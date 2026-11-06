@@ -9,6 +9,7 @@ Delete each item when it is done.
 - `src/graph`: `Graph.affected`.
 - `src/views/text`: `Text.diff`, `Text.patch`, `Text.merge`.
 - `src/views/bend`: `Bend.decode`, `Bend.diff`, `Bend.patch`, `Bend.merge`.
+- `src/views/bend`: after a merge, run the checker; report "merged, but the proofs fail" as its own outcome.
 - `src/store`: tree-aware `Tree.edit` (re-chunk only near the edit) and `Tree.diff` (skip shared subtrees). The first versions read and write everything.
 - `src/endpoints/file`:
   - Symlinks: a link is its own resource whose content is its target (agreed design). Needs a readlink effect; today a

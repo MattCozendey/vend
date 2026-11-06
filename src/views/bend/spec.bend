@@ -457,9 +457,12 @@ law Bend.patch:
 def Edits.is_empty(es: List<&2, ItemEdit>) -> Bool:
   List.is_empty(&2, ItemEdit, es)
 
-# the three-way merge of x and y from base, item by item: a key changed on
+# the three-way merge of x and y from base, item by item. A key changed on
 # one side only takes that side; a key changed the same way on both takes
-# it; a key changed differently on both is a clash (None)
+# it; a key changed differently on both takes Text.merge of its three item
+# texts, and is a clash (None) only when that clashes. Items that both
+# sides insert at one place go in one order whichever side is which:
+# callee before caller, else by key. Gaps follow the same rules as items.
 law Bend.merge:
   for base: Module
   for x: Module
