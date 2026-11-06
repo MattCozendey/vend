@@ -78,7 +78,7 @@ and soundness are proven in `src/shared.bend`).
   `write_accepted`, `write_authored`, `nested_untracked`, `step_keeps_history`, `replay_matches`, `restored_quiet`.
 - `src/daemon`: `step_frames`, `step_frames_lines`, `unmount_drops`, `unmount_frames`, `request_decode_after_encode`,
   `response_decode_after_encode`, `stop_guarded`, `stop_forced`, `entries_decode_after_encode`, `apply_saw`,
-  `mark_fixed`, `apply_forked`, `apply_forked_mark`, `reads_record_nothing`, `merge_all_or_nothing`.
+  `mark_fixed`, `apply_forked_mark`, `reads_record_nothing`, `merge_all_or_nothing`.
 - `src/cli`: `parse_after_show` (restated for `mount`; its old proof covered `watch`, which is gone),
   `ask_passes_words`.
 - `src/json`: `read_after_show`.

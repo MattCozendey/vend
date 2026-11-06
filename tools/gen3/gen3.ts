@@ -54,7 +54,8 @@
 //
 // EXTEND: a tactic is a function that adds alternatives (Alt) to a goal in `leafAlts`; a closer goes
 // in `closer`. Check a change with `bench` (parallel over the worker pool); find a slow spot with
-// GEN3_PROF=<dir> (each worker writes a markdown CPU profile there after its first task).
+// GEN3_PROF=<dir> (each worker writes a markdown CPU profile there after its first task); see each
+// goal the search expands and its steps with GEN3_TRACE=1 (in the server's log; `status` names it).
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -508,6 +509,9 @@ const load = async (file: string): Promise<Loaded | string> => {
   L.stamp = stampOf(L.seen);
   for (const f of files.values()) L.texts.set(f.ns === "" ? entry : path.resolve(top, f.ns + ".bend"), f.str);
   BK = L;
+  // a def with a ?TODO in its body is opaque: computing through a hole makes any two of its calls equal
+  // ({==} would "prove" join(h, g) == join(g, h) while join is ?TODO); a check of its own body parses it
+  for (const k of book.order) if (raw[k]?.$ === "Def" && raw[k].v !== null && isOpen(k)) raw[k] = { ...raw[k], v: null };
   buildIndex();
   books.set(entry, L);
   if (books.size > 3) books.delete(books.keys().next().value!);
@@ -1221,7 +1225,8 @@ const ann = (g: Goal, i: number): Term => B.pmap_get(g.ctx, i);
 const qn = (q: Term): number => (q.$ === "None" ? 0 : q.$ === "Lone" ? 1 : 2);
 // by the normal form (two goals that convert are one goal: a rewrite that changes nothing is a cycle)
 let unkeyed = 0; // a goal too large to key is its own key (never a cycle, never cached)
-const goalKey = (g: Goal, N: Term): number => attempt(FUEL_NF, () => mixH(g.ckey, qn(g.qt), H(N ?? lower(g.ty, LD(g))))) ?? -++unkeyed;
+// (with its pending binders: a helper's root, whose binders a match can split, is not the goal it lifts)
+const goalKey = (g: Goal, N: Term): number => attempt(FUEL_NF, () => mixH(g.ckey, qn(g.qt), g.pend, H(N ?? lower(g.ty, LD(g))))) ?? -++unkeyed;
 
 const parseLow = (text: string, g: Goal): Term => {
   const p = parserAt(text, 0, g.own.file, g.names);
@@ -1678,6 +1683,7 @@ const run = async (until: number, progress: () => void) => {
   } finally {
     deadline = Infinity;
     searching = false;
+    if (TRACE) console.error("[trace] stop: " + (S.root.pf ? "proven" : S.root.pn >= INF ? "every step failed" : S.nodes >= MAX_NODES ? "node cap" : "time or memory") + "; " + S.nodes + " goals, " + S.internal + " internal errors\n" + treeText(S.root, "", 0));
   }
 };
 const expand = (n: GNode) => {
@@ -1685,6 +1691,18 @@ const expand = (n: GNode) => {
   const c = n.g.pend === 0 ? S.proved.get(n.key) : undefined;
   if (c && tryText(n.g, flat(c))) { n.alts = []; setProof(n, c); tag("cache"); return; }
   n.alts = n.g.pend > 0 ? nodeAlts(n) : leafAlts(n);
+  if (TRACE) console.error("[trace] " + (n.g.path || "/") + (n.pf ? " closed" : "") + " :: " + clip(attempt(FUEL_NF, () => sh(n.g, lower(n.g.ty, LD(n.g)))) ?? "?", 160) + "\n" + n.alts.map((a) => "    " + (a.dead ? "dead " : "") + a.tag + " " + clip(a.note, 140)).join("\n"));
+};
+const TRACE = !!process.env.GEN3_TRACE;
+// the search tree (GEN3_TRACE): each goal's numbers, each step's state; 6 levels, 200 lines at most
+const treeText = (n: GNode, ind: string, depth: number, out: string[] = []): string => {
+  if (out.length < 200) out.push(ind + (n.g.path || "/") + " pn " + n.pn + (n.pf ? " PROVEN" : "") + (n.alts ? "" : " (not expanded)"));
+  for (const a of depth < 6 ? n.alts ?? [] : []) {
+    if (out.length >= 200) break;
+    out.push(ind + "  " + (a.pf ? "ok " : a.dead ? "dead " : unreached(a) ? "unreached " : "") + a.tag + " pn " + a.pn + " " + clip(a.note, 80));
+    for (const k of a.kids) treeText(k, ind + "    ", depth + 1, out);
+  }
+  return out.join("\n");
 };
 // the best partial proof under n: an alternative counts when it was checked; fewest holes first, then
 // most closed steps
@@ -1962,15 +1980,17 @@ const ctorAlts = (n: GNode, w: Term): (Alt | null)[] => {
   const adt = w.$ === "ADT" ? attempt(FUEL_NF, () => B.book_adt(BK.book, w, g.ctx, g.own.k)) : null;
   if (!adt || adt.c.length === 0 || adt.c.length > 4 || (adt.c.length === 1 && adt.c[0].n === 0) || !isProp(g.ty)) return [];
   return adt.c.map((ctr: Term) => attempt(FUEL_NF * 4, () => {
-    let cur = B.tele_fill(BK.book, ctr.T, w.x, g.ctx, g.own.k);
+    // the telescope twice, the earlier fields two different placeholders: a field whose type differs
+    // between the two names an earlier field (a witness, not a fact: no subgoal can give it)
+    let cur = B.tele_fill(BK.book, ctr.T, w.x, g.ctx, g.own.k), alt = cur;
     const kids: Goal[] = [];
     for (let f = 0; f < ctr.n; f++) {
-      const c = B.tele_head(BK.book, cur, g.ctx, g.own.k);
-      const A = lower(c.A, g.d + f);
-      // a field that names an earlier one is a witness, not a fact: no subgoal can give it
-      if ([...varsOf(A, new Set())].some((v) => v >= g.d) || !isProp(c.A)) return null;
-      kids.push({ ...g, ty: c.A, qt: c.q.$ === "None" ? B.None() : g.qt, path: g.path + "/" + shortOf(ctr.k) + "." + f });
-      cur = c.B(B.Var("_", g.d + f));
+      const c = B.tele_head(BK.book, cur, g.ctx, g.own.k), c2 = B.tele_head(BK.book, alt, g.ctx, g.own.k);
+      const A = wnf(c.A) ?? c.A, A2 = wnf(c2.A) ?? c2.A; // a field type may be a redex: (_ => T)(x)
+      if (H(lower(A, g.d)) !== H(lower(A2, g.d)) || !isProp(A)) return null;
+      kids.push({ ...g, ty: A, qt: c.q.$ === "None" ? B.None() : g.qt, path: g.path + "/" + shortOf(ctr.k) + "." + f });
+      cur = c.B(B.Var("_", FRESH + 100 + f));
+      alt = c2.B(B.Var("_", FRESH + 200 + f));
     }
     const s = B.name_show(g.own.file, ctr.k) + "{" + kids.map(() => HOLE).join(", ") + "}";
     return withKids(mkAlt(n, "ctor", s, 1 + kids.length * 0.1, (ps) => tm(s, ps)), kids, n.lv + 1, n.rws);
@@ -2088,7 +2108,24 @@ const liftAlts = (n: GNode): (Alt | null)[] => {
   if (g.own.level >= MAX_LEVEL || g.d === 0 || n.lv > 2) return [];
   const names = g.names;
   if (new Set(names).size !== names.length || names.some((x) => x === "_" || x === "" || !/^[A-Za-z_]\w*$/.test(x))) return [];
-  const blk: Term[] = [];
+  // a plain lift right under a node only repeats the node's own splits; a goal reached through `x =>`
+  // holds binders no match can reach, so there it is always offered
+  const underNode = n.up?.tag === "intro" && n.up.up.g.pend > 0;
+  const underLambda = n.up?.tag === "intro" && n.up.up.g.pend === 0;
+  const out: (Alt | null)[] = underLambda ? [liftAlt(n, null)] : [];
+  try {
+    const blk = liftBlockers(n);
+    if (!underNode && !underLambda && blk.some((t) => t.$ === "Var" && t.i < g.d)) out.push(liftAlt(n, null));
+    out.push(...genLifts(n, blk, 3));
+  } catch (e) {
+    if (e === TIMEOUT) throw e;
+    S.internal++;
+  }
+  return out;
+};
+// what blocks the goal and the hypotheses (deciding calls folded)
+const liftBlockers = (n: GNode): Term[] => {
+  const g = n.g, blk: Term[] = [];
   targetsOf(n);
   if (n.A) blockers(n.A, blk);
   for (const f of factsOf(g)) {
@@ -2096,23 +2133,22 @@ const liftAlts = (n: GNode): (Alt | null)[] => {
     f.A ??= nf(ann(g, f.i).T, LD(g), true, 20000) ?? f.N;
     if (f.A) blockers(f.A, blk);
   }
-  const out: (Alt | null)[] = [];
-  // a plain lift right under a node only repeats the node's own splits
-  const underNode = n.up?.tag === "intro" && n.up.up.g.pend > 0;
-  if (!underNode && blk.some((t) => t.$ === "Var" && t.i < g.d)) out.push(liftAlt(n, null));
-  const seen = new Set<number>();
-  // the deciding calls (atoms) first, innermost first
+  return blk;
+};
+// lifts with a stuck call of an enumeration-like type generalized: the deciding calls (atoms) first,
+// innermost first; at most max
+const genLifts = (n: GNode, blk: Term[], max: number): (Alt | null)[] => {
+  const g = n.g, out: (Alt | null)[] = [], seen = new Set<number>();
   const rank = new Map(blk.map((t) => [t, (t.$ === "App" && isAtom(B.term_higher(t, g.env), g.d) ? 0 : 1e6) + size(t, 1e5)]));
-  blk.sort((x, y) => rank.get(x)! - rank.get(y)!);
-  for (const t of blk) {
-    if (out.length >= 3) break;
+  for (const t of [...blk].sort((x, y) => rank.get(x)! - rank.get(y)!)) {
+    if (out.length >= max) break;
     if (t.$ !== "App" || seen.has(H(t)) || !closedBelow(t, g.d)) continue;
     seen.add(H(t));
     const T = attempt(FUEL_NF, () => B.term_infer(BK.book, g.lhs, B.term_higher(t, g.env), B.None(), g.ctx, g.d).ty);
     const w = T && wnf(T);
     const adt = w?.$ === "ADT" ? BK.raw[w.k] : null;
-    if (adt?.$ !== "ADT" || adt.c.length < 2 || adt.c.length > 8) continue;
-    out.push(liftAlt(n, { t, T: lower(T, LD(g)) }));
+    const Tl = adt?.$ === "ADT" && adt.c.length >= 2 && adt.c.length <= 8 ? attempt(FUEL_NF, () => lower(T, LD(g))) : undefined;
+    if (Tl) out.push(liftAlt(n, { t, T: Tl }));
   }
   return out;
 };
@@ -2121,7 +2157,8 @@ const liftAlt = (n: GNode, gen: { t: Term; T: Term } | null): Alt | null => {
   const note = gen ? "a helper over the context, " + sh(g, gen.t) + " generalized" : "a helper over the context (its parameters can be split)";
   const a = mkAlt(n, gen ? "lift:gen" : "lift", null, gen ? 3.5 : 3, (ps) => ps[0], note);
   a.open = () => {
-    if (S.helpers >= MAX_HELPERS) return null;
+    const no = (why: string) => { if (TRACE) console.error("[lift] " + (g.path || "/") + " not made: " + why); return null; };
+    if (S.helpers >= MAX_HELPERS) return no("helper cap");
     const used = new Set(g.names);
     const x = gen ? fresh(g, "x", used) : "", hx = gen ? fresh(g, "h" + x, used) : "";
     const names = [...g.names, x]; // every type is lowered at LD(g), where level g.d is x
@@ -2141,18 +2178,18 @@ const liftAlt = (n: GNode, gen: { t: Term; T: Term } | null): Alt | null => {
     for (let i = 0; i < g.d; i++) {
       const A = ann(g, i);
       const r = gen1(A.T);
-      if (!r) return null;
+      if (!r) return no("a context type does not print");
       const p = B.quant_show(A.q) + names[i] + ": " + r.s;
       if (r.moved) { movedIdx.add(i); later.push(p); argsLater.push(names[i]); }
       else { first.push(p); argsFirst.push(names[i]); }
     }
     const goal = gen1(g.ty);
-    if (!goal || (gen && !goal.moved && movedIdx.size === 0)) return null;
+    if (!goal || (gen && !goal.moved && movedIdx.size === 0)) return no(goal ? "the call occurs nowhere" : "the goal does not print");
     let params = first, args = argsFirst, pre = "";
     if (gen) {
       // the parameters before x must not name a moved one; x's type must name no moved one
-      for (let i = 0; i < g.d; i++) if (!movedIdx.has(i) && [...varsOf(lower(ann(g, i).T, i), new Set())].some((v) => movedIdx.has(v))) return null;
-      if ([...varsOf(gen.t, new Set()), ...varsOf(gen.T, new Set())].some((v) => movedIdx.has(v))) return null;
+      for (let i = 0; i < g.d; i++) if (!movedIdx.has(i) && [...varsOf(lower(ann(g, i).T, i), new Set())].some((v) => movedIdx.has(v))) return no("a kept parameter names a moved one");
+      if ([...varsOf(gen.t, new Set()), ...varsOf(gen.T, new Set())].some((v) => movedIdx.has(v))) return no("the call names a moved parameter");
       const ts = sh(g, gen.t), Ts = sh(g, gen.T);
       params = [...first, (isData(g, B.term_higher(gen.T, g.env)) ? "+" : "") + x + ": " + Ts, hx + ": {" + x + " == " + ts + " : " + Ts + "}", ...later];
       args = [...argsFirst, ts, "{==}", ...argsLater];
@@ -2163,9 +2200,11 @@ const liftAlt = (n: GNode, gen: { t: Term; T: Term } | null): Alt | null => {
     const name = helperName(g.own);
     const head = "def " + name + "(\n  " + params.join(",\n  ") + ") ->\n  " + goal.s + ":";
     const hk = addTemp(head, g.own);
-    if (!hk) return null;
+    if (!hk) return no("the helper does not parse: " + head.split(String.fromCharCode(10)).join(" "));
     const call = name + "(" + args.join(", ") + ")";
-    if (stmtErr(hk) || !tryText(g, pre + call)) return null;
+    const se = stmtErr(hk);
+    if (se) return no("its statement does not check: " + firstLine(se));
+    if (!tryText(g, pre + call)) return no("the call does not check: " + pre + call);
     S.helpers++;
     a.build = (ps) => ({ t: "def", name, head, body: ps[0], call: pre + call });
     const kid = mkNode(rootGoal(owner(hk, g.own.level + 1, g.own.root)), a, 0, 0);
@@ -2311,11 +2350,28 @@ const nearMisses = (n: GNode): string => {
 const tagsOf = () => [...S.tags.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t).join(" ");
 const secs = (ms: number) => (ms / 1000).toFixed(1) + " s";
 type Helper = Extract<Pf, { t: "def" }>;
-const defsText = (hs: Helper[]) => hs.map((h) => h.head + "\n" + bodyText(h.body) + "\n").join("\n");
-const helperBlock = (hs: Helper[], k: string, proven: boolean): string =>
+type Printed = { head: string; body: string };
+const printed = (hs: Helper[]): Printed[] => hs.map((h) => ({ head: h.head, body: bodyText(h.body) }));
+const defsText = (hs: Printed[]) => hs.map((h) => h.head + "\n" + h.body + "\n").join("\n");
+const helperBlock = (hs: Printed[], k: string, proven: boolean): string =>
   hs.length ? "# helper defs (" + (proven ? "proven" : "some open") + "): paste them above `def " + shortOf(k) + "(`\n" + defsText(hs) + "# the body of " + shortOf(k) + ":\n" : "";
 // --write: the def's text replaced by its helpers and its new body
-const editOf = (ds: Src, hs: Helper[], body: string): Edit => ({ t: "edit", file: ds.file, from: ds.header + "\n" + ds.body, to: (hs.length ? defsText(hs) + "\n" : "") + ds.header + "\n" + body });
+const editOf = (ds: Src, hs: Printed[], body: string): Edit => ({ t: "edit", file: ds.file, from: ds.header + "\n" + ds.body, to: (hs.length ? defsText(hs) + "\n" : "") + ds.header + "\n" + body });
+// the `+` marks a proof does not need (bend-lint's unneeded_plus), removed: a rebinding line `+x = x` or
+// a binder's mark, each kept only if the def no longer checks without it; from the last back, so the
+// earlier offsets stay valid
+const PLUS_LINE = /^[ \t]*\+([A-Za-z_]\w*) = \1[ \t]*\n/gm;
+const PLUS_MARK = /(?<=[{(,]\s*|^\s*|=>\s*)\+(?=[A-Za-z_]\w*\s*(?:,|\}|\)|=>))/gm;
+const trimPlus = (checks: (body: string) => boolean, body: string): string => {
+  const cuts = [...body.matchAll(PLUS_LINE), ...body.matchAll(PLUS_MARK)].map((m) => ({ at: m.index!, n: m[0].length })).sort((a, b) => b.at - a.at);
+  let cur = body;
+  for (const c of cuts.slice(0, 64)) {
+    if (late()) break;
+    const next = cur.slice(0, c.at) + cur.slice(c.at + c.n);
+    if (checks(next)) cur = next;
+  }
+  return cur;
+};
 // a proof's helpers and body through bend2's def check once more (what prints is what checks); a
 // partial's check gets less fuel (it only annotates a guess)
 const FUEL_PARTIAL = 5000000;
@@ -2376,11 +2432,24 @@ const proveWhole = async (k: string, ds: Src, until: number, hard: number, progr
   }
 };
 const provenText = (k: string, ds: Src, pf: Pf, ms: number, hard: number): Result => {
-  const name = shortOf(k), body = bodyText(pf), hs = helpersOf(pf);
-  const e = finalErrBy(hard, k, pf, body);
-  if (e instanceof Stop) return { ok: false, text: "# " + name + ": a proof was found, but gen3's re-check did not finish (" + errText(e) + "): unverified\n" + helperBlock(hs, k, true) + body };
-  if (e) return { ok: false, text: "# " + name + ": a proof was found but fails bend2's def check (a gen3 bug; please report it):\n" + body + "\n" + errText(e) };
-  return { ok: true, text: "# " + name + ": PROVEN in " + Math.round(ms) + " ms [" + tagsOf() + "]\n" + helperBlock(hs, k, true) + body, edit: editOf(ds, hs, body) };
+  const name = shortOf(k), hs = helpersOf(pf);
+  const e = finalErrBy(hard, k, pf, bodyText(pf));
+  if (e instanceof Stop) return { ok: false, text: "# " + name + ": a proof was found, but gen3's re-check did not finish (" + errText(e) + "): unverified\n" + helperBlock(printed(hs), k, true) + bodyText(pf) };
+  if (e) return { ok: false, text: "# " + name + ": a proof was found but fails bend2's def check (a gen3 bug; please report it):\n" + bodyText(pf) + "\n" + errText(e) };
+  const { helpers, body } = tidied(k, pf, hard);
+  return { ok: true, text: "# " + name + ": PROVEN in " + Math.round(ms) + " ms [" + tagsOf() + "]\n" + helperBlock(helpers, k, true) + body, edit: editOf(ds, helpers, body) };
+};
+// a proven proof's helpers and body without the + marks they do not need (before the hard deadline)
+const tidied = (k: string, pf: Pf, hard: number): { helpers: Printed[]; body: string } => {
+  deadline = hard;
+  try {
+    const helpers = helpersOf(pf).map((h) => {
+      const hk = temps.find((t) => shortOf(t) === h.name);
+      const b = bodyText(h.body);
+      return { head: h.head, body: hk ? trimPlus((x) => checkErr(hk, x, h.head) === null, b) : b };
+    });
+    return { helpers, body: trimPlus((x) => checkErr(k, x) === null, bodyText(pf)) };
+  } finally { deadline = Infinity; }
 };
 // --helpers: each open hole of a partial as a new lemma: its goal over its whole context (true iff the
 // hole is), its body ?TODO; the hole becomes its call. At most 6; a context with a repeated or
@@ -2436,7 +2505,7 @@ const helpersText = (k: string, ds: Src, pf: Pf, hard: number): Result | null =>
   return null;
 };
 const stubsResult = (k: string, ds: Src, out: Pf, stubs: string[]): Result => {
-  const hs = helpersOf(out), body = bodyText(out);
+  const hs = printed(helpersOf(out)), body = bodyText(out);
   const defs = stubs.join("\n") + (hs.length ? "\n" + defsText(hs) : "");
   return {
     ok: false,
@@ -2457,7 +2526,7 @@ const openText = (k: string, root: GNode, head: string, hard: number, ds?: Src):
   return {
     ok: false,
     text: head + ": a partial proof (" + p.holes + " holes, " + p.closed + " steps closed). A guess at a structure, not a proof" + note + "\n"
-      + helperBlock(helpersOf(p.pf), k, false) + body + "\n" + holesOf(p.pf).map((h, i) => "# hole " + (i + 1) + " at " + (h.g.path || "/") + " (in " + h.g.own.short + ")\n" + goalLines(h.g) + triedLines(h)).join("\n")
+      + helperBlock(printed(helpersOf(p.pf)), k, false) + body + "\n" + holesOf(p.pf).map((h, i) => "# hole " + (i + 1) + " at " + (h.g.path || "/") + " (in " + h.g.own.short + ")\n" + goalLines(h.g) + triedLines(h)).join("\n")
       + (stubs ? "\n" + stubs.text : "") + templatesOf(k),
     edit: stubs?.edit,
   };
@@ -2520,7 +2589,7 @@ const proveHoles = async (k: string, ds: Src, until: number, hard: number, progr
         if (!e) { body = nb; used.push(pf); }
         else notes.push("# hole " + (i + 1) + ": a fill was found but " + (e instanceof Stop ? "its re-check did not finish: " + inline(pf) : "fails the def check (a gen3 bug): " + inline(pf)));
       }
-      const hs = used.flatMap((p) => helpersOf(p));
+      const hs = printed(used.flatMap((p) => helpersOf(p)));
       const open = holes.map((h) => (h.n && !h.n.pf ? "# hole " + (h.i + 1) + " (open)\n" + goalLines(h.n.g) + triedLines(h.n) : "")).filter(Boolean);
       const ok = used.length === holes.length && todoAt(body).length === 0;
       const text = "# " + name + ": " + used.length + "/" + holes.length + " holes filled in " + secs(performance.now() - t0) + (S.tags.size ? " [" + tagsOf() + "]" : "") + "\n"
