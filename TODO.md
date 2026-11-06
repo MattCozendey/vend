@@ -12,8 +12,8 @@ Delete each item when it is done.
 - `src/history`: `History.join`.
 - `src/views/bend`: after a merge, run the checker; report "merged, but the proofs fail" as its own outcome. With
   `src/impact`, this is the guarantee: no law statement changed and the merged result checks, so every law holds.
-- `src/impact`: prune the radius by condition (`via` edges whose condition cannot hold under a query) once
-  `Cond.sat` exists; today conditions are only reported.
+- `src/impact`: prune the radius by condition (`via` edges whose condition cannot hold under a query) with
+  `Cond.sat`; today conditions are only reported.
 - `src/store`: tree-aware `Tree.edit` (re-chunk only near the edit) and `Tree.diff` (skip shared subtrees). The first versions read and write everything.
 - `src/endpoints/file`:
   - Symlinks: a link is its own resource whose content is its target (agreed design). Needs a readlink effect; today a
