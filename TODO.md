@@ -4,7 +4,11 @@ Delete each item when it is done.
 
 ## Implement
 
-- `src/conditions`: `Cond.canon`.
+- `src/conditions` (BDDs): choose the atom order from the formula (atoms that appear together placed next to each
+  other), or reorder while building: with name order, some formulas blow up (measured: 18.9 s for 20 atoms in a bad
+  order, about 0 s in a good one). `Cond.canon` returns a tree, so a BDD that shares subgraphs comes back
+  exponentially larger: if it becomes hot, keep the BDD itself in the graph, or give `Cond` a shared form. Its memo
+  lookups go through `Table`, so they speed up with the faster `Table` inside.
 - `src/history`: `History.join`.
 - `src/views/bend`: after a merge, run the checker; report "merged, but the proofs fail" as its own outcome. With
   `src/impact`, this is the guarantee: no law statement changed and the merged result checks, so every law holds.
