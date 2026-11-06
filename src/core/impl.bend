@@ -432,25 +432,32 @@ def Replay.line(l: Lines.Line, r: Result<&2, &2, Lines.Refused, Lines.Line>) -> 
       l
 
 # the line after the node v, added to h, when the record is of the line
-# named ln: the same advance a step made, as the node's parents are the
-# heads the step saw
+# named ln: the same advance the step made. It expects the heads the line
+# follows now: a version's parents are exactly those heads, a merge node
+# has them among its parents, and a line moved onto an existing node (a
+# merge that only catches up) has that node descend from them.
 def Replay.advance(+l: Lines.Line, h: History.History, ln: String, +v: History.Node) -> Lines.Line:
+  +n = History.Node.name(v)
   Shared.Bool.when(
     Lines.Line,
     String.eq(ln, Lines.Line.name(l)),
-    u => Replay.line(
-      l,
-      Lines.Line.advance(l, h, History.Node.name(v), History.Node.parents(v), History.Node.id(v))
-    ),
+    u => Replay.line(l, Lines.Line.advance(l, h, n, Lines.Line.heads(l, n), History.Node.id(v))),
     u => l
   )
 
-# c after one record
+# c after one record; the records of seen markers, marks and forks are the
+# daemon's, and leave a core as it is
 def Replay.one(c: Spec.Core, r: Journal.Record) -> Spec.Core:
   match c r:
     case Spec.Core{m, s, +h, l, ss, ms, ns} Journal.Kept{ln, content, +v}:
       +h2 = Replay.history(h, History.History.add(h, v))
       Spec.Core{m, Replay.store(s, content), h2, Replay.advance(l, h2, ln, v), ss, ms, ns}
+    case k Journal.Saw{a, ln}:
+      k
+    case k Journal.Marked{ln, nm, msg, a}:
+      k
+    case k Journal.Forked{ln, f, mk}:
+      k
 
 # c after the records rs, in order
 def Replay.all(rs: List<&2, Journal.Record>, c: Spec.Core) -> Spec.Core:

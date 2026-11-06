@@ -4,15 +4,10 @@ Delete each item when it is done.
 
 ## Implement
 
-- `src/conditions`: `Cond.sat`, `Cond.canon`.
+- `src/conditions`: `Cond.canon`.
 - `src/history`: `History.join`.
-- `src/graph`: `Graph.affected`.
-- `src/views/text`: `Text.diff`, `Text.patch`, `Text.merge`.
-- `src/views/bend`: `Bend.decode`, `Bend.diff`, `Bend.patch`, `Bend.merge`.
 - `src/views/bend`: after a merge, run the checker; report "merged, but the proofs fail" as its own outcome. With
   `src/impact`, this is the guarantee: no law statement changed and the merged result checks, so every law holds.
-- `bend-ver impact <line|mark>`: for each Bend resource the changeset touches, `Impact.classes` (base: where the line
-  forked, or the mark's heads) and `Impact.layers` over the space's documents, printed per layer.
 - `src/impact`: prune the radius by condition (`via` edges whose condition cannot hold under a query) once
   `Cond.sat` exists; today conditions are only reported.
 - `src/store`: tree-aware `Tree.edit` (re-chunk only near the edit) and `Tree.diff` (skip shared subtrees). The first versions read and write everything.
@@ -31,30 +26,30 @@ Delete each item when it is done.
 - `src/shared.bend`: a faster Table inside (e.g. Base Map), proving the same three laws.
 - `src/graph`: references across spaces (a reference with a scheme or an authority) through mounts; today unresolved.
 - The daemon (`src/daemon`; built: one per user and machine, all mounts, started only by
-  `bend-ver start-or-resume`, the down message, `status`, `mount`, `unmount`, guarded `daemon stop`). Left:
-  - The everyday commands as new request kinds: `lines`, `line new`, `log`, `show`, `diff`, `restore`, `affects`
-    (streaming: it is what `clients` will count), `mark`, `write --expect`. Then the MCP server over stdio, a thin
-    front like the CLI.
-  - Decisions you may revisit: `start-or-resume` runs in the foreground (a detached start needs a new foreign
-    effect); the door is TCP on 127.0.0.1 with a random 128-bit token in the file `daemon` of the data folder (Unix
-    sockets or named pipes need foreign code). On Windows the data folder is per user; on Linux and macOS Base cannot
-    set file modes, so the `daemon` file gets the default mode (often readable by other users): setting it to 0600
-    needs foreign code.
+  `bend-ver start-or-resume`, the down message, `status`, `mount`, `unmount`, guarded `daemon stop`, and the everyday
+  commands `lines`, `log`, `show`, `diff`, `affects`, `impact`, `line new`, `write --expect`, `restore`, `mark`,
+  `merge`). Left:
+  - Next: the MCP server over stdio, a thin front like the CLI; it signs writes with the client name.
+  - `affects` answers once; streaming it (what `clients` will count) is not built.
+  - `log` lists versions in walk order from the heads, not in topological order.
+  - `diff` takes versions (id prefixes, or a line for its head), not marks.
+  - A merge into a line that is behind always makes a merge node (no fast-forward); a resource with several heads on
+    either side clashes.
+  - Decisions you may revisit: `write` reads its bytes from `--from <file>` (Base has no effect that reads standard
+    input); a write without `BEND_VER_AGENT` is signed `unnamed`; a merge is all-or-nothing (one clash and no resource
+    moves, so a line never holds half of a merge whose resources may need each other); `start-or-resume` runs in the
+    foreground (a detached start needs a new foreign effect); the door is TCP on 127.0.0.1 with a random 128-bit token
+    in the file `daemon` of the data folder (Unix sockets or named pipes need foreign code). On Windows the data folder
+    is per user; on Linux and macOS Base cannot set file modes, so the `daemon` file gets the default mode (often
+    readable by other users): setting it to 0600 needs foreign code.
   - A slow client holds the acceptor up to 2 seconds per read (one connection at a time).
   - A mount that fails at start (its root gone) is reported and skipped; it stays in the mounts file.
   - Mounting at run time primes the streams from the line the daemon holds; the daemon restores every line from the
     journal at start.
-  - Seen markers and marks go into the journal once they live in the daemon's state.
 - `src/journal`: compaction (a snapshot of the store, history and lines, then a fresh log), so start-up does not
   replay everything and the journal stays below 4 GiB (it is read whole with `File.size`, a `U32`).
 - `src/endpoints/file`: on POSIX, a rename is durable only after its directory is synced; sync the directory after
   the rename of a Put and of a journal cut.
-- CLI for marks (`src/lines`, `Mark`): `bend-ver mark <line> <name> -m <message>`, `merge <line>@<mark> into <line>`,
-  `diff <mark> <mark>`. Store marks in the core's state, then state their laws (a mark holds its line's heads from
-  when it was made; advancing the line never changes it): today a mark is a copy of a line, so they hold by
-  definition.
-- Fronts: read the agent name from `BEND_VER_AGENT` (CLI) or the client name (MCP) for `Write`; give `affects` the
-  agent's seen marker (`src/lines`, `SeenBook`).
 
 ## Prove
 
@@ -78,8 +73,11 @@ and soundness are proven in `src/shared.bend`).
   `write_accepted`, `write_authored`, `nested_untracked`, `step_keeps_history`, `replay_matches`, `restored_quiet`.
 - `src/daemon`: `step_is_core`, `step_frames`, `step_frames_lines`, `unmount_drops`, `unmount_frames`,
   `request_decode_after_encode`, `response_decode_after_encode`, `token_checked`, `stop_guarded`, `stop_forced`,
-  `mount_once`, `entries_decode_after_encode`.
-- `src/cli`: `parse_after_show` (restated for `mount`; its old proof covered `watch`, which is gone).
+  `mount_once`, `entries_decode_after_encode`, `replay_nil`, `replay_con`, `apply_saw`, `apply_marked`, `mark_fixed`,
+  `apply_forked`, `apply_forked_mark`, `reads_record_nothing`, `write_stale`, `write_kept`, `merge_all_or_nothing`,
+  `affects_sees`.
+- `src/cli`: `parse_after_show` (restated for `mount`; its old proof covered `watch`, which is gone),
+  `ask_passes_words`.
 - `src/journal`: `read_after_encode`, `read_torn_tail`.
 - `src/impact`: `classify_unchanged`, `classify_added`, `classify_removed`, `classify_statement`,
   `classify_proof_only`, `classify_covered`, `radius_has_changed`, `radius_closed`, `radius_minimal`,

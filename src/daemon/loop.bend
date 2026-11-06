@@ -714,10 +714,173 @@ def Serve.unmount(st: Serve, +uri: String) -> IO(Serve):
         Serve.save(st2)
         return st2
 
+# the line key of the mount l
+def Local.line(l: Spec.Local) -> String:
+  match l:
+    case Spec.Local{Core.Mount{sp, ln, r, g}, gs, ss, ms, ns}:
+      Lines.Line.key(sp, ln)
+
+# the mounts of st
+def Serve.mounts(st: Serve) -> List<&2, Spec.Local>:
+  match st:
+    case Serve{Spec.Daemon{s, h, ls, ms, cs, bk}, ws, tok, dir, ib, ast}:
+      ms
+
+# the watches of st
+def Serve.watches(st: Serve) -> List<&2, Watch>:
+  match st:
+    case Serve{d, ws, tok, dir, ib, ast}:
+      ws
+
+# the core c with the content of each carry of cs that it tracks believed at
+# once: the line already holds it, so the answer to its Put shows no new
+# version
+def Carry.streams(cs: List<&2, Spec.Carry>, +c: Core.Core) -> Core.Core:
+  match cs:
+    case Nil{}:
+      c
+    case Con{Spec.Carry{+p, b}, +t}:
+      +h = Hash.Hash.blake3(b)
+      Shared.Bool.when(
+        Core.Core,
+        CoreImpl.Core.tracks(c, p),
+        u => Carry.streams(
+          t,
+          CoreImpl.Core.set_stream(c, p, Ep.Stream{Ep.Present{h}, Some{h}, False{}, False{}})
+        ),
+        u => Carry.streams(t, c)
+      )
+
+# a Put of the content of each carry that the core c tracks, to the
+# endpoint at root, with what c believes is there; the inputs of the
+# answers
+def Carry.puts(
+  +root: File.Root,
+  +c: Core.Core,
+  cs: List<&2, Spec.Carry>
+) -> IO(List<&2, Core.Input>):
+  match cs:
+    case Nil{}:
+      IO.pure(List<&2, Core.Input>, [])
+    case Con{Spec.Carry{+p, b}, +t}:
+      Shared.Bool.when(
+        IO(List<&2, Core.Input>),
+        CoreImpl.Core.tracks(c, p),
+        u => do IO<List<&2, Core.Input>>:
+          ss: List<&2, Ep.Signal> <- FileImpl.FileEp.put(root, p, b, CoreImpl.Core.belief(Ep.Stream.last(Core.Core.stream(c, p))))
+          rest: List<&2, Core.Input> <- Carry.puts(root, c, t)
+          return List.append(&2, Core.Input, CoreLoop.Loop.about(p, ss), rest),
+        u => Carry.puts(root, c, t))
+
+# the carries written to the working copy of the mount l, whose root is
+# found (none for a mount on another line)
+def Serve.carry.at(
+  +l: Spec.Local,
+  rm: Maybe<&2, File.Root>,
+  +cs: List<&2, Spec.Carry>,
+  +st: Serve,
+  j: File,
+  k: Serve -> File -> IO(Unit)
+) -> IO(Unit):
+  match rm:
+    case None{}:
+      k(st, j)
+    case Some{+root}:
+      +c = Spec.Daemon.core(Serve.daemon(st), l)
+      do IO<Unit>:
+        ins: List<&2, Core.Input> <- Carry.puts(root, c, cs)
+        dr: CoreLoop.Drained <- CoreLoop.Loop.drain(
+          ~Report.line,
+          CoreLoop.Loop.budget(),
+          root,
+          j,
+          Carry.streams(cs, c),
+          ins
+        )
+        Serve.drained(dr, st, Spec.Local.globs(l), k)
+
+# the root of the mount l, when it is on the line whose key is key
+def Serve.carry.root(+l: Spec.Local, key: String, ws: List<&2, Watch>) -> Maybe<&2, File.Root>:
+  Shared.Bool.when(
+    Maybe<&2, File.Root>,
+    String.eq(Local.line(l), key),
+    u => Watches.root(ws, Spec.Local.uri(l)),
+    u => None{}
+  )
+
+# the carries written to the working copy of every mount of ls on the line
+# whose key is key
+def Serve.carry(
+  ls: List<&2, Spec.Local>,
+  +key: String,
+  +cs: List<&2, Spec.Carry>,
+  +st: Serve,
+  j: File,
+  k: Serve -> File -> IO(Unit)
+) -> IO(Unit):
+  match ls:
+    case Nil{}:
+      k(st, j)
+    case Con{+l, t}:
+      Serve.carry.at(
+        l,
+        Serve.carry.root(l, key, Serve.watches(st)),
+        cs,
+        st,
+        j,
+        s2 => j2 => Serve.carry(t, key, cs, s2, j2, k)
+      )
+
+# after the records of a command are logged: the content carried to the
+# working copies of its line, then the answer; or the daemon ended when the
+# journal broke
+def Serve.logged(
+  w: File & Result<&1, &1, U32 & String, Unit>,
+  +st: Serve,
+  sock: Socket,
+  r: Spec.Response,
+  key: String,
+  cs: List<&2, Spec.Carry>,
+  k: Serve -> File -> IO(Unit)
+) -> IO(Unit):
+  (j, res) = w
+  match res:
+    case Fail{e}:
+      do IO<Unit>:
+        Wire.send(sock, Spec.Response.encode(Spec.Denied{"the journal could not be written"}))
+        Serve.drained(CoreLoop.Broke{Err.why(e)}, st, [], k)
+    case Done{u}:
+      Serve.carry(Serve.mounts(st), key, cs, st, j, s2 => j2 => do IO<Unit>:
+        Wire.send(sock, Spec.Response.encode(r))
+        k(s2, j2))
+
+# what the daemon does about a handled command: its records appended and
+# synced before anything else, and replayed into the daemon
+def Serve.asked(
+  h: Spec.Handled,
+  +st: Serve,
+  j: File,
+  sock: Socket,
+  k: Serve -> File -> IO(Unit)
+) -> IO(Unit):
+  match h:
+    case Spec.Handled{+rs, r, key, cs}:
+      do IO<Unit>:
+        w: File & Result<&1, &1, U32 & String, Unit> <- CoreLoop.Loop.log(j, rs)
+        Serve.logged(
+          w,
+          Serve.with(st, Spec.Daemon.replay(Serve.daemon(st), rs)),
+          sock,
+          r,
+          key,
+          cs,
+          k
+        )
+
 # what the daemon does about the action a, answering on sock
 def Serve.act(
   a: Spec.Action,
-  st: Serve,
+  +st: Serve,
   j: File,
   sock: Socket,
   k: Serve -> File -> IO(Unit)
@@ -740,6 +903,8 @@ def Serve.act(
       do IO<Unit>:
         Wire.send(sock, Spec.Response.encode(Spec.Stopping{}))
         Serve.end(st, j, "bend-ver stopped")
+    case Spec.DoAsk{a, c, b}:
+      Serve.asked(Spec.Daemon.handle(Serve.daemon(st), a, c, b), st, j, sock, k)
 
 # the request in the bytes of a connection, decided and acted on
 def Serve.request(
@@ -786,38 +951,21 @@ def Serve.go(fuel: Nat, +st: Serve, j: File) -> IO(Unit):
 # Start
 # -----
 
-# a mount that serves nothing, for the replay of the shared state
-def Start.nomount() -> Core.Mount:
-  Core.Mount{"", "", Shared.Uri{"file", None{}, "/"}, []}
-
-# the lines that the records move, given the history h of all of them:
-# each record moves the line it names, of the space of its node
-def Start.lines(
-  rs: List<&2, Journal.Record>,
-  +h: History.History,
-  ls: Shared.Table<Lines.Line>
-) -> Shared.Table<Lines.Line>:
-  match rs:
-    case Nil{}:
-      ls
-    case Con{Journal.Kept{+ln, ct, +v}, t}:
-      +sp = Shared.Name.space(History.Node.name(v))
-      +key = Spec.Line.key(sp, ln)
-      +ls = ls
-      l = Maybe.default(
-        &2,
-        Lines.Line,
-        Shared.Table.get(Lines.Line, ls, key),
-        Lines.Line.new(sp, ln)
-      )
-      Start.lines(t, h, Shared.Table.set(Lines.Line, ls, key, CoreImpl.Replay.advance(l, h, ln, v)))
-
 # the daemon that the records of the journal rebuild: every content in the
-# store, every node in the history, every line moved; no mount yet
-def Start.replayed(+rs: List<&2, Journal.Record>) -> Spec.Daemon:
-  +c = Core.Core.replay(Core.Core.new(Start.nomount()), rs)
-  +h = Core.Core.history(c)
-  Spec.Daemon{Core.Core.store(c), h, Start.lines(rs, h, Shared.Table.new(Lines.Line)), [], 0n}
+# store, every node in the history, every line, mark, seen marker and fork;
+# no mount yet
+def Start.replayed(rs: List<&2, Journal.Record>) -> Spec.Daemon:
+  Spec.Daemon.replay(
+    Spec.Daemon{
+      Store.Store.new(),
+      History.History.new(),
+      Shared.Table.new(Lines.Line),
+      [],
+      0n,
+      Spec.Book.new()
+    },
+    rs
+  )
 
 # the entries that the bytes of the mounts file spell; none when it is
 # missing or unreadable
@@ -1044,6 +1192,16 @@ def Client.infos(infos: List<&2, Spec.Info>) -> IO(Unit):
         Client.info(i)
         Client.infos(t)
 
+# the lines printed, one after another
+def Client.lines(ls: List<&2, String>) -> IO(Unit):
+  match ls:
+    case Nil{}:
+      IO.pure(Unit, Unit{})
+    case Con{l, t}:
+      do IO<Unit>:
+        IO.print(l)
+        Client.lines(t)
+
 # the lines of a response
 def Client.show(m: Maybe<&2, Spec.Response>) -> IO(Unit):
   match m:
@@ -1063,6 +1221,10 @@ def Client.show(m: Maybe<&2, Spec.Response>) -> IO(Unit):
       IO.print("stopping")
     case Some{Spec.Denied{why}}:
       IO.die(Unit, 1, "denied: " ++ why)
+    case Some{Spec.Said{True{}, ls}}:
+      Client.lines(ls)
+    case Some{Spec.Said{False{}, ls}}:
+      IO.die(Unit, 1, String.join(ls, "\n"))
 
 # the response read from the daemon, printed; the connection closed
 def Client.answered(r: Socket & Maybe<&2, Shared.Bytes()>) -> IO(Unit):
@@ -1146,3 +1308,34 @@ def Client.ask(b: Spec.Body) -> IO(Unit):
   do IO<Unit>:
     m: Maybe<&2, String> <- CoreLoop.Log.dir()
     Client.dir(m, b)
+
+# the everyday command of the words ws, with the bytes read
+def Client.file(
+  r: Result<&2, &2, String, Shared.Bytes()>,
+  a: String,
+  ws: List<&2, String>,
+  f: String
+) -> IO(Unit):
+  match r:
+    case Fail{e}:
+      IO.die(Unit, 1, String.concat(["cannot read ", f, ": ", e]))
+    case Done{b}:
+      Client.ask(Spec.Ask{a, ws, b})
+
+# the everyday command of the words ws by the agent a, with the bytes of
+# the file from as its data (none without one)
+def Client.data(a: String, ws: List<&2, String>, from: Maybe<&2, String>) -> IO(Unit):
+  match from:
+    case None{}:
+      Client.ask(Spec.Ask{a, ws, []})
+    case Some{+f}:
+      do IO<Unit>:
+        r: Result<&2, &2, String, Shared.Bytes()> <- CoreLoop.Log.bytes(Text.Text.encode(f))
+        Client.file(r, a, ws, f)
+
+# the everyday command of the words ws sent to the daemon, signed with the
+# agent named by BEND_VER_AGENT ("unnamed" when it is not set)
+def Client.everyday(ws: List<&2, String>, from: Maybe<&2, String>) -> IO(Unit):
+  do IO<Unit>:
+    a: Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_VER_AGENT")
+    Client.data(Maybe.default(&2, String, CoreLoop.Log.env(a, ""), "unnamed"), ws, from)

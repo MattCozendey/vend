@@ -13,15 +13,20 @@ import ../shared.bend as Shared
 # that matches a path decides); with no globs given, every file ("**").
 # UnmountCmd: stop versioning the mount at the root. DaemonStop: end the
 # daemon; without force it refuses while mounts are active or other
-# clients are connected. Versions from the endpoint are recorded as
-# Outside; a command that writes signs its versions with the agent name in
-# the environment variable BEND_VER_AGENT. Help: print the usage.
+# clients are connected. AskCmd: an everyday command (lines, log, show,
+# diff, affects, impact, line new, write, restore, mark, merge), whose words
+# the daemon reads; from: the file whose bytes a write writes (--from), as
+# Base has no effect that reads standard input. Versions from the endpoint
+# are recorded as Outside; a command that writes signs its versions with
+# the agent name in the environment variable BEND_VER_AGENT. Help: print
+# the usage.
 type Cmd is Data:
   StartOrResume{}
   StatusCmd{}
   MountCmd{root: String, globs: List<&2, String>, line: String}
   UnmountCmd{root: String}
   DaemonStop{force: Bool}
+  AskCmd{words: List<&2, String>, from: Maybe<&2, String>}
   Help{}
 
 # how to call the program
@@ -34,7 +39,17 @@ def Cli.usage() -> String:
       "         file:///C:/repo) that the globs select (default **; a leading ! excludes; the last glob\n",
       "         that matches decides), on the line <name> (default main)\n",
       "       bend-ver unmount <uri>                            stop versioning that root\n",
-      "       bend-ver daemon stop [--force]                    end the daemon (--force: even with mounts)"
+      "       bend-ver daemon stop [--force]                    end the daemon (--force: even with mounts)
+",
+      "       bend-ver lines | log <name> [--line L] [--author A] | show <name> [<version>]
+",
+      "         | diff <name> <a> <b> | affects <line> | impact <line|line@mark>
+",
+      "         | line new <name> --from <line|line@mark> | write <name> --expect <ids|none> --from <file> [--line L]
+",
+      "         | restore <name> <version> [--line L] | mark <line> <name> -m <message> | merge <line|line@mark> into <line>
+",
+      "         names are <space>:<path>; versions are id prefixes or lines; writes are signed with BEND_VER_AGENT"
     ]
   )
 
@@ -126,6 +141,75 @@ def Cli.word(+w: String) -> Result<&2, &2, String, Cmd>:
     )
   )
 
+# w is the first word of an everyday command
+def Cli.everyday(w: String) -> Bool:
+  List.contains(
+    ~String,
+    ~String.eq,
+    [
+      "lines",
+      "log",
+      "show",
+      "diff",
+      "affects",
+      "impact",
+      "line",
+      "write",
+      "restore",
+      "mark",
+      "merge"
+    ],
+    w
+  )
+
+# the words without a "--from <file>" pair, and the file of the first one
+type Split is Data:
+  Split{words: List<&2, String>, from: Maybe<&2, String>}
+
+# a split with the file f, when it has none yet
+def Cli.split.from(s: Split, f: String) -> Split:
+  match s:
+    case Split{ws, None{}}:
+      Split{ws, Some{f}}
+    case Split{ws, m}:
+      Split{ws, m}
+
+# the split of ws, given the words before, reversed
+def Cli.split.go(ws: List<&2, String>, +before: List<&2, String>) -> Split:
+  match ws:
+    case Nil{}:
+      Split{List.reverse(&2, String, before), None{}}
+    case Con{+w, Con{+f, +t}}:
+      Shared.Bool.when(
+        Split,
+        String.eq(w, "--from"),
+        u => Cli.split.from(Cli.split.go(t, before), f),
+        u => Cli.split.go(Con{f, t}, w <> before)
+      )
+    case Con{w, Nil{}}:
+      Split{List.reverse(&2, String, w <> before), None{}}
+
+# the command of a split write
+def Cli.ask.split(s: Split) -> Cmd:
+  match s:
+    case Split{ws, m}:
+      AskCmd{ws, m}
+
+# the everyday command of the words ws: a write takes its bytes from the
+# file of --from; every other command keeps --from among its words (line
+# new names its source with it)
+def Cli.ask(+ws: List<&2, String>) -> Cmd:
+  match ws:
+    case Con{w, r}:
+      Shared.Bool.when(
+        Cmd,
+        String.eq(w, "write"),
+        u => Cli.ask.split(Cli.split.go(ws, [])),
+        u => AskCmd{ws, None{}}
+      )
+    case Nil{}:
+      AskCmd{ws, None{}}
+
 # the daemon command of the words after "daemon"
 def Cli.daemon(ws: List<&2, String>) -> Result<&2, &2, String, Cmd>:
   match ws:
@@ -146,29 +230,43 @@ def Cli.daemon(ws: List<&2, String>) -> Result<&2, &2, String, Cmd>:
     case _:
       Fail{Cli.usage()}
 
+# the command of the words w, a, rest when w is no everyday command
+def Cli.parse.other(+w: String, +a: String, +rest: List<&2, String>) -> Result<&2, &2, String, Cmd>:
+  Shared.Bool.when(
+    Result<&2, &2, String, Cmd>,
+    String.eq(w, "mount"),
+    u => Cli.mount(a, rest),
+    u => Shared.Bool.when(
+      Result<&2, &2, String, Cmd>,
+      Bool.and(String.eq(w, "unmount"), List.is_empty(&2, String, rest)),
+      v => Cli.unmount(a),
+      v => Shared.Bool.when(
+        Result<&2, &2, String, Cmd>,
+        String.eq(w, "daemon"),
+        x => Cli.daemon(a <> rest),
+        x => Fail{Cli.usage()}
+      )
+    )
+  )
+
 # the command of the arguments after the program's own name, or the usage
 def Cli.parse(args: List<&2, String>) -> Result<&2, &2, String, Cmd>:
   match args:
     case Nil{}:
       Done{Help{}}
-    case Con{w, Nil{}}:
-      Cli.word(w)
+    case Con{+w, Nil{}}:
+      Shared.Bool.when(
+        Result<&2, &2, String, Cmd>,
+        Cli.everyday(w),
+        u => Done{Cli.ask([w])},
+        u => Cli.word(w)
+      )
     case Con{+w, Con{+a, +rest}}:
       Shared.Bool.when(
         Result<&2, &2, String, Cmd>,
-        String.eq(w, "mount"),
-        u => Cli.mount(a, rest),
-        u => Shared.Bool.when(
-          Result<&2, &2, String, Cmd>,
-          Bool.and(String.eq(w, "unmount"), List.is_empty(&2, String, rest)),
-          v => Cli.unmount(a),
-          v => Shared.Bool.when(
-            Result<&2, &2, String, Cmd>,
-            String.eq(w, "daemon"),
-            x => Cli.daemon(a <> rest),
-            x => Fail{Cli.usage()}
-          )
-        )
+        Cli.everyday(w),
+        e => Done{Cli.ask(w <> a <> rest)},
+        e => Cli.parse.other(w, a, rest)
       )
 
 # the arguments that spell c
@@ -186,6 +284,10 @@ def Cli.show(c: Cmd) -> List<&2, String>:
       ["daemon", "stop"]
     case DaemonStop{True{}}:
       ["daemon", "stop", "--force"]
+    case AskCmd{ws, None{}}:
+      ws
+    case AskCmd{ws, Some{f}}:
+      List.append(&2, String, ws, ["--from", f])
     case Help{}:
       ["help"]
 
@@ -205,3 +307,12 @@ law parse_after_show:
     )
       == Done{MountCmd{root, rs, ln}}: Result<&2, &2, String, Cmd>
   }
+
+# the words of an everyday command reach the daemon as they are, when the
+# command is not a write (a write moves its --from file out of its words)
+law ask_passes_words:
+  for w: String
+  for ws: List<&2, String>
+  for e: {Cli.everyday(w) == True{}: Bool}
+  for n: {String.eq(w, "write") == False{}: Bool}
+  {Cli.parse(w <> ws) == Done{AskCmd{w <> ws, None{}}}: Result<&2, &2, String, Cmd>}

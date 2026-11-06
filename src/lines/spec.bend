@@ -18,6 +18,24 @@ type Line is Data:
 def Line.new(space: String, name: String) -> Line:
   Line{space, name, Shared.Table.new(List<&2, Shared.Bytes()>)}
 
+# the key of the line named ln of the space sp: one text for every line of
+# every space, as a daemon keeps them
+def Line.key(sp: String, ln: String) -> String:
+  String.concat([sp, ":", ln])
+
+# the key of l
+def Line.id(l: Line) -> String:
+  match l:
+    case Line{sp, nm, hs}:
+      Line.key(sp, nm)
+
+# a new line named name of the space of l, following what l follows: the
+# start of a line forked from l
+def Line.fork(l: Line, name: String) -> Line:
+  match l:
+    case Line{sp, nm, hs}:
+      Line{sp, name, hs}
+
 # the heads that l follows for the resource n: none when l has not
 # reached it yet; a resource of another space has none on l
 def Line.heads(l: Line, n: Shared.Name) -> List<&2, Shared.Bytes()>:
@@ -159,15 +177,16 @@ law advance_descends:
 # What each agent last saw of each line, so "what changed since I looked"
 # is exact and per agent. A marker moves only when its agent catches up.
 
-# What an agent last saw of a line: for each path, the heads it saw then.
+# What an agent last saw of a line: the line's key (Line.id), and for each
+# path, the heads it saw then.
 type Seen is Data:
   Seen{agent: String, line: String, heads: Shared.Table<List<&2, Shared.Bytes()>>}
 
-# a marker of agent a on the line named ln that has seen nothing
+# a marker of agent a on the line whose key is ln that has seen nothing
 def Seen.new(a: String, ln: String) -> Seen:
   Seen{a, ln, Shared.Table.new(List<&2, Shared.Bytes()>)}
 
-# the name of the line of s
+# the key of the line of s
 def Seen.line(s: Seen) -> String:
   match s:
     case Seen{a, ln, hs}:
@@ -184,7 +203,12 @@ def Line.name(l: Line) -> String:
 def Seen.update(s: Seen, l: Line) -> Seen:
   match s l:
     case Seen{+a, +ln, hs} Line{sp, nm, lh}:
-      Shared.Bool.when(Seen, String.eq(ln, nm), u => Seen{a, ln, lh}, u => Seen{a, ln, hs})
+      Shared.Bool.when(
+        Seen,
+        String.eq(ln, Line.key(sp, nm)),
+        u => Seen{a, ln, lh},
+        u => Seen{a, ln, hs}
+      )
 
 # the heads in the table t for the path p: none when t has no row for it
 def Heads.at(t: Shared.Table<List<&2, Shared.Bytes()>>, p: String) -> List<&2, Shared.Bytes()>:
@@ -230,13 +254,13 @@ type SeenBook is Data:
 def SeenBook.new() -> SeenBook:
   SeenBook{Shared.Table.new(Seen)}
 
-# the key of the marker of agent a on the line named ln: the length of a
-# first, so no two pairs share a key
+# the key of the marker of agent a on the line whose key is ln: the length
+# of a first, so no two pairs share a key
 def SeenBook.key(a: String, ln: String) -> String:
   +a = a
   String.concat([Nat.show(String.length(a)), ":", a, ln])
 
-# the marker of agent a on the line named ln
+# the marker of agent a on the line whose key is ln
 def SeenBook.get(m: SeenBook, +a: String, +ln: String) -> Seen:
   match m:
     case SeenBook{rs}:
@@ -246,7 +270,7 @@ def SeenBook.get(m: SeenBook, +a: String, +ln: String) -> Seen:
 def SeenBook.update(m: SeenBook, +a: String, +l: Line) -> SeenBook:
   match m:
     case SeenBook{+rs}:
-      +ln = Line.name(l)
+      +ln = Line.id(l)
       SeenBook{
         Shared.Table.set(
           Seen,
@@ -260,7 +284,7 @@ def SeenBook.update(m: SeenBook, +a: String, +l: Line) -> SeenBook:
 law seen_caught_up:
   for s: Seen
   for l: Line
-  for h: {String.eq(Seen.line(s), Line.name(l)) == True{}: Bool}
+  for h: {String.eq(Seen.line(s), Line.id(l)) == True{}: Bool}
   {Seen.unseen(Seen.update(s, l), l) == []: List<&2, Shared.Name>}
 
 # catching up moves only that agent's marker on that line
@@ -270,7 +294,7 @@ law seen_frames:
   for l: Line
   for b: String
   for ln: String
-  for d: {Bool.and(String.eq(b, a), String.eq(ln, Line.name(l))) == False{}: Bool}
+  for d: {Bool.and(String.eq(b, a), String.eq(ln, Line.id(l))) == False{}: Bool}
   {SeenBook.get(SeenBook.update(m, a, l), b, ln) == SeenBook.get(m, b, ln): Seen}
 
 # Marks
@@ -294,3 +318,9 @@ def Mark.heads(m: Mark, n: Shared.Name) -> List<&2, Shared.Bytes()>:
   match m:
     case Mark{ln, nm, msg, a, l}:
       Line.heads(l, n)
+
+# the line of m as it was when m was made
+def Mark.at(m: Mark) -> Line:
+  match m:
+    case Mark{ln, nm, msg, a, l}:
+      l

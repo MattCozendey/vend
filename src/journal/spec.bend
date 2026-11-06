@@ -15,12 +15,21 @@ import ../views/text/spec.bend as Text
 # Records
 # -------
 
-# One kept version: the line it was kept on, its content (None for a
-# version that says the file is gone), and its history node. Replaying it
-# puts the content in the store, the node in the history, and moves the
-# line it names.
+# One change of the state that a power cut must not lose.
+# Kept: a version: the line it was kept on, its content (None for a version
+# that says the file is gone), and its history node; replaying it puts the
+# content in the store, the node in the history, and moves the line it names.
+# Saw: the agent caught up with the line whose key (Lines.Line.id) is line,
+# as that line is at this point of the journal.
+# Marked: a mark named name of the line whose key is line, with its message
+# and author, holding that line's heads at this point of the journal.
+# Forked: a new line whose key is line, following what the line whose key is
+# from followed at this point, or what its mark named by mark holds.
 type Record is Data:
   Kept{line: String, content: Maybe<&2, Shared.Bytes()>, node: History.Node}
+  Saw{agent: String, line: String}
+  Marked{line: String, name: String, message: String, author: History.Author}
+  Forked{line: String, from: String, mark: Maybe<&2, String>}
 
 # the bytes of a text: its UTF-8, framed
 def Utf8.framed(s: String) -> Shared.Bytes():
@@ -34,8 +43,17 @@ def Content.encode(c: Maybe<&2, Shared.Bytes()>) -> Shared.Bytes():
     case Some{b}:
       1 <> Store.Bytes.framed(b)
 
-# the bytes of a record: the tag 0 (Kept), the line, the content, then the
-# node's own bytes (History.Node.encode), which run to the end
+# the bytes of a mark name of a fork: 0 for none, or 1 then the name
+def MarkName.encode(m: Maybe<&2, String>) -> Shared.Bytes():
+  match m:
+    case None{}:
+      [0]
+    case Some{x}:
+      1 <> Utf8.framed(x)
+
+# the bytes of a record: a tag (0 Kept, 1 Saw, 2 Marked, 3 Forked), then its
+# fields in order; a Kept ends with the node's own bytes
+# (History.Node.encode), which run to the end
 def Record.payload(r: Record) -> Shared.Bytes():
   match r:
     case Kept{ln, c, v}:
@@ -45,6 +63,29 @@ def Record.payload(r: Record) -> Shared.Bytes():
           U32,
           Utf8.framed(ln),
           List.append(&2, U32, Content.encode(c), History.Node.encode(v))
+        )
+    case Saw{a, ln}:
+      1 <> List.append(&2, U32, Utf8.framed(a), Utf8.framed(ln))
+    case Marked{ln, nm, msg, a}:
+      2
+        <> List.append(
+          &2,
+          U32,
+          Utf8.framed(ln),
+          List.append(
+            &2,
+            U32,
+            Utf8.framed(nm),
+            List.append(&2, U32, Utf8.framed(msg), History.Author.encode(a))
+          )
+        )
+    case Forked{ln, f, m}:
+      3
+        <> List.append(
+          &2,
+          U32,
+          Utf8.framed(ln),
+          List.append(&2, U32, Utf8.framed(f), MarkName.encode(m))
         )
 
 # the first n bytes of b
@@ -97,13 +138,30 @@ def Author.ok(a: History.Author) -> Bool:
     case History.Agent{n}:
       Text.Text.ok(n)
 
-# every text that record r holds is valid UTF-8 text (Text.ok): its line,
-# its node's name, moved-from name and author. Only such records read back,
-# since the log holds texts as UTF-8.
+# the mark name of a fork, if any, is valid UTF-8 text
+def MarkName.ok(m: Maybe<&2, String>) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{x}:
+      Text.Text.ok(x)
+
+# every text that record r holds is valid UTF-8 text (Text.ok): its lines,
+# names, messages and authors. Only such records read back, since the log
+# holds texts as UTF-8.
 def Record.ok(r: Record) -> Bool:
   match r:
     case Kept{ln, c, History.Node{n, ps, b, f, a}}:
       Bool.and(Text.Text.ok(ln), Bool.and(Name.ok(n), Bool.and(From.ok(f), Author.ok(a))))
+    case Saw{a, ln}:
+      Bool.and(Text.Text.ok(a), Text.Text.ok(ln))
+    case Marked{ln, nm, msg, a}:
+      Bool.and(
+        Text.Text.ok(ln),
+        Bool.and(Text.Text.ok(nm), Bool.and(Text.Text.ok(msg), Author.ok(a)))
+      )
+    case Forked{ln, f, m}:
+      Bool.and(Text.Text.ok(ln), Bool.and(Text.Text.ok(f), MarkName.ok(m)))
 
 # every record of rs is ok
 def Records.ok(rs: List<&2, Record>) -> Bool:

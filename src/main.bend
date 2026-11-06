@@ -34,6 +34,8 @@ def Main.run(c: Result<&2, &2, String, Cli.Cmd>) -> IO(Unit):
       Daemon.Client.ask(Spec.Unmount{Main.uri(r)})
     case Done{Cli.DaemonStop{f}}:
       Daemon.Client.ask(Spec.Stop{f})
+    case Done{Cli.AskCmd{ws, f}}:
+      Daemon.Client.everyday(ws, f)
 
 # the arguments as a reusable list
 def Main.args(xs: List<String>) -> List<&2, String>:

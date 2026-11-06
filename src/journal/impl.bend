@@ -207,6 +207,16 @@ def Content.read(b: Shared.Bytes()) -> Maybe<&2, Got<Maybe<&2, Shared.Bytes()>>>
     case _:
       None{}
 
+# the mark name of a fork: 0 for none, or 1 then the name
+def MarkName.read(b: Shared.Bytes()) -> Maybe<&2, Got<Maybe<&2, String>>>:
+  match b:
+    case Con{0, r}:
+      Some{Got{None{}, r}}
+    case Con{1, r}:
+      Got.then(String, Maybe<&2, String>, Utf8.read(r), x => r2 => Some{Got{Some{x}, r2}})
+    case _:
+      None{}
+
 # the record of a whole payload, or None when it does not decode or bytes
 # are left over
 def Record.read.end(m: Maybe<&2, Got<Spec.Record>>) -> Maybe<&2, Spec.Record>:
@@ -216,7 +226,7 @@ def Record.read.end(m: Maybe<&2, Got<Spec.Record>>) -> Maybe<&2, Spec.Record>:
     case _:
       None{}
 
-# the record of a payload: the tag 0, the line, the content, the node
+# the record of a payload: its tag, then its fields (Spec.Record.payload)
 def Record.read(p: Shared.Bytes()) -> Maybe<&2, Spec.Record>:
   match p:
     case Con{0, b}:
@@ -234,6 +244,63 @@ def Record.read(p: Shared.Bytes()) -> Maybe<&2, Spec.Record>:
               Spec.Record,
               Node.read(r2),
               v => r3 => Some{Got{Spec.Kept{ln, c, v}, r3}}
+            )
+          )
+        )
+      )
+    case Con{1, b}:
+      Record.read.end(
+        Got.then(
+          String,
+          Spec.Record,
+          Utf8.read(b),
+          a => r => Got.then(
+            String,
+            Spec.Record,
+            Utf8.read(r),
+            ln => r2 => Some{Got{Spec.Saw{a, ln}, r2}}
+          )
+        )
+      )
+    case Con{2, b}:
+      Record.read.end(
+        Got.then(
+          String,
+          Spec.Record,
+          Utf8.read(b),
+          ln => r => Got.then(
+            String,
+            Spec.Record,
+            Utf8.read(r),
+            nm => r2 => Got.then(
+              String,
+              Spec.Record,
+              Utf8.read(r2),
+              msg => r3 => Got.then(
+                History.Author,
+                Spec.Record,
+                Author.read(r3),
+                a => r4 => Some{Got{Spec.Marked{ln, nm, msg, a}, r4}}
+              )
+            )
+          )
+        )
+      )
+    case Con{3, b}:
+      Record.read.end(
+        Got.then(
+          String,
+          Spec.Record,
+          Utf8.read(b),
+          ln => r => Got.then(
+            String,
+            Spec.Record,
+            Utf8.read(r),
+            f => r2 => Got.then(
+              Maybe<&2, String>,
+              Spec.Record,
+              MarkName.read(r2),
+              m => r3 => Some{Got{Spec.Forked{ln, f, m}, r3}}
             )
           )
         )

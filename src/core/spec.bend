@@ -493,8 +493,10 @@ def Core.persisted(c: Core) -> Persisted:
     case Core{m, s, h, l, ss, ms, ns}:
       Persisted{s, h, l}
 
-# c after the records, in order: each puts its content in the store and
-# its node in the history, and moves the line of c when it names that line
+# c after the records, in order: each Kept puts its content in the store and
+# its node in the history, and moves the line of c when it names that line;
+# the other records (seen markers, marks, forks) are the daemon's and leave
+# c as it is
 law Core.replay:
   for c: Core
   for rs: List<&2, Journal.Record>
