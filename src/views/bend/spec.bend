@@ -411,9 +411,24 @@ def Bend.changed.go(ks: List<&2, String>, +a: Module, +b: Module) -> List<&2, St
         u => k <> Bend.changed.go(t, a, b)
       )
 
-# what changed from a to b, for the graph: the keys whose item text differs
+# the keys of bs that are not in as
+def Keys.not_in(bs: List<&2, String>, +as: List<&2, String>) -> List<&2, String>:
+  match bs:
+    case Nil{}:
+      Nil{}
+    case Con{+k, +t}:
+      Shared.Bool.when(
+        List<&2, String>,
+        List.contains(~String, ~String.eq, as, k),
+        u => Keys.not_in(t, as),
+        u => k <> Keys.not_in(t, as)
+      )
+
+# what changed from a to b, for the graph: the keys whose item text differs,
+# each once
 def Bend.changed(+a: Module, +b: Module) -> Graph.Change:
-  Graph.Keys{Bend.changed.go(List.append(&2, String, Bend.keys(a), Bend.keys(b)), a, b)}
+  +ka = Bend.keys(a)
+  Graph.Keys{Bend.changed.go(List.append(&2, String, ka, Keys.not_in(Bend.keys(b), ka)), a, b)}
 
 # Meaning
 # -------
