@@ -1,0 +1,14 @@
+{
+  "name": "bend-ver",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "bend-lint"
+  },
+  "devDependencies": {
+    "bend-lint": "0.3.0"
+  },
+  "trustedDependencies": [
+    "bend-lint"
+  ]
+}

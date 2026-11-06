@@ -1,0 +1,30 @@
+{
+  "packages": {
+    "bend-lint-rules": "0.3.0.0"
+  },
+  "rules": {
+    "bend-lint-rules/language/decreasing_call": {},
+    "bend-lint-rules/language/forward_reference": {},
+    "bend-lint-rules/language/reused_binder": {},
+    "bend-lint-rules/language/unneeded_plus": {},
+    "bend-lint-rules/layout/canon_import_path": {},
+    "bend-lint-rules/layout/case": {},
+    "bend-lint-rules/layout/directive_order": {},
+    "bend-lint-rules/layout/format": {},
+    "bend-lint-rules/layout/imports": {},
+    "bend-lint-rules/no_unused/imports": {},
+    "bend-lint-rules/performance/append_in_loop": {},
+    "bend-lint-rules/performance/bang_after_fork": {},
+    "bend-lint-rules/performance/dead_accumulator": {},
+    "bend-lint-rules/performance/deep_call_in_fork": {},
+    "bend-lint-rules/performance/drop_in_bang": {},
+    "bend-lint-rules/performance/eager_branch": {},
+    "bend-lint-rules/performance/gpu_fit": {},
+    "bend-lint-rules/performance/list_index_loop": {},
+    "bend-lint-rules/performance/loop_invariant_call": {},
+    "bend-lint-rules/performance/missed_fork": {},
+    "bend-lint-rules/performance/repeated_call": {},
+    "bend-lint-rules/performance/template_value_field": {},
+    "bend-lint-rules/performance/unused_result": {}
+  }
+}
