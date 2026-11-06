@@ -139,6 +139,30 @@ def Keys.distinct(ks: List<&2, String>) -> Bool:
 def View.KeysDistinct(~D: Data, ~keys: D -> List<&2, String>) -> Type:
   @d: D -> {Keys.distinct(keys(d)) == True{}: Bool}
 
+# Obligations and verifiers
+# -------------------------
+# A view may say what a resource still owes (its open obligations) and
+# name an outside program that checks a resource in a folder (its
+# verifier). The core never names a kind of obligation, nor a program: it
+# only lists what the views give.
+
+# An open obligation: kind, a word its view defines; item, the key of the
+# item it is about; text, what is open there.
+type Obligation is Data:
+  Obligation{kind: String, item: String, text: String}
+
+# a and b are the same obligation
+def Obligation.is_eq(a: Obligation, b: Obligation) -> Bool:
+  match a b:
+    case Obligation{k1, i1, t1} Obligation{k2, i2, t2}:
+      List.all.if(u => List.all.if(v => String.eq(t1, t2), String.eq(i1, i2)), String.eq(k1, k2))
+
+# An outside check of a resource: run program with the arguments before,
+# then the resource's file path, then the arguments after; its output is
+# the verdict.
+type Verifier is Data:
+  Verifier{program: String, before: List<&2, String>, after: List<&2, String>}
+
 # Sequence diff and merge
 # -----------------------
 # The views diff and merge sequences (the lines of a text, the items of a

@@ -5,11 +5,12 @@ import ../graph/spec.bend as Graph
 import ../shared.bend as Shared
 import ../views/bend/impl.bend as BendImpl
 import ../views/bend/spec.bend as Bend
+import ../views/shared.bend as Vs
 import ../views/text/impl.bend as TextImpl
 import ../views/text/spec.bend as Text
 
-# What the daemon asks of the views: a diff, a three-way merge and the
-# edges a change affects. A resource whose path ends with ".bend" is read
+# What the daemon asks of the views: a diff, a three-way merge, the edges
+# a change affects, open obligations and a verifier. A resource whose path ends with ".bend" is read
 # by the Bend view (by item), any other UTF-8 resource by the Text view (by
 # line); other bytes have no view, so they only differ or not.
 
@@ -161,3 +162,50 @@ def View.affected(
   c: Graph.Change
 ) -> List<&2, Graph.Edge>:
   Graph.Graph.affected(Graph.Graph{es}, n, c, Cond.Always{})
+
+# the Bend document of the resource n with the text found
+def View.doc.of(n: Shared.Name, m: Maybe<&2, String>) -> List<&2, Bend.Doc>:
+  match m:
+    case None{}:
+      []
+    case Some{s}:
+      [Bend.Doc{n, View.module(s)}]
+
+# the Bend document of the resource n at path with the bytes b, when it is
+# a Bend resource whose bytes are UTF-8
+def View.doc(n: Shared.Name, path: String, b: Shared.Bytes()) -> List<&2, Bend.Doc>:
+  View.doc.of(
+    n,
+    Shared.Bool.when(Maybe<&2, String>, View.is_bend(path), u => Text.Text.decode(b), u => None{})
+  )
+
+# the open obligations of the one document found, given ds
+def View.obligations.of(
+  ds: List<&2, Bend.Doc>,
+  found: List<&2, Bend.Doc>
+) -> List<&2, Vs.Obligation>:
+  match found:
+    case Con{d, Nil{}}:
+      Bend.Bend.obligations(ds, d)
+    case _:
+      []
+
+# the open obligations of the resource n at path with the bytes b, given ds,
+# the line's Bend documents: the Bend view's; no other view has any yet
+def View.obligations(
+  ds: List<&2, Bend.Doc>,
+  n: Shared.Name,
+  path: String,
+  b: Shared.Bytes()
+) -> List<&2, Vs.Obligation>:
+  View.obligations.of(ds, View.doc(n, path, b))
+
+# the verifier of the resource at path: the Bend view's; no other view has
+# one yet
+def View.verifier(path: String) -> Maybe<&2, Vs.Verifier>:
+  Shared.Bool.when(
+    Maybe<&2, Vs.Verifier>,
+    View.is_bend(path),
+    u => Some{Bend.Bend.verifier()},
+    u => None{}
+  )

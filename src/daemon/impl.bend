@@ -12,6 +12,7 @@ import ../lines/spec.bend as Lines
 import ../shared.bend as Shared
 import ../store/spec.bend as Store
 import ../views/bend/spec.bend as Bend
+import ../views/shared.bend as Vs
 import ../views/text/spec.bend as Text
 import ./spec.bend as Spec
 import ./views.bend as Views
@@ -1795,6 +1796,95 @@ def Answer.merge(
     case _ _:
       Show.no(String.concat(["no such line or mark: ", f, " or ", t]))
 
+# the carry of the content found for the file at path; none when it is
+# gone, missing, or not one version
+def Answer.file(m: Maybe<&2, Maybe<&2, Shared.Bytes()>>, path: String) -> List<&2, Spec.Carry>:
+  match m:
+    case Some{Some{b}}:
+      [Spec.Carry{path, b}]
+    case _:
+      []
+
+# the carry of each path of ps that the line l (of the space sp) follows
+# with one version that has content
+def Answer.files.go(
+  ps: List<&2, String>,
+  +d: Spec.Daemon,
+  +l: Lines.Line,
+  +sp: String
+) -> List<&2, Spec.Carry>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case Con{+p, t}:
+      x = Ref.one(Lines.Line.heads(l, Shared.Name{sp, p}))
+      List.append(
+        &2,
+        Spec.Carry,
+        Answer.file(Answer.content(d, x), p),
+        Answer.files.go(t, d, l, sp)
+      )
+
+# the files of the line l as it is now: each resource with one version
+# that has content, with that content
+def Answer.files(d: Spec.Daemon, +l: Lines.Line) -> List<&2, Spec.Carry>:
+  Answer.files.go(Answer.paths(l), d, l, Answer.space(l))
+
+# the Bend documents of the carries of the space sp
+def Open.docs(cs: List<&2, Spec.Carry>, +sp: String) -> List<&2, Bend.Doc>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case Con{Spec.Carry{+p, b}, t}:
+      List.append(&2, Bend.Doc, Views.View.doc(Shared.Name{sp, p}, p, b), Open.docs(t, sp))
+
+# the line of an obligation of the resource at path
+def Open.line(path: String, o: Vs.Obligation) -> String:
+  match o:
+    case Vs.Obligation{k, i, t}:
+      String.concat([path, ": ", k, " ", i, ": ", t])
+
+# the lines of the obligations os of the resource at path
+def Open.lines.of(+path: String, os: List<&2, Vs.Obligation>) -> List<&2, String>:
+  match os:
+    case Nil{}:
+      Nil{}
+    case Con{o, t}:
+      Open.line(path, o) <> Open.lines.of(path, t)
+
+# the lines of the open obligations of each carry, by its view, given ds,
+# the line's Bend documents
+def Open.lines(cs: List<&2, Spec.Carry>, +ds: List<&2, Bend.Doc>, +sp: String) -> List<&2, String>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case Con{Spec.Carry{+p, b}, t}:
+      List.append(
+        &2,
+        String,
+        Open.lines.of(p, Views.View.obligations(ds, Shared.Name{sp, p}, p, b)),
+        Open.lines(t, ds, sp)
+      )
+
+# the open obligations of the line found for the text t, grouped by
+# resource
+def Answer.open(d: Spec.Daemon, ml: Maybe<&2, Lines.Line>, t: String) -> Spec.Handled:
+  match ml:
+    case None{}:
+      Show.no(String.append("no line named ", t))
+    case Some{+l}:
+      +sp = Answer.space(l)
+      +cs = Answer.files(d, l)
+      +ls = Open.lines(cs, Open.docs(cs, sp), sp)
+      Show.yes(
+        Shared.Bool.when(
+          List<&2, String>,
+          List.is_empty(&2, String, ls),
+          u => [String.append("no open obligations on ", t)],
+          u => ls
+        )
+      )
+
 # the result of the command c of the agent a with the data b
 def Answer.go(+d: Spec.Daemon, a: String, c: Spec.Command, b: Shared.Bytes()) -> Spec.Handled:
   match c:
@@ -1824,6 +1914,10 @@ def Answer.go(+d: Spec.Daemon, a: String, c: Spec.Command, b: Shared.Bytes()) ->
       Show.no("a checkout is made by the daemon's loop, not as a command")
     case Spec.ReleaseOf{t}:
       Show.no("a release is made by the daemon's loop, not as a command")
+    case Spec.OpenOf{+t}:
+      Answer.open(d, Spec.Daemon.line_ref(d, t), t)
+    case Spec.VerifyOf{t}:
+      Show.no("a verification is made by the daemon's loop, not as a command")
 
 def Spec.Daemon.handle(d, a, c, b):
   Answer.go(d, a, c, b)
@@ -1935,20 +2029,6 @@ def Spec.apply_forked(d, k, f, l, h, n):
 # Checkouts
 # ---------
 
-# the author a is Outside: the mount is one the user made
-def Plan.outside(a: History.Author) -> Bool:
-  match a:
-    case History.Outside{}:
-      True{}
-    case History.Agent{n}:
-      False{}
-
-# the mounts of d
-def Plan.mounts(d: Spec.Daemon) -> List<&2, Spec.Local>:
-  match d:
-    case Spec.Daemon{s, h, ls, ms, cs, bk}:
-      ms
-
 # the mounts of ms that the user made of the space sp
 def Plan.bases(ms: List<&2, Spec.Local>, +sp: String) -> List<&2, Spec.Local>:
   match ms:
@@ -1958,7 +2038,10 @@ def Plan.bases(ms: List<&2, Spec.Local>, +sp: String) -> List<&2, Spec.Local>:
       +rest = Plan.bases(t, sp)
       Shared.Bool.when(
         List<&2, Spec.Local>,
-        List.all.if(u => Plan.outside(Spec.Local.author(l)), String.eq(Spec.Local.space(l), sp)),
+        List.all.if(
+          u => Maybe.is_none(&2, String, Spec.Author.agent(Spec.Local.author(l))),
+          String.eq(Spec.Local.space(l), sp)
+        ),
         u => l <> rest,
         u => rest
       )
@@ -1986,15 +2069,27 @@ def Plan.first(ms: List<&2, Spec.Local>, best: Maybe<&2, Spec.Local>) -> Maybe<&
       Plan.first(t, Plan.better(l, best))
 
 # the plan for the base m, or why there is none
-def Plan.based(m: Maybe<&2, Spec.Local>, a: String, nm: String, sp: String) -> Result<&2, &2, String, Spec.Plan>:
+def Plan.based(
+  m: Maybe<&2, Spec.Local>,
+  a: String,
+  nm: String,
+  sp: String
+) -> Result<&2, &2, String, Spec.Plan>:
   match m:
     case None{}:
-      Fail{String.concat(["no mount of the space ", sp, " on this machine: ask the user to mount it"])}
+      Fail{
+        String.concat(["no mount of the space ", sp, " on this machine: ask the user to mount it"])
+      }
     case Some{b}:
       Done{Spec.Plan{b, a, nm}}
 
 # the plan of the agent a for the line found for the text t
-def Plan.of(d: Spec.Daemon, a: String, ml: Maybe<&2, Lines.Line>, t: String) -> Result<&2, &2, String, Spec.Plan>:
+def Plan.of(
+  d: Spec.Daemon,
+  a: String,
+  ml: Maybe<&2, Lines.Line>,
+  t: String
+) -> Result<&2, &2, String, Spec.Plan>:
   match ml:
     case None{}:
       Fail{String.append("no line named ", t)}
@@ -2002,7 +2097,7 @@ def Plan.of(d: Spec.Daemon, a: String, ml: Maybe<&2, Lines.Line>, t: String) -> 
       Shared.Bool.when(
         Result<&2, &2, String, Spec.Plan>,
         Spec.Checkout.name_ok(nm),
-        u => Plan.based(Plan.first(Plan.bases(Plan.mounts(d), sp), None{}), a, nm, sp),
+        u => Plan.based(Plan.first(Plan.bases(Spec.Daemon.mounts(d), sp), None{}), a, nm, sp),
         u => Fail{String.append("the line's name cannot name a folder: ", nm)}
       )
 
@@ -2016,26 +2111,3 @@ def Spec.Daemon.plan(d, a, t):
     u => Plan.of(d, a, Spec.Daemon.line_ref(d, t), t),
     u => Fail{String.append("not a valid agent name for a checkout: ", a)}
   )
-
-# the carry of the content found for the file at path; none when it is
-# gone, missing, or not one version
-def Checkout.carry(m: Maybe<&2, Maybe<&2, Shared.Bytes()>>, path: String) -> List<&2, Spec.Carry>:
-  match m:
-    case Some{Some{b}}:
-      [Spec.Carry{path, b}]
-    case _:
-      []
-
-# the carry of each path of ps that the line l (of the space sp) follows
-# with one version that has content
-def Checkout.carries.go(ps: List<&2, String>, +d: Spec.Daemon, +l: Lines.Line, +sp: String) -> List<&2, Spec.Carry>:
-  match ps:
-    case Nil{}:
-      Nil{}
-    case Con{+p, t}:
-      x = Ref.one(Lines.Line.heads(l, Shared.Name{sp, p}))
-      List.append(&2, Spec.Carry, Checkout.carry(Answer.content(d, x), p), Checkout.carries.go(t, d, l, sp))
-
-# the files of the line l as it is now, to write into a new checkout
-def Checkout.carries(d: Spec.Daemon, +l: Lines.Line) -> List<&2, Spec.Carry>:
-  Checkout.carries.go(Answer.paths(l), d, l, Answer.space(l))

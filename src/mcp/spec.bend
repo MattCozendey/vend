@@ -206,6 +206,16 @@ def Mcp.tools() -> List<&2, McpTool>:
       "vend_release",
       "Your working copy of a line removed: the folder is deleted, the line and its versions stay.",
       Says{[AWord{"release"}, APos{"line", "the line", True{}}]}
+    },
+    McpTool{
+      "vend_open",
+      "What each resource of a line still owes, as its view says (for Bend: laws no def fills, and ?holes in proofs), by resource.",
+      Says{[AWord{"open"}, APos{"line", "the line", True{}}]}
+    },
+    McpTool{
+      "vend_verify",
+      "Each resource of a line checked by its view's verifier (for Bend: bend --check-only), in your checkout of the line, else in the user's mount that shows it.",
+      Says{[AWord{"verify"}, APos{"line", "the line", True{}}]}
     }
   ]
 

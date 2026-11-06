@@ -844,3 +844,239 @@ def Bend.part(m: Module, n: Shared.Name, i: Item) -> Part:
       Code{}
     case Gap{t}:
       Code{}
+
+# Obligations
+# -----------
+# What a Bend resource still owes, in two kinds. "law": a law item that no
+# def fills; a def fills the law x of the resource n when it is named x in
+# the module of n, or named "A.x" in a module of the line whose import A
+# names n (the rule `bun run build` strips open laws by). "hole": a hole
+# `?name` (`?TODO` is one) in the text of a proof item, outside comments;
+# its item is the proof's name and its text the hole's name. Like the
+# mentions, a hole inside a string literal is counted.
+
+# A Bend resource of a line: its name and its document.
+type Doc is Data:
+  Doc{name: Shared.Name, module: Module}
+
+# the names of the def items among items
+def Items.defs(items: List<&2, Item>) -> List<&2, String>:
+  match items:
+    case Nil{}:
+      Nil{}
+    case Con{Keyed{DefItem{}, x, t}, r}:
+      x <> Items.defs(r)
+    case Con{i, r}:
+      Items.defs(r)
+
+# a and b name the same resource
+def Name.is_eq(a: Shared.Name, b: Shared.Name) -> Bool:
+  String.eq(Shared.Name.show(a), Shared.Name.show(b))
+
+# the def named y fills the law x of the resource n through an alias of
+# als: y is "A.x" for an alias A whose import names n
+def Bend.fills_alias(als: List<&2, Alias>, +n: Shared.Name, +x: String, +y: String) -> Bool:
+  match als:
+    case Nil{}:
+      False{}
+    case Con{Alias{a, tg}, r}:
+      here = List.all.if(u => String.eq(y, String.concat([a, ".", x])), Graph.Target.is(tg, n))
+      List.any.if(u => Bend.fills_alias(r, n, x, y), here)
+
+# some def named among ys, in the module of the resource n2 whose aliases
+# are als, fills the law x of the resource n
+def Bend.fills_any(
+  ys: List<&2, String>,
+  +n: Shared.Name,
+  +x: String,
+  +n2: Shared.Name,
+  +als: List<&2, Alias>
+) -> Bool:
+  match ys:
+    case Nil{}:
+      False{}
+    case Con{+y, t}:
+      here = List.any.if(
+        u => Bend.fills_alias(als, n, x, y),
+        Bool.and(Name.is_eq(n2, n), String.eq(y, x))
+      )
+      List.any.if(u => Bend.fills_any(t, n, x, n2, als), here)
+
+# some def of the documents ds fills the law x of the resource n
+def Bend.filled(ds: List<&2, Doc>, +n: Shared.Name, +x: String) -> Bool:
+  match ds:
+    case Nil{}:
+      False{}
+    case Con{Doc{+n2, m2}, t}:
+      +items = Module.items(m2)
+      List.any.if(
+        u => Bend.filled(t, n, x),
+        Bend.fills_any(Items.defs(items), n, x, n2, Bend.aliases(items, n2))
+      )
+
+# the names of the holes in s, given note: s is inside a comment. A '#'
+# starts a comment that runs to the end of its line; outside comments, a
+# '?' followed by name characters starts a hole
+def Bend.holes.go(s: String, note: Bool) -> List<&2, String>:
+  match s note:
+    case SNil{} _:
+      Nil{}
+    case SCon{c, +t} True{}:
+      Bend.holes.go(t, Bool.not(U32.is_eq(Char.to_u32(c), 10)))
+    case SCon{c, +t} False{}:
+      +x = Char.to_u32(c)
+      +name = Bend.ident.go(t)
+      +rest = Bend.holes.go(t, U32.is_eq(x, 35))
+      Shared.Bool.when(
+        List<&2, String>,
+        Bool.and(U32.is_eq(x, 63), Bool.not(String.is_empty(name))),
+        u => name <> rest,
+        u => rest
+      )
+
+# the names of the holes in the text s, outside comments
+def Bend.holes(s: String) -> List<&2, String>:
+  Bend.holes.go(s, False{})
+
+# the law that a part fills, if it is a proof
+def Part.fills(p: Part) -> Maybe<&2, String>:
+  match p:
+    case Proof{f}:
+      Some{f}
+    case _:
+      None{}
+
+# the law obligations of the laws xs of the resource n, given the line's
+# documents ds
+def Bend.law_obligations(
+  xs: List<&2, String>,
+  +ds: List<&2, Doc>,
+  +n: Shared.Name
+) -> List<&2, Views.Obligation>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case Con{+x, t}:
+      +rest = Bend.law_obligations(t, ds, n)
+      Shared.Bool.when(
+        List<&2, Views.Obligation>,
+        Bend.filled(ds, n, x),
+        u => rest,
+        u => Views.Obligation{"law", x, "no def fills it"} <> rest
+      )
+
+# a hole obligation of the proof f for each hole name of hs
+def Bend.hole_list(+f: String, hs: List<&2, String>) -> List<&2, Views.Obligation>:
+  match hs:
+    case Nil{}:
+      Nil{}
+    case Con{h, t}:
+      Views.Obligation{"hole", f, h} <> Bend.hole_list(f, t)
+
+# the hole obligations of an item that plays the part found
+def Bend.hole_of(m: Maybe<&2, String>, s: String) -> List<&2, Views.Obligation>:
+  match m:
+    case None{}:
+      []
+    case Some{f}:
+      Bend.hole_list(f, Bend.holes(s))
+
+# the hole obligations of the items of the module m of the resource n
+def Bend.hole_obligations(
+  items: List<&2, Item>,
+  +m: Module,
+  +n: Shared.Name
+) -> List<&2, Views.Obligation>:
+  match items:
+    case Nil{}:
+      Nil{}
+    case Con{+i, t}:
+      List.append(
+        &2,
+        Views.Obligation,
+        Bend.hole_of(Part.fills(Bend.part(m, n, i)), Item.text(i)),
+        Bend.hole_obligations(t, m, n)
+      )
+
+# the open obligations of the document d, given ds, every Bend document of
+# its line (d among them)
+def Bend.obligations(ds: List<&2, Doc>, d: Doc) -> List<&2, Views.Obligation>:
+  match d:
+    case Doc{+n, +m}:
+      +items = Module.items(m)
+      List.append(
+        &2,
+        Views.Obligation,
+        Bend.law_obligations(Items.laws(items), ds, n),
+        Bend.hole_obligations(items, m, n)
+      )
+
+# some item of items plays the proof of f in the module m of the resource
+# n, and its text holds the hole h
+def Bend.has_hole(
+  items: List<&2, Item>,
+  +m: Module,
+  +n: Shared.Name,
+  +f: String,
+  +h: String
+) -> Bool:
+  match items:
+    case Nil{}:
+      False{}
+    case Con{+i, t}:
+      here = Maybe.default(
+        &2,
+        Bool,
+        Maybe.map(&2, String, Bool, g => String.eq(g, f), Part.fills(Bend.part(m, n, i))),
+        False{}
+      )
+      List.any.if(
+        u => Bend.has_hole(t, m, n, f, h),
+        List.all.if(v => List.contains(~String, ~String.eq, Bend.holes(Item.text(i)), h), here)
+      )
+
+# a law obligation is exactly a law item of the resource that no def of the
+# line's Bend documents fills
+law obligation_law:
+  for ds: List<&2, Doc>
+  for n: Shared.Name
+  for m: Module
+  for x: String
+  for t: String
+  {
+    List.contains(
+      ~Views.Obligation,
+      ~Views.Obligation.is_eq,
+      Bend.obligations(ds, Doc{n, m}),
+      Views.Obligation{"law", x, t}
+    )
+      == Bool.and(
+        String.eq(t, "no def fills it"),
+        Bool.and(
+          List.contains(~String, ~String.eq, Items.laws(Module.items(m)), x),
+          Bool.not(Bend.filled(ds, n, x))
+        )
+      ): Bool
+  }
+
+# a hole obligation is exactly a hole of a proof item of the resource
+law obligation_hole:
+  for ds: List<&2, Doc>
+  for n: Shared.Name
+  for m: Module
+  for f: String
+  for h: String
+  {
+    List.contains(
+      ~Views.Obligation,
+      ~Views.Obligation.is_eq,
+      Bend.obligations(ds, Doc{n, m}),
+      Views.Obligation{"hole", f, h}
+    )
+      == Bend.has_hole(Module.items(m), m, n, f, h): Bool
+  }
+
+# The verifier of a Bend resource: `bend <file> --check-only`, the checker
+# with nothing run.
+def Bend.verifier() -> Views.Verifier:
+  Views.Verifier{"bend", [], ["--check-only"]}

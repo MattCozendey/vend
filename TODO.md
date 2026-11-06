@@ -10,8 +10,14 @@ Delete each item when it is done.
   exponentially larger: if it becomes hot, keep the BDD itself in the graph, or give `Cond` a shared form. Its memo
   lookups go through `Table`, so they speed up with the faster `Table` inside.
 - `src/history`: `History.join`.
-- `src/views/bend`: after a merge, run the checker; report "merged, but the proofs fail" as its own outcome. With
-  `src/impact`, this is the guarantee: no law statement changed and the merged result checks, so every law holds.
+- After a merge, run every view's verifier on the merged files; report "merged, but verification fails" as its own
+  outcome. For Bend, with `src/impact`, this is the guarantee: no law statement changed and the merged result checks,
+  so every law holds.
+- Obligations and verifiers for the C view (and others) when they earn them; today only the Bend view has any.
+- `verify` runs each verifier to its end (timeout 300 s) inside the daemon's core task, so the daemon serves nothing
+  else meanwhile; run verifiers on a task of their own.
+- The daemon picks a resource's view by its path (`.bend` for Bend, else Text when UTF-8); a view chosen by content
+  would drop that assumption.
 - `src/impact`: prune the radius by condition (`via` edges whose condition cannot hold under a query) with
   `Cond.sat`; today conditions are only reported.
 - `src/store`: tree-aware `Tree.edit` (re-chunk only near the edit) and `Tree.diff` (skip shared subtrees). The first versions read and write everything.
@@ -32,7 +38,8 @@ Delete each item when it is done.
 - The daemon (`src/daemon`; built: one per user and machine, all mounts, started only by
   `vend start-or-resume`, the down message, `status`, `mount`, `unmount`, guarded `daemon stop`, and the everyday
   commands `lines`, `log`, `show`, `diff`, `affects`, `impact`, `line new`, `write --expect`, `restore`, `mark`,
-  `merge`; agents' checkouts `checkout`/`release`, inside the user's mount; and the MCP front, `vend mcp`). Left:
+  `merge`; agents' checkouts `checkout`/`release`, inside the user's mount; `open` (obligations) and `verify`
+  (verifiers), through the views; and the MCP front, `vend mcp`). Left:
   - MCP (`src/mcp`): `affects` as a stream of notifications (`subscriptions/listen`), and resources or prompts, are
     not offered; tools only. A modern request is not checked against the client capabilities it declares (vend
     needs none). Tool output is text only (no `structuredContent`).
@@ -70,7 +77,7 @@ and soundness are proven in `src/shared.bend`).
   - `src/views/text`: `Text.lossless`, `Text.same_equivalence`, `Text.patches`, `Text.diffs_nothing`,
     `Text.merges`.
   - `src/views/bend`: `Bend.lossless`, `Bend.keys_distinct`, `Bend.same_equivalence`, `Bend.patches`,
-    `Bend.diffs_nothing`, `Bend.merges`, `refs_local`, `refs_imported`.
+    `Bend.diffs_nothing`, `Bend.merges`, `refs_local`, `refs_imported`, `obligation_law`, `obligation_hole`.
 - `src/store`: `node_is_eq`, `read_after_write`, `write_root`, `write_keeps`, `edit_root`, `read_after_edit`,
   `edit_keeps`, `write_collides`, `edit_collides`, `diff_applies`.
 - `src/conditions`: `sat_holds`, `sat_unsat`, `canon_same`, `canon_unique`.

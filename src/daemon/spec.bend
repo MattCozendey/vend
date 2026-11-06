@@ -129,6 +129,12 @@ def Local.drop(ms: List<&2, Local>, +uri: String) -> List<&2, Local>:
         u => m <> Local.drop(t, uri)
       )
 
+# the mounts of d
+def Daemon.mounts(d: Daemon) -> List<&2, Local>:
+  match d:
+    case Daemon{s, h, ls, ms, cs, bk}:
+      ms
+
 # the local of the mount at uri, if there is one
 def Daemon.local(d: Daemon, uri: String) -> Maybe<&2, Local>:
   match d:
@@ -671,6 +677,11 @@ law apply_forked_mark:
 #                                           line, in a mount of its space
 #   release <line>                          that working copy gone; the line
 #                                           stays
+#   open <line>                             each resource's open obligations
+#                                           on the line, as its view says
+#   verify <line>                           each resource checked by its
+#                                           view's verifier, in a folder that
+#                                           shows the line
 type Command is Data:
   LinesOf{}
   LogOf{name: Shared.Name, line: Maybe<&2, String>, author: Maybe<&2, String>}
@@ -685,6 +696,8 @@ type Command is Data:
   MergeOf{from: String, into: String}
   CheckoutOf{line: String}
   ReleaseOf{line: String}
+  OpenOf{line: String}
+  VerifyOf{line: String}
 
 # the resource whose bytes a command writes, as a URI the daemon fetches
 # before it handles the command: a write's --from; every other command
@@ -698,7 +711,7 @@ def Command.source(c: Command) -> Maybe<&2, String>:
 
 # the syntax of the everyday commands
 def Command.syntax() -> String:
-  "lines | log <name> [--line L] [--author A] | show <name> [<version>] | diff <name> <a> <b> | affects <line> | impact <line|line@mark> | line new <name> --from <line|line@mark> | write <name> --expect <ids|none> [--line L] [--from <uri>] | restore <name> <version> [--line L] | mark <line> <name> -m <message> | merge <line|line@mark> into <line> | checkout <line> | release <line>"
+  "lines | log <name> [--line L] [--author A] | show <name> [<version>] | diff <name> <a> <b> | affects <line> | impact <line|line@mark> | line new <name> --from <line|line@mark> | write <name> --expect <ids|none> [--line L] [--from <uri>] | restore <name> <version> [--line L] | mark <line> <name> -m <message> | merge <line|line@mark> into <line> | checkout <line> | release <line> | open <line> | verify <line>"
 
 # the usage of the everyday commands
 def Command.usage() -> String:
@@ -866,6 +879,22 @@ def Command.release(r: List<&2, String>) -> Result<&2, &2, String, Command>:
     case Nil{}:
       Fail{Command.usage()}
 
+# open <line>
+def Command.open(r: List<&2, String>) -> Result<&2, &2, String, Command>:
+  match r:
+    case Con{a, t}:
+      Command.if(List.is_empty(&2, String, t), OpenOf{a})
+    case Nil{}:
+      Fail{Command.usage()}
+
+# verify <line>
+def Command.verify(r: List<&2, String>) -> Result<&2, &2, String, Command>:
+  match r:
+    case Con{a, t}:
+      Command.if(List.is_empty(&2, String, t), VerifyOf{a})
+    case Nil{}:
+      Fail{Command.usage()}
+
 # A command word and the reader of the words after it.
 type Reader is Type:
   Reader{word: String, read: List<&2, String> -> Result<&2, &2, String, Command>}
@@ -885,7 +914,9 @@ def Command.readers() -> List<&1, Reader>:
     Reader{"mark", r => Command.mark(r)},
     Reader{"merge", r => Command.merge(r)},
     Reader{"checkout", r => Command.checkout(r)},
-    Reader{"release", r => Command.release(r)}
+    Reader{"release", r => Command.release(r)},
+    Reader{"open", r => Command.open(r)},
+    Reader{"verify", r => Command.verify(r)}
   ]
 
 # the words of rs
@@ -937,6 +968,8 @@ def Command.reads(c: Command) -> Bool:
     case DiffOf{n, a, b}:
       True{}
     case ImpactOf{t}:
+      True{}
+    case OpenOf{t}:
       True{}
     case _:
       False{}
@@ -1225,7 +1258,9 @@ law plan_contained:
 # Stopping, then end. DoAsk: run the command c for the agent with data
 # (Daemon.handle), keep its records, then answer. DoCheckout, DoRelease:
 # make or remove the agent's checkout of the line that line names, as
-# Daemon.plan places it, then answer.
+# Daemon.plan places it, then answer. DoVerify: run each resource's
+# verifier on the line's files, in the agent's checkout of the line, else
+# in a mount the user made that shows it, then answer.
 type Action is Data:
   Reply{response: Response}
   DoMount{uri: String, globs: List<&2, String>, line: String}
@@ -1234,6 +1269,7 @@ type Action is Data:
   DoAsk{agent: String, command: Command, data: Shared.Bytes()}
   DoCheckout{agent: String, line: String}
   DoRelease{agent: String, line: String}
+  DoVerify{agent: String, line: String}
 
 # the nodes of h, by the hex of their id
 def Versions.nodes(h: History.History) -> Shared.Table<History.Node>:
@@ -1326,6 +1362,8 @@ def Command.decided(r: Result<&2, &2, String, Command>, a: String, b: Shared.Byt
       DoCheckout{a, t}
     case Done{ReleaseOf{t}}:
       DoRelease{a, t}
+    case Done{VerifyOf{t}}:
+      DoVerify{a, t}
     case Done{c}:
       DoAsk{a, c, b}
 

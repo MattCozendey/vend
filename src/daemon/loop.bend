@@ -14,10 +14,12 @@ import ../journal/spec.bend as Journal
 import ../lines/spec.bend as Lines
 import ../shared.bend as Shared
 import ../store/spec.bend as Store
+import ../views/shared.bend as Vs
 import ../views/text/impl.bend as TextImpl
 import ../views/text/spec.bend as Text
 import ./impl.bend as Impl
 import ./spec.bend as Spec
+import ./views.bend as Views
 
 # The daemon's IO. `start-or-resume` takes the journal (its lock keeps a
 # second daemon out), restores the shared state from it, listens on a TCP
@@ -728,9 +730,7 @@ def Local.line(l: Spec.Local) -> String:
 
 # the mounts of st
 def Serve.mounts(st: Serve) -> List<&2, Spec.Local>:
-  match st:
-    case Serve{Spec.Daemon{s, h, ls, ms, cs, bk}, ws, tok, dir, ib, ast}:
-      ms
+  Spec.Daemon.mounts(Serve.daemon(st))
 
 # the watches of st
 def Serve.watches(st: Serve) -> List<&2, Watch>:
@@ -1037,7 +1037,7 @@ def Serve.checkout.at(
   match m:
     case Core.Mount{+sp, +ln, r, g, a}:
       +d = Serve.daemon(st)
-      cs = Impl.Checkout.carries(d, Spec.Daemon.line_in(d, sp, ln))
+      cs = Impl.Answer.files(d, Spec.Daemon.line_in(d, sp, ln))
       do IO<Unit>:
         +root: File.Root <- FileImpl.FileEp.open(os)
         put: List<
@@ -1219,6 +1219,149 @@ def Serve.release.planned(
       +r = Spec.Plan.root(p)
       Serve.release.os(File.FileEp.root_of(r), Shared.Uri.show(r), st, j, sock, k)
 
+# Verifying
+# ---------
+# `verify <line>` runs each resource's verifier (its view names one, or
+# none) on the line's files as a folder shows them: the agent's checkout of
+# the line, else a mount the user made that shows the line. Each runs to
+# its end (or its timeout) before the daemon serves the next event.
+
+# the OS path of the agent's checkout of the plan, when it is mounted
+def Verify.checkout(d: Spec.Daemon, pr: Result<&2, &2, String, Spec.Plan>) -> Maybe<&2, String>:
+  match pr:
+    case Fail{why}:
+      None{}
+    case Done{+p}:
+      Shared.Bool.when(
+        Maybe<&2, String>,
+        Maybe.is_some(&2, Spec.Local, Spec.Daemon.local(d, Shared.Uri.show(Spec.Plan.root(p)))),
+        u => File.FileEp.root_of(Spec.Plan.root(p)),
+        u => None{}
+      )
+
+# the OS path of the first mount of ms that the user made on the line
+# whose key is key
+def Verify.mount(ms: List<&2, Spec.Local>, +key: String) -> Maybe<&2, String>:
+  match ms:
+    case Nil{}:
+      None{}
+    case Con{+l, t}:
+      Shared.Bool.when(
+        Maybe<&2, String>,
+        List.all.if(
+          u => String.eq(Local.line(l), key),
+          Maybe.is_none(&2, String, Spec.Author.agent(Spec.Local.author(l)))
+        ),
+        u => File.FileEp.root_of(Spec.Local.root(l)),
+        u => Verify.mount(t, key)
+      )
+
+# the OS path of a mount the user made that shows the line found
+def Verify.mounted(d: Spec.Daemon, ml: Maybe<&2, Lines.Line>) -> Maybe<&2, String>:
+  match ml:
+    case None{}:
+      None{}
+    case Some{l}:
+      Verify.mount(Spec.Daemon.mounts(d), Lines.Line.id(l))
+
+# the folder that shows the line that t names to the agent a
+def Verify.folder(+d: Spec.Daemon, a: String, +t: String) -> Maybe<&2, String>:
+  Maybe.or(
+    &2,
+    String,
+    Verify.checkout(d, Spec.Daemon.plan(d, a, t)),
+    Verify.mounted(d, Spec.Daemon.line_ref(d, t))
+  )
+
+# the files of the line found, as carries
+def Verify.carries(d: Spec.Daemon, ml: Maybe<&2, Lines.Line>) -> List<&2, Spec.Carry>:
+  match ml:
+    case None{}:
+      []
+    case Some{l}:
+      Impl.Answer.files(d, l)
+
+# xs, as the list Process.run takes
+def Verify.args(xs: List<&2, String>) -> List<String>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case Con{x, t}:
+      x <> Verify.args(t)
+
+# the first n lines of ls that are not blank
+def Verify.first(n: Nat, ls: List<&2, String>) -> List<&2, String>:
+  match n ls:
+    case 0n _:
+      []
+    case _ Nil{}:
+      []
+    case 1n+(+m) Con{+x, +t}:
+      Shared.Bool.when(
+        List<&2, String>,
+        String.is_empty(String.trim(x)),
+        u => Verify.first(1n+m, t),
+        u => x <> Verify.first(m, t)
+      )
+
+# the verdict of the run of prog on the resource at path: its first lines
+def Verify.said(
+  path: String,
+  prog: String,
+  r: Result<&1, &1, U32 & String, U32 & (String & String)>
+) -> String:
+  match r:
+    case Fail{e}:
+      String.concat([path, ": could not run ", prog, ": ", Err.why(e)])
+    case Done{(st, (out, err))}:
+      String.concat(
+        [path, ": ", String.join(Verify.first(3n, String.lines(String.append(out, err))), " / ")]
+      )
+
+# the verdict for the resource at path in the folder os, by its verifier
+def Verify.one(m: Maybe<&2, Vs.Verifier>, os: String, +path: String) -> IO(String):
+  match m:
+    case None{}:
+      IO.pure(String, String.append(path, ": no verifier"))
+    case Some{Vs.Verifier{+prog, bf, af}}:
+      file = String.append(Spec.Checkout.dir(os), path)
+      args = Verify.args(List.append(&2, String, bf, file <> af))
+      do IO<String>:
+        r: Result<
+          &1,
+          &1,
+          U32 & String,
+          U32 & (String & String)> <- Process.run(prog, args, "", 1048576, 300000)
+        return Verify.said(path, prog, r)
+
+# the verdict for each carry's resource in the folder os
+def Verify.run(cs: List<&2, Spec.Carry>, +os: String) -> IO(List<&2, String>):
+  match cs:
+    case Nil{}:
+      IO.pure(List<&2, String>, [])
+    case Con{Spec.Carry{+p, b}, t}:
+      do IO<List<&2, String>>:
+        x: String <- Verify.one(Views.View.verifier(p), os, p)
+        rest: List<&2, String> <- Verify.run(t, os)
+        return x <> rest
+
+# the verification of the files cs in the folder found, answered on sock
+def Serve.verify(
+  mf: Maybe<&2, String>,
+  cs: List<&2, Spec.Carry>,
+  st: Serve,
+  j: File,
+  sock: Socket,
+  k: Serve -> File -> IO(Unit)
+) -> IO(Unit):
+  match mf:
+    case None{}:
+      Serve.said(sock, False{}, ["no folder shows this line; check it out first"], st, j, k)
+    case Some{os}:
+      do IO<Unit>:
+        ls: List<&2, String> <- Verify.run(cs, os)
+        Serve.said(sock, True{}, ls, st, j, k)
+
 # what the daemon does about the action a, answering on sock
 def Serve.act(
   a: Spec.Action,
@@ -1251,6 +1394,16 @@ def Serve.act(
       Serve.checkout.planned(Spec.Daemon.plan(Serve.daemon(st), a, t), st, j, sock, k)
     case Spec.DoRelease{a, t}:
       Serve.release.planned(Spec.Daemon.plan(Serve.daemon(st), a, t), st, j, sock, k)
+    case Spec.DoVerify{a, +t}:
+      +d = Serve.daemon(st)
+      Serve.verify(
+        Verify.folder(d, a, t),
+        Verify.carries(d, Spec.Daemon.line_ref(d, t)),
+        st,
+        j,
+        sock,
+        k
+      )
 
 # the request in the bytes of a connection, decided and acted on
 def Serve.request(
