@@ -37,7 +37,9 @@ Delete each item when it is done.
   replay the log, then rescan the mounts and record what changed while the daemon was down. The file driver must
   fsync its writes (today it does not).
 - CLI for marks (`src/lines`, `Mark`): `bend-ver mark <line> <name> -m <message>`, `merge <line>@<mark> into <line>`,
-  `diff <mark> <mark>`.
+  `diff <mark> <mark>`. Store marks in the core's state, then state their laws (a mark holds its line's heads from
+  when it was made; advancing the line never changes it): today a mark is a copy of a line, so they hold by
+  definition.
 - Fronts: read the agent name from `BEND_VER_AGENT` (CLI) or the client name (MCP) for `Write`; give `affects` the
   agent's seen marker (`src/lines`, `SeenBook`).
 
@@ -57,8 +59,7 @@ and soundness are proven in `src/shared.bend`).
 - `src/conditions`: `sat_holds`, `sat_unsat`, `canon_same`, `canon_unique`.
 - `src/history`: `node_encode_injective`, `add_refused`, `add_node`, `add_collides`, `add_idempotent`, `add_tips`,
   `new_ok`, `add_ok`, `join_keeps`, `join_adds_nothing`, `join_commutes`, `join_associates`, `join_idempotent`.
-- `src/lines`: `advance_head`, `advance_frames`, `advance_descends`, `seen_caught_up`, `seen_frames`, `mark_heads`,
-  `mark_fixed`.
+- `src/lines`: `advance_head`, `advance_frames`, `advance_descends`, `seen_caught_up`, `seen_frames`.
 - `src/graph`: `affected_exact`.
 - `src/core`: `noticed_follows_stream`, `records_each_version`, `fetched_reads_back`, `recorded_heads_line`,
   `write_accepted`, `write_authored`, `nested_untracked`, `step_keeps_history`.

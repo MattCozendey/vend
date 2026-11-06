@@ -294,29 +294,3 @@ def Mark.heads(m: Mark, n: Shared.Name) -> List<&2, Shared.Bytes()>:
   match m:
     case Mark{ln, nm, msg, a, l}:
       Line.heads(l, n)
-
-# a mark holds the heads its line followed for every resource when it was
-# made
-law mark_heads:
-  for l: Line
-  for nm: String
-  for msg: String
-  for a: History.Author
-  for n: Shared.Name
-  {Mark.heads(Mark.of(l, nm, msg, a), n) == Line.heads(l, n): List<&2, Shared.Bytes()>}
-
-# moving a line does not move its marks: a mark made before an advance still
-# gives the heads from before it, not the line's new ones
-law mark_fixed:
-  for l: Line
-  for h: History.History
-  for r: Shared.Name
-  for expect: List<&2, Shared.Bytes()>
-  for x: Shared.Bytes()
-  for k: Line
-  for nm: String
-  for msg: String
-  for a: History.Author
-  for n: Shared.Name
-  for d: {Line.advance(l, h, r, expect, x) == Done{k}: Result<&2, &2, Refused, Line>}
-  {Mark.heads(Mark.of(l, nm, msg, a), n) == Line.heads(l, n): List<&2, Shared.Bytes()>}
