@@ -3,42 +3,98 @@ import ../hash/spec.bend as Hash
 import ../shared.bend as Shared
 import ./spec.bend as Spec
 
-# A commit checks the heads it was given against the heads now, exactly
-# and in order, and then makes its node the one head. History.join is not
-# written yet.
-def Spec.Ids.is_eq(xs, ys):
-  match xs ys:
-    case Nil{} Nil{}:
+# An add stores the node under its id and makes it a tip of its resource in
+# place of its parents; a node that is there already changes nothing.
+# History.join is not written yet.
+
+# a before b, by bytes: the first differing byte decides; a prefix comes
+# first
+def Ids.lt(a: Shared.Bytes(), b: Shared.Bytes()) -> Bool:
+  match a b:
+    case Nil{} Con{y, yt}:
       True{}
-    case Con{x, xt} Con{y, yt}:
-      List.all.if(u => Spec.Ids.is_eq(xt, yt), Shared.Bytes.is_eq(x, y))
+    case Con{+x, xt} Con{+y, yt}:
+      Shared.Bool.when(Bool, U32.is_eq(x, y), u => Ids.lt(xt, yt), u => (x < y: U32))
     case _ _:
       False{}
 
-# h with node v under its id x, and x the one head of n
-def History.put(h: Spec.History, n: Shared.Name, +x: Shared.Bytes(), v: Spec.Node) -> Spec.History:
+# xs, sorted ascending, with x, once
+def Ids.insert(+x: Shared.Bytes(), xs: List<&2, Shared.Bytes()>) -> List<&2, Shared.Bytes()>:
+  match xs:
+    case Nil{}:
+      [x]
+    case Con{+y, +t}:
+      Shared.Bool.when(
+        List<&2, Shared.Bytes()>,
+        Shared.Bytes.is_eq(x, y),
+        u => Con{y, t},
+        u => Shared.Bool.when(
+          List<&2, Shared.Bytes()>,
+          Ids.lt(x, y),
+          v => Con{x, Con{y, t}},
+          v => Con{y, Ids.insert(x, t)}
+        )
+      )
+
+# xs without the ids of ps
+def Ids.without(
+  xs: List<&2, Shared.Bytes()>,
+  +ps: List<&2, Shared.Bytes()>
+) -> List<&2, Shared.Bytes()>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case Con{+x, +t}:
+      Shared.Bool.when(
+        List<&2, Shared.Bytes()>,
+        Spec.Ids.has(ps, x),
+        u => Ids.without(t, ps),
+        u => Con{x, Ids.without(t, ps)}
+      )
+
+# the first id of xs that h lacks, or None
+def Ids.missing(+h: Spec.History, xs: List<&2, Shared.Bytes()>) -> Maybe<&2, Shared.Bytes()>:
+  match xs:
+    case Nil{}:
+      None{}
+    case Con{+x, t}:
+      Shared.Bool.when(
+        Maybe<&2, Shared.Bytes()>,
+        Spec.History.has(h, x),
+        u => Ids.missing(h, t),
+        u => Some{x}
+      )
+
+# h with the node v under its id x, a tip of its resource in place of its
+# parents
+def History.put(h: Spec.History, +x: Shared.Bytes(), +v: Spec.Node) -> Spec.History:
   match h:
-    case Spec.History{ns, hs}:
+    case Spec.History{ns, +ts}:
+      +key = Shared.Name.show(Spec.Node.name(v))
+      old = Spec.History.tips.got(Map.get(List<&2, Shared.Bytes()>, [], ts, key))
+      tips = Ids.insert(x, Ids.without(old, Spec.Node.parents(v)))
       nodes = Map.set(&2, Maybe<&2, Spec.Node>, ns, Hash.Hash.hex(x), Some{v})
-      Spec.History{nodes, Map.set(&2, List<&2, Shared.Bytes()>, hs, Shared.Name.show(n), [x])}
+      Spec.History{nodes, Map.set(&2, List<&2, Shared.Bytes()>, ts, key, tips)}
 
-# the commit of node v, once its parents are known to be the heads of n
-def History.commit.of(
-  h: Spec.History,
-  n: Shared.Name,
-  +v: Spec.Node
-) -> Result<&2, &2, Spec.Refused, Spec.Committed>:
-  +x = Spec.Node.id(v)
-  Done{Spec.Committed{History.put(h, n, x, v), x}}
+# the add of v, given the missing parent if any
+def History.add.of(
+  +h: Spec.History,
+  +v: Spec.Node,
+  miss: Maybe<&2, Shared.Bytes()>
+) -> Result<&2, &2, Spec.Missing, Spec.Added>:
+  match miss:
+    case Some{p}:
+      Fail{Spec.Missing{p}}
+    case None{}:
+      +x = Spec.Node.id(v)
+      Shared.Bool.when(
+        Result<&2, &2, Spec.Missing, Spec.Added>,
+        Spec.History.has(h, x),
+        u => Done{Spec.Added{h, x}},
+        u => Done{Spec.Added{History.put(h, x, v), x}}
+      )
 
-def Spec.History.commit(h, n, expect, body, from):
+def Spec.History.add(h, v):
   +h = h
-  +n = n
-  +expect = expect
-  +heads = Spec.History.heads(h, n)
-  Shared.Bool.when(
-    Result<&2, &2, Spec.Refused, Spec.Committed>,
-    Spec.Ids.is_eq(expect, heads),
-    u => History.commit.of(h, n, Spec.Node{n, expect, body, from}),
-    u => Fail{Spec.Refused{heads}}
-  )
+  +v = v
+  History.add.of(h, v, Ids.missing(h, Spec.Node.parents(v)))

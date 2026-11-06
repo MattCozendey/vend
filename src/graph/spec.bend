@@ -22,12 +22,20 @@ type Target is Data:
   Named{name: Shared.Name}
   Unresolved{text: String}
 
-# Relative references
-# -------------------
+# References
+# ----------
+# A reference from inside a resource (an import path, an include) resolves
+# against the name of that resource like a relative reference against its
+# base URI in RFC 3986, section 5.2: the reference's path is merged with the
+# directory of the base path, and its dot segments are removed. Two stated
+# deviations: a ".." above the root of the space leaves the space, so the
+# reference stays unresolved (RFC 3986 would stop at the root); and a
+# reference with a scheme, an authority ("//"), a query or a fragment stays
+# unresolved for now (references across spaces come with mounts).
 
-# the path of the directory of rest, as segments: all but the last
-def Path.dir(rest: String) -> List<&2, String>:
-  +segs = String.split(rest, '/')
+# the directory of path, as segments: all but the last
+def Path.dir(path: String) -> List<&2, String>:
+  +segs = String.split(path, '/')
   List.take(&2, String, segs, Nat.sub(List.length(&2, String, segs), 1n))
 
 # k of dir without its last segment, or None when dir is the root
@@ -41,48 +49,98 @@ def Path.walk.up(
     case Con{d, r}:
       k(r)
 
-# the segments of dir (last first) after the relative segments rel, or None
-# when a ".." climbs out of the root
+# dir with an empty last segment when last holds: a dot segment ended the
+# reference, so it names a directory
+def Path.mark(last: Bool, dir: List<&2, String>) -> List<&2, String>:
+  match last:
+    case False{}:
+      dir
+    case True{}:
+      "" <> dir
+
+# dir (last first) after the segments rel, with the dot segments removed
+# (RFC 3986, 5.2.4): "." stays, ".." goes up, or None when it climbs out of
+# the root. A last segment of "." or ".." names a directory, so it leaves
+# an empty last segment, as in RFC 3986.
 def Path.walk(rel: List<&2, String>, dir: List<&2, String>) -> Maybe<&2, List<&2, String>>:
   match rel:
     case Nil{}:
       Some{dir}
     case Con{+x, +t}:
       +dir = dir
+      +last = List.is_empty(&2, String, t)
       Shared.Bool.when(
         Maybe<&2, List<&2, String>>,
         String.eq(x, "."),
-        u => Path.walk(t, dir),
+        u => Path.walk(t, Path.mark(last, dir)),
         u => Shared.Bool.when(
           Maybe<&2, List<&2, String>>,
           String.eq(x, ".."),
-          v => Path.walk.up(dir, r => Path.walk(t, r)),
+          v => Path.walk.up(dir, r => Path.walk(t, Path.mark(last, r))),
           v => Path.walk(t, x <> dir)
         )
       )
 
-# the target of the walked segments (last first), or unresolved p
-def Target.resolve.of(w: Maybe<&2, List<&2, String>>, p: String) -> Target:
+# the target of the walked segments (last first) in space sp, or
+# unresolved ref when they climbed out or do not form a valid path
+def Target.resolve.of(w: Maybe<&2, List<&2, String>>, sp: String, ref: String) -> Target:
   match w:
     case None{}:
-      Unresolved{p}
+      Unresolved{ref}
     case Some{segs}:
       +path = String.join(List.reverse(&2, String, segs), "/")
       Shared.Bool.when(
         Target,
         Glob.is_path(path),
-        u => Named{Shared.Name{Shared.FileScheme{}, path}},
-        u => Unresolved{p}
+        u => Named{Shared.Name{sp, path}},
+        u => Unresolved{ref}
       )
 
-# the target of a relative import path p from the resource n: a file name
-# when the path stays inside the root and is a valid path, else unresolved
-def Target.resolve(n: Shared.Name, +p: String) -> Target:
+# the cut at the first ':' starts with a scheme that holds no '/'
+def Ref.has_scheme.of(c: Maybe<&2, Shared.Cut>) -> Bool:
+  match c:
+    case None{}:
+      False{}
+    case Some{Shared.Cut{+b, a}}:
+      List.all.if(u => Bool.not(Shared.Text.has(b, 47)), Shared.Uri.is_scheme(b))
+
+# ref has a scheme: a scheme, then ':', before any '/'
+def Ref.has_scheme(ref: String) -> Bool:
+  Ref.has_scheme.of(Shared.Text.cut(ref, 58))
+
+# the reference ref stays unresolved: it has a scheme, an authority, a
+# query or a fragment
+def Ref.foreign(+ref: String) -> Bool:
+  List.any.if(
+    u => List.any.if(v => Bool.not(Shared.Uri.plain(ref)), String.starts_with(ref, "//")),
+    Ref.has_scheme(ref)
+  )
+
+# the target of the reference ref from the resource n: the empty reference
+# is n itself; one that starts with '/' starts at the root of the space;
+# any other merges with the directory of n
+def Target.resolve(+n: Shared.Name, +ref: String) -> Target:
   match n:
-    case Shared.Name{Shared.FileScheme{}, rest}:
-      Target.resolve.of(
-        Path.walk(String.split(p, '/'), List.reverse(&2, String, Path.dir(rest))),
-        p
+    case Shared.Name{+sp, path}:
+      Shared.Bool.when(
+        Target,
+        String.is_empty(ref),
+        u => Named{n},
+        u => Shared.Bool.when(
+          Target,
+          Ref.foreign(ref),
+          v => Unresolved{ref},
+          v => Shared.Bool.when(
+            Target,
+            String.starts_with(ref, "/"),
+            w => Target.resolve.of(Path.walk(String.split(String.drop(ref, 1n), '/'), []), sp, ref),
+            w => Target.resolve.of(
+              Path.walk(String.split(ref, '/'), List.reverse(&2, String, Path.dir(path))),
+              sp,
+              ref
+            )
+          )
+        )
       )
 
 # Which part of the target matters to the source: all of it, or only the

@@ -2,6 +2,7 @@ import Base
 import ../endpoints/spec.bend as Ep
 import ../glob/spec.bend as Glob
 import ../history/spec.bend as History
+import ../lines/spec.bend as Lines
 import ../shared.bend as Shared
 import ../store/spec.bend as Store
 
@@ -10,106 +11,175 @@ import ../store/spec.bend as Store
 # CLI, later the agent API) only builds inputs and reads outputs, so every
 # front shares one behavior.
 
+# Mounts
+# ------
+
+# A mount binds a line of a space to a URI prefix on one machine. Its
+# globs choose the files it versions, matched against the path relative to
+# the root. The space id lives in the file ".bend-ver" at the root, which
+# is never versioned. A directory below the root that holds its own
+# ".bend-ver" starts another space (like a git submodule): nothing under
+# it belongs to this mount.
+type Mount is Data:
+  Mount{space: String, line: String, root: Shared.Uri, globs: List<&2, Glob.Rule>}
+
+# the file at the root of a space that holds its id
+def Mount.space_file() -> String:
+  ".bend-ver"
+
 # Inputs
 # ------
 
-# A write through the core: the bytes, and the heads of the resource that
-# the writer saw. The core orders these, so its check is exact.
+# A request from a front. Write: write bytes to the file at path, by a
+# writer that saw the heads expect on the line of the mount. The core
+# orders these, so its check is exact. Stop: end the loop.
 type Request is Data:
-  Write{name: Shared.Name, bytes: Shared.Bytes(), expect: List<&2, Shared.Bytes()>}
+  Write{path: String, bytes: Shared.Bytes(), expect: List<&2, Shared.Bytes()>}
   Stop{}
 
-# Something for the core to handle. Noticed: a signal from an endpoint
-# about one resource. Moved: the endpoint saw the resource from move to to.
-# Asked: a front asks for something.
+# Something for the core to handle; an endpoint speaks in paths relative
+# to the root. Noticed: a signal about the file at path. Moved: the file
+# moved from one path to another. Nested: the directory dir holds its own
+# ".bend-ver", so it starts another space. Asked: a front asks for
+# something.
 type Input is Data:
-  Noticed{name: Shared.Name, signal: Ep.Signal}
-  Moved{from: Shared.Name, to: Shared.Name}
+  Noticed{path: String, signal: Ep.Signal}
+  Moved{from: String, to: String}
+  Nested{dir: String}
   Asked{request: Request}
 
 # Outputs
 # -------
 
-# Something for the loop to carry out or to report. Command: send it to the
-# endpoint of name. Recorded: a new version of name, with its id. Refused: a
-# write whose expected heads are not the heads now, which it names. Failed:
-# a version that the store could not keep (a hash collision), so the history
-# did not change. Stopped: the loop ends.
+# Why a version was not kept. Store: the store met a hash collision.
+# History: the history lacked a parent. Line: the line did not move.
+type Problem is Data:
+  StoreProblem{problem: Store.Problem}
+  HistoryProblem{missing: History.Missing}
+  LineProblem{refused: Lines.Refused}
+
+# Something for the loop to carry out or to report. Command: send it to
+# the endpoint for the file at path. Recorded: a new version of name, with
+# its id, now the head of name on the line. Refused: a write whose expected
+# heads are not the heads on the line, which it names. Failed: a version
+# that could not be kept, so the history and the line did not change.
+# Stopped: the loop ends.
 type Output is Data:
-  Command{name: Shared.Name, command: Ep.Command}
+  Command{path: String, command: Ep.Command}
   Recorded{name: Shared.Name, id: Shared.Bytes()}
   Refused{name: Shared.Name, heads: List<&2, Shared.Bytes()>}
-  Failed{name: Shared.Name, problem: Store.Problem}
+  Failed{name: Shared.Name, problem: Problem}
   Stopped{}
 
 # The state
 # ---------
 
-# track: the rules that choose the resources the core versions, matched
-# against the rest of a file name. store, history: the content and its
-# versions. streams: what the core knows of each resource, by the text of
-# its name. moves: for a resource that a move just made, the name it came
-# from, to put on its next version.
+# mount: what the core serves. store, history: the content and its
+# versions. line: the line of the mount. streams: what the core knows of
+# each file, by its path. moves: for a file that a move just made, the name
+# it came from, to put on its next version. nested: the directories that
+# start other spaces.
 type Core is Data:
   Core{
-    track: List<&2, Glob.Rule>,
+    mount: Mount,
     store: Store.Store,
     history: History.History,
+    line: Lines.Line,
     streams: Map<&2, Ep.Stream>,
-    moves: Map<&2, Maybe<&2, Shared.Name>>
+    moves: Map<&2, Maybe<&2, Shared.Name>>,
+    nested: List<&2, String>
   }
 
-# a core that tracks what rules select, and knows nothing yet
-def Core.new(rules: List<&2, Glob.Rule>) -> Core:
-  Core{
-    rules,
-    Store.Store.new(),
-    History.History.new(),
-    Map.new(&2, Ep.Stream),
-    Map.new(&2, Maybe<&2, Shared.Name>)
-  }
+# a core that serves the mount m and knows nothing yet
+def Core.new(m: Mount) -> Core:
+  match m:
+    case Mount{+sp, +ln, r, g}:
+      Core{
+        Mount{sp, ln, r, g},
+        Store.Store.new(),
+        History.History.new(),
+        Lines.Line.new(sp, ln),
+        Map.new(&2, Ep.Stream),
+        Map.new(&2, Maybe<&2, Shared.Name>),
+        []
+      }
 
-# the core versions the resource n: its rules select n's path
-def Core.tracks(c: Core, n: Shared.Name) -> Bool:
-  match c n:
-    case Core{tr, s, h, ss, ms} Shared.Name{Shared.FileScheme{}, rest}:
-      Glob.Rule.selects(tr, rest)
+# the space of c
+def Core.space(c: Core) -> String:
+  match c:
+    case Core{Mount{sp, ln, r, g}, s, h, l, ss, ms, ns}:
+      sp
+
+# the name of the file at path in the space of c
+def Core.name(c: Core, path: String) -> Shared.Name:
+  Shared.Name{Core.space(c), path}
+
+# path lies under the directory dir
+def Core.under(path: String, dir: String) -> Bool:
+  String.starts_with(path, String.append(dir, "/"))
+
+# path lies under one of the directories ds
+def Core.under_any(ds: List<&2, String>, +path: String) -> Bool:
+  match ds:
+    case Nil{}:
+      False{}
+    case Con{d, t}:
+      List.any.if(u => Core.under_any(t, path), Core.under(path, d))
+
+# the core versions the file at path: it is a valid path, not the space
+# file, under no nested space, and the globs of the mount select it
+def Core.tracks(c: Core, +path: String) -> Bool:
+  match c:
+    case Core{Mount{sp, ln, r, g}, s, h, l, ss, ms, ns}:
+      mine = List.all.if(
+        u => Bool.not(Core.under_any(ns, path)),
+        Bool.not(String.eq(path, Mount.space_file()))
+      )
+      List.all.if(u => Glob.Rule.selects(g, path), Bool.and(Glob.is_path(path), mine))
 
 # the history of c
 def Core.history(c: Core) -> History.History:
   match c:
-    case Core{tr, s, h, ss, ms}:
+    case Core{m, s, h, l, ss, ms, ns}:
       h
 
 # the store of c
 def Core.store(c: Core) -> Store.Store:
   match c:
-    case Core{tr, s, h, ss, ms}:
+    case Core{m, s, h, l, ss, ms, ns}:
       s
 
-# the stream of n in c: a new stream for a resource seen for the first time
+# the line of c
+def Core.line(c: Core) -> Lines.Line:
+  match c:
+    case Core{m, s, h, l, ss, ms, ns}:
+      l
+
+# the stream of the found pair
 def Core.stream.got(r: Map<&2, Ep.Stream> & Ep.Stream) -> Ep.Stream:
   (m, k) = r
   k
 
-# the stream of n in c
-def Core.stream(c: Core, n: Shared.Name) -> Ep.Stream:
+# the stream of the file at path in c: a new stream for a file seen for the
+# first time
+def Core.stream(c: Core, path: String) -> Ep.Stream:
   match c:
-    case Core{tr, s, h, ss, ms}:
-      Core.stream.got(Map.get(Ep.Stream, Ep.Stream.new(), ss, Shared.Name.show(n)))
+    case Core{m, s, h, l, ss, ms, ns}:
+      Core.stream.got(Map.get(Ep.Stream, Ep.Stream.new(), ss, path))
 
-# the pending moved-from name of n in c
+# the pending moved-from name of the found pair
 def Core.moved.got(
   r: Map<&2, Maybe<&2, Shared.Name>> & Maybe<&2, Shared.Name>
 ) -> Maybe<&2, Shared.Name>:
   (m, k) = r
   k
 
-# the name n moved from, while its next version is not recorded yet
-def Core.moved(c: Core, n: Shared.Name) -> Maybe<&2, Shared.Name>:
+# the name the file at path moved from, while its next version is not
+# recorded yet
+def Core.moved(c: Core, path: String) -> Maybe<&2, Shared.Name>:
   match c:
-    case Core{tr, s, h, ss, ms}:
-      Core.moved.got(Map.get(Maybe<&2, Shared.Name>, None{}, ms, Shared.Name.show(n)))
+    case Core{m, s, h, l, ss, ms, ns}:
+      Core.moved.got(Map.get(Maybe<&2, Shared.Name>, None{}, ms, path))
 
 # The result of a step: the core after it, and its outputs in order.
 type Stepped is Data:
@@ -133,12 +203,12 @@ def Stepped.outputs(s: Stepped) -> List<&2, Output>:
     case Stepped{c, os}:
       os
 
-# the commands among outputs, with their names dropped
+# the commands among outputs, with their paths dropped
 def Output.commands(os: List<&2, Output>) -> List<&2, Ep.Command>:
   match os:
     case Nil{}:
       Nil{}
-    case Con{Command{n, k}, t}:
+    case Con{Command{p, k}, t}:
       k <> Output.commands(t)
     case Con{o, t}:
       Output.commands(t)
@@ -161,6 +231,20 @@ def Output.recorded(os: List<&2, Output>) -> List<&2, Shared.Bytes()>:
     case Con{o, t}:
       Output.recorded(t)
 
+# the outputs hold Recorded{n, x}
+def Output.has_recorded(os: List<&2, Output>, +n: Shared.Name, +x: Shared.Bytes()) -> Bool:
+  match os:
+    case Nil{}:
+      False{}
+    case Con{Recorded{m, y}, t}:
+      same = List.all.if(
+        u => Shared.Bytes.is_eq(y, x),
+        String.eq(Shared.Name.show(m), Shared.Name.show(n))
+      )
+      List.any.if(u => Output.has_recorded(t, n, x), same)
+    case Con{o, t}:
+      Output.has_recorded(t, n, x)
+
 # the bytes as items for the store: one item per byte
 def Core.items(b: Shared.Bytes()) -> List<&2, Shared.Bytes()>:
   match b:
@@ -172,42 +256,41 @@ def Core.items(b: Shared.Bytes()) -> List<&2, Shared.Bytes()>:
 # Laws
 # ----
 
-# a signal about a resource the core does not track changes nothing
+# a signal about a file the core does not track changes nothing
 law untracked_ignored:
   for c: Core
-  for n: Shared.Name
+  for p: String
   for s: Ep.Signal
-  for h: {Core.tracks(c, n) == False{}: Bool}
-  {Core.step(c, Noticed{n, s}) == Stepped{c, []}: Stepped}
+  for h: {Core.tracks(c, p) == False{}: Bool}
+  {Core.step(c, Noticed{p, s}) == Stepped{c, []}: Stepped}
 
-# a signal about a tracked resource sends exactly the commands that its
-# stream sends
+# a signal about a tracked file sends exactly the commands that its stream
+# sends
 law noticed_follows_stream:
   for c: Core
-  for n: Shared.Name
+  for p: String
   for s: Ep.Signal
-  for h: {Core.tracks(c, n) == True{}: Bool}
+  for h: {Core.tracks(c, p) == True{}: Bool}
   {
     Output.commands(
-      Stepped.outputs(Core.step(c, Noticed{n, s}))
+      Stepped.outputs(Core.step(c, Noticed{p, s}))
     )
-      == Ep.Stepped.commands(Ep.Stream.step(Core.stream(c, n), s)): List<&2, Ep.Command>
+      == Ep.Stepped.commands(Ep.Stream.step(Core.stream(c, p), s)): List<&2, Ep.Command>
   }
 
-# each version that the stream records becomes exactly one history node,
-# unless the store fails; so the number of Recorded outputs is the number
-# of versions, when no output is Failed
+# each version that the stream records becomes exactly one Recorded
+# output, when no output is Failed
 law records_each_version:
   for c: Core
-  for n: Shared.Name
+  for p: String
   for s: Ep.Signal
-  for h: {Core.tracks(c, n) == True{}: Bool}
+  for h: {Core.tracks(c, p) == True{}: Bool}
   for f: {
     List.any(
       ~&2,
       ~Output,
       ~Output.is_failed,
-      Stepped.outputs(Core.step(c, Noticed{n, s}))
+      Stepped.outputs(Core.step(c, Noticed{p, s}))
     )
       == False{}: Bool
   }
@@ -215,75 +298,87 @@ law records_each_version:
     List.length(
       &2,
       Shared.Bytes(),
-      Output.recorded(Stepped.outputs(Core.step(c, Noticed{n, s})))
+      Output.recorded(Stepped.outputs(Core.step(c, Noticed{p, s})))
     )
-      == List.length(&2, Ep.Version, Ep.Stepped.versions(Ep.Stream.step(Core.stream(c, n), s))): Nat
+      == List.length(&2, Ep.Version, Ep.Stepped.versions(Ep.Stream.step(Core.stream(c, p), s))): Nat
   }
 
-# fetched content that the core records reads back from its node: the
-# node's root in the store gives exactly the fetched bytes
+# fetched content that the core records reads back from its node: a node
+# of the file, whose root in the store gives exactly the fetched bytes
 law fetched_reads_back:
   for c: Core
-  for n: Shared.Name
+  for p: String
   for bytes: Shared.Bytes()
   for t: Shared.Bytes()
   for x: Shared.Bytes()
   for parents: List<&2, Shared.Bytes()>
   for r: Store.Ref
   for from: Maybe<&2, Shared.Name>
-  for h: {Core.tracks(c, n) == True{}: Bool}
+  for h: {Core.tracks(c, p) == True{}: Bool}
   for o: {
     Output.recorded(
-      Stepped.outputs(Core.step(c, Noticed{n, Ep.Fetched{bytes, t}}))
+      Stepped.outputs(Core.step(c, Noticed{p, Ep.Fetched{bytes, t}}))
     )
       == [x]: List<&2, Shared.Bytes()>
   }
   for g: {
     History.History.get(
-      Core.history(Stepped.core(Core.step(c, Noticed{n, Ep.Fetched{bytes, t}}))),
+      Core.history(Stepped.core(Core.step(c, Noticed{p, Ep.Fetched{bytes, t}}))),
       x
     )
-      == Some{History.Node{n, parents, History.Has{r}, from}}: Maybe<&2, History.Node>
+      == Some{History.Node{Core.name(c, p), parents, History.Has{r}, from}}: Maybe<&2, History.Node>
   }
   {
     Store.Tree.read(
-      Core.store(Stepped.core(Core.step(c, Noticed{n, Ep.Fetched{bytes, t}}))),
+      Core.store(Stepped.core(Core.step(c, Noticed{p, Ep.Fetched{bytes, t}}))),
       r
     )
       == Some{Core.items(bytes)}: Maybe<&2, List<&2, Shared.Bytes()>>
   }
 
-# a write whose expected heads are not the heads now changes nothing and is
-# refused, naming the heads
+# a recorded version is the one head of its file on the line of the mount
+law recorded_heads_line:
+  for c: Core
+  for i: Input
+  for n: Shared.Name
+  for x: Shared.Bytes()
+  for o: {Output.has_recorded(Stepped.outputs(Core.step(c, i)), n, x) == True{}: Bool}
+  {Lines.Line.heads(Core.line(Stepped.core(Core.step(c, i))), n) == [x]: List<&2, Shared.Bytes()>}
+
+# a write whose expected heads are not the heads on the line changes
+# nothing and is refused, naming those heads
 law write_refused:
   for c: Core
-  for n: Shared.Name
+  for p: String
   for b: Shared.Bytes()
   for e: List<&2, Shared.Bytes()>
-  for h: {History.Ids.is_eq(e, History.History.heads(Core.history(c), n)) == False{}: Bool}
+  for h: {History.Ids.is_eq(e, Lines.Line.heads(Core.line(c), Core.name(c, p))) == False{}: Bool}
   {
     Core.step(
       c,
-      Asked{Write{n, b, e}}
+      Asked{Write{p, b, e}}
     )
-      == Stepped{c, [Refused{n, History.History.heads(Core.history(c), n)}]}: Stepped
+      == Stepped{
+        c,
+        [Refused{Core.name(c, p), Lines.Line.heads(Core.line(c), Core.name(c, p))}]
+      }: Stepped
   }
 
-# a write of a tracked resource with the right heads sends one Put of its
+# a write of a tracked file with the heads on the line sends one Put of its
 # bytes and records one version
 law write_accepted:
   for c: Core
-  for n: Shared.Name
+  for p: String
   for b: Shared.Bytes()
   for e: List<&2, Shared.Bytes()>
-  for t: {Core.tracks(c, n) == True{}: Bool}
-  for h: {History.Ids.is_eq(e, History.History.heads(Core.history(c), n)) == True{}: Bool}
+  for t: {Core.tracks(c, p) == True{}: Bool}
+  for h: {History.Ids.is_eq(e, Lines.Line.heads(Core.line(c), Core.name(c, p))) == True{}: Bool}
   for f: {
     List.any(
       ~&2,
       ~Output,
       ~Output.is_failed,
-      Stepped.outputs(Core.step(c, Asked{Write{n, b, e}}))
+      Stepped.outputs(Core.step(c, Asked{Write{p, b, e}}))
     )
       == False{}: Bool
   }
@@ -291,7 +386,7 @@ law write_accepted:
     List.length(
       &2,
       Ep.Command,
-      Output.commands(Stepped.outputs(Core.step(c, Asked{Write{n, b, e}})))
+      Output.commands(Stepped.outputs(Core.step(c, Asked{Write{p, b, e}})))
     )
       == 1n: Nat
   }
@@ -300,19 +395,33 @@ law write_accepted:
       List.length(
         &2,
         Shared.Bytes(),
-        Output.recorded(Stepped.outputs(Core.step(c, Asked{Write{n, b, e}})))
+        Output.recorded(Stepped.outputs(Core.step(c, Asked{Write{p, b, e}})))
       )
         == 1n: Nat
     }
 
-# a move records and sends nothing, and remembers where the resource came
-# from for its next version
+# a move records and sends nothing, and remembers where the file came from
+# for its next version
 law move_remembered:
   for c: Core
-  for f: Shared.Name
-  for t: Shared.Name
+  for f: String
+  for t: String
   {Stepped.outputs(Core.step(c, Moved{f, t})) == []: List<&2, Output>} &
-    {Core.moved(Stepped.core(Core.step(c, Moved{f, t})), t) == Some{f}: Maybe<&2, Shared.Name>}
+    {
+      Core.moved(
+        Stepped.core(Core.step(c, Moved{f, t})),
+        t
+      )
+        == Some{Core.name(c, f)}: Maybe<&2, Shared.Name>
+    }
+
+# once a directory starts another space, the core tracks nothing under it
+law nested_untracked:
+  for c: Core
+  for d: String
+  for p: String
+  for u: {Core.under(p, d) == True{}: Bool}
+  {Core.tracks(Stepped.core(Core.step(c, Nested{d})), p) == False{}: Bool}
 
 # a step leaves every node of the history in place
 law step_keeps_history:

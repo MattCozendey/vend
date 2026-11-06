@@ -4,11 +4,12 @@ import ../../shared.bend as Shared
 import ../../views/text/spec.bend as Text
 import ../spec.bend as Ep
 
-# The file endpoint. It is opened with a root directory: an OS path that
-# may be missing, unmounted or unreadable at any time. A name with the file
-# scheme has as its rest a valid path (Glob.is_path) below that root;
-# nothing else is a file resource. Paths live only in this endpoint: the
-# core sees names and signals.
+# The file endpoint. It is opened with a root directory: the OS path of a
+# mount's file URI, which may be missing, unmounted or unreadable at any
+# time. A resource is a valid path (Glob.is_path) below that root, relative
+# to it; nothing else is a file resource. The endpoint speaks in these
+# relative paths; the core makes names from them with the mount's space,
+# and OS paths live only in this endpoint.
 
 # Resources
 # ---------
@@ -32,14 +33,49 @@ def FileEp.last(rest: String) -> String:
 def FileEp.is_resource(+rest: String) -> Bool:
   Bool.and(Glob.is_path(rest), Bool.not(FileEp.is_temp(FileEp.last(rest))))
 
-# the name of rest, when it names a file resource
-def FileEp.name(+rest: String) -> Maybe<&2, Shared.Name>:
-  Shared.Bool.when(
-    Maybe<&2, Shared.Name>,
-    FileEp.is_resource(rest),
-    u => Some{Shared.Name{Shared.FileScheme{}, rest}},
-    u => None{}
-  )
+# rest, when it names a file resource
+def FileEp.resource(+rest: String) -> Maybe<&2, String>:
+  Shared.Bool.when(Maybe<&2, String>, FileEp.is_resource(rest), u => Some{rest}, u => None{})
+
+# The OS path of a file URI (RFC 8089): the scheme is "file", the authority
+# is absent, empty or "localhost", and the path is the OS path; a path like
+# "/C:/repo" names the Windows path "C:/repo". Percent-encoded characters
+# are not decoded yet: a '%' is taken as itself.
+
+# the authority a names this machine: none, empty or "localhost"
+def FileEp.local(a: Maybe<&2, String>) -> Bool:
+  match a:
+    case None{}:
+      True{}
+    case Some{+x}:
+      Bool.or(String.is_empty(x), String.eq(x, "localhost"))
+
+# p starts with '/', a letter, then ':', as "/C:/repo" does
+def FileEp.is_drive(p: String) -> Bool:
+  match p:
+    case SCon{s, SCon{c, SCon{k, t}}}:
+      Bool.and(
+        U32.is_eq(Char.to_u32(s), 47),
+        Bool.and(Char.is_alpha(c), U32.is_eq(Char.to_u32(k), 58))
+      )
+    case _:
+      False{}
+
+# the OS path of the URI path p
+def FileEp.os_path(+p: String) -> String:
+  Shared.Bool.when(String, FileEp.is_drive(p), u => String.drop(p, 1n), u => p)
+
+# the OS path of the file URI u, or None for a URI that is not a local
+# file URI
+def FileEp.root_of(u: Shared.Uri) -> Maybe<&2, String>:
+  match u:
+    case Shared.Uri{sc, a, p}:
+      Shared.Bool.when(
+        Maybe<&2, String>,
+        Bool.and(String.eq(sc, "file"), FileEp.local(a)),
+        v => Some{FileEp.os_path(p)},
+        v => None{}
+      )
 
 # the OS path of rest below the root: the root, '/', then the UTF-8 of rest
 def FileEp.path(root: Shared.Bytes(), rest: String) -> Shared.Bytes():
@@ -51,11 +87,11 @@ def FileEp.dir(rest: String) -> String:
   +segs = String.split(rest, '/')
   String.join(List.take(&2, String, segs, Nat.sub(List.length(&2, String, segs), 1n)), "/")
 
-# a rest that names no file resource has no name
-law name_needs_resource:
+# a rest that names no file resource is never a resource
+law resource_needs_path:
   for rest: String
   for h: {FileEp.is_resource(rest) == False{}: Bool}
-  {FileEp.name(rest) == None{}: Maybe<&2, Shared.Name>}
+  {FileEp.resource(rest) == None{}: Maybe<&2, String>}
 
 # Probes
 # ------
@@ -324,21 +360,21 @@ type Report is Data:
 # AllOverflowed: reports were dropped, so every watched stream must fetch
 # again. AllLost: the root went away, so every stream is unreachable.
 type Notice is Data:
-  About{name: Shared.Name, signal: Ep.Signal}
-  Moved{from: Shared.Name, to: Shared.Name}
+  About{path: String, signal: Ep.Signal}
+  Moved{from: String, to: String}
   AllOverflowed{}
   AllLost{reason: String}
 
-# the name of a report path, when it names a file resource
-def FileEp.name_of(p: Maybe<&2, String>) -> Maybe<&2, Shared.Name>:
+# a report path, when it names a file resource
+def FileEp.path_of(p: Maybe<&2, String>) -> Maybe<&2, String>:
   match p:
     case None{}:
       None{}
     case Some{r}:
-      FileEp.name(r)
+      FileEp.resource(r)
 
 # a hint for the resource n, if any
-def FileEp.hint.of(n: Maybe<&2, Shared.Name>) -> List<&2, Notice>:
+def FileEp.hint.of(n: Maybe<&2, String>) -> List<&2, Notice>:
   match n:
     case None{}:
       []
@@ -347,10 +383,10 @@ def FileEp.hint.of(n: Maybe<&2, Shared.Name>) -> List<&2, Notice>:
 
 # a hint for the resource at p, if any
 def FileEp.hint(p: Maybe<&2, String>) -> List<&2, Notice>:
-  FileEp.hint.of(FileEp.name_of(p))
+  FileEp.hint.of(FileEp.path_of(p))
 
 # the Moved notice of a rename, when both ends name resources
-def FileEp.moved(a: Maybe<&2, Shared.Name>, b: Maybe<&2, Shared.Name>) -> List<&2, Notice>:
+def FileEp.moved(a: Maybe<&2, String>, b: Maybe<&2, String>) -> List<&2, Notice>:
   match a b:
     case Some{x} Some{y}:
       [Moved{x, y}]
@@ -365,7 +401,7 @@ def FileEp.notices(e: Report) -> List<&2, Notice>:
     case Touched{p}:
       FileEp.hint(p)
     case Renamed{+a, +b}:
-      m = FileEp.moved(FileEp.name_of(a), FileEp.name_of(b))
+      m = FileEp.moved(FileEp.path_of(a), FileEp.path_of(b))
       List.append(&2, Notice, m, List.append(&2, Notice, FileEp.hint(a), FileEp.hint(b)))
     case Dropped{}:
       [AllOverflowed{}]
@@ -377,7 +413,7 @@ def Notice.all_hints(ns: List<&2, Notice>) -> Bool:
   match ns:
     case Nil{}:
       True{}
-    case Con{About{Shared.Name{s, r}, Ep.Hinted{}}, t}:
+    case Con{About{r, Ep.Hinted{}}, t}:
       List.all.if(u => Notice.all_hints(t), FileEp.is_resource(r))
     case Con{About{n, s}, t}:
       False{}

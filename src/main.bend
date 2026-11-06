@@ -21,7 +21,7 @@ def Main.report(o: Core.Output) -> IO(Unit):
       IO.print("failed " ++ Shared.Name.show(n))
     case Core.Stopped{}:
       IO.print("stopped")
-    case Core.Command{n, k}:
+    case Core.Command{p, k}:
       IO.pure(Unit, Unit{})
 
 # rest, with the glob m in front when there is one
@@ -53,6 +53,17 @@ def Main.ended(r: Maybe<&2, String>) -> IO(Unit):
     case Some{why}:
       IO.print("stopped: " ++ why)
 
+# the watch of the URI u (Cli.parse already checked that it reads) on the
+# line "main"
+def Main.watch(u: Maybe<&2, Shared.Uri>, gs: List<&2, Glob.Rule>) -> IO(Unit):
+  match u:
+    case None{}:
+      IO.print(Cli.Cli.usage())
+    case Some{r}:
+      do IO<Unit>:
+        e: Maybe<&2, String> <- Loop.Loop.run(~Main.report, r, "main", gs, Main.waits())
+        Main.ended(e)
+
 # the run of a parsed command line
 def Main.run(c: Result<&2, &2, String, Cli.Cmd>) -> IO(Unit):
   match c:
@@ -61,9 +72,7 @@ def Main.run(c: Result<&2, &2, String, Cli.Cmd>) -> IO(Unit):
     case Done{Cli.Help{}}:
       IO.print(Cli.Cli.usage())
     case Done{Cli.Watch{root, gs}}:
-      do IO<Unit>:
-        r: Maybe<&2, String> <- Loop.Loop.run(~Main.report, root, Main.globs(gs), Main.waits())
-        Main.ended(r)
+      Main.watch(Shared.Uri.read(root), Main.globs(gs))
 
 # the arguments as a reusable list
 def Main.args(xs: List<String>) -> List<&2, String>:

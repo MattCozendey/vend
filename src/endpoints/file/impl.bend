@@ -386,39 +386,35 @@ def FileEp.put(
 # Listing
 # -------
 
-# rest, with the name m in front when there is one
-def FileEp.names.put(
-  m: Maybe<&2, Shared.Name>,
-  rest: List<&2, Shared.Name>
-) -> List<&2, Shared.Name>:
+# rest, with the path m in front when there is one
+def FileEp.names.put(m: Maybe<&2, String>, rest: List<&2, String>) -> List<&2, String>:
   match m:
     case None{}:
       rest
     case Some{n}:
       n <> rest
 
-# the names of the paths that name file resources
-def FileEp.names(ps: List<&2, Shared.Bytes()>) -> List<&2, Shared.Name>:
+# the listed OS paths that name file resources, as resource paths
+def FileEp.names(ps: List<&2, Shared.Bytes()>) -> List<&2, String>:
   match ps:
     case Nil{}:
       Nil{}
     case Con{p, t}:
-      FileEp.names.put(Spec.FileEp.name_of(Text.Text.decode(p)), FileEp.names(t))
+      FileEp.names.put(Spec.FileEp.path_of(Text.Text.decode(p)), FileEp.names(t))
 
-# the names of a listing, or none when the root could not be listed
-def FileEp.list.of(
-  r: Result<&1, &1, U32 & String, List<&2, Shared.Bytes()>>
-) -> List<&2, Shared.Name>:
+# the resource paths of a listing, or none when the root could not be
+# listed
+def FileEp.list.of(r: Result<&1, &1, U32 & String, List<&2, Shared.Bytes()>>) -> List<&2, String>:
   match r:
     case Fail{e}:
       []
     case Done{ps}:
       FileEp.names(ps)
 
-# the names of the file resources below the root now: none when the root
+# the paths of the file resources below the root now: none when the root
 # cannot be listed
-def FileEp.list(root: Spec.Root) -> IO(List<&2, Shared.Name>):
-  do IO<List<&2, Shared.Name>>:
+def FileEp.list(root: Spec.Root) -> IO(List<&2, String>):
+  do IO<List<&2, String>>:
     r: Result<
       &1,
       &1,

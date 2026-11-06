@@ -20,12 +20,15 @@ Delete each item when it is done.
   - Debounce: a quiet window before fetching, so a truncate-then-write does not record the empty state.
   - Retry a transient Windows sharing violation during a fetch instead of reporting `Unreachable`.
   - No fsync after a write; a temp file left by a crash is never removed; files over 4 GiB (`File.size` is `U32`).
+  - File URIs: percent-encoded characters are not decoded yet (a `%` is taken as itself).
+- `src/core`: more than one mount per loop, and a `--line` option in the CLI (today: one mount, line `main`).
+- `src/graph`: references across spaces (a reference with a scheme or an authority) through mounts; today unresolved.
 
 ## Prove
 
 Every law stated but not proven:
 
-- `src/shared.bend`: `name_read_after_show`, `name_show_after_read`.
+- `src/shared.bend`: `uri_read_after_show`, `uri_show_after_read`, `name_read_after_show`, `name_show_after_read`.
 - `src/views/shared.bend` instances:
   - `src/views/text`: `Text.lossless`, `Text.join_after_lines`, `Text.same_equivalence`, `Text.patches`,
     `Text.diffs_nothing`, `Text.merges`.
@@ -35,13 +38,15 @@ Every law stated but not proven:
   `edit_keeps`, `write_collides`, `edit_collides`, `diff_applies`, `diff_answers`.
 - `src/endpoints/spec.bend`: the 14 stream laws.
 - `src/conditions`: `sat_holds`, `sat_unsat`, `canon_same`, `canon_unique`.
-- `src/history`: `commit_refused`, `commit_node`, `commit_head`, `commit_keeps`, `commit_frames`, `join_keeps`,
+- `src/history`: `add_refused`, `add_node`, `add_keeps`, `add_idempotent`, `add_tips`, `add_frames`, `join_keeps`,
   `join_adds_nothing`, `join_commutes`, `join_associates`, `join_idempotent`.
+- `src/lines`: `advance_refused`, `advance_head`, `advance_frames`, `advance_descends`.
 - `src/graph`: `affected_exact`.
 - `src/core`: `untracked_ignored`, `noticed_follows_stream`, `records_each_version`, `fetched_reads_back`,
-  `write_refused`, `write_accepted`, `move_remembered`, `step_keeps_history`.
+  `recorded_heads_line`, `write_refused`, `write_accepted`, `move_remembered`, `nested_untracked`,
+  `step_keeps_history`.
 - `src/cli`: `parse_after_show`.
-- `src/endpoints/file`: `name_needs_resource`, `absent_only_when_known`, `read_only_files`,
+- `src/endpoints/file`: `resource_needs_path`, `absent_only_when_known`, `read_only_files`,
   `non_resource_cannot_tell`, `temp_is_temp`, `absence_holds_only_known`, `notices_are_hints`.
 
 ## Strengthen
