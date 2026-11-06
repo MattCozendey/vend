@@ -16,7 +16,17 @@
 //     then their head bits;
 //   - nat: a Nat parameter that blocks the goal: 0n and 1n+p;
 //   - fun: the case tree of a recursive def that the goal calls on parameters (functional
-//     induction: List.get(xs, n) gives match xs n with its three cases).
+//     induction: List.get(xs, n) gives match xs n with its three cases);
+//   - prem (pattern B): the premises of the conclusion (`-> {..} -> G`) introduced in each arm
+//     (`+h => ?TODO`), alone, under a split on each enumeration parameter (Bool, Cmp) that a premise
+//     or the conclusion blocks on, and under one joint split of all of them (prem:all);
+//   - whole: the goal itself as one arm (its helpers are the point).
+// * pattern B step (hypGen): a hypothesis whose normal form holds a stuck call of an enumeration type
+//   that is not a whole side of it (Expect.holds(e, k) inside Bool.when(..) == Done{s}) gives a helper
+//   `(.., +g: Bool) -> {H[call := g]} -> G[call := g]`, proven by the schemes (prem), and the call
+//   `helper(.., call)(h)` (variables named twice rebound above it when the hole is alone on its line).
+// * a pair goal ({..} & {..}) becomes `(?TODO, ?TODO)`; clash and projection helpers take the type
+//   variables of the equation (Result<.., A>) as erased parameters.
 // * helpers for an arm that the leaf tactics do not close (depth <= MAX_DEPTH, each proven by the
 //   same schemes before it is used; only proven helpers are printed): the arm's goal over its
 //   context (true iff the arm is); the goal after the induction hypothesis rewrote it, with the
@@ -65,7 +75,7 @@ const MAX_HELPER_ARMS = 24;
 const ROUNDS = 16; // leaf + step rounds after a constructor step left new holes // arms left after the leaf pass that may each get a helper
 const NL = String.fromCharCode(10);
 // which skeleton gets the helpers: the most specific split first (the functions' own recursion)
-const SCHEME_RANK = ["enum", "u32+width", "word+split", "fun", "word", "nat", "u32", "whole"];
+const SCHEME_RANK = ["enum", "u32+width", "word+split", "fun", "word", "nat", "u32", "prem:all", "prem", "whole"];
 const ONLY = process.env.GEN2_IND_ONLY ? new RegExp(process.env.GEN2_IND_ONLY) : null; // debug: schemes by name
 
 // ---- small helpers ----
@@ -117,6 +127,13 @@ const freeVars = (t: LTerm, out: Set<number>) => {
   }
 };
 
+// t (a term at g) has an enumeration type: 2 to 4 constructors, none with fields (Bool, Cmp)
+const enumTyped = (A: Api, g: Goal, t: LTerm): boolean => {
+  const T = A.attempt(A.FUEL_NF, () => B.term_infer(A.book, g.lhs, B.term_higher(t, g.env), B.None(), g.ctx, g.d).ty);
+  const adt = T ? adtOf(A, g, T) : null;
+  return !!adt && adt.c.length >= 2 && adt.c.length <= 4 && adt.c.every((c: any) => c.n === 0);
+};
+
 // ---- arms: fill the ?TODO of a skeleton ----
 // the def check of k with body; for each ?TODO in order: its goal (the hole marked), the leaf tactics,
 // then a helper; returns the body with the closed arms filled
@@ -166,9 +183,18 @@ const fillArms = (R: Run, k: string, body: string, depth: number, passes = [0, 1
           // a step needs the hole alone on its line (a statement position)
           const ls = text.lastIndexOf("\n", at) + 1, ind = text.slice(ls, at), alone = /^\s*$/.test(ind) && /^[ \t]*(\n|$)/.test(text.slice(at + 5));
           const caseAt = text.lastIndexOf("case ", at), arm = caseAt >= 0 ? text.slice(caseAt, text.indexOf(":", caseAt)) : "";
-          const st = A.attempt(A.FUEL_NF * 4, () => ctorStep(R, k, g, alone ? ind : "", arm, fits)) ?? null;
-          if (st && fits(st)) { fill = st; if (st.includes("?TODO")) stepped = true; }
-          else if (pass === 1) fill = armHelper(R, k, g, depth, fits, alone ? ind : null);
+          // pattern B first when the hole is alone on its line (a call that names a variable twice can rebind
+          // it above), else after the constructor steps
+          const hyp = () => (depth < MAX_DEPTH ? A.attempt(A.FUEL_NF * 4, () => hypGen(R, k, g, depth, alone ? ind : "", fits)) ?? null : null);
+          const hg0 = alone ? hyp() : null;
+          const st = hg0 ? null : A.attempt(A.FUEL_NF * 4, () => ctorStep(R, k, g, alone ? ind : "", arm, fits)) ?? null;
+          if (hg0 && fits(hg0)) fill = hg0;
+          else if (st && fits(st)) { fill = st; if (st.includes("?TODO")) stepped = true; }
+          else {
+            const hg = alone ? null : hyp();
+            if (hg && fits(hg)) fill = hg;
+            else if (pass === 1) fill = armHelper(R, k, g, depth, fits, alone ? ind : null);
+          }
         }
         if (!fits(fill)) fill = null;
       }
@@ -449,11 +475,7 @@ const generalize = (A: Api, g: Goal, N: any, enums = false): { params: string[];
   };
   walk(N.a, 1); walk(N.b, 2);
   // maximal common subterms: drop one inside another common one
-  const isEnum = (t: LTerm) => {
-    const T = A.attempt(A.FUEL_NF, () => B.term_infer(A.book, g.lhs, B.term_higher(t, g.env), B.None(), g.ctx, g.d).ty);
-    const adt = T ? adtOf(A, g, T) : null;
-    return !!adt && adt.c.length >= 2 && adt.c.length <= 4 && adt.c.every((c: any) => c.n === 0);
-  };
+  const isEnum = (t: LTerm) => enumTyped(A, g, t);
   // common stuck calls become plain variables; with enums, a stuck call of an enumeration type (Cmp,
   // Bool) on one side becomes a variable with its equation (so the helper holds iff the goal does)
   const inside = (a: LTerm, b: LTerm) => a !== b && strictSubAny(A, A.key(a), b);
@@ -541,21 +563,43 @@ const fnHelper = (R: Run, head: string, body: string, why: string): string | nul
   return name!;
 };
 const fields = (n: number, base: string) => Array.from({ length: n }, (_, i) => base + i);
+// the variables of a type at g (a type parameter such as A in Result<.., A>), as erased parameters of a
+// helper and as the arguments of its calls; null when one is not a usable name
+const typeVars = (A: Api, g: Goal, Tl: LTerm): { params: string[]; args: string[] } | null => {
+  const fv = new Set<number>();
+  freeVars(Tl, fv);
+  const params: string[] = [], args: string[] = [];
+  for (const i of [...fv].sort((a, b) => a - b)) {
+    const a = A.ann(g, i);
+    if (!a || g.names[i] === "_") return null;
+    const T = A.attempt(A.FUEL_NF, () => A.show(A.lower(a.T, i), g.names.slice(0, i)));
+    if (T === undefined) return null;
+    params.push("-" + g.names[i] + ": " + T);
+    args.push(g.names[i]);
+  }
+  return { params, args };
+};
+const callPre = (name: string, args: string[]) => name + "(" + args.map((a) => a + ", ").join("");
 // is_C(z): Unit for the constructor C, Empty for the others
 const predHelper = (R: Run, g: Goal, Tl: LTerm, ck: string): string | null => {
   const { A } = R;
   const T = A.show(Tl, g.names);
+  const tv = typeVars(A, g, Tl);
+  if (!tv) return null;
   const cs = A.ctrFields(g, B.term_higher(Tl, g.env), []);
   const c = cs?.find((x: any) => x.k === ck);
   if (!cs || !c || cs.length < 2) return null;
   const nm = A.helperName(R.k, R.used, "is_" + c.show.replace(/^.*\./, "").replace(/\W/g, "") + "_");
   const pat = c.show + "{" + fields(c.types.length, "f").join(", ") + "}";
-  return fnHelper(R, "def " + nm + "(z: " + T + ") -> Type:", "  match z:\n    case " + pat + ":\n      Unit\n    case _:\n      Empty", "a constructor test");
+  const name = fnHelper(R, "def " + nm + "(" + [...tv.params, "z: " + T].join(", ") + ") -> Type:", "  match z:\n    case " + pat + ":\n      Unit\n    case _:\n      Empty", "a constructor test");
+  return name ? callPre(name, tv.args) : null;
 };
 // field j of constructor C, or d
 const projHelper = (R: Run, g: Goal, Tl: LTerm, ck: string, j: number): { name: string; ty: string } | null => {
   const { A } = R;
   const T = A.show(Tl, g.names);
+  const tv = typeVars(A, g, Tl);
+  if (!tv) return null;
   const cs = A.ctrFields(g, B.term_higher(Tl, g.env), fields(16, "f"));
   const c = cs?.find((x: any) => x.k === ck);
   if (!c || j >= c.types.length) return null;
@@ -564,8 +608,8 @@ const projHelper = (R: Run, g: Goal, Tl: LTerm, ck: string, j: number): { name: 
   const nm = A.helperName(R.k, R.used, c.show.replace(/^.*\./, "").replace(/\W/g, "") + "_" + j + "_");
   const pat = c.show + "{" + fields(c.types.length, "f").join(", ") + "}";
   const body = "  match z:\n    case " + pat + ":\n      f" + j + (cs.length > 1 ? "\n    case _:\n      d" : "");
-  const name = fnHelper(R, "def " + nm + "(z: " + T + ", d: " + Ti + ") -> " + Ti + ":", body, "a projection");
-  return name ? { name, ty: Ti } : null;
+  const name = fnHelper(R, "def " + nm + "(" + [...tv.params, "z: " + T, "d: " + Ti].join(", ") + ") -> " + Ti + ":", body, "a projection");
+  return name ? { name: callPre(name, tv.args), ty: Ti } : null;
 };
 // an equation goal closed by a chain of at most two equations, each a context hypothesis or an instance of
 // the induction hypothesis whose premises the context gives (frame.fixed's seq: the IH at the middle state,
@@ -655,13 +699,16 @@ const ctorStep = (R: Run, k: string, g: Goal, ind: string, arm = "", fits: (f: s
   const raw = A.lower(g.ty, g.d);
   const goalText = A.show(raw, g.names);
   const w = A.wnf(g.ty);
+  // 0. a pair goal (a type with one constructor of two fields, such as {..} & {..}): one hole per part
+  const pw = w && w.$ === "ADT" ? A.RAW[w.k] : null;
+  if (pw && pw.c?.length === 1 && pw.c[0].n === 2 && fits("(?TODO, ?TODO)")) return "(?TODO, ?TODO)";
   const emptyGoal = !!w && w.$ === "ADT" && A.RAW[w.k]?.c?.length === 0;
   for (let i = g.d - 1; i >= 0; i--) {
     if (A.now() > R.until) return null;
     if (!A.usable(g, i, B.Lone()) || g.names[i] === "_") continue;
     const ts = A.hypTargets(g, i);
     const E = ts[ts.length - 1] as any;
-    if (!E || E.$ !== "Eql" || !closedType(E.T)) continue;
+    if (!E || E.$ !== "Eql" || hasMetaOrHole(E.T)) continue;
     const ca = E.a.$ === "Ctr" ? E.a : null, cb = E.b.$ === "Ctr" ? E.b : null;
     const T = A.show(E.T, g.names), h = g.names[i];
     const sym = "Equal.sym(" + T + ", " + A.show(E.a, g.names) + ", " + A.show(E.b, g.names) + ", " + h + ")";
@@ -669,7 +716,7 @@ const ctorStep = (R: Run, k: string, g: Goal, ind: string, arm = "", fits: (f: s
     if (ca && cb && ca.k !== cb.k) {
       const P = predHelper(R, g, E.T, ca.k);
       if (!P) continue;
-      const d = "(%" + sym + " : " + P + "(_); Unit{})";
+      const d = "(%" + sym + " : " + P + "_); Unit{})";
       const txt = emptyGoal ? d : "Empty.absurd(" + goalText + ", " + d + ")";
       if (A.tryText(g, txt)) return txt;
       continue;
@@ -685,7 +732,7 @@ const ctorStep = (R: Run, k: string, g: Goal, ind: string, arm = "", fits: (f: s
           if (!pj) continue;
           const [l, r, ev] = flip ? [E.b, E.a, sym] : [E.a, E.b, h];
           // eq : {x == v}; (%eq : G[v := _]; t) : G for t : G[v := x]
-          const eq = "Equal.cong(" + T + ", " + pj.ty + ", z => " + pj.name + "(z, " + A.show(x, g.names) + "), " + A.show(l, g.names) + ", " + A.show(r, g.names) + ", " + ev + ")";
+          const eq = "Equal.cong(" + T + ", " + pj.ty + ", z => " + pj.name + "z, " + A.show(x, g.names) + "), " + A.show(l, g.names) + ", " + A.show(r, g.names) + ", " + ev + ")";
           return "(%" + eq + " : " + A.show(substVar(raw, v.i), g.names) + "; ?TODO)";
         }
       }
@@ -711,6 +758,81 @@ const ctorStep = (R: Run, k: string, g: Goal, ind: string, arm = "", fits: (f: s
     if (js.length === 0) continue;
     const inv = invHelper(R, g, side, xs[js[0]], C, !!cb, E.T, h, ind);
     if (inv) { R.inverted.add(ik); if (A.debug()) console.error("[gen2] --ind: inverted " + ik.slice(0, 160) + " (" + R.inverted.size + ")"); return inv; }
+  }
+  return null;
+};
+// pattern B: a hypothesis h whose normal form holds a stuck call c of an enumeration type (Bool, Cmp) that
+// is no variable (Expect.holds(e, k) inside Bool.when(.., Expect.holds(e, k), ..) == Done{s}): a helper
+// over the context with c a new parameter and h its premise, `(.., +g: Bool) -> {H[c := g]} -> G[c := g]`,
+// proven by the schemes (a split on g with the premise introduced, then a clash or injectivity), called
+// as `helper(.., c)(h)`
+const hypGen = (R: Run, k: string, g: Goal, depth: number, ind: string, fits: (f: string | null) => boolean): string | null => {
+  const { A } = R;
+  const raw = A.lower(g.ty, g.d);
+  if (A.attempt(A.FUEL_NF, () => hasMetaOrHole(raw)) !== false) return null;
+  for (let i = g.d - 1; i >= 0; i--) {
+    if (A.now() > R.until) return null;
+    if (!A.usable(g, i, B.Lone()) || g.names[i] === "_") continue;
+    const ts = A.hypTargets(g, i);
+    const E = ts[ts.length - 1] as any;
+    if (!E || E.$ !== "Eql" || hasMetaOrHole(E)) continue;
+    // the stuck enumeration calls of E (outermost first), at most two tried
+    const cs: LTerm[] = [];
+    const walk = (t: any) => {
+      if (cs.length >= 2 || !t || typeof t !== "object") return;
+      if (t.$ === "App") {
+        const [h, xs] = A.unapply(t);
+        if (h.$ === "Ref") {
+          const blk: LTerm[] = [];
+          A.blockers(t, blk);
+          const fv = new Set<number>();
+          freeVars(t, fv);
+          if (blk.length > 0 && fv.size > 0 && enumTyped(A, g, t) && !cs.some((c) => A.key(c) === A.key(t))) { cs.push(t); return; }
+        }
+        xs.forEach(walk);
+      } else if (t.$ === "Ctr" || t.$ === "ADT") t.x.forEach(walk);
+      else if (t.$ === "Eql") { walk(t.a); walk(t.b); }
+    };
+    walk(E);
+    // a call that is a whole side ({True == Char.is_eq(c, ..)}, a generalization's own equation) is a fact
+    // about it already: nothing to generalize
+    for (const c of cs.filter((c) => A.key(c) !== A.key(E.a) && A.key(c) !== A.key(E.b))) {
+      if (A.now() > R.until) return null;
+      const used = new Set<string>(g.names);
+      const gv = A.fresh("g", used);
+      const ck = A.key(c);
+      const repl = (t: any): LTerm => {
+        if (!t || typeof t !== "object") return t;
+        if (A.key(t) === ck) return B.Ref(gv) as LTerm;
+        switch (t.$) {
+          case "App": return { ...t, f: repl(t.f), x: repl(t.x) };
+          case "Ctr": case "ADT": return { ...t, x: t.x.map(repl) };
+          case "Eql": return { ...t, a: repl(t.a), b: repl(t.b), T: repl(t.T) };
+          default: return t;
+        }
+      };
+      const Ty = A.attempt(A.FUEL_NF, () => B.term_infer(A.book, g.lhs, B.term_higher(c, g.env), B.None(), g.ctx, g.d).ty);
+      if (!Ty) continue;
+      const tyText = A.attempt(A.FUEL_NF, () => A.show(A.lower(Ty, g.d), g.names));
+      const He = repl(E), Gr = repl(raw);
+      const hText = A.attempt(A.FUEL_NF, () => A.show(He, g.names)), gText = A.attempt(A.FUEL_NF, () => A.show(Gr, g.names));
+      if (tyText === undefined || hText === undefined || gText === undefined) continue;
+      const cp = ctxParams(A, g, B.Eql(Gr, He, Gr) as LTerm, (s) => s, new Set([i]));
+      if (!cp) continue;
+      const cText = A.show(c, g.names);
+      const premise = hText.startsWith("{") ? hText : "{" + hText + "}";
+      const nm = proveHelper(R, "def " + newName(R) + "(" + [...cp.params, "+" + gv + ": " + tyText].join(", ") + ") ->" + NL + "  " + premise + " -> " + gText + ":", depth);
+      if (!nm) continue;
+      const text = nm + "(" + [...cp.args, cText].join(", ") + ")(" + g.names[i] + ")";
+      if (fits(text)) return text;
+      // a variable named twice (k in the arguments and inside c) is affine: rebind it as reusable above
+      if (ind) {
+        const twice = g.names.filter((v: string) => v !== "_" && (text.match(new RegExp("(?<![\\w.])" + v.replace(/\./g, "\\.") + "(?![\\w.{])", "g")) ?? []).length > 1);
+        const copied = twice.length ? twice.map((v: string) => "+" + v + " = " + v + NL + ind).join("") + text : null;
+        if (copied && fits(copied)) return copied;
+      }
+      if (A.debug()) console.error("[gen2] --ind: the arm does not take " + text.slice(0, 300));
+    }
   }
   return null;
 };
@@ -759,7 +881,7 @@ const invHelper = (R: Run, g: Goal, side: LTerm, rr: LTerm, C: any, cRight: bool
       const p2 = K2.show + "{" + ys.join(", ") + "}";
       if (K2.k === K.k) return "    case " + p2 + ":\n      k(" + [...xs, "{==}", "h"].join(", ") + ")";
       const ev = cRight ? "Equal.sym(" + T + ", " + at(Gt, p2) + ", " + Ct + ", h)" : "h";
-      return "    case " + p2 + ":\n      Empty.absurd(G, (%" + ev + " : " + P + "(_); Unit{}))";
+      return "    case " + p2 + ":\n      Empty.absurd(G, (%" + ev + " : " + P + "_); Unit{}))";
     });
     const name = fnHelper(R, head, "  match " + rv + ":\n" + arms.join("\n"), "an inversion");
     if (!name) continue;
@@ -797,7 +919,7 @@ const schemes = (R: Run, k: string): Scheme[] => {
   if (!tl) { if (A.debug()) console.error("[gen2] --ind: no parameters for " + A.shortOf(k)); return []; }
   const out: Scheme[] = [];
   const add = (name: string, body: string | null) => { if (body) out.push({ name, body: indent(body, "  ") }); };
-  for (const s of [enumScheme, u32Scheme, wordScheme, natScheme, funScheme, wholeScheme]) {
+  for (const s of [enumScheme, u32Scheme, wordScheme, natScheme, funScheme, premScheme, wholeScheme]) {
     const r = A.attempt(A.FUEL_NF * 4, () => s(R, k, tl));
     if (A.debug()) console.error("[gen2] --ind: " + A.shortOf(k) + " " + s.name + ": " + (r ? r.map((x: any) => x[0]).join(", ") : "none"));
     if (r) for (const [nm, b] of r) add(nm, b);
@@ -950,6 +1072,55 @@ const wordScheme = (R: Run, k: string, tl: Tele): [string, string][] | null => {
 // with no induction in it (a stuck Bool or Cmp call generalized to a variable, with its equation when
 // it occurs on one side only; constructor steps on a hypothesis such as Done{x} == Done{s})
 const wholeScheme = (R: Run, k: string, tl: Tele): [string, string][] | null => [["whole", "?TODO"]];
+// the premises of the conclusion of k (`-> {..} -> G`): their names (fresh) and goals, at most 4
+const premises = (A: Api, tl: Tele): { names: string[]; goals: Goal[] } => {
+  const used = new Set(tl.ps.map((p) => p.name));
+  const names: string[] = [], goals: Goal[] = [];
+  let g: Goal | null = tl.g;
+  for (let j = 0; j < 4 && g; j++) {
+    const w = A.wnf(g.ty);
+    if (!w || w.$ !== "All") break;
+    const nm = A.fresh(j === 0 ? "h" : "h" + j, used);
+    g = A.intro(g, nm, false);
+    if (!g) break;
+    names.push(nm); goals.push(g);
+  }
+  return { names, goals };
+};
+// pattern B, on the side of the helper: the premises introduced in each arm (`h => ?TODO`), alone and
+// under a split on each enumeration parameter (Bool, Cmp) that the normal form of a premise blocks on
+const premScheme = (R: Run, k: string, tl: Tele): [string, string][] | null => {
+  const { A } = R;
+  const pr = premises(A, tl);
+  // reusable binders: a step that uses h (injectivity) and the holes it leaves would count h twice
+  const intro = pr.names.map((n) => "+" + n + " => ").join("") + "?TODO";
+  const out: [string, string][] = pr.names.length ? [["whole+intro", intro]] : [];
+  const last = pr.goals.length ? pr.goals[pr.goals.length - 1] : tl.g;
+  const idx = new Set<number>();
+  // an enumeration parameter that the conclusion blocks on (g of a generalized Char.is_eq(c, ..))
+  for (const i of blocking(A, tl)) if (tl.ps[i].q !== "-" && enumTyped(A, tl.g, B.Var(tl.ps[i].name, i) as LTerm)) idx.add(i);
+  for (let j = 0; j < pr.names.length; j++) {
+    const a = A.ann(last, tl.ps.length + j);
+    const N = a ? A.attempt(A.FUEL_NF * 2, () => A.nf(a.T, tl.ps.length + j)) : null;
+    const blk: LTerm[] = [];
+    if (N) A.blockers(N, blk);
+    for (const b of blk) if (b.$ === "Var" && b.i < tl.ps.length && tl.ps[b.i].q !== "-" && enumTyped(A, tl.g, b)) idx.add(b.i);
+  }
+  const ids = [...idx].sort((a, b) => a - b).slice(0, 3);
+  for (const i of ids.slice(0, 2)) {
+    const used = new Set(tl.ps.map((p) => p.name));
+    const cs = casesOf(A, tl, i, used);
+    if (!cs) continue;
+    out.push(["prem:" + tl.ps[i].name, matchText([tl.ps[i].name], cs.map((c) => [c]), () => intro)]);
+  }
+  // all of them jointly (nested Bool.pick(g, .., Bool.pick(g1, ..)): one arm per combination)
+  if (ids.length >= 2) {
+    const used = new Set(tl.ps.map((p) => p.name));
+    const cs = ids.map((i) => casesOf(A, tl, i, used));
+    if (cs.every((c) => c) && product(cs as string[][]).length <= 16) out.unshift(["prem:all", matchText(ids.map((i) => tl.ps[i].name), product(cs as string[][]), () => intro)]);
+  }
+  return out;
+};
 const natScheme = (R: Run, k: string, tl: Tele): [string, string][] | null => {
   const { A } = R;
   const out: [string, string][] = [];

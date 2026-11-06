@@ -9,7 +9,11 @@
 // bend2 comes from bend-lint's pinned download (tools/gen2/bend2.ts), bend2 loads the entry's
 // imports itself (so `import ./spec.bend as Spec` and law fills `def Spec.law(..)` work), the
 // shared-server pool and the --wp stepper (bend-bootstrap's own machine) are gone, and the induction
-// module (gen2_ind.ts) also tries the whole goal as one arm (a stuck Bool or Cmp call generalized).
+// module (gen2_ind.ts) also tries the whole goal as one arm (a stuck Bool or Cmp call generalized),
+// introduces premises, splits enumeration parameters that premises block on, and generalizes a stuck
+// enumeration call inside a hypothesis (pattern B). A rewrite also matches a lemma's side in normal
+// form, and the index files each side by its normal-form head too (pattern D: Brk.char(Brk.of(c)) is
+// Brk.char(Bool.pick(..)) in a goal's normal form).
 //
 // PURPOSE
 // -------
@@ -1245,6 +1249,12 @@ const indexOf = (t: B.TLD): IdxOf => {
             const sk = headKey(side === 0 ? c.a : c.b);
             if (sk.startsWith("R:") || (t.n === 0 && (sk.startsWith("C:") || sk.startsWith("A:")))) r.rw.push([sk, side]);
           }
+          // also by the head of each side in normal form (a rewrite matches that form too)
+          const cn = t.n > 0 ? attempt(20000, () => nf(o.concl, 0)) : null;
+          if (cn && cn.$ === "Eql") for (const side of [0, 1] as const) {
+            const sk = headKey(side === 0 ? cn.a : cn.b);
+            if (sk.startsWith("R:") && !r.rw.some(([k2, s2]) => k2 === sk && s2 === side)) r.rw.push([sk, side]);
+          }
         }
       }
     }
@@ -1478,6 +1488,12 @@ const applyCallee = (g: Goal, c: Callee, targets: LTerm[], depth: number, rw: nu
   if (!concl && targets.length > 0) {
     const pn = nfPattern(c, o.concl, g.d);
     if (pn && key(pn) !== key(pc)) push(pn, targets[targets.length - 1]);
+  } else if (concl && targets.length > 0 && sols.length === 0) {
+    // a rewrite: the side of the conclusion in normal form too (Brk.char(Brk.of(c)) is Brk.char(Bool.pick(..))
+    // in a goal's normal form), when the raw side matched nothing
+    const pn = nfPattern(c, o.concl, g.d);
+    const ps = pn ? concl(pn) : null;
+    if (ps && key(ps) !== key(pc)) for (const t of targets) push(ps, t);
   }
   if (cnt && cnt.probe) { cnt.spec = sols.length ? specOf(pc) : -1; return null; }
   for (const s0 of sols) {
