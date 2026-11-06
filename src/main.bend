@@ -3,10 +3,11 @@ import ./cli/spec.bend as Cli
 import ./daemon/impl.bend as DaemonImpl
 import ./daemon/loop.bend as Daemon
 import ./daemon/spec.bend as Spec
+import ./mcp/loop.bend as Mcp
 import ./shared.bend as Shared
 
 # The program: the CLI picks the command; start-or-resume runs the daemon,
-# and every other command asks it.
+# mcp serves the MCP front, and every other command asks the daemon.
 
 # the URI text as the daemon names mounts: read, then shown
 def Main.uri(+t: String) -> String:
@@ -57,6 +58,8 @@ def Main.run(c: Result<&2, &2, String, Cli.Cmd>) -> IO(Unit):
       Daemon.Client.ask(Spec.Stop{f})
     case Done{Cli.AskCmd{+ws}}:
       Main.ask(Cli.Cli.reads_stdin(ws), ws)
+    case Done{Cli.McpCmd{}}:
+      Mcp.Mcp.run()
 
 # the arguments as a reusable list
 def Main.args(xs: List<String>) -> List<&2, String>:

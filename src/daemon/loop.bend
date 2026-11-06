@@ -1230,28 +1230,59 @@ def Daemon.start_or_resume() -> IO(Unit):
 # The client
 # ----------
 # Every command but start-or-resume: read the door, connect, send one
-# request, print the response, exit. When the daemon is down, it says so
-# and exits with 1.
+# request, read the response. Client.request gives the response to a front;
+# the CLI prints it, and exits with 1 for a refusal or when the daemon is
+# down.
 
 # the message for a daemon that does not run
-def Client.down() -> IO(Unit):
-  IO.die(Unit, 1, "vend is not running; ask the user to run `vend start-or-resume`")
+def Client.down() -> String:
+  "vend is not running; ask the user to run `vend start-or-resume`"
+
+# What a request got: no daemon to answer it, or its answer, None when the
+# daemon answered something that is not a response.
+type Heard is Data:
+  Unheard{}
+  Heard{response: Maybe<&2, Spec.Response>}
+
+# An answer as text: whether it is no refusal, and its lines.
+type Shown is Data:
+  Shown{ok: Bool, lines: List<&2, String>}
 
 # the line of one mount in a status
-def Client.info(i: Spec.Info) -> IO(Unit):
+def Client.info(i: Spec.Info) -> String:
   match i:
     case Spec.Info{u, ln, sp, n}:
-      IO.print(String.concat([u, " line ", ln, " space ", sp, " versions ", Nat.show(n)]))
+      String.concat([u, " line ", ln, " space ", sp, " versions ", Nat.show(n)])
 
 # the lines of the mounts in a status
-def Client.infos(infos: List<&2, Spec.Info>) -> IO(Unit):
+def Client.infos(infos: List<&2, Spec.Info>) -> List<&2, String>:
   match infos:
     case Nil{}:
-      IO.pure(Unit, Unit{})
+      Nil{}
     case Con{i, t}:
-      do IO<Unit>:
-        Client.info(i)
-        Client.infos(t)
+      Client.info(i) <> Client.infos(t)
+
+# what a request got, as text
+def Client.shown(h: Heard) -> Shown:
+  match h:
+    case Unheard{}:
+      Shown{False{}, [Client.down()]}
+    case Heard{None{}}:
+      Shown{False{}, ["vend answered something that is not a response"]}
+    case Heard{Some{Spec.StatusIs{Nil{}, c}}}:
+      Shown{True{}, ["no mounts; clients " ++ Nat.show(c)]}
+    case Heard{Some{Spec.StatusIs{Con{i, t}, c}}}:
+      Shown{True{}, List.append(&2, String, Client.infos(Con{i, t}), ["clients " ++ Nat.show(c)])}
+    case Heard{Some{Spec.Mounted{sp}}}:
+      Shown{True{}, ["mounted (space " ++ sp ++ ")"]}
+    case Heard{Some{Spec.Unmounted{}}}:
+      Shown{True{}, ["unmounted"]}
+    case Heard{Some{Spec.Stopping{}}}:
+      Shown{True{}, ["stopping"]}
+    case Heard{Some{Spec.Denied{why}}}:
+      Shown{False{}, ["denied: " ++ why]}
+    case Heard{Some{Spec.Said{ok, ls}}}:
+      Shown{ok, ls}
 
 # the lines printed, one after another
 def Client.lines(ls: List<&2, String>) -> IO(Unit):
@@ -1263,63 +1294,47 @@ def Client.lines(ls: List<&2, String>) -> IO(Unit):
         IO.print(l)
         Client.lines(t)
 
-# the lines of a response
-def Client.show(m: Maybe<&2, Spec.Response>) -> IO(Unit):
-  match m:
-    case None{}:
-      IO.die(Unit, 1, "vend answered something that is not a response")
-    case Some{Spec.StatusIs{Nil{}, c}}:
-      IO.print("no mounts; clients " ++ Nat.show(c))
-    case Some{Spec.StatusIs{Con{i, t}, c}}:
-      do IO<Unit>:
-        Client.infos(Con{i, t})
-        IO.print("clients " ++ Nat.show(c))
-    case Some{Spec.Mounted{sp}}:
-      IO.print("mounted (space " ++ sp ++ ")")
-    case Some{Spec.Unmounted{}}:
-      IO.print("unmounted")
-    case Some{Spec.Stopping{}}:
-      IO.print("stopping")
-    case Some{Spec.Denied{why}}:
-      IO.die(Unit, 1, "denied: " ++ why)
-    case Some{Spec.Said{True{}, ls}}:
+# the answer printed; a refusal is the exit with 1
+def Client.print(s: Shown) -> IO(Unit):
+  match s:
+    case Shown{True{}, ls}:
       Client.lines(ls)
-    case Some{Spec.Said{False{}, ls}}:
+    case Shown{False{}, ls}:
       IO.die(Unit, 1, String.join(ls, "\n"))
 
-# the response read from the daemon, printed; the connection closed
-def Client.answered(r: Socket & Maybe<&2, Shared.Bytes()>) -> IO(Unit):
+# the response read from the daemon; the connection closed
+def Client.answered(r: Socket & Maybe<&2, Shared.Bytes()>) -> IO(Heard):
   (sock, m) = r
   match m:
     case None{}:
-      do IO<Unit>:
+      do IO<Heard>:
         Socket.close(sock)
-        Client.down()
+        return Unheard{}
     case Some{b}:
-      do IO<Unit>:
+      do IO<Heard>:
         Socket.close(sock)
-        Client.show(Spec.Response.decode(b))
+        return Heard{Spec.Response.decode(b)}
 
 # the response read once the request is sent
-def Client.sent(r: Socket & Result<&1, &1, (U32 & String) & List<&2, U32>, Unit>) -> IO(Unit):
+def Client.sent(r: Socket & Result<&1, &1, (U32 & String) & List<&2, U32>, Unit>) -> IO(Heard):
   (sock, w) = r
   match w:
     case Fail{e}:
-      do IO<Unit>:
+      do IO<Heard>:
         Socket.close(sock)
-        Client.down()
+        return Unheard{}
     case Done{u}:
-      do IO<Unit>:
+      do IO<Heard>:
         a: Socket & Maybe<&2, Shared.Bytes()> <- Wire.read(sock)
         Client.answered(a)
 
 # the request sent once connected
-def Client.connected(r: Result<&1, &1, U32 & String, Socket>, req: Spec.Request) -> IO(Unit):
+def Client.connected(r: Result<&1, &1, U32 & String, Socket>, req: Spec.Request) -> IO(Heard):
   match r:
     case Fail{e}:
-      Client.down()
+      IO.pure(Heard, Unheard{})
     case Done{sock}:
-      do IO<Unit>:
+      do IO<Heard>:
         s: Socket
           & Result<
             &1,
@@ -1329,12 +1344,12 @@ def Client.connected(r: Result<&1, &1, U32 & String, Socket>, req: Spec.Request)
         Client.sent(s)
 
 # the request with body b sent through the door, if the file names one
-def Client.door(m: Maybe<&2, Door>, b: Spec.Body) -> IO(Unit):
+def Client.door(m: Maybe<&2, Door>, b: Spec.Body) -> IO(Heard):
   match m:
     case None{}:
-      Client.down()
+      IO.pure(Heard, Unheard{})
     case Some{Door{port, tok}}:
-      do IO<Unit>:
+      do IO<Heard>:
         r: Result<&1, &1, U32 & String, Socket> <- TCP.connect("127.0.0.1", port)
         Client.connected(r, Spec.Request{tok, b})
 
@@ -1355,25 +1370,37 @@ def Client.read(r: Result<&2, &2, String, Shared.Bytes()>) -> Maybe<&2, Door>:
       Client.text(Text.Text.decode(bytes))
 
 # the request with body b, once the data folder is known
-def Client.dir(m: Maybe<&2, String>, b: Spec.Body) -> IO(Unit):
+def Client.dir(m: Maybe<&2, String>, b: Spec.Body) -> IO(Heard):
   match m:
     case None{}:
-      Client.down()
+      IO.pure(Heard, Unheard{})
     case Some{d}:
-      do IO<Unit>:
+      do IO<Heard>:
         r: Result<&2, &2, String, Shared.Bytes()> <- CoreLoop.Log.bytes(Data.path(d, "daemon"))
         Client.door(Client.read(r), b)
 
-# the request with body b sent to the daemon, and its response printed
-def Client.ask(b: Spec.Body) -> IO(Unit):
-  do IO<Unit>:
+# the request with body b sent to the daemon, and what it got; it never
+# ends the program
+def Client.request(b: Spec.Body) -> IO(Heard):
+  do IO<Heard>:
     m: Maybe<&2, String> <- CoreLoop.Log.dir()
     Client.dir(m, b)
 
+# the request with body b sent to the daemon, and its answer printed
+def Client.ask(b: Spec.Body) -> IO(Unit):
+  do IO<Unit>:
+    h: Heard <- Client.request(b)
+    Client.print(Client.shown(h))
+
+# the agent named by VEND_AGENT, or "unnamed" when it is not set
+def Client.agent() -> IO(String):
+  do IO<String>:
+    a: Result<&1, &1, U32 & String, String> <- IO.get_env("VEND_AGENT")
+    return Maybe.default(&2, String, CoreLoop.Log.env(a, ""), "unnamed")
+
 # the everyday command of the words ws sent to the daemon with the bytes
-# b, signed with the agent named by VEND_AGENT ("unnamed" when it is
-# not set)
+# b, signed with Client.agent
 def Client.everyday(ws: List<&2, String>, b: Shared.Bytes()) -> IO(Unit):
   do IO<Unit>:
-    a: Result<&1, &1, U32 & String, String> <- IO.get_env("VEND_AGENT")
-    Client.ask(Spec.Ask{Maybe.default(&2, String, CoreLoop.Log.env(a, ""), "unnamed"), ws, b})
+    a: String <- Client.agent()
+    Client.ask(Spec.Ask{a, ws, b})

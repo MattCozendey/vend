@@ -32,8 +32,10 @@ Delete each item when it is done.
 - The daemon (`src/daemon`; built: one per user and machine, all mounts, started only by
   `vend start-or-resume`, the down message, `status`, `mount`, `unmount`, guarded `daemon stop`, and the everyday
   commands `lines`, `log`, `show`, `diff`, `affects`, `impact`, `line new`, `write --expect`, `restore`, `mark`,
-  `merge`). Left:
-  - Next: the MCP server over stdio, a thin front like the CLI; it signs writes with the client name.
+  `merge`; and the MCP front, `vend mcp`). Left:
+  - MCP (`src/mcp`): `affects` as a stream of notifications (`subscriptions/listen`), and resources or prompts, are
+    not offered; tools only. A modern request is not checked against the client capabilities it declares (vend
+    needs none). Tool output is text only (no `structuredContent`).
   - `affects` answers once; streaming it (what `clients` will count) is not built.
   - `log` lists versions in walk order from the heads, not in topological order.
   - `diff` takes versions (id prefixes, or a line for its head), not marks.
@@ -79,6 +81,8 @@ and soundness are proven in `src/shared.bend`).
   `mark_fixed`, `apply_forked`, `apply_forked_mark`, `reads_record_nothing`, `merge_all_or_nothing`.
 - `src/cli`: `parse_after_show` (restated for `mount`; its old proof covered `watch`, which is gone),
   `ask_passes_words`.
+- `src/json`: `read_after_show`.
+- `src/mcp`: `body_is_cli`, `forwards_agents_only`.
 - `src/journal`: `read_after_encode`, `read_torn_tail`.
 - `src/impact`: `classify_unchanged`, `classify_added`, `classify_removed`, `classify_statement`,
   `classify_proof_only`, `classify_covered`, `radius_has_changed`, `radius_closed`, `radius_minimal`,

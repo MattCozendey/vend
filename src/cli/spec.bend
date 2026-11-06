@@ -19,8 +19,9 @@ import ../shared.bend as Shared
 # the daemon reads as they are; a write without --from <uri> writes the
 # bytes of standard input (Cli.reads_stdin). Versions from the endpoint are
 # recorded as Outside; a command that writes signs its versions with the
-# agent name in the environment variable VEND_AGENT. Help: print the
-# usage.
+# agent name in the environment variable VEND_AGENT. McpCmd: serve the
+# everyday commands as MCP tools on standard input and output, for an agent
+# harness that starts it (src/mcp). Help: print the usage.
 type Cmd is Data:
   StartOrResume{}
   StatusCmd{}
@@ -28,6 +29,7 @@ type Cmd is Data:
   UnmountCmd{root: String}
   DaemonStop{force: Bool}
   AskCmd{words: List<&2, String>}
+  McpCmd{}
   Help{}
 
 # how to call the program
@@ -41,6 +43,8 @@ def Cli.usage() -> String:
       "         that matches decides), on the line <name> (default main)\n",
       "       vend unmount <uri>                            stop versioning that root\n",
       "       vend daemon stop [--force]                    end the daemon (--force: even with mounts)
+",
+      "       vend mcp                                      the everyday commands as MCP tools on stdio
 ",
       "       vend ",
       Daemon.Command.syntax(),
@@ -129,11 +133,16 @@ def Cli.word(+w: String) -> Result<&2, &2, String, Cmd>:
       Result<&2, &2, String, Cmd>,
       String.eq(w, "status"),
       v => Done{StatusCmd{}},
-      v => Bool.pick(
+      v => Shared.Bool.when(
         Result<&2, &2, String, Cmd>,
-        String.eq(w, "help"),
-        Done{Help{}},
-        Fail{Cli.usage()}
+        String.eq(w, "mcp"),
+        x => Done{McpCmd{}},
+        x => Bool.pick(
+          Result<&2, &2, String, Cmd>,
+          String.eq(w, "help"),
+          Done{Help{}},
+          Fail{Cli.usage()}
+        )
       )
     )
   )
@@ -144,6 +153,12 @@ def Cli.everyday(w: String) -> Bool:
 
 # the bytes of standard input, read to its end
 def Stdin.read_all() -> IO(Result<&1, &1, U32 & String, Shared.Bytes()>):
+  import "./effs/stdin.c"
+  import "./effs/stdin.js"
+
+# the next line of standard input with its line feed, or the last bytes
+# before its end without one; no bytes at its end
+def Stdin.read_line() -> IO(Result<&1, &1, U32 & String, Shared.Bytes()>):
   import "./effs/stdin.c"
   import "./effs/stdin.js"
 
@@ -236,6 +251,8 @@ def Cli.show(c: Cmd) -> List<&2, String>:
       ["daemon", "stop", "--force"]
     case AskCmd{ws}:
       ws
+    case McpCmd{}:
+      ["mcp"]
     case Help{}:
       ["help"]
 
