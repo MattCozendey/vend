@@ -1,6 +1,7 @@
 import Base
 import ../../glob/impl.bend as GlobImpl
 import ../../shared.bend as Shared
+import ../shared.bend as Views
 import ./spec.bend as Spec
 # bend-lint: expect-file bend-lint-rules/language/reused_binder@warning -- proof binders whose other use is inside a rewrite motive or an erased argument; the checker accepts them
 
@@ -360,3 +361,77 @@ def Spec.Text.join_after_lines(s):
     Text.join_go(Spec.Brk.list(s), SNil{}),
     Brk.text_list(s)
   )
+
+# Diff and merge
+# --------------
+# Line by line, through the views' shared sequence diff and merge.
+
+# a and b end the same way
+def End.is_eq(a: Spec.End, b: Spec.End) -> Bool:
+  match a b:
+    case Spec.LF{} Spec.LF{}:
+      True{}
+    case Spec.CRLF{} Spec.CRLF{}:
+      True{}
+    case Spec.CR{} Spec.CR{}:
+      True{}
+    case Spec.Eof{} Spec.Eof{}:
+      True{}
+    case _ _:
+      False{}
+
+# a and b are the same line: the same text and the same end
+def Line.is_eq(a: Spec.Line, b: Spec.Line) -> Bool:
+  match a b:
+    case Spec.Line{t1, e1} Spec.Line{t2, e2}:
+      List.all.if(u => End.is_eq(e1, e2), String.eq(t1, t2))
+
+# the line edits of steps
+def Text.edits(hs: List<&2, Views.Hunk<Spec.Line>>) -> List<&2, Spec.LineEdit>:
+  match hs:
+    case Nil{}:
+      Nil{}
+    case Con{Views.Hunk{s, d, i}, t}:
+      Spec.LineEdit{s, d, i} <> Text.edits(t)
+
+# the steps of line edits
+def Text.steps(es: List<&2, Spec.LineEdit>) -> List<&2, Views.Hunk<Spec.Line>>:
+  match es:
+    case Nil{}:
+      Nil{}
+    case Con{Spec.LineEdit{s, d, i}, t}:
+      Views.Hunk{s, d, i} <> Text.steps(t)
+
+# the text of lines, if there are lines
+def Text.joined(m: Maybe<&2, List<&2, Spec.Line>>) -> Maybe<&2, String>:
+  match m:
+    case None{}:
+      None{}
+    case Some{ls}:
+      Some{Spec.Text.join(ls)}
+
+# a collision of two different line changes is a clash
+def Text.no_resolve(
+  base: List<&2, Spec.Line>,
+  a: Views.Hunk<Spec.Line>,
+  b: Views.Hunk<Spec.Line>
+) -> Maybe<&2, Views.Hunk<Spec.Line>>:
+  None{}
+
+def Spec.Text.diff(a, b):
+  hs = Views.Seq.diff(~Spec.Line, ~Line.is_eq, Spec.Text.lines(a), Spec.Text.lines(b))
+  Text.edits(Views.Seq.steps(~Spec.Line, hs, 0n, 0n))
+
+def Spec.Text.patch(s, es):
+  Text.joined(Views.Seq.patch(~Spec.Line, Text.steps(es), Some{Spec.Text.lines(s)}))
+
+def Spec.Text.merge(base, x, y):
+  ls = Views.Seq.merge(
+    ~Spec.Line,
+    ~Line.is_eq,
+    ~Text.no_resolve,
+    Spec.Text.lines(base),
+    Spec.Text.lines(x),
+    Spec.Text.lines(y)
+  )
+  Text.joined(ls)
