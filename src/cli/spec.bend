@@ -139,7 +139,7 @@ def Cli.word(+w: String) -> Result<&2, &2, String, Cmd>:
   )
 
 # w is the first word of an everyday command
-def Cli.everyday(+w: String) -> Bool:
+def Cli.everyday(w: String) -> Bool:
   List.contains(~String, ~String.eq, Daemon.Command.words(), w)
 
 # the words without a "--from <file>" pair, and the file of the first one
