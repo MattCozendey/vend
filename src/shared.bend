@@ -449,6 +449,37 @@ def String.eq_sound(
 ) -> {String.eq(a, b) == True{}: Bool} -> {a == b: String}:
   h => String.order_sound(a, b)(Cmp.is_eq_sound(String.order.go(a, b, EQ{}))(h))
 
+# String.eq answers False the same way round, with c the answer of
+# String.eq(b, a)
+def String.eq_flip.at(
+  +a: String,
+  b: String,
+  c: Bool
+) -> {String.eq(b, a) == c: Bool} -> {String.eq(a, b) == False{}: Bool} -> {c == False{}: Bool}:
+  match c:
+    case False{}:
+      _ => _ => {==}
+    case True{}:
+      e => d =>
+        ab = Equal.sym(String, b, a, String.eq_sound(b, a)(e))
+        same = Equal.cong(String, Bool, z => String.eq(a, z), a, b, ab)
+        aa = Equal.sym(Bool, String.eq(a, a), True{}, String.eq_refl(a))
+        Equal.trans(
+          Bool,
+          True{},
+          String.eq(a, b),
+          False{},
+          Equal.trans(Bool, True{}, String.eq(a, a), String.eq(a, b), aa, same),
+          d
+        )
+
+# String.eq is False the other way round too
+def String.eq_flip(
+  +a: String,
+  +b: String
+) -> {String.eq(a, b) == False{}: Bool} -> {String.eq(b, a) == False{}: Bool}:
+  String.eq_flip.at(a, b, String.eq(b, a), {==})
+
 # Tables
 # ------
 # A table maps keys to values. It is a plain list of rows for now, with no

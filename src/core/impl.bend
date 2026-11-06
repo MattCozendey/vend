@@ -109,7 +109,7 @@ def Core.added(
   +c: Spec.Core,
   +path: String,
   parents: List<&2, Shared.Bytes()>,
-  r: Result<&2, &2, History.Missing, History.Added>
+  r: Result<&2, &2, History.Refusal, History.Added>
 ) -> Spec.Stepped:
   match r:
     case Done{History.Added{+h2, +x}}:
@@ -314,3 +314,35 @@ def Spec.write_refused(c, p, b, e, h):
         }: Spec.Stepped
     }
   {==}
+
+# after a move to t, the core remembers where t came from
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- the second uses sit in the rewrite motive of Moved.kept; the checker accepts them
+def Moved.kept(
+  +c: Spec.Core,
+  f: String,
+  t: String
+) -> {
+  Spec.Core.moved(
+    Core.set_moved(c, t, Some{Spec.Core.name(c, f)}),
+    t
+  )
+    == Some{Spec.Core.name(c, f)}: Maybe<&2, Shared.Name>
+}:
+  match c:
+    case Spec.Core{m, s, h, l, ss, +ms, ns}:
+      nm = Spec.Core.name(Spec.Core{m, s, h, l, ss, ms, ns}, f)
+      %Equal.sym(
+        Maybe<&2, Maybe<&2, Shared.Name>>,
+        Shared.Table.get(
+          Maybe<&2, Shared.Name>,
+          Shared.Table.set(Maybe<&2, Shared.Name>, ms, t, Some{nm}),
+          t
+        ),
+        Some{Some{nm}},
+        Shared.Table.get_after_set(Maybe<&2, Shared.Name>, ms, t, Some{nm})
+      ): {Maybe.default(&2, Maybe<&2, Shared.Name>, _, None{}) == Some{nm}: Maybe<&2, Shared.Name>}
+      {==}
+
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+def Spec.move_remembered(c, f, t):
+  ({==}, Moved.kept(c, f, t))

@@ -21,13 +21,14 @@ Delete each item when it is done.
   - Retry a transient Windows sharing violation during a fetch instead of reporting `Unreachable`.
   - No fsync after a write; a temp file left by a crash is never removed; files over 4 GiB (`File.size` is `U32`).
   - File URIs: percent-encoded characters are not decoded yet (a `%` is taken as itself).
+- `src/shared.bend`: a faster Table inside (e.g. Base Map), proving the same three laws.
 - `src/core`: more than one mount per loop, and a `--line` option in the CLI (today: one mount, line `main`).
 - `src/graph`: references across spaces (a reference with a scheme or an authority) through mounts; today unresolved.
 
 ## Prove
 
-Every law stated but not proven. Missing library lemmas block several: `Map` get-after-set (history, lines,
-`move_remembered`) and `String.eq` reflexive/symmetric/transitive (`Text.same_equivalence`).
+Every law stated but not proven. `Text.same_equivalence` needs `String.eq` symmetry and transitivity (reflexivity
+and soundness are proven in `src/shared.bend`).
 
 - `src/shared.bend`: `uri_read_after_show`, `uri_show_after_read`, `name_read_after_show`, `name_show_after_read`.
 - `src/views/shared.bend` instances:
@@ -38,12 +39,16 @@ Every law stated but not proven. Missing library lemmas block several: `Map` get
 - `src/store`: `node_is_eq`, `read_after_write`, `write_root`, `write_keeps`, `edit_root`, `read_after_edit`,
   `edit_keeps`, `write_collides`, `edit_collides`, `diff_applies`, `diff_answers`.
 - `src/conditions`: `sat_holds`, `sat_unsat`, `canon_same`, `canon_unique`.
-- `src/history`: `add_refused`, `add_node`, `add_keeps`, `add_idempotent`, `add_tips`, `add_frames`, `join_keeps`,
-  `join_adds_nothing`, `join_commutes`, `join_associates`, `join_idempotent`.
-- `src/lines`: `advance_head`, `advance_frames`, `advance_descends`.
+- `src/history`: `node_encode_injective`, `add_refused`, `add_node`, `add_collides`, `add_idempotent`, `add_tips`,
+  `join_keeps`, `join_adds_nothing`, `join_commutes`, `join_associates`, `join_idempotent`. `add_collides` (its
+  `Node.id(a) == Node.id(b)` part) holds only for a history whose nodes sit under their own ids: it needs that
+  premise.
+- `src/lines`: `advance_head`, `advance_frames`, `advance_descends`. `advance_head` is false as stated for a name
+  of another space (`Line.advance` accepts it, but `Line.heads` of such a name is always `[]`): it needs a
+  same-space premise, or `advance` must refuse such names.
 - `src/graph`: `affected_exact`.
 - `src/core`: `noticed_follows_stream`, `records_each_version`, `fetched_reads_back`, `recorded_heads_line`,
-  `write_accepted`, `move_remembered`, `nested_untracked`, `step_keeps_history`.
+  `write_accepted`, `nested_untracked`, `step_keeps_history`.
 - `src/endpoints/file`: `temp_is_temp`.
 
 ## Strengthen

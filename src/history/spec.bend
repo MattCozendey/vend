@@ -76,6 +76,17 @@ def Node.encode(n: Node) -> Shared.Bytes():
 def Node.id(n: Node) -> Shared.Bytes():
   Hash.Hash.blake3(Node.encode(n))
 
+# a and b are the same node: they have the same bytes
+def Node.same(a: Node, b: Node) -> Bool:
+  Shared.Bytes.is_eq(Node.encode(a), Node.encode(b))
+
+# distinct nodes have distinct bytes, so Node.same is equality
+law node_encode_injective:
+  for a: Node
+  for b: Node
+  for e: {Node.encode(a) == Node.encode(b): Shared.Bytes()}
+  {a == b: Node}
+
 # The nodes by the hex of their id, and the tips of each resource by the
 # text of its name. The tips of a resource are its nodes that no node of it
 # has as a parent, in ascending byte order of their ids. Several tips mean
@@ -96,6 +107,18 @@ def History.get(h: History, x: Shared.Bytes()) -> Maybe<&2, Node>:
 # h holds a node with id x
 def History.has(h: History, x: Shared.Bytes()) -> Bool:
   Maybe.is_some(&2, Node, History.get(h, x))
+
+# the other node that m holds where v belongs, if any
+def History.collides.of(m: Maybe<&2, Node>, v: Node) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{w}:
+      Bool.not(Node.same(w, v))
+
+# h holds another node under the id of v
+def History.collides(h: History, +v: Node) -> Bool:
+  History.collides.of(History.get(h, Node.id(v)), v)
 
 # the tips of the resource n: none when it has no version yet
 def History.tips(h: History, n: Shared.Name) -> List<&2, Shared.Bytes()>:
@@ -148,22 +171,27 @@ def Node.parents(v: Node) -> List<&2, Shared.Bytes()>:
 # move it forward, belongs to lines (src/lines), not to the history: two
 # lines that write one resource apart simply fork it here.
 
-# Why an add is refused: a parent that the history does not hold.
-type Missing is Data:
+# Why an add is refused. Missing: a parent that the history does not hold.
+# Collides: the history holds another node a under the id of the new node
+# b (two nodes, one hash); it never keeps both, so it names them.
+type Refusal is Data:
   Missing{parent: Shared.Bytes()}
+  Collides{a: Node, b: Node}
 
 # A finished add: the history after it, and the id of the node.
 type Added is Data:
   Added{history: History, id: Shared.Bytes()}
 
-# h with the node v, or the parent of v that h lacks; a node that h holds
-# already changes nothing
+# h with the node v; or the parent of v that h lacks; or the other node
+# that h holds under the id of v. A node that h holds already changes
+# nothing.
 law History.add:
   for h: History
   for v: Node
-  Result<&2, &2, Missing, Added>
+  Result<&2, &2, Refusal, Added>
 
-# an add is refused exactly when a parent of the node is missing
+# an add is refused exactly when a parent of the node is missing, or the
+# history holds another node under its id
 law add_refused:
   for h: History
   for v: Node
@@ -171,11 +199,11 @@ law add_refused:
     Result.is_fail(
       &2,
       &2,
-      Missing,
+      Refusal,
       Added,
       History.add(h, v)
     )
-      == Bool.not(Ids.all_in(h, Node.parents(v))): Bool
+      == Bool.or(Bool.not(Ids.all_in(h, Node.parents(v))), History.collides(h, v)): Bool
   }
 
 # an add keeps exactly its node, under its id
@@ -184,8 +212,17 @@ law add_node:
   for v: Node
   for g: History
   for x: Shared.Bytes()
-  for a: {History.add(h, v) == Done{Added{g, x}}: Result<&2, &2, Missing, Added>}
+  for a: {History.add(h, v) == Done{Added{g, x}}: Result<&2, &2, Refusal, Added>}
   {History.get(g, x) == Some{v}: Maybe<&2, Node>} & {x == Node.id(v): Shared.Bytes()}
+
+# a refused add for a collision names another node with the same id
+law add_collides:
+  for h: History
+  for v: Node
+  for a: Node
+  for b: Node
+  for c: {History.add(h, v) == Fail{Collides{a, b}}: Result<&2, &2, Refusal, Added>}
+  {Node.same(a, b) == False{}: Bool} & {Node.id(a) == Node.id(b): Shared.Bytes()}
 
 # an add keeps every node
 law add_keeps:
@@ -195,16 +232,17 @@ law add_keeps:
   for x: Shared.Bytes()
   for y: Shared.Bytes()
   for w: Node
-  for a: {History.add(h, v) == Done{Added{g, x}}: Result<&2, &2, Missing, Added>}
+  for a: {History.add(h, v) == Done{Added{g, x}}: Result<&2, &2, Refusal, Added>}
   for o: {History.get(h, y) == Some{w}: Maybe<&2, Node>}
   {History.get(g, y) == Some{w}: Maybe<&2, Node>}
 
-# adding a node that the history holds changes nothing
+# adding a node that the history holds, with its parents, changes nothing
 law add_idempotent:
   for h: History
   for v: Node
+  for p: {Ids.all_in(h, Node.parents(v)) == True{}: Bool}
   for o: {History.get(h, Node.id(v)) == Some{v}: Maybe<&2, Node>}
-  {History.add(h, v) == Done{Added{h, Node.id(v)}}: Result<&2, &2, Missing, Added>}
+  {History.add(h, v) == Done{Added{h, Node.id(v)}}: Result<&2, &2, Refusal, Added>}
 
 # after an add, the node is a tip of its resource, and none of its parents
 # is
@@ -214,7 +252,7 @@ law add_tips:
   for g: History
   for x: Shared.Bytes()
   for p: Shared.Bytes()
-  for a: {History.add(h, v) == Done{Added{g, x}}: Result<&2, &2, Missing, Added>}
+  for a: {History.add(h, v) == Done{Added{g, x}}: Result<&2, &2, Refusal, Added>}
   for q: {Ids.has(Node.parents(v), p) == True{}: Bool}
   {Ids.has(History.tips(g, Node.name(v)), x) == True{}: Bool} &
     {Ids.has(History.tips(g, Node.name(v)), p) == False{}: Bool}
@@ -226,7 +264,7 @@ law add_frames:
   for g: History
   for x: Shared.Bytes()
   for m: Shared.Name
-  for a: {History.add(h, v) == Done{Added{g, x}}: Result<&2, &2, Missing, Added>}
+  for a: {History.add(h, v) == Done{Added{g, x}}: Result<&2, &2, Refusal, Added>}
   for d: {String.eq(Shared.Name.show(m), Shared.Name.show(Node.name(v))) == False{}: Bool}
   {History.tips(g, m) == History.tips(h, m): List<&2, Shared.Bytes()>}
 

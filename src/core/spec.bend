@@ -52,10 +52,11 @@ type Input is Data:
 # -------
 
 # Why a version was not kept. Store: the store met a hash collision.
-# History: the history lacked a parent. Line: the line did not move.
+# History: the history refused the node (a missing parent, or a collision).
+# Line: the line did not move.
 type Problem is Data:
   StoreProblem{problem: Store.Problem}
-  HistoryProblem{missing: History.Missing}
+  HistoryProblem{refusal: History.Refusal}
   LineProblem{refused: Lines.Refused}
 
 # Something for the loop to carry out or to report. Command: send it to
