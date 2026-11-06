@@ -462,12 +462,6 @@ law response_decode_after_encode:
 # the state that Daemon.replay gives. So the state after a restart is the
 # state before it.
 
-# the book of d
-def Daemon.book(d: Daemon) -> Book:
-  match d:
-    case Daemon{s, h, ls, ms, cs, bk}:
-      bk
-
 # the line whose key is k, if the daemon has it
 def Daemon.line_at(d: Daemon, k: String) -> Maybe<&2, Lines.Line>:
   match d:
@@ -706,114 +700,140 @@ def Command.if(ok: Bool, c: Command) -> Result<&2, &2, String, Command>:
     case True{}:
       Done{c}
 
-# Command.of for restore, mark and merge
-def Command.of.last(
-  +w: String,
-  +a: String,
-  +b: String,
-  +t: List<&2, String>,
-  ln: String
-) -> Result<&2, &2, String, Command>:
-  Shared.Bool.when(
-    Result<&2, &2, String, Command>,
-    String.eq(w, "restore"),
-    u => Command.named(a, n => RestoreTo{n, ln, b}),
-    u => Shared.Bool.when(
-      Result<&2, &2, String, Command>,
-      String.eq(w, "mark"),
-      v => Command.if(
-        Line.plain(b),
-        MarkMade{a, b, Maybe.default(&2, String, Opts.get(t, "-m"), "")}
-      ),
-      v => Shared.Bool.when(
-        Result<&2, &2, String, Command>,
-        Bool.and(String.eq(w, "merge"), String.eq(b, "into")),
-        x => Command.if(
-          Bool.not(List.is_empty(&2, String, t)),
-          MergeOf{a, Maybe.default(&2, String, List.head(&2, String, t), "")}
-        ),
-        x => Fail{Command.usage()}
-      )
-    )
-  )
-# Command.of for diff, line new, write, restore, mark and merge
-def Command.of.two(+w: String, +a: String, t: List<&2, String>) -> Result<&2, &2, String, Command>:
-  match t:
-    case Con{+b, +t2}:
-      +ln = Maybe.default(&2, String, Opts.get(t2, "--line"), "main")
-      Shared.Bool.when(
-        Result<&2, &2, String, Command>,
-        String.eq(w, "diff"),
-        u => Command.named(
-          a,
-          n => DiffOf{n, b, Maybe.default(&2, String, List.head(&2, String, t2), b)}
-        ),
-        u => Shared.Bool.when(
-          Result<&2, &2, String, Command>,
-          Bool.and(String.eq(w, "line"), String.eq(a, "new")),
-          v => Command.if(
-            Line.plain(b),
-            LineNew{b, Maybe.default(&2, String, Opts.get(t2, "--from"), "main")}
-          ),
-          v => Shared.Bool.when(
-            Result<&2, &2, String, Command>,
-            String.eq(w, "write"),
-            x => Command.named(
-              a,
-              n => WriteTo{
-                n,
-                ln,
-                Command.expect(Maybe.default(&2, String, Opts.get(b <> t2, "--expect"), "none"))
-              }
-            ),
-            x => Command.of.last(w, a, b, t2, ln)
-          )
-        )
-      )
-    case Nil{}:
-      Fail{Command.usage()}
-# Command.of for the commands with a first word a and more words t
-def Command.of.more(
-  +w: String,
-  +a: String,
-  +t: List<&2, String>
-) -> Result<&2, &2, String, Command>:
-  Shared.Bool.when(
-    Result<&2, &2, String, Command>,
-    String.eq(w, "affects"),
-    u => Command.if(List.is_empty(&2, String, t), AffectsOf{a}),
-    u => Shared.Bool.when(
-      Result<&2, &2, String, Command>,
-      String.eq(w, "impact"),
-      v => Command.if(List.is_empty(&2, String, t), ImpactOf{a}),
-      v => Command.of.two(w, a, t)
-    )
-  )
-# Command.of for every word but "lines"
-def Command.of.rest(+w: String, r: List<&2, String>) -> Result<&2, &2, String, Command>:
+# the line option of t: --line L, else main
+def Opts.line(t: List<&2, String>) -> String:
+  Maybe.default(&2, String, Opts.get(t, "--line"), "main")
+
+# Each command word has one reader below, for the words after it. Fewer
+# words than the command needs, or a word in the wrong place, is the usage.
+
+# lines
+def Command.lines(r: List<&2, String>) -> Result<&2, &2, String, Command>:
+  Command.if(List.is_empty(&2, String, r), LinesOf{})
+
+# log <name> [--line L] [--author A]
+def Command.log(r: List<&2, String>) -> Result<&2, &2, String, Command>:
   match r:
-    case Con{+a, +t}:
-      Shared.Bool.when(
-        Result<&2, &2, String, Command>,
-        String.eq(w, "log"),
-        u => Command.named(a, n => LogOf{n, Opts.get(t, "--line"), Opts.get(t, "--author")}),
-        u => Shared.Bool.when(
-          Result<&2, &2, String, Command>,
-          String.eq(w, "show"),
-          v => Command.named(a, n => ShowOf{n, List.head(&2, String, t)}),
-          v => Command.of.more(w, a, t)
-        )
-      )
+    case Con{a, +t}:
+      Command.named(a, n => LogOf{n, Opts.get(t, "--line"), Opts.get(t, "--author")})
     case Nil{}:
       Fail{Command.usage()}
-# the command that the words after the command's own word w spell
-def Command.of(+w: String, +r: List<&2, String>) -> Result<&2, &2, String, Command>:
-  Shared.Bool.when(
-    Result<&2, &2, String, Command>,
-    String.eq(w, "lines"),
-    u => Command.if(List.is_empty(&2, String, r), LinesOf{}),
-    u => Command.of.rest(w, r)
-  )
+
+# show <name> [<version>]
+def Command.show(r: List<&2, String>) -> Result<&2, &2, String, Command>:
+  match r:
+    case Con{a, t}:
+      Command.named(a, n => ShowOf{n, List.head(&2, String, t)})
+    case Nil{}:
+      Fail{Command.usage()}
+
+# diff <name> <a> [<b>]; with no b, b is a
+def Command.diff(r: List<&2, String>) -> Result<&2, &2, String, Command>:
+  match r:
+    case Con{a, Con{+b, t}}:
+      Command.named(a, n => DiffOf{n, b, Maybe.default(&2, String, List.head(&2, String, t), b)})
+    case _:
+      Fail{Command.usage()}
+
+# affects <line>
+def Command.affects(r: List<&2, String>) -> Result<&2, &2, String, Command>:
+  match r:
+    case Con{a, t}:
+      Command.if(List.is_empty(&2, String, t), AffectsOf{a})
+    case Nil{}:
+      Fail{Command.usage()}
+
+# impact <line|line@mark>
+def Command.impact(r: List<&2, String>) -> Result<&2, &2, String, Command>:
+  match r:
+    case Con{a, t}:
+      Command.if(List.is_empty(&2, String, t), ImpactOf{a})
+    case Nil{}:
+      Fail{Command.usage()}
+
+# line new <name> --from <line|line@mark>
+def Command.line(r: List<&2, String>) -> Result<&2, &2, String, Command>:
+  match r:
+    case Con{a, Con{+b, t}}:
+      line = {LineNew{b, Maybe.default(&2, String, Opts.get(t, "--from"), "main")}: Command}
+      Shared.Bool.when(
+        Result<&2, &2, String, Command>,
+        String.eq(a, "new"),
+        u => Command.if(Line.plain(b), line),
+        u => Fail{Command.usage()}
+      )
+    case _:
+      Fail{Command.usage()}
+
+# write <name> --expect <ids|none> [--line L]
+def Command.write(r: List<&2, String>) -> Result<&2, &2, String, Command>:
+  match r:
+    case Con{a, Con{b, +t}}:
+      e = Command.expect(Maybe.default(&2, String, Opts.get(b <> t, "--expect"), "none"))
+      Command.named(a, n => WriteTo{n, Opts.line(t), e})
+    case _:
+      Fail{Command.usage()}
+
+# restore <name> <version> [--line L]
+def Command.restore(r: List<&2, String>) -> Result<&2, &2, String, Command>:
+  match r:
+    case Con{a, Con{b, t}}:
+      Command.named(a, n => RestoreTo{n, Opts.line(t), b})
+    case _:
+      Fail{Command.usage()}
+
+# mark <line> <name> -m <message>
+def Command.mark(r: List<&2, String>) -> Result<&2, &2, String, Command>:
+  match r:
+    case Con{a, Con{+b, t}}:
+      Command.if(Line.plain(b), MarkMade{a, b, Maybe.default(&2, String, Opts.get(t, "-m"), "")})
+    case _:
+      Fail{Command.usage()}
+
+# merge <line|line@mark> into <line>
+def Command.merge(r: List<&2, String>) -> Result<&2, &2, String, Command>:
+  match r:
+    case Con{a, Con{b, Con{c, t}}}:
+      Command.if(String.eq(b, "into"), MergeOf{a, c})
+    case _:
+      Fail{Command.usage()}
+
+# A command word and the reader of the words after it.
+type Reader is Type:
+  Reader{word: String, read: List<&2, String> -> Result<&2, &2, String, Command>}
+
+# every command word with its reader
+def Command.readers() -> List<&1, Reader>:
+  [
+    Reader{"lines", r => Command.lines(r)},
+    Reader{"log", r => Command.log(r)},
+    Reader{"show", r => Command.show(r)},
+    Reader{"diff", r => Command.diff(r)},
+    Reader{"affects", r => Command.affects(r)},
+    Reader{"impact", r => Command.impact(r)},
+    Reader{"line", r => Command.line(r)},
+    Reader{"write", r => Command.write(r)},
+    Reader{"restore", r => Command.restore(r)},
+    Reader{"mark", r => Command.mark(r)},
+    Reader{"merge", r => Command.merge(r)}
+  ]
+
+# the reader of rs for the word w reads r; no reader for w is the usage
+def Command.of(
+  rs: List<&1, Reader>,
+  +w: String,
+  +r: List<&2, String>
+) -> Result<&2, &2, String, Command>:
+  match rs:
+    case Nil{}:
+      Fail{Command.usage()}
+    case Con{Reader{k, f}, t}:
+      Shared.Bool.when(
+        Result<&2, &2, String, Command>,
+        String.eq(k, w),
+        u => f(r),
+        u => Command.of(t, w, r)
+      )
 
 # the command that the words ws spell, or the usage
 def Command.read(ws: List<&2, String>) -> Result<&2, &2, String, Command>:
@@ -821,7 +841,7 @@ def Command.read(ws: List<&2, String>) -> Result<&2, &2, String, Command>:
     case Nil{}:
       Fail{Command.usage()}
     case Con{w, r}:
-      Command.of(w, r)
+      Command.of(Command.readers(), w, r)
 
 # the command only reads: it keeps no record
 def Command.reads(c: Command) -> Bool:

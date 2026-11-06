@@ -313,12 +313,6 @@ type Mark is Data:
 def Mark.of(+l: Line, name: String, msg: String, a: History.Author) -> Mark:
   Mark{Line.name(l), name, msg, a, l}
 
-# the heads that the line of m followed for the resource n when m was made
-def Mark.heads(m: Mark, n: Shared.Name) -> List<&2, Shared.Bytes()>:
-  match m:
-    case Mark{ln, nm, msg, a, l}:
-      Line.heads(l, n)
-
 # the line of m as it was when m was made
 def Mark.at(m: Mark) -> Line:
   match m:
