@@ -1,4 +1,5 @@
 import Base
+import ../daemon/spec.bend as Daemon
 import ../glob/spec.bend as Glob
 import ../shared.bend as Shared
 
@@ -41,15 +42,11 @@ def Cli.usage() -> String:
       "       bend-ver unmount <uri>                            stop versioning that root\n",
       "       bend-ver daemon stop [--force]                    end the daemon (--force: even with mounts)
 ",
-      "       bend-ver lines | log <name> [--line L] [--author A] | show <name> [<version>]
-",
-      "         | diff <name> <a> <b> | affects <line> | impact <line|line@mark>
-",
-      "         | line new <name> --from <line|line@mark> | write <name> --expect <ids|none> --from <file> [--line L]
-",
-      "         | restore <name> <version> [--line L] | mark <line> <name> -m <message> | merge <line|line@mark> into <line>
-",
-      "         names are <space>:<path>; versions are id prefixes or lines; writes are signed with BEND_VER_AGENT"
+      "       bend-ver ",
+      Daemon.Command.syntax(),
+      "
+         write also takes --from <file> (its bytes); names are <space>:<path>; versions are id prefixes or",
+      " lines; writes are signed with BEND_VER_AGENT"
     ]
   )
 
@@ -142,25 +139,8 @@ def Cli.word(+w: String) -> Result<&2, &2, String, Cmd>:
   )
 
 # w is the first word of an everyday command
-def Cli.everyday(w: String) -> Bool:
-  List.contains(
-    ~String,
-    ~String.eq,
-    [
-      "lines",
-      "log",
-      "show",
-      "diff",
-      "affects",
-      "impact",
-      "line",
-      "write",
-      "restore",
-      "mark",
-      "merge"
-    ],
-    w
-  )
+def Cli.everyday(+w: String) -> Bool:
+  List.contains(~String, ~String.eq, Daemon.Command.words(), w)
 
 # the words without a "--from <file>" pair, and the file of the first one
 type Split is Data:

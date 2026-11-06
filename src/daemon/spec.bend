@@ -648,9 +648,13 @@ type Command is Data:
   MarkMade{line: String, name: String, message: String}
   MergeOf{from: String, into: String}
 
+# the syntax of the everyday commands
+def Command.syntax() -> String:
+  "lines | log <name> [--line L] [--author A] | show <name> [<version>] | diff <name> <a> <b> | affects <line> | impact <line|line@mark> | line new <name> --from <line|line@mark> | write <name> --expect <ids|none> [--line L] | restore <name> <version> [--line L] | mark <line> <name> -m <message> | merge <line|line@mark> into <line>"
+
 # the usage of the everyday commands
 def Command.usage() -> String:
-  "usage: lines | log <name> [--line L] [--author A] | show <name> [<version>] | diff <name> <a> <b> | affects <line> | impact <line|line@mark> | line new <name> --from <line|line@mark> | write <name> --expect <ids|none> [--line L] | restore <name> <version> [--line L] | mark <line> <name> -m <message> | merge <line|line@mark> into <line>"
+  String.append("usage: ", Command.syntax())
 
 # the value after the option key in ws, if it is there
 def Opts.get(ws: List<&2, String>, +key: String) -> Maybe<&2, String>:
@@ -817,6 +821,18 @@ def Command.readers() -> List<&1, Reader>:
     Reader{"mark", r => Command.mark(r)},
     Reader{"merge", r => Command.merge(r)}
   ]
+
+# the words of rs
+def Reader.words(rs: List<&1, Reader>) -> List<&2, String>:
+  match rs:
+    case Nil{}:
+      Nil{}
+    case Con{Reader{k, f}, t}:
+      k <> Reader.words(t)
+
+# every everyday command word
+def Command.words() -> List<&2, String>:
+  Reader.words(Command.readers())
 
 # the reader of rs for the word w reads r; no reader for w is the usage
 def Command.of(
