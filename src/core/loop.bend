@@ -2,7 +2,6 @@ import Base
 import ../endpoints/file/impl.bend as FileImpl
 import ../endpoints/file/spec.bend as File
 import ../endpoints/spec.bend as Ep
-import ../glob/spec.bend as Glob
 import ../hash/spec.bend as Hash
 import ../journal/impl.bend as JournalImpl
 import ../journal/spec.bend as Journal
@@ -12,25 +11,17 @@ import ../views/text/spec.bend as Text
 import ./impl.bend as Impl
 import ./spec.bend as Spec
 
-# The loop: all of the core's IO, for the file endpoint. It reads the
-# space of the root (or makes one), takes the user's journal (locked, its
-# torn tail cut) and restores the core from it, watches the root, lists it
-# and fetches every file it knows so that what changed while it was off
-# gets versioned, then waits for reports. Each input goes through
-# Spec.Core.step. The records of a step go to the journal, which is synced
-# before anything else of that step happens; then each command goes to the
-# endpoint, whose answer is the next input, and every other output goes to
-# the front's report, so the loop prints nothing itself. Bend needs every
-# loop to end: the loop counts down waits (each at most half a second), and
-# the inputs of one wait count down a budget of steps.
+# The core's IO for the file endpoint, used by the daemon for each mount:
+# the inputs of reports, the drain of a queue of inputs (each through
+# Spec.Core.step; the records of a step go to the journal, which is synced
+# before anything else of that step happens; each command goes to the
+# endpoint, whose answer is the next input; every other output goes to the
+# front's report), the journal's files, and the space file of a root. Bend
+# needs every loop to end: a drain counts down a budget of steps.
 
-# the most steps that the inputs of one wait may take
+# the most steps that one drain may take
 def Loop.budget() -> Nat:
   1000000n
-
-# how long one wait lasts at most, in milliseconds
-def Loop.wait_ms() -> U32:
-  500
 
 # the text of an error
 def Loop.why(e: U32 & String) -> String:
@@ -249,91 +240,6 @@ def Loop.drain(
             more: List<&2, Spec.Input> <- Loop.carry_all(~report, root, os)
             Loop.drain(~report, f, root, j2, c2, List.append(&2, Spec.Input, t, more))))
 
-# k of the watcher and the notices of a wait, or the text of its failure
-def Loop.waited(
-  r: File & Result<&1, &1, U32 & String, List<&2, File.Notice>>,
-  k: File -> List<&2, File.Notice> -> IO(Maybe<&2, String>)
-) -> IO(Maybe<&2, String>):
-  (w, res) = r
-  match res:
-    case Fail{e}:
-      do IO<Maybe<&2, String>>:
-        FileImpl.FileEp.unwatch(w)
-        return Some{Loop.why(e)}
-    case Done{ns}:
-      k(w, ns)
-
-# the next waits after a drain, or the journal's failure
-def Loop.drained(
-  d: Drained,
-  w: File,
-  k: File -> File -> Spec.Core -> IO(Maybe<&2, String>)
-) -> IO(Maybe<&2, String>):
-  match d:
-    case Ran{c, j}:
-      k(w, j, c)
-    case Broke{why}:
-      do IO<Maybe<&2, String>>:
-        FileImpl.FileEp.unwatch(w)
-        return Some{"the journal could not be written: " ++ why}
-
-# the waits of the watcher w, at most waits of them, with the core c and
-# the journal j; None when the waits ran out, or the text of a failed wait
-def Loop.go(
-  ~report: Spec.Output -> IO(Unit),
-  waits: Nat,
-  +root: File.Root,
-  w: File,
-  j: File,
-  +c: Spec.Core
-) -> IO(Maybe<&2, String>):
-  match waits:
-    case 0n:
-      do IO<Maybe<&2, String>>:
-        FileImpl.FileEp.unwatch(w)
-        return None{}
-    case 1n+f:
-      do IO<Maybe<&2, String>>:
-        r: File
-          & Result<
-            &1,
-            &1,
-            U32 & String,
-            List<&2, File.Notice>> <- FileImpl.FileEp.next(w, Loop.wait_ms())
-        Loop.waited(r, w2 => +ns => do IO<Maybe<&2, String>>:
-          listed: List<&2, String> <- Loop.relist(root, Loop.overflowed(ns))
-          ins: List<&2, Spec.Input> = List.append(&2, Spec.Input, Loop.inputs(ns, Loop.known(c), Loop.each(Loop.known(c), Ep.Hinted{})), Loop.hints(listed))
-          d: Drained <- Loop.drain(~report, Loop.budget(), root, j, c, ins)
-          Loop.drained(d, w2, w3 => j2 => c2 => Loop.go(~report, f, root, w3, j2, c2)))
-
-# the loop once the watcher of the root started: list the root, fetch what
-# is listed and every file the restored core knows (so what changed or went
-# away while the loop was off gets versioned), then wait
-def Loop.started(
-  ~report: Spec.Output -> IO(Unit),
-  waits: Nat,
-  +root: File.Root,
-  j: File,
-  +c: Spec.Core,
-  wr: Result<&1, &1, U32 & String, File>
-) -> IO(Maybe<&2, String>):
-  match wr:
-    case Fail{e}:
-      IO.pure(Maybe<&2, String>, Some{Loop.why(e)})
-    case Done{w}:
-      do IO<Maybe<&2, String>>:
-        ns: List<&2, String> <- FileImpl.FileEp.list(root)
-        ins: List<
-          &2,
-          Spec.Input> = List.append(
-          &2,
-          Spec.Input,
-          Loop.hints(ns),
-          Loop.each(Loop.known(c), Ep.Hinted{})
-        )
-        d: Drained <- Loop.drain(~report, Loop.budget(), root, j, c, ins)
-        Loop.drained(d, w, w2 => j2 => c2 => Loop.go(~report, waits, root, w2, j2, c2))
-
 # The journal
 # -----------
 # One journal per user, in the user's data folder: %LOCALAPPDATA%\bend-ver
@@ -475,111 +381,6 @@ def Log.cut(+d: String, p: Shared.Bytes(), +b: Shared.Bytes(), +good: Nat) -> IO
       Log.cut.opened(Log.path(d, "journal.log.tmp"), p, List.take(&2, U32, b, good), o),
     u => IO.pure(Maybe<&2, String>, None{}))
 
-# the loop once the journal is open for appends
-def Loop.appending(
-  ~report: Spec.Output -> IO(Unit),
-  waits: Nat,
-  +root: File.Root,
-  c: Spec.Core,
-  o: Result<&1, &1, U32 & String, File>
-) -> IO(Maybe<&2, String>):
-  match o:
-    case Fail{e}:
-      IO.pure(Maybe<&2, String>, Some{"the journal could not be opened: " ++ Loop.why(e)})
-    case Done{j}:
-      do IO<Maybe<&2, String>>:
-        wr: Result<&1, &1, U32 & String, File> <- FileImpl.FileEp.watch(root)
-        Loop.started(~report, waits, root, j, c, wr)
-
-# the loop after the journal was read and its torn tail cut: the core
-# restored from the records, the journal open for appends, then the watch
-def Loop.restored(
-  ~report: Spec.Output -> IO(Unit),
-  waits: Nat,
-  root: File.Root,
-  m: Spec.Mount,
-  p: Shared.Bytes(),
-  rs: List<&2, Journal.Record>,
-  cut: Maybe<&2, String>
-) -> IO(Maybe<&2, String>):
-  match cut:
-    case Some{why}:
-      IO.pure(Maybe<&2, String>, Some{"the torn tail of the journal could not be cut: " ++ why})
-    case None{}:
-      do IO<Maybe<&2, String>>:
-        o: Result<&1, &1, U32 & String, File> <- File.open_bytes(p, "a")
-        Loop.appending(~report, waits, root, Spec.Core.restore(m, rs), o)
-
-# the loop with what the reader found in the bytes b of the journal
-def Loop.read.of(
-  ~report: Spec.Output -> IO(Unit),
-  waits: Nat,
-  root: File.Root,
-  m: Spec.Mount,
-  d: String,
-  +p: Shared.Bytes(),
-  b: Shared.Bytes(),
-  rd: Journal.Read
-) -> IO(Maybe<&2, String>):
-  match rd:
-    case Journal.Read{rs, good}:
-      do IO<Maybe<&2, String>>:
-        cut: Maybe<&2, String> <- Log.cut(d, p, b, good)
-        Loop.restored(~report, waits, root, m, p, rs, cut)
-
-# the loop once the bytes of the journal are read: its records, after the
-# torn tail (if any) is cut
-def Loop.read(
-  ~report: Spec.Output -> IO(Unit),
-  waits: Nat,
-  root: File.Root,
-  m: Spec.Mount,
-  d: String,
-  p: Shared.Bytes(),
-  r: Result<&2, &2, String, Shared.Bytes()>
-) -> IO(Maybe<&2, String>):
-  match r:
-    case Fail{e}:
-      IO.pure(Maybe<&2, String>, Some{"the journal could not be read: " ++ e})
-    case Done{+b}:
-      Loop.read.of(~report, waits, root, m, d, p, b, Journal.Journal.read(b))
-
-# the loop once the lock on the journal is held (its handle stays open
-# until the process ends, and with it the lock)
-def Loop.locked(
-  ~report: Spec.Output -> IO(Unit),
-  waits: Nat,
-  root: File.Root,
-  m: Spec.Mount,
-  +d: String,
-  lk: Result<&1, &1, U32 & String, File>
-) -> IO(Maybe<&2, String>):
-  match lk:
-    case Fail{e}:
-      IO.pure(Maybe<&2, String>, Some{"the journal is not free: " ++ Loop.why(e)})
-    case Done{held}:
-      +p = Log.path(d, "journal.log")
-      do IO<Maybe<&2, String>>:
-        r: Result<&2, &2, String, Shared.Bytes()> <- Log.bytes(p)
-        Loop.read(~report, waits, root, m, d, p, r)
-
-# the loop once the space is known: take the journal of the data folder
-def Loop.opened(
-  ~report: Spec.Output -> IO(Unit),
-  waits: Nat,
-  root: File.Root,
-  m: Spec.Mount,
-  dir: Maybe<&2, String>
-) -> IO(Maybe<&2, String>):
-  match dir:
-    case None{}:
-      IO.pure(Maybe<&2, String>, Some{"no data folder: set LOCALAPPDATA, XDG_DATA_HOME or HOME"})
-    case Some{+d}:
-      do IO<Maybe<&2, String>>:
-        made: Result<&1, &1, U32 & String, Unit> <- File.FileFx.make_dirs(Text.Text.encode(d))
-        lk: Result<&1, &1, U32 & String, File> <- File.FileFx.lock(Log.path(d, "journal.lock"))
-        Loop.locked(~report, waits, root, m, d, lk)
-
 # The space file
 # --------------
 # The id of a space is the text of the file ".bend-ver" at its root. A root
@@ -686,53 +487,3 @@ def Loop.space(+root: File.Root) -> IO(Result<&2, &2, String, String>):
   do IO<Result<&2, &2, String, String>>:
     s: Ep.Signal <- FileImpl.FileEp.fetch(root, Spec.Mount.space_file())
     Loop.space.of(root, s)
-
-# the loop once the space is known, or the text of why it is not
-def Loop.spaced(
-  ~report: Spec.Output -> IO(Unit),
-  waits: Nat,
-  root: File.Root,
-  uri: Shared.Uri,
-  line: String,
-  globs: List<&2, Glob.Rule>,
-  sp: Result<&2, &2, String, String>
-) -> IO(Maybe<&2, String>):
-  match sp:
-    case Fail{e}:
-      IO.pure(Maybe<&2, String>, Some{e})
-    case Done{id}:
-      do IO<Maybe<&2, String>>:
-        dir: Maybe<&2, String> <- Log.dir()
-        Loop.opened(~report, waits, root, Spec.Mount{id, line, uri, globs}, dir)
-
-# the loop over the root at the OS path os
-def Loop.rooted(
-  ~report: Spec.Output -> IO(Unit),
-  waits: Nat,
-  uri: Shared.Uri,
-  line: String,
-  globs: List<&2, Glob.Rule>,
-  os: Maybe<&2, String>
-) -> IO(Maybe<&2, String>):
-  match os:
-    case None{}:
-      IO.pure(Maybe<&2, String>, Some{"not a local file URI"})
-    case Some{path}:
-      do IO<Maybe<&2, String>>:
-        +r: File.Root <- FileImpl.FileEp.open(path)
-        sp: Result<&2, &2, String, String> <- Loop.space(r)
-        Loop.spaced(~report, waits, r, uri, line, globs, sp)
-
-# the core loop over the files below the URI root that the globs select,
-# on the line named line, for at most waits waits; None when the waits ran
-# out, or the text of what stopped it. The space id comes from the space
-# file at the root (made when missing). The watcher starts before the
-# listing, so no change between them is lost.
-def Loop.run(
-  ~report: Spec.Output -> IO(Unit),
-  +root: Shared.Uri,
-  line: String,
-  globs: List<&2, Glob.Rule>,
-  waits: Nat
-) -> IO(Maybe<&2, String>):
-  Loop.rooted(~report, waits, root, line, globs, File.FileEp.root_of(root))

@@ -29,25 +29,24 @@ Delete each item when it is done.
     both take it.
   - File URIs: percent-encoded characters are not decoded yet (a `%` is taken as itself).
 - `src/shared.bend`: a faster Table inside (e.g. Base Map), proving the same three laws.
-- `src/core`: more than one mount per loop, and a `--line` option in the CLI (today: one mount, line `main`).
 - `src/graph`: references across spaces (a reference with a scheme or an authority) through mounts; today unresolved.
-- The daemon (decided):
-  - One daemon per user per machine, serving all spaces.
-  - Started ONLY by `bend-ver start-or-resume`: no other start or resume command, and no auto-start (not on first
-    use, not at login). The user may turn the machine off at any moment.
-  - When it is down, every agent command fails with "bend-ver is not running; ask the user to run
-    `bend-ver start-or-resume`".
-  - Fronts, both thin (they build core inputs and print outputs): a CLI over a local socket (one command per call;
-    `affects` streams), and an MCP server over stdio.
-  - `daemon stop`: refuses while clients or mounts are active, unless `--force`; not offered to agents.
-- Durability: the watch loop already keeps the journal (`src/journal`): it syncs a step's records before anything
-  else of that step, and on start it cuts a torn tail, replays, and fetches every known and listed file. Left for
-  the daemon: `start-or-resume` runs this same start; seen markers and marks go into the journal once they live in
-  the core's state.
+- The daemon (`src/daemon`; built: one per user and machine, all mounts, started only by
+  `bend-ver start-or-resume`, the down message, `status`, `mount`, `unmount`, guarded `daemon stop`). Left:
+  - The everyday commands as new request kinds: `lines`, `line new`, `log`, `show`, `diff`, `restore`, `affects`
+    (streaming: it is what `clients` will count), `mark`, `write --expect`. Then the MCP server over stdio, a thin
+    front like the CLI.
+  - Decisions you may revisit: `start-or-resume` runs in the foreground (a detached start needs a new foreign
+    effect); the door is TCP on 127.0.0.1 with a random 128-bit token in the file `daemon` of the data folder (Unix
+    sockets or named pipes need foreign code). On Windows the data folder is per user; on Linux and macOS Base cannot
+    set file modes, so the `daemon` file gets the default mode (often readable by other users): setting it to 0600
+    needs foreign code.
+  - A slow client holds the acceptor up to 2 seconds per read (one connection at a time).
+  - A mount that fails at start (its root gone) is reported and skipped; it stays in the mounts file.
+  - Mounting at run time primes the streams from the line the daemon holds; the daemon restores every line from the
+    journal at start.
+  - Seen markers and marks go into the journal once they live in the daemon's state.
 - `src/journal`: compaction (a snapshot of the store, history and lines, then a fresh log), so start-up does not
   replay everything and the journal stays below 4 GiB (it is read whole with `File.size`, a `U32`).
-- `src/journal`: one loop per user holds the journal lock today, so two `watch` processes cannot run at once; the
-  daemon serves every mount from one process.
 - `src/endpoints/file`: on POSIX, a rename is durable only after its directory is synced; sync the directory after
   the rename of a Put and of a journal cut.
 - CLI for marks (`src/lines`, `Mark`): `bend-ver mark <line> <name> -m <message>`, `merge <line>@<mark> into <line>`,
@@ -77,6 +76,10 @@ and soundness are proven in `src/shared.bend`).
 - `src/graph`: `affected_exact`.
 - `src/core`: `noticed_follows_stream`, `records_each_version`, `fetched_reads_back`, `recorded_heads_line`,
   `write_accepted`, `write_authored`, `nested_untracked`, `step_keeps_history`, `replay_matches`, `restored_quiet`.
+- `src/daemon`: `step_is_core`, `step_frames`, `step_frames_lines`, `unmount_drops`, `unmount_frames`,
+  `request_decode_after_encode`, `response_decode_after_encode`, `token_checked`, `stop_guarded`, `stop_forced`,
+  `mount_once`, `entries_decode_after_encode`.
+- `src/cli`: `parse_after_show` (restated for `mount`; its old proof covered `watch`, which is gone).
 - `src/journal`: `read_after_encode`, `read_torn_tail`.
 - `src/impact`: `classify_unchanged`, `classify_added`, `classify_removed`, `classify_statement`,
   `classify_proof_only`, `classify_covered`, `radius_has_changed`, `radius_closed`, `radius_minimal`,

@@ -1,94 +1,39 @@
 import Base
 import ./cli/spec.bend as Cli
-import ./core/loop.bend as Loop
-import ./core/spec.bend as Core
-import ./glob/impl.bend as GlobImpl
-import ./glob/spec.bend as Glob
-import ./hash/spec.bend as Hash
-import ./history/spec.bend as History
+import ./daemon/impl.bend as DaemonImpl
+import ./daemon/loop.bend as Daemon
+import ./daemon/spec.bend as Spec
 import ./shared.bend as Shared
 
-# The program: the CLI picks the command, and the core's loop does the
-# work. This file only turns outputs into lines.
+# The program: the CLI picks the command; start-or-resume runs the daemon,
+# and every other command asks it.
 
-# the text of an author
-def Main.author(a: History.Author) -> String:
-  match a:
-    case History.Agent{n}:
-      n
-    case History.Outside{}:
-      "Outside"
-
-# the line of an output; commands go to the endpoint and records to the
-# journal, so neither reaches here
-def Main.report(o: Core.Output) -> IO(Unit):
-  match o:
-    case Core.Recorded{n, x, a}:
-      IO.print(
-        String.concat(
-          ["recorded ", Shared.Name.show(n), " ", Hash.Hash.hex(x), " by ", Main.author(a)]
-        )
-      )
-    case Core.Refused{n, hs}:
-      IO.print("refused " ++ Shared.Name.show(n))
-    case Core.Failed{n, p}:
-      IO.print("failed " ++ Shared.Name.show(n))
-    case Core.Stopped{}:
-      IO.print("stopped")
-    case Core.Command{p, k}:
-      IO.pure(Unit, Unit{})
-    case Core.Logged{r}:
-      IO.pure(Unit, Unit{})
-
-# rest, with the glob m in front when there is one
-def Main.put(m: Maybe<&2, Glob.Rule>, rest: List<&2, Glob.Rule>) -> List<&2, Glob.Rule>:
-  match m:
-    case None{}:
-      rest
-    case Some{g}:
-      g <> rest
-
-# the globs of the lines; Cli.parse already checked that each reads
-def Main.globs(ls: List<&2, String>) -> List<&2, Glob.Rule>:
-  match ls:
-    case Nil{}:
-      Nil{}
-    case Con{l, t}:
-      Main.put(Glob.Rule.read(l), Main.globs(t))
-
-# how many waits a watch lasts at most: the largest Nat literal, about 68
-# years of half-second waits
-def Main.waits() -> Nat:
-  4294967295n
-
-# the line for how the loop ended: nothing when its waits ran out
-def Main.ended(r: Maybe<&2, String>) -> IO(Unit):
-  match r:
-    case None{}:
-      IO.pure(Unit, Unit{})
-    case Some{why}:
-      IO.print("stopped: " ++ why)
-
-# the watch of the URI u (Cli.parse already checked that it reads) on the
-# line "main"
-def Main.watch(u: Maybe<&2, Shared.Uri>, gs: List<&2, Glob.Rule>) -> IO(Unit):
-  match u:
-    case None{}:
-      IO.print(Cli.Cli.usage())
-    case Some{r}:
-      do IO<Unit>:
-        e: Maybe<&2, String> <- Loop.Loop.run(~Main.report, r, "main", gs, Main.waits())
-        Main.ended(e)
+# the URI text as the daemon names mounts: read, then shown
+def Main.uri(+t: String) -> String:
+  Maybe.default(
+    &2,
+    String,
+    Maybe.map(&2, Shared.Uri, String, u => Shared.Uri.show(u), Shared.Uri.read(t)),
+    t
+  )
 
 # the run of a parsed command line
 def Main.run(c: Result<&2, &2, String, Cli.Cmd>) -> IO(Unit):
   match c:
     case Fail{u}:
-      IO.print(u)
+      IO.die(Unit, 2, u)
     case Done{Cli.Help{}}:
       IO.print(Cli.Cli.usage())
-    case Done{Cli.Watch{root, gs}}:
-      Main.watch(Shared.Uri.read(root), Main.globs(gs))
+    case Done{Cli.StartOrResume{}}:
+      Daemon.Daemon.start_or_resume()
+    case Done{Cli.StatusCmd{}}:
+      Daemon.Client.ask(Spec.Status{})
+    case Done{Cli.MountCmd{r, gs, ln}}:
+      Daemon.Client.ask(Spec.Mount{Main.uri(r), gs, ln})
+    case Done{Cli.UnmountCmd{r}}:
+      Daemon.Client.ask(Spec.Unmount{Main.uri(r)})
+    case Done{Cli.DaemonStop{f}}:
+      Daemon.Client.ask(Spec.Stop{f})
 
 # the arguments as a reusable list
 def Main.args(xs: List<String>) -> List<&2, String>:
