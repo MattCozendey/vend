@@ -11,6 +11,9 @@
 //       a def whose body is ?TODO: a whole body (case splits, induction, helper lemmas). A body with
 //       ?TODO holes: each hole. Prints the proof, or the best partial with each hole's goal.
 //       --write puts a full proof into the file (only if that body did not change meanwhile).
+//       --all: every def of the file with a ?TODO. --hole N: only the N-th ?TODO of a body.
+//       --helpers: on a miss, each open hole becomes a helper lemma (its goal over its context) and
+//       the body calls it; prove the helpers by name next (with --write, they go into the file).
 //   bun tools/gen3/gen3.ts goals <file.bend> <def>     each hole's goal, context and candidate steps
 //   bun tools/gen3/gen3.ts check <file.bend> [<def> ...]   bend2's def check, errors bounded
 //   bun tools/gen3/gen3.ts find <file.bend> <regex>    defs whose name matches, with statements
@@ -86,7 +89,7 @@ const LOG = path.join(HOME, ID.toString(36) + ".log");
 const stampOf = (files: string[]) => files.map((f) => { try { const s = fs.statSync(f); return s.mtimeMs + ":" + s.size; } catch { return "-"; } }).join(",");
 
 type Args = { cmd: string; pos: string[]; opt: Map<string, string> };
-const VALUED = new Set(["wait", "budget"]);
+const VALUED = new Set(["wait", "budget", "hole"]);
 const parseArgs = (argv: string[]): Args => {
   const pos: string[] = [];
   const opt = new Map<string, string>();
@@ -109,7 +112,7 @@ type Ev = { t: "out" | "err"; s: string } | { t: "edit"; file: string; from: str
 type Edit = Extract<Ev, { t: "edit" }>;
 
 // ---- client ----
-const USAGE = "usage: bun tools/gen3/gen3.ts prove <file.bend> <def>... [--wait S] [--budget S] [--write] | goals <file> <def> | check <file> [<def>...] | find <file> <regex> | bench <file> [<regex>] | status | stop";
+const USAGE = "usage: bun tools/gen3/gen3.ts prove <file.bend> <def>... [--all] [--hole N] [--helpers] [--wait S] [--budget S] [--write] | goals <file> <def> | check <file> [<def>...] | find <file> <regex> | bench <file> [<regex>] | status | stop";
 
 const post = async (ask: Ask, wait: number): Promise<Response | null> => {
   try {
@@ -2172,11 +2175,12 @@ const liftAlt = (n: GNode, gen: { t: Term; T: Term } | null): Alt | null => {
 };
 // helpers live in the book while the task runs (parsed as `?TODO` bodies; not lemmas)
 const temps: string[] = [];
-const helperName = (own: Owner): string => {
+// a fresh name root<sfx><i>: in no book, not in the entry's text, not in used
+const helperName = (own: Owner, sfx = ".g", used: Set<string> = new Set()): string => {
   const taken = new Set(Object.keys(BK.raw).map(shortOf));
   for (let i = 1; ; i++) {
-    const nm = own.root + ".g" + i;
-    if (!taken.has(nm) && !fileText(BK.entry).includes("def " + nm + "(")) return nm;
+    const nm = own.root + sfx + i;
+    if (!taken.has(nm) && !used.has(nm) && !fileText(BK.entry).includes("def " + nm + "(")) return nm;
   }
 };
 const addTemp = (head: string, own: Owner): string | null => {
@@ -2194,16 +2198,16 @@ const addTemp = (head: string, own: Owner): string | null => {
 const forget = (k: string) => {
   BK.strict.delete(k); BK.matched.delete(k); BK.enums.delete(k);
 };
-const dropTemps = () => {
-  for (const hk of temps) {
-    delete BK.raw[hk];
-    const j = BK.book.order.indexOf(hk);
-    if (j >= 0) BK.book.order.splice(j, 1);
-    BK.order.delete(hk); BK.files.delete(hk); BK.src.delete(hk);
-    forget(hk);
-  }
-  temps.length = 0;
+const dropTemp = (hk: string) => {
+  delete BK.raw[hk];
+  const j = BK.book.order.indexOf(hk);
+  if (j >= 0) BK.book.order.splice(j, 1);
+  BK.order.delete(hk); BK.files.delete(hk); BK.src.delete(hk);
+  forget(hk);
+  const t = temps.indexOf(hk);
+  if (t >= 0) temps.splice(t, 1);
 };
+const dropTemps = () => { for (const hk of [...temps]) dropTemp(hk); };
 
 // ---- bend2's errors, bounded ----
 // bend2's err_show prints every type in strong normal form (unbounded: stack overflows and gigabytes
@@ -2292,7 +2296,17 @@ const goalLines = (g0: Goal): string => {
 // what the search tried at an open goal: its live steps, closest first
 const triedLines = (n: GNode, max = 4): string => {
   const as = (n.alts ?? []).filter((a) => !a.dead && a.tag !== "intro").sort((a, b) => a.pn - b.pn).slice(0, max);
-  return as.length ? "\n# tried (closest first; open subgoals in parentheses):\n" + as.map((a) => "#   " + clip(a.note, 240) + (a.kids.length ? " (" + a.kids.filter((k) => !k.pf).length + " open)" : "")).join("\n") : "\n# tried: no step applies (no lemma, fact or rewrite fits; it may need a new lemma or a split)";
+  const needs = (a: Alt) => a.kids.filter((k) => !k.pf).slice(0, 2).map((k) => "\n#       needs: " + clip(attempt(FUEL_NF, () => sh(k.g, lower(k.g.ty, LD(k.g)))) ?? "?", 200)).join("");
+  if (as.length) return "\n# tried (closest first; open subgoals in parentheses):\n" + as.map((a) => "#   " + clip(a.note, 240) + (a.kids.length ? " (" + a.kids.filter((k) => !k.pf).length + " open)" + needs(a) : "")).join("\n");
+  return "\n# tried: no step applies (no lemma, fact or rewrite fits; it may need a new lemma or a split)" + nearMisses(n);
+};
+// lemmas filed under the goal's head that do not match it: compare their arguments with the goal's
+const nearMisses = (n: GNode): string => {
+  const t = n.raw ?? attempt(FUEL_NF, () => lower(n.g.ty, LD(n.g)));
+  const hk = t && headKey(t);
+  if (!hk || !/^(E\|)?(R|C|A):/.test(hk)) return "";
+  const ls = (BK.apply.get(hk) ?? []).filter((L) => L.order < n.g.own.order && L.k !== n.g.own.k).slice(0, 3);
+  return ls.length ? "\n# lemmas with the goal's head that do not match it (compare the arguments):\n" + ls.map((L) => "#   " + B.name_show(n.g.own.file, L.k) + " : " + clip(attempt(FUEL_NF, () => { const o = openMeta(BK.raw[L.k].T, L.n); return o ? show(lower(o.concl, 0), [], n.g.own.file) : "?"; }) ?? "?", 240)).join("\n") : "";
 };
 const tagsOf = () => [...S.tags.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t).join(" ");
 const secs = (ms: number) => (ms / 1000).toFixed(1) + " s";
@@ -2331,11 +2345,14 @@ const todoAt = (body: string): number[] => {
   return out;
 };
 // each hole's goal, read from bend2's error at that hole marked
-const holeGoals = (k: string, ds: Src, own: Owner): { at: number; g: Goal | null; err: Term }[] =>
-  todoAt(ds.body).slice(0, MAX_HOLES).map((p, i) => {
+// (--hole N: the N-th only; the others stay ?TODO)
+const holeGoals = (k: string, ds: Src, own: Owner): { at: number; g: Goal | null; err: Term; i: number }[] => {
+  const only = Number(OPTS.opt.get("hole") ?? 0);
+  return todoAt(ds.body).map((p, i) => ({ p, i })).filter(({ i }) => !only || i + 1 === only).slice(0, MAX_HOLES).map(({ p, i }) => {
     const err = checkErr(k, ds.body.slice(0, p) + "?gen3hole" + ds.body.slice(p + 5));
-    return { at: p, g: holeGoal(own, err, "hole" + (i + 1)), err };
+    return { at: p, g: holeGoal(own, err, "hole" + (i + 1)), err, i };
   });
+};
 
 // a whole body: the search from the def's root goal (its body forgotten while it runs)
 const proveWhole = async (k: string, ds: Src, until: number, hard: number, progress: (s: string) => void): Promise<Result> => {
@@ -2350,7 +2367,7 @@ const proveWhole = async (k: string, ds: Src, until: number, hard: number, progr
     });
     const ms = performance.now() - t0;
     const head = "# " + name + ": OPEN after " + secs(ms) + " (" + S.nodes + " goals searched" + (overMem ? ", stopped at the worker's memory share" : "") + (S.internal ? ", " + S.internal + " internal errors" : "") + ")";
-    return root.pf ? provenText(k, ds, root.pf, ms, hard) : openText(k, root, head, hard);
+    return root.pf ? provenText(k, ds, root.pf, ms, hard) : openText(k, root, head, hard, ds);
   } finally {
     BK.raw[k] = def;
     forget(k);
@@ -2365,20 +2382,106 @@ const provenText = (k: string, ds: Src, pf: Pf, ms: number, hard: number): Resul
   if (e) return { ok: false, text: "# " + name + ": a proof was found but fails bend2's def check (a gen3 bug; please report it):\n" + body + "\n" + errText(e) };
   return { ok: true, text: "# " + name + ": PROVEN in " + Math.round(ms) + " ms [" + tagsOf() + "]\n" + helperBlock(hs, k, true) + body, edit: editOf(ds, hs, body) };
 };
-const openText = (k: string, root: GNode, head: string, hard: number): Result => {
+// --helpers: each open hole of a partial as a new lemma: its goal over its whole context (true iff the
+// hole is), its body ?TODO; the hole becomes its call. At most 6; a context with a repeated or
+// anonymous name keeps its hole
+// spent: binders the proof consumed before the hole: left out when no type names them, else erased
+const stubOf = (g: Goal, used: Set<string>, spent: Set<string>): { head: string; call: string } | null => {
+  const names = g.names;
+  if (new Set(names).size !== names.length || names.some((x) => !/^[A-Za-z_]\w*$/.test(x))) return null;
+  const pad = [...names, "_"];
+  const types = names.map((_, i) => attempt(FUEL_NF, () => lower(ann(g, i).T, LD(g))));
+  const goalT = attempt(FUEL_NF, () => lower(g.ty, LD(g)));
+  if (types.some((x) => x === undefined) || goalT === undefined || hasMeta(goalT)) return null;
+  const named = new Set<number>();
+  [goalT, ...types].forEach((t) => varsOf(t, named));
+  const keep = names.map((x, i) => !spent.has(x) || named.has(i));
+  const params = names.flatMap((x, i) => (keep[i] ? [(spent.has(x) ? "-" : B.quant_show(ann(g, i).q)) + x + ": " + show(types[i], pad, g.own.file)] : []));
+  const name = helperName(g.own, ".h", used);
+  used.add(name);
+  return { head: "def " + name + "(\n  " + params.join(",\n  ") + ") ->\n  " + sh(g, goalT) + ":", call: name + "(" + names.filter((_, i) => keep[i]).join(", ") + ")" };
+};
+const mapHoles = (p: Pf, f: (n: GNode) => Pf): Pf => {
+  switch (p.t) {
+    case "hole": return f(p.n);
+    case "tm": return { ...p, subs: p.subs.map((x) => mapHoles(x, f)) };
+    case "rw": return { ...p, e: mapHoles(p.e, f), k: mapHoles(p.k, f) };
+    case "lam": case "dup": return { ...p, k: mapHoles(p.k, f) };
+    case "mt": return { ...p, arms: p.arms.map((a) => ({ pat: a.pat, k: mapHoles(a.k, f) })) };
+    case "def": return { ...p, body: mapHoles(p.body, f) };
+  }
+};
+// the body with each hole a stub's call, checked by bend2 with the stubs in the book: a binder that
+// the check finds consumed twice is spent, and the stubs are made again (3 rounds at most)
+const helpersText = (k: string, ds: Src, pf: Pf, hard: number): Result | null => {
+  const spent = new Set<string>();
+  for (let round = 0; round < 3; round++) {
+    const used = new Set<string>(), stubs: string[] = [];
+    const out = mapHoles(pf, (n) => {
+      const st = stubs.length < 6 ? stubOf(n.g.pend > 0 ? introAll(n.g) ?? n.g : n.g, used, spent) : null;
+      if (!st) return { t: "hole", n };
+      stubs.push(st.head + "\n  ?TODO\n");
+      return tm(st.call);
+    });
+    if (stubs.length === 0) return null;
+    const hks = stubs.map((st) => addTemp(st.slice(0, st.lastIndexOf("\n  ?TODO")), owner(k)));
+    const body = bodyText(out);
+    const e = hks.every((h) => h) ? finalErrBy(hard, k, out, body, FUEL_PARTIAL) : "a stub does not parse";
+    hks.forEach((h) => h && dropTemp(h));
+    const twice = e && typeof e.obs === "string" ? /^(\S+) \(consumed more than once\)/.exec(e.obs)?.[1] : undefined;
+    if (twice && !spent.has(twice)) { spent.add(twice); continue; }
+    if (e) return { ok: false, text: "# HELPERS: the body with helper calls does not check (" + firstLine(e) + "); not offered" };
+    return stubsResult(k, ds, out, stubs);
+  }
+  return null;
+};
+const stubsResult = (k: string, ds: Src, out: Pf, stubs: string[]): Result => {
+  const hs = helpersOf(out), body = bodyText(out);
+  const defs = stubs.join("\n") + (hs.length ? "\n" + defsText(hs) : "");
+  return {
+    ok: false,
+    text: "# HELPERS: each open hole as a new lemma (its goal over its context: true iff the hole is); prove each by name next\n" + defs + "\n# the body of " + shortOf(k) + ":\n" + body,
+    edit: { t: "edit", file: ds.file, from: ds.header + "\n" + ds.body, to: defs + "\n" + ds.header + "\n" + body },
+  };
+};
+const openText = (k: string, root: GNode, head: string, hard: number, ds?: Src): Result => {
   const p = partial(root);
   if (p.closed === 0 || p.holes === 0) {
     const leaf = root.alts?.[0]?.kids[0];
-    return { ok: false, text: head + "; no step closed\n" + (leaf ? goalLines(leaf.g) + triedLines(leaf) : goalLines(root.g)) };
+    return { ok: false, text: head + "; no step closed\n" + (leaf ? goalLines(leaf.g) + triedLines(leaf) : goalLines(root.g)) + templatesOf(k) };
   }
   const body = bodyText(p.pf);
   const e = finalErrBy(hard, k, p.pf, body, FUEL_PARTIAL);
   const note = e instanceof Stop ? "; not checked (" + errText(e) + ")" : e ? "; it does NOT check in gen3: " + firstLine(e) : "";
+  const stubs = OPTS.opt.has("helpers") && ds && !e ? helpersText(k, ds, p.pf, hard) : null;
   return {
     ok: false,
     text: head + ": a partial proof (" + p.holes + " holes, " + p.closed + " steps closed). A guess at a structure, not a proof" + note + "\n"
-      + helperBlock(helpersOf(p.pf), k, false) + body + "\n" + holesOf(p.pf).map((h, i) => "# hole " + (i + 1) + " at " + (h.g.path || "/") + " (in " + h.g.own.short + ")\n" + goalLines(h.g) + triedLines(h)).join("\n"),
+      + helperBlock(helpersOf(p.pf), k, false) + body + "\n" + holesOf(p.pf).map((h, i) => "# hole " + (i + 1) + " at " + (h.g.path || "/") + " (in " + h.g.own.short + ")\n" + goalLines(h.g) + triedLines(h)).join("\n")
+      + (stubs ? "\n" + stubs.text : "") + templatesOf(k),
+    edit: stubs?.edit,
   };
+};
+// the entry's proven defs whose statements share the most names with k's: their bodies as templates
+const refsOf = (T: Term): Set<string> => {
+  const out = new Set<string>();
+  const t = attempt(FUEL_NF, () => lower(T, 0));
+  if (t) some(t, (x) => { if (x.$ === "Ref") out.add(x.k); else if (x.$ === "App") { const f = B.term_unapply(x)[0]; if (f.$ === "Ref") out.add(f.k); } return false; });
+  return out;
+};
+const templatesOf = (k: string): string => {
+  const mine = refsOf(BK.raw[k].T);
+  if (mine.size === 0) return "";
+  const scored = ownDefs().filter((d) => d !== k && BK.raw[d].v !== null && !isOpen(d)).map((d) => {
+    const rs = refsOf(BK.raw[d].T);
+    const both = [...rs].filter((r) => mine.has(r)).length;
+    return { d, score: both / (rs.size + mine.size - both || 1) };
+  }).filter((x) => x.score >= 0.25).sort((a, b) => b.score - a.score).slice(0, 3);
+  if (scored.length === 0) return "";
+  return "\n# similar proven defs (templates):\n" + scored.map(({ d }) => {
+    const lines = (defSrc(d)?.body ?? "").split("\n").filter((l) => l.trim() !== "");
+    return "#   " + shortOf(d) + ":\n" + lines.slice(0, 6).map((l) => "#   " + clip(l, 200)).join("\n") + (lines.length > 6 ? "\n#     ... (" + lines.length + " lines)" : "");
+  }).join("\n");
 };
 // the ?TODO holes of a body: one search over all of them (a root whose one step needs every hole)
 const MAX_HOLES = 16;
@@ -2389,11 +2492,11 @@ const proveHoles = async (k: string, ds: Src, until: number, hard: number, progr
   const all = mkAlt(root, "holes", null, 0, () => tm(""));
   root.alts = [all];
   const notes: string[] = [];
-  const holes = holeGoals(k, ds, own).map((h, i) => {
-    if (!h.g) notes.push("# hole " + (i + 1) + ": no goal (bend2 stops before it): " + (h.err ? firstLine(h.err) : "the body checks"));
+  const holes = holeGoals(k, ds, own).map((h) => {
+    if (!h.g) notes.push("# hole " + (h.i + 1) + ": no goal (bend2 stops before it): " + (h.err ? firstLine(h.err) : "the body checks"));
     const n = h.g && mkNode(h.g, all, 0, 0);
     if (n) all.kids.push(n);
-    return { at: h.at, n };
+    return { at: h.at, n, i: h.i };
   });
   if (all.kids.length === 0) return { ok: false, text: "# " + name + ": no hole has a goal\n" + notes.join("\n") };
   try {
@@ -2405,7 +2508,8 @@ const proveHoles = async (k: string, ds: Src, until: number, hard: number, progr
       // checks with it (the other ?TODO holes check at any goal)
       let body = ds.body;
       const used: Pf[] = [];
-      for (const [i, h] of [...holes.entries()].reverse()) {
+      for (const h of [...holes].reverse()) {
+        const i = h.i;
         const pf = h.n?.pf;
         if (!pf) continue;
         const line = body.slice(body.lastIndexOf("\n", h.at) + 1, h.at);
@@ -2417,7 +2521,7 @@ const proveHoles = async (k: string, ds: Src, until: number, hard: number, progr
         else notes.push("# hole " + (i + 1) + ": a fill was found but " + (e instanceof Stop ? "its re-check did not finish: " + inline(pf) : "fails the def check (a gen3 bug): " + inline(pf)));
       }
       const hs = used.flatMap((p) => helpersOf(p));
-      const open = holes.map((h, i) => (h.n && !h.n.pf ? "# hole " + (i + 1) + " (open)\n" + goalLines(h.n.g) + triedLines(h.n) : "")).filter(Boolean);
+      const open = holes.map((h) => (h.n && !h.n.pf ? "# hole " + (h.i + 1) + " (open)\n" + goalLines(h.n.g) + triedLines(h.n) : "")).filter(Boolean);
       const ok = used.length === holes.length && todoAt(body).length === 0;
       const text = "# " + name + ": " + used.length + "/" + holes.length + " holes filled in " + secs(performance.now() - t0) + (S.tags.size ? " [" + tagsOf() + "]" : "") + "\n"
         + helperBlock(hs, k, true) + body + (notes.length || open.length ? "\n" + [...notes, ...open].join("\n") : "");
@@ -2433,6 +2537,9 @@ const proveOne = async (k: string, until: number, hard: number, progress: (s: st
   if (!ds) return { ok: false, text: "# " + name + ": gen3 cannot find its source text" };
   const se = nsOf(k) === "" ? stmtErr(k) : null;
   if (se) return { ok: false, text: "# " + name + ": STATEMENT ERROR (its type does not check; fix it first):\n" + errText(se) };
+  // a def that returns data needs an implementation: any value of its type checks, and the right one
+  // is the one its laws accept (gen3 does not search for that)
+  if (ds.body.trim() === "?TODO" && !isLemmaType(k)) return { ok: false, text: "# " + name + ": its type is data, not a proposition: it needs an implementation; gen3 does not write one (a body of the right type is not proof that it is the right body)" };
   if (ds.body.trim() === "?TODO") return proveWhole(k, ds, until, hard, progress);
   if (todoAt(ds.body).length) return proveHoles(k, ds, until, hard, progress);
   return { ok: true, text: "# " + name + ": no ?TODO in its body (nothing to prove; `check` checks it)" };
@@ -2440,6 +2547,7 @@ const proveOne = async (k: string, until: number, hard: number, progress: (s: st
 
 // ---- commands (in a worker) ----
 type Send = (m: Msg) => void;
+let OPTS: Args = parseArgs([]); // the current task's command and options
 type Snap = (s: string, code: number, edits?: Edit[]) => void;
 const defsOf = (a: Args): { ks: string[]; bad: string[] } => {
   const ks: string[] = [], bad: string[] = [];
@@ -2451,7 +2559,9 @@ const defsOf = (a: Args): { ks: string[]; bad: string[] } => {
   return { ks, bad };
 };
 const proveCmd = async (a: Args, until: number, hard: number, snap: Snap) => {
-  const { ks, bad } = defsOf(a);
+  const named = defsOf(a);
+  const ks = a.opt.has("all") ? [...new Set([...named.ks, ...ownDefs().filter((k) => todoAt(defSrc(k)?.body ?? "").length > 0)])] : named.ks;
+  const bad = named.bad;
   if (ks.length === 0) return snap(HONEST + "\n" + (bad.join("\n") || "# name a def to prove: " + USAGE), 1);
   const parts = ks.map((k) => "# " + shortOf(k) + ": searching");
   const edits: Edit[] = [];
@@ -2475,7 +2585,7 @@ const goalsCmd = (a: Args, hard: number, snap: Snap) => {
     if (!ds) continue;
     const gs = ds.body.trim() === "?TODO"
       ? [{ label: "the goal of " + own.short, g: introAll(rootGoal(own)) }]
-      : holeGoals(k, ds, own).map((h, i) => ({ label: "?TODO " + (i + 1) + " of " + own.short + " (line " + (ds.bodyLine + lineOf(ds.body, h.at)) + ")", g: h.g }));
+      : holeGoals(k, ds, own).map((h) => ({ label: "?TODO " + (h.i + 1) + " of " + own.short + " (line " + (ds.bodyLine + lineOf(ds.body, h.at)) + ")", g: h.g }));
     if (gs.length === 0) out.push("# " + own.short + ": no ?TODO in its body");
     for (const { label, g } of gs) {
       if (!g) { out.push("# " + label + ": no goal (bend2 stops before it; run `check`)"); continue; }
@@ -2520,17 +2630,40 @@ const findCmd = (a: Args, snap: Snap) => {
   hits.sort((x, y) => rank(x) - rank(y) || (BK.order.get(y) ?? 0) - (BK.order.get(x) ?? 0));
   const status = (k: string) => { const t = BK.raw[k]; return t.$ === "ADT" ? "type" : t.v === null ? (t.b ? "Base" : "law: no proof") : isOpen(k) ? "OPEN: has ?TODO" : t.b ? "Base" : "has a body"; };
   const rows = hits.slice(0, 40).map((k) => B.name_show(file, k) + "  [" + status(k) + "]\n  : " + clip(attempt(FUEL_NF, () => show(lower(BK.raw[k].T, 0), [], file)) ?? "?", 1500));
-  snap(HONEST + "\n# find " + a.pos[1] + ": " + hits.length + " defs" + (hits.length > 40 ? " (the first 40)" : "") + "\n" + rows.join("\n"), 0);
+  snap(HONEST + "\n# find " + a.pos[1] + ": " + hits.length + " defs" + (hits.length > 40 ? " (the first 40)" : "") + "\n" + rows.join("\n") + elsewhere(re), 0);
+};
+// defs that match in .bend files the entry does not load (its folder, its parent's): usable after an import
+const elsewhere = (re: RegExp): string => {
+  const loaded = new Set(BK.seen.map((f) => path.resolve(f)));
+  const out: string[] = [];
+  const walk = (dir: string, depth: number) => {
+    let ents: fs.Dirent[] = [];
+    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of ents) {
+      const f = path.join(dir, e.name);
+      if (e.isDirectory() && depth > 0 && e.name !== "node_modules" && !e.name.startsWith(".")) walk(f, depth - 1);
+      if (out.length >= 12 || !e.isFile() || !e.name.endsWith(".bend") || loaded.has(path.resolve(f))) continue;
+      fs.readFileSync(f, "utf8").split("\n").forEach((l, i) => { const m = DEF_LINE.exec(l); if (m && out.length < 12 && re.test(m[1])) out.push("  " + m[1] + "  [" + path.relative(BK.top, f) + ":" + (i + 1) + "]"); });
+    }
+  };
+  walk(path.resolve(BK.top, ".."), 2);
+  return out.length ? "\n# also in files the entry does not import (usable only after an import):\n" + out.join("\n") : "";
+};
+// k's result (after its parameters) is a proposition
+const isLemmaType = (k: string): boolean => {
+  const t = BK.raw[k];
+  const o = t?.$ === "Def" ? withOwnFuel(FUEL_NF * 2, () => attempt(FUEL_NF * 2, () => openMeta(t.T, t.n))) : null;
+  // a proposition, or a one-constructor type of facts (A & B)
+  return !!o && withOwnFuel(FUEL_NF * 4, () => attempt(FUEL_NF * 4, () => isPropType(o.concl) || (!!wnf(o.concl) && isProp(o.concl)))) === true;
 };
 const isLemma = (k: string): boolean => {
   const t = BK.raw[k];
-  if (t?.$ !== "Def" || t.v === null || t.x > 0 || t.i || isOpen(k)) return false;
-  const o = withOwnFuel(FUEL_NF * 2, () => attempt(FUEL_NF * 2, () => openMeta(t.T, t.n)));
-  return !!o && withOwnFuel(FUEL_NF * 4, () => attempt(FUEL_NF * 4, () => isPropType(o.concl))) === true && !!defSrc(k);
+  return t?.$ === "Def" && t.v !== null && !t.x && !t.i && !isOpen(k) && isLemmaType(k) && !!defSrc(k);
 };
 
 const runTask = async (t: Task, send: Send) => {
   const snap: Snap = (s, code, edits) => send({ id: t.id, t: "snap", s, code, edits });
+  OPTS = t.t === "run" ? t.args : parseArgs([]);
   const L = await load(taskEntry(t));
   if (typeof L === "string") {
     if (t.t === "reprove") send({ id: t.id, t: "row", s: "ERR  " + t.def + ": " + L.split("\n")[0], ok: false, ms: 0 });
