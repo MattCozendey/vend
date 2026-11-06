@@ -75,7 +75,9 @@ const HONEST = "# gen3: a heuristic helper, not the judge; its partials, goals a
 // ---- shared: the pinned bend2, the server's identity ----
 // bend2 is the Bend that bend-lint pins (its package.json: bendWindows on Windows, else bendRelease),
 // downloaded into bend-lint's cache by `bun install`; so gen3 checks with the same Bend as `bun run lint`.
+// GEN3_BEND, a path to a bend2 bend.ts, replaces that pin.
 const bendFile = (): string => {
+  if (process.env.GEN3_BEND) return path.resolve(process.env.GEN3_BEND);
   for (let d = import.meta.dir; ; d = path.dirname(d)) {
     const f = path.join(d, "node_modules", "bend-lint", "package.json");
     if (fs.existsSync(f)) {
@@ -86,7 +88,7 @@ const bendFile = (): string => {
         ?? (process.platform === "win32" ? (process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local")) : path.join(os.homedir(), ".cache"));
       return path.join(cache, "bend-lint", ...pin.split("/"), "bend2", "bend.ts");
     }
-    if (path.dirname(d) === d) throw new Error("bend-lint is not installed (run `bun install`)");
+    if (path.dirname(d) === d) throw new Error("bend-lint is not installed (run `bun install`, or set GEN3_BEND to a bend2 bend.ts)");
   }
 };
 const ID = BigInt.asUintN(48, BigInt(Bun.hash(fs.readFileSync(import.meta.path, "utf8") + "\0" + bendFile())));
