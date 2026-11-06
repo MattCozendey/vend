@@ -191,7 +191,7 @@ type Msg =
   | { id: number; t: "files"; files: string[] }
   | { id: number; t: "lemmas"; names: string[] }
   | { id: number; t: "row"; s: string; ok: boolean; ms: number }
-  | { id: number; t: "end" };
+  | { id: number; t: "end"; retire?: boolean };
 type Bench = { n: number; left: number; rows: string[]; ok: number; ms: number };
 type Job = {
   id: number; key: string; task: Task; t0: number; snap: string; code: number; edits: Edit[]; done: boolean;
@@ -260,7 +260,12 @@ const serve = async () => {
         if (b) { b.rows.push(m.s); if (m.ok) b.ok++; b.ms += m.ms; }
         break;
       }
-      case "end": w.job = null; if (!j.bench) finish(j); pump(); break;
+      case "end":
+        w.job = null;
+        if (m.retire) { workers.splice(workers.indexOf(w), 1); w.p.kill(); }
+        if (!j.bench) finish(j);
+        pump();
+        break;
     }
   };
   const spawnWorker = (): Worker => {
@@ -273,12 +278,13 @@ const serve = async () => {
       env: { ...process.env, GEN3_MEM_MB: String(MEM_MB) },
       ipc: (m: Msg) => onMsg(w, m),
       onExit: () => {
-        workers.splice(workers.indexOf(w), 1);
+        if (workers.includes(w)) workers.splice(workers.indexOf(w), 1);
         const j = w.job;
         if (j && !j.done && !j.bench) {
           emit(j, { t: "err", s: "# gen3: the worker stopped (a crash, or a check past its deadline); this answer is what the job had" });
           if (j.code === 3) j.code = 1;
           finish(j);
+          if (jobs.get(j.key) === j) jobs.delete(j.key);
         }
         pump();
       },
@@ -325,11 +331,11 @@ const serve = async () => {
     }
     pump();
   };
-  const startJob = (ask: Ask, a: Args): Job => {
+  const startJob = (ask: Ask, a: Args, key: string): Job => {
     const id = nextId++;
     const j = a.cmd === "bench"
-      ? newJob(keyOf(ask, a), { t: "lemmas", id, file: entryOf(ask.cwd, a), only: a.pos[1] ?? "", budget: num(a, "budget", 3, 60) * 1000, deadline: 0 })
-      : newJob(keyOf(ask, a), { t: "run", id, args: a, cwd: ask.cwd, deadline: 0 });
+      ? newJob(key, { t: "lemmas", id, file: entryOf(ask.cwd, a), only: a.pos[1] ?? "", budget: num(a, "budget", 3, 60) * 1000, deadline: 0 })
+      : newJob(key, { t: "run", id, args: a, cwd: ask.cwd, deadline: 0 });
     j.ask = ask;
     queue.push(j);
     pump();
@@ -371,9 +377,9 @@ const serve = async () => {
     if (a.cmd === "stop") { setTimeout(quit, 100); return stream([{ t: "out", s: "# gen3: server stopped" }, { t: "end", code: 0 }], null, 0, false); }
     if (a.cmd === "status") return stream([{ t: "out", s: statusText() }, { t: "end", code: 0 }], null, 0, false);
     if (!["prove", "goals", "check", "find", "bench"].includes(a.cmd) || a.pos.length === 0) return stream([{ t: "err", s: USAGE }, { t: "end", code: 1 }], null, 0, false);
-    const had = jobs.get(keyOf(ask, a));
+    const key = keyOf(ask, a), had = jobs.get(key);
     const head: Ev[] = had ? [{ t: "err", s: "# gen3: resumed a job started " + Math.round((Date.now() - had.t0) / 1000) + " s ago" + (had.done ? " (finished)" : "") }] : [];
-    return stream(head, had ?? startJob(ask, a), num(a, "wait", 10, 300) * 1000, a.opt.has("write"));
+    return stream(head, had ?? startJob(ask, a, key), num(a, "wait", 10, 300) * 1000, a.opt.has("write"));
   };
 
   try {
@@ -396,9 +402,13 @@ const serve = async () => {
   fs.mkdirSync(HOME, { recursive: true });
   for (const f of fs.readdirSync(HOME).filter((x) => x.endsWith(".port") && x !== ID.toString(36) + ".port")) {
     const id = f.slice(0, -5);
-    const port = Number(fs.readFileSync(path.join(HOME, f), "utf8"));
-    const h = await fetch("http://127.0.0.1:" + port + "/hello", { signal: AbortSignal.timeout(1000) }).then((r) => r.text()).catch(() => null);
-    if (h !== null && BigInt(h).toString(36) === id) await fetch("http://127.0.0.1:" + port + "/run", { method: "POST", body: JSON.stringify({ argv: ["stop"], cwd: "" }) }).catch(() => null);
+    try {
+      const port = Number(fs.readFileSync(path.join(HOME, f), "utf8"));
+      const h = await fetch("http://127.0.0.1:" + port + "/hello", { signal: AbortSignal.timeout(1000) }).then((r) => r.text()).catch(() => null);
+      if (h !== null && /^\d+$/.test(h) && BigInt(h).toString(36) === id) {
+        await fetch("http://127.0.0.1:" + port + "/run", { method: "POST", body: JSON.stringify({ argv: ["stop"], cwd: "" }), signal: AbortSignal.timeout(2000) }).catch(() => null);
+      }
+    } catch { /* an unreadable file: dropped below */ }
     for (const x of [f, id + ".log"]) try { fs.unlinkSync(path.join(HOME, x)); } catch { /* gone, or still open */ }
   }
   fs.writeFileSync(PORT_FILE(ID.toString(36)), String(PORT));
@@ -437,15 +447,15 @@ const attempt = <T>(n: number, f: () => T): T | undefined => {
 };
 // past the deadline, or the worker over its memory share (a search stops either way)
 const MEM_CAP = (Number(process.env.GEN3_MEM_MB) || 4096) * 2 ** 20;
-let overMem = false;
-const late = () => performance.now() > deadline || (deadline < Infinity && (overMem ||= process.memoryUsage.rss() > MEM_CAP));
+let overMem = false, searching = false;
+const late = () => performance.now() > deadline || (searching && (overMem ||= process.memoryUsage.rss() > MEM_CAP));
 
 type Src = { file: string; header: string; body: string; bodyLine: number };
 type Lemma = { k: string; order: number; n: number; np: number }; // n binders in all, np of them parameters
 type Loaded = {
   entry: string; top: string; book: Term; raw: Record<string, Term>; n0: number; order: Map<string, number>;
   files: Map<string, Term>; src: Map<string, Src | null>; texts: Map<string, string>; open: Map<string, Set<string>>;
-  apply: Map<string, Lemma[]>; rw: Map<string, { L: Lemma; side: 0 | 1 }[]>; seen: string[]; stamp: string;
+  apply: Map<string, Lemma[]>; rw: Map<string, { L: Lemma; side: 0 | 1 }[]>; fwd: Map<string, { L: Lemma; j: number }[]>; seen: string[]; stamp: string;
   zero: Map<Term, RegExp | null>; wraps: Map<string, Wrap[]> | null; nfs: Map<number, Term>; enums: Map<string, boolean>; strict: Map<string, number | null>; matched: Map<string, Set<number>>;
 };
 let BK: Loaded;
@@ -489,7 +499,7 @@ const load = async (file: string): Promise<Loaded | string> => {
     if (f) files.set(k, f);
   }
   const L: Loaded = {
-    entry, top, book, raw, n0, order, files, src: new Map(), texts: new Map(), open: new Map(), apply: new Map(), rw: new Map(),
+    entry, top, book, raw, n0, order, files, src: new Map(), texts: new Map(), open: new Map(), apply: new Map(), rw: new Map(), fwd: new Map(),
     seen: [...seen.keys()], stamp: "", zero: new Map(), wraps: null, nfs: new Map(), enums: new Map(), strict: new Map(), matched: new Map(),
   };
   L.stamp = stampOf(L.seen);
@@ -569,7 +579,7 @@ const isOpen = (k: string): boolean => {
     for (const line of source.split("\n")) {
       const def = DEF_LINE.exec(line);
       if (def) current = def[1];
-      else if (current && line.includes("?TODO") && !line.trimStart().startsWith("#")) { names.add(current); names.add(current.slice(current.indexOf(".") + 1)); }
+      else if (current && todoAt(line).length) { names.add(current); names.add(current.slice(current.indexOf(".") + 1)); }
     }
     BK.open.set(source, names);
   }
@@ -747,7 +757,6 @@ const varsOf = (t0: Term, out: Set<number>) => {
   return out;
 };
 const hasMeta = (t0: Term): boolean => some(t0, (t) => t.$ === "Var" && t.i >= META);
-const contains = (t0: Term, h: number): boolean => some(t0, (t) => H(t) === h);
 // every variable of t is below d or bound inside t
 const closedBelow = (t: Term, d: number, bound: number[] = []): boolean => {
   switch (t.$) {
@@ -776,6 +785,7 @@ const replace = (t: Term, h: number, by: Term, at = -1, seen = { n: 0 }): Term =
     default: return t;
   }
 };
+const contains = (t: Term, h: number): boolean => occurrences(t, h) > 0;
 const occurrences = (t: Term, h: number): number => {
   if (H(t) === h) return 1;
   switch (t.$) {
@@ -864,7 +874,16 @@ const enumDef = (k: string): boolean => {
 const nfGo = (h: Term, d: number, b: NfBudget): Term => {
   b.n--;
   const s = B.term_strip(h);
-  if (b.atoms && s.$ === "App" && isAtom(s, d)) { const [hd, xs] = B.term_unapply(s); return xs.reduce((r: Term, x: Term) => B.App(r, nfArg(x, d, b)), B.Ref(B.term_strip(hd).k)); }
+  if (!(b.atoms && s.$ === "App" && isAtom(s, d))) return nfStep(h, s, d, b);
+  // the innermost deciding call stays folded; one whose unfolding holds another unfolds (refold puts a
+  // wrapper back afterwards)
+  const inner = nfStep(h, s, d, b);
+  const decides = (t: Term) => { if (t === inner || t.$ !== "App") return false; const f = B.term_unapply(t)[0]; return f.$ === "Ref" && enumDef(f.k); };
+  if (some(inner, decides)) return inner;
+  const [hd, xs] = B.term_unapply(s);
+  return xs.reduce((r: Term, x: Term) => B.App(r, nfArg(x, d, b)), B.Ref(B.term_strip(hd).k));
+};
+const nfStep = (h: Term, s: Term, d: number, b: NfBudget): Term => {
   const w = wnfShared(h) ?? s;
   switch (w.$) {
     case "App": {
@@ -898,11 +917,12 @@ const wnfShared = (h: Term): Term => {
 };
 const nfObj = new WeakMap<object, Map<number, Term>>(); // by the term object: no lowering on a hit
 const nf = (h: Term, d: number, atoms = false, cap = FUEL_NFS): Term => {
-  const sub = d * 4 + (atoms ? 1 : 0) + cap * 8;
+  const sub = mixH(d, atoms ? 1 : 0, cap);
   const byObj = typeof h === "object" && h ? nfObj.get(h) : undefined;
   if (byObj?.has(sub)) return byObj.get(sub);
+  const whole = fuel >= cap;
   const r = nfKeyed(h, d, atoms, cap);
-  if (typeof h === "object" && h) { const m = byObj ?? new Map(); m.set(sub, r); if (!byObj) nfObj.set(h, m); }
+  if (whole && typeof h === "object" && h) { const m = byObj ?? new Map(); m.set(sub, r); if (!byObj) nfObj.set(h, m); }
   return r;
 };
 const nfKeyed = (h: Term, d: number, atoms: boolean, cap: number): Term => {
@@ -910,10 +930,12 @@ const nfKeyed = (h: Term, d: number, atoms: boolean, cap: number): Term => {
   if (!raw) return undefined;
   const k = mixH(H(raw), d, atoms ? 1 : 0, cap);
   if (BK.nfs.has(k)) return BK.nfs.get(k);
+  const whole = fuel >= cap; // with less fuel than cap the result is not the cap's: not cached
   const r = attempt(cap, () => {
     const t = canon(nfGo(h, d, { n: NF_NODES, atoms }));
     return atoms ? refold(t, d, { n: 400 }) : t;
   });
+  if (!whole) return r;
   if (BK.nfs.size > 200000) BK.nfs.clear();
   BK.nfs.set(k, r);
   return r;
@@ -923,7 +945,7 @@ const nfKeyed = (h: Term, d: number, atoms: boolean, cap: number): Term => {
 // against the subterms (innermost first)
 type Wrap = { k: string; n: number; P: Term };
 const wrapsOf = (): Map<string, Wrap[]> => {
-  BK.wraps ??= withOwnFuel(5000000, buildWraps); // built once per book; a TIMEOUT leaves nothing cached
+  BK.wraps ??= buildWraps(); // built once per book; a TIMEOUT leaves nothing cached
   return BK.wraps;
 };
 const buildWraps = (): Map<string, Wrap[]> => {
@@ -932,7 +954,7 @@ const buildWraps = (): Map<string, Wrap[]> => {
     const t = BK.raw[k];
     if (t?.$ !== "Def" || t.v === null || t.n === 0 || t.n > 6 || !enumDef(k) || strictOf(k) !== null) continue;
     const call = Array.from({ length: t.n }, (_, j) => B.Var("?" + j, META + j)).reduce((f: Term, x: Term) => B.App(f, x), B.Ref(k));
-    const P = nf(call, 0);
+    const P = withOwnFuel(FUEL_NFS, () => nf(call, 0));
     if (!P || P.$ !== "App" || headKey(P) === "R:" + k || size(P, 201) > 200) continue;
     const hk = headKey(P);
     m.set(hk, [...(m.get(hk) ?? []), { k, n: t.n, P }]);
@@ -1132,7 +1154,7 @@ const buildIndex = () => {
     const t = BK.raw[k];
     if (t?.$ !== "Def" || t.x > 0 || (t.v === null && t.b !== true) || t.i || isOpen(k)) continue;
     const L: Lemma = { k, order: BK.order.get(k) ?? -1, n: arity(t.T, t.n), np: t.n };
-    const o = attempt(20000, () => openMeta(t.T, L.n));
+    const o = withOwnFuel(FUEL_NF * 2, () => attempt(FUEL_NF * 2, () => openMeta(t.T, L.n)));
     const c = o && attempt(20000, () => lower(o.concl, 0));
     if (!o || !c) continue;
     const hk = headKey(c);
@@ -1149,9 +1171,16 @@ const buildIndex = () => {
         if (ok && !(BK.rw.get(sk) ?? []).some((x) => x.L.k === k && x.side === side)) add(BK.rw, sk, { L, side });
       }
     }
+    // a premise with a definite head (an equation on a call, a stuck predicate): forward reasoning
+    o.doms.forEach((dm, j) => {
+      const P = attempt(20000, () => lower(dm.A, 0));
+      const pk = P && headKey(P);
+      if (pk && /^(E\|R:|R:)/.test(pk) && hasMeta(P)) add(BK.fwd, pk, { L, j });
+    });
   }
   for (const v of BK.apply.values()) v.sort((a, b) => b.order - a.order);
   for (const v of BK.rw.values()) v.sort((a, b) => b.L.order - a.L.order);
+  for (const v of BK.fwd.values()) v.sort((a, b) => b.L.order - a.L.order);
 };
 
 // ---- printing ----
@@ -1188,7 +1217,8 @@ const sh = (g: Goal, t: Term): string => show(t, [...g.names, "_"], g.own.file);
 const ann = (g: Goal, i: number): Term => B.pmap_get(g.ctx, i);
 const qn = (q: Term): number => (q.$ === "None" ? 0 : q.$ === "Lone" ? 1 : 2);
 // by the normal form (two goals that convert are one goal: a rewrite that changes nothing is a cycle)
-const goalKey = (g: Goal, N: Term): number => attempt(FUEL_NF, () => mixH(g.ckey, qn(g.qt), H(N ?? lower(g.ty, LD(g))))) ?? Math.random();
+let unkeyed = 0; // a goal too large to key is its own key (never a cycle, never cached)
+const goalKey = (g: Goal, N: Term): number => attempt(FUEL_NF, () => mixH(g.ckey, qn(g.qt), H(N ?? lower(g.ty, LD(g))))) ?? -++unkeyed;
 
 const parseLow = (text: string, g: Goal): Term => {
   const p = parserAt(text, 0, g.own.file, g.names);
@@ -1328,43 +1358,48 @@ const armOf = (n: Goal, at: Goal, t: Term, A: Term, ctr: Term, used: Set<string>
   const cn = B.name_show(at.own.file, ctr.k);
   return { pat: isNat ? (ctr.k === "Zero" ? "0n" : "1n+" + fnames[0]) : cn + "{" + fnames.map((f, i) => (fmany[i] ? "+" : "") + f).join(", ") + "}", node };
 };
-// the pending binders worth a split: those that block evaluation (in the goal or a hypothesis; a
-// record that blocks early), then records the goal reads (at most 2), then enumerations (Bool, Cmp)
+// the pending binders worth a split: those that block evaluation (in the goal or a hypothesis), then
+// enumerations (Bool, Cmp) that only hypotheses name, then records
 const splitCands = (n: Goal, lg: Goal | null): number[] => {
-  const out: number[] = [], records: number[] = [], enums: number[] = [];
+  const out: number[] = [], records: number[] = [], enums: number[] = [], words = new Set<number>();
   let r: Goal | null = n;
   for (let j = 0; j < n.pend && r; j++) {
     const t = wnf(r.ty);
     if (!t || t.$ !== "All") break;
     const A = t.q.$ !== "None" ? wnf(t.A) : null;
     const a = A?.$ === "ADT" ? BK.raw[A.k] : null;
+    // a word splits as a def's own word (its induction), not inside a machine number (U32{w}, F32{w})
+    // nor below another word's split: there it only spells out bits
+    const isWord = a?.$ === "ADT" && a.c.some((c: Term) => /(^|[.:])W(Con|Nil)$/.test(c.k));
+    if (isWord && /(^|[/.])(U32|F32|WCon|WNil)(\/|$)/.test(n.path)) words.add(j);
     if (a?.$ === "ADT" && a.c.length === 1 && a.c[0].n > 0 && !/^(U32|F32|Chr|Word)$/.test(A.k) && !/\b(?:WCon|WNil)$/.test(a.c[0].k)) records.push(j);
     if (a?.$ === "ADT" && a.c.length >= 2 && a.c.length <= 4 && a.c.every((c: Term) => c.n === 0)) enums.push(j);
     r = intro(r, r.pnames[0], r.pmany[0]);
   }
-  const add = (j: number) => { if (j >= 0 && j < n.pend && !out.includes(j)) out.push(j); };
+  const add = (j: number) => { if (j >= 0 && j < n.pend && !out.includes(j) && !words.has(j)) out.push(j); };
   if (lg) {
     const blk: Term[] = [];
     // the stuck structure is enough here: small budgets
     const N = nf(lg.ty, lg.d, false, 8000);
     if (N) blockers(N, blk);
     for (let i = lg.d - 1; i >= 0; i--) { const a = ann(lg, i); const h = a && nf(a.T, lg.d, false, 2000); if (h) blockers(h, blk); }
-    const blocking = blk.filter((t) => t.$ === "Var").map((t) => t.i - n.d);
-    // the first blocker, a record that blocks, the other blockers; then (below) the other records
-    blocking.slice(0, 1).forEach(add);
-    records.filter((j) => blocking.includes(j)).forEach(add);
-    blocking.forEach(add);
+    // a function goal's premises are hypotheses to be (@h: {f(b) == ..} -> G blocks on b too)
+    let t = asAll(lg.ty);
+    for (let k = 0; t && k < 8; k++, t = asAll(t.B(B.Var("_", FRESH + k)))) { const h = nf(t.A, lg.d, false, 2000); if (h) blockers(h, blk); }
+    blk.filter((t) => t.$ === "Var").forEach((t) => add(t.i - n.d));
   }
-  records.slice(-2).reverse().forEach(add);
   enums.forEach(add);
+  // the branching splits are capped by depth; a record (one arm) does not branch: up to 2 more
   const depth = n.path.split("/").length - 1;
-  return out.slice(0, depth >= 4 ? 1 : depth >= 2 ? 2 : 3);
+  const branching = out.slice(0, depth >= 4 ? 1 : depth >= 2 ? 2 : 3);
+  return [...branching, ...records.slice(-2).reverse().filter((j) => !branching.includes(j))];
 };
 
 // ---- facts: hypotheses, and what follows from one in one step ----
 // a fact's proof text uses its hypothesis once; T is its type as stated, N in normal form; empty: a
 // proof of Empty (a constructor clash)
-type Fact = { pf: string; T: Term; N: Term; q: Term; i: number; empty?: boolean; A?: Term }; // A: N with deciding calls folded (lift)
+// A: N with deciding calls folded (lift); fwd: a lemma's conclusion (forward)
+type Fact = { pf: string; T: Term; N: Term; q: Term; i: number; empty?: boolean; A?: Term; fwd?: boolean };
 // an inline match eliminator {\{C1: ..; \{C2: ..; \{}}} : T -> Type}: each constructor's fields bound
 // by lambdas, its body from arm(ctor, field names)
 const elim = (g: Goal, T: Term, arm: (k: string, fs: string[]) => string): string | null => {
@@ -1390,7 +1425,7 @@ const derive = (g: Goal, h: Fact, out: Fact[]) => {
   if (ca.k !== cb.k) {
     // a clash: the motive is Empty at b's constructor, Unit elsewhere
     const P = elim(g, T, (k) => (k === cb.k ? "Empty" : "Unit"));
-    if (P) out.push({ pf: "(%" + h.pf + " : " + P + "; Unit{})", T: E, N: E, q: h.q, i: -1, empty: true });
+    if (P) out.push({ pf: "{(%" + h.pf + " : " + P + "; Unit{}) : Empty}", T: E, N: E, q: h.q, i: -1, empty: true });
     return;
   }
   // injectivity: field j of a equals field j of b
@@ -1400,7 +1435,8 @@ const derive = (g: Goal, h: Fact, out: Fact[]) => {
     const F = attempt(FUEL_NF, () => lower(B.term_infer(BK.book, g.lhs, B.term_higher(x, g.env), B.None(), g.ctx, g.d).ty, LD(g)));
     if (!F) return;
     const P = elim(g, T, (k, fs) => (k === ca.k ? "{" + fs[j] + " == " + sh(g, y) + " : " + sh(g, F) + "}" : "Unit"));
-    if (P) out.push({ pf: "(%" + sym + " : " + P + "; {==})", T: B.Eql(x, y, F), N: B.Eql(x, y, F), q: h.q, i: -1 });
+    // annotated: bend2 infers no type for a rewrite, and a fact may be a rewrite's evidence
+    if (P) out.push({ pf: "{(%" + sym + " : " + P + "; {==}) : {" + sh(g, x) + " == " + sh(g, y) + " : " + sh(g, F) + "}}", T: B.Eql(x, y, F), N: B.Eql(x, y, F), q: h.q, i: -1 });
   });
 };
 const factsOf = (g: Goal): Fact[] => {
@@ -1413,12 +1449,42 @@ const factsOf = (g: Goal): Fact[] => {
     if (!a || g.names[i] === "_") continue;
     const T = attempt(FUEL_NF, () => lower(a.T, LD(g)));
     if (!T) continue;
-    const f: Fact = { pf: g.names[i], T, N: nf(a.T, LD(g), false, 20000) ?? T, q: a.q, i };
+    const f: Fact = { pf: g.names[i], T, N: nf(a.T, LD(g)) ?? T, q: a.q, i }; // the goals' cap: hashes agree
     fs.push(f);
-    attempt(FUEL_NF, () => derive(g, f, fs!));
+    try { derive(g, f, fs); } catch (e) { if (e === TIMEOUT) throw e; } // each derived fact is bounded on its own
   }
-  S.facts.set(k, fs);
+  S.facts.set(k, fs); // forward facts complete their lemmas' other premises from these
+  for (const f of fs.filter((x) => x.i >= 0)) {
+    try { forward(g, f, fs); } catch (e) { if (e === TIMEOUT) throw e; }
+  }
   return fs;
+};
+// forward: a lemma one of whose premises a hypothesis fits, its other premises given by facts and
+// every parameter fixed, gives its conclusion as a new fact (When.done_eq(..)(h)); one step deep
+const MAX_FORWARD = 16;
+const forward = (g: Goal, f: Fact, out: Fact[]) => {
+  let made = out.filter((x) => x.fwd).length;
+  const seen = new Set<string>();
+  for (const t of f.N && H(f.N) !== H(f.T) ? [f.T, f.N] : [f.T]) {
+    for (const { L, j } of (BK.fwd.get(headKey(t)) ?? []).slice(0, 24)) {
+      if (made >= MAX_FORWARD || L.order >= g.own.order || L.k === g.own.k || seen.has(L.k + "#" + j)) continue;
+      seen.add(L.k + "#" + j);
+      const c = lemmaCallee(g, L);
+      const o = openMeta(c.T, c.n);
+      const P = o && attempt(FUEL_NF, () => lower(o.doms[j].A, LD(g)));
+      const sol: (Term | null)[] = new Array(c.n).fill(null);
+      if (!P || !match(P, t, sol, g.d)) continue;
+      const r = complete(g, c, sol, false);
+      const o2 = r && r.kids.length === 0 ? openMeta(c.T, c.n, solH(g, r.sol)) : null;
+      const E = o2 && attempt(FUEL_NF, () => lower(o2.concl, LD(g)));
+      if (!E || hasMeta(E) || !isProp(o2!.concl) || out.some((x) => H(x.T) === H(E))) continue;
+      const nf2 = nf(o2!.concl, LD(g)) ?? E;
+      const fact: Fact = { pf: callText(c, r!.args), T: E, N: nf2, q: f.q, i: -1, fwd: true };
+      out.push(fact);
+      made++;
+      try { derive(g, fact, out); } catch (e) { if (e === TIMEOUT) throw e; }
+    }
+  }
 };
 const usable = (f: Fact, qt: Term) => qt.$ === "None" || f.q.$ !== "None";
 
@@ -1430,7 +1496,8 @@ type Pf =
   | { t: "lam"; x: string; k: Pf }
   | { t: "mt"; x: string; arms: { pat: string; k: Pf }[] }
   | { t: "def"; name: string; head: string; body: Pf; call: string } // a helper def, used through its call
-  | { t: "hole"; n: GNode };
+  | { t: "hole"; n: GNode }
+  | { t: "dup"; xs: string[]; k: Pf }; // +x = x for each x (reusable from here on), then k
 const tm = (s: string, subs: Pf[] = []): Pf => ({ t: "tm", s, subs });
 const inline = (p: Pf): string => {
   switch (p.t) {
@@ -1439,16 +1506,18 @@ const inline = (p: Pf): string => {
     case "lam": return p.x + " => " + inline(p.k);
     case "def": return p.call;
     case "hole": return "?TODO";
+    case "dup": return p.xs.map((x) => "+" + x + " = " + x + "; ").join("") + inline(p.k);
     case "mt": throw new Error("a match is not an expression");
   }
 };
 const flat = (p: Pf): string => (p.t === "rw" ? "%" + inline(p.e) + " : " + p.P + "; " + flat(p.k) : inline(p));
 const render = (p: Pf, ind: string, out: string[]) => {
   if (p.t === "rw") { out.push(ind + "%" + inline(p.e) + " :", ind + "  " + p.P); render(p.k, ind, out); }
+  else if (p.t === "dup") { for (const x of p.xs) out.push(ind + "+" + x + " = " + x); render(p.k, ind, out); }
   else if (p.t === "mt") for (const [i, a] of p.arms.entries()) { if (i === 0) out.push(ind + "match " + p.x + ":"); out.push(ind + "  case " + a.pat + ":"); render(a.k, ind + "    ", out); }
   else out.push(ind + inline(p));
 };
-const kidsOf = (p: Pf): Pf[] => (p.t === "tm" ? p.subs : p.t === "rw" ? [p.e, p.k] : p.t === "lam" ? [p.k] : p.t === "mt" ? p.arms.map((a) => a.k) : p.t === "def" ? [p.body] : []);
+const kidsOf = (p: Pf): Pf[] => (p.t === "tm" ? p.subs : p.t === "rw" ? [p.e, p.k] : p.t === "lam" ? [p.k] : p.t === "mt" ? p.arms.map((a) => a.k) : p.t === "def" ? [p.body] : p.t === "dup" ? [p.k] : []);
 // the helper defs a proof uses, each after the helpers it calls (a def calls only defs above it)
 const helpersOf = (p: Pf, out: Extract<Pf, { t: "def" }>[] = []): Extract<Pf, { t: "def" }>[] => {
   for (const k of kidsOf(p)) helpersOf(k, out);
@@ -1592,6 +1661,7 @@ const step = () => {
 // loop (so the worker's progress messages leave the process), every second it reports progress
 const run = async (until: number, progress: () => void) => {
   deadline = until;
+  searching = true;
   let yielded = performance.now(), reported = yielded;
   try {
     while (!S.root.pf && S.root.pn < INF && S.nodes < MAX_NODES && !late()) {
@@ -1604,6 +1674,7 @@ const run = async (until: number, progress: () => void) => {
     if (e !== TIMEOUT) throw e;
   } finally {
     deadline = Infinity;
+    searching = false;
   }
 };
 const expand = (n: GNode) => {
@@ -1627,15 +1698,34 @@ const partial = (n: GNode): { pf: Pf; holes: number; closed: number } => {
 };
 
 // ---- node alternatives: a def body with pending binders ----
+// the pending binders introduced, each single-use Data one rebound reusable (+x = x, as hand proofs
+// open a body): a proof may then name a value twice (a call and its argument, a fact's arguments)
+const introReusable = (g0: Goal): { lg: Goal | null; dup: string[] } => {
+  const dup: string[] = [];
+  let g: Goal | null = g0;
+  while (g && g.pend > 0) {
+    const t = asAll(g.ty);
+    const many = g.pmany[0] || (!!t && t.q.$ === "Lone" && isData(g, t.A));
+    if (many && !g.pmany[0]) dup.push(g.pnames[0]);
+    g = intro(g, g.pnames[0], many);
+  }
+  return { lg: g, dup };
+};
 const nodeAlts = (n: GNode): Alt[] => {
   const alts: Alt[] = [];
-  const lg = introAll(n.g);
-  if (lg) { const a = withKids(mkAlt(n, "intro", null, 0, (ps) => ps[0], "introduce the parameters"), [lg], n.lv, n.rws); if (a) alts.push(a); }
+  const { lg, dup } = introReusable(n.g);
+  // only the names the proof uses twice (a partial keeps all: its holes may need them)
+  const intro1 = (ps: Pf[]): Pf => {
+    const text = holesOf(ps[0]).length ? null : attempt(FUEL_NF, () => flat(ps[0]));
+    const xs = text === null || text === undefined ? dup : dup.filter((x) => (text.match(new RegExp("(?<![\\w.])" + x + "(?![\\w])", "g")) ?? []).length > 1);
+    return xs.length ? { t: "dup", xs, k: ps[0] } : ps[0];
+  };
+  if (lg) { const a = withKids(mkAlt(n, "intro", null, 0, intro1, "introduce the parameters"), [lg], n.lv, n.rws); if (a) alts.push(a); }
   for (const j of splitCands(n.g, lg)) {
     const arms = split(n.g, j);
     if (!arms) continue;
     const x = n.g.pnames[j];
-    const a = withKids(mkAlt(n, "split", null, 1, (ps) => ({ t: "mt", x, arms: arms.map((r, i) => ({ pat: r.pat, k: ps[i] })) }), "match " + x), arms.map((r) => r.node), n.lv, n.rws);
+    const a = withKids(mkAlt(n, "split", null, arms.length === 1 ? 0.5 : 1, (ps) => ({ t: "mt", x, arms: arms.map((r, i) => ({ pat: r.pat, k: ps[i] })) }), "match " + x), arms.map((r) => r.node), n.lv, n.rws);
     if (a) alts.push(a);
   }
   return alts;
@@ -1699,8 +1789,6 @@ const leafAlts = (n: GNode): Alt[] => {
   return alts;
 };
 
-// apply: a hypothesis, the induction hypothesis or a lemma whose conclusion matches the goal; its
-// parameters from the match, its premises from facts, the rest subgoals
 // a callee's binders: its np parameters, then the premises of its conclusion (f(a, b)(h))
 type Callee = { text: string; T: Term; n: number; np: number; kind: "hyp" | "ih" | "lemma" };
 const callText = (c: Callee, args: string[]) =>
@@ -1791,8 +1879,8 @@ const fitPremises = (f: Fill): boolean => {
       const qt = B.quant_dem(dom.q, g.qt);
       const fit = (p: Term) => facts.some((fa) => {
         if (fa.empty || !usable(fa, qt)) return false;
-        const s2 = f.sol.slice();
-        if (!match(p, fa.T, s2, g.d) && !match(p, fa.N, s2, g.d)) return false;
+        let s2 = f.sol.slice();
+        if (!match(p, fa.T, s2, g.d) && !match(p, fa.N, (s2 = f.sol.slice()), g.d)) return false;
         s2.forEach((x, i) => { f.sol[i] = x; });
         f.via[j] = fa.pf;
         return true;
@@ -1834,6 +1922,8 @@ const argsOf = (f: Fill): Applied | null => {
   }
   return { args, kids, sol: f.sol };
 };
+// apply: a hypothesis, the induction hypothesis or a lemma whose conclusion matches the goal; its
+// parameters from the match, its premises from facts, the rest subgoals
 const applyAlts = (n: GNode): (Alt | null)[] => {
   const g = n.g;
   const targets = targetsOf(n);
@@ -1868,7 +1958,7 @@ const ctorAlts = (n: GNode, w: Term): (Alt | null)[] => {
   const g = n.g;
   const adt = w.$ === "ADT" ? attempt(FUEL_NF, () => B.book_adt(BK.book, w, g.ctx, g.own.k)) : null;
   if (!adt || adt.c.length === 0 || adt.c.length > 4 || (adt.c.length === 1 && adt.c[0].n === 0) || !isProp(g.ty)) return [];
-  return adt.c.map((ctr: Term) => attempt(FUEL_NF, () => {
+  return adt.c.map((ctr: Term) => attempt(FUEL_NF * 4, () => {
     let cur = B.tele_fill(BK.book, ctr.T, w.x, g.ctx, g.own.k);
     const kids: Goal[] = [];
     for (let f = 0; f < ctr.n; f++) {
@@ -1906,20 +1996,31 @@ const rewriteAlts = (n: GNode): (Alt | null)[] => {
     ...cands.filter((_, i) => counts[i] > 0).map((c) => ({ c, at: -1 })),
     ...cands.flatMap((c, i) => (counts[i] > 1 && counts[i] <= 4 ? Array.from({ length: counts[i] }, (_, at) => ({ c, at })) : [])),
   ];
+  let open = 0; // steps that leave a subgoal: at most 16 (a finished step is always kept)
   for (const { c, at } of sites) {
-    if (out.length >= 16) break;
+    if (open >= 16 && c.kids.length > 0) continue;
     const fh = H(c.from);
     const Gp = replace(c.base, fh, c.to, at);
     if (seen.has(H(Gp))) continue;
     seen.add(H(Gp));
     const P = show(replace(c.base, fh, B.Var("_", g.d), at), [...g.names, "_"], g.own.file);
-    const sub: Goal = { ...g, ty: B.term_higher(Gp, g.env), path: g.path + "%" };
     const e = c.e;
+    // the rewritten goal is {x == x} or a fact: a finished step (checked at once with the others)
+    const done = c.kids.length === 0 ? closingText(g, Gp) : null;
+    if (done) { out.push(mkAlt(n, c.tag, "%" + e + " : " + P + "; " + done, 1, () => ({ t: "rw", e: tm(e), P, k: tm(done) }))); continue; }
+    if (open++ >= 16) continue;
+    const sub: Goal = { ...g, ty: B.term_higher(Gp, g.env), path: g.path + "%" };
     const build = (ps: Pf[]): Pf => ({ t: "rw", e: tm(e, ps.slice(1)), P, k: ps[0] });
     const a = mkAlt(n, c.tag, "%" + e + " : " + P + "; " + HOLE, 1.5 + c.score * 0.1 + c.kids.length * 0.1, build, "%" + e.replace(/\u0000/g, "?") + " : " + clip(P, 160));
     out.push(withKids(a, [sub, ...c.kids], n.lv + 1, n.rws + 1));
   }
   return out;
+};
+// the proof of a goal G (lowered at LD) that is {x == x} or literally a fact, without a check
+const closingText = (g: Goal, G: Term): string | null => {
+  if (G.$ === "Eql" && H(G.a) === H(G.b)) return "{==}";
+  const h = H(G);
+  return factsOf(g).find((f) => !f.empty && usable(f, g.qt) && (H(f.T) === h || H(f.N) === h))?.pf ?? null;
 };
 type RwSite = { base: Term; subs: Map<number, Term>; score: (from: Term, base: number) => number };
 const rwCands = (g: Goal, N: Term, isRaw: boolean, cands: RwCand[]) => {
@@ -2080,7 +2181,7 @@ const helperName = (own: Owner): string => {
 };
 const addTemp = (head: string, own: Owner): string | null => {
   const n0 = BK.book.order.length;
-  try { B.parse_book(BK.book, BK.top, head + "\n  ?TODO\n", own.file.ns, own.file.al); } catch { BK.book.order.length = n0; return null; }
+  try { withHols(() => B.parse_book(BK.book, BK.top, head + "\n  ?TODO\n", own.file.ns, own.file.al)); } catch { BK.book.order.length = n0; return null; }
   const hk = BK.book.order[n0];
   if (!hk || BK.raw[hk]?.$ !== "Def") { for (const k of BK.book.order.slice(n0)) delete BK.raw[k]; BK.book.order.length = n0; return null; }
   temps.push(hk);
@@ -2092,7 +2193,6 @@ const addTemp = (head: string, own: Owner): string | null => {
 // what the book's memos derived from def k (its body may have been forgotten while a search ran)
 const forget = (k: string) => {
   BK.strict.delete(k); BK.matched.delete(k); BK.enums.delete(k);
-  if (BK.wraps && [...BK.wraps.values()].some((ws) => ws.some((w) => w.k === k))) BK.wraps = null;
 };
 const dropTemps = () => {
   for (const hk of temps) {
@@ -2150,9 +2250,14 @@ const errText = (e: Term, base = 0): string => {
   const file = e.spn?.file;
   const names: string[] = B.ctx_scope(e.ctx);
   const d = names.length;
-  const old = fuel;
-  fuel = FUEL_FINAL;
   try {
+    return withFuel(FUEL_FINAL, () => errBody(e, base, file, names, d));
+  } catch (x) {
+    return "Error: " + (typeof e.exp === "string" ? e.exp : "(gen3 could not print it: " + (x instanceof Stop ? x.why : String((x as Error)?.message ?? x).slice(0, 100)) + ")") + errLocation(e, base);
+  }
+};
+const errBody = (e: Term, base: number, file: Term, names: string[], d: number): string => {
+  {
     const out: string[] = ["Error:"];
     if (e.obs === undefined || typeof e.exp === "string" || typeof e.obs === "string" || e.obs.$ === "Hol") {
       const ex = (x: Term) => (typeof x === "string" ? x : showCut(x, d, names, file));
@@ -2170,9 +2275,7 @@ const errText = (e: Term, base = 0): string => {
     if (anns.length) out.push("Context (types as stated; a type over " + CTX_CHARS + " chars is cut):");
     for (const [i, a] of anns) out.push("- " + a.k + " : " + clip(showCut(a.T, i, names.slice(0, i), file, 2000), CTX_CHARS));
     return out.join("\n") + errLocation(e, base) + (e.nte ? "\n" + e.nte : "");
-  } catch (x) {
-    return "Error: " + (typeof e.exp === "string" ? e.exp : "(gen3 could not print it: " + String((x as Error)?.message ?? x).slice(0, 100) + ")") + errLocation(e, base);
-  } finally { fuel = old; }
+  }
 };
 const firstLine = (e: Term) => errText(e).split("\n").slice(0, 3).join(" ").slice(0, 300);
 
@@ -2211,11 +2314,10 @@ const finalErr = (k: string, pf: Pf, body: string, cap = FUEL_FINAL): Term => {
   return checkErr(k, body, undefined, cap);
 };
 type Result = { ok: boolean; text: string; edit?: Edit };
-// the answer of a search, printed and checked before the hard deadline (a check out of time is "not
-// decided"; printing out of time gives the fallback)
-const settle = (hard: number, f: () => Result, fallback: () => string): Result => {
+// finalErr before the hard deadline (past it: a Stop, "not decided")
+const finalErrBy = (hard: number, k: string, pf: Pf, body: string, cap = FUEL_FINAL): Term => {
   deadline = hard;
-  try { return f(); } catch (e) { if (e === TIMEOUT) return { ok: false, text: fallback() }; throw e; } finally { deadline = Infinity; }
+  try { return finalErr(k, pf, body, cap); } finally { deadline = Infinity; }
 };
 // the ?TODO holes of a body (offsets), not those in comments
 const todoAt = (body: string): number[] => {
@@ -2237,7 +2339,7 @@ const holeGoals = (k: string, ds: Src, own: Owner): { at: number; g: Goal | null
 
 // a whole body: the search from the def's root goal (its body forgotten while it runs)
 const proveWhole = async (k: string, ds: Src, until: number, hard: number, progress: (s: string) => void): Promise<Result> => {
-  const t0 = performance.now(), def = BK.raw[k], name = shortOf(k);
+  const t0 = performance.now(), def = BK.raw[k], name = shortOf(k), wraps0 = BK.wraps;
   BK.raw[k] = { ...def, v: null };
   try {
     const root = mkNode(rootGoal(owner(k)), null, 0, 0)!;
@@ -2248,28 +2350,29 @@ const proveWhole = async (k: string, ds: Src, until: number, hard: number, progr
     });
     const ms = performance.now() - t0;
     const head = "# " + name + ": OPEN after " + secs(ms) + " (" + S.nodes + " goals searched" + (overMem ? ", stopped at the worker's memory share" : "") + (S.internal ? ", " + S.internal + " internal errors" : "") + ")";
-    return settle(hard, () => (root.pf ? provenText(k, ds, root.pf, ms) : openText(k, root, head)), () => head + "; out of time while printing the answer");
+    return root.pf ? provenText(k, ds, root.pf, ms, hard) : openText(k, root, head, hard);
   } finally {
     BK.raw[k] = def;
     forget(k);
+    if (BK.wraps !== wraps0) BK.wraps = null; // built while k's body was hidden
     dropTemps();
   }
 };
-const provenText = (k: string, ds: Src, pf: Pf, ms: number): Result => {
+const provenText = (k: string, ds: Src, pf: Pf, ms: number, hard: number): Result => {
   const name = shortOf(k), body = bodyText(pf), hs = helpersOf(pf);
-  const e = finalErr(k, pf, body);
+  const e = finalErrBy(hard, k, pf, body);
   if (e instanceof Stop) return { ok: false, text: "# " + name + ": a proof was found, but gen3's re-check did not finish (" + errText(e) + "): unverified\n" + helperBlock(hs, k, true) + body };
   if (e) return { ok: false, text: "# " + name + ": a proof was found but fails bend2's def check (a gen3 bug; please report it):\n" + body + "\n" + errText(e) };
   return { ok: true, text: "# " + name + ": PROVEN in " + Math.round(ms) + " ms [" + tagsOf() + "]\n" + helperBlock(hs, k, true) + body, edit: editOf(ds, hs, body) };
 };
-const openText = (k: string, root: GNode, head: string): Result => {
+const openText = (k: string, root: GNode, head: string, hard: number): Result => {
   const p = partial(root);
   if (p.closed === 0 || p.holes === 0) {
     const leaf = root.alts?.[0]?.kids[0];
     return { ok: false, text: head + "; no step closed\n" + (leaf ? goalLines(leaf.g) + triedLines(leaf) : goalLines(root.g)) };
   }
   const body = bodyText(p.pf);
-  const e = finalErr(k, p.pf, body, FUEL_PARTIAL);
+  const e = finalErrBy(hard, k, p.pf, body, FUEL_PARTIAL);
   const note = e instanceof Stop ? "; not checked (" + errText(e) + ")" : e ? "; it does NOT check in gen3: " + firstLine(e) : "";
   return {
     ok: false,
@@ -2292,11 +2395,12 @@ const proveHoles = async (k: string, ds: Src, until: number, hard: number, progr
     if (n) all.kids.push(n);
     return { at: h.at, n };
   });
+  if (all.kids.length === 0) return { ok: false, text: "# " + name + ": no hole has a goal\n" + notes.join("\n") };
   try {
     calcAlt(all);
     calcNode(root);
     await run(until, () => progress("# " + name + ": searching (" + secs(performance.now() - t0) + "): " + holes.filter((h) => h.n?.pf).length + "/" + holes.length + " holes closed"));
-    return settle(hard, () => {
+    {
       // fill from the last hole back (the earlier offsets stay valid); a fill stays only if the body
       // checks with it (the other ?TODO holes check at any goal)
       let body = ds.body;
@@ -2308,7 +2412,7 @@ const proveHoles = async (k: string, ds: Src, until: number, hard: number, progr
         const out: string[] = [];
         if (/^\s*$/.test(line)) render(pf, line, out);
         const nb = body.slice(0, h.at) + (out.length ? out.join("\n").slice(line.length) : inline(pf)) + body.slice(h.at + 5);
-        const e = finalErr(k, pf, nb);
+        const e = finalErrBy(hard, k, pf, nb);
         if (!e) { body = nb; used.push(pf); }
         else notes.push("# hole " + (i + 1) + ": a fill was found but " + (e instanceof Stop ? "its re-check did not finish: " + inline(pf) : "fails the def check (a gen3 bug): " + inline(pf)));
       }
@@ -2318,7 +2422,7 @@ const proveHoles = async (k: string, ds: Src, until: number, hard: number, progr
       const text = "# " + name + ": " + used.length + "/" + holes.length + " holes filled in " + secs(performance.now() - t0) + (S.tags.size ? " [" + tagsOf() + "]" : "") + "\n"
         + helperBlock(hs, k, true) + body + (notes.length || open.length ? "\n" + [...notes, ...open].join("\n") : "");
       return { ok, text, edit: ok ? editOf(ds, hs, body) : undefined };
-    }, () => "# " + name + ": out of time while filling the holes");
+    }
   } finally {
     dropTemps();
   }
@@ -2363,7 +2467,7 @@ const proveCmd = async (a: Args, until: number, hard: number, snap: Snap) => {
     publish(i === ks.length - 1 ? code : 3);
   }
 };
-const goalsCmd = (a: Args, snap: Snap) => {
+const goalsCmd = (a: Args, hard: number, snap: Snap) => {
   const { ks, bad } = defsOf(a);
   const out = [HONEST, ...bad];
   for (const k of ks) {
@@ -2377,16 +2481,19 @@ const goalsCmd = (a: Args, snap: Snap) => {
       if (!g) { out.push("# " + label + ": no goal (bend2 stops before it; run `check`)"); continue; }
       const n = mkNode(g, null, 0, 0)!;
       newSearch(n);
-      deadline = performance.now() + 3000;
+      deadline = Math.min(hard, performance.now() + 3000);
       try { n.alts = leafAlts(n); } catch (e) { if (e !== TIMEOUT) throw e; n.alts ??= []; } finally { deadline = Infinity; dropTemps(); }
       const nfa = n.A ?? nf(g.ty, LD(g), true);
       const nfText = nfa ? "\n# goal in normal form (deciding calls folded): " + clip(sh(g, nfa), 2000) : "";
-      out.push("# " + label + "\n" + goalLines(g) + nfText + (n.pf ? "\n# closes by: " + inline(n.pf) : triedLines(n, 12)));
+      const derived = (S.facts.get(mixH(g.ckey, g.d)) ?? []).filter((f) => f.i < 0 && !f.pf.startsWith("Equal.sym(")).slice(0, 12);
+      const factText = derived.length ? "\n# facts derived from the context (their proof : their type):\n" + derived.map((f) => "#   " + clip(f.pf, 200) + " : " + clip(attempt(FUEL_NF, () => sh(g, f.T)) ?? "?", 300)).join("\n") : "";
+      out.push("# " + label + "\n" + goalLines(g) + nfText + factText + (n.pf ? "\n# closes by: " + inline(n.pf) : triedLines(n, 12)));
     }
   }
   snap(out.join("\n"), bad.length ? 1 : 0);
 };
-const checkCmd = (a: Args, snap: Snap) => {
+// each def's check before the hard deadline (past it: "not decided")
+const checkCmd = (a: Args, hard: number, snap: Snap) => {
   const { ks, bad } = a.pos.length > 1 ? defsOf(a) : { ks: ownDefs(), bad: [] };
   const out = [HONEST, ...bad];
   let errs = 0, todo = 0;
@@ -2395,8 +2502,10 @@ const checkCmd = (a: Args, snap: Snap) => {
     const ds = defSrc(k);
     if (!ds) continue;
     todo += todoAt(ds.body).length;
+    deadline = hard;
     const se = nsOf(k) === "" ? stmtErr(k) : null;
     const e = se ?? checkErr(k, ds.body);
+    deadline = Infinity;
     if (e) { errs++; out.push("# ERROR in " + shortOf(k) + (se ? " (its statement)" : "") + ":\n" + errText(e, se ? 0 : ds.bodyLine - ds.header.split("\n").length)); }
   }
   out.push("# check " + path.basename(BK.entry) + ": " + ks.length + " defs, " + errs + " with errors, " + todo + " ?TODO (" + Math.round(performance.now() - t0) + " ms; bend2's checker in gen3; `bend --check-only` is the judge)");
@@ -2416,8 +2525,8 @@ const findCmd = (a: Args, snap: Snap) => {
 const isLemma = (k: string): boolean => {
   const t = BK.raw[k];
   if (t?.$ !== "Def" || t.v === null || t.x > 0 || t.i || isOpen(k)) return false;
-  const o = attempt(20000, () => openMeta(t.T, t.n));
-  return !!o && attempt(20000, () => isPropType(o.concl)) === true && !!defSrc(k);
+  const o = withOwnFuel(FUEL_NF * 2, () => attempt(FUEL_NF * 2, () => openMeta(t.T, t.n)));
+  return !!o && withOwnFuel(FUEL_NF * 4, () => attempt(FUEL_NF * 4, () => isPropType(o.concl))) === true && !!defSrc(k);
 };
 
 const runTask = async (t: Task, send: Send) => {
@@ -2437,15 +2546,16 @@ const runTask = async (t: Task, send: Send) => {
     return send({ id: t.id, t: "lemmas", names: ownDefs().filter((k) => only.test(shortOf(k)) && isLemma(k)) });
   }
   if (t.t === "reprove") {
-    const ds = defSrc(t.def)!;
+    const ds = defSrc(t.def);
+    if (!ds) return send({ id: t.id, t: "row", s: "ERR  " + shortOf(t.def) + ": no source text", ok: false, ms: 0 });
     const r = await proveWhole(t.def, { ...ds, body: "  ?TODO" }, now + t.budget, hard, () => {});
     const ms = Math.round(performance.now() - now);
     return send({ id: t.id, t: "row", s: (r.ok ? "OK " : "-- ") + String(ms).padStart(6) + " ms  " + shortOf(t.def) + (r.ok ? "  [" + tagsOf() + "]" : ""), ok: r.ok, ms });
   }
   switch (t.args.cmd) {
     case "prove": return proveCmd(t.args, until, hard, snap);
-    case "goals": return goalsCmd(t.args, snap);
-    case "check": return checkCmd(t.args, snap);
+    case "goals": return goalsCmd(t.args, hard, snap);
+    case "check": return checkCmd(t.args, hard, snap);
     case "find": return findCmd(t.args, snap);
   }
 };
@@ -2460,10 +2570,11 @@ const onTask = async (t: Task, send: Send) => {
     send({ id: t.id, t: "snap", s: HONEST + "\n# gen3: internal error (please report it): " + why, code: 1 });
   } finally {
     fuel = Infinity; deadline = Infinity;
-    send({ id: t.id, t: "end" });
     if (overMem || process.memoryUsage.rss() > MEM_CAP * 0.7) { books.clear(); smemo.clear(); Bun.gc(true); }
     overMem = false;
-    if (process.memoryUsage.rss() > MEM_CAP || process.env.GEN3_PROF) setTimeout(() => process.exit(0), 100);
+    const retire = process.memoryUsage.rss() > MEM_CAP || !!process.env.GEN3_PROF;
+    send({ id: t.id, t: "end", retire });
+    if (retire) setTimeout(() => process.exit(0), 100);
   }
 };
 const worker = async () => {
