@@ -240,3 +240,77 @@ def Spec.Core.step(c, i):
       Core.write(c, p, b, e)
     case Spec.Asked{Spec.Stop{}}:
       Spec.Stepped{c, [Spec.Stopped{}]}
+
+def Spec.untracked_ignored(c, p, s, h):
+  Equal.sym(
+    Spec.Stepped,
+    Spec.Stepped{c, []},
+    Spec.Core.step(c, Spec.Noticed{p, s}),
+    (%Equal.sym(
+      Bool,
+      Core.tracks(c, p),
+      Spec.Core.tracks(c, p),
+      Core.tracks_ok(c, p)
+    ): {
+      Spec.Stepped{
+        c,
+        []
+      }
+        == Shared.Bool.when(
+          Spec.Stepped,
+          _,
+          u => Core.streamed(c, p, Ep.Stream.step(Spec.Core.stream(c, p), s)),
+          u => Spec.Stepped{c, []}
+        ): Spec.Stepped
+    }; (%Equal.sym(
+      Bool,
+      Spec.Core.tracks(c, p),
+      False{},
+      h
+    ): {
+      Spec.Stepped{
+        c,
+        []
+      }
+        == Shared.Bool.when(
+          Spec.Stepped,
+          _,
+          u => Core.streamed(c, p, Ep.Stream.step(Spec.Core.stream(c, p), s)),
+          u => Spec.Stepped{c, []}
+        ): Spec.Stepped
+    }; {==}))
+  )
+
+def Spec.write_refused(c, p, b, e, h):
+  %Equal.sym(
+    Bool,
+    History.Ids.is_eq(e, Lines.Line.heads(Spec.Core.line(c), Shared.Name{Spec.Core.space(c), p})),
+    False{},
+    h
+  ):
+    {
+      Shared.Bool.when(
+        Spec.Stepped,
+        List.all.if(u => Core.tracks(c, p), _),
+        u => Core.wrote(c, p, b),
+        u => Spec.Stepped{
+          c,
+          [
+            Spec.Refused{
+              Spec.Core.name(c, p),
+              Lines.Line.heads(Spec.Core.line(c), Shared.Name{Spec.Core.space(c), p})
+            }
+          ]
+        }
+      )
+        == Spec.Stepped{
+          c,
+          [
+            Spec.Refused{
+              Shared.Name{Spec.Core.space(c), p},
+              Lines.Line.heads(Spec.Core.line(c), Shared.Name{Spec.Core.space(c), p})
+            }
+          ]
+        }: Spec.Stepped
+    }
+  {==}

@@ -471,3 +471,327 @@ def FileEp.next(w: File, ms: U32) -> IO(File & Result<&1, &1, U32 & String, List
 # the watcher w released
 def FileEp.unwatch(w: File) -> IO(Unit):
   Spec.FileFx.unwatch(w)
+
+def Spec.resource_needs_path(rest, h):
+  rest = rest
+  %Equal.sym(Bool, Spec.FileEp.is_resource(rest), False{}, h):
+    {
+      Shared.Bool.when(
+        Maybe<&2, String>,
+        _,
+        u => Some{rest},
+        u => None{}
+      )
+        == None{}: Maybe<&2, String>
+    }
+  {==}
+
+# no False is True
+def Bool.false_not_true(e: {False{} == True{}: Bool}) -> Empty:
+  %e: Bool.pick(Type, _, Empty, Unit)
+  Unit{}
+
+# what absent_only_when_known concludes, for conditions a and b and probe here
+def Absent.Goal(a: Bool, b: Bool, here: Spec.Probe) -> Type:
+  {a == True{}: Bool} & ({b == True{}: Bool} & {here == Spec.NotFound{}: Spec.Probe})
+
+# absent_only_when_known with the two conditions of FileEp.decide as a and b
+def Absent.only(
+  a: Bool,
+  b: Bool,
+  here: Spec.Probe,
+  x: String
+) -> {
+  Spec.Decision.is_absent(
+    Shared.Bool.when(
+      Spec.Decision,
+      Bool.and(a, b),
+      u => Spec.FileEp.decide.here(here),
+      u => Spec.CannotTell{x}
+    )
+  )
+    == True{}: Bool
+} -> Absent.Goal(a, b, here):
+  match a b here:
+    case True{} True{} Spec.NotFound{}:
+      h => ({==}, ({==}, {==}))
+    case True{} True{} Spec.Found{Spec.KFile{}, d}:
+      h => Empty.absurd(
+        Absent.Goal(True{}, True{}, Spec.Found{Spec.KFile{}, d}),
+        Bool.false_not_true(h)
+      )
+    case True{} True{} Spec.Found{Spec.KDir{}, d}:
+      h => Empty.absurd(
+        Absent.Goal(True{}, True{}, Spec.Found{Spec.KDir{}, d}),
+        Bool.false_not_true(h)
+      )
+    case True{} True{} Spec.Found{Spec.KOther{}, d}:
+      h => Empty.absurd(
+        Absent.Goal(True{}, True{}, Spec.Found{Spec.KOther{}, d}),
+        Bool.false_not_true(h)
+      )
+    case True{} True{} Spec.Failed{c, t}:
+      h => Empty.absurd(Absent.Goal(True{}, True{}, Spec.Failed{c, t}), Bool.false_not_true(h))
+    case True{} False{} p:
+      h => Empty.absurd(Absent.Goal(True{}, False{}, p), Bool.false_not_true(h))
+    case False{} bb p:
+      h => Empty.absurd(Absent.Goal(False{}, bb, p), Bool.false_not_true(h))
+
+def Spec.absent_only_when_known(rest, r, root, here, h):
+  match r:
+    case Spec.Root{pp, d}:
+      +rest = rest
+      +root = root
+      bad = Shared.Bool.when(
+        String,
+        Spec.FileEp.is_resource(rest),
+        u => Spec.FileEp.root_why(root),
+        u => String.append("not a file resource: ", rest)
+      )
+      Absent.only(Spec.FileEp.is_resource(rest), Spec.FileEp.root_holds(d, root), here, bad)(h)
+
+# what read_only_files concludes, for conditions a and b
+def Read.Goal(a: Bool, b: Bool) -> Type:
+  {a == True{}: Bool} & {b == True{}: Bool}
+
+# read_only_files with the two conditions of FileEp.decide as a and b
+def Read.only(
+  a: Bool,
+  b: Bool,
+  here: Spec.Probe,
+  x: String
+) -> {
+  Spec.Decision.is_read(
+    Shared.Bool.when(
+      Spec.Decision,
+      Bool.and(a, b),
+      u => Spec.FileEp.decide.here(here),
+      u => Spec.CannotTell{x}
+    )
+  )
+    == True{}: Bool
+} -> Read.Goal(a, b):
+  match a b:
+    case True{} True{}:
+      h => ({==}, {==})
+    case True{} False{}:
+      h => Empty.absurd(Read.Goal(True{}, False{}), Bool.false_not_true(h))
+    case False{} bb:
+      h => Empty.absurd(Read.Goal(False{}, bb), Bool.false_not_true(h))
+
+def Spec.read_only_files(rest, r, root, here, h):
+  match r:
+    case Spec.Root{pp, d}:
+      +rest = rest
+      +root = root
+      bad = Shared.Bool.when(
+        String,
+        Spec.FileEp.is_resource(rest),
+        u => Spec.FileEp.root_why(root),
+        u => String.append("not a file resource: ", rest)
+      )
+      Read.only(Spec.FileEp.is_resource(rest), Spec.FileEp.root_holds(d, root), here, bad)(h)
+
+# no True is False
+def Bool.true_not_false(e: {True{} == False{}: Bool}) -> Empty:
+  %e: Bool.pick(Type, _, Unit, Empty)
+  Unit{}
+
+# the decision of FileEp.decide with conditions a and b, a not holding
+def NoRes.Goal(a: Bool, b: Bool, here: Spec.Probe, x: String) -> Type:
+  {
+    Bool.or(
+      Spec.Decision.is_read(
+        Shared.Bool.when(
+          Spec.Decision,
+          Bool.and(a, b),
+          u => Spec.FileEp.decide.here(here),
+          u => Spec.CannotTell{x}
+        )
+      ),
+      Spec.Decision.is_absent(
+        Shared.Bool.when(
+          Spec.Decision,
+          Bool.and(a, b),
+          u => Spec.FileEp.decide.here(here),
+          u => Spec.CannotTell{x}
+        )
+      )
+    )
+      == False{}: Bool
+  }
+
+# non_resource_cannot_tell with the two conditions of FileEp.decide as a and b
+def NoRes.go(
+  a: Bool,
+  b: Bool,
+  here: Spec.Probe,
+  x: String
+) -> {a == False{}: Bool} -> NoRes.Goal(a, b, here, x):
+  match a:
+    case False{}:
+      h => {==}
+    case True{}:
+      h => Empty.absurd(NoRes.Goal(True{}, b, here, x), Bool.true_not_false(h))
+
+def Spec.non_resource_cannot_tell(rest, r, root, here, h):
+  match r:
+    case Spec.Root{pp, d}:
+      +rest = rest
+      +root = root
+      bad = Shared.Bool.when(
+        String,
+        Spec.FileEp.is_resource(rest),
+        u => Spec.FileEp.root_why(root),
+        u => String.append("not a file resource: ", rest)
+      )
+      NoRes.go(Spec.FileEp.is_resource(rest), Spec.FileEp.root_holds(d, root), here, bad)(h)
+
+def Spec.absence_holds_only_known(d, t, h):
+  match d:
+    case Spec.ReadIt{}:
+      h
+    case Spec.KnownAbsent{}:
+      {==}
+    case Spec.CannotTell{reason}:
+      h
+
+# one step of Hints.append over an About hint, with b the answer of
+# FileEp.is_resource for it
+def Hints.app.at(
+  b: Bool,
+  -t: List<&2, Spec.Notice>,
+  -ys: List<&2, Spec.Notice>,
+  ih: {
+    Spec.Notice.all_hints(t) == True{}: Bool
+  } -> {
+    Spec.Notice.all_hints(ys) == True{}: Bool
+  } -> {Spec.Notice.all_hints(List.append(&2, Spec.Notice, t, ys)) == True{}: Bool}
+) -> {
+  List.all.if(u => Spec.Notice.all_hints(t), b) == True{}: Bool
+} -> {
+  Spec.Notice.all_hints(ys) == True{}: Bool
+} -> {
+  List.all.if(u => Spec.Notice.all_hints(List.append(&2, Spec.Notice, t, ys)), b) == True{}: Bool
+}:
+  match b:
+    case False{}:
+      hx => hy => Empty.absurd({False{} == True{}: Bool}, Bool.false_not_true(hx))
+    case True{}:
+      hx => hy => ih(hx, hy)
+
+# appending keeps all_hints
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- the other use of ys is an erased argument of Hints.app.at
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- the unused names are premises of the proof's own type; a proof does not run
+def Hints.append(
+  xs: List<&2, Spec.Notice>,
+  ys: List<&2, Spec.Notice>
+) -> {
+  Spec.Notice.all_hints(xs) == True{}: Bool
+} -> {
+  Spec.Notice.all_hints(ys) == True{}: Bool
+} -> {Spec.Notice.all_hints(List.append(&2, Spec.Notice, xs, ys)) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      _ => hy => hy
+    case Con{Spec.About{r, Ep.Hinted{}}, t}:
+      Hints.app.at(Spec.FileEp.is_resource(r), t, ys, Hints.append(t, ys))
+    case Con{Spec.About{r, Ep.Reached{x}}, t}:
+      hx => _ => Empty.absurd(
+        {
+          Spec.Notice.all_hints(
+            List.append(&2, Spec.Notice, Con{Spec.About{r, Ep.Reached{x}}, t}, ys)
+          )
+            == True{}: Bool
+        },
+        Bool.false_not_true(hx)
+      )
+    case Con{Spec.About{r, Ep.Fetched{x, y}}, t}:
+      hx => _ => Empty.absurd(
+        {
+          Spec.Notice.all_hints(
+            List.append(&2, Spec.Notice, Con{Spec.About{r, Ep.Fetched{x, y}}, t}, ys)
+          )
+            == True{}: Bool
+        },
+        Bool.false_not_true(hx)
+      )
+    case Con{Spec.About{r, Ep.Overflowed{}}, t}:
+      hx => _ => Empty.absurd(
+        {
+          Spec.Notice.all_hints(
+            List.append(&2, Spec.Notice, Con{Spec.About{r, Ep.Overflowed{}}, t}, ys)
+          )
+            == True{}: Bool
+        },
+        Bool.false_not_true(hx)
+      )
+    case Con{Spec.Moved{x, y}, t}:
+      Hints.append(t, ys)
+    case Con{Spec.AllOverflowed{}, t}:
+      Hints.append(t, ys)
+    case Con{Spec.AllLost{w}, t}:
+      Hints.append(t, ys)
+
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# the hint of a resource r, with b the answer of FileEp.is_resource(r)
+def Hints.of(
+  r: String,
+  b: Bool
+) -> {
+  Spec.FileEp.is_resource(r) == b: Bool
+} -> {
+  Spec.Notice.all_hints(
+    Spec.FileEp.hint.of(Shared.Bool.when(Maybe<&2, String>, b, u => Some{r}, u => None{}))
+  )
+    == True{}: Bool
+}:
+  match b:
+    case False{}:
+      e => {==}
+    case True{}:
+      e =>
+        %Equal.sym(Bool, Spec.FileEp.is_resource(r), True{}, e):
+          {List.all.if(u => Spec.Notice.all_hints([]), _) == True{}: Bool}
+        {==}
+
+# the hint of a report path is a hint about a resource
+def Hints.path(
+  p: Maybe<&2, String>
+) -> {Spec.Notice.all_hints(Spec.FileEp.hint(p)) == True{}: Bool}:
+  match p:
+    case None{}:
+      {==}
+    case Some{+r}:
+      Hints.of(r, Spec.FileEp.is_resource(r), {==})
+
+# the Moved notice of a rename is no About
+def Hints.moved(
+  x: Maybe<&2, String>,
+  y: Maybe<&2, String>
+) -> {Spec.Notice.all_hints(Spec.FileEp.moved(x, y)) == True{}: Bool}:
+  match x y:
+    case Some{a} Some{b}:
+      {==}
+    case Some{a} None{}:
+      {==}
+    case None{} Some{b}:
+      {==}
+    case None{} None{}:
+      {==}
+
+def Spec.notices_are_hints(e):
+  match e:
+    case Spec.Touched{p}:
+      Hints.path(p)
+    case Spec.Renamed{+a, +b}:
+      m = Spec.FileEp.moved(Spec.FileEp.path_of(a), Spec.FileEp.path_of(b))
+      rest = List.append(&2, Spec.Notice, Spec.FileEp.hint(a), Spec.FileEp.hint(b))
+      inner = Hints.append(Spec.FileEp.hint(a), Spec.FileEp.hint(b), Hints.path(a), Hints.path(b))
+      Hints.append(m, rest, Hints.moved(Spec.FileEp.path_of(a), Spec.FileEp.path_of(b)), inner)
+    case Spec.Dropped{}:
+      {==}
+    case Spec.RootGone{}:
+      {==}
