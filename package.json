@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "lint": "bend-lint",
-    "gen2": "bun tools/gen2/gen2.ts"
+    "gen3": "bun tools/gen3/gen3.ts"
   },
   "devDependencies": {
     "bend-lint": "0.3.0"

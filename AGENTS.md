@@ -103,7 +103,7 @@ Follow the `bend2` and the `experimental-bend-spec` skills.
 - **It's built for speed and sharing.** Content is stored once by hash, edits cost little even in huge
   files, and histories from different machines can be joined.
 - **It's proven correct.** Its rules are stated as laws that Bend's checker verifies, and a helper tool
-  (gen2) writes many of those proofs automatically.
+  (gen3) writes many of those proofs automatically.
 
 - README.md is for users and stays short. Internals go here and in code comments.
 - `bend-lint.json` picks the rules `bun run lint` runs (bend-lint's own, from BendHub).
