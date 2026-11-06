@@ -39,8 +39,7 @@ Delete each item when it is done.
   - `diff` takes versions (id prefixes, or a line for its head), not marks.
   - A merge into a line that is behind always makes a merge node (no fast-forward); a resource with several heads on
     either side clashes.
-  - Decisions you may revisit: `write` reads its bytes from `--from <file>` (Base has no effect that reads standard
-    input); a write without `BEND_VER_AGENT` is signed `unnamed`; a merge is all-or-nothing (one clash and no resource
+  - Decisions you may revisit: a write without `BEND_VER_AGENT` is signed `unnamed`; a merge is all-or-nothing (one clash and no resource
     moves, so a line never holds half of a merge whose resources may need each other); `start-or-resume` runs in the
     foreground (a detached start needs a new foreign effect); the door is TCP on 127.0.0.1 with a random 128-bit token
     in the file `daemon` of the data folder (Unix sockets or named pipes need foreign code). On Windows the data folder

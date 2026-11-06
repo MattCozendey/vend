@@ -1797,7 +1797,7 @@ def Answer.go(+d: Spec.Daemon, a: String, c: Spec.Command, b: Shared.Bytes()) ->
       Answer.impact(d, Ref.source(d, t), t)
     case Spec.LineNew{nm, +f}:
       Answer.fork(d, Ref.source(d, f), nm, f)
-    case Spec.WriteTo{n, ln, ps}:
+    case Spec.WriteTo{n, ln, ps, f}:
       Answer.write(d, a, n, ln, ps, b)
     case Spec.RestoreTo{+n, ln, v}:
       Answer.restore.of(d, Answer.content(d, Ref.version(d, n, v)), a, n, ln)

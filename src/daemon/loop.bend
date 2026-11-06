@@ -877,10 +877,75 @@ def Serve.asked(
           k
         )
 
+# the bytes of the resource at u through the endpoint e of its scheme
+def Source.at(
+  e: Maybe<&2, Shared.Endpoint>,
+  u: Shared.Uri
+) -> IO(Result<&2, &2, String, Shared.Bytes()>):
+  match e:
+    case None{}:
+      IO.pure(Result<&2, &2, String, Shared.Bytes()>, Fail{"no endpoint serves its scheme"})
+    case Some{Shared.FileEndpoint{}}:
+      FileImpl.FileEp.source(u)
+
+# the bytes of the resource at the URI m, through its endpoint, or why
+# they cannot be had
+def Source.fetch(m: Maybe<&2, Shared.Uri>) -> IO(Result<&2, &2, String, Shared.Bytes()>):
+  match m:
+    case None{}:
+      IO.pure(Result<&2, &2, String, Shared.Bytes()>, Fail{"it is not a URI"})
+    case Some{+u}:
+      Source.at(Shared.Endpoint.of(u), u)
+
+# the command c of the agent a handled with the fetched bytes, or refused
+# with why the source could not be read
+def Serve.fetched(
+  r: Result<&2, &2, String, Shared.Bytes()>,
+  t: String,
+  a: String,
+  c: Spec.Command,
+  +st: Serve,
+  j: File,
+  sock: Socket,
+  k: Serve -> File -> IO(Unit)
+) -> IO(Unit):
+  match r:
+    case Done{b}:
+      Serve.asked(Spec.Daemon.handle(Serve.daemon(st), a, c, b), st, j, sock, k)
+    case Fail{why}:
+      do IO<Unit>:
+        Wire.send(
+          sock,
+          Spec.Response.encode(
+            Spec.Said{False{}, [String.concat(["refused: cannot read ", t, ": ", why])]}
+          )
+        )
+        k(st, j)
+
+# the command c of the agent a handled: with the bytes of its source when
+# it names one (fetched first), else with the request's data b
+def Serve.sourced(
+  m: Maybe<&2, String>,
+  a: String,
+  c: Spec.Command,
+  b: Shared.Bytes(),
+  +st: Serve,
+  j: File,
+  sock: Socket,
+  k: Serve -> File -> IO(Unit)
+) -> IO(Unit):
+  match m:
+    case None{}:
+      Serve.asked(Spec.Daemon.handle(Serve.daemon(st), a, c, b), st, j, sock, k)
+    case Some{+t}:
+      do IO<Unit>:
+        r: Result<&2, &2, String, Shared.Bytes()> <- Source.fetch(Shared.Uri.read(t))
+        Serve.fetched(r, t, a, c, st, j, sock, k)
+
 # what the daemon does about the action a, answering on sock
 def Serve.act(
   a: Spec.Action,
-  +st: Serve,
+  st: Serve,
   j: File,
   sock: Socket,
   k: Serve -> File -> IO(Unit)
@@ -903,8 +968,8 @@ def Serve.act(
       do IO<Unit>:
         Wire.send(sock, Spec.Response.encode(Spec.Stopping{}))
         Serve.end(st, j, "bend-ver stopped")
-    case Spec.DoAsk{a, c, b}:
-      Serve.asked(Spec.Daemon.handle(Serve.daemon(st), a, c, b), st, j, sock, k)
+    case Spec.DoAsk{a, +c, b}:
+      Serve.sourced(Spec.Command.source(c), a, c, b, st, j, sock, k)
 
 # the request in the bytes of a connection, decided and acted on
 def Serve.request(
@@ -1309,33 +1374,10 @@ def Client.ask(b: Spec.Body) -> IO(Unit):
     m: Maybe<&2, String> <- CoreLoop.Log.dir()
     Client.dir(m, b)
 
-# the everyday command of the words ws, with the bytes read
-def Client.file(
-  r: Result<&2, &2, String, Shared.Bytes()>,
-  a: String,
-  ws: List<&2, String>,
-  f: String
-) -> IO(Unit):
-  match r:
-    case Fail{e}:
-      IO.die(Unit, 1, String.concat(["cannot read ", f, ": ", e]))
-    case Done{b}:
-      Client.ask(Spec.Ask{a, ws, b})
-
-# the everyday command of the words ws by the agent a, with the bytes of
-# the file from as its data (none without one)
-def Client.data(a: String, ws: List<&2, String>, from: Maybe<&2, String>) -> IO(Unit):
-  match from:
-    case None{}:
-      Client.ask(Spec.Ask{a, ws, []})
-    case Some{+f}:
-      do IO<Unit>:
-        r: Result<&2, &2, String, Shared.Bytes()> <- CoreLoop.Log.bytes(Text.Text.encode(f))
-        Client.file(r, a, ws, f)
-
-# the everyday command of the words ws sent to the daemon, signed with the
-# agent named by BEND_VER_AGENT ("unnamed" when it is not set)
-def Client.everyday(ws: List<&2, String>, from: Maybe<&2, String>) -> IO(Unit):
+# the everyday command of the words ws sent to the daemon with the bytes
+# b, signed with the agent named by BEND_VER_AGENT ("unnamed" when it is
+# not set)
+def Client.everyday(ws: List<&2, String>, b: Shared.Bytes()) -> IO(Unit):
   do IO<Unit>:
     a: Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_VER_AGENT")
-    Client.data(Maybe.default(&2, String, CoreLoop.Log.env(a, ""), "unnamed"), ws, from)
+    Client.ask(Spec.Ask{Maybe.default(&2, String, CoreLoop.Log.env(a, ""), "unnamed"), ws, b})

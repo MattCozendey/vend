@@ -104,6 +104,64 @@ def FileEp.read(p: Shared.Bytes()) -> IO(Got):
     o: Result<&1, &1, U32 & String, File> <- File.open_bytes(p, "r")
     FileEp.read.opened(o)
 
+# Sources
+# -------
+# A write may take its bytes from a file URI. Like a fetch, the read probes
+# first, reads only a regular file, and says why it cannot when it cannot.
+
+# the source after a read: its bytes, again() while the file moved, or why
+def FileEp.source.got(
+  g: Got,
+  again: Unit -> IO(Result<&2, &2, String, Shared.Bytes()>)
+) -> IO(Result<&2, &2, String, Shared.Bytes()>):
+  match g:
+    case Read{b}:
+      IO.pure(Result<&2, &2, String, Shared.Bytes()>, Done{b})
+    case Moving{}:
+      again(Unit{})
+    case Unreadable{why}:
+      IO.pure(Result<&2, &2, String, Shared.Bytes()>, Fail{why})
+
+# the bytes of the regular file at the OS path p, read again while it
+# changes, at most fuel times
+def FileEp.source.read(fuel: Nat, +p: Shared.Bytes()) -> IO(Result<&2, &2, String, Shared.Bytes()>):
+  match fuel:
+    case 0n:
+      IO.pure(Result<&2, &2, String, Shared.Bytes()>, Fail{"it kept changing while it was read"})
+    case 1n+f:
+      do IO<Result<&2, &2, String, Shared.Bytes()>>:
+        g: Got <- FileEp.read(p)
+        FileEp.source.got(g, u => FileEp.source.read(f, p))
+
+# the bytes of the file at the OS path p after its probe decided d
+def FileEp.source.decided(
+  d: Spec.Decision,
+  p: Shared.Bytes()
+) -> IO(Result<&2, &2, String, Shared.Bytes()>):
+  match d:
+    case Spec.ReadIt{}:
+      FileEp.source.read(4n, p)
+    case Spec.KnownAbsent{}:
+      IO.pure(Result<&2, &2, String, Shared.Bytes()>, Fail{"nothing is there"})
+    case Spec.CannotTell{why}:
+      IO.pure(Result<&2, &2, String, Shared.Bytes()>, Fail{why})
+
+# the bytes of the file at the OS path, if the URI names a local file
+def FileEp.source.at(m: Maybe<&2, String>) -> IO(Result<&2, &2, String, Shared.Bytes()>):
+  match m:
+    case None{}:
+      IO.pure(Result<&2, &2, String, Shared.Bytes()>, Fail{"it is not a local file URI"})
+    case Some{path}:
+      do IO<Result<&2, &2, String, Shared.Bytes()>>:
+        +p: Shared.Bytes() = Text.Text.encode(path)
+        here: Spec.Probe <- Spec.FileFx.probe(p)
+        FileEp.source.decided(Spec.FileEp.decide.here(here), p)
+
+# the bytes of the file that the file URI u names, or why they cannot be
+# read
+def FileEp.source(u: Shared.Uri) -> IO(Result<&2, &2, String, Shared.Bytes()>):
+  FileEp.source.at(Spec.FileEp.root_of(u))
+
 # the decision for rest: it probes the root, then rest's path
 def FileEp.decide(+root: Spec.Root, +rest: String) -> IO(Spec.Decision):
   do IO<Spec.Decision>:

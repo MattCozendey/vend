@@ -17,6 +17,27 @@ def Main.uri(+t: String) -> String:
     t
   )
 
+# the everyday command of the words ws sent with standard input as its
+# bytes, or why standard input could not be read
+def Main.stdin(r: Result<&1, &1, U32 & String, Shared.Bytes()>, ws: List<&2, String>) -> IO(Unit):
+  match r:
+    case Fail{e}:
+      (c, t) = e
+      IO.die(Unit, 1, String.append("cannot read standard input: ", t))
+    case Done{b}:
+      Daemon.Client.everyday(ws, b)
+
+# the everyday command of the words ws sent with its bytes: standard input
+# when it reads it (a write without --from), else none
+def Main.ask(stdin: Bool, ws: List<&2, String>) -> IO(Unit):
+  match stdin:
+    case False{}:
+      Daemon.Client.everyday(ws, [])
+    case True{}:
+      do IO<Unit>:
+        r: Result<&1, &1, U32 & String, Shared.Bytes()> <- Cli.Stdin.read_all()
+        Main.stdin(r, ws)
+
 # the run of a parsed command line
 def Main.run(c: Result<&2, &2, String, Cli.Cmd>) -> IO(Unit):
   match c:
@@ -34,8 +55,8 @@ def Main.run(c: Result<&2, &2, String, Cli.Cmd>) -> IO(Unit):
       Daemon.Client.ask(Spec.Unmount{Main.uri(r)})
     case Done{Cli.DaemonStop{f}}:
       Daemon.Client.ask(Spec.Stop{f})
-    case Done{Cli.AskCmd{ws, f}}:
-      Daemon.Client.everyday(ws, f)
+    case Done{Cli.AskCmd{+ws}}:
+      Main.ask(Cli.Cli.reads_stdin(ws), ws)
 
 # the arguments as a reusable list
 def Main.args(xs: List<String>) -> List<&2, String>:

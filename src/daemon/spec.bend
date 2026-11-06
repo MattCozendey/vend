@@ -265,7 +265,10 @@ law unmount_frames:
 # force it refuses while mounts are active or other clients are connected.
 # Ask: one of the everyday commands, as its words (Command.read reads
 # them), signed by the agent named agent (BEND_VER_AGENT; empty for none),
-# with data: the bytes that a write writes, else none.
+# with data: the bytes that a write writes, when the front has them (the
+# CLI reads them from standard input; the MCP front passes them), else
+# none. A write that names --from <uri> takes its bytes from that resource
+# instead, which the daemon fetches.
 type Body is Data:
   Status{}
   Mount{uri: String, globs: List<&2, String>, line: String}
@@ -631,7 +634,9 @@ law apply_forked_mark:
 #   impact <line|line@mark>                 the changeset since the fork,
 #                                           classified, and its radius
 #   line new <name> --from <line|line@mark> a new line
-#   write <name> --expect <ids|none> [--line L]   a version of the data
+#   write <name> --expect <ids|none> [--line L] [--from <uri>]
+#                                           a version of the data, or of
+#                                           the resource at the URI
 #   restore <name> <version> [--line L]     a version with an old content
 #   mark <line> <name> -m <message>         a mark of the line as it is
 #   merge <line|line@mark> into <line>      a merge, every resource or none
@@ -643,14 +648,24 @@ type Command is Data:
   AffectsOf{line: String}
   ImpactOf{target: String}
   LineNew{name: String, from: String}
-  WriteTo{name: Shared.Name, line: String, expect: List<&2, String>}
+  WriteTo{name: Shared.Name, line: String, expect: List<&2, String>, from: Maybe<&2, String>}
   RestoreTo{name: Shared.Name, line: String, version: String}
   MarkMade{line: String, name: String, message: String}
   MergeOf{from: String, into: String}
 
+# the resource whose bytes a command writes, as a URI the daemon fetches
+# before it handles the command: a write's --from; every other command
+# writes the request's data, or nothing
+def Command.source(c: Command) -> Maybe<&2, String>:
+  match c:
+    case WriteTo{n, ln, e, f}:
+      f
+    case _:
+      None{}
+
 # the syntax of the everyday commands
 def Command.syntax() -> String:
-  "lines | log <name> [--line L] [--author A] | show <name> [<version>] | diff <name> <a> <b> | affects <line> | impact <line|line@mark> | line new <name> --from <line|line@mark> | write <name> --expect <ids|none> [--line L] | restore <name> <version> [--line L] | mark <line> <name> -m <message> | merge <line|line@mark> into <line>"
+  "lines | log <name> [--line L] [--author A] | show <name> [<version>] | diff <name> <a> <b> | affects <line> | impact <line|line@mark> | line new <name> --from <line|line@mark> | write <name> --expect <ids|none> [--line L] [--from <uri>] | restore <name> <version> [--line L] | mark <line> <name> -m <message> | merge <line|line@mark> into <line>"
 
 # the usage of the everyday commands
 def Command.usage() -> String:
@@ -769,12 +784,12 @@ def Command.line(r: List<&2, String>) -> Result<&2, &2, String, Command>:
     case _:
       Fail{Command.usage()}
 
-# write <name> --expect <ids|none> [--line L]
+# write <name> --expect <ids|none> [--line L] [--from <uri>]
 def Command.write(r: List<&2, String>) -> Result<&2, &2, String, Command>:
   match r:
-    case Con{a, Con{b, +t}}:
+    case Con{a, Con{+b, +t}}:
       e = Command.expect(Maybe.default(&2, String, Opts.get(b <> t, "--expect"), "none"))
-      Command.named(a, n => WriteTo{n, Opts.line(t), e})
+      Command.named(a, n => WriteTo{n, Opts.line(t), e, Opts.get(b <> t, "--from")})
     case _:
       Fail{Command.usage()}
 
@@ -947,13 +962,15 @@ law reads_record_nothing:
   {Handled.records(Daemon.handle(d, a, c, b)) == []: List<&2, Journal.Record>}
 
 # a write that did not see the heads of the line now is refused, and keeps
-# nothing
+# nothing. Its bytes b are the request's data, or the resource of its
+# --from, which the daemon fetched before (Command.source)
 law write_stale:
   for d: Daemon
   for a: String
   for n: Shared.Name
   for ln: String
   for ps: List<&2, String>
+  for f: Maybe<&2, String>
   for b: Shared.Bytes()
   for e: List<&2, Shared.Bytes()>
   for i: {Daemon.ids(d, n, ps) == Some{e}: Maybe<&2, List<&2, Shared.Bytes()>>}
@@ -964,17 +981,18 @@ law write_stale:
     )
       == False{}: Bool
   }
-  {Handled.records(Daemon.handle(d, a, WriteTo{n, ln, ps}, b)) == []: List<&2, Journal.Record>} &
-    {Handled.ok(Daemon.handle(d, a, WriteTo{n, ln, ps}, b)) == False{}: Bool}
+  {Handled.records(Daemon.handle(d, a, WriteTo{n, ln, ps, f}, b)) == []: List<&2, Journal.Record>} &
+    {Handled.ok(Daemon.handle(d, a, WriteTo{n, ln, ps, f}, b)) == False{}: Bool}
 
-# a write that saw the heads of the line now keeps exactly one version: the
-# data, after those heads, signed by the agent
+# a write that saw the heads of the line now keeps exactly one version: its
+# bytes b, after those heads, signed by the agent
 law write_kept:
   for d: Daemon
   for a: String
   for n: Shared.Name
   for ln: String
   for ps: List<&2, String>
+  for f: Maybe<&2, String>
   for b: Shared.Bytes()
   for e: List<&2, Shared.Bytes()>
   for i: {Daemon.ids(d, n, ps) == Some{e}: Maybe<&2, List<&2, Shared.Bytes()>>}
@@ -987,7 +1005,7 @@ law write_kept:
   }
   {
     Handled.records(
-      Daemon.handle(d, a, WriteTo{n, ln, ps}, b)
+      Daemon.handle(d, a, WriteTo{n, ln, ps, f}, b)
     )
       == [
         Journal.Kept{
