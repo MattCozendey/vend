@@ -84,12 +84,14 @@ def Core.nest(c: Spec.Core, d: String) -> Spec.Core:
 def Core.heads(+c: Spec.Core, path: String) -> List<&2, Shared.Bytes()>:
   Lines.Line.heads(Spec.Core.line(c), Spec.Core.name(c, path))
 
-# the step after the line took the node x of the file at path, or refused
+# the step after the line took the node x by the author a of the file at
+# path, or refused
 def Core.advanced(
   c: Spec.Core,
   +path: String,
   h2: History.History,
   x: Shared.Bytes(),
+  a: History.Author,
   r: Result<&2, &2, Lines.Refused, Lines.Line>
 ) -> Spec.Stepped:
   match r:
@@ -98,17 +100,19 @@ def Core.advanced(
       n = Spec.Core.name(c, path)
       Spec.Stepped{
         Core.set_moved(Core.set_versions(c, h2, l2), path, None{}),
-        [Spec.Recorded{n, x}]
+        [Spec.Recorded{n, x, a}]
       }
     case Fail{e}:
       +c = c
       Spec.Stepped{c, [Spec.Failed{Spec.Core.name(c, path), Spec.LineProblem{e}}]}
 
-# the step after the history took the node, or lacked a parent
+# the step after the history took the node by the author a, or lacked a
+# parent
 def Core.added(
   +c: Spec.Core,
   +path: String,
   parents: List<&2, Shared.Bytes()>,
+  a: History.Author,
   r: Result<&2, &2, History.Refusal, History.Added>
 ) -> Spec.Stepped:
   match r:
@@ -118,38 +122,43 @@ def Core.added(
         path,
         h2,
         x,
+        a,
         Lines.Line.advance(Spec.Core.line(c), h2, Spec.Core.name(c, path), parents, x)
       )
     case Fail{e}:
       Spec.Stepped{c, [Spec.Failed{Spec.Core.name(c, path), Spec.HistoryProblem{e}}]}
 
-# the step that keeps body as the next version of the file at path: its
-# parents are the heads on the line, then the line moves to it
-def Core.keep(+c: Spec.Core, +path: String, body: History.Body) -> Spec.Stepped:
+# the step that keeps body, by the author a, as the next version of the file
+# at path: its parents are the heads on the line, then the line moves to it
+def Core.keep(+c: Spec.Core, +path: String, body: History.Body, +a: History.Author) -> Spec.Stepped:
   +parents = Core.heads(c, path)
-  v = {History.Node{Spec.Core.name(c, path), parents, body, Spec.Core.moved(c, path)}: History.Node}
-  Core.added(c, path, parents, History.History.add(Spec.Core.history(c), v))
+  v = {
+    History.Node{Spec.Core.name(c, path), parents, body, Spec.Core.moved(c, path), a}: History.Node
+  }
+  Core.added(c, path, parents, a, History.History.add(Spec.Core.history(c), v))
 
 # the step after the store took the content of the file at path, or failed
 def Core.stored(
   +c: Spec.Core,
   path: String,
-  r: Result<&2, &2, Store.Problem, Store.Wrote>
+  r: Result<&2, &2, Store.Problem, Store.Wrote>,
+  a: History.Author
 ) -> Spec.Stepped:
   match r:
     case Fail{p}:
       Spec.Stepped{c, [Spec.Failed{Spec.Core.name(c, path), Spec.StoreProblem{p}}]}
     case Done{Store.Wrote{s2, root}}:
-      Core.keep(Core.set_store(c, s2), path, History.Has{root})
+      Core.keep(Core.set_store(c, s2), path, History.Has{root}, a)
 
-# the step that records the version v of the file at path: content goes to
-# the store, then to the history; Gone goes to the history
-def Core.record(+c: Spec.Core, path: String, v: Ep.Version) -> Spec.Stepped:
+# the step that records the version v of the file at path, by the author
+# a: content goes to the store, then to the history; Gone goes to the
+# history
+def Core.record(+c: Spec.Core, path: String, v: Ep.Version, a: History.Author) -> Spec.Stepped:
   match v:
     case Ep.Content{bytes, t}:
-      Core.stored(c, path, Store.Tree.write(Spec.Core.store(c), Spec.Core.items(bytes)))
+      Core.stored(c, path, Store.Tree.write(Spec.Core.store(c), Spec.Core.items(bytes)), a)
     case Ep.Gone{}:
-      Core.keep(c, path, History.Gone{})
+      Core.keep(c, path, History.Gone{}, a)
 
 # os in front of the outputs of s
 def Core.prefix(os: List<&2, Spec.Output>, s: Spec.Stepped) -> Spec.Stepped:
@@ -164,29 +173,35 @@ def Core.then(r: Spec.Stepped, k: Spec.Core -> Spec.Stepped) -> Spec.Stepped:
       Core.prefix(os, k(c))
 
 # the step that carries out the effects of a stream, in order: a Send is a
-# Command output, a Record is recorded
-def Core.effects(es: List<&2, Ep.Effect>, c: Spec.Core, +path: String) -> Spec.Stepped:
+# Command output, a Record is recorded by the author a
+def Core.effects(
+  es: List<&2, Ep.Effect>,
+  c: Spec.Core,
+  +path: String,
+  +a: History.Author
+) -> Spec.Stepped:
   match es:
     case Nil{}:
       Spec.Stepped{c, []}
     case Con{Ep.Send{k}, t}:
-      Core.prefix([Spec.Command{path, k}], Core.effects(t, c, path))
+      Core.prefix([Spec.Command{path, k}], Core.effects(t, c, path, a))
     case Con{Ep.Record{v}, t}:
-      Core.then(Core.record(c, path, v), c2 => Core.effects(t, c2, path))
+      Core.then(Core.record(c, path, v, a), c2 => Core.effects(t, c2, path, a))
 
-# the step after the stream of the file at path stepped to s
-def Core.streamed(c: Spec.Core, +path: String, s: Ep.Stepped) -> Spec.Stepped:
+# the step after the stream of the file at path stepped to s; what it
+# records is by the author a
+def Core.streamed(c: Spec.Core, +path: String, s: Ep.Stepped, a: History.Author) -> Spec.Stepped:
   match s:
     case Ep.Stepped{k, es}:
-      Core.effects(es, Core.set_stream(c, path, k), path)
+      Core.effects(es, Core.set_stream(c, path, k), path, a)
 
 # the step after the signal s about the file at path: nothing for a file
-# the core does not track
+# the core does not track; what an endpoint shows is by Outside
 def Core.noticed(+c: Spec.Core, +path: String, s: Ep.Signal) -> Spec.Stepped:
   Shared.Bool.when(
     Spec.Stepped,
     Core.tracks(c, path),
-    u => Core.streamed(c, path, Ep.Stream.step(Spec.Core.stream(c, path), s)),
+    u => Core.streamed(c, path, Ep.Stream.step(Spec.Core.stream(c, path), s), History.Outside{}),
     u => Spec.Stepped{c, []}
   )
 
@@ -204,26 +219,27 @@ def Core.belief(last: Maybe<&2, Shared.Bytes()>) -> Ep.Expect:
 # matched), so the write is recorded now and the endpoint is a mirror: the
 # Put carries what the core last recorded, and the endpoint answers with
 # what is really there.
-def Core.wrote(+c: Spec.Core, +path: String, +b: Shared.Bytes()) -> Spec.Stepped:
+def Core.wrote(+c: Spec.Core, +path: String, +b: Shared.Bytes(), a: History.Author) -> Spec.Stepped:
   e = Core.belief(Ep.Stream.last(Spec.Core.stream(c, path)))
-  Core.streamed(c, path, Ep.Stream.wrote(b, Hash.Hash.blake3(b), e))
+  Core.streamed(c, path, Ep.Stream.wrote(b, Hash.Hash.blake3(b), e), a)
 
-# the step of a write of b to the file at path by a writer that saw the
-# heads e on the line. Refused when e are not the heads on the line now;
+# the step of a write of b to the file at path by the agent named a, which
+# saw the heads e on the line. Refused when e are not the heads on the line now;
 # also refused, with the heads, for a file the core does not track, which
 # it does not write.
 def Core.write(
   +c: Spec.Core,
   +path: String,
   b: Shared.Bytes(),
-  e: List<&2, Shared.Bytes()>
+  e: List<&2, Shared.Bytes()>,
+  a: String
 ) -> Spec.Stepped:
   +heads = Core.heads(c, path)
   ok = List.all.if(u => Core.tracks(c, path), History.Ids.is_eq(e, heads))
   Shared.Bool.when(
     Spec.Stepped,
     ok,
-    u => Core.wrote(c, path, b),
+    u => Core.wrote(c, path, b, History.Agent{a}),
     u => Spec.Stepped{c, [Spec.Refused{Spec.Core.name(c, path), heads}]}
   )
 
@@ -236,8 +252,8 @@ def Spec.Core.step(c, i):
       Spec.Stepped{Core.set_moved(c, t, Some{Spec.Core.name(c, f)}), []}
     case Spec.Nested{d}:
       Spec.Stepped{Core.nest(c, d), []}
-    case Spec.Asked{Spec.Write{p, b, e}}:
-      Core.write(c, p, b, e)
+    case Spec.Asked{Spec.Write{p, b, e, a}}:
+      Core.write(c, p, b, e, a)
     case Spec.Asked{Spec.Stop{}}:
       Spec.Stepped{c, [Spec.Stopped{}]}
 
@@ -259,7 +275,7 @@ def Spec.untracked_ignored(c, p, s, h):
         == Shared.Bool.when(
           Spec.Stepped,
           _,
-          u => Core.streamed(c, p, Ep.Stream.step(Spec.Core.stream(c, p), s)),
+          u => Core.streamed(c, p, Ep.Stream.step(Spec.Core.stream(c, p), s), History.Outside{}),
           u => Spec.Stepped{c, []}
         ): Spec.Stepped
     }; (%Equal.sym(
@@ -275,13 +291,13 @@ def Spec.untracked_ignored(c, p, s, h):
         == Shared.Bool.when(
           Spec.Stepped,
           _,
-          u => Core.streamed(c, p, Ep.Stream.step(Spec.Core.stream(c, p), s)),
+          u => Core.streamed(c, p, Ep.Stream.step(Spec.Core.stream(c, p), s), History.Outside{}),
           u => Spec.Stepped{c, []}
         ): Spec.Stepped
     }; {==}))
   )
 
-def Spec.write_refused(c, p, b, e, h):
+def Spec.write_refused(c, p, b, e, a, h):
   %Equal.sym(
     Bool,
     History.Ids.is_eq(e, Lines.Line.heads(Spec.Core.line(c), Shared.Name{Spec.Core.space(c), p})),
@@ -292,7 +308,7 @@ def Spec.write_refused(c, p, b, e, h):
       Shared.Bool.when(
         Spec.Stepped,
         List.all.if(u => Core.tracks(c, p), _),
-        u => Core.wrote(c, p, b),
+        u => Core.wrote(c, p, b, History.Agent{a}),
         u => Spec.Stepped{
           c,
           [

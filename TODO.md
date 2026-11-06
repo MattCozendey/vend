@@ -19,11 +19,27 @@ Delete each item when it is done.
     same-size change within one clock tick is missed.
   - Debounce: a quiet window before fetching, so a truncate-then-write does not record the empty state.
   - Retry a transient Windows sharing violation during a fetch instead of reporting `Unreachable`.
-  - No fsync after a write; a temp file left by a crash is never removed; files over 4 GiB (`File.size` is `U32`).
+  - A temp file left by a crash is never removed; files over 4 GiB (`File.size` is `U32`).
   - File URIs: percent-encoded characters are not decoded yet (a `%` is taken as itself).
 - `src/shared.bend`: a faster Table inside (e.g. Base Map), proving the same three laws.
 - `src/core`: more than one mount per loop, and a `--line` option in the CLI (today: one mount, line `main`).
 - `src/graph`: references across spaces (a reference with a scheme or an authority) through mounts; today unresolved.
+- The daemon (decided):
+  - One daemon per user per machine, serving all spaces.
+  - Started ONLY by `bend-ver start-or-resume`: no other start or resume command, and no auto-start (not on first
+    use, not at login). The user may turn the machine off at any moment.
+  - When it is down, every agent command fails with "bend-ver is not running; ask the user to run
+    `bend-ver start-or-resume`".
+  - Fronts, both thin (they build core inputs and print outputs): a CLI over a local socket (one command per call;
+    `affects` streams), and an MCP server over stdio.
+  - `daemon stop`: refuses while clients or mounts are active, unless `--force`; not offered to agents.
+- Durability (decided): acknowledge a write only after its write-ahead-log entry is fsynced; on `start-or-resume`,
+  replay the log, then rescan the mounts and record what changed while the daemon was down. The file driver must
+  fsync its writes (today it does not).
+- CLI for marks (`src/lines`, `Mark`): `bend-ver mark <line> <name> -m <message>`, `merge <line>@<mark> into <line>`,
+  `diff <mark> <mark>`.
+- Fronts: read the agent name from `BEND_VER_AGENT` (CLI) or the client name (MCP) for `Write`; give `affects` the
+  agent's seen marker (`src/lines`, `SeenBook`).
 
 ## Prove
 
@@ -40,15 +56,12 @@ and soundness are proven in `src/shared.bend`).
   `edit_keeps`, `write_collides`, `edit_collides`, `diff_applies`, `diff_answers`.
 - `src/conditions`: `sat_holds`, `sat_unsat`, `canon_same`, `canon_unique`.
 - `src/history`: `node_encode_injective`, `add_refused`, `add_node`, `add_collides`, `add_idempotent`, `add_tips`,
-  `join_keeps`, `join_adds_nothing`, `join_commutes`, `join_associates`, `join_idempotent`. `add_collides` (its
-  `Node.id(a) == Node.id(b)` part) holds only for a history whose nodes sit under their own ids: it needs that
-  premise.
-- `src/lines`: `advance_head`, `advance_frames`, `advance_descends`. `advance_head` is false as stated for a name
-  of another space (`Line.advance` accepts it, but `Line.heads` of such a name is always `[]`): it needs a
-  same-space premise, or `advance` must refuse such names.
+  `new_ok`, `add_ok`, `join_keeps`, `join_adds_nothing`, `join_commutes`, `join_associates`, `join_idempotent`.
+- `src/lines`: `advance_head`, `advance_frames`, `advance_descends`, `seen_caught_up`, `seen_frames`, `mark_heads`,
+  `mark_fixed`.
 - `src/graph`: `affected_exact`.
 - `src/core`: `noticed_follows_stream`, `records_each_version`, `fetched_reads_back`, `recorded_heads_line`,
-  `write_accepted`, `nested_untracked`, `step_keeps_history`.
+  `write_accepted`, `write_authored`, `nested_untracked`, `step_keeps_history`.
 - `src/endpoints/file`: `temp_is_temp`.
 
 ## Strengthen

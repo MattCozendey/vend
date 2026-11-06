@@ -30,11 +30,12 @@ def Mount.space_file() -> String:
 # Inputs
 # ------
 
-# A request from a front. Write: write bytes to the file at path, by a
-# writer that saw the heads expect on the line of the mount. The core
-# orders these, so its check is exact. Stop: end the loop.
+# A request from a front. Write: write bytes to the file at path, by the
+# agent named agent, which saw the heads expect on the line of the mount;
+# the version records the agent as its author. The core orders these, so
+# its check is exact. Stop: end the loop.
 type Request is Data:
-  Write{path: String, bytes: Shared.Bytes(), expect: List<&2, Shared.Bytes()>}
+  Write{path: String, bytes: Shared.Bytes(), expect: List<&2, Shared.Bytes()>, agent: String}
   Stop{}
 
 # Something for the core to handle; an endpoint speaks in paths relative
@@ -61,13 +62,13 @@ type Problem is Data:
 
 # Something for the loop to carry out or to report. Command: send it to
 # the endpoint for the file at path. Recorded: a new version of name, with
-# its id, now the head of name on the line. Refused: a write whose expected
+# its id and author, now the head of name on the line. Refused: a write whose expected
 # heads are not the heads on the line, which it names. Failed: a version
 # that could not be kept, so the history and the line did not change.
 # Stopped: the loop ends.
 type Output is Data:
   Command{path: String, command: Ep.Command}
-  Recorded{name: Shared.Name, id: Shared.Bytes()}
+  Recorded{name: Shared.Name, id: Shared.Bytes(), author: History.Author}
   Refused{name: Shared.Name, heads: List<&2, Shared.Bytes()>}
   Failed{name: Shared.Name, problem: Problem}
   Stopped{}
@@ -220,17 +221,17 @@ def Output.recorded(os: List<&2, Output>) -> List<&2, Shared.Bytes()>:
   match os:
     case Nil{}:
       Nil{}
-    case Con{Recorded{n, x}, t}:
+    case Con{Recorded{n, x, a}, t}:
       x <> Output.recorded(t)
     case Con{o, t}:
       Output.recorded(t)
 
-# the outputs hold Recorded{n, x}
+# the outputs hold a Recorded of n with id x
 def Output.has_recorded(os: List<&2, Output>, +n: Shared.Name, +x: Shared.Bytes()) -> Bool:
   match os:
     case Nil{}:
       False{}
-    case Con{Recorded{m, y}, t}:
+    case Con{Recorded{m, y, a}, t}:
       same = List.all.if(
         u => Shared.Bytes.is_eq(y, x),
         String.eq(Shared.Name.show(m), Shared.Name.show(n))
@@ -320,7 +321,9 @@ law fetched_reads_back:
       Core.history(Stepped.core(Core.step(c, Noticed{p, Ep.Fetched{bytes, t}}))),
       x
     )
-      == Some{History.Node{Core.name(c, p), parents, History.Has{r}, from}}: Maybe<&2, History.Node>
+      == Some{
+        History.Node{Core.name(c, p), parents, History.Has{r}, from, History.Outside{}}
+      }: Maybe<&2, History.Node>
   }
   {
     Store.Tree.read(
@@ -346,11 +349,12 @@ law write_refused:
   for p: String
   for b: Shared.Bytes()
   for e: List<&2, Shared.Bytes()>
+  for a: String
   for h: {History.Ids.is_eq(e, Lines.Line.heads(Core.line(c), Core.name(c, p))) == False{}: Bool}
   {
     Core.step(
       c,
-      Asked{Write{p, b, e}}
+      Asked{Write{p, b, e, a}}
     )
       == Stepped{
         c,
@@ -365,6 +369,7 @@ law write_accepted:
   for p: String
   for b: Shared.Bytes()
   for e: List<&2, Shared.Bytes()>
+  for a: String
   for t: {Core.tracks(c, p) == True{}: Bool}
   for h: {History.Ids.is_eq(e, Lines.Line.heads(Core.line(c), Core.name(c, p))) == True{}: Bool}
   for f: {
@@ -372,7 +377,7 @@ law write_accepted:
       ~&2,
       ~Output,
       ~Output.is_failed,
-      Stepped.outputs(Core.step(c, Asked{Write{p, b, e}}))
+      Stepped.outputs(Core.step(c, Asked{Write{p, b, e, a}}))
     )
       == False{}: Bool
   }
@@ -380,7 +385,7 @@ law write_accepted:
     List.length(
       &2,
       Ep.Command,
-      Output.commands(Stepped.outputs(Core.step(c, Asked{Write{p, b, e}})))
+      Output.commands(Stepped.outputs(Core.step(c, Asked{Write{p, b, e, a}})))
     )
       == 1n: Nat
   }
@@ -389,10 +394,34 @@ law write_accepted:
       List.length(
         &2,
         Shared.Bytes(),
-        Output.recorded(Stepped.outputs(Core.step(c, Asked{Write{p, b, e}})))
+        Output.recorded(Stepped.outputs(Core.step(c, Asked{Write{p, b, e, a}})))
       )
         == 1n: Nat
     }
+
+# the version an accepted write records names its agent as the author
+law write_authored:
+  for c: Core
+  for p: String
+  for b: Shared.Bytes()
+  for e: List<&2, Shared.Bytes()>
+  for a: String
+  for x: Shared.Bytes()
+  for v: History.Node
+  for o: {
+    Output.recorded(
+      Stepped.outputs(Core.step(c, Asked{Write{p, b, e, a}}))
+    )
+      == [x]: List<&2, Shared.Bytes()>
+  }
+  for g: {
+    History.History.get(
+      Core.history(Stepped.core(Core.step(c, Asked{Write{p, b, e, a}}))),
+      x
+    )
+      == Some{v}: Maybe<&2, History.Node>
+  }
+  {History.Node.author(v) == History.Agent{a}: History.Author}
 
 # a move records and sends nothing, and remembers where the file came from
 # for its next version

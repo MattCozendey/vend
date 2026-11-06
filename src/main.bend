@@ -5,16 +5,29 @@ import ./core/spec.bend as Core
 import ./glob/impl.bend as GlobImpl
 import ./glob/spec.bend as Glob
 import ./hash/spec.bend as Hash
+import ./history/spec.bend as History
 import ./shared.bend as Shared
 
 # The program: the CLI picks the command, and the core's loop does the
 # work. This file only turns outputs into lines.
 
+# the text of an author
+def Main.author(a: History.Author) -> String:
+  match a:
+    case History.Agent{n}:
+      n
+    case History.Outside{}:
+      "Outside"
+
 # the line of an output; commands go to the endpoint and never reach here
 def Main.report(o: Core.Output) -> IO(Unit):
   match o:
-    case Core.Recorded{n, x}:
-      IO.print(String.concat(["recorded ", Shared.Name.show(n), " ", Hash.Hash.hex(x)]))
+    case Core.Recorded{n, x, a}:
+      IO.print(
+        String.concat(
+          ["recorded ", Shared.Name.show(n), " ", Hash.Hash.hex(x), " by ", Main.author(a)]
+        )
+      )
     case Core.Refused{n, hs}:
       IO.print("refused " ++ Shared.Name.show(n))
     case Core.Failed{n, p}:

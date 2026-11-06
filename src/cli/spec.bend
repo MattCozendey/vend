@@ -9,7 +9,9 @@ import ../shared.bend as Shared
 # Shared.Uri.read reads it) that the globs select, on the line "main"; each
 # glob is read by Glob.Rule.read and matches the path relative to the root
 # (a leading '!' excludes, and the last glob that matches a path decides);
-# with no globs given, every file ("**"). Help: print the usage.
+# with no globs given, every file ("**"). Watch records what it sees as
+# Outside; a command that writes signs its versions with the agent name in
+# the environment variable BEND_VER_AGENT. Help: print the usage.
 type Cmd is Data:
   Watch{root: String, globs: List<&2, String>}
   Help{}

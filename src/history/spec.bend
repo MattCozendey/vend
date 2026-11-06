@@ -17,15 +17,25 @@ type Body is Data:
   Has{root: Store.Ref}
   Gone{}
 
+# Who wrote a version. Agent: a writer through a front, by the name the
+# front gives (the CLI reads it from the environment variable
+# BEND_VER_AGENT; the MCP front uses its client's name). Outside: an edit
+# the endpoint saw that no front made (an editor, a formatter, a build).
+type Author is Data:
+  Agent{name: String}
+  Outside{}
+
 # One version of the resource name, after its parents (none for the first,
 # several for a merge). from: the name this resource moved from, on the
-# first version after a move that the endpoint reported.
+# first version after a move that the endpoint reported. author: who wrote
+# it; part of the id, so two writers of the same content make two nodes.
 type Node is Data:
   Node{
     name: Shared.Name,
     parents: List<&2, Shared.Bytes()>,
     body: Body,
-    from: Maybe<&2, Shared.Name>
+    from: Maybe<&2, Shared.Name>,
+    author: Author
   }
 
 # the bytes of a name: its space, then its path, each as UTF-8 and framed
@@ -60,16 +70,35 @@ def From.encode(f: Maybe<&2, Shared.Name>) -> Shared.Bytes():
     case Some{m}:
       1 <> Name.encode(m)
 
-# the bytes that a node's id hashes: name, parents, body, then moved-from;
-# each part frames itself, so distinct nodes give distinct bytes
+# the bytes of an author: 0 for Outside, or 1 then the agent's name as
+# UTF-8, framed
+def Author.encode(a: Author) -> Shared.Bytes():
+  match a:
+    case Outside{}:
+      [0]
+    case Agent{n}:
+      1 <> Store.Bytes.framed(Text.Text.encode(n))
+
+# the bytes that a node's id hashes: name, parents, body, moved-from, then
+# author; each part frames itself, so distinct nodes give distinct bytes
 def Node.encode(n: Node) -> Shared.Bytes():
   match n:
-    case Node{m, ps, b, f}:
+    case Node{m, ps, b, f, a}:
       List.append(
         &2,
         U32,
         Name.encode(m),
-        List.append(&2, U32, Ids.encode(ps), List.append(&2, U32, Body.encode(b), From.encode(f)))
+        List.append(
+          &2,
+          U32,
+          Ids.encode(ps),
+          List.append(
+            &2,
+            U32,
+            Body.encode(b),
+            List.append(&2, U32, From.encode(f), Author.encode(a))
+          )
+        )
       )
 
 # the id of n
@@ -153,17 +182,32 @@ def Ids.all_in(+h: History, xs: List<&2, Shared.Bytes()>) -> Bool:
     case Con{x, t}:
       List.all.if(u => Ids.all_in(h, t), History.has(h, x))
 
+# who wrote v
+def Node.author(v: Node) -> Author:
+  match v:
+    case Node{n, ps, b, f, a}:
+      a
+
 # the resource of v
 def Node.name(v: Node) -> Shared.Name:
   match v:
-    case Node{n, ps, b, f}:
+    case Node{n, ps, b, f, a}:
       n
 
 # the parents of v
 def Node.parents(v: Node) -> List<&2, Shared.Bytes()>:
   match v:
-    case Node{n, ps, b, f}:
+    case Node{n, ps, b, f, a}:
       ps
+
+# h is well formed: every node it holds sits under its own id, so what
+# get finds for x is a node whose id has the hex of x. History.new is well
+# formed and add keeps it so (new_ok, add_ok), so every history the core
+# builds is. Only laws about where a node sits need it.
+def History.Ok(h: History) -> Type:
+  @x: Shared.Bytes() -> @v: Node -> {
+    History.get(h, x) == Some{v}: Maybe<&2, Node>
+  } -> {Hash.Hash.hex(Node.id(v)) == Hash.Hash.hex(x): String}
 
 # Adding
 # ------
@@ -215,12 +259,14 @@ law add_node:
   for a: {History.add(h, v) == Done{Added{g, x}}: Result<&2, &2, Refusal, Added>}
   {History.get(g, x) == Some{v}: Maybe<&2, Node>} & {x == Node.id(v): Shared.Bytes()}
 
-# a refused add for a collision names another node with the same id
+# a refused add for a collision, in a well-formed history, names another
+# node with the same id
 law add_collides:
   for h: History
   for v: Node
   for a: Node
   for b: Node
+  for k: History.Ok(h)
   for c: {History.add(h, v) == Fail{Collides{a, b}}: Result<&2, &2, Refusal, Added>}
   {Node.same(a, b) == False{}: Bool} & {Node.id(a) == Node.id(b): Shared.Bytes()}
 
@@ -244,18 +290,34 @@ law add_idempotent:
   for o: {History.get(h, Node.id(v)) == Some{v}: Maybe<&2, Node>}
   {History.add(h, v) == Done{Added{h, Node.id(v)}}: Result<&2, &2, Refusal, Added>}
 
-# after an add, the node is a tip of its resource, and none of its parents
-# is
+# after an add of a node that h did not hold, the node is a tip of its
+# resource, and none of its parents is (a node that h held already changes
+# nothing, and may have children)
 law add_tips:
   for h: History
   for v: Node
   for g: History
   for x: Shared.Bytes()
   for p: Shared.Bytes()
+  for n: {History.has(h, Node.id(v)) == False{}: Bool}
   for a: {History.add(h, v) == Done{Added{g, x}}: Result<&2, &2, Refusal, Added>}
   for q: {Ids.has(Node.parents(v), p) == True{}: Bool}
   {Ids.has(History.tips(g, Node.name(v)), x) == True{}: Bool} &
     {Ids.has(History.tips(g, Node.name(v)), p) == False{}: Bool}
+
+# a new history is well formed
+law new_ok:
+  History.Ok(History.new())
+
+# an add keeps a history well formed
+law add_ok:
+  for h: History
+  for v: Node
+  for g: History
+  for x: Shared.Bytes()
+  for k: History.Ok(h)
+  for a: {History.add(h, v) == Done{Added{g, x}}: Result<&2, &2, Refusal, Added>}
+  History.Ok(g)
 
 # an add touches only the tips of its own resource
 law add_frames:
