@@ -5,25 +5,6 @@ import ./spec.bend as Spec
 
 # Proofs of the stream laws. Most are a split on the stream and evaluation;
 # the write laws go through the two Bool.when lemmas below.
-def Word.cmp_refl(n: Nat, a: Word(n)) -> {Word.cmp(n, a, a) == EQ{}: Cmp}:
-  match n:
-    case 0n:
-      match a:
-        case WNil{}:
-          {==}
-    case 1n+np:
-      match a:
-        case WCon{+head, tail}:
-          match head:
-            case False{}:
-              %Equal.sym(Cmp, Word.cmp(np, tail, tail), EQ{}, Word.cmp_refl(np, tail)):
-                {Word.cmp.fin(False{}, False{}, _) == EQ{}: Cmp}
-              {==}
-            case True{}:
-              %Equal.sym(Cmp, Word.cmp(np, tail, tail), EQ{}, Word.cmp_refl(np, tail)):
-                {Word.cmp.fin(True{}, True{}, _) == EQ{}: Cmp}
-              {==}
-
 def U32.is_eq_refl(x: U32) -> {U32.is_eq(x, x) == True{}: Bool}:
   match x:
     case U32{w}:
@@ -31,7 +12,7 @@ def U32.is_eq_refl(x: U32) -> {U32.is_eq(x, x) == True{}: Bool}:
         Cmp,
         Word.cmp(32n, w, w),
         EQ{},
-        Word.cmp_refl(32n, w)
+        Shared.Word.cmp_refl(32n, w)
       ): {Cmp.is_eq(_) == True{}: Bool}
       {==}
 
@@ -50,7 +31,7 @@ def Bytes.is_eq_refl(b: Shared.Bytes()) -> {Shared.Bytes.is_eq(b, b) == True{}: 
               Cmp,
               Word.cmp(32n, data, data),
               EQ{},
-              Word.cmp_refl(32n, data)
+              Shared.Word.cmp_refl(32n, data)
             ): {
               True{} == List.all.if(u => Shared.Bytes.is_eq(tail, tail), Cmp.is_eq(_)): Bool
             }; (%Equal.sym(

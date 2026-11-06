@@ -7,7 +7,7 @@ import ./spec.bend as Spec
 def Line.set(l: Spec.Line, p: String, x: Shared.Bytes()) -> Spec.Line:
   match l:
     case Spec.Line{sp, nm, hs}:
-      Spec.Line{sp, nm, Map.set(&2, List<&2, Shared.Bytes()>, hs, p, [x])}
+      Spec.Line{sp, nm, Shared.Table.set(List<&2, Shared.Bytes()>, hs, p, [x])}
 
 def Spec.Line.advance(l, h, n, expect, x):
   +l = l

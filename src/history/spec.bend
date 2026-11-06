@@ -81,39 +81,32 @@ def Node.id(n: Node) -> Shared.Bytes():
 # has as a parent, in ascending byte order of their ids. Several tips mean
 # the resource forked: two lines, or two machines, wrote it apart.
 type History is Data:
-  History{nodes: Map<&2, Maybe<&2, Node>>, tips: Map<&2, List<&2, Shared.Bytes()>>}
+  History{nodes: Shared.Table<Node>, tips: Shared.Table<List<&2, Shared.Bytes()>>}
 
 # a history with no nodes
 def History.new() -> History:
-  History{Map.new(&2, Maybe<&2, Node>), Map.new(&2, List<&2, Shared.Bytes()>)}
-
-# the node of the found pair
-def History.get.got(r: Map<&2, Maybe<&2, Node>> & Maybe<&2, Node>) -> Maybe<&2, Node>:
-  (m, v) = r
-  v
+  History{Shared.Table.new(Node), Shared.Table.new(List<&2, Shared.Bytes()>)}
 
 # the node with id x, or None
 def History.get(h: History, x: Shared.Bytes()) -> Maybe<&2, Node>:
   match h:
     case History{ns, ts}:
-      History.get.got(Map.get(Maybe<&2, Node>, None{}, ns, Hash.Hash.hex(x)))
+      Shared.Table.get(Node, ns, Hash.Hash.hex(x))
 
 # h holds a node with id x
 def History.has(h: History, x: Shared.Bytes()) -> Bool:
   Maybe.is_some(&2, Node, History.get(h, x))
 
-# the tips of the found pair
-def History.tips.got(
-  r: Map<&2, List<&2, Shared.Bytes()>> & List<&2, Shared.Bytes()>
-) -> List<&2, Shared.Bytes()>:
-  (m, v) = r
-  v
-
 # the tips of the resource n: none when it has no version yet
 def History.tips(h: History, n: Shared.Name) -> List<&2, Shared.Bytes()>:
   match h:
     case History{ns, ts}:
-      History.tips.got(Map.get(List<&2, Shared.Bytes()>, [], ts, Shared.Name.show(n)))
+      Maybe.default(
+        &2,
+        List<&2, Shared.Bytes()>,
+        Shared.Table.get(List<&2, Shared.Bytes()>, ts, Shared.Name.show(n)),
+        []
+      )
 
 # xs and ys are the same ids in the same order
 def Ids.is_eq(xs: List<&2, Shared.Bytes()>, ys: List<&2, Shared.Bytes()>) -> Bool:

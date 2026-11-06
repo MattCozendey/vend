@@ -71,10 +71,15 @@ def History.put(h: Spec.History, +x: Shared.Bytes(), +v: Spec.Node) -> Spec.Hist
   match h:
     case Spec.History{ns, +ts}:
       +key = Shared.Name.show(Spec.Node.name(v))
-      old = Spec.History.tips.got(Map.get(List<&2, Shared.Bytes()>, [], ts, key))
+      old = Maybe.default(
+        &2,
+        List<&2, Shared.Bytes()>,
+        Shared.Table.get(List<&2, Shared.Bytes()>, ts, key),
+        []
+      )
       tips = Ids.insert(x, Ids.without(old, Spec.Node.parents(v)))
-      nodes = Map.set(&2, Maybe<&2, Spec.Node>, ns, Hash.Hash.hex(x), Some{v})
-      Spec.History{nodes, Map.set(&2, List<&2, Shared.Bytes()>, ts, key, tips)}
+      nodes = Shared.Table.set(Spec.Node, ns, Hash.Hash.hex(x), v)
+      Spec.History{nodes, Shared.Table.set(List<&2, Shared.Bytes()>, ts, key, tips)}
 
 # the add of v, given the missing parent if any
 def History.add.of(

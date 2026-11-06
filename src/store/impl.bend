@@ -95,7 +95,7 @@ def Store.put.at(
 ) -> Result<&2, &2, Spec.Problem, Spec.Store>:
   match s old:
     case Spec.Store{m} None{}:
-      Done{Spec.Store{Map.set(&2, Maybe<&2, Spec.Node>, m, key, Some{n})}}
+      Done{Spec.Store{Shared.Table.set(Spec.Node, m, key, n)}}
     case st Some{+o}:
       Shared.Bool.when(
         Result<&2, &2, Spec.Problem, Spec.Store>,

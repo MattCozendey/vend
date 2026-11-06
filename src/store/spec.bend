@@ -235,22 +235,17 @@ def Tree.root(items: List<&2, Shared.Bytes()>) -> Ref:
 
 # The nodes, by the hex of their hash.
 type Store is Data:
-  Store{nodes: Map<&2, Maybe<&2, Node>>}
+  Store{nodes: Shared.Table<Node>}
 
 # a store with no nodes
 def Store.new() -> Store:
-  Store{Map.new(&2, Maybe<&2, Node>)}
-
-# the node of the found pair, or None
-def Store.get.got(r: Map<&2, Maybe<&2, Node>> & Maybe<&2, Node>) -> Maybe<&2, Node>:
-  (m, v) = r
-  v
+  Store{Shared.Table.new(Node)}
 
 # the node at hash h, or None
 def Store.get(s: Store, h: Shared.Bytes()) -> Maybe<&2, Node>:
   match s:
     case Store{m}:
-      Store.get.got(Map.get(Maybe<&2, Node>, None{}, m, Hash.Hash.hex(h)))
+      Shared.Table.get(Node, m, Hash.Hash.hex(h))
 
 # a then b, or None when either is None
 def Items.both(

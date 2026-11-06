@@ -54,13 +54,13 @@ def Core.tracks_ok(
 def Core.set_stream(c: Spec.Core, path: String, k: Ep.Stream) -> Spec.Core:
   match c:
     case Spec.Core{m, s, h, l, ss, ms, ns}:
-      Spec.Core{m, s, h, l, Map.set(&2, Ep.Stream, ss, path, k), ms, ns}
+      Spec.Core{m, s, h, l, Shared.Table.set(Ep.Stream, ss, path, k), ms, ns}
 
 # c with the pending move of the file at path set to f
 def Core.set_moved(c: Spec.Core, path: String, f: Maybe<&2, Shared.Name>) -> Spec.Core:
   match c:
     case Spec.Core{m, s, h, l, ss, ms, ns}:
-      Spec.Core{m, s, h, l, ss, Map.set(&2, Maybe<&2, Shared.Name>, ms, path, f), ns}
+      Spec.Core{m, s, h, l, ss, Shared.Table.set(Maybe<&2, Shared.Name>, ms, path, f), ns}
 
 # c with the store s2
 def Core.set_store(c: Spec.Core, s2: Store.Store) -> Spec.Core:

@@ -85,8 +85,8 @@ type Core is Data:
     store: Store.Store,
     history: History.History,
     line: Lines.Line,
-    streams: Map<&2, Ep.Stream>,
-    moves: Map<&2, Maybe<&2, Shared.Name>>,
+    streams: Shared.Table<Ep.Stream>,
+    moves: Shared.Table<Maybe<&2, Shared.Name>>,
     nested: List<&2, String>
   }
 
@@ -99,8 +99,8 @@ def Core.new(m: Mount) -> Core:
         Store.Store.new(),
         History.History.new(),
         Lines.Line.new(sp, ln),
-        Map.new(&2, Ep.Stream),
-        Map.new(&2, Maybe<&2, Shared.Name>),
+        Shared.Table.new(Ep.Stream),
+        Shared.Table.new(Maybe<&2, Shared.Name>),
         []
       }
 
@@ -155,31 +155,24 @@ def Core.line(c: Core) -> Lines.Line:
     case Core{m, s, h, l, ss, ms, ns}:
       l
 
-# the stream of the found pair
-def Core.stream.got(r: Map<&2, Ep.Stream> & Ep.Stream) -> Ep.Stream:
-  (m, k) = r
-  k
-
 # the stream of the file at path in c: a new stream for a file seen for the
 # first time
 def Core.stream(c: Core, path: String) -> Ep.Stream:
   match c:
     case Core{m, s, h, l, ss, ms, ns}:
-      Core.stream.got(Map.get(Ep.Stream, Ep.Stream.new(), ss, path))
-
-# the pending moved-from name of the found pair
-def Core.moved.got(
-  r: Map<&2, Maybe<&2, Shared.Name>> & Maybe<&2, Shared.Name>
-) -> Maybe<&2, Shared.Name>:
-  (m, k) = r
-  k
+      Maybe.default(&2, Ep.Stream, Shared.Table.get(Ep.Stream, ss, path), Ep.Stream.new())
 
 # the name the file at path moved from, while its next version is not
 # recorded yet
 def Core.moved(c: Core, path: String) -> Maybe<&2, Shared.Name>:
   match c:
     case Core{m, s, h, l, ss, ms, ns}:
-      Core.moved.got(Map.get(Maybe<&2, Shared.Name>, None{}, ms, path))
+      Maybe.default(
+        &2,
+        Maybe<&2, Shared.Name>,
+        Shared.Table.get(Maybe<&2, Shared.Name>, ms, path),
+        None{}
+      )
 
 # The result of a step: the core after it, and its outputs in order.
 type Stepped is Data:

@@ -241,3 +241,413 @@ law name_show_after_read:
   for n: Name
   for h: {Name.read(t) == Some{n}: Maybe<&2, Name>}
   {Name.show(n) == t: String}
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# Equality of strings
+# -------------------
+# Tables compare keys with String.eq, so their laws need it to be
+# reflexive and sound.
+
+# Unit when c is not EQ
+def Cmp.Ne(c: Cmp) -> Type:
+  match c:
+    case LT{}:
+      Unit
+    case EQ{}:
+      Empty
+    case GT{}:
+      Unit
+
+# no c that is not EQ equals EQ
+def Cmp.ne_eq(-c: Cmp, n: Cmp.Ne(c), e: {c == EQ{}: Cmp}) -> Empty:
+  %e: Cmp.Ne(_)
+  n
+
+# no False equals True
+def Bool.false_ne_true(e: {False{} == True{}: Bool}) -> Empty:
+  %e: Bool.pick(Type, _, Empty, Unit)
+  Unit{}
+
+# Cmp.is_eq is True only for EQ
+def Cmp.is_eq_sound(c: Cmp) -> {Cmp.is_eq(c) == True{}: Bool} -> {c == EQ{}: Cmp}:
+  match c:
+    case LT{}:
+      h => Empty.absurd({LT{} == EQ{}: Cmp}, Bool.false_ne_true(h))
+    case EQ{}:
+      h => {==}
+    case GT{}:
+      h => Empty.absurd({GT{} == EQ{}: Cmp}, Bool.false_ne_true(h))
+
+# Bool.cmp is EQ only for equal Bools
+def Bool.cmp_eq(a: Bool, b: Bool) -> {Bool.cmp(a, b) == EQ{}: Cmp} -> {a == b: Bool}:
+  match a b:
+    case False{} False{}:
+      h => {==}
+    case False{} True{}:
+      h => Empty.absurd({False{} == True{}: Bool}, Cmp.ne_eq(LT{}, Unit{}, h))
+    case True{} False{}:
+      h => Empty.absurd({True{} == False{}: Bool}, Cmp.ne_eq(GT{}, Unit{}, h))
+    case True{} True{}:
+      h => {==}
+
+# the last step of Word.cmp_eq, with t the comparison of the tails
+def Word.cmp_eq.fin(
+  -p: Nat,
+  ab: Bool,
+  bb: Bool,
+  -at: Word(p),
+  -bt: Word(p),
+  t: Cmp,
+  ih: {Word.cmp(p, at, bt) == EQ{}: Cmp} -> {at == bt: Word(p)}
+) -> {
+  Word.cmp(p, at, bt) == t: Cmp
+} -> {Word.cmp.fin(ab, bb, t) == EQ{}: Cmp} -> {WCon{ab, at} == WCon{bb, bt}: Word(1n+p)}:
+  match t:
+    case LT{}:
+      e => h => Empty.absurd({WCon{ab, at} == WCon{bb, bt}: Word(1n+p)}, Cmp.ne_eq(LT{}, Unit{}, h))
+    case EQ{}:
+      e => h =>
+        %Bool.cmp_eq(ab, bb)(h): {WCon{ab, at} == WCon{_, bt}: Word(1n+p)}
+        %ih(e): {WCon{ab, at} == WCon{ab, _}: Word(1n+p)}
+        {==}
+    case GT{}:
+      e => h => Empty.absurd({WCon{ab, at} == WCon{bb, bt}: Word(1n+p)}, Cmp.ne_eq(GT{}, Unit{}, h))
+
+# Word.cmp is EQ only for equal words
+def Word.cmp_eq(
+  +n: Nat,
+  a: Word(n),
+  b: Word(n)
+) -> {Word.cmp(n, a, b) == EQ{}: Cmp} -> {a == b: Word(n)}:
+  match n:
+    case 0n:
+      match a b:
+        case WNil{} WNil{}:
+          _ => {==}
+    case 1n+p:
+      match a b:
+        case WCon{ab, +at} WCon{bb, +bt}:
+          h => Word.cmp_eq.fin(
+            p,
+            ab,
+            bb,
+            at,
+            bt,
+            Word.cmp(p, at, bt),
+            Word.cmp_eq(p, at, bt)
+          )({==}, h)
+
+# Word.cmp of a word with itself is EQ
+def Word.cmp_refl(n: Nat, a: Word(n)) -> {Word.cmp(n, a, a) == EQ{}: Cmp}:
+  match n:
+    case 0n:
+      match a:
+        case WNil{}:
+          {==}
+    case 1n+np:
+      match a:
+        case WCon{+head, tail}:
+          match head:
+            case False{}:
+              %Equal.sym(Cmp, Word.cmp(np, tail, tail), EQ{}, Word.cmp_refl(np, tail)):
+                {Word.cmp.fin(False{}, False{}, _) == EQ{}: Cmp}
+              {==}
+            case True{}:
+              %Equal.sym(Cmp, Word.cmp(np, tail, tail), EQ{}, Word.cmp_refl(np, tail)):
+                {Word.cmp.fin(True{}, True{}, _) == EQ{}: Cmp}
+              {==}
+
+# String.order.go of a string with itself, from EQ, is EQ
+def String.order_refl(a: String) -> {String.order.go(a, a, EQ{}) == EQ{}: Cmp}:
+  match a:
+    case SNil{}:
+      {==}
+    case SCon{c, t}:
+      match c:
+        case Chr{x}:
+          match x:
+            case U32{w}:
+              %Equal.sym(Cmp, Word.cmp(32n, w, w), EQ{}, Word.cmp_refl(32n, w)):
+                {String.order.go(t, t, _) == EQ{}: Cmp}
+              String.order_refl(t)
+
+# String.order.go ends at EQ only if it started at EQ
+def String.order_keeps(
+  c: Cmp,
+  a: String,
+  b: String
+) -> {String.order.go(a, b, c) == EQ{}: Cmp} -> {c == EQ{}: Cmp}:
+  match c:
+    case EQ{}:
+      h => {==}
+    case LT{}:
+      match a b:
+        case SNil{} SNil{}:
+          h => Empty.absurd({LT{} == EQ{}: Cmp}, Cmp.ne_eq(LT{}, Unit{}, h))
+        case SNil{} SCon{y, t2}:
+          h => Empty.absurd({LT{} == EQ{}: Cmp}, Cmp.ne_eq(LT{}, Unit{}, h))
+        case SCon{x, t1} SNil{}:
+          h => Empty.absurd({LT{} == EQ{}: Cmp}, Cmp.ne_eq(LT{}, Unit{}, h))
+        case SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
+          h => Empty.absurd({LT{} == EQ{}: Cmp}, Cmp.ne_eq(LT{}, Unit{}, h))
+    case GT{}:
+      match a b:
+        case SNil{} SNil{}:
+          h => Empty.absurd({GT{} == EQ{}: Cmp}, Cmp.ne_eq(GT{}, Unit{}, h))
+        case SNil{} SCon{y, t2}:
+          h => Empty.absurd({GT{} == EQ{}: Cmp}, Cmp.ne_eq(GT{}, Unit{}, h))
+        case SCon{x, t1} SNil{}:
+          h => Empty.absurd({GT{} == EQ{}: Cmp}, Cmp.ne_eq(GT{}, Unit{}, h))
+        case SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
+          h => Empty.absurd({GT{} == EQ{}: Cmp}, Cmp.ne_eq(GT{}, Unit{}, h))
+
+# String.order.go from c is String.order.go from EQ, when c is EQ
+def String.order_at(
+  -c: Cmp,
+  -t1: String,
+  -t2: String,
+  e: {c == EQ{}: Cmp}
+) -> {String.order.go(t1, t2, c) == EQ{}: Cmp} -> {String.order.go(t1, t2, EQ{}) == EQ{}: Cmp}:
+  %e: {String.order.go(t1, t2, c) == EQ{}: Cmp} -> {String.order.go(t1, t2, _) == EQ{}: Cmp}
+  h => h
+
+# String.order.go from EQ ends at EQ only for equal strings
+def String.order_sound(
+  a: String,
+  b: String
+) -> {String.order.go(a, b, EQ{}) == EQ{}: Cmp} -> {a == b: String}:
+  match a b:
+    case SNil{} SNil{}:
+      _ => {==}
+    case SNil{} SCon{y, t2}:
+      h => Empty.absurd({SNil{} == SCon{y, t2}: String}, Cmp.ne_eq(LT{}, Unit{}, h))
+    case SCon{x, t1} SNil{}:
+      h => Empty.absurd({SCon{x, t1} == SNil{}: String}, Cmp.ne_eq(GT{}, Unit{}, h))
+    case SCon{Chr{U32{+w1}}, +t1} SCon{Chr{U32{+w2}}, +t2}:
+      +h =>
+        +e = String.order_keeps(Word.cmp(32n, w1, w2), t1, t2)(h)
+        h2 = String.order_at(Word.cmp(32n, w1, w2), t1, t2, e)(h)
+        %Word.cmp_eq(32n, w1, w2)(e): {SCon{Chr{U32{w1}}, t1} == SCon{Chr{U32{_}}, t2}: String}
+        %String.order_sound(t1, t2)(h2): {SCon{Chr{U32{w1}}, t1} == SCon{Chr{U32{w1}}, _}: String}
+        {==}
+
+# every string equals itself
+def String.eq_refl(a: String) -> {String.eq(a, a) == True{}: Bool}:
+  %Equal.sym(
+    Cmp,
+    String.order.go(a, a, EQ{}),
+    EQ{},
+    String.order_refl(a)
+  ): {Cmp.is_eq(_) == True{}: Bool}
+  {==}
+
+# String.eq is True only for equal strings
+def String.eq_sound(
+  +a: String,
+  +b: String
+) -> {String.eq(a, b) == True{}: Bool} -> {a == b: String}:
+  h => String.order_sound(a, b)(Cmp.is_eq_sound(String.order.go(a, b, EQ{}))(h))
+
+# Tables
+# ------
+# A table maps keys to values. It is a plain list of rows for now, with no
+# key twice; a faster inside (Base's Map, say) may replace it later by
+# proving the same three laws. No other spec may rely on anything else
+# about a table.
+
+# A table: rows of a key and its value.
+type Table<-V: Data> is Data:
+  TNil{}
+  TRow{key: String, val: V, rest: Table<V>}
+
+# a table with no rows
+def Table.new(-V: Data) -> Table<V>:
+  TNil{}
+
+# the value of key k in t, or None
+def Table.get(-V: Data, t: Table<V>, +k: String) -> Maybe<&2, V>:
+  match t:
+    case TNil{}:
+      None{}
+    case TRow{rk, v, r}:
+      Bool.when(Maybe<&2, V>, String.eq(rk, k), u => Some{v}, u => Table.get(V, r, k))
+
+# t without the row of key k
+def Table.del(-V: Data, t: Table<V>, +k: String) -> Table<V>:
+  match t:
+    case TNil{}:
+      TNil{}
+    case TRow{+rk, v, +r}:
+      Bool.when(
+        Table<V>,
+        String.eq(rk, k),
+        u => Table.del(V, r, k),
+        u => TRow{rk, v, Table.del(V, r, k)}
+      )
+
+# t with key k mapped to v
+def Table.set(-V: Data, t: Table<V>, +k: String, v: V) -> Table<V>:
+  TRow{k, v, Table.del(V, t, k)}
+
+# the keys of t
+def Table.keys(-V: Data, t: Table<V>) -> List<&2, String>:
+  match t:
+    case TNil{}:
+      Nil{}
+    case TRow{k, v, r}:
+      k <> Table.keys(V, r)
+
+# a new table has no value for any key
+law Table.get_new:
+  for -V: Data
+  for k: String
+  {Table.get(V, Table.new(V), k) == None{}: Maybe<&2, V>}
+
+def Table.get_new(ty, k):
+  {==}
+
+# after setting k to v, k has v
+law Table.get_after_set:
+  for -V: Data
+  for t: Table<V>
+  for k: String
+  for v: V
+  {Table.get(V, Table.set(V, t, k, v), k) == Some{v}: Maybe<&2, V>}
+
+def Table.get_after_set(ty, t, k, v):
+  k = k
+  %Equal.sym(Bool, String.eq(k, k), True{}, String.eq_refl(k)):
+    {
+      Bool.when(
+        Maybe<&2, ty>,
+        _,
+        u => Some{v},
+        u => Table.get(ty, Table.del(ty, t, k), k)
+      )
+        == Some{v}: Maybe<&2, ty>
+    }
+  {==}
+
+# deleting k, with b the answer of String.eq(rk, k) for the first row
+def Table.get_del.at(
+  -V: Data,
+  rk: String,
+  v: V,
+  -r: Table<V>,
+  k: String,
+  k2: String,
+  b: Bool,
+  ih: {Table.get(V, Table.del(V, r, k), k2) == Table.get(V, r, k2): Maybe<&2, V>}
+) -> {
+  String.eq(rk, k) == b: Bool
+} -> {
+  String.eq(k, k2) == False{}: Bool
+} -> {
+  Table.get(
+    V,
+    Bool.when(Table<V>, b, u => Table.del(V, r, k), u => TRow{rk, v, Table.del(V, r, k)}),
+    k2
+  )
+    == Table.get(V, TRow{rk, v, r}, k2): Maybe<&2, V>
+}:
+  match b:
+    case True{}:
+      e => d =>
+        %Equal.sym(
+          String,
+          rk,
+          k,
+          String.eq_sound(rk, k)(e)
+        ): {
+          Table.get(
+            V,
+            Table.del(V, r, k),
+            k2
+          )
+            == Bool.when(
+              Maybe<&2, V>,
+              String.eq(_, k2),
+              u => Some{v},
+              u => Table.get(V, r, k2)
+            ): Maybe<&2, V>
+        }
+        %Equal.sym(
+          Bool,
+          String.eq(k, k2),
+          False{},
+          d
+        ): {
+          Table.get(
+            V,
+            Table.del(V, r, k),
+            k2
+          )
+            == Bool.when(Maybe<&2, V>, _, u => Some{v}, u => Table.get(V, r, k2)): Maybe<&2, V>
+        }
+        ih
+    case False{}:
+      e => d =>
+        %Equal.sym(Maybe<&2, V>, Table.get(V, Table.del(V, r, k), k2), Table.get(V, r, k2), ih):
+          {
+            Bool.when(
+              Maybe<&2, V>,
+              String.eq(rk, k2),
+              u => Some{v},
+              u => _
+            )
+              == Table.get(V, TRow{rk, v, r}, k2): Maybe<&2, V>
+          }
+        {==}
+
+# deleting k keeps the value of every other key
+def Table.get_del(
+  -V: Data,
+  t: Table<V>,
+  +k: String,
+  +k2: String
+) -> {
+  String.eq(k, k2) == False{}: Bool
+} -> {Table.get(V, Table.del(V, t, k), k2) == Table.get(V, t, k2): Maybe<&2, V>}:
+  match t:
+    case TNil{}:
+      _ => {==}
+    case TRow{+rk, v, r}:
+      +d => Table.get_del.at(
+        V,
+        rk,
+        v,
+        r,
+        k,
+        k2,
+        String.eq(rk, k),
+        Table.get_del(V, r, k, k2)(d)
+      )({==}, d)
+
+# setting k keeps the value of every other key
+law Table.set_keeps_other:
+  for -V: Data
+  for t: Table<V>
+  for k: String
+  for v: V
+  for k2: String
+  for d: {String.eq(k, k2) == False{}: Bool}
+  {Table.get(V, Table.set(V, t, k, v), k2) == Table.get(V, t, k2): Maybe<&2, V>}
+
+def Table.set_keeps_other(ty, t, k, v, k2, d):
+  k = k
+  k2 = k2
+  +d = d
+  %Equal.sym(Bool, String.eq(k, k2), False{}, d):
+    {
+      Bool.when(
+        Maybe<&2, ty>,
+        _,
+        u => Some{v},
+        u => Table.get(ty, Table.del(ty, t, k), k2)
+      )
+        == Table.get(ty, t, k2): Maybe<&2, ty>
+    }
+  Table.get_del(ty, t, k, k2)(d)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information

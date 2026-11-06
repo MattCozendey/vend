@@ -46,7 +46,7 @@ def Loop.each(ps: List<&2, String>, +s: Ep.Signal) -> List<&2, Spec.Input>:
 def Loop.known(c: Spec.Core) -> List<&2, String>:
   match c:
     case Spec.Core{m, s, h, l, ss, ms, ns}:
-      Map.keys(&2, Ep.Stream, ss)
+      Shared.Table.keys(Ep.Stream, ss)
 
 # p is the space file of a directory below the root: it starts another
 # space there

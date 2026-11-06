@@ -12,18 +12,11 @@ import ../shared.bend as Shared
 
 # A line of the space: its name, and the heads of each path by the path.
 type Line is Data:
-  Line{space: String, name: String, heads: Map<&2, List<&2, Shared.Bytes()>>}
+  Line{space: String, name: String, heads: Shared.Table<List<&2, Shared.Bytes()>>}
 
 # a line with no heads yet
 def Line.new(space: String, name: String) -> Line:
-  Line{space, name, Map.new(&2, List<&2, Shared.Bytes()>)}
-
-# the heads of the found pair
-def Line.heads.got(
-  r: Map<&2, List<&2, Shared.Bytes()>> & List<&2, Shared.Bytes()>
-) -> List<&2, Shared.Bytes()>:
-  (m, v) = r
-  v
+  Line{space, name, Shared.Table.new(List<&2, Shared.Bytes()>)}
 
 # the heads that l follows for the resource n: none when l has not
 # reached it yet; a resource of another space has none on l
@@ -34,7 +27,12 @@ def Line.heads(l: Line, n: Shared.Name) -> List<&2, Shared.Bytes()>:
       Shared.Bool.when(
         List<&2, Shared.Bytes()>,
         String.eq(sp, s),
-        u => Line.heads.got(Map.get(List<&2, Shared.Bytes()>, [], hs, p)),
+        u => Maybe.default(
+          &2,
+          List<&2, Shared.Bytes()>,
+          Shared.Table.get(List<&2, Shared.Bytes()>, hs, p),
+          []
+        ),
         u => []
       )
 
