@@ -250,6 +250,55 @@ function filefx_unwatch(w) {
   return { $: CID(Unit) };
 }
 
+// the open file f flushed to the disk
+function filefx_sync(f) {
+  try {
+    require("fs").fsyncSync(f);
+    return io_tup(f, io_done({ $: CID(Unit) }));
+  } catch (e) {
+    return io_tup(f, io_fail(io_code(e)));
+  }
+}
+
+// the lock file at path, held by this process: the JS lane has no flock, so
+// it writes its pid there and takes over only a lock whose process is gone
+function filefx_lock(path) {
+  const p = filefx_path(path);
+  if (p === null) {
+    return io_fail(22);
+  }
+  const fs = require("fs");
+  try {
+    let fd;
+    try {
+      fd = fs.openSync(p, "wx");
+    } catch (e) {
+      if (e.code !== "EEXIST") {
+        throw e;
+      }
+      const old = parseInt(fs.readFileSync(p, "utf8"), 10);
+      let alive = false;
+      if (old > 0 && old !== process.pid) {
+        try {
+          process.kill(old, 0);
+          alive = true;
+        } catch (k) {
+          alive = k.code === "EPERM";
+        }
+      }
+      if (alive) {
+        return io_fail(16);
+      }
+      fd = fs.openSync(p, "w");
+    }
+    fs.writeSync(fd, String(process.pid));
+    fs.fsyncSync(fd);
+    return io_done(fd);
+  } catch (e) {
+    return io_fail(io_code(e));
+  }
+}
+
 io_eff(CID(FileFx.probe), filefx_probe);
 io_eff(CID(FileFx.rename), filefx_rename);
 io_eff(CID(FileFx.make_dirs), filefx_make_dirs);
@@ -258,3 +307,5 @@ io_eff(CID(FileFx.watch), filefx_watch);
 io_eff(CID(FileFx.next), filefx_next);
 io_eff(CID(FileFx.unwatch), filefx_unwatch);
 io_eff(CID(FileFx.list), filefx_list_files);
+io_eff(CID(FileFx.sync), filefx_sync);
+io_eff(CID(FileFx.lock), filefx_lock);

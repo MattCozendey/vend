@@ -213,6 +213,22 @@ def FileEp.put.closed(
     File.close(f)
     return w
 
+# the write result after the temporary file is flushed to the disk and
+# closed, so the rename never puts a file whose bytes a power cut can lose
+def FileEp.put.flushed(
+  fw: File & Result<&1, &1, U32 & String, Unit>
+) -> IO(Result<&1, &1, U32 & String, Unit>):
+  (f, w) = fw
+  match w:
+    case Fail{e}:
+      do IO<Result<&1, &1, U32 & String, Unit>>:
+        File.close(f)
+        return Fail{e}
+    case Done{u}:
+      do IO<Result<&1, &1, U32 & String, Unit>>:
+        fs: File & Result<&1, &1, U32 & String, Unit> <- Spec.FileFx.sync(f)
+        FileEp.put.closed(fs)
+
 # the signals after the temporary file tmp was created ("x": only when no
 # file is there): write bytes into it, then rename it over p
 def FileEp.put.created(
@@ -227,7 +243,7 @@ def FileEp.put.created(
     case Done{f}:
       do IO<List<&2, Ep.Signal>>:
         fw: File & Result<&1, &1, U32 & String, Unit> <- File.write_bytes(f, bytes)
-        w: Result<&1, &1, U32 & String, Unit> <- FileEp.put.closed(fw)
+        w: Result<&1, &1, U32 & String, Unit> <- FileEp.put.flushed(fw)
         FileEp.put.wrote(tmp, p, bytes, w)
 
 # a number to keep temporary files apart, 0 when the OS gives none

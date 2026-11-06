@@ -7,6 +7,7 @@
 
 #ifndef _WIN32
 #include <dirent.h>
+#include <sys/file.h>
 #include <sys/stat.h>
 #ifdef __linux__
 #include <sys/inotify.h>
@@ -225,6 +226,96 @@ Term filefx_remove_run(Env e, Term* f, IoWork* w) {
 
 static void __attribute__((constructor)) filefx_remove_use(void) {
   io_eff(CID(FileFx.remove), filefx_remove_run);
+}
+
+#endif
+
+// Sync and lock
+// -------------
+
+// the descriptor w->hand flushed to the disk
+static void fx_sync_call(IoWork* w) {
+#ifdef _WIN32
+  HANDLE h = (HANDLE)_get_osfhandle((int)w->hand);
+  w->code = h != INVALID_HANDLE_VALUE && FlushFileBuffers(h)
+    ? 0 : fx_win_errno(GetLastError());
+#else
+  io_sys_end(w, fsync((int)w->hand));
+#endif
+}
+
+static Term fx_sync_pack(Env e, IoWork* w) {
+  return io_tup(e, io_hand(w->hand), io_res(e, w, term_pak(CID(Unit), 0)));
+}
+
+#ifdef CID(FileFx.sync)
+
+Term filefx_sync_run(Env e, Term* f, IoWork* w) {
+  w->hand = (intptr_t)io_hand_v(f[0]);
+  return io_work(w, fx_sync_call, fx_sync_pack);
+}
+
+static void __attribute__((constructor)) filefx_sync_use(void) {
+  io_eff(CID(FileFx.sync), filefx_sync_run);
+}
+
+#endif
+
+// the lock file w->data, held alone: w->hand its descriptor. The handle is
+// never closed on purpose; the OS releases the lock when the process ends.
+static void fx_lock_call(IoWork* w) {
+#ifdef _WIN32
+  HANDLE h = CreateFileA(w->data, GENERIC_READ | GENERIC_WRITE, 0, NULL,
+    OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (h == INVALID_HANDLE_VALUE) {
+    DWORD er = GetLastError();
+    w->code = er == ERROR_SHARING_VIOLATION ? EBUSY : fx_win_errno(er);
+    return;
+  }
+  int fd = _open_osfhandle((intptr_t)h, 0);
+  if (fd < 0) {
+    CloseHandle(h);
+    w->code = EIO;
+    return;
+  }
+  w->hand = fd;
+#else
+  int fd = open(w->data, O_RDWR | O_CREAT, 0644);
+  if (fd < 0) {
+    w->code = (u32)errno;
+    return;
+  }
+  if (flock(fd, LOCK_EX | LOCK_NB) != 0) {
+    w->code = errno == EWOULDBLOCK ? EBUSY : (u32)errno;
+    close(fd);
+    return;
+  }
+  w->hand = fd;
+#endif
+}
+
+static Term fx_lock_pack(Env e, IoWork* w) {
+  free(w->data);
+  if (w->code == EBUSY) {
+    return io_fail(e, EBUSY, "another bend-ver holds the journal");
+  }
+  return io_res(e, w, io_hand(w->hand));
+}
+
+#ifdef CID(FileFx.lock)
+
+Term filefx_lock_run(Env e, Term* f, IoWork* w) {
+  u64 n;
+  w->data = fx_path(e, f[0], &n);
+  if (w->data == NULL) {
+    w->code = EINVAL;
+    return fx_lock_pack(e, w);
+  }
+  return io_work(w, fx_lock_call, fx_lock_pack);
+}
+
+static void __attribute__((constructor)) filefx_lock_use(void) {
+  io_eff(CID(FileFx.lock), filefx_lock_run);
 }
 
 #endif

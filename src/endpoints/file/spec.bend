@@ -306,6 +306,26 @@ def FileFx.remove(path: Shared.Bytes()) -> IO(Result<&1, &1, U32 & String, Unit>
   import "./effs/file_fx.c"
   import "./effs/file_fx.js"
 
+# Durability
+# ----------
+
+# the open file f flushed to the disk: once this answers Done, every byte
+# written to f so far survives a power cut (FlushFileBuffers on Windows,
+# fsync elsewhere)
+def FileFx.sync(f: File) -> IO(File & Result<&1, &1, U32 & String, Unit>):
+  import "./effs/file_fx.c"
+  import "./effs/file_fx.js"
+
+# the lock file at path, made when missing, held by this process alone
+# until it ends; while another process holds it, this fails with EBUSY. The
+# OS drops the lock when its holder dies (a share-nothing handle on
+# Windows, flock elsewhere), so a power cut leaves no stale lock. The JS
+# lane writes its pid there instead and takes over a lock whose process is
+# gone.
+def FileFx.lock(path: Shared.Bytes()) -> IO(Result<&1, &1, U32 & String, File>):
+  import "./effs/file_fx.c"
+  import "./effs/file_fx.js"
+
 # Listing
 # -------
 
