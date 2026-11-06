@@ -87,6 +87,24 @@ Follow the `bend2` and the `experimental-bend-spec` skills.
 
 ## 3. Project
 
+**bend-ver** is a version control system written in Bend, built for many AI agents working at once.
+
+- **It records everything, live.** Every save is a version, with no commit step. It records edits made by
+  other tools too. Optional *marks* name the points that matter.
+- **It understands content.** For Bend and C code, it versions by item (a function, a type) instead of by
+  line. Changes, merges and conflicts are about meaning, not text layout. Unknown files still work at line
+  level, like git.
+- **It knows who depends on what.** It tracks imports, including conditional ones like C's `#ifdef`, and
+  tells each agent only about changes to the things its work uses.
+- **Agents work in parallel safely.** Each agent works on its own line (like a branch). Stale writes are
+  refused instead of overwriting others, and lines merge back by item.
+- **Resources aren't just files.** Anything with an address (a file, a server) is a stream that may be
+  reachable or not. Files are the first kind.
+- **It's built for speed and sharing.** Content is stored once by hash, edits cost little even in huge
+  files, and histories from different machines can be joined.
+- **It's proven correct.** Its rules are stated as laws that Bend's checker verifies, and a helper tool
+  (gen2) writes many of those proofs automatically.
+
 - README.md is for users and stays short. Internals go here and in code comments.
 - `bend-lint.json` picks the rules `bun run lint` runs (bend-lint's own, from BendHub).
 
