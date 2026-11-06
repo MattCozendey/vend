@@ -20,7 +20,25 @@
 //   - prem (pattern B): the premises of the conclusion (`-> {..} -> G`) introduced in each arm
 //     (`+h => ?TODO`), alone, under a split on each enumeration parameter (Bool, Cmp) that a premise
 //     or the conclusion blocks on, and under one joint split of all of them (prem:all);
-//   - whole: the goal itself as one arm (its helpers are the point).
+//   - whole: the goal itself as one arm (its helpers are the point);
+//   - rec: the record parameters (one constructor with fields) that a stuck call reads, opened (a
+//     Root{p, d} that FileEp.decide matches); premises stay in the goal;
+//   - blk: every parameter that the goal or a premise blocks on (enumerations, datatypes of at most 6
+//     constructors) and every enumeration parameter, split jointly in parameter order.
+//   rec and blk rank last: in the helper pass the best of them is tried after the two best schemes, so
+//   a def that the others prove costs nothing more.
+// * atoms step (the decide pattern; top level only): the stuck Bool/Cmp calls of an arm, on simple
+//   arguments (FileEp.is_resource(rest)) or a whole side of a hypothesis (Cli.globs_read(Con{r, t})),
+//   become parameters of a helper, each with its equation {g == call} (so the helper holds iff the arm
+//   does); its hypotheses and goal are restated in folded normal form: bend2's weak normal form unfolds
+//   wrapper defs (no match of their own) inside a stuck match, so each wrapper's pattern (its normal
+//   form over metavariables) is folded back (refold). The atoms come first among the helper's
+//   parameters (a later split on a context variable keeps binder order); blk then splits them.
+// * arm split step: a variable that the goal, a hypothesis or a premise of a function goal blocks on,
+//   also inside a constructor that a call matches (decide.here(Found{e, d}) reads e): `match v:` with
+//   one ?TODO per constructor; then an intro step introduces a premise, alone on its line (a parameter
+//   cannot be matched after a local statement, so splits come first).
+// * leaf: a Bool clash in a hypothesis ({False == True}) closes any goal through Bool.pick as the motive.
 // * pattern B step (hypGen): a hypothesis whose normal form holds a stuck call of an enumeration type
 //   that is not a whole side of it (Expect.holds(e, k) inside Bool.when(..) == Done{s}) gives a helper
 //   `(.., +g: Bool) -> {H[call := g]} -> G[call := g]`, proven by the schemes (prem), and the call
@@ -75,7 +93,7 @@ const MAX_HELPER_ARMS = 24;
 const ROUNDS = 16; // leaf + step rounds after a constructor step left new holes // arms left after the leaf pass that may each get a helper
 const NL = String.fromCharCode(10);
 // which skeleton gets the helpers: the most specific split first (the functions' own recursion)
-const SCHEME_RANK = ["enum", "u32+width", "word+split", "fun", "word", "nat", "u32", "prem:all", "prem", "whole"];
+const SCHEME_RANK = ["enum", "u32+width", "word+split", "fun", "word", "nat", "u32", "prem:all", "prem", "whole", "rec", "blk"];
 const ONLY = process.env.GEN2_IND_ONLY ? new RegExp(process.env.GEN2_IND_ONLY) : null; // debug: schemes by name
 
 // ---- small helpers ----
@@ -187,8 +205,18 @@ const fillArms = (R: Run, k: string, body: string, depth: number, passes = [0, 1
           // it above), else after the constructor steps
           const hyp = () => (depth < MAX_DEPTH ? A.attempt(A.FUEL_NF * 4, () => hypGen(R, k, g, depth, alone ? ind : "", fits)) ?? null : null);
           const hg0 = alone ? hyp() : null;
-          const st = hg0 ? null : A.attempt(A.FUEL_NF * 4, () => ctorStep(R, k, g, alone ? ind : "", arm, fits)) ?? null;
+          // the decide pattern: the stuck Bool/Cmp calls of the arm as parameters of a helper, before a
+          // constructor step splits a pair goal apart from the hypothesis that decides it
+          const ag = hg0 || pass !== 1 ? null : A.attempt(A.FUEL_NF * 8, () => atomGen(R, k, g, depth, alone ? ind : "", fits)) ?? null;
+          // a variable that the goal or a hypothesis blocks on: split it before a constructor step takes a
+          // pair goal apart from the hypothesis that decides it
+          const sp = hg0 || ag || pass !== 1 || !alone ? null : A.attempt(A.FUEL_NF * 4, () => armSplit(R, k, g, ind, fits)) ?? null;
+          const it = hg0 || ag || sp || pass !== 1 || !alone ? null : A.attempt(A.FUEL_NF, () => introStep(R, g, ind, fits)) ?? null;
+          const st = hg0 || ag || sp || it ? null : A.attempt(A.FUEL_NF * 4, () => ctorStep(R, k, g, alone ? ind : "", arm, fits)) ?? null;
           if (hg0 && fits(hg0)) fill = hg0;
+          else if (ag) fill = ag;
+          else if (sp) { fill = sp; stepped = true; }
+          else if (it) { fill = it; stepped = true; }
           else if (st && fits(st)) { fill = st; if (st.includes("?TODO")) stepped = true; }
           else {
             const hg = alone ? null : hyp();
@@ -836,6 +864,322 @@ const hypGen = (R: Run, k: string, g: Goal, depth: number, ind: string, fits: (f
   }
   return null;
 };
+// ---- atoms: stuck Bool/Cmp calls generalized as parameters (the decide pattern) ----
+// a term that a call may take and still count as on its parameters: a variable, a literal, a
+// constructor of such terms
+const simpleArg = (t: any): boolean => !!t && (t.$ === "Var" || t.$ === "Lit" || t.$ === "Num" || ((t.$ === "Ctr" || t.$ === "ADT") && t.x.every(simpleArg)));
+// Refolding. bend2's weak normal form unfolds a wrapper def (a def of an enumeration type with no match
+// of its own, FileEp.is_resource(rest) = Bool.and(Glob.is_path(rest), ..)) inside a stuck match, so a
+// hypothesis shows its body. A wrapper's pattern is the normal form of the wrapper applied to
+// metavariables; a subterm that matches it is folded back into the call. Wrappers are looked for among
+// the defs that the statement's calls name (three levels down).
+type Wrap = { k: string; n: number; P: LTerm; head: string };
+// def k returns an enumeration (Bool, Cmp)
+const enumMemo = new Map<string, boolean>();
+const enumDef = (A: Api, k: string): boolean => {
+  if (enumMemo.has(k)) return enumMemo.get(k)!;
+  const t = A.RAW[k];
+  let r = false;
+  if (t?.$ === "Def") {
+    const o = A.attempt(A.FUEL_NF, () => A.openMeta(t.T, t.n));
+    const w = o ? A.wnf(o.concl) : null;
+    const at = w && w.$ === "ADT" ? A.RAW[w.k] : null;
+    r = !!at && at.$ === "ADT" && at.c.length >= 2 && at.c.length <= 4 && at.c.every((c: any) => c.n === 0);
+  }
+  enumMemo.set(k, r);
+  return r;
+};
+const wrapMemo = new Map<string, Wrap | null>();
+let wrapBook: any = null;
+const wrapOf = (A: Api, k: string): Wrap | null => {
+  if (wrapBook !== A.book) { wrapMemo.clear(); wrapBook = A.book; }
+  if (wrapMemo.has(k)) return wrapMemo.get(k)!;
+  let r: Wrap | null = null;
+  const t = A.RAW[k];
+  if (t?.$ === "Def" && t.v && t.n >= 1 && t.n <= 4 && !isRecursive(A, k)) {
+    r = A.attempt(A.FUEL_NF * 2, () => {
+      let h: any = B.Ref(k);
+      for (let j = 0; j < t.n; j++) h = B.App(h, B.Var("?" + j, A.META + j));
+      const o = A.openMeta(t.T, t.n);
+      const adt = o ? A.wnf(o.concl) : null;
+      if (!adt || adt.$ !== "ADT") return null; // data (a Bool, a Maybe, ..): not a type or a proof
+      const P = A.nf(h, 0);
+      // a wrapper of another type folds only when no Bool/Cmp call is inside it (Uri.read: yes; Cli.watch,
+      // whose body is a stuck Bool.when: no, the atoms are inside it)
+      const at = A.RAW[adt.k];
+      const isEnumTy = at?.$ === "ADT" && at.c.length >= 2 && at.c.length <= 4 && at.c.every((c: any) => c.n === 0);
+      if (!isEnumTy) {
+        const st: any[] = [P];
+        for (let c = 0; st.length && c < 20000; c++) {
+          const x = st.pop();
+          if (!x || typeof x !== "object") continue;
+          if (x.$ === "App") { const [hh] = A.unapply(x); if (hh.$ === "Ref" && enumDef(A, hh.k)) return null; }
+          st.push(...termKids(x));
+        }
+      }
+      const [ph] = A.unapply(P);
+      if (ph.$ === "Ref" && ph.k === k) return null; // a match of its own: it stays a call anyway
+      const seen = new Set<number>();
+      const st: any[] = [P];
+      for (let c = 0; st.length && c < 20000; c++) { const x = st.pop(); if (!x || typeof x !== "object") continue; if (x.$ === "Var") seen.add(x.i); else st.push(...termKids(x)); }
+      for (let j = 0; j < t.n; j++) if (!seen.has(A.META + j)) return null;
+      return { k, n: t.n, P, head: ph.$ === "Ref" ? ph.k : ph.$ };
+    }) ?? null;
+  }
+  wrapMemo.set(k, r);
+  return r;
+};
+// the defs that a term names, and the defs their bodies name, to the given depth (at most 200 defs)
+const termKids = (x: any): any[] => {
+  switch (x.$) {
+    case "App": return [x.f, x.x];
+    case "Ctr": case "ADT": return x.x;
+    case "Eql": return [x.a, x.b, x.T];
+    case "Lam": return [x.f];
+    case "All": return [x.A, x.B];
+    case "Mat": return [x.h, x.m];
+    case "Let": case "Sub": return [];
+    default: return Object.keys(x).filter((f) => f !== "s" && f !== "k" && f !== "q" && x[f] && typeof x[f] === "object" && typeof x[f].$ === "string").map((f) => x[f]);
+  }
+};
+const namedDefs = (A: Api, t: any, out: Set<string>, depth: number) => {
+  const st: any[] = [t];
+  const found: string[] = [];
+  for (let n = 0; st.length && n < 5000 && out.size < 200; n++) {
+    const x = st.pop();
+    if (!x || typeof x !== "object" || typeof x.$ !== "string") continue;
+    if (x.$ === "Ref" && typeof x.k === "string" && A.RAW[x.k]?.$ === "Def" && !out.has(x.k)) { out.add(x.k); found.push(x.k); }
+    st.push(...termKids(x));
+  }
+  if (depth <= 0) return;
+  for (const k of found) {
+    if (out.size >= 200) return;
+    const d = A.RAW[k];
+    if (d?.$ !== "Def" || !d.v) continue;
+    const body = A.attempt(A.FUEL_NF, () => A.lower(d.v, 0));
+    if (body) namedDefs(A, body, out, depth - 1);
+  }
+};
+// t (a normal form at g) with the subterms that a wrapper pattern matches folded back, outermost first
+const refold = (A: Api, g: Goal, t: any, ws: Wrap[], b: { n: number }): any => {
+  if (!t || typeof t !== "object" || --b.n < 0) return t;
+  if (t.$ === "App" || t.$ === "Ctr") {
+    const [h] = t.$ === "App" ? A.unapply(t) : [t];
+    const hk = h.$ === "Ref" ? h.k : h.$;
+    for (const w of ws) {
+      if (w.head !== hk) continue;
+      const sol: (LTerm | null)[] = new Array(w.n).fill(null);
+      if (A.matchT(w.P, t, sol, g.d) && sol.every((x) => x)) {
+        return sol.reduce((r: any, x: any) => B.App(r, refold(A, g, x, ws, b)), B.Ref(w.k));
+      }
+    }
+  }
+  switch (t.$) {
+    case "App": return { ...t, f: refold(A, g, t.f, ws, b), x: refold(A, g, t.x, ws, b) };
+    case "Ctr": case "ADT": return { ...t, x: t.x.map((x: any) => refold(A, g, x, ws, b)) };
+    case "Eql": return { ...t, a: refold(A, g, t.a, ws, b), b: refold(A, g, t.b, ws, b) };
+    case "Lam": return { ...t, f: refold(A, g, t.f, ws, b) };
+    default: return t;
+  }
+};
+// the folded normal form of T (an HTerm at depth d of g): its normal form with the wrappers folded back
+const foldNf = (A: Api, g: Goal, T: any, d: number, ws: Wrap[]): any => {
+  const N = A.attempt(A.FUEL_NF * 2, () => A.nf(T, d));
+  if (!N) return null;
+  return A.attempt(A.FUEL_NF * 4, () => refold(A, g, N, ws, { n: 20000 })) ?? null;
+};
+// t with every subterm whose key is in m replaced by the variable m names (also under binders)
+const replKeys = (A: Api, t: any, m: Map<string, string>): any => {
+  if (!t || typeof t !== "object") return t;
+  const v = m.get(A.key(t));
+  if (v !== undefined) return B.Ref(v);
+  switch (t.$) {
+    case "App": return { ...t, f: replKeys(A, t.f, m), x: replKeys(A, t.x, m) };
+    case "Ctr": case "ADT": return { ...t, x: t.x.map((x: any) => replKeys(A, x, m)) };
+    case "Eql": return { ...t, a: replKeys(A, t.a, m), b: replKeys(A, t.b, m), T: replKeys(A, t.T, m) };
+    case "Lam": return { ...t, f: replKeys(A, t.f, m) };
+    default: return t;
+  }
+};
+const hasKey = (A: Api, t: any, k: string): boolean => {
+  if (!t || typeof t !== "object") return false;
+  if (A.key(t) === k) return true;
+  switch (t.$) {
+    case "App": return hasKey(A, t.f, k) || hasKey(A, t.x, k);
+    case "Ctr": case "ADT": return t.x.some((x: any) => hasKey(A, x, k));
+    case "Eql": return hasKey(A, t.a, k) || hasKey(A, t.b, k);
+    case "Lam": return hasKey(A, t.f, k);
+    default: return false;
+  }
+};
+// a first-order argument: a simple one, or a call of simple or first-order arguments (no binder), shallow
+const plainArg = (t: any, n = 0): boolean => simpleArg(t) || (n < 3 && t?.$ === "App" && (() => { let h = t; const xs: any[] = []; while (h.$ === "App") { xs.push(h.x); h = h.f; } return h.$ === "Ref" && xs.every((x) => plainArg(x, n + 1)); })());
+// the atoms of t: stuck calls of an enumeration type, on simple arguments or a whole side of a
+// hypothesis (sides), also under binders; at most 4, in order of appearance
+const atomsOf = (A: Api, g: Goal, t: any, sides: Set<string>, out: LTerm[]) => {
+  if (!t || typeof t !== "object" || out.length >= 4) return;
+  if (t.$ === "App") {
+    const [h, xs] = A.unapply(t);
+    if (h.$ === "Ref") {
+      const kk = A.key(t);
+      const fv = new Set<number>();
+      freeVars(t, fv);
+      const blk: LTerm[] = [];
+      A.blockers(t, blk);
+      const stuck = () => blk.length > 0 || (() => { const w = A.wnf(B.term_higher(t, g.env)); return !!w && w.$ !== "Ctr" && w.$ !== "Lit"; })();
+      const ok = fv.size > 0 && [...fv].every((v) => v < g.d) && enumTyped(A, g, t);
+      if (ok && xs.every(simpleArg) && stuck()) {
+        if (!out.some((o) => A.key(o) === kk)) out.push(t);
+        return;
+      }
+      // a whole side of a hypothesis (Maybe.is_some(Uri.read(root))) is an atom when no atom is inside it
+      if (ok && sides.has(kk) && xs.every(plainArg) && stuck()) {
+        const inner: LTerm[] = [];
+        xs.forEach((x: any) => atomsOf(A, g, x, new Set(), inner));
+        if (inner.length === 0) { if (!out.some((o) => A.key(o) === kk)) out.push(t); return; }
+      }
+    }
+    xs.forEach((x: any) => atomsOf(A, g, x, sides, out));
+  } else if (t.$ === "Ctr" || t.$ === "ADT") t.x.forEach((x: any) => atomsOf(A, g, x, sides, out));
+  else if (t.$ === "Eql") { atomsOf(A, g, t.a, sides, out); atomsOf(A, g, t.b, sides, out); }
+  else if (t.$ === "Lam") atomsOf(A, g, t.f, sides, out);
+};
+// an arm whose goal or hypotheses are stuck on Bool/Cmp calls of the statements (decide pattern): a
+// helper over those calls as parameters, each with its equation (so the helper holds iff the arm
+// does), its hypotheses and goal restated in folded form; the call `helper(.., call, {==}, ..)(h, ..)`
+const atomGen = (R: Run, k: string, g: Goal, depth: number, ind: string, fits: (f: string | null) => boolean): string | null => {
+  const { A } = R;
+  if (depth > 0) return null; // inside a helper the atoms are parameters already: splits finish it
+  const goal0 = A.attempt(A.FUEL_NF, () => A.lower(g.ty, g.d));
+  if (!goal0 || A.attempt(A.FUEL_NF, () => hasMetaOrHole(goal0)) !== false) return null;
+  // the wrappers that the goal and the hypotheses name
+  const named = new Set<string>();
+  const raws: any[] = [goal0];
+  for (let i = 0; i < g.d; i++) { const T0 = A.attempt(A.FUEL_NF, () => A.lower(A.ann(g, i).T, i)); if (T0 && T0.$ === "Eql") raws.push(T0); }
+  A.attempt(A.FUEL_NF * 4, () => { for (const r of raws) namedDefs(A, r, named, 2); });
+  const tw = A.now();
+  const ws = [...named].slice(0, 300).map((k2) => wrapOf(A, k2)).filter((w): w is Wrap => !!w).sort((x, y) => A.key(y.P).length - A.key(x.P).length);
+  if (A.debug()) console.error("[gen2] --ind: atoms: " + named.size + " named defs, " + ws.length + " wrappers (" + ws.map((w) => A.shortOf(w.k)).join(", ").slice(0, 300) + ") in " + Math.round(A.now() - tw) + " ms");
+  const G = foldNf(A, g, g.ty, g.d, ws);
+  if (!G) return null;
+  // the hypotheses: the equations of the context (usable), folded
+  const hs: { i: number; T: any }[] = [];
+  const sides = new Set<string>();
+  for (let i = 0; i < g.d; i++) {
+    if (g.names[i] === "_" || !A.usable(g, i, B.Lone())) continue;
+    // a hypothesis as stated when one of its sides is itself an atom ({Cli.globs_read(Con{r, t}) == True}:
+    // its normal form would unfold the call it is about), else its folded normal form
+    const T0 = A.attempt(A.FUEL_NF, () => A.lower(A.ann(g, i).T, i));
+    const rawAtom = !!T0 && T0.$ === "Eql" && [T0.a, T0.b].some((x: any) => x.$ === "App" && (() => { const [hh, xs] = A.unapply(x); return hh.$ === "Ref" && xs.every(simpleArg); })() && A.attempt(A.FUEL_NF, () => enumTyped(A, g, x)) === true);
+    const T = rawAtom ? T0 : foldNf(A, g, A.ann(g, i).T, i, ws);
+    if (!T || T.$ !== "Eql") continue;
+    if (T.a.$ === "Var" || T.b.$ === "Var") continue; // a generalization's own equation {g == call}: not a source of atoms
+    hs.push({ i, T });
+    for (const s2 of [T.a, T.b]) if (s2.$ === "App") sides.add(A.key(s2));
+  }
+  const atoms: LTerm[] = [];
+  A.attempt(A.FUEL_NF * 4, () => { for (const h of hs) atomsOf(A, g, h.T, sides, atoms); atomsOf(A, g, G, sides, atoms); });
+  if (A.debug()) console.error("[gen2] --ind: atoms of " + g.path + ": " + atoms.map((t) => A.attempt(A.FUEL_NF, () => A.show(t, g.names))).join(", "));
+  if (atoms.length === 0) return null;
+  const used = new Set<string>(g.names);
+  const vs = atoms.map((t) => ({ t, nm: A.fresh("g", used), eq: A.fresh("hg", used) }));
+  const m = new Map(vs.map((v) => [A.key(v.t), v.nm] as [string, string]));
+  const prem = hs.filter((h) => vs.some((v) => hasKey(A, h.T, A.key(v.t))));
+  const Gr = replKeys(A, G, m);
+  const shownAtoms = vs.map((v) => A.attempt(A.FUEL_NF, () => A.show(v.t, g.names)));
+  const tys = vs.map((v) => { const Ty = A.attempt(A.FUEL_NF, () => B.term_infer(A.book, g.lhs, B.term_higher(v.t, g.env), B.None(), g.ctx, g.d).ty); return Ty ? A.attempt(A.FUEL_NF, () => A.show(A.lower(Ty, g.d), g.names)) : undefined; });
+  const gText = A.attempt(A.FUEL_NF, () => A.show(Gr, g.names));
+  const pTexts = prem.map((h) => A.attempt(A.FUEL_NF, () => A.show(replKeys(A, h.T, m), g.names)));
+  if (gText === undefined || shownAtoms.some((s) => s === undefined) || tys.some((s) => s === undefined) || pTexts.some((s) => s === undefined)) return null;
+  // the parameters: what the restated goal and premises name, and the variables of the atoms (their equations)
+  const all = B.Ctr("Tuple", [Gr, ...prem.map((h) => replKeys(A, h.T, m)), ...vs.map((v) => v.t)]) as LTerm;
+  const cp = ctxParams(A, g, all, (s) => s, new Set(prem.map((h) => h.i)));
+  if (!cp) return null;
+  const brace = (s: string) => (s.startsWith("{") ? s : "{" + s + "}");
+  // the atoms first (a split on them may then be followed by a split on a context variable: binders are
+  // matched in order), then the context, then their equations
+  const params = [...vs.map((v, j) => "+" + v.nm + ": " + tys[j]), ...cp.params, ...vs.map((v, j) => "+" + v.eq + ": {" + v.nm + " == " + shownAtoms[j] + " : " + tys[j] + "}")];
+  const head = "def " + newName(R) + "(" + params.join(", ") + ") ->" + NL + "  " + [...pTexts.map((p) => brace(p!)), gText].join(" -> ") + ":";
+  const nm = proveHelper(R, head, depth);
+  if (!nm) return null;
+  const call = nm + "(" + [...shownAtoms.map((a) => a!), ...cp.args, ...vs.map(() => "{==}")].join(", ") + ")" + (prem.length ? "(" + prem.map((h) => g.names[h.i]).join(", ") + ")" : "");
+  if (fits(call)) return call;
+  // a variable named twice (rest in the arguments and inside an atom) is affine: rebind it above
+  if (ind) {
+    const twice = g.names.filter((v: string) => v !== "_" && (call.match(new RegExp("(?<![\\w.])" + v.replace(/\./g, "\\.") + "(?![\\w.{])", "g")) ?? []).length > 1);
+    const copied = twice.length ? twice.map((v: string) => "+" + v + " = " + v + NL + ind).join("") + call : null;
+    if (copied && fits(copied)) return copied;
+  }
+  if (A.debug()) console.error("[gen2] --ind: the arm does not take " + call.slice(0, 300));
+  return null;
+};
+// a function goal whose premise is a fact: introduce it, alone on its line (the steps then see it)
+const introStep = (R: Run, g: Goal, ind: string, fits: (f: string | null) => boolean): string | null => {
+  const { A } = R;
+  if (!ind) return null;
+  const w = A.wnf(g.ty);
+  if (!w || w.$ !== "All") return null;
+  const D = A.attempt(A.FUEL_NF, () => A.nf(w.A, g.d));
+  if (!D || D.$ !== "Eql") return null;
+  const nm = A.fresh("h", new Set<string>(g.names));
+  const text = "+" + nm + " =>" + NL + ind + "  ?TODO";
+  return fits(text) ? text : null;
+};
+// an arm stuck on a variable of a small datatype (a field of an outer pattern, as e in Found{e, d}): split it
+const armSplit = (R: Run, k: string, g: Goal, ind: string, fits: (f: string | null) => boolean): string | null => {
+  const { A } = R;
+  if (!ind) return null;
+  const terms: LTerm[] = [];
+  // the premises of a function goal (`{H} -> G`) count as hypotheses: a split must come before their
+  // introduction (a parameter cannot be matched after a local statement)
+  let gg: Goal | null = g;
+  for (let j = 0; j < 4 && gg; j++) {
+    const w = A.wnf(gg.ty);
+    if (!w || w.$ !== "All") break;
+    const D = A.attempt(A.FUEL_NF * 2, () => A.nf(w.A, gg!.d));
+    if (D && D.$ === "Eql") terms.push(D);
+    gg = A.intro(gg, "_p" + j, false);
+  }
+  const N = gg ? A.attempt(A.FUEL_NF * 2, () => A.nf(gg!.ty, gg!.d)) : null;
+  if (N) terms.push(N);
+  for (let i = 0; i < g.d; i++) {
+    if (!A.usable(g, i, B.Lone())) continue;
+    const T = A.attempt(A.FUEL_NF * 2, () => A.nf(A.ann(g, i).T, i));
+    if (T && T.$ === "Eql") terms.push(T);
+  }
+  const blk: LTerm[] = [];
+  for (const t of terms) A.blockers(t, blk);
+  // a variable inside a constructor that a call matches (decide.here(Found{e, d}) reads e): a nested match
+  const inner = (t: any, depth: number) => {
+    if (!t || typeof t !== "object" || depth > 6) return;
+    if (t.$ === "App") {
+      const [h, xs] = A.unapply(t);
+      if (h.$ === "Ref") {
+        const ms: Set<number> = A.matchedOf(h.k);
+        const fieldVars = (a: any, n: number) => { if (n > 2 || !a) return; if (a.$ === "Ctr") a.x.forEach((x: any) => (x.$ === "Var" ? blk.push(x) : fieldVars(x, n + 1))); };
+        xs.forEach((x: any, j: number) => { if (ms.has(j)) fieldVars(x, 0); });
+      }
+      xs.forEach((x: any) => inner(x, depth + 1));
+    } else if (t.$ === "Ctr" || t.$ === "ADT") t.x.forEach((x: any) => inner(x, depth + 1));
+    else if (t.$ === "Eql") { inner(t.a, depth + 1); inner(t.b, depth + 1); }
+    else if (t.$ === "Lam") inner(t.f, depth + 1);
+  };
+  for (const t of terms) inner(t, 0);
+  const seen = new Set<number>();
+  for (const b of blk as any[]) {
+    if (b.$ !== "Var" || b.i >= g.d || seen.has(b.i) || g.names[b.i] === "_") continue;
+    seen.add(b.i);
+    const adt = adtOf(A, g, A.ann(g, b.i).T);
+    if (!adt || adt.c.length === 0 || adt.c.length > 6) continue;
+    const tyName = A.attempt(A.FUEL_NF, () => A.show(A.lower(A.ann(g, b.i).T, b.i), g.names));
+    if (!tyName || /^(U32|F32|Char|Nat|String|Word)/.test(tyName)) continue;
+    const used = new Set<string>(g.names);
+    const cases = adt.c.map((c: any) => (c.n === 0 ? B.name_show(A.job().file, c.k) + "{}" : ctrPat(A, "", c, g.names[b.i], used)));
+    const text = "match " + g.names[b.i] + ":" + NL + cases.map((c: string) => ind + "  case " + c + ":" + NL + ind + "    ?TODO").join(NL);
+    if (fits(text)) return text;
+  }
+  return null;
+};
 // the inversion helper for side == C (side's strict argument rr stuck) and its use in the arm
 const invHelper = (R: Run, g: Goal, side: LTerm, rr: LTerm, C: any, cRight: boolean, Tl: LTerm, h: string, ind: string): string | null => {
   const { A } = R;
@@ -919,7 +1263,7 @@ const schemes = (R: Run, k: string): Scheme[] => {
   if (!tl) { if (A.debug()) console.error("[gen2] --ind: no parameters for " + A.shortOf(k)); return []; }
   const out: Scheme[] = [];
   const add = (name: string, body: string | null) => { if (body) out.push({ name, body: indent(body, "  ") }); };
-  for (const s of [enumScheme, u32Scheme, wordScheme, natScheme, funScheme, premScheme, wholeScheme]) {
+  for (const s of [enumScheme, u32Scheme, wordScheme, natScheme, funScheme, recScheme, blkScheme, premScheme, wholeScheme]) {
     const r = A.attempt(A.FUEL_NF * 4, () => s(R, k, tl));
     if (A.debug()) console.error("[gen2] --ind: " + A.shortOf(k) + " " + s.name + ": " + (r ? r.map((x: any) => x[0]).join(", ") : "none"));
     if (r) for (const [nm, b] of r) add(nm, b);
@@ -1121,6 +1465,78 @@ const premScheme = (R: Run, k: string, tl: Tele): [string, string][] | null => {
   }
   return out;
 };
+// the parameters that a stuck call reads, in the goal or in the type of a hypothesis parameter
+const matchedAll = (A: Api, tl: Tele): number[] => {
+  const out = new Set<number>(matchedParams(A, tl));
+  const walk = (t: LTerm) => {
+    if (t.$ === "App") {
+      const [h, xs] = A.unapply(t);
+      if (h.$ === "Ref") { const ms: Set<number> = A.matchedOf(h.k); xs.forEach((x: LTerm, j: number) => { if (ms.has(j) && x.$ === "Var" && x.i < tl.ps.length) out.add(x.i); }); }
+      xs.forEach(walk);
+    } else if (t.$ === "Ctr" || t.$ === "ADT") (t as any).x.forEach(walk);
+    else if (t.$ === "Eql") { walk(t.a); walk(t.b); }
+  };
+  for (const p of tl.ps) {
+    const T = A.attempt(A.FUEL_NF * 2, () => A.nf(p.T, p.i));
+    if (T && T.$ === "Eql") walk(T);
+  }
+  return [...out].filter((i) => tl.ps[i].q !== "-").sort((a, b) => a - b);
+};
+const isRecordTy = (A: Api, tl: Tele, i: number): boolean => {
+  const p = tl.ps[i];
+  if (/^(U32|F32|Char|Word|String)/.test(p.ty)) return false;
+  const adt = adtOf(A, tl.g, p.T);
+  return !!adt && adt.c.length === 1 && adt.c[0].n > 0;
+};
+// the decide pattern: the records (one constructor with fields) that a stuck call reads, opened, the
+// premises introduced; the arm then gets its stuck Bool calls generalized (atomGen)
+const recScheme = (R: Run, k: string, tl: Tele): [string, string][] | null => {
+  const { A } = R;
+  const recs = matchedAll(A, tl).filter((i) => isRecordTy(A, tl, i)).slice(0, 3);
+  const pr = premises(A, tl);
+  const intro = "?TODO"; // premises stay in the goal: an arm may still split a parameter, then introduce them
+  if (recs.length === 0) return null;
+  const used = new Set(tl.ps.map((p) => p.name));
+  const cs = recs.map((i) => casesOf(A, tl, i, used));
+  if (!cs.every((c) => c)) return null;
+  return [["rec", matchText(recs.map((i) => tl.ps[i].name), product(cs as string[][]), () => intro)]];
+};
+// the parameters that the goal or a premise blocks on (enumerations, and datatypes of at most 6
+// constructors), split jointly in parameter order, the premises introduced in each arm
+const blkScheme = (R: Run, k: string, tl: Tele): [string, string][] | null => {
+  const { A } = R;
+  const pr = premises(A, tl);
+  const intro = "?TODO"; // premises stay in the goal: an arm may still split a parameter, then introduce them
+  const idx = new Set<number>(blocking(A, tl));
+  const last = pr.goals.length ? pr.goals[pr.goals.length - 1] : tl.g;
+  for (let j = 0; j < pr.names.length; j++) {
+    const a = A.ann(last, tl.ps.length + j);
+    const N = a ? A.attempt(A.FUEL_NF * 2, () => A.nf(a.T, tl.ps.length + j)) : null;
+    const blk: LTerm[] = [];
+    if (N) A.blockers(N, blk);
+    for (const b of blk) if (b.$ === "Var" && b.i < tl.ps.length) idx.add(b.i);
+  }
+  for (const p of tl.ps) {
+    const T = A.attempt(A.FUEL_NF * 2, () => A.nf(p.T, p.i));
+    if (!T || T.$ !== "Eql" || T.a.$ === "Var" || T.b.$ === "Var") continue; // {g == call}: a generalization's equation
+    const blk: LTerm[] = [];
+    A.blockers(T, blk);
+    for (const b of blk) if (b.$ === "Var" && b.i < p.i) idx.add(b.i);
+  }
+  // every enumeration parameter (a generalized Bool call: the point is to split them all at once)
+  for (const p of tl.ps) if (p.q !== "-" && enumTyped(A, tl.g, B.Var(p.name, p.i) as LTerm)) idx.add(p.i);
+  const ids = [...idx].filter((i) => {
+    const p = tl.ps[i];
+    if (p.q === "-" || /^(U32|F32|Char|Nat|String|Word)/.test(p.ty)) return false;
+    const adt = adtOf(A, tl.g, p.T);
+    return !!adt && adt.c.length >= 1 && adt.c.length <= 6;
+  }).sort((a, b) => a - b).slice(0, 4);
+  if (ids.length === 0) return null;
+  const used = new Set(tl.ps.map((p) => p.name));
+  const cs = ids.map((i) => casesOf(A, tl, i, used));
+  if (!cs.every((c) => c) || product(cs as string[][]).length > MAX_ARMS) return null;
+  return [["blk", matchText(ids.map((i) => tl.ps[i].name), product(cs as string[][]), () => intro)]];
+};
 const natScheme = (R: Run, k: string, tl: Tele): [string, string][] | null => {
   const { A } = R;
   const out: [string, string][] = [];
@@ -1216,11 +1632,16 @@ const schemesProve = (R: Run, k: string, depth: number): Fill | null => {
   const rank = (f: any) => SCHEME_RANK.findIndex((r) => f.name.startsWith(r));
   tried.sort((a, b) => rank(a) - rank(b) || a.open - b.open || b.closed - a.closed);
   let best: Fill | null = tried[0] ?? null;
-  if (depth < MAX_DEPTH) for (const t of tried.slice(0, 2)) {
+  // the best two by rank; then the best of the joint-split schemes (rec, blk) when neither of those is one:
+  // they run only after the others failed, so a def that the others prove costs nothing more
+  const cands = tried.slice(0, 2);
+  const joint = tried.find((t: any) => /^(rec|blk)/.test(t.name));
+  if (joint && !cands.includes(joint)) cands.push(joint);
+  if (depth < MAX_DEPTH) for (const t of cands) {
     if (A.now() > R.until || t.open > MAX_HELPER_ARMS) break;
     // no arm closed: the split made no progress by the leaf tactics; the constructor steps only
     // (the whole goal as one arm closes nothing by itself: its helpers are the point)
-    const r = fillArms(R, k, t.body, depth, [t.closed === 0 && !String((t as any).name).startsWith("whole") ? 2 : 1]);
+    const r = fillArms(R, k, t.body, depth, [t.closed === 0 && !/^(whole|rec|blk)/.test(String((t as any).name)) ? 2 : 1]);
     if (A.debug()) console.error("[gen2] --ind: " + A.shortOf(k) + " scheme " + (t as any).name + " with helpers: " + (r ? r.open + " open" : "-"));
     if (!r) continue;
     const merged = { ...r, closed: r.closed + t.closed };
@@ -1309,6 +1730,14 @@ const indLeafGo = (A: Api, g: Goal): string | null => {
     const Tt = B.term_strip(E.T) as any;
     if (Tt.$ !== "ADT") continue;
     const targs = (Tt.x as LTerm[]).filter((x: any) => x.$ !== "Qua" && x.$ !== "Qnt").map((x) => A.show(x, g.names));
+    // a Bool clash ({False == True}): Bool.pick as the motive, Empty at the right side, Unit at the left
+    if (targs.length === 0 && A.shortOf(Tt.k) === "Bool" && (E as any).b?.$ === "Ctr") {
+      const rightTrue = A.shortOf((E as any).b.k) === "True";
+      const d = "(%" + g.names[i] + " : Bool.pick(Type, _, " + (rightTrue ? "Empty, Unit" : "Unit, Empty") + "); Unit{})";
+      const s = empty ? d : "Empty.absurd(" + goal + ", " + d + ")";
+      if (A.tryText(g, s)) return s;
+      continue;
+    }
     if (targs.length === 0) continue; // no type parameter: gen2's own absurd and ex-falso lemmas cover it
     for (const P of predsOf(A, Tt.k).slice(0, 8)) {
       if ((A.ORDER.get(P.k) ?? Infinity) >= job.order) continue;
