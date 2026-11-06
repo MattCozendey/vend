@@ -5,6 +5,7 @@ import ../glob/spec.bend as Glob
 import ../hash/spec.bend as Hash
 import ../history/impl.bend as HistoryImpl
 import ../history/spec.bend as History
+import ../journal/spec.bend as Journal
 import ../lines/impl.bend as LinesImpl
 import ../lines/spec.bend as Lines
 import ../shared.bend as Shared
@@ -84,81 +85,109 @@ def Core.nest(c: Spec.Core, d: String) -> Spec.Core:
 def Core.heads(+c: Spec.Core, path: String) -> List<&2, Shared.Bytes()>:
   Lines.Line.heads(Spec.Core.line(c), Spec.Core.name(c, path))
 
-# the step after the line took the node x by the author a of the file at
-# path, or refused
+# A version is kept whole or not at all: if the store, the history or the
+# line refuses it, the step gives back c0, the core before the version,
+# so a failed step changes nothing that the journal keeps.
+
+# the step after the line took the node v (id x) by the author a of the
+# file at path, or refused: the record of the version, then the version
 def Core.advanced(
+  c0: Spec.Core,
   c: Spec.Core,
   +path: String,
   h2: History.History,
   x: Shared.Bytes(),
   a: History.Author,
+  content: Maybe<&2, Shared.Bytes()>,
+  v: History.Node,
   r: Result<&2, &2, Lines.Refused, Lines.Line>
 ) -> Spec.Stepped:
   match r:
-    case Done{l2}:
+    case Done{+l2}:
       +c = c
       n = Spec.Core.name(c, path)
+      rec = {Journal.Kept{Lines.Line.name(l2), content, v}: Journal.Record}
       Spec.Stepped{
         Core.set_moved(Core.set_versions(c, h2, l2), path, None{}),
-        [Spec.Recorded{n, x, a}]
+        [Spec.Logged{rec}, Spec.Recorded{n, x, a}]
       }
     case Fail{e}:
-      +c = c
-      Spec.Stepped{c, [Spec.Failed{Spec.Core.name(c, path), Spec.LineProblem{e}}]}
+      +c0 = c0
+      Spec.Stepped{c0, [Spec.Failed{Spec.Core.name(c0, path), Spec.LineProblem{e}}]}
 
-# the step after the history took the node by the author a, or lacked a
-# parent
+# the step after the history took the node v by the author a, or refused
 def Core.added(
+  +c0: Spec.Core,
   +c: Spec.Core,
   +path: String,
   parents: List<&2, Shared.Bytes()>,
   a: History.Author,
+  content: Maybe<&2, Shared.Bytes()>,
+  v: History.Node,
   r: Result<&2, &2, History.Refusal, History.Added>
 ) -> Spec.Stepped:
   match r:
     case Done{History.Added{+h2, +x}}:
       Core.advanced(
+        c0,
         c,
         path,
         h2,
         x,
         a,
+        content,
+        v,
         Lines.Line.advance(Spec.Core.line(c), h2, Spec.Core.name(c, path), parents, x)
       )
     case Fail{e}:
-      Spec.Stepped{c, [Spec.Failed{Spec.Core.name(c, path), Spec.HistoryProblem{e}}]}
+      Spec.Stepped{c0, [Spec.Failed{Spec.Core.name(c0, path), Spec.HistoryProblem{e}}]}
 
 # the step that keeps body, by the author a, as the next version of the file
-# at path: its parents are the heads on the line, then the line moves to it
-def Core.keep(+c: Spec.Core, +path: String, body: History.Body, +a: History.Author) -> Spec.Stepped:
+# at path: its parents are the heads on the line, then the line moves to it;
+# c0 is the core before the version, content its bytes (None for Gone)
+def Core.keep(
+  c0: Spec.Core,
+  +c: Spec.Core,
+  +path: String,
+  body: History.Body,
+  +a: History.Author,
+  content: Maybe<&2, Shared.Bytes()>
+) -> Spec.Stepped:
   +parents = Core.heads(c, path)
-  v = {
+  +v = {
     History.Node{Spec.Core.name(c, path), parents, body, Spec.Core.moved(c, path), a}: History.Node
   }
-  Core.added(c, path, parents, a, History.History.add(Spec.Core.history(c), v))
+  Core.added(c0, c, path, parents, a, content, v, History.History.add(Spec.Core.history(c), v))
 
 # the step after the store took the content of the file at path, or failed
 def Core.stored(
   +c: Spec.Core,
   path: String,
   r: Result<&2, &2, Store.Problem, Store.Wrote>,
-  a: History.Author
+  a: History.Author,
+  content: Maybe<&2, Shared.Bytes()>
 ) -> Spec.Stepped:
   match r:
     case Fail{p}:
       Spec.Stepped{c, [Spec.Failed{Spec.Core.name(c, path), Spec.StoreProblem{p}}]}
     case Done{Store.Wrote{s2, root}}:
-      Core.keep(Core.set_store(c, s2), path, History.Has{root}, a)
+      Core.keep(c, Core.set_store(c, s2), path, History.Has{root}, a, content)
 
 # the step that records the version v of the file at path, by the author
 # a: content goes to the store, then to the history; Gone goes to the
 # history
 def Core.record(+c: Spec.Core, path: String, v: Ep.Version, a: History.Author) -> Spec.Stepped:
   match v:
-    case Ep.Content{bytes, t}:
-      Core.stored(c, path, Store.Tree.write(Spec.Core.store(c), Spec.Core.items(bytes)), a)
+    case Ep.Content{+bytes, t}:
+      Core.stored(
+        c,
+        path,
+        Store.Tree.write(Spec.Core.store(c), Spec.Core.items(bytes)),
+        a,
+        Some{bytes}
+      )
     case Ep.Gone{}:
-      Core.keep(c, path, History.Gone{}, a)
+      Core.keep(c, c, path, History.Gone{}, a, None{})
 
 # os in front of the outputs of s
 def Core.prefix(os: List<&2, Spec.Output>, s: Spec.Stepped) -> Spec.Stepped:
@@ -362,3 +391,162 @@ def Moved.kept(
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 def Spec.move_remembered(c, f, t):
   ({==}, Moved.kept(c, f, t))
+
+# Replay
+# ------
+
+# the store a write left, or s when it failed
+def Replay.wrote(s: Store.Store, r: Result<&2, &2, Store.Problem, Store.Wrote>) -> Store.Store:
+  match r:
+    case Done{Store.Wrote{s2, root}}:
+      s2
+    case Fail{e}:
+      s
+
+# the store after the content of a record, if any
+def Replay.store(s: Store.Store, content: Maybe<&2, Shared.Bytes()>) -> Store.Store:
+  match content:
+    case None{}:
+      s
+    case Some{b}:
+      +s = s
+      Replay.wrote(s, Store.Tree.write(s, Spec.Core.items(b)))
+
+# the history an add left, or h when it refused
+def Replay.history(
+  h: History.History,
+  r: Result<&2, &2, History.Refusal, History.Added>
+) -> History.History:
+  match r:
+    case Done{History.Added{h2, x}}:
+      h2
+    case Fail{e}:
+      h
+
+# the line an advance left, or l when it refused
+def Replay.line(l: Lines.Line, r: Result<&2, &2, Lines.Refused, Lines.Line>) -> Lines.Line:
+  match r:
+    case Done{l2}:
+      l2
+    case Fail{e}:
+      l
+
+# the line after the node v, added to h, when the record is of the line
+# named ln: the same advance a step made, as the node's parents are the
+# heads the step saw
+def Replay.advance(+l: Lines.Line, h: History.History, ln: String, +v: History.Node) -> Lines.Line:
+  Shared.Bool.when(
+    Lines.Line,
+    String.eq(ln, Lines.Line.name(l)),
+    u => Replay.line(
+      l,
+      Lines.Line.advance(l, h, History.Node.name(v), History.Node.parents(v), History.Node.id(v))
+    ),
+    u => l
+  )
+
+# c after one record
+def Replay.one(c: Spec.Core, r: Journal.Record) -> Spec.Core:
+  match c r:
+    case Spec.Core{m, s, +h, l, ss, ms, ns} Journal.Kept{ln, content, +v}:
+      +h2 = Replay.history(h, History.History.add(h, v))
+      Spec.Core{m, Replay.store(s, content), h2, Replay.advance(l, h2, ln, v), ss, ms, ns}
+
+# c after the records rs, in order
+def Replay.all(rs: List<&2, Journal.Record>, c: Spec.Core) -> Spec.Core:
+  match rs:
+    case Nil{}:
+      c
+    case Con{r, t}:
+      Replay.all(t, Replay.one(c, r))
+
+def Spec.Core.replay(c, rs):
+  Replay.all(rs, c)
+
+# the bytes of items, one after another
+def Replay.bytes(items: List<&2, Shared.Bytes()>) -> Shared.Bytes():
+  match items:
+    case Nil{}:
+      []
+    case Con{x, t}:
+      List.append(&2, U32, x, Replay.bytes(t))
+
+# the stream primed with the content that the store gives for root, if any
+def Replay.primed.read(r: Maybe<&2, List<&2, Shared.Bytes()>>) -> Maybe<&2, Ep.Stream>:
+  match r:
+    case None{}:
+      None{}
+    case Some{items}:
+      Some{
+        Ep.Stream{
+          Ep.Unreachable{"not reached yet"},
+          Some{Hash.Hash.blake3(Replay.bytes(items))},
+          False{},
+          False{}
+        }
+      }
+
+# the stream primed with the content of the node, when it holds content
+def Replay.primed.node(s: Store.Store, v: Maybe<&2, History.Node>) -> Maybe<&2, Ep.Stream>:
+  match v:
+    case Some{History.Node{n, ps, History.Has{root}, f, a}}:
+      Replay.primed.read(Store.Tree.read(s, root))
+    case _:
+      None{}
+
+# the stream primed with the content of the one head xs, if there is one
+def Replay.primed(
+  s: Store.Store,
+  h: History.History,
+  xs: List<&2, Shared.Bytes()>
+) -> Maybe<&2, Ep.Stream>:
+  match xs:
+    case Con{x, Nil{}}:
+      Replay.primed.node(s, History.History.get(h, x))
+    case _:
+      None{}
+
+# ss with k at p, when there is one
+def Replay.put(
+  ss: Shared.Table<Ep.Stream>,
+  p: String,
+  k: Maybe<&2, Ep.Stream>
+) -> Shared.Table<Ep.Stream>:
+  match k:
+    case None{}:
+      ss
+    case Some{x}:
+      Shared.Table.set(Ep.Stream, ss, p, x)
+
+# streams with a primed stream for each path of ps whose one head on the
+# line l holds content
+def Replay.prime(
+  ps: List<&2, String>,
+  +s: Store.Store,
+  +h: History.History,
+  +l: Lines.Line,
+  +sp: String,
+  ss: Shared.Table<Ep.Stream>
+) -> Shared.Table<Ep.Stream>:
+  match ps:
+    case Nil{}:
+      ss
+    case Con{+p, t}:
+      k = Replay.primed(s, h, Lines.Line.heads(l, Shared.Name{sp, p}))
+      Replay.prime(t, s, h, l, sp, Replay.put(ss, p, k))
+
+# the heads of l, by path
+def Replay.heads(l: Lines.Line) -> Shared.Table<List<&2, Shared.Bytes()>>:
+  match l:
+    case Lines.Line{sp, nm, hs}:
+      hs
+
+# c with its streams primed from its line
+def Replay.primed.core(c: Spec.Core) -> Spec.Core:
+  match c:
+    case Spec.Core{Spec.Mount{+sp, ln, r, g}, +s, +h, +l, ss, ms, ns}:
+      ps = Shared.Table.keys(List<&2, Shared.Bytes()>, Replay.heads(l))
+      Spec.Core{Spec.Mount{sp, ln, r, g}, s, h, l, Replay.prime(ps, s, h, l, sp, ss), ms, ns}
+
+def Spec.Core.restore(m, rs):
+  Replay.primed.core(Spec.Core.replay(Spec.Core.new(m), rs))

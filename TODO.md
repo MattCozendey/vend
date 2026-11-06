@@ -20,6 +20,8 @@ Delete each item when it is done.
   - Debounce: a quiet window before fetching, so a truncate-then-write does not record the empty state.
   - Retry a transient Windows sharing violation during a fetch instead of reporting `Unreachable`.
   - A temp file left by a crash is never removed; files over 4 GiB (`File.size` is `U32`).
+  - The JS lane locks the journal with a pid file (no flock there), so two loops that start at the same moment can
+    both take it.
   - File URIs: percent-encoded characters are not decoded yet (a `%` is taken as itself).
 - `src/shared.bend`: a faster Table inside (e.g. Base Map), proving the same three laws.
 - `src/core`: more than one mount per loop, and a `--line` option in the CLI (today: one mount, line `main`).
@@ -33,9 +35,16 @@ Delete each item when it is done.
   - Fronts, both thin (they build core inputs and print outputs): a CLI over a local socket (one command per call;
     `affects` streams), and an MCP server over stdio.
   - `daemon stop`: refuses while clients or mounts are active, unless `--force`; not offered to agents.
-- Durability (decided): acknowledge a write only after its write-ahead-log entry is fsynced; on `start-or-resume`,
-  replay the log, then rescan the mounts and record what changed while the daemon was down. The file driver must
-  fsync its writes (today it does not).
+- Durability: the watch loop already keeps the journal (`src/journal`): it syncs a step's records before anything
+  else of that step, and on start it cuts a torn tail, replays, and fetches every known and listed file. Left for
+  the daemon: `start-or-resume` runs this same start; seen markers and marks go into the journal once they live in
+  the core's state.
+- `src/journal`: compaction (a snapshot of the store, history and lines, then a fresh log), so start-up does not
+  replay everything and the journal stays below 4 GiB (it is read whole with `File.size`, a `U32`).
+- `src/journal`: one loop per user holds the journal lock today, so two `watch` processes cannot run at once; the
+  daemon serves every mount from one process.
+- `src/endpoints/file`: on POSIX, a rename is durable only after its directory is synced; sync the directory after
+  the rename of a Put and of a journal cut.
 - CLI for marks (`src/lines`, `Mark`): `bend-ver mark <line> <name> -m <message>`, `merge <line>@<mark> into <line>`,
   `diff <mark> <mark>`. Store marks in the core's state, then state their laws (a mark holds its line's heads from
   when it was made; advancing the line never changes it): today a mark is a copy of a line, so they hold by
@@ -62,7 +71,8 @@ and soundness are proven in `src/shared.bend`).
 - `src/lines`: `advance_head`, `advance_frames`, `advance_descends`, `seen_caught_up`, `seen_frames`.
 - `src/graph`: `affected_exact`.
 - `src/core`: `noticed_follows_stream`, `records_each_version`, `fetched_reads_back`, `recorded_heads_line`,
-  `write_accepted`, `write_authored`, `nested_untracked`, `step_keeps_history`.
+  `write_accepted`, `write_authored`, `nested_untracked`, `step_keeps_history`, `replay_matches`, `restored_quiet`.
+- `src/journal`: `read_after_encode`, `read_torn_tail`.
 - `src/endpoints/file`: `temp_is_temp`.
 
 ## Strengthen

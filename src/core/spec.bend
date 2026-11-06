@@ -1,7 +1,9 @@
 import Base
 import ../endpoints/spec.bend as Ep
 import ../glob/spec.bend as Glob
+import ../hash/spec.bend as Hash
 import ../history/spec.bend as History
+import ../journal/spec.bend as Journal
 import ../lines/spec.bend as Lines
 import ../shared.bend as Shared
 import ../store/spec.bend as Store
@@ -60,13 +62,17 @@ type Problem is Data:
   HistoryProblem{refusal: History.Refusal}
   LineProblem{refused: Lines.Refused}
 
-# Something for the loop to carry out or to report. Command: send it to
-# the endpoint for the file at path. Recorded: a new version of name, with
-# its id and author, now the head of name on the line. Refused: a write whose expected
-# heads are not the heads on the line, which it names. Failed: a version
-# that could not be kept, so the history and the line did not change.
-# Stopped: the loop ends.
+# Something for the loop to carry out or to report. Logged: a record for
+# the journal; the loop appends the records of a step and syncs the journal
+# before it carries out or reports any other output of that step, so no
+# version is reported, and no endpoint is written, before it is on disk.
+# Command: send it to the endpoint for the file at path. Recorded: a new
+# version of name, with its id and author, now the head of name on the
+# line. Refused: a write whose expected heads are not the heads on the
+# line, which it names. Failed: a version that could not be kept, so the
+# store, the history and the line did not change. Stopped: the loop ends.
 type Output is Data:
+  Logged{record: Journal.Record}
   Command{path: String, command: Ep.Command}
   Recorded{name: Shared.Name, id: Shared.Bytes(), author: History.Author}
   Refused{name: Shared.Name, heads: List<&2, Shared.Bytes()>}
@@ -239,6 +245,16 @@ def Output.has_recorded(os: List<&2, Output>, +n: Shared.Name, +x: Shared.Bytes(
       List.any.if(u => Output.has_recorded(t, n, x), same)
     case Con{o, t}:
       Output.has_recorded(t, n, x)
+
+# the records among outputs, in order
+def Output.logged(os: List<&2, Output>) -> List<&2, Journal.Record>:
+  match os:
+    case Nil{}:
+      Nil{}
+    case Con{Logged{r}, t}:
+      r <> Output.logged(t)
+    case Con{o, t}:
+      Output.logged(t)
 
 # the bytes as items for the store: one item per byte
 def Core.items(b: Shared.Bytes()) -> List<&2, Shared.Bytes()>:
@@ -459,4 +475,93 @@ law step_keeps_history:
       x
     )
       == Some{v}: Maybe<&2, History.Node>
+  }
+
+# Persistence
+# -----------
+# The store, the history and the line are what a power cut must not lose;
+# the streams, the pending moves and the nested spaces are rebuilt on
+# start, by fetching every file again.
+
+# The state that the journal keeps.
+type Persisted is Data:
+  Persisted{store: Store.Store, history: History.History, line: Lines.Line}
+
+# the state of c that the journal keeps
+def Core.persisted(c: Core) -> Persisted:
+  match c:
+    case Core{m, s, h, l, ss, ms, ns}:
+      Persisted{s, h, l}
+
+# c after the records, in order: each puts its content in the store and
+# its node in the history, and moves the line of c when it names that line
+law Core.replay:
+  for c: Core
+  for rs: List<&2, Journal.Record>
+  Core
+
+# a core that serves m, after the records of its journal: the records
+# replayed into Core.new(m), and the stream of each file whose one head on
+# the line holds content primed with the token of that content, so fetching
+# the same content again records nothing
+law Core.restore:
+  for m: Mount
+  for rs: List<&2, Journal.Record>
+  Core
+
+# the records of a step rebuild exactly what the step kept: replaying them
+# on the core before the step gives its store, history and line after the
+# step; so replaying a journal rebuilds the state of the run that wrote it
+law replay_matches:
+  for c: Core
+  for i: Input
+  {
+    Core.persisted(
+      Core.replay(c, Output.logged(Stepped.outputs(Core.step(c, i))))
+    )
+      == Core.persisted(Stepped.core(Core.step(c, i))): Persisted
+  }
+
+# no duplicate versions after a restart: on a restored core, content that
+# equals the content of a file's one head on the line records nothing
+law restored_quiet:
+  for m: Mount
+  for rs: List<&2, Journal.Record>
+  for p: String
+  for bytes: Shared.Bytes()
+  for x: Shared.Bytes()
+  for ps: List<&2, Shared.Bytes()>
+  for root: Store.Ref
+  for f: Maybe<&2, Shared.Name>
+  for a: History.Author
+  for h: {
+    Lines.Line.heads(
+      Core.line(Core.restore(m, rs)),
+      Core.name(Core.restore(m, rs), p)
+    )
+      == [x]: List<&2, Shared.Bytes()>
+  }
+  for g: {
+    History.History.get(
+      Core.history(Core.restore(m, rs)),
+      x
+    )
+      == Some{
+        History.Node{Core.name(Core.restore(m, rs), p), ps, History.Has{root}, f, a}
+      }: Maybe<&2, History.Node>
+  }
+  for r: {
+    Store.Tree.read(
+      Core.store(Core.restore(m, rs)),
+      root
+    )
+      == Some{Core.items(bytes)}: Maybe<&2, List<&2, Shared.Bytes()>>
+  }
+  {
+    Output.recorded(
+      Stepped.outputs(
+        Core.step(Core.restore(m, rs), Noticed{p, Ep.Fetched{bytes, Hash.Hash.blake3(bytes)}})
+      )
+    )
+      == []: List<&2, Shared.Bytes()>
   }

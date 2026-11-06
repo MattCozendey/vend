@@ -19,7 +19,8 @@ def Main.author(a: History.Author) -> String:
     case History.Outside{}:
       "Outside"
 
-# the line of an output; commands go to the endpoint and never reach here
+# the line of an output; commands go to the endpoint and records to the
+# journal, so neither reaches here
 def Main.report(o: Core.Output) -> IO(Unit):
   match o:
     case Core.Recorded{n, x, a}:
@@ -35,6 +36,8 @@ def Main.report(o: Core.Output) -> IO(Unit):
     case Core.Stopped{}:
       IO.print("stopped")
     case Core.Command{p, k}:
+      IO.pure(Unit, Unit{})
+    case Core.Logged{r}:
       IO.pure(Unit, Unit{})
 
 # rest, with the glob m in front when there is one
