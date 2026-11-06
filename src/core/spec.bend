@@ -21,13 +21,26 @@ import ../store/spec.bend as Store
 # the root. The space id lives in the file ".vend" at the root, which
 # is never versioned. A directory below the root that holds its own
 # ".vend" starts another space (like a git submodule): nothing under
-# it belongs to this mount.
+# it belongs to this mount. author signs the versions that the mount sees
+# saved: Outside for a mount the user made, the agent for an agent's
+# checkout.
 type Mount is Data:
-  Mount{space: String, line: String, root: Shared.Uri, globs: List<&2, Glob.Rule>}
+  Mount{
+    space: String,
+    line: String,
+    root: Shared.Uri,
+    globs: List<&2, Glob.Rule>,
+    author: History.Author
+  }
 
 # the file at the root of a space that holds its id
 def Mount.space_file() -> String:
   ".vend"
+
+# the directory at the root of a mount that holds the agents' checkouts,
+# `<agent>/<line>/` each; no mount versions anything under it
+def Mount.checkouts_dir() -> String:
+  ".vend-checkouts"
 
 # Inputs
 # ------
@@ -101,9 +114,9 @@ type Core is Data:
 # a core that serves the mount m and knows nothing yet
 def Core.new(m: Mount) -> Core:
   match m:
-    case Mount{+sp, +ln, r, g}:
+    case Mount{+sp, +ln, r, g, a}:
       Core{
-        Mount{sp, ln, r, g},
+        Mount{sp, ln, r, g, a},
         Store.Store.new(),
         History.History.new(),
         Lines.Line.new(sp, ln),
@@ -115,8 +128,14 @@ def Core.new(m: Mount) -> Core:
 # the space of c
 def Core.space(c: Core) -> String:
   match c:
-    case Core{Mount{sp, ln, r, g}, s, h, l, ss, ms, ns}:
+    case Core{Mount{sp, ln, r, g, a}, s, h, l, ss, ms, ns}:
       sp
+
+# the author of the versions that the mount of c sees saved
+def Core.author(c: Core) -> History.Author:
+  match c:
+    case Core{Mount{sp, ln, r, g, a}, s, h, l, ss, ms, ns}:
+      a
 
 # the name of the file at path in the space of c
 def Core.name(c: Core, path: String) -> Shared.Name:
@@ -134,16 +153,20 @@ def Core.under_any(ds: List<&2, String>, +path: String) -> Bool:
     case Con{d, t}:
       List.any.if(u => Core.under_any(t, path), Core.under(path, d))
 
-# the core versions the file at path: it is a valid path, not the space
-# file, under no nested space, and the globs of the mount select it
+# the core versions the file at path: it is not under the checkouts
+# directory, it is a valid path, not the space file, under no nested
+# space, and the globs of the mount select it
 def Core.tracks(c: Core, +path: String) -> Bool:
   match c:
-    case Core{Mount{sp, ln, r, g}, s, h, l, ss, ms, ns}:
+    case Core{Mount{sp, ln, r, g, a}, s, h, l, ss, ms, ns}:
       mine = List.all.if(
         u => Bool.not(Core.under_any(ns, path)),
         Bool.not(String.eq(path, Mount.space_file()))
       )
-      List.all.if(u => Glob.Rule.selects(g, path), Bool.and(Glob.is_path(path), mine))
+      List.all.if(
+        v => List.all.if(u => Glob.Rule.selects(g, path), Bool.and(Glob.is_path(path), mine)),
+        Bool.not(Core.under(path, Mount.checkouts_dir()))
+      )
 
 # the history of c
 def Core.history(c: Core) -> History.History:
@@ -315,7 +338,9 @@ law records_each_version:
   }
 
 # fetched content that the core records reads back from its node: a node
-# of the file, whose root in the store gives exactly the fetched bytes
+# of the file, signed by the author of the mount (Outside for a mount the
+# user made, the agent for a checkout), whose root in the store gives
+# exactly the fetched bytes
 law fetched_reads_back:
   for c: Core
   for p: String
@@ -338,7 +363,7 @@ law fetched_reads_back:
       x
     )
       == Some{
-        History.Node{Core.name(c, p), parents, History.Has{r}, from, History.Outside{}}
+        History.Node{Core.name(c, p), parents, History.Has{r}, from, Core.author(c)}
       }: Maybe<&2, History.Node>
   }
   {
@@ -461,6 +486,14 @@ law nested_untracked:
   for p: String
   for u: {Core.under(p, d) == True{}: Bool}
   {Core.tracks(Stepped.core(Core.step(c, Nested{d})), p) == False{}: Bool}
+
+# no mount versions a file under the checkouts directory: the agents'
+# checkouts inside a mount are mounts of their own
+law checkouts_untracked:
+  for c: Core
+  for p: String
+  for u: {Core.under(p, Mount.checkouts_dir()) == True{}: Bool}
+  {Core.tracks(c, p) == False{}: Bool}
 
 # a step leaves every node of the history in place
 law step_keeps_history:

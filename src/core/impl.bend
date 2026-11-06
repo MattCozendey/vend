@@ -20,12 +20,18 @@ import ./spec.bend as Spec
 # whose cost grows only with the length of the path
 def Core.tracks(c: Spec.Core, +path: String) -> Bool:
   match c:
-    case Spec.Core{Spec.Mount{sp, ln, r, g}, s, h, l, ss, ms, ns}:
+    case Spec.Core{Spec.Mount{sp, ln, r, g, a}, s, h, l, ss, ms, ns}:
       mine = List.all.if(
         u => Bool.not(Spec.Core.under_any(ns, path)),
         Bool.not(String.eq(path, Spec.Mount.space_file()))
       )
-      List.all.if(u => GlobImpl.Rule.selects.fast(g, path), Bool.and(Glob.is_path(path), mine))
+      List.all.if(
+        v => List.all.if(
+          u => GlobImpl.Rule.selects.fast(g, path),
+          Bool.and(Glob.is_path(path), mine)
+        ),
+        Bool.not(Spec.Core.under(path, Spec.Mount.checkouts_dir()))
+      )
 
 # Core.tracks answers what Spec.Core.tracks answers
 def Core.tracks_ok(
@@ -33,21 +39,22 @@ def Core.tracks_ok(
   +path: String
 ) -> {Core.tracks(c, path) == Spec.Core.tracks(c, path): Bool}:
   match c:
-    case Spec.Core{Spec.Mount{sp, ln, r, g}, s, h, l, ss, ms, ns}:
+    case Spec.Core{Spec.Mount{sp, ln, r, g, a}, s, h, l, ss, ms, ns}:
       mine = List.all.if(
         u => Bool.not(Spec.Core.under_any(ns, path)),
         Bool.not(String.eq(path, Spec.Mount.space_file()))
       )
       here = Bool.and(Glob.is_path(path), mine)
+      out = Bool.not(Spec.Core.under(path, Spec.Mount.checkouts_dir()))
       %GlobImpl.Rule.selects_fast_ok(
         g,
         path
       ): {
         List.all.if(
-          u => GlobImpl.Rule.selects.fast(g, path),
-          here
+          v => List.all.if(u => GlobImpl.Rule.selects.fast(g, path), here),
+          out
         )
-          == List.all.if(u => _, here): Bool
+          == List.all.if(v => List.all.if(u => _, here), out): Bool
       }
       {==}
 
@@ -225,12 +232,13 @@ def Core.streamed(c: Spec.Core, +path: String, s: Ep.Stepped, a: History.Author)
       Core.effects(es, Core.set_stream(c, path, k), path, a)
 
 # the step after the signal s about the file at path: nothing for a file
-# the core does not track; what an endpoint shows is by Outside
+# the core does not track; what an endpoint shows is by the author of the
+# mount
 def Core.noticed(+c: Spec.Core, +path: String, s: Ep.Signal) -> Spec.Stepped:
   Shared.Bool.when(
     Spec.Stepped,
     Core.tracks(c, path),
-    u => Core.streamed(c, path, Ep.Stream.step(Spec.Core.stream(c, path), s), History.Outside{}),
+    u => Core.streamed(c, path, Ep.Stream.step(Spec.Core.stream(c, path), s), Spec.Core.author(c)),
     u => Spec.Stepped{c, []}
   )
 
@@ -304,7 +312,7 @@ def Spec.untracked_ignored(c, p, s, h):
         == Shared.Bool.when(
           Spec.Stepped,
           _,
-          u => Core.streamed(c, p, Ep.Stream.step(Spec.Core.stream(c, p), s), History.Outside{}),
+          u => Core.streamed(c, p, Ep.Stream.step(Spec.Core.stream(c, p), s), Spec.Core.author(c)),
           u => Spec.Stepped{c, []}
         ): Spec.Stepped
     }; (%Equal.sym(
@@ -320,7 +328,7 @@ def Spec.untracked_ignored(c, p, s, h):
         == Shared.Bool.when(
           Spec.Stepped,
           _,
-          u => Core.streamed(c, p, Ep.Stream.step(Spec.Core.stream(c, p), s), History.Outside{}),
+          u => Core.streamed(c, p, Ep.Stream.step(Spec.Core.stream(c, p), s), Spec.Core.author(c)),
           u => Spec.Stepped{c, []}
         ): Spec.Stepped
     }; {==}))
@@ -551,9 +559,27 @@ def Replay.heads(l: Lines.Line) -> Shared.Table<List<&2, Shared.Bytes()>>:
 # c with its streams primed from its line
 def Replay.primed.core(c: Spec.Core) -> Spec.Core:
   match c:
-    case Spec.Core{Spec.Mount{+sp, ln, r, g}, +s, +h, +l, ss, ms, ns}:
+    case Spec.Core{Spec.Mount{+sp, ln, r, g, a}, +s, +h, +l, ss, ms, ns}:
       ps = Shared.Table.keys(List<&2, Shared.Bytes()>, Replay.heads(l))
-      Spec.Core{Spec.Mount{sp, ln, r, g}, s, h, l, Replay.prime(ps, s, h, l, sp, ss), ms, ns}
+      Spec.Core{Spec.Mount{sp, ln, r, g, a}, s, h, l, Replay.prime(ps, s, h, l, sp, ss), ms, ns}
 
 def Spec.Core.restore(m, rs):
   Replay.primed.core(Spec.Core.replay(Spec.Core.new(m), rs))
+
+def Spec.checkouts_untracked(c, p, u):
+  match c:
+    case Spec.Core{Spec.Mount{sp, ln, r, g, a}, s, h, l, ss, ms, ns}:
+      +p = p
+      mine = List.all.if(
+        w => Bool.not(Spec.Core.under_any(ns, p)),
+        Bool.not(String.eq(p, Spec.Mount.space_file()))
+      )
+      %Equal.sym(Bool, Spec.Core.under(p, Spec.Mount.checkouts_dir()), True{}, u):
+        {
+          List.all.if(
+            v => List.all.if(w => Glob.Rule.selects(g, p), Bool.and(Glob.is_path(p), mine)),
+            Bool.not(_)
+          )
+            == False{}: Bool
+        }
+      {==}

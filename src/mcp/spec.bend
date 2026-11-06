@@ -196,6 +196,16 @@ def Mcp.tools() -> List<&2, McpTool>:
           APos{"into", "the line to merge into", True{}}
         ]
       }
+    },
+    McpTool{
+      "vend_checkout",
+      "Your own working copy of a line: a folder inside the user's mount (.vend-checkouts/<you>/<line>/) that holds the line's files. What you save there is recorded on that line, signed with your client name. Answers with the folder's path.",
+      Says{[AWord{"checkout"}, APos{"line", "the line", True{}}]}
+    },
+    McpTool{
+      "vend_release",
+      "Your working copy of a line removed: the folder is deleted, the line and its versions stay.",
+      Says{[AWord{"release"}, APos{"line", "the line", True{}}]}
     }
   ]
 
@@ -488,7 +498,8 @@ def Mcp.instructions() -> String:
     [
       "vend versions every save live, by item for Bend and C. Names are <space>:<path>; a version is a node ",
       "id prefix or a line. Write with the heads you last saw (expect); a stale write is refused with the ",
-      "heads now. Your writes are signed with your client name. Mounting, unmounting and stopping vend are ",
+      "heads now. Your writes are signed with your client name. To edit files with your own tools, take a ",
+      "checkout of your line (vend_checkout) and edit there; release it when done. Mounting, unmounting and stopping vend are ",
       "the user's: when a tool says vend is not running, ask the user to run `vend start-or-resume`."
     ]
   )

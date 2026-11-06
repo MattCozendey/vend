@@ -1,6 +1,7 @@
 import Base
 import ../core/spec.bend as Core
 import ../endpoints/spec.bend as Ep
+import ../glob/spec.bend as Glob
 import ../history/spec.bend as History
 import ../journal/spec.bend as Journal
 import ../lines/spec.bend as Lines
@@ -74,14 +75,33 @@ def Local.globs(l: Local) -> List<&2, String>:
 # the line name of a mount
 def Local.line(l: Local) -> String:
   match l:
-    case Local{Core.Mount{sp, ln, r, g}, gs, ss, ms, ns}:
+    case Local{Core.Mount{sp, ln, r, g, a}, gs, ss, ms, ns}:
       ln
 
 # the text of the root of a mount, which names the mount in requests
 def Local.uri(l: Local) -> String:
   match l:
-    case Local{Core.Mount{sp, ln, r, g}, gs, ss, ms, ns}:
+    case Local{Core.Mount{sp, ln, r, g, a}, gs, ss, ms, ns}:
       Shared.Uri.show(r)
+
+# the space of a mount
+def Local.space(l: Local) -> String:
+  match l:
+    case Local{Core.Mount{sp, ln, r, g, a}, gs, ss, ms, ns}:
+      sp
+
+# the root of a mount
+def Local.root(l: Local) -> Shared.Uri:
+  match l:
+    case Local{Core.Mount{sp, ln, r, g, a}, gs, ss, ms, ns}:
+      r
+
+# who signs what a mount sees saved: Outside for a mount the user made, the
+# agent for a checkout
+def Local.author(l: Local) -> History.Author:
+  match l:
+    case Local{Core.Mount{sp, ln, r, g, a}, gs, ss, ms, ns}:
+      a
 
 # the first local of ms whose URI is uri
 def Local.find(ms: List<&2, Local>, +uri: String) -> Maybe<&2, Local>:
@@ -133,16 +153,23 @@ def Daemon.line(d: Daemon, +sp: String, +ln: String) -> Lines.Line:
 # and the parts l keeps on its own
 def Daemon.core(+d: Daemon, l: Local) -> Core.Core:
   match d l:
-    case Daemon{s, h, ls, ms, cs, bk} Local{Core.Mount{+sp, +ln, r, g}, gs, ss, mv, ns}:
-      Core.Core{Core.Mount{sp, ln, r, g}, s, h, Daemon.line(d, sp, ln), ss, mv, ns}
+    case Daemon{s, h, ls, ms, cs, bk} Local{Core.Mount{+sp, +ln, r, g, a}, gs, ss, mv, ns}:
+      Core.Core{Core.Mount{sp, ln, r, g, a}, s, h, Daemon.line(d, sp, ln), ss, mv, ns}
 
 # d with the result c of a step of the mount whose glob texts are gs: its
 # store, history and line become the daemon's, and its own parts replace
 # the local of its URI (first among the mounts)
 def Daemon.put(d: Daemon, c: Core.Core, gs: List<&2, String>) -> Daemon:
   match d c:
-    case Daemon{s, h, ls, ms, cs, bk} Core.Core{Core.Mount{+sp, +ln, r, g}, s2, h2, l2, ss, mv, ns}:
-      +l = {Local{Core.Mount{sp, ln, r, g}, gs, ss, mv, ns}: Local}
+    case Daemon{
+      s,
+      h,
+      ls,
+      ms,
+      cs,
+      bk
+    } Core.Core{Core.Mount{+sp, +ln, r, g, a}, s2, h2, l2, ss, mv, ns}:
+      +l = {Local{Core.Mount{sp, ln, r, g, a}, gs, ss, mv, ns}: Local}
       Daemon{
         s2,
         h2,
@@ -640,6 +667,10 @@ law apply_forked_mark:
 #   restore <name> <version> [--line L]     a version with an old content
 #   mark <line> <name> -m <message>         a mark of the line as it is
 #   merge <line|line@mark> into <line>      a merge, every resource or none
+#   checkout <line>                         the agent's working copy of the
+#                                           line, in a mount of its space
+#   release <line>                          that working copy gone; the line
+#                                           stays
 type Command is Data:
   LinesOf{}
   LogOf{name: Shared.Name, line: Maybe<&2, String>, author: Maybe<&2, String>}
@@ -652,6 +683,8 @@ type Command is Data:
   RestoreTo{name: Shared.Name, line: String, version: String}
   MarkMade{line: String, name: String, message: String}
   MergeOf{from: String, into: String}
+  CheckoutOf{line: String}
+  ReleaseOf{line: String}
 
 # the resource whose bytes a command writes, as a URI the daemon fetches
 # before it handles the command: a write's --from; every other command
@@ -665,7 +698,7 @@ def Command.source(c: Command) -> Maybe<&2, String>:
 
 # the syntax of the everyday commands
 def Command.syntax() -> String:
-  "lines | log <name> [--line L] [--author A] | show <name> [<version>] | diff <name> <a> <b> | affects <line> | impact <line|line@mark> | line new <name> --from <line|line@mark> | write <name> --expect <ids|none> [--line L] [--from <uri>] | restore <name> <version> [--line L] | mark <line> <name> -m <message> | merge <line|line@mark> into <line>"
+  "lines | log <name> [--line L] [--author A] | show <name> [<version>] | diff <name> <a> <b> | affects <line> | impact <line|line@mark> | line new <name> --from <line|line@mark> | write <name> --expect <ids|none> [--line L] [--from <uri>] | restore <name> <version> [--line L] | mark <line> <name> -m <message> | merge <line|line@mark> into <line> | checkout <line> | release <line>"
 
 # the usage of the everyday commands
 def Command.usage() -> String:
@@ -817,6 +850,22 @@ def Command.merge(r: List<&2, String>) -> Result<&2, &2, String, Command>:
     case _:
       Fail{Command.usage()}
 
+# checkout <line>
+def Command.checkout(r: List<&2, String>) -> Result<&2, &2, String, Command>:
+  match r:
+    case Con{a, t}:
+      Command.if(List.is_empty(&2, String, t), CheckoutOf{a})
+    case Nil{}:
+      Fail{Command.usage()}
+
+# release <line>
+def Command.release(r: List<&2, String>) -> Result<&2, &2, String, Command>:
+  match r:
+    case Con{a, t}:
+      Command.if(List.is_empty(&2, String, t), ReleaseOf{a})
+    case Nil{}:
+      Fail{Command.usage()}
+
 # A command word and the reader of the words after it.
 type Reader is Type:
   Reader{word: String, read: List<&2, String> -> Result<&2, &2, String, Command>}
@@ -834,7 +883,9 @@ def Command.readers() -> List<&1, Reader>:
     Reader{"write", r => Command.write(r)},
     Reader{"restore", r => Command.restore(r)},
     Reader{"mark", r => Command.mark(r)},
-    Reader{"merge", r => Command.merge(r)}
+    Reader{"merge", r => Command.merge(r)},
+    Reader{"checkout", r => Command.checkout(r)},
+    Reader{"release", r => Command.release(r)}
   ]
 
 # the words of rs
@@ -1049,6 +1100,122 @@ law affects_sees:
       == [Journal.Saw{a, Lines.Line.id(l)}]: List<&2, Journal.Record>
   }
 
+# Checkouts
+# ---------
+# An agent's checkout of a line is a mount of its own, made by the daemon
+# inside a mount that the user made of the line's space: its root is
+# `<root>/.vend-checkouts/<agent>/<line>/`, where no mount versions
+# anything (Core.checkouts_untracked). What the agent saves there is
+# recorded on that line, signed by the agent. vend makes and removes
+# nothing outside that folder.
+
+# Where a checkout goes: base, the user's mount it lives in; the agent;
+# the name of the line it follows.
+type Plan is Data:
+  Plan{base: Local, agent: String, line: String}
+
+# s can name one folder: a path segment (Glob.is_segment: not empty, not
+# "." or "..", no NUL or backslash) with no '/' in it either
+def Checkout.name_ok(+s: String) -> Bool:
+  List.all.if(u => Bool.not(Shared.Text.has(s, 47)), Glob.is_segment(s))
+
+# p with a '/' at its end
+def Checkout.dir(+p: String) -> String:
+  Shared.Bool.when(String, String.ends_with(p, "/"), u => p, u => String.append(p, "/"))
+
+# the root of the checkout of the agent a of the line named ln, inside the
+# mount whose root is u
+def Checkout.root(u: Shared.Uri, a: String, ln: String) -> Shared.Uri:
+  match u:
+    case Shared.Uri{sc, au, p}:
+      Shared.Uri{
+        sc,
+        au,
+        String.concat([Checkout.dir(p), Core.Mount.checkouts_dir(), "/", a, "/", ln, "/"])
+      }
+
+# the user's mount that p places a checkout in
+def Plan.base(p: Plan) -> Local:
+  match p:
+    case Plan{b, a, ln}:
+      b
+
+# the name of the line that p checks out
+def Plan.line(p: Plan) -> String:
+  match p:
+    case Plan{b, a, ln}:
+      ln
+
+# the space of the line that p checks out
+def Plan.space(p: Plan) -> String:
+  match p:
+    case Plan{b, a, ln}:
+      Local.space(b)
+
+# the root of the checkout that p places
+def Plan.root(p: Plan) -> Shared.Uri:
+  match p:
+    case Plan{b, a, ln}:
+      Checkout.root(Local.root(b), a, ln)
+
+# the mount of the checkout that p places: the base's space and globs, the
+# line, and the agent as its author
+def Plan.mount(+p: Plan) -> Core.Mount:
+  match p:
+    case Plan{Local{Core.Mount{sp, l0, r, g, a0}, gs, ss, ms, ns}, a, ln}:
+      Core.Mount{sp, ln, Plan.root(p), g, History.Agent{a}}
+
+# where the checkout of the agent a of the line that t names goes, or why
+# it cannot be made: a refusal unless a and the line's name can each name
+# one folder (Checkout.name_ok), t names exactly one line (Daemon.line_ref),
+# and the user made a mount of its space on this machine; of several, the
+# one whose URI comes first in String order
+law Daemon.plan:
+  for d: Daemon
+  for a: String
+  for t: String
+  Result<&2, &2, String, Plan>
+
+# a checkout lives only inside a mount the user made of the line's space,
+# in the folder of a valid agent name and line name, so neither name can
+# lead out of it (no "/", "\", "." or "..")
+law plan_contained:
+  for d: Daemon
+  for a: String
+  for t: String
+  for b: Local
+  for a2: String
+  for ln: String
+  for h: {Daemon.plan(d, a, t) == Done{Plan{b, a2, ln}}: Result<&2, &2, String, Plan>}
+  {a2 == a: String} &
+    (
+      {
+        Checkout.name_ok(a) == True{}: Bool
+      }
+        & (
+          {
+            Checkout.name_ok(ln) == True{}: Bool
+          }
+            & (
+              {
+                Local.author(b) == History.Outside{}: History.Author
+              }
+                & (
+                  {
+                    Daemon.local(d, Local.uri(b)) == Some{b}: Maybe<&2, Local>
+                  }
+                    & {
+                      Daemon.line_ref(
+                        d,
+                        t
+                      )
+                        == Some{Daemon.line_in(d, Local.space(b), ln)}: Maybe<&2, Lines.Line>
+                    }
+                )
+            )
+        )
+    )
+
 # Answers
 # -------
 
@@ -1056,13 +1223,17 @@ law affects_sees:
 # DoUnmount: change the mounts (the loop does the IO: the root, its space
 # file, the watcher, the mounts file), then answer. DoStop: answer
 # Stopping, then end. DoAsk: run the command c for the agent with data
-# (Daemon.handle), keep its records, then answer.
+# (Daemon.handle), keep its records, then answer. DoCheckout, DoRelease:
+# make or remove the agent's checkout of the line that line names, as
+# Daemon.plan places it, then answer.
 type Action is Data:
   Reply{response: Response}
   DoMount{uri: String, globs: List<&2, String>, line: String}
   DoUnmount{uri: String}
   DoStop{}
   DoAsk{agent: String, command: Command, data: Shared.Bytes()}
+  DoCheckout{agent: String, line: String}
+  DoRelease{agent: String, line: String}
 
 # the nodes of h, by the hex of their id
 def Versions.nodes(h: History.History) -> Shared.Table<History.Node>:
@@ -1102,7 +1273,7 @@ def Daemon.infos.go(+h: History.History, ms: List<&2, Local>) -> List<&2, Info>:
   match ms:
     case Nil{}:
       Nil{}
-    case Con{Local{Core.Mount{+sp, ln, r, g}, gs, ss, mv, ns}, t}:
+    case Con{Local{Core.Mount{+sp, ln, r, g, a}, gs, ss, mv, ns}, t}:
       Info{Shared.Uri.show(r), ln, sp, Versions.of(h, sp)} <> Daemon.infos.go(h, t)
 
 # the status of each mount of d
@@ -1151,6 +1322,10 @@ def Command.decided(r: Result<&2, &2, String, Command>, a: String, b: Shared.Byt
   match r:
     case Fail{u}:
       Reply{Said{False{}, [u]}}
+    case Done{CheckoutOf{t}}:
+      DoCheckout{a, t}
+    case Done{ReleaseOf{t}}:
+      DoRelease{a, t}
     case Done{c}:
       DoAsk{a, c, b}
 
@@ -1237,9 +1412,18 @@ law mount_once:
 # whole file is rewritten (to a temporary file, synced, then renamed over
 # it) on each mount and unmount, which a power cut leaves whole.
 
-# One mount as the file keeps it: the root, the line, the glob texts.
+# One mount as the file keeps it: the root, the line, the glob texts, and
+# the agent of a checkout (None for a mount the user made).
 type Entry is Data:
-  Entry{uri: String, line: String, globs: List<&2, String>}
+  Entry{uri: String, line: String, globs: List<&2, String>, agent: Maybe<&2, String>}
+
+# the agent of a checkout, None for a mount the user made
+def Author.agent(a: History.Author) -> Maybe<&2, String>:
+  match a:
+    case History.Agent{n}:
+      Some{n}
+    case History.Outside{}:
+      None{}
 
 # the entry of each mount
 def Daemon.entries.go(ms: List<&2, Local>) -> List<&2, Entry>:
@@ -1247,7 +1431,13 @@ def Daemon.entries.go(ms: List<&2, Local>) -> List<&2, Entry>:
     case Nil{}:
       Nil{}
     case Con{+l, t}:
-      Entry{Local.uri(l), Local.line(l), Local.globs(l)} <> Daemon.entries.go(t)
+      Entry{
+        Local.uri(l),
+        Local.line(l),
+        Local.globs(l),
+        Author.agent(Local.author(l))
+      }
+        <> Daemon.entries.go(t)
 
 # the entries of the mounts of d
 def Daemon.entries(d: Daemon) -> List<&2, Entry>:
@@ -1255,12 +1445,20 @@ def Daemon.entries(d: Daemon) -> List<&2, Entry>:
     case Daemon{s, h, ls, ms, cs, bk}:
       Daemon.entries.go(ms)
 
+# the bytes of the agent of an entry: 0, or 1 then its name
+def Agent.encode(m: Maybe<&2, String>) -> Shared.Bytes():
+  match m:
+    case None{}:
+      [0]
+    case Some{n}:
+      1 <> Journal.Utf8.framed(n)
+
 # the bytes of the entries, one after another
 def Entries.encode(es: List<&2, Entry>) -> Shared.Bytes():
   match es:
     case Nil{}:
       []
-    case Con{Entry{u, ln, gs}, t}:
+    case Con{Entry{u, ln, gs, ag}, t}:
       List.append(
         &2,
         U32,
@@ -1269,17 +1467,33 @@ def Entries.encode(es: List<&2, Entry>) -> Shared.Bytes():
           &2,
           U32,
           Journal.Utf8.framed(ln),
-          List.append(&2, U32, Texts.encode(gs), Entries.encode(t))
+          List.append(
+            &2,
+            U32,
+            Texts.encode(gs),
+            List.append(&2, U32, Agent.encode(ag), Entries.encode(t))
+          )
         )
       )
+
+# the agent's name, as a list of texts
+def Agent.texts(m: Maybe<&2, String>) -> List<&2, String>:
+  match m:
+    case None{}:
+      []
+    case Some{n}:
+      [n]
 
 # every text of the entries can be written as UTF-8
 def Entries.ok(es: List<&2, Entry>) -> Bool:
   match es:
     case Nil{}:
       True{}
-    case Con{Entry{u, ln, gs}, t}:
-      List.all.if(x => Entries.ok(t), Texts.ok(u <> ln <> gs))
+    case Con{Entry{u, ln, gs, ag}, t}:
+      List.all.if(
+        x => Entries.ok(t),
+        Texts.ok(u <> ln <> List.append(&2, String, gs, Agent.texts(ag)))
+      )
 
 # the entries that bytes b spell, or None
 law Entries.decode:

@@ -306,6 +306,13 @@ def FileFx.remove(path: Shared.Bytes()) -> IO(Result<&1, &1, U32 & String, Unit>
   import "./effs/file_fx.c"
   import "./effs/file_fx.js"
 
+# the directory at path removed with everything below it; links below it
+# are removed as links, never followed, and a path that is itself a link
+# is refused (ELOOP), so nothing outside the directory is touched
+def FileFx.remove_tree(path: Shared.Bytes()) -> IO(Result<&1, &1, U32 & String, Unit>):
+  import "./effs/file_fx.c"
+  import "./effs/file_fx.js"
+
 # Durability
 # ----------
 

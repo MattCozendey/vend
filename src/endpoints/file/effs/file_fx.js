@@ -71,6 +71,31 @@ function filefx_remove(path) {
   return filefx_unit(() => require("fs").unlinkSync(p));
 }
 
+// the directory at path removed with its tree; a link there is refused
+// (ELOOP), and links below it are removed as links (fs.rmSync does not
+// follow them)
+function filefx_remove_tree(path) {
+  const p = filefx_path(path);
+  if (p === null) {
+    return io_fail(22);
+  }
+  const fs = require("fs");
+  return filefx_unit(() => {
+    const st = fs.lstatSync(p);
+    if (st.isSymbolicLink()) {
+      const e = new Error("a link is there");
+      e.code = "ELOOP";
+      throw e;
+    }
+    if (!st.isDirectory()) {
+      const e = new Error("not a directory");
+      e.code = "ENOTDIR";
+      throw e;
+    }
+    fs.rmSync(p, { recursive: true, force: false });
+  });
+}
+
 // Watchers. The JS lane runs its loop without yielding to the host's event
 // loop, so fs.watch callbacks never run here; a watcher polls instead. Each
 // wait scans the tree below the root, without following links, and
@@ -303,6 +328,7 @@ io_eff(CID(FileFx.probe), filefx_probe);
 io_eff(CID(FileFx.rename), filefx_rename);
 io_eff(CID(FileFx.make_dirs), filefx_make_dirs);
 io_eff(CID(FileFx.remove), filefx_remove);
+io_eff(CID(FileFx.remove_tree), filefx_remove_tree);
 io_eff(CID(FileFx.watch), filefx_watch);
 io_eff(CID(FileFx.next), filefx_next);
 io_eff(CID(FileFx.unwatch), filefx_unwatch);

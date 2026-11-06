@@ -237,6 +237,16 @@ def Entries.read.one(
     case Some{J.Got{e, r}}:
       Maybe.map(&2, List<&2, Spec.Entry>, List<&2, Spec.Entry>, es => e <> es, k(r))
 
+# the agent of an entry: 0, or 1 then its name
+def Agent.read(b: Shared.Bytes()) -> Maybe<&2, J.Got<Maybe<&2, String>>>:
+  match b:
+    case Con{0, r}:
+      Some{J.Got{None{}, r}}
+    case Con{1, r}:
+      J.Got.then(String, Maybe<&2, String>, J.Utf8.read(r), n => r2 => Some{J.Got{Some{n}, r2}})
+    case _:
+      None{}
+
 # entries up to the end of the bytes; fuel counts the bytes left
 def Entries.read.go(fuel: Nat, b: Shared.Bytes()) -> Maybe<&2, List<&2, Spec.Entry>>:
   match fuel b:
@@ -258,7 +268,12 @@ def Entries.read.go(fuel: Nat, b: Shared.Bytes()) -> Maybe<&2, List<&2, Spec.Ent
               List<&2, String>,
               Spec.Entry,
               Texts.read(r2),
-              gs => r3 => Some{J.Got{Spec.Entry{u, ln, gs}, r3}}
+              gs => r3 => J.Got.then(
+                Maybe<&2, String>,
+                Spec.Entry,
+                Agent.read(r3),
+                ag => r4 => Some{J.Got{Spec.Entry{u, ln, gs, ag}, r4}}
+              )
             )
           )
         ),
@@ -275,7 +290,7 @@ def Spec.Entries.decode(b):
 # a mount that serves nothing: the core that replays a record for the
 # shared store and history only
 def Apply.nomount() -> Core.Mount:
-  Core.Mount{"", "", Shared.Uri{"file", None{}, "/"}, []}
+  Core.Mount{"", "", Shared.Uri{"file", None{}, "/"}, [], History.Outside{}}
 
 # d after the Kept record of the line named ln with content ct and node v
 def Apply.kept(
@@ -1805,6 +1820,10 @@ def Answer.go(+d: Spec.Daemon, a: String, c: Spec.Command, b: Shared.Bytes()) ->
       Answer.mark(d, Spec.Daemon.line_ref(d, t), a, nm, msg, t)
     case Spec.MergeOf{+f, +t}:
       Answer.merge(d, a, Ref.source(d, f), Spec.Daemon.line_ref(d, t), f, t)
+    case Spec.CheckoutOf{t}:
+      Show.no("a checkout is made by the daemon's loop, not as a command")
+    case Spec.ReleaseOf{t}:
+      Show.no("a release is made by the daemon's loop, not as a command")
 
 def Spec.Daemon.handle(d, a, c, b):
   Answer.go(d, a, c, b)
@@ -1912,3 +1931,111 @@ def Spec.apply_forked(d, k, f, l, h, n):
           %Equal.sym(Maybe<&2, Lines.Line>, Shared.Table.get(Lines.Line, Shared.Table.set(Lines.Line, lines, k, Lines.Line.fork(l, Spec.Key.name(k))), k), Some{Lines.Line.fork(l, Spec.Key.name(k))}, Shared.Table.get_after_set(Lines.Line, lines, k, Lines.Line.fork(l, Spec.Key.name(k)))) :
             {_ == Some{Lines.Line.fork(l, Spec.Key.after(Shared.Text.cut(k, 58), k))} : Maybe<&2, Lines.Line>}
           {==}
+
+# Checkouts
+# ---------
+
+# the author a is Outside: the mount is one the user made
+def Plan.outside(a: History.Author) -> Bool:
+  match a:
+    case History.Outside{}:
+      True{}
+    case History.Agent{n}:
+      False{}
+
+# the mounts of d
+def Plan.mounts(d: Spec.Daemon) -> List<&2, Spec.Local>:
+  match d:
+    case Spec.Daemon{s, h, ls, ms, cs, bk}:
+      ms
+
+# the mounts of ms that the user made of the space sp
+def Plan.bases(ms: List<&2, Spec.Local>, +sp: String) -> List<&2, Spec.Local>:
+  match ms:
+    case Nil{}:
+      Nil{}
+    case Con{+l, t}:
+      +rest = Plan.bases(t, sp)
+      Shared.Bool.when(
+        List<&2, Spec.Local>,
+        List.all.if(u => Plan.outside(Spec.Local.author(l)), String.eq(Spec.Local.space(l), sp)),
+        u => l <> rest,
+        u => rest
+      )
+
+# l, unless best comes before it in String order of their URIs
+def Plan.better(+l: Spec.Local, best: Maybe<&2, Spec.Local>) -> Maybe<&2, Spec.Local>:
+  match best:
+    case None{}:
+      Some{l}
+    case Some{+b}:
+      Shared.Bool.when(
+        Maybe<&2, Spec.Local>,
+        String.is_lt(Spec.Local.uri(b), Spec.Local.uri(l)),
+        u => Some{b},
+        u => Some{l}
+      )
+
+# the mount of ms whose URI comes first in String order, or best when it
+# comes before all of them
+def Plan.first(ms: List<&2, Spec.Local>, best: Maybe<&2, Spec.Local>) -> Maybe<&2, Spec.Local>:
+  match ms:
+    case Nil{}:
+      best
+    case Con{l, t}:
+      Plan.first(t, Plan.better(l, best))
+
+# the plan for the base m, or why there is none
+def Plan.based(m: Maybe<&2, Spec.Local>, a: String, nm: String, sp: String) -> Result<&2, &2, String, Spec.Plan>:
+  match m:
+    case None{}:
+      Fail{String.concat(["no mount of the space ", sp, " on this machine: ask the user to mount it"])}
+    case Some{b}:
+      Done{Spec.Plan{b, a, nm}}
+
+# the plan of the agent a for the line found for the text t
+def Plan.of(d: Spec.Daemon, a: String, ml: Maybe<&2, Lines.Line>, t: String) -> Result<&2, &2, String, Spec.Plan>:
+  match ml:
+    case None{}:
+      Fail{String.append("no line named ", t)}
+    case Some{Lines.Line{+sp, +nm, hs}}:
+      Shared.Bool.when(
+        Result<&2, &2, String, Spec.Plan>,
+        Spec.Checkout.name_ok(nm),
+        u => Plan.based(Plan.first(Plan.bases(Plan.mounts(d), sp), None{}), a, nm, sp),
+        u => Fail{String.append("the line's name cannot name a folder: ", nm)}
+      )
+
+def Spec.Daemon.plan(d, a, t):
+  +d = d
+  +a = a
+  +t = t
+  Shared.Bool.when(
+    Result<&2, &2, String, Spec.Plan>,
+    Spec.Checkout.name_ok(a),
+    u => Plan.of(d, a, Spec.Daemon.line_ref(d, t), t),
+    u => Fail{String.append("not a valid agent name for a checkout: ", a)}
+  )
+
+# the carry of the content found for the file at path; none when it is
+# gone, missing, or not one version
+def Checkout.carry(m: Maybe<&2, Maybe<&2, Shared.Bytes()>>, path: String) -> List<&2, Spec.Carry>:
+  match m:
+    case Some{Some{b}}:
+      [Spec.Carry{path, b}]
+    case _:
+      []
+
+# the carry of each path of ps that the line l (of the space sp) follows
+# with one version that has content
+def Checkout.carries.go(ps: List<&2, String>, +d: Spec.Daemon, +l: Lines.Line, +sp: String) -> List<&2, Spec.Carry>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case Con{+p, t}:
+      x = Ref.one(Lines.Line.heads(l, Shared.Name{sp, p}))
+      List.append(&2, Spec.Carry, Checkout.carry(Answer.content(d, x), p), Checkout.carries.go(t, d, l, sp))
+
+# the files of the line l as it is now, to write into a new checkout
+def Checkout.carries(d: Spec.Daemon, +l: Lines.Line) -> List<&2, Spec.Carry>:
+  Checkout.carries.go(Answer.paths(l), d, l, Answer.space(l))

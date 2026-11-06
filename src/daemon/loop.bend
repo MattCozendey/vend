@@ -592,6 +592,7 @@ def Serve.mount.watched(
   j: File,
   +gs: List<&2, String>,
   ln: String,
+  a: History.Author,
   k: Serve -> File -> Spec.Response -> IO(Unit)
 ) -> IO(Unit):
   match wr:
@@ -601,7 +602,7 @@ def Serve.mount.watched(
       +uri = Shared.Uri.show(u)
       +l = {
         Spec.Local{
-          Core.Mount{id, ln, u, Rules.of(gs)},
+          Core.Mount{id, ln, u, Rules.of(gs), a},
           gs,
           Shared.Table.new(Ep.Stream),
           Shared.Table.new(Maybe<&2, Shared.Name>),
@@ -646,6 +647,7 @@ def Serve.mount.spaced(
   j: File,
   gs: List<&2, String>,
   ln: String,
+  a: History.Author,
   k: Serve -> File -> Spec.Response -> IO(Unit)
 ) -> IO(Unit):
   match sp:
@@ -654,7 +656,7 @@ def Serve.mount.spaced(
     case Done{id}:
       do IO<Unit>:
         wr: Result<&1, &1, U32 & String, File> <- FileImpl.FileEp.watch(root)
-        Serve.mount.watched(wr, id, root, u, st, j, gs, ln, k)
+        Serve.mount.watched(wr, id, root, u, st, j, gs, ln, a, k)
 
 # the mount once the OS path of its root is known
 def Serve.mount.os(
@@ -664,6 +666,7 @@ def Serve.mount.os(
   j: File,
   gs: List<&2, String>,
   ln: String,
+  a: History.Author,
   k: Serve -> File -> Spec.Response -> IO(Unit)
 ) -> IO(Unit):
   match mo:
@@ -673,7 +676,7 @@ def Serve.mount.os(
       do IO<Unit>:
         +root: File.Root <- FileImpl.FileEp.open(os)
         sp: Result<&2, &2, String, String> <- CoreLoop.Loop.space(root)
-        Serve.mount.spaced(sp, root, u, st, j, gs, ln, k)
+        Serve.mount.spaced(sp, root, u, st, j, gs, ln, a, k)
 
 # the mount once its URI text is read
 def Serve.mount.uri(
@@ -683,25 +686,28 @@ def Serve.mount.uri(
   j: File,
   gs: List<&2, String>,
   ln: String,
+  a: History.Author,
   k: Serve -> File -> Spec.Response -> IO(Unit)
 ) -> IO(Unit):
   match mu:
     case None{}:
       k(st, j, Spec.Denied{String.append("not a URI: ", utext)})
     case Some{+u}:
-      Serve.mount.os(File.FileEp.root_of(u), u, st, j, gs, ln, k)
+      Serve.mount.os(File.FileEp.root_of(u), u, st, j, gs, ln, a, k)
 
 # the mount of the root at the URI text utext, on the line ln, versioning
-# what the glob texts gs select; k gets the response
+# what the glob texts gs select, what it sees saved signed by a; k gets the
+# response
 def Serve.mount(
   st: Serve,
   j: File,
   +utext: String,
   gs: List<&2, String>,
   ln: String,
+  a: History.Author,
   k: Serve -> File -> Spec.Response -> IO(Unit)
 ) -> IO(Unit):
-  Serve.mount.uri(Shared.Uri.read(utext), utext, st, j, gs, ln, k)
+  Serve.mount.uri(Shared.Uri.read(utext), utext, st, j, gs, ln, a, k)
 
 # st without the mount at uri, its watcher told to stop and the mounts file
 # written
@@ -717,7 +723,7 @@ def Serve.unmount(st: Serve, +uri: String) -> IO(Serve):
 # the line key of the mount l
 def Local.line(l: Spec.Local) -> String:
   match l:
-    case Spec.Local{Core.Mount{sp, ln, r, g}, gs, ss, ms, ns}:
+    case Spec.Local{Core.Mount{sp, ln, r, g, a}, gs, ss, ms, ns}:
       Lines.Line.key(sp, ln)
 
 # the mounts of st
@@ -942,10 +948,281 @@ def Serve.sourced(
         r: Result<&2, &2, String, Shared.Bytes()> <- Source.fetch(Shared.Uri.read(t))
         Serve.fetched(r, t, a, c, st, j, sock, k)
 
+# Checkouts
+# ---------
+# A checkout is a mount that the daemon makes at the root Daemon.plan
+# gives, inside a mount the user made, with the agent as its author. Its
+# folder gets the space file and the line's files; release unmounts it and
+# removes that folder only (FileFx.remove_tree follows no link).
+
+# the answer Said on sock, then k
+def Serve.said(
+  sock: Socket,
+  ok: Bool,
+  ls: List<&2, String>,
+  st: Serve,
+  j: File,
+  k: Serve -> File -> IO(Unit)
+) -> IO(Unit):
+  do IO<Unit>:
+    Wire.send(sock, Spec.Response.encode(Spec.Said{ok, ls}))
+    k(st, j)
+
+# the OS path of the root of a plan, as text ("?" when it is no local file)
+def Checkout.os(p: Spec.Plan) -> String:
+  Maybe.default(&2, String, File.FileEp.root_of(Spec.Plan.root(p)), "?")
+
+# the checkout mounted: answered when its space file named its space
+# (same), else unmounted and refused
+def Serve.checkout.filled(
+  same: Bool,
+  p: Spec.Plan,
+  uri: String,
+  st: Serve,
+  j: File,
+  sock: Socket,
+  k: Serve -> File -> IO(Unit)
+) -> IO(Unit):
+  match same:
+    case True{}:
+      Serve.said(sock, True{}, [String.append("checked out at ", Checkout.os(p))], st, j, k)
+    case False{}:
+      do IO<Unit>:
+        s2: Serve <- Serve.unmount(st, uri)
+        Serve.said(sock, False{}, ["refused: the checkout folder holds another space"], s2, j, k)
+
+# the checkout after its mount answered r
+def Serve.checkout.mounted(
+  r: Spec.Response,
+  +p: Spec.Plan,
+  uri: String,
+  st: Serve,
+  j: File,
+  sock: Socket,
+  k: Serve -> File -> IO(Unit)
+) -> IO(Unit):
+  match r:
+    case Spec.Mounted{id}:
+      Serve.checkout.filled(String.eq(id, Spec.Plan.space(p)), p, uri, st, j, sock, k)
+    case Spec.Denied{why}:
+      Serve.said(sock, False{}, [String.append("refused: ", why)], st, j, k)
+    case _:
+      Serve.said(sock, False{}, ["refused: the checkout was not mounted"], st, j, k)
+
+# each carry written to the folder at root, where nothing is yet
+def Checkout.write(+root: File.Root, cs: List<&2, Spec.Carry>) -> IO(Unit):
+  match cs:
+    case Nil{}:
+      IO.pure(Unit, Unit{})
+    case Con{Spec.Carry{p, b}, t}:
+      do IO<Unit>:
+        ss: List<&2, Ep.Signal> <- FileImpl.FileEp.put(root, p, b, Ep.WasAbsent{})
+        Checkout.write(root, t)
+
+# the checkout of the mount m once its folder is made: the space file and
+# the files of its line written, then the folder mounted with the agent as
+# its author, following the globs gs of the user's mount; its streams start
+# from the line, so what it finds there records nothing
+def Serve.checkout.at(
+  m: Core.Mount,
+  gs: List<&2, String>,
+  p: Spec.Plan,
+  os: String,
+  +uri: String,
+  +st: Serve,
+  j: File,
+  sock: Socket,
+  k: Serve -> File -> IO(Unit)
+) -> IO(Unit):
+  match m:
+    case Core.Mount{+sp, +ln, r, g, a}:
+      +d = Serve.daemon(st)
+      cs = Impl.Checkout.carries(d, Spec.Daemon.line_in(d, sp, ln))
+      do IO<Unit>:
+        +root: File.Root <- FileImpl.FileEp.open(os)
+        put: List<
+          &2,
+          Ep.Signal> <- FileImpl.FileEp.put(
+          root,
+          Core.Mount.space_file(),
+          Text.Text.encode(sp),
+          Ep.WasAbsent{}
+        )
+        Checkout.write(root, cs)
+        Serve.mount(
+          st,
+          j,
+          uri,
+          gs,
+          ln,
+          a,
+          s2 => j2 => res => Serve.checkout.mounted(res, p, uri, s2, j2, sock, k)
+        )
+
+# the checkout once its folder is made, or refused when it could not be
+def Serve.checkout.made(
+  mk: Result<&1, &1, U32 & String, Unit>,
+  +p: Spec.Plan,
+  os: String,
+  uri: String,
+  st: Serve,
+  j: File,
+  sock: Socket,
+  k: Serve -> File -> IO(Unit)
+) -> IO(Unit):
+  match mk:
+    case Fail{e}:
+      Serve.said(
+        sock,
+        False{},
+        [String.append("refused: cannot make the checkout folder: ", Err.why(e))],
+        st,
+        j,
+        k
+      )
+    case Done{x}:
+      Serve.checkout.at(
+        Spec.Plan.mount(p),
+        Spec.Local.globs(Spec.Plan.base(p)),
+        p,
+        os,
+        uri,
+        st,
+        j,
+        sock,
+        k
+      )
+
+# the checkout at the OS path os: answered at once when it is mounted
+# already (there), else its folder made
+def Serve.checkout.new(
+  there: Bool,
+  p: Spec.Plan,
+  +os: String,
+  uri: String,
+  st: Serve,
+  j: File,
+  sock: Socket,
+  k: Serve -> File -> IO(Unit)
+) -> IO(Unit):
+  match there:
+    case True{}:
+      Serve.said(sock, True{}, [String.append("checked out at ", os)], st, j, k)
+    case False{}:
+      do IO<Unit>:
+        mk: Result<&1, &1, U32 & String, Unit> <- File.FileFx.make_dirs(Text.Text.encode(os))
+        Serve.checkout.made(mk, p, os, uri, st, j, sock, k)
+
+# the checkout at the OS path mo: answered at once when it is mounted
+# already, else made
+def Serve.checkout.os(
+  mo: Maybe<&2, String>,
+  +p: Spec.Plan,
+  +st: Serve,
+  j: File,
+  sock: Socket,
+  k: Serve -> File -> IO(Unit)
+) -> IO(Unit):
+  match mo:
+    case None{}:
+      Serve.said(sock, False{}, ["refused: the mount is not a local file URI"], st, j, k)
+    case Some{os}:
+      +uri = Shared.Uri.show(Spec.Plan.root(p))
+      there = Maybe.is_some(&2, Spec.Local, Spec.Daemon.local(Serve.daemon(st), uri))
+      Serve.checkout.new(there, p, os, uri, st, j, sock, k)
+
+# the checkout of the plan, or refused with why there is none
+def Serve.checkout.planned(
+  pr: Result<&2, &2, String, Spec.Plan>,
+  st: Serve,
+  j: File,
+  sock: Socket,
+  k: Serve -> File -> IO(Unit)
+) -> IO(Unit):
+  match pr:
+    case Fail{why}:
+      Serve.said(sock, False{}, [String.append("refused: ", why)], st, j, k)
+    case Done{+p}:
+      Serve.checkout.os(File.FileEp.root_of(Spec.Plan.root(p)), p, st, j, sock, k)
+
+# the release once the checkout is unmounted: its folder removed
+def Serve.release.removed(
+  rm: Result<&1, &1, U32 & String, Unit>,
+  os: String,
+  st: Serve,
+  j: File,
+  sock: Socket,
+  k: Serve -> File -> IO(Unit)
+) -> IO(Unit):
+  match rm:
+    case Fail{e}:
+      Serve.said(
+        sock,
+        False{},
+        [String.concat(["released, but its folder could not be removed: ", os, ": ", Err.why(e)])],
+        st,
+        j,
+        k
+      )
+    case Done{x}:
+      Serve.said(sock, True{}, [String.append("released ", os)], st, j, k)
+
+# the release of the checkout at the OS path os, at uri, when it is
+# mounted (there): unmounted, then its folder removed; else refused
+def Serve.release.there(
+  there: Bool,
+  +os: String,
+  uri: String,
+  st: Serve,
+  j: File,
+  sock: Socket,
+  k: Serve -> File -> IO(Unit)
+) -> IO(Unit):
+  match there:
+    case True{}:
+      do IO<Unit>:
+        s2: Serve <- Serve.unmount(st, uri)
+        rm: Result<&1, &1, U32 & String, Unit> <- File.FileFx.remove_tree(Text.Text.encode(os))
+        Serve.release.removed(rm, os, s2, j, sock, k)
+    case False{}:
+      Serve.said(sock, False{}, [String.append("refused: no checkout of yours at ", os)], st, j, k)
+
+# the release of the checkout at the OS path mo, at uri: refused unless
+# it is mounted
+def Serve.release.os(
+  mo: Maybe<&2, String>,
+  +uri: String,
+  +st: Serve,
+  j: File,
+  sock: Socket,
+  k: Serve -> File -> IO(Unit)
+) -> IO(Unit):
+  match mo:
+    case None{}:
+      Serve.said(sock, False{}, ["refused: the mount is not a local file URI"], st, j, k)
+    case Some{os}:
+      there = Maybe.is_some(&2, Spec.Local, Spec.Daemon.local(Serve.daemon(st), uri))
+      Serve.release.there(there, os, uri, st, j, sock, k)
+
+# the release of the plan, or refused with why there is none
+def Serve.release.planned(
+  pr: Result<&2, &2, String, Spec.Plan>,
+  st: Serve,
+  j: File,
+  sock: Socket,
+  k: Serve -> File -> IO(Unit)
+) -> IO(Unit):
+  match pr:
+    case Fail{why}:
+      Serve.said(sock, False{}, [String.append("refused: ", why)], st, j, k)
+    case Done{p}:
+      +r = Spec.Plan.root(p)
+      Serve.release.os(File.FileEp.root_of(r), Shared.Uri.show(r), st, j, sock, k)
+
 # what the daemon does about the action a, answering on sock
 def Serve.act(
   a: Spec.Action,
-  st: Serve,
+  +st: Serve,
   j: File,
   sock: Socket,
   k: Serve -> File -> IO(Unit)
@@ -956,7 +1233,7 @@ def Serve.act(
         Wire.send(sock, Spec.Response.encode(r))
         k(st, j)
     case Spec.DoMount{u, gs, ln}:
-      Serve.mount(st, j, u, gs, ln, s2 => j2 => r => do IO<Unit>:
+      Serve.mount(st, j, u, gs, ln, History.Outside{}, s2 => j2 => r => do IO<Unit>:
         Wire.send(sock, Spec.Response.encode(r))
         k(s2, j2))
     case Spec.DoUnmount{u}:
@@ -970,6 +1247,10 @@ def Serve.act(
         Serve.end(st, j, "vend stopped")
     case Spec.DoAsk{a, +c, b}:
       Serve.sourced(Spec.Command.source(c), a, c, b, st, j, sock, k)
+    case Spec.DoCheckout{a, t}:
+      Serve.checkout.planned(Spec.Daemon.plan(Serve.daemon(st), a, t), st, j, sock, k)
+    case Spec.DoRelease{a, t}:
+      Serve.release.planned(Spec.Daemon.plan(Serve.daemon(st), a, t), st, j, sock, k)
 
 # the request in the bytes of a connection, decided and acted on
 def Serve.request(
@@ -1051,6 +1332,14 @@ def Start.said(u: String, r: Spec.Response) -> IO(Unit):
     case _:
       IO.pure(Unit, Unit{})
 
+# who signs what a mount of the file sees saved: its agent, else Outside
+def Start.author(m: Maybe<&2, String>) -> History.Author:
+  match m:
+    case None{}:
+      History.Outside{}
+    case Some{n}:
+      History.Agent{n}
+
 # the entries mounted again, in order, then k
 def Start.remount(
   es: List<&2, Spec.Entry>,
@@ -1061,8 +1350,8 @@ def Start.remount(
   match es:
     case Nil{}:
       k(st, j)
-    case Con{Spec.Entry{+u, ln, gs}, t}:
-      Serve.mount(st, j, u, gs, ln, s2 => j2 => r => do IO<Unit>:
+    case Con{Spec.Entry{+u, ln, gs, ag}, t}:
+      Serve.mount(st, j, u, gs, ln, Start.author(ag), s2 => j2 => r => do IO<Unit>:
         Start.said(u, r)
         Start.remount(t, s2, j2, k))
 

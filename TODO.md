@@ -32,7 +32,7 @@ Delete each item when it is done.
 - The daemon (`src/daemon`; built: one per user and machine, all mounts, started only by
   `vend start-or-resume`, the down message, `status`, `mount`, `unmount`, guarded `daemon stop`, and the everyday
   commands `lines`, `log`, `show`, `diff`, `affects`, `impact`, `line new`, `write --expect`, `restore`, `mark`,
-  `merge`; and the MCP front, `vend mcp`). Left:
+  `merge`; agents' checkouts `checkout`/`release`, inside the user's mount; and the MCP front, `vend mcp`). Left:
   - MCP (`src/mcp`): `affects` as a stream of notifications (`subscriptions/listen`), and resources or prompts, are
     not offered; tools only. A modern request is not checked against the client capabilities it declares (vend
     needs none). Tool output is text only (no `structuredContent`).
@@ -51,6 +51,10 @@ Delete each item when it is done.
   - A mount that fails at start (its root gone) is reported and skipped; it stays in the mounts file.
   - Mounting at run time primes the streams from the line the daemon holds; the daemon restores every line from the
     journal at start.
+  - Checkouts live in `<mount>/.vend-checkouts/<agent>/<line>/`; git shows that folder as untracked unless the user
+    ignores it (vend never edits `.gitignore`). A checkout follows the globs of the user's mount and knows nothing
+    of the nested spaces below it. `line new` accepts a name with `/` (for example `../x`); such a line can never be
+    checked out (`Checkout.name_ok`), so `line new` may refuse it too.
 - `src/journal`: compaction (a snapshot of the store, history and lines, then a fresh log), so start-up does not
   replay everything and the journal stays below 4 GiB (it is read whole with `File.size`, a `U32`).
 - `src/endpoints/file`: on POSIX, a rename is durable only after its directory is synced; sync the directory after
@@ -78,7 +82,7 @@ and soundness are proven in `src/shared.bend`).
   `write_accepted`, `write_authored`, `nested_untracked`, `step_keeps_history`, `replay_matches`, `restored_quiet`.
 - `src/daemon`: `step_frames`, `step_frames_lines`, `unmount_drops`, `unmount_frames`, `request_decode_after_encode`,
   `response_decode_after_encode`, `stop_guarded`, `stop_forced`, `entries_decode_after_encode`, `apply_saw`,
-  `mark_fixed`, `apply_forked_mark`, `reads_record_nothing`, `merge_all_or_nothing`.
+  `mark_fixed`, `apply_forked_mark`, `reads_record_nothing`, `merge_all_or_nothing`, `plan_contained`.
 - `src/cli`: `parse_after_show` (restated for `mount`; its old proof covered `watch`, which is gone),
   `ask_passes_words`.
 - `src/json`: `read_after_show`.

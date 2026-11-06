@@ -230,6 +230,135 @@ static void __attribute__((constructor)) filefx_remove_use(void) {
 
 #endif
 
+// the tree at p removed, depth levels deep at most: a link (a reparse
+// point on Windows) is removed as the link itself, never followed
+static u32 fx_rmtree(char* p, int depth) {
+  if (depth <= 0) {
+    return ELOOP;
+  }
+#ifdef _WIN32
+  DWORD a = GetFileAttributesA(p);
+  if (a == INVALID_FILE_ATTRIBUTES) {
+    return fx_win_errno(GetLastError());
+  }
+  if (a & FILE_ATTRIBUTE_READONLY) {
+    SetFileAttributesA(p, a & ~FILE_ATTRIBUTE_READONLY);
+  }
+  if ((a & FILE_ATTRIBUTE_REPARSE_POINT) || !(a & FILE_ATTRIBUTE_DIRECTORY)) {
+    BOOL ok = (a & FILE_ATTRIBUTE_DIRECTORY) ? RemoveDirectoryA(p) : DeleteFileA(p);
+    return ok ? 0 : fx_win_errno(GetLastError());
+  }
+  size_t n = strlen(p);
+  char* pat = malloc(n + 3);
+  if (pat == NULL) {
+    return ENOMEM;
+  }
+  memcpy(pat, p, n);
+  memcpy(pat + n, "\\*", 3);
+  WIN32_FIND_DATAA fd;
+  HANDLE h = FindFirstFileA(pat, &fd);
+  free(pat);
+  if (h != INVALID_HANDLE_VALUE) {
+    do {
+      if (strcmp(fd.cFileName, ".") == 0 || strcmp(fd.cFileName, "..") == 0) {
+        continue;
+      }
+      size_t m = strlen(fd.cFileName);
+      char* q = malloc(n + m + 2);
+      if (q == NULL) {
+        FindClose(h);
+        return ENOMEM;
+      }
+      memcpy(q, p, n);
+      q[n] = '\\';
+      memcpy(q + n + 1, fd.cFileName, m + 1);
+      u32 code = fx_rmtree(q, depth - 1);
+      free(q);
+      if (code != 0) {
+        FindClose(h);
+        return code;
+      }
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+  }
+  return RemoveDirectoryA(p) ? 0 : fx_win_errno(GetLastError());
+#else
+  struct stat st;
+  if (lstat(p, &st) != 0) {
+    return (u32)errno;
+  }
+  if (!S_ISDIR(st.st_mode)) {
+    return unlink(p) == 0 ? 0 : (u32)errno;
+  }
+  DIR* dir = opendir(p);
+  if (dir == NULL) {
+    return (u32)errno;
+  }
+  size_t n = strlen(p);
+  struct dirent* ent;
+  while ((ent = readdir(dir)) != NULL) {
+    if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
+      continue;
+    }
+    size_t m = strlen(ent->d_name);
+    char* q = malloc(n + m + 2);
+    if (q == NULL) {
+      closedir(dir);
+      return ENOMEM;
+    }
+    memcpy(q, p, n);
+    q[n] = '/';
+    memcpy(q + n + 1, ent->d_name, m + 1);
+    u32 code = fx_rmtree(q, depth - 1);
+    free(q);
+    if (code != 0) {
+      closedir(dir);
+      return code;
+    }
+  }
+  closedir(dir);
+  return rmdir(p) == 0 ? 0 : (u32)errno;
+#endif
+}
+
+// the directory w->data removed with its tree; a link there is refused
+static void fx_remove_tree_call(IoWork* w) {
+#ifdef _WIN32
+  DWORD a = GetFileAttributesA(w->data);
+  if (a == INVALID_FILE_ATTRIBUTES) {
+    w->code = fx_win_errno(GetLastError());
+    return;
+  }
+  if ((a & FILE_ATTRIBUTE_REPARSE_POINT) || !(a & FILE_ATTRIBUTE_DIRECTORY)) {
+    w->code = (a & FILE_ATTRIBUTE_REPARSE_POINT) ? ELOOP : ENOTDIR;
+    return;
+  }
+#else
+  struct stat st;
+  if (lstat(w->data, &st) != 0) {
+    w->code = (u32)errno;
+    return;
+  }
+  if (!S_ISDIR(st.st_mode)) {
+    w->code = S_ISLNK(st.st_mode) ? ELOOP : ENOTDIR;
+    return;
+  }
+#endif
+  w->code = fx_rmtree(w->data, 64);
+}
+
+#ifdef CID(FileFx.remove_tree)
+
+Term filefx_remove_tree_run(Env e, Term* f, IoWork* w) {
+  return fx_paths_start(e, f, w, 0, fx_remove_tree_call);
+}
+
+static void __attribute__((constructor)) filefx_remove_tree_use(void) {
+  io_eff(CID(FileFx.remove_tree), filefx_remove_tree_run);
+}
+
+#endif
+
 // Sync and lock
 // -------------
 
