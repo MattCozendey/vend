@@ -9,7 +9,12 @@ Delete each item when it is done.
 - `src/graph`: `Graph.affected`.
 - `src/views/text`: `Text.diff`, `Text.patch`, `Text.merge`.
 - `src/views/bend`: `Bend.decode`, `Bend.diff`, `Bend.patch`, `Bend.merge`.
-- `src/views/bend`: after a merge, run the checker; report "merged, but the proofs fail" as its own outcome.
+- `src/views/bend`: after a merge, run the checker; report "merged, but the proofs fail" as its own outcome. With
+  `src/impact`, this is the guarantee: no law statement changed and the merged result checks, so every law holds.
+- `bend-ver impact <line|mark>`: for each Bend resource the changeset touches, `Impact.classes` (base: where the line
+  forked, or the mark's heads) and `Impact.layers` over the space's documents, printed per layer.
+- `src/impact`: prune the radius by condition (`via` edges whose condition cannot hold under a query) once
+  `Cond.sat` exists; today conditions are only reported.
 - `src/store`: tree-aware `Tree.edit` (re-chunk only near the edit) and `Tree.diff` (skip shared subtrees). The first versions read and write everything.
 - `src/endpoints/file`:
   - Symlinks: a link is its own resource whose content is its target (agreed design). Needs a readlink effect; today a
@@ -62,7 +67,7 @@ and soundness are proven in `src/shared.bend`).
   - `src/views/text`: `Text.lossless`, `Text.same_equivalence`, `Text.patches`, `Text.diffs_nothing`,
     `Text.merges`.
   - `src/views/bend`: `Bend.lossless`, `Bend.keys_distinct`, `Bend.same_equivalence`, `Bend.patches`,
-    `Bend.diffs_nothing`, `Bend.merges`.
+    `Bend.diffs_nothing`, `Bend.merges`, `refs_local`, `refs_imported`.
 - `src/store`: `node_is_eq`, `read_after_write`, `write_root`, `write_keeps`, `edit_root`, `read_after_edit`,
   `edit_keeps`, `write_collides`, `edit_collides`, `diff_applies`, `diff_answers`.
 - `src/conditions`: `sat_holds`, `sat_unsat`, `canon_same`, `canon_unique`.
@@ -73,6 +78,9 @@ and soundness are proven in `src/shared.bend`).
 - `src/core`: `noticed_follows_stream`, `records_each_version`, `fetched_reads_back`, `recorded_heads_line`,
   `write_accepted`, `write_authored`, `nested_untracked`, `step_keeps_history`, `replay_matches`, `restored_quiet`.
 - `src/journal`: `read_after_encode`, `read_torn_tail`.
+- `src/impact`: `classify_unchanged`, `classify_added`, `classify_removed`, `classify_statement`,
+  `classify_proof_only`, `classify_covered`, `radius_has_changed`, `radius_closed`, `radius_minimal`,
+  `layers_cover`.
 - `src/endpoints/file`: `temp_is_temp`.
 
 ## Strengthen

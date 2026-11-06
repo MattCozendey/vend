@@ -368,8 +368,8 @@ def Bend.keys(m: Module) -> List<&2, String>:
 law Bend.keys_distinct:
   Views.View.KeysDistinct(~Module, ~Bend.keys)
 
-# the text of the item that defines key k in items, or None
-def Bend.owner(items: List<&2, Item>, +k: String, seen: List<&2, String>) -> Maybe<&2, String>:
+# the item that defines key k in items, or None
+def Bend.owner_item(items: List<&2, Item>, +k: String, seen: List<&2, String>) -> Maybe<&2, Item>:
   match items:
     case Nil{}:
       None{}
@@ -377,11 +377,15 @@ def Bend.owner(items: List<&2, Item>, +k: String, seen: List<&2, String>) -> May
       +seen = seen
       mine = Keys.of.go(Item.names(i), seen)
       Shared.Bool.when(
-        Maybe<&2, String>,
+        Maybe<&2, Item>,
         List.contains(~String, ~String.eq, mine, k),
-        u => Some{Item.text(i)},
-        u => Bend.owner(t, k, List.append(&2, String, Item.names(i), seen))
+        u => Some{i},
+        u => Bend.owner_item(t, k, List.append(&2, String, Item.names(i), seen))
       )
+
+# the text of the item that defines key k in items, or None
+def Bend.owner(items: List<&2, Item>, k: String) -> Maybe<&2, String>:
+  Maybe.map(&2, Item, String, i => Item.text(i), Bend.owner_item(items, k, []))
 
 # a and b are the same text, or both none
 def Texts.opt_eq(a: Maybe<&2, String>, b: Maybe<&2, String>) -> Bool:
@@ -399,7 +403,7 @@ def Bend.changed.go(ks: List<&2, String>, +a: Module, +b: Module) -> List<&2, St
     case Nil{}:
       Nil{}
     case Con{+k, +t}:
-      same = Texts.opt_eq(Bend.owner(Module.items(a), k, []), Bend.owner(Module.items(b), k, []))
+      same = Texts.opt_eq(Bend.owner(Module.items(a), k), Bend.owner(Module.items(b), k))
       Shared.Bool.when(
         List<&2, String>,
         same,
@@ -570,3 +574,258 @@ def Bend.edges.go(items: List<&2, Item>, +n: Shared.Name, +text: String) -> List
 # no conditional imports, so every edge holds always.
 def Bend.edges(n: Shared.Name, +m: Module) -> List<&2, Graph.Edge>:
   Bend.edges.go(Module.items(m), n, Bend.join(m))
+
+# References
+# ----------
+# What an item mentions. A mention is a maximal run of name characters
+# (Bend.is_ident: letters, digits, '_' and '.'), without a '.' at its end,
+# in the item's text outside comments: a '#' starts a comment that runs to
+# the end of its line. Comments are left out because they create no
+# dependency. Strings are not parsed, so a '#' inside a string literal cuts
+# its line too: that can miss a mention, never invent one.
+#
+# A run that equals a name of another item of the module (Item.names: its
+# name, and a type's constructors) is a local mention; the item's own names
+# are not mentions of itself. A run "A.x", where A is the alias of an
+# import of the module, mentions the item x of that import's target. Any
+# other run (a Base name, a local variable, a keyword) mentions nothing. A
+# local name wins over an alias when both fit.
+
+# An item that another one mentions: of this module, by name, or of an
+# import's target, by name. An import that does not resolve gives an
+# Unresolved target, so its mentions stay visible as unresolved.
+type Mention is Data:
+  Local{name: String}
+  Imported{target: Graph.Target, name: String}
+
+# An import's alias and the target it names.
+type Alias is Data:
+  Alias{alias: String, target: Graph.Target}
+
+# the alias of an import whose text has the words ws, from n: "path as A"
+# gives A and the target of path; anything else gives none
+def Bend.alias.of(n: Shared.Name, ws: List<&2, String>) -> List<&2, Alias>:
+  match ws:
+    case Con{p, Con{a, Con{x, Nil{}}}}:
+      Shared.Bool.when(
+        List<&2, Alias>,
+        String.eq(a, "as"),
+        u => [Alias{x, Bend.target(n, p)}],
+        u => []
+      )
+    case _:
+      []
+
+# the aliases of the imports among items of a module of the resource n: an
+# import "path as A" gives A and the target of path
+def Bend.aliases(items: List<&2, Item>, +n: Shared.Name) -> List<&2, Alias>:
+  match items:
+    case Nil{}:
+      Nil{}
+    case Con{Keyed{ImportItem{}, x, t}, r}:
+      List.append(&2, Alias, Bend.alias.of(n, Bend.words(x)), Bend.aliases(r, n))
+    case Con{i, r}:
+      Bend.aliases(r, n)
+
+# the run cur (last first) as a list of at most one name: none when empty
+def Bend.run.of(cur: String) -> List<&2, String>:
+  +x = Bend.trim_dot(String.reverse(cur))
+  Shared.Bool.when(List<&2, String>, String.is_empty(x), u => [], u => [x])
+
+# the runs of s, given cur, the run so far (last first), and note: s is
+# inside a comment
+def Bend.runs.go(s: String, +cur: String, note: Bool) -> List<&2, String>:
+  match s note:
+    case SNil{} _:
+      Bend.run.of(cur)
+    case SCon{c, +t} True{}:
+      Shared.Bool.when(
+        List<&2, String>,
+        U32.is_eq(Char.to_u32(c), 10),
+        u => Bend.runs.go(t, SNil{}, False{}),
+        u => Bend.runs.go(t, SNil{}, True{})
+      )
+    case SCon{+c, +t} False{}:
+      Shared.Bool.when(
+        List<&2, String>,
+        Bend.is_ident(c),
+        u => Bend.runs.go(t, SCon{c, cur}, False{}),
+        u => List.append(
+          &2,
+          String,
+          Bend.run.of(cur),
+          Bend.runs.go(t, SNil{}, U32.is_eq(Char.to_u32(c), 35))
+        )
+      )
+
+# the runs of the text s outside comments, without a '.' at their end
+def Bend.runs(s: String) -> List<&2, String>:
+  Bend.runs.go(s, SNil{}, False{})
+
+# a and b are the same mention
+def Mention.is_eq(a: Mention, b: Mention) -> Bool:
+  match a b:
+    case Local{x} Local{y}:
+      String.eq(x, y)
+    case Imported{s, x} Imported{t, y}:
+      List.all.if(u => String.eq(x, y), Graph.Target.is_eq(s, t))
+    case _ _:
+      False{}
+
+# ms without a mention that came before
+def Mentions.dedup(ms: List<&2, Mention>, seen: List<&2, Mention>) -> List<&2, Mention>:
+  match ms:
+    case Nil{}:
+      Nil{}
+    case Con{+x, +t}:
+      +seen = seen
+      Shared.Bool.when(
+        List<&2, Mention>,
+        List.contains(~Mention, ~Mention.is_eq, seen, x),
+        u => Mentions.dedup(t, seen),
+        u => x <> Mentions.dedup(t, x <> seen)
+      )
+
+# the mention through the first alias of als that the run x starts with
+def Bend.mention.alias(+x: String, als: List<&2, Alias>) -> List<&2, Mention>:
+  match als:
+    case Nil{}:
+      []
+    case Con{Alias{a, tg}, r}:
+      +pre = String.append(a, ".")
+      Shared.Bool.when(
+        List<&2, Mention>,
+        String.starts_with(x, pre),
+        u => [Imported{tg, String.drop(x, String.length(pre))}],
+        u => Bend.mention.alias(x, r)
+      )
+
+# the mention of the run x, if any, given the module's names, the item's
+# own names, and the aliases
+def Bend.mention(
+  +x: String,
+  names: List<&2, String>,
+  own: List<&2, String>,
+  als: List<&2, Alias>
+) -> List<&2, Mention>:
+  local = Bool.and(
+    List.contains(~String, ~String.eq, names, x),
+    Bool.not(List.contains(~String, ~String.eq, own, x))
+  )
+  Shared.Bool.when(List<&2, Mention>, local, u => [Local{x}], u => Bend.mention.alias(x, als))
+
+# the mentions of runs, in order, duplicates kept
+def Bend.mentions.go(
+  runs: List<&2, String>,
+  +names: List<&2, String>,
+  +own: List<&2, String>,
+  +als: List<&2, Alias>
+) -> List<&2, Mention>:
+  match runs:
+    case Nil{}:
+      Nil{}
+    case Con{x, t}:
+      List.append(
+        &2,
+        Mention,
+        Bend.mention(x, names, own, als),
+        Bend.mentions.go(t, names, own, als)
+      )
+
+# what item i of the module m of the resource n mentions, each once
+def Bend.refs(n: Shared.Name, m: Module, +i: Item) -> List<&2, Mention>:
+  +items = Module.items(m)
+  ms = Bend.mentions.go(
+    Bend.runs(Item.text(i)),
+    Items.names(items),
+    Item.names(i),
+    Bend.aliases(items, n)
+  )
+  Mentions.dedup(ms, [])
+
+# a local mention names another item of the module
+law refs_local:
+  for n: Shared.Name
+  for m: Module
+  for i: Item
+  for x: String
+  for h: {List.contains(~Mention, ~Mention.is_eq, Bend.refs(n, m, i), Local{x}) == True{}: Bool}
+  {List.contains(~String, ~String.eq, Items.names(Module.items(m)), x) == True{}: Bool} &
+    {List.contains(~String, ~String.eq, Item.names(i), x) == False{}: Bool}
+
+# Statements and proofs
+# ---------------------
+# A law's statement and its proof are separate items: the law item states
+# it, and a def with the law's name fills it. A def named "A.x", where A is
+# an import's alias, fills the law x of that import's target (that is the
+# only way Bend lets a module define a name of another).
+
+# The part an item plays. Statement: a law item, what a law states.
+# Proof: a def that fills the law named fills (here, or "A.x" of an import).
+# Code: any other item (a def that fills no law, a type, an import, a gap).
+type Part is Data:
+  Statement{}
+  Proof{fills: String}
+  Code{}
+
+# the names of the law items among items
+def Items.laws(items: List<&2, Item>) -> List<&2, String>:
+  match items:
+    case Nil{}:
+      Nil{}
+    case Con{Keyed{LawItem{}, x, t}, r}:
+      x <> Items.laws(r)
+    case Con{i, r}:
+      Items.laws(r)
+
+# the name x starts with an alias of als then '.'
+def Aliases.prefix(als: List<&2, Alias>, +x: String) -> Bool:
+  match als:
+    case Nil{}:
+      False{}
+    case Con{Alias{a, tg}, r}:
+      List.any.if(u => Aliases.prefix(r, x), String.starts_with(x, String.append(a, ".")))
+
+# some alias of als names the target t
+def Aliases.has_target(als: List<&2, Alias>, +t: Graph.Target) -> Bool:
+  match als:
+    case Nil{}:
+      False{}
+    case Con{Alias{a, tg}, r}:
+      List.any.if(u => Aliases.has_target(r, t), Graph.Target.is_eq(tg, t))
+
+# an imported mention goes through an alias of the module, to that alias's
+# target
+law refs_imported:
+  for n: Shared.Name
+  for m: Module
+  for i: Item
+  for t: Graph.Target
+  for x: String
+  for h: {
+    List.contains(~Mention, ~Mention.is_eq, Bend.refs(n, m, i), Imported{t, x}) == True{}: Bool
+  }
+  {Aliases.has_target(Bend.aliases(Module.items(m), n), t) == True{}: Bool}
+
+# the part of a def named x in the module m of the resource n
+def Bend.def_part(+x: String, m: Module, n: Shared.Name) -> Part:
+  +items = Module.items(m)
+  fills = List.any.if(
+    u => Aliases.prefix(Bend.aliases(items, n), x),
+    List.contains(~String, ~String.eq, Items.laws(items), x)
+  )
+  Shared.Bool.when(Part, fills, u => Proof{x}, u => Code{})
+
+# the part that item i plays in the module m of the resource n
+def Bend.part(m: Module, n: Shared.Name, i: Item) -> Part:
+  match i:
+    case Keyed{LawItem{}, x, t}:
+      Statement{}
+    case Keyed{DefItem{}, x, t}:
+      Bend.def_part(x, m, n)
+    case Keyed{TypeItem{}, x, t}:
+      Code{}
+    case Keyed{ImportItem{}, x, t}:
+      Code{}
+    case Gap{t}:
+      Code{}
