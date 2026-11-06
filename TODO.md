@@ -66,19 +66,17 @@ and soundness are proven in `src/shared.bend`).
   - `src/views/bend`: `Bend.lossless`, `Bend.keys_distinct`, `Bend.same_equivalence`, `Bend.patches`,
     `Bend.diffs_nothing`, `Bend.merges`, `refs_local`, `refs_imported`.
 - `src/store`: `node_is_eq`, `read_after_write`, `write_root`, `write_keeps`, `edit_root`, `read_after_edit`,
-  `edit_keeps`, `write_collides`, `edit_collides`, `diff_applies`, `diff_answers`.
+  `edit_keeps`, `write_collides`, `edit_collides`, `diff_applies`.
 - `src/conditions`: `sat_holds`, `sat_unsat`, `canon_same`, `canon_unique`.
 - `src/history`: `node_encode_injective`, `add_refused`, `add_node`, `add_collides`, `add_idempotent`, `add_tips`,
-  `new_ok`, `add_ok`, `join_keeps`, `join_adds_nothing`, `join_commutes`, `join_associates`, `join_idempotent`.
+  `add_ok`, `join_keeps`, `join_adds_nothing`, `join_commutes`, `join_associates`, `join_idempotent`.
 - `src/lines`: `advance_head`, `advance_frames`, `advance_descends`, `seen_caught_up`, `seen_frames`.
 - `src/graph`: `affected_exact`.
 - `src/core`: `noticed_follows_stream`, `records_each_version`, `fetched_reads_back`, `recorded_heads_line`,
   `write_accepted`, `write_authored`, `nested_untracked`, `step_keeps_history`, `replay_matches`, `restored_quiet`.
-- `src/daemon`: `step_is_core`, `step_frames`, `step_frames_lines`, `unmount_drops`, `unmount_frames`,
-  `request_decode_after_encode`, `response_decode_after_encode`, `token_checked`, `stop_guarded`, `stop_forced`,
-  `mount_once`, `entries_decode_after_encode`, `replay_nil`, `replay_con`, `apply_saw`, `apply_marked`, `mark_fixed`,
-  `apply_forked`, `apply_forked_mark`, `reads_record_nothing`, `write_stale`, `write_kept`, `merge_all_or_nothing`,
-  `affects_sees`.
+- `src/daemon`: `step_frames`, `step_frames_lines`, `unmount_drops`, `unmount_frames`, `request_decode_after_encode`,
+  `response_decode_after_encode`, `stop_guarded`, `stop_forced`, `entries_decode_after_encode`, `apply_saw`,
+  `mark_fixed`, `apply_forked`, `apply_forked_mark`, `reads_record_nothing`, `merge_all_or_nothing`.
 - `src/cli`: `parse_after_show` (restated for `mount`; its old proof covered `watch`, which is gone),
   `ask_passes_words`.
 - `src/journal`: `read_after_encode`, `read_torn_tail`.

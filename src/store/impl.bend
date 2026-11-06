@@ -216,3 +216,13 @@ def Store.diff.of(
 def Spec.Tree.diff(s, a, b):
   +s = s
   Store.diff.of(Spec.Tree.read(s, a), Spec.Tree.read(s, b))
+
+def Spec.diff_answers(s, a, b, xs, ys, ha, hb):
+  +s = s
+  +b = b
+  +xs = xs
+  %Equal.sym(Maybe<&2, List<&2, Shared.Bytes()>>, Spec.Tree.read.go(64n, s, [a]), Some{xs}, ha) :
+    {Maybe.is_some(&2, List<&2, Spec.Splice>, Store.diff.of(_, Spec.Tree.read.go(64n, s, [b]))) == True{} : Bool}
+  %Equal.sym(Maybe<&2, List<&2, Shared.Bytes()>>, Spec.Tree.read.go(64n, s, [b]), Some{ys}, hb) :
+    {Maybe.is_some(&2, List<&2, Spec.Splice>, Store.diff.of(Some{xs}, _)) == True{} : Bool}
+  {==}

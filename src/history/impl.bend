@@ -511,3 +511,6 @@ def Spec.add_keeps(h, v, g, x, y, w, a, o):
   +v = v
   Keeps.of(h, v, g, x, y, w, Ids.missing(h, Spec.Node.parents(v)))(a, o)
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+def Spec.new_ok():
+  x => v => x1 => Empty.absurd({Hash.Hash.hex(Spec.Node.id(v)) == Hash.Hash.hex(x) : String}, {(%x1 : {\{None: Unit; \{Some: f0 => Empty; \{}}} : Maybe<&2, Spec.Node> -> Type}(_); Unit{}) : Empty})

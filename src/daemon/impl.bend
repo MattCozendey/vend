@@ -1808,3 +1808,93 @@ def Answer.go(+d: Spec.Daemon, a: String, c: Spec.Command, b: Shared.Bytes()) ->
 
 def Spec.Daemon.handle(d, a, c, b):
   Answer.go(d, a, c, b)
+
+def Spec.affects_sees(d, a, t, b, l, h):
+  +d = d
+  +a = a
+  +t = t
+  +l = l
+  %Equal.sym(Maybe<&2, Lines.Line>, Shared.Bool.when(Maybe<&2, Lines.Line>, Shared.Text.has(t, 58), u => Spec.Daemon.line_at(d, t), u => Ref.line_of(d, Ref.named(Shared.Table.keys(Lines.Line, Ref.lines(d)), t))), Some{l}, h) :
+    {Spec.Handled.records(Answer.affects(d, a, _, t)) == [Journal.Saw{a, Lines.Line.id(l)}] : List<&2, Journal.Record>}
+  {==}
+
+def Spec.apply_marked(d, k, nm, msg, a, l, h, n):
+  match d:
+    case Spec.Daemon{+store, +history, +lines, +mounts, +clients, +book}:
+      match book:
+        case Spec.Book{+seen, +marks, +origins}:
+          +k = k
+          +nm = nm
+          +msg = msg
+          +a = a
+          +l = l
+          %Equal.sym(Maybe<&2, Lines.Line>, Shared.Table.get(Lines.Line, lines, k), Some{l}, h) :
+            {Spec.Daemon.mark(Apply.marked(Spec.Daemon{store, history, lines, mounts, clients, Spec.Book{seen, marks, origins}}, _, String.append(k, SCon{'@', String.append(nm, "")}), nm, msg, a), k, nm) == Some{Lines.Mark{Lines.Line.name(l), nm, msg, a, l}} : Maybe<&2, Lines.Mark>}
+          %Equal.sym(Maybe<&2, Lines.Mark>, Shared.Table.get(Lines.Mark, marks, String.append(k, SCon{'@', String.append(nm, "")})), None{}, n) :
+            {Spec.Daemon.mark(Shared.Bool.when(Spec.Daemon, Maybe.is_some(&2, Lines.Mark, _), u => Spec.Daemon{store, history, lines, mounts, clients, Spec.Book{seen, marks, origins}}, u => Spec.Daemon{store, history, lines, mounts, clients, Spec.Book{seen, Shared.Table.set(Lines.Mark, marks, String.append(k, SCon{'@', String.append(nm, "")}), Lines.Mark.of(l, nm, msg, a)), origins}}), k, nm) == Some{Lines.Mark{Lines.Line.name(l), nm, msg, a, l}} : Maybe<&2, Lines.Mark>}
+          %Equal.sym(Maybe<&2, Lines.Mark>, Shared.Table.get(Lines.Mark, Shared.Table.set(Lines.Mark, marks, String.append(k, SCon{'@', String.append(nm, "")}), Lines.Mark.of(l, nm, msg, a)), String.append(k, SCon{'@', String.append(nm, "")})), Some{Lines.Mark.of(l, nm, msg, a)}, Shared.Table.get_after_set(Lines.Mark, marks, String.append(k, SCon{'@', String.append(nm, "")}), Lines.Mark.of(l, nm, msg, a))) :
+            {_ == Some{Lines.Mark{Lines.Line.name(l), nm, msg, a, l}} : Maybe<&2, Lines.Mark>}
+          {==}
+
+def mount_once.g1(
+  +d: Spec.Daemon,
+  +tok: Shared.Bytes(),
+  +u: String,
+  +gs: List<&2, String>,
+  +ln: String,
+  +h: {Maybe.is_some(&2, Spec.Local, Spec.Daemon.local(d, u)) == True{} : Bool},
+  +x: Bool,
+  hx: {x == Shared.Bytes.is_eq(tok, tok) : Bool}) ->
+  {Spec.Action.is_reply(Shared.Bool.when(Spec.Action, x, x => Spec.Daemon.decide.body(d, Spec.Mount{u, gs, ln}), x => Spec.Reply{Spec.Denied{"wrong token"}})) == True{} : Bool}:
+  match x:
+    case False{}:
+      {==}
+    case True{}:
+      %Equal.sym(Bool, Maybe.is_some(&2, Spec.Local, Spec.Daemon.local(d, u)), True{}, h) :
+        {Spec.Action.is_reply(Shared.Bool.when(Spec.Action, _, x => Spec.Reply{Spec.Denied{String.append("already mounted: ", u)}}, x => Spec.DoMount{u, gs, ln})) == True{} : Bool}
+      {==}
+
+def Spec.mount_once(d, tok, u, gs, ln, h):
+  +tok = tok
+  mount_once.g1(d, tok, u, gs, ln, h, Shared.Bytes.is_eq(tok, tok), {==})
+
+def Spec.replay_con(d, r, rs):
+  {==}
+
+def Spec.replay_nil(d):
+  {==}
+
+def Spec.step_is_core(d, l, i):
+  {==}
+
+def Spec.token_checked(d, tok, r, h):
+  match r:
+    case Spec.Request{+token, +body}:
+      %Equal.sym(Bool, Shared.Bytes.is_eq(token, tok), False{}, h) :
+        {Shared.Bool.when(Spec.Action, _, x => Spec.Daemon.decide.body(d, body), x => Spec.Reply{Spec.Denied{"wrong token"}}) == Spec.Reply{Spec.Denied{"wrong token"}} : Spec.Action}
+      {==}
+
+def Spec.write_kept(d, a, n, ln, ps, f, b, e, i, s):
+  +d = d
+  +a = a
+  +n = n
+  +ln = ln
+  +b = b
+  +e = e
+  %Equal.sym(Maybe<&2, List<&2, Shared.Bytes()>>, Ref.all(ps, Shared.Table.keys(History.Node, Ref.nodes(d)), Ref.nodes(d), n), Some{e}, i) :
+    {Spec.Handled.records(Answer.write.ids(_, a, n, ln, Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), b)) == [Journal.Kept{ln, Some{b}, History.Node{n, Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n), History.Has{Store.Tree.up(64n, Store.Node.refs(Store.Tree.leaves.of(Store.Chunk.split.go(List<&2, U32>, Store.Bytes.id, Core.Core.items(b), 0, [], 0n, 0n))))}, None{}, History.Agent{a}}}] : List<&2, Journal.Record>}
+  %Equal.sym(Bool, History.Ids.is_eq(e, Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n)), True{}, s) :
+    {Spec.Handled.records(Shared.Bool.when(Spec.Handled, _, u => Answer.kept(a, n, ln, Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n), b), u => Show.no(String.concat(["refused: ", Lines.Line.id(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}})), " follows ", Show.ids(Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n)), " for ", Shared.Name.show(n)])))) == [Journal.Kept{ln, Some{b}, History.Node{n, Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n), History.Has{Store.Tree.up(64n, Store.Node.refs(Store.Tree.leaves.of(Store.Chunk.split.go(List<&2, U32>, Store.Bytes.id, Core.Core.items(b), 0, [], 0n, 0n))))}, None{}, History.Agent{a}}}] : List<&2, Journal.Record>}
+  {==}
+
+def Spec.write_stale(d, a, n, ln, ps, f, b, e, i, s):
+  +d = d
+  +a = a
+  +n = n
+  +ln = ln
+  +ps = ps
+  +b = b
+  +e = e
+  +i = i
+  +s = s
+  Tuple{(%Equal.sym(Maybe<&2, List<&2, Shared.Bytes()>>, Ref.all(ps, Shared.Table.keys(History.Node, Ref.nodes(d)), Ref.nodes(d), n), Some{e}, i) : {Spec.Handled.records(Answer.write.ids(_, a, n, ln, Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), b)) == [] : List<&2, Journal.Record>}; (%Equal.sym(Bool, History.Ids.is_eq(e, Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n)), False{}, s) : {Spec.Handled.records(Shared.Bool.when(Spec.Handled, _, u => Answer.kept(a, n, ln, Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n), b), u => Show.no(String.concat(["refused: ", Lines.Line.id(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}})), " follows ", Show.ids(Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n)), " for ", Shared.Name.show(n)])))) == [] : List<&2, Journal.Record>}; {==})), (%Equal.sym(Maybe<&2, List<&2, Shared.Bytes()>>, Ref.all(ps, Shared.Table.keys(History.Node, Ref.nodes(d)), Ref.nodes(d), n), Some{e}, i) : {Spec.Handled.ok(Answer.write.ids(_, a, n, ln, Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), b)) == False{} : Bool}; (%Equal.sym(Bool, History.Ids.is_eq(e, Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n)), False{}, s) : {Spec.Handled.ok(Shared.Bool.when(Spec.Handled, _, u => Answer.kept(a, n, ln, Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n), b), u => Show.no(String.concat(["refused: ", Lines.Line.id(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}})), " follows ", Show.ids(Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n)), " for ", Shared.Name.show(n)])))) == False{} : Bool}; {==}))}
