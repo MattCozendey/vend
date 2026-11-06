@@ -10,6 +10,9 @@
 //   bun tools/gen3/gen3.ts prove <file.bend> <def> [<def> ...] [--wait S] [--budget S] [--write]
 //       a def whose body is ?TODO: a whole body (case splits, induction, helper lemmas). A body with
 //       ?TODO holes: each hole. Prints the proof, or the best partial with each hole's goal.
+//       A def that returns data, with a ?TODO body: a body synthesized from the laws that name it
+//       (SYNTHESIZED: bend2 accepts it and the laws hold on small inputs; evidence, not a proof). The
+//       defs after it in the same call are proven against that body (prove <file> div2 div2_law).
 //       --write puts a full proof into the file (only if that body did not change meanwhile).
 //       --all: every def of the file with a ?TODO. --hole N: only the N-th ?TODO of a body.
 //       --helpers: on a miss, each open hole becomes a helper lemma (its goal over its context) and
@@ -36,6 +39,11 @@
 // * one search, anytime: proof-number search over an AND/OR tree (goals OR tactics, a tactic AND its
 //   subgoals). Every partial is the current best subtree, every subgoal gets effort in proportion to
 //   how close it is to a proof, and no phase repeats another's work.
+// * synthesis by testing: a data def's candidate bodies (a match on a parameter, a nested match on a
+//   recursive field, small typed leaves; simplest first) are kept when the laws that name the def hold
+//   on small values; an arm that another leaf could take with the same verdicts is reported, and a body
+//   the laws do not pin down at all is refused. bend2 reduces in place, so each law is lowered once and
+//   raised again for every candidate.
 // * one move for every split: a goal can become a helper def (its context its parameters, optionally
 //   with a stuck call generalized to a parameter x and an equation {x == call}), and a helper's
 //   parameters can be split. That gives splits inside ?TODO holes, functional and enumeration
@@ -621,6 +629,7 @@ const checkDef = (k: string, body: string, header?: string) => {
     return body;
   });
   B.def_check(BK.book, k, { ...def, v });
+  return v;
 };
 // k's def check with body: null, or bend2's error (a Stop: not decided, out of fuel or time)
 const checkErr = (k: string, body: string, header?: string, cap = FUEL_FINAL): Term => {
@@ -922,7 +931,7 @@ const wnfShared = (h: Term): Term => {
   if (fuel <= 0) return undefined;
   try { return B.term_wnf(BK.book, h); } catch (e) { if (e === TIMEOUT) throw e; return undefined; }
 };
-const nfObj = new WeakMap<object, Map<number, Term>>(); // by the term object: no lowering on a hit
+let nfObj = new WeakMap<object, Map<number, Term>>(); // by the term object: no lowering on a hit
 const nf = (h: Term, d: number, atoms = false, cap = FUEL_NFS): Term => {
   const sub = mixH(d, atoms ? 1 : 0, cap);
   const byObj = typeof h === "object" && h ? nfObj.get(h) : undefined;
@@ -2600,15 +2609,361 @@ const proveHoles = async (k: string, ds: Src, until: number, hard: number, progr
     dropTemps();
   }
 };
+// ---- synthesis: a body for a data def with a ?TODO body ----
+// Shapes (no match; a match on a parameter; that and a match on a field of the parameter's own type in
+// the arms that have one) times leaves per arm (small terms bend2 types at the arm: variables,
+// constructors, calls of defs with a matching result, self-calls; bend2's def check rejects a call that
+// does not descend), in order of size. A body is kept when every decided instance of the laws that name
+// the def holds: each law's data parameters take small values (n = 0..3, short lists), a premise that
+// does not hold drops the instance. Passing the laws on these inputs is evidence, not a proof.
+type Inst = { law: string; vals: (Term | null)[] }; // a law and its parameters' values (null: a premise)
+const MAX_VALS = 6, MAX_INSTS = 48, MAX_LEAVES = 14, MAX_COMBOS = 4000;
+
+// small closed values (lowered) of type A (an HTerm), at most MAX_VALS
+const valuesOf = (A: Term, depth: number, nest = 0): Term[] => {
+  const w = nest > 8 ? null : wnf(A);
+  if (!w) return [];
+  if (w.$ === "Typ") return [B.ADT("Bool", [], undefined, [])]; // a type parameter: Bool
+  if (w.$ !== "ADT") return [];
+  if (/(^|[.:])Nat$/.test(w.k)) return [0, 1, 2, 3].map((v) => B.Lit("Nat", v));
+  if (/(^|[.:])U32$/.test(w.k)) return [0, 1, 2].map((v) => B.Lit("U32", v));
+  const adt = attempt(FUEL_NF, () => B.book_adt(BK.book, w, B.ctx_nil(), undefined));
+  if (!adt || adt.c.length === 0) return [];
+  const out: Term[] = [];
+  // the constructors without fields first, then the others (a field of the same type costs depth)
+  for (const ctr of [...adt.c].sort((a: Term, b: Term) => a.n - b.n)) {
+    if (out.length >= MAX_VALS) break;
+    if (ctr.n > 0 && depth <= 0) continue;
+    const tel = attempt(FUEL_NF, () => B.tele_fill(BK.book, ctr.T, w.x, B.ctx_nil(), undefined));
+    if (!tel) continue;
+    // the fields one by one, each from the values of its type (depending on the earlier ones)
+    let rows: { xs: Term[]; cur: Term }[] = [{ xs: [], cur: tel }];
+    for (let f = 0; f < ctr.n && rows.length; f++) {
+      const next: { xs: Term[]; cur: Term }[] = [];
+      for (const r of rows) {
+        const c = attempt(FUEL_NF, () => B.tele_head(BK.book, r.cur, B.ctx_nil(), undefined));
+        if (!c) continue;
+        const fw = wnf(c.A);
+        for (const v of valuesOf(c.A, fw?.$ === "ADT" && fw.k === w.k ? depth - 1 : depth, nest + 1).slice(0, f === 0 ? 3 : 2)) {
+          if (next.length >= MAX_VALS) break;
+          next.push({ xs: [...r.xs, v], cur: c.B(B.term_higher(v, null)) });
+        }
+      }
+      rows = next;
+    }
+    for (const r of rows) if (out.length < MAX_VALS && r.xs.length === ctr.n) out.push(B.Ctr(ctr.k, r.xs));
+  }
+  return out;
+};
+// the laws that name k (proven or open; not k itself), each lowered once: re-raised for every candidate
+// (bend2's reduction updates the shared cells of a term: a term reduced under one body is stale)
+const lawsOf = (k: string): string[] =>
+  Object.keys(BK.raw).filter((l) => l !== k && BK.raw[l]?.$ === "Def" && !l.includes("~") && refsOf(BK.raw[l].T).has(k) && isLemmaType(l));
+// up to MAX_INSTS instances of law l: values for its data parameters, null for its premises
+const instancesOf = (l: string): Inst[] => {
+  const T = BK.raw[l].T;
+  let rows: { vals: (Term | null)[]; t: Term }[] = [{ vals: [], t: T }];
+  for (let i = 0; i < 12; i++) {
+    const next: typeof rows = [];
+    let done = false;
+    for (const r of rows) {
+      const s = asAll(r.t);
+      if (!s) { done = true; next.push(r); continue; }
+      if (isProp(s.A)) { next.push({ vals: [...r.vals, null], t: s.B(B.Var("h", FRESH + i)) }); continue; }
+      for (const v of valuesOf(s.A, 2)) if (next.length < MAX_INSTS) next.push({ vals: [...r.vals, v], t: s.B(B.term_higher(v, null)) });
+    }
+    rows = next;
+    if (done || rows.length === 0) break;
+  }
+  return rows.map((r) => ({ law: l, vals: r.vals }));
+};
+// do two closed terms evaluate to the same value? true, false, or null (not decided: stuck, out of fuel)
+const sameValue = (a: Term, b: Term, depth = 0): boolean | null => {
+  if (attempt(FUEL_NF, () => B.term_compare("EQ", BK.book, a, b, 0)) === true) return true;
+  if (depth > 24) return null;
+  let x = wnf(a), y = wnf(b);
+  if (!x || !y) return null;
+  if (x.$ === "Lit" && y.$ === "Lit") return x.k === y.k ? x.v === y.v : null;
+  if (x.$ === "Lit") x = B.lit_step(x);
+  if (y.$ === "Lit") y = B.lit_step(y);
+  if (x.$ !== "Ctr" || y.$ !== "Ctr") return null;
+  if (x.k !== y.k || x.x.length !== y.x.length) return false;
+  let all: boolean | null = true;
+  for (let i = 0; i < x.x.length; i++) {
+    const r = sameValue(x.x[i], y.x[i], depth + 1);
+    if (r === false) return false;
+    if (r === null) all = null;
+  }
+  return all;
+};
+// does instance n hold under k's current body? (null: not decided)
+const lawTerms = new Map<string, Term>();
+const holds = (n: Inst): boolean | null => {
+  const L = lawTerms.get(n.law);
+  if (!L) return null;
+  let t = B.term_higher(L, null);
+  for (let i = 0; i < n.vals.length; i++) {
+    const s = asAll(t);
+    if (!s) return null;
+    if (n.vals[i] === null) {
+      const p = wnf(s.A);
+      if (p?.$ !== "Eql" || sameValue(p.a, p.b) !== true) return null; // the premise does not hold: no instance
+      t = s.B(B.Var("h", FRESH + i));
+    } else t = s.B(B.term_higher(n.vals[i], null));
+  }
+  return decide(t, 0);
+};
+// does a closed proposition hold? An equation by evaluation; @x: A -> P for the small values of A; a
+// premise {..} -> P as P when the premise holds; a pair of facts by each part. null: not decided
+const decide = (t: Term, depth: number): boolean | null => {
+  const c = depth > 6 ? null : wnf(t);
+  if (!c) return null;
+  if (c.$ === "Eql") return sameValue(c.a, c.b);
+  if (c.$ === "All") {
+    if (isProp(c.A)) {
+      const p = decide(c.A, depth + 1);
+      return p === true ? decide(c.B(B.Var("h", FRESH + 400 + depth)), depth + 1) : null;
+    }
+    return every(valuesOf(c.A, 2).slice(0, 4).map((x) => decide(c.B(B.term_higher(x, null)), depth + 1)));
+  }
+  const adt = c.$ === "ADT" ? attempt(FUEL_NF, () => B.book_adt(BK.book, c, B.ctx_nil(), undefined)) : null;
+  if (adt?.c.length !== 1 || adt.c[0].n === 0) return null;
+  const parts: (boolean | null)[] = [];
+  let cur = attempt(FUEL_NF, () => B.tele_fill(BK.book, adt.c[0].T, c.x, B.ctx_nil(), undefined));
+  for (let f = 0; cur && f < adt.c[0].n; f++) {
+    const h = attempt(FUEL_NF, () => B.tele_head(BK.book, cur, B.ctx_nil(), undefined));
+    if (!h) return null;
+    parts.push(decide(h.A, depth + 1));
+    cur = h.B(B.Var("p", FRESH + 500 + depth * 8 + f));
+  }
+  return every(parts);
+};
+// all of them: false if one is false, null if none is false but one is not decided
+const every = (rs: (boolean | null)[]): boolean | null => (rs.some((r) => r === false) ? false : rs.length && rs.every((r) => r === true) ? true : null);
+
+// the shapes of a body: arms (a pattern path, the arm's goal) and how to print them
+type Shape = { arms: { g: Goal }[]; text: (leaves: string[]) => string };
+const shapesOf = (k: string): Shape[] => {
+  const root = rootGoal(owner(k));
+  const lg = introAll(root);
+  const out: Shape[] = lg ? [{ arms: [{ g: lg }], text: (ls) => "  " + ls[0] }] : [];
+  const ind = (s: string, n: number) => s.split("\n").map((l) => " ".repeat(n) + l).join("\n");
+  for (let j = 0; j < root.pend; j++) {
+    const arms = split(root, j);
+    if (!arms || arms.length > 4) continue;
+    const x = root.pnames[j];
+    const leaves = arms.map((a) => introAll(a.node));
+    if (leaves.some((l) => !l)) continue;
+    out.push({ arms: leaves.map((g) => ({ g: g! })), text: (ls) => "  match " + x + ":\n" + arms.map((a, i) => "    case " + a.pat + ":\n" + ind(ls[i], 6)).join("\n") });
+    // in each arm with a field of the parameter's own type (its recursion), that field matched too
+    const T = attempt(FUEL_NF, () => H(lower(asAll(nthBinder(root.ty, j))!.A, 0)));
+    const sub = arms.map((a) => {
+      for (let f = 0; f < a.node.pend - (root.pend - 1 - j); f++) { // the arm's fields come first
+        const fb = nthBinder(a.node.ty, f);
+        const s = fb && asAll(fb);
+        if (s && attempt(FUEL_NF, () => H(lower(s.A, 0))) === T) { const inner = split(a.node, f); if (inner && inner.length <= 4) return { f: a.node.pnames[f], inner }; }
+      }
+      return null;
+    });
+    if (!sub.some(Boolean)) continue;
+    const arms2 = arms.flatMap((a, i) => (sub[i] ? sub[i]!.inner.map((b) => introAll(b.node)) : [introAll(a.node)]));
+    if (arms2.some((l) => !l)) continue;
+    out.push({
+      arms: arms2.map((g) => ({ g: g! })),
+      text: (ls) => {
+        let at = 0;
+        return "  match " + x + ":\n" + arms.map((a, i) => "    case " + a.pat + ":\n" + (sub[i]
+          ? "      match " + sub[i]!.f + ":\n" + sub[i]!.inner.map((b) => "        case " + b.pat + ":\n" + ind(ls[at++], 10)).join("\n")
+          : ind(ls[at++], 6))).join("\n");
+      },
+    });
+  }
+  return out;
+};
+// the j-th binder of a function type, opened (the earlier ones bound to fresh variables)
+const nthBinder = (T: Term, j: number): Term | null => {
+  let t: Term = T;
+  for (let i = 0; i < j; i++) { const s = asAll(t); if (!s) return null; t = s.B(B.Var("_", FRESH + 300 + i)); }
+  return t;
+};
+// small terms that check at arm goal g: variables, constructors over them, calls over them, and
+// one-field constructors over calls; at most MAX_LEAVES
+const leavesAt = (g: Goal, k: string): string[] => {
+  // each candidate typed at g once; one per normal form (0n, Zero{} and Nat.mod(0n, 0n) are one leaf);
+  // ranked: variables and constructors, then self-calls and constructors around them, then the entry's
+  // calls, then Base's; shorter first within a rank
+  const found: { s: string; rank: number }[] = [], seen = new Set<string>(), values = new Set<number>();
+  const add = (s: string, rank: number) => {
+    if (seen.has(s) || found.length >= MAX_LEAVES * 4) return;
+    seen.add(s);
+    if (!tryText(g, s)) return;
+    const v = attempt(FUEL_NF, () => { const t = B.term_higher(parseLow(s, g), g.env); return H(nf(t, LD(g)) ?? lower(t, LD(g))); });
+    if (v !== undefined && values.has(v)) return;
+    if (v !== undefined) values.add(v);
+    found.push({ s, rank });
+  };
+  const vars = g.names.filter((x, i) => x !== "_" && ann(g, i)?.q.$ !== "None");
+  const w = wnf(g.ty);
+  const adt = w?.$ === "ADT" ? attempt(FUEL_NF, () => B.book_adt(BK.book, w, g.ctx, g.own.k)) : null;
+  const ctrs: { name: string; n: number }[] = (adt?.c ?? []).map((c: Term) => ({ name: B.name_show(g.own.file, c.k), n: c.n }));
+  // a constructor applied, in Bend's own spelling for a Nat (1n+x)
+  const ctrText = (name: string, args: string[]) => (/(^|\.)Succ$/.test(name) && args.length === 1 ? "1n+" + args[0] : name + "{" + args.join(", ") + "}");
+  const atoms = [...(w?.$ === "ADT" && /(^|[.:])Nat$/.test(w.k) ? ["0n"] : []), ...vars, ...ctrs.filter((c) => c.n === 0).map((c) => c.name + "{}")];
+  const combos = (m: number): string[][] => (m === 0 ? [[]] : combos(m - 1).flatMap((c) => atoms.map((a) => [...c, a])));
+  atoms.forEach((a) => add(a, 0));
+  for (const c of ctrs.filter((c) => c.n > 0 && c.n <= 2)) for (const args of combos(c.n).slice(0, 32)) add(ctrText(c.name, args), 0);
+  // calls: k itself, then the defs before it whose result type has the goal's head (1 to 3 parameters)
+  const head = attempt(FUEL_NF, () => headKey(lower(g.ty, LD(g))));
+  for (const f of [k, ...callsByResult(head ?? "", k)]) {
+    const n = BK.raw[f]?.n ?? 0;
+    if (n < 1 || n > 3) continue;
+    const name = B.name_show(g.own.file, f), rank = f === k ? 1 : BK.raw[f].b ? 3 : 2;
+    for (const args of combos(n).slice(0, 27)) {
+      const call = name + "(" + args.join(", ") + ")";
+      add(call, rank);
+      // a one-field constructor around it (1n+div2(q))
+      if (found.some((x) => x.s === call)) for (const c of ctrs.filter((c) => c.n === 1)) add(ctrText(c.name, [call]), rank);
+    }
+  }
+  return found.sort((a, b) => a.rank - b.rank || a.s.length - b.s.length).slice(0, MAX_LEAVES).map((x) => x.s);
+};
+// the data defs before k whose result type has head `head` (Base's too), at most 12, entry's first
+const callsByResult = (head: string, k: string): string[] => {
+  const ord = BK.order.get(k) ?? Infinity;
+  const out: string[] = [];
+  for (const f of BK.book.order) {
+    if (out.length >= 12) break;
+    const t = BK.raw[f];
+    if (f === k || t?.$ !== "Def" || t.n < 1 || t.n > 3 || (BK.order.get(f) ?? Infinity) >= ord || f.includes("~") || isOpen(f)) continue;
+    const o = attempt(20000, () => openMeta(t.T, t.n));
+    const c = o && attempt(20000, () => lower(o.concl, t.n));
+    if (c && headKey(c) === head && !isLemmaType(f)) out.push(f);
+  }
+  return out.reverse();
+};
+// the combinations of one leaf per arm, by the sum of their ranks (simplest first), at most max
+function* combosOf(sizes: number[], max: number): Generator<number[]> {
+  let made = 0;
+  const total = sizes.reduce((s, n) => s + n - 1, 0);
+  for (let sum = 0; sum <= total; sum++) {
+    const go = function* (i: number, left: number, acc: number[]): Generator<number[]> {
+      if (i === sizes.length) { if (left === 0) yield acc; return; }
+      for (let r = 0; r <= Math.min(left, sizes[i] - 1); r++) yield* go(i + 1, left - r, [...acc, r]);
+    };
+    for (const c of go(0, sum, [])) { if (made++ >= max) return; yield c; }
+  }
+}
+const synthesize = async (k: string, ds: Src, until: number, hard: number, progress: (s: string) => void): Promise<Result> => {
+  const t0 = performance.now(), name = shortOf(k), def = BK.raw[k];
+  const laws = lawsOf(k);
+  lawTerms.clear();
+  for (const l of laws) { const L = attempt(FUEL_NF, () => lower0(BK.raw[l].T, 0)); if (L) lawTerms.set(l, L); }
+  const insts = laws.filter((l) => lawTerms.has(l)).flatMap(instancesOf);
+  const refuse = (why: string): Result => ({ ok: false, text: "# " + name + ": its type is data, not a proposition: it needs an implementation; " + why });
+  if (insts.length === 0) return refuse("no law that names it has small instances to test a body against (gen3 writes a body only when laws constrain it)");
+  newSearch(mkNode(rootGoal(owner(k)), null, 0, 0)!);
+  deadline = until;
+  let tried = 0;
+  try {
+    for (const sh of shapesOf(k)) {
+      const leaves = sh.arms.map((a) => leavesAt(a.g, k));
+      if (TRACE) console.error("[synth] " + name + " shape:\n" + sh.text(sh.arms.map((_, i) => "<" + i + ">")) + "\n" + leaves.map((l, i) => "  <" + i + "> " + l.join(" | ")).join("\n") + "\n  instances " + insts.length);
+      if (leaves.some((l) => l.length === 0)) continue;
+      for (const pick of combosOf(leaves.map((l) => l.length), MAX_COMBOS)) {
+        if (late()) throw TIMEOUT;
+        if (++tried % 50 === 0) { progress("# " + name + ": synthesizing (" + secs(performance.now() - t0) + ", " + tried + " bodies tried)"); await Bun.sleep(0); }
+        const body = sh.text(pick.map((r, i) => leaves[i][r]));
+        const v = attempt(FUEL_CHECK * 4, () => checkDef(k, body));
+        if (TRACE && tried <= 3) console.error("[synth] try:\n" + body + "\n  " + (v ? "checks" : "rejected: " + firstLine(checkErr(k, body))));
+        if (!v) continue;
+        BK.raw[k] = { ...def, v };
+        synthesized.set(k, def);
+        resetNf(k);
+        const res = insts.map(holds);
+        if (TRACE && tried <= 3) console.error("[synth] instances: " + res.map((x) => (x === null ? "?" : x ? "+" : "-")).join(""));
+        if (res.some((r) => r === false) || !res.some((r) => r === true)) continue;
+        const n = res.filter((r) => r === true).length;
+        const open = undecided(k, def, v, sh, leaves, pick, insts);
+        const lawsText = laws.map(shortOf).join(", ");
+        if (open.length === sh.arms.length) {
+          BK.raw[k] = def;
+          synthesized.delete(k);
+          resetNf(k);
+          return refuse("its laws (" + lawsText + ") do not pin a body down on the inputs gen3 tries: " + body.trim().split("\n").join(" ") + " passes them, and so do bodies that answer differently (" + open.map((o) => o.alt).join("; ") + ")");
+        }
+        const notes = open.map((o) => "# the laws do not decide case " + o.arm + ": " + o.alt + " also passes them");
+        return {
+          ok: true,
+          text: "# " + name + ": SYNTHESIZED in " + secs(performance.now() - t0) + " (" + tried + " bodies tried): bend2 accepts it, and it passes " + n + " instances of its laws (" + lawsText + "). Evidence, not a proof: prove the laws next\n" + body + (notes.length ? "\n" + notes.join("\n") : ""),
+          edit: editOf(ds, [], body),
+        };
+      }
+    }
+  } catch (e) {
+    if (e !== TIMEOUT) throw e;
+  } finally {
+    deadline = Infinity;
+  }
+  BK.raw[k] = def;
+  synthesized.delete(k);
+  resetNf(k);
+  return refuse("no body of the shapes gen3 tries passed its laws (" + tried + " tried in " + secs(performance.now() - t0) + ")");
+};
+// the arms of an accepted body (v) that its laws do not decide: another leaf there also passes them and
+// answers differently on some small input; k is left with v
+const undecided = (k: string, def: Term, v: Term, sh: Shape, leaves: string[][], pick: number[], insts: Inst[]): { arm: string; alt: string }[] => {
+  const inputs = inputsOf(k);
+  const answers = (): (number | undefined)[] => inputs.map((xs) => {
+    const call = xs.reduce((f: Term, x: Term) => B.App(f, B.term_higher(x, null)), B.Ref(k));
+    const r = nf(call, 0, false, 200000);
+    return r ? H(r) : undefined;
+  });
+  const mine = answers();
+  const out: { arm: string; alt: string }[] = [];
+  for (let i = 0; i < sh.arms.length && !late(); i++) {
+    for (let r = 0; r < Math.min(leaves[i].length, 8); r++) {
+      if (r === pick[i]) continue;
+      const alt = pick.map((p, j) => leaves[j][j === i ? r : p]);
+      const v2 = attempt(FUEL_CHECK * 4, () => checkDef(k, sh.text(alt)));
+      if (!v2) continue;
+      BK.raw[k] = { ...def, v: v2 };
+      resetNf(k);
+      const res = insts.map(holds);
+      const differs = !res.some((x) => x === false) && res.some((x) => x === true) && answers().some((a, j) => a !== undefined && mine[j] !== undefined && a !== mine[j]);
+      if (differs) { out.push({ arm: sh.arms[i].g.path || "/", alt: leaves[i][r] }); break; }
+    }
+  }
+  BK.raw[k] = { ...def, v };
+  resetNf(k);
+  return out;
+};
+// small argument tuples for k (each parameter from the values of its type), at most 16
+const inputsOf = (k: string): Term[][] => {
+  let rows: { xs: Term[]; t: Term }[] = [{ xs: [], t: BK.raw[k].T }];
+  for (let j = 0; j < BK.raw[k].n; j++) {
+    const next: typeof rows = [];
+    for (const r of rows) {
+      const s = asAll(r.t);
+      if (!s) continue;
+      for (const x of valuesOf(s.A, 2)) if (next.length < 16) next.push({ xs: [...r.xs, x], t: s.B(B.term_higher(x, null)) });
+    }
+    rows = next;
+  }
+  return rows.map((r) => r.xs);
+};
+// the defs a task gave a synthesized body (their ?TODO defs, to restore after it: the book is cached)
+const synthesized = new Map<string, Term>();
+const restoreSynthesized = () => { for (const [k, d] of synthesized) { BK.raw[k] = d; resetNf(k); } synthesized.clear(); };
+// k's body changed: the memos that computed through it are stale
+const resetNf = (k: string) => { forget(k); BK.nfs.clear(); nfObj = new WeakMap(); BK.wraps = null; };
 const proveOne = async (k: string, until: number, hard: number, progress: (s: string) => void): Promise<Result> => {
   const ds = defSrc(k);
   const name = shortOf(k);
   if (!ds) return { ok: false, text: "# " + name + ": gen3 cannot find its source text" };
   const se = nsOf(k) === "" ? stmtErr(k) : null;
   if (se) return { ok: false, text: "# " + name + ": STATEMENT ERROR (its type does not check; fix it first):\n" + errText(se) };
-  // a def that returns data needs an implementation: any value of its type checks, and the right one
-  // is the one its laws accept (gen3 does not search for that)
-  if (ds.body.trim() === "?TODO" && !isLemmaType(k)) return { ok: false, text: "# " + name + ": its type is data, not a proposition: it needs an implementation; gen3 does not write one (a body of the right type is not proof that it is the right body)" };
+  // a def that returns data needs an implementation: any value of its type checks, so its laws choose
+  if (ds.body.trim() === "?TODO" && !isLemmaType(k)) return synthesize(k, ds, until, hard, progress);
   if (ds.body.trim() === "?TODO") return proveWhole(k, ds, until, hard, progress);
   if (todoAt(ds.body).length) return proveHoles(k, ds, until, hard, progress);
   return { ok: true, text: "# " + name + ": no ?TODO in its body (nothing to prove; `check` checks it)" };
@@ -2772,6 +3127,7 @@ const onTask = async (t: Task, send: Send) => {
     send({ id: t.id, t: "snap", s: HONEST + "\n# gen3: internal error (please report it): " + why, code: 1 });
   } finally {
     fuel = Infinity; deadline = Infinity;
+    if (BK) restoreSynthesized();
     if (overMem || process.memoryUsage.rss() > MEM_CAP * 0.7) { books.clear(); smemo.clear(); Bun.gc(true); }
     overMem = false;
     const retire = process.memoryUsage.rss() > MEM_CAP || !!process.env.GEN3_PROF;
