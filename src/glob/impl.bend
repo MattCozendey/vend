@@ -7289,3 +7289,59 @@ def Spec.read_after_escape(p, v):
   )
   (h, (read, q => Equal.sym(Bool, String.eq(q, p), Spec.Glob.matches(q, h), Lits.match(q, p))))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# Fast selection
+# --------------
+# Spec.Rule.selects asks each glob through Spec.Glob.matches, whose
+# derivatives are not normalized, so a '*' makes its cost grow fast with the
+# path. The slots step the deduplicated derivative sets one character at a
+# time and ask only "" at the end, for the same answer.
+
+# the slots after they read p
+def Slot.walk(p: String, slots: List<&2, Slot>) -> List<&2, Slot>:
+  match p:
+    case SNil{}:
+      slots
+    case SCon{c, t}:
+      Slot.walk(t, Slot.step(slots, c))
+
+# walking p, then selecting "", selects what the slots select for p
+def Slot.walk_ok(
+  p: String,
+  +slots: List<&2, Slot>,
+  +acc: Bool
+) -> {Slot.selects.go(Slot.walk(p, slots), SNil{}, acc) == Slot.selects.go(slots, p, acc): Bool}:
+  match p:
+    case SNil{}:
+      {==}
+    case SCon{+c, +t}:
+      %Slot.step_ok(
+        slots,
+        c,
+        t,
+        acc
+      ): {Slot.selects.go(Slot.walk(t, Slot.step(slots, c)), SNil{}, acc) == _: Bool}
+      Slot.walk_ok(t, Slot.step(slots, c), acc)
+
+# rules select p: Spec.Rule.selects, through the slots
+def Rule.selects.fast(rules: List<&2, Spec.Rule>, p: String) -> Bool:
+  Slot.selects.go(Slot.walk(p, Slot.of_rules(rules)), SNil{}, False{})
+
+# the fast selection gives the answer of Spec.Rule.selects
+def Rule.selects_fast_ok(
+  +rules: List<&2, Spec.Rule>,
+  +p: String
+) -> {Rule.selects.fast(rules, p) == Spec.Rule.selects(rules, p): Bool}:
+  Equal.trans(
+    Bool,
+    Rule.selects.fast(rules, p),
+    Slot.selects.go(Slot.of_rules(rules), p, False{}),
+    Spec.Rule.selects(rules, p),
+    Slot.walk_ok(p, Slot.of_rules(rules), False{}),
+    Equal.sym(
+      Bool,
+      Spec.Rule.selects.go(rules, p, False{}),
+      Slot.selects.go(Slot.of_rules(rules), p, False{}),
+      Slot.of_rules_ok(rules, p, False{})
+    )
+  )

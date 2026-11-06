@@ -82,6 +82,12 @@ def Stream.fetching(k: Stream) -> Bool:
     case Stream{r, l, f, d}:
       f
 
+# a hint came while the fetch of k was out
+def Stream.dirty(k: Stream) -> Bool:
+  match k:
+    case Stream{r, l, f, d}:
+      d
+
 # The result of a step: the stream after it, and its effects in order.
 type Stepped is Data:
   Stepped{stream: Stream, effects: List<&2, Effect>}
@@ -130,13 +136,32 @@ def Stream.fetched(
       es = List.append(&2, Effect, Stream.record(last, bytes, t), [Send{Fetch{}}])
       Stepped{Stream{Present{t}, Some{t}, True{}, False{}}, es}
 
-# after the resource is reached as absent: record Gone once
-def Stream.absent(last: Maybe<&2, Shared.Bytes()>, fetching: Bool, dirty: Bool) -> Stepped:
+# A Reached answer of Absent or Unreachable ends a fetch that is out: the
+# endpoint answers a fetch with Fetched or with Reached. If a hint came
+# while it was out, fetch again; else nothing is out.
+
+# the stream with reachability r and last recorded token last after a fetch
+# ended, with effects es before a new fetch when dirty
+def Stream.settle(
+  r: Reach,
+  last: Maybe<&2, Shared.Bytes()>,
+  dirty: Bool,
+  es: List<&2, Effect>
+) -> Stepped:
+  match dirty:
+    case False{}:
+      Stepped{Stream{r, last, False{}, False{}}, es}
+    case True{}:
+      Stepped{Stream{r, last, True{}, False{}}, List.append(&2, Effect, es, [Send{Fetch{}}])}
+
+# after the resource is reached as absent: record Gone once, and end the
+# fetch that is out
+def Stream.absent(last: Maybe<&2, Shared.Bytes()>, dirty: Bool) -> Stepped:
   match last:
     case None{}:
-      Stepped{Stream{Absent{}, None{}, fetching, dirty}, []}
+      Stream.settle(Absent{}, None{}, dirty, [])
     case Some{a}:
-      Stepped{Stream{Absent{}, None{}, fetching, dirty}, [Record{Gone{}}]}
+      Stream.settle(Absent{}, None{}, dirty, [Record{Gone{}}])
 
 # after the resource is reached as present with token t: fetch when t is
 # not the last recorded content
@@ -157,9 +182,9 @@ def Stream.present(
 def Stream.step(k: Stream, s: Signal) -> Stepped:
   match k s:
     case Stream{r, l, f, d} Reached{Unreachable{w}}:
-      Stepped{Stream{Unreachable{w}, l, f, d}, []}
+      Stream.settle(Unreachable{w}, l, d, [])
     case Stream{r, l, f, d} Reached{Absent{}}:
-      Stream.absent(l, f, d)
+      Stream.absent(l, d)
     case Stream{r, l, f, d} Reached{Present{t}}:
       Stream.present(l, f, d, t)
     case Stream{r, l, f, d} Hinted{}:
@@ -358,3 +383,20 @@ law write_then_fetch_quiet:
   for s: Stepped
   for h: {Stream.write(k, bytes, t, e) == Done{s}: Result<&2, &2, Refused, Stepped>}
   {Stepped.versions(Stream.step(Stepped.stream(s), Fetched{bytes, t})) == []: List<&2, Version>}
+
+# a Reached answer of Absent or Unreachable ends the fetch that is out: a
+# fetch is out after it exactly when a hint came while the old one was out
+law absent_ends_fetch:
+  for k: Stream
+  {Stream.fetching(Stepped.stream(Stream.step(k, Reached{Absent{}}))) == Stream.dirty(k): Bool}
+
+# the same for Unreachable
+law unreachable_ends_fetch:
+  for k: Stream
+  for why: String
+  {
+    Stream.fetching(
+      Stepped.stream(Stream.step(k, Reached{Unreachable{why}}))
+    )
+      == Stream.dirty(k): Bool
+  }

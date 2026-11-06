@@ -5,7 +5,7 @@ Delete each item when it is done.
 ## Implement
 
 - `src/conditions`: `Cond.sat`, `Cond.canon`.
-- `src/history`: `Ids.is_eq`, `History.commit`, `History.join`.
+- `src/history`: `History.join`.
 - `src/graph`: `Graph.affected`.
 - `src/views/text`: `Text.diff`, `Text.patch`, `Text.merge`.
 - `src/views/bend`: `Bend.decode`, `Bend.diff`, `Bend.patch`, `Bend.merge`.
@@ -17,6 +17,8 @@ Delete each item when it is done.
   - Linux (inotify) and macOS code: never compiled or run (written on Windows). macOS watching: not written yet.
   - JS lane watches by polling (the JS runtime never yields to Node's event loop): cost grows with the tree, and a
     same-size change within one clock tick is missed.
+  - Debounce: a quiet window before fetching, so a truncate-then-write does not record the empty state.
+  - Retry a transient Windows sharing violation during a fetch instead of reporting `Unreachable`.
   - No fsync after a write; a temp file left by a crash is never removed; files over 4 GiB (`File.size` is `U32`).
 
 ## Prove
@@ -31,11 +33,14 @@ Every law stated but not proven:
     `Bend.diffs_nothing`, `Bend.merges`.
 - `src/store`: `node_is_eq`, `read_after_write`, `write_root`, `write_keeps`, `edit_root`, `read_after_edit`,
   `edit_keeps`, `write_collides`, `edit_collides`, `diff_applies`, `diff_answers`.
-- `src/endpoints/spec.bend`: the 12 stream laws.
+- `src/endpoints/spec.bend`: the 14 stream laws.
 - `src/conditions`: `sat_holds`, `sat_unsat`, `canon_same`, `canon_unique`.
 - `src/history`: `commit_refused`, `commit_node`, `commit_head`, `commit_keeps`, `commit_frames`, `join_keeps`,
   `join_adds_nothing`, `join_commutes`, `join_associates`, `join_idempotent`.
 - `src/graph`: `affected_exact`.
+- `src/core`: `untracked_ignored`, `noticed_follows_stream`, `records_each_version`, `fetched_reads_back`,
+  `write_refused`, `write_accepted`, `move_remembered`, `step_keeps_history`.
+- `src/cli`: `parse_after_show`.
 - `src/endpoints/file`: `name_needs_resource`, `absent_only_when_known`, `read_only_files`,
   `non_resource_cannot_tell`, `temp_is_temp`, `absence_holds_only_known`, `notices_are_hints`.
 
