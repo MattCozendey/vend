@@ -16,7 +16,7 @@ import ../spec.bend as Ep
 
 # the mark in the names of the temporary files that a Put writes
 def FileEp.temp_mark() -> String:
-  ".bend-ver-"
+  ".vend-"
 
 # s is the name of a temporary file that a Put writes before its rename:
 # it starts with '.', holds the mark, and ends with ".tmp"

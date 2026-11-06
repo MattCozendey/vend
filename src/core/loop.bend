@@ -242,8 +242,8 @@ def Loop.drain(
 
 # The journal
 # -----------
-# One journal per user, in the user's data folder: %LOCALAPPDATA%\bend-ver
-# on Windows, else $XDG_DATA_HOME/bend-ver, else $HOME/.local/share/bend-ver.
+# One journal per user, in the user's data folder: %LOCALAPPDATA%\vend
+# on Windows, else $XDG_DATA_HOME/vend, else $HOME/.local/share/vend.
 # A lock file there keeps a second loop out (the OS drops the lock with its
 # process). The journal is read whole at start (so it stays below 4 GiB
 # until compaction exists), and a torn tail is cut by writing the good part
@@ -263,16 +263,14 @@ def Log.env(r: Result<&1, &1, U32 & String, String>, rest: String) -> Maybe<&2, 
         u => Some{String.append(v, rest)}
       )
 
-# the user's data folder for bend-ver, or None when no variable names one
+# the user's data folder for vend, or None when no variable names one
 def Log.dir() -> IO(Maybe<&2, String>):
   do IO<Maybe<&2, String>>:
     a: Result<&1, &1, U32 & String, String> <- IO.get_env("LOCALAPPDATA")
     b: Result<&1, &1, U32 & String, String> <- IO.get_env("XDG_DATA_HOME")
     h: Result<&1, &1, U32 & String, String> <- IO.get_env("HOME")
-    first: Maybe<
-      &2,
-      String> = Maybe.or(&2, String, Log.env(a, "/bend-ver"), Log.env(b, "/bend-ver"))
-    return Maybe.or(&2, String, first, Log.env(h, "/.local/share/bend-ver"))
+    first: Maybe<&2, String> = Maybe.or(&2, String, Log.env(a, "/vend"), Log.env(b, "/vend"))
+    return Maybe.or(&2, String, first, Log.env(h, "/.local/share/vend"))
 
 # the bytes of a path in the folder d
 def Log.path(d: String, name: String) -> Shared.Bytes():
@@ -383,7 +381,7 @@ def Log.cut(+d: String, p: Shared.Bytes(), +b: Shared.Bytes(), +good: Nat) -> IO
 
 # The space file
 # --------------
-# The id of a space is the text of the file ".bend-ver" at its root. A root
+# The id of a space is the text of the file ".vend" at its root. A root
 # without one gets a new id: 16 random bytes as 32 lowercase hex
 # characters, written there before anything else happens.
 

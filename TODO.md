@@ -30,7 +30,7 @@ Delete each item when it is done.
 - `src/shared.bend`: a faster Table inside (e.g. Base Map), proving the same three laws.
 - `src/graph`: references across spaces (a reference with a scheme or an authority) through mounts; today unresolved.
 - The daemon (`src/daemon`; built: one per user and machine, all mounts, started only by
-  `bend-ver start-or-resume`, the down message, `status`, `mount`, `unmount`, guarded `daemon stop`, and the everyday
+  `vend start-or-resume`, the down message, `status`, `mount`, `unmount`, guarded `daemon stop`, and the everyday
   commands `lines`, `log`, `show`, `diff`, `affects`, `impact`, `line new`, `write --expect`, `restore`, `mark`,
   `merge`). Left:
   - Next: the MCP server over stdio, a thin front like the CLI; it signs writes with the client name.
@@ -39,7 +39,7 @@ Delete each item when it is done.
   - `diff` takes versions (id prefixes, or a line for its head), not marks.
   - A merge into a line that is behind always makes a merge node (no fast-forward); a resource with several heads on
     either side clashes.
-  - Decisions you may revisit: a write without `BEND_VER_AGENT` is signed `unnamed`; a merge is all-or-nothing (one clash and no resource
+  - Decisions you may revisit: a write without `VEND_AGENT` is signed `unnamed`; a merge is all-or-nothing (one clash and no resource
     moves, so a line never holds half of a merge whose resources may need each other); `start-or-resume` runs in the
     foreground (a detached start needs a new foreign effect); the door is TCP on 127.0.0.1 with a random 128-bit token
     in the file `daemon` of the data folder (Unix sockets or named pipes need foreign code). On Windows the data folder

@@ -14,7 +14,7 @@ import ../views/text/spec.bend as Text
 # for one mount runs Core.step on a core made of the shared parts and that
 # mount's own parts, then puts the result back: every law of Core.step
 # holds for each mount, and the other mounts are not touched. Only
-# `bend-ver start-or-resume` starts it; fronts talk to it with requests.
+# `vend start-or-resume` starts it; fronts talk to it with requests.
 
 # State
 # -----
@@ -264,7 +264,7 @@ law unmount_frames:
 # Unmount: stop versioning the mount at uri. Stop: end the daemon; without
 # force it refuses while mounts are active or other clients are connected.
 # Ask: one of the everyday commands, as its words (Command.read reads
-# them), signed by the agent named agent (BEND_VER_AGENT; empty for none),
+# them), signed by the agent named agent (VEND_AGENT; empty for none),
 # with data: the bytes that a write writes, when the front has them (the
 # CLI reads them from standard input; the MCP front passes them), else
 # none. A write that names --from <uri> takes its bytes from that resource

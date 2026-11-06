@@ -297,7 +297,7 @@ static void fx_lock_call(IoWork* w) {
 static Term fx_lock_pack(Env e, IoWork* w) {
   free(w->data);
   if (w->code == EBUSY) {
-    return io_fail(e, EBUSY, "another bend-ver holds the journal");
+    return io_fail(e, EBUSY, "another vend holds the journal");
   }
   return io_res(e, w, io_hand(w->hand));
 }

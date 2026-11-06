@@ -19,7 +19,7 @@ import ../shared.bend as Shared
 # the daemon reads as they are; a write without --from <uri> writes the
 # bytes of standard input (Cli.reads_stdin). Versions from the endpoint are
 # recorded as Outside; a command that writes signs its versions with the
-# agent name in the environment variable BEND_VER_AGENT. Help: print the
+# agent name in the environment variable VEND_AGENT. Help: print the
 # usage.
 type Cmd is Data:
   StartOrResume{}
@@ -34,19 +34,19 @@ type Cmd is Data:
 def Cli.usage() -> String:
   String.concat(
     [
-      "usage: bend-ver start-or-resume                          run the daemon (in the foreground)\n",
-      "       bend-ver status                                   the mounts and clients\n",
-      "       bend-ver mount <uri> [<glob>...] [--line <name>]  version the files under the URI root (as\n",
+      "usage: vend start-or-resume                          run the daemon (in the foreground)\n",
+      "       vend status                                   the mounts and clients\n",
+      "       vend mount <uri> [<glob>...] [--line <name>]  version the files under the URI root (as\n",
       "         file:///C:/repo) that the globs select (default **; a leading ! excludes; the last glob\n",
       "         that matches decides), on the line <name> (default main)\n",
-      "       bend-ver unmount <uri>                            stop versioning that root\n",
-      "       bend-ver daemon stop [--force]                    end the daemon (--force: even with mounts)
+      "       vend unmount <uri>                            stop versioning that root\n",
+      "       vend daemon stop [--force]                    end the daemon (--force: even with mounts)
 ",
-      "       bend-ver ",
+      "       vend ",
       Daemon.Command.syntax(),
       "
          write writes standard input, or the resource at --from <uri>; names are <space>:<path>;",
-      " versions are id prefixes or lines; writes are signed with BEND_VER_AGENT"
+      " versions are id prefixes or lines; writes are signed with VEND_AGENT"
     ]
   )
 

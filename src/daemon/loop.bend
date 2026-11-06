@@ -503,7 +503,7 @@ def Serve.drained(
           do IO<Unit>:
             Watches.stop(ws, True{}, "")
             e: Result<&1, &1, Unit, Unit> <- Chan.send(Unit, ast, Unit{})
-            IO.die(Unit, 1, "bend-ver stopped: the journal could not be written: " ++ why)
+            IO.die(Unit, 1, "vend stopped: the journal could not be written: " ++ why)
 
 # the inputs of the reports ns of a mount whose core is c, with the paths
 # listed again when reports were lost
@@ -967,7 +967,7 @@ def Serve.act(
     case Spec.DoStop{}:
       do IO<Unit>:
         Wire.send(sock, Spec.Response.encode(Spec.Stopping{}))
-        Serve.end(st, j, "bend-ver stopped")
+        Serve.end(st, j, "vend stopped")
     case Spec.DoAsk{a, +c, b}:
       Serve.sourced(Spec.Command.source(c), a, c, b, st, j, sock, k)
 
@@ -993,7 +993,7 @@ def Serve.request(
 def Serve.on(m: Maybe<&1, Inbox>, st: Serve, j: File, k: Serve -> File -> IO(Unit)) -> IO(Unit):
   match m:
     case None{}:
-      Serve.end(st, j, "bend-ver stopped: its inbox closed")
+      Serve.end(st, j, "vend stopped: its inbox closed")
     case Some{WatchHeard{u, ns}}:
       Serve.heard(st, j, u, ns, k)
     case Some{WatchLost{u, why}}:
@@ -1007,7 +1007,7 @@ def Serve.on(m: Maybe<&1, Inbox>, st: Serve, j: File, k: Serve -> File -> IO(Uni
 def Serve.go(fuel: Nat, +st: Serve, j: File) -> IO(Unit):
   match fuel:
     case 0n:
-      Serve.end(st, j, "bend-ver stopped: its fuel ran out")
+      Serve.end(st, j, "vend stopped: its fuel ran out")
     case 1n+f:
       do IO<Unit>:
         m: Maybe<&1, Inbox> <- Chan.recv(Inbox, Serve.inbox(st))
@@ -1117,7 +1117,7 @@ def Start.listening(
     case Unbound{why}:
       do IO<Unit>:
         File.close(j)
-        IO.die(Unit, 1, "bend-ver could not listen: " ++ why)
+        IO.die(Unit, 1, "vend could not listen: " ++ why)
     case Bound{l, +port}:
       do IO<Unit>:
         +inbox: Chan(Inbox) <- Chan.new(Inbox, 4096)
@@ -1129,11 +1129,7 @@ def Start.listening(
         mb: Result<&2, &2, String, Shared.Bytes()> <- CoreLoop.Log.bytes(Data.path(d, "mounts"))
         IO.print(
           String.concat(
-            [
-              "bend-ver is running on 127.0.0.1:",
-              U32.show(port),
-              "; `bend-ver daemon stop` ends it"
-            ]
+            ["vend is running on 127.0.0.1:", U32.show(port), "; `vend daemon stop` ends it"]
           )
         )
         Start.remount(
@@ -1207,7 +1203,7 @@ def Start.read(r: Result<&2, &2, String, Shared.Bytes()>, d: String) -> IO(Unit)
 def Start.locked(lk: Result<&1, &1, U32 & String, File>, +d: String) -> IO(Unit):
   match lk:
     case Fail{e}:
-      IO.die(Unit, 1, "bend-ver is already running: " ++ Err.why(e))
+      IO.die(Unit, 1, "vend is already running: " ++ Err.why(e))
     case Done{held}:
       do IO<Unit>:
         r: Result<&2, &2, String, Shared.Bytes()> <- CoreLoop.Log.bytes(Data.path(d, "journal.log"))
@@ -1224,7 +1220,7 @@ def Start.dir(m: Maybe<&2, String>) -> IO(Unit):
         lk: Result<&1, &1, U32 & String, File> <- File.FileFx.lock(Data.path(d, "journal.lock"))
         Start.locked(lk, d)
 
-# `bend-ver start-or-resume`: the only way the daemon starts. It runs in
+# `vend start-or-resume`: the only way the daemon starts. It runs in
 # the foreground until a Stop.
 def Daemon.start_or_resume() -> IO(Unit):
   do IO<Unit>:
@@ -1239,7 +1235,7 @@ def Daemon.start_or_resume() -> IO(Unit):
 
 # the message for a daemon that does not run
 def Client.down() -> IO(Unit):
-  IO.die(Unit, 1, "bend-ver is not running; ask the user to run `bend-ver start-or-resume`")
+  IO.die(Unit, 1, "vend is not running; ask the user to run `vend start-or-resume`")
 
 # the line of one mount in a status
 def Client.info(i: Spec.Info) -> IO(Unit):
@@ -1271,7 +1267,7 @@ def Client.lines(ls: List<&2, String>) -> IO(Unit):
 def Client.show(m: Maybe<&2, Spec.Response>) -> IO(Unit):
   match m:
     case None{}:
-      IO.die(Unit, 1, "bend-ver answered something that is not a response")
+      IO.die(Unit, 1, "vend answered something that is not a response")
     case Some{Spec.StatusIs{Nil{}, c}}:
       IO.print("no mounts; clients " ++ Nat.show(c))
     case Some{Spec.StatusIs{Con{i, t}, c}}:
@@ -1375,9 +1371,9 @@ def Client.ask(b: Spec.Body) -> IO(Unit):
     Client.dir(m, b)
 
 # the everyday command of the words ws sent to the daemon with the bytes
-# b, signed with the agent named by BEND_VER_AGENT ("unnamed" when it is
+# b, signed with the agent named by VEND_AGENT ("unnamed" when it is
 # not set)
 def Client.everyday(ws: List<&2, String>, b: Shared.Bytes()) -> IO(Unit):
   do IO<Unit>:
-    a: Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_VER_AGENT")
+    a: Result<&1, &1, U32 & String, String> <- IO.get_env("VEND_AGENT")
     Client.ask(Spec.Ask{Maybe.default(&2, String, CoreLoop.Log.env(a, ""), "unnamed"), ws, b})

@@ -87,7 +87,7 @@ Follow the `bend2` and the `experimental-bend-spec` skills.
 
 ## 3. Project
 
-**bend-ver** is a version control system written in Bend, built for many AI agents working at once.
+**vend** is a version control system written in Bend, built for many AI agents working at once.
 
 - **It records everything, live.** Every save is a version, with no commit step. It records edits made by
   other tools too. Optional *marks* name the points that matter.

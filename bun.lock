@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "bend-ver",
+      "name": "vend",
       "devDependencies": {
         "bend-lint": "0.3.0",
       },

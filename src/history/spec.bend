@@ -19,7 +19,7 @@ type Body is Data:
 
 # Who wrote a version. Agent: a writer through a front, by the name the
 # front gives (the CLI reads it from the environment variable
-# BEND_VER_AGENT; the MCP front uses its client's name). Outside: an edit
+# VEND_AGENT; the MCP front uses its client's name). Outside: an edit
 # the endpoint saw that no front made (an editor, a formatter, a build).
 type Author is Data:
   Agent{name: String}

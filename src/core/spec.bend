@@ -18,16 +18,16 @@ import ../store/spec.bend as Store
 
 # A mount binds a line of a space to a URI prefix on one machine. Its
 # globs choose the files it versions, matched against the path relative to
-# the root. The space id lives in the file ".bend-ver" at the root, which
+# the root. The space id lives in the file ".vend" at the root, which
 # is never versioned. A directory below the root that holds its own
-# ".bend-ver" starts another space (like a git submodule): nothing under
+# ".vend" starts another space (like a git submodule): nothing under
 # it belongs to this mount.
 type Mount is Data:
   Mount{space: String, line: String, root: Shared.Uri, globs: List<&2, Glob.Rule>}
 
 # the file at the root of a space that holds its id
 def Mount.space_file() -> String:
-  ".bend-ver"
+  ".vend"
 
 # Inputs
 # ------
@@ -43,7 +43,7 @@ type Request is Data:
 # Something for the core to handle; an endpoint speaks in paths relative
 # to the root. Noticed: a signal about the file at path. Moved: the file
 # moved from one path to another. Nested: the directory dir holds its own
-# ".bend-ver", so it starts another space. Asked: a front asks for
+# ".vend", so it starts another space. Asked: a front asks for
 # something.
 type Input is Data:
   Noticed{path: String, signal: Ep.Signal}
