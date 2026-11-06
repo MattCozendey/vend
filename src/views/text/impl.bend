@@ -1,6 +1,8 @@
 import Base
+import ../../glob/impl.bend as GlobImpl
 import ../../shared.bend as Shared
 import ./spec.bend as Spec
+# bend-lint: expect-file bend-lint-rules/language/reused_binder@warning -- proof binders whose other use is inside a rewrite motive or an erased argument; the checker accepts them
 
 # The decoder reads one byte at a time. A lead byte gives the width; the
 # continuation bytes add six bits each. A finished sequence counts only if
@@ -113,3 +115,248 @@ def Text.decode.go(b: List<&2, U32>, st: Dec) -> Maybe<&2, String>:
 
 def Spec.Text.decode(b):
   Text.decode.go(b, Start{})
+
+# Lines
+# -----
+# Splitting into lines loses nothing: Text.join_go says what the splitter
+# keeps (the current line, reversed, then the rest), and Brk.text_list that
+# the roles of the characters spell them back.
+
+# the character of a line-splitting role
+def Brk.char(b: Spec.Brk) -> Char:
+  match b:
+    case Spec.Nl{}:
+      Chr{10}
+    case Spec.Cr{}:
+      Chr{13}
+    case Spec.Ch{c}:
+      c
+
+# the characters of roles
+def Brk.text(bs: List<&2, Spec.Brk>) -> String:
+  match bs:
+    case Nil{}:
+      SNil{}
+    case Con{b, t}:
+      SCon{Brk.char(b), Brk.text(t)}
+
+def Str.append_nil(a: String) -> {String.append(a, SNil{}) == a: String}:
+  match a:
+    case SNil{}:
+      {==}
+    case SCon{head, tail}:
+      %Equal.sym(String, String.append(tail, ""), tail, Str.append_nil(tail)):
+        {SCon{head, _} == SCon{head, tail}: String}
+      {==}
+
+def Str.append_assoc(
+  a: String,
+  b: String,
+  c: String
+) -> {String.append(String.append(a, b), c) == String.append(a, String.append(b, c)): String}:
+  match a:
+    case SNil{}:
+      {==}
+    case SCon{head, tail}:
+      %Equal.sym(
+        String,
+        String.append(String.append(tail, b), c),
+        String.append(tail, String.append(b, c)),
+        Str.append_assoc(tail, b, c)
+      ):
+        {SCon{head, _} == SCon{head, String.append(tail, String.append(b, c))}: String}
+      {==}
+
+def Str.rev_go(
+  s: String,
+  +acc: String
+) -> {String.reverse.go(s, acc) == String.append(String.reverse.go(s, SNil{}), acc): String}:
+  match s:
+    case SNil{}:
+      {==}
+    case SCon{+h, +t}:
+      r = String.reverse.go(t, SNil{})
+      +h1 = {SCon{h, SNil{}}: String}
+      %Equal.sym(String, String.reverse.go(t, h1), String.append(r, h1), Str.rev_go(t, h1)):
+        {String.reverse.go(t, SCon{h, acc}) == String.append(_, acc): String}
+      %Equal.sym(
+        String,
+        String.append(String.append(r, h1), acc),
+        String.append(r, String.append(h1, acc)),
+        Str.append_assoc(r, h1, acc)
+      ):
+        {String.reverse.go(t, SCon{h, acc}) == _: String}
+      Str.rev_go(t, SCon{h, acc})
+
+def Text.join_go(
+  bs: List<&2, Spec.Brk>,
+  +cur: String
+) -> {
+  Spec.Text.join(
+    Spec.Text.lines.go(bs, cur)
+  )
+    == String.append(String.reverse(cur), Brk.text(bs)): String
+}:
+  match bs:
+    case Nil{}:
+      {==}
+    case Con{Spec.Cr{}, Con{Spec.Nl{}, t}}:
+      %Equal.sym(
+        String,
+        Spec.Text.join(Spec.Text.lines.go(t, SNil{})),
+        Brk.text(t),
+        Text.join_go(t, SNil{})
+      ):
+        {
+          String.append(
+            String.reverse(cur),
+            String.append(Spec.End.text(Spec.CRLF{}), _)
+          )
+            == String.append(
+              String.reverse(cur),
+              Brk.text(Con{Spec.Cr{}, Con{Spec.Nl{}, t}})
+            ): String
+        }
+      {==}
+    case Con{Spec.Cr{}, Nil{}}:
+      {==}
+    case Con{Spec.Cr{}, Con{Spec.Cr{}, +t}}:
+      r = {Con{Spec.Cr{}, t}: List<&2, Spec.Brk>}
+      %Equal.sym(
+        String,
+        Spec.Text.join(Spec.Text.lines.go(r, SNil{})),
+        Brk.text(r),
+        Text.join_go(r, SNil{})
+      ):
+        {
+          String.append(
+            String.reverse(cur),
+            String.append(Spec.End.text(Spec.CR{}), _)
+          )
+            == String.append(String.reverse(cur), Brk.text(Con{Spec.Cr{}, r})): String
+        }
+      {==}
+    case Con{Spec.Cr{}, Con{Spec.Ch{c}, +t}}:
+      r = {Con{Spec.Ch{c}, t}: List<&2, Spec.Brk>}
+      %Equal.sym(
+        String,
+        Spec.Text.join(Spec.Text.lines.go(r, SNil{})),
+        Brk.text(r),
+        Text.join_go(r, SNil{})
+      ):
+        {
+          String.append(
+            String.reverse(cur),
+            String.append(Spec.End.text(Spec.CR{}), _)
+          )
+            == String.append(String.reverse(cur), Brk.text(Con{Spec.Cr{}, r})): String
+        }
+      {==}
+    case Con{Spec.Nl{}, +t}:
+      %Equal.sym(
+        String,
+        Spec.Text.join(Spec.Text.lines.go(t, SNil{})),
+        Brk.text(t),
+        Text.join_go(t, SNil{})
+      ):
+        {
+          String.append(
+            String.reverse(cur),
+            String.append(Spec.End.text(Spec.LF{}), _)
+          )
+            == String.append(String.reverse(cur), Brk.text(Con{Spec.Nl{}, t})): String
+        }
+      {==}
+    case Con{Spec.Ch{+c}, +t}:
+      +c1 = {SCon{c, SNil{}}: String}
+      rest = Brk.text(t)
+      %Equal.sym(
+        String,
+        Spec.Text.join(Spec.Text.lines.go(t, SCon{c, cur})),
+        String.append(String.reverse(SCon{c, cur}), rest),
+        Text.join_go(t, SCon{c, cur})
+      ):
+        {_ == String.append(String.reverse(cur), SCon{c, rest}): String}
+      %Equal.sym(
+        String,
+        String.reverse.go(cur, c1),
+        String.append(String.reverse.go(cur, SNil{}), c1),
+        Str.rev_go(cur, c1)
+      ):
+        {String.append(_, rest) == String.append(String.reverse(cur), SCon{c, rest}): String}
+      %Equal.sym(
+        String,
+        String.append(String.append(String.reverse(cur), c1), rest),
+        String.append(String.reverse(cur), String.append(c1, rest)),
+        Str.append_assoc(String.reverse(cur), c1, rest)
+      ):
+        {_ == String.append(String.reverse(cur), SCon{c, rest}): String}
+      {==}
+
+def Brk.char_of.cr(
+  c: Char,
+  b: Bool
+) -> {
+  Char.is_eq(c, Chr{13}) == b: Bool
+} -> {Brk.char(Bool.pick(Spec.Brk, b, Spec.Cr{}, Spec.Ch{c})) == c: Char}:
+  match b:
+    case True{}:
+
+      e => Equal.sym(Char, c, Chr{13}, GlobImpl.Char.is_eq_sound(c, Chr{13})(e))
+    case False{}:
+      e => {==}
+
+def Brk.char_of.nl(
+  +c: Char,
+  b: Bool
+) -> {
+  Char.is_eq(c, Chr{10}) == b: Bool
+} -> {
+  Brk.char(
+    Bool.pick(
+      Spec.Brk,
+      b,
+      Spec.Nl{},
+      Bool.pick(Spec.Brk, Char.is_eq(c, Chr{13}), Spec.Cr{}, Spec.Ch{c})
+    )
+  )
+    == c: Char
+}:
+  match b:
+    case True{}:
+      e => Equal.sym(Char, c, Chr{10}, GlobImpl.Char.is_eq_sound(c, Chr{10})(e))
+    case False{}:
+      e => Brk.char_of.cr(c, Char.is_eq(c, Chr{13}))({==})
+
+def Brk.char_of(+c: Char) -> {Brk.char(Spec.Brk.of(c)) == c: Char}:
+  Brk.char_of.nl(c, Char.is_eq(c, Chr{10}))({==})
+
+def Brk.text_list(s: String) -> {Brk.text(Spec.Brk.list(s)) == s: String}:
+  match s:
+    case SNil{}:
+      {==}
+    case SCon{h, t}:
+      %Equal.sym(
+        Char,
+        Brk.char(Spec.Brk.of(h)),
+        h,
+        Brk.char_of(h)
+      ): {SCon{_, Brk.text(Spec.Brk.list(t))} == SCon{h, t}: String}
+      %Equal.sym(
+        String,
+        Brk.text(Spec.Brk.list(t)),
+        t,
+        Brk.text_list(t)
+      ): {SCon{h, _} == SCon{h, t}: String}
+      {==}
+
+def Spec.Text.join_after_lines(s):
+  +s = s
+  Equal.trans(
+    String,
+    Spec.Text.join(Spec.Text.lines(s)),
+    Brk.text(Spec.Brk.list(s)),
+    s,
+    Text.join_go(Spec.Brk.list(s), SNil{}),
+    Brk.text_list(s)
+  )
