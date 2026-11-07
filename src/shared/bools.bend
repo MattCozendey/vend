@@ -67,3 +67,31 @@ def Bool.not_false(a: Bool) -> {Bool.not(a) == False{}: Bool} -> {a == True{}: B
         {False{} == True{}: Bool},
         Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
       )
+
+# anything or True is True
+def Bool.or_true_right(a: Bool) -> {Bool.or(a, True{}) == True{}: Bool}:
+  match a:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# "or" groups either way
+def Bool.or_assoc(
+  a: Bool,
+  b: Bool,
+  c: Bool
+) -> {Bool.or(a, Bool.or(b, c)) == Bool.or(Bool.or(a, b), c): Bool}:
+  match a:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# a "not" that is True is of False
+def Bool.not_true(a: Bool) -> {Bool.not(a) == True{}: Bool} -> {a == False{}: Bool}:
+  match a:
+    case False{}:
+      h => {==}
+    case True{}:
+      h => Empty.absurd({True{} == False{}: Bool}, Bool.false_ne_true(h))

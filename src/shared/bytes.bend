@@ -73,3 +73,19 @@ def Bytes.is_eq_sound(
         )(Bytes.is_eq_tail(U32.is_eq(x, y), xs, ys)(h)): {x <> xs == x <> _: Bytes()}
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# bytes are equal to themselves
+def Bytes.is_eq_refl(a: Bytes()) -> {Bytes.is_eq(a, a) == True{}: Bool}:
+  match a:
+    case Nil{}:
+      {==}
+    case Con{x, t}:
+      match x:
+        case U32{w}:
+          %Equal.sym(
+            Cmp,
+            Word.cmp(32n, w, w),
+            EQ{},
+            Words.Word.cmp_refl(32n, w)
+          ): {List.all.if(u => Bytes.is_eq(t, t), Cmp.is_eq(_)) == True{}: Bool}
+          Bytes.is_eq_refl(t)

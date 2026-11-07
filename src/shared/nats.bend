@@ -45,3 +45,27 @@ def Nat.lt_succ(e: Nat) -> {Nat.is_lt(e, 1n+e) == True{}: Bool}:
     case 1n+p:
       Nat.lt_succ(p)
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# Nat.cmp chains
+def Nat.cmp_chain(
+  a: Nat,
+  b: Nat,
+  c: Nat
+) -> {Cmps.Cmp.chain(Nat.cmp(a, b), Nat.cmp(b, c), Nat.cmp(a, c)) == True{}: Bool}:
+  match a b c:
+    case 0n 0n 0n:
+      {==}
+    case 0n 0n 1n+z:
+      {==}
+    case 0n 1n+y 0n:
+      {==}
+    case 0n 1n+y 1n+z:
+      Cmps.Cmp.chain_lt(Nat.cmp(y, z))
+    case 1n+x 0n 0n:
+      {==}
+    case 1n+x 0n 1n+z:
+      Cmps.Cmp.chain_gl(Nat.cmp(x, z))
+    case 1n+x 1n+y 0n:
+      Cmps.Cmp.chain_gg(Nat.cmp(x, y))
+    case 1n+x 1n+y 1n+z:
+      Nat.cmp_chain(x, y, z)

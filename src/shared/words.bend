@@ -136,3 +136,91 @@ def U32.is_eq_sound(a: U32, b: U32) -> {U32.is_eq(a, b) == True{}: Bool} -> {a =
           y
         )(Cmps.Cmp.is_eq_sound(Word.cmp(32n, x, y))(h)): {U32{x} == U32{_}: U32}
         {==}
+
+# the last step of Word.cmp is a "then" on the tails, then the heads
+def Word.cmp.fin_then(
+  ab: Bool,
+  bb: Bool,
+  t: Cmp
+) -> {Word.cmp.fin(ab, bb, t) == Cmps.Cmp.then(t, Bool.cmp(ab, bb)): Cmp}:
+  match t:
+    case LT{}:
+      {==}
+    case EQ{}:
+      {==}
+    case GT{}:
+      {==}
+
+# Word.cmp chains
+def Word.cmp_chain(
+  +n: Nat,
+  a: Word(n),
+  b: Word(n),
+  c: Word(n)
+) -> {Cmps.Cmp.chain(Word.cmp(n, a, b), Word.cmp(n, b, c), Word.cmp(n, a, c)) == True{}: Bool}:
+  match n:
+    case 0n:
+      match a b c:
+        case WNil{} WNil{} WNil{}:
+          {==}
+    case 1n+p:
+      match a b c:
+        case WCon{+ah, +at} WCon{+bh, +bt} WCon{+ch, +ct}:
+          +p = p
+          %Equal.sym(
+            Cmp,
+            Word.cmp.fin(ah, bh, Word.cmp(p, at, bt)),
+            Cmps.Cmp.then(Word.cmp(p, at, bt), Bool.cmp(ah, bh)),
+            Word.cmp.fin_then(ah, bh, Word.cmp(p, at, bt))
+          ): {
+            Cmps.Cmp.chain(
+              _,
+              Word.cmp.fin(bh, ch, Word.cmp(p, bt, ct)),
+              Word.cmp.fin(ah, ch, Word.cmp(p, at, ct))
+            )
+              == True{}: Bool
+          }
+          %Equal.sym(
+            Cmp,
+            Word.cmp.fin(bh, ch, Word.cmp(p, bt, ct)),
+            Cmps.Cmp.then(Word.cmp(p, bt, ct), Bool.cmp(bh, ch)),
+            Word.cmp.fin_then(bh, ch, Word.cmp(p, bt, ct))
+          ): {
+            Cmps.Cmp.chain(
+              Cmps.Cmp.then(Word.cmp(p, at, bt), Bool.cmp(ah, bh)),
+              _,
+              Word.cmp.fin(ah, ch, Word.cmp(p, at, ct))
+            )
+              == True{}: Bool
+          }
+          %Equal.sym(
+            Cmp,
+            Word.cmp.fin(ah, ch, Word.cmp(p, at, ct)),
+            Cmps.Cmp.then(Word.cmp(p, at, ct), Bool.cmp(ah, ch)),
+            Word.cmp.fin_then(ah, ch, Word.cmp(p, at, ct))
+          ): {
+            Cmps.Cmp.chain(
+              Cmps.Cmp.then(Word.cmp(p, at, bt), Bool.cmp(ah, bh)),
+              Cmps.Cmp.then(Word.cmp(p, bt, ct), Bool.cmp(bh, ch)),
+              _
+            )
+              == True{}: Bool
+          }
+          Cmps.Cmp.then_chain(
+            Word.cmp(p, at, bt),
+            Word.cmp(p, bt, ct),
+            Word.cmp(p, at, ct),
+            Bool.cmp(ah, bh),
+            Bool.cmp(bh, ch),
+            Bool.cmp(ah, ch)
+          )(Word.cmp_chain(p, at, bt, ct))(Cmps.Bool.cmp_chain(ah, bh, ch))
+
+# U32.cmp chains
+def U32.cmp_chain(
+  a: U32,
+  b: U32,
+  c: U32
+) -> {Cmps.Cmp.chain(U32.cmp(a, b), U32.cmp(b, c), U32.cmp(a, c)) == True{}: Bool}:
+  match a b c:
+    case U32{x} U32{y} U32{z}:
+      Word.cmp_chain(32n, x, y, z)

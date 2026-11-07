@@ -36,8 +36,6 @@ def Maybe.same(~A: Data, ~eq: A -> A -> Bool, a: Maybe<&2, A>, b: Maybe<&2, A>) 
     case _ _:
       False{}
 
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-
 # Maybe.same is True only for equal values, when eq is True only for equal ones
 def Maybe.same_sound(
   ~A: Data,
@@ -53,8 +51,7 @@ def Maybe.same_sound(
       h => Empty.absurd({None{} == Some{y}: Maybe<&2, A>}, Bools.Bool.false_ne_true(h))
     case Some{x} None{}:
       h => Empty.absurd({Some{x} == None{}: Maybe<&2, A>}, Bools.Bool.false_ne_true(h))
-    case Some{+x} Some{+y}:
+    case Some{+x} Some{y}:
       h =>
         %eqs(x)(y)(h): {Some{x} == Some{_}: Maybe<&2, A>}
         {==}
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information

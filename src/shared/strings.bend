@@ -216,43 +216,74 @@ def keep_has.any(c: Bool) -> {List.any.if(u => True{}, c) == True{}: Bool}:
     case False{}:
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a key of ks is in ks after keep adds n or not (held)
-def keep_has(+n: String, ks: List<&2, String>, held: Bool, +k: String) -> {has(ks, k) == True{}: Bool} -> {has(drop.keep(n, ks, held), k) == True{}: Bool}:
+def keep_has(
+  n: String,
+  ks: List<&2, String>,
+  held: Bool,
+  k: String
+) -> {has(ks, k) == True{}: Bool} -> {has(drop.keep(n, ks, held), k) == True{}: Bool}:
   match held:
     case True{}:
       h => h
     case False{}:
       h =>
-        %Equal.sym(Bool, has(ks, k), True{}, h): {List.any.if(u => _, String.eq(n, k)) == True{}: Bool}
+        %Equal.sym(
+          Bool,
+          has(ks, k),
+          True{},
+          h
+        ): {List.any.if(u => _, String.eq(n, k)) == True{}: Bool}
         keep_has.any(String.eq(n, k))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a key of ks is in the union of ns and ks
-def union_right(ns: List<&2, String>, +ks: List<&2, String>, +k: String) -> {has(ks, k) == True{}: Bool} -> {has(union(ns, ks), k) == True{}: Bool}:
+def union_right(
+  ns: List<&2, String>,
+  +ks: List<&2, String>,
+  +k: String
+) -> {has(ks, k) == True{}: Bool} -> {has(union(ns, ks), k) == True{}: Bool}:
   match ns:
     case Nil{}:
       h => h
     case Con{+n, r}:
       h => union_right(r, drop.keep(n, ks, has(ks, n)), k)(keep_has(n, ks, has(ks, n), k)(h))
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # n is in ks after keep adds it, when ks holds n (held) or not
-def keep_self(+n: String, +ks: List<&2, String>, held: Bool) -> {has(ks, n) == held: Bool} -> {has(drop.keep(n, ks, held), n) == True{}: Bool}:
+def keep_self(
+  n: String,
+  ks: List<&2, String>,
+  held: Bool
+) -> {has(ks, n) == held: Bool} -> {has(drop.keep(n, ks, held), n) == True{}: Bool}:
   match held:
     case True{}:
       h => h
     case False{}:
       h =>
-        %Equal.sym(Bool, String.eq(n, n), True{}, String.eq_refl(n)): {List.any.if(u => has(ks, n), _) == True{}: Bool}
+        %Equal.sym(
+          Bool,
+          String.eq(n, n),
+          True{},
+          String.eq_refl(n)
+        ): {List.any.if(u => has(ks, n), _) == True{}: Bool}
         {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # union_left at the first key n of ns, by whether n is k (hit)
 def union_left.at(
   +n: String,
   r: List<&2, String>,
   +ks: List<&2, String>,
-  +k: String,
+  k: String,
   hit: Bool,
   ih: @js: List<&2, String> -> {has(r, k) == True{}: Bool} -> {has(union(r, js), k) == True{}: Bool}
-) -> {String.eq(n, k) == hit: Bool} -> {List.any.if(u => has(r, k), hit) == True{}: Bool} -> {has(union(r, drop.keep(n, ks, has(ks, n))), k) == True{}: Bool}:
+) -> {
+  String.eq(n, k) == hit: Bool
+} -> {
+  List.any.if(u => has(r, k), hit) == True{}: Bool
+} -> {has(union(r, drop.keep(n, ks, has(ks, n))), k) == True{}: Bool}:
   match hit:
     case False{}:
       e => h => ih(drop.keep(n, ks, has(ks, n)))(h)
@@ -262,12 +293,177 @@ def union_left.at(
         union_right(r, drop.keep(n, ks, has(ks, n)), n)(keep_self(n, ks, has(ks, n))({==}))
 
 # a key of ns is in the union of ns and ks
-def union_left(ns: List<&2, String>, +ks: List<&2, String>, +k: String) -> {has(ns, k) == True{}: Bool} -> {has(union(ns, ks), k) == True{}: Bool}:
+def union_left(
+  ns: List<&2, String>,
+  ks: List<&2, String>,
+  +k: String
+) -> {has(ns, k) == True{}: Bool} -> {has(union(ns, ks), k) == True{}: Bool}:
   match ns:
     case Nil{}:
       h => Empty.absurd({has(union(Nil{}, ks), k) == True{}: Bool}, Bools.Bool.false_ne_true(h))
     case Con{+n, +r}:
       +h => union_left.at(n, r, ks, k, String.eq(n, k), js => union_left(r, js, k))({==})(
         %Equal.sym(Bool, has(n <> r, k), True{}, h): {_ == True{}: Bool}
-        {==}
+        {==})
+
+# String.order.go from c is c, then the order from EQ
+def String.order_then(
+  c: Cmp,
+  a: String,
+  b: String
+) -> {String.order.go(a, b, c) == Cmps.Cmp.then(c, String.order.go(a, b, EQ{})): Cmp}:
+  match c a b:
+    case EQ{} x y:
+      {==}
+    case LT{} SNil{} SNil{}:
+      {==}
+    case LT{} SNil{} SCon{y, t}:
+      {==}
+    case LT{} SCon{x, t} SNil{}:
+      {==}
+    case LT{} SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
+      {==}
+    case GT{} SNil{} SNil{}:
+      {==}
+    case GT{} SNil{} SCon{y, t}:
+      {==}
+    case GT{} SCon{x, t} SNil{}:
+      {==}
+    case GT{} SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
+      {==}
+
+# String.order chains
+def String.order_chain(
+  a: String,
+  b: String,
+  c: String
+) -> {Cmps.Cmp.chain(String.order(a, b), String.order(b, c), String.order(a, c)) == True{}: Bool}:
+  match a b c:
+    case SNil{} SNil{} SNil{}:
+      {==}
+    case SNil{} SNil{} SCon{Chr{z}, t3}:
+      {==}
+    case SNil{} SCon{Chr{y}, t2} SNil{}:
+      {==}
+    case SNil{} SCon{Chr{y}, t2} SCon{Chr{z}, t3}:
+      Cmps.Cmp.chain_lt(String.order(SCon{Chr{y}, t2}, SCon{Chr{z}, t3}))
+    case SCon{Chr{x}, t1} SNil{} SNil{}:
+      {==}
+    case SCon{Chr{x}, t1} SNil{} SCon{Chr{z}, t3}:
+      Cmps.Cmp.chain_gl(String.order(SCon{Chr{x}, t1}, SCon{Chr{z}, t3}))
+    case SCon{Chr{x}, t1} SCon{Chr{y}, t2} SNil{}:
+      Cmps.Cmp.chain_gg(String.order(SCon{Chr{x}, t1}, SCon{Chr{y}, t2}))
+    case SCon{Chr{+x}, +t1} SCon{Chr{+y}, +t2} SCon{Chr{+z}, +t3}:
+      %Equal.sym(
+        Cmp,
+        String.order.go(t1, t2, U32.cmp(x, y)),
+        Cmps.Cmp.then(U32.cmp(x, y), String.order.go(t1, t2, EQ{})),
+        String.order_then(U32.cmp(x, y), t1, t2)
+      ): {
+        Cmps.Cmp.chain(
+          _,
+          String.order.go(t2, t3, U32.cmp(y, z)),
+          String.order.go(t1, t3, U32.cmp(x, z))
+        )
+          == True{}: Bool
+      }
+      %Equal.sym(
+        Cmp,
+        String.order.go(t2, t3, U32.cmp(y, z)),
+        Cmps.Cmp.then(U32.cmp(y, z), String.order.go(t2, t3, EQ{})),
+        String.order_then(U32.cmp(y, z), t2, t3)
+      ): {
+        Cmps.Cmp.chain(
+          Cmps.Cmp.then(U32.cmp(x, y), String.order.go(t1, t2, EQ{})),
+          _,
+          String.order.go(t1, t3, U32.cmp(x, z))
+        )
+          == True{}: Bool
+      }
+      %Equal.sym(
+        Cmp,
+        String.order.go(t1, t3, U32.cmp(x, z)),
+        Cmps.Cmp.then(U32.cmp(x, z), String.order.go(t1, t3, EQ{})),
+        String.order_then(U32.cmp(x, z), t1, t3)
+      ): {
+        Cmps.Cmp.chain(
+          Cmps.Cmp.then(U32.cmp(x, y), String.order.go(t1, t2, EQ{})),
+          Cmps.Cmp.then(U32.cmp(y, z), String.order.go(t2, t3, EQ{})),
+          _
+        )
+          == True{}: Bool
+      }
+      Cmps.Cmp.then_chain(
+        U32.cmp(x, y),
+        U32.cmp(y, z),
+        U32.cmp(x, z),
+        String.order(t1, t2),
+        String.order(t2, t3),
+        String.order(t1, t3)
+      )(Words.U32.cmp_chain(x, y, z))(String.order_chain(t1, t2, t3))
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# has_cons_false, by whether the first key is k (hit)
+def has_cons_false.at(
+  hit: Bool,
+  r: List<&2, String>,
+  k: String
+) -> {
+  List.any.if(u => has(r, k), hit) == False{}: Bool
+} -> {hit == False{}: Bool}
+  & {has(r, k) == False{}: Bool}:
+  match hit:
+    case True{}:
+      h => Empty.absurd(
+        {True{} == False{}: Bool} & {has(r, k) == False{}: Bool},
+        Bools.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
       )
+    case False{}:
+      h => ({==}, h)
+
+# a list without k has neither k first nor k after
+def has_cons_false(
+  i: String,
+  r: List<&2, String>,
+  +k: String
+) -> {
+  has(i <> r, k) == False{}: Bool
+} -> {String.eq(i, k) == False{}: Bool}
+  & {has(r, k) == False{}: Bool}:
+  h => has_cons_false.at(String.eq(i, k), r, k)(h)
+
+# two lists without k, one after the other, are without k
+def has_append_false(
+  a: List<&2, String>,
+  b: List<&2, String>,
+  +k: String
+) -> {
+  has(a, k) == False{}: Bool
+} -> {has(b, k) == False{}: Bool} -> {has(List.append(&2, String, a, b), k) == False{}: Bool}:
+  match a:
+    case Nil{}:
+      ha => hb => hb
+    case Con{+i, +r}:
+      +ha => hb =>
+        %Equal.sym(
+          Bool,
+          String.eq(i, k),
+          False{},
+          Pair.fst(
+            {String.eq(i, k) == False{}: Bool},
+            {has(r, k) == False{}: Bool},
+            has_cons_false(i, r, k)(ha)
+          )
+        ): {List.any.if(u => has(List.append(&2, String, r, b), k), _) == False{}: Bool}
+        has_append_false(
+          r,
+          b,
+          k
+        )(
+          Pair.snd(
+            {String.eq(i, k) == False{}: Bool},
+            {has(r, k) == False{}: Bool},
+            has_cons_false(i, r, k)(ha)
+          )
+        )(hb)
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information

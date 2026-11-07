@@ -101,3 +101,330 @@ def Bool.cmp_swap(a: Bool, b: Bool) -> {Bool.cmp(b, a) == Cmp.flip(Bool.cmp(a, b
       {==}
     case True{} True{}:
       {==}
+
+# Chains of comparisons
+# ---------------------
+# The comparisons ab, bc and ac of three values a, b and c fit one order when
+# ac is what ab and bc force: an order is transitive when all its comparisons
+# chain.
+
+# ab, bc and ac fit one order
+def Cmp.chain(ab: Cmp, bc: Cmp, ac: Cmp) -> Bool:
+  match ab bc ac:
+    case LT{} LT{} LT{}:
+      True{}
+    case LT{} LT{} EQ{}:
+      False{}
+    case LT{} LT{} GT{}:
+      False{}
+    case LT{} EQ{} LT{}:
+      True{}
+    case LT{} EQ{} EQ{}:
+      False{}
+    case LT{} EQ{} GT{}:
+      False{}
+    case LT{} GT{} LT{}:
+      True{}
+    case LT{} GT{} EQ{}:
+      True{}
+    case LT{} GT{} GT{}:
+      True{}
+    case EQ{} LT{} LT{}:
+      True{}
+    case EQ{} LT{} EQ{}:
+      False{}
+    case EQ{} LT{} GT{}:
+      False{}
+    case EQ{} EQ{} LT{}:
+      False{}
+    case EQ{} EQ{} EQ{}:
+      True{}
+    case EQ{} EQ{} GT{}:
+      False{}
+    case EQ{} GT{} LT{}:
+      False{}
+    case EQ{} GT{} EQ{}:
+      False{}
+    case EQ{} GT{} GT{}:
+      True{}
+    case GT{} LT{} LT{}:
+      True{}
+    case GT{} LT{} EQ{}:
+      True{}
+    case GT{} LT{} GT{}:
+      True{}
+    case GT{} EQ{} LT{}:
+      False{}
+    case GT{} EQ{} EQ{}:
+      False{}
+    case GT{} EQ{} GT{}:
+      True{}
+    case GT{} GT{} LT{}:
+      False{}
+    case GT{} GT{} EQ{}:
+      False{}
+    case GT{} GT{} GT{}:
+      True{}
+
+# LT, then anything, then LT fit one order
+def Cmp.chain_lt(x: Cmp) -> {Cmp.chain(LT{}, x, LT{}) == True{}: Bool}:
+  match x:
+    case LT{}:
+      {==}
+    case EQ{}:
+      {==}
+    case GT{}:
+      {==}
+
+# GT, then LT, then anything fit one order
+def Cmp.chain_gl(x: Cmp) -> {Cmp.chain(GT{}, LT{}, x) == True{}: Bool}:
+  match x:
+    case LT{}:
+      {==}
+    case EQ{}:
+      {==}
+    case GT{}:
+      {==}
+
+# anything, then GT, then GT fit one order
+def Cmp.chain_gg(x: Cmp) -> {Cmp.chain(x, GT{}, GT{}) == True{}: Bool}:
+  match x:
+    case LT{}:
+      {==}
+    case EQ{}:
+      {==}
+    case GT{}:
+      {==}
+
+# a chain read the other way round
+def Cmp.chain_swap(
+  ab: Cmp,
+  bc: Cmp,
+  ac: Cmp
+) -> {Cmp.chain(bc, ab, ac) == Cmp.chain(ab, bc, ac): Bool}:
+  match ab bc ac:
+    case LT{} LT{} LT{}:
+      {==}
+    case LT{} LT{} EQ{}:
+      {==}
+    case LT{} LT{} GT{}:
+      {==}
+    case LT{} EQ{} LT{}:
+      {==}
+    case LT{} EQ{} EQ{}:
+      {==}
+    case LT{} EQ{} GT{}:
+      {==}
+    case LT{} GT{} LT{}:
+      {==}
+    case LT{} GT{} EQ{}:
+      {==}
+    case LT{} GT{} GT{}:
+      {==}
+    case EQ{} LT{} LT{}:
+      {==}
+    case EQ{} LT{} EQ{}:
+      {==}
+    case EQ{} LT{} GT{}:
+      {==}
+    case EQ{} EQ{} LT{}:
+      {==}
+    case EQ{} EQ{} EQ{}:
+      {==}
+    case EQ{} EQ{} GT{}:
+      {==}
+    case EQ{} GT{} LT{}:
+      {==}
+    case EQ{} GT{} EQ{}:
+      {==}
+    case EQ{} GT{} GT{}:
+      {==}
+    case GT{} LT{} LT{}:
+      {==}
+    case GT{} LT{} EQ{}:
+      {==}
+    case GT{} LT{} GT{}:
+      {==}
+    case GT{} EQ{} LT{}:
+      {==}
+    case GT{} EQ{} EQ{}:
+      {==}
+    case GT{} EQ{} GT{}:
+      {==}
+    case GT{} GT{} LT{}:
+      {==}
+    case GT{} GT{} EQ{}:
+      {==}
+    case GT{} GT{} GT{}:
+      {==}
+
+# an order by a first key, then a second, chains when both orders chain
+def Cmp.then_chain(
+  pa: Cmp,
+  pb: Cmp,
+  pc: Cmp,
+  sa: Cmp,
+  sb: Cmp,
+  sc: Cmp
+) -> {
+  Cmp.chain(pa, pb, pc) == True{}: Bool
+} -> {
+  Cmp.chain(sa, sb, sc) == True{}: Bool
+} -> {Cmp.chain(Cmp.then(pa, sa), Cmp.then(pb, sb), Cmp.then(pc, sc)) == True{}: Bool}:
+  match pa pb pc:
+    case LT{} LT{} LT{}:
+      hp => hs => {==}
+    case LT{} LT{} EQ{}:
+      hp => hs => Empty.absurd(
+        {Cmp.chain(Cmp.then(LT{}, sa), Cmp.then(LT{}, sb), Cmp.then(EQ{}, sc)) == True{}: Bool},
+        Bools.Bool.false_ne_true(hp)
+      )
+    case LT{} LT{} GT{}:
+      hp => hs => Empty.absurd(
+        {Cmp.chain(Cmp.then(LT{}, sa), Cmp.then(LT{}, sb), Cmp.then(GT{}, sc)) == True{}: Bool},
+        Bools.Bool.false_ne_true(hp)
+      )
+    case LT{} EQ{} LT{}:
+      match sb:
+        case LT{}:
+          hp => hs => {==}
+        case EQ{}:
+          hp => hs => {==}
+        case GT{}:
+          hp => hs => {==}
+    case LT{} EQ{} EQ{}:
+      hp => hs => Empty.absurd(
+        {Cmp.chain(Cmp.then(LT{}, sa), Cmp.then(EQ{}, sb), Cmp.then(EQ{}, sc)) == True{}: Bool},
+        Bools.Bool.false_ne_true(hp)
+      )
+    case LT{} EQ{} GT{}:
+      hp => hs => Empty.absurd(
+        {Cmp.chain(Cmp.then(LT{}, sa), Cmp.then(EQ{}, sb), Cmp.then(GT{}, sc)) == True{}: Bool},
+        Bools.Bool.false_ne_true(hp)
+      )
+    case LT{} GT{} LT{}:
+      hp => hs => {==}
+    case LT{} GT{} EQ{}:
+      match sc:
+        case LT{}:
+          hp => hs => {==}
+        case EQ{}:
+          hp => hs => {==}
+        case GT{}:
+          hp => hs => {==}
+    case LT{} GT{} GT{}:
+      hp => hs => {==}
+    case EQ{} LT{} LT{}:
+      match sa:
+        case LT{}:
+          hp => hs => {==}
+        case EQ{}:
+          hp => hs => {==}
+        case GT{}:
+          hp => hs => {==}
+    case EQ{} LT{} EQ{}:
+      hp => hs => Empty.absurd(
+        {Cmp.chain(Cmp.then(EQ{}, sa), Cmp.then(LT{}, sb), Cmp.then(EQ{}, sc)) == True{}: Bool},
+        Bools.Bool.false_ne_true(hp)
+      )
+    case EQ{} LT{} GT{}:
+      hp => hs => Empty.absurd(
+        {Cmp.chain(Cmp.then(EQ{}, sa), Cmp.then(LT{}, sb), Cmp.then(GT{}, sc)) == True{}: Bool},
+        Bools.Bool.false_ne_true(hp)
+      )
+    case EQ{} EQ{} LT{}:
+      hp => hs => Empty.absurd(
+        {Cmp.chain(Cmp.then(EQ{}, sa), Cmp.then(EQ{}, sb), Cmp.then(LT{}, sc)) == True{}: Bool},
+        Bools.Bool.false_ne_true(hp)
+      )
+    case EQ{} EQ{} EQ{}:
+      hp => hs => hs
+    case EQ{} EQ{} GT{}:
+      hp => hs => Empty.absurd(
+        {Cmp.chain(Cmp.then(EQ{}, sa), Cmp.then(EQ{}, sb), Cmp.then(GT{}, sc)) == True{}: Bool},
+        Bools.Bool.false_ne_true(hp)
+      )
+    case EQ{} GT{} LT{}:
+      hp => hs => Empty.absurd(
+        {Cmp.chain(Cmp.then(EQ{}, sa), Cmp.then(GT{}, sb), Cmp.then(LT{}, sc)) == True{}: Bool},
+        Bools.Bool.false_ne_true(hp)
+      )
+    case EQ{} GT{} EQ{}:
+      hp => hs => Empty.absurd(
+        {Cmp.chain(Cmp.then(EQ{}, sa), Cmp.then(GT{}, sb), Cmp.then(EQ{}, sc)) == True{}: Bool},
+        Bools.Bool.false_ne_true(hp)
+      )
+    case EQ{} GT{} GT{}:
+      match sa:
+        case LT{}:
+          hp => hs => {==}
+        case EQ{}:
+          hp => hs => {==}
+        case GT{}:
+          hp => hs => {==}
+    case GT{} LT{} LT{}:
+      hp => hs => {==}
+    case GT{} LT{} EQ{}:
+      match sc:
+        case LT{}:
+          hp => hs => {==}
+        case EQ{}:
+          hp => hs => {==}
+        case GT{}:
+          hp => hs => {==}
+    case GT{} LT{} GT{}:
+      hp => hs => {==}
+    case GT{} EQ{} LT{}:
+      hp => hs => Empty.absurd(
+        {Cmp.chain(Cmp.then(GT{}, sa), Cmp.then(EQ{}, sb), Cmp.then(LT{}, sc)) == True{}: Bool},
+        Bools.Bool.false_ne_true(hp)
+      )
+    case GT{} EQ{} EQ{}:
+      hp => hs => Empty.absurd(
+        {Cmp.chain(Cmp.then(GT{}, sa), Cmp.then(EQ{}, sb), Cmp.then(EQ{}, sc)) == True{}: Bool},
+        Bools.Bool.false_ne_true(hp)
+      )
+    case GT{} EQ{} GT{}:
+      match sb:
+        case LT{}:
+          hp => hs => {==}
+        case EQ{}:
+          hp => hs => {==}
+        case GT{}:
+          hp => hs => {==}
+    case GT{} GT{} LT{}:
+      hp => hs => Empty.absurd(
+        {Cmp.chain(Cmp.then(GT{}, sa), Cmp.then(GT{}, sb), Cmp.then(LT{}, sc)) == True{}: Bool},
+        Bools.Bool.false_ne_true(hp)
+      )
+    case GT{} GT{} EQ{}:
+      hp => hs => Empty.absurd(
+        {Cmp.chain(Cmp.then(GT{}, sa), Cmp.then(GT{}, sb), Cmp.then(EQ{}, sc)) == True{}: Bool},
+        Bools.Bool.false_ne_true(hp)
+      )
+    case GT{} GT{} GT{}:
+      hp => hs => {==}
+
+# Bool.cmp chains
+def Bool.cmp_chain(
+  a: Bool,
+  b: Bool,
+  c: Bool
+) -> {Cmp.chain(Bool.cmp(a, b), Bool.cmp(b, c), Bool.cmp(a, c)) == True{}: Bool}:
+  match a b c:
+    case False{} False{} False{}:
+      {==}
+    case False{} False{} True{}:
+      {==}
+    case False{} True{} False{}:
+      {==}
+    case False{} True{} True{}:
+      {==}
+    case True{} False{} False{}:
+      {==}
+    case True{} False{} True{}:
+      {==}
+    case True{} True{} False{}:
+      {==}
+    case True{} True{} True{}:
+      {==}
