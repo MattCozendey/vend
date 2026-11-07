@@ -1,7 +1,8 @@
 ## RULES(S)
 1 - IF YOU ARE AN AGENT, ONLY TOUCH THIS WITH EXPRESS PERMISSION AND ONLY ON THE AGENT-DESIGNATED SECTION UNLESS TOLD OTHERWISE. EVERYTHING ELSE IS HUMAN-WRITEN.
 
-2 - This implementation must be independent from the outside code.
+2 - This implementation must be independent from the outside code with exceptions:
+2.1 - Glob. It's proven so it's fine.
 
 3 - This must not contain technical details(at most in the agent-designated section) and even when it does the main intention is imperative.
 
@@ -29,7 +30,7 @@ A point is a version ID, a branch(its newest version) or branch@mark.
 #### Read
 - `try-get status` - what is mounted, who is connected and which branches this node owns.
 - `try-get branches` - every branch, with its owner group and newest version.
-- `try-get log <name>` - the versions of a resource, with author and time.
+- `try-get log <name> --branch <branch>` - the versions of a resource, with author and time.
 - `try-get content <name> [point]` - the content of a resource at a point.
 - `try-get diff <name> <a> <b>` - what changed, item by item for types the node knows how to decode.
 - `try-get affects <branch>` - changes elsewhere that touch what this branch uses.
@@ -38,18 +39,22 @@ A point is a version ID, a branch(its newest version) or branch@mark.
 - `try-get changes <topic> [--since X]` - the events of a topic as one answer(polling).
 
 #### Change
-- `try-write <name> --base <version>` - saves new content(bytes, a URI or an old version). Answers Written, Pending(owner group not reached), Stale or Refused.
-- `try-restore <branch> --to <point>` - records a new version where the whole branch, submodules included, equals that point. History is kept. Answers Restored, Pending, Partial(names the missing submodules) or Stale.
-- `try-create branch <name> --from <point>` - makes a branch. Answers Created or NameTaken.
+- `try-write <name> --branch <branch> --base <version>` - saves new content(bytes, a URI or an old version). Answers Written, Pending(owner group not reached), Stale or Refused.
+- `try-set-branch <branch> --to <point>` - makes the branch at that point or, when it exists, records a new version where the whole branch, submodules included, equals that point. History is kept. Answers Created, Restored, Pending, Partial(names the missing submodules) or Stale.
 - `try-create mark <branch> <name> -m <message>` - names the current point of a branch. Answers Marked or NameTaken.
 - `try-merge <point> into <branch>` - merges item by item. Answers Merged, Conflicted(the conflict is stored) or Stale.
 - `try-resolve <conflict> <choice>` - settles a stored conflict. Answers Resolved or Stale.
-- `try-mount <uri> [globs] --branch <name>` - ties a resource to a branch, and fills it when it is empty. A second mount of the same space on another branch is a worktree. Answers Mounted, Partial or Refused.
-- `try-unmount <uri>` - stops versioning it.
+- `try-mount <uri> [settings] --branch <name>` - ties a resource to a branch, and fills it when it is empty. The resource's kind reads and checks the settings(for kinds with paths, globs). On a mounted resource, it changes its settings or its branch(a checkout). A second mount of the same space on another branch is a worktree. Answers Mounted, Partial, Unsupported(the kind does not support a setting) or Refused.
+- `try-unmount <uri>` - stops versioning it. Answers Unmounted or NotMounted.
 
 #### Nodes
-- `try-change-owner <branch> <group>` - moves a branch to another owner group. Answers Changed, NoMajority or Refused.
+- `try-set-owner <branch> <group>` - sets the owner group of a branch. Answers Set, NoMajority or Refused.
+- `try-set-group <group> <member>...` - makes the group or, when it exists, replaces its members. A member is a node or a group. Answers Set, Cycle(the group would contain itself), NoMajority or Refused.
 - `try-sync <node> [--since X]` - swaps history with another node. Answers Synced, Partial or Refused.
+
+#### Connection
+- `try-open <node-uri> --writer <writer>` - connects to a node as a writer. Answers Opened.
+- `try-close` - ends the connection, or a subscription.
 
 #### Live
 - `try-subscribe <topic> [--since X]` - keeps sending the events of a topic: changes that affect you, new conflicts, new versions and the node's questions to you. Answers questions with the matching command(for example, `try-resolve`).
@@ -62,4 +67,4 @@ A point is a version ID, a branch(its newest version) or branch@mark.
 A submodule's own Vend Node must not be assumed to be local.
 - The parent records, on each of its versions, the space, branch and version of each child. Never a node address: any node that has that version can serve it.
 - A child is mounted like any other resource, and its branch has its own owner group.
-- `try-mount` and `try-restore` fetch each child from whoever has it. When none can be reached, they answer Partial.
+- `try-mount` and `try-set-branch` fetch each child from whoever has it. When none can be reached, they answer Partial.
