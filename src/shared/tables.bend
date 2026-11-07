@@ -290,12 +290,20 @@ def Table.keys_get.at(
   r: Table<V>,
   k: String,
   b: Bool,
-  ih: {Strings.has(Table.keys(V, r), k) == Maybe.is_some(&2, V, Table.get(V, r, k)): Bool}
+  ih: {
+    Shared.List.has(
+      ~String,
+      ~String.eq,
+      Table.keys(V, r),
+      k
+    )
+      == Maybe.is_some(&2, V, Table.get(V, r, k)): Bool
+  }
 ) -> {
   String.eq(rk, k) == b: Bool
 } -> {
   List.any.if(
-    u => Strings.has(Table.keys(V, r), k),
+    u => Shared.List.has(~String, ~String.eq, Table.keys(V, r), k),
     String.eq(rk, k)
   )
     == Maybe.is_some(
@@ -310,7 +318,7 @@ def Table.keys_get.at(
         %Equal.sym(Bool, String.eq(rk, k), True{}, e):
           {
             List.any.if(
-              u => Strings.has(Table.keys(V, r), k),
+              u => Shared.List.has(~String, ~String.eq, Table.keys(V, r), k),
               _
             )
               == Maybe.is_some(
@@ -325,7 +333,7 @@ def Table.keys_get.at(
         %Equal.sym(Bool, String.eq(rk, k), False{}, e):
           {
             List.any.if(
-              u => Strings.has(Table.keys(V, r), k),
+              u => Shared.List.has(~String, ~String.eq, Table.keys(V, r), k),
               _
             )
               == Maybe.is_some(
@@ -341,7 +349,15 @@ def Table.keys_get(
   -V: Data,
   t: Table<V>,
   +k: String
-) -> {Strings.has(Table.keys(V, t), k) == Maybe.is_some(&2, V, Table.get(V, t, k)): Bool}:
+) -> {
+  Shared.List.has(
+    ~String,
+    ~String.eq,
+    Table.keys(V, t),
+    k
+  )
+    == Maybe.is_some(&2, V, Table.get(V, t, k)): Bool
+}:
   match t:
     case TNil{}:
       {==}
@@ -415,7 +431,7 @@ def Table.agree_at.at(
   ih: {
     Table.agree(~V, ~eq, r, a, b) == True{}: Bool
   } -> {
-    Strings.has(r, n) == True{}: Bool
+    Shared.List.has(~String, ~String.eq, r, n) == True{}: Bool
   } -> {Maybes.Maybe.same(~V, ~eq, Table.get(V, a, n), Table.get(V, b, n)) == True{}: Bool}
 ) -> {
   String.eq(m, n) == hit: Bool
@@ -426,7 +442,7 @@ def Table.agree_at.at(
   )
     == True{}: Bool
 } -> {
-  List.any.if(u => Strings.has(r, n), hit) == True{}: Bool
+  List.any.if(u => Shared.List.has(~String, ~String.eq, r, n), hit) == True{}: Bool
 } -> {Maybes.Maybe.same(~V, ~eq, Table.get(V, a, n), Table.get(V, b, n)) == True{}: Bool}:
   match hit:
     case False{}:
@@ -458,7 +474,7 @@ def Table.agree_at(
 ) -> {
   Table.agree(~V, ~eq, ns, a, b) == True{}: Bool
 } -> {
-  Strings.has(ns, n) == True{}: Bool
+  Shared.List.has(~String, ~String.eq, ns, n) == True{}: Bool
 } -> {Maybes.Maybe.same(~V, ~eq, Table.get(V, a, n), Table.get(V, b, n)) == True{}: Bool}:
   match ns:
     case Nil{}:
@@ -501,24 +517,28 @@ def Table.absent.at(
   ks: List<&2, String>,
   u: List<&2, String>,
   n: String,
-  sub: {Strings.has(ks, n) == True{}: Bool} -> {Strings.has(u, n) == True{}: Bool}
+  sub: {
+    Shared.List.has(~String, ~String.eq, ks, n) == True{}: Bool
+  } -> {Shared.List.has(~String, ~String.eq, u, n) == True{}: Bool}
 ) -> {
-  Strings.has(ks, n) == c: Bool
-} -> {Strings.has(u, n) == False{}: Bool} -> {Strings.has(ks, n) == False{}: Bool}:
+  Shared.List.has(~String, ~String.eq, ks, n) == c: Bool
+} -> {
+  Shared.List.has(~String, ~String.eq, u, n) == False{}: Bool
+} -> {Shared.List.has(~String, ~String.eq, ks, n) == False{}: Bool}:
   match c:
     case False{}:
       e => hu => e
     case True{}:
       e => hu =>
         Empty.absurd(
-          {Strings.has(ks, n) == False{}: Bool},
+          {Shared.List.has(~String, ~String.eq, ks, n) == False{}: Bool},
           Shared.Bool.false_ne_true(
             Equal.trans(
               Bool,
               False{},
-              Strings.has(u, n),
+              Shared.List.has(~String, ~String.eq, u, n),
               True{},
-              Equal.sym(Bool, Strings.has(u, n), False{}, hu),
+              Equal.sym(Bool, Shared.List.has(~String, ~String.eq, u, n), False{}, hu),
               sub(e)
             )
           )
@@ -531,8 +551,12 @@ def Table.missing(
   +t: Table<V>,
   u: List<&2, String>,
   +n: String,
-  sub: {Strings.has(Table.keys(V, t), n) == True{}: Bool} -> {Strings.has(u, n) == True{}: Bool}
-) -> {Strings.has(u, n) == False{}: Bool} -> {Table.get(V, t, n) == None{}: Maybe<&2, V>}:
+  sub: {
+    Shared.List.has(~String, ~String.eq, Table.keys(V, t), n) == True{}: Bool
+  } -> {Shared.List.has(~String, ~String.eq, u, n) == True{}: Bool}
+) -> {
+  Shared.List.has(~String, ~String.eq, u, n) == False{}: Bool
+} -> {Table.get(V, t, n) == None{}: Maybe<&2, V>}:
   hu =>
     Table.none_of(
       V,
@@ -541,15 +565,21 @@ def Table.missing(
       Equal.trans(
         Bool,
         Maybe.is_some(&2, V, Table.get(V, t, n)),
-        Strings.has(Table.keys(V, t), n),
+        Shared.List.has(~String, ~String.eq, Table.keys(V, t), n),
         False{},
         Equal.sym(
           Bool,
-          Strings.has(Table.keys(V, t), n),
+          Shared.List.has(~String, ~String.eq, Table.keys(V, t), n),
           Maybe.is_some(&2, V, Table.get(V, t, n)),
           Table.keys_get(V, t, n)
         ),
-        Table.absent.at(Strings.has(Table.keys(V, t), n), Table.keys(V, t), u, n, sub)({==})(hu)
+        Table.absent.at(
+          Shared.List.has(~String, ~String.eq, Table.keys(V, t), n),
+          Table.keys(V, t),
+          u,
+          n,
+          sub
+        )({==})(hu)
       )
     )
 
@@ -563,7 +593,13 @@ def Table.same_sound.at(
   +n: String,
   c: Bool
 ) -> {
-  Strings.has(Strings.union(Table.keys(V, b), Table.keys(V, a)), n) == c: Bool
+  Shared.List.has(
+    ~String,
+    ~String.eq,
+    Strings.union(Table.keys(V, b), Table.keys(V, a)),
+    n
+  )
+    == c: Bool
 } -> {
   Table.same(~V, ~eq, a, b) == True{}: Bool
 } -> {Table.get(V, a, n) == Table.get(V, b, n): Maybe<&2, V>}:
@@ -623,7 +659,7 @@ def Table.same_sound(
     a,
     b,
     n,
-    Strings.has(Strings.union(Table.keys(V, b), Table.keys(V, a)), n)
+    Shared.List.has(~String, ~String.eq, Strings.union(Table.keys(V, b), Table.keys(V, a)), n)
   )({==})
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
@@ -694,7 +730,7 @@ def Table.rows_find.hit(
     )
       == Bools.Bool.when(
         Maybe<&2, V>,
-        Strings.has(r, k),
+        Shared.List.has(~String, ~String.eq, r, k),
         u => Table.get(V, t, k),
         u => None{}
       ): Maybe<&2, V>
@@ -715,12 +751,17 @@ def Table.rows_find.hit(
         Equal.trans(
           Maybe<&2, V>,
           Table.find_row(V, Table.rows(V, r, t), k),
-          Bools.Bool.when(Maybe<&2, V>, Strings.has(r, k), u => Table.get(V, t, k), u => None{}),
+          Bools.Bool.when(
+            Maybe<&2, V>,
+            Shared.List.has(~String, ~String.eq, r, k),
+            u => Table.get(V, t, k),
+            u => None{}
+          ),
           Table.get(V, t, k),
           ih,
           (
-            %Equal.sym(Maybe<&2, V>, Table.get(V, t, k), None{}, e): {Bools.Bool.when(Maybe<&2, V>, Strings.has(r, k), u => _, u => None{}) == _: Maybe<&2, V>}
-            Table.when_same(V, Strings.has(r, k), None{}))
+            %Equal.sym(Maybe<&2, V>, Table.get(V, t, k), None{}, e): {Bools.Bool.when(Maybe<&2, V>, Shared.List.has(~String, ~String.eq, r, k), u => _, u => None{}) == _: Maybe<&2, V>}
+            Table.when_same(V, Shared.List.has(~String, ~String.eq, r, k), None{}))
         )
     case Some{v}:
       e =>
@@ -756,7 +797,7 @@ def Table.rows_find.at(
     )
       == Bools.Bool.when(
         Maybe<&2, V>,
-        Strings.has(r, k),
+        Shared.List.has(~String, ~String.eq, r, k),
         u => Table.get(V, t, k),
         u => None{}
       ): Maybe<&2, V>
@@ -771,7 +812,7 @@ def Table.rows_find.at(
   )
     == Bools.Bool.when(
       Maybe<&2, V>,
-      List.any.if(u => Strings.has(r, k), hit),
+      List.any.if(u => Shared.List.has(~String, ~String.eq, r, k), hit),
       u => Table.get(V, t, k),
       u => None{}
     ): Maybe<&2, V>
@@ -782,7 +823,12 @@ def Table.rows_find.at(
         Maybe<&2, V>,
         Table.find_row(V, Table.rows.at(V, j, Table.get(V, t, j), Table.rows(V, r, t)), k),
         Table.find_row(V, Table.rows(V, r, t), k),
-        Bools.Bool.when(Maybe<&2, V>, Strings.has(r, k), u => Table.get(V, t, k), u => None{}),
+        Bools.Bool.when(
+          Maybe<&2, V>,
+          Shared.List.has(~String, ~String.eq, r, k),
+          u => Table.get(V, t, k),
+          u => None{}
+        ),
         Table.rows_find.miss(V, j, t, r, k, Table.get(V, t, j))(e),
         ih
       )
@@ -818,7 +864,7 @@ def Table.rows_find(
   )
     == Bools.Bool.when(
       Maybe<&2, V>,
-      Strings.has(ks, k),
+      Shared.List.has(~String, ~String.eq, ks, k),
       u => Table.get(V, t, k),
       u => None{}
     ): Maybe<&2, V>
@@ -841,7 +887,7 @@ def Table.rows_find_keys.of(
 } -> {
   Bools.Bool.when(
     Maybe<&2, V>,
-    Strings.has(Table.keys(V, t), k),
+    Shared.List.has(~String, ~String.eq, Table.keys(V, t), k),
     u => Table.get(V, t, k),
     u => None{}
   )
@@ -852,7 +898,7 @@ def Table.rows_find_keys.of(
       +e =>
         %Equal.sym(
           Bool,
-          Strings.has(Table.keys(V, t), k),
+          Shared.List.has(~String, ~String.eq, Table.keys(V, t), k),
           Maybe.is_some(&2, V, Table.get(V, t, k)),
           Table.keys_get(V, t, k)
         ): {
@@ -883,7 +929,7 @@ def Table.rows_find_keys.of(
       +e =>
         %Equal.sym(
           Bool,
-          Strings.has(Table.keys(V, t), k),
+          Shared.List.has(~String, ~String.eq, Table.keys(V, t), k),
           Maybe.is_some(&2, V, Table.get(V, t, k)),
           Table.keys_get(V, t, k)
         ): {
@@ -923,7 +969,7 @@ def Table.rows_find_keys(
     Table.find_row(V, Table.rows(V, Table.keys(V, t), t), k),
     Bools.Bool.when(
       Maybe<&2, V>,
-      Strings.has(Table.keys(V, t), k),
+      Shared.List.has(~String, ~String.eq, Table.keys(V, t), k),
       u => Table.get(V, t, k),
       u => None{}
     ),

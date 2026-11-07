@@ -1,4 +1,5 @@
 import Base
+import ../../shared/bytes.bend as Octets
 import ../../shared/uris.bend as Uris
 import ../core/spec.bend as Core
 
@@ -115,7 +116,7 @@ law Client.try_get_content:
   for c: Client
   for n: Core.Name
   for p: Core.Point
-  IO(Client & Reply<&2, Maybe<&2, List<&2, U32>>>)
+  IO(Client & Reply<&2, Maybe<&2, Octets.Bytes()>>)
 
 # what changed in the resource n from the point a to the point b
 law Client.try_get_diff:

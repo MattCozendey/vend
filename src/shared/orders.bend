@@ -248,12 +248,12 @@ def Order.fold_none.at(
   c: String,
   m: Maybe<&2, A>,
   ih: {
-    Strings.has(r, c) == False{}: Bool
+    Shared.List.has(~String, ~String.eq, r, c) == False{}: Bool
   } -> {Order.fold(~A, ~V, ~cmp, ~at, r, t, c, m) == m: Maybe<&2, A>}
 ) -> {
   String.eq(k, c) == hit: Bool
 } -> {
-  List.any.if(u => Strings.has(r, c), hit) == False{}: Bool
+  List.any.if(u => Shared.List.has(~String, ~String.eq, r, c), hit) == False{}: Bool
 } -> {
   Order.fold(~A, ~V, ~cmp, ~at, r, t, c, Order.step(~A, ~cmp, hit, at(t)(k), m)) == m: Maybe<&2, A>
 }:
@@ -289,7 +289,7 @@ def Order.fold_none(
   +c: String,
   +m: Maybe<&2, A>
 ) -> {
-  Strings.has(ks, c) == False{}: Bool
+  Shared.List.has(~String, ~String.eq, ks, c) == False{}: Bool
 } -> {Order.fold(~A, ~V, ~cmp, ~at, ks, t, c, m) == m: Maybe<&2, A>}:
   match ks:
     case Nil{}:
@@ -477,14 +477,14 @@ def Order.fold_some.at(
       == Order.join(~A, ~cmp, m, at(t)(c)): Maybe<&2, A>
   },
   ih: {
-    Strings.has(r, c) == True{}: Bool
+    Shared.List.has(~String, ~String.eq, r, c) == True{}: Bool
   } -> {
     Order.fold(~A, ~V, ~cmp, ~at, r, t, c, m) == Order.join(~A, ~cmp, m, at(t)(c)): Maybe<&2, A>
   }
 ) -> {
   String.eq(k, c) == hit: Bool
 } -> {
-  List.any.if(u => Strings.has(r, c), hit) == True{}: Bool
+  List.any.if(u => Shared.List.has(~String, ~String.eq, r, c), hit) == True{}: Bool
 } -> {
   Order.fold(
     ~A,
@@ -544,7 +544,7 @@ def Order.fold_some(
       == Order.join(~A, ~cmp, m, at(t)(c)): Maybe<&2, A>
   }
 ) -> {
-  Strings.has(ks, c) == True{}: Bool
+  Shared.List.has(~String, ~String.eq, ks, c) == True{}: Bool
 } -> {
   Order.fold(~A, ~V, ~cmp, ~at, ks, t, c, m) == Order.join(~A, ~cmp, m, at(t)(c)): Maybe<&2, A>
 }:
@@ -595,9 +595,11 @@ def Order.fold_all.at(
   +t: V,
   +c: String,
   +m: Maybe<&2, A>,
-  out: {Strings.has(ks, c) == False{}: Bool} -> {at(t)(c) == None{}: Maybe<&2, A>}
+  out: {
+    Shared.List.has(~String, ~String.eq, ks, c) == False{}: Bool
+  } -> {at(t)(c) == None{}: Maybe<&2, A>}
 ) -> {
-  Strings.has(ks, c) == held: Bool
+  Shared.List.has(~String, ~String.eq, ks, c) == held: Bool
 } -> {
   Order.fold(~A, ~V, ~cmp, ~at, ks, t, c, m) == Order.join(~A, ~cmp, m, at(t)(c)): Maybe<&2, A>
 }:
@@ -639,11 +641,25 @@ def Order.fold_all(
   t: V,
   +c: String,
   m: Maybe<&2, A>,
-  out: {Strings.has(ks, c) == False{}: Bool} -> {at(t)(c) == None{}: Maybe<&2, A>}
+  out: {
+    Shared.List.has(~String, ~String.eq, ks, c) == False{}: Bool
+  } -> {at(t)(c) == None{}: Maybe<&2, A>}
 ) -> {
   Order.fold(~A, ~V, ~cmp, ~at, ks, t, c, m) == Order.join(~A, ~cmp, m, at(t)(c)): Maybe<&2, A>
 }:
-  Order.fold_all.at(~A, ~V, ~cmp, ~at, refl, Strings.has(ks, c), ks, t, c, m, out)({==})
+  Order.fold_all.at(
+    ~A,
+    ~V,
+    ~cmp,
+    ~at,
+    refl,
+    Shared.List.has(~String, ~String.eq, ks, c),
+    ks,
+    t,
+    c,
+    m,
+    out
+  )({==})
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Order.join_comm when all three hold a value: by the orders c1 of o and p, c2
 # of o and q, and c3 of p and q

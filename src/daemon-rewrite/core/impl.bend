@@ -478,7 +478,10 @@ def Ver.named(ks: List<&2, String>, +vs: Tables.Table<Ver>, +k: String) -> Bool:
     case Nil{}:
       False{}
     case Con{j, r}:
-      Bool.or(Strings.has(History.parents(Tables.Table.get(Ver, vs, j)), k), Ver.named(r, vs, k))
+      Bool.or(
+        Shared.List.has(~String, ~String.eq, History.parents(Tables.Table.get(Ver, vs, j)), k),
+        Ver.named(r, vs, k)
+      )
 
 # the ID k is taken: vs holds a version with it, or a version that names it as
 # a parent, whose version lives on another node
@@ -512,7 +515,7 @@ def History.walk(
         case Nil{}:
           Nil{}
         case Con{+k, r}:
-          +w = History.next(k, r, done, vs, Strings.has(done, k))
+          +w = History.next(k, r, done, vs, Shared.List.has(~String, ~String.eq, done, k))
           List.append(
             &2,
             Tables.Row<Ver>,
@@ -999,7 +1002,12 @@ def Vers.first_in(vs: List<&2, Tables.Row<Ver>>, +ks: List<&2, String>) -> Maybe
     case Nil{}:
       None{}
     case Con{Tables.Row{+i, v}, r}:
-      List.find.if(String, i, u => Vers.first_in(r, ks), Strings.has(ks, i))
+      List.find.if(
+        String,
+        i,
+        u => Vers.first_in(r, ks),
+        Shared.List.has(~String, ~String.eq, ks, i)
+      )
 
 # what a three-way merge picks for one resource
 type Picked is Data:
@@ -1230,7 +1238,7 @@ def Merge.owner(
       match br:
         case Br{+h, o, e, c}:
           Merge.inside(
-            Strings.has(Vers.ids(History.of(St.versions(s), h)), f),
+            Shared.List.has(~String, ~String.eq, Vers.ids(History.of(St.versions(s), h)), f),
             s,
             r,
             w,
@@ -1447,7 +1455,17 @@ def Resolve.clash(
     case None{}:
       Out.same(s, Resolve.answer(Spec.Resolve.Refused{"no such conflict"}))
     case Some{Clash{b, h, f, bs, +l}}:
-      Resolve.named(Strings.has(l, n), s, r, w, t, k, n, x, Clash{b, h, f, bs, l})
+      Resolve.named(
+        Shared.List.has(~String, ~String.eq, l, n),
+        s,
+        r,
+        w,
+        t,
+        k,
+        n,
+        x,
+        Clash{b, h, f, bs, l}
+      )
 
 # the answer to a sync
 def Sync.answer(a: Spec.Sync) -> Spec.Answer:
@@ -1539,7 +1557,7 @@ def Sync.lost(
   +hb = Vers.blobs(vs, h)
   +lb = Vers.blobs(vs, l)
   Sync.lost.if(
-    Strings.has(Vers.ids(History.of(vs, h)), l),
+    Shared.List.has(~String, ~String.eq, Vers.ids(History.of(vs, h)), l),
     Names.differ(
       Strings.union(
         Tables.Table.keys(List<&2, U32>, lb),
@@ -4376,7 +4394,7 @@ def cf_owner(owner, taken, s, r, w, z, f, b, h, o, e, c, k):
       +h = h
       +f = f
       cf_inside(
-        Strings.has(Vers.ids(History.of(St.versions(s), h)), f),
+        Shared.List.has(~String, ~String.eq, Vers.ids(History.of(St.versions(s), h)), f),
         s,
         r,
         w,
@@ -4700,9 +4718,9 @@ law grp_all_has.at:
   for k: String
   (
     {
-      Strings.has(r, k) == True{}: Bool
+      Shared.List.has(~String, ~String.eq, r, k) == True{}: Bool
     } -> {
-      Reaches.Reach.found(
+      Shared.List.has(
         ~Spec.Member,
         ~Member.same,
         Grp.groups(r),
@@ -4711,11 +4729,11 @@ law grp_all_has.at:
         == True{}: Bool
     }
   ) -> {
-    List.any.if(u => Strings.has(r, k), hit) == True{}: Bool
+    List.any.if(u => Shared.List.has(~String, ~String.eq, r, k), hit) == True{}: Bool
   } -> {
-    Bool.or(
-      hit,
-      Reaches.Reach.found(~Spec.Member, ~Member.same, Grp.groups(r), Spec.Member.Group{k})
+    List.any.if(
+      u => Shared.List.has(~Spec.Member, ~Member.same, Grp.groups(r), Spec.Member.Group{k}),
+      hit
     )
       == True{}: Bool
   }
@@ -4732,9 +4750,9 @@ law grp_all_has:
   for ks: List<&2, String>
   for k: String
   {
-    Strings.has(ks, k) == True{}: Bool
+    Shared.List.has(~String, ~String.eq, ks, k) == True{}: Bool
   } -> {
-    Reaches.Reach.found(
+    Shared.List.has(
       ~Spec.Member,
       ~Member.same,
       Grp.groups(ks),
@@ -4760,15 +4778,9 @@ law grp_live.at:
   {
     Tables.Table.get(Grp, gs, k) == mg: Maybe<&2, Grp>
   } -> {
-    Reaches.Reach.found(~Spec.Member, ~Member.same, Grp.members.in(mg), q) == True{}: Bool
+    Shared.List.has(~Spec.Member, ~Member.same, Grp.members.in(mg), q) == True{}: Bool
   } -> {
-    Reaches.Reach.found(
-      ~Spec.Member,
-      ~Member.same,
-      Grp.all(gs),
-      Spec.Member.Group{k}
-    )
-      == True{}: Bool
+    Shared.List.has(~Spec.Member, ~Member.same, Grp.all(gs), Spec.Member.Group{k}) == True{}: Bool
   }
 
 def grp_live.at(mg, gs, k, q):
@@ -4776,7 +4788,7 @@ def grp_live.at(mg, gs, k, q):
     case None{}:
       e => h => Empty.absurd(
         {
-          Reaches.Reach.found(
+          Shared.List.has(
             ~Spec.Member,
             ~Member.same,
             Grp.all(gs),
@@ -4796,7 +4808,7 @@ def grp_live.at(mg, gs, k, q):
         )(
           Equal.trans(
             Bool,
-            Strings.has(Tables.Table.keys(Grp, gs), k),
+            Shared.List.has(~String, ~String.eq, Tables.Table.keys(Grp, gs), k),
             Maybe.is_some(&2, Grp, Tables.Table.get(Grp, gs, k)),
             True{},
             Tables.Table.keys_get(Grp, gs, k),
@@ -4817,15 +4829,15 @@ law grp_live:
   for p: Spec.Member
   for q: Spec.Member
   {
-    Reaches.Reach.found(~Spec.Member, ~Member.same, Grp.members.of(gs, p), q) == True{}: Bool
-  } -> {Reaches.Reach.found(~Spec.Member, ~Member.same, Grp.all(gs), p) == True{}: Bool}
+    Shared.List.has(~Spec.Member, ~Member.same, Grp.members.of(gs, p), q) == True{}: Bool
+  } -> {Shared.List.has(~Spec.Member, ~Member.same, Grp.all(gs), p) == True{}: Bool}
 
 def grp_live(gs, p, q):
   match p:
     case Spec.Member.Node{n}:
       h => Empty.absurd(
         {
-          Reaches.Reach.found(
+          Shared.List.has(
             ~Spec.Member,
             ~Member.same,
             Grp.all(gs),
@@ -4931,7 +4943,7 @@ def sg_on(cycle, s, g, m, ms, x):
           Tables.Table.set(Grp, St.groups(s), g, Grp{m <> ms, Grp.epoch.next(St.groups(s), g)}),
           m
         )((
-            %Equal.sym(Bool, Member.same(m, m), True{}, member_same_refl(m)): {Bool.or(_, Reaches.Reach.found(~Spec.Member, ~Member.same, ms, m)) == True{}: Bool}
+            %Equal.sym(Bool, Member.same(m, m), True{}, member_same_refl(m)): {List.any.if(u => Shared.List.has(~Spec.Member, ~Member.same, ms, m), _) == True{}: Bool}
             {==}))({==})
 
 # Write.at keeps the groups
@@ -5282,7 +5294,7 @@ def grp_kept.Merge.owner(
       match br:
         case Br{+h, o, e, c}:
           grp_kept.Merge.inside(
-            Strings.has(Vers.ids(History.of(St.versions(s), h)), f),
+            Shared.List.has(~String, ~String.eq, Vers.ids(History.of(St.versions(s), h)), f),
             s,
             r,
             w,
@@ -5487,7 +5499,17 @@ def grp_kept.Resolve.clash(
     case None{}:
       {==}
     case Some{Clash{b, h, f, bs, +l}}:
-      grp_kept.Resolve.named(Strings.has(l, n), s, r, w, t, k, n, x, Clash{b, h, f, bs, l})
+      grp_kept.Resolve.named(
+        Shared.List.has(~String, ~String.eq, l, n),
+        s,
+        r,
+        w,
+        t,
+        k,
+        n,
+        x,
+        Clash{b, h, f, bs, l}
+      )
 
 # no member of gs is inside itself
 def Grp.Acyclic(gs: Tables.Table<Grp>) -> Type:
@@ -7377,7 +7399,7 @@ law collides_at.at:
     {
       Sync.collides(r, os, vs) == False{}: Bool
     } -> {
-      Strings.has(r, k) == True{}: Bool
+      Shared.List.has(~String, ~String.eq, r, k) == True{}: Bool
     } -> {
       Sync.clash.at(Tables.Table.get(Ver, vs, k), Tables.Table.get(Ver, os, k)) == False{}: Bool
     }
@@ -7390,7 +7412,7 @@ law collides_at.at:
     )
       == False{}: Bool
   } -> {
-    List.any.if(u => Strings.has(r, k), hit) == True{}: Bool
+    List.any.if(u => Shared.List.has(~String, ~String.eq, r, k), hit) == True{}: Bool
   } -> {Sync.clash.at(Tables.Table.get(Ver, vs, k), Tables.Table.get(Ver, os, k)) == False{}: Bool}
 
 def collides_at.at(hit, j, r, os, vs, k):
@@ -7433,7 +7455,7 @@ law collides_at:
   {
     Sync.collides(ks, os, vs) == False{}: Bool
   } -> {
-    Strings.has(ks, k) == True{}: Bool
+    Shared.List.has(~String, ~String.eq, ks, k) == True{}: Bool
   } -> {Sync.clash.at(Tables.Table.get(Ver, vs, k), Tables.Table.get(Ver, os, k)) == False{}: Bool}
 
 def collides_at(ks, os, vs, k):
@@ -7513,7 +7535,7 @@ def compat_of.at(mb, bs, as, k):
         +k = k
         compat_mine(Tables.Table.get(Ver, as, k), v)((
             %hm: {Sync.clash.at(Tables.Table.get(Ver, as, k), _) == False{}: Bool}
-            collides_at(Tables.Table.keys(Ver, bs), bs, as, k)(hc)(Equal.trans(Bool, Strings.has(Tables.Table.keys(Ver, bs), k), Maybe.is_some(&2, Ver, Tables.Table.get(Ver, bs, k)), True{}, Tables.Table.keys_get(Ver, bs, k), Equal.cong(Maybe<&2, Ver>, Bool, z => Maybe.is_some(&2, Ver, z), Tables.Table.get(Ver, bs, k), Some{v}, hm)))))
+            collides_at(Tables.Table.keys(Ver, bs), bs, as, k)(hc)(Equal.trans(Bool, Shared.List.has(~String, ~String.eq, Tables.Table.keys(Ver, bs), k), Maybe.is_some(&2, Ver, Tables.Table.get(Ver, bs, k)), True{}, Tables.Table.keys_get(Ver, bs, k), Equal.cong(Maybe<&2, Ver>, Bool, z => Maybe.is_some(&2, Ver, z), Tables.Table.get(Ver, bs, k), Some{v}, hm)))))
 
 # when a sync found no collision, versions under the same ID hold the same
 # bytes for each resource
@@ -8290,11 +8312,11 @@ def sync_branches_find(full, vs, acc, c):
         Equal.trans(
           Bool,
           Maybe.is_some(&2, Br, Tables.Table.get(Br, full, c)),
-          Strings.has(Tables.Table.keys(Br, full), c),
+          Shared.List.has(~String, ~String.eq, Tables.Table.keys(Br, full), c),
           False{},
           Equal.sym(
             Bool,
-            Strings.has(Tables.Table.keys(Br, full), c),
+            Shared.List.has(~String, ~String.eq, Tables.Table.keys(Br, full), c),
             Maybe.is_some(&2, Br, Tables.Table.get(Br, full, c)),
             Tables.Table.keys_get(Br, full, c)
           ),
@@ -9261,11 +9283,11 @@ def marks_in_all(hb, inner, qm, mv):
             Equal.trans(
               Bool,
               Maybe.is_some(&2, MarkAt, Tables.Table.get(MarkAt, inner, qm)),
-              Strings.has(Tables.Table.keys(MarkAt, inner), qm),
+              Shared.List.has(~String, ~String.eq, Tables.Table.keys(MarkAt, inner), qm),
               False{},
               Equal.sym(
                 Bool,
-                Strings.has(Tables.Table.keys(MarkAt, inner), qm),
+                Shared.List.has(~String, ~String.eq, Tables.Table.keys(MarkAt, inner), qm),
                 Maybe.is_some(&2, MarkAt, Tables.Table.get(MarkAt, inner, qm)),
                 Tables.Table.keys_get(MarkAt, inner, qm)
               ),
@@ -9490,11 +9512,16 @@ def marks_sync_find(full, ms, ns, qb, qm):
               Tables.Table<MarkAt>,
               Tables.Table.get(Tables.Table<MarkAt>, full, qb)
             ),
-            Strings.has(Tables.Table.keys(Tables.Table<MarkAt>, full), qb),
+            Shared.List.has(~String, ~String.eq, Tables.Table.keys(Tables.Table<MarkAt>, full), qb),
             False{},
             Equal.sym(
               Bool,
-              Strings.has(Tables.Table.keys(Tables.Table<MarkAt>, full), qb),
+              Shared.List.has(
+                ~String,
+                ~String.eq,
+                Tables.Table.keys(Tables.Table<MarkAt>, full),
+                qb
+              ),
               Maybe.is_some(
                 &2,
                 Tables.Table<MarkAt>,
@@ -13095,7 +13122,7 @@ law walk_one:
   for w0: String
   for t0: String
   {
-    Strings.has(done, k) == False{}: Bool
+    Shared.List.has(~String, ~String.eq, done, k) == False{}: Bool
   } -> {
     Tables.Table.get(Ver, vs, k) == Some{Ver{b, ps, w0, t0}}: Maybe<&2, Ver>
   } -> {
@@ -13117,7 +13144,7 @@ def walk_one(g, k, r, done, vs, b, ps, w0, t0):
     +vs = vs
     %Equal.sym(
       Bool,
-      Strings.has(done, k),
+      Shared.List.has(~String, ~String.eq, done, k),
       False{},
       hd
     ): {
@@ -13195,7 +13222,7 @@ def hist_two(f, a, bb, xb, xw, xt, yb, yp, yw, yt, vs):
         History.walk(1n+f, [bb], [a], vs),
         Tables.Row{bb, Ver{yb, yp, yw, yt}} <> History.walk(f, yp, [bb, a], vs),
         walk_one(f, bb, [], [a], vs, yb, yp, yw, yt)((
-            %Equal.sym(Bool, String.eq(a, bb), False{}, hab): {List.any.if(u => Strings.has([], bb), _) == False{}: Bool}
+            %Equal.sym(Bool, String.eq(a, bb), False{}, hab): {List.any.if(u => Shared.List.has(~String, ~String.eq, [], bb), _) == False{}: Bool}
             {==}))(hb)
       )
     )
@@ -13209,9 +13236,9 @@ law first_two:
   for rest: List<&2, Tables.Row<Ver>>
   for ids: List<&2, String>
   {
-    Strings.has(ids, a) == False{}: Bool
+    Shared.List.has(~String, ~String.eq, ids, a) == False{}: Bool
   } -> {
-    Strings.has(ids, bb) == True{}: Bool
+    Shared.List.has(~String, ~String.eq, ids, bb) == True{}: Bool
   } -> {
     Vers.first_in(
       Tables.Row{a, x} <> (Tables.Row{bb, y} <> rest),
@@ -13227,7 +13254,7 @@ def first_two(a, bb, x, y, rest, ids):
     +bb = bb
     %Equal.sym(
       Bool,
-      Strings.has(ids, a),
+      Shared.List.has(~String, ~String.eq, ids, a),
       False{},
       ha
     ): {
@@ -13241,7 +13268,7 @@ def first_two(a, bb, x, y, rest, ids):
     }
     %Equal.sym(
       Bool,
-      Strings.has(ids, bb),
+      Shared.List.has(~String, ~String.eq, ids, bb),
       True{},
       hb
     ): {List.find.if(String, bb, u => Vers.first_in(rest, ids), _) == Some{bb}: Maybe<&2, String>}
@@ -13256,7 +13283,15 @@ law ids_second:
   for rest: List<&2, Tables.Row<Ver>>
   {
     String.eq(a, bb) == False{}: Bool
-  } -> {Strings.has(Vers.ids(Tables.Row{a, x} <> (Tables.Row{bb, y} <> rest)), bb) == True{}: Bool}
+  } -> {
+    Shared.List.has(
+      ~String,
+      ~String.eq,
+      Vers.ids(Tables.Row{a, x} <> (Tables.Row{bb, y} <> rest)),
+      bb
+    )
+      == True{}: Bool
+  }
 
 def ids_second(a, bb, x, y, rest):
   e =>
@@ -13267,13 +13302,21 @@ def ids_second(a, bb, x, y, rest):
       String.eq(a, bb),
       False{},
       e
-    ): {List.any.if(u => Strings.has(bb <> Vers.ids(rest), bb), _) == True{}: Bool}
+    ): {
+      List.any.if(
+        u => Shared.List.has(~String, ~String.eq, bb <> Vers.ids(rest), bb),
+        _
+      )
+        == True{}: Bool
+    }
     %Equal.sym(
       Bool,
       String.eq(bb, bb),
       True{},
       Strings.String.eq_refl(bb)
-    ): {List.any.if(u => Strings.has(Vers.ids(rest), bb), _) == True{}: Bool}
+    ): {
+      List.any.if(u => Shared.List.has(~String, ~String.eq, Vers.ids(rest), bb), _) == True{}: Bool
+    }
     {==}
 
 # a version found after adding one with another ID is the one found before
@@ -13325,15 +13368,37 @@ law named_at.at:
   for k: String
   (
     {
-      Strings.has(r, k) == True{}: Bool
-    } -> {Strings.has(History.parents(Tables.Table.get(Ver, vs, k)), x) == False{}: Bool}
+      Shared.List.has(~String, ~String.eq, r, k) == True{}: Bool
+    } -> {
+      Shared.List.has(
+        ~String,
+        ~String.eq,
+        History.parents(Tables.Table.get(Ver, vs, k)),
+        x
+      )
+        == False{}: Bool
+    }
   ) -> {
     String.eq(j, k) == hit: Bool
   } -> {
-    Strings.has(History.parents(Tables.Table.get(Ver, vs, j)), x) == False{}: Bool
+    Shared.List.has(
+      ~String,
+      ~String.eq,
+      History.parents(Tables.Table.get(Ver, vs, j)),
+      x
+    )
+      == False{}: Bool
   } -> {
-    List.any.if(u => Strings.has(r, k), hit) == True{}: Bool
-  } -> {Strings.has(History.parents(Tables.Table.get(Ver, vs, k)), x) == False{}: Bool}
+    List.any.if(u => Shared.List.has(~String, ~String.eq, r, k), hit) == True{}: Bool
+  } -> {
+    Shared.List.has(
+      ~String,
+      ~String.eq,
+      History.parents(Tables.Table.get(Ver, vs, k)),
+      x
+    )
+      == False{}: Bool
+  }
 
 def named_at.at(hit, j, r, vs, x, k):
   match hit:
@@ -13342,7 +13407,17 @@ def named_at.at(hit, j, r, vs, x, k):
         %Strings.String.eq_sound(
           j,
           k
-        )(e): {Strings.has(History.parents(Tables.Table.get(Ver, vs, _)), x) == False{}: Bool}
+        )(
+          e
+        ): {
+          Shared.List.has(
+            ~String,
+            ~String.eq,
+            History.parents(Tables.Table.get(Ver, vs, _)),
+            x
+          )
+            == False{}: Bool
+        }
         h0
     case False{}:
       ih => e => h0 => hk => ih(hk)
@@ -13357,14 +13432,30 @@ law named_at:
   {
     Ver.named(ks, vs, x) == False{}: Bool
   } -> {
-    Strings.has(ks, k) == True{}: Bool
-  } -> {Strings.has(History.parents(Tables.Table.get(Ver, vs, k)), x) == False{}: Bool}
+    Shared.List.has(~String, ~String.eq, ks, k) == True{}: Bool
+  } -> {
+    Shared.List.has(
+      ~String,
+      ~String.eq,
+      History.parents(Tables.Table.get(Ver, vs, k)),
+      x
+    )
+      == False{}: Bool
+  }
 
 def named_at(ks, vs, x, k):
   match ks:
     case Nil{}:
       hn => hk => Empty.absurd(
-        {Strings.has(History.parents(Tables.Table.get(Ver, vs, k)), x) == False{}: Bool},
+        {
+          Shared.List.has(
+            ~String,
+            ~String.eq,
+            History.parents(Tables.Table.get(Ver, vs, k)),
+            x
+          )
+            == False{}: Bool
+        },
         Shared.Bool.false_ne_true(hk)
       )
     case Con{+j, +r}:
@@ -13387,7 +13478,12 @@ def named_at(ks, vs, x, k):
             k
           )(
             Bools.Bool.or_false_right(
-              Strings.has(History.parents(Tables.Table.get(Ver, vs, j)), x),
+              Shared.List.has(
+                ~String,
+                ~String.eq,
+                History.parents(Tables.Table.get(Ver, vs, j)),
+                x
+              ),
               Ver.named(r, vs, x)
             )(hn)
           )
@@ -13395,7 +13491,7 @@ def named_at(ks, vs, x, k):
           {==}
         )(
           Bools.Bool.or_false_left(
-            Strings.has(History.parents(Tables.Table.get(Ver, vs, j)), x),
+            Shared.List.has(~String, ~String.eq, History.parents(Tables.Table.get(Ver, vs, j)), x),
             Ver.named(r, vs, x)
           )(hn)
         )
@@ -13416,11 +13512,13 @@ law avoid_at:
       String> -> @d2: List<
       &2,
       String> -> {
-      Strings.has(ks2, x) == False{}: Bool
+      Shared.List.has(~String, ~String.eq, ks2, x) == False{}: Bool
     } -> {
       Ver.named(Tables.Table.keys(Ver, v2s), v2s, x) == False{}: Bool
     } -> {
-      Strings.has(
+      Shared.List.has(
+        ~String,
+        ~String.eq,
         Vers.ids(History.walk(g, ks2, d2, Ver.add([Tables.Row{x, xv}], v2s))),
         x
       )
@@ -13431,11 +13529,13 @@ law avoid_at:
   } -> {
     String.eq(k, x) == False{}: Bool
   } -> {
-    Strings.has(r, x) == False{}: Bool
+    Shared.List.has(~String, ~String.eq, r, x) == False{}: Bool
   } -> {
     Ver.named(Tables.Table.keys(Ver, v2s), v2s, x) == False{}: Bool
   } -> {
-    Strings.has(
+    Shared.List.has(
+      ~String,
+      ~String.eq,
       Vers.ids(
         List.append(
           &2,
@@ -13472,7 +13572,9 @@ def avoid_at(mv, g, k, r, done, x, xv, v2s):
           hk
         ): {
           List.any.if(
-            u => Strings.has(
+            u => Shared.List.has(
+              ~String,
+              ~String.eq,
               Vers.ids(
                 History.walk(
                   g,
@@ -13487,9 +13589,13 @@ def avoid_at(mv, g, k, r, done, x, xv, v2s):
           )
             == False{}: Bool
         }
-        ih(List.append(&2, String, r, ps))(k <> done)(Strings.has_append_false(r, ps, x)(hr)((
-              %e: {Strings.has(History.parents(_), x) == False{}: Bool}
-              named_at(Tables.Table.keys(Ver, v2s), v2s, x, k)(hn)(Equal.trans(Bool, Strings.has(Tables.Table.keys(Ver, v2s), k), Maybe.is_some(&2, Ver, Tables.Table.get(Ver, v2s, k)), True{}, Tables.Table.keys_get(Ver, v2s, k), Equal.cong(Maybe<&2, Ver>, Bool, z => Maybe.is_some(&2, Ver, z), Tables.Table.get(Ver, v2s, k), Some{Ver{b, ps, a, t}}, e))))))(hn)
+        ih(
+          List.append(&2, String, r, ps)
+        )(k <> done)(Shared.List.has_append_false(~String, ~String.eq, r, ps, x)(hr)((
+              %e: {Shared.List.has(~String, ~String.eq, History.parents(_), x) == False{}: Bool}
+              named_at(Tables.Table.keys(Ver, v2s), v2s, x, k)(hn)(Equal.trans(Bool, Shared.List.has(~String, ~String.eq, Tables.Table.keys(Ver, v2s), k), Maybe.is_some(&2, Ver, Tables.Table.get(Ver, v2s, k)), True{}, Tables.Table.keys_get(Ver, v2s, k), Equal.cong(Maybe<&2, Ver>, Bool, z => Maybe.is_some(&2, Ver, z), Tables.Table.get(Ver, v2s, k), Some{Ver{b, ps, a, t}}, e))))))(
+          hn
+        )
 
 # walk_avoid at a version k, by whether the walk saw it (was)
 law avoid_was:
@@ -13507,22 +13613,26 @@ law avoid_was:
       String> -> @d2: List<
       &2,
       String> -> {
-      Strings.has(ks2, x) == False{}: Bool
+      Shared.List.has(~String, ~String.eq, ks2, x) == False{}: Bool
     } -> {
       Ver.named(Tables.Table.keys(Ver, v2s), v2s, x) == False{}: Bool
     } -> {
-      Strings.has(
+      Shared.List.has(
+        ~String,
+        ~String.eq,
         Vers.ids(History.walk(g, ks2, d2, Ver.add([Tables.Row{x, xv}], v2s))),
         x
       )
         == False{}: Bool
     }
   ) -> {
-    Strings.has(k <> r, x) == False{}: Bool
+    Shared.List.has(~String, ~String.eq, k <> r, x) == False{}: Bool
   } -> {
     Ver.named(Tables.Table.keys(Ver, v2s), v2s, x) == False{}: Bool
   } -> {
-    Strings.has(
+    Shared.List.has(
+      ~String,
+      ~String.eq,
       Vers.ids(
         List.append(
           &2,
@@ -13555,8 +13665,8 @@ def avoid_was(was, g, k, r, done, x, xv, v2s):
         )(
           Pair.snd(
             {String.eq(k, x) == False{}: Bool},
-            {Strings.has(r, x) == False{}: Bool},
-            Strings.has_cons_false(k, r, x)(hk)
+            {Shared.List.has(~String, ~String.eq, r, x) == False{}: Bool},
+            Shared.List.has_cons_false(~String, ~String.eq, k, r, x)(hk)
           )
         )(hn)
     case False{}:
@@ -13583,14 +13693,16 @@ def avoid_was(was, g, k, r, done, x, xv, v2s):
             )(
               Pair.fst(
                 {String.eq(k, x) == False{}: Bool},
-                {Strings.has(r, x) == False{}: Bool},
-                Strings.has_cons_false(k, r, x)(hk)
+                {Shared.List.has(~String, ~String.eq, r, x) == False{}: Bool},
+                Shared.List.has_cons_false(~String, ~String.eq, k, r, x)(hk)
               )
             )
           )
         ):
           {
-            Strings.has(
+            Shared.List.has(
+              ~String,
+              ~String.eq,
               Vers.ids(
                 List.append(
                   &2,
@@ -13624,14 +13736,14 @@ def avoid_was(was, g, k, r, done, x, xv, v2s):
         )(
           Pair.fst(
             {String.eq(k, x) == False{}: Bool},
-            {Strings.has(r, x) == False{}: Bool},
-            Strings.has_cons_false(k, r, x)(hk)
+            {Shared.List.has(~String, ~String.eq, r, x) == False{}: Bool},
+            Shared.List.has_cons_false(~String, ~String.eq, k, r, x)(hk)
           )
         )(
           Pair.snd(
             {String.eq(k, x) == False{}: Bool},
-            {Strings.has(r, x) == False{}: Bool},
-            Strings.has_cons_false(k, r, x)(hk)
+            {Shared.List.has(~String, ~String.eq, r, x) == False{}: Bool},
+            Shared.List.has_cons_false(~String, ~String.eq, k, r, x)(hk)
           )
         )(hn)
 
@@ -13645,11 +13757,13 @@ law walk_avoid:
   for xv: Ver
   for v2s: Tables.Table<Ver>
   {
-    Strings.has(ks, x) == False{}: Bool
+    Shared.List.has(~String, ~String.eq, ks, x) == False{}: Bool
   } -> {
     Ver.named(Tables.Table.keys(Ver, v2s), v2s, x) == False{}: Bool
   } -> {
-    Strings.has(
+    Shared.List.has(
+      ~String,
+      ~String.eq,
       Vers.ids(History.walk(f, ks, done, Ver.add([Tables.Row{x, xv}], v2s))),
       x
     )
@@ -13663,10 +13777,12 @@ def walk_avoid.g1(
   +x: String,
   +xv: Ver,
   +v2s: Tables.Table<Ver>,
-  x1: {Strings.has(ks, x) == False{}: Bool},
+  x1: {Shared.List.has(~String, ~String.eq, ks, x) == False{}: Bool},
   x2: {Ver.named(Tables.Table.keys(Ver, v2s), v2s, x) == False{}: Bool}
 ) -> {
-  Strings.has(
+  Shared.List.has(
+    ~String,
+    ~String.eq,
     Vers.ids(History.walk(f, ks, done, Ver.add([Tables.Row{x, xv}], v2s))),
     x
   )
@@ -13681,7 +13797,7 @@ def walk_avoid.g1(
           {==}
         case Con{head, tail}:
           avoid_was(
-            Strings.has(done, head),
+            Shared.List.has(~String, ~String.eq, done, head),
             fp,
             head,
             tail,
@@ -13728,7 +13844,7 @@ def links_two(
   ks: List<&2, String>,
   +vs: Tables.Table<Ver>,
   k: String
-) -> {Strings.has(ks, k) == True{}: Bool} -> &f:
+) -> {Shared.List.has(~String, ~String.eq, ks, k) == True{}: Bool} -> &f:
   Nat -> {History.links(ks, vs) == 1n+1n+f: Nat}:
   match ks:
     case Nil{}:
@@ -14428,7 +14544,7 @@ law blobs_get.at:
   for x2: List<&2, U32>
   (
     {
-      Strings.has(r, q) == True{}: Bool
+      Shared.List.has(~String, ~String.eq, r, q) == True{}: Bool
     } -> {
       Tables.Table.get(
         List<&2, U32>,
@@ -14453,7 +14569,7 @@ law blobs_get.at:
     )
       == Picked.Take{Some{y}}: Picked
   } -> {
-    List.any.if(u => Strings.has(r, q), hit) == True{}: Bool
+    List.any.if(u => Shared.List.has(~String, ~String.eq, r, q), hit) == True{}: Bool
   } -> {
     Tables.Table.get(
       List<&2, U32>,
@@ -14634,7 +14750,7 @@ law blobs_get:
     )
       == Picked.Take{Some{y}}: Picked
   } -> {
-    Strings.has(ns, q) == True{}: Bool
+    Shared.List.has(~String, ~String.eq, ns, q) == True{}: Bool
   } -> {
     Tables.Table.get(
       List<&2, U32>,
@@ -17031,8 +17147,10 @@ def mdk_fin(
     )
     +hav = Equal.trans(
       Bool,
-      Strings.has(Vers.ids(History.of(St.versions(s3), r2)), r3),
-      Strings.has(
+      Shared.List.has(~String, ~String.eq, Vers.ids(History.of(St.versions(s3), r2)), r3),
+      Shared.List.has(
+        ~String,
+        ~String.eq,
         Vers.ids(
           History.of(
             Ver.add(
@@ -17058,7 +17176,7 @@ def mdk_fin(
       Equal.cong(
         Tables.Table<Ver>,
         Bool,
-        y => Strings.has(Vers.ids(History.of(y, r2)), r3),
+        y => Shared.List.has(~String, ~String.eq, Vers.ids(History.of(y, r2)), r3),
         St.versions(s3),
         Ver.add(
           [
@@ -17121,7 +17239,9 @@ def mdk_fin(
           String.eq(r2, r3),
           False{},
           er2r3
-        ): {List.any.if(u => Strings.has([], r3), _) == False{}: Bool}; {==})
+        ): {
+          List.any.if(u => Shared.List.has(~String, ~String.eq, [], r3), _) == False{}: Bool
+        }; {==})
       )(
         Bools.Bool.or_false_right(
           Ver.has(St.versions(s2), r3),
@@ -17131,7 +17251,7 @@ def mdk_fin(
     )
     +hk3 = Equal.trans(
       Bool,
-      Strings.has(Tables.Table.keys(Ver, St.versions(s3)), r3),
+      Shared.List.has(~String, ~String.eq, Tables.Table.keys(Ver, St.versions(s3)), r3),
       Maybe.is_some(&2, Ver, Tables.Table.get(Ver, St.versions(s3), r3)),
       True{},
       Tables.Table.keys_get(Ver, St.versions(s3), r3),
@@ -17322,8 +17442,10 @@ def mdk_fin(
     )
     +hids = Equal.trans(
       Bool,
-      Strings.has(Vers.ids(History.of(St.versions(s3), r2)), v0),
-      Strings.has(
+      Shared.List.has(~String, ~String.eq, Vers.ids(History.of(St.versions(s3), r2)), v0),
+      Shared.List.has(
+        ~String,
+        ~String.eq,
         Vers.ids(
           Tables.Row{
             r2,
@@ -17344,7 +17466,7 @@ def mdk_fin(
       Equal.cong(
         List<&2, Tables.Row<Ver>>,
         Bool,
-        y => Strings.has(Vers.ids(y), v0),
+        y => Shared.List.has(~String, ~String.eq, Vers.ids(y), v0),
         History.of(St.versions(s3), r2),
         Tables.Row{
           r2,
@@ -17687,7 +17809,7 @@ def mdk_fin(
                 Bool,
                 Out,
                 y => Merge.inside(y, s3, r4, w4, z4, r3, b, Br{r2, o, e, 1n+k}),
-                Strings.has(Vers.ids(History.of(St.versions(s3), r2)), r3),
+                Shared.List.has(~String, ~String.eq, Vers.ids(History.of(St.versions(s3), r2)), r3),
                 False{},
                 hav
               ),
@@ -18368,7 +18490,9 @@ def mdk_fin(
         )(
           Equal.trans(
             Bool,
-            Strings.has(
+            Shared.List.has(
+              ~String,
+              ~String.eq,
               Tables.Table.keys(List<&2, U32>, Tables.Table.set(List<&2, U32>, yb, n1, x1)),
               n1
             ),
@@ -18412,7 +18536,9 @@ def mdk_fin(
       )(
         Equal.trans(
           Bool,
-          Strings.has(
+          Shared.List.has(
+            ~String,
+            ~String.eq,
             Tables.Table.keys(List<&2, U32>, Tables.Table.set(List<&2, U32>, yb, n2, x2)),
             n2
           ),
@@ -19259,7 +19385,7 @@ def mdk_core(
     )
     +hk3 = Equal.trans(
       Bool,
-      Strings.has(Tables.Table.keys(Ver, St.versions(s3)), r3),
+      Shared.List.has(~String, ~String.eq, Tables.Table.keys(Ver, St.versions(s3)), r3),
       Maybe.is_some(&2, Ver, Tables.Table.get(Ver, St.versions(s3), r3)),
       True{},
       Tables.Table.keys_get(Ver, St.versions(s3), r3),

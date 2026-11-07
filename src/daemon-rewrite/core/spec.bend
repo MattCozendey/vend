@@ -1,8 +1,9 @@
 import Base
+import ../../shared/bytes.bend as Octets
 
 # The pure core of a Vend Node: what it holds, what it answers, and the laws
 # about both. transport/spec.bend carries it over IO as the public API
-# (README, Public API). Bytes are List<&2, U32>, as in Base.
+# (README, Public API).
 
 # Names
 # -----
@@ -228,7 +229,7 @@ type Point is Data:
 
 # new content: bytes, or the content of an old version
 type Content is Data:
-  Content.Bytes{bytes: List<&2, U32>}
+  Content.Bytes{bytes: Octets.Bytes()}
   Content.Of{version: Version}
 
 # who asks for a change, and when: what a pure step records with it
@@ -465,7 +466,7 @@ law Node.get_content:
   for s: Node.State
   for n: Name
   for p: Point
-  Maybe<&2, List<&2, U32>>
+  Maybe<&2, Octets.Bytes()>
 
 # what changed in the resource n from the point a to the point b
 law Node.get_diff:
@@ -566,7 +567,7 @@ law Node.is_inside:
 # a and b hold the same content, for every resource at every point
 def Node.SameContent(a: Node.State, b: Node.State) -> Type:
   @n: Name -> @p: Point -> {
-    Node.get_content(a, n, p) == Node.get_content(b, n, p): Maybe<&2, List<&2, U32>>
+    Node.get_content(a, n, p) == Node.get_content(b, n, p): Maybe<&2, Octets.Bytes()>
   }
 
 # a change keeps every version that existed, with its content
@@ -578,12 +579,12 @@ law history_kept:
   for a: Answer
   for n: Name
   for v: Version
-  for x: List<&2, U32>
+  for x: Octets.Bytes()
   {
     Node.ask(s, e, q) == (t, a): Node.State & Answer
   } -> {
-    Node.get_content(s, n, Point.At{v}) == Some{x}: Maybe<&2, List<&2, U32>>
-  } -> {Node.get_content(t, n, Point.At{v}) == Some{x}: Maybe<&2, List<&2, U32>>}
+    Node.get_content(s, n, Point.At{v}) == Some{x}: Maybe<&2, Octets.Bytes()>
+  } -> {Node.get_content(t, n, Point.At{v}) == Some{x}: Maybe<&2, Octets.Bytes()>}
 
 # a change sent again with the same request ID gives the same answer and
 # changes nothing more
@@ -609,7 +610,7 @@ law write_at_head_is_written:
   for n: Name
   for b: Branch
   for v: Version
-  for x: List<&2, U32>
+  for x: Octets.Bytes()
   exs t: Node.State
   exs u: Version
   {
@@ -635,7 +636,7 @@ law read_after_write:
   for n: Name
   for b: Branch
   for base: Maybe<&2, Version>
-  for x: List<&2, U32>
+  for x: Octets.Bytes()
   for t: Node.State
   for v: Version
   {
@@ -648,7 +649,7 @@ law read_after_write:
     )
       == (t, Answer.Write{Write.Written{v}}): Node.State
       & Answer
-  } -> {Node.get_content(t, n, Point.Head{b}) == Some{x}: Maybe<&2, List<&2, U32>>}
+  } -> {Node.get_content(t, n, Point.Head{b}) == Some{x}: Maybe<&2, Octets.Bytes()>}
 
 # a stale write changes no content, and its base is not the current version
 law stale_changes_nothing:
@@ -692,8 +693,8 @@ law merge_disjoint_keeps_both:
   for n2: Name
   for base1: Maybe<&2, Version>
   for base2: Maybe<&2, Version>
-  for x1: List<&2, U32>
-  for x2: List<&2, U32>
+  for x1: Octets.Bytes()
+  for x2: Octets.Bytes()
   for v0: Version
   for v1: Version
   for v2: Version
@@ -737,8 +738,8 @@ law merge_disjoint_keeps_both:
   } -> {
     a4 == Answer.Merge{Merge.Merged{v3}}: Answer
   }
-    & {Node.get_content(s4, n1, Point.Head{b}) == Some{x1}: Maybe<&2, List<&2, U32>>}
-    & {Node.get_content(s4, n2, Point.Head{b}) == Some{x2}: Maybe<&2, List<&2, U32>>}
+    & {Node.get_content(s4, n1, Point.Head{b}) == Some{x1}: Maybe<&2, Octets.Bytes()>}
+    & {Node.get_content(s4, n2, Point.Head{b}) == Some{x2}: Maybe<&2, Octets.Bytes()>}
 
 # a merge that conflicts changes no content, and stores the conflict as the
 # one new conflict notice of the branch
