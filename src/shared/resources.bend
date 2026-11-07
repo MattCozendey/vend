@@ -1,5 +1,6 @@
 import Base
 import ./bools.bend as Bools
+import ./shared.bend as Shared
 import ./texts.bend as Texts
 import ./uris.bend as Uris
 
@@ -10,47 +11,122 @@ import ./uris.bend as Uris
 # glob-module path (Glob.is_path); this file may import only Base, so the
 # places that make names (the core and the views) check it.
 
-# A resource name: the space id, and the path inside the space. Two
-# resources are the same exactly when their names are.
+# A resource name is its text, "<space>:<path>": the space is the text up to
+# its first ':', the path is the rest. Two resources are the same exactly when
+# their names are, and two names are one name exactly when their texts are.
 type Name is Data:
-  Name{space: String, path: String}
+  Name{text: String}
+# the text of n
+def Name.show(n: Name) -> String:
+  match n:
+    case Name{t}:
+      t
+# the space in the cut c of the text t: t itself when it has no ':'
+def Name.space.cut(c: Maybe<&2, Texts.Cut>, t: String) -> String:
+  match c:
+    case None{}:
+      t
+    case Some{Texts.Cut{sp, p}}:
+      sp
 # the space of n
 def Name.space(n: Name) -> String:
   match n:
-    case Name{sp, p}:
-      sp
+    case Name{+t}:
+      Name.space.cut(Texts.Text.cut(t, 58), t)
+# the path in the cut c: none when the text has no ':'
+def Name.path.cut(c: Maybe<&2, Texts.Cut>) -> String:
+  match c:
+    case None{}:
+      ""
+    case Some{Texts.Cut{sp, p}}:
+      p
 # the path of n
 def Name.path(n: Name) -> String:
   match n:
-    case Name{sp, p}:
-      p
-# the text of n: "<space>:<path>"
-def Name.show(n: Name) -> String:
-  match n:
-    case Name{sp, p}:
-      String.append(sp, String.append(":", p))
-# the name of a cut at the first ':'
-def Name.read.cut(c: Maybe<&2, Texts.Cut>) -> Maybe<&2, Name>:
-  match c:
-    case None{}:
-      None{}
-    case Some{Texts.Cut{sp, p}}:
-      Some{Name{sp, p}}
-# the name of the text t: its space up to the first ':', its path after;
-# None when t has no ':'
-def Name.read(t: String) -> Maybe<&2, Name>:
-  Name.read.cut(Texts.Text.cut(t, 58))
-# a name whose space holds no ':' reads back from its text
+    case Name{t}:
+      Name.path.cut(Texts.Text.cut(t, 58))
+# the name of the text t; None when t has no ':'
+def Name.read(+t: String) -> Maybe<&2, Name>:
+  Bools.Bool.when(Maybe<&2, Name>, Texts.Text.has(t, 58), u => Some{Name{t}}, u => None{})
+# a name whose text holds a ':' reads back from its text
 law name_read_after_show:
   for n: Name
-  for v: {Texts.Text.has(Name.space(n), 58) == False{}: Bool}
+  for v: {Texts.Text.has(Name.show(n), 58) == True{}: Bool}
   {Name.read(Name.show(n)) == Some{n}: Maybe<&2, Name>}
+
+def name_read_after_show(n, v):
+  match n:
+    case Name{t}:
+      %Equal.sym(
+        Bool,
+        Texts.Text.has(t, 58),
+        True{},
+        v
+      ): {
+        Bools.Bool.when(
+          Maybe<&2, Name>,
+          _,
+          u => Some{Name{t}},
+          u => None{}
+        )
+          == Some{Name{t}}: Maybe<&2, Name>
+      }
+      {==}
+
+# name_show_after_read, by whether t holds a ':' (hit)
+law name_show_after_read.at:
+  for hit: Bool
+  for t: String
+  for n: Name
+  {
+    Texts.Text.has(t, 58) == hit: Bool
+  } -> {
+    Bools.Bool.when(
+      Maybe<&2, Name>,
+      hit,
+      u => Some{Name{t}},
+      u => None{}
+    )
+      == Some{n}: Maybe<&2, Name>
+  } -> {Name.show(n) == t: String}
+
+def name_show_after_read.at(hit, t, n):
+  match hit:
+    case True{}:
+      e => h =>
+        +n = n
+        +t = t
+        Equal.sym(
+          String,
+          t,
+          Name.show(n),
+          Equal.cong(
+            Maybe<&2, Name>,
+            String,
+            z => Name.show(Maybe.default(&2, Name, z, Name{""})),
+            Some{Name{t}},
+            Some{n},
+            h
+          )
+        )
+    case False{}:
+      e => h => Empty.absurd(
+        {Name.show(n) == t: String},
+        Shared.Bool.false_ne_true(
+          Equal.cong(Maybe<&2, Name>, Bool, z => Maybe.is_some(&2, Name, z), None{}, Some{n}, h)
+        )
+      )
+
 # a read name shows as the text it came from
 law name_show_after_read:
   for t: String
   for n: Name
   for h: {Name.read(t) == Some{n}: Maybe<&2, Name>}
   {Name.show(n) == t: String}
+
+def name_show_after_read(t, n, h):
+  +t = t
+  name_show_after_read.at(Texts.Text.has(t, 58), t, n)({==})(h)
 
 # Endpoints
 # ---------

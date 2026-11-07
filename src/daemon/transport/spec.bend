@@ -1,5 +1,6 @@
 import Base
 import ../../shared/bytes.bend as Octets
+import ../../shared/resources.bend as Resources
 import ../../shared/uris.bend as Uris
 import ../core/spec.bend as Core
 
@@ -107,21 +108,21 @@ law Client.try_get_branches:
 # the versions of the resource n on the branch b
 law Client.try_get_log:
   for c: Client
-  for n: Core.Name
+  for n: Resources.Name
   for b: Core.Branch
   IO(Client & Reply<&2, List<&2, Core.LogEntry>>)
 
 # the bytes of the resource n at the point p, if it is there
 law Client.try_get_content:
   for c: Client
-  for n: Core.Name
+  for n: Resources.Name
   for p: Core.Point
   IO(Client & Reply<&2, Maybe<&2, Octets.Bytes()>>)
 
 # what changed in the resource n from the point a to the point b
 law Client.try_get_diff:
   for c: Client
-  for n: Core.Name
+  for n: Resources.Name
   for a: Core.Point
   for b: Core.Point
   IO(Client & Reply<&2, List<&2, Core.Change>>)
@@ -156,7 +157,7 @@ law Client.try_get_changes:
 law Client.try_write:
   for c: Client
   for r: Core.RequestId
-  for n: Core.Name
+  for n: Resources.Name
   for b: Core.Branch
   for base: Maybe<&2, Core.Version>
   for x: Source
@@ -193,7 +194,7 @@ law Client.try_resolve:
   for c: Client
   for r: Core.RequestId
   for k: Core.Conflict
-  for n: Core.Name
+  for n: Resources.Name
   for x: Source
   IO(Client & Reply<&2, Core.Resolve>)
 

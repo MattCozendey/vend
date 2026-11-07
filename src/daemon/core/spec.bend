@@ -1,5 +1,6 @@
 import Base
 import ../../shared/bytes.bend as Octets
+import ../../shared/resources.bend as Resources
 
 # The pure core of a Vend Node: what it holds, what it answers, and the laws
 # about both. transport/spec.bend carries it over IO as the public API
@@ -146,20 +147,6 @@ law Conflict.read:
 # the text of c
 law Conflict.show:
   for c: Conflict
-  String
-
-# a resource name: a space and a path in it
-law Name:
-  Data
-
-# the name that t names
-law Name.read:
-  for t: String
-  Maybe<&2, Name>
-
-# the text of n
-law Name.show:
-  for n: Name
   String
 
 # the epoch of an owner group: which ownership accepted a write
@@ -407,7 +394,7 @@ type Merge is Data:
 # Left: the resources of the conflict that still clash
 type Resolve is Data:
   Resolve.Resolved{version: Version}
-  Resolve.Left{names: List<&2, Name>}
+  Resolve.Left{names: List<&2, Resources.Name>}
   Resolve.Stale{current: Version}
   Resolve.Refused{why: String}
 
@@ -457,21 +444,21 @@ law Node.get_branches:
 # the versions of the resource n on the branch b
 law Node.get_log:
   for s: Node.State
-  for n: Name
+  for n: Resources.Name
   for b: Branch
   List<&2, LogEntry>
 
 # the bytes of the resource n at the point p, if it is there
 law Node.get_content:
   for s: Node.State
-  for n: Name
+  for n: Resources.Name
   for p: Point
   Maybe<&2, Octets.Bytes()>
 
 # what changed in the resource n from the point a to the point b
 law Node.get_diff:
   for s: Node.State
-  for n: Name
+  for n: Resources.Name
   for a: Point
   for b: Point
   List<&2, Change>
@@ -504,11 +491,11 @@ law Node.get_changes:
 
 # a change that a node can be asked for
 type Ask is Data:
-  Ask.Write{name: Name, branch: Branch, base: Maybe<&2, Version>, content: Content}
+  Ask.Write{name: Resources.Name, branch: Branch, base: Maybe<&2, Version>, content: Content}
   Ask.SetBranch{branch: Branch, point: Point}
   Ask.CreateMark{branch: Branch, mark: Mark, message: String}
   Ask.Merge{point: Point, branch: Branch}
-  Ask.Resolve{conflict: Conflict, name: Name, content: Content}
+  Ask.Resolve{conflict: Conflict, name: Resources.Name, content: Content}
   Ask.SetOwner{branch: Branch, group: Group}
   Ask.SetGroup{group: Group, members: List<&2, Member>}
   Ask.Sync{other: Node.State, since: Maybe<&2, Position>}
@@ -566,7 +553,7 @@ law Node.is_inside:
 
 # a and b hold the same content, for every resource at every point
 def Node.SameContent(a: Node.State, b: Node.State) -> Type:
-  @n: Name -> @p: Point -> {
+  @n: Resources.Name -> @p: Point -> {
     Node.get_content(a, n, p) == Node.get_content(b, n, p): Maybe<&2, Octets.Bytes()>
   }
 
@@ -577,7 +564,7 @@ law history_kept:
   for q: Ask
   for t: Node.State
   for a: Answer
-  for n: Name
+  for n: Resources.Name
   for v: Version
   for x: Octets.Bytes()
   {
@@ -607,7 +594,7 @@ law write_at_head_is_written:
   for r: RequestId
   for w: Writer
   for time: Time
-  for n: Name
+  for n: Resources.Name
   for b: Branch
   for v: Version
   for x: Octets.Bytes()
@@ -633,7 +620,7 @@ law write_at_head_is_written:
 law read_after_write:
   for s: Node.State
   for e: Envelope
-  for n: Name
+  for n: Resources.Name
   for b: Branch
   for base: Maybe<&2, Version>
   for x: Octets.Bytes()
@@ -655,7 +642,7 @@ law read_after_write:
 law stale_changes_nothing:
   for s: Node.State
   for e: Envelope
-  for n: Name
+  for n: Resources.Name
   for b: Branch
   for base: Maybe<&2, Version>
   for x: Content
@@ -689,8 +676,8 @@ law merge_disjoint_keeps_both:
   for e4: Envelope
   for b: Branch
   for c: Branch
-  for n1: Name
-  for n2: Name
+  for n1: Resources.Name
+  for n2: Resources.Name
   for base1: Maybe<&2, Version>
   for base2: Maybe<&2, Version>
   for x1: Octets.Bytes()
@@ -708,7 +695,7 @@ law merge_disjoint_keeps_both:
   } -> {
     Node.get_outcome(s3, Envelope.id(e4)) == Outcome.NotSeen{}: Outcome
   } -> {
-    n1 != n2: Name
+    n1 != n2: Resources.Name
   } -> {
     Node.ask(
       s,

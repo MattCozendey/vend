@@ -7,6 +7,7 @@ import ../../shared/maybes.bend as Maybes
 import ../../shared/nats.bend as Nats
 import ../../shared/orders.bend as Orders
 import ../../shared/reach.bend as Reaches
+import ../../shared/resources.bend as Resources
 import ../../shared/shared.bend as Shared
 import ../../shared/strings.bend as Strings
 import ../../shared/tables.bend as Tables
@@ -98,15 +99,6 @@ def Spec.Conflict.read(t):
 
 def Spec.Conflict.show(c):
   c
-
-def Spec.Name():
-  String
-
-def Spec.Name.read(t):
-  Strings.String.nonempty(t)
-
-def Spec.Name.show(n):
-  n
 
 def Spec.Time():
   String
@@ -1272,6 +1264,14 @@ def Merge.point(m: Maybe<&2, String>, +s: St, r: String, w: String, t: String, +
     case Some{f}:
       Merge.branch(Tables.Table.get(Br, St.branches(s), b), s, r, w, t, f, b)
 
+# the names whose texts are ks
+def Names.of(ks: List<&2, String>) -> List<&2, Resources.Name>:
+  match ks:
+    case Nil{}:
+      []
+    case Con{k, r}:
+      Resources.Name{k} <> Names.of(r)
+
 # the answer to a resolve
 def Resolve.answer(a: Spec.Resolve) -> Spec.Answer:
   Spec.Answer.Resolve{a}
@@ -1323,7 +1323,7 @@ def Resolve.done(
               Clash{b, h, f, Tables.Table.set(List<&2, U32>, bs, n, y), x <> more}
             ),
             [],
-            Resolve.answer(Spec.Resolve.Left{x <> more})
+            Resolve.answer(Spec.Resolve.Left{Names.of(x <> more)})
           }
 
 # the clash k settled for n with the bytes that m holds
@@ -1829,7 +1829,7 @@ def Sync.go(collides: Bool, +s: St, +o: St) -> Out:
 # what the change q of the request r, by the writer w at the time t, does to s
 def Step.of(+s: St, r: String, w: String, t: String, q: Spec.Ask) -> Out:
   match q:
-    case Spec.Ask.Write{+n, b, base, x}:
+    case Spec.Ask.Write{Resources.Name{+n}, b, base, x}:
       Write.bytes(Content.bytes(s, n, x), s, r, w, t, n, b, base)
     case Spec.Ask.SetBranch{b, p}:
       SetBranch.point(Point.version(s, p), s, r, w, t, b)
@@ -1837,7 +1837,7 @@ def Step.of(+s: St, r: String, w: String, t: String, q: Spec.Ask) -> Out:
       CreateMark.branch(Tables.Table.get(Br, St.branches(s), b), s, b, m, x)
     case Spec.Ask.Merge{p, b}:
       Merge.point(Point.version(s, p), s, r, w, t, b)
-    case Spec.Ask.Resolve{+k, n, x}:
+    case Spec.Ask.Resolve{+k, Resources.Name{n}, x}:
       Resolve.clash(Tables.Table.get(Clash, St.clashes(s), k), s, r, w, t, k, n, x)
     case Spec.Ask.SetOwner{+b, g}:
       SetOwner.branch(Tables.Table.get(Br, St.branches(s), b), s, b, g)
@@ -2095,14 +2095,17 @@ def Spec.Node.get_branches(s):
 
 def Spec.Node.get_log(s, n, b):
   +s = s
-  Log.of(Log.history(St.versions(s), Br.head.of(Tables.Table.get(Br, St.branches(s), b))), n)
+  Log.of(
+    Log.history(St.versions(s), Br.head.of(Tables.Table.get(Br, St.branches(s), b))),
+    Resources.Name.show(n)
+  )
 
 def Spec.Node.get_content(s, n, p):
-  St.content(s, n, p)
+  St.content(s, Resources.Name.show(n), p)
 
 def Spec.Node.get_diff(s, n, a, b):
   +s = s
-  +n = n
+  +n = Resources.Name.show(n)
   Diff.of(Piece.of(n), St.content(s, n, a), St.content(s, n, b))
 
 # no format in the core says what an item uses; formats add these
@@ -3797,7 +3800,7 @@ def stale_at(ok, s, r, w, z, n, b, y, h, o, e, c, base, cur):
             St.clashes(s),
             [],
             Spec.Answer.Write{Spec.Write.Stale{h}},
-            n2,
+            Resources.Name.show(n2),
             p2
           ),
           heq => Shared.Bool.false_ne_true(
@@ -4133,7 +4136,7 @@ def cf_result(cl, s, r, w, z, f, b, bs, h, o, e, c, k):
             Tables.Table.set(Clash, St.clashes(s), r, Clash{b, h, f, bs, x <> more}),
             [Logged{Spec.Topic.Conflicts{b}, Spec.Notice.Conflicted{r}}],
             Spec.Answer.Merge{Spec.Merge.Conflicted{r}},
-            n2,
+            Resources.Name.show(n2),
             p2
           ),
           (
@@ -5784,7 +5787,7 @@ law step_acyclic:
 
 def step_acyclic(s, r, w, z, q):
   match q:
-    case Spec.Ask.Write{+n, b, base, x}:
+    case Spec.Ask.Write{Resources.Name{+n}, b, base, x}:
       a =>
         +s = s
         +r = r
@@ -5825,7 +5828,7 @@ def step_acyclic(s, r, w, z, q):
           grp_kept.Merge.point(Point.version(s, p), s, r, w, z, b)
         ): Grp.Acyclic(_)
         a
-    case Spec.Ask.Resolve{+k, n, x}:
+    case Spec.Ask.Resolve{+k, Resources.Name{n}, x}:
       a =>
         +s = s
         %Equal.sym(
@@ -10831,10 +10834,10 @@ def conv_core(a, b, r1, r2):
           )
         )
       ),
-      n,
+      Resources.Name.show(n),
       p
     )(
-      k => conv_v(a, b, r1, r2, n, k)(hc)
+      k => conv_v(a, b, r1, r2, Resources.Name.show(n), k)(hc)
     )(c => conv_h(a, b, r1, r2, c))(qb => qm => conv_m(a, b, r1, r2, qb, qm))
 
 # a sync that answers Synced found no collision
@@ -11527,13 +11530,13 @@ def idem_core(s, a, r1, r2):
       )
     ),
     Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
-    n,
+    Resources.Name.show(n),
     p
   )(
     k => Equal.cong(
       Maybe<&2, Ver>,
       Maybe<&2, List<&2, U32>>,
-      z => Blob.find.of(Ver.blobs.of(z), n),
+      z => Blob.find.of(Ver.blobs.of(z), Resources.Name.show(n)),
       Tables.Table.get(
         Ver,
         St.versions(
@@ -11617,7 +11620,7 @@ def idem_go(c, s, a, r1, s1, r2):
           St.clashes(s1),
           [],
           Sync.answer(Spec.Sync.Refused{"version ID collision"}),
-          n,
+          Resources.Name.show(n),
           p
         )
     case False{}:
@@ -13048,10 +13051,10 @@ def comm_core(s, a, b, r1, r2, r3, r4):
           )
         )
       ),
-      n,
+      Resources.Name.show(n),
       p
     )(
-      k => comm_v(s, a, b, r1, r2, r3, r4, n, k)(hc)
+      k => comm_v(s, a, b, r1, r2, r3, r4, Resources.Name.show(n), k)(hc)
     )(c => comm_h(s, a, b, r1, r2, r3, r4, c))(qb => qm => comm_m(s, a, b, r1, r2, r3, r4, qb, qm))
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
@@ -15772,7 +15775,7 @@ law ws_core:
     Spec.Node.ask(
       s,
       Spec.Envelope{r, w, z},
-      Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}}
+      Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}
     )
       == (t, Spec.Answer.Write{Spec.Write.Written{v}}): St
       & Spec.Answer
@@ -15851,7 +15854,9 @@ def ws_core(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
           )
         ),
         Answer.version(
-          Out.answer(Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}}))
+          Out.answer(
+            Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}})
+          )
         ),
         Some{v},
         Equal.cong(
@@ -15859,10 +15864,10 @@ def ws_core(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
           Maybe<&2, String>,
           y => Answer.version(Out.answer(y)),
           Write.on(Owner.of(s, Br{h, o, e, k}), s, r, w, z, n, b, base, x, Br{h, o, e, k}),
-          Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}}),
+          Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}),
           Equal.sym(
             Out,
-            Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}}),
+            Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}),
             Write.on(Owner.of(s, Br{h, o, e, k}), s, r, w, z, n, b, base, x, Br{h, o, e, k}),
             red
           )
@@ -15870,7 +15875,7 @@ def ws_core(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
         view_ver(
           s,
           r,
-          Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}}),
+          Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}),
           t,
           Spec.Answer.Write{Spec.Write.Written{v}}
         )(
@@ -15879,7 +15884,7 @@ def ws_core(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
             r,
             w,
             z,
-            Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}},
+            Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}},
             t,
             Spec.Answer.Write{Spec.Write.Written{v}}
           )(hn)(hask)
@@ -15909,7 +15914,7 @@ law ws_out:
     Spec.Node.ask(
       s,
       Spec.Envelope{r, w, z},
-      Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}}
+      Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}
     )
       == (t, Spec.Answer.Write{Spec.Write.Written{v}}): St
       & Spec.Answer
@@ -15921,7 +15926,7 @@ law ws_out:
       r,
       w,
       z,
-      Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}}
+      Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}
     )
       == Out{
         [
@@ -15955,7 +15960,7 @@ def ws_out(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
     +k = k
     Equal.trans(
       Out,
-      Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}}),
+      Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}),
       Write.on(Owner.of(s, Br{h, o, e, k}), s, r, w, z, n, b, base, x, Br{h, o, e, k}),
       Out{
         [
@@ -16033,7 +16038,7 @@ law ws_own:
     Spec.Node.ask(
       s,
       Spec.Envelope{r, w, z},
-      Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}}
+      Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}
     )
       == (t, Spec.Answer.Write{Spec.Write.Written{v}}): St
       & Spec.Answer
@@ -16097,7 +16102,7 @@ law ws_vv:
     Spec.Node.ask(
       s,
       Spec.Envelope{r, w, z},
-      Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}}
+      Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}
     )
       == (t, Spec.Answer.Write{Spec.Write.Written{v}}): St
       & Spec.Answer
@@ -16137,7 +16142,7 @@ def ws_vv(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
     view_v(
       s,
       r,
-      Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}}),
+      Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}),
       t,
       Spec.Answer.Write{Spec.Write.Written{v}},
       Out{
@@ -16160,7 +16165,7 @@ def ws_vv(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
         r,
         w,
         z,
-        Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}},
+        Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}},
         t,
         Spec.Answer.Write{Spec.Write.Written{v}}
       )(hn)(hask)
@@ -16188,7 +16193,7 @@ law ws_vb:
     Spec.Node.ask(
       s,
       Spec.Envelope{r, w, z},
-      Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}}
+      Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}
     )
       == (t, Spec.Answer.Write{Spec.Write.Written{v}}): St
       & Spec.Answer
@@ -16217,7 +16222,7 @@ def ws_vb(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
     view_b(
       s,
       r,
-      Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}}),
+      Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}),
       t,
       Spec.Answer.Write{Spec.Write.Written{v}},
       Out{
@@ -16240,7 +16245,7 @@ def ws_vb(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
         r,
         w,
         z,
-        Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}},
+        Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}},
         t,
         Spec.Answer.Write{Spec.Write.Written{v}}
       )(hn)(hask)
@@ -16268,7 +16273,7 @@ law ws_vg:
     Spec.Node.ask(
       s,
       Spec.Envelope{r, w, z},
-      Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}}
+      Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}
     )
       == (t, Spec.Answer.Write{Spec.Write.Written{v}}): St
       & Spec.Answer
@@ -16295,7 +16300,7 @@ def ws_vg(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
     view_g(
       s,
       r,
-      Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}}),
+      Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}),
       t,
       Spec.Answer.Write{Spec.Write.Written{v}},
       Out{
@@ -16318,7 +16323,7 @@ def ws_vg(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
         r,
         w,
         z,
-        Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}},
+        Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}},
         t,
         Spec.Answer.Write{Spec.Write.Written{v}}
       )(hn)(hask)
@@ -16346,7 +16351,7 @@ law ws_vself:
     Spec.Node.ask(
       s,
       Spec.Envelope{r, w, z},
-      Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}}
+      Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}
     )
       == (t, Spec.Answer.Write{Spec.Write.Written{v}}): St
       & Spec.Answer
@@ -16369,7 +16374,7 @@ def ws_vself(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
     view_self(
       s,
       r,
-      Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}}),
+      Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}),
       t,
       Spec.Answer.Write{Spec.Write.Written{v}}
     )(
@@ -16378,7 +16383,7 @@ def ws_vself(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
         r,
         w,
         z,
-        Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}},
+        Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}},
         t,
         Spec.Answer.Write{Spec.Write.Written{v}}
       )(hn)(hask)
@@ -16447,7 +16452,7 @@ law mdk_fin:
     Spec.Node.ask(
       s1,
       Spec.Envelope{r2, w2, z2},
-      Spec.Ask.Write{n1, b, base1, Spec.Content.Bytes{x1}}
+      Spec.Ask.Write{Resources.Name{n1}, b, base1, Spec.Content.Bytes{x1}}
     )
       == (s2, Spec.Answer.Write{Spec.Write.Written{v1}}): St
       & Spec.Answer
@@ -16455,7 +16460,7 @@ law mdk_fin:
     Spec.Node.ask(
       s2,
       Spec.Envelope{r3, w3, z3},
-      Spec.Ask.Write{n2, c, base2, Spec.Content.Bytes{x2}}
+      Spec.Ask.Write{Resources.Name{n2}, c, base2, Spec.Content.Bytes{x2}}
     )
       == (s3, Spec.Answer.Write{Spec.Write.Written{v2}}): St
       & Spec.Answer
@@ -18948,7 +18953,7 @@ law mdk_core.fuel:
     Spec.Node.ask(
       s1,
       Spec.Envelope{r2, w2, z2},
-      Spec.Ask.Write{n1, b, base1, Spec.Content.Bytes{x1}}
+      Spec.Ask.Write{Resources.Name{n1}, b, base1, Spec.Content.Bytes{x1}}
     )
       == (s2, Spec.Answer.Write{Spec.Write.Written{v1}}): St
       & Spec.Answer
@@ -18956,7 +18961,7 @@ law mdk_core.fuel:
     Spec.Node.ask(
       s2,
       Spec.Envelope{r3, w3, z3},
-      Spec.Ask.Write{n2, c, base2, Spec.Content.Bytes{x2}}
+      Spec.Ask.Write{Resources.Name{n2}, c, base2, Spec.Content.Bytes{x2}}
     )
       == (s3, Spec.Answer.Write{Spec.Write.Written{v2}}): St
       & Spec.Answer
@@ -19122,7 +19127,7 @@ law mdk_core:
     Spec.Node.ask(
       s1,
       Spec.Envelope{r2, w2, z2},
-      Spec.Ask.Write{n1, b, base1, Spec.Content.Bytes{x1}}
+      Spec.Ask.Write{Resources.Name{n1}, b, base1, Spec.Content.Bytes{x1}}
     )
       == (s2, Spec.Answer.Write{Spec.Write.Written{v1}}): St
       & Spec.Answer
@@ -19130,7 +19135,7 @@ law mdk_core:
     Spec.Node.ask(
       s2,
       Spec.Envelope{r3, w3, z3},
-      Spec.Ask.Write{n2, c, base2, Spec.Content.Bytes{x2}}
+      Spec.Ask.Write{Resources.Name{n2}, c, base2, Spec.Content.Bytes{x2}}
     )
       == (s3, Spec.Answer.Write{Spec.Write.Written{v2}}): St
       & Spec.Answer
@@ -19504,7 +19509,7 @@ law mdk_split:
     Spec.Node.ask(
       s1,
       Spec.Envelope{r2, w2, z2},
-      Spec.Ask.Write{n1, b, base1, Spec.Content.Bytes{x1}}
+      Spec.Ask.Write{Resources.Name{n1}, b, base1, Spec.Content.Bytes{x1}}
     )
       == (s2, Spec.Answer.Write{Spec.Write.Written{v1}}): St
       & Spec.Answer
@@ -19512,7 +19517,7 @@ law mdk_split:
     Spec.Node.ask(
       s2,
       Spec.Envelope{r3, w3, z3},
-      Spec.Ask.Write{n2, c, base2, Spec.Content.Bytes{x2}}
+      Spec.Ask.Write{Resources.Name{n2}, c, base2, Spec.Content.Bytes{x2}}
     )
       == (s3, Spec.Answer.Write{Spec.Write.Written{v2}}): St
       & Spec.Answer
@@ -19780,8 +19785,8 @@ def Spec.retry_is_safe(s, r, w, t1, t2, q, s1, a1):
     )
 
 def Spec.history_kept(s, e, q, t, a, n, v, x):
-  match e:
-    case Spec.Envelope{+r, w, z}:
+  match e n:
+    case Spec.Envelope{+r, w, z} Resources.Name{n}:
       h1 => h2 =>
         +s = s
         +q = q
@@ -19802,140 +19807,142 @@ def Spec.none_inside_itself_at_start(n, g):
   {==}
 
 def Spec.write_at_head_is_written(s, r, w, time, n, b, v, x):
-  +s = s
-  +r = r
-  +w = w
-  +time = time
-  +n = n
-  +b = b
-  +v = v
-  +x = x
-  (
-    Pair.fst(
-      St,
-      Spec.Answer,
-      Spec.Node.ask(
-        s,
-        Spec.Envelope{r, w, time},
-        Spec.Ask.Write{n, b, Some{v}, Spec.Content.Bytes{x}}
-      )
-    ),
-    (
-      r,
-      ho => hh => +hn => Equal.trans(
-        St & Spec.Answer,
-        Spec.Node.ask(
-          s,
-          Spec.Envelope{r, w, time},
-          Spec.Ask.Write{n, b, Some{v}, Spec.Content.Bytes{x}}
-        ),
-        (
-          Pair.fst(
-            St,
-            Spec.Answer,
-            Spec.Node.ask(
-              s,
-              Spec.Envelope{r, w, time},
-              Spec.Ask.Write{n, b, Some{v}, Spec.Content.Bytes{x}}
-            )
-          ),
-          Pair.snd(
-            St,
-            Spec.Answer,
-            Spec.Node.ask(
-              s,
-              Spec.Envelope{r, w, time},
-              Spec.Ask.Write{n, b, Some{v}, Spec.Content.Bytes{x}}
-            )
-          )
-        ),
-        (
-          Pair.fst(
-            St,
-            Spec.Answer,
-            Spec.Node.ask(
-              s,
-              Spec.Envelope{r, w, time},
-              Spec.Ask.Write{n, b, Some{v}, Spec.Content.Bytes{x}}
-            )
-          ),
-          Spec.Answer.Write{Spec.Write.Written{r}}
-        ),
-        Equal.sym(
-          St & Spec.Answer,
-          (
-            Pair.fst(
-              St,
-              Spec.Answer,
-              Spec.Node.ask(
-                s,
-                Spec.Envelope{r, w, time},
-                Spec.Ask.Write{n, b, Some{v}, Spec.Content.Bytes{x}}
-              )
-            ),
-            Pair.snd(
-              St,
-              Spec.Answer,
-              Spec.Node.ask(
-                s,
-                Spec.Envelope{r, w, time},
-                Spec.Ask.Write{n, b, Some{v}, Spec.Content.Bytes{x}}
-              )
-            )
-          ),
+  match n:
+    case Resources.Name{n}:
+      +s = s
+      +r = r
+      +w = w
+      +time = time
+      +n = n
+      +b = b
+      +v = v
+      +x = x
+      (
+        Pair.fst(
+          St,
+          Spec.Answer,
           Spec.Node.ask(
             s,
             Spec.Envelope{r, w, time},
-            Spec.Ask.Write{n, b, Some{v}, Spec.Content.Bytes{x}}
-          ),
-          Lists.Pair.eta(
-            St,
-            Spec.Answer,
+            Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
+          )
+        ),
+        (
+          r,
+          ho => hh => +hn => Equal.trans(
+            St & Spec.Answer,
             Spec.Node.ask(
               s,
               Spec.Envelope{r, w, time},
-              Spec.Ask.Write{n, b, Some{v}, Spec.Content.Bytes{x}}
-            )
-          )
-        ),
-        Equal.cong(
-          Spec.Answer,
-          St & Spec.Answer,
-          y => (
-            Pair.fst(
-              St,
-              Spec.Answer,
+              Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
+            ),
+            (
+              Pair.fst(
+                St,
+                Spec.Answer,
+                Spec.Node.ask(
+                  s,
+                  Spec.Envelope{r, w, time},
+                  Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
+                )
+              ),
+              Pair.snd(
+                St,
+                Spec.Answer,
+                Spec.Node.ask(
+                  s,
+                  Spec.Envelope{r, w, time},
+                  Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
+                )
+              )
+            ),
+            (
+              Pair.fst(
+                St,
+                Spec.Answer,
+                Spec.Node.ask(
+                  s,
+                  Spec.Envelope{r, w, time},
+                  Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
+                )
+              ),
+              Spec.Answer.Write{Spec.Write.Written{r}}
+            ),
+            Equal.sym(
+              St & Spec.Answer,
+              (
+                Pair.fst(
+                  St,
+                  Spec.Answer,
+                  Spec.Node.ask(
+                    s,
+                    Spec.Envelope{r, w, time},
+                    Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
+                  )
+                ),
+                Pair.snd(
+                  St,
+                  Spec.Answer,
+                  Spec.Node.ask(
+                    s,
+                    Spec.Envelope{r, w, time},
+                    Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
+                  )
+                )
+              ),
               Spec.Node.ask(
                 s,
                 Spec.Envelope{r, w, time},
-                Spec.Ask.Write{n, b, Some{v}, Spec.Content.Bytes{x}}
+                Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
+              ),
+              Lists.Pair.eta(
+                St,
+                Spec.Answer,
+                Spec.Node.ask(
+                  s,
+                  Spec.Envelope{r, w, time},
+                  Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
+                )
               )
             ),
-            y
-          ),
-          Pair.snd(
-            St,
-            Spec.Answer,
-            Spec.Node.ask(
-              s,
-              Spec.Envelope{r, w, time},
-              Spec.Ask.Write{n, b, Some{v}, Spec.Content.Bytes{x}}
+            Equal.cong(
+              Spec.Answer,
+              St & Spec.Answer,
+              y => (
+                Pair.fst(
+                  St,
+                  Spec.Answer,
+                  Spec.Node.ask(
+                    s,
+                    Spec.Envelope{r, w, time},
+                    Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
+                  )
+                ),
+                y
+              ),
+              Pair.snd(
+                St,
+                Spec.Answer,
+                Spec.Node.ask(
+                  s,
+                  Spec.Envelope{r, w, time},
+                  Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
+                )
+              ),
+              Spec.Answer.Write{Spec.Write.Written{r}},
+              (
+                %Equal.sym(Maybe<&2, Seen>, Tables.Table.get(Seen, St.seen(s), r), None{}, new_found(s, r)(hn)): {Pair.snd(St, Spec.Answer, Node.asked(_, s, r, w, time, Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}})) == Spec.Answer.Write{Spec.Write.Written{r}}: Spec.Answer}
+                %Equal.sym(Spec.Answer, Pair.snd(St, Spec.Answer, Node.applied(s, r, Step.of(s, r, w, time, Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}))), Out.answer(Step.of(s, r, w, time, Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}})), answer_after_applied(s, r, Step.of(s, r, w, time, Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}))): {_ == Spec.Answer.Write{Spec.Write.Written{r}}: Spec.Answer}
+                %Equal.sym(Bool, Ver.taken(St.versions(s), r), False{}, new_free(s, r)(hn)): {Out.answer(Write.free(_, s, r, w, time, n, b, Some{v}, x)) == Spec.Answer.Write{Spec.Write.Written{r}}: Spec.Answer}
+                write_on_head(Tables.Table.get(Br, St.branches(s), b), s, r, w, time, n, b, v, x)(hh)(ho))
             )
-          ),
-          Spec.Answer.Write{Spec.Write.Written{r}},
-          (
-            %Equal.sym(Maybe<&2, Seen>, Tables.Table.get(Seen, St.seen(s), r), None{}, new_found(s, r)(hn)): {Pair.snd(St, Spec.Answer, Node.asked(_, s, r, w, time, Spec.Ask.Write{n, b, Some{v}, Spec.Content.Bytes{x}})) == Spec.Answer.Write{Spec.Write.Written{r}}: Spec.Answer}
-            %Equal.sym(Spec.Answer, Pair.snd(St, Spec.Answer, Node.applied(s, r, Step.of(s, r, w, time, Spec.Ask.Write{n, b, Some{v}, Spec.Content.Bytes{x}}))), Out.answer(Step.of(s, r, w, time, Spec.Ask.Write{n, b, Some{v}, Spec.Content.Bytes{x}})), answer_after_applied(s, r, Step.of(s, r, w, time, Spec.Ask.Write{n, b, Some{v}, Spec.Content.Bytes{x}}))): {_ == Spec.Answer.Write{Spec.Write.Written{r}}: Spec.Answer}
-            %Equal.sym(Bool, Ver.taken(St.versions(s), r), False{}, new_free(s, r)(hn)): {Out.answer(Write.free(_, s, r, w, time, n, b, Some{v}, x)) == Spec.Answer.Write{Spec.Write.Written{r}}: Spec.Answer}
-            write_on_head(Tables.Table.get(Br, St.branches(s), b), s, r, w, time, n, b, v, x)(hh)(ho))
+          )
         )
       )
-    )
-  )
 
 def Spec.read_after_write(s, e, n, b, base, x, t, v):
-  match e:
-    case Spec.Envelope{+r, +w, +z}:
+  match e n:
+    case Spec.Envelope{+r, +w, +z} Resources.Name{n}:
       +hn => +h =>
         +s = s
         +n = n
@@ -19947,7 +19954,7 @@ def Spec.read_after_write(s, e, n, b, base, x, t, v):
         %applied_state(
           s,
           r,
-          Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}}),
+          Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}),
           t,
           Spec.Answer.Write{Spec.Write.Written{v}}
         )(
@@ -19956,7 +19963,7 @@ def Spec.read_after_write(s, e, n, b, base, x, t, v):
             r,
             w,
             z,
-            Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}},
+            Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}},
             t,
             Spec.Answer.Write{Spec.Write.Written{v}}
           )(hn)(h)
@@ -19971,18 +19978,26 @@ def Spec.read_after_write(s, e, n, b, base, x, t, v):
               Node.applied(
                 s,
                 r,
-                Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}})
+                Step.of(
+                  s,
+                  r,
+                  w,
+                  z,
+                  Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}
+                )
               )
             )
           ),
           Ver.add(
-            Out.versions(Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}})),
+            Out.versions(
+              Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}})
+            ),
             St.versions(s)
           ),
           versions_after_applied(
             s,
             r,
-            Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}})
+            Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}})
           )
         ):
           {
@@ -20000,7 +20015,13 @@ def Spec.read_after_write(s, e, n, b, base, x, t, v):
                           Node.applied(
                             s,
                             r,
-                            Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}})
+                            Step.of(
+                              s,
+                              r,
+                              w,
+                              z,
+                              Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}
+                            )
                           )
                         )
                       ),
@@ -20022,15 +20043,23 @@ def Spec.read_after_write(s, e, n, b, base, x, t, v):
               Node.applied(
                 s,
                 r,
-                Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}})
+                Step.of(
+                  s,
+                  r,
+                  w,
+                  z,
+                  Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}
+                )
               )
             )
           ),
-          Out.branches(Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}})),
+          Out.branches(
+            Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}})
+          ),
           branches_after_applied(
             s,
             r,
-            Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}})
+            Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}})
           )
         ):
           {
@@ -20039,7 +20068,13 @@ def Spec.read_after_write(s, e, n, b, base, x, t, v):
                 Ver.find.of(
                   Ver.add(
                     Out.versions(
-                      Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}})
+                      Step.of(
+                        s,
+                        r,
+                        w,
+                        z,
+                        Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}
+                      )
                     ),
                     St.versions(s)
                   ),
@@ -20067,7 +20102,7 @@ def Spec.read_after_write(s, e, n, b, base, x, t, v):
           applied_answer(
             s,
             r,
-            Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}}),
+            Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}),
             t,
             Spec.Answer.Write{Spec.Write.Written{v}}
           )(
@@ -20076,7 +20111,7 @@ def Spec.read_after_write(s, e, n, b, base, x, t, v):
               r,
               w,
               z,
-              Spec.Ask.Write{n, b, base, Spec.Content.Bytes{x}},
+              Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}},
               t,
               Spec.Answer.Write{Spec.Write.Written{v}}
             )(hn)(h)
@@ -20084,8 +20119,8 @@ def Spec.read_after_write(s, e, n, b, base, x, t, v):
         )
 
 def Spec.stale_changes_nothing(s, e, n, b, base, x, t, current):
-  match e:
-    case Spec.Envelope{+r, +w, +z}:
+  match e n:
+    case Spec.Envelope{+r, +w, +z} Resources.Name{n}:
       +hn => +h =>
         +s = s
         +n = n
@@ -20097,7 +20132,7 @@ def Spec.stale_changes_nothing(s, e, n, b, base, x, t, current):
         %applied_state(
           s,
           r,
-          Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, x}),
+          Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, x}),
           t,
           Spec.Answer.Write{Spec.Write.Stale{current}}
         )(
@@ -20106,7 +20141,7 @@ def Spec.stale_changes_nothing(s, e, n, b, base, x, t, current):
             r,
             w,
             z,
-            Spec.Ask.Write{n, b, base, x},
+            Spec.Ask.Write{Resources.Name{n}, b, base, x},
             t,
             Spec.Answer.Write{Spec.Write.Stale{current}}
           )(hn)(h)
@@ -20126,7 +20161,7 @@ def Spec.stale_changes_nothing(s, e, n, b, base, x, t, current):
           applied_answer(
             s,
             r,
-            Step.of(s, r, w, z, Spec.Ask.Write{n, b, base, x}),
+            Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, x}),
             t,
             Spec.Answer.Write{Spec.Write.Stale{current}}
           )(
@@ -20135,7 +20170,7 @@ def Spec.stale_changes_nothing(s, e, n, b, base, x, t, current):
               r,
               w,
               z,
-              Spec.Ask.Write{n, b, base, x},
+              Spec.Ask.Write{Resources.Name{n}, b, base, x},
               t,
               Spec.Answer.Write{Spec.Write.Stale{current}}
             )(hn)(h)
@@ -20530,12 +20565,16 @@ def Spec.merge_disjoint_keeps_both(
   v1,
   v2
 ):
-  match e1 e2 e3 e4:
+  match e1 e2 e3 e4 n1 n2:
     case Spec.Envelope{
       r1,
       w1,
       z1
-    } Spec.Envelope{r2, w2, z2} Spec.Envelope{r3, w3, z3} Spec.Envelope{+r4, w4, z4}:
+    } Spec.Envelope{
+      r2,
+      w2,
+      z2
+    } Spec.Envelope{r3, w3, z3} Spec.Envelope{+r4, w4, z4} Resources.Name{n1} Resources.Name{n2}:
       (
         r4,
         hn1 => hn2 => hn3 => hn4 => hne => h1 => h2 => h3 => h4 =>
@@ -20544,4 +20583,4 @@ def Spec.merge_disjoint_keeps_both(
           +v0 = v0
           +n1 = n1
           +n2 = n2
-          mdk_split(Tables.Table.get(Br, St.branches(s), b), Tables.Table.get(Ver, St.versions(s), v0), s, s1, s2, s3, s4, a4, r1, w1, z1, r2, w2, z2, r3, w3, z3, r4, w4, z4, b, c, n1, n2, base1, base2, x1, x2, v0, v1, v2)({==})({==})(hn1)(hn2)(hn3)(hn4)(Strings.String.ne_eq(n1, n2)(hne))(h1)(h2)(h3)(h4))
+          mdk_split(Tables.Table.get(Br, St.branches(s), b), Tables.Table.get(Ver, St.versions(s), v0), s, s1, s2, s3, s4, a4, r1, w1, z1, r2, w2, z2, r3, w3, z3, r4, w4, z4, b, c, n1, n2, base1, base2, x1, x2, v0, v1, v2)({==})({==})(hn1)(hn2)(hn3)(hn4)(Strings.String.ne_eq(n1, n2)(hq => hne(Equal.cong(String, Resources.Name, z => Resources.Name{z}, n1, n2, hq))))(h1)(h2)(h3)(h4))
