@@ -47,3 +47,46 @@ def Maybe.same_sound(
       h =>
         %eqs(x)(y)(h): {Some{x} == Some{_}: Maybe<&2, A>}
         {==}
+
+# m, else nothing, is m
+def Maybe.or_none(-A: Data, m: Maybe<&2, A>) -> {Maybe.or(&2, A, m, None{}) == m: Maybe<&2, A>}:
+  match m:
+    case None{}:
+      {==}
+    case Some{x}:
+      {==}
+
+# taking in the same value again keeps the first pick
+def Maybe.or_idem(
+  -A: Data,
+  x: Maybe<&2, A>,
+  y: Maybe<&2, A>
+) -> {Maybe.or(&2, A, Maybe.or(&2, A, x, y), y) == Maybe.or(&2, A, x, y): Maybe<&2, A>}:
+  match x y:
+    case None{} None{}:
+      {==}
+    case None{} Some{v}:
+      {==}
+    case Some{u} w:
+      {==}
+
+# mapping the identity changes nothing
+def Maybe.map_id(-A: Data, m: Maybe<&2, A>) -> {Maybe.map(&2, A, A, y => y, m) == m: Maybe<&2, A>}:
+  match m:
+    case None{}:
+      {==}
+    case Some{x}:
+      {==}
+
+# Maybe.same is True for a value and itself, when eq is
+def Maybe.same_refl(
+  ~A: Data,
+  ~eq: A -> A -> Bool,
+  ~refl: @x: A -> {eq(x, x) == True{}: Bool},
+  m: Maybe<&2, A>
+) -> {Maybe.same(~A, ~eq, m, m) == True{}: Bool}:
+  match m:
+    case None{}:
+      {==}
+    case Some{y}:
+      refl(y)

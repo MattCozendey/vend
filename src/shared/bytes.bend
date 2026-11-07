@@ -58,12 +58,10 @@ def Bytes.is_eq_refl(a: Bytes()) -> {Bytes.is_eq(a, a) == True{}: Bool}:
     case Nil{}:
       {==}
     case Con{x, t}:
-      match x:
-        case U32{w}:
-          %Equal.sym(
-            Cmp,
-            Word.cmp(32n, w, w),
-            EQ{},
-            Words.Word.cmp_refl(32n, w)
-          ): {List.all.if(u => Bytes.is_eq(t, t), Cmp.is_eq(_)) == True{}: Bool}
-          Bytes.is_eq_refl(t)
+      %Equal.sym(
+        Bool,
+        U32.is_eq(x, x),
+        True{},
+        Words.U32.is_eq_refl(x)
+      ): {List.all.if(u => Bytes.is_eq(t, t), _) == True{}: Bool}
+      Bytes.is_eq_refl(t)

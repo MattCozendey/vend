@@ -1,49 +1,11 @@
 import Base
 import ../shared/bools.bend as Bools
 import ../shared/bytes.bend as Octets
-import ../shared/words.bend as Words
 import ./spec.bend as Spec
 # bend-lint: expect-file bend-lint-rules/language/reused_binder@warning -- proof binders whose other use is inside a rewrite motive or an erased argument; the checker accepts them
 
 # Proofs of the stream laws. Most are a split on the stream and evaluation;
 # the write laws go through the two Bool.when lemmas below.
-def U32.is_eq_refl(x: U32) -> {U32.is_eq(x, x) == True{}: Bool}:
-  match x:
-    case U32{w}:
-      %Equal.sym(
-        Cmp,
-        Word.cmp(32n, w, w),
-        EQ{},
-        Words.Word.cmp_refl(32n, w)
-      ): {Cmp.is_eq(_) == True{}: Bool}
-      {==}
-
-def Bytes.is_eq_refl(b: Octets.Bytes()) -> {Octets.Bytes.is_eq(b, b) == True{}: Bool}:
-  match b:
-    case Nil{}:
-      {==}
-    case Con{+head, tail}:
-      match head:
-        case U32{data}:
-          Equal.sym(
-            Bool,
-            True{},
-            Octets.Bytes.is_eq(U32{data} <> tail, U32{data} <> tail),
-            (%Equal.sym(
-              Cmp,
-              Word.cmp(32n, data, data),
-              EQ{},
-              Words.Word.cmp_refl(32n, data)
-            ): {
-              True{} == List.all.if(u => Octets.Bytes.is_eq(tail, tail), Cmp.is_eq(_)): Bool
-            }; (%Equal.sym(
-              Bool,
-              Octets.Bytes.is_eq(tail, tail),
-              True{},
-              Bytes.is_eq_refl(tail)
-            ): {True{} == _: Bool}; {==}))
-          )
-
 def When.is_fail(
   -A: Data,
   b: Bool,
@@ -301,7 +263,7 @@ def Spec.write_then_fetch_quiet(k, bytes, t, e, s, h):
     )
       == []: List<&2, Spec.Version>
   }
-  %Equal.sym(Bool, Octets.Bytes.is_eq(t, t), True{}, Bytes.is_eq_refl(t)):
+  %Equal.sym(Bool, Octets.Bytes.is_eq(t, t), True{}, Octets.Bytes.is_eq_refl(t)):
     {
       Spec.Effect.versions(
         Bools.Bool.when(

@@ -4918,10 +4918,7 @@ def sg_on(cycle, s, g, m, ms, x):
           ~Tables.Table<Grp>,
           ~Member.same,
           ~Grp.members.of,
-          ~Grp.all,
-          ~member_same_refl,
           ~member_same_sound,
-          ~grp_live,
           [],
           List.length(
             &2,
@@ -5579,10 +5576,6 @@ def acyc_all.at(gs, y):
           ~Tables.Table<Grp>,
           ~Member.same,
           ~Grp.members.of,
-          ~Grp.all,
-          ~member_same_refl,
-          ~member_same_sound,
-          ~grp_live,
           List.length(&2, Spec.Member, Grp.all(gs)),
           gs,
           Spec.Member.Node{n}
@@ -7020,77 +7013,6 @@ def sync_free(c, a, o):
     case False{}:
       h => {==}
 
-# m, else nothing, is m
-law or_none:
-  for m: Maybe<&2, Ver>
-  {Maybe.or(&2, Ver, m, None{}) == m: Maybe<&2, Ver>}
-
-def or_none(m):
-  match m:
-    case None{}:
-      {==}
-    case Some{x}:
-      {==}
-
-# a version that a list does not hold is not found in it: by the lookup m
-law has_false_find.of:
-  for m: Maybe<&2, Ver>
-  for vs: Tables.Table<Ver>
-  for k: String
-  {
-    Tables.Table.get(Ver, vs, k) == m: Maybe<&2, Ver>
-  } -> {Ver.has(vs, k) == False{}: Bool} -> {Tables.Table.get(Ver, vs, k) == None{}: Maybe<&2, Ver>}
-
-def has_false_find.of(m, vs, k):
-  match m:
-    case None{}:
-      hm => hh => hm
-    case Some{u}:
-      +hm => hh =>
-        +vs = vs
-        +k = k
-        Empty.absurd(
-          {Tables.Table.get(Ver, vs, k) == None{}: Maybe<&2, Ver>},
-          Shared.Bool.false_ne_true(
-            Equal.sym(
-              Bool,
-              True{},
-              False{},
-              Equal.trans(
-                Bool,
-                True{},
-                Ver.has(vs, k),
-                False{},
-                Equal.sym(
-                  Bool,
-                  Ver.has(vs, k),
-                  True{},
-                  Equal.cong(
-                    Maybe<&2, Ver>,
-                    Bool,
-                    x => Maybe.is_some(&2, Ver, x),
-                    Tables.Table.get(Ver, vs, k),
-                    Some{u},
-                    hm
-                  )
-                ),
-                hh
-              )
-            )
-          )
-        )
-
-# a version that a list does not hold is not found in it
-law has_false_find:
-  for vs: Tables.Table<Ver>
-  for k: String
-  {Ver.has(vs, k) == False{}: Bool} -> {Tables.Table.get(Ver, vs, k) == None{}: Maybe<&2, Ver>}
-
-def has_false_find(vs, k):
-  +vs = vs
-  +k = k
-  has_false_find.of(Tables.Table.get(Ver, vs, k), vs, k)({==})
-
 # add_find when the first new version, under i, is already held: by the lookup
 # m of k, when i is k
 law add_find.held.of:
@@ -7265,9 +7187,9 @@ def add_find.fresh(hit, i, x, r, ys, k):
           Maybe<&2, Ver>,
           Tables.Table.get(Ver, ys, k),
           None{},
-          has_false_find(
-            ys,
-            k
+          Tables.Table.none_of(
+            Ver,
+            Tables.Table.get(Ver, ys, k)
           )(
             Equal.trans(
               Bool,
@@ -7386,7 +7308,7 @@ def add_find(xs, ys, k):
         Maybe<&2, Ver>,
         Maybe.or(&2, Ver, Tables.Table.get(Ver, ys, k), None{}),
         Tables.Table.get(Ver, ys, k),
-        or_none(Tables.Table.get(Ver, ys, k))
+        Maybes.Maybe.or_none(Ver, Tables.Table.get(Ver, ys, k))
       )
     case Con{Tables.Row{+i, +x}, +r}:
       +ys = ys
@@ -9604,18 +9526,6 @@ def marks_after_applied(s, r, out):
     case St{k, vs, bs, ms, gs, cs, ss, l} Out{nv, nb, nm, ng, nc, news, a}:
       {==}
 
-# mapping the identity changes nothing
-law map_id:
-  for m: Maybe<&2, String>
-  {Maybe.map(&2, String, String, y => y, m) == m: Maybe<&2, String>}
-
-def map_id(m):
-  match m:
-    case None{}:
-      {==}
-    case Some{x}:
-      {==}
-
 # after a takes in b's mark, and b takes in that, both hold the same version
 law mk_conv:
   for ma: Maybe<&2, String>
@@ -9647,7 +9557,7 @@ def mk_conv(ma, mb):
       Maybe<&2, String>,
       Maybe.map(&2, String, String, y => y, Orders.Order.join(~String, ~Ver.rev, ma, mb)),
       Orders.Order.join(~String, ~Ver.rev, ma, mb),
-      map_id(Orders.Order.join(~String, ~Ver.rev, ma, mb))
+      Maybes.Maybe.map_id(String, Orders.Order.join(~String, ~Ver.rev, ma, mb))
     ),
     Equal.trans(
       Maybe<&2, String>,
@@ -9671,7 +9581,10 @@ def mk_conv(ma, mb):
         ma,
         mb
       ),
-      map_id(Orders.Order.join(~String, ~Ver.rev, mb, Orders.Order.join(~String, ~Ver.rev, ma, mb)))
+      Maybes.Maybe.map_id(
+        String,
+        Orders.Order.join(~String, ~Ver.rev, mb, Orders.Order.join(~String, ~Ver.rev, ma, mb))
+      )
     )
   )
 
@@ -11039,21 +10952,6 @@ def sync_state(s, o, r, w, z, t):
       )
     )
 
-# taking in the same version again keeps the first pick
-law or_idem:
-  for x: Maybe<&2, Ver>
-  for y: Maybe<&2, Ver>
-  {Maybe.or(&2, Ver, Maybe.or(&2, Ver, x, y), y) == Maybe.or(&2, Ver, x, y): Maybe<&2, Ver>}
-
-def or_idem(x, y):
-  match x y:
-    case None{} None{}:
-      {==}
-    case None{} Some{v}:
-      {==}
-    case Some{u} w:
-      {==}
-
 # s takes in a twice: a version is as after once
 law idem_v:
   for s: St
@@ -11199,7 +11097,11 @@ def idem_v(s, a, r1, r2, k):
           St.versions(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
           k
         ),
-        or_idem(Tables.Table.get(Ver, St.versions(s), k), Tables.Table.get(Ver, St.versions(a), k)),
+        Maybes.Maybe.or_idem(
+          Ver,
+          Tables.Table.get(Ver, St.versions(s), k),
+          Tables.Table.get(Ver, St.versions(a), k)
+        ),
         Equal.sym(
           Maybe<&2, Ver>,
           Tables.Table.get(
@@ -12940,8 +12842,8 @@ def comm_m(s, a, b, r1, r2, r3, r4, qb, qm):
         qm
       ),
       (
-        %map_id(Orders.Order.join(~String, ~Ver.rev, Orders.Order.join(~String, ~Ver.rev, MarkAt.find(St.marks(s), qb, qm), MarkAt.find(St.marks(a), qb, qm)), MarkAt.find(St.marks(b), qb, qm))): {_ == Orders.Order.join(~String, ~Ver.rev, Orders.Order.join(~String, ~Ver.rev, MarkAt.find(St.marks(s), qb, qm), MarkAt.find(St.marks(b), qb, qm)), MarkAt.find(St.marks(a), qb, qm)): Maybe<&2, String>}
-        %map_id(Orders.Order.join(~String, ~Ver.rev, Orders.Order.join(~String, ~Ver.rev, MarkAt.find(St.marks(s), qb, qm), MarkAt.find(St.marks(b), qb, qm)), MarkAt.find(St.marks(a), qb, qm))): {Maybe.map(&2, String, String, y => y, Orders.Order.join(~String, ~Ver.rev, Orders.Order.join(~String, ~Ver.rev, MarkAt.find(St.marks(s), qb, qm), MarkAt.find(St.marks(a), qb, qm)), MarkAt.find(St.marks(b), qb, qm))) == _: Maybe<&2, String>}
+        %Maybes.Maybe.map_id(String, Orders.Order.join(~String, ~Ver.rev, Orders.Order.join(~String, ~Ver.rev, MarkAt.find(St.marks(s), qb, qm), MarkAt.find(St.marks(a), qb, qm)), MarkAt.find(St.marks(b), qb, qm))): {_ == Orders.Order.join(~String, ~Ver.rev, Orders.Order.join(~String, ~Ver.rev, MarkAt.find(St.marks(s), qb, qm), MarkAt.find(St.marks(b), qb, qm)), MarkAt.find(St.marks(a), qb, qm)): Maybe<&2, String>}
+        %Maybes.Maybe.map_id(String, Orders.Order.join(~String, ~Ver.rev, Orders.Order.join(~String, ~Ver.rev, MarkAt.find(St.marks(s), qb, qm), MarkAt.find(St.marks(b), qb, qm)), MarkAt.find(St.marks(a), qb, qm))): {Maybe.map(&2, String, String, y => y, Orders.Order.join(~String, ~Ver.rev, Orders.Order.join(~String, ~Ver.rev, MarkAt.find(St.marks(s), qb, qm), MarkAt.find(St.marks(a), qb, qm)), MarkAt.find(St.marks(b), qb, qm))) == _: Maybe<&2, String>}
         Orders.Order.join_comm(~String, ~String, ~Ver.rev, ~(y => y), x => y => rev_swap(x, y), x => y => rev_same(x, y), x => y => z => rev_chain(x, y, z), MarkAt.find(St.marks(s), qb, qm), MarkAt.find(St.marks(a), qb, qm), MarkAt.find(St.marks(b), qb, qm))),
       Equal.sym(
         Maybe<&2, String>,
@@ -13410,7 +13312,7 @@ def add1_other(vs, x, xv, k):
       add_find([Tables.Row{x, xv}], vs, k),
       (
         %Equal.sym(Bool, String.eq(x, k), False{}, e): {Maybe.or(&2, Ver, Tables.Table.get(Ver, vs, k), Bools.Bool.when(Maybe<&2, Ver>, _, u => Some{xv}, u => Tables.Table.find_row(Ver, [], k))) == Tables.Table.get(Ver, vs, k): Maybe<&2, Ver>}
-        or_none(Tables.Table.get(Ver, vs, k)))
+        Maybes.Maybe.or_none(Ver, Tables.Table.get(Ver, vs, k)))
     )
 
 # named_at at the first key j, by whether j is k (hit)
@@ -13792,19 +13694,6 @@ def walk_avoid.g1(
 def walk_avoid(f, ks, done, x, xv, v2s):
   x1 => x2 => walk_avoid.g1(f, ks, done, x, xv, v2s, x1, x2)
 
-# a plus one more is one more than a plus
-law nat_add_succ:
-  for a: Nat
-  for b: Nat
-  {Nat.add(a, 1n+b) == 1n+Nat.add(a, b): Nat}
-
-def nat_add_succ(a, b):
-  match a:
-    case 0n:
-      {==}
-    case 1n+q:
-      Equal.cong(Nat, Nat, z => 1n+z, Nat.add(q, 1n+b), 1n+Nat.add(q, b), nat_add_succ(q, b))
-
 # there is always fuel for one step of a walk
 def links_one(ks: List<&2, String>, +vs: Tables.Table<Ver>) -> &y:
   Nat -> {History.links(ks, vs) == 1n+y: Nat}:
@@ -13832,7 +13721,7 @@ def links_two.of(
     case (+y, e):
       (Nat.add(l, y), (
           %Equal.sym(Nat, History.links(r, vs), 1n+y, e): {Nat.add(1n+l, _) == 1n+1n+Nat.add(l, y): Nat}
-          Equal.cong(Nat, Nat, z => 1n+z, Nat.add(l, 1n+y), 1n+Nat.add(l, y), nat_add_succ(l, y))))
+          Equal.cong(Nat, Nat, z => 1n+z, Nat.add(l, 1n+y), 1n+Nat.add(l, y), Nats.Nat.add_succ(l, y))))
 
 # a walk over some versions has fuel for two steps
 def links_two(
@@ -13854,18 +13743,6 @@ def links_two(
         vs,
         links_one(r, vs)
       )
-
-# equal bytes, or none, are the same
-law same_refl:
-  for m: Maybe<&2, List<&2, U32>>
-  {Maybes.Maybe.same(~List<&2, U32>, ~Octets.Bytes.is_eq, m, m) == True{}: Bool}
-
-def same_refl(m):
-  match m:
-    case None{}:
-      {==}
-    case Some{y}:
-      Octets.Bytes.is_eq_refl(y)
 
 # the merge picks the head's write for n1
 law pick1:
@@ -13966,7 +13843,12 @@ def pick1(b0, n1, x1, n2, x2):
         Tables.Table.get(List<&2, U32>, b0, n1)
       ),
       True{},
-      same_refl(Tables.Table.get(List<&2, U32>, b0, n1))
+      Maybes.Maybe.same_refl(
+        ~List<&2, U32>,
+        ~Octets.Bytes.is_eq,
+        ~Octets.Bytes.is_eq_refl,
+        Tables.Table.get(List<&2, U32>, b0, n1)
+      )
     ):
       {
         Picked.of(
@@ -14146,7 +14028,12 @@ def pick2(b0, n1, x1, n2, x2):
         Tables.Table.get(List<&2, U32>, b0, n2)
       ),
       True{},
-      same_refl(Tables.Table.get(List<&2, U32>, b0, n2))
+      Maybes.Maybe.same_refl(
+        ~List<&2, U32>,
+        ~Octets.Bytes.is_eq,
+        ~Octets.Bytes.is_eq_refl,
+        Tables.Table.get(List<&2, U32>, b0, n2)
+      )
     ):
       {
         Picked.of(
@@ -14282,7 +14169,12 @@ def clash_none.at(c1, b0, n1, x1, n2, x2, n, rest):
             Tables.Table.get(List<&2, U32>, b0, n)
           ),
           True{},
-          same_refl(Tables.Table.get(List<&2, U32>, b0, n))
+          Maybes.Maybe.same_refl(
+            ~List<&2, U32>,
+            ~Octets.Bytes.is_eq,
+            ~Octets.Bytes.is_eq_refl,
+            Tables.Table.get(List<&2, U32>, b0, n)
+          )
         ):
           {
             Picked.clash(
@@ -14362,7 +14254,12 @@ def clash_none.at(c1, b0, n1, x1, n2, x2, n, rest):
             Tables.Table.get(List<&2, U32>, b0, n)
           ),
           True{},
-          same_refl(Tables.Table.get(List<&2, U32>, b0, n))
+          Maybes.Maybe.same_refl(
+            ~List<&2, U32>,
+            ~Octets.Bytes.is_eq,
+            ~Octets.Bytes.is_eq_refl,
+            Tables.Table.get(List<&2, U32>, b0, n)
+          )
         ):
           {
             Picked.clash(
@@ -16371,161 +16268,6 @@ def ws_vself(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
       )(hn)(hask)
     )
 
-# neq_ver, by whether a is b (hit)
-law neq_ver.at:
-  for hit: Bool
-  for vs: Tables.Table<Ver>
-  for a: String
-  for b: String
-  {
-    String.eq(a, b) == hit: Bool
-  } -> {
-    Ver.has(vs, a) == False{}: Bool
-  } -> {Ver.has(vs, b) == True{}: Bool} -> {hit == False{}: Bool}
-
-def neq_ver.at(hit, vs, a, b):
-  match hit:
-    case True{}:
-      e => ha => hb =>
-        +vs = vs
-        +a = a
-        +b = b
-        Empty.absurd(
-          {True{} == False{}: Bool},
-          Shared.Bool.false_ne_true(
-            Equal.trans(
-              Bool,
-              False{},
-              Ver.has(vs, a),
-              True{},
-              Equal.sym(Bool, Ver.has(vs, a), False{}, ha),
-              Equal.trans(
-                Bool,
-                Ver.has(vs, a),
-                Ver.has(vs, b),
-                True{},
-                Equal.cong(
-                  String,
-                  Bool,
-                  z => Ver.has(vs, z),
-                  a,
-                  b,
-                  Strings.String.eq_sound(a, b)(e)
-                ),
-                hb
-              )
-            )
-          )
-        )
-    case False{}:
-      e => ha => hb => {==}
-
-# a version ID that vs lacks is not one that it holds
-law neq_ver:
-  for vs: Tables.Table<Ver>
-  for a: String
-  for b: String
-  {
-    Ver.has(vs, a) == False{}: Bool
-  } -> {Ver.has(vs, b) == True{}: Bool} -> {String.eq(a, b) == False{}: Bool}
-
-def neq_ver(vs, a, b):
-  +a = a
-  +b = b
-  neq_ver.at(String.eq(a, b), vs, a, b)({==})
-
-# neq_br, by whether c is b (hit)
-law neq_br.at:
-  for hit: Bool
-  for bs: Tables.Table<Br>
-  for c: String
-  for b: String
-  for x: Br
-  {
-    String.eq(c, b) == hit: Bool
-  } -> {
-    Tables.Table.get(Br, bs, c) == None{}: Maybe<&2, Br>
-  } -> {Tables.Table.get(Br, bs, b) == Some{x}: Maybe<&2, Br>} -> {hit == False{}: Bool}
-
-def neq_br.at(hit, bs, c, b, x):
-  match hit:
-    case True{}:
-      e => hc => hb =>
-        +bs = bs
-        +c = c
-        +b = b
-        Empty.absurd(
-          {True{} == False{}: Bool},
-          Maybes.Maybe.none_ne_some(
-            Br,
-            x,
-            Equal.trans(
-              Maybe<&2, Br>,
-              None{},
-              Tables.Table.get(Br, bs, c),
-              Some{x},
-              Equal.sym(Maybe<&2, Br>, Tables.Table.get(Br, bs, c), None{}, hc),
-              Equal.trans(
-                Maybe<&2, Br>,
-                Tables.Table.get(Br, bs, c),
-                Tables.Table.get(Br, bs, b),
-                Some{x},
-                Equal.cong(
-                  String,
-                  Maybe<&2, Br>,
-                  z => Tables.Table.get(Br, bs, z),
-                  c,
-                  b,
-                  Strings.String.eq_sound(c, b)(e)
-                ),
-                hb
-              )
-            )
-          )
-        )
-    case False{}:
-      e => hc => hb => {==}
-
-# a branch name that bs lacks is not one that it holds
-law neq_br:
-  for bs: Tables.Table<Br>
-  for c: String
-  for b: String
-  for x: Br
-  {
-    Tables.Table.get(Br, bs, c) == None{}: Maybe<&2, Br>
-  } -> {Tables.Table.get(Br, bs, b) == Some{x}: Maybe<&2, Br>} -> {String.eq(c, b) == False{}: Bool}
-
-def neq_br(bs, c, b, x):
-  +c = c
-  +b = b
-  neq_br.at(String.eq(c, b), bs, c, b, x)({==})
-
-# neq_str, by whether a is b (hit)
-law neq_str.at:
-  for hit: Bool
-  for a: String
-  for b: String
-  {String.eq(a, b) == hit: Bool} -> {a != b: String} -> {hit == False{}: Bool}
-
-def neq_str.at(hit, a, b):
-  match hit:
-    case True{}:
-      e => hne => Empty.absurd({True{} == False{}: Bool}, hne(Strings.String.eq_sound(a, b)(e)))
-    case False{}:
-      e => hne => {==}
-
-# different names do not compare equal
-law neq_str:
-  for a: String
-  for b: String
-  {a != b: String} -> {String.eq(a, b) == False{}: Bool}
-
-def neq_str(a, b):
-  +a = a
-  +b = b
-  neq_str.at(String.eq(a, b), a, b)({==})
-
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the law is about the owner check as the node runs it; a proof does not run
 # merge_disjoint_keeps_both, once the walks of the merge have fuel f for two
 # steps
@@ -16707,7 +16449,30 @@ def mdk_fin(
     +s1g = sb_vg(s, s1, r1, w1, z1, b, c, v0)(hn1)(h1)
     +s1s = sb_vself(s, s1, r1, w1, z1, b, c, v0)(hn1)(h1)
     +hcn = sb_none(s, s1, r1, w1, z1, b, c, v0)(hn1)(h1)
-    +ecb = neq_br(St.branches(s), c, b, Br{v0, o, e, k})(hcn)(hbs)
+    +ecb = Tables.Table.differ(
+      Br,
+      St.branches(s),
+      c,
+      b
+    )(
+      Equal.cong(
+        Maybe<&2, Br>,
+        Bool,
+        z => Maybe.is_some(&2, Br, z),
+        Tables.Table.get(Br, St.branches(s), c),
+        None{},
+        hcn
+      )
+    )(
+      Equal.cong(
+        Maybe<&2, Br>,
+        Bool,
+        z => Maybe.is_some(&2, Br, z),
+        Tables.Table.get(Br, St.branches(s), b),
+        Some{Br{v0, o, e, k}},
+        hbs
+      )
+    )
     +ebc = Strings.String.eq_flip(c, b)(ecb)
     +b1b = Equal.trans(
       Maybe<&2, Br>,
@@ -16923,7 +16688,12 @@ def mdk_fin(
       Some{Ver{yb, yp, yw, yt}},
       g1v0
     )
-    +er2v0 = neq_ver(St.versions(s1), r2, v0)(taken_free(St.versions(s1), r2)(ht2))(hv1)
+    +er2v0 = Tables.Table.differ(
+      Ver,
+      St.versions(s1),
+      r2,
+      v0
+    )(taken_free(St.versions(s1), r2)(ht2))(hv1)
     +g2v0 = Equal.trans(
       Maybe<&2, Ver>,
       Tables.Table.get(Ver, St.versions(s2), v0),
@@ -16994,7 +16764,12 @@ def mdk_fin(
       Some{Ver{yb, yp, yw, yt}},
       g2v0
     )
-    +er3v0 = neq_ver(St.versions(s2), r3, v0)(taken_free(St.versions(s2), r3)(ht3))(hv2)
+    +er3v0 = Tables.Table.differ(
+      Ver,
+      St.versions(s2),
+      r3,
+      v0
+    )(taken_free(St.versions(s2), r3)(ht3))(hv2)
     +g2r2 = Equal.trans(
       Maybe<&2, Ver>,
       Tables.Table.get(Ver, St.versions(s2), r2),
@@ -17049,7 +16824,8 @@ def mdk_fin(
         St.versions(s1)
       )(taken_free(St.versions(s1), r2)(ht2))
     )
-    +er3r2 = neq_ver(
+    +er3r2 = Tables.Table.differ(
+      Ver,
       St.versions(s2),
       r3,
       r2
@@ -19333,7 +19109,30 @@ def mdk_core(
     +r3 = r3
     +s1b = sb_vb(s, s1, r1, w1, z1, b, c, v0)(hn1)(h1)
     +hcn = sb_none(s, s1, r1, w1, z1, b, c, v0)(hn1)(h1)
-    +ecb = neq_br(St.branches(s), c, b, Br{v0, o, e, k})(hcn)(hbs)
+    +ecb = Tables.Table.differ(
+      Br,
+      St.branches(s),
+      c,
+      b
+    )(
+      Equal.cong(
+        Maybe<&2, Br>,
+        Bool,
+        z => Maybe.is_some(&2, Br, z),
+        Tables.Table.get(Br, St.branches(s), c),
+        None{},
+        hcn
+      )
+    )(
+      Equal.cong(
+        Maybe<&2, Br>,
+        Bool,
+        z => Maybe.is_some(&2, Br, z),
+        Tables.Table.get(Br, St.branches(s), b),
+        Some{Br{v0, o, e, k}},
+        hbs
+      )
+    )
     +ebc = Strings.String.eq_flip(c, b)(ecb)
     +b1b = Equal.trans(
       Maybe<&2, Br>,
@@ -20619,4 +20418,4 @@ def Spec.merge_disjoint_keeps_both(
           +v0 = v0
           +n1 = n1
           +n2 = n2
-          mdk_split(Tables.Table.get(Br, St.branches(s), b), Tables.Table.get(Ver, St.versions(s), v0), s, s1, s2, s3, s4, a4, r1, w1, z1, r2, w2, z2, r3, w3, z3, r4, w4, z4, b, c, n1, n2, base1, base2, x1, x2, v0, v1, v2)({==})({==})(hn1)(hn2)(hn3)(hn4)(neq_str(n1, n2)(hne))(h1)(h2)(h3)(h4))
+          mdk_split(Tables.Table.get(Br, St.branches(s), b), Tables.Table.get(Ver, St.versions(s), v0), s, s1, s2, s3, s4, a4, r1, w1, z1, r2, w2, z2, r3, w3, z3, r4, w4, z4, b, c, n1, n2, base1, base2, x1, x2, v0, v1, v2)({==})({==})(hn1)(hn2)(hn3)(hn4)(Strings.String.ne_eq(n1, n2)(hne))(h1)(h2)(h3)(h4))

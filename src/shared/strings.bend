@@ -13,11 +13,13 @@ def String.order_refl(a: String) -> {String.order.go(a, a, EQ{}) == EQ{}: Cmp}:
     case SCon{c, t}:
       match c:
         case Chr{x}:
-          match x:
-            case U32{w}:
-              %Equal.sym(Cmp, Word.cmp(32n, w, w), EQ{}, Words.Word.cmp_refl(32n, w)):
-                {String.order.go(t, t, _) == EQ{}: Cmp}
-              String.order_refl(t)
+          %Equal.sym(
+            Cmp,
+            U32.cmp(x, x),
+            EQ{},
+            Words.U32.cmp_refl(x)
+          ): {String.order.go(t, t, _) == EQ{}: Cmp}
+          String.order_refl(t)
 # String.order.go from c is c, then the order from EQ
 def String.order_then(
   c: Cmp,
@@ -455,3 +457,19 @@ def has_append_false(
           )
         )(hb)
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# String.ne_eq, by whether a is b (hit)
+def String.ne_eq.at(
+  hit: Bool,
+  a: String,
+  b: String
+) -> {String.eq(a, b) == hit: Bool} -> {a != b: String} -> {hit == False{}: Bool}:
+  match hit:
+    case True{}:
+      e => hne => Empty.absurd({True{} == False{}: Bool}, hne(String.eq_sound(a, b)(e)))
+    case False{}:
+      e => hne => {==}
+
+# names that are not equal do not compare equal
+def String.ne_eq(+a: String, +b: String) -> {a != b: String} -> {String.eq(a, b) == False{}: Bool}:
+  String.ne_eq.at(String.eq(a, b), a, b)({==})

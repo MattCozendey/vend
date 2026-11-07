@@ -119,16 +119,6 @@ def Reach.fits(-A: Data, ps: List<&2, A>, f: Nat) -> Bool:
     case Con{p, r} 1n+n:
       Reach.fits(A, r, n)
 
-# a is at most b
-def Reach.le(a: Nat, b: Nat) -> Bool:
-  match a b:
-    case 0n n:
-      True{}
-    case 1n+x 0n:
-      False{}
-    case 1n+x 1n+y:
-      Reach.le(x, y)
-
 # no node of ps comes twice
 def Reach.distinct(~A: Data, ~same: A -> A -> Bool, ps: List<&2, A>) -> Bool:
   match ps:
@@ -164,15 +154,7 @@ def Reach.first(-A: Data, ps: List<&2, A>, m: A) -> A:
 # finding m in a ++ b is finding it in a or in b
 def Reach.found_append(
   ~A: Data,
-  ~V: Data,
   ~same: A -> A -> Bool,
-  ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +a: List<&2, A>,
   +b: List<&2, A>,
   +m: A
@@ -193,7 +175,7 @@ def Reach.found_append(
         Bool,
         Reach.found(~A, ~same, List.append(&2, A, r, b), m),
         Bool.or(Reach.found(~A, ~same, r, m), Reach.found(~A, ~same, b, m)),
-        Reach.found_append(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, r, b, m)
+        Reach.found_append(~A, ~same, r, b, m)
       ): {
         Bool.or(
           same(x, m),
@@ -210,15 +192,7 @@ def Reach.found_append(
 # Reach.found_cons, once a node y of r is found
 def Reach.found_cons(
   ~A: Data,
-  ~V: Data,
   ~same: A -> A -> Bool,
-  ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   x: A,
   r: List<&2, A>,
   y: A
@@ -241,12 +215,6 @@ def Reach.next_found.cons(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   x: A,
   r: List<&2, A>,
   g: V,
@@ -262,7 +230,7 @@ def Reach.next_found.cons(
     & {Reach.found(~A, ~same, succ(g)(y), q) == True{}: Bool}:
   match w:
     case (+y, (h1, h2)):
-      (y, (Reach.found_cons(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, x, r, y)(h1), h2))
+      (y, (Reach.found_cons(~A, ~same, x, r, y)(h1), h2))
 
 # Reach.next_found at the first node x of xs, by whether q is its successor
 # (hit)
@@ -271,12 +239,7 @@ def Reach.next_found.at(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
   ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +hit: Bool,
   +x: A,
   r: List<&2, A>,
@@ -304,21 +267,7 @@ def Reach.next_found.at(
               %Equal.sym(Bool, same(x, x), True{}, refl(x)): {Bool.or(_, Reach.found(~A, ~same, r, x)) == True{}: Bool}
               {==}), e))
     case False{}:
-      +e => +h => Reach.next_found.cons(
-        ~A,
-        ~V,
-        ~same,
-        ~succ,
-        ~nodes,
-        ~refl,
-        ~sound,
-        ~live,
-        x,
-        r,
-        g,
-        q,
-        ih(h)
-      )
+      +e => +h => Reach.next_found.cons(~A, ~V, ~same, ~succ, x, r, g, q, ih(h))
 
 # a node q of the next level is a successor of a node of xs
 def Reach.next_found(
@@ -326,12 +275,7 @@ def Reach.next_found(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
   ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +xs: List<&2, A>,
   +g: V,
   +q: A
@@ -356,18 +300,15 @@ def Reach.next_found(
           ~V,
           ~same,
           ~succ,
-          ~nodes,
           ~refl,
-          ~sound,
-          ~live,
           Reach.found(~A, ~same, succ(g)(x), q),
           x,
           r,
           g,
           q,
-          Reach.next_found(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, r, g, q)
+          Reach.next_found(~A, ~V, ~same, ~succ, ~refl, r, g, q)
         )({==})((
-            %Reach.found_append(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, succ(g)(x), Reach.next(~A, ~V, ~succ, r, g), q): {_ == True{}: Bool}
+            %Reach.found_append(~A, ~same, succ(g)(x), Reach.next(~A, ~V, ~succ, r, g), q): {_ == True{}: Bool}
             h))
 
 # Reach.path_step when ps has a first node p, once the node y before it is found
@@ -376,12 +317,6 @@ def Reach.path_step.cons(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   xs: List<&2, A>,
   p: A,
   r: List<&2, A>,
@@ -409,12 +344,7 @@ def Reach.path_step(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
   ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +xs: List<&2, A>,
   +ps: List<&2, A>,
   +g: V,
@@ -428,17 +358,13 @@ def Reach.path_step(
     & {Reach.path(~A, ~V, ~same, ~succ, ps, succ(g)(y), g, m) == True{}: Bool}:
   match ps:
     case Nil{}:
-      +h => Reach.next_found(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, xs, g, m)(h)
+      +h => Reach.next_found(~A, ~V, ~same, ~succ, ~refl, xs, g, m)(h)
     case Con{+p, +r}:
       +h => Reach.path_step.cons(
         ~A,
         ~V,
         ~same,
         ~succ,
-        ~nodes,
-        ~refl,
-        ~sound,
-        ~live,
         xs,
         p,
         r,
@@ -453,10 +379,7 @@ def Reach.path_step(
           ~V,
           ~same,
           ~succ,
-          ~nodes,
           ~refl,
-          ~sound,
-          ~live,
           xs,
           g,
           p
@@ -474,12 +397,6 @@ def Reach.go_path.cons(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   xs: List<&2, A>,
   ps: List<&2, A>,
   e: Nat,
@@ -509,12 +426,7 @@ def Reach.go_path.lift(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
   ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +xs: List<&2, A>,
   e: Nat,
   +g: V,
@@ -539,17 +451,13 @@ def Reach.go_path.lift(
         ~V,
         ~same,
         ~succ,
-        ~nodes,
-        ~refl,
-        ~sound,
-        ~live,
         xs,
         ps,
         e,
         g,
         m,
         hf,
-        Reach.path_step(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, xs, ps, g, m)(hp)
+        Reach.path_step(~A, ~V, ~same, ~succ, ~refl, xs, ps, g, m)(hp)
       )
 
 # Reach.go_path one level down, by whether m is in the first level (hit)
@@ -558,12 +466,7 @@ def Reach.go_path.at(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
   ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +hit: Bool,
   e: Nat,
   xs: List<&2, A>,
@@ -596,21 +499,7 @@ def Reach.go_path.at(
     case True{}:
       +he => +h => ([], (he, {==}))
     case False{}:
-      +he => +h => Reach.go_path.lift(
-        ~A,
-        ~V,
-        ~same,
-        ~succ,
-        ~nodes,
-        ~refl,
-        ~sound,
-        ~live,
-        xs,
-        e,
-        g,
-        m,
-        ih(h)
-      )
+      +he => +h => Reach.go_path.lift(~A, ~V, ~same, ~succ, ~refl, xs, e, g, m, ih(h))
 
 # a search that finds m has a path to m, no longer than the search is deep
 def Reach.go_path(
@@ -618,12 +507,7 @@ def Reach.go_path(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
   ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +f: Nat,
   +xs: List<&2, A>,
   +g: V,
@@ -644,29 +528,13 @@ def Reach.go_path(
         ~V,
         ~same,
         ~succ,
-        ~nodes,
         ~refl,
-        ~sound,
-        ~live,
         Reach.found(~A, ~same, xs, m),
         e,
         xs,
         g,
         m,
-        Reach.go_path(
-          ~A,
-          ~V,
-          ~same,
-          ~succ,
-          ~nodes,
-          ~refl,
-          ~sound,
-          ~live,
-          e,
-          Reach.next(~A, ~V, ~succ, xs, g),
-          g,
-          m
-        )
+        Reach.go_path(~A, ~V, ~same, ~succ, ~refl, e, Reach.next(~A, ~V, ~succ, xs, g), g, m)
       )({==})(h)
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
@@ -676,12 +544,7 @@ def Reach.found_sub.at(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +hit: Bool,
   +x: A,
   r: List<&2, A>,
@@ -723,19 +586,7 @@ def Reach.found_sub.at(
             Reach.found(~A, ~same, succ(g)(x), q),
             Reach.found(~A, ~same, Reach.next(~A, ~V, ~succ, r, g), q)
           ),
-          Reach.found_append(
-            ~A,
-            ~V,
-            ~same,
-            ~succ,
-            ~nodes,
-            ~refl,
-            ~sound,
-            ~live,
-            succ(g)(x),
-            Reach.next(~A, ~V, ~succ, r, g),
-            q
-          )
+          Reach.found_append(~A, ~same, succ(g)(x), Reach.next(~A, ~V, ~succ, r, g), q)
         ): {_ == True{}: Bool}
         %Equal.sym(
           A,
@@ -770,19 +621,7 @@ def Reach.found_sub.at(
             Reach.found(~A, ~same, succ(g)(x), q),
             Reach.found(~A, ~same, Reach.next(~A, ~V, ~succ, r, g), q)
           ),
-          Reach.found_append(
-            ~A,
-            ~V,
-            ~same,
-            ~succ,
-            ~nodes,
-            ~refl,
-            ~sound,
-            ~live,
-            succ(g)(x),
-            Reach.next(~A, ~V, ~succ, r, g),
-            q
-          )
+          Reach.found_append(~A, ~same, succ(g)(x), Reach.next(~A, ~V, ~succ, r, g), q)
         ): {_ == True{}: Bool}
         %Equal.sym(
           Bool,
@@ -799,12 +638,7 @@ def Reach.found_sub(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +xs: List<&2, A>,
   +p: A,
   +q: A,
@@ -826,17 +660,14 @@ def Reach.found_sub(
         ~V,
         ~same,
         ~succ,
-        ~nodes,
-        ~refl,
         ~sound,
-        ~live,
         same(x, p),
         x,
         r,
         p,
         q,
         g,
-        Reach.found_sub(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, r, p, q, g)
+        Reach.found_sub(~A, ~V, ~same, ~succ, ~sound, r, p, q, g)
       )({==})(h)
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
@@ -846,12 +677,7 @@ def Reach.path_sub(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   xs: List<&2, A>,
   +p: A,
   +r: List<&2, A>,
@@ -864,20 +690,7 @@ def Reach.path_sub(
 } -> {Reach.path(~A, ~V, ~same, ~succ, r, Reach.next(~A, ~V, ~succ, xs, g), g, m) == True{}: Bool}:
   match r:
     case Nil{}:
-      +hp => +h => Reach.found_sub(
-        ~A,
-        ~V,
-        ~same,
-        ~succ,
-        ~nodes,
-        ~refl,
-        ~sound,
-        ~live,
-        xs,
-        p,
-        m,
-        g
-      )(hp)(h)
+      +hp => +h => Reach.found_sub(~A, ~V, ~same, ~succ, ~sound, xs, p, m, g)(hp)(h)
     case Con{+q, +r2}:
       +hp => +h =>
         %Equal.sym(
@@ -889,10 +702,7 @@ def Reach.path_sub(
             ~V,
             ~same,
             ~succ,
-            ~nodes,
-            ~refl,
             ~sound,
-            ~live,
             xs,
             p,
             q,
@@ -918,12 +728,7 @@ def Reach.path_go(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +ps: List<&2, A>,
   +f: Nat,
   +xs: List<&2, A>,
@@ -968,10 +773,7 @@ def Reach.path_go(
             ~V,
             ~same,
             ~succ,
-            ~nodes,
-            ~refl,
             ~sound,
-            ~live,
             r,
             e,
             Reach.next(~A, ~V, ~succ, xs, g),
@@ -983,10 +785,7 @@ def Reach.path_go(
               ~V,
               ~same,
               ~succ,
-              ~nodes,
-              ~refl,
               ~sound,
-              ~live,
               xs,
               p,
               r,
@@ -1013,12 +812,6 @@ def Reach.path_append(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +a: List<&2, A>,
   +xs: List<&2, A>,
   +h: A,
@@ -1062,10 +855,6 @@ def Reach.path_append(
           ~V,
           ~same,
           ~succ,
-          ~nodes,
-          ~refl,
-          ~sound,
-          ~live,
           r,
           succ(g)(p),
           h,
@@ -1085,12 +874,6 @@ def Reach.path_first(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +ps: List<&2, A>,
   ys: List<&2, A>,
   +g: V,
@@ -1114,8 +897,6 @@ def Reach.path_within(
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
   ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
   ~live: @g: V -> @p: A -> @q: A -> {
     Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
   } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
@@ -1136,10 +917,6 @@ def Reach.path_within(
           ~V,
           ~same,
           ~succ,
-          ~nodes,
-          ~refl,
-          ~sound,
-          ~live,
           r,
           succ(g)(p),
           g,
@@ -1162,8 +939,6 @@ def Reach.path_within(
           ~same,
           ~succ,
           ~nodes,
-          ~refl,
-          ~sound,
           ~live,
           r,
           succ(g)(p),
@@ -1182,12 +957,7 @@ def Reach.after_path.at(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +hit: Bool,
   +x: A,
   r: List<&2, A>,
@@ -1249,12 +1019,7 @@ def Reach.after_path(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +rs: List<&2, A>,
   +p: A,
   ys: List<&2, A>,
@@ -1279,10 +1044,7 @@ def Reach.after_path(
         ~V,
         ~same,
         ~succ,
-        ~nodes,
-        ~refl,
         ~sound,
-        ~live,
         same(x, p),
         x,
         r,
@@ -1290,21 +1052,13 @@ def Reach.after_path(
         ys,
         g,
         m,
-        Reach.after_path(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, r, p, succ(g)(x), g, m)
+        Reach.after_path(~A, ~V, ~same, ~succ, ~sound, r, p, succ(g)(x), g, m)
       )({==})(hf)
 
 # Reach.after_distinct at the first node x, by whether it is p (hit)
 def Reach.after_distinct.at(
   ~A: Data,
-  ~V: Data,
   ~same: A -> A -> Bool,
-  ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +hit: Bool,
   x: A,
   +r: List<&2, A>,
@@ -1341,15 +1095,7 @@ def Reach.after_distinct.at(
 # what follows a node of a path that visits each node once visits each once
 def Reach.after_distinct(
   ~A: Data,
-  ~V: Data,
   ~same: A -> A -> Bool,
-  ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +rs: List<&2, A>,
   +p: A
 ) -> {
@@ -1361,32 +1107,19 @@ def Reach.after_distinct(
     case Con{+x, +r}:
       Reach.after_distinct.at(
         ~A,
-        ~V,
         ~same,
-        ~succ,
-        ~nodes,
-        ~refl,
-        ~sound,
-        ~live,
         same(x, p),
         x,
         r,
         p,
-        Reach.after_distinct(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, r, p)
+        Reach.after_distinct(~A, ~same, r, p)
       )({==})
 
 # Reach.after_free at the first node x, by whether it is p (hit)
 def Reach.after_free.at(
   ~A: Data,
-  ~V: Data,
   ~same: A -> A -> Bool,
-  ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +hit: Bool,
   +x: A,
   +r: List<&2, A>,
@@ -1435,15 +1168,8 @@ def Reach.after_free.at(
 # once
 def Reach.after_free(
   ~A: Data,
-  ~V: Data,
   ~same: A -> A -> Bool,
-  ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +rs: List<&2, A>,
   +p: A
 ) -> {
@@ -1460,18 +1186,13 @@ def Reach.after_free(
     case Con{+x, +r}:
       Reach.after_free.at(
         ~A,
-        ~V,
         ~same,
-        ~succ,
-        ~nodes,
-        ~refl,
         ~sound,
-        ~live,
         same(x, p),
         x,
         r,
         p,
-        Reach.after_free(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, r, p)
+        Reach.after_free(~A, ~same, ~sound, r, p)
       )({==})
 
 # Reach.shorten after its first node p, by whether p comes again (hit)
@@ -1480,12 +1201,7 @@ def Reach.shorten.at(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +hit: Bool,
   xs: List<&2, A>,
   +p: A,
@@ -1514,9 +1230,9 @@ def Reach.shorten.at(
       +he =>
         (p <> Reach.after(~A, ~same, rs, p), ((
               %Equal.sym(Bool, Reach.found(~A, ~same, xs, p), True{}, hx): {Bool.and(_, Reach.path(~A, ~V, ~same, ~succ, Reach.after(~A, ~same, rs, p), succ(g)(p), g, m)) == True{}: Bool}
-              Reach.after_path(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, rs, p, succ(g)(p), g, m)(he)(hp)), (
-              %Equal.sym(Bool, Reach.found(~A, ~same, Reach.after(~A, ~same, rs, p), p), False{}, Reach.after_free(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, rs, p)(hd)(he)): {Bool.and(Bool.not(_), Reach.distinct(~A, ~same, Reach.after(~A, ~same, rs, p))) == True{}: Bool}
-              Reach.after_distinct(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, rs, p)(hd))))
+              Reach.after_path(~A, ~V, ~same, ~succ, ~sound, rs, p, succ(g)(p), g, m)(he)(hp)), (
+              %Equal.sym(Bool, Reach.found(~A, ~same, Reach.after(~A, ~same, rs, p), p), False{}, Reach.after_free(~A, ~same, ~sound, rs, p)(hd)(he)): {Bool.and(Bool.not(_), Reach.distinct(~A, ~same, Reach.after(~A, ~same, rs, p))) == True{}: Bool}
+              Reach.after_distinct(~A, ~same, rs, p)(hd))))
 
 # Reach.shorten after its first node p, once the rest is cut
 def Reach.shorten.cons(
@@ -1524,12 +1240,7 @@ def Reach.shorten.cons(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   xs: List<&2, A>,
   +p: A,
   g: V,
@@ -1555,10 +1266,7 @@ def Reach.shorten.cons(
         ~V,
         ~same,
         ~succ,
-        ~nodes,
-        ~refl,
         ~sound,
-        ~live,
         Reach.found(~A, ~same, rs, p),
         xs,
         p,
@@ -1576,12 +1284,7 @@ def Reach.shorten(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +ps: List<&2, A>,
   +xs: List<&2, A>,
   +g: V,
@@ -1602,10 +1305,7 @@ def Reach.shorten(
         ~V,
         ~same,
         ~succ,
-        ~nodes,
-        ~refl,
         ~sound,
-        ~live,
         xs,
         p,
         g,
@@ -1619,10 +1319,7 @@ def Reach.shorten(
           ~V,
           ~same,
           ~succ,
-          ~nodes,
-          ~refl,
           ~sound,
-          ~live,
           r,
           succ(g)(p),
           g,
@@ -1642,12 +1339,12 @@ def Reach.shorten(
 def Reach.le_succ(
   +a: Nat,
   +b: Nat
-) -> {Reach.le(a, b) == True{}: Bool} -> {Reach.le(a, 1n+b) == True{}: Bool}:
+) -> {Nat.is_le(a, b) == True{}: Bool} -> {Nat.is_le(a, 1n+b) == True{}: Bool}:
   match a b:
     case 0n y:
       +h => {==}
     case 1n+x 0n:
-      +h => Empty.absurd({Reach.le(1n+x, 1n) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+      +h => Empty.absurd({Nat.is_le(1n+x, 1n) == True{}: Bool}, Shared.Bool.false_ne_true(h))
     case 1n+x 1n+y:
       +h => Reach.le_succ(x, y)(h)
 
@@ -1659,7 +1356,7 @@ def Reach.fits_le(
   +b: Nat
 ) -> {
   Reach.fits(A, ps, a) == True{}: Bool
-} -> {Reach.le(a, b) == True{}: Bool} -> {Reach.fits(A, ps, b) == True{}: Bool}:
+} -> {Nat.is_le(a, b) == True{}: Bool} -> {Reach.fits(A, ps, b) == True{}: Bool}:
   match ps a b:
     case Nil{} x y:
       +hf => +hl => {==}
@@ -1679,28 +1376,20 @@ def Reach.fits_le(
 # Reach.drop_le at the first node k, by whether it is p (hit)
 def Reach.drop_le.at(
   ~A: Data,
-  ~V: Data,
   ~same: A -> A -> Bool,
-  ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +hit: Bool,
   k: A,
   +r: List<&2, A>,
   p: A,
   ih: {
-    Reach.le(
+    Nat.is_le(
       List.length(&2, A, Shared.List.remove(~A, ~same, r, p)),
       List.length(&2, A, r)
     )
       == True{}: Bool
   }
 ) -> {
-  Reach.le(
+  Nat.is_le(
     List.length(&2, A, List.filter.put(A, k, Shared.List.remove(~A, ~same, r, p), Bool.not(hit))),
     1n+List.length(&2, A, r)
   )
@@ -1718,19 +1407,11 @@ def Reach.drop_le.at(
 # dropping nodes leaves no more than there were
 def Reach.drop_le(
   ~A: Data,
-  ~V: Data,
   ~same: A -> A -> Bool,
-  ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +ks: List<&2, A>,
   +p: A
 ) -> {
-  Reach.le(
+  Nat.is_le(
     List.length(&2, A, Shared.List.remove(~A, ~same, ks, p)),
     List.length(&2, A, ks)
   )
@@ -1740,34 +1421,12 @@ def Reach.drop_le(
     case Nil{}:
       {==}
     case Con{k, +r}:
-      Reach.drop_le.at(
-        ~A,
-        ~V,
-        ~same,
-        ~succ,
-        ~nodes,
-        ~refl,
-        ~sound,
-        ~live,
-        same(k, p),
-        k,
-        r,
-        p,
-        Reach.drop_le(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, r, p)
-      )
+      Reach.drop_le.at(~A, ~same, same(k, p), k, r, p, Reach.drop_le(~A, ~same, r, p))
 
 # Reach.drop_lt at the first node k, by whether it is p (hit)
 def Reach.drop_lt.at(
   ~A: Data,
-  ~V: Data,
   ~same: A -> A -> Bool,
-  ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +hit: Bool,
   k: A,
   r: List<&2, A>,
@@ -1775,7 +1434,7 @@ def Reach.drop_lt.at(
   ih: {
     Reach.found(~A, ~same, r, p) == True{}: Bool
   } -> {
-    Reach.le(
+    Nat.is_le(
       1n+List.length(&2, A, Shared.List.remove(~A, ~same, r, p)),
       List.length(&2, A, r)
     )
@@ -1784,7 +1443,7 @@ def Reach.drop_lt.at(
 ) -> {
   Bool.or(hit, Reach.found(~A, ~same, r, p)) == True{}: Bool
 } -> {
-  Reach.le(
+  Nat.is_le(
     1n+List.length(
       &2,
       A,
@@ -1796,28 +1455,20 @@ def Reach.drop_lt.at(
 }:
   match hit:
     case True{}:
-      +h => Reach.drop_le(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, r, p)
+      +h => Reach.drop_le(~A, ~same, r, p)
     case False{}:
       +h => ih(h)
 
 # dropping a node that is there leaves fewer
 def Reach.drop_lt(
   ~A: Data,
-  ~V: Data,
   ~same: A -> A -> Bool,
-  ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +ks: List<&2, A>,
   +p: A
 ) -> {
   Reach.found(~A, ~same, ks, p) == True{}: Bool
 } -> {
-  Reach.le(
+  Nat.is_le(
     1n+List.length(&2, A, Shared.List.remove(~A, ~same, ks, p)),
     List.length(&2, A, ks)
   )
@@ -1826,39 +1477,20 @@ def Reach.drop_lt(
   match ks:
     case Nil{}:
       +h => Empty.absurd(
-        {Reach.le(1n+List.length(&2, A, Shared.List.remove(~A, ~same, [], p)), 0n) == True{}: Bool},
+        {
+          Nat.is_le(1n+List.length(&2, A, Shared.List.remove(~A, ~same, [], p)), 0n) == True{}: Bool
+        },
         Shared.Bool.false_ne_true(h)
       )
     case Con{k, +r}:
-      Reach.drop_lt.at(
-        ~A,
-        ~V,
-        ~same,
-        ~succ,
-        ~nodes,
-        ~refl,
-        ~sound,
-        ~live,
-        same(k, p),
-        k,
-        r,
-        p,
-        Reach.drop_lt(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, r, p)
-      )
+      Reach.drop_lt.at(~A, ~same, same(k, p), k, r, p, Reach.drop_lt(~A, ~same, r, p))
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Reach.drop_keep at the first node k, by whether it is p (hk) and q (hq)
 def Reach.drop_keep.at(
   ~A: Data,
-  ~V: Data,
   ~same: A -> A -> Bool,
-  ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +hk: Bool,
   +hq: Bool,
   k: A,
@@ -1925,15 +1557,8 @@ def Reach.drop_keep.at(
 # dropping the nodes that are p keeps the others
 def Reach.drop_keep(
   ~A: Data,
-  ~V: Data,
   ~same: A -> A -> Bool,
-  ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +ks: List<&2, A>,
   +p: A,
   +q: A
@@ -1951,34 +1576,22 @@ def Reach.drop_keep(
     case Con{+k, +r}:
       Reach.drop_keep.at(
         ~A,
-        ~V,
         ~same,
-        ~succ,
-        ~nodes,
-        ~refl,
         ~sound,
-        ~live,
         same(k, p),
         same(k, q),
         k,
         r,
         p,
         q,
-        Reach.drop_keep(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, r, p, q)
+        Reach.drop_keep(~A, ~same, ~sound, r, p, q)
       )({==})({==})
 
 # the nodes of ps, none of them p, stay in ks without p
 def Reach.within_drop(
   ~A: Data,
-  ~V: Data,
   ~same: A -> A -> Bool,
-  ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +ps: List<&2, A>,
   +ks: List<&2, A>,
   +p: A
@@ -1998,13 +1611,8 @@ def Reach.within_drop(
           True{},
           Reach.drop_keep(
             ~A,
-            ~V,
             ~same,
-            ~succ,
-            ~nodes,
-            ~refl,
             ~sound,
-            ~live,
             ks,
             p,
             q
@@ -2023,13 +1631,8 @@ def Reach.within_drop(
         }
         Reach.within_drop(
           ~A,
-          ~V,
           ~same,
-          ~succ,
-          ~nodes,
-          ~refl,
           ~sound,
-          ~live,
           r,
           ks,
           p
@@ -2043,15 +1646,8 @@ def Reach.within_drop(
 # a path that visits each node of ks at most once has no more nodes than ks
 def Reach.fits_nodes(
   ~A: Data,
-  ~V: Data,
   ~same: A -> A -> Bool,
-  ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +ps: List<&2, A>,
   +ks: List<&2, A>
 ) -> {
@@ -2072,13 +1668,8 @@ def Reach.fits_nodes(
         )(
           Reach.fits_nodes(
             ~A,
-            ~V,
             ~same,
-            ~succ,
-            ~nodes,
-            ~refl,
             ~sound,
-            ~live,
             r,
             Shared.List.remove(~A, ~same, ks, p)
           )(
@@ -2089,13 +1680,8 @@ def Reach.fits_nodes(
           )(
             Reach.within_drop(
               ~A,
-              ~V,
               ~same,
-              ~succ,
-              ~nodes,
-              ~refl,
               ~sound,
-              ~live,
               r,
               ks,
               p
@@ -2118,13 +1704,7 @@ def Reach.fits_nodes(
         )(
           Reach.drop_lt(
             ~A,
-            ~V,
             ~same,
-            ~succ,
-            ~nodes,
-            ~refl,
-            ~sound,
-            ~live,
             ks,
             p
           )(
@@ -2145,7 +1725,6 @@ def Reach.in_through.fin(
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
   ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
   ~live: @g: V -> @p: A -> @q: A -> {
     Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
@@ -2167,10 +1746,7 @@ def Reach.in_through.fin(
         ~V,
         ~same,
         ~succ,
-        ~nodes,
-        ~refl,
         ~sound,
-        ~live,
         qs,
         List.length(&2, A, nodes(g)),
         succ(g)(x),
@@ -2181,33 +1757,11 @@ def Reach.in_through.fin(
       )(
         Reach.fits_nodes(
           ~A,
-          ~V,
           ~same,
-          ~succ,
-          ~nodes,
-          ~refl,
           ~sound,
-          ~live,
           qs,
           nodes(g)
-        )(
-          hd
-        )(
-          Reach.path_within(
-            ~A,
-            ~V,
-            ~same,
-            ~succ,
-            ~nodes,
-            ~refl,
-            ~sound,
-            ~live,
-            qs,
-            succ(g)(x),
-            g,
-            m
-          )(hq)
-        )
+        )(hd)(Reach.path_within(~A, ~V, ~same, ~succ, ~nodes, ~live, qs, succ(g)(x), g, m)(hq))
       )
 
 # Reach.in_through, once the path from h to m is found
@@ -2217,7 +1771,6 @@ def Reach.in_through.two(
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
   ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
   ~live: @g: V -> @p: A -> @q: A -> {
     Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
@@ -2243,7 +1796,6 @@ def Reach.in_through.two(
         ~same,
         ~succ,
         ~nodes,
-        ~refl,
         ~sound,
         ~live,
         g,
@@ -2254,32 +1806,12 @@ def Reach.in_through.two(
           ~V,
           ~same,
           ~succ,
-          ~nodes,
-          ~refl,
           ~sound,
-          ~live,
           List.append(&2, A, ps1, h <> ps2),
           succ(g)(x),
           g,
           m
-        )(
-          Reach.path_append(
-            ~A,
-            ~V,
-            ~same,
-            ~succ,
-            ~nodes,
-            ~refl,
-            ~sound,
-            ~live,
-            ps1,
-            succ(g)(x),
-            h,
-            ps2,
-            g,
-            m
-          )(h1)(h2)
-        )
+        )(Reach.path_append(~A, ~V, ~same, ~succ, ps1, succ(g)(x), h, ps2, g, m)(h1)(h2))
       )
 
 # Reach.in_through, once the path from x to h is found
@@ -2289,7 +1821,6 @@ def Reach.in_through.one(
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
   ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
   ~live: @g: V -> @p: A -> @q: A -> {
     Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
@@ -2313,23 +1844,7 @@ def Reach.in_through.one(
 ) -> {Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, m) == True{}: Bool}:
   match w:
     case (ps1, (h1, f1)):
-      Reach.in_through.two(
-        ~A,
-        ~V,
-        ~same,
-        ~succ,
-        ~nodes,
-        ~refl,
-        ~sound,
-        ~live,
-        g,
-        x,
-        h,
-        m,
-        ps1,
-        h1,
-        w2
-      )
+      Reach.in_through.two(~A, ~V, ~same, ~succ, ~nodes, ~sound, ~live, g, x, h, m, ps1, h1, w2)
 
 # what is inside a node h that is inside x is inside x
 def Reach.in_through(
@@ -2358,41 +1873,14 @@ def Reach.in_through(
     ~same,
     ~succ,
     ~nodes,
-    ~refl,
     ~sound,
     ~live,
     g,
     x,
     h,
     m,
-    Reach.go_path(
-      ~A,
-      ~V,
-      ~same,
-      ~succ,
-      ~nodes,
-      ~refl,
-      ~sound,
-      ~live,
-      List.length(&2, A, nodes(g)),
-      succ(g)(x),
-      g,
-      h
-    )(a),
-    Reach.go_path(
-      ~A,
-      ~V,
-      ~same,
-      ~succ,
-      ~nodes,
-      ~refl,
-      ~sound,
-      ~live,
-      List.length(&2, A, nodes(g)),
-      succ(g)(h),
-      g,
-      m
-    )(b)
+    Reach.go_path(~A, ~V, ~same, ~succ, ~refl, List.length(&2, A, nodes(g)), succ(g)(x), g, h)(a),
+    Reach.go_path(~A, ~V, ~same, ~succ, ~refl, List.length(&2, A, nodes(g)), succ(g)(h), g, m)(b)
   )
 # a search from no nodes finds nothing
 def Reach.go_nil(
@@ -2400,12 +1888,6 @@ def Reach.go_nil(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +f: Nat,
   g: V,
   m: A
@@ -2414,7 +1896,7 @@ def Reach.go_nil(
     case 0n:
       {==}
     case 1n+e:
-      Reach.go_nil(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, e, g, m)
+      Reach.go_nil(~A, ~V, ~same, ~succ, e, g, m)
 
 # a path from x's successors to m makes m inside x
 def Reach.path_in(
@@ -2423,7 +1905,6 @@ def Reach.path_in(
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
   ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
   ~live: @g: V -> @p: A -> @q: A -> {
     Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
@@ -2441,13 +1922,12 @@ def Reach.path_in(
     ~same,
     ~succ,
     ~nodes,
-    ~refl,
     ~sound,
     ~live,
     g,
     x,
     m,
-    Reach.shorten(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, ps, succ(g)(x), g, m)(h)
+    Reach.shorten(~A, ~V, ~same, ~succ, ~sound, ps, succ(g)(x), g, m)(h)
   )
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
@@ -2458,11 +1938,7 @@ def Reach.closes_found.at(
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
   ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +hit: Bool,
   +x: A,
   r: List<&2, A>,
@@ -2535,11 +2011,7 @@ def Reach.closes_found(
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
   ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   +ys: List<&2, A>,
   +g: V,
   +c: A,
@@ -2562,16 +2034,14 @@ def Reach.closes_found(
         ~same,
         ~succ,
         ~nodes,
-        ~refl,
         ~sound,
-        ~live,
         same(x, y),
         x,
         r,
         g,
         c,
         y,
-        Reach.closes_found(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, r, g, c, y)
+        Reach.closes_found(~A, ~V, ~same, ~succ, ~nodes, ~sound, r, g, c, y)
       )({==})(h)
 
 # a path from ys to c closes a cycle
@@ -2596,7 +2066,7 @@ def Reach.closes_path(
   match qs:
     case Nil{}:
       +h =>
-        Reach.closes_found(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, ys, g, c, c)(h)((
+        Reach.closes_found(~A, ~V, ~same, ~succ, ~nodes, ~sound, ys, g, c, c)(h)((
             %Equal.sym(Bool, same(c, c), True{}, refl(c)): {Bool.or(_, Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, c, c)) == True{}: Bool}
             {==}))
     case Con{+y, +r}:
@@ -2607,9 +2077,7 @@ def Reach.closes_path(
           ~same,
           ~succ,
           ~nodes,
-          ~refl,
           ~sound,
-          ~live,
           ys,
           g,
           c,
@@ -2620,7 +2088,7 @@ def Reach.closes_path(
             Reach.path(~A, ~V, ~same, ~succ, r, succ(g)(y), g, c)
           )(h)
         )((
-            %Equal.sym(Bool, Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, y, c), True{}, Reach.path_in(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, r, g, y, c)(Bools.Bool.and_true_right(Reach.found(~A, ~same, ys, y), Reach.path(~A, ~V, ~same, ~succ, r, succ(g)(y), g, c))(h))): {Bool.or(same(y, c), _) == True{}: Bool}
+            %Equal.sym(Bool, Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, y, c), True{}, Reach.path_in(~A, ~V, ~same, ~succ, ~nodes, ~sound, ~live, r, g, y, c)(Bools.Bool.and_true_right(Reach.found(~A, ~same, ys, y), Reach.path(~A, ~V, ~same, ~succ, r, succ(g)(y), g, c))(h))): {Bool.or(same(y, c), _) == True{}: Bool}
             Bools.Bool.or_true_right(same(y, c))))
 
 # a path that never leaves c is a path before c's successors were set
@@ -2629,12 +2097,6 @@ def Reach.put_keep(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   ~W: Data,
   ~put: V -> A -> W -> V,
   ~agree: @g: V -> @c: A -> @w: W -> @p: A -> {
@@ -2670,10 +2132,6 @@ def Reach.put_keep(
           ~V,
           ~same,
           ~succ,
-          ~nodes,
-          ~refl,
-          ~sound,
-          ~live,
           ~W,
           ~put,
           ~agree,
@@ -2693,12 +2151,6 @@ def Reach.put_back(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   ~W: Data,
   ~put: V -> A -> W -> V,
   ~agree: @g: V -> @c: A -> @w: W -> @p: A -> {
@@ -2746,10 +2198,6 @@ def Reach.put_back(
           ~V,
           ~same,
           ~succ,
-          ~nodes,
-          ~refl,
-          ~sound,
-          ~live,
           ~W,
           ~put,
           ~agree,
@@ -2775,17 +2223,6 @@ def Reach.put_first.cons(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
-  ~W: Data,
-  ~put: V -> A -> W -> V,
-  ~agree: @g: V -> @c: A -> @w: W -> @p: A -> {
-    same(p, c) == False{}: Bool
-  } -> {succ(put(g)(c)(w))(p) == succ(g)(p): List<&2, A>},
   p: A,
   xs: List<&2, A>,
   g: V,
@@ -2820,12 +2257,7 @@ def Reach.put_first.at(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   ~W: Data,
   ~put: V -> A -> W -> V,
   ~agree: @g: V -> @c: A -> @w: W -> @p: A -> {
@@ -2879,13 +2311,6 @@ def Reach.put_first.at(
           ~V,
           ~same,
           ~succ,
-          ~nodes,
-          ~refl,
-          ~sound,
-          ~live,
-          ~W,
-          ~put,
-          ~agree,
           p,
           xs,
           g,
@@ -2906,12 +2331,7 @@ def Reach.put_first(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  ~live: @g: V -> @p: A -> @q: A -> {
-    Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
   ~W: Data,
   ~put: V -> A -> W -> V,
   ~agree: @g: V -> @c: A -> @w: W -> @p: A -> {
@@ -2949,10 +2369,7 @@ def Reach.put_first(
         ~V,
         ~same,
         ~succ,
-        ~nodes,
-        ~refl,
         ~sound,
-        ~live,
         ~W,
         ~put,
         ~agree,
@@ -2964,25 +2381,7 @@ def Reach.put_first(
         c,
         w,
         m,
-        Reach.put_first(
-          ~A,
-          ~V,
-          ~same,
-          ~succ,
-          ~nodes,
-          ~refl,
-          ~sound,
-          ~live,
-          ~W,
-          ~put,
-          ~agree,
-          r,
-          succ(g)(p),
-          g,
-          c,
-          w,
-          m
-        )
+        Reach.put_first(~A, ~V, ~same, ~succ, ~sound, ~W, ~put, ~agree, r, succ(g)(p), g, c, w, m)
       )({==})(hf)
 
 # Reach.put_closes, once the part before c is cut
@@ -2997,11 +2396,6 @@ def Reach.put_closes.fin(
   ~live: @g: V -> @p: A -> @q: A -> {
     Reach.found(~A, ~same, succ(g)(p), q) == True{}: Bool
   } -> {Reach.found(~A, ~same, nodes(g), p) == True{}: Bool},
-  ~W: Data,
-  ~put: V -> A -> W -> V,
-  ~agree: @g: V -> @c: A -> @w: W -> @p: A -> {
-    same(p, c) == False{}: Bool
-  } -> {succ(put(g)(c)(w))(p) == succ(g)(p): List<&2, A>},
   ys: List<&2, A>,
   g: V,
   c: A,
@@ -3059,27 +2453,7 @@ def Reach.put_closes.at(
         ys,
         g,
         c
-      )(
-        Reach.put_keep(
-          ~A,
-          ~V,
-          ~same,
-          ~succ,
-          ~nodes,
-          ~refl,
-          ~sound,
-          ~live,
-          ~W,
-          ~put,
-          ~agree,
-          ps,
-          ys,
-          g,
-          c,
-          w,
-          c
-        )(e)(h)
-      )
+      )(Reach.put_keep(~A, ~V, ~same, ~succ, ~W, ~put, ~agree, ps, ys, g, c, w, c)(e)(h))
     case True{}:
       +e => +h => Reach.put_closes.fin(
         ~A,
@@ -3090,31 +2464,10 @@ def Reach.put_closes.at(
         ~refl,
         ~sound,
         ~live,
-        ~W,
-        ~put,
-        ~agree,
         ys,
         g,
         c,
-        Reach.put_first(
-          ~A,
-          ~V,
-          ~same,
-          ~succ,
-          ~nodes,
-          ~refl,
-          ~sound,
-          ~live,
-          ~W,
-          ~put,
-          ~agree,
-          ps,
-          ys,
-          g,
-          c,
-          w,
-          c
-        )(e)(h)
+        Reach.put_first(~A, ~V, ~same, ~succ, ~sound, ~W, ~put, ~agree, ps, ys, g, c, w, c)(e)(h)
       )
 
 # a path from ys to c after c's successors are set means ys closes a cycle
@@ -3220,10 +2573,6 @@ def Reach.put_acyclic.mid(
           ~V,
           ~same,
           ~succ,
-          ~nodes,
-          ~refl,
-          ~sound,
-          ~live,
           Reach.after(~A, ~same, ps, c),
           succ(put(g)(c)(w))(c),
           x,
@@ -3236,10 +2585,7 @@ def Reach.put_acyclic.mid(
             ~V,
             ~same,
             ~succ,
-            ~nodes,
-            ~refl,
             ~sound,
-            ~live,
             ps,
             c,
             succ(put(g)(c)(w))(x),
@@ -3252,10 +2598,6 @@ def Reach.put_acyclic.mid(
             ~V,
             ~same,
             ~succ,
-            ~nodes,
-            ~refl,
-            ~sound,
-            ~live,
             ~W,
             ~put,
             ~agree,
@@ -3340,10 +2682,7 @@ def Reach.put_acyclic.case(
             ~V,
             ~same,
             ~succ,
-            ~nodes,
-            ~refl,
             ~sound,
-            ~live,
             ~W,
             ~put,
             ~agree,
@@ -3404,36 +2743,15 @@ def Reach.put_acyclic.case(
             ~same,
             ~succ,
             ~nodes,
-            ~refl,
             ~sound,
             ~live,
             ps,
             g,
             x,
             x
-          )(
-            Reach.put_keep(
-              ~A,
-              ~V,
-              ~same,
-              ~succ,
-              ~nodes,
-              ~refl,
-              ~sound,
-              ~live,
-              ~W,
-              ~put,
-              ~agree,
-              ps,
-              succ(g)(x),
-              g,
-              c,
-              w,
-              x
-            )(eq)((
+          )(Reach.put_keep(~A, ~V, ~same, ~succ, ~W, ~put, ~agree, ps, succ(g)(x), g, c, w, x)(eq)((
                 %agree(g)(c)(w)(x)(ex): {Reach.path(~A, ~V, ~same, ~succ, ps, _, put(g)(c)(w), x) == True{}: Bool}
-                h))
-          )
+                h)))
         )
 
 # Reach.put_acyclic, once a cycle through x is found
@@ -3548,10 +2866,7 @@ def Reach.put_acyclic.at(
               ~V,
               ~same,
               ~succ,
-              ~nodes,
               ~refl,
-              ~sound,
-              ~live,
               List.length(&2, A, nodes(put(g)(c)(w))),
               succ(put(g)(c)(w))(x),
               put(g)(c)(w),

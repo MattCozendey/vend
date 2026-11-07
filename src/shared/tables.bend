@@ -931,3 +931,63 @@ def Table.rows_find_keys(
     Table.rows_find(V, Table.keys(V, t), t, k),
     Table.rows_find_keys.of(V, t, k, Table.get(V, t, k))({==})
   )
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# Table.differ, by whether a is b (hit)
+def Table.differ.at(
+  -V: Data,
+  hit: Bool,
+  t: Table<V>,
+  a: String,
+  b: String
+) -> {
+  String.eq(a, b) == hit: Bool
+} -> {
+  Maybe.is_some(&2, V, Table.get(V, t, a)) == False{}: Bool
+} -> {Maybe.is_some(&2, V, Table.get(V, t, b)) == True{}: Bool} -> {hit == False{}: Bool}:
+  match hit:
+    case True{}:
+      e => ha => hb =>
+        Empty.absurd(
+          {True{} == False{}: Bool},
+          Shared.Bool.false_ne_true(
+            Equal.trans(
+              Bool,
+              False{},
+              Maybe.is_some(&2, V, Table.get(V, t, a)),
+              True{},
+              Equal.sym(Bool, Maybe.is_some(&2, V, Table.get(V, t, a)), False{}, ha),
+              Equal.trans(
+                Bool,
+                Maybe.is_some(&2, V, Table.get(V, t, a)),
+                Maybe.is_some(&2, V, Table.get(V, t, b)),
+                True{},
+                Equal.cong(
+                  String,
+                  Bool,
+                  z => Maybe.is_some(&2, V, Table.get(V, t, z)),
+                  a,
+                  b,
+                  Strings.String.eq_sound(a, b)(e)
+                ),
+                hb
+              )
+            )
+          )
+        )
+    case False{}:
+      e => ha => hb => {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# a key that t lacks is not a key that it holds
+def Table.differ(
+  -V: Data,
+  t: Table<V>,
+  +a: String,
+  +b: String
+) -> {
+  Maybe.is_some(&2, V, Table.get(V, t, a)) == False{}: Bool
+} -> {
+  Maybe.is_some(&2, V, Table.get(V, t, b)) == True{}: Bool
+} -> {String.eq(a, b) == False{}: Bool}:
+  Table.differ.at(V, String.eq(a, b), t, a, b)({==})

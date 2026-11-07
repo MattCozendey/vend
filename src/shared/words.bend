@@ -224,3 +224,16 @@ def U32.cmp_chain(
   match a b c:
     case U32{x} U32{y} U32{z}:
       Word.cmp_chain(32n, x, y, z)
+
+# U32.cmp of a number with itself is EQ
+def U32.cmp_refl(x: U32) -> {U32.cmp(x, x) == EQ{}: Cmp}:
+  match x:
+    case U32{w}:
+      Word.cmp_refl(32n, w)
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a number is equal to itself
+def U32.is_eq_refl(x: U32) -> {U32.is_eq(x, x) == True{}: Bool}:
+  %Equal.sym(Cmp, U32.cmp(x, x), EQ{}, U32.cmp_refl(x)): {Cmp.is_eq(_) == True{}: Bool}
+  {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning

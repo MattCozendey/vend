@@ -69,3 +69,13 @@ def Nat.cmp_chain(
       Cmps.Cmp.chain_gg(Nat.cmp(x, y))
     case 1n+x 1n+y 1n+z:
       Nat.cmp_chain(x, y, z)
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a plus one more is one more than a plus
+def Nat.add_succ(a: Nat, b: Nat) -> {Nat.add(a, 1n+b) == 1n+Nat.add(a, b): Nat}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+q:
+      Equal.cong(Nat, Nat, z => 1n+z, Nat.add(q, 1n+b), 1n+Nat.add(q, b), Nat.add_succ(q, b))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
