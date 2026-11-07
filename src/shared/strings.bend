@@ -1,4 +1,5 @@
 import Base
+import ./bools.bend as Bools
 import ./cmps.bend as Cmps
 import ./words.bend as Words
 
@@ -158,3 +159,115 @@ def String.order_swap(
 
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# the text t, unless it is empty
+def String.nonempty(t: String) -> Maybe<&2, String>:
+  match t:
+    case SNil{}:
+      None{}
+    case SCon{c, r}:
+      Some{SCon{c, r}}
+
+# i then rest, unless i is the one dropped (hit)
+def drop.put(i: String, rest: List<&2, String>, hit: Bool) -> List<&2, String>:
+  match hit:
+    case True{}:
+      rest
+    case False{}:
+      i <> rest
+
+# ks, with n unless ks holds it (held)
+def drop.keep(n: String, ks: List<&2, String>, held: Bool) -> List<&2, String>:
+  match held:
+    case True{}:
+      ks
+    case False{}:
+      n <> ks
+
+# ks holds k
+def has(ks: List<&2, String>, +k: String) -> Bool:
+  match ks:
+    case Nil{}:
+      False{}
+    case Con{i, r}:
+      List.any.if(u => has(r, k), String.eq(i, k))
+
+# ks, without k
+def drop(ks: List<&2, String>, +k: String) -> List<&2, String>:
+  match ks:
+    case Nil{}:
+      Nil{}
+    case Con{+i, r}:
+      drop.put(i, drop(r, k), String.eq(i, k))
+
+# ks, with each key of ns that ks does not hold
+def union(ns: List<&2, String>, +ks: List<&2, String>) -> List<&2, String>:
+  match ns:
+    case Nil{}:
+      ks
+    case Con{+n, r}:
+      union(r, drop.keep(n, ks, has(ks, n)))
+
+# an "any" with a true rest is true
+def keep_has.any(c: Bool) -> {List.any.if(u => True{}, c) == True{}: Bool}:
+  match c:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# a key of ks is in ks after keep adds n or not (held)
+def keep_has(+n: String, ks: List<&2, String>, held: Bool, +k: String) -> {has(ks, k) == True{}: Bool} -> {has(drop.keep(n, ks, held), k) == True{}: Bool}:
+  match held:
+    case True{}:
+      h => h
+    case False{}:
+      h =>
+        %Equal.sym(Bool, has(ks, k), True{}, h): {List.any.if(u => _, String.eq(n, k)) == True{}: Bool}
+        keep_has.any(String.eq(n, k))
+
+# a key of ks is in the union of ns and ks
+def union_right(ns: List<&2, String>, +ks: List<&2, String>, +k: String) -> {has(ks, k) == True{}: Bool} -> {has(union(ns, ks), k) == True{}: Bool}:
+  match ns:
+    case Nil{}:
+      h => h
+    case Con{+n, r}:
+      h => union_right(r, drop.keep(n, ks, has(ks, n)), k)(keep_has(n, ks, has(ks, n), k)(h))
+
+# n is in ks after keep adds it, when ks holds n (held) or not
+def keep_self(+n: String, +ks: List<&2, String>, held: Bool) -> {has(ks, n) == held: Bool} -> {has(drop.keep(n, ks, held), n) == True{}: Bool}:
+  match held:
+    case True{}:
+      h => h
+    case False{}:
+      h =>
+        %Equal.sym(Bool, String.eq(n, n), True{}, String.eq_refl(n)): {List.any.if(u => has(ks, n), _) == True{}: Bool}
+        {==}
+
+# union_left at the first key n of ns, by whether n is k (hit)
+def union_left.at(
+  +n: String,
+  r: List<&2, String>,
+  +ks: List<&2, String>,
+  +k: String,
+  hit: Bool,
+  ih: @js: List<&2, String> -> {has(r, k) == True{}: Bool} -> {has(union(r, js), k) == True{}: Bool}
+) -> {String.eq(n, k) == hit: Bool} -> {List.any.if(u => has(r, k), hit) == True{}: Bool} -> {has(union(r, drop.keep(n, ks, has(ks, n))), k) == True{}: Bool}:
+  match hit:
+    case False{}:
+      e => h => ih(drop.keep(n, ks, has(ks, n)))(h)
+    case True{}:
+      +e => h =>
+        %String.eq_sound(n, k)(e): {has(union(r, drop.keep(n, ks, has(ks, n))), _) == True{}: Bool}
+        union_right(r, drop.keep(n, ks, has(ks, n)), n)(keep_self(n, ks, has(ks, n))({==}))
+
+# a key of ns is in the union of ns and ks
+def union_left(ns: List<&2, String>, +ks: List<&2, String>, +k: String) -> {has(ns, k) == True{}: Bool} -> {has(union(ns, ks), k) == True{}: Bool}:
+  match ns:
+    case Nil{}:
+      h => Empty.absurd({has(union(Nil{}, ks), k) == True{}: Bool}, Bools.Bool.false_ne_true(h))
+    case Con{+n, +r}:
+      +h => union_left.at(n, r, ks, k, String.eq(n, k), js => union_left(r, js, k))({==})(
+        %Equal.sym(Bool, has(n <> r, k), True{}, h): {_ == True{}: Bool}
+        {==}
+      )

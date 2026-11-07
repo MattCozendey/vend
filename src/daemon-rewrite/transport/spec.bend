@@ -1,25 +1,9 @@
 import Base
+import ../../shared/uris.bend as Uris
 import ../core/spec.bend as Core
 
 # The public API of a Vend Node (README, Public API): the core, carried over
 # IO. Every front offers exactly these operations.
-
-# Names
-# -----
-
-# a URI
-law Uri:
-  Data
-
-# the URI that t names
-law Uri.read:
-  for t: String
-  Maybe<&2, Uri>
-
-# the text of u
-law Uri.show:
-  for u: Uri
-  String
 
 # Values that callers make
 # ------------------------
@@ -28,7 +12,7 @@ law Uri.show:
 # first
 type Source is Data:
   Source.Content{content: Core.Content}
-  Source.From{uri: Uri}
+  Source.From{uri: Uris.Uri}
 
 # Answers
 # -------
@@ -46,7 +30,7 @@ law Status:
 # the mounted resources
 law Status.mounts:
   for s: Status
-  List<&2, Uri>
+  List<&2, Uris.Uri>
 
 # the writers that are connected
 law Status.writers:
@@ -95,12 +79,12 @@ law Subscription:
 
 # runs a node on the store at store, until a stop
 law Node.try_start_or_resume:
-  for store: Uri
+  for store: Uris.Uri
   IO(Start)
 
 # a connection to the node at node, as writer
 law Client.try_open:
-  for node: Uri
+  for node: Uris.Uri
   for writer: Core.Writer
   IO(Reply<&1, Client>)
 
@@ -218,7 +202,7 @@ law Client.try_resolve:
 law Client.try_mount:
   for c: Client
   for r: Core.RequestId
-  for u: Uri
+  for u: Uris.Uri
   for ss: List<&2, String>
   for b: Core.Branch
   IO(Client & Reply<&2, Mount>)
@@ -227,7 +211,7 @@ law Client.try_mount:
 law Client.try_unmount:
   for c: Client
   for r: Core.RequestId
-  for u: Uri
+  for u: Uris.Uri
   IO(Client & Reply<&2, Unmount>)
 
 # sets the owner group of the branch b to g

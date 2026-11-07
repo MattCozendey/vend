@@ -28,3 +28,39 @@ def List.drop_after_append(
       List.drop_zero(&2, A, ys)
     case Con{h, t}:
       List.drop_after_append(A, t, ys)
+
+# x then rest when hit, else rest
+def List.cons_if(-A: Data, x: A, rest: List<&2, A>, hit: Bool) -> List<&2, A>:
+  match hit:
+    case True{}:
+      x <> rest
+    case False{}:
+      rest
+
+# a cons_if commutes with an append after it
+def List.cons_if_append(
+  -A: Data,
+  x: A,
+  a: List<&2, A>,
+  b: List<&2, A>,
+  hit: Bool
+) -> {
+  List.cons_if(
+    A,
+    x,
+    List.append(&2, A, a, b),
+    hit
+  )
+    == List.append(&2, A, List.cons_if(A, x, a, hit), b): List<&2, A>
+}:
+  match hit:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# a pair is its two parts
+def Pair.eta(-A: Data, -B: Data, p: A & B) -> {(Pair.fst(A, B, p), Pair.snd(A, B, p)) == p: A & B}:
+  match p:
+    case (x, y):
+      {==}

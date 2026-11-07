@@ -1,5 +1,6 @@
 import Base
 import ./bools.bend as Bools
+import ./maybes.bend as Maybes
 import ./strings.bend as Strings
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
@@ -280,5 +281,308 @@ def Table.get_set(
 }:
   Table.get_set.at(V, t, k, v, c, String.eq(k, c))({==})
 
+# Table.keys_get at a row of key rk, by the answer b of String.eq(rk, k)
+def Table.keys_get.at(
+  -V: Data,
+  rk: String,
+  v: V,
+  r: Table<V>,
+  +k: String,
+  b: Bool,
+  ih: {Strings.has(Table.keys(V, r), k) == Maybe.is_some(&2, V, Table.get(V, r, k)): Bool}
+) -> {String.eq(rk, k) == b: Bool} -> {List.any.if(u => Strings.has(Table.keys(V, r), k), String.eq(rk, k)) == Maybe.is_some(&2, V, Bools.Bool.when(Maybe<&2, V>, String.eq(rk, k), u => Some{v}, u => Table.get(V, r, k))): Bool}:
+  match b:
+    case True{}:
+      e =>
+        %Equal.sym(Bool, String.eq(rk, k), True{}, e):
+          {List.any.if(u => Strings.has(Table.keys(V, r), k), _) == Maybe.is_some(&2, V, Bools.Bool.when(Maybe<&2, V>, _, u => Some{v}, u => Table.get(V, r, k))): Bool}
+        {==}
+    case False{}:
+      e =>
+        %Equal.sym(Bool, String.eq(rk, k), False{}, e):
+          {List.any.if(u => Strings.has(Table.keys(V, r), k), _) == Maybe.is_some(&2, V, Bools.Bool.when(Maybe<&2, V>, _, u => Some{v}, u => Table.get(V, r, k))): Bool}
+        ih
+
+# a key is among the keys of t exactly when t has a value for it
+def Table.keys_get(-V: Data, t: Table<V>, +k: String) -> {Strings.has(Table.keys(V, t), k) == Maybe.is_some(&2, V, Table.get(V, t, k)): Bool}:
+  match t:
+    case TNil{}:
+      {==}
+    case TRow{+rk, +v, +r}:
+      Table.keys_get.at(V, rk, v, r, k, String.eq(rk, k), Table.keys_get(V, r, k))({==})
+
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# a key and its value
+type Row<-V: Data> is Data:
+  Row{key: String, val: V}
+
+# the row of the key k, when m holds its value, then rest
+def Table.rows.at(-V: Data, k: String, m: Maybe<&2, V>, rest: List<&2, Row<V>>) -> List<&2, Row<V>>:
+  match m:
+    case None{}:
+      rest
+    case Some{v}:
+      Row{k, v} <> rest
+
+# the rows of t under the keys ks, as lookups see them
+def Table.rows(-V: Data, ks: List<&2, String>, +t: Table<V>) -> List<&2, Row<V>>:
+  match ks:
+    case Nil{}:
+      Nil{}
+    case Con{+k, r}:
+      Table.rows.at(V, k, Table.get(V, t, k), Table.rows(V, r, t))
+
+# the value of the first row of rs with the key k
+def Table.find_row(-V: Data, rs: List<&2, Row<V>>, +k: String) -> Maybe<&2, V>:
+  match rs:
+    case Nil{}:
+      None{}
+    case Con{Row{rk, v}, r}:
+      Bools.Bool.when(Maybe<&2, V>, String.eq(rk, k), u => Some{v}, u => Table.find_row(V, r, k))
+
+# each key of ns has values that eq calls the same in a and b
+def Table.agree(
+  ~V: Data,
+  ~eq: V -> V -> Bool,
+  ns: List<&2, String>,
+  +a: Table<V>,
+  +b: Table<V>
+) -> Bool:
+  match ns:
+    case Nil{}:
+      True{}
+    case Con{+n, r}:
+      List.all.if(
+        u => Table.agree(~V, ~eq, r, a, b),
+        Maybes.Maybe.same(~V, ~eq, Table.get(V, a, n), Table.get(V, b, n))
+      )
+
+# a and b hold the same keys, with values that eq calls the same
+def Table.same(~V: Data, ~eq: V -> V -> Bool, +a: Table<V>, +b: Table<V>) -> Bool:
+  Table.agree(~V, ~eq, Strings.union(Table.keys(V, b), Table.keys(V, a)), a, b)
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+
+# the first side of a true "all" is true
+def Table.all_head(c: Bool, rest: Unit -> Bool) -> {List.all.if(rest, c) == True{}: Bool} -> {c == True{}: Bool}:
+  match c:
+    case True{}:
+      h => {==}
+    case False{}:
+      h => Empty.absurd({False{} == True{}: Bool}, Bools.Bool.false_ne_true(h))
+
+# the rest of a true "all" is true
+def Table.all_rest(c: Bool, rest: Unit -> Bool) -> {List.all.if(rest, c) == True{}: Bool} -> {rest(Unit{}) == True{}: Bool}:
+  match c:
+    case True{}:
+      h => h
+    case False{}:
+      h => Empty.absurd({rest(Unit{}) == True{}: Bool}, Bools.Bool.false_ne_true(h))
+
+# Table.agree_at at the first key m, by whether m is n (hit)
+def Table.agree_at.at(
+  ~V: Data,
+  ~eq: V -> V -> Bool,
+  +m: String,
+  r: List<&2, String>,
+  +a: Table<V>,
+  +b: Table<V>,
+  +n: String,
+  hit: Bool,
+  ih: {Table.agree(~V, ~eq, r, a, b) == True{}: Bool} -> {Strings.has(r, n) == True{}: Bool} -> {Maybes.Maybe.same(~V, ~eq, Table.get(V, a, n), Table.get(V, b, n)) == True{}: Bool}
+) -> {String.eq(m, n) == hit: Bool} -> {List.all.if(u => Table.agree(~V, ~eq, r, a, b), Maybes.Maybe.same(~V, ~eq, Table.get(V, a, m), Table.get(V, b, m))) == True{}: Bool} -> {List.any.if(u => Strings.has(r, n), hit) == True{}: Bool} -> {Maybes.Maybe.same(~V, ~eq, Table.get(V, a, n), Table.get(V, b, n)) == True{}: Bool}:
+  match hit:
+    case False{}:
+      e => +hg => hn => ih(Table.all_rest(Maybes.Maybe.same(~V, ~eq, Table.get(V, a, m), Table.get(V, b, m)), u => Table.agree(~V, ~eq, r, a, b))(hg))(hn)
+    case True{}:
+      +e => +hg => hn =>
+        %Strings.String.eq_sound(m, n)(e): {Maybes.Maybe.same(~V, ~eq, Table.get(V, a, _), Table.get(V, b, _)) == True{}: Bool}
+        Table.all_head(Maybes.Maybe.same(~V, ~eq, Table.get(V, a, m), Table.get(V, b, m)), u => Table.agree(~V, ~eq, r, a, b))(hg)
+
+# when a and b agree on the keys ns, they agree on each key of ns
+def Table.agree_at(
+  ~V: Data,
+  ~eq: V -> V -> Bool,
+  ns: List<&2, String>,
+  +a: Table<V>,
+  +b: Table<V>,
+  +n: String
+) -> {Table.agree(~V, ~eq, ns, a, b) == True{}: Bool} -> {Strings.has(ns, n) == True{}: Bool} -> {Maybes.Maybe.same(~V, ~eq, Table.get(V, a, n), Table.get(V, b, n)) == True{}: Bool}:
+  match ns:
+    case Nil{}:
+      hg => hn => Empty.absurd({Maybes.Maybe.same(~V, ~eq, Table.get(V, a, n), Table.get(V, b, n)) == True{}: Bool}, Bools.Bool.false_ne_true(hn))
+    case Con{+m, +r}:
+      Table.agree_at.at(~V, ~eq, m, r, a, b, n, String.eq(m, n), Table.agree_at(~V, ~eq, r, a, b, n))({==})
+
+# a lookup that is not some is none
+def Table.none_of(-V: Data, m: Maybe<&2, V>) -> {Maybe.is_some(&2, V, m) == False{}: Bool} -> {m == None{}: Maybe<&2, V>}:
+  match m:
+    case None{}:
+      h => {==}
+    case Some{x}:
+      h => Empty.absurd({Some{x} == None{}: Maybe<&2, V>}, Bools.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h)))
+
+# a key that a list misses is missing from a sublist of it: by whether the
+# smaller list holds it (c)
+def Table.absent.at(
+  c: Bool,
+  +ks: List<&2, String>,
+  +u: List<&2, String>,
+  +n: String,
+  sub: {Strings.has(ks, n) == True{}: Bool} -> {Strings.has(u, n) == True{}: Bool}
+) -> {Strings.has(ks, n) == c: Bool} -> {Strings.has(u, n) == False{}: Bool} -> {Strings.has(ks, n) == False{}: Bool}:
+  match c:
+    case False{}:
+      e => hu => e
+    case True{}:
+      e => hu =>
+        Empty.absurd(
+          {Strings.has(ks, n) == False{}: Bool},
+          Bools.Bool.false_ne_true(Equal.trans(Bool, False{}, Strings.has(u, n), True{}, Equal.sym(Bool, Strings.has(u, n), False{}, hu), sub(e)))
+        )
+
+# a key missing from the union of the keys of a and b has no value in a
+def Table.missing_left(-V: Data, +a: Table<V>, +b: Table<V>, +n: String) -> {Strings.has(Strings.union(Table.keys(V, b), Table.keys(V, a)), n) == False{}: Bool} -> {Table.get(V, a, n) == None{}: Maybe<&2, V>}:
+  hu =>
+    Table.none_of(V, Table.get(V, a, n))(
+      Equal.trans(
+        Bool,
+        Maybe.is_some(&2, V, Table.get(V, a, n)),
+        Strings.has(Table.keys(V, a), n),
+        False{},
+        Equal.sym(Bool, Strings.has(Table.keys(V, a), n), Maybe.is_some(&2, V, Table.get(V, a, n)), Table.keys_get(V, a, n)),
+        Table.absent.at(Strings.has(Table.keys(V, a), n), Table.keys(V, a), Strings.union(Table.keys(V, b), Table.keys(V, a)), n, Strings.union_right(Table.keys(V, b), Table.keys(V, a), n))({==})(hu)
+      )
+    )
+
+# a key missing from the union of the keys of a and b has no value in b
+def Table.missing_right(-V: Data, +a: Table<V>, +b: Table<V>, +n: String) -> {Strings.has(Strings.union(Table.keys(V, b), Table.keys(V, a)), n) == False{}: Bool} -> {Table.get(V, b, n) == None{}: Maybe<&2, V>}:
+  hu =>
+    Table.none_of(V, Table.get(V, b, n))(
+      Equal.trans(
+        Bool,
+        Maybe.is_some(&2, V, Table.get(V, b, n)),
+        Strings.has(Table.keys(V, b), n),
+        False{},
+        Equal.sym(Bool, Strings.has(Table.keys(V, b), n), Maybe.is_some(&2, V, Table.get(V, b, n)), Table.keys_get(V, b, n)),
+        Table.absent.at(Strings.has(Table.keys(V, b), n), Table.keys(V, b), Strings.union(Table.keys(V, b), Table.keys(V, a)), n, Strings.union_left(Table.keys(V, b), Table.keys(V, a), n))({==})(hu)
+      )
+    )
+
+# Table.same_sound at the key n, by whether the union of the keys holds n (c)
+def Table.same_sound.at(
+  ~V: Data,
+  ~eq: V -> V -> Bool,
+  eqs: @x: V -> @y: V -> {eq(x, y) == True{}: Bool} -> {x == y: V},
+  +a: Table<V>,
+  +b: Table<V>,
+  +n: String,
+  c: Bool
+) -> {Strings.has(Strings.union(Table.keys(V, b), Table.keys(V, a)), n) == c: Bool} -> {Table.same(~V, ~eq, a, b) == True{}: Bool} -> {Table.get(V, a, n) == Table.get(V, b, n): Maybe<&2, V>}:
+  match c:
+    case True{}:
+      e => h => Maybes.Maybe.same_sound(~V, ~eq, eqs, Table.get(V, a, n), Table.get(V, b, n))(Table.agree_at(~V, ~eq, Strings.union(Table.keys(V, b), Table.keys(V, a)), a, b, n)(h)(e))
+    case False{}:
+      +e => h =>
+        Equal.trans(Maybe<&2, V>, Table.get(V, a, n), None{}, Table.get(V, b, n), Table.missing_left(V, a, b, n)(e), Equal.sym(Maybe<&2, V>, Table.get(V, b, n), None{}, Table.missing_right(V, a, b, n)(e)))
+
+# tables that Table.same calls the same have the same value for every key,
+# when eq is True only for equal values
+def Table.same_sound(
+  ~V: Data,
+  ~eq: V -> V -> Bool,
+  eqs: @x: V -> @y: V -> {eq(x, y) == True{}: Bool} -> {x == y: V},
+  +a: Table<V>,
+  +b: Table<V>,
+  +n: String
+) -> {Table.same(~V, ~eq, a, b) == True{}: Bool} -> {Table.get(V, a, n) == Table.get(V, b, n): Maybe<&2, V>}:
+  Table.same_sound.at(~V, ~eq, eqs, a, b, n, Strings.has(Strings.union(Table.keys(V, b), Table.keys(V, a)), n))({==})
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+
+# a when on a value that both sides give is that value
+def Table.when_same(-V: Data, b: Bool, m: Maybe<&2, V>) -> {Bools.Bool.when(Maybe<&2, V>, b, u => m, u => m) == m: Maybe<&2, V>}:
+  match b:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# Table.rows_find at a key j that is not k: by the lookup g of j
+def Table.rows_find.miss(-V: Data, +j: String, +t: Table<V>, r: List<&2, String>, +k: String, g: Maybe<&2, V>) -> {String.eq(j, k) == False{}: Bool} -> {Table.find_row(V, Table.rows.at(V, j, g, Table.rows(V, r, t)), k) == Table.find_row(V, Table.rows(V, r, t), k): Maybe<&2, V>}:
+  match g:
+    case None{}:
+      e => {==}
+    case Some{v}:
+      e =>
+        %Equal.sym(Bool, String.eq(j, k), False{}, e): {Bools.Bool.when(Maybe<&2, V>, _, u => Some{v}, u => Table.find_row(V, Table.rows(V, r, t), k)) == Table.find_row(V, Table.rows(V, r, t), k): Maybe<&2, V>}
+        {==}
+
+# Table.rows_find at the key k itself: by the lookup g of k, which t gives
+def Table.rows_find.hit(-V: Data, +t: Table<V>, r: List<&2, String>, +k: String, g: Maybe<&2, V>, ih: {Table.find_row(V, Table.rows(V, r, t), k) == Bools.Bool.when(Maybe<&2, V>, Strings.has(r, k), u => Table.get(V, t, k), u => None{}): Maybe<&2, V>}) -> {Table.get(V, t, k) == g: Maybe<&2, V>} -> {Table.find_row(V, Table.rows.at(V, k, g, Table.rows(V, r, t)), k) == Table.get(V, t, k): Maybe<&2, V>}:
+  match g:
+    case None{}:
+      +e =>
+        Equal.trans(
+          Maybe<&2, V>,
+          Table.find_row(V, Table.rows(V, r, t), k),
+          Bools.Bool.when(Maybe<&2, V>, Strings.has(r, k), u => Table.get(V, t, k), u => None{}),
+          Table.get(V, t, k),
+          ih,
+          (
+            %Equal.sym(Maybe<&2, V>, Table.get(V, t, k), None{}, e): {Bools.Bool.when(Maybe<&2, V>, Strings.has(r, k), u => _, u => None{}) == _: Maybe<&2, V>}
+            Table.when_same(V, Strings.has(r, k), None{})
+          )
+        )
+    case Some{v}:
+      e =>
+        %Equal.sym(Bool, String.eq(k, k), True{}, Strings.String.eq_refl(k)): {Bools.Bool.when(Maybe<&2, V>, _, u => Some{v}, u => Table.find_row(V, Table.rows(V, r, t), k)) == Table.get(V, t, k): Maybe<&2, V>}
+        Equal.sym(Maybe<&2, V>, Table.get(V, t, k), Some{v}, e)
+
+# Table.rows_find at the first key j, by whether j is k (hit)
+def Table.rows_find.at(
+  -V: Data,
+  +j: String,
+  r: List<&2, String>,
+  +t: Table<V>,
+  +k: String,
+  hit: Bool,
+  ih: {Table.find_row(V, Table.rows(V, r, t), k) == Bools.Bool.when(Maybe<&2, V>, Strings.has(r, k), u => Table.get(V, t, k), u => None{}): Maybe<&2, V>}
+) -> {String.eq(j, k) == hit: Bool} -> {Table.find_row(V, Table.rows.at(V, j, Table.get(V, t, j), Table.rows(V, r, t)), k) == Bools.Bool.when(Maybe<&2, V>, List.any.if(u => Strings.has(r, k), hit), u => Table.get(V, t, k), u => None{}): Maybe<&2, V>}:
+  match hit:
+    case False{}:
+      e => Equal.trans(Maybe<&2, V>, Table.find_row(V, Table.rows.at(V, j, Table.get(V, t, j), Table.rows(V, r, t)), k), Table.find_row(V, Table.rows(V, r, t), k), Bools.Bool.when(Maybe<&2, V>, Strings.has(r, k), u => Table.get(V, t, k), u => None{}), Table.rows_find.miss(V, j, t, r, k, Table.get(V, t, j))(e), ih)
+    case True{}:
+      +e =>
+        %Equal.sym(String, j, k, Strings.String.eq_sound(j, k)(e)): {Table.find_row(V, Table.rows.at(V, _, Table.get(V, t, _), Table.rows(V, r, t)), k) == Table.get(V, t, k): Maybe<&2, V>}
+        Table.rows_find.hit(V, t, r, k, Table.get(V, t, k), ih)({==})
+
+# the first row of the keys ks with the key k has t's value, when ks holds k
+def Table.rows_find(-V: Data, ks: List<&2, String>, +t: Table<V>, +k: String) -> {Table.find_row(V, Table.rows(V, ks, t), k) == Bools.Bool.when(Maybe<&2, V>, Strings.has(ks, k), u => Table.get(V, t, k), u => None{}): Maybe<&2, V>}:
+  match ks:
+    case Nil{}:
+      {==}
+    case Con{+j, +r}:
+      Table.rows_find.at(V, j, r, t, k, String.eq(j, k), Table.rows_find(V, r, t, k))({==})
+
+# Table.rows_find over all keys of t, by the lookup g of k
+def Table.rows_find_keys.of(-V: Data, +t: Table<V>, +k: String, g: Maybe<&2, V>) -> {Table.get(V, t, k) == g: Maybe<&2, V>} -> {Bools.Bool.when(Maybe<&2, V>, Strings.has(Table.keys(V, t), k), u => Table.get(V, t, k), u => None{}) == Table.get(V, t, k): Maybe<&2, V>}:
+  match g:
+    case None{}:
+      +e =>
+        %Equal.sym(Bool, Strings.has(Table.keys(V, t), k), Maybe.is_some(&2, V, Table.get(V, t, k)), Table.keys_get(V, t, k)): {Bools.Bool.when(Maybe<&2, V>, _, u => Table.get(V, t, k), u => None{}) == Table.get(V, t, k): Maybe<&2, V>}
+        %Equal.sym(Maybe<&2, V>, Table.get(V, t, k), None{}, e): {Bools.Bool.when(Maybe<&2, V>, Maybe.is_some(&2, V, _), u => _, u => None{}) == _: Maybe<&2, V>}
+        {==}
+    case Some{v}:
+      +e =>
+        %Equal.sym(Bool, Strings.has(Table.keys(V, t), k), Maybe.is_some(&2, V, Table.get(V, t, k)), Table.keys_get(V, t, k)): {Bools.Bool.when(Maybe<&2, V>, _, u => Table.get(V, t, k), u => None{}) == Table.get(V, t, k): Maybe<&2, V>}
+        %Equal.sym(Maybe<&2, V>, Table.get(V, t, k), Some{v}, e): {Bools.Bool.when(Maybe<&2, V>, Maybe.is_some(&2, V, _), u => _, u => None{}) == _: Maybe<&2, V>}
+        {==}
+
+# the rows of all keys of t find what t gives
+def Table.rows_find_keys(-V: Data, +t: Table<V>, +k: String) -> {Table.find_row(V, Table.rows(V, Table.keys(V, t), t), k) == Table.get(V, t, k): Maybe<&2, V>}:
+  Equal.trans(Maybe<&2, V>, Table.find_row(V, Table.rows(V, Table.keys(V, t), t), k), Bools.Bool.when(Maybe<&2, V>, Strings.has(Table.keys(V, t), k), u => Table.get(V, t, k), u => None{}), Table.get(V, t, k), Table.rows_find(V, Table.keys(V, t), t, k), Table.rows_find_keys.of(V, t, k, Table.get(V, t, k))({==}))
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
