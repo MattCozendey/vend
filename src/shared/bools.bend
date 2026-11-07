@@ -1,4 +1,5 @@
 import Base
+import ./shared.bend as Shared
 
 # k(), when b holds, else e(); only the chosen one runs
 def Bool.when(-A: Type, b: Bool, k: Unit -> A, e: Unit -> A) -> A:
@@ -7,16 +8,12 @@ def Bool.when(-A: Type, b: Bool, k: Unit -> A, e: Unit -> A) -> A:
       e(Unit{})
     case True{}:
       k(Unit{})
-# no False equals True
-def Bool.false_ne_true(e: {False{} == True{}: Bool}) -> Empty:
-  %e: Bool.pick(Type, _, Empty, Unit)
-  Unit{}
 
 # both sides of a true "and" are true
 def Bool.and_true_left(a: Bool, b: Bool) -> {Bool.and(a, b) == True{}: Bool} -> {a == True{}: Bool}:
   match a:
     case False{}:
-      h => Empty.absurd({False{} == True{}: Bool}, Bool.false_ne_true(h))
+      h => Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(h))
     case True{}:
       h => {==}
 
@@ -26,7 +23,7 @@ def Bool.and_true_right(
 ) -> {Bool.and(a, b) == True{}: Bool} -> {b == True{}: Bool}:
   match a:
     case False{}:
-      h => Empty.absurd({b == True{}: Bool}, Bool.false_ne_true(h))
+      h => Empty.absurd({b == True{}: Bool}, Shared.Bool.false_ne_true(h))
     case True{}:
       h => h
 
@@ -39,7 +36,7 @@ def Bool.or_false_left(
     case True{}:
       h => Empty.absurd(
         {True{} == False{}: Bool},
-        Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
+        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
       )
     case False{}:
       h => {==}
@@ -52,7 +49,7 @@ def Bool.or_false_right(
     case True{}:
       h => Empty.absurd(
         {b == False{}: Bool},
-        Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
+        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
       )
     case False{}:
       h => h
@@ -65,7 +62,7 @@ def Bool.not_false(a: Bool) -> {Bool.not(a) == False{}: Bool} -> {a == True{}: B
     case False{}:
       h => Empty.absurd(
         {False{} == True{}: Bool},
-        Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
+        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
       )
 
 # anything or True is True
@@ -94,4 +91,4 @@ def Bool.not_true(a: Bool) -> {Bool.not(a) == True{}: Bool} -> {a == False{}: Bo
     case False{}:
       h => {==}
     case True{}:
-      h => Empty.absurd({True{} == False{}: Bool}, Bool.false_ne_true(h))
+      h => Empty.absurd({True{} == False{}: Bool}, Shared.Bool.false_ne_true(h))

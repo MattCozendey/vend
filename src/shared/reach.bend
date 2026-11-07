@@ -1,5 +1,6 @@
 import Base
 import ./bools.bend as Bools
+import ./shared.bend as Shared
 
 # Reachability
 # ------------
@@ -151,19 +152,6 @@ def Reach.after(~A: Data, ~same: A -> A -> Bool, ps: List<&2, A>, +p: A) -> List
       []
     case Con{x, +r}:
       Bools.Bool.when(List<&2, A>, same(x, p), u => r, u => Reach.after(~A, ~same, r, p))
-
-# ks without the nodes that are p
-def Reach.drop(~A: Data, ~same: A -> A -> Bool, ks: List<&2, A>, +p: A) -> List<&2, A>:
-  match ks:
-    case Nil{}:
-      []
-    case Con{+k, +r}:
-      Bools.Bool.when(
-        List<&2, A>,
-        same(k, p),
-        u => Reach.drop(~A, ~same, r, p),
-        u => k <> Reach.drop(~A, ~same, r, p)
-      )
 
 # the first node of ps, or m
 def Reach.first(-A: Data, ps: List<&2, A>, m: A) -> A:
@@ -359,7 +347,7 @@ def Reach.next_found(
           Reach.found(~A, ~same, [], y) == True{}: Bool
         }
           & {Reach.found(~A, ~same, succ(g)(y), q) == True{}: Bool},
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case Con{+x, +r}:
       +h =>
@@ -830,7 +818,7 @@ def Reach.found_sub(
     case Nil{}:
       +h => +hq => Empty.absurd(
         {Reach.found(~A, ~same, Reach.next(~A, ~V, ~succ, [], g), q) == True{}: Bool},
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case Con{+x, +r}:
       +h => Reach.found_sub.at(
@@ -967,7 +955,7 @@ def Reach.path_go(
     case Con{+p, +r} 0n:
       +h => +hf => Empty.absurd(
         {Reach.go(~A, ~V, ~same, ~succ, 0n, xs, g, m) == True{}: Bool},
-        Bools.Bool.false_ne_true(hf)
+        Shared.Bool.false_ne_true(hf)
       )
     case Con{+p, +r} 1n+e:
       +h => +hf =>
@@ -1283,7 +1271,7 @@ def Reach.after_path(
     case Nil{}:
       +hf => +hp => Empty.absurd(
         {Reach.path(~A, ~V, ~same, ~succ, [], succ(g)(p), g, m) == True{}: Bool},
-        Bools.Bool.false_ne_true(hf)
+        Shared.Bool.false_ne_true(hf)
       )
     case Con{+x, +r}:
       +hf => Reach.after_path.at(
@@ -1467,7 +1455,7 @@ def Reach.after_free(
     case Nil{}:
       +hd => +hf => Empty.absurd(
         {Reach.found(~A, ~same, [], p) == False{}: Bool},
-        Bools.Bool.false_ne_true(hf)
+        Shared.Bool.false_ne_true(hf)
       )
     case Con{+x, +r}:
       Reach.after_free.at(
@@ -1659,7 +1647,7 @@ def Reach.le_succ(
     case 0n y:
       +h => {==}
     case 1n+x 0n:
-      +h => Empty.absurd({Reach.le(1n+x, 1n) == True{}: Bool}, Bools.Bool.false_ne_true(h))
+      +h => Empty.absurd({Reach.le(1n+x, 1n) == True{}: Bool}, Shared.Bool.false_ne_true(h))
     case 1n+x 1n+y:
       +h => Reach.le_succ(x, y)(h)
 
@@ -1678,12 +1666,12 @@ def Reach.fits_le(
     case Con{p, r} 0n y:
       +hf => +hl => Empty.absurd(
         {Reach.fits(A, p <> r, y) == True{}: Bool},
-        Bools.Bool.false_ne_true(hf)
+        Shared.Bool.false_ne_true(hf)
       )
     case Con{+p, +r} 1n+x 0n:
       +hf => +hl => Empty.absurd(
         {Reach.fits(A, p <> r, 0n) == True{}: Bool},
-        Bools.Bool.false_ne_true(hl)
+        Shared.Bool.false_ne_true(hl)
       )
     case Con{+p, +r} 1n+x 1n+y:
       +hf => +hl => Reach.fits_le(A, r, x, y)(hf)(hl)
@@ -1705,27 +1693,25 @@ def Reach.drop_le.at(
   +r: List<&2, A>,
   p: A,
   ih: {
-    Reach.le(List.length(&2, A, Reach.drop(~A, ~same, r, p)), List.length(&2, A, r)) == True{}: Bool
+    Reach.le(
+      List.length(&2, A, Shared.List.remove(~A, ~same, r, p)),
+      List.length(&2, A, r)
+    )
+      == True{}: Bool
   }
 ) -> {
   Reach.le(
-    List.length(
-      &2,
-      A,
-      Bools.Bool.when(
-        List<&2, A>,
-        hit,
-        u => Reach.drop(~A, ~same, r, p),
-        u => k <> Reach.drop(~A, ~same, r, p)
-      )
-    ),
+    List.length(&2, A, List.filter.put(A, k, Shared.List.remove(~A, ~same, r, p), Bool.not(hit))),
     1n+List.length(&2, A, r)
   )
     == True{}: Bool
 }:
   match hit:
     case True{}:
-      Reach.le_succ(List.length(&2, A, Reach.drop(~A, ~same, r, p)), List.length(&2, A, r))(ih)
+      Reach.le_succ(
+        List.length(&2, A, Shared.List.remove(~A, ~same, r, p)),
+        List.length(&2, A, r)
+      )(ih)
     case False{}:
       ih
 
@@ -1744,7 +1730,11 @@ def Reach.drop_le(
   +ks: List<&2, A>,
   +p: A
 ) -> {
-  Reach.le(List.length(&2, A, Reach.drop(~A, ~same, ks, p)), List.length(&2, A, ks)) == True{}: Bool
+  Reach.le(
+    List.length(&2, A, Shared.List.remove(~A, ~same, ks, p)),
+    List.length(&2, A, ks)
+  )
+    == True{}: Bool
 }:
   match ks:
     case Nil{}:
@@ -1786,7 +1776,7 @@ def Reach.drop_lt.at(
     Reach.found(~A, ~same, r, p) == True{}: Bool
   } -> {
     Reach.le(
-      1n+List.length(&2, A, Reach.drop(~A, ~same, r, p)),
+      1n+List.length(&2, A, Shared.List.remove(~A, ~same, r, p)),
       List.length(&2, A, r)
     )
       == True{}: Bool
@@ -1798,12 +1788,7 @@ def Reach.drop_lt.at(
     1n+List.length(
       &2,
       A,
-      Bools.Bool.when(
-        List<&2, A>,
-        hit,
-        u => Reach.drop(~A, ~same, r, p),
-        u => k <> Reach.drop(~A, ~same, r, p)
-      )
+      List.filter.put(A, k, Shared.List.remove(~A, ~same, r, p), Bool.not(hit))
     ),
     1n+List.length(&2, A, r)
   )
@@ -1833,7 +1818,7 @@ def Reach.drop_lt(
   Reach.found(~A, ~same, ks, p) == True{}: Bool
 } -> {
   Reach.le(
-    1n+List.length(&2, A, Reach.drop(~A, ~same, ks, p)),
+    1n+List.length(&2, A, Shared.List.remove(~A, ~same, ks, p)),
     List.length(&2, A, ks)
   )
     == True{}: Bool
@@ -1841,8 +1826,8 @@ def Reach.drop_lt(
   match ks:
     case Nil{}:
       +h => Empty.absurd(
-        {Reach.le(1n+List.length(&2, A, Reach.drop(~A, ~same, [], p)), 0n) == True{}: Bool},
-        Bools.Bool.false_ne_true(h)
+        {Reach.le(1n+List.length(&2, A, Shared.List.remove(~A, ~same, [], p)), 0n) == True{}: Bool},
+        Shared.Bool.false_ne_true(h)
       )
     case Con{k, +r}:
       Reach.drop_lt.at(
@@ -1884,7 +1869,7 @@ def Reach.drop_keep.at(
     Reach.found(~A, ~same, r, q) == True{}: Bool
   } -> {
     same(q, p) == False{}: Bool
-  } -> {Reach.found(~A, ~same, Reach.drop(~A, ~same, r, p), q) == True{}: Bool}
+  } -> {Reach.found(~A, ~same, Shared.List.remove(~A, ~same, r, p), q) == True{}: Bool}
 ) -> {
   same(k, p) == hk: Bool
 } -> {
@@ -1897,12 +1882,7 @@ def Reach.drop_keep.at(
   Reach.found(
     ~A,
     ~same,
-    Bools.Bool.when(
-      List<&2, A>,
-      hk,
-      u => Reach.drop(~A, ~same, r, p),
-      u => k <> Reach.drop(~A, ~same, r, p)
-    ),
+    List.filter.put(A, k, Shared.List.remove(~A, ~same, r, p), Bool.not(hk)),
     q
   )
     == True{}: Bool
@@ -1911,8 +1891,8 @@ def Reach.drop_keep.at(
     case True{} True{}:
       +ek => +eq => +h => +hn =>
         Empty.absurd(
-          {Reach.found(~A, ~same, Reach.drop(~A, ~same, r, p), q) == True{}: Bool},
-          Bools.Bool.false_ne_true(
+          {Reach.found(~A, ~same, Shared.List.remove(~A, ~same, r, p), q) == True{}: Bool},
+          Shared.Bool.false_ne_true(
             Equal.trans(Bool, False{}, same(k, p), True{}, Equal.sym(Bool, same(k, p), False{}, (
                   %Equal.sym(A, k, q, sound(k)(q)(eq)): {same(_, p) == False{}: Bool}
                   hn)), ek)
@@ -1927,13 +1907,15 @@ def Reach.drop_keep.at(
           same(k, q),
           True{},
           eq
-        ): {Bool.or(_, Reach.found(~A, ~same, Reach.drop(~A, ~same, r, p), q)) == True{}: Bool}
+        ): {
+          Bool.or(_, Reach.found(~A, ~same, Shared.List.remove(~A, ~same, r, p), q)) == True{}: Bool
+        }
         {==}
     case False{} False{}:
       +ek => +eq => +h => +hn =>
         %Equal.sym(
           Bool,
-          Reach.found(~A, ~same, Reach.drop(~A, ~same, r, p), q),
+          Reach.found(~A, ~same, Shared.List.remove(~A, ~same, r, p), q),
           True{},
           ih(h)(hn)
         ): {Bool.or(same(k, q), _) == True{}: Bool}
@@ -1959,12 +1941,12 @@ def Reach.drop_keep(
   Reach.found(~A, ~same, ks, q) == True{}: Bool
 } -> {
   same(q, p) == False{}: Bool
-} -> {Reach.found(~A, ~same, Reach.drop(~A, ~same, ks, p), q) == True{}: Bool}:
+} -> {Reach.found(~A, ~same, Shared.List.remove(~A, ~same, ks, p), q) == True{}: Bool}:
   match ks:
     case Nil{}:
       +h => +hn => Empty.absurd(
         {Reach.found(~A, ~same, [], q) == True{}: Bool},
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case Con{+k, +r}:
       Reach.drop_keep.at(
@@ -1985,7 +1967,6 @@ def Reach.drop_keep(
         Reach.drop_keep(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, ~live, r, p, q)
       )({==})({==})
 
-# bend-lint: expect-begin bend-lint-rules/performance/loop_invariant_call@information -- a proof does not run
 # the nodes of ps, none of them p, stay in ks without p
 def Reach.within_drop(
   ~A: Data,
@@ -2005,7 +1986,7 @@ def Reach.within_drop(
   Reach.within(~A, ~same, ps, ks) == True{}: Bool
 } -> {
   Reach.found(~A, ~same, ps, p) == False{}: Bool
-} -> {Reach.within(~A, ~same, ps, Reach.drop(~A, ~same, ks, p)) == True{}: Bool}:
+} -> {Reach.within(~A, ~same, ps, Shared.List.remove(~A, ~same, ks, p)) == True{}: Bool}:
   match ps:
     case Nil{}:
       +hw => +hn => {==}
@@ -2013,7 +1994,7 @@ def Reach.within_drop(
       +hw => +hn =>
         %Equal.sym(
           Bool,
-          Reach.found(~A, ~same, Reach.drop(~A, ~same, ks, p), q),
+          Reach.found(~A, ~same, Shared.List.remove(~A, ~same, ks, p), q),
           True{},
           Reach.drop_keep(
             ~A,
@@ -2033,7 +2014,13 @@ def Reach.within_drop(
               Reach.within(~A, ~same, r, ks)
             )(hw)
           )(Bools.Bool.or_false_left(same(q, p), Reach.found(~A, ~same, r, p))(hn))
-        ): {Bool.and(_, Reach.within(~A, ~same, r, Reach.drop(~A, ~same, ks, p))) == True{}: Bool}
+        ): {
+          Bool.and(
+            _,
+            Reach.within(~A, ~same, r, Shared.List.remove(~A, ~same, ks, p))
+          )
+            == True{}: Bool
+        }
         Reach.within_drop(
           ~A,
           ~V,
@@ -2052,7 +2039,6 @@ def Reach.within_drop(
             Reach.within(~A, ~same, r, ks)
           )(hw)
         )(Bools.Bool.or_false_right(same(q, p), Reach.found(~A, ~same, r, p))(hn))
-# bend-lint: expect-end bend-lint-rules/performance/loop_invariant_call@information
 
 # a path that visits each node of ks at most once has no more nodes than ks
 def Reach.fits_nodes(
@@ -2081,7 +2067,7 @@ def Reach.fits_nodes(
         Reach.fits_le(
           A,
           p <> r,
-          1n+List.length(&2, A, Reach.drop(~A, ~same, ks, p)),
+          1n+List.length(&2, A, Shared.List.remove(~A, ~same, ks, p)),
           List.length(&2, A, ks)
         )(
           Reach.fits_nodes(
@@ -2094,7 +2080,7 @@ def Reach.fits_nodes(
             ~sound,
             ~live,
             r,
-            Reach.drop(~A, ~same, ks, p)
+            Shared.List.remove(~A, ~same, ks, p)
           )(
             Bools.Bool.and_true_right(
               Bool.not(Reach.found(~A, ~same, r, p)),
@@ -2567,7 +2553,7 @@ def Reach.closes_found(
     case Nil{}:
       +h => +hy => Empty.absurd(
         {Reach.closes(~A, ~V, ~same, ~succ, ~nodes, g, c, []) == True{}: Bool},
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case Con{+x, +r}:
       +h => Reach.closes_found.at(
@@ -2955,7 +2941,7 @@ def Reach.put_first(
           Reach.path(~A, ~V, ~same, ~succ, qs, xs, g, c) == True{}: Bool
         }
           & {Reach.found(~A, ~same, qs, c) == False{}: Bool},
-        Bools.Bool.false_ne_true(hf)
+        Shared.Bool.false_ne_true(hf)
       )
     case Con{+p, +r}:
       +hf => Reach.put_first.at(
@@ -3538,7 +3524,7 @@ def Reach.put_acyclic.at(
     case True{}:
       +e => Empty.absurd(
         {True{} == False{}: Bool},
-        Bools.Bool.false_ne_true(
+        Shared.Bool.false_ne_true(
           Reach.put_acyclic.cyc(
             ~A,
             ~V,

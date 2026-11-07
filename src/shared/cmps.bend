@@ -1,5 +1,5 @@
 import Base
-import ./bools.bend as Bools
+import ./shared.bend as Shared
 
 # Equality of strings
 # -------------------
@@ -23,11 +23,11 @@ def Cmp.ne_eq(-c: Cmp, n: Cmp.Ne(c), e: {c == EQ{}: Cmp}) -> Empty:
 def Cmp.is_eq_sound(c: Cmp) -> {Cmp.is_eq(c) == True{}: Bool} -> {c == EQ{}: Cmp}:
   match c:
     case LT{}:
-      h => Empty.absurd({LT{} == EQ{}: Cmp}, Bools.Bool.false_ne_true(h))
+      h => Empty.absurd({LT{} == EQ{}: Cmp}, Shared.Bool.false_ne_true(h))
     case EQ{}:
       h => {==}
     case GT{}:
-      h => Empty.absurd({GT{} == EQ{}: Cmp}, Bools.Bool.false_ne_true(h))
+      h => Empty.absurd({GT{} == EQ{}: Cmp}, Shared.Bool.false_ne_true(h))
 # Bool.cmp is EQ only for equal Bools
 def Bool.cmp_eq(a: Bool, b: Bool) -> {Bool.cmp(a, b) == EQ{}: Cmp} -> {a == b: Bool}:
   match a b:
@@ -277,12 +277,12 @@ def Cmp.then_chain(
     case LT{} LT{} EQ{}:
       hp => hs => Empty.absurd(
         {Cmp.chain(Cmp.then(LT{}, sa), Cmp.then(LT{}, sb), Cmp.then(EQ{}, sc)) == True{}: Bool},
-        Bools.Bool.false_ne_true(hp)
+        Shared.Bool.false_ne_true(hp)
       )
     case LT{} LT{} GT{}:
       hp => hs => Empty.absurd(
         {Cmp.chain(Cmp.then(LT{}, sa), Cmp.then(LT{}, sb), Cmp.then(GT{}, sc)) == True{}: Bool},
-        Bools.Bool.false_ne_true(hp)
+        Shared.Bool.false_ne_true(hp)
       )
     case LT{} EQ{} LT{}:
       match sb:
@@ -295,12 +295,12 @@ def Cmp.then_chain(
     case LT{} EQ{} EQ{}:
       hp => hs => Empty.absurd(
         {Cmp.chain(Cmp.then(LT{}, sa), Cmp.then(EQ{}, sb), Cmp.then(EQ{}, sc)) == True{}: Bool},
-        Bools.Bool.false_ne_true(hp)
+        Shared.Bool.false_ne_true(hp)
       )
     case LT{} EQ{} GT{}:
       hp => hs => Empty.absurd(
         {Cmp.chain(Cmp.then(LT{}, sa), Cmp.then(EQ{}, sb), Cmp.then(GT{}, sc)) == True{}: Bool},
-        Bools.Bool.false_ne_true(hp)
+        Shared.Bool.false_ne_true(hp)
       )
     case LT{} GT{} LT{}:
       hp => hs => {==}
@@ -325,34 +325,34 @@ def Cmp.then_chain(
     case EQ{} LT{} EQ{}:
       hp => hs => Empty.absurd(
         {Cmp.chain(Cmp.then(EQ{}, sa), Cmp.then(LT{}, sb), Cmp.then(EQ{}, sc)) == True{}: Bool},
-        Bools.Bool.false_ne_true(hp)
+        Shared.Bool.false_ne_true(hp)
       )
     case EQ{} LT{} GT{}:
       hp => hs => Empty.absurd(
         {Cmp.chain(Cmp.then(EQ{}, sa), Cmp.then(LT{}, sb), Cmp.then(GT{}, sc)) == True{}: Bool},
-        Bools.Bool.false_ne_true(hp)
+        Shared.Bool.false_ne_true(hp)
       )
     case EQ{} EQ{} LT{}:
       hp => hs => Empty.absurd(
         {Cmp.chain(Cmp.then(EQ{}, sa), Cmp.then(EQ{}, sb), Cmp.then(LT{}, sc)) == True{}: Bool},
-        Bools.Bool.false_ne_true(hp)
+        Shared.Bool.false_ne_true(hp)
       )
     case EQ{} EQ{} EQ{}:
       hp => hs => hs
     case EQ{} EQ{} GT{}:
       hp => hs => Empty.absurd(
         {Cmp.chain(Cmp.then(EQ{}, sa), Cmp.then(EQ{}, sb), Cmp.then(GT{}, sc)) == True{}: Bool},
-        Bools.Bool.false_ne_true(hp)
+        Shared.Bool.false_ne_true(hp)
       )
     case EQ{} GT{} LT{}:
       hp => hs => Empty.absurd(
         {Cmp.chain(Cmp.then(EQ{}, sa), Cmp.then(GT{}, sb), Cmp.then(LT{}, sc)) == True{}: Bool},
-        Bools.Bool.false_ne_true(hp)
+        Shared.Bool.false_ne_true(hp)
       )
     case EQ{} GT{} EQ{}:
       hp => hs => Empty.absurd(
         {Cmp.chain(Cmp.then(EQ{}, sa), Cmp.then(GT{}, sb), Cmp.then(EQ{}, sc)) == True{}: Bool},
-        Bools.Bool.false_ne_true(hp)
+        Shared.Bool.false_ne_true(hp)
       )
     case EQ{} GT{} GT{}:
       match sa:
@@ -377,12 +377,12 @@ def Cmp.then_chain(
     case GT{} EQ{} LT{}:
       hp => hs => Empty.absurd(
         {Cmp.chain(Cmp.then(GT{}, sa), Cmp.then(EQ{}, sb), Cmp.then(LT{}, sc)) == True{}: Bool},
-        Bools.Bool.false_ne_true(hp)
+        Shared.Bool.false_ne_true(hp)
       )
     case GT{} EQ{} EQ{}:
       hp => hs => Empty.absurd(
         {Cmp.chain(Cmp.then(GT{}, sa), Cmp.then(EQ{}, sb), Cmp.then(EQ{}, sc)) == True{}: Bool},
-        Bools.Bool.false_ne_true(hp)
+        Shared.Bool.false_ne_true(hp)
       )
     case GT{} EQ{} GT{}:
       match sb:
@@ -395,12 +395,12 @@ def Cmp.then_chain(
     case GT{} GT{} LT{}:
       hp => hs => Empty.absurd(
         {Cmp.chain(Cmp.then(GT{}, sa), Cmp.then(GT{}, sb), Cmp.then(LT{}, sc)) == True{}: Bool},
-        Bools.Bool.false_ne_true(hp)
+        Shared.Bool.false_ne_true(hp)
       )
     case GT{} GT{} EQ{}:
       hp => hs => Empty.absurd(
         {Cmp.chain(Cmp.then(GT{}, sa), Cmp.then(GT{}, sb), Cmp.then(EQ{}, sc)) == True{}: Bool},
-        Bools.Bool.false_ne_true(hp)
+        Shared.Bool.false_ne_true(hp)
       )
     case GT{} GT{} GT{}:
       hp => hs => {==}

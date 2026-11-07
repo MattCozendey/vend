@@ -7,6 +7,7 @@ import ../../shared/maybes.bend as Maybes
 import ../../shared/nats.bend as Nats
 import ../../shared/orders.bend as Orders
 import ../../shared/reach.bend as Reaches
+import ../../shared/shared.bend as Shared
 import ../../shared/strings.bend as Strings
 import ../../shared/tables.bend as Tables
 import ./spec.bend as Spec
@@ -998,7 +999,7 @@ def Vers.first_in(vs: List<&2, Tables.Row<Ver>>, +ks: List<&2, String>) -> Maybe
     case Nil{}:
       None{}
     case Con{Tables.Row{+i, v}, r}:
-      Maybes.Maybe.if(String, i, u => Vers.first_in(r, ks), Strings.has(ks, i))
+      List.find.if(String, i, u => Vers.first_in(r, ks), Strings.has(ks, i))
 
 # what a three-way merge picks for one resource
 type Picked is Data:
@@ -1336,7 +1337,7 @@ def Resolve.bytes(
       match cl:
         case Clash{b, h, f, bs, +l}:
           Resolve.done(
-            Strings.drop(l, n),
+            Shared.List.remove(~String, ~String.eq, l, n),
             Ver.taken(St.versions(s), r),
             s,
             r,
@@ -1489,7 +1490,7 @@ def Names.differ(
     case Nil{}:
       Nil{}
     case Con{+n, r}:
-      Lists.List.cons_if(
+      List.filter.put(
         String,
         n,
         Names.differ(r, a, b),
@@ -1922,7 +1923,7 @@ def Logged.pick(+k: Spec.Topic, xs: List<&2, Logged>) -> List<&2, Spec.Notice>:
     case Nil{}:
       Nil{}
     case Con{Logged{t, n}, r}:
-      Lists.List.cons_if(Spec.Notice, n, Logged.pick(k, r), Topic.same(t, k))
+      List.filter.put(Spec.Notice, n, Logged.pick(k, r), Topic.same(t, k))
 
 # the versions of vs that hold the resource n
 def Log.of(vs: List<&2, Tables.Row<Ver>>, +n: String) -> List<&2, Tables.Row<Ver>>:
@@ -1930,7 +1931,7 @@ def Log.of(vs: List<&2, Tables.Row<Ver>>, +n: String) -> List<&2, Tables.Row<Ver
     case Nil{}:
       Nil{}
     case Con{Tables.Row{i, Ver{+b, p, a, t}}, r}:
-      Lists.List.cons_if(
+      List.filter.put(
         Tables.Row<Ver>,
         Tables.Row{i, Ver{b, p, a, t}},
         Log.of(r, n),
@@ -2210,7 +2211,7 @@ def pick_append(k, xs, ys):
         pick_append(k, r, ys)
       ):
         {
-          Lists.List.cons_if(
+          List.filter.put(
             Spec.Notice,
             n,
             _,
@@ -2219,11 +2220,11 @@ def pick_append(k, xs, ys):
             == List.append(
               &2,
               Spec.Notice,
-              Lists.List.cons_if(Spec.Notice, n, Logged.pick(k, r), Topic.same(t, k)),
+              List.filter.put(Spec.Notice, n, Logged.pick(k, r), Topic.same(t, k)),
               Logged.pick(k, ys)
             ): List<&2, Spec.Notice>
         }
-      Lists.List.cons_if_append(
+      Lists.List.filter.put_append(
         Spec.Notice,
         n,
         Logged.pick(k, r),
@@ -2623,7 +2624,7 @@ def put_keeps.at(hit, i, x, vs, v, u):
             )
               == Some{u}: Maybe<&2, Ver>
           },
-          Bools.Bool.false_ne_true(
+          Shared.Bool.false_ne_true(
             Equal.sym(
               Bool,
               True{},
@@ -3294,7 +3295,7 @@ def raw_at(ok, s, r, w, z, n, x, h, o, e, c, b, v):
           )
             == Some{x}: Maybe<&2, List<&2, U32>>
         },
-        Bools.Bool.false_ne_true(
+        Shared.Bool.false_ne_true(
           Answer.clash(
             Spec.Answer.Write{Spec.Write.Stale{h}},
             Spec.Answer.Write{Spec.Write.Written{v}},
@@ -3449,7 +3450,7 @@ def raw_on(owner, s, r, w, z, n, b, base, x, h, o, e, c, v):
           )
             == Some{x}: Maybe<&2, List<&2, U32>>
         },
-        Bools.Bool.false_ne_true(
+        Shared.Bool.false_ne_true(
           Answer.clash(
             Spec.Answer.Write{Spec.Write.Pending{r}},
             Spec.Answer.Write{Spec.Write.Written{v}},
@@ -3520,7 +3521,7 @@ def raw_branch(m, s, r, w, z, n, b, base, x, v):
           )
             == Some{x}: Maybe<&2, List<&2, U32>>
         },
-        Bools.Bool.false_ne_true(
+        Shared.Bool.false_ne_true(
           Answer.clash(
             Spec.Answer.Write{Spec.Write.Refused{"no such branch"}},
             Spec.Answer.Write{Spec.Write.Written{v}},
@@ -3664,7 +3665,7 @@ def raw_free(taken, s, r, w, z, n, b, base, x, v):
           )
             == Some{x}: Maybe<&2, List<&2, U32>>
         },
-        Bools.Bool.false_ne_true(
+        Shared.Bool.false_ne_true(
           Answer.clash(
             Spec.Answer.Write{Spec.Write.Refused{"version ID taken"}},
             Spec.Answer.Write{Spec.Write.Written{v}},
@@ -3756,7 +3757,7 @@ def stale_at(ok, s, r, w, z, n, b, y, h, o, e, c, base, cur):
           s
         )
           & {base != Some{cur}: Maybe<&2, String>},
-        Bools.Bool.false_ne_true(
+        Shared.Bool.false_ne_true(
           Answer.clash(
             Spec.Answer.Write{Spec.Write.Written{r}},
             Spec.Answer.Write{Spec.Write.Stale{cur}},
@@ -3781,7 +3782,7 @@ def stale_at(ok, s, r, w, z, n, b, y, h, o, e, c, base, cur):
             n2,
             p2
           ),
-          heq => Bools.Bool.false_ne_true(
+          heq => Shared.Bool.false_ne_true(
             Equal.trans(
               Bool,
               False{},
@@ -3851,7 +3852,7 @@ def stale_on(owner, s, r, w, z, n, b, base, y, h, o, e, c, cur):
           s
         )
           & {base != Some{cur}: Maybe<&2, String>},
-        Bools.Bool.false_ne_true(
+        Shared.Bool.false_ne_true(
           Answer.clash(
             Spec.Answer.Write{Spec.Write.Pending{r}},
             Spec.Answer.Write{Spec.Write.Stale{cur}},
@@ -3899,7 +3900,7 @@ def stale_branch(m, s, r, w, z, n, b, base, y, cur):
           s
         )
           & {Some{k} != Some{cur}: Maybe<&2, String>},
-        Bools.Bool.false_ne_true(
+        Shared.Bool.false_ne_true(
           Answer.clash(
             Spec.Answer.Write{Spec.Write.Refused{"no such branch"}},
             Spec.Answer.Write{Spec.Write.Stale{cur}},
@@ -3918,7 +3919,7 @@ def stale_branch(m, s, r, w, z, n, b, base, y, cur):
           s
         )
           & {None{} != Some{cur}: Maybe<&2, String>},
-        Bools.Bool.false_ne_true(
+        Shared.Bool.false_ne_true(
           Answer.clash(
             Spec.Answer.Write{Spec.Write.Written{r}},
             Spec.Answer.Write{Spec.Write.Stale{cur}},
@@ -3963,7 +3964,7 @@ def stale_free(taken, s, r, w, z, n, b, base, y, cur):
           s
         )
           & {base != Some{cur}: Maybe<&2, String>},
-        Bools.Bool.false_ne_true(
+        Shared.Bool.false_ne_true(
           Answer.clash(
             Spec.Answer.Write{Spec.Write.Refused{"version ID taken"}},
             Spec.Answer.Write{Spec.Write.Stale{cur}},
@@ -4011,7 +4012,7 @@ def stale_bytes(m, s, r, w, z, n, b, base, cur):
           s
         )
           & {base != Some{cur}: Maybe<&2, String>},
-        Bools.Bool.false_ne_true(
+        Shared.Bool.false_ne_true(
           Answer.clash(
             Spec.Answer.Write{Spec.Write.Refused{"no such content"}},
             Spec.Answer.Write{Spec.Write.Stale{cur}},
@@ -4090,7 +4091,7 @@ def cf_result(cl, s, r, w, z, f, b, bs, h, o, e, c, k):
             )
               == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>
           },
-        Bools.Bool.false_ne_true(
+        Shared.Bool.false_ne_true(
           Answer.clash(
             Spec.Answer.Merge{Spec.Merge.Merged{r}},
             Spec.Answer.Merge{Spec.Merge.Conflicted{k}},
@@ -4123,7 +4124,7 @@ def cf_result(cl, s, r, w, z, f, b, bs, h, o, e, c, k):
             %Equal.sym(List<&2, Logged>, List.drop(&2, Logged, List.append(&2, Logged, St.log(s), [Logged{Spec.Topic.Conflicts{b}, Spec.Notice.Conflicted{r}}]), List.length(&2, Logged, St.log(s))), [Logged{Spec.Topic.Conflicts{b}, Spec.Notice.Conflicted{r}}], Lists.List.drop_after_append(Logged, St.log(s), [Logged{Spec.Topic.Conflicts{b}, Spec.Notice.Conflicted{r}}])):
               {Logged.pick(Spec.Topic.Conflicts{b}, _) == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>}
             %Equal.sym(Bool, String.eq(b, b), True{}, Strings.String.eq_refl(b)):
-              {Lists.List.cons_if(Spec.Notice, Spec.Notice.Conflicted{r}, [], _) == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>}
+              {List.filter.put(Spec.Notice, Spec.Notice.Conflicted{r}, [], _) == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>}
             %Maybes.Maybe.some_inj(String, r, k, Equal.cong(Spec.Answer, Maybe<&2, String>, y => Answer.conflict(y), Spec.Answer.Merge{Spec.Merge.Conflicted{r}}, Spec.Answer.Merge{Spec.Merge.Conflicted{k}}, ha)):
               {[Spec.Notice.Conflicted{r}] == [Spec.Notice.Conflicted{_}]: List<&2, Spec.Notice>}
             {==})
@@ -4193,7 +4194,7 @@ def cf_inside(held, s, r, w, z, f, b, h, o, e, c, k):
             )
               == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>
           },
-        Bools.Bool.false_ne_true(
+        Shared.Bool.false_ne_true(
           Answer.clash(
             Spec.Answer.Merge{Spec.Merge.Merged{h}},
             Spec.Answer.Merge{Spec.Merge.Conflicted{k}},
@@ -4332,7 +4333,7 @@ def cf_owner(owner, taken, s, r, w, z, f, b, h, o, e, c, k):
             )
               == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>
           },
-        Bools.Bool.false_ne_true(
+        Shared.Bool.false_ne_true(
           Answer.clash(
             Spec.Answer.Merge{Spec.Merge.Refused{"not the owner"}},
             Spec.Answer.Merge{Spec.Merge.Conflicted{k}},
@@ -4362,7 +4363,7 @@ def cf_owner(owner, taken, s, r, w, z, f, b, h, o, e, c, k):
             )
               == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>
           },
-        Bools.Bool.false_ne_true(
+        Shared.Bool.false_ne_true(
           Answer.clash(
             Spec.Answer.Merge{Spec.Merge.Refused{"version ID taken"}},
             Spec.Answer.Merge{Spec.Merge.Conflicted{k}},
@@ -4433,7 +4434,7 @@ def cf_branch(m, s, r, w, z, f, b, k):
             )
               == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>
           },
-        Bools.Bool.false_ne_true(
+        Shared.Bool.false_ne_true(
           Answer.clash(
             Spec.Answer.Merge{Spec.Merge.Refused{"no such branch"}},
             Spec.Answer.Merge{Spec.Merge.Conflicted{k}},
@@ -4503,7 +4504,7 @@ def cf_point(m, s, r, w, z, b, k):
             )
               == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>
           },
-        Bools.Bool.false_ne_true(
+        Shared.Bool.false_ne_true(
           Answer.clash(
             Spec.Answer.Merge{Spec.Merge.Refused{"no such point"}},
             Spec.Answer.Merge{Spec.Merge.Conflicted{k}},
@@ -4560,7 +4561,7 @@ def set_owner_on(own, s, b, g, h, o, e, c, old, new):
               )
                 == Some{new}: Maybe<&2, Nat>
             },
-          Bools.Bool.false_ne_true(
+          Shared.Bool.false_ne_true(
             Answer.clash(
               Spec.Answer.SetOwner{Spec.SetOwner.Refused{"not the owner"}},
               Spec.Answer.SetOwner{Spec.SetOwner.Set{new}},
@@ -4684,12 +4685,12 @@ def member_same_sound(a, b):
     case Spec.Member.Node{x} Spec.Member.Group{y}:
       h => Empty.absurd(
         {Spec.Member.Node{x} == Spec.Member.Group{y}: Spec.Member},
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case Spec.Member.Group{x} Spec.Member.Node{y}:
       h => Empty.absurd(
         {Spec.Member.Group{x} == Spec.Member.Node{y}: Spec.Member},
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
 
 # grp_all_has at the first name j, by whether it is k (hit)
@@ -4783,7 +4784,7 @@ def grp_live.at(mg, gs, k, q):
           )
             == True{}: Bool
         },
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case Some{x}:
       e => h =>
@@ -4832,7 +4833,7 @@ def grp_live(gs, p, q):
           )
             == True{}: Bool
         },
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case Spec.Member.Group{+k}:
       +gs = gs
@@ -4859,7 +4860,7 @@ def sg_on(cycle, s, g, m, ms, x):
       ha =>
         Empty.absurd(
           {Grp.inside(Out.groups(SetGroup.on(True{}, s, g, m <> ms)), m, g) == True{}: Bool},
-          Bools.Bool.false_ne_true(
+          Shared.Bool.false_ne_true(
             Answer.clash(
               Spec.Answer.SetGroup{Spec.SetGroup.Cycle{}},
               Spec.Answer.SetGroup{Spec.SetGroup.Set{x}},
@@ -5377,7 +5378,7 @@ def grp_kept.Resolve.bytes(
       match cl:
         case Clash{b, h, f, bs, +l}:
           grp_kept.Resolve.done(
-            Strings.drop(l, n),
+            Shared.List.remove(~String, ~String.eq, l, n),
             Ver.taken(St.versions(s), r),
             s,
             r,
@@ -7008,7 +7009,7 @@ def sync_free(c, a, o):
     case True{}:
       h => Empty.absurd(
         {True{} == False{}: Bool},
-        Bools.Bool.false_ne_true(
+        Shared.Bool.false_ne_true(
           Answer.clash(
             Spec.Answer.Sync{Spec.Sync.Refused{"version ID collision"}},
             Spec.Answer.Sync{Spec.Sync.Synced{}},
@@ -7050,7 +7051,7 @@ def has_false_find.of(m, vs, k):
         +k = k
         Empty.absurd(
           {Tables.Table.get(Ver, vs, k) == None{}: Maybe<&2, Ver>},
-          Bools.Bool.false_ne_true(
+          Shared.Bool.false_ne_true(
             Equal.sym(
               Bool,
               True{},
@@ -7149,7 +7150,7 @@ def add_find.held.of(m, i, x, r, ys, k):
             )
               == Maybe.or(&2, Ver, Tables.Table.get(Ver, ys, k), Some{x}): Maybe<&2, Ver>
           },
-          Bools.Bool.false_ne_true(
+          Shared.Bool.false_ne_true(
             Equal.trans(
               Bool,
               False{},
@@ -7520,7 +7521,7 @@ def collides_at(ks, os, vs, k):
         {
           Sync.clash.at(Tables.Table.get(Ver, vs, k), Tables.Table.get(Ver, os, k)) == False{}: Bool
         },
-        Bools.Bool.false_ne_true(hn)
+        Shared.Bool.false_ne_true(hn)
       )
     case Con{+j, +r}:
       +os = os
@@ -13328,7 +13329,7 @@ def first_two(a, bb, x, y, rest, ids):
       False{},
       ha
     ): {
-      Maybes.Maybe.if(
+      List.find.if(
         String,
         a,
         u => Vers.first_in(Tables.Row{bb, y} <> rest, ids),
@@ -13341,9 +13342,7 @@ def first_two(a, bb, x, y, rest, ids):
       Strings.has(ids, bb),
       True{},
       hb
-    ): {
-      Maybes.Maybe.if(String, bb, u => Vers.first_in(rest, ids), _) == Some{bb}: Maybe<&2, String>
-    }
+    ): {List.find.if(String, bb, u => Vers.first_in(rest, ids), _) == Some{bb}: Maybe<&2, String>}
     {==}
 
 # the IDs of a, bb, ... hold bb
@@ -13464,7 +13463,7 @@ def named_at(ks, vs, x, k):
     case Nil{}:
       hn => hk => Empty.absurd(
         {Strings.has(History.parents(Tables.Table.get(Ver, vs, k)), x) == False{}: Bool},
-        Bools.Bool.false_ne_true(hk)
+        Shared.Bool.false_ne_true(hk)
       )
     case Con{+j, +r}:
       +hn =>
@@ -13846,7 +13845,7 @@ def links_two(
     case Nil{}:
       h => Empty.absurd(
         &f: Nat -> {History.links([], vs) == 1n+1n+f: Nat},
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case Con{j, +r}:
       h => links_two.of(
@@ -14770,7 +14769,7 @@ def blobs_get(ns, q, y, b0, n1, x1, n2, x2):
           )
             == Some{y}: Maybe<&2, List<&2, U32>>
         },
-        Bools.Bool.false_ne_true(hh)
+        Shared.Bool.false_ne_true(hh)
       )
     case Con{+n, +r}:
       +hp => hh =>
@@ -16393,7 +16392,7 @@ def neq_ver.at(hit, vs, a, b):
         +b = b
         Empty.absurd(
           {True{} == False{}: Bool},
-          Bools.Bool.false_ne_true(
+          Shared.Bool.false_ne_true(
             Equal.trans(
               Bool,
               False{},
@@ -19693,7 +19692,7 @@ def mdk_split(
               }
                 & {St.content(s4, n2, Spec.Point.Head{b}) == Some{x2}: Maybe<&2, List<&2, U32>>}
             ),
-          Bools.Bool.false_ne_true(
+          Shared.Bool.false_ne_true(
             Equal.trans(
               Bool,
               False{},

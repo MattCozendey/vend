@@ -1,6 +1,7 @@
 import Base
 import ./bools.bend as Bools
 import ./maybes.bend as Maybes
+import ./shared.bend as Shared
 import ./strings.bend as Strings
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
@@ -401,28 +402,6 @@ def Table.same(~V: Data, ~eq: V -> V -> Bool, +a: Table<V>, +b: Table<V>) -> Boo
 
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 
-# the first side of a true "all" is true
-def Table.all_head(
-  c: Bool,
-  rest: Unit -> Bool
-) -> {List.all.if(rest, c) == True{}: Bool} -> {c == True{}: Bool}:
-  match c:
-    case True{}:
-      h => {==}
-    case False{}:
-      h => Empty.absurd({False{} == True{}: Bool}, Bools.Bool.false_ne_true(h))
-
-# the rest of a true "all" is true
-def Table.all_rest(
-  c: Bool,
-  rest: Unit -> Bool
-) -> {List.all.if(rest, c) == True{}: Bool} -> {rest(Unit{}) == True{}: Bool}:
-  match c:
-    case True{}:
-      h => h
-    case False{}:
-      h => Empty.absurd({rest(Unit{}) == True{}: Bool}, Bools.Bool.false_ne_true(h))
-
 # Table.agree_at at the first key m, by whether m is n (hit)
 def Table.agree_at.at(
   ~V: Data,
@@ -452,7 +431,7 @@ def Table.agree_at.at(
   match hit:
     case False{}:
       e => +hg => hn => ih(
-        Table.all_rest(
+        Shared.List.all.if_rest(
           Maybes.Maybe.same(~V, ~eq, Table.get(V, a, m), Table.get(V, b, m)),
           u => Table.agree(~V, ~eq, r, a, b)
         )(hg)
@@ -463,7 +442,7 @@ def Table.agree_at.at(
           m,
           n
         )(e): {Maybes.Maybe.same(~V, ~eq, Table.get(V, a, _), Table.get(V, b, _)) == True{}: Bool}
-        Table.all_head(
+        Shared.List.all.if_hit(
           Maybes.Maybe.same(~V, ~eq, Table.get(V, a, m), Table.get(V, b, m)),
           u => Table.agree(~V, ~eq, r, a, b)
         )(hg)
@@ -485,7 +464,7 @@ def Table.agree_at(
     case Nil{}:
       hg => hn => Empty.absurd(
         {Maybes.Maybe.same(~V, ~eq, Table.get(V, a, n), Table.get(V, b, n)) == True{}: Bool},
-        Bools.Bool.false_ne_true(hn)
+        Shared.Bool.false_ne_true(hn)
       )
     case Con{+m, +r}:
       Table.agree_at.at(
@@ -511,7 +490,7 @@ def Table.none_of(
     case Some{x}:
       h => Empty.absurd(
         {Some{x} == None{}: Maybe<&2, V>},
-        Bools.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
+        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
       )
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
@@ -533,7 +512,7 @@ def Table.absent.at(
       e => hu =>
         Empty.absurd(
           {Strings.has(ks, n) == False{}: Bool},
-          Bools.Bool.false_ne_true(
+          Shared.Bool.false_ne_true(
             Equal.trans(
               Bool,
               False{},
@@ -546,73 +525,31 @@ def Table.absent.at(
         )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
-# a key missing from the union of the keys of a and b has no value in a
-def Table.missing_left(
+# a key missing from u, a list that holds each key of t, has no value in t
+def Table.missing(
   -V: Data,
-  +a: Table<V>,
-  +b: Table<V>,
-  +n: String
-) -> {
-  Strings.has(Strings.union(Table.keys(V, b), Table.keys(V, a)), n) == False{}: Bool
-} -> {Table.get(V, a, n) == None{}: Maybe<&2, V>}:
+  +t: Table<V>,
+  u: List<&2, String>,
+  +n: String,
+  sub: {Strings.has(Table.keys(V, t), n) == True{}: Bool} -> {Strings.has(u, n) == True{}: Bool}
+) -> {Strings.has(u, n) == False{}: Bool} -> {Table.get(V, t, n) == None{}: Maybe<&2, V>}:
   hu =>
     Table.none_of(
       V,
-      Table.get(V, a, n)
+      Table.get(V, t, n)
     )(
       Equal.trans(
         Bool,
-        Maybe.is_some(&2, V, Table.get(V, a, n)),
-        Strings.has(Table.keys(V, a), n),
+        Maybe.is_some(&2, V, Table.get(V, t, n)),
+        Strings.has(Table.keys(V, t), n),
         False{},
         Equal.sym(
           Bool,
-          Strings.has(Table.keys(V, a), n),
-          Maybe.is_some(&2, V, Table.get(V, a, n)),
-          Table.keys_get(V, a, n)
+          Strings.has(Table.keys(V, t), n),
+          Maybe.is_some(&2, V, Table.get(V, t, n)),
+          Table.keys_get(V, t, n)
         ),
-        Table.absent.at(
-          Strings.has(Table.keys(V, a), n),
-          Table.keys(V, a),
-          Strings.union(Table.keys(V, b), Table.keys(V, a)),
-          n,
-          Strings.union_right(Table.keys(V, b), Table.keys(V, a), n)
-        )({==})(hu)
-      )
-    )
-
-# a key missing from the union of the keys of a and b has no value in b
-def Table.missing_right(
-  -V: Data,
-  +a: Table<V>,
-  +b: Table<V>,
-  +n: String
-) -> {
-  Strings.has(Strings.union(Table.keys(V, b), Table.keys(V, a)), n) == False{}: Bool
-} -> {Table.get(V, b, n) == None{}: Maybe<&2, V>}:
-  hu =>
-    Table.none_of(
-      V,
-      Table.get(V, b, n)
-    )(
-      Equal.trans(
-        Bool,
-        Maybe.is_some(&2, V, Table.get(V, b, n)),
-        Strings.has(Table.keys(V, b), n),
-        False{},
-        Equal.sym(
-          Bool,
-          Strings.has(Table.keys(V, b), n),
-          Maybe.is_some(&2, V, Table.get(V, b, n)),
-          Table.keys_get(V, b, n)
-        ),
-        Table.absent.at(
-          Strings.has(Table.keys(V, b), n),
-          Table.keys(V, b),
-          Strings.union(Table.keys(V, b), Table.keys(V, a)),
-          n,
-          Strings.union_left(Table.keys(V, b), Table.keys(V, a), n)
-        )({==})(hu)
+        Table.absent.at(Strings.has(Table.keys(V, t), n), Table.keys(V, t), u, n, sub)({==})(hu)
       )
     )
 
@@ -646,8 +583,25 @@ def Table.same_sound.at(
           Table.get(V, a, n),
           None{},
           Table.get(V, b, n),
-          Table.missing_left(V, a, b, n)(e),
-          Equal.sym(Maybe<&2, V>, Table.get(V, b, n), None{}, Table.missing_right(V, a, b, n)(e))
+          Table.missing(
+            V,
+            a,
+            Strings.union(Table.keys(V, b), Table.keys(V, a)),
+            n,
+            Strings.union_right(Table.keys(V, b), Table.keys(V, a), n)
+          )(e),
+          Equal.sym(
+            Maybe<&2, V>,
+            Table.get(V, b, n),
+            None{},
+            Table.missing(
+              V,
+              b,
+              Strings.union(Table.keys(V, b), Table.keys(V, a)),
+              n,
+              Strings.union_left(Table.keys(V, b), Table.keys(V, a), n)
+            )(e)
+          )
         )
 
 # tables that Table.same calls the same have the same value for every key,

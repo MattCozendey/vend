@@ -1,6 +1,6 @@
 import Base
-import ./bools.bend as Bools
 import ./cmps.bend as Cmps
+import ./shared.bend as Shared
 import ./words.bend as Words
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
@@ -18,35 +18,56 @@ def String.order_refl(a: String) -> {String.order.go(a, a, EQ{}) == EQ{}: Cmp}:
               %Equal.sym(Cmp, Word.cmp(32n, w, w), EQ{}, Words.Word.cmp_refl(32n, w)):
                 {String.order.go(t, t, _) == EQ{}: Cmp}
               String.order_refl(t)
-# String.order.go ends at EQ only if it started at EQ
-def String.order_keeps(
+# String.order.go from c is c, then the order from EQ
+def String.order_then(
   c: Cmp,
   a: String,
   b: String
+) -> {String.order.go(a, b, c) == Cmps.Cmp.then(c, String.order.go(a, b, EQ{})): Cmp}:
+  match c a b:
+    case EQ{} x y:
+      {==}
+    case LT{} SNil{} SNil{}:
+      {==}
+    case LT{} SNil{} SCon{y, t}:
+      {==}
+    case LT{} SCon{x, t} SNil{}:
+      {==}
+    case LT{} SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
+      {==}
+    case GT{} SNil{} SNil{}:
+      {==}
+    case GT{} SNil{} SCon{y, t}:
+      {==}
+    case GT{} SCon{x, t} SNil{}:
+      {==}
+    case GT{} SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
+      {==}
+
+# String.order.go ends at EQ only if it started at EQ
+def String.order_keeps(
+  +c: Cmp,
+  +a: String,
+  +b: String
 ) -> {String.order.go(a, b, c) == EQ{}: Cmp} -> {c == EQ{}: Cmp}:
-  match c:
-    case EQ{}:
-      h => {==}
-    case LT{}:
-      match a b:
-        case SNil{} SNil{}:
-          h => Empty.absurd({LT{} == EQ{}: Cmp}, Cmps.Cmp.ne_eq(LT{}, Unit{}, h))
-        case SNil{} SCon{y, t2}:
-          h => Empty.absurd({LT{} == EQ{}: Cmp}, Cmps.Cmp.ne_eq(LT{}, Unit{}, h))
-        case SCon{x, t1} SNil{}:
-          h => Empty.absurd({LT{} == EQ{}: Cmp}, Cmps.Cmp.ne_eq(LT{}, Unit{}, h))
-        case SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
-          h => Empty.absurd({LT{} == EQ{}: Cmp}, Cmps.Cmp.ne_eq(LT{}, Unit{}, h))
-    case GT{}:
-      match a b:
-        case SNil{} SNil{}:
-          h => Empty.absurd({GT{} == EQ{}: Cmp}, Cmps.Cmp.ne_eq(GT{}, Unit{}, h))
-        case SNil{} SCon{y, t2}:
-          h => Empty.absurd({GT{} == EQ{}: Cmp}, Cmps.Cmp.ne_eq(GT{}, Unit{}, h))
-        case SCon{x, t1} SNil{}:
-          h => Empty.absurd({GT{} == EQ{}: Cmp}, Cmps.Cmp.ne_eq(GT{}, Unit{}, h))
-        case SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
-          h => Empty.absurd({GT{} == EQ{}: Cmp}, Cmps.Cmp.ne_eq(GT{}, Unit{}, h))
+  h => Cmps.Cmp.then_eq_left(
+    c,
+    String.order.go(a, b, EQ{})
+  )(
+    Equal.trans(
+      Cmp,
+      Cmps.Cmp.then(c, String.order.go(a, b, EQ{})),
+      String.order.go(a, b, c),
+      EQ{},
+      Equal.sym(
+        Cmp,
+        String.order.go(a, b, c),
+        Cmps.Cmp.then(c, String.order.go(a, b, EQ{})),
+        String.order_then(c, a, b)
+      ),
+      h
+    )
+  )
 # String.order.go from c is String.order.go from EQ, when c is EQ
 def String.order_at(
   -c: Cmp,
@@ -168,22 +189,6 @@ def String.nonempty(t: String) -> Maybe<&2, String>:
     case SCon{c, r}:
       Some{SCon{c, r}}
 
-# i then rest, unless i is the one dropped (hit)
-def drop.put(i: String, rest: List<&2, String>, hit: Bool) -> List<&2, String>:
-  match hit:
-    case True{}:
-      rest
-    case False{}:
-      i <> rest
-
-# ks, with n unless ks holds it (held)
-def drop.keep(n: String, ks: List<&2, String>, held: Bool) -> List<&2, String>:
-  match held:
-    case True{}:
-      ks
-    case False{}:
-      n <> ks
-
 # ks holds k
 def has(ks: List<&2, String>, +k: String) -> Bool:
   match ks:
@@ -192,21 +197,13 @@ def has(ks: List<&2, String>, +k: String) -> Bool:
     case Con{i, r}:
       List.any.if(u => has(r, k), String.eq(i, k))
 
-# ks, without k
-def drop(ks: List<&2, String>, +k: String) -> List<&2, String>:
-  match ks:
-    case Nil{}:
-      Nil{}
-    case Con{+i, r}:
-      drop.put(i, drop(r, k), String.eq(i, k))
-
 # ks, with each key of ns that ks does not hold
 def union(ns: List<&2, String>, +ks: List<&2, String>) -> List<&2, String>:
   match ns:
     case Nil{}:
       ks
     case Con{+n, r}:
-      union(r, drop.keep(n, ks, has(ks, n)))
+      union(r, List.filter.put(String, n, ks, Bool.not(has(ks, n))))
 
 # an "any" with a true rest is true
 def keep_has.any(c: Bool) -> {List.any.if(u => True{}, c) == True{}: Bool}:
@@ -223,7 +220,9 @@ def keep_has(
   ks: List<&2, String>,
   held: Bool,
   k: String
-) -> {has(ks, k) == True{}: Bool} -> {has(drop.keep(n, ks, held), k) == True{}: Bool}:
+) -> {
+  has(ks, k) == True{}: Bool
+} -> {has(List.filter.put(String, n, ks, Bool.not(held)), k) == True{}: Bool}:
   match held:
     case True{}:
       h => h
@@ -248,7 +247,11 @@ def union_right(
     case Nil{}:
       h => h
     case Con{+n, r}:
-      h => union_right(r, drop.keep(n, ks, has(ks, n)), k)(keep_has(n, ks, has(ks, n), k)(h))
+      h => union_right(
+        r,
+        List.filter.put(String, n, ks, Bool.not(has(ks, n))),
+        k
+      )(keep_has(n, ks, has(ks, n), k)(h))
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # n is in ks after keep adds it, when ks holds n (held) or not
@@ -256,7 +259,9 @@ def keep_self(
   n: String,
   ks: List<&2, String>,
   held: Bool
-) -> {has(ks, n) == held: Bool} -> {has(drop.keep(n, ks, held), n) == True{}: Bool}:
+) -> {
+  has(ks, n) == held: Bool
+} -> {has(List.filter.put(String, n, ks, Bool.not(held)), n) == True{}: Bool}:
   match held:
     case True{}:
       h => h
@@ -283,14 +288,23 @@ def union_left.at(
   String.eq(n, k) == hit: Bool
 } -> {
   List.any.if(u => has(r, k), hit) == True{}: Bool
-} -> {has(union(r, drop.keep(n, ks, has(ks, n))), k) == True{}: Bool}:
+} -> {has(union(r, List.filter.put(String, n, ks, Bool.not(has(ks, n)))), k) == True{}: Bool}:
   match hit:
     case False{}:
-      e => h => ih(drop.keep(n, ks, has(ks, n)))(h)
+      e => h => ih(List.filter.put(String, n, ks, Bool.not(has(ks, n))))(h)
     case True{}:
       +e => h =>
-        %String.eq_sound(n, k)(e): {has(union(r, drop.keep(n, ks, has(ks, n))), _) == True{}: Bool}
-        union_right(r, drop.keep(n, ks, has(ks, n)), n)(keep_self(n, ks, has(ks, n))({==}))
+        %String.eq_sound(
+          n,
+          k
+        )(
+          e
+        ): {has(union(r, List.filter.put(String, n, ks, Bool.not(has(ks, n)))), _) == True{}: Bool}
+        union_right(
+          r,
+          List.filter.put(String, n, ks, Bool.not(has(ks, n))),
+          n
+        )(keep_self(n, ks, has(ks, n))({==}))
 
 # a key of ns is in the union of ns and ks
 def union_left(
@@ -300,37 +314,11 @@ def union_left(
 ) -> {has(ns, k) == True{}: Bool} -> {has(union(ns, ks), k) == True{}: Bool}:
   match ns:
     case Nil{}:
-      h => Empty.absurd({has(union(Nil{}, ks), k) == True{}: Bool}, Bools.Bool.false_ne_true(h))
+      h => Empty.absurd({has(union(Nil{}, ks), k) == True{}: Bool}, Shared.Bool.false_ne_true(h))
     case Con{+n, +r}:
       +h => union_left.at(n, r, ks, k, String.eq(n, k), js => union_left(r, js, k))({==})(
         %Equal.sym(Bool, has(n <> r, k), True{}, h): {_ == True{}: Bool}
         {==})
-
-# String.order.go from c is c, then the order from EQ
-def String.order_then(
-  c: Cmp,
-  a: String,
-  b: String
-) -> {String.order.go(a, b, c) == Cmps.Cmp.then(c, String.order.go(a, b, EQ{})): Cmp}:
-  match c a b:
-    case EQ{} x y:
-      {==}
-    case LT{} SNil{} SNil{}:
-      {==}
-    case LT{} SNil{} SCon{y, t}:
-      {==}
-    case LT{} SCon{x, t} SNil{}:
-      {==}
-    case LT{} SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
-      {==}
-    case GT{} SNil{} SNil{}:
-      {==}
-    case GT{} SNil{} SCon{y, t}:
-      {==}
-    case GT{} SCon{x, t} SNil{}:
-      {==}
-    case GT{} SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
-      {==}
 
 # String.order chains
 def String.order_chain(
@@ -416,7 +404,7 @@ def has_cons_false.at(
     case True{}:
       h => Empty.absurd(
         {True{} == False{}: Bool} & {has(r, k) == False{}: Bool},
-        Bools.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
+        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
       )
     case False{}:
       h => ({==}, h)

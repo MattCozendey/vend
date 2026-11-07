@@ -3,6 +3,7 @@ import ../hash/spec.bend as Hash
 import ../shared/bools.bend as Bools
 import ../shared/bytes.bend as Octets
 import ../shared/resources.bend as Resources
+import ../shared/shared.bend as Shared
 import ../shared/strings.bend as Strings
 import ../shared/tables.bend as Tables
 import ./spec.bend as Spec
@@ -140,7 +141,7 @@ def Added.not_fail(
   -r: Spec.Added,
   a: {Fail{e} == Done{r}: Result<&2, &2, Spec.Refusal, Spec.Added>}
 ) -> Empty:
-  Bools.Bool.false_ne_true(
+  Shared.Bool.false_ne_true(
     Equal.cong(
       Result<&2, &2, Spec.Refusal, Spec.Added>,
       Bool,

@@ -1,6 +1,6 @@
 import Base
-import ./bools.bend as Bools
 import ./cmps.bend as Cmps
+import ./shared.bend as Shared
 import ./strings.bend as Strings
 
 # Picks by an order
@@ -275,7 +275,7 @@ def Order.fold_none.at(
           )
             == m: Maybe<&2, A>
         },
-        Bools.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, hn))
+        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, hn))
       )
 
 # a fold over keys without c changes nothing
@@ -564,7 +564,7 @@ def Order.fold_some(
           )
             == Order.join(~A, ~cmp, m, at(t)(c)): Maybe<&2, A>
         },
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case Con{+k, +r}:
       Order.fold_some.at(
@@ -746,7 +746,7 @@ def Order.comm3(
           )
             == key(Order.by(A, cmp(Order.by(A, EQ{}, o, q), p), Order.by(A, EQ{}, o, q), p)): B
         },
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case LT{} EQ{} EQ{}:
       e1 => e2 => e3 => h => Empty.absurd(
@@ -756,7 +756,7 @@ def Order.comm3(
           )
             == key(Order.by(A, cmp(Order.by(A, EQ{}, o, q), p), Order.by(A, EQ{}, o, q), p)): B
         },
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case LT{} EQ{} GT{}:
       +e1 => +e2 => +e3 => h =>
@@ -781,7 +781,7 @@ def Order.comm3(
           )
             == key(Order.by(A, cmp(Order.by(A, GT{}, o, q), p), Order.by(A, GT{}, o, q), p)): B
         },
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case LT{} GT{} EQ{}:
       e1 => e2 => e3 => h => Empty.absurd(
@@ -791,7 +791,7 @@ def Order.comm3(
           )
             == key(Order.by(A, cmp(Order.by(A, GT{}, o, q), p), Order.by(A, GT{}, o, q), p)): B
         },
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case LT{} GT{} GT{}:
       +e1 => +e2 => +e3 => h =>
@@ -837,7 +837,7 @@ def Order.comm3(
           )
             == key(Order.by(A, cmp(Order.by(A, LT{}, o, q), p), Order.by(A, LT{}, o, q), p)): B
         },
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case EQ{} LT{} GT{}:
       e1 => e2 => e3 => h => Empty.absurd(
@@ -847,7 +847,7 @@ def Order.comm3(
           )
             == key(Order.by(A, cmp(Order.by(A, LT{}, o, q), p), Order.by(A, LT{}, o, q), p)): B
         },
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case EQ{} EQ{} LT{}:
       e1 => e2 => e3 => h => Empty.absurd(
@@ -857,7 +857,7 @@ def Order.comm3(
           )
             == key(Order.by(A, cmp(Order.by(A, EQ{}, o, q), p), Order.by(A, EQ{}, o, q), p)): B
         },
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case EQ{} EQ{} EQ{}:
       +e1 => +e2 => +e3 => h =>
@@ -882,7 +882,7 @@ def Order.comm3(
           )
             == key(Order.by(A, cmp(Order.by(A, EQ{}, o, q), p), Order.by(A, EQ{}, o, q), p)): B
         },
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case EQ{} GT{} LT{}:
       e1 => e2 => e3 => h => Empty.absurd(
@@ -892,7 +892,7 @@ def Order.comm3(
           )
             == key(Order.by(A, cmp(Order.by(A, GT{}, o, q), p), Order.by(A, GT{}, o, q), p)): B
         },
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case EQ{} GT{} EQ{}:
       e1 => e2 => e3 => h => Empty.absurd(
@@ -902,7 +902,7 @@ def Order.comm3(
           )
             == key(Order.by(A, cmp(Order.by(A, GT{}, o, q), p), Order.by(A, GT{}, o, q), p)): B
         },
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case EQ{} GT{} GT{}:
       +e1 => +e2 => +e3 => h =>
@@ -948,7 +948,7 @@ def Order.comm3(
           )
             == key(Order.by(A, cmp(Order.by(A, LT{}, o, q), p), Order.by(A, LT{}, o, q), p)): B
         },
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case GT{} LT{} GT{}:
       e1 => e2 => e3 => h => Empty.absurd(
@@ -958,7 +958,7 @@ def Order.comm3(
           )
             == key(Order.by(A, cmp(Order.by(A, LT{}, o, q), p), Order.by(A, LT{}, o, q), p)): B
         },
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case GT{} EQ{} LT{}:
       +e1 => +e2 => +e3 => h =>
@@ -983,7 +983,7 @@ def Order.comm3(
           )
             == key(Order.by(A, cmp(Order.by(A, EQ{}, o, q), p), Order.by(A, EQ{}, o, q), p)): B
         },
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case GT{} EQ{} GT{}:
       e1 => e2 => e3 => h => Empty.absurd(
@@ -993,7 +993,7 @@ def Order.comm3(
           )
             == key(Order.by(A, cmp(Order.by(A, EQ{}, o, q), p), Order.by(A, EQ{}, o, q), p)): B
         },
-        Bools.Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case GT{} GT{} LT{}:
       +e1 => +e2 => +e3 => h =>
