@@ -1,5 +1,6 @@
 import Base
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/texts.bend as Cuts
 
 # JSON (RFC 8259), as far as the MCP front needs it. A text is a String of
 # Unicode characters; the front decodes and encodes its UTF-8. A number
@@ -49,7 +50,7 @@ def Json.skip(s: String) -> String:
     case SNil{}:
       SNil{}
     case SCon{+c, +t}:
-      Shared.Bool.when(String, Ch.is_space(c), u => Json.skip(t), u => SCon{c, t})
+      Bools.Bool.when(String, Ch.is_space(c), u => Json.skip(t), u => SCon{c, t})
 
 # Numbers
 # -------
@@ -57,84 +58,84 @@ def Json.skip(s: String) -> String:
 # takes the longest numeral at the start of a text.
 
 # c then the cut
-def Num.on(c: Char, k: Shared.Cut) -> Shared.Cut:
+def Num.on(c: Char, k: Cuts.Cut) -> Cuts.Cut:
   match k:
-    case Shared.Cut{b, a}:
-      Shared.Cut{SCon{c, b}, a}
+    case Cuts.Cut{b, a}:
+      Cuts.Cut{SCon{c, b}, a}
 
 # the digits at the start of s, and the rest
-def Num.digits(s: String) -> Shared.Cut:
+def Num.digits(s: String) -> Cuts.Cut:
   match s:
     case SNil{}:
-      Shared.Cut{SNil{}, SNil{}}
+      Cuts.Cut{SNil{}, SNil{}}
     case SCon{+c, +t}:
-      Shared.Bool.when(
-        Shared.Cut,
+      Bools.Bool.when(
+        Cuts.Cut,
         Char.is_digit(c),
         u => Num.on(c, Num.digits(t)),
-        u => Shared.Cut{SNil{}, SCon{c, t}}
+        u => Cuts.Cut{SNil{}, SCon{c, t}}
       )
 
 # the cut, when it took at least one digit
-def Num.some(k: Shared.Cut) -> Maybe<&2, Shared.Cut>:
+def Num.some(k: Cuts.Cut) -> Maybe<&2, Cuts.Cut>:
   match k:
-    case Shared.Cut{SNil{}, a}:
+    case Cuts.Cut{SNil{}, a}:
       None{}
-    case Shared.Cut{b, a}:
-      Some{Shared.Cut{b, a}}
+    case Cuts.Cut{b, a}:
+      Some{Cuts.Cut{b, a}}
 
 # a before the cut m
-def Num.join(a: String, m: Maybe<&2, Shared.Cut>) -> Maybe<&2, Shared.Cut>:
+def Num.join(a: String, m: Maybe<&2, Cuts.Cut>) -> Maybe<&2, Cuts.Cut>:
   match m:
     case None{}:
       None{}
-    case Some{Shared.Cut{b, r}}:
-      Some{Shared.Cut{String.append(a, b), r}}
+    case Some{Cuts.Cut{b, r}}:
+      Some{Cuts.Cut{String.append(a, b), r}}
 
 # the cut m, then k on its rest
-def Num.then(m: Maybe<&2, Shared.Cut>, k: String -> Maybe<&2, Shared.Cut>) -> Maybe<&2, Shared.Cut>:
+def Num.then(m: Maybe<&2, Cuts.Cut>, k: String -> Maybe<&2, Cuts.Cut>) -> Maybe<&2, Cuts.Cut>:
   match m:
     case None{}:
       None{}
-    case Some{Shared.Cut{a, r}}:
+    case Some{Cuts.Cut{a, r}}:
       Num.join(a, k(r))
 
 # nothing taken
-def Num.none(s: String) -> Maybe<&2, Shared.Cut>:
-  Some{Shared.Cut{SNil{}, s}}
+def Num.none(s: String) -> Maybe<&2, Cuts.Cut>:
+  Some{Cuts.Cut{SNil{}, s}}
 
 # an optional "-"
-def Num.minus(s: String) -> Maybe<&2, Shared.Cut>:
+def Num.minus(s: String) -> Maybe<&2, Cuts.Cut>:
   match s:
     case SCon{+c, +t}:
-      Shared.Bool.when(
-        Maybe<&2, Shared.Cut>,
+      Bools.Bool.when(
+        Maybe<&2, Cuts.Cut>,
         Ch.is(c, 45),
-        u => Some{Shared.Cut{"-", t}},
+        u => Some{Cuts.Cut{"-", t}},
         u => Num.none(SCon{c, t})
       )
     case SNil{}:
       Num.none(SNil{})
 
 # "0", or a digit 1 to 9 and more digits
-def Num.int(s: String) -> Maybe<&2, Shared.Cut>:
+def Num.int(s: String) -> Maybe<&2, Cuts.Cut>:
   match s:
     case SCon{+c, +t}:
-      Shared.Bool.when(
-        Maybe<&2, Shared.Cut>,
+      Bools.Bool.when(
+        Maybe<&2, Cuts.Cut>,
         Ch.is(c, 48),
-        u => Some{Shared.Cut{"0", t}},
+        u => Some{Cuts.Cut{"0", t}},
         u => Num.some(Num.digits(SCon{c, t}))
       )
     case SNil{}:
       None{}
 
 # an optional "." and one or more digits
-def Num.frac(s: String) -> Maybe<&2, Shared.Cut>:
+def Num.frac(s: String) -> Maybe<&2, Cuts.Cut>:
   match s:
     case SCon{+c, +t}:
-      Shared.Bool.when(
-        Maybe<&2, Shared.Cut>,
+      Bools.Bool.when(
+        Maybe<&2, Cuts.Cut>,
         Ch.is(c, 46),
         u => Num.join(".", Num.some(Num.digits(t))),
         u => Num.none(SCon{c, t})
@@ -143,11 +144,11 @@ def Num.frac(s: String) -> Maybe<&2, Shared.Cut>:
       Num.none(SNil{})
 
 # an optional "+" or "-", then one or more digits
-def Num.exp.digits(s: String) -> Maybe<&2, Shared.Cut>:
+def Num.exp.digits(s: String) -> Maybe<&2, Cuts.Cut>:
   match s:
     case SCon{+c, +t}:
-      Shared.Bool.when(
-        Maybe<&2, Shared.Cut>,
+      Bools.Bool.when(
+        Maybe<&2, Cuts.Cut>,
         Bool.or(Ch.is(c, 43), Ch.is(c, 45)),
         u => Num.join(SCon{c, SNil{}}, Num.some(Num.digits(t))),
         u => Num.some(Num.digits(SCon{c, t}))
@@ -156,11 +157,11 @@ def Num.exp.digits(s: String) -> Maybe<&2, Shared.Cut>:
       None{}
 
 # an optional "e" or "E" and its exponent
-def Num.exp(s: String) -> Maybe<&2, Shared.Cut>:
+def Num.exp(s: String) -> Maybe<&2, Cuts.Cut>:
   match s:
     case SCon{+c, +t}:
-      Shared.Bool.when(
-        Maybe<&2, Shared.Cut>,
+      Bools.Bool.when(
+        Maybe<&2, Cuts.Cut>,
         Bool.or(Ch.is(c, 101), Ch.is(c, 69)),
         u => Num.join(SCon{c, SNil{}}, Num.exp.digits(t)),
         u => Num.none(SCon{c, t})
@@ -170,13 +171,13 @@ def Num.exp(s: String) -> Maybe<&2, Shared.Cut>:
 
 # the numeral at the start of s, and the rest, or None when s starts with
 # none
-def Num.scan(s: String) -> Maybe<&2, Shared.Cut>:
+def Num.scan(s: String) -> Maybe<&2, Cuts.Cut>:
   Num.then(Num.minus(s), r => Num.then(Num.int(r), r2 => Num.then(Num.frac(r2), r3 => Num.exp(r3))))
 
 # the scan took a whole text: nothing is left
-def Num.whole.of(m: Maybe<&2, Shared.Cut>) -> Bool:
+def Num.whole.of(m: Maybe<&2, Cuts.Cut>) -> Bool:
   match m:
-    case Some{Shared.Cut{n, SNil{}}}:
+    case Some{Cuts.Cut{n, SNil{}}}:
       True{}
     case _:
       False{}
@@ -219,7 +220,7 @@ def Json.obj(fs: List<&2, Field>) -> Json:
 def Json.member(ms: Json, +k: String) -> Maybe<&2, Json>:
   match ms:
     case JMember{x, v, t}:
-      Shared.Bool.when(Maybe<&2, Json>, String.eq(x, k), u => Some{v}, u => Json.member(t, k))
+      Bools.Bool.when(Maybe<&2, Json>, String.eq(x, k), u => Some{v}, u => Json.member(t, k))
     case _:
       None{}
 
@@ -245,11 +246,11 @@ def Json.text(m: Maybe<&2, Json>) -> Maybe<&2, String>:
 # the hex digit of c, as its value
 def Hex.digit(+c: Char) -> Maybe<&2, U32>:
   +x = Char.to_u32(c)
-  Shared.Bool.when(
+  Bools.Bool.when(
     Maybe<&2, U32>,
     Char.is_digit(c),
     u => Some{(x - 48: U32)},
-    u => Shared.Bool.when(
+    u => Bools.Bool.when(
       Maybe<&2, U32>,
       Bool.and((x >= 97: U32), (x <= 102: U32)),
       v => Some{(x - 87: U32)},
@@ -328,7 +329,7 @@ def Esc.find(ws: List<&2, Swap>, +x: U32) -> Maybe<&2, U32>:
     case Nil{}:
       None{}
     case Con{Swap{f, t}, r}:
-      Shared.Bool.when(Maybe<&2, U32>, U32.is_eq(f, x), u => Some{t}, u => Esc.find(r, x))
+      Bools.Bool.when(Maybe<&2, U32>, U32.is_eq(f, x), u => Some{t}, u => Esc.find(r, x))
 
 # the character of a high surrogate u and the low one that may follow in
 # t as another \u escape, combined; u alone when none follows
@@ -337,7 +338,7 @@ def Str.pair(+u: U32, t: String, m: Maybe<&2, Code>) -> SStep:
     case Some{Code{+l, r}}:
       low = Bool.and((l >= 56320: U32), (l <= 57343: U32))
       both = ((((u - 55296: U32) << 10n) + (l - 56320: U32): U32) + 65536: U32)
-      Shared.Bool.when(SStep, low, v => SPush{Chr{both}, r}, v => SPush{Chr{u}, t})
+      Bools.Bool.when(SStep, low, v => SPush{Chr{both}, r}, v => SPush{Chr{u}, t})
     case None{}:
       SPush{Chr{u}, t}
 
@@ -349,13 +350,13 @@ def Str.uni(m: Maybe<&2, Code>) -> Maybe<&2, SStep>:
       None{}
     case Some{Code{+u, +t}}:
       high = Bool.and((u >= 55296: U32), (u <= 56319: U32))
-      next = Shared.Bool.when(
+      next = Bools.Bool.when(
         Maybe<&2, Code>,
         String.starts_with(t, SCon{Chr{92}, SCon{Chr{117}, SNil{}}}),
         v => Hex.four(String.drop(t, 2n)),
         v => None{}
       )
-      Some{Shared.Bool.when(SStep, high, v => Str.pair(u, t, next), v => SPush{Chr{u}, t})}
+      Some{Bools.Bool.when(SStep, high, v => Str.pair(u, t, next), v => SPush{Chr{u}, t})}
 
 # the step of an escape, after the backslash
 def Str.esc(s: String) -> Maybe<&2, SStep>:
@@ -363,7 +364,7 @@ def Str.esc(s: String) -> Maybe<&2, SStep>:
     case SNil{}:
       None{}
     case SCon{+e, +t}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, SStep>,
         Ch.is(e, 117),
         u => Str.uni(Hex.four(t)),
@@ -377,11 +378,11 @@ def Str.step(s: String) -> Maybe<&2, SStep>:
     case SNil{}:
       None{}
     case SCon{+c, +t}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, SStep>,
         Ch.is(c, 34),
         u => Some{SEnd{t}},
-        u => Shared.Bool.when(
+        u => Bools.Bool.when(
           Maybe<&2, SStep>,
           Ch.is(c, 92),
           v => Str.esc(t),
@@ -391,7 +392,7 @@ def Str.step(s: String) -> Maybe<&2, SStep>:
 
 # the string read from step m on, its characters so far reversed in acc;
 # fuel bounds the steps
-def Str.go(fuel: Nat, m: Maybe<&2, SStep>, acc: String) -> Maybe<&2, Shared.Cut>:
+def Str.go(fuel: Nat, m: Maybe<&2, SStep>, acc: String) -> Maybe<&2, Cuts.Cut>:
   match fuel:
     case 0n:
       None{}
@@ -400,12 +401,12 @@ def Str.go(fuel: Nat, m: Maybe<&2, SStep>, acc: String) -> Maybe<&2, Shared.Cut>
         case None{}:
           None{}
         case Some{SEnd{r}}:
-          Some{Shared.Cut{String.reverse(acc), r}}
+          Some{Cuts.Cut{String.reverse(acc), r}}
         case Some{SPush{c, r}}:
           Str.go(f, Str.step(r), SCon{c, acc})
 
 # the string at the start of s, after its opening quote, and the rest
-def Str.read(+s: String) -> Maybe<&2, Shared.Cut>:
+def Str.read(+s: String) -> Maybe<&2, Cuts.Cut>:
   Str.go(1n+String.length(s), Str.step(s), SNil{})
 
 # the hex digit of the value d (below 16)
@@ -416,23 +417,23 @@ def Hex.show(+d: U32) -> Char:
 def Str.char(+c: Char, +t: String) -> String:
   +x = Char.to_u32(c)
   +bs = {Chr{92}: Char}
-  Shared.Bool.when(
+  Bools.Bool.when(
     String,
     Bool.or(U32.is_eq(x, 34), U32.is_eq(x, 92)),
     u => SCon{bs, SCon{c, t}},
-    u => Shared.Bool.when(
+    u => Bools.Bool.when(
       String,
       U32.is_eq(x, 10),
       v => SCon{bs, SCon{'n', t}},
-      v => Shared.Bool.when(
+      v => Bools.Bool.when(
         String,
         U32.is_eq(x, 13),
         w => SCon{bs, SCon{'r', t}},
-        w => Shared.Bool.when(
+        w => Bools.Bool.when(
           String,
           U32.is_eq(x, 9),
           y => SCon{bs, SCon{'t', t}},
-          y => Shared.Bool.when(
+          y => Bools.Bool.when(
             String,
             (x < 32: U32),
             z => String.append(
@@ -555,7 +556,7 @@ type Lead is Data:
 # the lead of a character other than a bracket, a brace, a quote, a colon
 # or a comma, with code x
 def Lead.rest(c: Char, +x: U32) -> Lead:
-  Shared.Bool.when(
+  Bools.Bool.when(
     Lead,
     Bool.or(U32.is_eq(x, 45), Char.is_digit(c)),
     d => LNum{},
@@ -589,7 +590,7 @@ def Lead.find(ms: List<&2, LeadMark>, c: Char, +x: U32) -> Lead:
     case Nil{}:
       Lead.rest(c, x)
     case Con{LeadMark{k, l}, t}:
-      Shared.Bool.when(Lead, U32.is_eq(k, x), u => l, u => Lead.find(t, c, x))
+      Bools.Bool.when(Lead, U32.is_eq(k, x), u => l, u => Lead.find(t, c, x))
 
 # what the first character of s starts
 def Lead.of(s: String) -> Lead:
@@ -654,32 +655,32 @@ def Json.close_obj(stack: List<&2, Frame>, rest: String) -> Maybe<&2, Moved>:
       None{}
 
 # the string value read
-def Json.string(m: Maybe<&2, Shared.Cut>, stack: List<&2, Frame>) -> Maybe<&2, Moved>:
+def Json.string(m: Maybe<&2, Cuts.Cut>, stack: List<&2, Frame>) -> Maybe<&2, Moved>:
   match m:
     case None{}:
       None{}
-    case Some{Shared.Cut{s, r}}:
+    case Some{Cuts.Cut{s, r}}:
       Json.put(JStr{s}, stack, r)
 
 # the number value read
-def Json.number(m: Maybe<&2, Shared.Cut>, stack: List<&2, Frame>) -> Maybe<&2, Moved>:
+def Json.number(m: Maybe<&2, Cuts.Cut>, stack: List<&2, Frame>) -> Maybe<&2, Moved>:
   match m:
     case None{}:
       None{}
-    case Some{Shared.Cut{n, r}}:
+    case Some{Cuts.Cut{n, r}}:
       Json.put(JNum{n}, stack, r)
 
 # the word value at the start of s: true, false or null
 def Json.word(+s: String, +stack: List<&2, Frame>) -> Maybe<&2, Moved>:
-  Shared.Bool.when(
+  Bools.Bool.when(
     Maybe<&2, Moved>,
     String.starts_with(s, "true"),
     u => Json.put(JBool{True{}}, stack, String.drop(s, 4n)),
-    u => Shared.Bool.when(
+    u => Bools.Bool.when(
       Maybe<&2, Moved>,
       String.starts_with(s, "false"),
       v => Json.put(JBool{False{}}, stack, String.drop(s, 5n)),
-      v => Shared.Bool.when(
+      v => Bools.Bool.when(
         Maybe<&2, Moved>,
         String.starts_with(s, "null"),
         w => Json.put(JNull{}, stack, String.drop(s, 4n)),
@@ -689,9 +690,9 @@ def Json.word(+s: String, +stack: List<&2, Frame>) -> Maybe<&2, Moved>:
   )
 
 # the key read for the open object
-def Json.key(m: Maybe<&2, Shared.Cut>, stack: List<&2, Frame>) -> Maybe<&2, Moved>:
+def Json.key(m: Maybe<&2, Cuts.Cut>, stack: List<&2, Frame>) -> Maybe<&2, Moved>:
   match m stack:
-    case Some{Shared.Cut{k, r}} Con{FObj{fs, x}, t}:
+    case Some{Cuts.Cut{k, r}} Con{FObj{fs, x}, t}:
       Some{Moved{r, Run{Con{FObj{fs, k}, t}, WColon{}}}}
     case _ _:
       None{}

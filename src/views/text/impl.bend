@@ -1,6 +1,6 @@
 import Base
 import ../../glob/impl.bend as GlobImpl
-import ../../shared.bend as Shared
+import ../../shared/bytes.bend as Octets
 import ../shared.bend as Views
 import ./spec.bend as Spec
 # bend-lint: expect-file bend-lint-rules/language/reused_binder@warning -- proof binders whose other use is inside a rewrite motive or an erased argument; the checker accepts them
@@ -51,7 +51,7 @@ def Text.lead(+x: U32) -> Step:
 # encoding of a scalar value
 def Text.finish(+value: U32, seen: List<&2, U32>) -> Step:
   ok = List.all.if(
-    u => Shared.Bytes.is_eq(Spec.Text.encode_char(Chr{value}), seen),
+    u => Octets.Bytes.is_eq(Spec.Text.encode_char(Chr{value}), seen),
     Spec.Text.is_scalar(Chr{value})
   )
   Bool.pick(Step, ok, Decoded{Chr{value}}, Invalid{})

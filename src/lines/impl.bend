@@ -1,13 +1,16 @@
 import Base
 import ../history/spec.bend as History
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/bytes.bend as Octets
+import ../shared/resources.bend as Resources
+import ../shared/tables.bend as Tables
 import ./spec.bend as Spec
 
 # l with x as the one head of the path p
-def Line.set(l: Spec.Line, p: String, x: Shared.Bytes()) -> Spec.Line:
+def Line.set(l: Spec.Line, p: String, x: Octets.Bytes()) -> Spec.Line:
   match l:
     case Spec.Line{sp, nm, hs}:
-      Spec.Line{sp, nm, Shared.Table.set(List<&2, Shared.Bytes()>, hs, p, [x])}
+      Spec.Line{sp, nm, Tables.Table.set(List<&2, Octets.Bytes()>, hs, p, [x])}
 
 def Spec.Line.advance(l, h, n, expect, x):
   +l = l
@@ -19,19 +22,19 @@ def Spec.Line.advance(l, h, n, expect, x):
     v => List.all.if(u => Spec.Line.fits(h, n, expect, x), History.Ids.is_eq(expect, now)),
     Spec.Line.owns(l, n)
   )
-  Shared.Bool.when(
+  Bools.Bool.when(
     Result<&2, &2, Spec.Refused, Spec.Line>,
     ok,
-    u => Done{Line.set(l, Shared.Name.path(n), x)},
+    u => Done{Line.set(l, Resources.Name.path(n), x)},
     u => Fail{Spec.Refused{now}}
   )
 
 def advance_refused.i0(
   l: Spec.Line,
   h: History.History,
-  n: Shared.Name,
-  expect: List<&2, Shared.Bytes()>,
-  x: Shared.Bytes(),
+  n: Resources.Name,
+  expect: List<&2, Octets.Bytes()>,
+  x: Octets.Bytes(),
   +g: Bool,
   +g1: Bool,
   hg: {g1 == Spec.Line.fits.of(History.History.get(h, x), n, expect): Bool}
@@ -42,10 +45,10 @@ def advance_refused.i0(
       &2,
       Spec.Refused,
       Spec.Line,
-      Shared.Bool.when(
+      Bools.Bool.when(
         Result<&2, &2, Spec.Refused, Spec.Line>,
         List.all.if(u => Spec.Line.fits(h, n, expect, x), g),
-        u => Done{Line.set(l, Shared.Name.path(n), x)},
+        u => Done{Line.set(l, Resources.Name.path(n), x)},
         u => Fail{Spec.Refused{Spec.Line.heads(l, n)}}
       )
     )
@@ -66,10 +69,10 @@ def advance_refused.i0(
                   &2,
                   Spec.Refused,
                   Spec.Line,
-                  Shared.Bool.when(
+                  Bools.Bool.when(
                     Result<&2, &2, Spec.Refused, Spec.Line>,
                     _,
-                    u => Done{Line.set(l, Shared.Name.path(n), x)},
+                    u => Done{Line.set(l, Resources.Name.path(n), x)},
                     u => Fail{Spec.Refused{Spec.Line.heads(l, n)}}
                   )
                 )
@@ -86,10 +89,10 @@ def advance_refused.i0(
                   &2,
                   Spec.Refused,
                   Spec.Line,
-                  Shared.Bool.when(
+                  Bools.Bool.when(
                     Result<&2, &2, Spec.Refused, Spec.Line>,
                     _,
-                    u => Done{Line.set(l, Shared.Name.path(n), x)},
+                    u => Done{Line.set(l, Resources.Name.path(n), x)},
                     u => Fail{Spec.Refused{Spec.Line.heads(l, n)}}
                   )
                 )
@@ -102,9 +105,9 @@ def advance_refused.i0(
 def advance_refused.i1(
   l: Spec.Line,
   h: History.History,
-  n: Shared.Name,
-  expect: List<&2, Shared.Bytes()>,
-  x: Shared.Bytes(),
+  n: Resources.Name,
+  expect: List<&2, Octets.Bytes()>,
+  x: Octets.Bytes(),
   g0: Bool,
   g: Bool,
   g1: Bool,
@@ -116,10 +119,10 @@ def advance_refused.i1(
       &2,
       Spec.Refused,
       Spec.Line,
-      Shared.Bool.when(
+      Bools.Bool.when(
         Result<&2, &2, Spec.Refused, Spec.Line>,
         List.all.if(v => List.all.if(u => Spec.Line.fits(h, n, expect, x), g), g0),
-        u => Done{Line.set(l, Shared.Name.path(n), x)},
+        u => Done{Line.set(l, Resources.Name.path(n), x)},
         u => Fail{Spec.Refused{Spec.Line.heads(l, n)}}
       )
     )

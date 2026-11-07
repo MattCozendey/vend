@@ -1,7 +1,9 @@
 import Base
 import ../../conditions/spec.bend as Cond
 import ../../graph/spec.bend as Graph
-import ../../shared.bend as Shared
+import ../../shared/bools.bend as Bools
+import ../../shared/bytes.bend as Octets
+import ../../shared/resources.bend as Resources
 import ../shared.bend as Views
 import ../text/spec.bend as Text
 
@@ -56,7 +58,7 @@ def Bend.name.go(s: String) -> String:
         ),
         U32.is_eq(x, 123)
       )
-      Shared.Bool.when(String, stop, u => SNil{}, u => SCon{c, Bend.name.go(t)})
+      Bools.Bool.when(String, stop, u => SNil{}, u => SCon{c, Bend.name.go(t)})
 
 # s is only spaces and tabs
 def Bend.is_blank(s: String) -> Bool:
@@ -70,7 +72,7 @@ def Bend.is_blank(s: String) -> Bool:
 # the head for keyword k and kind, when s starts with k, else role r
 def Bend.head(+s: String, k: String, kind: ItemKind, r: Role) -> Role:
   +k = k
-  Shared.Bool.when(
+  Bools.Bool.when(
     Role,
     String.starts_with(s, k),
     u => Head{kind, Bend.name.go(String.drop(s, String.length(k)))},
@@ -81,13 +83,13 @@ def Bend.head(+s: String, k: String, kind: ItemKind, r: Role) -> Role:
 # "@unsafe def " at column 0, the import's name being all its text; a note
 # for '#' at column 0; blank; or body
 def Bend.role(+s: String) -> Role:
-  other = Shared.Bool.when(
+  other = Bools.Bool.when(
     Role,
     Bend.is_blank(s),
     u => Blank{},
-    u => Shared.Bool.when(Role, String.starts_with(s, "#"), v => Note{}, v => Body{})
+    u => Bools.Bool.when(Role, String.starts_with(s, "#"), v => Note{}, v => Body{})
   )
-  imp = Shared.Bool.when(
+  imp = Bools.Bool.when(
     Role,
     String.starts_with(s, "import "),
     u => Head{ImportItem{}, String.trim_end(String.drop(s, 7n))},
@@ -133,12 +135,7 @@ def Bend.notes.run(pend: List<&2, Text.Line>) -> List<&2, Text.Line>:
     case Nil{}:
       Nil{}
     case Con{+l, t}:
-      Shared.Bool.when(
-        List<&2, Text.Line>,
-        Bend.is_note(l),
-        u => l <> Bend.notes.run(t),
-        u => Nil{}
-      )
+      Bools.Bool.when(List<&2, Text.Line>, Bend.is_note(l), u => l <> Bend.notes.run(t), u => Nil{})
 
 # pend without the notes that end it
 def Bend.notes.before(pend: List<&2, Text.Line>) -> List<&2, Text.Line>:
@@ -146,7 +143,7 @@ def Bend.notes.before(pend: List<&2, Text.Line>) -> List<&2, Text.Line>:
     case Nil{}:
       Nil{}
     case Con{+l, +t}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, Text.Line>,
         Bend.is_note(l),
         u => Bend.notes.before(t),
@@ -170,7 +167,7 @@ def Open.close(cur: Open) -> List<&2, Item>:
 # a gap of the lines, last first, unless their text is empty
 def Bend.gap(ls: List<&2, Text.Line>) -> List<&2, Item>:
   +t = Bend.text(ls)
-  Shared.Bool.when(List<&2, Item>, String.is_empty(t), u => [], u => [Gap{t}])
+  Bools.Bool.when(List<&2, Item>, String.is_empty(t), u => [], u => [Gap{t}])
 
 # the items after the line l with role r; k goes on with the open item and
 # the pending lines
@@ -282,11 +279,11 @@ def Bend.ok(m: Module) -> Bool:
 
 # the document of UTF-8 bytes b, or None when b is not UTF-8
 law Bend.decode:
-  for b: Shared.Bytes()
+  for b: Octets.Bytes()
   Maybe<&2, Module>
 
 # the UTF-8 bytes of a document
-def Bend.encode(m: Module) -> Shared.Bytes():
+def Bend.encode(m: Module) -> Octets.Bytes():
   Text.Text.encode(Bend.join(m))
 
 # Bend loses nothing
@@ -309,7 +306,7 @@ def Bend.ctors.go(ls: List<&2, Text.Line>) -> List<&2, String>:
         u => Bool.not(Bend.is_blank(String.take(rest, 1n))),
         String.starts_with(x, "  ")
       )
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, String>,
         ok,
         u => Bend.name.go(rest) <> Bend.ctors.go(t),
@@ -340,7 +337,7 @@ def Keys.count(ns: List<&2, String>, +n: String) -> Nat:
     case Nil{}:
       0n
     case Con{x, +t}:
-      Shared.Bool.when(Nat, String.eq(x, n), u => 1n+Keys.count(t, n), u => Keys.count(t, n))
+      Bools.Bool.when(Nat, String.eq(x, n), u => 1n+Keys.count(t, n), u => Keys.count(t, n))
 
 # the keys of names: a name that occurred before gets "#" and its count, so
 # a file with a name defined twice (an edit in progress) still has
@@ -352,7 +349,7 @@ def Keys.of.go(ns: List<&2, String>, seen: List<&2, String>) -> List<&2, String>
     case Con{+n, t}:
       +seen = seen
       +c = Keys.count(seen, n)
-      k = Shared.Bool.when(
+      k = Bools.Bool.when(
         String,
         Nat.is_eq(c, 0n),
         u => n,
@@ -376,7 +373,7 @@ def Bend.owner_item(items: List<&2, Item>, +k: String, seen: List<&2, String>) -
     case Con{+i, t}:
       +seen = seen
       mine = Keys.of.go(Item.names(i), seen)
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, Item>,
         List.contains(~String, ~String.eq, mine, k),
         u => Some{i},
@@ -404,7 +401,7 @@ def Bend.changed.go(ks: List<&2, String>, +a: Module, +b: Module) -> List<&2, St
       Nil{}
     case Con{+k, +t}:
       same = Texts.opt_eq(Bend.owner(Module.items(a), k), Bend.owner(Module.items(b), k))
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, String>,
         same,
         u => Bend.changed.go(t, a, b),
@@ -417,7 +414,7 @@ def Keys.not_in(bs: List<&2, String>, +as: List<&2, String>) -> List<&2, String>
     case Nil{}:
       Nil{}
     case Con{+k, +t}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, String>,
         List.contains(~String, ~String.eq, as, k),
         u => Keys.not_in(t, as),
@@ -518,11 +515,11 @@ def Bend.ident.go(s: String) -> String:
     case SNil{}:
       SNil{}
     case SCon{+c, t}:
-      Shared.Bool.when(String, Bend.is_ident(c), u => SCon{c, Bend.ident.go(t)}, u => SNil{})
+      Bools.Bool.when(String, Bend.is_ident(c), u => SCon{c, Bend.ident.go(t)}, u => SNil{})
 
 # s without a '.' at its end
 def Bend.trim_dot(+s: String) -> String:
-  Shared.Bool.when(
+  Bools.Bool.when(
     String,
     String.ends_with(s, "."),
     u => String.take(s, Nat.sub(String.length(s), 1n)),
@@ -539,7 +536,7 @@ def Bend.uses.go(+s: String, +a: String, start: Bool) -> List<&2, String>:
       +rest = Bend.uses.go(t, a, Bool.not(Bend.is_ident(c)))
       +pre = String.append(a, ".")
       here = Bool.and(start, String.starts_with(s, pre))
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, String>,
         here,
         u => Bend.trim_dot(Bend.ident.go(String.drop(s, String.length(pre)))) <> rest,
@@ -552,18 +549,18 @@ def Bend.words(s: String) -> List<&2, String>:
 
 # the target of the import path p from n: relative paths resolve, others
 # (Base, hub packages) stay unresolved
-def Bend.target(n: Shared.Name, +p: String) -> Graph.Target:
+def Bend.target(n: Resources.Name, +p: String) -> Graph.Target:
   rel = Bool.or(String.starts_with(p, "./"), String.starts_with(p, "../"))
-  Shared.Bool.when(Graph.Target, rel, u => Graph.Target.resolve(n, p), u => Graph.Unresolved{p})
+  Bools.Bool.when(Graph.Target, rel, u => Graph.Target.resolve(n, p), u => Graph.Unresolved{p})
 
 # the edge of an import from n, given the words of its text and the text
 # of the whole module: "path as Alias" selects what the module uses through
 # Alias; anything else selects the whole target
-def Bend.edge(+n: Shared.Name, ws: List<&2, String>, text: String) -> Graph.Edge:
+def Bend.edge(+n: Resources.Name, ws: List<&2, String>, text: String) -> Graph.Edge:
   match ws:
     case Con{p, Con{a, Con{alias, Nil{}}}}:
       p = p
-      sel = Shared.Bool.when(
+      sel = Bools.Bool.when(
         Graph.Selection,
         String.eq(a, "as"),
         u => Graph.Items{Bend.uses.go(text, alias, True{})},
@@ -576,7 +573,7 @@ def Bend.edge(+n: Shared.Name, ws: List<&2, String>, text: String) -> Graph.Edge
       Graph.Edge{n, Graph.Unresolved{""}, Graph.BendView{}, Graph.Whole{}, Cond.Always{}}
 
 # the edges of the imports among items of a module from n with text text
-def Bend.edges.go(items: List<&2, Item>, +n: Shared.Name, +text: String) -> List<&2, Graph.Edge>:
+def Bend.edges.go(items: List<&2, Item>, +n: Resources.Name, +text: String) -> List<&2, Graph.Edge>:
   match items:
     case Nil{}:
       Nil{}
@@ -587,7 +584,7 @@ def Bend.edges.go(items: List<&2, Item>, +n: Shared.Name, +text: String) -> List
 
 # the edges of the document m of the resource n: one per import. Bend has
 # no conditional imports, so every edge holds always.
-def Bend.edges(n: Shared.Name, +m: Module) -> List<&2, Graph.Edge>:
+def Bend.edges(n: Resources.Name, +m: Module) -> List<&2, Graph.Edge>:
   Bend.edges.go(Module.items(m), n, Bend.join(m))
 
 # References
@@ -619,10 +616,10 @@ type Alias is Data:
 
 # the alias of an import whose text has the words ws, from n: "path as A"
 # gives A and the target of path; anything else gives none
-def Bend.alias.of(n: Shared.Name, ws: List<&2, String>) -> List<&2, Alias>:
+def Bend.alias.of(n: Resources.Name, ws: List<&2, String>) -> List<&2, Alias>:
   match ws:
     case Con{p, Con{a, Con{x, Nil{}}}}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, Alias>,
         String.eq(a, "as"),
         u => [Alias{x, Bend.target(n, p)}],
@@ -633,7 +630,7 @@ def Bend.alias.of(n: Shared.Name, ws: List<&2, String>) -> List<&2, Alias>:
 
 # the aliases of the imports among items of a module of the resource n: an
 # import "path as A" gives A and the target of path
-def Bend.aliases(items: List<&2, Item>, +n: Shared.Name) -> List<&2, Alias>:
+def Bend.aliases(items: List<&2, Item>, +n: Resources.Name) -> List<&2, Alias>:
   match items:
     case Nil{}:
       Nil{}
@@ -645,7 +642,7 @@ def Bend.aliases(items: List<&2, Item>, +n: Shared.Name) -> List<&2, Alias>:
 # the run cur (last first) as a list of at most one name: none when empty
 def Bend.run.of(cur: String) -> List<&2, String>:
   +x = Bend.trim_dot(String.reverse(cur))
-  Shared.Bool.when(List<&2, String>, String.is_empty(x), u => [], u => [x])
+  Bools.Bool.when(List<&2, String>, String.is_empty(x), u => [], u => [x])
 
 # the runs of s, given cur, the run so far (last first), and note: s is
 # inside a comment
@@ -654,14 +651,14 @@ def Bend.runs.go(s: String, +cur: String, note: Bool) -> List<&2, String>:
     case SNil{} _:
       Bend.run.of(cur)
     case SCon{c, +t} True{}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, String>,
         U32.is_eq(Char.to_u32(c), 10),
         u => Bend.runs.go(t, SNil{}, False{}),
         u => Bend.runs.go(t, SNil{}, True{})
       )
     case SCon{+c, +t} False{}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, String>,
         Bend.is_ident(c),
         u => Bend.runs.go(t, SCon{c, cur}, False{}),
@@ -694,7 +691,7 @@ def Mentions.dedup(ms: List<&2, Mention>, seen: List<&2, Mention>) -> List<&2, M
       Nil{}
     case Con{+x, +t}:
       +seen = seen
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, Mention>,
         List.contains(~Mention, ~Mention.is_eq, seen, x),
         u => Mentions.dedup(t, seen),
@@ -708,7 +705,7 @@ def Bend.mention.alias(+x: String, als: List<&2, Alias>) -> List<&2, Mention>:
       []
     case Con{Alias{a, tg}, r}:
       +pre = String.append(a, ".")
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, Mention>,
         String.starts_with(x, pre),
         u => [Imported{tg, String.drop(x, String.length(pre))}],
@@ -727,7 +724,7 @@ def Bend.mention(
     List.contains(~String, ~String.eq, names, x),
     Bool.not(List.contains(~String, ~String.eq, own, x))
   )
-  Shared.Bool.when(List<&2, Mention>, local, u => [Local{x}], u => Bend.mention.alias(x, als))
+  Bools.Bool.when(List<&2, Mention>, local, u => [Local{x}], u => Bend.mention.alias(x, als))
 
 # the mentions of runs, in order, duplicates kept
 def Bend.mentions.go(
@@ -748,7 +745,7 @@ def Bend.mentions.go(
       )
 
 # what item i of the module m of the resource n mentions, each once
-def Bend.refs(n: Shared.Name, m: Module, +i: Item) -> List<&2, Mention>:
+def Bend.refs(n: Resources.Name, m: Module, +i: Item) -> List<&2, Mention>:
   +items = Module.items(m)
   ms = Bend.mentions.go(
     Bend.runs(Item.text(i)),
@@ -760,7 +757,7 @@ def Bend.refs(n: Shared.Name, m: Module, +i: Item) -> List<&2, Mention>:
 
 # a local mention names another item of the module
 law refs_local:
-  for n: Shared.Name
+  for n: Resources.Name
   for m: Module
   for i: Item
   for x: String
@@ -812,7 +809,7 @@ def Aliases.has_target(als: List<&2, Alias>, +t: Graph.Target) -> Bool:
 # an imported mention goes through an alias of the module, to that alias's
 # target
 law refs_imported:
-  for n: Shared.Name
+  for n: Resources.Name
   for m: Module
   for i: Item
   for t: Graph.Target
@@ -823,16 +820,16 @@ law refs_imported:
   {Aliases.has_target(Bend.aliases(Module.items(m), n), t) == True{}: Bool}
 
 # the part of a def named x in the module m of the resource n
-def Bend.def_part(+x: String, m: Module, n: Shared.Name) -> Part:
+def Bend.def_part(+x: String, m: Module, n: Resources.Name) -> Part:
   +items = Module.items(m)
   fills = List.any.if(
     u => Aliases.prefix(Bend.aliases(items, n), x),
     List.contains(~String, ~String.eq, Items.laws(items), x)
   )
-  Shared.Bool.when(Part, fills, u => Proof{x}, u => Code{})
+  Bools.Bool.when(Part, fills, u => Proof{x}, u => Code{})
 
 # the part that item i plays in the module m of the resource n
-def Bend.part(m: Module, n: Shared.Name, i: Item) -> Part:
+def Bend.part(m: Module, n: Resources.Name, i: Item) -> Part:
   match i:
     case Keyed{LawItem{}, x, t}:
       Statement{}
@@ -857,7 +854,7 @@ def Bend.part(m: Module, n: Shared.Name, i: Item) -> Part:
 
 # A Bend resource of a line: its name and its document.
 type Doc is Data:
-  Doc{name: Shared.Name, module: Module}
+  Doc{name: Resources.Name, module: Module}
 
 # the names of the def items among items
 def Items.defs(items: List<&2, Item>) -> List<&2, String>:
@@ -870,12 +867,12 @@ def Items.defs(items: List<&2, Item>) -> List<&2, String>:
       Items.defs(r)
 
 # a and b name the same resource
-def Name.is_eq(a: Shared.Name, b: Shared.Name) -> Bool:
-  String.eq(Shared.Name.show(a), Shared.Name.show(b))
+def Name.is_eq(a: Resources.Name, b: Resources.Name) -> Bool:
+  String.eq(Resources.Name.show(a), Resources.Name.show(b))
 
 # the def named y fills the law x of the resource n through an alias of
 # als: y is "A.x" for an alias A whose import names n
-def Bend.fills_alias(als: List<&2, Alias>, +n: Shared.Name, +x: String, +y: String) -> Bool:
+def Bend.fills_alias(als: List<&2, Alias>, +n: Resources.Name, +x: String, +y: String) -> Bool:
   match als:
     case Nil{}:
       False{}
@@ -887,9 +884,9 @@ def Bend.fills_alias(als: List<&2, Alias>, +n: Shared.Name, +x: String, +y: Stri
 # are als, fills the law x of the resource n
 def Bend.fills_any(
   ys: List<&2, String>,
-  +n: Shared.Name,
+  +n: Resources.Name,
   +x: String,
-  +n2: Shared.Name,
+  +n2: Resources.Name,
   +als: List<&2, Alias>
 ) -> Bool:
   match ys:
@@ -903,7 +900,7 @@ def Bend.fills_any(
       List.any.if(u => Bend.fills_any(t, n, x, n2, als), here)
 
 # some def of the documents ds fills the law x of the resource n
-def Bend.filled(ds: List<&2, Doc>, +n: Shared.Name, +x: String) -> Bool:
+def Bend.filled(ds: List<&2, Doc>, +n: Resources.Name, +x: String) -> Bool:
   match ds:
     case Nil{}:
       False{}
@@ -927,7 +924,7 @@ def Bend.holes.go(s: String, note: Bool) -> List<&2, String>:
       +x = Char.to_u32(c)
       +name = Bend.ident.go(t)
       +rest = Bend.holes.go(t, U32.is_eq(x, 35))
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, String>,
         Bool.and(U32.is_eq(x, 63), Bool.not(String.is_empty(name))),
         u => name <> rest,
@@ -951,14 +948,14 @@ def Part.fills(p: Part) -> Maybe<&2, String>:
 def Bend.law_obligations(
   xs: List<&2, String>,
   +ds: List<&2, Doc>,
-  +n: Shared.Name
+  +n: Resources.Name
 ) -> List<&2, Views.Obligation>:
   match xs:
     case Nil{}:
       Nil{}
     case Con{+x, t}:
       +rest = Bend.law_obligations(t, ds, n)
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, Views.Obligation>,
         Bend.filled(ds, n, x),
         u => rest,
@@ -985,7 +982,7 @@ def Bend.hole_of(m: Maybe<&2, String>, s: String) -> List<&2, Views.Obligation>:
 def Bend.hole_obligations(
   items: List<&2, Item>,
   +m: Module,
-  +n: Shared.Name
+  +n: Resources.Name
 ) -> List<&2, Views.Obligation>:
   match items:
     case Nil{}:
@@ -1016,7 +1013,7 @@ def Bend.obligations(ds: List<&2, Doc>, d: Doc) -> List<&2, Views.Obligation>:
 def Bend.has_hole(
   items: List<&2, Item>,
   +m: Module,
-  +n: Shared.Name,
+  +n: Resources.Name,
   +f: String,
   +h: String
 ) -> Bool:
@@ -1039,7 +1036,7 @@ def Bend.has_hole(
 # line's Bend documents fills
 law obligation_law:
   for ds: List<&2, Doc>
-  for n: Shared.Name
+  for n: Resources.Name
   for m: Module
   for x: String
   for t: String
@@ -1062,7 +1059,7 @@ law obligation_law:
 # a hole obligation is exactly a hole of a proof item of the resource
 law obligation_hole:
   for ds: List<&2, Doc>
-  for n: Shared.Name
+  for n: Resources.Name
   for m: Module
   for f: String
   for h: String

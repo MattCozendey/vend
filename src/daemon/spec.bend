@@ -5,7 +5,12 @@ import ../glob/spec.bend as Glob
 import ../history/spec.bend as History
 import ../journal/spec.bend as Journal
 import ../lines/spec.bend as Lines
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/bytes.bend as Octets
+import ../shared/resources.bend as Resources
+import ../shared/tables.bend as Tables
+import ../shared/texts.bend as Cuts
+import ../shared/uris.bend as Uris
 import ../store/spec.bend as Store
 import ../views/text/spec.bend as Text
 
@@ -27,8 +32,8 @@ type Local is Data:
   Local{
     mount: Core.Mount,
     globs: List<&2, String>,
-    streams: Shared.Table<Ep.Stream>,
-    moves: Shared.Table<Maybe<&2, Shared.Name>>,
+    streams: Tables.Table<Ep.Stream>,
+    moves: Tables.Table<Maybe<&2, Resources.Name>>,
     nested: List<&2, String>
   }
 
@@ -41,11 +46,11 @@ type Origin is Data:
 # journal: every agent's seen markers, every mark (by Mark.key), and the
 # origin of every forked line (by its key).
 type Book is Data:
-  Book{seen: Lines.SeenBook, marks: Shared.Table<Lines.Mark>, origins: Shared.Table<Origin>}
+  Book{seen: Lines.SeenBook, marks: Tables.Table<Lines.Mark>, origins: Tables.Table<Origin>}
 
 # a book with nothing in it
 def Book.new() -> Book:
-  Book{Lines.SeenBook.new(), Shared.Table.new(Lines.Mark), Shared.Table.new(Origin)}
+  Book{Lines.SeenBook.new(), Tables.Table.new(Lines.Mark), Tables.Table.new(Origin)}
 
 # the key of the mark named name of the line whose key is line
 def Mark.key(line: String, name: String) -> String:
@@ -60,7 +65,7 @@ type Daemon is Data:
   Daemon{
     store: Store.Store,
     history: History.History,
-    lines: Shared.Table<Lines.Line>,
+    lines: Tables.Table<Lines.Line>,
     mounts: List<&2, Local>,
     clients: Nat,
     book: Book
@@ -82,7 +87,7 @@ def Local.line(l: Local) -> String:
 def Local.uri(l: Local) -> String:
   match l:
     case Local{Core.Mount{sp, ln, r, g, a}, gs, ss, ms, ns}:
-      Shared.Uri.show(r)
+      Uris.Uri.show(r)
 
 # the space of a mount
 def Local.space(l: Local) -> String:
@@ -91,7 +96,7 @@ def Local.space(l: Local) -> String:
       sp
 
 # the root of a mount
-def Local.root(l: Local) -> Shared.Uri:
+def Local.root(l: Local) -> Uris.Uri:
   match l:
     case Local{Core.Mount{sp, ln, r, g, a}, gs, ss, ms, ns}:
       r
@@ -109,7 +114,7 @@ def Local.find(ms: List<&2, Local>, +uri: String) -> Maybe<&2, Local>:
     case Nil{}:
       None{}
     case Con{+m, t}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, Local>,
         String.eq(Local.uri(m), uri),
         u => Some{m},
@@ -122,7 +127,7 @@ def Local.drop(ms: List<&2, Local>, +uri: String) -> List<&2, Local>:
     case Nil{}:
       Nil{}
     case Con{+m, +t}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, Local>,
         String.eq(Local.uri(m), uri),
         u => Local.drop(t, uri),
@@ -148,7 +153,7 @@ def Daemon.line(d: Daemon, +sp: String, +ln: String) -> Lines.Line:
       Maybe.default(
         &2,
         Lines.Line,
-        Shared.Table.get(Lines.Line, ls, Lines.Line.key(sp, ln)),
+        Tables.Table.get(Lines.Line, ls, Lines.Line.key(sp, ln)),
         Lines.Line.new(sp, ln)
       )
 
@@ -179,7 +184,7 @@ def Daemon.put(d: Daemon, c: Core.Core, gs: List<&2, String>) -> Daemon:
       Daemon{
         s2,
         h2,
-        Shared.Table.set(Lines.Line, ls, Lines.Line.key(sp, ln), l2),
+        Tables.Table.set(Lines.Line, ls, Lines.Line.key(sp, ln), l2),
         l <> Local.drop(ms, Local.uri(l)),
         cs,
         bk
@@ -307,11 +312,11 @@ type Body is Data:
   Mount{uri: String, globs: List<&2, String>, line: String}
   Unmount{uri: String}
   Stop{force: Bool}
-  Ask{agent: String, words: List<&2, String>, data: Shared.Bytes()}
+  Ask{agent: String, words: List<&2, String>, data: Octets.Bytes()}
 
 # A request: the token, then what it asks.
 type Request is Data:
-  Request{token: Shared.Bytes(), body: Body}
+  Request{token: Octets.Bytes(), body: Body}
 
 # One mount, as Status tells it: its root, line, space, and how many
 # versions of its space the history holds.
@@ -330,7 +335,7 @@ type Response is Data:
   Said{ok: Bool, lines: List<&2, String>}
 
 # each text framed as UTF-8, one after another
-def Texts.encode.go(xs: List<&2, String>) -> Shared.Bytes():
+def Texts.encode.go(xs: List<&2, String>) -> Octets.Bytes():
   match xs:
     case Nil{}:
       []
@@ -338,12 +343,12 @@ def Texts.encode.go(xs: List<&2, String>) -> Shared.Bytes():
       List.append(&2, U32, Journal.Utf8.framed(x), Texts.encode.go(t))
 
 # the bytes of the texts: their count, then each framed as UTF-8
-def Texts.encode(xs: List<&2, String>) -> Shared.Bytes():
+def Texts.encode(xs: List<&2, String>) -> Octets.Bytes():
   +xs = xs
   List.append(&2, U32, Store.Leb.of(List.length(&2, String, xs)), Texts.encode.go(xs))
 
 # the bytes of a Bool: 1 or 0
-def Flag.encode(b: Bool) -> Shared.Bytes():
+def Flag.encode(b: Bool) -> Octets.Bytes():
   match b:
     case False{}:
       [0]
@@ -352,7 +357,7 @@ def Flag.encode(b: Bool) -> Shared.Bytes():
 
 # the bytes of what a request asks: a tag (0 Status, 1 Mount, 2 Unmount,
 # 3 Stop, 4 Ask), then its fields in order
-def Body.encode(b: Body) -> Shared.Bytes():
+def Body.encode(b: Body) -> Octets.Bytes():
   match b:
     case Status{}:
       [0]
@@ -378,13 +383,13 @@ def Body.encode(b: Body) -> Shared.Bytes():
         )
 
 # the bytes of a request: the token, framed, then what it asks
-def Request.encode(r: Request) -> Shared.Bytes():
+def Request.encode(r: Request) -> Octets.Bytes():
   match r:
     case Request{t, b}:
       List.append(&2, U32, Store.Bytes.framed(t), Body.encode(b))
 
 # the bytes of one mount's status
-def Info.encode(i: Info) -> Shared.Bytes():
+def Info.encode(i: Info) -> Octets.Bytes():
   match i:
     case Info{u, ln, sp, n}:
       List.append(
@@ -400,7 +405,7 @@ def Info.encode(i: Info) -> Shared.Bytes():
       )
 
 # the bytes of the statuses, one after another
-def Infos.encode.go(infos: List<&2, Info>) -> Shared.Bytes():
+def Infos.encode.go(infos: List<&2, Info>) -> Octets.Bytes():
   match infos:
     case Nil{}:
       []
@@ -409,7 +414,7 @@ def Infos.encode.go(infos: List<&2, Info>) -> Shared.Bytes():
 
 # the bytes of a response: a tag (0 StatusIs, 1 Mounted, 2 Unmounted,
 # 3 Stopping, 4 Denied, 5 Said), then its fields in order
-def Response.encode(r: Response) -> Shared.Bytes():
+def Response.encode(r: Response) -> Octets.Bytes():
   match r:
     case StatusIs{+infos, n}:
       0
@@ -470,12 +475,12 @@ def Response.ok(r: Response) -> Bool:
 
 # the request that bytes b spell, or None
 law Request.decode:
-  for b: Shared.Bytes()
+  for b: Octets.Bytes()
   Maybe<&2, Request>
 
 # the response that bytes b spell, or None
 law Response.decode:
-  for b: Shared.Bytes()
+  for b: Octets.Bytes()
   Maybe<&2, Response>
 
 # a request reads back from its bytes
@@ -502,13 +507,13 @@ law response_decode_after_encode:
 def Daemon.line_at(d: Daemon, k: String) -> Maybe<&2, Lines.Line>:
   match d:
     case Daemon{s, h, ls, ms, cs, bk}:
-      Shared.Table.get(Lines.Line, ls, k)
+      Tables.Table.get(Lines.Line, ls, k)
 
 # the mark named nm of the line whose key is k, if there is one
 def Daemon.mark(d: Daemon, k: String, nm: String) -> Maybe<&2, Lines.Mark>:
   match d:
     case Daemon{s, h, ls, ms, cs, Book{sn, mk, og}}:
-      Shared.Table.get(Lines.Mark, mk, Mark.key(k, nm))
+      Tables.Table.get(Lines.Mark, mk, Mark.key(k, nm))
 
 # the seen marker of the agent a on the line whose key is k
 def Daemon.seen(d: Daemon, a: String, k: String) -> Lines.Seen:
@@ -520,19 +525,19 @@ def Daemon.seen(d: Daemon, a: String, k: String) -> Lines.Seen:
 def Daemon.origin(d: Daemon, k: String) -> Maybe<&2, Origin>:
   match d:
     case Daemon{s, h, ls, ms, cs, Book{sn, mk, og}}:
-      Shared.Table.get(Origin, og, k)
+      Tables.Table.get(Origin, og, k)
 
 # the text after the cut, or the whole text t when there is none
-def Key.after(c: Maybe<&2, Shared.Cut>, t: String) -> String:
+def Key.after(c: Maybe<&2, Cuts.Cut>, t: String) -> String:
   match c:
     case None{}:
       t
-    case Some{Shared.Cut{b, a}}:
+    case Some{Cuts.Cut{b, a}}:
       a
 
 # the text after the first ':' of a line key: the line's name
 def Key.name(+k: String) -> String:
-  Key.after(Shared.Text.cut(k, 58), k)
+  Key.after(Cuts.Text.cut(k, 58), k)
 
 # the record names the mark nm of the line whose key is k
 def Record.names_mark(r: Journal.Record, k: String, nm: String) -> Bool:
@@ -684,14 +689,14 @@ law apply_forked_mark:
 #                                           shows the line
 type Command is Data:
   LinesOf{}
-  LogOf{name: Shared.Name, line: Maybe<&2, String>, author: Maybe<&2, String>}
-  ShowOf{name: Shared.Name, version: Maybe<&2, String>}
-  DiffOf{name: Shared.Name, a: String, b: String}
+  LogOf{name: Resources.Name, line: Maybe<&2, String>, author: Maybe<&2, String>}
+  ShowOf{name: Resources.Name, version: Maybe<&2, String>}
+  DiffOf{name: Resources.Name, a: String, b: String}
   AffectsOf{line: String}
   ImpactOf{target: String}
   LineNew{name: String, from: String}
-  WriteTo{name: Shared.Name, line: String, expect: List<&2, String>, from: Maybe<&2, String>}
-  RestoreTo{name: Shared.Name, line: String, version: String}
+  WriteTo{name: Resources.Name, line: String, expect: List<&2, String>, from: Maybe<&2, String>}
+  RestoreTo{name: Resources.Name, line: String, version: String}
   MarkMade{line: String, name: String, message: String}
   MergeOf{from: String, into: String}
   CheckoutOf{line: String}
@@ -721,7 +726,7 @@ def Command.usage() -> String:
 def Opts.get(ws: List<&2, String>, +key: String) -> Maybe<&2, String>:
   match ws:
     case Con{w, Con{+v, t}}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, String>,
         String.eq(w, key),
         u => Some{v},
@@ -733,15 +738,15 @@ def Opts.get(ws: List<&2, String>, +key: String) -> Maybe<&2, String>:
 # a line name is plain: not empty, with no ':' or '@'
 def Line.plain(+n: String) -> Bool:
   List.all.if(
-    u => List.all.if(v => Bool.not(Shared.Text.has(n, 64)), Bool.not(Shared.Text.has(n, 58))),
+    u => List.all.if(v => Bool.not(Cuts.Text.has(n, 64)), Bool.not(Cuts.Text.has(n, 58))),
     Bool.not(String.is_empty(n))
   )
 
 # the command k of the name m read from t, or a refusal when t is no name
 def Command.named.of(
-  m: Maybe<&2, Shared.Name>,
+  m: Maybe<&2, Resources.Name>,
   t: String,
-  k: Shared.Name -> Command
+  k: Resources.Name -> Command
 ) -> Result<&2, &2, String, Command>:
   match m:
     case None{}:
@@ -750,12 +755,12 @@ def Command.named.of(
       Done{k(n)}
 
 # the command of a name text and k, or a refusal when it is not a name
-def Command.named(+t: String, k: Shared.Name -> Command) -> Result<&2, &2, String, Command>:
-  Command.named.of(Shared.Name.read(t), t, k)
+def Command.named(+t: String, k: Resources.Name -> Command) -> Result<&2, &2, String, Command>:
+  Command.named.of(Resources.Name.read(t), t, k)
 
 # the ids of an expect text: "none" for none, else prefixes split at ','
 def Command.expect(+e: String) -> List<&2, String>:
-  Shared.Bool.when(List<&2, String>, String.eq(e, "none"), u => [], u => String.split(e, ','))
+  Bools.Bool.when(List<&2, String>, String.eq(e, "none"), u => [], u => String.split(e, ','))
 
 # c when ok, else the usage
 def Command.if(ok: Bool, c: Command) -> Result<&2, &2, String, Command>:
@@ -821,7 +826,7 @@ def Command.line(r: List<&2, String>) -> Result<&2, &2, String, Command>:
   match r:
     case Con{a, Con{+b, t}}:
       line = {LineNew{b, Maybe.default(&2, String, Opts.get(t, "--from"), "main")}: Command}
-      Shared.Bool.when(
+      Bools.Bool.when(
         Result<&2, &2, String, Command>,
         String.eq(a, "new"),
         u => Command.if(Line.plain(b), line),
@@ -941,7 +946,7 @@ def Command.of(
     case Nil{}:
       Fail{Command.usage()}
     case Con{Reader{k, f}, t}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Result<&2, &2, String, Command>,
         String.eq(k, w),
         u => f(r),
@@ -982,7 +987,7 @@ def Command.reads(c: Command) -> Bool:
 # its files this way, and the mount's stream learns the bytes first, so
 # the fetch that follows records nothing.
 type Carry is Data:
-  Carry{path: String, bytes: Shared.Bytes()}
+  Carry{path: String, bytes: Octets.Bytes()}
 
 # The result of a command: the records to keep (Daemon.replay of them is
 # the daemon after it), the answer, and the content to carry to the
@@ -1017,9 +1022,9 @@ def Daemon.line_in(d: Daemon, +sp: String, +ln: String) -> Lines.Line:
 # matching exactly one node; None when a prefix matches none or several
 law Daemon.ids:
   for d: Daemon
-  for n: Shared.Name
+  for n: Resources.Name
   for ps: List<&2, String>
-  Maybe<&2, List<&2, Shared.Bytes()>>
+  Maybe<&2, List<&2, Octets.Bytes()>>
 
 # the line that the text t names (a name, or a key `<space>:<name>`), when
 # exactly one line has it
@@ -1033,7 +1038,7 @@ law Daemon.handle:
   for d: Daemon
   for a: String
   for c: Command
-  for b: Shared.Bytes()
+  for b: Octets.Bytes()
   Handled
 
 # a reading command keeps no record
@@ -1041,7 +1046,7 @@ law reads_record_nothing:
   for d: Daemon
   for a: String
   for c: Command
-  for b: Shared.Bytes()
+  for b: Octets.Bytes()
   for r: {Command.reads(c) == True{}: Bool}
   {Handled.records(Daemon.handle(d, a, c, b)) == []: List<&2, Journal.Record>}
 
@@ -1051,17 +1056,17 @@ law reads_record_nothing:
 law write_stale:
   for d: Daemon
   for a: String
-  for n: Shared.Name
+  for n: Resources.Name
   for ln: String
   for ps: List<&2, String>
   for f: Maybe<&2, String>
-  for b: Shared.Bytes()
-  for e: List<&2, Shared.Bytes()>
-  for i: {Daemon.ids(d, n, ps) == Some{e}: Maybe<&2, List<&2, Shared.Bytes()>>}
+  for b: Octets.Bytes()
+  for e: List<&2, Octets.Bytes()>
+  for i: {Daemon.ids(d, n, ps) == Some{e}: Maybe<&2, List<&2, Octets.Bytes()>>}
   for s: {
     History.Ids.is_eq(
       e,
-      Lines.Line.heads(Daemon.line_in(d, Shared.Name.space(n), ln), n)
+      Lines.Line.heads(Daemon.line_in(d, Resources.Name.space(n), ln), n)
     )
       == False{}: Bool
   }
@@ -1073,17 +1078,17 @@ law write_stale:
 law write_kept:
   for d: Daemon
   for a: String
-  for n: Shared.Name
+  for n: Resources.Name
   for ln: String
   for ps: List<&2, String>
   for f: Maybe<&2, String>
-  for b: Shared.Bytes()
-  for e: List<&2, Shared.Bytes()>
-  for i: {Daemon.ids(d, n, ps) == Some{e}: Maybe<&2, List<&2, Shared.Bytes()>>}
+  for b: Octets.Bytes()
+  for e: List<&2, Octets.Bytes()>
+  for i: {Daemon.ids(d, n, ps) == Some{e}: Maybe<&2, List<&2, Octets.Bytes()>>}
   for s: {
     History.Ids.is_eq(
       e,
-      Lines.Line.heads(Daemon.line_in(d, Shared.Name.space(n), ln), n)
+      Lines.Line.heads(Daemon.line_in(d, Resources.Name.space(n), ln), n)
     )
       == True{}: Bool
   }
@@ -1097,7 +1102,7 @@ law write_kept:
           Some{b},
           History.Node{
             n,
-            Lines.Line.heads(Daemon.line_in(d, Shared.Name.space(n), ln), n),
+            Lines.Line.heads(Daemon.line_in(d, Resources.Name.space(n), ln), n),
             History.Has{Store.Tree.root(Core.Core.items(b))},
             None{},
             History.Agent{a}
@@ -1113,7 +1118,7 @@ law merge_all_or_nothing:
   for a: String
   for f: String
   for t: String
-  for b: Shared.Bytes()
+  for b: Octets.Bytes()
   for o: {Handled.ok(Daemon.handle(d, a, MergeOf{f, t}, b)) == False{}: Bool}
   {Handled.records(Daemon.handle(d, a, MergeOf{f, t}, b)) == []: List<&2, Journal.Record>}
 
@@ -1123,7 +1128,7 @@ law affects_sees:
   for d: Daemon
   for a: String
   for t: String
-  for b: Shared.Bytes()
+  for b: Octets.Bytes()
   for l: Lines.Line
   for h: {Daemon.line_ref(d, t) == Some{l}: Maybe<&2, Lines.Line>}
   {
@@ -1150,18 +1155,18 @@ type Plan is Data:
 # s can name one folder: a path segment (Glob.is_segment: not empty, not
 # "." or "..", no NUL or backslash) with no '/' in it either
 def Checkout.name_ok(+s: String) -> Bool:
-  List.all.if(u => Bool.not(Shared.Text.has(s, 47)), Glob.is_segment(s))
+  List.all.if(u => Bool.not(Cuts.Text.has(s, 47)), Glob.is_segment(s))
 
 # p with a '/' at its end
 def Checkout.dir(+p: String) -> String:
-  Shared.Bool.when(String, String.ends_with(p, "/"), u => p, u => String.append(p, "/"))
+  Bools.Bool.when(String, String.ends_with(p, "/"), u => p, u => String.append(p, "/"))
 
 # the root of the checkout of the agent a of the line named ln, inside the
 # mount whose root is u
-def Checkout.root(u: Shared.Uri, a: String, ln: String) -> Shared.Uri:
+def Checkout.root(u: Uris.Uri, a: String, ln: String) -> Uris.Uri:
   match u:
-    case Shared.Uri{sc, au, p}:
-      Shared.Uri{
+    case Uris.Uri{sc, au, p}:
+      Uris.Uri{
         sc,
         au,
         String.concat([Checkout.dir(p), Core.Mount.checkouts_dir(), "/", a, "/", ln, "/"])
@@ -1186,7 +1191,7 @@ def Plan.space(p: Plan) -> String:
       Local.space(b)
 
 # the root of the checkout that p places
-def Plan.root(p: Plan) -> Shared.Uri:
+def Plan.root(p: Plan) -> Uris.Uri:
   match p:
     case Plan{b, a, ln}:
       Checkout.root(Local.root(b), a, ln)
@@ -1266,13 +1271,13 @@ type Action is Data:
   DoMount{uri: String, globs: List<&2, String>, line: String}
   DoUnmount{uri: String}
   DoStop{}
-  DoAsk{agent: String, command: Command, data: Shared.Bytes()}
+  DoAsk{agent: String, command: Command, data: Octets.Bytes()}
   DoCheckout{agent: String, line: String}
   DoRelease{agent: String, line: String}
   DoVerify{agent: String, line: String}
 
 # the nodes of h, by the hex of their id
-def Versions.nodes(h: History.History) -> Shared.Table<History.Node>:
+def Versions.nodes(h: History.History) -> Tables.Table<History.Node>:
   match h:
     case History.History{ns, ts}:
       ns
@@ -1283,18 +1288,18 @@ def Versions.of_space(m: Maybe<&2, History.Node>, sp: String) -> Bool:
     case None{}:
       False{}
     case Some{v}:
-      String.eq(Shared.Name.space(History.Node.name(v)), sp)
+      String.eq(Resources.Name.space(History.Node.name(v)), sp)
 
 # how many versions of the space sp the nodes ns hold, among the keys ks
-def Versions.count(ks: List<&2, String>, +ns: Shared.Table<History.Node>, +sp: String) -> Nat:
+def Versions.count(ks: List<&2, String>, +ns: Tables.Table<History.Node>, +sp: String) -> Nat:
   match ks:
     case Nil{}:
       0n
     case Con{k, t}:
       +rest = Versions.count(t, ns, sp)
-      Shared.Bool.when(
+      Bools.Bool.when(
         Nat,
-        Versions.of_space(Shared.Table.get(History.Node, ns, k), sp),
+        Versions.of_space(Tables.Table.get(History.Node, ns, k), sp),
         u => 1n+rest,
         u => rest
       )
@@ -1302,7 +1307,7 @@ def Versions.count(ks: List<&2, String>, +ns: Shared.Table<History.Node>, +sp: S
 # how many versions of the space sp the history holds
 def Versions.of(h: History.History, sp: String) -> Nat:
   +ns = Versions.nodes(h)
-  Versions.count(Shared.Table.keys(History.Node, ns), ns, sp)
+  Versions.count(Tables.Table.keys(History.Node, ns), ns, sp)
 
 # the status of each mount
 def Daemon.infos.go(+h: History.History, ms: List<&2, Local>) -> List<&2, Info>:
@@ -1310,7 +1315,7 @@ def Daemon.infos.go(+h: History.History, ms: List<&2, Local>) -> List<&2, Info>:
     case Nil{}:
       Nil{}
     case Con{Local{Core.Mount{+sp, ln, r, g, a}, gs, ss, mv, ns}, t}:
-      Info{Shared.Uri.show(r), ln, sp, Versions.of(h, sp)} <> Daemon.infos.go(h, t)
+      Info{Uris.Uri.show(r), ln, sp, Versions.of(h, sp)} <> Daemon.infos.go(h, t)
 
 # the status of each mount of d
 def Daemon.infos(d: Daemon) -> List<&2, Info>:
@@ -1347,14 +1352,14 @@ def Action.is_reply(a: Action) -> Bool:
       False{}
 
 # the token of a request
-def Request.token(r: Request) -> Shared.Bytes():
+def Request.token(r: Request) -> Octets.Bytes():
   match r:
     case Request{t, b}:
       t
 
 # what to do about the words of an Ask: the command they spell, or a
 # refusal with the usage
-def Command.decided(r: Result<&2, &2, String, Command>, a: String, b: Shared.Bytes()) -> Action:
+def Command.decided(r: Result<&2, &2, String, Command>, a: String, b: Octets.Bytes()) -> Action:
   match r:
     case Fail{u}:
       Reply{Said{False{}, [u]}}
@@ -1373,14 +1378,14 @@ def Daemon.decide.body(+d: Daemon, b: Body) -> Action:
     case Status{}:
       Reply{StatusIs{Daemon.infos(d), Daemon.clients(d)}}
     case Mount{+u, gs, ln}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Action,
         Maybe.is_some(&2, Local, Daemon.local(d, u)),
         x => Reply{Denied{String.append("already mounted: ", u)}},
         x => DoMount{u, gs, ln}
       )
     case Unmount{+u}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Action,
         Maybe.is_some(&2, Local, Daemon.local(d, u)),
         x => DoUnmount{u},
@@ -1389,7 +1394,7 @@ def Daemon.decide.body(+d: Daemon, b: Body) -> Action:
     case Ask{a, ws, b}:
       Command.decided(Command.read(ws), a, b)
     case Stop{f}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Action,
         Bool.or(f, Daemon.idle(d)),
         x => DoStop{},
@@ -1400,12 +1405,12 @@ def Daemon.decide.body(+d: Daemon, b: Body) -> Action:
 
 # what to do about the request r when the token of the daemon is tok: a
 # request with another token is refused, whatever it asks
-def Daemon.decide(d: Daemon, tok: Shared.Bytes(), r: Request) -> Action:
+def Daemon.decide(d: Daemon, tok: Octets.Bytes(), r: Request) -> Action:
   match r:
     case Request{t, b}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Action,
-        Shared.Bytes.is_eq(t, tok),
+        Octets.Bytes.is_eq(t, tok),
         x => Daemon.decide.body(d, b),
         x => Reply{Denied{"wrong token"}}
       )
@@ -1413,29 +1418,29 @@ def Daemon.decide(d: Daemon, tok: Shared.Bytes(), r: Request) -> Action:
 # a request with another token is refused, and asks nothing of the daemon
 law token_checked:
   for d: Daemon
-  for tok: Shared.Bytes()
+  for tok: Octets.Bytes()
   for r: Request
-  for h: {Shared.Bytes.is_eq(Request.token(r), tok) == False{}: Bool}
+  for h: {Octets.Bytes.is_eq(Request.token(r), tok) == False{}: Bool}
   {Daemon.decide(d, tok, r) == Reply{Denied{"wrong token"}}: Action}
 
 # a Stop without force does not end the daemon while a mount is active or
 # another client is connected
 law stop_guarded:
   for d: Daemon
-  for tok: Shared.Bytes()
+  for tok: Octets.Bytes()
   for h: {Daemon.idle(d) == False{}: Bool}
   {Action.stops(Daemon.decide(d, tok, Request{tok, Stop{False{}}})) == False{}: Bool}
 
 # a Stop with force and the right token always ends the daemon
 law stop_forced:
   for d: Daemon
-  for tok: Shared.Bytes()
+  for tok: Octets.Bytes()
   {Daemon.decide(d, tok, Request{tok, Stop{True{}}}) == DoStop{}: Action}
 
 # a Mount of a URI that is already mounted is refused at once
 law mount_once:
   for d: Daemon
-  for tok: Shared.Bytes()
+  for tok: Octets.Bytes()
   for u: String
   for gs: List<&2, String>
   for ln: String
@@ -1484,7 +1489,7 @@ def Daemon.entries(d: Daemon) -> List<&2, Entry>:
       Daemon.entries.go(ms)
 
 # the bytes of the agent of an entry: 0, or 1 then its name
-def Agent.encode(m: Maybe<&2, String>) -> Shared.Bytes():
+def Agent.encode(m: Maybe<&2, String>) -> Octets.Bytes():
   match m:
     case None{}:
       [0]
@@ -1492,7 +1497,7 @@ def Agent.encode(m: Maybe<&2, String>) -> Shared.Bytes():
       1 <> Journal.Utf8.framed(n)
 
 # the bytes of the entries, one after another
-def Entries.encode(es: List<&2, Entry>) -> Shared.Bytes():
+def Entries.encode(es: List<&2, Entry>) -> Octets.Bytes():
   match es:
     case Nil{}:
       []
@@ -1535,7 +1540,7 @@ def Entries.ok(es: List<&2, Entry>) -> Bool:
 
 # the entries that bytes b spell, or None
 law Entries.decode:
-  for b: Shared.Bytes()
+  for b: Octets.Bytes()
   Maybe<&2, List<&2, Entry>>
 
 # entries read back from their bytes

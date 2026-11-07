@@ -2,7 +2,9 @@ import Base
 import ../conditions/spec.bend as Cond
 import ../graph/impl.bend as GraphImpl
 import ../graph/spec.bend as Graph
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/bytes.bend as Octets
+import ../shared/resources.bend as Resources
 import ../views/bend/impl.bend as BendImpl
 import ../views/bend/spec.bend as Bend
 import ../views/shared.bend as Vs
@@ -76,7 +78,7 @@ def View.line_edits(es: List<&2, Text.LineEdit>) -> List<&2, String>:
 
 # the diff of the texts x and y of the resource at path, by its view
 def View.diff.texts(path: String, +x: String, +y: String) -> List<&2, String>:
-  Shared.Bool.when(
+  Bools.Bool.when(
     List<&2, String>,
     View.is_bend(path),
     u => View.item_edits(Bend.Bend.diff(View.module(x), View.module(y))),
@@ -94,7 +96,7 @@ def View.diff.of(
     case Some{x} Some{y}:
       View.diff.texts(path, x, y)
     case _ _:
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, String>,
         same,
         u => ["binary: the same"],
@@ -102,11 +104,11 @@ def View.diff.of(
       )
 
 # the lines of the diff from x to y of the resource at path
-def View.diff(path: String, +x: Shared.Bytes(), +y: Shared.Bytes()) -> List<&2, String>:
-  View.diff.of(path, Text.Text.decode(x), Text.Text.decode(y), Shared.Bytes.is_eq(x, y))
+def View.diff(path: String, +x: Octets.Bytes(), +y: Octets.Bytes()) -> List<&2, String>:
+  View.diff.of(path, Text.Text.decode(x), Text.Text.decode(y), Octets.Bytes.is_eq(x, y))
 
 # the bytes of a merged text, if the merge did not clash
-def View.merged.text(m: Maybe<&2, String>) -> Maybe<&2, Shared.Bytes()>:
+def View.merged.text(m: Maybe<&2, String>) -> Maybe<&2, Octets.Bytes()>:
   match m:
     case None{}:
       None{}
@@ -114,7 +116,7 @@ def View.merged.text(m: Maybe<&2, String>) -> Maybe<&2, Shared.Bytes()>:
       Some{Text.Text.encode(s)}
 
 # the bytes of a merged document, if the merge did not clash
-def View.merged.module(m: Maybe<&2, Bend.Module>) -> Maybe<&2, Shared.Bytes()>:
+def View.merged.module(m: Maybe<&2, Bend.Module>) -> Maybe<&2, Octets.Bytes()>:
   match m:
     case None{}:
       None{}
@@ -122,9 +124,9 @@ def View.merged.module(m: Maybe<&2, Bend.Module>) -> Maybe<&2, Shared.Bytes()>:
       Some{Bend.Bend.encode(d)}
 
 # the three-way merge of the texts, by the view of path
-def View.merge.texts(path: String, +b: String, +x: String, +y: String) -> Maybe<&2, Shared.Bytes()>:
-  Shared.Bool.when(
-    Maybe<&2, Shared.Bytes()>,
+def View.merge.texts(path: String, +b: String, +x: String, +y: String) -> Maybe<&2, Octets.Bytes()>:
+  Bools.Bool.when(
+    Maybe<&2, Octets.Bytes()>,
     View.is_bend(path),
     u => View.merged.module(Bend.Bend.merge(View.module(b), View.module(x), View.module(y))),
     u => View.merged.text(Text.Text.merge(b, x, y))
@@ -137,7 +139,7 @@ def View.merge.of(
   tb: Maybe<&2, String>,
   tx: Maybe<&2, String>,
   ty: Maybe<&2, String>
-) -> Maybe<&2, Shared.Bytes()>:
+) -> Maybe<&2, Octets.Bytes()>:
   match tb tx ty:
     case Some{b} Some{x} Some{y}:
       View.merge.texts(path, b, x, y)
@@ -148,23 +150,23 @@ def View.merge.of(
 # for a clash
 def View.merge(
   path: String,
-  b: Shared.Bytes(),
-  x: Shared.Bytes(),
-  y: Shared.Bytes()
-) -> Maybe<&2, Shared.Bytes()>:
+  b: Octets.Bytes(),
+  x: Octets.Bytes(),
+  y: Octets.Bytes()
+) -> Maybe<&2, Octets.Bytes()>:
   View.merge.of(path, Text.Text.decode(b), Text.Text.decode(x), Text.Text.decode(y))
 
 # the edges among es that a change c of the resource n affects, under any
 # configuration
 def View.affected(
   es: List<&2, Graph.Edge>,
-  n: Shared.Name,
+  n: Resources.Name,
   c: Graph.Change
 ) -> List<&2, Graph.Edge>:
   Graph.Graph.affected(Graph.Graph{es}, n, c, Cond.Always{})
 
 # the Bend document of the resource n with the text found
-def View.doc.of(n: Shared.Name, m: Maybe<&2, String>) -> List<&2, Bend.Doc>:
+def View.doc.of(n: Resources.Name, m: Maybe<&2, String>) -> List<&2, Bend.Doc>:
   match m:
     case None{}:
       []
@@ -173,10 +175,10 @@ def View.doc.of(n: Shared.Name, m: Maybe<&2, String>) -> List<&2, Bend.Doc>:
 
 # the Bend document of the resource n at path with the bytes b, when it is
 # a Bend resource whose bytes are UTF-8
-def View.doc(n: Shared.Name, path: String, b: Shared.Bytes()) -> List<&2, Bend.Doc>:
+def View.doc(n: Resources.Name, path: String, b: Octets.Bytes()) -> List<&2, Bend.Doc>:
   View.doc.of(
     n,
-    Shared.Bool.when(Maybe<&2, String>, View.is_bend(path), u => Text.Text.decode(b), u => None{})
+    Bools.Bool.when(Maybe<&2, String>, View.is_bend(path), u => Text.Text.decode(b), u => None{})
   )
 
 # the open obligations of the one document found, given ds
@@ -194,16 +196,16 @@ def View.obligations.of(
 # the line's Bend documents: the Bend view's; no other view has any yet
 def View.obligations(
   ds: List<&2, Bend.Doc>,
-  n: Shared.Name,
+  n: Resources.Name,
   path: String,
-  b: Shared.Bytes()
+  b: Octets.Bytes()
 ) -> List<&2, Vs.Obligation>:
   View.obligations.of(ds, View.doc(n, path, b))
 
 # the verifier of the resource at path: the Bend view's; no other view has
 # one yet
 def View.verifier(path: String) -> Maybe<&2, Vs.Verifier>:
-  Shared.Bool.when(
+  Bools.Bool.when(
     Maybe<&2, Vs.Verifier>,
     View.is_bend(path),
     u => Some{Bend.Bend.verifier()},

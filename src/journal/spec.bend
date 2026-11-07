@@ -1,7 +1,8 @@
 import Base
 import ../hash/spec.bend as Hash
 import ../history/spec.bend as History
-import ../shared.bend as Shared
+import ../shared/bytes.bend as Octets
+import ../shared/resources.bend as Resources
 import ../store/spec.bend as Store
 import ../views/text/spec.bend as Text
 
@@ -26,17 +27,17 @@ import ../views/text/spec.bend as Text
 # Forked: a new line whose key is line, following what the line whose key is
 # from followed at this point, or what its mark named by mark holds.
 type Record is Data:
-  Kept{line: String, content: Maybe<&2, Shared.Bytes()>, node: History.Node}
+  Kept{line: String, content: Maybe<&2, Octets.Bytes()>, node: History.Node}
   Saw{agent: String, line: String}
   Marked{line: String, name: String, message: String, author: History.Author}
   Forked{line: String, from: String, mark: Maybe<&2, String>}
 
 # the bytes of a text: its UTF-8, framed
-def Utf8.framed(s: String) -> Shared.Bytes():
+def Utf8.framed(s: String) -> Octets.Bytes():
   Store.Bytes.framed(Text.Text.encode(s))
 
 # the bytes of a content: 0 for none, or 1 then the content, framed
-def Content.encode(c: Maybe<&2, Shared.Bytes()>) -> Shared.Bytes():
+def Content.encode(c: Maybe<&2, Octets.Bytes()>) -> Octets.Bytes():
   match c:
     case None{}:
       [0]
@@ -44,7 +45,7 @@ def Content.encode(c: Maybe<&2, Shared.Bytes()>) -> Shared.Bytes():
       1 <> Store.Bytes.framed(b)
 
 # the bytes of a mark name of a fork: 0 for none, or 1 then the name
-def MarkName.encode(m: Maybe<&2, String>) -> Shared.Bytes():
+def MarkName.encode(m: Maybe<&2, String>) -> Octets.Bytes():
   match m:
     case None{}:
       [0]
@@ -54,7 +55,7 @@ def MarkName.encode(m: Maybe<&2, String>) -> Shared.Bytes():
 # the bytes of a record: a tag (0 Kept, 1 Saw, 2 Marked, 3 Forked), then its
 # fields in order; a Kept ends with the node's own bytes
 # (History.Node.encode), which run to the end
-def Record.payload(r: Record) -> Shared.Bytes():
+def Record.payload(r: Record) -> Octets.Bytes():
   match r:
     case Kept{ln, c, v}:
       0
@@ -89,17 +90,17 @@ def Record.payload(r: Record) -> Shared.Bytes():
         )
 
 # the first n bytes of b
-def Bytes.take(b: Shared.Bytes(), n: Nat) -> Shared.Bytes():
+def Bytes.take(b: Octets.Bytes(), n: Nat) -> Octets.Bytes():
   List.take(&2, U32, b, n)
 
 # the check of a payload: the first 8 bytes of its BLAKE3 hash
-def Record.check(p: Shared.Bytes()) -> Shared.Bytes():
+def Record.check(p: Octets.Bytes()) -> Octets.Bytes():
   Bytes.take(Hash.Hash.blake3(p), 8n)
 
 # The bytes of a record in the log: the length of its payload (LEB128),
 # the payload, then its check. A record that a power cut tore is shorter
 # than its length says, or fails its check, so a reader stops there.
-def Record.encode(r: Record) -> Shared.Bytes():
+def Record.encode(r: Record) -> Octets.Bytes():
   +p = Record.payload(r)
   List.append(
     &2,
@@ -109,7 +110,7 @@ def Record.encode(r: Record) -> Shared.Bytes():
   )
 
 # the bytes of records, one after another
-def Record.encode_all(rs: List<&2, Record>) -> Shared.Bytes():
+def Record.encode_all(rs: List<&2, Record>) -> Octets.Bytes():
   match rs:
     case Nil{}:
       []
@@ -117,13 +118,13 @@ def Record.encode_all(rs: List<&2, Record>) -> Shared.Bytes():
       List.append(&2, U32, Record.encode(r), Record.encode_all(t))
 
 # both texts of n are valid UTF-8 text
-def Name.ok(n: Shared.Name) -> Bool:
+def Name.ok(n: Resources.Name) -> Bool:
   match n:
-    case Shared.Name{sp, p}:
+    case Resources.Name{sp, p}:
       Bool.and(Text.Text.ok(sp), Text.Text.ok(p))
 
 # the moved-from name, if any, is ok
-def From.ok(f: Maybe<&2, Shared.Name>) -> Bool:
+def From.ok(f: Maybe<&2, Resources.Name>) -> Bool:
   match f:
     case None{}:
       True{}
@@ -183,7 +184,7 @@ type Read is Data:
 # the records of the log b, up to the first entry that is torn or fails
 # its check
 law Journal.read:
-  for b: Shared.Bytes()
+  for b: Octets.Bytes()
   Read
 
 # a log of whole records reads back as those records, all of it good

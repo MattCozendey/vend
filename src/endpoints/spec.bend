@@ -1,5 +1,6 @@
 import Base
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/bytes.bend as Octets
 
 # An endpoint reaches resources of one kind. The core sees each resource
 # as a stream: signals come in, commands go out. The endpoint alone reads
@@ -13,7 +14,7 @@ import ../shared.bend as Shared
 # exist. Unreachable: the endpoint cannot tell. Absent and Unreachable never
 # stand for each other, and none of them is final.
 type Reach is Data:
-  Present{token: Shared.Bytes()}
+  Present{token: Octets.Bytes()}
   Absent{}
   Unreachable{reason: String}
 
@@ -27,12 +28,12 @@ type Reach is Data:
 type Signal is Data:
   Reached{state: Reach}
   Hinted{}
-  Fetched{bytes: Shared.Bytes(), token: Shared.Bytes()}
+  Fetched{bytes: Octets.Bytes(), token: Octets.Bytes()}
   Overflowed{}
 
 # What a writer believes is there before it writes.
 type Expect is Data:
-  WasPresent{token: Shared.Bytes()}
+  WasPresent{token: Octets.Bytes()}
   WasAbsent{}
 
 # A command to the endpoint. Fetch: send the content. Put: write bytes as
@@ -40,11 +41,11 @@ type Expect is Data:
 # writers outside the core as well as its kind allows.
 type Command is Data:
   Fetch{}
-  Put{bytes: Shared.Bytes(), expect: Expect}
+  Put{bytes: Octets.Bytes(), expect: Expect}
 
 # A version for the history: new content, or the resource is gone.
 type Version is Data:
-  Content{bytes: Shared.Bytes(), token: Shared.Bytes()}
+  Content{bytes: Octets.Bytes(), token: Octets.Bytes()}
   Gone{}
 
 # What a step does: send a command, or record a version.
@@ -58,7 +59,7 @@ type Effect is Data:
 # history stays whole. fetching: a fetch is out. dirty: a hint came while it
 # was out, so fetch once more when it answers.
 type Stream is Data:
-  Stream{reach: Reach, last: Maybe<&2, Shared.Bytes()>, fetching: Bool, dirty: Bool}
+  Stream{reach: Reach, last: Maybe<&2, Octets.Bytes()>, fetching: Bool, dirty: Bool}
 
 # A stream that knows nothing yet.
 def Stream.new() -> Stream:
@@ -71,7 +72,7 @@ def Stream.reach(k: Stream) -> Reach:
       r
 
 # the token of the last content that k recorded
-def Stream.last(k: Stream) -> Maybe<&2, Shared.Bytes()>:
+def Stream.last(k: Stream) -> Maybe<&2, Octets.Bytes()>:
   match k:
     case Stream{r, l, f, d}:
       l
@@ -93,15 +94,15 @@ type Stepped is Data:
   Stepped{stream: Stream, effects: List<&2, Effect>}
 
 # t is the token of the last recorded content
-def Stream.knows(last: Maybe<&2, Shared.Bytes()>, t: Shared.Bytes()) -> Bool:
+def Stream.knows(last: Maybe<&2, Octets.Bytes()>, t: Octets.Bytes()) -> Bool:
   match last:
     case None{}:
       False{}
     case Some{a}:
-      Shared.Bytes.is_eq(a, t)
+      Octets.Bytes.is_eq(a, t)
 
 # a fetch, unless one is out: then fetch once more when it answers
-def Stream.ask(r: Reach, last: Maybe<&2, Shared.Bytes()>, fetching: Bool) -> Stepped:
+def Stream.ask(r: Reach, last: Maybe<&2, Octets.Bytes()>, fetching: Bool) -> Stepped:
   match fetching:
     case False{}:
       Stepped{Stream{r, last, True{}, False{}}, [Send{Fetch{}}]}
@@ -110,11 +111,11 @@ def Stream.ask(r: Reach, last: Maybe<&2, Shared.Bytes()>, fetching: Bool) -> Ste
 
 # the record of fetched content: none when t is the last recorded content
 def Stream.record(
-  last: Maybe<&2, Shared.Bytes()>,
-  bytes: Shared.Bytes(),
-  +t: Shared.Bytes()
+  last: Maybe<&2, Octets.Bytes()>,
+  bytes: Octets.Bytes(),
+  +t: Octets.Bytes()
 ) -> List<&2, Effect>:
-  Shared.Bool.when(
+  Bools.Bool.when(
     List<&2, Effect>,
     Stream.knows(last, t),
     u => [],
@@ -125,9 +126,9 @@ def Stream.record(
 # are the last recorded content, and fetch again if a hint came meanwhile
 def Stream.fetched(
   dirty: Bool,
-  last: Maybe<&2, Shared.Bytes()>,
-  bytes: Shared.Bytes(),
-  +t: Shared.Bytes()
+  last: Maybe<&2, Octets.Bytes()>,
+  bytes: Octets.Bytes(),
+  +t: Octets.Bytes()
 ) -> Stepped:
   match dirty:
     case False{}:
@@ -144,7 +145,7 @@ def Stream.fetched(
 # ended, with effects es before a new fetch when dirty
 def Stream.settle(
   r: Reach,
-  last: Maybe<&2, Shared.Bytes()>,
+  last: Maybe<&2, Octets.Bytes()>,
   dirty: Bool,
   es: List<&2, Effect>
 ) -> Stepped:
@@ -156,7 +157,7 @@ def Stream.settle(
 
 # after the resource is reached as absent: record Gone once, and end the
 # fetch that is out
-def Stream.absent(last: Maybe<&2, Shared.Bytes()>, dirty: Bool) -> Stepped:
+def Stream.absent(last: Maybe<&2, Octets.Bytes()>, dirty: Bool) -> Stepped:
   match last:
     case None{}:
       Stream.settle(Absent{}, None{}, dirty, [])
@@ -166,12 +167,12 @@ def Stream.absent(last: Maybe<&2, Shared.Bytes()>, dirty: Bool) -> Stepped:
 # after the resource is reached as present with token t: fetch when t is
 # not the last recorded content
 def Stream.present(
-  +last: Maybe<&2, Shared.Bytes()>,
+  +last: Maybe<&2, Octets.Bytes()>,
   +fetching: Bool,
   dirty: Bool,
-  +t: Shared.Bytes()
+  +t: Octets.Bytes()
 ) -> Stepped:
-  Shared.Bool.when(
+  Bools.Bool.when(
     Stepped,
     Stream.knows(last, t),
     u => Stepped{Stream{Present{t}, last, fetching, dirty}, []},
@@ -200,7 +201,7 @@ def Stream.step(k: Stream, s: Signal) -> Stepped:
 def Expect.holds(e: Expect, k: Stream) -> Bool:
   match e k:
     case WasPresent{+a} Stream{Present{b}, Some{c}, False{}, d}:
-      List.all.if(u => Shared.Bytes.is_eq(a, c), Shared.Bytes.is_eq(a, b))
+      List.all.if(u => Octets.Bytes.is_eq(a, c), Octets.Bytes.is_eq(a, b))
     case WasAbsent{} Stream{Absent{}, l, False{}, d}:
       True{}
     case _ _:
@@ -212,7 +213,7 @@ type Refused is Data:
 
 # the stream after an accepted write of bytes with token t that believes e:
 # one Put, and the content recorded at once
-def Stream.wrote(+bytes: Shared.Bytes(), +t: Shared.Bytes(), e: Expect) -> Stepped:
+def Stream.wrote(+bytes: Octets.Bytes(), +t: Octets.Bytes(), e: Expect) -> Stepped:
   Stepped{
     Stream{Present{t}, Some{t}, False{}, False{}},
     [Send{Put{bytes, e}}, Record{Content{bytes, t}}]
@@ -223,11 +224,11 @@ def Stream.wrote(+bytes: Shared.Bytes(), +t: Shared.Bytes(), e: Expect) -> Stepp
 # ordered by the core, so this check is exact.
 def Stream.write(
   +k: Stream,
-  bytes: Shared.Bytes(),
-  t: Shared.Bytes(),
+  bytes: Octets.Bytes(),
+  t: Octets.Bytes(),
   +e: Expect
 ) -> Result<&2, &2, Refused, Stepped>:
-  Shared.Bool.when(
+  Bools.Bool.when(
     Result<&2, &2, Refused, Stepped>,
     Expect.holds(e, k),
     u => Done{Stream.wrote(bytes, t, e)},
@@ -289,7 +290,7 @@ law unreachable_keeps_last:
     Stream.last(
       Stepped.stream(Stream.step(k, Reached{Unreachable{why}}))
     )
-      == Stream.last(k): Maybe<&2, Shared.Bytes()>
+      == Stream.last(k): Maybe<&2, Octets.Bytes()>
   }
 
 # a hint is not data: it records nothing
@@ -317,16 +318,16 @@ law hint_is_kept:
 # content the core last recorded records nothing again
 law same_content_records_nothing:
   for k: Stream
-  for bytes: Shared.Bytes()
-  for t: Shared.Bytes()
+  for bytes: Octets.Bytes()
+  for t: Octets.Bytes()
   for h: {Stream.knows(Stream.last(k), t) == True{}: Bool}
   {Stepped.versions(Stream.step(k, Fetched{bytes, t})) == []: List<&2, Version>}
 
 # new content records exactly its version
 law new_content_records_once:
   for k: Stream
-  for bytes: Shared.Bytes()
-  for t: Shared.Bytes()
+  for bytes: Octets.Bytes()
+  for t: Octets.Bytes()
   for h: {Stream.knows(Stream.last(k), t) == False{}: Bool}
   {Stepped.versions(Stream.step(k, Fetched{bytes, t})) == [Content{bytes, t}]: List<&2, Version>}
 
@@ -334,22 +335,22 @@ law new_content_records_once:
 # reached as absent
 law absent_records_gone:
   for k: Stream
-  for t: Shared.Bytes()
-  for h: {Stream.last(k) == Some{t}: Maybe<&2, Shared.Bytes()>}
+  for t: Octets.Bytes()
+  for h: {Stream.last(k) == Some{t}: Maybe<&2, Octets.Bytes()>}
   {Stepped.versions(Stream.step(k, Reached{Absent{}})) == [Gone{}]: List<&2, Version>}
 
 # a resource whose last record is Gone, or that has none, records nothing
 # when it is reached as absent
 law absent_stays_quiet:
   for k: Stream
-  for h: {Stream.last(k) == None{}: Maybe<&2, Shared.Bytes()>}
+  for h: {Stream.last(k) == None{}: Maybe<&2, Octets.Bytes()>}
   {Stepped.versions(Stream.step(k, Reached{Absent{}})) == []: List<&2, Version>}
 
 # a write is refused exactly when its belief does not hold
 law write_refused:
   for k: Stream
-  for bytes: Shared.Bytes()
-  for t: Shared.Bytes()
+  for bytes: Octets.Bytes()
+  for t: Octets.Bytes()
   for e: Expect
   {
     Result.is_fail(
@@ -366,8 +367,8 @@ law write_refused:
 # records exactly its content
 law write_puts_and_records:
   for k: Stream
-  for bytes: Shared.Bytes()
-  for t: Shared.Bytes()
+  for bytes: Octets.Bytes()
+  for t: Octets.Bytes()
   for e: Expect
   for s: Stepped
   for h: {Stream.write(k, bytes, t, e) == Done{s}: Result<&2, &2, Refused, Stepped>}
@@ -377,8 +378,8 @@ law write_puts_and_records:
 # after an accepted write, its fetch records nothing: the write recorded it
 law write_then_fetch_quiet:
   for k: Stream
-  for bytes: Shared.Bytes()
-  for t: Shared.Bytes()
+  for bytes: Octets.Bytes()
+  for t: Octets.Bytes()
   for e: Expect
   for s: Stepped
   for h: {Stream.write(k, bytes, t, e) == Done{s}: Result<&2, &2, Refused, Stepped>}

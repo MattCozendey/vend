@@ -12,7 +12,11 @@ import ../history/spec.bend as History
 import ../journal/impl.bend as J
 import ../journal/spec.bend as Journal
 import ../lines/spec.bend as Lines
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/bytes.bend as Octets
+import ../shared/resources.bend as Resources
+import ../shared/tables.bend as Tables
+import ../shared/uris.bend as Uris
 import ../store/spec.bend as Store
 import ../views/shared.bend as Vs
 import ../views/text/impl.bend as TextImpl
@@ -49,7 +53,7 @@ def Err.why(e: U32 & String) -> String:
 type Inbox is Type:
   WatchHeard{uri: String, notices: List<&2, File.Notice>}
   WatchLost{uri: String, why: String}
-  ClientAsked{bytes: Shared.Bytes(), socket: Socket}
+  ClientAsked{bytes: Octets.Bytes(), socket: Socket}
 
 # A watched mount: its URI, its root, and the channel that stops its
 # watcher.
@@ -71,13 +75,13 @@ def Report.line(o: Core.Output) -> IO(Unit):
     case Core.Recorded{n, x, a}:
       IO.print(
         String.concat(
-          ["recorded ", Shared.Name.show(n), " ", Hash.Hash.hex(x), " by ", Report.author(a)]
+          ["recorded ", Resources.Name.show(n), " ", Hash.Hash.hex(x), " by ", Report.author(a)]
         )
       )
     case Core.Refused{n, hs}:
-      IO.print("refused " ++ Shared.Name.show(n))
+      IO.print("refused " ++ Resources.Name.show(n))
     case Core.Failed{n, p}:
-      IO.print("failed " ++ Shared.Name.show(n))
+      IO.print("failed " ++ Resources.Name.show(n))
     case Core.Stopped{}:
       IO.pure(Unit, Unit{})
     case Core.Command{p, k}:
@@ -90,11 +94,11 @@ def Report.line(o: Core.Output) -> IO(Unit):
 # A message on a connection is its length (LEB128), then its bytes.
 
 # the bytes of the message, when acc holds all of it
-def Wire.whole(m: Maybe<&2, J.Got<Nat>>) -> Maybe<&2, Shared.Bytes()>:
+def Wire.whole(m: Maybe<&2, J.Got<Nat>>) -> Maybe<&2, Octets.Bytes()>:
   match m:
     case Some{J.Got{+n, +r}}:
-      Shared.Bool.when(
-        Maybe<&2, Shared.Bytes()>,
+      Bools.Bool.when(
+        Maybe<&2, Octets.Bytes()>,
         Nat.is_le(n, List.length(&2, U32, r)),
         u => Some{List.take(&2, U32, r, n)},
         u => None{}
@@ -105,28 +109,28 @@ def Wire.whole(m: Maybe<&2, J.Got<Nat>>) -> Maybe<&2, Shared.Bytes()>:
 # the message read so far into acc, after one more read
 def Wire.more(
   s: Socket & Poll<&1, &1, Result<&1, &1, U32 & String, Maybe<&1, List<&2, U32>>>, Unit>,
-  acc: Shared.Bytes(),
-  k: Socket -> Shared.Bytes() -> IO(Socket & Maybe<&2, Shared.Bytes()>)
-) -> IO(Socket & Maybe<&2, Shared.Bytes()>):
+  acc: Octets.Bytes(),
+  k: Socket -> Octets.Bytes() -> IO(Socket & Maybe<&2, Octets.Bytes()>)
+) -> IO(Socket & Maybe<&2, Octets.Bytes()>):
   (sock, p) = s
   match p:
     case Ready{Done{Some{chunk}}}:
       k(sock, List.append(&2, U32, acc, chunk))
     case _:
-      IO.pure(Socket & Maybe<&2, Shared.Bytes()>, (sock, None{}))
+      IO.pure(Socket & Maybe<&2, Octets.Bytes()>, (sock, None{}))
 
 # the message when it is whole, else one more read and k
 def Wire.read.at(
-  m: Maybe<&2, Shared.Bytes()>,
+  m: Maybe<&2, Octets.Bytes()>,
   sock: Socket,
-  acc: Shared.Bytes(),
-  k: Socket -> Shared.Bytes() -> IO(Socket & Maybe<&2, Shared.Bytes()>)
-) -> IO(Socket & Maybe<&2, Shared.Bytes()>):
+  acc: Octets.Bytes(),
+  k: Socket -> Octets.Bytes() -> IO(Socket & Maybe<&2, Octets.Bytes()>)
+) -> IO(Socket & Maybe<&2, Octets.Bytes()>):
   match m:
     case Some{b}:
-      IO.pure(Socket & Maybe<&2, Shared.Bytes()>, (sock, Some{b}))
+      IO.pure(Socket & Maybe<&2, Octets.Bytes()>, (sock, Some{b}))
     case None{}:
-      do IO<Socket & Maybe<&2, Shared.Bytes()>>:
+      do IO<Socket & Maybe<&2, Octets.Bytes()>>:
         s: Socket
           & Poll<
             &1,
@@ -140,16 +144,16 @@ def Wire.read.at(
 def Wire.read.go(
   fuel: Nat,
   sock: Socket,
-  +acc: Shared.Bytes()
-) -> IO(Socket & Maybe<&2, Shared.Bytes()>):
+  +acc: Octets.Bytes()
+) -> IO(Socket & Maybe<&2, Octets.Bytes()>):
   match fuel:
     case 0n:
-      IO.pure(Socket & Maybe<&2, Shared.Bytes()>, (sock, None{}))
+      IO.pure(Socket & Maybe<&2, Octets.Bytes()>, (sock, None{}))
     case 1n+f:
       Wire.read.at(Wire.whole(J.Leb.read(acc)), sock, acc, s2 => a2 => Wire.read.go(f, s2, a2))
 
 # the message on sock, within at most 64 reads
-def Wire.read(sock: Socket) -> IO(Socket & Maybe<&2, Shared.Bytes()>):
+def Wire.read(sock: Socket) -> IO(Socket & Maybe<&2, Octets.Bytes()>):
   Wire.read.go(64n, sock, [])
 
 # the socket closed after a send
@@ -158,7 +162,7 @@ def Wire.sent(r: Socket & Result<&1, &1, (U32 & String) & List<&2, U32>, Unit>) 
   Socket.close(sock)
 
 # the message b sent on sock, which then closes
-def Wire.send(sock: Socket, b: Shared.Bytes()) -> IO(Unit):
+def Wire.send(sock: Socket, b: Octets.Bytes()) -> IO(Unit):
   do IO<Unit>:
     r: Socket
       & Result<
@@ -237,7 +241,7 @@ def Watcher.go(
 
 # the request read from a connection sent on to the core task, or the
 # connection closed when no whole request came
-def Acceptor.read(r: Socket & Maybe<&2, Shared.Bytes()>, inbox: Chan(Inbox)) -> IO(Unit):
+def Acceptor.read(r: Socket & Maybe<&2, Octets.Bytes()>, inbox: Chan(Inbox)) -> IO(Unit):
   (sock, m) = r
   match m:
     case None{}:
@@ -257,7 +261,7 @@ def Acceptor.accepted(
   match p:
     case Ready{Done{sock}}:
       do IO<Unit>:
-        m: Socket & Maybe<&2, Shared.Bytes()> <- Wire.read(sock)
+        m: Socket & Maybe<&2, Octets.Bytes()> <- Wire.read(sock)
         Acceptor.read(m, inbox)
         k(l)
     case Ready{Fail{e}}:
@@ -294,12 +298,12 @@ def Acceptor.go(fuel: Nat, l: Listener, +inbox: Chan(Inbox), +stop: Chan(Unit)) 
 # ------------------------
 
 # the bytes of a path in the data folder d
-def Data.path(d: String, name: String) -> Shared.Bytes():
+def Data.path(d: String, name: String) -> Octets.Bytes():
   CoreLoop.Log.path(d, name)
 
 # the bytes b written whole to the file name of d: to a temporary file,
 # synced, then renamed over it; None, or why it failed
-def Data.write(+d: String, +name: String, b: Shared.Bytes()) -> IO(Maybe<&2, String>):
+def Data.write(+d: String, +name: String, b: Octets.Bytes()) -> IO(Maybe<&2, String>):
   +tmp = Data.path(d, String.append(name, ".tmp"))
   do IO<Maybe<&2, String>>:
     o: Result<&1, &1, U32 & String, File> <- File.open_bytes(tmp, "w")
@@ -309,11 +313,11 @@ def Data.write(+d: String, +name: String, b: Shared.Bytes()) -> IO(Maybe<&2, Str
 def Hex.digit(c: Char) -> Maybe<&2, U32>:
   match c:
     case Chr{+x}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, U32>,
         Bool.and(U32.is_ge(x, 48), U32.is_le(x, 57)),
         u => Some{(x - 48: U32)},
-        u => Shared.Bool.when(
+        u => Bools.Bool.when(
           Maybe<&2, U32>,
           Bool.and(U32.is_ge(x, 97), U32.is_le(x, 102)),
           v => Some{(x - 87: U32)},
@@ -330,7 +334,7 @@ def Hex.byte(a: Maybe<&2, U32>, b: Maybe<&2, U32>) -> Maybe<&2, U32>:
       None{}
 
 # x in front of the bytes m read
-def Hex.cons(x: Maybe<&2, U32>, m: Maybe<&2, Shared.Bytes()>) -> Maybe<&2, Shared.Bytes()>:
+def Hex.cons(x: Maybe<&2, U32>, m: Maybe<&2, Octets.Bytes()>) -> Maybe<&2, Octets.Bytes()>:
   match x m:
     case Some{v} Some{r}:
       Some{v <> r}
@@ -338,7 +342,7 @@ def Hex.cons(x: Maybe<&2, U32>, m: Maybe<&2, Shared.Bytes()>) -> Maybe<&2, Share
       None{}
 
 # the bytes that lowercase hex text spells, or None
-def Hex.bytes(s: String) -> Maybe<&2, Shared.Bytes()>:
+def Hex.bytes(s: String) -> Maybe<&2, Octets.Bytes()>:
   match s:
     case SNil{}:
       Some{[]}
@@ -350,7 +354,7 @@ def Hex.bytes(s: String) -> Maybe<&2, Shared.Bytes()>:
 # Where the daemon listens and its token, as the file "daemon" holds them:
 # the port, a space, the token as hex.
 type Door is Data:
-  Door{port: U32, token: Shared.Bytes()}
+  Door{port: U32, token: Octets.Bytes()}
 
 # the text of a door
 def Door.show(d: Door) -> String:
@@ -359,7 +363,7 @@ def Door.show(d: Door) -> String:
       String.concat([U32.show(p), " ", Hash.Hash.hex(t)])
 
 # the door that two words spell
-def Door.of(p: Maybe<&2, U32>, t: Maybe<&2, Shared.Bytes()>) -> Maybe<&2, Door>:
+def Door.of(p: Maybe<&2, U32>, t: Maybe<&2, Octets.Bytes()>) -> Maybe<&2, Door>:
   match p t:
     case Some{x} Some{y}:
       Some{Door{x, y}}
@@ -387,7 +391,7 @@ type Serve is Data:
   Serve{
     daemon: Spec.Daemon,
     watches: List<&2, Watch>,
-    token: Shared.Bytes(),
+    token: Octets.Bytes(),
     dir: String,
     inbox: Chan(Inbox),
     astop: Chan(Unit)
@@ -423,7 +427,7 @@ def Watches.root(ws: List<&2, Watch>, +uri: String) -> Maybe<&2, File.Root>:
     case Nil{}:
       None{}
     case Con{Watch{u, r, sc}, t}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, File.Root>,
         String.eq(u, uri),
         x => Some{r},
@@ -436,7 +440,7 @@ def Watches.drop(ws: List<&2, Watch>, +uri: String) -> List<&2, Watch>:
     case Nil{}:
       Nil{}
     case Con{+w, +t}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, Watch>,
         String.eq(Watch.uri(w), uri),
         x => Watches.drop(t, uri),
@@ -450,7 +454,7 @@ def Watches.stop(ws: List<&2, Watch>, +all: Bool, +uri: String) -> IO(Unit):
       IO.pure(Unit, Unit{})
     case Con{Watch{u, r, sc}, t}:
       do IO<Unit>:
-        Shared.Bool.when(
+        Bools.Bool.when(
           IO(Unit),
           Bool.or(all, String.eq(u, uri)),
           x => do IO<Unit>:
@@ -589,7 +593,7 @@ def Serve.mount.watched(
   wr: Result<&1, &1, U32 & String, File>,
   +id: String,
   +root: File.Root,
-  +u: Shared.Uri,
+  +u: Uris.Uri,
   +st: Serve,
   j: File,
   +gs: List<&2, String>,
@@ -601,13 +605,13 @@ def Serve.mount.watched(
     case Fail{e}:
       k(st, j, Spec.Denied{Err.why(e)})
     case Done{w}:
-      +uri = Shared.Uri.show(u)
+      +uri = Uris.Uri.show(u)
       +l = {
         Spec.Local{
           Core.Mount{id, ln, u, Rules.of(gs), a},
           gs,
-          Shared.Table.new(Ep.Stream),
-          Shared.Table.new(Maybe<&2, Shared.Name>),
+          Tables.Table.new(Ep.Stream),
+          Tables.Table.new(Maybe<&2, Resources.Name>),
           []
         }: Spec.Local
       }
@@ -644,7 +648,7 @@ def Serve.mount.watched(
 def Serve.mount.spaced(
   sp: Result<&2, &2, String, String>,
   +root: File.Root,
-  u: Shared.Uri,
+  u: Uris.Uri,
   st: Serve,
   j: File,
   gs: List<&2, String>,
@@ -663,7 +667,7 @@ def Serve.mount.spaced(
 # the mount once the OS path of its root is known
 def Serve.mount.os(
   mo: Maybe<&2, String>,
-  u: Shared.Uri,
+  u: Uris.Uri,
   st: Serve,
   j: File,
   gs: List<&2, String>,
@@ -682,7 +686,7 @@ def Serve.mount.os(
 
 # the mount once its URI text is read
 def Serve.mount.uri(
-  mu: Maybe<&2, Shared.Uri>,
+  mu: Maybe<&2, Uris.Uri>,
   utext: String,
   st: Serve,
   j: File,
@@ -709,7 +713,7 @@ def Serve.mount(
   a: History.Author,
   k: Serve -> File -> Spec.Response -> IO(Unit)
 ) -> IO(Unit):
-  Serve.mount.uri(Shared.Uri.read(utext), utext, st, j, gs, ln, a, k)
+  Serve.mount.uri(Uris.Uri.read(utext), utext, st, j, gs, ln, a, k)
 
 # st without the mount at uri, its watcher told to stop and the mounts file
 # written
@@ -747,7 +751,7 @@ def Carry.streams(cs: List<&2, Spec.Carry>, +c: Core.Core) -> Core.Core:
       c
     case Con{Spec.Carry{+p, b}, +t}:
       +h = Hash.Hash.blake3(b)
-      Shared.Bool.when(
+      Bools.Bool.when(
         Core.Core,
         CoreImpl.Core.tracks(c, p),
         u => Carry.streams(
@@ -769,7 +773,7 @@ def Carry.puts(
     case Nil{}:
       IO.pure(List<&2, Core.Input>, [])
     case Con{Spec.Carry{+p, b}, +t}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         IO(List<&2, Core.Input>),
         CoreImpl.Core.tracks(c, p),
         u => do IO<List<&2, Core.Input>>:
@@ -807,7 +811,7 @@ def Serve.carry.at(
 
 # the root of the mount l, when it is on the line whose key is key
 def Serve.carry.root(+l: Spec.Local, key: String, ws: List<&2, Watch>) -> Maybe<&2, File.Root>:
-  Shared.Bool.when(
+  Bools.Bool.when(
     Maybe<&2, File.Root>,
     String.eq(Local.line(l), key),
     u => Watches.root(ws, Spec.Local.uri(l)),
@@ -885,28 +889,28 @@ def Serve.asked(
 
 # the bytes of the resource at u through the endpoint e of its scheme
 def Source.at(
-  e: Maybe<&2, Shared.Endpoint>,
-  u: Shared.Uri
-) -> IO(Result<&2, &2, String, Shared.Bytes()>):
+  e: Maybe<&2, Resources.Endpoint>,
+  u: Uris.Uri
+) -> IO(Result<&2, &2, String, Octets.Bytes()>):
   match e:
     case None{}:
-      IO.pure(Result<&2, &2, String, Shared.Bytes()>, Fail{"no endpoint serves its scheme"})
-    case Some{Shared.FileEndpoint{}}:
+      IO.pure(Result<&2, &2, String, Octets.Bytes()>, Fail{"no endpoint serves its scheme"})
+    case Some{Resources.FileEndpoint{}}:
       FileImpl.FileEp.source(u)
 
 # the bytes of the resource at the URI m, through its endpoint, or why
 # they cannot be had
-def Source.fetch(m: Maybe<&2, Shared.Uri>) -> IO(Result<&2, &2, String, Shared.Bytes()>):
+def Source.fetch(m: Maybe<&2, Uris.Uri>) -> IO(Result<&2, &2, String, Octets.Bytes()>):
   match m:
     case None{}:
-      IO.pure(Result<&2, &2, String, Shared.Bytes()>, Fail{"it is not a URI"})
+      IO.pure(Result<&2, &2, String, Octets.Bytes()>, Fail{"it is not a URI"})
     case Some{+u}:
-      Source.at(Shared.Endpoint.of(u), u)
+      Source.at(Resources.Endpoint.of(u), u)
 
 # the command c of the agent a handled with the fetched bytes, or refused
 # with why the source could not be read
 def Serve.fetched(
-  r: Result<&2, &2, String, Shared.Bytes()>,
+  r: Result<&2, &2, String, Octets.Bytes()>,
   t: String,
   a: String,
   c: Spec.Command,
@@ -934,7 +938,7 @@ def Serve.sourced(
   m: Maybe<&2, String>,
   a: String,
   c: Spec.Command,
-  b: Shared.Bytes(),
+  b: Octets.Bytes(),
   +st: Serve,
   j: File,
   sock: Socket,
@@ -945,7 +949,7 @@ def Serve.sourced(
       Serve.asked(Spec.Daemon.handle(Serve.daemon(st), a, c, b), st, j, sock, k)
     case Some{+t}:
       do IO<Unit>:
-        r: Result<&2, &2, String, Shared.Bytes()> <- Source.fetch(Shared.Uri.read(t))
+        r: Result<&2, &2, String, Octets.Bytes()> <- Source.fetch(Uris.Uri.read(t))
         Serve.fetched(r, t, a, c, st, j, sock, k)
 
 # Checkouts
@@ -1127,7 +1131,7 @@ def Serve.checkout.os(
     case None{}:
       Serve.said(sock, False{}, ["refused: the mount is not a local file URI"], st, j, k)
     case Some{os}:
-      +uri = Shared.Uri.show(Spec.Plan.root(p))
+      +uri = Uris.Uri.show(Spec.Plan.root(p))
       there = Maybe.is_some(&2, Spec.Local, Spec.Daemon.local(Serve.daemon(st), uri))
       Serve.checkout.new(there, p, os, uri, st, j, sock, k)
 
@@ -1217,7 +1221,7 @@ def Serve.release.planned(
       Serve.said(sock, False{}, [String.append("refused: ", why)], st, j, k)
     case Done{p}:
       +r = Spec.Plan.root(p)
-      Serve.release.os(File.FileEp.root_of(r), Shared.Uri.show(r), st, j, sock, k)
+      Serve.release.os(File.FileEp.root_of(r), Uris.Uri.show(r), st, j, sock, k)
 
 # Verifying
 # ---------
@@ -1232,9 +1236,9 @@ def Verify.checkout(d: Spec.Daemon, pr: Result<&2, &2, String, Spec.Plan>) -> Ma
     case Fail{why}:
       None{}
     case Done{+p}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, String>,
-        Maybe.is_some(&2, Spec.Local, Spec.Daemon.local(d, Shared.Uri.show(Spec.Plan.root(p)))),
+        Maybe.is_some(&2, Spec.Local, Spec.Daemon.local(d, Uris.Uri.show(Spec.Plan.root(p)))),
         u => File.FileEp.root_of(Spec.Plan.root(p)),
         u => None{}
       )
@@ -1246,7 +1250,7 @@ def Verify.mount(ms: List<&2, Spec.Local>, +key: String) -> Maybe<&2, String>:
     case Nil{}:
       None{}
     case Con{+l, t}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, String>,
         List.all.if(
           u => String.eq(Local.line(l), key),
@@ -1297,7 +1301,7 @@ def Verify.first(n: Nat, ls: List<&2, String>) -> List<&2, String>:
     case _ Nil{}:
       []
     case 1n+(+m) Con{+x, +t}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, String>,
         String.is_empty(String.trim(x)),
         u => Verify.first(1n+m, t),
@@ -1458,7 +1462,7 @@ def Start.replayed(rs: List<&2, Journal.Record>) -> Spec.Daemon:
     Spec.Daemon{
       Store.Store.new(),
       History.History.new(),
-      Shared.Table.new(Lines.Line),
+      Tables.Table.new(Lines.Line),
       [],
       0n,
       Spec.Book.new()
@@ -1468,7 +1472,7 @@ def Start.replayed(rs: List<&2, Journal.Record>) -> Spec.Daemon:
 
 # the entries that the bytes of the mounts file spell; none when it is
 # missing or unreadable
-def Start.entries(r: Result<&2, &2, String, Shared.Bytes()>) -> List<&2, Spec.Entry>:
+def Start.entries(r: Result<&2, &2, String, Octets.Bytes()>) -> List<&2, Spec.Entry>:
   match r:
     case Fail{e}:
       []
@@ -1553,7 +1557,7 @@ def Start.listening(
   j: File,
   rs: List<&2, Journal.Record>,
   +d: String,
-  +tok: Shared.Bytes()
+  +tok: Octets.Bytes()
 ) -> IO(Unit):
   match b:
     case Unbound{why}:
@@ -1568,7 +1572,7 @@ def Start.listening(
           &2,
           String> <- Data.write(d, "daemon", Text.Text.encode(Door.show(Door{port, tok})))
         IO.spawn(Unit, Acceptor.go(Fuel.max(), l, inbox, astop))
-        mb: Result<&2, &2, String, Shared.Bytes()> <- CoreLoop.Log.bytes(Data.path(d, "mounts"))
+        mb: Result<&2, &2, String, Octets.Bytes()> <- CoreLoop.Log.bytes(Data.path(d, "mounts"))
         IO.print(
           String.concat(
             ["vend is running on 127.0.0.1:", U32.show(port), "; `vend daemon stop` ends it"]
@@ -1583,7 +1587,7 @@ def Start.listening(
 
 # the daemon once its token is drawn
 def Start.token(
-  t: Result<&2, &2, String, Shared.Bytes()>,
+  t: Result<&2, &2, String, Octets.Bytes()>,
   j: File,
   rs: List<&2, Journal.Record>,
   d: String
@@ -1610,7 +1614,7 @@ def Start.opened(
       IO.die(Unit, 1, "the journal could not be opened: " ++ Err.why(e))
     case Done{j}:
       do IO<Unit>:
-        t: Result<&2, &2, String, Shared.Bytes()> <- CoreLoop.Loop.random(4n)
+        t: Result<&2, &2, String, Octets.Bytes()> <- CoreLoop.Loop.random(4n)
         Start.token(t, j, rs, d)
 
 # the daemon once the torn tail of the journal is cut
@@ -1624,7 +1628,7 @@ def Start.cut(cut: Maybe<&2, String>, rs: List<&2, Journal.Record>, +d: String) 
         Start.opened(o, rs, d)
 
 # the daemon with what the reader found in the bytes b of the journal
-def Start.records(rd: Journal.Read, b: Shared.Bytes(), +d: String) -> IO(Unit):
+def Start.records(rd: Journal.Read, b: Octets.Bytes(), +d: String) -> IO(Unit):
   match rd:
     case Journal.Read{rs, good}:
       do IO<Unit>:
@@ -1632,7 +1636,7 @@ def Start.records(rd: Journal.Read, b: Shared.Bytes(), +d: String) -> IO(Unit):
         Start.cut(cut, rs, d)
 
 # the daemon once the bytes of the journal are read
-def Start.read(r: Result<&2, &2, String, Shared.Bytes()>, d: String) -> IO(Unit):
+def Start.read(r: Result<&2, &2, String, Octets.Bytes()>, d: String) -> IO(Unit):
   match r:
     case Fail{e}:
       IO.die(Unit, 1, "the journal could not be read: " ++ e)
@@ -1648,7 +1652,7 @@ def Start.locked(lk: Result<&1, &1, U32 & String, File>, +d: String) -> IO(Unit)
       IO.die(Unit, 1, "vend is already running: " ++ Err.why(e))
     case Done{held}:
       do IO<Unit>:
-        r: Result<&2, &2, String, Shared.Bytes()> <- CoreLoop.Log.bytes(Data.path(d, "journal.log"))
+        r: Result<&2, &2, String, Octets.Bytes()> <- CoreLoop.Log.bytes(Data.path(d, "journal.log"))
         Start.read(r, d)
 
 # the daemon once the data folder is known
@@ -1745,7 +1749,7 @@ def Client.print(s: Shown) -> IO(Unit):
       IO.die(Unit, 1, String.join(ls, "\n"))
 
 # the response read from the daemon; the connection closed
-def Client.answered(r: Socket & Maybe<&2, Shared.Bytes()>) -> IO(Heard):
+def Client.answered(r: Socket & Maybe<&2, Octets.Bytes()>) -> IO(Heard):
   (sock, m) = r
   match m:
     case None{}:
@@ -1767,7 +1771,7 @@ def Client.sent(r: Socket & Result<&1, &1, (U32 & String) & List<&2, U32>, Unit>
         return Unheard{}
     case Done{u}:
       do IO<Heard>:
-        a: Socket & Maybe<&2, Shared.Bytes()> <- Wire.read(sock)
+        a: Socket & Maybe<&2, Octets.Bytes()> <- Wire.read(sock)
         Client.answered(a)
 
 # the request sent once connected
@@ -1804,7 +1808,7 @@ def Client.text(m: Maybe<&2, String>) -> Maybe<&2, Door>:
       Door.read(s)
 
 # the door that the bytes of the file "daemon" spell
-def Client.read(r: Result<&2, &2, String, Shared.Bytes()>) -> Maybe<&2, Door>:
+def Client.read(r: Result<&2, &2, String, Octets.Bytes()>) -> Maybe<&2, Door>:
   match r:
     case Fail{e}:
       None{}
@@ -1818,7 +1822,7 @@ def Client.dir(m: Maybe<&2, String>, b: Spec.Body) -> IO(Heard):
       IO.pure(Heard, Unheard{})
     case Some{d}:
       do IO<Heard>:
-        r: Result<&2, &2, String, Shared.Bytes()> <- CoreLoop.Log.bytes(Data.path(d, "daemon"))
+        r: Result<&2, &2, String, Octets.Bytes()> <- CoreLoop.Log.bytes(Data.path(d, "daemon"))
         Client.door(Client.read(r), b)
 
 # the request with body b sent to the daemon, and what it got; it never
@@ -1842,7 +1846,7 @@ def Client.agent() -> IO(String):
 
 # the everyday command of the words ws sent to the daemon with the bytes
 # b, signed with Client.agent
-def Client.everyday(ws: List<&2, String>, b: Shared.Bytes()) -> IO(Unit):
+def Client.everyday(ws: List<&2, String>, b: Octets.Bytes()) -> IO(Unit):
   do IO<Unit>:
     a: String <- Client.agent()
     Client.ask(Spec.Ask{a, ws, b})

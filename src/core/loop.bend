@@ -5,7 +5,9 @@ import ../endpoints/spec.bend as Ep
 import ../hash/spec.bend as Hash
 import ../journal/impl.bend as JournalImpl
 import ../journal/spec.bend as Journal
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/bytes.bend as Octets
+import ../shared/tables.bend as Tables
 import ../views/text/impl.bend as TextImpl
 import ../views/text/spec.bend as Text
 import ./impl.bend as Impl
@@ -48,7 +50,7 @@ def Loop.each(ps: List<&2, String>, +s: Ep.Signal) -> List<&2, Spec.Input>:
 def Loop.known(c: Spec.Core) -> List<&2, String>:
   match c:
     case Spec.Core{m, s, h, l, ss, ms, ns}:
-      Shared.Table.keys(Ep.Stream, ss)
+      Tables.Table.keys(Ep.Stream, ss)
 
 # p is the space file of a directory below the root: it starts another
 # space there
@@ -59,7 +61,7 @@ def Loop.is_nested(p: String) -> Bool:
 # directory of p when p is the space file of another space
 def Loop.noticed(+p: String, +s: Ep.Signal) -> List<&2, Spec.Input>:
   dir = String.take(p, Nat.sub(String.length(p), 1n+String.length(Spec.Mount.space_file())))
-  Shared.Bool.when(
+  Bools.Bool.when(
     List<&2, Spec.Input>,
     Loop.is_nested(p),
     u => [Spec.Nested{dir}, Spec.Noticed{p, s}],
@@ -256,7 +258,7 @@ def Log.env(r: Result<&1, &1, U32 & String, String>, rest: String) -> Maybe<&2, 
     case Fail{e}:
       None{}
     case Done{+v}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, String>,
         String.is_empty(v),
         u => None{},
@@ -273,11 +275,11 @@ def Log.dir() -> IO(Maybe<&2, String>):
     return Maybe.or(&2, String, first, Log.env(h, "/.local/share/vend"))
 
 # the bytes of a path in the folder d
-def Log.path(d: String, name: String) -> Shared.Bytes():
+def Log.path(d: String, name: String) -> Octets.Bytes():
   Text.Text.encode(String.concat([d, "/", name]))
 
 # the bytes that a read gave, or why it gave none
-def Log.got(g: FileImpl.Got) -> Result<&2, &2, String, Shared.Bytes()>:
+def Log.got(g: FileImpl.Got) -> Result<&2, &2, String, Octets.Bytes()>:
   match g:
     case FileImpl.Read{b}:
       Done{b}
@@ -289,20 +291,20 @@ def Log.got(g: FileImpl.Got) -> Result<&2, &2, String, Shared.Bytes()>:
 # the bytes of the journal, empty when there is none yet, or why they
 # cannot be read
 def Log.bytes.of(
-  p: Shared.Bytes(),
+  p: Octets.Bytes(),
   probe: File.Probe
-) -> IO(Result<&2, &2, String, Shared.Bytes()>):
+) -> IO(Result<&2, &2, String, Octets.Bytes()>):
   match probe:
     case File.NotFound{}:
-      IO.pure(Result<&2, &2, String, Shared.Bytes()>, Done{[]})
+      IO.pure(Result<&2, &2, String, Octets.Bytes()>, Done{[]})
     case _:
-      do IO<Result<&2, &2, String, Shared.Bytes()>>:
+      do IO<Result<&2, &2, String, Octets.Bytes()>>:
         g: FileImpl.Got <- FileImpl.FileEp.read(p)
         return Log.got(g)
 
 # the bytes of the journal at p
-def Log.bytes(+p: Shared.Bytes()) -> IO(Result<&2, &2, String, Shared.Bytes()>):
-  do IO<Result<&2, &2, String, Shared.Bytes()>>:
+def Log.bytes(+p: Octets.Bytes()) -> IO(Result<&2, &2, String, Octets.Bytes()>):
+  do IO<Result<&2, &2, String, Octets.Bytes()>>:
     probe: File.Probe <- File.FileFx.probe(p)
     Log.bytes.of(p, probe)
 
@@ -340,8 +342,8 @@ def Log.renamed(r: Result<&1, &1, U32 & String, Unit>) -> Maybe<&2, String>:
 
 # the rename over the journal after the good part is on disk
 def Log.cut.wrote(
-  tmp: Shared.Bytes(),
-  p: Shared.Bytes(),
+  tmp: Octets.Bytes(),
+  p: Octets.Bytes(),
   w: Result<&1, &1, U32 & String, Unit>
 ) -> IO(Maybe<&2, String>):
   match w:
@@ -354,9 +356,9 @@ def Log.cut.wrote(
 
 # the good part written to tmp and renamed over p, or why not
 def Log.cut.opened(
-  tmp: Shared.Bytes(),
-  p: Shared.Bytes(),
-  good: Shared.Bytes(),
+  tmp: Octets.Bytes(),
+  p: Octets.Bytes(),
+  good: Octets.Bytes(),
   o: Result<&1, &1, U32 & String, File>
 ) -> IO(Maybe<&2, String>):
   match o:
@@ -370,8 +372,8 @@ def Log.cut.opened(
 
 # the journal at p cut to its first good bytes of b, when a torn tail
 # follows them; None when nothing needed cutting or the cut worked
-def Log.cut(+d: String, p: Shared.Bytes(), +b: Shared.Bytes(), +good: Nat) -> IO(Maybe<&2, String>):
-  Shared.Bool.when(
+def Log.cut(+d: String, p: Octets.Bytes(), +b: Octets.Bytes(), +good: Nat) -> IO(Maybe<&2, String>):
+  Bools.Bool.when(
     IO(Maybe<&2, String>),
     Nat.is_lt(good, List.length(&2, U32, b)),
     u => do IO<Maybe<&2, String>>:
@@ -386,7 +388,7 @@ def Log.cut(+d: String, p: Shared.Bytes(), +b: Shared.Bytes(), +good: Nat) -> IO
 # characters, written there before anything else happens.
 
 # the bytes of one random word, low byte first, or the text of its failure
-def Loop.word(r: Result<&1, &1, U32 & String, U32>) -> Result<&2, &2, String, Shared.Bytes()>:
+def Loop.word(r: Result<&1, &1, U32 & String, U32>) -> Result<&2, &2, String, Octets.Bytes()>:
   match r:
     case Fail{e}:
       Fail{Loop.why(e)}
@@ -395,9 +397,9 @@ def Loop.word(r: Result<&1, &1, U32 & String, U32>) -> Result<&2, &2, String, Sh
 
 # a then b, or the first failure
 def Loop.join(
-  a: Result<&2, &2, String, Shared.Bytes()>,
-  b: Result<&2, &2, String, Shared.Bytes()>
-) -> Result<&2, &2, String, Shared.Bytes()>:
+  a: Result<&2, &2, String, Octets.Bytes()>,
+  b: Result<&2, &2, String, Octets.Bytes()>
+) -> Result<&2, &2, String, Octets.Bytes()>:
   match a b:
     case Done{x} Done{y}:
       Done{List.append(&2, U32, x, y)}
@@ -407,14 +409,14 @@ def Loop.join(
       Fail{e}
 
 # n random words as bytes, or the text of a failure
-def Loop.random(n: Nat) -> IO(Result<&2, &2, String, Shared.Bytes()>):
+def Loop.random(n: Nat) -> IO(Result<&2, &2, String, Octets.Bytes()>):
   match n:
     case 0n:
-      IO.pure(Result<&2, &2, String, Shared.Bytes()>, Done{[]})
+      IO.pure(Result<&2, &2, String, Octets.Bytes()>, Done{[]})
     case 1n+k:
-      do IO<Result<&2, &2, String, Shared.Bytes()>>:
+      do IO<Result<&2, &2, String, Octets.Bytes()>>:
         r: Result<&1, &1, U32 & String, U32> <- IO.random_u32()
-        rest: Result<&2, &2, String, Shared.Bytes()> <- Loop.random(k)
+        rest: Result<&2, &2, String, Octets.Bytes()> <- Loop.random(k)
         return Loop.join(Loop.word(r), rest)
 
 # the id that the put of a new space file left, or the text of what went
@@ -433,7 +435,7 @@ def Loop.created(id: String, ss: List<&2, Ep.Signal>) -> Result<&2, &2, String, 
 # a new space file at the root, with a random id
 def Loop.create(
   root: File.Root,
-  r: Result<&2, &2, String, Shared.Bytes()>
+  r: Result<&2, &2, String, Octets.Bytes()>
 ) -> IO(Result<&2, &2, String, String>):
   match r:
     case Fail{e}:
@@ -458,7 +460,7 @@ def Loop.space.text(t: Maybe<&2, String>) -> Result<&2, &2, String, String>:
       Fail{"the space file is not UTF-8"}
     case Some{x}:
       +id = String.trim(x)
-      Shared.Bool.when(
+      Bools.Bool.when(
         Result<&2, &2, String, String>,
         String.is_empty(id),
         u => Fail{"the space file is empty"},
@@ -473,7 +475,7 @@ def Loop.space.of(root: File.Root, s: Ep.Signal) -> IO(Result<&2, &2, String, St
       IO.pure(Result<&2, &2, String, String>, Loop.space.text(Text.Text.decode(b)))
     case Ep.Reached{Ep.Absent{}}:
       do IO<Result<&2, &2, String, String>>:
-        r: Result<&2, &2, String, Shared.Bytes()> <- Loop.random(4n)
+        r: Result<&2, &2, String, Octets.Bytes()> <- Loop.random(4n)
         Loop.create(root, r)
     case Ep.Reached{Ep.Unreachable{why}}:
       IO.pure(Result<&2, &2, String, String>, Fail{why})

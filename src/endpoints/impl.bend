@@ -1,5 +1,7 @@
 import Base
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/bytes.bend as Octets
+import ../shared/words.bend as Words
 import ./spec.bend as Spec
 # bend-lint: expect-file bend-lint-rules/language/reused_binder@warning -- proof binders whose other use is inside a rewrite motive or an erased argument; the checker accepts them
 
@@ -12,11 +14,11 @@ def U32.is_eq_refl(x: U32) -> {U32.is_eq(x, x) == True{}: Bool}:
         Cmp,
         Word.cmp(32n, w, w),
         EQ{},
-        Shared.Word.cmp_refl(32n, w)
+        Words.Word.cmp_refl(32n, w)
       ): {Cmp.is_eq(_) == True{}: Bool}
       {==}
 
-def Bytes.is_eq_refl(b: Shared.Bytes()) -> {Shared.Bytes.is_eq(b, b) == True{}: Bool}:
+def Bytes.is_eq_refl(b: Octets.Bytes()) -> {Octets.Bytes.is_eq(b, b) == True{}: Bool}:
   match b:
     case Nil{}:
       {==}
@@ -26,17 +28,17 @@ def Bytes.is_eq_refl(b: Shared.Bytes()) -> {Shared.Bytes.is_eq(b, b) == True{}: 
           Equal.sym(
             Bool,
             True{},
-            Shared.Bytes.is_eq(U32{data} <> tail, U32{data} <> tail),
+            Octets.Bytes.is_eq(U32{data} <> tail, U32{data} <> tail),
             (%Equal.sym(
               Cmp,
               Word.cmp(32n, data, data),
               EQ{},
-              Shared.Word.cmp_refl(32n, data)
+              Words.Word.cmp_refl(32n, data)
             ): {
-              True{} == List.all.if(u => Shared.Bytes.is_eq(tail, tail), Cmp.is_eq(_)): Bool
+              True{} == List.all.if(u => Octets.Bytes.is_eq(tail, tail), Cmp.is_eq(_)): Bool
             }; (%Equal.sym(
               Bool,
-              Shared.Bytes.is_eq(tail, tail),
+              Octets.Bytes.is_eq(tail, tail),
               True{},
               Bytes.is_eq_refl(tail)
             ): {True{} == _: Bool}; {==}))
@@ -53,7 +55,7 @@ def When.is_fail(
     &2,
     Spec.Refused,
     A,
-    Shared.Bool.when(Result<&2, &2, Spec.Refused, A>, b, u => Done{x}, u => Fail{f})
+    Bools.Bool.when(Result<&2, &2, Spec.Refused, A>, b, u => Done{x}, u => Fail{f})
   )
     == Bool.not(b): Bool
 }:
@@ -70,7 +72,7 @@ def When.done_eq(
   f: Spec.Refused,
   s: A
 ) -> {
-  Shared.Bool.when(
+  Bools.Bool.when(
     Result<&2, &2, Spec.Refused, A>,
     b,
     u => Done{x},
@@ -147,7 +149,7 @@ def Spec.same_content_records_nothing(k, bytes, t, h):
           %Equal.sym(Bool, Spec.Stream.knows(last, t), True{}, h):
             {
               Spec.Effect.versions(
-                Shared.Bool.when(
+                Bools.Bool.when(
                   List<&2, Spec.Effect>,
                   _,
                   u => [],
@@ -164,7 +166,7 @@ def Spec.same_content_records_nothing(k, bytes, t, h):
                 List.append(
                   &2,
                   Spec.Effect,
-                  Shared.Bool.when(
+                  Bools.Bool.when(
                     List<&2, Spec.Effect>,
                     _,
                     u => [],
@@ -185,7 +187,7 @@ def Spec.new_content_records_once(k, bytes, t, h):
           %Equal.sym(Bool, Spec.Stream.knows(last, t), False{}, h):
             {
               Spec.Effect.versions(
-                Shared.Bool.when(
+                Bools.Bool.when(
                   List<&2, Spec.Effect>,
                   _,
                   u => [],
@@ -202,7 +204,7 @@ def Spec.new_content_records_once(k, bytes, t, h):
                 List.append(
                   &2,
                   Spec.Effect,
-                  Shared.Bool.when(
+                  Bools.Bool.when(
                     List<&2, Spec.Effect>,
                     _,
                     u => [],
@@ -220,7 +222,7 @@ def Spec.absent_records_gone(k, t, h):
     case Spec.Stream{reach, last, fetching, +dirty}:
       match dirty:
         case False{}:
-          %Equal.sym(Maybe<&2, Shared.Bytes()>, last, Some{t}, h):
+          %Equal.sym(Maybe<&2, Octets.Bytes()>, last, Some{t}, h):
             {
               Spec.Stepped.versions(
                 Spec.Stream.absent(_, False{})
@@ -229,7 +231,7 @@ def Spec.absent_records_gone(k, t, h):
             }
           {==}
         case True{}:
-          %Equal.sym(Maybe<&2, Shared.Bytes()>, last, Some{t}, h):
+          %Equal.sym(Maybe<&2, Octets.Bytes()>, last, Some{t}, h):
             {
               Spec.Stepped.versions(
                 Spec.Stream.absent(_, True{})
@@ -243,11 +245,11 @@ def Spec.absent_stays_quiet(k, h):
     case Spec.Stream{reach, last, fetching, +dirty}:
       match dirty:
         case False{}:
-          %Equal.sym(Maybe<&2, Shared.Bytes()>, last, None{}, h):
+          %Equal.sym(Maybe<&2, Octets.Bytes()>, last, None{}, h):
             {Spec.Stepped.versions(Spec.Stream.absent(_, False{})) == []: List<&2, Spec.Version>}
           {==}
         case True{}:
-          %Equal.sym(Maybe<&2, Shared.Bytes()>, last, None{}, h):
+          %Equal.sym(Maybe<&2, Octets.Bytes()>, last, None{}, h):
             {Spec.Stepped.versions(Spec.Stream.absent(_, True{})) == []: List<&2, Spec.Version>}
           {==}
 
@@ -299,10 +301,10 @@ def Spec.write_then_fetch_quiet(k, bytes, t, e, s, h):
     )
       == []: List<&2, Spec.Version>
   }
-  %Equal.sym(Bool, Shared.Bytes.is_eq(t, t), True{}, Bytes.is_eq_refl(t)):
+  %Equal.sym(Bool, Octets.Bytes.is_eq(t, t), True{}, Bytes.is_eq_refl(t)):
     {
       Spec.Effect.versions(
-        Shared.Bool.when(
+        Bools.Bool.when(
           List<&2, Spec.Effect>,
           _,
           u => [],

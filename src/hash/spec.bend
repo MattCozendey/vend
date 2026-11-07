@@ -1,5 +1,5 @@
 import Base
-import ../shared.bend as Shared
+import ../shared/bytes.bend as Octets
 
 # BLAKE3 in its default hash mode, as the BLAKE3 specification states it
 # (https://github.com/BLAKE3-team/BLAKE3-specs/blob/master/blake3.pdf):
@@ -422,7 +422,7 @@ def Blake3.tree(depth: Nat, cs: List<&2, List<&2, Blk>>, +n: U32, +index: U32) -
           Blake3.parent(Blake3.value(lp), Blake3.value(rp))
 
 # the 32 bytes of a chaining value, little-endian
-def Blake3.bytes(cv: Cv8) -> Shared.Bytes():
+def Blake3.bytes(cv: Cv8) -> Octets.Bytes():
   match cv:
     case Cv8{+h0, +h1, +h2, +h3, +h4, +h5, +h6, +h7}:
       [
@@ -462,7 +462,7 @@ def Blake3.bytes(cv: Cv8) -> Shared.Bytes():
 
 # BLAKE3's 32-byte hash of b, in its default hash mode (no key, no context
 # string)
-def Hash.blake3(b: Shared.Bytes()) -> Shared.Bytes():
+def Hash.blake3(b: Octets.Bytes()) -> Octets.Bytes():
   +cs = Blake3.chunks(Blake3.blocks(b, Nil{}, 64n, Nil{}), Nil{}, 16n, Nil{})
   n = U32.from_nat(List.length(&2, List<&2, Blk>, cs))
   Blake3.bytes(Blake3.root(Blake3.tree(40n, cs, n, 0)))
@@ -472,7 +472,7 @@ def Hash.digit(+x: U32) -> Char:
   Bool.pick(Char, (x < 10: U32), Chr{(x + 48: U32)}, Chr{(x + 87: U32)})
 
 # the lowercase hex of h: two digits per byte, high digit first
-def Hash.hex(h: Shared.Bytes()) -> String:
+def Hash.hex(h: Octets.Bytes()) -> String:
   match h:
     case Nil{}:
       SNil{}

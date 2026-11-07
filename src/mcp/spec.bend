@@ -2,7 +2,8 @@ import Base
 import ../cli/spec.bend as Cli
 import ../daemon/spec.bend as Daemon
 import ../json/spec.bend as J
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/bytes.bend as Octets
 import ../views/text/spec.bend as Text
 
 # The MCP front: the everyday commands as tools for agents, over the Model
@@ -225,7 +226,7 @@ def Mcp.tool(ts: List<&2, McpTool>, +n: String) -> Maybe<&2, McpTool>:
     case Nil{}:
       None{}
     case Con{McpTool{+x, ab, d}, t}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, McpTool>,
         String.eq(x, n),
         u => Some{McpTool{x, ab, d}},
@@ -284,19 +285,19 @@ def Mcp.words(args: List<&2, Arg>, +v: J.Json) -> Result<&2, &2, String, List<&2
 # The value of each base64 character (RFC 4648, section 4).
 def B64.value(+c: Char) -> Maybe<&2, U32>:
   +x = Char.to_u32(c)
-  Shared.Bool.when(
+  Bools.Bool.when(
     Maybe<&2, U32>,
     Bool.and((x >= 65: U32), (x <= 90: U32)),
     u => Some{(x - 65: U32)},
-    u => Shared.Bool.when(
+    u => Bools.Bool.when(
       Maybe<&2, U32>,
       Bool.and((x >= 97: U32), (x <= 122: U32)),
       v => Some{(x - 71: U32)},
-      v => Shared.Bool.when(
+      v => Bools.Bool.when(
         Maybe<&2, U32>,
         Char.is_digit(c),
         w => Some{(x + 4: U32)},
-        w => Shared.Bool.when(
+        w => Bools.Bool.when(
           Maybe<&2, U32>,
           U32.is_eq(x, 43),
           y => Some{62},
@@ -307,7 +308,7 @@ def B64.value(+c: Char) -> Maybe<&2, U32>:
   )
 
 # the three bytes of one group of four values a, b, c, d (each below 64)
-def B64.group(a: U32, b: U32, c: U32, d: U32) -> Shared.Bytes():
+def B64.group(a: U32, b: U32, c: U32, d: U32) -> Octets.Bytes():
   +w = ((((a << 18n) .|. (b << 12n)) .|. ((c << 6n) .|. d)): U32)
   [((w >> 16n) .&. 255: U32), ((w >> 8n) .&. 255: U32), (w .&. 255: U32)]
 
@@ -336,7 +337,7 @@ def B64.values(s: String) -> Maybe<&2, List<&2, U32>>:
     case SNil{}:
       Some{[]}
     case SCon{+c, +t}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, List<&2, U32>>,
         U32.is_eq(Char.to_u32(c), 61),
         u => Bool.pick(Maybe<&2, List<&2, U32>>, B64.pad(t), Some{[]}, None{}),
@@ -345,15 +346,15 @@ def B64.values(s: String) -> Maybe<&2, List<&2, U32>>:
 
 # the bytes of the base64 values vs, four at a time; a last group of two or
 # three values gives one or two bytes, and a last group of one is wrong
-def B64.bytes(vs: List<&2, U32>) -> Maybe<&2, Shared.Bytes()>:
+def B64.bytes(vs: List<&2, U32>) -> Maybe<&2, Octets.Bytes()>:
   match vs:
     case Nil{}:
       Some{[]}
     case Con{a, Con{b, Con{c, Con{d, t}}}}:
       Maybe.map(
         &2,
-        Shared.Bytes(),
-        Shared.Bytes(),
+        Octets.Bytes(),
+        Octets.Bytes(),
         r => List.append(&2, U32, B64.group(a, b, c, d), r),
         B64.bytes(t)
       )
@@ -365,7 +366,7 @@ def B64.bytes(vs: List<&2, U32>) -> Maybe<&2, Shared.Bytes()>:
       None{}
 
 # the bytes of the values, when every character was base64
-def B64.decode.of(m: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Shared.Bytes()>:
+def B64.decode.of(m: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Octets.Bytes()>:
   match m:
     case None{}:
       None{}
@@ -374,15 +375,15 @@ def B64.decode.of(m: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Shared.Bytes()>:
 
 # the bytes that the base64 text s spells (RFC 4648, section 4; the '='
 # padding is optional), or None when s is no base64
-def B64.decode(s: String) -> Maybe<&2, Shared.Bytes()>:
+def B64.decode(s: String) -> Maybe<&2, Octets.Bytes()>:
   B64.decode.of(B64.values(s))
 
 # the bytes a call writes, given here (from one argument) and rest (from
 # the others): at most one argument gives them
 def Mcp.data.both(
-  here: Result<&2, &2, String, Maybe<&2, Shared.Bytes()>>,
-  rest: Result<&2, &2, String, Maybe<&2, Shared.Bytes()>>
-) -> Result<&2, &2, String, Maybe<&2, Shared.Bytes()>>:
+  here: Result<&2, &2, String, Maybe<&2, Octets.Bytes()>>,
+  rest: Result<&2, &2, String, Maybe<&2, Octets.Bytes()>>
+) -> Result<&2, &2, String, Maybe<&2, Octets.Bytes()>>:
   match here rest:
     case Fail{e} _:
       Fail{e}
@@ -400,8 +401,8 @@ def Mcp.data.both(
 def Mcp.data.of(
   k: String,
   m: Maybe<&2, J.Json>,
-  f: String -> Result<&2, &2, String, Maybe<&2, Shared.Bytes()>>
-) -> Result<&2, &2, String, Maybe<&2, Shared.Bytes()>>:
+  f: String -> Result<&2, &2, String, Maybe<&2, Octets.Bytes()>>
+) -> Result<&2, &2, String, Maybe<&2, Octets.Bytes()>>:
   match m:
     case None{}:
       Done{None{}}
@@ -411,7 +412,7 @@ def Mcp.data.of(
       Fail{String.concat(["argument ", k, " must be a string"])}
 
 # the bytes of a base64 text, or why it is not base64
-def Mcp.base64(m: Maybe<&2, Shared.Bytes()>) -> Result<&2, &2, String, Maybe<&2, Shared.Bytes()>>:
+def Mcp.base64(m: Maybe<&2, Octets.Bytes()>) -> Result<&2, &2, String, Maybe<&2, Octets.Bytes()>>:
   match m:
     case None{}:
       Fail{"argument base64 is not base64"}
@@ -420,7 +421,7 @@ def Mcp.base64(m: Maybe<&2, Shared.Bytes()>) -> Result<&2, &2, String, Maybe<&2,
 
 # the bytes that the args of a call write, given the arguments object: the
 # text as UTF-8, or the base64 decoded; None when neither is given
-def Mcp.data(args: List<&2, Arg>, +v: J.Json) -> Result<&2, &2, String, Maybe<&2, Shared.Bytes()>>:
+def Mcp.data(args: List<&2, Arg>, +v: J.Json) -> Result<&2, &2, String, Maybe<&2, Octets.Bytes()>>:
   match args:
     case Nil{}:
       Done{None{}}
@@ -437,7 +438,7 @@ def Mcp.data(args: List<&2, Arg>, +v: J.Json) -> Result<&2, &2, String, Maybe<&2
 def Mcp.ask(
   a: String,
   ws: Result<&2, &2, String, List<&2, String>>,
-  m: Result<&2, &2, String, Maybe<&2, Shared.Bytes()>>
+  m: Result<&2, &2, String, Maybe<&2, Octets.Bytes()>>
 ) -> Result<&2, &2, String, Daemon.Body>:
   match ws m:
     case Fail{e} _:
@@ -445,7 +446,7 @@ def Mcp.ask(
     case _ Fail{e}:
       Fail{e}
     case Done{xs} Done{d}:
-      Done{Daemon.Ask{a, xs, Maybe.default(&2, Shared.Bytes(), d, [])}}
+      Done{Daemon.Ask{a, xs, Maybe.default(&2, Octets.Bytes(), d, [])}}
 
 # the daemon request of a call of the tool t with the arguments object v,
 # signed by the agent a; or why the arguments are wrong
@@ -674,7 +675,7 @@ def Mcp.call(id: J.Json, e: Era, a: String, n: Maybe<&2, String>, v: J.Json) -> 
 # the answer to the request id with method m and params p, in era e, from
 # agent a
 def Mcp.serve(+id: J.Json, +e: Era, a: String, +m: String, +p: J.Json) -> Out:
-  Shared.Bool.when(
+  Bools.Bool.when(
     Out,
     String.eq(m, "tools/call"),
     u => Mcp.call(
@@ -684,15 +685,15 @@ def Mcp.serve(+id: J.Json, +e: Era, a: String, +m: String, +p: J.Json) -> Out:
       J.Json.text(J.Json.get(p, "name")),
       Maybe.default(&2, J.Json, J.Json.get(p, "arguments"), J.Json.obj([]))
     ),
-    u => Shared.Bool.when(
+    u => Bools.Bool.when(
       Out,
       String.eq(m, "tools/list"),
       v => Answer{Mcp.reply(id, e, [J.Field{"tools", J.Json.arr(McpTool.all(Mcp.tools()))}])},
-      v => Shared.Bool.when(
+      v => Bools.Bool.when(
         Out,
         String.eq(m, "ping"),
         w => Answer{Mcp.reply(id, e, [])},
-        w => Shared.Bool.when(
+        w => Bools.Bool.when(
           Out,
           String.eq(m, "server/discover"),
           x => Answer{
@@ -755,7 +756,7 @@ def McpState.fallback(s: McpState) -> String:
 
 # the answer to a legacy request
 def Mcp.legacy.serve(+s: McpState, +id: J.Json, +m: String, +p: J.Json) -> McpStep:
-  Shared.Bool.when(
+  Bools.Bool.when(
     McpStep,
     String.eq(m, "initialize"),
     u => Mcp.initialize(s, id, p),
@@ -787,10 +788,10 @@ def Mcp.modern.serve(
       J.Field{"requested", J.JStr{ver}}
     ]
   )
-  Shared.Bool.when(
+  Bools.Bool.when(
     McpStep,
     String.eq(ver, Mcp.modern()),
-    u => Shared.Bool.when(
+    u => Bools.Bool.when(
       McpStep,
       caps,
       v => McpStep{s, Mcp.serve(id, Modern{}, agent, m, p)},
@@ -881,7 +882,7 @@ law body_is_cli:
   for v: J.Json
   for x: String
   for ws: List<&2, String>
-  for d: Shared.Bytes()
+  for d: Octets.Bytes()
   for k: {Mcp.tool(Mcp.tools(), n) == Some{t}: Maybe<&2, McpTool>}
   for h: {Mcp.body(a, t, v) == Done{Daemon.Ask{x, ws, d}}: Result<&2, &2, String, Daemon.Body>}
   {x == a: String} & {Cli.Cli.parse(ws) == Done{Cli.AskCmd{ws}}: Result<&2, &2, String, Cli.Cmd>}

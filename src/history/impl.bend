@@ -1,6 +1,10 @@
 import Base
 import ../hash/spec.bend as Hash
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/bytes.bend as Octets
+import ../shared/resources.bend as Resources
+import ../shared/strings.bend as Strings
+import ../shared/tables.bend as Tables
 import ./spec.bend as Spec
 
 # An add stores the node under its id and makes it a tip of its resource in
@@ -9,27 +13,27 @@ import ./spec.bend as Spec
 
 # a before b, by bytes: the first differing byte decides; a prefix comes
 # first
-def Ids.lt(a: Shared.Bytes(), b: Shared.Bytes()) -> Bool:
+def Ids.lt(a: Octets.Bytes(), b: Octets.Bytes()) -> Bool:
   match a b:
     case Nil{} Con{y, yt}:
       True{}
     case Con{+x, xt} Con{+y, yt}:
-      Shared.Bool.when(Bool, U32.is_eq(x, y), u => Ids.lt(xt, yt), u => (x < y: U32))
+      Bools.Bool.when(Bool, U32.is_eq(x, y), u => Ids.lt(xt, yt), u => (x < y: U32))
     case _ _:
       False{}
 
 # xs, sorted ascending, with x, once
-def Ids.insert(+x: Shared.Bytes(), xs: List<&2, Shared.Bytes()>) -> List<&2, Shared.Bytes()>:
+def Ids.insert(+x: Octets.Bytes(), xs: List<&2, Octets.Bytes()>) -> List<&2, Octets.Bytes()>:
   match xs:
     case Nil{}:
       [x]
     case Con{+y, +t}:
-      Shared.Bool.when(
-        List<&2, Shared.Bytes()>,
-        Shared.Bytes.is_eq(x, y),
+      Bools.Bool.when(
+        List<&2, Octets.Bytes()>,
+        Octets.Bytes.is_eq(x, y),
         u => Con{y, t},
-        u => Shared.Bool.when(
-          List<&2, Shared.Bytes()>,
+        u => Bools.Bool.when(
+          List<&2, Octets.Bytes()>,
           Ids.lt(x, y),
           v => Con{x, Con{y, t}},
           v => Con{y, Ids.insert(x, t)}
@@ -38,28 +42,28 @@ def Ids.insert(+x: Shared.Bytes(), xs: List<&2, Shared.Bytes()>) -> List<&2, Sha
 
 # xs without the ids of ps
 def Ids.without(
-  xs: List<&2, Shared.Bytes()>,
-  +ps: List<&2, Shared.Bytes()>
-) -> List<&2, Shared.Bytes()>:
+  xs: List<&2, Octets.Bytes()>,
+  +ps: List<&2, Octets.Bytes()>
+) -> List<&2, Octets.Bytes()>:
   match xs:
     case Nil{}:
       Nil{}
     case Con{+x, +t}:
-      Shared.Bool.when(
-        List<&2, Shared.Bytes()>,
+      Bools.Bool.when(
+        List<&2, Octets.Bytes()>,
         Spec.Ids.has(ps, x),
         u => Ids.without(t, ps),
         u => Con{x, Ids.without(t, ps)}
       )
 
 # the first id of xs that h lacks, or None
-def Ids.missing(+h: Spec.History, xs: List<&2, Shared.Bytes()>) -> Maybe<&2, Shared.Bytes()>:
+def Ids.missing(+h: Spec.History, xs: List<&2, Octets.Bytes()>) -> Maybe<&2, Octets.Bytes()>:
   match xs:
     case Nil{}:
       None{}
     case Con{+x, t}:
-      Shared.Bool.when(
-        Maybe<&2, Shared.Bytes()>,
+      Bools.Bool.when(
+        Maybe<&2, Octets.Bytes()>,
         Spec.History.has(h, x),
         u => Ids.missing(h, t),
         u => Some{x}
@@ -67,33 +71,33 @@ def Ids.missing(+h: Spec.History, xs: List<&2, Shared.Bytes()>) -> Maybe<&2, Sha
 
 # h with the node v under its id x, a tip of its resource in place of its
 # parents
-def History.put(h: Spec.History, +x: Shared.Bytes(), +v: Spec.Node) -> Spec.History:
+def History.put(h: Spec.History, +x: Octets.Bytes(), +v: Spec.Node) -> Spec.History:
   match h:
     case Spec.History{ns, +ts}:
-      +key = Shared.Name.show(Spec.Node.name(v))
+      +key = Resources.Name.show(Spec.Node.name(v))
       old = Maybe.default(
         &2,
-        List<&2, Shared.Bytes()>,
-        Shared.Table.get(List<&2, Shared.Bytes()>, ts, key),
+        List<&2, Octets.Bytes()>,
+        Tables.Table.get(List<&2, Octets.Bytes()>, ts, key),
         []
       )
       tips = Ids.insert(x, Ids.without(old, Spec.Node.parents(v)))
-      nodes = Shared.Table.set(Spec.Node, ns, Hash.Hash.hex(x), v)
-      Spec.History{nodes, Shared.Table.set(List<&2, Shared.Bytes()>, ts, key, tips)}
+      nodes = Tables.Table.set(Spec.Node, ns, Hash.Hash.hex(x), v)
+      Spec.History{nodes, Tables.Table.set(List<&2, Octets.Bytes()>, ts, key, tips)}
 
 # the add of v under its id x, given what h holds there: a node that h
 # holds already changes nothing, and another node there is a collision
 def History.add.at(
   h: Spec.History,
   +v: Spec.Node,
-  +x: Shared.Bytes(),
+  +x: Octets.Bytes(),
   m: Maybe<&2, Spec.Node>
 ) -> Result<&2, &2, Spec.Refusal, Spec.Added>:
   match m:
     case None{}:
       Done{Spec.Added{History.put(h, x, v), x}}
     case Some{+w}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Result<&2, &2, Spec.Refusal, Spec.Added>,
         Spec.Node.same(w, v),
         u => Done{Spec.Added{h, x}},
@@ -104,7 +108,7 @@ def History.add.at(
 def History.add.of(
   +h: Spec.History,
   +v: Spec.Node,
-  miss: Maybe<&2, Shared.Bytes()>
+  miss: Maybe<&2, Octets.Bytes()>
 ) -> Result<&2, &2, Spec.Refusal, Spec.Added>:
   match miss:
     case Some{p}:
@@ -136,7 +140,7 @@ def Added.not_fail(
   -r: Spec.Added,
   a: {Fail{e} == Done{r}: Result<&2, &2, Spec.Refusal, Spec.Added>}
 ) -> Empty:
-  Shared.Bool.false_ne_true(
+  Bools.Bool.false_ne_true(
     Equal.cong(
       Result<&2, &2, Spec.Refusal, Spec.Added>,
       Bool,
@@ -150,48 +154,48 @@ def Added.not_fail(
 # put keeps the tips of every other resource
 def Frames.put(
   h: Spec.History,
-  x: Shared.Bytes(),
+  x: Octets.Bytes(),
   +v: Spec.Node,
-  m: Shared.Name
+  m: Resources.Name
 ) -> {
-  String.eq(Shared.Name.show(Spec.Node.name(v)), Shared.Name.show(m)) == False{}: Bool
+  String.eq(Resources.Name.show(Spec.Node.name(v)), Resources.Name.show(m)) == False{}: Bool
 } -> {
-  Spec.History.tips(History.put(h, x, v), m) == Spec.History.tips(h, m): List<&2, Shared.Bytes()>
+  Spec.History.tips(History.put(h, x, v), m) == Spec.History.tips(h, m): List<&2, Octets.Bytes()>
 }:
   match h:
     case Spec.History{ns, +ts}:
       d =>
-        +key = Shared.Name.show(Spec.Node.name(v))
+        +key = Resources.Name.show(Spec.Node.name(v))
         old = Maybe.default(
           &2,
-          List<&2, Shared.Bytes()>,
-          Shared.Table.get(List<&2, Shared.Bytes()>, ts, key),
+          List<&2, Octets.Bytes()>,
+          Tables.Table.get(List<&2, Octets.Bytes()>, ts, key),
           []
         )
         +tips = Ids.insert(x, Ids.without(old, Spec.Node.parents(v)))
-        +k2 = Shared.Name.show(m)
+        +k2 = Resources.Name.show(m)
         %Equal.sym(
-          Maybe<&2, List<&2, Shared.Bytes()>>,
-          Shared.Table.get(
-            List<&2, Shared.Bytes()>,
-            Shared.Table.set(List<&2, Shared.Bytes()>, ts, key, tips),
+          Maybe<&2, List<&2, Octets.Bytes()>>,
+          Tables.Table.get(
+            List<&2, Octets.Bytes()>,
+            Tables.Table.set(List<&2, Octets.Bytes()>, ts, key, tips),
             k2
           ),
-          Shared.Table.get(List<&2, Shared.Bytes()>, ts, k2),
-          Shared.Table.set_keeps_other(List<&2, Shared.Bytes()>, ts, key, tips, k2, d)
+          Tables.Table.get(List<&2, Octets.Bytes()>, ts, k2),
+          Tables.Table.set_keeps_other(List<&2, Octets.Bytes()>, ts, key, tips, k2, d)
         ): {
           Maybe.default(
             &2,
-            List<&2, Shared.Bytes()>,
+            List<&2, Octets.Bytes()>,
             _,
             []
           )
             == Maybe.default(
               &2,
-              List<&2, Shared.Bytes()>,
-              Shared.Table.get(List<&2, Shared.Bytes()>, ts, k2),
+              List<&2, Octets.Bytes()>,
+              Tables.Table.get(List<&2, Octets.Bytes()>, ts, k2),
               []
-            ): List<&2, Shared.Bytes()>
+            ): List<&2, Octets.Bytes()>
         }
         {==}
 
@@ -200,20 +204,20 @@ def Frames.put(
 def Frames.same(
   h: Spec.History,
   v: Spec.Node,
-  m: Shared.Name,
+  m: Resources.Name,
   g: Spec.History,
-  -x: Shared.Bytes(),
+  -x: Octets.Bytes(),
   -w: Spec.Node,
   b: Bool
 ) -> {
-  Shared.Bool.when(
+  Bools.Bool.when(
     Result<&2, &2, Spec.Refusal, Spec.Added>,
     b,
     u => Done{Spec.Added{h, Spec.Node.id(v)}},
     u => Fail{Spec.Collides{w, v}}
   )
     == Done{Spec.Added{g, x}}: Result<&2, &2, Spec.Refusal, Spec.Added>
-} -> {Spec.History.tips(g, m) == Spec.History.tips(h, m): List<&2, Shared.Bytes()>}:
+} -> {Spec.History.tips(g, m) == Spec.History.tips(h, m): List<&2, Octets.Bytes()>}:
   match b:
     case True{}:
       a =>
@@ -227,11 +231,11 @@ def Frames.same(
             a
           ): {h == g: Spec.History}
         }
-        %hg: {Spec.History.tips(_, m) == Spec.History.tips(h, m): List<&2, Shared.Bytes()>}
+        %hg: {Spec.History.tips(_, m) == Spec.History.tips(h, m): List<&2, Octets.Bytes()>}
         {==}
     case False{}:
       a => Empty.absurd(
-        {Spec.History.tips(g, m) == Spec.History.tips(h, m): List<&2, Shared.Bytes()>},
+        {Spec.History.tips(g, m) == Spec.History.tips(h, m): List<&2, Octets.Bytes()>},
         Added.not_fail(Spec.Collides{w, v}, Spec.Added{g, x}, a)
       )
 
@@ -240,9 +244,9 @@ def Frames.same(
 def Frames.at(
   +h: Spec.History,
   +v: Spec.Node,
-  m: Shared.Name,
+  m: Resources.Name,
   g: Spec.History,
-  -x: Shared.Bytes(),
+  -x: Octets.Bytes(),
   r: Maybe<&2, Spec.Node>
 ) -> {
   History.add.at(
@@ -253,8 +257,8 @@ def Frames.at(
   )
     == Done{Spec.Added{g, x}}: Result<&2, &2, Spec.Refusal, Spec.Added>
 } -> {
-  String.eq(Shared.Name.show(Spec.Node.name(v)), Shared.Name.show(m)) == False{}: Bool
-} -> {Spec.History.tips(g, m) == Spec.History.tips(h, m): List<&2, Shared.Bytes()>}:
+  String.eq(Resources.Name.show(Spec.Node.name(v)), Resources.Name.show(m)) == False{}: Bool
+} -> {Spec.History.tips(g, m) == Spec.History.tips(h, m): List<&2, Octets.Bytes()>}:
   match r:
     case None{}:
       a => d =>
@@ -269,7 +273,7 @@ def Frames.at(
             a
           ): {p == g: Spec.History}
         }
-        %hg: {Spec.History.tips(_, m) == Spec.History.tips(h, m): List<&2, Shared.Bytes()>}
+        %hg: {Spec.History.tips(_, m) == Spec.History.tips(h, m): List<&2, Octets.Bytes()>}
         Frames.put(h, Spec.Node.id(v), v, m)(d)
     case Some{w}:
       a => d => Frames.same(h, v, m, g, x, w, Spec.Node.same(w, v))(a)
@@ -278,19 +282,19 @@ def Frames.at(
 def Frames.of(
   +h: Spec.History,
   +v: Spec.Node,
-  m: Shared.Name,
+  m: Resources.Name,
   g: Spec.History,
-  x: Shared.Bytes(),
-  miss: Maybe<&2, Shared.Bytes()>
+  x: Octets.Bytes(),
+  miss: Maybe<&2, Octets.Bytes()>
 ) -> {
   History.add.of(h, v, miss) == Done{Spec.Added{g, x}}: Result<&2, &2, Spec.Refusal, Spec.Added>
 } -> {
-  String.eq(Shared.Name.show(Spec.Node.name(v)), Shared.Name.show(m)) == False{}: Bool
-} -> {Spec.History.tips(g, m) == Spec.History.tips(h, m): List<&2, Shared.Bytes()>}:
+  String.eq(Resources.Name.show(Spec.Node.name(v)), Resources.Name.show(m)) == False{}: Bool
+} -> {Spec.History.tips(g, m) == Spec.History.tips(h, m): List<&2, Octets.Bytes()>}:
   match miss:
     case Some{p}:
       a => d => Empty.absurd(
-        {Spec.History.tips(g, m) == Spec.History.tips(h, m): List<&2, Shared.Bytes()>},
+        {Spec.History.tips(g, m) == Spec.History.tips(h, m): List<&2, Octets.Bytes()>},
         Added.not_fail(Spec.Missing{p}, Spec.Added{g, x}, a)
       )
     case None{}:
@@ -307,14 +311,14 @@ def Spec.add_frames(h, v, g, x, m, a, d):
     g,
     x,
     Ids.missing(h, Spec.Node.parents(v))
-  )(a, Shared.String.eq_flip(Shared.Name.show(m), Shared.Name.show(Spec.Node.name(v)))(d))
+  )(a, Strings.String.eq_flip(Resources.Name.show(m), Resources.Name.show(Spec.Node.name(v)))(d))
 
 # an id that h lacks has another hex than an id that h holds, with c the
 # answer of String.eq on the two hexes
 def Keeps.ne(
   h: Spec.History,
-  x: Shared.Bytes(),
-  y: Shared.Bytes(),
+  x: Octets.Bytes(),
+  y: Octets.Bytes(),
   -w: Spec.Node,
   c: Bool
 ) -> {
@@ -329,19 +333,19 @@ def Keeps.ne(
       e => n => o =>
         +hx = Hash.Hash.hex(x)
         +hy = Hash.Hash.hex(y)
-        xy = Shared.String.eq_sound(hx, hy)(e)
+        xy = Strings.String.eq_sound(hx, hy)(e)
         yw = Equal.cong(
           Maybe<&2, Spec.Node>,
           Bool,
           q => Maybe.is_some(&2, Spec.Node, q),
           Some{w},
-          Shared.Table.get(Spec.Node, ns, hy),
-          Equal.sym(Maybe<&2, Spec.Node>, Shared.Table.get(Spec.Node, ns, hy), Some{w}, o)
+          Tables.Table.get(Spec.Node, ns, hy),
+          Equal.sym(Maybe<&2, Spec.Node>, Tables.Table.get(Spec.Node, ns, hy), Some{w}, o)
         )
         yx = Equal.cong(
           String,
           Bool,
-          k => Maybe.is_some(&2, Spec.Node, Shared.Table.get(Spec.Node, ns, k)),
+          k => Maybe.is_some(&2, Spec.Node, Tables.Table.get(Spec.Node, ns, k)),
           hy,
           hx,
           Equal.sym(String, hx, hy, xy)
@@ -350,22 +354,22 @@ def Keeps.ne(
           Maybe<&2, Spec.Node>,
           Bool,
           q => Maybe.is_some(&2, Spec.Node, q),
-          Shared.Table.get(Spec.Node, ns, hx),
+          Tables.Table.get(Spec.Node, ns, hx),
           None{},
           n
         )
         tx = Equal.trans(
           Bool,
           True{},
-          Maybe.is_some(&2, Spec.Node, Shared.Table.get(Spec.Node, ns, hy)),
-          Maybe.is_some(&2, Spec.Node, Shared.Table.get(Spec.Node, ns, hx)),
+          Maybe.is_some(&2, Spec.Node, Tables.Table.get(Spec.Node, ns, hy)),
+          Maybe.is_some(&2, Spec.Node, Tables.Table.get(Spec.Node, ns, hx)),
           yw,
           yx
         )
         Equal.trans(
           Bool,
           True{},
-          Maybe.is_some(&2, Spec.Node, Shared.Table.get(Spec.Node, ns, hx)),
+          Maybe.is_some(&2, Spec.Node, Tables.Table.get(Spec.Node, ns, hx)),
           False{},
           tx,
           xn
@@ -374,9 +378,9 @@ def Keeps.ne(
 # put keeps every node under another hex
 def Keeps.put(
   h: Spec.History,
-  x: Shared.Bytes(),
+  x: Octets.Bytes(),
   v: Spec.Node,
-  y: Shared.Bytes(),
+  y: Octets.Bytes(),
   -w: Spec.Node
 ) -> {
   String.eq(Hash.Hash.hex(x), Hash.Hash.hex(y)) == False{}: Bool
@@ -390,9 +394,9 @@ def Keeps.put(
         +hy = Hash.Hash.hex(y)
         %Equal.sym(
           Maybe<&2, Spec.Node>,
-          Shared.Table.get(Spec.Node, Shared.Table.set(Spec.Node, ns, hx, v), hy),
-          Shared.Table.get(Spec.Node, ns, hy),
-          Shared.Table.set_keeps_other(Spec.Node, ns, hx, v, hy, d)
+          Tables.Table.get(Spec.Node, Tables.Table.set(Spec.Node, ns, hx, v), hy),
+          Tables.Table.get(Spec.Node, ns, hy),
+          Tables.Table.set_keeps_other(Spec.Node, ns, hx, v, hy, d)
         ): {_ == Some{w}: Maybe<&2, Spec.Node>}
         o
 
@@ -402,13 +406,13 @@ def Keeps.same(
   h: Spec.History,
   v: Spec.Node,
   g: Spec.History,
-  -x: Shared.Bytes(),
-  y: Shared.Bytes(),
+  -x: Octets.Bytes(),
+  y: Octets.Bytes(),
   -w: Spec.Node,
   -w2: Spec.Node,
   b: Bool
 ) -> {
-  Shared.Bool.when(
+  Bools.Bool.when(
     Result<&2, &2, Spec.Refusal, Spec.Added>,
     b,
     u => Done{Spec.Added{h, Spec.Node.id(v)}},
@@ -445,8 +449,8 @@ def Keeps.at(
   +h: Spec.History,
   +v: Spec.Node,
   g: Spec.History,
-  -x: Shared.Bytes(),
-  +y: Shared.Bytes(),
+  -x: Octets.Bytes(),
+  +y: Octets.Bytes(),
   -w: Spec.Node,
   r: Maybe<&2, Spec.Node>
 ) -> {
@@ -488,10 +492,10 @@ def Keeps.of(
   +h: Spec.History,
   +v: Spec.Node,
   g: Spec.History,
-  x: Shared.Bytes(),
-  y: Shared.Bytes(),
+  x: Octets.Bytes(),
+  y: Octets.Bytes(),
   -w: Spec.Node,
-  miss: Maybe<&2, Shared.Bytes()>
+  miss: Maybe<&2, Octets.Bytes()>
 ) -> {
   History.add.of(h, v, miss) == Done{Spec.Added{g, x}}: Result<&2, &2, Spec.Refusal, Spec.Added>
 } -> {

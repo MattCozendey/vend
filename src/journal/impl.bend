@@ -1,6 +1,8 @@
 import Base
 import ../history/spec.bend as History
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/bytes.bend as Octets
+import ../shared/resources.bend as Resources
 import ../store/spec.bend as Store
 import ../views/text/impl.bend as TextImpl
 import ../views/text/spec.bend as Text
@@ -11,14 +13,14 @@ import ./spec.bend as Spec
 
 # A value read from the front of some bytes, and the bytes after it.
 type Got<-T: Data> is Data:
-  Got{value: T, rest: Shared.Bytes()}
+  Got{value: T, rest: Octets.Bytes()}
 
 # k of what m read, or None when m read nothing
 def Got.then(
   -A: Data,
   -B: Data,
   m: Maybe<&2, Got<A>>,
-  k: A -> Shared.Bytes() -> Maybe<&2, Got<B>>
+  k: A -> Octets.Bytes() -> Maybe<&2, Got<B>>
 ) -> Maybe<&2, Got<B>>:
   match m:
     case None{}:
@@ -28,13 +30,13 @@ def Got.then(
 
 # the LEB128 number at the front of b, given acc so far and the weight of
 # its next seven bits
-def Leb.read.go(b: Shared.Bytes(), +weight: Nat, acc: Nat) -> Maybe<&2, Got<Nat>>:
+def Leb.read.go(b: Octets.Bytes(), +weight: Nat, acc: Nat) -> Maybe<&2, Got<Nat>>:
   match b:
     case Nil{}:
       None{}
     case Con{+x, +t}:
       +n = Nat.add(acc, Nat.mul(U32.to_nat((x .&. 127: U32)), weight))
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, Got<Nat>>,
         (x < 128: U32),
         u => Some{Got{n, t}},
@@ -42,11 +44,11 @@ def Leb.read.go(b: Shared.Bytes(), +weight: Nat, acc: Nat) -> Maybe<&2, Got<Nat>
       )
 
 # the LEB128 number at the front of b
-def Leb.read(b: Shared.Bytes()) -> Maybe<&2, Got<Nat>>:
+def Leb.read(b: Octets.Bytes()) -> Maybe<&2, Got<Nat>>:
   Leb.read.go(b, 1n, 0n)
 
 # x in front of the bytes that m read
-def Bytes.read.more(x: U32, m: Maybe<&2, Got<Shared.Bytes()>>) -> Maybe<&2, Got<Shared.Bytes()>>:
+def Bytes.read.more(x: U32, m: Maybe<&2, Got<Octets.Bytes()>>) -> Maybe<&2, Got<Octets.Bytes()>>:
   match m:
     case None{}:
       None{}
@@ -54,7 +56,7 @@ def Bytes.read.more(x: U32, m: Maybe<&2, Got<Shared.Bytes()>>) -> Maybe<&2, Got<
       Some{Got{x <> v, r}}
 
 # the first n bytes of b, or None when b is shorter
-def Bytes.read(n: Nat, b: Shared.Bytes()) -> Maybe<&2, Got<Shared.Bytes()>>:
+def Bytes.read(n: Nat, b: Octets.Bytes()) -> Maybe<&2, Got<Octets.Bytes()>>:
   match n:
     case 0n:
       Some{Got{[], b}}
@@ -66,11 +68,11 @@ def Bytes.read(n: Nat, b: Shared.Bytes()) -> Maybe<&2, Got<Shared.Bytes()>>:
           Bytes.read.more(x, Bytes.read(k, t))
 
 # framed bytes: their length, then them
-def Framed.read(b: Shared.Bytes()) -> Maybe<&2, Got<Shared.Bytes()>>:
-  Got.then(Nat, Shared.Bytes(), Leb.read(b), n => r => Bytes.read(n, r))
+def Framed.read(b: Octets.Bytes()) -> Maybe<&2, Got<Octets.Bytes()>>:
+  Got.then(Nat, Octets.Bytes(), Leb.read(b), n => r => Bytes.read(n, r))
 
 # the text that m read as UTF-8, or None when it is not UTF-8
-def Utf8.got(m: Maybe<&2, String>, r: Shared.Bytes()) -> Maybe<&2, Got<String>>:
+def Utf8.got(m: Maybe<&2, String>, r: Octets.Bytes()) -> Maybe<&2, Got<String>>:
   match m:
     case None{}:
       None{}
@@ -78,28 +80,28 @@ def Utf8.got(m: Maybe<&2, String>, r: Shared.Bytes()) -> Maybe<&2, Got<String>>:
       Some{Got{s, r}}
 
 # framed UTF-8 text
-def Utf8.read(b: Shared.Bytes()) -> Maybe<&2, Got<String>>:
-  Got.then(Shared.Bytes(), String, Framed.read(b), x => r => Utf8.got(Text.Text.decode(x), r))
+def Utf8.read(b: Octets.Bytes()) -> Maybe<&2, Got<String>>:
+  Got.then(Octets.Bytes(), String, Framed.read(b), x => r => Utf8.got(Text.Text.decode(x), r))
 
 # a name: its space, then its path
-def Name.read(b: Shared.Bytes()) -> Maybe<&2, Got<Shared.Name>>:
+def Name.read(b: Octets.Bytes()) -> Maybe<&2, Got<Resources.Name>>:
   Got.then(
     String,
-    Shared.Name,
+    Resources.Name,
     Utf8.read(b),
     sp => r => Got.then(
       String,
-      Shared.Name,
+      Resources.Name,
       Utf8.read(r),
-      p => r2 => Some{Got{Shared.Name{sp, p}, r2}}
+      p => r2 => Some{Got{Resources.Name{sp, p}, r2}}
     )
   )
 
 # x in front of the ids that m read
 def Ids.read.cons(
-  x: Shared.Bytes(),
-  m: Maybe<&2, Got<List<&2, Shared.Bytes()>>>
-) -> Maybe<&2, Got<List<&2, Shared.Bytes()>>>:
+  x: Octets.Bytes(),
+  m: Maybe<&2, Got<List<&2, Octets.Bytes()>>>
+) -> Maybe<&2, Got<List<&2, Octets.Bytes()>>>:
   match m:
     case None{}:
       None{}
@@ -107,28 +109,28 @@ def Ids.read.cons(
       Some{Got{x <> v, r}}
 
 # n framed ids, in order
-def Ids.read.go(n: Nat, b: Shared.Bytes()) -> Maybe<&2, Got<List<&2, Shared.Bytes()>>>:
+def Ids.read.go(n: Nat, b: Octets.Bytes()) -> Maybe<&2, Got<List<&2, Octets.Bytes()>>>:
   match n:
     case 0n:
       Some{Got{[], b}}
     case 1n+k:
       Got.then(
-        Shared.Bytes(),
-        List<&2, Shared.Bytes()>,
+        Octets.Bytes(),
+        List<&2, Octets.Bytes()>,
         Framed.read(b),
         x => r => Ids.read.cons(x, Ids.read.go(k, r))
       )
 
 # ids: their number, then each framed
-def Ids.read(b: Shared.Bytes()) -> Maybe<&2, Got<List<&2, Shared.Bytes()>>>:
-  Got.then(Nat, List<&2, Shared.Bytes()>, Leb.read(b), n => r => Ids.read.go(n, r))
+def Ids.read(b: Octets.Bytes()) -> Maybe<&2, Got<List<&2, Octets.Bytes()>>>:
+  Got.then(Nat, List<&2, Octets.Bytes()>, Leb.read(b), n => r => Ids.read.go(n, r))
 
 # a body: 0 then a root (its hash framed, then its count), or 1 for Gone
-def Body.read(b: Shared.Bytes()) -> Maybe<&2, Got<History.Body>>:
+def Body.read(b: Octets.Bytes()) -> Maybe<&2, Got<History.Body>>:
   match b:
     case Con{0, r}:
       Got.then(
-        Shared.Bytes(),
+        Octets.Bytes(),
         History.Body,
         Framed.read(r),
         h => r2 => Got.then(
@@ -144,17 +146,22 @@ def Body.read(b: Shared.Bytes()) -> Maybe<&2, Got<History.Body>>:
       None{}
 
 # a moved-from name: 0 for none, or 1 then a name
-def From.read(b: Shared.Bytes()) -> Maybe<&2, Got<Maybe<&2, Shared.Name>>>:
+def From.read(b: Octets.Bytes()) -> Maybe<&2, Got<Maybe<&2, Resources.Name>>>:
   match b:
     case Con{0, r}:
       Some{Got{None{}, r}}
     case Con{1, r}:
-      Got.then(Shared.Name, Maybe<&2, Shared.Name>, Name.read(r), n => r2 => Some{Got{Some{n}, r2}})
+      Got.then(
+        Resources.Name,
+        Maybe<&2, Resources.Name>,
+        Name.read(r),
+        n => r2 => Some{Got{Some{n}, r2}}
+      )
     case _:
       None{}
 
 # an author: 0 for Outside, or 1 then the agent's name
-def Author.read(b: Shared.Bytes()) -> Maybe<&2, Got<History.Author>>:
+def Author.read(b: Octets.Bytes()) -> Maybe<&2, Got<History.Author>>:
   match b:
     case Con{0, r}:
       Some{Got{History.Outside{}, r}}
@@ -164,13 +171,13 @@ def Author.read(b: Shared.Bytes()) -> Maybe<&2, Got<History.Author>>:
       None{}
 
 # a node: name, parents, body, moved-from, then author
-def Node.read(b: Shared.Bytes()) -> Maybe<&2, Got<History.Node>>:
+def Node.read(b: Octets.Bytes()) -> Maybe<&2, Got<History.Node>>:
   Got.then(
-    Shared.Name,
+    Resources.Name,
     History.Node,
     Name.read(b),
     n => r => Got.then(
-      List<&2, Shared.Bytes()>,
+      List<&2, Octets.Bytes()>,
       History.Node,
       Ids.read(r),
       ps => r2 => Got.then(
@@ -178,7 +185,7 @@ def Node.read(b: Shared.Bytes()) -> Maybe<&2, Got<History.Node>>:
         History.Node,
         Body.read(r2),
         bd => r3 => Got.then(
-          Maybe<&2, Shared.Name>,
+          Maybe<&2, Resources.Name>,
           History.Node,
           From.read(r3),
           f => r4 => Got.then(
@@ -193,14 +200,14 @@ def Node.read(b: Shared.Bytes()) -> Maybe<&2, Got<History.Node>>:
   )
 
 # a content: 0 for none, or 1 then framed bytes
-def Content.read(b: Shared.Bytes()) -> Maybe<&2, Got<Maybe<&2, Shared.Bytes()>>>:
+def Content.read(b: Octets.Bytes()) -> Maybe<&2, Got<Maybe<&2, Octets.Bytes()>>>:
   match b:
     case Con{0, r}:
       Some{Got{None{}, r}}
     case Con{1, r}:
       Got.then(
-        Shared.Bytes(),
-        Maybe<&2, Shared.Bytes()>,
+        Octets.Bytes(),
+        Maybe<&2, Octets.Bytes()>,
         Framed.read(r),
         x => r2 => Some{Got{Some{x}, r2}}
       )
@@ -208,7 +215,7 @@ def Content.read(b: Shared.Bytes()) -> Maybe<&2, Got<Maybe<&2, Shared.Bytes()>>>
       None{}
 
 # the mark name of a fork: 0 for none, or 1 then the name
-def MarkName.read(b: Shared.Bytes()) -> Maybe<&2, Got<Maybe<&2, String>>>:
+def MarkName.read(b: Octets.Bytes()) -> Maybe<&2, Got<Maybe<&2, String>>>:
   match b:
     case Con{0, r}:
       Some{Got{None{}, r}}
@@ -227,7 +234,7 @@ def Record.read.end(m: Maybe<&2, Got<Spec.Record>>) -> Maybe<&2, Spec.Record>:
       None{}
 
 # the record of a payload: its tag, then its fields (Spec.Record.payload)
-def Record.read(p: Shared.Bytes()) -> Maybe<&2, Spec.Record>:
+def Record.read(p: Octets.Bytes()) -> Maybe<&2, Spec.Record>:
   match p:
     case Con{0, b}:
       Record.read.end(
@@ -236,7 +243,7 @@ def Record.read(p: Shared.Bytes()) -> Maybe<&2, Spec.Record>:
           Spec.Record,
           Utf8.read(b),
           ln => r => Got.then(
-            Maybe<&2, Shared.Bytes()>,
+            Maybe<&2, Octets.Bytes()>,
             Spec.Record,
             Content.read(r),
             c => r2 => Got.then(
@@ -313,7 +320,7 @@ type Entry is Data:
   Entry{record: Spec.Record, size: Nat}
 
 # the entry of a decoded record of size n
-def Entry.decoded(m: Maybe<&2, Spec.Record>, n: Nat, r: Shared.Bytes()) -> Maybe<&2, Got<Entry>>:
+def Entry.decoded(m: Maybe<&2, Spec.Record>, n: Nat, r: Octets.Bytes()) -> Maybe<&2, Got<Entry>>:
   match m:
     case None{}:
       None{}
@@ -323,32 +330,32 @@ def Entry.decoded(m: Maybe<&2, Spec.Record>, n: Nat, r: Shared.Bytes()) -> Maybe
 # the entry of the payload p and the check c, when c is p's check and p
 # decodes; n is the size of the whole entry
 def Entry.of(
-  +p: Shared.Bytes(),
-  c: Shared.Bytes(),
+  +p: Octets.Bytes(),
+  c: Octets.Bytes(),
   n: Nat,
-  r: Shared.Bytes()
+  r: Octets.Bytes()
 ) -> Maybe<&2, Got<Entry>>:
-  Shared.Bool.when(
+  Bools.Bool.when(
     Maybe<&2, Got<Entry>>,
-    Shared.Bytes.is_eq(c, Spec.Record.check(p)),
+    Octets.Bytes.is_eq(c, Spec.Record.check(p)),
     u => Entry.decoded(Record.read(p), n, r),
     u => None{}
   )
 
 # the entry at the front of b: the length of its payload, the payload, and
 # its check, all there and right
-def Entry.read(+b: Shared.Bytes()) -> Maybe<&2, Got<Entry>>:
+def Entry.read(+b: Octets.Bytes()) -> Maybe<&2, Got<Entry>>:
   total = List.length(&2, U32, b)
   Got.then(
     Nat,
     Entry,
     Leb.read(b),
     n => r => Got.then(
-      Shared.Bytes(),
+      Octets.Bytes(),
       Entry,
       Bytes.read(n, r),
       p => r2 => Got.then(
-        Shared.Bytes(),
+        Octets.Bytes(),
         Entry,
         Bytes.read(8n, r2),
         c => +r3 => Entry.of(p, c, Nat.sub(total, List.length(&2, U32, r3)), r3)
@@ -361,7 +368,7 @@ def Journal.read.next(
   m: Maybe<&2, Got<Entry>>,
   acc: List<&2, Spec.Record>,
   good: Nat,
-  k: Shared.Bytes() -> List<&2, Spec.Record> -> Nat -> Spec.Read
+  k: Octets.Bytes() -> List<&2, Spec.Record> -> Nat -> Spec.Read
 ) -> Spec.Read:
   match m:
     case None{}:
@@ -373,7 +380,7 @@ def Journal.read.next(
 # fuel bounds the entries (each takes at least one byte)
 def Journal.read.go(
   fuel: Nat,
-  b: Shared.Bytes(),
+  b: Octets.Bytes(),
   acc: List<&2, Spec.Record>,
   good: Nat
 ) -> Spec.Read:

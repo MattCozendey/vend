@@ -1,6 +1,8 @@
 import Base
 import ../../glob/spec.bend as Glob
-import ../../shared.bend as Shared
+import ../../shared/bools.bend as Bools
+import ../../shared/bytes.bend as Octets
+import ../../shared/uris.bend as Uris
 import ../../views/text/spec.bend as Text
 import ../spec.bend as Ep
 
@@ -35,7 +37,7 @@ def FileEp.is_resource(+rest: String) -> Bool:
 
 # rest, when it names a file resource
 def FileEp.resource(+rest: String) -> Maybe<&2, String>:
-  Shared.Bool.when(Maybe<&2, String>, FileEp.is_resource(rest), u => Some{rest}, u => None{})
+  Bools.Bool.when(Maybe<&2, String>, FileEp.is_resource(rest), u => Some{rest}, u => None{})
 
 # The OS path of a file URI (RFC 8089): the scheme is "file", the authority
 # is absent, empty or "localhost", and the path is the OS path; a path like
@@ -63,14 +65,14 @@ def FileEp.is_drive(p: String) -> Bool:
 
 # the OS path of the URI path p
 def FileEp.os_path(+p: String) -> String:
-  Shared.Bool.when(String, FileEp.is_drive(p), u => String.drop(p, 1n), u => p)
+  Bools.Bool.when(String, FileEp.is_drive(p), u => String.drop(p, 1n), u => p)
 
 # the OS path of the file URI u, or None for a URI that is not a local
 # file URI
-def FileEp.root_of(u: Shared.Uri) -> Maybe<&2, String>:
+def FileEp.root_of(u: Uris.Uri) -> Maybe<&2, String>:
   match u:
-    case Shared.Uri{sc, a, p}:
-      Shared.Bool.when(
+    case Uris.Uri{sc, a, p}:
+      Bools.Bool.when(
         Maybe<&2, String>,
         Bool.and(String.eq(sc, "file"), FileEp.local(a)),
         v => Some{FileEp.os_path(p)},
@@ -78,7 +80,7 @@ def FileEp.root_of(u: Shared.Uri) -> Maybe<&2, String>:
       )
 
 # the OS path of rest below the root: the root, '/', then the UTF-8 of rest
-def FileEp.path(root: Shared.Bytes(), rest: String) -> Shared.Bytes():
+def FileEp.path(root: Octets.Bytes(), rest: String) -> Octets.Bytes():
   List.append(&2, U32, root, 47 <> Text.Text.encode(rest))
 
 # the segments of rest but the last, joined by '/': its directory below
@@ -115,17 +117,17 @@ type Probe is Data:
   Failed{code: U32, text: String}
 
 # the probe of the OS path p
-def FileFx.probe(path: Shared.Bytes()) -> IO(Probe):
+def FileFx.probe(path: Octets.Bytes()) -> IO(Probe):
   import "./effs/file_fx.c"
   import "./effs/file_fx.js"
 
 # An open file endpoint: the OS path of its root, and the device the root
 # was on when it was opened, or None when the root was not there then.
 type Root is Data:
-  Root{path: Shared.Bytes(), device: Maybe<&2, U32>}
+  Root{path: Octets.Bytes(), device: Maybe<&2, U32>}
 
 # the OS path of the root
-def Root.path(r: Root) -> Shared.Bytes():
+def Root.path(r: Root) -> Octets.Bytes():
   match r:
     case Root{p, d}:
       p
@@ -188,13 +190,13 @@ def FileEp.decide(+rest: String, r: Root, +root: Probe, here: Probe) -> Decision
     case Root{p, d}:
       d = d
       ok = Bool.and(FileEp.is_resource(rest), FileEp.root_holds(d, root))
-      bad = Shared.Bool.when(
+      bad = Bools.Bool.when(
         String,
         FileEp.is_resource(rest),
         u => FileEp.root_why(root),
         u => String.append("not a file resource: ", rest)
       )
-      Shared.Bool.when(Decision, ok, u => FileEp.decide.here(here), u => CannotTell{bad})
+      Bools.Bool.when(Decision, ok, u => FileEp.decide.here(here), u => CannotTell{bad})
 
 # the decision says nothing is there
 def Decision.is_absent(d: Decision) -> Bool:
@@ -257,7 +259,7 @@ law non_resource_cannot_tell:
 def FileEp.temp(+rest: String, n: U32) -> String:
   +dir = FileEp.dir(rest)
   +name = String.concat([".", FileEp.last(rest), FileEp.temp_mark(), U32.show(n), ".tmp"])
-  Shared.Bool.when(String, String.is_empty(dir), u => name, u => String.concat([dir, "/", name]))
+  Bools.Bool.when(String, String.is_empty(dir), u => name, u => String.concat([dir, "/", name]))
 
 # the temporary file of a Put is never taken for a resource, so its reports
 # and its name stay out of the history
@@ -271,10 +273,10 @@ law temp_is_temp:
 # between that check and the rename is overwritten, and nothing can tell
 # afterwards. Writes through the core are exact, because the core orders
 # them before they reach the disk.
-def FileEp.holds(e: Ep.Expect, d: Decision, token: Maybe<&2, Shared.Bytes()>) -> Bool:
+def FileEp.holds(e: Ep.Expect, d: Decision, token: Maybe<&2, Octets.Bytes()>) -> Bool:
   match e d token:
     case Ep.WasPresent{a} ReadIt{} Some{b}:
-      Shared.Bytes.is_eq(a, b)
+      Octets.Bytes.is_eq(a, b)
     case Ep.WasAbsent{} KnownAbsent{} _:
       True{}
     case _ _ _:
@@ -283,33 +285,33 @@ def FileEp.holds(e: Ep.Expect, d: Decision, token: Maybe<&2, Shared.Bytes()>) ->
 # a belief in absence holds only when the endpoint knows nothing is there
 law absence_holds_only_known:
   for d: Decision
-  for t: Maybe<&2, Shared.Bytes()>
+  for t: Maybe<&2, Octets.Bytes()>
   for h: {FileEp.holds(Ep.WasAbsent{}, d, t) == True{}: Bool}
   {Decision.is_absent(d) == True{}: Bool}
 
 # the write of a temporary file at path from, renamed over path to; the
 # rename replaces to at once for every reader
 def FileFx.rename(
-  from: Shared.Bytes(),
-  to: Shared.Bytes()
+  from: Octets.Bytes(),
+  to: Octets.Bytes()
 ) -> IO(Result<&1, &1, U32 & String, Unit>):
   import "./effs/file_fx.c"
   import "./effs/file_fx.js"
 
 # the directory at path, with every missing directory above it
-def FileFx.make_dirs(path: Shared.Bytes()) -> IO(Result<&1, &1, U32 & String, Unit>):
+def FileFx.make_dirs(path: Octets.Bytes()) -> IO(Result<&1, &1, U32 & String, Unit>):
   import "./effs/file_fx.c"
   import "./effs/file_fx.js"
 
 # the file at path removed
-def FileFx.remove(path: Shared.Bytes()) -> IO(Result<&1, &1, U32 & String, Unit>):
+def FileFx.remove(path: Octets.Bytes()) -> IO(Result<&1, &1, U32 & String, Unit>):
   import "./effs/file_fx.c"
   import "./effs/file_fx.js"
 
 # the directory at path removed with everything below it; links below it
 # are removed as links, never followed, and a path that is itself a link
 # is refused (ELOOP), so nothing outside the directory is touched
-def FileFx.remove_tree(path: Shared.Bytes()) -> IO(Result<&1, &1, U32 & String, Unit>):
+def FileFx.remove_tree(path: Octets.Bytes()) -> IO(Result<&1, &1, U32 & String, Unit>):
   import "./effs/file_fx.c"
   import "./effs/file_fx.js"
 
@@ -329,7 +331,7 @@ def FileFx.sync(f: File) -> IO(File & Result<&1, &1, U32 & String, Unit>):
 # Windows, flock elsewhere), so a power cut leaves no stale lock. The JS
 # lane writes its pid there instead and takes over a lock whose process is
 # gone.
-def FileFx.lock(path: Shared.Bytes()) -> IO(Result<&1, &1, U32 & String, File>):
+def FileFx.lock(path: Octets.Bytes()) -> IO(Result<&1, &1, U32 & String, File>):
   import "./effs/file_fx.c"
   import "./effs/file_fx.js"
 
@@ -340,7 +342,7 @@ def FileFx.lock(path: Shared.Bytes()) -> IO(Result<&1, &1, U32 & String, File>):
 # with '/' between segments, without following links (a link is skipped,
 # as are directories that cannot be read); fails when root is not a
 # directory now
-def FileFx.list(root: Shared.Bytes()) -> IO(Result<&1, &1, U32 & String, List<&2, Shared.Bytes()>>):
+def FileFx.list(root: Octets.Bytes()) -> IO(Result<&1, &1, U32 & String, List<&2, Octets.Bytes()>>):
   import "./effs/file_fx.c"
   import "./effs/file_fx.js"
 
@@ -352,14 +354,14 @@ def FileFx.list(root: Shared.Bytes()) -> IO(Result<&1, &1, U32 & String, List<&2
 # written, changed or removed. RawRenamed: the OS paired a rename. RawLost:
 # the OS dropped events. RawRootGone: the root itself went away.
 type Raw is Data:
-  RawTouched{path: Shared.Bytes()}
-  RawRenamed{from: Shared.Bytes(), to: Shared.Bytes()}
+  RawTouched{path: Octets.Bytes()}
+  RawRenamed{from: Octets.Bytes(), to: Octets.Bytes()}
   RawLost{}
   RawRootGone{}
 
 # a watcher of the root and everything below it, carried in a File handle:
 # the watcher is an OS descriptor, and FileFx.unwatch releases it
-def FileFx.watch(root: Shared.Bytes()) -> IO(Result<&1, &1, U32 & String, File>):
+def FileFx.watch(root: Octets.Bytes()) -> IO(Result<&1, &1, U32 & String, File>):
   import "./effs/file_fx.c"
   import "./effs/file_fx.js"
 

@@ -2,7 +2,8 @@ import Base
 import ../cli/spec.bend as Cli
 import ../daemon/loop.bend as Daemon
 import ../json/spec.bend as J
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/bytes.bend as Octets
 import ../views/text/impl.bend as TextImpl
 import ../views/text/spec.bend as Text
 import ./spec.bend as Spec
@@ -15,20 +16,20 @@ import ./spec.bend as Spec
 # each wait for input, so every answer is out before the next read.
 
 # r without the line ends at its start
-def Line.trim.rev(r: Shared.Bytes()) -> Shared.Bytes():
+def Line.trim.rev(r: Octets.Bytes()) -> Octets.Bytes():
   match r:
     case Nil{}:
       Nil{}
     case Con{+x, +t}:
-      Shared.Bool.when(
-        Shared.Bytes(),
+      Bools.Bool.when(
+        Octets.Bytes(),
         Bool.or(U32.is_eq(x, 10), U32.is_eq(x, 13)),
         u => Line.trim.rev(t),
         u => Con{x, t}
       )
 
 # b without the line feed and carriage return at its end
-def Line.trim(b: Shared.Bytes()) -> Shared.Bytes():
+def Line.trim(b: Octets.Bytes()) -> Octets.Bytes():
   List.reverse(&2, U32, Line.trim.rev(List.reverse(&2, U32, b)))
 
 # the JSON value of a line of UTF-8, or None when it is not one
@@ -63,7 +64,7 @@ def Mcp.out(st: Spec.McpStep) -> IO(Spec.McpState):
 
 # the state after the line b (its bytes without line ends); a blank line is
 # skipped
-def Mcp.line(s: Spec.McpState, b: Shared.Bytes()) -> IO(Spec.McpState):
+def Mcp.line(s: Spec.McpState, b: Octets.Bytes()) -> IO(Spec.McpState):
   match b:
     case Nil{}:
       IO.pure(Spec.McpState, s)
@@ -75,7 +76,7 @@ def Mcp.line(s: Spec.McpState, b: Shared.Bytes()) -> IO(Spec.McpState):
 def Mcp.go(
   fuel: Nat,
   s: Spec.McpState,
-  r: Result<&1, &1, U32 & String, Shared.Bytes()>
+  r: Result<&1, &1, U32 & String, Octets.Bytes()>
 ) -> IO(Unit):
   match fuel:
     case 0n:
@@ -89,7 +90,7 @@ def Mcp.go(
         case Done{Con{x, t}}:
           do IO<Unit>:
             s2: Spec.McpState <- Mcp.line(s, Line.trim(Con{x, t}))
-            next: Result<&1, &1, U32 & String, Shared.Bytes()> <- Cli.Stdin.read_line()
+            next: Result<&1, &1, U32 & String, Octets.Bytes()> <- Cli.Stdin.read_line()
             Mcp.go(f, s2, next)
 
 # serve MCP on standard input and output until the input ends; the agent
@@ -97,5 +98,5 @@ def Mcp.go(
 def Mcp.run() -> IO(Unit):
   do IO<Unit>:
     a: String <- Daemon.Client.agent()
-    r: Result<&1, &1, U32 & String, Shared.Bytes()> <- Cli.Stdin.read_line()
+    r: Result<&1, &1, U32 & String, Octets.Bytes()> <- Cli.Stdin.read_line()
     Mcp.go(4294967295n, Spec.McpState{a, None{}}, r)

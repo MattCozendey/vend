@@ -1,6 +1,8 @@
 import Base
 import ../../hash/spec.bend as Hash
-import ../../shared.bend as Shared
+import ../../shared/bools.bend as Bools
+import ../../shared/bytes.bend as Octets
+import ../../shared/uris.bend as Uris
 import ../../views/text/impl.bend as TextImpl
 import ../../views/text/spec.bend as Text
 import ../spec.bend as Ep
@@ -25,7 +27,7 @@ def FileEp.device_of(p: Spec.Probe) -> Maybe<&2, U32>:
 # root is a directory now, so a later mount over it is caught.
 def FileEp.open(root: String) -> IO(Spec.Root):
   do IO<Spec.Root>:
-    +path: Shared.Bytes() = Text.Text.encode(root)
+    +path: Octets.Bytes() = Text.Text.encode(root)
     p: Spec.Probe <- Spec.FileFx.probe(path)
     return Spec.Root{path, FileEp.device_of(p)}
 
@@ -45,7 +47,7 @@ def FileEp.unread(d: Spec.Decision) -> Ep.Signal:
 # What a read of a file gave. Read: all its bytes. Moving: its size changed
 # while it was read, so read again. Unreadable: an error, with its text.
 type Got is Data:
-  Read{bytes: Shared.Bytes()}
+  Read{bytes: Octets.Bytes()}
   Moving{}
   Unreadable{why: String}
 
@@ -55,16 +57,16 @@ def FileEp.why(e: U32 & String) -> Got:
   Unreadable{t}
 
 # the read of size bytes: Moving when there were not exactly size bytes
-def FileEp.got(size: U32, r: Result<&1, &1, U32 & String, Shared.Bytes()>) -> Got:
+def FileEp.got(size: U32, r: Result<&1, &1, U32 & String, Octets.Bytes()>) -> Got:
   match r:
     case Fail{e}:
       FileEp.why(e)
     case Done{+b}:
       same = Nat.is_eq(List.length(&2, U32, b), U32.to_nat(size))
-      Shared.Bool.when(Got, same, u => Read{b}, u => Moving{})
+      Bools.Bool.when(Got, same, u => Read{b}, u => Moving{})
 
 # the read of n bytes, after it closes the file
-def FileEp.read.done(n: U32, fr: File & Result<&1, &1, U32 & String, Shared.Bytes()>) -> IO(Got):
+def FileEp.read.done(n: U32, fr: File & Result<&1, &1, U32 & String, Octets.Bytes()>) -> IO(Got):
   (f, r) = fr
   do IO<Got>:
     File.close(f)
@@ -80,7 +82,7 @@ def FileEp.read.sized(f: File, s: Result<&1, &1, U32 & String, U32>) -> IO(Got):
         return FileEp.why(e)
     case Done{+n}:
       do IO<Got>:
-        fr: File & Result<&1, &1, U32 & String, Shared.Bytes()> <- File.read_bytes(f, (n + 1: U32))
+        fr: File & Result<&1, &1, U32 & String, Octets.Bytes()> <- File.read_bytes(f, (n + 1: U32))
         FileEp.read.done(n, fr)
 
 # the read after File.size
@@ -99,7 +101,7 @@ def FileEp.read.opened(o: Result<&1, &1, U32 & String, File>) -> IO(Got):
         FileEp.read.size(fs)
 
 # the bytes of the file at the OS path p
-def FileEp.read(p: Shared.Bytes()) -> IO(Got):
+def FileEp.read(p: Octets.Bytes()) -> IO(Got):
   do IO<Got>:
     o: Result<&1, &1, U32 & String, File> <- File.open_bytes(p, "r")
     FileEp.read.opened(o)
@@ -112,54 +114,54 @@ def FileEp.read(p: Shared.Bytes()) -> IO(Got):
 # the source after a read: its bytes, again() while the file moved, or why
 def FileEp.source.got(
   g: Got,
-  again: Unit -> IO(Result<&2, &2, String, Shared.Bytes()>)
-) -> IO(Result<&2, &2, String, Shared.Bytes()>):
+  again: Unit -> IO(Result<&2, &2, String, Octets.Bytes()>)
+) -> IO(Result<&2, &2, String, Octets.Bytes()>):
   match g:
     case Read{b}:
-      IO.pure(Result<&2, &2, String, Shared.Bytes()>, Done{b})
+      IO.pure(Result<&2, &2, String, Octets.Bytes()>, Done{b})
     case Moving{}:
       again(Unit{})
     case Unreadable{why}:
-      IO.pure(Result<&2, &2, String, Shared.Bytes()>, Fail{why})
+      IO.pure(Result<&2, &2, String, Octets.Bytes()>, Fail{why})
 
 # the bytes of the regular file at the OS path p, read again while it
 # changes, at most fuel times
-def FileEp.source.read(fuel: Nat, +p: Shared.Bytes()) -> IO(Result<&2, &2, String, Shared.Bytes()>):
+def FileEp.source.read(fuel: Nat, +p: Octets.Bytes()) -> IO(Result<&2, &2, String, Octets.Bytes()>):
   match fuel:
     case 0n:
-      IO.pure(Result<&2, &2, String, Shared.Bytes()>, Fail{"it kept changing while it was read"})
+      IO.pure(Result<&2, &2, String, Octets.Bytes()>, Fail{"it kept changing while it was read"})
     case 1n+f:
-      do IO<Result<&2, &2, String, Shared.Bytes()>>:
+      do IO<Result<&2, &2, String, Octets.Bytes()>>:
         g: Got <- FileEp.read(p)
         FileEp.source.got(g, u => FileEp.source.read(f, p))
 
 # the bytes of the file at the OS path p after its probe decided d
 def FileEp.source.decided(
   d: Spec.Decision,
-  p: Shared.Bytes()
-) -> IO(Result<&2, &2, String, Shared.Bytes()>):
+  p: Octets.Bytes()
+) -> IO(Result<&2, &2, String, Octets.Bytes()>):
   match d:
     case Spec.ReadIt{}:
       FileEp.source.read(4n, p)
     case Spec.KnownAbsent{}:
-      IO.pure(Result<&2, &2, String, Shared.Bytes()>, Fail{"nothing is there"})
+      IO.pure(Result<&2, &2, String, Octets.Bytes()>, Fail{"nothing is there"})
     case Spec.CannotTell{why}:
-      IO.pure(Result<&2, &2, String, Shared.Bytes()>, Fail{why})
+      IO.pure(Result<&2, &2, String, Octets.Bytes()>, Fail{why})
 
 # the bytes of the file at the OS path, if the URI names a local file
-def FileEp.source.at(m: Maybe<&2, String>) -> IO(Result<&2, &2, String, Shared.Bytes()>):
+def FileEp.source.at(m: Maybe<&2, String>) -> IO(Result<&2, &2, String, Octets.Bytes()>):
   match m:
     case None{}:
-      IO.pure(Result<&2, &2, String, Shared.Bytes()>, Fail{"it is not a local file URI"})
+      IO.pure(Result<&2, &2, String, Octets.Bytes()>, Fail{"it is not a local file URI"})
     case Some{path}:
-      do IO<Result<&2, &2, String, Shared.Bytes()>>:
-        +p: Shared.Bytes() = Text.Text.encode(path)
+      do IO<Result<&2, &2, String, Octets.Bytes()>>:
+        +p: Octets.Bytes() = Text.Text.encode(path)
         here: Spec.Probe <- Spec.FileFx.probe(p)
         FileEp.source.decided(Spec.FileEp.decide.here(here), p)
 
 # the bytes of the file that the file URI u names, or why they cannot be
 # read
-def FileEp.source(u: Shared.Uri) -> IO(Result<&2, &2, String, Shared.Bytes()>):
+def FileEp.source(u: Uris.Uri) -> IO(Result<&2, &2, String, Octets.Bytes()>):
   FileEp.source.at(Spec.FileEp.root_of(u))
 
 # the decision for rest: it probes the root, then rest's path
@@ -232,8 +234,8 @@ def FileEp.failed(what: String, e: U32 & String) -> Ep.Signal:
 # the signals after the rename of the temporary file tmp over p: the written
 # content, whose token the core already knows; on failure tmp is removed
 def FileEp.put.renamed(
-  tmp: Shared.Bytes(),
-  +bytes: Shared.Bytes(),
+  tmp: Octets.Bytes(),
+  +bytes: Octets.Bytes(),
   r: Result<&1, &1, U32 & String, Unit>
 ) -> IO(List<&2, Ep.Signal>):
   match r:
@@ -247,9 +249,9 @@ def FileEp.put.renamed(
 # the signals after the temporary file tmp was written and closed: on
 # success, the rename over p
 def FileEp.put.wrote(
-  +tmp: Shared.Bytes(),
-  p: Shared.Bytes(),
-  bytes: Shared.Bytes(),
+  +tmp: Octets.Bytes(),
+  p: Octets.Bytes(),
+  bytes: Octets.Bytes(),
   w: Result<&1, &1, U32 & String, Unit>
 ) -> IO(List<&2, Ep.Signal>):
   match w:
@@ -290,9 +292,9 @@ def FileEp.put.flushed(
 # the signals after the temporary file tmp was created ("x": only when no
 # file is there): write bytes into it, then rename it over p
 def FileEp.put.created(
-  tmp: Shared.Bytes(),
-  p: Shared.Bytes(),
-  +bytes: Shared.Bytes(),
+  tmp: Octets.Bytes(),
+  p: Octets.Bytes(),
+  +bytes: Octets.Bytes(),
   o: Result<&1, &1, U32 & String, File>
 ) -> IO(List<&2, Ep.Signal>):
   match o:
@@ -317,11 +319,11 @@ def FileEp.nonce(r: Result<&1, &1, U32 & String, U32>) -> U32:
 def FileEp.put.write(
   +root: Spec.Root,
   +rest: String,
-  bytes: Shared.Bytes()
+  bytes: Octets.Bytes()
 ) -> IO(List<&2, Ep.Signal>):
   do IO<List<&2, Ep.Signal>>:
     r: Result<&1, &1, U32 & String, U32> <- IO.random_u32()
-    +tmp: Shared.Bytes() = Spec.FileEp.path(
+    +tmp: Octets.Bytes() = Spec.FileEp.path(
       Spec.Root.path(root),
       Spec.FileEp.temp(rest, FileEp.nonce(r))
     )
@@ -333,7 +335,7 @@ def FileEp.put.write(
 def FileEp.put.dirs(
   root: Spec.Root,
   rest: String,
-  bytes: Shared.Bytes(),
+  bytes: Octets.Bytes(),
   m: Result<&1, &1, U32 & String, Unit>
 ) -> IO(List<&2, Ep.Signal>):
   match m:
@@ -361,7 +363,7 @@ def FileEp.put.go(
   d: Spec.Decision,
   +root: Spec.Root,
   +rest: String,
-  bytes: Shared.Bytes()
+  bytes: Octets.Bytes()
 ) -> IO(List<&2, Ep.Signal>):
   match d:
     case Spec.KnownAbsent{}:
@@ -380,13 +382,13 @@ def FileEp.put.read(
   g: Got,
   root: Spec.Root,
   rest: String,
-  bytes: Shared.Bytes(),
+  bytes: Octets.Bytes(),
   e: Ep.Expect
 ) -> IO(List<&2, Ep.Signal>):
   match g:
     case Read{+b}:
       +t = Hash.Hash.blake3(b)
-      Shared.Bool.when(
+      Bools.Bool.when(
         IO(List<&2, Ep.Signal>),
         Spec.FileEp.holds(e, Spec.ReadIt{}, Some{t}),
         u => FileEp.put.go(Spec.ReadIt{}, root, rest, bytes),
@@ -403,7 +405,7 @@ def FileEp.put.decided(
   d: Spec.Decision,
   +root: Spec.Root,
   +rest: String,
-  bytes: Shared.Bytes(),
+  bytes: Octets.Bytes(),
   e: Ep.Expect
 ) -> IO(List<&2, Ep.Signal>):
   match d:
@@ -412,7 +414,7 @@ def FileEp.put.decided(
         g: Got <- FileEp.read(Spec.FileEp.path(Spec.Root.path(root), rest))
         FileEp.put.read(g, root, rest, bytes, e)
     case Spec.KnownAbsent{}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         IO(List<&2, Ep.Signal>),
         Spec.FileEp.holds(e, Spec.KnownAbsent{}, None{}),
         u => FileEp.put.go(Spec.KnownAbsent{}, root, rest, bytes),
@@ -427,7 +429,7 @@ def FileEp.put.if(
   ok: Bool,
   +root: Spec.Root,
   +rest: String,
-  bytes: Shared.Bytes(),
+  bytes: Octets.Bytes(),
   e: Ep.Expect
 ) -> IO(List<&2, Ep.Signal>):
   match ok:
@@ -452,7 +454,7 @@ def FileEp.put.if(
 def FileEp.put(
   root: Spec.Root,
   +rest: String,
-  bytes: Shared.Bytes(),
+  bytes: Octets.Bytes(),
   e: Ep.Expect
 ) -> IO(List<&2, Ep.Signal>):
   FileEp.put.if(Spec.FileEp.is_resource(rest), root, rest, bytes, e)
@@ -469,7 +471,7 @@ def FileEp.names.put(m: Maybe<&2, String>, rest: List<&2, String>) -> List<&2, S
       n <> rest
 
 # the listed OS paths that name file resources, as resource paths
-def FileEp.names(ps: List<&2, Shared.Bytes()>) -> List<&2, String>:
+def FileEp.names(ps: List<&2, Octets.Bytes()>) -> List<&2, String>:
   match ps:
     case Nil{}:
       Nil{}
@@ -478,7 +480,7 @@ def FileEp.names(ps: List<&2, Shared.Bytes()>) -> List<&2, String>:
 
 # the resource paths of a listing, or none when the root could not be
 # listed
-def FileEp.list.of(r: Result<&1, &1, U32 & String, List<&2, Shared.Bytes()>>) -> List<&2, String>:
+def FileEp.list.of(r: Result<&1, &1, U32 & String, List<&2, Octets.Bytes()>>) -> List<&2, String>:
   match r:
     case Fail{e}:
       []
@@ -493,7 +495,7 @@ def FileEp.list(root: Spec.Root) -> IO(List<&2, String>):
       &1,
       &1,
       U32 & String,
-      List<&2, Shared.Bytes()>> <- Spec.FileFx.list(Spec.Root.path(root))
+      List<&2, Octets.Bytes()>> <- Spec.FileFx.list(Spec.Root.path(root))
     return FileEp.list.of(r)
 
 # Watching
@@ -550,7 +552,7 @@ def Spec.resource_needs_path(rest, h):
   rest = rest
   %Equal.sym(Bool, Spec.FileEp.is_resource(rest), False{}, h):
     {
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, String>,
         _,
         u => Some{rest},
@@ -577,7 +579,7 @@ def Absent.only(
   x: String
 ) -> {
   Spec.Decision.is_absent(
-    Shared.Bool.when(
+    Bools.Bool.when(
       Spec.Decision,
       Bool.and(a, b),
       u => Spec.FileEp.decide.here(here),
@@ -616,7 +618,7 @@ def Spec.absent_only_when_known(rest, r, root, here, h):
     case Spec.Root{pp, d}:
       +rest = rest
       +root = root
-      bad = Shared.Bool.when(
+      bad = Bools.Bool.when(
         String,
         Spec.FileEp.is_resource(rest),
         u => Spec.FileEp.root_why(root),
@@ -636,7 +638,7 @@ def Read.only(
   x: String
 ) -> {
   Spec.Decision.is_read(
-    Shared.Bool.when(
+    Bools.Bool.when(
       Spec.Decision,
       Bool.and(a, b),
       u => Spec.FileEp.decide.here(here),
@@ -658,7 +660,7 @@ def Spec.read_only_files(rest, r, root, here, h):
     case Spec.Root{pp, d}:
       +rest = rest
       +root = root
-      bad = Shared.Bool.when(
+      bad = Bools.Bool.when(
         String,
         Spec.FileEp.is_resource(rest),
         u => Spec.FileEp.root_why(root),
@@ -676,7 +678,7 @@ def NoRes.Goal(a: Bool, b: Bool, here: Spec.Probe, x: String) -> Type:
   {
     Bool.or(
       Spec.Decision.is_read(
-        Shared.Bool.when(
+        Bools.Bool.when(
           Spec.Decision,
           Bool.and(a, b),
           u => Spec.FileEp.decide.here(here),
@@ -684,7 +686,7 @@ def NoRes.Goal(a: Bool, b: Bool, here: Spec.Probe, x: String) -> Type:
         )
       ),
       Spec.Decision.is_absent(
-        Shared.Bool.when(
+        Bools.Bool.when(
           Spec.Decision,
           Bool.and(a, b),
           u => Spec.FileEp.decide.here(here),
@@ -713,7 +715,7 @@ def Spec.non_resource_cannot_tell(rest, r, root, here, h):
     case Spec.Root{pp, d}:
       +rest = rest
       +root = root
-      bad = Shared.Bool.when(
+      bad = Bools.Bool.when(
         String,
         Spec.FileEp.is_resource(rest),
         u => Spec.FileEp.root_why(root),
@@ -818,7 +820,7 @@ def Hints.of(
   Spec.FileEp.is_resource(r) == b: Bool
 } -> {
   Spec.Notice.all_hints(
-    Spec.FileEp.hint.of(Shared.Bool.when(Maybe<&2, String>, b, u => Some{r}, u => None{}))
+    Spec.FileEp.hint.of(Bools.Bool.when(Maybe<&2, String>, b, u => Some{r}, u => None{}))
   )
     == True{}: Bool
 }:

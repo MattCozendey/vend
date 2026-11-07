@@ -5,7 +5,10 @@ import ../hash/spec.bend as Hash
 import ../history/spec.bend as History
 import ../journal/spec.bend as Journal
 import ../lines/spec.bend as Lines
-import ../shared.bend as Shared
+import ../shared/bytes.bend as Octets
+import ../shared/resources.bend as Resources
+import ../shared/tables.bend as Tables
+import ../shared/uris.bend as Uris
 import ../store/spec.bend as Store
 
 # The core: one pure step for each input. The loop owns all IO: it waits
@@ -28,7 +31,7 @@ type Mount is Data:
   Mount{
     space: String,
     line: String,
-    root: Shared.Uri,
+    root: Uris.Uri,
     globs: List<&2, Glob.Rule>,
     author: History.Author
   }
@@ -50,7 +53,7 @@ def Mount.checkouts_dir() -> String:
 # the version records the agent as its author. The core orders these, so
 # its check is exact. Stop: end the loop.
 type Request is Data:
-  Write{path: String, bytes: Shared.Bytes(), expect: List<&2, Shared.Bytes()>, agent: String}
+  Write{path: String, bytes: Octets.Bytes(), expect: List<&2, Octets.Bytes()>, agent: String}
   Stop{}
 
 # Something for the core to handle; an endpoint speaks in paths relative
@@ -87,9 +90,9 @@ type Problem is Data:
 type Output is Data:
   Logged{record: Journal.Record}
   Command{path: String, command: Ep.Command}
-  Recorded{name: Shared.Name, id: Shared.Bytes(), author: History.Author}
-  Refused{name: Shared.Name, heads: List<&2, Shared.Bytes()>}
-  Failed{name: Shared.Name, problem: Problem}
+  Recorded{name: Resources.Name, id: Octets.Bytes(), author: History.Author}
+  Refused{name: Resources.Name, heads: List<&2, Octets.Bytes()>}
+  Failed{name: Resources.Name, problem: Problem}
   Stopped{}
 
 # The state
@@ -106,8 +109,8 @@ type Core is Data:
     store: Store.Store,
     history: History.History,
     line: Lines.Line,
-    streams: Shared.Table<Ep.Stream>,
-    moves: Shared.Table<Maybe<&2, Shared.Name>>,
+    streams: Tables.Table<Ep.Stream>,
+    moves: Tables.Table<Maybe<&2, Resources.Name>>,
     nested: List<&2, String>
   }
 
@@ -120,8 +123,8 @@ def Core.new(m: Mount) -> Core:
         Store.Store.new(),
         History.History.new(),
         Lines.Line.new(sp, ln),
-        Shared.Table.new(Ep.Stream),
-        Shared.Table.new(Maybe<&2, Shared.Name>),
+        Tables.Table.new(Ep.Stream),
+        Tables.Table.new(Maybe<&2, Resources.Name>),
         []
       }
 
@@ -138,8 +141,8 @@ def Core.author(c: Core) -> History.Author:
       a
 
 # the name of the file at path in the space of c
-def Core.name(c: Core, path: String) -> Shared.Name:
-  Shared.Name{Core.space(c), path}
+def Core.name(c: Core, path: String) -> Resources.Name:
+  Resources.Name{Core.space(c), path}
 
 # path lies under the directory dir
 def Core.under(path: String, dir: String) -> Bool:
@@ -191,17 +194,17 @@ def Core.line(c: Core) -> Lines.Line:
 def Core.stream(c: Core, path: String) -> Ep.Stream:
   match c:
     case Core{m, s, h, l, ss, ms, ns}:
-      Maybe.default(&2, Ep.Stream, Shared.Table.get(Ep.Stream, ss, path), Ep.Stream.new())
+      Maybe.default(&2, Ep.Stream, Tables.Table.get(Ep.Stream, ss, path), Ep.Stream.new())
 
 # the name the file at path moved from, while its next version is not
 # recorded yet
-def Core.moved(c: Core, path: String) -> Maybe<&2, Shared.Name>:
+def Core.moved(c: Core, path: String) -> Maybe<&2, Resources.Name>:
   match c:
     case Core{m, s, h, l, ss, ms, ns}:
       Maybe.default(
         &2,
-        Maybe<&2, Shared.Name>,
-        Shared.Table.get(Maybe<&2, Shared.Name>, ms, path),
+        Maybe<&2, Resources.Name>,
+        Tables.Table.get(Maybe<&2, Resources.Name>, ms, path),
         None{}
       )
 
@@ -246,7 +249,7 @@ def Output.is_failed(o: Output) -> Bool:
       False{}
 
 # the ids among outputs
-def Output.recorded(os: List<&2, Output>) -> List<&2, Shared.Bytes()>:
+def Output.recorded(os: List<&2, Output>) -> List<&2, Octets.Bytes()>:
   match os:
     case Nil{}:
       Nil{}
@@ -256,14 +259,14 @@ def Output.recorded(os: List<&2, Output>) -> List<&2, Shared.Bytes()>:
       Output.recorded(t)
 
 # the outputs hold a Recorded of n with id x
-def Output.has_recorded(os: List<&2, Output>, +n: Shared.Name, +x: Shared.Bytes()) -> Bool:
+def Output.has_recorded(os: List<&2, Output>, +n: Resources.Name, +x: Octets.Bytes()) -> Bool:
   match os:
     case Nil{}:
       False{}
     case Con{Recorded{m, y, a}, t}:
       same = List.all.if(
-        u => Shared.Bytes.is_eq(y, x),
-        String.eq(Shared.Name.show(m), Shared.Name.show(n))
+        u => Octets.Bytes.is_eq(y, x),
+        String.eq(Resources.Name.show(m), Resources.Name.show(n))
       )
       List.any.if(u => Output.has_recorded(t, n, x), same)
     case Con{o, t}:
@@ -280,7 +283,7 @@ def Output.logged(os: List<&2, Output>) -> List<&2, Journal.Record>:
       Output.logged(t)
 
 # the bytes as items for the store: one item per byte
-def Core.items(b: Shared.Bytes()) -> List<&2, Shared.Bytes()>:
+def Core.items(b: Octets.Bytes()) -> List<&2, Octets.Bytes()>:
   match b:
     case Nil{}:
       Nil{}
@@ -331,7 +334,7 @@ law records_each_version:
   {
     List.length(
       &2,
-      Shared.Bytes(),
+      Octets.Bytes(),
       Output.recorded(Stepped.outputs(Core.step(c, Noticed{p, s})))
     )
       == List.length(&2, Ep.Version, Ep.Stepped.versions(Ep.Stream.step(Core.stream(c, p), s))): Nat
@@ -344,18 +347,18 @@ law records_each_version:
 law fetched_reads_back:
   for c: Core
   for p: String
-  for bytes: Shared.Bytes()
-  for t: Shared.Bytes()
-  for x: Shared.Bytes()
-  for parents: List<&2, Shared.Bytes()>
+  for bytes: Octets.Bytes()
+  for t: Octets.Bytes()
+  for x: Octets.Bytes()
+  for parents: List<&2, Octets.Bytes()>
   for r: Store.Ref
-  for from: Maybe<&2, Shared.Name>
+  for from: Maybe<&2, Resources.Name>
   for h: {Core.tracks(c, p) == True{}: Bool}
   for o: {
     Output.recorded(
       Stepped.outputs(Core.step(c, Noticed{p, Ep.Fetched{bytes, t}}))
     )
-      == [x]: List<&2, Shared.Bytes()>
+      == [x]: List<&2, Octets.Bytes()>
   }
   for g: {
     History.History.get(
@@ -371,25 +374,25 @@ law fetched_reads_back:
       Core.store(Stepped.core(Core.step(c, Noticed{p, Ep.Fetched{bytes, t}}))),
       r
     )
-      == Some{Core.items(bytes)}: Maybe<&2, List<&2, Shared.Bytes()>>
+      == Some{Core.items(bytes)}: Maybe<&2, List<&2, Octets.Bytes()>>
   }
 
 # a recorded version is the one head of its file on the line of the mount
 law recorded_heads_line:
   for c: Core
   for i: Input
-  for n: Shared.Name
-  for x: Shared.Bytes()
+  for n: Resources.Name
+  for x: Octets.Bytes()
   for o: {Output.has_recorded(Stepped.outputs(Core.step(c, i)), n, x) == True{}: Bool}
-  {Lines.Line.heads(Core.line(Stepped.core(Core.step(c, i))), n) == [x]: List<&2, Shared.Bytes()>}
+  {Lines.Line.heads(Core.line(Stepped.core(Core.step(c, i))), n) == [x]: List<&2, Octets.Bytes()>}
 
 # a write whose expected heads are not the heads on the line changes
 # nothing and is refused, naming those heads
 law write_refused:
   for c: Core
   for p: String
-  for b: Shared.Bytes()
-  for e: List<&2, Shared.Bytes()>
+  for b: Octets.Bytes()
+  for e: List<&2, Octets.Bytes()>
   for a: String
   for h: {History.Ids.is_eq(e, Lines.Line.heads(Core.line(c), Core.name(c, p))) == False{}: Bool}
   {
@@ -408,8 +411,8 @@ law write_refused:
 law write_accepted:
   for c: Core
   for p: String
-  for b: Shared.Bytes()
-  for e: List<&2, Shared.Bytes()>
+  for b: Octets.Bytes()
+  for e: List<&2, Octets.Bytes()>
   for a: String
   for t: {Core.tracks(c, p) == True{}: Bool}
   for h: {History.Ids.is_eq(e, Lines.Line.heads(Core.line(c), Core.name(c, p))) == True{}: Bool}
@@ -434,7 +437,7 @@ law write_accepted:
     {
       List.length(
         &2,
-        Shared.Bytes(),
+        Octets.Bytes(),
         Output.recorded(Stepped.outputs(Core.step(c, Asked{Write{p, b, e, a}})))
       )
         == 1n: Nat
@@ -444,16 +447,16 @@ law write_accepted:
 law write_authored:
   for c: Core
   for p: String
-  for b: Shared.Bytes()
-  for e: List<&2, Shared.Bytes()>
+  for b: Octets.Bytes()
+  for e: List<&2, Octets.Bytes()>
   for a: String
-  for x: Shared.Bytes()
+  for x: Octets.Bytes()
   for v: History.Node
   for o: {
     Output.recorded(
       Stepped.outputs(Core.step(c, Asked{Write{p, b, e, a}}))
     )
-      == [x]: List<&2, Shared.Bytes()>
+      == [x]: List<&2, Octets.Bytes()>
   }
   for g: {
     History.History.get(
@@ -476,7 +479,7 @@ law move_remembered:
         Stepped.core(Core.step(c, Moved{f, t})),
         t
       )
-        == Some{Core.name(c, f)}: Maybe<&2, Shared.Name>
+        == Some{Core.name(c, f)}: Maybe<&2, Resources.Name>
     }
 
 # once a directory starts another space, the core tracks nothing under it
@@ -499,7 +502,7 @@ law checkouts_untracked:
 law step_keeps_history:
   for c: Core
   for i: Input
-  for x: Shared.Bytes()
+  for x: Octets.Bytes()
   for v: History.Node
   for o: {History.History.get(Core.history(c), x) == Some{v}: Maybe<&2, History.Node>}
   {
@@ -563,18 +566,18 @@ law restored_quiet:
   for m: Mount
   for rs: List<&2, Journal.Record>
   for p: String
-  for bytes: Shared.Bytes()
-  for x: Shared.Bytes()
-  for ps: List<&2, Shared.Bytes()>
+  for bytes: Octets.Bytes()
+  for x: Octets.Bytes()
+  for ps: List<&2, Octets.Bytes()>
   for root: Store.Ref
-  for f: Maybe<&2, Shared.Name>
+  for f: Maybe<&2, Resources.Name>
   for a: History.Author
   for h: {
     Lines.Line.heads(
       Core.line(Core.restore(m, rs)),
       Core.name(Core.restore(m, rs), p)
     )
-      == [x]: List<&2, Shared.Bytes()>
+      == [x]: List<&2, Octets.Bytes()>
   }
   for g: {
     History.History.get(
@@ -590,7 +593,7 @@ law restored_quiet:
       Core.store(Core.restore(m, rs)),
       root
     )
-      == Some{Core.items(bytes)}: Maybe<&2, List<&2, Shared.Bytes()>>
+      == Some{Core.items(bytes)}: Maybe<&2, List<&2, Octets.Bytes()>>
   }
   {
     Output.recorded(
@@ -598,5 +601,5 @@ law restored_quiet:
         Core.step(Core.restore(m, rs), Noticed{p, Ep.Fetched{bytes, Hash.Hash.blake3(bytes)}})
       )
     )
-      == []: List<&2, Shared.Bytes()>
+      == []: List<&2, Octets.Bytes()>
   }

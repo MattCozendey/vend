@@ -1,6 +1,9 @@
 import Base
 import ../history/spec.bend as History
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/bytes.bend as Octets
+import ../shared/resources.bend as Resources
+import ../shared/tables.bend as Tables
 
 # A line: a named cursor over the history of one space, like a git branch
 # but per resource. For each path it holds the heads that a working copy on
@@ -12,11 +15,11 @@ import ../shared.bend as Shared
 
 # A line of the space: its name, and the heads of each path by the path.
 type Line is Data:
-  Line{space: String, name: String, heads: Shared.Table<List<&2, Shared.Bytes()>>}
+  Line{space: String, name: String, heads: Tables.Table<List<&2, Octets.Bytes()>>}
 
 # a line with no heads yet
 def Line.new(space: String, name: String) -> Line:
-  Line{space, name, Shared.Table.new(List<&2, Shared.Bytes()>)}
+  Line{space, name, Tables.Table.new(List<&2, Octets.Bytes()>)}
 
 # the key of the line named ln of the space sp: one text for every line of
 # every space, as a daemon keeps them
@@ -38,30 +41,30 @@ def Line.fork(l: Line, name: String) -> Line:
 
 # the heads that l follows for the resource n: none when l has not
 # reached it yet; a resource of another space has none on l
-def Line.heads(l: Line, n: Shared.Name) -> List<&2, Shared.Bytes()>:
+def Line.heads(l: Line, n: Resources.Name) -> List<&2, Octets.Bytes()>:
   match l n:
-    case Line{sp, nm, hs} Shared.Name{s, p}:
+    case Line{sp, nm, hs} Resources.Name{s, p}:
       hs = hs
-      Shared.Bool.when(
-        List<&2, Shared.Bytes()>,
+      Bools.Bool.when(
+        List<&2, Octets.Bytes()>,
         String.eq(sp, s),
         u => Maybe.default(
           &2,
-          List<&2, Shared.Bytes()>,
-          Shared.Table.get(List<&2, Shared.Bytes()>, hs, p),
+          List<&2, Octets.Bytes()>,
+          Tables.Table.get(List<&2, Octets.Bytes()>, hs, p),
           []
         ),
         u => []
       )
 
 # n is a resource of the space of l
-def Line.owns(l: Line, n: Shared.Name) -> Bool:
+def Line.owns(l: Line, n: Resources.Name) -> Bool:
   match l n:
-    case Line{sp, nm, hs} Shared.Name{s, p}:
+    case Line{sp, nm, hs} Resources.Name{s, p}:
       String.eq(sp, s)
 
 # every id of xs is a parent of the node v
-def Line.descends(xs: List<&2, Shared.Bytes()>, +v: History.Node) -> Bool:
+def Line.descends(xs: List<&2, Octets.Bytes()>, +v: History.Node) -> Bool:
   match xs:
     case Nil{}:
       True{}
@@ -71,29 +74,29 @@ def Line.descends(xs: List<&2, Shared.Bytes()>, +v: History.Node) -> Bool:
 # the found node may follow expect for n
 def Line.fits.of(
   v: Maybe<&2, History.Node>,
-  n: Shared.Name,
-  expect: List<&2, Shared.Bytes()>
+  n: Resources.Name,
+  expect: List<&2, Octets.Bytes()>
 ) -> Bool:
   match v:
     case None{}:
       False{}
     case Some{+w}:
-      same = String.eq(Shared.Name.show(History.Node.name(w)), Shared.Name.show(n))
+      same = String.eq(Resources.Name.show(History.Node.name(w)), Resources.Name.show(n))
       List.all.if(u => Line.descends(expect, w), same)
 
 # the node x of h may follow the heads expect of n: it is a node of n, and
 # every id of expect is one of its parents
 def Line.fits(
   h: History.History,
-  n: Shared.Name,
-  expect: List<&2, Shared.Bytes()>,
-  x: Shared.Bytes()
+  n: Resources.Name,
+  expect: List<&2, Octets.Bytes()>,
+  x: Octets.Bytes()
 ) -> Bool:
   Line.fits.of(History.History.get(h, x), n, expect)
 
 # Why a line refused to move: the heads it follows now for the resource.
 type Refused is Data:
-  Refused{now: List<&2, Shared.Bytes()>}
+  Refused{now: List<&2, Octets.Bytes()>}
 
 # l with the node x of h as the one head of n; refused unless n is a
 # resource of the space of l, expect is the heads that l follows for n, and
@@ -101,9 +104,9 @@ type Refused is Data:
 law Line.advance:
   for l: Line
   for h: History.History
-  for n: Shared.Name
-  for expect: List<&2, Shared.Bytes()>
-  for x: Shared.Bytes()
+  for n: Resources.Name
+  for expect: List<&2, Octets.Bytes()>
+  for x: Octets.Bytes()
   Result<&2, &2, Refused, Line>
 
 # Laws
@@ -114,9 +117,9 @@ law Line.advance:
 law advance_refused:
   for l: Line
   for h: History.History
-  for n: Shared.Name
-  for expect: List<&2, Shared.Bytes()>
-  for x: Shared.Bytes()
+  for n: Resources.Name
+  for expect: List<&2, Octets.Bytes()>
+  for x: Octets.Bytes()
   {
     Result.is_fail(
       &2,
@@ -137,35 +140,35 @@ law advance_refused:
 law advance_head:
   for l: Line
   for h: History.History
-  for n: Shared.Name
-  for expect: List<&2, Shared.Bytes()>
-  for x: Shared.Bytes()
+  for n: Resources.Name
+  for expect: List<&2, Octets.Bytes()>
+  for x: Octets.Bytes()
   for k: Line
   for a: {Line.advance(l, h, n, expect, x) == Done{k}: Result<&2, &2, Refused, Line>}
-  {Line.heads(k, n) == [x]: List<&2, Shared.Bytes()>}
+  {Line.heads(k, n) == [x]: List<&2, Octets.Bytes()>}
 
 # moving a line touches only the heads of its own resource
 law advance_frames:
   for l: Line
   for h: History.History
-  for n: Shared.Name
-  for expect: List<&2, Shared.Bytes()>
-  for x: Shared.Bytes()
+  for n: Resources.Name
+  for expect: List<&2, Octets.Bytes()>
+  for x: Octets.Bytes()
   for k: Line
-  for m: Shared.Name
+  for m: Resources.Name
   for a: {Line.advance(l, h, n, expect, x) == Done{k}: Result<&2, &2, Refused, Line>}
-  for d: {String.eq(Shared.Name.show(m), Shared.Name.show(n)) == False{}: Bool}
-  {Line.heads(k, m) == Line.heads(l, m): List<&2, Shared.Bytes()>}
+  for d: {String.eq(Resources.Name.show(m), Resources.Name.show(n)) == False{}: Bool}
+  {Line.heads(k, m) == Line.heads(l, m): List<&2, Octets.Bytes()>}
 
 # a line only moves forward: its new head has every old head as a parent
 law advance_descends:
   for l: Line
   for h: History.History
-  for n: Shared.Name
-  for expect: List<&2, Shared.Bytes()>
-  for x: Shared.Bytes()
+  for n: Resources.Name
+  for expect: List<&2, Octets.Bytes()>
+  for x: Octets.Bytes()
   for k: Line
-  for p: Shared.Bytes()
+  for p: Octets.Bytes()
   for v: History.Node
   for a: {Line.advance(l, h, n, expect, x) == Done{k}: Result<&2, &2, Refused, Line>}
   for o: {History.Ids.has(Line.heads(l, n), p) == True{}: Bool}
@@ -180,11 +183,11 @@ law advance_descends:
 # What an agent last saw of a line: the line's key (Line.id), and for each
 # path, the heads it saw then.
 type Seen is Data:
-  Seen{agent: String, line: String, heads: Shared.Table<List<&2, Shared.Bytes()>>}
+  Seen{agent: String, line: String, heads: Tables.Table<List<&2, Octets.Bytes()>>}
 
 # a marker of agent a on the line whose key is ln that has seen nothing
 def Seen.new(a: String, ln: String) -> Seen:
-  Seen{a, ln, Shared.Table.new(List<&2, Shared.Bytes()>)}
+  Seen{a, ln, Tables.Table.new(List<&2, Octets.Bytes()>)}
 
 # the key of the line of s
 def Seen.line(s: Seen) -> String:
@@ -203,7 +206,7 @@ def Line.name(l: Line) -> String:
 def Seen.update(s: Seen, l: Line) -> Seen:
   match s l:
     case Seen{+a, +ln, hs} Line{sp, nm, lh}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Seen,
         String.eq(ln, Line.key(sp, nm)),
         u => Seen{a, ln, lh},
@@ -211,21 +214,21 @@ def Seen.update(s: Seen, l: Line) -> Seen:
       )
 
 # the heads in the table t for the path p: none when t has no row for it
-def Heads.at(t: Shared.Table<List<&2, Shared.Bytes()>>, p: String) -> List<&2, Shared.Bytes()>:
-  Maybe.default(&2, List<&2, Shared.Bytes()>, Shared.Table.get(List<&2, Shared.Bytes()>, t, p), [])
+def Heads.at(t: Tables.Table<List<&2, Octets.Bytes()>>, p: String) -> List<&2, Octets.Bytes()>:
+  Maybe.default(&2, List<&2, Octets.Bytes()>, Tables.Table.get(List<&2, Octets.Bytes()>, t, p), [])
 
 # the paths of ps whose heads in lh differ from those in seen
 def Seen.unseen.go(
   ps: List<&2, String>,
-  +lh: Shared.Table<List<&2, Shared.Bytes()>>,
-  +seen: Shared.Table<List<&2, Shared.Bytes()>>
+  +lh: Tables.Table<List<&2, Octets.Bytes()>>,
+  +seen: Tables.Table<List<&2, Octets.Bytes()>>
 ) -> List<&2, String>:
   match ps:
     case Nil{}:
       Nil{}
     case Con{+p, +t}:
       same = History.Ids.is_eq(Heads.at(lh, p), Heads.at(seen, p))
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, String>,
         same,
         u => Seen.unseen.go(t, lh, seen),
@@ -233,26 +236,26 @@ def Seen.unseen.go(
       )
 
 # the names of the paths ps in the space sp
-def Seen.names(+sp: String, ps: List<&2, String>) -> List<&2, Shared.Name>:
+def Seen.names(+sp: String, ps: List<&2, String>) -> List<&2, Resources.Name>:
   match ps:
     case Nil{}:
       Nil{}
     case Con{p, t}:
-      Shared.Name{sp, p} <> Seen.names(sp, t)
+      Resources.Name{sp, p} <> Seen.names(sp, t)
 
 # the resources of l whose heads changed since s saw them
-def Seen.unseen(s: Seen, l: Line) -> List<&2, Shared.Name>:
+def Seen.unseen(s: Seen, l: Line) -> List<&2, Resources.Name>:
   match s l:
     case Seen{a, ln, hs} Line{sp, nm, +lh}:
-      Seen.names(sp, Seen.unseen.go(Shared.Table.keys(List<&2, Shared.Bytes()>, lh), lh, hs))
+      Seen.names(sp, Seen.unseen.go(Tables.Table.keys(List<&2, Octets.Bytes()>, lh), lh, hs))
 
 # The markers of every agent on every line.
 type SeenBook is Data:
-  SeenBook{rows: Shared.Table<Seen>}
+  SeenBook{rows: Tables.Table<Seen>}
 
 # no markers yet
 def SeenBook.new() -> SeenBook:
-  SeenBook{Shared.Table.new(Seen)}
+  SeenBook{Tables.Table.new(Seen)}
 
 # the key of the marker of agent a on the line whose key is ln: the length
 # of a first, so no two pairs share a key
@@ -264,7 +267,7 @@ def SeenBook.key(a: String, ln: String) -> String:
 def SeenBook.get(m: SeenBook, +a: String, +ln: String) -> Seen:
   match m:
     case SeenBook{rs}:
-      Maybe.default(&2, Seen, Shared.Table.get(Seen, rs, SeenBook.key(a, ln)), Seen.new(a, ln))
+      Maybe.default(&2, Seen, Tables.Table.get(Seen, rs, SeenBook.key(a, ln)), Seen.new(a, ln))
 
 # m with the marker of agent a on l caught up with l
 def SeenBook.update(m: SeenBook, +a: String, +l: Line) -> SeenBook:
@@ -272,7 +275,7 @@ def SeenBook.update(m: SeenBook, +a: String, +l: Line) -> SeenBook:
     case SeenBook{+rs}:
       +ln = Line.id(l)
       SeenBook{
-        Shared.Table.set(
+        Tables.Table.set(
           Seen,
           rs,
           SeenBook.key(a, ln),
@@ -285,7 +288,7 @@ law seen_caught_up:
   for s: Seen
   for l: Line
   for h: {String.eq(Seen.line(s), Line.id(l)) == True{}: Bool}
-  {Seen.unseen(Seen.update(s, l), l) == []: List<&2, Shared.Name>}
+  {Seen.unseen(Seen.update(s, l), l) == []: List<&2, Resources.Name>}
 
 # catching up moves only that agent's marker on that line
 law seen_frames:

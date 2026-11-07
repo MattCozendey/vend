@@ -1,5 +1,6 @@
 import Base
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/tables.bend as Tables
 import ./spec.bend as Spec
 
 # Conditions as reduced ordered BDDs. Atoms are ordered by String.order of
@@ -23,7 +24,7 @@ type Node is Data:
 # free id. Tables are memo tables: an operation on the same ids is done
 # once.
 type Bdds is Data:
-  Bdds{nodes: Shared.Table<Node>, ids: Shared.Table<U32>, memo: Shared.Table<U32>, next: U32}
+  Bdds{nodes: Tables.Table<Node>, ids: Tables.Table<U32>, memo: Tables.Table<U32>, next: U32}
 
 # A build step: the nodes after it, and the id it made.
 type Got is Data:
@@ -36,7 +37,7 @@ type Op is Data:
 
 # nodes with none made yet
 def Bdds.new() -> Bdds:
-  Bdds{Shared.Table.new(Node), Shared.Table.new(U32), Shared.Table.new(U32), 2}
+  Bdds{Tables.Table.new(Node), Tables.Table.new(U32), Tables.Table.new(U32), 2}
 
 # the node with id x (x is 2 or more)
 def Bdds.node.of(m: Maybe<&2, Node>) -> Node:
@@ -50,7 +51,7 @@ def Bdds.node.of(m: Maybe<&2, Node>) -> Node:
 def Bdds.node(b: Bdds, x: U32) -> Node:
   match b:
     case Bdds{ns, ids, ms, n}:
-      Bdds.node.of(Shared.Table.get(Node, ns, U32.show(x)))
+      Bdds.node.of(Tables.Table.get(Node, ns, U32.show(x)))
 
 # the key of a node: its children, then its atom; the numbers hold no ','
 # so the key names one node
@@ -61,7 +62,7 @@ def Node.key(v: String, lo: U32, hi: U32) -> String:
 def Bdds.memo.ids(b: Bdds, key: String) -> Maybe<&2, U32>:
   match b:
     case Bdds{ns, ids, ms, n}:
-      Shared.Table.get(U32, ids, key)
+      Tables.Table.get(U32, ids, key)
 
 # the node that was found under key, or a new one with the next id
 def Bdds.mk.found(m: Maybe<&2, U32>, b: Bdds, key: String, v: String, lo: U32, hi: U32) -> Got:
@@ -69,14 +70,14 @@ def Bdds.mk.found(m: Maybe<&2, U32>, b: Bdds, key: String, v: String, lo: U32, h
     case Some{x} _:
       Got{b, x}
     case None{} Bdds{ns, ids, ms, +n}:
-      nodes = Shared.Table.set(Node, ns, U32.show(n), Node{v, lo, hi})
-      Got{Bdds{nodes, Shared.Table.set(U32, ids, key, n), ms, (n + 1: U32)}, n}
+      nodes = Tables.Table.set(Node, ns, U32.show(n), Node{v, lo, hi})
+      Got{Bdds{nodes, Tables.Table.set(U32, ids, key, n), ms, (n + 1: U32)}, n}
 
 # the id of the node testing v with children lo and hi: the child itself
 # when both are equal, else the one node with that key
 def Bdds.mk(+b: Bdds, +v: String, +lo: U32, +hi: U32) -> Got:
   +key = Node.key(v, lo, hi)
-  Shared.Bool.when(
+  Bools.Bool.when(
     Got,
     U32.is_eq(lo, hi),
     u => Got{b, lo},
@@ -87,13 +88,13 @@ def Bdds.mk(+b: Bdds, +v: String, +lo: U32, +hi: U32) -> Got:
 def Bdds.memo.get(b: Bdds, key: String) -> Maybe<&2, U32>:
   match b:
     case Bdds{ns, ids, ms, n}:
-      Shared.Table.get(U32, ms, key)
+      Tables.Table.get(U32, ms, key)
 
 # b with the result x stored under key
 def Bdds.memo.set(b: Bdds, key: String, +x: U32) -> Got:
   match b:
     case Bdds{ns, ids, ms, n}:
-      Got{Bdds{ns, ids, Shared.Table.set(U32, ms, key, x), n}, x}
+      Got{Bdds{ns, ids, Tables.Table.set(U32, ms, key, x), n}, x}
 
 # k of the nodes and the id of g
 def Got.then(g: Got, k: Bdds -> U32 -> Got) -> Got:
@@ -106,15 +107,15 @@ def Got.then(g: Got, k: Bdds -> U32 -> Got) -> Got:
 def Op.leaf(op: Op, +x: U32, +y: U32) -> Maybe<&2, U32>:
   match op:
     case OpAnd{}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, U32>,
         Bool.or(U32.is_eq(x, 0), U32.is_eq(y, 0)),
         u => Some{0},
-        u => Shared.Bool.when(
+        u => Bools.Bool.when(
           Maybe<&2, U32>,
           U32.is_eq(x, 1),
           v => Some{y},
-          v => Shared.Bool.when(
+          v => Bools.Bool.when(
             Maybe<&2, U32>,
             Bool.or(U32.is_eq(y, 1), U32.is_eq(x, y)),
             w => Some{x},
@@ -123,15 +124,15 @@ def Op.leaf(op: Op, +x: U32, +y: U32) -> Maybe<&2, U32>:
         )
       )
     case OpOr{}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, U32>,
         Bool.or(U32.is_eq(x, 1), U32.is_eq(y, 1)),
         u => Some{1},
-        u => Shared.Bool.when(
+        u => Bools.Bool.when(
           Maybe<&2, U32>,
           U32.is_eq(x, 0),
           v => Some{y},
-          v => Shared.Bool.when(
+          v => Bools.Bool.when(
             Maybe<&2, U32>,
             Bool.or(U32.is_eq(y, 0), U32.is_eq(x, y)),
             w => Some{x},
@@ -238,11 +239,11 @@ def Bdd.not(fuel: Nat, b: Bdds, +x: U32) -> Got:
       Got{b, 0}
     case 1n+(+f):
       +key = String.append("!", U32.show(x))
-      leaf = Shared.Bool.when(
+      leaf = Bools.Bool.when(
         Maybe<&2, U32>,
         U32.is_eq(x, 0),
         u => Some{1},
-        u => Shared.Bool.when(Maybe<&2, U32>, U32.is_eq(x, 1), v => Some{0}, v => None{})
+        u => Bools.Bool.when(Maybe<&2, U32>, U32.is_eq(x, 1), v => Some{0}, v => None{})
       )
       Bdd.or_else(
         leaf,
@@ -338,11 +339,11 @@ def Bdd.read(fuel: Nat, +b: Bdds, +x: U32) -> Spec.Cond:
     case 0n:
       Spec.Never{}
     case 1n+(+f):
-      Shared.Bool.when(
+      Bools.Bool.when(
         Spec.Cond,
         U32.is_eq(x, 0),
         u => Spec.Never{},
-        u => Shared.Bool.when(
+        u => Bools.Bool.when(
           Spec.Cond,
           U32.is_eq(x, 1),
           v => Spec.Always{},
@@ -366,17 +367,17 @@ def Bdd.path(fuel: Nat, +b: Bdds, +x: U32, +on: List<&2, String>) -> Maybe<&2, L
     case 0n:
       None{}
     case 1n+(+f):
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, List<&2, String>>,
         U32.is_eq(x, 0),
         u => None{},
-        u => Shared.Bool.when(
+        u => Bools.Bool.when(
           Maybe<&2, List<&2, String>>,
           U32.is_eq(x, 1),
           v => Some{on},
           v => Bdd.path.node(
             Bdds.node(b, x),
-            +hi => lo => n => Shared.Bool.when(
+            +hi => lo => n => Bools.Bool.when(
               Maybe<&2, List<&2, String>>,
               U32.is_eq(hi, 0),
               w => Bdd.path(f, b, lo, on),
@@ -449,7 +450,7 @@ def Lits.meet(xs: List<&2, String>, +ys: List<&2, String>) -> Bool:
 def Lits.sat(l: Lits) -> Spec.Sat:
   match l:
     case Lits{+p, n, v}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Spec.Sat,
         List.any.if(u => Lits.meet(p, n), v),
         u => Spec.Unsat{},

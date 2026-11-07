@@ -1,12 +1,13 @@
 import Base
 import ../conditions/impl.bend as CondImpl
 import ../conditions/spec.bend as Cond
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/resources.bend as Resources
 import ./spec.bend as Spec
 
 # the edge e is affected: it points at n, its selection meets c, and its
 # condition can hold together with under
-def Graph.hits(+e: Spec.Edge, n: Shared.Name, c: Spec.Change, under: Cond.Cond) -> Bool:
+def Graph.hits(+e: Spec.Edge, n: Resources.Name, c: Spec.Change, under: Cond.Cond) -> Bool:
   List.all.if(
     v => List.all.if(
       u => Cond.Sat.is_holds(Cond.Cond.sat(Cond.And{Spec.Edge.cond(e), under})),
@@ -18,7 +19,7 @@ def Graph.hits(+e: Spec.Edge, n: Shared.Name, c: Spec.Change, under: Cond.Cond) 
 # the affected edges among es
 def Graph.affected.go(
   es: List<&2, Spec.Edge>,
-  +n: Shared.Name,
+  +n: Resources.Name,
   +c: Spec.Change,
   +under: Cond.Cond
 ) -> List<&2, Spec.Edge>:
@@ -27,7 +28,7 @@ def Graph.affected.go(
       Nil{}
     case Con{+e, t}:
       +rest = Graph.affected.go(t, n, c, under)
-      Shared.Bool.when(List<&2, Spec.Edge>, Graph.hits(e, n, c, under), u => e <> rest, u => rest)
+      Bools.Bool.when(List<&2, Spec.Edge>, Graph.hits(e, n, c, under), u => e <> rest, u => rest)
 
 def Spec.Graph.affected(g, n, c, under):
   match g:

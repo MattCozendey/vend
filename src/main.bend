@@ -4,7 +4,8 @@ import ./daemon/impl.bend as DaemonImpl
 import ./daemon/loop.bend as Daemon
 import ./daemon/spec.bend as Spec
 import ./mcp/loop.bend as Mcp
-import ./shared.bend as Shared
+import ./shared/bytes.bend as Octets
+import ./shared/uris.bend as Uris
 
 # The program: the CLI picks the command; start-or-resume runs the daemon,
 # mcp serves the MCP front, and every other command asks the daemon.
@@ -14,13 +15,13 @@ def Main.uri(+t: String) -> String:
   Maybe.default(
     &2,
     String,
-    Maybe.map(&2, Shared.Uri, String, u => Shared.Uri.show(u), Shared.Uri.read(t)),
+    Maybe.map(&2, Uris.Uri, String, u => Uris.Uri.show(u), Uris.Uri.read(t)),
     t
   )
 
 # the everyday command of the words ws sent with standard input as its
 # bytes, or why standard input could not be read
-def Main.stdin(r: Result<&1, &1, U32 & String, Shared.Bytes()>, ws: List<&2, String>) -> IO(Unit):
+def Main.stdin(r: Result<&1, &1, U32 & String, Octets.Bytes()>, ws: List<&2, String>) -> IO(Unit):
   match r:
     case Fail{e}:
       (c, t) = e
@@ -36,7 +37,7 @@ def Main.ask(stdin: Bool, ws: List<&2, String>) -> IO(Unit):
       Daemon.Client.everyday(ws, [])
     case True{}:
       do IO<Unit>:
-        r: Result<&1, &1, U32 & String, Shared.Bytes()> <- Cli.Stdin.read_all()
+        r: Result<&1, &1, U32 & String, Octets.Bytes()> <- Cli.Stdin.read_all()
         Main.stdin(r, ws)
 
 # the run of a parsed command line

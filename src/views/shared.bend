@@ -1,5 +1,6 @@
 import Base
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/bytes.bend as Octets
 
 # A view reads a resource's bytes as a document of its own type D, and
 # writes the document back. ok tells the documents that the view can
@@ -9,8 +10,8 @@ import ../shared.bend as Shared
 def View.ReadBack(
   ~D: Data,
   ~ok: D -> Bool,
-  ~dec: Shared.Bytes() -> Maybe<&2, D>,
-  ~enc: D -> Shared.Bytes()
+  ~dec: Octets.Bytes() -> Maybe<&2, D>,
+  ~enc: D -> Octets.Bytes()
 ) -> Type:
   @d: D -> {ok(d) == True{}: Bool} -> {dec(enc(d)) == Some{d}: Maybe<&2, D>}
 
@@ -18,28 +19,28 @@ def View.ReadBack(
 def View.WriteBack(
   ~D: Data,
   ~ok: D -> Bool,
-  ~dec: Shared.Bytes() -> Maybe<&2, D>,
-  ~enc: D -> Shared.Bytes()
+  ~dec: Octets.Bytes() -> Maybe<&2, D>,
+  ~enc: D -> Octets.Bytes()
 ) -> Type:
-  @b: Shared.Bytes() -> @d: D -> {dec(b) == Some{d}: Maybe<&2, D>} -> {enc(d) == b: Shared.Bytes()}
+  @b: Octets.Bytes() -> @d: D -> {dec(b) == Some{d}: Maybe<&2, D>} -> {enc(d) == b: Octets.Bytes()}
 
 # dec gives only valid documents
 def View.DecodesValid(
   ~D: Data,
   ~ok: D -> Bool,
-  ~dec: Shared.Bytes() -> Maybe<&2, D>,
-  ~enc: D -> Shared.Bytes()
+  ~dec: Octets.Bytes() -> Maybe<&2, D>,
+  ~enc: D -> Octets.Bytes()
 ) -> Type:
-  @b: Shared.Bytes() -> @d: D -> {dec(b) == Some{d}: Maybe<&2, D>} -> {ok(d) == True{}: Bool}
+  @b: Octets.Bytes() -> @d: D -> {dec(b) == Some{d}: Maybe<&2, D>} -> {ok(d) == True{}: Bool}
 
 # enc writes a valid document as real bytes
 def View.EncodesBytes(
   ~D: Data,
   ~ok: D -> Bool,
-  ~dec: Shared.Bytes() -> Maybe<&2, D>,
-  ~enc: D -> Shared.Bytes()
+  ~dec: Octets.Bytes() -> Maybe<&2, D>,
+  ~enc: D -> Octets.Bytes()
 ) -> Type:
-  @d: D -> {ok(d) == True{}: Bool} -> {Shared.is_bytes(enc(d)) == True{}: Bool}
+  @d: D -> {ok(d) == True{}: Bool} -> {Octets.is_bytes(enc(d)) == True{}: Bool}
 
 # The contract of a view: it loses nothing. Together, the four parts say
 # that the bytes dec accepts and the valid documents are one to one through
@@ -47,8 +48,8 @@ def View.EncodesBytes(
 def View.Lossless(
   ~D: Data,
   ~ok: D -> Bool,
-  ~dec: Shared.Bytes() -> Maybe<&2, D>,
-  ~enc: D -> Shared.Bytes()
+  ~dec: Octets.Bytes() -> Maybe<&2, D>,
+  ~enc: D -> Octets.Bytes()
 ) -> Type:
   View.ReadBack(~D, ~ok, ~dec, ~enc) &
     (
@@ -220,7 +221,7 @@ def Seq.tails(rows: List<&2, List<&2, Nat>>) -> List<&2, List<&2, Nat>>:
 def Seq.common(~T: Data, ~eq: T -> T -> Bool, xs: List<&2, T>, ys: List<&2, T>) -> Nat:
   match xs ys:
     case Con{x, xt} Con{y, yt}:
-      Shared.Bool.when(Nat, eq(x, y), u => 1n+Seq.common(~T, ~eq, xt, yt), u => 0n)
+      Bools.Bool.when(Nat, eq(x, y), u => 1n+Seq.common(~T, ~eq, xt, yt), u => 0n)
     case _ _:
       0n
 
@@ -246,7 +247,7 @@ def Seq.row(
     case Con{b, bt} Con{n0, nt}:
       +nt = nt
       +rest = Seq.row(~T, ~eq, a, bt, nt)
-      here = Shared.Bool.when(Nat, eq(a, b), u => 1n+Seq.hd(nt), u => Nat.max(n0, Seq.hd(rest)))
+      here = Bools.Bool.when(Nat, eq(a, b), u => 1n+Seq.hd(nt), u => Nat.max(n0, Seq.hd(rest)))
       here <> rest
     case _ _:
       [0n]
@@ -298,11 +299,11 @@ def Seq.trace(
     case Con{x, xt} Con{y, yt}:
       down = Seq.hd(Seq.top(List.tail(&2, List<&2, Nat>, rows)))
       right = Seq.hd(List.tail(&2, Nat, Seq.top(rows)))
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, Op<T>>,
         eq(x, y),
         u => OpKeep{} <> Seq.trace(~T, ~eq, xt, yt, Seq.tails(List.tail(&2, List<&2, Nat>, rows))),
-        u => Shared.Bool.when(
+        u => Bools.Bool.when(
           List<&2, Op<T>>,
           Nat.is_le(right, down),
           v => OpDrop{} <> Seq.trace(~T, ~eq, xt, ys, List.tail(&2, List<&2, Nat>, rows)),
@@ -369,7 +370,7 @@ def Seq.apply(
     case Con{Hunk{s, d, ins}, t} Nil{}:
       s = s
       d = d
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, List<&2, T>>,
         Bool.and(Nat.is_eq(pos, s), Nat.is_eq(d, 0n)),
         u => Seq.prepend(~T, ins, Seq.apply(~T, t, Nil{}, pos)),
@@ -378,11 +379,11 @@ def Seq.apply(
     case Con{Hunk{s, d, ins}, t} Con{x, xt}:
       +s = s
       +d = d
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, List<&2, T>>,
         Nat.is_lt(pos, s),
         u => Seq.prepend(~T, [x], Seq.apply(~T, hs, xt, 1n+pos)),
-        u => Shared.Bool.when(
+        u => Bools.Bool.when(
           Maybe<&2, List<&2, T>>,
           Bool.and(Nat.is_eq(pos, s), Nat.is_le(d, List.length(&2, T, xs))),
           v => Seq.prepend(~T, ins, Seq.apply(~T, t, List.drop(&2, T, xs, d), Nat.add(pos, d))),
@@ -413,7 +414,7 @@ def Seq.splice(
   +del: Nat,
   ins: List<&2, T>
 ) -> Maybe<&2, List<&2, T>>:
-  Shared.Bool.when(
+  Bools.Bool.when(
     Maybe<&2, List<&2, T>>,
     Nat.is_le(Nat.add(pos, del), List.length(&2, T, xs)),
     u => Some{
@@ -481,7 +482,7 @@ def Seq.take(
   last: Nat,
   k: Nat -> Maybe<&2, List<&2, Hunk<T>>>
 ) -> Maybe<&2, List<&2, Hunk<T>>>:
-  Shared.Bool.when(
+  Bools.Bool.when(
     Maybe<&2, List<&2, Hunk<T>>>,
     Nat.is_le(last, Hunk.start(~T, h)),
     u => Seq.prepend(~Hunk<T>, [h], k(Hunk.end(~T, h))),
@@ -520,10 +521,10 @@ def Seq.merge3(
     case Con{h, t} Nil{}:
       Seq.take(~T, h, last, e => Seq.merge3(~T, ~eq, ~resolve, base, t, Nil{}, e))
     case Con{+a, at} Con{+b, bt}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, List<&2, Hunk<T>>>,
         Hunk.collide(~T, a, b),
-        u => Shared.Bool.when(
+        u => Bools.Bool.when(
           Maybe<&2, List<&2, Hunk<T>>>,
           Hunk.is_eq(~T, ~eq, a, b),
           v => Seq.take(~T, a, last, e => Seq.merge3(~T, ~eq, ~resolve, base, at, bt, e)),
@@ -534,7 +535,7 @@ def Seq.merge3(
             e => Seq.merge3(~T, ~eq, ~resolve, base, at, bt, e)
           )
         ),
-        u => Shared.Bool.when(
+        u => Bools.Bool.when(
           Maybe<&2, List<&2, Hunk<T>>>,
           Nat.is_lt(Hunk.start(~T, a), Hunk.start(~T, b)),
           v => Seq.take(~T, a, last, e => Seq.merge3(~T, ~eq, ~resolve, base, at, hy, e)),

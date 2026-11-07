@@ -1,7 +1,8 @@
 import Base
 import ../../conditions/spec.bend as Cond
 import ../../graph/spec.bend as Graph
-import ../../shared.bend as Shared
+import ../../shared/bools.bend as Bools
+import ../../shared/resources.bend as Resources
 import ../text/spec.bend as Text
 
 # C: a resource whose bytes are UTF-8 C source. Its document is its Text
@@ -37,7 +38,7 @@ def C.logical.go(lines: List<&2, Text.Line>, acc: String) -> List<&2, String>:
       [acc]
     case Con{l, +t}:
       +x = String.append(acc, Text.Line.text(l))
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, String>,
         C.ends_bs(x),
         u => C.logical.go(t, C.drop_last(x)),
@@ -86,7 +87,7 @@ def C.name.go(s: String) -> String:
     case SNil{}:
       SNil{}
     case SCon{+c, t}:
-      Shared.Bool.when(String, C.is_name(c), u => SCon{c, C.name.go(t)}, u => SNil{})
+      Bools.Bool.when(String, C.is_name(c), u => SCon{c, C.name.go(t)}, u => SNil{})
 
 # the digits at the start of s
 def C.digits.go(s: String) -> String:
@@ -94,7 +95,7 @@ def C.digits.go(s: String) -> String:
     case SNil{}:
       SNil{}
     case SCon{+c, t}:
-      Shared.Bool.when(String, Char.is_digit(c), u => SCon{c, C.digits.go(t)}, u => SNil{})
+      Bools.Bool.when(String, Char.is_digit(c), u => SCon{c, C.digits.go(t)}, u => SNil{})
 
 # every character of s is '0'
 def C.all_zero(s: String) -> Bool:
@@ -111,7 +112,7 @@ type Lexed is Data:
 
 # the token of a name n: the keyword defined, or a name
 def C.word(+n: String) -> Lexed:
-  Shared.Bool.when(
+  Bools.Bool.when(
     Lexed,
     String.eq(n, "defined"),
     u => Got{TDefined{}, 7n},
@@ -121,19 +122,19 @@ def C.word(+n: String) -> Lexed:
 # the token at the start of s for a character c (code x) that is not a
 # space and does not start "&&", "||", "!=" or "!"
 def C.token.one(+c: Char, +x: U32, +s: String) -> Lexed:
-  Shared.Bool.when(
+  Bools.Bool.when(
     Lexed,
     U32.is_eq(x, 40),
     v => Got{TOpen{}, 1n},
-    v => Shared.Bool.when(
+    v => Bools.Bool.when(
       Lexed,
       U32.is_eq(x, 41),
       w => Got{TClose{}, 1n},
-      w => Shared.Bool.when(
+      w => Bools.Bool.when(
         Lexed,
         C.is_start(c),
         y => C.word(C.name.go(s)),
-        y => Shared.Bool.when(
+        y => Bools.Bool.when(
           Lexed,
           Char.is_digit(c),
           z => Got{TNum{C.all_zero(C.digits.go(s))}, String.length(C.digits.go(s))},
@@ -146,23 +147,23 @@ def C.token.one(+c: Char, +x: U32, +s: String) -> Lexed:
 # the token at the start of s, whose first character is c (with code x)
 def C.token(c: Char, +x: U32, +s: String) -> Lexed:
   +two = String.take(s, 2n)
-  Shared.Bool.when(
+  Bools.Bool.when(
     Lexed,
     Bool.or(U32.is_eq(x, 32), U32.is_eq(x, 9)),
     u => Skip{1n},
-    u => Shared.Bool.when(
+    u => Bools.Bool.when(
       Lexed,
       String.eq(two, "&&"),
       v => Got{TAnd{}, 2n},
-      v => Shared.Bool.when(
+      v => Bools.Bool.when(
         Lexed,
         String.eq(two, "||"),
         w => Got{TOr{}, 2n},
-        w => Shared.Bool.when(
+        w => Bools.Bool.when(
           Lexed,
           String.eq(two, "!="),
           y => Got{TOther{}, 2n},
-          y => Shared.Bool.when(
+          y => Bools.Bool.when(
             Lexed,
             U32.is_eq(x, 33),
             z => Got{TNot{}, 1n},
@@ -264,7 +265,7 @@ def C.parse(fuel: Nat, lv: Level, toks: List<&2, Tok>) -> Maybe<&2, Parsed>:
         case LUnary{} Con{TName{x}, r}:
           Some{Parsed{Cond.Atom{x}, r}}
         case LUnary{} Con{TNum{z}, r}:
-          Some{Parsed{Shared.Bool.when(Cond.Cond, z, u => Cond.Never{}, u => Cond.Always{}), r}}
+          Some{Parsed{Bools.Bool.when(Cond.Cond, z, u => Cond.Never{}, u => Cond.Always{}), r}}
         case LUnary{} ts:
           None{}
 
@@ -302,7 +303,7 @@ def C.until(s: String, +x: U32) -> String:
     case SNil{}:
       SNil{}
     case SCon{+c, t}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         String,
         U32.is_eq(Char.to_u32(c), x),
         u => SNil{},
@@ -311,11 +312,11 @@ def C.until(s: String, +x: U32) -> String:
 
 # the include of rest: "path" or <path>
 def C.include(+rest: String) -> Directive:
-  Shared.Bool.when(
+  Bools.Bool.when(
     Directive,
     String.starts_with(rest, SCon{Chr{34}, SNil{}}),
     u => DQuote{C.until(String.drop(rest, 1n), 34)},
-    u => Shared.Bool.when(
+    u => Bools.Bool.when(
       Directive,
       String.starts_with(rest, "<"),
       v => DAngle{C.until(String.drop(rest, 1n), 62)},
@@ -326,31 +327,31 @@ def C.include(+rest: String) -> Directive:
 # the directive with keyword w and the text rest after it
 def C.keyword(+w: String, +rest: String) -> Directive:
   +name = C.name.go(rest)
-  Shared.Bool.when(
+  Bools.Bool.when(
     Directive,
     String.eq(w, "if"),
     u => DIf{C.expr(rest)},
-    u => Shared.Bool.when(
+    u => Bools.Bool.when(
       Directive,
       String.eq(w, "ifdef"),
       v => DIf{C.defined(name)},
-      v => Shared.Bool.when(
+      v => Bools.Bool.when(
         Directive,
         String.eq(w, "ifndef"),
         x => DIf{Cond.Not{C.defined(name)}},
-        x => Shared.Bool.when(
+        x => Bools.Bool.when(
           Directive,
           String.eq(w, "elif"),
           y => DElif{C.expr(rest)},
-          y => Shared.Bool.when(
+          y => Bools.Bool.when(
             Directive,
             String.eq(w, "else"),
             z => DElse{},
-            z => Shared.Bool.when(
+            z => Bools.Bool.when(
               Directive,
               String.eq(w, "endif"),
               q => DEndif{},
-              q => Shared.Bool.when(
+              q => Bools.Bool.when(
                 Directive,
                 String.eq(w, "include"),
                 r => C.include(rest),
@@ -368,7 +369,7 @@ def C.directive(line: String) -> Directive:
   +t = String.trim_start(line)
   +d = String.trim_start(String.drop(t, 1n))
   +w = C.name.go(d)
-  Shared.Bool.when(
+  Bools.Bool.when(
     Directive,
     String.starts_with(t, "#"),
     u => C.keyword(w, String.trim(String.drop(d, String.length(w)))),
@@ -424,7 +425,7 @@ def C.else(stack: List<&2, Branch>) -> List<&2, Branch>:
 def C.edges.go(
   ds: List<&2, Directive>,
   +stack: List<&2, Branch>,
-  +n: Shared.Name
+  +n: Resources.Name
 ) -> List<&2, Graph.Edge>:
   match ds:
     case Nil{}:
@@ -447,5 +448,5 @@ def C.edges.go(
       C.edges.go(t, stack, n)
 
 # the edges of the C text s of the resource n: one per #include
-def C.edges(n: Shared.Name, s: String) -> List<&2, Graph.Edge>:
+def C.edges(n: Resources.Name, s: String) -> List<&2, Graph.Edge>:
   C.edges.go(C.directives(C.logical(s)), [], n)

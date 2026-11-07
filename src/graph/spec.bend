@@ -1,7 +1,10 @@
 import Base
 import ../conditions/spec.bend as Cond
 import ../glob/spec.bend as Glob
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/resources.bend as Resources
+import ../shared/texts.bend as Cuts
+import ../shared/uris.bend as Uris
 
 # The graph of resources: who refers to whom, through which view, for which
 # items, and when. One graph holds every edge with its condition, so a
@@ -19,7 +22,7 @@ type ViewId is Data:
 # point at a resource or an item that does not exist yet; it stays, and
 # resolves when that appears.
 type Target is Data:
-  Named{name: Shared.Name}
+  Named{name: Resources.Name}
   Unresolved{text: String}
 
 # References
@@ -69,11 +72,11 @@ def Path.walk(rel: List<&2, String>, dir: List<&2, String>) -> Maybe<&2, List<&2
     case Con{+x, +t}:
       +dir = dir
       +last = List.is_empty(&2, String, t)
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, List<&2, String>>,
         String.eq(x, "."),
         u => Path.walk(t, Path.mark(last, dir)),
-        u => Shared.Bool.when(
+        u => Bools.Bool.when(
           Maybe<&2, List<&2, String>>,
           String.eq(x, ".."),
           v => Path.walk.up(dir, r => Path.walk(t, Path.mark(last, r))),
@@ -89,48 +92,48 @@ def Target.resolve.of(w: Maybe<&2, List<&2, String>>, sp: String, ref: String) -
       Unresolved{ref}
     case Some{segs}:
       +path = String.join(List.reverse(&2, String, segs), "/")
-      Shared.Bool.when(
+      Bools.Bool.when(
         Target,
         Glob.is_path(path),
-        u => Named{Shared.Name{sp, path}},
+        u => Named{Resources.Name{sp, path}},
         u => Unresolved{ref}
       )
 
 # the cut at the first ':' starts with a scheme that holds no '/'
-def Ref.has_scheme.of(c: Maybe<&2, Shared.Cut>) -> Bool:
+def Ref.has_scheme.of(c: Maybe<&2, Cuts.Cut>) -> Bool:
   match c:
     case None{}:
       False{}
-    case Some{Shared.Cut{+b, a}}:
-      List.all.if(u => Bool.not(Shared.Text.has(b, 47)), Shared.Uri.is_scheme(b))
+    case Some{Cuts.Cut{+b, a}}:
+      List.all.if(u => Bool.not(Cuts.Text.has(b, 47)), Uris.Uri.is_scheme(b))
 
 # ref has a scheme: a scheme, then ':', before any '/'
 def Ref.has_scheme(ref: String) -> Bool:
-  Ref.has_scheme.of(Shared.Text.cut(ref, 58))
+  Ref.has_scheme.of(Cuts.Text.cut(ref, 58))
 
 # the reference ref stays unresolved: it has a scheme, an authority, a
 # query or a fragment
 def Ref.foreign(+ref: String) -> Bool:
   List.any.if(
-    u => List.any.if(v => Bool.not(Shared.Uri.plain(ref)), String.starts_with(ref, "//")),
+    u => List.any.if(v => Bool.not(Uris.Uri.plain(ref)), String.starts_with(ref, "//")),
     Ref.has_scheme(ref)
   )
 
 # the target of the reference ref from the resource n: the empty reference
 # is n itself; one that starts with '/' starts at the root of the space;
 # any other merges with the directory of n
-def Target.resolve(+n: Shared.Name, +ref: String) -> Target:
+def Target.resolve(+n: Resources.Name, +ref: String) -> Target:
   match n:
-    case Shared.Name{+sp, path}:
-      Shared.Bool.when(
+    case Resources.Name{+sp, path}:
+      Bools.Bool.when(
         Target,
         String.is_empty(ref),
         u => Named{n},
-        u => Shared.Bool.when(
+        u => Bools.Bool.when(
           Target,
           Ref.foreign(ref),
           v => Unresolved{ref},
-          v => Shared.Bool.when(
+          v => Bools.Bool.when(
             Target,
             String.starts_with(ref, "/"),
             w => Target.resolve.of(Path.walk(String.split(String.drop(ref, 1n), '/'), []), sp, ref),
@@ -151,7 +154,7 @@ type Selection is Data:
 
 # A reference from one resource to another, active when cond holds.
 type Edge is Data:
-  Edge{from: Shared.Name, to: Target, view: ViewId, select: Selection, cond: Cond.Cond}
+  Edge{from: Resources.Name, to: Target, view: ViewId, select: Selection, cond: Cond.Cond}
 
 # where e points
 def Edge.to(e: Edge) -> Target:
@@ -201,10 +204,10 @@ def Selection.touches(s: Selection, c: Change) -> Bool:
       Keys.meet(ks, cs)
 
 # the edge points at the resource n
-def Target.is(t: Target, n: Shared.Name) -> Bool:
+def Target.is(t: Target, n: Resources.Name) -> Bool:
   match t:
     case Named{m}:
-      String.eq(Shared.Name.show(m), Shared.Name.show(n))
+      String.eq(Resources.Name.show(m), Resources.Name.show(n))
     case Unresolved{x}:
       False{}
 
@@ -224,7 +227,7 @@ def ViewId.is_eq(a: ViewId, b: ViewId) -> Bool:
 def Target.is_eq(a: Target, b: Target) -> Bool:
   match a b:
     case Named{x} Named{y}:
-      String.eq(Shared.Name.show(x), Shared.Name.show(y))
+      String.eq(Resources.Name.show(x), Resources.Name.show(y))
     case Unresolved{x} Unresolved{y}:
       String.eq(x, y)
     case _ _:
@@ -262,7 +265,7 @@ def Edge.is_eq(a: Edge, b: Edge) -> Bool:
           ),
           Target.is_eq(t1, t2)
         ),
-        String.eq(Shared.Name.show(f1), Shared.Name.show(f2))
+        String.eq(Resources.Name.show(f1), Resources.Name.show(f2))
       )
 
 # g has the edge e
@@ -278,7 +281,7 @@ def Graph.has(g: Graph, e: Edge) -> Bool:
 # configuration where under also holds
 law Graph.affected:
   for g: Graph
-  for n: Shared.Name
+  for n: Resources.Name
   for c: Change
   for under: Cond.Cond
   List<&2, Edge>
@@ -288,7 +291,7 @@ law Graph.affected:
 # importer that does not use what changed is left alone
 law affected_exact:
   for g: Graph
-  for n: Shared.Name
+  for n: Resources.Name
   for c: Change
   for under: Cond.Cond
   for e: Edge

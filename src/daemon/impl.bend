@@ -9,7 +9,12 @@ import ../impact/spec.bend as Impact
 import ../journal/impl.bend as J
 import ../journal/spec.bend as Journal
 import ../lines/spec.bend as Lines
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/bytes.bend as Octets
+import ../shared/resources.bend as Resources
+import ../shared/tables.bend as Tables
+import ../shared/texts.bend as Cuts
+import ../shared/uris.bend as Uris
 import ../store/spec.bend as Store
 import ../views/bend/spec.bend as Bend
 import ../views/shared.bend as Vs
@@ -28,7 +33,7 @@ def Spec.Daemon.step(d, l, i):
 # rest, as the journal's readers do.
 
 # n texts, framed as UTF-8, one after another
-def Texts.read.go(n: Nat, b: Shared.Bytes()) -> Maybe<&2, J.Got<List<&2, String>>>:
+def Texts.read.go(n: Nat, b: Octets.Bytes()) -> Maybe<&2, J.Got<List<&2, String>>>:
   match n:
     case 0n:
       Some{J.Got{[], b}}
@@ -46,7 +51,7 @@ def Texts.read.go(n: Nat, b: Shared.Bytes()) -> Maybe<&2, J.Got<List<&2, String>
       )
 
 # texts: their count, then each
-def Texts.read(b: Shared.Bytes()) -> Maybe<&2, J.Got<List<&2, String>>>:
+def Texts.read(b: Octets.Bytes()) -> Maybe<&2, J.Got<List<&2, String>>>:
   J.Got.then(Nat, List<&2, String>, J.Leb.read(b), n => r => Texts.read.go(n, r))
 
 # the value of m when it read all of the bytes, else None
@@ -58,7 +63,7 @@ def Read.whole(-A: Data, m: Maybe<&2, J.Got<A>>) -> Maybe<&2, A>:
       None{}
 
 # a Bool: 0 or 1
-def Flag.read(b: Shared.Bytes()) -> Maybe<&2, J.Got<Bool>>:
+def Flag.read(b: Octets.Bytes()) -> Maybe<&2, J.Got<Bool>>:
   match b:
     case Con{0, r}:
       Some{J.Got{False{}, r}}
@@ -68,7 +73,7 @@ def Flag.read(b: Shared.Bytes()) -> Maybe<&2, J.Got<Bool>>:
       None{}
 
 # what a request asks, after its tag
-def Body.read(b: Shared.Bytes()) -> Maybe<&2, J.Got<Spec.Body>>:
+def Body.read(b: Octets.Bytes()) -> Maybe<&2, J.Got<Spec.Body>>:
   match b:
     case Con{0, r}:
       Some{J.Got{Spec.Status{}, r}}
@@ -103,7 +108,7 @@ def Body.read(b: Shared.Bytes()) -> Maybe<&2, J.Got<Spec.Body>>:
           Spec.Body,
           Texts.read(r2),
           ws => r3 => J.Got.then(
-            Shared.Bytes(),
+            Octets.Bytes(),
             Spec.Body,
             J.Framed.read(r3),
             b => r4 => Some{J.Got{Spec.Ask{a, ws, b}, r4}}
@@ -117,7 +122,7 @@ def Spec.Request.decode(b):
   Read.whole(
     Spec.Request,
     J.Got.then(
-      Shared.Bytes(),
+      Octets.Bytes(),
       Spec.Request,
       J.Framed.read(b),
       t => r => J.Got.then(
@@ -130,7 +135,7 @@ def Spec.Request.decode(b):
   )
 
 # one mount's status
-def Info.read(b: Shared.Bytes()) -> Maybe<&2, J.Got<Spec.Info>>:
+def Info.read(b: Octets.Bytes()) -> Maybe<&2, J.Got<Spec.Info>>:
   J.Got.then(
     String,
     Spec.Info,
@@ -154,7 +159,7 @@ def Info.read(b: Shared.Bytes()) -> Maybe<&2, J.Got<Spec.Info>>:
   )
 
 # n statuses, one after another
-def Infos.read.go(n: Nat, b: Shared.Bytes()) -> Maybe<&2, J.Got<List<&2, Spec.Info>>>:
+def Infos.read.go(n: Nat, b: Octets.Bytes()) -> Maybe<&2, J.Got<List<&2, Spec.Info>>>:
   match n:
     case 0n:
       Some{J.Got{[], b}}
@@ -172,7 +177,7 @@ def Infos.read.go(n: Nat, b: Shared.Bytes()) -> Maybe<&2, J.Got<List<&2, Spec.In
       )
 
 # a response, from its tag
-def Response.read(b: Shared.Bytes()) -> Maybe<&2, J.Got<Spec.Response>>:
+def Response.read(b: Octets.Bytes()) -> Maybe<&2, J.Got<Spec.Response>>:
   match b:
     case Con{0, r}:
       J.Got.then(
@@ -230,7 +235,7 @@ def Spec.Response.decode(b):
 # the entry that m read in front of the entries that k reads from the rest
 def Entries.read.one(
   m: Maybe<&2, J.Got<Spec.Entry>>,
-  k: Shared.Bytes() -> Maybe<&2, List<&2, Spec.Entry>>
+  k: Octets.Bytes() -> Maybe<&2, List<&2, Spec.Entry>>
 ) -> Maybe<&2, List<&2, Spec.Entry>>:
   match m:
     case None{}:
@@ -239,7 +244,7 @@ def Entries.read.one(
       Maybe.map(&2, List<&2, Spec.Entry>, List<&2, Spec.Entry>, es => e <> es, k(r))
 
 # the agent of an entry: 0, or 1 then its name
-def Agent.read(b: Shared.Bytes()) -> Maybe<&2, J.Got<Maybe<&2, String>>>:
+def Agent.read(b: Octets.Bytes()) -> Maybe<&2, J.Got<Maybe<&2, String>>>:
   match b:
     case Con{0, r}:
       Some{J.Got{None{}, r}}
@@ -249,7 +254,7 @@ def Agent.read(b: Shared.Bytes()) -> Maybe<&2, J.Got<Maybe<&2, String>>>:
       None{}
 
 # entries up to the end of the bytes; fuel counts the bytes left
-def Entries.read.go(fuel: Nat, b: Shared.Bytes()) -> Maybe<&2, List<&2, Spec.Entry>>:
+def Entries.read.go(fuel: Nat, b: Octets.Bytes()) -> Maybe<&2, List<&2, Spec.Entry>>:
   match fuel b:
     case _ Nil{}:
       Some{[]}
@@ -291,13 +296,13 @@ def Spec.Entries.decode(b):
 # a mount that serves nothing: the core that replays a record for the
 # shared store and history only
 def Apply.nomount() -> Core.Mount:
-  Core.Mount{"", "", Shared.Uri{"file", None{}, "/"}, [], History.Outside{}}
+  Core.Mount{"", "", Uris.Uri{"file", None{}, "/"}, [], History.Outside{}}
 
 # d after the Kept record of the line named ln with content ct and node v
 def Apply.kept(
   d: Spec.Daemon,
   +ln: String,
-  ct: Maybe<&2, Shared.Bytes()>,
+  ct: Maybe<&2, Octets.Bytes()>,
   +v: History.Node
 ) -> Spec.Daemon:
   match d:
@@ -308,26 +313,26 @@ def Apply.kept(
           s,
           h,
           Lines.Line.new("", ""),
-          Shared.Table.new(Ep.Stream),
-          Shared.Table.new(Maybe<&2, Shared.Name>),
+          Tables.Table.new(Ep.Stream),
+          Tables.Table.new(Maybe<&2, Resources.Name>),
           []
         },
         [Journal.Kept{ln, ct, v}]
       )
       +h2 = Core.Core.history(c)
-      +sp = Shared.Name.space(History.Node.name(v))
+      +sp = Resources.Name.space(History.Node.name(v))
       +key = Lines.Line.key(sp, ln)
       +ls = ls
       l = Maybe.default(
         &2,
         Lines.Line,
-        Shared.Table.get(Lines.Line, ls, key),
+        Tables.Table.get(Lines.Line, ls, key),
         Lines.Line.new(sp, ln)
       )
       Spec.Daemon{
         Core.Core.store(c),
         h2,
-        Shared.Table.set(Lines.Line, ls, key, CoreImpl.Replay.advance(l, h2, ln, v)),
+        Tables.Table.set(Lines.Line, ls, key, CoreImpl.Replay.advance(l, h2, ln, v)),
         ms,
         cs,
         bk
@@ -354,9 +359,9 @@ def Apply.marked(
     case k None{}:
       k
     case Spec.Daemon{+s, +h, +ls, +ms, +cs, Spec.Book{+sn, +mk, +og}} Some{l}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Spec.Daemon,
-        Maybe.is_some(&2, Lines.Mark, Shared.Table.get(Lines.Mark, mk, key)),
+        Maybe.is_some(&2, Lines.Mark, Tables.Table.get(Lines.Mark, mk, key)),
         u => Spec.Daemon{s, h, ls, ms, cs, Spec.Book{sn, mk, og}},
         u => Spec.Daemon{
           s,
@@ -364,7 +369,7 @@ def Apply.marked(
           ls,
           ms,
           cs,
-          Spec.Book{sn, Shared.Table.set(Lines.Mark, mk, key, Lines.Mark.of(l, nm, msg, a)), og}
+          Spec.Book{sn, Tables.Table.set(Lines.Mark, mk, key, Lines.Mark.of(l, nm, msg, a)), og}
         }
       )
 
@@ -390,17 +395,17 @@ def Apply.forked(
       x
     case Spec.Daemon{+s, +h, +ls, +ms, +cs, Spec.Book{+sn, +mk, +og}} Some{l}:
       +nl = Lines.Line.fork(l, Spec.Key.name(k))
-      Shared.Bool.when(
+      Bools.Bool.when(
         Spec.Daemon,
-        Maybe.is_some(&2, Lines.Line, Shared.Table.get(Lines.Line, ls, k)),
+        Maybe.is_some(&2, Lines.Line, Tables.Table.get(Lines.Line, ls, k)),
         u => Spec.Daemon{s, h, ls, ms, cs, Spec.Book{sn, mk, og}},
         u => Spec.Daemon{
           s,
           h,
-          Shared.Table.set(Lines.Line, ls, k, nl),
+          Tables.Table.set(Lines.Line, ls, k, nl),
           ms,
           cs,
-          Spec.Book{sn, mk, Shared.Table.set(Spec.Origin, og, k, Spec.Origin{f, m, nl})}
+          Spec.Book{sn, mk, Tables.Table.set(Spec.Origin, og, k, Spec.Origin{f, m, nl})}
         }
       )
 
@@ -434,23 +439,23 @@ def Spec.Daemon.replay(d, rs):
 # ----------
 
 # the nodes of the history of d
-def Ref.nodes(d: Spec.Daemon) -> Shared.Table<History.Node>:
+def Ref.nodes(d: Spec.Daemon) -> Tables.Table<History.Node>:
   match d:
     case Spec.Daemon{s, h, ls, ms, cs, bk}:
       Spec.Versions.nodes(h)
 
 # a and b are the same name
-def Ref.same(a: Shared.Name, b: Shared.Name) -> Bool:
-  String.eq(Shared.Name.show(a), Shared.Name.show(b))
+def Ref.same(a: Resources.Name, b: Resources.Name) -> Bool:
+  String.eq(Resources.Name.show(a), Resources.Name.show(b))
 
 # the id of the node found under a key, when it is a node of n
-def Ref.of(m: Maybe<&2, History.Node>, n: Shared.Name) -> List<&2, Shared.Bytes()>:
+def Ref.of(m: Maybe<&2, History.Node>, n: Resources.Name) -> List<&2, Octets.Bytes()>:
   match m:
     case None{}:
       []
     case Some{+v}:
-      Shared.Bool.when(
-        List<&2, Shared.Bytes()>,
+      Bools.Bool.when(
+        List<&2, Octets.Bytes()>,
         Ref.same(History.Node.name(v), n),
         u => [History.Node.id(v)],
         u => []
@@ -459,29 +464,29 @@ def Ref.of(m: Maybe<&2, History.Node>, n: Shared.Name) -> List<&2, Shared.Bytes(
 # the ids of the nodes of n among the keys ks whose hex starts with p
 def Ref.matches(
   ks: List<&2, String>,
-  +ns: Shared.Table<History.Node>,
-  +n: Shared.Name,
+  +ns: Tables.Table<History.Node>,
+  +n: Resources.Name,
   +p: String
-) -> List<&2, Shared.Bytes()>:
+) -> List<&2, Octets.Bytes()>:
   match ks:
     case Nil{}:
       Nil{}
     case Con{+k, t}:
       +rest = Ref.matches(t, ns, n, p)
-      Shared.Bool.when(
-        List<&2, Shared.Bytes()>,
+      Bools.Bool.when(
+        List<&2, Octets.Bytes()>,
         String.starts_with(k, p),
         u => List.append(
           &2,
-          Shared.Bytes(),
-          Ref.of(Shared.Table.get(History.Node, ns, k), n),
+          Octets.Bytes(),
+          Ref.of(Tables.Table.get(History.Node, ns, k), n),
           rest
         ),
         u => rest
       )
 
 # the one id of xs
-def Ref.one(xs: List<&2, Shared.Bytes()>) -> Maybe<&2, Shared.Bytes()>:
+def Ref.one(xs: List<&2, Octets.Bytes()>) -> Maybe<&2, Octets.Bytes()>:
   match xs:
     case Con{x, Nil{}}:
       Some{x}
@@ -490,9 +495,9 @@ def Ref.one(xs: List<&2, Shared.Bytes()>) -> Maybe<&2, Shared.Bytes()>:
 
 # x before the ids of the rest, when both are found
 def Ref.cons(
-  m: Maybe<&2, Shared.Bytes()>,
-  r: Maybe<&2, List<&2, Shared.Bytes()>>
-) -> Maybe<&2, List<&2, Shared.Bytes()>>:
+  m: Maybe<&2, Octets.Bytes()>,
+  r: Maybe<&2, List<&2, Octets.Bytes()>>
+) -> Maybe<&2, List<&2, Octets.Bytes()>>:
   match m r:
     case Some{x} Some{xs}:
       Some{x <> xs}
@@ -503,9 +508,9 @@ def Ref.cons(
 def Ref.all(
   ps: List<&2, String>,
   +ks: List<&2, String>,
-  +ns: Shared.Table<History.Node>,
-  +n: Shared.Name
-) -> Maybe<&2, List<&2, Shared.Bytes()>>:
+  +ns: Tables.Table<History.Node>,
+  +n: Resources.Name
+) -> Maybe<&2, List<&2, Octets.Bytes()>>:
   match ps:
     case Nil{}:
       Some{[]}
@@ -514,7 +519,7 @@ def Ref.all(
 
 def Spec.Daemon.ids(d, n, ps):
   +ns = Ref.nodes(d)
-  Ref.all(ps, Shared.Table.keys(History.Node, ns), ns, n)
+  Ref.all(ps, Tables.Table.keys(History.Node, ns), ns, n)
 
 # the keys among ks whose line name is t
 def Ref.named(ks: List<&2, String>, +t: String) -> List<&2, String>:
@@ -522,7 +527,7 @@ def Ref.named(ks: List<&2, String>, +t: String) -> List<&2, String>:
     case Nil{}:
       Nil{}
     case Con{+k, +r}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, String>,
         String.eq(Spec.Key.name(k), t),
         u => k <> Ref.named(r, t),
@@ -538,7 +543,7 @@ def Ref.line_of(d: Spec.Daemon, ks: List<&2, String>) -> Maybe<&2, Lines.Line>:
       None{}
 
 # the lines of d
-def Ref.lines(d: Spec.Daemon) -> Shared.Table<Lines.Line>:
+def Ref.lines(d: Spec.Daemon) -> Tables.Table<Lines.Line>:
   match d:
     case Spec.Daemon{s, h, ls, ms, cs, bk}:
       ls
@@ -546,11 +551,11 @@ def Ref.lines(d: Spec.Daemon) -> Shared.Table<Lines.Line>:
 def Spec.Daemon.line_ref(d, t):
   +d = d
   +t = t
-  Shared.Bool.when(
+  Bools.Bool.when(
     Maybe<&2, Lines.Line>,
-    Shared.Text.has(t, 58),
+    Cuts.Text.has(t, 58),
     u => Spec.Daemon.line_at(d, t),
-    u => Ref.line_of(d, Ref.named(Shared.Table.keys(Lines.Line, Ref.lines(d)), t))
+    u => Ref.line_of(d, Ref.named(Tables.Table.keys(Lines.Line, Ref.lines(d)), t))
   )
 
 # What a reference to a line or a mark gives: its key, its mark (if any),
@@ -582,16 +587,16 @@ def Ref.lined(l: Maybe<&2, Lines.Line>) -> Maybe<&2, Source>:
       Some{Source{Lines.Line.id(x), None{}, x}}
 
 # the source that t names: `<line>@<mark>`, or a line
-def Ref.source.of(+d: Spec.Daemon, c: Maybe<&2, Shared.Cut>, t: String) -> Maybe<&2, Source>:
+def Ref.source.of(+d: Spec.Daemon, c: Maybe<&2, Cuts.Cut>, t: String) -> Maybe<&2, Source>:
   match c:
     case None{}:
       Ref.lined(Spec.Daemon.line_ref(d, t))
-    case Some{Shared.Cut{b, a}}:
+    case Some{Cuts.Cut{b, a}}:
       Ref.marked(d, Spec.Daemon.line_ref(d, b), a)
 
 # the source that t names
 def Ref.source(d: Spec.Daemon, +t: String) -> Maybe<&2, Source>:
-  Ref.source.of(d, Shared.Text.cut(t, 64), t)
+  Ref.source.of(d, Cuts.Text.cut(t, 64), t)
 
 # Contents
 # --------
@@ -609,7 +614,7 @@ def Ref.store(d: Spec.Daemon) -> Store.Store:
       s
 
 # the bytes of the items the store read, if it could
-def Content.bytes(m: Maybe<&2, List<&2, Shared.Bytes()>>) -> Maybe<&2, Maybe<&2, Shared.Bytes()>>:
+def Content.bytes(m: Maybe<&2, List<&2, Octets.Bytes()>>) -> Maybe<&2, Maybe<&2, Octets.Bytes()>>:
   match m:
     case None{}:
       None{}
@@ -617,7 +622,7 @@ def Content.bytes(m: Maybe<&2, List<&2, Shared.Bytes()>>) -> Maybe<&2, Maybe<&2,
       Some{Some{CoreImpl.Replay.bytes(items)}}
 
 # the content of the node found: Some{None} for a version that says gone
-def Content.of(d: Spec.Daemon, m: Maybe<&2, History.Node>) -> Maybe<&2, Maybe<&2, Shared.Bytes()>>:
+def Content.of(d: Spec.Daemon, m: Maybe<&2, History.Node>) -> Maybe<&2, Maybe<&2, Octets.Bytes()>>:
   match m:
     case None{}:
       None{}
@@ -628,7 +633,7 @@ def Content.of(d: Spec.Daemon, m: Maybe<&2, History.Node>) -> Maybe<&2, Maybe<&2
 
 # the content of the version x: None when the daemon lacks it, Some{None}
 # for a version that says gone
-def Content.at(+d: Spec.Daemon, x: Shared.Bytes()) -> Maybe<&2, Maybe<&2, Shared.Bytes()>>:
+def Content.at(+d: Spec.Daemon, x: Octets.Bytes()) -> Maybe<&2, Maybe<&2, Octets.Bytes()>>:
   Content.of(d, History.History.get(Ref.history(d), x))
 
 # the id that the version text v names for n: a line's one head, else an
@@ -636,20 +641,20 @@ def Content.at(+d: Spec.Daemon, x: Shared.Bytes()) -> Maybe<&2, Maybe<&2, Shared
 def Ref.version.of(
   l: Maybe<&2, Lines.Line>,
   d: Spec.Daemon,
-  n: Shared.Name,
+  n: Resources.Name,
   v: String
-) -> Maybe<&2, Shared.Bytes()>:
+) -> Maybe<&2, Octets.Bytes()>:
   match l:
     case Some{x}:
       Ref.one(Lines.Line.heads(x, n))
     case None{}:
       Maybe.default(
         &2,
-        Maybe<&2, Shared.Bytes()>,
+        Maybe<&2, Octets.Bytes()>,
         Maybe.map(
           &2,
-          List<&2, Shared.Bytes()>,
-          Maybe<&2, Shared.Bytes()>,
+          List<&2, Octets.Bytes()>,
+          Maybe<&2, Octets.Bytes()>,
           xs => Ref.one(xs),
           Spec.Daemon.ids(d, n, [v])
         ),
@@ -657,18 +662,18 @@ def Ref.version.of(
       )
 
 # the id that the version text v names for n
-def Ref.version(+d: Spec.Daemon, n: Shared.Name, +v: String) -> Maybe<&2, Shared.Bytes()>:
+def Ref.version(+d: Spec.Daemon, n: Resources.Name, +v: String) -> Maybe<&2, Octets.Bytes()>:
   Ref.version.of(Spec.Daemon.line_ref(d, v), d, n, v)
 
 # Showing
 # -------
 
 # the first 8 hex digits of an id
-def Show.id(x: Shared.Bytes()) -> String:
+def Show.id(x: Octets.Bytes()) -> String:
   String.take(Hash.Hash.hex(x), 8n)
 
 # the ids, short, one after another
-def Show.ids(xs: List<&2, Shared.Bytes()>) -> String:
+def Show.ids(xs: List<&2, Octets.Bytes()>) -> String:
   match xs:
     case Nil{}:
       "none"
@@ -702,7 +707,7 @@ def Show.text(m: Maybe<&2, String>, n: Nat) -> Spec.Handled:
       Show.yes(String.split(s, Chr{10}))
 
 # the lines of a content
-def Show.content(m: Maybe<&2, Maybe<&2, Shared.Bytes()>>) -> Spec.Handled:
+def Show.content(m: Maybe<&2, Maybe<&2, Octets.Bytes()>>) -> Spec.Handled:
   match m:
     case None{}:
       Show.no("no such version")
@@ -715,7 +720,7 @@ def Show.content(m: Maybe<&2, Maybe<&2, Shared.Bytes()>>) -> Spec.Handled:
 # -------------------
 
 # the parents of a node found, if any
-def Dag.parents(m: Maybe<&2, History.Node>) -> List<&2, Shared.Bytes()>:
+def Dag.parents(m: Maybe<&2, History.Node>) -> List<&2, Octets.Bytes()>:
   match m:
     case None{}:
       []
@@ -727,48 +732,48 @@ def Dag.parents(m: Maybe<&2, History.Node>) -> List<&2, Shared.Bytes()>:
 def Dag.walk(
   fuel: Nat,
   +h: History.History,
-  queue: List<&2, Shared.Bytes()>,
-  seen: List<&2, Shared.Bytes()>
-) -> List<&2, Shared.Bytes()>:
+  queue: List<&2, Octets.Bytes()>,
+  seen: List<&2, Octets.Bytes()>
+) -> List<&2, Octets.Bytes()>:
   match fuel queue:
     case 0n q:
-      List.reverse(&2, Shared.Bytes(), seen)
+      List.reverse(&2, Octets.Bytes(), seen)
     case _ Nil{}:
-      List.reverse(&2, Shared.Bytes(), seen)
+      List.reverse(&2, Octets.Bytes(), seen)
     case 1n+(+f) Con{+x, +t}:
       +seen = seen
-      Shared.Bool.when(
-        List<&2, Shared.Bytes()>,
+      Bools.Bool.when(
+        List<&2, Octets.Bytes()>,
         History.Ids.has(seen, x),
         u => Dag.walk(f, h, t, seen),
         u => Dag.walk(
           f,
           h,
-          List.append(&2, Shared.Bytes(), t, Dag.parents(History.History.get(h, x))),
+          List.append(&2, Octets.Bytes(), t, Dag.parents(History.History.get(h, x))),
           x <> seen
         )
       )
 
 # fuel for a walk of h: more steps than nodes and parents
 def Dag.fuel(h: History.History) -> Nat:
-  +n = List.length(&2, String, Shared.Table.keys(History.Node, Spec.Versions.nodes(h)))
+  +n = List.length(&2, String, Tables.Table.keys(History.Node, Spec.Versions.nodes(h)))
   Nat.add(Nat.mul(n, n), 2n)
 
 # the ids reachable from xs
-def Dag.reach(+h: History.History, xs: List<&2, Shared.Bytes()>) -> List<&2, Shared.Bytes()>:
+def Dag.reach(+h: History.History, xs: List<&2, Octets.Bytes()>) -> List<&2, Octets.Bytes()>:
   Dag.walk(Dag.fuel(h), h, xs, [])
 
 # the first id of ys that xs also has
 def Dag.first(
-  ys: List<&2, Shared.Bytes()>,
-  +xs: List<&2, Shared.Bytes()>
-) -> Maybe<&2, Shared.Bytes()>:
+  ys: List<&2, Octets.Bytes()>,
+  +xs: List<&2, Octets.Bytes()>
+) -> Maybe<&2, Octets.Bytes()>:
   match ys:
     case Nil{}:
       None{}
     case Con{+y, t}:
-      Shared.Bool.when(
-        Maybe<&2, Shared.Bytes()>,
+      Bools.Bool.when(
+        Maybe<&2, Octets.Bytes()>,
         History.Ids.has(xs, y),
         u => Some{y},
         u => Dag.first(t, xs)
@@ -777,16 +782,16 @@ def Dag.first(
 # the nearest common ancestor of a and b (each its own ancestor)
 def Dag.base(
   +h: History.History,
-  a: Shared.Bytes(),
-  b: Shared.Bytes()
-) -> Maybe<&2, Shared.Bytes()>:
+  a: Octets.Bytes(),
+  b: Octets.Bytes()
+) -> Maybe<&2, Octets.Bytes()>:
   Dag.first(Dag.reach(h, [b]), Dag.reach(h, [a]))
 
 # Answers
 # -------
 
 # the heads table of a line
-def Answer.table(l: Lines.Line) -> Shared.Table<List<&2, Shared.Bytes()>>:
+def Answer.table(l: Lines.Line) -> Tables.Table<List<&2, Octets.Bytes()>>:
   match l:
     case Lines.Line{sp, nm, hs}:
       hs
@@ -799,20 +804,20 @@ def Answer.space(l: Lines.Line) -> String:
 
 # the paths a line follows
 def Answer.paths(l: Lines.Line) -> List<&2, String>:
-  Shared.Table.keys(List<&2, Shared.Bytes()>, Answer.table(l))
+  Tables.Table.keys(List<&2, Octets.Bytes()>, Answer.table(l))
 
 # how many paths of ps the line l follows differently than at
 def Answer.moved(
   ps: List<&2, String>,
-  +l: Shared.Table<List<&2, Shared.Bytes()>>,
-  +at: Shared.Table<List<&2, Shared.Bytes()>>
+  +l: Tables.Table<List<&2, Octets.Bytes()>>,
+  +at: Tables.Table<List<&2, Octets.Bytes()>>
 ) -> Nat:
   match ps:
     case Nil{}:
       0n
     case Con{+p, t}:
       +rest = Answer.moved(t, l, at)
-      Shared.Bool.when(
+      Bools.Bool.when(
         Nat,
         History.Ids.is_eq(Lines.Heads.at(l, p), Lines.Heads.at(at, p)),
         u => rest,
@@ -875,7 +880,7 @@ def Answer.body(v: History.Node) -> String:
 # the log line of the node found, if it is by the author asked for
 def Answer.entry(
   m: Maybe<&2, History.Node>,
-  x: Shared.Bytes(),
+  x: Octets.Bytes(),
   ma: Maybe<&2, String>
 ) -> List<&2, String>:
   match m:
@@ -893,11 +898,11 @@ def Answer.entry(
           Show.ids(History.Node.parents(v))
         ]
       )
-      Shared.Bool.when(List<&2, String>, Answer.by(v, ma), u => [line], u => [])
+      Bools.Bool.when(List<&2, String>, Answer.by(v, ma), u => [line], u => [])
 
 # the log lines of the ids xs
 def Answer.entries(
-  xs: List<&2, Shared.Bytes()>,
+  xs: List<&2, Octets.Bytes()>,
   +h: History.History,
   +ma: Maybe<&2, String>
 ) -> List<&2, String>:
@@ -915,20 +920,20 @@ def Answer.entries(
 # the heads a log starts from: those of the line named, else every tip
 def Answer.starts(
   d: Spec.Daemon,
-  n: Shared.Name,
+  n: Resources.Name,
   ml: Maybe<&2, String>
-) -> List<&2, Shared.Bytes()>:
+) -> List<&2, Octets.Bytes()>:
   match ml:
     case None{}:
       History.History.tips(Ref.history(d), n)
     case Some{t}:
       Maybe.default(
         &2,
-        List<&2, Shared.Bytes()>,
+        List<&2, Octets.Bytes()>,
         Maybe.map(
           &2,
           Lines.Line,
-          List<&2, Shared.Bytes()>,
+          List<&2, Octets.Bytes()>,
           l => Lines.Line.heads(l, n),
           Spec.Daemon.line_ref(d, t)
         ),
@@ -938,24 +943,24 @@ def Answer.starts(
 # the log of n
 def Answer.log(
   +d: Spec.Daemon,
-  +n: Shared.Name,
+  +n: Resources.Name,
   ml: Maybe<&2, String>,
   ma: Maybe<&2, String>
 ) -> Spec.Handled:
   +h = Ref.history(d)
   +ls = Answer.entries(Dag.reach(h, Answer.starts(d, n, ml)), h, ma)
-  Shared.Bool.when(
+  Bools.Bool.when(
     Spec.Handled,
     List.is_empty(&2, String, ls),
-    u => Show.yes([String.append("no versions of ", Shared.Name.show(n))]),
+    u => Show.yes([String.append("no versions of ", Resources.Name.show(n))]),
     u => Show.yes(ls)
   )
 
 # the content of the version that m found
 def Answer.content(
   d: Spec.Daemon,
-  m: Maybe<&2, Shared.Bytes()>
-) -> Maybe<&2, Maybe<&2, Shared.Bytes()>>:
+  m: Maybe<&2, Octets.Bytes()>
+) -> Maybe<&2, Maybe<&2, Octets.Bytes()>>:
   match m:
     case None{}:
       None{}
@@ -963,7 +968,7 @@ def Answer.content(
       Content.at(d, x)
 
 # the content of the version text mv of n, or of n's one tip
-def Answer.show(+d: Spec.Daemon, n: Shared.Name, mv: Maybe<&2, String>) -> Spec.Handled:
+def Answer.show(+d: Spec.Daemon, n: Resources.Name, mv: Maybe<&2, String>) -> Spec.Handled:
   match mv:
     case None{}:
       Show.content(Answer.content(d, Ref.one(History.History.tips(Ref.history(d), n))))
@@ -973,8 +978,8 @@ def Answer.show(+d: Spec.Daemon, n: Shared.Name, mv: Maybe<&2, String>) -> Spec.
 # the diff of two contents found
 def Answer.diff.of(
   path: String,
-  x: Maybe<&2, Maybe<&2, Shared.Bytes()>>,
-  y: Maybe<&2, Maybe<&2, Shared.Bytes()>>
+  x: Maybe<&2, Maybe<&2, Octets.Bytes()>>,
+  y: Maybe<&2, Maybe<&2, Octets.Bytes()>>
 ) -> Spec.Handled:
   match x y:
     case Some{Some{a}} Some{Some{b}}:
@@ -985,15 +990,15 @@ def Answer.diff.of(
       Show.no("no such version")
 
 # the diff of the versions a and b of n
-def Answer.diff(+d: Spec.Daemon, +n: Shared.Name, a: String, b: String) -> Spec.Handled:
+def Answer.diff(+d: Spec.Daemon, +n: Resources.Name, a: String, b: String) -> Spec.Handled:
   Answer.diff.of(
-    Shared.Name.path(n),
+    Resources.Name.path(n),
     Answer.content(d, Ref.version(d, n, a)),
     Answer.content(d, Ref.version(d, n, b))
   )
 
 # the Bend document of a content, if it is UTF-8
-def Answer.module(c: Maybe<&2, Maybe<&2, Shared.Bytes()>>) -> Maybe<&2, Bend.Module>:
+def Answer.module(c: Maybe<&2, Maybe<&2, Octets.Bytes()>>) -> Maybe<&2, Bend.Module>:
   match c:
     case Some{Some{b}}:
       Maybe.map(&2, String, Bend.Module, s => Views.View.module(s), Text.Text.decode(b))
@@ -1003,8 +1008,8 @@ def Answer.module(c: Maybe<&2, Maybe<&2, Shared.Bytes()>>) -> Maybe<&2, Bend.Mod
 # the content of the one head of hs
 def Answer.head(
   d: Spec.Daemon,
-  hs: List<&2, Shared.Bytes()>
-) -> Maybe<&2, Maybe<&2, Shared.Bytes()>>:
+  hs: List<&2, Octets.Bytes()>
+) -> Maybe<&2, Maybe<&2, Octets.Bytes()>>:
   Answer.content(d, Ref.one(hs))
 
 # the import edges of the Bend resources at the paths ps of the line l
@@ -1013,9 +1018,9 @@ def Answer.edges(ps: List<&2, String>, +d: Spec.Daemon, +l: Lines.Line) -> List<
     case Nil{}:
       Nil{}
     case Con{+p, t}:
-      +n = {Shared.Name{Answer.space(l), p}: Shared.Name}
+      +n = {Resources.Name{Answer.space(l), p}: Resources.Name}
       +rest = Answer.edges(t, d, l)
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, Graph.Edge>,
         Views.View.is_bend(p),
         u => List.append(
@@ -1046,7 +1051,7 @@ def Answer.change(
 ) -> Graph.Change:
   match a b:
     case Some{x} Some{y}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Graph.Change,
         Views.View.is_bend(path),
         u => Bend.Bend.changed(x, y),
@@ -1078,29 +1083,29 @@ def Answer.affected(es: List<&2, Graph.Edge>) -> List<&2, String>:
       Nil{}
     case Con{Graph.Edge{f, t, v, s, c}, r}:
       String.concat(
-        ["  affects ", Shared.Name.show(f), ", which uses ", Answer.selection(s)]
+        ["  affects ", Resources.Name.show(f), ", which uses ", Answer.selection(s)]
       )
         <> Answer.affected(r)
 
 # the seen heads of a marker
-def Answer.seen(s: Lines.Seen) -> Shared.Table<List<&2, Shared.Bytes()>>:
+def Answer.seen(s: Lines.Seen) -> Tables.Table<List<&2, Octets.Bytes()>>:
   match s:
     case Lines.Seen{a, ln, hs}:
       hs
 
 # the lines of each changed resource of ns, and what each change affects
 def Answer.news(
-  ns: List<&2, Shared.Name>,
+  ns: List<&2, Resources.Name>,
   +d: Spec.Daemon,
   +l: Lines.Line,
-  +seen: Shared.Table<List<&2, Shared.Bytes()>>,
+  +seen: Tables.Table<List<&2, Octets.Bytes()>>,
   +es: List<&2, Graph.Edge>
 ) -> List<&2, String>:
   match ns:
     case Nil{}:
       Nil{}
     case Con{+n, t}:
-      +p = Shared.Name.path(n)
+      +p = Resources.Name.path(n)
       +c = Answer.change(
         p,
         Answer.module(Answer.head(d, Lines.Heads.at(seen, p))),
@@ -1110,7 +1115,7 @@ def Answer.news(
         &2,
         String,
         String.concat(
-          ["changed ", Shared.Name.show(n), ": ", Answer.changed(c)]
+          ["changed ", Resources.Name.show(n), ": ", Answer.changed(c)]
         )
           <> Answer.affected(Views.View.affected(es, n, c)),
         Answer.news(t, d, l, seen, es)
@@ -1132,9 +1137,9 @@ def Answer.affects(
       +s = Spec.Daemon.seen(d, a, k)
       +ns = Lines.Seen.unseen(s, l)
       es = Answer.edges(Answer.paths(l), d, l)
-      ls = Shared.Bool.when(
+      ls = Bools.Bool.when(
         List<&2, String>,
-        List.is_empty(&2, Shared.Name, ns),
+        List.is_empty(&2, Resources.Name, ns),
         u => [String.append("nothing new on ", k)],
         u => Answer.news(ns, d, l, Answer.seen(s), es)
       )
@@ -1164,7 +1169,7 @@ type Found is Data:
 def Answer.classes(
   cs: List<&2, Impact.Classified>,
   +path: String,
-  +n: Shared.Name
+  +n: Resources.Name
 ) -> List<&2, Found>:
   match cs:
     case Nil{}:
@@ -1204,7 +1209,7 @@ def Answer.changes.at(
   same: Bool,
   bend: Bool,
   +d: Spec.Daemon,
-  +n: Shared.Name,
+  +n: Resources.Name,
   p: String,
   at: Lines.Line,
   base: Lines.Line,
@@ -1242,7 +1247,7 @@ def Answer.changes(
     case Nil{}:
       Nil{}
     case Con{+p, t}:
-      +n = {Shared.Name{sp, p}: Shared.Name}
+      +n = {Resources.Name{sp, p}: Resources.Name}
       same = History.Ids.is_eq(Lines.Line.heads(at, n), Lines.Line.heads(base, n))
       Answer.changes.at(
         same,
@@ -1261,9 +1266,9 @@ def Answer.docs(ps: List<&2, String>, +d: Spec.Daemon, +l: Lines.Line) -> List<&
     case Nil{}:
       Nil{}
     case Con{+p, t}:
-      +n = {Shared.Name{Answer.space(l), p}: Shared.Name}
+      +n = {Resources.Name{Answer.space(l), p}: Resources.Name}
       +rest = Answer.docs(t, d, l)
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, Impact.Doc>,
         Views.View.is_bend(p),
         u => Maybe.default(
@@ -1305,15 +1310,15 @@ def Answer.spots(ss: List<&2, Impact.Spot>) -> String:
     case Nil{}:
       ""
     case Con{Impact.Spot{n, k}, t}:
-      String.concat([" ", Shared.Name.path(n), ":", k, Answer.spots(t)])
+      String.concat([" ", Resources.Name.path(n), ":", k, Answer.spots(t)])
 
 # the names of resources
-def Answer.names(ns: List<&2, Shared.Name>) -> String:
+def Answer.names(ns: List<&2, Resources.Name>) -> String:
   match ns:
     case Nil{}:
       ""
     case Con{n, t}:
-      String.concat([" ", Shared.Name.show(n), Answer.names(t)])
+      String.concat([" ", Resources.Name.show(n), Answer.names(t)])
 
 # the lines of the layers of a radius
 def Answer.layers(l: Impact.Layers) -> List<&2, String>:
@@ -1351,7 +1356,7 @@ def Answer.impact(+d: Spec.Daemon, m: Maybe<&2, Source>, t: String) -> Spec.Hand
       docs = Answer.docs(Answer.paths(at), d, at)
       lay = Impact.Impact.layers(
         docs,
-        Answer.all_lines(Shared.Table.keys(Lines.Line, Ref.lines(d)), d),
+        Answer.all_lines(Tables.Table.keys(Lines.Line, Ref.lines(d)), d),
         Found.spots(fs)
       )
       Show.yes(
@@ -1370,7 +1375,7 @@ def Answer.fork(d: Spec.Daemon, m: Maybe<&2, Source>, nm: String, f: String) -> 
       Show.no(String.append("no such line or mark: ", f))
     case Some{Source{k, mk, at}}:
       +nk = Lines.Line.key(Answer.space(at), nm)
-      Shared.Bool.when(
+      Bools.Bool.when(
         Spec.Handled,
         Maybe.is_some(&2, Lines.Line, Spec.Daemon.line_at(d, nk)),
         u => Show.no(String.append("the line exists: ", nk)),
@@ -1386,11 +1391,11 @@ def Answer.fork(d: Spec.Daemon, m: Maybe<&2, Source>, nm: String, f: String) -> 
 # by the agent a
 def Answer.kept(
   a: String,
-  +n: Shared.Name,
+  +n: Resources.Name,
   ln: String,
   +l: Lines.Line,
-  hs: List<&2, Shared.Bytes()>,
-  +b: Shared.Bytes()
+  hs: List<&2, Octets.Bytes()>,
+  +b: Octets.Bytes()
 ) -> Spec.Handled:
   +v = {
     History.Node{
@@ -1408,30 +1413,30 @@ def Answer.kept(
       [String.concat(["wrote ", Show.id(History.Node.id(v)), " on ", Lines.Line.id(l)])]
     },
     Lines.Line.id(l),
-    [Spec.Carry{Shared.Name.path(n), b}]
+    [Spec.Carry{Resources.Name.path(n), b}]
   }
 
 # a write of b to n after the ids found, on the line l
 def Answer.write.ids(
-  m: Maybe<&2, List<&2, Shared.Bytes()>>,
+  m: Maybe<&2, List<&2, Octets.Bytes()>>,
   a: String,
-  +n: Shared.Name,
+  +n: Resources.Name,
   ln: String,
   +l: Lines.Line,
-  b: Shared.Bytes()
+  b: Octets.Bytes()
 ) -> Spec.Handled:
   match m:
     case None{}:
       Show.no("an expected version names no version of the resource, or several")
     case Some{e}:
       +hs = Lines.Line.heads(l, n)
-      Shared.Bool.when(
+      Bools.Bool.when(
         Spec.Handled,
         History.Ids.is_eq(e, hs),
         u => Answer.kept(a, n, ln, l, hs, b),
         u => Show.no(
           String.concat(
-            ["refused: ", Lines.Line.id(l), " follows ", Show.ids(hs), " for ", Shared.Name.show(n)]
+            ["refused: ", Lines.Line.id(l), " follows ", Show.ids(hs), " for ", Resources.Name.show(n)]
           )
         )
       )
@@ -1440,31 +1445,31 @@ def Answer.write.ids(
 def Answer.write(
   +d: Spec.Daemon,
   a: String,
-  +n: Shared.Name,
+  +n: Resources.Name,
   +ln: String,
   ps: List<&2, String>,
-  b: Shared.Bytes()
+  b: Octets.Bytes()
 ) -> Spec.Handled:
   Answer.write.ids(
     Spec.Daemon.ids(d, n, ps),
     a,
     n,
     ln,
-    Spec.Daemon.line_in(d, Shared.Name.space(n), ln),
+    Spec.Daemon.line_in(d, Resources.Name.space(n), ln),
     b
   )
 
 # a restore of the content found as a new version of n on the line named ln
 def Answer.restore.of(
   d: Spec.Daemon,
-  c: Maybe<&2, Maybe<&2, Shared.Bytes()>>,
+  c: Maybe<&2, Maybe<&2, Octets.Bytes()>>,
   a: String,
-  +n: Shared.Name,
+  +n: Resources.Name,
   +ln: String
 ) -> Spec.Handled:
   match c:
     case Some{Some{b}}:
-      +l = Spec.Daemon.line_in(d, Shared.Name.space(n), ln)
+      +l = Spec.Daemon.line_in(d, Resources.Name.space(n), ln)
       Answer.kept(a, n, ln, l, Lines.Line.heads(l, n), b)
     case Some{None{}}:
       Show.no("that version says the resource is gone; there is no content to restore")
@@ -1485,7 +1490,7 @@ def Answer.mark(
       Show.no(String.append("no such line: ", t))
     case Some{l}:
       +k = Lines.Line.id(l)
-      Shared.Bool.when(
+      Bools.Bool.when(
         Spec.Handled,
         Maybe.is_some(&2, Lines.Mark, Spec.Daemon.mark(d, k, nm)),
         u => Show.no(String.concat(["the mark exists: ", k, "@", nm])),
@@ -1513,7 +1518,7 @@ def Answer.mark(
 # copies. Clash: why it cannot merge.
 type Merged is Data:
   Same{}
-  Take{node: History.Node, content: Maybe<&2, Shared.Bytes()>, fresh: Bool}
+  Take{node: History.Node, content: Maybe<&2, Octets.Bytes()>, fresh: Bool}
   Clash{why: String}
 
 # the merge of the resource at path, with its outcome
@@ -1521,28 +1526,28 @@ type At is Data:
   At{path: String, merged: Merged}
 
 # two contents are the same
-def Answer.same(a: Maybe<&2, Shared.Bytes()>, b: Maybe<&2, Shared.Bytes()>) -> Bool:
+def Answer.same(a: Maybe<&2, Octets.Bytes()>, b: Maybe<&2, Octets.Bytes()>) -> Bool:
   match a b:
     case None{} None{}:
       True{}
     case Some{x} Some{y}:
-      Shared.Bytes.is_eq(x, y)
+      Octets.Bytes.is_eq(x, y)
     case _ _:
       False{}
 
 # the merge of three present contents, by the view of path
 def Answer.three.view(
   path: String,
-  b: Maybe<&2, Shared.Bytes()>,
-  x: Maybe<&2, Shared.Bytes()>,
-  y: Maybe<&2, Shared.Bytes()>
-) -> Maybe<&2, Maybe<&2, Shared.Bytes()>>:
+  b: Maybe<&2, Octets.Bytes()>,
+  x: Maybe<&2, Octets.Bytes()>,
+  y: Maybe<&2, Octets.Bytes()>
+) -> Maybe<&2, Maybe<&2, Octets.Bytes()>>:
   match b x y:
     case Some{bb} Some{xx} Some{yy}:
       Maybe.map(
         &2,
-        Shared.Bytes(),
-        Maybe<&2, Shared.Bytes()>,
+        Octets.Bytes(),
+        Maybe<&2, Octets.Bytes()>,
         r => Some{r},
         Views.View.merge(path, bb, xx, yy)
       )
@@ -1553,20 +1558,20 @@ def Answer.three.view(
 # from their base b; None for a clash
 def Answer.three(
   path: String,
-  +b: Maybe<&2, Shared.Bytes()>,
-  +x: Maybe<&2, Shared.Bytes()>,
-  +y: Maybe<&2, Shared.Bytes()>
-) -> Maybe<&2, Maybe<&2, Shared.Bytes()>>:
-  Shared.Bool.when(
-    Maybe<&2, Maybe<&2, Shared.Bytes()>>,
+  +b: Maybe<&2, Octets.Bytes()>,
+  +x: Maybe<&2, Octets.Bytes()>,
+  +y: Maybe<&2, Octets.Bytes()>
+) -> Maybe<&2, Maybe<&2, Octets.Bytes()>>:
+  Bools.Bool.when(
+    Maybe<&2, Maybe<&2, Octets.Bytes()>>,
     Answer.same(y, b),
     u => Some{x},
-    u => Shared.Bool.when(
-      Maybe<&2, Maybe<&2, Shared.Bytes()>>,
+    u => Bools.Bool.when(
+      Maybe<&2, Maybe<&2, Octets.Bytes()>>,
       Answer.same(x, b),
       v => Some{y},
-      v => Shared.Bool.when(
-        Maybe<&2, Maybe<&2, Shared.Bytes()>>,
+      v => Bools.Bool.when(
+        Maybe<&2, Maybe<&2, Octets.Bytes()>>,
         Answer.same(x, y),
         w => Some{x},
         w => Answer.three.view(path, b, x, y)
@@ -1575,7 +1580,7 @@ def Answer.three(
   )
 
 # a content, or none when the version is missing
-def Answer.flat(c: Maybe<&2, Maybe<&2, Shared.Bytes()>>) -> Maybe<&2, Shared.Bytes()>:
+def Answer.flat(c: Maybe<&2, Maybe<&2, Octets.Bytes()>>) -> Maybe<&2, Octets.Bytes()>:
   match c:
     case None{}:
       None{}
@@ -1583,7 +1588,7 @@ def Answer.flat(c: Maybe<&2, Maybe<&2, Shared.Bytes()>>) -> Maybe<&2, Shared.Byt
       x
 
 # the content of the base found, if any
-def Answer.base(d: Spec.Daemon, m: Maybe<&2, Shared.Bytes()>) -> Maybe<&2, Shared.Bytes()>:
+def Answer.base(d: Spec.Daemon, m: Maybe<&2, Octets.Bytes()>) -> Maybe<&2, Octets.Bytes()>:
   match m:
     case None{}:
       None{}
@@ -1591,7 +1596,7 @@ def Answer.base(d: Spec.Daemon, m: Maybe<&2, Shared.Bytes()>) -> Maybe<&2, Share
       Answer.flat(Content.at(d, x))
 
 # what a version holds, given its content
-def Answer.holds(c: Maybe<&2, Shared.Bytes()>) -> History.Body:
+def Answer.holds(c: Maybe<&2, Octets.Bytes()>) -> History.Body:
   match c:
     case None{}:
       History.Gone{}
@@ -1601,45 +1606,45 @@ def Answer.holds(c: Maybe<&2, Shared.Bytes()>) -> History.Body:
 # the merge node of n after the target head t and the source head s, with
 # the merged content found
 def Answer.merge.node(
-  r: Maybe<&2, Maybe<&2, Shared.Bytes()>>,
+  r: Maybe<&2, Maybe<&2, Octets.Bytes()>>,
   a: String,
-  n: Shared.Name,
-  t: Shared.Bytes(),
-  s: Shared.Bytes()
+  n: Resources.Name,
+  t: Octets.Bytes(),
+  s: Octets.Bytes()
 ) -> Merged:
   match r:
     case None{}:
       Clash{
-        String.concat([Shared.Name.show(n), ": both sides changed it, and their changes clash"])
+        String.concat([Resources.Name.show(n), ": both sides changed it, and their changes clash"])
       }
     case Some{+c}:
       Take{History.Node{n, [t, s], Answer.holds(c), None{}, History.Agent{a}}, c, True{}}
 
 # the base m is the source head s: the target already has the source
-def Answer.has(m: Maybe<&2, Shared.Bytes()>, s: Shared.Bytes()) -> Bool:
+def Answer.has(m: Maybe<&2, Octets.Bytes()>, s: Octets.Bytes()) -> Bool:
   match m:
     case None{}:
       False{}
     case Some{x}:
-      Shared.Bytes.is_eq(x, s)
+      Octets.Bytes.is_eq(x, s)
 
 # the merge of n from the source head s into the target head t
 def Answer.merge.two(
   +d: Spec.Daemon,
   a: String,
-  +n: Shared.Name,
-  +s: Shared.Bytes(),
-  +t: Shared.Bytes()
+  +n: Resources.Name,
+  +s: Octets.Bytes(),
+  +t: Octets.Bytes()
 ) -> Merged:
   h = Ref.history(d)
   +m = Dag.base(h, t, s)
-  Shared.Bool.when(
+  Bools.Bool.when(
     Merged,
     Answer.has(m, s),
     u => Same{},
     u => Answer.merge.node(
       Answer.three(
-        Shared.Name.path(n),
+        Resources.Name.path(n),
         Answer.base(d, m),
         Answer.flat(Content.at(d, t)),
         Answer.flat(Content.at(d, s))
@@ -1655,12 +1660,12 @@ def Answer.merge.two(
 def Answer.merge.own(
   d: Spec.Daemon,
   m: Maybe<&2, History.Node>,
-  s: Shared.Bytes(),
-  n: Shared.Name
+  s: Octets.Bytes(),
+  n: Resources.Name
 ) -> Merged:
   match m:
     case None{}:
-      Clash{String.append("a version is missing from the history: ", Shared.Name.show(n))}
+      Clash{String.append("a version is missing from the history: ", Resources.Name.show(n))}
     case Some{v}:
       Take{v, Answer.flat(Content.at(d, s)), False{}}
 
@@ -1668,9 +1673,9 @@ def Answer.merge.own(
 def Answer.merge.one(
   +d: Spec.Daemon,
   a: String,
-  n: Shared.Name,
-  fs: List<&2, Shared.Bytes()>,
-  ts: List<&2, Shared.Bytes()>
+  n: Resources.Name,
+  fs: List<&2, Octets.Bytes()>,
+  ts: List<&2, Octets.Bytes()>
 ) -> Merged:
   match fs ts:
     case Nil{} _:
@@ -1678,14 +1683,14 @@ def Answer.merge.one(
     case Con{+s, Nil{}} Nil{}:
       Answer.merge.own(d, History.History.get(Ref.history(d), s), s, n)
     case Con{+s, Nil{}} Con{+t, Nil{}}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Merged,
-        Shared.Bytes.is_eq(s, t),
+        Octets.Bytes.is_eq(s, t),
         u => Same{},
         u => Answer.merge.two(d, a, n, s, t)
       )
     case _ _:
-      Clash{String.append("several heads: ", Shared.Name.show(n))}
+      Clash{String.append("several heads: ", Resources.Name.show(n))}
 
 # the merge of every path of ps from the line src into the line tgt
 def Answer.merge.paths(
@@ -1700,7 +1705,7 @@ def Answer.merge.paths(
     case Nil{}:
       Nil{}
     case Con{+p, t}:
-      +n = {Shared.Name{sp, p}: Shared.Name}
+      +n = {Resources.Name{sp, p}: Resources.Name}
       At{
         p,
         Answer.merge.one(d, a, n, Lines.Line.heads(src, n), Lines.Line.heads(tgt, n))
@@ -1755,14 +1760,14 @@ def Answer.merged(xs: List<&2, At>) -> List<&2, String>:
 def Answer.merge.done(+xs: List<&2, At>, +l: Lines.Line) -> Spec.Handled:
   +cs = Answer.clashes(xs)
   +ms = Answer.merged(xs)
-  Shared.Bool.when(
+  Bools.Bool.when(
     Spec.Handled,
     List.is_empty(&2, String, cs),
     u => Spec.Handled{
       Answer.taken(xs, Lines.Line.name(l)),
       Spec.Said{
         True{},
-        Shared.Bool.when(
+        Bools.Bool.when(
           List<&2, String>,
           List.is_empty(&2, String, ms),
           v => ["nothing to merge"],
@@ -1787,7 +1792,7 @@ def Answer.merge(
   match ms mt:
     case Some{Source{k, mk, +at}} Some{+l}:
       +sp = Answer.space(at)
-      Shared.Bool.when(
+      Bools.Bool.when(
         Spec.Handled,
         String.eq(sp, Answer.space(l)),
         u => Answer.merge.done(Answer.merge.paths(Answer.paths(at), d, a, sp, at, l), l),
@@ -1798,7 +1803,7 @@ def Answer.merge(
 
 # the carry of the content found for the file at path; none when it is
 # gone, missing, or not one version
-def Answer.file(m: Maybe<&2, Maybe<&2, Shared.Bytes()>>, path: String) -> List<&2, Spec.Carry>:
+def Answer.file(m: Maybe<&2, Maybe<&2, Octets.Bytes()>>, path: String) -> List<&2, Spec.Carry>:
   match m:
     case Some{Some{b}}:
       [Spec.Carry{path, b}]
@@ -1817,7 +1822,7 @@ def Answer.files.go(
     case Nil{}:
       Nil{}
     case Con{+p, t}:
-      x = Ref.one(Lines.Line.heads(l, Shared.Name{sp, p}))
+      x = Ref.one(Lines.Line.heads(l, Resources.Name{sp, p}))
       List.append(
         &2,
         Spec.Carry,
@@ -1836,7 +1841,7 @@ def Open.docs(cs: List<&2, Spec.Carry>, +sp: String) -> List<&2, Bend.Doc>:
     case Nil{}:
       Nil{}
     case Con{Spec.Carry{+p, b}, t}:
-      List.append(&2, Bend.Doc, Views.View.doc(Shared.Name{sp, p}, p, b), Open.docs(t, sp))
+      List.append(&2, Bend.Doc, Views.View.doc(Resources.Name{sp, p}, p, b), Open.docs(t, sp))
 
 # the line of an obligation of the resource at path
 def Open.line(path: String, o: Vs.Obligation) -> String:
@@ -1862,7 +1867,7 @@ def Open.lines(cs: List<&2, Spec.Carry>, +ds: List<&2, Bend.Doc>, +sp: String) -
       List.append(
         &2,
         String,
-        Open.lines.of(p, Views.View.obligations(ds, Shared.Name{sp, p}, p, b)),
+        Open.lines.of(p, Views.View.obligations(ds, Resources.Name{sp, p}, p, b)),
         Open.lines(t, ds, sp)
       )
 
@@ -1877,7 +1882,7 @@ def Answer.open(d: Spec.Daemon, ml: Maybe<&2, Lines.Line>, t: String) -> Spec.Ha
       +cs = Answer.files(d, l)
       +ls = Open.lines(cs, Open.docs(cs, sp), sp)
       Show.yes(
-        Shared.Bool.when(
+        Bools.Bool.when(
           List<&2, String>,
           List.is_empty(&2, String, ls),
           u => [String.append("no open obligations on ", t)],
@@ -1886,10 +1891,10 @@ def Answer.open(d: Spec.Daemon, ml: Maybe<&2, Lines.Line>, t: String) -> Spec.Ha
       )
 
 # the result of the command c of the agent a with the data b
-def Answer.go(+d: Spec.Daemon, a: String, c: Spec.Command, b: Shared.Bytes()) -> Spec.Handled:
+def Answer.go(+d: Spec.Daemon, a: String, c: Spec.Command, b: Octets.Bytes()) -> Spec.Handled:
   match c:
     case Spec.LinesOf{}:
-      Show.yes(Answer.lines(Shared.Table.keys(Lines.Line, Ref.lines(d)), d))
+      Show.yes(Answer.lines(Tables.Table.keys(Lines.Line, Ref.lines(d)), d))
     case Spec.LogOf{n, ml, ma}:
       Answer.log(d, n, ml, ma)
     case Spec.ShowOf{n, mv}:
@@ -1927,7 +1932,7 @@ def Spec.affects_sees(d, a, t, b, l, h):
   +a = a
   +t = t
   +l = l
-  %Equal.sym(Maybe<&2, Lines.Line>, Shared.Bool.when(Maybe<&2, Lines.Line>, Shared.Text.has(t, 58), u => Spec.Daemon.line_at(d, t), u => Ref.line_of(d, Ref.named(Shared.Table.keys(Lines.Line, Ref.lines(d)), t))), Some{l}, h) :
+  %Equal.sym(Maybe<&2, Lines.Line>, Bools.Bool.when(Maybe<&2, Lines.Line>, Cuts.Text.has(t, 58), u => Spec.Daemon.line_at(d, t), u => Ref.line_of(d, Ref.named(Tables.Table.keys(Lines.Line, Ref.lines(d)), t))), Some{l}, h) :
     {Spec.Handled.records(Answer.affects(d, a, _, t)) == [Journal.Saw{a, Lines.Line.id(l)}] : List<&2, Journal.Record>}
   {==}
 
@@ -1941,35 +1946,35 @@ def Spec.apply_marked(d, k, nm, msg, a, l, h, n):
           +msg = msg
           +a = a
           +l = l
-          %Equal.sym(Maybe<&2, Lines.Line>, Shared.Table.get(Lines.Line, lines, k), Some{l}, h) :
+          %Equal.sym(Maybe<&2, Lines.Line>, Tables.Table.get(Lines.Line, lines, k), Some{l}, h) :
             {Spec.Daemon.mark(Apply.marked(Spec.Daemon{store, history, lines, mounts, clients, Spec.Book{seen, marks, origins}}, _, String.append(k, SCon{'@', String.append(nm, "")}), nm, msg, a), k, nm) == Some{Lines.Mark{Lines.Line.name(l), nm, msg, a, l}} : Maybe<&2, Lines.Mark>}
-          %Equal.sym(Maybe<&2, Lines.Mark>, Shared.Table.get(Lines.Mark, marks, String.append(k, SCon{'@', String.append(nm, "")})), None{}, n) :
-            {Spec.Daemon.mark(Shared.Bool.when(Spec.Daemon, Maybe.is_some(&2, Lines.Mark, _), u => Spec.Daemon{store, history, lines, mounts, clients, Spec.Book{seen, marks, origins}}, u => Spec.Daemon{store, history, lines, mounts, clients, Spec.Book{seen, Shared.Table.set(Lines.Mark, marks, String.append(k, SCon{'@', String.append(nm, "")}), Lines.Mark.of(l, nm, msg, a)), origins}}), k, nm) == Some{Lines.Mark{Lines.Line.name(l), nm, msg, a, l}} : Maybe<&2, Lines.Mark>}
-          %Equal.sym(Maybe<&2, Lines.Mark>, Shared.Table.get(Lines.Mark, Shared.Table.set(Lines.Mark, marks, String.append(k, SCon{'@', String.append(nm, "")}), Lines.Mark.of(l, nm, msg, a)), String.append(k, SCon{'@', String.append(nm, "")})), Some{Lines.Mark.of(l, nm, msg, a)}, Shared.Table.get_after_set(Lines.Mark, marks, String.append(k, SCon{'@', String.append(nm, "")}), Lines.Mark.of(l, nm, msg, a))) :
+          %Equal.sym(Maybe<&2, Lines.Mark>, Tables.Table.get(Lines.Mark, marks, String.append(k, SCon{'@', String.append(nm, "")})), None{}, n) :
+            {Spec.Daemon.mark(Bools.Bool.when(Spec.Daemon, Maybe.is_some(&2, Lines.Mark, _), u => Spec.Daemon{store, history, lines, mounts, clients, Spec.Book{seen, marks, origins}}, u => Spec.Daemon{store, history, lines, mounts, clients, Spec.Book{seen, Tables.Table.set(Lines.Mark, marks, String.append(k, SCon{'@', String.append(nm, "")}), Lines.Mark.of(l, nm, msg, a)), origins}}), k, nm) == Some{Lines.Mark{Lines.Line.name(l), nm, msg, a, l}} : Maybe<&2, Lines.Mark>}
+          %Equal.sym(Maybe<&2, Lines.Mark>, Tables.Table.get(Lines.Mark, Tables.Table.set(Lines.Mark, marks, String.append(k, SCon{'@', String.append(nm, "")}), Lines.Mark.of(l, nm, msg, a)), String.append(k, SCon{'@', String.append(nm, "")})), Some{Lines.Mark.of(l, nm, msg, a)}, Tables.Table.get_after_set(Lines.Mark, marks, String.append(k, SCon{'@', String.append(nm, "")}), Lines.Mark.of(l, nm, msg, a))) :
             {_ == Some{Lines.Mark{Lines.Line.name(l), nm, msg, a, l}} : Maybe<&2, Lines.Mark>}
           {==}
 
 def mount_once.g1(
   +d: Spec.Daemon,
-  +tok: Shared.Bytes(),
+  +tok: Octets.Bytes(),
   +u: String,
   +gs: List<&2, String>,
   +ln: String,
   +h: {Maybe.is_some(&2, Spec.Local, Spec.Daemon.local(d, u)) == True{} : Bool},
   +x: Bool,
-  hx: {x == Shared.Bytes.is_eq(tok, tok) : Bool}) ->
-  {Spec.Action.is_reply(Shared.Bool.when(Spec.Action, x, x => Spec.Daemon.decide.body(d, Spec.Mount{u, gs, ln}), x => Spec.Reply{Spec.Denied{"wrong token"}})) == True{} : Bool}:
+  hx: {x == Octets.Bytes.is_eq(tok, tok) : Bool}) ->
+  {Spec.Action.is_reply(Bools.Bool.when(Spec.Action, x, x => Spec.Daemon.decide.body(d, Spec.Mount{u, gs, ln}), x => Spec.Reply{Spec.Denied{"wrong token"}})) == True{} : Bool}:
   match x:
     case False{}:
       {==}
     case True{}:
       %Equal.sym(Bool, Maybe.is_some(&2, Spec.Local, Spec.Daemon.local(d, u)), True{}, h) :
-        {Spec.Action.is_reply(Shared.Bool.when(Spec.Action, _, x => Spec.Reply{Spec.Denied{String.append("already mounted: ", u)}}, x => Spec.DoMount{u, gs, ln})) == True{} : Bool}
+        {Spec.Action.is_reply(Bools.Bool.when(Spec.Action, _, x => Spec.Reply{Spec.Denied{String.append("already mounted: ", u)}}, x => Spec.DoMount{u, gs, ln})) == True{} : Bool}
       {==}
 
 def Spec.mount_once(d, tok, u, gs, ln, h):
   +tok = tok
-  mount_once.g1(d, tok, u, gs, ln, h, Shared.Bytes.is_eq(tok, tok), {==})
+  mount_once.g1(d, tok, u, gs, ln, h, Octets.Bytes.is_eq(tok, tok), {==})
 
 def Spec.replay_con(d, r, rs):
   {==}
@@ -1983,8 +1988,8 @@ def Spec.step_is_core(d, l, i):
 def Spec.token_checked(d, tok, r, h):
   match r:
     case Spec.Request{+token, +body}:
-      %Equal.sym(Bool, Shared.Bytes.is_eq(token, tok), False{}, h) :
-        {Shared.Bool.when(Spec.Action, _, x => Spec.Daemon.decide.body(d, body), x => Spec.Reply{Spec.Denied{"wrong token"}}) == Spec.Reply{Spec.Denied{"wrong token"}} : Spec.Action}
+      %Equal.sym(Bool, Octets.Bytes.is_eq(token, tok), False{}, h) :
+        {Bools.Bool.when(Spec.Action, _, x => Spec.Daemon.decide.body(d, body), x => Spec.Reply{Spec.Denied{"wrong token"}}) == Spec.Reply{Spec.Denied{"wrong token"}} : Spec.Action}
       {==}
 
 def Spec.write_kept(d, a, n, ln, ps, f, b, e, i, s):
@@ -1994,10 +1999,10 @@ def Spec.write_kept(d, a, n, ln, ps, f, b, e, i, s):
   +ln = ln
   +b = b
   +e = e
-  %Equal.sym(Maybe<&2, List<&2, Shared.Bytes()>>, Ref.all(ps, Shared.Table.keys(History.Node, Ref.nodes(d)), Ref.nodes(d), n), Some{e}, i) :
-    {Spec.Handled.records(Answer.write.ids(_, a, n, ln, Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), b)) == [Journal.Kept{ln, Some{b}, History.Node{n, Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n), History.Has{Store.Tree.up(64n, Store.Node.refs(Store.Tree.leaves.of(Store.Chunk.split.go(List<&2, U32>, Store.Bytes.id, Core.Core.items(b), 0, [], 0n, 0n))))}, None{}, History.Agent{a}}}] : List<&2, Journal.Record>}
-  %Equal.sym(Bool, History.Ids.is_eq(e, Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n)), True{}, s) :
-    {Spec.Handled.records(Shared.Bool.when(Spec.Handled, _, u => Answer.kept(a, n, ln, Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n), b), u => Show.no(String.concat(["refused: ", Lines.Line.id(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}})), " follows ", Show.ids(Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n)), " for ", Shared.Name.show(n)])))) == [Journal.Kept{ln, Some{b}, History.Node{n, Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n), History.Has{Store.Tree.up(64n, Store.Node.refs(Store.Tree.leaves.of(Store.Chunk.split.go(List<&2, U32>, Store.Bytes.id, Core.Core.items(b), 0, [], 0n, 0n))))}, None{}, History.Agent{a}}}] : List<&2, Journal.Record>}
+  %Equal.sym(Maybe<&2, List<&2, Octets.Bytes()>>, Ref.all(ps, Tables.Table.keys(History.Node, Ref.nodes(d)), Ref.nodes(d), n), Some{e}, i) :
+    {Spec.Handled.records(Answer.write.ids(_, a, n, ln, Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Resources.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Resources.Name.space(n), ln, Tables.TNil{}}), b)) == [Journal.Kept{ln, Some{b}, History.Node{n, Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Resources.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Resources.Name.space(n), ln, Tables.TNil{}}), n), History.Has{Store.Tree.up(64n, Store.Node.refs(Store.Tree.leaves.of(Store.Chunk.split.go(List<&2, U32>, Store.Bytes.id, Core.Core.items(b), 0, [], 0n, 0n))))}, None{}, History.Agent{a}}}] : List<&2, Journal.Record>}
+  %Equal.sym(Bool, History.Ids.is_eq(e, Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Resources.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Resources.Name.space(n), ln, Tables.TNil{}}), n)), True{}, s) :
+    {Spec.Handled.records(Bools.Bool.when(Spec.Handled, _, u => Answer.kept(a, n, ln, Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Resources.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Resources.Name.space(n), ln, Tables.TNil{}}), Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Resources.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Resources.Name.space(n), ln, Tables.TNil{}}), n), b), u => Show.no(String.concat(["refused: ", Lines.Line.id(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Resources.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Resources.Name.space(n), ln, Tables.TNil{}})), " follows ", Show.ids(Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Resources.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Resources.Name.space(n), ln, Tables.TNil{}}), n)), " for ", Resources.Name.show(n)])))) == [Journal.Kept{ln, Some{b}, History.Node{n, Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Resources.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Resources.Name.space(n), ln, Tables.TNil{}}), n), History.Has{Store.Tree.up(64n, Store.Node.refs(Store.Tree.leaves.of(Store.Chunk.split.go(List<&2, U32>, Store.Bytes.id, Core.Core.items(b), 0, [], 0n, 0n))))}, None{}, History.Agent{a}}}] : List<&2, Journal.Record>}
   {==}
 
 def Spec.write_stale(d, a, n, ln, ps, f, b, e, i, s):
@@ -2010,7 +2015,7 @@ def Spec.write_stale(d, a, n, ln, ps, f, b, e, i, s):
   +e = e
   +i = i
   +s = s
-  Tuple{(%Equal.sym(Maybe<&2, List<&2, Shared.Bytes()>>, Ref.all(ps, Shared.Table.keys(History.Node, Ref.nodes(d)), Ref.nodes(d), n), Some{e}, i) : {Spec.Handled.records(Answer.write.ids(_, a, n, ln, Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), b)) == [] : List<&2, Journal.Record>}; (%Equal.sym(Bool, History.Ids.is_eq(e, Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n)), False{}, s) : {Spec.Handled.records(Shared.Bool.when(Spec.Handled, _, u => Answer.kept(a, n, ln, Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n), b), u => Show.no(String.concat(["refused: ", Lines.Line.id(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}})), " follows ", Show.ids(Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n)), " for ", Shared.Name.show(n)])))) == [] : List<&2, Journal.Record>}; {==})), (%Equal.sym(Maybe<&2, List<&2, Shared.Bytes()>>, Ref.all(ps, Shared.Table.keys(History.Node, Ref.nodes(d)), Ref.nodes(d), n), Some{e}, i) : {Spec.Handled.ok(Answer.write.ids(_, a, n, ln, Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), b)) == False{} : Bool}; (%Equal.sym(Bool, History.Ids.is_eq(e, Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n)), False{}, s) : {Spec.Handled.ok(Shared.Bool.when(Spec.Handled, _, u => Answer.kept(a, n, ln, Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n), b), u => Show.no(String.concat(["refused: ", Lines.Line.id(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}})), " follows ", Show.ids(Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Shared.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Shared.Name.space(n), ln, Shared.TNil{}}), n)), " for ", Shared.Name.show(n)])))) == False{} : Bool}; {==}))}
+  Tuple{(%Equal.sym(Maybe<&2, List<&2, Octets.Bytes()>>, Ref.all(ps, Tables.Table.keys(History.Node, Ref.nodes(d)), Ref.nodes(d), n), Some{e}, i) : {Spec.Handled.records(Answer.write.ids(_, a, n, ln, Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Resources.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Resources.Name.space(n), ln, Tables.TNil{}}), b)) == [] : List<&2, Journal.Record>}; (%Equal.sym(Bool, History.Ids.is_eq(e, Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Resources.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Resources.Name.space(n), ln, Tables.TNil{}}), n)), False{}, s) : {Spec.Handled.records(Bools.Bool.when(Spec.Handled, _, u => Answer.kept(a, n, ln, Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Resources.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Resources.Name.space(n), ln, Tables.TNil{}}), Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Resources.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Resources.Name.space(n), ln, Tables.TNil{}}), n), b), u => Show.no(String.concat(["refused: ", Lines.Line.id(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Resources.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Resources.Name.space(n), ln, Tables.TNil{}})), " follows ", Show.ids(Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Resources.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Resources.Name.space(n), ln, Tables.TNil{}}), n)), " for ", Resources.Name.show(n)])))) == [] : List<&2, Journal.Record>}; {==})), (%Equal.sym(Maybe<&2, List<&2, Octets.Bytes()>>, Ref.all(ps, Tables.Table.keys(History.Node, Ref.nodes(d)), Ref.nodes(d), n), Some{e}, i) : {Spec.Handled.ok(Answer.write.ids(_, a, n, ln, Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Resources.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Resources.Name.space(n), ln, Tables.TNil{}}), b)) == False{} : Bool}; (%Equal.sym(Bool, History.Ids.is_eq(e, Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Resources.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Resources.Name.space(n), ln, Tables.TNil{}}), n)), False{}, s) : {Spec.Handled.ok(Bools.Bool.when(Spec.Handled, _, u => Answer.kept(a, n, ln, Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Resources.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Resources.Name.space(n), ln, Tables.TNil{}}), Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Resources.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Resources.Name.space(n), ln, Tables.TNil{}}), n), b), u => Show.no(String.concat(["refused: ", Lines.Line.id(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Resources.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Resources.Name.space(n), ln, Tables.TNil{}})), " follows ", Show.ids(Lines.Line.heads(Maybe.default(&2, Lines.Line, Spec.Daemon.line_at(d, String.append(Resources.Name.space(n), SCon{':', String.append(ln, "")})), Lines.Line{Resources.Name.space(n), ln, Tables.TNil{}}), n)), " for ", Resources.Name.show(n)])))) == False{} : Bool}; {==}))}
 
 def Spec.apply_forked(d, k, f, l, h, n):
   match d:
@@ -2018,12 +2023,12 @@ def Spec.apply_forked(d, k, f, l, h, n):
       match book:
         case Spec.Book{seen, marks, origins}:
           +k = k
-          %Equal.sym(Maybe<&2, Lines.Line>, Shared.Table.get(Lines.Line, lines, f), Some{l}, h) :
-            {Spec.Daemon.line_at(Apply.forked(Spec.Daemon{store, history, lines, mounts, clients, Spec.Book{seen, marks, origins}}, _, k, f, None{}), k) == Some{Lines.Line.fork(l, Spec.Key.after(Shared.Text.cut(k, 58), k))} : Maybe<&2, Lines.Line>}
-          %Equal.sym(Maybe<&2, Lines.Line>, Shared.Table.get(Lines.Line, lines, k), None{}, n) :
-            {Spec.Daemon.line_at(Shared.Bool.when(Spec.Daemon, Maybe.is_some(&2, Lines.Line, _), u => Spec.Daemon{store, history, lines, mounts, clients, Spec.Book{seen, marks, origins}}, u => Spec.Daemon{store, history, Shared.Table.set(Lines.Line, lines, k, Lines.Line.fork(l, Spec.Key.name(k))), mounts, clients, Spec.Book{seen, marks, Shared.Table.set(Spec.Origin, origins, k, Spec.Origin{f, None{}, Lines.Line.fork(l, Spec.Key.name(k))})}}), k) == Some{Lines.Line.fork(l, Spec.Key.after(Shared.Text.cut(k, 58), k))} : Maybe<&2, Lines.Line>}
-          %Equal.sym(Maybe<&2, Lines.Line>, Shared.Table.get(Lines.Line, Shared.Table.set(Lines.Line, lines, k, Lines.Line.fork(l, Spec.Key.name(k))), k), Some{Lines.Line.fork(l, Spec.Key.name(k))}, Shared.Table.get_after_set(Lines.Line, lines, k, Lines.Line.fork(l, Spec.Key.name(k)))) :
-            {_ == Some{Lines.Line.fork(l, Spec.Key.after(Shared.Text.cut(k, 58), k))} : Maybe<&2, Lines.Line>}
+          %Equal.sym(Maybe<&2, Lines.Line>, Tables.Table.get(Lines.Line, lines, f), Some{l}, h) :
+            {Spec.Daemon.line_at(Apply.forked(Spec.Daemon{store, history, lines, mounts, clients, Spec.Book{seen, marks, origins}}, _, k, f, None{}), k) == Some{Lines.Line.fork(l, Spec.Key.after(Cuts.Text.cut(k, 58), k))} : Maybe<&2, Lines.Line>}
+          %Equal.sym(Maybe<&2, Lines.Line>, Tables.Table.get(Lines.Line, lines, k), None{}, n) :
+            {Spec.Daemon.line_at(Bools.Bool.when(Spec.Daemon, Maybe.is_some(&2, Lines.Line, _), u => Spec.Daemon{store, history, lines, mounts, clients, Spec.Book{seen, marks, origins}}, u => Spec.Daemon{store, history, Tables.Table.set(Lines.Line, lines, k, Lines.Line.fork(l, Spec.Key.name(k))), mounts, clients, Spec.Book{seen, marks, Tables.Table.set(Spec.Origin, origins, k, Spec.Origin{f, None{}, Lines.Line.fork(l, Spec.Key.name(k))})}}), k) == Some{Lines.Line.fork(l, Spec.Key.after(Cuts.Text.cut(k, 58), k))} : Maybe<&2, Lines.Line>}
+          %Equal.sym(Maybe<&2, Lines.Line>, Tables.Table.get(Lines.Line, Tables.Table.set(Lines.Line, lines, k, Lines.Line.fork(l, Spec.Key.name(k))), k), Some{Lines.Line.fork(l, Spec.Key.name(k))}, Tables.Table.get_after_set(Lines.Line, lines, k, Lines.Line.fork(l, Spec.Key.name(k)))) :
+            {_ == Some{Lines.Line.fork(l, Spec.Key.after(Cuts.Text.cut(k, 58), k))} : Maybe<&2, Lines.Line>}
           {==}
 
 # Checkouts
@@ -2036,7 +2041,7 @@ def Plan.bases(ms: List<&2, Spec.Local>, +sp: String) -> List<&2, Spec.Local>:
       Nil{}
     case Con{+l, t}:
       +rest = Plan.bases(t, sp)
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, Spec.Local>,
         List.all.if(
           u => Maybe.is_none(&2, String, Spec.Author.agent(Spec.Local.author(l))),
@@ -2052,7 +2057,7 @@ def Plan.better(+l: Spec.Local, best: Maybe<&2, Spec.Local>) -> Maybe<&2, Spec.L
     case None{}:
       Some{l}
     case Some{+b}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, Spec.Local>,
         String.is_lt(Spec.Local.uri(b), Spec.Local.uri(l)),
         u => Some{b},
@@ -2094,7 +2099,7 @@ def Plan.of(
     case None{}:
       Fail{String.append("no line named ", t)}
     case Some{Lines.Line{+sp, +nm, hs}}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Result<&2, &2, String, Spec.Plan>,
         Spec.Checkout.name_ok(nm),
         u => Plan.based(Plan.first(Plan.bases(Spec.Daemon.mounts(d), sp), None{}), a, nm, sp),
@@ -2105,7 +2110,7 @@ def Spec.Daemon.plan(d, a, t):
   +d = d
   +a = a
   +t = t
-  Shared.Bool.when(
+  Bools.Bool.when(
     Result<&2, &2, String, Spec.Plan>,
     Spec.Checkout.name_ok(a),
     u => Plan.of(d, a, Spec.Daemon.line_ref(d, t), t),

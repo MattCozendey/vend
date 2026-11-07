@@ -1,6 +1,6 @@
 import Base
 import ../../graph/spec.bend as Graph
-import ../../shared.bend as Shared
+import ../../shared/bools.bend as Bools
 import ../shared.bend as Views
 import ../text/impl.bend as TextImpl
 import ../text/spec.bend as Text
@@ -86,7 +86,7 @@ def Bend.one(
         Bool.and(Spec.ItemKind.is_eq(k, k1), Spec.ItemKind.is_eq(k, k2)),
         Bool.and(String.eq(n, n1), String.eq(n, n2))
       )
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, Views.Hunk<Spec.Item>>,
         same,
         u => Bend.retext(k, n, s, Text.Text.merge(bt, xt, yt)),
@@ -156,11 +156,11 @@ def Bend.order(
     yfirst,
     by_text
   )
-  Shared.Bool.when(
+  Bools.Bool.when(
     Maybe<&2, Views.Hunk<Spec.Item>>,
     Bool.and(xy, Bool.not(yx)),
     u => yfirst,
-    u => Shared.Bool.when(
+    u => Bools.Bool.when(
       Maybe<&2, Views.Hunk<Spec.Item>>,
       Bool.and(yx, Bool.not(xy)),
       v => xfirst,
@@ -179,11 +179,11 @@ def Bend.resolve(
   match a b:
     case Views.Hunk{+s1, +d1, +i1} Views.Hunk{s2, +d2, +i2}:
       +here = Nat.is_eq(s1, s2)
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, Views.Hunk<Spec.Item>>,
         Bool.and(here, Bool.and(Nat.is_eq(d1, 1n), Nat.is_eq(d2, 1n))),
         u => Bend.one(List.get(&2, Spec.Item, base, s1), i1, i2, s1),
-        u => Shared.Bool.when(
+        u => Bools.Bool.when(
           Maybe<&2, Views.Hunk<Spec.Item>>,
           Bool.and(here, Bool.and(Nat.is_eq(d1, 0n), Nat.is_eq(d2, 0n))),
           v => Bend.order(i1, i2, s1),

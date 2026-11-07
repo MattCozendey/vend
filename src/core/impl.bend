@@ -8,7 +8,10 @@ import ../history/spec.bend as History
 import ../journal/spec.bend as Journal
 import ../lines/impl.bend as LinesImpl
 import ../lines/spec.bend as Lines
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/bytes.bend as Octets
+import ../shared/resources.bend as Resources
+import ../shared/tables.bend as Tables
 import ../store/impl.bend as StoreImpl
 import ../store/spec.bend as Store
 import ./spec.bend as Spec
@@ -62,13 +65,13 @@ def Core.tracks_ok(
 def Core.set_stream(c: Spec.Core, path: String, k: Ep.Stream) -> Spec.Core:
   match c:
     case Spec.Core{m, s, h, l, ss, ms, ns}:
-      Spec.Core{m, s, h, l, Shared.Table.set(Ep.Stream, ss, path, k), ms, ns}
+      Spec.Core{m, s, h, l, Tables.Table.set(Ep.Stream, ss, path, k), ms, ns}
 
 # c with the pending move of the file at path set to f
-def Core.set_moved(c: Spec.Core, path: String, f: Maybe<&2, Shared.Name>) -> Spec.Core:
+def Core.set_moved(c: Spec.Core, path: String, f: Maybe<&2, Resources.Name>) -> Spec.Core:
   match c:
     case Spec.Core{m, s, h, l, ss, ms, ns}:
-      Spec.Core{m, s, h, l, ss, Shared.Table.set(Maybe<&2, Shared.Name>, ms, path, f), ns}
+      Spec.Core{m, s, h, l, ss, Tables.Table.set(Maybe<&2, Resources.Name>, ms, path, f), ns}
 
 # c with the store s2
 def Core.set_store(c: Spec.Core, s2: Store.Store) -> Spec.Core:
@@ -89,7 +92,7 @@ def Core.nest(c: Spec.Core, d: String) -> Spec.Core:
       Spec.Core{m, s, h, l, ss, ms, d <> ns}
 
 # the heads of the file at path on the line of c
-def Core.heads(+c: Spec.Core, path: String) -> List<&2, Shared.Bytes()>:
+def Core.heads(+c: Spec.Core, path: String) -> List<&2, Octets.Bytes()>:
   Lines.Line.heads(Spec.Core.line(c), Spec.Core.name(c, path))
 
 # A version is kept whole or not at all: if the store, the history or the
@@ -103,9 +106,9 @@ def Core.advanced(
   c: Spec.Core,
   +path: String,
   h2: History.History,
-  x: Shared.Bytes(),
+  x: Octets.Bytes(),
   a: History.Author,
-  content: Maybe<&2, Shared.Bytes()>,
+  content: Maybe<&2, Octets.Bytes()>,
   v: History.Node,
   r: Result<&2, &2, Lines.Refused, Lines.Line>
 ) -> Spec.Stepped:
@@ -127,9 +130,9 @@ def Core.added(
   +c0: Spec.Core,
   +c: Spec.Core,
   +path: String,
-  parents: List<&2, Shared.Bytes()>,
+  parents: List<&2, Octets.Bytes()>,
   a: History.Author,
-  content: Maybe<&2, Shared.Bytes()>,
+  content: Maybe<&2, Octets.Bytes()>,
   v: History.Node,
   r: Result<&2, &2, History.Refusal, History.Added>
 ) -> Spec.Stepped:
@@ -158,7 +161,7 @@ def Core.keep(
   +path: String,
   body: History.Body,
   +a: History.Author,
-  content: Maybe<&2, Shared.Bytes()>
+  content: Maybe<&2, Octets.Bytes()>
 ) -> Spec.Stepped:
   +parents = Core.heads(c, path)
   +v = {
@@ -172,7 +175,7 @@ def Core.stored(
   path: String,
   r: Result<&2, &2, Store.Problem, Store.Wrote>,
   a: History.Author,
-  content: Maybe<&2, Shared.Bytes()>
+  content: Maybe<&2, Octets.Bytes()>
 ) -> Spec.Stepped:
   match r:
     case Fail{p}:
@@ -235,7 +238,7 @@ def Core.streamed(c: Spec.Core, +path: String, s: Ep.Stepped, a: History.Author)
 # the core does not track; what an endpoint shows is by the author of the
 # mount
 def Core.noticed(+c: Spec.Core, +path: String, s: Ep.Signal) -> Spec.Stepped:
-  Shared.Bool.when(
+  Bools.Bool.when(
     Spec.Stepped,
     Core.tracks(c, path),
     u => Core.streamed(c, path, Ep.Stream.step(Spec.Core.stream(c, path), s), Spec.Core.author(c)),
@@ -244,7 +247,7 @@ def Core.noticed(+c: Spec.Core, +path: String, s: Ep.Signal) -> Spec.Stepped:
 
 # what the core believes is at a file: present with the token of the
 # content it last recorded, or absent
-def Core.belief(last: Maybe<&2, Shared.Bytes()>) -> Ep.Expect:
+def Core.belief(last: Maybe<&2, Octets.Bytes()>) -> Ep.Expect:
   match last:
     case None{}:
       Ep.WasAbsent{}
@@ -256,7 +259,7 @@ def Core.belief(last: Maybe<&2, Shared.Bytes()>) -> Ep.Expect:
 # matched), so the write is recorded now and the endpoint is a mirror: the
 # Put carries what the core last recorded, and the endpoint answers with
 # what is really there.
-def Core.wrote(+c: Spec.Core, +path: String, +b: Shared.Bytes(), a: History.Author) -> Spec.Stepped:
+def Core.wrote(+c: Spec.Core, +path: String, +b: Octets.Bytes(), a: History.Author) -> Spec.Stepped:
   e = Core.belief(Ep.Stream.last(Spec.Core.stream(c, path)))
   Core.streamed(c, path, Ep.Stream.wrote(b, Hash.Hash.blake3(b), e), a)
 
@@ -267,13 +270,13 @@ def Core.wrote(+c: Spec.Core, +path: String, +b: Shared.Bytes(), a: History.Auth
 def Core.write(
   +c: Spec.Core,
   +path: String,
-  b: Shared.Bytes(),
-  e: List<&2, Shared.Bytes()>,
+  b: Octets.Bytes(),
+  e: List<&2, Octets.Bytes()>,
   a: String
 ) -> Spec.Stepped:
   +heads = Core.heads(c, path)
   ok = List.all.if(u => Core.tracks(c, path), History.Ids.is_eq(e, heads))
-  Shared.Bool.when(
+  Bools.Bool.when(
     Spec.Stepped,
     ok,
     u => Core.wrote(c, path, b, History.Agent{a}),
@@ -309,7 +312,7 @@ def Spec.untracked_ignored(c, p, s, h):
         c,
         []
       }
-        == Shared.Bool.when(
+        == Bools.Bool.when(
           Spec.Stepped,
           _,
           u => Core.streamed(c, p, Ep.Stream.step(Spec.Core.stream(c, p), s), Spec.Core.author(c)),
@@ -325,7 +328,7 @@ def Spec.untracked_ignored(c, p, s, h):
         c,
         []
       }
-        == Shared.Bool.when(
+        == Bools.Bool.when(
           Spec.Stepped,
           _,
           u => Core.streamed(c, p, Ep.Stream.step(Spec.Core.stream(c, p), s), Spec.Core.author(c)),
@@ -337,12 +340,15 @@ def Spec.untracked_ignored(c, p, s, h):
 def Spec.write_refused(c, p, b, e, a, h):
   %Equal.sym(
     Bool,
-    History.Ids.is_eq(e, Lines.Line.heads(Spec.Core.line(c), Shared.Name{Spec.Core.space(c), p})),
+    History.Ids.is_eq(
+      e,
+      Lines.Line.heads(Spec.Core.line(c), Resources.Name{Spec.Core.space(c), p})
+    ),
     False{},
     h
   ):
     {
-      Shared.Bool.when(
+      Bools.Bool.when(
         Spec.Stepped,
         List.all.if(u => Core.tracks(c, p), _),
         u => Core.wrote(c, p, b, History.Agent{a}),
@@ -351,7 +357,7 @@ def Spec.write_refused(c, p, b, e, a, h):
           [
             Spec.Refused{
               Spec.Core.name(c, p),
-              Lines.Line.heads(Spec.Core.line(c), Shared.Name{Spec.Core.space(c), p})
+              Lines.Line.heads(Spec.Core.line(c), Resources.Name{Spec.Core.space(c), p})
             }
           ]
         }
@@ -360,8 +366,8 @@ def Spec.write_refused(c, p, b, e, a, h):
           c,
           [
             Spec.Refused{
-              Shared.Name{Spec.Core.space(c), p},
-              Lines.Line.heads(Spec.Core.line(c), Shared.Name{Spec.Core.space(c), p})
+              Resources.Name{Spec.Core.space(c), p},
+              Lines.Line.heads(Spec.Core.line(c), Resources.Name{Spec.Core.space(c), p})
             }
           ]
         }: Spec.Stepped
@@ -379,21 +385,29 @@ def Moved.kept(
     Core.set_moved(c, t, Some{Spec.Core.name(c, f)}),
     t
   )
-    == Some{Spec.Core.name(c, f)}: Maybe<&2, Shared.Name>
+    == Some{Spec.Core.name(c, f)}: Maybe<&2, Resources.Name>
 }:
   match c:
     case Spec.Core{m, s, h, l, ss, +ms, ns}:
       nm = Spec.Core.name(Spec.Core{m, s, h, l, ss, ms, ns}, f)
       %Equal.sym(
-        Maybe<&2, Maybe<&2, Shared.Name>>,
-        Shared.Table.get(
-          Maybe<&2, Shared.Name>,
-          Shared.Table.set(Maybe<&2, Shared.Name>, ms, t, Some{nm}),
+        Maybe<&2, Maybe<&2, Resources.Name>>,
+        Tables.Table.get(
+          Maybe<&2, Resources.Name>,
+          Tables.Table.set(Maybe<&2, Resources.Name>, ms, t, Some{nm}),
           t
         ),
         Some{Some{nm}},
-        Shared.Table.get_after_set(Maybe<&2, Shared.Name>, ms, t, Some{nm})
-      ): {Maybe.default(&2, Maybe<&2, Shared.Name>, _, None{}) == Some{nm}: Maybe<&2, Shared.Name>}
+        Tables.Table.get_after_set(Maybe<&2, Resources.Name>, ms, t, Some{nm})
+      ): {
+        Maybe.default(
+          &2,
+          Maybe<&2, Resources.Name>,
+          _,
+          None{}
+        )
+          == Some{nm}: Maybe<&2, Resources.Name>
+      }
       {==}
 
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
@@ -412,7 +426,7 @@ def Replay.wrote(s: Store.Store, r: Result<&2, &2, Store.Problem, Store.Wrote>) 
       s
 
 # the store after the content of a record, if any
-def Replay.store(s: Store.Store, content: Maybe<&2, Shared.Bytes()>) -> Store.Store:
+def Replay.store(s: Store.Store, content: Maybe<&2, Octets.Bytes()>) -> Store.Store:
   match content:
     case None{}:
       s
@@ -446,7 +460,7 @@ def Replay.line(l: Lines.Line, r: Result<&2, &2, Lines.Refused, Lines.Line>) -> 
 # merge that only catches up) has that node descend from them.
 def Replay.advance(+l: Lines.Line, h: History.History, ln: String, +v: History.Node) -> Lines.Line:
   +n = History.Node.name(v)
-  Shared.Bool.when(
+  Bools.Bool.when(
     Lines.Line,
     String.eq(ln, Lines.Line.name(l)),
     u => Replay.line(l, Lines.Line.advance(l, h, n, Lines.Line.heads(l, n), History.Node.id(v))),
@@ -479,7 +493,7 @@ def Spec.Core.replay(c, rs):
   Replay.all(rs, c)
 
 # the bytes of items, one after another
-def Replay.bytes(items: List<&2, Shared.Bytes()>) -> Shared.Bytes():
+def Replay.bytes(items: List<&2, Octets.Bytes()>) -> Octets.Bytes():
   match items:
     case Nil{}:
       []
@@ -487,7 +501,7 @@ def Replay.bytes(items: List<&2, Shared.Bytes()>) -> Shared.Bytes():
       List.append(&2, U32, x, Replay.bytes(t))
 
 # the stream primed with the content that the store gives for root, if any
-def Replay.primed.read(r: Maybe<&2, List<&2, Shared.Bytes()>>) -> Maybe<&2, Ep.Stream>:
+def Replay.primed.read(r: Maybe<&2, List<&2, Octets.Bytes()>>) -> Maybe<&2, Ep.Stream>:
   match r:
     case None{}:
       None{}
@@ -513,7 +527,7 @@ def Replay.primed.node(s: Store.Store, v: Maybe<&2, History.Node>) -> Maybe<&2, 
 def Replay.primed(
   s: Store.Store,
   h: History.History,
-  xs: List<&2, Shared.Bytes()>
+  xs: List<&2, Octets.Bytes()>
 ) -> Maybe<&2, Ep.Stream>:
   match xs:
     case Con{x, Nil{}}:
@@ -523,15 +537,15 @@ def Replay.primed(
 
 # ss with k at p, when there is one
 def Replay.put(
-  ss: Shared.Table<Ep.Stream>,
+  ss: Tables.Table<Ep.Stream>,
   p: String,
   k: Maybe<&2, Ep.Stream>
-) -> Shared.Table<Ep.Stream>:
+) -> Tables.Table<Ep.Stream>:
   match k:
     case None{}:
       ss
     case Some{x}:
-      Shared.Table.set(Ep.Stream, ss, p, x)
+      Tables.Table.set(Ep.Stream, ss, p, x)
 
 # streams with a primed stream for each path of ps whose one head on the
 # line l holds content
@@ -541,17 +555,17 @@ def Replay.prime(
   +h: History.History,
   +l: Lines.Line,
   +sp: String,
-  ss: Shared.Table<Ep.Stream>
-) -> Shared.Table<Ep.Stream>:
+  ss: Tables.Table<Ep.Stream>
+) -> Tables.Table<Ep.Stream>:
   match ps:
     case Nil{}:
       ss
     case Con{+p, t}:
-      k = Replay.primed(s, h, Lines.Line.heads(l, Shared.Name{sp, p}))
+      k = Replay.primed(s, h, Lines.Line.heads(l, Resources.Name{sp, p}))
       Replay.prime(t, s, h, l, sp, Replay.put(ss, p, k))
 
 # the heads of l, by path
-def Replay.heads(l: Lines.Line) -> Shared.Table<List<&2, Shared.Bytes()>>:
+def Replay.heads(l: Lines.Line) -> Tables.Table<List<&2, Octets.Bytes()>>:
   match l:
     case Lines.Line{sp, nm, hs}:
       hs
@@ -560,7 +574,7 @@ def Replay.heads(l: Lines.Line) -> Shared.Table<List<&2, Shared.Bytes()>>:
 def Replay.primed.core(c: Spec.Core) -> Spec.Core:
   match c:
     case Spec.Core{Spec.Mount{+sp, ln, r, g, a}, +s, +h, +l, ss, ms, ns}:
-      ps = Shared.Table.keys(List<&2, Shared.Bytes()>, Replay.heads(l))
+      ps = Tables.Table.keys(List<&2, Octets.Bytes()>, Replay.heads(l))
       Spec.Core{Spec.Mount{sp, ln, r, g, a}, s, h, l, Replay.prime(ps, s, h, l, sp, ss), ms, ns}
 
 def Spec.Core.restore(m, rs):

@@ -3,6 +3,7 @@
 
 2 - This implementation must be independent from the outside code with exceptions:
 2.1 - Glob. It's proven so it's fine.
+2.2 - src/shared.bend | src/shared/*.bend
 
 3 - This must not contain technical details(at most in the agent-designated section) and even when it does the main intention is imperative.
 
@@ -40,10 +41,10 @@ A point is a version ID, a branch(its newest version) or branch@mark.
 
 #### Change
 - `try-write <name> --branch <branch> --base <version>` - saves new content(bytes, a URI or an old version). Answers Written, Pending(owner group not reached), Stale or Refused.
-- `try-set-branch <branch> --to <point>` - makes the branch at that point or, when it exists, records a new version where the whole branch, submodules included, equals that point. History is kept. Answers Created, Restored, Pending, Partial(names the missing submodules) or Stale.
-- `try-create mark <branch> <name> -m <message>` - names the current point of a branch. Answers Marked or NameTaken.
-- `try-merge <point> into <branch>` - merges item by item. Answers Merged, Conflicted(the conflict is stored) or Stale.
-- `try-resolve <conflict> <choice>` - settles a stored conflict. Answers Resolved or Stale.
+- `try-set-branch <branch> --to <point>` - makes the branch at that point or, when it exists, records a new version where the whole branch, submodules included, equals that point. History is kept. Answers Created, Restored, Pending, Partial(names the missing submodules), Stale or Refused.
+- `try-create mark <branch> <name> -m <message>` - names the current point of a branch. Answers Marked, NameTaken or Refused.
+- `try-merge <point> into <branch>` - merges item by item. Answers Merged, Conflicted(the conflict is stored), Stale or Refused.
+- `try-resolve <conflict> <name> <content>` - settles one resource of a stored conflict. Answers Resolved(no resource clashes any more), Left(the resources that still clash), Stale or Refused.
 - `try-mount <uri> [settings] --branch <name>` - ties a resource to a branch, and fills it when it is empty. The resource's kind reads and checks the settings(for kinds with paths, globs). On a mounted resource, it changes its settings or its branch(a checkout). A second mount of the same space on another branch is a worktree. Answers Mounted, Partial, Unsupported(the kind does not support a setting) or Refused.
 - `try-unmount <uri>` - stops versioning it. Answers Unmounted or NotMounted.
 
@@ -57,7 +58,7 @@ A point is a version ID, a branch(its newest version) or branch@mark.
 - `try-close` - ends the connection, or a subscription.
 
 #### Live
-- `try-subscribe <topic> [--since X]` - keeps sending the events of a topic: changes that affect you, new conflicts, new versions and the node's questions to you. Answers questions with the matching command(for example, `try-resolve`).
+- `try-subscribe <topic> [--since X]` - keeps sending the events of a topic: changes that affect you, new conflicts, new versions, groups that a sync kept(the other node's members would close a cycle) and the node's questions to you. Answers questions with the matching command(for example, `try-resolve`).
 
 #### The node itself
 - `try-start-or-resume` - runs the node.

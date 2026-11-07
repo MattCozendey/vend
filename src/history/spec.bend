@@ -1,6 +1,8 @@
 import Base
 import ../hash/spec.bend as Hash
-import ../shared.bend as Shared
+import ../shared/bytes.bend as Octets
+import ../shared/resources.bend as Resources
+import ../shared/tables.bend as Tables
 import ../store/spec.bend as Store
 import ../views/text/spec.bend as Text
 
@@ -31,17 +33,17 @@ type Author is Data:
 # it; part of the id, so two writers of the same content make two nodes.
 type Node is Data:
   Node{
-    name: Shared.Name,
-    parents: List<&2, Shared.Bytes()>,
+    name: Resources.Name,
+    parents: List<&2, Octets.Bytes()>,
     body: Body,
-    from: Maybe<&2, Shared.Name>,
+    from: Maybe<&2, Resources.Name>,
     author: Author
   }
 
 # the bytes of a name: its space, then its path, each as UTF-8 and framed
-def Name.encode(n: Shared.Name) -> Shared.Bytes():
+def Name.encode(n: Resources.Name) -> Octets.Bytes():
   match n:
-    case Shared.Name{sp, p}:
+    case Resources.Name{sp, p}:
       List.append(
         &2,
         U32,
@@ -50,12 +52,12 @@ def Name.encode(n: Shared.Name) -> Shared.Bytes():
       )
 
 # the bytes of ids, framed, after their number
-def Ids.encode(xs: List<&2, Shared.Bytes()>) -> Shared.Bytes():
+def Ids.encode(xs: List<&2, Octets.Bytes()>) -> Octets.Bytes():
   +xs = xs
-  List.append(&2, U32, Store.Leb.of(List.length(&2, Shared.Bytes(), xs)), Store.Bytes.frame_all(xs))
+  List.append(&2, U32, Store.Leb.of(List.length(&2, Octets.Bytes(), xs)), Store.Bytes.frame_all(xs))
 
 # the bytes of a body: 0 then the root, or 1 for Gone
-def Body.encode(b: Body) -> Shared.Bytes():
+def Body.encode(b: Body) -> Octets.Bytes():
   match b:
     case Has{r}:
       0 <> Store.Ref.encode(r)
@@ -63,7 +65,7 @@ def Body.encode(b: Body) -> Shared.Bytes():
       [1]
 
 # the bytes of a moved-from name: 0 for none, or 1 then the name
-def From.encode(f: Maybe<&2, Shared.Name>) -> Shared.Bytes():
+def From.encode(f: Maybe<&2, Resources.Name>) -> Octets.Bytes():
   match f:
     case None{}:
       [0]
@@ -72,7 +74,7 @@ def From.encode(f: Maybe<&2, Shared.Name>) -> Shared.Bytes():
 
 # the bytes of an author: 0 for Outside, or 1 then the agent's name as
 # UTF-8, framed
-def Author.encode(a: Author) -> Shared.Bytes():
+def Author.encode(a: Author) -> Octets.Bytes():
   match a:
     case Outside{}:
       [0]
@@ -81,7 +83,7 @@ def Author.encode(a: Author) -> Shared.Bytes():
 
 # the bytes that a node's id hashes: name, parents, body, moved-from, then
 # author; each part frames itself, so distinct nodes give distinct bytes
-def Node.encode(n: Node) -> Shared.Bytes():
+def Node.encode(n: Node) -> Octets.Bytes():
   match n:
     case Node{m, ps, b, f, a}:
       List.append(
@@ -102,18 +104,18 @@ def Node.encode(n: Node) -> Shared.Bytes():
       )
 
 # the id of n
-def Node.id(n: Node) -> Shared.Bytes():
+def Node.id(n: Node) -> Octets.Bytes():
   Hash.Hash.blake3(Node.encode(n))
 
 # a and b are the same node: they have the same bytes
 def Node.same(a: Node, b: Node) -> Bool:
-  Shared.Bytes.is_eq(Node.encode(a), Node.encode(b))
+  Octets.Bytes.is_eq(Node.encode(a), Node.encode(b))
 
 # distinct nodes have distinct bytes, so Node.same is equality
 law node_encode_injective:
   for a: Node
   for b: Node
-  for e: {Node.encode(a) == Node.encode(b): Shared.Bytes()}
+  for e: {Node.encode(a) == Node.encode(b): Octets.Bytes()}
   {a == b: Node}
 
 # The nodes by the hex of their id, and the tips of each resource by the
@@ -121,20 +123,20 @@ law node_encode_injective:
 # has as a parent, in ascending byte order of their ids. Several tips mean
 # the resource forked: two lines, or two machines, wrote it apart.
 type History is Data:
-  History{nodes: Shared.Table<Node>, tips: Shared.Table<List<&2, Shared.Bytes()>>}
+  History{nodes: Tables.Table<Node>, tips: Tables.Table<List<&2, Octets.Bytes()>>}
 
 # a history with no nodes
 def History.new() -> History:
-  History{Shared.Table.new(Node), Shared.Table.new(List<&2, Shared.Bytes()>)}
+  History{Tables.Table.new(Node), Tables.Table.new(List<&2, Octets.Bytes()>)}
 
 # the node with id x, or None
-def History.get(h: History, x: Shared.Bytes()) -> Maybe<&2, Node>:
+def History.get(h: History, x: Octets.Bytes()) -> Maybe<&2, Node>:
   match h:
     case History{ns, ts}:
-      Shared.Table.get(Node, ns, Hash.Hash.hex(x))
+      Tables.Table.get(Node, ns, Hash.Hash.hex(x))
 
 # h holds a node with id x
-def History.has(h: History, x: Shared.Bytes()) -> Bool:
+def History.has(h: History, x: Octets.Bytes()) -> Bool:
   Maybe.is_some(&2, Node, History.get(h, x))
 
 # the other node that m holds where v belongs, if any
@@ -150,32 +152,32 @@ def History.collides(h: History, +v: Node) -> Bool:
   History.collides.of(History.get(h, Node.id(v)), v)
 
 # the tips of the resource n: none when it has no version yet
-def History.tips(h: History, n: Shared.Name) -> List<&2, Shared.Bytes()>:
+def History.tips(h: History, n: Resources.Name) -> List<&2, Octets.Bytes()>:
   match h:
     case History{ns, ts}:
       Maybe.default(
         &2,
-        List<&2, Shared.Bytes()>,
-        Shared.Table.get(List<&2, Shared.Bytes()>, ts, Shared.Name.show(n)),
+        List<&2, Octets.Bytes()>,
+        Tables.Table.get(List<&2, Octets.Bytes()>, ts, Resources.Name.show(n)),
         []
       )
 
 # xs and ys are the same ids in the same order
-def Ids.is_eq(xs: List<&2, Shared.Bytes()>, ys: List<&2, Shared.Bytes()>) -> Bool:
+def Ids.is_eq(xs: List<&2, Octets.Bytes()>, ys: List<&2, Octets.Bytes()>) -> Bool:
   match xs ys:
     case Nil{} Nil{}:
       True{}
     case Con{x, xt} Con{y, yt}:
-      List.all.if(u => Ids.is_eq(xt, yt), Shared.Bytes.is_eq(x, y))
+      List.all.if(u => Ids.is_eq(xt, yt), Octets.Bytes.is_eq(x, y))
     case _ _:
       False{}
 
 # xs holds the id x
-def Ids.has(xs: List<&2, Shared.Bytes()>, x: Shared.Bytes()) -> Bool:
-  List.contains(~Shared.Bytes(), ~Shared.Bytes.is_eq, xs, x)
+def Ids.has(xs: List<&2, Octets.Bytes()>, x: Octets.Bytes()) -> Bool:
+  List.contains(~Octets.Bytes(), ~Octets.Bytes.is_eq, xs, x)
 
 # every id of xs is a node of h
-def Ids.all_in(+h: History, xs: List<&2, Shared.Bytes()>) -> Bool:
+def Ids.all_in(+h: History, xs: List<&2, Octets.Bytes()>) -> Bool:
   match xs:
     case Nil{}:
       True{}
@@ -189,13 +191,13 @@ def Node.author(v: Node) -> Author:
       a
 
 # the resource of v
-def Node.name(v: Node) -> Shared.Name:
+def Node.name(v: Node) -> Resources.Name:
   match v:
     case Node{n, ps, b, f, a}:
       n
 
 # the parents of v
-def Node.parents(v: Node) -> List<&2, Shared.Bytes()>:
+def Node.parents(v: Node) -> List<&2, Octets.Bytes()>:
   match v:
     case Node{n, ps, b, f, a}:
       ps
@@ -205,7 +207,7 @@ def Node.parents(v: Node) -> List<&2, Shared.Bytes()>:
 # formed and add keeps it so (new_ok, add_ok), so every history the core
 # builds is. Only laws about where a node sits need it.
 def History.Ok(h: History) -> Type:
-  @x: Shared.Bytes() -> @v: Node -> {
+  @x: Octets.Bytes() -> @v: Node -> {
     History.get(h, x) == Some{v}: Maybe<&2, Node>
   } -> {Hash.Hash.hex(Node.id(v)) == Hash.Hash.hex(x): String}
 
@@ -219,12 +221,12 @@ def History.Ok(h: History) -> Type:
 # Collides: the history holds another node a under the id of the new node
 # b (two nodes, one hash); it never keeps both, so it names them.
 type Refusal is Data:
-  Missing{parent: Shared.Bytes()}
+  Missing{parent: Octets.Bytes()}
   Collides{a: Node, b: Node}
 
 # A finished add: the history after it, and the id of the node.
 type Added is Data:
-  Added{history: History, id: Shared.Bytes()}
+  Added{history: History, id: Octets.Bytes()}
 
 # h with the node v; or the parent of v that h lacks; or the other node
 # that h holds under the id of v. A node that h holds already changes
@@ -255,9 +257,9 @@ law add_node:
   for h: History
   for v: Node
   for g: History
-  for x: Shared.Bytes()
+  for x: Octets.Bytes()
   for a: {History.add(h, v) == Done{Added{g, x}}: Result<&2, &2, Refusal, Added>}
-  {History.get(g, x) == Some{v}: Maybe<&2, Node>} & {x == Node.id(v): Shared.Bytes()}
+  {History.get(g, x) == Some{v}: Maybe<&2, Node>} & {x == Node.id(v): Octets.Bytes()}
 
 # a refused add for a collision, in a well-formed history, names another
 # node with the same id
@@ -268,15 +270,15 @@ law add_collides:
   for b: Node
   for k: History.Ok(h)
   for c: {History.add(h, v) == Fail{Collides{a, b}}: Result<&2, &2, Refusal, Added>}
-  {Node.same(a, b) == False{}: Bool} & {Node.id(a) == Node.id(b): Shared.Bytes()}
+  {Node.same(a, b) == False{}: Bool} & {Node.id(a) == Node.id(b): Octets.Bytes()}
 
 # an add keeps every node
 law add_keeps:
   for h: History
   for v: Node
   for g: History
-  for x: Shared.Bytes()
-  for y: Shared.Bytes()
+  for x: Octets.Bytes()
+  for y: Octets.Bytes()
   for w: Node
   for a: {History.add(h, v) == Done{Added{g, x}}: Result<&2, &2, Refusal, Added>}
   for o: {History.get(h, y) == Some{w}: Maybe<&2, Node>}
@@ -297,8 +299,8 @@ law add_tips:
   for h: History
   for v: Node
   for g: History
-  for x: Shared.Bytes()
-  for p: Shared.Bytes()
+  for x: Octets.Bytes()
+  for p: Octets.Bytes()
   for n: {History.has(h, Node.id(v)) == False{}: Bool}
   for a: {History.add(h, v) == Done{Added{g, x}}: Result<&2, &2, Refusal, Added>}
   for q: {Ids.has(Node.parents(v), p) == True{}: Bool}
@@ -314,7 +316,7 @@ law add_ok:
   for h: History
   for v: Node
   for g: History
-  for x: Shared.Bytes()
+  for x: Octets.Bytes()
   for k: History.Ok(h)
   for a: {History.add(h, v) == Done{Added{g, x}}: Result<&2, &2, Refusal, Added>}
   History.Ok(g)
@@ -324,11 +326,11 @@ law add_frames:
   for h: History
   for v: Node
   for g: History
-  for x: Shared.Bytes()
-  for m: Shared.Name
+  for x: Octets.Bytes()
+  for m: Resources.Name
   for a: {History.add(h, v) == Done{Added{g, x}}: Result<&2, &2, Refusal, Added>}
-  for d: {String.eq(Shared.Name.show(m), Shared.Name.show(Node.name(v))) == False{}: Bool}
-  {History.tips(g, m) == History.tips(h, m): List<&2, Shared.Bytes()>}
+  for d: {String.eq(Resources.Name.show(m), Resources.Name.show(Node.name(v))) == False{}: Bool}
+  {History.tips(g, m) == History.tips(h, m): List<&2, Octets.Bytes()>}
 
 # Sync
 # ----
@@ -339,8 +341,8 @@ law add_frames:
 
 # h and g hold the same nodes and the same tips
 def History.Same(h: History, g: History) -> Type:
-  (@x: Shared.Bytes() -> {History.get(h, x) == History.get(g, x): Maybe<&2, Node>}) &
-    (@n: Shared.Name -> {History.tips(h, n) == History.tips(g, n): List<&2, Shared.Bytes()>})
+  (@x: Octets.Bytes() -> {History.get(h, x) == History.get(g, x): Maybe<&2, Node>}) &
+    (@n: Resources.Name -> {History.tips(h, n) == History.tips(g, n): List<&2, Octets.Bytes()>})
 
 # the union of h and g
 law History.join:
@@ -352,7 +354,7 @@ law History.join:
 law join_keeps:
   for h: History
   for g: History
-  for x: Shared.Bytes()
+  for x: Octets.Bytes()
   for v: Node
   for o: {Maybe.or(&2, Node, History.get(h, x), History.get(g, x)) == Some{v}: Maybe<&2, Node>}
   {History.get(History.join(h, g), x) == Some{v}: Maybe<&2, Node>}
@@ -361,7 +363,7 @@ law join_keeps:
 law join_adds_nothing:
   for h: History
   for g: History
-  for x: Shared.Bytes()
+  for x: Octets.Bytes()
   for o: {Maybe.or(&2, Node, History.get(h, x), History.get(g, x)) == None{}: Maybe<&2, Node>}
   {History.get(History.join(h, g), x) == None{}: Maybe<&2, Node>}
 

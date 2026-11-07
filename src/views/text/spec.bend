@@ -1,5 +1,5 @@
 import Base
-import ../../shared.bend as Shared
+import ../../shared/bytes.bend as Octets
 import ../shared.bend as Views
 
 # Text: a resource whose bytes are UTF-8. Its document is the String of
@@ -34,7 +34,7 @@ def Text.width(+x: U32) -> Width:
   )
 
 # the UTF-8 bytes of the scalar value x, w wide (RFC 3629, section 3)
-def Text.encode_char.of(w: Width, +x: U32) -> Shared.Bytes():
+def Text.encode_char.of(w: Width, +x: U32) -> Octets.Bytes():
   match w:
     case W1{}:
       [x]
@@ -51,13 +51,13 @@ def Text.encode_char.of(w: Width, +x: U32) -> Shared.Bytes():
       ]
 
 # the UTF-8 bytes of the character c
-def Text.encode_char(c: Char) -> Shared.Bytes():
+def Text.encode_char(c: Char) -> Octets.Bytes():
   match c:
     case Chr{+x}:
       Text.encode_char.of(Text.width(x), x)
 
 # the UTF-8 bytes of s
-def Text.encode(s: String) -> Shared.Bytes():
+def Text.encode(s: String) -> Octets.Bytes():
   match s:
     case SNil{}:
       []
@@ -66,7 +66,7 @@ def Text.encode(s: String) -> Shared.Bytes():
 
 # the String that UTF-8 bytes b spell, or None when b is not UTF-8
 law Text.decode:
-  for b: Shared.Bytes()
+  for b: Octets.Bytes()
   Maybe<&2, String>
 
 # Text loses nothing: decode accepts exactly the UTF-8 encodings of valid

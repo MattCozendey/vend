@@ -1,14 +1,16 @@
 import Base
 import ../daemon/spec.bend as Daemon
 import ../glob/spec.bend as Glob
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/bytes.bend as Octets
+import ../shared/uris.bend as Uris
 
 # The command line. It only turns arguments into a command; the daemon
 # does the work, so the CLI holds no behavior of its own.
 
 # A command. StartOrResume: run the daemon in the foreground; the only way
 # it starts. StatusCmd: the mounts and clients. MountCmd: version the files
-# under the URI root (as Shared.Uri.read reads it) that the globs select,
+# under the URI root (as Uris.Uri.read reads it) that the globs select,
 # on the line named line; each glob is read by Glob.Rule.read and matches
 # the path relative to the root (a leading '!' excludes, and the last glob
 # that matches a path decides); with no globs given, every file ("**").
@@ -71,7 +73,7 @@ type Picked is Data:
 def Cli.pick.rev(rev: List<&2, String>, all: List<&2, String>) -> Picked:
   match rev:
     case Con{ln, Con{flag, t}}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Picked,
         String.eq(flag, "--line"),
         u => Picked{List.reverse(&2, String, t), ln},
@@ -105,9 +107,9 @@ def Cli.mount(+root: String, rest: List<&2, String>) -> Result<&2, &2, String, C
   +p = Cli.pick(rest)
   ok = List.all.if(
     u => Cli.globs_read(Picked.globs(p)),
-    Maybe.is_some(&2, Shared.Uri, Shared.Uri.read(root))
+    Maybe.is_some(&2, Uris.Uri, Uris.Uri.read(root))
   )
-  Shared.Bool.when(
+  Bools.Bool.when(
     Result<&2, &2, String, Cmd>,
     ok,
     u => Cli.mount.of(root, p),
@@ -116,24 +118,24 @@ def Cli.mount(+root: String, rest: List<&2, String>) -> Result<&2, &2, String, C
 
 # the unmount command of root, when it reads as a URI
 def Cli.unmount(+root: String) -> Result<&2, &2, String, Cmd>:
-  Shared.Bool.when(
+  Bools.Bool.when(
     Result<&2, &2, String, Cmd>,
-    Maybe.is_some(&2, Shared.Uri, Shared.Uri.read(root)),
+    Maybe.is_some(&2, Uris.Uri, Uris.Uri.read(root)),
     u => Done{UnmountCmd{root}},
     u => Fail{Cli.usage()}
   )
 
 # the command of one word
 def Cli.word(+w: String) -> Result<&2, &2, String, Cmd>:
-  Shared.Bool.when(
+  Bools.Bool.when(
     Result<&2, &2, String, Cmd>,
     String.eq(w, "start-or-resume"),
     u => Done{StartOrResume{}},
-    u => Shared.Bool.when(
+    u => Bools.Bool.when(
       Result<&2, &2, String, Cmd>,
       String.eq(w, "status"),
       v => Done{StatusCmd{}},
-      v => Shared.Bool.when(
+      v => Bools.Bool.when(
         Result<&2, &2, String, Cmd>,
         String.eq(w, "mcp"),
         x => Done{McpCmd{}},
@@ -152,13 +154,13 @@ def Cli.everyday(w: String) -> Bool:
   List.contains(~String, ~String.eq, Daemon.Command.words(), w)
 
 # the bytes of standard input, read to its end
-def Stdin.read_all() -> IO(Result<&1, &1, U32 & String, Shared.Bytes()>):
+def Stdin.read_all() -> IO(Result<&1, &1, U32 & String, Octets.Bytes()>):
   import "./effs/stdin.c"
   import "./effs/stdin.js"
 
 # the next line of standard input with its line feed, or the last bytes
 # before its end without one; no bytes at its end
-def Stdin.read_line() -> IO(Result<&1, &1, U32 & String, Shared.Bytes()>):
+def Stdin.read_line() -> IO(Result<&1, &1, U32 & String, Octets.Bytes()>):
   import "./effs/stdin.c"
   import "./effs/stdin.js"
 
@@ -197,15 +199,15 @@ def Cli.daemon(ws: List<&2, String>) -> Result<&2, &2, String, Cmd>:
 
 # the command of the words w, a, rest when w is no everyday command
 def Cli.parse.other(+w: String, +a: String, +rest: List<&2, String>) -> Result<&2, &2, String, Cmd>:
-  Shared.Bool.when(
+  Bools.Bool.when(
     Result<&2, &2, String, Cmd>,
     String.eq(w, "mount"),
     u => Cli.mount(a, rest),
-    u => Shared.Bool.when(
+    u => Bools.Bool.when(
       Result<&2, &2, String, Cmd>,
       Bool.and(String.eq(w, "unmount"), List.is_empty(&2, String, rest)),
       v => Cli.unmount(a),
-      v => Shared.Bool.when(
+      v => Bools.Bool.when(
         Result<&2, &2, String, Cmd>,
         String.eq(w, "daemon"),
         x => Cli.daemon(a <> rest),
@@ -220,14 +222,14 @@ def Cli.parse(args: List<&2, String>) -> Result<&2, &2, String, Cmd>:
     case Nil{}:
       Done{Help{}}
     case Con{+w, Nil{}}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Result<&2, &2, String, Cmd>,
         Cli.everyday(w),
         u => Done{AskCmd{[w]}},
         u => Cli.word(w)
       )
     case Con{+w, Con{+a, +rest}}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Result<&2, &2, String, Cmd>,
         Cli.everyday(w),
         e => Done{AskCmd{w <> a <> rest}},
@@ -263,7 +265,7 @@ law parse_after_show:
   for root: String
   for rs: List<&2, String>
   for ln: String
-  for u: {Maybe.is_some(&2, Shared.Uri, Shared.Uri.read(root)) == True{}: Bool}
+  for u: {Maybe.is_some(&2, Uris.Uri, Uris.Uri.read(root)) == True{}: Bool}
   for h: {Cli.globs_read(rs) == True{}: Bool}
   for n: {List.is_empty(&2, String, rs) == False{}: Bool}
   {

@@ -2,7 +2,9 @@ import Base
 import ../conditions/spec.bend as Cond
 import ../graph/spec.bend as Graph
 import ../lines/spec.bend as Lines
-import ../shared.bend as Shared
+import ../shared/bools.bend as Bools
+import ../shared/bytes.bend as Octets
+import ../shared/resources.bend as Resources
 import ../views/bend/spec.bend as Bend
 
 # Impact: what a change of Bend source means, and how far it reaches.
@@ -35,12 +37,7 @@ def Impact.statement(items: List<&2, Bend.Item>, +x: String) -> Maybe<&2, String
     case Nil{}:
       None{}
     case Con{Bend.Keyed{Bend.LawItem{}, y, t}, r}:
-      Shared.Bool.when(
-        Maybe<&2, String>,
-        String.eq(y, x),
-        u => Some{t},
-        u => Impact.statement(r, x)
-      )
+      Bools.Bool.when(Maybe<&2, String>, String.eq(y, x), u => Some{t}, u => Impact.statement(r, x))
     case Con{i, r}:
       Impact.statement(r, x)
 
@@ -73,7 +70,7 @@ def Impact.is_code(p: Bend.Part) -> Bool:
 # the local mentions of every law item among items of m
 def Impact.observed(
   items: List<&2, Bend.Item>,
-  +n: Shared.Name,
+  +n: Resources.Name,
   +m: Bend.Module
 ) -> List<&2, String>:
   match items:
@@ -81,7 +78,7 @@ def Impact.observed(
       Nil{}
     case Con{+i, r}:
       +rest = Impact.observed(r, n, m)
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, String>,
         Impact.is_statement(Bend.Bend.part(m, n, i)),
         u => List.append(&2, String, Mentions.locals(Bend.Bend.refs(n, m, i)), rest),
@@ -90,7 +87,7 @@ def Impact.observed(
 
 # Impact.code_mentions of the item found, if any
 def Impact.code_mentions.of(
-  +n: Shared.Name,
+  +n: Resources.Name,
   +m: Bend.Module,
   o: Maybe<&2, Bend.Item>
 ) -> List<&2, String>:
@@ -98,7 +95,7 @@ def Impact.code_mentions.of(
     case None{}:
       []
     case Some{+i}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, String>,
         Impact.is_code(Bend.Bend.part(m, n, i)),
         u => Mentions.locals(Bend.Bend.refs(n, m, i)),
@@ -107,7 +104,7 @@ def Impact.code_mentions.of(
 
 # the names that the item named x mentions, when it is code; none for a
 # proof or a statement, or when no item is named x
-def Impact.code_mentions(n: Shared.Name, +m: Bend.Module, x: String) -> List<&2, String>:
+def Impact.code_mentions(n: Resources.Name, +m: Bend.Module, x: String) -> List<&2, String>:
   Impact.code_mentions.of(n, m, Bend.Bend.owner_item(Bend.Module.items(m), x, []))
 
 # ns with every name of xs that ns lacks
@@ -116,7 +113,7 @@ def Names.add(xs: List<&2, String>, +ns: List<&2, String>) -> List<&2, String>:
     case Nil{}:
       ns
     case Con{+x, +t}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, String>,
         List.contains(~String, ~String.eq, ns, x),
         u => Names.add(t, ns),
@@ -129,7 +126,7 @@ def Impact.unseen(xs: List<&2, String>, +seen: List<&2, String>) -> List<&2, Str
     case Nil{}:
       Nil{}
     case Con{+x, +t}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, String>,
         List.contains(~String, ~String.eq, seen, x),
         u => Impact.unseen(t, seen),
@@ -140,7 +137,7 @@ def Impact.unseen(xs: List<&2, String>, +seen: List<&2, String>) -> List<&2, Str
 # counts the names left to visit
 def Impact.covered.go(
   fuel: Nat,
-  +n: Shared.Name,
+  +n: Resources.Name,
   +m: Bend.Module,
   todo: List<&2, String>,
   +seen: List<&2, String>
@@ -160,7 +157,7 @@ def Impact.covered.go(
 # every name a law item mentions, then every name the code items reached
 # so far mention, and so on. Proofs are not followed: a proof uses names to
 # show a law, it does not constrain them.
-def Impact.covered(+n: Shared.Name, +m: Bend.Module) -> List<&2, String>:
+def Impact.covered(+n: Resources.Name, +m: Bend.Module) -> List<&2, String>:
   +start = Names.add(Impact.observed(Bend.Module.items(m), n, m), [])
   fuel = {1n+List.length(&2, String, Bend.Items.names(Bend.Module.items(m))): Nat}
   Impact.covered.go(fuel, n, m, start, start)
@@ -187,7 +184,7 @@ def Impact.moved(+x: String, base: Bend.Module, new: Bend.Module) -> Bool:
 def Impact.class.of(
   p: Bend.Part,
   names: List<&2, String>,
-  n: Shared.Name,
+  n: Resources.Name,
   base: Bend.Module,
   new: Bend.Module
 ) -> Class:
@@ -195,15 +192,15 @@ def Impact.class.of(
     case Bend.Statement{}:
       LawStatement{}
     case Bend.Proof{x}:
-      Shared.Bool.when(Class, Impact.moved(x, base, new), u => LawStatement{}, u => ProofOnly{})
+      Bools.Bool.when(Class, Impact.moved(x, base, new), u => LawStatement{}, u => ProofOnly{})
     case Bend.Code{}:
       cov = Impact.covered(n, new)
-      Shared.Bool.when(Class, Names.meet(names, cov), u => Covered{}, u => Uncovered{})
+      Bools.Bool.when(Class, Names.meet(names, cov), u => Covered{}, u => Uncovered{})
 
 # the class of a change from the item ob of base to the item on of new, by
 # one key: None when both are the same text or both are missing
 def Impact.classify.of(
-  +n: Shared.Name,
+  +n: Resources.Name,
   base: Bend.Module,
   +new: Bend.Module,
   ob: Maybe<&2, Bend.Item>,
@@ -217,7 +214,7 @@ def Impact.classify.of(
     case Some{a} None{}:
       Some{Removed{}}
     case Some{a} Some{+b}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, Class>,
         String.eq(Bend.Item.text(a), Bend.Item.text(b)),
         u => None{},
@@ -227,7 +224,7 @@ def Impact.classify.of(
 # the class of the change of key k from base to new in the resource n, or
 # None when its item did not change
 def Impact.classify(
-  n: Shared.Name,
+  n: Resources.Name,
   +base: Bend.Module,
   +new: Bend.Module,
   +k: String
@@ -254,7 +251,7 @@ def Impact.classes.at(
 # the classes of the keys ks that changed
 def Impact.classes.go(
   ks: List<&2, String>,
-  +n: Shared.Name,
+  +n: Resources.Name,
   +base: Bend.Module,
   +new: Bend.Module
 ) -> List<&2, Classified>:
@@ -266,7 +263,11 @@ def Impact.classes.go(
       Impact.classes.at(k, Impact.classify(n, base, new, k), rest)
 
 # the classes of every key that changed from base to new in the resource n
-def Impact.classes(n: Shared.Name, +base: Bend.Module, +new: Bend.Module) -> List<&2, Classified>:
+def Impact.classes(
+  n: Resources.Name,
+  +base: Bend.Module,
+  +new: Bend.Module
+) -> List<&2, Classified>:
   ks = Names.add(List.append(&2, String, Bend.Bend.keys(base), Bend.Bend.keys(new)), [])
   Impact.classes.go(List.reverse(&2, String, ks), n, base, new)
 
@@ -318,7 +319,7 @@ def Impact.fills_moved(p: Bend.Part, base: Bend.Module, new: Bend.Module) -> Boo
 # a key is unclassified exactly when its item text is the same, or missing,
 # on both sides
 law classify_unchanged:
-  for n: Shared.Name
+  for n: Resources.Name
   for base: Bend.Module
   for new: Bend.Module
   for k: String
@@ -336,7 +337,7 @@ law classify_unchanged:
 
 # Added exactly when only new has the key
 law classify_added:
-  for n: Shared.Name
+  for n: Resources.Name
   for base: Bend.Module
   for new: Bend.Module
   for k: String
@@ -353,7 +354,7 @@ law classify_added:
 
 # Removed exactly when only base has the key
 law classify_removed:
-  for n: Shared.Name
+  for n: Resources.Name
   for base: Bend.Module
   for new: Bend.Module
   for k: String
@@ -371,7 +372,7 @@ law classify_removed:
 # for a key whose item a in base and b in new differ: LawStatement exactly
 # when b is a law item, or the proof of a law of new whose statement changed
 law classify_statement:
-  for n: Shared.Name
+  for n: Resources.Name
   for base: Bend.Module
   for new: Bend.Module
   for k: String
@@ -394,7 +395,7 @@ law classify_statement:
 # for such a key: ProofOnly exactly when b is a proof whose law statement
 # did not change
 law classify_proof_only:
-  for n: Shared.Name
+  for n: Resources.Name
   for base: Bend.Module
   for new: Bend.Module
   for k: String
@@ -417,7 +418,7 @@ law classify_proof_only:
 # for such a key: Covered exactly when b is code that a law statement of new
 # observes
 law classify_covered:
-  for n: Shared.Name
+  for n: Resources.Name
   for base: Bend.Module
   for new: Bend.Module
   for k: String
@@ -447,10 +448,10 @@ law classify_covered:
 
 # A Bend document of a resource.
 type Doc is Data:
-  Doc{name: Shared.Name, module: Bend.Module}
+  Doc{name: Resources.Name, module: Bend.Module}
 
 # the name of d
-def Doc.name(d: Doc) -> Shared.Name:
+def Doc.name(d: Doc) -> Resources.Name:
   match d:
     case Doc{n, m}:
       n
@@ -463,26 +464,26 @@ def Doc.module(d: Doc) -> Bend.Module:
 
 # An item of a resource, by name.
 type Spot is Data:
-  Spot{at: Shared.Name, name: String}
+  Spot{at: Resources.Name, name: String}
 
 # a and b are the same spot
 def Spot.is_eq(a: Spot, b: Spot) -> Bool:
   match a b:
     case Spot{m, x} Spot{n, y}:
-      List.all.if(u => String.eq(x, y), String.eq(Shared.Name.show(m), Shared.Name.show(n)))
+      List.all.if(u => String.eq(x, y), String.eq(Resources.Name.show(m), Resources.Name.show(n)))
 
 # the mention x, from an item of the resource at, names the spot s
-def Impact.names(x: Bend.Mention, at: Shared.Name, s: Spot) -> Bool:
+def Impact.names(x: Bend.Mention, at: Resources.Name, s: Spot) -> Bool:
   match x s:
     case Bend.Local{a} Spot{n, b}:
-      Bool.and(String.eq(Shared.Name.show(at), Shared.Name.show(n)), String.eq(a, b))
+      Bool.and(String.eq(Resources.Name.show(at), Resources.Name.show(n)), String.eq(a, b))
     case Bend.Imported{t, a} Spot{n, b}:
       Bool.and(Graph.Target.is_eq(t, Graph.Named{n}), String.eq(a, b))
 
 # the mention ms holds, from an item of the resource at, names the spot s:
 # a local mention when at is s's resource, an imported one whose target is
 # s's resource otherwise
-def Impact.mentions(ms: List<&2, Bend.Mention>, +at: Shared.Name, +s: Spot) -> Bool:
+def Impact.mentions(ms: List<&2, Bend.Mention>, +at: Resources.Name, +s: Spot) -> Bool:
   match ms:
     case Nil{}:
       False{}
@@ -497,7 +498,7 @@ def Impact.users.items(items: List<&2, Bend.Item>, +d: Doc, +s: Spot) -> List<&2
     case Con{Bend.Keyed{k, +x, t}, r}:
       i = {Bend.Keyed{k, x, t}: Bend.Item}
       +rest = Impact.users.items(r, d, s)
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, Spot>,
         Impact.mentions(Bend.Bend.refs(Doc.name(d), Doc.module(d), i), Doc.name(d), s),
         u => Spot{Doc.name(d), x} <> rest,
@@ -525,7 +526,7 @@ def Spots.unseen(xs: List<&2, Spot>, +seen: List<&2, Spot>) -> List<&2, Spot>:
     case Nil{}:
       Nil{}
     case Con{+x, +t}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, Spot>,
         List.contains(~Spot, ~Spot.is_eq, seen, x),
         u => Spots.unseen(t, seen),
@@ -622,7 +623,7 @@ law radius_minimal:
 # An import edge that the radius crosses: from the importer to the target,
 # with the condition under which the edge holds.
 type Via is Data:
-  Via{from: Shared.Name, to: Shared.Name, cond: Cond.Cond}
+  Via{from: Resources.Name, to: Resources.Name, cond: Cond.Cond}
 
 # The radius in layers. statements: the law items it holds; proofs: the
 # proofs it holds; code: the rest. resources: every resource with a spot in
@@ -633,26 +634,26 @@ type Layers is Data:
     statements: List<&2, Spot>,
     proofs: List<&2, Spot>,
     code: List<&2, Spot>,
-    resources: List<&2, Shared.Name>,
+    resources: List<&2, Resources.Name>,
     lines: List<&2, String>,
     via: List<&2, Via>
   }
 
 # the document of the resource n in docs, if any
-def Docs.find(docs: List<&2, Doc>, +n: Shared.Name) -> Maybe<&2, Doc>:
+def Docs.find(docs: List<&2, Doc>, +n: Resources.Name) -> Maybe<&2, Doc>:
   match docs:
     case Nil{}:
       None{}
     case Con{+d, r}:
-      Shared.Bool.when(
+      Bools.Bool.when(
         Maybe<&2, Doc>,
-        String.eq(Shared.Name.show(Doc.name(d)), Shared.Name.show(n)),
+        String.eq(Resources.Name.show(Doc.name(d)), Resources.Name.show(n)),
         u => Some{d},
         u => Docs.find(r, n)
       )
 
 # the part of the item found in m of the resource n; Code when none is
-def Impact.part.item(m: Bend.Module, n: Shared.Name, o: Maybe<&2, Bend.Item>) -> Bend.Part:
+def Impact.part.item(m: Bend.Module, n: Resources.Name, o: Maybe<&2, Bend.Item>) -> Bend.Part:
   match o:
     case None{}:
       Bend.Code{}
@@ -699,7 +700,7 @@ def Impact.layer(ss: List<&2, Spot>, +docs: List<&2, Doc>, +l: Layer) -> List<&2
       Nil{}
     case Con{+s, t}:
       +rest = Impact.layer(t, docs, l)
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, Spot>,
         Layer.has(l, Impact.part.at(docs, s)),
         u => s <> rest,
@@ -707,46 +708,49 @@ def Impact.layer(ss: List<&2, Spot>, +docs: List<&2, Doc>, +l: Layer) -> List<&2
       )
 
 # ns holds the resource n
-def Resources.has(ns: List<&2, Shared.Name>, +n: Shared.Name) -> Bool:
+def Names.has(ns: List<&2, Resources.Name>, +n: Resources.Name) -> Bool:
   match ns:
     case Nil{}:
       False{}
     case Con{m, t}:
-      List.any.if(u => Resources.has(t, n), String.eq(Shared.Name.show(m), Shared.Name.show(n)))
+      List.any.if(u => Names.has(t, n), String.eq(Resources.Name.show(m), Resources.Name.show(n)))
 
 # the resources of ss, each once
-def Impact.resources(ss: List<&2, Spot>, seen: List<&2, Shared.Name>) -> List<&2, Shared.Name>:
+def Impact.resources(
+  ss: List<&2, Spot>,
+  seen: List<&2, Resources.Name>
+) -> List<&2, Resources.Name>:
   match ss:
     case Nil{}:
       Nil{}
     case Con{Spot{+n, x}, +t}:
       +seen = seen
-      Shared.Bool.when(
-        List<&2, Shared.Name>,
-        Resources.has(seen, n),
+      Bools.Bool.when(
+        List<&2, Resources.Name>,
+        Names.has(seen, n),
         u => Impact.resources(t, seen),
         u => n <> Impact.resources(t, n <> seen)
       )
 
 # the line l follows one of the resources rs: its heads for it are not empty
-def Impact.follows(+l: Lines.Line, rs: List<&2, Shared.Name>) -> Bool:
+def Impact.follows(+l: Lines.Line, rs: List<&2, Resources.Name>) -> Bool:
   match rs:
     case Nil{}:
       False{}
     case Con{r, t}:
       List.any.if(
         u => Impact.follows(l, t),
-        Bool.not(List.is_empty(&2, Shared.Bytes(), Lines.Line.heads(l, r)))
+        Bool.not(List.is_empty(&2, Octets.Bytes(), Lines.Line.heads(l, r)))
       )
 
 # the names of the lines of ls that follow one of the resources rs
-def Impact.lines(ls: List<&2, Lines.Line>, +rs: List<&2, Shared.Name>) -> List<&2, String>:
+def Impact.lines(ls: List<&2, Lines.Line>, +rs: List<&2, Resources.Name>) -> List<&2, String>:
   match ls:
     case Nil{}:
       Nil{}
     case Con{+l, t}:
       +rest = Impact.lines(t, rs)
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, String>,
         Impact.follows(l, rs),
         u => Lines.Line.name(l) <> rest,
@@ -754,28 +758,28 @@ def Impact.lines(ls: List<&2, Lines.Line>, +rs: List<&2, Shared.Name>) -> List<&
       )
 
 # the import edges es of a resource that point at one of the resources rs
-def Impact.via.edges(es: List<&2, Graph.Edge>, +rs: List<&2, Shared.Name>) -> List<&2, Via>:
+def Impact.via.edges(es: List<&2, Graph.Edge>, +rs: List<&2, Resources.Name>) -> List<&2, Via>:
   match es:
     case Nil{}:
       Nil{}
     case Con{Graph.Edge{f, Graph.Named{n}, v, s, c}, t}:
       +n = n
       +rest = Impact.via.edges(t, rs)
-      Shared.Bool.when(List<&2, Via>, Resources.has(rs, n), u => Via{f, n, c} <> rest, u => rest)
+      Bools.Bool.when(List<&2, Via>, Names.has(rs, n), u => Via{f, n, c} <> rest, u => rest)
     case Con{e, t}:
       Impact.via.edges(t, rs)
 
 # the import edges between the resources rs, from their documents in docs
-def Impact.via(docs: List<&2, Doc>, +rs: List<&2, Shared.Name>) -> List<&2, Via>:
+def Impact.via(docs: List<&2, Doc>, +rs: List<&2, Resources.Name>) -> List<&2, Via>:
   match docs:
     case Nil{}:
       Nil{}
     case Con{Doc{n, m}, t}:
       +n = n
       +rest = Impact.via(t, rs)
-      Shared.Bool.when(
+      Bools.Bool.when(
         List<&2, Via>,
-        Resources.has(rs, n),
+        Names.has(rs, n),
         u => List.append(&2, Via, Impact.via.edges(Bend.Bend.edges(n, m), rs), rest),
         u => rest
       )
