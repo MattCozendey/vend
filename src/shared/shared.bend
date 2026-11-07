@@ -200,3 +200,133 @@ def List.has_append_false(
           k
         )(List.any.if_false_rest(same(i, k), u => List.has(~A, ~same, r, k))(ha))(hb)
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# List.has_split, once the rest is split
+def List.has_split.cons(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  x: A,
+  r: List<&2, A>,
+  m: A,
+  w: &ys: List<
+    &2,
+    A> -> &y: A -> &zs: List<
+    &2,
+    A> -> {r == List.append(&2, A, ys, y <> zs): List<&2, A>}
+    & {same(y, m) == True{}: Bool}
+) -> &ys:
+  List<
+    &2,
+    A> -> &y: A -> &zs: List<
+    &2,
+    A> -> {x <> r == List.append(&2, A, ys, y <> zs): List<&2, A>}
+    & {same(y, m) == True{}: Bool}:
+  match w:
+    case (ys, (y, (zs, (e1, e2)))):
+      (
+        x <> ys,
+        (
+          y,
+          (
+            zs,
+            (
+              Equal.cong(
+                List<&2, A>,
+                List<&2, A>,
+                z => x <> z,
+                r,
+                List.append(&2, A, ys, y <> zs),
+                e1
+              ),
+              e2
+            )
+          )
+        )
+      )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# List.has_split at the first element x, by whether it is m (hit)
+def List.has_split.at(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  hit: Bool,
+  x: A,
+  r: List<&2, A>,
+  m: A,
+  ih: {
+    List.has(~A, ~same, r, m) == True{}: Bool
+  } -> &ys: List<
+    &2,
+    A> -> &y: A -> &zs: List<
+    &2,
+    A> -> {r == List.append(&2, A, ys, y <> zs): List<&2, A>}
+    & {same(y, m) == True{}: Bool}
+) -> {
+  same(x, m) == hit: Bool
+} -> {List.any.if(u => List.has(~A, ~same, r, m), hit) == True{}: Bool} -> &ys:
+  List<
+    &2,
+    A> -> &y: A -> &zs: List<
+    &2,
+    A> -> {x <> r == List.append(&2, A, ys, y <> zs): List<&2, A>}
+    & {same(y, m) == True{}: Bool}:
+  match hit:
+    case True{}:
+      e => h => ([], (x, (r, ({==}, e))))
+    case False{}:
+      e => h => List.has_split.cons(~A, ~same, x, r, m, ih(h))
+
+# an element of xs splits it: the elements before it, it, and the ones after
+def List.has_split(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  xs: List<&2, A>,
+  +m: A
+) -> {List.has(~A, ~same, xs, m) == True{}: Bool} -> &ys:
+  List<
+    &2,
+    A> -> &y: A -> &zs: List<
+    &2,
+    A> -> {xs == List.append(&2, A, ys, y <> zs): List<&2, A>}
+    & {same(y, m) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      h => Empty.absurd(
+        &ys: List<
+          &2,
+          A> -> &y: A -> &zs: List<
+          &2,
+          A> -> {[] == List.append(&2, A, ys, y <> zs): List<&2, A>}
+          & {same(y, m) == True{}: Bool},
+        Bool.false_ne_true(h)
+      )
+    case Con{+x, +r}:
+      List.has_split.at(~A, ~same, same(x, m), x, r, m, List.has_split(~A, ~same, r, m))({==})
+
+# an element in the middle of a list is in the list
+def List.has_middle(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  ~refl: @a: A -> {same(a, a) == True{}: Bool},
+  ys: List<&2, A>,
+  +m: A,
+  +zs: List<&2, A>
+) -> {List.has(~A, ~same, List.append(&2, A, ys, m <> zs), m) == True{}: Bool}:
+  match ys:
+    case Nil{}:
+      %Equal.sym(
+        Bool,
+        same(m, m),
+        True{},
+        refl(m)
+      ): {List.any.if(u => List.has(~A, ~same, zs, m), _) == True{}: Bool}
+      {==}
+    case Con{x, +r}:
+      List.has_cons(
+        ~A,
+        ~same,
+        x,
+        List.append(&2, A, r, m <> zs),
+        m
+      )(List.has_middle(~A, ~same, ~refl, r, m, zs))

@@ -80,7 +80,7 @@ law Subscription:
   Type
 
 # runs a node on the store at store, until a stop
-law Node.try_start_or_resume:
+law VendNode.try_start_or_resume:
   for store: Uris.Uri
   IO(Start)
 
@@ -237,7 +237,7 @@ law Client.try_set_group:
 law Client.try_sync:
   for c: Client
   for r: Core.RequestId
-  for n: Core.Node
+  for n: Core.VendNode
   for s: Maybe<&2, Core.Position>
   IO(Client & Reply<&2, Core.Sync>)
 

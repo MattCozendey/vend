@@ -52,13 +52,14 @@ A point is a version ID, a branch(its newest version) or branch@mark.
 - `try-set-owner <branch> <group>` - sets the owner group of a branch. Answers Set, NoMajority or Refused.
 - `try-set-group <group> <member>...` - makes the group or, when it exists, replaces its members. A member is a node or a group. Answers Set, Cycle(the group would contain itself), NoMajority or Refused.
 - `try-sync <node> [--since X]` - swaps history with another node. Answers Synced, Partial or Refused.
+  For each group, both nodes keep the members with the larger stamp(the newer set, and on a tie the larger member list), so they end with the same groups. A sync takes those members even when groups then contain one another: refusing them would search every group on every sync, and the nodes could still disagree. The groups on such a cycle share their members until a `try-set-group` settles them.
 
 #### Connection
 - `try-open <node-uri> --writer <writer>` - connects to a node as a writer. Answers Opened.
 - `try-close` - ends the connection, or a subscription.
 
 #### Live
-- `try-subscribe <topic> [--since X]` - keeps sending the events of a topic: changes that affect you, new conflicts, new versions, groups that a sync kept(the other node's members would close a cycle) and the node's questions to you. Answers questions with the matching command(for example, `try-resolve`).
+- `try-subscribe <topic> [--since X]` - keeps sending the events of a topic: changes that affect you, new conflicts, new versions, groups that a sync left on a cycle and the node's questions to you. Answers questions with the matching command(for example, `try-resolve`).
 
 #### The node itself
 - `try-start-or-resume` - runs the node.

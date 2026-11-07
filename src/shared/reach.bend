@@ -2873,3 +2873,218 @@ def Reach.put_acyclic(
     hc
   )({==})
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a list that closes a cycle keeps each and/or as one value, for the proofs to split on
+# a path from no nodes leads nowhere
+def Reach.path_empty(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  ps: List<&2, A>,
+  g: V,
+  m: A
+) -> {Reach.path(~A, ~V, ~same, ~succ, ps, [], g, m) == False{}: Bool}:
+  match ps:
+    case Nil{}:
+      {==}
+    case Con{p, r}:
+      {==}
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# Reach.closes_split, once the rest is split
+def Reach.closes_split.cons(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  ~nodes: V -> List<&2, A>,
+  g: V,
+  c: A,
+  x: A,
+  r: List<&2, A>,
+  w: &pre: List<
+    &2,
+    A> -> &y: A -> &post: List<
+    &2,
+    A> -> {
+    r == List.append(&2, A, pre, y <> post): List<&2, A>
+  }
+    & {Bool.or(same(y, c), Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, y, c)) == True{}: Bool}
+) -> &pre:
+  List<
+    &2,
+    A> -> &y: A -> &post: List<
+    &2,
+    A> -> {
+    x <> r == List.append(&2, A, pre, y <> post): List<&2, A>
+  }
+    & {Bool.or(same(y, c), Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, y, c)) == True{}: Bool}:
+  match w:
+    case (pre, (y, (post, (e1, e2)))):
+      (
+        x <> pre,
+        (
+          y,
+          (
+            post,
+            (
+              Equal.cong(
+                List<&2, A>,
+                List<&2, A>,
+                z => x <> z,
+                r,
+                List.append(&2, A, pre, y <> post),
+                e1
+              ),
+              e2
+            )
+          )
+        )
+      )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# Reach.closes_split at the first node x, by whether it closes a cycle (hit)
+def Reach.closes_split.at(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  ~nodes: V -> List<&2, A>,
+  hit: Bool,
+  g: V,
+  c: A,
+  x: A,
+  r: List<&2, A>,
+  ih: {
+    Reach.closes(~A, ~V, ~same, ~succ, ~nodes, g, c, r) == True{}: Bool
+  } -> &pre: List<
+    &2,
+    A> -> &y: A -> &post: List<
+    &2,
+    A> -> {
+    r == List.append(&2, A, pre, y <> post): List<&2, A>
+  }
+    & {Bool.or(same(y, c), Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, y, c)) == True{}: Bool}
+) -> {
+  Bool.or(same(x, c), Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, c)) == hit: Bool
+} -> {Bool.or(hit, Reach.closes(~A, ~V, ~same, ~succ, ~nodes, g, c, r)) == True{}: Bool} -> &pre:
+  List<
+    &2,
+    A> -> &y: A -> &post: List<
+    &2,
+    A> -> {
+    x <> r == List.append(&2, A, pre, y <> post): List<&2, A>
+  }
+    & {Bool.or(same(y, c), Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, y, c)) == True{}: Bool}:
+  match hit:
+    case True{}:
+      e => h => ([], (x, (r, ({==}, e))))
+    case False{}:
+      e => h => Reach.closes_split.cons(~A, ~V, ~same, ~succ, ~nodes, g, c, x, r, ih(h))
+
+# a list that closes a cycle has a node that does, with the nodes before and
+# after it
+def Reach.closes_split(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  ~nodes: V -> List<&2, A>,
+  +g: V,
+  +c: A,
+  ys: List<&2, A>
+) -> {Reach.closes(~A, ~V, ~same, ~succ, ~nodes, g, c, ys) == True{}: Bool} -> &pre:
+  List<
+    &2,
+    A> -> &y: A -> &post: List<
+    &2,
+    A> -> {
+    ys == List.append(&2, A, pre, y <> post): List<&2, A>
+  }
+    & {Bool.or(same(y, c), Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, y, c)) == True{}: Bool}:
+  match ys:
+    case Nil{}:
+      h => Empty.absurd(
+        &pre: List<
+          &2,
+          A> -> &y: A -> &post: List<
+          &2,
+          A> -> {
+          [] == List.append(&2, A, pre, y <> post): List<&2, A>
+        }
+          & {Bool.or(same(y, c), Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, y, c)) == True{}: Bool},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Con{+x, +r}:
+      Reach.closes_split.at(
+        ~A,
+        ~V,
+        ~same,
+        ~succ,
+        ~nodes,
+        Bool.or(same(x, c), Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, c)),
+        g,
+        c,
+        x,
+        r,
+        Reach.closes_split(~A, ~V, ~same, ~succ, ~nodes, g, c, r)
+      )({==})
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a node that closes a cycle makes every list with it close one
+def Reach.closes_middle(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  ~nodes: V -> List<&2, A>,
+  +g: V,
+  +c: A,
+  pre: List<&2, A>,
+  y: A,
+  post: List<&2, A>
+) -> {
+  Bool.or(same(y, c), Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, y, c)) == True{}: Bool
+} -> {
+  Reach.closes(
+    ~A,
+    ~V,
+    ~same,
+    ~succ,
+    ~nodes,
+    g,
+    c,
+    List.append(&2, A, pre, y <> post)
+  )
+    == True{}: Bool
+}:
+  match pre:
+    case Nil{}:
+      h =>
+        %Equal.sym(
+          Bool,
+          Bool.or(same(y, c), Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, y, c)),
+          True{},
+          h
+        ): {Bool.or(_, Reach.closes(~A, ~V, ~same, ~succ, ~nodes, g, c, post)) == True{}: Bool}
+        {==}
+    case Con{+x, r}:
+      h =>
+        %Equal.sym(
+          Bool,
+          Reach.closes(~A, ~V, ~same, ~succ, ~nodes, g, c, List.append(&2, A, r, y <> post)),
+          True{},
+          Reach.closes_middle(~A, ~V, ~same, ~succ, ~nodes, g, c, r, y, post)(h)
+        ): {
+          Bool.or(
+            Bool.or(same(x, c), Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, c)),
+            _
+          )
+            == True{}: Bool
+        }
+        Bools.Bool.or_true_right(
+          Bool.or(same(x, c), Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, c))
+        )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information

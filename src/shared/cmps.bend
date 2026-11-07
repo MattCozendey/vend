@@ -428,3 +428,115 @@ def Bool.cmp_chain(
       {==}
     case True{} True{} True{}:
       {==}
+
+# Orders of lists
+# ---------------
+# Two lists compare element by element by an order cmp; a list that ends first
+# is the smaller.
+
+# xs and ys by cmp
+def List.order(~A: Data, ~cmp: A -> A -> Cmp, xs: List<&2, A>, ys: List<&2, A>) -> Cmp:
+  match xs ys:
+    case Nil{} Nil{}:
+      EQ{}
+    case Nil{} Con{y, t}:
+      LT{}
+    case Con{x, r} Nil{}:
+      GT{}
+    case Con{x, r} Con{y, t}:
+      Cmp.then(cmp(x, y), List.order(~A, ~cmp, r, t))
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# a list is EQ to itself
+def List.order_refl(
+  ~A: Data,
+  ~cmp: A -> A -> Cmp,
+  ~refl: @a: A -> {cmp(a, a) == EQ{}: Cmp},
+  xs: List<&2, A>
+) -> {List.order(~A, ~cmp, xs, xs) == EQ{}: Cmp}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      %Equal.sym(
+        Cmp,
+        cmp(x, x),
+        EQ{},
+        refl(x)
+      ): {Cmp.then(_, List.order(~A, ~cmp, r, r)) == EQ{}: Cmp}
+      List.order_refl(~A, ~cmp, ~refl, r)
+
+# comparing lists the other way round flips the order
+def List.order_swap(
+  ~A: Data,
+  ~cmp: A -> A -> Cmp,
+  ~swap: @a: A -> @b: A -> {cmp(b, a) == Cmp.flip(cmp(a, b)): Cmp},
+  xs: List<&2, A>,
+  ys: List<&2, A>
+) -> {List.order(~A, ~cmp, ys, xs) == Cmp.flip(List.order(~A, ~cmp, xs, ys)): Cmp}:
+  match xs ys:
+    case Nil{} Nil{}:
+      {==}
+    case Nil{} Con{y, t}:
+      {==}
+    case Con{x, r} Nil{}:
+      {==}
+    case Con{+x, +r} Con{+y, +t}:
+      %Equal.sym(
+        Cmp,
+        List.order(~A, ~cmp, t, r),
+        Cmp.flip(List.order(~A, ~cmp, r, t)),
+        List.order_swap(~A, ~cmp, ~swap, r, t)
+      ): {Cmp.then(cmp(y, x), _) == Cmp.flip(Cmp.then(cmp(x, y), List.order(~A, ~cmp, r, t))): Cmp}
+      %Equal.sym(
+        Cmp,
+        cmp(y, x),
+        Cmp.flip(cmp(x, y)),
+        swap(x)(y)
+      ): {
+        Cmp.then(
+          _,
+          Cmp.flip(List.order(~A, ~cmp, r, t))
+        )
+          == Cmp.flip(Cmp.then(cmp(x, y), List.order(~A, ~cmp, r, t))): Cmp
+      }
+      Cmp.then_flip(cmp(x, y), List.order(~A, ~cmp, r, t))
+
+# lists that compare EQ are the same, for an order whose EQ means the same
+def List.order_sound(
+  ~A: Data,
+  ~cmp: A -> A -> Cmp,
+  ~sound: @a: A -> @b: A -> {cmp(a, b) == EQ{}: Cmp} -> {a == b: A},
+  xs: List<&2, A>,
+  ys: List<&2, A>
+) -> {List.order(~A, ~cmp, xs, ys) == EQ{}: Cmp} -> {xs == ys: List<&2, A>}:
+  match xs ys:
+    case Nil{} Nil{}:
+      h => {==}
+    case Nil{} Con{y, t}:
+      h => Empty.absurd({[] == y <> t: List<&2, A>}, Cmp.ne_eq(LT{}, Unit{}, h))
+    case Con{x, r} Nil{}:
+      h => Empty.absurd({x <> r == []: List<&2, A>}, Cmp.ne_eq(GT{}, Unit{}, h))
+    case Con{+x, +r} Con{+y, +t}:
+      +h =>
+        %sound(
+          x,
+          y
+        )(
+          Cmp.then_eq_left(cmp(x, y), List.order(~A, ~cmp, r, t))(h)
+        ): {x <> r == _ <> t: List<&2, A>}
+        Equal.cong(
+          List<&2, A>,
+          List<&2, A>,
+          z => x <> z,
+          r,
+          t,
+          List.order_sound(
+            ~A,
+            ~cmp,
+            ~sound,
+            r,
+            t
+          )(Cmp.then_eq_right(cmp(x, y), List.order(~A, ~cmp, r, t))(h))
+        )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information

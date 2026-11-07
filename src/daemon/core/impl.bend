@@ -19,13 +19,13 @@ import ./spec.bend as Spec
 
 # Names
 # -----
-def Spec.Node():
+def Spec.VendNode():
   String
 
-def Spec.Node.read(t):
+def Spec.VendNode.read(t):
   Strings.String.nonempty(t)
 
-def Spec.Node.show(n):
+def Spec.VendNode.show(n):
   n
 
 def Spec.Group():
@@ -155,22 +155,27 @@ def Spec.Epoch.number(e):
 
 # a version: its resources by name, the versions it came from, who made it,
 # and when; its ID is its key
-type Ver is Data:
-  Ver{blobs: Tables.Table<List<&2, U32>>, parents: List<&2, String>, author: String, time: String}
+type VersionRecord is Data:
+  VersionRecord{
+    blobs: Tables.Table<List<&2, U32>>,
+    parents: List<&2, String>,
+    author: String,
+    time: String
+  }
 
 # a branch: its newest version, its owner group, and the stamp of that head:
 # the owner's epoch, then how many heads the owner set in that epoch; its
 # name is its key
-type Br is Data:
-  Br{head: String, owner: String, epoch: Nat, count: Nat}
+type BranchRecord is Data:
+  BranchRecord{head: String, owner: String, epoch: Nat, count: Nat}
 
 # a mark: a fixed name for a version of a branch
 type MarkAt is Data:
   MarkAt{version: String, message: String}
 
 # an owner group: its members, and how many times they were set
-type Grp is Data:
-  Grp{members: List<&2, Spec.Member>, epoch: Nat}
+type GroupRecord is Data:
+  GroupRecord{members: List<&2, Spec.Member>, epoch: Nat}
 
 # a merge that clashed: its branch and that branch's head then, the version
 # merged in, the resources settled so far, and the resources that still clash
@@ -194,29 +199,29 @@ type Logged is Data:
 # what a node holds: who it is, its versions, branches, marks (by branch, then
 # name), groups and clashes, the requests it answered, and its notices in
 # order
-type St is Data:
-  St{
+type NodeState is Data:
+  NodeState{
     self: String,
-    versions: Tables.Table<Ver>,
-    branches: Tables.Table<Br>,
+    versions: Tables.Table<VersionRecord>,
+    branches: Tables.Table<BranchRecord>,
     marks: Tables.Table<Tables.Table<MarkAt>>,
-    groups: Tables.Table<Grp>,
+    groups: Tables.Table<GroupRecord>,
     clashes: Tables.Table<Clash>,
     seen: Tables.Table<Seen>,
     log: List<&2, Logged>
   }
 
-def Spec.Node.State():
-  St
+def Spec.VendNode.State():
+  NodeState
 
 # what a change does: the versions it adds, the branches, marks, groups and
 # clashes after it, its notices, and its answer
 type Out is Data:
   Out{
-    versions: List<&2, Tables.Row<Ver>>,
-    branches: Tables.Table<Br>,
+    versions: List<&2, Tables.Row<VersionRecord>>,
+    branches: Tables.Table<BranchRecord>,
     marks: Tables.Table<Tables.Table<MarkAt>>,
-    groups: Tables.Table<Grp>,
+    groups: Tables.Table<GroupRecord>,
     clashes: Tables.Table<Clash>,
     news: List<&2, Logged>,
     answer: Spec.Answer
@@ -227,30 +232,41 @@ type Out is Data:
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the pure node is the model that the laws are about: an and/or keeps one value for a proof to split on; speed belongs in a later fast node, proven equal to this one
 
 # vs holds the version k
-def Ver.has(vs: Tables.Table<Ver>, k: String) -> Bool:
-  Maybe.is_some(&2, Ver, Tables.Table.get(Ver, vs, k))
+def VersionRecord.has(vs: Tables.Table<VersionRecord>, k: String) -> Bool:
+  Maybe.is_some(&2, VersionRecord, Tables.Table.get(VersionRecord, vs, k))
 
 # vs, with v unless vs holds a version with its ID (held)
-def Ver.add.put(i: String, v: Ver, vs: Tables.Table<Ver>, held: Bool) -> Tables.Table<Ver>:
+def VersionRecord.add.put(
+  i: String,
+  v: VersionRecord,
+  vs: Tables.Table<VersionRecord>,
+  held: Bool
+) -> Tables.Table<VersionRecord>:
   match held:
     case True{}:
       vs
     case False{}:
-      Tables.Table.set(Ver, vs, i, v)
+      Tables.Table.set(VersionRecord, vs, i, v)
 
 # vs, with v unless vs holds a version with its ID
-def Ver.add.one(v: Tables.Row<Ver>, +vs: Tables.Table<Ver>) -> Tables.Table<Ver>:
+def VersionRecord.add.one(
+  v: Tables.Row<VersionRecord>,
+  +vs: Tables.Table<VersionRecord>
+) -> Tables.Table<VersionRecord>:
   match v:
     case Tables.Row{+i, x}:
-      Ver.add.put(i, x, vs, Ver.has(vs, i))
+      VersionRecord.add.put(i, x, vs, VersionRecord.has(vs, i))
 
 # vs, with each version of news whose ID vs does not hold
-def Ver.add(news: List<&2, Tables.Row<Ver>>, vs: Tables.Table<Ver>) -> Tables.Table<Ver>:
+def VersionRecord.add(
+  news: List<&2, Tables.Row<VersionRecord>>,
+  vs: Tables.Table<VersionRecord>
+) -> Tables.Table<VersionRecord>:
   match news:
     case Nil{}:
       vs
     case Con{v, r}:
-      Ver.add(r, Ver.add.one(v, vs))
+      VersionRecord.add(r, VersionRecord.add.one(v, vs))
 
 # the marks of the branch b, none when it has none
 def Marks.of(ms: Tables.Table<Tables.Table<MarkAt>>, b: String) -> Tables.Table<MarkAt>:
@@ -288,12 +304,36 @@ def MarkAt.set(
 # a and b are the same member
 def Member.same(a: Spec.Member, b: Spec.Member) -> Bool:
   match a b:
-    case Spec.Member.Node{x} Spec.Member.Node{y}:
+    case Spec.Member.VendNode{x} Spec.Member.VendNode{y}:
       String.eq(x, y)
     case Spec.Member.Group{x} Spec.Member.Group{y}:
       String.eq(x, y)
     case _ _:
       False{}
+
+# the order of members: nodes first, then groups, each by name
+def Member.order(a: Spec.Member, b: Spec.Member) -> Cmp:
+  match a b:
+    case Spec.Member.VendNode{x} Spec.Member.VendNode{y}:
+      String.order(x, y)
+    case Spec.Member.VendNode{x} Spec.Member.Group{y}:
+      LT{}
+    case Spec.Member.Group{x} Spec.Member.VendNode{y}:
+      GT{}
+    case Spec.Member.Group{x} Spec.Member.Group{y}:
+      String.order(x, y)
+
+# the stamp of a group: its epoch, then its members
+def GroupRecord.stamp.cmp(a: GroupRecord, b: GroupRecord) -> Cmp:
+  match a b:
+    case GroupRecord{m1, e1} GroupRecord{m2, e2}:
+      Cmps.Cmp.then(Nat.cmp(e1, e2), Cmps.List.order(~Spec.Member, ~Member.order, m1, m2))
+
+# the members of a group
+def GroupRecord.members(x: GroupRecord) -> List<&2, Spec.Member>:
+  match x:
+    case GroupRecord{ms, e}:
+      ms
 
 # a and b are the same topic
 def Topic.same(a: Spec.Topic, b: Spec.Topic) -> Bool:
@@ -311,82 +351,85 @@ def Topic.same(a: Spec.Topic, b: Spec.Topic) -> Bool:
 
 # The parts of a state
 # --------------------
-def St.self(s: St) -> String:
+def NodeState.self(s: NodeState) -> String:
   match s:
-    case St{k, vs, bs, ms, gs, cs, ss, l}:
+    case NodeState{k, vs, bs, ms, gs, cs, ss, l}:
       k
 
-def St.versions(s: St) -> Tables.Table<Ver>:
+def NodeState.versions(s: NodeState) -> Tables.Table<VersionRecord>:
   match s:
-    case St{k, vs, bs, ms, gs, cs, ss, l}:
+    case NodeState{k, vs, bs, ms, gs, cs, ss, l}:
       vs
 
-def St.branches(s: St) -> Tables.Table<Br>:
+def NodeState.branches(s: NodeState) -> Tables.Table<BranchRecord>:
   match s:
-    case St{k, vs, bs, ms, gs, cs, ss, l}:
+    case NodeState{k, vs, bs, ms, gs, cs, ss, l}:
       bs
 
-def St.marks(s: St) -> Tables.Table<Tables.Table<MarkAt>>:
+def NodeState.marks(s: NodeState) -> Tables.Table<Tables.Table<MarkAt>>:
   match s:
-    case St{k, vs, bs, ms, gs, cs, ss, l}:
+    case NodeState{k, vs, bs, ms, gs, cs, ss, l}:
       ms
 
-def St.groups(s: St) -> Tables.Table<Grp>:
+def NodeState.groups(s: NodeState) -> Tables.Table<GroupRecord>:
   match s:
-    case St{k, vs, bs, ms, gs, cs, ss, l}:
+    case NodeState{k, vs, bs, ms, gs, cs, ss, l}:
       gs
 
-def St.clashes(s: St) -> Tables.Table<Clash>:
+def NodeState.clashes(s: NodeState) -> Tables.Table<Clash>:
   match s:
-    case St{k, vs, bs, ms, gs, cs, ss, l}:
+    case NodeState{k, vs, bs, ms, gs, cs, ss, l}:
       cs
 
-def St.seen(s: St) -> Tables.Table<Seen>:
+def NodeState.seen(s: NodeState) -> Tables.Table<Seen>:
   match s:
-    case St{k, vs, bs, ms, gs, cs, ss, l}:
+    case NodeState{k, vs, bs, ms, gs, cs, ss, l}:
       ss
 
-def St.log(s: St) -> List<&2, Logged>:
+def NodeState.log(s: NodeState) -> List<&2, Logged>:
   match s:
-    case St{k, vs, bs, ms, gs, cs, ss, l}:
+    case NodeState{k, vs, bs, ms, gs, cs, ss, l}:
       l
 
 # Reads
 # -----
 
 # the head of the branch that m holds
-def Br.head.of(m: Maybe<&2, Br>) -> Maybe<&2, String>:
+def BranchRecord.head.of(m: Maybe<&2, BranchRecord>) -> Maybe<&2, String>:
   match m:
     case None{}:
       None{}
-    case Some{Br{h, o, e, c}}:
+    case Some{BranchRecord{h, o, e, c}}:
       Some{h}
 
 # the version that p names in s
-def Point.version(s: St, p: Spec.Point) -> Maybe<&2, String>:
+def Point.version(s: NodeState, p: Spec.Point) -> Maybe<&2, String>:
   match p:
     case Spec.Point.At{v}:
       Some{v}
     case Spec.Point.Head{b}:
-      Br.head.of(Tables.Table.get(Br, St.branches(s), b))
+      BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s), b))
     case Spec.Point.Mark{b, m}:
-      MarkAt.find(St.marks(s), b, m)
+      MarkAt.find(NodeState.marks(s), b, m)
 
 # the resources of the version that m holds
-def Ver.blobs.of(m: Maybe<&2, Ver>) -> Maybe<&2, Tables.Table<List<&2, U32>>>:
+def VersionRecord.blobs.of(m: Maybe<&2, VersionRecord>) -> Maybe<&2, Tables.Table<List<&2, U32>>>:
   match m:
     case None{}:
       None{}
-    case Some{Ver{b, p, a, t}}:
+    case Some{VersionRecord{b, p, a, t}}:
       Some{b}
 
 # the version that m names, among vs
-def Ver.find.of(vs: Tables.Table<Ver>, m: Maybe<&2, String>) -> Maybe<&2, Ver>:
+def VersionRecord.find.of(
+  vs: Tables.Table<VersionRecord>,
+  m: Maybe<&2, String>
+) -> Maybe<&2, VersionRecord>:
   match m:
     case None{}:
       None{}
     case Some{k}:
-      Tables.Table.get(Ver, vs, k)
+      Tables.Table.get(VersionRecord, vs, k)
 
 # the bytes of the resource n among the resources that m holds
 def Blob.find.of(m: Maybe<&2, Tables.Table<List<&2, U32>>>, n: String) -> Maybe<&2, List<&2, U32>>:
@@ -397,51 +440,58 @@ def Blob.find.of(m: Maybe<&2, Tables.Table<List<&2, U32>>>, n: String) -> Maybe<
       Tables.Table.get(List<&2, U32>, bs, n)
 
 # the resources of the version k among vs, none when vs does not hold it
-def Vers.blobs(vs: Tables.Table<Ver>, k: String) -> Tables.Table<List<&2, U32>>:
+def Vers.blobs(vs: Tables.Table<VersionRecord>, k: String) -> Tables.Table<List<&2, U32>>:
   Maybe.default(
     &2,
     Tables.Table<List<&2, U32>>,
-    Ver.blobs.of(Tables.Table.get(Ver, vs, k)),
+    VersionRecord.blobs.of(Tables.Table.get(VersionRecord, vs, k)),
     Tables.Table.new(List<&2, U32>)
   )
 
 # the bytes of the resource n at the point p of s
-def St.content(+s: St, n: String, p: Spec.Point) -> Maybe<&2, List<&2, U32>>:
-  Blob.find.of(Ver.blobs.of(Ver.find.of(St.versions(s), Point.version(s, p))), n)
+def NodeState.content(+s: NodeState, n: String, p: Spec.Point) -> Maybe<&2, List<&2, U32>>:
+  Blob.find.of(
+    VersionRecord.blobs.of(VersionRecord.find.of(NodeState.versions(s), Point.version(s, p))),
+    n
+  )
 
 # one step of a walk: the versions it reached, the frontier after it, and the
 # versions seen so far
 type Walked is Data:
-  Walked{reached: List<&2, Tables.Row<Ver>>, next: List<&2, String>, done: List<&2, String>}
+  Walked{
+    reached: List<&2, Tables.Row<VersionRecord>>,
+    next: List<&2, String>,
+    done: List<&2, String>
+  }
 
 # the step of a walk at the version that m holds, with the frontier r after
 def History.at(
   +k: String,
   r: List<&2, String>,
   done: List<&2, String>,
-  m: Maybe<&2, Ver>
+  m: Maybe<&2, VersionRecord>
 ) -> Walked:
   match m:
     case None{}:
       Walked{[], r, k <> done}
-    case Some{Ver{b, +p, a, t}}:
-      Walked{[Tables.Row{k, Ver{b, p, a, t}}], List.append(&2, String, r, p), k <> done}
+    case Some{VersionRecord{b, +p, a, t}}:
+      Walked{[Tables.Row{k, VersionRecord{b, p, a, t}}], List.append(&2, String, r, p), k <> done}
 
 # the step of a walk at the key k, skipped when done holds it (was)
 def History.next(
   +k: String,
   r: List<&2, String>,
   done: List<&2, String>,
-  vs: Tables.Table<Ver>,
+  vs: Tables.Table<VersionRecord>,
   was: Bool
 ) -> Walked:
   match was:
     case True{}:
       Walked{[], r, done}
     case False{}:
-      History.at(k, r, done, Tables.Table.get(Ver, vs, k))
+      History.at(k, r, done, Tables.Table.get(VersionRecord, vs, k))
 
-def Walked.reached(w: Walked) -> List<&2, Tables.Row<Ver>>:
+def Walked.reached(w: Walked) -> List<&2, Tables.Row<VersionRecord>>:
   match w:
     case Walked{x, n, d}:
       x
@@ -457,37 +507,45 @@ def Walked.done(w: Walked) -> List<&2, String>:
       d
 
 # the parents of the version that m holds
-def History.parents(m: Maybe<&2, Ver>) -> List<&2, String>:
+def History.parents(m: Maybe<&2, VersionRecord>) -> List<&2, String>:
   match m:
     case None{}:
       Nil{}
-    case Some{Ver{b, p, a, t}}:
+    case Some{VersionRecord{b, p, a, t}}:
       p
 
 # a version of vs among the keys ks names k as a parent
-def Ver.named(ks: List<&2, String>, +vs: Tables.Table<Ver>, +k: String) -> Bool:
+def VersionRecord.named(ks: List<&2, String>, +vs: Tables.Table<VersionRecord>, +k: String) -> Bool:
   match ks:
     case Nil{}:
       False{}
     case Con{j, r}:
       Bool.or(
-        Shared.List.has(~String, ~String.eq, History.parents(Tables.Table.get(Ver, vs, j)), k),
-        Ver.named(r, vs, k)
+        Shared.List.has(
+          ~String,
+          ~String.eq,
+          History.parents(Tables.Table.get(VersionRecord, vs, j)),
+          k
+        ),
+        VersionRecord.named(r, vs, k)
       )
 
 # the ID k is taken: vs holds a version with it, or a version that names it as
 # a parent, whose version lives on another node
-def Ver.taken(+vs: Tables.Table<Ver>, +k: String) -> Bool:
-  Bool.or(Ver.has(vs, k), Ver.named(Tables.Table.keys(Ver, vs), vs, k))
+def VersionRecord.taken(+vs: Tables.Table<VersionRecord>, +k: String) -> Bool:
+  Bool.or(
+    VersionRecord.has(vs, k),
+    VersionRecord.named(Tables.Table.keys(VersionRecord, vs), vs, k)
+  )
 
 # the number of parent links of the versions with the keys ks
-def History.links(ks: List<&2, String>, +vs: Tables.Table<Ver>) -> Nat:
+def History.links(ks: List<&2, String>, +vs: Tables.Table<VersionRecord>) -> Nat:
   match ks:
     case Nil{}:
       1n
     case Con{k, r}:
       Nat.add(
-        1n+List.length(&2, String, History.parents(Tables.Table.get(Ver, vs, k))),
+        1n+List.length(&2, String, History.parents(Tables.Table.get(VersionRecord, vs, k))),
         History.links(r, vs)
       )
 
@@ -497,8 +555,8 @@ def History.walk(
   f: Nat,
   ks: List<&2, String>,
   +done: List<&2, String>,
-  +vs: Tables.Table<Ver>
-) -> List<&2, Tables.Row<Ver>>:
+  +vs: Tables.Table<VersionRecord>
+) -> List<&2, Tables.Row<VersionRecord>>:
   match f:
     case 0n:
       Nil{}
@@ -510,63 +568,71 @@ def History.walk(
           +w = History.next(k, r, done, vs, Shared.List.has(~String, ~String.eq, done, k))
           List.append(
             &2,
-            Tables.Row<Ver>,
+            Tables.Row<VersionRecord>,
             Walked.reached(w),
             History.walk(g, Walked.next(w), Walked.done(w), vs)
           )
 
 # the version k and the versions it came from, among vs; fuel for every
 # version, once per parent link
-def History.of(+vs: Tables.Table<Ver>, k: String) -> List<&2, Tables.Row<Ver>>:
-  History.walk(History.links(Tables.Table.keys(Ver, vs), vs), [k], [], vs)
+def History.of(+vs: Tables.Table<VersionRecord>, k: String) -> List<&2, Tables.Row<VersionRecord>>:
+  History.walk(History.links(Tables.Table.keys(VersionRecord, vs), vs), [k], [], vs)
 
 # Groups
 # ------
 
+# the members of the group that m holds; None when there is none
+def GroupRecord.members.got(m: Maybe<&2, GroupRecord>) -> Maybe<&2, List<&2, Spec.Member>>:
+  Maybe.map(&2, GroupRecord, List<&2, Spec.Member>, y => GroupRecord.members(y), m)
+
 # the members of the group that m holds
-def Grp.members.in(m: Maybe<&2, Grp>) -> List<&2, Spec.Member>:
+def GroupRecord.members.in(m: Maybe<&2, GroupRecord>) -> List<&2, Spec.Member>:
   match m:
     case None{}:
       Nil{}
-    case Some{Grp{ms, e}}:
+    case Some{GroupRecord{ms, e}}:
       ms
 
 # the members of the group that m is, among gs; none for a node
-def Grp.members.of(gs: Tables.Table<Grp>, m: Spec.Member) -> List<&2, Spec.Member>:
+def GroupRecord.members.of(gs: Tables.Table<GroupRecord>, m: Spec.Member) -> List<&2, Spec.Member>:
   match m:
-    case Spec.Member.Node{n}:
+    case Spec.Member.VendNode{n}:
       Nil{}
     case Spec.Member.Group{g}:
-      Grp.members.in(Tables.Table.get(Grp, gs, g))
+      GroupRecord.members.in(Tables.Table.get(GroupRecord, gs, g))
 
 # the groups named ks, as members
-def Grp.groups(ks: List<&2, String>) -> List<&2, Spec.Member>:
+def GroupRecord.groups(ks: List<&2, String>) -> List<&2, Spec.Member>:
   match ks:
     case Nil{}:
       []
     case Con{k, r}:
-      Spec.Member.Group{k} <> Grp.groups(r)
+      Spec.Member.Group{k} <> GroupRecord.groups(r)
 
 # the groups of gs, as members: the members that can have members
-def Grp.all(gs: Tables.Table<Grp>) -> List<&2, Spec.Member>:
-  Grp.groups(Tables.Table.keys(Grp, gs))
+def GroupRecord.all(gs: Tables.Table<GroupRecord>) -> List<&2, Spec.Member>:
+  GroupRecord.groups(Tables.Table.keys(GroupRecord, gs))
 
 # gs with x as the group c; a node has no group to set
-def Grp.put(gs: Tables.Table<Grp>, c: Spec.Member, x: Grp) -> Tables.Table<Grp>:
+def GroupRecord.put(
+  gs: Tables.Table<GroupRecord>,
+  c: Spec.Member,
+  x: GroupRecord
+) -> Tables.Table<GroupRecord>:
   match c:
-    case Spec.Member.Node{n}:
+    case Spec.Member.VendNode{n}:
       gs
     case Spec.Member.Group{k}:
-      Tables.Table.set(Grp, gs, k, x)
+      Tables.Table.set(GroupRecord, gs, k, x)
 
 # m is inside the group g of gs: a member of g, or of a group inside g
-def Grp.inside(gs: Tables.Table<Grp>, m: Spec.Member, g: String) -> Bool:
+def GroupRecord.inside(gs: Tables.Table<GroupRecord>, m: Spec.Member, g: String) -> Bool:
   Reaches.Reach.in(
     ~Spec.Member,
-    ~Tables.Table<Grp>,
+    ~Tables.Table<GroupRecord>,
     ~Member.same,
-    ~Grp.members.of,
-    ~Grp.all,
+    ~GroupRecord.members.of,
+    ~GroupRecord.all,
     gs,
     Spec.Member.Group{g},
     m
@@ -574,27 +640,38 @@ def Grp.inside(gs: Tables.Table<Grp>, m: Spec.Member, g: String) -> Bool:
 
 # Changes
 # -------
-# A change reads the state and says what to do (an Out); Node.ask applies it.
+# A change reads the state and says what to do (an Out); VendNode.ask applies it.
 # A change never removes a version, and it writes no notice of its own: both
-# are Node.ask's.
+# are VendNode.ask's.
 
 # nothing changes, and the answer is a
-def Out.same(+s: St, a: Spec.Answer) -> Out:
-  Out{[], St.branches(s), St.marks(s), St.groups(s), St.clashes(s), [], a}
+def Out.same(+s: NodeState, a: Spec.Answer) -> Out:
+  Out{
+    [],
+    NodeState.branches(s),
+    NodeState.marks(s),
+    NodeState.groups(s),
+    NodeState.clashes(s),
+    [],
+    a
+  }
 
 # the node of s is in the owner group of the branch b
-def Owner.of(+s: St, b: Br) -> Bool:
+def Owner.of(+s: NodeState, b: BranchRecord) -> Bool:
   match b:
-    case Br{h, +o, e, c}:
-      Bool.or(String.eq(o, St.self(s)), Grp.inside(St.groups(s), Spec.Member.Node{St.self(s)}, o))
+    case BranchRecord{h, +o, e, c}:
+      Bool.or(
+        String.eq(o, NodeState.self(s)),
+        GroupRecord.inside(NodeState.groups(s), Spec.Member.VendNode{NodeState.self(s)}, o)
+      )
 
 # the bytes that x names, for the resource n of s
-def Content.bytes(s: St, n: String, x: Spec.Content) -> Maybe<&2, List<&2, U32>>:
+def Content.bytes(s: NodeState, n: String, x: Spec.Content) -> Maybe<&2, List<&2, U32>>:
   match x:
     case Spec.Content.Bytes{y}:
       Some{y}
     case Spec.Content.Of{v}:
-      St.content(s, n, Spec.Point.At{v})
+      NodeState.content(s, n, Spec.Point.At{v})
 
 # m names the version k
 def Base.is(m: Maybe<&2, String>, k: String) -> Bool:
@@ -605,10 +682,10 @@ def Base.is(m: Maybe<&2, String>, k: String) -> Bool:
       String.eq(j, k)
 
 # a new head h for the branch b, as its owner
-def Br.moved(b: Br, h: String) -> Br:
+def BranchRecord.moved(b: BranchRecord, h: String) -> BranchRecord:
   match b:
-    case Br{old, o, e, c}:
-      Br{h, o, e, 1n+c}
+    case BranchRecord{old, o, e, c}:
+      BranchRecord{h, o, e, 1n+c}
 
 # the notice that the branch b has the new head v
 def Logged.head(+b: String, v: String) -> Logged:
@@ -622,34 +699,44 @@ def Write.answer(w: Spec.Write) -> Spec.Answer:
 # (ok)
 def Write.at(
   ok: Bool,
-  +s: St,
+  +s: NodeState,
   +r: String,
   w: String,
   t: String,
   n: String,
   +b: String,
   y: List<&2, U32>,
-  br: Br
+  br: BranchRecord
 ) -> Out:
   match ok:
     case False{}:
       match br:
-        case Br{h, o, e, c}:
+        case BranchRecord{h, o, e, c}:
           Out.same(s, Write.answer(Spec.Write.Stale{h}))
     case True{}:
       match br:
-        case Br{+h, o, e, c}:
+        case BranchRecord{+h, o, e, c}:
           Out{
             [
               Tables.Row{
                 r,
-                Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s), h), n, y), [h], w, t}
+                VersionRecord{
+                  Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s), h), n, y),
+                  [h],
+                  w,
+                  t
+                }
               }
             ],
-            Tables.Table.set(Br, St.branches(s), b, Br.moved(Br{h, o, e, c}, r)),
-            St.marks(s),
-            St.groups(s),
-            St.clashes(s),
+            Tables.Table.set(
+              BranchRecord,
+              NodeState.branches(s),
+              b,
+              BranchRecord.moved(BranchRecord{h, o, e, c}, r)
+            ),
+            NodeState.marks(s),
+            NodeState.groups(s),
+            NodeState.clashes(s),
             [Logged.head(b, r)],
             Write.answer(Spec.Write.Written{r})
           }
@@ -657,7 +744,7 @@ def Write.at(
 # a write of y to n on br, the branch b, as its owner or not
 def Write.on(
   owner: Bool,
-  +s: St,
+  +s: NodeState,
   +r: String,
   w: String,
   t: String,
@@ -665,35 +752,40 @@ def Write.on(
   b: String,
   base: Maybe<&2, String>,
   y: List<&2, U32>,
-  +br: Br
+  +br: BranchRecord
 ) -> Out:
   match owner:
     case True{}:
       match br:
-        case Br{+h, o, e, c}:
-          Write.at(Base.is(base, h), s, r, w, t, n, b, y, Br{h, o, e, c})
+        case BranchRecord{+h, o, e, c}:
+          Write.at(Base.is(base, h), s, r, w, t, n, b, y, BranchRecord{h, o, e, c})
     case False{}:
       match br:
-        case Br{+h, o, e, c}:
+        case BranchRecord{+h, o, e, c}:
           Out{
             [
               Tables.Row{
                 r,
-                Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s), h), n, y), [h], w, t}
+                VersionRecord{
+                  Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s), h), n, y),
+                  [h],
+                  w,
+                  t
+                }
               }
             ],
-            St.branches(s),
-            St.marks(s),
-            St.groups(s),
-            St.clashes(s),
+            NodeState.branches(s),
+            NodeState.marks(s),
+            NodeState.groups(s),
+            NodeState.clashes(s),
             [],
             Write.answer(Spec.Write.Pending{r})
           }
 
 # a write of y to n on the branch b, which m holds when it exists
 def Write.branch(
-  m: Maybe<&2, Br>,
-  +s: St,
+  m: Maybe<&2, BranchRecord>,
+  +s: NodeState,
   +r: String,
   w: String,
   t: String,
@@ -714,7 +806,7 @@ def Write.branch(
             [
               Tables.Row{
                 r,
-                Ver{
+                VersionRecord{
                   Tables.Table.set(List<&2, U32>, Tables.Table.new(List<&2, U32>), n, y),
                   [],
                   w,
@@ -722,10 +814,15 @@ def Write.branch(
                 }
               }
             ],
-            Tables.Table.set(Br, St.branches(s), b, Br{r, St.self(s), 0n, 0n}),
-            St.marks(s),
-            St.groups(s),
-            St.clashes(s),
+            Tables.Table.set(
+              BranchRecord,
+              NodeState.branches(s),
+              b,
+              BranchRecord{r, NodeState.self(s), 0n, 0n}
+            ),
+            NodeState.marks(s),
+            NodeState.groups(s),
+            NodeState.clashes(s),
             [Logged.head(b, r)],
             Write.answer(Spec.Write.Written{r})
           }
@@ -733,7 +830,7 @@ def Write.branch(
 # a write of y, unless the version ID r is taken
 def Write.free(
   taken: Bool,
-  +s: St,
+  +s: NodeState,
   r: String,
   w: String,
   t: String,
@@ -746,12 +843,22 @@ def Write.free(
     case True{}:
       Out.same(s, Write.answer(Spec.Write.Refused{"version ID taken"}))
     case False{}:
-      Write.branch(Tables.Table.get(Br, St.branches(s), b), s, r, w, t, n, b, base, y)
+      Write.branch(
+        Tables.Table.get(BranchRecord, NodeState.branches(s), b),
+        s,
+        r,
+        w,
+        t,
+        n,
+        b,
+        base,
+        y
+      )
 
 # a write of the bytes that m holds
 def Write.bytes(
   m: Maybe<&2, List<&2, U32>>,
-  +s: St,
+  +s: NodeState,
   +r: String,
   w: String,
   t: String,
@@ -763,7 +870,7 @@ def Write.bytes(
     case None{}:
       Out.same(s, Write.answer(Spec.Write.Refused{"no such content"}))
     case Some{y}:
-      Write.free(Ver.taken(St.versions(s), r), s, r, w, t, n, b, base, y)
+      Write.free(VersionRecord.taken(NodeState.versions(s), r), s, r, w, t, n, b, base, y)
 
 # the answer to a set-branch
 def SetBranch.answer(a: Spec.SetBranch) -> Spec.Answer:
@@ -774,38 +881,43 @@ def SetBranch.answer(a: Spec.SetBranch) -> Spec.Answer:
 def SetBranch.on(
   owner: Bool,
   taken: Bool,
-  +s: St,
+  +s: NodeState,
   +r: String,
   w: String,
   t: String,
   +b: String,
   bs: Tables.Table<List<&2, U32>>,
-  +br: Br
+  +br: BranchRecord
 ) -> Out:
   match owner taken:
     case _ True{}:
       Out.same(s, SetBranch.answer(Spec.SetBranch.Refused{"version ID taken"}))
     case False{} False{}:
       match br:
-        case Br{h, o, e, c}:
+        case BranchRecord{h, o, e, c}:
           Out{
-            [Tables.Row{r, Ver{bs, [h], w, t}}],
-            St.branches(s),
-            St.marks(s),
-            St.groups(s),
-            St.clashes(s),
+            [Tables.Row{r, VersionRecord{bs, [h], w, t}}],
+            NodeState.branches(s),
+            NodeState.marks(s),
+            NodeState.groups(s),
+            NodeState.clashes(s),
             [],
             SetBranch.answer(Spec.SetBranch.Pending{r})
           }
     case True{} False{}:
       match br:
-        case Br{+h, o, e, c}:
+        case BranchRecord{+h, o, e, c}:
           Out{
-            [Tables.Row{r, Ver{bs, [h], w, t}}],
-            Tables.Table.set(Br, St.branches(s), b, Br.moved(Br{h, o, e, c}, r)),
-            St.marks(s),
-            St.groups(s),
-            St.clashes(s),
+            [Tables.Row{r, VersionRecord{bs, [h], w, t}}],
+            Tables.Table.set(
+              BranchRecord,
+              NodeState.branches(s),
+              b,
+              BranchRecord.moved(BranchRecord{h, o, e, c}, r)
+            ),
+            NodeState.marks(s),
+            NodeState.groups(s),
+            NodeState.clashes(s),
             [Logged.head(b, r)],
             SetBranch.answer(Spec.SetBranch.Restored{r})
           }
@@ -813,8 +925,8 @@ def SetBranch.on(
 # the branch b set to the version k, whose resources bs are; m holds b when
 # it exists
 def SetBranch.branch(
-  m: Maybe<&2, Br>,
-  +s: St,
+  m: Maybe<&2, BranchRecord>,
+  +s: NodeState,
   +r: String,
   w: String,
   t: String,
@@ -826,20 +938,35 @@ def SetBranch.branch(
     case None{}:
       Out{
         [],
-        Tables.Table.set(Br, St.branches(s), b, Br{k, St.self(s), 0n, 0n}),
-        St.marks(s),
-        St.groups(s),
-        St.clashes(s),
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s),
+          b,
+          BranchRecord{k, NodeState.self(s), 0n, 0n}
+        ),
+        NodeState.marks(s),
+        NodeState.groups(s),
+        NodeState.clashes(s),
         [Logged.head(b, k)],
         SetBranch.answer(Spec.SetBranch.Created{k})
       }
     case Some{+br}:
-      SetBranch.on(Owner.of(s, br), Ver.taken(St.versions(s), r), s, r, w, t, b, bs, br)
+      SetBranch.on(
+        Owner.of(s, br),
+        VersionRecord.taken(NodeState.versions(s), r),
+        s,
+        r,
+        w,
+        t,
+        b,
+        bs,
+        br
+      )
 
 # the branch b set to the version k, which m holds when s has it
 def SetBranch.version(
-  m: Maybe<&2, Ver>,
-  +s: St,
+  m: Maybe<&2, VersionRecord>,
+  +s: NodeState,
   r: String,
   w: String,
   t: String,
@@ -849,13 +976,22 @@ def SetBranch.version(
   match m:
     case None{}:
       Out.same(s, SetBranch.answer(Spec.SetBranch.Refused{"no such version"}))
-    case Some{Ver{bs, p, a, z}}:
-      SetBranch.branch(Tables.Table.get(Br, St.branches(s), b), s, r, w, t, b, k, bs)
+    case Some{VersionRecord{bs, p, a, z}}:
+      SetBranch.branch(
+        Tables.Table.get(BranchRecord, NodeState.branches(s), b),
+        s,
+        r,
+        w,
+        t,
+        b,
+        k,
+        bs
+      )
 
 # the branch b set to the version that m names
 def SetBranch.point(
   m: Maybe<&2, String>,
-  +s: St,
+  +s: NodeState,
   r: String,
   w: String,
   t: String,
@@ -865,7 +1001,7 @@ def SetBranch.point(
     case None{}:
       Out.same(s, SetBranch.answer(Spec.SetBranch.Refused{"no such point"}))
     case Some{+k}:
-      SetBranch.version(Tables.Table.get(Ver, St.versions(s), k), s, r, w, t, b, k)
+      SetBranch.version(Tables.Table.get(VersionRecord, NodeState.versions(s), k), s, r, w, t, b, k)
 
 # the answer to a create-mark
 def CreateMark.answer(a: Spec.CreateMark) -> Spec.Answer:
@@ -874,60 +1010,66 @@ def CreateMark.answer(a: Spec.CreateMark) -> Spec.Answer:
 # the mark m of br with the message x, unless m names a version of br (held)
 def CreateMark.free(
   held: Maybe<&2, String>,
-  +s: St,
+  +s: NodeState,
   b: String,
   +m: String,
   x: String,
-  br: Br
+  br: BranchRecord
 ) -> Out:
   match held:
     case Some{k}:
       Out.same(s, CreateMark.answer(Spec.CreateMark.Taken{}))
     case None{}:
       match br:
-        case Br{h, o, e, c}:
+        case BranchRecord{h, o, e, c}:
           Out{
             [],
-            St.branches(s),
-            MarkAt.set(St.marks(s), b, m, MarkAt{h, x}),
-            St.groups(s),
-            St.clashes(s),
+            NodeState.branches(s),
+            MarkAt.set(NodeState.marks(s), b, m, MarkAt{h, x}),
+            NodeState.groups(s),
+            NodeState.clashes(s),
             [],
             CreateMark.answer(Spec.CreateMark.Marked{m})
           }
 
 # the mark m with the message x on the branch b, which f holds when it exists
-def CreateMark.branch(f: Maybe<&2, Br>, +s: St, +b: String, +m: String, x: String) -> Out:
+def CreateMark.branch(
+  f: Maybe<&2, BranchRecord>,
+  +s: NodeState,
+  +b: String,
+  +m: String,
+  x: String
+) -> Out:
   match f:
     case None{}:
       Out.same(s, CreateMark.answer(Spec.CreateMark.Refused{"no such branch"}))
     case Some{br}:
-      CreateMark.free(MarkAt.find(St.marks(s), b, m), s, b, m, x, br)
+      CreateMark.free(MarkAt.find(NodeState.marks(s), b, m), s, b, m, x, br)
 
 # the answer to a set-owner
 def SetOwner.answer(a: Spec.SetOwner) -> Spec.Answer:
   Spec.Answer.SetOwner{a}
 
 # the owner group g for br, when the node of s owns br
-def SetOwner.on(owner: Bool, +s: St, b: String, g: String, br: Br) -> Out:
+def SetOwner.on(owner: Bool, +s: NodeState, b: String, g: String, br: BranchRecord) -> Out:
   match owner:
     case False{}:
       Out.same(s, SetOwner.answer(Spec.SetOwner.Refused{"not the owner"}))
     case True{}:
       match br:
-        case Br{h, o, +e, c}:
+        case BranchRecord{h, o, +e, c}:
           Out{
             [],
-            Tables.Table.set(Br, St.branches(s), b, Br{h, g, 1n+e, 0n}),
-            St.marks(s),
-            St.groups(s),
-            St.clashes(s),
+            Tables.Table.set(BranchRecord, NodeState.branches(s), b, BranchRecord{h, g, 1n+e, 0n}),
+            NodeState.marks(s),
+            NodeState.groups(s),
+            NodeState.clashes(s),
             [],
             SetOwner.answer(Spec.SetOwner.Set{1n+e})
           }
 
 # the owner group g for the branch that f holds
-def SetOwner.branch(f: Maybe<&2, Br>, +s: St, b: String, g: String) -> Out:
+def SetOwner.branch(f: Maybe<&2, BranchRecord>, +s: NodeState, b: String, g: String) -> Out:
   match f:
     case None{}:
       Out.same(s, SetOwner.answer(Spec.SetOwner.Refused{"no such branch"}))
@@ -939,49 +1081,54 @@ def SetGroup.answer(a: Spec.SetGroup) -> Spec.Answer:
   Spec.Answer.SetGroup{a}
 
 # the epoch of the group that m holds, or none
-def Grp.epoch.of(m: Maybe<&2, Grp>) -> Nat:
+def GroupRecord.epoch.of(m: Maybe<&2, GroupRecord>) -> Nat:
   match m:
     case None{}:
       0n
-    case Some{Grp{ms, e}}:
+    case Some{GroupRecord{ms, e}}:
       e
 
 # the epoch that the group g gets when it is set next
-def Grp.epoch.next(gs: Tables.Table<Grp>, g: String) -> Nat:
-  1n+Grp.epoch.of(Tables.Table.get(Grp, gs, g))
+def GroupRecord.epoch.next(gs: Tables.Table<GroupRecord>, g: String) -> Nat:
+  1n+GroupRecord.epoch.of(Tables.Table.get(GroupRecord, gs, g))
 
 # setting the members of the group g to ms closes a cycle: a member of ms is
 # g, or has g inside it
-def Cycle.has(gs: Tables.Table<Grp>, g: String, ms: List<&2, Spec.Member>) -> Bool:
+def Cycle.has(gs: Tables.Table<GroupRecord>, g: String, ms: List<&2, Spec.Member>) -> Bool:
   Reaches.Reach.closes(
     ~Spec.Member,
-    ~Tables.Table<Grp>,
+    ~Tables.Table<GroupRecord>,
     ~Member.same,
-    ~Grp.members.of,
-    ~Grp.all,
+    ~GroupRecord.members.of,
+    ~GroupRecord.all,
     gs,
     Spec.Member.Group{g},
     ms
   )
 
 # the group g with the members ms, unless that closes a cycle
-def SetGroup.on(cycle: Bool, +s: St, +g: String, ms: List<&2, Spec.Member>) -> Out:
+def SetGroup.on(cycle: Bool, +s: NodeState, +g: String, ms: List<&2, Spec.Member>) -> Out:
   match cycle:
     case True{}:
       Out.same(s, SetGroup.answer(Spec.SetGroup.Cycle{}))
     case False{}:
       Out{
         [],
-        St.branches(s),
-        St.marks(s),
-        Tables.Table.set(Grp, St.groups(s), g, Grp{ms, Grp.epoch.next(St.groups(s), g)}),
-        St.clashes(s),
+        NodeState.branches(s),
+        NodeState.marks(s),
+        Tables.Table.set(
+          GroupRecord,
+          NodeState.groups(s),
+          g,
+          GroupRecord{ms, GroupRecord.epoch.next(NodeState.groups(s), g)}
+        ),
+        NodeState.clashes(s),
         [],
-        SetGroup.answer(Spec.SetGroup.Set{Grp.epoch.next(St.groups(s), g)})
+        SetGroup.answer(Spec.SetGroup.Set{GroupRecord.epoch.next(NodeState.groups(s), g)})
       }
 
 # the IDs of vs
-def Vers.ids(vs: List<&2, Tables.Row<Ver>>) -> List<&2, String>:
+def Vers.ids(vs: List<&2, Tables.Row<VersionRecord>>) -> List<&2, String>:
   match vs:
     case Nil{}:
       Nil{}
@@ -989,7 +1136,10 @@ def Vers.ids(vs: List<&2, Tables.Row<Ver>>) -> List<&2, String>:
       i <> Vers.ids(r)
 
 # the first version of vs whose ID ks holds
-def Vers.first_in(vs: List<&2, Tables.Row<Ver>>, +ks: List<&2, String>) -> Maybe<&2, String>:
+def Vers.first_in(
+  vs: List<&2, Tables.Row<VersionRecord>>,
+  +ks: List<&2, String>
+) -> Maybe<&2, String>:
   match vs:
     case Nil{}:
       None{}
@@ -1110,37 +1260,42 @@ def Merge.answer(a: Spec.Merge) -> Spec.Answer:
 # that clash (cs)
 def Merge.result(
   cs: List<&2, String>,
-  +s: St,
+  +s: NodeState,
   +r: String,
   w: String,
   t: String,
   f: String,
   +b: String,
   bs: Tables.Table<List<&2, U32>>,
-  br: Br
+  br: BranchRecord
 ) -> Out:
   match cs:
     case Nil{}:
       match br:
-        case Br{+h, o, e, c}:
+        case BranchRecord{+h, o, e, c}:
           Out{
-            [Tables.Row{r, Ver{bs, [h, f], w, t}}],
-            Tables.Table.set(Br, St.branches(s), b, Br.moved(Br{h, o, e, c}, r)),
-            St.marks(s),
-            St.groups(s),
-            St.clashes(s),
+            [Tables.Row{r, VersionRecord{bs, [h, f], w, t}}],
+            Tables.Table.set(
+              BranchRecord,
+              NodeState.branches(s),
+              b,
+              BranchRecord.moved(BranchRecord{h, o, e, c}, r)
+            ),
+            NodeState.marks(s),
+            NodeState.groups(s),
+            NodeState.clashes(s),
             [Logged.head(b, r)],
             Merge.answer(Spec.Merge.Merged{r})
           }
     case Con{k, more}:
       match br:
-        case Br{h, o, e, c}:
+        case BranchRecord{h, o, e, c}:
           Out{
             [],
-            St.branches(s),
-            St.marks(s),
-            St.groups(s),
-            Tables.Table.set(Clash, St.clashes(s), r, Clash{b, h, f, bs, k <> more}),
+            NodeState.branches(s),
+            NodeState.marks(s),
+            NodeState.groups(s),
+            Tables.Table.set(Clash, NodeState.clashes(s), r, Clash{b, h, f, bs, k <> more}),
             [Logged{Spec.Topic.Conflicts{b}, Spec.Notice.Conflicted{r}}],
             Merge.answer(Spec.Merge.Conflicted{r})
           }
@@ -1148,7 +1303,7 @@ def Merge.result(
 # the merge of the version f into br, from the resources of its head hb, of f
 # (fb), and of their base (bb)
 def Merge.three(
-  s: St,
+  s: NodeState,
   r: String,
   w: String,
   t: String,
@@ -1157,7 +1312,7 @@ def Merge.three(
   +fb: Tables.Table<List<&2, U32>>,
   +bb: Tables.Table<List<&2, U32>>,
   b: String,
-  br: Br
+  br: BranchRecord
 ) -> Out:
   +ns = Strings.union(
     Tables.Table.keys(List<&2, U32>, bb),
@@ -1169,57 +1324,57 @@ def Merge.three(
   Merge.result(Merge.clashes(ns, hb, fb, bb), s, r, w, t, f, b, Merge.blobs(ns, hb, fb, bb), br)
 
 # the resources of the base that m holds, none without a base
-def Merge.base(s: St, m: Maybe<&2, String>) -> Tables.Table<List<&2, U32>>:
+def Merge.base(s: NodeState, m: Maybe<&2, String>) -> Tables.Table<List<&2, U32>>:
   match m:
     case None{}:
       Tables.Table.new(List<&2, U32>)
     case Some{k}:
-      Vers.blobs(St.versions(s), k)
+      Vers.blobs(NodeState.versions(s), k)
 
 # the merge of the version f into br, unless the head already holds f
 def Merge.inside(
   held: Bool,
-  +s: St,
+  +s: NodeState,
   r: String,
   w: String,
   t: String,
   +f: String,
   b: String,
-  +br: Br
+  +br: BranchRecord
 ) -> Out:
   match held:
     case True{}:
       match br:
-        case Br{h, o, e, c}:
+        case BranchRecord{h, o, e, c}:
           Out.same(s, Merge.answer(Spec.Merge.Merged{h}))
     case False{}:
       match br:
-        case Br{+h, o, e, c}:
-          hh = History.of(St.versions(s), h)
+        case BranchRecord{+h, o, e, c}:
+          hh = History.of(NodeState.versions(s), h)
           Merge.three(
             s,
             r,
             w,
             t,
             f,
-            Vers.blobs(St.versions(s), h),
-            Vers.blobs(St.versions(s), f),
-            Merge.base(s, Vers.first_in(History.of(St.versions(s), f), Vers.ids(hh))),
+            Vers.blobs(NodeState.versions(s), h),
+            Vers.blobs(NodeState.versions(s), f),
+            Merge.base(s, Vers.first_in(History.of(NodeState.versions(s), f), Vers.ids(hh))),
             b,
-            Br{h, o, e, c}
+            BranchRecord{h, o, e, c}
           )
 
 # the merge of the version f into br, as its owner, unless the ID r is taken
 def Merge.owner(
   owner: Bool,
   taken: Bool,
-  +s: St,
+  +s: NodeState,
   r: String,
   w: String,
   t: String,
   +f: String,
   b: String,
-  +br: Br
+  +br: BranchRecord
 ) -> Out:
   match owner taken:
     case False{} _:
@@ -1228,22 +1383,22 @@ def Merge.owner(
       Out.same(s, Merge.answer(Spec.Merge.Refused{"version ID taken"}))
     case True{} False{}:
       match br:
-        case Br{+h, o, e, c}:
+        case BranchRecord{+h, o, e, c}:
           Merge.inside(
-            Shared.List.has(~String, ~String.eq, Vers.ids(History.of(St.versions(s), h)), f),
+            Shared.List.has(~String, ~String.eq, Vers.ids(History.of(NodeState.versions(s), h)), f),
             s,
             r,
             w,
             t,
             f,
             b,
-            Br{h, o, e, c}
+            BranchRecord{h, o, e, c}
           )
 
 # the merge of the version f into the branch that m holds
 def Merge.branch(
-  m: Maybe<&2, Br>,
-  +s: St,
+  m: Maybe<&2, BranchRecord>,
+  +s: NodeState,
   +r: String,
   w: String,
   t: String,
@@ -1254,15 +1409,32 @@ def Merge.branch(
     case None{}:
       Out.same(s, Merge.answer(Spec.Merge.Refused{"no such branch"}))
     case Some{+br}:
-      Merge.owner(Owner.of(s, br), Ver.taken(St.versions(s), r), s, r, w, t, f, b, br)
+      Merge.owner(
+        Owner.of(s, br),
+        VersionRecord.taken(NodeState.versions(s), r),
+        s,
+        r,
+        w,
+        t,
+        f,
+        b,
+        br
+      )
 
 # the merge of the version that m names into the branch b
-def Merge.point(m: Maybe<&2, String>, +s: St, r: String, w: String, t: String, +b: String) -> Out:
+def Merge.point(
+  m: Maybe<&2, String>,
+  +s: NodeState,
+  r: String,
+  w: String,
+  t: String,
+  +b: String
+) -> Out:
   match m:
     case None{}:
       Out.same(s, Merge.answer(Spec.Merge.Refused{"no such point"}))
     case Some{f}:
-      Merge.branch(Tables.Table.get(Br, St.branches(s), b), s, r, w, t, f, b)
+      Merge.branch(Tables.Table.get(BranchRecord, NodeState.branches(s), b), s, r, w, t, f, b)
 
 # the names whose texts are ks
 def Names.of(ks: List<&2, String>) -> List<&2, Resources.Name>:
@@ -1281,7 +1453,7 @@ def Resolve.answer(a: Spec.Resolve) -> Spec.Answer:
 def Resolve.done(
   left: List<&2, String>,
   taken: Bool,
-  +s: St,
+  +s: NodeState,
   +r: String,
   w: String,
   t: String,
@@ -1289,7 +1461,7 @@ def Resolve.done(
   n: String,
   y: List<&2, U32>,
   cl: Clash,
-  br: Br
+  br: BranchRecord
 ) -> Out:
   match left:
     case Nil{}:
@@ -1298,13 +1470,23 @@ def Resolve.done(
           Out.same(s, Resolve.answer(Spec.Resolve.Refused{"version ID taken"}))
         case False{}:
           match cl br:
-            case Clash{+b, h, f, bs, l} Br{h2, o, e, c}:
+            case Clash{+b, h, f, bs, l} BranchRecord{h2, o, e, c}:
               Out{
-                [Tables.Row{r, Ver{Tables.Table.set(List<&2, U32>, bs, n, y), [h, f], w, t}}],
-                Tables.Table.set(Br, St.branches(s), b, Br.moved(Br{h2, o, e, c}, r)),
-                St.marks(s),
-                St.groups(s),
-                Tables.Table.del(Clash, St.clashes(s), k),
+                [
+                  Tables.Row{
+                    r,
+                    VersionRecord{Tables.Table.set(List<&2, U32>, bs, n, y), [h, f], w, t}
+                  }
+                ],
+                Tables.Table.set(
+                  BranchRecord,
+                  NodeState.branches(s),
+                  b,
+                  BranchRecord.moved(BranchRecord{h2, o, e, c}, r)
+                ),
+                NodeState.marks(s),
+                NodeState.groups(s),
+                Tables.Table.del(Clash, NodeState.clashes(s), k),
                 [Logged.head(b, r)],
                 Resolve.answer(Spec.Resolve.Resolved{r})
               }
@@ -1313,12 +1495,12 @@ def Resolve.done(
         case Clash{b, h, f, bs, l}:
           Out{
             [],
-            St.branches(s),
-            St.marks(s),
-            St.groups(s),
+            NodeState.branches(s),
+            NodeState.marks(s),
+            NodeState.groups(s),
             Tables.Table.set(
               Clash,
-              St.clashes(s),
+              NodeState.clashes(s),
               k,
               Clash{b, h, f, Tables.Table.set(List<&2, U32>, bs, n, y), x <> more}
             ),
@@ -1329,14 +1511,14 @@ def Resolve.done(
 # the clash k settled for n with the bytes that m holds
 def Resolve.bytes(
   m: Maybe<&2, List<&2, U32>>,
-  +s: St,
+  +s: NodeState,
   +r: String,
   w: String,
   t: String,
   k: String,
   +n: String,
   +cl: Clash,
-  br: Br
+  br: BranchRecord
 ) -> Out:
   match m:
     case None{}:
@@ -1346,7 +1528,7 @@ def Resolve.bytes(
         case Clash{b, h, f, bs, +l}:
           Resolve.done(
             Shared.List.remove(~String, ~String.eq, l, n),
-            Ver.taken(St.versions(s), r),
+            VersionRecord.taken(NodeState.versions(s), r),
             s,
             r,
             w,
@@ -1361,7 +1543,7 @@ def Resolve.bytes(
 # the clash k settled for n with x, when its head is still the branch's (ok)
 def Resolve.fresh(
   ok: Bool,
-  +s: St,
+  +s: NodeState,
   r: String,
   w: String,
   t: String,
@@ -1369,20 +1551,20 @@ def Resolve.fresh(
   +n: String,
   x: Spec.Content,
   cl: Clash,
-  br: Br
+  br: BranchRecord
 ) -> Out:
   match ok:
     case False{}:
       match br:
-        case Br{h, o, e, c}:
+        case BranchRecord{h, o, e, c}:
           Out.same(s, Resolve.answer(Spec.Resolve.Stale{h}))
     case True{}:
       Resolve.bytes(Content.bytes(s, n, x), s, r, w, t, k, n, cl, br)
 
 # the clash k settled for n with x, on the branch that m holds
 def Resolve.branch(
-  m: Maybe<&2, Br>,
-  s: St,
+  m: Maybe<&2, BranchRecord>,
+  s: NodeState,
   r: String,
   w: String,
   t: String,
@@ -1394,7 +1576,7 @@ def Resolve.branch(
   match m:
     case None{}:
       Out.same(s, Resolve.answer(Spec.Resolve.Refused{"no such branch"}))
-    case Some{Br{+h, o, e, c}}:
+    case Some{BranchRecord{+h, o, e, c}}:
       match cl:
         case Clash{b2, +h2, f, bs, l}:
           Resolve.fresh(
@@ -1407,13 +1589,13 @@ def Resolve.branch(
             n,
             x,
             Clash{b2, h2, f, bs, l},
-            Br{h, o, e, c}
+            BranchRecord{h, o, e, c}
           )
 
 # the clash k settled for n with x, when n clashes in it (has)
 def Resolve.named(
   has: Bool,
-  +s: St,
+  +s: NodeState,
   r: String,
   w: String,
   t: String,
@@ -1429,7 +1611,7 @@ def Resolve.named(
       match cl:
         case Clash{+b, h, f, bs, l}:
           Resolve.branch(
-            Tables.Table.get(Br, St.branches(s), b),
+            Tables.Table.get(BranchRecord, NodeState.branches(s), b),
             s,
             r,
             w,
@@ -1443,7 +1625,7 @@ def Resolve.named(
 # the clash that m holds, settled for n with x
 def Resolve.clash(
   m: Maybe<&2, Clash>,
-  s: St,
+  s: NodeState,
   r: String,
   w: String,
   t: String,
@@ -1473,28 +1655,35 @@ def Sync.answer(a: Spec.Sync) -> Spec.Answer:
 
 # the order of the stamps of the heads of a and b: epoch, then count, then
 # the head's ID, so that every node picks the same winner
-def Br.stamp.cmp(a: Br, b: Br) -> Cmp:
+def BranchRecord.stamp.cmp(a: BranchRecord, b: BranchRecord) -> Cmp:
   match a b:
-    case Br{h1, o1, e1, c1} Br{h2, o2, e2, c2}:
+    case BranchRecord{h1, o1, e1, c1} BranchRecord{h2, o2, e2, c2}:
       Cmps.Cmp.then(Nat.cmp(e1, e2), Cmps.Cmp.then(Nat.cmp(c1, c2), String.order(h1, h2)))
 
 # both lookups found a version under the same ID, with other resources
-def Sync.clash.at(mine: Maybe<&2, Ver>, theirs: Maybe<&2, Ver>) -> Bool:
+def Sync.clash.at(mine: Maybe<&2, VersionRecord>, theirs: Maybe<&2, VersionRecord>) -> Bool:
   match mine theirs:
-    case Some{Ver{b1, p1, a1, t1}} Some{Ver{b2, p2, a2, t2}}:
+    case Some{VersionRecord{b1, p1, a1, t1}} Some{VersionRecord{b2, p2, a2, t2}}:
       Bool.not(Tables.Table.same(~List<&2, U32>, ~Octets.Bytes.is_eq, b1, b2))
     case _ _:
       False{}
 
 # a version of os under one of the keys ks has the ID of a version of vs, with
 # other resources
-def Sync.collides(ks: List<&2, String>, +os: Tables.Table<Ver>, +vs: Tables.Table<Ver>) -> Bool:
+def Sync.collides(
+  ks: List<&2, String>,
+  +os: Tables.Table<VersionRecord>,
+  +vs: Tables.Table<VersionRecord>
+) -> Bool:
   match ks:
     case Nil{}:
       False{}
     case Con{+k, r}:
       Bool.or(
-        Sync.clash.at(Tables.Table.get(Ver, vs, k), Tables.Table.get(Ver, os, k)),
+        Sync.clash.at(
+          Tables.Table.get(VersionRecord, vs, k),
+          Tables.Table.get(VersionRecord, os, k)
+        ),
         Sync.collides(r, os, vs)
       )
 
@@ -1524,7 +1713,7 @@ def Names.differ(
 
 # what a sync does to branches: the branches, the clashes, and the notices
 type Mix is Data:
-  Mix{branches: Tables.Table<Br>, clashes: Tables.Table<Clash>, news: List<&2, Logged>}
+  Mix{branches: Tables.Table<BranchRecord>, clashes: Tables.Table<Clash>, news: List<&2, Logged>}
 
 # cs, with the clash of the head l, unless h's history holds l (held) or no
 # resource differs (ns)
@@ -1548,7 +1737,7 @@ def Sync.lost.if(
 # cs, with a clash when the head l of the branch b lost to the head h and is
 # not in its history; its resources that differ from h's clash
 def Sync.lost(
-  +vs: Tables.Table<Ver>,
+  +vs: Tables.Table<VersionRecord>,
   +h: String,
   b: String,
   +l: String,
@@ -1575,41 +1764,59 @@ def Sync.lost(
 
 # the branches after their mine and theirs met, for the branch b, by the order
 # c of their stamps; the winner's head is the branch's, and the loser may clash
-def Sync.pick(c: Cmp, +b: String, mine: Br, theirs: Br, vs: Tables.Table<Ver>, acc: Mix) -> Mix:
+def Sync.pick(
+  c: Cmp,
+  +b: String,
+  mine: BranchRecord,
+  theirs: BranchRecord,
+  vs: Tables.Table<VersionRecord>,
+  acc: Mix
+) -> Mix:
   match c mine theirs acc:
-    case LT{} Br{h1, o1, e1, c1} Br{+h, o, e, k} Mix{bs, cs, ns}:
+    case LT{} BranchRecord{h1, o1, e1, c1} BranchRecord{+h, o, e, k} Mix{bs, cs, ns}:
       Mix{
-        Tables.Table.set(Br, bs, b, Br{h, o, e, k}),
+        Tables.Table.set(BranchRecord, bs, b, BranchRecord{h, o, e, k}),
         Sync.lost(vs, h, b, h1, cs),
         List.append(&2, Logged, ns, [Logged.head(b, h)])
       }
-    case GT{} Br{h, o, e, k} Br{h2, o2, e2, c2} Mix{bs, cs, ns}:
+    case GT{} BranchRecord{h, o, e, k} BranchRecord{h2, o2, e2, c2} Mix{bs, cs, ns}:
       Mix{bs, Sync.lost(vs, h, b, h2, cs), ns}
     case EQ{} m t z:
       z
 
 # the branches after theirs, the branch b, met the one that m holds
-def Sync.at(m: Maybe<&2, Br>, +b: String, +theirs: Br, vs: Tables.Table<Ver>, acc: Mix) -> Mix:
+def Sync.at(
+  m: Maybe<&2, BranchRecord>,
+  +b: String,
+  +theirs: BranchRecord,
+  vs: Tables.Table<VersionRecord>,
+  acc: Mix
+) -> Mix:
   match m:
     case None{}:
       match theirs acc:
-        case Br{+h, o, e, k} Mix{bs, cs, ns}:
+        case BranchRecord{+h, o, e, k} Mix{bs, cs, ns}:
           Mix{
-            Tables.Table.set(Br, bs, b, Br{h, o, e, k}),
+            Tables.Table.set(BranchRecord, bs, b, BranchRecord{h, o, e, k}),
             cs,
             List.append(&2, Logged, ns, [Logged.head(b, h)])
           }
     case Some{+mine}:
-      Sync.pick(Br.stamp.cmp(mine, theirs), b, mine, theirs, vs, acc)
+      Sync.pick(BranchRecord.stamp.cmp(mine, theirs), b, mine, theirs, vs, acc)
 
 # the branches after theirs, the branch b, met them
-def Sync.meet(acc: Mix, +b: String, theirs: Br, vs: Tables.Table<Ver>) -> Mix:
+def Sync.meet(acc: Mix, +b: String, theirs: BranchRecord, vs: Tables.Table<VersionRecord>) -> Mix:
   match acc:
     case Mix{+bs, cs, ns}:
-      Sync.at(Tables.Table.get(Br, bs, b), b, theirs, vs, Mix{bs, cs, ns})
+      Sync.at(Tables.Table.get(BranchRecord, bs, b), b, theirs, vs, Mix{bs, cs, ns})
 
 # the branches after the branch b that m holds met them; none when m is empty
-def Sync.seen.meet(b: String, m: Maybe<&2, Br>, acc: Mix, vs: Tables.Table<Ver>) -> Mix:
+def Sync.seen.meet(
+  b: String,
+  m: Maybe<&2, BranchRecord>,
+  acc: Mix,
+  vs: Tables.Table<VersionRecord>
+) -> Mix:
   match m:
     case None{}:
       acc
@@ -1619,17 +1826,22 @@ def Sync.seen.meet(b: String, m: Maybe<&2, Br>, acc: Mix, vs: Tables.Table<Ver>)
 # the branches after the branch of each key of ks in full met them
 def Sync.branches(
   ks: List<&2, String>,
-  +full: Tables.Table<Br>,
-  +vs: Tables.Table<Ver>,
+  +full: Tables.Table<BranchRecord>,
+  +vs: Tables.Table<VersionRecord>,
   acc: Mix
 ) -> Mix:
   match ks:
     case Nil{}:
       acc
     case Con{+k, r}:
-      Sync.branches(r, full, vs, Sync.seen.meet(k, Tables.Table.get(Br, full, k), acc, vs))
+      Sync.branches(
+        r,
+        full,
+        vs,
+        Sync.seen.meet(k, Tables.Table.get(BranchRecord, full, k), acc, vs)
+      )
 
-def Mix.branches(m: Mix) -> Tables.Table<Br>:
+def Mix.branches(m: Mix) -> Tables.Table<BranchRecord>:
   match m:
     case Mix{bs, cs, ns}:
       bs
@@ -1727,54 +1939,64 @@ def Marked.news(m: Marked) -> List<&2, Logged>:
 
 # what a sync does to groups: the groups, and the notices of the ones it kept
 type Kept is Data:
-  Kept{groups: Tables.Table<Grp>, news: List<&2, Logged>}
+  Kept{groups: Tables.Table<GroupRecord>, news: List<&2, Logged>}
 
-# the groups with x as g, unless that closes a cycle: then they keep their
-# own, with a notice of x's members
-def Sync.group.put(cycle: Bool, g: String, x: Grp, k: Kept) -> Kept:
-  match cycle x k:
-    case True{} Grp{ms, e} Kept{gs, ns}:
+# the groups with x as g. A notice says when x closes a cycle: the groups on
+# it then hold one another (see none_inside_itself_after in the spec)
+def Sync.group.put(+g: String, x: GroupRecord, k: Kept) -> Kept:
+  match x k:
+    case GroupRecord{+ms, e} Kept{+gs, ns}:
       Kept{
-        gs,
-        List.append(&2, Logged, ns, [Logged{Spec.Topic.Groups{}, Spec.Notice.GroupKept{g, ms}}])
+        Tables.Table.set(GroupRecord, gs, g, GroupRecord{ms, e}),
+        List.append(
+          &2,
+          Logged,
+          ns,
+          List.filter.put(
+            Logged,
+            Logged{Spec.Topic.Groups{}, Spec.Notice.GroupCycle{g, ms}},
+            [],
+            Cycle.has(gs, g, ms)
+          )
+        )
       }
-    case False{} y Kept{gs, ns}:
-      Kept{Tables.Table.set(Grp, gs, g, y), ns}
 
-# the groups with x as g when it is later (and closes no cycle)
-def Sync.group.later(later: Bool, +g: String, x: Grp, k: Kept) -> Kept:
-  match later x k:
-    case False{} y z:
-      z
-    case True{} Grp{+ms, e} Kept{+gs, ns}:
-      Sync.group.put(Cycle.has(gs, g, ms), g, Grp{ms, e}, Kept{gs, ns})
+# the groups after the other node's group x, named g, met the node's own: the
+# larger stamp (c) wins
+def Sync.group.pick(c: Cmp, g: String, x: GroupRecord, k: Kept) -> Kept:
+  match c:
+    case LT{}:
+      Sync.group.put(g, x, k)
+    case EQ{}:
+      k
+    case GT{}:
+      k
 
-# the groups after their group x, named g, met the group that m holds: the
-# later epoch wins
-def Sync.group.at(m: Maybe<&2, Grp>, +g: String, x: Grp, k: Kept) -> Kept:
-  match m x k:
-    case None{} Grp{+ms, e} Kept{+gs, ns}:
-      Sync.group.put(Cycle.has(gs, g, ms), g, Grp{ms, e}, Kept{gs, ns})
-    case Some{Grp{ns, f}} Grp{ms, +e} z:
-      Sync.group.later(Nat.is_lt(f, e), g, Grp{ms, e}, z)
+# the groups after their group x, named g, met the group that m holds
+def Sync.group.at(m: Maybe<&2, GroupRecord>, g: String, +x: GroupRecord, k: Kept) -> Kept:
+  match m:
+    case None{}:
+      Sync.group.put(g, x, k)
+    case Some{mine}:
+      Sync.group.pick(GroupRecord.stamp.cmp(mine, x), g, x, k)
 
 # the groups after the group that vis holds, named g, met them
-def Sync.group.seen(+g: String, vis: Maybe<&2, Grp>, k: Kept) -> Kept:
+def Sync.group.seen(+g: String, vis: Maybe<&2, GroupRecord>, k: Kept) -> Kept:
   match vis k:
     case None{} z:
       z
     case Some{x} Kept{+gs, ns}:
-      Sync.group.at(Tables.Table.get(Grp, gs, g), g, x, Kept{gs, ns})
+      Sync.group.at(Tables.Table.get(GroupRecord, gs, g), g, x, Kept{gs, ns})
 
 # the groups after the group of each key of ks in full met them
-def Sync.groups(ks: List<&2, String>, +full: Tables.Table<Grp>, k: Kept) -> Kept:
+def Sync.groups(ks: List<&2, String>, +full: Tables.Table<GroupRecord>, k: Kept) -> Kept:
   match ks:
     case Nil{}:
       k
     case Con{+g, r}:
-      Sync.groups(r, full, Sync.group.seen(g, Tables.Table.get(Grp, full, g), k))
+      Sync.groups(r, full, Sync.group.seen(g, Tables.Table.get(GroupRecord, full, g), k))
 
-def Kept.groups(k: Kept) -> Tables.Table<Grp>:
+def Kept.groups(k: Kept) -> Tables.Table<GroupRecord>:
   match k:
     case Kept{gs, ns}:
       gs
@@ -1786,27 +2008,31 @@ def Kept.news(k: Kept) -> List<&2, Logged>:
 
 # s after it took in o, unless their versions collide; it takes in all of o,
 # since a position only narrows what the transport sends
-def Sync.go(collides: Bool, +s: St, +o: St) -> Out:
+def Sync.go(collides: Bool, +s: NodeState, +o: NodeState) -> Out:
   match collides:
     case True{}:
       Out.same(s, Sync.answer(Spec.Sync.Refused{"version ID collision"}))
     case False{}:
-      +news = Tables.Table.rows(Ver, Tables.Table.keys(Ver, St.versions(o)), St.versions(o))
+      +news = Tables.Table.rows(
+        VersionRecord,
+        Tables.Table.keys(VersionRecord, NodeState.versions(o)),
+        NodeState.versions(o)
+      )
       +mix = Sync.branches(
-        Tables.Table.keys(Br, St.branches(o)),
-        St.branches(o),
-        Ver.add(news, St.versions(s)),
-        Mix{St.branches(s), St.clashes(s), []}
+        Tables.Table.keys(BranchRecord, NodeState.branches(o)),
+        NodeState.branches(o),
+        VersionRecord.add(news, NodeState.versions(s)),
+        Mix{NodeState.branches(s), NodeState.clashes(s), []}
       )
       +kept = Sync.groups(
-        Tables.Table.keys(Grp, St.groups(o)),
-        St.groups(o),
-        Kept{St.groups(s), []}
+        Tables.Table.keys(GroupRecord, NodeState.groups(o)),
+        NodeState.groups(o),
+        Kept{NodeState.groups(s), []}
       )
       +marked = Sync.marks(
-        Tables.Table.keys(Tables.Table<MarkAt>, St.marks(o)),
-        St.marks(o),
-        Marked{St.marks(s), []}
+        Tables.Table.keys(Tables.Table<MarkAt>, NodeState.marks(o)),
+        NodeState.marks(o),
+        Marked{NodeState.marks(s), []}
       )
       Out{
         news,
@@ -1827,38 +2053,42 @@ def Sync.go(collides: Bool, +s: St, +o: St) -> Out:
 # --------
 
 # what the change q of the request r, by the writer w at the time t, does to s
-def Step.of(+s: St, r: String, w: String, t: String, q: Spec.Ask) -> Out:
+def Step.of(+s: NodeState, r: String, w: String, t: String, q: Spec.Ask) -> Out:
   match q:
     case Spec.Ask.Write{Resources.Name{+n}, b, base, x}:
       Write.bytes(Content.bytes(s, n, x), s, r, w, t, n, b, base)
     case Spec.Ask.SetBranch{b, p}:
       SetBranch.point(Point.version(s, p), s, r, w, t, b)
     case Spec.Ask.CreateMark{+b, m, x}:
-      CreateMark.branch(Tables.Table.get(Br, St.branches(s), b), s, b, m, x)
+      CreateMark.branch(Tables.Table.get(BranchRecord, NodeState.branches(s), b), s, b, m, x)
     case Spec.Ask.Merge{p, b}:
       Merge.point(Point.version(s, p), s, r, w, t, b)
     case Spec.Ask.Resolve{+k, Resources.Name{n}, x}:
-      Resolve.clash(Tables.Table.get(Clash, St.clashes(s), k), s, r, w, t, k, n, x)
+      Resolve.clash(Tables.Table.get(Clash, NodeState.clashes(s), k), s, r, w, t, k, n, x)
     case Spec.Ask.SetOwner{+b, g}:
-      SetOwner.branch(Tables.Table.get(Br, St.branches(s), b), s, b, g)
+      SetOwner.branch(Tables.Table.get(BranchRecord, NodeState.branches(s), b), s, b, g)
     case Spec.Ask.SetGroup{+g, +ms}:
-      SetGroup.on(Cycle.has(St.groups(s), g, ms), s, g, ms)
+      SetGroup.on(Cycle.has(NodeState.groups(s), g, ms), s, g, ms)
     case Spec.Ask.Sync{+o, p}:
       Sync.go(
-        Sync.collides(Tables.Table.keys(Ver, St.versions(o)), St.versions(o), St.versions(s)),
+        Sync.collides(
+          Tables.Table.keys(VersionRecord, NodeState.versions(o)),
+          NodeState.versions(o),
+          NodeState.versions(s)
+        ),
         s,
         o
       )
 
 # s after out, the answer to the request r: new versions join the ones s
 # holds, the answer is kept for retries, and the notices go last
-def Node.applied(s: St, r: String, out: Out) -> St & Spec.Answer:
+def VendNode.applied(s: NodeState, r: String, out: Out) -> NodeState & Spec.Answer:
   match s out:
-    case St{k, vs, bs, ms, gs, cs, ss, +l} Out{nv, nb, nm, ng, nc, news, +a}:
+    case NodeState{k, vs, bs, ms, gs, cs, ss, +l} Out{nv, nb, nm, ng, nc, news, +a}:
       (
-        St{
+        NodeState{
           k,
-          Ver.add(nv, vs),
+          VersionRecord.add(nv, vs),
           nb,
           nm,
           ng,
@@ -1870,20 +2100,20 @@ def Node.applied(s: St, r: String, out: Out) -> St & Spec.Answer:
       )
 
 # s after the change q of the request r, unless found holds r's answer
-def Node.asked(
+def VendNode.asked(
   found: Maybe<&2, Seen>,
-  +s: St,
+  +s: NodeState,
   +r: String,
   w: String,
   t: String,
   q: Spec.Ask
-) -> St
+) -> NodeState
   & Spec.Answer:
   match found:
     case Some{Seen{a, p}}:
       (s, a)
     case None{}:
-      Node.applied(s, r, Step.of(s, r, w, t, q))
+      VendNode.applied(s, r, Step.of(s, r, w, t, q))
 
 # a unit of content: its format, kind, name, place, condition and parent
 type Piece is Data:
@@ -1944,20 +2174,26 @@ def Logged.pick(+k: Spec.Topic, xs: List<&2, Logged>) -> List<&2, Spec.Notice>:
       List.filter.put(Spec.Notice, n, Logged.pick(k, r), Topic.same(t, k))
 
 # the versions of vs that hold the resource n
-def Log.of(vs: List<&2, Tables.Row<Ver>>, +n: String) -> List<&2, Tables.Row<Ver>>:
+def Log.of(
+  vs: List<&2, Tables.Row<VersionRecord>>,
+  +n: String
+) -> List<&2, Tables.Row<VersionRecord>>:
   match vs:
     case Nil{}:
       Nil{}
-    case Con{Tables.Row{i, Ver{+b, p, a, t}}, r}:
+    case Con{Tables.Row{i, VersionRecord{+b, p, a, t}}, r}:
       List.filter.put(
-        Tables.Row<Ver>,
-        Tables.Row{i, Ver{b, p, a, t}},
+        Tables.Row<VersionRecord>,
+        Tables.Row{i, VersionRecord{b, p, a, t}},
         Log.of(r, n),
         Maybe.is_some(&2, List<&2, U32>, Tables.Table.get(List<&2, U32>, b, n))
       )
 
 # the history of the head that m holds, among vs
-def Log.history(vs: Tables.Table<Ver>, m: Maybe<&2, String>) -> List<&2, Tables.Row<Ver>>:
+def Log.history(
+  vs: Tables.Table<VersionRecord>,
+  m: Maybe<&2, String>
+) -> List<&2, Tables.Row<VersionRecord>>:
   match m:
     case None{}:
       Nil{}
@@ -1976,15 +2212,15 @@ def Outcome.of(found: Maybe<&2, Seen>, held: Bool, at: Nat) -> Spec.Outcome:
       Spec.Outcome.NotSeen{}
 
 # the epoch of the branch that m holds
-def Br.epoch.of(m: Maybe<&2, Br>) -> Maybe<&2, Nat>:
+def BranchRecord.epoch.of(m: Maybe<&2, BranchRecord>) -> Maybe<&2, Nat>:
   match m:
     case None{}:
       None{}
-    case Some{Br{h, o, e, c}}:
+    case Some{BranchRecord{h, o, e, c}}:
       Some{e}
 
 # the node of s owns the branch that m holds
-def Owner.in(s: St, m: Maybe<&2, Br>) -> Bool:
+def Owner.in(s: NodeState, m: Maybe<&2, BranchRecord>) -> Bool:
   match m:
     case None{}:
       False{}
@@ -2039,7 +2275,7 @@ def Spec.Touch.used(t):
       u
 
 def Spec.BranchEntry():
-  Tables.Row<Br>
+  Tables.Row<BranchRecord>
 
 def Spec.BranchEntry.branch(e):
   match e:
@@ -2048,16 +2284,16 @@ def Spec.BranchEntry.branch(e):
 
 def Spec.BranchEntry.owner(e):
   match e:
-    case Tables.Row{n, Br{h, o, x, c}}:
+    case Tables.Row{n, BranchRecord{h, o, x, c}}:
       o
 
 def Spec.BranchEntry.newest(e):
   match e:
-    case Tables.Row{n, Br{h, o, x, c}}:
+    case Tables.Row{n, BranchRecord{h, o, x, c}}:
       h
 
 def Spec.LogEntry():
-  Tables.Row<Ver>
+  Tables.Row<VersionRecord>
 
 def Spec.LogEntry.version(e):
   match e:
@@ -2066,85 +2302,95 @@ def Spec.LogEntry.version(e):
 
 def Spec.LogEntry.author(e):
   match e:
-    case Tables.Row{i, Ver{b, p, a, t}}:
+    case Tables.Row{i, VersionRecord{b, p, a, t}}:
       a
 
 def Spec.LogEntry.time(e):
   match e:
-    case Tables.Row{i, Ver{b, p, a, t}}:
+    case Tables.Row{i, VersionRecord{b, p, a, t}}:
       t
 
-def Spec.Node.empty(n):
-  St{
+def Spec.VendNode.empty(n):
+  NodeState{
     n,
-    Tables.Table.new(Ver),
-    Tables.Table.new(Br),
+    Tables.Table.new(VersionRecord),
+    Tables.Table.new(BranchRecord),
     Tables.Table.new(Tables.Table<MarkAt>),
-    Tables.Table.new(Grp),
+    Tables.Table.new(GroupRecord),
     Tables.Table.new(Clash),
     Tables.Table.new(Seen),
     []
   }
 
-def Spec.Node.position(s):
-  List.length(&2, Logged, St.log(s))
+def Spec.VendNode.position(s):
+  List.length(&2, Logged, NodeState.log(s))
 
-def Spec.Node.get_branches(s):
+def Spec.VendNode.get_branches(s):
   +s = s
-  Tables.Table.rows(Br, Tables.Table.keys(Br, St.branches(s)), St.branches(s))
+  Tables.Table.rows(
+    BranchRecord,
+    Tables.Table.keys(BranchRecord, NodeState.branches(s)),
+    NodeState.branches(s)
+  )
 
-def Spec.Node.get_log(s, n, b):
+def Spec.VendNode.get_log(s, n, b):
   +s = s
   Log.of(
-    Log.history(St.versions(s), Br.head.of(Tables.Table.get(Br, St.branches(s), b))),
+    Log.history(
+      NodeState.versions(s),
+      BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s), b))
+    ),
     Resources.Name.show(n)
   )
 
-def Spec.Node.get_content(s, n, p):
-  St.content(s, Resources.Name.show(n), p)
+def Spec.VendNode.get_content(s, n, p):
+  NodeState.content(s, Resources.Name.show(n), p)
 
-def Spec.Node.get_diff(s, n, a, b):
+def Spec.VendNode.get_diff(s, n, a, b):
   +s = s
   +n = Resources.Name.show(n)
-  Diff.of(Piece.of(n), St.content(s, n, a), St.content(s, n, b))
+  Diff.of(Piece.of(n), NodeState.content(s, n, a), NodeState.content(s, n, b))
 
 # no format in the core says what an item uses; formats add these
-def Spec.Node.get_affects(s, b):
+def Spec.VendNode.get_affects(s, b):
   Nil{}
 
-def Spec.Node.get_impact(s, p):
+def Spec.VendNode.get_impact(s, p):
   Nil{}
 
-def Spec.Node.get_outcome(s, r):
+def Spec.VendNode.get_outcome(s, r):
   +s = s
   +r = r
   Outcome.of(
-    Tables.Table.get(Seen, St.seen(s), r),
-    Ver.taken(St.versions(s), r),
-    List.length(&2, Logged, St.log(s))
+    Tables.Table.get(Seen, NodeState.seen(s), r),
+    VersionRecord.taken(NodeState.versions(s), r),
+    List.length(&2, Logged, NodeState.log(s))
   )
 
-def Spec.Node.get_changes(s, k, p):
-  Logged.pick(k, List.drop(&2, Logged, St.log(s), Maybe.default(&2, Nat, p, 0n)))
+def Spec.VendNode.get_changes(s, k, p):
+  Logged.pick(k, List.drop(&2, Logged, NodeState.log(s), Maybe.default(&2, Nat, p, 0n)))
 
-def Spec.Node.ask(s, e, q):
+def Spec.VendNode.ask(s, e, q):
   match e:
     case Spec.Envelope{+r, w, t}:
       +s = s
-      Node.asked(Tables.Table.get(Seen, St.seen(s), r), s, r, w, t, q)
+      VendNode.asked(Tables.Table.get(Seen, NodeState.seen(s), r), s, r, w, t, q)
 
-def Spec.Node.get_epoch(s, b):
-  Br.epoch.of(Tables.Table.get(Br, St.branches(s), b))
+def Spec.VendNode.get_epoch(s, b):
+  BranchRecord.epoch.of(Tables.Table.get(BranchRecord, NodeState.branches(s), b))
 
-def Spec.Node.get_head(s, b):
-  Br.head.of(Tables.Table.get(Br, St.branches(s), b))
+def Spec.VendNode.get_head(s, b):
+  BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s), b))
 
-def Spec.Node.is_owner(s, b):
+def Spec.VendNode.is_owner(s, b):
   +s = s
-  Owner.in(s, Tables.Table.get(Br, St.branches(s), b))
+  Owner.in(s, Tables.Table.get(BranchRecord, NodeState.branches(s), b))
 
-def Spec.Node.is_inside(s, m, g):
-  Grp.inside(St.groups(s), m, g)
+def Spec.VendNode.get_members(s, g):
+  GroupRecord.members.got(Tables.Table.get(GroupRecord, NodeState.groups(s), g))
+
+def Spec.VendNode.is_inside(s, m, g):
+  GroupRecord.inside(NodeState.groups(s), m, g)
 
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
@@ -2152,12 +2398,12 @@ def Spec.Node.is_inside(s, m, g):
 # ------
 
 # the parts of out
-def Out.versions(out: Out) -> List<&2, Tables.Row<Ver>>:
+def Out.versions(out: Out) -> List<&2, Tables.Row<VersionRecord>>:
   match out:
     case Out{nv, nb, nm, ng, nc, news, a}:
       nv
 
-def Out.branches(out: Out) -> Tables.Table<Br>:
+def Out.branches(out: Out) -> Tables.Table<BranchRecord>:
   match out:
     case Out{nv, nb, nm, ng, nc, news, a}:
       nb
@@ -2167,7 +2413,7 @@ def Out.marks(out: Out) -> Tables.Table<Tables.Table<MarkAt>>:
     case Out{nv, nb, nm, ng, nc, news, a}:
       nm
 
-def Out.groups(out: Out) -> Tables.Table<Grp>:
+def Out.groups(out: Out) -> Tables.Table<GroupRecord>:
   match out:
     case Out{nv, nb, nm, ng, nc, news, a}:
       ng
@@ -2183,9 +2429,9 @@ def Out.answer(out: Out) -> Spec.Answer:
       a
 
 # the notices a change adds: none for a retry, else the change's own
-def Node.news(
+def VendNode.news(
   found: Maybe<&2, Seen>,
-  s: St,
+  s: NodeState,
   r: String,
   w: String,
   t: String,
@@ -2341,34 +2587,39 @@ def since_on(k, xs, ys):
 
 # a change appends its notices to the log
 law applied_log:
-  for s: St
+  for s: NodeState
   for r: String
   for out: Out
   {
-    St.log(
-      Pair.fst(St, Spec.Answer, Node.applied(s, r, out))
+    NodeState.log(
+      Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, out))
     )
-      == List.append(&2, Logged, St.log(s), Out.news(out)): List<&2, Logged>
+      == List.append(&2, Logged, NodeState.log(s), Out.news(out)): List<&2, Logged>
   }
 
 def applied_log(s, r, out):
   match s out:
-    case St{k, vs, bs, ms, gs, cs, ss, l} Out{nv, nb, nm, ng, nc, news, a}:
+    case NodeState{k, vs, bs, ms, gs, cs, ss, l} Out{nv, nb, nm, ng, nc, news, a}:
       {==}
 
 # a change, or its retry, appends its notices to the log
 law asked_log:
   for found: Maybe<&2, Seen>
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for t: String
   for q: Spec.Ask
   {
-    St.log(
-      Pair.fst(St, Spec.Answer, Node.asked(found, s, r, w, t, q))
+    NodeState.log(
+      Pair.fst(NodeState, Spec.Answer, VendNode.asked(found, s, r, w, t, q))
     )
-      == List.append(&2, Logged, St.log(s), Node.news(found, s, r, w, t, q)): List<&2, Logged>
+      == List.append(
+        &2,
+        Logged,
+        NodeState.log(s),
+        VendNode.news(found, s, r, w, t, q)
+      ): List<&2, Logged>
   }
 
 def asked_log(found, s, r, w, t, q):
@@ -2376,9 +2627,9 @@ def asked_log(found, s, r, w, t, q):
     case Some{Seen{a, p}}:
       Equal.sym(
         List<&2, Logged>,
-        List.append(&2, Logged, St.log(s), []),
-        St.log(s),
-        Lists.List.append_nil(Logged, St.log(s))
+        List.append(&2, Logged, NodeState.log(s), []),
+        NodeState.log(s),
+        Lists.List.append_nil(Logged, NodeState.log(s))
       )
     case None{}:
       +s = s
@@ -2388,26 +2639,26 @@ def asked_log(found, s, r, w, t, q):
 # the notices after a change or a retry split at the position before it
 law since_asked:
   for found: Maybe<&2, Seen>
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for t: String
   for q: Spec.Ask
   for k: Spec.Topic
   {
-    Spec.Node.get_changes(
-      Pair.fst(St, Spec.Answer, Node.asked(found, s, r, w, t, q)),
+    Spec.VendNode.get_changes(
+      Pair.fst(NodeState, Spec.Answer, VendNode.asked(found, s, r, w, t, q)),
       k,
       None{}
     )
       == List.append(
         &2,
         Spec.Notice,
-        Spec.Node.get_changes(s, k, None{}),
-        Spec.Node.get_changes(
-          Pair.fst(St, Spec.Answer, Node.asked(found, s, r, w, t, q)),
+        Spec.VendNode.get_changes(s, k, None{}),
+        Spec.VendNode.get_changes(
+          Pair.fst(NodeState, Spec.Answer, VendNode.asked(found, s, r, w, t, q)),
           k,
-          Some{Spec.Node.position(s)}
+          Some{Spec.VendNode.position(s)}
         )
       ): List<&2, Spec.Notice>
   }
@@ -2421,8 +2672,8 @@ def since_asked(found, s, r, w, t, q, k):
   +q = q
   %Equal.sym(
     List<&2, Logged>,
-    St.log(Pair.fst(St, Spec.Answer, Node.asked(found, s, r, w, t, q))),
-    List.append(&2, Logged, St.log(s), Node.news(found, s, r, w, t, q)),
+    NodeState.log(Pair.fst(NodeState, Spec.Answer, VendNode.asked(found, s, r, w, t, q))),
+    List.append(&2, Logged, NodeState.log(s), VendNode.news(found, s, r, w, t, q)),
     asked_log(found, s, r, w, t, q)
   ):
     {
@@ -2433,32 +2684,32 @@ def since_asked(found, s, r, w, t, q, k):
         == List.append(
           &2,
           Spec.Notice,
-          Logged.pick(k, List.drop(&2, Logged, St.log(s), 0n)),
-          Logged.pick(k, List.drop(&2, Logged, _, List.length(&2, Logged, St.log(s))))
+          Logged.pick(k, List.drop(&2, Logged, NodeState.log(s), 0n)),
+          Logged.pick(k, List.drop(&2, Logged, _, List.length(&2, Logged, NodeState.log(s))))
         ): List<&2, Spec.Notice>
     }
-  since_on(k, St.log(s), Node.news(found, s, r, w, t, q))
+  since_on(k, NodeState.log(s), VendNode.news(found, s, r, w, t, q))
 
 # the notices after any change split at the position before it
 law since_ask:
-  for s: St
+  for s: NodeState
   for e: Spec.Envelope
   for q: Spec.Ask
   for k: Spec.Topic
   {
-    Spec.Node.get_changes(
-      Pair.fst(St, Spec.Answer, Spec.Node.ask(s, e, q)),
+    Spec.VendNode.get_changes(
+      Pair.fst(NodeState, Spec.Answer, Spec.VendNode.ask(s, e, q)),
       k,
       None{}
     )
       == List.append(
         &2,
         Spec.Notice,
-        Spec.Node.get_changes(s, k, None{}),
-        Spec.Node.get_changes(
-          Pair.fst(St, Spec.Answer, Spec.Node.ask(s, e, q)),
+        Spec.VendNode.get_changes(s, k, None{}),
+        Spec.VendNode.get_changes(
+          Pair.fst(NodeState, Spec.Answer, Spec.VendNode.ask(s, e, q)),
           k,
-          Some{Spec.Node.position(s)}
+          Some{Spec.VendNode.position(s)}
         )
       ): List<&2, Spec.Notice>
   }
@@ -2467,23 +2718,27 @@ def since_ask(s, e, q, k):
   match e:
     case Spec.Envelope{+r, w, t}:
       +s = s
-      since_asked(Tables.Table.get(Seen, St.seen(s), r), s, r, w, t, q, k)
+      since_asked(Tables.Table.get(Seen, NodeState.seen(s), r), s, r, w, t, q, k)
 
 # after a change, the node keeps its answer under its request ID
 law seen_after_applied:
-  for s: St
+  for s: NodeState
   for r: String
   for out: Out
   {
     Seen.answer.of(
-      Tables.Table.get(Seen, St.seen(Pair.fst(St, Spec.Answer, Node.applied(s, r, out))), r)
+      Tables.Table.get(
+        Seen,
+        NodeState.seen(Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, out))),
+        r
+      )
     )
-      == Some{Pair.snd(St, Spec.Answer, Node.applied(s, r, out))}: Maybe<&2, Spec.Answer>
+      == Some{Pair.snd(NodeState, Spec.Answer, VendNode.applied(s, r, out))}: Maybe<&2, Spec.Answer>
   }
 
 def seen_after_applied(s, r, out):
   match s out:
-    case St{k, vs, bs, ms, gs, cs, ss, l} Out{nv, nb, nm, ng, nc, news, a}:
+    case NodeState{k, vs, bs, ms, gs, cs, ss, l} Out{nv, nb, nm, ng, nc, news, a}:
       %Equal.sym(
         Maybe<&2, Seen>,
         Tables.Table.get(
@@ -2500,22 +2755,24 @@ def seen_after_applied(s, r, out):
 # after a change or a retry, the node keeps the answer under its request ID
 law seen_after_asked:
   for found: Maybe<&2, Seen>
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for t: String
   for q: Spec.Ask
   {
-    Tables.Table.get(Seen, St.seen(s), r) == found: Maybe<&2, Seen>
+    Tables.Table.get(Seen, NodeState.seen(s), r) == found: Maybe<&2, Seen>
   } -> {
     Seen.answer.of(
       Tables.Table.get(
         Seen,
-        St.seen(Pair.fst(St, Spec.Answer, Node.asked(found, s, r, w, t, q))),
+        NodeState.seen(Pair.fst(NodeState, Spec.Answer, VendNode.asked(found, s, r, w, t, q))),
         r
       )
     )
-      == Some{Pair.snd(St, Spec.Answer, Node.asked(found, s, r, w, t, q))}: Maybe<&2, Spec.Answer>
+      == Some{
+        Pair.snd(NodeState, Spec.Answer, VendNode.asked(found, s, r, w, t, q))
+      }: Maybe<&2, Spec.Answer>
   }
 
 def seen_after_asked(found, s, r, w, t, q):
@@ -2524,7 +2781,12 @@ def seen_after_asked(found, s, r, w, t, q):
       h =>
         +s = s
         +r = r
-        %Equal.sym(Maybe<&2, Seen>, Tables.Table.get(Seen, St.seen(s), r), Some{Seen{a, p}}, h):
+        %Equal.sym(
+          Maybe<&2, Seen>,
+          Tables.Table.get(Seen, NodeState.seen(s), r),
+          Some{Seen{a, p}},
+          h
+        ):
           {Seen.answer.of(_) == Some{a}: Maybe<&2, Spec.Answer>}
         {==}
     case None{}:
@@ -2535,7 +2797,7 @@ def seen_after_asked(found, s, r, w, t, q):
 
 # after a change of the request r, the node keeps its answer under r
 law seen_after_ask:
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for t: String
@@ -2544,24 +2806,26 @@ law seen_after_ask:
     Seen.answer.of(
       Tables.Table.get(
         Seen,
-        St.seen(Pair.fst(St, Spec.Answer, Spec.Node.ask(s, Spec.Envelope{r, w, t}, q))),
+        NodeState.seen(
+          Pair.fst(NodeState, Spec.Answer, Spec.VendNode.ask(s, Spec.Envelope{r, w, t}, q))
+        ),
         r
       )
     )
       == Some{
-        Pair.snd(St, Spec.Answer, Spec.Node.ask(s, Spec.Envelope{r, w, t}, q))
+        Pair.snd(NodeState, Spec.Answer, Spec.VendNode.ask(s, Spec.Envelope{r, w, t}, q))
       }: Maybe<&2, Spec.Answer>
   }
 
 def seen_after_ask(s, r, w, t, q):
   +s = s
   +r = r
-  seen_after_asked(Tables.Table.get(Seen, St.seen(s), r), s, r, w, t, q)({==})
+  seen_after_asked(Tables.Table.get(Seen, NodeState.seen(s), r), s, r, w, t, q)({==})
 
 # a request whose answer the node keeps gets that answer, and changes nothing
 law asked_found:
   for found: Maybe<&2, Seen>
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for t: String
@@ -2569,35 +2833,35 @@ law asked_found:
   for a: Spec.Answer
   {
     Seen.answer.of(found) == Some{a}: Maybe<&2, Spec.Answer>
-  } -> {Node.asked(found, s, r, w, t, q) == (s, a): St & Spec.Answer}
+  } -> {VendNode.asked(found, s, r, w, t, q) == (s, a): NodeState & Spec.Answer}
 
 def asked_found(found, s, r, w, t, q, a):
   match found:
     case None{}:
       h => Empty.absurd(
-        {Node.asked(None{}, s, r, w, t, q) == (s, a): St & Spec.Answer},
+        {VendNode.asked(None{}, s, r, w, t, q) == (s, a): NodeState & Spec.Answer},
         Maybes.Maybe.none_ne_some(Spec.Answer, a, h)
       )
     case Some{Seen{b, p}}:
       h =>
-        %Maybes.Maybe.some_inj(Spec.Answer, b, a, h): {(s, b) == (s, _): St & Spec.Answer}
+        %Maybes.Maybe.some_inj(Spec.Answer, b, a, h): {(s, b) == (s, _): NodeState & Spec.Answer}
         {==}
 
 # the versions after a change are its new ones joined to the old
 law versions_after_applied:
-  for s: St
+  for s: NodeState
   for r: String
   for out: Out
   {
-    St.versions(
-      Pair.fst(St, Spec.Answer, Node.applied(s, r, out))
+    NodeState.versions(
+      Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, out))
     )
-      == Ver.add(Out.versions(out), St.versions(s)): Tables.Table<Ver>
+      == VersionRecord.add(Out.versions(out), NodeState.versions(s)): Tables.Table<VersionRecord>
   }
 
 def versions_after_applied(s, r, out):
   match s out:
-    case St{k, vs, bs, ms, gs, cs, ss, l} Out{nv, nb, nm, ng, nc, news, a}:
+    case NodeState{k, vs, bs, ms, gs, cs, ss, l} Out{nv, nb, nm, ng, nc, news, a}:
       {==}
 
 # adding a version keeps one found by another key: by whether the keys are the
@@ -2605,24 +2869,24 @@ def versions_after_applied(s, r, out):
 law put_keeps.at:
   for hit: Bool
   for i: String
-  for x: Ver
-  for vs: Tables.Table<Ver>
+  for x: VersionRecord
+  for vs: Tables.Table<VersionRecord>
   for v: String
-  for u: Ver
+  for u: VersionRecord
   {
     String.eq(i, v) == hit: Bool
   } -> {
-    Ver.has(vs, i) == False{}: Bool
+    VersionRecord.has(vs, i) == False{}: Bool
   } -> {
-    Tables.Table.get(Ver, vs, v) == Some{u}: Maybe<&2, Ver>
+    Tables.Table.get(VersionRecord, vs, v) == Some{u}: Maybe<&2, VersionRecord>
   } -> {
     Bools.Bool.when(
-      Maybe<&2, Ver>,
+      Maybe<&2, VersionRecord>,
       hit,
       z => Some{x},
-      z => Tables.Table.get(Ver, vs, v)
+      z => Tables.Table.get(VersionRecord, vs, v)
     )
-      == Some{u}: Maybe<&2, Ver>
+      == Some{u}: Maybe<&2, VersionRecord>
   }
 
 def put_keeps.at(hit, i, x, vs, v, u):
@@ -2638,12 +2902,12 @@ def put_keeps.at(hit, i, x, vs, v, u):
         Empty.absurd(
           {
             Bools.Bool.when(
-              Maybe<&2, Ver>,
+              Maybe<&2, VersionRecord>,
               True{},
               z => Some{x},
-              z => Tables.Table.get(Ver, vs, v)
+              z => Tables.Table.get(VersionRecord, vs, v)
             )
-              == Some{u}: Maybe<&2, Ver>
+              == Some{u}: Maybe<&2, VersionRecord>
           },
           Shared.Bool.false_ne_true(
             Equal.sym(
@@ -2653,34 +2917,34 @@ def put_keeps.at(hit, i, x, vs, v, u):
               Equal.trans(
                 Bool,
                 True{},
-                Ver.has(vs, v),
+                VersionRecord.has(vs, v),
                 False{},
                 Equal.sym(
                   Bool,
-                  Ver.has(vs, v),
+                  VersionRecord.has(vs, v),
                   True{},
                   Equal.cong(
-                    Maybe<&2, Ver>,
+                    Maybe<&2, VersionRecord>,
                     Bool,
-                    m => Maybe.is_some(&2, Ver, m),
-                    Tables.Table.get(Ver, vs, v),
+                    m => Maybe.is_some(&2, VersionRecord, m),
+                    Tables.Table.get(VersionRecord, vs, v),
                     Some{u},
                     hf
                   )
                 ),
                 Equal.trans(
                   Bool,
-                  Ver.has(vs, v),
-                  Ver.has(vs, i),
+                  VersionRecord.has(vs, v),
+                  VersionRecord.has(vs, i),
                   False{},
                   Equal.sym(
                     Bool,
-                    Ver.has(vs, i),
-                    Ver.has(vs, v),
+                    VersionRecord.has(vs, i),
+                    VersionRecord.has(vs, v),
                     Equal.cong(
                       String,
                       Bool,
-                      k => Ver.has(vs, k),
+                      k => VersionRecord.has(vs, k),
                       i,
                       v,
                       Strings.String.eq_sound(i, v)(he)
@@ -2698,15 +2962,22 @@ def put_keeps.at(hit, i, x, vs, v, u):
 law put_keeps:
   for held: Bool
   for i: String
-  for x: Ver
-  for vs: Tables.Table<Ver>
+  for x: VersionRecord
+  for vs: Tables.Table<VersionRecord>
   for v: String
-  for u: Ver
+  for u: VersionRecord
   {
-    Ver.has(vs, i) == held: Bool
+    VersionRecord.has(vs, i) == held: Bool
   } -> {
-    Tables.Table.get(Ver, vs, v) == Some{u}: Maybe<&2, Ver>
-  } -> {Tables.Table.get(Ver, Ver.add.put(i, x, vs, held), v) == Some{u}: Maybe<&2, Ver>}
+    Tables.Table.get(VersionRecord, vs, v) == Some{u}: Maybe<&2, VersionRecord>
+  } -> {
+    Tables.Table.get(
+      VersionRecord,
+      VersionRecord.add.put(i, x, vs, held),
+      v
+    )
+      == Some{u}: Maybe<&2, VersionRecord>
+  }
 
 def put_keeps(held, i, x, vs, v, u):
   match held:
@@ -2719,44 +2990,58 @@ def put_keeps(held, i, x, vs, v, u):
         +vs = vs
         +v = v
         %Equal.sym(
-          Maybe<&2, Ver>,
-          Tables.Table.get(Ver, Tables.Table.set(Ver, vs, i, x), v),
+          Maybe<&2, VersionRecord>,
+          Tables.Table.get(VersionRecord, Tables.Table.set(VersionRecord, vs, i, x), v),
           Bools.Bool.when(
-            Maybe<&2, Ver>,
+            Maybe<&2, VersionRecord>,
             String.eq(i, v),
             z => Some{x},
-            z => Tables.Table.get(Ver, vs, v)
+            z => Tables.Table.get(VersionRecord, vs, v)
           ),
-          Tables.Table.get_set(Ver, vs, i, x, v)
+          Tables.Table.get_set(VersionRecord, vs, i, x, v)
         ):
-          {_ == Some{u}: Maybe<&2, Ver>}
+          {_ == Some{u}: Maybe<&2, VersionRecord>}
         put_keeps.at(String.eq(i, v), i, x, vs, v, u)({==})(hh)(hf)
 
 # adding one version keeps every version that was found
 law add_one_keeps:
-  for c: Tables.Row<Ver>
-  for vs: Tables.Table<Ver>
+  for c: Tables.Row<VersionRecord>
+  for vs: Tables.Table<VersionRecord>
   for v: String
-  for u: Ver
+  for u: VersionRecord
   {
-    Tables.Table.get(Ver, vs, v) == Some{u}: Maybe<&2, Ver>
-  } -> {Tables.Table.get(Ver, Ver.add.one(c, vs), v) == Some{u}: Maybe<&2, Ver>}
+    Tables.Table.get(VersionRecord, vs, v) == Some{u}: Maybe<&2, VersionRecord>
+  } -> {
+    Tables.Table.get(
+      VersionRecord,
+      VersionRecord.add.one(c, vs),
+      v
+    )
+      == Some{u}: Maybe<&2, VersionRecord>
+  }
 
 def add_one_keeps(c, vs, v, u):
   match c:
     case Tables.Row{+i, x}:
       +vs = vs
-      put_keeps(Ver.has(vs, i), i, x, vs, v, u)({==})
+      put_keeps(VersionRecord.has(vs, i), i, x, vs, v, u)({==})
 
 # adding versions keeps every version that was found
 law add_keeps:
-  for news: List<&2, Tables.Row<Ver>>
-  for vs: Tables.Table<Ver>
+  for news: List<&2, Tables.Row<VersionRecord>>
+  for vs: Tables.Table<VersionRecord>
   for v: String
-  for u: Ver
+  for u: VersionRecord
   {
-    Tables.Table.get(Ver, vs, v) == Some{u}: Maybe<&2, Ver>
-  } -> {Tables.Table.get(Ver, Ver.add(news, vs), v) == Some{u}: Maybe<&2, Ver>}
+    Tables.Table.get(VersionRecord, vs, v) == Some{u}: Maybe<&2, VersionRecord>
+  } -> {
+    Tables.Table.get(
+      VersionRecord,
+      VersionRecord.add(news, vs),
+      v
+    )
+      == Some{u}: Maybe<&2, VersionRecord>
+  }
 
 def add_keeps(news, vs, v, u):
   match news:
@@ -2767,27 +3052,31 @@ def add_keeps(news, vs, v, u):
         +vs = vs
         +v = v
         +u = u
-        add_keeps(r, Ver.add.one(c, vs), v, u)(add_one_keeps(c, vs, v, u)(h))
+        add_keeps(r, VersionRecord.add.one(c, vs), v, u)(add_one_keeps(c, vs, v, u)(h))
 
 # the bytes of a resource of the version that m holds stay, when that version
 # stays
 law kept_at:
-  for m: Maybe<&2, Ver>
-  for vs: Tables.Table<Ver>
-  for ws: Tables.Table<Ver>
+  for m: Maybe<&2, VersionRecord>
+  for vs: Tables.Table<VersionRecord>
+  for ws: Tables.Table<VersionRecord>
   for v: String
   for n: String
   for x: List<&2, U32>
   {
-    Tables.Table.get(Ver, vs, v) == m: Maybe<&2, Ver>
+    Tables.Table.get(VersionRecord, vs, v) == m: Maybe<&2, VersionRecord>
   } -> (
-    @u: Ver -> {
-      Tables.Table.get(Ver, vs, v) == Some{u}: Maybe<&2, Ver>
-    } -> {Tables.Table.get(Ver, ws, v) == Some{u}: Maybe<&2, Ver>}
+    @u: VersionRecord -> {
+      Tables.Table.get(VersionRecord, vs, v) == Some{u}: Maybe<&2, VersionRecord>
+    } -> {Tables.Table.get(VersionRecord, ws, v) == Some{u}: Maybe<&2, VersionRecord>}
   ) -> {
-    Blob.find.of(Ver.blobs.of(m), n) == Some{x}: Maybe<&2, List<&2, U32>>
+    Blob.find.of(VersionRecord.blobs.of(m), n) == Some{x}: Maybe<&2, List<&2, U32>>
   } -> {
-    Blob.find.of(Ver.blobs.of(Tables.Table.get(Ver, ws, v)), n) == Some{x}: Maybe<&2, List<&2, U32>>
+    Blob.find.of(
+      VersionRecord.blobs.of(Tables.Table.get(VersionRecord, ws, v)),
+      n
+    )
+      == Some{x}: Maybe<&2, List<&2, U32>>
   }
 
 def kept_at(m, vs, ws, v, n, x):
@@ -2796,7 +3085,7 @@ def kept_at(m, vs, ws, v, n, x):
       he => hk => hc => Empty.absurd(
         {
           Blob.find.of(
-            Ver.blobs.of(Tables.Table.get(Ver, ws, v)),
+            VersionRecord.blobs.of(Tables.Table.get(VersionRecord, ws, v)),
             n
           )
             == Some{x}: Maybe<&2, List<&2, U32>>
@@ -2807,14 +3096,19 @@ def kept_at(m, vs, ws, v, n, x):
       he => hk => hc =>
         +ws = ws
         +v = v
-        %Equal.sym(Maybe<&2, Ver>, Tables.Table.get(Ver, ws, v), Some{u}, hk(u)(he)):
-          {Blob.find.of(Ver.blobs.of(_), n) == Some{x}: Maybe<&2, List<&2, U32>>}
+        %Equal.sym(
+          Maybe<&2, VersionRecord>,
+          Tables.Table.get(VersionRecord, ws, v),
+          Some{u},
+          hk(u)(he)
+        ):
+          {Blob.find.of(VersionRecord.blobs.of(_), n) == Some{x}: Maybe<&2, List<&2, U32>>}
         hc
 
 # a change or a retry keeps every version that existed, with its content
 law kept_asked:
   for found: Maybe<&2, Seen>
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for t: String
@@ -2823,10 +3117,10 @@ law kept_asked:
   for v: String
   for x: List<&2, U32>
   {
-    St.content(s, n, Spec.Point.At{v}) == Some{x}: Maybe<&2, List<&2, U32>>
+    NodeState.content(s, n, Spec.Point.At{v}) == Some{x}: Maybe<&2, List<&2, U32>>
   } -> {
-    St.content(
-      Pair.fst(St, Spec.Answer, Node.asked(found, s, r, w, t, q)),
+    NodeState.content(
+      Pair.fst(NodeState, Spec.Answer, VendNode.asked(found, s, r, w, t, q)),
       n,
       Spec.Point.At{v}
     )
@@ -2846,26 +3140,30 @@ def kept_asked(found, s, r, w, t, q, n, v, x):
         +q = q
         +v = v
         %Equal.sym(
-          Tables.Table<Ver>,
-          St.versions(Pair.fst(St, Spec.Answer, Node.applied(s, r, Step.of(s, r, w, t, q)))),
-          Ver.add(Out.versions(Step.of(s, r, w, t, q)), St.versions(s)),
+          Tables.Table<VersionRecord>,
+          NodeState.versions(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Step.of(s, r, w, t, q)))
+          ),
+          VersionRecord.add(Out.versions(Step.of(s, r, w, t, q)), NodeState.versions(s)),
           versions_after_applied(s, r, Step.of(s, r, w, t, q))
         ):
           {
             Blob.find.of(
-              Ver.blobs.of(Tables.Table.get(Ver, _, v)),
+              VersionRecord.blobs.of(Tables.Table.get(VersionRecord, _, v)),
               n
             )
               == Some{x}: Maybe<&2, List<&2, U32>>
           }
         kept_at(
-          Tables.Table.get(Ver, St.versions(s), v),
-          St.versions(s),
-          Ver.add(Out.versions(Step.of(s, r, w, t, q)), St.versions(s)),
+          Tables.Table.get(VersionRecord, NodeState.versions(s), v),
+          NodeState.versions(s),
+          VersionRecord.add(Out.versions(Step.of(s, r, w, t, q)), NodeState.versions(s)),
           v,
           n,
           x
-        )({==})(u => add_keeps(Out.versions(Step.of(s, r, w, t, q)), St.versions(s), v, u))(h)
+        )(
+          {==}
+        )(u => add_keeps(Out.versions(Step.of(s, r, w, t, q)), NodeState.versions(s), v, u))(h)
 
 # a number for each kind of answer, so that two kinds can be told apart
 def Answer.tag(a: Spec.Answer) -> Nat:
@@ -2991,167 +3289,176 @@ def outcome_new(found, held, at):
 
 # an ID that is not taken is not held
 law taken_free:
-  for vs: Tables.Table<Ver>
+  for vs: Tables.Table<VersionRecord>
   for k: String
-  {Ver.taken(vs, k) == False{}: Bool} -> {Ver.has(vs, k) == False{}: Bool}
+  {VersionRecord.taken(vs, k) == False{}: Bool} -> {VersionRecord.has(vs, k) == False{}: Bool}
 
 def taken_free(vs, k):
   +vs = vs
   +k = k
-  Bools.Bool.or_false_left(Ver.has(vs, k), Ver.named(Tables.Table.keys(Ver, vs), vs, k))
+  Bools.Bool.or_false_left(
+    VersionRecord.has(vs, k),
+    VersionRecord.named(Tables.Table.keys(VersionRecord, vs), vs, k)
+  )
 
 # a new request has no kept answer
 law new_found:
-  for s: St
+  for s: NodeState
   for r: String
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
-  } -> {Tables.Table.get(Seen, St.seen(s), r) == None{}: Maybe<&2, Seen>}
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+  } -> {Tables.Table.get(Seen, NodeState.seen(s), r) == None{}: Maybe<&2, Seen>}
 
 def new_found(s, r):
   h =>
     +s = s
     +r = r
     Pair.fst(
-      {Tables.Table.get(Seen, St.seen(s), r) == None{}: Maybe<&2, Seen>},
-      {Ver.taken(St.versions(s), r) == False{}: Bool},
+      {Tables.Table.get(Seen, NodeState.seen(s), r) == None{}: Maybe<&2, Seen>},
+      {VersionRecord.taken(NodeState.versions(s), r) == False{}: Bool},
       outcome_new(
-        Tables.Table.get(Seen, St.seen(s), r),
-        Ver.taken(St.versions(s), r),
-        List.length(&2, Logged, St.log(s))
+        Tables.Table.get(Seen, NodeState.seen(s), r),
+        VersionRecord.taken(NodeState.versions(s), r),
+        List.length(&2, Logged, NodeState.log(s))
       )(h)
     )
 
 # no version has the ID of a new request
 law new_free:
-  for s: St
+  for s: NodeState
   for r: String
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
-  } -> {Ver.taken(St.versions(s), r) == False{}: Bool}
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+  } -> {VersionRecord.taken(NodeState.versions(s), r) == False{}: Bool}
 
 def new_free(s, r):
   h =>
     +s = s
     +r = r
     Pair.snd(
-      {Tables.Table.get(Seen, St.seen(s), r) == None{}: Maybe<&2, Seen>},
-      {Ver.taken(St.versions(s), r) == False{}: Bool},
+      {Tables.Table.get(Seen, NodeState.seen(s), r) == None{}: Maybe<&2, Seen>},
+      {VersionRecord.taken(NodeState.versions(s), r) == False{}: Bool},
       outcome_new(
-        Tables.Table.get(Seen, St.seen(s), r),
-        Ver.taken(St.versions(s), r),
-        List.length(&2, Logged, St.log(s))
+        Tables.Table.get(Seen, NodeState.seen(s), r),
+        VersionRecord.taken(NodeState.versions(s), r),
+        List.length(&2, Logged, NodeState.log(s))
       )(h)
     )
 
 # a new request runs its change, and the node keeps its answer
 law ask_step:
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for z: String
   for q: Spec.Ask
-  for t: St
+  for t: NodeState
   for a: Spec.Answer
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.ask(s, Spec.Envelope{r, w, z}, q) == (t, a): St & Spec.Answer
-  } -> {Node.applied(s, r, Step.of(s, r, w, z, q)) == (t, a): St & Spec.Answer}
+    Spec.VendNode.ask(s, Spec.Envelope{r, w, z}, q) == (t, a): NodeState & Spec.Answer
+  } -> {VendNode.applied(s, r, Step.of(s, r, w, z, q)) == (t, a): NodeState & Spec.Answer}
 
 def ask_step(s, r, w, z, q, t, a):
   hn => h =>
     +s = s
     +r = r
-    %new_found(s, r)(hn): {Node.asked(_, s, r, w, z, q) == (t, a): St & Spec.Answer}
+    %new_found(s, r)(hn): {VendNode.asked(_, s, r, w, z, q) == (t, a): NodeState & Spec.Answer}
     h
 
 # a change whose result is (t, a) answers a
 law applied_answer:
-  for s: St
+  for s: NodeState
   for r: String
   for out: Out
-  for t: St
+  for t: NodeState
   for a: Spec.Answer
-  {Node.applied(s, r, out) == (t, a): St & Spec.Answer} -> {Out.answer(out) == a: Spec.Answer}
+  {
+    VendNode.applied(s, r, out) == (t, a): NodeState & Spec.Answer
+  } -> {Out.answer(out) == a: Spec.Answer}
 
 def applied_answer(s, r, out, t, a):
   match s out:
-    case St{k, vs, bs, ms, gs, cs, ss, l} Out{nv, nb, nm, ng, nc, news, b}:
+    case NodeState{k, vs, bs, ms, gs, cs, ss, l} Out{nv, nb, nm, ng, nc, news, b}:
       h => Equal.cong(
-        St & Spec.Answer,
+        NodeState & Spec.Answer,
         Spec.Answer,
-        x => Pair.snd(St, Spec.Answer, x),
-        Node.applied(St{k, vs, bs, ms, gs, cs, ss, l}, r, Out{nv, nb, nm, ng, nc, news, b}),
+        x => Pair.snd(NodeState, Spec.Answer, x),
+        VendNode.applied(
+          NodeState{k, vs, bs, ms, gs, cs, ss, l},
+          r,
+          Out{nv, nb, nm, ng, nc, news, b}
+        ),
         (t, a),
         h
       )
 
 # a change whose result is (t, a) leaves the node as t
 law applied_state:
-  for s: St
+  for s: NodeState
   for r: String
   for out: Out
-  for t: St
+  for t: NodeState
   for a: Spec.Answer
   {
-    Node.applied(s, r, out) == (t, a): St & Spec.Answer
-  } -> {Pair.fst(St, Spec.Answer, Node.applied(s, r, out)) == t: St}
+    VendNode.applied(s, r, out) == (t, a): NodeState & Spec.Answer
+  } -> {Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, out)) == t: NodeState}
 
 def applied_state(s, r, out, t, a):
   h => Equal.cong(
-    St & Spec.Answer,
-    St,
-    x => Pair.fst(St, Spec.Answer, x),
-    Node.applied(s, r, out),
+    NodeState & Spec.Answer,
+    NodeState,
+    x => Pair.fst(NodeState, Spec.Answer, x),
+    VendNode.applied(s, r, out),
     (t, a),
     h
   )
 
 # the answer after a change is the change's
 law answer_after_applied:
-  for s: St
+  for s: NodeState
   for r: String
   for out: Out
-  {Pair.snd(St, Spec.Answer, Node.applied(s, r, out)) == Out.answer(out): Spec.Answer}
+  {Pair.snd(NodeState, Spec.Answer, VendNode.applied(s, r, out)) == Out.answer(out): Spec.Answer}
 
 def answer_after_applied(s, r, out):
   match s out:
-    case St{k, vs, bs, ms, gs, cs, ss, l} Out{nv, nb, nm, ng, nc, news, a}:
+    case NodeState{k, vs, bs, ms, gs, cs, ss, l} Out{nv, nb, nm, ng, nc, news, a}:
       {==}
 
 # the branches after a change are the change's
 law branches_after_applied:
-  for s: St
+  for s: NodeState
   for r: String
   for out: Out
   {
-    St.branches(
-      Pair.fst(St, Spec.Answer, Node.applied(s, r, out))
+    NodeState.branches(
+      Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, out))
     )
-      == Out.branches(out): Tables.Table<Br>
+      == Out.branches(out): Tables.Table<BranchRecord>
   }
 
 def branches_after_applied(s, r, out):
   match s out:
-    case St{k, vs, bs, ms, gs, cs, ss, l} Out{nv, nb, nm, ng, nc, news, a}:
+    case NodeState{k, vs, bs, ms, gs, cs, ss, l} Out{nv, nb, nm, ng, nc, news, a}:
       {==}
 
 # the groups after a change are the change's
 law groups_after_applied:
-  for s: St
+  for s: NodeState
   for r: String
   for out: Out
   {
-    St.groups(
-      Pair.fst(St, Spec.Answer, Node.applied(s, r, out))
+    NodeState.groups(
+      Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, out))
     )
-      == Out.groups(out): Tables.Table<Grp>
+      == Out.groups(out): Tables.Table<GroupRecord>
   }
 
 def groups_after_applied(s, r, out):
   match s out:
-    case St{k, vs, bs, ms, gs, cs, ss, l} Out{nv, nb, nm, ng, nc, news, a}:
+    case NodeState{k, vs, bs, ms, gs, cs, ss, l} Out{nv, nb, nm, ng, nc, news, a}:
       {==}
 
 # a version whose ID is new is found after it is added
@@ -3161,16 +3468,16 @@ law add_new_find:
   for ps: List<&2, String>
   for w: String
   for z: String
-  for vs: Tables.Table<Ver>
+  for vs: Tables.Table<VersionRecord>
   {
-    Ver.has(vs, r) == False{}: Bool
+    VersionRecord.has(vs, r) == False{}: Bool
   } -> {
     Tables.Table.get(
-      Ver,
-      Ver.add([Tables.Row{r, Ver{bl, ps, w, z}}], vs),
+      VersionRecord,
+      VersionRecord.add([Tables.Row{r, VersionRecord{bl, ps, w, z}}], vs),
       r
     )
-      == Some{Ver{bl, ps, w, z}}: Maybe<&2, Ver>
+      == Some{VersionRecord{bl, ps, w, z}}: Maybe<&2, VersionRecord>
   }
 
 def add_new_find(r, bl, ps, w, z, vs):
@@ -3181,21 +3488,21 @@ def add_new_find(r, bl, ps, w, z, vs):
     +ps = ps
     +w = w
     +z = z
-    %Equal.sym(Bool, Ver.has(vs, r), False{}, hh):
+    %Equal.sym(Bool, VersionRecord.has(vs, r), False{}, hh):
       {
         Tables.Table.get(
-          Ver,
-          Ver.add.put(r, Ver{bl, ps, w, z}, vs, _),
+          VersionRecord,
+          VersionRecord.add.put(r, VersionRecord{bl, ps, w, z}, vs, _),
           r
         )
-          == Some{Ver{bl, ps, w, z}}: Maybe<&2, Ver>
+          == Some{VersionRecord{bl, ps, w, z}}: Maybe<&2, VersionRecord>
       }
-    Tables.Table.get_after_set(Ver, vs, r, Ver{bl, ps, w, z})
+    Tables.Table.get_after_set(VersionRecord, vs, r, VersionRecord{bl, ps, w, z})
 
 # a write on the head v of the branch that m holds, as its owner, is written
 law write_on_head:
-  for m: Maybe<&2, Br>
-  for s: St
+  for m: Maybe<&2, BranchRecord>
+  for s: NodeState
   for r: String
   for w: String
   for t: String
@@ -3204,7 +3511,7 @@ law write_on_head:
   for v: String
   for x: List<&2, U32>
   {
-    Br.head.of(m) == Some{v}: Maybe<&2, String>
+    BranchRecord.head.of(m) == Some{v}: Maybe<&2, String>
   } -> {
     Owner.in(s, m) == True{}: Bool
   } -> {
@@ -3226,29 +3533,29 @@ def write_on_head(m, s, r, w, t, n, b, v, x):
         },
         Maybes.Maybe.none_ne_some(String, v, hh)
       )
-    case Some{Br{h, o, e, c}}:
+    case Some{BranchRecord{h, o, e, c}}:
       hh => ho =>
         +s = s
         +r = r
         +v = v
-        %Equal.sym(Bool, Owner.of(s, Br{h, o, e, c}), True{}, ho):
+        %Equal.sym(Bool, Owner.of(s, BranchRecord{h, o, e, c}), True{}, ho):
           {
             Out.answer(
-              Write.on(_, s, r, w, t, n, b, Some{v}, x, Br{h, o, e, c})
+              Write.on(_, s, r, w, t, n, b, Some{v}, x, BranchRecord{h, o, e, c})
             )
               == Spec.Answer.Write{Spec.Write.Written{r}}: Spec.Answer
           }
         %Equal.sym(String, h, v, Maybes.Maybe.some_inj(String, h, v, hh)):
           {
             Out.answer(
-              Write.at(String.eq(v, _), s, r, w, t, n, b, x, Br{h, o, e, c})
+              Write.at(String.eq(v, _), s, r, w, t, n, b, x, BranchRecord{h, o, e, c})
             )
               == Spec.Answer.Write{Spec.Write.Written{r}}: Spec.Answer
           }
         %Equal.sym(Bool, String.eq(v, v), True{}, Strings.String.eq_refl(v)):
           {
             Out.answer(
-              Write.at(_, s, r, w, t, n, b, x, Br{h, o, e, c})
+              Write.at(_, s, r, w, t, n, b, x, BranchRecord{h, o, e, c})
             )
               == Spec.Answer.Write{Spec.Write.Written{r}}: Spec.Answer
           }
@@ -3257,7 +3564,7 @@ def write_on_head(m, s, r, w, t, n, b, v, x):
 # a write as the owner that answers Written: the head holds the bytes
 law raw_at:
   for ok: Bool
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for z: String
@@ -3270,19 +3577,26 @@ law raw_at:
   for b: String
   for v: String
   {
-    Ver.taken(St.versions(s), r) == False{}: Bool
+    VersionRecord.taken(NodeState.versions(s), r) == False{}: Bool
   } -> {
     Out.answer(
-      Write.at(ok, s, r, w, z, n, b, x, Br{h, o, e, c})
+      Write.at(ok, s, r, w, z, n, b, x, BranchRecord{h, o, e, c})
     )
       == Spec.Answer.Write{Spec.Write.Written{v}}: Spec.Answer
   } -> {
     Blob.find.of(
-      Ver.blobs.of(
-        Ver.find.of(
-          Ver.add(Out.versions(Write.at(ok, s, r, w, z, n, b, x, Br{h, o, e, c})), St.versions(s)),
-          Br.head.of(
-            Tables.Table.get(Br, Out.branches(Write.at(ok, s, r, w, z, n, b, x, Br{h, o, e, c})), b)
+      VersionRecord.blobs.of(
+        VersionRecord.find.of(
+          VersionRecord.add(
+            Out.versions(Write.at(ok, s, r, w, z, n, b, x, BranchRecord{h, o, e, c})),
+            NodeState.versions(s)
+          ),
+          BranchRecord.head.of(
+            Tables.Table.get(
+              BranchRecord,
+              Out.branches(Write.at(ok, s, r, w, z, n, b, x, BranchRecord{h, o, e, c})),
+              b
+            )
           )
         )
       ),
@@ -3297,16 +3611,16 @@ def raw_at(ok, s, r, w, z, n, x, h, o, e, c, b, v):
       hh => ha => Empty.absurd(
         {
           Blob.find.of(
-            Ver.blobs.of(
-              Ver.find.of(
-                Ver.add(
-                  Out.versions(Write.at(False{}, s, r, w, z, n, b, x, Br{h, o, e, c})),
-                  St.versions(s)
+            VersionRecord.blobs.of(
+              VersionRecord.find.of(
+                VersionRecord.add(
+                  Out.versions(Write.at(False{}, s, r, w, z, n, b, x, BranchRecord{h, o, e, c})),
+                  NodeState.versions(s)
                 ),
-                Br.head.of(
+                BranchRecord.head.of(
                   Tables.Table.get(
-                    Br,
-                    Out.branches(Write.at(False{}, s, r, w, z, n, b, x, Br{h, o, e, c})),
+                    BranchRecord,
+                    Out.branches(Write.at(False{}, s, r, w, z, n, b, x, BranchRecord{h, o, e, c})),
                     b
                   )
                 )
@@ -3333,30 +3647,44 @@ def raw_at(ok, s, r, w, z, n, x, h, o, e, c, b, v):
         +x = x
         +b = b
         %Equal.sym(
-          Maybe<&2, Br>,
-          Tables.Table.get(Br, Tables.Table.set(Br, St.branches(s), b, Br{r, o, e, 1n+c}), b),
-          Some{Br{r, o, e, 1n+c}},
-          Tables.Table.get_after_set(Br, St.branches(s), b, Br{r, o, e, 1n+c})
+          Maybe<&2, BranchRecord>,
+          Tables.Table.get(
+            BranchRecord,
+            Tables.Table.set(BranchRecord, NodeState.branches(s), b, BranchRecord{r, o, e, 1n+c}),
+            b
+          ),
+          Some{BranchRecord{r, o, e, 1n+c}},
+          Tables.Table.get_after_set(
+            BranchRecord,
+            NodeState.branches(s),
+            b,
+            BranchRecord{r, o, e, 1n+c}
+          )
         ):
           {
             Blob.find.of(
-              Ver.blobs.of(
-                Ver.find.of(
-                  Ver.add(
+              VersionRecord.blobs.of(
+                VersionRecord.find.of(
+                  VersionRecord.add(
                     [
                       Tables.Row{
                         r,
-                        Ver{
-                          Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s), h), n, x),
+                        VersionRecord{
+                          Tables.Table.set(
+                            List<&2, U32>,
+                            Vers.blobs(NodeState.versions(s), h),
+                            n,
+                            x
+                          ),
                           [h],
                           w,
                           z
                         }
                       }
                     ],
-                    St.versions(s)
+                    NodeState.versions(s)
                   ),
-                  Br.head.of(_)
+                  BranchRecord.head.of(_)
                 )
               ),
               n
@@ -3364,44 +3692,49 @@ def raw_at(ok, s, r, w, z, n, x, h, o, e, c, b, v):
               == Some{x}: Maybe<&2, List<&2, U32>>
           }
         %Equal.sym(
-          Maybe<&2, Ver>,
+          Maybe<&2, VersionRecord>,
           Tables.Table.get(
-            Ver,
-            Ver.add(
+            VersionRecord,
+            VersionRecord.add(
               [
                 Tables.Row{
                   r,
-                  Ver{
-                    Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s), h), n, x),
+                  VersionRecord{
+                    Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s), h), n, x),
                     [h],
                     w,
                     z
                   }
                 }
               ],
-              St.versions(s)
+              NodeState.versions(s)
             ),
             r
           ),
           Some{
-            Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s), h), n, x), [h], w, z}
+            VersionRecord{
+              Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s), h), n, x),
+              [h],
+              w,
+              z
+            }
           },
           add_new_find(
             r,
-            Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s), h), n, x),
+            Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s), h), n, x),
             [h],
             w,
             z,
-            St.versions(s)
-          )(taken_free(St.versions(s), r)(hh))
+            NodeState.versions(s)
+          )(taken_free(NodeState.versions(s), r)(hh))
         ):
-          {Blob.find.of(Ver.blobs.of(_), n) == Some{x}: Maybe<&2, List<&2, U32>>}
-        Tables.Table.get_after_set(List<&2, U32>, Vers.blobs(St.versions(s), h), n, x)
+          {Blob.find.of(VersionRecord.blobs.of(_), n) == Some{x}: Maybe<&2, List<&2, U32>>}
+        Tables.Table.get_after_set(List<&2, U32>, Vers.blobs(NodeState.versions(s), h), n, x)
 
 # a write on a branch, as its owner or not, that answers Written
 law raw_on:
   for owner: Bool
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for z: String
@@ -3415,24 +3748,24 @@ law raw_on:
   for c: Nat
   for v: String
   {
-    Ver.taken(St.versions(s), r) == False{}: Bool
+    VersionRecord.taken(NodeState.versions(s), r) == False{}: Bool
   } -> {
     Out.answer(
-      Write.on(owner, s, r, w, z, n, b, base, x, Br{h, o, e, c})
+      Write.on(owner, s, r, w, z, n, b, base, x, BranchRecord{h, o, e, c})
     )
       == Spec.Answer.Write{Spec.Write.Written{v}}: Spec.Answer
   } -> {
     Blob.find.of(
-      Ver.blobs.of(
-        Ver.find.of(
-          Ver.add(
-            Out.versions(Write.on(owner, s, r, w, z, n, b, base, x, Br{h, o, e, c})),
-            St.versions(s)
+      VersionRecord.blobs.of(
+        VersionRecord.find.of(
+          VersionRecord.add(
+            Out.versions(Write.on(owner, s, r, w, z, n, b, base, x, BranchRecord{h, o, e, c})),
+            NodeState.versions(s)
           ),
-          Br.head.of(
+          BranchRecord.head.of(
             Tables.Table.get(
-              Br,
-              Out.branches(Write.on(owner, s, r, w, z, n, b, base, x, Br{h, o, e, c})),
+              BranchRecord,
+              Out.branches(Write.on(owner, s, r, w, z, n, b, base, x, BranchRecord{h, o, e, c})),
               b
             )
           )
@@ -3452,16 +3785,20 @@ def raw_on(owner, s, r, w, z, n, b, base, x, h, o, e, c, v):
       hh => ha => Empty.absurd(
         {
           Blob.find.of(
-            Ver.blobs.of(
-              Ver.find.of(
-                Ver.add(
-                  Out.versions(Write.on(False{}, s, r, w, z, n, b, base, x, Br{h, o, e, c})),
-                  St.versions(s)
+            VersionRecord.blobs.of(
+              VersionRecord.find.of(
+                VersionRecord.add(
+                  Out.versions(
+                    Write.on(False{}, s, r, w, z, n, b, base, x, BranchRecord{h, o, e, c})
+                  ),
+                  NodeState.versions(s)
                 ),
-                Br.head.of(
+                BranchRecord.head.of(
                   Tables.Table.get(
-                    Br,
-                    Out.branches(Write.on(False{}, s, r, w, z, n, b, base, x, Br{h, o, e, c})),
+                    BranchRecord,
+                    Out.branches(
+                      Write.on(False{}, s, r, w, z, n, b, base, x, BranchRecord{h, o, e, c})
+                    ),
                     b
                   )
                 )
@@ -3482,8 +3819,8 @@ def raw_on(owner, s, r, w, z, n, b, base, x, h, o, e, c, v):
 
 # a write on the branch that m holds that answers Written
 law raw_branch:
-  for m: Maybe<&2, Br>
-  for s: St
+  for m: Maybe<&2, BranchRecord>
+  for s: NodeState
   for r: String
   for w: String
   for z: String
@@ -3493,7 +3830,7 @@ law raw_branch:
   for x: List<&2, U32>
   for v: String
   {
-    Ver.taken(St.versions(s), r) == False{}: Bool
+    VersionRecord.taken(NodeState.versions(s), r) == False{}: Bool
   } -> {
     Out.answer(
       Write.branch(m, s, r, w, z, n, b, base, x)
@@ -3501,11 +3838,18 @@ law raw_branch:
       == Spec.Answer.Write{Spec.Write.Written{v}}: Spec.Answer
   } -> {
     Blob.find.of(
-      Ver.blobs.of(
-        Ver.find.of(
-          Ver.add(Out.versions(Write.branch(m, s, r, w, z, n, b, base, x)), St.versions(s)),
-          Br.head.of(
-            Tables.Table.get(Br, Out.branches(Write.branch(m, s, r, w, z, n, b, base, x)), b)
+      VersionRecord.blobs.of(
+        VersionRecord.find.of(
+          VersionRecord.add(
+            Out.versions(Write.branch(m, s, r, w, z, n, b, base, x)),
+            NodeState.versions(s)
+          ),
+          BranchRecord.head.of(
+            Tables.Table.get(
+              BranchRecord,
+              Out.branches(Write.branch(m, s, r, w, z, n, b, base, x)),
+              b
+            )
           )
         )
       ),
@@ -3516,22 +3860,22 @@ law raw_branch:
 
 def raw_branch(m, s, r, w, z, n, b, base, x, v):
   match m base:
-    case Some{Br{+h, +o, +e, +c}} k:
+    case Some{BranchRecord{+h, +o, +e, +c}} k:
       +s = s
-      raw_on(Owner.of(s, Br{h, o, e, c}), s, r, w, z, n, b, k, x, h, o, e, c, v)
+      raw_on(Owner.of(s, BranchRecord{h, o, e, c}), s, r, w, z, n, b, k, x, h, o, e, c, v)
     case None{} Some{k}:
       hh => ha => Empty.absurd(
         {
           Blob.find.of(
-            Ver.blobs.of(
-              Ver.find.of(
-                Ver.add(
+            VersionRecord.blobs.of(
+              VersionRecord.find.of(
+                VersionRecord.add(
                   Out.versions(Write.branch(None{}, s, r, w, z, n, b, Some{k}, x)),
-                  St.versions(s)
+                  NodeState.versions(s)
                 ),
-                Br.head.of(
+                BranchRecord.head.of(
                   Tables.Table.get(
-                    Br,
+                    BranchRecord,
                     Out.branches(Write.branch(None{}, s, r, w, z, n, b, Some{k}, x)),
                     b
                   )
@@ -3558,24 +3902,34 @@ def raw_branch(m, s, r, w, z, n, b, base, x, v):
         +n = n
         +x = x
         %Equal.sym(
-          Maybe<&2, Br>,
+          Maybe<&2, BranchRecord>,
           Tables.Table.get(
-            Br,
-            Tables.Table.set(Br, St.branches(s), b, Br{r, St.self(s), 0n, 0n}),
+            BranchRecord,
+            Tables.Table.set(
+              BranchRecord,
+              NodeState.branches(s),
+              b,
+              BranchRecord{r, NodeState.self(s), 0n, 0n}
+            ),
             b
           ),
-          Some{Br{r, St.self(s), 0n, 0n}},
-          Tables.Table.get_after_set(Br, St.branches(s), b, Br{r, St.self(s), 0n, 0n})
+          Some{BranchRecord{r, NodeState.self(s), 0n, 0n}},
+          Tables.Table.get_after_set(
+            BranchRecord,
+            NodeState.branches(s),
+            b,
+            BranchRecord{r, NodeState.self(s), 0n, 0n}
+          )
         ):
           {
             Blob.find.of(
-              Ver.blobs.of(
-                Ver.find.of(
-                  Ver.add(
+              VersionRecord.blobs.of(
+                VersionRecord.find.of(
+                  VersionRecord.add(
                     [
                       Tables.Row{
                         r,
-                        Ver{
+                        VersionRecord{
                           Tables.Table.set(List<&2, U32>, Tables.Table.new(List<&2, U32>), n, x),
                           [],
                           w,
@@ -3583,9 +3937,9 @@ def raw_branch(m, s, r, w, z, n, b, base, x, v):
                         }
                       }
                     ],
-                    St.versions(s)
+                    NodeState.versions(s)
                   ),
-                  Br.head.of(_)
+                  BranchRecord.head.of(_)
                 )
               ),
               n
@@ -3593,14 +3947,14 @@ def raw_branch(m, s, r, w, z, n, b, base, x, v):
               == Some{x}: Maybe<&2, List<&2, U32>>
           }
         %Equal.sym(
-          Maybe<&2, Ver>,
+          Maybe<&2, VersionRecord>,
           Tables.Table.get(
-            Ver,
-            Ver.add(
+            VersionRecord,
+            VersionRecord.add(
               [
                 Tables.Row{
                   r,
-                  Ver{
+                  VersionRecord{
                     Tables.Table.set(List<&2, U32>, Tables.Table.new(List<&2, U32>), n, x),
                     [],
                     w,
@@ -3608,12 +3962,17 @@ def raw_branch(m, s, r, w, z, n, b, base, x, v):
                   }
                 }
               ],
-              St.versions(s)
+              NodeState.versions(s)
             ),
             r
           ),
           Some{
-            Ver{Tables.Table.set(List<&2, U32>, Tables.Table.new(List<&2, U32>), n, x), [], w, z}
+            VersionRecord{
+              Tables.Table.set(List<&2, U32>, Tables.Table.new(List<&2, U32>), n, x),
+              [],
+              w,
+              z
+            }
           },
           add_new_find(
             r,
@@ -3621,16 +3980,16 @@ def raw_branch(m, s, r, w, z, n, b, base, x, v):
             [],
             w,
             z,
-            St.versions(s)
-          )(taken_free(St.versions(s), r)(hh))
+            NodeState.versions(s)
+          )(taken_free(NodeState.versions(s), r)(hh))
         ):
-          {Blob.find.of(Ver.blobs.of(_), n) == Some{x}: Maybe<&2, List<&2, U32>>}
+          {Blob.find.of(VersionRecord.blobs.of(_), n) == Some{x}: Maybe<&2, List<&2, U32>>}
         Tables.Table.get_after_set(List<&2, U32>, Tables.Table.new(List<&2, U32>), n, x)
 
 # a write that answers Written, unless its version ID is taken
 law raw_free:
   for taken: Bool
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for z: String
@@ -3640,7 +3999,7 @@ law raw_free:
   for x: List<&2, U32>
   for v: String
   {
-    Ver.taken(St.versions(s), r) == taken: Bool
+    VersionRecord.taken(NodeState.versions(s), r) == taken: Bool
   } -> {
     Out.answer(
       Write.free(taken, s, r, w, z, n, b, base, x)
@@ -3648,11 +4007,18 @@ law raw_free:
       == Spec.Answer.Write{Spec.Write.Written{v}}: Spec.Answer
   } -> {
     Blob.find.of(
-      Ver.blobs.of(
-        Ver.find.of(
-          Ver.add(Out.versions(Write.free(taken, s, r, w, z, n, b, base, x)), St.versions(s)),
-          Br.head.of(
-            Tables.Table.get(Br, Out.branches(Write.free(taken, s, r, w, z, n, b, base, x)), b)
+      VersionRecord.blobs.of(
+        VersionRecord.find.of(
+          VersionRecord.add(
+            Out.versions(Write.free(taken, s, r, w, z, n, b, base, x)),
+            NodeState.versions(s)
+          ),
+          BranchRecord.head.of(
+            Tables.Table.get(
+              BranchRecord,
+              Out.branches(Write.free(taken, s, r, w, z, n, b, base, x)),
+              b
+            )
           )
         )
       ),
@@ -3667,15 +4033,15 @@ def raw_free(taken, s, r, w, z, n, b, base, x, v):
       hh => ha => Empty.absurd(
         {
           Blob.find.of(
-            Ver.blobs.of(
-              Ver.find.of(
-                Ver.add(
+            VersionRecord.blobs.of(
+              VersionRecord.find.of(
+                VersionRecord.add(
                   Out.versions(Write.free(True{}, s, r, w, z, n, b, base, x)),
-                  St.versions(s)
+                  NodeState.versions(s)
                 ),
-                Br.head.of(
+                BranchRecord.head.of(
                   Tables.Table.get(
-                    Br,
+                    BranchRecord,
                     Out.branches(Write.free(True{}, s, r, w, z, n, b, base, x)),
                     b
                   )
@@ -3698,12 +4064,23 @@ def raw_free(taken, s, r, w, z, n, b, base, x, v):
       hh =>
         +s = s
         +b = b
-        raw_branch(Tables.Table.get(Br, St.branches(s), b), s, r, w, z, n, b, base, x, v)(hh)
+        raw_branch(
+          Tables.Table.get(BranchRecord, NodeState.branches(s), b),
+          s,
+          r,
+          w,
+          z,
+          n,
+          b,
+          base,
+          x,
+          v
+        )(hh)
 
 # a change that adds no version and keeps the branches and marks keeps the
 # content at every point
 law same_content_out:
-  for s: St
+  for s: NodeState
   for r: String
   for cs: Tables.Table<Clash>
   for news: List<&2, Logged>
@@ -3711,31 +4088,35 @@ law same_content_out:
   for n: String
   for p: Spec.Point
   {
-    St.content(
+    NodeState.content(
       Pair.fst(
-        St,
+        NodeState,
         Spec.Answer,
-        Node.applied(s, r, Out{[], St.branches(s), St.marks(s), St.groups(s), cs, news, a})
+        VendNode.applied(
+          s,
+          r,
+          Out{[], NodeState.branches(s), NodeState.marks(s), NodeState.groups(s), cs, news, a}
+        )
       ),
       n,
       p
     )
-      == St.content(s, n, p): Maybe<&2, List<&2, U32>>
+      == NodeState.content(s, n, p): Maybe<&2, List<&2, U32>>
   }
 
 def same_content_out(s, r, cs, news, a, n, p):
   match s p:
-    case St{k, vs, bs, ms, gs, c2, ss, l} Spec.Point.At{v}:
+    case NodeState{k, vs, bs, ms, gs, c2, ss, l} Spec.Point.At{v}:
       {==}
-    case St{k, vs, bs, ms, gs, c2, ss, l} Spec.Point.Head{b}:
+    case NodeState{k, vs, bs, ms, gs, c2, ss, l} Spec.Point.Head{b}:
       {==}
-    case St{k, vs, bs, ms, gs, c2, ss, l} Spec.Point.Mark{b, m}:
+    case NodeState{k, vs, bs, ms, gs, c2, ss, l} Spec.Point.Mark{b, m}:
       {==}
 
 # a stale write as the owner: its base is not the head (ok is False)
 law stale_at:
   for ok: Bool
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for z: String
@@ -3752,14 +4133,14 @@ law stale_at:
     Base.is(base, h) == ok: Bool
   } -> {
     Out.answer(
-      Write.at(ok, s, r, w, z, n, b, y, Br{h, o, e, c})
+      Write.at(ok, s, r, w, z, n, b, y, BranchRecord{h, o, e, c})
     )
       == Spec.Answer.Write{Spec.Write.Stale{cur}}: Spec.Answer
-  } -> Spec.Node.SameContent(
+  } -> Spec.VendNode.SameContent(
     Pair.fst(
-      St,
+      NodeState,
       Spec.Answer,
-      Node.applied(s, r, Write.at(ok, s, r, w, z, n, b, y, Br{h, o, e, c}))
+      VendNode.applied(s, r, Write.at(ok, s, r, w, z, n, b, y, BranchRecord{h, o, e, c}))
     ),
     s
   )
@@ -3769,11 +4150,11 @@ def stale_at(ok, s, r, w, z, n, b, y, h, o, e, c, base, cur):
   match ok:
     case True{}:
       hb => ha => Empty.absurd(
-        Spec.Node.SameContent(
+        Spec.VendNode.SameContent(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(s, r, Write.at(True{}, s, r, w, z, n, b, y, Br{h, o, e, c}))
+            VendNode.applied(s, r, Write.at(True{}, s, r, w, z, n, b, y, BranchRecord{h, o, e, c}))
           ),
           s
         )
@@ -3797,7 +4178,7 @@ def stale_at(ok, s, r, w, z, n, b, y, h, o, e, c, base, cur):
           n2 => p2 => same_content_out(
             s,
             r,
-            St.clashes(s),
+            NodeState.clashes(s),
             [],
             Spec.Answer.Write{Spec.Write.Stale{h}},
             Resources.Name.show(n2),
@@ -3828,7 +4209,7 @@ def stale_at(ok, s, r, w, z, n, b, y, h, o, e, c, base, cur):
 # a stale write on a branch, as its owner or not
 law stale_on:
   for owner: Bool
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for z: String
@@ -3843,14 +4224,14 @@ law stale_on:
   for cur: String
   {
     Out.answer(
-      Write.on(owner, s, r, w, z, n, b, base, y, Br{h, o, e, c})
+      Write.on(owner, s, r, w, z, n, b, base, y, BranchRecord{h, o, e, c})
     )
       == Spec.Answer.Write{Spec.Write.Stale{cur}}: Spec.Answer
-  } -> Spec.Node.SameContent(
+  } -> Spec.VendNode.SameContent(
     Pair.fst(
-      St,
+      NodeState,
       Spec.Answer,
-      Node.applied(s, r, Write.on(owner, s, r, w, z, n, b, base, y, Br{h, o, e, c}))
+      VendNode.applied(s, r, Write.on(owner, s, r, w, z, n, b, base, y, BranchRecord{h, o, e, c}))
     ),
     s
   )
@@ -3864,11 +4245,15 @@ def stale_on(owner, s, r, w, z, n, b, base, y, h, o, e, c, cur):
       stale_at(Base.is(base, h), s, r, w, z, n, b, y, h, o, e, c, base, cur)({==})
     case False{}:
       ha => Empty.absurd(
-        Spec.Node.SameContent(
+        Spec.VendNode.SameContent(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(s, r, Write.on(False{}, s, r, w, z, n, b, base, y, Br{h, o, e, c}))
+            VendNode.applied(
+              s,
+              r,
+              Write.on(False{}, s, r, w, z, n, b, base, y, BranchRecord{h, o, e, c})
+            )
           ),
           s
         )
@@ -3884,8 +4269,8 @@ def stale_on(owner, s, r, w, z, n, b, base, y, h, o, e, c, cur):
 
 # a stale write on the branch that m holds
 law stale_branch:
-  for m: Maybe<&2, Br>
-  for s: St
+  for m: Maybe<&2, BranchRecord>
+  for s: NodeState
   for r: String
   for w: String
   for z: String
@@ -3899,24 +4284,28 @@ law stale_branch:
       Write.branch(m, s, r, w, z, n, b, base, y)
     )
       == Spec.Answer.Write{Spec.Write.Stale{cur}}: Spec.Answer
-  } -> Spec.Node.SameContent(
-    Pair.fst(St, Spec.Answer, Node.applied(s, r, Write.branch(m, s, r, w, z, n, b, base, y))),
+  } -> Spec.VendNode.SameContent(
+    Pair.fst(
+      NodeState,
+      Spec.Answer,
+      VendNode.applied(s, r, Write.branch(m, s, r, w, z, n, b, base, y))
+    ),
     s
   )
     & {base != Some{cur}: Maybe<&2, String>}
 
 def stale_branch(m, s, r, w, z, n, b, base, y, cur):
   match m base:
-    case Some{Br{+h, +o, +e, +c}} k:
+    case Some{BranchRecord{+h, +o, +e, +c}} k:
       +s = s
-      stale_on(Owner.of(s, Br{h, o, e, c}), s, r, w, z, n, b, k, y, h, o, e, c, cur)
+      stale_on(Owner.of(s, BranchRecord{h, o, e, c}), s, r, w, z, n, b, k, y, h, o, e, c, cur)
     case None{} Some{k}:
       ha => Empty.absurd(
-        Spec.Node.SameContent(
+        Spec.VendNode.SameContent(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(s, r, Write.branch(None{}, s, r, w, z, n, b, Some{k}, y))
+            VendNode.applied(s, r, Write.branch(None{}, s, r, w, z, n, b, Some{k}, y))
           ),
           s
         )
@@ -3931,11 +4320,11 @@ def stale_branch(m, s, r, w, z, n, b, base, y, cur):
       )
     case None{} None{}:
       ha => Empty.absurd(
-        Spec.Node.SameContent(
+        Spec.VendNode.SameContent(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(s, r, Write.branch(None{}, s, r, w, z, n, b, None{}, y))
+            VendNode.applied(s, r, Write.branch(None{}, s, r, w, z, n, b, None{}, y))
           ),
           s
         )
@@ -3952,7 +4341,7 @@ def stale_branch(m, s, r, w, z, n, b, base, y, cur):
 # a stale write, unless its version ID is taken
 law stale_free:
   for taken: Bool
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for z: String
@@ -3966,8 +4355,12 @@ law stale_free:
       Write.free(taken, s, r, w, z, n, b, base, y)
     )
       == Spec.Answer.Write{Spec.Write.Stale{cur}}: Spec.Answer
-  } -> Spec.Node.SameContent(
-    Pair.fst(St, Spec.Answer, Node.applied(s, r, Write.free(taken, s, r, w, z, n, b, base, y))),
+  } -> Spec.VendNode.SameContent(
+    Pair.fst(
+      NodeState,
+      Spec.Answer,
+      VendNode.applied(s, r, Write.free(taken, s, r, w, z, n, b, base, y))
+    ),
     s
   )
     & {base != Some{cur}: Maybe<&2, String>}
@@ -3976,11 +4369,11 @@ def stale_free(taken, s, r, w, z, n, b, base, y, cur):
   match taken:
     case True{}:
       ha => Empty.absurd(
-        Spec.Node.SameContent(
+        Spec.VendNode.SameContent(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(s, r, Write.free(True{}, s, r, w, z, n, b, base, y))
+            VendNode.applied(s, r, Write.free(True{}, s, r, w, z, n, b, base, y))
           ),
           s
         )
@@ -3996,12 +4389,23 @@ def stale_free(taken, s, r, w, z, n, b, base, y, cur):
     case False{}:
       +s = s
       +b = b
-      stale_branch(Tables.Table.get(Br, St.branches(s), b), s, r, w, z, n, b, base, y, cur)
+      stale_branch(
+        Tables.Table.get(BranchRecord, NodeState.branches(s), b),
+        s,
+        r,
+        w,
+        z,
+        n,
+        b,
+        base,
+        y,
+        cur
+      )
 
 # a stale write of the bytes that m holds
 law stale_bytes:
   for m: Maybe<&2, List<&2, U32>>
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for z: String
@@ -4014,8 +4418,12 @@ law stale_bytes:
       Write.bytes(m, s, r, w, z, n, b, base)
     )
       == Spec.Answer.Write{Spec.Write.Stale{cur}}: Spec.Answer
-  } -> Spec.Node.SameContent(
-    Pair.fst(St, Spec.Answer, Node.applied(s, r, Write.bytes(m, s, r, w, z, n, b, base))),
+  } -> Spec.VendNode.SameContent(
+    Pair.fst(
+      NodeState,
+      Spec.Answer,
+      VendNode.applied(s, r, Write.bytes(m, s, r, w, z, n, b, base))
+    ),
     s
   )
     & {base != Some{cur}: Maybe<&2, String>}
@@ -4024,11 +4432,11 @@ def stale_bytes(m, s, r, w, z, n, b, base, cur):
   match m:
     case None{}:
       ha => Empty.absurd(
-        Spec.Node.SameContent(
+        Spec.VendNode.SameContent(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(s, r, Write.bytes(None{}, s, r, w, z, n, b, base))
+            VendNode.applied(s, r, Write.bytes(None{}, s, r, w, z, n, b, base))
           ),
           s
         )
@@ -4044,13 +4452,13 @@ def stale_bytes(m, s, r, w, z, n, b, base, cur):
     case Some{y}:
       +s = s
       +r = r
-      stale_free(Ver.taken(St.versions(s), r), s, r, w, z, n, b, base, y, cur)
+      stale_free(VersionRecord.taken(NodeState.versions(s), r), s, r, w, z, n, b, base, y, cur)
 
 # a merge that clashed on the names cl: no content changes, and its one new
 # notice on the branch is the conflict
 law cf_result:
   for cl: List<&2, String>
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for z: String
@@ -4064,26 +4472,26 @@ law cf_result:
   for k: String
   {
     Out.answer(
-      Merge.result(cl, s, r, w, z, f, b, bs, Br{h, o, e, c})
+      Merge.result(cl, s, r, w, z, f, b, bs, BranchRecord{h, o, e, c})
     )
       == Spec.Answer.Merge{Spec.Merge.Conflicted{k}}: Spec.Answer
-  } -> Spec.Node.SameContent(
+  } -> Spec.VendNode.SameContent(
     Pair.fst(
-      St,
+      NodeState,
       Spec.Answer,
-      Node.applied(s, r, Merge.result(cl, s, r, w, z, f, b, bs, Br{h, o, e, c}))
+      VendNode.applied(s, r, Merge.result(cl, s, r, w, z, f, b, bs, BranchRecord{h, o, e, c}))
     ),
     s
   )
     & {
-      Spec.Node.get_changes(
+      Spec.VendNode.get_changes(
         Pair.fst(
-          St,
+          NodeState,
           Spec.Answer,
-          Node.applied(s, r, Merge.result(cl, s, r, w, z, f, b, bs, Br{h, o, e, c}))
+          VendNode.applied(s, r, Merge.result(cl, s, r, w, z, f, b, bs, BranchRecord{h, o, e, c}))
         ),
         Spec.Topic.Conflicts{b},
-        Some{Spec.Node.position(s)}
+        Some{Spec.VendNode.position(s)}
       )
         == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>
     }
@@ -4092,23 +4500,31 @@ def cf_result(cl, s, r, w, z, f, b, bs, h, o, e, c, k):
   match cl:
     case Nil{}:
       ha => Empty.absurd(
-        Spec.Node.SameContent(
+        Spec.VendNode.SameContent(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(s, r, Merge.result(Nil{}, s, r, w, z, f, b, bs, Br{h, o, e, c}))
+            VendNode.applied(
+              s,
+              r,
+              Merge.result(Nil{}, s, r, w, z, f, b, bs, BranchRecord{h, o, e, c})
+            )
           ),
           s
         )
           & {
-            Spec.Node.get_changes(
+            Spec.VendNode.get_changes(
               Pair.fst(
-                St,
+                NodeState,
                 Spec.Answer,
-                Node.applied(s, r, Merge.result(Nil{}, s, r, w, z, f, b, bs, Br{h, o, e, c}))
+                VendNode.applied(
+                  s,
+                  r,
+                  Merge.result(Nil{}, s, r, w, z, f, b, bs, BranchRecord{h, o, e, c})
+                )
               ),
               Spec.Topic.Conflicts{b},
-              Some{Spec.Node.position(s)}
+              Some{Spec.VendNode.position(s)}
             )
               == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>
           },
@@ -4133,16 +4549,16 @@ def cf_result(cl, s, r, w, z, f, b, bs, h, o, e, c, k):
           n2 => p2 => same_content_out(
             s,
             r,
-            Tables.Table.set(Clash, St.clashes(s), r, Clash{b, h, f, bs, x <> more}),
+            Tables.Table.set(Clash, NodeState.clashes(s), r, Clash{b, h, f, bs, x <> more}),
             [Logged{Spec.Topic.Conflicts{b}, Spec.Notice.Conflicted{r}}],
             Spec.Answer.Merge{Spec.Merge.Conflicted{r}},
             Resources.Name.show(n2),
             p2
           ),
           (
-            %Equal.sym(List<&2, Logged>, St.log(Pair.fst(St, Spec.Answer, Node.applied(s, r, Out{[], St.branches(s), St.marks(s), St.groups(s), Tables.Table.set(Clash, St.clashes(s), r, Clash{b, h, f, bs, x <> more}), [Logged{Spec.Topic.Conflicts{b}, Spec.Notice.Conflicted{r}}], Spec.Answer.Merge{Spec.Merge.Conflicted{r}}}))), List.append(&2, Logged, St.log(s), [Logged{Spec.Topic.Conflicts{b}, Spec.Notice.Conflicted{r}}]), applied_log(s, r, Out{[], St.branches(s), St.marks(s), St.groups(s), Tables.Table.set(Clash, St.clashes(s), r, Clash{b, h, f, bs, x <> more}), [Logged{Spec.Topic.Conflicts{b}, Spec.Notice.Conflicted{r}}], Spec.Answer.Merge{Spec.Merge.Conflicted{r}}})):
-              {Logged.pick(Spec.Topic.Conflicts{b}, List.drop(&2, Logged, _, List.length(&2, Logged, St.log(s)))) == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>}
-            %Equal.sym(List<&2, Logged>, List.drop(&2, Logged, List.append(&2, Logged, St.log(s), [Logged{Spec.Topic.Conflicts{b}, Spec.Notice.Conflicted{r}}]), List.length(&2, Logged, St.log(s))), [Logged{Spec.Topic.Conflicts{b}, Spec.Notice.Conflicted{r}}], Lists.List.drop_after_append(Logged, St.log(s), [Logged{Spec.Topic.Conflicts{b}, Spec.Notice.Conflicted{r}}])):
+            %Equal.sym(List<&2, Logged>, NodeState.log(Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Out{[], NodeState.branches(s), NodeState.marks(s), NodeState.groups(s), Tables.Table.set(Clash, NodeState.clashes(s), r, Clash{b, h, f, bs, x <> more}), [Logged{Spec.Topic.Conflicts{b}, Spec.Notice.Conflicted{r}}], Spec.Answer.Merge{Spec.Merge.Conflicted{r}}}))), List.append(&2, Logged, NodeState.log(s), [Logged{Spec.Topic.Conflicts{b}, Spec.Notice.Conflicted{r}}]), applied_log(s, r, Out{[], NodeState.branches(s), NodeState.marks(s), NodeState.groups(s), Tables.Table.set(Clash, NodeState.clashes(s), r, Clash{b, h, f, bs, x <> more}), [Logged{Spec.Topic.Conflicts{b}, Spec.Notice.Conflicted{r}}], Spec.Answer.Merge{Spec.Merge.Conflicted{r}}})):
+              {Logged.pick(Spec.Topic.Conflicts{b}, List.drop(&2, Logged, _, List.length(&2, Logged, NodeState.log(s)))) == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>}
+            %Equal.sym(List<&2, Logged>, List.drop(&2, Logged, List.append(&2, Logged, NodeState.log(s), [Logged{Spec.Topic.Conflicts{b}, Spec.Notice.Conflicted{r}}]), List.length(&2, Logged, NodeState.log(s))), [Logged{Spec.Topic.Conflicts{b}, Spec.Notice.Conflicted{r}}], Lists.List.drop_after_append(Logged, NodeState.log(s), [Logged{Spec.Topic.Conflicts{b}, Spec.Notice.Conflicted{r}}])):
               {Logged.pick(Spec.Topic.Conflicts{b}, _) == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>}
             %Equal.sym(Bool, String.eq(b, b), True{}, Strings.String.eq_refl(b)):
               {List.filter.put(Spec.Notice, Spec.Notice.Conflicted{r}, [], _) == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>}
@@ -4154,7 +4570,7 @@ def cf_result(cl, s, r, w, z, f, b, bs, h, o, e, c, k):
 # a merge that clashed, unless the head already holds the version f (held)
 law cf_inside:
   for held: Bool
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for z: String
@@ -4167,26 +4583,26 @@ law cf_inside:
   for k: String
   {
     Out.answer(
-      Merge.inside(held, s, r, w, z, f, b, Br{h, o, e, c})
+      Merge.inside(held, s, r, w, z, f, b, BranchRecord{h, o, e, c})
     )
       == Spec.Answer.Merge{Spec.Merge.Conflicted{k}}: Spec.Answer
-  } -> Spec.Node.SameContent(
+  } -> Spec.VendNode.SameContent(
     Pair.fst(
-      St,
+      NodeState,
       Spec.Answer,
-      Node.applied(s, r, Merge.inside(held, s, r, w, z, f, b, Br{h, o, e, c}))
+      VendNode.applied(s, r, Merge.inside(held, s, r, w, z, f, b, BranchRecord{h, o, e, c}))
     ),
     s
   )
     & {
-      Spec.Node.get_changes(
+      Spec.VendNode.get_changes(
         Pair.fst(
-          St,
+          NodeState,
           Spec.Answer,
-          Node.applied(s, r, Merge.inside(held, s, r, w, z, f, b, Br{h, o, e, c}))
+          VendNode.applied(s, r, Merge.inside(held, s, r, w, z, f, b, BranchRecord{h, o, e, c}))
         ),
         Spec.Topic.Conflicts{b},
-        Some{Spec.Node.position(s)}
+        Some{Spec.VendNode.position(s)}
       )
         == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>
     }
@@ -4195,23 +4611,27 @@ def cf_inside(held, s, r, w, z, f, b, h, o, e, c, k):
   match held:
     case True{}:
       ha => Empty.absurd(
-        Spec.Node.SameContent(
+        Spec.VendNode.SameContent(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(s, r, Merge.inside(True{}, s, r, w, z, f, b, Br{h, o, e, c}))
+            VendNode.applied(s, r, Merge.inside(True{}, s, r, w, z, f, b, BranchRecord{h, o, e, c}))
           ),
           s
         )
           & {
-            Spec.Node.get_changes(
+            Spec.VendNode.get_changes(
               Pair.fst(
-                St,
+                NodeState,
                 Spec.Answer,
-                Node.applied(s, r, Merge.inside(True{}, s, r, w, z, f, b, Br{h, o, e, c}))
+                VendNode.applied(
+                  s,
+                  r,
+                  Merge.inside(True{}, s, r, w, z, f, b, BranchRecord{h, o, e, c})
+                )
               ),
               Spec.Topic.Conflicts{b},
-              Some{Spec.Node.position(s)}
+              Some{Spec.VendNode.position(s)}
             )
               == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>
           },
@@ -4235,21 +4655,27 @@ def cf_inside(held, s, r, w, z, f, b, h, o, e, c, k):
               Merge.base(
                 s,
                 Vers.first_in(
-                  History.of(St.versions(s), f),
-                  Vers.ids(History.of(St.versions(s), h))
+                  History.of(NodeState.versions(s), f),
+                  Vers.ids(History.of(NodeState.versions(s), h))
                 )
               )
             ),
             Strings.union(
-              Tables.Table.keys(List<&2, U32>, Vers.blobs(St.versions(s), f)),
-              Strings.union(Tables.Table.keys(List<&2, U32>, Vers.blobs(St.versions(s), h)), [])
+              Tables.Table.keys(List<&2, U32>, Vers.blobs(NodeState.versions(s), f)),
+              Strings.union(
+                Tables.Table.keys(List<&2, U32>, Vers.blobs(NodeState.versions(s), h)),
+                []
+              )
             )
           ),
-          Vers.blobs(St.versions(s), h),
-          Vers.blobs(St.versions(s), f),
+          Vers.blobs(NodeState.versions(s), h),
+          Vers.blobs(NodeState.versions(s), f),
           Merge.base(
             s,
-            Vers.first_in(History.of(St.versions(s), f), Vers.ids(History.of(St.versions(s), h)))
+            Vers.first_in(
+              History.of(NodeState.versions(s), f),
+              Vers.ids(History.of(NodeState.versions(s), h))
+            )
           )
         ),
         s,
@@ -4265,21 +4691,27 @@ def cf_inside(held, s, r, w, z, f, b, h, o, e, c, k):
               Merge.base(
                 s,
                 Vers.first_in(
-                  History.of(St.versions(s), f),
-                  Vers.ids(History.of(St.versions(s), h))
+                  History.of(NodeState.versions(s), f),
+                  Vers.ids(History.of(NodeState.versions(s), h))
                 )
               )
             ),
             Strings.union(
-              Tables.Table.keys(List<&2, U32>, Vers.blobs(St.versions(s), f)),
-              Strings.union(Tables.Table.keys(List<&2, U32>, Vers.blobs(St.versions(s), h)), [])
+              Tables.Table.keys(List<&2, U32>, Vers.blobs(NodeState.versions(s), f)),
+              Strings.union(
+                Tables.Table.keys(List<&2, U32>, Vers.blobs(NodeState.versions(s), h)),
+                []
+              )
             )
           ),
-          Vers.blobs(St.versions(s), h),
-          Vers.blobs(St.versions(s), f),
+          Vers.blobs(NodeState.versions(s), h),
+          Vers.blobs(NodeState.versions(s), f),
           Merge.base(
             s,
-            Vers.first_in(History.of(St.versions(s), f), Vers.ids(History.of(St.versions(s), h)))
+            Vers.first_in(
+              History.of(NodeState.versions(s), f),
+              Vers.ids(History.of(NodeState.versions(s), h))
+            )
           )
         ),
         h,
@@ -4293,7 +4725,7 @@ def cf_inside(held, s, r, w, z, f, b, h, o, e, c, k):
 law cf_owner:
   for owner: Bool
   for taken: Bool
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for z: String
@@ -4306,26 +4738,30 @@ law cf_owner:
   for k: String
   {
     Out.answer(
-      Merge.owner(owner, taken, s, r, w, z, f, b, Br{h, o, e, c})
+      Merge.owner(owner, taken, s, r, w, z, f, b, BranchRecord{h, o, e, c})
     )
       == Spec.Answer.Merge{Spec.Merge.Conflicted{k}}: Spec.Answer
-  } -> Spec.Node.SameContent(
+  } -> Spec.VendNode.SameContent(
     Pair.fst(
-      St,
+      NodeState,
       Spec.Answer,
-      Node.applied(s, r, Merge.owner(owner, taken, s, r, w, z, f, b, Br{h, o, e, c}))
+      VendNode.applied(s, r, Merge.owner(owner, taken, s, r, w, z, f, b, BranchRecord{h, o, e, c}))
     ),
     s
   )
     & {
-      Spec.Node.get_changes(
+      Spec.VendNode.get_changes(
         Pair.fst(
-          St,
+          NodeState,
           Spec.Answer,
-          Node.applied(s, r, Merge.owner(owner, taken, s, r, w, z, f, b, Br{h, o, e, c}))
+          VendNode.applied(
+            s,
+            r,
+            Merge.owner(owner, taken, s, r, w, z, f, b, BranchRecord{h, o, e, c})
+          )
         ),
         Spec.Topic.Conflicts{b},
-        Some{Spec.Node.position(s)}
+        Some{Spec.VendNode.position(s)}
       )
         == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>
     }
@@ -4334,23 +4770,31 @@ def cf_owner(owner, taken, s, r, w, z, f, b, h, o, e, c, k):
   match owner taken:
     case False{} _:
       ha => Empty.absurd(
-        Spec.Node.SameContent(
+        Spec.VendNode.SameContent(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(s, r, Merge.owner(False{}, taken, s, r, w, z, f, b, Br{h, o, e, c}))
+            VendNode.applied(
+              s,
+              r,
+              Merge.owner(False{}, taken, s, r, w, z, f, b, BranchRecord{h, o, e, c})
+            )
           ),
           s
         )
           & {
-            Spec.Node.get_changes(
+            Spec.VendNode.get_changes(
               Pair.fst(
-                St,
+                NodeState,
                 Spec.Answer,
-                Node.applied(s, r, Merge.owner(False{}, taken, s, r, w, z, f, b, Br{h, o, e, c}))
+                VendNode.applied(
+                  s,
+                  r,
+                  Merge.owner(False{}, taken, s, r, w, z, f, b, BranchRecord{h, o, e, c})
+                )
               ),
               Spec.Topic.Conflicts{b},
-              Some{Spec.Node.position(s)}
+              Some{Spec.VendNode.position(s)}
             )
               == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>
           },
@@ -4364,23 +4808,31 @@ def cf_owner(owner, taken, s, r, w, z, f, b, h, o, e, c, k):
       )
     case True{} True{}:
       ha => Empty.absurd(
-        Spec.Node.SameContent(
+        Spec.VendNode.SameContent(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(s, r, Merge.owner(True{}, True{}, s, r, w, z, f, b, Br{h, o, e, c}))
+            VendNode.applied(
+              s,
+              r,
+              Merge.owner(True{}, True{}, s, r, w, z, f, b, BranchRecord{h, o, e, c})
+            )
           ),
           s
         )
           & {
-            Spec.Node.get_changes(
+            Spec.VendNode.get_changes(
               Pair.fst(
-                St,
+                NodeState,
                 Spec.Answer,
-                Node.applied(s, r, Merge.owner(True{}, True{}, s, r, w, z, f, b, Br{h, o, e, c}))
+                VendNode.applied(
+                  s,
+                  r,
+                  Merge.owner(True{}, True{}, s, r, w, z, f, b, BranchRecord{h, o, e, c})
+                )
               ),
               Spec.Topic.Conflicts{b},
-              Some{Spec.Node.position(s)}
+              Some{Spec.VendNode.position(s)}
             )
               == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>
           },
@@ -4397,7 +4849,7 @@ def cf_owner(owner, taken, s, r, w, z, f, b, h, o, e, c, k):
       +h = h
       +f = f
       cf_inside(
-        Shared.List.has(~String, ~String.eq, Vers.ids(History.of(St.versions(s), h)), f),
+        Shared.List.has(~String, ~String.eq, Vers.ids(History.of(NodeState.versions(s), h)), f),
         s,
         r,
         w,
@@ -4413,8 +4865,8 @@ def cf_owner(owner, taken, s, r, w, z, f, b, h, o, e, c, k):
 
 # a merge into the branch that m holds that clashed
 law cf_branch:
-  for m: Maybe<&2, Br>
-  for s: St
+  for m: Maybe<&2, BranchRecord>
+  for s: NodeState
   for r: String
   for w: String
   for z: String
@@ -4426,15 +4878,15 @@ law cf_branch:
       Merge.branch(m, s, r, w, z, f, b)
     )
       == Spec.Answer.Merge{Spec.Merge.Conflicted{k}}: Spec.Answer
-  } -> Spec.Node.SameContent(
-    Pair.fst(St, Spec.Answer, Node.applied(s, r, Merge.branch(m, s, r, w, z, f, b))),
+  } -> Spec.VendNode.SameContent(
+    Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Merge.branch(m, s, r, w, z, f, b))),
     s
   )
     & {
-      Spec.Node.get_changes(
-        Pair.fst(St, Spec.Answer, Node.applied(s, r, Merge.branch(m, s, r, w, z, f, b))),
+      Spec.VendNode.get_changes(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Merge.branch(m, s, r, w, z, f, b))),
         Spec.Topic.Conflicts{b},
-        Some{Spec.Node.position(s)}
+        Some{Spec.VendNode.position(s)}
       )
         == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>
     }
@@ -4443,15 +4895,23 @@ def cf_branch(m, s, r, w, z, f, b, k):
   match m:
     case None{}:
       ha => Empty.absurd(
-        Spec.Node.SameContent(
-          Pair.fst(St, Spec.Answer, Node.applied(s, r, Merge.branch(None{}, s, r, w, z, f, b))),
+        Spec.VendNode.SameContent(
+          Pair.fst(
+            NodeState,
+            Spec.Answer,
+            VendNode.applied(s, r, Merge.branch(None{}, s, r, w, z, f, b))
+          ),
           s
         )
           & {
-            Spec.Node.get_changes(
-              Pair.fst(St, Spec.Answer, Node.applied(s, r, Merge.branch(None{}, s, r, w, z, f, b))),
+            Spec.VendNode.get_changes(
+              Pair.fst(
+                NodeState,
+                Spec.Answer,
+                VendNode.applied(s, r, Merge.branch(None{}, s, r, w, z, f, b))
+              ),
               Spec.Topic.Conflicts{b},
-              Some{Spec.Node.position(s)}
+              Some{Spec.VendNode.position(s)}
             )
               == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>
           },
@@ -4463,12 +4923,12 @@ def cf_branch(m, s, r, w, z, f, b, k):
           )
         )
       )
-    case Some{Br{+h, +o, +e, +c}}:
+    case Some{BranchRecord{+h, +o, +e, +c}}:
       +s = s
       +r = r
       cf_owner(
-        Owner.of(s, Br{h, o, e, c}),
-        Ver.taken(St.versions(s), r),
+        Owner.of(s, BranchRecord{h, o, e, c}),
+        VersionRecord.taken(NodeState.versions(s), r),
         s,
         r,
         w,
@@ -4485,7 +4945,7 @@ def cf_branch(m, s, r, w, z, f, b, k):
 # a merge of the version that m names into the branch b that clashed
 law cf_point:
   for m: Maybe<&2, String>
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for z: String
@@ -4496,15 +4956,15 @@ law cf_point:
       Merge.point(m, s, r, w, z, b)
     )
       == Spec.Answer.Merge{Spec.Merge.Conflicted{k}}: Spec.Answer
-  } -> Spec.Node.SameContent(
-    Pair.fst(St, Spec.Answer, Node.applied(s, r, Merge.point(m, s, r, w, z, b))),
+  } -> Spec.VendNode.SameContent(
+    Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Merge.point(m, s, r, w, z, b))),
     s
   )
     & {
-      Spec.Node.get_changes(
-        Pair.fst(St, Spec.Answer, Node.applied(s, r, Merge.point(m, s, r, w, z, b))),
+      Spec.VendNode.get_changes(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Merge.point(m, s, r, w, z, b))),
         Spec.Topic.Conflicts{b},
-        Some{Spec.Node.position(s)}
+        Some{Spec.VendNode.position(s)}
       )
         == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>
     }
@@ -4513,15 +4973,23 @@ def cf_point(m, s, r, w, z, b, k):
   match m:
     case None{}:
       ha => Empty.absurd(
-        Spec.Node.SameContent(
-          Pair.fst(St, Spec.Answer, Node.applied(s, r, Merge.point(None{}, s, r, w, z, b))),
+        Spec.VendNode.SameContent(
+          Pair.fst(
+            NodeState,
+            Spec.Answer,
+            VendNode.applied(s, r, Merge.point(None{}, s, r, w, z, b))
+          ),
           s
         )
           & {
-            Spec.Node.get_changes(
-              Pair.fst(St, Spec.Answer, Node.applied(s, r, Merge.point(None{}, s, r, w, z, b))),
+            Spec.VendNode.get_changes(
+              Pair.fst(
+                NodeState,
+                Spec.Answer,
+                VendNode.applied(s, r, Merge.point(None{}, s, r, w, z, b))
+              ),
               Spec.Topic.Conflicts{b},
-              Some{Spec.Node.position(s)}
+              Some{Spec.VendNode.position(s)}
             )
               == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>
           },
@@ -4536,13 +5004,13 @@ def cf_point(m, s, r, w, z, b, k):
     case Some{f}:
       +s = s
       +b = b
-      cf_branch(Tables.Table.get(Br, St.branches(s), b), s, r, w, z, f, b, k)
+      cf_branch(Tables.Table.get(BranchRecord, NodeState.branches(s), b), s, r, w, z, f, b, k)
 
 # a set-owner on the branch b, of epoch e, that answers Set{new}, gives b a
 # larger epoch, new
 law set_owner_on:
   for own: Bool
-  for s: St
+  for s: NodeState
   for b: String
   for g: String
   for h: String
@@ -4555,15 +5023,19 @@ law set_owner_on:
     e == old: Nat
   } -> {
     Out.answer(
-      SetOwner.on(own, s, b, g, Br{h, o, e, c})
+      SetOwner.on(own, s, b, g, BranchRecord{h, o, e, c})
     )
       == Spec.Answer.SetOwner{Spec.SetOwner.Set{new}}: Spec.Answer
   } -> {
     Nat.is_lt(old, new) == True{}: Bool
   }
     & {
-      Br.epoch.of(
-        Tables.Table.get(Br, Out.branches(SetOwner.on(own, s, b, g, Br{h, o, e, c})), b)
+      BranchRecord.epoch.of(
+        Tables.Table.get(
+          BranchRecord,
+          Out.branches(SetOwner.on(own, s, b, g, BranchRecord{h, o, e, c})),
+          b
+        )
       )
         == Some{new}: Maybe<&2, Nat>
     }
@@ -4577,8 +5049,12 @@ def set_owner_on(own, s, b, g, h, o, e, c, old, new):
             Nat.is_lt(old, new) == True{}: Bool
           }
             & {
-              Br.epoch.of(
-                Tables.Table.get(Br, Out.branches(SetOwner.on(False{}, s, b, g, Br{h, o, e, c})), b)
+              BranchRecord.epoch.of(
+                Tables.Table.get(
+                  BranchRecord,
+                  Out.branches(SetOwner.on(False{}, s, b, g, BranchRecord{h, o, e, c})),
+                  b
+                )
               )
                 == Some{new}: Maybe<&2, Nat>
             },
@@ -4601,8 +5077,8 @@ def set_owner_on(own, s, b, g, h, o, e, c, old, new):
             %Equal.cong(Spec.Answer, Nat, x => Answer.epoch(x), Spec.Answer.SetOwner{Spec.SetOwner.Set{1n+e}}, Spec.Answer.SetOwner{Spec.SetOwner.Set{new}}, ha):
               {Nat.is_lt(e, _) == True{}: Bool}
             Nats.Nat.lt_succ(e)), (
-            %Equal.sym(Maybe<&2, Br>, Tables.Table.get(Br, Tables.Table.set(Br, St.branches(s), b, Br{h, g, 1n+e, 0n}), b), Some{Br{h, g, 1n+e, 0n}}, Tables.Table.get_after_set(Br, St.branches(s), b, Br{h, g, 1n+e, 0n})):
-              {Br.epoch.of(_) == Some{new}: Maybe<&2, Nat>}
+            %Equal.sym(Maybe<&2, BranchRecord>, Tables.Table.get(BranchRecord, Tables.Table.set(BranchRecord, NodeState.branches(s), b, BranchRecord{h, g, 1n+e, 0n}), b), Some{BranchRecord{h, g, 1n+e, 0n}}, Tables.Table.get_after_set(BranchRecord, NodeState.branches(s), b, BranchRecord{h, g, 1n+e, 0n})):
+              {BranchRecord.epoch.of(_) == Some{new}: Maybe<&2, Nat>}
             %Equal.cong(Spec.Answer, Nat, x => Answer.epoch(x), Spec.Answer.SetOwner{Spec.SetOwner.Set{1n+e}}, Spec.Answer.SetOwner{Spec.SetOwner.Set{new}}, ha):
               {Some{1n+e} == Some{_}: Maybe<&2, Nat>}
             {==}))
@@ -4610,14 +5086,14 @@ def set_owner_on(own, s, b, g, h, o, e, c, old, new):
 # a set-owner on the branch that m holds, of epoch old, that answers Set{new},
 # gives b a larger epoch, new
 law set_owner_lemma:
-  for m: Maybe<&2, Br>
-  for s: St
+  for m: Maybe<&2, BranchRecord>
+  for s: NodeState
   for b: String
   for g: String
   for old: Nat
   for new: Nat
   {
-    Br.epoch.of(m) == Some{old}: Maybe<&2, Nat>
+    BranchRecord.epoch.of(m) == Some{old}: Maybe<&2, Nat>
   } -> {
     Out.answer(
       SetOwner.branch(m, s, b, g)
@@ -4627,8 +5103,8 @@ law set_owner_lemma:
     Nat.is_lt(old, new) == True{}: Bool
   }
     & {
-      Br.epoch.of(
-        Tables.Table.get(Br, Out.branches(SetOwner.branch(m, s, b, g)), b)
+      BranchRecord.epoch.of(
+        Tables.Table.get(BranchRecord, Out.branches(SetOwner.branch(m, s, b, g)), b)
       )
         == Some{new}: Maybe<&2, Nat>
     }
@@ -4642,18 +5118,18 @@ def set_owner_lemma(m, s, b, g, old, new):
             Nat.is_lt(old, new) == True{}: Bool
           }
             & {
-              Br.epoch.of(
-                Tables.Table.get(Br, Out.branches(SetOwner.branch(None{}, s, b, g)), b)
+              BranchRecord.epoch.of(
+                Tables.Table.get(BranchRecord, Out.branches(SetOwner.branch(None{}, s, b, g)), b)
               )
                 == Some{new}: Maybe<&2, Nat>
             },
           Maybes.Maybe.none_ne_some(Nat, old, hep)
         )
-    case Some{Br{+h, +o, +e, +c}}:
+    case Some{BranchRecord{+h, +o, +e, +c}}:
       hep => ha =>
         +s = s
         set_owner_on(
-          Owner.of(s, Br{h, o, e, c}),
+          Owner.of(s, BranchRecord{h, o, e, c}),
           s,
           b,
           g,
@@ -4672,7 +5148,7 @@ law member_same_refl:
 
 def member_same_refl(m):
   match m:
-    case Spec.Member.Node{k}:
+    case Spec.Member.VendNode{k}:
       Strings.String.eq_refl(k)
     case Spec.Member.Group{k}:
       Strings.String.eq_refl(k)
@@ -4685,11 +5161,11 @@ law member_same_sound:
 
 def member_same_sound(a, b):
   match a b:
-    case Spec.Member.Node{x} Spec.Member.Node{y}:
+    case Spec.Member.VendNode{x} Spec.Member.VendNode{y}:
       h => Equal.cong(
         String,
         Spec.Member,
-        z => Spec.Member.Node{z},
+        z => Spec.Member.VendNode{z},
         x,
         y,
         Strings.String.eq_sound(x, y)(h)
@@ -4703,14 +5179,14 @@ def member_same_sound(a, b):
         y,
         Strings.String.eq_sound(x, y)(h)
       )
-    case Spec.Member.Node{x} Spec.Member.Group{y}:
+    case Spec.Member.VendNode{x} Spec.Member.Group{y}:
       h => Empty.absurd(
-        {Spec.Member.Node{x} == Spec.Member.Group{y}: Spec.Member},
+        {Spec.Member.VendNode{x} == Spec.Member.Group{y}: Spec.Member},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.Member.Group{x} Spec.Member.Node{y}:
+    case Spec.Member.Group{x} Spec.Member.VendNode{y}:
       h => Empty.absurd(
-        {Spec.Member.Group{x} == Spec.Member.Node{y}: Spec.Member},
+        {Spec.Member.Group{x} == Spec.Member.VendNode{y}: Spec.Member},
         Shared.Bool.false_ne_true(h)
       )
 
@@ -4726,7 +5202,7 @@ law grp_all_has.at:
       Shared.List.has(
         ~Spec.Member,
         ~Member.same,
-        Grp.groups(r),
+        GroupRecord.groups(r),
         Spec.Member.Group{k}
       )
         == True{}: Bool
@@ -4735,7 +5211,7 @@ law grp_all_has.at:
     List.any.if(u => Shared.List.has(~String, ~String.eq, r, k), hit) == True{}: Bool
   } -> {
     List.any.if(
-      u => Shared.List.has(~Spec.Member, ~Member.same, Grp.groups(r), Spec.Member.Group{k}),
+      u => Shared.List.has(~Spec.Member, ~Member.same, GroupRecord.groups(r), Spec.Member.Group{k}),
       hit
     )
       == True{}: Bool
@@ -4758,7 +5234,7 @@ law grp_all_has:
     Shared.List.has(
       ~Spec.Member,
       ~Member.same,
-      Grp.groups(ks),
+      GroupRecord.groups(ks),
       Spec.Member.Group{k}
     )
       == True{}: Bool
@@ -4774,16 +5250,22 @@ def grp_all_has(ks, k):
 
 # grp_live for the group k, by what gs holds for it (mg)
 law grp_live.at:
-  for mg: Maybe<&2, Grp>
-  for gs: Tables.Table<Grp>
+  for mg: Maybe<&2, GroupRecord>
+  for gs: Tables.Table<GroupRecord>
   for k: String
   for q: Spec.Member
   {
-    Tables.Table.get(Grp, gs, k) == mg: Maybe<&2, Grp>
+    Tables.Table.get(GroupRecord, gs, k) == mg: Maybe<&2, GroupRecord>
   } -> {
-    Shared.List.has(~Spec.Member, ~Member.same, Grp.members.in(mg), q) == True{}: Bool
+    Shared.List.has(~Spec.Member, ~Member.same, GroupRecord.members.in(mg), q) == True{}: Bool
   } -> {
-    Shared.List.has(~Spec.Member, ~Member.same, Grp.all(gs), Spec.Member.Group{k}) == True{}: Bool
+    Shared.List.has(
+      ~Spec.Member,
+      ~Member.same,
+      GroupRecord.all(gs),
+      Spec.Member.Group{k}
+    )
+      == True{}: Bool
   }
 
 def grp_live.at(mg, gs, k, q):
@@ -4794,7 +5276,7 @@ def grp_live.at(mg, gs, k, q):
           Shared.List.has(
             ~Spec.Member,
             ~Member.same,
-            Grp.all(gs),
+            GroupRecord.all(gs),
             Spec.Member.Group{k}
           )
             == True{}: Bool
@@ -4806,20 +5288,20 @@ def grp_live.at(mg, gs, k, q):
         +gs = gs
         +k = k
         grp_all_has(
-          Tables.Table.keys(Grp, gs),
+          Tables.Table.keys(GroupRecord, gs),
           k
         )(
           Equal.trans(
             Bool,
-            Shared.List.has(~String, ~String.eq, Tables.Table.keys(Grp, gs), k),
-            Maybe.is_some(&2, Grp, Tables.Table.get(Grp, gs, k)),
+            Shared.List.has(~String, ~String.eq, Tables.Table.keys(GroupRecord, gs), k),
+            Maybe.is_some(&2, GroupRecord, Tables.Table.get(GroupRecord, gs, k)),
             True{},
-            Tables.Table.keys_get(Grp, gs, k),
+            Tables.Table.keys_get(GroupRecord, gs, k),
             Equal.cong(
-              Maybe<&2, Grp>,
+              Maybe<&2, GroupRecord>,
               Bool,
-              z => Maybe.is_some(&2, Grp, z),
-              Tables.Table.get(Grp, gs, k),
+              z => Maybe.is_some(&2, GroupRecord, z),
+              Tables.Table.get(GroupRecord, gs, k),
               Some{x},
               e
             )
@@ -4828,23 +5310,23 @@ def grp_live.at(mg, gs, k, q):
 
 # a member with members is a group of gs
 law grp_live:
-  for gs: Tables.Table<Grp>
+  for gs: Tables.Table<GroupRecord>
   for p: Spec.Member
   for q: Spec.Member
   {
-    Shared.List.has(~Spec.Member, ~Member.same, Grp.members.of(gs, p), q) == True{}: Bool
-  } -> {Shared.List.has(~Spec.Member, ~Member.same, Grp.all(gs), p) == True{}: Bool}
+    Shared.List.has(~Spec.Member, ~Member.same, GroupRecord.members.of(gs, p), q) == True{}: Bool
+  } -> {Shared.List.has(~Spec.Member, ~Member.same, GroupRecord.all(gs), p) == True{}: Bool}
 
 def grp_live(gs, p, q):
   match p:
-    case Spec.Member.Node{n}:
+    case Spec.Member.VendNode{n}:
       h => Empty.absurd(
         {
           Shared.List.has(
             ~Spec.Member,
             ~Member.same,
-            Grp.all(gs),
-            Spec.Member.Node{n}
+            GroupRecord.all(gs),
+            Spec.Member.VendNode{n}
           )
             == True{}: Bool
         },
@@ -4852,129 +5334,39 @@ def grp_live(gs, p, q):
       )
     case Spec.Member.Group{+k}:
       +gs = gs
-      grp_live.at(Tables.Table.get(Grp, gs, k), gs, k, q)({==})
-
-# a set-group that answers Set has its first member inside the group
-law sg_on:
-  for cycle: Bool
-  for s: St
-  for g: String
-  for m: Spec.Member
-  for ms: List<&2, Spec.Member>
-  for x: Nat
-  {
-    Out.answer(
-      SetGroup.on(cycle, s, g, m <> ms)
-    )
-      == Spec.Answer.SetGroup{Spec.SetGroup.Set{x}}: Spec.Answer
-  } -> {Grp.inside(Out.groups(SetGroup.on(cycle, s, g, m <> ms)), m, g) == True{}: Bool}
-
-def sg_on(cycle, s, g, m, ms, x):
-  match cycle:
-    case True{}:
-      ha =>
-        Empty.absurd(
-          {Grp.inside(Out.groups(SetGroup.on(True{}, s, g, m <> ms)), m, g) == True{}: Bool},
-          Shared.Bool.false_ne_true(
-            Answer.clash(
-              Spec.Answer.SetGroup{Spec.SetGroup.Cycle{}},
-              Spec.Answer.SetGroup{Spec.SetGroup.Set{x}},
-              ha
-            )
-          )
-        )
-    case False{}:
-      ha =>
-        +s = s
-        +g = g
-        +m = m
-        +ms = ms
-        %Equal.sym(
-          Maybe<&2, Grp>,
-          Tables.Table.get(
-            Grp,
-            Tables.Table.set(Grp, St.groups(s), g, Grp{m <> ms, Grp.epoch.next(St.groups(s), g)}),
-            g
-          ),
-          Some{Grp{m <> ms, Grp.epoch.next(St.groups(s), g)}},
-          Tables.Table.get_after_set(
-            Grp,
-            St.groups(s),
-            g,
-            Grp{m <> ms, Grp.epoch.next(St.groups(s), g)}
-          )
-        ):
-          {
-            Reaches.Reach.go(
-              ~Spec.Member,
-              ~Tables.Table<Grp>,
-              ~Member.same,
-              ~Grp.members.of,
-              List.length(
-                &2,
-                Spec.Member,
-                Grp.all(
-                  Tables.Table.set(
-                    Grp,
-                    St.groups(s),
-                    g,
-                    Grp{m <> ms, Grp.epoch.next(St.groups(s), g)}
-                  )
-                )
-              ),
-              Grp.members.in(_),
-              Tables.Table.set(Grp, St.groups(s), g, Grp{m <> ms, Grp.epoch.next(St.groups(s), g)}),
-              m
-            )
-              == True{}: Bool
-          }
-        Reaches.Reach.path_go(
-          ~Spec.Member,
-          ~Tables.Table<Grp>,
-          ~Member.same,
-          ~Grp.members.of,
-          ~member_same_sound,
-          [],
-          List.length(
-            &2,
-            Spec.Member,
-            Grp.all(
-              Tables.Table.set(Grp, St.groups(s), g, Grp{m <> ms, Grp.epoch.next(St.groups(s), g)})
-            )
-          ),
-          m <> ms,
-          Tables.Table.set(Grp, St.groups(s), g, Grp{m <> ms, Grp.epoch.next(St.groups(s), g)}),
-          m
-        )((
-            %Equal.sym(Bool, Member.same(m, m), True{}, member_same_refl(m)): {List.any.if(u => Shared.List.has(~Spec.Member, ~Member.same, ms, m), _) == True{}: Bool}
-            {==}))({==})
+      grp_live.at(Tables.Table.get(GroupRecord, gs, k), gs, k, q)({==})
 
 # Write.at keeps the groups
 def grp_kept.Write.at(
   ok: Bool,
-  s: St,
+  s: NodeState,
   r: String,
   w: String,
   t: String,
   n: String,
   b: String,
   y: List<&2, U32>,
-  br: Br
-) -> {Out.groups(Write.at(ok, s, r, w, t, n, b, y, br)) == St.groups(s): Tables.Table<Grp>}:
+  br: BranchRecord
+) -> {
+  Out.groups(
+    Write.at(ok, s, r, w, t, n, b, y, br)
+  )
+    == NodeState.groups(s): Tables.Table<GroupRecord>
+}:
   match ok:
     case False{}:
       match br:
-        case Br{h, o, e, c}:
+        case BranchRecord{h, o, e, c}:
           {==}
     case True{}:
       match br:
-        case Br{h, o, e, c}:
+        case BranchRecord{h, o, e, c}:
           {==}
 
 # Write.on keeps the groups
 def grp_kept.Write.on(
   owner: Bool,
-  s: St,
+  s: NodeState,
   r: String,
   w: String,
   t: String,
@@ -4982,24 +5374,27 @@ def grp_kept.Write.on(
   b: String,
   base: Maybe<&2, String>,
   y: List<&2, U32>,
-  +br: Br
+  +br: BranchRecord
 ) -> {
-  Out.groups(Write.on(owner, s, r, w, t, n, b, base, y, br)) == St.groups(s): Tables.Table<Grp>
+  Out.groups(
+    Write.on(owner, s, r, w, t, n, b, base, y, br)
+  )
+    == NodeState.groups(s): Tables.Table<GroupRecord>
 }:
   match owner:
     case True{}:
       match br:
-        case Br{+h, o, e, c}:
-          grp_kept.Write.at(Base.is(base, h), s, r, w, t, n, b, y, Br{h, o, e, c})
+        case BranchRecord{+h, o, e, c}:
+          grp_kept.Write.at(Base.is(base, h), s, r, w, t, n, b, y, BranchRecord{h, o, e, c})
     case False{}:
       match br:
-        case Br{h, o, e, c}:
+        case BranchRecord{h, o, e, c}:
           {==}
 
 # Write.branch keeps the groups
 def grp_kept.Write.branch(
-  m: Maybe<&2, Br>,
-  +s: St,
+  m: Maybe<&2, BranchRecord>,
+  +s: NodeState,
   r: String,
   w: String,
   t: String,
@@ -5007,7 +5402,12 @@ def grp_kept.Write.branch(
   b: String,
   base: Maybe<&2, String>,
   y: List<&2, U32>
-) -> {Out.groups(Write.branch(m, s, r, w, t, n, b, base, y)) == St.groups(s): Tables.Table<Grp>}:
+) -> {
+  Out.groups(
+    Write.branch(m, s, r, w, t, n, b, base, y)
+  )
+    == NodeState.groups(s): Tables.Table<GroupRecord>
+}:
   match m:
     case Some{+br}:
       grp_kept.Write.on(Owner.of(s, br), s, r, w, t, n, b, base, y, br)
@@ -5021,7 +5421,7 @@ def grp_kept.Write.branch(
 # Write.free keeps the groups
 def grp_kept.Write.free(
   taken: Bool,
-  +s: St,
+  +s: NodeState,
   r: String,
   w: String,
   t: String,
@@ -5029,158 +5429,229 @@ def grp_kept.Write.free(
   +b: String,
   base: Maybe<&2, String>,
   y: List<&2, U32>
-) -> {Out.groups(Write.free(taken, s, r, w, t, n, b, base, y)) == St.groups(s): Tables.Table<Grp>}:
+) -> {
+  Out.groups(
+    Write.free(taken, s, r, w, t, n, b, base, y)
+  )
+    == NodeState.groups(s): Tables.Table<GroupRecord>
+}:
   match taken:
     case True{}:
       {==}
     case False{}:
-      grp_kept.Write.branch(Tables.Table.get(Br, St.branches(s), b), s, r, w, t, n, b, base, y)
+      grp_kept.Write.branch(
+        Tables.Table.get(BranchRecord, NodeState.branches(s), b),
+        s,
+        r,
+        w,
+        t,
+        n,
+        b,
+        base,
+        y
+      )
 
 # Write.bytes keeps the groups
 def grp_kept.Write.bytes(
   m: Maybe<&2, List<&2, U32>>,
-  +s: St,
+  +s: NodeState,
   +r: String,
   w: String,
   t: String,
   n: String,
   b: String,
   base: Maybe<&2, String>
-) -> {Out.groups(Write.bytes(m, s, r, w, t, n, b, base)) == St.groups(s): Tables.Table<Grp>}:
+) -> {
+  Out.groups(
+    Write.bytes(m, s, r, w, t, n, b, base)
+  )
+    == NodeState.groups(s): Tables.Table<GroupRecord>
+}:
   match m:
     case None{}:
       {==}
     case Some{y}:
-      grp_kept.Write.free(Ver.taken(St.versions(s), r), s, r, w, t, n, b, base, y)
+      grp_kept.Write.free(VersionRecord.taken(NodeState.versions(s), r), s, r, w, t, n, b, base, y)
 
 # SetBranch.on keeps the groups
 def grp_kept.SetBranch.on(
   owner: Bool,
   taken: Bool,
-  s: St,
+  s: NodeState,
   r: String,
   w: String,
   t: String,
   b: String,
   bs: Tables.Table<List<&2, U32>>,
-  +br: Br
+  +br: BranchRecord
 ) -> {
-  Out.groups(SetBranch.on(owner, taken, s, r, w, t, b, bs, br)) == St.groups(s): Tables.Table<Grp>
+  Out.groups(
+    SetBranch.on(owner, taken, s, r, w, t, b, bs, br)
+  )
+    == NodeState.groups(s): Tables.Table<GroupRecord>
 }:
   match owner taken:
     case _ True{}:
       {==}
     case False{} False{}:
       match br:
-        case Br{h, o, e, c}:
+        case BranchRecord{h, o, e, c}:
           {==}
     case True{} False{}:
       match br:
-        case Br{h, o, e, c}:
+        case BranchRecord{h, o, e, c}:
           {==}
 
 # SetBranch.branch keeps the groups
 def grp_kept.SetBranch.branch(
-  m: Maybe<&2, Br>,
-  +s: St,
+  m: Maybe<&2, BranchRecord>,
+  +s: NodeState,
   +r: String,
   w: String,
   t: String,
   b: String,
   k: String,
   bs: Tables.Table<List<&2, U32>>
-) -> {Out.groups(SetBranch.branch(m, s, r, w, t, b, k, bs)) == St.groups(s): Tables.Table<Grp>}:
+) -> {
+  Out.groups(
+    SetBranch.branch(m, s, r, w, t, b, k, bs)
+  )
+    == NodeState.groups(s): Tables.Table<GroupRecord>
+}:
   match m:
     case None{}:
       {==}
     case Some{+br}:
-      grp_kept.SetBranch.on(Owner.of(s, br), Ver.taken(St.versions(s), r), s, r, w, t, b, bs, br)
+      grp_kept.SetBranch.on(
+        Owner.of(s, br),
+        VersionRecord.taken(NodeState.versions(s), r),
+        s,
+        r,
+        w,
+        t,
+        b,
+        bs,
+        br
+      )
 
 # SetBranch.version keeps the groups
 def grp_kept.SetBranch.version(
-  m: Maybe<&2, Ver>,
-  +s: St,
+  m: Maybe<&2, VersionRecord>,
+  +s: NodeState,
   r: String,
   w: String,
   t: String,
   +b: String,
   k: String
-) -> {Out.groups(SetBranch.version(m, s, r, w, t, b, k)) == St.groups(s): Tables.Table<Grp>}:
+) -> {
+  Out.groups(
+    SetBranch.version(m, s, r, w, t, b, k)
+  )
+    == NodeState.groups(s): Tables.Table<GroupRecord>
+}:
   match m:
     case None{}:
       {==}
-    case Some{Ver{bs, p, a, z}}:
-      grp_kept.SetBranch.branch(Tables.Table.get(Br, St.branches(s), b), s, r, w, t, b, k, bs)
+    case Some{VersionRecord{bs, p, a, z}}:
+      grp_kept.SetBranch.branch(
+        Tables.Table.get(BranchRecord, NodeState.branches(s), b),
+        s,
+        r,
+        w,
+        t,
+        b,
+        k,
+        bs
+      )
 
 # SetBranch.point keeps the groups
 def grp_kept.SetBranch.point(
   m: Maybe<&2, String>,
-  +s: St,
+  +s: NodeState,
   r: String,
   w: String,
   t: String,
   b: String
-) -> {Out.groups(SetBranch.point(m, s, r, w, t, b)) == St.groups(s): Tables.Table<Grp>}:
+) -> {
+  Out.groups(SetBranch.point(m, s, r, w, t, b)) == NodeState.groups(s): Tables.Table<GroupRecord>
+}:
   match m:
     case None{}:
       {==}
     case Some{+k}:
-      grp_kept.SetBranch.version(Tables.Table.get(Ver, St.versions(s), k), s, r, w, t, b, k)
+      grp_kept.SetBranch.version(
+        Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+        s,
+        r,
+        w,
+        t,
+        b,
+        k
+      )
 
 # CreateMark.free keeps the groups
 def grp_kept.CreateMark.free(
   held: Maybe<&2, String>,
-  s: St,
+  s: NodeState,
   b: String,
   m: String,
   x: String,
-  br: Br
-) -> {Out.groups(CreateMark.free(held, s, b, m, x, br)) == St.groups(s): Tables.Table<Grp>}:
+  br: BranchRecord
+) -> {
+  Out.groups(
+    CreateMark.free(held, s, b, m, x, br)
+  )
+    == NodeState.groups(s): Tables.Table<GroupRecord>
+}:
   match held:
     case Some{k}:
       {==}
     case None{}:
       match br:
-        case Br{h, o, e, c}:
+        case BranchRecord{h, o, e, c}:
           {==}
 
 # CreateMark.branch keeps the groups
 def grp_kept.CreateMark.branch(
-  f: Maybe<&2, Br>,
-  +s: St,
+  f: Maybe<&2, BranchRecord>,
+  +s: NodeState,
   +b: String,
   +m: String,
   x: String
-) -> {Out.groups(CreateMark.branch(f, s, b, m, x)) == St.groups(s): Tables.Table<Grp>}:
+) -> {
+  Out.groups(CreateMark.branch(f, s, b, m, x)) == NodeState.groups(s): Tables.Table<GroupRecord>
+}:
   match f:
     case None{}:
       {==}
     case Some{br}:
-      grp_kept.CreateMark.free(MarkAt.find(St.marks(s), b, m), s, b, m, x, br)
+      grp_kept.CreateMark.free(MarkAt.find(NodeState.marks(s), b, m), s, b, m, x, br)
 
 # SetOwner.on keeps the groups
 def grp_kept.SetOwner.on(
   owner: Bool,
-  s: St,
+  s: NodeState,
   b: String,
   g: String,
-  br: Br
-) -> {Out.groups(SetOwner.on(owner, s, b, g, br)) == St.groups(s): Tables.Table<Grp>}:
+  br: BranchRecord
+) -> {
+  Out.groups(SetOwner.on(owner, s, b, g, br)) == NodeState.groups(s): Tables.Table<GroupRecord>
+}:
   match owner:
     case False{}:
       {==}
     case True{}:
       match br:
-        case Br{h, o, e, c}:
+        case BranchRecord{h, o, e, c}:
           {==}
 
 # SetOwner.branch keeps the groups
 def grp_kept.SetOwner.branch(
-  f: Maybe<&2, Br>,
-  +s: St,
+  f: Maybe<&2, BranchRecord>,
+  +s: NodeState,
   b: String,
   g: String
-) -> {Out.groups(SetOwner.branch(f, s, b, g)) == St.groups(s): Tables.Table<Grp>}:
+) -> {Out.groups(SetOwner.branch(f, s, b, g)) == NodeState.groups(s): Tables.Table<GroupRecord>}:
   match f:
     case None{}:
       {==}
@@ -5190,28 +5661,33 @@ def grp_kept.SetOwner.branch(
 # Merge.result keeps the groups
 def grp_kept.Merge.result(
   cs: List<&2, String>,
-  s: St,
+  s: NodeState,
   r: String,
   w: String,
   t: String,
   f: String,
   b: String,
   bs: Tables.Table<List<&2, U32>>,
-  br: Br
-) -> {Out.groups(Merge.result(cs, s, r, w, t, f, b, bs, br)) == St.groups(s): Tables.Table<Grp>}:
+  br: BranchRecord
+) -> {
+  Out.groups(
+    Merge.result(cs, s, r, w, t, f, b, bs, br)
+  )
+    == NodeState.groups(s): Tables.Table<GroupRecord>
+}:
   match cs:
     case Nil{}:
       match br:
-        case Br{h, o, e, c}:
+        case BranchRecord{h, o, e, c}:
           {==}
     case Con{k, more}:
       match br:
-        case Br{h, o, e, c}:
+        case BranchRecord{h, o, e, c}:
           {==}
 
 # Merge.three keeps the groups
 def grp_kept.Merge.three(
-  s: St,
+  s: NodeState,
   r: String,
   w: String,
   t: String,
@@ -5220,8 +5696,13 @@ def grp_kept.Merge.three(
   +fb: Tables.Table<List<&2, U32>>,
   +bb: Tables.Table<List<&2, U32>>,
   b: String,
-  br: Br
-) -> {Out.groups(Merge.three(s, r, w, t, f, hb, fb, bb, b, br)) == St.groups(s): Tables.Table<Grp>}:
+  br: BranchRecord
+) -> {
+  Out.groups(
+    Merge.three(s, r, w, t, f, hb, fb, bb, b, br)
+  )
+    == NodeState.groups(s): Tables.Table<GroupRecord>
+}:
   +ns = Strings.union(
     Tables.Table.keys(List<&2, U32>, bb),
     Strings.union(
@@ -5244,49 +5725,57 @@ def grp_kept.Merge.three(
 # Merge.inside keeps the groups
 def grp_kept.Merge.inside(
   held: Bool,
-  +s: St,
+  +s: NodeState,
   r: String,
   w: String,
   t: String,
   +f: String,
   b: String,
-  +br: Br
-) -> {Out.groups(Merge.inside(held, s, r, w, t, f, b, br)) == St.groups(s): Tables.Table<Grp>}:
+  +br: BranchRecord
+) -> {
+  Out.groups(
+    Merge.inside(held, s, r, w, t, f, b, br)
+  )
+    == NodeState.groups(s): Tables.Table<GroupRecord>
+}:
   match held:
     case True{}:
       match br:
-        case Br{h, o, e, c}:
+        case BranchRecord{h, o, e, c}:
           {==}
     case False{}:
       match br:
-        case Br{+h, o, e, c}:
-          hh = History.of(St.versions(s), h)
+        case BranchRecord{+h, o, e, c}:
+          hh = History.of(NodeState.versions(s), h)
           grp_kept.Merge.three(
             s,
             r,
             w,
             t,
             f,
-            Vers.blobs(St.versions(s), h),
-            Vers.blobs(St.versions(s), f),
-            Merge.base(s, Vers.first_in(History.of(St.versions(s), f), Vers.ids(hh))),
+            Vers.blobs(NodeState.versions(s), h),
+            Vers.blobs(NodeState.versions(s), f),
+            Merge.base(s, Vers.first_in(History.of(NodeState.versions(s), f), Vers.ids(hh))),
             b,
-            Br{h, o, e, c}
+            BranchRecord{h, o, e, c}
           )
 
 # Merge.owner keeps the groups
 def grp_kept.Merge.owner(
   owner: Bool,
   taken: Bool,
-  +s: St,
+  +s: NodeState,
   r: String,
   w: String,
   t: String,
   +f: String,
   b: String,
-  +br: Br
+  +br: BranchRecord
 ) -> {
-  Out.groups(Merge.owner(owner, taken, s, r, w, t, f, b, br)) == St.groups(s): Tables.Table<Grp>
+  Out.groups(
+    Merge.owner(owner, taken, s, r, w, t, f, b, br)
+  )
+    == NodeState.groups(s): Tables.Table<GroupRecord>
 }:
   match owner taken:
     case False{} _:
@@ -5295,54 +5784,74 @@ def grp_kept.Merge.owner(
       {==}
     case True{} False{}:
       match br:
-        case Br{+h, o, e, c}:
+        case BranchRecord{+h, o, e, c}:
           grp_kept.Merge.inside(
-            Shared.List.has(~String, ~String.eq, Vers.ids(History.of(St.versions(s), h)), f),
+            Shared.List.has(~String, ~String.eq, Vers.ids(History.of(NodeState.versions(s), h)), f),
             s,
             r,
             w,
             t,
             f,
             b,
-            Br{h, o, e, c}
+            BranchRecord{h, o, e, c}
           )
 
 # Merge.branch keeps the groups
 def grp_kept.Merge.branch(
-  m: Maybe<&2, Br>,
-  +s: St,
+  m: Maybe<&2, BranchRecord>,
+  +s: NodeState,
   +r: String,
   w: String,
   t: String,
   f: String,
   b: String
-) -> {Out.groups(Merge.branch(m, s, r, w, t, f, b)) == St.groups(s): Tables.Table<Grp>}:
+) -> {
+  Out.groups(Merge.branch(m, s, r, w, t, f, b)) == NodeState.groups(s): Tables.Table<GroupRecord>
+}:
   match m:
     case None{}:
       {==}
     case Some{+br}:
-      grp_kept.Merge.owner(Owner.of(s, br), Ver.taken(St.versions(s), r), s, r, w, t, f, b, br)
+      grp_kept.Merge.owner(
+        Owner.of(s, br),
+        VersionRecord.taken(NodeState.versions(s), r),
+        s,
+        r,
+        w,
+        t,
+        f,
+        b,
+        br
+      )
 
 # Merge.point keeps the groups
 def grp_kept.Merge.point(
   m: Maybe<&2, String>,
-  +s: St,
+  +s: NodeState,
   r: String,
   w: String,
   t: String,
   +b: String
-) -> {Out.groups(Merge.point(m, s, r, w, t, b)) == St.groups(s): Tables.Table<Grp>}:
+) -> {Out.groups(Merge.point(m, s, r, w, t, b)) == NodeState.groups(s): Tables.Table<GroupRecord>}:
   match m:
     case None{}:
       {==}
     case Some{f}:
-      grp_kept.Merge.branch(Tables.Table.get(Br, St.branches(s), b), s, r, w, t, f, b)
+      grp_kept.Merge.branch(
+        Tables.Table.get(BranchRecord, NodeState.branches(s), b),
+        s,
+        r,
+        w,
+        t,
+        f,
+        b
+      )
 
 # Resolve.done keeps the groups
 def grp_kept.Resolve.done(
   left: List<&2, String>,
   taken: Bool,
-  s: St,
+  s: NodeState,
   r: String,
   w: String,
   t: String,
@@ -5350,12 +5859,12 @@ def grp_kept.Resolve.done(
   n: String,
   y: List<&2, U32>,
   cl: Clash,
-  br: Br
+  br: BranchRecord
 ) -> {
   Out.groups(
     Resolve.done(left, taken, s, r, w, t, k, n, y, cl, br)
   )
-    == St.groups(s): Tables.Table<Grp>
+    == NodeState.groups(s): Tables.Table<GroupRecord>
 }:
   match left:
     case Nil{}:
@@ -5364,7 +5873,7 @@ def grp_kept.Resolve.done(
           {==}
         case False{}:
           match cl br:
-            case Clash{b, h, f, bs, l} Br{h2, o, e, c}:
+            case Clash{b, h, f, bs, l} BranchRecord{h2, o, e, c}:
               {==}
     case Con{x, more}:
       match cl:
@@ -5374,15 +5883,20 @@ def grp_kept.Resolve.done(
 # Resolve.bytes keeps the groups
 def grp_kept.Resolve.bytes(
   m: Maybe<&2, List<&2, U32>>,
-  +s: St,
+  +s: NodeState,
   +r: String,
   w: String,
   t: String,
   k: String,
   +n: String,
   +cl: Clash,
-  br: Br
-) -> {Out.groups(Resolve.bytes(m, s, r, w, t, k, n, cl, br)) == St.groups(s): Tables.Table<Grp>}:
+  br: BranchRecord
+) -> {
+  Out.groups(
+    Resolve.bytes(m, s, r, w, t, k, n, cl, br)
+  )
+    == NodeState.groups(s): Tables.Table<GroupRecord>
+}:
   match m:
     case None{}:
       {==}
@@ -5391,7 +5905,7 @@ def grp_kept.Resolve.bytes(
         case Clash{b, h, f, bs, +l}:
           grp_kept.Resolve.done(
             Shared.List.remove(~String, ~String.eq, l, n),
-            Ver.taken(St.versions(s), r),
+            VersionRecord.taken(NodeState.versions(s), r),
             s,
             r,
             w,
@@ -5406,7 +5920,7 @@ def grp_kept.Resolve.bytes(
 # Resolve.fresh keeps the groups
 def grp_kept.Resolve.fresh(
   ok: Bool,
-  +s: St,
+  +s: NodeState,
   r: String,
   w: String,
   t: String,
@@ -5414,22 +5928,25 @@ def grp_kept.Resolve.fresh(
   +n: String,
   x: Spec.Content,
   cl: Clash,
-  br: Br
+  br: BranchRecord
 ) -> {
-  Out.groups(Resolve.fresh(ok, s, r, w, t, k, n, x, cl, br)) == St.groups(s): Tables.Table<Grp>
+  Out.groups(
+    Resolve.fresh(ok, s, r, w, t, k, n, x, cl, br)
+  )
+    == NodeState.groups(s): Tables.Table<GroupRecord>
 }:
   match ok:
     case False{}:
       match br:
-        case Br{h, o, e, c}:
+        case BranchRecord{h, o, e, c}:
           {==}
     case True{}:
       grp_kept.Resolve.bytes(Content.bytes(s, n, x), s, r, w, t, k, n, cl, br)
 
 # Resolve.branch keeps the groups
 def grp_kept.Resolve.branch(
-  m: Maybe<&2, Br>,
-  s: St,
+  m: Maybe<&2, BranchRecord>,
+  s: NodeState,
   r: String,
   w: String,
   t: String,
@@ -5437,11 +5954,16 @@ def grp_kept.Resolve.branch(
   n: String,
   x: Spec.Content,
   +cl: Clash
-) -> {Out.groups(Resolve.branch(m, s, r, w, t, k, n, x, cl)) == St.groups(s): Tables.Table<Grp>}:
+) -> {
+  Out.groups(
+    Resolve.branch(m, s, r, w, t, k, n, x, cl)
+  )
+    == NodeState.groups(s): Tables.Table<GroupRecord>
+}:
   match m:
     case None{}:
       {==}
-    case Some{Br{+h, o, e, c}}:
+    case Some{BranchRecord{+h, o, e, c}}:
       match cl:
         case Clash{b2, +h2, f, bs, l}:
           grp_kept.Resolve.fresh(
@@ -5454,13 +5976,13 @@ def grp_kept.Resolve.branch(
             n,
             x,
             Clash{b2, h2, f, bs, l},
-            Br{h, o, e, c}
+            BranchRecord{h, o, e, c}
           )
 
 # Resolve.named keeps the groups
 def grp_kept.Resolve.named(
   has: Bool,
-  +s: St,
+  +s: NodeState,
   r: String,
   w: String,
   t: String,
@@ -5468,7 +5990,12 @@ def grp_kept.Resolve.named(
   n: String,
   x: Spec.Content,
   +cl: Clash
-) -> {Out.groups(Resolve.named(has, s, r, w, t, k, n, x, cl)) == St.groups(s): Tables.Table<Grp>}:
+) -> {
+  Out.groups(
+    Resolve.named(has, s, r, w, t, k, n, x, cl)
+  )
+    == NodeState.groups(s): Tables.Table<GroupRecord>
+}:
   match has:
     case False{}:
       {==}
@@ -5476,7 +6003,7 @@ def grp_kept.Resolve.named(
       match cl:
         case Clash{+b, h, f, bs, l}:
           grp_kept.Resolve.branch(
-            Tables.Table.get(Br, St.branches(s), b),
+            Tables.Table.get(BranchRecord, NodeState.branches(s), b),
             s,
             r,
             w,
@@ -5490,14 +6017,19 @@ def grp_kept.Resolve.named(
 # Resolve.clash keeps the groups
 def grp_kept.Resolve.clash(
   m: Maybe<&2, Clash>,
-  s: St,
+  s: NodeState,
   r: String,
   w: String,
   t: String,
   k: String,
   +n: String,
   x: Spec.Content
-) -> {Out.groups(Resolve.clash(m, s, r, w, t, k, n, x)) == St.groups(s): Tables.Table<Grp>}:
+) -> {
+  Out.groups(
+    Resolve.clash(m, s, r, w, t, k, n, x)
+  )
+    == NodeState.groups(s): Tables.Table<GroupRecord>
+}:
   match m:
     case None{}:
       {==}
@@ -5515,14 +6047,14 @@ def grp_kept.Resolve.clash(
       )
 
 # no member of gs is inside itself
-def Grp.Acyclic(gs: Tables.Table<Grp>) -> Type:
+def GroupRecord.Acyclic(gs: Tables.Table<GroupRecord>) -> Type:
   @y: Spec.Member -> {
     Reaches.Reach.in(
       ~Spec.Member,
-      ~Tables.Table<Grp>,
+      ~Tables.Table<GroupRecord>,
       ~Member.same,
-      ~Grp.members.of,
-      ~Grp.all,
+      ~GroupRecord.members.of,
+      ~GroupRecord.all,
       gs,
       y,
       y
@@ -5532,58 +6064,74 @@ def Grp.Acyclic(gs: Tables.Table<Grp>) -> Type:
 
 # setting a group elsewhere leaves a member's members
 law grp_agree:
-  for gs: Tables.Table<Grp>
+  for gs: Tables.Table<GroupRecord>
   for c: Spec.Member
-  for x: Grp
+  for x: GroupRecord
   for p: Spec.Member
   {
     Member.same(p, c) == False{}: Bool
-  } -> {Grp.members.of(Grp.put(gs, c, x), p) == Grp.members.of(gs, p): List<&2, Spec.Member>}
+  } -> {
+    GroupRecord.members.of(
+      GroupRecord.put(gs, c, x),
+      p
+    )
+      == GroupRecord.members.of(gs, p): List<&2, Spec.Member>
+  }
 
 def grp_agree(gs, c, x, p):
   match c p:
-    case Spec.Member.Node{n} q:
+    case Spec.Member.VendNode{n} q:
       h => {==}
-    case Spec.Member.Group{k} Spec.Member.Node{n}:
+    case Spec.Member.Group{k} Spec.Member.VendNode{n}:
       h => {==}
     case Spec.Member.Group{+k} Spec.Member.Group{+j}:
       +h =>
         +gs = gs
         +x = x
         %Equal.sym(
-          Maybe<&2, Grp>,
-          Tables.Table.get(Grp, Tables.Table.set(Grp, gs, k, x), j),
+          Maybe<&2, GroupRecord>,
+          Tables.Table.get(GroupRecord, Tables.Table.set(GroupRecord, gs, k, x), j),
           Bools.Bool.when(
-            Maybe<&2, Grp>,
+            Maybe<&2, GroupRecord>,
             String.eq(k, j),
             u => Some{x},
-            u => Tables.Table.get(Grp, gs, j)
+            u => Tables.Table.get(GroupRecord, gs, j)
           ),
-          Tables.Table.get_set(Grp, gs, k, x, j)
+          Tables.Table.get_set(GroupRecord, gs, k, x, j)
         ):
-          {Grp.members.in(_) == Grp.members.in(Tables.Table.get(Grp, gs, j)): List<&2, Spec.Member>}
+          {
+            GroupRecord.members.in(
+              _
+            )
+              == GroupRecord.members.in(Tables.Table.get(GroupRecord, gs, j)): List<&2, Spec.Member>
+          }
         %Equal.sym(Bool, String.eq(k, j), False{}, Strings.String.eq_flip(j, k)(h)):
           {
-            Grp.members.in(
-              Bools.Bool.when(Maybe<&2, Grp>, _, u => Some{x}, u => Tables.Table.get(Grp, gs, j))
+            GroupRecord.members.in(
+              Bools.Bool.when(
+                Maybe<&2, GroupRecord>,
+                _,
+                u => Some{x},
+                u => Tables.Table.get(GroupRecord, gs, j)
+              )
             )
-              == Grp.members.in(Tables.Table.get(Grp, gs, j)): List<&2, Spec.Member>
+              == GroupRecord.members.in(Tables.Table.get(GroupRecord, gs, j)): List<&2, Spec.Member>
           }
         {==}
 
 # acyc_all for one member y
 law acyc_all.at:
-  for gs: Tables.Table<Grp>
+  for gs: Tables.Table<GroupRecord>
   for y: Spec.Member
   (
-    @h: String -> {Grp.inside(gs, Spec.Member.Group{h}, h) == False{}: Bool}
+    @h: String -> {GroupRecord.inside(gs, Spec.Member.Group{h}, h) == False{}: Bool}
   ) -> {
     Reaches.Reach.in(
       ~Spec.Member,
-      ~Tables.Table<Grp>,
+      ~Tables.Table<GroupRecord>,
       ~Member.same,
-      ~Grp.members.of,
-      ~Grp.all,
+      ~GroupRecord.members.of,
+      ~GroupRecord.all,
       gs,
       y,
       y
@@ -5593,40 +6141,42 @@ law acyc_all.at:
 
 def acyc_all.at(gs, y):
   match y:
-    case Spec.Member.Node{n}:
+    case Spec.Member.VendNode{n}:
       a =>
         +gs = gs
         Reaches.Reach.go_nil(
           ~Spec.Member,
-          ~Tables.Table<Grp>,
+          ~Tables.Table<GroupRecord>,
           ~Member.same,
-          ~Grp.members.of,
-          List.length(&2, Spec.Member, Grp.all(gs)),
+          ~GroupRecord.members.of,
+          List.length(&2, Spec.Member, GroupRecord.all(gs)),
           gs,
-          Spec.Member.Node{n}
+          Spec.Member.VendNode{n}
         )
     case Spec.Member.Group{h}:
       a => a(h)
 
 # no group of gs inside itself: then no member is
 law acyc_all:
-  for gs: Tables.Table<Grp>
-  (@h: String -> {Grp.inside(gs, Spec.Member.Group{h}, h) == False{}: Bool}) -> Grp.Acyclic(gs)
+  for gs: Tables.Table<GroupRecord>
+  (
+    @h: String -> {GroupRecord.inside(gs, Spec.Member.Group{h}, h) == False{}: Bool}
+  ) -> GroupRecord.Acyclic(gs)
 
 def acyc_all(gs):
   a => y => acyc_all.at(gs, y)(a)
 
 # setting the group g to ms, when that closes no cycle, keeps gs acyclic
 law set_acyclic:
-  for gs: Tables.Table<Grp>
+  for gs: Tables.Table<GroupRecord>
   for g: String
   for ms: List<&2, Spec.Member>
   for e: Nat
-  Grp.Acyclic(
+  GroupRecord.Acyclic(
     gs
   ) -> {
     Cycle.has(gs, g, ms) == False{}: Bool
-  } -> Grp.Acyclic(Tables.Table.set(Grp, gs, g, Grp{ms, e}))
+  } -> GroupRecord.Acyclic(Tables.Table.set(GroupRecord, gs, g, GroupRecord{ms, e}))
 
 def set_acyclic(gs, g, ms, e):
   a => +hc =>
@@ -5636,118 +6186,36 @@ def set_acyclic(gs, g, ms, e):
     +e = e
     y => Reaches.Reach.put_acyclic(
       ~Spec.Member,
-      ~Tables.Table<Grp>,
+      ~Tables.Table<GroupRecord>,
       ~Member.same,
-      ~Grp.members.of,
-      ~Grp.all,
+      ~GroupRecord.members.of,
+      ~GroupRecord.all,
       ~member_same_refl,
       ~member_same_sound,
       ~grp_live,
-      ~Grp,
-      ~Grp.put,
+      ~GroupRecord,
+      ~GroupRecord.put,
       ~grp_agree,
       gs,
       Spec.Member.Group{g},
-      Grp{ms, e},
+      GroupRecord{ms, e},
       y
     )(a)((
-        %Equal.sym(Maybe<&2, Grp>, Tables.Table.get(Grp, Tables.Table.set(Grp, gs, g, Grp{ms, e}), g), Some{Grp{ms, e}}, Tables.Table.get_after_set(Grp, gs, g, Grp{ms, e})):
-          {Reaches.Reach.closes(~Spec.Member, ~Tables.Table<Grp>, ~Member.same, ~Grp.members.of, ~Grp.all, gs, Spec.Member.Group{g}, Grp.members.in(_)) == False{}: Bool}
+        %Equal.sym(Maybe<&2, GroupRecord>, Tables.Table.get(GroupRecord, Tables.Table.set(GroupRecord, gs, g, GroupRecord{ms, e}), g), Some{GroupRecord{ms, e}}, Tables.Table.get_after_set(GroupRecord, gs, g, GroupRecord{ms, e})):
+          {Reaches.Reach.closes(~Spec.Member, ~Tables.Table<GroupRecord>, ~Member.same, ~GroupRecord.members.of, ~GroupRecord.all, gs, Spec.Member.Group{g}, GroupRecord.members.in(_)) == False{}: Bool}
         hc))
-
-# a sync's put of a group keeps the groups acyclic
-law grp_put:
-  for c: Bool
-  for g: String
-  for ms: List<&2, Spec.Member>
-  for e: Nat
-  for gs: Tables.Table<Grp>
-  for ns: List<&2, Logged>
-  {
-    Cycle.has(gs, g, ms) == c: Bool
-  } -> Grp.Acyclic(gs) -> Grp.Acyclic(Kept.groups(Sync.group.put(c, g, Grp{ms, e}, Kept{gs, ns})))
-
-def grp_put(c, g, ms, e, gs, ns):
-  match c:
-    case True{}:
-      hc => a => a
-    case False{}:
-      hc => a => set_acyclic(gs, g, ms, e)(a)(hc)
-
-law grp_later:
-  for lt: Bool
-  for g: String
-  for x: Grp
-  for k: Kept
-  Grp.Acyclic(Kept.groups(k)) -> Grp.Acyclic(Kept.groups(Sync.group.later(lt, g, x, k)))
-
-def grp_later(lt, g, x, k):
-  match lt x k:
-    case False{} y z:
-      a => a
-    case True{} Grp{+ms, e} Kept{+gs, ns}:
-      +g = g
-      grp_put(Cycle.has(gs, g, ms), g, ms, e, gs, ns)({==})
-
-law grp_at:
-  for m: Maybe<&2, Grp>
-  for g: String
-  for x: Grp
-  for k: Kept
-  Grp.Acyclic(Kept.groups(k)) -> Grp.Acyclic(Kept.groups(Sync.group.at(m, g, x, k)))
-
-def grp_at(m, g, x, k):
-  match m x k:
-    case None{} Grp{+ms, e} Kept{+gs, ns}:
-      +g = g
-      grp_put(Cycle.has(gs, g, ms), g, ms, e, gs, ns)({==})
-    case Some{Grp{ns, f}} Grp{ms, +e} z:
-      grp_later(Nat.is_lt(f, e), g, Grp{ms, e}, z)
-
-law grp_seen:
-  for g: String
-  for vis: Maybe<&2, Grp>
-  for k: Kept
-  Grp.Acyclic(Kept.groups(k)) -> Grp.Acyclic(Kept.groups(Sync.group.seen(g, vis, k)))
-
-def grp_seen(g, vis, k):
-  match vis k:
-    case None{} z:
-      a => a
-    case Some{x} Kept{+gs, ns}:
-      +g = g
-      grp_at(Tables.Table.get(Grp, gs, g), g, x, Kept{gs, ns})
-
-# a sync's group pass keeps the groups acyclic
-law grp_fold:
-  for ks: List<&2, String>
-  for full: Tables.Table<Grp>
-  for k: Kept
-  Grp.Acyclic(Kept.groups(k)) -> Grp.Acyclic(Kept.groups(Sync.groups(ks, full, k)))
-
-def grp_fold(ks, full, k):
-  match ks:
-    case Nil{}:
-      a => a
-    case Con{+g, r}:
-      a =>
-        +full = full
-        +k = k
-        grp_fold(
-          r,
-          full,
-          Sync.group.seen(g, Tables.Table.get(Grp, full, g), k)
-        )(grp_seen(g, Tables.Table.get(Grp, full, g), k)(a))
 
 # a set-group keeps the groups acyclic, by whether it closes a cycle
 law sg_acyclic:
   for cycle: Bool
-  for s: St
+  for s: NodeState
   for g: String
   for ms: List<&2, Spec.Member>
   {
-    Cycle.has(St.groups(s), g, ms) == cycle: Bool
-  } -> Grp.Acyclic(St.groups(s)) -> Grp.Acyclic(Out.groups(SetGroup.on(cycle, s, g, ms)))
+    Cycle.has(NodeState.groups(s), g, ms) == cycle: Bool
+  } -> GroupRecord.Acyclic(
+    NodeState.groups(s)
+  ) -> GroupRecord.Acyclic(Out.groups(SetGroup.on(cycle, s, g, ms)))
 
 def sg_acyclic(cycle, s, g, ms):
   match cycle:
@@ -5757,143 +6225,160 @@ def sg_acyclic(cycle, s, g, ms):
       hc => a =>
         +s = s
         +g = g
-        set_acyclic(St.groups(s), g, ms, Grp.epoch.next(St.groups(s), g))(a)(hc)
-
-# a sync keeps the groups acyclic, by whether its versions collide
-law sync_acyclic:
-  for c: Bool
-  for s: St
-  for o: St
-  Grp.Acyclic(St.groups(s)) -> Grp.Acyclic(Out.groups(Sync.go(c, s, o)))
-
-def sync_acyclic(c, s, o):
-  match c:
-    case True{}:
-      a => a
-    case False{}:
-      a =>
-        +s = s
-        +o = o
-        grp_fold(Tables.Table.keys(Grp, St.groups(o)), St.groups(o), Kept{St.groups(s), []})(a)
+        set_acyclic(
+          NodeState.groups(s),
+          g,
+          ms,
+          GroupRecord.epoch.next(NodeState.groups(s), g)
+        )(a)(hc)
 
 # every change keeps the groups acyclic
 law step_acyclic:
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for z: String
   for q: Spec.Ask
-  Grp.Acyclic(St.groups(s)) -> Grp.Acyclic(Out.groups(Step.of(s, r, w, z, q)))
+  {
+    Spec.Ask.local(q) == True{}: Bool
+  } -> GroupRecord.Acyclic(
+    NodeState.groups(s)
+  ) -> GroupRecord.Acyclic(Out.groups(Step.of(s, r, w, z, q)))
 
 def step_acyclic(s, r, w, z, q):
   match q:
     case Spec.Ask.Write{Resources.Name{+n}, b, base, x}:
-      a =>
+      hl => a =>
         +s = s
         +r = r
         %Equal.sym(
-          Tables.Table<Grp>,
+          Tables.Table<GroupRecord>,
           Out.groups(Write.bytes(Content.bytes(s, n, x), s, r, w, z, n, b, base)),
-          St.groups(s),
+          NodeState.groups(s),
           grp_kept.Write.bytes(Content.bytes(s, n, x), s, r, w, z, n, b, base)
-        ): Grp.Acyclic(_)
+        ): GroupRecord.Acyclic(_)
         a
     case Spec.Ask.SetBranch{b, p}:
-      a =>
+      hl => a =>
         +s = s
         %Equal.sym(
-          Tables.Table<Grp>,
+          Tables.Table<GroupRecord>,
           Out.groups(SetBranch.point(Point.version(s, p), s, r, w, z, b)),
-          St.groups(s),
+          NodeState.groups(s),
           grp_kept.SetBranch.point(Point.version(s, p), s, r, w, z, b)
-        ): Grp.Acyclic(_)
+        ): GroupRecord.Acyclic(_)
         a
     case Spec.Ask.CreateMark{+b, m, x}:
-      a =>
+      hl => a =>
         +s = s
         %Equal.sym(
-          Tables.Table<Grp>,
-          Out.groups(CreateMark.branch(Tables.Table.get(Br, St.branches(s), b), s, b, m, x)),
-          St.groups(s),
-          grp_kept.CreateMark.branch(Tables.Table.get(Br, St.branches(s), b), s, b, m, x)
-        ): Grp.Acyclic(_)
+          Tables.Table<GroupRecord>,
+          Out.groups(
+            CreateMark.branch(Tables.Table.get(BranchRecord, NodeState.branches(s), b), s, b, m, x)
+          ),
+          NodeState.groups(s),
+          grp_kept.CreateMark.branch(
+            Tables.Table.get(BranchRecord, NodeState.branches(s), b),
+            s,
+            b,
+            m,
+            x
+          )
+        ): GroupRecord.Acyclic(_)
         a
     case Spec.Ask.Merge{p, b}:
-      a =>
+      hl => a =>
         +s = s
         %Equal.sym(
-          Tables.Table<Grp>,
+          Tables.Table<GroupRecord>,
           Out.groups(Merge.point(Point.version(s, p), s, r, w, z, b)),
-          St.groups(s),
+          NodeState.groups(s),
           grp_kept.Merge.point(Point.version(s, p), s, r, w, z, b)
-        ): Grp.Acyclic(_)
+        ): GroupRecord.Acyclic(_)
         a
     case Spec.Ask.Resolve{+k, Resources.Name{n}, x}:
-      a =>
+      hl => a =>
         +s = s
         %Equal.sym(
-          Tables.Table<Grp>,
-          Out.groups(Resolve.clash(Tables.Table.get(Clash, St.clashes(s), k), s, r, w, z, k, n, x)),
-          St.groups(s),
-          grp_kept.Resolve.clash(Tables.Table.get(Clash, St.clashes(s), k), s, r, w, z, k, n, x)
-        ): Grp.Acyclic(_)
+          Tables.Table<GroupRecord>,
+          Out.groups(
+            Resolve.clash(Tables.Table.get(Clash, NodeState.clashes(s), k), s, r, w, z, k, n, x)
+          ),
+          NodeState.groups(s),
+          grp_kept.Resolve.clash(
+            Tables.Table.get(Clash, NodeState.clashes(s), k),
+            s,
+            r,
+            w,
+            z,
+            k,
+            n,
+            x
+          )
+        ): GroupRecord.Acyclic(_)
         a
     case Spec.Ask.SetOwner{+b, g}:
-      a =>
+      hl => a =>
         +s = s
         %Equal.sym(
-          Tables.Table<Grp>,
-          Out.groups(SetOwner.branch(Tables.Table.get(Br, St.branches(s), b), s, b, g)),
-          St.groups(s),
-          grp_kept.SetOwner.branch(Tables.Table.get(Br, St.branches(s), b), s, b, g)
-        ): Grp.Acyclic(_)
+          Tables.Table<GroupRecord>,
+          Out.groups(
+            SetOwner.branch(Tables.Table.get(BranchRecord, NodeState.branches(s), b), s, b, g)
+          ),
+          NodeState.groups(s),
+          grp_kept.SetOwner.branch(
+            Tables.Table.get(BranchRecord, NodeState.branches(s), b),
+            s,
+            b,
+            g
+          )
+        ): GroupRecord.Acyclic(_)
         a
     case Spec.Ask.SetGroup{+g, +ms}:
-      a =>
+      hl => a =>
         +s = s
-        sg_acyclic(Cycle.has(St.groups(s), g, ms), s, g, ms)({==})(a)
-    case Spec.Ask.Sync{+o, p}:
-      a =>
-        +s = s
-        sync_acyclic(
-          Sync.collides(Tables.Table.keys(Ver, St.versions(o)), St.versions(o), St.versions(s)),
-          s,
-          o
-        )(a)
+        sg_acyclic(Cycle.has(NodeState.groups(s), g, ms), s, g, ms)({==})(a)
+    case Spec.Ask.Sync{o, p}:
+      hl => a => Empty.absurd(
+        GroupRecord.Acyclic(Out.groups(Step.of(s, r, w, z, Spec.Ask.Sync{o, p}))),
+        Shared.Bool.false_ne_true(hl)
+      )
 
 # a change keeps every group outside itself, by whether its request was seen
 law nia_asked:
   for found: Maybe<&2, Seen>
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for z: String
   for q: Spec.Ask
-  for t: St
+  for t: NodeState
   for a: Spec.Answer
   for g: String
   {
-    Node.asked(found, s, r, w, z, q) == (t, a): St & Spec.Answer
-  } -> Grp.Acyclic(
-    St.groups(s)
-  ) -> {Grp.inside(St.groups(t), Spec.Member.Group{g}, g) == False{}: Bool}
+    VendNode.asked(found, s, r, w, z, q) == (t, a): NodeState & Spec.Answer
+  } -> {
+    Spec.Ask.local(q) == True{}: Bool
+  } -> GroupRecord.Acyclic(
+    NodeState.groups(s)
+  ) -> {GroupRecord.inside(NodeState.groups(t), Spec.Member.Group{g}, g) == False{}: Bool}
 
 def nia_asked(found, s, r, w, z, q, t, a, g):
   match found:
     case Some{Seen{b, p}}:
-      h => ac =>
+      h => hl => ac =>
         +s = s
         %Equal.cong(
-          St & Spec.Answer,
-          St,
-          x => Pair.fst(St, Spec.Answer, x),
+          NodeState & Spec.Answer,
+          NodeState,
+          x => Pair.fst(NodeState, Spec.Answer, x),
           (s, b),
           (t, a),
           h
-        ): {Grp.inside(St.groups(_), Spec.Member.Group{g}, g) == False{}: Bool}
+        ): {GroupRecord.inside(NodeState.groups(_), Spec.Member.Group{g}, g) == False{}: Bool}
         ac(Spec.Member.Group{g})
     case None{}:
-      h => ac =>
+      h => hl => ac =>
         +s = s
         +r = r
         +w = w
@@ -5905,41 +6390,53 @@ def nia_asked(found, s, r, w, z, q, t, a, g):
           Step.of(s, r, w, z, q),
           t,
           a
-        )(h): {Grp.inside(St.groups(_), Spec.Member.Group{g}, g) == False{}: Bool}
+        )(h): {GroupRecord.inside(NodeState.groups(_), Spec.Member.Group{g}, g) == False{}: Bool}
         %Equal.sym(
-          Tables.Table<Grp>,
-          St.groups(Pair.fst(St, Spec.Answer, Node.applied(s, r, Step.of(s, r, w, z, q)))),
+          Tables.Table<GroupRecord>,
+          NodeState.groups(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Step.of(s, r, w, z, q)))
+          ),
           Out.groups(Step.of(s, r, w, z, q)),
           groups_after_applied(s, r, Step.of(s, r, w, z, q))
         ):
-          {Grp.inside(_, Spec.Member.Group{g}, g) == False{}: Bool}
-        step_acyclic(s, r, w, z, q)(ac)(Spec.Member.Group{g})
+          {GroupRecord.inside(_, Spec.Member.Group{g}, g) == False{}: Bool}
+        step_acyclic(s, r, w, z, q)(hl)(ac)(Spec.Member.Group{g})
 
 # the node of a state stays across a change
 law self_after_applied:
-  for s: St
+  for s: NodeState
   for r: String
   for out: Out
-  {St.self(Pair.fst(St, Spec.Answer, Node.applied(s, r, out))) == St.self(s): String}
+  {
+    NodeState.self(
+      Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, out))
+    )
+      == NodeState.self(s): String
+  }
 
 def self_after_applied(s, r, out):
   match s out:
-    case St{k, vs, bs, ms, gs, cs, ss, l} Out{nv, nb, nm, ng, nc, news, a}:
+    case NodeState{k, vs, bs, ms, gs, cs, ss, l} Out{nv, nb, nm, ng, nc, news, a}:
       {==}
 
 # a change whose result is (t, a), and whose Out is o: the versions of t
 law view_v:
-  for s: St
+  for s: NodeState
   for r: String
   for x: Out
-  for t: St
+  for t: NodeState
   for a: Spec.Answer
   for o: Out
   {
-    Node.applied(s, r, x) == (t, a): St & Spec.Answer
+    VendNode.applied(s, r, x) == (t, a): NodeState & Spec.Answer
   } -> {
     x == o: Out
-  } -> {St.versions(t) == Ver.add(Out.versions(o), St.versions(s)): Tables.Table<Ver>}
+  } -> {
+    NodeState.versions(
+      t
+    )
+      == VersionRecord.add(Out.versions(o), NodeState.versions(s)): Tables.Table<VersionRecord>
+  }
 
 def view_v(s, r, x, t, a, o):
   hask => hout =>
@@ -5948,44 +6445,51 @@ def view_v(s, r, x, t, a, o):
     +x = x
     +t = t
     Equal.trans(
-      Tables.Table<Ver>,
-      St.versions(t),
-      Ver.add(Out.versions(x), St.versions(s)),
-      Ver.add(Out.versions(o), St.versions(s)),
+      Tables.Table<VersionRecord>,
+      NodeState.versions(t),
+      VersionRecord.add(Out.versions(x), NodeState.versions(s)),
+      VersionRecord.add(Out.versions(o), NodeState.versions(s)),
       Equal.trans(
-        Tables.Table<Ver>,
-        St.versions(t),
-        St.versions(Pair.fst(St, Spec.Answer, Node.applied(s, r, x))),
-        Ver.add(Out.versions(x), St.versions(s)),
+        Tables.Table<VersionRecord>,
+        NodeState.versions(t),
+        NodeState.versions(Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, x))),
+        VersionRecord.add(Out.versions(x), NodeState.versions(s)),
         Equal.cong(
-          St,
-          Tables.Table<Ver>,
-          z => St.versions(z),
+          NodeState,
+          Tables.Table<VersionRecord>,
+          z => NodeState.versions(z),
           t,
-          Pair.fst(St, Spec.Answer, Node.applied(s, r, x)),
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, x)),
           Equal.sym(
-            St,
-            Pair.fst(St, Spec.Answer, Node.applied(s, r, x)),
+            NodeState,
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, x)),
             t,
             applied_state(s, r, x, t, a)(hask)
           )
         ),
         versions_after_applied(s, r, x)
       ),
-      Equal.cong(Out, Tables.Table<Ver>, z => Ver.add(Out.versions(z), St.versions(s)), x, o, hout)
+      Equal.cong(
+        Out,
+        Tables.Table<VersionRecord>,
+        z => VersionRecord.add(Out.versions(z), NodeState.versions(s)),
+        x,
+        o,
+        hout
+      )
     )
 
 # ... the branches of t
 law view_b:
-  for s: St
+  for s: NodeState
   for r: String
   for x: Out
-  for t: St
+  for t: NodeState
   for a: Spec.Answer
   for o: Out
   {
-    Node.applied(s, r, x) == (t, a): St & Spec.Answer
-  } -> {x == o: Out} -> {St.branches(t) == Out.branches(o): Tables.Table<Br>}
+    VendNode.applied(s, r, x) == (t, a): NodeState & Spec.Answer
+  } -> {x == o: Out} -> {NodeState.branches(t) == Out.branches(o): Tables.Table<BranchRecord>}
 
 def view_b(s, r, x, t, a, o):
   hask => hout =>
@@ -5994,44 +6498,44 @@ def view_b(s, r, x, t, a, o):
     +x = x
     +t = t
     Equal.trans(
-      Tables.Table<Br>,
-      St.branches(t),
+      Tables.Table<BranchRecord>,
+      NodeState.branches(t),
       Out.branches(x),
       Out.branches(o),
       Equal.trans(
-        Tables.Table<Br>,
-        St.branches(t),
-        St.branches(Pair.fst(St, Spec.Answer, Node.applied(s, r, x))),
+        Tables.Table<BranchRecord>,
+        NodeState.branches(t),
+        NodeState.branches(Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, x))),
         Out.branches(x),
         Equal.cong(
-          St,
-          Tables.Table<Br>,
-          z => St.branches(z),
+          NodeState,
+          Tables.Table<BranchRecord>,
+          z => NodeState.branches(z),
           t,
-          Pair.fst(St, Spec.Answer, Node.applied(s, r, x)),
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, x)),
           Equal.sym(
-            St,
-            Pair.fst(St, Spec.Answer, Node.applied(s, r, x)),
+            NodeState,
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, x)),
             t,
             applied_state(s, r, x, t, a)(hask)
           )
         ),
         branches_after_applied(s, r, x)
       ),
-      Equal.cong(Out, Tables.Table<Br>, z => Out.branches(z), x, o, hout)
+      Equal.cong(Out, Tables.Table<BranchRecord>, z => Out.branches(z), x, o, hout)
     )
 
 # ... the groups of t
 law view_g:
-  for s: St
+  for s: NodeState
   for r: String
   for x: Out
-  for t: St
+  for t: NodeState
   for a: Spec.Answer
   for o: Out
   {
-    Node.applied(s, r, x) == (t, a): St & Spec.Answer
-  } -> {x == o: Out} -> {St.groups(t) == Out.groups(o): Tables.Table<Grp>}
+    VendNode.applied(s, r, x) == (t, a): NodeState & Spec.Answer
+  } -> {x == o: Out} -> {NodeState.groups(t) == Out.groups(o): Tables.Table<GroupRecord>}
 
 def view_g(s, r, x, t, a, o):
   hask => hout =>
@@ -6040,41 +6544,43 @@ def view_g(s, r, x, t, a, o):
     +x = x
     +t = t
     Equal.trans(
-      Tables.Table<Grp>,
-      St.groups(t),
+      Tables.Table<GroupRecord>,
+      NodeState.groups(t),
       Out.groups(x),
       Out.groups(o),
       Equal.trans(
-        Tables.Table<Grp>,
-        St.groups(t),
-        St.groups(Pair.fst(St, Spec.Answer, Node.applied(s, r, x))),
+        Tables.Table<GroupRecord>,
+        NodeState.groups(t),
+        NodeState.groups(Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, x))),
         Out.groups(x),
         Equal.cong(
-          St,
-          Tables.Table<Grp>,
-          z => St.groups(z),
+          NodeState,
+          Tables.Table<GroupRecord>,
+          z => NodeState.groups(z),
           t,
-          Pair.fst(St, Spec.Answer, Node.applied(s, r, x)),
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, x)),
           Equal.sym(
-            St,
-            Pair.fst(St, Spec.Answer, Node.applied(s, r, x)),
+            NodeState,
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, x)),
             t,
             applied_state(s, r, x, t, a)(hask)
           )
         ),
         groups_after_applied(s, r, x)
       ),
-      Equal.cong(Out, Tables.Table<Grp>, z => Out.groups(z), x, o, hout)
+      Equal.cong(Out, Tables.Table<GroupRecord>, z => Out.groups(z), x, o, hout)
     )
 
 # ... the node of t
 law view_self:
-  for s: St
+  for s: NodeState
   for r: String
   for x: Out
-  for t: St
+  for t: NodeState
   for a: Spec.Answer
-  {Node.applied(s, r, x) == (t, a): St & Spec.Answer} -> {St.self(t) == St.self(s): String}
+  {
+    VendNode.applied(s, r, x) == (t, a): NodeState & Spec.Answer
+  } -> {NodeState.self(t) == NodeState.self(s): String}
 
 def view_self(s, r, x, t, a):
   hask =>
@@ -6084,18 +6590,18 @@ def view_self(s, r, x, t, a):
     +t = t
     Equal.trans(
       String,
-      St.self(t),
-      St.self(Pair.fst(St, Spec.Answer, Node.applied(s, r, x))),
-      St.self(s),
+      NodeState.self(t),
+      NodeState.self(Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, x))),
+      NodeState.self(s),
       Equal.cong(
-        St,
+        NodeState,
         String,
-        z => St.self(z),
+        z => NodeState.self(z),
         t,
-        Pair.fst(St, Spec.Answer, Node.applied(s, r, x)),
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, x)),
         Equal.sym(
-          St,
-          Pair.fst(St, Spec.Answer, Node.applied(s, r, x)),
+          NodeState,
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, x)),
           t,
           applied_state(s, r, x, t, a)(hask)
         )
@@ -6105,13 +6611,13 @@ def view_self(s, r, x, t, a):
 
 # a change answers what its Out answers, so the version it names
 law view_ver:
-  for s: St
+  for s: NodeState
   for r: String
   for x: Out
-  for t: St
+  for t: NodeState
   for a: Spec.Answer
   {
-    Node.applied(s, r, x) == (t, a): St & Spec.Answer
+    VendNode.applied(s, r, x) == (t, a): NodeState & Spec.Answer
   } -> {Answer.version(Out.answer(x)) == Answer.version(a): Maybe<&2, String>}
 
 def view_ver(s, r, x, t, a):
@@ -6131,13 +6637,13 @@ def view_ver(s, r, x, t, a):
 law sb_on_none:
   for owner: Bool
   for taken: Bool
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for t: String
   for b: String
   for bs: Tables.Table<List<&2, U32>>
-  for br: Br
+  for br: BranchRecord
   {
     Answer.version(
       Out.answer(SetBranch.on(owner, taken, s, r, w, t, b, bs, br))
@@ -6151,17 +6657,17 @@ def sb_on_none(owner, taken, s, r, w, t, b, bs, br):
       {==}
     case False{} False{}:
       match br:
-        case Br{h, o, e, c}:
+        case BranchRecord{h, o, e, c}:
           {==}
     case True{} False{}:
       match br:
-        case Br{h, o, e, c}:
+        case BranchRecord{h, o, e, c}:
           {==}
 
 # a set-branch that creates c at k
 law sb_branch:
-  for mb: Maybe<&2, Br>
-  for s: St
+  for mb: Maybe<&2, BranchRecord>
+  for s: NodeState
   for r: String
   for w: String
   for t: String
@@ -6170,14 +6676,14 @@ law sb_branch:
   for bs: Tables.Table<List<&2, U32>>
   for v: String
   {
-    Tables.Table.get(Br, St.branches(s), c) == mb: Maybe<&2, Br>
+    Tables.Table.get(BranchRecord, NodeState.branches(s), c) == mb: Maybe<&2, BranchRecord>
   } -> {
     Answer.version(
       Out.answer(SetBranch.branch(mb, s, r, w, t, c, k, bs))
     )
       == Some{v}: Maybe<&2, String>
   } -> {
-    Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>
+    Tables.Table.get(BranchRecord, NodeState.branches(s), c) == None{}: Maybe<&2, BranchRecord>
   }
     & (
       {
@@ -6196,10 +6702,15 @@ law sb_branch:
           )
             == Out{
               [],
-              Tables.Table.set(Br, St.branches(s), c, Br{k, St.self(s), 0n, 0n}),
-              St.marks(s),
-              St.groups(s),
-              St.clashes(s),
+              Tables.Table.set(
+                BranchRecord,
+                NodeState.branches(s),
+                c,
+                BranchRecord{k, NodeState.self(s), 0n, 0n}
+              ),
+              NodeState.marks(s),
+              NodeState.groups(s),
+              NodeState.clashes(s),
               [Logged.head(c, k)],
               SetBranch.answer(Spec.SetBranch.Created{k})
             }: Out
@@ -6220,7 +6731,12 @@ def sb_branch(mb, s, r, w, t, c, k, bs, v):
         +bs = bs
         Empty.absurd(
           {
-            Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>
+            Tables.Table.get(
+              BranchRecord,
+              NodeState.branches(s),
+              c
+            )
+              == None{}: Maybe<&2, BranchRecord>
           }
             & (
               {
@@ -6239,10 +6755,15 @@ def sb_branch(mb, s, r, w, t, c, k, bs, v):
                   )
                     == Out{
                       [],
-                      Tables.Table.set(Br, St.branches(s), c, Br{k, St.self(s), 0n, 0n}),
-                      St.marks(s),
-                      St.groups(s),
-                      St.clashes(s),
+                      Tables.Table.set(
+                        BranchRecord,
+                        NodeState.branches(s),
+                        c,
+                        BranchRecord{k, NodeState.self(s), 0n, 0n}
+                      ),
+                      NodeState.marks(s),
+                      NodeState.groups(s),
+                      NodeState.clashes(s),
                       [Logged.head(c, k)],
                       SetBranch.answer(Spec.SetBranch.Created{k})
                     }: Out
@@ -6256,7 +6777,17 @@ def sb_branch(mb, s, r, w, t, c, k, bs, v):
               None{},
               Answer.version(
                 Out.answer(
-                  SetBranch.on(Owner.of(s, br), Ver.taken(St.versions(s), r), s, r, w, t, c, bs, br)
+                  SetBranch.on(
+                    Owner.of(s, br),
+                    VersionRecord.taken(NodeState.versions(s), r),
+                    s,
+                    r,
+                    w,
+                    t,
+                    c,
+                    bs,
+                    br
+                  )
                 )
               ),
               Some{v},
@@ -6266,7 +6797,7 @@ def sb_branch(mb, s, r, w, t, c, k, bs, v):
                   Out.answer(
                     SetBranch.on(
                       Owner.of(s, br),
-                      Ver.taken(St.versions(s), r),
+                      VersionRecord.taken(NodeState.versions(s), r),
                       s,
                       r,
                       w,
@@ -6278,7 +6809,17 @@ def sb_branch(mb, s, r, w, t, c, k, bs, v):
                   )
                 ),
                 None{},
-                sb_on_none(Owner.of(s, br), Ver.taken(St.versions(s), r), s, r, w, t, c, bs, br)
+                sb_on_none(
+                  Owner.of(s, br),
+                  VersionRecord.taken(NodeState.versions(s), r),
+                  s,
+                  r,
+                  w,
+                  t,
+                  c,
+                  bs,
+                  br
+                )
               ),
               h
             )
@@ -6287,8 +6828,8 @@ def sb_branch(mb, s, r, w, t, c, k, bs, v):
 
 # a set-branch to the version k, which mv holds
 law sb_version:
-  for mv: Maybe<&2, Ver>
-  for s: St
+  for mv: Maybe<&2, VersionRecord>
+  for s: NodeState
   for r: String
   for w: String
   for t: String
@@ -6296,18 +6837,18 @@ law sb_version:
   for k: String
   for v: String
   {
-    Tables.Table.get(Ver, St.versions(s), k) == mv: Maybe<&2, Ver>
+    Tables.Table.get(VersionRecord, NodeState.versions(s), k) == mv: Maybe<&2, VersionRecord>
   } -> {
     Answer.version(
       Out.answer(SetBranch.version(mv, s, r, w, t, c, k))
     )
       == Some{v}: Maybe<&2, String>
   } -> {
-    Ver.has(St.versions(s), k) == True{}: Bool
+    VersionRecord.has(NodeState.versions(s), k) == True{}: Bool
   }
     & (
       {
-        Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>
+        Tables.Table.get(BranchRecord, NodeState.branches(s), c) == None{}: Maybe<&2, BranchRecord>
       }
         & (
           {
@@ -6325,10 +6866,15 @@ law sb_version:
               )
                 == Out{
                   [],
-                  Tables.Table.set(Br, St.branches(s), c, Br{k, St.self(s), 0n, 0n}),
-                  St.marks(s),
-                  St.groups(s),
-                  St.clashes(s),
+                  Tables.Table.set(
+                    BranchRecord,
+                    NodeState.branches(s),
+                    c,
+                    BranchRecord{k, NodeState.self(s), 0n, 0n}
+                  ),
+                  NodeState.marks(s),
+                  NodeState.groups(s),
+                  NodeState.clashes(s),
                   [Logged.head(c, k)],
                   SetBranch.answer(Spec.SetBranch.Created{k})
                 }: Out
@@ -6341,11 +6887,16 @@ def sb_version(mv, s, r, w, t, c, k, v):
     case None{}:
       e => h => Empty.absurd(
         {
-          Ver.has(St.versions(s), k) == True{}: Bool
+          VersionRecord.has(NodeState.versions(s), k) == True{}: Bool
         }
           & (
             {
-              Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>
+              Tables.Table.get(
+                BranchRecord,
+                NodeState.branches(s),
+                c
+              )
+                == None{}: Maybe<&2, BranchRecord>
             }
               & (
                 {
@@ -6363,10 +6914,15 @@ def sb_version(mv, s, r, w, t, c, k, v):
                     )
                       == Out{
                         [],
-                        Tables.Table.set(Br, St.branches(s), c, Br{k, St.self(s), 0n, 0n}),
-                        St.marks(s),
-                        St.groups(s),
-                        St.clashes(s),
+                        Tables.Table.set(
+                          BranchRecord,
+                          NodeState.branches(s),
+                          c,
+                          BranchRecord{k, NodeState.self(s), 0n, 0n}
+                        ),
+                        NodeState.marks(s),
+                        NodeState.groups(s),
+                        NodeState.clashes(s),
                         [Logged.head(c, k)],
                         SetBranch.answer(Spec.SetBranch.Created{k})
                       }: Out
@@ -6375,25 +6931,35 @@ def sb_version(mv, s, r, w, t, c, k, v):
           ),
         Maybes.Maybe.none_ne_some(String, v, h)
       )
-    case Some{Ver{bs, ps, a, z}}:
+    case Some{VersionRecord{bs, ps, a, z}}:
       +e => h =>
         +s = s
         +c = c
         +k = k
         (
           Equal.cong(
-            Maybe<&2, Ver>,
+            Maybe<&2, VersionRecord>,
             Bool,
-            y => Maybe.is_some(&2, Ver, y),
-            Tables.Table.get(Ver, St.versions(s), k),
-            Some{Ver{bs, ps, a, z}},
+            y => Maybe.is_some(&2, VersionRecord, y),
+            Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+            Some{VersionRecord{bs, ps, a, z}},
             e
           ),
-          sb_branch(Tables.Table.get(Br, St.branches(s), c), s, r, w, t, c, k, bs, v)({==})(h)
+          sb_branch(
+            Tables.Table.get(BranchRecord, NodeState.branches(s), c),
+            s,
+            r,
+            w,
+            t,
+            c,
+            k,
+            bs,
+            v
+          )({==})(h)
         )
 
 law sb_point.fin.of:
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for t: String
@@ -6401,14 +6967,14 @@ law sb_point.fin.of:
   for k: String
   for v: String
   {
-    Ver.has(St.versions(s), k) == True{}: Bool
+    VersionRecord.has(NodeState.versions(s), k) == True{}: Bool
   } -> {
-    Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>
+    Tables.Table.get(BranchRecord, NodeState.branches(s), c) == None{}: Maybe<&2, BranchRecord>
   } -> {
     k == v: String
   } -> {
     SetBranch.version(
-      Tables.Table.get(Ver, St.versions(s), k),
+      Tables.Table.get(VersionRecord, NodeState.versions(s), k),
       s,
       r,
       w,
@@ -6418,10 +6984,15 @@ law sb_point.fin.of:
     )
       == Out{
         [],
-        Tables.Table.set(Br, St.branches(s), c, Br{k, St.self(s), 0n, 0n}),
-        St.marks(s),
-        St.groups(s),
-        St.clashes(s),
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s),
+          c,
+          BranchRecord{k, NodeState.self(s), 0n, 0n}
+        ),
+        NodeState.marks(s),
+        NodeState.groups(s),
+        NodeState.clashes(s),
         [Logged.head(c, k)],
         SetBranch.answer(Spec.SetBranch.Created{k})
       }: Out
@@ -6430,15 +7001,20 @@ law sb_point.fin.of:
   }
     & (
       {
-        Ver.has(St.versions(s), v) == True{}: Bool
+        VersionRecord.has(NodeState.versions(s), v) == True{}: Bool
       }
         & (
           {
-            Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>
+            Tables.Table.get(
+              BranchRecord,
+              NodeState.branches(s),
+              c
+            )
+              == None{}: Maybe<&2, BranchRecord>
           }
             & {
               SetBranch.version(
-                Tables.Table.get(Ver, St.versions(s), k),
+                Tables.Table.get(VersionRecord, NodeState.versions(s), k),
                 s,
                 r,
                 w,
@@ -6448,10 +7024,15 @@ law sb_point.fin.of:
               )
                 == Out{
                   [],
-                  Tables.Table.set(Br, St.branches(s), c, Br{v, St.self(s), 0n, 0n}),
-                  St.marks(s),
-                  St.groups(s),
-                  St.clashes(s),
+                  Tables.Table.set(
+                    BranchRecord,
+                    NodeState.branches(s),
+                    c,
+                    BranchRecord{v, NodeState.self(s), 0n, 0n}
+                  ),
+                  NodeState.marks(s),
+                  NodeState.groups(s),
+                  NodeState.clashes(s),
                   [Logged.head(c, v)],
                   SetBranch.answer(Spec.SetBranch.Created{v})
                 }: Out
@@ -6466,15 +7047,20 @@ def sb_point.fin.of(s, r, w, t, c, k, v):
     }
       & (
         {
-          Ver.has(St.versions(s), _) == True{}: Bool
+          VersionRecord.has(NodeState.versions(s), _) == True{}: Bool
         }
           & (
             {
-              Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>
+              Tables.Table.get(
+                BranchRecord,
+                NodeState.branches(s),
+                c
+              )
+                == None{}: Maybe<&2, BranchRecord>
             }
               & {
                 SetBranch.version(
-                  Tables.Table.get(Ver, St.versions(s), k),
+                  Tables.Table.get(VersionRecord, NodeState.versions(s), k),
                   s,
                   r,
                   w,
@@ -6484,10 +7070,15 @@ def sb_point.fin.of(s, r, w, t, c, k, v):
                 )
                   == Out{
                     [],
-                    Tables.Table.set(Br, St.branches(s), c, Br{_, St.self(s), 0n, 0n}),
-                    St.marks(s),
-                    St.groups(s),
-                    St.clashes(s),
+                    Tables.Table.set(
+                      BranchRecord,
+                      NodeState.branches(s),
+                      c,
+                      BranchRecord{_, NodeState.self(s), 0n, 0n}
+                    ),
+                    NodeState.marks(s),
+                    NodeState.groups(s),
+                    NodeState.clashes(s),
                     [Logged.head(c, _)],
                     SetBranch.answer(Spec.SetBranch.Created{_})
                   }: Out
@@ -6498,7 +7089,7 @@ def sb_point.fin.of(s, r, w, t, c, k, v):
 
 # sb_point, once the version k is found to be v
 law sb_point.fin:
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for t: String
@@ -6506,11 +7097,11 @@ law sb_point.fin:
   for k: String
   for v: String
   {
-    Ver.has(St.versions(s), k) == True{}: Bool
+    VersionRecord.has(NodeState.versions(s), k) == True{}: Bool
   }
     & (
       {
-        Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>
+        Tables.Table.get(BranchRecord, NodeState.branches(s), c) == None{}: Maybe<&2, BranchRecord>
       }
         & (
           {
@@ -6518,7 +7109,7 @@ law sb_point.fin:
           }
             & {
               SetBranch.version(
-                Tables.Table.get(Ver, St.versions(s), k),
+                Tables.Table.get(VersionRecord, NodeState.versions(s), k),
                 s,
                 r,
                 w,
@@ -6528,10 +7119,15 @@ law sb_point.fin:
               )
                 == Out{
                   [],
-                  Tables.Table.set(Br, St.branches(s), c, Br{k, St.self(s), 0n, 0n}),
-                  St.marks(s),
-                  St.groups(s),
-                  St.clashes(s),
+                  Tables.Table.set(
+                    BranchRecord,
+                    NodeState.branches(s),
+                    c,
+                    BranchRecord{k, NodeState.self(s), 0n, 0n}
+                  ),
+                  NodeState.marks(s),
+                  NodeState.groups(s),
+                  NodeState.clashes(s),
                   [Logged.head(c, k)],
                   SetBranch.answer(Spec.SetBranch.Created{k})
                 }: Out
@@ -6540,15 +7136,20 @@ law sb_point.fin:
     ) -> {Some{k} == Some{v}: Maybe<&2, String>}
     & (
       {
-        Ver.has(St.versions(s), v) == True{}: Bool
+        VersionRecord.has(NodeState.versions(s), v) == True{}: Bool
       }
         & (
           {
-            Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>
+            Tables.Table.get(
+              BranchRecord,
+              NodeState.branches(s),
+              c
+            )
+              == None{}: Maybe<&2, BranchRecord>
           }
             & {
               SetBranch.version(
-                Tables.Table.get(Ver, St.versions(s), k),
+                Tables.Table.get(VersionRecord, NodeState.versions(s), k),
                 s,
                 r,
                 w,
@@ -6558,10 +7159,15 @@ law sb_point.fin:
               )
                 == Out{
                   [],
-                  Tables.Table.set(Br, St.branches(s), c, Br{v, St.self(s), 0n, 0n}),
-                  St.marks(s),
-                  St.groups(s),
-                  St.clashes(s),
+                  Tables.Table.set(
+                    BranchRecord,
+                    NodeState.branches(s),
+                    c,
+                    BranchRecord{v, NodeState.self(s), 0n, 0n}
+                  ),
+                  NodeState.marks(s),
+                  NodeState.groups(s),
+                  NodeState.clashes(s),
                   [Logged.head(c, v)],
                   SetBranch.answer(Spec.SetBranch.Created{v})
                 }: Out
@@ -6570,7 +7176,7 @@ law sb_point.fin:
     )
 
 def sb_point.fin.g1(
-  s: St,
+  s: NodeState,
   r: String,
   w: String,
   t: String,
@@ -6578,14 +7184,14 @@ def sb_point.fin.g1(
   k: String,
   v: String,
   x: Pair(
-    {Ver.has(St.versions(s), k) == True{}: Bool},
+    {VersionRecord.has(NodeState.versions(s), k) == True{}: Bool},
     Pair(
-      {Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>},
+      {Tables.Table.get(BranchRecord, NodeState.branches(s), c) == None{}: Maybe<&2, BranchRecord>},
       Pair(
         {k == v: String},
         {
           SetBranch.version(
-            Tables.Table.get(Ver, St.versions(s), k),
+            Tables.Table.get(VersionRecord, NodeState.versions(s), k),
             s,
             r,
             w,
@@ -6595,10 +7201,15 @@ def sb_point.fin.g1(
           )
             == Out{
               [],
-              Tables.Table.set(Br, St.branches(s), c, Br{k, St.self(s), 0n, 0n}),
-              St.marks(s),
-              St.groups(s),
-              St.clashes(s),
+              Tables.Table.set(
+                BranchRecord,
+                NodeState.branches(s),
+                c,
+                BranchRecord{k, NodeState.self(s), 0n, 0n}
+              ),
+              NodeState.marks(s),
+              NodeState.groups(s),
+              NodeState.clashes(s),
               [Logged.head(c, k)],
               SetBranch.answer(Spec.SetBranch.Created{k})
             }: Out
@@ -6609,12 +7220,12 @@ def sb_point.fin.g1(
 ) -> Pair(
   {Some{k} == Some{v}: Maybe<&2, String>},
   Pair(
-    {Ver.has(St.versions(s), v) == True{}: Bool},
+    {VersionRecord.has(NodeState.versions(s), v) == True{}: Bool},
     Pair(
-      {Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>},
+      {Tables.Table.get(BranchRecord, NodeState.branches(s), c) == None{}: Maybe<&2, BranchRecord>},
       {
         SetBranch.version(
-          Tables.Table.get(Ver, St.versions(s), k),
+          Tables.Table.get(VersionRecord, NodeState.versions(s), k),
           s,
           r,
           w,
@@ -6624,10 +7235,15 @@ def sb_point.fin.g1(
         )
           == Out{
             [],
-            Tables.Table.set(Br, St.branches(s), c, Br{v, St.self(s), 0n, 0n}),
-            St.marks(s),
-            St.groups(s),
-            St.clashes(s),
+            Tables.Table.set(
+              BranchRecord,
+              NodeState.branches(s),
+              c,
+              BranchRecord{v, NodeState.self(s), 0n, 0n}
+            ),
+            NodeState.marks(s),
+            NodeState.groups(s),
+            NodeState.clashes(s),
             [Logged.head(c, v)],
             SetBranch.answer(Spec.SetBranch.Created{v})
           }: Out
@@ -6649,7 +7265,7 @@ def sb_point.fin(s, r, w, t, c, k, v):
 # a set-branch to the point m that answers Created
 law sb_point:
   for m: Maybe<&2, String>
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for t: String
@@ -6662,11 +7278,16 @@ law sb_point:
   }
     & (
       {
-        Ver.has(St.versions(s), v) == True{}: Bool
+        VersionRecord.has(NodeState.versions(s), v) == True{}: Bool
       }
         & (
           {
-            Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>
+            Tables.Table.get(
+              BranchRecord,
+              NodeState.branches(s),
+              c
+            )
+              == None{}: Maybe<&2, BranchRecord>
           }
             & {
               SetBranch.point(
@@ -6679,10 +7300,15 @@ law sb_point:
               )
                 == Out{
                   [],
-                  Tables.Table.set(Br, St.branches(s), c, Br{v, St.self(s), 0n, 0n}),
-                  St.marks(s),
-                  St.groups(s),
-                  St.clashes(s),
+                  Tables.Table.set(
+                    BranchRecord,
+                    NodeState.branches(s),
+                    c,
+                    BranchRecord{v, NodeState.self(s), 0n, 0n}
+                  ),
+                  NodeState.marks(s),
+                  NodeState.groups(s),
+                  NodeState.clashes(s),
                   [Logged.head(c, v)],
                   SetBranch.answer(Spec.SetBranch.Created{v})
                 }: Out
@@ -6699,11 +7325,16 @@ def sb_point(m, s, r, w, t, c, v):
         }
           & (
             {
-              Ver.has(St.versions(s), v) == True{}: Bool
+              VersionRecord.has(NodeState.versions(s), v) == True{}: Bool
             }
               & (
                 {
-                  Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>
+                  Tables.Table.get(
+                    BranchRecord,
+                    NodeState.branches(s),
+                    c
+                  )
+                    == None{}: Maybe<&2, BranchRecord>
                 }
                   & {
                     SetBranch.point(
@@ -6716,10 +7347,15 @@ def sb_point(m, s, r, w, t, c, v):
                     )
                       == Out{
                         [],
-                        Tables.Table.set(Br, St.branches(s), c, Br{v, St.self(s), 0n, 0n}),
-                        St.marks(s),
-                        St.groups(s),
-                        St.clashes(s),
+                        Tables.Table.set(
+                          BranchRecord,
+                          NodeState.branches(s),
+                          c,
+                          BranchRecord{v, NodeState.self(s), 0n, 0n}
+                        ),
+                        NodeState.marks(s),
+                        NodeState.groups(s),
+                        NodeState.clashes(s),
                         [Logged.head(c, v)],
                         SetBranch.answer(Spec.SetBranch.Created{v})
                       }: Out
@@ -6744,13 +7380,22 @@ def sb_point(m, s, r, w, t, c, v):
           c,
           k,
           v,
-          sb_version(Tables.Table.get(Ver, St.versions(s), k), s, r, w, t, c, k, v)({==})(h)
+          sb_version(
+            Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+            s,
+            r,
+            w,
+            t,
+            c,
+            k,
+            v
+          )({==})(h)
         )
 
 # a write as the owner that answers Written: its Out
 law wr_at:
   for ok: Bool
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for t: String
@@ -6764,7 +7409,7 @@ law wr_at:
   for v: String
   {
     Answer.version(
-      Out.answer(Write.at(ok, s, r, w, t, n, b, x, Br{h, o, e, c}))
+      Out.answer(Write.at(ok, s, r, w, t, n, b, x, BranchRecord{h, o, e, c}))
     )
       == Some{v}: Maybe<&2, String>
   } -> {
@@ -6777,19 +7422,29 @@ law wr_at:
       n,
       b,
       x,
-      Br{h, o, e, c}
+      BranchRecord{h, o, e, c}
     )
       == Out{
         [
           Tables.Row{
             r,
-            Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s), h), n, x), [h], w, t}
+            VersionRecord{
+              Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s), h), n, x),
+              [h],
+              w,
+              t
+            }
           }
         ],
-        Tables.Table.set(Br, St.branches(s), b, Br.moved(Br{h, o, e, c}, r)),
-        St.marks(s),
-        St.groups(s),
-        St.clashes(s),
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s),
+          b,
+          BranchRecord.moved(BranchRecord{h, o, e, c}, r)
+        ),
+        NodeState.marks(s),
+        NodeState.groups(s),
+        NodeState.clashes(s),
         [Logged.head(b, r)],
         Write.answer(Spec.Write.Written{r})
       }: Out
@@ -6809,24 +7464,29 @@ def wr_at(ok, s, r, w, t, n, b, x, h, o, e, c, v):
             n,
             b,
             x,
-            Br{h, o, e, c}
+            BranchRecord{h, o, e, c}
           )
             == Out{
               [
                 Tables.Row{
                   r,
-                  Ver{
-                    Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s), h), n, x),
+                  VersionRecord{
+                    Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s), h), n, x),
                     [h],
                     w,
                     t
                   }
                 }
               ],
-              Tables.Table.set(Br, St.branches(s), b, Br.moved(Br{h, o, e, c}, r)),
-              St.marks(s),
-              St.groups(s),
-              St.clashes(s),
+              Tables.Table.set(
+                BranchRecord,
+                NodeState.branches(s),
+                b,
+                BranchRecord.moved(BranchRecord{h, o, e, c}, r)
+              ),
+              NodeState.marks(s),
+              NodeState.groups(s),
+              NodeState.clashes(s),
               [Logged.head(b, r)],
               Write.answer(Spec.Write.Written{r})
             }: Out
@@ -6839,7 +7499,7 @@ def wr_at(ok, s, r, w, t, n, b, x, h, o, e, c, v):
 # a write on a branch that answers Written: as its owner, with that Out
 law wr_on:
   for owner: Bool
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for t: String
@@ -6854,7 +7514,7 @@ law wr_on:
   for v: String
   {
     Answer.version(
-      Out.answer(Write.on(owner, s, r, w, t, n, b, base, x, Br{h, o, e, c}))
+      Out.answer(Write.on(owner, s, r, w, t, n, b, base, x, BranchRecord{h, o, e, c}))
     )
       == Some{v}: Maybe<&2, String>
   } -> {
@@ -6871,19 +7531,29 @@ law wr_on:
         b,
         base,
         x,
-        Br{h, o, e, c}
+        BranchRecord{h, o, e, c}
       )
         == Out{
           [
             Tables.Row{
               r,
-              Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s), h), n, x), [h], w, t}
+              VersionRecord{
+                Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s), h), n, x),
+                [h],
+                w,
+                t
+              }
             }
           ],
-          Tables.Table.set(Br, St.branches(s), b, Br.moved(Br{h, o, e, c}, r)),
-          St.marks(s),
-          St.groups(s),
-          St.clashes(s),
+          Tables.Table.set(
+            BranchRecord,
+            NodeState.branches(s),
+            b,
+            BranchRecord.moved(BranchRecord{h, o, e, c}, r)
+          ),
+          NodeState.marks(s),
+          NodeState.groups(s),
+          NodeState.clashes(s),
           [Logged.head(b, r)],
           Write.answer(Spec.Write.Written{r})
         }: Out
@@ -6907,24 +7577,29 @@ def wr_on(owner, s, r, w, t, n, b, base, x, h, o, e, c, v):
               b,
               base,
               x,
-              Br{h, o, e, c}
+              BranchRecord{h, o, e, c}
             )
               == Out{
                 [
                   Tables.Row{
                     r,
-                    Ver{
-                      Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s), h), n, x),
+                    VersionRecord{
+                      Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s), h), n, x),
                       [h],
                       w,
                       t
                     }
                   }
                 ],
-                Tables.Table.set(Br, St.branches(s), b, Br.moved(Br{h, o, e, c}, r)),
-                St.marks(s),
-                St.groups(s),
-                St.clashes(s),
+                Tables.Table.set(
+                  BranchRecord,
+                  NodeState.branches(s),
+                  b,
+                  BranchRecord.moved(BranchRecord{h, o, e, c}, r)
+                ),
+                NodeState.marks(s),
+                NodeState.groups(s),
+                NodeState.clashes(s),
                 [Logged.head(b, r)],
                 Write.answer(Spec.Write.Written{r})
               }: Out
@@ -6938,7 +7613,7 @@ def wr_on(owner, s, r, w, t, n, b, base, x, h, o, e, c, v):
 
 # a write with a free ID on an existing branch is a write on that branch
 law wr_reduce:
-  for s: St
+  for s: NodeState
   for r: String
   for w: String
   for t: String
@@ -6946,14 +7621,14 @@ law wr_reduce:
   for b: String
   for base: Maybe<&2, String>
   for x: List<&2, U32>
-  for br: Br
+  for br: BranchRecord
   {
-    Ver.taken(St.versions(s), r) == False{}: Bool
+    VersionRecord.taken(NodeState.versions(s), r) == False{}: Bool
   } -> {
-    Tables.Table.get(Br, St.branches(s), b) == Some{br}: Maybe<&2, Br>
+    Tables.Table.get(BranchRecord, NodeState.branches(s), b) == Some{br}: Maybe<&2, BranchRecord>
   } -> {
     Write.free(
-      Ver.taken(St.versions(s), r),
+      VersionRecord.taken(NodeState.versions(s), r),
       s,
       r,
       w,
@@ -6974,7 +7649,7 @@ def wr_reduce(s, r, w, t, n, b, base, x, br):
     +br = br
     %Equal.sym(
       Bool,
-      Ver.taken(St.versions(s), r),
+      VersionRecord.taken(NodeState.versions(s), r),
       False{},
       ht
     ): {
@@ -6992,8 +7667,8 @@ def wr_reduce(s, r, w, t, n, b, base, x, br):
         == Write.on(Owner.of(s, br), s, r, w, t, n, b, base, x, br): Out
     }
     %Equal.sym(
-      Maybe<&2, Br>,
-      Tables.Table.get(Br, St.branches(s), b),
+      Maybe<&2, BranchRecord>,
+      Tables.Table.get(BranchRecord, NodeState.branches(s), b),
       Some{br},
       hb
     ): {
@@ -7016,8 +7691,8 @@ def wr_reduce(s, r, w, t, n, b, base, x, br):
 # a sync that answers Synced found no collision
 law sync_free:
   for c: Bool
-  for a: St
-  for o: St
+  for a: NodeState
+  for o: NodeState
   {
     Out.answer(Sync.go(c, a, o)) == Spec.Answer.Sync{Spec.Sync.Synced{}}: Spec.Answer
   } -> {c == False{}: Bool}
@@ -7041,26 +7716,31 @@ def sync_free(c, a, o):
 # add_find when the first new version, under i, is already held: by the lookup
 # m of k, when i is k
 law add_find.held.of:
-  for m: Maybe<&2, Ver>
+  for m: Maybe<&2, VersionRecord>
   for i: String
-  for x: Ver
-  for r: List<&2, Tables.Row<Ver>>
-  for ys: Tables.Table<Ver>
+  for x: VersionRecord
+  for r: List<&2, Tables.Row<VersionRecord>>
+  for ys: Tables.Table<VersionRecord>
   for k: String
   {
-    Tables.Table.get(Ver, ys, k) == m: Maybe<&2, Ver>
+    Tables.Table.get(VersionRecord, ys, k) == m: Maybe<&2, VersionRecord>
   } -> {
-    Ver.has(ys, i) == True{}: Bool
+    VersionRecord.has(ys, i) == True{}: Bool
   } -> {
     String.eq(i, k) == True{}: Bool
   } -> {
     Maybe.or(
       &2,
-      Ver,
-      Tables.Table.get(Ver, ys, k),
-      Tables.Table.find_row(Ver, r, k)
+      VersionRecord,
+      Tables.Table.get(VersionRecord, ys, k),
+      Tables.Table.find_row(VersionRecord, r, k)
     )
-      == Maybe.or(&2, Ver, Tables.Table.get(Ver, ys, k), Some{x}): Maybe<&2, Ver>
+      == Maybe.or(
+        &2,
+        VersionRecord,
+        Tables.Table.get(VersionRecord, ys, k),
+        Some{x}
+      ): Maybe<&2, VersionRecord>
   }
 
 def add_find.held.of(m, i, x, r, ys, k):
@@ -7068,18 +7748,18 @@ def add_find.held.of(m, i, x, r, ys, k):
     case Some{u}:
       hm => hh => he =>
         %Equal.sym(
-          Maybe<&2, Ver>,
-          Tables.Table.get(Ver, ys, k),
+          Maybe<&2, VersionRecord>,
+          Tables.Table.get(VersionRecord, ys, k),
           Some{u},
           hm
         ): {
           Maybe.or(
             &2,
-            Ver,
+            VersionRecord,
             _,
-            Tables.Table.find_row(Ver, r, k)
+            Tables.Table.find_row(VersionRecord, r, k)
           )
-            == Maybe.or(&2, Ver, _, Some{x}): Maybe<&2, Ver>
+            == Maybe.or(&2, VersionRecord, _, Some{x}): Maybe<&2, VersionRecord>
         }
         {==}
     case None{}:
@@ -7091,32 +7771,37 @@ def add_find.held.of(m, i, x, r, ys, k):
           {
             Maybe.or(
               &2,
-              Ver,
-              Tables.Table.get(Ver, ys, k),
-              Tables.Table.find_row(Ver, r, k)
+              VersionRecord,
+              Tables.Table.get(VersionRecord, ys, k),
+              Tables.Table.find_row(VersionRecord, r, k)
             )
-              == Maybe.or(&2, Ver, Tables.Table.get(Ver, ys, k), Some{x}): Maybe<&2, Ver>
+              == Maybe.or(
+                &2,
+                VersionRecord,
+                Tables.Table.get(VersionRecord, ys, k),
+                Some{x}
+              ): Maybe<&2, VersionRecord>
           },
           Shared.Bool.false_ne_true(
             Equal.trans(
               Bool,
               False{},
-              Ver.has(ys, i),
+              VersionRecord.has(ys, i),
               True{},
               Equal.trans(
                 Bool,
                 False{},
-                Ver.has(ys, k),
-                Ver.has(ys, i),
+                VersionRecord.has(ys, k),
+                VersionRecord.has(ys, i),
                 Equal.sym(
                   Bool,
-                  Ver.has(ys, k),
+                  VersionRecord.has(ys, k),
                   False{},
                   Equal.cong(
-                    Maybe<&2, Ver>,
+                    Maybe<&2, VersionRecord>,
                     Bool,
-                    z => Maybe.is_some(&2, Ver, z),
-                    Tables.Table.get(Ver, ys, k),
+                    z => Maybe.is_some(&2, VersionRecord, z),
+                    Tables.Table.get(VersionRecord, ys, k),
                     None{},
                     hm
                   )
@@ -7124,7 +7809,7 @@ def add_find.held.of(m, i, x, r, ys, k):
                 Equal.cong(
                   String,
                   Bool,
-                  z => Ver.has(ys, z),
+                  z => VersionRecord.has(ys, z),
                   k,
                   i,
                   Equal.sym(String, i, k, Strings.String.eq_sound(i, k)(he))
@@ -7139,27 +7824,32 @@ def add_find.held.of(m, i, x, r, ys, k):
 law add_find.held:
   for hit: Bool
   for i: String
-  for x: Ver
-  for r: List<&2, Tables.Row<Ver>>
-  for ys: Tables.Table<Ver>
+  for x: VersionRecord
+  for r: List<&2, Tables.Row<VersionRecord>>
+  for ys: Tables.Table<VersionRecord>
   for k: String
   {
-    Ver.has(ys, i) == True{}: Bool
+    VersionRecord.has(ys, i) == True{}: Bool
   } -> {
     String.eq(i, k) == hit: Bool
   } -> {
     Maybe.or(
       &2,
-      Ver,
-      Tables.Table.get(Ver, ys, k),
-      Tables.Table.find_row(Ver, r, k)
+      VersionRecord,
+      Tables.Table.get(VersionRecord, ys, k),
+      Tables.Table.find_row(VersionRecord, r, k)
     )
       == Maybe.or(
         &2,
-        Ver,
-        Tables.Table.get(Ver, ys, k),
-        Bools.Bool.when(Maybe<&2, Ver>, hit, u => Some{x}, u => Tables.Table.find_row(Ver, r, k))
-      ): Maybe<&2, Ver>
+        VersionRecord,
+        Tables.Table.get(VersionRecord, ys, k),
+        Bools.Bool.when(
+          Maybe<&2, VersionRecord>,
+          hit,
+          u => Some{x},
+          u => Tables.Table.find_row(VersionRecord, r, k)
+        )
+      ): Maybe<&2, VersionRecord>
   }
 
 def add_find.held(hit, i, x, r, ys, k):
@@ -7170,33 +7860,43 @@ def add_find.held(hit, i, x, r, ys, k):
       hh => he =>
         +ys = ys
         +k = k
-        add_find.held.of(Tables.Table.get(Ver, ys, k), i, x, r, ys, k)({==})(hh)(he)
+        add_find.held.of(Tables.Table.get(VersionRecord, ys, k), i, x, r, ys, k)({==})(hh)(he)
 
 # add_find when the first new version, under i, is not held
 law add_find.fresh:
   for hit: Bool
   for i: String
-  for x: Ver
-  for r: List<&2, Tables.Row<Ver>>
-  for ys: Tables.Table<Ver>
+  for x: VersionRecord
+  for r: List<&2, Tables.Row<VersionRecord>>
+  for ys: Tables.Table<VersionRecord>
   for k: String
   {
-    Ver.has(ys, i) == False{}: Bool
+    VersionRecord.has(ys, i) == False{}: Bool
   } -> {
     String.eq(i, k) == hit: Bool
   } -> {
     Maybe.or(
       &2,
-      Ver,
-      Bools.Bool.when(Maybe<&2, Ver>, hit, u => Some{x}, u => Tables.Table.get(Ver, ys, k)),
-      Tables.Table.find_row(Ver, r, k)
+      VersionRecord,
+      Bools.Bool.when(
+        Maybe<&2, VersionRecord>,
+        hit,
+        u => Some{x},
+        u => Tables.Table.get(VersionRecord, ys, k)
+      ),
+      Tables.Table.find_row(VersionRecord, r, k)
     )
       == Maybe.or(
         &2,
-        Ver,
-        Tables.Table.get(Ver, ys, k),
-        Bools.Bool.when(Maybe<&2, Ver>, hit, u => Some{x}, u => Tables.Table.find_row(Ver, r, k))
-      ): Maybe<&2, Ver>
+        VersionRecord,
+        Tables.Table.get(VersionRecord, ys, k),
+        Bools.Bool.when(
+          Maybe<&2, VersionRecord>,
+          hit,
+          u => Some{x},
+          u => Tables.Table.find_row(VersionRecord, r, k)
+        )
+      ): Maybe<&2, VersionRecord>
   }
 
 def add_find.fresh(hit, i, x, r, ys, k):
@@ -7209,22 +7909,22 @@ def add_find.fresh(hit, i, x, r, ys, k):
         +k = k
         +i = i
         %Equal.sym(
-          Maybe<&2, Ver>,
-          Tables.Table.get(Ver, ys, k),
+          Maybe<&2, VersionRecord>,
+          Tables.Table.get(VersionRecord, ys, k),
           None{},
           Tables.Table.none_of(
-            Ver,
-            Tables.Table.get(Ver, ys, k)
+            VersionRecord,
+            Tables.Table.get(VersionRecord, ys, k)
           )(
             Equal.trans(
               Bool,
-              Ver.has(ys, k),
-              Ver.has(ys, i),
+              VersionRecord.has(ys, k),
+              VersionRecord.has(ys, i),
               False{},
               Equal.cong(
                 String,
                 Bool,
-                z => Ver.has(ys, z),
+                z => VersionRecord.has(ys, z),
                 k,
                 i,
                 Equal.sym(String, i, k, Strings.String.eq_sound(i, k)(he))
@@ -7233,32 +7933,32 @@ def add_find.fresh(hit, i, x, r, ys, k):
             )
           )
         ):
-          {Some{x} == Maybe.or(&2, Ver, _, Some{x}): Maybe<&2, Ver>}
+          {Some{x} == Maybe.or(&2, VersionRecord, _, Some{x}): Maybe<&2, VersionRecord>}
         {==}
 
 # add_find, for the first new version, under i
 law add_find.one:
   for held: Bool
   for i: String
-  for x: Ver
-  for r: List<&2, Tables.Row<Ver>>
-  for ys: Tables.Table<Ver>
+  for x: VersionRecord
+  for r: List<&2, Tables.Row<VersionRecord>>
+  for ys: Tables.Table<VersionRecord>
   for k: String
   {
-    Ver.has(ys, i) == held: Bool
+    VersionRecord.has(ys, i) == held: Bool
   } -> {
     Maybe.or(
       &2,
-      Ver,
-      Tables.Table.get(Ver, Ver.add.put(i, x, ys, held), k),
-      Tables.Table.find_row(Ver, r, k)
+      VersionRecord,
+      Tables.Table.get(VersionRecord, VersionRecord.add.put(i, x, ys, held), k),
+      Tables.Table.find_row(VersionRecord, r, k)
     )
       == Maybe.or(
         &2,
-        Ver,
-        Tables.Table.get(Ver, ys, k),
-        Tables.Table.find_row(Ver, Tables.Row{i, x} <> r, k)
-      ): Maybe<&2, Ver>
+        VersionRecord,
+        Tables.Table.get(VersionRecord, ys, k),
+        Tables.Table.find_row(VersionRecord, Tables.Row{i, x} <> r, k)
+      ): Maybe<&2, VersionRecord>
   }
 
 def add_find.one(held, i, x, r, ys, k):
@@ -7275,128 +7975,143 @@ def add_find.one(held, i, x, r, ys, k):
         +x = x
         +ys = ys
         %Equal.sym(
-          Maybe<&2, Ver>,
-          Tables.Table.get(Ver, Tables.Table.set(Ver, ys, i, x), k),
+          Maybe<&2, VersionRecord>,
+          Tables.Table.get(VersionRecord, Tables.Table.set(VersionRecord, ys, i, x), k),
           Bools.Bool.when(
-            Maybe<&2, Ver>,
+            Maybe<&2, VersionRecord>,
             String.eq(i, k),
             u => Some{x},
-            u => Tables.Table.get(Ver, ys, k)
+            u => Tables.Table.get(VersionRecord, ys, k)
           ),
-          Tables.Table.get_set(Ver, ys, i, x, k)
+          Tables.Table.get_set(VersionRecord, ys, i, x, k)
         ):
           {
             Maybe.or(
               &2,
-              Ver,
+              VersionRecord,
               _,
-              Tables.Table.find_row(Ver, r, k)
+              Tables.Table.find_row(VersionRecord, r, k)
             )
               == Maybe.or(
                 &2,
-                Ver,
-                Tables.Table.get(Ver, ys, k),
+                VersionRecord,
+                Tables.Table.get(VersionRecord, ys, k),
                 Bools.Bool.when(
-                  Maybe<&2, Ver>,
+                  Maybe<&2, VersionRecord>,
                   String.eq(i, k),
                   u => Some{x},
-                  u => Tables.Table.find_row(Ver, r, k)
+                  u => Tables.Table.find_row(VersionRecord, r, k)
                 )
-              ): Maybe<&2, Ver>
+              ): Maybe<&2, VersionRecord>
           }
         add_find.fresh(String.eq(i, k), i, x, r, ys, k)(hh)({==})
 
 # a version found after versions are added: the old one when held, else the
 # first new one
 law add_find:
-  for xs: List<&2, Tables.Row<Ver>>
-  for ys: Tables.Table<Ver>
+  for xs: List<&2, Tables.Row<VersionRecord>>
+  for ys: Tables.Table<VersionRecord>
   for k: String
   {
     Tables.Table.get(
-      Ver,
-      Ver.add(xs, ys),
+      VersionRecord,
+      VersionRecord.add(xs, ys),
       k
     )
       == Maybe.or(
         &2,
-        Ver,
-        Tables.Table.get(Ver, ys, k),
-        Tables.Table.find_row(Ver, xs, k)
-      ): Maybe<&2, Ver>
+        VersionRecord,
+        Tables.Table.get(VersionRecord, ys, k),
+        Tables.Table.find_row(VersionRecord, xs, k)
+      ): Maybe<&2, VersionRecord>
   }
 
 def add_find(xs, ys, k):
   match xs:
     case Nil{}:
       Equal.sym(
-        Maybe<&2, Ver>,
-        Maybe.or(&2, Ver, Tables.Table.get(Ver, ys, k), None{}),
-        Tables.Table.get(Ver, ys, k),
-        Maybes.Maybe.or_none(Ver, Tables.Table.get(Ver, ys, k))
+        Maybe<&2, VersionRecord>,
+        Maybe.or(&2, VersionRecord, Tables.Table.get(VersionRecord, ys, k), None{}),
+        Tables.Table.get(VersionRecord, ys, k),
+        Maybes.Maybe.or_none(VersionRecord, Tables.Table.get(VersionRecord, ys, k))
       )
     case Con{Tables.Row{+i, +x}, +r}:
       +ys = ys
       +k = k
       Equal.trans(
-        Maybe<&2, Ver>,
-        Tables.Table.get(Ver, Ver.add(r, Ver.add.one(Tables.Row{i, x}, ys)), k),
-        Maybe.or(
-          &2,
-          Ver,
-          Tables.Table.get(Ver, Ver.add.one(Tables.Row{i, x}, ys), k),
-          Tables.Table.find_row(Ver, r, k)
+        Maybe<&2, VersionRecord>,
+        Tables.Table.get(
+          VersionRecord,
+          VersionRecord.add(r, VersionRecord.add.one(Tables.Row{i, x}, ys)),
+          k
         ),
         Maybe.or(
           &2,
-          Ver,
-          Tables.Table.get(Ver, ys, k),
-          Tables.Table.find_row(Ver, Tables.Row{i, x} <> r, k)
+          VersionRecord,
+          Tables.Table.get(VersionRecord, VersionRecord.add.one(Tables.Row{i, x}, ys), k),
+          Tables.Table.find_row(VersionRecord, r, k)
         ),
-        add_find(r, Ver.add.one(Tables.Row{i, x}, ys), k),
-        add_find.one(Ver.has(ys, i), i, x, r, ys, k)({==})
+        Maybe.or(
+          &2,
+          VersionRecord,
+          Tables.Table.get(VersionRecord, ys, k),
+          Tables.Table.find_row(VersionRecord, Tables.Row{i, x} <> r, k)
+        ),
+        add_find(r, VersionRecord.add.one(Tables.Row{i, x}, ys), k),
+        add_find.one(VersionRecord.has(ys, i), i, x, r, ys, k)({==})
       )
 
 # after a sync, a version is the own one when held, else the other node's
 law sync_find:
-  for o: Tables.Table<Ver>
-  for ys: Tables.Table<Ver>
+  for o: Tables.Table<VersionRecord>
+  for ys: Tables.Table<VersionRecord>
   for k: String
   {
     Tables.Table.get(
-      Ver,
-      Ver.add(Tables.Table.rows(Ver, Tables.Table.keys(Ver, o), o), ys),
+      VersionRecord,
+      VersionRecord.add(
+        Tables.Table.rows(VersionRecord, Tables.Table.keys(VersionRecord, o), o),
+        ys
+      ),
       k
     )
       == Maybe.or(
         &2,
-        Ver,
-        Tables.Table.get(Ver, ys, k),
-        Tables.Table.get(Ver, o, k)
-      ): Maybe<&2, Ver>
+        VersionRecord,
+        Tables.Table.get(VersionRecord, ys, k),
+        Tables.Table.get(VersionRecord, o, k)
+      ): Maybe<&2, VersionRecord>
   }
 
 def sync_find(o, ys, k):
   +o = o
   +k = k
-  %Tables.Table.rows_find_keys(Ver, o, k):
+  %Tables.Table.rows_find_keys(VersionRecord, o, k):
     {
       Tables.Table.get(
-        Ver,
-        Ver.add(Tables.Table.rows(Ver, Tables.Table.keys(Ver, o), o), ys),
+        VersionRecord,
+        VersionRecord.add(
+          Tables.Table.rows(VersionRecord, Tables.Table.keys(VersionRecord, o), o),
+          ys
+        ),
         k
       )
-        == Maybe.or(&2, Ver, Tables.Table.get(Ver, ys, k), _): Maybe<&2, Ver>
+        == Maybe.or(
+          &2,
+          VersionRecord,
+          Tables.Table.get(VersionRecord, ys, k),
+          _
+        ): Maybe<&2, VersionRecord>
     }
-  add_find(Tables.Table.rows(Ver, Tables.Table.keys(Ver, o), o), ys, k)
+  add_find(Tables.Table.rows(VersionRecord, Tables.Table.keys(VersionRecord, o), o), ys, k)
 
 # a sync that finds no collision found none at each key it walked
 law collides_at.at:
   for hit: Bool
   for j: String
   for r: List<&2, String>
-  for os: Tables.Table<Ver>
-  for vs: Tables.Table<Ver>
+  for os: Tables.Table<VersionRecord>
+  for vs: Tables.Table<VersionRecord>
   for k: String
   (
     {
@@ -7404,19 +8119,29 @@ law collides_at.at:
     } -> {
       Shared.List.has(~String, ~String.eq, r, k) == True{}: Bool
     } -> {
-      Sync.clash.at(Tables.Table.get(Ver, vs, k), Tables.Table.get(Ver, os, k)) == False{}: Bool
+      Sync.clash.at(
+        Tables.Table.get(VersionRecord, vs, k),
+        Tables.Table.get(VersionRecord, os, k)
+      )
+        == False{}: Bool
     }
   ) -> {
     String.eq(j, k) == hit: Bool
   } -> {
     Bool.or(
-      Sync.clash.at(Tables.Table.get(Ver, vs, j), Tables.Table.get(Ver, os, j)),
+      Sync.clash.at(Tables.Table.get(VersionRecord, vs, j), Tables.Table.get(VersionRecord, os, j)),
       Sync.collides(r, os, vs)
     )
       == False{}: Bool
   } -> {
     List.any.if(u => Shared.List.has(~String, ~String.eq, r, k), hit) == True{}: Bool
-  } -> {Sync.clash.at(Tables.Table.get(Ver, vs, k), Tables.Table.get(Ver, os, k)) == False{}: Bool}
+  } -> {
+    Sync.clash.at(
+      Tables.Table.get(VersionRecord, vs, k),
+      Tables.Table.get(VersionRecord, os, k)
+    )
+      == False{}: Bool
+  }
 
 def collides_at.at(hit, j, r, os, vs, k):
   match hit:
@@ -7427,7 +8152,10 @@ def collides_at.at(hit, j, r, os, vs, k):
         +vs = vs
         ih(
           Bools.Bool.or_false_right(
-            Sync.clash.at(Tables.Table.get(Ver, vs, j), Tables.Table.get(Ver, os, j)),
+            Sync.clash.at(
+              Tables.Table.get(VersionRecord, vs, j),
+              Tables.Table.get(VersionRecord, os, j)
+            ),
             Sync.collides(r, os, vs)
           )(hc)
         )(hn)
@@ -7443,30 +8171,47 @@ def collides_at.at(hit, j, r, os, vs, k):
         )(
           he
         ): {
-          Sync.clash.at(Tables.Table.get(Ver, vs, _), Tables.Table.get(Ver, os, _)) == False{}: Bool
+          Sync.clash.at(
+            Tables.Table.get(VersionRecord, vs, _),
+            Tables.Table.get(VersionRecord, os, _)
+          )
+            == False{}: Bool
         }
         Bools.Bool.or_false_left(
-          Sync.clash.at(Tables.Table.get(Ver, vs, j), Tables.Table.get(Ver, os, j)),
+          Sync.clash.at(
+            Tables.Table.get(VersionRecord, vs, j),
+            Tables.Table.get(VersionRecord, os, j)
+          ),
           Sync.collides(r, os, vs)
         )(hc)
 
 law collides_at:
   for ks: List<&2, String>
-  for os: Tables.Table<Ver>
-  for vs: Tables.Table<Ver>
+  for os: Tables.Table<VersionRecord>
+  for vs: Tables.Table<VersionRecord>
   for k: String
   {
     Sync.collides(ks, os, vs) == False{}: Bool
   } -> {
     Shared.List.has(~String, ~String.eq, ks, k) == True{}: Bool
-  } -> {Sync.clash.at(Tables.Table.get(Ver, vs, k), Tables.Table.get(Ver, os, k)) == False{}: Bool}
+  } -> {
+    Sync.clash.at(
+      Tables.Table.get(VersionRecord, vs, k),
+      Tables.Table.get(VersionRecord, os, k)
+    )
+      == False{}: Bool
+  }
 
 def collides_at(ks, os, vs, k):
   match ks:
     case Nil{}:
       hc => hn => Empty.absurd(
         {
-          Sync.clash.at(Tables.Table.get(Ver, vs, k), Tables.Table.get(Ver, os, k)) == False{}: Bool
+          Sync.clash.at(
+            Tables.Table.get(VersionRecord, vs, k),
+            Tables.Table.get(VersionRecord, os, k)
+          )
+            == False{}: Bool
         },
         Shared.Bool.false_ne_true(hn)
       )
@@ -7477,7 +8222,7 @@ def collides_at(ks, os, vs, k):
       collides_at.at(String.eq(j, k), j, r, os, vs, k)(collides_at(r, os, vs, k))({==})
 
 # when both lookups find a version, they hold the same bytes for each resource
-def Compat(mb: Maybe<&2, Ver>, ma: Maybe<&2, Ver>) -> Type:
+def Compat(mb: Maybe<&2, VersionRecord>, ma: Maybe<&2, VersionRecord>) -> Type:
   match mb:
     case None{}:
       Unit
@@ -7488,23 +8233,23 @@ def Compat(mb: Maybe<&2, Ver>, ma: Maybe<&2, Ver>) -> Type:
         case Some{u}:
           @n: String -> {
             Blob.find.of(
-              Ver.blobs.of(Some{u}),
+              VersionRecord.blobs.of(Some{u}),
               n
             )
-              == Blob.find.of(Ver.blobs.of(Some{v}), n): Maybe<&2, List<&2, U32>>
+              == Blob.find.of(VersionRecord.blobs.of(Some{v}), n): Maybe<&2, List<&2, U32>>
           }
 
 # compat_of, by the own lookup ma, once the other one found v
 law compat_mine:
-  for ma: Maybe<&2, Ver>
-  for v: Ver
+  for ma: Maybe<&2, VersionRecord>
+  for v: VersionRecord
   {Sync.clash.at(ma, Some{v}) == False{}: Bool} -> Compat(Some{v}, ma)
 
 def compat_mine(ma, v):
   match ma v:
     case None{} y:
       h => Unit{}
-    case Some{Ver{+ub, up, ua, ut}} Ver{+vb, vp, va, vt}:
+    case Some{VersionRecord{+ub, up, ua, ut}} VersionRecord{+vb, vp, va, vt}:
       +h =>
         n => Tables.Table.same_sound(
           ~List<&2, U32>,
@@ -7517,15 +8262,15 @@ def compat_mine(ma, v):
 
 # compat_of, by the other lookup mb
 law compat_of.at:
-  for mb: Maybe<&2, Ver>
-  for bs: Tables.Table<Ver>
-  for as: Tables.Table<Ver>
+  for mb: Maybe<&2, VersionRecord>
+  for bs: Tables.Table<VersionRecord>
+  for as: Tables.Table<VersionRecord>
   for k: String
   {
-    Tables.Table.get(Ver, bs, k) == mb: Maybe<&2, Ver>
+    Tables.Table.get(VersionRecord, bs, k) == mb: Maybe<&2, VersionRecord>
   } -> {
-    Sync.collides(Tables.Table.keys(Ver, bs), bs, as) == False{}: Bool
-  } -> Compat(mb, Tables.Table.get(Ver, as, k))
+    Sync.collides(Tables.Table.keys(VersionRecord, bs), bs, as) == False{}: Bool
+  } -> Compat(mb, Tables.Table.get(VersionRecord, as, k))
 
 def compat_of.at(mb, bs, as, k):
   match mb:
@@ -7536,41 +8281,43 @@ def compat_of.at(mb, bs, as, k):
         +bs = bs
         +as = as
         +k = k
-        compat_mine(Tables.Table.get(Ver, as, k), v)((
-            %hm: {Sync.clash.at(Tables.Table.get(Ver, as, k), _) == False{}: Bool}
-            collides_at(Tables.Table.keys(Ver, bs), bs, as, k)(hc)(Equal.trans(Bool, Shared.List.has(~String, ~String.eq, Tables.Table.keys(Ver, bs), k), Maybe.is_some(&2, Ver, Tables.Table.get(Ver, bs, k)), True{}, Tables.Table.keys_get(Ver, bs, k), Equal.cong(Maybe<&2, Ver>, Bool, z => Maybe.is_some(&2, Ver, z), Tables.Table.get(Ver, bs, k), Some{v}, hm)))))
+        compat_mine(Tables.Table.get(VersionRecord, as, k), v)((
+            %hm: {Sync.clash.at(Tables.Table.get(VersionRecord, as, k), _) == False{}: Bool}
+            collides_at(Tables.Table.keys(VersionRecord, bs), bs, as, k)(hc)(Equal.trans(Bool, Shared.List.has(~String, ~String.eq, Tables.Table.keys(VersionRecord, bs), k), Maybe.is_some(&2, VersionRecord, Tables.Table.get(VersionRecord, bs, k)), True{}, Tables.Table.keys_get(VersionRecord, bs, k), Equal.cong(Maybe<&2, VersionRecord>, Bool, z => Maybe.is_some(&2, VersionRecord, z), Tables.Table.get(VersionRecord, bs, k), Some{v}, hm)))))
 
 # when a sync found no collision, versions under the same ID hold the same
 # bytes for each resource
 law compat_of:
-  for bs: Tables.Table<Ver>
-  for as: Tables.Table<Ver>
+  for bs: Tables.Table<VersionRecord>
+  for as: Tables.Table<VersionRecord>
   for k: String
   {
-    Sync.collides(Tables.Table.keys(Ver, bs), bs, as) == False{}: Bool
-  } -> Compat(Tables.Table.get(Ver, bs, k), Tables.Table.get(Ver, as, k))
+    Sync.collides(Tables.Table.keys(VersionRecord, bs), bs, as) == False{}: Bool
+  } -> Compat(Tables.Table.get(VersionRecord, bs, k), Tables.Table.get(VersionRecord, as, k))
 
 def compat_of(bs, as, k):
   +bs = bs
   +k = k
-  compat_of.at(Tables.Table.get(Ver, bs, k), bs, as, k)({==})
+  compat_of.at(Tables.Table.get(VersionRecord, bs, k), bs, as, k)({==})
 
 # after a takes in b, and b takes in that, a resource of a version has the same
 # bytes on both
 law vb_conv:
-  for ma: Maybe<&2, Ver>
-  for mb: Maybe<&2, Ver>
+  for ma: Maybe<&2, VersionRecord>
+  for mb: Maybe<&2, VersionRecord>
   for n: String
   Compat(
     mb,
     ma
   ) -> {
     Blob.find.of(
-      Ver.blobs.of(Maybe.or(&2, Ver, ma, mb)),
+      VersionRecord.blobs.of(Maybe.or(&2, VersionRecord, ma, mb)),
       n
     )
       == Blob.find.of(
-        Ver.blobs.of(Maybe.or(&2, Ver, mb, Maybe.or(&2, Ver, ma, mb))),
+        VersionRecord.blobs.of(
+          Maybe.or(&2, VersionRecord, mb, Maybe.or(&2, VersionRecord, ma, mb))
+        ),
         n
       ): Maybe<&2, List<&2, U32>>
   }
@@ -7588,12 +8335,12 @@ def vb_conv(ma, mb, n):
 
 # a stamp compares EQ with itself
 law stamp_refl:
-  for x: Br
-  {Br.stamp.cmp(x, x) == EQ{}: Cmp}
+  for x: BranchRecord
+  {BranchRecord.stamp.cmp(x, x) == EQ{}: Cmp}
 
 def stamp_refl(x):
   match x:
-    case Br{h, o, e, c}:
+    case BranchRecord{h, o, e, c}:
       %Equal.sym(Cmp, Nat.cmp(e, e), EQ{}, Nats.Nat.cmp_refl(e)):
         {Cmps.Cmp.then(_, Cmps.Cmp.then(Nat.cmp(c, c), String.order(h, h))) == EQ{}: Cmp}
       %Equal.sym(Cmp, Nat.cmp(c, c), EQ{}, Nats.Nat.cmp_refl(c)):
@@ -7602,13 +8349,13 @@ def stamp_refl(x):
 
 # comparing stamps the other way round flips the order
 law stamp_swap:
-  for x: Br
-  for y: Br
-  {Br.stamp.cmp(y, x) == Cmps.Cmp.flip(Br.stamp.cmp(x, y)): Cmp}
+  for x: BranchRecord
+  for y: BranchRecord
+  {BranchRecord.stamp.cmp(y, x) == Cmps.Cmp.flip(BranchRecord.stamp.cmp(x, y)): Cmp}
 
 def stamp_swap(x, y):
   match x y:
-    case Br{+h1, o1, +e1, +c1} Br{+h2, o2, +e2, +c2}:
+    case BranchRecord{+h1, o1, +e1, +c1} BranchRecord{+h2, o2, +e2, +c2}:
       %Equal.sym(
         Cmp,
         String.order(h2, h1),
@@ -7662,20 +8409,22 @@ def stamp_swap(x, y):
       Cmps.Cmp.then_flip(Nat.cmp(e1, e2), Cmps.Cmp.then(Nat.cmp(c1, c2), String.order(h1, h2)))
 
 # the head of a branch
-def Br.head(b: Br) -> String:
+def BranchRecord.head(b: BranchRecord) -> String:
   match b:
-    case Br{h, o, e, c}:
+    case BranchRecord{h, o, e, c}:
       h
 
 # branches whose stamps compare EQ have the same head
 law stamp_eq_head:
-  for x: Br
-  for y: Br
-  {Br.stamp.cmp(x, y) == EQ{}: Cmp} -> {Br.head(x) == Br.head(y): String}
+  for x: BranchRecord
+  for y: BranchRecord
+  {
+    BranchRecord.stamp.cmp(x, y) == EQ{}: Cmp
+  } -> {BranchRecord.head(x) == BranchRecord.head(y): String}
 
 def stamp_eq_head(x, y):
   match x y:
-    case Br{+h1, o1, e1, +c1} Br{+h2, o2, e2, +c2}:
+    case BranchRecord{+h1, o1, e1, +c1} BranchRecord{+h2, o2, e2, +c2}:
       h => Strings.String.order_sound(
         h1,
         h2
@@ -7693,26 +8442,36 @@ def stamp_eq_head(x, y):
 
 # the head of the branch that m holds is its head mapped
 law head_of_map:
-  for m: Maybe<&2, Br>
-  {Br.head.of(m) == Maybe.map(&2, Br, String, y => Br.head(y), m): Maybe<&2, String>}
+  for m: Maybe<&2, BranchRecord>
+  {
+    BranchRecord.head.of(
+      m
+    )
+      == Maybe.map(&2, BranchRecord, String, y => BranchRecord.head(y), m): Maybe<&2, String>
+  }
 
 def head_of_map(m):
   match m:
     case None{}:
       {==}
-    case Some{Br{h, o, e, c}}:
+    case Some{BranchRecord{h, o, e, c}}:
       {==}
 
 # after a takes in b's branch, and b takes in that, both have the same head
 law hb_conv:
-  for ma: Maybe<&2, Br>
-  for mb: Maybe<&2, Br>
+  for ma: Maybe<&2, BranchRecord>
+  for mb: Maybe<&2, BranchRecord>
   {
-    Br.head.of(
-      Orders.Order.join(~Br, ~Br.stamp.cmp, ma, mb)
+    BranchRecord.head.of(
+      Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, ma, mb)
     )
-      == Br.head.of(
-        Orders.Order.join(~Br, ~Br.stamp.cmp, mb, Orders.Order.join(~Br, ~Br.stamp.cmp, ma, mb))
+      == BranchRecord.head.of(
+        Orders.Order.join(
+          ~BranchRecord,
+          ~BranchRecord.stamp.cmp,
+          mb,
+          Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, ma, mb)
+        )
       ): Maybe<&2, String>
   }
 
@@ -7721,47 +8480,73 @@ def hb_conv(ma, mb):
   +mb = mb
   %Equal.sym(
     Maybe<&2, String>,
-    Br.head.of(Orders.Order.join(~Br, ~Br.stamp.cmp, ma, mb)),
-    Maybe.map(&2, Br, String, y => Br.head(y), Orders.Order.join(~Br, ~Br.stamp.cmp, ma, mb)),
-    head_of_map(Orders.Order.join(~Br, ~Br.stamp.cmp, ma, mb))
+    BranchRecord.head.of(Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, ma, mb)),
+    Maybe.map(
+      &2,
+      BranchRecord,
+      String,
+      y => BranchRecord.head(y),
+      Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, ma, mb)
+    ),
+    head_of_map(Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, ma, mb))
   ):
     {
       _
-        == Br.head.of(
-          Orders.Order.join(~Br, ~Br.stamp.cmp, mb, Orders.Order.join(~Br, ~Br.stamp.cmp, ma, mb))
+        == BranchRecord.head.of(
+          Orders.Order.join(
+            ~BranchRecord,
+            ~BranchRecord.stamp.cmp,
+            mb,
+            Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, ma, mb)
+          )
         ): Maybe<&2, String>
     }
   %Equal.sym(
     Maybe<&2, String>,
-    Br.head.of(
-      Orders.Order.join(~Br, ~Br.stamp.cmp, mb, Orders.Order.join(~Br, ~Br.stamp.cmp, ma, mb))
+    BranchRecord.head.of(
+      Orders.Order.join(
+        ~BranchRecord,
+        ~BranchRecord.stamp.cmp,
+        mb,
+        Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, ma, mb)
+      )
     ),
     Maybe.map(
       &2,
-      Br,
+      BranchRecord,
       String,
-      y => Br.head(y),
-      Orders.Order.join(~Br, ~Br.stamp.cmp, mb, Orders.Order.join(~Br, ~Br.stamp.cmp, ma, mb))
+      y => BranchRecord.head(y),
+      Orders.Order.join(
+        ~BranchRecord,
+        ~BranchRecord.stamp.cmp,
+        mb,
+        Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, ma, mb)
+      )
     ),
     head_of_map(
-      Orders.Order.join(~Br, ~Br.stamp.cmp, mb, Orders.Order.join(~Br, ~Br.stamp.cmp, ma, mb))
+      Orders.Order.join(
+        ~BranchRecord,
+        ~BranchRecord.stamp.cmp,
+        mb,
+        Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, ma, mb)
+      )
     )
   ):
     {
       Maybe.map(
         &2,
-        Br,
+        BranchRecord,
         String,
-        y => Br.head(y),
-        Orders.Order.join(~Br, ~Br.stamp.cmp, ma, mb)
+        y => BranchRecord.head(y),
+        Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, ma, mb)
       )
         == _: Maybe<&2, String>
     }
   Orders.Order.join_conv(
-    ~Br,
+    ~BranchRecord,
     ~String,
-    ~Br.stamp.cmp,
-    ~Br.head,
+    ~BranchRecord.stamp.cmp,
+    ~BranchRecord.head,
     y => stamp_refl(y),
     a => b => stamp_swap(a, b),
     a => b => stamp_eq_head(a, b),
@@ -7772,28 +8557,28 @@ def hb_conv(ma, mb):
 # a new branch t of another node, under the key k, where the node had none
 law at_new:
   for hit: Bool
-  for bs: Tables.Table<Br>
+  for bs: Tables.Table<BranchRecord>
   for k: String
-  for t: Br
+  for t: BranchRecord
   for c: String
   {
     String.eq(k, c) == hit: Bool
   } -> {
-    Tables.Table.get(Br, bs, k) == None{}: Maybe<&2, Br>
+    Tables.Table.get(BranchRecord, bs, k) == None{}: Maybe<&2, BranchRecord>
   } -> {
     Bools.Bool.when(
-      Maybe<&2, Br>,
+      Maybe<&2, BranchRecord>,
       hit,
       u => Some{t},
-      u => Tables.Table.get(Br, bs, c)
+      u => Tables.Table.get(BranchRecord, bs, c)
     )
       == Orders.Order.step(
-        ~Br,
-        ~Br.stamp.cmp,
+        ~BranchRecord,
+        ~BranchRecord.stamp.cmp,
         hit,
         Some{t},
-        Tables.Table.get(Br, bs, c)
-      ): Maybe<&2, Br>
+        Tables.Table.get(BranchRecord, bs, c)
+      ): Maybe<&2, BranchRecord>
   }
 
 def at_new(hit, bs, k, t, c):
@@ -7811,43 +8596,55 @@ def at_new(hit, bs, k, t, c):
           t
         }
           == Some{
-            Orders.Order.pick(Br, Br.stamp.cmp, Tables.Table.get(Br, bs, _), t)
-          }: Maybe<&2, Br>
+            Orders.Order.pick(
+              BranchRecord,
+              BranchRecord.stamp.cmp,
+              Tables.Table.get(BranchRecord, bs, _),
+              t
+            )
+          }: Maybe<&2, BranchRecord>
       }; (%Equal.sym(
-        Maybe<&2, Br>,
-        Tables.Table.get(Br, bs, k),
+        Maybe<&2, BranchRecord>,
+        Tables.Table.get(BranchRecord, bs, k),
         None{},
         x1
-      ): {Some{t} == Some{Orders.Order.pick(Br, Br.stamp.cmp, _, t)}: Maybe<&2, Br>}; {==}))
+      ): {
+        Some{
+          t
+        }
+          == Some{
+            Orders.Order.pick(BranchRecord, BranchRecord.stamp.cmp, _, t)
+          }: Maybe<&2, BranchRecord>
+      }; {==}))
 
 # a branch t of another node that wins over the node's mine (LT)
 law at_set:
   for hit: Bool
-  for bs: Tables.Table<Br>
+  for bs: Tables.Table<BranchRecord>
   for k: String
-  for mine: Br
-  for t: Br
+  for mine: BranchRecord
+  for t: BranchRecord
   for c: String
   {
     String.eq(k, c) == hit: Bool
   } -> {
-    Tables.Table.get(Br, bs, k) == Some{mine}: Maybe<&2, Br>
+    Tables.Table.get(BranchRecord, bs, k) == Some{mine}: Maybe<&2, BranchRecord>
   } -> {
-    Br.stamp.cmp(mine, t) == LT{}: Cmp
+    BranchRecord.stamp.cmp(mine, t) == LT{}: Cmp
   } -> {
     Bools.Bool.when(
-      Maybe<&2, Br>,
+      Maybe<&2, BranchRecord>,
       hit,
       u => Some{t},
-      u => Tables.Table.get(Br, bs, c)
+      u => Tables.Table.get(BranchRecord, bs, c)
     )
       == Orders.Order.step(
-        ~Br,
-        ~Br.stamp.cmp,
+        ~BranchRecord,
+        ~BranchRecord.stamp.cmp,
         hit,
         Some{t},
-        Tables.Table.get(Br, bs, c)
-      ): Maybe<&2, Br>
+        Tables.Table.get(BranchRecord, bs, c)
+      ): Maybe<&2, BranchRecord>
   }
 
 def at_set(hit, bs, k, mine, t, c):
@@ -7871,57 +8668,68 @@ def at_set(hit, bs, k, mine, t, c):
             t
           }
             == Orders.Order.step(
-              ~Br,
-              ~Br.stamp.cmp,
+              ~BranchRecord,
+              ~BranchRecord.stamp.cmp,
               True{},
               Some{t},
-              Tables.Table.get(Br, bs, _)
-            ): Maybe<&2, Br>
+              Tables.Table.get(BranchRecord, bs, _)
+            ): Maybe<&2, BranchRecord>
         }
         %Equal.sym(
-          Maybe<&2, Br>,
-          Tables.Table.get(Br, bs, k),
+          Maybe<&2, BranchRecord>,
+          Tables.Table.get(BranchRecord, bs, k),
           Some{mine},
           hm
-        ): {Some{t} == Orders.Order.step(~Br, ~Br.stamp.cmp, True{}, Some{t}, _): Maybe<&2, Br>}
+        ): {
+          Some{
+            t
+          }
+            == Orders.Order.step(
+              ~BranchRecord,
+              ~BranchRecord.stamp.cmp,
+              True{},
+              Some{t},
+              _
+            ): Maybe<&2, BranchRecord>
+        }
         %Equal.sym(
           Cmp,
-          Br.stamp.cmp(mine, t),
+          BranchRecord.stamp.cmp(mine, t),
           LT{},
           hc
-        ): {Some{t} == Some{Orders.Order.by(Br, _, mine, t)}: Maybe<&2, Br>}
+        ): {Some{t} == Some{Orders.Order.by(BranchRecord, _, mine, t)}: Maybe<&2, BranchRecord>}
         {==}
 
 # a branch t of another node that does not win over the node's mine
 law at_stay:
   for hit: Bool
-  for bs: Tables.Table<Br>
+  for bs: Tables.Table<BranchRecord>
   for k: String
-  for mine: Br
-  for t: Br
+  for mine: BranchRecord
+  for t: BranchRecord
   for c: String
   for c0: Cmp
   {
     String.eq(k, c) == hit: Bool
   } -> {
-    Tables.Table.get(Br, bs, k) == Some{mine}: Maybe<&2, Br>
+    Tables.Table.get(BranchRecord, bs, k) == Some{mine}: Maybe<&2, BranchRecord>
   } -> {
-    Br.stamp.cmp(mine, t) == c0: Cmp
+    BranchRecord.stamp.cmp(mine, t) == c0: Cmp
   } -> {
-    Orders.Order.by(Br, c0, mine, t) == mine: Br
+    Orders.Order.by(BranchRecord, c0, mine, t) == mine: BranchRecord
   } -> {
     Tables.Table.get(
-      Br,
+      BranchRecord,
       bs,
       c
     )
       == Orders.Order.step(
-        ~Br,
-        ~Br.stamp.cmp,
+        ~BranchRecord,
+        ~BranchRecord.stamp.cmp,
         hit,
         Some{t},
-        Tables.Table.get(Br, bs, c)
-      ): Maybe<&2, Br>
+        Tables.Table.get(BranchRecord, bs, c)
+      ): Maybe<&2, BranchRecord>
   }
 
 def at_stay(hit, bs, k, mine, t, c, c0):
@@ -7942,36 +8750,45 @@ def at_stay(hit, bs, k, mine, t, c, c0):
           he
         ): {
           Tables.Table.get(
-            Br,
+            BranchRecord,
             bs,
             _
           )
             == Orders.Order.step(
-              ~Br,
-              ~Br.stamp.cmp,
+              ~BranchRecord,
+              ~BranchRecord.stamp.cmp,
               True{},
               Some{t},
-              Tables.Table.get(Br, bs, _)
-            ): Maybe<&2, Br>
+              Tables.Table.get(BranchRecord, bs, _)
+            ): Maybe<&2, BranchRecord>
         }
         %Equal.sym(
-          Maybe<&2, Br>,
-          Tables.Table.get(Br, bs, k),
+          Maybe<&2, BranchRecord>,
+          Tables.Table.get(BranchRecord, bs, k),
           Some{mine},
           hm
-        ): {_ == Orders.Order.step(~Br, ~Br.stamp.cmp, True{}, Some{t}, _): Maybe<&2, Br>}
+        ): {
+          _
+            == Orders.Order.step(
+              ~BranchRecord,
+              ~BranchRecord.stamp.cmp,
+              True{},
+              Some{t},
+              _
+            ): Maybe<&2, BranchRecord>
+        }
         %Equal.sym(
           Cmp,
-          Br.stamp.cmp(mine, t),
+          BranchRecord.stamp.cmp(mine, t),
           c0,
           hc
-        ): {Some{mine} == Some{Orders.Order.by(Br, _, mine, t)}: Maybe<&2, Br>}
+        ): {Some{mine} == Some{Orders.Order.by(BranchRecord, _, mine, t)}: Maybe<&2, BranchRecord>}
         %Equal.sym(
-          Br,
-          Orders.Order.by(Br, c0, mine, t),
+          BranchRecord,
+          Orders.Order.by(BranchRecord, c0, mine, t),
           mine,
           hb
-        ): {Some{mine} == Some{_}: Maybe<&2, Br>}
+        ): {Some{mine} == Some{_}: Maybe<&2, BranchRecord>}
         {==}
 
 # the branches after another node's t met the node's mine, by the order c0
@@ -7986,28 +8803,42 @@ law pick_find:
   for to: String
   for te: Nat
   for tk: Nat
-  for vs: Tables.Table<Ver>
-  for bs: Tables.Table<Br>
+  for vs: Tables.Table<VersionRecord>
+  for bs: Tables.Table<BranchRecord>
   for cs: Tables.Table<Clash>
   for ns: List<&2, Logged>
   for c: String
   {
-    Tables.Table.get(Br, bs, k) == Some{Br{mh, mo, me, mk}}: Maybe<&2, Br>
+    Tables.Table.get(
+      BranchRecord,
+      bs,
+      k
+    )
+      == Some{BranchRecord{mh, mo, me, mk}}: Maybe<&2, BranchRecord>
   } -> {
-    Br.stamp.cmp(Br{mh, mo, me, mk}, Br{th, to, te, tk}) == c0: Cmp
+    BranchRecord.stamp.cmp(BranchRecord{mh, mo, me, mk}, BranchRecord{th, to, te, tk}) == c0: Cmp
   } -> {
     Tables.Table.get(
-      Br,
-      Mix.branches(Sync.pick(c0, k, Br{mh, mo, me, mk}, Br{th, to, te, tk}, vs, Mix{bs, cs, ns})),
+      BranchRecord,
+      Mix.branches(
+        Sync.pick(
+          c0,
+          k,
+          BranchRecord{mh, mo, me, mk},
+          BranchRecord{th, to, te, tk},
+          vs,
+          Mix{bs, cs, ns}
+        )
+      ),
       c
     )
       == Orders.Order.step(
-        ~Br,
-        ~Br.stamp.cmp,
+        ~BranchRecord,
+        ~BranchRecord.stamp.cmp,
         String.eq(k, c),
-        Some{Br{th, to, te, tk}},
-        Tables.Table.get(Br, bs, c)
-      ): Maybe<&2, Br>
+        Some{BranchRecord{th, to, te, tk}},
+        Tables.Table.get(BranchRecord, bs, c)
+      ): Maybe<&2, BranchRecord>
   }
 
 def pick_find(c0, k, mh, mo, me, mk, th, to, te, tk, vs, bs, cs, ns, c):
@@ -8022,27 +8853,38 @@ def pick_find(c0, k, mh, mo, me, mk, th, to, te, tk, vs, bs, cs, ns, c):
         +te = te
         +tk = tk
         %Equal.sym(
-          Maybe<&2, Br>,
-          Tables.Table.get(Br, Tables.Table.set(Br, bs, k, Br{th, to, te, tk}), c),
-          Bools.Bool.when(
-            Maybe<&2, Br>,
-            String.eq(k, c),
-            u => Some{Br{th, to, te, tk}},
-            u => Tables.Table.get(Br, bs, c)
+          Maybe<&2, BranchRecord>,
+          Tables.Table.get(
+            BranchRecord,
+            Tables.Table.set(BranchRecord, bs, k, BranchRecord{th, to, te, tk}),
+            c
           ),
-          Tables.Table.get_set(Br, bs, k, Br{th, to, te, tk}, c)
+          Bools.Bool.when(
+            Maybe<&2, BranchRecord>,
+            String.eq(k, c),
+            u => Some{BranchRecord{th, to, te, tk}},
+            u => Tables.Table.get(BranchRecord, bs, c)
+          ),
+          Tables.Table.get_set(BranchRecord, bs, k, BranchRecord{th, to, te, tk}, c)
         ):
           {
             _
               == Orders.Order.step(
-                ~Br,
-                ~Br.stamp.cmp,
+                ~BranchRecord,
+                ~BranchRecord.stamp.cmp,
                 String.eq(k, c),
-                Some{Br{th, to, te, tk}},
-                Tables.Table.get(Br, bs, c)
-              ): Maybe<&2, Br>
+                Some{BranchRecord{th, to, te, tk}},
+                Tables.Table.get(BranchRecord, bs, c)
+              ): Maybe<&2, BranchRecord>
           }
-        at_set(String.eq(k, c), bs, k, Br{mh, mo, me, mk}, Br{th, to, te, tk}, c)({==})(hm)(hc)
+        at_set(
+          String.eq(k, c),
+          bs,
+          k,
+          BranchRecord{mh, mo, me, mk},
+          BranchRecord{th, to, te, tk},
+          c
+        )({==})(hm)(hc)
     case GT{}:
       hm => hc =>
         +k = k
@@ -8051,8 +8893,8 @@ def pick_find(c0, k, mh, mo, me, mk, th, to, te, tk, vs, bs, cs, ns, c):
           String.eq(k, c),
           bs,
           k,
-          Br{mh, mo, me, mk},
-          Br{th, to, te, tk},
+          BranchRecord{mh, mo, me, mk},
+          BranchRecord{th, to, te, tk},
           c,
           GT{}
         )({==})(hm)(hc)({==})
@@ -8064,40 +8906,40 @@ def pick_find(c0, k, mh, mo, me, mk, th, to, te, tk, vs, bs, cs, ns, c):
           String.eq(k, c),
           bs,
           k,
-          Br{mh, mo, me, mk},
-          Br{th, to, te, tk},
+          BranchRecord{mh, mo, me, mk},
+          BranchRecord{th, to, te, tk},
           c,
           EQ{}
         )({==})(hm)(hc)({==})
 
 # the branches after another node's t met the branch that m0 holds
 law at_find:
-  for m0: Maybe<&2, Br>
+  for m0: Maybe<&2, BranchRecord>
   for k: String
   for th: String
   for to: String
   for te: Nat
   for tk: Nat
-  for vs: Tables.Table<Ver>
-  for bs: Tables.Table<Br>
+  for vs: Tables.Table<VersionRecord>
+  for bs: Tables.Table<BranchRecord>
   for cs: Tables.Table<Clash>
   for ns: List<&2, Logged>
   for c: String
   {
-    Tables.Table.get(Br, bs, k) == m0: Maybe<&2, Br>
+    Tables.Table.get(BranchRecord, bs, k) == m0: Maybe<&2, BranchRecord>
   } -> {
     Tables.Table.get(
-      Br,
-      Mix.branches(Sync.at(m0, k, Br{th, to, te, tk}, vs, Mix{bs, cs, ns})),
+      BranchRecord,
+      Mix.branches(Sync.at(m0, k, BranchRecord{th, to, te, tk}, vs, Mix{bs, cs, ns})),
       c
     )
       == Orders.Order.step(
-        ~Br,
-        ~Br.stamp.cmp,
+        ~BranchRecord,
+        ~BranchRecord.stamp.cmp,
         String.eq(k, c),
-        Some{Br{th, to, te, tk}},
-        Tables.Table.get(Br, bs, c)
-      ): Maybe<&2, Br>
+        Some{BranchRecord{th, to, te, tk}},
+        Tables.Table.get(BranchRecord, bs, c)
+      ): Maybe<&2, BranchRecord>
   }
 
 def at_find(m0, k, th, to, te, tk, vs, bs, cs, ns, c):
@@ -8112,35 +8954,39 @@ def at_find(m0, k, th, to, te, tk, vs, bs, cs, ns, c):
         +te = te
         +tk = tk
         %Equal.sym(
-          Maybe<&2, Br>,
-          Tables.Table.get(Br, Tables.Table.set(Br, bs, k, Br{th, to, te, tk}), c),
-          Bools.Bool.when(
-            Maybe<&2, Br>,
-            String.eq(k, c),
-            u => Some{Br{th, to, te, tk}},
-            u => Tables.Table.get(Br, bs, c)
+          Maybe<&2, BranchRecord>,
+          Tables.Table.get(
+            BranchRecord,
+            Tables.Table.set(BranchRecord, bs, k, BranchRecord{th, to, te, tk}),
+            c
           ),
-          Tables.Table.get_set(Br, bs, k, Br{th, to, te, tk}, c)
+          Bools.Bool.when(
+            Maybe<&2, BranchRecord>,
+            String.eq(k, c),
+            u => Some{BranchRecord{th, to, te, tk}},
+            u => Tables.Table.get(BranchRecord, bs, c)
+          ),
+          Tables.Table.get_set(BranchRecord, bs, k, BranchRecord{th, to, te, tk}, c)
         ):
           {
             _
               == Orders.Order.step(
-                ~Br,
-                ~Br.stamp.cmp,
+                ~BranchRecord,
+                ~BranchRecord.stamp.cmp,
                 String.eq(k, c),
-                Some{Br{th, to, te, tk}},
-                Tables.Table.get(Br, bs, c)
-              ): Maybe<&2, Br>
+                Some{BranchRecord{th, to, te, tk}},
+                Tables.Table.get(BranchRecord, bs, c)
+              ): Maybe<&2, BranchRecord>
           }
-        at_new(String.eq(k, c), bs, k, Br{th, to, te, tk}, c)({==})(hm)
-    case Some{Br{+mh, +mo, +me, +mk}}:
+        at_new(String.eq(k, c), bs, k, BranchRecord{th, to, te, tk}, c)({==})(hm)
+    case Some{BranchRecord{+mh, +mo, +me, +mk}}:
       hm =>
         +th = th
         +to = to
         +te = te
         +tk = tk
         pick_find(
-          Br.stamp.cmp(Br{mh, mo, me, mk}, Br{th, to, te, tk}),
+          BranchRecord.stamp.cmp(BranchRecord{mh, mo, me, mk}, BranchRecord{th, to, te, tk}),
           k,
           mh,
           mo,
@@ -8160,23 +9006,23 @@ def at_find(m0, k, th, to, te, tk, vs, bs, cs, ns, c):
 # one step of a sync's branch pass, for the branch f of another node, named k
 law seen_find:
   for k: String
-  for f: Maybe<&2, Br>
+  for f: Maybe<&2, BranchRecord>
   for acc: Mix
-  for vs: Tables.Table<Ver>
+  for vs: Tables.Table<VersionRecord>
   for c: String
   {
     Tables.Table.get(
-      Br,
+      BranchRecord,
       Mix.branches(Sync.seen.meet(k, f, acc, vs)),
       c
     )
       == Orders.Order.step(
-        ~Br,
-        ~Br.stamp.cmp,
+        ~BranchRecord,
+        ~BranchRecord.stamp.cmp,
         String.eq(k, c),
         f,
-        Tables.Table.get(Br, Mix.branches(acc), c)
-      ): Maybe<&2, Br>
+        Tables.Table.get(BranchRecord, Mix.branches(acc), c)
+      ): Maybe<&2, BranchRecord>
   }
 
 def seen_find(k, f, acc, vs, c):
@@ -8184,38 +9030,49 @@ def seen_find(k, f, acc, vs, c):
     case None{} Mix{bs, cs, ns}:
       +c = c
       Equal.sym(
-        Maybe<&2, Br>,
-        Orders.Order.step(~Br, ~Br.stamp.cmp, String.eq(k, c), None{}, Tables.Table.get(Br, bs, c)),
-        Tables.Table.get(Br, bs, c),
-        Orders.Order.step_none(~Br, ~Br.stamp.cmp, String.eq(k, c), Tables.Table.get(Br, bs, c))
+        Maybe<&2, BranchRecord>,
+        Orders.Order.step(
+          ~BranchRecord,
+          ~BranchRecord.stamp.cmp,
+          String.eq(k, c),
+          None{},
+          Tables.Table.get(BranchRecord, bs, c)
+        ),
+        Tables.Table.get(BranchRecord, bs, c),
+        Orders.Order.step_none(
+          ~BranchRecord,
+          ~BranchRecord.stamp.cmp,
+          String.eq(k, c),
+          Tables.Table.get(BranchRecord, bs, c)
+        )
       )
-    case Some{Br{th, to, te, tk}} Mix{+bs, cs, ns}:
+    case Some{BranchRecord{th, to, te, tk}} Mix{+bs, cs, ns}:
       +k = k
-      at_find(Tables.Table.get(Br, bs, k), k, th, to, te, tk, vs, bs, cs, ns, c)({==})
+      at_find(Tables.Table.get(BranchRecord, bs, k), k, th, to, te, tk, vs, bs, cs, ns, c)({==})
 
 # a sync's branch pass, as a fold
 law brs_fold_find:
   for ks: List<&2, String>
-  for full: Tables.Table<Br>
-  for vs: Tables.Table<Ver>
+  for full: Tables.Table<BranchRecord>
+  for vs: Tables.Table<VersionRecord>
   for acc: Mix
   for c: String
   {
     Tables.Table.get(
-      Br,
+      BranchRecord,
       Mix.branches(Sync.branches(ks, full, vs, acc)),
       c
     )
       == Orders.Order.fold(
-        ~Br,
-        ~Tables.Table<Br>,
-        ~Br.stamp.cmp,
-        ~(t => k => Tables.Table.get(Br, t, k)),
+        ~BranchRecord,
+        ~Tables.Table<BranchRecord>,
+        ~BranchRecord.stamp.cmp,
+        ~(t => k => Tables.Table.get(BranchRecord, t, k)),
         ks,
         full,
         c,
-        Tables.Table.get(Br, Mix.branches(acc), c)
-      ): Maybe<&2, Br>
+        Tables.Table.get(BranchRecord, Mix.branches(acc), c)
+      ): Maybe<&2, BranchRecord>
   }
 
 def brs_fold_find(ks, full, vs, acc, c):
@@ -8227,47 +9084,58 @@ def brs_fold_find(ks, full, vs, acc, c):
       +vs = vs
       +c = c
       +acc = acc
-      %seen_find(k, Tables.Table.get(Br, full, k), acc, vs, c):
+      %seen_find(k, Tables.Table.get(BranchRecord, full, k), acc, vs, c):
         {
           Tables.Table.get(
-            Br,
+            BranchRecord,
             Mix.branches(
-              Sync.branches(r, full, vs, Sync.seen.meet(k, Tables.Table.get(Br, full, k), acc, vs))
+              Sync.branches(
+                r,
+                full,
+                vs,
+                Sync.seen.meet(k, Tables.Table.get(BranchRecord, full, k), acc, vs)
+              )
             ),
             c
           )
             == Orders.Order.fold(
-              ~Br,
-              ~Tables.Table<Br>,
-              ~Br.stamp.cmp,
-              ~(t => k => Tables.Table.get(Br, t, k)),
+              ~BranchRecord,
+              ~Tables.Table<BranchRecord>,
+              ~BranchRecord.stamp.cmp,
+              ~(t => k => Tables.Table.get(BranchRecord, t, k)),
               r,
               full,
               c,
               _
-            ): Maybe<&2, Br>
+            ): Maybe<&2, BranchRecord>
         }
-      brs_fold_find(r, full, vs, Sync.seen.meet(k, Tables.Table.get(Br, full, k), acc, vs), c)
+      brs_fold_find(
+        r,
+        full,
+        vs,
+        Sync.seen.meet(k, Tables.Table.get(BranchRecord, full, k), acc, vs),
+        c
+      )
 
 # after a sync's branch pass, a branch is the winner of the node's own and the
 # other node's
 law sync_branches_find:
-  for full: Tables.Table<Br>
-  for vs: Tables.Table<Ver>
+  for full: Tables.Table<BranchRecord>
+  for vs: Tables.Table<VersionRecord>
   for acc: Mix
   for c: String
   {
     Tables.Table.get(
-      Br,
-      Mix.branches(Sync.branches(Tables.Table.keys(Br, full), full, vs, acc)),
+      BranchRecord,
+      Mix.branches(Sync.branches(Tables.Table.keys(BranchRecord, full), full, vs, acc)),
       c
     )
       == Orders.Order.join(
-        ~Br,
-        ~Br.stamp.cmp,
-        Tables.Table.get(Br, Mix.branches(acc), c),
-        Tables.Table.get(Br, full, c)
-      ): Maybe<&2, Br>
+        ~BranchRecord,
+        ~BranchRecord.stamp.cmp,
+        Tables.Table.get(BranchRecord, Mix.branches(acc), c),
+        Tables.Table.get(BranchRecord, full, c)
+      ): Maybe<&2, BranchRecord>
   }
 
 def sync_branches_find(full, vs, acc, c):
@@ -8275,53 +9143,53 @@ def sync_branches_find(full, vs, acc, c):
   +acc = acc
   +c = c
   Equal.trans(
-    Maybe<&2, Br>,
+    Maybe<&2, BranchRecord>,
     Tables.Table.get(
-      Br,
-      Mix.branches(Sync.branches(Tables.Table.keys(Br, full), full, vs, acc)),
+      BranchRecord,
+      Mix.branches(Sync.branches(Tables.Table.keys(BranchRecord, full), full, vs, acc)),
       c
     ),
     Orders.Order.fold(
-      ~Br,
-      ~Tables.Table<Br>,
-      ~Br.stamp.cmp,
-      ~(t => k => Tables.Table.get(Br, t, k)),
-      Tables.Table.keys(Br, full),
+      ~BranchRecord,
+      ~Tables.Table<BranchRecord>,
+      ~BranchRecord.stamp.cmp,
+      ~(t => k => Tables.Table.get(BranchRecord, t, k)),
+      Tables.Table.keys(BranchRecord, full),
       full,
       c,
-      Tables.Table.get(Br, Mix.branches(acc), c)
+      Tables.Table.get(BranchRecord, Mix.branches(acc), c)
     ),
     Orders.Order.join(
-      ~Br,
-      ~Br.stamp.cmp,
-      Tables.Table.get(Br, Mix.branches(acc), c),
-      Tables.Table.get(Br, full, c)
+      ~BranchRecord,
+      ~BranchRecord.stamp.cmp,
+      Tables.Table.get(BranchRecord, Mix.branches(acc), c),
+      Tables.Table.get(BranchRecord, full, c)
     ),
-    brs_fold_find(Tables.Table.keys(Br, full), full, vs, acc, c),
+    brs_fold_find(Tables.Table.keys(BranchRecord, full), full, vs, acc, c),
     Orders.Order.fold_all(
-      ~Br,
-      ~Tables.Table<Br>,
-      ~Br.stamp.cmp,
-      ~(t => k => Tables.Table.get(Br, t, k)),
+      ~BranchRecord,
+      ~Tables.Table<BranchRecord>,
+      ~BranchRecord.stamp.cmp,
+      ~(t => k => Tables.Table.get(BranchRecord, t, k)),
       y => stamp_refl(y),
-      Tables.Table.keys(Br, full),
+      Tables.Table.keys(BranchRecord, full),
       full,
       c,
-      Tables.Table.get(Br, Mix.branches(acc), c),
+      Tables.Table.get(BranchRecord, Mix.branches(acc), c),
       h => Tables.Table.none_of(
-        Br,
-        Tables.Table.get(Br, full, c)
+        BranchRecord,
+        Tables.Table.get(BranchRecord, full, c)
       )(
         Equal.trans(
           Bool,
-          Maybe.is_some(&2, Br, Tables.Table.get(Br, full, c)),
-          Shared.List.has(~String, ~String.eq, Tables.Table.keys(Br, full), c),
+          Maybe.is_some(&2, BranchRecord, Tables.Table.get(BranchRecord, full, c)),
+          Shared.List.has(~String, ~String.eq, Tables.Table.keys(BranchRecord, full), c),
           False{},
           Equal.sym(
             Bool,
-            Shared.List.has(~String, ~String.eq, Tables.Table.keys(Br, full), c),
-            Maybe.is_some(&2, Br, Tables.Table.get(Br, full, c)),
-            Tables.Table.keys_get(Br, full, c)
+            Shared.List.has(~String, ~String.eq, Tables.Table.keys(BranchRecord, full), c),
+            Maybe.is_some(&2, BranchRecord, Tables.Table.get(BranchRecord, full, c)),
+            Tables.Table.keys_get(BranchRecord, full, c)
           ),
           h
         )
@@ -8330,13 +9198,13 @@ def sync_branches_find(full, vs, acc, c):
   )
 
 # the order of versions for marks: the smaller version is the greater
-def Ver.rev(a: String, b: String) -> Cmp:
+def VersionRecord.rev(a: String, b: String) -> Cmp:
   String.order(b, a)
 
 # the version order of marks compares EQ with itself
 law rev_refl:
   for a: String
-  {Ver.rev(a, a) == EQ{}: Cmp}
+  {VersionRecord.rev(a, a) == EQ{}: Cmp}
 
 def rev_refl(a):
   Strings.String.order_refl(a)
@@ -8345,7 +9213,7 @@ def rev_refl(a):
 law rev_swap:
   for a: String
   for b: String
-  {Ver.rev(b, a) == Cmps.Cmp.flip(Ver.rev(a, b)): Cmp}
+  {VersionRecord.rev(b, a) == Cmps.Cmp.flip(VersionRecord.rev(a, b)): Cmp}
 
 def rev_swap(a, b):
   Strings.String.order_swap(b, a, EQ{})
@@ -8354,7 +9222,7 @@ def rev_swap(a, b):
 law rev_same:
   for a: String
   for b: String
-  {Ver.rev(a, b) == EQ{}: Cmp} -> {a == b: String}
+  {VersionRecord.rev(a, b) == EQ{}: Cmp} -> {a == b: String}
 
 def rev_same(a, b):
   h =>
@@ -8589,7 +9457,7 @@ def Marks.on(hb: Bool, hm: Bool, f: Maybe<&2, String>, mv: Maybe<&2, String>) ->
     case False{}:
       mv
     case True{}:
-      Orders.Order.step(~String, ~Ver.rev, hm, f, mv)
+      Orders.Order.step(~String, ~VersionRecord.rev, hm, f, mv)
 
 # a mark's version after the marks ks of the branch inner met mv, when that
 # branch is the mark's (hb)
@@ -8607,7 +9475,7 @@ def Marks.in(
       Orders.Order.fold(
         ~String,
         ~Tables.Table<MarkAt>,
-        ~Ver.rev,
+        ~VersionRecord.rev,
         ~(t => k => MarkAt.version.of(Tables.Table.get(MarkAt, t, k))),
         ks,
         inner,
@@ -8870,7 +9738,7 @@ law seen_hit.at:
     )
       == Orders.Order.join(
         ~String,
-        ~Ver.rev,
+        ~VersionRecord.rev,
         MarkAt.find(ms, b, m),
         MarkAt.version.of(Some{x})
       ): Maybe<&2, String>
@@ -8894,7 +9762,7 @@ def seen_hit.at(own, b, m, x, ms, ns):
             b,
             m
           )
-            == Orders.Order.join(~String, ~Ver.rev, _, Some{v}): Maybe<&2, String>
+            == Orders.Order.join(~String, ~VersionRecord.rev, _, Some{v}): Maybe<&2, String>
         }
         set_self(ms, b, m, v, t)
     case Some{+k} MarkAt{+v, t}:
@@ -8922,7 +9790,7 @@ def seen_hit.at(own, b, m, x, ms, ns):
             b,
             m
           )
-            == Orders.Order.join(~String, ~Ver.rev, _, Some{v}): Maybe<&2, String>
+            == Orders.Order.join(~String, ~VersionRecord.rev, _, Some{v}): Maybe<&2, String>
         }
         seen_hit.by(String.order(v, k), b, m, k, v, t, ms, ns)(h)
 
@@ -8940,7 +9808,7 @@ law seen_hit:
     )
       == Orders.Order.join(
         ~String,
-        ~Ver.rev,
+        ~VersionRecord.rev,
         MarkAt.find(Marked.marks(acc), b, m),
         MarkAt.version.of(vis)
       ): Maybe<&2, String>
@@ -9022,7 +9890,7 @@ def seen_step.at(hb, hm, b, m, vis, acc, qb, qm):
           )
             == Orders.Order.join(
               ~String,
-              ~Ver.rev,
+              ~VersionRecord.rev,
               MarkAt.find(Marked.marks(acc), _, qm),
               MarkAt.version.of(vis)
             ): Maybe<&2, String>
@@ -9040,7 +9908,7 @@ def seen_step.at(hb, hm, b, m, vis, acc, qb, qm):
           )
             == Orders.Order.join(
               ~String,
-              ~Ver.rev,
+              ~VersionRecord.rev,
               MarkAt.find(Marked.marks(acc), b, _),
               MarkAt.version.of(vis)
             ): Maybe<&2, String>
@@ -9166,7 +10034,7 @@ def marks_in_find(hb, ks, b, inner, acc, qb, qm):
           Orders.Order.fold(
             ~String,
             ~Tables.Table<MarkAt>,
-            ~Ver.rev,
+            ~VersionRecord.rev,
             ~(t => k => MarkAt.version.of(Tables.Table.get(MarkAt, t, k))),
             r,
             inner,
@@ -9180,14 +10048,14 @@ def marks_in_find(hb, ks, b, inner, acc, qb, qm):
           Orders.Order.fold(
             ~String,
             ~Tables.Table<MarkAt>,
-            ~Ver.rev,
+            ~VersionRecord.rev,
             ~(t => k => MarkAt.version.of(Tables.Table.get(MarkAt, t, k))),
             r,
             inner,
             qm,
             Orders.Order.step(
               ~String,
-              ~Ver.rev,
+              ~VersionRecord.rev,
               String.eq(m, qm),
               MarkAt.version.of(Tables.Table.get(MarkAt, inner, m)),
               MarkAt.find(Marked.marks(acc), qb, qm)
@@ -9208,7 +10076,7 @@ def marks_in_find(hb, ks, b, inner, acc, qb, qm):
             z => Orders.Order.fold(
               ~String,
               ~Tables.Table<MarkAt>,
-              ~Ver.rev,
+              ~VersionRecord.rev,
               ~(t => k => MarkAt.version.of(Tables.Table.get(MarkAt, t, k))),
               r,
               inner,
@@ -9222,7 +10090,7 @@ def marks_in_find(hb, ks, b, inner, acc, qb, qm):
             ),
             Orders.Order.step(
               ~String,
-              ~Ver.rev,
+              ~VersionRecord.rev,
               String.eq(m, qm),
               MarkAt.version.of(Tables.Table.get(MarkAt, inner, m)),
               MarkAt.find(Marked.marks(acc), qb, qm)
@@ -9249,7 +10117,7 @@ law marks_in_all:
     )
       == Orders.Order.step(
         ~String,
-        ~Ver.rev,
+        ~VersionRecord.rev,
         hb,
         MarkAt.version.of(Tables.Table.get(MarkAt, inner, qm)),
         mv
@@ -9266,7 +10134,7 @@ def marks_in_all(hb, inner, qm, mv):
       Orders.Order.fold_all(
         ~String,
         ~Tables.Table<MarkAt>,
-        ~Ver.rev,
+        ~VersionRecord.rev,
         ~(t => k => MarkAt.version.of(Tables.Table.get(MarkAt, t, k))),
         y => rev_refl(y),
         Tables.Table.keys(MarkAt, inner),
@@ -9317,7 +10185,7 @@ law marks_branch_find:
     )
       == Orders.Order.step(
         ~String,
-        ~Ver.rev,
+        ~VersionRecord.rev,
         String.eq(b, qb),
         MarkAt.find(full, b, qm),
         MarkAt.find(Marked.marks(acc), qb, qm)
@@ -9348,7 +10216,7 @@ def marks_branch_find(b, full, acc, qb, qm):
     ),
     Orders.Order.step(
       ~String,
-      ~Ver.rev,
+      ~VersionRecord.rev,
       String.eq(b, qb),
       MarkAt.find(full, b, qm),
       MarkAt.find(Marked.marks(acc), qb, qm)
@@ -9381,7 +10249,7 @@ law marks_fold_find:
       == Orders.Order.fold(
         ~String,
         ~(+Sigma<Tables.Table<Tables.Table<MarkAt>>, _ => String>),
-        ~Ver.rev,
+        ~VersionRecord.rev,
         ~Marks.at,
         bks,
         (full, qm),
@@ -9420,7 +10288,7 @@ def marks_fold_find(bks, full, acc, qb, qm):
             == Orders.Order.fold(
               ~String,
               ~(+Sigma<Tables.Table<Tables.Table<MarkAt>>, _ => String>),
-              ~Ver.rev,
+              ~VersionRecord.rev,
               ~Marks.at,
               r,
               (full, qm),
@@ -9452,7 +10320,7 @@ law marks_sync_find:
     )
       == Orders.Order.join(
         ~String,
-        ~Ver.rev,
+        ~VersionRecord.rev,
         MarkAt.find(ms, qb, qm),
         MarkAt.find(full, qb, qm)
       ): Maybe<&2, String>
@@ -9473,19 +10341,24 @@ def marks_sync_find(full, ms, ns, qb, qm):
     Orders.Order.fold(
       ~String,
       ~(+Sigma<Tables.Table<Tables.Table<MarkAt>>, _ => String>),
-      ~Ver.rev,
+      ~VersionRecord.rev,
       ~Marks.at,
       Tables.Table.keys(Tables.Table<MarkAt>, full),
       (full, qm),
       qb,
       MarkAt.find(ms, qb, qm)
     ),
-    Orders.Order.join(~String, ~Ver.rev, MarkAt.find(ms, qb, qm), MarkAt.find(full, qb, qm)),
+    Orders.Order.join(
+      ~String,
+      ~VersionRecord.rev,
+      MarkAt.find(ms, qb, qm),
+      MarkAt.find(full, qb, qm)
+    ),
     marks_fold_find(Tables.Table.keys(Tables.Table<MarkAt>, full), full, Marked{ms, ns}, qb, qm),
     Orders.Order.fold_all(
       ~String,
       ~(+Sigma<Tables.Table<Tables.Table<MarkAt>>, _ => String>),
-      ~Ver.rev,
+      ~VersionRecord.rev,
       ~Marks.at,
       y => rev_refl(y),
       Tables.Table.keys(Tables.Table<MarkAt>, full),
@@ -9541,19 +10414,19 @@ def marks_sync_find(full, ms, ns, qb, qm):
 
 # the marks after a change are the change's
 law marks_after_applied:
-  for s: St
+  for s: NodeState
   for r: String
   for out: Out
   {
-    St.marks(
-      Pair.fst(St, Spec.Answer, Node.applied(s, r, out))
+    NodeState.marks(
+      Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, out))
     )
       == Out.marks(out): Tables.Table<Tables.Table<MarkAt>>
   }
 
 def marks_after_applied(s, r, out):
   match s out:
-    case St{k, vs, bs, ms, gs, cs, ss, l} Out{nv, nb, nm, ng, nc, news, a}:
+    case NodeState{k, vs, bs, ms, gs, cs, ss, l} Out{nv, nb, nm, ng, nc, news, a}:
       {==}
 
 # after a takes in b's mark, and b takes in that, both hold the same version
@@ -9563,15 +10436,15 @@ law mk_conv:
   {
     Orders.Order.join(
       ~String,
-      ~Ver.rev,
+      ~VersionRecord.rev,
       ma,
       mb
     )
       == Orders.Order.join(
         ~String,
-        ~Ver.rev,
+        ~VersionRecord.rev,
         mb,
-        Orders.Order.join(~String, ~Ver.rev, ma, mb)
+        Orders.Order.join(~String, ~VersionRecord.rev, ma, mb)
       ): Maybe<&2, String>
   }
 
@@ -9580,30 +10453,45 @@ def mk_conv(ma, mb):
   +mb = mb
   Equal.trans(
     Maybe<&2, String>,
-    Orders.Order.join(~String, ~Ver.rev, ma, mb),
-    Maybe.map(&2, String, String, y => y, Orders.Order.join(~String, ~Ver.rev, ma, mb)),
-    Orders.Order.join(~String, ~Ver.rev, mb, Orders.Order.join(~String, ~Ver.rev, ma, mb)),
+    Orders.Order.join(~String, ~VersionRecord.rev, ma, mb),
+    Maybe.map(&2, String, String, y => y, Orders.Order.join(~String, ~VersionRecord.rev, ma, mb)),
+    Orders.Order.join(
+      ~String,
+      ~VersionRecord.rev,
+      mb,
+      Orders.Order.join(~String, ~VersionRecord.rev, ma, mb)
+    ),
     Equal.sym(
       Maybe<&2, String>,
-      Maybe.map(&2, String, String, y => y, Orders.Order.join(~String, ~Ver.rev, ma, mb)),
-      Orders.Order.join(~String, ~Ver.rev, ma, mb),
-      Maybes.Maybe.map_id(String, Orders.Order.join(~String, ~Ver.rev, ma, mb))
+      Maybe.map(&2, String, String, y => y, Orders.Order.join(~String, ~VersionRecord.rev, ma, mb)),
+      Orders.Order.join(~String, ~VersionRecord.rev, ma, mb),
+      Maybes.Maybe.map_id(String, Orders.Order.join(~String, ~VersionRecord.rev, ma, mb))
     ),
     Equal.trans(
       Maybe<&2, String>,
-      Maybe.map(&2, String, String, y => y, Orders.Order.join(~String, ~Ver.rev, ma, mb)),
+      Maybe.map(&2, String, String, y => y, Orders.Order.join(~String, ~VersionRecord.rev, ma, mb)),
       Maybe.map(
         &2,
         String,
         String,
         y => y,
-        Orders.Order.join(~String, ~Ver.rev, mb, Orders.Order.join(~String, ~Ver.rev, ma, mb))
+        Orders.Order.join(
+          ~String,
+          ~VersionRecord.rev,
+          mb,
+          Orders.Order.join(~String, ~VersionRecord.rev, ma, mb)
+        )
       ),
-      Orders.Order.join(~String, ~Ver.rev, mb, Orders.Order.join(~String, ~Ver.rev, ma, mb)),
+      Orders.Order.join(
+        ~String,
+        ~VersionRecord.rev,
+        mb,
+        Orders.Order.join(~String, ~VersionRecord.rev, ma, mb)
+      ),
       Orders.Order.join_conv(
         ~String,
         ~String,
-        ~Ver.rev,
+        ~VersionRecord.rev,
         ~(y => y),
         y => rev_refl(y),
         a => b => rev_swap(a, b),
@@ -9613,7 +10501,12 @@ def mk_conv(ma, mb):
       ),
       Maybes.Maybe.map_id(
         String,
-        Orders.Order.join(~String, ~Ver.rev, mb, Orders.Order.join(~String, ~Ver.rev, ma, mb))
+        Orders.Order.join(
+          ~String,
+          ~VersionRecord.rev,
+          mb,
+          Orders.Order.join(~String, ~VersionRecord.rev, ma, mb)
+        )
       )
     )
   )
@@ -9621,23 +10514,29 @@ def mk_conv(ma, mb):
 # versions that agree on a resource at each key agree at any version m
 law find_any:
   for m: Maybe<&2, String>
-  for v1: Tables.Table<Ver>
-  for v2: Tables.Table<Ver>
+  for v1: Tables.Table<VersionRecord>
+  for v2: Tables.Table<VersionRecord>
   for n: String
   (
     @k: String -> {
       Blob.find.of(
-        Ver.blobs.of(Tables.Table.get(Ver, v1, k)),
+        VersionRecord.blobs.of(Tables.Table.get(VersionRecord, v1, k)),
         n
       )
-        == Blob.find.of(Ver.blobs.of(Tables.Table.get(Ver, v2, k)), n): Maybe<&2, List<&2, U32>>
+        == Blob.find.of(
+          VersionRecord.blobs.of(Tables.Table.get(VersionRecord, v2, k)),
+          n
+        ): Maybe<&2, List<&2, U32>>
     }
   ) -> {
     Blob.find.of(
-      Ver.blobs.of(Ver.find.of(v1, m)),
+      VersionRecord.blobs.of(VersionRecord.find.of(v1, m)),
       n
     )
-      == Blob.find.of(Ver.blobs.of(Ver.find.of(v2, m)), n): Maybe<&2, List<&2, U32>>
+      == Blob.find.of(
+        VersionRecord.blobs.of(VersionRecord.find.of(v2, m)),
+        n
+      ): Maybe<&2, List<&2, U32>>
   }
 
 def find_any(m, v1, v2, n):
@@ -9649,33 +10548,40 @@ def find_any(m, v1, v2, n):
 
 # states whose versions, heads and marks agree hold the same content
 law content_eq:
-  for s1: St
-  for s2: St
+  for s1: NodeState
+  for s2: NodeState
   for n: String
   for p: Spec.Point
   (
     @k: String -> {
       Blob.find.of(
-        Ver.blobs.of(Tables.Table.get(Ver, St.versions(s1), k)),
+        VersionRecord.blobs.of(Tables.Table.get(VersionRecord, NodeState.versions(s1), k)),
         n
       )
         == Blob.find.of(
-          Ver.blobs.of(Tables.Table.get(Ver, St.versions(s2), k)),
+          VersionRecord.blobs.of(Tables.Table.get(VersionRecord, NodeState.versions(s2), k)),
           n
         ): Maybe<&2, List<&2, U32>>
     }
   ) -> (
     @c: String -> {
-      Br.head.of(
-        Tables.Table.get(Br, St.branches(s1), c)
+      BranchRecord.head.of(
+        Tables.Table.get(BranchRecord, NodeState.branches(s1), c)
       )
-        == Br.head.of(Tables.Table.get(Br, St.branches(s2), c)): Maybe<&2, String>
+        == BranchRecord.head.of(
+          Tables.Table.get(BranchRecord, NodeState.branches(s2), c)
+        ): Maybe<&2, String>
     }
   ) -> (
     @b: String -> @m: String -> {
-      MarkAt.find(St.marks(s1), b, m) == MarkAt.find(St.marks(s2), b, m): Maybe<&2, String>
+      MarkAt.find(
+        NodeState.marks(s1),
+        b,
+        m
+      )
+        == MarkAt.find(NodeState.marks(s2), b, m): Maybe<&2, String>
     }
-  ) -> {St.content(s1, n, p) == St.content(s2, n, p): Maybe<&2, List<&2, U32>>}
+  ) -> {NodeState.content(s1, n, p) == NodeState.content(s2, n, p): Maybe<&2, List<&2, U32>>}
 
 def content_eq(s1, s2, n, p):
   match p:
@@ -9690,20 +10596,23 @@ def content_eq(s1, s2, n, p):
           b
         ): {
           Blob.find.of(
-            Ver.blobs.of(
-              Ver.find.of(St.versions(s1), Br.head.of(Tables.Table.get(Br, St.branches(s1), b)))
+            VersionRecord.blobs.of(
+              VersionRecord.find.of(
+                NodeState.versions(s1),
+                BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s1), b))
+              )
             ),
             n
           )
             == Blob.find.of(
-              Ver.blobs.of(Ver.find.of(St.versions(s2), _)),
+              VersionRecord.blobs.of(VersionRecord.find.of(NodeState.versions(s2), _)),
               n
             ): Maybe<&2, List<&2, U32>>
         }
         find_any(
-          Br.head.of(Tables.Table.get(Br, St.branches(s1), b)),
-          St.versions(s1),
-          St.versions(s2),
+          BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s1), b)),
+          NodeState.versions(s1),
+          NodeState.versions(s2),
           n
         )(vv)
     case Spec.Point.Mark{+b, +m}:
@@ -9717,172 +10626,213 @@ def content_eq(s1, s2, n, p):
           m
         ): {
           Blob.find.of(
-            Ver.blobs.of(Ver.find.of(St.versions(s1), MarkAt.find(St.marks(s1), b, m))),
+            VersionRecord.blobs.of(
+              VersionRecord.find.of(NodeState.versions(s1), MarkAt.find(NodeState.marks(s1), b, m))
+            ),
             n
           )
             == Blob.find.of(
-              Ver.blobs.of(Ver.find.of(St.versions(s2), _)),
+              VersionRecord.blobs.of(VersionRecord.find.of(NodeState.versions(s2), _)),
               n
             ): Maybe<&2, List<&2, U32>>
         }
-        find_any(MarkAt.find(St.marks(s1), b, m), St.versions(s1), St.versions(s2), n)(vv)
+        find_any(
+          MarkAt.find(NodeState.marks(s1), b, m),
+          NodeState.versions(s1),
+          NodeState.versions(s2),
+          n
+        )(vv)
 
 # after a sync, a version is the own one when held, else the other node's
 law after_v:
-  for s: St
-  for o: St
+  for s: NodeState
+  for o: NodeState
   for r: String
   for k: String
   {
     Tables.Table.get(
-      Ver,
-      St.versions(Pair.fst(St, Spec.Answer, Node.applied(s, r, Sync.go(False{}, s, o)))),
+      VersionRecord,
+      NodeState.versions(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Sync.go(False{}, s, o)))
+      ),
       k
     )
       == Maybe.or(
         &2,
-        Ver,
-        Tables.Table.get(Ver, St.versions(s), k),
-        Tables.Table.get(Ver, St.versions(o), k)
-      ): Maybe<&2, Ver>
+        VersionRecord,
+        Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+        Tables.Table.get(VersionRecord, NodeState.versions(o), k)
+      ): Maybe<&2, VersionRecord>
   }
 
 def after_v(s, o, r, k):
   +s = s
   +o = o
   Equal.trans(
-    Maybe<&2, Ver>,
+    Maybe<&2, VersionRecord>,
     Tables.Table.get(
-      Ver,
-      St.versions(Pair.fst(St, Spec.Answer, Node.applied(s, r, Sync.go(False{}, s, o)))),
+      VersionRecord,
+      NodeState.versions(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Sync.go(False{}, s, o)))
+      ),
       k
     ),
     Tables.Table.get(
-      Ver,
-      Ver.add(
-        Tables.Table.rows(Ver, Tables.Table.keys(Ver, St.versions(o)), St.versions(o)),
-        St.versions(s)
+      VersionRecord,
+      VersionRecord.add(
+        Tables.Table.rows(
+          VersionRecord,
+          Tables.Table.keys(VersionRecord, NodeState.versions(o)),
+          NodeState.versions(o)
+        ),
+        NodeState.versions(s)
       ),
       k
     ),
     Maybe.or(
       &2,
-      Ver,
-      Tables.Table.get(Ver, St.versions(s), k),
-      Tables.Table.get(Ver, St.versions(o), k)
+      VersionRecord,
+      Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+      Tables.Table.get(VersionRecord, NodeState.versions(o), k)
     ),
     Equal.cong(
-      Tables.Table<Ver>,
-      Maybe<&2, Ver>,
-      z => Tables.Table.get(Ver, z, k),
-      St.versions(Pair.fst(St, Spec.Answer, Node.applied(s, r, Sync.go(False{}, s, o)))),
-      Ver.add(
-        Tables.Table.rows(Ver, Tables.Table.keys(Ver, St.versions(o)), St.versions(o)),
-        St.versions(s)
+      Tables.Table<VersionRecord>,
+      Maybe<&2, VersionRecord>,
+      z => Tables.Table.get(VersionRecord, z, k),
+      NodeState.versions(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Sync.go(False{}, s, o)))
+      ),
+      VersionRecord.add(
+        Tables.Table.rows(
+          VersionRecord,
+          Tables.Table.keys(VersionRecord, NodeState.versions(o)),
+          NodeState.versions(o)
+        ),
+        NodeState.versions(s)
       ),
       versions_after_applied(s, r, Sync.go(False{}, s, o))
     ),
-    sync_find(St.versions(o), St.versions(s), k)
+    sync_find(NodeState.versions(o), NodeState.versions(s), k)
   )
 
 # after a sync, a branch is the winner of the own and the other node's
 law after_b:
-  for s: St
-  for o: St
+  for s: NodeState
+  for o: NodeState
   for r: String
   for c: String
   {
     Tables.Table.get(
-      Br,
-      St.branches(Pair.fst(St, Spec.Answer, Node.applied(s, r, Sync.go(False{}, s, o)))),
+      BranchRecord,
+      NodeState.branches(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Sync.go(False{}, s, o)))
+      ),
       c
     )
       == Orders.Order.join(
-        ~Br,
-        ~Br.stamp.cmp,
-        Tables.Table.get(Br, St.branches(s), c),
-        Tables.Table.get(Br, St.branches(o), c)
-      ): Maybe<&2, Br>
+        ~BranchRecord,
+        ~BranchRecord.stamp.cmp,
+        Tables.Table.get(BranchRecord, NodeState.branches(s), c),
+        Tables.Table.get(BranchRecord, NodeState.branches(o), c)
+      ): Maybe<&2, BranchRecord>
   }
 
 def after_b(s, o, r, c):
   +s = s
   +o = o
   Equal.trans(
-    Maybe<&2, Br>,
+    Maybe<&2, BranchRecord>,
     Tables.Table.get(
-      Br,
-      St.branches(Pair.fst(St, Spec.Answer, Node.applied(s, r, Sync.go(False{}, s, o)))),
+      BranchRecord,
+      NodeState.branches(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Sync.go(False{}, s, o)))
+      ),
       c
     ),
     Tables.Table.get(
-      Br,
+      BranchRecord,
       Mix.branches(
         Sync.branches(
-          Tables.Table.keys(Br, St.branches(o)),
-          St.branches(o),
-          Ver.add(
-            Tables.Table.rows(Ver, Tables.Table.keys(Ver, St.versions(o)), St.versions(o)),
-            St.versions(s)
+          Tables.Table.keys(BranchRecord, NodeState.branches(o)),
+          NodeState.branches(o),
+          VersionRecord.add(
+            Tables.Table.rows(
+              VersionRecord,
+              Tables.Table.keys(VersionRecord, NodeState.versions(o)),
+              NodeState.versions(o)
+            ),
+            NodeState.versions(s)
           ),
-          Mix{St.branches(s), St.clashes(s), []}
+          Mix{NodeState.branches(s), NodeState.clashes(s), []}
         )
       ),
       c
     ),
     Orders.Order.join(
-      ~Br,
-      ~Br.stamp.cmp,
-      Tables.Table.get(Br, St.branches(s), c),
-      Tables.Table.get(Br, St.branches(o), c)
+      ~BranchRecord,
+      ~BranchRecord.stamp.cmp,
+      Tables.Table.get(BranchRecord, NodeState.branches(s), c),
+      Tables.Table.get(BranchRecord, NodeState.branches(o), c)
     ),
     Equal.cong(
-      Tables.Table<Br>,
-      Maybe<&2, Br>,
-      z => Tables.Table.get(Br, z, c),
-      St.branches(Pair.fst(St, Spec.Answer, Node.applied(s, r, Sync.go(False{}, s, o)))),
+      Tables.Table<BranchRecord>,
+      Maybe<&2, BranchRecord>,
+      z => Tables.Table.get(BranchRecord, z, c),
+      NodeState.branches(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Sync.go(False{}, s, o)))
+      ),
       Mix.branches(
         Sync.branches(
-          Tables.Table.keys(Br, St.branches(o)),
-          St.branches(o),
-          Ver.add(
-            Tables.Table.rows(Ver, Tables.Table.keys(Ver, St.versions(o)), St.versions(o)),
-            St.versions(s)
+          Tables.Table.keys(BranchRecord, NodeState.branches(o)),
+          NodeState.branches(o),
+          VersionRecord.add(
+            Tables.Table.rows(
+              VersionRecord,
+              Tables.Table.keys(VersionRecord, NodeState.versions(o)),
+              NodeState.versions(o)
+            ),
+            NodeState.versions(s)
           ),
-          Mix{St.branches(s), St.clashes(s), []}
+          Mix{NodeState.branches(s), NodeState.clashes(s), []}
         )
       ),
       branches_after_applied(s, r, Sync.go(False{}, s, o))
     ),
     sync_branches_find(
-      St.branches(o),
-      Ver.add(
-        Tables.Table.rows(Ver, Tables.Table.keys(Ver, St.versions(o)), St.versions(o)),
-        St.versions(s)
+      NodeState.branches(o),
+      VersionRecord.add(
+        Tables.Table.rows(
+          VersionRecord,
+          Tables.Table.keys(VersionRecord, NodeState.versions(o)),
+          NodeState.versions(o)
+        ),
+        NodeState.versions(s)
       ),
-      Mix{St.branches(s), St.clashes(s), []},
+      Mix{NodeState.branches(s), NodeState.clashes(s), []},
       c
     )
   )
 
 # after a sync, a mark has the smaller of the own and the other node's versions
 law after_m:
-  for s: St
-  for o: St
+  for s: NodeState
+  for o: NodeState
   for r: String
   for qb: String
   for qm: String
   {
     MarkAt.find(
-      St.marks(Pair.fst(St, Spec.Answer, Node.applied(s, r, Sync.go(False{}, s, o)))),
+      NodeState.marks(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Sync.go(False{}, s, o)))
+      ),
       qb,
       qm
     )
       == Orders.Order.join(
         ~String,
-        ~Ver.rev,
-        MarkAt.find(St.marks(s), qb, qm),
-        MarkAt.find(St.marks(o), qb, qm)
+        ~VersionRecord.rev,
+        MarkAt.find(NodeState.marks(s), qb, qm),
+        MarkAt.find(NodeState.marks(o), qb, qm)
       ): Maybe<&2, String>
   }
 
@@ -9892,16 +10842,18 @@ def after_m(s, o, r, qb, qm):
   Equal.trans(
     Maybe<&2, String>,
     MarkAt.find(
-      St.marks(Pair.fst(St, Spec.Answer, Node.applied(s, r, Sync.go(False{}, s, o)))),
+      NodeState.marks(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Sync.go(False{}, s, o)))
+      ),
       qb,
       qm
     ),
     MarkAt.find(
       Marked.marks(
         Sync.marks(
-          Tables.Table.keys(Tables.Table<MarkAt>, St.marks(o)),
-          St.marks(o),
-          Marked{St.marks(s), []}
+          Tables.Table.keys(Tables.Table<MarkAt>, NodeState.marks(o)),
+          NodeState.marks(o),
+          Marked{NodeState.marks(s), []}
         )
       ),
       qb,
@@ -9909,68 +10861,76 @@ def after_m(s, o, r, qb, qm):
     ),
     Orders.Order.join(
       ~String,
-      ~Ver.rev,
-      MarkAt.find(St.marks(s), qb, qm),
-      MarkAt.find(St.marks(o), qb, qm)
+      ~VersionRecord.rev,
+      MarkAt.find(NodeState.marks(s), qb, qm),
+      MarkAt.find(NodeState.marks(o), qb, qm)
     ),
     Equal.cong(
       Tables.Table<Tables.Table<MarkAt>>,
       Maybe<&2, String>,
       z => MarkAt.find(z, qb, qm),
-      St.marks(Pair.fst(St, Spec.Answer, Node.applied(s, r, Sync.go(False{}, s, o)))),
+      NodeState.marks(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Sync.go(False{}, s, o)))
+      ),
       Marked.marks(
         Sync.marks(
-          Tables.Table.keys(Tables.Table<MarkAt>, St.marks(o)),
-          St.marks(o),
-          Marked{St.marks(s), []}
+          Tables.Table.keys(Tables.Table<MarkAt>, NodeState.marks(o)),
+          NodeState.marks(o),
+          Marked{NodeState.marks(s), []}
         )
       ),
       marks_after_applied(s, r, Sync.go(False{}, s, o))
     ),
-    marks_sync_find(St.marks(o), St.marks(s), [], qb, qm)
+    marks_sync_find(NodeState.marks(o), NodeState.marks(s), [], qb, qm)
   )
 
 # a takes in b, then b takes in that: a resource of a version agrees
 law conv_v:
-  for a: St
-  for b: St
+  for a: NodeState
+  for b: NodeState
   for r1: String
   for r2: String
   for n: String
   for k: String
   {
     Sync.collides(
-      Tables.Table.keys(Ver, St.versions(b)),
-      St.versions(b),
-      St.versions(a)
+      Tables.Table.keys(VersionRecord, NodeState.versions(b)),
+      NodeState.versions(b),
+      NodeState.versions(a)
     )
       == False{}: Bool
   } -> {
     Blob.find.of(
-      Ver.blobs.of(
+      VersionRecord.blobs.of(
         Tables.Table.get(
-          Ver,
-          St.versions(Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))),
+          VersionRecord,
+          NodeState.versions(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+          ),
           k
         )
       ),
       n
     )
       == Blob.find.of(
-        Ver.blobs.of(
+        VersionRecord.blobs.of(
           Tables.Table.get(
-            Ver,
-            St.versions(
+            VersionRecord,
+            NodeState.versions(
               Pair.fst(
-                St,
+                NodeState,
                 Spec.Answer,
-                Node.applied(
+                VendNode.applied(
                   b,
                   r2,
                   Sync.go(
                     False{},
                     b,
-                    Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))
+                    Pair.fst(
+                      NodeState,
+                      Spec.Answer,
+                      VendNode.applied(a, r1, Sync.go(False{}, a, b))
+                    )
                   )
                 )
               )
@@ -9993,41 +10953,47 @@ def conv_v(a, b, r1, r2, n, k):
     Equal.trans(
       Maybe<&2, List<&2, U32>>,
       Blob.find.of(
-        Ver.blobs.of(
+        VersionRecord.blobs.of(
           Tables.Table.get(
-            Ver,
-            St.versions(Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))),
+            VersionRecord,
+            NodeState.versions(
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+            ),
             k
           )
         ),
         n
       ),
       Blob.find.of(
-        Ver.blobs.of(
+        VersionRecord.blobs.of(
           Maybe.or(
             &2,
-            Ver,
-            Tables.Table.get(Ver, St.versions(a), k),
-            Tables.Table.get(Ver, St.versions(b), k)
+            VersionRecord,
+            Tables.Table.get(VersionRecord, NodeState.versions(a), k),
+            Tables.Table.get(VersionRecord, NodeState.versions(b), k)
           )
         ),
         n
       ),
       Blob.find.of(
-        Ver.blobs.of(
+        VersionRecord.blobs.of(
           Tables.Table.get(
-            Ver,
-            St.versions(
+            VersionRecord,
+            NodeState.versions(
               Pair.fst(
-                St,
+                NodeState,
                 Spec.Answer,
-                Node.applied(
+                VendNode.applied(
                   b,
                   r2,
                   Sync.go(
                     False{},
                     b,
-                    Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))
+                    Pair.fst(
+                      NodeState,
+                      Spec.Answer,
+                      VendNode.applied(a, r1, Sync.go(False{}, a, b))
+                    )
                   )
                 )
               )
@@ -10038,66 +11004,72 @@ def conv_v(a, b, r1, r2, n, k):
         n
       ),
       Equal.cong(
-        Maybe<&2, Ver>,
+        Maybe<&2, VersionRecord>,
         Maybe<&2, List<&2, U32>>,
-        z => Blob.find.of(Ver.blobs.of(z), n),
+        z => Blob.find.of(VersionRecord.blobs.of(z), n),
         Tables.Table.get(
-          Ver,
-          St.versions(Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))),
+          VersionRecord,
+          NodeState.versions(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+          ),
           k
         ),
         Maybe.or(
           &2,
-          Ver,
-          Tables.Table.get(Ver, St.versions(a), k),
-          Tables.Table.get(Ver, St.versions(b), k)
+          VersionRecord,
+          Tables.Table.get(VersionRecord, NodeState.versions(a), k),
+          Tables.Table.get(VersionRecord, NodeState.versions(b), k)
         ),
         after_v(a, b, r1, k)
       ),
       Equal.trans(
         Maybe<&2, List<&2, U32>>,
         Blob.find.of(
-          Ver.blobs.of(
+          VersionRecord.blobs.of(
             Maybe.or(
               &2,
-              Ver,
-              Tables.Table.get(Ver, St.versions(a), k),
-              Tables.Table.get(Ver, St.versions(b), k)
+              VersionRecord,
+              Tables.Table.get(VersionRecord, NodeState.versions(a), k),
+              Tables.Table.get(VersionRecord, NodeState.versions(b), k)
             )
           ),
           n
         ),
         Blob.find.of(
-          Ver.blobs.of(
+          VersionRecord.blobs.of(
             Maybe.or(
               &2,
-              Ver,
-              Tables.Table.get(Ver, St.versions(b), k),
+              VersionRecord,
+              Tables.Table.get(VersionRecord, NodeState.versions(b), k),
               Maybe.or(
                 &2,
-                Ver,
-                Tables.Table.get(Ver, St.versions(a), k),
-                Tables.Table.get(Ver, St.versions(b), k)
+                VersionRecord,
+                Tables.Table.get(VersionRecord, NodeState.versions(a), k),
+                Tables.Table.get(VersionRecord, NodeState.versions(b), k)
               )
             )
           ),
           n
         ),
         Blob.find.of(
-          Ver.blobs.of(
+          VersionRecord.blobs.of(
             Tables.Table.get(
-              Ver,
-              St.versions(
+              VersionRecord,
+              NodeState.versions(
                 Pair.fst(
-                  St,
+                  NodeState,
                   Spec.Answer,
-                  Node.applied(
+                  VendNode.applied(
                     b,
                     r2,
                     Sync.go(
                       False{},
                       b,
-                      Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))
+                      Pair.fst(
+                        NodeState,
+                        Spec.Answer,
+                        VendNode.applied(a, r1, Sync.go(False{}, a, b))
+                      )
                     )
                   )
                 )
@@ -10108,27 +11080,31 @@ def conv_v(a, b, r1, r2, n, k):
           n
         ),
         vb_conv(
-          Tables.Table.get(Ver, St.versions(a), k),
-          Tables.Table.get(Ver, St.versions(b), k),
+          Tables.Table.get(VersionRecord, NodeState.versions(a), k),
+          Tables.Table.get(VersionRecord, NodeState.versions(b), k),
           n
-        )(compat_of(St.versions(b), St.versions(a), k)(hc)),
+        )(compat_of(NodeState.versions(b), NodeState.versions(a), k)(hc)),
         Equal.sym(
           Maybe<&2, List<&2, U32>>,
           Blob.find.of(
-            Ver.blobs.of(
+            VersionRecord.blobs.of(
               Tables.Table.get(
-                Ver,
-                St.versions(
+                VersionRecord,
+                NodeState.versions(
                   Pair.fst(
-                    St,
+                    NodeState,
                     Spec.Answer,
-                    Node.applied(
+                    VendNode.applied(
                       b,
                       r2,
                       Sync.go(
                         False{},
                         b,
-                        Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))
+                        Pair.fst(
+                          NodeState,
+                          Spec.Answer,
+                          VendNode.applied(a, r1, Sync.go(False{}, a, b))
+                        )
                       )
                     )
                   )
@@ -10139,16 +11115,16 @@ def conv_v(a, b, r1, r2, n, k):
             n
           ),
           Blob.find.of(
-            Ver.blobs.of(
+            VersionRecord.blobs.of(
               Maybe.or(
                 &2,
-                Ver,
-                Tables.Table.get(Ver, St.versions(b), k),
+                VersionRecord,
+                Tables.Table.get(VersionRecord, NodeState.versions(b), k),
                 Maybe.or(
                   &2,
-                  Ver,
-                  Tables.Table.get(Ver, St.versions(a), k),
-                  Tables.Table.get(Ver, St.versions(b), k)
+                  VersionRecord,
+                  Tables.Table.get(VersionRecord, NodeState.versions(a), k),
+                  Tables.Table.get(VersionRecord, NodeState.versions(b), k)
                 )
               )
             ),
@@ -10157,20 +11133,24 @@ def conv_v(a, b, r1, r2, n, k):
           Equal.trans(
             Maybe<&2, List<&2, U32>>,
             Blob.find.of(
-              Ver.blobs.of(
+              VersionRecord.blobs.of(
                 Tables.Table.get(
-                  Ver,
-                  St.versions(
+                  VersionRecord,
+                  NodeState.versions(
                     Pair.fst(
-                      St,
+                      NodeState,
                       Spec.Answer,
-                      Node.applied(
+                      VendNode.applied(
                         b,
                         r2,
                         Sync.go(
                           False{},
                           b,
-                          Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))
+                          Pair.fst(
+                            NodeState,
+                            Spec.Answer,
+                            VendNode.applied(a, r1, Sync.go(False{}, a, b))
+                          )
                         )
                       )
                     )
@@ -10181,15 +11161,19 @@ def conv_v(a, b, r1, r2, n, k):
               n
             ),
             Blob.find.of(
-              Ver.blobs.of(
+              VersionRecord.blobs.of(
                 Maybe.or(
                   &2,
-                  Ver,
-                  Tables.Table.get(Ver, St.versions(b), k),
+                  VersionRecord,
+                  Tables.Table.get(VersionRecord, NodeState.versions(b), k),
                   Tables.Table.get(
-                    Ver,
-                    St.versions(
-                      Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))
+                    VersionRecord,
+                    NodeState.versions(
+                      Pair.fst(
+                        NodeState,
+                        Spec.Answer,
+                        VendNode.applied(a, r1, Sync.go(False{}, a, b))
+                      )
                     ),
                     k
                   )
@@ -10198,38 +11182,42 @@ def conv_v(a, b, r1, r2, n, k):
               n
             ),
             Blob.find.of(
-              Ver.blobs.of(
+              VersionRecord.blobs.of(
                 Maybe.or(
                   &2,
-                  Ver,
-                  Tables.Table.get(Ver, St.versions(b), k),
+                  VersionRecord,
+                  Tables.Table.get(VersionRecord, NodeState.versions(b), k),
                   Maybe.or(
                     &2,
-                    Ver,
-                    Tables.Table.get(Ver, St.versions(a), k),
-                    Tables.Table.get(Ver, St.versions(b), k)
+                    VersionRecord,
+                    Tables.Table.get(VersionRecord, NodeState.versions(a), k),
+                    Tables.Table.get(VersionRecord, NodeState.versions(b), k)
                   )
                 )
               ),
               n
             ),
             Equal.cong(
-              Maybe<&2, Ver>,
+              Maybe<&2, VersionRecord>,
               Maybe<&2, List<&2, U32>>,
-              z => Blob.find.of(Ver.blobs.of(z), n),
+              z => Blob.find.of(VersionRecord.blobs.of(z), n),
               Tables.Table.get(
-                Ver,
-                St.versions(
+                VersionRecord,
+                NodeState.versions(
                   Pair.fst(
-                    St,
+                    NodeState,
                     Spec.Answer,
-                    Node.applied(
+                    VendNode.applied(
                       b,
                       r2,
                       Sync.go(
                         False{},
                         b,
-                        Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))
+                        Pair.fst(
+                          NodeState,
+                          Spec.Answer,
+                          VendNode.applied(a, r1, Sync.go(False{}, a, b))
+                        )
                       )
                     )
                   )
@@ -10238,40 +11226,53 @@ def conv_v(a, b, r1, r2, n, k):
               ),
               Maybe.or(
                 &2,
-                Ver,
-                Tables.Table.get(Ver, St.versions(b), k),
+                VersionRecord,
+                Tables.Table.get(VersionRecord, NodeState.versions(b), k),
                 Tables.Table.get(
-                  Ver,
-                  St.versions(
-                    Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))
+                  VersionRecord,
+                  NodeState.versions(
+                    Pair.fst(
+                      NodeState,
+                      Spec.Answer,
+                      VendNode.applied(a, r1, Sync.go(False{}, a, b))
+                    )
                   ),
                   k
                 )
               ),
               after_v(
                 b,
-                Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b))),
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b))),
                 r2,
                 k
               )
             ),
             Equal.cong(
-              Maybe<&2, Ver>,
+              Maybe<&2, VersionRecord>,
               Maybe<&2, List<&2, U32>>,
               z => Blob.find.of(
-                Ver.blobs.of(Maybe.or(&2, Ver, Tables.Table.get(Ver, St.versions(b), k), z)),
+                VersionRecord.blobs.of(
+                  Maybe.or(
+                    &2,
+                    VersionRecord,
+                    Tables.Table.get(VersionRecord, NodeState.versions(b), k),
+                    z
+                  )
+                ),
                 n
               ),
               Tables.Table.get(
-                Ver,
-                St.versions(Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))),
+                VersionRecord,
+                NodeState.versions(
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+                ),
                 k
               ),
               Maybe.or(
                 &2,
-                Ver,
-                Tables.Table.get(Ver, St.versions(a), k),
-                Tables.Table.get(Ver, St.versions(b), k)
+                VersionRecord,
+                Tables.Table.get(VersionRecord, NodeState.versions(a), k),
+                Tables.Table.get(VersionRecord, NodeState.versions(b), k)
               ),
               after_v(a, b, r1, k)
             )
@@ -10282,33 +11283,35 @@ def conv_v(a, b, r1, r2, n, k):
 
 # a takes in b, then b takes in that: a branch head agrees
 law conv_h:
-  for a: St
-  for b: St
+  for a: NodeState
+  for b: NodeState
   for r1: String
   for r2: String
   for c: String
   {
-    Br.head.of(
+    BranchRecord.head.of(
       Tables.Table.get(
-        Br,
-        St.branches(Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))),
+        BranchRecord,
+        NodeState.branches(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+        ),
         c
       )
     )
-      == Br.head.of(
+      == BranchRecord.head.of(
         Tables.Table.get(
-          Br,
-          St.branches(
+          BranchRecord,
+          NodeState.branches(
             Pair.fst(
-              St,
+              NodeState,
               Spec.Answer,
-              Node.applied(
+              VendNode.applied(
                 b,
                 r2,
                 Sync.go(
                   False{},
                   b,
-                  Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
                 )
               )
             )
@@ -10325,35 +11328,37 @@ def conv_h(a, b, r1, r2, c):
   +c = c
   Equal.trans(
     Maybe<&2, String>,
-    Br.head.of(
+    BranchRecord.head.of(
       Tables.Table.get(
-        Br,
-        St.branches(Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))),
+        BranchRecord,
+        NodeState.branches(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+        ),
         c
       )
     ),
-    Br.head.of(
+    BranchRecord.head.of(
       Orders.Order.join(
-        ~Br,
-        ~Br.stamp.cmp,
-        Tables.Table.get(Br, St.branches(a), c),
-        Tables.Table.get(Br, St.branches(b), c)
+        ~BranchRecord,
+        ~BranchRecord.stamp.cmp,
+        Tables.Table.get(BranchRecord, NodeState.branches(a), c),
+        Tables.Table.get(BranchRecord, NodeState.branches(b), c)
       )
     ),
-    Br.head.of(
+    BranchRecord.head.of(
       Tables.Table.get(
-        Br,
-        St.branches(
+        BranchRecord,
+        NodeState.branches(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(
+            VendNode.applied(
               b,
               r2,
               Sync.go(
                 False{},
                 b,
-                Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
               )
             )
           )
@@ -10362,59 +11367,61 @@ def conv_h(a, b, r1, r2, c):
       )
     ),
     Equal.cong(
-      Maybe<&2, Br>,
+      Maybe<&2, BranchRecord>,
       Maybe<&2, String>,
-      z => Br.head.of(z),
+      z => BranchRecord.head.of(z),
       Tables.Table.get(
-        Br,
-        St.branches(Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))),
+        BranchRecord,
+        NodeState.branches(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+        ),
         c
       ),
       Orders.Order.join(
-        ~Br,
-        ~Br.stamp.cmp,
-        Tables.Table.get(Br, St.branches(a), c),
-        Tables.Table.get(Br, St.branches(b), c)
+        ~BranchRecord,
+        ~BranchRecord.stamp.cmp,
+        Tables.Table.get(BranchRecord, NodeState.branches(a), c),
+        Tables.Table.get(BranchRecord, NodeState.branches(b), c)
       ),
       after_b(a, b, r1, c)
     ),
     Equal.trans(
       Maybe<&2, String>,
-      Br.head.of(
+      BranchRecord.head.of(
         Orders.Order.join(
-          ~Br,
-          ~Br.stamp.cmp,
-          Tables.Table.get(Br, St.branches(a), c),
-          Tables.Table.get(Br, St.branches(b), c)
+          ~BranchRecord,
+          ~BranchRecord.stamp.cmp,
+          Tables.Table.get(BranchRecord, NodeState.branches(a), c),
+          Tables.Table.get(BranchRecord, NodeState.branches(b), c)
         )
       ),
-      Br.head.of(
+      BranchRecord.head.of(
         Orders.Order.join(
-          ~Br,
-          ~Br.stamp.cmp,
-          Tables.Table.get(Br, St.branches(b), c),
+          ~BranchRecord,
+          ~BranchRecord.stamp.cmp,
+          Tables.Table.get(BranchRecord, NodeState.branches(b), c),
           Orders.Order.join(
-            ~Br,
-            ~Br.stamp.cmp,
-            Tables.Table.get(Br, St.branches(a), c),
-            Tables.Table.get(Br, St.branches(b), c)
+            ~BranchRecord,
+            ~BranchRecord.stamp.cmp,
+            Tables.Table.get(BranchRecord, NodeState.branches(a), c),
+            Tables.Table.get(BranchRecord, NodeState.branches(b), c)
           )
         )
       ),
-      Br.head.of(
+      BranchRecord.head.of(
         Tables.Table.get(
-          Br,
-          St.branches(
+          BranchRecord,
+          NodeState.branches(
             Pair.fst(
-              St,
+              NodeState,
               Spec.Answer,
-              Node.applied(
+              VendNode.applied(
                 b,
                 r2,
                 Sync.go(
                   False{},
                   b,
-                  Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
                 )
               )
             )
@@ -10422,23 +11429,30 @@ def conv_h(a, b, r1, r2, c):
           c
         )
       ),
-      hb_conv(Tables.Table.get(Br, St.branches(a), c), Tables.Table.get(Br, St.branches(b), c)),
+      hb_conv(
+        Tables.Table.get(BranchRecord, NodeState.branches(a), c),
+        Tables.Table.get(BranchRecord, NodeState.branches(b), c)
+      ),
       Equal.sym(
         Maybe<&2, String>,
-        Br.head.of(
+        BranchRecord.head.of(
           Tables.Table.get(
-            Br,
-            St.branches(
+            BranchRecord,
+            NodeState.branches(
               Pair.fst(
-                St,
+                NodeState,
                 Spec.Answer,
-                Node.applied(
+                VendNode.applied(
                   b,
                   r2,
                   Sync.go(
                     False{},
                     b,
-                    Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))
+                    Pair.fst(
+                      NodeState,
+                      Spec.Answer,
+                      VendNode.applied(a, r1, Sync.go(False{}, a, b))
+                    )
                   )
                 )
               )
@@ -10446,35 +11460,39 @@ def conv_h(a, b, r1, r2, c):
             c
           )
         ),
-        Br.head.of(
+        BranchRecord.head.of(
           Orders.Order.join(
-            ~Br,
-            ~Br.stamp.cmp,
-            Tables.Table.get(Br, St.branches(b), c),
+            ~BranchRecord,
+            ~BranchRecord.stamp.cmp,
+            Tables.Table.get(BranchRecord, NodeState.branches(b), c),
             Orders.Order.join(
-              ~Br,
-              ~Br.stamp.cmp,
-              Tables.Table.get(Br, St.branches(a), c),
-              Tables.Table.get(Br, St.branches(b), c)
+              ~BranchRecord,
+              ~BranchRecord.stamp.cmp,
+              Tables.Table.get(BranchRecord, NodeState.branches(a), c),
+              Tables.Table.get(BranchRecord, NodeState.branches(b), c)
             )
           )
         ),
         Equal.trans(
           Maybe<&2, String>,
-          Br.head.of(
+          BranchRecord.head.of(
             Tables.Table.get(
-              Br,
-              St.branches(
+              BranchRecord,
+              NodeState.branches(
                 Pair.fst(
-                  St,
+                  NodeState,
                   Spec.Answer,
-                  Node.applied(
+                  VendNode.applied(
                     b,
                     r2,
                     Sync.go(
                       False{},
                       b,
-                      Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))
+                      Pair.fst(
+                        NodeState,
+                        Spec.Answer,
+                        VendNode.applied(a, r1, Sync.go(False{}, a, b))
+                      )
                     )
                   )
                 )
@@ -10482,48 +11500,54 @@ def conv_h(a, b, r1, r2, c):
               c
             )
           ),
-          Br.head.of(
+          BranchRecord.head.of(
             Orders.Order.join(
-              ~Br,
-              ~Br.stamp.cmp,
-              Tables.Table.get(Br, St.branches(b), c),
+              ~BranchRecord,
+              ~BranchRecord.stamp.cmp,
+              Tables.Table.get(BranchRecord, NodeState.branches(b), c),
               Tables.Table.get(
-                Br,
-                St.branches(Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))),
+                BranchRecord,
+                NodeState.branches(
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+                ),
                 c
               )
             )
           ),
-          Br.head.of(
+          BranchRecord.head.of(
             Orders.Order.join(
-              ~Br,
-              ~Br.stamp.cmp,
-              Tables.Table.get(Br, St.branches(b), c),
+              ~BranchRecord,
+              ~BranchRecord.stamp.cmp,
+              Tables.Table.get(BranchRecord, NodeState.branches(b), c),
               Orders.Order.join(
-                ~Br,
-                ~Br.stamp.cmp,
-                Tables.Table.get(Br, St.branches(a), c),
-                Tables.Table.get(Br, St.branches(b), c)
+                ~BranchRecord,
+                ~BranchRecord.stamp.cmp,
+                Tables.Table.get(BranchRecord, NodeState.branches(a), c),
+                Tables.Table.get(BranchRecord, NodeState.branches(b), c)
               )
             )
           ),
           Equal.cong(
-            Maybe<&2, Br>,
+            Maybe<&2, BranchRecord>,
             Maybe<&2, String>,
-            z => Br.head.of(z),
+            z => BranchRecord.head.of(z),
             Tables.Table.get(
-              Br,
-              St.branches(
+              BranchRecord,
+              NodeState.branches(
                 Pair.fst(
-                  St,
+                  NodeState,
                   Spec.Answer,
-                  Node.applied(
+                  VendNode.applied(
                     b,
                     r2,
                     Sync.go(
                       False{},
                       b,
-                      Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))
+                      Pair.fst(
+                        NodeState,
+                        Spec.Answer,
+                        VendNode.applied(a, r1, Sync.go(False{}, a, b))
+                      )
                     )
                   )
                 )
@@ -10531,38 +11555,47 @@ def conv_h(a, b, r1, r2, c):
               c
             ),
             Orders.Order.join(
-              ~Br,
-              ~Br.stamp.cmp,
-              Tables.Table.get(Br, St.branches(b), c),
+              ~BranchRecord,
+              ~BranchRecord.stamp.cmp,
+              Tables.Table.get(BranchRecord, NodeState.branches(b), c),
               Tables.Table.get(
-                Br,
-                St.branches(Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))),
+                BranchRecord,
+                NodeState.branches(
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+                ),
                 c
               )
             ),
             after_b(
               b,
-              Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b))),
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b))),
               r2,
               c
             )
           ),
           Equal.cong(
-            Maybe<&2, Br>,
+            Maybe<&2, BranchRecord>,
             Maybe<&2, String>,
-            z => Br.head.of(
-              Orders.Order.join(~Br, ~Br.stamp.cmp, Tables.Table.get(Br, St.branches(b), c), z)
+            z => BranchRecord.head.of(
+              Orders.Order.join(
+                ~BranchRecord,
+                ~BranchRecord.stamp.cmp,
+                Tables.Table.get(BranchRecord, NodeState.branches(b), c),
+                z
+              )
             ),
             Tables.Table.get(
-              Br,
-              St.branches(Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))),
+              BranchRecord,
+              NodeState.branches(
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+              ),
               c
             ),
             Orders.Order.join(
-              ~Br,
-              ~Br.stamp.cmp,
-              Tables.Table.get(Br, St.branches(a), c),
-              Tables.Table.get(Br, St.branches(b), c)
+              ~BranchRecord,
+              ~BranchRecord.stamp.cmp,
+              Tables.Table.get(BranchRecord, NodeState.branches(a), c),
+              Tables.Table.get(BranchRecord, NodeState.branches(b), c)
             ),
             after_b(a, b, r1, c)
           )
@@ -10573,30 +11606,32 @@ def conv_h(a, b, r1, r2, c):
 
 # a takes in b, then b takes in that: a mark agrees
 law conv_m:
-  for a: St
-  for b: St
+  for a: NodeState
+  for b: NodeState
   for r1: String
   for r2: String
   for qb: String
   for qm: String
   {
     MarkAt.find(
-      St.marks(Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))),
+      NodeState.marks(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+      ),
       qb,
       qm
     )
       == MarkAt.find(
-        St.marks(
+        NodeState.marks(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(
+            VendNode.applied(
               b,
               r2,
               Sync.go(
                 False{},
                 b,
-                Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
               )
             )
           )
@@ -10615,28 +11650,30 @@ def conv_m(a, b, r1, r2, qb, qm):
   Equal.trans(
     Maybe<&2, String>,
     MarkAt.find(
-      St.marks(Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))),
+      NodeState.marks(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+      ),
       qb,
       qm
     ),
     Orders.Order.join(
       ~String,
-      ~Ver.rev,
-      MarkAt.find(St.marks(a), qb, qm),
-      MarkAt.find(St.marks(b), qb, qm)
+      ~VersionRecord.rev,
+      MarkAt.find(NodeState.marks(a), qb, qm),
+      MarkAt.find(NodeState.marks(b), qb, qm)
     ),
     MarkAt.find(
-      St.marks(
+      NodeState.marks(
         Pair.fst(
-          St,
+          NodeState,
           Spec.Answer,
-          Node.applied(
+          VendNode.applied(
             b,
             r2,
             Sync.go(
               False{},
               b,
-              Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
             )
           )
         )
@@ -10649,33 +11686,33 @@ def conv_m(a, b, r1, r2, qb, qm):
       Maybe<&2, String>,
       Orders.Order.join(
         ~String,
-        ~Ver.rev,
-        MarkAt.find(St.marks(a), qb, qm),
-        MarkAt.find(St.marks(b), qb, qm)
+        ~VersionRecord.rev,
+        MarkAt.find(NodeState.marks(a), qb, qm),
+        MarkAt.find(NodeState.marks(b), qb, qm)
       ),
       Orders.Order.join(
         ~String,
-        ~Ver.rev,
-        MarkAt.find(St.marks(b), qb, qm),
+        ~VersionRecord.rev,
+        MarkAt.find(NodeState.marks(b), qb, qm),
         Orders.Order.join(
           ~String,
-          ~Ver.rev,
-          MarkAt.find(St.marks(a), qb, qm),
-          MarkAt.find(St.marks(b), qb, qm)
+          ~VersionRecord.rev,
+          MarkAt.find(NodeState.marks(a), qb, qm),
+          MarkAt.find(NodeState.marks(b), qb, qm)
         )
       ),
       MarkAt.find(
-        St.marks(
+        NodeState.marks(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(
+            VendNode.applied(
               b,
               r2,
               Sync.go(
                 False{},
                 b,
-                Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
               )
             )
           )
@@ -10683,21 +11720,21 @@ def conv_m(a, b, r1, r2, qb, qm):
         qb,
         qm
       ),
-      mk_conv(MarkAt.find(St.marks(a), qb, qm), MarkAt.find(St.marks(b), qb, qm)),
+      mk_conv(MarkAt.find(NodeState.marks(a), qb, qm), MarkAt.find(NodeState.marks(b), qb, qm)),
       Equal.sym(
         Maybe<&2, String>,
         MarkAt.find(
-          St.marks(
+          NodeState.marks(
             Pair.fst(
-              St,
+              NodeState,
               Spec.Answer,
-              Node.applied(
+              VendNode.applied(
                 b,
                 r2,
                 Sync.go(
                   False{},
                   b,
-                  Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
                 )
               )
             )
@@ -10707,29 +11744,33 @@ def conv_m(a, b, r1, r2, qb, qm):
         ),
         Orders.Order.join(
           ~String,
-          ~Ver.rev,
-          MarkAt.find(St.marks(b), qb, qm),
+          ~VersionRecord.rev,
+          MarkAt.find(NodeState.marks(b), qb, qm),
           Orders.Order.join(
             ~String,
-            ~Ver.rev,
-            MarkAt.find(St.marks(a), qb, qm),
-            MarkAt.find(St.marks(b), qb, qm)
+            ~VersionRecord.rev,
+            MarkAt.find(NodeState.marks(a), qb, qm),
+            MarkAt.find(NodeState.marks(b), qb, qm)
           )
         ),
         Equal.trans(
           Maybe<&2, String>,
           MarkAt.find(
-            St.marks(
+            NodeState.marks(
               Pair.fst(
-                St,
+                NodeState,
                 Spec.Answer,
-                Node.applied(
+                VendNode.applied(
                   b,
                   r2,
                   Sync.go(
                     False{},
                     b,
-                    Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))
+                    Pair.fst(
+                      NodeState,
+                      Spec.Answer,
+                      VendNode.applied(a, r1, Sync.go(False{}, a, b))
+                    )
                   )
                 )
               )
@@ -10739,28 +11780,30 @@ def conv_m(a, b, r1, r2, qb, qm):
           ),
           Orders.Order.join(
             ~String,
-            ~Ver.rev,
-            MarkAt.find(St.marks(b), qb, qm),
+            ~VersionRecord.rev,
+            MarkAt.find(NodeState.marks(b), qb, qm),
             MarkAt.find(
-              St.marks(Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))),
+              NodeState.marks(
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+              ),
               qb,
               qm
             )
           ),
           Orders.Order.join(
             ~String,
-            ~Ver.rev,
-            MarkAt.find(St.marks(b), qb, qm),
+            ~VersionRecord.rev,
+            MarkAt.find(NodeState.marks(b), qb, qm),
             Orders.Order.join(
               ~String,
-              ~Ver.rev,
-              MarkAt.find(St.marks(a), qb, qm),
-              MarkAt.find(St.marks(b), qb, qm)
+              ~VersionRecord.rev,
+              MarkAt.find(NodeState.marks(a), qb, qm),
+              MarkAt.find(NodeState.marks(b), qb, qm)
             )
           ),
           after_m(
             b,
-            Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b))),
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b))),
             r2,
             qb,
             qm
@@ -10768,17 +11811,24 @@ def conv_m(a, b, r1, r2, qb, qm):
           Equal.cong(
             Maybe<&2, String>,
             Maybe<&2, String>,
-            z => Orders.Order.join(~String, ~Ver.rev, MarkAt.find(St.marks(b), qb, qm), z),
+            z => Orders.Order.join(
+              ~String,
+              ~VersionRecord.rev,
+              MarkAt.find(NodeState.marks(b), qb, qm),
+              z
+            ),
             MarkAt.find(
-              St.marks(Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))),
+              NodeState.marks(
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+              ),
               qb,
               qm
             ),
             Orders.Order.join(
               ~String,
-              ~Ver.rev,
-              MarkAt.find(St.marks(a), qb, qm),
-              MarkAt.find(St.marks(b), qb, qm)
+              ~VersionRecord.rev,
+              MarkAt.find(NodeState.marks(a), qb, qm),
+              MarkAt.find(NodeState.marks(b), qb, qm)
             ),
             after_m(a, b, r1, qb, qm)
           )
@@ -10789,26 +11839,30 @@ def conv_m(a, b, r1, r2, qb, qm):
 
 # a takes in b, then b takes in that: both hold the same content
 law conv_core:
-  for a: St
-  for b: St
+  for a: NodeState
+  for b: NodeState
   for r1: String
   for r2: String
   {
     Sync.collides(
-      Tables.Table.keys(Ver, St.versions(b)),
-      St.versions(b),
-      St.versions(a)
+      Tables.Table.keys(VersionRecord, NodeState.versions(b)),
+      NodeState.versions(b),
+      NodeState.versions(a)
     )
       == False{}: Bool
-  } -> Spec.Node.SameContent(
-    Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b))),
+  } -> Spec.VendNode.SameContent(
+    Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b))),
     Pair.fst(
-      St,
+      NodeState,
       Spec.Answer,
-      Node.applied(
+      VendNode.applied(
         b,
         r2,
-        Sync.go(False{}, b, Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b))))
+        Sync.go(
+          False{},
+          b,
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+        )
       )
     )
   )
@@ -10820,17 +11874,17 @@ def conv_core(a, b, r1, r2):
     +r1 = r1
     +r2 = r2
     +n => p => content_eq(
-      Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b))),
+      Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b))),
       Pair.fst(
-        St,
+        NodeState,
         Spec.Answer,
-        Node.applied(
+        VendNode.applied(
           b,
           r2,
           Sync.go(
             False{},
             b,
-            Pair.fst(St, Spec.Answer, Node.applied(a, r1, Sync.go(False{}, a, b)))
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
           )
         )
       ),
@@ -10842,27 +11896,27 @@ def conv_core(a, b, r1, r2):
 
 # a sync that answers Synced found no collision
 law sync_clean:
-  for s: St
-  for o: St
+  for s: NodeState
+  for o: NodeState
   for r: String
   for w: String
   for z: String
-  for t: St
+  for t: NodeState
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r, w, z},
       Spec.Ask.Sync{o, None{}}
     )
-      == (t, Spec.Answer.Sync{Spec.Sync.Synced{}}): St
+      == (t, Spec.Answer.Sync{Spec.Sync.Synced{}}): NodeState
       & Spec.Answer
   } -> {
     Sync.collides(
-      Tables.Table.keys(Ver, St.versions(o)),
-      St.versions(o),
-      St.versions(s)
+      Tables.Table.keys(VersionRecord, NodeState.versions(o)),
+      NodeState.versions(o),
+      NodeState.versions(s)
     )
       == False{}: Bool
   }
@@ -10874,7 +11928,11 @@ def sync_clean(s, o, r, w, z, t):
     +r = r
     +t = t
     sync_free(
-      Sync.collides(Tables.Table.keys(Ver, St.versions(o)), St.versions(o), St.versions(s)),
+      Sync.collides(
+        Tables.Table.keys(VersionRecord, NodeState.versions(o)),
+        NodeState.versions(o),
+        NodeState.versions(s)
+      ),
       s,
       o
     )(
@@ -10882,7 +11940,11 @@ def sync_clean(s, o, r, w, z, t):
         s,
         r,
         Sync.go(
-          Sync.collides(Tables.Table.keys(Ver, St.versions(o)), St.versions(o), St.versions(s)),
+          Sync.collides(
+            Tables.Table.keys(VersionRecord, NodeState.versions(o)),
+            NodeState.versions(o),
+            NodeState.versions(s)
+          ),
           s,
           o
         ),
@@ -10903,23 +11965,25 @@ def sync_clean(s, o, r, w, z, t):
 
 # a sync that answers Synced leaves the node as it would with no collision
 law sync_state:
-  for s: St
-  for o: St
+  for s: NodeState
+  for o: NodeState
   for r: String
   for w: String
   for z: String
-  for t: St
+  for t: NodeState
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r, w, z},
       Spec.Ask.Sync{o, None{}}
     )
-      == (t, Spec.Answer.Sync{Spec.Sync.Synced{}}): St
+      == (t, Spec.Answer.Sync{Spec.Sync.Synced{}}): NodeState
       & Spec.Answer
-  } -> {Pair.fst(St, Spec.Answer, Node.applied(s, r, Sync.go(False{}, s, o))) == t: St}
+  } -> {
+    Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Sync.go(False{}, s, o))) == t: NodeState
+  }
 
 def sync_state(s, o, r, w, z, t):
   +hn => +h =>
@@ -10930,16 +11994,20 @@ def sync_state(s, o, r, w, z, t):
     +z = z
     +t = t
     Equal.trans(
-      St,
-      Pair.fst(St, Spec.Answer, Node.applied(s, r, Sync.go(False{}, s, o))),
+      NodeState,
+      Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Sync.go(False{}, s, o))),
       Pair.fst(
-        St,
+        NodeState,
         Spec.Answer,
-        Node.applied(
+        VendNode.applied(
           s,
           r,
           Sync.go(
-            Sync.collides(Tables.Table.keys(Ver, St.versions(o)), St.versions(o), St.versions(s)),
+            Sync.collides(
+              Tables.Table.keys(VersionRecord, NodeState.versions(o)),
+              NodeState.versions(o),
+              NodeState.versions(s)
+            ),
             s,
             o
           )
@@ -10948,13 +12016,21 @@ def sync_state(s, o, r, w, z, t):
       t,
       Equal.cong(
         Bool,
-        St,
-        x => Pair.fst(St, Spec.Answer, Node.applied(s, r, Sync.go(x, s, o))),
+        NodeState,
+        x => Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Sync.go(x, s, o))),
         False{},
-        Sync.collides(Tables.Table.keys(Ver, St.versions(o)), St.versions(o), St.versions(s)),
+        Sync.collides(
+          Tables.Table.keys(VersionRecord, NodeState.versions(o)),
+          NodeState.versions(o),
+          NodeState.versions(s)
+        ),
         Equal.sym(
           Bool,
-          Sync.collides(Tables.Table.keys(Ver, St.versions(o)), St.versions(o), St.versions(s)),
+          Sync.collides(
+            Tables.Table.keys(VersionRecord, NodeState.versions(o)),
+            NodeState.versions(o),
+            NodeState.versions(s)
+          ),
           False{},
           sync_clean(s, o, r, w, z, t)(hn)(h)
         )
@@ -10963,7 +12039,11 @@ def sync_state(s, o, r, w, z, t):
         s,
         r,
         Sync.go(
-          Sync.collides(Tables.Table.keys(Ver, St.versions(o)), St.versions(o), St.versions(s)),
+          Sync.collides(
+            Tables.Table.keys(VersionRecord, NodeState.versions(o)),
+            NodeState.versions(o),
+            NodeState.versions(s)
+          ),
           s,
           o
         ),
@@ -10984,24 +12064,24 @@ def sync_state(s, o, r, w, z, t):
 
 # s takes in a twice: a version is as after once
 law idem_v:
-  for s: St
-  for a: St
+  for s: NodeState
+  for a: NodeState
   for r1: String
   for r2: String
   for k: String
   {
     Tables.Table.get(
-      Ver,
-      St.versions(
+      VersionRecord,
+      NodeState.versions(
         Pair.fst(
-          St,
+          NodeState,
           Spec.Answer,
-          Node.applied(
-            Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+          VendNode.applied(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
             r2,
             Sync.go(
               False{},
-              Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
               a
             )
           )
@@ -11010,10 +12090,12 @@ law idem_v:
       k
     )
       == Tables.Table.get(
-        Ver,
-        St.versions(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+        VersionRecord,
+        NodeState.versions(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+        ),
         k
-      ): Maybe<&2, Ver>
+      ): Maybe<&2, VersionRecord>
   }
 
 def idem_v(s, a, r1, r2, k):
@@ -11022,19 +12104,19 @@ def idem_v(s, a, r1, r2, k):
   +r1 = r1
   +k = k
   Equal.trans(
-    Maybe<&2, Ver>,
+    Maybe<&2, VersionRecord>,
     Tables.Table.get(
-      Ver,
-      St.versions(
+      VersionRecord,
+      NodeState.versions(
         Pair.fst(
-          St,
+          NodeState,
           Spec.Answer,
-          Node.applied(
-            Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+          VendNode.applied(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
             r2,
             Sync.go(
               False{},
-              Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
               a
             )
           )
@@ -11044,106 +12126,130 @@ def idem_v(s, a, r1, r2, k):
     ),
     Maybe.or(
       &2,
-      Ver,
+      VersionRecord,
       Tables.Table.get(
-        Ver,
-        St.versions(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+        VersionRecord,
+        NodeState.versions(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+        ),
         k
       ),
-      Tables.Table.get(Ver, St.versions(a), k)
+      Tables.Table.get(VersionRecord, NodeState.versions(a), k)
     ),
     Tables.Table.get(
-      Ver,
-      St.versions(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+      VersionRecord,
+      NodeState.versions(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+      ),
       k
     ),
-    after_v(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))), a, r2, k),
+    after_v(
+      Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
+      a,
+      r2,
+      k
+    ),
     Equal.trans(
-      Maybe<&2, Ver>,
+      Maybe<&2, VersionRecord>,
       Maybe.or(
         &2,
-        Ver,
+        VersionRecord,
         Tables.Table.get(
-          Ver,
-          St.versions(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+          VersionRecord,
+          NodeState.versions(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+          ),
           k
         ),
-        Tables.Table.get(Ver, St.versions(a), k)
+        Tables.Table.get(VersionRecord, NodeState.versions(a), k)
       ),
       Maybe.or(
         &2,
-        Ver,
+        VersionRecord,
         Maybe.or(
           &2,
-          Ver,
-          Tables.Table.get(Ver, St.versions(s), k),
-          Tables.Table.get(Ver, St.versions(a), k)
+          VersionRecord,
+          Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+          Tables.Table.get(VersionRecord, NodeState.versions(a), k)
         ),
-        Tables.Table.get(Ver, St.versions(a), k)
+        Tables.Table.get(VersionRecord, NodeState.versions(a), k)
       ),
       Tables.Table.get(
-        Ver,
-        St.versions(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+        VersionRecord,
+        NodeState.versions(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+        ),
         k
       ),
       Equal.cong(
-        Maybe<&2, Ver>,
-        Maybe<&2, Ver>,
-        z => Maybe.or(&2, Ver, z, Tables.Table.get(Ver, St.versions(a), k)),
+        Maybe<&2, VersionRecord>,
+        Maybe<&2, VersionRecord>,
+        z => Maybe.or(
+          &2,
+          VersionRecord,
+          z,
+          Tables.Table.get(VersionRecord, NodeState.versions(a), k)
+        ),
         Tables.Table.get(
-          Ver,
-          St.versions(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+          VersionRecord,
+          NodeState.versions(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+          ),
           k
         ),
         Maybe.or(
           &2,
-          Ver,
-          Tables.Table.get(Ver, St.versions(s), k),
-          Tables.Table.get(Ver, St.versions(a), k)
+          VersionRecord,
+          Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+          Tables.Table.get(VersionRecord, NodeState.versions(a), k)
         ),
         after_v(s, a, r1, k)
       ),
       Equal.trans(
-        Maybe<&2, Ver>,
+        Maybe<&2, VersionRecord>,
         Maybe.or(
           &2,
-          Ver,
+          VersionRecord,
           Maybe.or(
             &2,
-            Ver,
-            Tables.Table.get(Ver, St.versions(s), k),
-            Tables.Table.get(Ver, St.versions(a), k)
+            VersionRecord,
+            Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+            Tables.Table.get(VersionRecord, NodeState.versions(a), k)
           ),
-          Tables.Table.get(Ver, St.versions(a), k)
+          Tables.Table.get(VersionRecord, NodeState.versions(a), k)
         ),
         Maybe.or(
           &2,
-          Ver,
-          Tables.Table.get(Ver, St.versions(s), k),
-          Tables.Table.get(Ver, St.versions(a), k)
+          VersionRecord,
+          Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+          Tables.Table.get(VersionRecord, NodeState.versions(a), k)
         ),
         Tables.Table.get(
-          Ver,
-          St.versions(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+          VersionRecord,
+          NodeState.versions(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+          ),
           k
         ),
         Maybes.Maybe.or_idem(
-          Ver,
-          Tables.Table.get(Ver, St.versions(s), k),
-          Tables.Table.get(Ver, St.versions(a), k)
+          VersionRecord,
+          Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+          Tables.Table.get(VersionRecord, NodeState.versions(a), k)
         ),
         Equal.sym(
-          Maybe<&2, Ver>,
+          Maybe<&2, VersionRecord>,
           Tables.Table.get(
-            Ver,
-            St.versions(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+            VersionRecord,
+            NodeState.versions(
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+            ),
             k
           ),
           Maybe.or(
             &2,
-            Ver,
-            Tables.Table.get(Ver, St.versions(s), k),
-            Tables.Table.get(Ver, St.versions(a), k)
+            VersionRecord,
+            Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+            Tables.Table.get(VersionRecord, NodeState.versions(a), k)
           ),
           after_v(s, a, r1, k)
         )
@@ -11153,24 +12259,24 @@ def idem_v(s, a, r1, r2, k):
 
 # s takes in a twice: a branch is as after once
 law idem_b:
-  for s: St
-  for a: St
+  for s: NodeState
+  for a: NodeState
   for r1: String
   for r2: String
   for c: String
   {
     Tables.Table.get(
-      Br,
-      St.branches(
+      BranchRecord,
+      NodeState.branches(
         Pair.fst(
-          St,
+          NodeState,
           Spec.Answer,
-          Node.applied(
-            Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+          VendNode.applied(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
             r2,
             Sync.go(
               False{},
-              Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
               a
             )
           )
@@ -11179,10 +12285,12 @@ law idem_b:
       c
     )
       == Tables.Table.get(
-        Br,
-        St.branches(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+        BranchRecord,
+        NodeState.branches(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+        ),
         c
-      ): Maybe<&2, Br>
+      ): Maybe<&2, BranchRecord>
   }
 
 def idem_b(s, a, r1, r2, c):
@@ -11191,19 +12299,19 @@ def idem_b(s, a, r1, r2, c):
   +r1 = r1
   +c = c
   Equal.trans(
-    Maybe<&2, Br>,
+    Maybe<&2, BranchRecord>,
     Tables.Table.get(
-      Br,
-      St.branches(
+      BranchRecord,
+      NodeState.branches(
         Pair.fst(
-          St,
+          NodeState,
           Spec.Answer,
-          Node.applied(
-            Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+          VendNode.applied(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
             r2,
             Sync.go(
               False{},
-              Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
               a
             )
           )
@@ -11212,109 +12320,133 @@ def idem_b(s, a, r1, r2, c):
       c
     ),
     Orders.Order.join(
-      ~Br,
-      ~Br.stamp.cmp,
+      ~BranchRecord,
+      ~BranchRecord.stamp.cmp,
       Tables.Table.get(
-        Br,
-        St.branches(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+        BranchRecord,
+        NodeState.branches(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+        ),
         c
       ),
-      Tables.Table.get(Br, St.branches(a), c)
+      Tables.Table.get(BranchRecord, NodeState.branches(a), c)
     ),
     Tables.Table.get(
-      Br,
-      St.branches(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+      BranchRecord,
+      NodeState.branches(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+      ),
       c
     ),
-    after_b(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))), a, r2, c),
+    after_b(
+      Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
+      a,
+      r2,
+      c
+    ),
     Equal.trans(
-      Maybe<&2, Br>,
+      Maybe<&2, BranchRecord>,
       Orders.Order.join(
-        ~Br,
-        ~Br.stamp.cmp,
+        ~BranchRecord,
+        ~BranchRecord.stamp.cmp,
         Tables.Table.get(
-          Br,
-          St.branches(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+          BranchRecord,
+          NodeState.branches(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+          ),
           c
         ),
-        Tables.Table.get(Br, St.branches(a), c)
+        Tables.Table.get(BranchRecord, NodeState.branches(a), c)
       ),
       Orders.Order.join(
-        ~Br,
-        ~Br.stamp.cmp,
+        ~BranchRecord,
+        ~BranchRecord.stamp.cmp,
         Orders.Order.join(
-          ~Br,
-          ~Br.stamp.cmp,
-          Tables.Table.get(Br, St.branches(s), c),
-          Tables.Table.get(Br, St.branches(a), c)
+          ~BranchRecord,
+          ~BranchRecord.stamp.cmp,
+          Tables.Table.get(BranchRecord, NodeState.branches(s), c),
+          Tables.Table.get(BranchRecord, NodeState.branches(a), c)
         ),
-        Tables.Table.get(Br, St.branches(a), c)
+        Tables.Table.get(BranchRecord, NodeState.branches(a), c)
       ),
       Tables.Table.get(
-        Br,
-        St.branches(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+        BranchRecord,
+        NodeState.branches(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+        ),
         c
       ),
       Equal.cong(
-        Maybe<&2, Br>,
-        Maybe<&2, Br>,
-        z => Orders.Order.join(~Br, ~Br.stamp.cmp, z, Tables.Table.get(Br, St.branches(a), c)),
+        Maybe<&2, BranchRecord>,
+        Maybe<&2, BranchRecord>,
+        z => Orders.Order.join(
+          ~BranchRecord,
+          ~BranchRecord.stamp.cmp,
+          z,
+          Tables.Table.get(BranchRecord, NodeState.branches(a), c)
+        ),
         Tables.Table.get(
-          Br,
-          St.branches(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+          BranchRecord,
+          NodeState.branches(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+          ),
           c
         ),
         Orders.Order.join(
-          ~Br,
-          ~Br.stamp.cmp,
-          Tables.Table.get(Br, St.branches(s), c),
-          Tables.Table.get(Br, St.branches(a), c)
+          ~BranchRecord,
+          ~BranchRecord.stamp.cmp,
+          Tables.Table.get(BranchRecord, NodeState.branches(s), c),
+          Tables.Table.get(BranchRecord, NodeState.branches(a), c)
         ),
         after_b(s, a, r1, c)
       ),
       Equal.trans(
-        Maybe<&2, Br>,
+        Maybe<&2, BranchRecord>,
         Orders.Order.join(
-          ~Br,
-          ~Br.stamp.cmp,
+          ~BranchRecord,
+          ~BranchRecord.stamp.cmp,
           Orders.Order.join(
-            ~Br,
-            ~Br.stamp.cmp,
-            Tables.Table.get(Br, St.branches(s), c),
-            Tables.Table.get(Br, St.branches(a), c)
+            ~BranchRecord,
+            ~BranchRecord.stamp.cmp,
+            Tables.Table.get(BranchRecord, NodeState.branches(s), c),
+            Tables.Table.get(BranchRecord, NodeState.branches(a), c)
           ),
-          Tables.Table.get(Br, St.branches(a), c)
+          Tables.Table.get(BranchRecord, NodeState.branches(a), c)
         ),
         Orders.Order.join(
-          ~Br,
-          ~Br.stamp.cmp,
-          Tables.Table.get(Br, St.branches(s), c),
-          Tables.Table.get(Br, St.branches(a), c)
+          ~BranchRecord,
+          ~BranchRecord.stamp.cmp,
+          Tables.Table.get(BranchRecord, NodeState.branches(s), c),
+          Tables.Table.get(BranchRecord, NodeState.branches(a), c)
         ),
         Tables.Table.get(
-          Br,
-          St.branches(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+          BranchRecord,
+          NodeState.branches(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+          ),
           c
         ),
         Orders.Order.join_idem(
-          ~Br,
-          ~Br.stamp.cmp,
+          ~BranchRecord,
+          ~BranchRecord.stamp.cmp,
           y => stamp_refl(y),
-          Tables.Table.get(Br, St.branches(s), c),
-          Tables.Table.get(Br, St.branches(a), c)
+          Tables.Table.get(BranchRecord, NodeState.branches(s), c),
+          Tables.Table.get(BranchRecord, NodeState.branches(a), c)
         ),
         Equal.sym(
-          Maybe<&2, Br>,
+          Maybe<&2, BranchRecord>,
           Tables.Table.get(
-            Br,
-            St.branches(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+            BranchRecord,
+            NodeState.branches(
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+            ),
             c
           ),
           Orders.Order.join(
-            ~Br,
-            ~Br.stamp.cmp,
-            Tables.Table.get(Br, St.branches(s), c),
-            Tables.Table.get(Br, St.branches(a), c)
+            ~BranchRecord,
+            ~BranchRecord.stamp.cmp,
+            Tables.Table.get(BranchRecord, NodeState.branches(s), c),
+            Tables.Table.get(BranchRecord, NodeState.branches(a), c)
           ),
           after_b(s, a, r1, c)
         )
@@ -11324,24 +12456,24 @@ def idem_b(s, a, r1, r2, c):
 
 # s takes in a twice: a mark is as after once
 law idem_m:
-  for s: St
-  for a: St
+  for s: NodeState
+  for a: NodeState
   for r1: String
   for r2: String
   for qb: String
   for qm: String
   {
     MarkAt.find(
-      St.marks(
+      NodeState.marks(
         Pair.fst(
-          St,
+          NodeState,
           Spec.Answer,
-          Node.applied(
-            Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+          VendNode.applied(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
             r2,
             Sync.go(
               False{},
-              Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
               a
             )
           )
@@ -11351,7 +12483,9 @@ law idem_m:
       qm
     )
       == MarkAt.find(
-        St.marks(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+        NodeState.marks(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+        ),
         qb,
         qm
       ): Maybe<&2, String>
@@ -11366,16 +12500,16 @@ def idem_m(s, a, r1, r2, qb, qm):
   Equal.trans(
     Maybe<&2, String>,
     MarkAt.find(
-      St.marks(
+      NodeState.marks(
         Pair.fst(
-          St,
+          NodeState,
           Spec.Answer,
-          Node.applied(
-            Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+          VendNode.applied(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
             r2,
             Sync.go(
               False{},
-              Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
               a
             )
           )
@@ -11386,62 +12520,83 @@ def idem_m(s, a, r1, r2, qb, qm):
     ),
     Orders.Order.join(
       ~String,
-      ~Ver.rev,
+      ~VersionRecord.rev,
       MarkAt.find(
-        St.marks(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+        NodeState.marks(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+        ),
         qb,
         qm
       ),
-      MarkAt.find(St.marks(a), qb, qm)
+      MarkAt.find(NodeState.marks(a), qb, qm)
     ),
     MarkAt.find(
-      St.marks(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+      NodeState.marks(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+      ),
       qb,
       qm
     ),
-    after_m(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))), a, r2, qb, qm),
+    after_m(
+      Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
+      a,
+      r2,
+      qb,
+      qm
+    ),
     Equal.trans(
       Maybe<&2, String>,
       Orders.Order.join(
         ~String,
-        ~Ver.rev,
+        ~VersionRecord.rev,
         MarkAt.find(
-          St.marks(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+          NodeState.marks(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+          ),
           qb,
           qm
         ),
-        MarkAt.find(St.marks(a), qb, qm)
+        MarkAt.find(NodeState.marks(a), qb, qm)
       ),
       Orders.Order.join(
         ~String,
-        ~Ver.rev,
+        ~VersionRecord.rev,
         Orders.Order.join(
           ~String,
-          ~Ver.rev,
-          MarkAt.find(St.marks(s), qb, qm),
-          MarkAt.find(St.marks(a), qb, qm)
+          ~VersionRecord.rev,
+          MarkAt.find(NodeState.marks(s), qb, qm),
+          MarkAt.find(NodeState.marks(a), qb, qm)
         ),
-        MarkAt.find(St.marks(a), qb, qm)
+        MarkAt.find(NodeState.marks(a), qb, qm)
       ),
       MarkAt.find(
-        St.marks(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+        NodeState.marks(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+        ),
         qb,
         qm
       ),
       Equal.cong(
         Maybe<&2, String>,
         Maybe<&2, String>,
-        z => Orders.Order.join(~String, ~Ver.rev, z, MarkAt.find(St.marks(a), qb, qm)),
+        z => Orders.Order.join(
+          ~String,
+          ~VersionRecord.rev,
+          z,
+          MarkAt.find(NodeState.marks(a), qb, qm)
+        ),
         MarkAt.find(
-          St.marks(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+          NodeState.marks(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+          ),
           qb,
           qm
         ),
         Orders.Order.join(
           ~String,
-          ~Ver.rev,
-          MarkAt.find(St.marks(s), qb, qm),
-          MarkAt.find(St.marks(a), qb, qm)
+          ~VersionRecord.rev,
+          MarkAt.find(NodeState.marks(s), qb, qm),
+          MarkAt.find(NodeState.marks(a), qb, qm)
         ),
         after_m(s, a, r1, qb, qm)
       ),
@@ -11449,45 +12604,49 @@ def idem_m(s, a, r1, r2, qb, qm):
         Maybe<&2, String>,
         Orders.Order.join(
           ~String,
-          ~Ver.rev,
+          ~VersionRecord.rev,
           Orders.Order.join(
             ~String,
-            ~Ver.rev,
-            MarkAt.find(St.marks(s), qb, qm),
-            MarkAt.find(St.marks(a), qb, qm)
+            ~VersionRecord.rev,
+            MarkAt.find(NodeState.marks(s), qb, qm),
+            MarkAt.find(NodeState.marks(a), qb, qm)
           ),
-          MarkAt.find(St.marks(a), qb, qm)
+          MarkAt.find(NodeState.marks(a), qb, qm)
         ),
         Orders.Order.join(
           ~String,
-          ~Ver.rev,
-          MarkAt.find(St.marks(s), qb, qm),
-          MarkAt.find(St.marks(a), qb, qm)
+          ~VersionRecord.rev,
+          MarkAt.find(NodeState.marks(s), qb, qm),
+          MarkAt.find(NodeState.marks(a), qb, qm)
         ),
         MarkAt.find(
-          St.marks(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+          NodeState.marks(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+          ),
           qb,
           qm
         ),
         Orders.Order.join_idem(
           ~String,
-          ~Ver.rev,
+          ~VersionRecord.rev,
           y => rev_refl(y),
-          MarkAt.find(St.marks(s), qb, qm),
-          MarkAt.find(St.marks(a), qb, qm)
+          MarkAt.find(NodeState.marks(s), qb, qm),
+          MarkAt.find(NodeState.marks(a), qb, qm)
         ),
         Equal.sym(
           Maybe<&2, String>,
           MarkAt.find(
-            St.marks(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+            NodeState.marks(
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+            ),
             qb,
             qm
           ),
           Orders.Order.join(
             ~String,
-            ~Ver.rev,
-            MarkAt.find(St.marks(s), qb, qm),
-            MarkAt.find(St.marks(a), qb, qm)
+            ~VersionRecord.rev,
+            MarkAt.find(NodeState.marks(s), qb, qm),
+            MarkAt.find(NodeState.marks(a), qb, qm)
           ),
           after_m(s, a, r1, qb, qm)
         )
@@ -11497,21 +12656,25 @@ def idem_m(s, a, r1, r2, qb, qm):
 
 # s takes in a twice: the content is as after once
 law idem_core:
-  for s: St
-  for a: St
+  for s: NodeState
+  for a: NodeState
   for r1: String
   for r2: String
-  Spec.Node.SameContent(
+  Spec.VendNode.SameContent(
     Pair.fst(
-      St,
+      NodeState,
       Spec.Answer,
-      Node.applied(
-        Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+      VendNode.applied(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
         r2,
-        Sync.go(False{}, Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))), a)
+        Sync.go(
+          False{},
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
+          a
+        )
       )
     ),
-    Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))
+    Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
   )
 
 def idem_core(s, a, r1, r2):
@@ -11521,34 +12684,38 @@ def idem_core(s, a, r1, r2):
   +r2 = r2
   +n => p => content_eq(
     Pair.fst(
-      St,
+      NodeState,
       Spec.Answer,
-      Node.applied(
-        Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+      VendNode.applied(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
         r2,
-        Sync.go(False{}, Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))), a)
+        Sync.go(
+          False{},
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
+          a
+        )
       )
     ),
-    Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+    Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
     Resources.Name.show(n),
     p
   )(
     k => Equal.cong(
-      Maybe<&2, Ver>,
+      Maybe<&2, VersionRecord>,
       Maybe<&2, List<&2, U32>>,
-      z => Blob.find.of(Ver.blobs.of(z), Resources.Name.show(n)),
+      z => Blob.find.of(VersionRecord.blobs.of(z), Resources.Name.show(n)),
       Tables.Table.get(
-        Ver,
-        St.versions(
+        VersionRecord,
+        NodeState.versions(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(
-              Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+            VendNode.applied(
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
               r2,
               Sync.go(
                 False{},
-                Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
                 a
               )
             )
@@ -11557,29 +12724,31 @@ def idem_core(s, a, r1, r2):
         k
       ),
       Tables.Table.get(
-        Ver,
-        St.versions(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+        VersionRecord,
+        NodeState.versions(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+        ),
         k
       ),
       idem_v(s, a, r1, r2, k)
     )
   )(
     c => Equal.cong(
-      Maybe<&2, Br>,
+      Maybe<&2, BranchRecord>,
       Maybe<&2, String>,
-      z => Br.head.of(z),
+      z => BranchRecord.head.of(z),
       Tables.Table.get(
-        Br,
-        St.branches(
+        BranchRecord,
+        NodeState.branches(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(
-              Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+            VendNode.applied(
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
               r2,
               Sync.go(
                 False{},
-                Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
                 a
               )
             )
@@ -11588,8 +12757,10 @@ def idem_core(s, a, r1, r2):
         c
       ),
       Tables.Table.get(
-        Br,
-        St.branches(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+        BranchRecord,
+        NodeState.branches(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+        ),
         c
       ),
       idem_b(s, a, r1, r2, c)
@@ -11599,14 +12770,22 @@ def idem_core(s, a, r1, r2):
 # a second sync with a, by whether it found a collision (c)
 law idem_go:
   for c: Bool
-  for s: St
-  for a: St
+  for s: NodeState
+  for a: NodeState
   for r1: String
-  for s1: St
+  for s1: NodeState
   for r2: String
   {
-    Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))) == s1: St
-  } -> Spec.Node.SameContent(Pair.fst(St, Spec.Answer, Node.applied(s1, r2, Sync.go(c, s1, a))), s1)
+    Pair.fst(
+      NodeState,
+      Spec.Answer,
+      VendNode.applied(s, r1, Sync.go(False{}, s, a))
+    )
+      == s1: NodeState
+  } -> Spec.VendNode.SameContent(
+    Pair.fst(NodeState, Spec.Answer, VendNode.applied(s1, r2, Sync.go(c, s1, a))),
+    s1
+  )
 
 def idem_go(c, s, a, r1, s1, r2):
   match c:
@@ -11617,7 +12796,7 @@ def idem_go(c, s, a, r1, s1, r2):
         n => p => same_content_out(
           s1,
           r2,
-          St.clashes(s1),
+          NodeState.clashes(s1),
           [],
           Sync.answer(Spec.Sync.Refused{"version ID collision"}),
           Resources.Name.show(n),
@@ -11629,8 +12808,8 @@ def idem_go(c, s, a, r1, s1, r2):
         +a = a
         +r1 = r1
         +r2 = r2
-        %e: Spec.Node.SameContent(
-          Pair.fst(St, Spec.Answer, Node.applied(_, r2, Sync.go(False{}, _, a))),
+        %e: Spec.VendNode.SameContent(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(_, r2, Sync.go(False{}, _, a))),
           _
         )
         idem_core(s, a, r1, r2)
@@ -11638,20 +12817,34 @@ def idem_go(c, s, a, r1, s1, r2):
 # a second sync with a, by whether its request was seen (found)
 law idem_ask:
   for found: Maybe<&2, Seen>
-  for s: St
-  for a: St
+  for s: NodeState
+  for a: NodeState
   for r1: String
-  for s1: St
+  for s1: NodeState
   for r2: String
   for w2: String
   for z2: String
-  for s2: St
+  for s2: NodeState
   for a2: Spec.Answer
   {
-    Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))) == s1: St
+    Pair.fst(
+      NodeState,
+      Spec.Answer,
+      VendNode.applied(s, r1, Sync.go(False{}, s, a))
+    )
+      == s1: NodeState
   } -> {
-    Node.asked(found, s1, r2, w2, z2, Spec.Ask.Sync{a, None{}}) == (s2, a2): St & Spec.Answer
-  } -> Spec.Node.SameContent(s2, s1)
+    VendNode.asked(
+      found,
+      s1,
+      r2,
+      w2,
+      z2,
+      Spec.Ask.Sync{a, None{}}
+    )
+      == (s2, a2): NodeState
+      & Spec.Answer
+  } -> Spec.VendNode.SameContent(s2, s1)
 
 def idem_ask(found, s, a, r1, s1, r2, w2, z2, s2, a2):
   match found:
@@ -11659,13 +12852,13 @@ def idem_ask(found, s, a, r1, s1, r2, w2, z2, s2, a2):
       e => h =>
         +s1 = s1
         %Equal.cong(
-          St & Spec.Answer,
-          St,
-          x => Pair.fst(St, Spec.Answer, x),
+          NodeState & Spec.Answer,
+          NodeState,
+          x => Pair.fst(NodeState, Spec.Answer, x),
           (s1, b),
           (s2, a2),
           h
-        ): Spec.Node.SameContent(_, s1)
+        ): Spec.VendNode.SameContent(_, s1)
         n => p => {==}
     case None{}:
       e => h =>
@@ -11678,9 +12871,13 @@ def idem_ask(found, s, a, r1, s1, r2, w2, z2, s2, a2):
           Step.of(s1, r2, w2, z2, Spec.Ask.Sync{a, None{}}),
           s2,
           a2
-        )(h): Spec.Node.SameContent(_, s1)
+        )(h): Spec.VendNode.SameContent(_, s1)
         idem_go(
-          Sync.collides(Tables.Table.keys(Ver, St.versions(a)), St.versions(a), St.versions(s1)),
+          Sync.collides(
+            Tables.Table.keys(VersionRecord, NodeState.versions(a)),
+            NodeState.versions(a),
+            NodeState.versions(s1)
+          ),
           s,
           a,
           r1,
@@ -11690,14 +12887,26 @@ def idem_ask(found, s, a, r1, s1, r2, w2, z2, s2, a2):
 
 # the stamps of three branches chain
 law stamp_chain:
-  for x: Br
-  for y: Br
-  for z: Br
-  {Cmps.Cmp.chain(Br.stamp.cmp(x, y), Br.stamp.cmp(y, z), Br.stamp.cmp(x, z)) == True{}: Bool}
+  for x: BranchRecord
+  for y: BranchRecord
+  for z: BranchRecord
+  {
+    Cmps.Cmp.chain(
+      BranchRecord.stamp.cmp(x, y),
+      BranchRecord.stamp.cmp(y, z),
+      BranchRecord.stamp.cmp(x, z)
+    )
+      == True{}: Bool
+  }
 
 def stamp_chain(x, y, z):
   match x y z:
-    case Br{+h1, o1, +e1, +c1} Br{+h2, o2, +e2, +c2} Br{+h3, o3, +e3, +c3}:
+    case BranchRecord{
+      +h1,
+      o1,
+      +e1,
+      +c1
+    } BranchRecord{+h2, o2, +e2, +c2} BranchRecord{+h3, o3, +e3, +c3}:
       Cmps.Cmp.then_chain(
         Nat.cmp(e1, e2),
         Nat.cmp(e2, e3),
@@ -11723,7 +12932,14 @@ law rev_chain:
   for a: String
   for b: String
   for c: String
-  {Cmps.Cmp.chain(Ver.rev(a, b), Ver.rev(b, c), Ver.rev(a, c)) == True{}: Bool}
+  {
+    Cmps.Cmp.chain(
+      VersionRecord.rev(a, b),
+      VersionRecord.rev(b, c),
+      VersionRecord.rev(a, c)
+    )
+      == True{}: Bool
+  }
 
 def rev_chain(a, b, c):
   +a = a
@@ -11746,20 +12962,22 @@ def rev_chain(a, b, c):
 # taking in vb then va holds the same bytes as va then vb, when vb agrees with
 # what was held before it
 law comm_blob:
-  for vs: Maybe<&2, Ver>
-  for va: Maybe<&2, Ver>
-  for vb: Maybe<&2, Ver>
+  for vs: Maybe<&2, VersionRecord>
+  for va: Maybe<&2, VersionRecord>
+  for vb: Maybe<&2, VersionRecord>
   for n: String
   Compat(
     vb,
-    Maybe.or(&2, Ver, vs, va)
+    Maybe.or(&2, VersionRecord, vs, va)
   ) -> {
     Blob.find.of(
-      Ver.blobs.of(Maybe.or(&2, Ver, Maybe.or(&2, Ver, vs, va), vb)),
+      VersionRecord.blobs.of(Maybe.or(&2, VersionRecord, Maybe.or(&2, VersionRecord, vs, va), vb)),
       n
     )
       == Blob.find.of(
-        Ver.blobs.of(Maybe.or(&2, Ver, Maybe.or(&2, Ver, vs, vb), va)),
+        VersionRecord.blobs.of(
+          Maybe.or(&2, VersionRecord, Maybe.or(&2, VersionRecord, vs, vb), va)
+        ),
         n
       ): Maybe<&2, List<&2, U32>>
   }
@@ -11779,9 +12997,9 @@ def comm_blob(vs, va, vb, n):
 
 # s takes in a then b, or b then a: a version agrees
 law comm_v:
-  for s: St
-  for a: St
-  for b: St
+  for s: NodeState
+  for a: NodeState
+  for b: NodeState
   for r1: String
   for r2: String
   for r3: String
@@ -11790,26 +13008,28 @@ law comm_v:
   for k: String
   {
     Sync.collides(
-      Tables.Table.keys(Ver, St.versions(b)),
-      St.versions(b),
-      St.versions(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))))
+      Tables.Table.keys(VersionRecord, NodeState.versions(b)),
+      NodeState.versions(b),
+      NodeState.versions(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+      )
     )
       == False{}: Bool
   } -> {
     Blob.find.of(
-      Ver.blobs.of(
+      VersionRecord.blobs.of(
         Tables.Table.get(
-          Ver,
-          St.versions(
+          VersionRecord,
+          NodeState.versions(
             Pair.fst(
-              St,
+              NodeState,
               Spec.Answer,
-              Node.applied(
-                Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+              VendNode.applied(
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
                 r2,
                 Sync.go(
                   False{},
-                  Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
                   b
                 )
               )
@@ -11821,19 +13041,23 @@ law comm_v:
       n
     )
       == Blob.find.of(
-        Ver.blobs.of(
+        VersionRecord.blobs.of(
           Tables.Table.get(
-            Ver,
-            St.versions(
+            VersionRecord,
+            NodeState.versions(
               Pair.fst(
-                St,
+                NodeState,
                 Spec.Answer,
-                Node.applied(
-                  Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                VendNode.applied(
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
                   r4,
                   Sync.go(
                     False{},
-                    Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                    Pair.fst(
+                      NodeState,
+                      Spec.Answer,
+                      VendNode.applied(s, r3, Sync.go(False{}, s, b))
+                    ),
                     a
                   )
                 )
@@ -11860,19 +13084,23 @@ def comm_v(s, a, b, r1, r2, r3, r4, n, k):
     Equal.trans(
       Maybe<&2, List<&2, U32>>,
       Blob.find.of(
-        Ver.blobs.of(
+        VersionRecord.blobs.of(
           Tables.Table.get(
-            Ver,
-            St.versions(
+            VersionRecord,
+            NodeState.versions(
               Pair.fst(
-                St,
+                NodeState,
                 Spec.Answer,
-                Node.applied(
-                  Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+                VendNode.applied(
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
                   r2,
                   Sync.go(
                     False{},
-                    Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+                    Pair.fst(
+                      NodeState,
+                      Spec.Answer,
+                      VendNode.applied(s, r1, Sync.go(False{}, s, a))
+                    ),
                     b
                   )
                 )
@@ -11884,35 +13112,39 @@ def comm_v(s, a, b, r1, r2, r3, r4, n, k):
         n
       ),
       Blob.find.of(
-        Ver.blobs.of(
+        VersionRecord.blobs.of(
           Maybe.or(
             &2,
-            Ver,
+            VersionRecord,
             Maybe.or(
               &2,
-              Ver,
-              Tables.Table.get(Ver, St.versions(s), k),
-              Tables.Table.get(Ver, St.versions(a), k)
+              VersionRecord,
+              Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+              Tables.Table.get(VersionRecord, NodeState.versions(a), k)
             ),
-            Tables.Table.get(Ver, St.versions(b), k)
+            Tables.Table.get(VersionRecord, NodeState.versions(b), k)
           )
         ),
         n
       ),
       Blob.find.of(
-        Ver.blobs.of(
+        VersionRecord.blobs.of(
           Tables.Table.get(
-            Ver,
-            St.versions(
+            VersionRecord,
+            NodeState.versions(
               Pair.fst(
-                St,
+                NodeState,
                 Spec.Answer,
-                Node.applied(
-                  Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                VendNode.applied(
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
                   r4,
                   Sync.go(
                     False{},
-                    Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                    Pair.fst(
+                      NodeState,
+                      Spec.Answer,
+                      VendNode.applied(s, r3, Sync.go(False{}, s, b))
+                    ),
                     a
                   )
                 )
@@ -11924,21 +13156,21 @@ def comm_v(s, a, b, r1, r2, r3, r4, n, k):
         n
       ),
       Equal.cong(
-        Maybe<&2, Ver>,
+        Maybe<&2, VersionRecord>,
         Maybe<&2, List<&2, U32>>,
-        z => Blob.find.of(Ver.blobs.of(z), n),
+        z => Blob.find.of(VersionRecord.blobs.of(z), n),
         Tables.Table.get(
-          Ver,
-          St.versions(
+          VersionRecord,
+          NodeState.versions(
             Pair.fst(
-              St,
+              NodeState,
               Spec.Answer,
-              Node.applied(
-                Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+              VendNode.applied(
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
                 r2,
                 Sync.go(
                   False{},
-                  Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
                   b
                 )
               )
@@ -11948,29 +13180,33 @@ def comm_v(s, a, b, r1, r2, r3, r4, n, k):
         ),
         Maybe.or(
           &2,
-          Ver,
+          VersionRecord,
           Maybe.or(
             &2,
-            Ver,
-            Tables.Table.get(Ver, St.versions(s), k),
-            Tables.Table.get(Ver, St.versions(a), k)
+            VersionRecord,
+            Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+            Tables.Table.get(VersionRecord, NodeState.versions(a), k)
           ),
-          Tables.Table.get(Ver, St.versions(b), k)
+          Tables.Table.get(VersionRecord, NodeState.versions(b), k)
         ),
         Equal.trans(
-          Maybe<&2, Ver>,
+          Maybe<&2, VersionRecord>,
           Tables.Table.get(
-            Ver,
-            St.versions(
+            VersionRecord,
+            NodeState.versions(
               Pair.fst(
-                St,
+                NodeState,
                 Spec.Answer,
-                Node.applied(
-                  Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+                VendNode.applied(
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
                   r2,
                   Sync.go(
                     False{},
-                    Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+                    Pair.fst(
+                      NodeState,
+                      Spec.Answer,
+                      VendNode.applied(s, r1, Sync.go(False{}, s, a))
+                    ),
                     b
                   )
                 )
@@ -11980,40 +13216,54 @@ def comm_v(s, a, b, r1, r2, r3, r4, n, k):
           ),
           Maybe.or(
             &2,
-            Ver,
+            VersionRecord,
             Tables.Table.get(
-              Ver,
-              St.versions(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+              VersionRecord,
+              NodeState.versions(
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+              ),
               k
             ),
-            Tables.Table.get(Ver, St.versions(b), k)
+            Tables.Table.get(VersionRecord, NodeState.versions(b), k)
           ),
           Maybe.or(
             &2,
-            Ver,
+            VersionRecord,
             Maybe.or(
               &2,
-              Ver,
-              Tables.Table.get(Ver, St.versions(s), k),
-              Tables.Table.get(Ver, St.versions(a), k)
+              VersionRecord,
+              Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+              Tables.Table.get(VersionRecord, NodeState.versions(a), k)
             ),
-            Tables.Table.get(Ver, St.versions(b), k)
+            Tables.Table.get(VersionRecord, NodeState.versions(b), k)
           ),
-          after_v(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))), b, r2, k),
+          after_v(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
+            b,
+            r2,
+            k
+          ),
           Equal.cong(
-            Maybe<&2, Ver>,
-            Maybe<&2, Ver>,
-            z => Maybe.or(&2, Ver, z, Tables.Table.get(Ver, St.versions(b), k)),
+            Maybe<&2, VersionRecord>,
+            Maybe<&2, VersionRecord>,
+            z => Maybe.or(
+              &2,
+              VersionRecord,
+              z,
+              Tables.Table.get(VersionRecord, NodeState.versions(b), k)
+            ),
             Tables.Table.get(
-              Ver,
-              St.versions(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+              VersionRecord,
+              NodeState.versions(
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+              ),
               k
             ),
             Maybe.or(
               &2,
-              Ver,
-              Tables.Table.get(Ver, St.versions(s), k),
-              Tables.Table.get(Ver, St.versions(a), k)
+              VersionRecord,
+              Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+              Tables.Table.get(VersionRecord, NodeState.versions(a), k)
             ),
             after_v(s, a, r1, k)
           )
@@ -12022,51 +13272,59 @@ def comm_v(s, a, b, r1, r2, r3, r4, n, k):
       Equal.trans(
         Maybe<&2, List<&2, U32>>,
         Blob.find.of(
-          Ver.blobs.of(
+          VersionRecord.blobs.of(
             Maybe.or(
               &2,
-              Ver,
+              VersionRecord,
               Maybe.or(
                 &2,
-                Ver,
-                Tables.Table.get(Ver, St.versions(s), k),
-                Tables.Table.get(Ver, St.versions(a), k)
+                VersionRecord,
+                Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+                Tables.Table.get(VersionRecord, NodeState.versions(a), k)
               ),
-              Tables.Table.get(Ver, St.versions(b), k)
+              Tables.Table.get(VersionRecord, NodeState.versions(b), k)
             )
           ),
           n
         ),
         Blob.find.of(
-          Ver.blobs.of(
+          VersionRecord.blobs.of(
             Maybe.or(
               &2,
-              Ver,
+              VersionRecord,
               Maybe.or(
                 &2,
-                Ver,
-                Tables.Table.get(Ver, St.versions(s), k),
-                Tables.Table.get(Ver, St.versions(b), k)
+                VersionRecord,
+                Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+                Tables.Table.get(VersionRecord, NodeState.versions(b), k)
               ),
-              Tables.Table.get(Ver, St.versions(a), k)
+              Tables.Table.get(VersionRecord, NodeState.versions(a), k)
             )
           ),
           n
         ),
         Blob.find.of(
-          Ver.blobs.of(
+          VersionRecord.blobs.of(
             Tables.Table.get(
-              Ver,
-              St.versions(
+              VersionRecord,
+              NodeState.versions(
                 Pair.fst(
-                  St,
+                  NodeState,
                   Spec.Answer,
-                  Node.applied(
-                    Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                  VendNode.applied(
+                    Pair.fst(
+                      NodeState,
+                      Spec.Answer,
+                      VendNode.applied(s, r3, Sync.go(False{}, s, b))
+                    ),
                     r4,
                     Sync.go(
                       False{},
-                      Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                      Pair.fst(
+                        NodeState,
+                        Spec.Answer,
+                        VendNode.applied(s, r3, Sync.go(False{}, s, b))
+                      ),
                       a
                     )
                   )
@@ -12078,29 +13336,37 @@ def comm_v(s, a, b, r1, r2, r3, r4, n, k):
           n
         ),
         comm_blob(
-          Tables.Table.get(Ver, St.versions(s), k),
-          Tables.Table.get(Ver, St.versions(a), k),
-          Tables.Table.get(Ver, St.versions(b), k),
+          Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+          Tables.Table.get(VersionRecord, NodeState.versions(a), k),
+          Tables.Table.get(VersionRecord, NodeState.versions(b), k),
           n
         )((
-            %after_v(s, a, r1, k): Compat(Tables.Table.get(Ver, St.versions(b), k), _)
-            compat_of(St.versions(b), St.versions(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))), k)(hc))),
+            %after_v(s, a, r1, k): Compat(Tables.Table.get(VersionRecord, NodeState.versions(b), k), _)
+            compat_of(NodeState.versions(b), NodeState.versions(Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))), k)(hc))),
         Equal.sym(
           Maybe<&2, List<&2, U32>>,
           Blob.find.of(
-            Ver.blobs.of(
+            VersionRecord.blobs.of(
               Tables.Table.get(
-                Ver,
-                St.versions(
+                VersionRecord,
+                NodeState.versions(
                   Pair.fst(
-                    St,
+                    NodeState,
                     Spec.Answer,
-                    Node.applied(
-                      Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                    VendNode.applied(
+                      Pair.fst(
+                        NodeState,
+                        Spec.Answer,
+                        VendNode.applied(s, r3, Sync.go(False{}, s, b))
+                      ),
                       r4,
                       Sync.go(
                         False{},
-                        Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                        Pair.fst(
+                          NodeState,
+                          Spec.Answer,
+                          VendNode.applied(s, r3, Sync.go(False{}, s, b))
+                        ),
                         a
                       )
                     )
@@ -12112,37 +13378,45 @@ def comm_v(s, a, b, r1, r2, r3, r4, n, k):
             n
           ),
           Blob.find.of(
-            Ver.blobs.of(
+            VersionRecord.blobs.of(
               Maybe.or(
                 &2,
-                Ver,
+                VersionRecord,
                 Maybe.or(
                   &2,
-                  Ver,
-                  Tables.Table.get(Ver, St.versions(s), k),
-                  Tables.Table.get(Ver, St.versions(b), k)
+                  VersionRecord,
+                  Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+                  Tables.Table.get(VersionRecord, NodeState.versions(b), k)
                 ),
-                Tables.Table.get(Ver, St.versions(a), k)
+                Tables.Table.get(VersionRecord, NodeState.versions(a), k)
               )
             ),
             n
           ),
           Equal.cong(
-            Maybe<&2, Ver>,
+            Maybe<&2, VersionRecord>,
             Maybe<&2, List<&2, U32>>,
-            z => Blob.find.of(Ver.blobs.of(z), n),
+            z => Blob.find.of(VersionRecord.blobs.of(z), n),
             Tables.Table.get(
-              Ver,
-              St.versions(
+              VersionRecord,
+              NodeState.versions(
                 Pair.fst(
-                  St,
+                  NodeState,
                   Spec.Answer,
-                  Node.applied(
-                    Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                  VendNode.applied(
+                    Pair.fst(
+                      NodeState,
+                      Spec.Answer,
+                      VendNode.applied(s, r3, Sync.go(False{}, s, b))
+                    ),
                     r4,
                     Sync.go(
                       False{},
-                      Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                      Pair.fst(
+                        NodeState,
+                        Spec.Answer,
+                        VendNode.applied(s, r3, Sync.go(False{}, s, b))
+                      ),
                       a
                     )
                   )
@@ -12152,29 +13426,37 @@ def comm_v(s, a, b, r1, r2, r3, r4, n, k):
             ),
             Maybe.or(
               &2,
-              Ver,
+              VersionRecord,
               Maybe.or(
                 &2,
-                Ver,
-                Tables.Table.get(Ver, St.versions(s), k),
-                Tables.Table.get(Ver, St.versions(b), k)
+                VersionRecord,
+                Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+                Tables.Table.get(VersionRecord, NodeState.versions(b), k)
               ),
-              Tables.Table.get(Ver, St.versions(a), k)
+              Tables.Table.get(VersionRecord, NodeState.versions(a), k)
             ),
             Equal.trans(
-              Maybe<&2, Ver>,
+              Maybe<&2, VersionRecord>,
               Tables.Table.get(
-                Ver,
-                St.versions(
+                VersionRecord,
+                NodeState.versions(
                   Pair.fst(
-                    St,
+                    NodeState,
                     Spec.Answer,
-                    Node.applied(
-                      Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                    VendNode.applied(
+                      Pair.fst(
+                        NodeState,
+                        Spec.Answer,
+                        VendNode.applied(s, r3, Sync.go(False{}, s, b))
+                      ),
                       r4,
                       Sync.go(
                         False{},
-                        Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                        Pair.fst(
+                          NodeState,
+                          Spec.Answer,
+                          VendNode.applied(s, r3, Sync.go(False{}, s, b))
+                        ),
                         a
                       )
                     )
@@ -12184,49 +13466,62 @@ def comm_v(s, a, b, r1, r2, r3, r4, n, k):
               ),
               Maybe.or(
                 &2,
-                Ver,
+                VersionRecord,
                 Tables.Table.get(
-                  Ver,
-                  St.versions(
-                    Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b)))
+                  VersionRecord,
+                  NodeState.versions(
+                    Pair.fst(
+                      NodeState,
+                      Spec.Answer,
+                      VendNode.applied(s, r3, Sync.go(False{}, s, b))
+                    )
                   ),
                   k
                 ),
-                Tables.Table.get(Ver, St.versions(a), k)
+                Tables.Table.get(VersionRecord, NodeState.versions(a), k)
               ),
               Maybe.or(
                 &2,
-                Ver,
+                VersionRecord,
                 Maybe.or(
                   &2,
-                  Ver,
-                  Tables.Table.get(Ver, St.versions(s), k),
-                  Tables.Table.get(Ver, St.versions(b), k)
+                  VersionRecord,
+                  Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+                  Tables.Table.get(VersionRecord, NodeState.versions(b), k)
                 ),
-                Tables.Table.get(Ver, St.versions(a), k)
+                Tables.Table.get(VersionRecord, NodeState.versions(a), k)
               ),
               after_v(
-                Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
                 a,
                 r4,
                 k
               ),
               Equal.cong(
-                Maybe<&2, Ver>,
-                Maybe<&2, Ver>,
-                z => Maybe.or(&2, Ver, z, Tables.Table.get(Ver, St.versions(a), k)),
+                Maybe<&2, VersionRecord>,
+                Maybe<&2, VersionRecord>,
+                z => Maybe.or(
+                  &2,
+                  VersionRecord,
+                  z,
+                  Tables.Table.get(VersionRecord, NodeState.versions(a), k)
+                ),
                 Tables.Table.get(
-                  Ver,
-                  St.versions(
-                    Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b)))
+                  VersionRecord,
+                  NodeState.versions(
+                    Pair.fst(
+                      NodeState,
+                      Spec.Answer,
+                      VendNode.applied(s, r3, Sync.go(False{}, s, b))
+                    )
                   ),
                   k
                 ),
                 Maybe.or(
                   &2,
-                  Ver,
-                  Tables.Table.get(Ver, St.versions(s), k),
-                  Tables.Table.get(Ver, St.versions(b), k)
+                  VersionRecord,
+                  Tables.Table.get(VersionRecord, NodeState.versions(s), k),
+                  Tables.Table.get(VersionRecord, NodeState.versions(b), k)
                 ),
                 after_v(s, b, r3, k)
               )
@@ -12238,28 +13533,28 @@ def comm_v(s, a, b, r1, r2, r3, r4, n, k):
 
 # s takes in a then b, or b then a: a branch head agrees
 law comm_h:
-  for s: St
-  for a: St
-  for b: St
+  for s: NodeState
+  for a: NodeState
+  for b: NodeState
   for r1: String
   for r2: String
   for r3: String
   for r4: String
   for c: String
   {
-    Br.head.of(
+    BranchRecord.head.of(
       Tables.Table.get(
-        Br,
-        St.branches(
+        BranchRecord,
+        NodeState.branches(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(
-              Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+            VendNode.applied(
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
               r2,
               Sync.go(
                 False{},
-                Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
                 b
               )
             )
@@ -12268,19 +13563,19 @@ law comm_h:
         c
       )
     )
-      == Br.head.of(
+      == BranchRecord.head.of(
         Tables.Table.get(
-          Br,
-          St.branches(
+          BranchRecord,
+          NodeState.branches(
             Pair.fst(
-              St,
+              NodeState,
               Spec.Answer,
-              Node.applied(
-                Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+              VendNode.applied(
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
                 r4,
                 Sync.go(
                   False{},
-                  Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
                   a
                 )
               )
@@ -12300,19 +13595,19 @@ def comm_h(s, a, b, r1, r2, r3, r4, c):
   +c = c
   Equal.trans(
     Maybe<&2, String>,
-    Br.head.of(
+    BranchRecord.head.of(
       Tables.Table.get(
-        Br,
-        St.branches(
+        BranchRecord,
+        NodeState.branches(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(
-              Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+            VendNode.applied(
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
               r2,
               Sync.go(
                 False{},
-                Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
                 b
               )
             )
@@ -12321,32 +13616,32 @@ def comm_h(s, a, b, r1, r2, r3, r4, c):
         c
       )
     ),
-    Br.head.of(
+    BranchRecord.head.of(
       Orders.Order.join(
-        ~Br,
-        ~Br.stamp.cmp,
+        ~BranchRecord,
+        ~BranchRecord.stamp.cmp,
         Orders.Order.join(
-          ~Br,
-          ~Br.stamp.cmp,
-          Tables.Table.get(Br, St.branches(s), c),
-          Tables.Table.get(Br, St.branches(a), c)
+          ~BranchRecord,
+          ~BranchRecord.stamp.cmp,
+          Tables.Table.get(BranchRecord, NodeState.branches(s), c),
+          Tables.Table.get(BranchRecord, NodeState.branches(a), c)
         ),
-        Tables.Table.get(Br, St.branches(b), c)
+        Tables.Table.get(BranchRecord, NodeState.branches(b), c)
       )
     ),
-    Br.head.of(
+    BranchRecord.head.of(
       Tables.Table.get(
-        Br,
-        St.branches(
+        BranchRecord,
+        NodeState.branches(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(
-              Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+            VendNode.applied(
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
               r4,
               Sync.go(
                 False{},
-                Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
                 a
               )
             )
@@ -12356,21 +13651,21 @@ def comm_h(s, a, b, r1, r2, r3, r4, c):
       )
     ),
     Equal.cong(
-      Maybe<&2, Br>,
+      Maybe<&2, BranchRecord>,
       Maybe<&2, String>,
-      z => Br.head.of(z),
+      z => BranchRecord.head.of(z),
       Tables.Table.get(
-        Br,
-        St.branches(
+        BranchRecord,
+        NodeState.branches(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(
-              Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+            VendNode.applied(
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
               r2,
               Sync.go(
                 False{},
-                Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
                 b
               )
             )
@@ -12379,30 +13674,30 @@ def comm_h(s, a, b, r1, r2, r3, r4, c):
         c
       ),
       Orders.Order.join(
-        ~Br,
-        ~Br.stamp.cmp,
+        ~BranchRecord,
+        ~BranchRecord.stamp.cmp,
         Orders.Order.join(
-          ~Br,
-          ~Br.stamp.cmp,
-          Tables.Table.get(Br, St.branches(s), c),
-          Tables.Table.get(Br, St.branches(a), c)
+          ~BranchRecord,
+          ~BranchRecord.stamp.cmp,
+          Tables.Table.get(BranchRecord, NodeState.branches(s), c),
+          Tables.Table.get(BranchRecord, NodeState.branches(a), c)
         ),
-        Tables.Table.get(Br, St.branches(b), c)
+        Tables.Table.get(BranchRecord, NodeState.branches(b), c)
       ),
       Equal.trans(
-        Maybe<&2, Br>,
+        Maybe<&2, BranchRecord>,
         Tables.Table.get(
-          Br,
-          St.branches(
+          BranchRecord,
+          NodeState.branches(
             Pair.fst(
-              St,
+              NodeState,
               Spec.Answer,
-              Node.applied(
-                Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+              VendNode.applied(
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
                 r2,
                 Sync.go(
                   False{},
-                  Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
                   b
                 )
               )
@@ -12411,41 +13706,55 @@ def comm_h(s, a, b, r1, r2, r3, r4, c):
           c
         ),
         Orders.Order.join(
-          ~Br,
-          ~Br.stamp.cmp,
+          ~BranchRecord,
+          ~BranchRecord.stamp.cmp,
           Tables.Table.get(
-            Br,
-            St.branches(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+            BranchRecord,
+            NodeState.branches(
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+            ),
             c
           ),
-          Tables.Table.get(Br, St.branches(b), c)
+          Tables.Table.get(BranchRecord, NodeState.branches(b), c)
         ),
         Orders.Order.join(
-          ~Br,
-          ~Br.stamp.cmp,
+          ~BranchRecord,
+          ~BranchRecord.stamp.cmp,
           Orders.Order.join(
-            ~Br,
-            ~Br.stamp.cmp,
-            Tables.Table.get(Br, St.branches(s), c),
-            Tables.Table.get(Br, St.branches(a), c)
+            ~BranchRecord,
+            ~BranchRecord.stamp.cmp,
+            Tables.Table.get(BranchRecord, NodeState.branches(s), c),
+            Tables.Table.get(BranchRecord, NodeState.branches(a), c)
           ),
-          Tables.Table.get(Br, St.branches(b), c)
+          Tables.Table.get(BranchRecord, NodeState.branches(b), c)
         ),
-        after_b(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))), b, r2, c),
+        after_b(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
+          b,
+          r2,
+          c
+        ),
         Equal.cong(
-          Maybe<&2, Br>,
-          Maybe<&2, Br>,
-          z => Orders.Order.join(~Br, ~Br.stamp.cmp, z, Tables.Table.get(Br, St.branches(b), c)),
+          Maybe<&2, BranchRecord>,
+          Maybe<&2, BranchRecord>,
+          z => Orders.Order.join(
+            ~BranchRecord,
+            ~BranchRecord.stamp.cmp,
+            z,
+            Tables.Table.get(BranchRecord, NodeState.branches(b), c)
+          ),
           Tables.Table.get(
-            Br,
-            St.branches(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+            BranchRecord,
+            NodeState.branches(
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+            ),
             c
           ),
           Orders.Order.join(
-            ~Br,
-            ~Br.stamp.cmp,
-            Tables.Table.get(Br, St.branches(s), c),
-            Tables.Table.get(Br, St.branches(a), c)
+            ~BranchRecord,
+            ~BranchRecord.stamp.cmp,
+            Tables.Table.get(BranchRecord, NodeState.branches(s), c),
+            Tables.Table.get(BranchRecord, NodeState.branches(a), c)
           ),
           after_b(s, a, r1, c)
         )
@@ -12453,45 +13762,45 @@ def comm_h(s, a, b, r1, r2, r3, r4, c):
     ),
     Equal.trans(
       Maybe<&2, String>,
-      Br.head.of(
+      BranchRecord.head.of(
         Orders.Order.join(
-          ~Br,
-          ~Br.stamp.cmp,
+          ~BranchRecord,
+          ~BranchRecord.stamp.cmp,
           Orders.Order.join(
-            ~Br,
-            ~Br.stamp.cmp,
-            Tables.Table.get(Br, St.branches(s), c),
-            Tables.Table.get(Br, St.branches(a), c)
+            ~BranchRecord,
+            ~BranchRecord.stamp.cmp,
+            Tables.Table.get(BranchRecord, NodeState.branches(s), c),
+            Tables.Table.get(BranchRecord, NodeState.branches(a), c)
           ),
-          Tables.Table.get(Br, St.branches(b), c)
+          Tables.Table.get(BranchRecord, NodeState.branches(b), c)
         )
       ),
-      Br.head.of(
+      BranchRecord.head.of(
         Orders.Order.join(
-          ~Br,
-          ~Br.stamp.cmp,
+          ~BranchRecord,
+          ~BranchRecord.stamp.cmp,
           Orders.Order.join(
-            ~Br,
-            ~Br.stamp.cmp,
-            Tables.Table.get(Br, St.branches(s), c),
-            Tables.Table.get(Br, St.branches(b), c)
+            ~BranchRecord,
+            ~BranchRecord.stamp.cmp,
+            Tables.Table.get(BranchRecord, NodeState.branches(s), c),
+            Tables.Table.get(BranchRecord, NodeState.branches(b), c)
           ),
-          Tables.Table.get(Br, St.branches(a), c)
+          Tables.Table.get(BranchRecord, NodeState.branches(a), c)
         )
       ),
-      Br.head.of(
+      BranchRecord.head.of(
         Tables.Table.get(
-          Br,
-          St.branches(
+          BranchRecord,
+          NodeState.branches(
             Pair.fst(
-              St,
+              NodeState,
               Spec.Answer,
-              Node.applied(
-                Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+              VendNode.applied(
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
                 r4,
                 Sync.go(
                   False{},
-                  Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
                   a
                 )
               )
@@ -12501,24 +13810,28 @@ def comm_h(s, a, b, r1, r2, r3, r4, c):
         )
       ),
       (
-        %Equal.sym(Maybe<&2, String>, Br.head.of(Orders.Order.join(~Br, ~Br.stamp.cmp, Orders.Order.join(~Br, ~Br.stamp.cmp, Tables.Table.get(Br, St.branches(s), c), Tables.Table.get(Br, St.branches(a), c)), Tables.Table.get(Br, St.branches(b), c))), Maybe.map(&2, Br, String, y => Br.head(y), Orders.Order.join(~Br, ~Br.stamp.cmp, Orders.Order.join(~Br, ~Br.stamp.cmp, Tables.Table.get(Br, St.branches(s), c), Tables.Table.get(Br, St.branches(a), c)), Tables.Table.get(Br, St.branches(b), c))), head_of_map(Orders.Order.join(~Br, ~Br.stamp.cmp, Orders.Order.join(~Br, ~Br.stamp.cmp, Tables.Table.get(Br, St.branches(s), c), Tables.Table.get(Br, St.branches(a), c)), Tables.Table.get(Br, St.branches(b), c)))): {_ == Br.head.of(Orders.Order.join(~Br, ~Br.stamp.cmp, Orders.Order.join(~Br, ~Br.stamp.cmp, Tables.Table.get(Br, St.branches(s), c), Tables.Table.get(Br, St.branches(b), c)), Tables.Table.get(Br, St.branches(a), c))): Maybe<&2, String>}
-        %Equal.sym(Maybe<&2, String>, Br.head.of(Orders.Order.join(~Br, ~Br.stamp.cmp, Orders.Order.join(~Br, ~Br.stamp.cmp, Tables.Table.get(Br, St.branches(s), c), Tables.Table.get(Br, St.branches(b), c)), Tables.Table.get(Br, St.branches(a), c))), Maybe.map(&2, Br, String, y => Br.head(y), Orders.Order.join(~Br, ~Br.stamp.cmp, Orders.Order.join(~Br, ~Br.stamp.cmp, Tables.Table.get(Br, St.branches(s), c), Tables.Table.get(Br, St.branches(b), c)), Tables.Table.get(Br, St.branches(a), c))), head_of_map(Orders.Order.join(~Br, ~Br.stamp.cmp, Orders.Order.join(~Br, ~Br.stamp.cmp, Tables.Table.get(Br, St.branches(s), c), Tables.Table.get(Br, St.branches(b), c)), Tables.Table.get(Br, St.branches(a), c)))): {Maybe.map(&2, Br, String, y => Br.head(y), Orders.Order.join(~Br, ~Br.stamp.cmp, Orders.Order.join(~Br, ~Br.stamp.cmp, Tables.Table.get(Br, St.branches(s), c), Tables.Table.get(Br, St.branches(a), c)), Tables.Table.get(Br, St.branches(b), c))) == _: Maybe<&2, String>}
-        Orders.Order.join_comm(~Br, ~String, ~Br.stamp.cmp, ~Br.head, x => y => stamp_swap(x, y), x => y => stamp_eq_head(x, y), x => y => z => stamp_chain(x, y, z), Tables.Table.get(Br, St.branches(s), c), Tables.Table.get(Br, St.branches(a), c), Tables.Table.get(Br, St.branches(b), c))),
+        %Equal.sym(Maybe<&2, String>, BranchRecord.head.of(Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, Tables.Table.get(BranchRecord, NodeState.branches(s), c), Tables.Table.get(BranchRecord, NodeState.branches(a), c)), Tables.Table.get(BranchRecord, NodeState.branches(b), c))), Maybe.map(&2, BranchRecord, String, y => BranchRecord.head(y), Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, Tables.Table.get(BranchRecord, NodeState.branches(s), c), Tables.Table.get(BranchRecord, NodeState.branches(a), c)), Tables.Table.get(BranchRecord, NodeState.branches(b), c))), head_of_map(Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, Tables.Table.get(BranchRecord, NodeState.branches(s), c), Tables.Table.get(BranchRecord, NodeState.branches(a), c)), Tables.Table.get(BranchRecord, NodeState.branches(b), c)))): {_ == BranchRecord.head.of(Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, Tables.Table.get(BranchRecord, NodeState.branches(s), c), Tables.Table.get(BranchRecord, NodeState.branches(b), c)), Tables.Table.get(BranchRecord, NodeState.branches(a), c))): Maybe<&2, String>}
+        %Equal.sym(Maybe<&2, String>, BranchRecord.head.of(Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, Tables.Table.get(BranchRecord, NodeState.branches(s), c), Tables.Table.get(BranchRecord, NodeState.branches(b), c)), Tables.Table.get(BranchRecord, NodeState.branches(a), c))), Maybe.map(&2, BranchRecord, String, y => BranchRecord.head(y), Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, Tables.Table.get(BranchRecord, NodeState.branches(s), c), Tables.Table.get(BranchRecord, NodeState.branches(b), c)), Tables.Table.get(BranchRecord, NodeState.branches(a), c))), head_of_map(Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, Tables.Table.get(BranchRecord, NodeState.branches(s), c), Tables.Table.get(BranchRecord, NodeState.branches(b), c)), Tables.Table.get(BranchRecord, NodeState.branches(a), c)))): {Maybe.map(&2, BranchRecord, String, y => BranchRecord.head(y), Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, Orders.Order.join(~BranchRecord, ~BranchRecord.stamp.cmp, Tables.Table.get(BranchRecord, NodeState.branches(s), c), Tables.Table.get(BranchRecord, NodeState.branches(a), c)), Tables.Table.get(BranchRecord, NodeState.branches(b), c))) == _: Maybe<&2, String>}
+        Orders.Order.join_comm(~BranchRecord, ~String, ~BranchRecord.stamp.cmp, ~BranchRecord.head, x => y => stamp_swap(x, y), x => y => stamp_eq_head(x, y), x => y => z => stamp_chain(x, y, z), Tables.Table.get(BranchRecord, NodeState.branches(s), c), Tables.Table.get(BranchRecord, NodeState.branches(a), c), Tables.Table.get(BranchRecord, NodeState.branches(b), c))),
       Equal.sym(
         Maybe<&2, String>,
-        Br.head.of(
+        BranchRecord.head.of(
           Tables.Table.get(
-            Br,
-            St.branches(
+            BranchRecord,
+            NodeState.branches(
               Pair.fst(
-                St,
+                NodeState,
                 Spec.Answer,
-                Node.applied(
-                  Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                VendNode.applied(
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
                   r4,
                   Sync.go(
                     False{},
-                    Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                    Pair.fst(
+                      NodeState,
+                      Spec.Answer,
+                      VendNode.applied(s, r3, Sync.go(False{}, s, b))
+                    ),
                     a
                   )
                 )
@@ -12527,35 +13840,39 @@ def comm_h(s, a, b, r1, r2, r3, r4, c):
             c
           )
         ),
-        Br.head.of(
+        BranchRecord.head.of(
           Orders.Order.join(
-            ~Br,
-            ~Br.stamp.cmp,
+            ~BranchRecord,
+            ~BranchRecord.stamp.cmp,
             Orders.Order.join(
-              ~Br,
-              ~Br.stamp.cmp,
-              Tables.Table.get(Br, St.branches(s), c),
-              Tables.Table.get(Br, St.branches(b), c)
+              ~BranchRecord,
+              ~BranchRecord.stamp.cmp,
+              Tables.Table.get(BranchRecord, NodeState.branches(s), c),
+              Tables.Table.get(BranchRecord, NodeState.branches(b), c)
             ),
-            Tables.Table.get(Br, St.branches(a), c)
+            Tables.Table.get(BranchRecord, NodeState.branches(a), c)
           )
         ),
         Equal.cong(
-          Maybe<&2, Br>,
+          Maybe<&2, BranchRecord>,
           Maybe<&2, String>,
-          z => Br.head.of(z),
+          z => BranchRecord.head.of(z),
           Tables.Table.get(
-            Br,
-            St.branches(
+            BranchRecord,
+            NodeState.branches(
               Pair.fst(
-                St,
+                NodeState,
                 Spec.Answer,
-                Node.applied(
-                  Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                VendNode.applied(
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
                   r4,
                   Sync.go(
                     False{},
-                    Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                    Pair.fst(
+                      NodeState,
+                      Spec.Answer,
+                      VendNode.applied(s, r3, Sync.go(False{}, s, b))
+                    ),
                     a
                   )
                 )
@@ -12564,30 +13881,38 @@ def comm_h(s, a, b, r1, r2, r3, r4, c):
             c
           ),
           Orders.Order.join(
-            ~Br,
-            ~Br.stamp.cmp,
+            ~BranchRecord,
+            ~BranchRecord.stamp.cmp,
             Orders.Order.join(
-              ~Br,
-              ~Br.stamp.cmp,
-              Tables.Table.get(Br, St.branches(s), c),
-              Tables.Table.get(Br, St.branches(b), c)
+              ~BranchRecord,
+              ~BranchRecord.stamp.cmp,
+              Tables.Table.get(BranchRecord, NodeState.branches(s), c),
+              Tables.Table.get(BranchRecord, NodeState.branches(b), c)
             ),
-            Tables.Table.get(Br, St.branches(a), c)
+            Tables.Table.get(BranchRecord, NodeState.branches(a), c)
           ),
           Equal.trans(
-            Maybe<&2, Br>,
+            Maybe<&2, BranchRecord>,
             Tables.Table.get(
-              Br,
-              St.branches(
+              BranchRecord,
+              NodeState.branches(
                 Pair.fst(
-                  St,
+                  NodeState,
                   Spec.Answer,
-                  Node.applied(
-                    Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                  VendNode.applied(
+                    Pair.fst(
+                      NodeState,
+                      Spec.Answer,
+                      VendNode.applied(s, r3, Sync.go(False{}, s, b))
+                    ),
                     r4,
                     Sync.go(
                       False{},
-                      Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                      Pair.fst(
+                        NodeState,
+                        Spec.Answer,
+                        VendNode.applied(s, r3, Sync.go(False{}, s, b))
+                      ),
                       a
                     )
                   )
@@ -12596,51 +13921,55 @@ def comm_h(s, a, b, r1, r2, r3, r4, c):
               c
             ),
             Orders.Order.join(
-              ~Br,
-              ~Br.stamp.cmp,
+              ~BranchRecord,
+              ~BranchRecord.stamp.cmp,
               Tables.Table.get(
-                Br,
-                St.branches(Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b)))),
+                BranchRecord,
+                NodeState.branches(
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b)))
+                ),
                 c
               ),
-              Tables.Table.get(Br, St.branches(a), c)
+              Tables.Table.get(BranchRecord, NodeState.branches(a), c)
             ),
             Orders.Order.join(
-              ~Br,
-              ~Br.stamp.cmp,
+              ~BranchRecord,
+              ~BranchRecord.stamp.cmp,
               Orders.Order.join(
-                ~Br,
-                ~Br.stamp.cmp,
-                Tables.Table.get(Br, St.branches(s), c),
-                Tables.Table.get(Br, St.branches(b), c)
+                ~BranchRecord,
+                ~BranchRecord.stamp.cmp,
+                Tables.Table.get(BranchRecord, NodeState.branches(s), c),
+                Tables.Table.get(BranchRecord, NodeState.branches(b), c)
               ),
-              Tables.Table.get(Br, St.branches(a), c)
+              Tables.Table.get(BranchRecord, NodeState.branches(a), c)
             ),
             after_b(
-              Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
               a,
               r4,
               c
             ),
             Equal.cong(
-              Maybe<&2, Br>,
-              Maybe<&2, Br>,
+              Maybe<&2, BranchRecord>,
+              Maybe<&2, BranchRecord>,
               z => Orders.Order.join(
-                ~Br,
-                ~Br.stamp.cmp,
+                ~BranchRecord,
+                ~BranchRecord.stamp.cmp,
                 z,
-                Tables.Table.get(Br, St.branches(a), c)
+                Tables.Table.get(BranchRecord, NodeState.branches(a), c)
               ),
               Tables.Table.get(
-                Br,
-                St.branches(Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b)))),
+                BranchRecord,
+                NodeState.branches(
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b)))
+                ),
                 c
               ),
               Orders.Order.join(
-                ~Br,
-                ~Br.stamp.cmp,
-                Tables.Table.get(Br, St.branches(s), c),
-                Tables.Table.get(Br, St.branches(b), c)
+                ~BranchRecord,
+                ~BranchRecord.stamp.cmp,
+                Tables.Table.get(BranchRecord, NodeState.branches(s), c),
+                Tables.Table.get(BranchRecord, NodeState.branches(b), c)
               ),
               after_b(s, b, r3, c)
             )
@@ -12652,9 +13981,9 @@ def comm_h(s, a, b, r1, r2, r3, r4, c):
 
 # s takes in a then b, or b then a: a mark agrees
 law comm_m:
-  for s: St
-  for a: St
-  for b: St
+  for s: NodeState
+  for a: NodeState
+  for b: NodeState
   for r1: String
   for r2: String
   for r3: String
@@ -12663,16 +13992,16 @@ law comm_m:
   for qm: String
   {
     MarkAt.find(
-      St.marks(
+      NodeState.marks(
         Pair.fst(
-          St,
+          NodeState,
           Spec.Answer,
-          Node.applied(
-            Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+          VendNode.applied(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
             r2,
             Sync.go(
               False{},
-              Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
               b
             )
           )
@@ -12682,16 +14011,16 @@ law comm_m:
       qm
     )
       == MarkAt.find(
-        St.marks(
+        NodeState.marks(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(
-              Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+            VendNode.applied(
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
               r4,
               Sync.go(
                 False{},
-                Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
                 a
               )
             )
@@ -12713,16 +14042,16 @@ def comm_m(s, a, b, r1, r2, r3, r4, qb, qm):
   Equal.trans(
     Maybe<&2, String>,
     MarkAt.find(
-      St.marks(
+      NodeState.marks(
         Pair.fst(
-          St,
+          NodeState,
           Spec.Answer,
-          Node.applied(
-            Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+          VendNode.applied(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
             r2,
             Sync.go(
               False{},
-              Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
               b
             )
           )
@@ -12733,26 +14062,26 @@ def comm_m(s, a, b, r1, r2, r3, r4, qb, qm):
     ),
     Orders.Order.join(
       ~String,
-      ~Ver.rev,
+      ~VersionRecord.rev,
       Orders.Order.join(
         ~String,
-        ~Ver.rev,
-        MarkAt.find(St.marks(s), qb, qm),
-        MarkAt.find(St.marks(a), qb, qm)
+        ~VersionRecord.rev,
+        MarkAt.find(NodeState.marks(s), qb, qm),
+        MarkAt.find(NodeState.marks(a), qb, qm)
       ),
-      MarkAt.find(St.marks(b), qb, qm)
+      MarkAt.find(NodeState.marks(b), qb, qm)
     ),
     MarkAt.find(
-      St.marks(
+      NodeState.marks(
         Pair.fst(
-          St,
+          NodeState,
           Spec.Answer,
-          Node.applied(
-            Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+          VendNode.applied(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
             r4,
             Sync.go(
               False{},
-              Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
               a
             )
           )
@@ -12764,16 +14093,16 @@ def comm_m(s, a, b, r1, r2, r3, r4, qb, qm):
     Equal.trans(
       Maybe<&2, String>,
       MarkAt.find(
-        St.marks(
+        NodeState.marks(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(
-              Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+            VendNode.applied(
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
               r2,
               Sync.go(
                 False{},
-                Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
                 b
               )
             )
@@ -12784,27 +14113,29 @@ def comm_m(s, a, b, r1, r2, r3, r4, qb, qm):
       ),
       Orders.Order.join(
         ~String,
-        ~Ver.rev,
+        ~VersionRecord.rev,
         MarkAt.find(
-          St.marks(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+          NodeState.marks(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+          ),
           qb,
           qm
         ),
-        MarkAt.find(St.marks(b), qb, qm)
+        MarkAt.find(NodeState.marks(b), qb, qm)
       ),
       Orders.Order.join(
         ~String,
-        ~Ver.rev,
+        ~VersionRecord.rev,
         Orders.Order.join(
           ~String,
-          ~Ver.rev,
-          MarkAt.find(St.marks(s), qb, qm),
-          MarkAt.find(St.marks(a), qb, qm)
+          ~VersionRecord.rev,
+          MarkAt.find(NodeState.marks(s), qb, qm),
+          MarkAt.find(NodeState.marks(a), qb, qm)
         ),
-        MarkAt.find(St.marks(b), qb, qm)
+        MarkAt.find(NodeState.marks(b), qb, qm)
       ),
       after_m(
-        Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
         b,
         r2,
         qb,
@@ -12813,17 +14144,24 @@ def comm_m(s, a, b, r1, r2, r3, r4, qb, qm):
       Equal.cong(
         Maybe<&2, String>,
         Maybe<&2, String>,
-        z => Orders.Order.join(~String, ~Ver.rev, z, MarkAt.find(St.marks(b), qb, qm)),
+        z => Orders.Order.join(
+          ~String,
+          ~VersionRecord.rev,
+          z,
+          MarkAt.find(NodeState.marks(b), qb, qm)
+        ),
         MarkAt.find(
-          St.marks(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a)))),
+          NodeState.marks(
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+          ),
           qb,
           qm
         ),
         Orders.Order.join(
           ~String,
-          ~Ver.rev,
-          MarkAt.find(St.marks(s), qb, qm),
-          MarkAt.find(St.marks(a), qb, qm)
+          ~VersionRecord.rev,
+          MarkAt.find(NodeState.marks(s), qb, qm),
+          MarkAt.find(NodeState.marks(a), qb, qm)
         ),
         after_m(s, a, r1, qb, qm)
       )
@@ -12832,37 +14170,37 @@ def comm_m(s, a, b, r1, r2, r3, r4, qb, qm):
       Maybe<&2, String>,
       Orders.Order.join(
         ~String,
-        ~Ver.rev,
+        ~VersionRecord.rev,
         Orders.Order.join(
           ~String,
-          ~Ver.rev,
-          MarkAt.find(St.marks(s), qb, qm),
-          MarkAt.find(St.marks(a), qb, qm)
+          ~VersionRecord.rev,
+          MarkAt.find(NodeState.marks(s), qb, qm),
+          MarkAt.find(NodeState.marks(a), qb, qm)
         ),
-        MarkAt.find(St.marks(b), qb, qm)
+        MarkAt.find(NodeState.marks(b), qb, qm)
       ),
       Orders.Order.join(
         ~String,
-        ~Ver.rev,
+        ~VersionRecord.rev,
         Orders.Order.join(
           ~String,
-          ~Ver.rev,
-          MarkAt.find(St.marks(s), qb, qm),
-          MarkAt.find(St.marks(b), qb, qm)
+          ~VersionRecord.rev,
+          MarkAt.find(NodeState.marks(s), qb, qm),
+          MarkAt.find(NodeState.marks(b), qb, qm)
         ),
-        MarkAt.find(St.marks(a), qb, qm)
+        MarkAt.find(NodeState.marks(a), qb, qm)
       ),
       MarkAt.find(
-        St.marks(
+        NodeState.marks(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(
-              Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+            VendNode.applied(
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
               r4,
               Sync.go(
                 False{},
-                Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
                 a
               )
             )
@@ -12872,22 +14210,22 @@ def comm_m(s, a, b, r1, r2, r3, r4, qb, qm):
         qm
       ),
       (
-        %Maybes.Maybe.map_id(String, Orders.Order.join(~String, ~Ver.rev, Orders.Order.join(~String, ~Ver.rev, MarkAt.find(St.marks(s), qb, qm), MarkAt.find(St.marks(a), qb, qm)), MarkAt.find(St.marks(b), qb, qm))): {_ == Orders.Order.join(~String, ~Ver.rev, Orders.Order.join(~String, ~Ver.rev, MarkAt.find(St.marks(s), qb, qm), MarkAt.find(St.marks(b), qb, qm)), MarkAt.find(St.marks(a), qb, qm)): Maybe<&2, String>}
-        %Maybes.Maybe.map_id(String, Orders.Order.join(~String, ~Ver.rev, Orders.Order.join(~String, ~Ver.rev, MarkAt.find(St.marks(s), qb, qm), MarkAt.find(St.marks(b), qb, qm)), MarkAt.find(St.marks(a), qb, qm))): {Maybe.map(&2, String, String, y => y, Orders.Order.join(~String, ~Ver.rev, Orders.Order.join(~String, ~Ver.rev, MarkAt.find(St.marks(s), qb, qm), MarkAt.find(St.marks(a), qb, qm)), MarkAt.find(St.marks(b), qb, qm))) == _: Maybe<&2, String>}
-        Orders.Order.join_comm(~String, ~String, ~Ver.rev, ~(y => y), x => y => rev_swap(x, y), x => y => rev_same(x, y), x => y => z => rev_chain(x, y, z), MarkAt.find(St.marks(s), qb, qm), MarkAt.find(St.marks(a), qb, qm), MarkAt.find(St.marks(b), qb, qm))),
+        %Maybes.Maybe.map_id(String, Orders.Order.join(~String, ~VersionRecord.rev, Orders.Order.join(~String, ~VersionRecord.rev, MarkAt.find(NodeState.marks(s), qb, qm), MarkAt.find(NodeState.marks(a), qb, qm)), MarkAt.find(NodeState.marks(b), qb, qm))): {_ == Orders.Order.join(~String, ~VersionRecord.rev, Orders.Order.join(~String, ~VersionRecord.rev, MarkAt.find(NodeState.marks(s), qb, qm), MarkAt.find(NodeState.marks(b), qb, qm)), MarkAt.find(NodeState.marks(a), qb, qm)): Maybe<&2, String>}
+        %Maybes.Maybe.map_id(String, Orders.Order.join(~String, ~VersionRecord.rev, Orders.Order.join(~String, ~VersionRecord.rev, MarkAt.find(NodeState.marks(s), qb, qm), MarkAt.find(NodeState.marks(b), qb, qm)), MarkAt.find(NodeState.marks(a), qb, qm))): {Maybe.map(&2, String, String, y => y, Orders.Order.join(~String, ~VersionRecord.rev, Orders.Order.join(~String, ~VersionRecord.rev, MarkAt.find(NodeState.marks(s), qb, qm), MarkAt.find(NodeState.marks(a), qb, qm)), MarkAt.find(NodeState.marks(b), qb, qm))) == _: Maybe<&2, String>}
+        Orders.Order.join_comm(~String, ~String, ~VersionRecord.rev, ~(y => y), x => y => rev_swap(x, y), x => y => rev_same(x, y), x => y => z => rev_chain(x, y, z), MarkAt.find(NodeState.marks(s), qb, qm), MarkAt.find(NodeState.marks(a), qb, qm), MarkAt.find(NodeState.marks(b), qb, qm))),
       Equal.sym(
         Maybe<&2, String>,
         MarkAt.find(
-          St.marks(
+          NodeState.marks(
             Pair.fst(
-              St,
+              NodeState,
               Spec.Answer,
-              Node.applied(
-                Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+              VendNode.applied(
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
                 r4,
                 Sync.go(
                   False{},
-                  Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
                   a
                 )
               )
@@ -12898,28 +14236,32 @@ def comm_m(s, a, b, r1, r2, r3, r4, qb, qm):
         ),
         Orders.Order.join(
           ~String,
-          ~Ver.rev,
+          ~VersionRecord.rev,
           Orders.Order.join(
             ~String,
-            ~Ver.rev,
-            MarkAt.find(St.marks(s), qb, qm),
-            MarkAt.find(St.marks(b), qb, qm)
+            ~VersionRecord.rev,
+            MarkAt.find(NodeState.marks(s), qb, qm),
+            MarkAt.find(NodeState.marks(b), qb, qm)
           ),
-          MarkAt.find(St.marks(a), qb, qm)
+          MarkAt.find(NodeState.marks(a), qb, qm)
         ),
         Equal.trans(
           Maybe<&2, String>,
           MarkAt.find(
-            St.marks(
+            NodeState.marks(
               Pair.fst(
-                St,
+                NodeState,
                 Spec.Answer,
-                Node.applied(
-                  Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                VendNode.applied(
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
                   r4,
                   Sync.go(
                     False{},
-                    Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+                    Pair.fst(
+                      NodeState,
+                      Spec.Answer,
+                      VendNode.applied(s, r3, Sync.go(False{}, s, b))
+                    ),
                     a
                   )
                 )
@@ -12930,27 +14272,29 @@ def comm_m(s, a, b, r1, r2, r3, r4, qb, qm):
           ),
           Orders.Order.join(
             ~String,
-            ~Ver.rev,
+            ~VersionRecord.rev,
             MarkAt.find(
-              St.marks(Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b)))),
+              NodeState.marks(
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b)))
+              ),
               qb,
               qm
             ),
-            MarkAt.find(St.marks(a), qb, qm)
+            MarkAt.find(NodeState.marks(a), qb, qm)
           ),
           Orders.Order.join(
             ~String,
-            ~Ver.rev,
+            ~VersionRecord.rev,
             Orders.Order.join(
               ~String,
-              ~Ver.rev,
-              MarkAt.find(St.marks(s), qb, qm),
-              MarkAt.find(St.marks(b), qb, qm)
+              ~VersionRecord.rev,
+              MarkAt.find(NodeState.marks(s), qb, qm),
+              MarkAt.find(NodeState.marks(b), qb, qm)
             ),
-            MarkAt.find(St.marks(a), qb, qm)
+            MarkAt.find(NodeState.marks(a), qb, qm)
           ),
           after_m(
-            Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
             a,
             r4,
             qb,
@@ -12959,17 +14303,24 @@ def comm_m(s, a, b, r1, r2, r3, r4, qb, qm):
           Equal.cong(
             Maybe<&2, String>,
             Maybe<&2, String>,
-            z => Orders.Order.join(~String, ~Ver.rev, z, MarkAt.find(St.marks(a), qb, qm)),
+            z => Orders.Order.join(
+              ~String,
+              ~VersionRecord.rev,
+              z,
+              MarkAt.find(NodeState.marks(a), qb, qm)
+            ),
             MarkAt.find(
-              St.marks(Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b)))),
+              NodeState.marks(
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b)))
+              ),
               qb,
               qm
             ),
             Orders.Order.join(
               ~String,
-              ~Ver.rev,
-              MarkAt.find(St.marks(s), qb, qm),
-              MarkAt.find(St.marks(b), qb, qm)
+              ~VersionRecord.rev,
+              MarkAt.find(NodeState.marks(s), qb, qm),
+              MarkAt.find(NodeState.marks(b), qb, qm)
             ),
             after_m(s, b, r3, qb, qm)
           )
@@ -12980,37 +14331,47 @@ def comm_m(s, a, b, r1, r2, r3, r4, qb, qm):
 
 # s takes in a then b, or b then a: both hold the same content
 law comm_core:
-  for s: St
-  for a: St
-  for b: St
+  for s: NodeState
+  for a: NodeState
+  for b: NodeState
   for r1: String
   for r2: String
   for r3: String
   for r4: String
   {
     Sync.collides(
-      Tables.Table.keys(Ver, St.versions(b)),
-      St.versions(b),
-      St.versions(Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))))
+      Tables.Table.keys(VersionRecord, NodeState.versions(b)),
+      NodeState.versions(b),
+      NodeState.versions(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a)))
+      )
     )
       == False{}: Bool
-  } -> Spec.Node.SameContent(
+  } -> Spec.VendNode.SameContent(
     Pair.fst(
-      St,
+      NodeState,
       Spec.Answer,
-      Node.applied(
-        Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+      VendNode.applied(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
         r2,
-        Sync.go(False{}, Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))), b)
+        Sync.go(
+          False{},
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
+          b
+        )
       )
     ),
     Pair.fst(
-      St,
+      NodeState,
       Spec.Answer,
-      Node.applied(
-        Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+      VendNode.applied(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
         r4,
-        Sync.go(False{}, Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))), a)
+        Sync.go(
+          False{},
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
+          a
+        )
       )
     )
   )
@@ -13026,27 +14387,27 @@ def comm_core(s, a, b, r1, r2, r3, r4):
     +r4 = r4
     +n => p => content_eq(
       Pair.fst(
-        St,
+        NodeState,
         Spec.Answer,
-        Node.applied(
-          Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+        VendNode.applied(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
           r2,
           Sync.go(
             False{},
-            Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
             b
           )
         )
       ),
       Pair.fst(
-        St,
+        NodeState,
         Spec.Answer,
-        Node.applied(
-          Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+        VendNode.applied(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
           r4,
           Sync.go(
             False{},
-            Pair.fst(St, Spec.Answer, Node.applied(s, r3, Sync.go(False{}, s, b))),
+            Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r3, Sync.go(False{}, s, b))),
             a
           )
         )
@@ -13061,22 +14422,22 @@ def comm_core(s, a, b, r1, r2, r3, r4):
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a walk step at a version that m holds
 law walk_at:
-  for m: Maybe<&2, Ver>
+  for m: Maybe<&2, VersionRecord>
   for g: Nat
   for k: String
   for r: List<&2, String>
   for done: List<&2, String>
-  for vs: Tables.Table<Ver>
+  for vs: Tables.Table<VersionRecord>
   for b: Tables.Table<List<&2, U32>>
   for ps: List<&2, String>
   for w0: String
   for t0: String
   {
-    m == Some{Ver{b, ps, w0, t0}}: Maybe<&2, Ver>
+    m == Some{VersionRecord{b, ps, w0, t0}}: Maybe<&2, VersionRecord>
   } -> {
     List.append(
       &2,
-      Tables.Row<Ver>,
+      Tables.Row<VersionRecord>,
       Walked.reached(History.at(k, r, done, m)),
       History.walk(
         g,
@@ -13085,21 +14446,26 @@ law walk_at:
         vs
       )
     )
-      == Tables.Row{k, Ver{b, ps, w0, t0}}
-      <> History.walk(g, List.append(&2, String, r, ps), k <> done, vs): List<&2, Tables.Row<Ver>>
+      == Tables.Row{k, VersionRecord{b, ps, w0, t0}}
+      <> History.walk(
+        g,
+        List.append(&2, String, r, ps),
+        k <> done,
+        vs
+      ): List<&2, Tables.Row<VersionRecord>>
   }
 
 def walk_at(m, g, k, r, done, vs, b, ps, w0, t0):
   e =>
     %Equal.sym(
-      Maybe<&2, Ver>,
+      Maybe<&2, VersionRecord>,
       m,
-      Some{Ver{b, ps, w0, t0}},
+      Some{VersionRecord{b, ps, w0, t0}},
       e
     ): {
       List.append(
         &2,
-        Tables.Row<Ver>,
+        Tables.Row<VersionRecord>,
         Walked.reached(History.at(k, r, done, _)),
         History.walk(
           g,
@@ -13108,8 +14474,13 @@ def walk_at(m, g, k, r, done, vs, b, ps, w0, t0):
           vs
         )
       )
-        == Tables.Row{k, Ver{b, ps, w0, t0}}
-        <> History.walk(g, List.append(&2, String, r, ps), k <> done, vs): List<&2, Tables.Row<Ver>>
+        == Tables.Row{k, VersionRecord{b, ps, w0, t0}}
+        <> History.walk(
+          g,
+          List.append(&2, String, r, ps),
+          k <> done,
+          vs
+        ): List<&2, Tables.Row<VersionRecord>>
     }
     {==}
 
@@ -13119,7 +14490,7 @@ law walk_one:
   for k: String
   for r: List<&2, String>
   for done: List<&2, String>
-  for vs: Tables.Table<Ver>
+  for vs: Tables.Table<VersionRecord>
   for b: Tables.Table<List<&2, U32>>
   for ps: List<&2, String>
   for w0: String
@@ -13127,7 +14498,12 @@ law walk_one:
   {
     Shared.List.has(~String, ~String.eq, done, k) == False{}: Bool
   } -> {
-    Tables.Table.get(Ver, vs, k) == Some{Ver{b, ps, w0, t0}}: Maybe<&2, Ver>
+    Tables.Table.get(
+      VersionRecord,
+      vs,
+      k
+    )
+      == Some{VersionRecord{b, ps, w0, t0}}: Maybe<&2, VersionRecord>
   } -> {
     History.walk(
       1n+g,
@@ -13135,8 +14511,13 @@ law walk_one:
       done,
       vs
     )
-      == Tables.Row{k, Ver{b, ps, w0, t0}}
-      <> History.walk(g, List.append(&2, String, r, ps), k <> done, vs): List<&2, Tables.Row<Ver>>
+      == Tables.Row{k, VersionRecord{b, ps, w0, t0}}
+      <> History.walk(
+        g,
+        List.append(&2, String, r, ps),
+        k <> done,
+        vs
+      ): List<&2, Tables.Row<VersionRecord>>
   }
 
 def walk_one(g, k, r, done, vs, b, ps, w0, t0):
@@ -13153,7 +14534,7 @@ def walk_one(g, k, r, done, vs, b, ps, w0, t0):
     ): {
       List.append(
         &2,
-        Tables.Row<Ver>,
+        Tables.Row<VersionRecord>,
         Walked.reached(History.next(k, r, done, vs, _)),
         History.walk(
           g,
@@ -13162,10 +14543,15 @@ def walk_one(g, k, r, done, vs, b, ps, w0, t0):
           vs
         )
       )
-        == Tables.Row{k, Ver{b, ps, w0, t0}}
-        <> History.walk(g, List.append(&2, String, r, ps), k <> done, vs): List<&2, Tables.Row<Ver>>
+        == Tables.Row{k, VersionRecord{b, ps, w0, t0}}
+        <> History.walk(
+          g,
+          List.append(&2, String, r, ps),
+          k <> done,
+          vs
+        ): List<&2, Tables.Row<VersionRecord>>
     }
-    walk_at(Tables.Table.get(Ver, vs, k), g, k, r, done, vs, b, ps, w0, t0)(hg)
+    walk_at(Tables.Table.get(VersionRecord, vs, k), g, k, r, done, vs, b, ps, w0, t0)(hg)
 
 # the first two versions of a walk from a, whose one parent is bb
 law hist_two:
@@ -13179,13 +14565,23 @@ law hist_two:
   for yp: List<&2, String>
   for yw: String
   for yt: String
-  for vs: Tables.Table<Ver>
+  for vs: Tables.Table<VersionRecord>
   {
-    Tables.Table.get(Ver, vs, a) == Some{Ver{xb, [bb], xw, xt}}: Maybe<&2, Ver>
+    Tables.Table.get(
+      VersionRecord,
+      vs,
+      a
+    )
+      == Some{VersionRecord{xb, [bb], xw, xt}}: Maybe<&2, VersionRecord>
   } -> {
     String.eq(a, bb) == False{}: Bool
   } -> {
-    Tables.Table.get(Ver, vs, bb) == Some{Ver{yb, yp, yw, yt}}: Maybe<&2, Ver>
+    Tables.Table.get(
+      VersionRecord,
+      vs,
+      bb
+    )
+      == Some{VersionRecord{yb, yp, yw, yt}}: Maybe<&2, VersionRecord>
   } -> {
     History.walk(
       1n+1n+f,
@@ -13193,10 +14589,10 @@ law hist_two:
       [],
       vs
     )
-      == Tables.Row{a, Ver{xb, [bb], xw, xt}}
+      == Tables.Row{a, VersionRecord{xb, [bb], xw, xt}}
       <> (
-        Tables.Row{bb, Ver{yb, yp, yw, yt}} <> History.walk(f, yp, [bb, a], vs)
-      ): List<&2, Tables.Row<Ver>>
+        Tables.Row{bb, VersionRecord{yb, yp, yw, yt}} <> History.walk(f, yp, [bb, a], vs)
+      ): List<&2, Tables.Row<VersionRecord>>
   }
 
 def hist_two(f, a, bb, xb, xw, xt, yb, yp, yw, yt, vs):
@@ -13209,21 +14605,21 @@ def hist_two(f, a, bb, xb, xw, xt, yb, yp, yw, yt, vs):
     +xw = xw
     +xt = xt
     Equal.trans(
-      List<&2, Tables.Row<Ver>>,
+      List<&2, Tables.Row<VersionRecord>>,
       History.walk(1n+1n+f, [a], [], vs),
-      Tables.Row{a, Ver{xb, [bb], xw, xt}} <> History.walk(1n+f, [bb], [a], vs),
+      Tables.Row{a, VersionRecord{xb, [bb], xw, xt}} <> History.walk(1n+f, [bb], [a], vs),
       Tables.Row{
         a,
-        Ver{xb, [bb], xw, xt}
+        VersionRecord{xb, [bb], xw, xt}
       }
-        <> (Tables.Row{bb, Ver{yb, yp, yw, yt}} <> History.walk(f, yp, [bb, a], vs)),
+        <> (Tables.Row{bb, VersionRecord{yb, yp, yw, yt}} <> History.walk(f, yp, [bb, a], vs)),
       walk_one(1n+f, a, [], [], vs, xb, [bb], xw, xt)({==})(ha),
       Equal.cong(
-        List<&2, Tables.Row<Ver>>,
-        List<&2, Tables.Row<Ver>>,
-        z => Tables.Row{a, Ver{xb, [bb], xw, xt}} <> z,
+        List<&2, Tables.Row<VersionRecord>>,
+        List<&2, Tables.Row<VersionRecord>>,
+        z => Tables.Row{a, VersionRecord{xb, [bb], xw, xt}} <> z,
         History.walk(1n+f, [bb], [a], vs),
-        Tables.Row{bb, Ver{yb, yp, yw, yt}} <> History.walk(f, yp, [bb, a], vs),
+        Tables.Row{bb, VersionRecord{yb, yp, yw, yt}} <> History.walk(f, yp, [bb, a], vs),
         walk_one(f, bb, [], [a], vs, yb, yp, yw, yt)((
             %Equal.sym(Bool, String.eq(a, bb), False{}, hab): {List.any.if(u => Shared.List.has(~String, ~String.eq, [], bb), _) == False{}: Bool}
             {==}))(hb)
@@ -13234,9 +14630,9 @@ def hist_two(f, a, bb, xb, xw, xt, yb, yp, yw, yt, vs):
 law first_two:
   for a: String
   for bb: String
-  for x: Ver
-  for y: Ver
-  for rest: List<&2, Tables.Row<Ver>>
+  for x: VersionRecord
+  for y: VersionRecord
+  for rest: List<&2, Tables.Row<VersionRecord>>
   for ids: List<&2, String>
   {
     Shared.List.has(~String, ~String.eq, ids, a) == False{}: Bool
@@ -13281,9 +14677,9 @@ def first_two(a, bb, x, y, rest, ids):
 law ids_second:
   for a: String
   for bb: String
-  for x: Ver
-  for y: Ver
-  for rest: List<&2, Tables.Row<Ver>>
+  for x: VersionRecord
+  for y: VersionRecord
+  for rest: List<&2, Tables.Row<VersionRecord>>
   {
     String.eq(a, bb) == False{}: Bool
   } -> {
@@ -13324,19 +14720,19 @@ def ids_second(a, bb, x, y, rest):
 
 # a version found after adding one with another ID is the one found before
 law add1_other:
-  for vs: Tables.Table<Ver>
+  for vs: Tables.Table<VersionRecord>
   for x: String
-  for xv: Ver
+  for xv: VersionRecord
   for k: String
   {
     String.eq(x, k) == False{}: Bool
   } -> {
     Tables.Table.get(
-      Ver,
-      Ver.add([Tables.Row{x, xv}], vs),
+      VersionRecord,
+      VersionRecord.add([Tables.Row{x, xv}], vs),
       k
     )
-      == Tables.Table.get(Ver, vs, k): Maybe<&2, Ver>
+      == Tables.Table.get(VersionRecord, vs, k): Maybe<&2, VersionRecord>
   }
 
 def add1_other(vs, x, xv, k):
@@ -13346,19 +14742,19 @@ def add1_other(vs, x, xv, k):
     +xv = xv
     +k = k
     Equal.trans(
-      Maybe<&2, Ver>,
-      Tables.Table.get(Ver, Ver.add([Tables.Row{x, xv}], vs), k),
+      Maybe<&2, VersionRecord>,
+      Tables.Table.get(VersionRecord, VersionRecord.add([Tables.Row{x, xv}], vs), k),
       Maybe.or(
         &2,
-        Ver,
-        Tables.Table.get(Ver, vs, k),
-        Tables.Table.find_row(Ver, [Tables.Row{x, xv}], k)
+        VersionRecord,
+        Tables.Table.get(VersionRecord, vs, k),
+        Tables.Table.find_row(VersionRecord, [Tables.Row{x, xv}], k)
       ),
-      Tables.Table.get(Ver, vs, k),
+      Tables.Table.get(VersionRecord, vs, k),
       add_find([Tables.Row{x, xv}], vs, k),
       (
-        %Equal.sym(Bool, String.eq(x, k), False{}, e): {Maybe.or(&2, Ver, Tables.Table.get(Ver, vs, k), Bools.Bool.when(Maybe<&2, Ver>, _, u => Some{xv}, u => Tables.Table.find_row(Ver, [], k))) == Tables.Table.get(Ver, vs, k): Maybe<&2, Ver>}
-        Maybes.Maybe.or_none(Ver, Tables.Table.get(Ver, vs, k)))
+        %Equal.sym(Bool, String.eq(x, k), False{}, e): {Maybe.or(&2, VersionRecord, Tables.Table.get(VersionRecord, vs, k), Bools.Bool.when(Maybe<&2, VersionRecord>, _, u => Some{xv}, u => Tables.Table.find_row(VersionRecord, [], k))) == Tables.Table.get(VersionRecord, vs, k): Maybe<&2, VersionRecord>}
+        Maybes.Maybe.or_none(VersionRecord, Tables.Table.get(VersionRecord, vs, k)))
     )
 
 # named_at at the first key j, by whether j is k (hit)
@@ -13366,7 +14762,7 @@ law named_at.at:
   for hit: Bool
   for j: String
   for r: List<&2, String>
-  for vs: Tables.Table<Ver>
+  for vs: Tables.Table<VersionRecord>
   for x: String
   for k: String
   (
@@ -13376,7 +14772,7 @@ law named_at.at:
       Shared.List.has(
         ~String,
         ~String.eq,
-        History.parents(Tables.Table.get(Ver, vs, k)),
+        History.parents(Tables.Table.get(VersionRecord, vs, k)),
         x
       )
         == False{}: Bool
@@ -13387,7 +14783,7 @@ law named_at.at:
     Shared.List.has(
       ~String,
       ~String.eq,
-      History.parents(Tables.Table.get(Ver, vs, j)),
+      History.parents(Tables.Table.get(VersionRecord, vs, j)),
       x
     )
       == False{}: Bool
@@ -13397,7 +14793,7 @@ law named_at.at:
     Shared.List.has(
       ~String,
       ~String.eq,
-      History.parents(Tables.Table.get(Ver, vs, k)),
+      History.parents(Tables.Table.get(VersionRecord, vs, k)),
       x
     )
       == False{}: Bool
@@ -13416,7 +14812,7 @@ def named_at.at(hit, j, r, vs, x, k):
           Shared.List.has(
             ~String,
             ~String.eq,
-            History.parents(Tables.Table.get(Ver, vs, _)),
+            History.parents(Tables.Table.get(VersionRecord, vs, _)),
             x
           )
             == False{}: Bool
@@ -13429,18 +14825,18 @@ def named_at.at(hit, j, r, vs, x, k):
 # among ks
 law named_at:
   for ks: List<&2, String>
-  for vs: Tables.Table<Ver>
+  for vs: Tables.Table<VersionRecord>
   for x: String
   for k: String
   {
-    Ver.named(ks, vs, x) == False{}: Bool
+    VersionRecord.named(ks, vs, x) == False{}: Bool
   } -> {
     Shared.List.has(~String, ~String.eq, ks, k) == True{}: Bool
   } -> {
     Shared.List.has(
       ~String,
       ~String.eq,
-      History.parents(Tables.Table.get(Ver, vs, k)),
+      History.parents(Tables.Table.get(VersionRecord, vs, k)),
       x
     )
       == False{}: Bool
@@ -13454,7 +14850,7 @@ def named_at(ks, vs, x, k):
           Shared.List.has(
             ~String,
             ~String.eq,
-            History.parents(Tables.Table.get(Ver, vs, k)),
+            History.parents(Tables.Table.get(VersionRecord, vs, k)),
             x
           )
             == False{}: Bool
@@ -13484,31 +14880,36 @@ def named_at(ks, vs, x, k):
               Shared.List.has(
                 ~String,
                 ~String.eq,
-                History.parents(Tables.Table.get(Ver, vs, j)),
+                History.parents(Tables.Table.get(VersionRecord, vs, j)),
                 x
               ),
-              Ver.named(r, vs, x)
+              VersionRecord.named(r, vs, x)
             )(hn)
           )
         )(
           {==}
         )(
           Bools.Bool.or_false_left(
-            Shared.List.has(~String, ~String.eq, History.parents(Tables.Table.get(Ver, vs, j)), x),
-            Ver.named(r, vs, x)
+            Shared.List.has(
+              ~String,
+              ~String.eq,
+              History.parents(Tables.Table.get(VersionRecord, vs, j)),
+              x
+            ),
+            VersionRecord.named(r, vs, x)
           )(hn)
         )
 
 # walk_avoid at a version k that vs holds as m
 law avoid_at:
-  for mv: Maybe<&2, Ver>
+  for mv: Maybe<&2, VersionRecord>
   for g: Nat
   for k: String
   for r: List<&2, String>
   for done: List<&2, String>
   for x: String
-  for xv: Ver
-  for v2s: Tables.Table<Ver>
+  for xv: VersionRecord
+  for v2s: Tables.Table<VersionRecord>
   (
     @ks2: List<
       &2,
@@ -13517,24 +14918,24 @@ law avoid_at:
       String> -> {
       Shared.List.has(~String, ~String.eq, ks2, x) == False{}: Bool
     } -> {
-      Ver.named(Tables.Table.keys(Ver, v2s), v2s, x) == False{}: Bool
+      VersionRecord.named(Tables.Table.keys(VersionRecord, v2s), v2s, x) == False{}: Bool
     } -> {
       Shared.List.has(
         ~String,
         ~String.eq,
-        Vers.ids(History.walk(g, ks2, d2, Ver.add([Tables.Row{x, xv}], v2s))),
+        Vers.ids(History.walk(g, ks2, d2, VersionRecord.add([Tables.Row{x, xv}], v2s))),
         x
       )
         == False{}: Bool
     }
   ) -> {
-    Tables.Table.get(Ver, v2s, k) == mv: Maybe<&2, Ver>
+    Tables.Table.get(VersionRecord, v2s, k) == mv: Maybe<&2, VersionRecord>
   } -> {
     String.eq(k, x) == False{}: Bool
   } -> {
     Shared.List.has(~String, ~String.eq, r, x) == False{}: Bool
   } -> {
-    Ver.named(Tables.Table.keys(Ver, v2s), v2s, x) == False{}: Bool
+    VersionRecord.named(Tables.Table.keys(VersionRecord, v2s), v2s, x) == False{}: Bool
   } -> {
     Shared.List.has(
       ~String,
@@ -13542,13 +14943,13 @@ law avoid_at:
       Vers.ids(
         List.append(
           &2,
-          Tables.Row<Ver>,
+          Tables.Row<VersionRecord>,
           Walked.reached(History.at(k, r, done, mv)),
           History.walk(
             g,
             Walked.next(History.at(k, r, done, mv)),
             Walked.done(History.at(k, r, done, mv)),
-            Ver.add([Tables.Row{x, xv}], v2s)
+            VersionRecord.add([Tables.Row{x, xv}], v2s)
           )
         )
       ),
@@ -13561,7 +14962,7 @@ def avoid_at(mv, g, k, r, done, x, xv, v2s):
   match mv:
     case None{}:
       ih => e => hk => hr => hn => ih(r)(k <> done)(hr)(hn)
-    case Some{Ver{b, +ps, a, t}}:
+    case Some{VersionRecord{b, +ps, a, t}}:
       ih => +e => hk => hr => +hn =>
         +k = k
         +x = x
@@ -13583,7 +14984,7 @@ def avoid_at(mv, g, k, r, done, x, xv, v2s):
                   g,
                   List.append(&2, String, r, ps),
                   k <> done,
-                  Ver.add([Tables.Row{x, xv}], v2s)
+                  VersionRecord.add([Tables.Row{x, xv}], v2s)
                 )
               ),
               x
@@ -13596,7 +14997,7 @@ def avoid_at(mv, g, k, r, done, x, xv, v2s):
           List.append(&2, String, r, ps)
         )(k <> done)(Shared.List.has_append_false(~String, ~String.eq, r, ps, x)(hr)((
               %e: {Shared.List.has(~String, ~String.eq, History.parents(_), x) == False{}: Bool}
-              named_at(Tables.Table.keys(Ver, v2s), v2s, x, k)(hn)(Equal.trans(Bool, Shared.List.has(~String, ~String.eq, Tables.Table.keys(Ver, v2s), k), Maybe.is_some(&2, Ver, Tables.Table.get(Ver, v2s, k)), True{}, Tables.Table.keys_get(Ver, v2s, k), Equal.cong(Maybe<&2, Ver>, Bool, z => Maybe.is_some(&2, Ver, z), Tables.Table.get(Ver, v2s, k), Some{Ver{b, ps, a, t}}, e))))))(
+              named_at(Tables.Table.keys(VersionRecord, v2s), v2s, x, k)(hn)(Equal.trans(Bool, Shared.List.has(~String, ~String.eq, Tables.Table.keys(VersionRecord, v2s), k), Maybe.is_some(&2, VersionRecord, Tables.Table.get(VersionRecord, v2s, k)), True{}, Tables.Table.keys_get(VersionRecord, v2s, k), Equal.cong(Maybe<&2, VersionRecord>, Bool, z => Maybe.is_some(&2, VersionRecord, z), Tables.Table.get(VersionRecord, v2s, k), Some{VersionRecord{b, ps, a, t}}, e))))))(
           hn
         )
 
@@ -13608,8 +15009,8 @@ law avoid_was:
   for r: List<&2, String>
   for done: List<&2, String>
   for x: String
-  for xv: Ver
-  for v2s: Tables.Table<Ver>
+  for xv: VersionRecord
+  for v2s: Tables.Table<VersionRecord>
   (
     @ks2: List<
       &2,
@@ -13618,12 +15019,12 @@ law avoid_was:
       String> -> {
       Shared.List.has(~String, ~String.eq, ks2, x) == False{}: Bool
     } -> {
-      Ver.named(Tables.Table.keys(Ver, v2s), v2s, x) == False{}: Bool
+      VersionRecord.named(Tables.Table.keys(VersionRecord, v2s), v2s, x) == False{}: Bool
     } -> {
       Shared.List.has(
         ~String,
         ~String.eq,
-        Vers.ids(History.walk(g, ks2, d2, Ver.add([Tables.Row{x, xv}], v2s))),
+        Vers.ids(History.walk(g, ks2, d2, VersionRecord.add([Tables.Row{x, xv}], v2s))),
         x
       )
         == False{}: Bool
@@ -13631,7 +15032,7 @@ law avoid_was:
   ) -> {
     Shared.List.has(~String, ~String.eq, k <> r, x) == False{}: Bool
   } -> {
-    Ver.named(Tables.Table.keys(Ver, v2s), v2s, x) == False{}: Bool
+    VersionRecord.named(Tables.Table.keys(VersionRecord, v2s), v2s, x) == False{}: Bool
   } -> {
     Shared.List.has(
       ~String,
@@ -13639,13 +15040,15 @@ law avoid_was:
       Vers.ids(
         List.append(
           &2,
-          Tables.Row<Ver>,
-          Walked.reached(History.next(k, r, done, Ver.add([Tables.Row{x, xv}], v2s), was)),
+          Tables.Row<VersionRecord>,
+          Walked.reached(
+            History.next(k, r, done, VersionRecord.add([Tables.Row{x, xv}], v2s), was)
+          ),
           History.walk(
             g,
-            Walked.next(History.next(k, r, done, Ver.add([Tables.Row{x, xv}], v2s), was)),
-            Walked.done(History.next(k, r, done, Ver.add([Tables.Row{x, xv}], v2s), was)),
-            Ver.add([Tables.Row{x, xv}], v2s)
+            Walked.next(History.next(k, r, done, VersionRecord.add([Tables.Row{x, xv}], v2s), was)),
+            Walked.done(History.next(k, r, done, VersionRecord.add([Tables.Row{x, xv}], v2s), was)),
+            VersionRecord.add([Tables.Row{x, xv}], v2s)
           )
         )
       ),
@@ -13681,9 +15084,9 @@ def avoid_was(was, g, k, r, done, x, xv, v2s):
         +v2s = v2s
         +done = done
         %Equal.sym(
-          Maybe<&2, Ver>,
-          Tables.Table.get(Ver, Ver.add([Tables.Row{x, xv}], v2s), k),
-          Tables.Table.get(Ver, v2s, k),
+          Maybe<&2, VersionRecord>,
+          Tables.Table.get(VersionRecord, VersionRecord.add([Tables.Row{x, xv}], v2s), k),
+          Tables.Table.get(VersionRecord, v2s, k),
           add1_other(
             v2s,
             x,
@@ -13709,13 +15112,13 @@ def avoid_was(was, g, k, r, done, x, xv, v2s):
               Vers.ids(
                 List.append(
                   &2,
-                  Tables.Row<Ver>,
+                  Tables.Row<VersionRecord>,
                   Walked.reached(History.at(k, r, done, _)),
                   History.walk(
                     g,
                     Walked.next(History.at(k, r, done, _)),
                     Walked.done(History.at(k, r, done, _)),
-                    Ver.add([Tables.Row{x, xv}], v2s)
+                    VersionRecord.add([Tables.Row{x, xv}], v2s)
                   )
                 )
               ),
@@ -13724,7 +15127,7 @@ def avoid_was(was, g, k, r, done, x, xv, v2s):
               == False{}: Bool
           }
         avoid_at(
-          Tables.Table.get(Ver, v2s, k),
+          Tables.Table.get(VersionRecord, v2s, k),
           g,
           k,
           r,
@@ -13757,17 +15160,17 @@ law walk_avoid:
   for ks: List<&2, String>
   for done: List<&2, String>
   for x: String
-  for xv: Ver
-  for v2s: Tables.Table<Ver>
+  for xv: VersionRecord
+  for v2s: Tables.Table<VersionRecord>
   {
     Shared.List.has(~String, ~String.eq, ks, x) == False{}: Bool
   } -> {
-    Ver.named(Tables.Table.keys(Ver, v2s), v2s, x) == False{}: Bool
+    VersionRecord.named(Tables.Table.keys(VersionRecord, v2s), v2s, x) == False{}: Bool
   } -> {
     Shared.List.has(
       ~String,
       ~String.eq,
-      Vers.ids(History.walk(f, ks, done, Ver.add([Tables.Row{x, xv}], v2s))),
+      Vers.ids(History.walk(f, ks, done, VersionRecord.add([Tables.Row{x, xv}], v2s))),
       x
     )
       == False{}: Bool
@@ -13778,15 +15181,15 @@ def walk_avoid.g1(
   +ks: List<&2, String>,
   +done: List<&2, String>,
   +x: String,
-  +xv: Ver,
-  +v2s: Tables.Table<Ver>,
+  +xv: VersionRecord,
+  +v2s: Tables.Table<VersionRecord>,
   x1: {Shared.List.has(~String, ~String.eq, ks, x) == False{}: Bool},
-  x2: {Ver.named(Tables.Table.keys(Ver, v2s), v2s, x) == False{}: Bool}
+  x2: {VersionRecord.named(Tables.Table.keys(VersionRecord, v2s), v2s, x) == False{}: Bool}
 ) -> {
   Shared.List.has(
     ~String,
     ~String.eq,
-    Vers.ids(History.walk(f, ks, done, Ver.add([Tables.Row{x, xv}], v2s))),
+    Vers.ids(History.walk(f, ks, done, VersionRecord.add([Tables.Row{x, xv}], v2s))),
     x
   )
     == False{}: Bool
@@ -13814,7 +15217,7 @@ def walk_avoid(f, ks, done, x, xv, v2s):
   x1 => x2 => walk_avoid.g1(f, ks, done, x, xv, v2s, x1, x2)
 
 # there is always fuel for one step of a walk
-def links_one(ks: List<&2, String>, +vs: Tables.Table<Ver>) -> &y:
+def links_one(ks: List<&2, String>, +vs: Tables.Table<VersionRecord>) -> &y:
   Nat -> {History.links(ks, vs) == 1n+y: Nat}:
   match ks:
     case Nil{}:
@@ -13822,7 +15225,7 @@ def links_one(ks: List<&2, String>, +vs: Tables.Table<Ver>) -> &y:
     case Con{k, r}:
       (
         Nat.add(
-          List.length(&2, String, History.parents(Tables.Table.get(Ver, vs, k))),
+          List.length(&2, String, History.parents(Tables.Table.get(VersionRecord, vs, k))),
           History.links(r, vs)
         ),
         {==}
@@ -13832,7 +15235,7 @@ def links_one(ks: List<&2, String>, +vs: Tables.Table<Ver>) -> &y:
 def links_two.of(
   +l: Nat,
   r: List<&2, String>,
-  vs: Tables.Table<Ver>,
+  vs: Tables.Table<VersionRecord>,
   w: &y: Nat -> {History.links(r, vs) == 1n+y: Nat}
 ) -> &f:
   Nat -> {Nat.add(1n+l, History.links(r, vs)) == 1n+1n+f: Nat}:
@@ -13845,7 +15248,7 @@ def links_two.of(
 # a walk over some versions has fuel for two steps
 def links_two(
   ks: List<&2, String>,
-  +vs: Tables.Table<Ver>,
+  +vs: Tables.Table<VersionRecord>,
   k: String
 ) -> {Shared.List.has(~String, ~String.eq, ks, k) == True{}: Bool} -> &f:
   Nat -> {History.links(ks, vs) == 1n+1n+f: Nat}:
@@ -13857,7 +15260,7 @@ def links_two(
       )
     case Con{j, +r}:
       h => links_two.of(
-        List.length(&2, String, History.parents(Tables.Table.get(Ver, vs, j))),
+        List.length(&2, String, History.parents(Tables.Table.get(VersionRecord, vs, j))),
         r,
         vs,
         links_one(r, vs)
@@ -14811,8 +16214,8 @@ def blobs_get(ns, q, y, b0, n1, x1, n2, x2):
 
 # a set-branch of c to the head of b that answers Created
 law sb_core:
-  for s: St
-  for t: St
+  for s: NodeState
+  for t: NodeState
   for r: String
   for w: String
   for z: String
@@ -14820,29 +16223,37 @@ law sb_core:
   for c: String
   for v: String
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r, w, z},
       Spec.Ask.SetBranch{c, Spec.Point.Head{b}}
     )
-      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): St
+      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): NodeState
       & Spec.Answer
   } -> {
-    Br.head.of(Tables.Table.get(Br, St.branches(s), b)) == Some{v}: Maybe<&2, String>
+    BranchRecord.head.of(
+      Tables.Table.get(BranchRecord, NodeState.branches(s), b)
+    )
+      == Some{v}: Maybe<&2, String>
   }
     & (
       {
-        Ver.has(St.versions(s), v) == True{}: Bool
+        VersionRecord.has(NodeState.versions(s), v) == True{}: Bool
       }
         & (
           {
-            Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>
+            Tables.Table.get(
+              BranchRecord,
+              NodeState.branches(s),
+              c
+            )
+              == None{}: Maybe<&2, BranchRecord>
           }
             & {
               SetBranch.point(
-                Br.head.of(Tables.Table.get(Br, St.branches(s), b)),
+                BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s), b)),
                 s,
                 r,
                 w,
@@ -14851,10 +16262,15 @@ law sb_core:
               )
                 == Out{
                   [],
-                  Tables.Table.set(Br, St.branches(s), c, Br{v, St.self(s), 0n, 0n}),
-                  St.marks(s),
-                  St.groups(s),
-                  St.clashes(s),
+                  Tables.Table.set(
+                    BranchRecord,
+                    NodeState.branches(s),
+                    c,
+                    BranchRecord{v, NodeState.self(s), 0n, 0n}
+                  ),
+                  NodeState.marks(s),
+                  NodeState.groups(s),
+                  NodeState.clashes(s),
                   [Logged.head(c, v)],
                   SetBranch.answer(Spec.SetBranch.Created{v})
                 }: Out
@@ -14864,14 +16280,14 @@ law sb_core:
 
 def sb_core.g7(
   +self: String,
-  +versions: Tables.Table<Ver>,
-  +branches: Tables.Table<Br>,
+  +versions: Tables.Table<VersionRecord>,
+  +branches: Tables.Table<BranchRecord>,
   +marks: Tables.Table<Tables.Table<MarkAt>>,
-  +groups: Tables.Table<Grp>,
+  +groups: Tables.Table<GroupRecord>,
   +clashes: Tables.Table<Clash>,
   +seen: Tables.Table<Seen>,
   +log: List<&2, Logged>,
-  +t: St,
+  +t: NodeState,
   +r: String,
   +w: String,
   +z: String,
@@ -14883,28 +16299,28 @@ def sb_core.g7(
   x: {
     Outcome.of(
       x2,
-      Ver.taken(versions, r),
+      VersionRecord.taken(versions, r),
       List.length(&2, Logged, log)
     )
       == Spec.Outcome.NotSeen{}: Spec.Outcome
   },
   x1: {
-    Node.asked(
+    VendNode.asked(
       x2,
-      St{self, versions, branches, marks, groups, clashes, seen, log},
+      NodeState{self, versions, branches, marks, groups, clashes, seen, log},
       r,
       w,
       z,
       Spec.Ask.SetBranch{c, Spec.Point.Head{b}}
     )
-      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): Pair(St, Spec.Answer)
+      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): Pair(NodeState, Spec.Answer)
   }
 ) -> Pair(
   {
-    Br.head.of(
+    BranchRecord.head.of(
       Tables.Table.get(
-        Br,
-        St.branches(St{self, versions, branches, marks, groups, clashes, seen, log}),
+        BranchRecord,
+        NodeState.branches(NodeState{self, versions, branches, marks, groups, clashes, seen, log}),
         b
       )
     )
@@ -14912,8 +16328,8 @@ def sb_core.g7(
   },
   Pair(
     {
-      Ver.has(
-        St.versions(St{self, versions, branches, marks, groups, clashes, seen, log}),
+      VersionRecord.has(
+        NodeState.versions(NodeState{self, versions, branches, marks, groups, clashes, seen, log}),
         v
       )
         == True{}: Bool
@@ -14921,22 +16337,26 @@ def sb_core.g7(
     Pair(
       {
         Tables.Table.get(
-          Br,
-          St.branches(St{self, versions, branches, marks, groups, clashes, seen, log}),
+          BranchRecord,
+          NodeState.branches(
+            NodeState{self, versions, branches, marks, groups, clashes, seen, log}
+          ),
           c
         )
-          == None{}: Maybe<&2, Br>
+          == None{}: Maybe<&2, BranchRecord>
       },
       {
         SetBranch.point(
-          Br.head.of(
+          BranchRecord.head.of(
             Tables.Table.get(
-              Br,
-              St.branches(St{self, versions, branches, marks, groups, clashes, seen, log}),
+              BranchRecord,
+              NodeState.branches(
+                NodeState{self, versions, branches, marks, groups, clashes, seen, log}
+              ),
               b
             )
           ),
-          St{self, versions, branches, marks, groups, clashes, seen, log},
+          NodeState{self, versions, branches, marks, groups, clashes, seen, log},
           r,
           w,
           z,
@@ -14945,19 +16365,27 @@ def sb_core.g7(
           == Out{
             [],
             Tables.Table.set(
-              Br,
-              St.branches(St{self, versions, branches, marks, groups, clashes, seen, log}),
+              BranchRecord,
+              NodeState.branches(
+                NodeState{self, versions, branches, marks, groups, clashes, seen, log}
+              ),
               c,
-              Br{
+              BranchRecord{
                 v,
-                St.self(St{self, versions, branches, marks, groups, clashes, seen, log}),
+                NodeState.self(
+                  NodeState{self, versions, branches, marks, groups, clashes, seen, log}
+                ),
                 0n,
                 0n
               }
             ),
-            St.marks(St{self, versions, branches, marks, groups, clashes, seen, log}),
-            St.groups(St{self, versions, branches, marks, groups, clashes, seen, log}),
-            St.clashes(St{self, versions, branches, marks, groups, clashes, seen, log}),
+            NodeState.marks(NodeState{self, versions, branches, marks, groups, clashes, seen, log}),
+            NodeState.groups(
+              NodeState{self, versions, branches, marks, groups, clashes, seen, log}
+            ),
+            NodeState.clashes(
+              NodeState{self, versions, branches, marks, groups, clashes, seen, log}
+            ),
             [Logged.head(c, v)],
             SetBranch.answer(Spec.SetBranch.Created{v})
           }: Out
@@ -14966,18 +16394,20 @@ def sb_core.g7(
   )
 ):
   match t:
-    case St{self1, versions1, branches1, marks1, groups1, clashes1, seen1, log1}:
+    case NodeState{self1, versions1, branches1, marks1, groups1, clashes1, seen1, log1}:
       match x2:
         case None{}:
           sb_point(
-            Br.head.of(
+            BranchRecord.head.of(
               Tables.Table.get(
-                Br,
-                St.branches(St{self, versions, branches, marks, groups, clashes, seen, log}),
+                BranchRecord,
+                NodeState.branches(
+                  NodeState{self, versions, branches, marks, groups, clashes, seen, log}
+                ),
                 b
               )
             ),
-            St{self, versions, branches, marks, groups, clashes, seen, log},
+            NodeState{self, versions, branches, marks, groups, clashes, seen, log},
             r,
             w,
             z,
@@ -14985,17 +16415,17 @@ def sb_core.g7(
             v
           )(
             view_ver(
-              St{self, versions, branches, marks, groups, clashes, seen, log},
+              NodeState{self, versions, branches, marks, groups, clashes, seen, log},
               r,
               SetBranch.point(
-                Br.head.of(Tables.Table.get(Br, branches, b)),
-                St{self, versions, branches, marks, groups, clashes, seen, log},
+                BranchRecord.head.of(Tables.Table.get(BranchRecord, branches, b)),
+                NodeState{self, versions, branches, marks, groups, clashes, seen, log},
                 r,
                 w,
                 z,
                 c
               ),
-              St{self1, versions1, branches1, marks1, groups1, clashes1, seen1, log1},
+              NodeState{self1, versions1, branches1, marks1, groups1, clashes1, seen1, log1},
               Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}
             )(x1)
           )
@@ -15005,11 +16435,11 @@ def sb_core.g7(
               Empty.absurd(
                 Pair(
                   {
-                    Br.head.of(
+                    BranchRecord.head.of(
                       Tables.Table.get(
-                        Br,
-                        St.branches(
-                          St{self, versions, branches, marks, groups, clashes, seen, log}
+                        BranchRecord,
+                        NodeState.branches(
+                          NodeState{self, versions, branches, marks, groups, clashes, seen, log}
                         ),
                         b
                       )
@@ -15018,9 +16448,9 @@ def sb_core.g7(
                   },
                   Pair(
                     {
-                      Ver.has(
-                        St.versions(
-                          St{self, versions, branches, marks, groups, clashes, seen, log}
+                      VersionRecord.has(
+                        NodeState.versions(
+                          NodeState{self, versions, branches, marks, groups, clashes, seen, log}
                         ),
                         v
                       )
@@ -15029,26 +16459,35 @@ def sb_core.g7(
                     Pair(
                       {
                         Tables.Table.get(
-                          Br,
-                          St.branches(
-                            St{self, versions, branches, marks, groups, clashes, seen, log}
+                          BranchRecord,
+                          NodeState.branches(
+                            NodeState{self, versions, branches, marks, groups, clashes, seen, log}
                           ),
                           c
                         )
-                          == None{}: Maybe<&2, Br>
+                          == None{}: Maybe<&2, BranchRecord>
                       },
                       {
                         SetBranch.point(
-                          Br.head.of(
+                          BranchRecord.head.of(
                             Tables.Table.get(
-                              Br,
-                              St.branches(
-                                St{self, versions, branches, marks, groups, clashes, seen, log}
+                              BranchRecord,
+                              NodeState.branches(
+                                NodeState{
+                                  self,
+                                  versions,
+                                  branches,
+                                  marks,
+                                  groups,
+                                  clashes,
+                                  seen,
+                                  log
+                                }
                               ),
                               b
                             )
                           ),
-                          St{self, versions, branches, marks, groups, clashes, seen, log},
+                          NodeState{self, versions, branches, marks, groups, clashes, seen, log},
                           r,
                           w,
                           z,
@@ -15057,28 +16496,46 @@ def sb_core.g7(
                           == Out{
                             [],
                             Tables.Table.set(
-                              Br,
-                              St.branches(
-                                St{self, versions, branches, marks, groups, clashes, seen, log}
+                              BranchRecord,
+                              NodeState.branches(
+                                NodeState{
+                                  self,
+                                  versions,
+                                  branches,
+                                  marks,
+                                  groups,
+                                  clashes,
+                                  seen,
+                                  log
+                                }
                               ),
                               c,
-                              Br{
+                              BranchRecord{
                                 v,
-                                St.self(
-                                  St{self, versions, branches, marks, groups, clashes, seen, log}
+                                NodeState.self(
+                                  NodeState{
+                                    self,
+                                    versions,
+                                    branches,
+                                    marks,
+                                    groups,
+                                    clashes,
+                                    seen,
+                                    log
+                                  }
                                 ),
                                 0n,
                                 0n
                               }
                             ),
-                            St.marks(
-                              St{self, versions, branches, marks, groups, clashes, seen, log}
+                            NodeState.marks(
+                              NodeState{self, versions, branches, marks, groups, clashes, seen, log}
                             ),
-                            St.groups(
-                              St{self, versions, branches, marks, groups, clashes, seen, log}
+                            NodeState.groups(
+                              NodeState{self, versions, branches, marks, groups, clashes, seen, log}
                             ),
-                            St.clashes(
-                              St{self, versions, branches, marks, groups, clashes, seen, log}
+                            NodeState.clashes(
+                              NodeState{self, versions, branches, marks, groups, clashes, seen, log}
                             ),
                             [Logged.head(c, v)],
                             SetBranch.answer(Spec.SetBranch.Created{v})
@@ -15096,7 +16553,7 @@ def sb_core.g7(
 
 def sb_core(s, t, r, w, z, b, c, v):
   match s:
-    case St{self, versions, branches, marks, groups, clashes, +seen, log}:
+    case NodeState{self, versions, branches, marks, groups, clashes, +seen, log}:
       +r = r
       x => x1 => sb_core.g7(
         self,
@@ -15122,8 +16579,8 @@ def sb_core(s, t, r, w, z, b, c, v):
 
 # ... b's head was v
 law sb_head:
-  for s: St
-  for t: St
+  for s: NodeState
+  for t: NodeState
   for r: String
   for w: String
   for z: String
@@ -15131,31 +16588,46 @@ law sb_head:
   for c: String
   for v: String
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r, w, z},
       Spec.Ask.SetBranch{c, Spec.Point.Head{b}}
     )
-      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): St
+      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): NodeState
       & Spec.Answer
-  } -> {Br.head.of(Tables.Table.get(Br, St.branches(s), b)) == Some{v}: Maybe<&2, String>}
+  } -> {
+    BranchRecord.head.of(
+      Tables.Table.get(BranchRecord, NodeState.branches(s), b)
+    )
+      == Some{v}: Maybe<&2, String>
+  }
 
 def sb_head(s, t, r, w, z, b, c, v):
   hn => h => Pair.fst(
-    {Br.head.of(Tables.Table.get(Br, St.branches(s), b)) == Some{v}: Maybe<&2, String>},
+    {
+      BranchRecord.head.of(
+        Tables.Table.get(BranchRecord, NodeState.branches(s), b)
+      )
+        == Some{v}: Maybe<&2, String>
+    },
     (
       {
-        Ver.has(St.versions(s), v) == True{}: Bool
+        VersionRecord.has(NodeState.versions(s), v) == True{}: Bool
       }
         & (
           {
-            Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>
+            Tables.Table.get(
+              BranchRecord,
+              NodeState.branches(s),
+              c
+            )
+              == None{}: Maybe<&2, BranchRecord>
           }
             & {
               SetBranch.point(
-                Br.head.of(Tables.Table.get(Br, St.branches(s), b)),
+                BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s), b)),
                 s,
                 r,
                 w,
@@ -15164,10 +16636,15 @@ def sb_head(s, t, r, w, z, b, c, v):
               )
                 == Out{
                   [],
-                  Tables.Table.set(Br, St.branches(s), c, Br{v, St.self(s), 0n, 0n}),
-                  St.marks(s),
-                  St.groups(s),
-                  St.clashes(s),
+                  Tables.Table.set(
+                    BranchRecord,
+                    NodeState.branches(s),
+                    c,
+                    BranchRecord{v, NodeState.self(s), 0n, 0n}
+                  ),
+                  NodeState.marks(s),
+                  NodeState.groups(s),
+                  NodeState.clashes(s),
                   [Logged.head(c, v)],
                   SetBranch.answer(Spec.SetBranch.Created{v})
                 }: Out
@@ -15179,8 +16656,8 @@ def sb_head(s, t, r, w, z, b, c, v):
 
 # ... v was a version
 law sb_has:
-  for s: St
-  for t: St
+  for s: NodeState
+  for t: NodeState
   for r: String
   for w: String
   for z: String
@@ -15188,27 +16665,27 @@ law sb_has:
   for c: String
   for v: String
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r, w, z},
       Spec.Ask.SetBranch{c, Spec.Point.Head{b}}
     )
-      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): St
+      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): NodeState
       & Spec.Answer
-  } -> {Ver.has(St.versions(s), v) == True{}: Bool}
+  } -> {VersionRecord.has(NodeState.versions(s), v) == True{}: Bool}
 
 def sb_has(s, t, r, w, z, b, c, v):
   hn => h => Pair.fst(
-    {Ver.has(St.versions(s), v) == True{}: Bool},
+    {VersionRecord.has(NodeState.versions(s), v) == True{}: Bool},
     (
       {
-        Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>
+        Tables.Table.get(BranchRecord, NodeState.branches(s), c) == None{}: Maybe<&2, BranchRecord>
       }
         & {
           SetBranch.point(
-            Br.head.of(Tables.Table.get(Br, St.branches(s), b)),
+            BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s), b)),
             s,
             r,
             w,
@@ -15217,28 +16694,43 @@ def sb_has(s, t, r, w, z, b, c, v):
           )
             == Out{
               [],
-              Tables.Table.set(Br, St.branches(s), c, Br{v, St.self(s), 0n, 0n}),
-              St.marks(s),
-              St.groups(s),
-              St.clashes(s),
+              Tables.Table.set(
+                BranchRecord,
+                NodeState.branches(s),
+                c,
+                BranchRecord{v, NodeState.self(s), 0n, 0n}
+              ),
+              NodeState.marks(s),
+              NodeState.groups(s),
+              NodeState.clashes(s),
               [Logged.head(c, v)],
               SetBranch.answer(Spec.SetBranch.Created{v})
             }: Out
         }
     ),
     Pair.snd(
-      {Br.head.of(Tables.Table.get(Br, St.branches(s), b)) == Some{v}: Maybe<&2, String>},
+      {
+        BranchRecord.head.of(
+          Tables.Table.get(BranchRecord, NodeState.branches(s), b)
+        )
+          == Some{v}: Maybe<&2, String>
+      },
       (
         {
-          Ver.has(St.versions(s), v) == True{}: Bool
+          VersionRecord.has(NodeState.versions(s), v) == True{}: Bool
         }
           & (
             {
-              Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>
+              Tables.Table.get(
+                BranchRecord,
+                NodeState.branches(s),
+                c
+              )
+                == None{}: Maybe<&2, BranchRecord>
             }
               & {
                 SetBranch.point(
-                  Br.head.of(Tables.Table.get(Br, St.branches(s), b)),
+                  BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s), b)),
                   s,
                   r,
                   w,
@@ -15247,10 +16739,15 @@ def sb_has(s, t, r, w, z, b, c, v):
                 )
                   == Out{
                     [],
-                    Tables.Table.set(Br, St.branches(s), c, Br{v, St.self(s), 0n, 0n}),
-                    St.marks(s),
-                    St.groups(s),
-                    St.clashes(s),
+                    Tables.Table.set(
+                      BranchRecord,
+                      NodeState.branches(s),
+                      c,
+                      BranchRecord{v, NodeState.self(s), 0n, 0n}
+                    ),
+                    NodeState.marks(s),
+                    NodeState.groups(s),
+                    NodeState.clashes(s),
                     [Logged.head(c, v)],
                     SetBranch.answer(Spec.SetBranch.Created{v})
                   }: Out
@@ -15263,8 +16760,8 @@ def sb_has(s, t, r, w, z, b, c, v):
 
 # ... c did not exist
 law sb_none:
-  for s: St
-  for t: St
+  for s: NodeState
+  for t: NodeState
   for r: String
   for w: String
   for z: String
@@ -15272,23 +16769,23 @@ law sb_none:
   for c: String
   for v: String
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r, w, z},
       Spec.Ask.SetBranch{c, Spec.Point.Head{b}}
     )
-      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): St
+      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): NodeState
       & Spec.Answer
-  } -> {Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>}
+  } -> {Tables.Table.get(BranchRecord, NodeState.branches(s), c) == None{}: Maybe<&2, BranchRecord>}
 
 def sb_none(s, t, r, w, z, b, c, v):
   hn => h => Pair.fst(
-    {Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>},
+    {Tables.Table.get(BranchRecord, NodeState.branches(s), c) == None{}: Maybe<&2, BranchRecord>},
     {
       SetBranch.point(
-        Br.head.of(Tables.Table.get(Br, St.branches(s), b)),
+        BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s), b)),
         s,
         r,
         w,
@@ -15297,23 +16794,33 @@ def sb_none(s, t, r, w, z, b, c, v):
       )
         == Out{
           [],
-          Tables.Table.set(Br, St.branches(s), c, Br{v, St.self(s), 0n, 0n}),
-          St.marks(s),
-          St.groups(s),
-          St.clashes(s),
+          Tables.Table.set(
+            BranchRecord,
+            NodeState.branches(s),
+            c,
+            BranchRecord{v, NodeState.self(s), 0n, 0n}
+          ),
+          NodeState.marks(s),
+          NodeState.groups(s),
+          NodeState.clashes(s),
           [Logged.head(c, v)],
           SetBranch.answer(Spec.SetBranch.Created{v})
         }: Out
     },
     Pair.snd(
-      {Ver.has(St.versions(s), v) == True{}: Bool},
+      {VersionRecord.has(NodeState.versions(s), v) == True{}: Bool},
       (
         {
-          Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>
+          Tables.Table.get(
+            BranchRecord,
+            NodeState.branches(s),
+            c
+          )
+            == None{}: Maybe<&2, BranchRecord>
         }
           & {
             SetBranch.point(
-              Br.head.of(Tables.Table.get(Br, St.branches(s), b)),
+              BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s), b)),
               s,
               r,
               w,
@@ -15322,28 +16829,43 @@ def sb_none(s, t, r, w, z, b, c, v):
             )
               == Out{
                 [],
-                Tables.Table.set(Br, St.branches(s), c, Br{v, St.self(s), 0n, 0n}),
-                St.marks(s),
-                St.groups(s),
-                St.clashes(s),
+                Tables.Table.set(
+                  BranchRecord,
+                  NodeState.branches(s),
+                  c,
+                  BranchRecord{v, NodeState.self(s), 0n, 0n}
+                ),
+                NodeState.marks(s),
+                NodeState.groups(s),
+                NodeState.clashes(s),
                 [Logged.head(c, v)],
                 SetBranch.answer(Spec.SetBranch.Created{v})
               }: Out
           }
       ),
       Pair.snd(
-        {Br.head.of(Tables.Table.get(Br, St.branches(s), b)) == Some{v}: Maybe<&2, String>},
+        {
+          BranchRecord.head.of(
+            Tables.Table.get(BranchRecord, NodeState.branches(s), b)
+          )
+            == Some{v}: Maybe<&2, String>
+        },
         (
           {
-            Ver.has(St.versions(s), v) == True{}: Bool
+            VersionRecord.has(NodeState.versions(s), v) == True{}: Bool
           }
             & (
               {
-                Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>
+                Tables.Table.get(
+                  BranchRecord,
+                  NodeState.branches(s),
+                  c
+                )
+                  == None{}: Maybe<&2, BranchRecord>
               }
                 & {
                   SetBranch.point(
-                    Br.head.of(Tables.Table.get(Br, St.branches(s), b)),
+                    BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s), b)),
                     s,
                     r,
                     w,
@@ -15352,10 +16874,15 @@ def sb_none(s, t, r, w, z, b, c, v):
                   )
                     == Out{
                       [],
-                      Tables.Table.set(Br, St.branches(s), c, Br{v, St.self(s), 0n, 0n}),
-                      St.marks(s),
-                      St.groups(s),
-                      St.clashes(s),
+                      Tables.Table.set(
+                        BranchRecord,
+                        NodeState.branches(s),
+                        c,
+                        BranchRecord{v, NodeState.self(s), 0n, 0n}
+                      ),
+                      NodeState.marks(s),
+                      NodeState.groups(s),
+                      NodeState.clashes(s),
                       [Logged.head(c, v)],
                       SetBranch.answer(Spec.SetBranch.Created{v})
                     }: Out
@@ -15369,8 +16896,8 @@ def sb_none(s, t, r, w, z, b, c, v):
 
 # ... its Out
 law sb_out:
-  for s: St
-  for t: St
+  for s: NodeState
+  for t: NodeState
   for r: String
   for w: String
   for z: String
@@ -15378,18 +16905,18 @@ law sb_out:
   for c: String
   for v: String
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r, w, z},
       Spec.Ask.SetBranch{c, Spec.Point.Head{b}}
     )
-      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): St
+      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): NodeState
       & Spec.Answer
   } -> {
     SetBranch.point(
-      Br.head.of(Tables.Table.get(Br, St.branches(s), b)),
+      BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s), b)),
       s,
       r,
       w,
@@ -15398,10 +16925,15 @@ law sb_out:
     )
       == Out{
         [],
-        Tables.Table.set(Br, St.branches(s), c, Br{v, St.self(s), 0n, 0n}),
-        St.marks(s),
-        St.groups(s),
-        St.clashes(s),
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s),
+          c,
+          BranchRecord{v, NodeState.self(s), 0n, 0n}
+        ),
+        NodeState.marks(s),
+        NodeState.groups(s),
+        NodeState.clashes(s),
         [Logged.head(c, v)],
         SetBranch.answer(Spec.SetBranch.Created{v})
       }: Out
@@ -15409,10 +16941,10 @@ law sb_out:
 
 def sb_out(s, t, r, w, z, b, c, v):
   hn => h => Pair.snd(
-    {Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>},
+    {Tables.Table.get(BranchRecord, NodeState.branches(s), c) == None{}: Maybe<&2, BranchRecord>},
     {
       SetBranch.point(
-        Br.head.of(Tables.Table.get(Br, St.branches(s), b)),
+        BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s), b)),
         s,
         r,
         w,
@@ -15421,23 +16953,33 @@ def sb_out(s, t, r, w, z, b, c, v):
       )
         == Out{
           [],
-          Tables.Table.set(Br, St.branches(s), c, Br{v, St.self(s), 0n, 0n}),
-          St.marks(s),
-          St.groups(s),
-          St.clashes(s),
+          Tables.Table.set(
+            BranchRecord,
+            NodeState.branches(s),
+            c,
+            BranchRecord{v, NodeState.self(s), 0n, 0n}
+          ),
+          NodeState.marks(s),
+          NodeState.groups(s),
+          NodeState.clashes(s),
           [Logged.head(c, v)],
           SetBranch.answer(Spec.SetBranch.Created{v})
         }: Out
     },
     Pair.snd(
-      {Ver.has(St.versions(s), v) == True{}: Bool},
+      {VersionRecord.has(NodeState.versions(s), v) == True{}: Bool},
       (
         {
-          Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>
+          Tables.Table.get(
+            BranchRecord,
+            NodeState.branches(s),
+            c
+          )
+            == None{}: Maybe<&2, BranchRecord>
         }
           & {
             SetBranch.point(
-              Br.head.of(Tables.Table.get(Br, St.branches(s), b)),
+              BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s), b)),
               s,
               r,
               w,
@@ -15446,28 +16988,43 @@ def sb_out(s, t, r, w, z, b, c, v):
             )
               == Out{
                 [],
-                Tables.Table.set(Br, St.branches(s), c, Br{v, St.self(s), 0n, 0n}),
-                St.marks(s),
-                St.groups(s),
-                St.clashes(s),
+                Tables.Table.set(
+                  BranchRecord,
+                  NodeState.branches(s),
+                  c,
+                  BranchRecord{v, NodeState.self(s), 0n, 0n}
+                ),
+                NodeState.marks(s),
+                NodeState.groups(s),
+                NodeState.clashes(s),
                 [Logged.head(c, v)],
                 SetBranch.answer(Spec.SetBranch.Created{v})
               }: Out
           }
       ),
       Pair.snd(
-        {Br.head.of(Tables.Table.get(Br, St.branches(s), b)) == Some{v}: Maybe<&2, String>},
+        {
+          BranchRecord.head.of(
+            Tables.Table.get(BranchRecord, NodeState.branches(s), b)
+          )
+            == Some{v}: Maybe<&2, String>
+        },
         (
           {
-            Ver.has(St.versions(s), v) == True{}: Bool
+            VersionRecord.has(NodeState.versions(s), v) == True{}: Bool
           }
             & (
               {
-                Tables.Table.get(Br, St.branches(s), c) == None{}: Maybe<&2, Br>
+                Tables.Table.get(
+                  BranchRecord,
+                  NodeState.branches(s),
+                  c
+                )
+                  == None{}: Maybe<&2, BranchRecord>
               }
                 & {
                   SetBranch.point(
-                    Br.head.of(Tables.Table.get(Br, St.branches(s), b)),
+                    BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s), b)),
                     s,
                     r,
                     w,
@@ -15476,10 +17033,15 @@ def sb_out(s, t, r, w, z, b, c, v):
                   )
                     == Out{
                       [],
-                      Tables.Table.set(Br, St.branches(s), c, Br{v, St.self(s), 0n, 0n}),
-                      St.marks(s),
-                      St.groups(s),
-                      St.clashes(s),
+                      Tables.Table.set(
+                        BranchRecord,
+                        NodeState.branches(s),
+                        c,
+                        BranchRecord{v, NodeState.self(s), 0n, 0n}
+                      ),
+                      NodeState.marks(s),
+                      NodeState.groups(s),
+                      NodeState.clashes(s),
                       [Logged.head(c, v)],
                       SetBranch.answer(Spec.SetBranch.Created{v})
                     }: Out
@@ -15493,8 +17055,8 @@ def sb_out(s, t, r, w, z, b, c, v):
 
 # ... the versions after it
 law sb_vv:
-  for s: St
-  for t: St
+  for s: NodeState
+  for t: NodeState
   for r: String
   for w: String
   for z: String
@@ -15502,16 +17064,16 @@ law sb_vv:
   for c: String
   for v: String
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r, w, z},
       Spec.Ask.SetBranch{c, Spec.Point.Head{b}}
     )
-      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): St
+      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): NodeState
       & Spec.Answer
-  } -> {St.versions(t) == St.versions(s): Tables.Table<Ver>}
+  } -> {NodeState.versions(t) == NodeState.versions(s): Tables.Table<VersionRecord>}
 
 def sb_vv(s, t, r, w, z, b, c, v):
   +hn => +h =>
@@ -15531,10 +17093,15 @@ def sb_vv(s, t, r, w, z, b, c, v):
       Spec.Answer.SetBranch{Spec.SetBranch.Created{v}},
       Out{
         [],
-        Tables.Table.set(Br, St.branches(s), c, Br{v, St.self(s), 0n, 0n}),
-        St.marks(s),
-        St.groups(s),
-        St.clashes(s),
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s),
+          c,
+          BranchRecord{v, NodeState.self(s), 0n, 0n}
+        ),
+        NodeState.marks(s),
+        NodeState.groups(s),
+        NodeState.clashes(s),
         [Logged.head(c, v)],
         SetBranch.answer(Spec.SetBranch.Created{v})
       }
@@ -15552,8 +17119,8 @@ def sb_vv(s, t, r, w, z, b, c, v):
 
 # ... the branches after it
 law sb_vb:
-  for s: St
-  for t: St
+  for s: NodeState
+  for t: NodeState
   for r: String
   for w: String
   for z: String
@@ -15561,20 +17128,25 @@ law sb_vb:
   for c: String
   for v: String
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r, w, z},
       Spec.Ask.SetBranch{c, Spec.Point.Head{b}}
     )
-      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): St
+      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): NodeState
       & Spec.Answer
   } -> {
-    St.branches(
+    NodeState.branches(
       t
     )
-      == Tables.Table.set(Br, St.branches(s), c, Br{v, St.self(s), 0n, 0n}): Tables.Table<Br>
+      == Tables.Table.set(
+        BranchRecord,
+        NodeState.branches(s),
+        c,
+        BranchRecord{v, NodeState.self(s), 0n, 0n}
+      ): Tables.Table<BranchRecord>
   }
 
 def sb_vb(s, t, r, w, z, b, c, v):
@@ -15595,10 +17167,15 @@ def sb_vb(s, t, r, w, z, b, c, v):
       Spec.Answer.SetBranch{Spec.SetBranch.Created{v}},
       Out{
         [],
-        Tables.Table.set(Br, St.branches(s), c, Br{v, St.self(s), 0n, 0n}),
-        St.marks(s),
-        St.groups(s),
-        St.clashes(s),
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s),
+          c,
+          BranchRecord{v, NodeState.self(s), 0n, 0n}
+        ),
+        NodeState.marks(s),
+        NodeState.groups(s),
+        NodeState.clashes(s),
         [Logged.head(c, v)],
         SetBranch.answer(Spec.SetBranch.Created{v})
       }
@@ -15616,8 +17193,8 @@ def sb_vb(s, t, r, w, z, b, c, v):
 
 # ... the groups after it
 law sb_vg:
-  for s: St
-  for t: St
+  for s: NodeState
+  for t: NodeState
   for r: String
   for w: String
   for z: String
@@ -15625,16 +17202,16 @@ law sb_vg:
   for c: String
   for v: String
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r, w, z},
       Spec.Ask.SetBranch{c, Spec.Point.Head{b}}
     )
-      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): St
+      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): NodeState
       & Spec.Answer
-  } -> {St.groups(t) == St.groups(s): Tables.Table<Grp>}
+  } -> {NodeState.groups(t) == NodeState.groups(s): Tables.Table<GroupRecord>}
 
 def sb_vg(s, t, r, w, z, b, c, v):
   +hn => +h =>
@@ -15654,10 +17231,15 @@ def sb_vg(s, t, r, w, z, b, c, v):
       Spec.Answer.SetBranch{Spec.SetBranch.Created{v}},
       Out{
         [],
-        Tables.Table.set(Br, St.branches(s), c, Br{v, St.self(s), 0n, 0n}),
-        St.marks(s),
-        St.groups(s),
-        St.clashes(s),
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s),
+          c,
+          BranchRecord{v, NodeState.self(s), 0n, 0n}
+        ),
+        NodeState.marks(s),
+        NodeState.groups(s),
+        NodeState.clashes(s),
         [Logged.head(c, v)],
         SetBranch.answer(Spec.SetBranch.Created{v})
       }
@@ -15675,8 +17257,8 @@ def sb_vg(s, t, r, w, z, b, c, v):
 
 # ... the node after it
 law sb_vself:
-  for s: St
-  for t: St
+  for s: NodeState
+  for t: NodeState
   for r: String
   for w: String
   for z: String
@@ -15684,20 +17266,20 @@ law sb_vself:
   for c: String
   for v: String
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r, w, z},
       Spec.Ask.SetBranch{c, Spec.Point.Head{b}}
     )
-      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): St
+      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): NodeState
       & Spec.Answer
-  } -> {St.self(t) == St.self(s): String}
+  } -> {NodeState.self(t) == NodeState.self(s): String}
 
 def sb_vself.g4(
-  +s: St,
-  t: St,
+  +s: NodeState,
+  t: NodeState,
   +r: String,
   w: String,
   z: String,
@@ -15705,17 +17287,17 @@ def sb_vself.g4(
   c: String,
   v: String,
   +x2: Maybe<&2, Seen>,
-  hx2: {x2 == Tables.Table.get(Seen, St.seen(s), r): Maybe<&2, Seen>},
+  hx2: {x2 == Tables.Table.get(Seen, NodeState.seen(s), r): Maybe<&2, Seen>},
   x: {
     Outcome.of(
       x2,
-      Ver.taken(St.versions(s), r),
-      List.length(&2, Logged, St.log(s))
+      VersionRecord.taken(NodeState.versions(s), r),
+      List.length(&2, Logged, NodeState.log(s))
     )
       == Spec.Outcome.NotSeen{}: Spec.Outcome
   },
   x1: {
-    Node.asked(
+    VendNode.asked(
       x2,
       s,
       r,
@@ -15723,15 +17305,22 @@ def sb_vself.g4(
       z,
       Spec.Ask.SetBranch{c, Spec.Point.Head{b}}
     )
-      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): Pair(St, Spec.Answer)
+      == (t, Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}): Pair(NodeState, Spec.Answer)
   }
-) -> {St.self(t) == St.self(s): String}:
+) -> {NodeState.self(t) == NodeState.self(s): String}:
   match x2:
     case None{}:
       view_self(
         s,
         r,
-        SetBranch.point(Br.head.of(Tables.Table.get(Br, St.branches(s), b)), s, r, w, z, c),
+        SetBranch.point(
+          BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s), b)),
+          s,
+          r,
+          w,
+          z,
+          c
+        ),
         t,
         Spec.Answer.SetBranch{Spec.SetBranch.Created{v}}
       )(x1)
@@ -15739,7 +17328,7 @@ def sb_vself.g4(
       match value:
         case Seen{answer, at}:
           Empty.absurd(
-            {St.self(t) == St.self(s): String},
+            {NodeState.self(t) == NodeState.self(s): String},
             {
               (%x: {\{Spec.Outcome.Applied: f0 => Unit; \{Spec.Outcome.NotSeen: Empty; \{}}}: Spec.Outcome -> Type}(
                 _
@@ -15750,13 +17339,26 @@ def sb_vself.g4(
 def sb_vself(s, t, r, w, z, b, c, v):
   +s = s
   +r = r
-  x => x1 => sb_vself.g4(s, t, r, w, z, b, c, v, Tables.Table.get(Seen, St.seen(s), r), {==}, x, x1)
+  x => x1 => sb_vself.g4(
+    s,
+    t,
+    r,
+    w,
+    z,
+    b,
+    c,
+    v,
+    Tables.Table.get(Seen, NodeState.seen(s), r),
+    {==},
+    x,
+    x1
+  )
 
 # a write on the branch b, at its head h, that answers Written: the write as
 # the owner it was
 law ws_core:
-  for s: St
-  for t: St
+  for s: NodeState
+  for t: NodeState
   for r: String
   for w: String
   for z: String
@@ -15770,23 +17372,28 @@ law ws_core:
   for k: Nat
   for v: String
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r, w, z},
       Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}
     )
-      == (t, Spec.Answer.Write{Spec.Write.Written{v}}): St
+      == (t, Spec.Answer.Write{Spec.Write.Written{v}}): NodeState
       & Spec.Answer
   } -> {
-    Tables.Table.get(Br, St.branches(s), b) == Some{Br{h, o, e, k}}: Maybe<&2, Br>
+    Tables.Table.get(
+      BranchRecord,
+      NodeState.branches(s),
+      b
+    )
+      == Some{BranchRecord{h, o, e, k}}: Maybe<&2, BranchRecord>
   } -> {
-    Owner.of(s, Br{h, o, e, k}) == True{}: Bool
+    Owner.of(s, BranchRecord{h, o, e, k}) == True{}: Bool
   }
     & {
       Write.on(
-        Owner.of(s, Br{h, o, e, k}),
+        Owner.of(s, BranchRecord{h, o, e, k}),
         s,
         r,
         w,
@@ -15795,19 +17402,29 @@ law ws_core:
         b,
         base,
         x,
-        Br{h, o, e, k}
+        BranchRecord{h, o, e, k}
       )
         == Out{
           [
             Tables.Row{
               r,
-              Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s), h), n, x), [h], w, z}
+              VersionRecord{
+                Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s), h), n, x),
+                [h],
+                w,
+                z
+              }
             }
           ],
-          Tables.Table.set(Br, St.branches(s), b, Br.moved(Br{h, o, e, k}, r)),
-          St.marks(s),
-          St.groups(s),
-          St.clashes(s),
+          Tables.Table.set(
+            BranchRecord,
+            NodeState.branches(s),
+            b,
+            BranchRecord.moved(BranchRecord{h, o, e, k}, r)
+          ),
+          NodeState.marks(s),
+          NodeState.groups(s),
+          NodeState.clashes(s),
           [Logged.head(b, r)],
           Write.answer(Spec.Write.Written{r})
         }: Out
@@ -15829,9 +17446,9 @@ def ws_core(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
     +e = e
     +k = k
     +v = v
-    +red = wr_reduce(s, r, w, z, n, b, base, x, Br{h, o, e, k})(new_free(s, r)(hn))(hb)
+    +red = wr_reduce(s, r, w, z, n, b, base, x, BranchRecord{h, o, e, k})(new_free(s, r)(hn))(hb)
     wr_on(
-      Owner.of(s, Br{h, o, e, k}),
+      Owner.of(s, BranchRecord{h, o, e, k}),
       s,
       r,
       w,
@@ -15850,7 +17467,18 @@ def ws_core(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
         Maybe<&2, String>,
         Answer.version(
           Out.answer(
-            Write.on(Owner.of(s, Br{h, o, e, k}), s, r, w, z, n, b, base, x, Br{h, o, e, k})
+            Write.on(
+              Owner.of(s, BranchRecord{h, o, e, k}),
+              s,
+              r,
+              w,
+              z,
+              n,
+              b,
+              base,
+              x,
+              BranchRecord{h, o, e, k}
+            )
           )
         ),
         Answer.version(
@@ -15863,12 +17491,34 @@ def ws_core(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
           Out,
           Maybe<&2, String>,
           y => Answer.version(Out.answer(y)),
-          Write.on(Owner.of(s, Br{h, o, e, k}), s, r, w, z, n, b, base, x, Br{h, o, e, k}),
+          Write.on(
+            Owner.of(s, BranchRecord{h, o, e, k}),
+            s,
+            r,
+            w,
+            z,
+            n,
+            b,
+            base,
+            x,
+            BranchRecord{h, o, e, k}
+          ),
           Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}),
           Equal.sym(
             Out,
             Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}),
-            Write.on(Owner.of(s, Br{h, o, e, k}), s, r, w, z, n, b, base, x, Br{h, o, e, k}),
+            Write.on(
+              Owner.of(s, BranchRecord{h, o, e, k}),
+              s,
+              r,
+              w,
+              z,
+              n,
+              b,
+              base,
+              x,
+              BranchRecord{h, o, e, k}
+            ),
             red
           )
         ),
@@ -15894,8 +17544,8 @@ def ws_core(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
 
 # ... its Out
 law ws_out:
-  for s: St
-  for t: St
+  for s: NodeState
+  for t: NodeState
   for r: String
   for w: String
   for z: String
@@ -15909,17 +17559,22 @@ law ws_out:
   for k: Nat
   for v: String
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r, w, z},
       Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}
     )
-      == (t, Spec.Answer.Write{Spec.Write.Written{v}}): St
+      == (t, Spec.Answer.Write{Spec.Write.Written{v}}): NodeState
       & Spec.Answer
   } -> {
-    Tables.Table.get(Br, St.branches(s), b) == Some{Br{h, o, e, k}}: Maybe<&2, Br>
+    Tables.Table.get(
+      BranchRecord,
+      NodeState.branches(s),
+      b
+    )
+      == Some{BranchRecord{h, o, e, k}}: Maybe<&2, BranchRecord>
   } -> {
     Step.of(
       s,
@@ -15932,13 +17587,23 @@ law ws_out:
         [
           Tables.Row{
             r,
-            Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s), h), n, x), [h], w, z}
+            VersionRecord{
+              Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s), h), n, x),
+              [h],
+              w,
+              z
+            }
           }
         ],
-        Tables.Table.set(Br, St.branches(s), b, Br.moved(Br{h, o, e, k}, r)),
-        St.marks(s),
-        St.groups(s),
-        St.clashes(s),
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s),
+          b,
+          BranchRecord.moved(BranchRecord{h, o, e, k}, r)
+        ),
+        NodeState.marks(s),
+        NodeState.groups(s),
+        NodeState.clashes(s),
         [Logged.head(b, r)],
         Write.answer(Spec.Write.Written{r})
       }: Out
@@ -15961,27 +17626,48 @@ def ws_out(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
     Equal.trans(
       Out,
       Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}),
-      Write.on(Owner.of(s, Br{h, o, e, k}), s, r, w, z, n, b, base, x, Br{h, o, e, k}),
+      Write.on(
+        Owner.of(s, BranchRecord{h, o, e, k}),
+        s,
+        r,
+        w,
+        z,
+        n,
+        b,
+        base,
+        x,
+        BranchRecord{h, o, e, k}
+      ),
       Out{
         [
           Tables.Row{
             r,
-            Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s), h), n, x), [h], w, z}
+            VersionRecord{
+              Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s), h), n, x),
+              [h],
+              w,
+              z
+            }
           }
         ],
-        Tables.Table.set(Br, St.branches(s), b, Br.moved(Br{h, o, e, k}, r)),
-        St.marks(s),
-        St.groups(s),
-        St.clashes(s),
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s),
+          b,
+          BranchRecord.moved(BranchRecord{h, o, e, k}, r)
+        ),
+        NodeState.marks(s),
+        NodeState.groups(s),
+        NodeState.clashes(s),
         [Logged.head(b, r)],
         Write.answer(Spec.Write.Written{r})
       },
-      wr_reduce(s, r, w, z, n, b, base, x, Br{h, o, e, k})(new_free(s, r)(hn))(hb),
+      wr_reduce(s, r, w, z, n, b, base, x, BranchRecord{h, o, e, k})(new_free(s, r)(hn))(hb),
       Pair.snd(
-        {Owner.of(s, Br{h, o, e, k}) == True{}: Bool},
+        {Owner.of(s, BranchRecord{h, o, e, k}) == True{}: Bool},
         {
           Write.on(
-            Owner.of(s, Br{h, o, e, k}),
+            Owner.of(s, BranchRecord{h, o, e, k}),
             s,
             r,
             w,
@@ -15990,24 +17676,29 @@ def ws_out(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
             b,
             base,
             x,
-            Br{h, o, e, k}
+            BranchRecord{h, o, e, k}
           )
             == Out{
               [
                 Tables.Row{
                   r,
-                  Ver{
-                    Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s), h), n, x),
+                  VersionRecord{
+                    Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s), h), n, x),
                     [h],
                     w,
                     z
                   }
                 }
               ],
-              Tables.Table.set(Br, St.branches(s), b, Br.moved(Br{h, o, e, k}, r)),
-              St.marks(s),
-              St.groups(s),
-              St.clashes(s),
+              Tables.Table.set(
+                BranchRecord,
+                NodeState.branches(s),
+                b,
+                BranchRecord.moved(BranchRecord{h, o, e, k}, r)
+              ),
+              NodeState.marks(s),
+              NodeState.groups(s),
+              NodeState.clashes(s),
               [Logged.head(b, r)],
               Write.answer(Spec.Write.Written{r})
             }: Out
@@ -16018,8 +17709,8 @@ def ws_out(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
 
 # ... it was the owner's
 law ws_own:
-  for s: St
-  for t: St
+  for s: NodeState
+  for t: NodeState
   for r: String
   for w: String
   for z: String
@@ -16033,25 +17724,30 @@ law ws_own:
   for k: Nat
   for v: String
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r, w, z},
       Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}
     )
-      == (t, Spec.Answer.Write{Spec.Write.Written{v}}): St
+      == (t, Spec.Answer.Write{Spec.Write.Written{v}}): NodeState
       & Spec.Answer
   } -> {
-    Tables.Table.get(Br, St.branches(s), b) == Some{Br{h, o, e, k}}: Maybe<&2, Br>
-  } -> {Owner.of(s, Br{h, o, e, k}) == True{}: Bool}
+    Tables.Table.get(
+      BranchRecord,
+      NodeState.branches(s),
+      b
+    )
+      == Some{BranchRecord{h, o, e, k}}: Maybe<&2, BranchRecord>
+  } -> {Owner.of(s, BranchRecord{h, o, e, k}) == True{}: Bool}
 
 def ws_own(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
   hn => hask => hb => Pair.fst(
-    {Owner.of(s, Br{h, o, e, k}) == True{}: Bool},
+    {Owner.of(s, BranchRecord{h, o, e, k}) == True{}: Bool},
     {
       Write.on(
-        Owner.of(s, Br{h, o, e, k}),
+        Owner.of(s, BranchRecord{h, o, e, k}),
         s,
         r,
         w,
@@ -16060,19 +17756,29 @@ def ws_own(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
         b,
         base,
         x,
-        Br{h, o, e, k}
+        BranchRecord{h, o, e, k}
       )
         == Out{
           [
             Tables.Row{
               r,
-              Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s), h), n, x), [h], w, z}
+              VersionRecord{
+                Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s), h), n, x),
+                [h],
+                w,
+                z
+              }
             }
           ],
-          Tables.Table.set(Br, St.branches(s), b, Br.moved(Br{h, o, e, k}, r)),
-          St.marks(s),
-          St.groups(s),
-          St.clashes(s),
+          Tables.Table.set(
+            BranchRecord,
+            NodeState.branches(s),
+            b,
+            BranchRecord.moved(BranchRecord{h, o, e, k}, r)
+          ),
+          NodeState.marks(s),
+          NodeState.groups(s),
+          NodeState.clashes(s),
           [Logged.head(b, r)],
           Write.answer(Spec.Write.Written{r})
         }: Out
@@ -16082,8 +17788,8 @@ def ws_own(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
 
 # ... the versions after it
 law ws_vv:
-  for s: St
-  for t: St
+  for s: NodeState
+  for t: NodeState
   for r: String
   for w: String
   for z: String
@@ -16097,30 +17803,40 @@ law ws_vv:
   for k: Nat
   for v: String
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r, w, z},
       Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}
     )
-      == (t, Spec.Answer.Write{Spec.Write.Written{v}}): St
+      == (t, Spec.Answer.Write{Spec.Write.Written{v}}): NodeState
       & Spec.Answer
   } -> {
-    Tables.Table.get(Br, St.branches(s), b) == Some{Br{h, o, e, k}}: Maybe<&2, Br>
+    Tables.Table.get(
+      BranchRecord,
+      NodeState.branches(s),
+      b
+    )
+      == Some{BranchRecord{h, o, e, k}}: Maybe<&2, BranchRecord>
   } -> {
-    St.versions(
+    NodeState.versions(
       t
     )
-      == Ver.add(
+      == VersionRecord.add(
         [
           Tables.Row{
             r,
-            Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s), h), n, x), [h], w, z}
+            VersionRecord{
+              Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s), h), n, x),
+              [h],
+              w,
+              z
+            }
           }
         ],
-        St.versions(s)
-      ): Tables.Table<Ver>
+        NodeState.versions(s)
+      ): Tables.Table<VersionRecord>
   }
 
 def ws_vv(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
@@ -16149,13 +17865,23 @@ def ws_vv(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
         [
           Tables.Row{
             r,
-            Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s), h), n, x), [h], w, z}
+            VersionRecord{
+              Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s), h), n, x),
+              [h],
+              w,
+              z
+            }
           }
         ],
-        Tables.Table.set(Br, St.branches(s), b, Br.moved(Br{h, o, e, k}, r)),
-        St.marks(s),
-        St.groups(s),
-        St.clashes(s),
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s),
+          b,
+          BranchRecord.moved(BranchRecord{h, o, e, k}, r)
+        ),
+        NodeState.marks(s),
+        NodeState.groups(s),
+        NodeState.clashes(s),
         [Logged.head(b, r)],
         Write.answer(Spec.Write.Written{r})
       }
@@ -16173,8 +17899,8 @@ def ws_vv(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
 
 # ... the branches after it
 law ws_vb:
-  for s: St
-  for t: St
+  for s: NodeState
+  for t: NodeState
   for r: String
   for w: String
   for z: String
@@ -16188,19 +17914,32 @@ law ws_vb:
   for k: Nat
   for v: String
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r, w, z},
       Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}
     )
-      == (t, Spec.Answer.Write{Spec.Write.Written{v}}): St
+      == (t, Spec.Answer.Write{Spec.Write.Written{v}}): NodeState
       & Spec.Answer
   } -> {
-    Tables.Table.get(Br, St.branches(s), b) == Some{Br{h, o, e, k}}: Maybe<&2, Br>
+    Tables.Table.get(
+      BranchRecord,
+      NodeState.branches(s),
+      b
+    )
+      == Some{BranchRecord{h, o, e, k}}: Maybe<&2, BranchRecord>
   } -> {
-    St.branches(t) == Tables.Table.set(Br, St.branches(s), b, Br{r, o, e, 1n+k}): Tables.Table<Br>
+    NodeState.branches(
+      t
+    )
+      == Tables.Table.set(
+        BranchRecord,
+        NodeState.branches(s),
+        b,
+        BranchRecord{r, o, e, 1n+k}
+      ): Tables.Table<BranchRecord>
   }
 
 def ws_vb(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
@@ -16229,13 +17968,23 @@ def ws_vb(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
         [
           Tables.Row{
             r,
-            Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s), h), n, x), [h], w, z}
+            VersionRecord{
+              Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s), h), n, x),
+              [h],
+              w,
+              z
+            }
           }
         ],
-        Tables.Table.set(Br, St.branches(s), b, Br.moved(Br{h, o, e, k}, r)),
-        St.marks(s),
-        St.groups(s),
-        St.clashes(s),
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s),
+          b,
+          BranchRecord.moved(BranchRecord{h, o, e, k}, r)
+        ),
+        NodeState.marks(s),
+        NodeState.groups(s),
+        NodeState.clashes(s),
         [Logged.head(b, r)],
         Write.answer(Spec.Write.Written{r})
       }
@@ -16253,8 +18002,8 @@ def ws_vb(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
 
 # ... the groups after it
 law ws_vg:
-  for s: St
-  for t: St
+  for s: NodeState
+  for t: NodeState
   for r: String
   for w: String
   for z: String
@@ -16268,18 +18017,23 @@ law ws_vg:
   for k: Nat
   for v: String
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r, w, z},
       Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}
     )
-      == (t, Spec.Answer.Write{Spec.Write.Written{v}}): St
+      == (t, Spec.Answer.Write{Spec.Write.Written{v}}): NodeState
       & Spec.Answer
   } -> {
-    Tables.Table.get(Br, St.branches(s), b) == Some{Br{h, o, e, k}}: Maybe<&2, Br>
-  } -> {St.groups(t) == St.groups(s): Tables.Table<Grp>}
+    Tables.Table.get(
+      BranchRecord,
+      NodeState.branches(s),
+      b
+    )
+      == Some{BranchRecord{h, o, e, k}}: Maybe<&2, BranchRecord>
+  } -> {NodeState.groups(t) == NodeState.groups(s): Tables.Table<GroupRecord>}
 
 def ws_vg(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
   +hn => +hask => hb =>
@@ -16307,13 +18061,23 @@ def ws_vg(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
         [
           Tables.Row{
             r,
-            Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s), h), n, x), [h], w, z}
+            VersionRecord{
+              Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s), h), n, x),
+              [h],
+              w,
+              z
+            }
           }
         ],
-        Tables.Table.set(Br, St.branches(s), b, Br.moved(Br{h, o, e, k}, r)),
-        St.marks(s),
-        St.groups(s),
-        St.clashes(s),
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s),
+          b,
+          BranchRecord.moved(BranchRecord{h, o, e, k}, r)
+        ),
+        NodeState.marks(s),
+        NodeState.groups(s),
+        NodeState.clashes(s),
         [Logged.head(b, r)],
         Write.answer(Spec.Write.Written{r})
       }
@@ -16331,8 +18095,8 @@ def ws_vg(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
 
 # ... the node after it
 law ws_vself:
-  for s: St
-  for t: St
+  for s: NodeState
+  for t: NodeState
   for r: String
   for w: String
   for z: String
@@ -16346,18 +18110,23 @@ law ws_vself:
   for k: Nat
   for v: String
   {
-    Spec.Node.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r, w, z},
       Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}
     )
-      == (t, Spec.Answer.Write{Spec.Write.Written{v}}): St
+      == (t, Spec.Answer.Write{Spec.Write.Written{v}}): NodeState
       & Spec.Answer
   } -> {
-    Tables.Table.get(Br, St.branches(s), b) == Some{Br{h, o, e, k}}: Maybe<&2, Br>
-  } -> {St.self(t) == St.self(s): String}
+    Tables.Table.get(
+      BranchRecord,
+      NodeState.branches(s),
+      b
+    )
+      == Some{BranchRecord{h, o, e, k}}: Maybe<&2, BranchRecord>
+  } -> {NodeState.self(t) == NodeState.self(s): String}
 
 def ws_vself(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
   hn => hask => hb =>
@@ -16393,11 +18162,11 @@ def ws_vself(s, t, r, w, z, n, b, base, x, h, o, e, k, v):
 # merge_disjoint_keeps_both, once the walks of the merge have fuel f for two
 # steps
 law mdk_fin:
-  for s: St
-  for s1: St
-  for s2: St
-  for s3: St
-  for s4: St
+  for s: NodeState
+  for s1: NodeState
+  for s2: NodeState
+  for s3: NodeState
+  for s4: NodeState
   for a4: Spec.Answer
   for r1: String
   for w1: String
@@ -16431,61 +18200,75 @@ law mdk_fin:
   for yt: String
   for f: Nat
   {
-    Spec.Node.get_outcome(s, r1) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r1) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.get_outcome(s1, r2) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s1, r2) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.get_outcome(s2, r3) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s2, r3) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.get_outcome(s3, r4) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s3, r4) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
     String.eq(n1, n2) == False{}: Bool
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r1, w1, z1},
       Spec.Ask.SetBranch{c, Spec.Point.Head{b}}
     )
-      == (s1, Spec.Answer.SetBranch{Spec.SetBranch.Created{v0}}): St
+      == (s1, Spec.Answer.SetBranch{Spec.SetBranch.Created{v0}}): NodeState
       & Spec.Answer
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s1,
       Spec.Envelope{r2, w2, z2},
       Spec.Ask.Write{Resources.Name{n1}, b, base1, Spec.Content.Bytes{x1}}
     )
-      == (s2, Spec.Answer.Write{Spec.Write.Written{v1}}): St
+      == (s2, Spec.Answer.Write{Spec.Write.Written{v1}}): NodeState
       & Spec.Answer
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s2,
       Spec.Envelope{r3, w3, z3},
       Spec.Ask.Write{Resources.Name{n2}, c, base2, Spec.Content.Bytes{x2}}
     )
-      == (s3, Spec.Answer.Write{Spec.Write.Written{v2}}): St
+      == (s3, Spec.Answer.Write{Spec.Write.Written{v2}}): NodeState
       & Spec.Answer
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s3,
       Spec.Envelope{r4, w4, z4},
       Spec.Ask.Merge{Spec.Point.Head{c}, b}
     )
-      == (s4, a4): St
+      == (s4, a4): NodeState
       & Spec.Answer
   } -> {
-    Tables.Table.get(Br, St.branches(s), b) == Some{Br{v0, o, e, k}}: Maybe<&2, Br>
+    Tables.Table.get(
+      BranchRecord,
+      NodeState.branches(s),
+      b
+    )
+      == Some{BranchRecord{v0, o, e, k}}: Maybe<&2, BranchRecord>
   } -> {
-    Tables.Table.get(Ver, St.versions(s), v0) == Some{Ver{yb, yp, yw, yt}}: Maybe<&2, Ver>
+    Tables.Table.get(
+      VersionRecord,
+      NodeState.versions(s),
+      v0
+    )
+      == Some{VersionRecord{yb, yp, yw, yt}}: Maybe<&2, VersionRecord>
   } -> {
-    History.links(Tables.Table.keys(Ver, St.versions(s3)), St.versions(s3)) == 1n+1n+f: Nat
+    History.links(
+      Tables.Table.keys(VersionRecord, NodeState.versions(s3)),
+      NodeState.versions(s3)
+    )
+      == 1n+1n+f: Nat
   } -> {
     a4 == Spec.Answer.Merge{Spec.Merge.Merged{r4}}: Spec.Answer
   }
     & (
       {
-        St.content(s4, n1, Spec.Point.Head{b}) == Some{x1}: Maybe<&2, List<&2, U32>>
+        NodeState.content(s4, n1, Spec.Point.Head{b}) == Some{x1}: Maybe<&2, List<&2, U32>>
       }
-        & {St.content(s4, n2, Spec.Point.Head{b}) == Some{x2}: Maybe<&2, List<&2, U32>>}
+        & {NodeState.content(s4, n2, Spec.Point.Head{b}) == Some{x2}: Maybe<&2, List<&2, U32>>}
     )
 
 def mdk_fin(
@@ -16571,53 +18354,79 @@ def mdk_fin(
     +s1s = sb_vself(s, s1, r1, w1, z1, b, c, v0)(hn1)(h1)
     +hcn = sb_none(s, s1, r1, w1, z1, b, c, v0)(hn1)(h1)
     +ecb = Tables.Table.differ(
-      Br,
-      St.branches(s),
+      BranchRecord,
+      NodeState.branches(s),
       c,
       b
     )(
       Equal.cong(
-        Maybe<&2, Br>,
+        Maybe<&2, BranchRecord>,
         Bool,
-        z => Maybe.is_some(&2, Br, z),
-        Tables.Table.get(Br, St.branches(s), c),
+        z => Maybe.is_some(&2, BranchRecord, z),
+        Tables.Table.get(BranchRecord, NodeState.branches(s), c),
         None{},
         hcn
       )
     )(
       Equal.cong(
-        Maybe<&2, Br>,
+        Maybe<&2, BranchRecord>,
         Bool,
-        z => Maybe.is_some(&2, Br, z),
-        Tables.Table.get(Br, St.branches(s), b),
-        Some{Br{v0, o, e, k}},
+        z => Maybe.is_some(&2, BranchRecord, z),
+        Tables.Table.get(BranchRecord, NodeState.branches(s), b),
+        Some{BranchRecord{v0, o, e, k}},
         hbs
       )
     )
     +ebc = Strings.String.eq_flip(c, b)(ecb)
     +b1b = Equal.trans(
-      Maybe<&2, Br>,
-      Tables.Table.get(Br, St.branches(s1), b),
-      Tables.Table.get(Br, Tables.Table.set(Br, St.branches(s), c, Br{v0, St.self(s), 0n, 0n}), b),
-      Some{Br{v0, o, e, k}},
+      Maybe<&2, BranchRecord>,
+      Tables.Table.get(BranchRecord, NodeState.branches(s1), b),
+      Tables.Table.get(
+        BranchRecord,
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s),
+          c,
+          BranchRecord{v0, NodeState.self(s), 0n, 0n}
+        ),
+        b
+      ),
+      Some{BranchRecord{v0, o, e, k}},
       Equal.cong(
-        Tables.Table<Br>,
-        Maybe<&2, Br>,
-        y => Tables.Table.get(Br, y, b),
-        St.branches(s1),
-        Tables.Table.set(Br, St.branches(s), c, Br{v0, St.self(s), 0n, 0n}),
+        Tables.Table<BranchRecord>,
+        Maybe<&2, BranchRecord>,
+        y => Tables.Table.get(BranchRecord, y, b),
+        NodeState.branches(s1),
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s),
+          c,
+          BranchRecord{v0, NodeState.self(s), 0n, 0n}
+        ),
         s1b
       ),
       Equal.trans(
-        Maybe<&2, Br>,
+        Maybe<&2, BranchRecord>,
         Tables.Table.get(
-          Br,
-          Tables.Table.set(Br, St.branches(s), c, Br{v0, St.self(s), 0n, 0n}),
+          BranchRecord,
+          Tables.Table.set(
+            BranchRecord,
+            NodeState.branches(s),
+            c,
+            BranchRecord{v0, NodeState.self(s), 0n, 0n}
+          ),
           b
         ),
-        Tables.Table.get(Br, St.branches(s), b),
-        Some{Br{v0, o, e, k}},
-        Tables.Table.set_keeps_other(Br, St.branches(s), c, Br{v0, St.self(s), 0n, 0n}, b, ecb),
+        Tables.Table.get(BranchRecord, NodeState.branches(s), b),
+        Some{BranchRecord{v0, o, e, k}},
+        Tables.Table.set_keeps_other(
+          BranchRecord,
+          NodeState.branches(s),
+          c,
+          BranchRecord{v0, NodeState.self(s), 0n, 0n},
+          b,
+          ecb
+        ),
         hbs
       )
     )
@@ -16627,157 +18436,311 @@ def mdk_fin(
     +s2s = ws_vself(s1, s2, r2, w2, z2, n1, b, base1, x1, v0, o, e, k, v1)(hn2)(h2)(b1b)
     +own = ws_own(s1, s2, r2, w2, z2, n1, b, base1, x1, v0, o, e, k, v1)(hn2)(h2)(b1b)
     +b2c = Equal.trans(
-      Maybe<&2, Br>,
-      Tables.Table.get(Br, St.branches(s2), c),
-      Tables.Table.get(Br, Tables.Table.set(Br, St.branches(s1), b, Br{r2, o, e, 1n+k}), c),
-      Some{Br{v0, St.self(s), 0n, 0n}},
+      Maybe<&2, BranchRecord>,
+      Tables.Table.get(BranchRecord, NodeState.branches(s2), c),
+      Tables.Table.get(
+        BranchRecord,
+        Tables.Table.set(BranchRecord, NodeState.branches(s1), b, BranchRecord{r2, o, e, 1n+k}),
+        c
+      ),
+      Some{BranchRecord{v0, NodeState.self(s), 0n, 0n}},
       Equal.cong(
-        Tables.Table<Br>,
-        Maybe<&2, Br>,
-        y => Tables.Table.get(Br, y, c),
-        St.branches(s2),
-        Tables.Table.set(Br, St.branches(s1), b, Br{r2, o, e, 1n+k}),
+        Tables.Table<BranchRecord>,
+        Maybe<&2, BranchRecord>,
+        y => Tables.Table.get(BranchRecord, y, c),
+        NodeState.branches(s2),
+        Tables.Table.set(BranchRecord, NodeState.branches(s1), b, BranchRecord{r2, o, e, 1n+k}),
         s2b
       ),
       Equal.trans(
-        Maybe<&2, Br>,
-        Tables.Table.get(Br, Tables.Table.set(Br, St.branches(s1), b, Br{r2, o, e, 1n+k}), c),
-        Tables.Table.get(Br, St.branches(s1), c),
-        Some{Br{v0, St.self(s), 0n, 0n}},
-        Tables.Table.set_keeps_other(Br, St.branches(s1), b, Br{r2, o, e, 1n+k}, c, ebc),
+        Maybe<&2, BranchRecord>,
+        Tables.Table.get(
+          BranchRecord,
+          Tables.Table.set(BranchRecord, NodeState.branches(s1), b, BranchRecord{r2, o, e, 1n+k}),
+          c
+        ),
+        Tables.Table.get(BranchRecord, NodeState.branches(s1), c),
+        Some{BranchRecord{v0, NodeState.self(s), 0n, 0n}},
+        Tables.Table.set_keeps_other(
+          BranchRecord,
+          NodeState.branches(s1),
+          b,
+          BranchRecord{r2, o, e, 1n+k},
+          c,
+          ebc
+        ),
         Equal.trans(
-          Maybe<&2, Br>,
-          Tables.Table.get(Br, St.branches(s1), c),
+          Maybe<&2, BranchRecord>,
+          Tables.Table.get(BranchRecord, NodeState.branches(s1), c),
           Tables.Table.get(
-            Br,
-            Tables.Table.set(Br, St.branches(s), c, Br{v0, St.self(s), 0n, 0n}),
+            BranchRecord,
+            Tables.Table.set(
+              BranchRecord,
+              NodeState.branches(s),
+              c,
+              BranchRecord{v0, NodeState.self(s), 0n, 0n}
+            ),
             c
           ),
-          Some{Br{v0, St.self(s), 0n, 0n}},
+          Some{BranchRecord{v0, NodeState.self(s), 0n, 0n}},
           Equal.cong(
-            Tables.Table<Br>,
-            Maybe<&2, Br>,
-            y => Tables.Table.get(Br, y, c),
-            St.branches(s1),
-            Tables.Table.set(Br, St.branches(s), c, Br{v0, St.self(s), 0n, 0n}),
+            Tables.Table<BranchRecord>,
+            Maybe<&2, BranchRecord>,
+            y => Tables.Table.get(BranchRecord, y, c),
+            NodeState.branches(s1),
+            Tables.Table.set(
+              BranchRecord,
+              NodeState.branches(s),
+              c,
+              BranchRecord{v0, NodeState.self(s), 0n, 0n}
+            ),
             s1b
           ),
-          Tables.Table.get_after_set(Br, St.branches(s), c, Br{v0, St.self(s), 0n, 0n})
+          Tables.Table.get_after_set(
+            BranchRecord,
+            NodeState.branches(s),
+            c,
+            BranchRecord{v0, NodeState.self(s), 0n, 0n}
+          )
         )
       )
     )
-    +s3v = ws_vv(s2, s3, r3, w3, z3, n2, c, base2, x2, v0, St.self(s), 0n, 0n, v2)(hn3)(h3)(b2c)
-    +s3b = ws_vb(s2, s3, r3, w3, z3, n2, c, base2, x2, v0, St.self(s), 0n, 0n, v2)(hn3)(h3)(b2c)
-    +s3g = ws_vg(s2, s3, r3, w3, z3, n2, c, base2, x2, v0, St.self(s), 0n, 0n, v2)(hn3)(h3)(b2c)
-    +s3s = ws_vself(s2, s3, r3, w3, z3, n2, c, base2, x2, v0, St.self(s), 0n, 0n, v2)(hn3)(h3)(b2c)
+    +s3v = ws_vv(
+      s2,
+      s3,
+      r3,
+      w3,
+      z3,
+      n2,
+      c,
+      base2,
+      x2,
+      v0,
+      NodeState.self(s),
+      0n,
+      0n,
+      v2
+    )(hn3)(h3)(b2c)
+    +s3b = ws_vb(
+      s2,
+      s3,
+      r3,
+      w3,
+      z3,
+      n2,
+      c,
+      base2,
+      x2,
+      v0,
+      NodeState.self(s),
+      0n,
+      0n,
+      v2
+    )(hn3)(h3)(b2c)
+    +s3g = ws_vg(
+      s2,
+      s3,
+      r3,
+      w3,
+      z3,
+      n2,
+      c,
+      base2,
+      x2,
+      v0,
+      NodeState.self(s),
+      0n,
+      0n,
+      v2
+    )(hn3)(h3)(b2c)
+    +s3s = ws_vself(
+      s2,
+      s3,
+      r3,
+      w3,
+      z3,
+      n2,
+      c,
+      base2,
+      x2,
+      v0,
+      NodeState.self(s),
+      0n,
+      0n,
+      v2
+    )(hn3)(h3)(b2c)
     +ha = Equal.trans(
       Maybe<&2, String>,
-      Br.head.of(Tables.Table.get(Br, St.branches(s3), c)),
-      Br.head.of(
+      BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s3), c)),
+      BranchRecord.head.of(
         Tables.Table.get(
-          Br,
-          Tables.Table.set(Br, St.branches(s2), c, Br{r3, St.self(s), 0n, 1n+0n}),
+          BranchRecord,
+          Tables.Table.set(
+            BranchRecord,
+            NodeState.branches(s2),
+            c,
+            BranchRecord{r3, NodeState.self(s), 0n, 1n+0n}
+          ),
           c
         )
       ),
       Some{r3},
       Equal.cong(
-        Tables.Table<Br>,
+        Tables.Table<BranchRecord>,
         Maybe<&2, String>,
-        y => Br.head.of(Tables.Table.get(Br, y, c)),
-        St.branches(s3),
-        Tables.Table.set(Br, St.branches(s2), c, Br{r3, St.self(s), 0n, 1n+0n}),
+        y => BranchRecord.head.of(Tables.Table.get(BranchRecord, y, c)),
+        NodeState.branches(s3),
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s2),
+          c,
+          BranchRecord{r3, NodeState.self(s), 0n, 1n+0n}
+        ),
         s3b
       ),
       Equal.cong(
-        Maybe<&2, Br>,
+        Maybe<&2, BranchRecord>,
         Maybe<&2, String>,
-        y => Br.head.of(y),
+        y => BranchRecord.head.of(y),
         Tables.Table.get(
-          Br,
-          Tables.Table.set(Br, St.branches(s2), c, Br{r3, St.self(s), 0n, 1n+0n}),
+          BranchRecord,
+          Tables.Table.set(
+            BranchRecord,
+            NodeState.branches(s2),
+            c,
+            BranchRecord{r3, NodeState.self(s), 0n, 1n+0n}
+          ),
           c
         ),
-        Some{Br{r3, St.self(s), 0n, 1n+0n}},
-        Tables.Table.get_after_set(Br, St.branches(s2), c, Br{r3, St.self(s), 0n, 1n+0n})
-      )
-    )
-    +hb3 = Equal.trans(
-      Maybe<&2, Br>,
-      Tables.Table.get(Br, St.branches(s3), b),
-      Tables.Table.get(
-        Br,
-        Tables.Table.set(Br, St.branches(s2), c, Br{r3, St.self(s), 0n, 1n+0n}),
-        b
-      ),
-      Some{Br{r2, o, e, 1n+k}},
-      Equal.cong(
-        Tables.Table<Br>,
-        Maybe<&2, Br>,
-        y => Tables.Table.get(Br, y, b),
-        St.branches(s3),
-        Tables.Table.set(Br, St.branches(s2), c, Br{r3, St.self(s), 0n, 1n+0n}),
-        s3b
-      ),
-      Equal.trans(
-        Maybe<&2, Br>,
-        Tables.Table.get(
-          Br,
-          Tables.Table.set(Br, St.branches(s2), c, Br{r3, St.self(s), 0n, 1n+0n}),
-          b
-        ),
-        Tables.Table.get(Br, St.branches(s2), b),
-        Some{Br{r2, o, e, 1n+k}},
-        Tables.Table.set_keeps_other(Br, St.branches(s2), c, Br{r3, St.self(s), 0n, 1n+0n}, b, ecb),
-        Equal.trans(
-          Maybe<&2, Br>,
-          Tables.Table.get(Br, St.branches(s2), b),
-          Tables.Table.get(Br, Tables.Table.set(Br, St.branches(s1), b, Br{r2, o, e, 1n+k}), b),
-          Some{Br{r2, o, e, 1n+k}},
-          Equal.cong(
-            Tables.Table<Br>,
-            Maybe<&2, Br>,
-            y => Tables.Table.get(Br, y, b),
-            St.branches(s2),
-            Tables.Table.set(Br, St.branches(s1), b, Br{r2, o, e, 1n+k}),
-            s2b
-          ),
-          Tables.Table.get_after_set(Br, St.branches(s1), b, Br{r2, o, e, 1n+k})
+        Some{BranchRecord{r3, NodeState.self(s), 0n, 1n+0n}},
+        Tables.Table.get_after_set(
+          BranchRecord,
+          NodeState.branches(s2),
+          c,
+          BranchRecord{r3, NodeState.self(s), 0n, 1n+0n}
         )
       )
     )
-    +s31 = Equal.trans(String, St.self(s3), St.self(s2), St.self(s1), s3s, s2s)
-    +g31 = Equal.trans(Tables.Table<Grp>, St.groups(s3), St.groups(s2), St.groups(s1), s3g, s2g)
+    +hb3 = Equal.trans(
+      Maybe<&2, BranchRecord>,
+      Tables.Table.get(BranchRecord, NodeState.branches(s3), b),
+      Tables.Table.get(
+        BranchRecord,
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s2),
+          c,
+          BranchRecord{r3, NodeState.self(s), 0n, 1n+0n}
+        ),
+        b
+      ),
+      Some{BranchRecord{r2, o, e, 1n+k}},
+      Equal.cong(
+        Tables.Table<BranchRecord>,
+        Maybe<&2, BranchRecord>,
+        y => Tables.Table.get(BranchRecord, y, b),
+        NodeState.branches(s3),
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s2),
+          c,
+          BranchRecord{r3, NodeState.self(s), 0n, 1n+0n}
+        ),
+        s3b
+      ),
+      Equal.trans(
+        Maybe<&2, BranchRecord>,
+        Tables.Table.get(
+          BranchRecord,
+          Tables.Table.set(
+            BranchRecord,
+            NodeState.branches(s2),
+            c,
+            BranchRecord{r3, NodeState.self(s), 0n, 1n+0n}
+          ),
+          b
+        ),
+        Tables.Table.get(BranchRecord, NodeState.branches(s2), b),
+        Some{BranchRecord{r2, o, e, 1n+k}},
+        Tables.Table.set_keeps_other(
+          BranchRecord,
+          NodeState.branches(s2),
+          c,
+          BranchRecord{r3, NodeState.self(s), 0n, 1n+0n},
+          b,
+          ecb
+        ),
+        Equal.trans(
+          Maybe<&2, BranchRecord>,
+          Tables.Table.get(BranchRecord, NodeState.branches(s2), b),
+          Tables.Table.get(
+            BranchRecord,
+            Tables.Table.set(BranchRecord, NodeState.branches(s1), b, BranchRecord{r2, o, e, 1n+k}),
+            b
+          ),
+          Some{BranchRecord{r2, o, e, 1n+k}},
+          Equal.cong(
+            Tables.Table<BranchRecord>,
+            Maybe<&2, BranchRecord>,
+            y => Tables.Table.get(BranchRecord, y, b),
+            NodeState.branches(s2),
+            Tables.Table.set(BranchRecord, NodeState.branches(s1), b, BranchRecord{r2, o, e, 1n+k}),
+            s2b
+          ),
+          Tables.Table.get_after_set(
+            BranchRecord,
+            NodeState.branches(s1),
+            b,
+            BranchRecord{r2, o, e, 1n+k}
+          )
+        )
+      )
+    )
+    +s31 = Equal.trans(String, NodeState.self(s3), NodeState.self(s2), NodeState.self(s1), s3s, s2s)
+    +g31 = Equal.trans(
+      Tables.Table<GroupRecord>,
+      NodeState.groups(s3),
+      NodeState.groups(s2),
+      NodeState.groups(s1),
+      s3g,
+      s2g
+    )
     +hown = Equal.trans(
       Bool,
-      Owner.of(s3, Br{r2, o, e, 1n+k}),
+      Owner.of(s3, BranchRecord{r2, o, e, 1n+k}),
       Bool.or(
-        String.eq(o, St.self(s1)),
-        Grp.inside(St.groups(s3), Spec.Member.Node{St.self(s1)}, o)
+        String.eq(o, NodeState.self(s1)),
+        GroupRecord.inside(NodeState.groups(s3), Spec.Member.VendNode{NodeState.self(s1)}, o)
       ),
       True{},
       Equal.cong(
         String,
         Bool,
-        y => Bool.or(String.eq(o, y), Grp.inside(St.groups(s3), Spec.Member.Node{y}, o)),
-        St.self(s3),
-        St.self(s1),
+        y => Bool.or(
+          String.eq(o, y),
+          GroupRecord.inside(NodeState.groups(s3), Spec.Member.VendNode{y}, o)
+        ),
+        NodeState.self(s3),
+        NodeState.self(s1),
         s31
       ),
       Equal.trans(
         Bool,
         Bool.or(
-          String.eq(o, St.self(s1)),
-          Grp.inside(St.groups(s3), Spec.Member.Node{St.self(s1)}, o)
+          String.eq(o, NodeState.self(s1)),
+          GroupRecord.inside(NodeState.groups(s3), Spec.Member.VendNode{NodeState.self(s1)}, o)
         ),
-        Owner.of(s1, Br{v0, o, e, k}),
+        Owner.of(s1, BranchRecord{v0, o, e, k}),
         True{},
         Equal.cong(
-          Tables.Table<Grp>,
+          Tables.Table<GroupRecord>,
           Bool,
-          y => Bool.or(String.eq(o, St.self(s1)), Grp.inside(y, Spec.Member.Node{St.self(s1)}, o)),
-          St.groups(s3),
-          St.groups(s1),
+          y => Bool.or(
+            String.eq(o, NodeState.self(s1)),
+            GroupRecord.inside(y, Spec.Member.VendNode{NodeState.self(s1)}, o)
+          ),
+          NodeState.groups(s3),
+          NodeState.groups(s1),
           g31
         ),
         own
@@ -16787,87 +18750,87 @@ def mdk_fin(
     +ht2 = new_free(s1, r2)(hn2)
     +ht3 = new_free(s2, r3)(hn3)
     +g1v0 = Equal.trans(
-      Maybe<&2, Ver>,
-      Tables.Table.get(Ver, St.versions(s1), v0),
-      Tables.Table.get(Ver, St.versions(s), v0),
-      Some{Ver{yb, yp, yw, yt}},
+      Maybe<&2, VersionRecord>,
+      Tables.Table.get(VersionRecord, NodeState.versions(s1), v0),
+      Tables.Table.get(VersionRecord, NodeState.versions(s), v0),
+      Some{VersionRecord{yb, yp, yw, yt}},
       Equal.cong(
-        Tables.Table<Ver>,
-        Maybe<&2, Ver>,
-        y => Tables.Table.get(Ver, y, v0),
-        St.versions(s1),
-        St.versions(s),
+        Tables.Table<VersionRecord>,
+        Maybe<&2, VersionRecord>,
+        y => Tables.Table.get(VersionRecord, y, v0),
+        NodeState.versions(s1),
+        NodeState.versions(s),
         s1v
       ),
       hvs
     )
     +hv1 = Equal.cong(
-      Maybe<&2, Ver>,
+      Maybe<&2, VersionRecord>,
       Bool,
-      y => Maybe.is_some(&2, Ver, y),
-      Tables.Table.get(Ver, St.versions(s1), v0),
-      Some{Ver{yb, yp, yw, yt}},
+      y => Maybe.is_some(&2, VersionRecord, y),
+      Tables.Table.get(VersionRecord, NodeState.versions(s1), v0),
+      Some{VersionRecord{yb, yp, yw, yt}},
       g1v0
     )
     +er2v0 = Tables.Table.differ(
-      Ver,
-      St.versions(s1),
+      VersionRecord,
+      NodeState.versions(s1),
       r2,
       v0
-    )(taken_free(St.versions(s1), r2)(ht2))(hv1)
+    )(taken_free(NodeState.versions(s1), r2)(ht2))(hv1)
     +g2v0 = Equal.trans(
-      Maybe<&2, Ver>,
-      Tables.Table.get(Ver, St.versions(s2), v0),
-      Tables.Table.get(Ver, St.versions(s1), v0),
-      Some{Ver{yb, yp, yw, yt}},
+      Maybe<&2, VersionRecord>,
+      Tables.Table.get(VersionRecord, NodeState.versions(s2), v0),
+      Tables.Table.get(VersionRecord, NodeState.versions(s1), v0),
+      Some{VersionRecord{yb, yp, yw, yt}},
       Equal.trans(
-        Maybe<&2, Ver>,
-        Tables.Table.get(Ver, St.versions(s2), v0),
+        Maybe<&2, VersionRecord>,
+        Tables.Table.get(VersionRecord, NodeState.versions(s2), v0),
         Tables.Table.get(
-          Ver,
-          Ver.add(
+          VersionRecord,
+          VersionRecord.add(
             [
               Tables.Row{
                 r2,
-                Ver{
-                  Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s1), v0), n1, x1),
+                VersionRecord{
+                  Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s1), v0), n1, x1),
                   [v0],
                   w2,
                   z2
                 }
               }
             ],
-            St.versions(s1)
+            NodeState.versions(s1)
           ),
           v0
         ),
-        Tables.Table.get(Ver, St.versions(s1), v0),
+        Tables.Table.get(VersionRecord, NodeState.versions(s1), v0),
         Equal.cong(
-          Tables.Table<Ver>,
-          Maybe<&2, Ver>,
-          y => Tables.Table.get(Ver, y, v0),
-          St.versions(s2),
-          Ver.add(
+          Tables.Table<VersionRecord>,
+          Maybe<&2, VersionRecord>,
+          y => Tables.Table.get(VersionRecord, y, v0),
+          NodeState.versions(s2),
+          VersionRecord.add(
             [
               Tables.Row{
                 r2,
-                Ver{
-                  Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s1), v0), n1, x1),
+                VersionRecord{
+                  Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s1), v0), n1, x1),
                   [v0],
                   w2,
                   z2
                 }
               }
             ],
-            St.versions(s1)
+            NodeState.versions(s1)
           ),
           s2v
         ),
         add1_other(
-          St.versions(s1),
+          NodeState.versions(s1),
           r2,
-          Ver{
-            Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s1), v0), n1, x1),
+          VersionRecord{
+            Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s1), v0), n1, x1),
             [v0],
             w2,
             z2
@@ -16878,89 +18841,94 @@ def mdk_fin(
       g1v0
     )
     +hv2 = Equal.cong(
-      Maybe<&2, Ver>,
+      Maybe<&2, VersionRecord>,
       Bool,
-      y => Maybe.is_some(&2, Ver, y),
-      Tables.Table.get(Ver, St.versions(s2), v0),
-      Some{Ver{yb, yp, yw, yt}},
+      y => Maybe.is_some(&2, VersionRecord, y),
+      Tables.Table.get(VersionRecord, NodeState.versions(s2), v0),
+      Some{VersionRecord{yb, yp, yw, yt}},
       g2v0
     )
     +er3v0 = Tables.Table.differ(
-      Ver,
-      St.versions(s2),
+      VersionRecord,
+      NodeState.versions(s2),
       r3,
       v0
-    )(taken_free(St.versions(s2), r3)(ht3))(hv2)
+    )(taken_free(NodeState.versions(s2), r3)(ht3))(hv2)
     +g2r2 = Equal.trans(
-      Maybe<&2, Ver>,
-      Tables.Table.get(Ver, St.versions(s2), r2),
+      Maybe<&2, VersionRecord>,
+      Tables.Table.get(VersionRecord, NodeState.versions(s2), r2),
       Tables.Table.get(
-        Ver,
-        Ver.add(
+        VersionRecord,
+        VersionRecord.add(
           [
             Tables.Row{
               r2,
-              Ver{
-                Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s1), v0), n1, x1),
+              VersionRecord{
+                Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s1), v0), n1, x1),
                 [v0],
                 w2,
                 z2
               }
             }
           ],
-          St.versions(s1)
+          NodeState.versions(s1)
         ),
         r2
       ),
       Some{
-        Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s1), v0), n1, x1), [v0], w2, z2}
+        VersionRecord{
+          Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s1), v0), n1, x1),
+          [v0],
+          w2,
+          z2
+        }
       },
       Equal.cong(
-        Tables.Table<Ver>,
-        Maybe<&2, Ver>,
-        y => Tables.Table.get(Ver, y, r2),
-        St.versions(s2),
-        Ver.add(
+        Tables.Table<VersionRecord>,
+        Maybe<&2, VersionRecord>,
+        y => Tables.Table.get(VersionRecord, y, r2),
+        NodeState.versions(s2),
+        VersionRecord.add(
           [
             Tables.Row{
               r2,
-              Ver{
-                Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s1), v0), n1, x1),
+              VersionRecord{
+                Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s1), v0), n1, x1),
                 [v0],
                 w2,
                 z2
               }
             }
           ],
-          St.versions(s1)
+          NodeState.versions(s1)
         ),
         s2v
       ),
       add_new_find(
         r2,
-        Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s1), v0), n1, x1),
+        Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s1), v0), n1, x1),
         [v0],
         w2,
         z2,
-        St.versions(s1)
-      )(taken_free(St.versions(s1), r2)(ht2))
+        NodeState.versions(s1)
+      )(taken_free(NodeState.versions(s1), r2)(ht2))
     )
     +er3r2 = Tables.Table.differ(
-      Ver,
-      St.versions(s2),
+      VersionRecord,
+      NodeState.versions(s2),
       r3,
       r2
     )(
-      taken_free(St.versions(s2), r3)(ht3)
+      taken_free(NodeState.versions(s2), r3)(ht3)
     )(
       Equal.cong(
-        Maybe<&2, Ver>,
+        Maybe<&2, VersionRecord>,
         Bool,
-        y => Maybe.is_some(&2, Ver, y),
-        Tables.Table.get(Ver, St.versions(s2), r2),
+        y => Maybe.is_some(&2, VersionRecord, y),
+        Tables.Table.get(VersionRecord, NodeState.versions(s2), r2),
         Some{
-          Ver{
-            Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s1), v0), n1, x1),
+          VersionRecord{
+            Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s1), v0), n1, x1),
             [v0],
             w2,
             z2
@@ -16971,114 +18939,124 @@ def mdk_fin(
     )
     +er2r3 = Strings.String.eq_flip(r3, r2)(er3r2)
     +g3r3 = Equal.trans(
-      Maybe<&2, Ver>,
-      Tables.Table.get(Ver, St.versions(s3), r3),
+      Maybe<&2, VersionRecord>,
+      Tables.Table.get(VersionRecord, NodeState.versions(s3), r3),
       Tables.Table.get(
-        Ver,
-        Ver.add(
+        VersionRecord,
+        VersionRecord.add(
           [
             Tables.Row{
               r3,
-              Ver{
-                Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+              VersionRecord{
+                Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
                 [v0],
                 w3,
                 z3
               }
             }
           ],
-          St.versions(s2)
+          NodeState.versions(s2)
         ),
         r3
       ),
       Some{
-        Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2), [v0], w3, z3}
+        VersionRecord{
+          Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
+          [v0],
+          w3,
+          z3
+        }
       },
       Equal.cong(
-        Tables.Table<Ver>,
-        Maybe<&2, Ver>,
-        y => Tables.Table.get(Ver, y, r3),
-        St.versions(s3),
-        Ver.add(
+        Tables.Table<VersionRecord>,
+        Maybe<&2, VersionRecord>,
+        y => Tables.Table.get(VersionRecord, y, r3),
+        NodeState.versions(s3),
+        VersionRecord.add(
           [
             Tables.Row{
               r3,
-              Ver{
-                Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+              VersionRecord{
+                Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
                 [v0],
                 w3,
                 z3
               }
             }
           ],
-          St.versions(s2)
+          NodeState.versions(s2)
         ),
         s3v
       ),
       add_new_find(
         r3,
-        Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+        Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
         [v0],
         w3,
         z3,
-        St.versions(s2)
-      )(taken_free(St.versions(s2), r3)(ht3))
+        NodeState.versions(s2)
+      )(taken_free(NodeState.versions(s2), r3)(ht3))
     )
     +g3r2 = Equal.trans(
-      Maybe<&2, Ver>,
-      Tables.Table.get(Ver, St.versions(s3), r2),
-      Tables.Table.get(Ver, St.versions(s2), r2),
+      Maybe<&2, VersionRecord>,
+      Tables.Table.get(VersionRecord, NodeState.versions(s3), r2),
+      Tables.Table.get(VersionRecord, NodeState.versions(s2), r2),
       Some{
-        Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s1), v0), n1, x1), [v0], w2, z2}
+        VersionRecord{
+          Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s1), v0), n1, x1),
+          [v0],
+          w2,
+          z2
+        }
       },
       Equal.trans(
-        Maybe<&2, Ver>,
-        Tables.Table.get(Ver, St.versions(s3), r2),
+        Maybe<&2, VersionRecord>,
+        Tables.Table.get(VersionRecord, NodeState.versions(s3), r2),
         Tables.Table.get(
-          Ver,
-          Ver.add(
+          VersionRecord,
+          VersionRecord.add(
             [
               Tables.Row{
                 r3,
-                Ver{
-                  Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+                VersionRecord{
+                  Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
                   [v0],
                   w3,
                   z3
                 }
               }
             ],
-            St.versions(s2)
+            NodeState.versions(s2)
           ),
           r2
         ),
-        Tables.Table.get(Ver, St.versions(s2), r2),
+        Tables.Table.get(VersionRecord, NodeState.versions(s2), r2),
         Equal.cong(
-          Tables.Table<Ver>,
-          Maybe<&2, Ver>,
-          y => Tables.Table.get(Ver, y, r2),
-          St.versions(s3),
-          Ver.add(
+          Tables.Table<VersionRecord>,
+          Maybe<&2, VersionRecord>,
+          y => Tables.Table.get(VersionRecord, y, r2),
+          NodeState.versions(s3),
+          VersionRecord.add(
             [
               Tables.Row{
                 r3,
-                Ver{
-                  Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+                VersionRecord{
+                  Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
                   [v0],
                   w3,
                   z3
                 }
               }
             ],
-            St.versions(s2)
+            NodeState.versions(s2)
           ),
           s3v
         ),
         add1_other(
-          St.versions(s2),
+          NodeState.versions(s2),
           r3,
-          Ver{
-            Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+          VersionRecord{
+            Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
             [v0],
             w3,
             z3
@@ -17089,58 +19067,58 @@ def mdk_fin(
       g2r2
     )
     +g3v0 = Equal.trans(
-      Maybe<&2, Ver>,
-      Tables.Table.get(Ver, St.versions(s3), v0),
-      Tables.Table.get(Ver, St.versions(s2), v0),
-      Some{Ver{yb, yp, yw, yt}},
+      Maybe<&2, VersionRecord>,
+      Tables.Table.get(VersionRecord, NodeState.versions(s3), v0),
+      Tables.Table.get(VersionRecord, NodeState.versions(s2), v0),
+      Some{VersionRecord{yb, yp, yw, yt}},
       Equal.trans(
-        Maybe<&2, Ver>,
-        Tables.Table.get(Ver, St.versions(s3), v0),
+        Maybe<&2, VersionRecord>,
+        Tables.Table.get(VersionRecord, NodeState.versions(s3), v0),
         Tables.Table.get(
-          Ver,
-          Ver.add(
+          VersionRecord,
+          VersionRecord.add(
             [
               Tables.Row{
                 r3,
-                Ver{
-                  Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+                VersionRecord{
+                  Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
                   [v0],
                   w3,
                   z3
                 }
               }
             ],
-            St.versions(s2)
+            NodeState.versions(s2)
           ),
           v0
         ),
-        Tables.Table.get(Ver, St.versions(s2), v0),
+        Tables.Table.get(VersionRecord, NodeState.versions(s2), v0),
         Equal.cong(
-          Tables.Table<Ver>,
-          Maybe<&2, Ver>,
-          y => Tables.Table.get(Ver, y, v0),
-          St.versions(s3),
-          Ver.add(
+          Tables.Table<VersionRecord>,
+          Maybe<&2, VersionRecord>,
+          y => Tables.Table.get(VersionRecord, y, v0),
+          NodeState.versions(s3),
+          VersionRecord.add(
             [
               Tables.Row{
                 r3,
-                Ver{
-                  Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+                VersionRecord{
+                  Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
                   [v0],
                   w3,
                   z3
                 }
               }
             ],
-            St.versions(s2)
+            NodeState.versions(s2)
           ),
           s3v
         ),
         add1_other(
-          St.versions(s2),
+          NodeState.versions(s2),
           r3,
-          Ver{
-            Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+          VersionRecord{
+            Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
             [v0],
             w3,
             z3
@@ -17152,25 +19130,25 @@ def mdk_fin(
     )
     +hav = Equal.trans(
       Bool,
-      Shared.List.has(~String, ~String.eq, Vers.ids(History.of(St.versions(s3), r2)), r3),
+      Shared.List.has(~String, ~String.eq, Vers.ids(History.of(NodeState.versions(s3), r2)), r3),
       Shared.List.has(
         ~String,
         ~String.eq,
         Vers.ids(
           History.of(
-            Ver.add(
+            VersionRecord.add(
               [
                 Tables.Row{
                   r3,
-                  Ver{
-                    Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+                  VersionRecord{
+                    Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
                     [v0],
                     w3,
                     z3
                   }
                 }
               ],
-              St.versions(s2)
+              NodeState.versions(s2)
             ),
             r2
           )
@@ -17179,65 +19157,70 @@ def mdk_fin(
       ),
       False{},
       Equal.cong(
-        Tables.Table<Ver>,
+        Tables.Table<VersionRecord>,
         Bool,
         y => Shared.List.has(~String, ~String.eq, Vers.ids(History.of(y, r2)), r3),
-        St.versions(s3),
-        Ver.add(
+        NodeState.versions(s3),
+        VersionRecord.add(
           [
             Tables.Row{
               r3,
-              Ver{
-                Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+              VersionRecord{
+                Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
                 [v0],
                 w3,
                 z3
               }
             }
           ],
-          St.versions(s2)
+          NodeState.versions(s2)
         ),
         s3v
       ),
       walk_avoid(
         History.links(
           Tables.Table.keys(
-            Ver,
-            Ver.add(
+            VersionRecord,
+            VersionRecord.add(
               [
                 Tables.Row{
                   r3,
-                  Ver{
-                    Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+                  VersionRecord{
+                    Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
                     [v0],
                     w3,
                     z3
                   }
                 }
               ],
-              St.versions(s2)
+              NodeState.versions(s2)
             )
           ),
-          Ver.add(
+          VersionRecord.add(
             [
               Tables.Row{
                 r3,
-                Ver{
-                  Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+                VersionRecord{
+                  Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
                   [v0],
                   w3,
                   z3
                 }
               }
             ],
-            St.versions(s2)
+            NodeState.versions(s2)
           )
         ),
         [r2],
         [],
         r3,
-        Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2), [v0], w3, z3},
-        St.versions(s2)
+        VersionRecord{
+          Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
+          [v0],
+          w3,
+          z3
+        },
+        NodeState.versions(s2)
       )(
         (%Equal.sym(
           Bool,
@@ -17249,25 +19232,34 @@ def mdk_fin(
         }; {==})
       )(
         Bools.Bool.or_false_right(
-          Ver.has(St.versions(s2), r3),
-          Ver.named(Tables.Table.keys(Ver, St.versions(s2)), St.versions(s2), r3)
+          VersionRecord.has(NodeState.versions(s2), r3),
+          VersionRecord.named(
+            Tables.Table.keys(VersionRecord, NodeState.versions(s2)),
+            NodeState.versions(s2),
+            r3
+          )
         )(ht3)
       )
     )
     +hk3 = Equal.trans(
       Bool,
-      Shared.List.has(~String, ~String.eq, Tables.Table.keys(Ver, St.versions(s3)), r3),
-      Maybe.is_some(&2, Ver, Tables.Table.get(Ver, St.versions(s3), r3)),
+      Shared.List.has(
+        ~String,
+        ~String.eq,
+        Tables.Table.keys(VersionRecord, NodeState.versions(s3)),
+        r3
+      ),
+      Maybe.is_some(&2, VersionRecord, Tables.Table.get(VersionRecord, NodeState.versions(s3), r3)),
       True{},
-      Tables.Table.keys_get(Ver, St.versions(s3), r3),
+      Tables.Table.keys_get(VersionRecord, NodeState.versions(s3), r3),
       Equal.cong(
-        Maybe<&2, Ver>,
+        Maybe<&2, VersionRecord>,
         Bool,
-        y => Maybe.is_some(&2, Ver, y),
-        Tables.Table.get(Ver, St.versions(s3), r3),
+        y => Maybe.is_some(&2, VersionRecord, y),
+        Tables.Table.get(VersionRecord, NodeState.versions(s3), r3),
         Some{
-          Ver{
-            Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+          VersionRecord{
+            Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
             [v0],
             w3,
             z3
@@ -17277,62 +19269,62 @@ def mdk_fin(
       )
     )
     +hbv1 = Equal.cong(
-      Maybe<&2, Ver>,
+      Maybe<&2, VersionRecord>,
       Tables.Table<List<&2, U32>>,
       y => Maybe.default(
         &2,
         Tables.Table<List<&2, U32>>,
-        Ver.blobs.of(y),
+        VersionRecord.blobs.of(y),
         Tables.Table.new(List<&2, U32>)
       ),
-      Tables.Table.get(Ver, St.versions(s1), v0),
-      Some{Ver{yb, yp, yw, yt}},
+      Tables.Table.get(VersionRecord, NodeState.versions(s1), v0),
+      Some{VersionRecord{yb, yp, yw, yt}},
       g1v0
     )
     +hbv2 = Equal.cong(
-      Maybe<&2, Ver>,
+      Maybe<&2, VersionRecord>,
       Tables.Table<List<&2, U32>>,
       y => Maybe.default(
         &2,
         Tables.Table<List<&2, U32>>,
-        Ver.blobs.of(y),
+        VersionRecord.blobs.of(y),
         Tables.Table.new(List<&2, U32>)
       ),
-      Tables.Table.get(Ver, St.versions(s2), v0),
-      Some{Ver{yb, yp, yw, yt}},
+      Tables.Table.get(VersionRecord, NodeState.versions(s2), v0),
+      Some{VersionRecord{yb, yp, yw, yt}},
       g2v0
     )
     +hbv3 = Equal.cong(
-      Maybe<&2, Ver>,
+      Maybe<&2, VersionRecord>,
       Tables.Table<List<&2, U32>>,
       y => Maybe.default(
         &2,
         Tables.Table<List<&2, U32>>,
-        Ver.blobs.of(y),
+        VersionRecord.blobs.of(y),
         Tables.Table.new(List<&2, U32>)
       ),
-      Tables.Table.get(Ver, St.versions(s3), v0),
-      Some{Ver{yb, yp, yw, yt}},
+      Tables.Table.get(VersionRecord, NodeState.versions(s3), v0),
+      Some{VersionRecord{yb, yp, yw, yt}},
       g3v0
     )
     +hbr2 = Equal.trans(
       Tables.Table<List<&2, U32>>,
-      Vers.blobs(St.versions(s3), r2),
-      Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s1), v0), n1, x1),
+      Vers.blobs(NodeState.versions(s3), r2),
+      Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s1), v0), n1, x1),
       Tables.Table.set(List<&2, U32>, yb, n1, x1),
       Equal.cong(
-        Maybe<&2, Ver>,
+        Maybe<&2, VersionRecord>,
         Tables.Table<List<&2, U32>>,
         y => Maybe.default(
           &2,
           Tables.Table<List<&2, U32>>,
-          Ver.blobs.of(y),
+          VersionRecord.blobs.of(y),
           Tables.Table.new(List<&2, U32>)
         ),
-        Tables.Table.get(Ver, St.versions(s3), r2),
+        Tables.Table.get(VersionRecord, NodeState.versions(s3), r2),
         Some{
-          Ver{
-            Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s1), v0), n1, x1),
+          VersionRecord{
+            Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s1), v0), n1, x1),
             [v0],
             w2,
             z2
@@ -17344,29 +19336,29 @@ def mdk_fin(
         Tables.Table<List<&2, U32>>,
         Tables.Table<List<&2, U32>>,
         y => Tables.Table.set(List<&2, U32>, y, n1, x1),
-        Vers.blobs(St.versions(s1), v0),
+        Vers.blobs(NodeState.versions(s1), v0),
         yb,
         hbv1
       )
     )
     +hbr3 = Equal.trans(
       Tables.Table<List<&2, U32>>,
-      Vers.blobs(St.versions(s3), r3),
-      Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+      Vers.blobs(NodeState.versions(s3), r3),
+      Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
       Tables.Table.set(List<&2, U32>, yb, n2, x2),
       Equal.cong(
-        Maybe<&2, Ver>,
+        Maybe<&2, VersionRecord>,
         Tables.Table<List<&2, U32>>,
         y => Maybe.default(
           &2,
           Tables.Table<List<&2, U32>>,
-          Ver.blobs.of(y),
+          VersionRecord.blobs.of(y),
           Tables.Table.new(List<&2, U32>)
         ),
-        Tables.Table.get(Ver, St.versions(s3), r3),
+        Tables.Table.get(VersionRecord, NodeState.versions(s3), r3),
         Some{
-          Ver{
-            Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+          VersionRecord{
+            Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
             [v0],
             w3,
             z3
@@ -17378,25 +19370,39 @@ def mdk_fin(
         Tables.Table<List<&2, U32>>,
         Tables.Table<List<&2, U32>>,
         y => Tables.Table.set(List<&2, U32>, y, n2, x2),
-        Vers.blobs(St.versions(s2), v0),
+        Vers.blobs(NodeState.versions(s2), v0),
         yb,
         hbv2
       )
     )
     +hf3 = Equal.trans(
-      List<&2, Tables.Row<Ver>>,
-      History.of(St.versions(s3), r3),
-      History.walk(1n+1n+f, [r3], [], St.versions(s3)),
+      List<&2, Tables.Row<VersionRecord>>,
+      History.of(NodeState.versions(s3), r3),
+      History.walk(1n+1n+f, [r3], [], NodeState.versions(s3)),
       Tables.Row{
         r3,
-        Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2), [v0], w3, z3}
+        VersionRecord{
+          Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
+          [v0],
+          w3,
+          z3
+        }
       }
-        <> (Tables.Row{v0, Ver{yb, yp, yw, yt}} <> History.walk(f, yp, [v0, r3], St.versions(s3))),
+        <> (
+          Tables.Row{
+            v0,
+            VersionRecord{yb, yp, yw, yt}
+          }
+            <> History.walk(f, yp, [v0, r3], NodeState.versions(s3))
+        ),
       Equal.cong(
         Nat,
-        List<&2, Tables.Row<Ver>>,
-        y => History.walk(y, [r3], [], St.versions(s3)),
-        History.links(Tables.Table.keys(Ver, St.versions(s3)), St.versions(s3)),
+        List<&2, Tables.Row<VersionRecord>>,
+        y => History.walk(y, [r3], [], NodeState.versions(s3)),
+        History.links(
+          Tables.Table.keys(VersionRecord, NodeState.versions(s3)),
+          NodeState.versions(s3)
+        ),
         1n+1n+f,
         hl
       ),
@@ -17404,30 +19410,44 @@ def mdk_fin(
         f,
         r3,
         v0,
-        Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+        Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
         w3,
         z3,
         yb,
         yp,
         yw,
         yt,
-        St.versions(s3)
+        NodeState.versions(s3)
       )(g3r3)(er3v0)(g3v0)
     )
     +hf2 = Equal.trans(
-      List<&2, Tables.Row<Ver>>,
-      History.of(St.versions(s3), r2),
-      History.walk(1n+1n+f, [r2], [], St.versions(s3)),
+      List<&2, Tables.Row<VersionRecord>>,
+      History.of(NodeState.versions(s3), r2),
+      History.walk(1n+1n+f, [r2], [], NodeState.versions(s3)),
       Tables.Row{
         r2,
-        Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s1), v0), n1, x1), [v0], w2, z2}
+        VersionRecord{
+          Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s1), v0), n1, x1),
+          [v0],
+          w2,
+          z2
+        }
       }
-        <> (Tables.Row{v0, Ver{yb, yp, yw, yt}} <> History.walk(f, yp, [v0, r2], St.versions(s3))),
+        <> (
+          Tables.Row{
+            v0,
+            VersionRecord{yb, yp, yw, yt}
+          }
+            <> History.walk(f, yp, [v0, r2], NodeState.versions(s3))
+        ),
       Equal.cong(
         Nat,
-        List<&2, Tables.Row<Ver>>,
-        y => History.walk(y, [r2], [], St.versions(s3)),
-        History.links(Tables.Table.keys(Ver, St.versions(s3)), St.versions(s3)),
+        List<&2, Tables.Row<VersionRecord>>,
+        y => History.walk(y, [r2], [], NodeState.versions(s3)),
+        History.links(
+          Tables.Table.keys(VersionRecord, NodeState.versions(s3)),
+          NodeState.versions(s3)
+        ),
         1n+1n+f,
         hl
       ),
@@ -17435,111 +19455,140 @@ def mdk_fin(
         f,
         r2,
         v0,
-        Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s1), v0), n1, x1),
+        Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s1), v0), n1, x1),
         w2,
         z2,
         yb,
         yp,
         yw,
         yt,
-        St.versions(s3)
+        NodeState.versions(s3)
       )(g3r2)(er2v0)(g3v0)
     )
     +hids = Equal.trans(
       Bool,
-      Shared.List.has(~String, ~String.eq, Vers.ids(History.of(St.versions(s3), r2)), v0),
+      Shared.List.has(~String, ~String.eq, Vers.ids(History.of(NodeState.versions(s3), r2)), v0),
       Shared.List.has(
         ~String,
         ~String.eq,
         Vers.ids(
           Tables.Row{
             r2,
-            Ver{
-              Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s1), v0), n1, x1),
+            VersionRecord{
+              Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s1), v0), n1, x1),
               [v0],
               w2,
               z2
             }
           }
             <> (
-              Tables.Row{v0, Ver{yb, yp, yw, yt}} <> History.walk(f, yp, [v0, r2], St.versions(s3))
+              Tables.Row{
+                v0,
+                VersionRecord{yb, yp, yw, yt}
+              }
+                <> History.walk(f, yp, [v0, r2], NodeState.versions(s3))
             )
         ),
         v0
       ),
       True{},
       Equal.cong(
-        List<&2, Tables.Row<Ver>>,
+        List<&2, Tables.Row<VersionRecord>>,
         Bool,
         y => Shared.List.has(~String, ~String.eq, Vers.ids(y), v0),
-        History.of(St.versions(s3), r2),
+        History.of(NodeState.versions(s3), r2),
         Tables.Row{
           r2,
-          Ver{
-            Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s1), v0), n1, x1),
+          VersionRecord{
+            Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s1), v0), n1, x1),
             [v0],
             w2,
             z2
           }
         }
           <> (
-            Tables.Row{v0, Ver{yb, yp, yw, yt}} <> History.walk(f, yp, [v0, r2], St.versions(s3))
+            Tables.Row{
+              v0,
+              VersionRecord{yb, yp, yw, yt}
+            }
+              <> History.walk(f, yp, [v0, r2], NodeState.versions(s3))
           ),
         hf2
       ),
       ids_second(
         r2,
         v0,
-        Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s1), v0), n1, x1), [v0], w2, z2},
-        Ver{yb, yp, yw, yt},
-        History.walk(f, yp, [v0, r2], St.versions(s3))
+        VersionRecord{
+          Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s1), v0), n1, x1),
+          [v0],
+          w2,
+          z2
+        },
+        VersionRecord{yb, yp, yw, yt},
+        History.walk(f, yp, [v0, r2], NodeState.versions(s3))
       )(er2v0)
     )
     +hf = Equal.trans(
       Maybe<&2, String>,
-      Vers.first_in(History.of(St.versions(s3), r3), Vers.ids(History.of(St.versions(s3), r2))),
+      Vers.first_in(
+        History.of(NodeState.versions(s3), r3),
+        Vers.ids(History.of(NodeState.versions(s3), r2))
+      ),
       Vers.first_in(
         Tables.Row{
           r3,
-          Ver{
-            Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+          VersionRecord{
+            Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
             [v0],
             w3,
             z3
           }
         }
           <> (
-            Tables.Row{v0, Ver{yb, yp, yw, yt}} <> History.walk(f, yp, [v0, r3], St.versions(s3))
+            Tables.Row{
+              v0,
+              VersionRecord{yb, yp, yw, yt}
+            }
+              <> History.walk(f, yp, [v0, r3], NodeState.versions(s3))
           ),
-        Vers.ids(History.of(St.versions(s3), r2))
+        Vers.ids(History.of(NodeState.versions(s3), r2))
       ),
       Some{v0},
       Equal.cong(
-        List<&2, Tables.Row<Ver>>,
+        List<&2, Tables.Row<VersionRecord>>,
         Maybe<&2, String>,
-        y => Vers.first_in(y, Vers.ids(History.of(St.versions(s3), r2))),
-        History.of(St.versions(s3), r3),
+        y => Vers.first_in(y, Vers.ids(History.of(NodeState.versions(s3), r2))),
+        History.of(NodeState.versions(s3), r3),
         Tables.Row{
           r3,
-          Ver{
-            Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+          VersionRecord{
+            Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
             [v0],
             w3,
             z3
           }
         }
           <> (
-            Tables.Row{v0, Ver{yb, yp, yw, yt}} <> History.walk(f, yp, [v0, r3], St.versions(s3))
+            Tables.Row{
+              v0,
+              VersionRecord{yb, yp, yw, yt}
+            }
+              <> History.walk(f, yp, [v0, r3], NodeState.versions(s3))
           ),
         hf3
       ),
       first_two(
         r3,
         v0,
-        Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2), [v0], w3, z3},
-        Ver{yb, yp, yw, yt},
-        History.walk(f, yp, [v0, r3], St.versions(s3)),
-        Vers.ids(History.of(St.versions(s3), r2))
+        VersionRecord{
+          Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
+          [v0],
+          w3,
+          z3
+        },
+        VersionRecord{yb, yp, yw, yt},
+        History.walk(f, yp, [v0, r3], NodeState.versions(s3)),
+        Vers.ids(History.of(NodeState.versions(s3), r2))
       )(hav)(hids)
     )
     +hmo = Equal.trans(
@@ -17550,7 +19599,7 @@ def mdk_fin(
         [
           Tables.Row{
             r4,
-            Ver{
+            VersionRecord{
               Merge.blobs(
                 Strings.union(
                   Tables.Table.keys(List<&2, U32>, yb),
@@ -17572,10 +19621,15 @@ def mdk_fin(
             }
           }
         ],
-        Tables.Table.set(Br, St.branches(s3), b, Br.moved(Br{r2, o, e, 1n+k}, r4)),
-        St.marks(s3),
-        St.groups(s3),
-        St.clashes(s3),
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s3),
+          b,
+          BranchRecord.moved(BranchRecord{r2, o, e, 1n+k}, r4)
+        ),
+        NodeState.marks(s3),
+        NodeState.groups(s3),
+        NodeState.clashes(s3),
         [Logged.head(b, r4)],
         Merge.answer(Spec.Merge.Merged{r4})
       },
@@ -17583,19 +19637,19 @@ def mdk_fin(
         Maybe<&2, String>,
         Out,
         y => Merge.point(y, s3, r4, w4, z4, b),
-        Br.head.of(Tables.Table.get(Br, St.branches(s3), c)),
+        BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s3), c)),
         Some{r3},
         ha
       ),
       Equal.trans(
         Out,
         Merge.point(Some{r3}, s3, r4, w4, z4, b),
-        Merge.branch(Some{Br{r2, o, e, 1n+k}}, s3, r4, w4, z4, r3, b),
+        Merge.branch(Some{BranchRecord{r2, o, e, 1n+k}}, s3, r4, w4, z4, r3, b),
         Out{
           [
             Tables.Row{
               r4,
-              Ver{
+              VersionRecord{
                 Merge.blobs(
                   Strings.union(
                     Tables.Table.keys(List<&2, U32>, yb),
@@ -17620,40 +19674,45 @@ def mdk_fin(
               }
             }
           ],
-          Tables.Table.set(Br, St.branches(s3), b, Br.moved(Br{r2, o, e, 1n+k}, r4)),
-          St.marks(s3),
-          St.groups(s3),
-          St.clashes(s3),
+          Tables.Table.set(
+            BranchRecord,
+            NodeState.branches(s3),
+            b,
+            BranchRecord.moved(BranchRecord{r2, o, e, 1n+k}, r4)
+          ),
+          NodeState.marks(s3),
+          NodeState.groups(s3),
+          NodeState.clashes(s3),
           [Logged.head(b, r4)],
           Merge.answer(Spec.Merge.Merged{r4})
         },
         Equal.cong(
-          Maybe<&2, Br>,
+          Maybe<&2, BranchRecord>,
           Out,
           y => Merge.branch(y, s3, r4, w4, z4, r3, b),
-          Tables.Table.get(Br, St.branches(s3), b),
-          Some{Br{r2, o, e, 1n+k}},
+          Tables.Table.get(BranchRecord, NodeState.branches(s3), b),
+          Some{BranchRecord{r2, o, e, 1n+k}},
           hb3
         ),
         Equal.trans(
           Out,
-          Merge.branch(Some{Br{r2, o, e, 1n+k}}, s3, r4, w4, z4, r3, b),
+          Merge.branch(Some{BranchRecord{r2, o, e, 1n+k}}, s3, r4, w4, z4, r3, b),
           Merge.owner(
             True{},
-            Ver.taken(St.versions(s3), r4),
+            VersionRecord.taken(NodeState.versions(s3), r4),
             s3,
             r4,
             w4,
             z4,
             r3,
             b,
-            Br{r2, o, e, 1n+k}
+            BranchRecord{r2, o, e, 1n+k}
           ),
           Out{
             [
               Tables.Row{
                 r4,
-                Ver{
+                VersionRecord{
                   Merge.blobs(
                     Strings.union(
                       Tables.Table.keys(List<&2, U32>, yb),
@@ -17681,10 +19740,15 @@ def mdk_fin(
                 }
               }
             ],
-            Tables.Table.set(Br, St.branches(s3), b, Br.moved(Br{r2, o, e, 1n+k}, r4)),
-            St.marks(s3),
-            St.groups(s3),
-            St.clashes(s3),
+            Tables.Table.set(
+              BranchRecord,
+              NodeState.branches(s3),
+              b,
+              BranchRecord.moved(BranchRecord{r2, o, e, 1n+k}, r4)
+            ),
+            NodeState.marks(s3),
+            NodeState.groups(s3),
+            NodeState.clashes(s3),
             [Logged.head(b, r4)],
             Merge.answer(Spec.Merge.Merged{r4})
           },
@@ -17693,16 +19757,16 @@ def mdk_fin(
             Out,
             y => Merge.owner(
               y,
-              Ver.taken(St.versions(s3), r4),
+              VersionRecord.taken(NodeState.versions(s3), r4),
               s3,
               r4,
               w4,
               z4,
               r3,
               b,
-              Br{r2, o, e, 1n+k}
+              BranchRecord{r2, o, e, 1n+k}
             ),
-            Owner.of(s3, Br{r2, o, e, 1n+k}),
+            Owner.of(s3, BranchRecord{r2, o, e, 1n+k}),
             True{},
             hown
           ),
@@ -17710,21 +19774,21 @@ def mdk_fin(
             Out,
             Merge.owner(
               True{},
-              Ver.taken(St.versions(s3), r4),
+              VersionRecord.taken(NodeState.versions(s3), r4),
               s3,
               r4,
               w4,
               z4,
               r3,
               b,
-              Br{r2, o, e, 1n+k}
+              BranchRecord{r2, o, e, 1n+k}
             ),
-            Merge.owner(True{}, False{}, s3, r4, w4, z4, r3, b, Br{r2, o, e, 1n+k}),
+            Merge.owner(True{}, False{}, s3, r4, w4, z4, r3, b, BranchRecord{r2, o, e, 1n+k}),
             Out{
               [
                 Tables.Row{
                   r4,
-                  Ver{
+                  VersionRecord{
                     Merge.blobs(
                       Strings.union(
                         Tables.Table.keys(List<&2, U32>, yb),
@@ -17752,30 +19816,35 @@ def mdk_fin(
                   }
                 }
               ],
-              Tables.Table.set(Br, St.branches(s3), b, Br.moved(Br{r2, o, e, 1n+k}, r4)),
-              St.marks(s3),
-              St.groups(s3),
-              St.clashes(s3),
+              Tables.Table.set(
+                BranchRecord,
+                NodeState.branches(s3),
+                b,
+                BranchRecord.moved(BranchRecord{r2, o, e, 1n+k}, r4)
+              ),
+              NodeState.marks(s3),
+              NodeState.groups(s3),
+              NodeState.clashes(s3),
               [Logged.head(b, r4)],
               Merge.answer(Spec.Merge.Merged{r4})
             },
             Equal.cong(
               Bool,
               Out,
-              y => Merge.owner(True{}, y, s3, r4, w4, z4, r3, b, Br{r2, o, e, 1n+k}),
-              Ver.taken(St.versions(s3), r4),
+              y => Merge.owner(True{}, y, s3, r4, w4, z4, r3, b, BranchRecord{r2, o, e, 1n+k}),
+              VersionRecord.taken(NodeState.versions(s3), r4),
               False{},
               ht4
             ),
             Equal.trans(
               Out,
-              Merge.owner(True{}, False{}, s3, r4, w4, z4, r3, b, Br{r2, o, e, 1n+k}),
-              Merge.inside(False{}, s3, r4, w4, z4, r3, b, Br{r2, o, e, 1n+k}),
+              Merge.owner(True{}, False{}, s3, r4, w4, z4, r3, b, BranchRecord{r2, o, e, 1n+k}),
+              Merge.inside(False{}, s3, r4, w4, z4, r3, b, BranchRecord{r2, o, e, 1n+k}),
               Out{
                 [
                   Tables.Row{
                     r4,
-                    Ver{
+                    VersionRecord{
                       Merge.blobs(
                         Strings.union(
                           Tables.Table.keys(List<&2, U32>, yb),
@@ -17803,41 +19872,51 @@ def mdk_fin(
                     }
                   }
                 ],
-                Tables.Table.set(Br, St.branches(s3), b, Br.moved(Br{r2, o, e, 1n+k}, r4)),
-                St.marks(s3),
-                St.groups(s3),
-                St.clashes(s3),
+                Tables.Table.set(
+                  BranchRecord,
+                  NodeState.branches(s3),
+                  b,
+                  BranchRecord.moved(BranchRecord{r2, o, e, 1n+k}, r4)
+                ),
+                NodeState.marks(s3),
+                NodeState.groups(s3),
+                NodeState.clashes(s3),
                 [Logged.head(b, r4)],
                 Merge.answer(Spec.Merge.Merged{r4})
               },
               Equal.cong(
                 Bool,
                 Out,
-                y => Merge.inside(y, s3, r4, w4, z4, r3, b, Br{r2, o, e, 1n+k}),
-                Shared.List.has(~String, ~String.eq, Vers.ids(History.of(St.versions(s3), r2)), r3),
+                y => Merge.inside(y, s3, r4, w4, z4, r3, b, BranchRecord{r2, o, e, 1n+k}),
+                Shared.List.has(
+                  ~String,
+                  ~String.eq,
+                  Vers.ids(History.of(NodeState.versions(s3), r2)),
+                  r3
+                ),
                 False{},
                 hav
               ),
               Equal.trans(
                 Out,
-                Merge.inside(False{}, s3, r4, w4, z4, r3, b, Br{r2, o, e, 1n+k}),
+                Merge.inside(False{}, s3, r4, w4, z4, r3, b, BranchRecord{r2, o, e, 1n+k}),
                 Merge.three(
                   s3,
                   r4,
                   w4,
                   z4,
                   r3,
-                  Vers.blobs(St.versions(s3), r2),
-                  Vers.blobs(St.versions(s3), r3),
-                  Vers.blobs(St.versions(s3), v0),
+                  Vers.blobs(NodeState.versions(s3), r2),
+                  Vers.blobs(NodeState.versions(s3), r3),
+                  Vers.blobs(NodeState.versions(s3), v0),
                   b,
-                  Br{r2, o, e, 1n+k}
+                  BranchRecord{r2, o, e, 1n+k}
                 ),
                 Out{
                   [
                     Tables.Row{
                       r4,
-                      Ver{
+                      VersionRecord{
                         Merge.blobs(
                           Strings.union(
                             Tables.Table.keys(List<&2, U32>, yb),
@@ -17865,10 +19944,15 @@ def mdk_fin(
                       }
                     }
                   ],
-                  Tables.Table.set(Br, St.branches(s3), b, Br.moved(Br{r2, o, e, 1n+k}, r4)),
-                  St.marks(s3),
-                  St.groups(s3),
-                  St.clashes(s3),
+                  Tables.Table.set(
+                    BranchRecord,
+                    NodeState.branches(s3),
+                    b,
+                    BranchRecord.moved(BranchRecord{r2, o, e, 1n+k}, r4)
+                  ),
+                  NodeState.marks(s3),
+                  NodeState.groups(s3),
+                  NodeState.clashes(s3),
                   [Logged.head(b, r4)],
                   Merge.answer(Spec.Merge.Merged{r4})
                 },
@@ -17881,15 +19965,15 @@ def mdk_fin(
                     w4,
                     z4,
                     r3,
-                    Vers.blobs(St.versions(s3), r2),
-                    Vers.blobs(St.versions(s3), r3),
+                    Vers.blobs(NodeState.versions(s3), r2),
+                    Vers.blobs(NodeState.versions(s3), r3),
                     Merge.base(s3, y),
                     b,
-                    Br{r2, o, e, 1n+k}
+                    BranchRecord{r2, o, e, 1n+k}
                   ),
                   Vers.first_in(
-                    History.of(St.versions(s3), r3),
-                    Vers.ids(History.of(St.versions(s3), r2))
+                    History.of(NodeState.versions(s3), r3),
+                    Vers.ids(History.of(NodeState.versions(s3), r2))
                   ),
                   Some{v0},
                   hf
@@ -17902,11 +19986,11 @@ def mdk_fin(
                     w4,
                     z4,
                     r3,
-                    Vers.blobs(St.versions(s3), r2),
-                    Vers.blobs(St.versions(s3), r3),
-                    Vers.blobs(St.versions(s3), v0),
+                    Vers.blobs(NodeState.versions(s3), r2),
+                    Vers.blobs(NodeState.versions(s3), r3),
+                    Vers.blobs(NodeState.versions(s3), v0),
                     b,
-                    Br{r2, o, e, 1n+k}
+                    BranchRecord{r2, o, e, 1n+k}
                   ),
                   Merge.three(
                     s3,
@@ -17915,16 +19999,16 @@ def mdk_fin(
                     z4,
                     r3,
                     Tables.Table.set(List<&2, U32>, yb, n1, x1),
-                    Vers.blobs(St.versions(s3), r3),
-                    Vers.blobs(St.versions(s3), v0),
+                    Vers.blobs(NodeState.versions(s3), r3),
+                    Vers.blobs(NodeState.versions(s3), v0),
                     b,
-                    Br{r2, o, e, 1n+k}
+                    BranchRecord{r2, o, e, 1n+k}
                   ),
                   Out{
                     [
                       Tables.Row{
                         r4,
-                        Ver{
+                        VersionRecord{
                           Merge.blobs(
                             Strings.union(
                               Tables.Table.keys(List<&2, U32>, yb),
@@ -17952,10 +20036,15 @@ def mdk_fin(
                         }
                       }
                     ],
-                    Tables.Table.set(Br, St.branches(s3), b, Br.moved(Br{r2, o, e, 1n+k}, r4)),
-                    St.marks(s3),
-                    St.groups(s3),
-                    St.clashes(s3),
+                    Tables.Table.set(
+                      BranchRecord,
+                      NodeState.branches(s3),
+                      b,
+                      BranchRecord.moved(BranchRecord{r2, o, e, 1n+k}, r4)
+                    ),
+                    NodeState.marks(s3),
+                    NodeState.groups(s3),
+                    NodeState.clashes(s3),
                     [Logged.head(b, r4)],
                     Merge.answer(Spec.Merge.Merged{r4})
                   },
@@ -17969,12 +20058,12 @@ def mdk_fin(
                       z4,
                       r3,
                       y,
-                      Vers.blobs(St.versions(s3), r3),
-                      Vers.blobs(St.versions(s3), v0),
+                      Vers.blobs(NodeState.versions(s3), r3),
+                      Vers.blobs(NodeState.versions(s3), v0),
                       b,
-                      Br{r2, o, e, 1n+k}
+                      BranchRecord{r2, o, e, 1n+k}
                     ),
-                    Vers.blobs(St.versions(s3), r2),
+                    Vers.blobs(NodeState.versions(s3), r2),
                     Tables.Table.set(List<&2, U32>, yb, n1, x1),
                     hbr2
                   ),
@@ -17987,10 +20076,10 @@ def mdk_fin(
                       z4,
                       r3,
                       Tables.Table.set(List<&2, U32>, yb, n1, x1),
-                      Vers.blobs(St.versions(s3), r3),
-                      Vers.blobs(St.versions(s3), v0),
+                      Vers.blobs(NodeState.versions(s3), r3),
+                      Vers.blobs(NodeState.versions(s3), v0),
                       b,
-                      Br{r2, o, e, 1n+k}
+                      BranchRecord{r2, o, e, 1n+k}
                     ),
                     Merge.three(
                       s3,
@@ -18000,15 +20089,15 @@ def mdk_fin(
                       r3,
                       Tables.Table.set(List<&2, U32>, yb, n1, x1),
                       Tables.Table.set(List<&2, U32>, yb, n2, x2),
-                      Vers.blobs(St.versions(s3), v0),
+                      Vers.blobs(NodeState.versions(s3), v0),
                       b,
-                      Br{r2, o, e, 1n+k}
+                      BranchRecord{r2, o, e, 1n+k}
                     ),
                     Out{
                       [
                         Tables.Row{
                           r4,
-                          Ver{
+                          VersionRecord{
                             Merge.blobs(
                               Strings.union(
                                 Tables.Table.keys(List<&2, U32>, yb),
@@ -18036,10 +20125,15 @@ def mdk_fin(
                           }
                         }
                       ],
-                      Tables.Table.set(Br, St.branches(s3), b, Br.moved(Br{r2, o, e, 1n+k}, r4)),
-                      St.marks(s3),
-                      St.groups(s3),
-                      St.clashes(s3),
+                      Tables.Table.set(
+                        BranchRecord,
+                        NodeState.branches(s3),
+                        b,
+                        BranchRecord.moved(BranchRecord{r2, o, e, 1n+k}, r4)
+                      ),
+                      NodeState.marks(s3),
+                      NodeState.groups(s3),
+                      NodeState.clashes(s3),
                       [Logged.head(b, r4)],
                       Merge.answer(Spec.Merge.Merged{r4})
                     },
@@ -18054,11 +20148,11 @@ def mdk_fin(
                         r3,
                         Tables.Table.set(List<&2, U32>, yb, n1, x1),
                         y,
-                        Vers.blobs(St.versions(s3), v0),
+                        Vers.blobs(NodeState.versions(s3), v0),
                         b,
-                        Br{r2, o, e, 1n+k}
+                        BranchRecord{r2, o, e, 1n+k}
                       ),
-                      Vers.blobs(St.versions(s3), r3),
+                      Vers.blobs(NodeState.versions(s3), r3),
                       Tables.Table.set(List<&2, U32>, yb, n2, x2),
                       hbr3
                     ),
@@ -18072,9 +20166,9 @@ def mdk_fin(
                         r3,
                         Tables.Table.set(List<&2, U32>, yb, n1, x1),
                         Tables.Table.set(List<&2, U32>, yb, n2, x2),
-                        Vers.blobs(St.versions(s3), v0),
+                        Vers.blobs(NodeState.versions(s3), v0),
                         b,
-                        Br{r2, o, e, 1n+k}
+                        BranchRecord{r2, o, e, 1n+k}
                       ),
                       Merge.three(
                         s3,
@@ -18086,13 +20180,13 @@ def mdk_fin(
                         Tables.Table.set(List<&2, U32>, yb, n2, x2),
                         yb,
                         b,
-                        Br{r2, o, e, 1n+k}
+                        BranchRecord{r2, o, e, 1n+k}
                       ),
                       Out{
                         [
                           Tables.Row{
                             r4,
-                            Ver{
+                            VersionRecord{
                               Merge.blobs(
                                 Strings.union(
                                   Tables.Table.keys(List<&2, U32>, yb),
@@ -18120,10 +20214,15 @@ def mdk_fin(
                             }
                           }
                         ],
-                        Tables.Table.set(Br, St.branches(s3), b, Br.moved(Br{r2, o, e, 1n+k}, r4)),
-                        St.marks(s3),
-                        St.groups(s3),
-                        St.clashes(s3),
+                        Tables.Table.set(
+                          BranchRecord,
+                          NodeState.branches(s3),
+                          b,
+                          BranchRecord.moved(BranchRecord{r2, o, e, 1n+k}, r4)
+                        ),
+                        NodeState.marks(s3),
+                        NodeState.groups(s3),
+                        NodeState.clashes(s3),
                         [Logged.head(b, r4)],
                         Merge.answer(Spec.Merge.Merged{r4})
                       },
@@ -18140,9 +20239,9 @@ def mdk_fin(
                           Tables.Table.set(List<&2, U32>, yb, n2, x2),
                           y,
                           b,
-                          Br{r2, o, e, 1n+k}
+                          BranchRecord{r2, o, e, 1n+k}
                         ),
-                        Vers.blobs(St.versions(s3), v0),
+                        Vers.blobs(NodeState.versions(s3), v0),
                         yb,
                         hbv3
                       ),
@@ -18178,7 +20277,7 @@ def mdk_fin(
                             Tables.Table.set(List<&2, U32>, yb, n2, x2),
                             yb
                           ),
-                          Br{r2, o, e, 1n+k}
+                          BranchRecord{r2, o, e, 1n+k}
                         ),
                         Merge.clashes(
                           Strings.union(
@@ -18246,7 +20345,7 @@ def mdk_fin(
         [
           Tables.Row{
             r4,
-            Ver{
+            VersionRecord{
               Merge.blobs(
                 Strings.union(
                   Tables.Table.keys(List<&2, U32>, yb),
@@ -18268,10 +20367,15 @@ def mdk_fin(
             }
           }
         ],
-        Tables.Table.set(Br, St.branches(s3), b, Br.moved(Br{r2, o, e, 1n+k}, r4)),
-        St.marks(s3),
-        St.groups(s3),
-        St.clashes(s3),
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s3),
+          b,
+          BranchRecord.moved(BranchRecord{r2, o, e, 1n+k}, r4)
+        ),
+        NodeState.marks(s3),
+        NodeState.groups(s3),
+        NodeState.clashes(s3),
         [Logged.head(b, r4)],
         Merge.answer(Spec.Merge.Merged{r4})
       }
@@ -18286,7 +20390,7 @@ def mdk_fin(
         [
           Tables.Row{
             r4,
-            Ver{
+            VersionRecord{
               Merge.blobs(
                 Strings.union(
                   Tables.Table.keys(List<&2, U32>, yb),
@@ -18308,56 +20412,81 @@ def mdk_fin(
             }
           }
         ],
-        Tables.Table.set(Br, St.branches(s3), b, Br.moved(Br{r2, o, e, 1n+k}, r4)),
-        St.marks(s3),
-        St.groups(s3),
-        St.clashes(s3),
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s3),
+          b,
+          BranchRecord.moved(BranchRecord{r2, o, e, 1n+k}, r4)
+        ),
+        NodeState.marks(s3),
+        NodeState.groups(s3),
+        NodeState.clashes(s3),
         [Logged.head(b, r4)],
         Merge.answer(Spec.Merge.Merged{r4})
       }
     )(ha4)(hmo)
     +hd4 = Equal.trans(
       Maybe<&2, String>,
-      Br.head.of(Tables.Table.get(Br, St.branches(s4), b)),
-      Br.head.of(
+      BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s4), b)),
+      BranchRecord.head.of(
         Tables.Table.get(
-          Br,
-          Tables.Table.set(Br, St.branches(s3), b, Br.moved(Br{r2, o, e, 1n+k}, r4)),
+          BranchRecord,
+          Tables.Table.set(
+            BranchRecord,
+            NodeState.branches(s3),
+            b,
+            BranchRecord.moved(BranchRecord{r2, o, e, 1n+k}, r4)
+          ),
           b
         )
       ),
       Some{r4},
       Equal.cong(
-        Tables.Table<Br>,
+        Tables.Table<BranchRecord>,
         Maybe<&2, String>,
-        y => Br.head.of(Tables.Table.get(Br, y, b)),
-        St.branches(s4),
-        Tables.Table.set(Br, St.branches(s3), b, Br.moved(Br{r2, o, e, 1n+k}, r4)),
+        y => BranchRecord.head.of(Tables.Table.get(BranchRecord, y, b)),
+        NodeState.branches(s4),
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s3),
+          b,
+          BranchRecord.moved(BranchRecord{r2, o, e, 1n+k}, r4)
+        ),
         s4b
       ),
       Equal.cong(
-        Maybe<&2, Br>,
+        Maybe<&2, BranchRecord>,
         Maybe<&2, String>,
-        y => Br.head.of(y),
+        y => BranchRecord.head.of(y),
         Tables.Table.get(
-          Br,
-          Tables.Table.set(Br, St.branches(s3), b, Br.moved(Br{r2, o, e, 1n+k}, r4)),
+          BranchRecord,
+          Tables.Table.set(
+            BranchRecord,
+            NodeState.branches(s3),
+            b,
+            BranchRecord.moved(BranchRecord{r2, o, e, 1n+k}, r4)
+          ),
           b
         ),
-        Some{Br.moved(Br{r2, o, e, 1n+k}, r4)},
-        Tables.Table.get_after_set(Br, St.branches(s3), b, Br.moved(Br{r2, o, e, 1n+k}, r4))
+        Some{BranchRecord.moved(BranchRecord{r2, o, e, 1n+k}, r4)},
+        Tables.Table.get_after_set(
+          BranchRecord,
+          NodeState.branches(s3),
+          b,
+          BranchRecord.moved(BranchRecord{r2, o, e, 1n+k}, r4)
+        )
       )
     )
     +hg4 = Equal.trans(
-      Maybe<&2, Ver>,
-      Tables.Table.get(Ver, St.versions(s4), r4),
+      Maybe<&2, VersionRecord>,
+      Tables.Table.get(VersionRecord, NodeState.versions(s4), r4),
       Tables.Table.get(
-        Ver,
-        Ver.add(
+        VersionRecord,
+        VersionRecord.add(
           [
             Tables.Row{
               r4,
-              Ver{
+              VersionRecord{
                 Merge.blobs(
                   Strings.union(
                     Tables.Table.keys(List<&2, U32>, yb),
@@ -18382,12 +20511,12 @@ def mdk_fin(
               }
             }
           ],
-          St.versions(s3)
+          NodeState.versions(s3)
         ),
         r4
       ),
       Some{
-        Ver{
+        VersionRecord{
           Merge.blobs(
             Strings.union(
               Tables.Table.keys(List<&2, U32>, yb),
@@ -18409,15 +20538,15 @@ def mdk_fin(
         }
       },
       Equal.cong(
-        Tables.Table<Ver>,
-        Maybe<&2, Ver>,
-        y => Tables.Table.get(Ver, y, r4),
-        St.versions(s4),
-        Ver.add(
+        Tables.Table<VersionRecord>,
+        Maybe<&2, VersionRecord>,
+        y => Tables.Table.get(VersionRecord, y, r4),
+        NodeState.versions(s4),
+        VersionRecord.add(
           [
             Tables.Row{
               r4,
-              Ver{
+              VersionRecord{
                 Merge.blobs(
                   Strings.union(
                     Tables.Table.keys(List<&2, U32>, yb),
@@ -18442,7 +20571,7 @@ def mdk_fin(
               }
             }
           ],
-          St.versions(s3)
+          NodeState.versions(s3)
         ),
         s4v
       ),
@@ -18466,8 +20595,8 @@ def mdk_fin(
         [r2, r3],
         w4,
         z4,
-        St.versions(s3)
-      )(taken_free(St.versions(s3), r4)(ht4))
+        NodeState.versions(s3)
+      )(taken_free(NodeState.versions(s3), r4)(ht4))
     )
     +hns1 = Strings.union_right(
       Tables.Table.keys(List<&2, U32>, yb),
@@ -18583,7 +20712,7 @@ def mdk_fin(
               [
                 Tables.Row{
                   r4,
-                  Ver{
+                  VersionRecord{
                     Merge.blobs(
                       Strings.union(
                         Tables.Table.keys(List<&2, U32>, yb),
@@ -18611,10 +20740,15 @@ def mdk_fin(
                   }
                 }
               ],
-              Tables.Table.set(Br, St.branches(s3), b, Br.moved(Br{r2, o, e, 1n+k}, r4)),
-              St.marks(s3),
-              St.groups(s3),
-              St.clashes(s3),
+              Tables.Table.set(
+                BranchRecord,
+                NodeState.branches(s3),
+                b,
+                BranchRecord.moved(BranchRecord{r2, o, e, 1n+k}, r4)
+              ),
+              NodeState.marks(s3),
+              NodeState.groups(s3),
+              NodeState.clashes(s3),
               [Logged.head(b, r4)],
               Merge.answer(Spec.Merge.Merged{r4})
             },
@@ -18626,7 +20760,7 @@ def mdk_fin(
                 [
                   Tables.Row{
                     r4,
-                    Ver{
+                    VersionRecord{
                       Merge.blobs(
                         Strings.union(
                           Tables.Table.keys(List<&2, U32>, yb),
@@ -18654,10 +20788,15 @@ def mdk_fin(
                     }
                   }
                 ],
-                Tables.Table.set(Br, St.branches(s3), b, Br.moved(Br{r2, o, e, 1n+k}, r4)),
-                St.marks(s3),
-                St.groups(s3),
-                St.clashes(s3),
+                Tables.Table.set(
+                  BranchRecord,
+                  NodeState.branches(s3),
+                  b,
+                  BranchRecord.moved(BranchRecord{r2, o, e, 1n+k}, r4)
+                ),
+                NodeState.marks(s3),
+                NodeState.groups(s3),
+                NodeState.clashes(s3),
                 [Logged.head(b, r4)],
                 Merge.answer(Spec.Merge.Merged{r4})
               },
@@ -18676,24 +20815,33 @@ def mdk_fin(
       (
         Equal.trans(
           Maybe<&2, List<&2, U32>>,
-          St.content(s4, n1, Spec.Point.Head{b}),
-          Blob.find.of(Ver.blobs.of(Ver.find.of(St.versions(s4), Some{r4})), n1),
+          NodeState.content(s4, n1, Spec.Point.Head{b}),
+          Blob.find.of(
+            VersionRecord.blobs.of(VersionRecord.find.of(NodeState.versions(s4), Some{r4})),
+            n1
+          ),
           Some{x1},
           Equal.cong(
             Maybe<&2, String>,
             Maybe<&2, List<&2, U32>>,
-            y => Blob.find.of(Ver.blobs.of(Ver.find.of(St.versions(s4), y)), n1),
-            Br.head.of(Tables.Table.get(Br, St.branches(s4), b)),
+            y => Blob.find.of(
+              VersionRecord.blobs.of(VersionRecord.find.of(NodeState.versions(s4), y)),
+              n1
+            ),
+            BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s4), b)),
             Some{r4},
             hd4
           ),
           Equal.trans(
             Maybe<&2, List<&2, U32>>,
-            Blob.find.of(Ver.blobs.of(Ver.find.of(St.versions(s4), Some{r4})), n1),
             Blob.find.of(
-              Ver.blobs.of(
+              VersionRecord.blobs.of(VersionRecord.find.of(NodeState.versions(s4), Some{r4})),
+              n1
+            ),
+            Blob.find.of(
+              VersionRecord.blobs.of(
                 Some{
-                  Ver{
+                  VersionRecord{
                     Merge.blobs(
                       Strings.union(
                         Tables.Table.keys(List<&2, U32>, yb),
@@ -18725,12 +20873,12 @@ def mdk_fin(
             ),
             Some{x1},
             Equal.cong(
-              Maybe<&2, Ver>,
+              Maybe<&2, VersionRecord>,
               Maybe<&2, List<&2, U32>>,
-              y => Blob.find.of(Ver.blobs.of(y), n1),
-              Tables.Table.get(Ver, St.versions(s4), r4),
+              y => Blob.find.of(VersionRecord.blobs.of(y), n1),
+              Tables.Table.get(VersionRecord, NodeState.versions(s4), r4),
               Some{
-                Ver{
+                VersionRecord{
                   Merge.blobs(
                     Strings.union(
                       Tables.Table.keys(List<&2, U32>, yb),
@@ -18782,24 +20930,33 @@ def mdk_fin(
         ),
         Equal.trans(
           Maybe<&2, List<&2, U32>>,
-          St.content(s4, n2, Spec.Point.Head{b}),
-          Blob.find.of(Ver.blobs.of(Ver.find.of(St.versions(s4), Some{r4})), n2),
+          NodeState.content(s4, n2, Spec.Point.Head{b}),
+          Blob.find.of(
+            VersionRecord.blobs.of(VersionRecord.find.of(NodeState.versions(s4), Some{r4})),
+            n2
+          ),
           Some{x2},
           Equal.cong(
             Maybe<&2, String>,
             Maybe<&2, List<&2, U32>>,
-            y => Blob.find.of(Ver.blobs.of(Ver.find.of(St.versions(s4), y)), n2),
-            Br.head.of(Tables.Table.get(Br, St.branches(s4), b)),
+            y => Blob.find.of(
+              VersionRecord.blobs.of(VersionRecord.find.of(NodeState.versions(s4), y)),
+              n2
+            ),
+            BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s4), b)),
             Some{r4},
             hd4
           ),
           Equal.trans(
             Maybe<&2, List<&2, U32>>,
-            Blob.find.of(Ver.blobs.of(Ver.find.of(St.versions(s4), Some{r4})), n2),
             Blob.find.of(
-              Ver.blobs.of(
+              VersionRecord.blobs.of(VersionRecord.find.of(NodeState.versions(s4), Some{r4})),
+              n2
+            ),
+            Blob.find.of(
+              VersionRecord.blobs.of(
                 Some{
-                  Ver{
+                  VersionRecord{
                     Merge.blobs(
                       Strings.union(
                         Tables.Table.keys(List<&2, U32>, yb),
@@ -18831,12 +20988,12 @@ def mdk_fin(
             ),
             Some{x2},
             Equal.cong(
-              Maybe<&2, Ver>,
+              Maybe<&2, VersionRecord>,
               Maybe<&2, List<&2, U32>>,
-              y => Blob.find.of(Ver.blobs.of(y), n2),
-              Tables.Table.get(Ver, St.versions(s4), r4),
+              y => Blob.find.of(VersionRecord.blobs.of(y), n2),
+              Tables.Table.get(VersionRecord, NodeState.versions(s4), r4),
               Some{
-                Ver{
+                VersionRecord{
                   Merge.blobs(
                     Strings.union(
                       Tables.Table.keys(List<&2, U32>, yb),
@@ -18892,11 +21049,11 @@ def mdk_fin(
 
 # mdk_core, once the walks have fuel for two steps
 law mdk_core.fuel:
-  for s: St
-  for s1: St
-  for s2: St
-  for s3: St
-  for s4: St
+  for s: NodeState
+  for s1: NodeState
+  for s2: NodeState
+  for s3: NodeState
+  for s4: NodeState
   for a4: Spec.Answer
   for r1: String
   for w1: String
@@ -18929,62 +21086,76 @@ law mdk_core.fuel:
   for yw: String
   for yt: String
   for w: &f: Nat -> {
-    History.links(Tables.Table.keys(Ver, St.versions(s3)), St.versions(s3)) == 1n+1n+f: Nat
+    History.links(
+      Tables.Table.keys(VersionRecord, NodeState.versions(s3)),
+      NodeState.versions(s3)
+    )
+      == 1n+1n+f: Nat
   }
   {
-    Spec.Node.get_outcome(s, r1) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r1) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.get_outcome(s1, r2) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s1, r2) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.get_outcome(s2, r3) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s2, r3) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.get_outcome(s3, r4) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s3, r4) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
     String.eq(n1, n2) == False{}: Bool
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r1, w1, z1},
       Spec.Ask.SetBranch{c, Spec.Point.Head{b}}
     )
-      == (s1, Spec.Answer.SetBranch{Spec.SetBranch.Created{v0}}): St
+      == (s1, Spec.Answer.SetBranch{Spec.SetBranch.Created{v0}}): NodeState
       & Spec.Answer
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s1,
       Spec.Envelope{r2, w2, z2},
       Spec.Ask.Write{Resources.Name{n1}, b, base1, Spec.Content.Bytes{x1}}
     )
-      == (s2, Spec.Answer.Write{Spec.Write.Written{v1}}): St
+      == (s2, Spec.Answer.Write{Spec.Write.Written{v1}}): NodeState
       & Spec.Answer
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s2,
       Spec.Envelope{r3, w3, z3},
       Spec.Ask.Write{Resources.Name{n2}, c, base2, Spec.Content.Bytes{x2}}
     )
-      == (s3, Spec.Answer.Write{Spec.Write.Written{v2}}): St
+      == (s3, Spec.Answer.Write{Spec.Write.Written{v2}}): NodeState
       & Spec.Answer
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s3,
       Spec.Envelope{r4, w4, z4},
       Spec.Ask.Merge{Spec.Point.Head{c}, b}
     )
-      == (s4, a4): St
+      == (s4, a4): NodeState
       & Spec.Answer
   } -> {
-    Tables.Table.get(Br, St.branches(s), b) == Some{Br{v0, o, e, k}}: Maybe<&2, Br>
+    Tables.Table.get(
+      BranchRecord,
+      NodeState.branches(s),
+      b
+    )
+      == Some{BranchRecord{v0, o, e, k}}: Maybe<&2, BranchRecord>
   } -> {
-    Tables.Table.get(Ver, St.versions(s), v0) == Some{Ver{yb, yp, yw, yt}}: Maybe<&2, Ver>
+    Tables.Table.get(
+      VersionRecord,
+      NodeState.versions(s),
+      v0
+    )
+      == Some{VersionRecord{yb, yp, yw, yt}}: Maybe<&2, VersionRecord>
   } -> {
     a4 == Spec.Answer.Merge{Spec.Merge.Merged{r4}}: Spec.Answer
   }
     & (
       {
-        St.content(s4, n1, Spec.Point.Head{b}) == Some{x1}: Maybe<&2, List<&2, U32>>
+        NodeState.content(s4, n1, Spec.Point.Head{b}) == Some{x1}: Maybe<&2, List<&2, U32>>
       }
-        & {St.content(s4, n2, Spec.Point.Head{b}) == Some{x2}: Maybe<&2, List<&2, U32>>}
+        & {NodeState.content(s4, n2, Spec.Point.Head{b}) == Some{x2}: Maybe<&2, List<&2, U32>>}
     )
 
 def mdk_core.fuel(
@@ -19069,11 +21240,11 @@ def mdk_core.fuel(
       )(hn1)(hn2)(hn3)(hn4)(hne)(h1)(h2)(h3)(h4)(hbs)(hvs)(hl)
 # merge_disjoint_keeps_both, once b's record and v0's version are found
 law mdk_core:
-  for s: St
-  for s1: St
-  for s2: St
-  for s3: St
-  for s4: St
+  for s: NodeState
+  for s1: NodeState
+  for s2: NodeState
+  for s3: NodeState
+  for s4: NodeState
   for a4: Spec.Answer
   for r1: String
   for w1: String
@@ -19106,59 +21277,69 @@ law mdk_core:
   for yw: String
   for yt: String
   {
-    Spec.Node.get_outcome(s, r1) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r1) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.get_outcome(s1, r2) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s1, r2) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.get_outcome(s2, r3) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s2, r3) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.get_outcome(s3, r4) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s3, r4) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
     String.eq(n1, n2) == False{}: Bool
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r1, w1, z1},
       Spec.Ask.SetBranch{c, Spec.Point.Head{b}}
     )
-      == (s1, Spec.Answer.SetBranch{Spec.SetBranch.Created{v0}}): St
+      == (s1, Spec.Answer.SetBranch{Spec.SetBranch.Created{v0}}): NodeState
       & Spec.Answer
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s1,
       Spec.Envelope{r2, w2, z2},
       Spec.Ask.Write{Resources.Name{n1}, b, base1, Spec.Content.Bytes{x1}}
     )
-      == (s2, Spec.Answer.Write{Spec.Write.Written{v1}}): St
+      == (s2, Spec.Answer.Write{Spec.Write.Written{v1}}): NodeState
       & Spec.Answer
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s2,
       Spec.Envelope{r3, w3, z3},
       Spec.Ask.Write{Resources.Name{n2}, c, base2, Spec.Content.Bytes{x2}}
     )
-      == (s3, Spec.Answer.Write{Spec.Write.Written{v2}}): St
+      == (s3, Spec.Answer.Write{Spec.Write.Written{v2}}): NodeState
       & Spec.Answer
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s3,
       Spec.Envelope{r4, w4, z4},
       Spec.Ask.Merge{Spec.Point.Head{c}, b}
     )
-      == (s4, a4): St
+      == (s4, a4): NodeState
       & Spec.Answer
   } -> {
-    Tables.Table.get(Br, St.branches(s), b) == Some{Br{v0, o, e, k}}: Maybe<&2, Br>
+    Tables.Table.get(
+      BranchRecord,
+      NodeState.branches(s),
+      b
+    )
+      == Some{BranchRecord{v0, o, e, k}}: Maybe<&2, BranchRecord>
   } -> {
-    Tables.Table.get(Ver, St.versions(s), v0) == Some{Ver{yb, yp, yw, yt}}: Maybe<&2, Ver>
+    Tables.Table.get(
+      VersionRecord,
+      NodeState.versions(s),
+      v0
+    )
+      == Some{VersionRecord{yb, yp, yw, yt}}: Maybe<&2, VersionRecord>
   } -> {
     a4 == Spec.Answer.Merge{Spec.Merge.Merged{r4}}: Spec.Answer
   }
     & (
       {
-        St.content(s4, n1, Spec.Point.Head{b}) == Some{x1}: Maybe<&2, List<&2, U32>>
+        NodeState.content(s4, n1, Spec.Point.Head{b}) == Some{x1}: Maybe<&2, List<&2, U32>>
       }
-        & {St.content(s4, n2, Spec.Point.Head{b}) == Some{x2}: Maybe<&2, List<&2, U32>>}
+        & {NodeState.content(s4, n2, Spec.Point.Head{b}) == Some{x2}: Maybe<&2, List<&2, U32>>}
     )
 
 def mdk_core(
@@ -19241,167 +21422,248 @@ def mdk_core(
     +s1b = sb_vb(s, s1, r1, w1, z1, b, c, v0)(hn1)(h1)
     +hcn = sb_none(s, s1, r1, w1, z1, b, c, v0)(hn1)(h1)
     +ecb = Tables.Table.differ(
-      Br,
-      St.branches(s),
+      BranchRecord,
+      NodeState.branches(s),
       c,
       b
     )(
       Equal.cong(
-        Maybe<&2, Br>,
+        Maybe<&2, BranchRecord>,
         Bool,
-        z => Maybe.is_some(&2, Br, z),
-        Tables.Table.get(Br, St.branches(s), c),
+        z => Maybe.is_some(&2, BranchRecord, z),
+        Tables.Table.get(BranchRecord, NodeState.branches(s), c),
         None{},
         hcn
       )
     )(
       Equal.cong(
-        Maybe<&2, Br>,
+        Maybe<&2, BranchRecord>,
         Bool,
-        z => Maybe.is_some(&2, Br, z),
-        Tables.Table.get(Br, St.branches(s), b),
-        Some{Br{v0, o, e, k}},
+        z => Maybe.is_some(&2, BranchRecord, z),
+        Tables.Table.get(BranchRecord, NodeState.branches(s), b),
+        Some{BranchRecord{v0, o, e, k}},
         hbs
       )
     )
     +ebc = Strings.String.eq_flip(c, b)(ecb)
     +b1b = Equal.trans(
-      Maybe<&2, Br>,
-      Tables.Table.get(Br, St.branches(s1), b),
-      Tables.Table.get(Br, Tables.Table.set(Br, St.branches(s), c, Br{v0, St.self(s), 0n, 0n}), b),
-      Some{Br{v0, o, e, k}},
+      Maybe<&2, BranchRecord>,
+      Tables.Table.get(BranchRecord, NodeState.branches(s1), b),
+      Tables.Table.get(
+        BranchRecord,
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s),
+          c,
+          BranchRecord{v0, NodeState.self(s), 0n, 0n}
+        ),
+        b
+      ),
+      Some{BranchRecord{v0, o, e, k}},
       Equal.cong(
-        Tables.Table<Br>,
-        Maybe<&2, Br>,
-        y => Tables.Table.get(Br, y, b),
-        St.branches(s1),
-        Tables.Table.set(Br, St.branches(s), c, Br{v0, St.self(s), 0n, 0n}),
+        Tables.Table<BranchRecord>,
+        Maybe<&2, BranchRecord>,
+        y => Tables.Table.get(BranchRecord, y, b),
+        NodeState.branches(s1),
+        Tables.Table.set(
+          BranchRecord,
+          NodeState.branches(s),
+          c,
+          BranchRecord{v0, NodeState.self(s), 0n, 0n}
+        ),
         s1b
       ),
       Equal.trans(
-        Maybe<&2, Br>,
+        Maybe<&2, BranchRecord>,
         Tables.Table.get(
-          Br,
-          Tables.Table.set(Br, St.branches(s), c, Br{v0, St.self(s), 0n, 0n}),
+          BranchRecord,
+          Tables.Table.set(
+            BranchRecord,
+            NodeState.branches(s),
+            c,
+            BranchRecord{v0, NodeState.self(s), 0n, 0n}
+          ),
           b
         ),
-        Tables.Table.get(Br, St.branches(s), b),
-        Some{Br{v0, o, e, k}},
-        Tables.Table.set_keeps_other(Br, St.branches(s), c, Br{v0, St.self(s), 0n, 0n}, b, ecb),
+        Tables.Table.get(BranchRecord, NodeState.branches(s), b),
+        Some{BranchRecord{v0, o, e, k}},
+        Tables.Table.set_keeps_other(
+          BranchRecord,
+          NodeState.branches(s),
+          c,
+          BranchRecord{v0, NodeState.self(s), 0n, 0n},
+          b,
+          ecb
+        ),
         hbs
       )
     )
     +s2b = ws_vb(s1, s2, r2, w2, z2, n1, b, base1, x1, v0, o, e, k, v1)(hn2)(h2)(b1b)
     +b2c = Equal.trans(
-      Maybe<&2, Br>,
-      Tables.Table.get(Br, St.branches(s2), c),
-      Tables.Table.get(Br, Tables.Table.set(Br, St.branches(s1), b, Br{r2, o, e, 1n+k}), c),
-      Some{Br{v0, St.self(s), 0n, 0n}},
+      Maybe<&2, BranchRecord>,
+      Tables.Table.get(BranchRecord, NodeState.branches(s2), c),
+      Tables.Table.get(
+        BranchRecord,
+        Tables.Table.set(BranchRecord, NodeState.branches(s1), b, BranchRecord{r2, o, e, 1n+k}),
+        c
+      ),
+      Some{BranchRecord{v0, NodeState.self(s), 0n, 0n}},
       Equal.cong(
-        Tables.Table<Br>,
-        Maybe<&2, Br>,
-        y => Tables.Table.get(Br, y, c),
-        St.branches(s2),
-        Tables.Table.set(Br, St.branches(s1), b, Br{r2, o, e, 1n+k}),
+        Tables.Table<BranchRecord>,
+        Maybe<&2, BranchRecord>,
+        y => Tables.Table.get(BranchRecord, y, c),
+        NodeState.branches(s2),
+        Tables.Table.set(BranchRecord, NodeState.branches(s1), b, BranchRecord{r2, o, e, 1n+k}),
         s2b
       ),
       Equal.trans(
-        Maybe<&2, Br>,
-        Tables.Table.get(Br, Tables.Table.set(Br, St.branches(s1), b, Br{r2, o, e, 1n+k}), c),
-        Tables.Table.get(Br, St.branches(s1), c),
-        Some{Br{v0, St.self(s), 0n, 0n}},
-        Tables.Table.set_keeps_other(Br, St.branches(s1), b, Br{r2, o, e, 1n+k}, c, ebc),
+        Maybe<&2, BranchRecord>,
+        Tables.Table.get(
+          BranchRecord,
+          Tables.Table.set(BranchRecord, NodeState.branches(s1), b, BranchRecord{r2, o, e, 1n+k}),
+          c
+        ),
+        Tables.Table.get(BranchRecord, NodeState.branches(s1), c),
+        Some{BranchRecord{v0, NodeState.self(s), 0n, 0n}},
+        Tables.Table.set_keeps_other(
+          BranchRecord,
+          NodeState.branches(s1),
+          b,
+          BranchRecord{r2, o, e, 1n+k},
+          c,
+          ebc
+        ),
         Equal.trans(
-          Maybe<&2, Br>,
-          Tables.Table.get(Br, St.branches(s1), c),
+          Maybe<&2, BranchRecord>,
+          Tables.Table.get(BranchRecord, NodeState.branches(s1), c),
           Tables.Table.get(
-            Br,
-            Tables.Table.set(Br, St.branches(s), c, Br{v0, St.self(s), 0n, 0n}),
+            BranchRecord,
+            Tables.Table.set(
+              BranchRecord,
+              NodeState.branches(s),
+              c,
+              BranchRecord{v0, NodeState.self(s), 0n, 0n}
+            ),
             c
           ),
-          Some{Br{v0, St.self(s), 0n, 0n}},
+          Some{BranchRecord{v0, NodeState.self(s), 0n, 0n}},
           Equal.cong(
-            Tables.Table<Br>,
-            Maybe<&2, Br>,
-            y => Tables.Table.get(Br, y, c),
-            St.branches(s1),
-            Tables.Table.set(Br, St.branches(s), c, Br{v0, St.self(s), 0n, 0n}),
+            Tables.Table<BranchRecord>,
+            Maybe<&2, BranchRecord>,
+            y => Tables.Table.get(BranchRecord, y, c),
+            NodeState.branches(s1),
+            Tables.Table.set(
+              BranchRecord,
+              NodeState.branches(s),
+              c,
+              BranchRecord{v0, NodeState.self(s), 0n, 0n}
+            ),
             s1b
           ),
-          Tables.Table.get_after_set(Br, St.branches(s), c, Br{v0, St.self(s), 0n, 0n})
+          Tables.Table.get_after_set(
+            BranchRecord,
+            NodeState.branches(s),
+            c,
+            BranchRecord{v0, NodeState.self(s), 0n, 0n}
+          )
         )
       )
     )
-    +s3v = ws_vv(s2, s3, r3, w3, z3, n2, c, base2, x2, v0, St.self(s), 0n, 0n, v2)(hn3)(h3)(b2c)
+    +s3v = ws_vv(
+      s2,
+      s3,
+      r3,
+      w3,
+      z3,
+      n2,
+      c,
+      base2,
+      x2,
+      v0,
+      NodeState.self(s),
+      0n,
+      0n,
+      v2
+    )(hn3)(h3)(b2c)
     +ht3 = new_free(s2, r3)(hn3)
     +g3r3 = Equal.trans(
-      Maybe<&2, Ver>,
-      Tables.Table.get(Ver, St.versions(s3), r3),
+      Maybe<&2, VersionRecord>,
+      Tables.Table.get(VersionRecord, NodeState.versions(s3), r3),
       Tables.Table.get(
-        Ver,
-        Ver.add(
+        VersionRecord,
+        VersionRecord.add(
           [
             Tables.Row{
               r3,
-              Ver{
-                Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+              VersionRecord{
+                Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
                 [v0],
                 w3,
                 z3
               }
             }
           ],
-          St.versions(s2)
+          NodeState.versions(s2)
         ),
         r3
       ),
       Some{
-        Ver{Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2), [v0], w3, z3}
+        VersionRecord{
+          Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
+          [v0],
+          w3,
+          z3
+        }
       },
       Equal.cong(
-        Tables.Table<Ver>,
-        Maybe<&2, Ver>,
-        y => Tables.Table.get(Ver, y, r3),
-        St.versions(s3),
-        Ver.add(
+        Tables.Table<VersionRecord>,
+        Maybe<&2, VersionRecord>,
+        y => Tables.Table.get(VersionRecord, y, r3),
+        NodeState.versions(s3),
+        VersionRecord.add(
           [
             Tables.Row{
               r3,
-              Ver{
-                Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+              VersionRecord{
+                Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
                 [v0],
                 w3,
                 z3
               }
             }
           ],
-          St.versions(s2)
+          NodeState.versions(s2)
         ),
         s3v
       ),
       add_new_find(
         r3,
-        Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+        Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
         [v0],
         w3,
         z3,
-        St.versions(s2)
-      )(taken_free(St.versions(s2), r3)(ht3))
+        NodeState.versions(s2)
+      )(taken_free(NodeState.versions(s2), r3)(ht3))
     )
     +hk3 = Equal.trans(
       Bool,
-      Shared.List.has(~String, ~String.eq, Tables.Table.keys(Ver, St.versions(s3)), r3),
-      Maybe.is_some(&2, Ver, Tables.Table.get(Ver, St.versions(s3), r3)),
+      Shared.List.has(
+        ~String,
+        ~String.eq,
+        Tables.Table.keys(VersionRecord, NodeState.versions(s3)),
+        r3
+      ),
+      Maybe.is_some(&2, VersionRecord, Tables.Table.get(VersionRecord, NodeState.versions(s3), r3)),
       True{},
-      Tables.Table.keys_get(Ver, St.versions(s3), r3),
+      Tables.Table.keys_get(VersionRecord, NodeState.versions(s3), r3),
       Equal.cong(
-        Maybe<&2, Ver>,
+        Maybe<&2, VersionRecord>,
         Bool,
-        y => Maybe.is_some(&2, Ver, y),
-        Tables.Table.get(Ver, St.versions(s3), r3),
+        y => Maybe.is_some(&2, VersionRecord, y),
+        Tables.Table.get(VersionRecord, NodeState.versions(s3), r3),
         Some{
-          Ver{
-            Tables.Table.set(List<&2, U32>, Vers.blobs(St.versions(s2), v0), n2, x2),
+          VersionRecord{
+            Tables.Table.set(List<&2, U32>, Vers.blobs(NodeState.versions(s2), v0), n2, x2),
             [v0],
             w3,
             z3
@@ -19447,18 +21709,22 @@ def mdk_core(
       yp,
       yw,
       yt,
-      links_two(Tables.Table.keys(Ver, St.versions(s3)), St.versions(s3), r3)(hk3)
+      links_two(
+        Tables.Table.keys(VersionRecord, NodeState.versions(s3)),
+        NodeState.versions(s3),
+        r3
+      )(hk3)
     )(hn1)(hn2)(hn3)(hn4)(hne)(h1)(h2)(h3)(h4)(hbs)(hvs)
 
 # merge_disjoint_keeps_both, by b's record (mb) and v0's version (mv)
 law mdk_split:
-  for mb: Maybe<&2, Br>
-  for mv: Maybe<&2, Ver>
-  for s: St
-  for s1: St
-  for s2: St
-  for s3: St
-  for s4: St
+  for mb: Maybe<&2, BranchRecord>
+  for mv: Maybe<&2, VersionRecord>
+  for s: NodeState
+  for s1: NodeState
+  for s2: NodeState
+  for s3: NodeState
+  for s4: NodeState
   for a4: Spec.Answer
   for r1: String
   for w1: String
@@ -19484,59 +21750,59 @@ law mdk_split:
   for v1: String
   for v2: String
   {
-    Tables.Table.get(Br, St.branches(s), b) == mb: Maybe<&2, Br>
+    Tables.Table.get(BranchRecord, NodeState.branches(s), b) == mb: Maybe<&2, BranchRecord>
   } -> {
-    Tables.Table.get(Ver, St.versions(s), v0) == mv: Maybe<&2, Ver>
+    Tables.Table.get(VersionRecord, NodeState.versions(s), v0) == mv: Maybe<&2, VersionRecord>
   } -> {
-    Spec.Node.get_outcome(s, r1) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s, r1) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.get_outcome(s1, r2) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s1, r2) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.get_outcome(s2, r3) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s2, r3) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
-    Spec.Node.get_outcome(s3, r4) == Spec.Outcome.NotSeen{}: Spec.Outcome
+    Spec.VendNode.get_outcome(s3, r4) == Spec.Outcome.NotSeen{}: Spec.Outcome
   } -> {
     String.eq(n1, n2) == False{}: Bool
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s,
       Spec.Envelope{r1, w1, z1},
       Spec.Ask.SetBranch{c, Spec.Point.Head{b}}
     )
-      == (s1, Spec.Answer.SetBranch{Spec.SetBranch.Created{v0}}): St
+      == (s1, Spec.Answer.SetBranch{Spec.SetBranch.Created{v0}}): NodeState
       & Spec.Answer
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s1,
       Spec.Envelope{r2, w2, z2},
       Spec.Ask.Write{Resources.Name{n1}, b, base1, Spec.Content.Bytes{x1}}
     )
-      == (s2, Spec.Answer.Write{Spec.Write.Written{v1}}): St
+      == (s2, Spec.Answer.Write{Spec.Write.Written{v1}}): NodeState
       & Spec.Answer
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s2,
       Spec.Envelope{r3, w3, z3},
       Spec.Ask.Write{Resources.Name{n2}, c, base2, Spec.Content.Bytes{x2}}
     )
-      == (s3, Spec.Answer.Write{Spec.Write.Written{v2}}): St
+      == (s3, Spec.Answer.Write{Spec.Write.Written{v2}}): NodeState
       & Spec.Answer
   } -> {
-    Spec.Node.ask(
+    Spec.VendNode.ask(
       s3,
       Spec.Envelope{r4, w4, z4},
       Spec.Ask.Merge{Spec.Point.Head{c}, b}
     )
-      == (s4, a4): St
+      == (s4, a4): NodeState
       & Spec.Answer
   } -> {
     a4 == Spec.Answer.Merge{Spec.Merge.Merged{r4}}: Spec.Answer
   }
     & (
       {
-        St.content(s4, n1, Spec.Point.Head{b}) == Some{x1}: Maybe<&2, List<&2, U32>>
+        NodeState.content(s4, n1, Spec.Point.Head{b}) == Some{x1}: Maybe<&2, List<&2, U32>>
       }
-        & {St.content(s4, n2, Spec.Point.Head{b}) == Some{x2}: Maybe<&2, List<&2, U32>>}
+        & {NodeState.content(s4, n2, Spec.Point.Head{b}) == Some{x2}: Maybe<&2, List<&2, U32>>}
     )
 
 def mdk_split(
@@ -19581,9 +21847,16 @@ def mdk_split(
           }
             & (
               {
-                St.content(s4, n1, Spec.Point.Head{b}) == Some{x1}: Maybe<&2, List<&2, U32>>
+                NodeState.content(s4, n1, Spec.Point.Head{b}) == Some{x1}: Maybe<&2, List<&2, U32>>
               }
-                & {St.content(s4, n2, Spec.Point.Head{b}) == Some{x2}: Maybe<&2, List<&2, U32>>}
+                & {
+                  NodeState.content(
+                    s4,
+                    n2,
+                    Spec.Point.Head{b}
+                  )
+                    == Some{x2}: Maybe<&2, List<&2, U32>>
+                }
             ),
           Maybes.Maybe.none_ne_some(
             String,
@@ -19591,17 +21864,17 @@ def mdk_split(
             Equal.trans(
               Maybe<&2, String>,
               None{},
-              Br.head.of(Tables.Table.get(Br, St.branches(s), b)),
+              BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s), b)),
               Some{v0},
               Equal.sym(
                 Maybe<&2, String>,
-                Br.head.of(Tables.Table.get(Br, St.branches(s), b)),
+                BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s), b)),
                 None{},
                 Equal.cong(
-                  Maybe<&2, Br>,
+                  Maybe<&2, BranchRecord>,
                   Maybe<&2, String>,
-                  y => Br.head.of(y),
-                  Tables.Table.get(Br, St.branches(s), b),
+                  y => BranchRecord.head.of(y),
+                  Tables.Table.get(BranchRecord, NodeState.branches(s), b),
                   None{},
                   eb
                 )
@@ -19610,7 +21883,7 @@ def mdk_split(
             )
           )
         )
-    case Some{Br{h, o, e, k}} None{}:
+    case Some{BranchRecord{h, o, e, k}} None{}:
       eb => ev => +hn1 => hn2 => hn3 => hn4 => hne => +h1 => h2 => h3 => h4 =>
         Empty.absurd(
           {
@@ -19618,25 +21891,32 @@ def mdk_split(
           }
             & (
               {
-                St.content(s4, n1, Spec.Point.Head{b}) == Some{x1}: Maybe<&2, List<&2, U32>>
+                NodeState.content(s4, n1, Spec.Point.Head{b}) == Some{x1}: Maybe<&2, List<&2, U32>>
               }
-                & {St.content(s4, n2, Spec.Point.Head{b}) == Some{x2}: Maybe<&2, List<&2, U32>>}
+                & {
+                  NodeState.content(
+                    s4,
+                    n2,
+                    Spec.Point.Head{b}
+                  )
+                    == Some{x2}: Maybe<&2, List<&2, U32>>
+                }
             ),
           Shared.Bool.false_ne_true(
             Equal.trans(
               Bool,
               False{},
-              Ver.has(St.versions(s), v0),
+              VersionRecord.has(NodeState.versions(s), v0),
               True{},
               Equal.sym(
                 Bool,
-                Ver.has(St.versions(s), v0),
+                VersionRecord.has(NodeState.versions(s), v0),
                 False{},
                 Equal.cong(
-                  Maybe<&2, Ver>,
+                  Maybe<&2, VersionRecord>,
                   Bool,
-                  y => Maybe.is_some(&2, Ver, y),
-                  Tables.Table.get(Ver, St.versions(s), v0),
+                  y => Maybe.is_some(&2, VersionRecord, y),
+                  Tables.Table.get(VersionRecord, NodeState.versions(s), v0),
                   None{},
                   ev
                 )
@@ -19645,7 +21925,7 @@ def mdk_split(
             )
           )
         )
-    case Some{Br{+h, +o, +e, +k}} Some{Ver{yb, yp, yw, yt}}:
+    case Some{BranchRecord{+h, +o, +e, +k}} Some{VersionRecord{yb, yp, yw, yt}}:
       +eb => ev => +hn1 => hn2 => hn3 => hn4 => hne => +h1 => h2 => h3 => h4 =>
         +s = s
         +s1 = s1
@@ -19662,18 +21942,18 @@ def mdk_split(
           Equal.trans(
             Maybe<&2, String>,
             Some{h},
-            Br.head.of(Tables.Table.get(Br, St.branches(s), b)),
+            BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s), b)),
             Some{v0},
             Equal.sym(
               Maybe<&2, String>,
-              Br.head.of(Tables.Table.get(Br, St.branches(s), b)),
+              BranchRecord.head.of(Tables.Table.get(BranchRecord, NodeState.branches(s), b)),
               Some{h},
               Equal.cong(
-                Maybe<&2, Br>,
+                Maybe<&2, BranchRecord>,
                 Maybe<&2, String>,
-                y => Br.head.of(y),
-                Tables.Table.get(Br, St.branches(s), b),
-                Some{Br{h, o, e, k}},
+                y => BranchRecord.head.of(y),
+                Tables.Table.get(BranchRecord, NodeState.branches(s), b),
+                Some{BranchRecord{h, o, e, k}},
                 eb
               )
             ),
@@ -19718,8 +21998,1757 @@ def mdk_split(
           yw,
           yt
         )(hn1)(hn2)(hn3)(hn4)(hne)(h1)(h2)(h3)(h4)((
-            %hv0: {Tables.Table.get(Br, St.branches(s), b) == Some{Br{_, o, e, k}}: Maybe<&2, Br>}
+            %hv0: {Tables.Table.get(BranchRecord, NodeState.branches(s), b) == Some{BranchRecord{_, o, e, k}}: Maybe<&2, BranchRecord>}
             eb))(ev)
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# a set-group that answers Set has set the group to its members
+law sg_set:
+  for cycle: Bool
+  for s: NodeState
+  for g: String
+  for ms: List<&2, Spec.Member>
+  for x: Nat
+  {
+    Out.answer(
+      SetGroup.on(cycle, s, g, ms)
+    )
+      == Spec.Answer.SetGroup{Spec.SetGroup.Set{x}}: Spec.Answer
+  } -> {
+    GroupRecord.members.got(
+      Tables.Table.get(GroupRecord, Out.groups(SetGroup.on(cycle, s, g, ms)), g)
+    )
+      == Some{ms}: Maybe<&2, List<&2, Spec.Member>>
+  }
+
+def sg_set(cycle, s, g, ms, x):
+  match cycle:
+    case True{}:
+      ha => Empty.absurd(
+        {
+          GroupRecord.members.got(
+            Tables.Table.get(GroupRecord, Out.groups(SetGroup.on(True{}, s, g, ms)), g)
+          )
+            == Some{ms}: Maybe<&2, List<&2, Spec.Member>>
+        },
+        Shared.Bool.false_ne_true(
+          Answer.clash(
+            Spec.Answer.SetGroup{Spec.SetGroup.Cycle{}},
+            Spec.Answer.SetGroup{Spec.SetGroup.Set{x}},
+            ha
+          )
+        )
+      )
+    case False{}:
+      ha =>
+        +s = s
+        +g = g
+        +ms = ms
+        Equal.cong(
+          Maybe<&2, GroupRecord>,
+          Maybe<&2, List<&2, Spec.Member>>,
+          y => GroupRecord.members.got(y),
+          Tables.Table.get(
+            GroupRecord,
+            Tables.Table.set(
+              GroupRecord,
+              NodeState.groups(s),
+              g,
+              GroupRecord{ms, GroupRecord.epoch.next(NodeState.groups(s), g)}
+            ),
+            g
+          ),
+          Some{GroupRecord{ms, GroupRecord.epoch.next(NodeState.groups(s), g)}},
+          Tables.Table.get_after_set(
+            GroupRecord,
+            NodeState.groups(s),
+            g,
+            GroupRecord{ms, GroupRecord.epoch.next(NodeState.groups(s), g)}
+          )
+        )
+
+# a set-group, whatever it answers, leaves every other group
+law sg_other:
+  for cycle: Bool
+  for s: NodeState
+  for g: String
+  for h: String
+  for ms: List<&2, Spec.Member>
+  {
+    String.eq(g, h) == False{}: Bool
+  } -> {
+    GroupRecord.members.got(
+      Tables.Table.get(GroupRecord, Out.groups(SetGroup.on(cycle, s, g, ms)), h)
+    )
+      == GroupRecord.members.got(
+        Tables.Table.get(GroupRecord, NodeState.groups(s), h)
+      ): Maybe<&2, List<&2, Spec.Member>>
+  }
+
+def sg_other(cycle, s, g, h, ms):
+  match cycle:
+    case True{}:
+      e => {==}
+    case False{}:
+      e =>
+        +s = s
+        +g = g
+        +h = h
+        +ms = ms
+        Equal.cong(
+          Maybe<&2, GroupRecord>,
+          Maybe<&2, List<&2, Spec.Member>>,
+          y => GroupRecord.members.got(y),
+          Tables.Table.get(
+            GroupRecord,
+            Tables.Table.set(
+              GroupRecord,
+              NodeState.groups(s),
+              g,
+              GroupRecord{ms, GroupRecord.epoch.next(NodeState.groups(s), g)}
+            ),
+            h
+          ),
+          Tables.Table.get(GroupRecord, NodeState.groups(s), h),
+          Tables.Table.set_keeps_other(
+            GroupRecord,
+            NodeState.groups(s),
+            g,
+            GroupRecord{ms, GroupRecord.epoch.next(NodeState.groups(s), g)},
+            h,
+            e
+          )
+        )
+
+# set_keeps_others, by whether the request was seen (found)
+law keep_others_asked:
+  for found: Maybe<&2, Seen>
+  for s: NodeState
+  for r: String
+  for w: String
+  for z: String
+  for g: String
+  for h: String
+  for ms: List<&2, Spec.Member>
+  for t: NodeState
+  for a: Spec.Answer
+  {
+    VendNode.asked(found, s, r, w, z, Spec.Ask.SetGroup{g, ms}) == (t, a): NodeState & Spec.Answer
+  } -> {
+    String.eq(g, h) == False{}: Bool
+  } -> {
+    GroupRecord.members.got(
+      Tables.Table.get(GroupRecord, NodeState.groups(t), h)
+    )
+      == GroupRecord.members.got(
+        Tables.Table.get(GroupRecord, NodeState.groups(s), h)
+      ): Maybe<&2, List<&2, Spec.Member>>
+  }
+
+def keep_others_asked(found, s, r, w, z, g, h, ms, t, a):
+  match found:
+    case Some{Seen{b, q}}:
+      hask => e =>
+        +s = s
+        +h = h
+        %Equal.cong(
+          NodeState & Spec.Answer,
+          NodeState,
+          y => Pair.fst(NodeState, Spec.Answer, y),
+          (s, b),
+          (t, a),
+          hask
+        ): {
+          GroupRecord.members.got(
+            Tables.Table.get(GroupRecord, NodeState.groups(_), h)
+          )
+            == GroupRecord.members.got(
+              Tables.Table.get(GroupRecord, NodeState.groups(s), h)
+            ): Maybe<&2, List<&2, Spec.Member>>
+        }
+        {==}
+    case None{}:
+      hask => e =>
+        +s = s
+        +r = r
+        +w = w
+        +z = z
+        +g = g
+        +h = h
+        +ms = ms
+        %applied_state(
+          s,
+          r,
+          Step.of(s, r, w, z, Spec.Ask.SetGroup{g, ms}),
+          t,
+          a
+        )(
+          hask
+        ): {
+          GroupRecord.members.got(
+            Tables.Table.get(GroupRecord, NodeState.groups(_), h)
+          )
+            == GroupRecord.members.got(
+              Tables.Table.get(GroupRecord, NodeState.groups(s), h)
+            ): Maybe<&2, List<&2, Spec.Member>>
+        }
+        %Equal.sym(
+          Tables.Table<GroupRecord>,
+          NodeState.groups(
+            Pair.fst(
+              NodeState,
+              Spec.Answer,
+              VendNode.applied(s, r, Step.of(s, r, w, z, Spec.Ask.SetGroup{g, ms}))
+            )
+          ),
+          Out.groups(Step.of(s, r, w, z, Spec.Ask.SetGroup{g, ms})),
+          groups_after_applied(s, r, Step.of(s, r, w, z, Spec.Ask.SetGroup{g, ms}))
+        ): {
+          GroupRecord.members.got(
+            Tables.Table.get(GroupRecord, _, h)
+          )
+            == GroupRecord.members.got(
+              Tables.Table.get(GroupRecord, NodeState.groups(s), h)
+            ): Maybe<&2, List<&2, Spec.Member>>
+        }
+        sg_other(Cycle.has(NodeState.groups(s), g, ms), s, g, h, ms)(e)
+
+# what the group that mg holds was set to is its members
+law got_in:
+  for mg: Maybe<&2, GroupRecord>
+  for ms: List<&2, Spec.Member>
+  {
+    GroupRecord.members.got(mg) == Some{ms}: Maybe<&2, List<&2, Spec.Member>>
+  } -> {GroupRecord.members.in(mg) == ms: List<&2, Spec.Member>}
+
+def got_in(mg, ms):
+  match mg:
+    case None{}:
+      h => Empty.absurd(
+        {GroupRecord.members.in(None{}) == ms: List<&2, Spec.Member>},
+        Maybes.Maybe.none_ne_some(List<&2, Spec.Member>, ms, h)
+      )
+    case Some{GroupRecord{l, e}}:
+      h => Maybes.Maybe.some_inj(List<&2, Spec.Member>, l, ms, h)
+
+law among_found.of:
+  for m: Spec.Member
+  for ms: List<&2, Spec.Member>
+  for w: Spec.Member.Among(m, ms)
+  {Shared.List.has(~Spec.Member, ~Member.same, ms, m) == True{}: Bool}
+
+def among_found.of(m, ms, w):
+  match w:
+    case (ys, (zs, e)):
+      %Equal.sym(
+        List<&2, Spec.Member>,
+        ms,
+        List.append(&2, Spec.Member, ys, m <> zs),
+        e
+      ): {Shared.List.has(~Spec.Member, ~Member.same, _, m) == True{}: Bool}
+      Shared.List.has_middle(~Spec.Member, ~Member.same, ~member_same_refl, ys, m, zs)
+
+# a member among ms is found in ms
+law among_found:
+  for m: Spec.Member
+  for ms: List<&2, Spec.Member>
+  Spec.Member.Among(m, ms) -> {Shared.List.has(~Spec.Member, ~Member.same, ms, m) == True{}: Bool}
+
+def among_found(m, ms):
+  w => among_found.of(m, ms, w)
+
+# a member found in ms is among ms, by where it was found
+law found_among.of:
+  for ms: List<&2, Spec.Member>
+  for m: Spec.Member
+  for w: &ys: List<
+    &2,
+    Spec.Member> -> &y: Spec.Member -> &zs: List<
+    &2,
+    Spec.Member> -> {
+    ms == List.append(&2, Spec.Member, ys, y <> zs): List<&2, Spec.Member>
+  }
+    & {Member.same(y, m) == True{}: Bool}
+  Spec.Member.Among(m, ms)
+
+def found_among.of(ms, m, w):
+  match w:
+    case (ys, (y, (zs, (e1, e2)))):
+      (ys, (zs, (
+            %member_same_sound(y, m)(e2): {ms == List.append(&2, Spec.Member, ys, _ <> zs): List<&2, Spec.Member>}
+            e1)))
+
+law found_among:
+  for ms: List<&2, Spec.Member>
+  for m: Spec.Member
+  {Shared.List.has(~Spec.Member, ~Member.same, ms, m) == True{}: Bool} -> Spec.Member.Among(m, ms)
+
+def found_among(ms, m):
+  +ms = ms
+  +m = m
+  h => found_among.of(ms, m, Shared.List.has_split(~Spec.Member, ~Member.same, ms, m)(h))
+
+law of_found.of:
+  for s: NodeState
+  for g: String
+  for x: Spec.Member
+  for w: Spec.Member.Of(s, g, x)
+  {
+    Shared.List.has(
+      ~Spec.Member,
+      ~Member.same,
+      GroupRecord.members.of(NodeState.groups(s), Spec.Member.Group{g}),
+      x
+    )
+      == True{}: Bool
+  }
+
+def of_found.of(s, g, x, w):
+  match w:
+    case (+ms, (eg, ha)):
+      %Equal.sym(
+        List<&2, Spec.Member>,
+        GroupRecord.members.in(Tables.Table.get(GroupRecord, NodeState.groups(s), g)),
+        ms,
+        got_in(Tables.Table.get(GroupRecord, NodeState.groups(s), g), ms)(eg)
+      ): {Shared.List.has(~Spec.Member, ~Member.same, _, x) == True{}: Bool}
+      among_found(x, ms)(ha)
+
+# a member of g is found among g's members
+law of_found:
+  for s: NodeState
+  for g: String
+  for x: Spec.Member
+  Spec.Member.Of(
+    s,
+    g,
+    x
+  ) -> {
+    Shared.List.has(
+      ~Spec.Member,
+      ~Member.same,
+      GroupRecord.members.of(NodeState.groups(s), Spec.Member.Group{g}),
+      x
+    )
+      == True{}: Bool
+  }
+
+def of_found(s, g, x):
+  w => of_found.of(s, g, x, w)
+
+# a member found among g's members is a member of g: by what s holds for g (mg)
+law of_from_found.at:
+  for mg: Maybe<&2, GroupRecord>
+  for s: NodeState
+  for g: String
+  for x: Spec.Member
+  {
+    Tables.Table.get(GroupRecord, NodeState.groups(s), g) == mg: Maybe<&2, GroupRecord>
+  } -> {
+    Shared.List.has(~Spec.Member, ~Member.same, GroupRecord.members.in(mg), x) == True{}: Bool
+  } -> Spec.Member.Of(s, g, x)
+
+def of_from_found.at(mg, s, g, x):
+  match mg:
+    case None{}:
+      e => h => Empty.absurd(Spec.Member.Of(s, g, x), Shared.Bool.false_ne_true(h))
+    case Some{GroupRecord{+ms, ep}}:
+      e => h =>
+        +s = s
+        +g = g
+        (
+          ms,
+          (
+            Equal.cong(
+              Maybe<&2, GroupRecord>,
+              Maybe<&2, List<&2, Spec.Member>>,
+              z => GroupRecord.members.got(z),
+              Tables.Table.get(GroupRecord, NodeState.groups(s), g),
+              Some{GroupRecord{ms, ep}},
+              e
+            ),
+            found_among(ms, x)(h)
+          )
+        )
+
+law of_from_found:
+  for s: NodeState
+  for g: String
+  for x: Spec.Member
+  {
+    Shared.List.has(
+      ~Spec.Member,
+      ~Member.same,
+      GroupRecord.members.of(NodeState.groups(s), Spec.Member.Group{g}),
+      x
+    )
+      == True{}: Bool
+  } -> Spec.Member.Of(s, g, x)
+
+def of_from_found(s, g, x):
+  +s = s
+  +g = g
+  h => of_from_found.at(Tables.Table.get(GroupRecord, NodeState.groups(s), g), s, g, x)({==})(h)
+
+# chain_path at a first group h, once the chain is taken apart
+law chain_path.pair:
+  for s: NodeState
+  for g: String
+  for h: String
+  for r: List<&2, String>
+  for m: Spec.Member
+  for hc: Spec.Member.Of(s, g, Spec.Member.Group{h}) & Spec.VendNode.Chain(s, h, r, m)
+  (
+    Spec.VendNode.Chain(
+      s,
+      h,
+      r,
+      m
+    ) -> {
+      Reaches.Reach.path(
+        ~Spec.Member,
+        ~Tables.Table<GroupRecord>,
+        ~Member.same,
+        ~GroupRecord.members.of,
+        GroupRecord.groups(r),
+        GroupRecord.members.of(NodeState.groups(s), Spec.Member.Group{h}),
+        NodeState.groups(s),
+        m
+      )
+        == True{}: Bool
+    }
+  ) -> {
+    Bool.and(
+      Shared.List.has(
+        ~Spec.Member,
+        ~Member.same,
+        GroupRecord.members.of(NodeState.groups(s), Spec.Member.Group{g}),
+        Spec.Member.Group{h}
+      ),
+      Reaches.Reach.path(
+        ~Spec.Member,
+        ~Tables.Table<GroupRecord>,
+        ~Member.same,
+        ~GroupRecord.members.of,
+        GroupRecord.groups(r),
+        GroupRecord.members.of(NodeState.groups(s), Spec.Member.Group{h}),
+        NodeState.groups(s),
+        m
+      )
+    )
+      == True{}: Bool
+  }
+
+def chain_path.pair(s, g, h, r, m, hc):
+  match hc:
+    case (ho, hr):
+      ih =>
+        +s = s
+        +g = g
+        +h = h
+        %Equal.sym(
+          Bool,
+          Shared.List.has(
+            ~Spec.Member,
+            ~Member.same,
+            GroupRecord.members.of(NodeState.groups(s), Spec.Member.Group{g}),
+            Spec.Member.Group{h}
+          ),
+          True{},
+          of_found(s, g, Spec.Member.Group{h})(ho)
+        ): {
+          Bool.and(
+            _,
+            Reaches.Reach.path(
+              ~Spec.Member,
+              ~Tables.Table<GroupRecord>,
+              ~Member.same,
+              ~GroupRecord.members.of,
+              GroupRecord.groups(r),
+              GroupRecord.members.of(NodeState.groups(s), Spec.Member.Group{h}),
+              NodeState.groups(s),
+              m
+            )
+          )
+            == True{}: Bool
+        }
+        ih(hr)
+
+# a chain of groups is a path of their members
+law chain_path:
+  for ps: List<&2, String>
+  for s: NodeState
+  for g: String
+  for m: Spec.Member
+  Spec.VendNode.Chain(
+    s,
+    g,
+    ps,
+    m
+  ) -> {
+    Reaches.Reach.path(
+      ~Spec.Member,
+      ~Tables.Table<GroupRecord>,
+      ~Member.same,
+      ~GroupRecord.members.of,
+      GroupRecord.groups(ps),
+      GroupRecord.members.of(NodeState.groups(s), Spec.Member.Group{g}),
+      NodeState.groups(s),
+      m
+    )
+      == True{}: Bool
+  }
+
+def chain_path(ps, s, g, m):
+  match ps:
+    case Nil{}:
+      hc => of_found(s, g, m)(hc)
+    case Con{+h, +r}:
+      hc =>
+        +s = s
+        +g = g
+        +m = m
+        chain_path.pair(s, g, h, r, m, hc)(chain_path(r, s, h, m))
+
+# path_chain, once the rest of the path is a chain
+law path_chain.cons:
+  for s: NodeState
+  for g: String
+  for k: String
+  for m: Spec.Member
+  for ho: Spec.Member.Of(s, g, Spec.Member.Group{k})
+  for w: &qs: List<&2, String> -> Spec.VendNode.Chain(s, k, qs, m)
+  (&qs: List<&2, String> -> Spec.VendNode.Chain(s, g, qs, m))
+
+def path_chain.cons(s, g, k, m, ho, w):
+  match w:
+    case (qs, c):
+      (k <> qs, (ho, c))
+
+# a path of members from g's members is a chain of groups
+law path_chain:
+  for ps: List<&2, Spec.Member>
+  for s: NodeState
+  for g: String
+  for m: Spec.Member
+  {
+    Reaches.Reach.path(
+      ~Spec.Member,
+      ~Tables.Table<GroupRecord>,
+      ~Member.same,
+      ~GroupRecord.members.of,
+      ps,
+      GroupRecord.members.of(NodeState.groups(s), Spec.Member.Group{g}),
+      NodeState.groups(s),
+      m
+    )
+      == True{}: Bool
+  } -> &qs: List<&2, String> -> Spec.VendNode.Chain(s, g, qs, m)
+
+def path_chain(ps, s, g, m):
+  match ps:
+    case Nil{}:
+      h => ([], of_from_found(s, g, m)(h))
+    case Con{Spec.Member.VendNode{n}, +r}:
+      +h =>
+        +s = s
+        +m = m
+        Empty.absurd(
+          &qs: List<&2, String> -> Spec.VendNode.Chain(s, g, qs, m),
+          Shared.Bool.false_ne_true(
+            Equal.trans(
+              Bool,
+              False{},
+              Reaches.Reach.path(
+                ~Spec.Member,
+                ~Tables.Table<GroupRecord>,
+                ~Member.same,
+                ~GroupRecord.members.of,
+                r,
+                [],
+                NodeState.groups(s),
+                m
+              ),
+              True{},
+              Equal.sym(
+                Bool,
+                Reaches.Reach.path(
+                  ~Spec.Member,
+                  ~Tables.Table<GroupRecord>,
+                  ~Member.same,
+                  ~GroupRecord.members.of,
+                  r,
+                  [],
+                  NodeState.groups(s),
+                  m
+                ),
+                False{},
+                Reaches.Reach.path_empty(
+                  ~Spec.Member,
+                  ~Tables.Table<GroupRecord>,
+                  ~Member.same,
+                  ~GroupRecord.members.of,
+                  r,
+                  NodeState.groups(s),
+                  m
+                )
+              ),
+              Bools.Bool.and_true_right(
+                Shared.List.has(
+                  ~Spec.Member,
+                  ~Member.same,
+                  GroupRecord.members.of(NodeState.groups(s), Spec.Member.Group{g}),
+                  Spec.Member.VendNode{n}
+                ),
+                Reaches.Reach.path(
+                  ~Spec.Member,
+                  ~Tables.Table<GroupRecord>,
+                  ~Member.same,
+                  ~GroupRecord.members.of,
+                  r,
+                  [],
+                  NodeState.groups(s),
+                  m
+                )
+              )(h)
+            )
+          )
+        )
+    case Con{Spec.Member.Group{+k}, +r}:
+      +h =>
+        +s = s
+        +g = g
+        +m = m
+        path_chain.cons(
+          s,
+          g,
+          k,
+          m,
+          of_from_found(
+            s,
+            g,
+            Spec.Member.Group{k}
+          )(
+            Bools.Bool.and_true_left(
+              Shared.List.has(
+                ~Spec.Member,
+                ~Member.same,
+                GroupRecord.members.of(NodeState.groups(s), Spec.Member.Group{g}),
+                Spec.Member.Group{k}
+              ),
+              Reaches.Reach.path(
+                ~Spec.Member,
+                ~Tables.Table<GroupRecord>,
+                ~Member.same,
+                ~GroupRecord.members.of,
+                r,
+                GroupRecord.members.of(NodeState.groups(s), Spec.Member.Group{k}),
+                NodeState.groups(s),
+                m
+              )
+            )(h)
+          ),
+          path_chain(
+            r,
+            s,
+            k,
+            m
+          )(
+            Bools.Bool.and_true_right(
+              Shared.List.has(
+                ~Spec.Member,
+                ~Member.same,
+                GroupRecord.members.of(NodeState.groups(s), Spec.Member.Group{g}),
+                Spec.Member.Group{k}
+              ),
+              Reaches.Reach.path(
+                ~Spec.Member,
+                ~Tables.Table<GroupRecord>,
+                ~Member.same,
+                ~GroupRecord.members.of,
+                r,
+                GroupRecord.members.of(NodeState.groups(s), Spec.Member.Group{k}),
+                NodeState.groups(s),
+                m
+              )
+            )(h)
+          )
+        )
+
+# inside_has_chain, once the search's path is found
+law inside_chain.of:
+  for s: NodeState
+  for g: String
+  for m: Spec.Member
+  for w: &ps: List<
+    &2,
+    Spec.Member> -> {
+    Reaches.Reach.path(
+      ~Spec.Member,
+      ~Tables.Table<GroupRecord>,
+      ~Member.same,
+      ~GroupRecord.members.of,
+      ps,
+      GroupRecord.members.of(NodeState.groups(s), Spec.Member.Group{g}),
+      NodeState.groups(s),
+      m
+    )
+      == True{}: Bool
+  }
+    & {
+      Reaches.Reach.fits(
+        Spec.Member,
+        ps,
+        List.length(&2, Spec.Member, GroupRecord.all(NodeState.groups(s)))
+      )
+        == True{}: Bool
+    }
+  (&qs: List<&2, String> -> Spec.VendNode.Chain(s, g, qs, m))
+
+def inside_chain.of(s, g, m, w):
+  match w:
+    case (ps, (hp, hf)):
+      path_chain(ps, s, g, m)(hp)
+
+# a member that closes a cycle for g, as the search sees it, closes it as the
+# spec says
+law closer_of:
+  for s: NodeState
+  for g: String
+  for y: Spec.Member
+  {
+    Bool.or(
+      Member.same(y, Spec.Member.Group{g}),
+      Reaches.Reach.in(
+        ~Spec.Member,
+        ~Tables.Table<GroupRecord>,
+        ~Member.same,
+        ~GroupRecord.members.of,
+        ~GroupRecord.all,
+        NodeState.groups(s),
+        y,
+        Spec.Member.Group{g}
+      )
+    )
+      == True{}: Bool
+  } -> Spec.Member.Closes(s, g, y)
+
+def closer_of(s, g, y):
+  match y:
+    case Spec.Member.VendNode{n}:
+      h =>
+        +s = s
+        +g = g
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            Reaches.Reach.in(
+              ~Spec.Member,
+              ~Tables.Table<GroupRecord>,
+              ~Member.same,
+              ~GroupRecord.members.of,
+              ~GroupRecord.all,
+              NodeState.groups(s),
+              Spec.Member.VendNode{n},
+              Spec.Member.Group{g}
+            ),
+            True{},
+            Equal.sym(
+              Bool,
+              Reaches.Reach.in(
+                ~Spec.Member,
+                ~Tables.Table<GroupRecord>,
+                ~Member.same,
+                ~GroupRecord.members.of,
+                ~GroupRecord.all,
+                NodeState.groups(s),
+                Spec.Member.VendNode{n},
+                Spec.Member.Group{g}
+              ),
+              False{},
+              Reaches.Reach.go_nil(
+                ~Spec.Member,
+                ~Tables.Table<GroupRecord>,
+                ~Member.same,
+                ~GroupRecord.members.of,
+                List.length(&2, Spec.Member, GroupRecord.all(NodeState.groups(s))),
+                NodeState.groups(s),
+                Spec.Member.Group{g}
+              )
+            ),
+            h
+          )
+        )
+    case Spec.Member.Group{h}:
+      +h0 => hne =>
+        +s = s
+        +g = g
+        %Strings.String.ne_eq(
+          h,
+          g
+        )(
+          hne
+        ): {
+          Bool.or(
+            _,
+            Reaches.Reach.in(
+              ~Spec.Member,
+              ~Tables.Table<GroupRecord>,
+              ~Member.same,
+              ~GroupRecord.members.of,
+              ~GroupRecord.all,
+              NodeState.groups(s),
+              Spec.Member.Group{h},
+              Spec.Member.Group{g}
+            )
+          )
+            == True{}: Bool
+        }
+        h0
+
+# closes_of for the group h, by whether h is g (b)
+law closes_of.at:
+  for b: Bool
+  for s: NodeState
+  for g: String
+  for h: String
+  {
+    String.eq(h, g) == b: Bool
+  } -> Spec.Member.Closes(
+    s,
+    g,
+    Spec.Member.Group{h}
+  ) -> {
+    Bool.or(
+      b,
+      Reaches.Reach.in(
+        ~Spec.Member,
+        ~Tables.Table<GroupRecord>,
+        ~Member.same,
+        ~GroupRecord.members.of,
+        ~GroupRecord.all,
+        NodeState.groups(s),
+        Spec.Member.Group{h},
+        Spec.Member.Group{g}
+      )
+    )
+      == True{}: Bool
+  }
+
+def closes_of.at(b, s, g, h):
+  match b:
+    case True{}:
+      e => hc => {==}
+    case False{}:
+      +e => hc =>
+        +g = g
+        +h = h
+        hc(
+          q => Shared.Bool.false_ne_true(
+            Equal.trans(
+              Bool,
+              False{},
+              String.eq(h, g),
+              True{},
+              Equal.sym(Bool, String.eq(h, g), False{}, e),
+              (
+                %Equal.sym(String, h, g, q): {String.eq(_, g) == True{}: Bool}
+                Strings.String.eq_refl(g))
+            )
+          )
+        )
+
+# a member that closes a cycle as the spec says closes it for the search
+law closes_of:
+  for s: NodeState
+  for g: String
+  for y: Spec.Member
+  Spec.Member.Closes(
+    s,
+    g,
+    y
+  ) -> {
+    Bool.or(
+      Member.same(y, Spec.Member.Group{g}),
+      Reaches.Reach.in(
+        ~Spec.Member,
+        ~Tables.Table<GroupRecord>,
+        ~Member.same,
+        ~GroupRecord.members.of,
+        ~GroupRecord.all,
+        NodeState.groups(s),
+        y,
+        Spec.Member.Group{g}
+      )
+    )
+      == True{}: Bool
+  }
+
+def closes_of(s, g, y):
+  match y:
+    case Spec.Member.VendNode{n}:
+      hc => Empty.absurd(
+        {
+          Bool.or(
+            Member.same(Spec.Member.VendNode{n}, Spec.Member.Group{g}),
+            Reaches.Reach.in(
+              ~Spec.Member,
+              ~Tables.Table<GroupRecord>,
+              ~Member.same,
+              ~GroupRecord.members.of,
+              ~GroupRecord.all,
+              NodeState.groups(s),
+              Spec.Member.VendNode{n},
+              Spec.Member.Group{g}
+            )
+          )
+            == True{}: Bool
+        },
+        hc
+      )
+    case Spec.Member.Group{+h}:
+      hc =>
+        +g = g
+        closes_of.at(String.eq(h, g), s, g, h)({==})(hc)
+
+# a set-group that answers Cycle found a member that closes one
+law sg_cycle:
+  for cycle: Bool
+  for s: NodeState
+  for g: String
+  for ms: List<&2, Spec.Member>
+  {
+    Out.answer(
+      SetGroup.on(cycle, s, g, ms)
+    )
+      == Spec.Answer.SetGroup{Spec.SetGroup.Cycle{}}: Spec.Answer
+  } -> {cycle == True{}: Bool}
+
+def sg_cycle(cycle, s, g, ms):
+  match cycle:
+    case True{}:
+      h => {==}
+    case False{}:
+      h => Empty.absurd(
+        {False{} == True{}: Bool},
+        Shared.Bool.false_ne_true(
+          Answer.clash(
+            Spec.Answer.SetGroup{Spec.SetGroup.Set{GroupRecord.epoch.next(NodeState.groups(s), g)}},
+            Spec.Answer.SetGroup{Spec.SetGroup.Cycle{}},
+            h
+          )
+        )
+      )
+
+# cycle_has_closer, once the closing member is found
+law closer_found.of:
+  for s: NodeState
+  for g: String
+  for ms: List<&2, Spec.Member>
+  for w: &pre: List<
+    &2,
+    Spec.Member> -> &y: Spec.Member -> &post: List<
+    &2,
+    Spec.Member> -> {
+    ms == List.append(&2, Spec.Member, pre, y <> post): List<&2, Spec.Member>
+  }
+    & {
+      Bool.or(
+        Member.same(y, Spec.Member.Group{g}),
+        Reaches.Reach.in(
+          ~Spec.Member,
+          ~Tables.Table<GroupRecord>,
+          ~Member.same,
+          ~GroupRecord.members.of,
+          ~GroupRecord.all,
+          NodeState.groups(s),
+          y,
+          Spec.Member.Group{g}
+        )
+      )
+        == True{}: Bool
+    }
+  (&m: Spec.Member -> Spec.Member.Among(m, ms) & Spec.Member.Closes(s, g, m))
+
+def closer_found.of(s, g, ms, w):
+  match w:
+    case (pre, (+y, (post, (e1, e2)))):
+      (y, ((pre, (post, e1)), closer_of(s, g, y)(e2)))
+
+# a member among ms that closes a cycle makes the set-group find one
+law closer_among.of:
+  for s: NodeState
+  for g: String
+  for ms: List<&2, Spec.Member>
+  for m: Spec.Member
+  for w: Spec.Member.Among(m, ms)
+  Spec.Member.Closes(s, g, m) -> {Cycle.has(NodeState.groups(s), g, ms) == True{}: Bool}
+
+def closer_among.of(s, g, ms, m, w):
+  match w:
+    case (ys, (zs, e)):
+      hc =>
+        +s = s
+        +g = g
+        +m = m
+        %Equal.sym(
+          List<&2, Spec.Member>,
+          ms,
+          List.append(&2, Spec.Member, ys, m <> zs),
+          e
+        ): {Cycle.has(NodeState.groups(s), g, _) == True{}: Bool}
+        Reaches.Reach.closes_middle(
+          ~Spec.Member,
+          ~Tables.Table<GroupRecord>,
+          ~Member.same,
+          ~GroupRecord.members.of,
+          ~GroupRecord.all,
+          NodeState.groups(s),
+          Spec.Member.Group{g},
+          ys,
+          m,
+          zs
+        )(closes_of(s, g, m)(hc))
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# a member is EQ to itself
+law member_order_refl:
+  for a: Spec.Member
+  {Member.order(a, a) == EQ{}: Cmp}
+
+def member_order_refl(a):
+  match a:
+    case Spec.Member.VendNode{x}:
+      Strings.String.order_refl(x)
+    case Spec.Member.Group{x}:
+      Strings.String.order_refl(x)
+
+# comparing members the other way round flips the order
+law member_order_swap:
+  for a: Spec.Member
+  for b: Spec.Member
+  {Member.order(b, a) == Cmps.Cmp.flip(Member.order(a, b)): Cmp}
+
+def member_order_swap(a, b):
+  match a b:
+    case Spec.Member.VendNode{x} Spec.Member.VendNode{y}:
+      Strings.String.order_swap(x, y, EQ{})
+    case Spec.Member.VendNode{x} Spec.Member.Group{y}:
+      {==}
+    case Spec.Member.Group{x} Spec.Member.VendNode{y}:
+      {==}
+    case Spec.Member.Group{x} Spec.Member.Group{y}:
+      Strings.String.order_swap(x, y, EQ{})
+
+# members that compare EQ are the same
+law member_order_sound:
+  for a: Spec.Member
+  for b: Spec.Member
+  {Member.order(a, b) == EQ{}: Cmp} -> {a == b: Spec.Member}
+
+def member_order_sound(a, b):
+  match a b:
+    case Spec.Member.VendNode{x} Spec.Member.VendNode{y}:
+      h => Equal.cong(
+        String,
+        Spec.Member,
+        z => Spec.Member.VendNode{z},
+        x,
+        y,
+        Strings.String.order_sound(x, y)(h)
+      )
+    case Spec.Member.VendNode{x} Spec.Member.Group{y}:
+      h => Empty.absurd(
+        {Spec.Member.VendNode{x} == Spec.Member.Group{y}: Spec.Member},
+        Cmps.Cmp.ne_eq(LT{}, Unit{}, h)
+      )
+    case Spec.Member.Group{x} Spec.Member.VendNode{y}:
+      h => Empty.absurd(
+        {Spec.Member.Group{x} == Spec.Member.VendNode{y}: Spec.Member},
+        Cmps.Cmp.ne_eq(GT{}, Unit{}, h)
+      )
+    case Spec.Member.Group{x} Spec.Member.Group{y}:
+      h => Equal.cong(
+        String,
+        Spec.Member,
+        z => Spec.Member.Group{z},
+        x,
+        y,
+        Strings.String.order_sound(x, y)(h)
+      )
+
+# a group's stamp is EQ to itself
+law grp_stamp_refl:
+  for x: GroupRecord
+  {GroupRecord.stamp.cmp(x, x) == EQ{}: Cmp}
+
+def grp_stamp_refl(x):
+  match x:
+    case GroupRecord{ms, e}:
+      %Equal.sym(
+        Cmp,
+        Nat.cmp(e, e),
+        EQ{},
+        Nats.Nat.cmp_refl(e)
+      ): {Cmps.Cmp.then(_, Cmps.List.order(~Spec.Member, ~Member.order, ms, ms)) == EQ{}: Cmp}
+      Cmps.List.order_refl(~Spec.Member, ~Member.order, ~member_order_refl, ms)
+
+# comparing group stamps the other way round flips the order
+law grp_stamp_swap:
+  for x: GroupRecord
+  for y: GroupRecord
+  {GroupRecord.stamp.cmp(y, x) == Cmps.Cmp.flip(GroupRecord.stamp.cmp(x, y)): Cmp}
+
+def grp_stamp_swap(x, y):
+  match x y:
+    case GroupRecord{+m1, +e1} GroupRecord{+m2, +e2}:
+      %Equal.sym(
+        Cmp,
+        Cmps.List.order(~Spec.Member, ~Member.order, m2, m1),
+        Cmps.Cmp.flip(Cmps.List.order(~Spec.Member, ~Member.order, m1, m2)),
+        Cmps.List.order_swap(~Spec.Member, ~Member.order, ~member_order_swap, m1, m2)
+      ): {
+        Cmps.Cmp.then(
+          Nat.cmp(e2, e1),
+          _
+        )
+          == Cmps.Cmp.flip(
+            Cmps.Cmp.then(Nat.cmp(e1, e2), Cmps.List.order(~Spec.Member, ~Member.order, m1, m2))
+          ): Cmp
+      }
+      %Equal.sym(
+        Cmp,
+        Nat.cmp(e2, e1),
+        Cmps.Cmp.flip(Nat.cmp(e1, e2)),
+        Nats.Nat.cmp_swap(e1, e2)
+      ): {
+        Cmps.Cmp.then(
+          _,
+          Cmps.Cmp.flip(Cmps.List.order(~Spec.Member, ~Member.order, m1, m2))
+        )
+          == Cmps.Cmp.flip(
+            Cmps.Cmp.then(Nat.cmp(e1, e2), Cmps.List.order(~Spec.Member, ~Member.order, m1, m2))
+          ): Cmp
+      }
+      Cmps.Cmp.then_flip(Nat.cmp(e1, e2), Cmps.List.order(~Spec.Member, ~Member.order, m1, m2))
+
+# groups whose stamps compare EQ have the same members
+law grp_stamp_eq:
+  for x: GroupRecord
+  for y: GroupRecord
+  {
+    GroupRecord.stamp.cmp(x, y) == EQ{}: Cmp
+  } -> {GroupRecord.members(x) == GroupRecord.members(y): List<&2, Spec.Member>}
+
+def grp_stamp_eq(x, y):
+  match x y:
+    case GroupRecord{+m1, e1} GroupRecord{+m2, e2}:
+      h => Cmps.List.order_sound(
+        ~Spec.Member,
+        ~Member.order,
+        ~member_order_sound,
+        m1,
+        m2
+      )(
+        Cmps.Cmp.then_eq_right(
+          Nat.cmp(e1, e2),
+          Cmps.List.order(~Spec.Member, ~Member.order, m1, m2)
+        )(h)
+      )
+
+# a sync's pick for the group h, by the order c0 of the node's own group and
+# theirs (x), leaves every other group
+law grp_pick_other:
+  for c0: Cmp
+  for gs: Tables.Table<GroupRecord>
+  for ns: List<&2, Logged>
+  for h: String
+  for x: GroupRecord
+  for c: String
+  for e: {String.eq(h, c) == False{}: Bool}
+  {
+    Tables.Table.get(
+      GroupRecord,
+      Kept.groups(Sync.group.pick(c0, h, x, Kept{gs, ns})),
+      c
+    )
+      == Tables.Table.get(GroupRecord, gs, c): Maybe<&2, GroupRecord>
+  }
+
+def grp_pick_other(c0, gs, ns, h, x, c, e):
+  match c0:
+    case LT{}:
+      match x:
+        case GroupRecord{ms, ep}:
+          Tables.Table.set_keeps_other(GroupRecord, gs, h, GroupRecord{ms, ep}, c, e)
+    case EQ{}:
+      {==}
+    case GT{}:
+      {==}
+
+# a sync's meeting of the group h leaves every other group
+law grp_at_other:
+  for m: Maybe<&2, GroupRecord>
+  for gs: Tables.Table<GroupRecord>
+  for ns: List<&2, Logged>
+  for h: String
+  for x: GroupRecord
+  for c: String
+  for e: {String.eq(h, c) == False{}: Bool}
+  {
+    Tables.Table.get(
+      GroupRecord,
+      Kept.groups(Sync.group.at(m, h, x, Kept{gs, ns})),
+      c
+    )
+      == Tables.Table.get(GroupRecord, gs, c): Maybe<&2, GroupRecord>
+  }
+
+def grp_at_other(m, gs, ns, h, x, c, e):
+  match m:
+    case None{}:
+      grp_pick_other(LT{}, gs, ns, h, x, c, e)
+    case Some{mine}:
+      +x = x
+      grp_pick_other(GroupRecord.stamp.cmp(mine, x), gs, ns, h, x, c, e)
+
+# a sync's pick for the group h, by the order c0 of the node's own group
+# (mine) and theirs (x), holds the winner
+law grp_pick_same:
+  for c0: Cmp
+  for mine: GroupRecord
+  for gs: Tables.Table<GroupRecord>
+  for ns: List<&2, Logged>
+  for h: String
+  for x: GroupRecord
+  for em: {Tables.Table.get(GroupRecord, gs, h) == Some{mine}: Maybe<&2, GroupRecord>}
+  {
+    Tables.Table.get(
+      GroupRecord,
+      Kept.groups(Sync.group.pick(c0, h, x, Kept{gs, ns})),
+      h
+    )
+      == Some{Orders.Order.by(GroupRecord, c0, mine, x)}: Maybe<&2, GroupRecord>
+  }
+
+def grp_pick_same(c0, mine, gs, ns, h, x, em):
+  match c0:
+    case LT{}:
+      match x:
+        case GroupRecord{ms, ep}:
+          Tables.Table.get_after_set(GroupRecord, gs, h, GroupRecord{ms, ep})
+    case EQ{}:
+      em
+    case GT{}:
+      em
+
+# a sync's meeting of the group h, whose own group m is, holds the winner
+law grp_at_same:
+  for m: Maybe<&2, GroupRecord>
+  for gs: Tables.Table<GroupRecord>
+  for ns: List<&2, Logged>
+  for h: String
+  for x: GroupRecord
+  for em: {Tables.Table.get(GroupRecord, gs, h) == m: Maybe<&2, GroupRecord>}
+  {
+    Tables.Table.get(
+      GroupRecord,
+      Kept.groups(Sync.group.at(m, h, x, Kept{gs, ns})),
+      h
+    )
+      == Some{Orders.Order.pick(~GroupRecord, ~GroupRecord.stamp.cmp, m, x)}: Maybe<&2, GroupRecord>
+  }
+
+def grp_at_same(m, gs, ns, h, x, em):
+  match m:
+    case None{}:
+      match x:
+        case GroupRecord{ms, ep}:
+          Tables.Table.get_after_set(GroupRecord, gs, h, GroupRecord{ms, ep})
+    case Some{+mine}:
+      +x = x
+      grp_pick_same(GroupRecord.stamp.cmp(mine, x), mine, gs, ns, h, x, em)
+
+# a sync's meeting of the group h, by whether h is c (hit), is an order step
+law grp_at_find:
+  for hit: Bool
+  for gs: Tables.Table<GroupRecord>
+  for ns: List<&2, Logged>
+  for h: String
+  for x: GroupRecord
+  for c: String
+  {
+    String.eq(h, c) == hit: Bool
+  } -> {
+    Tables.Table.get(
+      GroupRecord,
+      Kept.groups(Sync.group.at(Tables.Table.get(GroupRecord, gs, h), h, x, Kept{gs, ns})),
+      c
+    )
+      == Orders.Order.step(
+        ~GroupRecord,
+        ~GroupRecord.stamp.cmp,
+        hit,
+        Some{x},
+        Tables.Table.get(GroupRecord, gs, c)
+      ): Maybe<&2, GroupRecord>
+  }
+
+def grp_at_find(hit, gs, ns, h, x, c):
+  match hit:
+    case True{}:
+      e =>
+        +gs = gs
+        +h = h
+        +x = x
+        %Strings.String.eq_sound(
+          h,
+          c
+        )(
+          e
+        ): {
+          Tables.Table.get(
+            GroupRecord,
+            Kept.groups(Sync.group.at(Tables.Table.get(GroupRecord, gs, h), h, x, Kept{gs, ns})),
+            _
+          )
+            == Some{
+              Orders.Order.pick(
+                ~GroupRecord,
+                ~GroupRecord.stamp.cmp,
+                Tables.Table.get(GroupRecord, gs, _),
+                x
+              )
+            }: Maybe<&2, GroupRecord>
+        }
+        grp_at_same(Tables.Table.get(GroupRecord, gs, h), gs, ns, h, x, {==})
+    case False{}:
+      e =>
+        +gs = gs
+        +h = h
+        grp_at_other(Tables.Table.get(GroupRecord, gs, h), gs, ns, h, x, c, e)
+
+# a sync's meeting of the group h, with the value f, is an order step
+law grp_seen_find:
+  for h: String
+  for f: Maybe<&2, GroupRecord>
+  for k: Kept
+  for c: String
+  {
+    Tables.Table.get(
+      GroupRecord,
+      Kept.groups(Sync.group.seen(h, f, k)),
+      c
+    )
+      == Orders.Order.step(
+        ~GroupRecord,
+        ~GroupRecord.stamp.cmp,
+        String.eq(h, c),
+        f,
+        Tables.Table.get(GroupRecord, Kept.groups(k), c)
+      ): Maybe<&2, GroupRecord>
+  }
+
+def grp_seen_find(h, f, k, c):
+  match f k:
+    case None{} z:
+      +c = c
+      Equal.sym(
+        Maybe<&2, GroupRecord>,
+        Orders.Order.step(
+          ~GroupRecord,
+          ~GroupRecord.stamp.cmp,
+          String.eq(h, c),
+          None{},
+          Tables.Table.get(GroupRecord, Kept.groups(z), c)
+        ),
+        Tables.Table.get(GroupRecord, Kept.groups(z), c),
+        Orders.Order.step_none(
+          ~GroupRecord,
+          ~GroupRecord.stamp.cmp,
+          String.eq(h, c),
+          Tables.Table.get(GroupRecord, Kept.groups(z), c)
+        )
+      )
+    case Some{x} Kept{gs, ns}:
+      +h = h
+      +c = c
+      grp_at_find(String.eq(h, c), gs, ns, h, x, c)({==})
+
+# a sync's group pass is an order fold
+law grp_fold_find:
+  for ks: List<&2, String>
+  for full: Tables.Table<GroupRecord>
+  for k: Kept
+  for c: String
+  {
+    Tables.Table.get(
+      GroupRecord,
+      Kept.groups(Sync.groups(ks, full, k)),
+      c
+    )
+      == Orders.Order.fold(
+        ~GroupRecord,
+        ~Tables.Table<GroupRecord>,
+        ~GroupRecord.stamp.cmp,
+        ~(t => k => Tables.Table.get(GroupRecord, t, k)),
+        ks,
+        full,
+        c,
+        Tables.Table.get(GroupRecord, Kept.groups(k), c)
+      ): Maybe<&2, GroupRecord>
+  }
+
+def grp_fold_find(ks, full, k, c):
+  match ks:
+    case Nil{}:
+      {==}
+    case Con{+h, r}:
+      +full = full
+      +k = k
+      +c = c
+      %grp_seen_find(
+        h,
+        Tables.Table.get(GroupRecord, full, h),
+        k,
+        c
+      ): {
+        Tables.Table.get(
+          GroupRecord,
+          Kept.groups(
+            Sync.groups(r, full, Sync.group.seen(h, Tables.Table.get(GroupRecord, full, h), k))
+          ),
+          c
+        )
+          == Orders.Order.fold(
+            ~GroupRecord,
+            ~Tables.Table<GroupRecord>,
+            ~GroupRecord.stamp.cmp,
+            ~(t => k => Tables.Table.get(GroupRecord, t, k)),
+            r,
+            full,
+            c,
+            _
+          ): Maybe<&2, GroupRecord>
+      }
+      grp_fold_find(r, full, Sync.group.seen(h, Tables.Table.get(GroupRecord, full, h), k), c)
+
+# after a sync's group pass, a group is the winner of the node's own and the
+# other node's
+law sync_groups_find:
+  for full: Tables.Table<GroupRecord>
+  for k: Kept
+  for c: String
+  {
+    Tables.Table.get(
+      GroupRecord,
+      Kept.groups(Sync.groups(Tables.Table.keys(GroupRecord, full), full, k)),
+      c
+    )
+      == Orders.Order.join(
+        ~GroupRecord,
+        ~GroupRecord.stamp.cmp,
+        Tables.Table.get(GroupRecord, Kept.groups(k), c),
+        Tables.Table.get(GroupRecord, full, c)
+      ): Maybe<&2, GroupRecord>
+  }
+
+def sync_groups_find(full, k, c):
+  +full = full
+  +k = k
+  +c = c
+  Equal.trans(
+    Maybe<&2, GroupRecord>,
+    Tables.Table.get(
+      GroupRecord,
+      Kept.groups(Sync.groups(Tables.Table.keys(GroupRecord, full), full, k)),
+      c
+    ),
+    Orders.Order.fold(
+      ~GroupRecord,
+      ~Tables.Table<GroupRecord>,
+      ~GroupRecord.stamp.cmp,
+      ~(t => k => Tables.Table.get(GroupRecord, t, k)),
+      Tables.Table.keys(GroupRecord, full),
+      full,
+      c,
+      Tables.Table.get(GroupRecord, Kept.groups(k), c)
+    ),
+    Orders.Order.join(
+      ~GroupRecord,
+      ~GroupRecord.stamp.cmp,
+      Tables.Table.get(GroupRecord, Kept.groups(k), c),
+      Tables.Table.get(GroupRecord, full, c)
+    ),
+    grp_fold_find(Tables.Table.keys(GroupRecord, full), full, k, c),
+    Orders.Order.fold_all(
+      ~GroupRecord,
+      ~Tables.Table<GroupRecord>,
+      ~GroupRecord.stamp.cmp,
+      ~(t => k => Tables.Table.get(GroupRecord, t, k)),
+      y => grp_stamp_refl(y),
+      Tables.Table.keys(GroupRecord, full),
+      full,
+      c,
+      Tables.Table.get(GroupRecord, Kept.groups(k), c),
+      h => Tables.Table.none_of(
+        GroupRecord,
+        Tables.Table.get(GroupRecord, full, c)
+      )(
+        Equal.trans(
+          Bool,
+          Maybe.is_some(&2, GroupRecord, Tables.Table.get(GroupRecord, full, c)),
+          Shared.List.has(~String, ~String.eq, Tables.Table.keys(GroupRecord, full), c),
+          False{},
+          Equal.sym(
+            Bool,
+            Shared.List.has(~String, ~String.eq, Tables.Table.keys(GroupRecord, full), c),
+            Maybe.is_some(&2, GroupRecord, Tables.Table.get(GroupRecord, full, c)),
+            Tables.Table.keys_get(GroupRecord, full, c)
+          ),
+          h
+        )
+      )
+    )
+  )
+
+# after s takes in o, a group is the winner of s's and o's
+law after_sync_find:
+  for s: NodeState
+  for o: NodeState
+  for r: String
+  for g: String
+  {
+    Tables.Table.get(
+      GroupRecord,
+      NodeState.groups(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Sync.go(False{}, s, o)))
+      ),
+      g
+    )
+      == Orders.Order.join(
+        ~GroupRecord,
+        ~GroupRecord.stamp.cmp,
+        Tables.Table.get(GroupRecord, NodeState.groups(s), g),
+        Tables.Table.get(GroupRecord, NodeState.groups(o), g)
+      ): Maybe<&2, GroupRecord>
+  }
+
+def after_sync_find(s, o, r, g):
+  +s = s
+  +o = o
+  Equal.trans(
+    Maybe<&2, GroupRecord>,
+    Tables.Table.get(
+      GroupRecord,
+      NodeState.groups(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Sync.go(False{}, s, o)))
+      ),
+      g
+    ),
+    Tables.Table.get(GroupRecord, Out.groups(Sync.go(False{}, s, o)), g),
+    Orders.Order.join(
+      ~GroupRecord,
+      ~GroupRecord.stamp.cmp,
+      Tables.Table.get(GroupRecord, NodeState.groups(s), g),
+      Tables.Table.get(GroupRecord, NodeState.groups(o), g)
+    ),
+    Equal.cong(
+      Tables.Table<GroupRecord>,
+      Maybe<&2, GroupRecord>,
+      t => Tables.Table.get(GroupRecord, t, g),
+      NodeState.groups(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r, Sync.go(False{}, s, o)))
+      ),
+      Out.groups(Sync.go(False{}, s, o)),
+      groups_after_applied(s, r, Sync.go(False{}, s, o))
+    ),
+    sync_groups_find(NodeState.groups(o), Kept{NodeState.groups(s), []}, g)
+  )
+
+# a takes in b, then b takes in that: both hold the same members for g
+law groups_conv:
+  for a: NodeState
+  for b: NodeState
+  for r1: String
+  for r2: String
+  for g: String
+  {
+    GroupRecord.members.got(
+      Tables.Table.get(
+        GroupRecord,
+        NodeState.groups(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+        ),
+        g
+      )
+    )
+      == GroupRecord.members.got(
+        Tables.Table.get(
+          GroupRecord,
+          NodeState.groups(
+            Pair.fst(
+              NodeState,
+              Spec.Answer,
+              VendNode.applied(
+                b,
+                r2,
+                Sync.go(
+                  False{},
+                  b,
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+                )
+              )
+            )
+          ),
+          g
+        )
+      ): Maybe<&2, List<&2, Spec.Member>>
+  }
+
+def groups_conv(a, b, r1, r2, g):
+  +a = a
+  +b = b
+  +r1 = r1
+  +g = g
+  %Equal.sym(
+    Maybe<&2, GroupRecord>,
+    Tables.Table.get(
+      GroupRecord,
+      NodeState.groups(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+      ),
+      g
+    ),
+    Orders.Order.join(
+      ~GroupRecord,
+      ~GroupRecord.stamp.cmp,
+      Tables.Table.get(GroupRecord, NodeState.groups(a), g),
+      Tables.Table.get(GroupRecord, NodeState.groups(b), g)
+    ),
+    after_sync_find(a, b, r1, g)
+  ): {
+    GroupRecord.members.got(
+      _
+    )
+      == GroupRecord.members.got(
+        Tables.Table.get(
+          GroupRecord,
+          NodeState.groups(
+            Pair.fst(
+              NodeState,
+              Spec.Answer,
+              VendNode.applied(
+                b,
+                r2,
+                Sync.go(
+                  False{},
+                  b,
+                  Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+                )
+              )
+            )
+          ),
+          g
+        )
+      ): Maybe<&2, List<&2, Spec.Member>>
+  }
+  %Equal.sym(
+    Maybe<&2, GroupRecord>,
+    Tables.Table.get(
+      GroupRecord,
+      NodeState.groups(
+        Pair.fst(
+          NodeState,
+          Spec.Answer,
+          VendNode.applied(
+            b,
+            r2,
+            Sync.go(
+              False{},
+              b,
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+            )
+          )
+        )
+      ),
+      g
+    ),
+    Orders.Order.join(
+      ~GroupRecord,
+      ~GroupRecord.stamp.cmp,
+      Tables.Table.get(GroupRecord, NodeState.groups(b), g),
+      Tables.Table.get(
+        GroupRecord,
+        NodeState.groups(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+        ),
+        g
+      )
+    ),
+    after_sync_find(
+      b,
+      Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b))),
+      r2,
+      g
+    )
+  ): {
+    GroupRecord.members.got(
+      Orders.Order.join(
+        ~GroupRecord,
+        ~GroupRecord.stamp.cmp,
+        Tables.Table.get(GroupRecord, NodeState.groups(a), g),
+        Tables.Table.get(GroupRecord, NodeState.groups(b), g)
+      )
+    )
+      == GroupRecord.members.got(_): Maybe<&2, List<&2, Spec.Member>>
+  }
+  %Equal.sym(
+    Maybe<&2, GroupRecord>,
+    Tables.Table.get(
+      GroupRecord,
+      NodeState.groups(
+        Pair.fst(NodeState, Spec.Answer, VendNode.applied(a, r1, Sync.go(False{}, a, b)))
+      ),
+      g
+    ),
+    Orders.Order.join(
+      ~GroupRecord,
+      ~GroupRecord.stamp.cmp,
+      Tables.Table.get(GroupRecord, NodeState.groups(a), g),
+      Tables.Table.get(GroupRecord, NodeState.groups(b), g)
+    ),
+    after_sync_find(a, b, r1, g)
+  ): {
+    GroupRecord.members.got(
+      Orders.Order.join(
+        ~GroupRecord,
+        ~GroupRecord.stamp.cmp,
+        Tables.Table.get(GroupRecord, NodeState.groups(a), g),
+        Tables.Table.get(GroupRecord, NodeState.groups(b), g)
+      )
+    )
+      == GroupRecord.members.got(
+        Orders.Order.join(
+          ~GroupRecord,
+          ~GroupRecord.stamp.cmp,
+          Tables.Table.get(GroupRecord, NodeState.groups(b), g),
+          _
+        )
+      ): Maybe<&2, List<&2, Spec.Member>>
+  }
+  Orders.Order.join_conv(
+    ~GroupRecord,
+    ~List<&2, Spec.Member>,
+    ~GroupRecord.stamp.cmp,
+    ~GroupRecord.members,
+    y => grp_stamp_refl(y),
+    x => y => grp_stamp_swap(x, y),
+    x => y => grp_stamp_eq(x, y),
+    Tables.Table.get(GroupRecord, NodeState.groups(a), g),
+    Tables.Table.get(GroupRecord, NodeState.groups(b), g)
+  )
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # Laws
@@ -19732,16 +23761,20 @@ def Spec.since_splits(s, e, q, t, a, k):
     +k = k
     %h:
       {
-        Spec.Node.get_changes(
-          Pair.fst(St, Spec.Answer, _),
+        Spec.VendNode.get_changes(
+          Pair.fst(NodeState, Spec.Answer, _),
           k,
           None{}
         )
           == List.append(
             &2,
             Spec.Notice,
-            Spec.Node.get_changes(s, k, None{}),
-            Spec.Node.get_changes(Pair.fst(St, Spec.Answer, _), k, Some{Spec.Node.position(s)})
+            Spec.VendNode.get_changes(s, k, None{}),
+            Spec.VendNode.get_changes(
+              Pair.fst(NodeState, Spec.Answer, _),
+              k,
+              Some{Spec.VendNode.position(s)}
+            )
           ): List<&2, Spec.Notice>
       }
     since_ask(s, e, q, k)
@@ -19754,34 +23787,42 @@ def Spec.retry_is_safe(s, r, w, t1, t2, q, s1, a1):
     +t1 = t1
     +q = q
     %h: {
-      Spec.Node.ask(Pair.fst(St, Spec.Answer, _), Spec.Envelope{r, w, t2}, q) == _: St & Spec.Answer
+      Spec.VendNode.ask(
+        Pair.fst(NodeState, Spec.Answer, _),
+        Spec.Envelope{r, w, t2},
+        q
+      )
+        == _: NodeState
+        & Spec.Answer
     }
     Equal.trans(
-      St & Spec.Answer,
-      Spec.Node.ask(
-        Pair.fst(St, Spec.Answer, Spec.Node.ask(s, Spec.Envelope{r, w, t1}, q)),
+      NodeState & Spec.Answer,
+      Spec.VendNode.ask(
+        Pair.fst(NodeState, Spec.Answer, Spec.VendNode.ask(s, Spec.Envelope{r, w, t1}, q)),
         Spec.Envelope{r, w, t2},
         q
       ),
       (
-        Pair.fst(St, Spec.Answer, Spec.Node.ask(s, Spec.Envelope{r, w, t1}, q)),
-        Pair.snd(St, Spec.Answer, Spec.Node.ask(s, Spec.Envelope{r, w, t1}, q))
+        Pair.fst(NodeState, Spec.Answer, Spec.VendNode.ask(s, Spec.Envelope{r, w, t1}, q)),
+        Pair.snd(NodeState, Spec.Answer, Spec.VendNode.ask(s, Spec.Envelope{r, w, t1}, q))
       ),
-      Spec.Node.ask(s, Spec.Envelope{r, w, t1}, q),
+      Spec.VendNode.ask(s, Spec.Envelope{r, w, t1}, q),
       asked_found(
         Tables.Table.get(
           Seen,
-          St.seen(Pair.fst(St, Spec.Answer, Spec.Node.ask(s, Spec.Envelope{r, w, t1}, q))),
+          NodeState.seen(
+            Pair.fst(NodeState, Spec.Answer, Spec.VendNode.ask(s, Spec.Envelope{r, w, t1}, q))
+          ),
           r
         ),
-        Pair.fst(St, Spec.Answer, Spec.Node.ask(s, Spec.Envelope{r, w, t1}, q)),
+        Pair.fst(NodeState, Spec.Answer, Spec.VendNode.ask(s, Spec.Envelope{r, w, t1}, q)),
         r,
         w,
         t2,
         q,
-        Pair.snd(St, Spec.Answer, Spec.Node.ask(s, Spec.Envelope{r, w, t1}, q))
+        Pair.snd(NodeState, Spec.Answer, Spec.VendNode.ask(s, Spec.Envelope{r, w, t1}, q))
       )(seen_after_ask(s, r, w, t1, q)),
-      Lists.Pair.eta(St, Spec.Answer, Spec.Node.ask(s, Spec.Envelope{r, w, t1}, q))
+      Lists.Pair.eta(NodeState, Spec.Answer, Spec.VendNode.ask(s, Spec.Envelope{r, w, t1}, q))
     )
 
 def Spec.history_kept(s, e, q, t, a, n, v, x):
@@ -19794,14 +23835,14 @@ def Spec.history_kept(s, e, q, t, a, n, v, x):
         +v = v
         +x = x
         %h1: {
-          St.content(
-            Pair.fst(St, Spec.Answer, _),
+          NodeState.content(
+            Pair.fst(NodeState, Spec.Answer, _),
             n,
             Spec.Point.At{v}
           )
             == Some{x}: Maybe<&2, List<&2, U32>>
         }
-        kept_asked(Tables.Table.get(Seen, St.seen(s), r), s, r, w, z, q, n, v, x)(h2)
+        kept_asked(Tables.Table.get(Seen, NodeState.seen(s), r), s, r, w, z, q, n, v, x)(h2)
 
 def Spec.none_inside_itself_at_start(n, g):
   {==}
@@ -19819,9 +23860,9 @@ def Spec.write_at_head_is_written(s, r, w, time, n, b, v, x):
       +x = x
       (
         Pair.fst(
-          St,
+          NodeState,
           Spec.Answer,
-          Spec.Node.ask(
+          Spec.VendNode.ask(
             s,
             Spec.Envelope{r, w, time},
             Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
@@ -19830,26 +23871,26 @@ def Spec.write_at_head_is_written(s, r, w, time, n, b, v, x):
         (
           r,
           ho => hh => +hn => Equal.trans(
-            St & Spec.Answer,
-            Spec.Node.ask(
+            NodeState & Spec.Answer,
+            Spec.VendNode.ask(
               s,
               Spec.Envelope{r, w, time},
               Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
             ),
             (
               Pair.fst(
-                St,
+                NodeState,
                 Spec.Answer,
-                Spec.Node.ask(
+                Spec.VendNode.ask(
                   s,
                   Spec.Envelope{r, w, time},
                   Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
                 )
               ),
               Pair.snd(
-                St,
+                NodeState,
                 Spec.Answer,
-                Spec.Node.ask(
+                Spec.VendNode.ask(
                   s,
                   Spec.Envelope{r, w, time},
                   Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
@@ -19858,9 +23899,9 @@ def Spec.write_at_head_is_written(s, r, w, time, n, b, v, x):
             ),
             (
               Pair.fst(
-                St,
+                NodeState,
                 Spec.Answer,
-                Spec.Node.ask(
+                Spec.VendNode.ask(
                   s,
                   Spec.Envelope{r, w, time},
                   Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
@@ -19869,36 +23910,36 @@ def Spec.write_at_head_is_written(s, r, w, time, n, b, v, x):
               Spec.Answer.Write{Spec.Write.Written{r}}
             ),
             Equal.sym(
-              St & Spec.Answer,
+              NodeState & Spec.Answer,
               (
                 Pair.fst(
-                  St,
+                  NodeState,
                   Spec.Answer,
-                  Spec.Node.ask(
+                  Spec.VendNode.ask(
                     s,
                     Spec.Envelope{r, w, time},
                     Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
                   )
                 ),
                 Pair.snd(
-                  St,
+                  NodeState,
                   Spec.Answer,
-                  Spec.Node.ask(
+                  Spec.VendNode.ask(
                     s,
                     Spec.Envelope{r, w, time},
                     Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
                   )
                 )
               ),
-              Spec.Node.ask(
+              Spec.VendNode.ask(
                 s,
                 Spec.Envelope{r, w, time},
                 Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
               ),
               Lists.Pair.eta(
-                St,
+                NodeState,
                 Spec.Answer,
-                Spec.Node.ask(
+                Spec.VendNode.ask(
                   s,
                   Spec.Envelope{r, w, time},
                   Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
@@ -19907,12 +23948,12 @@ def Spec.write_at_head_is_written(s, r, w, time, n, b, v, x):
             ),
             Equal.cong(
               Spec.Answer,
-              St & Spec.Answer,
+              NodeState & Spec.Answer,
               y => (
                 Pair.fst(
-                  St,
+                  NodeState,
                   Spec.Answer,
-                  Spec.Node.ask(
+                  Spec.VendNode.ask(
                     s,
                     Spec.Envelope{r, w, time},
                     Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
@@ -19921,9 +23962,9 @@ def Spec.write_at_head_is_written(s, r, w, time, n, b, v, x):
                 y
               ),
               Pair.snd(
-                St,
+                NodeState,
                 Spec.Answer,
-                Spec.Node.ask(
+                Spec.VendNode.ask(
                   s,
                   Spec.Envelope{r, w, time},
                   Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}
@@ -19931,10 +23972,10 @@ def Spec.write_at_head_is_written(s, r, w, time, n, b, v, x):
               ),
               Spec.Answer.Write{Spec.Write.Written{r}},
               (
-                %Equal.sym(Maybe<&2, Seen>, Tables.Table.get(Seen, St.seen(s), r), None{}, new_found(s, r)(hn)): {Pair.snd(St, Spec.Answer, Node.asked(_, s, r, w, time, Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}})) == Spec.Answer.Write{Spec.Write.Written{r}}: Spec.Answer}
-                %Equal.sym(Spec.Answer, Pair.snd(St, Spec.Answer, Node.applied(s, r, Step.of(s, r, w, time, Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}))), Out.answer(Step.of(s, r, w, time, Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}})), answer_after_applied(s, r, Step.of(s, r, w, time, Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}))): {_ == Spec.Answer.Write{Spec.Write.Written{r}}: Spec.Answer}
-                %Equal.sym(Bool, Ver.taken(St.versions(s), r), False{}, new_free(s, r)(hn)): {Out.answer(Write.free(_, s, r, w, time, n, b, Some{v}, x)) == Spec.Answer.Write{Spec.Write.Written{r}}: Spec.Answer}
-                write_on_head(Tables.Table.get(Br, St.branches(s), b), s, r, w, time, n, b, v, x)(hh)(ho))
+                %Equal.sym(Maybe<&2, Seen>, Tables.Table.get(Seen, NodeState.seen(s), r), None{}, new_found(s, r)(hn)): {Pair.snd(NodeState, Spec.Answer, VendNode.asked(_, s, r, w, time, Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}})) == Spec.Answer.Write{Spec.Write.Written{r}}: Spec.Answer}
+                %Equal.sym(Spec.Answer, Pair.snd(NodeState, Spec.Answer, VendNode.applied(s, r, Step.of(s, r, w, time, Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}))), Out.answer(Step.of(s, r, w, time, Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}})), answer_after_applied(s, r, Step.of(s, r, w, time, Spec.Ask.Write{Resources.Name{n}, b, Some{v}, Spec.Content.Bytes{x}}))): {_ == Spec.Answer.Write{Spec.Write.Written{r}}: Spec.Answer}
+                %Equal.sym(Bool, VersionRecord.taken(NodeState.versions(s), r), False{}, new_free(s, r)(hn)): {Out.answer(Write.free(_, s, r, w, time, n, b, Some{v}, x)) == Spec.Answer.Write{Spec.Write.Written{r}}: Spec.Answer}
+                write_on_head(Tables.Table.get(BranchRecord, NodeState.branches(s), b), s, r, w, time, n, b, v, x)(hh)(ho))
             )
           )
         )
@@ -19968,14 +24009,14 @@ def Spec.read_after_write(s, e, n, b, base, x, t, v):
             Spec.Answer.Write{Spec.Write.Written{v}}
           )(hn)(h)
         ):
-          {St.content(_, n, Spec.Point.Head{b}) == Some{x}: Maybe<&2, List<&2, U32>>}
+          {NodeState.content(_, n, Spec.Point.Head{b}) == Some{x}: Maybe<&2, List<&2, U32>>}
         %Equal.sym(
-          Tables.Table<Ver>,
-          St.versions(
+          Tables.Table<VersionRecord>,
+          NodeState.versions(
             Pair.fst(
-              St,
+              NodeState,
               Spec.Answer,
-              Node.applied(
+              VendNode.applied(
                 s,
                 r,
                 Step.of(
@@ -19988,11 +24029,11 @@ def Spec.read_after_write(s, e, n, b, base, x, t, v):
               )
             )
           ),
-          Ver.add(
+          VersionRecord.add(
             Out.versions(
               Step.of(s, r, w, z, Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}})
             ),
-            St.versions(s)
+            NodeState.versions(s)
           ),
           versions_after_applied(
             s,
@@ -20002,17 +24043,17 @@ def Spec.read_after_write(s, e, n, b, base, x, t, v):
         ):
           {
             Blob.find.of(
-              Ver.blobs.of(
-                Ver.find.of(
+              VersionRecord.blobs.of(
+                VersionRecord.find.of(
                   _,
-                  Br.head.of(
+                  BranchRecord.head.of(
                     Tables.Table.get(
-                      Br,
-                      St.branches(
+                      BranchRecord,
+                      NodeState.branches(
                         Pair.fst(
-                          St,
+                          NodeState,
                           Spec.Answer,
-                          Node.applied(
+                          VendNode.applied(
                             s,
                             r,
                             Step.of(
@@ -20035,12 +24076,12 @@ def Spec.read_after_write(s, e, n, b, base, x, t, v):
               == Some{x}: Maybe<&2, List<&2, U32>>
           }
         %Equal.sym(
-          Tables.Table<Br>,
-          St.branches(
+          Tables.Table<BranchRecord>,
+          NodeState.branches(
             Pair.fst(
-              St,
+              NodeState,
               Spec.Answer,
-              Node.applied(
+              VendNode.applied(
                 s,
                 r,
                 Step.of(
@@ -20064,9 +24105,9 @@ def Spec.read_after_write(s, e, n, b, base, x, t, v):
         ):
           {
             Blob.find.of(
-              Ver.blobs.of(
-                Ver.find.of(
-                  Ver.add(
+              VersionRecord.blobs.of(
+                VersionRecord.find.of(
+                  VersionRecord.add(
                     Out.versions(
                       Step.of(
                         s,
@@ -20076,9 +24117,9 @@ def Spec.read_after_write(s, e, n, b, base, x, t, v):
                         Spec.Ask.Write{Resources.Name{n}, b, base, Spec.Content.Bytes{x}}
                       )
                     ),
-                    St.versions(s)
+                    NodeState.versions(s)
                   ),
-                  Br.head.of(Tables.Table.get(Br, _, b))
+                  BranchRecord.head.of(Tables.Table.get(BranchRecord, _, b))
                 )
               ),
               n
@@ -20086,7 +24127,7 @@ def Spec.read_after_write(s, e, n, b, base, x, t, v):
               == Some{x}: Maybe<&2, List<&2, U32>>
           }
         raw_free(
-          Ver.taken(St.versions(s), r),
+          VersionRecord.taken(NodeState.versions(s), r),
           s,
           r,
           w,
@@ -20146,7 +24187,7 @@ def Spec.stale_changes_nothing(s, e, n, b, base, x, t, current):
             Spec.Answer.Write{Spec.Write.Stale{current}}
           )(hn)(h)
         ):
-          Spec.Node.SameContent(_, s) & {base != Some{current}: Maybe<&2, String>}
+          Spec.VendNode.SameContent(_, s) & {base != Some{current}: Maybe<&2, String>}
         stale_bytes(
           Content.bytes(s, n, x),
           s,
@@ -20203,15 +24244,15 @@ def Spec.conflict_changes_nothing(s, e, p, b, t, k):
             Spec.Answer.Merge{Spec.Merge.Conflicted{k}}
           )(hn)(h)
         ):
-          Spec.Node.SameContent(
+          Spec.VendNode.SameContent(
             _,
             s
           )
             & {
-              Spec.Node.get_changes(
+              Spec.VendNode.get_changes(
                 _,
                 Spec.Topic.Conflicts{b},
-                Some{Spec.Node.position(s)}
+                Some{Spec.VendNode.position(s)}
               )
                 == [Spec.Notice.Conflicted{k}]: List<&2, Spec.Notice>
             }
@@ -20272,14 +24313,19 @@ def Spec.epoch_grows(s, e, b, g, t, old, new):
           {
             Nat.is_lt(old, new) == True{}: Bool
           }
-            & {Br.epoch.of(Tables.Table.get(Br, St.branches(_), b)) == Some{new}: Maybe<&2, Nat>}
+            & {
+              BranchRecord.epoch.of(
+                Tables.Table.get(BranchRecord, NodeState.branches(_), b)
+              )
+                == Some{new}: Maybe<&2, Nat>
+            }
         %Equal.sym(
-          Tables.Table<Br>,
-          St.branches(
+          Tables.Table<BranchRecord>,
+          NodeState.branches(
             Pair.fst(
-              St,
+              NodeState,
               Spec.Answer,
-              Node.applied(s, r, Step.of(s, r, w, z, Spec.Ask.SetOwner{b, g}))
+              VendNode.applied(s, r, Step.of(s, r, w, z, Spec.Ask.SetOwner{b, g}))
             )
           ),
           Out.branches(Step.of(s, r, w, z, Spec.Ask.SetOwner{b, g})),
@@ -20288,9 +24334,14 @@ def Spec.epoch_grows(s, e, b, g, t, old, new):
           {
             Nat.is_lt(old, new) == True{}: Bool
           }
-            & {Br.epoch.of(Tables.Table.get(Br, _, b)) == Some{new}: Maybe<&2, Nat>}
+            & {
+              BranchRecord.epoch.of(
+                Tables.Table.get(BranchRecord, _, b)
+              )
+                == Some{new}: Maybe<&2, Nat>
+            }
         set_owner_lemma(
-          Tables.Table.get(Br, St.branches(s), b),
+          Tables.Table.get(BranchRecord, NodeState.branches(s), b),
           s,
           b,
           g,
@@ -20318,74 +24369,6 @@ def Spec.epoch_grows(s, e, b, g, t, old, new):
           )
         )
 
-def Spec.inside_after_set(s, e, g, m, ms, t, x):
-  match e:
-    case Spec.Envelope{+r, +w, +z}:
-      +hn => +h =>
-        +s = s
-        +g = g
-        +m = m
-        +ms = ms
-        +t = t
-        +x = x
-        %applied_state(
-          s,
-          r,
-          Step.of(s, r, w, z, Spec.Ask.SetGroup{g, m <> ms}),
-          t,
-          Spec.Answer.SetGroup{Spec.SetGroup.Set{x}}
-        )(
-          ask_step(
-            s,
-            r,
-            w,
-            z,
-            Spec.Ask.SetGroup{g, m <> ms},
-            t,
-            Spec.Answer.SetGroup{Spec.SetGroup.Set{x}}
-          )(hn)(h)
-        ):
-          {Grp.inside(St.groups(_), m, g) == True{}: Bool}
-        %Equal.sym(
-          Tables.Table<Grp>,
-          St.groups(
-            Pair.fst(
-              St,
-              Spec.Answer,
-              Node.applied(s, r, Step.of(s, r, w, z, Spec.Ask.SetGroup{g, m <> ms}))
-            )
-          ),
-          Out.groups(Step.of(s, r, w, z, Spec.Ask.SetGroup{g, m <> ms})),
-          groups_after_applied(s, r, Step.of(s, r, w, z, Spec.Ask.SetGroup{g, m <> ms}))
-        ):
-          {Grp.inside(_, m, g) == True{}: Bool}
-        sg_on(
-          Cycle.has(St.groups(s), g, m <> ms),
-          s,
-          g,
-          m,
-          ms,
-          x
-        )(
-          applied_answer(
-            s,
-            r,
-            Step.of(s, r, w, z, Spec.Ask.SetGroup{g, m <> ms}),
-            t,
-            Spec.Answer.SetGroup{Spec.SetGroup.Set{x}}
-          )(
-            ask_step(
-              s,
-              r,
-              w,
-              z,
-              Spec.Ask.SetGroup{g, m <> ms},
-              t,
-              Spec.Answer.SetGroup{Spec.SetGroup.Set{x}}
-            )(hn)(h)
-          )
-        )
-
 def Spec.sync_converges(a, b, a1, b1, e1, e2):
   match e1 e2:
     case Spec.Envelope{+r1, +w1, +z1} Spec.Envelope{+r2, w2, z2}:
@@ -20394,7 +24377,7 @@ def Spec.sync_converges(a, b, a1, b1, e1, e2):
         +b = b
         +a1 = a1
         +b1 = b1
-        %sync_state(b, a1, r2, w2, z2, b1)(hn2)(h2): Spec.Node.SameContent(a1, _)
+        %sync_state(b, a1, r2, w2, z2, b1)(hn2)(h2): Spec.VendNode.SameContent(a1, _)
         %sync_state(
           a,
           b,
@@ -20406,9 +24389,9 @@ def Spec.sync_converges(a, b, a1, b1, e1, e2):
           hn1
         )(
           h1
-        ): Spec.Node.SameContent(
+        ): Spec.VendNode.SameContent(
           _,
-          Pair.fst(St, Spec.Answer, Node.applied(b, r2, Sync.go(False{}, b, _)))
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(b, r2, Sync.go(False{}, b, _)))
         )
         conv_core(a, b, r1, r2)(sync_clean(a, b, r1, w1, z1, a1)(hn1)(h1))
 
@@ -20420,7 +24403,7 @@ def Spec.sync_idempotent(s, a, s1, s2, a2, e1, e2):
         +a = a
         +s1 = s1
         idem_ask(
-          Tables.Table.get(Seen, St.seen(s1), r2),
+          Tables.Table.get(Seen, NodeState.seen(s1), r2),
           s,
           a,
           r1,
@@ -20447,7 +24430,7 @@ def Spec.sync_commutes(s, a, b, s1, s2, s3, s4, e1, e2, e3, e4):
         +s2 = s2
         +s3 = s3
         +s4 = s4
-        %sync_state(s1, b, r2, w2, z2, s2)(hn2)(h2): Spec.Node.SameContent(_, s4)
+        %sync_state(s1, b, r2, w2, z2, s2)(hn2)(h2): Spec.VendNode.SameContent(_, s4)
         %sync_state(
           s3,
           a,
@@ -20459,8 +24442,8 @@ def Spec.sync_commutes(s, a, b, s1, s2, s3, s4, e1, e2, e3, e4):
           hn4
         )(
           h4
-        ): Spec.Node.SameContent(
-          Pair.fst(St, Spec.Answer, Node.applied(s1, r2, Sync.go(False{}, s1, b))),
+        ): Spec.VendNode.SameContent(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s1, r2, Sync.go(False{}, s1, b))),
           _
         )
         %sync_state(
@@ -20474,9 +24457,9 @@ def Spec.sync_commutes(s, a, b, s1, s2, s3, s4, e1, e2, e3, e4):
           hn1
         )(
           h1
-        ): Spec.Node.SameContent(
-          Pair.fst(St, Spec.Answer, Node.applied(_, r2, Sync.go(False{}, _, b))),
-          Pair.fst(St, Spec.Answer, Node.applied(s3, r4, Sync.go(False{}, s3, a)))
+        ): Spec.VendNode.SameContent(
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(_, r2, Sync.go(False{}, _, b))),
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(s3, r4, Sync.go(False{}, s3, a)))
         )
         %sync_state(
           s,
@@ -20489,37 +24472,37 @@ def Spec.sync_commutes(s, a, b, s1, s2, s3, s4, e1, e2, e3, e4):
           hn3
         )(
           h3
-        ): Spec.Node.SameContent(
+        ): Spec.VendNode.SameContent(
           Pair.fst(
-            St,
+            NodeState,
             Spec.Answer,
-            Node.applied(
-              Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+            VendNode.applied(
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
               r2,
               Sync.go(
                 False{},
-                Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))),
+                Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))),
                 b
               )
             )
           ),
-          Pair.fst(St, Spec.Answer, Node.applied(_, r4, Sync.go(False{}, _, a)))
+          Pair.fst(NodeState, Spec.Answer, VendNode.applied(_, r4, Sync.go(False{}, _, a)))
         )
         comm_core(s, a, b, r1, r2, r3, r4)((
-            %Equal.sym(St, Pair.fst(St, Spec.Answer, Node.applied(s, r1, Sync.go(False{}, s, a))), s1, sync_state(s, a, r1, w1, z1, s1)(hn1)(h1)): {Sync.collides(Tables.Table.keys(Ver, St.versions(b)), St.versions(b), St.versions(_)) == False{}: Bool}
+            %Equal.sym(NodeState, Pair.fst(NodeState, Spec.Answer, VendNode.applied(s, r1, Sync.go(False{}, s, a))), s1, sync_state(s, a, r1, w1, z1, s1)(hn1)(h1)): {Sync.collides(Tables.Table.keys(VersionRecord, NodeState.versions(b)), NodeState.versions(b), NodeState.versions(_)) == False{}: Bool}
             sync_clean(s1, b, r2, w2, z2, s2)(hn2)(h2)))
 
 def Spec.inside_through(s, m, h, g):
   Reaches.Reach.in_through(
     ~Spec.Member,
-    ~Tables.Table<Grp>,
+    ~Tables.Table<GroupRecord>,
     ~Member.same,
-    ~Grp.members.of,
-    ~Grp.all,
+    ~GroupRecord.members.of,
+    ~GroupRecord.all,
     ~member_same_refl,
     ~member_same_sound,
     ~grp_live,
-    St.groups(s),
+    NodeState.groups(s),
     Spec.Member.Group{g},
     Spec.Member.Group{h},
     m
@@ -20528,10 +24511,10 @@ def Spec.inside_through(s, m, h, g):
 def Spec.none_inside_itself_after(s, e, q, t, a, g):
   match e:
     case Spec.Envelope{+r, w, z}:
-      h => hg =>
+      h => hl => hg =>
         +s = s
         nia_asked(
-          Tables.Table.get(Seen, St.seen(s), r),
+          Tables.Table.get(Seen, NodeState.seen(s), r),
           s,
           r,
           w,
@@ -20540,7 +24523,7 @@ def Spec.none_inside_itself_after(s, e, q, t, a, g):
           t,
           a,
           g
-        )(h)(acyc_all(St.groups(s))(hg))
+        )(h)(hl)(acyc_all(NodeState.groups(s))(hg))
 
 def Spec.merge_disjoint_keeps_both(
   s,
@@ -20583,4 +24566,272 @@ def Spec.merge_disjoint_keeps_both(
           +v0 = v0
           +n1 = n1
           +n2 = n2
-          mdk_split(Tables.Table.get(Br, St.branches(s), b), Tables.Table.get(Ver, St.versions(s), v0), s, s1, s2, s3, s4, a4, r1, w1, z1, r2, w2, z2, r3, w3, z3, r4, w4, z4, b, c, n1, n2, base1, base2, x1, x2, v0, v1, v2)({==})({==})(hn1)(hn2)(hn3)(hn4)(Strings.String.ne_eq(n1, n2)(hq => hne(Equal.cong(String, Resources.Name, z => Resources.Name{z}, n1, n2, hq))))(h1)(h2)(h3)(h4))
+          mdk_split(Tables.Table.get(BranchRecord, NodeState.branches(s), b), Tables.Table.get(VersionRecord, NodeState.versions(s), v0), s, s1, s2, s3, s4, a4, r1, w1, z1, r2, w2, z2, r3, w3, z3, r4, w4, z4, b, c, n1, n2, base1, base2, x1, x2, v0, v1, v2)({==})({==})(hn1)(hn2)(hn3)(hn4)(Strings.String.ne_eq(n1, n2)(hq => hne(Equal.cong(String, Resources.Name, z => Resources.Name{z}, n1, n2, hq))))(h1)(h2)(h3)(h4))
+
+def Spec.members_after_set(s, e, g, ms, t, x):
+  match e:
+    case Spec.Envelope{+r, +w, +z}:
+      +hn => +h =>
+        +s = s
+        +g = g
+        +ms = ms
+        +t = t
+        +x = x
+        %applied_state(
+          s,
+          r,
+          Step.of(s, r, w, z, Spec.Ask.SetGroup{g, ms}),
+          t,
+          Spec.Answer.SetGroup{Spec.SetGroup.Set{x}}
+        )(
+          ask_step(
+            s,
+            r,
+            w,
+            z,
+            Spec.Ask.SetGroup{g, ms},
+            t,
+            Spec.Answer.SetGroup{Spec.SetGroup.Set{x}}
+          )(hn)(h)
+        ):
+          {
+            GroupRecord.members.got(
+              Tables.Table.get(GroupRecord, NodeState.groups(_), g)
+            )
+              == Some{ms}: Maybe<&2, List<&2, Spec.Member>>
+          }
+        %Equal.sym(
+          Tables.Table<GroupRecord>,
+          NodeState.groups(
+            Pair.fst(
+              NodeState,
+              Spec.Answer,
+              VendNode.applied(s, r, Step.of(s, r, w, z, Spec.Ask.SetGroup{g, ms}))
+            )
+          ),
+          Out.groups(Step.of(s, r, w, z, Spec.Ask.SetGroup{g, ms})),
+          groups_after_applied(s, r, Step.of(s, r, w, z, Spec.Ask.SetGroup{g, ms}))
+        ):
+          {
+            GroupRecord.members.got(
+              Tables.Table.get(GroupRecord, _, g)
+            )
+              == Some{ms}: Maybe<&2, List<&2, Spec.Member>>
+          }
+        sg_set(
+          Cycle.has(NodeState.groups(s), g, ms),
+          s,
+          g,
+          ms,
+          x
+        )(
+          applied_answer(
+            s,
+            r,
+            Step.of(s, r, w, z, Spec.Ask.SetGroup{g, ms}),
+            t,
+            Spec.Answer.SetGroup{Spec.SetGroup.Set{x}}
+          )(
+            ask_step(
+              s,
+              r,
+              w,
+              z,
+              Spec.Ask.SetGroup{g, ms},
+              t,
+              Spec.Answer.SetGroup{Spec.SetGroup.Set{x}}
+            )(hn)(h)
+          )
+        )
+
+def Spec.set_keeps_others(s, e, g, h, ms, t, a):
+  match e:
+    case Spec.Envelope{+r, w, z}:
+      hask => hne =>
+        +s = s
+        +g = g
+        +h = h
+        keep_others_asked(
+          Tables.Table.get(Seen, NodeState.seen(s), r),
+          s,
+          r,
+          w,
+          z,
+          g,
+          h,
+          ms,
+          t,
+          a
+        )(hask)(Strings.String.eq_flip(h, g)(Strings.String.ne_eq(h, g)(hne)))
+
+def Spec.inside_has_chain(s, m, g):
+  hi =>
+    +s = s
+    +g = g
+    +m = m
+    inside_chain.of(
+      s,
+      g,
+      m,
+      Reaches.Reach.go_path(
+        ~Spec.Member,
+        ~Tables.Table<GroupRecord>,
+        ~Member.same,
+        ~GroupRecord.members.of,
+        ~member_same_refl,
+        List.length(&2, Spec.Member, GroupRecord.all(NodeState.groups(s))),
+        GroupRecord.members.of(NodeState.groups(s), Spec.Member.Group{g}),
+        NodeState.groups(s),
+        m
+      )(hi)
+    )
+
+def Spec.chain_is_inside(s, g, ps, m):
+  hc =>
+    +s = s
+    +g = g
+    +ps = ps
+    +m = m
+    Reaches.Reach.path_in(
+      ~Spec.Member,
+      ~Tables.Table<GroupRecord>,
+      ~Member.same,
+      ~GroupRecord.members.of,
+      ~GroupRecord.all,
+      ~member_same_sound,
+      ~grp_live,
+      GroupRecord.groups(ps),
+      NodeState.groups(s),
+      Spec.Member.Group{g},
+      m
+    )(chain_path(ps, s, g, m)(hc))
+
+def Spec.cycle_has_closer(s, e, g, ms, t):
+  match e:
+    case Spec.Envelope{+r, +w, +z}:
+      +hn => +h =>
+        +s = s
+        +g = g
+        +ms = ms
+        +t = t
+        closer_found.of(
+          s,
+          g,
+          ms,
+          Reaches.Reach.closes_split(
+            ~Spec.Member,
+            ~Tables.Table<GroupRecord>,
+            ~Member.same,
+            ~GroupRecord.members.of,
+            ~GroupRecord.all,
+            NodeState.groups(s),
+            Spec.Member.Group{g},
+            ms
+          )(
+            sg_cycle(
+              Cycle.has(NodeState.groups(s), g, ms),
+              s,
+              g,
+              ms
+            )(
+              applied_answer(
+                s,
+                r,
+                Step.of(s, r, w, z, Spec.Ask.SetGroup{g, ms}),
+                t,
+                Spec.Answer.SetGroup{Spec.SetGroup.Cycle{}}
+              )(
+                ask_step(
+                  s,
+                  r,
+                  w,
+                  z,
+                  Spec.Ask.SetGroup{g, ms},
+                  t,
+                  Spec.Answer.SetGroup{Spec.SetGroup.Cycle{}}
+                )(hn)(h)
+              )
+            )
+          )
+        )
+
+def Spec.closer_is_cycle(s, e, g, ms, m, t, a):
+  match e:
+    case Spec.Envelope{+r, +w, +z}:
+      +hn => ham => hc => +h =>
+        +s = s
+        +g = g
+        +ms = ms
+        +t = t
+        +a = a
+        Equal.trans(
+          Spec.Answer,
+          a,
+          Out.answer(SetGroup.on(Cycle.has(NodeState.groups(s), g, ms), s, g, ms)),
+          Spec.Answer.SetGroup{Spec.SetGroup.Cycle{}},
+          Equal.sym(
+            Spec.Answer,
+            Out.answer(Step.of(s, r, w, z, Spec.Ask.SetGroup{g, ms})),
+            a,
+            applied_answer(
+              s,
+              r,
+              Step.of(s, r, w, z, Spec.Ask.SetGroup{g, ms}),
+              t,
+              a
+            )(ask_step(s, r, w, z, Spec.Ask.SetGroup{g, ms}, t, a)(hn)(h))
+          ),
+          (
+            %Equal.sym(Bool, Cycle.has(NodeState.groups(s), g, ms), True{}, closer_among.of(s, g, ms, m, ham)(hc)): {Out.answer(SetGroup.on(_, s, g, ms)) == Spec.Answer.SetGroup{Spec.SetGroup.Cycle{}}: Spec.Answer}
+            {==})
+        )
+
+def Spec.groups_converge(a, b, a1, b1, e1, e2, g):
+  match e1 e2:
+    case Spec.Envelope{+r1, w1, z1} Spec.Envelope{+r2, w2, z2}:
+      +hn1 => hn2 => +h1 => h2 =>
+        +a = a
+        +b = b
+        +a1 = a1
+        +b1 = b1
+        +g = g
+        %sync_state(
+          b,
+          a1,
+          r2,
+          w2,
+          z2,
+          b1
+        )(
+          hn2
+        )(
+          h2
+        ): {
+          Spec.VendNode.get_members(
+            a1,
+            g
+          )
+            == Spec.VendNode.get_members(_, g): Maybe<&2, List<&2, Spec.Member>>
+        }
+        %sync_state(
+          a,
+          b,
+          r1,
+          w1,
+          z1,
+          a1
+        )(
+          hn1
+        )(
+          h1
+        ): {
+          Spec.VendNode.get_members(
+            _,
+            g
+          )
+            == Spec.VendNode.get_members(
+              Pair.fst(NodeState, Spec.Answer, VendNode.applied(b, r2, Sync.go(False{}, b, _))),
+              g
+            ): Maybe<&2, List<&2, Spec.Member>>
+        }
+        groups_conv(a, b, r1, r2, g)

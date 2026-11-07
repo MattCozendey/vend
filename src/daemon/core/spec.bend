@@ -10,17 +10,17 @@ import ../../shared/resources.bend as Resources
 # -----
 
 # a Vend Node
-law Node:
+law VendNode:
   Data
 
 # the node that t names
-law Node.read:
+law VendNode.read:
   for t: String
-  Maybe<&2, Node>
+  Maybe<&2, VendNode>
 
 # the text of n
-law Node.show:
-  for n: Node
+law VendNode.show:
+  for n: VendNode
   String
 
 # an owner group
@@ -231,7 +231,7 @@ def Envelope.id(e: Envelope) -> RequestId:
 
 # a member of an owner group
 type Member is Data:
-  Member.Node{node: Node}
+  Member.VendNode{node: VendNode}
   Member.Group{group: Group}
 
 # what a subscription or a poll follows: on a branch, or the groups
@@ -344,15 +344,15 @@ law LogEntry.time:
   for e: LogEntry
   Time
 
-# an event of a topic. GroupKept: a sync kept this node's members of the group,
-# since the other node's members would close a cycle; a set-group settles it.
+# an event of a topic. GroupCycle: a sync took the group's members although
+# they close a cycle (see none_inside_itself_after); a set-group settles it.
 # MarkMoved: a sync met the same mark of another node, on another version, and
 # the smaller version won on both nodes
 type Notice is Data:
   Notice.Touched{touch: Touch}
   Notice.Conflicted{conflict: Conflict}
   Notice.Versioned{branch: Branch, version: Version}
-  Notice.GroupKept{group: Group, members: List<&2, Member>}
+  Notice.GroupCycle{group: Group, members: List<&2, Member>}
   Notice.MarkMoved{branch: Branch, mark: Mark, from: Version, to: Version}
 
 # Answers
@@ -419,72 +419,72 @@ type Sync is Data:
 # -------------
 # What a node does, without IO: the laws are about these. Each try_
 # operation of transport/spec.bend asks a node to run its pure variant: a
-# read, or Node.ask for a change. Mounts, stops and connections have none:
+# read, or VendNode.ask for a change. Mounts, stops and connections have none:
 # their behavior is IO.
 
 # what a node holds
-law Node.State:
+law VendNode.State:
   Data
 
 # the node n, holding nothing yet
-law Node.empty:
-  for n: Node
-  Node.State
+law VendNode.empty:
+  for n: VendNode
+  VendNode.State
 
 # the position of s, to start from with "since"
-law Node.position:
-  for s: Node.State
+law VendNode.position:
+  for s: VendNode.State
   Position
 
 # every branch of s
-law Node.get_branches:
-  for s: Node.State
+law VendNode.get_branches:
+  for s: VendNode.State
   List<&2, BranchEntry>
 
 # the versions of the resource n on the branch b
-law Node.get_log:
-  for s: Node.State
+law VendNode.get_log:
+  for s: VendNode.State
   for n: Resources.Name
   for b: Branch
   List<&2, LogEntry>
 
 # the bytes of the resource n at the point p, if it is there
-law Node.get_content:
-  for s: Node.State
+law VendNode.get_content:
+  for s: VendNode.State
   for n: Resources.Name
   for p: Point
   Maybe<&2, Octets.Bytes()>
 
 # what changed in the resource n from the point a to the point b
-law Node.get_diff:
-  for s: Node.State
+law VendNode.get_diff:
+  for s: VendNode.State
   for n: Resources.Name
   for a: Point
   for b: Point
   List<&2, Change>
 
 # the changes elsewhere that touch what the branch b uses
-law Node.get_affects:
-  for s: Node.State
+law VendNode.get_affects:
+  for s: VendNode.State
   for b: Branch
   List<&2, Touch>
 
 # what the changes up to the point p touch elsewhere
-law Node.get_impact:
-  for s: Node.State
+law VendNode.get_impact:
+  for s: VendNode.State
   for p: Point
   List<&2, Touch>
 
 # whether the request r happened
-law Node.get_outcome:
-  for s: Node.State
+law VendNode.get_outcome:
+  for s: VendNode.State
   for r: RequestId
   Outcome
 
 # the notices of the topic t since the position p (from the start without
 # one)
-law Node.get_changes:
-  for s: Node.State
+law VendNode.get_changes:
+  for s: VendNode.State
   for t: Topic
   for p: Maybe<&2, Position>
   List<&2, Notice>
@@ -498,7 +498,15 @@ type Ask is Data:
   Ask.Resolve{conflict: Conflict, name: Resources.Name, content: Content}
   Ask.SetOwner{branch: Branch, group: Group}
   Ask.SetGroup{group: Group, members: List<&2, Member>}
-  Ask.Sync{other: Node.State, since: Maybe<&2, Position>}
+  Ask.Sync{other: VendNode.State, since: Maybe<&2, Position>}
+
+# q is made on this node: anything but taking in another node
+def Ask.local(q: Ask) -> Bool:
+  match q:
+    case Ask.Sync{o, p}:
+      False{}
+    case _:
+      True{}
 
 # the answer to an Ask
 type Answer is Data:
@@ -512,15 +520,15 @@ type Answer is Data:
   Answer.Sync{answer: Sync}
 
 # s after the change q, beside its answer
-law Node.ask:
-  for s: Node.State
+law VendNode.ask:
+  for s: VendNode.State
   for e: Envelope
   for q: Ask
-  Node.State & Answer
+  VendNode.State & Answer
 
 # the epoch of the owner group of the branch b, if b exists
-law Node.get_epoch:
-  for s: Node.State
+law VendNode.get_epoch:
+  for s: VendNode.State
   for b: Branch
   Maybe<&2, Epoch>
 
@@ -530,20 +538,26 @@ law Epoch.number:
   Nat
 
 # the newest version of the branch b, if b exists
-law Node.get_head:
-  for s: Node.State
+law VendNode.get_head:
+  for s: VendNode.State
   for b: Branch
   Maybe<&2, Version>
 
 # the node of s is in the owner group of the branch b
-law Node.is_owner:
-  for s: Node.State
+law VendNode.is_owner:
+  for s: VendNode.State
   for b: Branch
   Bool
 
+# the members that the group g was last set to; None for a group never set
+law VendNode.get_members:
+  for s: VendNode.State
+  for g: Group
+  Maybe<&2, List<&2, Member>>
+
 # m is a member of the group g, or of a group inside g
-law Node.is_inside:
-  for s: Node.State
+law VendNode.is_inside:
+  for s: VendNode.State
   for m: Member
   for g: Group
   Bool
@@ -551,46 +565,81 @@ law Node.is_inside:
 # Laws
 # ----
 
+# m is among ms: ms is ys, then m, then zs
+def Member.Among(m: Member, ms: List<&2, Member>) -> Type:
+  &ys: List<
+    &2,
+    Member> -> &zs: List<
+    &2,
+    Member> -> {ms == List.append(&2, Member, ys, m <> zs): List<&2, Member>}
+
+# m is a member of the group g in s
+def Member.Of(s: VendNode.State, g: Group, m: Member) -> Type:
+  &ms: List<
+    &2,
+    Member> -> {
+    VendNode.get_members(s, g) == Some{ms}: Maybe<&2, List<&2, Member>>
+  }
+    & Member.Among(m, ms)
+
+# a chain of groups ps from g to m: each group of ps is a member of the one
+# before it (the first, of g), and m is a member of the last
+def VendNode.Chain(s: VendNode.State, g: Group, ps: List<&2, Group>, m: Member) -> Type:
+  match ps:
+    case Nil{}:
+      Member.Of(s, g, m)
+    case Con{h, r}:
+      Member.Of(s, g, Member.Group{h}) & VendNode.Chain(s, h, r, m)
+
+# setting the members of g to a list with m closes a cycle: m is a group, and
+# when it is not g, g is inside it
+def Member.Closes(s: VendNode.State, g: Group, m: Member) -> Type:
+  match m:
+    case Member.VendNode{n}:
+      Empty
+    case Member.Group{h}:
+      {h != g: Group} -> {VendNode.is_inside(s, Member.Group{g}, h) == True{}: Bool}
+
 # a and b hold the same content, for every resource at every point
-def Node.SameContent(a: Node.State, b: Node.State) -> Type:
+def VendNode.SameContent(a: VendNode.State, b: VendNode.State) -> Type:
   @n: Resources.Name -> @p: Point -> {
-    Node.get_content(a, n, p) == Node.get_content(b, n, p): Maybe<&2, Octets.Bytes()>
+    VendNode.get_content(a, n, p) == VendNode.get_content(b, n, p): Maybe<&2, Octets.Bytes()>
   }
 
 # a change keeps every version that existed, with its content
 law history_kept:
-  for s: Node.State
+  for s: VendNode.State
   for e: Envelope
   for q: Ask
-  for t: Node.State
+  for t: VendNode.State
   for a: Answer
   for n: Resources.Name
   for v: Version
   for x: Octets.Bytes()
   {
-    Node.ask(s, e, q) == (t, a): Node.State & Answer
+    VendNode.ask(s, e, q) == (t, a): VendNode.State & Answer
   } -> {
-    Node.get_content(s, n, Point.At{v}) == Some{x}: Maybe<&2, Octets.Bytes()>
-  } -> {Node.get_content(t, n, Point.At{v}) == Some{x}: Maybe<&2, Octets.Bytes()>}
+    VendNode.get_content(s, n, Point.At{v}) == Some{x}: Maybe<&2, Octets.Bytes()>
+  } -> {VendNode.get_content(t, n, Point.At{v}) == Some{x}: Maybe<&2, Octets.Bytes()>}
 
 # a change sent again with the same request ID gives the same answer and
 # changes nothing more
 law retry_is_safe:
-  for s: Node.State
+  for s: VendNode.State
   for r: RequestId
   for w: Writer
   for t1: Time
   for t2: Time
   for q: Ask
-  for s1: Node.State
+  for s1: VendNode.State
   for a1: Answer
   {
-    Node.ask(s, Envelope{r, w, t1}, q) == (s1, a1): Node.State & Answer
-  } -> {Node.ask(s1, Envelope{r, w, t2}, q) == (s1, a1): Node.State & Answer}
+    VendNode.ask(s, Envelope{r, w, t1}, q) == (s1, a1): VendNode.State & Answer
+  } -> {VendNode.ask(s1, Envelope{r, w, t2}, q) == (s1, a1): VendNode.State & Answer}
 
 # on the owner, a new request that writes bytes on the head answers Written
 law write_at_head_is_written:
-  for s: Node.State
+  for s: VendNode.State
   for r: RequestId
   for w: Writer
   for time: Time
@@ -598,77 +647,77 @@ law write_at_head_is_written:
   for b: Branch
   for v: Version
   for x: Octets.Bytes()
-  exs t: Node.State
+  exs t: VendNode.State
   exs u: Version
   {
-    Node.is_owner(s, b) == True{}: Bool
+    VendNode.is_owner(s, b) == True{}: Bool
   } -> {
-    Node.get_head(s, b) == Some{v}: Maybe<&2, Version>
+    VendNode.get_head(s, b) == Some{v}: Maybe<&2, Version>
   } -> {
-    Node.get_outcome(s, r) == Outcome.NotSeen{}: Outcome
+    VendNode.get_outcome(s, r) == Outcome.NotSeen{}: Outcome
   } -> {
-    Node.ask(
+    VendNode.ask(
       s,
       Envelope{r, w, time},
       Ask.Write{n, b, Some{v}, Content.Bytes{x}}
     )
-      == (t, Answer.Write{Write.Written{u}}): Node.State
+      == (t, Answer.Write{Write.Written{u}}): VendNode.State
       & Answer
   }
 
 # after a write answers Written, the head of the branch holds the bytes
 law read_after_write:
-  for s: Node.State
+  for s: VendNode.State
   for e: Envelope
   for n: Resources.Name
   for b: Branch
   for base: Maybe<&2, Version>
   for x: Octets.Bytes()
-  for t: Node.State
+  for t: VendNode.State
   for v: Version
   {
-    Node.get_outcome(s, Envelope.id(e)) == Outcome.NotSeen{}: Outcome
+    VendNode.get_outcome(s, Envelope.id(e)) == Outcome.NotSeen{}: Outcome
   } -> {
-    Node.ask(
+    VendNode.ask(
       s,
       e,
       Ask.Write{n, b, base, Content.Bytes{x}}
     )
-      == (t, Answer.Write{Write.Written{v}}): Node.State
+      == (t, Answer.Write{Write.Written{v}}): VendNode.State
       & Answer
-  } -> {Node.get_content(t, n, Point.Head{b}) == Some{x}: Maybe<&2, Octets.Bytes()>}
+  } -> {VendNode.get_content(t, n, Point.Head{b}) == Some{x}: Maybe<&2, Octets.Bytes()>}
 
 # a stale write changes no content, and its base is not the current version
 law stale_changes_nothing:
-  for s: Node.State
+  for s: VendNode.State
   for e: Envelope
   for n: Resources.Name
   for b: Branch
   for base: Maybe<&2, Version>
   for x: Content
-  for t: Node.State
+  for t: VendNode.State
   for current: Version
   {
-    Node.get_outcome(s, Envelope.id(e)) == Outcome.NotSeen{}: Outcome
+    VendNode.get_outcome(s, Envelope.id(e)) == Outcome.NotSeen{}: Outcome
   } -> {
-    Node.ask(
+    VendNode.ask(
       s,
       e,
       Ask.Write{n, b, base, x}
     )
-      == (t, Answer.Write{Write.Stale{current}}): Node.State
+      == (t, Answer.Write{Write.Stale{current}}): VendNode.State
       & Answer
-  } -> Node.SameContent(t, s)
+  } -> VendNode.SameContent(t, s)
     & {base != Some{current}: Maybe<&2, Version>}
 
 # when c starts from b, and each then writes a different resource, merging c
 # into b answers Merged and keeps both writes
 law merge_disjoint_keeps_both:
-  for s: Node.State
-  for s1: Node.State
-  for s2: Node.State
-  for s3: Node.State
-  for s4: Node.State
+  for s: VendNode.State
+  for s1: VendNode.State
+  for s2: VendNode.State
+  for s3: VendNode.State
+  for s4: VendNode.State
   for a4: Answer
   for e1: Envelope
   for e2: Envelope
@@ -687,229 +736,390 @@ law merge_disjoint_keeps_both:
   for v2: Version
   exs v3: Version
   {
-    Node.get_outcome(s, Envelope.id(e1)) == Outcome.NotSeen{}: Outcome
+    VendNode.get_outcome(s, Envelope.id(e1)) == Outcome.NotSeen{}: Outcome
   } -> {
-    Node.get_outcome(s1, Envelope.id(e2)) == Outcome.NotSeen{}: Outcome
+    VendNode.get_outcome(s1, Envelope.id(e2)) == Outcome.NotSeen{}: Outcome
   } -> {
-    Node.get_outcome(s2, Envelope.id(e3)) == Outcome.NotSeen{}: Outcome
+    VendNode.get_outcome(s2, Envelope.id(e3)) == Outcome.NotSeen{}: Outcome
   } -> {
-    Node.get_outcome(s3, Envelope.id(e4)) == Outcome.NotSeen{}: Outcome
+    VendNode.get_outcome(s3, Envelope.id(e4)) == Outcome.NotSeen{}: Outcome
   } -> {
     n1 != n2: Resources.Name
   } -> {
-    Node.ask(
+    VendNode.ask(
       s,
       e1,
       Ask.SetBranch{c, Point.Head{b}}
     )
-      == (s1, Answer.SetBranch{SetBranch.Created{v0}}): Node.State
+      == (s1, Answer.SetBranch{SetBranch.Created{v0}}): VendNode.State
       & Answer
   } -> {
-    Node.ask(
+    VendNode.ask(
       s1,
       e2,
       Ask.Write{n1, b, base1, Content.Bytes{x1}}
     )
-      == (s2, Answer.Write{Write.Written{v1}}): Node.State
+      == (s2, Answer.Write{Write.Written{v1}}): VendNode.State
       & Answer
   } -> {
-    Node.ask(
+    VendNode.ask(
       s2,
       e3,
       Ask.Write{n2, c, base2, Content.Bytes{x2}}
     )
-      == (s3, Answer.Write{Write.Written{v2}}): Node.State
+      == (s3, Answer.Write{Write.Written{v2}}): VendNode.State
       & Answer
   } -> {
-    Node.ask(s3, e4, Ask.Merge{Point.Head{c}, b}) == (s4, a4): Node.State & Answer
+    VendNode.ask(s3, e4, Ask.Merge{Point.Head{c}, b}) == (s4, a4): VendNode.State & Answer
   } -> {
     a4 == Answer.Merge{Merge.Merged{v3}}: Answer
   }
-    & {Node.get_content(s4, n1, Point.Head{b}) == Some{x1}: Maybe<&2, Octets.Bytes()>}
-    & {Node.get_content(s4, n2, Point.Head{b}) == Some{x2}: Maybe<&2, Octets.Bytes()>}
+    & {VendNode.get_content(s4, n1, Point.Head{b}) == Some{x1}: Maybe<&2, Octets.Bytes()>}
+    & {VendNode.get_content(s4, n2, Point.Head{b}) == Some{x2}: Maybe<&2, Octets.Bytes()>}
 
 # a merge that conflicts changes no content, and stores the conflict as the
 # one new conflict notice of the branch
 law conflict_changes_nothing:
-  for s: Node.State
+  for s: VendNode.State
   for e: Envelope
   for p: Point
   for b: Branch
-  for t: Node.State
+  for t: VendNode.State
   for k: Conflict
   {
-    Node.get_outcome(s, Envelope.id(e)) == Outcome.NotSeen{}: Outcome
+    VendNode.get_outcome(s, Envelope.id(e)) == Outcome.NotSeen{}: Outcome
   } -> {
-    Node.ask(s, e, Ask.Merge{p, b}) == (t, Answer.Merge{Merge.Conflicted{k}}): Node.State & Answer
-  } -> Node.SameContent(
+    VendNode.ask(
+      s,
+      e,
+      Ask.Merge{p, b}
+    )
+      == (t, Answer.Merge{Merge.Conflicted{k}}): VendNode.State
+      & Answer
+  } -> VendNode.SameContent(
     t,
     s
   )
     & {
-      Node.get_changes(
+      VendNode.get_changes(
         t,
         Topic.Conflicts{b},
-        Some{Node.position(s)}
+        Some{VendNode.position(s)}
       )
         == [Notice.Conflicted{k}]: List<&2, Notice>
     }
 
-# after a group is set, each member is inside it
-law inside_after_set:
-  for s: Node.State
+# after the group g is set to ms, its members are exactly ms
+law members_after_set:
+  for s: VendNode.State
   for e: Envelope
   for g: Group
-  for m: Member
   for ms: List<&2, Member>
-  for t: Node.State
+  for t: VendNode.State
   for x: Epoch
   {
-    Node.get_outcome(s, Envelope.id(e)) == Outcome.NotSeen{}: Outcome
+    VendNode.get_outcome(s, Envelope.id(e)) == Outcome.NotSeen{}: Outcome
   } -> {
-    Node.ask(
+    VendNode.ask(
       s,
       e,
-      Ask.SetGroup{g, m <> ms}
+      Ask.SetGroup{g, ms}
     )
-      == (t, Answer.SetGroup{SetGroup.Set{x}}): Node.State
+      == (t, Answer.SetGroup{SetGroup.Set{x}}): VendNode.State
       & Answer
-  } -> {Node.is_inside(t, m, g) == True{}: Bool}
+  } -> {VendNode.get_members(t, g) == Some{ms}: Maybe<&2, List<&2, Member>>}
+
+# setting the group g leaves the members of every other group
+law set_keeps_others:
+  for s: VendNode.State
+  for e: Envelope
+  for g: Group
+  for h: Group
+  for ms: List<&2, Member>
+  for t: VendNode.State
+  for a: Answer
+  {
+    VendNode.ask(s, e, Ask.SetGroup{g, ms}) == (t, a): VendNode.State & Answer
+  } -> {
+    h != g: Group
+  } -> {VendNode.get_members(t, h) == VendNode.get_members(s, h): Maybe<&2, List<&2, Member>>}
 
 # what is inside a group that is inside g is inside g
 law inside_through:
-  for s: Node.State
+  for s: VendNode.State
   for m: Member
   for h: Group
   for g: Group
   {
-    Node.is_inside(s, Member.Group{h}, g) == True{}: Bool
-  } -> {Node.is_inside(s, m, h) == True{}: Bool} -> {Node.is_inside(s, m, g) == True{}: Bool}
+    VendNode.is_inside(s, Member.Group{h}, g) == True{}: Bool
+  } -> {
+    VendNode.is_inside(s, m, h) == True{}: Bool
+  } -> {VendNode.is_inside(s, m, g) == True{}: Bool}
+
+# m is inside g exactly when a chain of groups leads from g to m
+law inside_has_chain:
+  for s: VendNode.State
+  for m: Member
+  for g: Group
+  {
+    VendNode.is_inside(s, m, g) == True{}: Bool
+  } -> &ps: List<&2, Group> -> VendNode.Chain(s, g, ps, m)
+
+law chain_is_inside:
+  for s: VendNode.State
+  for g: Group
+  for ps: List<&2, Group>
+  for m: Member
+  VendNode.Chain(s, g, ps, m) -> {VendNode.is_inside(s, m, g) == True{}: Bool}
+
+# a set-group answers Cycle exactly when one of its members closes a cycle
+law cycle_has_closer:
+  for s: VendNode.State
+  for e: Envelope
+  for g: Group
+  for ms: List<&2, Member>
+  for t: VendNode.State
+  {
+    VendNode.get_outcome(s, Envelope.id(e)) == Outcome.NotSeen{}: Outcome
+  } -> {
+    VendNode.ask(
+      s,
+      e,
+      Ask.SetGroup{g, ms}
+    )
+      == (t, Answer.SetGroup{SetGroup.Cycle{}}): VendNode.State
+      & Answer
+  } -> &m: Member -> Member.Among(m, ms)
+    & Member.Closes(s, g, m)
+
+law closer_is_cycle:
+  for s: VendNode.State
+  for e: Envelope
+  for g: Group
+  for ms: List<&2, Member>
+  for m: Member
+  for t: VendNode.State
+  for a: Answer
+  {
+    VendNode.get_outcome(s, Envelope.id(e)) == Outcome.NotSeen{}: Outcome
+  } -> Member.Among(
+    m,
+    ms
+  ) -> Member.Closes(
+    s,
+    g,
+    m
+  ) -> {
+    VendNode.ask(s, e, Ask.SetGroup{g, ms}) == (t, a): VendNode.State & Answer
+  } -> {a == Answer.SetGroup{SetGroup.Cycle{}}: Answer}
 
 # no group is inside itself at the start
 law none_inside_itself_at_start:
-  for n: Node
+  for n: VendNode
   for g: Group
-  {Node.is_inside(Node.empty(n), Member.Group{g}, g) == False{}: Bool}
+  {VendNode.is_inside(VendNode.empty(n), Member.Group{g}, g) == False{}: Bool}
 
-# a change keeps every group outside itself
+# a change made on this node keeps every group outside itself. A sync does
+# not: when two nodes set groups before they meet, the groups that win on each
+# may hold one another. Refusing those would cost a search of the whole group
+# graph on every sync, and the nodes could still keep different groups. So a
+# sync takes the winning groups as they are, and notices the cycle
+# (GroupCycle): inside stays well defined, and the groups on a cycle hold the
+# same members. groups_converge is what that buys.
 law none_inside_itself_after:
-  for s: Node.State
+  for s: VendNode.State
   for e: Envelope
   for q: Ask
-  for t: Node.State
+  for t: VendNode.State
   for a: Answer
   for g: Group
   {
-    Node.ask(s, e, q) == (t, a): Node.State & Answer
+    VendNode.ask(s, e, q) == (t, a): VendNode.State & Answer
+  } -> {
+    Ask.local(q) == True{}: Bool
   } -> (
-    @h: Group -> {Node.is_inside(s, Member.Group{h}, h) == False{}: Bool}
-  ) -> {Node.is_inside(t, Member.Group{g}, g) == False{}: Bool}
+    @h: Group -> {VendNode.is_inside(s, Member.Group{h}, h) == False{}: Bool}
+  ) -> {VendNode.is_inside(t, Member.Group{g}, g) == False{}: Bool}
 
 # setting an owner group gives the branch a larger epoch
 law epoch_grows:
-  for s: Node.State
+  for s: VendNode.State
   for e: Envelope
   for b: Branch
   for g: Group
-  for t: Node.State
+  for t: VendNode.State
   for old: Epoch
   for new: Epoch
   {
-    Node.get_outcome(s, Envelope.id(e)) == Outcome.NotSeen{}: Outcome
+    VendNode.get_outcome(s, Envelope.id(e)) == Outcome.NotSeen{}: Outcome
   } -> {
-    Node.get_epoch(s, b) == Some{old}: Maybe<&2, Epoch>
+    VendNode.get_epoch(s, b) == Some{old}: Maybe<&2, Epoch>
   } -> {
-    Node.ask(
+    VendNode.ask(
       s,
       e,
       Ask.SetOwner{b, g}
     )
-      == (t, Answer.SetOwner{SetOwner.Set{new}}): Node.State
+      == (t, Answer.SetOwner{SetOwner.Set{new}}): VendNode.State
       & Answer
   } -> {
     Nat.is_lt(Epoch.number(old), Epoch.number(new)) == True{}: Bool
   }
-    & {Node.get_epoch(t, b) == Some{new}: Maybe<&2, Epoch>}
+    & {VendNode.get_epoch(t, b) == Some{new}: Maybe<&2, Epoch>}
 
 # after a takes in b, and b takes in that, both hold the same content
 law sync_converges:
-  for a: Node.State
-  for b: Node.State
-  for a1: Node.State
-  for b1: Node.State
+  for a: VendNode.State
+  for b: VendNode.State
+  for a1: VendNode.State
+  for b1: VendNode.State
   for e1: Envelope
   for e2: Envelope
   {
-    Node.get_outcome(a, Envelope.id(e1)) == Outcome.NotSeen{}: Outcome
+    VendNode.get_outcome(a, Envelope.id(e1)) == Outcome.NotSeen{}: Outcome
   } -> {
-    Node.get_outcome(b, Envelope.id(e2)) == Outcome.NotSeen{}: Outcome
+    VendNode.get_outcome(b, Envelope.id(e2)) == Outcome.NotSeen{}: Outcome
   } -> {
-    Node.ask(a, e1, Ask.Sync{b, None{}}) == (a1, Answer.Sync{Sync.Synced{}}): Node.State & Answer
+    VendNode.ask(
+      a,
+      e1,
+      Ask.Sync{b, None{}}
+    )
+      == (a1, Answer.Sync{Sync.Synced{}}): VendNode.State
+      & Answer
   } -> {
-    Node.ask(b, e2, Ask.Sync{a1, None{}}) == (b1, Answer.Sync{Sync.Synced{}}): Node.State & Answer
-  } -> Node.SameContent(a1, b1)
+    VendNode.ask(
+      b,
+      e2,
+      Ask.Sync{a1, None{}}
+    )
+      == (b1, Answer.Sync{Sync.Synced{}}): VendNode.State
+      & Answer
+  } -> VendNode.SameContent(a1, b1)
+
+# after a takes in b, and b takes in that, both hold the same groups: each
+# group has the members of its larger stamp (its epoch, then its members)
+law groups_converge:
+  for a: VendNode.State
+  for b: VendNode.State
+  for a1: VendNode.State
+  for b1: VendNode.State
+  for e1: Envelope
+  for e2: Envelope
+  for g: Group
+  {
+    VendNode.get_outcome(a, Envelope.id(e1)) == Outcome.NotSeen{}: Outcome
+  } -> {
+    VendNode.get_outcome(b, Envelope.id(e2)) == Outcome.NotSeen{}: Outcome
+  } -> {
+    VendNode.ask(
+      a,
+      e1,
+      Ask.Sync{b, None{}}
+    )
+      == (a1, Answer.Sync{Sync.Synced{}}): VendNode.State
+      & Answer
+  } -> {
+    VendNode.ask(
+      b,
+      e2,
+      Ask.Sync{a1, None{}}
+    )
+      == (b1, Answer.Sync{Sync.Synced{}}): VendNode.State
+      & Answer
+  } -> {VendNode.get_members(a1, g) == VendNode.get_members(b1, g): Maybe<&2, List<&2, Member>>}
 
 # taking in a then b holds the same content as taking in b then a
 law sync_commutes:
-  for s: Node.State
-  for a: Node.State
-  for b: Node.State
-  for s1: Node.State
-  for s2: Node.State
-  for s3: Node.State
-  for s4: Node.State
+  for s: VendNode.State
+  for a: VendNode.State
+  for b: VendNode.State
+  for s1: VendNode.State
+  for s2: VendNode.State
+  for s3: VendNode.State
+  for s4: VendNode.State
   for e1: Envelope
   for e2: Envelope
   for e3: Envelope
   for e4: Envelope
   {
-    Node.get_outcome(s, Envelope.id(e1)) == Outcome.NotSeen{}: Outcome
+    VendNode.get_outcome(s, Envelope.id(e1)) == Outcome.NotSeen{}: Outcome
   } -> {
-    Node.get_outcome(s1, Envelope.id(e2)) == Outcome.NotSeen{}: Outcome
+    VendNode.get_outcome(s1, Envelope.id(e2)) == Outcome.NotSeen{}: Outcome
   } -> {
-    Node.get_outcome(s, Envelope.id(e3)) == Outcome.NotSeen{}: Outcome
+    VendNode.get_outcome(s, Envelope.id(e3)) == Outcome.NotSeen{}: Outcome
   } -> {
-    Node.get_outcome(s3, Envelope.id(e4)) == Outcome.NotSeen{}: Outcome
+    VendNode.get_outcome(s3, Envelope.id(e4)) == Outcome.NotSeen{}: Outcome
   } -> {
-    Node.ask(s, e1, Ask.Sync{a, None{}}) == (s1, Answer.Sync{Sync.Synced{}}): Node.State & Answer
+    VendNode.ask(
+      s,
+      e1,
+      Ask.Sync{a, None{}}
+    )
+      == (s1, Answer.Sync{Sync.Synced{}}): VendNode.State
+      & Answer
   } -> {
-    Node.ask(s1, e2, Ask.Sync{b, None{}}) == (s2, Answer.Sync{Sync.Synced{}}): Node.State & Answer
+    VendNode.ask(
+      s1,
+      e2,
+      Ask.Sync{b, None{}}
+    )
+      == (s2, Answer.Sync{Sync.Synced{}}): VendNode.State
+      & Answer
   } -> {
-    Node.ask(s, e3, Ask.Sync{b, None{}}) == (s3, Answer.Sync{Sync.Synced{}}): Node.State & Answer
+    VendNode.ask(
+      s,
+      e3,
+      Ask.Sync{b, None{}}
+    )
+      == (s3, Answer.Sync{Sync.Synced{}}): VendNode.State
+      & Answer
   } -> {
-    Node.ask(s3, e4, Ask.Sync{a, None{}}) == (s4, Answer.Sync{Sync.Synced{}}): Node.State & Answer
-  } -> Node.SameContent(s2, s4)
+    VendNode.ask(
+      s3,
+      e4,
+      Ask.Sync{a, None{}}
+    )
+      == (s4, Answer.Sync{Sync.Synced{}}): VendNode.State
+      & Answer
+  } -> VendNode.SameContent(s2, s4)
 
 # taking in the same node twice holds the same content as once
 law sync_idempotent:
-  for s: Node.State
-  for a: Node.State
-  for s1: Node.State
-  for s2: Node.State
+  for s: VendNode.State
+  for a: VendNode.State
+  for s1: VendNode.State
+  for s2: VendNode.State
   for a2: Answer
   for e1: Envelope
   for e2: Envelope
   {
-    Node.get_outcome(s, Envelope.id(e1)) == Outcome.NotSeen{}: Outcome
+    VendNode.get_outcome(s, Envelope.id(e1)) == Outcome.NotSeen{}: Outcome
   } -> {
-    Node.ask(s, e1, Ask.Sync{a, None{}}) == (s1, Answer.Sync{Sync.Synced{}}): Node.State & Answer
+    VendNode.ask(
+      s,
+      e1,
+      Ask.Sync{a, None{}}
+    )
+      == (s1, Answer.Sync{Sync.Synced{}}): VendNode.State
+      & Answer
   } -> {
-    Node.ask(s1, e2, Ask.Sync{a, None{}}) == (s2, a2): Node.State & Answer
-  } -> Node.SameContent(s2, s1)
+    VendNode.ask(s1, e2, Ask.Sync{a, None{}}) == (s2, a2): VendNode.State & Answer
+  } -> VendNode.SameContent(s2, s1)
 
 # the notices after a change are the notices before it, then the notices
 # since it: none is missed or doubled between polls
 law since_splits:
-  for s: Node.State
+  for s: VendNode.State
   for e: Envelope
   for q: Ask
-  for t: Node.State
+  for t: VendNode.State
   for a: Answer
   for k: Topic
   {
-    Node.ask(s, e, q) == (t, a): Node.State & Answer
+    VendNode.ask(s, e, q) == (t, a): VendNode.State & Answer
   } -> {
-    Node.get_changes(
+    VendNode.get_changes(
       t,
       k,
       None{}
@@ -917,7 +1127,7 @@ law since_splits:
       == List.append(
         &2,
         Notice,
-        Node.get_changes(s, k, None{}),
-        Node.get_changes(t, k, Some{Node.position(s)})
+        VendNode.get_changes(s, k, None{}),
+        VendNode.get_changes(t, k, Some{VendNode.position(s)})
       ): List<&2, Notice>
   }
