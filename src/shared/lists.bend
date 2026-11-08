@@ -31,34 +31,6 @@ def List.drop_after_append(
     case Con{h, t}:
       List.drop_after_append(A, t, ys)
 
-# a filter.put commutes with an append after it
-def List.filter.put_append(
-  -A: Data,
-  x: A,
-  a: List<&2, A>,
-  b: List<&2, A>,
-  hit: Bool
-) -> {
-  List.filter.put(
-    A,
-    x,
-    List.append(&2, A, a, b),
-    hit
-  )
-    == List.append(&2, A, List.filter.put(A, x, a, hit), b): List<&2, A>
-}:
-  match hit:
-    case True{}:
-      {==}
-    case False{}:
-      {==}
-
-# a pair is its two parts
-def Pair.eta(-A: Data, -B: Data, p: A & B) -> {(Pair.fst(A, B, p), Pair.snd(A, B, p)) == p: A & B}:
-  match p:
-    case (x, y):
-      {==}
-
 # appends group either way
 def List.append_assoc(
   -A: Data,

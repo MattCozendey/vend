@@ -27,58 +27,8 @@ def Bool.and_true_right(
     case True{}:
       h => h
 
-# both sides of a false "or" are false
-def Bool.or_false_left(
-  a: Bool,
-  b: Bool
-) -> {Bool.or(a, b) == False{}: Bool} -> {a == False{}: Bool}:
-  match a:
-    case True{}:
-      h => Empty.absurd(
-        {True{} == False{}: Bool},
-        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
-      )
-    case False{}:
-      h => {==}
-
-def Bool.or_false_right(
-  a: Bool,
-  b: Bool
-) -> {Bool.or(a, b) == False{}: Bool} -> {b == False{}: Bool}:
-  match a:
-    case True{}:
-      h => Empty.absurd(
-        {b == False{}: Bool},
-        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
-      )
-    case False{}:
-      h => h
-
-# a "not" that is false is of a true
-def Bool.not_false(a: Bool) -> {Bool.not(a) == False{}: Bool} -> {a == True{}: Bool}:
-  match a:
-    case True{}:
-      h => {==}
-    case False{}:
-      h => Empty.absurd(
-        {False{} == True{}: Bool},
-        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
-      )
-
 # anything or True is True
 def Bool.or_true_right(a: Bool) -> {Bool.or(a, True{}) == True{}: Bool}:
-  match a:
-    case False{}:
-      {==}
-    case True{}:
-      {==}
-
-# "or" groups either way
-def Bool.or_assoc(
-  a: Bool,
-  b: Bool,
-  c: Bool
-) -> {Bool.or(a, Bool.or(b, c)) == Bool.or(Bool.or(a, b), c): Bool}:
   match a:
     case False{}:
       {==}

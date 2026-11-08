@@ -238,7 +238,7 @@ def State() -> Data:
 
 # a node that holds nothing yet
 def Node.empty() -> State():
-  Tries.Tip{}
+  Tries.Trie.new(Cells.Cell<Entry>)
 
 # what a holder of a and of b holds: a sync
 def Node.join(a: State(), b: State()) -> State():

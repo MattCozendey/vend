@@ -870,7 +870,6 @@ def Mark.first(+s: Spec.State(), xs: List<&2, Spec.Id>, prev: Maybe<&2, Spec.Id>
     case Con{+x, r}:
       List.before.if(Mark.is(State.asked(s, x), m), prev, Mark.first(s, r, Some{x}, m))
 
-
 # the version that the mark m of the branch b names
 def Mark.of(+s: Spec.State(), +b: String, +m: String) -> Maybe<&2, Spec.Id>:
   Mark.first(s, Spec.Node.chain(s, Spec.Chain.Branch{b}), None{}, m)
@@ -938,7 +937,6 @@ def Res.clashes(+s: Spec.State(), ns: List<&2, String>, +base: Maybe<&2, Spec.Id
         Res.clashes(s, r, base, ours, from),
         Pick.is_clash(Pick.merge(Res.of(s, n, base), Res.of(s, n, ours), Res.of(s, n, Some{from})))
       )
-
 
 # Conflicts
 # ---------

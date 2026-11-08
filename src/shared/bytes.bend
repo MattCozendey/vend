@@ -5,12 +5,6 @@ import ./words.bend as Words
 # a resource's content: one byte per U32, as Base's File effects use
 def Bytes() -> Data:
   List<&2, U32>
-# x is a byte: below 256
-def is_byte(x: U32) -> Bool:
-  (x < 256: U32)
-# every value of b is a byte
-def is_bytes(b: Bytes()) -> Bool:
-  List.all(~&2, ~U32, ~is_byte, b)
 # a and b are the same bytes
 def Bytes.is_eq(a: Bytes(), b: Bytes()) -> Bool:
   match a b:
