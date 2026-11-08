@@ -3662,3 +3662,11 @@ def Bool.or_split(
         {Bool.or(_, Bool.and(r, Bool.and(f, t))) == Bool.and(r, Bool.and(f, t)): Bool}
       {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# a choice between two same values is that value
+def Bool.when_same(-A: Type, b: Bool, -v: A) -> {Bool.when(A, b, u => v, u => v) == v: A}:
+  match b:
+    case True{}:
+      {==}
+    case False{}:
+      {==}

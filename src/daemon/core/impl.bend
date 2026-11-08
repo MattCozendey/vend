@@ -8338,3 +8338,328 @@ def Spec.Node.members_after_set(n, s, e, g, ms, v):
           }
         last
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# Locality
+# --------
+# An entry outside a chain leaves the chain as it was (Off.chain): a request
+# of another chain, in a slot that was empty; a root of another chain; or a
+# vote on another chain.
+
+# Chain.key_apart, from two texts whose keys are not apart
+def Chain.key_apart.no(-a: String, +b: String, -x: List<&2, Bool>, -y: List<&2, Bool>, h: {String.eq(a, b) == False{}: Bool}, p: &e: {a == b: String} -> {
+  Shared.Trie.apart(x, y) == False{}: Bool
+}) -> Empty:
+  match p:
+    case (e, q):
+      Shared.Bool.false_ne_true(
+        Equal.trans(
+          Bool,
+          False{},
+          String.eq(a, b),
+          True{},
+          Equal.sym(Bool, String.eq(a, b), False{}, h),
+          %Equal.sym(String, a, b, e): {String.eq(_, b) == True{}: Bool}
+          Shared.String.eq_refl(b)
+        )
+      )
+
+# Chain.key_apart once the keys of the names are known to be apart or not (k)
+def Chain.key_apart.at(
+  k: Bool,
+  +a: String,
+  +b: String,
+  +x: List<&2, Bool>,
+  +y: List<&2, Bool>,
+  ek: {Shared.Trie.apart(List.append(&2, Bool, Shared.Trie.text(a), x), List.append(&2, Bool, Shared.Trie.text(b), y)) == k: Bool},
+  h: {String.eq(a, b) == False{}: Bool}
+) -> {k == True{}: Bool}:
+  match k:
+    case True{}:
+      {==}
+    case False{}:
+      Empty.absurd({False{} == True{}: Bool}, Chain.key_apart.no(a, b, x, y, h, Shared.Trie.text_join(a, b, x, y)(ek)))
+
+# the keys of two different chains, each with more after it, are apart
+def Chain.key_apart(d: Spec.Chain, c: Spec.Chain, +x: List<&2, Bool>, +y: List<&2, Bool>) -> {Spec.Chain.same(d, c) == False{}: Bool} -> {
+  Shared.Trie.apart(List.append(&2, Bool, Spec.Chain.key(d), x), List.append(&2, Bool, Spec.Chain.key(c), y)) == True{}: Bool
+}:
+  match d c:
+    case Spec.Chain.branch{+a} Spec.Chain.branch{+b}:
+      h => Chain.key_apart.at(Shared.Trie.apart(List.append(&2, Bool, Shared.Trie.text(a), x), List.append(&2, Bool, Shared.Trie.text(b), y)), a, b, x, y, {==}, h)
+    case Spec.Chain.group{+a} Spec.Chain.group{+b}:
+      h => Chain.key_apart.at(Shared.Trie.apart(List.append(&2, Bool, Shared.Trie.text(a), x), List.append(&2, Bool, Shared.Trie.text(b), y)), a, b, x, y, {==}, h)
+    case Spec.Chain.branch{a} Spec.Chain.group{b}:
+      h => {==}
+    case Spec.Chain.group{a} Spec.Chain.branch{b}:
+      h => {==}
+
+# the key of a chain, with more after it, is apart from the key of another
+def Chain.key_apart_end(+d: Spec.Chain, +c: Spec.Chain, +x: List<&2, Bool>) -> {Spec.Chain.same(d, c) == False{}: Bool} -> {
+  Shared.Trie.apart(List.append(&2, Bool, Spec.Chain.key(d), x), Spec.Chain.key(c)) == True{}: Bool
+}:
+  h =>
+    %Shared.List.append_nil(Bool, Spec.Chain.key(c)): {Shared.Trie.apart(List.append(&2, Bool, Spec.Chain.key(d), x), _) == True{}: Bool}
+    Chain.key_apart(d, c, x, [])(h)
+
+# an entry outside a chain
+type Off is Data:
+  Off.ask{id: Spec.Id, time: String, ask: Spec.Ask}
+  Off.root{chain: Spec.Chain, owner: String, entry: Spec.Entry}
+  Off.vote{node: String, chain: Spec.Chain, after: Spec.Id, entry: Spec.Entry}
+
+# the slot of o
+def Off.slot(o: Off) -> Spec.Slot:
+  match o:
+    case Off.ask{i, t, q}:
+      Spec.Slot.ask{i}
+    case Off.root{d, n, e}:
+      Spec.Slot.root{d, n}
+    case Off.vote{n, d, h, e}:
+      Spec.Slot.vote{n, d, h}
+
+# the entry of o
+def Off.entry(o: Off) -> Spec.Entry:
+  match o:
+    case Off.ask{i, t, q}:
+      Spec.Entry.ask{i, t, q}
+    case Off.root{d, n, e}:
+      e
+    case Off.vote{n, d, h, e}:
+      e
+
+# s with o
+def Off.join(+s: Spec.State(), +o: Off) -> Spec.State():
+  State.put(s, Off.slot(o), Off.entry(o))
+
+# o is outside the chain c of s: of another chain, and a request in an empty
+# slot
+def Off.ok(o: Off, +c: Spec.Chain, +s: Spec.State()) -> Bool:
+  match o:
+    case Off.ask{+i, t, q}:
+      Bool.and(Bool.not(Spec.Chain.same(Spec.Ask.chain(q), c)), Maybe.is_none(&2, Cells.Cell<Spec.Entry>, State.cell(s, Spec.Slot.ask{i})))
+    case Off.root{d, n, e}:
+      Bool.not(Spec.Chain.same(d, c))
+    case Off.vote{n, d, h, e}:
+      Bool.not(Spec.Chain.same(d, c))
+
+# an entry outside the chain c leaves its votes
+def Off.votes(o: Off, +s: Spec.State(), +c: Spec.Chain) -> {Off.ok(o, c, s) == True{}: Bool} -> {
+  Chain.votes(Off.join(s, o), c) == Chain.votes(s, c): Shared.Trie<Cells.Cell<Spec.Entry>>
+}:
+  match o:
+    case Off.ask{+i, +t, +q}:
+      h => Shared.Trie.under_union_apart(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, Spec.Slot.key(Spec.Slot.ask{i}), Spec.Vote.key(c), Cells.one{Spec.Entry.ask{i, t, q}})({==})
+    case Off.root{+d, +n, +e}:
+      h => Shared.Trie.under_union_apart(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, Spec.Slot.key(Spec.Slot.root{d, n}), Spec.Vote.key(c), Cells.one{e})({==})
+    case Off.vote{+n, +d, +v, +e}:
+      h => Shared.Trie.under_union_apart(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, Spec.Slot.key(Spec.Slot.vote{n, d, v}), Spec.Vote.key(c), Cells.one{e})(
+        Chain.key_apart_end(d, c, List.append(&2, Bool, Shared.Trie.text(n), Spec.Id.key(v)))(Shared.Bool.not_true(Spec.Chain.same(d, c))(h))
+      )
+
+# an entry outside the chain c leaves its claim
+def Off.claim(o: Off, +s: Spec.State(), +c: Spec.Chain) -> {Off.ok(o, c, s) == True{}: Bool} -> {
+  Spec.Node.claim(Off.join(s, o), c) == Spec.Node.claim(s, c): Maybe<&2, Spec.Entry>
+}:
+  match o:
+    case Off.ask{+i, +t, +q}:
+      h => Fresh.claim(s, Spec.Slot.key(Spec.Slot.ask{i}), c, Cells.one{Spec.Entry.ask{i, t, q}})({==})
+    case Off.root{+d, +n, +e}:
+      h => Fresh.claim(s, Spec.Slot.key(Spec.Slot.root{d, n}), c, Cells.one{e})(
+        Chain.key_apart_end(d, c, Shared.Trie.text(n))(Shared.Bool.not_true(Spec.Chain.same(d, c))(h))
+      )
+    case Off.vote{+n, +d, +v, +e}:
+      h => Fresh.claim(s, Spec.Slot.key(Spec.Slot.vote{n, d, v}), c, Cells.one{e})({==})
+
+# a cell known to be none is none
+def Cell.none_of(m: Maybe<&2, Cells.Cell<Spec.Entry>>) -> {Maybe.is_none(&2, Cells.Cell<Spec.Entry>, m) == True{}: Bool} -> {m == None{}: Maybe<&2, Cells.Cell<Spec.Entry>>}:
+  match m:
+    case None{}:
+      h => {==}
+    case Some{x}:
+      h => Empty.absurd({Some{x} == None{}: Maybe<&2, Cells.Cell<Spec.Entry>>}, Shared.Bool.false_ne_true(h))
+
+# a step that a request in a fresh slot would make, it does not make when it
+# is of another chain
+def Off.won.same(
+  +s: Spec.State(),
+  +i: Spec.Id,
+  +t: String,
+  +q: Spec.Ask,
+  +c: Spec.Chain,
+  +ms: List<&2, String>,
+  +hok: {Off.ok(Off.ask{i, t, q}, c, s) == True{}: Bool}
+) -> {
+  Step.ask(c, i, ms, State.asked(Off.join(s, Off.ask{i, t, q}), i)) == Step.ask(c, i, ms, State.asked(s, i)): Maybe<&2, Step>
+}:
+  +ka = Spec.Slot.key(Spec.Slot.ask{i})
+  +ea = {Cells.one{Spec.Entry.ask{i, t, q}}: Cells.Cell<Spec.Entry>}
+  +ns = Bool.not(Spec.Chain.same(Spec.Ask.chain(q), c))
+  +nc = Maybe.is_none(&2, Cells.Cell<Spec.Entry>, State.cell(s, Spec.Slot.ask{i}))
+  +hn = Cell.none_of(State.cell(s, Spec.Slot.ask{i}))(Shared.Bool.and_true_right(ns, nc)(hok))
+  +hf = Shared.Bool.not_true(Spec.Chain.same(Spec.Ask.chain(q), c))(Shared.Bool.and_true_left(ns, nc)(hok))
+  Equal.trans(
+    Maybe<&2, Step>,
+    Step.ask(c, i, ms, State.asked(Off.join(s, Off.ask{i, t, q}), i)),
+    None{},
+    Step.ask(c, i, ms, State.asked(s, i)),
+    %Equal.sym(
+      Maybe<&2, Cells.Cell<Spec.Entry>>,
+      Shared.Trie.get(Cells.Cell<Spec.Entry>, Off.join(s, Off.ask{i, t, q}), ka),
+      Shared.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), Shared.Trie.get(Cells.Cell<Spec.Entry>, s, ka), Shared.Trie.get(Cells.Cell<Spec.Entry>, Shared.Trie.one(Cells.Cell<Spec.Entry>, ka, ea), ka)),
+      Shared.Trie.get_union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, Shared.Trie.one(Cells.Cell<Spec.Entry>, ka, ea), ka)
+    ): {Step.ask(c, i, ms, Asked.of(Cell.entry(_))) == None{}: Maybe<&2, Step>}
+    %Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, Shared.Trie.get(Cells.Cell<Spec.Entry>, s, ka), None{}, hn):
+      {Step.ask(c, i, ms, Asked.of(Cell.entry(Shared.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), _, Shared.Trie.get(Cells.Cell<Spec.Entry>, Shared.Trie.one(Cells.Cell<Spec.Entry>, ka, ea), ka))))) == None{}: Maybe<&2, Step>}
+    %Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, Shared.Trie.get(Cells.Cell<Spec.Entry>, Shared.Trie.one(Cells.Cell<Spec.Entry>, ka, ea), ka), Some{ea}, Shared.Trie.get_one(Cells.Cell<Spec.Entry>, ka, ea)):
+      {Step.ask(c, i, ms, Asked.of(Cell.entry(Shared.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), None{}, _)))) == None{}: Maybe<&2, Step>}
+    %Equal.sym(Bool, Spec.Chain.same(Spec.Ask.chain(q), c), False{}, hf): {Step.if(_, i, q, ms) == None{}: Maybe<&2, Step>}
+    {==},
+    %Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, Shared.Trie.get(Cells.Cell<Spec.Entry>, s, ka), None{}, hn): {None{} == Step.ask(c, i, ms, Asked.of(Cell.entry(_))): Maybe<&2, Step>}
+    {==}
+  )
+
+# Off.won for a request, once the step's version j is known to be its request
+# or not (hit)
+def Off.won.ask.at(
+  hit: Bool,
+  +s: Spec.State(),
+  +i: Spec.Id,
+  +t: String,
+  +q: Spec.Ask,
+  +c: Spec.Chain,
+  +ms: List<&2, String>,
+  +j: Spec.Id,
+  +eh: {Spec.Id.same(j, i) == hit: Bool},
+  +hok: {Off.ok(Off.ask{i, t, q}, c, s) == True{}: Bool}
+) -> {
+  Step.ask(c, j, ms, State.asked(Off.join(s, Off.ask{i, t, q}), j)) == Step.ask(c, j, ms, State.asked(s, j)): Maybe<&2, Step>
+}:
+  match hit:
+    case True{}:
+      %Equal.sym(Spec.Id, j, i, Id.same_sound(j, i)(eh)):
+        {Step.ask(c, _, ms, State.asked(Off.join(s, Off.ask{i, t, q}), _)) == Step.ask(c, _, ms, State.asked(s, _)): Maybe<&2, Step>}
+      Off.won.same(s, i, t, q, c, ms, hok)
+    case False{}:
+      Equal.cong(
+        Maybe<&2, Cells.Cell<Spec.Entry>>,
+        Maybe<&2, Step>,
+        z => Step.ask(c, j, ms, Asked.of(Cell.entry(z))),
+        Shared.Trie.get(Cells.Cell<Spec.Entry>, Off.join(s, Off.ask{i, t, q}), Spec.Slot.key(Spec.Slot.ask{j})),
+        Shared.Trie.get(Cells.Cell<Spec.Entry>, s, Spec.Slot.key(Spec.Slot.ask{j})),
+        Fresh.cell(s, Spec.Slot.key(Spec.Slot.ask{i}), Spec.Slot.key(Spec.Slot.ask{j}), Cells.one{Spec.Entry.ask{i, t, q}})(
+          Vote.apart.at(Shared.Trie.apart(Spec.Id.key(i), Spec.Id.key(j)), j, i, {==}, eh)
+        )
+      )
+
+# an entry outside the chain c leaves the steps that it makes
+def Off.won(o: Off, +s: Spec.State(), +c: Spec.Chain, +ms: List<&2, String>, w: Maybe<&2, Spec.Id>) -> {
+  Off.ok(o, c, s) == True{}: Bool
+} -> {Step.won(Off.join(s, o), c, ms, w) == Step.won(s, c, ms, w): Maybe<&2, Step>}:
+  match o w:
+    case o2 None{}:
+      h => {==}
+    case Off.ask{+i, +t, +q} Some{+j}:
+      +h => Off.won.ask.at(Spec.Id.same(j, i), s, i, t, q, c, ms, j, {==}, h)
+    case Off.root{+d, +n, +e} Some{+j}:
+      h => Equal.cong(
+        Maybe<&2, Cells.Cell<Spec.Entry>>,
+        Maybe<&2, Step>,
+        z => Step.ask(c, j, ms, Asked.of(Cell.entry(z))),
+        Shared.Trie.get(Cells.Cell<Spec.Entry>, Off.join(s, Off.root{d, n, e}), Spec.Slot.key(Spec.Slot.ask{j})),
+        Shared.Trie.get(Cells.Cell<Spec.Entry>, s, Spec.Slot.key(Spec.Slot.ask{j})),
+        Fresh.cell(s, Spec.Slot.key(Spec.Slot.root{d, n}), Spec.Slot.key(Spec.Slot.ask{j}), Cells.one{e})({==})
+      )
+    case Off.vote{+n, +d, +v, +e} Some{+j}:
+      h => Equal.cong(
+        Maybe<&2, Cells.Cell<Spec.Entry>>,
+        Maybe<&2, Step>,
+        z => Step.ask(c, j, ms, Asked.of(Cell.entry(z))),
+        Shared.Trie.get(Cells.Cell<Spec.Entry>, Off.join(s, Off.vote{n, d, v, e}), Spec.Slot.key(Spec.Slot.ask{j})),
+        Shared.Trie.get(Cells.Cell<Spec.Entry>, s, Spec.Slot.key(Spec.Slot.ask{j})),
+        Fresh.cell(s, Spec.Slot.key(Spec.Slot.vote{n, d, v}), Spec.Slot.key(Spec.Slot.ask{j}), Cells.one{e})({==})
+      )
+
+# an entry outside the chain c leaves the next step after each step
+def Off.next(+o: Off, +s: Spec.State(), +c: Spec.Chain, k: Step) -> {Off.ok(o, c, s) == True{}: Bool} -> {
+  Chain.next(Off.join(s, o), c, k) == Chain.next(s, c, k): Maybe<&2, Step>
+}:
+  match k:
+    case Step{+v, +ms}:
+      +h =>
+        %Equal.sym(Shared.Trie<Cells.Cell<Spec.Entry>>, Chain.votes(Off.join(s, o), c), Chain.votes(s, c), Off.votes(o, s, c)(h)):
+          {Step.won(Off.join(s, o), c, ms, Quorums.Quorum.winner(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, ms, ms, Spot{_, v})) == Step.won(s, c, ms, Quorums.Quorum.winner(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, ms, ms, Spot{Chain.votes(s, c), v})): Maybe<&2, Step>}
+        Off.won(o, s, c, ms, Quorums.Quorum.winner(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, ms, ms, Spot{Chain.votes(s, c), v}))(h)
+
+# an entry outside the chain c leaves its walks
+def Off.walk(f: Nat, +o: Off, +s: Spec.State(), +c: Spec.Chain, nx: Maybe<&2, Step>) -> {Off.ok(o, c, s) == True{}: Bool} -> {
+  Chain.walk(f, Off.join(s, o), c, nx) == Chain.walk(f, s, c, nx): List<&2, Spec.Id>
+}:
+  match f nx:
+    case 0n m:
+      h => {==}
+    case 1n+e None{}:
+      h => {==}
+    case 1n+e Some{Step{+i, +ms}}:
+      +h =>
+        %Equal.sym(Maybe<&2, Step>, Chain.next(Off.join(s, o), c, Step{i, ms}), Chain.next(s, c, Step{i, ms}), Off.next(o, s, c, Step{i, ms})(h)):
+          {i <> Chain.walk(e, Off.join(s, o), c, _) == i <> Chain.walk(e, s, c, Chain.next(s, c, Step{i, ms})): List<&2, Spec.Id>}
+        %Equal.sym(
+          List<&2, Spec.Id>,
+          Chain.walk(e, Off.join(s, o), c, Chain.next(s, c, Step{i, ms})),
+          Chain.walk(e, s, c, Chain.next(s, c, Step{i, ms})),
+          Off.walk(e, o, s, c, Chain.next(s, c, Step{i, ms}))(h)
+        ): {i <> _ == i <> Chain.walk(e, s, c, Chain.next(s, c, Step{i, ms})): List<&2, Spec.Id>}
+        {==}
+
+# an entry outside the chain c leaves the versions from a first step
+def Off.from(+o: Off, +s: Spec.State(), +c: Spec.Chain, r: Maybe<&2, Step>) -> {Off.ok(o, c, s) == True{}: Bool} -> {
+  Chain.from(Off.join(s, o), c, r) == Chain.from(s, c, r): List<&2, Spec.Id>
+}:
+  match r:
+    case None{}:
+      h => {==}
+    case Some{Step{+i, +ms}}:
+      +h =>
+        %Equal.sym(Shared.Trie<Cells.Cell<Spec.Entry>>, Chain.votes(Off.join(s, o), c), Chain.votes(s, c), Off.votes(o, s, c)(h)):
+          {
+            i <> Chain.walk(1n+Shared.Trie.size(Cells.Cell<Spec.Entry>, _), Off.join(s, o), c, Chain.next(Off.join(s, o), c, Step{i, ms}))
+              == i <> Chain.walk(Chain.fuel(s, c), s, c, Chain.next(s, c, Step{i, ms})): List<&2, Spec.Id>
+          }
+        %Equal.sym(Maybe<&2, Step>, Chain.next(Off.join(s, o), c, Step{i, ms}), Chain.next(s, c, Step{i, ms}), Off.next(o, s, c, Step{i, ms})(h)):
+          {i <> Chain.walk(Chain.fuel(s, c), Off.join(s, o), c, _) == i <> Chain.walk(Chain.fuel(s, c), s, c, Chain.next(s, c, Step{i, ms})): List<&2, Spec.Id>}
+        %Equal.sym(
+          List<&2, Spec.Id>,
+          Chain.walk(Chain.fuel(s, c), Off.join(s, o), c, Chain.next(s, c, Step{i, ms})),
+          Chain.walk(Chain.fuel(s, c), s, c, Chain.next(s, c, Step{i, ms})),
+          Off.walk(Chain.fuel(s, c), o, s, c, Chain.next(s, c, Step{i, ms}))(h)
+        ): {i <> _ == i <> Chain.walk(Chain.fuel(s, c), s, c, Chain.next(s, c, Step{i, ms})): List<&2, Spec.Id>}
+        {==}
+
+# an entry outside the chain c leaves its first step, once its claim's step
+# is known (m)
+def Off.root.of(o: Off, +s: Spec.State(), +c: Spec.Chain, m: Maybe<&2, Step>) -> {Off.ok(o, c, s) == True{}: Bool} -> {
+  Chain.root.of(Off.join(s, o), c, m) == Chain.root.of(s, c, m): Maybe<&2, Step>
+}:
+  match m:
+    case None{}:
+      h => {==}
+    case Some{Step{+i, +ms}}:
+      h => Off.won(o, s, c, ms, Some{i})(h)
+
+# an entry outside the chain c leaves the chain
+def Off.chain(+o: Off, +s: Spec.State(), +c: Spec.Chain) -> {Off.ok(o, c, s) == True{}: Bool} -> {
+  Spec.Node.chain(Off.join(s, o), c) == Spec.Node.chain(s, c): List<&2, Spec.Id>
+}:
+  +h =>
+    %Equal.sym(Maybe<&2, Spec.Entry>, Spec.Node.claim(Off.join(s, o), c), Spec.Node.claim(s, c), Off.claim(o, s, c)(h)):
+      {
+        Chain.from(Off.join(s, o), c, Chain.root.of(Off.join(s, o), c, Root.of(_)))
+          == Chain.from(s, c, Chain.root.of(s, c, Root.of(Spec.Node.claim(s, c)))): List<&2, Spec.Id>
+      }
+    %Equal.sym(
+      Maybe<&2, Step>,
+      Chain.root.of(Off.join(s, o), c, Root.of(Spec.Node.claim(s, c))),
+      Chain.root.of(s, c, Root.of(Spec.Node.claim(s, c))),
+      Off.root.of(o, s, c, Root.of(Spec.Node.claim(s, c)))(h)
+    ): {Chain.from(Off.join(s, o), c, _) == Chain.from(s, c, Chain.root.of(s, c, Root.of(Spec.Node.claim(s, c)))): List<&2, Spec.Id>}
+    Off.from(o, s, c, Chain.root.of(s, c, Root.of(Spec.Node.claim(s, c))))(h)
