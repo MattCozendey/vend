@@ -5545,3 +5545,208 @@ def Spec.Node.set_group_cycle(n, s, e, g, ms, h, v):
         {Bool.not(_) == False{}: Bool}
       {==})
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# Convergence
+# -----------
+
+def Spec.Node.join_comm(a, b):
+  Shared.Trie.union_comm(
+    ~Cells.Cell<Spec.Entry>,
+    ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
+    ~(x => y => Cells.Cell.join_comm(~Spec.Entry, ~Spec.Entry.same, ~Spec.Entry.same_refl, ~Spec.Entry.same_sound, x, y)),
+    a,
+    b
+  )
+
+def Spec.Node.join_assoc(a, b, c):
+  Shared.Trie.union_assoc(
+    ~Cells.Cell<Spec.Entry>,
+    ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
+    ~(x => y => z => Cells.Cell.join_assoc(~Spec.Entry, ~Spec.Entry.same, ~Spec.Entry.same_refl, ~Spec.Entry.same_sound, x, y, z)),
+    a,
+    b,
+    c
+  )
+
+def Spec.Node.join_idem(a):
+  Shared.Trie.union_idem(
+    ~Cells.Cell<Spec.Entry>,
+    ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
+    ~(x => Cells.Cell.join_idem(~Spec.Entry, ~Spec.Entry.same, ~Spec.Entry.same_refl, x)),
+    a
+  )
+
+def Spec.Node.missing_sync(s, r):
+  Shared.Trie.union_minus(
+    ~Cells.Cell<Spec.Entry>,
+    ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
+    ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same),
+    ~(x => Cells.Cell.join_idem(~Spec.Entry, ~Spec.Entry.same, ~Spec.Entry.same_refl, x)),
+    ~(x => y => Cells.Cell.same_sound(~Spec.Entry, ~Spec.Entry.same, ~Spec.Entry.same_sound, x, y)),
+    s,
+    r
+  )
+
+# Retries
+# -------
+
+# a joined state still holds what it held
+def Hold.join(+s: Spec.State(), +t: Spec.State(), +k: Spec.Slot) -> {
+  Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(s, k)) == True{}: Bool
+} -> {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(Spec.Node.join(s, t), k)) == True{}: Bool}:
+  h =>
+    %Equal.sym(
+      Maybe<&2, Cells.Cell<Spec.Entry>>,
+      Shared.Trie.get(Cells.Cell<Spec.Entry>, Spec.Node.join(s, t), Spec.Slot.key(k)),
+      Shared.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), State.cell(s, k), State.cell(t, k)),
+      Shared.Trie.get_union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, t, Spec.Slot.key(k))
+    ): {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, _) == True{}: Bool}
+    Shared.Trie.pick_left(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), State.cell(s, k), State.cell(t, k))(h)
+
+# a state that took in an entry at a slot holds that slot
+def Hold.put(+s: Spec.State(), +k: Spec.Slot, +e: Spec.Entry) -> {
+  Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(State.put(s, k, e), k)) == True{}: Bool
+}:
+  +t = Shared.Trie.one(Cells.Cell<Spec.Entry>, Spec.Slot.key(k), Cells.one{e})
+  %Equal.sym(
+    Maybe<&2, Cells.Cell<Spec.Entry>>,
+    Shared.Trie.get(Cells.Cell<Spec.Entry>, Spec.Node.join(s, t), Spec.Slot.key(k)),
+    Shared.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), State.cell(s, k), Shared.Trie.get(Cells.Cell<Spec.Entry>, t, Spec.Slot.key(k))),
+    Shared.Trie.get_union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, t, Spec.Slot.key(k))
+  ): {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, _) == True{}: Bool}
+  %Equal.sym(
+    Maybe<&2, Cells.Cell<Spec.Entry>>,
+    Shared.Trie.get(Cells.Cell<Spec.Entry>, t, Spec.Slot.key(k)),
+    Some{Cells.one{e}},
+    Shared.Trie.get_one(Cells.Cell<Spec.Entry>, Spec.Slot.key(k), Cells.one{e})
+  ): {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, Shared.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), State.cell(s, k), _)) == True{}: Bool}
+  Shared.Trie.pick_right(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), State.cell(s, k), Some{Cells.one{e}})({==})
+
+# both states hold the slot k, so the one picked does
+def Hold.pick(
+  c: Bool,
+  a: Spec.State(),
+  b: Spec.State(),
+  -k: Spec.Slot,
+  ha: {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(a, k)) == True{}: Bool},
+  hb: {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(b, k)) == True{}: Bool}
+) -> {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(Bool.pick(Spec.State(), c, a, b), k)) == True{}: Bool}:
+  match c:
+    case True{}:
+      ha
+    case False{}:
+      hb
+
+# Node.ask.at keeps what s1 holds
+def Hold.at(
+  +n: String,
+  +s: Spec.State(),
+  +s1: Spec.State(),
+  +i: Spec.Id,
+  +q: Spec.Ask,
+  m: Maybe<&2, Step>,
+  +k: Spec.Slot,
+  +h1: {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(s1, k)) == True{}: Bool}
+) -> {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(Node.ask.at(n, s, s1, i, q, m), k)) == True{}: Bool}:
+  match m:
+    case None{}:
+      h1
+    case Some{Step{+h, ms}}:
+      Hold.pick(
+        Bool.and(Node.may_vote(n, s, Spec.Ask.chain(q), h, ms), Ask.fits(s, q, h)),
+        State.put(s1, Spec.Slot.vote{n, Spec.Ask.chain(q), h}, Spec.Entry.vote{i}),
+        s1,
+        k,
+        Hold.join(
+          s1,
+          Shared.Trie.one(Cells.Cell<Spec.Entry>, Spec.Slot.key(Spec.Slot.vote{n, Spec.Ask.chain(q), h}), Cells.one{Spec.Entry.vote{i}}),
+          k
+        )(h1),
+        h1
+      )
+
+# Node.ask.root keeps what s1 holds
+def Hold.root(
+  +n: String,
+  +s: Spec.State(),
+  +s1: Spec.State(),
+  +i: Spec.Id,
+  +q: Spec.Ask,
+  m: Maybe<&2, Spec.Entry>,
+  +k: Spec.Slot,
+  +h1: {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(s1, k)) == True{}: Bool}
+) -> {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(Node.ask.root(n, s, s1, i, q, m), k)) == True{}: Bool}:
+  match m:
+    case None{}:
+      Hold.pick(
+        Ask.creates(q),
+        State.put(s1, Spec.Slot.root{Spec.Ask.chain(q), n}, Spec.Entry.root{Spec.Ask.chain(q), i, n}),
+        s1,
+        k,
+        Hold.join(
+          s1,
+          Shared.Trie.one(
+            Cells.Cell<Spec.Entry>,
+            Spec.Slot.key(Spec.Slot.root{Spec.Ask.chain(q), n}),
+            Cells.one{Spec.Entry.root{Spec.Ask.chain(q), i, n}}
+          ),
+          k
+        )(h1),
+        h1
+      )
+    case Some{x}:
+      Hold.at(n, s, s1, i, q, Chain.cursor(s, Spec.Ask.chain(q)), k, h1)
+
+# a node that took in the request i holds it, once its cell in s is known (m)
+def Hold.fresh(
+  +n: String,
+  +s: Spec.State(),
+  +i: Spec.Id,
+  +t: String,
+  +q: Spec.Ask,
+  m: Maybe<&2, Cells.Cell<Spec.Entry>>,
+  em: {State.cell(s, Spec.Slot.ask{i}) == m: Maybe<&2, Cells.Cell<Spec.Entry>>}
+) -> {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(Node.ask.fresh(n, s, i, t, q, m), Spec.Slot.ask{i})) == True{}: Bool}:
+  match m:
+    case Some{x}:
+      %Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, State.cell(s, Spec.Slot.ask{i}), Some{x}, em):
+        {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, _) == True{}: Bool}
+      {==}
+    case None{}:
+      Hold.root(
+        n,
+        s,
+        State.put(s, Spec.Slot.ask{i}, Spec.Entry.ask{i, t, q}),
+        i,
+        q,
+        Spec.Node.claim(s, Spec.Ask.chain(q)),
+        Spec.Slot.ask{i},
+        Hold.put(s, Spec.Slot.ask{i}, Spec.Entry.ask{i, t, q})
+      )
+
+# a held request changes nothing, once its cell is known (m)
+def Held.fresh(n: String, s: Spec.State(), i: Spec.Id, t: String, q: Spec.Ask, m: Maybe<&2, Cells.Cell<Spec.Entry>>) -> {
+  Maybe.is_some(&2, Cells.Cell<Spec.Entry>, m) == True{}: Bool
+} -> {Node.ask.fresh(n, s, i, t, q, m) == s: Spec.State()}:
+  match m:
+    case None{}:
+      h => Empty.absurd({Node.ask.fresh(n, s, i, t, q, None{}) == s: Spec.State()}, Shared.Bool.false_ne_true(h))
+    case Some{x}:
+      h => {==}
+
+def Spec.Node.ask_held(n, s, e, q):
+  match e:
+    case Spec.Envelope{+r, +w, t}:
+      +s = s
+      Held.fresh(n, s, Spec.Id{w, r}, t, q, State.cell(s, Spec.Slot.ask{Spec.Id{w, r}}))
+
+def Spec.Node.ask_again(n, s, r, w, t1, t2, q1, q2):
+  +n = n
+  +s = s
+  +r = r
+  +w = w
+  +q1 = q1
+  +t1 = t1
+  Spec.Node.ask_held(n, Spec.Node.ask(n, s, Spec.Envelope{r, w, t1}, q1), Spec.Envelope{r, w, t2}, q2)(
+    Hold.fresh(n, s, Spec.Id{w, r}, t1, q1, State.cell(s, Spec.Slot.ask{Spec.Id{w, r}}), {==})
+  )

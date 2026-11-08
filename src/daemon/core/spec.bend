@@ -603,6 +603,60 @@ law Node.vote:
 # Laws
 # ----
 
+# a request that s holds already changes nothing: a retry, to any node that
+# took the request in, is safe
+law Node.ask_held:
+  for n: String
+  for s: State()
+  for e: Envelope
+  for q: Ask
+  {
+    Maybe.is_some(
+      &2,
+      Cells.Cell<Entry>,
+      Shared.Trie.get(Cells.Cell<Entry>, s, Slot.key(Slot.ask{Envelope.of(e)}))
+    )
+      == True{}: Bool
+  } -> {Node.ask(n, s, e, q) == s: State()}
+
+# a request sent again with the same ID, at any time, changes nothing more
+law Node.ask_again:
+  for n: String
+  for s: State()
+  for r: String
+  for w: String
+  for t1: String
+  for t2: String
+  for q1: Ask
+  for q2: Ask
+  {
+    Node.ask(n, Node.ask(n, s, Envelope{r, w, t1}, q1), Envelope{r, w, t2}, q2)
+      == Node.ask(n, s, Envelope{r, w, t1}, q1): State()
+  }
+
+# syncs converge: a join takes in each entry once, in any order and any
+# number of times
+law Node.join_comm:
+  for a: State()
+  for b: State()
+  {Node.join(a, b) == Node.join(b, a): State()}
+
+law Node.join_assoc:
+  for a: State()
+  for b: State()
+  for c: State()
+  {Node.join(Node.join(a, b), c) == Node.join(a, Node.join(b, c)): State()}
+
+law Node.join_idem:
+  for a: State()
+  {Node.join(a, a) == a: State()}
+
+# a sync that sends only what the receiver lacks is the whole sync
+law Node.missing_sync:
+  for s: State()
+  for r: State()
+  {Node.join(r, Node.missing(s, r)) == Node.join(r, s): State()}
+
 # a chain only grows when no new entry contradicts an old one and its claim
 # stays: what a node answered Written stays so after such a sync
 law Node.chain_kept:

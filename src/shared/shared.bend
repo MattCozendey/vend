@@ -2384,6 +2384,36 @@ def Trie.pick_none(
     case Some{x}:
       {==}
 
+# a pick with a value on the left has a value
+def Trie.pick_left(
+  ~V: Data,
+  ~join: V -> V -> V,
+  a: Maybe<&2, V>,
+  b: Maybe<&2, V>
+) -> {Maybe.is_some(&2, V, a) == True{}: Bool} -> {Maybe.is_some(&2, V, Trie.pick(~V, ~join, a, b)) == True{}: Bool}:
+  match a b:
+    case None{} y:
+      h => Empty.absurd({Maybe.is_some(&2, V, Trie.pick(~V, ~join, None{}, y)) == True{}: Bool}, Bool.false_ne_true(h))
+    case Some{x} None{}:
+      h => {==}
+    case Some{x} Some{y}:
+      h => {==}
+
+# a pick with a value on the right has a value
+def Trie.pick_right(
+  ~V: Data,
+  ~join: V -> V -> V,
+  a: Maybe<&2, V>,
+  b: Maybe<&2, V>
+) -> {Maybe.is_some(&2, V, b) == True{}: Bool} -> {Maybe.is_some(&2, V, Trie.pick(~V, ~join, a, b)) == True{}: Bool}:
+  match a b:
+    case None{} y:
+      h => h
+    case Some{x} None{}:
+      h => {==}
+    case Some{x} Some{y}:
+      h => {==}
+
 # a union holds, for each key, what both sides hold, joined
 law Trie.get_union:
   for ~V: Data
