@@ -6787,3 +6787,238 @@ def Spec.Node.notices_exactly(t, k, since, x):
     Notice.all(since, k),
     x
   )
+
+# Members after a set
+# -------------------
+
+# x is a root entry that names the chain c
+def Root.names(x: Spec.Entry, +c: Spec.Chain) -> Bool:
+  match x:
+    case Spec.Entry.root{d, i, n}:
+      Spec.Chain.same(d, c)
+    case y:
+      False{}
+
+# what the cells r hold, the cells y <> r hold
+def Root.first_has.cons(+y: Cells.Cell<Spec.Entry>, +r: List<&2, Cells.Cell<Spec.Entry>>, -c: Spec.Chain, +x: Spec.Entry, e: &e: {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), r, Cells.one{x}) == True{}: Bool} -> {Root.names(x, c) == True{}: Bool}) -> &e: {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), y <> r, Cells.one{x}) == True{}: Bool} -> {Root.names(x, c) == True{}: Bool}:
+  match e:
+    case (hr, hn):
+      (Shared.List.has_cons(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), y, r, Cells.one{x})(hr), hn)
+
+# Root.first_has at a root entry that names d, once d is known to be c or
+# not (hit)
+def Root.first_has.at(
+  hit: Bool,
+  +c: Spec.Chain,
+  +d: Spec.Chain,
+  +i: Spec.Id,
+  +n: String,
+  +r: List<&2, Cells.Cell<Spec.Entry>>,
+  +x: Spec.Entry,
+  eh: {Spec.Chain.same(d, c) == hit: Bool},
+  ih: {Spec.Root.first(c, r) == Some{x}: Maybe<&2, Spec.Entry>} -> &e: {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), r, Cells.one{x}) == True{}: Bool} -> {Root.names(x, c) == True{}: Bool}
+) -> {
+  Shared.Bool.when(Maybe<&2, Spec.Entry>, hit, u => Some{Spec.Entry.root{d, i, n}}, u => Spec.Root.first(c, r)) == Some{x}: Maybe<&2, Spec.Entry>
+} -> &e: {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), Cells.one{Spec.Entry.root{d, i, n}} <> r, Cells.one{x}) == True{}: Bool} -> {Root.names(x, c) == True{}: Bool}:
+  match hit:
+    case True{}:
+      h =>
+        +ex = Shared.Maybe.some_inj(Spec.Entry, Spec.Entry.root{d, i, n}, x, h)
+        (
+          %ex: {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), Cells.one{Spec.Entry.root{d, i, n}} <> r, Cells.one{_}) == True{}: Bool}
+          %Equal.sym(Bool, Spec.Entry.same(Spec.Entry.root{d, i, n}, Spec.Entry.root{d, i, n}), True{}, Spec.Entry.same_refl(Spec.Entry.root{d, i, n})):
+            {List.any.if(u => Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), r, Cells.one{Spec.Entry.root{d, i, n}}), _) == True{}: Bool}
+          {==},
+          %ex: {Root.names(_, c) == True{}: Bool}
+          eh
+        )
+    case False{}:
+      h =>
+        Root.first_has.cons(Cells.one{Spec.Entry.root{d, i, n}}, r, c, x, ih(h))
+
+# a claim of the chain c among the cells cs is a root entry among them that
+# names c
+def Root.first_has(+c: Spec.Chain, cs: List<&2, Cells.Cell<Spec.Entry>>, +x: Spec.Entry) -> {
+  Spec.Root.first(c, cs) == Some{x}: Maybe<&2, Spec.Entry>
+} -> &e: {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), cs, Cells.one{x}) == True{}: Bool} -> {Root.names(x, c) == True{}: Bool}:
+  match cs:
+    case Nil{}:
+      h => Empty.absurd(&e: {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), [], Cells.one{x}) == True{}: Bool} -> {Root.names(x, c) == True{}: Bool}, Shared.Maybe.none_ne_some(Spec.Entry, x, h))
+    case Con{Cells.one{Spec.Entry.root{+d, +i, +n}}, +r}:
+      Root.first_has.at(Spec.Chain.same(d, c), c, d, i, n, r, x, {==}, z => Root.first_has(c, r, x)(z))
+    case Con{Cells.one{Spec.Entry.ask{+a, +t, +q}}, +r}:
+      h => Root.first_has.cons(Cells.one{Spec.Entry.ask{a, t, q}}, r, c, x, Root.first_has(c, r, x)(h))
+    case Con{Cells.one{Spec.Entry.vote{+a}}, +r}:
+      h => Root.first_has.cons(Cells.one{Spec.Entry.vote{a}}, r, c, x, Root.first_has(c, r, x)(h))
+    case Con{Cells.many{}, +r}:
+      h => Root.first_has.cons(Cells.many{}, r, c, x, Root.first_has(c, r, x)(h))
+
+# a member that a list has, the list with one more put before it has
+def Group.put_keeps(+a: Spec.Member, +rs: List<&2, Spec.Member>, k: Bool, +m: Spec.Member) -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, rs, m) == True{}: Bool} -> {
+  Shared.List.has(~Spec.Member, ~Spec.Member.same, List.filter.put(Spec.Member, a, rs, k), m) == True{}: Bool
+}:
+  match k:
+    case True{}:
+      h => Shared.List.has_cons(~Spec.Member, ~Spec.Member.same, a, rs, m)(h)
+    case False{}:
+      h => h
+
+# Group.put_has once rs is known to have the group g or not (k)
+def Group.put_has.at(k: Bool, +g: String, +rs: List<&2, Spec.Member>, ek: {Shared.List.has(~Spec.Member, ~Spec.Member.same, rs, Spec.Member.group{g}) == k: Bool}) -> {
+  Shared.List.has(~Spec.Member, ~Spec.Member.same, List.filter.put(Spec.Member, Spec.Member.group{g}, rs, Bool.not(k)), Spec.Member.group{g}) == True{}: Bool
+}:
+  match k:
+    case True{}:
+      ek
+    case False{}:
+      %Equal.sym(Bool, Spec.Member.same(Spec.Member.group{g}, Spec.Member.group{g}), True{}, Member.same_refl(Spec.Member.group{g})):
+        {List.any.if(u => Shared.List.has(~Spec.Member, ~Spec.Member.same, rs, Spec.Member.group{g}), _) == True{}: Bool}
+      {==}
+
+# the roots of the cells after one more hold the roots of the cells
+def Group.roots_cons(y: Cells.Cell<Spec.Entry>, +r: List<&2, Cells.Cell<Spec.Entry>>, +m: Spec.Member) -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.roots(r), m) == True{}: Bool} -> {
+  Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.roots(y <> r), m) == True{}: Bool
+}:
+  match y:
+    case Cells.one{Spec.Entry.root{Spec.Chain.group{+h}, i, n}}:
+      +rest = Group.roots(r)
+      Group.put_keeps(Spec.Member.group{h}, rest, Bool.not(Shared.List.has(~Spec.Member, ~Spec.Member.same, rest, Spec.Member.group{h})), m)
+    case Cells.one{Spec.Entry.root{Spec.Chain.branch{b}, i, n}}:
+      x => x
+    case Cells.one{Spec.Entry.ask{a, t, q}}:
+      x => x
+    case Cells.one{Spec.Entry.vote{a}}:
+      x => x
+    case Cells.many{}:
+      x => x
+
+# Group.roots_has at the first cell y, once it is known to be the root of
+# the group g or not (hit)
+def Group.roots_has.at(
+  hit: Bool,
+  +y: Cells.Cell<Spec.Entry>,
+  +r: List<&2, Cells.Cell<Spec.Entry>>,
+  +g: String,
+  +i: Spec.Id,
+  +n: String,
+  +eh: {Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same)(y, Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}}) == hit: Bool},
+  hc: {List.any.if(u => Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), r, Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}}), hit) == True{}: Bool},
+  ih: {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), r, Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}}) == True{}: Bool} -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.roots(r), Spec.Member.group{g}) == True{}: Bool}
+) -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.roots(y <> r), Spec.Member.group{g}) == True{}: Bool}:
+  match hit:
+    case True{}:
+      %Equal.sym(Cells.Cell<Spec.Entry>, y, Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}}, Cells.Cell.same_sound(~Spec.Entry, ~Spec.Entry.same, ~Spec.Entry.same_sound, y, Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}})(eh)):
+        {Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.roots(_ <> r), Spec.Member.group{g}) == True{}: Bool}
+      Group.put_has.at(Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.roots(r), Spec.Member.group{g}), g, Group.roots(r), {==})
+    case False{}:
+      Group.roots_cons(y, r, Spec.Member.group{g})(ih(hc))
+
+# a root of the group g among the cells makes g one of their groups
+def Group.roots_has(cs: List<&2, Cells.Cell<Spec.Entry>>, +g: String, +i: Spec.Id, +n: String) -> {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), cs, Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}}) == True{}: Bool} -> {
+  Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.roots(cs), Spec.Member.group{g}) == True{}: Bool
+}:
+  match cs:
+    case Nil{}:
+      h => h
+    case Con{+y, +r}:
+      h => Group.roots_has.at(Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same)(y, Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}}), y, r, g, i, n, {==}, h, z => Group.roots_has(r, g, i, n)(z))
+
+# Id.key_join once the writers are known to be the same (ew)
+def Id.key_join.done(
+  -w1: String,
+  -r1: String,
+  -w2: String,
+  -r2: String,
+  ew: {w1 == w2: String},
+  e: &er: {r1 == r2: String} -> {Shared.Trie.apart([], []) == False{}: Bool}
+) -> {Spec.Id{w1, r1} == Spec.Id{w2, r2}: Spec.Id}:
+  match e:
+    case (er, h):
+      %Equal.sym(String, w1, w2, ew): {Spec.Id{_, r1} == Spec.Id{w2, r2}: Spec.Id}
+      %Equal.sym(String, r1, r2, er): {Spec.Id{w2, _} == Spec.Id{w2, r2}: Spec.Id}
+      {==}
+
+# Id.key_join after the writers' keys
+def Id.key_join.next(
+  -w1: String,
+  +r1: String,
+  -w2: String,
+  +r2: String,
+  e: &ew: {w1 == w2: String} -> {Shared.Trie.apart(Shared.Trie.text(r1), Shared.Trie.text(r2)) == False{}: Bool}
+) -> {Spec.Id{w1, r1} == Spec.Id{w2, r2}: Spec.Id}:
+  match e:
+    case (ew, h):
+      Id.key_join.done(
+        w1,
+        r1,
+        w2,
+        r2,
+        ew,
+        Shared.Trie.text_join(r1, r2, [], [])(
+          Equal.trans(
+            Bool,
+            Shared.Trie.apart(List.append(&2, Bool, Shared.Trie.text(r1), []), List.append(&2, Bool, Shared.Trie.text(r2), [])),
+            Shared.Trie.apart(Shared.Trie.text(r1), List.append(&2, Bool, Shared.Trie.text(r2), [])),
+            False{},
+            Equal.cong(List<&2, Bool>, Bool, z => Shared.Trie.apart(z, List.append(&2, Bool, Shared.Trie.text(r2), [])), List.append(&2, Bool, Shared.Trie.text(r1), []), Shared.Trie.text(r1), Shared.List.append_nil(Bool, Shared.Trie.text(r1))),
+            Equal.trans(
+              Bool,
+              Shared.Trie.apart(Shared.Trie.text(r1), List.append(&2, Bool, Shared.Trie.text(r2), [])),
+              Shared.Trie.apart(Shared.Trie.text(r1), Shared.Trie.text(r2)),
+              False{},
+              Equal.cong(List<&2, Bool>, Bool, z => Shared.Trie.apart(Shared.Trie.text(r1), z), List.append(&2, Bool, Shared.Trie.text(r2), []), Shared.Trie.text(r2), Shared.List.append_nil(Bool, Shared.Trie.text(r2))),
+              h
+            )
+          )
+        )
+      )
+
+# requests whose keys are not apart are the same request
+def Id.key_join(i: Spec.Id, v: Spec.Id) -> {Shared.Trie.apart(Spec.Id.key(i), Spec.Id.key(v)) == False{}: Bool} -> {i == v: Spec.Id}:
+  match i v:
+    case Spec.Id{+w1, +r1} Spec.Id{+w2, +r2}:
+      h => Id.key_join.next(w1, r1, w2, r2, Shared.Trie.text_join(w1, w2, Shared.Trie.text(r1), Shared.Trie.text(r2))(h))
+
+# Vote.apart once the requests' keys are known to be apart or not (k)
+def Vote.apart.at(k: Bool, +i: Spec.Id, +v: Spec.Id, ek: {Shared.Trie.apart(Spec.Id.key(v), Spec.Id.key(i)) == k: Bool}, hs: {Spec.Id.same(i, v) == False{}: Bool}) -> {
+  k == True{}: Bool
+}:
+  match k:
+    case True{}:
+      {==}
+    case False{}:
+      Empty.absurd(
+        {False{} == True{}: Bool},
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            Spec.Id.same(i, v),
+            True{},
+            Equal.sym(Bool, Spec.Id.same(i, v), False{}, hs),
+            %Equal.sym(Spec.Id, v, i, Id.key_join(v, i)(ek)): {Spec.Id.same(i, _) == True{}: Bool}
+            Id.same_refl(i)
+          )
+        )
+      )
+
+# the votes of one node on one chain, after two different requests, are in
+# slots apart
+def Vote.apart(+n: String, +c: Spec.Chain, +i: Spec.Id, +v: Spec.Id) -> {Spec.Id.same(i, v) == False{}: Bool} -> {
+  Shared.Trie.apart(Spec.Slot.key(Spec.Slot.vote{n, c, v}), Spec.Slot.key(Spec.Slot.vote{n, c, i})) == True{}: Bool
+}:
+  +ck = Spec.Chain.key(c)
+  hs =>
+    %Equal.sym(
+      Bool,
+      Shared.Trie.apart(List.append(&2, Bool, Shared.Trie.text(n), List.append(&2, Bool, ck, Spec.Id.key(v))), List.append(&2, Bool, Shared.Trie.text(n), List.append(&2, Bool, ck, Spec.Id.key(i)))),
+      Shared.Trie.apart(List.append(&2, Bool, ck, Spec.Id.key(v)), List.append(&2, Bool, ck, Spec.Id.key(i))),
+      Shared.Trie.prefix_apart(Shared.Trie.text(n), List.append(&2, Bool, ck, Spec.Id.key(v)), List.append(&2, Bool, ck, Spec.Id.key(i)))
+    ): {_ == True{}: Bool}
+    %Equal.sym(
+      Bool,
+      Shared.Trie.apart(List.append(&2, Bool, ck, Spec.Id.key(v)), List.append(&2, Bool, ck, Spec.Id.key(i))),
+      Shared.Trie.apart(Spec.Id.key(v), Spec.Id.key(i)),
+      Shared.Trie.prefix_apart(ck, Spec.Id.key(v), Spec.Id.key(i))
+    ): {_ == True{}: Bool}
+    Vote.apart.at(Shared.Trie.apart(Spec.Id.key(v), Spec.Id.key(i)), i, v, {==}, hs)

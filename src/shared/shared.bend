@@ -2266,6 +2266,56 @@ def Trie.under(-V: Data, t: Trie<V>, k: List<&2, Bool>) -> Trie<V>:
     case bin{h, z, o} Con{True{}, r}:
       Trie.under(V, o, r)
 
+# what a list has, the list with more after it has
+def List.has_left(~A: Data, ~same: A -> A -> Bool, a: List<&2, A>, +b: List<&2, A>, +m: A) -> {
+  List.has(~A, ~same, a, m) == True{}: Bool
+} -> {List.has(~A, ~same, List.append(&2, A, a, b), m) == True{}: Bool}:
+  h =>
+    %Equal.sym(
+      Bool,
+      List.has(~A, ~same, List.append(&2, A, a, b), m),
+      Bool.or(List.has(~A, ~same, a, m), List.has(~A, ~same, b, m)),
+      List.has_append(~A, ~same, a, b, m)
+    ): {_ == True{}: Bool}
+    %Equal.sym(Bool, List.has(~A, ~same, a, m), True{}, h): {Bool.or(_, List.has(~A, ~same, b, m)) == True{}: Bool}
+    {==}
+
+# what a list has, the list with more before it has
+def List.has_right(~A: Data, ~same: A -> A -> Bool, +a: List<&2, A>, +b: List<&2, A>, +m: A) -> {
+  List.has(~A, ~same, b, m) == True{}: Bool
+} -> {List.has(~A, ~same, List.append(&2, A, a, b), m) == True{}: Bool}:
+  h =>
+    %Equal.sym(
+      Bool,
+      List.has(~A, ~same, List.append(&2, A, a, b), m),
+      Bool.or(List.has(~A, ~same, a, m), List.has(~A, ~same, b, m)),
+      List.has_append(~A, ~same, a, b, m)
+    ): {_ == True{}: Bool}
+    %Equal.sym(Bool, List.has(~A, ~same, b, m), True{}, h): {Bool.or(List.has(~A, ~same, a, m), _) == True{}: Bool}
+    Bool.or_true_right(List.has(~A, ~same, a, m))
+
+# a value under a key is a value of the trie
+def Trie.values_under(~V: Data, ~same: V -> V -> Bool, t: Trie<V>, p: List<&2, Bool>, +v: V) -> {
+  List.has(~V, ~same, Trie.values(V, Trie.under(V, t, p)), v) == True{}: Bool
+} -> {List.has(~V, ~same, Trie.values(V, t), v) == True{}: Bool}:
+  match t p:
+    case tip{} r:
+      h => h
+    case bin{m, z, o} Nil{}:
+      h => h
+    case bin{None{}, +z, +o} Con{False{}, r}:
+      h => List.has_left(~V, ~same, Trie.values(V, z), Trie.values(V, o), v)(Trie.values_under(~V, ~same, z, r, v)(h))
+    case bin{None{}, +z, +o} Con{True{}, r}:
+      h => List.has_right(~V, ~same, Trie.values(V, z), Trie.values(V, o), v)(Trie.values_under(~V, ~same, o, r, v)(h))
+    case bin{Some{+x}, +z, +o} Con{False{}, r}:
+      h => List.has_cons(~V, ~same, x, List.append(&2, V, Trie.values(V, z), Trie.values(V, o)), v)(
+        List.has_left(~V, ~same, Trie.values(V, z), Trie.values(V, o), v)(Trie.values_under(~V, ~same, z, r, v)(h))
+      )
+    case bin{Some{+x}, +z, +o} Con{True{}, r}:
+      h => List.has_cons(~V, ~same, x, List.append(&2, V, Trie.values(V, z), Trie.values(V, o)), v)(
+        List.has_right(~V, ~same, Trie.values(V, z), Trie.values(V, o), v)(Trie.values_under(~V, ~same, o, r, v)(h))
+      )
+
 # Keys of text
 # ------------
 
