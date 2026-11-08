@@ -2805,6 +2805,157 @@ def Trie.apart(k: List<&2, Bool>, p: List<&2, Bool>) -> Bool:
     case _ _:
       False{}
 
+# keys that share a start are apart exactly when what follows it is
+def Trie.prefix_apart(p: List<&2, Bool>, +k: List<&2, Bool>, +q: List<&2, Bool>) -> {Trie.apart(List.append(&2, Bool, p, k), List.append(&2, Bool, p, q)) == Trie.apart(k, q): Bool}:
+  match p:
+    case Nil{}:
+      {==}
+    case Con{False{}, r}:
+      Trie.prefix_apart(r, k, q)
+    case Con{True{}, r}:
+      Trie.prefix_apart(r, k, q)
+
+# words with the same first bit b, whose rest is the same, are the same
+def Trie.word_join.next(
+  -k: Nat,
+  -b: Bool,
+  -t1: Word(k),
+  -t2: Word(k),
+  -x: List<&2, Bool>,
+  -y: List<&2, Bool>,
+  e: &e1: {t1 == t2: Word(k)} -> {Trie.apart(x, y) == False{}: Bool}
+) -> &e2: {WCon{b, t1} == WCon{b, t2}: Word(1n+k)} -> {Trie.apart(x, y) == False{}: Bool}:
+  match e:
+    case (e1, h):
+      (Equal.cong(Word(k), Word(1n+k), z => WCon{b, z}, t1, t2, e1), h)
+
+# keys that start with the bits of two words, and are not apart, start with
+# the same word, and are not apart after it
+def Trie.word_join(
+  n: Nat,
+  w1: Word(n),
+  w2: Word(n),
+  +x: List<&2, Bool>,
+  +y: List<&2, Bool>
+) -> {Trie.apart(List.append(&2, Bool, Trie.word(n, w1), x), List.append(&2, Bool, Trie.word(n, w2), y)) == False{}: Bool} -> (&e: {w1 == w2: Word(n)} -> {
+  Trie.apart(x, y) == False{}: Bool
+}):
+  match n:
+    case 0n:
+      match w1 w2:
+        case WNil{} WNil{}:
+          h => ({==}, h)
+    case 1n+k:
+      match w1 w2:
+        case WCon{False{}, t1} WCon{False{}, t2}:
+          h => Trie.word_join.next(k, False{}, t1, t2, x, y, Trie.word_join(k, t1, t2, x, y)(h))
+        case WCon{True{}, t1} WCon{True{}, t2}:
+          h => Trie.word_join.next(k, True{}, t1, t2, x, y, Trie.word_join(k, t1, t2, x, y)(h))
+        case WCon{False{}, t1} WCon{True{}, t2}:
+          h => Empty.absurd(
+            &e: {WCon{False{}, t1} == WCon{True{}, t2}: Word(1n+k)} -> {Trie.apart(x, y) == False{}: Bool},
+            Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
+          )
+        case WCon{True{}, t1} WCon{False{}, t2}:
+          h => Empty.absurd(
+            &e: {WCon{True{}, t1} == WCon{False{}, t2}: Word(1n+k)} -> {Trie.apart(x, y) == False{}: Bool},
+            Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
+          )
+
+# texts whose first characters and rests are the same are the same
+def Text.cons_eq(-w1: Word(32n), -r1: String, -w2: Word(32n), -r2: String, ew: {w1 == w2: Word(32n)}, er: {r1 == r2: String}) -> {
+  SCon{Chr{U32{w1}}, r1} == SCon{Chr{U32{w2}}, r2}: String
+}:
+  %Equal.sym(Word(32n), w1, w2, ew): {SCon{Chr{U32{_}}, r1} == SCon{Chr{U32{w2}}, r2}: String}
+  %Equal.sym(String, r1, r2, er): {SCon{Chr{U32{w2}}, _} == SCon{Chr{U32{w2}}, r2}: String}
+  {==}
+
+# Trie.text_join once the first characters are known to be the same (ew)
+def Text.join.done(
+  -w1: Word(32n),
+  -r1: String,
+  -w2: Word(32n),
+  -r2: String,
+  -x: List<&2, Bool>,
+  -y: List<&2, Bool>,
+  ew: {w1 == w2: Word(32n)},
+  e: &e: {r1 == r2: String} -> {Trie.apart(x, y) == False{}: Bool}
+) -> &e: {SCon{Chr{U32{w1}}, r1} == SCon{Chr{U32{w2}}, r2}: String} -> {Trie.apart(x, y) == False{}: Bool}:
+  match e:
+    case (er, h):
+      (Text.cons_eq(w1, r1, w2, r2, ew, er), h)
+
+# Trie.text_join after the first characters' words
+def Text.join.word(
+  -w1: Word(32n),
+  -r1: String,
+  -w2: Word(32n),
+  -r2: String,
+  -x: List<&2, Bool>,
+  -y: List<&2, Bool>,
+  e: &ew: {w1 == w2: Word(32n)} -> {Trie.apart(List.append(&2, Bool, Trie.text(r1), x), List.append(&2, Bool, Trie.text(r2), y)) == False{}: Bool},
+  rec: {Trie.apart(List.append(&2, Bool, Trie.text(r1), x), List.append(&2, Bool, Trie.text(r2), y)) == False{}: Bool} -> &e: {r1 == r2: String} -> {Trie.apart(x, y) == False{}: Bool}
+) -> &e: {SCon{Chr{U32{w1}}, r1} == SCon{Chr{U32{w2}}, r2}: String} -> {Trie.apart(x, y) == False{}: Bool}:
+  match e:
+    case (ew, h):
+      Text.join.done(w1, r1, w2, r2, x, y, ew, rec(h))
+
+# keys that start with the keys of two texts, and are not apart, start with
+# the same text, and are not apart after it: a text's key never starts
+# another's
+def Trie.text_join(a: String, b: String, +x: List<&2, Bool>, +y: List<&2, Bool>) -> {
+  Trie.apart(List.append(&2, Bool, Trie.text(a), x), List.append(&2, Bool, Trie.text(b), y)) == False{}: Bool
+} -> &e: {a == b: String} -> {Trie.apart(x, y) == False{}: Bool}:
+  match a b:
+    case SNil{} SNil{}:
+      h => ({==}, h)
+    case SNil{} SCon{Chr{U32{w}}, r}:
+      h => Empty.absurd(&e: {SNil{} == SCon{Chr{U32{w}}, r}: String} -> {Trie.apart(x, y) == False{}: Bool}, Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h)))
+    case SCon{Chr{U32{w}}, r} SNil{}:
+      h => Empty.absurd(&e: {SCon{Chr{U32{w}}, r} == SNil{}: String} -> {Trie.apart(x, y) == False{}: Bool}, Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h)))
+    case SCon{Chr{U32{+w1}}, +r1} SCon{Chr{U32{+w2}}, +r2}:
+      h =>
+        Text.join.word(
+          w1,
+          r1,
+          w2,
+          r2,
+          x,
+          y,
+          Trie.word_join(32n, w1, w2, List.append(&2, Bool, Trie.text(r1), x), List.append(&2, Bool, Trie.text(r2), y))(
+            Equal.trans(
+              Bool,
+              Trie.apart(List.append(&2, Bool, Trie.word(32n, w1), List.append(&2, Bool, Trie.text(r1), x)), List.append(&2, Bool, Trie.word(32n, w2), List.append(&2, Bool, Trie.text(r2), y))),
+              Trie.apart(List.append(&2, Bool, List.append(&2, Bool, Trie.word(32n, w1), Trie.text(r1)), x), List.append(&2, Bool, Trie.word(32n, w2), List.append(&2, Bool, Trie.text(r2), y))),
+              False{},
+              Equal.cong(
+                List<&2, Bool>,
+                Bool,
+                z => Trie.apart(z, List.append(&2, Bool, Trie.word(32n, w2), List.append(&2, Bool, Trie.text(r2), y))),
+                List.append(&2, Bool, Trie.word(32n, w1), List.append(&2, Bool, Trie.text(r1), x)),
+                List.append(&2, Bool, List.append(&2, Bool, Trie.word(32n, w1), Trie.text(r1)), x),
+                Equal.sym(List<&2, Bool>, List.append(&2, Bool, List.append(&2, Bool, Trie.word(32n, w1), Trie.text(r1)), x), List.append(&2, Bool, Trie.word(32n, w1), List.append(&2, Bool, Trie.text(r1), x)), List.append_assoc(Bool, Trie.word(32n, w1), Trie.text(r1), x))
+              ),
+              Equal.trans(
+                Bool,
+                Trie.apart(List.append(&2, Bool, List.append(&2, Bool, Trie.word(32n, w1), Trie.text(r1)), x), List.append(&2, Bool, Trie.word(32n, w2), List.append(&2, Bool, Trie.text(r2), y))),
+                Trie.apart(List.append(&2, Bool, List.append(&2, Bool, Trie.word(32n, w1), Trie.text(r1)), x), List.append(&2, Bool, List.append(&2, Bool, Trie.word(32n, w2), Trie.text(r2)), y)),
+                False{},
+                Equal.cong(
+                  List<&2, Bool>,
+                  Bool,
+                  z => Trie.apart(List.append(&2, Bool, List.append(&2, Bool, Trie.word(32n, w1), Trie.text(r1)), x), z),
+                  List.append(&2, Bool, Trie.word(32n, w2), List.append(&2, Bool, Trie.text(r2), y)),
+                  List.append(&2, Bool, List.append(&2, Bool, Trie.word(32n, w2), Trie.text(r2)), y),
+                  Equal.sym(List<&2, Bool>, List.append(&2, Bool, List.append(&2, Bool, Trie.word(32n, w2), Trie.text(r2)), y), List.append(&2, Bool, Trie.word(32n, w2), List.append(&2, Bool, Trie.text(r2), y)), List.append_assoc(Bool, Trie.word(32n, w2), Trie.text(r2), y))
+                ),
+                h
+              )
+            )
+          ),
+          z => Trie.text_join(r1, r2, x, y)(z)
+        )
+
 # a trie joined with nothing is itself
 def Trie.union_tip(
   ~V: Data,
