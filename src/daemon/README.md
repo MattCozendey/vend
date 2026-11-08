@@ -55,7 +55,7 @@ Each resource is read in the format of its path, and every format has its own di
 
 #### Nodes
 - `try-set-owner <branch> <group>` - makes the nodes inside the group the owners of the branch.
-- `try-set-group <group> <member>...` - makes the group or, when it exists, replaces its members. A member is a node or a group. A set that would make the group contain itself is Stale.
+- `try-set-group <group> <member>...` - makes the group or, when it exists, replaces its members. A member is a node or a group. A set that would make the group contain itself is Stale. It changes no other group's members; each branch and group depends on its own entries alone, so entries of others never change it.
 - `try-sync <node>` - swaps history with another node: each sends what the other lacks. Answers Synced, Partial or Refused.
   Nodes that took in the same entries hold the same state, in any order and any number of times. A version that a node answered Written stays so after a sync that contradicts nothing it holds. A sync may still leave groups that contain one another; the groups on such a cycle share their members and are a notice until a `try-set-group` settles them.
 

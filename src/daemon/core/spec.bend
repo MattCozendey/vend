@@ -821,7 +821,10 @@ law Node.set_keeps_others:
   for h: String
   {String.eq(g, h) == False{}: Bool}
     -> {
-      Node.members(Node.ask(n, s, e, Ask.set_group{g, ms}), h)
+      Node.members(
+        Node.ask(n, s, e, Ask.set_group{g, ms}),
+        h
+      )
         == Node.members(s, h): Maybe<&2, List<&2, Member>>
     }
 

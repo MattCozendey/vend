@@ -3226,14 +3226,30 @@ def Trie.union_tip(
       {==}
 
 # the part of a union under a key is the union of the parts under it
-def Trie.under_union(~V: Data, ~join: V -> V -> V, a: Trie<V>, b: Trie<V>, p: List<&2, Bool>) -> {
-  Trie.under(V, Trie.union(~V, ~join, a, b), p) == Trie.union(~V, ~join, Trie.under(V, a, p), Trie.under(V, b, p)): Trie<V>
+def Trie.under_union(
+  ~V: Data,
+  ~join: V -> V -> V,
+  a: Trie<V>,
+  b: Trie<V>,
+  p: List<&2, Bool>
+) -> {
+  Trie.under(
+    V,
+    Trie.union(~V, ~join, a, b),
+    p
+  )
+    == Trie.union(~V, ~join, Trie.under(V, a, p), Trie.under(V, b, p)): Trie<V>
 }:
   match a b p:
     case tip{} y q:
       {==}
     case bin{h, z, o} tip{} q:
-      Equal.sym(Trie<V>, Trie.union(~V, ~join, Trie.under(V, bin{h, z, o}, q), tip{}), Trie.under(V, bin{h, z, o}, q), Trie.union_tip(~V, ~join, Trie.under(V, bin{h, z, o}, q)))
+      Equal.sym(
+        Trie<V>,
+        Trie.union(~V, ~join, Trie.under(V, bin{h, z, o}, q), tip{}),
+        Trie.under(V, bin{h, z, o}, q),
+        Trie.union_tip(~V, ~join, Trie.under(V, bin{h, z, o}, q))
+      )
     case bin{h1, z1, o1} bin{h2, z2, o2} Nil{}:
       {==}
     case bin{h1, z1, o1} bin{h2, z2, o2} Con{False{}, r}:
@@ -3242,7 +3258,12 @@ def Trie.under_union(~V: Data, ~join: V -> V -> V, a: Trie<V>, b: Trie<V>, p: Li
       Trie.under_union(~V, ~join, o1, o2, r)
 
 # a key after p is the key q of the part of t under p
-def Trie.get_under(-V: Data, t: Trie<V>, p: List<&2, Bool>, +q: List<&2, Bool>) -> {
+def Trie.get_under(
+  -V: Data,
+  t: Trie<V>,
+  p: List<&2, Bool>,
+  q: List<&2, Bool>
+) -> {
   Trie.get(V, t, List.append(&2, Bool, p, q)) == Trie.get(V, Trie.under(V, t, p), q): Maybe<&2, V>
 }:
   match t p:
@@ -3264,9 +3285,12 @@ def Trie.under_nil(-V: Data, t: Trie<V>) -> {Trie.under(V, t, []) == t: Trie<V>}
       {==}
 
 # the trie of one key after p, under p, is the trie of what follows p
-def Trie.under_one(-V: Data, p: List<&2, Bool>, +q: List<&2, Bool>, +v: V) -> {
-  Trie.under(V, Trie.one(V, List.append(&2, Bool, p, q), v), p) == Trie.one(V, q, v): Trie<V>
-}:
+def Trie.under_one(
+  -V: Data,
+  p: List<&2, Bool>,
+  q: List<&2, Bool>,
+  v: V
+) -> {Trie.under(V, Trie.one(V, List.append(&2, Bool, p, q), v), p) == Trie.one(V, q, v): Trie<V>}:
   match p:
     case Nil{}:
       Trie.under_nil(V, Trie.one(V, q, v))
