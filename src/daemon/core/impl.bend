@@ -751,14 +751,36 @@ def Vote.of(m: Maybe<&2, Spec.Entry>) -> Maybe<&2, Spec.Id>:
       None{}
 
 # where a node votes: in s, on the chain c, after the version v
+# the votes on the chain c of s: what a vote count on c reads
+def Chain.votes(s: Spec.State(), c: Spec.Chain) -> Shared.Trie<Cells.Cell<Spec.Entry>>:
+  Shared.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Vote.key(c))
+
 type Spot is Data:
-  Spot{state: Spec.State(), chain: Spec.Chain, after: Spec.Id}
+  Spot{votes: Shared.Trie<Cells.Cell<Spec.Entry>>, after: Spec.Id}
 
 # the version that the node m votes for at the spot g
 def Spot.vote(g: Spot, m: String) -> Maybe<&2, Spec.Id>:
   match g:
-    case Spot{s, c, v}:
-      Vote.of(Cell.entry(State.cell(s, Spec.Slot.vote{m, c, v})))
+    case Spot{t, v}:
+      Vote.of(Cell.entry(Shared.Trie.get(Cells.Cell<Spec.Entry>, t, List.append(&2, Bool, Shared.Trie.text(m), Spec.Id.key(v)))))
+
+# the vote of m in the votes on c of s is the vote in its slot
+def Spot.vote_cell(+s: Spec.State(), +c: Spec.Chain, +v: Spec.Id, +m: String) -> {
+  Spot.vote(Spot{Chain.votes(s, c), v}, m) == Vote.of(Cell.entry(State.cell(s, Spec.Slot.vote{m, c, v}))): Maybe<&2, Spec.Id>
+}:
+  Equal.cong(
+    Maybe<&2, Cells.Cell<Spec.Entry>>,
+    Maybe<&2, Spec.Id>,
+    z => Vote.of(Cell.entry(z)),
+    Shared.Trie.get(Cells.Cell<Spec.Entry>, Chain.votes(s, c), List.append(&2, Bool, Shared.Trie.text(m), Spec.Id.key(v))),
+    State.cell(s, Spec.Slot.vote{m, c, v}),
+    Equal.sym(
+      Maybe<&2, Cells.Cell<Spec.Entry>>,
+      State.cell(s, Spec.Slot.vote{m, c, v}),
+      Shared.Trie.get(Cells.Cell<Spec.Entry>, Chain.votes(s, c), List.append(&2, Bool, Shared.Trie.text(m), Spec.Id.key(v))),
+      Shared.Trie.get_under(Cells.Cell<Spec.Entry>, s, Spec.Vote.key(c), List.append(&2, Bool, Shared.Trie.text(m), Spec.Id.key(v)))
+    )
+  )
 
 # Chains
 # ------
@@ -825,7 +847,7 @@ def Chain.next(+s: Spec.State(), +c: Spec.Chain, k: Step) -> Maybe<&2, Step>:
           ~Spec.Id.same,
           ms,
           ms,
-          Spot{s, c, v}
+          Spot{Chain.votes(s, c), v}
         )
       )
 
@@ -857,7 +879,7 @@ def State.fuel(s: Spec.State()) -> Nat:
 # enough steps for the chain c of s: one more than it has votes, so a chain
 # depends on its own entries alone
 def Chain.fuel(+s: Spec.State(), +c: Spec.Chain) -> Nat:
-  1n+Shared.Trie.size(Cells.Cell<Spec.Entry>, Shared.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Vote.key(c)))
+  1n+Shared.Trie.size(Cells.Cell<Spec.Entry>, Chain.votes(s, c))
 
 # the first step of a chain, from its root entry m
 def Root.of(m: Maybe<&2, Spec.Entry>) -> Maybe<&2, Step>:
@@ -2639,8 +2661,8 @@ def Kept.keeps(
     ~Spot.vote,
     ~Spec.Id.same,
     ms,
-    Spot{s, c, v},
-    Spot{Spec.Node.join(s, t), c, v}
+    Spot{Chain.votes(s, c), v},
+    Spot{Chain.votes(Spec.Node.join(s, t), c), v}
   )
     == True{}: Bool
 }:
@@ -2652,8 +2674,8 @@ def Kept.keeps(
         Quorums.Quorum.kept(
           ~Spec.Id,
           ~Spec.Id.same,
-          Spot.vote(Spot{s, c, v}, m),
-          Spot.vote(Spot{Spec.Node.join(s, t), c, v}, m)
+          Spot.vote(Spot{Chain.votes(s, c), v}, m),
+          Spot.vote(Spot{Chain.votes(Spec.Node.join(s, t), c), v}, m)
         ),
         Quorums.Quorum.keeps(
           ~String,
@@ -2662,18 +2684,25 @@ def Kept.keeps(
           ~Spot.vote,
           ~Spec.Id.same,
           r,
-          Spot{s, c, v},
-          Spot{Spec.Node.join(s, t), c, v}
+          Spot{Chain.votes(s, c), v},
+          Spot{Chain.votes(Spec.Node.join(s, t), c), v}
         )
       )(
         Kept.one.at(
-          Spot.vote(Spot{s, c, v}, m),
-          Spot.vote(Spot{Spec.Node.join(s, t), c, v}, m),
-          j => Kept.vote.of(
-            Cell.entry(State.cell(s, Spec.Slot.vote{m, c, v})),
-            Cell.entry(State.cell(Spec.Node.join(s, t), Spec.Slot.vote{m, c, v})),
-            j,
-            e => Kept.slot(s, t, Spec.Slot.vote{m, c, v}, e, a)
+          Spot.vote(Spot{Chain.votes(s, c), v}, m),
+          Spot.vote(Spot{Chain.votes(Spec.Node.join(s, t), c), v}, m),
+          j => hx => Equal.trans(
+            Maybe<&2, Spec.Id>,
+            Spot.vote(Spot{Chain.votes(Spec.Node.join(s, t), c), v}, m),
+            Vote.of(Cell.entry(State.cell(Spec.Node.join(s, t), Spec.Slot.vote{m, c, v}))),
+            Some{j},
+            Spot.vote_cell(Spec.Node.join(s, t), c, v, m),
+            Kept.vote.of(
+              Cell.entry(State.cell(s, Spec.Slot.vote{m, c, v})),
+              Cell.entry(State.cell(Spec.Node.join(s, t), Spec.Slot.vote{m, c, v})),
+              j,
+              e => Kept.slot(s, t, Spec.Slot.vote{m, c, v}, e, a)
+            )(Equal.trans(Maybe<&2, Spec.Id>, Vote.of(Cell.entry(State.cell(s, Spec.Slot.vote{m, c, v}))), Spot.vote(Spot{Chain.votes(s, c), v}, m), Some{j}, Equal.sym(Maybe<&2, Spec.Id>, Spot.vote(Spot{Chain.votes(s, c), v}, m), Vote.of(Cell.entry(State.cell(s, Spec.Slot.vote{m, c, v}))), Spot.vote_cell(s, c, v, m)), hx))
           )
         )
       )(Kept.keeps(s, t, c, v, r, a))
@@ -2731,7 +2760,7 @@ def Kept.next.won(
       ~Spec.Id.same,
       ms,
       ms,
-      Spot{s, c, v}
+      Spot{Chain.votes(s, c), v}
     )
       == w: Maybe<&2, Spec.Id>
   }
@@ -2750,7 +2779,7 @@ def Kept.next.won(
       ~Spec.Id.same,
       ms,
       ms,
-      Spot{Spec.Node.join(s, t), c, v}
+      Spot{Chain.votes(Spec.Node.join(s, t), c), v}
     )
   )
     == Some{st}: Maybe<&2, Step>
@@ -2771,7 +2800,7 @@ def Kept.next.won(
               ~Spec.Id.same,
               ms,
               ms,
-              Spot{Spec.Node.join(s, t), c, v}
+              Spot{Chain.votes(Spec.Node.join(s, t), c), v}
             )
           )
             == Some{st}: Maybe<&2, Step>
@@ -2780,8 +2809,8 @@ def Kept.next.won(
       )
     case Some{+i}:
       h =>
-        +g = {Spot{s, c, v}: Spot}
-        +g2 = {Spot{Spec.Node.join(s, t), c, v}: Spot}
+        +g = {Spot{Chain.votes(s, c), v}: Spot}
+        +g2 = {Spot{Chain.votes(Spec.Node.join(s, t), c), v}: Spot}
         +won = Quorums.Quorum.winner_of(
           ~String,
           ~Spec.Id,
@@ -2859,7 +2888,7 @@ def Kept.next(
           ~Spec.Id.same,
           ms,
           ms,
-          Spot{s, c, v}
+          Spot{Chain.votes(s, c), v}
         ),
         {==}
       )
@@ -3813,21 +3842,28 @@ def Stay.cursor(
 
 # the vote of n at the spot of s is the entry of its slot
 def Spot.vote_of(
-  s: Spec.State(),
-  c: Spec.Chain,
-  v: Spec.Id,
-  n: String,
+  +s: Spec.State(),
+  +c: Spec.Chain,
+  +v: Spec.Id,
+  +n: String,
   -m: Maybe<&2, Cells.Cell<Spec.Entry>>
 ) -> {
   State.cell(s, Spec.Slot.vote{n, c, v}) == m: Maybe<&2, Cells.Cell<Spec.Entry>>
-} -> {Spot.vote(Spot{s, c, v}, n) == Vote.of(Cell.entry(m)): Maybe<&2, Spec.Id>}:
-  h => Equal.cong(
-    Maybe<&2, Cells.Cell<Spec.Entry>>,
+} -> {Spot.vote(Spot{Chain.votes(s, c), v}, n) == Vote.of(Cell.entry(m)): Maybe<&2, Spec.Id>}:
+  h => Equal.trans(
     Maybe<&2, Spec.Id>,
-    z => Vote.of(Cell.entry(z)),
-    State.cell(s, Spec.Slot.vote{n, c, v}),
-    m,
-    h
+    Spot.vote(Spot{Chain.votes(s, c), v}, n),
+    Vote.of(Cell.entry(State.cell(s, Spec.Slot.vote{n, c, v}))),
+    Vote.of(Cell.entry(m)),
+    Spot.vote_cell(s, c, v, n),
+    Equal.cong(
+      Maybe<&2, Cells.Cell<Spec.Entry>>,
+      Maybe<&2, Spec.Id>,
+      z => Vote.of(Cell.entry(z)),
+      State.cell(s, Spec.Slot.vote{n, c, v}),
+      m,
+      h
+    )
   )
 
 # nothing follows the step to v when its sole owner n has not voted after it
@@ -3850,7 +3886,7 @@ def Next.none(
         ~Spec.Id.same,
         [n],
         [n],
-        Spot{s, c, v}
+        Spot{Chain.votes(s, c), v}
       ),
       None{},
       Quorums.Quorum.winner_none(
@@ -3860,7 +3896,7 @@ def Next.none(
         ~Spot.vote,
         ~Spec.Id.same,
         n,
-        Spot{s, c, v}
+        Spot{Chain.votes(s, c), v}
       )(Spot.vote_of(s, c, v, n, None{})(h))
     ):
       {Step.won(s, c, [n], _) == None{}: Maybe<&2, Step>}
@@ -3899,7 +3935,7 @@ def Next.one(
         ~Spec.Id.same,
         [n],
         [n],
-        Spot{s, c, v}
+        Spot{Chain.votes(s, c), v}
       ),
       Some{i},
       Quorums.Quorum.winner_one(
@@ -3910,7 +3946,7 @@ def Next.one(
         ~Spec.Id.same,
         ~Id.same_refl,
         n,
-        Spot{s, c, v},
+        Spot{Chain.votes(s, c), v},
         i
       )(Spot.vote_of(s, c, v, n, Some{Cells.one{Spec.Entry.vote{i}}})(hv))
     ):
