@@ -8663,3 +8663,372 @@ def Off.chain(+o: Off, +s: Spec.State(), +c: Spec.Chain) -> {Off.ok(o, c, s) == 
       Off.root.of(o, s, c, Root.of(Spec.Node.claim(s, c)))(h)
     ): {Chain.from(Off.join(s, o), c, _) == Chain.from(s, c, Chain.root.of(s, c, Root.of(Spec.Node.claim(s, c)))): List<&2, Spec.Id>}
     Off.from(o, s, c, Chain.root.of(s, c, Root.of(Spec.Node.claim(s, c))))(h)
+
+# Held versions
+# -------------
+# Every version of a chain is a request that the state holds.
+
+# the step m, if any, is of a request that s holds
+def Step.held(s: Spec.State(), m: Maybe<&2, Step>) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{Step{x, ms}}:
+      Maybe.is_some(&2, Asked, State.asked(s, x))
+
+# s holds the requests of the versions xs
+def Ids.held(+s: Spec.State(), xs: List<&2, Spec.Id>) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case Con{x, r}:
+      Bool.and(Maybe.is_some(&2, Asked, State.asked(s, x)), Ids.held(s, r))
+
+# Step.ask_held once the change is known to be of the chain or not (b)
+def Step.if_held(b: Bool, +s: Spec.State(), +i: Spec.Id, -t: String, q: Spec.Ask, ms: List<&2, String>, er: {
+  State.asked(s, i) == Some{Asked{t, q}}: Maybe<&2, Asked>
+}) -> {Step.held(s, Step.if(b, i, q, ms)) == True{}: Bool}:
+  match b:
+    case True{}:
+      %Equal.sym(Maybe<&2, Asked>, State.asked(s, i), Some{Asked{t, q}}, er): {Maybe.is_some(&2, Asked, _) == True{}: Bool}
+      {==}
+    case False{}:
+      {==}
+
+# a step to a request is of a request that s holds
+def Step.ask_held(+s: Spec.State(), +c: Spec.Chain, +i: Spec.Id, ms: List<&2, String>, r: Maybe<&2, Asked>, er: {
+  State.asked(s, i) == r: Maybe<&2, Asked>
+}) -> {Step.held(s, Step.ask(c, i, ms, r)) == True{}: Bool}:
+  match r:
+    case None{}:
+      {==}
+    case Some{Asked{t, +q}}:
+      Step.if_held(Spec.Chain.same(Spec.Ask.chain(q), c), s, i, t, q, ms, er)
+
+# a step that votes make is of a request that s holds
+def Won.held(+s: Spec.State(), +c: Spec.Chain, ms: List<&2, String>, w: Maybe<&2, Spec.Id>) -> {
+  Step.held(s, Step.won(s, c, ms, w)) == True{}: Bool
+}:
+  match w:
+    case None{}:
+      {==}
+    case Some{+i}:
+      Step.ask_held(s, c, i, ms, State.asked(s, i), {==})
+
+# the next step is of a request that s holds
+def Next.held(+s: Spec.State(), +c: Spec.Chain, k: Step) -> {Step.held(s, Chain.next(s, c, k)) == True{}: Bool}:
+  match k:
+    case Step{+v, +ms}:
+      Won.held(s, c, ms, Quorums.Quorum.winner(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, ms, ms, Spot{Chain.votes(s, c), v}))
+
+# a walk from a held step holds every version
+def Walk.held(f: Nat, +s: Spec.State(), +c: Spec.Chain, nx: Maybe<&2, Step>) -> {Step.held(s, nx) == True{}: Bool} -> {
+  Ids.held(s, Chain.walk(f, s, c, nx)) == True{}: Bool
+}:
+  match f nx:
+    case 0n m:
+      h => {==}
+    case 1n+e None{}:
+      h => {==}
+    case 1n+e Some{Step{+i, +ms}}:
+      h =>
+        %Equal.sym(Bool, Maybe.is_some(&2, Asked, State.asked(s, i)), True{}, h): {Bool.and(_, Ids.held(s, Chain.walk(e, s, c, Chain.next(s, c, Step{i, ms})))) == True{}: Bool}
+        Walk.held(e, s, c, Chain.next(s, c, Step{i, ms}))(Next.held(s, c, Step{i, ms}))
+
+# the versions from a held first step are held
+def From.held(+s: Spec.State(), +c: Spec.Chain, r: Maybe<&2, Step>) -> {Step.held(s, r) == True{}: Bool} -> {
+  Ids.held(s, Chain.from(s, c, r)) == True{}: Bool
+}:
+  match r:
+    case None{}:
+      h => {==}
+    case Some{Step{+i, +ms}}:
+      h =>
+        %Equal.sym(Bool, Maybe.is_some(&2, Asked, State.asked(s, i)), True{}, h):
+          {Bool.and(_, Ids.held(s, Chain.walk(Chain.fuel(s, c), s, c, Chain.next(s, c, Step{i, ms})))) == True{}: Bool}
+        Walk.held(Chain.fuel(s, c), s, c, Chain.next(s, c, Step{i, ms}))(Next.held(s, c, Step{i, ms}))
+
+# the first step of a claim is held
+def Root.held(+s: Spec.State(), +c: Spec.Chain, m: Maybe<&2, Step>) -> {Step.held(s, Chain.root.of(s, c, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      {==}
+    case Some{Step{+i, ms}}:
+      Step.ask_held(s, c, i, ms, State.asked(s, i), {==})
+
+# every version of a chain is a request that s holds
+def Chain.held(+s: Spec.State(), +c: Spec.Chain) -> {Ids.held(s, Spec.Node.chain(s, c)) == True{}: Bool}:
+  From.held(s, c, Chain.root(s, c))(Root.held(s, c, Root.of(Spec.Node.claim(s, c))))
+
+# Other groups
+# ------------
+
+# Off.asked for a request, once the version x is known to be its request or
+# not (hit)
+def Off.asked.at(
+  hit: Bool,
+  +s: Spec.State(),
+  +i: Spec.Id,
+  +t: String,
+  +q: Spec.Ask,
+  +x: Spec.Id,
+  +eh: {Spec.Id.same(x, i) == hit: Bool},
+  hn: {State.cell(s, Spec.Slot.ask{i}) == None{}: Maybe<&2, Cells.Cell<Spec.Entry>>},
+  hx: {Maybe.is_some(&2, Asked, State.asked(s, x)) == True{}: Bool}
+) -> {State.asked(Off.join(s, Off.ask{i, t, q}), x) == State.asked(s, x): Maybe<&2, Asked>}:
+  match hit:
+    case True{}:
+      Empty.absurd(
+        {State.asked(Off.join(s, Off.ask{i, t, q}), x) == State.asked(s, x): Maybe<&2, Asked>},
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            Maybe.is_some(&2, Asked, State.asked(s, x)),
+            True{},
+            %Equal.sym(Spec.Id, x, i, Id.same_sound(x, i)(eh)): {False{} == Maybe.is_some(&2, Asked, State.asked(s, _)): Bool}
+            %Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, State.cell(s, Spec.Slot.ask{i}), None{}, hn): {False{} == Maybe.is_some(&2, Asked, Asked.of(Cell.entry(_))): Bool}
+            {==},
+            hx
+          )
+        )
+      )
+    case False{}:
+      Equal.cong(
+        Maybe<&2, Cells.Cell<Spec.Entry>>,
+        Maybe<&2, Asked>,
+        z => Asked.of(Cell.entry(z)),
+        Shared.Trie.get(Cells.Cell<Spec.Entry>, Off.join(s, Off.ask{i, t, q}), Spec.Slot.key(Spec.Slot.ask{x})),
+        Shared.Trie.get(Cells.Cell<Spec.Entry>, s, Spec.Slot.key(Spec.Slot.ask{x})),
+        Fresh.cell(s, Spec.Slot.key(Spec.Slot.ask{i}), Spec.Slot.key(Spec.Slot.ask{x}), Cells.one{Spec.Entry.ask{i, t, q}})(
+          Vote.apart.at(Shared.Trie.apart(Spec.Id.key(i), Spec.Id.key(x)), x, i, {==}, eh)
+        )
+      )
+
+# an entry outside a chain leaves the requests that s holds
+def Off.asked(o: Off, +s: Spec.State(), +c: Spec.Chain, +x: Spec.Id) -> {Off.ok(o, c, s) == True{}: Bool} -> {
+  Maybe.is_some(&2, Asked, State.asked(s, x)) == True{}: Bool
+} -> {State.asked(Off.join(s, o), x) == State.asked(s, x): Maybe<&2, Asked>}:
+  match o:
+    case Off.ask{+i, +t, +q}:
+      h => hx => Off.asked.at(
+        Spec.Id.same(x, i),
+        s,
+        i,
+        t,
+        q,
+        x,
+        {==},
+        Cell.none_of(State.cell(s, Spec.Slot.ask{i}))(
+          Shared.Bool.and_true_right(Bool.not(Spec.Chain.same(Spec.Ask.chain(q), c)), Maybe.is_none(&2, Cells.Cell<Spec.Entry>, State.cell(s, Spec.Slot.ask{i})))(h)
+        ),
+        hx
+      )
+    case Off.root{+d, +n, +e}:
+      h => hx => Equal.cong(
+        Maybe<&2, Cells.Cell<Spec.Entry>>,
+        Maybe<&2, Asked>,
+        z => Asked.of(Cell.entry(z)),
+        Shared.Trie.get(Cells.Cell<Spec.Entry>, Off.join(s, Off.root{d, n, e}), Spec.Slot.key(Spec.Slot.ask{x})),
+        Shared.Trie.get(Cells.Cell<Spec.Entry>, s, Spec.Slot.key(Spec.Slot.ask{x})),
+        Fresh.cell(s, Spec.Slot.key(Spec.Slot.root{d, n}), Spec.Slot.key(Spec.Slot.ask{x}), Cells.one{e})({==})
+      )
+    case Off.vote{+n, +d, +v, +e}:
+      h => hx => Equal.cong(
+        Maybe<&2, Cells.Cell<Spec.Entry>>,
+        Maybe<&2, Asked>,
+        z => Asked.of(Cell.entry(z)),
+        Shared.Trie.get(Cells.Cell<Spec.Entry>, Off.join(s, Off.vote{n, d, v, e}), Spec.Slot.key(Spec.Slot.ask{x})),
+        Shared.Trie.get(Cells.Cell<Spec.Entry>, s, Spec.Slot.key(Spec.Slot.ask{x})),
+        Fresh.cell(s, Spec.Slot.key(Spec.Slot.vote{n, d, v}), Spec.Slot.key(Spec.Slot.ask{x}), Cells.one{e})({==})
+      )
+
+# an entry outside a chain leaves what the last set-group of its held
+# versions sets
+def Off.last(+o: Off, +s: Spec.State(), +c: Spec.Chain, xs: List<&2, Spec.Id>, f: Maybe<&2, List<&2, Spec.Member>>) -> {Off.ok(o, c, s) == True{}: Bool} -> {
+  Ids.held(s, xs) == True{}: Bool
+} -> {Group.last(Off.join(s, o), xs, f) == Group.last(s, xs, f): Maybe<&2, List<&2, Spec.Member>>}:
+  match xs:
+    case Nil{}:
+      h => hh => {==}
+    case Con{+x, +r}:
+      +h => +hh =>
+        %Equal.sym(
+          Maybe<&2, Asked>,
+          State.asked(Off.join(s, o), x),
+          State.asked(s, x),
+          Off.asked(o, s, c, x)(h)(Shared.Bool.and_true_left(Maybe.is_some(&2, Asked, State.asked(s, x)), Ids.held(s, r))(hh))
+        ): {Group.last(Off.join(s, o), r, Group.set(_, f)) == Group.last(s, r, Group.set(State.asked(s, x), f)): Maybe<&2, List<&2, Spec.Member>>}
+        Off.last(o, s, c, r, Group.set(State.asked(s, x), f))(h)(Shared.Bool.and_true_right(Maybe.is_some(&2, Asked, State.asked(s, x)), Ids.held(s, r))(hh))
+
+# a chain with no claim has no versions
+def Chain.none(+s: Spec.State(), +c: Spec.Chain) -> {Spec.Node.claim(s, c) == None{}: Maybe<&2, Spec.Entry>} -> {
+  Spec.Node.chain(s, c) == []: List<&2, Spec.Id>
+}:
+  h =>
+    %Equal.sym(Maybe<&2, Spec.Entry>, Spec.Node.claim(s, c), None{}, h): {Chain.from(s, c, Chain.root.of(s, c, Root.of(_))) == []: List<&2, Spec.Id>}
+    {==}
+
+# Off.members once the claim of the group is known (m)
+def Off.members.at(
+  m: Maybe<&2, Spec.Entry>,
+  +o: Off,
+  +s: Spec.State(),
+  +h: String,
+  +em: {Spec.Node.claim(s, Spec.Chain.group{h}) == m: Maybe<&2, Spec.Entry>},
+  +hok: {Off.ok(o, Spec.Chain.group{h}, s) == True{}: Bool}
+) -> {
+  Shared.Bool.when(Maybe<&2, List<&2, Spec.Member>>, Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(Off.join(s, o)), Spec.Member.group{h}), u => Group.last(s, Spec.Node.chain(s, Spec.Chain.group{h}), None{}), u => None{}) == Shared.Bool.when(Maybe<&2, List<&2, Spec.Member>>, Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s), Spec.Member.group{h}), u => Group.last(s, Spec.Node.chain(s, Spec.Chain.group{h}), None{}), u => None{}): Maybe<&2, List<&2, Spec.Member>>
+}:
+  match m:
+    case None{}:
+      %Equal.sym(List<&2, Spec.Id>, Spec.Node.chain(s, Spec.Chain.group{h}), [], Chain.none(s, Spec.Chain.group{h})(em)):
+        {Shared.Bool.when(Maybe<&2, List<&2, Spec.Member>>, Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(Off.join(s, o)), Spec.Member.group{h}), u => Group.last(s, _, None{}), u => None{}) == Shared.Bool.when(Maybe<&2, List<&2, Spec.Member>>, Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s), Spec.Member.group{h}), u => Group.last(s, _, None{}), u => None{}): Maybe<&2, List<&2, Spec.Member>>}
+      Equal.trans(
+        Maybe<&2, List<&2, Spec.Member>>,
+        Shared.Bool.when(Maybe<&2, List<&2, Spec.Member>>, Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(Off.join(s, o)), Spec.Member.group{h}), u => None{}, u => None{}),
+        None{},
+        Shared.Bool.when(Maybe<&2, List<&2, Spec.Member>>, Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s), Spec.Member.group{h}), u => None{}, u => None{}),
+        Shared.Bool.when_same(Maybe<&2, List<&2, Spec.Member>>, Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(Off.join(s, o)), Spec.Member.group{h}), None{}),
+        Equal.sym(Maybe<&2, List<&2, Spec.Member>>, Shared.Bool.when(Maybe<&2, List<&2, Spec.Member>>, Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s), Spec.Member.group{h}), u => None{}, u => None{}), None{}, Shared.Bool.when_same(Maybe<&2, List<&2, Spec.Member>>, Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s), Spec.Member.group{h}), None{}))
+      )
+    case Some{+x}:
+      %Equal.sym(
+        Bool,
+        Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(Off.join(s, o)), Spec.Member.group{h}),
+        True{},
+        Group.claimed(Off.join(s, o), h, x)(Equal.trans(Maybe<&2, Spec.Entry>, Spec.Node.claim(Off.join(s, o), Spec.Chain.group{h}), Spec.Node.claim(s, Spec.Chain.group{h}), Some{x}, Off.claim(o, s, Spec.Chain.group{h})(hok), em))
+      ): {
+        Shared.Bool.when(Maybe<&2, List<&2, Spec.Member>>, _, u => Group.last(s, Spec.Node.chain(s, Spec.Chain.group{h}), None{}), u => None{})
+          == Shared.Bool.when(Maybe<&2, List<&2, Spec.Member>>, Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s), Spec.Member.group{h}), u => Group.last(s, Spec.Node.chain(s, Spec.Chain.group{h}), None{}), u => None{}): Maybe<&2, List<&2, Spec.Member>>
+      }
+      %Equal.sym(Bool, Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s), Spec.Member.group{h}), True{}, Group.claimed(s, h, x)(em)): {
+        Group.last(s, Spec.Node.chain(s, Spec.Chain.group{h}), None{})
+          == Shared.Bool.when(Maybe<&2, List<&2, Spec.Member>>, _, u => Group.last(s, Spec.Node.chain(s, Spec.Chain.group{h}), None{}), u => None{}): Maybe<&2, List<&2, Spec.Member>>
+      }
+      {==}
+
+# an entry outside a group leaves its members
+def Off.members(+o: Off, +s: Spec.State(), +h: String) -> {Off.ok(o, Spec.Chain.group{h}, s) == True{}: Bool} -> {
+  Spec.Node.members(Off.join(s, o), h) == Spec.Node.members(s, h): Maybe<&2, List<&2, Spec.Member>>
+}:
+  +hok =>
+    %Equal.sym(List<&2, Spec.Id>, Spec.Node.chain(Off.join(s, o), Spec.Chain.group{h}), Spec.Node.chain(s, Spec.Chain.group{h}), Off.chain(o, s, Spec.Chain.group{h})(hok)): {
+      Shared.Bool.when(Maybe<&2, List<&2, Spec.Member>>, Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(Off.join(s, o)), Spec.Member.group{h}), u => Group.last(Off.join(s, o), _, None{}), u => None{}) == Shared.Bool.when(Maybe<&2, List<&2, Spec.Member>>, Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s), Spec.Member.group{h}), u => Group.last(s, Spec.Node.chain(s, Spec.Chain.group{h}), None{}), u => None{}): Maybe<&2, List<&2, Spec.Member>>
+    }
+    %Equal.sym(
+      Maybe<&2, List<&2, Spec.Member>>,
+      Group.last(Off.join(s, o), Spec.Node.chain(s, Spec.Chain.group{h}), None{}),
+      Group.last(s, Spec.Node.chain(s, Spec.Chain.group{h}), None{}),
+      Off.last(o, s, Spec.Chain.group{h}, Spec.Node.chain(s, Spec.Chain.group{h}), None{})(hok)(Chain.held(s, Spec.Chain.group{h}))
+    ): {Shared.Bool.when(Maybe<&2, List<&2, Spec.Member>>, Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(Off.join(s, o)), Spec.Member.group{h}), u => _, u => None{}) == Shared.Bool.when(Maybe<&2, List<&2, Spec.Member>>, Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s), Spec.Member.group{h}), u => Group.last(s, Spec.Node.chain(s, Spec.Chain.group{h}), None{}), u => None{}): Maybe<&2, List<&2, Spec.Member>>}
+    Off.members.at(Spec.Node.claim(s, Spec.Chain.group{h}), o, s, h, {==}, hok)
+
+# a vote that a set-group of g may add leaves the group h
+def Keep.pick(
+  b: Bool,
+  +s1: Spec.State(),
+  +n: String,
+  +g: String,
+  +v: Spec.Id,
+  +i: Spec.Id,
+  +h: String,
+  hgh: {String.eq(g, h) == False{}: Bool}
+) -> {
+  Spec.Node.members(Bool.pick(Spec.State(), b, State.put(s1, Spec.Slot.vote{n, Spec.Chain.group{g}, v}, Spec.Entry.vote{i}), s1), h)
+    == Spec.Node.members(s1, h): Maybe<&2, List<&2, Spec.Member>>
+}:
+  match b:
+    case True{}:
+      Off.members(Off.vote{n, Spec.Chain.group{g}, v, Spec.Entry.vote{i}}, s1, h)(
+        %Equal.sym(Bool, String.eq(g, h), False{}, hgh): {Bool.not(_) == True{}: Bool}
+        {==}
+      )
+    case False{}:
+      {==}
+
+# Node.ask.at for a set-group of g leaves the group h
+def Keep.at(
+  +n: String,
+  +s: Spec.State(),
+  +s1: Spec.State(),
+  +i: Spec.Id,
+  +g: String,
+  +ms: List<&2, Spec.Member>,
+  m: Maybe<&2, Step>,
+  +h: String,
+  hgh: {String.eq(g, h) == False{}: Bool}
+) -> {Spec.Node.members(Node.ask.at(n, s, s1, i, Spec.Ask.set_group{g, ms}, m), h) == Spec.Node.members(s1, h): Maybe<&2, List<&2, Spec.Member>>}:
+  match m:
+    case None{}:
+      {==}
+    case Some{Step{+hd, +ms2}}:
+      Keep.pick(
+        Bool.and(Node.may_vote(n, s, Spec.Chain.group{g}, hd, ms2), Ask.fits(s, Spec.Ask.set_group{g, ms}, hd)),
+        s1,
+        n,
+        g,
+        hd,
+        i,
+        h,
+        hgh
+      )
+
+# Node.ask.root for a set-group of g leaves the group h
+def Keep.root(
+  +n: String,
+  +s: Spec.State(),
+  +s1: Spec.State(),
+  +i: Spec.Id,
+  +g: String,
+  +ms: List<&2, Spec.Member>,
+  m: Maybe<&2, Spec.Entry>,
+  +h: String,
+  +hgh: {String.eq(g, h) == False{}: Bool}
+) -> {Spec.Node.members(Node.ask.root(n, s, s1, i, Spec.Ask.set_group{g, ms}, m), h) == Spec.Node.members(s1, h): Maybe<&2, List<&2, Spec.Member>>}:
+  match m:
+    case None{}:
+      Off.members(Off.root{Spec.Chain.group{g}, n, Spec.Entry.root{Spec.Chain.group{g}, i, n}}, s1, h)(
+        %Equal.sym(Bool, String.eq(g, h), False{}, hgh): {Bool.not(_) == True{}: Bool}
+        {==}
+      )
+    case Some{x}:
+      Keep.at(n, s, s1, i, g, ms, Chain.cursor(s, Spec.Chain.group{g}), h, hgh)
+
+# a set-group of g, once its slot's cell is known (m), leaves the group h
+def Keep.fresh(
+  +n: String,
+  +s: Spec.State(),
+  +i: Spec.Id,
+  +t: String,
+  +g: String,
+  +ms: List<&2, Spec.Member>,
+  m: Maybe<&2, Cells.Cell<Spec.Entry>>,
+  em: {State.cell(s, Spec.Slot.ask{i}) == m: Maybe<&2, Cells.Cell<Spec.Entry>>},
+  +h: String,
+  +hgh: {String.eq(g, h) == False{}: Bool}
+) -> {Spec.Node.members(Node.ask.fresh(n, s, i, t, Spec.Ask.set_group{g, ms}, m), h) == Spec.Node.members(s, h): Maybe<&2, List<&2, Spec.Member>>}:
+  match m:
+    case Some{x}:
+      {==}
+    case None{}:
+      +s1 = State.put(s, Spec.Slot.ask{i}, Spec.Entry.ask{i, t, Spec.Ask.set_group{g, ms}})
+      Equal.trans(
+        Maybe<&2, List<&2, Spec.Member>>,
+        Spec.Node.members(Node.ask.root(n, s, s1, i, Spec.Ask.set_group{g, ms}, Spec.Node.claim(s, Spec.Chain.group{g})), h),
+        Spec.Node.members(s1, h),
+        Spec.Node.members(s, h),
+        Keep.root(n, s, s1, i, g, ms, Spec.Node.claim(s, Spec.Chain.group{g}), h, hgh),
+        Off.members(Off.ask{i, t, Spec.Ask.set_group{g, ms}}, s, h)(
+          %Equal.sym(Bool, String.eq(g, h), False{}, hgh):
+            {Bool.and(Bool.not(_), Maybe.is_none(&2, Cells.Cell<Spec.Entry>, State.cell(s, Spec.Slot.ask{i}))) == True{}: Bool}
+          %Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, State.cell(s, Spec.Slot.ask{i}), None{}, em): {Maybe.is_none(&2, Cells.Cell<Spec.Entry>, _) == True{}: Bool}
+          {==}
+        )
+      )
+
+def Spec.Node.set_keeps_others(n, s, e, g, ms, h):
+  match e:
+    case Spec.Envelope{+r, +w, +t}:
+      +s = s
+      hgh => Keep.fresh(n, s, Spec.Id{w, r}, t, g, ms, State.cell(s, Spec.Slot.ask{Spec.Id{w, r}}), {==}, h, hgh)

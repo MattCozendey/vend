@@ -811,6 +811,20 @@ law Node.members_after_set:
         == Some{ms}: Maybe<&2, List<&2, Member>>
     }
 
+# a set-group leaves the members of every other group
+law Node.set_keeps_others:
+  for n: String
+  for s: State()
+  for e: Envelope
+  for g: String
+  for ms: List<&2, Member>
+  for h: String
+  {String.eq(g, h) == False{}: Bool}
+    -> {
+      Node.members(Node.ask(n, s, e, Ask.set_group{g, ms}), h)
+        == Node.members(s, h): Maybe<&2, List<&2, Member>>
+    }
+
 # the sole owner of a group refuses a set-group that would make the group
 # contain itself, as a member h of the new set is the group or holds it: the
 # group stays as it was
