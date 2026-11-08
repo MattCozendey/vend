@@ -13,6 +13,24 @@ def Bytes.of_text(s: String) -> Bytes():
     case SCon{Chr{c}, r}:
       c <> Bytes.of_text(r)
 
+# the text of the bytes b, one character per byte
+def Bytes.to_text(b: Bytes()) -> String:
+  match b:
+    case Nil{}:
+      SNil{}
+    case Con{c, r}:
+      SCon{Chr{c}, Bytes.to_text(r)}
+
+# the bytes of a text read back as the text
+def Bytes.text_back(s: String) -> {Bytes.to_text(Bytes.of_text(s)) == s: String}:
+  match s:
+    case SNil{}:
+      {==}
+    case SCon{Chr{c}, r}:
+      %Equal.sym(String, Bytes.to_text(Bytes.of_text(r)), r, Bytes.text_back(r)):
+        {SCon{Chr{c}, _} == SCon{Chr{c}, r}: String}
+      {==}
+
 # a and b are the same bytes
 def Bytes.is_eq(a: Bytes(), b: Bytes()) -> Bool:
   match a b:

@@ -5,6 +5,8 @@ import ../../shared/formats.bend as Formats
 import ../../shared/lists.bend as Lists
 import ../../shared/maybes.bend as Maybes
 import ../../shared/resources.bend as Resources
+import ../../shared/shared.bend as Shared
+import ../../shared/texts.bend as Texts
 import ../../shared/tries.bend as Tries
 
 # The pure core of a Vend Node: what it holds, what it answers, and the laws
@@ -300,11 +302,41 @@ type BranchEntry is Data:
 type LogEntry is Data:
   LogEntry{version: Id, time: String}
 
+# a change elsewhere that touches what a branch uses: the version wrote the
+# resource changed, and the resource used of the branch is that resource or
+# uses it (Node.affects_exactly)
+type Touch is Data:
+  Touch{version: Id, changed: Resources.Name, branch: String, used: Resources.Name}
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality keeps each and as one value for the proofs to split on
+# a and b are the same touch
+def Touch.same(a: Touch, b: Touch) -> Bool:
+  match a b:
+    case Touch{v1, c1, b1, u1} Touch{v2, c2, b2, u2}:
+      Bool.and(
+        Id.same(v1, v2),
+        Bool.and(Resources.Name.same(c1, c2), Bool.and(String.eq(b1, b2), Resources.Name.same(u1, u2)))
+      )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# the branch of t
+def Touch.branch(t: Touch) -> String:
+  match t:
+    case Touch{v, c, b, u}:
+      b
+
+# the version of t
+def Touch.version(t: Touch) -> Id:
+  match t:
+    case Touch{v, c, b, u}:
+      v
+
 # what a subscription or a poll follows: the versions or the conflicts of a
-# branch, or the groups
+# branch, the changes elsewhere that touch it, or the groups
 type Topic is Data:
   Topic.versions{branch: String}
   Topic.conflicts{branch: String}
+  Topic.affects{branch: String}
   Topic.groups{}
 
 # an event of a topic. GroupCycle: the group is inside itself, as syncs can
@@ -312,6 +344,7 @@ type Topic is Data:
 type Notice is Data:
   Notice.versioned{branch: String, version: Id}
   Notice.conflicted{branch: String, version: Id}
+  Notice.touched{touch: Touch}
   Notice.group_cycle{group: String}
 
 # Reads
@@ -406,6 +439,108 @@ law Node.notices:
   for t: Topic
   for since: State()
   List<&2, Notice>
+
+# the version at the point p, if there is one
+law Node.version:
+  for s: State()
+  for p: Point
+  Maybe<&2, Id>
+
+# x is the version v, or a version that v came from
+law Node.has:
+  for s: State()
+  for v: Id
+  for x: Id
+  Bool
+
+# the resource that the version v wrote, when it is a write or a resolve
+law Node.wrote:
+  for s: State()
+  for v: Id
+  Maybe<&2, Resources.Name>
+
+# the resources of the branch b at its head
+law Node.resources:
+  for s: State()
+  for b: String
+  List<&2, Resources.Name>
+
+# the resources that the resource u of the branch b imports, as the format of
+# u reads them at the head of b
+law Node.imports:
+  for s: State()
+  for b: String
+  for u: Resources.Name
+  List<&2, Resources.Name>
+
+# the resource u of the branch b uses c: through its imports, at any depth
+law Node.uses:
+  for s: State()
+  for b: String
+  for u: Resources.Name
+  for c: Resources.Name
+  Bool
+
+# the newer of the versions x and y, when one came from the other
+law Node.forward:
+  for s: State()
+  for x: Id
+  for y: Id
+  Maybe<&2, Id>
+
+# the touch t holds (Node.touches_exactly)
+law Node.touches:
+  for s: State()
+  for t: Touch
+  Bool
+
+# the changes elsewhere that touch what the branch b uses
+law Node.affects:
+  for s: State()
+  for b: String
+  List<&2, Touch>
+
+# what the changes up to the point p touch elsewhere
+law Node.impact:
+  for s: State()
+  for p: Point
+  List<&2, Touch>
+
+# Submodules
+# ----------
+# A submodule is a resource whose bytes point to a version: its writer and
+# its request, on two lines (Format.module). A reader goes through it to the
+# content at Point.at of that version, and a merge of two pointers takes the
+# newer one when one came from the other (Node.forward).
+
+# the bytes of a pointer to the version i
+def Id.show(i: Id) -> Octets.Bytes():
+  match i:
+    case Id{w, r}:
+      Octets.Bytes.of_text(String.append(w, SCon{Chr{10}, r}))
+
+# the version of a pointer's text, cut at its first line
+def Id.read.cut(c: Maybe<&2, Texts.Cut>) -> Maybe<&2, Id>:
+  match c:
+    case None{}:
+      None{}
+    case Some{Texts.Cut{w, r}}:
+      Some{Id{w, r}}
+
+# the version that the bytes b point to
+def Id.read(b: Octets.Bytes()) -> Maybe<&2, Id>:
+  Id.read.cut(Texts.Text.cut(Octets.Bytes.to_text(b), 10))
+
+# Touches
+# -------
+
+# the names of the branches es
+def Branch.names(es: List<&2, BranchEntry>) -> List<&2, String>:
+  match es:
+    case Nil{}:
+      []
+    case Con{BranchEntry{b, os, h}, r}:
+      b <> Branch.names(r)
 
 # Changes
 # -------
@@ -546,3 +681,111 @@ law Node.write_stale:
       )
         == Node.chain(s, Chain.branch{b}): List<&2, Id>
     }
+
+# a touch holds when its branch is a branch and lacks its version, which is a
+# version of a branch and wrote the resource changed, and the resource used is
+# of the branch, and is the one changed or uses it
+law Node.touches_exactly:
+  for s: State()
+  for v: Id
+  for c: Resources.Name
+  for b: String
+  for u: Resources.Name
+  {
+    Node.touches(s, Touch{v, c, b, u})
+      == Bool.and(
+        Shared.List.has(~String, ~String.eq, Branch.names(Node.branches(s)), b),
+        Bool.and(
+          Shared.List.has(
+            ~Id,
+            ~Id.same,
+            Shared.List.flat(~String, ~Id, ~State(), ~(t => x => Node.chain(t, Chain.branch{x})), Branch.names(Node.branches(s)), s),
+            v
+          ),
+          Bool.and(
+            Bool.and(
+              Maybe.is_some(&2, Id, Node.head(s, b)),
+              Bool.not(Node.has(s, Maybe.default(&2, Id, Node.head(s, b), v), v))
+            ),
+            Bool.and(
+              Maybes.Maybe.same(~Resources.Name, ~Resources.Name.same, Node.wrote(s, v), Some{c}),
+              Bool.and(
+                Shared.List.has(~Resources.Name, ~Resources.Name.same, Node.resources(s, b), u),
+                Bool.or(Resources.Name.same(u, c), Node.uses(s, b, u, c))
+              )
+            )
+          )
+        )
+      ): Bool
+  }
+
+# the branch b is affected by exactly the touches of b that hold: the changes
+# elsewhere to what b uses, at any depth
+law Node.affects_exactly:
+  for s: State()
+  for b: String
+  for t: Touch
+  {
+    Shared.List.has(~Touch, ~Touch.same, Node.affects(s, b), t)
+      == Bool.and(String.eq(Touch.branch(t), b), Node.touches(s, t)): Bool
+  }
+
+# the impact of the point p is exactly the touches that hold of its version or
+# of a version that it came from
+law Node.impact_exactly:
+  for s: State()
+  for p: Point
+  for t: Touch
+  {
+    Shared.List.has(~Touch, ~Touch.same, Node.impact(s, p), t)
+      == Bool.and(
+        Bool.and(
+          Maybe.is_some(&2, Id, Node.version(s, p)),
+          Node.has(s, Maybe.default(&2, Id, Node.version(s, p), Touch.version(t)), Touch.version(t))
+        ),
+        Node.touches(s, t)
+      ): Bool
+  }
+
+# a resource of a branch uses what it imports
+law Node.uses_import:
+  for s: State()
+  for b: String
+  for u: Resources.Name
+  for c: Resources.Name
+  {Shared.List.has(~Resources.Name, ~Resources.Name.same, Node.resources(s, b), u) == True{}: Bool}
+    -> {Shared.List.has(~Resources.Name, ~Resources.Name.same, Node.imports(s, b, u), c) == True{}: Bool}
+    -> {Node.uses(s, b, u, c) == True{}: Bool}
+
+# what a used resource uses is used
+law Node.uses_through:
+  for s: State()
+  for b: String
+  for u: Resources.Name
+  for h: Resources.Name
+  for c: Resources.Name
+  {Node.uses(s, b, u, h) == True{}: Bool}
+    -> {Node.uses(s, b, h, c) == True{}: Bool}
+    -> {Node.uses(s, b, u, c) == True{}: Bool}
+
+# a pointer reads back as the version it points to
+law Id.read_show:
+  for w: String
+  for r: String
+  {Texts.Text.has(w, 10) == False{}: Bool} -> {Id.read(Id.show(Id{w, r})) == Some{Id{w, r}}: Maybe<&2, Id>}
+
+# of two versions, the one that came from the other is newer
+law Node.forward_theirs:
+  for s: State()
+  for x: Id
+  for y: Id
+  {Node.has(s, y, x) == True{}: Bool} -> {Node.forward(s, x, y) == Some{y}: Maybe<&2, Id>}
+
+# of two versions, the one that the other came before is newer
+law Node.forward_ours:
+  for s: State()
+  for x: Id
+  for y: Id
+  {Node.has(s, y, x) == False{}: Bool}
+    -> {Node.has(s, x, y) == True{}: Bool}
+    -> {Node.forward(s, x, y) == Some{x}: Maybe<&2, Id>}

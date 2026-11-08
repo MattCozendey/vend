@@ -27,14 +27,6 @@ def Bool.and_true_right(
     case True{}:
       h => h
 
-# anything or True is True
-def Bool.or_true_right(a: Bool) -> {Bool.or(a, True{}) == True{}: Bool}:
-  match a:
-    case False{}:
-      {==}
-    case True{}:
-      {==}
-
 # a "not" that is True is of False
 def Bool.not_true(a: Bool) -> {Bool.not(a) == True{}: Bool} -> {a == False{}: Bool}:
   match a:

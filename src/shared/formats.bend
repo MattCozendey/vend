@@ -1219,7 +1219,8 @@ def Rule.edges(+r: Rule, b: Octets.Bytes()) -> List<&2, Edge>:
 # Nested formats
 # --------------
 # A format is lines (the default), whole, an embedding of an inner format in
-# an outer one, or a language: a base format and the rule of its imports.
+# an outer one, a language: a base format and the rule of its imports, or a
+# submodule: a pointer to a version, which the core reads and merges.
 # Formats nest to any depth (CSS and JS inside HTML), and the laws below hold
 # for every one. Each operation takes a list of items, so that an embedding
 # hands all its texts to the outer format and all its regions to the inner one
@@ -1229,6 +1230,7 @@ type Format is Data:
   Format.whole{}
   Format.embed{outer: Format, open: Octets.Bytes(), close: Octets.Bytes(), inner: Format}
   Format.code{base: Format, rule: Rule}
+  Format.module{}
 
 # the first of the items xs, empty when there is none
 def Items.first(xs: List<&2, Octets.Bytes()>) -> Octets.Bytes():
@@ -1258,6 +1260,10 @@ def Format.diffs(f: Format, bs: List<&2, Octets.Bytes()>, +as: List<&2, Octets.B
         <> Format.diffs(Format.embed{o, op, cl, i}, br, List.tail(&2, Octets.Bytes(), as))
     case Format.code{base, r} c:
       Format.diffs(base, c, as)
+    case Format.module{} Nil{}:
+      []
+    case Format.module{} Con{b, br}:
+      Patch.whole{b} <> Format.diffs(Format.module{}, br, List.tail(&2, Octets.Bytes(), as))
 
 # the items as after the patches ps, one for each of ps; a patch of another
 # format applies as plain
@@ -1285,6 +1291,10 @@ def Format.applies(f: Format, ps: List<&2, Patch>, +as: List<&2, Octets.Bytes()>
       Plain.apply(Items.first(as), p) <> Format.applies(Format.embed{o, op, cl, i}, pr, List.tail(&2, Octets.Bytes(), as))
     case Format.code{base, r} q:
       Format.applies(base, q, as)
+    case Format.module{} Nil{}:
+      []
+    case Format.module{} Con{p, pr}:
+      Plain.apply(Items.first(as), p) <> Format.applies(Format.module{}, pr, List.tail(&2, Octets.Bytes(), as))
 
 # the patches from as to bs, applied to as, give bs, in every format
 law Format.apply_diffs:
@@ -1348,6 +1358,16 @@ def Format.apply_diffs(f, bs, as):
       )
     case Format.code{base, r} c:
       Format.apply_diffs(base, c, as)
+    case Format.module{} Nil{}:
+      {==}
+    case Format.module{} Con{b, br}:
+      %Equal.sym(
+        List<&2, Octets.Bytes()>,
+        Format.applies(Format.module{}, Format.diffs(Format.module{}, br, List.tail(&2, Octets.Bytes(), as)), List.tail(&2, Octets.Bytes(), as)),
+        br,
+        Format.apply_diffs(Format.module{}, br, List.tail(&2, Octets.Bytes(), as))
+      ): {b <> _ == b <> br: List<&2, Octets.Bytes()>}
+      {==}
 
 # Nested merges
 # -------------
@@ -1388,6 +1408,8 @@ def Format.decide.both(f: Format, +b: Octets.Bytes(), +x: Octets.Bytes(), +y: Oc
       )
     case Format.code{base, r}:
       Format.decide.both(base, b, x, y)
+    case Format.module{}:
+      Decision.both{}
 
 # the decision d, in the format f
 def Format.decide.on(d: Decision, f: Format, +b: Octets.Bytes(), +x: Octets.Bytes(), +y: Octets.Bytes()) -> Decision:
@@ -1511,6 +1533,10 @@ def Format.merges(f: Format, js: List<&2, Job>) -> List<&2, Merged>:
       Merge.taken(d, x, y) <> Format.merges(Format.embed{o, op, cl, i}, jr)
     case Format.code{base, r} q:
       Format.merges(base, q)
+    case Format.module{} Nil{}:
+      []
+    case Format.module{} Con{Job{b, x, y, d}, jr}:
+      Merge.taken(d, x, y) <> Format.merges(Format.module{}, jr)
 
 # the merge of x and y, two changes of b, in the format f
 def Format.merge(+f: Format, +b: Octets.Bytes(), +x: Octets.Bytes(), +y: Octets.Bytes()) -> Merged:
@@ -1577,6 +1603,22 @@ def Format.merges_taken(
       )
     case Format.code{base, r} e:
       Format.merges_taken(base, b, x, y, z, e, h)
+    case Format.module{} Decision.theirs{}:
+      %Equal.sym(Octets.Bytes(), y, z, Maybes.Maybe.some_inj(Octets.Bytes(), y, z, h)): {[Merged.clean{_}] == [Merged.clean{z}]: List<&2, Merged>}
+      {==}
+    case Format.module{} Decision.ours{}:
+      %Equal.sym(Octets.Bytes(), x, z, Maybes.Maybe.some_inj(Octets.Bytes(), x, z, h)): {[Merged.clean{_}] == [Merged.clean{z}]: List<&2, Merged>}
+      {==}
+    case Format.module{} Decision.both{}:
+      Empty.absurd(
+        {Format.merges(Format.module{}, [Job{b, x, y, Decision.both{}}]) == [Merged.clean{z}]: List<&2, Merged>},
+        Maybes.Maybe.none_ne_some(Octets.Bytes(), z, h)
+      )
+    case Format.module{} Decision.pieces{}:
+      Empty.absurd(
+        {Format.merges(Format.module{}, [Job{b, x, y, Decision.pieces{}}]) == [Merged.clean{z}]: List<&2, Merged>},
+        Maybes.Maybe.none_ne_some(Octets.Bytes(), z, h)
+      )
 
 # a decision that takes z of the changes takes it in every format
 def Format.decide.on_taken(
@@ -1672,6 +1714,8 @@ def Format.changes(f: Format, +a: Octets.Bytes(), +b: Octets.Bytes()) -> List<&2
       Format.changes(o, a, b)
     case Format.code{base, r}:
       Format.changes(base, a, b)
+    case Format.module{}:
+      Plain.changes.whole(Octets.Bytes.is_eq(a, b), a, b)
 
 # the edges of each of the items bs, by the rule r
 def Rule.edges.of(bs: List<&2, Octets.Bytes()>, +r: Rule) -> List<&2, Edge>:
@@ -1704,6 +1748,8 @@ def Format.uses(f: Format, +bs: List<&2, Octets.Bytes()>) -> List<&2, Edge>:
       List.append(&2, Edge, Format.uses(o, Embed.parts(bs, True{}, op, cl)), Format.uses(i, Embed.parts(bs, False{}, op, cl)))
     case Format.code{base, r}:
       List.append(&2, Edge, Rule.edges.of(bs, r), Format.uses(base, bs))
+    case Format.module{}:
+      []
 
 # Known formats
 # -------------
@@ -1764,6 +1810,7 @@ def Format.known() -> List<&2, Known>:
     Known{".css", css},
     Known{".html", html},
     Known{".htm", html},
+    Known{".module", Format.module{}},
     Known{".md", Format.embed{Format.lines{}, Octets.Bytes.of_text("```"), Octets.Bytes.of_text("```"), Format.lines{}}}
   ]
 

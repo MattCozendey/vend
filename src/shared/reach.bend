@@ -45,6 +45,26 @@ def Reach.go(
         Reach.go(~A, ~V, ~same, ~succ, e, Reach.next(~A, ~V, ~succ, xs, g), g, m)
       )
 
+# a search finds what its first level has
+def Reach.go_has(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  f: Nat,
+  +xs: List<&2, A>,
+  +g: V,
+  +m: A
+) -> {Shared.List.has(~A, ~same, xs, m) == True{}: Bool} -> {Reach.go(~A, ~V, ~same, ~succ, f, xs, g, m) == True{}: Bool}:
+  match f:
+    case 0n:
+      h => h
+    case 1n+e:
+      h =>
+        %Equal.sym(Bool, Shared.List.has(~A, ~same, xs, m), True{}, h):
+          {Bool.or(_, Reach.go(~A, ~V, ~same, ~succ, e, Reach.next(~A, ~V, ~succ, xs, g), g, m)) == True{}: Bool}
+        {==}
+
 # m is a successor of x, or a successor of one, at any depth
 def Reach.in(
   ~A: Data,
@@ -547,7 +567,7 @@ def Reach.found_sub.at(
           True{},
           ih(h)(hq)
         ): {Bool.or(Shared.List.has(~A, ~same, succ(g)(x), q), _) == True{}: Bool}
-        Bools.Bool.or_true_right(Shared.List.has(~A, ~same, succ(g)(x), q))
+        Shared.Bool.or_true_right(Shared.List.has(~A, ~same, succ(g)(x), q))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a successor q of a node p of xs is in the next level
@@ -722,7 +742,7 @@ def Reach.path_go(
             )
           )(hf)
         ): {Bool.or(Shared.List.has(~A, ~same, xs, m), _) == True{}: Bool}
-        Bools.Bool.or_true_right(Shared.List.has(~A, ~same, xs, m))
+        Shared.Bool.or_true_right(Shared.List.has(~A, ~same, xs, m))
 
 # a path to h, then a path from h to m, is a path to m
 def Reach.path_append(
