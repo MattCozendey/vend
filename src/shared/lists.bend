@@ -19,6 +19,20 @@ def List.append_nil(-A: Data, xs: List<&2, A>) -> {List.append(&2, A, xs, []) ==
       %List.append_nil(A, t): {h <> List.append(&2, A, t, []) == h <> _: List<&2, A>}
       {==}
 
+# lists with equal heads and equal tails are equal
+def List.cons_eq(
+  -A: Data,
+  -x: A,
+  -y: A,
+  -xs: List<&2, A>,
+  -ys: List<&2, A>,
+  h: {x == y: A},
+  t: {xs == ys: List<&2, A>}
+) -> {x <> xs == y <> ys: List<&2, A>}:
+  %Equal.sym(A, x, y, h): {_ <> xs == y <> ys: List<&2, A>}
+  %Equal.sym(List<&2, A>, xs, ys, t): {y <> _ == y <> ys: List<&2, A>}
+  {==}
+
 # dropping the first list of an append leaves the second
 def List.drop_after_append(
   -A: Data,

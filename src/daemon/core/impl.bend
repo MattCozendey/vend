@@ -1098,21 +1098,23 @@ def Pick.bytes(m: Formats.Merged) -> Pick:
       Pick.clash{}
 
 # the merge of a resource that the base, ours and theirs hold or not, when
-# both sides changed it
+# both sides changed it, in the format f
 def Pick.both(
+  f: Formats.Format,
   b: Maybe<&2, Octets.Bytes()>,
   o: Maybe<&2, Octets.Bytes()>,
   t: Maybe<&2, Octets.Bytes()>
 ) -> Pick:
   match o t:
     case Some{x} Some{y}:
-      Pick.bytes(Formats.Format.merge(Maybe.default(&2, Octets.Bytes(), b, []), x, y))
+      Pick.bytes(Formats.Format.merge(f, Maybe.default(&2, Octets.Bytes(), b, []), x, y))
     case _ _:
       Pick.clash{}
 
 # the merge of a resource, once both sides are known to agree or not (held)
 def Pick.of.same(
   held: Bool,
+  f: Formats.Format,
   b: Maybe<&2, Octets.Bytes()>,
   o: Maybe<&2, Octets.Bytes()>,
   t: Maybe<&2, Octets.Bytes()>
@@ -1121,11 +1123,12 @@ def Pick.of.same(
     case True{}:
       Pick.take{o}
     case False{}:
-      Pick.both(b, o, t)
+      Pick.both(f, b, o, t)
 
 # the merge of a resource, once theirs is known to be the base or not (held)
 def Pick.of.right(
   held: Bool,
+  f: Formats.Format,
   b: Maybe<&2, Octets.Bytes()>,
   +o: Maybe<&2, Octets.Bytes()>,
   +t: Maybe<&2, Octets.Bytes()>
@@ -1134,11 +1137,12 @@ def Pick.of.right(
     case True{}:
       Pick.take{o}
     case False{}:
-      Pick.of.same(Maybes.Maybe.same(~Octets.Bytes(), ~Octets.Bytes.is_eq, o, t), b, o, t)
+      Pick.of.same(Maybes.Maybe.same(~Octets.Bytes(), ~Octets.Bytes.is_eq, o, t), f, b, o, t)
 
 # the merge of a resource, once ours is known to be the base or not (held)
 def Pick.of(
   held: Bool,
+  f: Formats.Format,
   +b: Maybe<&2, Octets.Bytes()>,
   o: Maybe<&2, Octets.Bytes()>,
   +t: Maybe<&2, Octets.Bytes()>
@@ -1147,15 +1151,17 @@ def Pick.of(
     case True{}:
       Pick.take{t}
     case False{}:
-      Pick.of.right(Maybes.Maybe.same(~Octets.Bytes(), ~Octets.Bytes.is_eq, t, b), b, o, t)
+      Pick.of.right(Maybes.Maybe.same(~Octets.Bytes(), ~Octets.Bytes.is_eq, t, b), f, b, o, t)
 
-# what a merge of the base b, ours o and theirs t keeps of a resource
+# what a merge of the base b, ours o and theirs t keeps of a resource in the
+# format f
 def Pick.merge(
+  f: Formats.Format,
   +b: Maybe<&2, Octets.Bytes()>,
   +o: Maybe<&2, Octets.Bytes()>,
   t: Maybe<&2, Octets.Bytes()>
 ) -> Pick:
-  Pick.of(Maybes.Maybe.same(~Octets.Bytes(), ~Octets.Bytes.is_eq, o, b), b, o, t)
+  Pick.of(Maybes.Maybe.same(~Octets.Bytes(), ~Octets.Bytes.is_eq, o, b), f, b, o, t)
 
 # the bytes of a merge: ours on a clash
 def Pick.kept(p: Pick, o: Maybe<&2, Octets.Bytes()>) -> Maybe<&2, Octets.Bytes()>:
@@ -1204,7 +1210,7 @@ def Res.at(
         State.asked.of(s, base),
         Asked.hits(State.asked.of(s, base), n)
       ) Res.at(e, s, Some{from}, n, State.asked(s, from), Asked.hits(State.asked(s, from), n))
-      Pick.kept(Pick.merge(bs, o, fs), o)
+      Pick.kept(Pick.merge(Formats.Format.of(Resources.Name.path(n)), bs, o, fs), o)
     case 1n+e Some{+i} Some{Asked{t, +q}} h:
       +before = Chain.before(s, Spec.Ask.chain(q), i)
       Res.at(e, s, before, n, State.asked.of(s, before), Asked.hits(State.asked.of(s, before), n))
@@ -1327,7 +1333,9 @@ def Res.clashes(
         Resources.Name,
         n,
         Res.clashes(s, r, base, ours, from),
-        Pick.is_clash(Pick.merge(Res.of(s, n, base), Res.of(s, n, ours), Res.of(s, n, Some{from})))
+        Pick.is_clash(
+          Pick.merge(Formats.Format.of(Resources.Name.path(n)), Res.of(s, n, base), Res.of(s, n, ours), Res.of(s, n, Some{from}))
+        )
       )
 
 # Conflicts
@@ -1590,6 +1598,7 @@ def Spec.Node.diff(s, n, a, b):
   +s = s
   +n = n
   Formats.Format.changes(
+    Formats.Format.of(Resources.Name.path(n)),
     Maybe.default(&2, Octets.Bytes(), Spec.Node.content(s, n, a), []),
     Maybe.default(&2, Octets.Bytes(), Spec.Node.content(s, n, b), [])
   )

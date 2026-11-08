@@ -5,6 +5,14 @@ import ./words.bend as Words
 # a resource's content: one byte per U32, as Base's File effects use
 def Bytes() -> Data:
   List<&2, U32>
+# the codes of the characters of s, one per byte: for ASCII text
+def Bytes.of_text(s: String) -> Bytes():
+  match s:
+    case SNil{}:
+      []
+    case SCon{Chr{c}, r}:
+      c <> Bytes.of_text(r)
+
 # a and b are the same bytes
 def Bytes.is_eq(a: Bytes(), b: Bytes()) -> Bool:
   match a b:
