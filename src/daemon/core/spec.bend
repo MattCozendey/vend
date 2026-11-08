@@ -19,7 +19,7 @@ import ../../shared/tries.bend as Tries
 # A chain (a branch, or an owner group) is a list of versions. Its first
 # version is the request that a root entry names; each next one is the
 # request that most of the chain's owners vote for, after the version before
-# it. A slot with two different entries holds Many: the request, the vote or
+# it. A slot with two different entries holds many: the request, the vote or
 # the root in it counts for nothing.
 
 # Names
@@ -33,24 +33,24 @@ type Id is Data:
 
 # what has versions and owners: a branch, or an owner group
 type Chain is Data:
-  Chain.Branch{name: String}
-  Chain.Group{name: String}
+  Chain.branch{name: String}
+  Chain.group{name: String}
 
 # a member of an owner group: a node, or another group
 type Member is Data:
-  Member.Node{name: String}
-  Member.Group{name: String}
+  Member.node{name: String}
+  Member.group{name: String}
 
 # new content: bytes, or what an old version held
 type Content is Data:
-  Content.Bytes{bytes: Octets.Bytes()}
-  Content.Of{version: Id}
+  Content.bytes{bytes: Octets.Bytes()}
+  Content.of{version: Id}
 
 # a version, the newest version of a branch, or a mark of a branch
 type Point is Data:
-  Point.At{version: Id}
-  Point.Head{branch: String}
-  Point.Mark{branch: String, mark: String}
+  Point.at{version: Id}
+  Point.head{branch: String}
+  Point.mark{branch: String, mark: String}
 
 # Requests
 # --------
@@ -59,31 +59,31 @@ type Point is Data:
 
 # a change that a writer asks for
 type Ask is Data:
-  Ask.Write{branch: String, name: Resources.Name, base: Maybe<&2, Id>, content: Content}
-  Ask.SetBranch{branch: String, to: Id}
-  Ask.Merge{branch: String, from: Id}
-  Ask.Resolve{branch: String, conflict: Id, name: Resources.Name, content: Content}
-  Ask.Mark{branch: String, mark: String, message: String}
-  Ask.SetOwner{chain: Chain, members: List<&2, String>}
-  Ask.SetGroup{group: String, members: List<&2, Member>}
+  Ask.write{branch: String, name: Resources.Name, base: Maybe<&2, Id>, content: Content}
+  Ask.set_branch{branch: String, to: Id}
+  Ask.merge{branch: String, from: Id}
+  Ask.resolve{branch: String, conflict: Id, name: Resources.Name, content: Content}
+  Ask.mark{branch: String, mark: String, message: String}
+  Ask.set_owner{chain: Chain, members: List<&2, String>}
+  Ask.set_group{group: String, members: List<&2, Member>}
 
 # the chain that q changes
 def Ask.chain(q: Ask) -> Chain:
   match q:
-    case Ask.Write{b, n, base, c}:
-      Chain.Branch{b}
-    case Ask.SetBranch{b, v}:
-      Chain.Branch{b}
-    case Ask.Merge{b, v}:
-      Chain.Branch{b}
-    case Ask.Resolve{b, k, n, c}:
-      Chain.Branch{b}
-    case Ask.Mark{b, m, t}:
-      Chain.Branch{b}
-    case Ask.SetOwner{c, ms}:
+    case Ask.write{b, n, base, c}:
+      Chain.branch{b}
+    case Ask.set_branch{b, v}:
+      Chain.branch{b}
+    case Ask.merge{b, v}:
+      Chain.branch{b}
+    case Ask.resolve{b, k, n, c}:
+      Chain.branch{b}
+    case Ask.mark{b, m, t}:
+      Chain.branch{b}
+    case Ask.set_owner{c, ms}:
       c
-    case Ask.SetGroup{g, ms}:
-      Chain.Group{g}
+    case Ask.set_group{g, ms}:
+      Chain.group{g}
 
 # who asks for a change, and when
 type Envelope is Data:
@@ -101,16 +101,16 @@ def Envelope.of(e: Envelope) -> Id:
 # a request, with its time; a vote of a node for a version; or a node's claim
 # of the first version of a chain, which that node owns then
 type Entry is Data:
-  Entry.Ask{id: Id, time: String, ask: Ask}
-  Entry.Vote{choice: Id}
-  Entry.Root{chain: Chain, first: Id, owner: String}
+  Entry.ask{id: Id, time: String, ask: Ask}
+  Entry.vote{choice: Id}
+  Entry.root{chain: Chain, first: Id, owner: String}
 
 # where an entry is: a request by its ID, a vote by its node and the version
 # that it follows, a root by its chain and the node that claims it
 type Slot is Data:
-  Slot.Ask{id: Id}
-  Slot.Vote{node: String, chain: Chain, after: Id}
-  Slot.Root{chain: Chain, owner: String}
+  Slot.ask{id: Id}
+  Slot.vote{node: String, chain: Chain, after: Id}
+  Slot.root{chain: Chain, owner: String}
 
 # the key of i
 def Id.key(i: Id) -> List<&2, Bool>:
@@ -121,9 +121,9 @@ def Id.key(i: Id) -> List<&2, Bool>:
 # the key of c
 def Chain.key(c: Chain) -> List<&2, Bool>:
   match c:
-    case Chain.Branch{n}:
+    case Chain.branch{n}:
       False{} <> Tries.Trie.text(n)
-    case Chain.Group{n}:
+    case Chain.group{n}:
       True{} <> Tries.Trie.text(n)
 
 # the start of the keys of the roots of c
@@ -133,13 +133,13 @@ def Root.key(c: Chain) -> List<&2, Bool>:
 # the key of k: no two slots share one
 def Slot.key(k: Slot) -> List<&2, Bool>:
   match k:
-    case Slot.Ask{i}:
+    case Slot.ask{i}:
       False{} <> Id.key(i)
-    case Slot.Vote{n, c, i}:
+    case Slot.vote{n, c, i}:
       True{}
         <> False{}
         <> List.append(&2, Bool, Tries.Trie.text(n), List.append(&2, Bool, Chain.key(c), Id.key(i)))
-    case Slot.Root{c, n}:
+    case Slot.root{c, n}:
       List.append(&2, Bool, Root.key(c), Tries.Trie.text(n))
 
 # Equality
@@ -154,9 +154,9 @@ def Id.same(a: Id, b: Id) -> Bool:
 # a and b are the same chain
 def Chain.same(a: Chain, b: Chain) -> Bool:
   match a b:
-    case Chain.Branch{x} Chain.Branch{y}:
+    case Chain.branch{x} Chain.branch{y}:
       String.eq(x, y)
-    case Chain.Group{x} Chain.Group{y}:
+    case Chain.group{x} Chain.group{y}:
       String.eq(x, y)
     case _ _:
       False{}
@@ -164,9 +164,9 @@ def Chain.same(a: Chain, b: Chain) -> Bool:
 # a and b are the same member
 def Member.same(a: Member, b: Member) -> Bool:
   match a b:
-    case Member.Node{x} Member.Node{y}:
+    case Member.node{x} Member.node{y}:
       String.eq(x, y)
-    case Member.Group{x} Member.Group{y}:
+    case Member.group{x} Member.group{y}:
       String.eq(x, y)
     case _ _:
       False{}
@@ -174,9 +174,9 @@ def Member.same(a: Member, b: Member) -> Bool:
 # a and b are the same content
 def Content.same(a: Content, b: Content) -> Bool:
   match a b:
-    case Content.Bytes{x} Content.Bytes{y}:
+    case Content.bytes{x} Content.bytes{y}:
       Octets.Bytes.is_eq(x, y)
-    case Content.Of{x} Content.Of{y}:
+    case Content.of{x} Content.of{y}:
       Id.same(x, y)
     case _ _:
       False{}
@@ -185,7 +185,7 @@ def Content.same(a: Content, b: Content) -> Bool:
 # a and b are the same change
 def Ask.same(a: Ask, b: Ask) -> Bool:
   match a b:
-    case Ask.Write{b1, n1, v1, c1} Ask.Write{b2, n2, v2, c2}:
+    case Ask.write{b1, n1, v1, c1} Ask.write{b2, n2, v2, c2}:
       Bool.and(
         String.eq(b1, b2),
         Bool.and(
@@ -193,20 +193,20 @@ def Ask.same(a: Ask, b: Ask) -> Bool:
           Bool.and(Maybes.Maybe.same(~Id, ~Id.same, v1, v2), Content.same(c1, c2))
         )
       )
-    case Ask.SetBranch{b1, v1} Ask.SetBranch{b2, v2}:
+    case Ask.set_branch{b1, v1} Ask.set_branch{b2, v2}:
       Bool.and(String.eq(b1, b2), Id.same(v1, v2))
-    case Ask.Merge{b1, v1} Ask.Merge{b2, v2}:
+    case Ask.merge{b1, v1} Ask.merge{b2, v2}:
       Bool.and(String.eq(b1, b2), Id.same(v1, v2))
-    case Ask.Resolve{b1, k1, n1, c1} Ask.Resolve{b2, k2, n2, c2}:
+    case Ask.resolve{b1, k1, n1, c1} Ask.resolve{b2, k2, n2, c2}:
       Bool.and(
         String.eq(b1, b2),
         Bool.and(Id.same(k1, k2), Bool.and(Resources.Name.same(n1, n2), Content.same(c1, c2)))
       )
-    case Ask.Mark{b1, m1, t1} Ask.Mark{b2, m2, t2}:
+    case Ask.mark{b1, m1, t1} Ask.mark{b2, m2, t2}:
       Bool.and(String.eq(b1, b2), Bool.and(String.eq(m1, m2), String.eq(t1, t2)))
-    case Ask.SetOwner{c1, ms1} Ask.SetOwner{c2, ms2}:
+    case Ask.set_owner{c1, ms1} Ask.set_owner{c2, ms2}:
       Bool.and(Chain.same(c1, c2), Lists.List.same(~String, ~String.eq, ms1, ms2))
-    case Ask.SetGroup{g1, ms1} Ask.SetGroup{g2, ms2}:
+    case Ask.set_group{g1, ms1} Ask.set_group{g2, ms2}:
       Bool.and(String.eq(g1, g2), Lists.List.same(~Member, ~Member.same, ms1, ms2))
     case _ _:
       False{}
@@ -214,11 +214,11 @@ def Ask.same(a: Ask, b: Ask) -> Bool:
 # a and b are the same entry
 def Entry.same(a: Entry, b: Entry) -> Bool:
   match a b:
-    case Entry.Ask{i1, t1, q1} Entry.Ask{i2, t2, q2}:
+    case Entry.ask{i1, t1, q1} Entry.ask{i2, t2, q2}:
       Bool.and(Id.same(i1, i2), Bool.and(String.eq(t1, t2), Ask.same(q1, q2)))
-    case Entry.Vote{i1} Entry.Vote{i2}:
+    case Entry.vote{i1} Entry.vote{i2}:
       Id.same(i1, i2)
-    case Entry.Root{c1, i1, n1} Entry.Root{c2, i2, n2}:
+    case Entry.root{c1, i1, n1} Entry.root{c2, i2, n2}:
       Bool.and(Chain.same(c1, c2), Bool.and(Id.same(i1, i2), String.eq(n1, n2)))
     case _ _:
       False{}
@@ -264,9 +264,9 @@ def Root.first(cs: List<&2, Cells.Cell<Entry>>) -> Maybe<&2, Entry>:
   match cs:
     case Nil{}:
       None{}
-    case Con{Cells.One{e}, r}:
+    case Con{Cells.one{e}, r}:
       Some{e}
-    case Con{Cells.Many{}, r}:
+    case Con{Cells.many{}, r}:
       Root.first(r)
 
 # the claim of the first version of the chain c: when nodes claim it apart,
@@ -285,12 +285,12 @@ def Node.claim(s: State(), c: Chain) -> Maybe<&2, Entry>:
 # it at the head any more. Refused: it, or its chain, is contradicted, or it
 # changes a chain that does not exist.
 type Answer is Data:
-  Answer.Written{version: Id}
-  Answer.Conflicted{version: Id}
-  Answer.Pending{}
-  Answer.Stale{head: Id}
-  Answer.Refused{why: String}
-  Answer.NotSeen{}
+  Answer.written{version: Id}
+  Answer.conflicted{version: Id}
+  Answer.pending{}
+  Answer.stale{head: Id}
+  Answer.refused{why: String}
+  Answer.not_seen{}
 
 # a branch, as Node.branches lists it
 type BranchEntry is Data:
@@ -303,16 +303,16 @@ type LogEntry is Data:
 # what a subscription or a poll follows: the versions or the conflicts of a
 # branch, or the groups
 type Topic is Data:
-  Topic.Versions{branch: String}
-  Topic.Conflicts{branch: String}
-  Topic.Groups{}
+  Topic.versions{branch: String}
+  Topic.conflicts{branch: String}
+  Topic.groups{}
 
 # an event of a topic. GroupCycle: the group is inside itself, as syncs can
 # leave groups; a set-group settles it
 type Notice is Data:
-  Notice.Versioned{branch: String, version: Id}
-  Notice.Conflicted{branch: String, version: Id}
-  Notice.GroupCycle{group: String}
+  Notice.versioned{branch: String, version: Id}
+  Notice.conflicted{branch: String, version: Id}
+  Notice.group_cycle{group: String}
 
 # Reads
 # -----
@@ -459,13 +459,13 @@ law Node.write_written:
   for base: Maybe<&2, Id>
   for x: Octets.Bytes()
   for v: Id
-  {Node.owners(s, Chain.Branch{b}) == [n]: List<&2, String>}
+  {Node.owners(s, Chain.branch{b}) == [n]: List<&2, String>}
     -> {Node.head(s, b) == Some{v}: Maybe<&2, Id>}
     -> {
       Tries.Trie.get(
         Cells.Cell<Entry>,
         s,
-        Slot.key(Slot.Ask{Envelope.of(e)})
+        Slot.key(Slot.ask{Envelope.of(e)})
       )
         == None{}: Maybe<&2, Cells.Cell<Entry>>
     }
@@ -473,7 +473,7 @@ law Node.write_written:
       Tries.Trie.get(
         Cells.Cell<Entry>,
         s,
-        Slot.key(Slot.Vote{n, Chain.Branch{b}, v})
+        Slot.key(Slot.vote{n, Chain.branch{b}, v})
       )
         == None{}: Maybe<&2, Cells.Cell<Entry>>
     }
@@ -481,22 +481,22 @@ law Node.write_written:
       Node.content(
         s,
         name,
-        Point.Head{b}
+        Point.head{b}
       )
         == Node.content_at(s, name, base): Maybe<&2, Octets.Bytes()>
     }
     -> {
       Node.answer(
-        Node.ask(n, s, e, Ask.Write{b, name, base, Content.Bytes{x}}),
+        Node.ask(n, s, e, Ask.write{b, name, base, Content.bytes{x}}),
         Envelope.of(e)
       )
-        == Answer.Written{Envelope.of(e)}: Answer
+        == Answer.written{Envelope.of(e)}: Answer
     }
       & {
         Node.content(
-          Node.ask(n, s, e, Ask.Write{b, name, base, Content.Bytes{x}}),
+          Node.ask(n, s, e, Ask.write{b, name, base, Content.bytes{x}}),
           name,
-          Point.At{Envelope.of(e)}
+          Point.at{Envelope.of(e)}
         )
           == Some{x}: Maybe<&2, Octets.Bytes()>
       }
@@ -512,13 +512,13 @@ law Node.write_stale:
   for base: Maybe<&2, Id>
   for x: Content
   for v: Id
-  {Node.owners(s, Chain.Branch{b}) == [n]: List<&2, String>}
+  {Node.owners(s, Chain.branch{b}) == [n]: List<&2, String>}
     -> {Node.head(s, b) == Some{v}: Maybe<&2, Id>}
     -> {
       Tries.Trie.get(
         Cells.Cell<Entry>,
         s,
-        Slot.key(Slot.Ask{Envelope.of(e)})
+        Slot.key(Slot.ask{Envelope.of(e)})
       )
         == None{}: Maybe<&2, Cells.Cell<Entry>>
     }
@@ -526,7 +526,7 @@ law Node.write_stale:
       Tries.Trie.get(
         Cells.Cell<Entry>,
         s,
-        Slot.key(Slot.Vote{n, Chain.Branch{b}, v})
+        Slot.key(Slot.vote{n, Chain.branch{b}, v})
       )
         == None{}: Maybe<&2, Cells.Cell<Entry>>
     }
@@ -534,15 +534,15 @@ law Node.write_stale:
       Maybes.Maybe.same(
         ~Octets.Bytes(),
         ~Octets.Bytes.is_eq,
-        Node.content(s, name, Point.Head{b}),
+        Node.content(s, name, Point.head{b}),
         Node.content_at(s, name, base)
       )
         == False{}: Bool
     }
     -> {
       Node.chain(
-        Node.ask(n, s, e, Ask.Write{b, name, base, x}),
-        Chain.Branch{b}
+        Node.ask(n, s, e, Ask.write{b, name, base, x}),
+        Chain.branch{b}
       )
-        == Node.chain(s, Chain.Branch{b}): List<&2, Id>
+        == Node.chain(s, Chain.branch{b}): List<&2, Id>
     }

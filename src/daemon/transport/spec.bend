@@ -16,17 +16,17 @@ import ../core/spec.bend as Core
 # where new content comes from: content, or a resource that the node reads
 # first
 type Source is Data:
-  Source.Content{content: Core.Content}
-  Source.From{uri: Uris.Uri}
+  Source.content{content: Core.Content}
+  Source.from{uri: Uris.Uri}
 
 # Answers
 # -------
 
 # an answer that crossed IO, or why it did not
 type Reply<a, -A: Kind(a)> is Kind(a):
-  Reply.Delivered{answer: A}
-  Reply.TimedOut{}
-  Reply.Unreachable{}
+  Reply.delivered{answer: A}
+  Reply.timed_out{}
+  Reply.unreachable{}
 
 # the notices that a poll returns, and what to pass as since next time
 type Changes is Data:
@@ -54,33 +54,33 @@ law Status.owned:
 # Partial: the submodules in missing could not be fetched. Unsupported: the
 # kind of the resource does not support a setting
 type Mount is Data:
-  Mount.Mounted{}
-  Mount.Partial{missing: List<&2, String>}
-  Mount.Unsupported{why: String}
-  Mount.Refused{why: String}
+  Mount.mounted{}
+  Mount.partial{missing: List<&2, String>}
+  Mount.unsupported{why: String}
+  Mount.refused{why: String}
 
 type Unmount is Data:
-  Unmount.Unmounted{}
-  Unmount.NotMounted{}
+  Unmount.unmounted{}
+  Unmount.not_mounted{}
 
 # Partial: some entries of the other node did not arrive; the ones that did
 # are taken in
 type Sync is Data:
-  Sync.Synced{}
-  Sync.Partial{}
-  Sync.Refused{why: String}
+  Sync.synced{}
+  Sync.partial{}
+  Sync.refused{why: String}
 
 # Refused: without force, while mounts are active or other writers are
 # connected
 type Stop is Data:
-  Stop.Stopped{}
-  Stop.Refused{why: String}
+  Stop.stopped{}
+  Stop.refused{why: String}
 
 # Busy: another node holds the store
 type Start is Data:
-  Start.Ended{}
-  Start.Busy{}
-  Start.Refused{why: String}
+  Start.ended{}
+  Start.busy{}
+  Start.refused{why: String}
 
 # Operations
 # ----------

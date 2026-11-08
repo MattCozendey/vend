@@ -922,7 +922,7 @@ def Quorum.winner_of(member, choice, state, vote, same, refl, sound, ms, g, x):
       )(hx)
     )
 
-# One member
+# one member
 # ----------
 
 # the one member of [m] decides alone: its vote wins

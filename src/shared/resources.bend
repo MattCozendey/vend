@@ -152,7 +152,7 @@ def name_show_after_read(t, n, h):
 
 # The kinds of endpoint. A mount's URI scheme picks one.
 type Endpoint is Data:
-  FileEndpoint{}
+  file_endpoint{}
 # the endpoint of u's scheme, or None for a scheme with none yet
 def Endpoint.of(u: Uris.Uri) -> Maybe<&2, Endpoint>:
   match u:
@@ -160,6 +160,6 @@ def Endpoint.of(u: Uris.Uri) -> Maybe<&2, Endpoint>:
       Bools.Bool.when(
         Maybe<&2, Endpoint>,
         String.eq(sc, "file"),
-        v => Some{FileEndpoint{}},
+        v => Some{file_endpoint{}},
         v => None{}
       )

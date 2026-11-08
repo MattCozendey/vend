@@ -397,8 +397,8 @@ def Lines.bytes_list(b):
 # next drop lines and puts the lines put in their place; Whole is the new
 # content
 type Patch is Data:
-  Patch.Lines{keep: Nat, drop: Nat, put: List<&2, Octets.Bytes()>}
-  Patch.Whole{bytes: Octets.Bytes()}
+  Patch.lines{keep: Nat, drop: Nat, put: List<&2, Octets.Bytes()>}
+  Patch.whole{bytes: Octets.Bytes()}
 
 # x is not 0
 def Format.not_nul(x: U32) -> Bool:
@@ -412,7 +412,7 @@ def Format.is_text(b: Octets.Bytes()) -> Bool:
 def Lines.patch(c: Cut) -> Patch:
   match c:
     case Cut{s, o, n, e}:
-      Patch.Lines{List.length(&2, Octets.Bytes(), s), List.length(&2, Octets.Bytes(), o), n}
+      Patch.lines{List.length(&2, Octets.Bytes(), s), List.length(&2, Octets.Bytes(), o), n}
 
 # the patch from a to b, as lines when both are text (text)
 def Format.diff.by(text: Bool, a: Octets.Bytes(), b: Octets.Bytes()) -> Patch:
@@ -420,7 +420,7 @@ def Format.diff.by(text: Bool, a: Octets.Bytes(), b: Octets.Bytes()) -> Patch:
     case True{}:
       Lines.patch(Lines.cut(Lines.list(a), Lines.list(b)))
     case False{}:
-      Patch.Whole{b}
+      Patch.whole{b}
 
 # the patch from a to b
 def Format.diff(+a: Octets.Bytes(), +b: Octets.Bytes()) -> Patch:
@@ -429,9 +429,9 @@ def Format.diff(+a: Octets.Bytes(), +b: Octets.Bytes()) -> Patch:
 # a after the patch p
 def Format.apply(a: Octets.Bytes(), p: Patch) -> Octets.Bytes():
   match p:
-    case Patch.Lines{k, d, put}:
+    case Patch.lines{k, d, put}:
       Lines.bytes(Lines.apply(k, Lines.list(a), d, put))
-    case Patch.Whole{x}:
+    case Patch.whole{x}:
       x
 
 # the patch of a cut c of the lines of a, applied to a, gives the bytes of the
@@ -500,8 +500,8 @@ def Format.apply_diff(a, b):
 
 # a merge: its bytes, or a clash
 type Merged is Data:
-  Merged.Clean{bytes: Octets.Bytes()}
-  Merged.Clash{}
+  Merged.clean{bytes: Octets.Bytes()}
+  Merged.clash{}
 
 # the lines lb after two patches, x's first when it ends before y's starts
 # (x_first), y's first when it ends before x's starts (y_first)
@@ -518,11 +518,11 @@ def Format.merge.order(
 ) -> Merged:
   match x_first y_first:
     case True{} w:
-      Merged.Clean{Lines.bytes(Lines.apply(kx, Lines.apply(ky, lb, dy, ny), dx, nx))}
+      Merged.clean{Lines.bytes(Lines.apply(kx, Lines.apply(ky, lb, dy, ny), dx, nx))}
     case False{} True{}:
-      Merged.Clean{Lines.bytes(Lines.apply(ky, Lines.apply(kx, lb, dx, nx), dy, ny))}
+      Merged.clean{Lines.bytes(Lines.apply(ky, Lines.apply(kx, lb, dx, nx), dy, ny))}
     case False{} False{}:
-      Merged.Clash{}
+      Merged.clash{}
 
 # the merge of the cuts cx and cy of the lines lb
 def Format.merge.cuts(lb: List<&2, Octets.Bytes()>, cx: Cut, cy: Cut) -> Merged:
@@ -560,7 +560,7 @@ def Format.merge.text(
     case True{}:
       Format.merge.lines(b, x, y)
     case False{}:
-      Merged.Clash{}
+      Merged.clash{}
 
 # the merge when x and y are the same change or not (held)
 def Format.merge.same(
@@ -571,7 +571,7 @@ def Format.merge.same(
 ) -> Merged:
   match held:
     case True{}:
-      Merged.Clean{x}
+      Merged.clean{x}
     case False{}:
       Format.merge.text(
         Bool.and(Format.is_text(b), Bool.and(Format.is_text(x), Format.is_text(y))),
@@ -589,7 +589,7 @@ def Format.merge.right(
 ) -> Merged:
   match held:
     case True{}:
-      Merged.Clean{x}
+      Merged.clean{x}
     case False{}:
       Format.merge.same(Octets.Bytes.is_eq(x, y), b, x, y)
 
@@ -602,7 +602,7 @@ def Format.merge.left(
 ) -> Merged:
   match held:
     case True{}:
-      Merged.Clean{y}
+      Merged.clean{y}
     case False{}:
       Format.merge.right(Octets.Bytes.is_eq(y, b), b, x, y)
 
@@ -617,7 +617,7 @@ def Format.merge_left_only.at(
   b: Octets.Bytes(),
   x: Octets.Bytes(),
   e: {Octets.Bytes.is_eq(x, b) == held: Bool}
-) -> {Format.merge.left(held, b, x, b) == Merged.Clean{x}: Merged}:
+) -> {Format.merge.left(held, b, x, b) == Merged.clean{x}: Merged}:
   match held:
     case True{}:
       %Equal.sym(
@@ -625,11 +625,11 @@ def Format.merge_left_only.at(
         x,
         b,
         Octets.Bytes.is_eq_sound(x, b)(e)
-      ): {Merged.Clean{b} == Merged.Clean{_}: Merged}
+      ): {Merged.clean{b} == Merged.clean{_}: Merged}
       {==}
     case False{}:
       %Equal.sym(Bool, Octets.Bytes.is_eq(b, b), True{}, Octets.Bytes.is_eq_refl(b)):
-        {Format.merge.right(_, b, x, b) == Merged.Clean{x}: Merged}
+        {Format.merge.right(_, b, x, b) == Merged.clean{x}: Merged}
       {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
@@ -637,7 +637,7 @@ def Format.merge_left_only.at(
 law Format.merge_left_only:
   for +b: Octets.Bytes()
   for +x: Octets.Bytes()
-  {Format.merge(b, x, b) == Merged.Clean{x}: Merged}
+  {Format.merge(b, x, b) == Merged.clean{x}: Merged}
 
 def Format.merge_left_only(b, x):
   Format.merge_left_only.at(Octets.Bytes.is_eq(x, b), b, x, {==})
@@ -646,11 +646,11 @@ def Format.merge_left_only(b, x):
 law Format.merge_right_only:
   for +b: Octets.Bytes()
   for +y: Octets.Bytes()
-  {Format.merge(b, b, y) == Merged.Clean{y}: Merged}
+  {Format.merge(b, b, y) == Merged.clean{y}: Merged}
 
 def Format.merge_right_only(b, y):
   %Equal.sym(Bool, Octets.Bytes.is_eq(b, b), True{}, Octets.Bytes.is_eq_refl(b)):
-    {Format.merge.left(_, b, b, y) == Merged.Clean{y}: Merged}
+    {Format.merge.left(_, b, b, y) == Merged.clean{y}: Merged}
   {==}
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
@@ -660,15 +660,15 @@ def Format.merge_same.at(
   b: Octets.Bytes(),
   x: Octets.Bytes(),
   e: {Octets.Bytes.is_eq(x, b) == held: Bool}
-) -> {Format.merge.left(held, b, x, x) == Merged.Clean{x}: Merged}:
+) -> {Format.merge.left(held, b, x, x) == Merged.clean{x}: Merged}:
   match held:
     case True{}:
       {==}
     case False{}:
       %Equal.sym(Bool, Octets.Bytes.is_eq(x, b), False{}, e):
-        {Format.merge.right(_, b, x, x) == Merged.Clean{x}: Merged}
+        {Format.merge.right(_, b, x, x) == Merged.clean{x}: Merged}
       %Equal.sym(Bool, Octets.Bytes.is_eq(x, x), True{}, Octets.Bytes.is_eq_refl(x)):
-        {Format.merge.same(_, b, x, x) == Merged.Clean{x}: Merged}
+        {Format.merge.same(_, b, x, x) == Merged.clean{x}: Merged}
       {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
@@ -676,7 +676,7 @@ def Format.merge_same.at(
 law Format.merge_same:
   for +b: Octets.Bytes()
   for +x: Octets.Bytes()
-  {Format.merge(b, x, x) == Merged.Clean{x}: Merged}
+  {Format.merge(b, x, x) == Merged.clean{x}: Merged}
 
 def Format.merge_same(b, x):
   Format.merge_same.at(Octets.Bytes.is_eq(x, b), b, x, {==})
@@ -692,8 +692,8 @@ type Item is Data:
 
 # a part that a patch added or removed
 type Change is Data:
-  Change.Added{item: Item}
-  Change.Removed{item: Item}
+  Change.added{item: Item}
+  Change.removed{item: Item}
 
 # the lines ls as the changes that make (c), counted from the line at
 def Lines.changes(
@@ -707,14 +707,6 @@ def Lines.changes(
     case Con{l, r}:
       make(Item{"line", at, l}) <> Lines.changes(~make, r, 1n+at)
 
-# a removed part
-def Change.removed(i: Item) -> Change:
-  Change.Removed{i}
-
-# an added part
-def Change.added(i: Item) -> Change:
-  Change.Added{i}
-
 # the changes of a whole content from a to b, none when they are the same
 # (held)
 def Format.changes.whole(held: Bool, a: Octets.Bytes(), b: Octets.Bytes()) -> List<&2, Change>:
@@ -722,23 +714,23 @@ def Format.changes.whole(held: Bool, a: Octets.Bytes(), b: Octets.Bytes()) -> Li
     case True{}:
       []
     case False{}:
-      [Change.Removed{Item{"content", 0n, a}}, Change.Added{Item{"content", 0n, b}}]
+      [Change.removed{Item{"content", 0n, a}}, Change.added{Item{"content", 0n, b}}]
 
 # the changes of the patch p of a
 def Format.changes.of(+a: Octets.Bytes(), p: Patch) -> List<&2, Change>:
   match p:
-    case Patch.Lines{+k, d, put}:
+    case Patch.lines{+k, d, put}:
       List.append(
         &2,
         Change,
         Lines.changes(
-          ~Change.removed,
+          ~(i => Change.removed{i}),
           List.take(&2, Octets.Bytes(), List.drop(&2, Octets.Bytes(), Lines.list(a), k), d),
           1n+k
         ),
-        Lines.changes(~Change.added, put, 1n+k)
+        Lines.changes(~(i => Change.added{i}), put, 1n+k)
       )
-    case Patch.Whole{+x}:
+    case Patch.whole{+x}:
       Format.changes.whole(Octets.Bytes.is_eq(a, x), a, x)
 
 # what changed from a to b, part by part
