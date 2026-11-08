@@ -1491,18 +1491,6 @@ def Group.last(
     case Con{x, r}:
       Group.last(s, r, Group.set(State.asked(s, x), found))
 
-def Spec.Node.members(s, g):
-  +s = s
-  Group.last(s, Spec.Node.chain(s, Spec.Chain.group{g}), None{})
-
-# the members of m, when it is a group
-def Group.succ(s: Spec.State(), m: Spec.Member) -> List<&2, Spec.Member>:
-  match m:
-    case Spec.Member.node{n}:
-      []
-    case Spec.Member.group{g}:
-      Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), [])
-
 # the groups whose roots are among the cells cs, as members
 def Group.roots(cs: List<&2, Cells.Cell<Spec.Entry>>) -> List<&2, Spec.Member>:
   match cs:
@@ -1523,14 +1511,52 @@ def Group.roots(cs: List<&2, Cells.Cell<Spec.Entry>>) -> List<&2, Spec.Member>:
 def Group.all(s: Spec.State()) -> List<&2, Spec.Member>:
   Group.roots(Shared.Trie.values(Cells.Cell<Spec.Entry>, s))
 
+# the groups of a state: the graph that Node.is_inside searches. Only a group
+# that it knows, by its root, has members.
+type Groups is Data:
+  Groups{state: Spec.State(), all: List<&2, Spec.Member>}
+
+# the groups of s
+def Groups.of(+s: Spec.State()) -> Groups:
+  Groups{s, Group.all(s)}
+
+# every group of gs, as a member
+def Groups.nodes(gs: Groups) -> List<&2, Spec.Member>:
+  match gs:
+    case Groups{s, all}:
+      all
+
+# the members of the group h in gs, if gs knows h
+def Groups.members(gs: Groups, h: String) -> Maybe<&2, List<&2, Spec.Member>>:
+  match gs:
+    case Groups{+s, all}:
+      +h = h
+      Shared.Bool.when(
+        Maybe<&2, List<&2, Spec.Member>>,
+        Shared.List.has(~Spec.Member, ~Spec.Member.same, all, Spec.Member.group{h}),
+        u => Group.last(s, Spec.Node.chain(s, Spec.Chain.group{h}), None{}),
+        u => None{}
+      )
+
+def Spec.Node.members(s, g):
+  Groups.members(Groups.of(s), g)
+
+# the members of m in gs, when it is a group
+def Group.succ(gs: Groups, m: Spec.Member) -> List<&2, Spec.Member>:
+  match m:
+    case Spec.Member.node{n}:
+      []
+    case Spec.Member.group{h}:
+      Maybe.default(&2, List<&2, Spec.Member>, Groups.members(gs, h), [])
+
 def Spec.Node.is_inside(s, m, g):
   Reaches.Reach.in(
     ~Spec.Member,
-    ~Spec.State(),
+    ~Groups,
     ~Spec.Member.same,
     ~Group.succ,
-    ~Group.all,
-    s,
+    ~Groups.nodes,
+    Groups.of(s),
     Spec.Member.group{g},
     m
   )
@@ -1546,12 +1572,12 @@ def Group.nodes.of(ms: List<&2, Spec.Member>) -> List<&2, String>:
       Group.nodes.of(r)
 
 # the nodes that some group of gs names
-def Group.named(+s: Spec.State(), gs: List<&2, Spec.Member>) -> List<&2, String>:
-  match gs:
+def Group.named(+gs: Groups, ms: List<&2, Spec.Member>) -> List<&2, String>:
+  match ms:
     case Nil{}:
       []
     case Con{g, r}:
-      Shared.union(Group.nodes.of(Group.succ(s, g)), Group.named(s, r))
+      Shared.union(Group.nodes.of(Group.succ(gs, g)), Group.named(gs, r))
 
 # the nodes of ns that are inside the group g
 def Group.inside(+s: Spec.State(), ns: List<&2, String>, +g: String) -> List<&2, String>:
@@ -1568,7 +1594,8 @@ def Group.inside(+s: Spec.State(), ns: List<&2, String>, +g: String) -> List<&2,
 
 def Spec.Node.nodes(s, g):
   +s = s
-  Group.inside(s, Group.named(s, Group.all(s)), g)
+  +gs = Groups.of(s)
+  Group.inside(s, Group.named(gs, Groups.nodes(gs)), g)
 
 # the member m of a new set of the group g makes g contain itself
 def Group.loops(s: Spec.State(), +g: String, m: Spec.Member) -> Bool:
@@ -5749,4 +5776,182 @@ def Spec.Node.ask_again(n, s, r, w, t1, t2, q1, q2):
   +t1 = t1
   Spec.Node.ask_held(n, Spec.Node.ask(n, s, Spec.Envelope{r, w, t1}, q1), Spec.Envelope{r, w, t2}, q2)(
     Hold.fresh(n, s, Spec.Id{w, r}, t1, q1, State.cell(s, Spec.Slot.ask{Spec.Id{w, r}}), {==})
+  )
+
+# Group laws
+# ----------
+
+# Group.live once the group h is known to be among all or not (hit)
+def Group.live.at(
+  hit: Bool,
+  s: Spec.State(),
+  all: List<&2, Spec.Member>,
+  h: String,
+  q: Spec.Member,
+  e: {Shared.List.has(~Spec.Member, ~Spec.Member.same, all, Spec.Member.group{h}) == hit: Bool}
+) -> {
+  Shared.List.has(~Spec.Member, ~Spec.Member.same, Maybe.default(&2, List<&2, Spec.Member>, Shared.Bool.when(Maybe<&2, List<&2, Spec.Member>>, hit, u => Group.last(s, Spec.Node.chain(s, Spec.Chain.group{h}), None{}), u => None{}), []), q)
+    == True{}: Bool
+} -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, all, Spec.Member.group{h}) == True{}: Bool}:
+  match hit:
+    case True{}:
+      x => e
+    case False{}:
+      x => Empty.absurd({Shared.List.has(~Spec.Member, ~Spec.Member.same, all, Spec.Member.group{h}) == True{}: Bool}, Shared.Bool.false_ne_true(x))
+
+# only a group of gs has members
+def Group.live(gs: Groups, p: Spec.Member, q: Spec.Member) -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.succ(gs, p), q) == True{}: Bool} -> {
+  Shared.List.has(~Spec.Member, ~Spec.Member.same, Groups.nodes(gs), p) == True{}: Bool
+}:
+  match gs p:
+    case Groups{s, all} Spec.Member.node{n}:
+      x => Empty.absurd({Shared.List.has(~Spec.Member, ~Spec.Member.same, all, Spec.Member.node{n}) == True{}: Bool}, Shared.Bool.false_ne_true(x))
+    case Groups{+s, +all} Spec.Member.group{+h}:
+      Group.live.at(Shared.List.has(~Spec.Member, ~Spec.Member.same, all, Spec.Member.group{h}), s, all, h, q, {==})
+
+def Spec.Node.inside_member(s, m, g, ms):
+  +s = s
+  +m = m
+  +g = g
+  +ms = ms
+  hm => hx =>
+    Reaches.Reach.go_has(
+      ~Spec.Member,
+      ~Groups,
+      ~Spec.Member.same,
+      ~Group.succ,
+      List.length(&2, Spec.Member, Groups.nodes(Groups.of(s))),
+      Group.succ(Groups.of(s), Spec.Member.group{g}),
+      Groups.of(s),
+      m
+    )(
+      %Equal.sym(Maybe<&2, List<&2, Spec.Member>>, Spec.Node.members(s, g), Some{ms}, hm):
+        {Shared.List.has(~Spec.Member, ~Spec.Member.same, Maybe.default(&2, List<&2, Spec.Member>, _, []), m) == True{}: Bool}
+      hx
+    )
+
+def Spec.Node.inside_through(s, m, h, g):
+  x => y =>
+    Reaches.Reach.in_through(
+      ~Spec.Member,
+      ~Groups,
+      ~Spec.Member.same,
+      ~Group.succ,
+      ~Groups.nodes,
+      ~Member.same_refl,
+      ~Member.same_sound,
+      ~Group.live,
+      Groups.of(s),
+      Spec.Member.group{g},
+      Spec.Member.group{h},
+      m
+    )(x)(y)
+
+# no path starts from no member
+def Group.no_path(ps: List<&2, Spec.Member>, gs: Groups, m: Spec.Member) -> {
+  Reaches.Reach.path(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, ps, [], gs, m) == True{}: Bool
+} -> Empty:
+  match ps:
+    case Nil{}:
+      x => Shared.Bool.false_ne_true(x)
+    case Con{p, r}:
+      x => Shared.Bool.false_ne_true(x)
+
+# a path from the members of g to m: m is a member of g, or inside one
+def Group.unfold(ps: List<&2, Spec.Member>, +s: Spec.State(), +g: String, +m: Spec.Member) -> {
+  Reaches.Reach.path(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, ps, Group.succ(Groups.of(s), Spec.Member.group{g}), Groups.of(s), m) == True{}: Bool
+} -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), []), m) == True{}: Bool}
+  | (&h: String -> {
+    Shared.List.has(~Spec.Member, ~Spec.Member.same, Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), []), Spec.Member.group{h}) == True{}: Bool
+  }
+    & {Spec.Node.is_inside(s, m, h) == True{}: Bool}):
+  match ps:
+    case Nil{}:
+      x => Inl{x}
+    case Con{p, +r}:
+      match p:
+        case Spec.Member.node{n}:
+          +x =>
+            Empty.absurd(
+              {Shared.List.has(~Spec.Member, ~Spec.Member.same, Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), []), m) == True{}: Bool}
+                | (&h: String -> {
+                  Shared.List.has(~Spec.Member, ~Spec.Member.same, Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), []), Spec.Member.group{h}) == True{}: Bool
+                }
+                  & {Spec.Node.is_inside(s, m, h) == True{}: Bool}),
+              Group.no_path(r, Groups.of(s), m)(
+                Shared.Bool.and_true_right(
+                  Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.succ(Groups.of(s), Spec.Member.group{g}), Spec.Member.node{n}),
+                  Reaches.Reach.path(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, r, [], Groups.of(s), m)
+                )(x)
+              )
+            )
+        case Spec.Member.group{+h}:
+          +x =>
+            Inr{
+              (
+                h,
+                (
+                  Shared.Bool.and_true_left(
+                    Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.succ(Groups.of(s), Spec.Member.group{g}), Spec.Member.group{h}),
+                    Reaches.Reach.path(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, r, Group.succ(Groups.of(s), Spec.Member.group{h}), Groups.of(s), m)
+                  )(x),
+                  Reaches.Reach.path_in(
+                    ~Spec.Member,
+                    ~Groups,
+                    ~Spec.Member.same,
+                    ~Group.succ,
+                    ~Groups.nodes,
+                    ~Member.same_sound,
+                    ~Group.live,
+                    r,
+                    Groups.of(s),
+                    Spec.Member.group{h},
+                    m
+                  )(
+                    Shared.Bool.and_true_right(
+                      Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.succ(Groups.of(s), Spec.Member.group{g}), Spec.Member.group{h}),
+                      Reaches.Reach.path(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, r, Group.succ(Groups.of(s), Spec.Member.group{h}), Groups.of(s), m)
+                    )(x)
+                  )
+                )
+              )
+            }
+
+# Group.unfold, from a path that a search found
+def Group.unfold.of(
+  +s: Spec.State(),
+  +g: String,
+  +m: Spec.Member,
+  w: &ps: List<&2, Spec.Member> -> {
+    Reaches.Reach.path(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, ps, Group.succ(Groups.of(s), Spec.Member.group{g}), Groups.of(s), m) == True{}: Bool
+  }
+    & {Reaches.Reach.fits(Spec.Member, ps, List.length(&2, Spec.Member, Groups.nodes(Groups.of(s)))) == True{}: Bool}
+) -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), []), m) == True{}: Bool}
+  | (&h: String -> {
+    Shared.List.has(~Spec.Member, ~Spec.Member.same, Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), []), Spec.Member.group{h}) == True{}: Bool
+  }
+    & {Spec.Node.is_inside(s, m, h) == True{}: Bool}):
+  match w:
+    case (ps, (hp, hf)):
+      Group.unfold(ps, s, g, m)(hp)
+
+def Spec.Node.inside_unfold(s, m, g):
+  +s = s
+  +m = m
+  +g = g
+  x => Group.unfold.of(
+    s,
+    g,
+    m,
+    Reaches.Reach.go_path(
+      ~Spec.Member,
+      ~Groups,
+      ~Spec.Member.same,
+      ~Group.succ,
+      ~Member.same_refl,
+      List.length(&2, Spec.Member, Groups.nodes(Groups.of(s))),
+      Group.succ(Groups.of(s), Spec.Member.group{g}),
+      Groups.of(s),
+      m
+    )(x)
   )

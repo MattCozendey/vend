@@ -927,6 +927,49 @@ law Node.uses_through:
     -> {Node.uses(s, b, h, c) == True{}: Bool}
     -> {Node.uses(s, b, u, c) == True{}: Bool}
 
+# a member of a group is inside it
+law Node.inside_member:
+  for s: State()
+  for m: Member
+  for g: String
+  for ms: List<&2, Member>
+  {Node.members(s, g) == Some{ms}: Maybe<&2, List<&2, Member>>}
+    -> {Shared.List.has(~Member, ~Member.same, ms, m) == True{}: Bool}
+    -> {Node.is_inside(s, m, g) == True{}: Bool}
+
+# what is inside a group that is inside g is inside g
+law Node.inside_through:
+  for s: State()
+  for m: Member
+  for h: String
+  for g: String
+  {Node.is_inside(s, Member.group{h}, g) == True{}: Bool}
+    -> {Node.is_inside(s, m, h) == True{}: Bool}
+    -> {Node.is_inside(s, m, g) == True{}: Bool}
+
+# what is inside g is a member of g, or inside a group that is a member of g:
+# with inside_member and inside_through, inside is exactly membership, at any
+# depth
+law Node.inside_unfold:
+  for s: State()
+  for m: Member
+  for g: String
+  {Node.is_inside(s, m, g) == True{}: Bool}
+    -> {
+      Shared.List.has(~Member, ~Member.same, Maybe.default(&2, List<&2, Member>, Node.members(s, g), []), m)
+        == True{}: Bool
+    }
+      | (&h: String -> {
+        Shared.List.has(
+          ~Member,
+          ~Member.same,
+          Maybe.default(&2, List<&2, Member>, Node.members(s, g), []),
+          Member.group{h}
+        )
+          == True{}: Bool
+      }
+        & {Node.is_inside(s, m, h) == True{}: Bool})
+
 # a pointer reads back from its bytes, when no part of it holds a line break
 law Pointer.read_show:
   for sp: String
