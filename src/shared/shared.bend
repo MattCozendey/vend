@@ -3132,3 +3132,15 @@ def Trie.size_union_one(ty, join, s, k, v):
           {1n+_ == 1n+1n+Nat.add(Trie.size(ty, z), Trie.size(ty, o)): Nat}
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# two bools that each make the other true are equal
+def Bool.iff(a: Bool, b: Bool, ab: {a == True{}: Bool} -> {b == True{}: Bool}, ba: {b == True{}: Bool} -> {a == True{}: Bool}) -> {a == b: Bool}:
+  match a b:
+    case True{} True{}:
+      {==}
+    case True{} False{}:
+      Empty.absurd({True{} == False{}: Bool}, Bool.false_ne_true(ab({==})))
+    case False{} True{}:
+      Empty.absurd({False{} == True{}: Bool}, Bool.false_ne_true(ba({==})))
+    case False{} False{}:
+      {==}

@@ -1002,7 +1002,7 @@ def Version.is_from.if(held: Bool, s: Spec.State(), x: Spec.Id, v: Spec.Id) -> B
     case True{}:
       True{}
     case False{}:
-      Reaches.Reach.in(
+      Reaches.Reach.in_fast(
         ~Spec.Id,
         ~Spec.State(),
         ~Spec.Id.same,
@@ -1550,7 +1550,7 @@ def Group.succ(gs: Groups, m: Spec.Member) -> List<&2, Spec.Member>:
       Maybe.default(&2, List<&2, Spec.Member>, Groups.members(gs, h), [])
 
 def Spec.Node.is_inside(s, m, g):
-  Reaches.Reach.in(
+  Reaches.Reach.in_fast(
     ~Spec.Member,
     ~Groups,
     ~Spec.Member.same,
@@ -1881,7 +1881,7 @@ def Spec.Node.imports(s, b, u):
 def Spec.Node.uses(s, b, u, c):
   s = s
   b = b
-  Reaches.Reach.in(
+  Reaches.Reach.in_fast(
     ~Resources.Name,
     ~Uses,
     ~Resources.Name.same,
@@ -4752,8 +4752,9 @@ def Spec.Node.forward_ours(s, x, y):
 def Spec.Node.uses_import(s, b, u, c):
   +s = s
   +b = b
-  u = u
-  hu => hc =>
+  +u = u
+  +c = c
+  hu => hc => Reaches.Reach.of_in(~Resources.Name, ~Uses, ~Resources.Name.same, ~Uses.succ, ~Uses.nodes, ~Resources.Name.same_refl, ~Resources.Name.same_sound, Uses.of(s, b), u, c)(
     Reaches.Reach.go_has(
       ~Resources.Name,
       ~Uses,
@@ -4765,7 +4766,7 @@ def Spec.Node.uses_import(s, b, u, c):
       c
     )(
       %Equal.sym(Bool, Shared.List.has(~Resources.Name, ~Resources.Name.same, Spec.Node.resources(s, b), u), True{}, hu): {Shared.List.has(~Resources.Name, ~Resources.Name.same, Shared.Bool.when(List<&2, Resources.Name>, _, w => Uses.targets(Uses.of(s, b), u), w => []), c) == True{}: Bool}
-      hc)
+      hc))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Uses.live once n is known to be a resource of g or not (hit)
@@ -4812,7 +4813,12 @@ def Uses.live(
   )
 
 def Spec.Node.uses_through(s, b, u, h, c):
-  x => y =>
+  +s = s
+  +b = b
+  +u = u
+  +h = h
+  +c = c
+  x => y => Reaches.Reach.of_in(~Resources.Name, ~Uses, ~Resources.Name.same, ~Uses.succ, ~Uses.nodes, ~Resources.Name.same_refl, ~Resources.Name.same_sound, Uses.of(s, b), u, c)(
     Reaches.Reach.in_through(
       ~Resources.Name,
       ~Uses,
@@ -4826,7 +4832,8 @@ def Spec.Node.uses_through(s, b, u, h, c):
       u,
       h,
       c
-    )(x)(y)
+    )(Reaches.Reach.to_in(~Resources.Name, ~Uses, ~Resources.Name.same, ~Uses.succ, ~Uses.nodes, ~Resources.Name.same_refl, ~Resources.Name.same_sound, Uses.of(s, b), u, h)(x))(Reaches.Reach.to_in(~Resources.Name, ~Uses, ~Resources.Name.same, ~Uses.succ, ~Uses.nodes, ~Resources.Name.same_refl, ~Resources.Name.same_sound, Uses.of(s, b), h, c)(y))
+  )
 
 # Touch laws
 # ----------
@@ -5791,7 +5798,7 @@ def Spec.Node.inside_member(s, m, g, ms):
   +m = m
   +g = g
   +ms = ms
-  hm => hx =>
+  hm => hx => Reaches.Reach.of_in(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, ~Groups.nodes, ~Member.same_refl, ~Member.same_sound, Groups.of(s), Spec.Member.group{g}, m)(
     Reaches.Reach.go_has(
       ~Spec.Member,
       ~Groups,
@@ -5806,9 +5813,14 @@ def Spec.Node.inside_member(s, m, g, ms):
         {Shared.List.has(~Spec.Member, ~Spec.Member.same, Maybe.default(&2, List<&2, Spec.Member>, _, []), m) == True{}: Bool}
       hx
     )
+  )
 
 def Spec.Node.inside_through(s, m, h, g):
-  x => y =>
+  +s = s
+  +m = m
+  +h = h
+  +g = g
+  x => y => Reaches.Reach.of_in(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, ~Groups.nodes, ~Member.same_refl, ~Member.same_sound, Groups.of(s), Spec.Member.group{g}, m)(
     Reaches.Reach.in_through(
       ~Spec.Member,
       ~Groups,
@@ -5822,7 +5834,10 @@ def Spec.Node.inside_through(s, m, h, g):
       Spec.Member.group{g},
       Spec.Member.group{h},
       m
-    )(x)(y)
+    )(Reaches.Reach.to_in(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, ~Groups.nodes, ~Member.same_refl, ~Member.same_sound, Groups.of(s), Spec.Member.group{g}, Spec.Member.group{h})(x))(
+      Reaches.Reach.to_in(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, ~Groups.nodes, ~Member.same_refl, ~Member.same_sound, Groups.of(s), Spec.Member.group{h}, m)(y)
+    )
+  )
 
 # no path starts from no member
 def Group.no_path(ps: List<&2, Spec.Member>, gs: Groups, m: Spec.Member) -> {
@@ -5872,7 +5887,7 @@ def Group.unfold(ps: List<&2, Spec.Member>, +s: Spec.State(), +g: String, +m: Sp
                     Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.succ(Groups.of(s), Spec.Member.group{g}), Spec.Member.group{h}),
                     Reaches.Reach.path(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, r, Group.succ(Groups.of(s), Spec.Member.group{h}), Groups.of(s), m)
                   )(x),
-                  Reaches.Reach.path_in(
+                  Reaches.Reach.of_in(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, ~Groups.nodes, ~Member.same_refl, ~Member.same_sound, Groups.of(s), Spec.Member.group{h}, m)(Reaches.Reach.path_in(
                     ~Spec.Member,
                     ~Groups,
                     ~Spec.Member.same,
@@ -5889,7 +5904,7 @@ def Group.unfold(ps: List<&2, Spec.Member>, +s: Spec.State(), +g: String, +m: Sp
                       Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.succ(Groups.of(s), Spec.Member.group{g}), Spec.Member.group{h}),
                       Reaches.Reach.path(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, r, Group.succ(Groups.of(s), Spec.Member.group{h}), Groups.of(s), m)
                     )(x)
-                  )
+                  ))
                 )
               )
             }
@@ -5930,7 +5945,7 @@ def Spec.Node.inside_unfold(s, m, g):
       Group.succ(Groups.of(s), Spec.Member.group{g}),
       Groups.of(s),
       m
-    )(x)
+    )(Reaches.Reach.to_in(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, ~Groups.nodes, ~Member.same_refl, ~Member.same_sound, Groups.of(s), Spec.Member.group{g}, m)(x))
   )
 
 # Notices since

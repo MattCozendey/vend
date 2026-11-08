@@ -1865,3 +1865,316 @@ def Reach.path_in(
   )
 
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# Fast search
+# -----------
+# Reach.fast finds what Reach.go finds (Reach.fast_go), but stops at the first
+# level that has m, and keeps each node once in a level, so a level is never
+# longer than the graph.
+
+# the nodes of xs, each once: where it last comes
+def Reach.uniq(~A: Data, ~same: A -> A -> Bool, xs: List<&2, A>) -> List<&2, A>:
+  match xs:
+    case Nil{}:
+      []
+    case Con{+x, +r}:
+      List.filter.put(A, x, Reach.uniq(~A, ~same, r), Bool.not(Shared.List.has(~A, ~same, r, x)))
+
+# Reach.has_uniq at the first node x, once r is known to have it or not (k)
+# and x is known to be m or not (hit)
+def Reach.has_uniq.at(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
+  k: Bool,
+  hit: Bool,
+  +x: A,
+  +r: List<&2, A>,
+  +us: List<&2, A>,
+  +m: A,
+  ek: {Shared.List.has(~A, ~same, r, x) == k: Bool},
+  +eh: {same(x, m) == hit: Bool},
+  +ih: {Shared.List.has(~A, ~same, us, m) == Shared.List.has(~A, ~same, r, m): Bool}
+) -> {Shared.List.has(~A, ~same, List.filter.put(A, x, us, Bool.not(k)), m) == List.any.if(u => Shared.List.has(~A, ~same, r, m), hit): Bool}:
+  match k hit:
+    case True{} True{}:
+      Equal.trans(
+        Bool,
+        Shared.List.has(~A, ~same, us, m),
+        Shared.List.has(~A, ~same, r, m),
+        True{},
+        ih,
+        %sound(x, m)(eh): {Shared.List.has(~A, ~same, r, _) == True{}: Bool}
+        ek
+      )
+    case True{} False{}:
+      ih
+    case False{} h:
+      %Equal.sym(Bool, same(x, m), h, eh): {List.any.if(u => Shared.List.has(~A, ~same, us, m), _) == List.any.if(u => Shared.List.has(~A, ~same, r, m), h): Bool}
+      Equal.cong(Bool, Bool, z => List.any.if(u => z, h), Shared.List.has(~A, ~same, us, m), Shared.List.has(~A, ~same, r, m), ih)
+
+# uniq keeps every node
+def Reach.has_uniq(~A: Data, ~same: A -> A -> Bool, ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A}, xs: List<&2, A>, +m: A) -> {
+  Shared.List.has(~A, ~same, Reach.uniq(~A, ~same, xs), m) == Shared.List.has(~A, ~same, xs, m): Bool
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+x, +r}:
+      Reach.has_uniq.at(
+        ~A,
+        ~same,
+        ~sound,
+        Shared.List.has(~A, ~same, r, x),
+        same(x, m),
+        x,
+        r,
+        Reach.uniq(~A, ~same, r),
+        m,
+        {==},
+        {==},
+        Reach.has_uniq(~A, ~same, ~sound, r, m)
+      )
+
+# a path from a level is a path from the level without its repeats
+def Reach.path_uniq(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
+  ps: List<&2, A>,
+  +xs: List<&2, A>,
+  +g: V,
+  +m: A
+) -> {
+  Reach.path(~A, ~V, ~same, ~succ, ps, Reach.uniq(~A, ~same, xs), g, m) == Reach.path(~A, ~V, ~same, ~succ, ps, xs, g, m): Bool
+}:
+  match ps:
+    case Nil{}:
+      Reach.has_uniq(~A, ~same, ~sound, xs, m)
+    case Con{+p, r}:
+      Equal.cong(
+        Bool,
+        Bool,
+        z => Bool.and(z, Reach.path(~A, ~V, ~same, ~succ, r, succ(g)(p), g, m)),
+        Shared.List.has(~A, ~same, Reach.uniq(~A, ~same, xs), p),
+        Shared.List.has(~A, ~same, xs, p),
+        Reach.has_uniq(~A, ~same, ~sound, xs, p)
+      )
+
+# a search of a level without its repeats finds what a search of the level finds
+def Reach.go_uniq.to(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
+  +f: Nat,
+  +xs: List<&2, A>,
+  +g: V,
+  +m: A,
+  w: &ps: List<&2, A> -> {Reach.path(~A, ~V, ~same, ~succ, ps, Reach.uniq(~A, ~same, xs), g, m) == True{}: Bool}
+    & {Reach.fits(A, ps, f) == True{}: Bool}
+) -> {Reach.go(~A, ~V, ~same, ~succ, f, xs, g, m) == True{}: Bool}:
+  match w:
+    case (+ps, (hp, hf)):
+      Reach.path_go(~A, ~V, ~same, ~succ, ~sound, ps, f, xs, g, m)(
+        Equal.trans(
+          Bool,
+          Reach.path(~A, ~V, ~same, ~succ, ps, xs, g, m),
+          Reach.path(~A, ~V, ~same, ~succ, ps, Reach.uniq(~A, ~same, xs), g, m),
+          True{},
+          Equal.sym(
+            Bool,
+            Reach.path(~A, ~V, ~same, ~succ, ps, Reach.uniq(~A, ~same, xs), g, m),
+            Reach.path(~A, ~V, ~same, ~succ, ps, xs, g, m),
+            Reach.path_uniq(~A, ~V, ~same, ~succ, ~sound, ps, xs, g, m)
+          ),
+          hp
+        )
+      )(hf)
+
+# a search of a level finds what a search of it without its repeats finds
+def Reach.go_uniq.from(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
+  +f: Nat,
+  +xs: List<&2, A>,
+  +g: V,
+  +m: A,
+  w: &ps: List<&2, A> -> {Reach.path(~A, ~V, ~same, ~succ, ps, xs, g, m) == True{}: Bool} & {Reach.fits(A, ps, f) == True{}: Bool}
+) -> {Reach.go(~A, ~V, ~same, ~succ, f, Reach.uniq(~A, ~same, xs), g, m) == True{}: Bool}:
+  match w:
+    case (+ps, (hp, hf)):
+      Reach.path_go(~A, ~V, ~same, ~succ, ~sound, ps, f, Reach.uniq(~A, ~same, xs), g, m)(
+        Equal.trans(
+          Bool,
+          Reach.path(~A, ~V, ~same, ~succ, ps, Reach.uniq(~A, ~same, xs), g, m),
+          Reach.path(~A, ~V, ~same, ~succ, ps, xs, g, m),
+          True{},
+          Reach.path_uniq(~A, ~V, ~same, ~succ, ~sound, ps, xs, g, m),
+          hp
+        )
+      )(hf)
+
+# repeats in a level change nothing a search finds
+def Reach.go_uniq(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  ~refl: @a: A -> {same(a, a) == True{}: Bool},
+  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
+  +f: Nat,
+  +xs: List<&2, A>,
+  +g: V,
+  +m: A
+) -> {Reach.go(~A, ~V, ~same, ~succ, f, Reach.uniq(~A, ~same, xs), g, m) == Reach.go(~A, ~V, ~same, ~succ, f, xs, g, m): Bool}:
+  Shared.Bool.iff(
+    Reach.go(~A, ~V, ~same, ~succ, f, Reach.uniq(~A, ~same, xs), g, m),
+    Reach.go(~A, ~V, ~same, ~succ, f, xs, g, m),
+    h => Reach.go_uniq.to(~A, ~V, ~same, ~succ, ~sound, f, xs, g, m, Reach.go_path(~A, ~V, ~same, ~succ, ~refl, f, Reach.uniq(~A, ~same, xs), g, m)(h)),
+    h => Reach.go_uniq.from(~A, ~V, ~same, ~succ, ~sound, f, xs, g, m, Reach.go_path(~A, ~V, ~same, ~succ, ~refl, f, xs, g, m)(h))
+  )
+
+# m is in the level xs, or in one of the f levels below it: the levels without
+# their repeats, and no level after the first that has m
+def Reach.fast(~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>, f: Nat, +xs: List<&2, A>, +g: V, +m: A) -> Bool:
+  match f:
+    case 0n:
+      Shared.List.has(~A, ~same, xs, m)
+    case 1n+e:
+      List.any.if(
+        u => Reach.fast(~A, ~V, ~same, ~succ, e, Reach.uniq(~A, ~same, Reach.next(~A, ~V, ~succ, xs, g)), g, m),
+        Shared.List.has(~A, ~same, xs, m)
+      )
+
+# the fast search finds what the search finds
+def Reach.fast_go(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  ~refl: @a: A -> {same(a, a) == True{}: Bool},
+  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
+  f: Nat,
+  +xs: List<&2, A>,
+  +g: V,
+  +m: A
+) -> {Reach.fast(~A, ~V, ~same, ~succ, f, xs, g, m) == Reach.go(~A, ~V, ~same, ~succ, f, xs, g, m): Bool}:
+  match f:
+    case 0n:
+      {==}
+    case 1n+e:
+      +e = e
+      +n = Reach.next(~A, ~V, ~succ, xs, g)
+      Equal.trans(
+        Bool,
+        List.any.if(u => Reach.fast(~A, ~V, ~same, ~succ, e, Reach.uniq(~A, ~same, n), g, m), Shared.List.has(~A, ~same, xs, m)),
+        List.any.if(u => Reach.go(~A, ~V, ~same, ~succ, e, n, g, m), Shared.List.has(~A, ~same, xs, m)),
+        Bool.or(Shared.List.has(~A, ~same, xs, m), Reach.go(~A, ~V, ~same, ~succ, e, n, g, m)),
+        Equal.cong(
+          Bool,
+          Bool,
+          z => List.any.if(u => z, Shared.List.has(~A, ~same, xs, m)),
+          Reach.fast(~A, ~V, ~same, ~succ, e, Reach.uniq(~A, ~same, n), g, m),
+          Reach.go(~A, ~V, ~same, ~succ, e, n, g, m),
+          Equal.trans(
+            Bool,
+            Reach.fast(~A, ~V, ~same, ~succ, e, Reach.uniq(~A, ~same, n), g, m),
+            Reach.go(~A, ~V, ~same, ~succ, e, Reach.uniq(~A, ~same, n), g, m),
+            Reach.go(~A, ~V, ~same, ~succ, e, n, g, m),
+            Reach.fast_go(~A, ~V, ~same, ~succ, ~refl, ~sound, e, Reach.uniq(~A, ~same, n), g, m),
+            Reach.go_uniq(~A, ~V, ~same, ~succ, ~refl, ~sound, e, n, g, m)
+          )
+        ),
+        Shared.Bool.or_lazy(Shared.List.has(~A, ~same, xs, m), Reach.go(~A, ~V, ~same, ~succ, e, n, g, m))
+      )
+
+# m is a successor of x, or a successor of one, at any depth: Reach.in, fast
+def Reach.in_fast(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  ~nodes: V -> List<&2, A>,
+  +g: V,
+  x: A,
+  m: A
+) -> Bool:
+  Reach.fast(~A, ~V, ~same, ~succ, List.length(&2, A, nodes(g)), succ(g)(x), g, m)
+
+# the fast search answers as Reach.in
+def Reach.fast_in(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  ~nodes: V -> List<&2, A>,
+  ~refl: @a: A -> {same(a, a) == True{}: Bool},
+  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
+  +g: V,
+  +x: A,
+  +m: A
+) -> {Reach.in_fast(~A, ~V, ~same, ~succ, ~nodes, g, x, m) == Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, m): Bool}:
+  Reach.fast_go(~A, ~V, ~same, ~succ, ~refl, ~sound, List.length(&2, A, nodes(g)), succ(g)(x), g, m)
+
+# what the fast search finds, Reach.in finds
+def Reach.to_in(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  ~nodes: V -> List<&2, A>,
+  ~refl: @a: A -> {same(a, a) == True{}: Bool},
+  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
+  +g: V,
+  +x: A,
+  +m: A
+) -> {Reach.in_fast(~A, ~V, ~same, ~succ, ~nodes, g, x, m) == True{}: Bool} -> {
+  Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, m) == True{}: Bool
+}:
+  h => Equal.trans(
+    Bool,
+    Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, m),
+    Reach.in_fast(~A, ~V, ~same, ~succ, ~nodes, g, x, m),
+    True{},
+    Equal.sym(
+      Bool,
+      Reach.in_fast(~A, ~V, ~same, ~succ, ~nodes, g, x, m),
+      Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, m),
+      Reach.fast_in(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, g, x, m)
+    ),
+    h
+  )
+
+# what Reach.in finds, the fast search finds
+def Reach.of_in(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  ~nodes: V -> List<&2, A>,
+  ~refl: @a: A -> {same(a, a) == True{}: Bool},
+  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
+  +g: V,
+  +x: A,
+  +m: A
+) -> {Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, m) == True{}: Bool} -> {
+  Reach.in_fast(~A, ~V, ~same, ~succ, ~nodes, g, x, m) == True{}: Bool
+}:
+  h => Equal.trans(
+    Bool,
+    Reach.in_fast(~A, ~V, ~same, ~succ, ~nodes, g, x, m),
+    Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, m),
+    True{},
+    Reach.fast_in(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, g, x, m),
+    h
+  )
