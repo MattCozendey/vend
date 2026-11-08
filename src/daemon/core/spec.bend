@@ -1,1133 +1,487 @@
 import Base
 import ../../shared/bytes.bend as Octets
+import ../../shared/cells.bend as Cells
+import ../../shared/formats.bend as Formats
+import ../../shared/lists.bend as Lists
+import ../../shared/maybes.bend as Maybes
 import ../../shared/resources.bend as Resources
+import ../../shared/tries.bend as Tries
 
 # The pure core of a Vend Node: what it holds, what it answers, and the laws
 # about both. transport/spec.bend carries it over IO as the public API
 # (README, Public API).
+#
+# A node holds entries in slots. Two nodes sync by joining what they hold, so
+# every node that took in the same entries holds the same state, in any order
+# and any number of times (Tries.Trie.union_comm, union_assoc, union_idem, with
+# the laws of Cells.Cell.join). Every answer is read from the state alone.
+#
+# A chain (a branch, or an owner group) is a list of versions. Its first
+# version is the request that a root entry names; each next one is the
+# request that most of the chain's owners vote for, after the version before
+# it. A slot with two different entries holds Many: the request, the vote or
+# the root in it counts for nothing.
 
 # Names
 # -----
+# A node, writer, branch, group, mark, request ID and time are texts.
 
-# a Vend Node
-law VendNode:
-  Data
+# a request: the writer that made it and the ID that the writer gave it. A
+# version is the request that made it.
+type Id is Data:
+  Id{writer: String, request: String}
 
-# the node that t names
-law VendNode.read:
-  for t: String
-  Maybe<&2, VendNode>
+# what has versions and owners: a branch, or an owner group
+type Chain is Data:
+  Chain.Branch{name: String}
+  Chain.Group{name: String}
 
-# the text of n
-law VendNode.show:
-  for n: VendNode
-  String
+# a member of an owner group: a node, or another group
+type Member is Data:
+  Member.Node{name: String}
+  Member.Group{name: String}
 
-# an owner group
-law Group:
-  Data
-
-# the group that t names
-law Group.read:
-  for t: String
-  Maybe<&2, Group>
-
-# the text of g
-law Group.show:
-  for g: Group
-  String
-
-# a space: the resources that version together
-law Space:
-  Data
-
-# the space that t names
-law Space.read:
-  for t: String
-  Maybe<&2, Space>
-
-# the text of s
-law Space.show:
-  for s: Space
-  String
-
-# a branch
-law Branch:
-  Data
-
-# the branch that t names
-law Branch.read:
-  for t: String
-  Maybe<&2, Branch>
-
-# the text of b
-law Branch.show:
-  for b: Branch
-  String
-
-# a mark: a named point of a branch
-law Mark:
-  Data
-
-# the mark that t names
-law Mark.read:
-  for t: String
-  Maybe<&2, Mark>
-
-# the text of m
-law Mark.show:
-  for m: Mark
-  String
-
-# a writer
-law Writer:
-  Data
-
-# the writer that t names
-law Writer.read:
-  for t: String
-  Maybe<&2, Writer>
-
-# the text of w
-law Writer.show:
-  for w: Writer
-  String
-
-# a version
-law Version:
-  Data
-
-# the version that t names
-law Version.read:
-  for t: String
-  Maybe<&2, Version>
-
-# the text of v
-law Version.show:
-  for v: Version
-  String
-
-# the ID of a request that changes something
-law RequestId:
-  Data
-
-# the request ID that t names
-law RequestId.read:
-  for t: String
-  Maybe<&2, RequestId>
-
-# the text of r
-law RequestId.show:
-  for r: RequestId
-  String
-
-# a position, to start from with "since"
-law Position:
-  Data
-
-# the position that t names
-law Position.read:
-  for t: String
-  Maybe<&2, Position>
-
-# the text of p
-law Position.show:
-  for p: Position
-  String
-
-# a stored conflict
-law Conflict:
-  Data
-
-# the conflict that t names
-law Conflict.read:
-  for t: String
-  Maybe<&2, Conflict>
-
-# the text of c
-law Conflict.show:
-  for c: Conflict
-  String
-
-# the epoch of an owner group: which ownership accepted a write
-law Epoch:
-  Data
-
-# the epoch that t names
-law Epoch.read:
-  for t: String
-  Maybe<&2, Epoch>
-
-# the text of e
-law Epoch.show:
-  for e: Epoch
-  String
-
-# a time
-law Time:
-  Data
-
-# the time that t names
-law Time.read:
-  for t: String
-  Maybe<&2, Time>
-
-# the text of t
-law Time.show:
-  for t: Time
-  String
-
-# a format: what decodes content into items (bend, c, text)
-law Format:
-  Data
-
-# the format that t names
-law Format.read:
-  for t: String
-  Maybe<&2, Format>
-
-# the text of f
-law Format.show:
-  for f: Format
-  String
-
-# where an item is in its resource
-law Place:
-  Data
-
-# the place that t names
-law Place.read:
-  for t: String
-  Maybe<&2, Place>
-
-# the text of p
-law Place.show:
-  for p: Place
-  String
-
-# Values that callers make
-# ------------------------
-
-# a point: a version, the newest version of a branch, or a mark of a branch
-type Point is Data:
-  Point.At{version: Version}
-  Point.Head{branch: Branch}
-  Point.Mark{branch: Branch, mark: Mark}
-
-# new content: bytes, or the content of an old version
+# new content: bytes, or what an old version held
 type Content is Data:
   Content.Bytes{bytes: Octets.Bytes()}
-  Content.Of{version: Version}
+  Content.Of{version: Id}
 
-# who asks for a change, and when: what a pure step records with it
+# a version, the newest version of a branch, or a mark of a branch
+type Point is Data:
+  Point.At{version: Id}
+  Point.Head{branch: String}
+  Point.Mark{branch: String, mark: String}
+
+# Requests
+# --------
+# A request is data alone: a point becomes a version before it is asked for,
+# so that a request sent again, to any node, is the same request.
+
+# a change that a writer asks for
+type Ask is Data:
+  Ask.Write{branch: String, name: Resources.Name, base: Maybe<&2, Id>, content: Content}
+  Ask.SetBranch{branch: String, to: Id}
+  Ask.Merge{branch: String, from: Id}
+  Ask.Resolve{branch: String, conflict: Id, name: Resources.Name, content: Content}
+  Ask.Mark{branch: String, mark: String, message: String}
+  Ask.SetOwner{chain: Chain, members: List<&2, String>}
+  Ask.SetGroup{group: String, members: List<&2, Member>}
+
+# the chain that q changes
+def Ask.chain(q: Ask) -> Chain:
+  match q:
+    case Ask.Write{b, n, base, c}:
+      Chain.Branch{b}
+    case Ask.SetBranch{b, v}:
+      Chain.Branch{b}
+    case Ask.Merge{b, v}:
+      Chain.Branch{b}
+    case Ask.Resolve{b, k, n, c}:
+      Chain.Branch{b}
+    case Ask.Mark{b, m, t}:
+      Chain.Branch{b}
+    case Ask.SetOwner{c, ms}:
+      c
+    case Ask.SetGroup{g, ms}:
+      Chain.Group{g}
+
+# who asks for a change, and when
 type Envelope is Data:
-  Envelope{id: RequestId, writer: Writer, time: Time}
+  Envelope{id: String, writer: String, time: String}
 
-# the request ID of e
-def Envelope.id(e: Envelope) -> RequestId:
+# the request of e
+def Envelope.of(e: Envelope) -> Id:
   match e:
     case Envelope{r, w, t}:
-      r
+      Id{w, r}
 
-# a member of an owner group
-type Member is Data:
-  Member.VendNode{node: VendNode}
-  Member.Group{group: Group}
+# Entries
+# -------
 
-# what a subscription or a poll follows: on a branch, or the groups
-type Topic is Data:
-  Topic.Affects{branch: Branch}
-  Topic.Conflicts{branch: Branch}
-  Topic.Versions{branch: Branch}
-  Topic.Groups{}
+# a request, with its time; a vote of a node for a version; or a node's claim
+# of the first version of a chain, which that node owns then
+type Entry is Data:
+  Entry.Ask{id: Id, time: String, ask: Ask}
+  Entry.Vote{choice: Id}
+  Entry.Root{chain: Chain, first: Id, owner: String}
 
-# Items
-# -----
+# where an entry is: a request by its ID, a vote by its node and the version
+# that it follows, a root by its chain and the node that claims it
+type Slot is Data:
+  Slot.Ask{id: Id}
+  Slot.Vote{node: String, chain: Chain, after: Id}
+  Slot.Root{chain: Chain, owner: String}
 
-# a unit of content that a format decoded (a function, a type, a line)
-law Item:
-  Data
+# the key of i
+def Id.key(i: Id) -> List<&2, Bool>:
+  match i:
+    case Id{w, r}:
+      List.append(&2, Bool, Tries.Trie.text(w), Tries.Trie.text(r))
 
-# the format that decoded i
-law Item.format:
-  for i: Item
-  Format
+# the key of c
+def Chain.key(c: Chain) -> List<&2, Bool>:
+  match c:
+    case Chain.Branch{n}:
+      False{} <> Tries.Trie.text(n)
+    case Chain.Group{n}:
+      True{} <> Tries.Trie.text(n)
 
-# the label that the format gives i (function, type, line)
-law Item.kind:
-  for i: Item
-  String
+# the start of the keys of the roots of c
+def Root.key(c: Chain) -> List<&2, Bool>:
+  True{} <> True{} <> Chain.key(c)
 
-# the name of i
-law Item.name:
-  for i: Item
-  String
+# the key of k: no two slots share one
+def Slot.key(k: Slot) -> List<&2, Bool>:
+  match k:
+    case Slot.Ask{i}:
+      False{} <> Id.key(i)
+    case Slot.Vote{n, c, i}:
+      True{} <> False{} <> List.append(&2, Bool, Tries.Trie.text(n), List.append(&2, Bool, Chain.key(c), Id.key(i)))
+    case Slot.Root{c, n}:
+      List.append(&2, Bool, Root.key(c), Tries.Trie.text(n))
 
-# where i is
-law Item.place:
-  for i: Item
-  Place
+# Equality
+# --------
 
-# the condition under which i exists, in the format's own text
-law Item.condition:
-  for i: Item
-  Maybe<&2, String>
+# a and b are the same request
+def Id.same(a: Id, b: Id) -> Bool:
+  match a b:
+    case Id{w1, r1} Id{w2, r2}:
+      Bool.and(String.eq(w1, w2), String.eq(r1, r2))
 
-# the item that i is inside
-law Item.parent:
-  for i: Item
-  Maybe<&2, Item>
+# a and b are the same chain
+def Chain.same(a: Chain, b: Chain) -> Bool:
+  match a b:
+    case Chain.Branch{x} Chain.Branch{y}:
+      String.eq(x, y)
+    case Chain.Group{x} Chain.Group{y}:
+      String.eq(x, y)
+    case _ _:
+      False{}
 
-# a change between two points, item by item
-type Change is Data:
-  Change.Added{item: Item}
-  Change.Removed{item: Item}
-  Change.Edited{before: Item, after: Item}
+# a and b are the same member
+def Member.same(a: Member, b: Member) -> Bool:
+  match a b:
+    case Member.Node{x} Member.Node{y}:
+      String.eq(x, y)
+    case Member.Group{x} Member.Group{y}:
+      String.eq(x, y)
+    case _ _:
+      False{}
 
-# a change that touches an item that other work uses
-law Touch:
-  Data
+# a and b are the same content
+def Content.same(a: Content, b: Content) -> Bool:
+  match a b:
+    case Content.Bytes{x} Content.Bytes{y}:
+      Octets.Bytes.is_eq(x, y)
+    case Content.Of{x} Content.Of{y}:
+      Id.same(x, y)
+    case _ _:
+      False{}
 
-# the version that made the change
-law Touch.version:
-  for t: Touch
-  Version
+# a and b are the same resource
+def Name.same(a: Resources.Name, b: Resources.Name) -> Bool:
+  String.eq(Resources.Name.show(a), Resources.Name.show(b))
 
-# the item that changed
-law Touch.changed:
-  for t: Touch
-  Item
+# a and b are the same change
+def Ask.same(a: Ask, b: Ask) -> Bool:
+  match a b:
+    case Ask.Write{b1, n1, v1, c1} Ask.Write{b2, n2, v2, c2}:
+      Bool.and(
+        String.eq(b1, b2),
+        Bool.and(Name.same(n1, n2), Bool.and(Maybes.Maybe.same(~Id, ~Id.same, v1, v2), Content.same(c1, c2)))
+      )
+    case Ask.SetBranch{b1, v1} Ask.SetBranch{b2, v2}:
+      Bool.and(String.eq(b1, b2), Id.same(v1, v2))
+    case Ask.Merge{b1, v1} Ask.Merge{b2, v2}:
+      Bool.and(String.eq(b1, b2), Id.same(v1, v2))
+    case Ask.Resolve{b1, k1, n1, c1} Ask.Resolve{b2, k2, n2, c2}:
+      Bool.and(String.eq(b1, b2), Bool.and(Id.same(k1, k2), Bool.and(Name.same(n1, n2), Content.same(c1, c2))))
+    case Ask.Mark{b1, m1, t1} Ask.Mark{b2, m2, t2}:
+      Bool.and(String.eq(b1, b2), Bool.and(String.eq(m1, m2), String.eq(t1, t2)))
+    case Ask.SetOwner{c1, ms1} Ask.SetOwner{c2, ms2}:
+      Bool.and(Chain.same(c1, c2), Lists.List.same(~String, ~String.eq, ms1, ms2))
+    case Ask.SetGroup{g1, ms1} Ask.SetGroup{g2, ms2}:
+      Bool.and(String.eq(g1, g2), Lists.List.same(~Member, ~Member.same, ms1, ms2))
+    case _ _:
+      False{}
 
-# the item that uses it
-law Touch.used:
-  for t: Touch
-  Item
+# a and b are the same entry
+def Entry.same(a: Entry, b: Entry) -> Bool:
+  match a b:
+    case Entry.Ask{i1, t1, q1} Entry.Ask{i2, t2, q2}:
+      Bool.and(Id.same(i1, i2), Bool.and(String.eq(t1, t2), Ask.same(q1, q2)))
+    case Entry.Vote{i1} Entry.Vote{i2}:
+      Id.same(i1, i2)
+    case Entry.Root{c1, i1, n1} Entry.Root{c2, i2, n2}:
+      Bool.and(Chain.same(c1, c2), Bool.and(Id.same(i1, i2), String.eq(n1, n2)))
+    case _ _:
+      False{}
 
-# Answers that callers read
-# -------------------------
+# Entry.same is True for an entry and itself
+law Entry.same_refl:
+  for a: Entry
+  {Entry.same(a, a) == True{}: Bool}
 
-# a branch, as try_get_branches lists it
-law BranchEntry:
-  Data
+# Entry.same is True only for equal entries
+law Entry.same_sound:
+  for a: Entry
+  for b: Entry
+  {Entry.same(a, b) == True{}: Bool} -> {a == b: Entry}
 
-# the branch
-law BranchEntry.branch:
-  for e: BranchEntry
-  Branch
+# The state
+# ---------
 
-# its owner group
-law BranchEntry.owner:
-  for e: BranchEntry
-  Group
+# what a node holds: the cell of each slot, by the slot's key
+def State() -> Data:
+  Tries.Trie<Cells.Cell<Entry>>
 
-# its newest version
-law BranchEntry.newest:
-  for e: BranchEntry
-  Version
+# a node that holds nothing yet
+def Node.empty() -> State():
+  Tries.Tip{}
 
-# a version, as try_get_log lists it
-law LogEntry:
-  Data
+# what a holder of a and of b holds: a sync
+def Node.join(a: State(), b: State()) -> State():
+  Tries.Trie.union(~Cells.Cell<Entry>, ~Cells.Cell.join(~Entry, ~Entry.same), a, b)
 
-# the version
-law LogEntry.version:
-  for e: LogEntry
-  Version
+# what a holder of r lacks of s: what a sync from s to r sends
+# (Tries.Trie.union_minus)
+def Node.missing(s: State(), r: State()) -> State():
+  Tries.Trie.minus(~Cells.Cell<Entry>, ~Cells.Cell.same(~Entry, ~Entry.same), s, r)
 
-# its writer
-law LogEntry.author:
-  for e: LogEntry
-  Writer
+# no entry of t contradicts one of s
+def Node.agrees(s: State(), t: State()) -> Bool:
+  Cells.Cell.agrees(~Entry, ~Entry.same, s, t)
 
-# when it was recorded
-law LogEntry.time:
-  for e: LogEntry
-  Time
+# the first claim among the cells cs that every holder agrees on
+def Root.first(cs: List<&2, Cells.Cell<Entry>>) -> Maybe<&2, Entry>:
+  match cs:
+    case Nil{}:
+      None{}
+    case Con{Cells.One{e}, r}:
+      Some{e}
+    case Con{Cells.Many{}, r}:
+      Root.first(r)
 
-# an event of a topic. GroupCycle: a sync took the group's members although
-# they close a cycle (see none_inside_itself_after); a set-group settles it.
-# MarkMoved: a sync met the same mark of another node, on another version, and
-# the smaller version won on both nodes
-type Notice is Data:
-  Notice.Touched{touch: Touch}
-  Notice.Conflicted{conflict: Conflict}
-  Notice.Versioned{branch: Branch, version: Version}
-  Notice.GroupCycle{group: Group, members: List<&2, Member>}
-  Notice.MarkMoved{branch: Branch, mark: Mark, from: Version, to: Version}
+# the claim of the first version of the chain c: when nodes claim it apart,
+# the one with the smallest key
+def Node.claim(s: State(), c: Chain) -> Maybe<&2, Entry>:
+  Root.first(Tries.Trie.values(Cells.Cell<Entry>, Tries.Trie.under(Cells.Cell<Entry>, s, Root.key(c))))
 
 # Answers
 # -------
 
-# whether a request that timed out happened
-type Outcome is Data:
-  Outcome.Applied{at: Position}
-  Outcome.NotSeen{}
+# where a request is. Written: in its chain. Conflicted: a merge or a resolve
+# in its chain, after which resources still clash. Pending: not in its chain
+# yet, and its owners may still vote for it. Stale: its owners cannot vote for
+# it at the head any more. Refused: it, or its chain, is contradicted, or it
+# changes a chain that does not exist.
+type Answer is Data:
+  Answer.Written{version: Id}
+  Answer.Conflicted{version: Id}
+  Answer.Pending{}
+  Answer.Stale{head: Id}
+  Answer.Refused{why: String}
+  Answer.NotSeen{}
 
-# Pending: the owner group was not reached, and may still turn it into a
-# conflict
-type Write is Data:
-  Write.Written{version: Version}
-  Write.Pending{version: Version}
-  Write.Stale{current: Version}
-  Write.Refused{why: String}
+# a branch, as Node.branches lists it
+type BranchEntry is Data:
+  BranchEntry{branch: String, owners: List<&2, String>, head: Id}
 
-# Partial: the submodules in missing could not be fetched
-type SetBranch is Data:
-  SetBranch.Created{version: Version}
-  SetBranch.Restored{version: Version}
-  SetBranch.Pending{version: Version}
-  SetBranch.Partial{version: Version, missing: List<&2, Space>}
-  SetBranch.Stale{current: Version}
-  SetBranch.Refused{why: String}
+# a version that changed a resource, as Node.log lists it
+type LogEntry is Data:
+  LogEntry{version: Id, time: String}
 
-type CreateMark is Data:
-  CreateMark.Marked{mark: Mark}
-  CreateMark.Taken{}
-  CreateMark.Refused{why: String}
+# what a subscription or a poll follows: the versions or the conflicts of a
+# branch, or the groups
+type Topic is Data:
+  Topic.Versions{branch: String}
+  Topic.Conflicts{branch: String}
+  Topic.Groups{}
 
-type Merge is Data:
-  Merge.Merged{version: Version}
-  Merge.Conflicted{conflict: Conflict}
-  Merge.Stale{current: Version}
-  Merge.Refused{why: String}
+# an event of a topic. GroupCycle: the group is inside itself, as syncs can
+# leave groups; a set-group settles it
+type Notice is Data:
+  Notice.Versioned{branch: String, version: Id}
+  Notice.Conflicted{branch: String, version: Id}
+  Notice.GroupCycle{group: String}
 
-# Left: the resources of the conflict that still clash
-type Resolve is Data:
-  Resolve.Resolved{version: Version}
-  Resolve.Left{names: List<&2, Resources.Name>}
-  Resolve.Stale{current: Version}
-  Resolve.Refused{why: String}
+# Reads
+# -----
 
-type SetOwner is Data:
-  SetOwner.Set{epoch: Epoch}
-  SetOwner.NoMajority{}
-  SetOwner.Refused{why: String}
+# the versions of the chain c, in order
+law Node.chain:
+  for s: State()
+  for c: Chain
+  List<&2, Id>
 
-# Cycle: the group would contain itself
-type SetGroup is Data:
-  SetGroup.Set{epoch: Epoch}
-  SetGroup.Cycle{}
-  SetGroup.NoMajority{}
-  SetGroup.Refused{why: String}
+# the nodes that vote for the next version of the chain c
+law Node.owners:
+  for s: State()
+  for c: Chain
+  List<&2, String>
 
-type Sync is Data:
-  Sync.Synced{}
-  Sync.Partial{}
-  Sync.Refused{why: String}
-
-# The pure node
-# -------------
-# What a node does, without IO: the laws are about these. Each try_
-# operation of transport/spec.bend asks a node to run its pure variant: a
-# read, or VendNode.ask for a change. Mounts, stops and connections have none:
-# their behavior is IO.
-
-# what a node holds
-law VendNode.State:
-  Data
-
-# the node n, holding nothing yet
-law VendNode.empty:
-  for n: VendNode
-  VendNode.State
-
-# the position of s, to start from with "since"
-law VendNode.position:
-  for s: VendNode.State
-  Position
-
-# every branch of s
-law VendNode.get_branches:
-  for s: VendNode.State
-  List<&2, BranchEntry>
-
-# the versions of the resource n on the branch b
-law VendNode.get_log:
-  for s: VendNode.State
-  for n: Resources.Name
-  for b: Branch
-  List<&2, LogEntry>
+# the newest version of the branch b, if b exists
+law Node.head:
+  for s: State()
+  for b: String
+  Maybe<&2, Id>
 
 # the bytes of the resource n at the point p, if it is there
-law VendNode.get_content:
-  for s: VendNode.State
+law Node.content:
+  for s: State()
   for n: Resources.Name
   for p: Point
   Maybe<&2, Octets.Bytes()>
 
+# the bytes of the resource n at the version base, if any
+law Node.content_at:
+  for s: State()
+  for n: Resources.Name
+  for base: Maybe<&2, Id>
+  Maybe<&2, Octets.Bytes()>
+
+# every branch
+law Node.branches:
+  for s: State()
+  List<&2, BranchEntry>
+
+# the versions of the branch b that changed the resource n
+law Node.log:
+  for s: State()
+  for n: Resources.Name
+  for b: String
+  List<&2, LogEntry>
+
 # what changed in the resource n from the point a to the point b
-law VendNode.get_diff:
-  for s: VendNode.State
+law Node.diff:
+  for s: State()
   for n: Resources.Name
   for a: Point
   for b: Point
-  List<&2, Change>
+  List<&2, Formats.Change>
 
-# the changes elsewhere that touch what the branch b uses
-law VendNode.get_affects:
-  for s: VendNode.State
-  for b: Branch
-  List<&2, Touch>
+# where the request i is
+law Node.answer:
+  for s: State()
+  for i: Id
+  Answer
 
-# what the changes up to the point p touch elsewhere
-law VendNode.get_impact:
-  for s: VendNode.State
-  for p: Point
-  List<&2, Touch>
+# the resources that still clash after the merge k
+law Node.conflict:
+  for s: State()
+  for k: Id
+  List<&2, Resources.Name>
 
-# whether the request r happened
-law VendNode.get_outcome:
-  for s: VendNode.State
-  for r: RequestId
-  Outcome
-
-# the notices of the topic t since the position p (from the start without
-# one)
-law VendNode.get_changes:
-  for s: VendNode.State
-  for t: Topic
-  for p: Maybe<&2, Position>
-  List<&2, Notice>
-
-# a change that a node can be asked for
-type Ask is Data:
-  Ask.Write{name: Resources.Name, branch: Branch, base: Maybe<&2, Version>, content: Content}
-  Ask.SetBranch{branch: Branch, point: Point}
-  Ask.CreateMark{branch: Branch, mark: Mark, message: String}
-  Ask.Merge{point: Point, branch: Branch}
-  Ask.Resolve{conflict: Conflict, name: Resources.Name, content: Content}
-  Ask.SetOwner{branch: Branch, group: Group}
-  Ask.SetGroup{group: Group, members: List<&2, Member>}
-  Ask.Sync{other: VendNode.State, since: Maybe<&2, Position>}
-
-# q is made on this node: anything but taking in another node
-def Ask.local(q: Ask) -> Bool:
-  match q:
-    case Ask.Sync{o, p}:
-      False{}
-    case _:
-      True{}
-
-# the answer to an Ask
-type Answer is Data:
-  Answer.Write{answer: Write}
-  Answer.SetBranch{answer: SetBranch}
-  Answer.CreateMark{answer: CreateMark}
-  Answer.Merge{answer: Merge}
-  Answer.Resolve{answer: Resolve}
-  Answer.SetOwner{answer: SetOwner}
-  Answer.SetGroup{answer: SetGroup}
-  Answer.Sync{answer: Sync}
-
-# s after the change q, beside its answer
-law VendNode.ask:
-  for s: VendNode.State
-  for e: Envelope
-  for q: Ask
-  VendNode.State & Answer
-
-# the epoch of the owner group of the branch b, if b exists
-law VendNode.get_epoch:
-  for s: VendNode.State
-  for b: Branch
-  Maybe<&2, Epoch>
-
-# the number of e: a later epoch has a larger one
-law Epoch.number:
-  for e: Epoch
-  Nat
-
-# the newest version of the branch b, if b exists
-law VendNode.get_head:
-  for s: VendNode.State
-  for b: Branch
-  Maybe<&2, Version>
-
-# the node of s is in the owner group of the branch b
-law VendNode.is_owner:
-  for s: VendNode.State
-  for b: Branch
-  Bool
-
-# the members that the group g was last set to; None for a group never set
-law VendNode.get_members:
-  for s: VendNode.State
-  for g: Group
+# the members of the group g, if g exists
+law Node.members:
+  for s: State()
+  for g: String
   Maybe<&2, List<&2, Member>>
 
 # m is a member of the group g, or of a group inside g
-law VendNode.is_inside:
-  for s: VendNode.State
+law Node.is_inside:
+  for s: State()
   for m: Member
-  for g: Group
+  for g: String
   Bool
+
+# the nodes inside the group g: what a set-owner to g asks for
+law Node.nodes:
+  for s: State()
+  for g: String
+  List<&2, String>
+
+# the notices of the topic t in s that since does not have
+law Node.notices:
+  for s: State()
+  for t: Topic
+  for since: State()
+  List<&2, Notice>
+
+# Changes
+# -------
+
+# s, after the node n took in the request q of e: the request, n's vote for
+# it when n owns its chain and q fits the head, or its root when q makes a
+# chain. A request that s holds already changes nothing.
+law Node.ask:
+  for n: String
+  for s: State()
+  for e: Envelope
+  for q: Ask
+  State()
+
+# s, after the node n voted at the head of each chain that it owns, for the
+# first request there that fits it
+law Node.vote:
+  for n: String
+  for s: State()
+  State()
 
 # Laws
 # ----
 
-# m is among ms: ms is ys, then m, then zs
-def Member.Among(m: Member, ms: List<&2, Member>) -> Type:
-  &ys: List<
-    &2,
-    Member> -> &zs: List<
-    &2,
-    Member> -> {ms == List.append(&2, Member, ys, m <> zs): List<&2, Member>}
-
-# m is a member of the group g in s
-def Member.Of(s: VendNode.State, g: Group, m: Member) -> Type:
-  &ms: List<
-    &2,
-    Member> -> {
-    VendNode.get_members(s, g) == Some{ms}: Maybe<&2, List<&2, Member>>
-  }
-    & Member.Among(m, ms)
-
-# a chain of groups ps from g to m: each group of ps is a member of the one
-# before it (the first, of g), and m is a member of the last
-def VendNode.Chain(s: VendNode.State, g: Group, ps: List<&2, Group>, m: Member) -> Type:
-  match ps:
-    case Nil{}:
-      Member.Of(s, g, m)
-    case Con{h, r}:
-      Member.Of(s, g, Member.Group{h}) & VendNode.Chain(s, h, r, m)
-
-# setting the members of g to a list with m closes a cycle: m is a group, and
-# when it is not g, g is inside it
-def Member.Closes(s: VendNode.State, g: Group, m: Member) -> Type:
-  match m:
-    case Member.VendNode{n}:
-      Empty
-    case Member.Group{h}:
-      {h != g: Group} -> {VendNode.is_inside(s, Member.Group{g}, h) == True{}: Bool}
-
-# a and b hold the same content, for every resource at every point
-def VendNode.SameContent(a: VendNode.State, b: VendNode.State) -> Type:
-  @n: Resources.Name -> @p: Point -> {
-    VendNode.get_content(a, n, p) == VendNode.get_content(b, n, p): Maybe<&2, Octets.Bytes()>
-  }
-
-# a change keeps every version that existed, with its content
-law history_kept:
-  for s: VendNode.State
-  for e: Envelope
-  for q: Ask
-  for t: VendNode.State
-  for a: Answer
-  for n: Resources.Name
-  for v: Version
-  for x: Octets.Bytes()
-  {
-    VendNode.ask(s, e, q) == (t, a): VendNode.State & Answer
-  } -> {
-    VendNode.get_content(s, n, Point.At{v}) == Some{x}: Maybe<&2, Octets.Bytes()>
-  } -> {VendNode.get_content(t, n, Point.At{v}) == Some{x}: Maybe<&2, Octets.Bytes()>}
-
-# a change sent again with the same request ID gives the same answer and
-# changes nothing more
-law retry_is_safe:
-  for s: VendNode.State
-  for r: RequestId
-  for w: Writer
-  for t1: Time
-  for t2: Time
-  for q: Ask
-  for s1: VendNode.State
-  for a1: Answer
-  {
-    VendNode.ask(s, Envelope{r, w, t1}, q) == (s1, a1): VendNode.State & Answer
-  } -> {VendNode.ask(s1, Envelope{r, w, t2}, q) == (s1, a1): VendNode.State & Answer}
-
-# on the owner, a new request that writes bytes on the head answers Written
-law write_at_head_is_written:
-  for s: VendNode.State
-  for r: RequestId
-  for w: Writer
-  for time: Time
-  for n: Resources.Name
-  for b: Branch
-  for v: Version
-  for x: Octets.Bytes()
-  exs t: VendNode.State
-  exs u: Version
-  {
-    VendNode.is_owner(s, b) == True{}: Bool
-  } -> {
-    VendNode.get_head(s, b) == Some{v}: Maybe<&2, Version>
-  } -> {
-    VendNode.get_outcome(s, r) == Outcome.NotSeen{}: Outcome
-  } -> {
-    VendNode.ask(
-      s,
-      Envelope{r, w, time},
-      Ask.Write{n, b, Some{v}, Content.Bytes{x}}
-    )
-      == (t, Answer.Write{Write.Written{u}}): VendNode.State
-      & Answer
-  }
-
-# after a write answers Written, the head of the branch holds the bytes
-law read_after_write:
-  for s: VendNode.State
-  for e: Envelope
-  for n: Resources.Name
-  for b: Branch
-  for base: Maybe<&2, Version>
-  for x: Octets.Bytes()
-  for t: VendNode.State
-  for v: Version
-  {
-    VendNode.get_outcome(s, Envelope.id(e)) == Outcome.NotSeen{}: Outcome
-  } -> {
-    VendNode.ask(
-      s,
-      e,
-      Ask.Write{n, b, base, Content.Bytes{x}}
-    )
-      == (t, Answer.Write{Write.Written{v}}): VendNode.State
-      & Answer
-  } -> {VendNode.get_content(t, n, Point.Head{b}) == Some{x}: Maybe<&2, Octets.Bytes()>}
-
-# a stale write changes no content, and its base is not the current version
-law stale_changes_nothing:
-  for s: VendNode.State
-  for e: Envelope
-  for n: Resources.Name
-  for b: Branch
-  for base: Maybe<&2, Version>
-  for x: Content
-  for t: VendNode.State
-  for current: Version
-  {
-    VendNode.get_outcome(s, Envelope.id(e)) == Outcome.NotSeen{}: Outcome
-  } -> {
-    VendNode.ask(
-      s,
-      e,
-      Ask.Write{n, b, base, x}
-    )
-      == (t, Answer.Write{Write.Stale{current}}): VendNode.State
-      & Answer
-  } -> VendNode.SameContent(t, s)
-    & {base != Some{current}: Maybe<&2, Version>}
-
-# when c starts from b, and each then writes a different resource, merging c
-# into b answers Merged and keeps both writes
-law merge_disjoint_keeps_both:
-  for s: VendNode.State
-  for s1: VendNode.State
-  for s2: VendNode.State
-  for s3: VendNode.State
-  for s4: VendNode.State
-  for a4: Answer
-  for e1: Envelope
-  for e2: Envelope
-  for e3: Envelope
-  for e4: Envelope
-  for b: Branch
-  for c: Branch
-  for n1: Resources.Name
-  for n2: Resources.Name
-  for base1: Maybe<&2, Version>
-  for base2: Maybe<&2, Version>
-  for x1: Octets.Bytes()
-  for x2: Octets.Bytes()
-  for v0: Version
-  for v1: Version
-  for v2: Version
-  exs v3: Version
-  {
-    VendNode.get_outcome(s, Envelope.id(e1)) == Outcome.NotSeen{}: Outcome
-  } -> {
-    VendNode.get_outcome(s1, Envelope.id(e2)) == Outcome.NotSeen{}: Outcome
-  } -> {
-    VendNode.get_outcome(s2, Envelope.id(e3)) == Outcome.NotSeen{}: Outcome
-  } -> {
-    VendNode.get_outcome(s3, Envelope.id(e4)) == Outcome.NotSeen{}: Outcome
-  } -> {
-    n1 != n2: Resources.Name
-  } -> {
-    VendNode.ask(
-      s,
-      e1,
-      Ask.SetBranch{c, Point.Head{b}}
-    )
-      == (s1, Answer.SetBranch{SetBranch.Created{v0}}): VendNode.State
-      & Answer
-  } -> {
-    VendNode.ask(
-      s1,
-      e2,
-      Ask.Write{n1, b, base1, Content.Bytes{x1}}
-    )
-      == (s2, Answer.Write{Write.Written{v1}}): VendNode.State
-      & Answer
-  } -> {
-    VendNode.ask(
-      s2,
-      e3,
-      Ask.Write{n2, c, base2, Content.Bytes{x2}}
-    )
-      == (s3, Answer.Write{Write.Written{v2}}): VendNode.State
-      & Answer
-  } -> {
-    VendNode.ask(s3, e4, Ask.Merge{Point.Head{c}, b}) == (s4, a4): VendNode.State & Answer
-  } -> {
-    a4 == Answer.Merge{Merge.Merged{v3}}: Answer
-  }
-    & {VendNode.get_content(s4, n1, Point.Head{b}) == Some{x1}: Maybe<&2, Octets.Bytes()>}
-    & {VendNode.get_content(s4, n2, Point.Head{b}) == Some{x2}: Maybe<&2, Octets.Bytes()>}
-
-# a merge that conflicts changes no content, and stores the conflict as the
-# one new conflict notice of the branch
-law conflict_changes_nothing:
-  for s: VendNode.State
-  for e: Envelope
-  for p: Point
-  for b: Branch
-  for t: VendNode.State
-  for k: Conflict
-  {
-    VendNode.get_outcome(s, Envelope.id(e)) == Outcome.NotSeen{}: Outcome
-  } -> {
-    VendNode.ask(
-      s,
-      e,
-      Ask.Merge{p, b}
-    )
-      == (t, Answer.Merge{Merge.Conflicted{k}}): VendNode.State
-      & Answer
-  } -> VendNode.SameContent(
-    t,
-    s
-  )
-    & {
-      VendNode.get_changes(
-        t,
-        Topic.Conflicts{b},
-        Some{VendNode.position(s)}
-      )
-        == [Notice.Conflicted{k}]: List<&2, Notice>
+# a chain only grows when no new entry contradicts an old one and its claim
+# stays: what a node answered Written stays so after such a sync
+law Node.chain_kept:
+  for s: State()
+  for t: State()
+  for c: Chain
+  {Node.agrees(s, t) == True{}: Bool}
+    -> {Node.claim(Node.join(s, t), c) == Node.claim(s, c): Maybe<&2, Entry>}
+    -> {
+      List.take(&2, Id, Node.chain(Node.join(s, t), c), List.length(&2, Id, Node.chain(s, c)))
+        == Node.chain(s, c): List<&2, Id>
     }
 
-# after the group g is set to ms, its members are exactly ms
-law members_after_set:
-  for s: VendNode.State
+# the sole owner of a branch writes a resource that did not change since its
+# base: the write is Written, and its version holds the bytes
+law Node.write_written:
+  for n: String
+  for s: State()
   for e: Envelope
-  for g: Group
-  for ms: List<&2, Member>
-  for t: VendNode.State
-  for x: Epoch
-  {
-    VendNode.get_outcome(s, Envelope.id(e)) == Outcome.NotSeen{}: Outcome
-  } -> {
-    VendNode.ask(
-      s,
-      e,
-      Ask.SetGroup{g, ms}
-    )
-      == (t, Answer.SetGroup{SetGroup.Set{x}}): VendNode.State
-      & Answer
-  } -> {VendNode.get_members(t, g) == Some{ms}: Maybe<&2, List<&2, Member>>}
+  for b: String
+  for name: Resources.Name
+  for base: Maybe<&2, Id>
+  for x: Octets.Bytes()
+  for v: Id
+  {Node.owners(s, Chain.Branch{b}) == [n]: List<&2, String>}
+    -> {Node.head(s, b) == Some{v}: Maybe<&2, Id>}
+    -> {Tries.Trie.get(Cells.Cell<Entry>, s, Slot.key(Slot.Ask{Envelope.of(e)})) == None{}: Maybe<&2, Cells.Cell<Entry>>}
+    -> {Tries.Trie.get(Cells.Cell<Entry>, s, Slot.key(Slot.Vote{n, Chain.Branch{b}, v})) == None{}: Maybe<&2, Cells.Cell<Entry>>}
+    -> {Node.content(s, name, Point.Head{b}) == Node.content_at(s, name, base): Maybe<&2, Octets.Bytes()>}
+    -> {
+      Node.answer(Node.ask(n, s, e, Ask.Write{b, name, base, Content.Bytes{x}}), Envelope.of(e))
+        == Answer.Written{Envelope.of(e)}: Answer
+    }
+      & {
+        Node.content(Node.ask(n, s, e, Ask.Write{b, name, base, Content.Bytes{x}}), name, Point.At{Envelope.of(e)})
+          == Some{x}: Maybe<&2, Octets.Bytes()>
+      }
 
-# setting the group g leaves the members of every other group
-law set_keeps_others:
-  for s: VendNode.State
+# the sole owner of a branch refuses a write of a resource that changed since
+# its base: the branch stays as it was
+law Node.write_stale:
+  for n: String
+  for s: State()
   for e: Envelope
-  for g: Group
-  for h: Group
-  for ms: List<&2, Member>
-  for t: VendNode.State
-  for a: Answer
-  {
-    VendNode.ask(s, e, Ask.SetGroup{g, ms}) == (t, a): VendNode.State & Answer
-  } -> {
-    h != g: Group
-  } -> {VendNode.get_members(t, h) == VendNode.get_members(s, h): Maybe<&2, List<&2, Member>>}
-
-# what is inside a group that is inside g is inside g
-law inside_through:
-  for s: VendNode.State
-  for m: Member
-  for h: Group
-  for g: Group
-  {
-    VendNode.is_inside(s, Member.Group{h}, g) == True{}: Bool
-  } -> {
-    VendNode.is_inside(s, m, h) == True{}: Bool
-  } -> {VendNode.is_inside(s, m, g) == True{}: Bool}
-
-# m is inside g exactly when a chain of groups leads from g to m
-law inside_has_chain:
-  for s: VendNode.State
-  for m: Member
-  for g: Group
-  {
-    VendNode.is_inside(s, m, g) == True{}: Bool
-  } -> &ps: List<&2, Group> -> VendNode.Chain(s, g, ps, m)
-
-law chain_is_inside:
-  for s: VendNode.State
-  for g: Group
-  for ps: List<&2, Group>
-  for m: Member
-  VendNode.Chain(s, g, ps, m) -> {VendNode.is_inside(s, m, g) == True{}: Bool}
-
-# a set-group answers Cycle exactly when one of its members closes a cycle
-law cycle_has_closer:
-  for s: VendNode.State
-  for e: Envelope
-  for g: Group
-  for ms: List<&2, Member>
-  for t: VendNode.State
-  {
-    VendNode.get_outcome(s, Envelope.id(e)) == Outcome.NotSeen{}: Outcome
-  } -> {
-    VendNode.ask(
-      s,
-      e,
-      Ask.SetGroup{g, ms}
-    )
-      == (t, Answer.SetGroup{SetGroup.Cycle{}}): VendNode.State
-      & Answer
-  } -> &m: Member -> Member.Among(m, ms)
-    & Member.Closes(s, g, m)
-
-law closer_is_cycle:
-  for s: VendNode.State
-  for e: Envelope
-  for g: Group
-  for ms: List<&2, Member>
-  for m: Member
-  for t: VendNode.State
-  for a: Answer
-  {
-    VendNode.get_outcome(s, Envelope.id(e)) == Outcome.NotSeen{}: Outcome
-  } -> Member.Among(
-    m,
-    ms
-  ) -> Member.Closes(
-    s,
-    g,
-    m
-  ) -> {
-    VendNode.ask(s, e, Ask.SetGroup{g, ms}) == (t, a): VendNode.State & Answer
-  } -> {a == Answer.SetGroup{SetGroup.Cycle{}}: Answer}
-
-# no group is inside itself at the start
-law none_inside_itself_at_start:
-  for n: VendNode
-  for g: Group
-  {VendNode.is_inside(VendNode.empty(n), Member.Group{g}, g) == False{}: Bool}
-
-# a change made on this node keeps every group outside itself. A sync does
-# not: when two nodes set groups before they meet, the groups that win on each
-# may hold one another. Refusing those would cost a search of the whole group
-# graph on every sync, and the nodes could still keep different groups. So a
-# sync takes the winning groups as they are, and notices the cycle
-# (GroupCycle): inside stays well defined, and the groups on a cycle hold the
-# same members. groups_converge is what that buys.
-law none_inside_itself_after:
-  for s: VendNode.State
-  for e: Envelope
-  for q: Ask
-  for t: VendNode.State
-  for a: Answer
-  for g: Group
-  {
-    VendNode.ask(s, e, q) == (t, a): VendNode.State & Answer
-  } -> {
-    Ask.local(q) == True{}: Bool
-  } -> (
-    @h: Group -> {VendNode.is_inside(s, Member.Group{h}, h) == False{}: Bool}
-  ) -> {VendNode.is_inside(t, Member.Group{g}, g) == False{}: Bool}
-
-# setting an owner group gives the branch a larger epoch
-law epoch_grows:
-  for s: VendNode.State
-  for e: Envelope
-  for b: Branch
-  for g: Group
-  for t: VendNode.State
-  for old: Epoch
-  for new: Epoch
-  {
-    VendNode.get_outcome(s, Envelope.id(e)) == Outcome.NotSeen{}: Outcome
-  } -> {
-    VendNode.get_epoch(s, b) == Some{old}: Maybe<&2, Epoch>
-  } -> {
-    VendNode.ask(
-      s,
-      e,
-      Ask.SetOwner{b, g}
-    )
-      == (t, Answer.SetOwner{SetOwner.Set{new}}): VendNode.State
-      & Answer
-  } -> {
-    Nat.is_lt(Epoch.number(old), Epoch.number(new)) == True{}: Bool
-  }
-    & {VendNode.get_epoch(t, b) == Some{new}: Maybe<&2, Epoch>}
-
-# after a takes in b, and b takes in that, both hold the same content
-law sync_converges:
-  for a: VendNode.State
-  for b: VendNode.State
-  for a1: VendNode.State
-  for b1: VendNode.State
-  for e1: Envelope
-  for e2: Envelope
-  {
-    VendNode.get_outcome(a, Envelope.id(e1)) == Outcome.NotSeen{}: Outcome
-  } -> {
-    VendNode.get_outcome(b, Envelope.id(e2)) == Outcome.NotSeen{}: Outcome
-  } -> {
-    VendNode.ask(
-      a,
-      e1,
-      Ask.Sync{b, None{}}
-    )
-      == (a1, Answer.Sync{Sync.Synced{}}): VendNode.State
-      & Answer
-  } -> {
-    VendNode.ask(
-      b,
-      e2,
-      Ask.Sync{a1, None{}}
-    )
-      == (b1, Answer.Sync{Sync.Synced{}}): VendNode.State
-      & Answer
-  } -> VendNode.SameContent(a1, b1)
-
-# after a takes in b, and b takes in that, both hold the same groups: each
-# group has the members of its larger stamp (its epoch, then its members)
-law groups_converge:
-  for a: VendNode.State
-  for b: VendNode.State
-  for a1: VendNode.State
-  for b1: VendNode.State
-  for e1: Envelope
-  for e2: Envelope
-  for g: Group
-  {
-    VendNode.get_outcome(a, Envelope.id(e1)) == Outcome.NotSeen{}: Outcome
-  } -> {
-    VendNode.get_outcome(b, Envelope.id(e2)) == Outcome.NotSeen{}: Outcome
-  } -> {
-    VendNode.ask(
-      a,
-      e1,
-      Ask.Sync{b, None{}}
-    )
-      == (a1, Answer.Sync{Sync.Synced{}}): VendNode.State
-      & Answer
-  } -> {
-    VendNode.ask(
-      b,
-      e2,
-      Ask.Sync{a1, None{}}
-    )
-      == (b1, Answer.Sync{Sync.Synced{}}): VendNode.State
-      & Answer
-  } -> {VendNode.get_members(a1, g) == VendNode.get_members(b1, g): Maybe<&2, List<&2, Member>>}
-
-# taking in a then b holds the same content as taking in b then a
-law sync_commutes:
-  for s: VendNode.State
-  for a: VendNode.State
-  for b: VendNode.State
-  for s1: VendNode.State
-  for s2: VendNode.State
-  for s3: VendNode.State
-  for s4: VendNode.State
-  for e1: Envelope
-  for e2: Envelope
-  for e3: Envelope
-  for e4: Envelope
-  {
-    VendNode.get_outcome(s, Envelope.id(e1)) == Outcome.NotSeen{}: Outcome
-  } -> {
-    VendNode.get_outcome(s1, Envelope.id(e2)) == Outcome.NotSeen{}: Outcome
-  } -> {
-    VendNode.get_outcome(s, Envelope.id(e3)) == Outcome.NotSeen{}: Outcome
-  } -> {
-    VendNode.get_outcome(s3, Envelope.id(e4)) == Outcome.NotSeen{}: Outcome
-  } -> {
-    VendNode.ask(
-      s,
-      e1,
-      Ask.Sync{a, None{}}
-    )
-      == (s1, Answer.Sync{Sync.Synced{}}): VendNode.State
-      & Answer
-  } -> {
-    VendNode.ask(
-      s1,
-      e2,
-      Ask.Sync{b, None{}}
-    )
-      == (s2, Answer.Sync{Sync.Synced{}}): VendNode.State
-      & Answer
-  } -> {
-    VendNode.ask(
-      s,
-      e3,
-      Ask.Sync{b, None{}}
-    )
-      == (s3, Answer.Sync{Sync.Synced{}}): VendNode.State
-      & Answer
-  } -> {
-    VendNode.ask(
-      s3,
-      e4,
-      Ask.Sync{a, None{}}
-    )
-      == (s4, Answer.Sync{Sync.Synced{}}): VendNode.State
-      & Answer
-  } -> VendNode.SameContent(s2, s4)
-
-# taking in the same node twice holds the same content as once
-law sync_idempotent:
-  for s: VendNode.State
-  for a: VendNode.State
-  for s1: VendNode.State
-  for s2: VendNode.State
-  for a2: Answer
-  for e1: Envelope
-  for e2: Envelope
-  {
-    VendNode.get_outcome(s, Envelope.id(e1)) == Outcome.NotSeen{}: Outcome
-  } -> {
-    VendNode.ask(
-      s,
-      e1,
-      Ask.Sync{a, None{}}
-    )
-      == (s1, Answer.Sync{Sync.Synced{}}): VendNode.State
-      & Answer
-  } -> {
-    VendNode.ask(s1, e2, Ask.Sync{a, None{}}) == (s2, a2): VendNode.State & Answer
-  } -> VendNode.SameContent(s2, s1)
-
-# the notices after a change are the notices before it, then the notices
-# since it: none is missed or doubled between polls
-law since_splits:
-  for s: VendNode.State
-  for e: Envelope
-  for q: Ask
-  for t: VendNode.State
-  for a: Answer
-  for k: Topic
-  {
-    VendNode.ask(s, e, q) == (t, a): VendNode.State & Answer
-  } -> {
-    VendNode.get_changes(
-      t,
-      k,
-      None{}
-    )
-      == List.append(
-        &2,
-        Notice,
-        VendNode.get_changes(s, k, None{}),
-        VendNode.get_changes(t, k, Some{VendNode.position(s)})
-      ): List<&2, Notice>
-  }
+  for b: String
+  for name: Resources.Name
+  for base: Maybe<&2, Id>
+  for x: Content
+  for v: Id
+  {Node.owners(s, Chain.Branch{b}) == [n]: List<&2, String>}
+    -> {Node.head(s, b) == Some{v}: Maybe<&2, Id>}
+    -> {Tries.Trie.get(Cells.Cell<Entry>, s, Slot.key(Slot.Ask{Envelope.of(e)})) == None{}: Maybe<&2, Cells.Cell<Entry>>}
+    -> {Tries.Trie.get(Cells.Cell<Entry>, s, Slot.key(Slot.Vote{n, Chain.Branch{b}, v})) == None{}: Maybe<&2, Cells.Cell<Entry>>}
+    -> {
+      Maybes.Maybe.same(
+        ~Octets.Bytes(),
+        ~Octets.Bytes.is_eq,
+        Node.content(s, name, Point.Head{b}),
+        Node.content_at(s, name, base)
+      )
+        == False{}: Bool
+    }
+    -> {Node.chain(Node.ask(n, s, e, Ask.Write{b, name, base, x}), Chain.Branch{b}) == Node.chain(s, Chain.Branch{b}): List<&2, Id>}

@@ -1,4 +1,6 @@
 import Base
+import ./bools.bend as Bools
+import ./shared.bend as Shared
 
 # dropping nothing keeps a list
 def List.drop_zero(a, -A: Kind(a), xs: List<a, A>) -> {List.drop(a, A, xs, 0n) == xs: List<a, A>}:
@@ -442,3 +444,69 @@ def List.ends_right(A, same, sound, a, b):
       List.take_drop(A, b, db)
     )
   )
+
+# Equality
+# --------
+
+# xs and ys hold the same elements in the same order, as same calls them
+def List.same(~A: Data, ~same: A -> A -> Bool, xs: List<&2, A>, ys: List<&2, A>) -> Bool:
+  match xs ys:
+    case Nil{} Nil{}:
+      True{}
+    case Con{x, xr} Con{y, yr}:
+      Bool.and(same(x, y), List.same(~A, ~same, xr, yr))
+    case _ _:
+      False{}
+
+# List.same is True for a list and itself
+law List.same_refl:
+  for ~A: Data
+  for ~same: A -> A -> Bool
+  for ~refl: @x: A -> {same(x, x) == True{}: Bool}
+  for xs: List<&2, A>
+  {List.same(~A, ~same, xs, xs) == True{}: Bool}
+
+def List.same_refl(A, same, refl, xs):
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+x, +r}:
+      %Equal.sym(Bool, same(x, x), True{}, refl(x)) : {Bool.and(_, List.same(~A, ~same, r, r)) == True{}: Bool}
+      List.same_refl(~A, ~same, ~refl, r)
+
+# List.same is True only for equal lists
+law List.same_sound:
+  for ~A: Data
+  for ~same: A -> A -> Bool
+  for ~sound: @x: A -> @y: A -> {same(x, y) == True{}: Bool} -> {x == y: A}
+  for xs: List<&2, A>
+  for ys: List<&2, A>
+  {List.same(~A, ~same, xs, ys) == True{}: Bool} -> {xs == ys: List<&2, A>}
+
+def List.same_sound(A, same, sound, xs, ys):
+  match xs ys:
+    case Nil{} Nil{}:
+      h => {==}
+    case Nil{} Con{y, yr}:
+      h => Empty.absurd({Nil{} == Con{y, yr}: List<&2, A>}, Shared.Bool.false_ne_true(h))
+    case Con{x, xr} Nil{}:
+      h => Empty.absurd({Con{x, xr} == Nil{}: List<&2, A>}, Shared.Bool.false_ne_true(h))
+    case Con{+x, +xr} Con{+y, +yr}:
+      +h =>
+        %sound(x)(y)(Bools.Bool.and_true_left(same(x, y), List.same(~A, ~same, xr, yr))(h)) : {x <> xr == _ <> yr: List<&2, A>}
+        %List.same_sound(~A, ~same, ~sound, xr, yr)(Bools.Bool.and_true_right(same(x, y), List.same(~A, ~same, xr, yr))(h)) :
+          {x <> xr == x <> _: List<&2, A>}
+        {==}
+
+# the first elements of xs ++ ys, as many as xs has, are xs
+def List.take_append(-A: Data, xs: List<&2, A>, ys: List<&2, A>) -> {List.take(&2, A, List.append(&2, A, xs, ys), List.length(&2, A, xs)) == xs: List<&2, A>}:
+  match xs:
+    case Nil{}:
+      match ys:
+        case Nil{}:
+          {==}
+        case Con{h, t}:
+          {==}
+    case Con{h, t}:
+      %List.take_append(A, t, ys) : {h <> List.take(&2, A, List.append(&2, A, t, ys), List.length(&2, A, t)) == h <> _: List<&2, A>}
+      {==}

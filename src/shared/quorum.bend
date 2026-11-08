@@ -1,6 +1,7 @@
 import Base
 import ./bools.bend as Bools
 import ./maybes.bend as Maybes
+import ./nats.bend as Nats
 import ./shared.bend as Shared
 
 # Quorums
@@ -9,111 +10,6 @@ import ./shared.bend as Shared
 # the state g. A choice has a majority when more members vote for it than do
 # not. A majority is unique, new votes keep it, and a scan of the members finds
 # it: so a holder that learns more votes never sees a decided choice change.
-
-# Order of numbers
-# ----------------
-
-# a number is not less than itself
-def Nat.lt_irrefl(a: Nat) -> {Nat.is_lt(a, a) == False{}: Bool}:
-  match a:
-    case 0n:
-      {==}
-    case 1n+p:
-      Nat.lt_irrefl(p)
-
-# a < b and b <= c give a < c
-def Nat.lt_le(a: Nat, b: Nat, c: Nat) -> {Nat.is_lt(a, b) == True{}: Bool} -> {Nat.is_le(b, c) == True{}: Bool} -> {Nat.is_lt(a, c) == True{}: Bool}:
-  match a b c:
-    case 0n 0n w:
-      h => k => Empty.absurd({Nat.is_lt(0n, w) == True{}: Bool}, Shared.Bool.false_ne_true(h))
-    case 0n 1n+q 0n:
-      h => k => Empty.absurd({Nat.is_lt(0n, 0n) == True{}: Bool}, Shared.Bool.false_ne_true(k))
-    case 0n 1n+q 1n+w:
-      h => k => {==}
-    case 1n+p 0n w:
-      h => k => Empty.absurd({Nat.is_lt(1n+p, w) == True{}: Bool}, Shared.Bool.false_ne_true(h))
-    case 1n+p 1n+q 0n:
-      h => k => Empty.absurd({Nat.is_lt(1n+p, 0n) == True{}: Bool}, Shared.Bool.false_ne_true(k))
-    case 1n+p 1n+q 1n+w:
-      Nat.lt_le(p, q, w)
-
-# a <= b and b < c give a < c
-def Nat.le_lt(a: Nat, b: Nat, c: Nat) -> {Nat.is_le(a, b) == True{}: Bool} -> {Nat.is_lt(b, c) == True{}: Bool} -> {Nat.is_lt(a, c) == True{}: Bool}:
-  match a b c:
-    case 0n 0n 0n:
-      h => k => Empty.absurd({Nat.is_lt(0n, 0n) == True{}: Bool}, Shared.Bool.false_ne_true(k))
-    case 0n 1n+q 0n:
-      h => k => Empty.absurd({Nat.is_lt(0n, 0n) == True{}: Bool}, Shared.Bool.false_ne_true(k))
-    case 0n v 1n+w:
-      h => k => {==}
-    case 1n+p 0n w:
-      h => k => Empty.absurd({Nat.is_lt(1n+p, w) == True{}: Bool}, Shared.Bool.false_ne_true(h))
-    case 1n+p 1n+q 0n:
-      h => k => Empty.absurd({Nat.is_lt(1n+p, 0n) == True{}: Bool}, Shared.Bool.false_ne_true(k))
-    case 1n+p 1n+q 1n+w:
-      Nat.le_lt(p, q, w)
-
-# a < b gives a <= b
-def Nat.lt_weak(a: Nat, b: Nat) -> {Nat.is_lt(a, b) == True{}: Bool} -> {Nat.is_le(a, b) == True{}: Bool}:
-  match a b:
-    case 0n 0n:
-      h => Empty.absurd({Nat.is_le(0n, 0n) == True{}: Bool}, Shared.Bool.false_ne_true(h))
-    case 0n 1n+q:
-      h => {==}
-    case 1n+p 0n:
-      h => Empty.absurd({Nat.is_le(1n+p, 0n) == True{}: Bool}, Shared.Bool.false_ne_true(h))
-    case 1n+p 1n+q:
-      Nat.lt_weak(p, q)
-
-# a <= b gives a <= b + 1
-def Nat.le_succ(a: Nat, b: Nat) -> {Nat.is_le(a, b) == True{}: Bool} -> {Nat.is_le(a, 1n+b) == True{}: Bool}:
-  match a b:
-    case 0n w:
-      h => {==}
-    case 1n+p 0n:
-      h => Empty.absurd({Nat.is_le(1n+p, 1n) == True{}: Bool}, Shared.Bool.false_ne_true(h))
-    case 1n+p 1n+q:
-      Nat.le_succ(p, q)
-
-# n, plus one when b holds
-def Nat.add_if(b: Bool, n: Nat) -> Nat:
-  match b:
-    case True{}:
-      1n+n
-    case False{}:
-      n
-
-# a <= b gives a <= b, plus one when c holds
-def Nat.le_add_if(c: Bool, a: Nat, b: Nat) -> {Nat.is_le(a, b) == True{}: Bool} -> {Nat.is_le(a, Nat.add_if(c, b)) == True{}: Bool}:
-  match c:
-    case True{}:
-      Nat.le_succ(a, b)
-    case False{}:
-      h => h
-
-# a <= b gives a, plus one when c holds, <= b plus one
-def Nat.add_if_le_succ(c: Bool, a: Nat, b: Nat) -> {Nat.is_le(a, b) == True{}: Bool} -> {Nat.is_le(Nat.add_if(c, a), 1n+b) == True{}: Bool}:
-  match c:
-    case True{}:
-      h => h
-    case False{}:
-      Nat.le_succ(a, b)
-
-# adding the same one keeps a <= b
-def Nat.add_if_le(c: Bool, a: Nat, b: Nat) -> {Nat.is_le(a, b) == True{}: Bool} -> {Nat.is_le(Nat.add_if(c, a), Nat.add_if(c, b)) == True{}: Bool}:
-  match c:
-    case True{}:
-      h => h
-    case False{}:
-      h => h
-
-# a number below b means b is above 0
-def Nat.lt_pos(a: Nat, b: Nat) -> {Nat.is_lt(a, b) == True{}: Bool} -> {Nat.is_lt(0n, b) == True{}: Bool}:
-  match a:
-    case 0n:
-      h => h
-    case 1n+p:
-      Nat.le_lt(0n, 1n+p, b)({==})
 
 # Votes
 # -----
@@ -141,7 +37,7 @@ def Quorum.yes(
     case Nil{}:
       0n
     case Con{m, r}:
-      Nat.add_if(Quorum.hit(~B, ~same, vote(g)(m), x), Quorum.yes(~A, ~B, ~V, ~vote, ~same, r, g, x))
+      Nats.Nat.add_if(Quorum.hit(~B, ~same, vote(g)(m), x), Quorum.yes(~A, ~B, ~V, ~vote, ~same, r, g, x))
 
 # the number of members of ms that do not vote for x
 def Quorum.no(
@@ -158,7 +54,7 @@ def Quorum.no(
     case Nil{}:
       0n
     case Con{m, r}:
-      Nat.add_if(Bool.not(Quorum.hit(~B, ~same, vote(g)(m), x)), Quorum.no(~A, ~B, ~V, ~vote, ~same, r, g, x))
+      Nats.Nat.add_if(Bool.not(Quorum.hit(~B, ~same, vote(g)(m), x)), Quorum.no(~A, ~B, ~V, ~vote, ~same, r, g, x))
 
 # x has a majority of ms: more of them vote for it than do not
 def Quorum.has(
@@ -335,7 +231,7 @@ def Quorum.yes_le_no.at(
   y: Nat,
   n: Nat,
   ih: {Nat.is_le(y, n) == True{}: Bool}
-) -> {Nat.is_le(Nat.add_if(hy, y), Nat.add_if(Bool.not(hx), n)) == True{}: Bool}:
+) -> {Nat.is_le(Nats.Nat.add_if(hy, y), Nats.Nat.add_if(Bool.not(hx), n)) == True{}: Bool}:
   match hy hx:
     case True{} True{}:
       Empty.absurd(
@@ -347,7 +243,7 @@ def Quorum.yes_le_no.at(
     case False{} True{}:
       ih
     case False{} False{}:
-      Nat.le_succ(y, n)(ih)
+      Nats.Nat.le_succ(y, n)(ih)
 
 # no more members vote for y than do not vote for x, when x is not y
 def Quorum.yes_le_no(
@@ -409,14 +305,14 @@ def Quorum.unique.at(
       +yy = Quorum.yes(~A, ~B, ~V, ~vote, ~same, ms, g, y)
       +nx = Quorum.no(~A, ~B, ~V, ~vote, ~same, ms, g, x)
       +ny = Quorum.no(~A, ~B, ~V, ~vote, ~same, ms, g, y)
-      +a = Nat.le_lt(yx, ny, yy)(
+      +a = Nats.Nat.le_lt(yx, ny, yy)(
         Quorum.yes_le_no(~A, ~B, ~V, ~vote, ~same, ~refl, ~sound, ms, g, y, x, Quorum.ne_flip(~B, ~same, ~refl, ~sound, x, y, e))
       )(hy)
-      +b = Nat.lt_le(yx, yy, nx)(a)(Quorum.yes_le_no(~A, ~B, ~V, ~vote, ~same, ~refl, ~sound, ms, g, x, y, e))
-      +c = Nat.lt_le(yx, nx, yx)(b)(Nat.lt_weak(nx, yx)(hx))
+      +b = Nats.Nat.lt_le(yx, yy, nx)(a)(Quorum.yes_le_no(~A, ~B, ~V, ~vote, ~same, ~refl, ~sound, ms, g, x, y, e))
+      +c = Nats.Nat.lt_le(yx, nx, yx)(b)(Nats.Nat.lt_weak(nx, yx)(hx))
       Empty.absurd(
         {x == y: B},
-        Shared.Bool.false_ne_true(Equal.trans(Bool, False{}, Nat.is_lt(yx, yx), True{}, Equal.sym(Bool, Nat.is_lt(yx, yx), False{}, Nat.lt_irrefl(yx)), c))
+        Shared.Bool.false_ne_true(Equal.trans(Bool, False{}, Nat.is_lt(yx, yx), True{}, Equal.sym(Bool, Nat.is_lt(yx, yx), False{}, Nats.Nat.lt_irrefl(yx)), c))
       )
 
 # two choices with a majority of the same members are the same
@@ -456,21 +352,21 @@ def Quorum.yes_more.at(
   k: {Quorum.kept(~B, ~same, v, w) == True{}: Bool},
   ih: {Nat.is_le(y, y2) == True{}: Bool}
 ) -> {
-  Nat.is_le(Nat.add_if(Quorum.hit(~B, ~same, v, x), y), Nat.add_if(Quorum.hit(~B, ~same, w, x), y2))
+  Nat.is_le(Nats.Nat.add_if(Quorum.hit(~B, ~same, v, x), y), Nats.Nat.add_if(Quorum.hit(~B, ~same, w, x), y2))
     == True{}: Bool
 }:
   match v w:
     case None{} u:
-      Nat.le_add_if(Quorum.hit(~B, ~same, u, x), y, y2)(ih)
+      Nats.Nat.le_add_if(Quorum.hit(~B, ~same, u, x), y, y2)(ih)
     case Some{b} None{}:
       Empty.absurd(
-        {Nat.is_le(Nat.add_if(same(b, x), y), y2) == True{}: Bool},
+        {Nat.is_le(Nats.Nat.add_if(same(b, x), y), y2) == True{}: Bool},
         Shared.Bool.false_ne_true(k)
       )
     case Some{+b} Some{+c}:
       %Equal.sym(B, c, b, sound(c)(b)(k)) :
-        {Nat.is_le(Nat.add_if(same(b, x), y), Nat.add_if(same(_, x), y2)) == True{}: Bool}
-      Nat.add_if_le(same(b, x), y, y2)(ih)
+        {Nat.is_le(Nats.Nat.add_if(same(b, x), y), Nats.Nat.add_if(same(_, x), y2)) == True{}: Bool}
+      Nats.Nat.add_if_le(same(b, x), y, y2)(ih)
 
 # Quorum.no_less for one member, whose vote v in g is kept as w in g2
 def Quorum.no_less.at(
@@ -486,26 +382,26 @@ def Quorum.no_less.at(
   ih: {Nat.is_le(n2, n) == True{}: Bool}
 ) -> {
   Nat.is_le(
-    Nat.add_if(Bool.not(Quorum.hit(~B, ~same, w, x)), n2),
-    Nat.add_if(Bool.not(Quorum.hit(~B, ~same, v, x)), n)
+    Nats.Nat.add_if(Bool.not(Quorum.hit(~B, ~same, w, x)), n2),
+    Nats.Nat.add_if(Bool.not(Quorum.hit(~B, ~same, v, x)), n)
   )
     == True{}: Bool
 }:
   match v w:
     case None{} u:
-      Nat.add_if_le_succ(Bool.not(Quorum.hit(~B, ~same, u, x)), n2, n)(ih)
+      Nats.Nat.add_if_le_succ(Bool.not(Quorum.hit(~B, ~same, u, x)), n2, n)(ih)
     case Some{b} None{}:
       Empty.absurd(
-        {Nat.is_le(1n+n2, Nat.add_if(Bool.not(same(b, x)), n)) == True{}: Bool},
+        {Nat.is_le(1n+n2, Nats.Nat.add_if(Bool.not(same(b, x)), n)) == True{}: Bool},
         Shared.Bool.false_ne_true(k)
       )
     case Some{+b} Some{+c}:
       %Equal.sym(B, c, b, sound(c)(b)(k)) :
         {
-          Nat.is_le(Nat.add_if(Bool.not(same(_, x)), n2), Nat.add_if(Bool.not(same(b, x)), n))
+          Nat.is_le(Nats.Nat.add_if(Bool.not(same(_, x)), n2), Nats.Nat.add_if(Bool.not(same(b, x)), n))
             == True{}: Bool
         }
-      Nat.add_if_le(Bool.not(same(b, x)), n2, n)(ih)
+      Nats.Nat.add_if_le(Bool.not(same(b, x)), n2, n)(ih)
 
 # kept votes keep the members that vote for x
 def Quorum.yes_more(
@@ -607,12 +503,12 @@ def Quorum.has_more(A, B, V, vote, same, sound, ms, g, g2, x):
   +g2 = g2
   +x = x
   +k => h =>
-    Nat.lt_le(
+    Nats.Nat.lt_le(
       Quorum.no(~A, ~B, ~V, ~vote, ~same, ms, g2, x),
       Quorum.yes(~A, ~B, ~V, ~vote, ~same, ms, g, x),
       Quorum.yes(~A, ~B, ~V, ~vote, ~same, ms, g2, x)
     )(
-      Nat.le_lt(
+      Nats.Nat.le_lt(
         Quorum.no(~A, ~B, ~V, ~vote, ~same, ms, g2, x),
         Quorum.no(~A, ~B, ~V, ~vote, ~same, ms, g, x),
         Quorum.yes(~A, ~B, ~V, ~vote, ~same, ms, g, x)
@@ -734,7 +630,7 @@ def Quorum.scan.past(
   ec: {same(b, x) == c: Bool},
   eb: {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, b) == False{}: Bool},
   hx: {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool},
-  pos: {Nat.is_lt(0n, Nat.add_if(c, yr)) == True{}: Bool}
+  pos: {Nat.is_lt(0n, Nats.Nat.add_if(c, yr)) == True{}: Bool}
 ) -> {Nat.is_lt(0n, yr) == True{}: Bool}:
   match c:
     case True{}:
@@ -773,7 +669,7 @@ def Quorum.scan.if(
   +yr: Nat,
   eb: {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, b) == held: Bool},
   +hx: {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool},
-  pos: {Nat.is_lt(0n, Nat.add_if(same(b, x), yr)) == True{}: Bool},
+  pos: {Nat.is_lt(0n, Nats.Nat.add_if(same(b, x), yr)) == True{}: Bool},
   ih: {Nat.is_lt(0n, yr) == True{}: Bool} -> {rest == Some{x}: Maybe<&2, B>}
 ) -> {Quorum.winner.if(B, held, b, rest) == Some{x}: Maybe<&2, B>}:
   match held:
@@ -799,7 +695,7 @@ def Quorum.scan.at(
   +x: B,
   +yr: Nat,
   +hx: {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool},
-  pos: {Nat.is_lt(0n, Nat.add_if(Quorum.hit(~B, ~same, v, x), yr)) == True{}: Bool},
+  pos: {Nat.is_lt(0n, Nats.Nat.add_if(Quorum.hit(~B, ~same, v, x), yr)) == True{}: Bool},
   ih: {Nat.is_lt(0n, yr) == True{}: Bool} -> {rest == Some{x}: Maybe<&2, B>}
 ) -> {Quorum.winner.at(~A, ~B, ~V, ~vote, ~same, v, rest, ms, g) == Some{x}: Maybe<&2, B>}:
   match v:
@@ -891,7 +787,7 @@ def Quorum.winner_of(A, B, V, vote, same, refl, sound, ms, g, x):
   +x = x
   +hx =>
     Quorum.scan(~A, ~B, ~V, ~vote, ~same, ~refl, ~sound, ms, ms, g, x, hx)(
-      Nat.lt_pos(
+      Nats.Nat.lt_pos(
         Quorum.no(~A, ~B, ~V, ~vote, ~same, ms, g, x),
         Quorum.yes(~A, ~B, ~V, ~vote, ~same, ms, g, x)
       )(hx)
