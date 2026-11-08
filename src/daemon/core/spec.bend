@@ -10,8 +10,8 @@ import ../../shared/shared.bend as Shared
 #
 # A node holds entries in slots. Two nodes sync by joining what they hold, so
 # every node that took in the same entries holds the same state, in any order
-# and any number of times (Shared.Trie.union_comm, union_assoc, union_idem, with
-# the laws of Cells.Cell.join). Every answer is read from the state alone.
+# and any number of times (Node.join_comm, join_assoc, join_idem). Every answer
+# is read from the state alone.
 #
 # A chain (a branch, or an owner group) is a list of versions. Its first
 # version is the request that a root entry names; each next one is the
@@ -350,7 +350,6 @@ type Notice is Data:
   Notice.touched{touch: Touch}
   Notice.group_cycle{group: String}
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality keeps each and as one value for the proofs to split on
 # a and b are the same notice
 def Notice.same(a: Notice, b: Notice) -> Bool:
   match a b:
@@ -364,7 +363,6 @@ def Notice.same(a: Notice, b: Notice) -> Bool:
       String.eq(g1, g2)
     case _ _:
       False{}
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # Reads
 # -----
@@ -646,7 +644,12 @@ law Node.ask_again:
   for q1: Ask
   for q2: Ask
   {
-    Node.ask(n, Node.ask(n, s, Envelope{r, w, t1}, q1), Envelope{r, w, t2}, q2)
+    Node.ask(
+      n,
+      Node.ask(n, s, Envelope{r, w, t1}, q1),
+      Envelope{r, w, t2},
+      q2
+    )
       == Node.ask(n, s, Envelope{r, w, t1}, q1): State()
   }
 
@@ -972,19 +975,26 @@ law Node.inside_unfold:
   for g: String
   {Node.is_inside(s, m, g) == True{}: Bool}
     -> {
-      Shared.List.has(~Member, ~Member.same, Maybe.default(&2, List<&2, Member>, Node.members(s, g), []), m)
+      Shared.List.has(
+        ~Member,
+        ~Member.same,
+        Maybe.default(&2, List<&2, Member>, Node.members(s, g), []),
+        m
+      )
         == True{}: Bool
     }
-      | (&h: String -> {
-        Shared.List.has(
-          ~Member,
-          ~Member.same,
-          Maybe.default(&2, List<&2, Member>, Node.members(s, g), []),
-          Member.group{h}
-        )
-          == True{}: Bool
-      }
-        & {Node.is_inside(s, m, h) == True{}: Bool})
+      | (
+        &h: String -> {
+          Shared.List.has(
+            ~Member,
+            ~Member.same,
+            Maybe.default(&2, List<&2, Member>, Node.members(s, g), []),
+            Member.group{h}
+          )
+            == True{}: Bool
+        }
+          & {Node.is_inside(s, m, h) == True{}: Bool}
+      )
 
 # the notices of t since the state since are exactly the notices of t that
 # since did not have: a poll misses none, and doubles none
@@ -994,7 +1004,12 @@ law Node.notices_exactly:
   for since: State()
   for x: Notice
   {
-    Shared.List.has(~Notice, ~Notice.same, Node.notices(t, k, since), x)
+    Shared.List.has(
+      ~Notice,
+      ~Notice.same,
+      Node.notices(t, k, since),
+      x
+    )
       == Bool.and(
         Bool.not(Shared.List.has(~Notice, ~Notice.same, Node.notices(since, k, Node.empty()), x)),
         Shared.List.has(~Notice, ~Notice.same, Node.notices(t, k, Node.empty()), x)

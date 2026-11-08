@@ -7,7 +7,8 @@ import ./shared.bend as Shared
 # nodes(g) that have successors. A search goes one level at a time: a level is
 # a list of nodes, and the next level holds the successors of each. It goes as
 # deep as the graph has nodes, which is deep enough: a shortest path visits
-# each node once.
+# each node once. Reach.in states what a search finds; code runs Reach.in_fast,
+# which answers the same (Reach.fast_in).
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a search, a path and a chain keep each and/or as one value, for the proofs to split on
 # the successors of each node of xs
@@ -1880,6 +1881,7 @@ def Reach.uniq(~A: Data, ~same: A -> A -> Bool, xs: List<&2, A>) -> List<&2, A>:
     case Con{+x, +r}:
       List.filter.put(A, x, Reach.uniq(~A, ~same, r), Bool.not(Shared.List.has(~A, ~same, r, x)))
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Reach.has_uniq at the first node x, once r is known to have it or not (k)
 # and x is known to be m or not (hit)
 def Reach.has_uniq.at(
@@ -1888,14 +1890,22 @@ def Reach.has_uniq.at(
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
   k: Bool,
   hit: Bool,
-  +x: A,
-  +r: List<&2, A>,
-  +us: List<&2, A>,
-  +m: A,
+  x: A,
+  r: List<&2, A>,
+  us: List<&2, A>,
+  m: A,
   ek: {Shared.List.has(~A, ~same, r, x) == k: Bool},
-  +eh: {same(x, m) == hit: Bool},
-  +ih: {Shared.List.has(~A, ~same, us, m) == Shared.List.has(~A, ~same, r, m): Bool}
-) -> {Shared.List.has(~A, ~same, List.filter.put(A, x, us, Bool.not(k)), m) == List.any.if(u => Shared.List.has(~A, ~same, r, m), hit): Bool}:
+  eh: {same(x, m) == hit: Bool},
+  ih: {Shared.List.has(~A, ~same, us, m) == Shared.List.has(~A, ~same, r, m): Bool}
+) -> {
+  Shared.List.has(
+    ~A,
+    ~same,
+    List.filter.put(A, x, us, Bool.not(k)),
+    m
+  )
+    == List.any.if(u => Shared.List.has(~A, ~same, r, m), hit): Bool
+}:
   match k hit:
     case True{} True{}:
       Equal.trans(
@@ -1905,17 +1915,47 @@ def Reach.has_uniq.at(
         True{},
         ih,
         %sound(x, m)(eh): {Shared.List.has(~A, ~same, r, _) == True{}: Bool}
-        ek
-      )
+        ek)
     case True{} False{}:
       ih
     case False{} h:
-      %Equal.sym(Bool, same(x, m), h, eh): {List.any.if(u => Shared.List.has(~A, ~same, us, m), _) == List.any.if(u => Shared.List.has(~A, ~same, r, m), h): Bool}
-      Equal.cong(Bool, Bool, z => List.any.if(u => z, h), Shared.List.has(~A, ~same, us, m), Shared.List.has(~A, ~same, r, m), ih)
+      %Equal.sym(
+        Bool,
+        same(x, m),
+        h,
+        eh
+      ): {
+        List.any.if(
+          u => Shared.List.has(~A, ~same, us, m),
+          _
+        )
+          == List.any.if(u => Shared.List.has(~A, ~same, r, m), h): Bool
+      }
+      Equal.cong(
+        Bool,
+        Bool,
+        z => List.any.if(u => z, h),
+        Shared.List.has(~A, ~same, us, m),
+        Shared.List.has(~A, ~same, r, m),
+        ih
+      )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # uniq keeps every node
-def Reach.has_uniq(~A: Data, ~same: A -> A -> Bool, ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A}, xs: List<&2, A>, +m: A) -> {
-  Shared.List.has(~A, ~same, Reach.uniq(~A, ~same, xs), m) == Shared.List.has(~A, ~same, xs, m): Bool
+def Reach.has_uniq(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
+  xs: List<&2, A>,
+  +m: A
+) -> {
+  Shared.List.has(
+    ~A,
+    ~same,
+    Reach.uniq(~A, ~same, xs),
+    m
+  )
+    == Shared.List.has(~A, ~same, xs, m): Bool
 }:
   match xs:
     case Nil{}:
@@ -1936,6 +1976,8 @@ def Reach.has_uniq(~A: Data, ~same: A -> A -> Bool, ~sound: @a: A -> @b: A -> {s
         Reach.has_uniq(~A, ~same, ~sound, r, m)
       )
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement keeps each and/or as one value for the proof to split on; a proof does not run
 # a path from a level is a path from the level without its repeats
 def Reach.path_uniq(
   ~A: Data,
@@ -1944,16 +1986,26 @@ def Reach.path_uniq(
   ~succ: V -> A -> List<&2, A>,
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
   ps: List<&2, A>,
-  +xs: List<&2, A>,
-  +g: V,
-  +m: A
+  xs: List<&2, A>,
+  g: V,
+  m: A
 ) -> {
-  Reach.path(~A, ~V, ~same, ~succ, ps, Reach.uniq(~A, ~same, xs), g, m) == Reach.path(~A, ~V, ~same, ~succ, ps, xs, g, m): Bool
+  Reach.path(
+    ~A,
+    ~V,
+    ~same,
+    ~succ,
+    ps,
+    Reach.uniq(~A, ~same, xs),
+    g,
+    m
+  )
+    == Reach.path(~A, ~V, ~same, ~succ, ps, xs, g, m): Bool
 }:
   match ps:
     case Nil{}:
       Reach.has_uniq(~A, ~same, ~sound, xs, m)
-    case Con{+p, r}:
+    case Con{p, r}:
       Equal.cong(
         Bool,
         Bool,
@@ -1962,6 +2014,8 @@ def Reach.path_uniq(
         Shared.List.has(~A, ~same, xs, p),
         Reach.has_uniq(~A, ~same, ~sound, xs, p)
       )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # a search of a level without its repeats finds what a search of the level finds
 def Reach.go_uniq.to(
@@ -1970,16 +2024,31 @@ def Reach.go_uniq.to(
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  +f: Nat,
+  f: Nat,
   +xs: List<&2, A>,
   +g: V,
   +m: A,
-  w: &ps: List<&2, A> -> {Reach.path(~A, ~V, ~same, ~succ, ps, Reach.uniq(~A, ~same, xs), g, m) == True{}: Bool}
+  w: &ps: List<
+    &2,
+    A> -> {
+    Reach.path(~A, ~V, ~same, ~succ, ps, Reach.uniq(~A, ~same, xs), g, m) == True{}: Bool
+  }
     & {Reach.fits(A, ps, f) == True{}: Bool}
 ) -> {Reach.go(~A, ~V, ~same, ~succ, f, xs, g, m) == True{}: Bool}:
   match w:
     case (+ps, (hp, hf)):
-      Reach.path_go(~A, ~V, ~same, ~succ, ~sound, ps, f, xs, g, m)(
+      Reach.path_go(
+        ~A,
+        ~V,
+        ~same,
+        ~succ,
+        ~sound,
+        ps,
+        f,
+        xs,
+        g,
+        m
+      )(
         Equal.trans(
           Bool,
           Reach.path(~A, ~V, ~same, ~succ, ps, xs, g, m),
@@ -2002,15 +2071,31 @@ def Reach.go_uniq.from(
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  +f: Nat,
+  f: Nat,
   +xs: List<&2, A>,
   +g: V,
   +m: A,
-  w: &ps: List<&2, A> -> {Reach.path(~A, ~V, ~same, ~succ, ps, xs, g, m) == True{}: Bool} & {Reach.fits(A, ps, f) == True{}: Bool}
+  w: &ps: List<
+    &2,
+    A> -> {
+    Reach.path(~A, ~V, ~same, ~succ, ps, xs, g, m) == True{}: Bool
+  }
+    & {Reach.fits(A, ps, f) == True{}: Bool}
 ) -> {Reach.go(~A, ~V, ~same, ~succ, f, Reach.uniq(~A, ~same, xs), g, m) == True{}: Bool}:
   match w:
     case (+ps, (hp, hf)):
-      Reach.path_go(~A, ~V, ~same, ~succ, ~sound, ps, f, Reach.uniq(~A, ~same, xs), g, m)(
+      Reach.path_go(
+        ~A,
+        ~V,
+        ~same,
+        ~succ,
+        ~sound,
+        ps,
+        f,
+        Reach.uniq(~A, ~same, xs),
+        g,
+        m
+      )(
         Equal.trans(
           Bool,
           Reach.path(~A, ~V, ~same, ~succ, ps, Reach.uniq(~A, ~same, xs), g, m),
@@ -2033,29 +2118,79 @@ def Reach.go_uniq(
   +xs: List<&2, A>,
   +g: V,
   +m: A
-) -> {Reach.go(~A, ~V, ~same, ~succ, f, Reach.uniq(~A, ~same, xs), g, m) == Reach.go(~A, ~V, ~same, ~succ, f, xs, g, m): Bool}:
+) -> {
+  Reach.go(
+    ~A,
+    ~V,
+    ~same,
+    ~succ,
+    f,
+    Reach.uniq(~A, ~same, xs),
+    g,
+    m
+  )
+    == Reach.go(~A, ~V, ~same, ~succ, f, xs, g, m): Bool
+}:
   Shared.Bool.iff(
     Reach.go(~A, ~V, ~same, ~succ, f, Reach.uniq(~A, ~same, xs), g, m),
     Reach.go(~A, ~V, ~same, ~succ, f, xs, g, m),
-    h => Reach.go_uniq.to(~A, ~V, ~same, ~succ, ~sound, f, xs, g, m, Reach.go_path(~A, ~V, ~same, ~succ, ~refl, f, Reach.uniq(~A, ~same, xs), g, m)(h)),
-    h => Reach.go_uniq.from(~A, ~V, ~same, ~succ, ~sound, f, xs, g, m, Reach.go_path(~A, ~V, ~same, ~succ, ~refl, f, xs, g, m)(h))
+    h => Reach.go_uniq.to(
+      ~A,
+      ~V,
+      ~same,
+      ~succ,
+      ~sound,
+      f,
+      xs,
+      g,
+      m,
+      Reach.go_path(~A, ~V, ~same, ~succ, ~refl, f, Reach.uniq(~A, ~same, xs), g, m)(h)
+    ),
+    h => Reach.go_uniq.from(
+      ~A,
+      ~V,
+      ~same,
+      ~succ,
+      ~sound,
+      f,
+      xs,
+      g,
+      m,
+      Reach.go_path(~A, ~V, ~same, ~succ, ~refl, f, xs, g, m)(h)
+    )
   )
 
 # m is in the level xs, or in one of the f levels below it: the levels without
 # their repeats, and no level after the first that has m
-def Reach.fast(~A: Data,
+def Reach.fast(
+  ~A: Data,
   ~V: Data,
   ~same: A -> A -> Bool,
-  ~succ: V -> A -> List<&2, A>, f: Nat, +xs: List<&2, A>, +g: V, +m: A) -> Bool:
+  ~succ: V -> A -> List<&2, A>,
+  f: Nat,
+  +xs: List<&2, A>,
+  +g: V,
+  +m: A
+) -> Bool:
   match f:
     case 0n:
       Shared.List.has(~A, ~same, xs, m)
     case 1n+e:
       List.any.if(
-        u => Reach.fast(~A, ~V, ~same, ~succ, e, Reach.uniq(~A, ~same, Reach.next(~A, ~V, ~succ, xs, g)), g, m),
+        u => Reach.fast(
+          ~A,
+          ~V,
+          ~same,
+          ~succ,
+          e,
+          Reach.uniq(~A, ~same, Reach.next(~A, ~V, ~succ, xs, g)),
+          g,
+          m
+        ),
         Shared.List.has(~A, ~same, xs, m)
       )
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement keeps each and/or as one value for the proof to split on; a proof does not run
 # the fast search finds what the search finds
 def Reach.fast_go(
   ~A: Data,
@@ -2068,7 +2203,9 @@ def Reach.fast_go(
   +xs: List<&2, A>,
   +g: V,
   +m: A
-) -> {Reach.fast(~A, ~V, ~same, ~succ, f, xs, g, m) == Reach.go(~A, ~V, ~same, ~succ, f, xs, g, m): Bool}:
+) -> {
+  Reach.fast(~A, ~V, ~same, ~succ, f, xs, g, m) == Reach.go(~A, ~V, ~same, ~succ, f, xs, g, m): Bool
+}:
   match f:
     case 0n:
       {==}
@@ -2077,8 +2214,14 @@ def Reach.fast_go(
       +n = Reach.next(~A, ~V, ~succ, xs, g)
       Equal.trans(
         Bool,
-        List.any.if(u => Reach.fast(~A, ~V, ~same, ~succ, e, Reach.uniq(~A, ~same, n), g, m), Shared.List.has(~A, ~same, xs, m)),
-        List.any.if(u => Reach.go(~A, ~V, ~same, ~succ, e, n, g, m), Shared.List.has(~A, ~same, xs, m)),
+        List.any.if(
+          u => Reach.fast(~A, ~V, ~same, ~succ, e, Reach.uniq(~A, ~same, n), g, m),
+          Shared.List.has(~A, ~same, xs, m)
+        ),
+        List.any.if(
+          u => Reach.go(~A, ~V, ~same, ~succ, e, n, g, m),
+          Shared.List.has(~A, ~same, xs, m)
+        ),
         Bool.or(Shared.List.has(~A, ~same, xs, m), Reach.go(~A, ~V, ~same, ~succ, e, n, g, m)),
         Equal.cong(
           Bool,
@@ -2095,8 +2238,12 @@ def Reach.fast_go(
             Reach.go_uniq(~A, ~V, ~same, ~succ, ~refl, ~sound, e, n, g, m)
           )
         ),
-        Shared.Bool.or_lazy(Shared.List.has(~A, ~same, xs, m), Reach.go(~A, ~V, ~same, ~succ, e, n, g, m))
+        Shared.Bool.or_lazy(
+          Shared.List.has(~A, ~same, xs, m),
+          Reach.go(~A, ~V, ~same, ~succ, e, n, g, m)
+        )
       )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # m is a successor of x, or a successor of one, at any depth: Reach.in, fast
 def Reach.in_fast(
@@ -2121,11 +2268,24 @@ def Reach.fast_in(
   ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
   +g: V,
-  +x: A,
-  +m: A
-) -> {Reach.in_fast(~A, ~V, ~same, ~succ, ~nodes, g, x, m) == Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, m): Bool}:
+  x: A,
+  m: A
+) -> {
+  Reach.in_fast(
+    ~A,
+    ~V,
+    ~same,
+    ~succ,
+    ~nodes,
+    g,
+    x,
+    m
+  )
+    == Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, m): Bool
+}:
   Reach.fast_go(~A, ~V, ~same, ~succ, ~refl, ~sound, List.length(&2, A, nodes(g)), succ(g)(x), g, m)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # what the fast search finds, Reach.in finds
 def Reach.to_in(
   ~A: Data,
@@ -2135,12 +2295,12 @@ def Reach.to_in(
   ~nodes: V -> List<&2, A>,
   ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  +g: V,
-  +x: A,
-  +m: A
-) -> {Reach.in_fast(~A, ~V, ~same, ~succ, ~nodes, g, x, m) == True{}: Bool} -> {
-  Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, m) == True{}: Bool
-}:
+  g: V,
+  x: A,
+  m: A
+) -> {
+  Reach.in_fast(~A, ~V, ~same, ~succ, ~nodes, g, x, m) == True{}: Bool
+} -> {Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, m) == True{}: Bool}:
   h => Equal.trans(
     Bool,
     Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, m),
@@ -2154,7 +2314,9 @@ def Reach.to_in(
     ),
     h
   )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # what Reach.in finds, the fast search finds
 def Reach.of_in(
   ~A: Data,
@@ -2164,12 +2326,12 @@ def Reach.of_in(
   ~nodes: V -> List<&2, A>,
   ~refl: @a: A -> {same(a, a) == True{}: Bool},
   ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
-  +g: V,
-  +x: A,
-  +m: A
-) -> {Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, m) == True{}: Bool} -> {
-  Reach.in_fast(~A, ~V, ~same, ~succ, ~nodes, g, x, m) == True{}: Bool
-}:
+  g: V,
+  x: A,
+  m: A
+) -> {
+  Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, m) == True{}: Bool
+} -> {Reach.in_fast(~A, ~V, ~same, ~succ, ~nodes, g, x, m) == True{}: Bool}:
   h => Equal.trans(
     Bool,
     Reach.in_fast(~A, ~V, ~same, ~succ, ~nodes, g, x, m),
@@ -2178,3 +2340,4 @@ def Reach.of_in(
     Reach.fast_in(~A, ~V, ~same, ~succ, ~nodes, ~refl, ~sound, g, x, m),
     h
   )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning

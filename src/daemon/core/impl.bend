@@ -2155,7 +2155,13 @@ def Notice.unseen(old: List<&2, Spec.Notice>, n: Spec.Notice) -> Bool:
 
 def Spec.Node.notices(s, t, since):
   +t = t
-  Shared.List.keep(~Spec.Notice, ~List<&2, Spec.Notice>, ~Notice.unseen, Notice.all(s, t), Notice.all(since, t))
+  Shared.List.keep(
+    ~Spec.Notice,
+    ~List<&2, Spec.Notice>,
+    ~Notice.unseen,
+    Notice.all(s, t),
+    Notice.all(since, t)
+  )
 
 # Changes
 # -------
@@ -4746,7 +4752,6 @@ def Spec.Node.forward_ours(s, x, y):
     {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Uses laws
 # ---------
 def Spec.Node.uses_import(s, b, u, c):
@@ -4754,7 +4759,18 @@ def Spec.Node.uses_import(s, b, u, c):
   +b = b
   +u = u
   +c = c
-  hu => hc => Reaches.Reach.of_in(~Resources.Name, ~Uses, ~Resources.Name.same, ~Uses.succ, ~Uses.nodes, ~Resources.Name.same_refl, ~Resources.Name.same_sound, Uses.of(s, b), u, c)(
+  hu => hc => Reaches.Reach.of_in(
+    ~Resources.Name,
+    ~Uses,
+    ~Resources.Name.same,
+    ~Uses.succ,
+    ~Uses.nodes,
+    ~Resources.Name.same_refl,
+    ~Resources.Name.same_sound,
+    Uses.of(s, b),
+    u,
+    c
+  )(
     Reaches.Reach.go_has(
       ~Resources.Name,
       ~Uses,
@@ -4766,8 +4782,8 @@ def Spec.Node.uses_import(s, b, u, c):
       c
     )(
       %Equal.sym(Bool, Shared.List.has(~Resources.Name, ~Resources.Name.same, Spec.Node.resources(s, b), u), True{}, hu): {Shared.List.has(~Resources.Name, ~Resources.Name.same, Shared.Bool.when(List<&2, Resources.Name>, _, w => Uses.targets(Uses.of(s, b), u), w => []), c) == True{}: Bool}
-      hc))
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+      hc)
+  )
 
 # Uses.live once n is known to be a resource of g or not (hit)
 def Uses.live.at(
@@ -4818,7 +4834,18 @@ def Spec.Node.uses_through(s, b, u, h, c):
   +u = u
   +h = h
   +c = c
-  x => y => Reaches.Reach.of_in(~Resources.Name, ~Uses, ~Resources.Name.same, ~Uses.succ, ~Uses.nodes, ~Resources.Name.same_refl, ~Resources.Name.same_sound, Uses.of(s, b), u, c)(
+  x => y => Reaches.Reach.of_in(
+    ~Resources.Name,
+    ~Uses,
+    ~Resources.Name.same,
+    ~Uses.succ,
+    ~Uses.nodes,
+    ~Resources.Name.same_refl,
+    ~Resources.Name.same_sound,
+    Uses.of(s, b),
+    u,
+    c
+  )(
     Reaches.Reach.in_through(
       ~Resources.Name,
       ~Uses,
@@ -4832,7 +4859,33 @@ def Spec.Node.uses_through(s, b, u, h, c):
       u,
       h,
       c
-    )(Reaches.Reach.to_in(~Resources.Name, ~Uses, ~Resources.Name.same, ~Uses.succ, ~Uses.nodes, ~Resources.Name.same_refl, ~Resources.Name.same_sound, Uses.of(s, b), u, h)(x))(Reaches.Reach.to_in(~Resources.Name, ~Uses, ~Resources.Name.same, ~Uses.succ, ~Uses.nodes, ~Resources.Name.same_refl, ~Resources.Name.same_sound, Uses.of(s, b), h, c)(y))
+    )(
+      Reaches.Reach.to_in(
+        ~Resources.Name,
+        ~Uses,
+        ~Resources.Name.same,
+        ~Uses.succ,
+        ~Uses.nodes,
+        ~Resources.Name.same_refl,
+        ~Resources.Name.same_sound,
+        Uses.of(s, b),
+        u,
+        h
+      )(x)
+    )(
+      Reaches.Reach.to_in(
+        ~Resources.Name,
+        ~Uses,
+        ~Resources.Name.same,
+        ~Uses.succ,
+        ~Uses.nodes,
+        ~Resources.Name.same_refl,
+        ~Resources.Name.same_sound,
+        Uses.of(s, b),
+        h,
+        c
+      )(y)
+    )
   )
 
 # Touch laws
@@ -5559,12 +5612,20 @@ def Spec.Node.set_group_cycle(n, s, e, g, ms, h, v):
 
 # Convergence
 # -----------
-
 def Spec.Node.join_comm(a, b):
   Shared.Trie.union_comm(
     ~Cells.Cell<Spec.Entry>,
     ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
-    ~(x => y => Cells.Cell.join_comm(~Spec.Entry, ~Spec.Entry.same, ~Spec.Entry.same_refl, ~Spec.Entry.same_sound, x, y)),
+    ~(
+      x => y => Cells.Cell.join_comm(
+        ~Spec.Entry,
+        ~Spec.Entry.same,
+        ~Spec.Entry.same_refl,
+        ~Spec.Entry.same_sound,
+        x,
+        y
+      )
+    ),
     a,
     b
   )
@@ -5573,7 +5634,17 @@ def Spec.Node.join_assoc(a, b, c):
   Shared.Trie.union_assoc(
     ~Cells.Cell<Spec.Entry>,
     ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
-    ~(x => y => z => Cells.Cell.join_assoc(~Spec.Entry, ~Spec.Entry.same, ~Spec.Entry.same_refl, ~Spec.Entry.same_sound, x, y, z)),
+    ~(
+      x => y => z => Cells.Cell.join_assoc(
+        ~Spec.Entry,
+        ~Spec.Entry.same,
+        ~Spec.Entry.same_refl,
+        ~Spec.Entry.same_sound,
+        x,
+        y,
+        z
+      )
+    ),
     a,
     b,
     c
@@ -5602,36 +5673,90 @@ def Spec.Node.missing_sync(s, r):
 # -------
 
 # a joined state still holds what it held
-def Hold.join(+s: Spec.State(), +t: Spec.State(), +k: Spec.Slot) -> {
+def Hold.join(
+  +s: Spec.State(),
+  +t: Spec.State(),
+  +k: Spec.Slot
+) -> {
   Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(s, k)) == True{}: Bool
-} -> {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(Spec.Node.join(s, t), k)) == True{}: Bool}:
+} -> {
+  Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(Spec.Node.join(s, t), k)) == True{}: Bool
+}:
   h =>
     %Equal.sym(
       Maybe<&2, Cells.Cell<Spec.Entry>>,
       Shared.Trie.get(Cells.Cell<Spec.Entry>, Spec.Node.join(s, t), Spec.Slot.key(k)),
-      Shared.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), State.cell(s, k), State.cell(t, k)),
-      Shared.Trie.get_union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, t, Spec.Slot.key(k))
+      Shared.Trie.pick(
+        ~Cells.Cell<Spec.Entry>,
+        ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
+        State.cell(s, k),
+        State.cell(t, k)
+      ),
+      Shared.Trie.get_union(
+        ~Cells.Cell<Spec.Entry>,
+        ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
+        s,
+        t,
+        Spec.Slot.key(k)
+      )
     ): {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, _) == True{}: Bool}
-    Shared.Trie.pick_left(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), State.cell(s, k), State.cell(t, k))(h)
+    Shared.Trie.pick_left(
+      ~Cells.Cell<Spec.Entry>,
+      ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
+      State.cell(s, k),
+      State.cell(t, k)
+    )(h)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a state that took in an entry at a slot holds that slot
-def Hold.put(+s: Spec.State(), +k: Spec.Slot, +e: Spec.Entry) -> {
-  Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(State.put(s, k, e), k)) == True{}: Bool
-}:
-  +t = Shared.Trie.one(Cells.Cell<Spec.Entry>, Spec.Slot.key(k), Cells.one{e})
+def Hold.put(
+  +s: Spec.State(),
+  +k: Spec.Slot,
+  +e: Spec.Entry
+) -> {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(State.put(s, k, e), k)) == True{}: Bool}:
+  t = Shared.Trie.one(Cells.Cell<Spec.Entry>, Spec.Slot.key(k), Cells.one{e})
   %Equal.sym(
     Maybe<&2, Cells.Cell<Spec.Entry>>,
     Shared.Trie.get(Cells.Cell<Spec.Entry>, Spec.Node.join(s, t), Spec.Slot.key(k)),
-    Shared.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), State.cell(s, k), Shared.Trie.get(Cells.Cell<Spec.Entry>, t, Spec.Slot.key(k))),
-    Shared.Trie.get_union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, t, Spec.Slot.key(k))
+    Shared.Trie.pick(
+      ~Cells.Cell<Spec.Entry>,
+      ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
+      State.cell(s, k),
+      Shared.Trie.get(Cells.Cell<Spec.Entry>, t, Spec.Slot.key(k))
+    ),
+    Shared.Trie.get_union(
+      ~Cells.Cell<Spec.Entry>,
+      ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
+      s,
+      t,
+      Spec.Slot.key(k)
+    )
   ): {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, _) == True{}: Bool}
   %Equal.sym(
     Maybe<&2, Cells.Cell<Spec.Entry>>,
     Shared.Trie.get(Cells.Cell<Spec.Entry>, t, Spec.Slot.key(k)),
     Some{Cells.one{e}},
     Shared.Trie.get_one(Cells.Cell<Spec.Entry>, Spec.Slot.key(k), Cells.one{e})
-  ): {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, Shared.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), State.cell(s, k), _)) == True{}: Bool}
-  Shared.Trie.pick_right(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), State.cell(s, k), Some{Cells.one{e}})({==})
+  ): {
+    Maybe.is_some(
+      &2,
+      Cells.Cell<Spec.Entry>,
+      Shared.Trie.pick(
+        ~Cells.Cell<Spec.Entry>,
+        ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
+        State.cell(s, k),
+        _
+      )
+    )
+      == True{}: Bool
+  }
+  Shared.Trie.pick_right(
+    ~Cells.Cell<Spec.Entry>,
+    ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
+    State.cell(s, k),
+    Some{Cells.one{e}}
+  )({==})
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # both states hold the slot k, so the one picked does
 def Hold.pick(
@@ -5641,13 +5766,22 @@ def Hold.pick(
   -k: Spec.Slot,
   ha: {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(a, k)) == True{}: Bool},
   hb: {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(b, k)) == True{}: Bool}
-) -> {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(Bool.pick(Spec.State(), c, a, b), k)) == True{}: Bool}:
+) -> {
+  Maybe.is_some(
+    &2,
+    Cells.Cell<Spec.Entry>,
+    State.cell(Bool.pick(Spec.State(), c, a, b), k)
+  )
+    == True{}: Bool
+}:
   match c:
     case True{}:
       ha
     case False{}:
       hb
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement keeps each and/or as one value for the proof to split on; a proof does not run
 # Node.ask.at keeps what s1 holds
 def Hold.at(
   +n: String,
@@ -5656,9 +5790,16 @@ def Hold.at(
   +i: Spec.Id,
   +q: Spec.Ask,
   m: Maybe<&2, Step>,
-  +k: Spec.Slot,
+  k: Spec.Slot,
   +h1: {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(s1, k)) == True{}: Bool}
-) -> {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(Node.ask.at(n, s, s1, i, q, m), k)) == True{}: Bool}:
+) -> {
+  Maybe.is_some(
+    &2,
+    Cells.Cell<Spec.Entry>,
+    State.cell(Node.ask.at(n, s, s1, i, q, m), k)
+  )
+    == True{}: Bool
+}:
   match m:
     case None{}:
       h1
@@ -5670,12 +5811,19 @@ def Hold.at(
         k,
         Hold.join(
           s1,
-          Shared.Trie.one(Cells.Cell<Spec.Entry>, Spec.Slot.key(Spec.Slot.vote{n, Spec.Ask.chain(q), h}), Cells.one{Spec.Entry.vote{i}}),
+          Shared.Trie.one(
+            Cells.Cell<Spec.Entry>,
+            Spec.Slot.key(Spec.Slot.vote{n, Spec.Ask.chain(q), h}),
+            Cells.one{Spec.Entry.vote{i}}
+          ),
           k
         )(h1),
         h1
       )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Node.ask.root keeps what s1 holds
 def Hold.root(
   +n: String,
@@ -5684,14 +5832,25 @@ def Hold.root(
   +i: Spec.Id,
   +q: Spec.Ask,
   m: Maybe<&2, Spec.Entry>,
-  +k: Spec.Slot,
+  k: Spec.Slot,
   +h1: {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(s1, k)) == True{}: Bool}
-) -> {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(Node.ask.root(n, s, s1, i, q, m), k)) == True{}: Bool}:
+) -> {
+  Maybe.is_some(
+    &2,
+    Cells.Cell<Spec.Entry>,
+    State.cell(Node.ask.root(n, s, s1, i, q, m), k)
+  )
+    == True{}: Bool
+}:
   match m:
     case None{}:
       Hold.pick(
         Ask.creates(q),
-        State.put(s1, Spec.Slot.root{Spec.Ask.chain(q), n}, Spec.Entry.root{Spec.Ask.chain(q), i, n}),
+        State.put(
+          s1,
+          Spec.Slot.root{Spec.Ask.chain(q), n},
+          Spec.Entry.root{Spec.Ask.chain(q), i, n}
+        ),
         s1,
         k,
         Hold.join(
@@ -5707,17 +5866,25 @@ def Hold.root(
       )
     case Some{x}:
       Hold.at(n, s, s1, i, q, Chain.cursor(s, Spec.Ask.chain(q)), k, h1)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a node that took in the request i holds it, once its cell in s is known (m)
 def Hold.fresh(
-  +n: String,
+  n: String,
   +s: Spec.State(),
   +i: Spec.Id,
   +t: String,
   +q: Spec.Ask,
   m: Maybe<&2, Cells.Cell<Spec.Entry>>,
   em: {State.cell(s, Spec.Slot.ask{i}) == m: Maybe<&2, Cells.Cell<Spec.Entry>>}
-) -> {Maybe.is_some(&2, Cells.Cell<Spec.Entry>, State.cell(Node.ask.fresh(n, s, i, t, q, m), Spec.Slot.ask{i})) == True{}: Bool}:
+) -> {
+  Maybe.is_some(
+    &2,
+    Cells.Cell<Spec.Entry>,
+    State.cell(Node.ask.fresh(n, s, i, t, q, m), Spec.Slot.ask{i})
+  )
+    == True{}: Bool
+}:
   match m:
     case Some{x}:
       %Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, State.cell(s, Spec.Slot.ask{i}), Some{x}, em):
@@ -5736,12 +5903,22 @@ def Hold.fresh(
       )
 
 # a held request changes nothing, once its cell is known (m)
-def Held.fresh(n: String, s: Spec.State(), i: Spec.Id, t: String, q: Spec.Ask, m: Maybe<&2, Cells.Cell<Spec.Entry>>) -> {
+def Held.fresh(
+  n: String,
+  s: Spec.State(),
+  i: Spec.Id,
+  t: String,
+  q: Spec.Ask,
+  m: Maybe<&2, Cells.Cell<Spec.Entry>>
+) -> {
   Maybe.is_some(&2, Cells.Cell<Spec.Entry>, m) == True{}: Bool
 } -> {Node.ask.fresh(n, s, i, t, q, m) == s: Spec.State()}:
   match m:
     case None{}:
-      h => Empty.absurd({Node.ask.fresh(n, s, i, t, q, None{}) == s: Spec.State()}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Node.ask.fresh(n, s, i, t, q, None{}) == s: Spec.State()},
+        Shared.Bool.false_ne_true(h)
+      )
     case Some{x}:
       h => {==}
 
@@ -5758,9 +5935,12 @@ def Spec.Node.ask_again(n, s, r, w, t1, t2, q1, q2):
   +w = w
   +q1 = q1
   +t1 = t1
-  Spec.Node.ask_held(n, Spec.Node.ask(n, s, Spec.Envelope{r, w, t1}, q1), Spec.Envelope{r, w, t2}, q2)(
-    Hold.fresh(n, s, Spec.Id{w, r}, t1, q1, State.cell(s, Spec.Slot.ask{Spec.Id{w, r}}), {==})
-  )
+  Spec.Node.ask_held(
+    n,
+    Spec.Node.ask(n, s, Spec.Envelope{r, w, t1}, q1),
+    Spec.Envelope{r, w, t2},
+    q2
+  )(Hold.fresh(n, s, Spec.Id{w, r}, t1, q1, State.cell(s, Spec.Slot.ask{Spec.Id{w, r}}), {==}))
 
 # Group laws
 # ----------
@@ -5774,31 +5954,83 @@ def Group.live.at(
   q: Spec.Member,
   e: {Shared.List.has(~Spec.Member, ~Spec.Member.same, all, Spec.Member.group{h}) == hit: Bool}
 ) -> {
-  Shared.List.has(~Spec.Member, ~Spec.Member.same, Maybe.default(&2, List<&2, Spec.Member>, Shared.Bool.when(Maybe<&2, List<&2, Spec.Member>>, hit, u => Group.last(s, Spec.Node.chain(s, Spec.Chain.group{h}), None{}), u => None{}), []), q)
+  Shared.List.has(
+    ~Spec.Member,
+    ~Spec.Member.same,
+    Maybe.default(
+      &2,
+      List<&2, Spec.Member>,
+      Shared.Bool.when(
+        Maybe<&2, List<&2, Spec.Member>>,
+        hit,
+        u => Group.last(s, Spec.Node.chain(s, Spec.Chain.group{h}), None{}),
+        u => None{}
+      ),
+      []
+    ),
+    q
+  )
     == True{}: Bool
 } -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, all, Spec.Member.group{h}) == True{}: Bool}:
   match hit:
     case True{}:
       x => e
     case False{}:
-      x => Empty.absurd({Shared.List.has(~Spec.Member, ~Spec.Member.same, all, Spec.Member.group{h}) == True{}: Bool}, Shared.Bool.false_ne_true(x))
+      x => Empty.absurd(
+        {
+          Shared.List.has(
+            ~Spec.Member,
+            ~Spec.Member.same,
+            all,
+            Spec.Member.group{h}
+          )
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(x)
+      )
 
 # only a group of gs has members
-def Group.live(gs: Groups, p: Spec.Member, q: Spec.Member) -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.succ(gs, p), q) == True{}: Bool} -> {
-  Shared.List.has(~Spec.Member, ~Spec.Member.same, Groups.nodes(gs), p) == True{}: Bool
-}:
+def Group.live(
+  gs: Groups,
+  p: Spec.Member,
+  q: Spec.Member
+) -> {
+  Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.succ(gs, p), q) == True{}: Bool
+} -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Groups.nodes(gs), p) == True{}: Bool}:
   match gs p:
     case Groups{s, all} Spec.Member.node{n}:
-      x => Empty.absurd({Shared.List.has(~Spec.Member, ~Spec.Member.same, all, Spec.Member.node{n}) == True{}: Bool}, Shared.Bool.false_ne_true(x))
+      x => Empty.absurd(
+        {
+          Shared.List.has(~Spec.Member, ~Spec.Member.same, all, Spec.Member.node{n}) == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(x)
+      )
     case Groups{+s, +all} Spec.Member.group{+h}:
-      Group.live.at(Shared.List.has(~Spec.Member, ~Spec.Member.same, all, Spec.Member.group{h}), s, all, h, q, {==})
+      Group.live.at(
+        Shared.List.has(~Spec.Member, ~Spec.Member.same, all, Spec.Member.group{h}),
+        s,
+        all,
+        h,
+        q,
+        {==}
+      )
 
 def Spec.Node.inside_member(s, m, g, ms):
   +s = s
   +m = m
   +g = g
-  +ms = ms
-  hm => hx => Reaches.Reach.of_in(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, ~Groups.nodes, ~Member.same_refl, ~Member.same_sound, Groups.of(s), Spec.Member.group{g}, m)(
+  hm => hx => Reaches.Reach.of_in(
+    ~Spec.Member,
+    ~Groups,
+    ~Spec.Member.same,
+    ~Group.succ,
+    ~Groups.nodes,
+    ~Member.same_refl,
+    ~Member.same_sound,
+    Groups.of(s),
+    Spec.Member.group{g},
+    m
+  )(
     Reaches.Reach.go_has(
       ~Spec.Member,
       ~Groups,
@@ -5811,8 +6043,7 @@ def Spec.Node.inside_member(s, m, g, ms):
     )(
       %Equal.sym(Maybe<&2, List<&2, Spec.Member>>, Spec.Node.members(s, g), Some{ms}, hm):
         {Shared.List.has(~Spec.Member, ~Spec.Member.same, Maybe.default(&2, List<&2, Spec.Member>, _, []), m) == True{}: Bool}
-      hx
-    )
+      hx)
   )
 
 def Spec.Node.inside_through(s, m, h, g):
@@ -5820,7 +6051,18 @@ def Spec.Node.inside_through(s, m, h, g):
   +m = m
   +h = h
   +g = g
-  x => y => Reaches.Reach.of_in(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, ~Groups.nodes, ~Member.same_refl, ~Member.same_sound, Groups.of(s), Spec.Member.group{g}, m)(
+  x => y => Reaches.Reach.of_in(
+    ~Spec.Member,
+    ~Groups,
+    ~Spec.Member.same,
+    ~Group.succ,
+    ~Groups.nodes,
+    ~Member.same_refl,
+    ~Member.same_sound,
+    Groups.of(s),
+    Spec.Member.group{g},
+    m
+  )(
     Reaches.Reach.in_through(
       ~Spec.Member,
       ~Groups,
@@ -5834,14 +6076,52 @@ def Spec.Node.inside_through(s, m, h, g):
       Spec.Member.group{g},
       Spec.Member.group{h},
       m
-    )(Reaches.Reach.to_in(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, ~Groups.nodes, ~Member.same_refl, ~Member.same_sound, Groups.of(s), Spec.Member.group{g}, Spec.Member.group{h})(x))(
-      Reaches.Reach.to_in(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, ~Groups.nodes, ~Member.same_refl, ~Member.same_sound, Groups.of(s), Spec.Member.group{h}, m)(y)
+    )(
+      Reaches.Reach.to_in(
+        ~Spec.Member,
+        ~Groups,
+        ~Spec.Member.same,
+        ~Group.succ,
+        ~Groups.nodes,
+        ~Member.same_refl,
+        ~Member.same_sound,
+        Groups.of(s),
+        Spec.Member.group{g},
+        Spec.Member.group{h}
+      )(x)
+    )(
+      Reaches.Reach.to_in(
+        ~Spec.Member,
+        ~Groups,
+        ~Spec.Member.same,
+        ~Group.succ,
+        ~Groups.nodes,
+        ~Member.same_refl,
+        ~Member.same_sound,
+        Groups.of(s),
+        Spec.Member.group{h},
+        m
+      )(y)
     )
   )
 
 # no path starts from no member
-def Group.no_path(ps: List<&2, Spec.Member>, gs: Groups, m: Spec.Member) -> {
-  Reaches.Reach.path(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, ps, [], gs, m) == True{}: Bool
+def Group.no_path(
+  ps: List<&2, Spec.Member>,
+  gs: Groups,
+  m: Spec.Member
+) -> {
+  Reaches.Reach.path(
+    ~Spec.Member,
+    ~Groups,
+    ~Spec.Member.same,
+    ~Group.succ,
+    ps,
+    [],
+    gs,
+    m
+  )
+    == True{}: Bool
 } -> Empty:
   match ps:
     case Nil{}:
@@ -5850,13 +6130,44 @@ def Group.no_path(ps: List<&2, Spec.Member>, gs: Groups, m: Spec.Member) -> {
       x => Shared.Bool.false_ne_true(x)
 
 # a path from the members of g to m: m is a member of g, or inside one
-def Group.unfold(ps: List<&2, Spec.Member>, +s: Spec.State(), +g: String, +m: Spec.Member) -> {
-  Reaches.Reach.path(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, ps, Group.succ(Groups.of(s), Spec.Member.group{g}), Groups.of(s), m) == True{}: Bool
-} -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), []), m) == True{}: Bool}
-  | (&h: String -> {
-    Shared.List.has(~Spec.Member, ~Spec.Member.same, Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), []), Spec.Member.group{h}) == True{}: Bool
-  }
-    & {Spec.Node.is_inside(s, m, h) == True{}: Bool}):
+def Group.unfold(
+  ps: List<&2, Spec.Member>,
+  +s: Spec.State(),
+  +g: String,
+  +m: Spec.Member
+) -> {
+  Reaches.Reach.path(
+    ~Spec.Member,
+    ~Groups,
+    ~Spec.Member.same,
+    ~Group.succ,
+    ps,
+    Group.succ(Groups.of(s), Spec.Member.group{g}),
+    Groups.of(s),
+    m
+  )
+    == True{}: Bool
+} -> {
+  Shared.List.has(
+    ~Spec.Member,
+    ~Spec.Member.same,
+    Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), []),
+    m
+  )
+    == True{}: Bool
+}
+  | (
+    &h: String -> {
+      Shared.List.has(
+        ~Spec.Member,
+        ~Spec.Member.same,
+        Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), []),
+        Spec.Member.group{h}
+      )
+        == True{}: Bool
+    }
+      & {Spec.Node.is_inside(s, m, h) == True{}: Bool}
+  ):
   match ps:
     case Nil{}:
       x => Inl{x}
@@ -5865,15 +6176,49 @@ def Group.unfold(ps: List<&2, Spec.Member>, +s: Spec.State(), +g: String, +m: Sp
         case Spec.Member.node{n}:
           +x =>
             Empty.absurd(
-              {Shared.List.has(~Spec.Member, ~Spec.Member.same, Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), []), m) == True{}: Bool}
-                | (&h: String -> {
-                  Shared.List.has(~Spec.Member, ~Spec.Member.same, Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), []), Spec.Member.group{h}) == True{}: Bool
-                }
-                  & {Spec.Node.is_inside(s, m, h) == True{}: Bool}),
-              Group.no_path(r, Groups.of(s), m)(
+              {
+                Shared.List.has(
+                  ~Spec.Member,
+                  ~Spec.Member.same,
+                  Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), []),
+                  m
+                )
+                  == True{}: Bool
+              }
+                | (
+                  &h: String -> {
+                    Shared.List.has(
+                      ~Spec.Member,
+                      ~Spec.Member.same,
+                      Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), []),
+                      Spec.Member.group{h}
+                    )
+                      == True{}: Bool
+                  }
+                    & {Spec.Node.is_inside(s, m, h) == True{}: Bool}
+                ),
+              Group.no_path(
+                r,
+                Groups.of(s),
+                m
+              )(
                 Shared.Bool.and_true_right(
-                  Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.succ(Groups.of(s), Spec.Member.group{g}), Spec.Member.node{n}),
-                  Reaches.Reach.path(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, r, [], Groups.of(s), m)
+                  Shared.List.has(
+                    ~Spec.Member,
+                    ~Spec.Member.same,
+                    Group.succ(Groups.of(s), Spec.Member.group{g}),
+                    Spec.Member.node{n}
+                  ),
+                  Reaches.Reach.path(
+                    ~Spec.Member,
+                    ~Groups,
+                    ~Spec.Member.same,
+                    ~Group.succ,
+                    r,
+                    [],
+                    Groups.of(s),
+                    m
+                  )
                 )(x)
               )
             )
@@ -5884,45 +6229,121 @@ def Group.unfold(ps: List<&2, Spec.Member>, +s: Spec.State(), +g: String, +m: Sp
                 h,
                 (
                   Shared.Bool.and_true_left(
-                    Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.succ(Groups.of(s), Spec.Member.group{g}), Spec.Member.group{h}),
-                    Reaches.Reach.path(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, r, Group.succ(Groups.of(s), Spec.Member.group{h}), Groups.of(s), m)
+                    Shared.List.has(
+                      ~Spec.Member,
+                      ~Spec.Member.same,
+                      Group.succ(Groups.of(s), Spec.Member.group{g}),
+                      Spec.Member.group{h}
+                    ),
+                    Reaches.Reach.path(
+                      ~Spec.Member,
+                      ~Groups,
+                      ~Spec.Member.same,
+                      ~Group.succ,
+                      r,
+                      Group.succ(Groups.of(s), Spec.Member.group{h}),
+                      Groups.of(s),
+                      m
+                    )
                   )(x),
-                  Reaches.Reach.of_in(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, ~Groups.nodes, ~Member.same_refl, ~Member.same_sound, Groups.of(s), Spec.Member.group{h}, m)(Reaches.Reach.path_in(
+                  Reaches.Reach.of_in(
                     ~Spec.Member,
                     ~Groups,
                     ~Spec.Member.same,
                     ~Group.succ,
                     ~Groups.nodes,
+                    ~Member.same_refl,
                     ~Member.same_sound,
-                    ~Group.live,
-                    r,
                     Groups.of(s),
                     Spec.Member.group{h},
                     m
                   )(
-                    Shared.Bool.and_true_right(
-                      Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.succ(Groups.of(s), Spec.Member.group{g}), Spec.Member.group{h}),
-                      Reaches.Reach.path(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, r, Group.succ(Groups.of(s), Spec.Member.group{h}), Groups.of(s), m)
-                    )(x)
-                  ))
+                    Reaches.Reach.path_in(
+                      ~Spec.Member,
+                      ~Groups,
+                      ~Spec.Member.same,
+                      ~Group.succ,
+                      ~Groups.nodes,
+                      ~Member.same_sound,
+                      ~Group.live,
+                      r,
+                      Groups.of(s),
+                      Spec.Member.group{h},
+                      m
+                    )(
+                      Shared.Bool.and_true_right(
+                        Shared.List.has(
+                          ~Spec.Member,
+                          ~Spec.Member.same,
+                          Group.succ(Groups.of(s), Spec.Member.group{g}),
+                          Spec.Member.group{h}
+                        ),
+                        Reaches.Reach.path(
+                          ~Spec.Member,
+                          ~Groups,
+                          ~Spec.Member.same,
+                          ~Group.succ,
+                          r,
+                          Group.succ(Groups.of(s), Spec.Member.group{h}),
+                          Groups.of(s),
+                          m
+                        )
+                      )(x)
+                    )
+                  )
                 )
               )
             }
 
 # Group.unfold, from a path that a search found
 def Group.unfold.of(
-  +s: Spec.State(),
-  +g: String,
-  +m: Spec.Member,
-  w: &ps: List<&2, Spec.Member> -> {
-    Reaches.Reach.path(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, ps, Group.succ(Groups.of(s), Spec.Member.group{g}), Groups.of(s), m) == True{}: Bool
+  s: Spec.State(),
+  g: String,
+  m: Spec.Member,
+  w: &ps: List<
+    &2,
+    Spec.Member> -> {
+    Reaches.Reach.path(
+      ~Spec.Member,
+      ~Groups,
+      ~Spec.Member.same,
+      ~Group.succ,
+      ps,
+      Group.succ(Groups.of(s), Spec.Member.group{g}),
+      Groups.of(s),
+      m
+    )
+      == True{}: Bool
   }
-    & {Reaches.Reach.fits(Spec.Member, ps, List.length(&2, Spec.Member, Groups.nodes(Groups.of(s)))) == True{}: Bool}
-) -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), []), m) == True{}: Bool}
-  | (&h: String -> {
-    Shared.List.has(~Spec.Member, ~Spec.Member.same, Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), []), Spec.Member.group{h}) == True{}: Bool
-  }
-    & {Spec.Node.is_inside(s, m, h) == True{}: Bool}):
+    & {
+      Reaches.Reach.fits(
+        Spec.Member,
+        ps,
+        List.length(&2, Spec.Member, Groups.nodes(Groups.of(s)))
+      )
+        == True{}: Bool
+    }
+) -> {
+  Shared.List.has(
+    ~Spec.Member,
+    ~Spec.Member.same,
+    Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), []),
+    m
+  )
+    == True{}: Bool
+}
+  | (
+    &h: String -> {
+      Shared.List.has(
+        ~Spec.Member,
+        ~Spec.Member.same,
+        Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), []),
+        Spec.Member.group{h}
+      )
+        == True{}: Bool
+    }
+      & {Spec.Node.is_inside(s, m, h) == True{}: Bool}
+  ):
   match w:
     case (ps, (hp, hf)):
       Group.unfold(ps, s, g, m)(hp)
@@ -5945,14 +6366,30 @@ def Spec.Node.inside_unfold(s, m, g):
       Group.succ(Groups.of(s), Spec.Member.group{g}),
       Groups.of(s),
       m
-    )(Reaches.Reach.to_in(~Spec.Member, ~Groups, ~Spec.Member.same, ~Group.succ, ~Groups.nodes, ~Member.same_refl, ~Member.same_sound, Groups.of(s), Spec.Member.group{g}, m)(x))
+    )(
+      Reaches.Reach.to_in(
+        ~Spec.Member,
+        ~Groups,
+        ~Spec.Member.same,
+        ~Group.succ,
+        ~Groups.nodes,
+        ~Member.same_refl,
+        ~Member.same_sound,
+        Groups.of(s),
+        Spec.Member.group{g},
+        m
+      )(x)
+    )
   )
 
 # Notices since
 # -------------
 
 # Notice.same is True only for equal notices
-def Notice.same_sound(a: Spec.Notice, b: Spec.Notice) -> {Spec.Notice.same(a, b) == True{}: Bool} -> {a == b: Spec.Notice}:
+def Notice.same_sound(
+  a: Spec.Notice,
+  b: Spec.Notice
+) -> {Spec.Notice.same(a, b) == True{}: Bool} -> {a == b: Spec.Notice}:
   match a b:
     case Spec.Notice.versioned{+b1, +v1} Spec.Notice.versioned{+b2, +v2}:
       +h =>
@@ -5960,77 +6397,180 @@ def Notice.same_sound(a: Spec.Notice, b: Spec.Notice) -> {Spec.Notice.same(a, b)
           String,
           b1,
           b2,
-          Shared.String.eq_sound(b1, b2)(Shared.Bool.and_true_left(String.eq(b1, b2), Spec.Id.same(v1, v2))(h))
+          Shared.String.eq_sound(
+            b1,
+            b2
+          )(Shared.Bool.and_true_left(String.eq(b1, b2), Spec.Id.same(v1, v2))(h))
         ): {Spec.Notice.versioned{_, v1} == Spec.Notice.versioned{b2, v2}: Spec.Notice}
         %Equal.sym(
           Spec.Id,
           v1,
           v2,
-          Id.same_sound(v1, v2)(Shared.Bool.and_true_right(String.eq(b1, b2), Spec.Id.same(v1, v2))(h))
+          Id.same_sound(
+            v1,
+            v2
+          )(Shared.Bool.and_true_right(String.eq(b1, b2), Spec.Id.same(v1, v2))(h))
         ): {Spec.Notice.versioned{b2, _} == Spec.Notice.versioned{b2, v2}: Spec.Notice}
         {==}
     case Spec.Notice.versioned{b1, v1} Spec.Notice.conflicted{b2, v2}:
-      h => Empty.absurd({Spec.Notice.versioned{b1, v1} == Spec.Notice.conflicted{b2, v2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Notice.versioned{b1, v1} == Spec.Notice.conflicted{b2, v2}: Spec.Notice},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Notice.versioned{b1, v1} Spec.Notice.touched{t2}:
-      h => Empty.absurd({Spec.Notice.versioned{b1, v1} == Spec.Notice.touched{t2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Notice.versioned{b1, v1} == Spec.Notice.touched{t2}: Spec.Notice},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Notice.versioned{b1, v1} Spec.Notice.group_cycle{g2}:
-      h => Empty.absurd({Spec.Notice.versioned{b1, v1} == Spec.Notice.group_cycle{g2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Notice.versioned{b1, v1} == Spec.Notice.group_cycle{g2}: Spec.Notice},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Notice.conflicted{b1, v1} Spec.Notice.versioned{b2, v2}:
-      h => Empty.absurd({Spec.Notice.conflicted{b1, v1} == Spec.Notice.versioned{b2, v2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Notice.conflicted{b1, v1} == Spec.Notice.versioned{b2, v2}: Spec.Notice},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Notice.conflicted{+b1, +v1} Spec.Notice.conflicted{+b2, +v2}:
       +h =>
         %Equal.sym(
           String,
           b1,
           b2,
-          Shared.String.eq_sound(b1, b2)(Shared.Bool.and_true_left(String.eq(b1, b2), Spec.Id.same(v1, v2))(h))
+          Shared.String.eq_sound(
+            b1,
+            b2
+          )(Shared.Bool.and_true_left(String.eq(b1, b2), Spec.Id.same(v1, v2))(h))
         ): {Spec.Notice.conflicted{_, v1} == Spec.Notice.conflicted{b2, v2}: Spec.Notice}
         %Equal.sym(
           Spec.Id,
           v1,
           v2,
-          Id.same_sound(v1, v2)(Shared.Bool.and_true_right(String.eq(b1, b2), Spec.Id.same(v1, v2))(h))
+          Id.same_sound(
+            v1,
+            v2
+          )(Shared.Bool.and_true_right(String.eq(b1, b2), Spec.Id.same(v1, v2))(h))
         ): {Spec.Notice.conflicted{b2, _} == Spec.Notice.conflicted{b2, v2}: Spec.Notice}
         {==}
     case Spec.Notice.conflicted{b1, v1} Spec.Notice.touched{t2}:
-      h => Empty.absurd({Spec.Notice.conflicted{b1, v1} == Spec.Notice.touched{t2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Notice.conflicted{b1, v1} == Spec.Notice.touched{t2}: Spec.Notice},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Notice.conflicted{b1, v1} Spec.Notice.group_cycle{g2}:
-      h => Empty.absurd({Spec.Notice.conflicted{b1, v1} == Spec.Notice.group_cycle{g2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Notice.conflicted{b1, v1} == Spec.Notice.group_cycle{g2}: Spec.Notice},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Notice.touched{t1} Spec.Notice.versioned{b2, v2}:
-      h => Empty.absurd({Spec.Notice.touched{t1} == Spec.Notice.versioned{b2, v2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Notice.touched{t1} == Spec.Notice.versioned{b2, v2}: Spec.Notice},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Notice.touched{t1} Spec.Notice.conflicted{b2, v2}:
-      h => Empty.absurd({Spec.Notice.touched{t1} == Spec.Notice.conflicted{b2, v2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
-    case Spec.Notice.touched{+t1} Spec.Notice.touched{+t2}:
+      h => Empty.absurd(
+        {Spec.Notice.touched{t1} == Spec.Notice.conflicted{b2, v2}: Spec.Notice},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Spec.Notice.touched{+t1} Spec.Notice.touched{t2}:
       h =>
-        %Equal.sym(Spec.Touch, t1, t2, Touch.same_sound(t1, t2)(h)): {Spec.Notice.touched{_} == Spec.Notice.touched{t2}: Spec.Notice}
+        %Equal.sym(
+          Spec.Touch,
+          t1,
+          t2,
+          Touch.same_sound(t1, t2)(h)
+        ): {Spec.Notice.touched{_} == Spec.Notice.touched{t2}: Spec.Notice}
         {==}
     case Spec.Notice.touched{t1} Spec.Notice.group_cycle{g2}:
-      h => Empty.absurd({Spec.Notice.touched{t1} == Spec.Notice.group_cycle{g2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Notice.touched{t1} == Spec.Notice.group_cycle{g2}: Spec.Notice},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Notice.group_cycle{g1} Spec.Notice.versioned{b2, v2}:
-      h => Empty.absurd({Spec.Notice.group_cycle{g1} == Spec.Notice.versioned{b2, v2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Notice.group_cycle{g1} == Spec.Notice.versioned{b2, v2}: Spec.Notice},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Notice.group_cycle{g1} Spec.Notice.conflicted{b2, v2}:
-      h => Empty.absurd({Spec.Notice.group_cycle{g1} == Spec.Notice.conflicted{b2, v2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Notice.group_cycle{g1} == Spec.Notice.conflicted{b2, v2}: Spec.Notice},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Notice.group_cycle{g1} Spec.Notice.touched{t2}:
-      h => Empty.absurd({Spec.Notice.group_cycle{g1} == Spec.Notice.touched{t2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
-    case Spec.Notice.group_cycle{+g1} Spec.Notice.group_cycle{+g2}:
+      h => Empty.absurd(
+        {Spec.Notice.group_cycle{g1} == Spec.Notice.touched{t2}: Spec.Notice},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Spec.Notice.group_cycle{+g1} Spec.Notice.group_cycle{g2}:
       h =>
-        %Equal.sym(String, g1, g2, Shared.String.eq_sound(g1, g2)(h)): {Spec.Notice.group_cycle{_} == Spec.Notice.group_cycle{g2}: Spec.Notice}
+        %Equal.sym(
+          String,
+          g1,
+          g2,
+          Shared.String.eq_sound(g1, g2)(h)
+        ): {Spec.Notice.group_cycle{_} == Spec.Notice.group_cycle{g2}: Spec.Notice}
         {==}
 
 # the notices of z since nothing are all its notices of the topic k
-def Notice.since_none(+z: Spec.State(), k: Spec.Topic, +x: Spec.Notice) -> {
-  Shared.List.has(~Spec.Notice, ~Spec.Notice.same, Spec.Node.notices(z, k, Spec.Node.empty()), x)
+def Notice.since_none(
+  z: Spec.State(),
+  k: Spec.Topic,
+  x: Spec.Notice
+) -> {
+  Shared.List.has(
+    ~Spec.Notice,
+    ~Spec.Notice.same,
+    Spec.Node.notices(z, k, Spec.Node.empty()),
+    x
+  )
     == Shared.List.has(~Spec.Notice, ~Spec.Notice.same, Notice.all(z, k), x): Bool
 }:
   match k:
-    case Spec.Topic.versions{+b}:
-      Shared.List.has_keep(~Spec.Notice, ~List<&2, Spec.Notice>, ~Spec.Notice.same, ~Notice.unseen, ~Notice.same_sound, Notice.all(z, Spec.Topic.versions{b}), [], x)
-    case Spec.Topic.conflicts{+b}:
-      Shared.List.has_keep(~Spec.Notice, ~List<&2, Spec.Notice>, ~Spec.Notice.same, ~Notice.unseen, ~Notice.same_sound, Notice.all(z, Spec.Topic.conflicts{b}), [], x)
-    case Spec.Topic.affects{+b}:
-      Shared.List.has_keep(~Spec.Notice, ~List<&2, Spec.Notice>, ~Spec.Notice.same, ~Notice.unseen, ~Notice.same_sound, Notice.all(z, Spec.Topic.affects{b}), [], x)
+    case Spec.Topic.versions{b}:
+      Shared.List.has_keep(
+        ~Spec.Notice,
+        ~List<&2, Spec.Notice>,
+        ~Spec.Notice.same,
+        ~Notice.unseen,
+        ~Notice.same_sound,
+        Notice.all(z, Spec.Topic.versions{b}),
+        [],
+        x
+      )
+    case Spec.Topic.conflicts{b}:
+      Shared.List.has_keep(
+        ~Spec.Notice,
+        ~List<&2, Spec.Notice>,
+        ~Spec.Notice.same,
+        ~Notice.unseen,
+        ~Notice.same_sound,
+        Notice.all(z, Spec.Topic.conflicts{b}),
+        [],
+        x
+      )
+    case Spec.Topic.affects{b}:
+      Shared.List.has_keep(
+        ~Spec.Notice,
+        ~List<&2, Spec.Notice>,
+        ~Spec.Notice.same,
+        ~Notice.unseen,
+        ~Notice.same_sound,
+        Notice.all(z, Spec.Topic.affects{b}),
+        [],
+        x
+      )
     case Spec.Topic.groups{}:
-      Shared.List.has_keep(~Spec.Notice, ~List<&2, Spec.Notice>, ~Spec.Notice.same, ~Notice.unseen, ~Notice.same_sound, Notice.all(z, Spec.Topic.groups{}), [], x)
+      Shared.List.has_keep(
+        ~Spec.Notice,
+        ~List<&2, Spec.Notice>,
+        ~Spec.Notice.same,
+        ~Notice.unseen,
+        ~Notice.same_sound,
+        Notice.all(z, Spec.Topic.groups{}),
+        [],
+        x
+      )
 
 def Spec.Node.notices_exactly(t, k, since, x):
   +t = t
@@ -6039,14 +6579,29 @@ def Spec.Node.notices_exactly(t, k, since, x):
   +x = x
   %Equal.sym(
     Bool,
-    Shared.List.has(~Spec.Notice, ~Spec.Notice.same, Spec.Node.notices(since, k, Spec.Node.empty()), x),
+    Shared.List.has(
+      ~Spec.Notice,
+      ~Spec.Notice.same,
+      Spec.Node.notices(since, k, Spec.Node.empty()),
+      x
+    ),
     Shared.List.has(~Spec.Notice, ~Spec.Notice.same, Notice.all(since, k), x),
     Notice.since_none(since, k, x)
   ): {
-    Shared.List.has(~Spec.Notice, ~Spec.Notice.same, Spec.Node.notices(t, k, since), x)
+    Shared.List.has(
+      ~Spec.Notice,
+      ~Spec.Notice.same,
+      Spec.Node.notices(t, k, since),
+      x
+    )
       == Bool.and(
         Bool.not(_),
-        Shared.List.has(~Spec.Notice, ~Spec.Notice.same, Spec.Node.notices(t, k, Spec.Node.empty()), x)
+        Shared.List.has(
+          ~Spec.Notice,
+          ~Spec.Notice.same,
+          Spec.Node.notices(t, k, Spec.Node.empty()),
+          x
+        )
       ): Bool
   }
   %Equal.sym(
@@ -6055,7 +6610,24 @@ def Spec.Node.notices_exactly(t, k, since, x):
     Shared.List.has(~Spec.Notice, ~Spec.Notice.same, Notice.all(t, k), x),
     Notice.since_none(t, k, x)
   ): {
-    Shared.List.has(~Spec.Notice, ~Spec.Notice.same, Spec.Node.notices(t, k, since), x)
-      == Bool.and(Bool.not(Shared.List.has(~Spec.Notice, ~Spec.Notice.same, Notice.all(since, k), x)), _): Bool
+    Shared.List.has(
+      ~Spec.Notice,
+      ~Spec.Notice.same,
+      Spec.Node.notices(t, k, since),
+      x
+    )
+      == Bool.and(
+        Bool.not(Shared.List.has(~Spec.Notice, ~Spec.Notice.same, Notice.all(since, k), x)),
+        _
+      ): Bool
   }
-  Shared.List.has_keep(~Spec.Notice, ~List<&2, Spec.Notice>, ~Spec.Notice.same, ~Notice.unseen, ~Notice.same_sound, Notice.all(t, k), Notice.all(since, k), x)
+  Shared.List.has_keep(
+    ~Spec.Notice,
+    ~List<&2, Spec.Notice>,
+    ~Spec.Notice.same,
+    ~Notice.unseen,
+    ~Notice.same_sound,
+    Notice.all(t, k),
+    Notice.all(since, k),
+    x
+  )

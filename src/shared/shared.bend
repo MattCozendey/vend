@@ -2398,10 +2398,15 @@ def Trie.pick_left(
   ~join: V -> V -> V,
   a: Maybe<&2, V>,
   b: Maybe<&2, V>
-) -> {Maybe.is_some(&2, V, a) == True{}: Bool} -> {Maybe.is_some(&2, V, Trie.pick(~V, ~join, a, b)) == True{}: Bool}:
+) -> {
+  Maybe.is_some(&2, V, a) == True{}: Bool
+} -> {Maybe.is_some(&2, V, Trie.pick(~V, ~join, a, b)) == True{}: Bool}:
   match a b:
     case None{} y:
-      h => Empty.absurd({Maybe.is_some(&2, V, Trie.pick(~V, ~join, None{}, y)) == True{}: Bool}, Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Maybe.is_some(&2, V, Trie.pick(~V, ~join, None{}, y)) == True{}: Bool},
+        Bool.false_ne_true(h)
+      )
     case Some{x} None{}:
       h => {==}
     case Some{x} Some{y}:
@@ -2413,7 +2418,9 @@ def Trie.pick_right(
   ~join: V -> V -> V,
   a: Maybe<&2, V>,
   b: Maybe<&2, V>
-) -> {Maybe.is_some(&2, V, b) == True{}: Bool} -> {Maybe.is_some(&2, V, Trie.pick(~V, ~join, a, b)) == True{}: Bool}:
+) -> {
+  Maybe.is_some(&2, V, b) == True{}: Bool
+} -> {Maybe.is_some(&2, V, Trie.pick(~V, ~join, a, b)) == True{}: Bool}:
   match a b:
     case None{} y:
       h => h
@@ -3134,7 +3141,12 @@ def Trie.size_union_one(ty, join, s, k, v):
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # two bools that each make the other true are equal
-def Bool.iff(a: Bool, b: Bool, ab: {a == True{}: Bool} -> {b == True{}: Bool}, ba: {b == True{}: Bool} -> {a == True{}: Bool}) -> {a == b: Bool}:
+def Bool.iff(
+  a: Bool,
+  b: Bool,
+  ab: {a == True{}: Bool} -> {b == True{}: Bool},
+  ba: {b == True{}: Bool} -> {a == True{}: Bool}
+) -> {a == b: Bool}:
   match a b:
     case True{} True{}:
       {==}

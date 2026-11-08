@@ -517,7 +517,10 @@ def Cut.apply(c: Cut, ls: List<&2, Shared.Bytes()>) -> List<&2, Shared.Bytes()>:
 def Plain.before(cx: Cut, cy: Cut) -> Bool:
   match cx cy:
     case Cut{sx, ox, nx, ex} Cut{sy, oy, ny, ey}:
-      Nat.is_lt(Nat.add(List.length(&2, Shared.Bytes(), sx), List.length(&2, Shared.Bytes(), ox)), List.length(&2, Shared.Bytes(), sy))
+      Nat.is_lt(
+        Nat.add(List.length(&2, Shared.Bytes(), sx), List.length(&2, Shared.Bytes(), ox)),
+        List.length(&2, Shared.Bytes(), sy)
+      )
 
 # the merge of the cuts cx and cy, once cx is known to end before cy starts
 # (x_first) or cy before cx (y_first): one change made to the other's lines
@@ -2235,9 +2238,12 @@ def Format.of(p: String) -> Format:
 # ------------
 
 # no two cuts each end before the other starts
-def Plain.apart(cx: Cut, cy: Cut) -> {Plain.before(cx, cy) == True{}: Bool} -> {Plain.before(cy, cx) == True{}: Bool} -> Empty:
+def Plain.apart(
+  cx: Cut,
+  cy: Cut
+) -> {Plain.before(cx, cy) == True{}: Bool} -> {Plain.before(cy, cx) == True{}: Bool} -> Empty:
   match cx cy:
-    case Cut{+sx, +ox, nx, ex} Cut{+sy, +oy, ny, ey}:
+    case Cut{sx, ox, nx, ex} Cut{sy, oy, ny, ey}:
       +kx = List.length(&2, Shared.Bytes(), sx)
       +dx = List.length(&2, Shared.Bytes(), ox)
       +ky = List.length(&2, Shared.Bytes(), sy)
@@ -2250,67 +2256,146 @@ def Plain.apart(cx: Cut, cy: Cut) -> {Plain.before(cx, cy) == True{}: Bool} -> {
             Nat.is_lt(kx, kx),
             True{},
             Equal.sym(Bool, Nat.is_lt(kx, kx), False{}, Shared.Nat.lt_irrefl(kx)),
-            Shared.Nat.lt_le(kx, ky, kx)(Shared.Nat.le_lt(kx, Nat.add(kx, dx), ky)(Shared.Nat.le_add(kx, dx))(h1))(
-              Shared.Nat.lt_weak(ky, kx)(Shared.Nat.le_lt(ky, Nat.add(ky, dy), kx)(Shared.Nat.le_add(ky, dy))(h2))
+            Shared.Nat.lt_le(
+              kx,
+              ky,
+              kx
+            )(
+              Shared.Nat.le_lt(kx, Nat.add(kx, dx), ky)(Shared.Nat.le_add(kx, dx))(h1)
+            )(
+              Shared.Nat.lt_weak(
+                ky,
+                kx
+              )(Shared.Nat.le_lt(ky, Nat.add(ky, dy), kx)(Shared.Nat.le_add(ky, dy))(h2))
             )
           )
         )
 
 # the patch of a cut, applied to a, makes the cut's change to the lines of a
-def Cut.apply_patch(c: Cut, a: Shared.Bytes()) -> {Plain.apply(a, Lines.patch(c)) == Lines.bytes(Cut.apply(c, Lines.list(a))): Shared.Bytes()}:
+def Cut.apply_patch(
+  c: Cut,
+  a: Shared.Bytes()
+) -> {Plain.apply(a, Lines.patch(c)) == Lines.bytes(Cut.apply(c, Lines.list(a))): Shared.Bytes()}:
   match c:
     case Cut{s, o, n, e}:
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Format.merge in lines, once both sides are known to change the text
 def Merge.apart.both(
-  +b: Shared.Bytes(),
-  +x: Shared.Bytes(),
-  +y: Shared.Bytes(),
+  b: Shared.Bytes(),
+  x: Shared.Bytes(),
+  y: Shared.Bytes(),
   hd: {Merge.decide(b, x, y) == Decision.both{}: Decision},
   hb: {Plain.is_text(b) == True{}: Bool},
   hx: {Plain.is_text(x) == True{}: Bool},
   hy: {Plain.is_text(y) == True{}: Bool}
 ) -> {
-  Format.merge(Format.leaf{Leaf.lines{}}, b, x, y)
-    == Plain.merge.cuts(Lines.cut(Lines.list(b), Lines.list(x)), Lines.cut(Lines.list(b), Lines.list(y))): Merged
+  Format.merge(
+    Format.leaf{Leaf.lines{}},
+    b,
+    x,
+    y
+  )
+    == Plain.merge.cuts(
+      Lines.cut(Lines.list(b), Lines.list(x)),
+      Lines.cut(Lines.list(b), Lines.list(y))
+    ): Merged
 }:
   %Equal.sym(Decision, Merge.decide(b, x, y), Decision.both{}, hd):
     {
-      Merged.head(Format.merges(Format.leaf{Leaf.lines{}}, [Job{b, x, y, Format.decide.on(_, Format.leaf{Leaf.lines{}}, b, x, y)}]))
-        == Plain.merge.cuts(Lines.cut(Lines.list(b), Lines.list(x)), Lines.cut(Lines.list(b), Lines.list(y))): Merged
+      Merged.head(
+        Format.merges(
+          Format.leaf{Leaf.lines{}},
+          [Job{b, x, y, Format.decide.on(_, Format.leaf{Leaf.lines{}}, b, x, y)}]
+        )
+      )
+        == Plain.merge.cuts(
+          Lines.cut(Lines.list(b), Lines.list(x)),
+          Lines.cut(Lines.list(b), Lines.list(y))
+        ): Merged
     }
   %Equal.sym(Bool, Plain.is_text(b), True{}, hb):
     {
-      Plain.merge.text(Bool.and(_, Bool.and(Plain.is_text(x), Plain.is_text(y))), b, x, y)
-        == Plain.merge.cuts(Lines.cut(Lines.list(b), Lines.list(x)), Lines.cut(Lines.list(b), Lines.list(y))): Merged
+      Plain.merge.text(
+        Bool.and(_, Bool.and(Plain.is_text(x), Plain.is_text(y))),
+        b,
+        x,
+        y
+      )
+        == Plain.merge.cuts(
+          Lines.cut(Lines.list(b), Lines.list(x)),
+          Lines.cut(Lines.list(b), Lines.list(y))
+        ): Merged
     }
   %Equal.sym(Bool, Plain.is_text(x), True{}, hx):
     {
-      Plain.merge.text(Bool.and(_, Plain.is_text(y)), b, x, y)
-        == Plain.merge.cuts(Lines.cut(Lines.list(b), Lines.list(x)), Lines.cut(Lines.list(b), Lines.list(y))): Merged
+      Plain.merge.text(
+        Bool.and(_, Plain.is_text(y)),
+        b,
+        x,
+        y
+      )
+        == Plain.merge.cuts(
+          Lines.cut(Lines.list(b), Lines.list(x)),
+          Lines.cut(Lines.list(b), Lines.list(y))
+        ): Merged
     }
   %Equal.sym(Bool, Plain.is_text(y), True{}, hy):
     {
-      Plain.merge.text(_, b, x, y)
-        == Plain.merge.cuts(Lines.cut(Lines.list(b), Lines.list(x)), Lines.cut(Lines.list(b), Lines.list(y))): Merged
+      Plain.merge.text(
+        _,
+        b,
+        x,
+        y
+      )
+        == Plain.merge.cuts(
+          Lines.cut(Lines.list(b), Lines.list(x)),
+          Lines.cut(Lines.list(b), Lines.list(y))
+        ): Merged
     }
   {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # the line patch from b to x, applied to y, once b and x are text
-def Merge.apart.patch(+b: Shared.Bytes(), +x: Shared.Bytes(), +y: Shared.Bytes(), hb: {Plain.is_text(b) == True{}: Bool}, hx: {Plain.is_text(x) == True{}: Bool}) -> {
-  Plain.apply(y, Plain.diff(b, x)) == Lines.bytes(Cut.apply(Lines.cut(Lines.list(b), Lines.list(x)), Lines.list(y))): Shared.Bytes()
+def Merge.apart.patch(
+  b: Shared.Bytes(),
+  x: Shared.Bytes(),
+  y: Shared.Bytes(),
+  hb: {Plain.is_text(b) == True{}: Bool},
+  hx: {Plain.is_text(x) == True{}: Bool}
+) -> {
+  Plain.apply(
+    y,
+    Plain.diff(b, x)
+  )
+    == Lines.bytes(
+      Cut.apply(Lines.cut(Lines.list(b), Lines.list(x)), Lines.list(y))
+    ): Shared.Bytes()
 }:
   %Equal.sym(Bool, Plain.is_text(b), True{}, hb):
     {
-      Plain.apply(y, Plain.diff.by(Bool.and(_, Plain.is_text(x)), b, x))
-        == Lines.bytes(Cut.apply(Lines.cut(Lines.list(b), Lines.list(x)), Lines.list(y))): Shared.Bytes()
+      Plain.apply(
+        y,
+        Plain.diff.by(Bool.and(_, Plain.is_text(x)), b, x)
+      )
+        == Lines.bytes(
+          Cut.apply(Lines.cut(Lines.list(b), Lines.list(x)), Lines.list(y))
+        ): Shared.Bytes()
     }
   %Equal.sym(Bool, Plain.is_text(x), True{}, hx):
     {
-      Plain.apply(y, Plain.diff.by(_, b, x)) == Lines.bytes(Cut.apply(Lines.cut(Lines.list(b), Lines.list(x)), Lines.list(y))): Shared.Bytes()
+      Plain.apply(
+        y,
+        Plain.diff.by(_, b, x)
+      )
+        == Lines.bytes(
+          Cut.apply(Lines.cut(Lines.list(b), Lines.list(x)), Lines.list(y))
+        ): Shared.Bytes()
     }
   Cut.apply_patch(Lines.cut(Lines.list(b), Lines.list(x)), y)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # two different changes of a text, where the lines that x changes end before
 # the ones that y changes start, merge into y with x's change made to it
@@ -2322,22 +2407,71 @@ law Format.merge_apart:
     -> {Plain.is_text(b) == True{}: Bool}
     -> {Plain.is_text(x) == True{}: Bool}
     -> {Plain.is_text(y) == True{}: Bool}
-    -> {Plain.before(Lines.cut(Lines.list(b), Lines.list(x)), Lines.cut(Lines.list(b), Lines.list(y))) == True{}: Bool}
-    -> {Format.merge(Format.leaf{Leaf.lines{}}, b, x, y) == Merged.clean{Plain.apply(y, Plain.diff(b, x))}: Merged}
+    -> {
+      Plain.before(
+        Lines.cut(Lines.list(b), Lines.list(x)),
+        Lines.cut(Lines.list(b), Lines.list(y))
+      )
+        == True{}: Bool
+    }
+    -> {
+      Format.merge(
+        Format.leaf{Leaf.lines{}},
+        b,
+        x,
+        y
+      )
+        == Merged.clean{Plain.apply(y, Plain.diff(b, x))}: Merged
+    }
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 def Format.merge_apart(b, x, y):
   +lb = Lines.list(b)
-  +cx = Lines.cut(lb, Lines.list(x))
-  +cy = Lines.cut(lb, Lines.list(y))
+  cx = Lines.cut(lb, Lines.list(x))
+  cy = Lines.cut(lb, Lines.list(y))
   hd => +hb => +hx => hy => he =>
-    %Equal.sym(Merged, Format.merge(Format.leaf{Leaf.lines{}}, b, x, y), Plain.merge.cuts(cx, cy), Merge.apart.both(b, x, y, hd, hb, hx, hy)):
+    %Equal.sym(
+      Merged,
+      Format.merge(Format.leaf{Leaf.lines{}}, b, x, y),
+      Plain.merge.cuts(cx, cy),
+      Merge.apart.both(b, x, y, hd, hb, hx, hy)
+    ):
       {_ == Merged.clean{Plain.apply(y, Plain.diff(b, x))}: Merged}
-    %Equal.sym(Shared.Bytes(), Plain.apply(y, Plain.diff(b, x)), Lines.bytes(Cut.apply(cx, Lines.list(y))), Merge.apart.patch(b, x, y, hb, hx)):
+    %Equal.sym(
+      Shared.Bytes(),
+      Plain.apply(y, Plain.diff(b, x)),
+      Lines.bytes(Cut.apply(cx, Lines.list(y))),
+      Merge.apart.patch(b, x, y, hb, hx)
+    ):
       {Plain.merge.cuts(cx, cy) == Merged.clean{_}: Merged}
-    %Equal.sym(Bool, Plain.before(cx, cy), True{}, he): {Plain.merge.order(_, Plain.before(cy, cx), cx, cy) == Merged.clean{Lines.bytes(Cut.apply(cx, Lines.list(y)))}: Merged}
-    %Equal.sym(List<&2, Shared.Bytes()>, Cut.right(cy), Lines.list(y), Lines.cut_right(lb, Lines.list(y))):
-      {Merged.clean{Lines.bytes(Cut.apply(cx, _))} == Merged.clean{Lines.bytes(Cut.apply(cx, Lines.list(y)))}: Merged}
+    %Equal.sym(
+      Bool,
+      Plain.before(cx, cy),
+      True{},
+      he
+    ): {
+      Plain.merge.order(
+        _,
+        Plain.before(cy, cx),
+        cx,
+        cy
+      )
+        == Merged.clean{Lines.bytes(Cut.apply(cx, Lines.list(y)))}: Merged
+    }
+    %Equal.sym(
+      List<&2, Shared.Bytes()>,
+      Cut.right(cy),
+      Lines.list(y),
+      Lines.cut_right(lb, Lines.list(y))
+    ):
+      {
+        Merged.clean{
+          Lines.bytes(Cut.apply(cx, _))
+        }
+          == Merged.clean{Lines.bytes(Cut.apply(cx, Lines.list(y)))}: Merged
+      }
     {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the mirror of Format.merge_apart: when the lines that y changes end before
 # the ones that x changes start, the merge is x with y's change made to it
@@ -2349,29 +2483,64 @@ law Format.merge_apart_mirror:
     -> {Plain.is_text(b) == True{}: Bool}
     -> {Plain.is_text(x) == True{}: Bool}
     -> {Plain.is_text(y) == True{}: Bool}
-    -> {Plain.before(Lines.cut(Lines.list(b), Lines.list(y)), Lines.cut(Lines.list(b), Lines.list(x))) == True{}: Bool}
-    -> {Format.merge(Format.leaf{Leaf.lines{}}, b, x, y) == Merged.clean{Plain.apply(x, Plain.diff(b, y))}: Merged}
+    -> {
+      Plain.before(
+        Lines.cut(Lines.list(b), Lines.list(y)),
+        Lines.cut(Lines.list(b), Lines.list(x))
+      )
+        == True{}: Bool
+    }
+    -> {
+      Format.merge(
+        Format.leaf{Leaf.lines{}},
+        b,
+        x,
+        y
+      )
+        == Merged.clean{Plain.apply(x, Plain.diff(b, y))}: Merged
+    }
 
 # Format.merge_apart_mirror, once x is known to end before y starts or not
 # (held)
 def Merge.apart.mirror(
   held: Bool,
-  +cx: Cut,
-  +cy: Cut,
-  +x: Shared.Bytes(),
+  cx: Cut,
+  cy: Cut,
+  x: Shared.Bytes(),
   ex: {Plain.before(cx, cy) == held: Bool},
   he: {Plain.before(cy, cx) == True{}: Bool},
   hr: {Cut.right(cx) == Lines.list(x): List<&2, Shared.Bytes()>}
-) -> {Plain.merge.order(held, True{}, cx, cy) == Merged.clean{Lines.bytes(Cut.apply(cy, Lines.list(x)))}: Merged}:
+) -> {
+  Plain.merge.order(
+    held,
+    True{},
+    cx,
+    cy
+  )
+    == Merged.clean{Lines.bytes(Cut.apply(cy, Lines.list(x)))}: Merged
+}:
   match held:
     case True{}:
       Empty.absurd(
-        {Plain.merge.order(True{}, True{}, cx, cy) == Merged.clean{Lines.bytes(Cut.apply(cy, Lines.list(x)))}: Merged},
+        {
+          Plain.merge.order(
+            True{},
+            True{},
+            cx,
+            cy
+          )
+            == Merged.clean{Lines.bytes(Cut.apply(cy, Lines.list(x)))}: Merged
+        },
         Plain.apart(cx, cy)(ex)(he)
       )
     case False{}:
       %Equal.sym(List<&2, Shared.Bytes()>, Cut.right(cx), Lines.list(x), hr):
-        {Merged.clean{Lines.bytes(Cut.apply(cy, _))} == Merged.clean{Lines.bytes(Cut.apply(cy, Lines.list(x)))}: Merged}
+        {
+          Merged.clean{
+            Lines.bytes(Cut.apply(cy, _))
+          }
+            == Merged.clean{Lines.bytes(Cut.apply(cy, Lines.list(x)))}: Merged
+        }
       {==}
 
 def Format.merge_apart_mirror(b, x, y):
@@ -2379,9 +2548,40 @@ def Format.merge_apart_mirror(b, x, y):
   +cx = Lines.cut(lb, Lines.list(x))
   +cy = Lines.cut(lb, Lines.list(y))
   hd => +hb => hx => +hy => +he =>
-    %Equal.sym(Merged, Format.merge(Format.leaf{Leaf.lines{}}, b, x, y), Plain.merge.cuts(cx, cy), Merge.apart.both(b, x, y, hd, hb, hx, hy)):
+    %Equal.sym(
+      Merged,
+      Format.merge(Format.leaf{Leaf.lines{}}, b, x, y),
+      Plain.merge.cuts(cx, cy),
+      Merge.apart.both(b, x, y, hd, hb, hx, hy)
+    ):
       {_ == Merged.clean{Plain.apply(x, Plain.diff(b, y))}: Merged}
-    %Equal.sym(Shared.Bytes(), Plain.apply(x, Plain.diff(b, y)), Lines.bytes(Cut.apply(cy, Lines.list(x))), Merge.apart.patch(b, y, x, hb, hy)):
+    %Equal.sym(
+      Shared.Bytes(),
+      Plain.apply(x, Plain.diff(b, y)),
+      Lines.bytes(Cut.apply(cy, Lines.list(x))),
+      Merge.apart.patch(b, y, x, hb, hy)
+    ):
       {Plain.merge.cuts(cx, cy) == Merged.clean{_}: Merged}
-    %Equal.sym(Bool, Plain.before(cy, cx), True{}, he): {Plain.merge.order(Plain.before(cx, cy), _, cx, cy) == Merged.clean{Lines.bytes(Cut.apply(cy, Lines.list(x)))}: Merged}
-    Merge.apart.mirror(Plain.before(cx, cy), cx, cy, x, {==}, he, Lines.cut_right(lb, Lines.list(x)))
+    %Equal.sym(
+      Bool,
+      Plain.before(cy, cx),
+      True{},
+      he
+    ): {
+      Plain.merge.order(
+        Plain.before(cx, cy),
+        _,
+        cx,
+        cy
+      )
+        == Merged.clean{Lines.bytes(Cut.apply(cy, Lines.list(x)))}: Merged
+    }
+    Merge.apart.mirror(
+      Plain.before(cx, cy),
+      cx,
+      cy,
+      x,
+      {==},
+      he,
+      Lines.cut_right(lb, Lines.list(x))
+    )

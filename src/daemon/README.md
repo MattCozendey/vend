@@ -39,7 +39,7 @@ Every change answers where its request is: Written(its version), Conflicted(a me
 - `try-get impact <point>` - what the changes up to this point touch on the branches that do not have them yet.
 - `try-get answer <request-id>` - where a change that timed out is.
 - `try-get conflict <merge>` - the resources that still clash after a merge.
-- `try-get changes <topic> [--since X]` - the events of a topic as one answer(polling), and what to pass as --since next time.
+- `try-get changes <topic> [--since X]` - the events of a topic as one answer(polling), and what to pass as --since next time. A poll misses no event and doubles none.
 
 #### Change
 - `try-write <name> --branch <branch> --base <version>` - saves new content(bytes, a URI or an old version). The owner group refuses it as Stale when the resource changed since the base.
@@ -51,7 +51,7 @@ Every change answers where its request is: Written(its version), Conflicted(a me
 - `try-unmount <uri>` - stops versioning it. Answers Unmounted or NotMounted.
 
 #### Formats
-Each resource is read in the format of its path, and every format has its own diff and merge. Lines are the default; content that is not text is one whole part. A format can hold another inside it(CSS and JavaScript inside HTML, code inside Markdown), to any depth: its parts merge in their own formats. A language also reads what a resource imports, with the conditions and the alias of each import; affects and impact follow those imports. For every format, a diff applied to the old content gives the new one, and a merge takes the one change when only one side changed, or when both made the same change.
+Each resource is read in the format of its path, and every format has its own diff and merge. Lines are the default; content that is not text is one whole part. A format can hold another inside it(CSS and JavaScript inside HTML, code inside Markdown), to any depth: its parts merge in their own formats. A language also reads what a resource imports, with the conditions and the alias of each import; affects and impact follow those imports. For every format, a diff applied to the old content gives the new one, and a merge takes the one change when only one side changed, or when both made the same change. In text, two changes whose lines lie apart merge into both.
 
 #### Nodes
 - `try-set-owner <branch> <group>` - makes the nodes inside the group the owners of the branch.
