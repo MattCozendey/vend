@@ -133,20 +133,18 @@ def Chain.key(c: Chain) -> List<&2, Bool>:
 def Root.key(c: Chain) -> List<&2, Bool>:
   True{} <> True{} <> Chain.key(c)
 
+# the start of the keys of the votes on c: all of a chain's votes are under
+# one key, so other chains' entries never touch them
+def Vote.key(c: Chain) -> List<&2, Bool>:
+  True{} <> False{} <> Chain.key(c)
+
 # the key of k: no two slots share one
 def Slot.key(k: Slot) -> List<&2, Bool>:
   match k:
     case Slot.ask{i}:
       False{} <> Id.key(i)
     case Slot.vote{n, c, i}:
-      True{}
-        <> False{}
-        <> List.append(
-          &2,
-          Bool,
-          Shared.Trie.text(n),
-          List.append(&2, Bool, Chain.key(c), Id.key(i))
-        )
+      List.append(&2, Bool, Vote.key(c), List.append(&2, Bool, Shared.Trie.text(n), Id.key(i)))
     case Slot.root{c, n}:
       List.append(&2, Bool, Root.key(c), Shared.Trie.text(n))
 

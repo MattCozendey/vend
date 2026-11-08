@@ -850,9 +850,14 @@ def Chain.last(f: Nat, +s: Spec.State(), +c: Spec.Chain, k: Step, nx: Maybe<&2, 
     case 1n+e Some{+st}:
       Chain.last(e, s, c, st, Chain.next(s, c, st))
 
-# enough steps for any chain of s: one more than it has entries
+# enough steps for any lookup of s: one more than it has entries
 def State.fuel(s: Spec.State()) -> Nat:
   1n+Shared.Trie.size(Cells.Cell<Spec.Entry>, s)
+
+# enough steps for the chain c of s: one more than it has votes, so a chain
+# depends on its own entries alone
+def Chain.fuel(+s: Spec.State(), +c: Spec.Chain) -> Nat:
+  1n+Shared.Trie.size(Cells.Cell<Spec.Entry>, Shared.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Vote.key(c)))
 
 # the first step of a chain, from its root entry m
 def Root.of(m: Maybe<&2, Spec.Entry>) -> Maybe<&2, Step>:
@@ -880,7 +885,7 @@ def Chain.from(+s: Spec.State(), +c: Spec.Chain, r: Maybe<&2, Step>) -> List<&2,
     case None{}:
       []
     case Some{Step{+i, ms}}:
-      i <> Chain.walk(State.fuel(s), s, c, Chain.next(s, c, Step{i, ms}))
+      i <> Chain.walk(Chain.fuel(s, c), s, c, Chain.next(s, c, Step{i, ms}))
 
 # the last step of the chain c of s, from its first step r
 def Chain.cursor.of(+s: Spec.State(), +c: Spec.Chain, r: Maybe<&2, Step>) -> Maybe<&2, Step>:
@@ -888,7 +893,7 @@ def Chain.cursor.of(+s: Spec.State(), +c: Spec.Chain, r: Maybe<&2, Step>) -> May
     case None{}:
       None{}
     case Some{+st}:
-      Some{Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st))}
+      Some{Chain.last(Chain.fuel(s, c), s, c, st, Chain.next(s, c, st))}
 
 # the last step of the chain c of s, if c exists
 def Chain.cursor(+s: Spec.State(), +c: Spec.Chain) -> Maybe<&2, Step>:
@@ -3297,16 +3302,18 @@ def List.take_zero(
       {==}
 
 # an agreeing join walks at least as far
-def State.fuel_le(
-  s: Spec.State(),
-  t: Spec.State()
-) -> {Nat.is_le(State.fuel(s), State.fuel(Spec.Node.join(s, t))) == True{}: Bool}:
-  Shared.Trie.size_union(
-    ~Cells.Cell<Spec.Entry>,
-    ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
-    s,
-    t
-  )
+def Chain.fuel_le(
+  +s: Spec.State(),
+  +t: Spec.State(),
+  +c: Spec.Chain
+) -> {Nat.is_le(Chain.fuel(s, c), Chain.fuel(Spec.Node.join(s, t), c)) == True{}: Bool}:
+  %Equal.sym(
+    Shared.Trie<Cells.Cell<Spec.Entry>>,
+    Shared.Trie.under(Cells.Cell<Spec.Entry>, Spec.Node.join(s, t), Spec.Vote.key(c)),
+    Shared.Trie.union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), Shared.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Vote.key(c)), Shared.Trie.under(Cells.Cell<Spec.Entry>, t, Spec.Vote.key(c))),
+    Shared.Trie.under_union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, t, Spec.Vote.key(c))
+  ): {Nat.is_le(1n+Shared.Trie.size(Cells.Cell<Spec.Entry>, Shared.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Vote.key(c))), 1n+Shared.Trie.size(Cells.Cell<Spec.Entry>, _)) == True{}: Bool}
+  Shared.Trie.size_union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), Shared.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Vote.key(c)), Shared.Trie.under(Cells.Cell<Spec.Entry>, t, Spec.Vote.key(c)))
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Spec.Node.chain_kept from the first step m
@@ -3329,35 +3336,35 @@ def Kept.chain.from(
     case None{}:
       {==}
     case Some{Step{+i, +ms}}:
-      +w = Chain.walk(State.fuel(s), s, c, Chain.next(s, c, Step{i, ms}))
+      +w = Chain.walk(Chain.fuel(s, c), s, c, Chain.next(s, c, Step{i, ms}))
       x = Chain.walk(
-        Nat.sub(State.fuel(Spec.Node.join(s, t)), List.length(&2, Spec.Id, w)),
+        Nat.sub(Chain.fuel(Spec.Node.join(s, t), c), List.length(&2, Spec.Id, w)),
         Spec.Node.join(s, t),
         c,
         Chain.next(
           Spec.Node.join(s, t),
           c,
-          Chain.last(State.fuel(s), s, c, Step{i, ms}, Chain.next(s, c, Step{i, ms}))
+          Chain.last(Chain.fuel(s, c), s, c, Step{i, ms}, Chain.next(s, c, Step{i, ms}))
         )
       )
       %Equal.sym(
         List<&2, Spec.Id>,
         Chain.walk(
-          State.fuel(Spec.Node.join(s, t)),
+          Chain.fuel(Spec.Node.join(s, t), c),
           Spec.Node.join(s, t),
           c,
           Chain.next(Spec.Node.join(s, t), c, Step{i, ms})
         ),
         List.append(&2, Spec.Id, w, x),
         Ext.walk(
-          State.fuel(s),
-          State.fuel(Spec.Node.join(s, t)),
+          Chain.fuel(s, c),
+          Chain.fuel(Spec.Node.join(s, t), c),
           s,
           t,
           c,
           Step{i, ms},
           a
-        )(State.fuel_le(s, t))
+        )(Chain.fuel_le(s, t, c))
       ):
         {
           List.take(
@@ -3486,7 +3493,7 @@ def Grow.from(
   a: {Spec.Node.agrees(s, t) == True{}: Bool},
   st: Step,
   -l: Step,
-  el: {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step}
+  el: {Chain.last(Chain.fuel(s, c), s, c, st, Chain.next(s, c, st)) == l: Step}
 ) -> {
   Chain.from(
     Spec.Node.join(s, t),
@@ -3499,8 +3506,8 @@ def Grow.from(
       Chain.from(s, c, Some{st}),
       Chain.walk(
         Nat.sub(
-          State.fuel(Spec.Node.join(s, t)),
-          List.length(&2, Spec.Id, Chain.walk(State.fuel(s), s, c, Chain.next(s, c, st)))
+          Chain.fuel(Spec.Node.join(s, t), c),
+          List.length(&2, Spec.Id, Chain.walk(Chain.fuel(s, c), s, c, Chain.next(s, c, st)))
         ),
         Spec.Node.join(s, t),
         c,
@@ -3510,13 +3517,13 @@ def Grow.from(
 }:
   match st:
     case Step{+i, +ms}:
-      w = Chain.walk(State.fuel(s), s, c, Chain.next(s, c, Step{i, ms}))
-      g = Nat.sub(State.fuel(Spec.Node.join(s, t)), List.length(&2, Spec.Id, w))
+      w = Chain.walk(Chain.fuel(s, c), s, c, Chain.next(s, c, Step{i, ms}))
+      g = Nat.sub(Chain.fuel(Spec.Node.join(s, t), c), List.length(&2, Spec.Id, w))
       %el:
         {
           i
             <> Chain.walk(
-              State.fuel(Spec.Node.join(s, t)),
+              Chain.fuel(Spec.Node.join(s, t), c),
               Spec.Node.join(s, t),
               c,
               Chain.next(Spec.Node.join(s, t), c, Step{i, ms})
@@ -3530,18 +3537,18 @@ def Grow.from(
             ): List<&2, Spec.Id>
         }
       %Ext.walk(
-        State.fuel(s),
-        State.fuel(Spec.Node.join(s, t)),
+        Chain.fuel(s, c),
+        Chain.fuel(Spec.Node.join(s, t), c),
         s,
         t,
         c,
         Step{i, ms},
         a
-      )(State.fuel_le(s, t)):
+      )(Chain.fuel_le(s, t, c)):
         {
           i
             <> Chain.walk(
-              State.fuel(Spec.Node.join(s, t)),
+              Chain.fuel(Spec.Node.join(s, t), c),
               Spec.Node.join(s, t),
               c,
               Chain.next(Spec.Node.join(s, t), c, Step{i, ms})
@@ -3560,10 +3567,10 @@ def Grow.last(
   a: {Spec.Node.agrees(s, t) == True{}: Bool},
   +st: Step,
   -l: Step,
-  el: {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step}
+  el: {Chain.last(Chain.fuel(s, c), s, c, st, Chain.next(s, c, st)) == l: Step}
 ) -> {
   Chain.last(
-    State.fuel(Spec.Node.join(s, t)),
+    Chain.fuel(Spec.Node.join(s, t), c),
     Spec.Node.join(s, t),
     c,
     st,
@@ -3571,8 +3578,8 @@ def Grow.last(
   )
     == Chain.last(
       Nat.sub(
-        State.fuel(Spec.Node.join(s, t)),
-        List.length(&2, Spec.Id, Chain.walk(State.fuel(s), s, c, Chain.next(s, c, st)))
+        Chain.fuel(Spec.Node.join(s, t), c),
+        List.length(&2, Spec.Id, Chain.walk(Chain.fuel(s, c), s, c, Chain.next(s, c, st)))
       ),
       Spec.Node.join(s, t),
       c,
@@ -3581,13 +3588,13 @@ def Grow.last(
     ): Step
 }:
   g = Nat.sub(
-    State.fuel(Spec.Node.join(s, t)),
-    List.length(&2, Spec.Id, Chain.walk(State.fuel(s), s, c, Chain.next(s, c, st)))
+    Chain.fuel(Spec.Node.join(s, t), c),
+    List.length(&2, Spec.Id, Chain.walk(Chain.fuel(s, c), s, c, Chain.next(s, c, st)))
   )
   %el:
     {
       Chain.last(
-        State.fuel(Spec.Node.join(s, t)),
+        Chain.fuel(Spec.Node.join(s, t), c),
         Spec.Node.join(s, t),
         c,
         st,
@@ -3595,7 +3602,7 @@ def Grow.last(
       )
         == Chain.last(g, Spec.Node.join(s, t), c, _, Chain.next(Spec.Node.join(s, t), c, _)): Step
     }
-  Ext.last(State.fuel(s), State.fuel(Spec.Node.join(s, t)), s, t, c, st, a)(State.fuel_le(s, t))
+  Ext.last(Chain.fuel(s, c), Chain.fuel(Spec.Node.join(s, t), c), s, t, c, st, a)(Chain.fuel_le(s, t, c))
 
 # a first step of s stays when the claim stays
 def Grow.root.of(
@@ -3652,7 +3659,7 @@ def Start.of(
   &st: Step -> {
     r == Some{st}: Maybe<&2, Step>
   }
-    & {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step}
+    & {Chain.last(Chain.fuel(s, c), s, c, st, Chain.next(s, c, st)) == l: Step}
 ):
   match r:
     case None{}:
@@ -3660,7 +3667,7 @@ def Start.of(
         &st: Step -> {
           None{} == Some{st}: Maybe<&2, Step>
         }
-          & {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step},
+          & {Chain.last(Chain.fuel(s, c), s, c, st, Chain.next(s, c, st)) == l: Step},
         Shared.Maybe.none_ne_some(Step, l, h)
       )
     case Some{st}:
@@ -3670,7 +3677,7 @@ def Start.of(
           {==},
           Shared.Maybe.some_inj(
             Step,
-            Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)),
+            Chain.last(Chain.fuel(s, c), s, c, st, Chain.next(s, c, st)),
             l,
             h
           )
@@ -3689,14 +3696,14 @@ def Stay.chain.of(
   pr: &st: Step -> {
     Chain.root(s, c) == Some{st}: Maybe<&2, Step>
   }
-    & {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step}
+    & {Chain.last(Chain.fuel(s, c), s, c, st, Chain.next(s, c, st)) == l: Step}
 ) -> {Spec.Node.chain(Spec.Node.join(s, t), c) == Spec.Node.chain(s, c): List<&2, Spec.Id>}:
   match pr:
     case (+st, (+er, el)):
       +j = Spec.Node.join(s, t)
       g = Nat.sub(
-        State.fuel(j),
-        List.length(&2, Spec.Id, Chain.walk(State.fuel(s), s, c, Chain.next(s, c, st)))
+        Chain.fuel(j, c),
+        List.length(&2, Spec.Id, Chain.walk(Chain.fuel(s, c), s, c, Chain.next(s, c, st)))
       )
       x = Chain.from(s, c, Some{st})
       Equal.trans(
@@ -3755,20 +3762,20 @@ def Stay.cursor.of(
   pr: &st: Step -> {
     Chain.root(s, c) == Some{st}: Maybe<&2, Step>
   }
-    & {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step}
+    & {Chain.last(Chain.fuel(s, c), s, c, st, Chain.next(s, c, st)) == l: Step}
 ) -> {Chain.cursor(Spec.Node.join(s, t), c) == Some{l}: Maybe<&2, Step>}:
   match pr:
     case (+st, (er, el)):
       +j = Spec.Node.join(s, t)
       g = Nat.sub(
-        State.fuel(j),
-        List.length(&2, Spec.Id, Chain.walk(State.fuel(s), s, c, Chain.next(s, c, st)))
+        Chain.fuel(j, c),
+        List.length(&2, Spec.Id, Chain.walk(Chain.fuel(s, c), s, c, Chain.next(s, c, st)))
       )
       %Equal.sym(Maybe<&2, Step>, Chain.root(j, c), Some{st}, Grow.root(s, t, c, a, hc, st)(er)):
         {Chain.cursor.of(j, c, _) == Some{l}: Maybe<&2, Step>}
       %Equal.sym(
         Step,
-        Chain.last(State.fuel(j), j, c, st, Chain.next(j, c, st)),
+        Chain.last(Chain.fuel(j, c), j, c, st, Chain.next(j, c, st)),
         Chain.last(g, j, c, l, Chain.next(j, c, l)),
         Grow.last(s, t, c, a, st, l, el)
       ):
@@ -4342,37 +4349,43 @@ def Owners.has(n: String) -> {Shared.List.has(~String, ~String.eq, [n], n) == Tr
   {==}
 
 # one entry at a free key walks one step further
-def Grow.fuel(
+def Chain.fuel_grow(
   +s: Spec.State(),
-  k: List<&2, Bool>,
-  x: Cells.Cell<Spec.Entry>
-) -> {
-  Shared.Trie.get(Cells.Cell<Spec.Entry>, s, k) == None{}: Maybe<&2, Cells.Cell<Spec.Entry>>
-} -> {
-  Nat.is_lt(
-    State.fuel(s),
-    State.fuel(Spec.Node.join(s, Shared.Trie.one(Cells.Cell<Spec.Entry>, k, x)))
-  )
-    == True{}: Bool
+  +c: Spec.Chain,
+  +q: List<&2, Bool>,
+  +x: Cells.Cell<Spec.Entry>
+) -> {Shared.Trie.get(Cells.Cell<Spec.Entry>, s, List.append(&2, Bool, Spec.Vote.key(c), q)) == None{}: Maybe<&2, Cells.Cell<Spec.Entry>>} -> {
+  Nat.is_lt(Chain.fuel(s, c), Chain.fuel(Spec.Node.join(s, Shared.Trie.one(Cells.Cell<Spec.Entry>, List.append(&2, Bool, Spec.Vote.key(c), q), x)), c)) == True{}: Bool
 }:
   h =>
     %Equal.sym(
+      Shared.Trie<Cells.Cell<Spec.Entry>>,
+      Shared.Trie.under(Cells.Cell<Spec.Entry>, Spec.Node.join(s, Shared.Trie.one(Cells.Cell<Spec.Entry>, List.append(&2, Bool, Spec.Vote.key(c), q), x)), Spec.Vote.key(c)),
+      Shared.Trie.union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), Shared.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Vote.key(c)), Shared.Trie.under(Cells.Cell<Spec.Entry>, Shared.Trie.one(Cells.Cell<Spec.Entry>, List.append(&2, Bool, Spec.Vote.key(c), q), x), Spec.Vote.key(c))),
+      Shared.Trie.under_union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, Shared.Trie.one(Cells.Cell<Spec.Entry>, List.append(&2, Bool, Spec.Vote.key(c), q), x), Spec.Vote.key(c))
+    ): {Nat.is_lt(Chain.fuel(s, c), 1n+Shared.Trie.size(Cells.Cell<Spec.Entry>, _)) == True{}: Bool}
+    %Equal.sym(
+      Shared.Trie<Cells.Cell<Spec.Entry>>,
+      Shared.Trie.under(Cells.Cell<Spec.Entry>, Shared.Trie.one(Cells.Cell<Spec.Entry>, List.append(&2, Bool, Spec.Vote.key(c), q), x), Spec.Vote.key(c)),
+      Shared.Trie.one(Cells.Cell<Spec.Entry>, q, x),
+      Shared.Trie.under_one(Cells.Cell<Spec.Entry>, Spec.Vote.key(c), q, x)
+    ): {Nat.is_lt(Chain.fuel(s, c), 1n+Shared.Trie.size(Cells.Cell<Spec.Entry>, Shared.Trie.union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), Shared.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Vote.key(c)), _))) == True{}: Bool}
+    %Equal.sym(
       Nat,
-      Shared.Trie.size(
-        Cells.Cell<Spec.Entry>,
-        Spec.Node.join(s, Shared.Trie.one(Cells.Cell<Spec.Entry>, k, x))
-      ),
-      1n+Shared.Trie.size(Cells.Cell<Spec.Entry>, s),
-      Shared.Trie.size_union_one(
-        ~Cells.Cell<Spec.Entry>,
-        ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
-        s,
-        k,
-        x
-      )(h)
-    ):
-      {Nat.is_lt(State.fuel(s), 1n+_) == True{}: Bool}
-    Shared.Nat.lt_succ(Shared.Trie.size(Cells.Cell<Spec.Entry>, s))
+      Shared.Trie.size(Cells.Cell<Spec.Entry>, Shared.Trie.union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), Shared.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Vote.key(c)), Shared.Trie.one(Cells.Cell<Spec.Entry>, q, x))),
+      1n+Shared.Trie.size(Cells.Cell<Spec.Entry>, Shared.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Vote.key(c))),
+      Shared.Trie.size_union_one(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), Shared.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Vote.key(c)), q, x)(
+        Equal.trans(
+          Maybe<&2, Cells.Cell<Spec.Entry>>,
+          Shared.Trie.get(Cells.Cell<Spec.Entry>, Shared.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Vote.key(c)), q),
+          Shared.Trie.get(Cells.Cell<Spec.Entry>, s, List.append(&2, Bool, Spec.Vote.key(c), q)),
+          None{},
+          Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, Shared.Trie.get(Cells.Cell<Spec.Entry>, s, List.append(&2, Bool, Spec.Vote.key(c), q)), Shared.Trie.get(Cells.Cell<Spec.Entry>, Shared.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Vote.key(c)), q), Shared.Trie.get_under(Cells.Cell<Spec.Entry>, s, Spec.Vote.key(c), q)),
+          h
+        )
+      )
+    ): {Nat.is_lt(Chain.fuel(s, c), 1n+_) == True{}: Bool}
+    Shared.Nat.lt_succ(Chain.fuel(s, c))
 
 # the request i is in the chain of s2, s1 and the sole owner's vote for it
 # after v, once the first step of the chain of s1 is known
@@ -4392,10 +4405,10 @@ def Written.shape(
   next2: {
     Chain.next(Spec.Node.join(s1, tv), c, Step{v, [n]}) == Some{Step{i, [n]}}: Maybe<&2, Step>
   },
-  grow: {Nat.is_lt(State.fuel(s1), State.fuel(Spec.Node.join(s1, tv))) == True{}: Bool},
+  grow: {Nat.is_lt(Chain.fuel(s1, c), Chain.fuel(Spec.Node.join(s1, tv), c)) == True{}: Bool},
   +st: Step,
   er: {Chain.root(s1, c) == Some{st}: Maybe<&2, Step>},
-  el: {Chain.last(State.fuel(s1), s1, c, st, Chain.next(s1, c, st)) == Step{v, [n]}: Step}
+  el: {Chain.last(Chain.fuel(s1, c), s1, c, st, Chain.next(s1, c, st)) == Step{v, [n]}: Step}
 ) -> {
   Spec.Node.chain(
     Spec.Node.join(s1, tv),
@@ -4408,8 +4421,8 @@ def Written.shape(
       i
         <> Chain.walk(
           Nat.sub(
-            State.fuel(Spec.Node.join(s1, tv)),
-            1n+List.length(&2, Spec.Id, Chain.walk(State.fuel(s1), s1, c, Chain.next(s1, c, st)))
+            Chain.fuel(Spec.Node.join(s1, tv), c),
+            1n+List.length(&2, Spec.Id, Chain.walk(Chain.fuel(s1, c), s1, c, Chain.next(s1, c, st)))
           ),
           Spec.Node.join(s1, tv),
           c,
@@ -4418,20 +4431,20 @@ def Written.shape(
     ): List<&2, Spec.Id>
 }:
   +s2 = Spec.Node.join(s1, tv)
-  +w1 = Chain.walk(State.fuel(s1), s1, c, Chain.next(s1, c, st))
+  +w1 = Chain.walk(Chain.fuel(s1, c), s1, c, Chain.next(s1, c, st))
   x1 = Chain.from(s1, c, Some{st})
-  g = Nat.sub(State.fuel(s2), List.length(&2, Spec.Id, w1))
-  g1 = Nat.sub(State.fuel(s2), 1n+List.length(&2, Spec.Id, w1))
+  g = Nat.sub(Chain.fuel(s2, c), List.length(&2, Spec.Id, w1))
+  g1 = Nat.sub(Chain.fuel(s2, c), 1n+List.length(&2, Spec.Id, w1))
   rest = Chain.walk(g1, s2, c, Chain.next(s2, c, Step{i, [n]}))
   gs = Shared.Nat.sub_pos(
     List.length(&2, Spec.Id, w1),
-    State.fuel(s2)
+    Chain.fuel(s2, c)
   )(
     Shared.Nat.le_lt(
       List.length(&2, Spec.Id, w1),
-      State.fuel(s1),
-      State.fuel(s2)
-    )(Walk.length(State.fuel(s1), s1, c, Chain.next(s1, c, st)))(grow)
+      Chain.fuel(s1, c),
+      Chain.fuel(s2, c)
+    )(Walk.length(Chain.fuel(s1, c), s1, c, Chain.next(s1, c, st)))(grow)
   )
   Equal.trans(
     List<&2, Spec.Id>,
@@ -4473,11 +4486,11 @@ def Written.has(
   next2: {
     Chain.next(Spec.Node.join(s1, tv), c, Step{v, [n]}) == Some{Step{i, [n]}}: Maybe<&2, Step>
   },
-  grow: {Nat.is_lt(State.fuel(s1), State.fuel(Spec.Node.join(s1, tv))) == True{}: Bool},
+  grow: {Nat.is_lt(Chain.fuel(s1, c), Chain.fuel(Spec.Node.join(s1, tv), c)) == True{}: Bool},
   pr: &st: Step -> {
     Chain.root(s1, c) == Some{st}: Maybe<&2, Step>
   }
-    & {Chain.last(State.fuel(s1), s1, c, st, Chain.next(s1, c, st)) == Step{v, [n]}: Step}
+    & {Chain.last(Chain.fuel(s1, c), s1, c, st, Chain.next(s1, c, st)) == Step{v, [n]}: Step}
 ) -> {
   Shared.List.has(
     ~Spec.Id,
@@ -4492,8 +4505,8 @@ def Written.has(
       x1 = Chain.from(s1, c, Some{st})
       rest = Chain.walk(
         Nat.sub(
-          State.fuel(Spec.Node.join(s1, tv)),
-          1n+List.length(&2, Spec.Id, Chain.walk(State.fuel(s1), s1, c, Chain.next(s1, c, st)))
+          Chain.fuel(Spec.Node.join(s1, tv), c),
+          1n+List.length(&2, Spec.Id, Chain.walk(Chain.fuel(s1, c), s1, c, Chain.next(s1, c, st)))
         ),
         Spec.Node.join(s1, tv),
         c,
@@ -4605,7 +4618,7 @@ def Written.at(
     cell2a
   )
   next2 = Next.one(s2, c, v, n, i, t, q)(cell2v)(asked2)(Chain.same_refl(c))
-  grow = Grow.fuel(s1, kv, ev)(f4)
+  grow = Chain.fuel_grow(s1, c, List.append(&2, Bool, Shared.Trie.text(n), Spec.Id.key(v)), ev)(f4)
   has = Written.has(
     n,
     s1,
@@ -6060,11 +6073,11 @@ def Chain.last_of(
         List.last.go(
           &2,
           Spec.Id,
-          Chain.walk(State.fuel(s), s, c, Chain.next(s, c, Step{i, ms})),
+          Chain.walk(Chain.fuel(s, c), s, c, Chain.next(s, c, Step{i, ms})),
           i
         ),
-        Step.version(Chain.last(State.fuel(s), s, c, Step{i, ms}, Chain.next(s, c, Step{i, ms}))),
-        Chain.walk_last(State.fuel(s), s, c, Step{i, ms}, Chain.next(s, c, Step{i, ms}))
+        Step.version(Chain.last(Chain.fuel(s, c), s, c, Step{i, ms}, Chain.next(s, c, Step{i, ms}))),
+        Chain.walk_last(Chain.fuel(s, c), s, c, Step{i, ms}, Chain.next(s, c, Step{i, ms}))
       )
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
@@ -7714,48 +7727,25 @@ def Vote.apart.at(
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # the votes of one node on one chain, after two different requests, are in
 # slots apart
-def Vote.apart(
-  n: String,
-  c: Spec.Chain,
-  +i: Spec.Id,
-  +v: Spec.Id
-) -> {
-  Spec.Id.same(i, v) == False{}: Bool
-} -> {
-  Shared.Trie.apart(
-    Spec.Slot.key(Spec.Slot.vote{n, c, v}),
-    Spec.Slot.key(Spec.Slot.vote{n, c, i})
-  )
-    == True{}: Bool
+def Vote.apart(+n: String, +c: Spec.Chain, +i: Spec.Id, +v: Spec.Id) -> {Spec.Id.same(i, v) == False{}: Bool} -> {
+  Shared.Trie.apart(Spec.Slot.key(Spec.Slot.vote{n, c, v}), Spec.Slot.key(Spec.Slot.vote{n, c, i})) == True{}: Bool
 }:
   +ck = Spec.Chain.key(c)
   hs =>
     %Equal.sym(
       Bool,
-      Shared.Trie.apart(
-        List.append(&2, Bool, Shared.Trie.text(n), List.append(&2, Bool, ck, Spec.Id.key(v))),
-        List.append(&2, Bool, Shared.Trie.text(n), List.append(&2, Bool, ck, Spec.Id.key(i)))
-      ),
-      Shared.Trie.apart(
-        List.append(&2, Bool, ck, Spec.Id.key(v)),
-        List.append(&2, Bool, ck, Spec.Id.key(i))
-      ),
-      Shared.Trie.prefix_apart(
-        Shared.Trie.text(n),
-        List.append(&2, Bool, ck, Spec.Id.key(v)),
-        List.append(&2, Bool, ck, Spec.Id.key(i))
-      )
+      Shared.Trie.apart(List.append(&2, Bool, ck, List.append(&2, Bool, Shared.Trie.text(n), Spec.Id.key(v))), List.append(&2, Bool, ck, List.append(&2, Bool, Shared.Trie.text(n), Spec.Id.key(i)))),
+      Shared.Trie.apart(List.append(&2, Bool, Shared.Trie.text(n), Spec.Id.key(v)), List.append(&2, Bool, Shared.Trie.text(n), Spec.Id.key(i))),
+      Shared.Trie.prefix_apart(ck, List.append(&2, Bool, Shared.Trie.text(n), Spec.Id.key(v)), List.append(&2, Bool, Shared.Trie.text(n), Spec.Id.key(i)))
     ): {_ == True{}: Bool}
     %Equal.sym(
       Bool,
-      Shared.Trie.apart(
-        List.append(&2, Bool, ck, Spec.Id.key(v)),
-        List.append(&2, Bool, ck, Spec.Id.key(i))
-      ),
+      Shared.Trie.apart(List.append(&2, Bool, Shared.Trie.text(n), Spec.Id.key(v)), List.append(&2, Bool, Shared.Trie.text(n), Spec.Id.key(i))),
       Shared.Trie.apart(Spec.Id.key(v), Spec.Id.key(i)),
-      Shared.Trie.prefix_apart(ck, Spec.Id.key(v), Spec.Id.key(i))
+      Shared.Trie.prefix_apart(Shared.Trie.text(n), Spec.Id.key(v), Spec.Id.key(i))
     ): {_ == True{}: Bool}
     Vote.apart.at(Shared.Trie.apart(Spec.Id.key(v), Spec.Id.key(i)), i, v, {==}, hs)
+
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the members that the last set-group of xs, then i, sets
@@ -7936,7 +7926,7 @@ def Members.last(
     )
       == Some{Step{i, [n]}}: Maybe<&2, Step>
   },
-  grow: {Nat.is_lt(State.fuel(s1), State.fuel(Spec.Node.join(s1, tv))) == True{}: Bool},
+  grow: {Nat.is_lt(Chain.fuel(s1, Spec.Chain.group{g}), Chain.fuel(Spec.Node.join(s1, tv), Spec.Chain.group{g})) == True{}: Bool},
   nexti: {
     Chain.next(Spec.Node.join(s1, tv), Spec.Chain.group{g}, Step{i, [n]}) == None{}: Maybe<&2, Step>
   },
@@ -7952,7 +7942,7 @@ def Members.last(
   }
     & {
       Chain.last(
-        State.fuel(s1),
+        Chain.fuel(s1, Spec.Chain.group{g}),
         s1,
         Spec.Chain.group{g},
         st,
@@ -7981,12 +7971,12 @@ def Members.last(
           i
             <> Chain.walk(
               Nat.sub(
-                State.fuel(Spec.Node.join(s1, tv)),
+                Chain.fuel(Spec.Node.join(s1, tv), Spec.Chain.group{g}),
                 1n+List.length(
                   &2,
                   Spec.Id,
                   Chain.walk(
-                    State.fuel(s1),
+                    Chain.fuel(s1, Spec.Chain.group{g}),
                     s1,
                     Spec.Chain.group{g},
                     Chain.next(s1, Spec.Chain.group{g}, st)
@@ -8018,12 +8008,12 @@ def Members.last(
               i
                 <> Chain.walk(
                   Nat.sub(
-                    State.fuel(Spec.Node.join(s1, tv)),
+                    Chain.fuel(Spec.Node.join(s1, tv), Spec.Chain.group{g}),
                     1n+List.length(
                       &2,
                       Spec.Id,
                       Chain.walk(
-                        State.fuel(s1),
+                        Chain.fuel(s1, Spec.Chain.group{g}),
                         s1,
                         Spec.Chain.group{g},
                         Chain.next(s1, Spec.Chain.group{g}, st)
@@ -8043,12 +8033,12 @@ def Members.last(
         List<&2, Spec.Id>,
         Chain.walk(
           Nat.sub(
-            State.fuel(Spec.Node.join(s1, tv)),
+            Chain.fuel(Spec.Node.join(s1, tv), Spec.Chain.group{g}),
             1n+List.length(
               &2,
               Spec.Id,
               Chain.walk(
-                State.fuel(s1),
+                Chain.fuel(s1, Spec.Chain.group{g}),
                 s1,
                 Spec.Chain.group{g},
                 Chain.next(s1, Spec.Chain.group{g}, st)
@@ -8062,12 +8052,12 @@ def Members.last(
         [],
         Walk.none(
           Nat.sub(
-            State.fuel(Spec.Node.join(s1, tv)),
+            Chain.fuel(Spec.Node.join(s1, tv), Spec.Chain.group{g}),
             1n+List.length(
               &2,
               Spec.Id,
               Chain.walk(
-                State.fuel(s1),
+                Chain.fuel(s1, Spec.Chain.group{g}),
                 s1,
                 Spec.Chain.group{g},
                 Chain.next(s1, Spec.Chain.group{g}, st)
@@ -8279,7 +8269,7 @@ def Spec.Node.members_after_set(n, s, e, g, ms, v):
           a2,
           hc2,
           Next.one(s2, c, v, n, i, t, q)(cell2v)(asked2)(Chain.same_refl(c)),
-          Grow.fuel(s1, kv, ev)(f4),
+          Chain.fuel_grow(s1, c, List.append(&2, Bool, Shared.Trie.text(n), Spec.Id.key(v)), ev)(f4),
           Next.none(s2, c, i, n)(f5),
           asked2,
           Start.of(s1, c, Chain.root(s1, c), l)(ecur1)
