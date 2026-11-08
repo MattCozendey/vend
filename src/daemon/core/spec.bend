@@ -510,6 +510,14 @@ law Node.forward:
   for y: Id
   Maybe<&2, Id>
 
+# the request q fits the head v of its chain: what its owners check before
+# they vote for it
+law Node.fits:
+  for s: State()
+  for q: Ask
+  for v: Id
+  Bool
+
 # the touch t holds (Node.touches_exactly)
 law Node.touches:
   for s: State()
@@ -751,6 +759,36 @@ law Node.write_written:
         )
           == Some{x}: Maybe<&2, Shared.Bytes()>
       }
+
+# after the sole owner of the group g takes a set-group to ms that fits its
+# head v, and nothing follows it, the members of g are ms
+law Node.members_after_set:
+  for n: String
+  for s: State()
+  for e: Envelope
+  for g: String
+  for ms: List<&2, Member>
+  for v: Id
+  {Node.owners(s, Chain.group{g}) == [n]: List<&2, String>}
+    -> {List.last(&2, Id, Node.chain(s, Chain.group{g})) == Some{v}: Maybe<&2, Id>}
+    -> {
+      Shared.Trie.get(Cells.Cell<Entry>, s, Slot.key(Slot.ask{Envelope.of(e)}))
+        == None{}: Maybe<&2, Cells.Cell<Entry>>
+    }
+    -> {
+      Shared.Trie.get(Cells.Cell<Entry>, s, Slot.key(Slot.vote{n, Chain.group{g}, v}))
+        == None{}: Maybe<&2, Cells.Cell<Entry>>
+    }
+    -> {
+      Shared.Trie.get(Cells.Cell<Entry>, s, Slot.key(Slot.vote{n, Chain.group{g}, Envelope.of(e)}))
+        == None{}: Maybe<&2, Cells.Cell<Entry>>
+    }
+    -> {Id.same(Envelope.of(e), v) == False{}: Bool}
+    -> {Node.fits(s, Ask.set_group{g, ms}, v) == True{}: Bool}
+    -> {
+      Node.members(Node.ask(n, s, e, Ask.set_group{g, ms}), g)
+        == Some{ms}: Maybe<&2, List<&2, Member>>
+    }
 
 # the sole owner of a group refuses a set-group that would make the group
 # contain itself, as a member h of the new set is the group or holds it: the

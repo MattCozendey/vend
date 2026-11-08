@@ -1639,6 +1639,9 @@ def Ask.fits(+s: Spec.State(), q: Spec.Ask, h: Spec.Id) -> Bool:
     case Spec.Ask.set_group{g, ms}:
       Bool.not(Group.loops.any(s, g, ms))
 
+def Spec.Node.fits(s, q, v):
+  Ask.fits(s, q, v)
+
 # the change q makes its chain when the chain does not exist
 def Ask.creates(q: Spec.Ask) -> Bool:
   match q:
@@ -7022,3 +7025,246 @@ def Vote.apart(+n: String, +c: Spec.Chain, +i: Spec.Id, +v: Spec.Id) -> {Spec.Id
       Shared.Trie.prefix_apart(ck, Spec.Id.key(v), Spec.Id.key(i))
     ): {_ == True{}: Bool}
     Vote.apart.at(Shared.Trie.apart(Spec.Id.key(v), Spec.Id.key(i)), i, v, {==}, hs)
+
+# the members that the last set-group of xs, then i, sets
+def Group.last_append(+s: Spec.State(), xs: List<&2, Spec.Id>, +i: Spec.Id, f: Maybe<&2, List<&2, Spec.Member>>) -> {
+  Group.last(s, List.append(&2, Spec.Id, xs, [i]), f) == Group.set(State.asked(s, i), Group.last(s, xs, f)): Maybe<&2, List<&2, Spec.Member>>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      Group.last_append(s, r, i, Group.set(State.asked(s, x), f))
+
+# a root entry x among the cells of s that names the group g makes g one of
+# the groups of s
+def Group.known(x: Spec.Entry, +s: Spec.State(), +g: String) -> {
+  Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), Shared.Trie.values(Cells.Cell<Spec.Entry>, s), Cells.one{x}) == True{}: Bool
+} -> {Root.names(x, Spec.Chain.group{g}) == True{}: Bool} -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s), Spec.Member.group{g}) == True{}: Bool}:
+  match x:
+    case Spec.Entry.root{+d, +i, +n}:
+      hc => hn =>
+        Group.roots_has(Shared.Trie.values(Cells.Cell<Spec.Entry>, s), g, i, n)(
+          %Chain.same_sound(d, Spec.Chain.group{g})(hn): {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), Shared.Trie.values(Cells.Cell<Spec.Entry>, s), Cells.one{Spec.Entry.root{_, i, n}}) == True{}: Bool}
+          hc
+        )
+    case Spec.Entry.ask{a, t, q}:
+      hc => hn => Empty.absurd({Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s), Spec.Member.group{g}) == True{}: Bool}, Shared.Bool.false_ne_true(hn))
+    case Spec.Entry.vote{a}:
+      hc => hn => Empty.absurd({Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s), Spec.Member.group{g}) == True{}: Bool}, Shared.Bool.false_ne_true(hn))
+
+# Group.claimed, from what the claim is
+def Group.claimed.of(
+  +s: Spec.State(),
+  +g: String,
+  +x: Spec.Entry,
+  e: &e: {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), Shared.Trie.values(Cells.Cell<Spec.Entry>, Shared.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Root.key(Spec.Chain.group{g}))), Cells.one{x}) == True{}: Bool}
+    -> {Root.names(x, Spec.Chain.group{g}) == True{}: Bool}
+) -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s), Spec.Member.group{g}) == True{}: Bool}:
+  match e:
+    case (hc, hn):
+      Group.known(x, s, g)(
+        Shared.Trie.values_under(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), s, Spec.Root.key(Spec.Chain.group{g}), Cells.one{x})(hc)
+      )(hn)
+
+# the claim x of the group g in s makes g one of the groups of s
+def Group.claimed(+s: Spec.State(), +g: String, +x: Spec.Entry) -> {
+  Spec.Node.claim(s, Spec.Chain.group{g}) == Some{x}: Maybe<&2, Spec.Entry>
+} -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s), Spec.Member.group{g}) == True{}: Bool}:
+  h => Group.claimed.of(s, g, x, Root.first_has(Spec.Chain.group{g}, Shared.Trie.values(Cells.Cell<Spec.Entry>, Shared.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Root.key(Spec.Chain.group{g}))), x)(h))
+
+
+# the members of the group g after the sole owner's vote for the set-group i
+# to ms, with nothing after i, once the chain before the vote is known (pr)
+def Members.last(
+  +n: String,
+  +s1: Spec.State(),
+  +i: Spec.Id,
+  +g: String,
+  +v: Spec.Id,
+  -t: String,
+  -ms: List<&2, Spec.Member>,
+  +tv: Spec.State(),
+  +a2: {Spec.Node.agrees(s1, tv) == True{}: Bool},
+  +hc2: {Spec.Node.claim(Spec.Node.join(s1, tv), Spec.Chain.group{g}) == Spec.Node.claim(s1, Spec.Chain.group{g}): Maybe<&2, Spec.Entry>},
+  +next2: {Chain.next(Spec.Node.join(s1, tv), Spec.Chain.group{g}, Step{v, [n]}) == Some{Step{i, [n]}}: Maybe<&2, Step>},
+  +grow: {Nat.is_lt(State.fuel(s1), State.fuel(Spec.Node.join(s1, tv))) == True{}: Bool},
+  nexti: {Chain.next(Spec.Node.join(s1, tv), Spec.Chain.group{g}, Step{i, [n]}) == None{}: Maybe<&2, Step>},
+  asked2: {State.asked(Spec.Node.join(s1, tv), i) == Some{Asked{t, Spec.Ask.set_group{g, ms}}}: Maybe<&2, Asked>},
+  pr: &st: Step -> {Chain.root(s1, Spec.Chain.group{g}) == Some{st}: Maybe<&2, Step>}
+    & {Chain.last(State.fuel(s1), s1, Spec.Chain.group{g}, st, Chain.next(s1, Spec.Chain.group{g}, st)) == Step{v, [n]}: Step}
+) -> {Group.last(Spec.Node.join(s1, tv), Spec.Node.chain(Spec.Node.join(s1, tv), Spec.Chain.group{g}), None{}) == Some{ms}: Maybe<&2, List<&2, Spec.Member>>}:
+  match pr:
+    case (+st, (er, el)):
+      +x1 = Chain.from(s1, Spec.Chain.group{g}, Some{st})
+      %Equal.sym(
+        List<&2, Spec.Id>,
+        Spec.Node.chain(Spec.Node.join(s1, tv), Spec.Chain.group{g}),
+        List.append(&2, Spec.Id, x1, i <> Chain.walk(Nat.sub(State.fuel(Spec.Node.join(s1, tv)), 1n+List.length(&2, Spec.Id, Chain.walk(State.fuel(s1), s1, Spec.Chain.group{g}, Chain.next(s1, Spec.Chain.group{g}, st)))), Spec.Node.join(s1, tv), Spec.Chain.group{g}, Chain.next(Spec.Node.join(s1, tv), Spec.Chain.group{g}, Step{i, [n]}))),
+        Written.shape(n, s1, i, Spec.Chain.group{g}, v, tv, a2, hc2, next2, grow, st, er, el)
+      ): {Group.last(Spec.Node.join(s1, tv), _, None{}) == Some{ms}: Maybe<&2, List<&2, Spec.Member>>}
+      %Equal.sym(Maybe<&2, Step>, Chain.next(Spec.Node.join(s1, tv), Spec.Chain.group{g}, Step{i, [n]}), None{}, nexti):
+        {Group.last(Spec.Node.join(s1, tv), List.append(&2, Spec.Id, x1, i <> Chain.walk(Nat.sub(State.fuel(Spec.Node.join(s1, tv)), 1n+List.length(&2, Spec.Id, Chain.walk(State.fuel(s1), s1, Spec.Chain.group{g}, Chain.next(s1, Spec.Chain.group{g}, st)))), Spec.Node.join(s1, tv), Spec.Chain.group{g}, _)), None{}) == Some{ms}: Maybe<&2, List<&2, Spec.Member>>}
+      %Equal.sym(List<&2, Spec.Id>, Chain.walk(Nat.sub(State.fuel(Spec.Node.join(s1, tv)), 1n+List.length(&2, Spec.Id, Chain.walk(State.fuel(s1), s1, Spec.Chain.group{g}, Chain.next(s1, Spec.Chain.group{g}, st)))), Spec.Node.join(s1, tv), Spec.Chain.group{g}, None{}), [], Walk.none(Nat.sub(State.fuel(Spec.Node.join(s1, tv)), 1n+List.length(&2, Spec.Id, Chain.walk(State.fuel(s1), s1, Spec.Chain.group{g}, Chain.next(s1, Spec.Chain.group{g}, st)))), Spec.Node.join(s1, tv), Spec.Chain.group{g})):
+        {Group.last(Spec.Node.join(s1, tv), List.append(&2, Spec.Id, x1, i <> _), None{}) == Some{ms}: Maybe<&2, List<&2, Spec.Member>>}
+      %Equal.sym(
+        Maybe<&2, List<&2, Spec.Member>>,
+        Group.last(Spec.Node.join(s1, tv), List.append(&2, Spec.Id, x1, [i]), None{}),
+        Group.set(State.asked(Spec.Node.join(s1, tv), i), Group.last(Spec.Node.join(s1, tv), x1, None{})),
+        Group.last_append(Spec.Node.join(s1, tv), x1, i, None{})
+      ): {_ == Some{ms}: Maybe<&2, List<&2, Spec.Member>>}
+      %Equal.sym(Maybe<&2, Asked>, State.asked(Spec.Node.join(s1, tv), i), Some{Asked{t, Spec.Ask.set_group{g, ms}}}, asked2):
+        {Group.set(_, Group.last(Spec.Node.join(s1, tv), x1, None{})) == Some{ms}: Maybe<&2, List<&2, Spec.Member>>}
+      {==}
+
+# the group g, claimed in s, is one of the groups after two entries that keep
+# its claim
+def Members.known(
+  +s: Spec.State(),
+  +t1: Spec.State(),
+  +t2: Spec.State(),
+  +g: String,
+  hc: {Spec.Node.claim(Spec.Node.join(s, t1), Spec.Chain.group{g}) == Spec.Node.claim(s, Spec.Chain.group{g}): Maybe<&2, Spec.Entry>},
+  hc2: {
+    Spec.Node.claim(Spec.Node.join(Spec.Node.join(s, t1), t2), Spec.Chain.group{g}) == Spec.Node.claim(Spec.Node.join(s, t1), Spec.Chain.group{g}): Maybe<&2, Spec.Entry>
+  },
+  e: &x: Spec.Entry -> {Spec.Node.claim(s, Spec.Chain.group{g}) == Some{x}: Maybe<&2, Spec.Entry>}
+) -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(Spec.Node.join(Spec.Node.join(s, t1), t2)), Spec.Member.group{g}) == True{}: Bool}:
+  match e:
+    case (+x, hx):
+      Group.claimed(Spec.Node.join(Spec.Node.join(s, t1), t2), g, x)(
+        Equal.trans(
+          Maybe<&2, Spec.Entry>,
+          Spec.Node.claim(Spec.Node.join(Spec.Node.join(s, t1), t2), Spec.Chain.group{g}),
+          Spec.Node.claim(s, Spec.Chain.group{g}),
+          Some{x},
+          Equal.trans(
+            Maybe<&2, Spec.Entry>,
+            Spec.Node.claim(Spec.Node.join(Spec.Node.join(s, t1), t2), Spec.Chain.group{g}),
+            Spec.Node.claim(Spec.Node.join(s, t1), Spec.Chain.group{g}),
+            Spec.Node.claim(s, Spec.Chain.group{g}),
+            hc2,
+            hc
+          ),
+          hx
+        )
+      )
+
+def Spec.Node.members_after_set(n, s, e, g, ms, v):
+  match e:
+    case Spec.Envelope{+r, +w, +t}:
+      +n = n
+      +s = s
+      +g = g
+      +ms = ms
+      +v = v
+      +i = {Spec.Id{w, r}: Spec.Id}
+      +c = {Spec.Chain.group{g}: Spec.Chain}
+      +q = {Spec.Ask.set_group{g, ms}: Spec.Ask}
+      +l = {Step{v, [n]}: Step}
+      +ka = Spec.Slot.key(Spec.Slot.ask{i})
+      +kv = Spec.Slot.key(Spec.Slot.vote{n, c, v})
+      +kvi = Spec.Slot.key(Spec.Slot.vote{n, c, i})
+      +ea = {Cells.one{Spec.Entry.ask{i, t, q}}: Cells.Cell<Spec.Entry>}
+      +ev = {Cells.one{Spec.Entry.vote{i}}: Cells.Cell<Spec.Entry>}
+      +ta = Shared.Trie.one(Cells.Cell<Spec.Entry>, ka, ea)
+      +tv = Shared.Trie.one(Cells.Cell<Spec.Entry>, kv, ev)
+      +s1 = Spec.Node.join(s, ta)
+      +s2 = Spec.Node.join(s1, tv)
+      +h1 => h2 => +h3 => +h4 => h5 => h6 => h7 =>
+        +hcur = Equal.trans(
+          Maybe<&2, Spec.Id>,
+          Maybe.map(&2, Step, Spec.Id, k => Step.version(k), Chain.cursor(s, c)),
+          List.last(&2, Spec.Id, Spec.Node.chain(s, c)),
+          Some{v},
+          Equal.sym(
+            Maybe<&2, Spec.Id>,
+            List.last(&2, Spec.Id, Spec.Node.chain(s, c)),
+            Maybe.map(&2, Step, Spec.Id, k => Step.version(k), Chain.cursor(s, c)),
+            Chain.last_of(s, c, Chain.root(s, c))
+          ),
+          h2
+        )
+        +ask = Owner.takes(n, s, Spec.Envelope{r, w, t}, q, v)(h1)(hcur)(h3)(h4)(h7)
+        +ecur = Owner.cursor(Chain.cursor(s, c), n, v)(h1)(hcur)
+        +a = Cells.Cell.agrees_one(~Spec.Entry, ~Spec.Entry.same, s, ka, ea)(h3)
+        +hc = Fresh.claim(s, ka, c, ea)({==})
+        +f4 = Equal.trans(
+          Maybe<&2, Cells.Cell<Spec.Entry>>,
+          Shared.Trie.get(Cells.Cell<Spec.Entry>, s1, kv),
+          Shared.Trie.get(Cells.Cell<Spec.Entry>, s, kv),
+          None{},
+          Fresh.cell(s, ka, kv, ea)({==}),
+          h4
+        )
+        +ecur1 = Stay.cursor(s, ta, c, a, hc, l, ecur, Next.none(s1, c, v, n)(f4))
+        +cell1a = Equal.trans(
+          Maybe<&2, Cells.Cell<Spec.Entry>>,
+          Shared.Trie.get(Cells.Cell<Spec.Entry>, s1, ka),
+          Shared.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), Shared.Trie.get(Cells.Cell<Spec.Entry>, s, ka), Shared.Trie.get(Cells.Cell<Spec.Entry>, ta, ka)),
+          Some{ea},
+          Shared.Trie.get_union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, ta, ka),
+          %Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, Shared.Trie.get(Cells.Cell<Spec.Entry>, s, ka), None{}, h3):
+            {Shared.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), _, Shared.Trie.get(Cells.Cell<Spec.Entry>, ta, ka)) == Some{ea}: Maybe<&2, Cells.Cell<Spec.Entry>>}
+          Shared.Trie.get_one(Cells.Cell<Spec.Entry>, ka, ea)
+        )
+        +a2 = Cells.Cell.agrees_one(~Spec.Entry, ~Spec.Entry.same, s1, kv, ev)(f4)
+        +hc2 = Fresh.claim(s1, kv, c, ev)({==})
+        +cell2v = Equal.trans(
+          Maybe<&2, Cells.Cell<Spec.Entry>>,
+          Shared.Trie.get(Cells.Cell<Spec.Entry>, s2, kv),
+          Shared.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), Shared.Trie.get(Cells.Cell<Spec.Entry>, s1, kv), Shared.Trie.get(Cells.Cell<Spec.Entry>, tv, kv)),
+          Some{ev},
+          Shared.Trie.get_union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s1, tv, kv),
+          %Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, Shared.Trie.get(Cells.Cell<Spec.Entry>, s1, kv), None{}, f4):
+            {Shared.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), _, Shared.Trie.get(Cells.Cell<Spec.Entry>, tv, kv)) == Some{ev}: Maybe<&2, Cells.Cell<Spec.Entry>>}
+          Shared.Trie.get_one(Cells.Cell<Spec.Entry>, kv, ev)
+        )
+        +cell2a = Equal.trans(
+          Maybe<&2, Cells.Cell<Spec.Entry>>,
+          Shared.Trie.get(Cells.Cell<Spec.Entry>, s2, ka),
+          Shared.Trie.get(Cells.Cell<Spec.Entry>, s1, ka),
+          Some{ea},
+          Fresh.cell(s1, kv, ka, ev)({==}),
+          cell1a
+        )
+        +asked2 = Equal.cong(Maybe<&2, Cells.Cell<Spec.Entry>>, Maybe<&2, Asked>, z => Asked.of(Cell.entry(z)), Shared.Trie.get(Cells.Cell<Spec.Entry>, s2, ka), Some{ea}, cell2a)
+        +f5 = Equal.trans(
+          Maybe<&2, Cells.Cell<Spec.Entry>>,
+          Shared.Trie.get(Cells.Cell<Spec.Entry>, s2, kvi),
+          Shared.Trie.get(Cells.Cell<Spec.Entry>, s1, kvi),
+          None{},
+          Fresh.cell(s1, kv, kvi, ev)(Vote.apart(n, c, i, v)(h6)),
+          Equal.trans(Maybe<&2, Cells.Cell<Spec.Entry>>, Shared.Trie.get(Cells.Cell<Spec.Entry>, s1, kvi), Shared.Trie.get(Cells.Cell<Spec.Entry>, s, kvi), None{}, Fresh.cell(s, ka, kvi, ea)({==}), h5)
+        )
+        +last = Members.last(
+          n,
+          s1,
+          i,
+          g,
+          v,
+          t,
+          ms,
+          tv,
+          a2,
+          hc2,
+          Next.one(s2, c, v, n, i, t, q)(cell2v)(asked2)(Chain.same_refl(c)),
+          Grow.fuel(s1, kv, ev)(f4),
+          Next.none(s2, c, i, n)(f5),
+          asked2,
+          Start.of(s1, c, Chain.root(s1, c), l)(ecur1)
+        )
+        +hall = Members.known(s, ta, tv, g, hc, hc2, Claim.of(s, c, Spec.Node.claim(s, c), {==}, l)(ecur))
+        %Equal.sym(Spec.State(), Spec.Node.ask(n, s, Spec.Envelope{r, w, t}, q), s2, ask):
+          {Spec.Node.members(_, g) == Some{ms}: Maybe<&2, List<&2, Spec.Member>>}
+        %Equal.sym(Bool, Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s2), Spec.Member.group{g}), True{}, hall):
+          {
+            Shared.Bool.when(
+              Maybe<&2, List<&2, Spec.Member>>,
+              _,
+              u => Group.last(s2, Spec.Node.chain(s2, c), None{}),
+              u => None{}
+            )
+              == Some{ms}: Maybe<&2, List<&2, Spec.Member>>
+          }
+        last
