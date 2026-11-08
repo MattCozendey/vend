@@ -61,6 +61,39 @@ def Trie.values(-V: Data, t: Trie<V>) -> List<&2, V>:
     case Bin{Some{v}, z, o}:
       v <> List.append(&2, V, Trie.values(V, z), Trie.values(V, o))
 
+# the number of entries of t
+def Trie.size(-V: Data, t: Trie<V>) -> Nat:
+  match t:
+    case Tip{}:
+      0n
+    case Bin{None{}, z, o}:
+      Nat.add(Trie.size(V, z), Trie.size(V, o))
+    case Bin{Some{v}, z, o}:
+      1n+Nat.add(Trie.size(V, z), Trie.size(V, o))
+
+# Keys of text
+# ------------
+
+# the bits of the word w, from its first
+def Trie.word(n: Nat, w: Word(n)) -> List<&2, Bool>:
+  match n:
+    case 0n:
+      []
+    case 1n+p:
+      match w:
+        case WCon{b, t}:
+          b <> Trie.word(p, t)
+
+# the key of the text t: each character as True and its 32 bits, then False;
+# so the key of one text never starts the key of another, and keys of texts
+# put one after the other never meet
+def Trie.text(t: String) -> List<&2, Bool>:
+  match t:
+    case SNil{}:
+      [False{}]
+    case SCon{Chr{U32{w}}, r}:
+      True{} <> List.append(&2, Bool, Trie.word(32n, w), Trie.text(r))
+
 # Unions
 # ------
 # A union joins the values of a key that both tries hold. When join is a
