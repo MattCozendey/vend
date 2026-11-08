@@ -1825,20 +1825,6 @@ def Spec.Node.resources(s, b):
   +s = s
   Names.of(Res.of.names(s, Spec.Node.head(s, b)))
 
-# a branch of s at its head, with its resources
-type Uses is Data:
-  Uses{state: Spec.State(), head: Maybe<&2, Spec.Id>, names: List<&2, Resources.Name>}
-
-# the branch b of s, as a graph
-def Uses.of(+s: Spec.State(), +b: String) -> Uses:
-  Uses{s, Spec.Node.head(s, b), Spec.Node.resources(s, b)}
-
-# the resources of the branch of g
-def Uses.nodes(g: Uses) -> List<&2, Resources.Name>:
-  match g:
-    case Uses{s, h, ns}:
-      ns
-
 # the bytes m, as a list of one item or none
 def Uses.items(m: Maybe<&2, Shared.Bytes()>) -> List<&2, Shared.Bytes()>:
   match m:
@@ -1855,14 +1841,39 @@ def Uses.named(es: List<&2, Formats.Edge>, +n: Resources.Name) -> List<&2, Resou
     case Con{Formats.Edge{t, a, cs}, r}:
       Resources.Name.at(n, Shared.Bytes.to_text(t)) <> Uses.named(r, n)
 
+# what the resource n imports at the version h of s, as its format reads it
+def Uses.edges(+s: Spec.State(), +h: Maybe<&2, Spec.Id>, +n: Resources.Name) -> List<&2, Resources.Name>:
+  Uses.named(Formats.Format.uses(Formats.Format.of(Resources.Name.path(n)), Uses.items(Res.of(s, n, h))), n)
+
+# the imports of each of the resources ns at the version h of s, by name
+def Uses.table(ns: List<&2, Resources.Name>, +s: Spec.State(), +h: Maybe<&2, Spec.Id>) -> Shared.Trie<List<&2, Resources.Name>>:
+  match ns:
+    case Nil{}:
+      Shared.Trie.new(List<&2, Resources.Name>)
+    case Con{+n, r}:
+      Shared.Trie.set(List<&2, Resources.Name>, Uses.table(r, s, h), Shared.Trie.text(Resources.Name.show(n)), Uses.edges(s, h, n))
+
+# a branch at its head: its resources, and what each imports, read once
+type Uses is Data:
+  Uses{names: List<&2, Resources.Name>, imports: Shared.Trie<List<&2, Resources.Name>>}
+
+# the branch b of s, as a graph
+def Uses.of(+s: Spec.State(), +b: String) -> Uses:
+  +h = Spec.Node.head(s, b)
+  +ns = Spec.Node.resources(s, b)
+  Uses{ns, Uses.table(ns, s, h)}
+
+# the resources of the branch of g
+def Uses.nodes(g: Uses) -> List<&2, Resources.Name>:
+  match g:
+    case Uses{ns, t}:
+      ns
+
 # what the resource n imports in the branch of g
 def Uses.targets(g: Uses, +n: Resources.Name) -> List<&2, Resources.Name>:
   match g:
-    case Uses{s, h, ns}:
-      Uses.named(
-        Formats.Format.uses(Formats.Format.of(Resources.Name.path(n)), Uses.items(Res.of(s, n, h))),
-        n
-      )
+    case Uses{ns, t}:
+      Maybe.default(&2, List<&2, Resources.Name>, Shared.Trie.get(List<&2, Resources.Name>, t, Shared.Trie.text(Resources.Name.show(n))), [])
 
 # what n imports in g, when it is a resource of g
 def Uses.succ(g: Uses, n: Resources.Name) -> List<&2, Resources.Name>:
@@ -2007,27 +2018,72 @@ def Touch.of(
     case Some{c}:
       Touch.each(us, v, c, b)
 
-# a branch of s, with its resources
+# a branch of s with what a check of its touches reads, each read once: the
+# names of the branches, the versions of every branch, the branch's resources
+# and the graph of their imports
 type Affects is Data:
-  Affects{state: Spec.State(), branch: String, resources: List<&2, Resources.Name>}
+  Affects{
+    state: Spec.State(),
+    branch: String,
+    names: List<&2, String>,
+    versions: List<&2, Spec.Id>,
+    resources: List<&2, Resources.Name>,
+    uses: Uses
+  }
 
-# the branch b of s, with its resources
+# the branch b of s, read once
 def Affects.of(+s: Spec.State(), +b: String) -> Affects:
-  Affects{s, b, Spec.Node.resources(s, b)}
+  Affects{s, b, Spec.Branch.names(Spec.Node.branches(s)), Touch.versions(s), Spec.Node.resources(s, b), Uses.of(s, b)}
+
+# the branch of g
+def Affects.branch(g: Affects) -> String:
+  match g:
+    case Affects{s, b, ns, vs, us, gr}:
+      b
+
+# the state of g
+def Affects.state(g: Affects) -> Spec.State():
+  match g:
+    case Affects{s, b, ns, vs, us, gr}:
+      s
 
 # the touches of the version v on the branch of g
 def Affects.at(g: Affects, v: Spec.Id) -> List<&2, Spec.Touch>:
   match g:
-    case Affects{s, b, us}:
+    case Affects{s, b, ns, vs, us, gr}:
       +v = v
       Touch.of(Spec.Node.wrote(s, v), v, b, us)
 
+# Spec.Node.touches of t, from what g read: the same check, when t is of the
+# branch of g (Affects.holds_eq)
+def Affects.holds(g: Affects, t: Spec.Touch) -> Bool:
+  match g t:
+    case Affects{+s, b, ns, vs, us, gr} Spec.Touch{+v, +c, +d, +u}:
+      List.all.if(
+        w => List.all.if(
+          w => List.all.if(
+            w => List.all.if(
+              w => List.all.if(
+                w => List.any.if(
+                  w => Reaches.Reach.in_fast(~Resources.Name, ~Uses, ~Resources.Name.same, ~Uses.succ, ~Uses.nodes, gr, u, c),
+                  Resources.Name.same(u, c)
+                ),
+                Shared.List.has(~Resources.Name, ~Resources.Name.same, us, u)
+              ),
+              Touch.wrote(s, v, c)
+            ),
+            Touch.lacks(s, d, v)
+          ),
+          Shared.List.has(~Spec.Id, ~Spec.Id.same, vs, v)
+        ),
+        Shared.List.has(~String, ~String.eq, ns, d)
+      )
+
 # the touch t is of the branch of g, and holds
 def Affects.keeps(g: Affects, t: Spec.Touch) -> Bool:
-  match g:
-    case Affects{s, b, us}:
-      +t = t
-      List.all.if(w => Spec.Node.touches(s, t), String.eq(Spec.Touch.branch(t), b))
+  +g = g
+  +t = t
+  List.all.if(w => Affects.holds(g, t), String.eq(Affects.branch(g), Spec.Touch.branch(t)))
 
 # the touches that may hold of the branch b
 def Affects.cands(s: Spec.State(), b: String) -> List<&2, Spec.Touch>:
@@ -2047,48 +2103,38 @@ def Spec.Node.affects(s, b):
   +b = b
   Shared.List.keep(~Spec.Touch, ~Affects, ~Affects.keeps, Affects.cands(s, b), Affects.of(s, b))
 
-# the version of a point of s
-type Impact is Data:
-  Impact{state: Spec.State(), version: Maybe<&2, Spec.Id>}
+# a branch of s read once, and the version of a point
+type Impacted is Data:
+  Impacted{affects: Affects, version: Maybe<&2, Spec.Id>}
 
-# the touch t is of the version of g, or a version that it came from, and
-# holds
-def Impact.keeps(g: Impact, t: Spec.Touch) -> Bool:
+# the touch t is of the version of g, or a version that it came from, and of
+# the branch of g, and holds
+def Impacted.keeps(g: Impacted, t: Spec.Touch) -> Bool:
   match g:
-    case Impact{+s, +m}:
+    case Impacted{+a, +m}:
       +t = t
       List.all.if(
-        w => Spec.Node.touches(s, t),
-        List.all.if(
-          w => Spec.Node.has(
-            s,
-            Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)),
-            Spec.Touch.version(t)
-          ),
-          Maybe.is_some(&2, Spec.Id, m)
+        w => Affects.keeps(a, t),
+        Bool.and(
+          Maybe.is_some(&2, Spec.Id, m),
+          Spec.Node.has(Affects.state(a), Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))
         )
       )
 
-# the touches that may hold of any branch of s
-def Impact.cands(+s: Spec.State()) -> List<&2, Spec.Touch>:
-  Shared.List.flat(
-    ~String,
-    ~Spec.Touch,
-    ~Spec.State(),
-    ~Affects.cands,
-    Spec.Branch.names(Spec.Node.branches(s)),
-    s
-  )
+# the impact of the version m of a point of s
+type Impact is Data:
+  Impact{state: Spec.State(), version: Maybe<&2, Spec.Id>}
+
+# the touches of the branch b that the version of g touches
+def Impact.at(g: Impact, b: String) -> List<&2, Spec.Touch>:
+  match g:
+    case Impact{+s, m}:
+      +b = b
+      Shared.List.keep(~Spec.Touch, ~Impacted, ~Impacted.keeps, Affects.cands(s, b), Impacted{Affects.of(s, b), m})
 
 def Spec.Node.impact(s, p):
   +s = s
-  Shared.List.keep(
-    ~Spec.Touch,
-    ~Impact,
-    ~Impact.keeps,
-    Impact.cands(s),
-    Impact{s, Spec.Node.version(s, p)}
-  )
+  Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, Spec.Branch.names(Spec.Node.branches(s)), Impact{s, Spec.Node.version(s, p)})
 
 # Notices
 # -------
@@ -5324,19 +5370,18 @@ def Affects.complete(
   +b: String,
   t: Spec.Touch
 ) -> {
-  Bool.and(String.eq(Spec.Touch.branch(t), b), Spec.Node.touches(s, t)) == True{}: Bool
+  Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t)) == True{}: Bool
 } -> {Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Affects.cands(s, b), t) == True{}: Bool}:
   match t:
     case Spec.Touch{+v, +c, +d, +u}:
       +h =>
-        %Shared.String.eq_sound(
+        %Equal.sym(
+          String,
+          b,
           d,
-          b
-        )(
-          Shared.Bool.and_true_left(
-            String.eq(d, b),
-            Spec.Node.touches(s, Spec.Touch{v, c, d, u})
-          )(h)
+          Shared.String.eq_sound(b, d)(
+            Shared.Bool.and_true_left(String.eq(b, d), Spec.Node.touches(s, Spec.Touch{v, c, d, u}))(h)
+          )
         ): {
           Shared.List.has(
             ~Spec.Touch,
@@ -5354,145 +5399,178 @@ def Affects.complete(
           u
         )(
           Shared.Bool.and_true_right(
-            String.eq(d, b),
+            String.eq(b, d),
             Spec.Node.touches(s, Spec.Touch{v, c, d, u})
           )(h)
         )
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a touch of the branch b holds by what Affects.of read exactly when it holds
+def Affects.holds_eq(+s: Spec.State(), +b: String, t: Spec.Touch) -> {String.eq(b, Spec.Touch.branch(t)) == True{}: Bool} -> {
+  Affects.holds(Affects.of(s, b), t) == Spec.Node.touches(s, t): Bool
+}:
+  match t:
+    case Spec.Touch{+v, +c, +d, +u}:
+      h =>
+        %Shared.String.eq_sound(b, d)(h):
+          {Affects.holds(Affects.of(s, b), Spec.Touch{v, c, _, u}) == Spec.Node.touches(s, Spec.Touch{v, c, _, u}): Bool}
+        {==}
+
+# Affects.keeps_eq once t is known to be of the branch b or not (k)
+def Affects.keeps_eq.at(k: Bool, +s: Spec.State(), +b: String, +t: Spec.Touch, ek: {String.eq(b, Spec.Touch.branch(t)) == k: Bool}) -> {
+  List.all.if(w => Affects.holds(Affects.of(s, b), t), k) == Bool.and(k, Spec.Node.touches(s, t)): Bool
+}:
+  match k:
+    case False{}:
+      {==}
+    case True{}:
+      Affects.holds_eq(s, b, t)(ek)
+
+# what Affects.of(s, b) keeps is the touches of b that hold
+def Affects.keeps_eq(+s: Spec.State(), +b: String, +t: Spec.Touch) -> {
+  Affects.keeps(Affects.of(s, b), t) == Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t)): Bool
+}:
+  Affects.keeps_eq.at(String.eq(b, Spec.Touch.branch(t)), s, b, t, {==})
+
 def Spec.Node.affects_exactly(s, b, t):
   +s = s
   +b = b
   +t = t
-  +e = String.eq(Spec.Touch.branch(t), b)
-  k = Spec.Node.touches(s, t)
-  %Shared.Bool.and_lazy(e, k):
-    {Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Spec.Node.affects(s, b), t) == _: Bool}
-  Shared.List.keep_exactly(
-    ~Spec.Touch,
-    ~Affects,
-    ~Spec.Touch.same,
-    ~Affects.keeps,
-    ~Touch.same_sound,
-    Affects.cands(s, b),
-    Affects.of(s, b),
-    t,
-    h => Affects.complete(
-      s,
-      b,
-      t
-    )(
-      Equal.trans(
-        Bool,
-        Bool.and(e, k),
-        List.all.if(w => k, e),
-        True{},
-        Equal.sym(Bool, List.all.if(w => k, e), Bool.and(e, k), Shared.Bool.and_lazy(e, k)),
-        h
-      )
-    )
-  )
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement keeps each and/or as one value for the proof to split on; a proof does not run
-# a touch that holds may hold of some branch
-def Impact.complete(
-  +s: Spec.State(),
-  t: Spec.Touch
-) -> {
-  Spec.Node.touches(s, t) == True{}: Bool
-} -> {Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Impact.cands(s), t) == True{}: Bool}:
-  match t:
-    case Spec.Touch{+v, +c, +d, +u}:
-      +ht =>
-        Shared.List.has_flat(
-          ~String,
-          ~Spec.Touch,
-          ~Spec.State(),
-          ~String.eq,
-          ~Spec.Touch.same,
-          ~Affects.cands,
-          ~Text.sound,
-          Spec.Branch.names(Spec.Node.branches(s)),
-          s,
-          d,
-          Spec.Touch{v, c, d, u}
-        )(
-          Shared.Bool.and_true_left(
-            Touch.named(s, d),
-            Bool.and(
-              Touch.made(s, v),
-              Bool.and(
-                Touch.lacks(s, d, v),
-                Bool.and(
-                  Touch.wrote(s, v, c),
-                  Bool.and(Touch.held(s, d, u), Touch.reaches(s, d, u, c))
-                )
-              )
-            )
-          )(Touch.whole(s, v, c, d, u)(ht))
-        )(Touch.complete(s, v, c, d, u)(ht))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-def Spec.Node.impact_exactly(s, p, t):
-  +s = s
-  p = p
-  +t = t
-  +m = Spec.Node.version(s, p)
-  +i = Maybe.is_some(&2, Spec.Id, m)
-  +o = Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))
-  k = Spec.Node.touches(s, t)
-  +e = Equal.trans(
+  +ke = Affects.keeps_eq(s, b, t)
+  Equal.trans(
     Bool,
-    List.all.if(w => k, List.all.if(w => o, i)),
-    Bool.and(List.all.if(w => o, i), k),
-    Bool.and(Bool.and(i, o), k),
-    Shared.Bool.and_lazy(List.all.if(w => o, i), k),
-    Equal.cong(
-      Bool,
-      Bool,
-      z => Bool.and(z, k),
-      List.all.if(w => o, i),
-      Bool.and(i, o),
-      Shared.Bool.and_lazy(i, o)
-    )
-  )
-  %e:
-    {Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Spec.Node.impact(s, p), t) == _: Bool}
-  Shared.List.keep_exactly(
-    ~Spec.Touch,
-    ~Impact,
-    ~Spec.Touch.same,
-    ~Impact.keeps,
-    ~Touch.same_sound,
-    Impact.cands(s),
-    Impact{s, m},
-    t,
-    h => Impact.complete(
-      s,
-      t
-    )(
-      Shared.Bool.and_true_right(
-        Bool.and(i, o),
-        k
-      )(
+    Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Spec.Node.affects(s, b), t),
+    Affects.keeps(Affects.of(s, b), t),
+    Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t)),
+    Shared.List.keep_exactly(
+      ~Spec.Touch,
+      ~Affects,
+      ~Spec.Touch.same,
+      ~Affects.keeps,
+      ~Touch.same_sound,
+      Affects.cands(s, b),
+      Affects.of(s, b),
+      t,
+      h => Affects.complete(s, b, t)(
         Equal.trans(
           Bool,
-          Bool.and(Bool.and(i, o), k),
-          List.all.if(w => k, List.all.if(w => o, i)),
+          Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t)),
+          Affects.keeps(Affects.of(s, b), t),
           True{},
-          Equal.sym(
-            Bool,
-            List.all.if(w => k, List.all.if(w => o, i)),
-            Bool.and(Bool.and(i, o), k),
-            e
-          ),
+          Equal.sym(Bool, Affects.keeps(Affects.of(s, b), t), Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t)), ke),
           h
         )
       )
+    ),
+    ke
+  )
+
+# the touches of the branch b that the version m touches are those of b
+# that hold, of m or a version that it came from
+def Impact.at_has(+s: Spec.State(), +m: Maybe<&2, Spec.Id>, +b: String, +t: Spec.Touch) -> {
+  Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Impact.at(Impact{s, m}, b), t) == Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t))): Bool
+}:
+  +k = Affects.keeps(Affects.of(s, b), t)
+  +f = Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t)))
+  +ke = Affects.keeps_eq(s, b, t)
+  Equal.trans(
+    Bool,
+    Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Impact.at(Impact{s, m}, b), t),
+    List.all.if(w => k, f),
+    Bool.and(f, Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t))),
+    Shared.List.keep_exactly(
+      ~Spec.Touch,
+      ~Impacted,
+      ~Spec.Touch.same,
+      ~Impacted.keeps,
+      ~Touch.same_sound,
+      Affects.cands(s, b),
+      Impacted{Affects.of(s, b), m},
+      t,
+      h => Affects.complete(s, b, t)(
+        Equal.trans(
+          Bool,
+          Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t)),
+          k,
+          True{},
+          Equal.sym(Bool, k, Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t)), ke),
+          Shared.List.all.if_rest(f, w => k)(h)
+        )
+      )
+    ),
+    Equal.trans(
+      Bool,
+      List.all.if(w => k, f),
+      Bool.and(f, k),
+      Bool.and(f, Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t))),
+      Shared.Bool.and_lazy(f, k),
+      Equal.cong(Bool, Bool, z => Bool.and(f, z), k, Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t)), ke)
     )
   )
+
+# the impact over the branches ns holds exactly the touches that hold, of
+# one of ns
+def Impact.flat_has(ns: List<&2, String>, +s: Spec.State(), +m: Maybe<&2, Spec.Id>, +t: Spec.Touch) -> {
+  Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, ns, Impact{s, m}), t) == Bool.and(Shared.List.has(~String, ~String.eq, ns, Spec.Touch.branch(t)), Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Spec.Node.touches(s, t))): Bool
+}:
+  match ns:
+    case Nil{}:
+      {==}
+    case Con{+b, +r}:
+      %Equal.sym(
+        Bool,
+        Shared.List.has(~Spec.Touch, ~Spec.Touch.same, List.append(&2, Spec.Touch, Impact.at(Impact{s, m}, b), Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, r, Impact{s, m})), t),
+        Bool.or(Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Impact.at(Impact{s, m}, b), t), Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, r, Impact{s, m}), t)),
+        Shared.List.has_append(~Spec.Touch, ~Spec.Touch.same, Impact.at(Impact{s, m}, b), Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, r, Impact{s, m}), t)
+      ): {_ == Bool.and(Shared.List.has(~String, ~String.eq, b <> r, Spec.Touch.branch(t)), Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Spec.Node.touches(s, t))): Bool}
+      %Equal.sym(
+        Bool,
+        Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Impact.at(Impact{s, m}, b), t),
+        Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t))),
+        Impact.at_has(s, m, b, t)
+      ): {Bool.or(_, Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, r, Impact{s, m}), t)) == Bool.and(Shared.List.has(~String, ~String.eq, b <> r, Spec.Touch.branch(t)), Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Spec.Node.touches(s, t))): Bool}
+      %Equal.sym(
+        Bool,
+        Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, r, Impact{s, m}), t),
+        Bool.and(Shared.List.has(~String, ~String.eq, r, Spec.Touch.branch(t)), Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Spec.Node.touches(s, t))),
+        Impact.flat_has(r, s, m, t)
+      ): {
+        Bool.or(Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t))), _) == Bool.and(Shared.List.has(~String, ~String.eq, b <> r, Spec.Touch.branch(t)), Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Spec.Node.touches(s, t))): Bool
+      }
+      Shared.Bool.or_split(String.eq(b, Spec.Touch.branch(t)), Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Spec.Node.touches(s, t), Shared.List.has(~String, ~String.eq, r, Spec.Touch.branch(t)))
+
+# a touch that holds is of a branch
+def Impact.named(+s: Spec.State(), t: Spec.Touch) -> {Spec.Node.touches(s, t) == True{}: Bool} -> {
+  Shared.List.has(~String, ~String.eq, Spec.Branch.names(Spec.Node.branches(s)), Spec.Touch.branch(t)) == True{}: Bool
+}:
+  match t:
+    case Spec.Touch{+v, +c, +d, +u}:
+      h => Shared.Bool.and_true_left(
+        Touch.named(s, d),
+        Bool.and(
+          Touch.made(s, v),
+          Bool.and(Touch.lacks(s, d, v), Bool.and(Touch.wrote(s, v, c), Bool.and(Touch.held(s, d, u), Touch.reaches(s, d, u, c))))
+        )
+      )(Touch.whole(s, v, c, d, u)(h))
+
+def Spec.Node.impact_exactly(s, p, t):
+  +s = s
+  +t = t
+  +m = Spec.Node.version(s, p)
+  +ns = Spec.Branch.names(Spec.Node.branches(s))
+  Equal.trans(
+    Bool,
+    Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, ns, Impact{s, m}), t),
+    Bool.and(Shared.List.has(~String, ~String.eq, ns, Spec.Touch.branch(t)), Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Spec.Node.touches(s, t))),
+    Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Spec.Node.touches(s, t)),
+    Impact.flat_has(ns, s, m, t),
+    Shared.Bool.and_implied_right(
+      Shared.List.has(~String, ~String.eq, ns, Spec.Touch.branch(t)),
+      Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Spec.Node.touches(s, t)),
+      h => Impact.named(s, t)(Shared.Bool.and_true_right(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Spec.Node.touches(s, t))(h))
+    )
+  )
+
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Group cycles

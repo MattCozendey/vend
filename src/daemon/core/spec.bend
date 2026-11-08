@@ -897,7 +897,7 @@ law Node.affects_exactly:
       Node.affects(s, b),
       t
     )
-      == Bool.and(String.eq(Touch.branch(t), b), Node.touches(s, t)): Bool
+      == Bool.and(String.eq(b, Touch.branch(t)), Node.touches(s, t)): Bool
   }
 
 # the impact of the point p is exactly the touches that hold of its version or

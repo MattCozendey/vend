@@ -3156,3 +3156,37 @@ def Bool.iff(
       Empty.absurd({False{} == True{}: Bool}, Bool.false_ne_true(ba({==})))
     case False{} False{}:
       {==}
+
+# h and k is k, when k makes h true
+def Bool.and_implied_right(h: Bool, k: Bool, c: {k == True{}: Bool} -> {h == True{}: Bool}) -> {Bool.and(h, k) == k: Bool}:
+  match h k:
+    case True{} True{}:
+      {==}
+    case True{} False{}:
+      {==}
+    case False{} True{}:
+      Empty.absurd({Bool.and(False{}, True{}) == True{}: Bool}, Bool.false_ne_true(c({==})))
+    case False{} False{}:
+      {==}
+
+# x, or y and x, is x
+def Bool.or_absorb(x: Bool, y: Bool) -> {Bool.or(x, Bool.and(y, x)) == x: Bool}:
+  match x:
+    case True{}:
+      {==}
+    case False{}:
+      Bool.and_false_right(y)
+
+# one place among a list that holds hit, then the rest that holds r: the "and"
+# of f and t holds at the first place when hit does, or later
+def Bool.or_split(hit: Bool, +f: Bool, +t: Bool, r: Bool) -> {
+  Bool.or(Bool.and(f, Bool.and(hit, t)), Bool.and(r, Bool.and(f, t)))
+    == Bool.and(List.any.if(u => r, hit), Bool.and(f, t)): Bool
+}:
+  match hit:
+    case True{}:
+      Bool.or_absorb(Bool.and(f, t), r)
+    case False{}:
+      %Equal.sym(Bool, Bool.and(f, False{}), False{}, Bool.and_false_right(f)):
+        {Bool.or(_, Bool.and(r, Bool.and(f, t))) == Bool.and(r, Bool.and(f, t)): Bool}
+      {==}
