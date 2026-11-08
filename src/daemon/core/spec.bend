@@ -284,7 +284,9 @@ def Node.claim(s: State(), c: Chain) -> Maybe<&2, Entry>:
 # where a request is. Written: in its chain. Conflicted: a merge or a resolve
 # in its chain, after which resources still clash. Pending: not in its chain
 # yet, and its owners may still vote for it. Stale: its owners cannot vote for
-# it at the head any more. Refused: it, or its chain, is contradicted, or it
+# it at the head any more: a write whose resource changed since its base, a
+# mark whose name is taken, or a set-group that would make the group contain
+# itself. Refused: it, or its chain, is contradicted, or it
 # changes a chain that does not exist.
 type Answer is Data:
   Answer.written{version: Id}

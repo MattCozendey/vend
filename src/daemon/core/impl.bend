@@ -1465,6 +1465,127 @@ def Spec.Node.conflict(s, k):
   +k = k
   Merge.left(s, k, State.asked(s, k))
 
+# Groups
+# ------
+
+# the members that the request r sets, else found
+def Group.set(
+  r: Maybe<&2, Asked>,
+  found: Maybe<&2, List<&2, Spec.Member>>
+) -> Maybe<&2, List<&2, Spec.Member>>:
+  match r:
+    case Some{Asked{t, Spec.Ask.set_group{g, ms}}}:
+      Some{ms}
+    case _:
+      found
+
+# the members that the last set-group of xs sets, else found
+def Group.last(
+  +s: Spec.State(),
+  xs: List<&2, Spec.Id>,
+  found: Maybe<&2, List<&2, Spec.Member>>
+) -> Maybe<&2, List<&2, Spec.Member>>:
+  match xs:
+    case Nil{}:
+      found
+    case Con{x, r}:
+      Group.last(s, r, Group.set(State.asked(s, x), found))
+
+def Spec.Node.members(s, g):
+  +s = s
+  Group.last(s, Spec.Node.chain(s, Spec.Chain.group{g}), None{})
+
+# the members of m, when it is a group
+def Group.succ(s: Spec.State(), m: Spec.Member) -> List<&2, Spec.Member>:
+  match m:
+    case Spec.Member.node{n}:
+      []
+    case Spec.Member.group{g}:
+      Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), [])
+
+# the groups whose roots are among the cells cs, as members
+def Group.roots(cs: List<&2, Cells.Cell<Spec.Entry>>) -> List<&2, Spec.Member>:
+  match cs:
+    case Nil{}:
+      []
+    case Con{Cells.one{Spec.Entry.root{Spec.Chain.group{+g}, i, n}}, r}:
+      +rest = Group.roots(r)
+      List.filter.put(
+        Spec.Member,
+        Spec.Member.group{g},
+        rest,
+        Bool.not(Shared.List.has(~Spec.Member, ~Spec.Member.same, rest, Spec.Member.group{g}))
+      )
+    case Con{c, r}:
+      Group.roots(r)
+
+# every group of s, as a member
+def Group.all(s: Spec.State()) -> List<&2, Spec.Member>:
+  Group.roots(Shared.Trie.values(Cells.Cell<Spec.Entry>, s))
+
+def Spec.Node.is_inside(s, m, g):
+  Reaches.Reach.in(
+    ~Spec.Member,
+    ~Spec.State(),
+    ~Spec.Member.same,
+    ~Group.succ,
+    ~Group.all,
+    s,
+    Spec.Member.group{g},
+    m
+  )
+
+# the nodes among the members ms
+def Group.nodes.of(ms: List<&2, Spec.Member>) -> List<&2, String>:
+  match ms:
+    case Nil{}:
+      []
+    case Con{Spec.Member.node{n}, r}:
+      n <> Group.nodes.of(r)
+    case Con{Spec.Member.group{g}, r}:
+      Group.nodes.of(r)
+
+# the nodes that some group of gs names
+def Group.named(+s: Spec.State(), gs: List<&2, Spec.Member>) -> List<&2, String>:
+  match gs:
+    case Nil{}:
+      []
+    case Con{g, r}:
+      Shared.union(Group.nodes.of(Group.succ(s, g)), Group.named(s, r))
+
+# the nodes of ns that are inside the group g
+def Group.inside(+s: Spec.State(), ns: List<&2, String>, +g: String) -> List<&2, String>:
+  match ns:
+    case Nil{}:
+      []
+    case Con{+n, r}:
+      List.filter.put(
+        String,
+        n,
+        Group.inside(s, r, g),
+        Spec.Node.is_inside(s, Spec.Member.node{n}, g)
+      )
+
+def Spec.Node.nodes(s, g):
+  +s = s
+  Group.inside(s, Group.named(s, Group.all(s)), g)
+
+# the member m of a new set of the group g makes g contain itself
+def Group.loops(s: Spec.State(), +g: String, m: Spec.Member) -> Bool:
+  match m:
+    case Spec.Member.node{n}:
+      False{}
+    case Spec.Member.group{+h}:
+      List.any.if(u => Spec.Node.is_inside(s, Spec.Member.group{g}, h), String.eq(h, g))
+
+# some member of ms makes the group g contain itself
+def Group.loops.any(+s: Spec.State(), +g: String, ms: List<&2, Spec.Member>) -> Bool:
+  match ms:
+    case Nil{}:
+      False{}
+    case Con{m, r}:
+      List.any.if(u => Group.loops.any(s, g, r), Group.loops(s, g, m))
+
 # Answers
 # -------
 
@@ -1489,7 +1610,7 @@ def Ask.fits(+s: Spec.State(), q: Spec.Ask, h: Spec.Id) -> Bool:
     case Spec.Ask.set_owner{c, ms}:
       Bool.not(List.is_empty(&2, String, ms))
     case Spec.Ask.set_group{g, ms}:
-      True{}
+      Bool.not(Group.loops.any(s, g, ms))
 
 # the change q makes its chain when the chain does not exist
 def Ask.creates(q: Spec.Ask) -> Bool:
@@ -1659,111 +1780,6 @@ def Spec.Node.diff(s, n, a, b):
     Maybe.default(&2, Shared.Bytes(), Spec.Node.content(s, n, a), []),
     Maybe.default(&2, Shared.Bytes(), Spec.Node.content(s, n, b), [])
   )
-
-# Groups
-# ------
-
-# the members that the request r sets, else found
-def Group.set(
-  r: Maybe<&2, Asked>,
-  found: Maybe<&2, List<&2, Spec.Member>>
-) -> Maybe<&2, List<&2, Spec.Member>>:
-  match r:
-    case Some{Asked{t, Spec.Ask.set_group{g, ms}}}:
-      Some{ms}
-    case _:
-      found
-
-# the members that the last set-group of xs sets, else found
-def Group.last(
-  +s: Spec.State(),
-  xs: List<&2, Spec.Id>,
-  found: Maybe<&2, List<&2, Spec.Member>>
-) -> Maybe<&2, List<&2, Spec.Member>>:
-  match xs:
-    case Nil{}:
-      found
-    case Con{x, r}:
-      Group.last(s, r, Group.set(State.asked(s, x), found))
-
-def Spec.Node.members(s, g):
-  +s = s
-  Group.last(s, Spec.Node.chain(s, Spec.Chain.group{g}), None{})
-
-# the members of m, when it is a group
-def Group.succ(s: Spec.State(), m: Spec.Member) -> List<&2, Spec.Member>:
-  match m:
-    case Spec.Member.node{n}:
-      []
-    case Spec.Member.group{g}:
-      Maybe.default(&2, List<&2, Spec.Member>, Spec.Node.members(s, g), [])
-
-# the groups whose roots are among the cells cs, as members
-def Group.roots(cs: List<&2, Cells.Cell<Spec.Entry>>) -> List<&2, Spec.Member>:
-  match cs:
-    case Nil{}:
-      []
-    case Con{Cells.one{Spec.Entry.root{Spec.Chain.group{+g}, i, n}}, r}:
-      +rest = Group.roots(r)
-      List.filter.put(
-        Spec.Member,
-        Spec.Member.group{g},
-        rest,
-        Bool.not(Shared.List.has(~Spec.Member, ~Spec.Member.same, rest, Spec.Member.group{g}))
-      )
-    case Con{c, r}:
-      Group.roots(r)
-
-# every group of s, as a member
-def Group.all(s: Spec.State()) -> List<&2, Spec.Member>:
-  Group.roots(Shared.Trie.values(Cells.Cell<Spec.Entry>, s))
-
-def Spec.Node.is_inside(s, m, g):
-  Reaches.Reach.in(
-    ~Spec.Member,
-    ~Spec.State(),
-    ~Spec.Member.same,
-    ~Group.succ,
-    ~Group.all,
-    s,
-    Spec.Member.group{g},
-    m
-  )
-
-# the nodes among the members ms
-def Group.nodes.of(ms: List<&2, Spec.Member>) -> List<&2, String>:
-  match ms:
-    case Nil{}:
-      []
-    case Con{Spec.Member.node{n}, r}:
-      n <> Group.nodes.of(r)
-    case Con{Spec.Member.group{g}, r}:
-      Group.nodes.of(r)
-
-# the nodes that some group of gs names
-def Group.named(+s: Spec.State(), gs: List<&2, Spec.Member>) -> List<&2, String>:
-  match gs:
-    case Nil{}:
-      []
-    case Con{g, r}:
-      Shared.union(Group.nodes.of(Group.succ(s, g)), Group.named(s, r))
-
-# the nodes of ns that are inside the group g
-def Group.inside(+s: Spec.State(), ns: List<&2, String>, +g: String) -> List<&2, String>:
-  match ns:
-    case Nil{}:
-      []
-    case Con{+n, r}:
-      List.filter.put(
-        String,
-        n,
-        Group.inside(s, r, g),
-        Spec.Node.is_inside(s, Spec.Member.node{n}, g)
-      )
-
-def Spec.Node.nodes(s, g):
-  +s = s
-  Group.inside(s, Group.named(s, Group.all(s)), g)
 
 # Uses
 # ----
