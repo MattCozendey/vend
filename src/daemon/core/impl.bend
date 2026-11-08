@@ -2093,20 +2093,6 @@ def Spec.Node.impact(s, p):
 # Notices
 # -------
 
-# a and b are the same notice
-def Notice.same(a: Spec.Notice, b: Spec.Notice) -> Bool:
-  match a b:
-    case Spec.Notice.versioned{b1, v1} Spec.Notice.versioned{b2, v2}:
-      Bool.and(String.eq(b1, b2), Spec.Id.same(v1, v2))
-    case Spec.Notice.conflicted{b1, v1} Spec.Notice.conflicted{b2, v2}:
-      Bool.and(String.eq(b1, b2), Spec.Id.same(v1, v2))
-    case Spec.Notice.touched{t1} Spec.Notice.touched{t2}:
-      Spec.Touch.same(t1, t2)
-    case Spec.Notice.group_cycle{g1} Spec.Notice.group_cycle{g2}:
-      String.eq(g1, g2)
-    case _ _:
-      False{}
-
 # the versions of the branch b among xs, as notices
 def Notice.versions(+b: String, xs: List<&2, Spec.Id>) -> List<&2, Spec.Notice>:
   match xs:
@@ -2163,22 +2149,13 @@ def Notice.all(+s: Spec.State(), t: Spec.Topic) -> List<&2, Spec.Notice>:
     case Spec.Topic.groups{}:
       Notice.cycles(s, Group.all(s))
 
-# the notices of ns that old does not hold
-def Notice.new(ns: List<&2, Spec.Notice>, +old: List<&2, Spec.Notice>) -> List<&2, Spec.Notice>:
-  match ns:
-    case Nil{}:
-      []
-    case Con{+n, r}:
-      List.filter.put(
-        Spec.Notice,
-        n,
-        Notice.new(r, old),
-        Bool.not(Shared.List.has(~Spec.Notice, ~Notice.same, old, n))
-      )
+# the notice n is not among old
+def Notice.unseen(old: List<&2, Spec.Notice>, n: Spec.Notice) -> Bool:
+  Bool.not(Shared.List.has(~Spec.Notice, ~Spec.Notice.same, old, n))
 
 def Spec.Node.notices(s, t, since):
   +t = t
-  Notice.new(Notice.all(s, t), Notice.all(since, t))
+  Shared.List.keep(~Spec.Notice, ~List<&2, Spec.Notice>, ~Notice.unseen, Notice.all(s, t), Notice.all(since, t))
 
 # Changes
 # -------
@@ -5955,3 +5932,115 @@ def Spec.Node.inside_unfold(s, m, g):
       m
     )(x)
   )
+
+# Notices since
+# -------------
+
+# Notice.same is True only for equal notices
+def Notice.same_sound(a: Spec.Notice, b: Spec.Notice) -> {Spec.Notice.same(a, b) == True{}: Bool} -> {a == b: Spec.Notice}:
+  match a b:
+    case Spec.Notice.versioned{+b1, +v1} Spec.Notice.versioned{+b2, +v2}:
+      +h =>
+        %Equal.sym(
+          String,
+          b1,
+          b2,
+          Shared.String.eq_sound(b1, b2)(Shared.Bool.and_true_left(String.eq(b1, b2), Spec.Id.same(v1, v2))(h))
+        ): {Spec.Notice.versioned{_, v1} == Spec.Notice.versioned{b2, v2}: Spec.Notice}
+        %Equal.sym(
+          Spec.Id,
+          v1,
+          v2,
+          Id.same_sound(v1, v2)(Shared.Bool.and_true_right(String.eq(b1, b2), Spec.Id.same(v1, v2))(h))
+        ): {Spec.Notice.versioned{b2, _} == Spec.Notice.versioned{b2, v2}: Spec.Notice}
+        {==}
+    case Spec.Notice.versioned{b1, v1} Spec.Notice.conflicted{b2, v2}:
+      h => Empty.absurd({Spec.Notice.versioned{b1, v1} == Spec.Notice.conflicted{b2, v2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+    case Spec.Notice.versioned{b1, v1} Spec.Notice.touched{t2}:
+      h => Empty.absurd({Spec.Notice.versioned{b1, v1} == Spec.Notice.touched{t2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+    case Spec.Notice.versioned{b1, v1} Spec.Notice.group_cycle{g2}:
+      h => Empty.absurd({Spec.Notice.versioned{b1, v1} == Spec.Notice.group_cycle{g2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+    case Spec.Notice.conflicted{b1, v1} Spec.Notice.versioned{b2, v2}:
+      h => Empty.absurd({Spec.Notice.conflicted{b1, v1} == Spec.Notice.versioned{b2, v2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+    case Spec.Notice.conflicted{+b1, +v1} Spec.Notice.conflicted{+b2, +v2}:
+      +h =>
+        %Equal.sym(
+          String,
+          b1,
+          b2,
+          Shared.String.eq_sound(b1, b2)(Shared.Bool.and_true_left(String.eq(b1, b2), Spec.Id.same(v1, v2))(h))
+        ): {Spec.Notice.conflicted{_, v1} == Spec.Notice.conflicted{b2, v2}: Spec.Notice}
+        %Equal.sym(
+          Spec.Id,
+          v1,
+          v2,
+          Id.same_sound(v1, v2)(Shared.Bool.and_true_right(String.eq(b1, b2), Spec.Id.same(v1, v2))(h))
+        ): {Spec.Notice.conflicted{b2, _} == Spec.Notice.conflicted{b2, v2}: Spec.Notice}
+        {==}
+    case Spec.Notice.conflicted{b1, v1} Spec.Notice.touched{t2}:
+      h => Empty.absurd({Spec.Notice.conflicted{b1, v1} == Spec.Notice.touched{t2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+    case Spec.Notice.conflicted{b1, v1} Spec.Notice.group_cycle{g2}:
+      h => Empty.absurd({Spec.Notice.conflicted{b1, v1} == Spec.Notice.group_cycle{g2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+    case Spec.Notice.touched{t1} Spec.Notice.versioned{b2, v2}:
+      h => Empty.absurd({Spec.Notice.touched{t1} == Spec.Notice.versioned{b2, v2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+    case Spec.Notice.touched{t1} Spec.Notice.conflicted{b2, v2}:
+      h => Empty.absurd({Spec.Notice.touched{t1} == Spec.Notice.conflicted{b2, v2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+    case Spec.Notice.touched{+t1} Spec.Notice.touched{+t2}:
+      h =>
+        %Equal.sym(Spec.Touch, t1, t2, Touch.same_sound(t1, t2)(h)): {Spec.Notice.touched{_} == Spec.Notice.touched{t2}: Spec.Notice}
+        {==}
+    case Spec.Notice.touched{t1} Spec.Notice.group_cycle{g2}:
+      h => Empty.absurd({Spec.Notice.touched{t1} == Spec.Notice.group_cycle{g2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+    case Spec.Notice.group_cycle{g1} Spec.Notice.versioned{b2, v2}:
+      h => Empty.absurd({Spec.Notice.group_cycle{g1} == Spec.Notice.versioned{b2, v2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+    case Spec.Notice.group_cycle{g1} Spec.Notice.conflicted{b2, v2}:
+      h => Empty.absurd({Spec.Notice.group_cycle{g1} == Spec.Notice.conflicted{b2, v2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+    case Spec.Notice.group_cycle{g1} Spec.Notice.touched{t2}:
+      h => Empty.absurd({Spec.Notice.group_cycle{g1} == Spec.Notice.touched{t2}: Spec.Notice}, Shared.Bool.false_ne_true(h))
+    case Spec.Notice.group_cycle{+g1} Spec.Notice.group_cycle{+g2}:
+      h =>
+        %Equal.sym(String, g1, g2, Shared.String.eq_sound(g1, g2)(h)): {Spec.Notice.group_cycle{_} == Spec.Notice.group_cycle{g2}: Spec.Notice}
+        {==}
+
+# the notices of z since nothing are all its notices of the topic k
+def Notice.since_none(+z: Spec.State(), k: Spec.Topic, +x: Spec.Notice) -> {
+  Shared.List.has(~Spec.Notice, ~Spec.Notice.same, Spec.Node.notices(z, k, Spec.Node.empty()), x)
+    == Shared.List.has(~Spec.Notice, ~Spec.Notice.same, Notice.all(z, k), x): Bool
+}:
+  match k:
+    case Spec.Topic.versions{+b}:
+      Shared.List.has_keep(~Spec.Notice, ~List<&2, Spec.Notice>, ~Spec.Notice.same, ~Notice.unseen, ~Notice.same_sound, Notice.all(z, Spec.Topic.versions{b}), [], x)
+    case Spec.Topic.conflicts{+b}:
+      Shared.List.has_keep(~Spec.Notice, ~List<&2, Spec.Notice>, ~Spec.Notice.same, ~Notice.unseen, ~Notice.same_sound, Notice.all(z, Spec.Topic.conflicts{b}), [], x)
+    case Spec.Topic.affects{+b}:
+      Shared.List.has_keep(~Spec.Notice, ~List<&2, Spec.Notice>, ~Spec.Notice.same, ~Notice.unseen, ~Notice.same_sound, Notice.all(z, Spec.Topic.affects{b}), [], x)
+    case Spec.Topic.groups{}:
+      Shared.List.has_keep(~Spec.Notice, ~List<&2, Spec.Notice>, ~Spec.Notice.same, ~Notice.unseen, ~Notice.same_sound, Notice.all(z, Spec.Topic.groups{}), [], x)
+
+def Spec.Node.notices_exactly(t, k, since, x):
+  +t = t
+  +k = k
+  +since = since
+  +x = x
+  %Equal.sym(
+    Bool,
+    Shared.List.has(~Spec.Notice, ~Spec.Notice.same, Spec.Node.notices(since, k, Spec.Node.empty()), x),
+    Shared.List.has(~Spec.Notice, ~Spec.Notice.same, Notice.all(since, k), x),
+    Notice.since_none(since, k, x)
+  ): {
+    Shared.List.has(~Spec.Notice, ~Spec.Notice.same, Spec.Node.notices(t, k, since), x)
+      == Bool.and(
+        Bool.not(_),
+        Shared.List.has(~Spec.Notice, ~Spec.Notice.same, Spec.Node.notices(t, k, Spec.Node.empty()), x)
+      ): Bool
+  }
+  %Equal.sym(
+    Bool,
+    Shared.List.has(~Spec.Notice, ~Spec.Notice.same, Spec.Node.notices(t, k, Spec.Node.empty()), x),
+    Shared.List.has(~Spec.Notice, ~Spec.Notice.same, Notice.all(t, k), x),
+    Notice.since_none(t, k, x)
+  ): {
+    Shared.List.has(~Spec.Notice, ~Spec.Notice.same, Spec.Node.notices(t, k, since), x)
+      == Bool.and(Bool.not(Shared.List.has(~Spec.Notice, ~Spec.Notice.same, Notice.all(since, k), x)), _): Bool
+  }
+  Shared.List.has_keep(~Spec.Notice, ~List<&2, Spec.Notice>, ~Spec.Notice.same, ~Notice.unseen, ~Notice.same_sound, Notice.all(t, k), Notice.all(since, k), x)

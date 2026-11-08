@@ -350,6 +350,22 @@ type Notice is Data:
   Notice.touched{touch: Touch}
   Notice.group_cycle{group: String}
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality keeps each and as one value for the proofs to split on
+# a and b are the same notice
+def Notice.same(a: Notice, b: Notice) -> Bool:
+  match a b:
+    case Notice.versioned{b1, v1} Notice.versioned{b2, v2}:
+      Bool.and(String.eq(b1, b2), Id.same(v1, v2))
+    case Notice.conflicted{b1, v1} Notice.conflicted{b2, v2}:
+      Bool.and(String.eq(b1, b2), Id.same(v1, v2))
+    case Notice.touched{t1} Notice.touched{t2}:
+      Touch.same(t1, t2)
+    case Notice.group_cycle{g1} Notice.group_cycle{g2}:
+      String.eq(g1, g2)
+    case _ _:
+      False{}
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
 # Reads
 # -----
 
@@ -969,6 +985,21 @@ law Node.inside_unfold:
           == True{}: Bool
       }
         & {Node.is_inside(s, m, h) == True{}: Bool})
+
+# the notices of t since the state since are exactly the notices of t that
+# since did not have: a poll misses none, and doubles none
+law Node.notices_exactly:
+  for t: State()
+  for k: Topic
+  for since: State()
+  for x: Notice
+  {
+    Shared.List.has(~Notice, ~Notice.same, Node.notices(t, k, since), x)
+      == Bool.and(
+        Bool.not(Shared.List.has(~Notice, ~Notice.same, Node.notices(since, k, Node.empty()), x)),
+        Shared.List.has(~Notice, ~Notice.same, Node.notices(t, k, Node.empty()), x)
+      ): Bool
+  }
 
 # a pointer reads back from its bytes, when no part of it holds a line break
 law Pointer.read_show:
