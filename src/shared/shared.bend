@@ -854,6 +854,14 @@ def Nat.le_zero(a: Nat) -> {Nat.is_le(0n, a) == True{}: Bool}:
     case 1n+p:
       {==}
 
+# a number is at most itself plus another
+def Nat.le_add(a: Nat, b: Nat) -> {Nat.is_le(a, Nat.add(a, b)) == True{}: Bool}:
+  match a:
+    case 0n:
+      Nat.le_zero(b)
+    case 1n+p:
+      Nat.le_add(p, b)
+
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a <= c gives a + b <= c + b
 def Nat.add_le_right(
