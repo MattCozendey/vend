@@ -1,7 +1,5 @@
 import Base
-import ./bools.bend as Bools
 import ./shared.bend as Shared
-import ./tries.bend as Tries
 
 # Cells
 # -----
@@ -310,15 +308,15 @@ def Cell.agrees.here(
 def Cell.agrees(
   ~V: Data,
   ~same: V -> V -> Bool,
-  s: Tries.Trie<Cell<V>>,
-  t: Tries.Trie<Cell<V>>
+  s: Shared.Trie<Cell<V>>,
+  t: Shared.Trie<Cell<V>>
 ) -> Bool:
   match s t:
-    case Tries.tip{} y:
+    case Shared.tip{} y:
       True{}
-    case Tries.bin{h, z, o} Tries.tip{}:
+    case Shared.bin{h, z, o} Shared.tip{}:
       True{}
-    case Tries.bin{h1, z1, o1} Tries.bin{h2, z2, o2}:
+    case Shared.bin{h1, z1, o1} Shared.bin{h2, z2, o2}:
       Bool.and(
         Cell.agrees.here(~V, ~same, h1, h2),
         Bool.and(Cell.agrees(~V, ~same, z1, z2), Cell.agrees(~V, ~same, o1, o2))
@@ -345,12 +343,12 @@ def Cell.kept.here(
   Cell.agrees.here(~V, ~same, a, b) == True{}: Bool
 } -> {
   a == Some{one{v}}: Maybe<&2, Cell<V>>
-} -> {Tries.Trie.pick(~Cell<V>, ~Cell.join(~V, ~same), a, b) == Some{one{v}}: Maybe<&2, Cell<V>>}:
+} -> {Shared.Trie.pick(~Cell<V>, ~Cell.join(~V, ~same), a, b) == Some{one{v}}: Maybe<&2, Cell<V>>}:
   match a b:
     case None{} y:
       h => g => Empty.absurd(
         {
-          Tries.Trie.pick(
+          Shared.Trie.pick(
             ~Cell<V>,
             ~Cell.join(~V, ~same),
             None{},
@@ -365,7 +363,7 @@ def Cell.kept.here(
     case Some{many{}} y:
       h => g => Empty.absurd(
         {
-          Tries.Trie.pick(
+          Shared.Trie.pick(
             ~Cell<V>,
             ~Cell.join(~V, ~same),
             Some{many{}},
@@ -406,16 +404,16 @@ law Cell.agrees_kept:
   for ~V: Data
   for ~same: V -> V -> Bool
   for ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V}
-  for s: Tries.Trie<Cell<V>>
-  for t: Tries.Trie<Cell<V>>
+  for s: Shared.Trie<Cell<V>>
+  for t: Shared.Trie<Cell<V>>
   for k: List<&2, Bool>
   for -v: V
   {Cell.agrees(~V, ~same, s, t) == True{}: Bool}
-    -> {Tries.Trie.get(Cell<V>, s, k) == Some{one{v}}: Maybe<&2, Cell<V>>}
+    -> {Shared.Trie.get(Cell<V>, s, k) == Some{one{v}}: Maybe<&2, Cell<V>>}
     -> {
-      Tries.Trie.get(
+      Shared.Trie.get(
         Cell<V>,
-        Tries.Trie.union(~Cell<V>, ~Cell.join(~V, ~same), s, t),
+        Shared.Trie.union(~Cell<V>, ~Cell.join(~V, ~same), s, t),
         k
       )
         == Some{one{v}}: Maybe<&2, Cell<V>>
@@ -425,16 +423,16 @@ law Cell.agrees_kept:
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 def Cell.agrees_kept(ty, same, sound, s, t, k, v):
   match s t k:
-    case Tries.tip{} y q:
+    case Shared.tip{} y q:
       a => g => Empty.absurd(
-        {Tries.Trie.get(Cell<ty>, y, q) == Some{one{v}}: Maybe<&2, Cell<ty>>},
+        {Shared.Trie.get(Cell<ty>, y, q) == Some{one{v}}: Maybe<&2, Cell<ty>>},
         Shared.Bool.false_ne_true(
           Equal.cong(Maybe<&2, Cell<ty>>, Bool, m => Cell.is_one(ty, m), None{}, Some{one{v}}, g)
         )
       )
-    case Tries.bin{h, z, o} Tries.tip{} q:
+    case Shared.bin{h, z, o} Shared.tip{} q:
       a => g => g
-    case Tries.bin{+h1, +z1, +o1} Tries.bin{+h2, +z2, +o2} Nil{}:
+    case Shared.bin{+h1, +z1, +o1} Shared.bin{+h2, +z2, +o2} Nil{}:
       +a => g => Cell.kept.here(
         ~ty,
         ~same,
@@ -443,12 +441,12 @@ def Cell.agrees_kept(ty, same, sound, s, t, k, v):
         h2,
         v
       )(
-        Bools.Bool.and_true_left(
+        Shared.Bool.and_true_left(
           Cell.agrees.here(~ty, ~same, h1, h2),
           Bool.and(Cell.agrees(~ty, ~same, z1, z2), Cell.agrees(~ty, ~same, o1, o2))
         )(a)
       )(g)
-    case Tries.bin{+h1, +z1, +o1} Tries.bin{+h2, +z2, +o2} Con{False{}, r}:
+    case Shared.bin{+h1, +z1, +o1} Shared.bin{+h2, +z2, +o2} Con{False{}, r}:
       +a => g => Cell.agrees_kept(
         ~ty,
         ~same,
@@ -458,17 +456,17 @@ def Cell.agrees_kept(ty, same, sound, s, t, k, v):
         r,
         v
       )(
-        Bools.Bool.and_true_left(
+        Shared.Bool.and_true_left(
           Cell.agrees(~ty, ~same, z1, z2),
           Cell.agrees(~ty, ~same, o1, o2)
         )(
-          Bools.Bool.and_true_right(
+          Shared.Bool.and_true_right(
             Cell.agrees.here(~ty, ~same, h1, h2),
             Bool.and(Cell.agrees(~ty, ~same, z1, z2), Cell.agrees(~ty, ~same, o1, o2))
           )(a)
         )
       )(g)
-    case Tries.bin{+h1, +z1, +o1} Tries.bin{+h2, +z2, +o2} Con{True{}, r}:
+    case Shared.bin{+h1, +z1, +o1} Shared.bin{+h2, +z2, +o2} Con{True{}, r}:
       +a => g => Cell.agrees_kept(
         ~ty,
         ~same,
@@ -478,11 +476,11 @@ def Cell.agrees_kept(ty, same, sound, s, t, k, v):
         r,
         v
       )(
-        Bools.Bool.and_true_right(
+        Shared.Bool.and_true_right(
           Cell.agrees(~ty, ~same, z1, z2),
           Cell.agrees(~ty, ~same, o1, o2)
         )(
-          Bools.Bool.and_true_right(
+          Shared.Bool.and_true_right(
             Cell.agrees.here(~ty, ~same, h1, h2),
             Bool.and(Cell.agrees(~ty, ~same, z1, z2), Cell.agrees(~ty, ~same, o1, o2))
           )(a)
@@ -495,12 +493,12 @@ def Cell.agrees_kept(ty, same, sound, s, t, k, v):
 def Cell.agrees_tip(
   ~V: Data,
   ~same: V -> V -> Bool,
-  s: Tries.Trie<Cell<V>>
-) -> {Cell.agrees(~V, ~same, s, Tries.tip{}) == True{}: Bool}:
+  s: Shared.Trie<Cell<V>>
+) -> {Cell.agrees(~V, ~same, s, Shared.tip{}) == True{}: Bool}:
   match s:
-    case Tries.tip{}:
+    case Shared.tip{}:
       {==}
-    case Tries.bin{h, z, o}:
+    case Shared.bin{h, z, o}:
       {==}
 
 # nothing at a key does not contradict what a holds there
@@ -521,19 +519,19 @@ def Cell.agrees_none(
 law Cell.agrees_one:
   for ~V: Data
   for ~same: V -> V -> Bool
-  for s: Tries.Trie<Cell<V>>
+  for s: Shared.Trie<Cell<V>>
   for k: List<&2, Bool>
   for +x: Cell<V>
-  {Tries.Trie.get(Cell<V>, s, k) == None{}: Maybe<&2, Cell<V>>}
-    -> {Cell.agrees(~V, ~same, s, Tries.Trie.one(Cell<V>, k, x)) == True{}: Bool}
+  {Shared.Trie.get(Cell<V>, s, k) == None{}: Maybe<&2, Cell<V>>}
+    -> {Cell.agrees(~V, ~same, s, Shared.Trie.one(Cell<V>, k, x)) == True{}: Bool}
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality, or a proof, keeps each and/or as one value for the proofs to split on
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 def Cell.agrees_one(ty, same, s, k, x):
   match s k:
-    case Tries.tip{} q:
+    case Shared.tip{} q:
       g => {==}
-    case Tries.bin{+h, +z, +o} Nil{}:
+    case Shared.bin{+h, +z, +o} Nil{}:
       g =>
         %Equal.sym(
           Maybe<&2, Cell<ty>>,
@@ -544,48 +542,48 @@ def Cell.agrees_one(ty, same, s, k, x):
           Bool.and(
             Cell.agrees.here(~ty, ~same, _, Some{x}),
             Bool.and(
-              Cell.agrees(~ty, ~same, z, Tries.tip{}),
-              Cell.agrees(~ty, ~same, o, Tries.tip{})
+              Cell.agrees(~ty, ~same, z, Shared.tip{}),
+              Cell.agrees(~ty, ~same, o, Shared.tip{})
             )
           )
             == True{}: Bool
         }
         %Equal.sym(
           Bool,
-          Cell.agrees(~ty, ~same, z, Tries.tip{}),
+          Cell.agrees(~ty, ~same, z, Shared.tip{}),
           True{},
           Cell.agrees_tip(~ty, ~same, z)
         ):
-          {Bool.and(_, Cell.agrees(~ty, ~same, o, Tries.tip{})) == True{}: Bool}
+          {Bool.and(_, Cell.agrees(~ty, ~same, o, Shared.tip{})) == True{}: Bool}
         Cell.agrees_tip(~ty, ~same, o)
-    case Tries.bin{+h, +z, +o} Con{False{}, +r}:
-      g => Bools.Bool.and_both(
+    case Shared.bin{+h, +z, +o} Con{False{}, +r}:
+      g => Shared.Bool.and_both(
         Cell.agrees.here(~ty, ~same, h, None{}),
         Bool.and(
-          Cell.agrees(~ty, ~same, z, Tries.Trie.one(Cell<ty>, r, x)),
-          Cell.agrees(~ty, ~same, o, Tries.tip{})
+          Cell.agrees(~ty, ~same, z, Shared.Trie.one(Cell<ty>, r, x)),
+          Cell.agrees(~ty, ~same, o, Shared.tip{})
         )
       )(
         Cell.agrees_none(~ty, ~same, h)
       )(
-        Bools.Bool.and_both(
-          Cell.agrees(~ty, ~same, z, Tries.Trie.one(Cell<ty>, r, x)),
-          Cell.agrees(~ty, ~same, o, Tries.tip{})
+        Shared.Bool.and_both(
+          Cell.agrees(~ty, ~same, z, Shared.Trie.one(Cell<ty>, r, x)),
+          Cell.agrees(~ty, ~same, o, Shared.tip{})
         )(Cell.agrees_one(~ty, ~same, z, r, x)(g))(Cell.agrees_tip(~ty, ~same, o))
       )
-    case Tries.bin{+h, +z, +o} Con{True{}, +r}:
-      g => Bools.Bool.and_both(
+    case Shared.bin{+h, +z, +o} Con{True{}, +r}:
+      g => Shared.Bool.and_both(
         Cell.agrees.here(~ty, ~same, h, None{}),
         Bool.and(
-          Cell.agrees(~ty, ~same, z, Tries.tip{}),
-          Cell.agrees(~ty, ~same, o, Tries.Trie.one(Cell<ty>, r, x))
+          Cell.agrees(~ty, ~same, z, Shared.tip{}),
+          Cell.agrees(~ty, ~same, o, Shared.Trie.one(Cell<ty>, r, x))
         )
       )(
         Cell.agrees_none(~ty, ~same, h)
       )(
-        Bools.Bool.and_both(
-          Cell.agrees(~ty, ~same, z, Tries.tip{}),
-          Cell.agrees(~ty, ~same, o, Tries.Trie.one(Cell<ty>, r, x))
+        Shared.Bool.and_both(
+          Cell.agrees(~ty, ~same, z, Shared.tip{}),
+          Cell.agrees(~ty, ~same, o, Shared.Trie.one(Cell<ty>, r, x))
         )(Cell.agrees_tip(~ty, ~same, z))(Cell.agrees_one(~ty, ~same, o, r, x)(g))
       )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information

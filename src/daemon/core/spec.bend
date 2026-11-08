@@ -1,13 +1,8 @@
 import Base
-import ../../shared/bytes.bend as Octets
 import ../../shared/cells.bend as Cells
 import ../../shared/formats.bend as Formats
-import ../../shared/lists.bend as Lists
-import ../../shared/maybes.bend as Maybes
 import ../../shared/resources.bend as Resources
 import ../../shared/shared.bend as Shared
-import ../../shared/texts.bend as Texts
-import ../../shared/tries.bend as Tries
 
 # The pure core of a Vend Node: what it holds, what it answers, and the laws
 # about both. transport/spec.bend carries it over IO as the public API
@@ -15,7 +10,7 @@ import ../../shared/tries.bend as Tries
 #
 # A node holds entries in slots. Two nodes sync by joining what they hold, so
 # every node that took in the same entries holds the same state, in any order
-# and any number of times (Tries.Trie.union_comm, union_assoc, union_idem, with
+# and any number of times (Shared.Trie.union_comm, union_assoc, union_idem, with
 # the laws of Cells.Cell.join). Every answer is read from the state alone.
 #
 # A chain (a branch, or an owner group) is a list of versions. Its first
@@ -45,7 +40,7 @@ type Member is Data:
 
 # new content: bytes, or what an old version held
 type Content is Data:
-  Content.bytes{bytes: Octets.Bytes()}
+  Content.bytes{bytes: Shared.Bytes()}
   Content.of{version: Id}
 
 # a version, the newest version of a branch, or a mark of a branch
@@ -118,15 +113,15 @@ type Slot is Data:
 def Id.key(i: Id) -> List<&2, Bool>:
   match i:
     case Id{w, r}:
-      List.append(&2, Bool, Tries.Trie.text(w), Tries.Trie.text(r))
+      List.append(&2, Bool, Shared.Trie.text(w), Shared.Trie.text(r))
 
 # the key of c
 def Chain.key(c: Chain) -> List<&2, Bool>:
   match c:
     case Chain.branch{n}:
-      False{} <> Tries.Trie.text(n)
+      False{} <> Shared.Trie.text(n)
     case Chain.group{n}:
-      True{} <> Tries.Trie.text(n)
+      True{} <> Shared.Trie.text(n)
 
 # the start of the keys of the roots of c
 def Root.key(c: Chain) -> List<&2, Bool>:
@@ -140,9 +135,14 @@ def Slot.key(k: Slot) -> List<&2, Bool>:
     case Slot.vote{n, c, i}:
       True{}
         <> False{}
-        <> List.append(&2, Bool, Tries.Trie.text(n), List.append(&2, Bool, Chain.key(c), Id.key(i)))
+        <> List.append(
+          &2,
+          Bool,
+          Shared.Trie.text(n),
+          List.append(&2, Bool, Chain.key(c), Id.key(i))
+        )
     case Slot.root{c, n}:
-      List.append(&2, Bool, Root.key(c), Tries.Trie.text(n))
+      List.append(&2, Bool, Root.key(c), Shared.Trie.text(n))
 
 # Equality
 # --------
@@ -177,7 +177,7 @@ def Member.same(a: Member, b: Member) -> Bool:
 def Content.same(a: Content, b: Content) -> Bool:
   match a b:
     case Content.bytes{x} Content.bytes{y}:
-      Octets.Bytes.is_eq(x, y)
+      Shared.Bytes.is_eq(x, y)
     case Content.of{x} Content.of{y}:
       Id.same(x, y)
     case _ _:
@@ -192,7 +192,7 @@ def Ask.same(a: Ask, b: Ask) -> Bool:
         String.eq(b1, b2),
         Bool.and(
           Resources.Name.same(n1, n2),
-          Bool.and(Maybes.Maybe.same(~Id, ~Id.same, v1, v2), Content.same(c1, c2))
+          Bool.and(Shared.Maybe.same(~Id, ~Id.same, v1, v2), Content.same(c1, c2))
         )
       )
     case Ask.set_branch{b1, v1} Ask.set_branch{b2, v2}:
@@ -207,9 +207,9 @@ def Ask.same(a: Ask, b: Ask) -> Bool:
     case Ask.mark{b1, m1, t1} Ask.mark{b2, m2, t2}:
       Bool.and(String.eq(b1, b2), Bool.and(String.eq(m1, m2), String.eq(t1, t2)))
     case Ask.set_owner{c1, ms1} Ask.set_owner{c2, ms2}:
-      Bool.and(Chain.same(c1, c2), Lists.List.same(~String, ~String.eq, ms1, ms2))
+      Bool.and(Chain.same(c1, c2), Shared.List.same(~String, ~String.eq, ms1, ms2))
     case Ask.set_group{g1, ms1} Ask.set_group{g2, ms2}:
-      Bool.and(String.eq(g1, g2), Lists.List.same(~Member, ~Member.same, ms1, ms2))
+      Bool.and(String.eq(g1, g2), Shared.List.same(~Member, ~Member.same, ms1, ms2))
     case _ _:
       False{}
 
@@ -242,20 +242,20 @@ law Entry.same_sound:
 
 # what a node holds: the cell of each slot, by the slot's key
 def State() -> Data:
-  Tries.Trie<Cells.Cell<Entry>>
+  Shared.Trie<Cells.Cell<Entry>>
 
 # a node that holds nothing yet
 def Node.empty() -> State():
-  Tries.Trie.new(Cells.Cell<Entry>)
+  Shared.Trie.new(Cells.Cell<Entry>)
 
 # what a holder of a and of b holds: a sync
 def Node.join(a: State(), b: State()) -> State():
-  Tries.Trie.union(~Cells.Cell<Entry>, ~Cells.Cell.join(~Entry, ~Entry.same), a, b)
+  Shared.Trie.union(~Cells.Cell<Entry>, ~Cells.Cell.join(~Entry, ~Entry.same), a, b)
 
 # what a holder of r lacks of s: what a sync from s to r sends
-# (Tries.Trie.union_minus)
+# (Shared.Trie.union_minus)
 def Node.missing(s: State(), r: State()) -> State():
-  Tries.Trie.minus(~Cells.Cell<Entry>, ~Cells.Cell.same(~Entry, ~Entry.same), s, r)
+  Shared.Trie.minus(~Cells.Cell<Entry>, ~Cells.Cell.same(~Entry, ~Entry.same), s, r)
 
 # no entry of t contradicts one of s
 def Node.agrees(s: State(), t: State()) -> Bool:
@@ -275,7 +275,7 @@ def Root.first(cs: List<&2, Cells.Cell<Entry>>) -> Maybe<&2, Entry>:
 # the one with the smallest key
 def Node.claim(s: State(), c: Chain) -> Maybe<&2, Entry>:
   Root.first(
-    Tries.Trie.values(Cells.Cell<Entry>, Tries.Trie.under(Cells.Cell<Entry>, s, Root.key(c)))
+    Shared.Trie.values(Cells.Cell<Entry>, Shared.Trie.under(Cells.Cell<Entry>, s, Root.key(c)))
   )
 
 # Answers
@@ -374,14 +374,14 @@ law Node.content:
   for s: State()
   for n: Resources.Name
   for p: Point
-  Maybe<&2, Octets.Bytes()>
+  Maybe<&2, Shared.Bytes()>
 
 # the bytes of the resource n at the version base, if any
 law Node.content_at:
   for s: State()
   for n: Resources.Name
   for base: Maybe<&2, Id>
-  Maybe<&2, Octets.Bytes()>
+  Maybe<&2, Shared.Bytes()>
 
 # every branch
 law Node.branches:
@@ -527,10 +527,10 @@ def Pointer.version(p: Pointer) -> Id:
       v
 
 # the bytes of the pointer p
-def Pointer.show(p: Pointer) -> Octets.Bytes():
+def Pointer.show(p: Pointer) -> Shared.Bytes():
   match p:
     case Pointer{sp, b, Id{w, r}}:
-      Octets.Bytes.of_text(
+      Shared.Bytes.of_text(
         String.append(
           sp,
           SCon{Chr{10}, String.append(b, SCon{Chr{10}, String.append(w, SCon{Chr{10}, r})})}
@@ -539,33 +539,33 @@ def Pointer.show(p: Pointer) -> Octets.Bytes():
 
 # the pointer of the space sp and the branch b, once the text after them is
 # cut at its first line (c)
-def Pointer.read.last(sp: String, b: String, c: Maybe<&2, Texts.Cut>) -> Maybe<&2, Pointer>:
+def Pointer.read.last(sp: String, b: String, c: Maybe<&2, Shared.Cut>) -> Maybe<&2, Pointer>:
   match c:
     case None{}:
       None{}
-    case Some{Texts.Cut{w, r}}:
+    case Some{Shared.Cut{w, r}}:
       Some{Pointer{sp, b, Id{w, r}}}
 
 # the pointer of the space sp, once the text after it is cut at its first
 # line (c)
-def Pointer.read.rest(sp: String, c: Maybe<&2, Texts.Cut>) -> Maybe<&2, Pointer>:
+def Pointer.read.rest(sp: String, c: Maybe<&2, Shared.Cut>) -> Maybe<&2, Pointer>:
   match c:
     case None{}:
       None{}
-    case Some{Texts.Cut{b, t}}:
-      Pointer.read.last(sp, b, Texts.Text.cut(t, 10))
+    case Some{Shared.Cut{b, t}}:
+      Pointer.read.last(sp, b, Shared.Text.cut(t, 10))
 
 # the pointer of a text, once it is cut at its first line (c)
-def Pointer.read.cut(c: Maybe<&2, Texts.Cut>) -> Maybe<&2, Pointer>:
+def Pointer.read.cut(c: Maybe<&2, Shared.Cut>) -> Maybe<&2, Pointer>:
   match c:
     case None{}:
       None{}
-    case Some{Texts.Cut{sp, t}}:
-      Pointer.read.rest(sp, Texts.Text.cut(t, 10))
+    case Some{Shared.Cut{sp, t}}:
+      Pointer.read.rest(sp, Shared.Text.cut(t, 10))
 
 # the pointer in the bytes b
-def Pointer.read(b: Octets.Bytes()) -> Maybe<&2, Pointer>:
-  Pointer.read.cut(Texts.Text.cut(Octets.Bytes.to_text(b), 10))
+def Pointer.read(b: Shared.Bytes()) -> Maybe<&2, Pointer>:
+  Pointer.read.cut(Shared.Text.cut(Shared.Bytes.to_text(b), 10))
 
 # Touches
 # -------
@@ -628,12 +628,12 @@ law Node.write_written:
   for b: String
   for name: Resources.Name
   for base: Maybe<&2, Id>
-  for x: Octets.Bytes()
+  for x: Shared.Bytes()
   for v: Id
   {Node.owners(s, Chain.branch{b}) == [n]: List<&2, String>}
     -> {Node.head(s, b) == Some{v}: Maybe<&2, Id>}
     -> {
-      Tries.Trie.get(
+      Shared.Trie.get(
         Cells.Cell<Entry>,
         s,
         Slot.key(Slot.ask{Envelope.of(e)})
@@ -641,7 +641,7 @@ law Node.write_written:
         == None{}: Maybe<&2, Cells.Cell<Entry>>
     }
     -> {
-      Tries.Trie.get(
+      Shared.Trie.get(
         Cells.Cell<Entry>,
         s,
         Slot.key(Slot.vote{n, Chain.branch{b}, v})
@@ -654,7 +654,7 @@ law Node.write_written:
         name,
         Point.head{b}
       )
-        == Node.content_at(s, name, base): Maybe<&2, Octets.Bytes()>
+        == Node.content_at(s, name, base): Maybe<&2, Shared.Bytes()>
     }
     -> {
       Node.answer(
@@ -669,7 +669,7 @@ law Node.write_written:
           name,
           Point.at{Envelope.of(e)}
         )
-          == Some{x}: Maybe<&2, Octets.Bytes()>
+          == Some{x}: Maybe<&2, Shared.Bytes()>
       }
 
 # the sole owner of a branch refuses a write of a resource that changed since
@@ -686,7 +686,7 @@ law Node.write_stale:
   {Node.owners(s, Chain.branch{b}) == [n]: List<&2, String>}
     -> {Node.head(s, b) == Some{v}: Maybe<&2, Id>}
     -> {
-      Tries.Trie.get(
+      Shared.Trie.get(
         Cells.Cell<Entry>,
         s,
         Slot.key(Slot.ask{Envelope.of(e)})
@@ -694,7 +694,7 @@ law Node.write_stale:
         == None{}: Maybe<&2, Cells.Cell<Entry>>
     }
     -> {
-      Tries.Trie.get(
+      Shared.Trie.get(
         Cells.Cell<Entry>,
         s,
         Slot.key(Slot.vote{n, Chain.branch{b}, v})
@@ -702,9 +702,9 @@ law Node.write_stale:
         == None{}: Maybe<&2, Cells.Cell<Entry>>
     }
     -> {
-      Maybes.Maybe.same(
-        ~Octets.Bytes(),
-        ~Octets.Bytes.is_eq,
+      Shared.Maybe.same(
+        ~Shared.Bytes(),
+        ~Shared.Bytes.is_eq,
         Node.content(s, name, Point.head{b}),
         Node.content_at(s, name, base)
       )
@@ -754,7 +754,7 @@ law Node.touches_exactly:
               Bool.not(Node.has(s, Maybe.default(&2, Id, Node.head(s, b), v), v))
             ),
             Bool.and(
-              Maybes.Maybe.same(~Resources.Name, ~Resources.Name.same, Node.wrote(s, v), Some{c}),
+              Shared.Maybe.same(~Resources.Name, ~Resources.Name.same, Node.wrote(s, v), Some{c}),
               Bool.and(
                 Shared.List.has(~Resources.Name, ~Resources.Name.same, Node.resources(s, b), u),
                 Bool.or(Resources.Name.same(u, c), Node.uses(s, b, u, c))
@@ -838,9 +838,9 @@ law Pointer.read_show:
   for b: String
   for w: String
   for r: String
-  {Texts.Text.has(sp, 10) == False{}: Bool}
-    -> {Texts.Text.has(b, 10) == False{}: Bool}
-    -> {Texts.Text.has(w, 10) == False{}: Bool}
+  {Shared.Text.has(sp, 10) == False{}: Bool}
+    -> {Shared.Text.has(b, 10) == False{}: Bool}
+    -> {Shared.Text.has(w, 10) == False{}: Bool}
     -> {
       Pointer.read(
         Pointer.show(Pointer{sp, b, Id{w, r}})

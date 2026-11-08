@@ -1,7 +1,7 @@
 import Base
-import ../../shared/bytes.bend as Octets
 import ../../shared/formats.bend as Formats
 import ../../shared/resources.bend as Resources
+import ../../shared/shared.bend as Shared
 import ../../shared/uris.bend as Uris
 import ../core/spec.bend as Core
 
@@ -132,7 +132,7 @@ law Client.try_get_content:
   for c: Client
   for n: Resources.Name
   for p: Core.Point
-  IO(Client & Reply<&2, Maybe<&2, Octets.Bytes()>>)
+  IO(Client & Reply<&2, Maybe<&2, Shared.Bytes()>>)
 
 # what changed in the resource n from the point a to the point b
 law Client.try_get_diff:

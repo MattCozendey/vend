@@ -1,5 +1,4 @@
 import Base
-import ./bools.bend as Bools
 import ./shared.bend as Shared
 
 # Reachability
@@ -143,7 +142,7 @@ def Reach.after(~A: Data, ~same: A -> A -> Bool, ps: List<&2, A>, +p: A) -> List
     case Nil{}:
       []
     case Con{x, +r}:
-      Bools.Bool.when(List<&2, A>, same(x, p), u => r, u => Reach.after(~A, ~same, r, p))
+      Shared.Bool.when(List<&2, A>, same(x, p), u => r, u => Reach.after(~A, ~same, r, p))
 
 # the first node of ps, or m
 def Reach.first(-A: Data, ps: List<&2, A>, m: A) -> A:
@@ -314,7 +313,7 @@ def Reach.path_step(
         r,
         g,
         m,
-        Bools.Bool.and_true_right(
+        Shared.Bool.and_true_right(
           Shared.List.has(~A, ~same, Reach.next(~A, ~V, ~succ, xs, g), p),
           Reach.path(~A, ~V, ~same, ~succ, r, succ(g)(p), g, m)
         )(h),
@@ -328,7 +327,7 @@ def Reach.path_step(
           g,
           p
         )(
-          Bools.Bool.and_true_left(
+          Shared.Bool.and_true_left(
             Shared.List.has(~A, ~same, Reach.next(~A, ~V, ~succ, xs, g), p),
             Reach.path(~A, ~V, ~same, ~succ, r, succ(g)(p), g, m)
           )(h)
@@ -656,13 +655,13 @@ def Reach.path_sub(
           )(
             hp
           )(
-            Bools.Bool.and_true_left(
+            Shared.Bool.and_true_left(
               Shared.List.has(~A, ~same, succ(g)(p), q),
               Reach.path(~A, ~V, ~same, ~succ, r2, succ(g)(q), g, m)
             )(h)
           )
         ): {Bool.and(_, Reach.path(~A, ~V, ~same, ~succ, r2, succ(g)(q), g, m)) == True{}: Bool}
-        Bools.Bool.and_true_right(
+        Shared.Bool.and_true_right(
           Shared.List.has(~A, ~same, succ(g)(p), q),
           Reach.path(~A, ~V, ~same, ~succ, r2, succ(g)(q), g, m)
         )(h)
@@ -738,12 +737,12 @@ def Reach.path_go(
               g,
               m
             )(
-              Bools.Bool.and_true_left(
+              Shared.Bool.and_true_left(
                 Shared.List.has(~A, ~same, xs, p),
                 Reach.path(~A, ~V, ~same, ~succ, r, succ(g)(p), g, m)
               )(h)
             )(
-              Bools.Bool.and_true_right(
+              Shared.Bool.and_true_right(
                 Shared.List.has(~A, ~same, xs, p),
                 Reach.path(~A, ~V, ~same, ~succ, r, succ(g)(p), g, m)
               )(h)
@@ -785,7 +784,7 @@ def Reach.path_append(
           Bool,
           Shared.List.has(~A, ~same, xs, p),
           True{},
-          Bools.Bool.and_true_left(
+          Shared.Bool.and_true_left(
             Shared.List.has(~A, ~same, xs, p),
             Reach.path(~A, ~V, ~same, ~succ, r, succ(g)(p), g, h)
           )(ha)
@@ -808,7 +807,7 @@ def Reach.path_append(
           g,
           m
         )(
-          Bools.Bool.and_true_right(
+          Shared.Bool.and_true_right(
             Shared.List.has(~A, ~same, xs, p),
             Reach.path(~A, ~V, ~same, ~succ, r, succ(g)(p), g, h)
           )(ha)
@@ -831,7 +830,7 @@ def Reach.path_first(
     case Nil{}:
       +h => h
     case Con{+p, r}:
-      +h => Bools.Bool.and_true_left(
+      +h => Shared.Bool.and_true_left(
         Shared.List.has(~A, ~same, ys, p),
         Reach.path(~A, ~V, ~same, ~succ, r, succ(g)(p), g, m)
       )(h)
@@ -868,7 +867,7 @@ def Reach.path_within(
           g,
           m
         )(
-          Bools.Bool.and_true_right(
+          Shared.Bool.and_true_right(
             Shared.List.has(~A, ~same, ys, p),
             Reach.path(~A, ~V, ~same, ~succ, r, succ(g)(p), g, m)
           )(h)
@@ -891,7 +890,7 @@ def Reach.path_within(
           g,
           m
         )(
-          Bools.Bool.and_true_right(
+          Shared.Bool.and_true_right(
             Shared.List.has(~A, ~same, ys, p),
             Reach.path(~A, ~V, ~same, ~succ, r, succ(g)(p), g, m)
           )(h)
@@ -934,7 +933,7 @@ def Reach.after_path.at(
     ~V,
     ~same,
     ~succ,
-    Bools.Bool.when(List<&2, A>, hit, u => r, u => Reach.after(~A, ~same, r, p)),
+    Shared.Bool.when(List<&2, A>, hit, u => r, u => Reach.after(~A, ~same, r, p)),
     succ(g)(p),
     g,
     m
@@ -945,7 +944,7 @@ def Reach.after_path.at(
     case True{}:
       +he => +hf => +hp =>
         %sound(x)(p)(he): {Reach.path(~A, ~V, ~same, ~succ, r, succ(g)(_), g, m) == True{}: Bool}
-        Bools.Bool.and_true_right(
+        Shared.Bool.and_true_right(
           Shared.List.has(~A, ~same, ys, x),
           Reach.path(~A, ~V, ~same, ~succ, r, succ(g)(x), g, m)
         )(hp)
@@ -953,7 +952,7 @@ def Reach.after_path.at(
       +he => +hf => +hp => ih(
         hf
       )(
-        Bools.Bool.and_true_right(
+        Shared.Bool.and_true_right(
           Shared.List.has(~A, ~same, ys, x),
           Reach.path(~A, ~V, ~same, ~succ, r, succ(g)(x), g, m)
         )(hp)
@@ -1020,19 +1019,19 @@ def Reach.after_distinct.at(
   Reach.distinct(
     ~A,
     ~same,
-    Bools.Bool.when(List<&2, A>, hit, u => r, u => Reach.after(~A, ~same, r, p))
+    Shared.Bool.when(List<&2, A>, hit, u => r, u => Reach.after(~A, ~same, r, p))
   )
     == True{}: Bool
 }:
   match hit:
     case True{}:
-      +he => +hd => Bools.Bool.and_true_right(
+      +he => +hd => Shared.Bool.and_true_right(
         Bool.not(Shared.List.has(~A, ~same, r, x)),
         Reach.distinct(~A, ~same, r)
       )(hd)
     case False{}:
       +he => +hd => ih(
-        Bools.Bool.and_true_right(
+        Shared.Bool.and_true_right(
           Bool.not(Shared.List.has(~A, ~same, r, x)),
           Reach.distinct(~A, ~same, r)
         )(hd)
@@ -1085,7 +1084,7 @@ def Reach.after_free.at(
   Shared.List.has(
     ~A,
     ~same,
-    Bools.Bool.when(List<&2, A>, hit, u => r, u => Reach.after(~A, ~same, r, p)),
+    Shared.Bool.when(List<&2, A>, hit, u => r, u => Reach.after(~A, ~same, r, p)),
     p
   )
     == False{}: Bool
@@ -1094,17 +1093,17 @@ def Reach.after_free.at(
     case True{}:
       +he => +hd => +hf =>
         %sound(x)(p)(he): {Shared.List.has(~A, ~same, r, _) == False{}: Bool}
-        Bools.Bool.not_true(
+        Shared.Bool.not_true(
           Shared.List.has(~A, ~same, r, x)
         )(
-          Bools.Bool.and_true_left(
+          Shared.Bool.and_true_left(
             Bool.not(Shared.List.has(~A, ~same, r, x)),
             Reach.distinct(~A, ~same, r)
           )(hd)
         )
     case False{}:
       +he => +hd => +hf => ih(
-        Bools.Bool.and_true_right(
+        Shared.Bool.and_true_right(
           Bool.not(Shared.List.has(~A, ~same, r, x)),
           Reach.distinct(~A, ~same, r)
         )(hd)
@@ -1256,7 +1255,7 @@ def Reach.shorten(
         p,
         g,
         m,
-        Bools.Bool.and_true_left(
+        Shared.Bool.and_true_left(
           Shared.List.has(~A, ~same, xs, p),
           Reach.path(~A, ~V, ~same, ~succ, r, succ(g)(p), g, m)
         )(h),
@@ -1271,7 +1270,7 @@ def Reach.shorten(
           g,
           m
         )(
-          Bools.Bool.and_true_right(
+          Shared.Bool.and_true_right(
             Shared.List.has(~A, ~same, xs, p),
             Reach.path(~A, ~V, ~same, ~succ, r, succ(g)(p), g, m)
           )(h)
@@ -1567,7 +1566,7 @@ def Reach.within_drop(
             p,
             q
           )(
-            Bools.Bool.and_true_left(
+            Shared.Bool.and_true_left(
               Shared.List.has(~A, ~same, ks, q),
               Reach.within(~A, ~same, r, ks)
             )(hw)
@@ -1587,7 +1586,7 @@ def Reach.within_drop(
           ks,
           p
         )(
-          Bools.Bool.and_true_right(
+          Shared.Bool.and_true_right(
             Shared.List.has(~A, ~same, ks, q),
             Reach.within(~A, ~same, r, ks)
           )(hw)
@@ -1623,7 +1622,7 @@ def Reach.fits_nodes(
             r,
             Shared.List.remove(~A, ~same, ks, p)
           )(
-            Bools.Bool.and_true_right(
+            Shared.Bool.and_true_right(
               Bool.not(Shared.List.has(~A, ~same, r, p)),
               Reach.distinct(~A, ~same, r)
             )(hd)
@@ -1636,15 +1635,15 @@ def Reach.fits_nodes(
               ks,
               p
             )(
-              Bools.Bool.and_true_right(
+              Shared.Bool.and_true_right(
                 Shared.List.has(~A, ~same, ks, p),
                 Reach.within(~A, ~same, r, ks)
               )(hw)
             )(
-              Bools.Bool.not_true(
+              Shared.Bool.not_true(
                 Shared.List.has(~A, ~same, r, p)
               )(
-                Bools.Bool.and_true_left(
+                Shared.Bool.and_true_left(
                   Bool.not(Shared.List.has(~A, ~same, r, p)),
                   Reach.distinct(~A, ~same, r)
                 )(hd)
@@ -1658,7 +1657,7 @@ def Reach.fits_nodes(
             ks,
             p
           )(
-            Bools.Bool.and_true_left(
+            Shared.Bool.and_true_left(
               Shared.List.has(~A, ~same, ks, p),
               Reach.within(~A, ~same, r, ks)
             )(hw)
