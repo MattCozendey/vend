@@ -142,6 +142,18 @@ law Client.try_get_diff:
   for b: Core.Point
   IO(Client & Reply<&2, List<&2, Formats.Change>>)
 
+# the changes elsewhere that touch what the branch b uses (Core.Node.affects)
+law Client.try_get_affects:
+  for c: Client
+  for b: String
+  IO(Client & Reply<&2, List<&2, Core.Touch>>)
+
+# what the changes up to the point p touch elsewhere (Core.Node.impact)
+law Client.try_get_impact:
+  for c: Client
+  for p: Core.Point
+  IO(Client & Reply<&2, List<&2, Core.Touch>>)
+
 # where the request r of this writer is: an answer to a change that timed out
 law Client.try_get_answer:
   for c: Client

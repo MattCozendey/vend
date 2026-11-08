@@ -169,7 +169,7 @@ def Path.step(+p: String, +done: List<&2, String>) -> List<&2, String>:
 
 # the parts of a path after the parts ps, from the folders done (the last
 # first)
-def Path.walk(ps: List<&2, String>, +done: List<&2, String>) -> List<&2, String>:
+def Path.walk(ps: List<&2, String>, done: List<&2, String>) -> List<&2, String>:
   match ps:
     case Nil{}:
       List.reverse(&2, String, done)
@@ -188,9 +188,14 @@ def Path.parts(fs: List<&2, String>, +t: String) -> List<&2, String>:
 
 # the resource at the path t from the folder of the resource n
 def Name.at(+n: Name, t: String) -> Name:
-  +ps = String.split(Name.path(n), Chr{47})
-  +fs = List.reverse(&2, String, List.tail(&2, String, List.reverse(&2, String, ps)))
-  Name{String.append(Name.space(n), String.append(":", String.join(Path.walk(Path.parts(fs, t), []), "/")))}
+  ps = String.split(Name.path(n), Chr{47})
+  fs = List.reverse(&2, String, List.tail(&2, String, List.reverse(&2, String, ps)))
+  Name{
+    String.append(
+      Name.space(n),
+      String.append(":", String.join(Path.walk(Path.parts(fs, t), []), "/"))
+    )
+  }
 
 # Endpoints
 # ---------

@@ -558,12 +558,7 @@ def Plain.merge.lines(b: Octets.Bytes(), x: Octets.Bytes(), y: Octets.Bytes()) -
   Plain.merge.cuts(lb, Lines.cut(lb, Lines.list(x)), Lines.cut(lb, Lines.list(y)))
 
 # the merge of two different changes, as lines when all three are text (text)
-def Plain.merge.text(
-  text: Bool,
-  b: Octets.Bytes(),
-  x: Octets.Bytes(),
-  y: Octets.Bytes()
-) -> Merged:
+def Plain.merge.text(text: Bool, b: Octets.Bytes(), x: Octets.Bytes(), y: Octets.Bytes()) -> Merged:
   match text:
     case True{}:
       Plain.merge.lines(b, x, y)
@@ -596,7 +591,12 @@ def Merge.decide.right(held: Bool, x: Octets.Bytes(), y: Octets.Bytes()) -> Deci
       Merge.decide.same(Octets.Bytes.is_eq(x, y))
 
 # theirs when x is b (held), else as y is b or not
-def Merge.decide.left(held: Bool, b: Octets.Bytes(), +x: Octets.Bytes(), +y: Octets.Bytes()) -> Decision:
+def Merge.decide.left(
+  held: Bool,
+  b: Octets.Bytes(),
+  x: Octets.Bytes(),
+  +y: Octets.Bytes()
+) -> Decision:
   match held:
     case True{}:
       Decision.theirs{}
@@ -604,7 +604,7 @@ def Merge.decide.left(held: Bool, b: Octets.Bytes(), +x: Octets.Bytes(), +y: Oct
       Merge.decide.right(Octets.Bytes.is_eq(y, b), x, y)
 
 # what a merge of x and y, two changes of b, takes before any format looks
-def Merge.decide(+b: Octets.Bytes(), +x: Octets.Bytes(), +y: Octets.Bytes()) -> Decision:
+def Merge.decide(+b: Octets.Bytes(), +x: Octets.Bytes(), y: Octets.Bytes()) -> Decision:
   Merge.decide.left(Octets.Bytes.is_eq(x, b), b, x, y)
 
 # the change that the decision d takes of x and y, none for both
@@ -619,37 +619,53 @@ def Decision.take(d: Decision, x: Octets.Bytes(), y: Octets.Bytes()) -> Maybe<&2
     case Decision.pieces{}:
       None{}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Merge.left_only once x is known to be b or not (held)
 def Merge.left_only.at(
   held: Bool,
-  +b: Octets.Bytes(),
-  +x: Octets.Bytes(),
+  b: Octets.Bytes(),
+  x: Octets.Bytes(),
   e: {Octets.Bytes.is_eq(x, b) == held: Bool}
 ) -> {Decision.take(Merge.decide.left(held, b, x, b), x, b) == Some{x}: Maybe<&2, Octets.Bytes()>}:
   match held:
     case True{}:
-      %Equal.sym(Octets.Bytes(), x, b, Octets.Bytes.is_eq_sound(x, b)(e)): {Some{b} == Some{_}: Maybe<&2, Octets.Bytes()>}
+      %Equal.sym(
+        Octets.Bytes(),
+        x,
+        b,
+        Octets.Bytes.is_eq_sound(x, b)(e)
+      ): {Some{b} == Some{_}: Maybe<&2, Octets.Bytes()>}
       {==}
     case False{}:
       %Equal.sym(Bool, Octets.Bytes.is_eq(b, b), True{}, Octets.Bytes.is_eq_refl(b)):
         {Decision.take(Merge.decide.right(_, x, b), x, b) == Some{x}: Maybe<&2, Octets.Bytes()>}
       {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # when only x changed b, the decision takes x
-def Merge.left_only(+b: Octets.Bytes(), +x: Octets.Bytes()) -> {Decision.take(Merge.decide(b, x, b), x, b) == Some{x}: Maybe<&2, Octets.Bytes()>}:
+def Merge.left_only(
+  +b: Octets.Bytes(),
+  +x: Octets.Bytes()
+) -> {Decision.take(Merge.decide(b, x, b), x, b) == Some{x}: Maybe<&2, Octets.Bytes()>}:
   Merge.left_only.at(Octets.Bytes.is_eq(x, b), b, x, {==})
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # when only y changed b, the decision takes y
-def Merge.right_only(+b: Octets.Bytes(), +y: Octets.Bytes()) -> {Decision.take(Merge.decide(b, b, y), b, y) == Some{y}: Maybe<&2, Octets.Bytes()>}:
+def Merge.right_only(
+  b: Octets.Bytes(),
+  y: Octets.Bytes()
+) -> {Decision.take(Merge.decide(b, b, y), b, y) == Some{y}: Maybe<&2, Octets.Bytes()>}:
   %Equal.sym(Bool, Octets.Bytes.is_eq(b, b), True{}, Octets.Bytes.is_eq_refl(b)):
     {Decision.take(Merge.decide.left(_, b, b, y), b, y) == Some{y}: Maybe<&2, Octets.Bytes()>}
   {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Merge.same once x is known to be b or not (held)
 def Merge.same.at(
   held: Bool,
-  +b: Octets.Bytes(),
-  +x: Octets.Bytes(),
+  b: Octets.Bytes(),
+  x: Octets.Bytes(),
   e: {Octets.Bytes.is_eq(x, b) == held: Bool}
 ) -> {Decision.take(Merge.decide.left(held, b, x, x), x, x) == Some{x}: Maybe<&2, Octets.Bytes()>}:
   match held:
@@ -661,9 +677,13 @@ def Merge.same.at(
       %Equal.sym(Bool, Octets.Bytes.is_eq(x, x), True{}, Octets.Bytes.is_eq_refl(x)):
         {Decision.take(Merge.decide.same(_), x, x) == Some{x}: Maybe<&2, Octets.Bytes()>}
       {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # when both made the same change, the decision takes it
-def Merge.same(+b: Octets.Bytes(), +x: Octets.Bytes()) -> {Decision.take(Merge.decide(b, x, x), x, x) == Some{x}: Maybe<&2, Octets.Bytes()>}:
+def Merge.same(
+  +b: Octets.Bytes(),
+  +x: Octets.Bytes()
+) -> {Decision.take(Merge.decide(b, x, x), x, x) == Some{x}: Maybe<&2, Octets.Bytes()>}:
   Merge.same.at(Octets.Bytes.is_eq(x, b), b, x, {==})
 
 # Embedding
@@ -695,27 +715,32 @@ def Bytes.starts(p: Octets.Bytes(), b: Octets.Bytes()) -> Bool:
     case Nil{} w:
       True{}
     case Con{x, pr} Con{y, br}:
-      Bool.and(U32.is_eq(x, y), Bytes.starts(pr, br))
+      List.all.if(u => Bytes.starts(pr, br), U32.is_eq(x, y))
     case Con{x, pr} Nil{}:
       False{}
 
-# the place found at x <> r, when p starts there (hit), else the place in r
-def Bytes.find.at(hit: Bool, +p: Octets.Bytes(), +x: U32, +r: Octets.Bytes(), rest: Maybe<&2, Found>) -> Maybe<&2, Found>:
-  match hit rest:
-    case True{} m:
-      Some{Found{[], List.drop(&2, U32, x <> r, List.length(&2, U32, p))}}
-    case False{} None{}:
+# the place m of p in some bytes, after the byte x
+def Found.put(x: U32, m: Maybe<&2, Found>) -> Maybe<&2, Found>:
+  match m:
+    case None{}:
       None{}
-    case False{} Some{Found{u, w}}:
+    case Some{Found{u, w}}:
       Some{Found{x <> u, w}}
 
+# bend-lint: expect-begin bend-lint-rules/performance/list_index_loop@warning -- List.length runs only at the hit, where the lazy search stops: once per search
 # where p first occurs in b, if it does
 def Bytes.find(+p: Octets.Bytes(), b: Octets.Bytes()) -> Maybe<&2, Found>:
   match b:
     case Nil{}:
       Bool.pick(Maybe<&2, Found>, List.is_empty(&2, U32, p), Some{Found{[], []}}, None{})
     case Con{+x, +r}:
-      Bytes.find.at(Bytes.starts(p, x <> r), p, x, r, Bytes.find(p, r))
+      Bools.Bool.when(
+        Maybe<&2, Found>,
+        Bytes.starts(p, x <> r),
+        u => Some{Found{[], List.drop(&2, U32, x <> r, List.length(&2, U32, p))}},
+        u => Found.put(x, Bytes.find(p, r))
+      )
+# bend-lint: expect-end bend-lint-rules/performance/list_index_loop@warning
 
 # the pieces of b, f steps at most: looking for an opening marker op (opening),
 # or for the closing marker cl of a region (not opening); m is where the marker
@@ -724,7 +749,7 @@ def Embed.split.go(
   f: Nat,
   +op: Octets.Bytes(),
   +cl: Octets.Bytes(),
-  +b: Octets.Bytes(),
+  b: Octets.Bytes(),
   opening: Bool,
   m: Maybe<&2, Found>
 ) -> List<&2, Piece>:
@@ -743,7 +768,7 @@ def Embed.split.go(
       Piece.region{u, True{}} <> Embed.split.go(e, op, cl, w, True{}, Bytes.find(op, w))
 
 # the pieces of b, between the markers op and cl
-def Embed.split(+op: Octets.Bytes(), +cl: Octets.Bytes(), +b: Octets.Bytes()) -> List<&2, Piece>:
+def Embed.split(+op: Octets.Bytes(), cl: Octets.Bytes(), +b: Octets.Bytes()) -> List<&2, Piece>:
   Embed.split.go(1n+List.length(&2, U32, b), op, cl, b, True{}, Bytes.find(op, b))
 
 # the bytes of the pieces ps, with the markers op and cl around each region
@@ -754,7 +779,12 @@ def Embed.join(+op: Octets.Bytes(), +cl: Octets.Bytes(), ps: List<&2, Piece>) ->
     case Con{Piece.text{t}, r}:
       List.append(&2, U32, t, Embed.join(op, cl, r))
     case Con{Piece.region{c, True{}}, r}:
-      List.append(&2, U32, op, List.append(&2, U32, c, List.append(&2, U32, cl, Embed.join(op, cl, r))))
+      List.append(
+        &2,
+        U32,
+        op,
+        List.append(&2, U32, c, List.append(&2, U32, cl, Embed.join(op, cl, r)))
+      )
     case Con{Piece.region{c, False{}}, r}:
       List.append(&2, U32, op, List.append(&2, U32, c, Embed.join(op, cl, r)))
 
@@ -774,48 +804,103 @@ def Found.after(m: Maybe<&2, Found>) -> Octets.Bytes():
     case None{}:
       []
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # bytes that start with p are p, then the rest
-def Bytes.starts_drop(p: Octets.Bytes(), b: Octets.Bytes()) -> {Bytes.starts(p, b) == True{}: Bool} -> {
-  b == List.append(&2, U32, p, List.drop(&2, U32, b, List.length(&2, U32, p))): Octets.Bytes()
-}:
+def Bytes.starts_drop(
+  p: Octets.Bytes(),
+  b: Octets.Bytes()
+) -> {
+  Bytes.starts(p, b) == True{}: Bool
+} -> {b == List.append(&2, U32, p, List.drop(&2, U32, b, List.length(&2, U32, p))): Octets.Bytes()}:
   match p b:
     case Nil{} w:
       h => Equal.sym(Octets.Bytes(), List.drop(&2, U32, w, 0n), w, Lists.List.drop_zero(&2, U32, w))
     case Con{+x, +pr} Con{+y, +br}:
       +h =>
-        %Equal.sym(U32, x, y, Words.U32.is_eq_sound(x, y)(Bools.Bool.and_true_left(U32.is_eq(x, y), Bytes.starts(pr, br))(h))):
-          {y <> br == _ <> List.append(&2, U32, pr, List.drop(&2, U32, br, List.length(&2, U32, pr))): Octets.Bytes()}
-        %Bytes.starts_drop(pr, br)(Bools.Bool.and_true_right(U32.is_eq(x, y), Bytes.starts(pr, br))(h)):
+        %Equal.sym(
+          U32,
+          x,
+          y,
+          Words.U32.is_eq_sound(
+            x,
+            y
+          )(Shared.List.all.if_hit(U32.is_eq(x, y), u => Bytes.starts(pr, br))(h))
+        ):
+          {
+            y
+              <> br
+              == _
+              <> List.append(
+                &2,
+                U32,
+                pr,
+                List.drop(&2, U32, br, List.length(&2, U32, pr))
+              ): Octets.Bytes()
+          }
+        %Bytes.starts_drop(
+          pr,
+          br
+        )(Shared.List.all.if_rest(U32.is_eq(x, y), u => Bytes.starts(pr, br))(h)):
           {y <> br == y <> _: Octets.Bytes()}
         {==}
     case Con{x, pr} Nil{}:
       h => Empty.absurd(
-        {Nil{} == List.append(&2, U32, x <> pr, List.drop(&2, U32, Nil{}, List.length(&2, U32, x <> pr))): Octets.Bytes()},
+        {
+          Nil{}
+            == List.append(
+              &2,
+              U32,
+              x <> pr,
+              List.drop(&2, U32, Nil{}, List.length(&2, U32, x <> pr))
+            ): Octets.Bytes()
+        },
         Shared.Bool.false_ne_true(h)
       )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Bytes.find_cut at x <> r, by whether p starts there (hit)
 def Bytes.find_cut.at(
   -u: Octets.Bytes(),
   -w: Octets.Bytes(),
   hit: Bool,
-  +p: Octets.Bytes(),
-  +x: U32,
-  +r: Octets.Bytes(),
+  p: Octets.Bytes(),
+  x: U32,
+  r: Octets.Bytes(),
   rest: Maybe<&2, Found>,
   eh: {Bytes.starts(p, x <> r) == hit: Bool},
-  ih: @u2: Octets.Bytes() -> @w2: Octets.Bytes() -> {rest == Some{Found{u2, w2}}: Maybe<&2, Found>} -> {
-    r == List.append(&2, U32, u2, List.append(&2, U32, p, w2)): Octets.Bytes()
-  }
-) -> {Bytes.find.at(hit, p, x, r, rest) == Some{Found{u, w}}: Maybe<&2, Found>} -> {
-  x <> r == List.append(&2, U32, u, List.append(&2, U32, p, w)): Octets.Bytes()
-}:
+  ih: @u2: Octets.Bytes() -> @w2: Octets.Bytes() -> {
+    rest == Some{Found{u2, w2}}: Maybe<&2, Found>
+  } -> {r == List.append(&2, U32, u2, List.append(&2, U32, p, w2)): Octets.Bytes()}
+) -> {
+  Bools.Bool.when(
+    Maybe<&2, Found>,
+    hit,
+    z => Some{Found{[], List.drop(&2, U32, x <> r, List.length(&2, U32, p))}},
+    z => Found.put(x, rest)
+  )
+    == Some{Found{u, w}}: Maybe<&2, Found>
+} -> {x <> r == List.append(&2, U32, u, List.append(&2, U32, p, w)): Octets.Bytes()}:
   match hit rest:
     case True{} m:
       +h =>
-        %Equal.cong(Maybe<&2, Found>, Octets.Bytes(), z => Found.before(z), Some{Found{[], List.drop(&2, U32, x <> r, List.length(&2, U32, p))}}, Some{Found{u, w}}, h):
+        %Equal.cong(
+          Maybe<&2, Found>,
+          Octets.Bytes(),
+          z => Found.before(z),
+          Some{Found{[], List.drop(&2, U32, x <> r, List.length(&2, U32, p))}},
+          Some{Found{u, w}},
+          h
+        ):
           {x <> r == List.append(&2, U32, _, List.append(&2, U32, p, w)): Octets.Bytes()}
-        %Equal.cong(Maybe<&2, Found>, Octets.Bytes(), z => Found.after(z), Some{Found{[], List.drop(&2, U32, x <> r, List.length(&2, U32, p))}}, Some{Found{u, w}}, h):
+        %Equal.cong(
+          Maybe<&2, Found>,
+          Octets.Bytes(),
+          z => Found.after(z),
+          Some{Found{[], List.drop(&2, U32, x <> r, List.length(&2, U32, p))}},
+          Some{Found{u, w}},
+          h
+        ):
           {x <> r == List.append(&2, U32, p, _): Octets.Bytes()}
         Bytes.starts_drop(p, x <> r)(eh)
     case False{} None{}:
@@ -823,25 +908,60 @@ def Bytes.find_cut.at(
         {x <> r == List.append(&2, U32, u, List.append(&2, U32, p, w)): Octets.Bytes()},
         Maybes.Maybe.none_ne_some(Found, Found{u, w}, h)
       )
-    case False{} Some{Found{+u2, +w2}}:
+    case False{} Some{Found{u2, w2}}:
       +h =>
-        %Equal.cong(Maybe<&2, Found>, Octets.Bytes(), z => Found.before(z), Some{Found{x <> u2, w2}}, Some{Found{u, w}}, h):
+        %Equal.cong(
+          Maybe<&2, Found>,
+          Octets.Bytes(),
+          z => Found.before(z),
+          Some{Found{x <> u2, w2}},
+          Some{Found{u, w}},
+          h
+        ):
           {x <> r == List.append(&2, U32, _, List.append(&2, U32, p, w)): Octets.Bytes()}
-        %Equal.cong(Maybe<&2, Found>, Octets.Bytes(), z => Found.after(z), Some{Found{x <> u2, w2}}, Some{Found{u, w}}, h):
+        %Equal.cong(
+          Maybe<&2, Found>,
+          Octets.Bytes(),
+          z => Found.after(z),
+          Some{Found{x <> u2, w2}},
+          Some{Found{u, w}},
+          h
+        ):
           {x <> r == x <> List.append(&2, U32, u2, List.append(&2, U32, p, _)): Octets.Bytes()}
         %ih(u2)(w2)({==}): {x <> r == x <> _: Octets.Bytes()}
         {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # what Bytes.find finds cuts b: the bytes before, the pattern, the bytes after
-def Bytes.find_cut(-u: Octets.Bytes(), -w: Octets.Bytes(), b: Octets.Bytes(), +p: Octets.Bytes()) -> {
+def Bytes.find_cut(
+  -u: Octets.Bytes(),
+  -w: Octets.Bytes(),
+  b: Octets.Bytes(),
+  +p: Octets.Bytes()
+) -> {
   Bytes.find(p, b) == Some{Found{u, w}}: Maybe<&2, Found>
 } -> {b == List.append(&2, U32, u, List.append(&2, U32, p, w)): Octets.Bytes()}:
   match b p:
     case Nil{} Nil{}:
       +h =>
-        %Equal.cong(Maybe<&2, Found>, Octets.Bytes(), z => Found.before(z), Some{Found{[], []}}, Some{Found{u, w}}, h):
+        %Equal.cong(
+          Maybe<&2, Found>,
+          Octets.Bytes(),
+          z => Found.before(z),
+          Some{Found{[], []}},
+          Some{Found{u, w}},
+          h
+        ):
           {Nil{} == List.append(&2, U32, _, List.append(&2, U32, Nil{}, w)): Octets.Bytes()}
-        %Equal.cong(Maybe<&2, Found>, Octets.Bytes(), z => Found.after(z), Some{Found{[], []}}, Some{Found{u, w}}, h):
+        %Equal.cong(
+          Maybe<&2, Found>,
+          Octets.Bytes(),
+          z => Found.after(z),
+          Some{Found{[], []}},
+          Some{Found{u, w}},
+          h
+        ):
           {Nil{} == List.append(&2, U32, Nil{}, List.append(&2, U32, Nil{}, _)): Octets.Bytes()}
         {==}
     case Nil{} Con{y, q}:
@@ -850,7 +970,18 @@ def Bytes.find_cut(-u: Octets.Bytes(), -w: Octets.Bytes(), b: Octets.Bytes(), +p
         Maybes.Maybe.none_ne_some(Found, Found{u, w}, h)
       )
     case Con{+x, +r} m:
-      Bytes.find_cut.at(u, w, Bytes.starts(m, x <> r), m, x, r, Bytes.find(m, r), {==}, u2 => w2 => e => Bytes.find_cut(u2, w2, r, m)(e))
+      Bytes.find_cut.at(
+        u,
+        w,
+        Bytes.starts(m, x <> r),
+        m,
+        x,
+        r,
+        Bytes.find(m, r),
+        {==},
+        u2 => w2 => e => Bytes.find_cut(u2, w2, r, m)(e)
+      )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # the marker that a split looks for: op outside a region (opening), cl inside
 def Embed.marker(opening: Bool, op: Octets.Bytes(), cl: Octets.Bytes()) -> Octets.Bytes():
@@ -869,52 +1000,121 @@ def Embed.whole(opening: Bool, op: Octets.Bytes(), b: Octets.Bytes()) -> Octets.
     case False{}:
       List.append(&2, U32, op, b)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/list_index_loop@warning -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # the pieces of a split, joined, give back what they stand for
 def Embed.join_split.go(
   f: Nat,
   +op: Octets.Bytes(),
   +cl: Octets.Bytes(),
-  +b: Octets.Bytes(),
+  b: Octets.Bytes(),
   opening: Bool,
   m: Maybe<&2, Found>,
-  hm: @u: Octets.Bytes() -> @w: Octets.Bytes() -> {m == Some{Found{u, w}}: Maybe<&2, Found>} -> {
-    b == List.append(&2, U32, u, List.append(&2, U32, Embed.marker(opening, op, cl), w)): Octets.Bytes()
+  hm: @u: Octets.Bytes() -> @w: Octets.Bytes() -> {
+    m == Some{Found{u, w}}: Maybe<&2, Found>
+  } -> {
+    b
+      == List.append(
+        &2,
+        U32,
+        u,
+        List.append(&2, U32, Embed.marker(opening, op, cl), w)
+      ): Octets.Bytes()
   }
-) -> {Embed.join(op, cl, Embed.split.go(f, op, cl, b, opening, m)) == Embed.whole(opening, op, b): Octets.Bytes()}:
+) -> {
+  Embed.join(
+    op,
+    cl,
+    Embed.split.go(f, op, cl, b, opening, m)
+  )
+    == Embed.whole(opening, op, b): Octets.Bytes()
+}:
   match f opening m:
     case 0n True{} n:
       Lists.List.append_nil(U32, b)
     case 0n False{} n:
-      Equal.cong(Octets.Bytes(), Octets.Bytes(), z => List.append(&2, U32, op, z), List.append(&2, U32, b, []), b, Lists.List.append_nil(U32, b))
+      Equal.cong(
+        Octets.Bytes(),
+        Octets.Bytes(),
+        z => List.append(&2, U32, op, z),
+        List.append(&2, U32, b, []),
+        b,
+        Lists.List.append_nil(U32, b)
+      )
     case 1n+e True{} None{}:
       Lists.List.append_nil(U32, b)
-    case 1n+e True{} Some{Found{+u, +w}}:
+    case 1n+e True{} Some{Found{u, +w}}:
       %Equal.sym(
         Octets.Bytes(),
         Embed.join(op, cl, Embed.split.go(e, op, cl, w, False{}, Bytes.find(cl, w))),
         List.append(&2, U32, op, w),
-        Embed.join_split.go(e, op, cl, w, False{}, Bytes.find(cl, w), u2 => w2 => h => Bytes.find_cut(u2, w2, w, cl)(h))
+        Embed.join_split.go(
+          e,
+          op,
+          cl,
+          w,
+          False{},
+          Bytes.find(cl, w),
+          u2 => w2 => h => Bytes.find_cut(u2, w2, w, cl)(h)
+        )
       ):
         {List.append(&2, U32, u, _) == b: Octets.Bytes()}
-      Equal.sym(Octets.Bytes(), b, List.append(&2, U32, u, List.append(&2, U32, op, w)), hm(u)(w)({==}))
+      Equal.sym(
+        Octets.Bytes(),
+        b,
+        List.append(&2, U32, u, List.append(&2, U32, op, w)),
+        hm(u)(w)({==})
+      )
     case 1n+e False{} None{}:
-      Equal.cong(Octets.Bytes(), Octets.Bytes(), z => List.append(&2, U32, op, z), List.append(&2, U32, b, []), b, Lists.List.append_nil(U32, b))
-    case 1n+e False{} Some{Found{+u, +w}}:
+      Equal.cong(
+        Octets.Bytes(),
+        Octets.Bytes(),
+        z => List.append(&2, U32, op, z),
+        List.append(&2, U32, b, []),
+        b,
+        Lists.List.append_nil(U32, b)
+      )
+    case 1n+e False{} Some{Found{u, +w}}:
       %Equal.sym(
         Octets.Bytes(),
         Embed.join(op, cl, Embed.split.go(e, op, cl, w, True{}, Bytes.find(op, w))),
         w,
-        Embed.join_split.go(e, op, cl, w, True{}, Bytes.find(op, w), u2 => w2 => h => Bytes.find_cut(u2, w2, w, op)(h))
+        Embed.join_split.go(
+          e,
+          op,
+          cl,
+          w,
+          True{},
+          Bytes.find(op, w),
+          u2 => w2 => h => Bytes.find_cut(u2, w2, w, op)(h)
+        )
       ):
-        {List.append(&2, U32, op, List.append(&2, U32, u, List.append(&2, U32, cl, _))) == List.append(&2, U32, op, b): Octets.Bytes()}
+        {
+          List.append(
+            &2,
+            U32,
+            op,
+            List.append(&2, U32, u, List.append(&2, U32, cl, _))
+          )
+            == List.append(&2, U32, op, b): Octets.Bytes()
+        }
       Equal.cong(
         Octets.Bytes(),
         Octets.Bytes(),
         z => List.append(&2, U32, op, z),
         List.append(&2, U32, u, List.append(&2, U32, cl, w)),
         b,
-        Equal.sym(Octets.Bytes(), b, List.append(&2, U32, u, List.append(&2, U32, cl, w)), hm(u)(w)({==}))
+        Equal.sym(
+          Octets.Bytes(),
+          b,
+          List.append(&2, U32, u, List.append(&2, U32, cl, w)),
+          hm(u)(w)({==})
+        )
       )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/list_index_loop@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # the pieces of b, joined, give back b: an embedding loses nothing
 law Embed.join_split:
@@ -924,7 +1124,15 @@ law Embed.join_split:
   {Embed.join(op, cl, Embed.split(op, cl, b)) == b: Octets.Bytes()}
 
 def Embed.join_split(op, cl, b):
-  Embed.join_split.go(1n+List.length(&2, U32, b), op, cl, b, True{}, Bytes.find(op, b), u => w => h => Bytes.find_cut(u, w, b, op)(h))
+  Embed.join_split.go(
+    1n+List.length(&2, U32, b),
+    op,
+    cl,
+    b,
+    True{},
+    Bytes.find(op, b),
+    u => w => h => Bytes.find_cut(u, w, b, op)(h)
+  )
 
 # the shape of a piece
 def Piece.shape(p: Piece) -> Shape:
@@ -964,7 +1172,11 @@ def Pieces.regions(ps: List<&2, Piece>) -> List<&2, Octets.Bytes()>:
 
 # the pieces of the shapes sh, filled with the texts ts and the regions rs in
 # order; a missing one is empty
-def Pieces.build(sh: List<&2, Shape>, ts: List<&2, Octets.Bytes()>, rs: List<&2, Octets.Bytes()>) -> List<&2, Piece>:
+def Pieces.build(
+  sh: List<&2, Shape>,
+  ts: List<&2, Octets.Bytes()>,
+  rs: List<&2, Octets.Bytes()>
+) -> List<&2, Piece>:
   match sh ts rs:
     case Nil{} t r:
       []
@@ -978,19 +1190,39 @@ def Pieces.build(sh: List<&2, Shape>, ts: List<&2, Octets.Bytes()>, rs: List<&2,
       Piece.region{c, k} <> Pieces.build(sr, t, rr)
 
 # the pieces of their own shape, texts and regions are the pieces
-def Pieces.build_of(ps: List<&2, Piece>) -> {Pieces.build(Pieces.shape(ps), Pieces.texts(ps), Pieces.regions(ps)) == ps: List<&2, Piece>}:
+def Pieces.build_of(
+  ps: List<&2, Piece>
+) -> {Pieces.build(Pieces.shape(ps), Pieces.texts(ps), Pieces.regions(ps)) == ps: List<&2, Piece>}:
   match ps:
     case Nil{}:
       {==}
     case Con{head, tail}:
       match head:
         case Piece.text{bytes}:
-          %Equal.sym(List<&2, Piece>, Pieces.build(Pieces.shape(tail), Pieces.texts(tail), Pieces.regions(tail)), tail, Pieces.build_of(tail)) :
-            {Piece.text{bytes} <> _ == Piece.text{bytes} <> tail : List<&2, Piece>}
+          %Equal.sym(
+            List<&2, Piece>,
+            Pieces.build(Pieces.shape(tail), Pieces.texts(tail), Pieces.regions(tail)),
+            tail,
+            Pieces.build_of(tail)
+          ):
+            {Piece.text{bytes} <> _ == Piece.text{bytes} <> tail: List<&2, Piece>}
           {==}
         case Piece.region{bytes1, closed}:
-          %Equal.sym(List<&2, Piece>, Pieces.build(Pieces.shape(tail), Pieces.texts(tail), Pieces.regions(tail)), tail, Pieces.build_of(tail)) :
-            {Piece.region{bytes1, closed} <> _ == Piece.region{bytes1, closed} <> tail : List<&2, Piece>}
+          %Equal.sym(
+            List<&2, Piece>,
+            Pieces.build(Pieces.shape(tail), Pieces.texts(tail), Pieces.regions(tail)),
+            tail,
+            Pieces.build_of(tail)
+          ):
+            {
+              Piece.region{
+                bytes1,
+                closed
+              }
+                <> _
+                == Piece.region{bytes1, closed}
+                <> tail: List<&2, Piece>
+            }
           {==}
 
 # Changes
@@ -1097,9 +1329,11 @@ def Line.trim(l: Octets.Bytes()) -> Octets.Bytes():
     case Con{+x, +r}:
       Bools.Bool.when(Octets.Bytes(), Line.is_blank(x), u => Line.trim(r), u => x <> r)
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- Bytes.starts of an empty marker returns at once
 # l starts with the marker p, which is not empty
 def Line.marks(+p: Octets.Bytes(), l: Octets.Bytes()) -> Bool:
   Bool.and(Bool.not(List.is_empty(&2, U32, p)), Bytes.starts(p, l))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # x cut where the marker m was found, when it is not empty (held): all of x
 # comes before it when it is empty or not in x
@@ -1122,9 +1356,9 @@ def Found.rest(c: Found) -> Octets.Bytes():
 
 # the edge whose target and what follows it are cut at the close marker (c),
 # with the alias marker al, under the conditions cs
-def Rule.named(c: Found, +al: Octets.Bytes(), cs: List<&2, Cond>) -> Edge:
+def Rule.named(c: Found, al: Octets.Bytes(), cs: List<&2, Cond>) -> Edge:
   match c:
-    case Found{t, +w}:
+    case Found{t, w}:
       Edge{t, Found.rest(Rule.cut(al, w)), cs}
 
 # the edges of the bytes w after a start marker, once the open marker is
@@ -1132,9 +1366,9 @@ def Rule.named(c: Found, +al: Octets.Bytes(), cs: List<&2, Cond>) -> Edge:
 def Rule.opened(
   held: Bool,
   m: Maybe<&2, Found>,
-  +w: Octets.Bytes(),
-  +cl: Octets.Bytes(),
-  +al: Octets.Bytes(),
+  w: Octets.Bytes(),
+  cl: Octets.Bytes(),
+  al: Octets.Bytes(),
   cs: List<&2, Cond>
 ) -> List<&2, Edge>:
   match held m:
@@ -1142,18 +1376,18 @@ def Rule.opened(
       [Rule.named(Rule.cut(cl, w), al, cs)]
     case True{} None{}:
       []
-    case True{} Some{Found{u, +a}}:
+    case True{} Some{Found{u, a}}:
       [Rule.named(Rule.cut(cl, a), al, cs)]
 
 # the edges of the trimmed line t, once it is known to start with the start
 # marker st or not (started)
 def Rule.line.at(
   started: Bool,
-  +st: Octets.Bytes(),
-  +t: Octets.Bytes(),
+  st: Octets.Bytes(),
+  t: Octets.Bytes(),
   +op: Octets.Bytes(),
-  +cl: Octets.Bytes(),
-  +al: Octets.Bytes(),
+  cl: Octets.Bytes(),
+  al: Octets.Bytes(),
   cs: List<&2, Cond>
 ) -> List<&2, Edge>:
   match started:
@@ -1213,88 +1447,139 @@ def Rule.edges.go(ls: List<&2, Octets.Bytes()>, +r: Rule, +cs: List<&2, Cond>) -
       List.append(&2, Edge, Rule.line(r, l, cs), Rule.edges.go(rest, r, Rule.step(r, l, cs)))
 
 # the edges of the bytes b
-def Rule.edges(+r: Rule, b: Octets.Bytes()) -> List<&2, Edge>:
+def Rule.edges(r: Rule, b: Octets.Bytes()) -> List<&2, Edge>:
   Rule.edges.go(Lines.list(b), r, [])
 
 # Nested formats
 # --------------
-# A format is lines (the default), whole, an embedding of an inner format in
-# an outer one, a language: a base format and the rule of its imports, or a
-# submodule: a pointer to a version, which the core reads and merges.
-# Formats nest to any depth (CSS and JS inside HTML), and the laws below hold
-# for every one. Each operation takes a list of items, so that an embedding
-# hands all its texts to the outer format and all its regions to the inner one
-# in one call; an old item that is missing is empty.
+# A format is a leaf, an embedding of an inner format in an outer one, or a
+# language: a base format and the rule of its imports. Formats nest to any
+# depth (CSS and JS inside HTML), and the laws below hold for every one. Each
+# operation takes a list of items, so that an embedding hands all its texts to
+# the outer format and all its regions to the inner one in one call; an old
+# item that is missing is empty.
 type Format is Data:
-  Format.lines{}
-  Format.whole{}
+  Format.leaf{kind: Leaf}
   Format.embed{outer: Format, open: Octets.Bytes(), close: Octets.Bytes(), inner: Format}
   Format.code{base: Format, rule: Rule}
-  Format.module{}
+
+# a format that holds no other: lines (the default), the content as one whole
+# part, or a submodule, a pointer to a child that the core reads and merges
+type Leaf is Data:
+  Leaf.lines{}
+  Leaf.whole{}
+  Leaf.module{}
 
 # the first of the items xs, empty when there is none
 def Items.first(xs: List<&2, Octets.Bytes()>) -> Octets.Bytes():
   Maybe.default(&2, Octets.Bytes(), List.head(&2, Octets.Bytes(), xs), [])
 
+# the patch from a to b, in the leaf k
+def Leaf.diff(k: Leaf, a: Octets.Bytes(), b: Octets.Bytes()) -> Patch:
+  match k:
+    case Leaf.lines{}:
+      Plain.diff(a, b)
+    case Leaf.whole{}:
+      Patch.whole{b}
+    case Leaf.module{}:
+      Patch.whole{b}
+
+# the patch from a to b, in the leaf k, applied to a, gives b
+def Leaf.apply_diff(
+  k: Leaf,
+  a: Octets.Bytes(),
+  b: Octets.Bytes()
+) -> {Plain.apply(a, Leaf.diff(k, a, b)) == b: Octets.Bytes()}:
+  match k:
+    case Leaf.lines{}:
+      Plain.apply_diff(a, b)
+    case Leaf.whole{}:
+      {==}
+    case Leaf.module{}:
+      {==}
+
+# bend-lint: expect-begin bend-lint-rules/performance/deep_call_in_fork@information -- these walks cover the few pieces of one item; a tail walk would need a reverse that Pieces.build_of would then undo
 # the patches from the items as to the items bs, one for each of bs
-def Format.diffs(f: Format, bs: List<&2, Octets.Bytes()>, +as: List<&2, Octets.Bytes()>) -> List<&2, Patch>:
+def Format.diffs(
+  f: Format,
+  bs: List<&2, Octets.Bytes()>,
+  +as: List<&2, Octets.Bytes()>
+) -> List<&2, Patch>:
   match f bs:
-    case Format.lines{} Nil{}:
+    case Format.leaf{k} Nil{}:
       []
-    case Format.lines{} Con{+b, br}:
-      Plain.diff(Items.first(as), b) <> Format.diffs(Format.lines{}, br, List.tail(&2, Octets.Bytes(), as))
-    case Format.whole{} Nil{}:
-      []
-    case Format.whole{} Con{b, br}:
-      Patch.whole{b} <> Format.diffs(Format.whole{}, br, List.tail(&2, Octets.Bytes(), as))
+    case Format.leaf{+k} Con{b, br}:
+      Leaf.diff(
+        k,
+        Items.first(as),
+        b
+      )
+        <> Format.diffs(Format.leaf{k}, br, List.tail(&2, Octets.Bytes(), as))
     case Format.embed{o, op, cl, i} Nil{}:
       []
-    case Format.embed{+o, +op, +cl, +i} Con{+b, br}:
+    case Format.embed{+o, +op, +cl, +i} Con{b, br}:
       +pa = Embed.split(op, cl, Items.first(as))
       +pb = Embed.split(op, cl, b)
-      Patch.pieces{
-        Pieces.shape(pb),
-        Format.diffs(o, Pieces.texts(pb), Pieces.texts(pa)),
-        Format.diffs(i, Pieces.regions(pb), Pieces.regions(pa))
-      }
-        <> Format.diffs(Format.embed{o, op, cl, i}, br, List.tail(&2, Octets.Bytes(), as))
+      tb = Pieces.texts(pb)
+      ta = Pieces.texts(pa)
+      rb = Pieces.regions(pb)
+      ra = Pieces.regions(pa)
+      ts rs rest = Format.diffs(
+        o,
+        tb,
+        ta
+      ) Format.diffs(
+        i,
+        rb,
+        ra
+      ) Format.diffs(Format.embed{o, op, cl, i}, br, List.tail(&2, Octets.Bytes(), as))
+      Patch.pieces{Pieces.shape(pb), ts, rs} <> rest
     case Format.code{base, r} c:
       Format.diffs(base, c, as)
-    case Format.module{} Nil{}:
-      []
-    case Format.module{} Con{b, br}:
-      Patch.whole{b} <> Format.diffs(Format.module{}, br, List.tail(&2, Octets.Bytes(), as))
+# bend-lint: expect-end bend-lint-rules/performance/deep_call_in_fork@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/deep_call_in_fork@information -- these walks cover the few pieces of one item; a tail walk would need a reverse that Pieces.build_of would then undo
 # the items as after the patches ps, one for each of ps; a patch of another
 # format applies as plain
-def Format.applies(f: Format, ps: List<&2, Patch>, +as: List<&2, Octets.Bytes()>) -> List<&2, Octets.Bytes()>:
+def Format.applies(
+  f: Format,
+  ps: List<&2, Patch>,
+  +as: List<&2, Octets.Bytes()>
+) -> List<&2, Octets.Bytes()>:
   match f ps:
-    case Format.lines{} Nil{}:
+    case Format.leaf{k} Nil{}:
       []
-    case Format.lines{} Con{p, pr}:
-      Plain.apply(Items.first(as), p) <> Format.applies(Format.lines{}, pr, List.tail(&2, Octets.Bytes(), as))
-    case Format.whole{} Nil{}:
-      []
-    case Format.whole{} Con{p, pr}:
-      Plain.apply(Items.first(as), p) <> Format.applies(Format.whole{}, pr, List.tail(&2, Octets.Bytes(), as))
+    case Format.leaf{+k} Con{p, pr}:
+      Plain.apply(
+        Items.first(as),
+        p
+      )
+        <> Format.applies(Format.leaf{k}, pr, List.tail(&2, Octets.Bytes(), as))
     case Format.embed{o, op, cl, i} Nil{}:
       []
     case Format.embed{+o, +op, +cl, +i} Con{Patch.pieces{sh, tps, rps}, pr}:
       +pa = Embed.split(op, cl, Items.first(as))
-      Embed.join(
-        op,
-        cl,
-        Pieces.build(sh, Format.applies(o, tps, Pieces.texts(pa)), Format.applies(i, rps, Pieces.regions(pa)))
+      ta = Pieces.texts(pa)
+      ra = Pieces.regions(pa)
+      ts rs rest = Format.applies(
+        o,
+        tps,
+        ta
+      ) Format.applies(
+        i,
+        rps,
+        ra
+      ) Format.applies(Format.embed{o, op, cl, i}, pr, List.tail(&2, Octets.Bytes(), as))
+      Embed.join(op, cl, Pieces.build(sh, ts, rs)) <> rest
+    case Format.embed{+o, +op, +cl, +i} Con{p, pr}:
+      Plain.apply(
+        Items.first(as),
+        p
       )
         <> Format.applies(Format.embed{o, op, cl, i}, pr, List.tail(&2, Octets.Bytes(), as))
-    case Format.embed{+o, +op, +cl, +i} Con{p, pr}:
-      Plain.apply(Items.first(as), p) <> Format.applies(Format.embed{o, op, cl, i}, pr, List.tail(&2, Octets.Bytes(), as))
     case Format.code{base, r} q:
       Format.applies(base, q, as)
-    case Format.module{} Nil{}:
-      []
-    case Format.module{} Con{p, pr}:
-      Plain.apply(Items.first(as), p) <> Format.applies(Format.module{}, pr, List.tail(&2, Octets.Bytes(), as))
+# bend-lint: expect-end bend-lint-rules/performance/deep_call_in_fork@information
 
 # the patches from as to bs, applied to as, give bs, in every format
 law Format.apply_diffs:
@@ -1303,47 +1588,38 @@ law Format.apply_diffs:
   for +as: List<&2, Octets.Bytes()>
   {Format.applies(f, Format.diffs(f, bs, as), as) == bs: List<&2, Octets.Bytes()>}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 def Format.apply_diffs(f, bs, as):
   match f bs:
-    case Format.lines{} Nil{}:
+    case Format.leaf{k} Nil{}:
       {==}
-    case Format.lines{} Con{+b, br}:
+    case Format.leaf{+k} Con{b, br}:
       Lists.List.cons_eq(
         Octets.Bytes(),
-        Plain.apply(Items.first(as), Plain.diff(Items.first(as), b)),
+        Plain.apply(Items.first(as), Leaf.diff(k, Items.first(as), b)),
         b,
-        Format.applies(Format.lines{}, Format.diffs(Format.lines{}, br, List.tail(&2, Octets.Bytes(), as)), List.tail(&2, Octets.Bytes(), as)),
+        Format.applies(
+          Format.leaf{k},
+          Format.diffs(Format.leaf{k}, br, List.tail(&2, Octets.Bytes(), as)),
+          List.tail(&2, Octets.Bytes(), as)
+        ),
         br,
-        Plain.apply_diff(Items.first(as), b),
-        Format.apply_diffs(Format.lines{}, br, List.tail(&2, Octets.Bytes(), as))
+        Leaf.apply_diff(k, Items.first(as), b),
+        Format.apply_diffs(Format.leaf{k}, br, List.tail(&2, Octets.Bytes(), as))
       )
-    case Format.whole{} Nil{}:
-      {==}
-    case Format.whole{} Con{b, br}:
-      %Equal.sym(
-        List<&2, Octets.Bytes()>,
-        Format.applies(Format.whole{}, Format.diffs(Format.whole{}, br, List.tail(&2, Octets.Bytes(), as)), List.tail(&2, Octets.Bytes(), as)),
-        br,
-        Format.apply_diffs(Format.whole{}, br, List.tail(&2, Octets.Bytes(), as))
-      ): {b <> _ == b <> br: List<&2, Octets.Bytes()>}
-      {==}
     case Format.embed{o, op, cl, i} Nil{}:
       {==}
     case Format.embed{+o, +op, +cl, +i} Con{+b, br}:
       +pa = Embed.split(op, cl, Items.first(as))
       +pb = Embed.split(op, cl, b)
-      +ta = Pieces.texts(pa)
-      +ra = Pieces.regions(pa)
-      +tb = Pieces.texts(pb)
-      +rb = Pieces.regions(pb)
-      +rest = List.tail(&2, Octets.Bytes(), as)
+      ta = Pieces.texts(pa)
+      ra = Pieces.regions(pa)
+      tb = Pieces.texts(pb)
+      rb = Pieces.regions(pb)
+      rest = List.tail(&2, Octets.Bytes(), as)
       Lists.List.cons_eq(
         Octets.Bytes(),
-        Embed.join(
-          op,
-          cl,
-          Pieces.build(Pieces.shape(pb), Format.applies(o, Format.diffs(o, tb, ta), ta), Format.applies(i, Format.diffs(i, rb, ra), ra))
-        ),
+        Embed.join(op, cl, Pieces.build(Pieces.shape(pb), Format.applies(o, Format.diffs(o, tb, ta), ta), Format.applies(i, Format.diffs(i, rb, ra), ra))),
         b,
         Format.applies(Format.embed{o, op, cl, i}, Format.diffs(Format.embed{o, op, cl, i}, br, rest), rest),
         br,
@@ -1354,20 +1630,10 @@ def Format.apply_diffs(f, bs, as):
         %Equal.sym(List<&2, Piece>, Pieces.build(Pieces.shape(pb), tb, rb), pb, Pieces.build_of(pb)):
           {Embed.join(op, cl, _) == b: Octets.Bytes()}
         Embed.join_split(op, cl, b),
-        Format.apply_diffs(Format.embed{o, op, cl, i}, br, rest)
-      )
+        Format.apply_diffs(Format.embed{o, op, cl, i}, br, rest))
     case Format.code{base, r} c:
       Format.apply_diffs(base, c, as)
-    case Format.module{} Nil{}:
-      {==}
-    case Format.module{} Con{b, br}:
-      %Equal.sym(
-        List<&2, Octets.Bytes()>,
-        Format.applies(Format.module{}, Format.diffs(Format.module{}, br, List.tail(&2, Octets.Bytes(), as)), List.tail(&2, Octets.Bytes(), as)),
-        br,
-        Format.apply_diffs(Format.module{}, br, List.tail(&2, Octets.Bytes(), as))
-      ): {b <> _ == b <> br: List<&2, Octets.Bytes()>}
-      {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Nested merges
 # -------------
@@ -1385,34 +1651,41 @@ def Shape.same(a: Shape, b: Shape) -> Bool:
       False{}
 
 # the shape of the pieces of b, between the markers op and cl
-def Embed.shape(+op: Octets.Bytes(), +cl: Octets.Bytes(), +b: Octets.Bytes()) -> List<&2, Shape>:
+def Embed.shape(op: Octets.Bytes(), cl: Octets.Bytes(), b: Octets.Bytes()) -> List<&2, Shape>:
   Pieces.shape(Embed.split(op, cl, b))
 
 # what to take when both changes differ, in the format f
-def Format.decide.both(f: Format, +b: Octets.Bytes(), +x: Octets.Bytes(), +y: Octets.Bytes()) -> Decision:
+def Format.decide.both(
+  f: Format,
+  b: Octets.Bytes(),
+  x: Octets.Bytes(),
+  y: Octets.Bytes()
+) -> Decision:
   match f:
-    case Format.lines{}:
-      Decision.both{}
-    case Format.whole{}:
+    case Format.leaf{k}:
       Decision.both{}
     case Format.embed{o, +op, +cl, i}:
       +sb = Embed.shape(op, cl, b)
       Bool.pick(
         Decision,
-        Bool.and(
-          Lists.List.same(~Shape, ~Shape.same, sb, Embed.shape(op, cl, x)),
-          Lists.List.same(~Shape, ~Shape.same, sb, Embed.shape(op, cl, y))
+        List.all.if(
+          u => Lists.List.same(~Shape, ~Shape.same, sb, Embed.shape(op, cl, y)),
+          Lists.List.same(~Shape, ~Shape.same, sb, Embed.shape(op, cl, x))
         ),
         Decision.pieces{},
         Decision.both{}
       )
     case Format.code{base, r}:
       Format.decide.both(base, b, x, y)
-    case Format.module{}:
-      Decision.both{}
 
 # the decision d, in the format f
-def Format.decide.on(d: Decision, f: Format, +b: Octets.Bytes(), +x: Octets.Bytes(), +y: Octets.Bytes()) -> Decision:
+def Format.decide.on(
+  d: Decision,
+  f: Format,
+  b: Octets.Bytes(),
+  x: Octets.Bytes(),
+  y: Octets.Bytes()
+) -> Decision:
   match d:
     case Decision.both{}:
       Format.decide.both(f, b, x, y)
@@ -1420,7 +1693,12 @@ def Format.decide.on(d: Decision, f: Format, +b: Octets.Bytes(), +x: Octets.Byte
       e
 
 # what a merge of x and y, two changes of b, takes in the format f
-def Format.decide(f: Format, +b: Octets.Bytes(), +x: Octets.Bytes(), +y: Octets.Bytes()) -> Decision:
+def Format.decide(
+  f: Format,
+  +b: Octets.Bytes(),
+  +x: Octets.Bytes(),
+  +y: Octets.Bytes()
+) -> Decision:
   Format.decide.on(Merge.decide(b, x, y), f, b, x, y)
 
 # a merge to make: the base, the two changes, and what to take
@@ -1432,12 +1710,22 @@ def Job.of(f: Format, +b: Octets.Bytes(), +x: Octets.Bytes(), +y: Octets.Bytes()
   Job{b, x, y, Format.decide(f, b, x, y)}
 
 # the jobs of the items bs, xs and ys, place by place, in the format f
-def Jobs.of(bs: List<&2, Octets.Bytes()>, +f: Format, +xs: List<&2, Octets.Bytes()>, +ys: List<&2, Octets.Bytes()>) -> List<&2, Job>:
+def Jobs.of(
+  bs: List<&2, Octets.Bytes()>,
+  +f: Format,
+  +xs: List<&2, Octets.Bytes()>,
+  +ys: List<&2, Octets.Bytes()>
+) -> List<&2, Job>:
   match bs:
     case Nil{}:
       []
     case Con{b, br}:
-      Job.of(f, b, Items.first(xs), Items.first(ys))
+      Job.of(
+        f,
+        b,
+        Items.first(xs),
+        Items.first(ys)
+      )
         <> Jobs.of(br, f, List.tail(&2, Octets.Bytes(), xs), List.tail(&2, Octets.Bytes(), ys))
 
 # the change that the decision d takes of x and y, a clash for both
@@ -1458,10 +1746,34 @@ def Merge.plain(d: Decision, +b: Octets.Bytes(), +x: Octets.Bytes(), +y: Octets.
     case Decision.ours{}:
       Merged.clean{x}
     case e:
-      Plain.merge.text(Bool.and(Plain.is_text(b), Bool.and(Plain.is_text(x), Plain.is_text(y))), b, x, y)
+      Plain.merge.text(
+        Bool.and(Plain.is_text(b), Bool.and(Plain.is_text(x), Plain.is_text(y))),
+        b,
+        x,
+        y
+      )
+
+# the merge of x and y, two changes of b, in the leaf k, with the decision d
+def Leaf.merge(
+  k: Leaf,
+  d: Decision,
+  b: Octets.Bytes(),
+  x: Octets.Bytes(),
+  y: Octets.Bytes()
+) -> Merged:
+  match k:
+    case Leaf.lines{}:
+      Merge.plain(d, b, x, y)
+    case Leaf.whole{}:
+      Merge.taken(d, x, y)
+    case Leaf.module{}:
+      Merge.taken(d, x, y)
 
 # the bytes x put before the bytes of a clean list m
-def Merged.put(x: Octets.Bytes(), m: Maybe<&2, List<&2, Octets.Bytes()>>) -> Maybe<&2, List<&2, Octets.Bytes()>>:
+def Merged.put(
+  x: Octets.Bytes(),
+  m: Maybe<&2, List<&2, Octets.Bytes()>>
+) -> Maybe<&2, List<&2, Octets.Bytes()>>:
   match m:
     case None{}:
       None{}
@@ -1480,8 +1792,8 @@ def Merged.all(ms: List<&2, Merged>) -> Maybe<&2, List<&2, Octets.Bytes()>>:
 
 # the embedding of the shape sh, with the merged texts mt and regions mr
 def Merge.pieces(
-  +op: Octets.Bytes(),
-  +cl: Octets.Bytes(),
+  op: Octets.Bytes(),
+  cl: Octets.Bytes(),
   sh: List<&2, Shape>,
   mt: Maybe<&2, List<&2, Octets.Bytes()>>,
   mr: Maybe<&2, List<&2, Octets.Bytes()>>
@@ -1500,48 +1812,134 @@ def Merged.head(ms: List<&2, Merged>) -> Merged:
     case Con{m, r}:
       m
 
+# bend-lint: expect-begin bend-lint-rules/performance/deep_call_in_fork@information -- these walks cover the few pieces of one item; a tail walk would need a reverse that Pieces.build_of would then undo
 # the merges of the jobs js, in the format f. An embedding of one shape merges
 # its texts in the outer format and its regions in the inner one; of other
 # shapes, it merges as the outer format.
 def Format.merges(f: Format, js: List<&2, Job>) -> List<&2, Merged>:
   match f js:
-    case Format.lines{} Nil{}:
+    case Format.leaf{k} Nil{}:
       []
-    case Format.lines{} Con{Job{b, x, y, d}, jr}:
-      Merge.plain(d, b, x, y) <> Format.merges(Format.lines{}, jr)
-    case Format.whole{} Nil{}:
-      []
-    case Format.whole{} Con{Job{b, x, y, d}, jr}:
-      Merge.taken(d, x, y) <> Format.merges(Format.whole{}, jr)
+    case Format.leaf{+k} Con{Job{b, x, y, d}, jr}:
+      Leaf.merge(k, d, b, x, y) <> Format.merges(Format.leaf{k}, jr)
     case Format.embed{o, op, cl, i} Nil{}:
       []
     case Format.embed{+o, +op, +cl, +i} Con{Job{b, x, y, Decision.pieces{}}, jr}:
       +pb = Embed.split(op, cl, b)
       +px = Embed.split(op, cl, x)
       +py = Embed.split(op, cl, y)
-      Merge.pieces(
-        op,
-        cl,
-        Pieces.shape(pb),
-        Merged.all(Format.merges(o, Jobs.of(Pieces.texts(pb), o, Pieces.texts(px), Pieces.texts(py)))),
-        Merged.all(Format.merges(i, Jobs.of(Pieces.regions(pb), i, Pieces.regions(px), Pieces.regions(py))))
-      )
-        <> Format.merges(Format.embed{o, op, cl, i}, jr)
+      jt = Jobs.of(Pieces.texts(pb), o, Pieces.texts(px), Pieces.texts(py))
+      jr2 = Jobs.of(Pieces.regions(pb), i, Pieces.regions(px), Pieces.regions(py))
+      mt mr rest = Format.merges(
+        o,
+        jt
+      ) Format.merges(i, jr2) Format.merges(Format.embed{o, op, cl, i}, jr)
+      Merge.pieces(op, cl, Pieces.shape(pb), Merged.all(mt), Merged.all(mr)) <> rest
     case Format.embed{+o, +op, +cl, +i} Con{Job{+b, +x, +y, Decision.both{}}, jr}:
-      Merged.head(Format.merges(o, [Job.of(o, b, x, y)])) <> Format.merges(Format.embed{o, op, cl, i}, jr)
+      m rest = Format.merges(o, [Job.of(o, b, x, y)]) Format.merges(Format.embed{o, op, cl, i}, jr)
+      Merged.head(m) <> rest
     case Format.embed{+o, +op, +cl, +i} Con{Job{b, x, y, d}, jr}:
       Merge.taken(d, x, y) <> Format.merges(Format.embed{o, op, cl, i}, jr)
     case Format.code{base, r} q:
       Format.merges(base, q)
-    case Format.module{} Nil{}:
-      []
-    case Format.module{} Con{Job{b, x, y, d}, jr}:
-      Merge.taken(d, x, y) <> Format.merges(Format.module{}, jr)
+# bend-lint: expect-end bend-lint-rules/performance/deep_call_in_fork@information
 
 # the merge of x and y, two changes of b, in the format f
-def Format.merge(+f: Format, +b: Octets.Bytes(), +x: Octets.Bytes(), +y: Octets.Bytes()) -> Merged:
+def Format.merge(+f: Format, b: Octets.Bytes(), x: Octets.Bytes(), y: Octets.Bytes()) -> Merged:
   Merged.head(Format.merges(f, [Job.of(f, b, x, y)]))
 
+# a decision that takes z of the changes merges to z, by lines
+def Merge.plain_taken(
+  d: Decision,
+  -b: Octets.Bytes(),
+  -x: Octets.Bytes(),
+  -y: Octets.Bytes(),
+  -z: Octets.Bytes(),
+  h: {Decision.take(d, x, y) == Some{z}: Maybe<&2, Octets.Bytes()>}
+) -> {Merge.plain(d, b, x, y) == Merged.clean{z}: Merged}:
+  match d:
+    case Decision.theirs{}:
+      %Equal.sym(
+        Octets.Bytes(),
+        y,
+        z,
+        Maybes.Maybe.some_inj(Octets.Bytes(), y, z, h)
+      ): {Merged.clean{_} == Merged.clean{z}: Merged}
+      {==}
+    case Decision.ours{}:
+      %Equal.sym(
+        Octets.Bytes(),
+        x,
+        z,
+        Maybes.Maybe.some_inj(Octets.Bytes(), x, z, h)
+      ): {Merged.clean{_} == Merged.clean{z}: Merged}
+      {==}
+    case Decision.both{}:
+      Empty.absurd(
+        {Merge.plain(Decision.both{}, b, x, y) == Merged.clean{z}: Merged},
+        Maybes.Maybe.none_ne_some(Octets.Bytes(), z, h)
+      )
+    case Decision.pieces{}:
+      Empty.absurd(
+        {Merge.plain(Decision.pieces{}, b, x, y) == Merged.clean{z}: Merged},
+        Maybes.Maybe.none_ne_some(Octets.Bytes(), z, h)
+      )
+
+# a decision that takes z of the changes takes z
+def Merge.taken_taken(
+  d: Decision,
+  -x: Octets.Bytes(),
+  -y: Octets.Bytes(),
+  -z: Octets.Bytes(),
+  h: {Decision.take(d, x, y) == Some{z}: Maybe<&2, Octets.Bytes()>}
+) -> {Merge.taken(d, x, y) == Merged.clean{z}: Merged}:
+  match d:
+    case Decision.theirs{}:
+      %Equal.sym(
+        Octets.Bytes(),
+        y,
+        z,
+        Maybes.Maybe.some_inj(Octets.Bytes(), y, z, h)
+      ): {Merged.clean{_} == Merged.clean{z}: Merged}
+      {==}
+    case Decision.ours{}:
+      %Equal.sym(
+        Octets.Bytes(),
+        x,
+        z,
+        Maybes.Maybe.some_inj(Octets.Bytes(), x, z, h)
+      ): {Merged.clean{_} == Merged.clean{z}: Merged}
+      {==}
+    case Decision.both{}:
+      Empty.absurd(
+        {Merge.taken(Decision.both{}, x, y) == Merged.clean{z}: Merged},
+        Maybes.Maybe.none_ne_some(Octets.Bytes(), z, h)
+      )
+    case Decision.pieces{}:
+      Empty.absurd(
+        {Merge.taken(Decision.pieces{}, x, y) == Merged.clean{z}: Merged},
+        Maybes.Maybe.none_ne_some(Octets.Bytes(), z, h)
+      )
+
+# a decision that takes z of the changes merges to z, in every leaf
+def Leaf.merge_taken(
+  k: Leaf,
+  -b: Octets.Bytes(),
+  -x: Octets.Bytes(),
+  -y: Octets.Bytes(),
+  -z: Octets.Bytes(),
+  d: Decision,
+  h: {Decision.take(d, x, y) == Some{z}: Maybe<&2, Octets.Bytes()>}
+) -> {Leaf.merge(k, d, b, x, y) == Merged.clean{z}: Merged}:
+  match k:
+    case Leaf.lines{}:
+      Merge.plain_taken(d, b, x, y, z, h)
+    case Leaf.whole{}:
+      Merge.taken_taken(d, x, y, z, h)
+    case Leaf.module{}:
+      Merge.taken_taken(d, x, y, z, h)
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a job whose decision takes z of its changes merges to z, in every format
 def Format.merges_taken(
   f: Format,
@@ -1553,72 +1951,56 @@ def Format.merges_taken(
   h: {Decision.take(d, x, y) == Some{z}: Maybe<&2, Octets.Bytes()>}
 ) -> {Format.merges(f, [Job{b, x, y, d}]) == [Merged.clean{z}]: List<&2, Merged>}:
   match f d:
-    case Format.lines{} Decision.theirs{}:
-      %Equal.sym(Octets.Bytes(), y, z, Maybes.Maybe.some_inj(Octets.Bytes(), y, z, h)): {[Merged.clean{_}] == [Merged.clean{z}]: List<&2, Merged>}
-      {==}
-    case Format.lines{} Decision.ours{}:
-      %Equal.sym(Octets.Bytes(), x, z, Maybes.Maybe.some_inj(Octets.Bytes(), x, z, h)): {[Merged.clean{_}] == [Merged.clean{z}]: List<&2, Merged>}
-      {==}
-    case Format.lines{} Decision.both{}:
-      Empty.absurd(
-        {Format.merges(Format.lines{}, [Job{b, x, y, Decision.both{}}]) == [Merged.clean{z}]: List<&2, Merged>},
-        Maybes.Maybe.none_ne_some(Octets.Bytes(), z, h)
-      )
-    case Format.lines{} Decision.pieces{}:
-      Empty.absurd(
-        {Format.merges(Format.lines{}, [Job{b, x, y, Decision.pieces{}}]) == [Merged.clean{z}]: List<&2, Merged>},
-        Maybes.Maybe.none_ne_some(Octets.Bytes(), z, h)
-      )
-    case Format.whole{} Decision.theirs{}:
-      %Equal.sym(Octets.Bytes(), y, z, Maybes.Maybe.some_inj(Octets.Bytes(), y, z, h)): {[Merged.clean{_}] == [Merged.clean{z}]: List<&2, Merged>}
-      {==}
-    case Format.whole{} Decision.ours{}:
-      %Equal.sym(Octets.Bytes(), x, z, Maybes.Maybe.some_inj(Octets.Bytes(), x, z, h)): {[Merged.clean{_}] == [Merged.clean{z}]: List<&2, Merged>}
-      {==}
-    case Format.whole{} Decision.both{}:
-      Empty.absurd(
-        {Format.merges(Format.whole{}, [Job{b, x, y, Decision.both{}}]) == [Merged.clean{z}]: List<&2, Merged>},
-        Maybes.Maybe.none_ne_some(Octets.Bytes(), z, h)
-      )
-    case Format.whole{} Decision.pieces{}:
-      Empty.absurd(
-        {Format.merges(Format.whole{}, [Job{b, x, y, Decision.pieces{}}]) == [Merged.clean{z}]: List<&2, Merged>},
-        Maybes.Maybe.none_ne_some(Octets.Bytes(), z, h)
+    case Format.leaf{k} e:
+      Equal.cong(
+        Merged,
+        List<&2, Merged>,
+        m => [m],
+        Leaf.merge(k, e, b, x, y),
+        Merged.clean{z},
+        Leaf.merge_taken(k, b, x, y, z, e, h)
       )
     case Format.embed{o, op, cl, i} Decision.theirs{}:
-      %Equal.sym(Octets.Bytes(), y, z, Maybes.Maybe.some_inj(Octets.Bytes(), y, z, h)): {[Merged.clean{_}] == [Merged.clean{z}]: List<&2, Merged>}
+      %Equal.sym(
+        Octets.Bytes(),
+        y,
+        z,
+        Maybes.Maybe.some_inj(Octets.Bytes(), y, z, h)
+      ): {[Merged.clean{_}] == [Merged.clean{z}]: List<&2, Merged>}
       {==}
     case Format.embed{o, op, cl, i} Decision.ours{}:
-      %Equal.sym(Octets.Bytes(), x, z, Maybes.Maybe.some_inj(Octets.Bytes(), x, z, h)): {[Merged.clean{_}] == [Merged.clean{z}]: List<&2, Merged>}
+      %Equal.sym(
+        Octets.Bytes(),
+        x,
+        z,
+        Maybes.Maybe.some_inj(Octets.Bytes(), x, z, h)
+      ): {[Merged.clean{_}] == [Merged.clean{z}]: List<&2, Merged>}
       {==}
     case Format.embed{o, op, cl, i} Decision.both{}:
       Empty.absurd(
-        {Format.merges(Format.embed{o, op, cl, i}, [Job{b, x, y, Decision.both{}}]) == [Merged.clean{z}]: List<&2, Merged>},
+        {
+          Format.merges(
+            Format.embed{o, op, cl, i},
+            [Job{b, x, y, Decision.both{}}]
+          )
+            == [Merged.clean{z}]: List<&2, Merged>
+        },
         Maybes.Maybe.none_ne_some(Octets.Bytes(), z, h)
       )
     case Format.embed{o, op, cl, i} Decision.pieces{}:
       Empty.absurd(
-        {Format.merges(Format.embed{o, op, cl, i}, [Job{b, x, y, Decision.pieces{}}]) == [Merged.clean{z}]: List<&2, Merged>},
+        {
+          Format.merges(
+            Format.embed{o, op, cl, i},
+            [Job{b, x, y, Decision.pieces{}}]
+          )
+            == [Merged.clean{z}]: List<&2, Merged>
+        },
         Maybes.Maybe.none_ne_some(Octets.Bytes(), z, h)
       )
     case Format.code{base, r} e:
       Format.merges_taken(base, b, x, y, z, e, h)
-    case Format.module{} Decision.theirs{}:
-      %Equal.sym(Octets.Bytes(), y, z, Maybes.Maybe.some_inj(Octets.Bytes(), y, z, h)): {[Merged.clean{_}] == [Merged.clean{z}]: List<&2, Merged>}
-      {==}
-    case Format.module{} Decision.ours{}:
-      %Equal.sym(Octets.Bytes(), x, z, Maybes.Maybe.some_inj(Octets.Bytes(), x, z, h)): {[Merged.clean{_}] == [Merged.clean{z}]: List<&2, Merged>}
-      {==}
-    case Format.module{} Decision.both{}:
-      Empty.absurd(
-        {Format.merges(Format.module{}, [Job{b, x, y, Decision.both{}}]) == [Merged.clean{z}]: List<&2, Merged>},
-        Maybes.Maybe.none_ne_some(Octets.Bytes(), z, h)
-      )
-    case Format.module{} Decision.pieces{}:
-      Empty.absurd(
-        {Format.merges(Format.module{}, [Job{b, x, y, Decision.pieces{}}]) == [Merged.clean{z}]: List<&2, Merged>},
-        Maybes.Maybe.none_ne_some(Octets.Bytes(), z, h)
-      )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # a decision that takes z of the changes takes it in every format
 def Format.decide.on_taken(
@@ -1637,7 +2019,14 @@ def Format.decide.on_taken(
       h
     case Decision.both{}:
       Empty.absurd(
-        {Decision.take(Format.decide.on(Decision.both{}, f, b, x, y), x, y) == Some{z}: Maybe<&2, Octets.Bytes()>},
+        {
+          Decision.take(
+            Format.decide.on(Decision.both{}, f, b, x, y),
+            x,
+            y
+          )
+            == Some{z}: Maybe<&2, Octets.Bytes()>
+        },
         Maybes.Maybe.none_ne_some(Octets.Bytes(), z, h)
       )
     case Decision.pieces{}:
@@ -1706,16 +2095,14 @@ def Format.merge_same(f, b, x):
 # reader: an embedding shows the changes of its outer format, over all of it
 def Format.changes(f: Format, +a: Octets.Bytes(), +b: Octets.Bytes()) -> List<&2, Change>:
   match f:
-    case Format.lines{}:
+    case Format.leaf{Leaf.lines{}}:
       Plain.changes(a, b)
-    case Format.whole{}:
+    case Format.leaf{k}:
       Plain.changes.whole(Octets.Bytes.is_eq(a, b), a, b)
     case Format.embed{o, op, cl, i}:
       Format.changes(o, a, b)
     case Format.code{base, r}:
       Format.changes(base, a, b)
-    case Format.module{}:
-      Plain.changes.whole(Octets.Bytes.is_eq(a, b), a, b)
 
 # the edges of each of the items bs, by the rule r
 def Rule.edges.of(bs: List<&2, Octets.Bytes()>, +r: Rule) -> List<&2, Edge>:
@@ -1727,29 +2114,45 @@ def Rule.edges.of(bs: List<&2, Octets.Bytes()>, +r: Rule) -> List<&2, Edge>:
 
 # the texts (texts) or the regions of each of the items bs, between the
 # markers op and cl
-def Embed.parts(bs: List<&2, Octets.Bytes()>, texts: Bool, +op: Octets.Bytes(), +cl: Octets.Bytes()) -> List<&2, Octets.Bytes()>:
+def Embed.parts(
+  bs: List<&2, Octets.Bytes()>,
+  texts: Bool,
+  +op: Octets.Bytes(),
+  +cl: Octets.Bytes()
+) -> List<&2, Octets.Bytes()>:
   match bs texts:
     case Nil{} t:
       []
     case Con{b, br} True{}:
-      List.append(&2, Octets.Bytes(), Pieces.texts(Embed.split(op, cl, b)), Embed.parts(br, True{}, op, cl))
+      List.append(
+        &2,
+        Octets.Bytes(),
+        Pieces.texts(Embed.split(op, cl, b)),
+        Embed.parts(br, True{}, op, cl)
+      )
     case Con{b, br} False{}:
-      List.append(&2, Octets.Bytes(), Pieces.regions(Embed.split(op, cl, b)), Embed.parts(br, False{}, op, cl))
+      List.append(
+        &2,
+        Octets.Bytes(),
+        Pieces.regions(Embed.split(op, cl, b)),
+        Embed.parts(br, False{}, op, cl)
+      )
 
+# bend-lint: expect-begin bend-lint-rules/performance/deep_call_in_fork@information -- these walks cover the few pieces of one item; a tail walk would need a reverse that Pieces.build_of would then undo
 # what the items bs use, in the format f: the edges of each language, in the
 # parts that it reads
 def Format.uses(f: Format, +bs: List<&2, Octets.Bytes()>) -> List<&2, Edge>:
   match f:
-    case Format.lines{}:
-      []
-    case Format.whole{}:
+    case Format.leaf{k}:
       []
     case Format.embed{o, +op, +cl, i}:
-      List.append(&2, Edge, Format.uses(o, Embed.parts(bs, True{}, op, cl)), Format.uses(i, Embed.parts(bs, False{}, op, cl)))
+      tp = Embed.parts(bs, True{}, op, cl)
+      rp = Embed.parts(bs, False{}, op, cl)
+      ts rs = Format.uses(o, tp) Format.uses(i, rp)
+      List.append(&2, Edge, ts, rs)
     case Format.code{base, r}:
       List.append(&2, Edge, Rule.edges.of(bs, r), Format.uses(base, bs))
-    case Format.module{}:
-      []
+# bend-lint: expect-end bend-lint-rules/performance/deep_call_in_fork@information
 
 # Known formats
 # -------------
@@ -1757,7 +2160,7 @@ def Format.uses(f: Format, +bs: List<&2, Octets.Bytes()>) -> List<&2, Edge>:
 # a language whose imports name a target after start, up to close
 def Format.imports(start: String, open: String, close: String, alias: String) -> Format:
   Format.code{
-    Format.lines{},
+    Format.leaf{Leaf.lines{}},
     Rule{
       Octets.Bytes.of_text(start),
       Octets.Bytes.of_text(open),
@@ -1778,7 +2181,7 @@ def Format.known() -> List<&2, Known>:
   +css = Format.imports("@import ", "\"", "\"", "")
   +js = Format.imports("import ", "from \"", "\"", "")
   +c: Format = Format.code{
-    Format.lines{},
+    Format.leaf{Leaf.lines{}},
     Rule{
       Octets.Bytes.of_text("#include"),
       Octets.Bytes.of_text("\""),
@@ -1810,8 +2213,22 @@ def Format.known() -> List<&2, Known>:
     Known{".css", css},
     Known{".html", html},
     Known{".htm", html},
-    Known{".module", Format.module{}},
-    Known{".md", Format.embed{Format.lines{}, Octets.Bytes.of_text("```"), Octets.Bytes.of_text("```"), Format.lines{}}}
+    Known{".module", Format.leaf{Leaf.module{}}},
+    Known{".png", Format.leaf{Leaf.whole{}}},
+    Known{".jpg", Format.leaf{Leaf.whole{}}},
+    Known{".gif", Format.leaf{Leaf.whole{}}},
+    Known{".pdf", Format.leaf{Leaf.whole{}}},
+    Known{".zip", Format.leaf{Leaf.whole{}}},
+    Known{".wasm", Format.leaf{Leaf.whole{}}},
+    Known{
+      ".md",
+      Format.embed{
+        Format.leaf{Leaf.lines{}},
+        Octets.Bytes.of_text("```"),
+        Octets.Bytes.of_text("```"),
+        Format.leaf{Leaf.lines{}}
+      }
+    }
   ]
 
 # the format of the first suffix of ks that the path p ends with: lines when
@@ -1819,7 +2236,7 @@ def Format.known() -> List<&2, Known>:
 def Format.find(ks: List<&2, Known>, +p: String) -> Format:
   match ks:
     case Nil{}:
-      Format.lines{}
+      Format.leaf{Leaf.lines{}}
     case Con{Known{k, f}, r}:
       Bools.Bool.when(Format, String.ends_with(p, k), u => f, u => Format.find(r, p))
 

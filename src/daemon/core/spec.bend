@@ -308,16 +308,17 @@ type LogEntry is Data:
 type Touch is Data:
   Touch{version: Id, changed: Resources.Name, branch: String, used: Resources.Name}
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality keeps each and as one value for the proofs to split on
 # a and b are the same touch
 def Touch.same(a: Touch, b: Touch) -> Bool:
   match a b:
     case Touch{v1, c1, b1, u1} Touch{v2, c2, b2, u2}:
       Bool.and(
         Id.same(v1, v2),
-        Bool.and(Resources.Name.same(c1, c2), Bool.and(String.eq(b1, b2), Resources.Name.same(u1, u2)))
+        Bool.and(
+          Resources.Name.same(c1, c2),
+          Bool.and(String.eq(b1, b2), Resources.Name.same(u1, u2))
+        )
       )
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the branch of t
 def Touch.branch(t: Touch) -> String:
@@ -508,28 +509,63 @@ law Node.impact:
 
 # Submodules
 # ----------
-# A submodule is a resource whose bytes point to a version: its writer and
-# its request, on two lines (Format.module). A reader goes through it to the
-# content at Point.at of that version, and a merge of two pointers takes the
-# newer one when one came from the other (Node.forward).
+# A submodule is a resource whose bytes point to a child (Format.module): the
+# space of the child's resources, the branch that it follows, and its
+# version, on lines of their own. Never a node: any node that has the version
+# can serve it. A reader goes through it to the content at Point.at of that
+# version, and a merge of two pointers takes the newer one when one came from
+# the other (Node.forward).
 
-# the bytes of a pointer to the version i
-def Id.show(i: Id) -> Octets.Bytes():
-  match i:
-    case Id{w, r}:
-      Octets.Bytes.of_text(String.append(w, SCon{Chr{10}, r}))
+# a pointer to a child
+type Pointer is Data:
+  Pointer{space: String, branch: String, version: Id}
 
-# the version of a pointer's text, cut at its first line
-def Id.read.cut(c: Maybe<&2, Texts.Cut>) -> Maybe<&2, Id>:
+# the version of the child that p points to
+def Pointer.version(p: Pointer) -> Id:
+  match p:
+    case Pointer{sp, b, v}:
+      v
+
+# the bytes of the pointer p
+def Pointer.show(p: Pointer) -> Octets.Bytes():
+  match p:
+    case Pointer{sp, b, Id{w, r}}:
+      Octets.Bytes.of_text(
+        String.append(
+          sp,
+          SCon{Chr{10}, String.append(b, SCon{Chr{10}, String.append(w, SCon{Chr{10}, r})})}
+        )
+      )
+
+# the pointer of the space sp and the branch b, once the text after them is
+# cut at its first line (c)
+def Pointer.read.last(sp: String, b: String, c: Maybe<&2, Texts.Cut>) -> Maybe<&2, Pointer>:
   match c:
     case None{}:
       None{}
     case Some{Texts.Cut{w, r}}:
-      Some{Id{w, r}}
+      Some{Pointer{sp, b, Id{w, r}}}
 
-# the version that the bytes b point to
-def Id.read(b: Octets.Bytes()) -> Maybe<&2, Id>:
-  Id.read.cut(Texts.Text.cut(Octets.Bytes.to_text(b), 10))
+# the pointer of the space sp, once the text after it is cut at its first
+# line (c)
+def Pointer.read.rest(sp: String, c: Maybe<&2, Texts.Cut>) -> Maybe<&2, Pointer>:
+  match c:
+    case None{}:
+      None{}
+    case Some{Texts.Cut{b, t}}:
+      Pointer.read.last(sp, b, Texts.Text.cut(t, 10))
+
+# the pointer of a text, once it is cut at its first line (c)
+def Pointer.read.cut(c: Maybe<&2, Texts.Cut>) -> Maybe<&2, Pointer>:
+  match c:
+    case None{}:
+      None{}
+    case Some{Texts.Cut{sp, t}}:
+      Pointer.read.rest(sp, Texts.Text.cut(t, 10))
+
+# the pointer in the bytes b
+def Pointer.read(b: Octets.Bytes()) -> Maybe<&2, Pointer>:
+  Pointer.read.cut(Texts.Text.cut(Octets.Bytes.to_text(b), 10))
 
 # Touches
 # -------
@@ -692,14 +728,24 @@ law Node.touches_exactly:
   for b: String
   for u: Resources.Name
   {
-    Node.touches(s, Touch{v, c, b, u})
+    Node.touches(
+      s,
+      Touch{v, c, b, u}
+    )
       == Bool.and(
         Shared.List.has(~String, ~String.eq, Branch.names(Node.branches(s)), b),
         Bool.and(
           Shared.List.has(
             ~Id,
             ~Id.same,
-            Shared.List.flat(~String, ~Id, ~State(), ~(t => x => Node.chain(t, Chain.branch{x})), Branch.names(Node.branches(s)), s),
+            Shared.List.flat(
+              ~String,
+              ~Id,
+              ~State(),
+              ~(t => x => Node.chain(t, Chain.branch{x})),
+              Branch.names(Node.branches(s)),
+              s
+            ),
             v
           ),
           Bool.and(
@@ -726,7 +772,12 @@ law Node.affects_exactly:
   for b: String
   for t: Touch
   {
-    Shared.List.has(~Touch, ~Touch.same, Node.affects(s, b), t)
+    Shared.List.has(
+      ~Touch,
+      ~Touch.same,
+      Node.affects(s, b),
+      t
+    )
       == Bool.and(String.eq(Touch.branch(t), b), Node.touches(s, t)): Bool
   }
 
@@ -737,7 +788,12 @@ law Node.impact_exactly:
   for p: Point
   for t: Touch
   {
-    Shared.List.has(~Touch, ~Touch.same, Node.impact(s, p), t)
+    Shared.List.has(
+      ~Touch,
+      ~Touch.same,
+      Node.impact(s, p),
+      t
+    )
       == Bool.and(
         Bool.and(
           Maybe.is_some(&2, Id, Node.version(s, p)),
@@ -754,7 +810,15 @@ law Node.uses_import:
   for u: Resources.Name
   for c: Resources.Name
   {Shared.List.has(~Resources.Name, ~Resources.Name.same, Node.resources(s, b), u) == True{}: Bool}
-    -> {Shared.List.has(~Resources.Name, ~Resources.Name.same, Node.imports(s, b, u), c) == True{}: Bool}
+    -> {
+      Shared.List.has(
+        ~Resources.Name,
+        ~Resources.Name.same,
+        Node.imports(s, b, u),
+        c
+      )
+        == True{}: Bool
+    }
     -> {Node.uses(s, b, u, c) == True{}: Bool}
 
 # what a used resource uses is used
@@ -768,11 +832,21 @@ law Node.uses_through:
     -> {Node.uses(s, b, h, c) == True{}: Bool}
     -> {Node.uses(s, b, u, c) == True{}: Bool}
 
-# a pointer reads back as the version it points to
-law Id.read_show:
+# a pointer reads back from its bytes, when no part of it holds a line break
+law Pointer.read_show:
+  for sp: String
+  for b: String
   for w: String
   for r: String
-  {Texts.Text.has(w, 10) == False{}: Bool} -> {Id.read(Id.show(Id{w, r})) == Some{Id{w, r}}: Maybe<&2, Id>}
+  {Texts.Text.has(sp, 10) == False{}: Bool}
+    -> {Texts.Text.has(b, 10) == False{}: Bool}
+    -> {Texts.Text.has(w, 10) == False{}: Bool}
+    -> {
+      Pointer.read(
+        Pointer.show(Pointer{sp, b, Id{w, r}})
+      )
+        == Some{Pointer{sp, b, Id{w, r}}}: Maybe<&2, Pointer>
+    }
 
 # of two versions, the one that came from the other is newer
 law Node.forward_theirs:

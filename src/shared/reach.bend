@@ -52,17 +52,25 @@ def Reach.go_has(
   ~same: A -> A -> Bool,
   ~succ: V -> A -> List<&2, A>,
   f: Nat,
-  +xs: List<&2, A>,
-  +g: V,
-  +m: A
-) -> {Shared.List.has(~A, ~same, xs, m) == True{}: Bool} -> {Reach.go(~A, ~V, ~same, ~succ, f, xs, g, m) == True{}: Bool}:
+  xs: List<&2, A>,
+  g: V,
+  m: A
+) -> {
+  Shared.List.has(~A, ~same, xs, m) == True{}: Bool
+} -> {Reach.go(~A, ~V, ~same, ~succ, f, xs, g, m) == True{}: Bool}:
   match f:
     case 0n:
       h => h
     case 1n+e:
       h =>
         %Equal.sym(Bool, Shared.List.has(~A, ~same, xs, m), True{}, h):
-          {Bool.or(_, Reach.go(~A, ~V, ~same, ~succ, e, Reach.next(~A, ~V, ~succ, xs, g), g, m)) == True{}: Bool}
+          {
+            Bool.or(
+              _,
+              Reach.go(~A, ~V, ~same, ~succ, e, Reach.next(~A, ~V, ~succ, xs, g), g, m)
+            )
+              == True{}: Bool
+          }
         {==}
 
 # m is a successor of x, or a successor of one, at any depth
