@@ -4019,26 +4019,61 @@ def Fresh.claim(
   )
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality, or a proof, keeps each and/or as one value for the proofs to split on
-def Spec.Node.write_stale(n, s, e, b, name, base, x, v):
+def Owner.refuses(
+  n: String,
+  s: Spec.State(),
+  e: Spec.Envelope,
+  q: Spec.Ask,
+  v: Spec.Id
+) -> {
+  Spec.Node.owners(s, Spec.Ask.chain(q)) == [n]: List<&2, String>
+} -> {
+  Maybe.map(
+    &2,
+    Step,
+    Spec.Id,
+    k => Step.version(k),
+    Chain.cursor(s, Spec.Ask.chain(q))
+  )
+    == Some{v}: Maybe<&2, Spec.Id>
+} -> {
+  Shared.Trie.get(
+    Cells.Cell<Spec.Entry>,
+    s,
+    Spec.Slot.key(Spec.Slot.ask{Spec.Envelope.of(e)})
+  )
+    == None{}: Maybe<&2, Cells.Cell<Spec.Entry>>
+} -> {
+  Shared.Trie.get(
+    Cells.Cell<Spec.Entry>,
+    s,
+    Spec.Slot.key(Spec.Slot.vote{n, Spec.Ask.chain(q), v})
+  )
+    == None{}: Maybe<&2, Cells.Cell<Spec.Entry>>
+} -> {
+  Ask.fits(s, q, v) == False{}: Bool
+} -> {
+  Spec.Node.chain(
+    Spec.Node.ask(n, s, e, q),
+    Spec.Ask.chain(q)
+  )
+    == Spec.Node.chain(s, Spec.Ask.chain(q)): List<&2, Spec.Id>
+}:
   match e:
     case Spec.Envelope{r, w, +t}:
       +n = n
       +s = s
-      +b = b
-      name = name
-      base = base
-      x = x
+      +q = q
       +v = v
       +i = {Spec.Id{w, r}: Spec.Id}
-      +c = {Spec.Chain.branch{b}: Spec.Chain}
-      +q = {Spec.Ask.write{b, name, base, x}: Spec.Ask}
+      +c = Spec.Ask.chain(q)
       l = {Step{v, [n]}: Step}
       +ka = Spec.Slot.key(Spec.Slot.ask{i})
       kv = Spec.Slot.key(Spec.Slot.vote{n, c, v})
       +ea = {Cells.one{Spec.Entry.ask{i, t, q}}: Cells.Cell<Spec.Entry>}
       +ta = Shared.Trie.one(Cells.Cell<Spec.Entry>, ka, ea)
       s1 = Spec.Node.join(s, ta)
-      +h1 => +h2 => +h3 => +h4 => h5 =>
+      +h1 => +h2 => +h3 => +h4 => fits =>
         +ecur = Owner.cursor(Chain.cursor(s, c), n, v)(h1)(h2)
         +a = Cells.Cell.agrees_one(~Spec.Entry, ~Spec.Entry.same, s, ka, ea)(h3)
         +hc = Fresh.claim(s, ka, c, ea)({==})
@@ -4051,41 +4086,6 @@ def Spec.Node.write_stale(n, s, e, b, name, base, x, v):
           h4
         )
         +same = Stay.chain(s, ta, c, a, hc, l, ecur, Next.none(s1, c, v, n)(f4))
-        +fits = Equal.trans(
-          Bool,
-          Ask.fits(s, q, v),
-          Shared.Maybe.same(
-            ~Shared.Bytes(),
-            ~Shared.Bytes.is_eq,
-            Spec.Node.content(s, name, Spec.Point.head{b}),
-            Spec.Node.content_at(s, name, base)
-          ),
-          False{},
-          Equal.sym(
-            Bool,
-            Shared.Maybe.same(
-              ~Shared.Bytes(),
-              ~Shared.Bytes.is_eq,
-              Spec.Node.content(s, name, Spec.Point.head{b}),
-              Spec.Node.content_at(s, name, base)
-            ),
-            Ask.fits(s, q, v),
-            Equal.cong(
-              Maybe<&2, Spec.Id>,
-              Bool,
-              z => Shared.Maybe.same(
-                ~Shared.Bytes(),
-                ~Shared.Bytes.is_eq,
-                Res.of(s, name, z),
-                Res.of(s, name, base)
-              ),
-              Spec.Node.head(s, b),
-              Some{v},
-              h2
-            )
-          ),
-          h5
-        )
         +may = Node.may_vote(n, s, c, v, [n])
         +ask = Equal.trans(
           Spec.State(),
@@ -4166,6 +4166,59 @@ def Spec.Node.write_stale(n, s, e, b, name, base, x, v):
           same
         )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+def Spec.Node.write_stale(n, s, e, b, name, base, x, v):
+  h1 => +h2 => h3 => h4 => h5 =>
+    Owner.refuses(
+      n,
+      s,
+      e,
+      Spec.Ask.write{b, name, base, x},
+      v
+    )(
+      h1
+    )(
+      h2
+    )(
+      h3
+    )(
+      h4
+    )(
+      Equal.trans(
+        Bool,
+        Ask.fits(s, Spec.Ask.write{b, name, base, x}, v),
+        Shared.Maybe.same(
+          ~Shared.Bytes(),
+          ~Shared.Bytes.is_eq,
+          Spec.Node.content(s, name, Spec.Point.head{b}),
+          Spec.Node.content_at(s, name, base)
+        ),
+        False{},
+        Equal.sym(
+          Bool,
+          Shared.Maybe.same(
+            ~Shared.Bytes(),
+            ~Shared.Bytes.is_eq,
+            Spec.Node.content(s, name, Spec.Point.head{b}),
+            Spec.Node.content_at(s, name, base)
+          ),
+          Ask.fits(s, Spec.Ask.write{b, name, base, x}, v),
+          Equal.cong(
+            Maybe<&2, Spec.Id>,
+            Bool,
+            z => Shared.Maybe.same(
+              ~Shared.Bytes(),
+              ~Shared.Bytes.is_eq,
+              Res.of(s, name, z),
+              Res.of(s, name, base)
+            ),
+            Spec.Node.head(s, b),
+            Some{v},
+            h2
+          )
+        ),
+        h5
+      )
+    )
 
 # a list that holds a node holds it
 def Owners.has(n: String) -> {Shared.List.has(~String, ~String.eq, [n], n) == True{}: Bool}:
@@ -5299,3 +5352,196 @@ def Spec.Node.impact_exactly(s, p, t):
     )
   )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# Group cycles
+# ------------
+
+# the last version of a walk after the step k is the version of its last step
+def Chain.walk_last(
+  f: Nat,
+  +s: Spec.State(),
+  +c: Spec.Chain,
+  k: Step,
+  nx: Maybe<&2, Step>
+) -> {
+  List.last.go(
+    &2,
+    Spec.Id,
+    Chain.walk(f, s, c, nx),
+    Step.version(k)
+  )
+    == Step.version(Chain.last(f, s, c, k, nx)): Spec.Id
+}:
+  match f nx:
+    case 0n m:
+      {==}
+    case 1n+e None{}:
+      {==}
+    case 1n+e Some{Step{+j, +ms}}:
+      Chain.walk_last(e, s, c, Step{j, ms}, Chain.next(s, c, Step{j, ms}))
+
+# the last version of a chain from its first step r is the version of its
+# cursor
+def Chain.last_of(
+  +s: Spec.State(),
+  +c: Spec.Chain,
+  r: Maybe<&2, Step>
+) -> {
+  List.last(
+    &2,
+    Spec.Id,
+    Chain.from(s, c, r)
+  )
+    == Maybe.map(
+      &2,
+      Step,
+      Spec.Id,
+      k => Step.version(k),
+      Chain.cursor.of(s, c, r)
+    ): Maybe<&2, Spec.Id>
+}:
+  match r:
+    case None{}:
+      {==}
+    case Some{Step{+i, +ms}}:
+      Equal.cong(
+        Spec.Id,
+        Maybe<&2, Spec.Id>,
+        z => Some{z},
+        List.last.go(
+          &2,
+          Spec.Id,
+          Chain.walk(State.fuel(s), s, c, Chain.next(s, c, Step{i, ms})),
+          i
+        ),
+        Step.version(Chain.last(State.fuel(s), s, c, Step{i, ms}, Chain.next(s, c, Step{i, ms}))),
+        Chain.walk_last(State.fuel(s), s, c, Step{i, ms}, Chain.next(s, c, Step{i, ms}))
+      )
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# Group.loops_has at the first member m, once it is known to be the group h or
+# not (hit)
+def Group.loops_has.at(
+  hit: Bool,
+  s: Spec.State(),
+  g: String,
+  h: String,
+  m: Spec.Member,
+  r: List<&2, Spec.Member>,
+  em: {Spec.Member.same(m, Spec.Member.group{h}) == hit: Bool},
+  hm: {
+    List.any.if(
+      u => Shared.List.has(~Spec.Member, ~Spec.Member.same, r, Spec.Member.group{h}),
+      hit
+    )
+      == True{}: Bool
+  },
+  hl: {
+    List.any.if(
+      u => Spec.Node.is_inside(s, Spec.Member.group{g}, h),
+      String.eq(h, g)
+    )
+      == True{}: Bool
+  },
+  ih: {
+    Shared.List.has(~Spec.Member, ~Spec.Member.same, r, Spec.Member.group{h}) == True{}: Bool
+  } -> {Group.loops.any(s, g, r) == True{}: Bool}
+) -> {List.any.if(u => Group.loops.any(s, g, r), Group.loops(s, g, m)) == True{}: Bool}:
+  match hit:
+    case True{}:
+      %Equal.sym(
+        Spec.Member,
+        m,
+        Spec.Member.group{h},
+        Member.same_sound(m, Spec.Member.group{h})(em)
+      ):
+        {List.any.if(u => Group.loops.any(s, g, r), Group.loops(s, g, _)) == True{}: Bool}
+      %Equal.sym(
+        Bool,
+        List.any.if(u => Spec.Node.is_inside(s, Spec.Member.group{g}, h), String.eq(h, g)),
+        True{},
+        hl
+      ): {List.any.if(u => Group.loops.any(s, g, r), _) == True{}: Bool}
+      {==}
+    case False{}:
+      %Equal.sym(Bool, Group.loops.any(s, g, r), True{}, ih(hm)):
+        {List.any.if(u => _, Group.loops(s, g, m)) == True{}: Bool}
+      Shared.List.any.if_true(Group.loops(s, g, m))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# a member of ms that is the group g, or holds it, makes g contain itself
+def Group.loops_has(
+  ms: List<&2, Spec.Member>,
+  +s: Spec.State(),
+  +g: String,
+  +h: String
+) -> {
+  Shared.List.has(~Spec.Member, ~Spec.Member.same, ms, Spec.Member.group{h}) == True{}: Bool
+} -> {
+  List.any.if(u => Spec.Node.is_inside(s, Spec.Member.group{g}, h), String.eq(h, g)) == True{}: Bool
+} -> {Group.loops.any(s, g, ms) == True{}: Bool}:
+  match ms:
+    case Nil{}:
+      hm => hl => Empty.absurd(
+        {Group.loops.any(s, g, []) == True{}: Bool},
+        Shared.Bool.false_ne_true(hm)
+      )
+    case Con{+m, +r}:
+      hm => +hl =>
+        Group.loops_has.at(
+          Spec.Member.same(m, Spec.Member.group{h}),
+          s,
+          g,
+          h,
+          m,
+          r,
+          {==},
+          hm,
+          hl,
+          x => Group.loops_has(r, s, g, h)(x)(hl)
+        )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement keeps each and/or as one value for the proof to split on; a proof does not run
+def Spec.Node.set_group_cycle(n, s, e, g, ms, h, v):
+  +s = s
+  +g = g
+  +ms = ms
+  +h = h
+  h1 => h2 => h3 => h4 => h5 => h6 =>
+    +lazy = Equal.trans(
+      Bool,
+      List.any.if(u => Spec.Node.is_inside(s, Spec.Member.group{g}, h), String.eq(h, g)),
+      Bool.or(String.eq(h, g), Spec.Node.is_inside(s, Spec.Member.group{g}, h)),
+      True{},
+      Shared.Bool.or_lazy(String.eq(h, g), Spec.Node.is_inside(s, Spec.Member.group{g}, h)),
+      h6
+    )
+    Owner.refuses(
+      n,
+      s,
+      e,
+      Spec.Ask.set_group{g, ms},
+      v
+    )(
+      h1
+    )(
+      Equal.trans(
+        Maybe<&2, Spec.Id>,
+        Maybe.map(&2, Step, Spec.Id, k => Step.version(k), Chain.cursor(s, Spec.Chain.group{g})),
+        List.last(&2, Spec.Id, Spec.Node.chain(s, Spec.Chain.group{g})),
+        Some{v},
+        Equal.sym(
+          Maybe<&2, Spec.Id>,
+          List.last(&2, Spec.Id, Spec.Node.chain(s, Spec.Chain.group{g})),
+          Maybe.map(&2, Step, Spec.Id, k => Step.version(k), Chain.cursor(s, Spec.Chain.group{g})),
+          Chain.last_of(s, Spec.Chain.group{g}, Chain.root(s, Spec.Chain.group{g}))
+        ),
+        h2
+      )
+    )(h3)(h4)(
+      %Equal.sym(Bool, Group.loops.any(s, g, ms), True{}, Group.loops_has(ms, s, g, h)(h5)(lazy)):
+        {Bool.not(_) == False{}: Bool}
+      {==})
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information

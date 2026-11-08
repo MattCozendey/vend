@@ -674,6 +674,45 @@ law Node.write_written:
           == Some{x}: Maybe<&2, Shared.Bytes()>
       }
 
+# the sole owner of a group refuses a set-group that would make the group
+# contain itself, as a member h of the new set is the group or holds it: the
+# group stays as it was
+law Node.set_group_cycle:
+  for n: String
+  for s: State()
+  for e: Envelope
+  for g: String
+  for ms: List<&2, Member>
+  for h: String
+  for v: Id
+  {Node.owners(s, Chain.group{g}) == [n]: List<&2, String>}
+    -> {List.last(&2, Id, Node.chain(s, Chain.group{g})) == Some{v}: Maybe<&2, Id>}
+    -> {
+      Shared.Trie.get(
+        Cells.Cell<Entry>,
+        s,
+        Slot.key(Slot.ask{Envelope.of(e)})
+      )
+        == None{}: Maybe<&2, Cells.Cell<Entry>>
+    }
+    -> {
+      Shared.Trie.get(
+        Cells.Cell<Entry>,
+        s,
+        Slot.key(Slot.vote{n, Chain.group{g}, v})
+      )
+        == None{}: Maybe<&2, Cells.Cell<Entry>>
+    }
+    -> {Shared.List.has(~Member, ~Member.same, ms, Member.group{h}) == True{}: Bool}
+    -> {Bool.or(String.eq(h, g), Node.is_inside(s, Member.group{g}, h)) == True{}: Bool}
+    -> {
+      Node.chain(
+        Node.ask(n, s, e, Ask.set_group{g, ms}),
+        Chain.group{g}
+      )
+        == Node.chain(s, Chain.group{g}): List<&2, Id>
+    }
+
 # the sole owner of a branch refuses a write of a resource that changed since
 # its base: the branch stays as it was
 law Node.write_stale:
