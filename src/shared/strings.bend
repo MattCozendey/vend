@@ -131,4 +131,3 @@ def union(ns: List<&2, String>, +ks: List<&2, String>) -> List<&2, String>:
         r,
         List.filter.put(String, n, ks, Bool.not(Shared.List.has(~String, ~String.eq, ks, n)))
       )
-

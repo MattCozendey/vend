@@ -1838,4 +1838,3 @@ def Reach.path_in(
   )
 
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-

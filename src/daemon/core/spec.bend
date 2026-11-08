@@ -136,7 +136,9 @@ def Slot.key(k: Slot) -> List<&2, Bool>:
     case Slot.Ask{i}:
       False{} <> Id.key(i)
     case Slot.Vote{n, c, i}:
-      True{} <> False{} <> List.append(&2, Bool, Tries.Trie.text(n), List.append(&2, Bool, Chain.key(c), Id.key(i)))
+      True{}
+        <> False{}
+        <> List.append(&2, Bool, Tries.Trie.text(n), List.append(&2, Bool, Chain.key(c), Id.key(i)))
     case Slot.Root{c, n}:
       List.append(&2, Bool, Root.key(c), Tries.Trie.text(n))
 
@@ -179,24 +181,27 @@ def Content.same(a: Content, b: Content) -> Bool:
     case _ _:
       False{}
 
-# a and b are the same resource
-def Name.same(a: Resources.Name, b: Resources.Name) -> Bool:
-  String.eq(Resources.Name.show(a), Resources.Name.show(b))
-
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality, or a proof, keeps each and/or as one value for the proofs to split on
 # a and b are the same change
 def Ask.same(a: Ask, b: Ask) -> Bool:
   match a b:
     case Ask.Write{b1, n1, v1, c1} Ask.Write{b2, n2, v2, c2}:
       Bool.and(
         String.eq(b1, b2),
-        Bool.and(Name.same(n1, n2), Bool.and(Maybes.Maybe.same(~Id, ~Id.same, v1, v2), Content.same(c1, c2)))
+        Bool.and(
+          Resources.Name.same(n1, n2),
+          Bool.and(Maybes.Maybe.same(~Id, ~Id.same, v1, v2), Content.same(c1, c2))
+        )
       )
     case Ask.SetBranch{b1, v1} Ask.SetBranch{b2, v2}:
       Bool.and(String.eq(b1, b2), Id.same(v1, v2))
     case Ask.Merge{b1, v1} Ask.Merge{b2, v2}:
       Bool.and(String.eq(b1, b2), Id.same(v1, v2))
     case Ask.Resolve{b1, k1, n1, c1} Ask.Resolve{b2, k2, n2, c2}:
-      Bool.and(String.eq(b1, b2), Bool.and(Id.same(k1, k2), Bool.and(Name.same(n1, n2), Content.same(c1, c2))))
+      Bool.and(
+        String.eq(b1, b2),
+        Bool.and(Id.same(k1, k2), Bool.and(Resources.Name.same(n1, n2), Content.same(c1, c2)))
+      )
     case Ask.Mark{b1, m1, t1} Ask.Mark{b2, m2, t2}:
       Bool.and(String.eq(b1, b2), Bool.and(String.eq(m1, m2), String.eq(t1, t2)))
     case Ask.SetOwner{c1, ms1} Ask.SetOwner{c2, ms2}:
@@ -217,6 +222,7 @@ def Entry.same(a: Entry, b: Entry) -> Bool:
       Bool.and(Chain.same(c1, c2), Bool.and(Id.same(i1, i2), String.eq(n1, n2)))
     case _ _:
       False{}
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # Entry.same is True for an entry and itself
 law Entry.same_refl:
@@ -266,7 +272,9 @@ def Root.first(cs: List<&2, Cells.Cell<Entry>>) -> Maybe<&2, Entry>:
 # the claim of the first version of the chain c: when nodes claim it apart,
 # the one with the smallest key
 def Node.claim(s: State(), c: Chain) -> Maybe<&2, Entry>:
-  Root.first(Tries.Trie.values(Cells.Cell<Entry>, Tries.Trie.under(Cells.Cell<Entry>, s, Root.key(c))))
+  Root.first(
+    Tries.Trie.values(Cells.Cell<Entry>, Tries.Trie.under(Cells.Cell<Entry>, s, Root.key(c)))
+  )
 
 # Answers
 # -------
@@ -431,7 +439,12 @@ law Node.chain_kept:
   {Node.agrees(s, t) == True{}: Bool}
     -> {Node.claim(Node.join(s, t), c) == Node.claim(s, c): Maybe<&2, Entry>}
     -> {
-      List.take(&2, Id, Node.chain(Node.join(s, t), c), List.length(&2, Id, Node.chain(s, c)))
+      List.take(
+        &2,
+        Id,
+        Node.chain(Node.join(s, t), c),
+        List.length(&2, Id, Node.chain(s, c))
+      )
         == Node.chain(s, c): List<&2, Id>
     }
 
@@ -448,15 +461,43 @@ law Node.write_written:
   for v: Id
   {Node.owners(s, Chain.Branch{b}) == [n]: List<&2, String>}
     -> {Node.head(s, b) == Some{v}: Maybe<&2, Id>}
-    -> {Tries.Trie.get(Cells.Cell<Entry>, s, Slot.key(Slot.Ask{Envelope.of(e)})) == None{}: Maybe<&2, Cells.Cell<Entry>>}
-    -> {Tries.Trie.get(Cells.Cell<Entry>, s, Slot.key(Slot.Vote{n, Chain.Branch{b}, v})) == None{}: Maybe<&2, Cells.Cell<Entry>>}
-    -> {Node.content(s, name, Point.Head{b}) == Node.content_at(s, name, base): Maybe<&2, Octets.Bytes()>}
     -> {
-      Node.answer(Node.ask(n, s, e, Ask.Write{b, name, base, Content.Bytes{x}}), Envelope.of(e))
+      Tries.Trie.get(
+        Cells.Cell<Entry>,
+        s,
+        Slot.key(Slot.Ask{Envelope.of(e)})
+      )
+        == None{}: Maybe<&2, Cells.Cell<Entry>>
+    }
+    -> {
+      Tries.Trie.get(
+        Cells.Cell<Entry>,
+        s,
+        Slot.key(Slot.Vote{n, Chain.Branch{b}, v})
+      )
+        == None{}: Maybe<&2, Cells.Cell<Entry>>
+    }
+    -> {
+      Node.content(
+        s,
+        name,
+        Point.Head{b}
+      )
+        == Node.content_at(s, name, base): Maybe<&2, Octets.Bytes()>
+    }
+    -> {
+      Node.answer(
+        Node.ask(n, s, e, Ask.Write{b, name, base, Content.Bytes{x}}),
+        Envelope.of(e)
+      )
         == Answer.Written{Envelope.of(e)}: Answer
     }
       & {
-        Node.content(Node.ask(n, s, e, Ask.Write{b, name, base, Content.Bytes{x}}), name, Point.At{Envelope.of(e)})
+        Node.content(
+          Node.ask(n, s, e, Ask.Write{b, name, base, Content.Bytes{x}}),
+          name,
+          Point.At{Envelope.of(e)}
+        )
           == Some{x}: Maybe<&2, Octets.Bytes()>
       }
 
@@ -473,8 +514,22 @@ law Node.write_stale:
   for v: Id
   {Node.owners(s, Chain.Branch{b}) == [n]: List<&2, String>}
     -> {Node.head(s, b) == Some{v}: Maybe<&2, Id>}
-    -> {Tries.Trie.get(Cells.Cell<Entry>, s, Slot.key(Slot.Ask{Envelope.of(e)})) == None{}: Maybe<&2, Cells.Cell<Entry>>}
-    -> {Tries.Trie.get(Cells.Cell<Entry>, s, Slot.key(Slot.Vote{n, Chain.Branch{b}, v})) == None{}: Maybe<&2, Cells.Cell<Entry>>}
+    -> {
+      Tries.Trie.get(
+        Cells.Cell<Entry>,
+        s,
+        Slot.key(Slot.Ask{Envelope.of(e)})
+      )
+        == None{}: Maybe<&2, Cells.Cell<Entry>>
+    }
+    -> {
+      Tries.Trie.get(
+        Cells.Cell<Entry>,
+        s,
+        Slot.key(Slot.Vote{n, Chain.Branch{b}, v})
+      )
+        == None{}: Maybe<&2, Cells.Cell<Entry>>
+    }
     -> {
       Maybes.Maybe.same(
         ~Octets.Bytes(),
@@ -484,4 +539,10 @@ law Node.write_stale:
       )
         == False{}: Bool
     }
-    -> {Node.chain(Node.ask(n, s, e, Ask.Write{b, name, base, x}), Chain.Branch{b}) == Node.chain(s, Chain.Branch{b}): List<&2, Id>}
+    -> {
+      Node.chain(
+        Node.ask(n, s, e, Ask.Write{b, name, base, x}),
+        Chain.Branch{b}
+      )
+        == Node.chain(s, Chain.Branch{b}): List<&2, Id>
+    }

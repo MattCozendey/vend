@@ -42,3 +42,14 @@ def Bool.not_true(a: Bool) -> {Bool.not(a) == True{}: Bool} -> {a == False{}: Bo
       h => {==}
     case True{}:
       h => Empty.absurd({True{} == False{}: Bool}, Shared.Bool.false_ne_true(h))
+
+# both sides are true, so their "and" is
+def Bool.and_both(
+  a: Bool,
+  b: Bool
+) -> {a == True{}: Bool} -> {b == True{}: Bool} -> {Bool.and(a, b) == True{}: Bool}:
+  match a:
+    case True{}:
+      ha => hb => hb
+    case False{}:
+      ha => hb => Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(ha))

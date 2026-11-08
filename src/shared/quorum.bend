@@ -15,7 +15,7 @@ import ./shared.bend as Shared
 # -----
 
 # the vote v is for x
-def Quorum.hit(~B: Data, ~same: B -> B -> Bool, v: Maybe<&2, B>, +x: B) -> Bool:
+def Quorum.hit(~B: Data, ~same: B -> B -> Bool, v: Maybe<&2, B>, x: B) -> Bool:
   match v:
     case None{}:
       False{}
@@ -37,7 +37,10 @@ def Quorum.yes(
     case Nil{}:
       0n
     case Con{m, r}:
-      Nats.Nat.add_if(Quorum.hit(~B, ~same, vote(g)(m), x), Quorum.yes(~A, ~B, ~V, ~vote, ~same, r, g, x))
+      Nats.Nat.add_if(
+        Quorum.hit(~B, ~same, vote(g)(m), x),
+        Quorum.yes(~A, ~B, ~V, ~vote, ~same, r, g, x)
+      )
 
 # the number of members of ms that do not vote for x
 def Quorum.no(
@@ -54,7 +57,10 @@ def Quorum.no(
     case Nil{}:
       0n
     case Con{m, r}:
-      Nats.Nat.add_if(Bool.not(Quorum.hit(~B, ~same, vote(g)(m), x)), Quorum.no(~A, ~B, ~V, ~vote, ~same, r, g, x))
+      Nats.Nat.add_if(
+        Bool.not(Quorum.hit(~B, ~same, vote(g)(m), x)),
+        Quorum.no(~A, ~B, ~V, ~vote, ~same, r, g, x)
+      )
 
 # x has a majority of ms: more of them vote for it than do not
 def Quorum.has(
@@ -67,15 +73,10 @@ def Quorum.has(
   +g: V,
   +x: B
 ) -> Bool:
-  Nat.is_lt(Quorum.no(~A, ~B, ~V, ~vote, ~same, ms, g, x), Quorum.yes(~A, ~B, ~V, ~vote, ~same, ms, g, x))
-
-# b when it has a majority of ms (held), else rest
-def Quorum.winner.if(-B: Data, held: Bool, b: B, rest: Maybe<&2, B>) -> Maybe<&2, B>:
-  match held:
-    case True{}:
-      Some{b}
-    case False{}:
-      rest
+  Nat.is_lt(
+    Quorum.no(~A, ~B, ~V, ~vote, ~same, ms, g, x),
+    Quorum.yes(~A, ~B, ~V, ~vote, ~same, ms, g, x)
+  )
 
 # the vote v when it has a majority of ms, else rest
 def Quorum.winner.at(
@@ -86,14 +87,14 @@ def Quorum.winner.at(
   ~same: B -> B -> Bool,
   v: Maybe<&2, B>,
   rest: Maybe<&2, B>,
-  +ms: List<&2, A>,
-  +g: V
+  ms: List<&2, A>,
+  g: V
 ) -> Maybe<&2, B>:
   match v:
     case None{}:
       rest
     case Some{+b}:
-      Quorum.winner.if(B, Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, b), b, rest)
+      Bool.pick(Maybe<&2, B>, Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, b), Some{b}, rest)
 
 # the first vote of a member of ks that has a majority of ms
 def Quorum.winner(
@@ -130,6 +131,7 @@ def Quorum.kept(~B: Data, ~same: B -> B -> Bool, v: Maybe<&2, B>, w: Maybe<&2, B
     case Some{b}:
       Quorum.hit(~B, ~same, w, b)
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality, or a proof, keeps each and/or as one value for the proofs to split on
 # every vote of a member of ms in g is kept in g2
 def Quorum.keeps(
   ~A: Data,
@@ -149,12 +151,14 @@ def Quorum.keeps(
         Quorum.kept(~B, ~same, vote(g)(m), vote(g2)(m)),
         Quorum.keeps(~A, ~B, ~V, ~vote, ~same, r, g, g2)
       )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # Laws
 # ----
 # Each law asks of same only that it is True for a value and itself (refl),
 # and only for equal values (sound).
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # x is not y, so y is not x
 def Quorum.ne_flip.at(
   ~B: Data,
@@ -163,7 +167,7 @@ def Quorum.ne_flip.at(
   ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
   back: Bool,
   +x: B,
-  +y: B,
+  y: B,
   no: {same(x, y) == False{}: Bool},
   e: {same(y, x) == back: Bool}
 ) -> {back == False{}: Bool}:
@@ -191,6 +195,7 @@ def Quorum.ne_flip.at(
           )
         )
       )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # x is not y, so y is not x
 def Quorum.ne_flip(
@@ -211,16 +216,18 @@ def Quorum.hit_excl(
   ~refl: @x: B -> {same(x, x) == True{}: Bool},
   ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
   v: Maybe<&2, B>,
-  +x: B,
+  x: B,
   +y: B,
   no: {same(x, y) == False{}: Bool}
-) -> {Quorum.hit(~B, ~same, v, y) == True{}: Bool} -> {Quorum.hit(~B, ~same, v, x) == False{}: Bool}:
+) -> {
+  Quorum.hit(~B, ~same, v, y) == True{}: Bool
+} -> {Quorum.hit(~B, ~same, v, x) == False{}: Bool}:
   match v:
     case None{}:
       h => {==}
-    case Some{+b}:
+    case Some{b}:
       h =>
-        %Equal.sym(B, b, y, sound(b)(y)(h)) : {same(_, x) == False{}: Bool}
+        %Equal.sym(B, b, y, sound(b)(y)(h)): {same(_, x) == False{}: Bool}
         Quorum.ne_flip(~B, ~same, ~refl, ~sound, x, y, no)
 
 # Quorum.yes_le_no for one member, by whether it votes for y (hy) and x (hx)
@@ -294,8 +301,8 @@ def Quorum.unique.at(
   +x: B,
   +y: B,
   +e: {same(x, y) == held: Bool},
-  +hx: {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool},
-  +hy: {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, y) == True{}: Bool}
+  hx: {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool},
+  hy: {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, y) == True{}: Bool}
 ) -> {x == y: B}:
   match held:
     case True{}:
@@ -304,15 +311,45 @@ def Quorum.unique.at(
       +yx = Quorum.yes(~A, ~B, ~V, ~vote, ~same, ms, g, x)
       +yy = Quorum.yes(~A, ~B, ~V, ~vote, ~same, ms, g, y)
       +nx = Quorum.no(~A, ~B, ~V, ~vote, ~same, ms, g, x)
-      +ny = Quorum.no(~A, ~B, ~V, ~vote, ~same, ms, g, y)
-      +a = Nats.Nat.le_lt(yx, ny, yy)(
-        Quorum.yes_le_no(~A, ~B, ~V, ~vote, ~same, ~refl, ~sound, ms, g, y, x, Quorum.ne_flip(~B, ~same, ~refl, ~sound, x, y, e))
+      ny = Quorum.no(~A, ~B, ~V, ~vote, ~same, ms, g, y)
+      a = Nats.Nat.le_lt(
+        yx,
+        ny,
+        yy
+      )(
+        Quorum.yes_le_no(
+          ~A,
+          ~B,
+          ~V,
+          ~vote,
+          ~same,
+          ~refl,
+          ~sound,
+          ms,
+          g,
+          y,
+          x,
+          Quorum.ne_flip(~B, ~same, ~refl, ~sound, x, y, e)
+        )
       )(hy)
-      +b = Nats.Nat.lt_le(yx, yy, nx)(a)(Quorum.yes_le_no(~A, ~B, ~V, ~vote, ~same, ~refl, ~sound, ms, g, x, y, e))
-      +c = Nats.Nat.lt_le(yx, nx, yx)(b)(Nats.Nat.lt_weak(nx, yx)(hx))
+      b = Nats.Nat.lt_le(
+        yx,
+        yy,
+        nx
+      )(a)(Quorum.yes_le_no(~A, ~B, ~V, ~vote, ~same, ~refl, ~sound, ms, g, x, y, e))
+      c = Nats.Nat.lt_le(yx, nx, yx)(b)(Nats.Nat.lt_weak(nx, yx)(hx))
       Empty.absurd(
         {x == y: B},
-        Shared.Bool.false_ne_true(Equal.trans(Bool, False{}, Nat.is_lt(yx, yx), True{}, Equal.sym(Bool, Nat.is_lt(yx, yx), False{}, Nats.Nat.lt_irrefl(yx)), c))
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            Nat.is_lt(yx, yx),
+            True{},
+            Equal.sym(Bool, Nat.is_lt(yx, yx), False{}, Nats.Nat.lt_irrefl(yx)),
+            c
+          )
+        )
       )
 
 # two choices with a majority of the same members are the same
@@ -332,12 +369,28 @@ law Quorum.unique:
     -> {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, y) == True{}: Bool}
     -> {x == y: B}
 
-def Quorum.unique(A, B, V, vote, same, refl, sound, ms, g, x, y):
-  +ms = ms
-  +g = g
+def Quorum.unique(member, choice, state, vote, same, refl, sound, ms, g, x, y):
+  ms = ms
+  g = g
   +x = x
   +y = y
-  hx => hy => Quorum.unique.at(~A, ~B, ~V, ~vote, ~same, ~refl, ~sound, same(x, y), ms, g, x, y, {==}, hx, hy)
+  hx => hy => Quorum.unique.at(
+    ~member,
+    ~choice,
+    ~state,
+    ~vote,
+    ~same,
+    ~refl,
+    ~sound,
+    same(x, y),
+    ms,
+    g,
+    x,
+    y,
+    {==},
+    hx,
+    hy
+  )
 
 # Quorum.yes_more for one member, whose vote v in g is kept as w in g2
 def Quorum.yes_more.at(
@@ -346,13 +399,16 @@ def Quorum.yes_more.at(
   ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
   v: Maybe<&2, B>,
   w: Maybe<&2, B>,
-  +x: B,
+  x: B,
   y: Nat,
   y2: Nat,
   k: {Quorum.kept(~B, ~same, v, w) == True{}: Bool},
   ih: {Nat.is_le(y, y2) == True{}: Bool}
 ) -> {
-  Nat.is_le(Nats.Nat.add_if(Quorum.hit(~B, ~same, v, x), y), Nats.Nat.add_if(Quorum.hit(~B, ~same, w, x), y2))
+  Nat.is_le(
+    Nats.Nat.add_if(Quorum.hit(~B, ~same, v, x), y),
+    Nats.Nat.add_if(Quorum.hit(~B, ~same, w, x), y2)
+  )
     == True{}: Bool
 }:
   match v w:
@@ -363,8 +419,8 @@ def Quorum.yes_more.at(
         {Nat.is_le(Nats.Nat.add_if(same(b, x), y), y2) == True{}: Bool},
         Shared.Bool.false_ne_true(k)
       )
-    case Some{+b} Some{+c}:
-      %Equal.sym(B, c, b, sound(c)(b)(k)) :
+    case Some{+b} Some{c}:
+      %Equal.sym(B, c, b, sound(c)(b)(k)):
         {Nat.is_le(Nats.Nat.add_if(same(b, x), y), Nats.Nat.add_if(same(_, x), y2)) == True{}: Bool}
       Nats.Nat.add_if_le(same(b, x), y, y2)(ih)
 
@@ -375,7 +431,7 @@ def Quorum.no_less.at(
   ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
   v: Maybe<&2, B>,
   w: Maybe<&2, B>,
-  +x: B,
+  x: B,
   n: Nat,
   n2: Nat,
   k: {Quorum.kept(~B, ~same, v, w) == True{}: Bool},
@@ -395,10 +451,13 @@ def Quorum.no_less.at(
         {Nat.is_le(1n+n2, Nats.Nat.add_if(Bool.not(same(b, x)), n)) == True{}: Bool},
         Shared.Bool.false_ne_true(k)
       )
-    case Some{+b} Some{+c}:
-      %Equal.sym(B, c, b, sound(c)(b)(k)) :
+    case Some{+b} Some{c}:
+      %Equal.sym(B, c, b, sound(c)(b)(k)):
         {
-          Nat.is_le(Nats.Nat.add_if(Bool.not(same(_, x)), n2), Nats.Nat.add_if(Bool.not(same(b, x)), n))
+          Nat.is_le(
+            Nats.Nat.add_if(Bool.not(same(_, x)), n2),
+            Nats.Nat.add_if(Bool.not(same(b, x)), n)
+          )
             == True{}: Bool
         }
       Nats.Nat.add_if_le(Bool.not(same(b, x)), n2, n)(ih)
@@ -439,7 +498,19 @@ def Quorum.yes_more(
         Quorum.yes(~A, ~B, ~V, ~vote, ~same, r, g, x),
         Quorum.yes(~A, ~B, ~V, ~vote, ~same, r, g2, x),
         Bools.Bool.and_true_left(kh, kr)(k),
-        Quorum.yes_more(~A, ~B, ~V, ~vote, ~same, ~sound, r, g, g2, x, Bools.Bool.and_true_right(kh, kr)(k))
+        Quorum.yes_more(
+          ~A,
+          ~B,
+          ~V,
+          ~vote,
+          ~same,
+          ~sound,
+          r,
+          g,
+          g2,
+          x,
+          Bools.Bool.and_true_right(kh, kr)(k)
+        )
       )
 
 # kept votes keep the members that do not vote for x from growing
@@ -478,7 +549,19 @@ def Quorum.no_less(
         Quorum.no(~A, ~B, ~V, ~vote, ~same, r, g, x),
         Quorum.no(~A, ~B, ~V, ~vote, ~same, r, g2, x),
         Bools.Bool.and_true_left(kh, kr)(k),
-        Quorum.no_less(~A, ~B, ~V, ~vote, ~same, ~sound, r, g, g2, x, Bools.Bool.and_true_right(kh, kr)(k))
+        Quorum.no_less(
+          ~A,
+          ~B,
+          ~V,
+          ~vote,
+          ~same,
+          ~sound,
+          r,
+          g,
+          g2,
+          x,
+          Bools.Bool.and_true_right(kh, kr)(k)
+        )
       )
 
 # a majority stays a majority when every vote is kept
@@ -497,23 +580,23 @@ law Quorum.has_more:
     -> {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool}
     -> {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g2, x) == True{}: Bool}
 
-def Quorum.has_more(A, B, V, vote, same, sound, ms, g, g2, x):
+def Quorum.has_more(member, choice, state, vote, same, sound, ms, g, g2, x):
   +ms = ms
   +g = g
   +g2 = g2
   +x = x
   +k => h =>
     Nats.Nat.lt_le(
-      Quorum.no(~A, ~B, ~V, ~vote, ~same, ms, g2, x),
-      Quorum.yes(~A, ~B, ~V, ~vote, ~same, ms, g, x),
-      Quorum.yes(~A, ~B, ~V, ~vote, ~same, ms, g2, x)
+      Quorum.no(~member, ~choice, ~state, ~vote, ~same, ms, g2, x),
+      Quorum.yes(~member, ~choice, ~state, ~vote, ~same, ms, g, x),
+      Quorum.yes(~member, ~choice, ~state, ~vote, ~same, ms, g2, x)
     )(
       Nats.Nat.le_lt(
-        Quorum.no(~A, ~B, ~V, ~vote, ~same, ms, g2, x),
-        Quorum.no(~A, ~B, ~V, ~vote, ~same, ms, g, x),
-        Quorum.yes(~A, ~B, ~V, ~vote, ~same, ms, g, x)
-      )(Quorum.no_less(~A, ~B, ~V, ~vote, ~same, ~sound, ms, g, g2, x, k))(h)
-    )(Quorum.yes_more(~A, ~B, ~V, ~vote, ~same, ~sound, ms, g, g2, x, k))
+        Quorum.no(~member, ~choice, ~state, ~vote, ~same, ms, g2, x),
+        Quorum.no(~member, ~choice, ~state, ~vote, ~same, ms, g, x),
+        Quorum.yes(~member, ~choice, ~state, ~vote, ~same, ms, g, x)
+      )(Quorum.no_less(~member, ~choice, ~state, ~vote, ~same, ~sound, ms, g, g2, x, k))(h)
+    )(Quorum.yes_more(~member, ~choice, ~state, ~vote, ~same, ~sound, ms, g, g2, x, k))
 
 # Quorum.has_winner when the vote b was picked or not (held)
 def Quorum.has_winner.if(
@@ -525,18 +608,25 @@ def Quorum.has_winner.if(
   held: Bool,
   b: B,
   rest: Maybe<&2, B>,
-  +ms: List<&2, A>,
-  +g: V,
-  +x: B,
+  ms: List<&2, A>,
+  g: V,
+  x: B,
   eb: {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, b) == held: Bool},
-  ih: {rest == Some{x}: Maybe<&2, B>} -> {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool}
+  ih: {
+    rest == Some{x}: Maybe<&2, B>
+  } -> {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool}
 ) -> {
-  Quorum.winner.if(B, held, b, rest) == Some{x}: Maybe<&2, B>
+  Bool.pick(Maybe<&2, B>, held, Some{b}, rest) == Some{x}: Maybe<&2, B>
 } -> {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool}:
   match held:
     case True{}:
       h =>
-        %Maybes.Maybe.some_inj(B, b, x, h) : {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, _) == True{}: Bool}
+        %Maybes.Maybe.some_inj(
+          B,
+          b,
+          x,
+          h
+        ): {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, _) == True{}: Bool}
         eb
     case False{}:
       ih
@@ -552,8 +642,10 @@ def Quorum.has_winner.at(
   rest: Maybe<&2, B>,
   +ms: List<&2, A>,
   +g: V,
-  +x: B,
-  ih: {rest == Some{x}: Maybe<&2, B>} -> {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool}
+  x: B,
+  ih: {
+    rest == Some{x}: Maybe<&2, B>
+  } -> {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool}
 ) -> {
   Quorum.winner.at(~A, ~B, ~V, ~vote, ~same, v, rest, ms, g) == Some{x}: Maybe<&2, B>
 } -> {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool}:
@@ -591,28 +683,29 @@ law Quorum.has_winner:
   {Quorum.winner(~A, ~B, ~V, ~vote, ~same, ks, ms, g) == Some{x}: Maybe<&2, B>}
     -> {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool}
 
-def Quorum.has_winner(A, B, V, vote, same, ks, ms, g, x):
+def Quorum.has_winner(member, choice, state, vote, same, ks, ms, g, x):
   match ks:
     case Nil{}:
       h => Empty.absurd(
-        {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool},
-        Maybes.Maybe.none_ne_some(B, x, h)
+        {Quorum.has(~member, ~choice, ~state, ~vote, ~same, ms, g, x) == True{}: Bool},
+        Maybes.Maybe.none_ne_some(choice, x, h)
       )
-    case Con{+k, +r}:
+    case Con{k, +r}:
       Quorum.has_winner.at(
-        ~A,
-        ~B,
-        ~V,
+        ~member,
+        ~choice,
+        ~state,
         ~vote,
         ~same,
         vote(g)(k),
-        Quorum.winner(~A, ~B, ~V, ~vote, ~same, r, ms, g),
+        Quorum.winner(~member, ~choice, ~state, ~vote, ~same, r, ms, g),
         ms,
         g,
         x,
-        Quorum.has_winner(~A, ~B, ~V, ~vote, ~same, r, ms, g, x)
+        Quorum.has_winner(~member, ~choice, ~state, ~vote, ~same, r, ms, g, x)
       )
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # the scan goes past a vote b without a majority: b is not x (c)
 def Quorum.scan.past(
   ~A: Data,
@@ -622,11 +715,11 @@ def Quorum.scan.past(
   ~same: B -> B -> Bool,
   ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
   c: Bool,
-  +b: B,
-  +ms: List<&2, A>,
-  +g: V,
-  +x: B,
-  +yr: Nat,
+  b: B,
+  ms: List<&2, A>,
+  g: V,
+  x: B,
+  yr: Nat,
   ec: {same(b, x) == c: Bool},
   eb: {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, b) == False{}: Bool},
   hx: {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool},
@@ -634,22 +727,17 @@ def Quorum.scan.past(
 ) -> {Nat.is_lt(0n, yr) == True{}: Bool}:
   match c:
     case True{}:
-      Empty.absurd(
-        {Nat.is_lt(0n, yr) == True{}: Bool},
-        Shared.Bool.false_ne_true(
-          Equal.trans(
+      Empty.absurd({Nat.is_lt(0n, yr) == True{}: Bool}, Shared.Bool.false_ne_true(Equal.trans(
             Bool,
             False{},
             Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, b),
             True{},
             Equal.sym(Bool, Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, b), False{}, eb),
-            %Equal.sym(B, b, x, sound(b)(x)(ec)) : {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, _) == True{}: Bool}
-            hx
-          )
-        )
-      )
+            %Equal.sym(B, b, x, sound(b)(x)(ec)): {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, _) == True{}: Bool}
+            hx)))
     case False{}:
       pos
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Quorum.scan at a vote b, picked or not (held)
 def Quorum.scan.if(
@@ -663,21 +751,52 @@ def Quorum.scan.if(
   held: Bool,
   +b: B,
   rest: Maybe<&2, B>,
-  +ms: List<&2, A>,
-  +g: V,
+  ms: List<&2, A>,
+  g: V,
   +x: B,
-  +yr: Nat,
+  yr: Nat,
   eb: {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, b) == held: Bool},
-  +hx: {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool},
+  hx: {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool},
   pos: {Nat.is_lt(0n, Nats.Nat.add_if(same(b, x), yr)) == True{}: Bool},
   ih: {Nat.is_lt(0n, yr) == True{}: Bool} -> {rest == Some{x}: Maybe<&2, B>}
-) -> {Quorum.winner.if(B, held, b, rest) == Some{x}: Maybe<&2, B>}:
+) -> {Bool.pick(Maybe<&2, B>, held, Some{b}, rest) == Some{x}: Maybe<&2, B>}:
   match held:
     case True{}:
-      %Quorum.unique(~A, ~B, ~V, ~vote, ~same, ~refl, ~sound, ms, g, b, x)(eb)(hx) : {Some{b} == Some{_}: Maybe<&2, B>}
+      %Quorum.unique(
+        ~A,
+        ~B,
+        ~V,
+        ~vote,
+        ~same,
+        ~refl,
+        ~sound,
+        ms,
+        g,
+        b,
+        x
+      )(eb)(hx): {Some{b} == Some{_}: Maybe<&2, B>}
       {==}
     case False{}:
-      ih(Quorum.scan.past(~A, ~B, ~V, ~vote, ~same, ~sound, same(b, x), b, ms, g, x, yr, {==}, eb, hx, pos))
+      ih(
+        Quorum.scan.past(
+          ~A,
+          ~B,
+          ~V,
+          ~vote,
+          ~same,
+          ~sound,
+          same(b, x),
+          b,
+          ms,
+          g,
+          x,
+          yr,
+          {==},
+          eb,
+          hx,
+          pos
+        )
+      )
 
 # Quorum.scan at the vote v of a member, with rest the winner after it
 def Quorum.scan.at(
@@ -692,9 +811,9 @@ def Quorum.scan.at(
   rest: Maybe<&2, B>,
   +ms: List<&2, A>,
   +g: V,
-  +x: B,
-  +yr: Nat,
-  +hx: {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool},
+  x: B,
+  yr: Nat,
+  hx: {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool},
   pos: {Nat.is_lt(0n, Nats.Nat.add_if(Quorum.hit(~B, ~same, v, x), yr)) == True{}: Bool},
   ih: {Nat.is_lt(0n, yr) == True{}: Bool} -> {rest == Some{x}: Maybe<&2, B>}
 ) -> {Quorum.winner.at(~A, ~B, ~V, ~vote, ~same, v, rest, ms, g) == Some{x}: Maybe<&2, B>}:
@@ -742,11 +861,8 @@ def Quorum.scan(
 } -> {Quorum.winner(~A, ~B, ~V, ~vote, ~same, ks, ms, g) == Some{x}: Maybe<&2, B>}:
   match ks:
     case Nil{}:
-      pos => Empty.absurd(
-        {None{} == Some{x}: Maybe<&2, B>},
-        Shared.Bool.false_ne_true(pos)
-      )
-    case Con{+k, +r}:
+      pos => Empty.absurd({None{} == Some{x}: Maybe<&2, B>}, Shared.Bool.false_ne_true(pos))
+    case Con{k, +r}:
       pos => Quorum.scan.at(
         ~A,
         ~B,
@@ -781,15 +897,28 @@ law Quorum.winner_of:
   {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool}
     -> {Quorum.winner(~A, ~B, ~V, ~vote, ~same, ms, ms, g) == Some{x}: Maybe<&2, B>}
 
-def Quorum.winner_of(A, B, V, vote, same, refl, sound, ms, g, x):
+def Quorum.winner_of(member, choice, state, vote, same, refl, sound, ms, g, x):
   +ms = ms
   +g = g
   +x = x
   +hx =>
-    Quorum.scan(~A, ~B, ~V, ~vote, ~same, ~refl, ~sound, ms, ms, g, x, hx)(
+    Quorum.scan(
+      ~member,
+      ~choice,
+      ~state,
+      ~vote,
+      ~same,
+      ~refl,
+      ~sound,
+      ms,
+      ms,
+      g,
+      x,
+      hx
+    )(
       Nats.Nat.lt_pos(
-        Quorum.no(~A, ~B, ~V, ~vote, ~same, ms, g, x),
-        Quorum.yes(~A, ~B, ~V, ~vote, ~same, ms, g, x)
+        Quorum.no(~member, ~choice, ~state, ~vote, ~same, ms, g, x),
+        Quorum.yes(~member, ~choice, ~state, ~vote, ~same, ms, g, x)
       )(hx)
     )
 
@@ -810,25 +939,46 @@ law Quorum.winner_one:
   {vote(g)(m) == Some{x}: Maybe<&2, B>}
     -> {Quorum.winner(~A, ~B, ~V, ~vote, ~same, [m], [m], g) == Some{x}: Maybe<&2, B>}
 
-def Quorum.winner_one(A, B, V, vote, same, refl, m, g, x):
+def Quorum.winner_one(member, choice, state, vote, same, refl, m, g, x):
   +h =>
-    %Equal.sym(Maybe<&2, B>, vote(g)(m), Some{x}, h) :
-      {Quorum.winner.at(~A, ~B, ~V, ~vote, ~same, _, None{}, [m], g) == Some{x}: Maybe<&2, B>}
-    %Equal.sym(Maybe<&2, B>, vote(g)(m), Some{x}, h) :
+    %Equal.sym(Maybe<&2, choice>, vote(g)(m), Some{x}, h):
       {
-        Quorum.winner.if(
-          B,
+        Quorum.winner.at(
+          ~member,
+          ~choice,
+          ~state,
+          ~vote,
+          ~same,
+          _,
+          None{},
+          [m],
+          g
+        )
+          == Some{x}: Maybe<&2, choice>
+      }
+    %Equal.sym(Maybe<&2, choice>, vote(g)(m), Some{x}, h):
+      {
+        Bool.pick(
+          Maybe<&2, choice>,
           Nat.is_lt(
-            Nats.Nat.add_if(Bool.not(Quorum.hit(~B, ~same, _, x)), 0n),
-            Nats.Nat.add_if(Quorum.hit(~B, ~same, _, x), 0n)
+            Nats.Nat.add_if(Bool.not(Quorum.hit(~choice, ~same, _, x)), 0n),
+            Nats.Nat.add_if(Quorum.hit(~choice, ~same, _, x), 0n)
           ),
-          x,
+          Some{x},
           None{}
         )
-          == Some{x}: Maybe<&2, B>
+          == Some{x}: Maybe<&2, choice>
       }
-    %Equal.sym(Bool, same(x, x), True{}, refl(x)) :
-      {Quorum.winner.if(B, Nat.is_lt(Nats.Nat.add_if(Bool.not(_), 0n), Nats.Nat.add_if(_, 0n)), x, None{}) == Some{x}: Maybe<&2, B>}
+    %Equal.sym(Bool, same(x, x), True{}, refl(x)):
+      {
+        Bool.pick(
+          Maybe<&2, choice>,
+          Nat.is_lt(Nats.Nat.add_if(Bool.not(_), 0n), Nats.Nat.add_if(_, 0n)),
+          Some{x},
+          None{}
+        )
+          == Some{x}: Maybe<&2, choice>
+      }
     {==}
 
 # the one member of [m] has not voted: nothing wins
@@ -843,8 +993,21 @@ law Quorum.winner_none:
   {vote(g)(m) == None{}: Maybe<&2, B>}
     -> {Quorum.winner(~A, ~B, ~V, ~vote, ~same, [m], [m], g) == None{}: Maybe<&2, B>}
 
-def Quorum.winner_none(A, B, V, vote, same, m, g):
+def Quorum.winner_none(member, choice, state, vote, same, m, g):
   h =>
-    %Equal.sym(Maybe<&2, B>, vote(g)(m), None{}, h) :
-      {Quorum.winner.at(~A, ~B, ~V, ~vote, ~same, _, None{}, [m], g) == None{}: Maybe<&2, B>}
+    %Equal.sym(Maybe<&2, choice>, vote(g)(m), None{}, h):
+      {
+        Quorum.winner.at(
+          ~member,
+          ~choice,
+          ~state,
+          ~vote,
+          ~same,
+          _,
+          None{},
+          [m],
+          g
+        )
+          == None{}: Maybe<&2, choice>
+      }
     {==}

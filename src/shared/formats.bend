@@ -1,7 +1,6 @@
 import Base
 import ./bytes.bend as Octets
 import ./lists.bend as Lists
-import ./shared.bend as Shared
 import ./words.bend as Words
 
 # Formats
@@ -19,7 +18,8 @@ def Lines.split.on(
   nl: Bool,
   c: U32,
   s: Octets.Bytes() & List<&2, Octets.Bytes()>
-) -> Octets.Bytes() & List<&2, Octets.Bytes()>:
+) -> Octets.Bytes()
+  & List<&2, Octets.Bytes()>:
   match nl s:
     case True{} Tuple{l, ls}:
       ([], l <> ls)
@@ -49,17 +49,22 @@ def Lines.join.of(s: Octets.Bytes() & List<&2, Octets.Bytes()>) -> Octets.Bytes(
       Lines.join(ls, l)
 
 # a byte before the first line comes first
-def Lines.join_cons(ls: List<&2, Octets.Bytes()>, c: U32, l: Octets.Bytes()) -> {Lines.join(ls, c <> l) == c <> Lines.join(ls, l): Octets.Bytes()}:
+def Lines.join_cons(
+  ls: List<&2, Octets.Bytes()>,
+  c: U32,
+  l: Octets.Bytes()
+) -> {Lines.join(ls, c <> l) == c <> Lines.join(ls, l): Octets.Bytes()}:
   match ls:
     case Nil{}:
       {==}
     case Con{n, r}:
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Lines.read_back once c is known to be '\n' or not (nl)
 def Lines.read_back.on(
   nl: Bool,
-  +c: U32,
+  c: U32,
   s: Octets.Bytes() & List<&2, Octets.Bytes()>,
   r: Octets.Bytes(),
   e: {U32.is_eq(c, 10) == nl: Bool},
@@ -67,14 +72,25 @@ def Lines.read_back.on(
 ) -> {Lines.join.of(Lines.split.on(nl, c, s)) == c <> r: Octets.Bytes()}:
   match nl s:
     case True{} Tuple{l, ls}:
-      %Equal.sym(U32, c, 10, Words.U32.is_eq_sound(c, 10)(e)) : {10 <> Lines.join(ls, l) == _ <> r: Octets.Bytes()}
-      %ih : {10 <> Lines.join(ls, l) == 10 <> _: Octets.Bytes()}
+      %Equal.sym(
+        U32,
+        c,
+        10,
+        Words.U32.is_eq_sound(c, 10)(e)
+      ): {10 <> Lines.join(ls, l) == _ <> r: Octets.Bytes()}
+      %ih: {10 <> Lines.join(ls, l) == 10 <> _: Octets.Bytes()}
       {==}
-    case False{} Tuple{+l, +ls}:
-      %Equal.sym(Octets.Bytes(), Lines.join(ls, c <> l), c <> Lines.join(ls, l), Lines.join_cons(ls, c, l)) :
+    case False{} Tuple{l, ls}:
+      %Equal.sym(
+        Octets.Bytes(),
+        Lines.join(ls, c <> l),
+        c <> Lines.join(ls, l),
+        Lines.join_cons(ls, c, l)
+      ):
         {_ == c <> r: Octets.Bytes()}
-      %ih : {c <> Lines.join(ls, l) == c <> _: Octets.Bytes()}
+      %ih: {c <> Lines.join(ls, l) == c <> _: Octets.Bytes()}
       {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the lines of b join back into b
 law Lines.read_back:
@@ -122,7 +138,7 @@ def Lines.cut.ends(s: List<&2, Octets.Bytes()>, e: Lists.Ends<Octets.Bytes()>) -
 # the cut of a fork, by the ends of what follows its shared start
 def Lines.cut.of(f: Lists.Fork<Octets.Bytes()>) -> Cut:
   match f:
-    case Lists.Fork{s, +ra, +rb}:
+    case Lists.Fork{s, ra, rb}:
       Lines.cut.ends(s, Lists.List.ends(~Octets.Bytes(), ~Octets.Bytes.is_eq, ra, rb))
 
 # the lines that a and b share at the start and at the end, and what differs
@@ -130,22 +146,51 @@ def Lines.cut(a: List<&2, Octets.Bytes()>, b: List<&2, Octets.Bytes()>) -> Cut:
   Lines.cut.of(Lists.List.fork(~Octets.Bytes(), ~Octets.Bytes.is_eq, a, b))
 
 # the old lines of a cut by ends e are its start, then the first list of e
-def Lines.cut.ends_left(s: List<&2, Octets.Bytes()>, e: Lists.Ends<Octets.Bytes()>) -> {Cut.left(Lines.cut.ends(s, e)) == List.append(&2, Octets.Bytes(), s, Lists.Ends.left(Octets.Bytes(), e)): List<&2, Octets.Bytes()>}:
+def Lines.cut.ends_left(
+  s: List<&2, Octets.Bytes()>,
+  e: Lists.Ends<Octets.Bytes()>
+) -> {
+  Cut.left(
+    Lines.cut.ends(s, e)
+  )
+    == List.append(
+      &2,
+      Octets.Bytes(),
+      s,
+      Lists.Ends.left(Octets.Bytes(), e)
+    ): List<&2, Octets.Bytes()>
+}:
   match e:
     case Lists.Ends{ea, eb, se}:
       {==}
 
 # the new lines of a cut by ends e are its start, then the second list of e
-def Lines.cut.ends_right(s: List<&2, Octets.Bytes()>, e: Lists.Ends<Octets.Bytes()>) -> {Cut.right(Lines.cut.ends(s, e)) == List.append(&2, Octets.Bytes(), s, Lists.Ends.right(Octets.Bytes(), e)): List<&2, Octets.Bytes()>}:
+def Lines.cut.ends_right(
+  s: List<&2, Octets.Bytes()>,
+  e: Lists.Ends<Octets.Bytes()>
+) -> {
+  Cut.right(
+    Lines.cut.ends(s, e)
+  )
+    == List.append(
+      &2,
+      Octets.Bytes(),
+      s,
+      Lists.Ends.right(Octets.Bytes(), e)
+    ): List<&2, Octets.Bytes()>
+}:
   match e:
     case Lists.Ends{ea, eb, se}:
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # the old lines of the cut of a fork are its first list
-def Lines.cut.of_left(f: Lists.Fork<Octets.Bytes()>) -> {Cut.left(Lines.cut.of(f)) == Lists.Fork.left(Octets.Bytes(), f): List<&2, Octets.Bytes()>}:
+def Lines.cut.of_left(
+  f: Lists.Fork<Octets.Bytes()>
+) -> {Cut.left(Lines.cut.of(f)) == Lists.Fork.left(Octets.Bytes(), f): List<&2, Octets.Bytes()>}:
   match f:
-    case Lists.Fork{+s, +ra, +rb}:
-      +e = Lists.List.ends(~Octets.Bytes(), ~Octets.Bytes.is_eq, ra, rb)
+    case Lists.Fork{s, +ra, +rb}:
+      e = Lists.List.ends(~Octets.Bytes(), ~Octets.Bytes.is_eq, ra, rb)
       Equal.trans(
         List<&2, Octets.Bytes()>,
         Cut.left(Lines.cut.ends(s, e)),
@@ -163,10 +208,12 @@ def Lines.cut.of_left(f: Lists.Fork<Octets.Bytes()>) -> {Cut.left(Lines.cut.of(f
       )
 
 # the new lines of the cut of a fork are its second list
-def Lines.cut.of_right(f: Lists.Fork<Octets.Bytes()>) -> {Cut.right(Lines.cut.of(f)) == Lists.Fork.right(Octets.Bytes(), f): List<&2, Octets.Bytes()>}:
+def Lines.cut.of_right(
+  f: Lists.Fork<Octets.Bytes()>
+) -> {Cut.right(Lines.cut.of(f)) == Lists.Fork.right(Octets.Bytes(), f): List<&2, Octets.Bytes()>}:
   match f:
-    case Lists.Fork{+s, +ra, +rb}:
-      +e = Lists.List.ends(~Octets.Bytes(), ~Octets.Bytes.is_eq, ra, rb)
+    case Lists.Fork{s, +ra, +rb}:
+      e = Lists.List.ends(~Octets.Bytes(), ~Octets.Bytes.is_eq, ra, rb)
       Equal.trans(
         List<&2, Octets.Bytes()>,
         Cut.right(Lines.cut.ends(s, e)),
@@ -179,9 +226,16 @@ def Lines.cut.of_right(f: Lists.Fork<Octets.Bytes()>) -> {Cut.right(Lines.cut.of
           z => List.append(&2, Octets.Bytes(), s, z),
           Lists.Ends.right(Octets.Bytes(), e),
           rb,
-          Lists.List.ends_right(~Octets.Bytes(), ~Octets.Bytes.is_eq, ~Octets.Bytes.is_eq_sound, ra, rb)
+          Lists.List.ends_right(
+            ~Octets.Bytes(),
+            ~Octets.Bytes.is_eq,
+            ~Octets.Bytes.is_eq_sound,
+            ra,
+            rb
+          )
         )
       )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a cut gives back the old lines
 law Lines.cut_left:
@@ -189,8 +243,9 @@ law Lines.cut_left:
   for +b: List<&2, Octets.Bytes()>
   {Cut.left(Lines.cut(a, b)) == a: List<&2, Octets.Bytes()>}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 def Lines.cut_left(a, b):
-  +f = Lists.List.fork(~Octets.Bytes(), ~Octets.Bytes.is_eq, a, b)
+  f = Lists.List.fork(~Octets.Bytes(), ~Octets.Bytes.is_eq, a, b)
   Equal.trans(
     List<&2, Octets.Bytes()>,
     Cut.left(Lines.cut.of(f)),
@@ -199,6 +254,7 @@ def Lines.cut_left(a, b):
     Lines.cut.of_left(f),
     Lists.List.fork_left(~Octets.Bytes(), ~Octets.Bytes.is_eq, a, b)
   )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a cut gives back the new lines
 law Lines.cut_right:
@@ -206,8 +262,9 @@ law Lines.cut_right:
   for +b: List<&2, Octets.Bytes()>
   {Cut.right(Lines.cut(a, b)) == b: List<&2, Octets.Bytes()>}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 def Lines.cut_right(a, b):
-  +f = Lists.List.fork(~Octets.Bytes(), ~Octets.Bytes.is_eq, a, b)
+  f = Lists.List.fork(~Octets.Bytes(), ~Octets.Bytes.is_eq, a, b)
   Equal.trans(
     List<&2, Octets.Bytes()>,
     Cut.right(Lines.cut.of(f)),
@@ -216,10 +273,16 @@ def Lines.cut_right(a, b):
     Lines.cut.of_right(f),
     Lists.List.fork_right(~Octets.Bytes(), ~Octets.Bytes.is_eq, ~Octets.Bytes.is_eq_sound, a, b)
   )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the lines a after a patch: keep the first keep lines, drop the next drop, and
 # put the lines put in their place
-def Lines.apply(keep: Nat, a: List<&2, Octets.Bytes()>, drop: Nat, put: List<&2, Octets.Bytes()>) -> List<&2, Octets.Bytes()>:
+def Lines.apply(
+  keep: Nat,
+  a: List<&2, Octets.Bytes()>,
+  drop: Nat,
+  put: List<&2, Octets.Bytes()>
+) -> List<&2, Octets.Bytes()>:
   match keep a:
     case 0n x:
       List.append(&2, Octets.Bytes(), put, List.drop(&2, Octets.Bytes(), x, drop))
@@ -228,35 +291,62 @@ def Lines.apply(keep: Nat, a: List<&2, Octets.Bytes()>, drop: Nat, put: List<&2,
     case 1n+k Con{l, r}:
       l <> Lines.apply(k, r, drop, put)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/list_index_loop@warning -- a proof does not run
 # applying the patch of a cut to its old lines gives its new lines
 def Lines.apply_cut(
   s: List<&2, Octets.Bytes()>,
-  +o: List<&2, Octets.Bytes()>,
+  o: List<&2, Octets.Bytes()>,
   n: List<&2, Octets.Bytes()>,
   e: List<&2, Octets.Bytes()>
 ) -> {
-  Lines.apply(List.length(&2, Octets.Bytes(), s), Cut.left(Cut{s, o, n, e}), List.length(&2, Octets.Bytes(), o), n)
+  Lines.apply(
+    List.length(&2, Octets.Bytes(), s),
+    Cut.left(Cut{s, o, n, e}),
+    List.length(&2, Octets.Bytes(), o),
+    n
+  )
     == Cut.right(Cut{s, o, n, e}): List<&2, Octets.Bytes()>
 }:
   match s:
     case Nil{}:
       %Equal.sym(
         List<&2, Octets.Bytes()>,
-        List.drop(&2, Octets.Bytes(), List.append(&2, Octets.Bytes(), o, e), List.length(&2, Octets.Bytes(), o)),
+        List.drop(
+          &2,
+          Octets.Bytes(),
+          List.append(&2, Octets.Bytes(), o, e),
+          List.length(&2, Octets.Bytes(), o)
+        ),
         e,
         Lists.List.drop_after_append(Octets.Bytes(), o, e)
-      ) :
-        {List.append(&2, Octets.Bytes(), n, _) == List.append(&2, Octets.Bytes(), n, e): List<&2, Octets.Bytes()>}
+      ):
+        {
+          List.append(
+            &2,
+            Octets.Bytes(),
+            n,
+            _
+          )
+            == List.append(&2, Octets.Bytes(), n, e): List<&2, Octets.Bytes()>
+        }
       {==}
     case Con{l, r}:
       %Equal.sym(
         List<&2, Octets.Bytes()>,
-        Lines.apply(List.length(&2, Octets.Bytes(), r), Cut.left(Cut{r, o, n, e}), List.length(&2, Octets.Bytes(), o), n),
+        Lines.apply(
+          List.length(&2, Octets.Bytes(), r),
+          Cut.left(Cut{r, o, n, e}),
+          List.length(&2, Octets.Bytes(), o),
+          n
+        ),
         Cut.right(Cut{r, o, n, e}),
         Lines.apply_cut(r, o, n, e)
-      ) :
+      ):
         {l <> _ == l <> Cut.right(Cut{r, o, n, e}): List<&2, Octets.Bytes()>}
       {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/list_index_loop@warning
 
 # the lines of b
 def Lines.list.of(s: Octets.Bytes() & List<&2, Octets.Bytes()>) -> List<&2, Octets.Bytes()>:
@@ -277,7 +367,9 @@ def Lines.bytes(ls: List<&2, Octets.Bytes()>) -> Octets.Bytes():
       Lines.join(r, l)
 
 # the bytes of a split are the bytes of its lines
-def Lines.bytes_of(s: Octets.Bytes() & List<&2, Octets.Bytes()>) -> {Lines.bytes(Lines.list.of(s)) == Lines.join.of(s): Octets.Bytes()}:
+def Lines.bytes_of(
+  s: Octets.Bytes() & List<&2, Octets.Bytes()>
+) -> {Lines.bytes(Lines.list.of(s)) == Lines.join.of(s): Octets.Bytes()}:
   match s:
     case Tuple{l, ls}:
       {==}
@@ -323,7 +415,7 @@ def Lines.patch(c: Cut) -> Patch:
       Patch.Lines{List.length(&2, Octets.Bytes(), s), List.length(&2, Octets.Bytes(), o), n}
 
 # the patch from a to b, as lines when both are text (text)
-def Format.diff.by(text: Bool, +a: Octets.Bytes(), b: Octets.Bytes()) -> Patch:
+def Format.diff.by(text: Bool, a: Octets.Bytes(), b: Octets.Bytes()) -> Patch:
   match text:
     case True{}:
       Lines.patch(Lines.cut(Lines.list(a), Lines.list(b)))
@@ -346,26 +438,29 @@ def Format.apply(a: Octets.Bytes(), p: Patch) -> Octets.Bytes():
 # new lines lb of c
 def Format.apply_patch(
   c: Cut,
-  +a: Octets.Bytes(),
-  +lb: List<&2, Octets.Bytes()>,
+  a: Octets.Bytes(),
+  lb: List<&2, Octets.Bytes()>,
   hl: {Cut.left(c) == Lines.list(a): List<&2, Octets.Bytes()>},
   hr: {Cut.right(c) == lb: List<&2, Octets.Bytes()>}
 ) -> {Format.apply(a, Lines.patch(c)) == Lines.bytes(lb): Octets.Bytes()}:
   match c:
-    case Cut{+s, +o, +n, +e}:
+    case Cut{s, o, n, e}:
       Equal.cong(
         List<&2, Octets.Bytes()>,
         Octets.Bytes(),
         z => Lines.bytes(z),
         Lines.apply(List.length(&2, Octets.Bytes(), s), Lines.list(a), List.length(&2, Octets.Bytes(), o), n),
         lb,
-        %hl : {Lines.apply(List.length(&2, Octets.Bytes(), s), _, List.length(&2, Octets.Bytes(), o), n) == lb: List<&2, Octets.Bytes()>}
-        %hr : {Lines.apply(List.length(&2, Octets.Bytes(), s), Cut.left(Cut{s, o, n, e}), List.length(&2, Octets.Bytes(), o), n) == _: List<&2, Octets.Bytes()>}
-        Lines.apply_cut(s, o, n, e)
-      )
+        %hl: {Lines.apply(List.length(&2, Octets.Bytes(), s), _, List.length(&2, Octets.Bytes(), o), n) == lb: List<&2, Octets.Bytes()>}
+        %hr: {Lines.apply(List.length(&2, Octets.Bytes(), s), Cut.left(Cut{s, o, n, e}), List.length(&2, Octets.Bytes(), o), n) == _: List<&2, Octets.Bytes()>}
+        Lines.apply_cut(s, o, n, e))
 
 # Format.apply_diff, by whether both are text (text)
-def Format.apply_diff.by(text: Bool, +a: Octets.Bytes(), +b: Octets.Bytes()) -> {Format.apply(a, Format.diff.by(text, a, b)) == b: Octets.Bytes()}:
+def Format.apply_diff.by(
+  text: Bool,
+  +a: Octets.Bytes(),
+  +b: Octets.Bytes()
+) -> {Format.apply(a, Format.diff.by(text, a, b)) == b: Octets.Bytes()}:
   match text:
     case True{}:
       +la = Lines.list(a)
@@ -375,7 +470,13 @@ def Format.apply_diff.by(text: Bool, +a: Octets.Bytes(), +b: Octets.Bytes()) -> 
         Format.apply(a, Lines.patch(Lines.cut(la, lb))),
         Lines.bytes(lb),
         b,
-        Format.apply_patch(Lines.cut(la, lb), a, lb, Lines.cut_left(la, lb), Lines.cut_right(la, lb)),
+        Format.apply_patch(
+          Lines.cut(la, lb),
+          a,
+          lb,
+          Lines.cut_left(la, lb),
+          Lines.cut_right(la, lb)
+        ),
         Lines.bytes_list(b)
       )
     case False{}:
@@ -431,7 +532,17 @@ def Format.merge.cuts(lb: List<&2, Octets.Bytes()>, cx: Cut, cy: Cut) -> Merged:
       +dx = List.length(&2, Octets.Bytes(), ox)
       +ky = List.length(&2, Octets.Bytes(), sy)
       +dy = List.length(&2, Octets.Bytes(), oy)
-      Format.merge.order(Nat.is_lt(Nat.add(kx, dx), ky), Nat.is_lt(Nat.add(ky, dy), kx), lb, kx, dx, nx, ky, dy, ny)
+      Format.merge.order(
+        Nat.is_lt(Nat.add(kx, dx), ky),
+        Nat.is_lt(Nat.add(ky, dy), kx),
+        lb,
+        kx,
+        dx,
+        nx,
+        ky,
+        dy,
+        ny
+      )
 
 # the merge of two text changes, by their lines
 def Format.merge.lines(b: Octets.Bytes(), x: Octets.Bytes(), y: Octets.Bytes()) -> Merged:
@@ -439,7 +550,12 @@ def Format.merge.lines(b: Octets.Bytes(), x: Octets.Bytes(), y: Octets.Bytes()) 
   Format.merge.cuts(lb, Lines.cut(lb, Lines.list(x)), Lines.cut(lb, Lines.list(y)))
 
 # the merge of two different changes, as lines when all three are text (text)
-def Format.merge.text(text: Bool, b: Octets.Bytes(), x: Octets.Bytes(), y: Octets.Bytes()) -> Merged:
+def Format.merge.text(
+  text: Bool,
+  b: Octets.Bytes(),
+  x: Octets.Bytes(),
+  y: Octets.Bytes()
+) -> Merged:
   match text:
     case True{}:
       Format.merge.lines(b, x, y)
@@ -447,15 +563,30 @@ def Format.merge.text(text: Bool, b: Octets.Bytes(), x: Octets.Bytes(), y: Octet
       Merged.Clash{}
 
 # the merge when x and y are the same change or not (held)
-def Format.merge.same(held: Bool, +b: Octets.Bytes(), +x: Octets.Bytes(), +y: Octets.Bytes()) -> Merged:
+def Format.merge.same(
+  held: Bool,
+  +b: Octets.Bytes(),
+  +x: Octets.Bytes(),
+  +y: Octets.Bytes()
+) -> Merged:
   match held:
     case True{}:
       Merged.Clean{x}
     case False{}:
-      Format.merge.text(Bool.and(Format.is_text(b), Bool.and(Format.is_text(x), Format.is_text(y))), b, x, y)
+      Format.merge.text(
+        Bool.and(Format.is_text(b), Bool.and(Format.is_text(x), Format.is_text(y))),
+        b,
+        x,
+        y
+      )
 
 # the merge when y is b or not (held)
-def Format.merge.right(held: Bool, +b: Octets.Bytes(), +x: Octets.Bytes(), +y: Octets.Bytes()) -> Merged:
+def Format.merge.right(
+  held: Bool,
+  b: Octets.Bytes(),
+  +x: Octets.Bytes(),
+  +y: Octets.Bytes()
+) -> Merged:
   match held:
     case True{}:
       Merged.Clean{x}
@@ -463,7 +594,12 @@ def Format.merge.right(held: Bool, +b: Octets.Bytes(), +x: Octets.Bytes(), +y: O
       Format.merge.same(Octets.Bytes.is_eq(x, y), b, x, y)
 
 # the merge when x is b or not (held)
-def Format.merge.left(held: Bool, +b: Octets.Bytes(), +x: Octets.Bytes(), +y: Octets.Bytes()) -> Merged:
+def Format.merge.left(
+  held: Bool,
+  +b: Octets.Bytes(),
+  x: Octets.Bytes(),
+  +y: Octets.Bytes()
+) -> Merged:
   match held:
     case True{}:
       Merged.Clean{y}
@@ -471,24 +607,31 @@ def Format.merge.left(held: Bool, +b: Octets.Bytes(), +x: Octets.Bytes(), +y: Oc
       Format.merge.right(Octets.Bytes.is_eq(y, b), b, x, y)
 
 # the merge of x and y, two changes of b
-def Format.merge(+b: Octets.Bytes(), +x: Octets.Bytes(), +y: Octets.Bytes()) -> Merged:
+def Format.merge(+b: Octets.Bytes(), +x: Octets.Bytes(), y: Octets.Bytes()) -> Merged:
   Format.merge.left(Octets.Bytes.is_eq(x, b), b, x, y)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Format.merge_left_only once x is known to be b or not (held)
 def Format.merge_left_only.at(
   held: Bool,
-  +b: Octets.Bytes(),
-  +x: Octets.Bytes(),
+  b: Octets.Bytes(),
+  x: Octets.Bytes(),
   e: {Octets.Bytes.is_eq(x, b) == held: Bool}
 ) -> {Format.merge.left(held, b, x, b) == Merged.Clean{x}: Merged}:
   match held:
     case True{}:
-      %Equal.sym(Octets.Bytes(), x, b, Octets.Bytes.is_eq_sound(x, b)(e)) : {Merged.Clean{b} == Merged.Clean{_}: Merged}
+      %Equal.sym(
+        Octets.Bytes(),
+        x,
+        b,
+        Octets.Bytes.is_eq_sound(x, b)(e)
+      ): {Merged.Clean{b} == Merged.Clean{_}: Merged}
       {==}
     case False{}:
-      %Equal.sym(Bool, Octets.Bytes.is_eq(b, b), True{}, Octets.Bytes.is_eq_refl(b)) :
+      %Equal.sym(Bool, Octets.Bytes.is_eq(b, b), True{}, Octets.Bytes.is_eq_refl(b)):
         {Format.merge.right(_, b, x, b) == Merged.Clean{x}: Merged}
       {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # when only x changed b, the merge is x
 law Format.merge_left_only:
@@ -506,26 +649,28 @@ law Format.merge_right_only:
   {Format.merge(b, b, y) == Merged.Clean{y}: Merged}
 
 def Format.merge_right_only(b, y):
-  %Equal.sym(Bool, Octets.Bytes.is_eq(b, b), True{}, Octets.Bytes.is_eq_refl(b)) :
+  %Equal.sym(Bool, Octets.Bytes.is_eq(b, b), True{}, Octets.Bytes.is_eq_refl(b)):
     {Format.merge.left(_, b, b, y) == Merged.Clean{y}: Merged}
   {==}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Format.merge_same once x is known to be b or not (held)
 def Format.merge_same.at(
   held: Bool,
-  +b: Octets.Bytes(),
-  +x: Octets.Bytes(),
+  b: Octets.Bytes(),
+  x: Octets.Bytes(),
   e: {Octets.Bytes.is_eq(x, b) == held: Bool}
 ) -> {Format.merge.left(held, b, x, x) == Merged.Clean{x}: Merged}:
   match held:
     case True{}:
       {==}
     case False{}:
-      %Equal.sym(Bool, Octets.Bytes.is_eq(x, b), False{}, e) :
+      %Equal.sym(Bool, Octets.Bytes.is_eq(x, b), False{}, e):
         {Format.merge.right(_, b, x, x) == Merged.Clean{x}: Merged}
-      %Equal.sym(Bool, Octets.Bytes.is_eq(x, x), True{}, Octets.Bytes.is_eq_refl(x)) :
+      %Equal.sym(Bool, Octets.Bytes.is_eq(x, x), True{}, Octets.Bytes.is_eq_refl(x)):
         {Format.merge.same(_, b, x, x) == Merged.Clean{x}: Merged}
       {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # when both made the same change, the merge is that change
 law Format.merge_same:
@@ -551,7 +696,11 @@ type Change is Data:
   Change.Removed{item: Item}
 
 # the lines ls as the changes that make (c), counted from the line at
-def Lines.changes(~make: Item -> Change, ls: List<&2, Octets.Bytes()>, +at: Nat) -> List<&2, Change>:
+def Lines.changes(
+  ~make: Item -> Change,
+  ls: List<&2, Octets.Bytes()>,
+  +at: Nat
+) -> List<&2, Change>:
   match ls:
     case Nil{}:
       []
@@ -578,16 +727,20 @@ def Format.changes.whole(held: Bool, a: Octets.Bytes(), b: Octets.Bytes()) -> Li
 # the changes of the patch p of a
 def Format.changes.of(+a: Octets.Bytes(), p: Patch) -> List<&2, Change>:
   match p:
-    case Patch.Lines{+k, +d, put}:
+    case Patch.Lines{+k, d, put}:
       List.append(
         &2,
         Change,
-        Lines.changes(~Change.removed, List.take(&2, Octets.Bytes(), List.drop(&2, Octets.Bytes(), Lines.list(a), k), d), 1n+k),
+        Lines.changes(
+          ~Change.removed,
+          List.take(&2, Octets.Bytes(), List.drop(&2, Octets.Bytes(), Lines.list(a), k), d),
+          1n+k
+        ),
         Lines.changes(~Change.added, put, 1n+k)
       )
     case Patch.Whole{+x}:
       Format.changes.whole(Octets.Bytes.is_eq(a, x), a, x)
 
 # what changed from a to b, part by part
-def Format.changes(+a: Octets.Bytes(), +b: Octets.Bytes()) -> List<&2, Change>:
+def Format.changes(+a: Octets.Bytes(), b: Octets.Bytes()) -> List<&2, Change>:
   Format.changes.of(a, Format.diff(a, b))

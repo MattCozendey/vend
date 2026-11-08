@@ -19,23 +19,8 @@ import ./spec.bend as Spec
 # Equality
 # --------
 
-# the left side of a true "and" is true
-def And.left(+a: Bool, +b: Bool, h: {Bool.and(a, b) == True{}: Bool}) -> {a == True{}: Bool}:
-  Bools.Bool.and_true_left(a, b)(h)
-
-# the right side of a true "and" is true
-def And.right(+a: Bool, +b: Bool, h: {Bool.and(a, b) == True{}: Bool}) -> {b == True{}: Bool}:
-  Bools.Bool.and_true_right(a, b)(h)
-
-# both sides are true, so their "and" is
-def And.both(a: Bool, b: Bool, ha: {a == True{}: Bool}, hb: {b == True{}: Bool}) -> {Bool.and(a, b) == True{}: Bool}:
-  match a:
-    case True{}:
-      hb
-    case False{}:
-      Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(ha))
-
-# String.eq is True only for equal texts
+# String.eq is True only for equal texts. String.eq_sound takes its texts as
+# +a and +b; a template that wants a sound check takes plain ones
 def Text.sound(a: String, b: String) -> {String.eq(a, b) == True{}: Bool} -> {a == b: String}:
   Strings.String.eq_sound(a, b)
 
@@ -43,16 +28,28 @@ def Text.sound(a: String, b: String) -> {String.eq(a, b) == True{}: Bool} -> {a 
 def Id.same_refl(a: Spec.Id) -> {Spec.Id.same(a, a) == True{}: Bool}:
   match a:
     case Spec.Id{+w, +r}:
-      And.both(String.eq(w, w), String.eq(r, r), Strings.String.eq_refl(w), Strings.String.eq_refl(r))
+      Bools.Bool.and_both(
+        String.eq(w, w),
+        String.eq(r, r)
+      )(Strings.String.eq_refl(w))(Strings.String.eq_refl(r))
 
 # Id.same is True only for equal requests
-def Id.same_sound(a: Spec.Id, b: Spec.Id) -> {Spec.Id.same(a, b) == True{}: Bool} -> {a == b: Spec.Id}:
+def Id.same_sound(
+  a: Spec.Id,
+  b: Spec.Id
+) -> {Spec.Id.same(a, b) == True{}: Bool} -> {a == b: Spec.Id}:
   match a b:
     case Spec.Id{+w1, +r1} Spec.Id{+w2, +r2}:
       +h =>
-        %Strings.String.eq_sound(w1, w2)(And.left(String.eq(w1, w2), String.eq(r1, r2), h)) :
+        %Strings.String.eq_sound(
+          w1,
+          w2
+        )(Bools.Bool.and_true_left(String.eq(w1, w2), String.eq(r1, r2))(h)):
           {Spec.Id{w1, r1} == Spec.Id{_, r2}: Spec.Id}
-        %Strings.String.eq_sound(r1, r2)(And.right(String.eq(w1, w2), String.eq(r1, r2), h)) :
+        %Strings.String.eq_sound(
+          r1,
+          r2
+        )(Bools.Bool.and_true_right(String.eq(w1, w2), String.eq(r1, r2))(h)):
           {Spec.Id{w1, r1} == Spec.Id{w1, _}: Spec.Id}
         {==}
 
@@ -65,20 +62,32 @@ def Chain.same_refl(a: Spec.Chain) -> {Spec.Chain.same(a, a) == True{}: Bool}:
       Strings.String.eq_refl(x)
 
 # Chain.same is True only for equal chains
-def Chain.same_sound(a: Spec.Chain, b: Spec.Chain) -> {Spec.Chain.same(a, b) == True{}: Bool} -> {a == b: Spec.Chain}:
+def Chain.same_sound(
+  a: Spec.Chain,
+  b: Spec.Chain
+) -> {Spec.Chain.same(a, b) == True{}: Bool} -> {a == b: Spec.Chain}:
   match a b:
-    case Spec.Chain.Branch{+x} Spec.Chain.Branch{+y}:
+    case Spec.Chain.Branch{x} Spec.Chain.Branch{y}:
       h =>
-        %Strings.String.eq_sound(x, y)(h) : {Spec.Chain.Branch{x} == Spec.Chain.Branch{_}: Spec.Chain}
+        %Strings.String.eq_sound(
+          x,
+          y
+        )(h): {Spec.Chain.Branch{x} == Spec.Chain.Branch{_}: Spec.Chain}
         {==}
-    case Spec.Chain.Group{+x} Spec.Chain.Group{+y}:
+    case Spec.Chain.Group{x} Spec.Chain.Group{y}:
       h =>
-        %Strings.String.eq_sound(x, y)(h) : {Spec.Chain.Group{x} == Spec.Chain.Group{_}: Spec.Chain}
+        %Strings.String.eq_sound(x, y)(h): {Spec.Chain.Group{x} == Spec.Chain.Group{_}: Spec.Chain}
         {==}
     case Spec.Chain.Branch{x} Spec.Chain.Group{y}:
-      h => Empty.absurd({Spec.Chain.Branch{x} == Spec.Chain.Group{y}: Spec.Chain}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Chain.Branch{x} == Spec.Chain.Group{y}: Spec.Chain},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Chain.Group{x} Spec.Chain.Branch{y}:
-      h => Empty.absurd({Spec.Chain.Group{x} == Spec.Chain.Branch{y}: Spec.Chain}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Chain.Group{x} == Spec.Chain.Branch{y}: Spec.Chain},
+        Shared.Bool.false_ne_true(h)
+      )
 
 # Member.same is True for a member and itself
 def Member.same_refl(a: Spec.Member) -> {Spec.Member.same(a, a) == True{}: Bool}:
@@ -89,20 +98,32 @@ def Member.same_refl(a: Spec.Member) -> {Spec.Member.same(a, a) == True{}: Bool}
       Strings.String.eq_refl(x)
 
 # Member.same is True only for equal members
-def Member.same_sound(a: Spec.Member, b: Spec.Member) -> {Spec.Member.same(a, b) == True{}: Bool} -> {a == b: Spec.Member}:
+def Member.same_sound(
+  a: Spec.Member,
+  b: Spec.Member
+) -> {Spec.Member.same(a, b) == True{}: Bool} -> {a == b: Spec.Member}:
   match a b:
-    case Spec.Member.Node{+x} Spec.Member.Node{+y}:
+    case Spec.Member.Node{x} Spec.Member.Node{y}:
       h =>
-        %Strings.String.eq_sound(x, y)(h) : {Spec.Member.Node{x} == Spec.Member.Node{_}: Spec.Member}
+        %Strings.String.eq_sound(x, y)(h): {Spec.Member.Node{x} == Spec.Member.Node{_}: Spec.Member}
         {==}
-    case Spec.Member.Group{+x} Spec.Member.Group{+y}:
+    case Spec.Member.Group{x} Spec.Member.Group{y}:
       h =>
-        %Strings.String.eq_sound(x, y)(h) : {Spec.Member.Group{x} == Spec.Member.Group{_}: Spec.Member}
+        %Strings.String.eq_sound(
+          x,
+          y
+        )(h): {Spec.Member.Group{x} == Spec.Member.Group{_}: Spec.Member}
         {==}
     case Spec.Member.Node{x} Spec.Member.Group{y}:
-      h => Empty.absurd({Spec.Member.Node{x} == Spec.Member.Group{y}: Spec.Member}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Member.Node{x} == Spec.Member.Group{y}: Spec.Member},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Member.Group{x} Spec.Member.Node{y}:
-      h => Empty.absurd({Spec.Member.Group{x} == Spec.Member.Node{y}: Spec.Member}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Member.Group{x} == Spec.Member.Node{y}: Spec.Member},
+        Shared.Bool.false_ne_true(h)
+      )
 
 # Content.same is True for a content and itself
 def Content.same_refl(a: Spec.Content) -> {Spec.Content.same(a, a) == True{}: Bool}:
@@ -113,273 +134,519 @@ def Content.same_refl(a: Spec.Content) -> {Spec.Content.same(a, a) == True{}: Bo
       Id.same_refl(v)
 
 # Content.same is True only for equal contents
-def Content.same_sound(a: Spec.Content, b: Spec.Content) -> {Spec.Content.same(a, b) == True{}: Bool} -> {a == b: Spec.Content}:
+def Content.same_sound(
+  a: Spec.Content,
+  b: Spec.Content
+) -> {Spec.Content.same(a, b) == True{}: Bool} -> {a == b: Spec.Content}:
   match a b:
-    case Spec.Content.Bytes{+x} Spec.Content.Bytes{+y}:
+    case Spec.Content.Bytes{x} Spec.Content.Bytes{y}:
       h =>
-        %Octets.Bytes.is_eq_sound(x, y)(h) : {Spec.Content.Bytes{x} == Spec.Content.Bytes{_}: Spec.Content}
+        %Octets.Bytes.is_eq_sound(
+          x,
+          y
+        )(h): {Spec.Content.Bytes{x} == Spec.Content.Bytes{_}: Spec.Content}
         {==}
-    case Spec.Content.Of{+x} Spec.Content.Of{+y}:
+    case Spec.Content.Of{x} Spec.Content.Of{y}:
       h =>
-        %Id.same_sound(x, y)(h) : {Spec.Content.Of{x} == Spec.Content.Of{_}: Spec.Content}
+        %Id.same_sound(x, y)(h): {Spec.Content.Of{x} == Spec.Content.Of{_}: Spec.Content}
         {==}
     case Spec.Content.Bytes{x} Spec.Content.Of{y}:
-      h => Empty.absurd({Spec.Content.Bytes{x} == Spec.Content.Of{y}: Spec.Content}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Content.Bytes{x} == Spec.Content.Of{y}: Spec.Content},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Content.Of{x} Spec.Content.Bytes{y}:
-      h => Empty.absurd({Spec.Content.Of{x} == Spec.Content.Bytes{y}: Spec.Content}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Content.Of{x} == Spec.Content.Bytes{y}: Spec.Content},
+        Shared.Bool.false_ne_true(h)
+      )
 
-# Name.same is True for a name and itself
-def Name.same_refl(a: Resources.Name) -> {Spec.Name.same(a, a) == True{}: Bool}:
-  match a:
-    case Resources.Name{t}:
-      Strings.String.eq_refl(t)
-
-# Name.same is True only for equal names
-def Name.same_sound(a: Resources.Name, b: Resources.Name) -> {Spec.Name.same(a, b) == True{}: Bool} -> {a == b: Resources.Name}:
-  match a b:
-    case Resources.Name{+x} Resources.Name{+y}:
-      h =>
-        %Strings.String.eq_sound(x, y)(h) : {Resources.Name{x} == Resources.Name{_}: Resources.Name}
-        {==}
-
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality, or a proof, keeps each and/or as one value for the proofs to split on
 # Ask.same is True for a change and itself
 def Ask.same_refl(a: Spec.Ask) -> {Spec.Ask.same(a, a) == True{}: Bool}:
   match a:
     case Spec.Ask.Write{+b, +n, +v, +c}:
-      And.both(
+      Bools.Bool.and_both(
         String.eq(b, b),
-        Bool.and(Spec.Name.same(n, n), Bool.and(Maybes.Maybe.same(~Spec.Id, ~Spec.Id.same, v, v), Spec.Content.same(c, c))),
-        Strings.String.eq_refl(b),
-        And.both(
-          Spec.Name.same(n, n),
-          Bool.and(Maybes.Maybe.same(~Spec.Id, ~Spec.Id.same, v, v), Spec.Content.same(c, c)),
-          Name.same_refl(n),
-          And.both(
+        Bool.and(
+          Resources.Name.same(n, n),
+          Bool.and(Maybes.Maybe.same(~Spec.Id, ~Spec.Id.same, v, v), Spec.Content.same(c, c))
+        )
+      )(
+        Strings.String.eq_refl(b)
+      )(
+        Bools.Bool.and_both(
+          Resources.Name.same(n, n),
+          Bool.and(Maybes.Maybe.same(~Spec.Id, ~Spec.Id.same, v, v), Spec.Content.same(c, c))
+        )(
+          Resources.Name.same_refl(n)
+        )(
+          Bools.Bool.and_both(
             Maybes.Maybe.same(~Spec.Id, ~Spec.Id.same, v, v),
-            Spec.Content.same(c, c),
-            Maybes.Maybe.same_refl(~Spec.Id, ~Spec.Id.same, ~Id.same_refl, v),
-            Content.same_refl(c)
-          )
+            Spec.Content.same(c, c)
+          )(Maybes.Maybe.same_refl(~Spec.Id, ~Spec.Id.same, ~Id.same_refl, v))(Content.same_refl(c))
         )
       )
     case Spec.Ask.SetBranch{+b, +v}:
-      And.both(String.eq(b, b), Spec.Id.same(v, v), Strings.String.eq_refl(b), Id.same_refl(v))
-    case Spec.Ask.Merge{+b, +v}:
-      And.both(String.eq(b, b), Spec.Id.same(v, v), Strings.String.eq_refl(b), Id.same_refl(v))
-    case Spec.Ask.Resolve{+b, +k, +n, +c}:
-      And.both(
+      Bools.Bool.and_both(
         String.eq(b, b),
-        Bool.and(Spec.Id.same(k, k), Bool.and(Spec.Name.same(n, n), Spec.Content.same(c, c))),
-        Strings.String.eq_refl(b),
-        And.both(
+        Spec.Id.same(v, v)
+      )(Strings.String.eq_refl(b))(Id.same_refl(v))
+    case Spec.Ask.Merge{+b, +v}:
+      Bools.Bool.and_both(
+        String.eq(b, b),
+        Spec.Id.same(v, v)
+      )(Strings.String.eq_refl(b))(Id.same_refl(v))
+    case Spec.Ask.Resolve{+b, +k, +n, +c}:
+      Bools.Bool.and_both(
+        String.eq(b, b),
+        Bool.and(Spec.Id.same(k, k), Bool.and(Resources.Name.same(n, n), Spec.Content.same(c, c)))
+      )(
+        Strings.String.eq_refl(b)
+      )(
+        Bools.Bool.and_both(
           Spec.Id.same(k, k),
-          Bool.and(Spec.Name.same(n, n), Spec.Content.same(c, c)),
-          Id.same_refl(k),
-          And.both(Spec.Name.same(n, n), Spec.Content.same(c, c), Name.same_refl(n), Content.same_refl(c))
+          Bool.and(Resources.Name.same(n, n), Spec.Content.same(c, c))
+        )(
+          Id.same_refl(k)
+        )(
+          Bools.Bool.and_both(
+            Resources.Name.same(n, n),
+            Spec.Content.same(c, c)
+          )(Resources.Name.same_refl(n))(Content.same_refl(c))
         )
       )
     case Spec.Ask.Mark{+b, +m, +t}:
-      And.both(
+      Bools.Bool.and_both(
         String.eq(b, b),
-        Bool.and(String.eq(m, m), String.eq(t, t)),
-        Strings.String.eq_refl(b),
-        And.both(String.eq(m, m), String.eq(t, t), Strings.String.eq_refl(m), Strings.String.eq_refl(t))
+        Bool.and(String.eq(m, m), String.eq(t, t))
+      )(
+        Strings.String.eq_refl(b)
+      )(
+        Bools.Bool.and_both(
+          String.eq(m, m),
+          String.eq(t, t)
+        )(Strings.String.eq_refl(m))(Strings.String.eq_refl(t))
       )
     case Spec.Ask.SetOwner{+c, +ms}:
-      And.both(
+      Bools.Bool.and_both(
         Spec.Chain.same(c, c),
-        Lists.List.same(~String, ~String.eq, ms, ms),
-        Chain.same_refl(c),
-        Lists.List.same_refl(~String, ~String.eq, ~Strings.String.eq_refl, ms)
-      )
+        Lists.List.same(~String, ~String.eq, ms, ms)
+      )(Chain.same_refl(c))(Lists.List.same_refl(~String, ~String.eq, ~Strings.String.eq_refl, ms))
     case Spec.Ask.SetGroup{+g, +ms}:
-      And.both(
+      Bools.Bool.and_both(
         String.eq(g, g),
-        Lists.List.same(~Spec.Member, ~Spec.Member.same, ms, ms),
-        Strings.String.eq_refl(g),
-        Lists.List.same_refl(~Spec.Member, ~Spec.Member.same, ~Member.same_refl, ms)
-      )
+        Lists.List.same(~Spec.Member, ~Spec.Member.same, ms, ms)
+      )(
+        Strings.String.eq_refl(g)
+      )(Lists.List.same_refl(~Spec.Member, ~Spec.Member.same, ~Member.same_refl, ms))
 
 # Ask.same is True only for equal changes
-def Ask.same_sound(a: Spec.Ask, b: Spec.Ask) -> {Spec.Ask.same(a, b) == True{}: Bool} -> {a == b: Spec.Ask}:
+def Ask.same_sound(
+  a: Spec.Ask,
+  b: Spec.Ask
+) -> {Spec.Ask.same(a, b) == True{}: Bool} -> {a == b: Spec.Ask}:
   match a b:
     case Spec.Ask.Write{+b1, +n1, +v1, +c1} Spec.Ask.Write{+b2, +n2, +v2, +c2}:
       +h =>
-        +r1 = Bool.and(Spec.Name.same(n1, n2), Bool.and(Maybes.Maybe.same(~Spec.Id, ~Spec.Id.same, v1, v2), Spec.Content.same(c1, c2)))
-        +r2 = Bool.and(Maybes.Maybe.same(~Spec.Id, ~Spec.Id.same, v1, v2), Spec.Content.same(c1, c2))
-        +h1 = And.right(String.eq(b1, b2), r1, h)
-        +h2 = And.right(Spec.Name.same(n1, n2), r2, h1)
-        %Strings.String.eq_sound(b1, b2)(And.left(String.eq(b1, b2), r1, h)) :
+        +r1 = Bool.and(
+          Resources.Name.same(n1, n2),
+          Bool.and(Maybes.Maybe.same(~Spec.Id, ~Spec.Id.same, v1, v2), Spec.Content.same(c1, c2))
+        )
+        +r2 = Bool.and(
+          Maybes.Maybe.same(~Spec.Id, ~Spec.Id.same, v1, v2),
+          Spec.Content.same(c1, c2)
+        )
+        +h1 = Bools.Bool.and_true_right(String.eq(b1, b2), r1)(h)
+        +h2 = Bools.Bool.and_true_right(Resources.Name.same(n1, n2), r2)(h1)
+        %Strings.String.eq_sound(b1, b2)(Bools.Bool.and_true_left(String.eq(b1, b2), r1)(h)):
           {Spec.Ask.Write{b1, n1, v1, c1} == Spec.Ask.Write{_, n2, v2, c2}: Spec.Ask}
-        %Name.same_sound(n1, n2)(And.left(Spec.Name.same(n1, n2), r2, h1)) :
+        %Resources.Name.same_sound(
+          n1,
+          n2
+        )(Bools.Bool.and_true_left(Resources.Name.same(n1, n2), r2)(h1)):
           {Spec.Ask.Write{b1, n1, v1, c1} == Spec.Ask.Write{b1, _, v2, c2}: Spec.Ask}
-        %Maybes.Maybe.same_sound(~Spec.Id, ~Spec.Id.same, Id.same_sound, v1, v2)(
-          And.left(Maybes.Maybe.same(~Spec.Id, ~Spec.Id.same, v1, v2), Spec.Content.same(c1, c2), h2)
-        ) :
+        %Maybes.Maybe.same_sound(
+          ~Spec.Id,
+          ~Spec.Id.same,
+          Id.same_sound,
+          v1,
+          v2
+        )(
+          Bools.Bool.and_true_left(
+            Maybes.Maybe.same(~Spec.Id, ~Spec.Id.same, v1, v2),
+            Spec.Content.same(c1, c2)
+          )(h2)
+        ):
           {Spec.Ask.Write{b1, n1, v1, c1} == Spec.Ask.Write{b1, n1, _, c2}: Spec.Ask}
-        %Content.same_sound(c1, c2)(And.right(Maybes.Maybe.same(~Spec.Id, ~Spec.Id.same, v1, v2), Spec.Content.same(c1, c2), h2)) :
+        %Content.same_sound(
+          c1,
+          c2
+        )(
+          Bools.Bool.and_true_right(
+            Maybes.Maybe.same(~Spec.Id, ~Spec.Id.same, v1, v2),
+            Spec.Content.same(c1, c2)
+          )(h2)
+        ):
           {Spec.Ask.Write{b1, n1, v1, c1} == Spec.Ask.Write{b1, n1, v1, _}: Spec.Ask}
         {==}
     case Spec.Ask.SetBranch{+b1, +v1} Spec.Ask.SetBranch{+b2, +v2}:
       +h =>
-        %Strings.String.eq_sound(b1, b2)(And.left(String.eq(b1, b2), Spec.Id.same(v1, v2), h)) :
+        %Strings.String.eq_sound(
+          b1,
+          b2
+        )(Bools.Bool.and_true_left(String.eq(b1, b2), Spec.Id.same(v1, v2))(h)):
           {Spec.Ask.SetBranch{b1, v1} == Spec.Ask.SetBranch{_, v2}: Spec.Ask}
-        %Id.same_sound(v1, v2)(And.right(String.eq(b1, b2), Spec.Id.same(v1, v2), h)) :
+        %Id.same_sound(
+          v1,
+          v2
+        )(Bools.Bool.and_true_right(String.eq(b1, b2), Spec.Id.same(v1, v2))(h)):
           {Spec.Ask.SetBranch{b1, v1} == Spec.Ask.SetBranch{b1, _}: Spec.Ask}
         {==}
     case Spec.Ask.Merge{+b1, +v1} Spec.Ask.Merge{+b2, +v2}:
       +h =>
-        %Strings.String.eq_sound(b1, b2)(And.left(String.eq(b1, b2), Spec.Id.same(v1, v2), h)) :
+        %Strings.String.eq_sound(
+          b1,
+          b2
+        )(Bools.Bool.and_true_left(String.eq(b1, b2), Spec.Id.same(v1, v2))(h)):
           {Spec.Ask.Merge{b1, v1} == Spec.Ask.Merge{_, v2}: Spec.Ask}
-        %Id.same_sound(v1, v2)(And.right(String.eq(b1, b2), Spec.Id.same(v1, v2), h)) :
+        %Id.same_sound(
+          v1,
+          v2
+        )(Bools.Bool.and_true_right(String.eq(b1, b2), Spec.Id.same(v1, v2))(h)):
           {Spec.Ask.Merge{b1, v1} == Spec.Ask.Merge{b1, _}: Spec.Ask}
         {==}
     case Spec.Ask.Resolve{+b1, +k1, +n1, +c1} Spec.Ask.Resolve{+b2, +k2, +n2, +c2}:
       +h =>
-        +r1 = Bool.and(Spec.Id.same(k1, k2), Bool.and(Spec.Name.same(n1, n2), Spec.Content.same(c1, c2)))
-        +r2 = Bool.and(Spec.Name.same(n1, n2), Spec.Content.same(c1, c2))
-        +h1 = And.right(String.eq(b1, b2), r1, h)
-        +h2 = And.right(Spec.Id.same(k1, k2), r2, h1)
-        %Strings.String.eq_sound(b1, b2)(And.left(String.eq(b1, b2), r1, h)) :
+        +r1 = Bool.and(
+          Spec.Id.same(k1, k2),
+          Bool.and(Resources.Name.same(n1, n2), Spec.Content.same(c1, c2))
+        )
+        +r2 = Bool.and(Resources.Name.same(n1, n2), Spec.Content.same(c1, c2))
+        +h1 = Bools.Bool.and_true_right(String.eq(b1, b2), r1)(h)
+        +h2 = Bools.Bool.and_true_right(Spec.Id.same(k1, k2), r2)(h1)
+        %Strings.String.eq_sound(b1, b2)(Bools.Bool.and_true_left(String.eq(b1, b2), r1)(h)):
           {Spec.Ask.Resolve{b1, k1, n1, c1} == Spec.Ask.Resolve{_, k2, n2, c2}: Spec.Ask}
-        %Id.same_sound(k1, k2)(And.left(Spec.Id.same(k1, k2), r2, h1)) :
+        %Id.same_sound(k1, k2)(Bools.Bool.and_true_left(Spec.Id.same(k1, k2), r2)(h1)):
           {Spec.Ask.Resolve{b1, k1, n1, c1} == Spec.Ask.Resolve{b1, _, n2, c2}: Spec.Ask}
-        %Name.same_sound(n1, n2)(And.left(Spec.Name.same(n1, n2), Spec.Content.same(c1, c2), h2)) :
+        %Resources.Name.same_sound(
+          n1,
+          n2
+        )(Bools.Bool.and_true_left(Resources.Name.same(n1, n2), Spec.Content.same(c1, c2))(h2)):
           {Spec.Ask.Resolve{b1, k1, n1, c1} == Spec.Ask.Resolve{b1, k1, _, c2}: Spec.Ask}
-        %Content.same_sound(c1, c2)(And.right(Spec.Name.same(n1, n2), Spec.Content.same(c1, c2), h2)) :
+        %Content.same_sound(
+          c1,
+          c2
+        )(Bools.Bool.and_true_right(Resources.Name.same(n1, n2), Spec.Content.same(c1, c2))(h2)):
           {Spec.Ask.Resolve{b1, k1, n1, c1} == Spec.Ask.Resolve{b1, k1, n1, _}: Spec.Ask}
         {==}
     case Spec.Ask.Mark{+b1, +m1, +t1} Spec.Ask.Mark{+b2, +m2, +t2}:
       +h =>
         +r1 = Bool.and(String.eq(m1, m2), String.eq(t1, t2))
-        +h1 = And.right(String.eq(b1, b2), r1, h)
-        %Strings.String.eq_sound(b1, b2)(And.left(String.eq(b1, b2), r1, h)) :
+        +h1 = Bools.Bool.and_true_right(String.eq(b1, b2), r1)(h)
+        %Strings.String.eq_sound(b1, b2)(Bools.Bool.and_true_left(String.eq(b1, b2), r1)(h)):
           {Spec.Ask.Mark{b1, m1, t1} == Spec.Ask.Mark{_, m2, t2}: Spec.Ask}
-        %Strings.String.eq_sound(m1, m2)(And.left(String.eq(m1, m2), String.eq(t1, t2), h1)) :
+        %Strings.String.eq_sound(
+          m1,
+          m2
+        )(Bools.Bool.and_true_left(String.eq(m1, m2), String.eq(t1, t2))(h1)):
           {Spec.Ask.Mark{b1, m1, t1} == Spec.Ask.Mark{b1, _, t2}: Spec.Ask}
-        %Strings.String.eq_sound(t1, t2)(And.right(String.eq(m1, m2), String.eq(t1, t2), h1)) :
+        %Strings.String.eq_sound(
+          t1,
+          t2
+        )(Bools.Bool.and_true_right(String.eq(m1, m2), String.eq(t1, t2))(h1)):
           {Spec.Ask.Mark{b1, m1, t1} == Spec.Ask.Mark{b1, m1, _}: Spec.Ask}
         {==}
     case Spec.Ask.SetOwner{+c1, +ms1} Spec.Ask.SetOwner{+c2, +ms2}:
       +h =>
-        %Chain.same_sound(c1, c2)(And.left(Spec.Chain.same(c1, c2), Lists.List.same(~String, ~String.eq, ms1, ms2), h)) :
+        %Chain.same_sound(
+          c1,
+          c2
+        )(
+          Bools.Bool.and_true_left(
+            Spec.Chain.same(c1, c2),
+            Lists.List.same(~String, ~String.eq, ms1, ms2)
+          )(h)
+        ):
           {Spec.Ask.SetOwner{c1, ms1} == Spec.Ask.SetOwner{_, ms2}: Spec.Ask}
-        %Lists.List.same_sound(~String, ~String.eq, ~Text.sound, ms1, ms2)(
-          And.right(Spec.Chain.same(c1, c2), Lists.List.same(~String, ~String.eq, ms1, ms2), h)
-        ) :
+        %Lists.List.same_sound(
+          ~String,
+          ~String.eq,
+          ~Text.sound,
+          ms1,
+          ms2
+        )(
+          Bools.Bool.and_true_right(
+            Spec.Chain.same(c1, c2),
+            Lists.List.same(~String, ~String.eq, ms1, ms2)
+          )(h)
+        ):
           {Spec.Ask.SetOwner{c1, ms1} == Spec.Ask.SetOwner{c1, _}: Spec.Ask}
         {==}
     case Spec.Ask.SetGroup{+g1, +ms1} Spec.Ask.SetGroup{+g2, +ms2}:
       +h =>
-        %Strings.String.eq_sound(g1, g2)(And.left(String.eq(g1, g2), Lists.List.same(~Spec.Member, ~Spec.Member.same, ms1, ms2), h)) :
+        %Strings.String.eq_sound(
+          g1,
+          g2
+        )(
+          Bools.Bool.and_true_left(
+            String.eq(g1, g2),
+            Lists.List.same(~Spec.Member, ~Spec.Member.same, ms1, ms2)
+          )(h)
+        ):
           {Spec.Ask.SetGroup{g1, ms1} == Spec.Ask.SetGroup{_, ms2}: Spec.Ask}
-        %Lists.List.same_sound(~Spec.Member, ~Spec.Member.same, ~Member.same_sound, ms1, ms2)(
-          And.right(String.eq(g1, g2), Lists.List.same(~Spec.Member, ~Spec.Member.same, ms1, ms2), h)
-        ) :
+        %Lists.List.same_sound(
+          ~Spec.Member,
+          ~Spec.Member.same,
+          ~Member.same_sound,
+          ms1,
+          ms2
+        )(
+          Bools.Bool.and_true_right(
+            String.eq(g1, g2),
+            Lists.List.same(~Spec.Member, ~Spec.Member.same, ms1, ms2)
+          )(h)
+        ):
           {Spec.Ask.SetGroup{g1, ms1} == Spec.Ask.SetGroup{g1, _}: Spec.Ask}
         {==}
     case Spec.Ask.Write{p0, p1, p2, p3} Spec.Ask.SetBranch{q0, q1}:
-      h => Empty.absurd({Spec.Ask.Write{p0, p1, p2, p3} == Spec.Ask.SetBranch{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Write{p0, p1, p2, p3} == Spec.Ask.SetBranch{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Write{p0, p1, p2, p3} Spec.Ask.Merge{q0, q1}:
-      h => Empty.absurd({Spec.Ask.Write{p0, p1, p2, p3} == Spec.Ask.Merge{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Write{p0, p1, p2, p3} == Spec.Ask.Merge{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Write{p0, p1, p2, p3} Spec.Ask.Resolve{q0, q1, q2, q3}:
-      h => Empty.absurd({Spec.Ask.Write{p0, p1, p2, p3} == Spec.Ask.Resolve{q0, q1, q2, q3}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Write{p0, p1, p2, p3} == Spec.Ask.Resolve{q0, q1, q2, q3}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Write{p0, p1, p2, p3} Spec.Ask.Mark{q0, q1, q2}:
-      h => Empty.absurd({Spec.Ask.Write{p0, p1, p2, p3} == Spec.Ask.Mark{q0, q1, q2}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Write{p0, p1, p2, p3} == Spec.Ask.Mark{q0, q1, q2}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Write{p0, p1, p2, p3} Spec.Ask.SetOwner{q0, q1}:
-      h => Empty.absurd({Spec.Ask.Write{p0, p1, p2, p3} == Spec.Ask.SetOwner{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Write{p0, p1, p2, p3} == Spec.Ask.SetOwner{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Write{p0, p1, p2, p3} Spec.Ask.SetGroup{q0, q1}:
-      h => Empty.absurd({Spec.Ask.Write{p0, p1, p2, p3} == Spec.Ask.SetGroup{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Write{p0, p1, p2, p3} == Spec.Ask.SetGroup{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.SetBranch{p0, p1} Spec.Ask.Write{q0, q1, q2, q3}:
-      h => Empty.absurd({Spec.Ask.SetBranch{p0, p1} == Spec.Ask.Write{q0, q1, q2, q3}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.SetBranch{p0, p1} == Spec.Ask.Write{q0, q1, q2, q3}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.SetBranch{p0, p1} Spec.Ask.Merge{q0, q1}:
-      h => Empty.absurd({Spec.Ask.SetBranch{p0, p1} == Spec.Ask.Merge{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.SetBranch{p0, p1} == Spec.Ask.Merge{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.SetBranch{p0, p1} Spec.Ask.Resolve{q0, q1, q2, q3}:
-      h => Empty.absurd({Spec.Ask.SetBranch{p0, p1} == Spec.Ask.Resolve{q0, q1, q2, q3}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.SetBranch{p0, p1} == Spec.Ask.Resolve{q0, q1, q2, q3}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.SetBranch{p0, p1} Spec.Ask.Mark{q0, q1, q2}:
-      h => Empty.absurd({Spec.Ask.SetBranch{p0, p1} == Spec.Ask.Mark{q0, q1, q2}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.SetBranch{p0, p1} == Spec.Ask.Mark{q0, q1, q2}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.SetBranch{p0, p1} Spec.Ask.SetOwner{q0, q1}:
-      h => Empty.absurd({Spec.Ask.SetBranch{p0, p1} == Spec.Ask.SetOwner{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.SetBranch{p0, p1} == Spec.Ask.SetOwner{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.SetBranch{p0, p1} Spec.Ask.SetGroup{q0, q1}:
-      h => Empty.absurd({Spec.Ask.SetBranch{p0, p1} == Spec.Ask.SetGroup{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.SetBranch{p0, p1} == Spec.Ask.SetGroup{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Merge{p0, p1} Spec.Ask.Write{q0, q1, q2, q3}:
-      h => Empty.absurd({Spec.Ask.Merge{p0, p1} == Spec.Ask.Write{q0, q1, q2, q3}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Merge{p0, p1} == Spec.Ask.Write{q0, q1, q2, q3}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Merge{p0, p1} Spec.Ask.SetBranch{q0, q1}:
-      h => Empty.absurd({Spec.Ask.Merge{p0, p1} == Spec.Ask.SetBranch{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Merge{p0, p1} == Spec.Ask.SetBranch{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Merge{p0, p1} Spec.Ask.Resolve{q0, q1, q2, q3}:
-      h => Empty.absurd({Spec.Ask.Merge{p0, p1} == Spec.Ask.Resolve{q0, q1, q2, q3}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Merge{p0, p1} == Spec.Ask.Resolve{q0, q1, q2, q3}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Merge{p0, p1} Spec.Ask.Mark{q0, q1, q2}:
-      h => Empty.absurd({Spec.Ask.Merge{p0, p1} == Spec.Ask.Mark{q0, q1, q2}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Merge{p0, p1} == Spec.Ask.Mark{q0, q1, q2}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Merge{p0, p1} Spec.Ask.SetOwner{q0, q1}:
-      h => Empty.absurd({Spec.Ask.Merge{p0, p1} == Spec.Ask.SetOwner{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Merge{p0, p1} == Spec.Ask.SetOwner{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Merge{p0, p1} Spec.Ask.SetGroup{q0, q1}:
-      h => Empty.absurd({Spec.Ask.Merge{p0, p1} == Spec.Ask.SetGroup{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Merge{p0, p1} == Spec.Ask.SetGroup{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Resolve{p0, p1, p2, p3} Spec.Ask.Write{q0, q1, q2, q3}:
-      h => Empty.absurd({Spec.Ask.Resolve{p0, p1, p2, p3} == Spec.Ask.Write{q0, q1, q2, q3}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Resolve{p0, p1, p2, p3} == Spec.Ask.Write{q0, q1, q2, q3}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Resolve{p0, p1, p2, p3} Spec.Ask.SetBranch{q0, q1}:
-      h => Empty.absurd({Spec.Ask.Resolve{p0, p1, p2, p3} == Spec.Ask.SetBranch{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Resolve{p0, p1, p2, p3} == Spec.Ask.SetBranch{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Resolve{p0, p1, p2, p3} Spec.Ask.Merge{q0, q1}:
-      h => Empty.absurd({Spec.Ask.Resolve{p0, p1, p2, p3} == Spec.Ask.Merge{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Resolve{p0, p1, p2, p3} == Spec.Ask.Merge{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Resolve{p0, p1, p2, p3} Spec.Ask.Mark{q0, q1, q2}:
-      h => Empty.absurd({Spec.Ask.Resolve{p0, p1, p2, p3} == Spec.Ask.Mark{q0, q1, q2}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Resolve{p0, p1, p2, p3} == Spec.Ask.Mark{q0, q1, q2}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Resolve{p0, p1, p2, p3} Spec.Ask.SetOwner{q0, q1}:
-      h => Empty.absurd({Spec.Ask.Resolve{p0, p1, p2, p3} == Spec.Ask.SetOwner{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Resolve{p0, p1, p2, p3} == Spec.Ask.SetOwner{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Resolve{p0, p1, p2, p3} Spec.Ask.SetGroup{q0, q1}:
-      h => Empty.absurd({Spec.Ask.Resolve{p0, p1, p2, p3} == Spec.Ask.SetGroup{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Resolve{p0, p1, p2, p3} == Spec.Ask.SetGroup{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Mark{p0, p1, p2} Spec.Ask.Write{q0, q1, q2, q3}:
-      h => Empty.absurd({Spec.Ask.Mark{p0, p1, p2} == Spec.Ask.Write{q0, q1, q2, q3}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Mark{p0, p1, p2} == Spec.Ask.Write{q0, q1, q2, q3}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Mark{p0, p1, p2} Spec.Ask.SetBranch{q0, q1}:
-      h => Empty.absurd({Spec.Ask.Mark{p0, p1, p2} == Spec.Ask.SetBranch{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Mark{p0, p1, p2} == Spec.Ask.SetBranch{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Mark{p0, p1, p2} Spec.Ask.Merge{q0, q1}:
-      h => Empty.absurd({Spec.Ask.Mark{p0, p1, p2} == Spec.Ask.Merge{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Mark{p0, p1, p2} == Spec.Ask.Merge{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Mark{p0, p1, p2} Spec.Ask.Resolve{q0, q1, q2, q3}:
-      h => Empty.absurd({Spec.Ask.Mark{p0, p1, p2} == Spec.Ask.Resolve{q0, q1, q2, q3}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Mark{p0, p1, p2} == Spec.Ask.Resolve{q0, q1, q2, q3}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Mark{p0, p1, p2} Spec.Ask.SetOwner{q0, q1}:
-      h => Empty.absurd({Spec.Ask.Mark{p0, p1, p2} == Spec.Ask.SetOwner{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Mark{p0, p1, p2} == Spec.Ask.SetOwner{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.Mark{p0, p1, p2} Spec.Ask.SetGroup{q0, q1}:
-      h => Empty.absurd({Spec.Ask.Mark{p0, p1, p2} == Spec.Ask.SetGroup{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.Mark{p0, p1, p2} == Spec.Ask.SetGroup{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.SetOwner{p0, p1} Spec.Ask.Write{q0, q1, q2, q3}:
-      h => Empty.absurd({Spec.Ask.SetOwner{p0, p1} == Spec.Ask.Write{q0, q1, q2, q3}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.SetOwner{p0, p1} == Spec.Ask.Write{q0, q1, q2, q3}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.SetOwner{p0, p1} Spec.Ask.SetBranch{q0, q1}:
-      h => Empty.absurd({Spec.Ask.SetOwner{p0, p1} == Spec.Ask.SetBranch{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.SetOwner{p0, p1} == Spec.Ask.SetBranch{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.SetOwner{p0, p1} Spec.Ask.Merge{q0, q1}:
-      h => Empty.absurd({Spec.Ask.SetOwner{p0, p1} == Spec.Ask.Merge{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.SetOwner{p0, p1} == Spec.Ask.Merge{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.SetOwner{p0, p1} Spec.Ask.Resolve{q0, q1, q2, q3}:
-      h => Empty.absurd({Spec.Ask.SetOwner{p0, p1} == Spec.Ask.Resolve{q0, q1, q2, q3}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.SetOwner{p0, p1} == Spec.Ask.Resolve{q0, q1, q2, q3}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.SetOwner{p0, p1} Spec.Ask.Mark{q0, q1, q2}:
-      h => Empty.absurd({Spec.Ask.SetOwner{p0, p1} == Spec.Ask.Mark{q0, q1, q2}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.SetOwner{p0, p1} == Spec.Ask.Mark{q0, q1, q2}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.SetOwner{p0, p1} Spec.Ask.SetGroup{q0, q1}:
-      h => Empty.absurd({Spec.Ask.SetOwner{p0, p1} == Spec.Ask.SetGroup{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.SetOwner{p0, p1} == Spec.Ask.SetGroup{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.SetGroup{p0, p1} Spec.Ask.Write{q0, q1, q2, q3}:
-      h => Empty.absurd({Spec.Ask.SetGroup{p0, p1} == Spec.Ask.Write{q0, q1, q2, q3}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.SetGroup{p0, p1} == Spec.Ask.Write{q0, q1, q2, q3}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.SetGroup{p0, p1} Spec.Ask.SetBranch{q0, q1}:
-      h => Empty.absurd({Spec.Ask.SetGroup{p0, p1} == Spec.Ask.SetBranch{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.SetGroup{p0, p1} == Spec.Ask.SetBranch{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.SetGroup{p0, p1} Spec.Ask.Merge{q0, q1}:
-      h => Empty.absurd({Spec.Ask.SetGroup{p0, p1} == Spec.Ask.Merge{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.SetGroup{p0, p1} == Spec.Ask.Merge{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.SetGroup{p0, p1} Spec.Ask.Resolve{q0, q1, q2, q3}:
-      h => Empty.absurd({Spec.Ask.SetGroup{p0, p1} == Spec.Ask.Resolve{q0, q1, q2, q3}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.SetGroup{p0, p1} == Spec.Ask.Resolve{q0, q1, q2, q3}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.SetGroup{p0, p1} Spec.Ask.Mark{q0, q1, q2}:
-      h => Empty.absurd({Spec.Ask.SetGroup{p0, p1} == Spec.Ask.Mark{q0, q1, q2}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.SetGroup{p0, p1} == Spec.Ask.Mark{q0, q1, q2}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Ask.SetGroup{p0, p1} Spec.Ask.SetOwner{q0, q1}:
-      h => Empty.absurd({Spec.Ask.SetGroup{p0, p1} == Spec.Ask.SetOwner{q0, q1}: Spec.Ask}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Ask.SetGroup{p0, p1} == Spec.Ask.SetOwner{q0, q1}: Spec.Ask},
+        Shared.Bool.false_ne_true(h)
+      )
 
 def Spec.Entry.same_refl(a):
   match a:
     case Spec.Entry.Ask{+i, +t, +q}:
-      And.both(
+      Bools.Bool.and_both(
         Spec.Id.same(i, i),
-        Bool.and(String.eq(t, t), Spec.Ask.same(q, q)),
-        Id.same_refl(i),
-        And.both(String.eq(t, t), Spec.Ask.same(q, q), Strings.String.eq_refl(t), Ask.same_refl(q))
+        Bool.and(String.eq(t, t), Spec.Ask.same(q, q))
+      )(
+        Id.same_refl(i)
+      )(
+        Bools.Bool.and_both(
+          String.eq(t, t),
+          Spec.Ask.same(q, q)
+        )(Strings.String.eq_refl(t))(Ask.same_refl(q))
       )
     case Spec.Entry.Vote{i}:
       Id.same_refl(i)
     case Spec.Entry.Root{+c, +i, +n}:
-      And.both(
+      Bools.Bool.and_both(
         Spec.Chain.same(c, c),
-        Bool.and(Spec.Id.same(i, i), String.eq(n, n)),
-        Chain.same_refl(c),
-        And.both(Spec.Id.same(i, i), String.eq(n, n), Id.same_refl(i), Strings.String.eq_refl(n))
+        Bool.and(Spec.Id.same(i, i), String.eq(n, n))
+      )(
+        Chain.same_refl(c)
+      )(
+        Bools.Bool.and_both(
+          Spec.Id.same(i, i),
+          String.eq(n, n)
+        )(Id.same_refl(i))(Strings.String.eq_refl(n))
       )
 
 def Spec.Entry.same_sound(a, b):
@@ -387,41 +654,72 @@ def Spec.Entry.same_sound(a, b):
     case Spec.Entry.Ask{+i1, +t1, +q1} Spec.Entry.Ask{+i2, +t2, +q2}:
       +h =>
         +r1 = Bool.and(String.eq(t1, t2), Spec.Ask.same(q1, q2))
-        +h1 = And.right(Spec.Id.same(i1, i2), r1, h)
-        %Id.same_sound(i1, i2)(And.left(Spec.Id.same(i1, i2), r1, h)) :
+        +h1 = Bools.Bool.and_true_right(Spec.Id.same(i1, i2), r1)(h)
+        %Id.same_sound(i1, i2)(Bools.Bool.and_true_left(Spec.Id.same(i1, i2), r1)(h)):
           {Spec.Entry.Ask{i1, t1, q1} == Spec.Entry.Ask{_, t2, q2}: Spec.Entry}
-        %Strings.String.eq_sound(t1, t2)(And.left(String.eq(t1, t2), Spec.Ask.same(q1, q2), h1)) :
+        %Strings.String.eq_sound(
+          t1,
+          t2
+        )(Bools.Bool.and_true_left(String.eq(t1, t2), Spec.Ask.same(q1, q2))(h1)):
           {Spec.Entry.Ask{i1, t1, q1} == Spec.Entry.Ask{i1, _, q2}: Spec.Entry}
-        %Ask.same_sound(q1, q2)(And.right(String.eq(t1, t2), Spec.Ask.same(q1, q2), h1)) :
+        %Ask.same_sound(
+          q1,
+          q2
+        )(Bools.Bool.and_true_right(String.eq(t1, t2), Spec.Ask.same(q1, q2))(h1)):
           {Spec.Entry.Ask{i1, t1, q1} == Spec.Entry.Ask{i1, t1, _}: Spec.Entry}
         {==}
-    case Spec.Entry.Vote{+i1} Spec.Entry.Vote{+i2}:
+    case Spec.Entry.Vote{i1} Spec.Entry.Vote{i2}:
       h =>
-        %Id.same_sound(i1, i2)(h) : {Spec.Entry.Vote{i1} == Spec.Entry.Vote{_}: Spec.Entry}
+        %Id.same_sound(i1, i2)(h): {Spec.Entry.Vote{i1} == Spec.Entry.Vote{_}: Spec.Entry}
         {==}
     case Spec.Entry.Root{+c1, +i1, +n1} Spec.Entry.Root{+c2, +i2, +n2}:
       +h =>
         +r1 = Bool.and(Spec.Id.same(i1, i2), String.eq(n1, n2))
-        +h1 = And.right(Spec.Chain.same(c1, c2), r1, h)
-        %Chain.same_sound(c1, c2)(And.left(Spec.Chain.same(c1, c2), r1, h)) :
+        +h1 = Bools.Bool.and_true_right(Spec.Chain.same(c1, c2), r1)(h)
+        %Chain.same_sound(c1, c2)(Bools.Bool.and_true_left(Spec.Chain.same(c1, c2), r1)(h)):
           {Spec.Entry.Root{c1, i1, n1} == Spec.Entry.Root{_, i2, n2}: Spec.Entry}
-        %Id.same_sound(i1, i2)(And.left(Spec.Id.same(i1, i2), String.eq(n1, n2), h1)) :
+        %Id.same_sound(
+          i1,
+          i2
+        )(Bools.Bool.and_true_left(Spec.Id.same(i1, i2), String.eq(n1, n2))(h1)):
           {Spec.Entry.Root{c1, i1, n1} == Spec.Entry.Root{c1, _, n2}: Spec.Entry}
-        %Strings.String.eq_sound(n1, n2)(And.right(Spec.Id.same(i1, i2), String.eq(n1, n2), h1)) :
+        %Strings.String.eq_sound(
+          n1,
+          n2
+        )(Bools.Bool.and_true_right(Spec.Id.same(i1, i2), String.eq(n1, n2))(h1)):
           {Spec.Entry.Root{c1, i1, n1} == Spec.Entry.Root{c1, i1, _}: Spec.Entry}
         {==}
     case Spec.Entry.Ask{p0, p1, p2} Spec.Entry.Vote{q0}:
-      h => Empty.absurd({Spec.Entry.Ask{p0, p1, p2} == Spec.Entry.Vote{q0}: Spec.Entry}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Entry.Ask{p0, p1, p2} == Spec.Entry.Vote{q0}: Spec.Entry},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Entry.Ask{p0, p1, p2} Spec.Entry.Root{q0, q1, q2}:
-      h => Empty.absurd({Spec.Entry.Ask{p0, p1, p2} == Spec.Entry.Root{q0, q1, q2}: Spec.Entry}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Entry.Ask{p0, p1, p2} == Spec.Entry.Root{q0, q1, q2}: Spec.Entry},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Entry.Vote{p0} Spec.Entry.Ask{q0, q1, q2}:
-      h => Empty.absurd({Spec.Entry.Vote{p0} == Spec.Entry.Ask{q0, q1, q2}: Spec.Entry}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Entry.Vote{p0} == Spec.Entry.Ask{q0, q1, q2}: Spec.Entry},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Entry.Vote{p0} Spec.Entry.Root{q0, q1, q2}:
-      h => Empty.absurd({Spec.Entry.Vote{p0} == Spec.Entry.Root{q0, q1, q2}: Spec.Entry}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Entry.Vote{p0} == Spec.Entry.Root{q0, q1, q2}: Spec.Entry},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Entry.Root{p0, p1, p2} Spec.Entry.Ask{q0, q1, q2}:
-      h => Empty.absurd({Spec.Entry.Root{p0, p1, p2} == Spec.Entry.Ask{q0, q1, q2}: Spec.Entry}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Entry.Root{p0, p1, p2} == Spec.Entry.Ask{q0, q1, q2}: Spec.Entry},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.Entry.Root{p0, p1, p2} Spec.Entry.Vote{q0}:
-      h => Empty.absurd({Spec.Entry.Root{p0, p1, p2} == Spec.Entry.Vote{q0}: Spec.Entry}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.Entry.Root{p0, p1, p2} == Spec.Entry.Vote{q0}: Spec.Entry},
+        Shared.Bool.false_ne_true(h)
+      )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # Lookups
 # -------
@@ -496,7 +794,12 @@ def Step.if(held: Bool, i: Spec.Id, q: Spec.Ask, ms: List<&2, String>) -> Maybe<
       None{}
 
 # the step to i, when s holds its request r on the chain c
-def Step.ask(+c: Spec.Chain, i: Spec.Id, ms: List<&2, String>, r: Maybe<&2, Asked>) -> Maybe<&2, Step>:
+def Step.ask(
+  c: Spec.Chain,
+  i: Spec.Id,
+  ms: List<&2, String>,
+  r: Maybe<&2, Asked>
+) -> Maybe<&2, Step>:
   match r:
     case None{}:
       None{}
@@ -504,7 +807,12 @@ def Step.ask(+c: Spec.Chain, i: Spec.Id, ms: List<&2, String>, r: Maybe<&2, Aske
       Step.if(Spec.Chain.same(Spec.Ask.chain(q), c), i, q, ms)
 
 # the step to the winner w of a vote, on the chain c of s
-def Step.won(+s: Spec.State(), +c: Spec.Chain, ms: List<&2, String>, w: Maybe<&2, Spec.Id>) -> Maybe<&2, Step>:
+def Step.won(
+  s: Spec.State(),
+  c: Spec.Chain,
+  ms: List<&2, String>,
+  w: Maybe<&2, Spec.Id>
+) -> Maybe<&2, Step>:
   match w:
     case None{}:
       None{}
@@ -514,12 +822,21 @@ def Step.won(+s: Spec.State(), +c: Spec.Chain, ms: List<&2, String>, w: Maybe<&2
 # the next step of the chain c of s, after the step k
 def Chain.next(+s: Spec.State(), +c: Spec.Chain, k: Step) -> Maybe<&2, Step>:
   match k:
-    case Step{+v, +ms}:
+    case Step{v, +ms}:
       Step.won(
         s,
         c,
         ms,
-        Quorums.Quorum.winner(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, ms, ms, Spot{s, c, v})
+        Quorums.Quorum.winner(
+          ~String,
+          ~Spec.Id,
+          ~Spot,
+          ~Spot.vote,
+          ~Spec.Id.same,
+          ms,
+          ms,
+          Spot{s, c, v}
+        )
       )
 
 # the versions of the chain c of s from the step nx on, f steps at most
@@ -556,7 +873,7 @@ def Root.of(m: Maybe<&2, Spec.Entry>) -> Maybe<&2, Step>:
       None{}
 
 # the first step of the chain c, when s holds its root and its request
-def Chain.root.of(+s: Spec.State(), +c: Spec.Chain, m: Maybe<&2, Step>) -> Maybe<&2, Step>:
+def Chain.root.of(s: Spec.State(), c: Spec.Chain, m: Maybe<&2, Step>) -> Maybe<&2, Step>:
   match m:
     case None{}:
       None{}
@@ -572,7 +889,7 @@ def Chain.from(+s: Spec.State(), +c: Spec.Chain, r: Maybe<&2, Step>) -> List<&2,
   match r:
     case None{}:
       []
-    case Some{Step{+i, +ms}}:
+    case Some{Step{+i, ms}}:
       i <> Chain.walk(State.fuel(s), s, c, Chain.next(s, c, Step{i, ms}))
 
 # the last step of the chain c of s, from its first step r
@@ -635,24 +952,18 @@ def Entry.ids(cs: List<&2, Cells.Cell<Spec.Entry>>) -> List<&2, Spec.Id>:
 def State.versions(s: Spec.State()) -> List<&2, Spec.Id>:
   Entry.ids(Tries.Trie.values(Cells.Cell<Spec.Entry>, s))
 
-# prev when x is v (held), else what follows (rest)
-def List.before.if(held: Bool, prev: Maybe<&2, Spec.Id>, rest: Maybe<&2, Spec.Id>) -> Maybe<&2, Spec.Id>:
-  match held:
-    case True{}:
-      prev
-    case False{}:
-      rest
-
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the rest is one walk of the list; it costs the same with or without the pick
 # the version before v in xs, after prev; none when v is first or not there
 def List.before(xs: List<&2, Spec.Id>, prev: Maybe<&2, Spec.Id>, +v: Spec.Id) -> Maybe<&2, Spec.Id>:
   match xs:
     case Nil{}:
       None{}
     case Con{+x, r}:
-      List.before.if(Spec.Id.same(x, v), prev, List.before(r, Some{x}, v))
+      Bool.pick(Maybe<&2, Spec.Id>, Spec.Id.same(x, v), prev, List.before(r, Some{x}, v))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the version before v on its chain c
-def Chain.before(+s: Spec.State(), c: Spec.Chain, +v: Spec.Id) -> Maybe<&2, Spec.Id>:
+def Chain.before(s: Spec.State(), c: Spec.Chain, v: Spec.Id) -> Maybe<&2, Spec.Id>:
   List.before(Spec.Node.chain(s, c), None{}, v)
 
 # the versions that the change q of v names besides the one before it
@@ -666,7 +977,7 @@ def Ask.refs(q: Spec.Ask) -> List<&2, Spec.Id>:
       []
 
 # the versions that v came from, when s holds its request r
-def Version.parents.of(+s: Spec.State(), +v: Spec.Id, r: Maybe<&2, Asked>) -> List<&2, Spec.Id>:
+def Version.parents.of(s: Spec.State(), v: Spec.Id, r: Maybe<&2, Asked>) -> List<&2, Spec.Id>:
   match r:
     case None{}:
       []
@@ -674,7 +985,18 @@ def Version.parents.of(+s: Spec.State(), +v: Spec.Id, r: Maybe<&2, Asked>) -> Li
       List.append(
         &2,
         Spec.Id,
-        Maybe.default(&2, List<&2, Spec.Id>, Maybe.map(&2, Spec.Id, List<&2, Spec.Id>, x => [x], Chain.before(s, Spec.Ask.chain(q), v)), []),
+        Maybe.default(
+          &2,
+          List<&2, Spec.Id>,
+          Maybe.map(
+            &2,
+            Spec.Id,
+            List<&2, Spec.Id>,
+            x => [x],
+            Chain.before(s, Spec.Ask.chain(q), v)
+          ),
+          []
+        ),
         Ask.refs(q)
       )
 
@@ -684,28 +1006,35 @@ def Version.parents(s: Spec.State(), v: Spec.Id) -> List<&2, Spec.Id>:
   +v = v
   Version.parents.of(s, v, State.asked(s, v))
 
-# x is v, or a version that v came from
-def Version.is_from(+s: Spec.State(), +x: Spec.Id, +v: Spec.Id) -> Bool:
-  Bool.or(
-    Spec.Id.same(x, v),
-    Reaches.Reach.in(~Spec.Id, ~Spec.State(), ~Spec.Id.same, ~Version.parents, ~State.versions, s, v, x)
-  )
+# x is v (held), or a version that v came from
+def Version.is_from.if(held: Bool, s: Spec.State(), x: Spec.Id, v: Spec.Id) -> Bool:
+  match held:
+    case True{}:
+      True{}
+    case False{}:
+      Reaches.Reach.in(
+        ~Spec.Id,
+        ~Spec.State(),
+        ~Spec.Id.same,
+        ~Version.parents,
+        ~State.versions,
+        s,
+        v,
+        x
+      )
 
+# x is v, or a version that v came from
+def Version.is_from(s: Spec.State(), +x: Spec.Id, +v: Spec.Id) -> Bool:
+  Version.is_from.if(Spec.Id.same(x, v), s, x, v)
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the rest is one walk of the list; it costs the same with or without the pick
 # the first version of xs that v came from
 def Version.base.go(+s: Spec.State(), xs: List<&2, Spec.Id>, +v: Spec.Id) -> Maybe<&2, Spec.Id>:
   match xs:
     case Nil{}:
       None{}
     case Con{+x, r}:
-      List.before.if(Version.is_from(s, x, v), Some{x}, Version.base.go(s, r, v))
-
-# nothing when the list ended (held), else rest
-def List.upto.if(held: Bool, rest: List<&2, Spec.Id>) -> List<&2, Spec.Id>:
-  match held:
-    case True{}:
-      []
-    case False{}:
-      rest
+      Bool.pick(Maybe<&2, Spec.Id>, Version.is_from(s, x, v), Some{x}, Version.base.go(s, r, v))
 
 # the versions of xs up to v
 def List.upto(xs: List<&2, Spec.Id>, +v: Spec.Id) -> List<&2, Spec.Id>:
@@ -713,15 +1042,21 @@ def List.upto(xs: List<&2, Spec.Id>, +v: Spec.Id) -> List<&2, Spec.Id>:
     case Nil{}:
       []
     case Con{+x, r}:
-      x <> List.upto.if(Spec.Id.same(x, v), List.upto(r, v))
+      x <> Bool.pick(List<&2, Spec.Id>, Spec.Id.same(x, v), [], List.upto(r, v))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the base of a merge of from into the chain c, whose head was ours: the newest
 # version of c up to ours that from came from
-def Version.base(+s: Spec.State(), +c: Spec.Chain, ours: Maybe<&2, Spec.Id>, +from: Spec.Id) -> Maybe<&2, Spec.Id>:
+def Version.base(
+  +s: Spec.State(),
+  c: Spec.Chain,
+  ours: Maybe<&2, Spec.Id>,
+  from: Spec.Id
+) -> Maybe<&2, Spec.Id>:
   match ours:
     case None{}:
       None{}
-    case Some{+o}:
+    case Some{o}:
       Version.base.go(s, List.reverse(&2, Spec.Id, List.upto(Spec.Node.chain(s, c), o)), from)
 
 # Content
@@ -732,17 +1067,17 @@ def Version.base(+s: Spec.State(), +c: Spec.Chain, ours: Maybe<&2, Spec.Id>, +fr
 # every other change keeps the version before it.
 
 # the request r names the resource n
-def Asked.hits(r: Maybe<&2, Asked>, +n: Resources.Name) -> Bool:
+def Asked.hits(r: Maybe<&2, Asked>, n: Resources.Name) -> Bool:
   match r:
     case Some{Asked{t, Spec.Ask.Write{b, m, base, c}}}:
-      Spec.Name.same(m, n)
+      Resources.Name.same(m, n)
     case Some{Asked{t, Spec.Ask.Resolve{b, k, m, c}}}:
-      Spec.Name.same(m, n)
+      Resources.Name.same(m, n)
     case _:
       False{}
 
 # the request of v, when there is one
-def State.asked.of(+s: Spec.State(), v: Maybe<&2, Spec.Id>) -> Maybe<&2, Asked>:
+def State.asked.of(s: Spec.State(), v: Maybe<&2, Spec.Id>) -> Maybe<&2, Asked>:
   match v:
     case None{}:
       None{}
@@ -764,7 +1099,11 @@ def Pick.bytes(m: Formats.Merged) -> Pick:
 
 # the merge of a resource that the base, ours and theirs hold or not, when
 # both sides changed it
-def Pick.both(b: Maybe<&2, Octets.Bytes()>, o: Maybe<&2, Octets.Bytes()>, t: Maybe<&2, Octets.Bytes()>) -> Pick:
+def Pick.both(
+  b: Maybe<&2, Octets.Bytes()>,
+  o: Maybe<&2, Octets.Bytes()>,
+  t: Maybe<&2, Octets.Bytes()>
+) -> Pick:
   match o t:
     case Some{x} Some{y}:
       Pick.bytes(Formats.Format.merge(Maybe.default(&2, Octets.Bytes(), b, []), x, y))
@@ -772,7 +1111,12 @@ def Pick.both(b: Maybe<&2, Octets.Bytes()>, o: Maybe<&2, Octets.Bytes()>, t: May
       Pick.Clash{}
 
 # the merge of a resource, once both sides are known to agree or not (held)
-def Pick.of.same(held: Bool, b: Maybe<&2, Octets.Bytes()>, o: Maybe<&2, Octets.Bytes()>, t: Maybe<&2, Octets.Bytes()>) -> Pick:
+def Pick.of.same(
+  held: Bool,
+  b: Maybe<&2, Octets.Bytes()>,
+  o: Maybe<&2, Octets.Bytes()>,
+  t: Maybe<&2, Octets.Bytes()>
+) -> Pick:
   match held:
     case True{}:
       Pick.Take{o}
@@ -780,7 +1124,12 @@ def Pick.of.same(held: Bool, b: Maybe<&2, Octets.Bytes()>, o: Maybe<&2, Octets.B
       Pick.both(b, o, t)
 
 # the merge of a resource, once theirs is known to be the base or not (held)
-def Pick.of.right(held: Bool, +b: Maybe<&2, Octets.Bytes()>, +o: Maybe<&2, Octets.Bytes()>, +t: Maybe<&2, Octets.Bytes()>) -> Pick:
+def Pick.of.right(
+  held: Bool,
+  b: Maybe<&2, Octets.Bytes()>,
+  +o: Maybe<&2, Octets.Bytes()>,
+  +t: Maybe<&2, Octets.Bytes()>
+) -> Pick:
   match held:
     case True{}:
       Pick.Take{o}
@@ -788,7 +1137,12 @@ def Pick.of.right(held: Bool, +b: Maybe<&2, Octets.Bytes()>, +o: Maybe<&2, Octet
       Pick.of.same(Maybes.Maybe.same(~Octets.Bytes(), ~Octets.Bytes.is_eq, o, t), b, o, t)
 
 # the merge of a resource, once ours is known to be the base or not (held)
-def Pick.of(held: Bool, +b: Maybe<&2, Octets.Bytes()>, +o: Maybe<&2, Octets.Bytes()>, +t: Maybe<&2, Octets.Bytes()>) -> Pick:
+def Pick.of(
+  held: Bool,
+  +b: Maybe<&2, Octets.Bytes()>,
+  o: Maybe<&2, Octets.Bytes()>,
+  +t: Maybe<&2, Octets.Bytes()>
+) -> Pick:
   match held:
     case True{}:
       Pick.Take{t}
@@ -796,7 +1150,11 @@ def Pick.of(held: Bool, +b: Maybe<&2, Octets.Bytes()>, +o: Maybe<&2, Octets.Byte
       Pick.of.right(Maybes.Maybe.same(~Octets.Bytes(), ~Octets.Bytes.is_eq, t, b), b, o, t)
 
 # what a merge of the base b, ours o and theirs t keeps of a resource
-def Pick.merge(+b: Maybe<&2, Octets.Bytes()>, +o: Maybe<&2, Octets.Bytes()>, +t: Maybe<&2, Octets.Bytes()>) -> Pick:
+def Pick.merge(
+  +b: Maybe<&2, Octets.Bytes()>,
+  +o: Maybe<&2, Octets.Bytes()>,
+  t: Maybe<&2, Octets.Bytes()>
+) -> Pick:
   Pick.of(Maybes.Maybe.same(~Octets.Bytes(), ~Octets.Bytes.is_eq, o, b), b, o, t)
 
 # the bytes of a merge: ours on a clash
@@ -838,44 +1196,61 @@ def Res.at(
       +ours = Chain.before(s, Spec.Chain.Branch{b}, i)
       +base = Version.base(s, Spec.Chain.Branch{b}, ours, from)
       +o = Res.at(e, s, ours, n, State.asked.of(s, ours), Asked.hits(State.asked.of(s, ours), n))
-      Pick.kept(
-        Pick.merge(
-          Res.at(e, s, base, n, State.asked.of(s, base), Asked.hits(State.asked.of(s, base), n)),
-          o,
-          Res.at(e, s, Some{from}, n, State.asked(s, from), Asked.hits(State.asked(s, from), n))
-        ),
-        o
-      )
+      bs fs = Res.at(
+        e,
+        s,
+        base,
+        n,
+        State.asked.of(s, base),
+        Asked.hits(State.asked.of(s, base), n)
+      ) Res.at(e, s, Some{from}, n, State.asked(s, from), Asked.hits(State.asked(s, from), n))
+      Pick.kept(Pick.merge(bs, o, fs), o)
     case 1n+e Some{+i} Some{Asked{t, +q}} h:
       +before = Chain.before(s, Spec.Ask.chain(q), i)
       Res.at(e, s, before, n, State.asked.of(s, before), Asked.hits(State.asked.of(s, before), n))
 
 # the bytes of the resource n at the version v of s
-def Res.of(+s: Spec.State(), +n: Resources.Name, +v: Maybe<&2, Spec.Id>) -> Maybe<&2, Octets.Bytes()>:
+def Res.of(
+  +s: Spec.State(),
+  +n: Resources.Name,
+  +v: Maybe<&2, Spec.Id>
+) -> Maybe<&2, Octets.Bytes()>:
   Res.at(State.fuel(s), s, v, n, State.asked.of(s, v), Asked.hits(State.asked.of(s, v), n))
 
 # the request r names the mark m
-def Mark.is(r: Maybe<&2, Asked>, +m: String) -> Bool:
+def Mark.is(r: Maybe<&2, Asked>, m: String) -> Bool:
   match r:
     case Some{Asked{t, Spec.Ask.Mark{b, k, x}}}:
       String.eq(k, m)
     case _:
       False{}
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the rest is one walk of the list; it costs the same with or without the pick
 # the version that the first mark m of xs names: the one before it, after prev
-def Mark.first(+s: Spec.State(), xs: List<&2, Spec.Id>, prev: Maybe<&2, Spec.Id>, +m: String) -> Maybe<&2, Spec.Id>:
+def Mark.first(
+  +s: Spec.State(),
+  xs: List<&2, Spec.Id>,
+  prev: Maybe<&2, Spec.Id>,
+  +m: String
+) -> Maybe<&2, Spec.Id>:
   match xs:
     case Nil{}:
       None{}
     case Con{+x, r}:
-      List.before.if(Mark.is(State.asked(s, x), m), prev, Mark.first(s, r, Some{x}, m))
+      Bool.pick(
+        Maybe<&2, Spec.Id>,
+        Mark.is(State.asked(s, x), m),
+        prev,
+        Mark.first(s, r, Some{x}, m)
+      )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the version that the mark m of the branch b names
-def Mark.of(+s: Spec.State(), +b: String, +m: String) -> Maybe<&2, Spec.Id>:
+def Mark.of(+s: Spec.State(), b: String, m: String) -> Maybe<&2, Spec.Id>:
   Mark.first(s, Spec.Node.chain(s, Spec.Chain.Branch{b}), None{}, m)
 
 # the version at the point p of s
-def Point.version(+s: Spec.State(), p: Spec.Point) -> Maybe<&2, Spec.Id>:
+def Point.version(s: Spec.State(), p: Spec.Point) -> Maybe<&2, Spec.Id>:
   match p:
     case Spec.Point.At{v}:
       Some{v}
@@ -896,7 +1271,12 @@ def Spec.Node.content_at(s, n, base):
 
 # the texts of the resources at the version v, whose request is r; f steps at
 # most
-def Res.names(+f: Nat, +s: Spec.State(), v: Maybe<&2, Spec.Id>, r: Maybe<&2, Asked>) -> List<&2, String>:
+def Res.names(
+  +f: Nat,
+  +s: Spec.State(),
+  v: Maybe<&2, Spec.Id>,
+  r: Maybe<&2, Asked>
+) -> List<&2, String>:
   match f v r:
     case 0n w m:
       []
@@ -906,9 +1286,15 @@ def Res.names(+f: Nat, +s: Spec.State(), v: Maybe<&2, Spec.Id>, r: Maybe<&2, Ask
       []
     case 1n+e Some{i} Some{Asked{t, Spec.Ask.SetBranch{b, +to}}}:
       Res.names(e, s, Some{to}, State.asked(s, to))
-    case 1n+e Some{+i} Some{Asked{t, Spec.Ask.Merge{+b, +from}}}:
+    case 1n+e Some{+i} Some{Asked{t, Spec.Ask.Merge{b, +from}}}:
       +ours = Chain.before(s, Spec.Chain.Branch{b}, i)
-      Strings.union(Res.names(e, s, Some{from}, State.asked(s, from)), Res.names(e, s, ours, State.asked.of(s, ours)))
+      fs os = Res.names(
+        e,
+        s,
+        Some{from},
+        State.asked(s, from)
+      ) Res.names(e, s, ours, State.asked.of(s, ours))
+      Strings.union(fs, os)
     case 1n+e Some{+i} Some{Asked{t, Spec.Ask.Write{b, m, base, c}}}:
       +before = Chain.before(s, Spec.Chain.Branch{b}, i)
       Strings.union([Resources.Name.show(m)], Res.names(e, s, before, State.asked.of(s, before)))
@@ -925,11 +1311,17 @@ def Pick.is_clash(p: Pick) -> Bool:
       True{}
 
 # the resources of the names ns that clash when from merges into ours over base
-def Res.clashes(+s: Spec.State(), ns: List<&2, String>, +base: Maybe<&2, Spec.Id>, +ours: Maybe<&2, Spec.Id>, +from: Spec.Id) -> List<&2, Resources.Name>:
+def Res.clashes(
+  +s: Spec.State(),
+  ns: List<&2, String>,
+  +base: Maybe<&2, Spec.Id>,
+  +ours: Maybe<&2, Spec.Id>,
+  +from: Spec.Id
+) -> List<&2, Resources.Name>:
   match ns:
     case Nil{}:
       []
-    case Con{+t, r}:
+    case Con{t, r}:
       +n = {Resources.Name{t}: Resources.Name}
       List.filter.put(
         Resources.Name,
@@ -946,7 +1338,7 @@ def Res.of.names(+s: Spec.State(), +v: Maybe<&2, Spec.Id>) -> List<&2, String>:
   Res.names(State.fuel(s), s, v, State.asked.of(s, v))
 
 # the resources that clash at the merge k, whose request is r
-def Merge.clashes(+s: Spec.State(), +k: Spec.Id, r: Maybe<&2, Asked>) -> List<&2, Resources.Name>:
+def Merge.clashes(+s: Spec.State(), k: Spec.Id, r: Maybe<&2, Asked>) -> List<&2, Resources.Name>:
   match r:
     case Some{Asked{t, Spec.Ask.Merge{+b, +from}}}:
       +ours = Chain.before(s, Spec.Chain.Branch{b}, k)
@@ -961,7 +1353,7 @@ def Merge.clashes(+s: Spec.State(), +k: Spec.Id, r: Maybe<&2, Asked>) -> List<&2
       []
 
 # the text that the request r settles of k
-def Merge.settles(r: Maybe<&2, Asked>, +k: Spec.Id) -> List<&2, String>:
+def Merge.settles(r: Maybe<&2, Asked>, k: Spec.Id) -> List<&2, String>:
   match r:
     case Some{Asked{t, Spec.Ask.Resolve{b, j, n, c}}}:
       List.filter.put(String, Resources.Name.show(n), [], Spec.Id.same(j, k))
@@ -977,18 +1369,29 @@ def Merge.settled(+s: Spec.State(), xs: List<&2, Spec.Id>, +k: Spec.Id) -> List<
       List.append(&2, String, Merge.settles(State.asked(s, x), k), Merge.settled(s, r, k))
 
 # the names of ns whose texts ts does not hold
-def Names.unsettled(ns: List<&2, Resources.Name>, +ts: List<&2, String>) -> List<&2, Resources.Name>:
+def Names.unsettled(
+  ns: List<&2, Resources.Name>,
+  +ts: List<&2, String>
+) -> List<&2, Resources.Name>:
   match ns:
     case Nil{}:
       []
     case Con{+n, r}:
-      List.filter.put(Resources.Name, n, Names.unsettled(r, ts), Bool.not(Shared.List.has(~String, ~String.eq, ts, Resources.Name.show(n))))
+      List.filter.put(
+        Resources.Name,
+        n,
+        Names.unsettled(r, ts),
+        Bool.not(Shared.List.has(~String, ~String.eq, ts, Resources.Name.show(n)))
+      )
 
 # the resources that still clash after the merge k, whose request is r
 def Merge.left(+s: Spec.State(), +k: Spec.Id, +r: Maybe<&2, Asked>) -> List<&2, Resources.Name>:
   match r:
     case Some{Asked{t, Spec.Ask.Merge{+b, from}}}:
-      Names.unsettled(Merge.clashes(s, k, r), Merge.settled(s, Spec.Node.chain(s, Spec.Chain.Branch{b}), k))
+      Names.unsettled(
+        Merge.clashes(s, k, r),
+        Merge.settled(s, Spec.Node.chain(s, Spec.Chain.Branch{b}), k)
+      )
     case _:
       []
 
@@ -1001,16 +1404,21 @@ def Spec.Node.conflict(s, k):
 # -------
 
 # the change q fits the head h of its chain: the owners may vote for it there
-def Ask.fits(+s: Spec.State(), q: Spec.Ask, +h: Spec.Id) -> Bool:
+def Ask.fits(+s: Spec.State(), q: Spec.Ask, h: Spec.Id) -> Bool:
   match q:
     case Spec.Ask.Write{b, +n, base, c}:
-      Maybes.Maybe.same(~Octets.Bytes(), ~Octets.Bytes.is_eq, Res.of(s, n, Some{h}), Res.of(s, n, base))
+      Maybes.Maybe.same(
+        ~Octets.Bytes(),
+        ~Octets.Bytes.is_eq,
+        Res.of(s, n, Some{h}),
+        Res.of(s, n, base)
+      )
     case Spec.Ask.SetBranch{b, to}:
       Maybe.is_some(&2, Asked, State.asked(s, to))
     case Spec.Ask.Merge{b, from}:
       Maybe.is_some(&2, Asked, State.asked(s, from))
-    case Spec.Ask.Resolve{b, k, +n, c}:
-      Shared.List.has(~Resources.Name, ~Spec.Name.same, Spec.Node.conflict(s, k), n)
+    case Spec.Ask.Resolve{b, k, n, c}:
+      Shared.List.has(~Resources.Name, ~Resources.Name.same, Spec.Node.conflict(s, k), n)
     case Spec.Ask.Mark{b, m, t}:
       Maybe.is_none(&2, Spec.Id, Mark.of(s, b, m))
     case Spec.Ask.SetOwner{c, ms}:
@@ -1039,7 +1447,7 @@ def Answer.done.if(left: List<&2, Resources.Name>, i: Spec.Id, k: Spec.Id) -> Sp
       Spec.Answer.Conflicted{k}
 
 # the answer to the request i in its chain, whose change is q
-def Answer.done(+s: Spec.State(), +i: Spec.Id, q: Spec.Ask) -> Spec.Answer:
+def Answer.done(s: Spec.State(), +i: Spec.Id, q: Spec.Ask) -> Spec.Answer:
   match q:
     case Spec.Ask.Merge{b, from}:
       Answer.done.if(Spec.Node.conflict(s, i), i, i)
@@ -1048,35 +1456,29 @@ def Answer.done(+s: Spec.State(), +i: Spec.Id, q: Spec.Ask) -> Spec.Answer:
     case _:
       Spec.Answer.Written{i}
 
-# Pending, when q fits the head h (held), else Stale
-def Answer.fits(held: Bool, h: Spec.Id) -> Spec.Answer:
-  match held:
-    case True{}:
-      Spec.Answer.Pending{}
-    case False{}:
-      Spec.Answer.Stale{h}
-
-# Pending, when q makes a chain (held), else Refused
-def Answer.creates(held: Bool) -> Spec.Answer:
-  match held:
-    case True{}:
-      Spec.Answer.Pending{}
-    case False{}:
-      Spec.Answer.Refused{"no such chain"}
-
 # the answer to a request of q outside its chain, whose claim is m and last
 # step k
-def Answer.open(+s: Spec.State(), +q: Spec.Ask, m: Maybe<&2, Spec.Entry>, k: Maybe<&2, Step>) -> Spec.Answer:
+def Answer.open(
+  s: Spec.State(),
+  q: Spec.Ask,
+  m: Maybe<&2, Spec.Entry>,
+  k: Maybe<&2, Step>
+) -> Spec.Answer:
   match m k:
     case w Some{Step{+h, ms}}:
-      Answer.fits(Ask.fits(s, q, h), h)
+      Bool.pick(Spec.Answer, Ask.fits(s, q, h), Spec.Answer.Pending{}, Spec.Answer.Stale{h})
     case None{} None{}:
-      Answer.creates(Ask.creates(q))
+      Bool.pick(
+        Spec.Answer,
+        Ask.creates(q),
+        Spec.Answer.Pending{},
+        Spec.Answer.Refused{"no such chain"}
+      )
     case Some{e} None{}:
       Spec.Answer.Pending{}
 
 # the answer to the request i of q, in its chain or not (held)
-def Answer.in(+s: Spec.State(), +i: Spec.Id, +q: Spec.Ask, held: Bool) -> Spec.Answer:
+def Answer.in(+s: Spec.State(), i: Spec.Id, +q: Spec.Ask, held: Bool) -> Spec.Answer:
   match held:
     case True{}:
       Answer.done(s, i, q)
@@ -1091,7 +1493,12 @@ def Answer.of(+s: Spec.State(), +i: Spec.Id, m: Maybe<&2, Cells.Cell<Spec.Entry>
     case Some{Cells.Many{}}:
       Spec.Answer.Refused{"the request is contradicted"}
     case Some{Cells.One{Spec.Entry.Ask{j, t, +q}}}:
-      Answer.in(s, i, q, Shared.List.has(~Spec.Id, ~Spec.Id.same, Spec.Node.chain(s, Spec.Ask.chain(q)), i))
+      Answer.in(
+        s,
+        i,
+        q,
+        Shared.List.has(~Spec.Id, ~Spec.Id.same, Spec.Node.chain(s, Spec.Ask.chain(q)), i)
+      )
     case Some{Cells.One{e}}:
       Spec.Answer.NotSeen{}
 
@@ -1104,7 +1511,11 @@ def Spec.Node.answer(s, i):
 # --------
 
 # the branch b, at its last step m, then rest
-def Branches.at(b: String, m: Maybe<&2, Step>, rest: List<&2, Spec.BranchEntry>) -> List<&2, Spec.BranchEntry>:
+def Branches.at(
+  b: String,
+  m: Maybe<&2, Step>,
+  rest: List<&2, Spec.BranchEntry>
+) -> List<&2, Spec.BranchEntry>:
   match m:
     case None{}:
       rest
@@ -1134,7 +1545,12 @@ def Spec.Node.branches(s):
   Branches.of(s, Branches.named(Tries.Trie.values(Cells.Cell<Spec.Entry>, s)))
 
 # the version x, when it changed the resource (held), then rest
-def Log.at(held: Bool, x: Spec.Id, r: Maybe<&2, Asked>, rest: List<&2, Spec.LogEntry>) -> List<&2, Spec.LogEntry>:
+def Log.at(
+  held: Bool,
+  x: Spec.Id,
+  r: Maybe<&2, Asked>,
+  rest: List<&2, Spec.LogEntry>
+) -> List<&2, Spec.LogEntry>:
   match held r:
     case True{} Some{Asked{t, q}}:
       Spec.LogEntry{x, t} <> rest
@@ -1142,13 +1558,25 @@ def Log.at(held: Bool, x: Spec.Id, r: Maybe<&2, Asked>, rest: List<&2, Spec.LogE
       rest
 
 # the versions of xs, after prev, that changed the resource n
-def Log.of(+s: Spec.State(), +n: Resources.Name, xs: List<&2, Spec.Id>, +prev: Maybe<&2, Spec.Id>) -> List<&2, Spec.LogEntry>:
+def Log.of(
+  +s: Spec.State(),
+  +n: Resources.Name,
+  xs: List<&2, Spec.Id>,
+  prev: Maybe<&2, Spec.Id>
+) -> List<&2, Spec.LogEntry>:
   match xs:
     case Nil{}:
       []
     case Con{+x, r}:
       Log.at(
-        Bool.not(Maybes.Maybe.same(~Octets.Bytes(), ~Octets.Bytes.is_eq, Res.of(s, n, Some{x}), Res.of(s, n, prev))),
+        Bool.not(
+          Maybes.Maybe.same(
+            ~Octets.Bytes(),
+            ~Octets.Bytes.is_eq,
+            Res.of(s, n, Some{x}),
+            Res.of(s, n, prev)
+          )
+        ),
         x,
         State.asked(s, x),
         Log.of(s, n, r, Some{x})
@@ -1170,7 +1598,10 @@ def Spec.Node.diff(s, n, a, b):
 # ------
 
 # the members that the request r sets, else found
-def Group.set(r: Maybe<&2, Asked>, found: Maybe<&2, List<&2, Spec.Member>>) -> Maybe<&2, List<&2, Spec.Member>>:
+def Group.set(
+  r: Maybe<&2, Asked>,
+  found: Maybe<&2, List<&2, Spec.Member>>
+) -> Maybe<&2, List<&2, Spec.Member>>:
   match r:
     case Some{Asked{t, Spec.Ask.SetGroup{g, ms}}}:
       Some{ms}
@@ -1178,7 +1609,11 @@ def Group.set(r: Maybe<&2, Asked>, found: Maybe<&2, List<&2, Spec.Member>>) -> M
       found
 
 # the members that the last set-group of xs sets, else found
-def Group.last(+s: Spec.State(), xs: List<&2, Spec.Id>, found: Maybe<&2, List<&2, Spec.Member>>) -> Maybe<&2, List<&2, Spec.Member>>:
+def Group.last(
+  +s: Spec.State(),
+  xs: List<&2, Spec.Id>,
+  found: Maybe<&2, List<&2, Spec.Member>>
+) -> Maybe<&2, List<&2, Spec.Member>>:
   match xs:
     case Nil{}:
       found
@@ -1204,7 +1639,12 @@ def Group.roots(cs: List<&2, Cells.Cell<Spec.Entry>>) -> List<&2, Spec.Member>:
       []
     case Con{Cells.One{Spec.Entry.Root{Spec.Chain.Group{+g}, i, n}}, r}:
       +rest = Group.roots(r)
-      List.filter.put(Spec.Member, Spec.Member.Group{g}, rest, Bool.not(Shared.List.has(~Spec.Member, ~Spec.Member.same, rest, Spec.Member.Group{g})))
+      List.filter.put(
+        Spec.Member,
+        Spec.Member.Group{g},
+        rest,
+        Bool.not(Shared.List.has(~Spec.Member, ~Spec.Member.same, rest, Spec.Member.Group{g}))
+      )
     case Con{c, r}:
       Group.roots(r)
 
@@ -1213,7 +1653,16 @@ def Group.all(s: Spec.State()) -> List<&2, Spec.Member>:
   Group.roots(Tries.Trie.values(Cells.Cell<Spec.Entry>, s))
 
 def Spec.Node.is_inside(s, m, g):
-  Reaches.Reach.in(~Spec.Member, ~Spec.State(), ~Spec.Member.same, ~Group.succ, ~Group.all, s, Spec.Member.Group{g}, m)
+  Reaches.Reach.in(
+    ~Spec.Member,
+    ~Spec.State(),
+    ~Spec.Member.same,
+    ~Group.succ,
+    ~Group.all,
+    s,
+    Spec.Member.Group{g},
+    m
+  )
 
 # the nodes among the members ms
 def Group.nodes.of(ms: List<&2, Spec.Member>) -> List<&2, String>:
@@ -1230,7 +1679,7 @@ def Group.named(+s: Spec.State(), gs: List<&2, Spec.Member>) -> List<&2, String>
   match gs:
     case Nil{}:
       []
-    case Con{+g, r}:
+    case Con{g, r}:
       Strings.union(Group.nodes.of(Group.succ(s, g)), Group.named(s, r))
 
 # the nodes of ns that are inside the group g
@@ -1239,7 +1688,12 @@ def Group.inside(+s: Spec.State(), ns: List<&2, String>, +g: String) -> List<&2,
     case Nil{}:
       []
     case Con{+n, r}:
-      List.filter.put(String, n, Group.inside(s, r, g), Spec.Node.is_inside(s, Spec.Member.Node{n}, g))
+      List.filter.put(
+        String,
+        n,
+        Group.inside(s, r, g),
+        Spec.Node.is_inside(s, Spec.Member.Node{n}, g)
+      )
 
 def Spec.Node.nodes(s, g):
   +s = s
@@ -1287,7 +1741,12 @@ def Notice.cycles(+s: Spec.State(), gs: List<&2, Spec.Member>) -> List<&2, Spec.
     case Nil{}:
       []
     case Con{Spec.Member.Group{+g}, r}:
-      List.filter.put(Spec.Notice, Spec.Notice.GroupCycle{g}, Notice.cycles(s, r), Spec.Node.is_inside(s, Spec.Member.Group{g}, g))
+      List.filter.put(
+        Spec.Notice,
+        Spec.Notice.GroupCycle{g},
+        Notice.cycles(s, r),
+        Spec.Node.is_inside(s, Spec.Member.Group{g}, g)
+      )
     case Con{m, r}:
       Notice.cycles(s, r)
 
@@ -1307,7 +1766,12 @@ def Notice.new(ns: List<&2, Spec.Notice>, +old: List<&2, Spec.Notice>) -> List<&
     case Nil{}:
       []
     case Con{+n, r}:
-      List.filter.put(Spec.Notice, n, Notice.new(r, old), Bool.not(Shared.List.has(~Spec.Notice, ~Notice.same, old, n)))
+      List.filter.put(
+        Spec.Notice,
+        n,
+        Notice.new(r, old),
+        Bool.not(Shared.List.has(~Spec.Notice, ~Notice.same, old, n))
+      )
 
 def Spec.Node.notices(s, t, since):
   +t = t
@@ -1320,16 +1784,15 @@ def Spec.Node.notices(s, t, since):
 def State.put(s: Spec.State(), k: Spec.Slot, e: Spec.Entry) -> Spec.State():
   Spec.Node.join(s, Tries.Trie.one(Cells.Cell<Spec.Entry>, Spec.Slot.key(k), Cells.One{e}))
 
-# s with the vote in the slot k for i, when the node may vote (held)
-def Node.vote.if(held: Bool, s: Spec.State(), k: Spec.Slot, i: Spec.Id) -> Spec.State():
-  match held:
-    case True{}:
-      State.put(s, k, Spec.Entry.Vote{i})
-    case False{}:
-      s
-
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the laws of Node.ask split on this and; a request is taken in once
 # the node n may vote at the step h of the chain c, whose owners are ms
-def Node.may_vote(+n: String, +s: Spec.State(), +c: Spec.Chain, +h: Spec.Id, ms: List<&2, String>) -> Bool:
+def Node.may_vote(
+  +n: String,
+  s: Spec.State(),
+  c: Spec.Chain,
+  h: Spec.Id,
+  ms: List<&2, String>
+) -> Bool:
   Bool.and(
     Shared.List.has(~String, ~String.eq, ms, n),
     Maybe.is_none(&2, Cells.Cell<Spec.Entry>, State.cell(s, Spec.Slot.Vote{n, c, h}))
@@ -1337,39 +1800,74 @@ def Node.may_vote(+n: String, +s: Spec.State(), +c: Spec.Chain, +h: Spec.Id, ms:
 
 # s1 after the node n voted for the request i of q, at the last step m of its
 # chain in s
-def Node.ask.at(+n: String, +s: Spec.State(), s1: Spec.State(), i: Spec.Id, +q: Spec.Ask, m: Maybe<&2, Step>) -> Spec.State():
+def Node.ask.at(
+  +n: String,
+  +s: Spec.State(),
+  +s1: Spec.State(),
+  i: Spec.Id,
+  +q: Spec.Ask,
+  m: Maybe<&2, Step>
+) -> Spec.State():
   match m:
     case None{}:
       s1
     case Some{Step{+h, ms}}:
       +c = Spec.Ask.chain(q)
-      Node.vote.if(Bool.and(Node.may_vote(n, s, c, h, ms), Ask.fits(s, q, h)), s1, Spec.Slot.Vote{n, c, h}, i)
-
-# s1 with n's claim of the chain c at i, when q makes c (held)
-def Node.root.if(held: Bool, s1: Spec.State(), +c: Spec.Chain, i: Spec.Id, +n: String) -> Spec.State():
-  match held:
-    case True{}:
-      State.put(s1, Spec.Slot.Root{c, n}, Spec.Entry.Root{c, i, n})
-    case False{}:
-      s1
+      Bool.pick(
+        Spec.State(),
+        Bool.and(Node.may_vote(n, s, c, h, ms), Ask.fits(s, q, h)),
+        State.put(s1, Spec.Slot.Vote{n, c, h}, Spec.Entry.Vote{i}),
+        s1
+      )
 
 # s1 after the node n took in the request i of q, whose chain has the claim m
 # in s
-def Node.ask.root(+n: String, +s: Spec.State(), s1: Spec.State(), i: Spec.Id, +q: Spec.Ask, m: Maybe<&2, Spec.Entry>) -> Spec.State():
+def Node.ask.root(
+  +n: String,
+  +s: Spec.State(),
+  +s1: Spec.State(),
+  i: Spec.Id,
+  +q: Spec.Ask,
+  m: Maybe<&2, Spec.Entry>
+) -> Spec.State():
   match m:
     case None{}:
-      Node.root.if(Ask.creates(q), s1, Spec.Ask.chain(q), i, n)
+      Bool.pick(
+        Spec.State(),
+        Ask.creates(q),
+        State.put(
+          s1,
+          Spec.Slot.Root{Spec.Ask.chain(q), n},
+          Spec.Entry.Root{Spec.Ask.chain(q), i, n}
+        ),
+        s1
+      )
     case Some{x}:
       Node.ask.at(n, s, s1, i, q, Chain.cursor(s, Spec.Ask.chain(q)))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # s after the node n took in the request i of q at the time t, whose cell in s
 # is m
-def Node.ask.fresh(+n: String, +s: Spec.State(), +i: Spec.Id, t: String, +q: Spec.Ask, m: Maybe<&2, Cells.Cell<Spec.Entry>>) -> Spec.State():
+def Node.ask.fresh(
+  n: String,
+  +s: Spec.State(),
+  +i: Spec.Id,
+  t: String,
+  +q: Spec.Ask,
+  m: Maybe<&2, Cells.Cell<Spec.Entry>>
+) -> Spec.State():
   match m:
     case Some{x}:
       s
     case None{}:
-      Node.ask.root(n, s, State.put(s, Spec.Slot.Ask{i}, Spec.Entry.Ask{i, t, q}), i, q, Spec.Node.claim(s, Spec.Ask.chain(q)))
+      Node.ask.root(
+        n,
+        s,
+        State.put(s, Spec.Slot.Ask{i}, Spec.Entry.Ask{i, t, q}),
+        i,
+        q,
+        Spec.Node.claim(s, Spec.Ask.chain(q))
+      )
 
 def Spec.Node.ask(n, s, e, q):
   match e:
@@ -1379,22 +1877,53 @@ def Spec.Node.ask(n, s, e, q):
       Node.ask.fresh(n, s, i, t, q, State.cell(s, Spec.Slot.Ask{i}))
 
 # the first request among the cells cs that changes the chain c, is not among
+# Ask.fits of q at the head h, when the request is not in its chain yet
+# (outside)
+def Vote.open.on(outside: Bool, s: Spec.State(), q: Spec.Ask, h: Spec.Id) -> Bool:
+  match outside:
+    case True{}:
+      Ask.fits(s, q, h)
+    case False{}:
+      False{}
+
+# the request i of q is on the chain (held), is not among its versions xs and
+# fits its head h
+def Vote.open(
+  held: Bool,
+  s: Spec.State(),
+  q: Spec.Ask,
+  xs: List<&2, Spec.Id>,
+  i: Spec.Id,
+  h: Spec.Id
+) -> Bool:
+  match held:
+    case True{}:
+      Vote.open.on(Bool.not(Shared.List.has(~Spec.Id, ~Spec.Id.same, xs, i)), s, q, h)
+    case False{}:
+      False{}
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the rest is one walk of the list; it costs the same with or without the pick
 # its versions xs, and fits its head h
-def Vote.pick(+s: Spec.State(), cs: List<&2, Cells.Cell<Spec.Entry>>, +c: Spec.Chain, +xs: List<&2, Spec.Id>, +h: Spec.Id) -> Maybe<&2, Spec.Id>:
+def Vote.pick(
+  +s: Spec.State(),
+  cs: List<&2, Cells.Cell<Spec.Entry>>,
+  +c: Spec.Chain,
+  +xs: List<&2, Spec.Id>,
+  +h: Spec.Id
+) -> Maybe<&2, Spec.Id>:
   match cs:
     case Nil{}:
       None{}
     case Con{Cells.One{Spec.Entry.Ask{+i, t, +q}}, r}:
-      List.before.if(
-        Bool.and(
-          Spec.Chain.same(Spec.Ask.chain(q), c),
-          Bool.and(Bool.not(Shared.List.has(~Spec.Id, ~Spec.Id.same, xs, i)), Ask.fits(s, q, h))
-        ),
+      Bool.pick(
+        Maybe<&2, Spec.Id>,
+        Vote.open(Spec.Chain.same(Spec.Ask.chain(q), c), s, q, xs, i, h),
         Some{i},
         Vote.pick(s, r, c, xs, h)
       )
     case Con{x, r}:
       Vote.pick(s, r, c, xs, h)
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the vote in the slot k for the choice m, when the node may vote (held)
 def Vote.cast(held: Bool, k: Spec.Slot, m: Maybe<&2, Spec.Id>) -> Spec.State():
@@ -1423,7 +1952,12 @@ def Vote.chains(cs: List<&2, Cells.Cell<Spec.Entry>>) -> List<&2, Spec.Chain>:
       []
     case Con{Cells.One{Spec.Entry.Root{+c, i, n}}, r}:
       +rest = Vote.chains(r)
-      List.filter.put(Spec.Chain, c, rest, Bool.not(Shared.List.has(~Spec.Chain, ~Spec.Chain.same, rest, c)))
+      List.filter.put(
+        Spec.Chain,
+        c,
+        rest,
+        Bool.not(Shared.List.has(~Spec.Chain, ~Spec.Chain.same, rest, c))
+      )
     case Con{x, r}:
       Vote.chains(r)
 
@@ -1444,55 +1978,106 @@ def Spec.Node.vote(n, s):
 # What a node holds stays when it takes in entries that agree with it.
 
 # the cell of a slot is kept by an agreeing join
-def Kept.cell(+s: Spec.State(), +t: Spec.State(), k: Spec.Slot, -e: Spec.Entry, a: {Spec.Node.agrees(s, t) == True{}: Bool}) -> {
+def Kept.cell(
+  s: Spec.State(),
+  t: Spec.State(),
+  k: Spec.Slot,
+  -e: Spec.Entry,
+  a: {Spec.Node.agrees(s, t) == True{}: Bool}
+) -> {
   State.cell(s, k) == Some{Cells.One{e}}: Maybe<&2, Cells.Cell<Spec.Entry>>
 } -> {State.cell(Spec.Node.join(s, t), k) == Some{Cells.One{e}}: Maybe<&2, Cells.Cell<Spec.Entry>>}:
-  Cells.Cell.agrees_kept(~Spec.Entry, ~Spec.Entry.same, ~Spec.Entry.same_sound, s, t, Spec.Slot.key(k), e)(a)
+  Cells.Cell.agrees_kept(
+    ~Spec.Entry,
+    ~Spec.Entry.same,
+    ~Spec.Entry.same_sound,
+    s,
+    t,
+    Spec.Slot.key(k),
+    e
+  )(a)
 
 # the entry of a cell m is kept in m2, when m2 keeps the value of m
 def Kept.entry(
   m: Maybe<&2, Cells.Cell<Spec.Entry>>,
   m2: Maybe<&2, Cells.Cell<Spec.Entry>>,
   -e: Spec.Entry,
-  keep: {m == Some{Cells.One{e}}: Maybe<&2, Cells.Cell<Spec.Entry>>} -> {m2 == Some{Cells.One{e}}: Maybe<&2, Cells.Cell<Spec.Entry>>}
-) -> {Cell.entry(m) == Some{e}: Maybe<&2, Spec.Entry>} -> {Cell.entry(m2) == Some{e}: Maybe<&2, Spec.Entry>}:
+  keep: {
+    m == Some{Cells.One{e}}: Maybe<&2, Cells.Cell<Spec.Entry>>
+  } -> {m2 == Some{Cells.One{e}}: Maybe<&2, Cells.Cell<Spec.Entry>>}
+) -> {
+  Cell.entry(m) == Some{e}: Maybe<&2, Spec.Entry>
+} -> {Cell.entry(m2) == Some{e}: Maybe<&2, Spec.Entry>}:
   match m:
     case None{}:
-      h => Empty.absurd({Cell.entry(m2) == Some{e}: Maybe<&2, Spec.Entry>}, Maybes.Maybe.none_ne_some(Spec.Entry, e, h))
+      h => Empty.absurd(
+        {Cell.entry(m2) == Some{e}: Maybe<&2, Spec.Entry>},
+        Maybes.Maybe.none_ne_some(Spec.Entry, e, h)
+      )
     case Some{Cells.Many{}}:
-      h => Empty.absurd({Cell.entry(m2) == Some{e}: Maybe<&2, Spec.Entry>}, Maybes.Maybe.none_ne_some(Spec.Entry, e, h))
-    case Some{Cells.One{+x}}:
+      h => Empty.absurd(
+        {Cell.entry(m2) == Some{e}: Maybe<&2, Spec.Entry>},
+        Maybes.Maybe.none_ne_some(Spec.Entry, e, h)
+      )
+    case Some{Cells.One{x}}:
       h =>
         +xe = Maybes.Maybe.some_inj(Spec.Entry, x, e, h)
         %Equal.sym(
           Maybe<&2, Cells.Cell<Spec.Entry>>,
           m2,
           Some{Cells.One{e}},
-          keep(%xe : {Some{Cells.One{x}} == Some{Cells.One{_}}: Maybe<&2, Cells.Cell<Spec.Entry>>}; {==})
-        ) :
+          keep(%xe: {
+            Some{Cells.One{x}} == Some{Cells.One{_}}: Maybe<&2, Cells.Cell<Spec.Entry>>
+          }; {==})
+        ):
           {Cell.entry(_) == Some{e}: Maybe<&2, Spec.Entry>}
         {==}
 
 # the entry of the slot k is kept by an agreeing join
-def Kept.slot(+s: Spec.State(), +t: Spec.State(), +k: Spec.Slot, -e: Spec.Entry, a: {Spec.Node.agrees(s, t) == True{}: Bool}) -> {
+def Kept.slot(
+  +s: Spec.State(),
+  +t: Spec.State(),
+  +k: Spec.Slot,
+  -e: Spec.Entry,
+  a: {Spec.Node.agrees(s, t) == True{}: Bool}
+) -> {
   Cell.entry(State.cell(s, k)) == Some{e}: Maybe<&2, Spec.Entry>
 } -> {Cell.entry(State.cell(Spec.Node.join(s, t), k)) == Some{e}: Maybe<&2, Spec.Entry>}:
   Kept.entry(State.cell(s, k), State.cell(Spec.Node.join(s, t), k), e, Kept.cell(s, t, k, e, a))
 
 # a request that x names is named by y, when y keeps the entry of x
-def Kept.asked.of(x: Maybe<&2, Spec.Entry>, y: Maybe<&2, Spec.Entry>, -r: Asked, keep: @e: Spec.Entry -> {x == Some{e}: Maybe<&2, Spec.Entry>} -> {y == Some{e}: Maybe<&2, Spec.Entry>}) -> {
-  Asked.of(x) == Some{r}: Maybe<&2, Asked>
-} -> {Asked.of(y) == Some{r}: Maybe<&2, Asked>}:
+def Kept.asked.of(
+  x: Maybe<&2, Spec.Entry>,
+  y: Maybe<&2, Spec.Entry>,
+  -r: Asked,
+  keep: @e: Spec.Entry -> {
+    x == Some{e}: Maybe<&2, Spec.Entry>
+  } -> {y == Some{e}: Maybe<&2, Spec.Entry>}
+) -> {Asked.of(x) == Some{r}: Maybe<&2, Asked>} -> {Asked.of(y) == Some{r}: Maybe<&2, Asked>}:
   match x:
     case None{}:
-      h => Empty.absurd({Asked.of(y) == Some{r}: Maybe<&2, Asked>}, Maybes.Maybe.none_ne_some(Asked, r, h))
-    case Some{+e}:
+      h => Empty.absurd(
+        {Asked.of(y) == Some{r}: Maybe<&2, Asked>},
+        Maybes.Maybe.none_ne_some(Asked, r, h)
+      )
+    case Some{e}:
       h =>
-        %Equal.sym(Maybe<&2, Spec.Entry>, y, Some{e}, keep(e)({==})) : {Asked.of(_) == Some{r}: Maybe<&2, Asked>}
+        %Equal.sym(
+          Maybe<&2, Spec.Entry>,
+          y,
+          Some{e},
+          keep(e)({==})
+        ): {Asked.of(_) == Some{r}: Maybe<&2, Asked>}
         h
 
 # a request that s holds is kept by an agreeing join
-def Kept.asked(+s: Spec.State(), +t: Spec.State(), +i: Spec.Id, -r: Asked, +a: {Spec.Node.agrees(s, t) == True{}: Bool}) -> {
+def Kept.asked(
+  +s: Spec.State(),
+  +t: Spec.State(),
+  +i: Spec.Id,
+  -r: Asked,
+  a: {Spec.Node.agrees(s, t) == True{}: Bool}
+) -> {
   State.asked(s, i) == Some{r}: Maybe<&2, Asked>
 } -> {State.asked(Spec.Node.join(s, t), i) == Some{r}: Maybe<&2, Asked>}:
   Kept.asked.of(
@@ -1503,40 +2088,88 @@ def Kept.asked(+s: Spec.State(), +t: Spec.State(), +i: Spec.Id, -r: Asked, +a: {
   )
 
 # a vote that x holds is held by y, when y keeps the entry of x
-def Kept.vote.of(x: Maybe<&2, Spec.Entry>, y: Maybe<&2, Spec.Entry>, -j: Spec.Id, keep: @e: Spec.Entry -> {x == Some{e}: Maybe<&2, Spec.Entry>} -> {y == Some{e}: Maybe<&2, Spec.Entry>}) -> {
-  Vote.of(x) == Some{j}: Maybe<&2, Spec.Id>
-} -> {Vote.of(y) == Some{j}: Maybe<&2, Spec.Id>}:
+def Kept.vote.of(
+  x: Maybe<&2, Spec.Entry>,
+  y: Maybe<&2, Spec.Entry>,
+  -j: Spec.Id,
+  keep: @e: Spec.Entry -> {
+    x == Some{e}: Maybe<&2, Spec.Entry>
+  } -> {y == Some{e}: Maybe<&2, Spec.Entry>}
+) -> {Vote.of(x) == Some{j}: Maybe<&2, Spec.Id>} -> {Vote.of(y) == Some{j}: Maybe<&2, Spec.Id>}:
   match x:
     case None{}:
-      h => Empty.absurd({Vote.of(y) == Some{j}: Maybe<&2, Spec.Id>}, Maybes.Maybe.none_ne_some(Spec.Id, j, h))
-    case Some{+e}:
+      h => Empty.absurd(
+        {Vote.of(y) == Some{j}: Maybe<&2, Spec.Id>},
+        Maybes.Maybe.none_ne_some(Spec.Id, j, h)
+      )
+    case Some{e}:
       h =>
-        %Equal.sym(Maybe<&2, Spec.Entry>, y, Some{e}, keep(e)({==})) : {Vote.of(_) == Some{j}: Maybe<&2, Spec.Id>}
+        %Equal.sym(
+          Maybe<&2, Spec.Entry>,
+          y,
+          Some{e},
+          keep(e)({==})
+        ): {Vote.of(_) == Some{j}: Maybe<&2, Spec.Id>}
         h
 
 # a vote kept as y is a vote that the quorum keeps
-def Kept.one.at(x: Maybe<&2, Spec.Id>, y: Maybe<&2, Spec.Id>, keep: @j: Spec.Id -> {x == Some{j}: Maybe<&2, Spec.Id>} -> {y == Some{j}: Maybe<&2, Spec.Id>}) -> {
-  Quorums.Quorum.kept(~Spec.Id, ~Spec.Id.same, x, y) == True{}: Bool
-}:
+def Kept.one.at(
+  x: Maybe<&2, Spec.Id>,
+  y: Maybe<&2, Spec.Id>,
+  keep: @j: Spec.Id -> {x == Some{j}: Maybe<&2, Spec.Id>} -> {y == Some{j}: Maybe<&2, Spec.Id>}
+) -> {Quorums.Quorum.kept(~Spec.Id, ~Spec.Id.same, x, y) == True{}: Bool}:
   match x:
     case None{}:
       {==}
     case Some{+j}:
-      %Equal.sym(Maybe<&2, Spec.Id>, y, Some{j}, keep(j)({==})) :
+      %Equal.sym(Maybe<&2, Spec.Id>, y, Some{j}, keep(j)({==})):
         {Quorums.Quorum.hit(~Spec.Id, ~Spec.Id.same, _, j) == True{}: Bool}
       Id.same_refl(j)
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # every vote at the spot of s is kept by an agreeing join
-def Kept.keeps(+s: Spec.State(), +t: Spec.State(), +c: Spec.Chain, +v: Spec.Id, ms: List<&2, String>, +a: {Spec.Node.agrees(s, t) == True{}: Bool}) -> {
-  Quorums.Quorum.keeps(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, ms, Spot{s, c, v}, Spot{Spec.Node.join(s, t), c, v}) == True{}: Bool
+def Kept.keeps(
+  +s: Spec.State(),
+  +t: Spec.State(),
+  +c: Spec.Chain,
+  +v: Spec.Id,
+  ms: List<&2, String>,
+  +a: {Spec.Node.agrees(s, t) == True{}: Bool}
+) -> {
+  Quorums.Quorum.keeps(
+    ~String,
+    ~Spec.Id,
+    ~Spot,
+    ~Spot.vote,
+    ~Spec.Id.same,
+    ms,
+    Spot{s, c, v},
+    Spot{Spec.Node.join(s, t), c, v}
+  )
+    == True{}: Bool
 }:
   match ms:
     case Nil{}:
       {==}
     case Con{+m, +r}:
-      And.both(
-        Quorums.Quorum.kept(~Spec.Id, ~Spec.Id.same, Spot.vote(Spot{s, c, v}, m), Spot.vote(Spot{Spec.Node.join(s, t), c, v}, m)),
-        Quorums.Quorum.keeps(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, r, Spot{s, c, v}, Spot{Spec.Node.join(s, t), c, v}),
+      Bools.Bool.and_both(
+        Quorums.Quorum.kept(
+          ~Spec.Id,
+          ~Spec.Id.same,
+          Spot.vote(Spot{s, c, v}, m),
+          Spot.vote(Spot{Spec.Node.join(s, t), c, v}, m)
+        ),
+        Quorums.Quorum.keeps(
+          ~String,
+          ~Spec.Id,
+          ~Spot,
+          ~Spot.vote,
+          ~Spec.Id.same,
+          r,
+          Spot{s, c, v},
+          Spot{Spec.Node.join(s, t), c, v}
+        )
+      )(
         Kept.one.at(
           Spot.vote(Spot{s, c, v}, m),
           Spot.vote(Spot{Spec.Node.join(s, t), c, v}, m),
@@ -1546,33 +2179,42 @@ def Kept.keeps(+s: Spec.State(), +t: Spec.State(), +c: Spec.Chain, +v: Spec.Id, 
             j,
             e => Kept.slot(s, t, Spec.Slot.Vote{m, c, v}, e, a)
           )
-        ),
-        Kept.keeps(s, t, c, v, r, a)
-      )
+        )
+      )(Kept.keeps(s, t, c, v, r, a))
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a step to i that s holds the request of is kept by an agreeing join
 def Kept.step.ask(
-  +s: Spec.State(),
-  +t: Spec.State(),
-  +c: Spec.Chain,
-  +i: Spec.Id,
-  +ms: List<&2, String>,
+  s: Spec.State(),
+  t: Spec.State(),
+  c: Spec.Chain,
+  i: Spec.Id,
+  ms: List<&2, String>,
   -st: Step,
-  +a: {Spec.Node.agrees(s, t) == True{}: Bool},
+  a: {Spec.Node.agrees(s, t) == True{}: Bool},
   r: Maybe<&2, Asked>,
   er: {State.asked(s, i) == r: Maybe<&2, Asked>}
-) -> {Step.ask(c, i, ms, r) == Some{st}: Maybe<&2, Step>} -> {Step.ask(c, i, ms, State.asked(Spec.Node.join(s, t), i)) == Some{st}: Maybe<&2, Step>}:
+) -> {
+  Step.ask(c, i, ms, r) == Some{st}: Maybe<&2, Step>
+} -> {Step.ask(c, i, ms, State.asked(Spec.Node.join(s, t), i)) == Some{st}: Maybe<&2, Step>}:
   match r:
     case None{}:
       h => Empty.absurd(
         {Step.ask(c, i, ms, State.asked(Spec.Node.join(s, t), i)) == Some{st}: Maybe<&2, Step>},
         Maybes.Maybe.none_ne_some(Step, st, h)
       )
-    case Some{+x}:
+    case Some{x}:
       h =>
-        %Equal.sym(Maybe<&2, Asked>, State.asked(Spec.Node.join(s, t), i), Some{x}, Kept.asked(s, t, i, x, a)(er)) :
+        %Equal.sym(
+          Maybe<&2, Asked>,
+          State.asked(Spec.Node.join(s, t), i),
+          Some{x},
+          Kept.asked(s, t, i, x, a)(er)
+        ):
           {Step.ask(c, i, ms, _) == Some{st}: Maybe<&2, Step>}
         h
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Kept.next once the winner w of the vote in s is known
 def Kept.next.won(
@@ -1584,13 +2226,36 @@ def Kept.next.won(
   -st: Step,
   +a: {Spec.Node.agrees(s, t) == True{}: Bool},
   w: Maybe<&2, Spec.Id>,
-  ew: {Quorums.Quorum.winner(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, ms, ms, Spot{s, c, v}) == w: Maybe<&2, Spec.Id>}
-) -> {Step.won(s, c, ms, w) == Some{st}: Maybe<&2, Step>} -> {
+  ew: {
+    Quorums.Quorum.winner(
+      ~String,
+      ~Spec.Id,
+      ~Spot,
+      ~Spot.vote,
+      ~Spec.Id.same,
+      ms,
+      ms,
+      Spot{s, c, v}
+    )
+      == w: Maybe<&2, Spec.Id>
+  }
+) -> {
+  Step.won(s, c, ms, w) == Some{st}: Maybe<&2, Step>
+} -> {
   Step.won(
     Spec.Node.join(s, t),
     c,
     ms,
-    Quorums.Quorum.winner(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, ms, ms, Spot{Spec.Node.join(s, t), c, v})
+    Quorums.Quorum.winner(
+      ~String,
+      ~Spec.Id,
+      ~Spot,
+      ~Spot.vote,
+      ~Spec.Id.same,
+      ms,
+      ms,
+      Spot{Spec.Node.join(s, t), c, v}
+    )
   )
     == Some{st}: Maybe<&2, Step>
 }:
@@ -1602,7 +2267,16 @@ def Kept.next.won(
             Spec.Node.join(s, t),
             c,
             ms,
-            Quorums.Quorum.winner(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, ms, ms, Spot{Spec.Node.join(s, t), c, v})
+            Quorums.Quorum.winner(
+              ~String,
+              ~Spec.Id,
+              ~Spot,
+              ~Spot.vote,
+              ~Spec.Id.same,
+              ms,
+              ms,
+              Spot{Spec.Node.join(s, t), c, v}
+            )
           )
             == Some{st}: Maybe<&2, Step>
         },
@@ -1612,9 +2286,43 @@ def Kept.next.won(
       h =>
         +g = {Spot{s, c, v}: Spot}
         +g2 = {Spot{Spec.Node.join(s, t), c, v}: Spot}
-        +won = Quorums.Quorum.winner_of(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, ~Id.same_refl, ~Id.same_sound, ms, g2, i)(
-          Quorums.Quorum.has_more(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, ~Id.same_sound, ms, g, g2, i)(Kept.keeps(s, t, c, v, ms, a))(
-            Quorums.Quorum.has_winner(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, ms, ms, g, i)(ew)
+        +won = Quorums.Quorum.winner_of(
+          ~String,
+          ~Spec.Id,
+          ~Spot,
+          ~Spot.vote,
+          ~Spec.Id.same,
+          ~Id.same_refl,
+          ~Id.same_sound,
+          ms,
+          g2,
+          i
+        )(
+          Quorums.Quorum.has_more(
+            ~String,
+            ~Spec.Id,
+            ~Spot,
+            ~Spot.vote,
+            ~Spec.Id.same,
+            ~Id.same_sound,
+            ms,
+            g,
+            g2,
+            i
+          )(
+            Kept.keeps(s, t, c, v, ms, a)
+          )(
+            Quorums.Quorum.has_winner(
+              ~String,
+              ~Spec.Id,
+              ~Spot,
+              ~Spot.vote,
+              ~Spec.Id.same,
+              ms,
+              ms,
+              g,
+              i
+            )(ew)
           )
         )
         %Equal.sym(
@@ -1622,12 +2330,19 @@ def Kept.next.won(
           Quorums.Quorum.winner(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, ms, ms, g2),
           Some{i},
           won
-        ) :
+        ):
           {Step.won(Spec.Node.join(s, t), c, ms, _) == Some{st}: Maybe<&2, Step>}
         Kept.step.ask(s, t, c, i, ms, st, a, State.asked(s, i), {==})(h)
 
 # a next step of s is kept by an agreeing join
-def Kept.next(+s: Spec.State(), +t: Spec.State(), +c: Spec.Chain, k: Step, -st: Step, +a: {Spec.Node.agrees(s, t) == True{}: Bool}) -> {
+def Kept.next(
+  +s: Spec.State(),
+  t: Spec.State(),
+  +c: Spec.Chain,
+  k: Step,
+  -st: Step,
+  a: {Spec.Node.agrees(s, t) == True{}: Bool}
+) -> {
   Chain.next(s, c, k) == Some{st}: Maybe<&2, Step>
 } -> {Chain.next(Spec.Node.join(s, t), c, k) == Some{st}: Maybe<&2, Step>}:
   match k:
@@ -1640,7 +2355,16 @@ def Kept.next(+s: Spec.State(), +t: Spec.State(), +c: Spec.Chain, k: Step, -st: 
         ms,
         st,
         a,
-        Quorums.Quorum.winner(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, ms, ms, Spot{s, c, v}),
+        Quorums.Quorum.winner(
+          ~String,
+          ~Spec.Id,
+          ~Spot,
+          ~Spot.vote,
+          ~Spec.Id.same,
+          ms,
+          ms,
+          Spot{s, c, v}
+        ),
         {==}
       )
 
@@ -1648,7 +2372,11 @@ def Kept.next(+s: Spec.State(), +t: Spec.State(), +c: Spec.Chain, k: Step, -st: 
 # -----
 
 # a walk from no next step is empty
-def Walk.none(+g: Nat, +s: Spec.State(), +c: Spec.Chain) -> {Chain.walk(g, s, c, None{}) == []: List<&2, Spec.Id>}:
+def Walk.none(
+  +g: Nat,
+  s: Spec.State(),
+  c: Spec.Chain
+) -> {Chain.walk(g, s, c, None{}) == []: List<&2, Spec.Id>}:
   match g:
     case 0n:
       {==}
@@ -1656,7 +2384,12 @@ def Walk.none(+g: Nat, +s: Spec.State(), +c: Spec.Chain) -> {Chain.walk(g, s, c,
       {==}
 
 # a walk from no next step ends where it starts
-def Last.none(+g: Nat, +s: Spec.State(), +c: Spec.Chain, k: Step) -> {Chain.last(g, s, c, k, None{}) == k: Step}:
+def Last.none(
+  +g: Nat,
+  s: Spec.State(),
+  c: Spec.Chain,
+  k: Step
+) -> {Chain.last(g, s, c, k, None{}) == k: Step}:
   match g:
     case 0n:
       {==}
@@ -1664,28 +2397,41 @@ def Last.none(+g: Nat, +s: Spec.State(), +c: Spec.Chain, k: Step) -> {Chain.last
       {==}
 
 # a walk of f steps has at most f versions
-def Walk.length(+f: Nat, +s: Spec.State(), +c: Spec.Chain, nx: Maybe<&2, Step>) -> {Nat.is_le(List.length(&2, Spec.Id, Chain.walk(f, s, c, nx)), f) == True{}: Bool}:
+def Walk.length(
+  +f: Nat,
+  +s: Spec.State(),
+  +c: Spec.Chain,
+  nx: Maybe<&2, Step>
+) -> {Nat.is_le(List.length(&2, Spec.Id, Chain.walk(f, s, c, nx)), f) == True{}: Bool}:
   match f nx:
     case 0n m:
       {==}
     case 1n+e None{}:
       {==}
-    case 1n+e Some{Step{+i, +ms}}:
+    case 1n+e Some{Step{i, ms}}:
       Walk.length(e, s, c, Chain.next(s, c, Step{i, ms}))
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Ext.walk once the next step nx after k in s is known
 def Ext.walk.at(
   e: Nat,
-  +g: Nat,
-  +s: Spec.State(),
-  +t: Spec.State(),
-  +c: Spec.Chain,
+  g: Nat,
+  s: Spec.State(),
+  t: Spec.State(),
+  c: Spec.Chain,
   k: Step,
-  +a: {Spec.Node.agrees(s, t) == True{}: Bool},
+  a: {Spec.Node.agrees(s, t) == True{}: Bool},
   nx: Maybe<&2, Step>,
   enx: {Chain.next(s, c, k) == nx: Maybe<&2, Step>},
-  ih: @k2: Step -> {Nat.is_le(e, g) == True{}: Bool} -> {
-    Chain.walk(g, Spec.Node.join(s, t), c, Chain.next(Spec.Node.join(s, t), c, k2))
+  ih: @k2: Step -> {
+    Nat.is_le(e, g) == True{}: Bool
+  } -> {
+    Chain.walk(
+      g,
+      Spec.Node.join(s, t),
+      c,
+      Chain.next(Spec.Node.join(s, t), c, k2)
+    )
       == List.append(
         &2,
         Spec.Id,
@@ -1698,8 +2444,15 @@ def Ext.walk.at(
         )
       ): List<&2, Spec.Id>
   }
-) -> {Nat.is_le(e, g) == True{}: Bool} -> {
-  Chain.walk(1n+g, Spec.Node.join(s, t), c, Chain.next(Spec.Node.join(s, t), c, k))
+) -> {
+  Nat.is_le(e, g) == True{}: Bool
+} -> {
+  Chain.walk(
+    1n+g,
+    Spec.Node.join(s, t),
+    c,
+    Chain.next(Spec.Node.join(s, t), c, k)
+  )
     == List.append(
       &2,
       Spec.Id,
@@ -1715,44 +2468,91 @@ def Ext.walk.at(
   match nx:
     case None{}:
       le =>
-        %Equal.sym(Nat, Nat.sub(1n+g, 0n), 1n+g, Nats.Nat.sub_zero(1n+g)) :
+        %Equal.sym(Nat, Nat.sub(1n+g, 0n), 1n+g, Nats.Nat.sub_zero(1n+g)):
           {
-            Chain.walk(1n+g, Spec.Node.join(s, t), c, Chain.next(Spec.Node.join(s, t), c, k))
-              == Chain.walk(_, Spec.Node.join(s, t), c, Chain.next(Spec.Node.join(s, t), c, k)): List<&2, Spec.Id>
+            Chain.walk(
+              1n+g,
+              Spec.Node.join(s, t),
+              c,
+              Chain.next(Spec.Node.join(s, t), c, k)
+            )
+              == Chain.walk(
+                _,
+                Spec.Node.join(s, t),
+                c,
+                Chain.next(Spec.Node.join(s, t), c, k)
+              ): List<&2, Spec.Id>
           }
         {==}
-    case Some{Step{+i, +ms}}:
+    case Some{Step{i, ms}}:
       le =>
         %Equal.sym(
           Maybe<&2, Step>,
           Chain.next(Spec.Node.join(s, t), c, k),
           Some{Step{i, ms}},
           Kept.next(s, t, c, k, Step{i, ms}, a)(enx)
-        ) :
+        ):
           {
-            Chain.walk(1n+g, Spec.Node.join(s, t), c, _)
+            Chain.walk(
+              1n+g,
+              Spec.Node.join(s, t),
+              c,
+              _
+            )
               == List.append(
                 &2,
                 Spec.Id,
                 i <> Chain.walk(e, s, c, Chain.next(s, c, Step{i, ms})),
                 Chain.walk(
-                  Nat.sub(1n+g, 1n+List.length(&2, Spec.Id, Chain.walk(e, s, c, Chain.next(s, c, Step{i, ms})))),
+                  Nat.sub(
+                    1n+g,
+                    1n+List.length(&2, Spec.Id, Chain.walk(e, s, c, Chain.next(s, c, Step{i, ms})))
+                  ),
                   Spec.Node.join(s, t),
                   c,
-                  Chain.next(Spec.Node.join(s, t), c, Chain.last(e, s, c, Step{i, ms}, Chain.next(s, c, Step{i, ms})))
+                  Chain.next(
+                    Spec.Node.join(s, t),
+                    c,
+                    Chain.last(e, s, c, Step{i, ms}, Chain.next(s, c, Step{i, ms}))
+                  )
                 )
               ): List<&2, Spec.Id>
           }
-        %ih(Step{i, ms})(le) :
+        %ih(Step{i, ms})(le):
           {
-            i <> Chain.walk(g, Spec.Node.join(s, t), c, Chain.next(Spec.Node.join(s, t), c, Step{i, ms})) == i <> _: List<&2, Spec.Id>
+            i
+              <> Chain.walk(
+                g,
+                Spec.Node.join(s, t),
+                c,
+                Chain.next(Spec.Node.join(s, t), c, Step{i, ms})
+              )
+              == i
+              <> _: List<&2, Spec.Id>
           }
         {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a walk of s, then the walk of s and t from where it ended, is the walk of s
 # and t: when t agrees with s, and s and t walk at least as far
-def Ext.walk(+f: Nat, +g: Nat, +s: Spec.State(), +t: Spec.State(), +c: Spec.Chain, +k: Step, +a: {Spec.Node.agrees(s, t) == True{}: Bool}) -> {Nat.is_le(f, g) == True{}: Bool} -> {
-  Chain.walk(g, Spec.Node.join(s, t), c, Chain.next(Spec.Node.join(s, t), c, k))
+def Ext.walk(
+  +f: Nat,
+  +g: Nat,
+  +s: Spec.State(),
+  +t: Spec.State(),
+  +c: Spec.Chain,
+  +k: Step,
+  +a: {Spec.Node.agrees(s, t) == True{}: Bool}
+) -> {
+  Nat.is_le(f, g) == True{}: Bool
+} -> {
+  Chain.walk(
+    g,
+    Spec.Node.join(s, t),
+    c,
+    Chain.next(Spec.Node.join(s, t), c, k)
+  )
     == List.append(
       &2,
       Spec.Id,
@@ -1768,16 +2568,31 @@ def Ext.walk(+f: Nat, +g: Nat, +s: Spec.State(), +t: Spec.State(), +c: Spec.Chai
   match f g:
     case 0n w:
       le =>
-        %Equal.sym(Nat, Nat.sub(w, 0n), w, Nats.Nat.sub_zero(w)) :
+        %Equal.sym(Nat, Nat.sub(w, 0n), w, Nats.Nat.sub_zero(w)):
           {
-            Chain.walk(w, Spec.Node.join(s, t), c, Chain.next(Spec.Node.join(s, t), c, k))
-              == Chain.walk(_, Spec.Node.join(s, t), c, Chain.next(Spec.Node.join(s, t), c, k)): List<&2, Spec.Id>
+            Chain.walk(
+              w,
+              Spec.Node.join(s, t),
+              c,
+              Chain.next(Spec.Node.join(s, t), c, k)
+            )
+              == Chain.walk(
+                _,
+                Spec.Node.join(s, t),
+                c,
+                Chain.next(Spec.Node.join(s, t), c, k)
+              ): List<&2, Spec.Id>
           }
         {==}
     case 1n+e 0n:
       le => Empty.absurd(
         {
-          Chain.walk(0n, Spec.Node.join(s, t), c, Chain.next(Spec.Node.join(s, t), c, k))
+          Chain.walk(
+            0n,
+            Spec.Node.join(s, t),
+            c,
+            Chain.next(Spec.Node.join(s, t), c, k)
+          )
             == List.append(
               &2,
               Spec.Id,
@@ -1793,21 +2608,42 @@ def Ext.walk(+f: Nat, +g: Nat, +s: Spec.State(), +t: Spec.State(), +c: Spec.Chai
         Shared.Bool.false_ne_true(le)
       )
     case 1n+e 1n+h:
-      Ext.walk.at(e, h, s, t, c, k, a, Chain.next(s, c, k), {==}, k2 => Ext.walk(e, h, s, t, c, k2, a))
+      Ext.walk.at(
+        e,
+        h,
+        s,
+        t,
+        c,
+        k,
+        a,
+        Chain.next(s, c, k),
+        {==},
+        k2 => Ext.walk(e, h, s, t, c, k2, a)
+      )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Ext.last once the next step nx after k in s is known
 def Ext.last.at(
   e: Nat,
-  +g: Nat,
-  +s: Spec.State(),
-  +t: Spec.State(),
-  +c: Spec.Chain,
-  +k: Step,
-  +a: {Spec.Node.agrees(s, t) == True{}: Bool},
+  g: Nat,
+  s: Spec.State(),
+  t: Spec.State(),
+  c: Spec.Chain,
+  k: Step,
+  a: {Spec.Node.agrees(s, t) == True{}: Bool},
   nx: Maybe<&2, Step>,
   enx: {Chain.next(s, c, k) == nx: Maybe<&2, Step>},
-  ih: @k2: Step -> {Nat.is_le(e, g) == True{}: Bool} -> {
-    Chain.last(g, Spec.Node.join(s, t), c, k2, Chain.next(Spec.Node.join(s, t), c, k2))
+  ih: @k2: Step -> {
+    Nat.is_le(e, g) == True{}: Bool
+  } -> {
+    Chain.last(
+      g,
+      Spec.Node.join(s, t),
+      c,
+      k2,
+      Chain.next(Spec.Node.join(s, t), c, k2)
+    )
       == Chain.last(
         Nat.sub(g, List.length(&2, Spec.Id, Chain.walk(e, s, c, Chain.next(s, c, k2)))),
         Spec.Node.join(s, t),
@@ -1816,8 +2652,16 @@ def Ext.last.at(
         Chain.next(Spec.Node.join(s, t), c, Chain.last(e, s, c, k2, Chain.next(s, c, k2)))
       ): Step
   }
-) -> {Nat.is_le(e, g) == True{}: Bool} -> {
-  Chain.last(1n+g, Spec.Node.join(s, t), c, k, Chain.next(Spec.Node.join(s, t), c, k))
+) -> {
+  Nat.is_le(e, g) == True{}: Bool
+} -> {
+  Chain.last(
+    1n+g,
+    Spec.Node.join(s, t),
+    c,
+    k,
+    Chain.next(Spec.Node.join(s, t), c, k)
+  )
     == Chain.last(
       Nat.sub(1n+g, List.length(&2, Spec.Id, Chain.walk(1n+e, s, c, nx))),
       Spec.Node.join(s, t),
@@ -1829,30 +2673,61 @@ def Ext.last.at(
   match nx:
     case None{}:
       le => {==}
-    case Some{Step{+i, +ms}}:
+    case Some{Step{i, ms}}:
       le =>
         %Equal.sym(
           Maybe<&2, Step>,
           Chain.next(Spec.Node.join(s, t), c, k),
           Some{Step{i, ms}},
           Kept.next(s, t, c, k, Step{i, ms}, a)(enx)
-        ) :
+        ):
           {
-            Chain.last(1n+g, Spec.Node.join(s, t), c, k, _)
+            Chain.last(
+              1n+g,
+              Spec.Node.join(s, t),
+              c,
+              k,
+              _
+            )
               == Chain.last(
-                Nat.sub(g, List.length(&2, Spec.Id, Chain.walk(e, s, c, Chain.next(s, c, Step{i, ms})))),
+                Nat.sub(
+                  g,
+                  List.length(&2, Spec.Id, Chain.walk(e, s, c, Chain.next(s, c, Step{i, ms})))
+                ),
                 Spec.Node.join(s, t),
                 c,
                 Chain.last(e, s, c, Step{i, ms}, Chain.next(s, c, Step{i, ms})),
-                Chain.next(Spec.Node.join(s, t), c, Chain.last(e, s, c, Step{i, ms}, Chain.next(s, c, Step{i, ms})))
+                Chain.next(
+                  Spec.Node.join(s, t),
+                  c,
+                  Chain.last(e, s, c, Step{i, ms}, Chain.next(s, c, Step{i, ms}))
+                )
               ): Step
           }
         ih(Step{i, ms})(le)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # the last step of s, walked on in s and t, is the last step of s and t: when t
 # agrees with s, and s and t walk at least as far
-def Ext.last(+f: Nat, +g: Nat, +s: Spec.State(), +t: Spec.State(), +c: Spec.Chain, +k: Step, +a: {Spec.Node.agrees(s, t) == True{}: Bool}) -> {Nat.is_le(f, g) == True{}: Bool} -> {
-  Chain.last(g, Spec.Node.join(s, t), c, k, Chain.next(Spec.Node.join(s, t), c, k))
+def Ext.last(
+  +f: Nat,
+  +g: Nat,
+  +s: Spec.State(),
+  +t: Spec.State(),
+  +c: Spec.Chain,
+  +k: Step,
+  +a: {Spec.Node.agrees(s, t) == True{}: Bool}
+) -> {
+  Nat.is_le(f, g) == True{}: Bool
+} -> {
+  Chain.last(
+    g,
+    Spec.Node.join(s, t),
+    c,
+    k,
+    Chain.next(Spec.Node.join(s, t), c, k)
+  )
     == Chain.last(
       Nat.sub(g, List.length(&2, Spec.Id, Chain.walk(f, s, c, Chain.next(s, c, k)))),
       Spec.Node.join(s, t),
@@ -1864,16 +2739,34 @@ def Ext.last(+f: Nat, +g: Nat, +s: Spec.State(), +t: Spec.State(), +c: Spec.Chai
   match f g:
     case 0n w:
       le =>
-        %Equal.sym(Nat, Nat.sub(w, 0n), w, Nats.Nat.sub_zero(w)) :
+        %Equal.sym(Nat, Nat.sub(w, 0n), w, Nats.Nat.sub_zero(w)):
           {
-            Chain.last(w, Spec.Node.join(s, t), c, k, Chain.next(Spec.Node.join(s, t), c, k))
-              == Chain.last(_, Spec.Node.join(s, t), c, k, Chain.next(Spec.Node.join(s, t), c, k)): Step
+            Chain.last(
+              w,
+              Spec.Node.join(s, t),
+              c,
+              k,
+              Chain.next(Spec.Node.join(s, t), c, k)
+            )
+              == Chain.last(
+                _,
+                Spec.Node.join(s, t),
+                c,
+                k,
+                Chain.next(Spec.Node.join(s, t), c, k)
+              ): Step
           }
         {==}
     case 1n+e 0n:
       le => Empty.absurd(
         {
-          Chain.last(0n, Spec.Node.join(s, t), c, k, Chain.next(Spec.Node.join(s, t), c, k))
+          Chain.last(
+            0n,
+            Spec.Node.join(s, t),
+            c,
+            k,
+            Chain.next(Spec.Node.join(s, t), c, k)
+          )
             == Chain.last(
               Nat.sub(0n, List.length(&2, Spec.Id, Chain.walk(1n+e, s, c, Chain.next(s, c, k)))),
               Spec.Node.join(s, t),
@@ -1885,13 +2778,27 @@ def Ext.last(+f: Nat, +g: Nat, +s: Spec.State(), +t: Spec.State(), +c: Spec.Chai
         Shared.Bool.false_ne_true(le)
       )
     case 1n+e 1n+h:
-      Ext.last.at(e, h, s, t, c, k, a, Chain.next(s, c, k), {==}, k2 => Ext.last(e, h, s, t, c, k2, a))
+      Ext.last.at(
+        e,
+        h,
+        s,
+        t,
+        c,
+        k,
+        a,
+        Chain.next(s, c, k),
+        {==},
+        k2 => Ext.last(e, h, s, t, c, k2, a)
+      )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # Chains kept
 # -----------
 
 # nothing taken of a list is nothing
-def List.take_zero(xs: List<&2, Spec.Id>) -> {List.take(&2, Spec.Id, xs, 0n) == []: List<&2, Spec.Id>}:
+def List.take_zero(
+  xs: List<&2, Spec.Id>
+) -> {List.take(&2, Spec.Id, xs, 0n) == []: List<&2, Spec.Id>}:
   match xs:
     case Nil{}:
       {==}
@@ -1899,12 +2806,32 @@ def List.take_zero(xs: List<&2, Spec.Id>) -> {List.take(&2, Spec.Id, xs, 0n) == 
       {==}
 
 # an agreeing join walks at least as far
-def State.fuel_le(+s: Spec.State(), +t: Spec.State()) -> {Nat.is_le(State.fuel(s), State.fuel(Spec.Node.join(s, t))) == True{}: Bool}:
-  Tries.Trie.size_union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, t)
+def State.fuel_le(
+  s: Spec.State(),
+  t: Spec.State()
+) -> {Nat.is_le(State.fuel(s), State.fuel(Spec.Node.join(s, t))) == True{}: Bool}:
+  Tries.Trie.size_union(
+    ~Cells.Cell<Spec.Entry>,
+    ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
+    s,
+    t
+  )
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Spec.Node.chain_kept from the first step m
-def Kept.chain.from(+s: Spec.State(), +t: Spec.State(), +c: Spec.Chain, +a: {Spec.Node.agrees(s, t) == True{}: Bool}, m: Maybe<&2, Step>) -> {
-  List.take(&2, Spec.Id, Chain.from(Spec.Node.join(s, t), c, m), List.length(&2, Spec.Id, Chain.from(s, c, m)))
+def Kept.chain.from(
+  +s: Spec.State(),
+  +t: Spec.State(),
+  +c: Spec.Chain,
+  a: {Spec.Node.agrees(s, t) == True{}: Bool},
+  m: Maybe<&2, Step>
+) -> {
+  List.take(
+    &2,
+    Spec.Id,
+    Chain.from(Spec.Node.join(s, t), c, m),
+    List.length(&2, Spec.Id, Chain.from(s, c, m))
+  )
     == Chain.from(s, c, m): List<&2, Spec.Id>
 }:
   match m:
@@ -1912,60 +2839,149 @@ def Kept.chain.from(+s: Spec.State(), +t: Spec.State(), +c: Spec.Chain, +a: {Spe
       {==}
     case Some{Step{+i, +ms}}:
       +w = Chain.walk(State.fuel(s), s, c, Chain.next(s, c, Step{i, ms}))
-      +x = Chain.walk(
+      x = Chain.walk(
         Nat.sub(State.fuel(Spec.Node.join(s, t)), List.length(&2, Spec.Id, w)),
         Spec.Node.join(s, t),
         c,
-        Chain.next(Spec.Node.join(s, t), c, Chain.last(State.fuel(s), s, c, Step{i, ms}, Chain.next(s, c, Step{i, ms})))
+        Chain.next(
+          Spec.Node.join(s, t),
+          c,
+          Chain.last(State.fuel(s), s, c, Step{i, ms}, Chain.next(s, c, Step{i, ms}))
+        )
       )
       %Equal.sym(
         List<&2, Spec.Id>,
-        Chain.walk(State.fuel(Spec.Node.join(s, t)), Spec.Node.join(s, t), c, Chain.next(Spec.Node.join(s, t), c, Step{i, ms})),
+        Chain.walk(
+          State.fuel(Spec.Node.join(s, t)),
+          Spec.Node.join(s, t),
+          c,
+          Chain.next(Spec.Node.join(s, t), c, Step{i, ms})
+        ),
         List.append(&2, Spec.Id, w, x),
-        Ext.walk(State.fuel(s), State.fuel(Spec.Node.join(s, t)), s, t, c, Step{i, ms}, a)(State.fuel_le(s, t))
-      ) :
-        {List.take(&2, Spec.Id, i <> _, 1n+List.length(&2, Spec.Id, w)) == i <> w: List<&2, Spec.Id>}
-      %Lists.List.take_append(Spec.Id, w, x) : {i <> List.take(&2, Spec.Id, List.append(&2, Spec.Id, w, x), List.length(&2, Spec.Id, w)) == i <> _: List<&2, Spec.Id>}
+        Ext.walk(
+          State.fuel(s),
+          State.fuel(Spec.Node.join(s, t)),
+          s,
+          t,
+          c,
+          Step{i, ms},
+          a
+        )(State.fuel_le(s, t))
+      ):
+        {
+          List.take(
+            &2,
+            Spec.Id,
+            i <> _,
+            1n+List.length(&2, Spec.Id, w)
+          )
+            == i
+            <> w: List<&2, Spec.Id>
+        }
+      %Lists.List.take_append(
+        Spec.Id,
+        w,
+        x
+      ): {
+        i
+          <> List.take(&2, Spec.Id, List.append(&2, Spec.Id, w, x), List.length(&2, Spec.Id, w))
+          == i
+          <> _: List<&2, Spec.Id>
+      }
       {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Spec.Node.chain_kept once the request r of the first version i is known
-def Kept.chain.ask(+s: Spec.State(), +t: Spec.State(), +c: Spec.Chain, +a: {Spec.Node.agrees(s, t) == True{}: Bool}, +i: Spec.Id, +ms: List<&2, String>, r: Maybe<&2, Asked>, er: {State.asked(s, i) == r: Maybe<&2, Asked>}) -> {
-  List.take(&2, Spec.Id, Chain.from(Spec.Node.join(s, t), c, Step.ask(c, i, ms, State.asked(Spec.Node.join(s, t), i))), List.length(&2, Spec.Id, Chain.from(s, c, Step.ask(c, i, ms, r))))
+def Kept.chain.ask(
+  +s: Spec.State(),
+  +t: Spec.State(),
+  +c: Spec.Chain,
+  +a: {Spec.Node.agrees(s, t) == True{}: Bool},
+  +i: Spec.Id,
+  ms: List<&2, String>,
+  r: Maybe<&2, Asked>,
+  er: {State.asked(s, i) == r: Maybe<&2, Asked>}
+) -> {
+  List.take(
+    &2,
+    Spec.Id,
+    Chain.from(Spec.Node.join(s, t), c, Step.ask(c, i, ms, State.asked(Spec.Node.join(s, t), i))),
+    List.length(&2, Spec.Id, Chain.from(s, c, Step.ask(c, i, ms, r)))
+  )
     == Chain.from(s, c, Step.ask(c, i, ms, r)): List<&2, Spec.Id>
 }:
   match r:
     case None{}:
-      List.take_zero(Chain.from(Spec.Node.join(s, t), c, Step.ask(c, i, ms, State.asked(Spec.Node.join(s, t), i))))
-    case Some{+x}:
-      %Equal.sym(Maybe<&2, Asked>, State.asked(Spec.Node.join(s, t), i), Some{x}, Kept.asked(s, t, i, x, a)(er)) :
+      List.take_zero(
+        Chain.from(
+          Spec.Node.join(s, t),
+          c,
+          Step.ask(c, i, ms, State.asked(Spec.Node.join(s, t), i))
+        )
+      )
+    case Some{x}:
+      %Equal.sym(
+        Maybe<&2, Asked>,
+        State.asked(Spec.Node.join(s, t), i),
+        Some{x},
+        Kept.asked(s, t, i, x, a)(er)
+      ):
         {
-          List.take(&2, Spec.Id, Chain.from(Spec.Node.join(s, t), c, Step.ask(c, i, ms, _)), List.length(&2, Spec.Id, Chain.from(s, c, Step.ask(c, i, ms, Some{x}))))
+          List.take(
+            &2,
+            Spec.Id,
+            Chain.from(Spec.Node.join(s, t), c, Step.ask(c, i, ms, _)),
+            List.length(&2, Spec.Id, Chain.from(s, c, Step.ask(c, i, ms, Some{x})))
+          )
             == Chain.from(s, c, Step.ask(c, i, ms, Some{x})): List<&2, Spec.Id>
         }
       Kept.chain.from(s, t, c, a, Step.ask(c, i, ms, Some{x}))
 
 # Spec.Node.chain_kept once the first step mr of the claim is known
-def Kept.chain.root(+s: Spec.State(), +t: Spec.State(), +c: Spec.Chain, +a: {Spec.Node.agrees(s, t) == True{}: Bool}, mr: Maybe<&2, Step>) -> {
-  List.take(&2, Spec.Id, Chain.from(Spec.Node.join(s, t), c, Chain.root.of(Spec.Node.join(s, t), c, mr)), List.length(&2, Spec.Id, Chain.from(s, c, Chain.root.of(s, c, mr))))
+def Kept.chain.root(
+  +s: Spec.State(),
+  t: Spec.State(),
+  c: Spec.Chain,
+  a: {Spec.Node.agrees(s, t) == True{}: Bool},
+  mr: Maybe<&2, Step>
+) -> {
+  List.take(
+    &2,
+    Spec.Id,
+    Chain.from(Spec.Node.join(s, t), c, Chain.root.of(Spec.Node.join(s, t), c, mr)),
+    List.length(&2, Spec.Id, Chain.from(s, c, Chain.root.of(s, c, mr)))
+  )
     == Chain.from(s, c, Chain.root.of(s, c, mr)): List<&2, Spec.Id>
 }:
   match mr:
     case None{}:
       {==}
-    case Some{Step{+i, +ms}}:
+    case Some{Step{+i, ms}}:
       Kept.chain.ask(s, t, c, a, i, ms, State.asked(s, i), {==})
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 def Spec.Node.chain_kept(s, t, c):
   +s = s
-  +t = t
+  t = t
   +c = c
   +a => hc =>
-    %Equal.sym(Maybe<&2, Spec.Entry>, Spec.Node.claim(Spec.Node.join(s, t), c), Spec.Node.claim(s, c), hc) :
+    %Equal.sym(
+      Maybe<&2, Spec.Entry>,
+      Spec.Node.claim(Spec.Node.join(s, t), c),
+      Spec.Node.claim(s, c),
+      hc
+    ):
       {
-        List.take(&2, Spec.Id, Chain.from(Spec.Node.join(s, t), c, Chain.root.of(Spec.Node.join(s, t), c, Root.of(_))), List.length(&2, Spec.Id, Spec.Node.chain(s, c)))
+        List.take(
+          &2,
+          Spec.Id,
+          Chain.from(Spec.Node.join(s, t), c, Chain.root.of(Spec.Node.join(s, t), c, Root.of(_))),
+          List.length(&2, Spec.Id, Spec.Node.chain(s, c))
+        )
           == Spec.Node.chain(s, c): List<&2, Spec.Id>
       }
     Kept.chain.root(s, t, c, a, Root.of(Spec.Node.claim(s, c)))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Growth
 # ------
@@ -1976,18 +2992,25 @@ def Grow.from(
   +s: Spec.State(),
   +t: Spec.State(),
   +c: Spec.Chain,
-  +a: {Spec.Node.agrees(s, t) == True{}: Bool},
+  a: {Spec.Node.agrees(s, t) == True{}: Bool},
   st: Step,
   -l: Step,
   el: {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step}
 ) -> {
-  Chain.from(Spec.Node.join(s, t), c, Some{st})
+  Chain.from(
+    Spec.Node.join(s, t),
+    c,
+    Some{st}
+  )
     == List.append(
       &2,
       Spec.Id,
       Chain.from(s, c, Some{st}),
       Chain.walk(
-        Nat.sub(State.fuel(Spec.Node.join(s, t)), List.length(&2, Spec.Id, Chain.walk(State.fuel(s), s, c, Chain.next(s, c, st)))),
+        Nat.sub(
+          State.fuel(Spec.Node.join(s, t)),
+          List.length(&2, Spec.Id, Chain.walk(State.fuel(s), s, c, Chain.next(s, c, st)))
+        ),
         Spec.Node.join(s, t),
         c,
         Chain.next(Spec.Node.join(s, t), c, l)
@@ -1996,17 +3019,44 @@ def Grow.from(
 }:
   match st:
     case Step{+i, +ms}:
-      +w = Chain.walk(State.fuel(s), s, c, Chain.next(s, c, Step{i, ms}))
-      +g = Nat.sub(State.fuel(Spec.Node.join(s, t)), List.length(&2, Spec.Id, w))
-      %el :
+      w = Chain.walk(State.fuel(s), s, c, Chain.next(s, c, Step{i, ms}))
+      g = Nat.sub(State.fuel(Spec.Node.join(s, t)), List.length(&2, Spec.Id, w))
+      %el:
         {
-          i <> Chain.walk(State.fuel(Spec.Node.join(s, t)), Spec.Node.join(s, t), c, Chain.next(Spec.Node.join(s, t), c, Step{i, ms}))
-            == i <> List.append(&2, Spec.Id, w, Chain.walk(g, Spec.Node.join(s, t), c, Chain.next(Spec.Node.join(s, t), c, _))): List<&2, Spec.Id>
+          i
+            <> Chain.walk(
+              State.fuel(Spec.Node.join(s, t)),
+              Spec.Node.join(s, t),
+              c,
+              Chain.next(Spec.Node.join(s, t), c, Step{i, ms})
+            )
+            == i
+            <> List.append(
+              &2,
+              Spec.Id,
+              w,
+              Chain.walk(g, Spec.Node.join(s, t), c, Chain.next(Spec.Node.join(s, t), c, _))
+            ): List<&2, Spec.Id>
         }
-      %Ext.walk(State.fuel(s), State.fuel(Spec.Node.join(s, t)), s, t, c, Step{i, ms}, a)(State.fuel_le(s, t)) :
+      %Ext.walk(
+        State.fuel(s),
+        State.fuel(Spec.Node.join(s, t)),
+        s,
+        t,
+        c,
+        Step{i, ms},
+        a
+      )(State.fuel_le(s, t)):
         {
-          i <> Chain.walk(State.fuel(Spec.Node.join(s, t)), Spec.Node.join(s, t), c, Chain.next(Spec.Node.join(s, t), c, Step{i, ms}))
-            == i <> _: List<&2, Spec.Id>
+          i
+            <> Chain.walk(
+              State.fuel(Spec.Node.join(s, t)),
+              Spec.Node.join(s, t),
+              c,
+              Chain.next(Spec.Node.join(s, t), c, Step{i, ms})
+            )
+            == i
+            <> _: List<&2, Spec.Id>
         }
       {==}
 
@@ -2016,24 +3066,42 @@ def Grow.last(
   +s: Spec.State(),
   +t: Spec.State(),
   +c: Spec.Chain,
-  +a: {Spec.Node.agrees(s, t) == True{}: Bool},
+  a: {Spec.Node.agrees(s, t) == True{}: Bool},
   +st: Step,
   -l: Step,
   el: {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step}
 ) -> {
-  Chain.last(State.fuel(Spec.Node.join(s, t)), Spec.Node.join(s, t), c, st, Chain.next(Spec.Node.join(s, t), c, st))
+  Chain.last(
+    State.fuel(Spec.Node.join(s, t)),
+    Spec.Node.join(s, t),
+    c,
+    st,
+    Chain.next(Spec.Node.join(s, t), c, st)
+  )
     == Chain.last(
-      Nat.sub(State.fuel(Spec.Node.join(s, t)), List.length(&2, Spec.Id, Chain.walk(State.fuel(s), s, c, Chain.next(s, c, st)))),
+      Nat.sub(
+        State.fuel(Spec.Node.join(s, t)),
+        List.length(&2, Spec.Id, Chain.walk(State.fuel(s), s, c, Chain.next(s, c, st)))
+      ),
       Spec.Node.join(s, t),
       c,
       l,
       Chain.next(Spec.Node.join(s, t), c, l)
     ): Step
 }:
-  +g = Nat.sub(State.fuel(Spec.Node.join(s, t)), List.length(&2, Spec.Id, Chain.walk(State.fuel(s), s, c, Chain.next(s, c, st))))
-  %el :
+  g = Nat.sub(
+    State.fuel(Spec.Node.join(s, t)),
+    List.length(&2, Spec.Id, Chain.walk(State.fuel(s), s, c, Chain.next(s, c, st)))
+  )
+  %el:
     {
-      Chain.last(State.fuel(Spec.Node.join(s, t)), Spec.Node.join(s, t), c, st, Chain.next(Spec.Node.join(s, t), c, st))
+      Chain.last(
+        State.fuel(Spec.Node.join(s, t)),
+        Spec.Node.join(s, t),
+        c,
+        st,
+        Chain.next(Spec.Node.join(s, t), c, st)
+      )
         == Chain.last(g, Spec.Node.join(s, t), c, _, Chain.next(Spec.Node.join(s, t), c, _)): Step
     }
   Ext.last(State.fuel(s), State.fuel(Spec.Node.join(s, t)), s, t, c, st, a)(State.fuel_le(s, t))
@@ -2041,45 +3109,82 @@ def Grow.last(
 # a first step of s stays when the claim stays
 def Grow.root.of(
   +s: Spec.State(),
-  +t: Spec.State(),
-  +c: Spec.Chain,
-  +a: {Spec.Node.agrees(s, t) == True{}: Bool},
+  t: Spec.State(),
+  c: Spec.Chain,
+  a: {Spec.Node.agrees(s, t) == True{}: Bool},
   mr: Maybe<&2, Step>,
   -st: Step
-) -> {Chain.root.of(s, c, mr) == Some{st}: Maybe<&2, Step>} -> {Chain.root.of(Spec.Node.join(s, t), c, mr) == Some{st}: Maybe<&2, Step>}:
+) -> {
+  Chain.root.of(s, c, mr) == Some{st}: Maybe<&2, Step>
+} -> {Chain.root.of(Spec.Node.join(s, t), c, mr) == Some{st}: Maybe<&2, Step>}:
   match mr:
     case None{}:
-      h => Empty.absurd({Chain.root.of(Spec.Node.join(s, t), c, None{}) == Some{st}: Maybe<&2, Step>}, Maybes.Maybe.none_ne_some(Step, st, h))
-    case Some{Step{+i, +ms}}:
+      h => Empty.absurd(
+        {Chain.root.of(Spec.Node.join(s, t), c, None{}) == Some{st}: Maybe<&2, Step>},
+        Maybes.Maybe.none_ne_some(Step, st, h)
+      )
+    case Some{Step{+i, ms}}:
       Kept.step.ask(s, t, c, i, ms, st, a, State.asked(s, i), {==})
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a first step of s stays in s and t when the claim stays
 def Grow.root(
   +s: Spec.State(),
-  +t: Spec.State(),
+  t: Spec.State(),
   +c: Spec.Chain,
-  +a: {Spec.Node.agrees(s, t) == True{}: Bool},
+  a: {Spec.Node.agrees(s, t) == True{}: Bool},
   hc: {Spec.Node.claim(Spec.Node.join(s, t), c) == Spec.Node.claim(s, c): Maybe<&2, Spec.Entry>},
   -st: Step
-) -> {Chain.root(s, c) == Some{st}: Maybe<&2, Step>} -> {Chain.root(Spec.Node.join(s, t), c) == Some{st}: Maybe<&2, Step>}:
+) -> {
+  Chain.root(s, c) == Some{st}: Maybe<&2, Step>
+} -> {Chain.root(Spec.Node.join(s, t), c) == Some{st}: Maybe<&2, Step>}:
   h =>
-    %Equal.sym(Maybe<&2, Spec.Entry>, Spec.Node.claim(Spec.Node.join(s, t), c), Spec.Node.claim(s, c), hc) :
+    %Equal.sym(
+      Maybe<&2, Spec.Entry>,
+      Spec.Node.claim(Spec.Node.join(s, t), c),
+      Spec.Node.claim(s, c),
+      hc
+    ):
       {Chain.root.of(Spec.Node.join(s, t), c, Root.of(_)) == Some{st}: Maybe<&2, Step>}
     Grow.root.of(s, t, c, a, Root.of(Spec.Node.claim(s, c)), st)(h)
 
 # a chain whose last step is l has a first step that leads to l, when r is its
 # first step
-def Start.of(+s: Spec.State(), +c: Spec.Chain, r: Maybe<&2, Step>, -l: Step) -> {Chain.cursor.of(s, c, r) == Some{l}: Maybe<&2, Step>} -> (
-  &st: Step -> {r == Some{st}: Maybe<&2, Step>} & {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step}
+def Start.of(
+  s: Spec.State(),
+  c: Spec.Chain,
+  r: Maybe<&2, Step>,
+  -l: Step
+) -> {
+  Chain.cursor.of(s, c, r) == Some{l}: Maybe<&2, Step>
+} -> (
+  &st: Step -> {
+    r == Some{st}: Maybe<&2, Step>
+  }
+    & {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step}
 ):
   match r:
     case None{}:
       h => Empty.absurd(
-        &st: Step -> {None{} == Some{st}: Maybe<&2, Step>} & {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step},
+        &st: Step -> {
+          None{} == Some{st}: Maybe<&2, Step>
+        }
+          & {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step},
         Maybes.Maybe.none_ne_some(Step, l, h)
       )
-    case Some{+st}:
-      h => (st, ({==}, Maybes.Maybe.some_inj(Step, Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)), l, h)))
+    case Some{st}:
+      h => (
+        st,
+        (
+          {==},
+          Maybes.Maybe.some_inj(
+            Step,
+            Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)),
+            l,
+            h
+          )
+        )
+      )
 
 # Stay.chain once the first step st of the chain is known
 def Stay.chain.of(
@@ -2087,22 +3192,35 @@ def Stay.chain.of(
   +t: Spec.State(),
   +c: Spec.Chain,
   +a: {Spec.Node.agrees(s, t) == True{}: Bool},
-  +hc: {Spec.Node.claim(Spec.Node.join(s, t), c) == Spec.Node.claim(s, c): Maybe<&2, Spec.Entry>},
-  +l: Step,
+  hc: {Spec.Node.claim(Spec.Node.join(s, t), c) == Spec.Node.claim(s, c): Maybe<&2, Spec.Entry>},
+  l: Step,
   en: {Chain.next(Spec.Node.join(s, t), c, l) == None{}: Maybe<&2, Step>},
-  pr: &st: Step -> {Chain.root(s, c) == Some{st}: Maybe<&2, Step>} & {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step}
+  pr: &st: Step -> {
+    Chain.root(s, c) == Some{st}: Maybe<&2, Step>
+  }
+    & {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step}
 ) -> {Spec.Node.chain(Spec.Node.join(s, t), c) == Spec.Node.chain(s, c): List<&2, Spec.Id>}:
   match pr:
     case (+st, (+er, el)):
       +j = Spec.Node.join(s, t)
-      +g = Nat.sub(State.fuel(j), List.length(&2, Spec.Id, Chain.walk(State.fuel(s), s, c, Chain.next(s, c, st))))
-      +x = Chain.from(s, c, Some{st})
+      g = Nat.sub(
+        State.fuel(j),
+        List.length(&2, Spec.Id, Chain.walk(State.fuel(s), s, c, Chain.next(s, c, st)))
+      )
+      x = Chain.from(s, c, Some{st})
       Equal.trans(
         List<&2, Spec.Id>,
         Chain.from(j, c, Chain.root(j, c)),
         Chain.from(j, c, Some{st}),
         Chain.from(s, c, Chain.root(s, c)),
-        Equal.cong(Maybe<&2, Step>, List<&2, Spec.Id>, z => Chain.from(j, c, z), Chain.root(j, c), Some{st}, Grow.root(s, t, c, a, hc, st)(er)),
+        Equal.cong(
+          Maybe<&2, Step>,
+          List<&2, Spec.Id>,
+          z => Chain.from(j, c, z),
+          Chain.root(j, c),
+          Some{st},
+          Grow.root(s, t, c, a, hc, st)(er)
+        ),
         Equal.trans(
           List<&2, Spec.Id>,
           Chain.from(j, c, Some{st}),
@@ -2114,34 +3232,21 @@ def Stay.chain.of(
             List.append(&2, Spec.Id, x, Chain.walk(g, j, c, Chain.next(j, c, l))),
             List.append(&2, Spec.Id, x, []),
             Chain.from(s, c, Chain.root(s, c)),
-            %Equal.sym(Maybe<&2, Step>, Chain.next(j, c, l), None{}, en) :
+            %Equal.sym(Maybe<&2, Step>, Chain.next(j, c, l), None{}, en):
               {List.append(&2, Spec.Id, x, Chain.walk(g, j, c, _)) == List.append(&2, Spec.Id, x, []): List<&2, Spec.Id>}
             Equal.cong(List<&2, Spec.Id>, List<&2, Spec.Id>, z => List.append(&2, Spec.Id, x, z), Chain.walk(g, j, c, None{}), [], Walk.none(g, j, c)),
-            Equal.trans(
-              List<&2, Spec.Id>,
-              List.append(&2, Spec.Id, x, []),
-              x,
-              Chain.from(s, c, Chain.root(s, c)),
-              Lists.List.append_nil(Spec.Id, x),
-              Equal.sym(
-                List<&2, Spec.Id>,
-                Chain.from(s, c, Chain.root(s, c)),
-                x,
-                Equal.cong(Maybe<&2, Step>, List<&2, Spec.Id>, z => Chain.from(s, c, z), Chain.root(s, c), Some{st}, er)
-              )
-            )
-          )
+            Equal.trans(List<&2, Spec.Id>, List.append(&2, Spec.Id, x, []), x, Chain.from(s, c, Chain.root(s, c)), Lists.List.append_nil(Spec.Id, x), Equal.sym(List<&2, Spec.Id>, Chain.from(s, c, Chain.root(s, c)), x, Equal.cong(Maybe<&2, Step>, List<&2, Spec.Id>, z => Chain.from(s, c, z), Chain.root(s, c), Some{st}, er))))
         )
       )
 
 # a chain stays as it was when nothing follows its last step l in s and t
 def Stay.chain(
   +s: Spec.State(),
-  +t: Spec.State(),
+  t: Spec.State(),
   +c: Spec.Chain,
-  +a: {Spec.Node.agrees(s, t) == True{}: Bool},
-  +hc: {Spec.Node.claim(Spec.Node.join(s, t), c) == Spec.Node.claim(s, c): Maybe<&2, Spec.Entry>},
-  +l: Step,
+  a: {Spec.Node.agrees(s, t) == True{}: Bool},
+  hc: {Spec.Node.claim(Spec.Node.join(s, t), c) == Spec.Node.claim(s, c): Maybe<&2, Spec.Entry>},
+  l: Step,
   ecur: {Chain.cursor(s, c) == Some{l}: Maybe<&2, Step>},
   en: {Chain.next(Spec.Node.join(s, t), c, l) == None{}: Maybe<&2, Step>}
 ) -> {Spec.Node.chain(Spec.Node.join(s, t), c) == Spec.Node.chain(s, c): List<&2, Spec.Id>}:
@@ -2153,102 +3258,208 @@ def Stay.cursor.of(
   +t: Spec.State(),
   +c: Spec.Chain,
   +a: {Spec.Node.agrees(s, t) == True{}: Bool},
-  +hc: {Spec.Node.claim(Spec.Node.join(s, t), c) == Spec.Node.claim(s, c): Maybe<&2, Spec.Entry>},
-  +l: Step,
+  hc: {Spec.Node.claim(Spec.Node.join(s, t), c) == Spec.Node.claim(s, c): Maybe<&2, Spec.Entry>},
+  l: Step,
   en: {Chain.next(Spec.Node.join(s, t), c, l) == None{}: Maybe<&2, Step>},
-  pr: &st: Step -> {Chain.root(s, c) == Some{st}: Maybe<&2, Step>} & {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step}
+  pr: &st: Step -> {
+    Chain.root(s, c) == Some{st}: Maybe<&2, Step>
+  }
+    & {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step}
 ) -> {Chain.cursor(Spec.Node.join(s, t), c) == Some{l}: Maybe<&2, Step>}:
   match pr:
-    case (+st, (+er, el)):
+    case (+st, (er, el)):
       +j = Spec.Node.join(s, t)
-      +g = Nat.sub(State.fuel(j), List.length(&2, Spec.Id, Chain.walk(State.fuel(s), s, c, Chain.next(s, c, st))))
-      %Equal.sym(Maybe<&2, Step>, Chain.root(j, c), Some{st}, Grow.root(s, t, c, a, hc, st)(er)) :
+      g = Nat.sub(
+        State.fuel(j),
+        List.length(&2, Spec.Id, Chain.walk(State.fuel(s), s, c, Chain.next(s, c, st)))
+      )
+      %Equal.sym(Maybe<&2, Step>, Chain.root(j, c), Some{st}, Grow.root(s, t, c, a, hc, st)(er)):
         {Chain.cursor.of(j, c, _) == Some{l}: Maybe<&2, Step>}
       %Equal.sym(
         Step,
         Chain.last(State.fuel(j), j, c, st, Chain.next(j, c, st)),
         Chain.last(g, j, c, l, Chain.next(j, c, l)),
         Grow.last(s, t, c, a, st, l, el)
-      ) :
+      ):
         {Some{_} == Some{l}: Maybe<&2, Step>}
-      %Equal.sym(Maybe<&2, Step>, Chain.next(j, c, l), None{}, en) : {Some{Chain.last(g, j, c, l, _)} == Some{l}: Maybe<&2, Step>}
-      %Equal.sym(Step, Chain.last(g, j, c, l, None{}), l, Last.none(g, j, c, l)) : {Some{_} == Some{l}: Maybe<&2, Step>}
+      %Equal.sym(
+        Maybe<&2, Step>,
+        Chain.next(j, c, l),
+        None{},
+        en
+      ): {Some{Chain.last(g, j, c, l, _)} == Some{l}: Maybe<&2, Step>}
+      %Equal.sym(
+        Step,
+        Chain.last(g, j, c, l, None{}),
+        l,
+        Last.none(g, j, c, l)
+      ): {Some{_} == Some{l}: Maybe<&2, Step>}
       {==}
 
 # the last step of a chain stays when nothing follows it in s and t
 def Stay.cursor(
   +s: Spec.State(),
-  +t: Spec.State(),
+  t: Spec.State(),
   +c: Spec.Chain,
-  +a: {Spec.Node.agrees(s, t) == True{}: Bool},
-  +hc: {Spec.Node.claim(Spec.Node.join(s, t), c) == Spec.Node.claim(s, c): Maybe<&2, Spec.Entry>},
-  +l: Step,
+  a: {Spec.Node.agrees(s, t) == True{}: Bool},
+  hc: {Spec.Node.claim(Spec.Node.join(s, t), c) == Spec.Node.claim(s, c): Maybe<&2, Spec.Entry>},
+  l: Step,
   ecur: {Chain.cursor(s, c) == Some{l}: Maybe<&2, Step>},
   en: {Chain.next(Spec.Node.join(s, t), c, l) == None{}: Maybe<&2, Step>}
 ) -> {Chain.cursor(Spec.Node.join(s, t), c) == Some{l}: Maybe<&2, Step>}:
   Stay.cursor.of(s, t, c, a, hc, l, en, Start.of(s, c, Chain.root(s, c), l)(ecur))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Owner steps
 # -----------
 
 # the vote of n at the spot of s is the entry of its slot
-def Spot.vote_of(+s: Spec.State(), +c: Spec.Chain, +v: Spec.Id, +n: String, -m: Maybe<&2, Cells.Cell<Spec.Entry>>) -> {
+def Spot.vote_of(
+  s: Spec.State(),
+  c: Spec.Chain,
+  v: Spec.Id,
+  n: String,
+  -m: Maybe<&2, Cells.Cell<Spec.Entry>>
+) -> {
   State.cell(s, Spec.Slot.Vote{n, c, v}) == m: Maybe<&2, Cells.Cell<Spec.Entry>>
 } -> {Spot.vote(Spot{s, c, v}, n) == Vote.of(Cell.entry(m)): Maybe<&2, Spec.Id>}:
-  h => Equal.cong(Maybe<&2, Cells.Cell<Spec.Entry>>, Maybe<&2, Spec.Id>, z => Vote.of(Cell.entry(z)), State.cell(s, Spec.Slot.Vote{n, c, v}), m, h)
+  h => Equal.cong(
+    Maybe<&2, Cells.Cell<Spec.Entry>>,
+    Maybe<&2, Spec.Id>,
+    z => Vote.of(Cell.entry(z)),
+    State.cell(s, Spec.Slot.Vote{n, c, v}),
+    m,
+    h
+  )
 
 # nothing follows the step to v when its sole owner n has not voted after it
-def Next.none(+s: Spec.State(), +c: Spec.Chain, +v: Spec.Id, +n: String) -> {
+def Next.none(
+  +s: Spec.State(),
+  +c: Spec.Chain,
+  +v: Spec.Id,
+  +n: String
+) -> {
   State.cell(s, Spec.Slot.Vote{n, c, v}) == None{}: Maybe<&2, Cells.Cell<Spec.Entry>>
 } -> {Chain.next(s, c, Step{v, [n]}) == None{}: Maybe<&2, Step>}:
   h =>
     %Equal.sym(
       Maybe<&2, Spec.Id>,
-      Quorums.Quorum.winner(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, [n], [n], Spot{s, c, v}),
+      Quorums.Quorum.winner(
+        ~String,
+        ~Spec.Id,
+        ~Spot,
+        ~Spot.vote,
+        ~Spec.Id.same,
+        [n],
+        [n],
+        Spot{s, c, v}
+      ),
       None{},
-      Quorums.Quorum.winner_none(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, n, Spot{s, c, v})(Spot.vote_of(s, c, v, n, None{})(h))
-    ) :
+      Quorums.Quorum.winner_none(
+        ~String,
+        ~Spec.Id,
+        ~Spot,
+        ~Spot.vote,
+        ~Spec.Id.same,
+        n,
+        Spot{s, c, v}
+      )(Spot.vote_of(s, c, v, n, None{})(h))
+    ):
       {Step.won(s, c, [n], _) == None{}: Maybe<&2, Step>}
     {==}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # the version i follows v when its sole owner n voted for it, and its change q
 # is on the chain
-def Next.one(+s: Spec.State(), +c: Spec.Chain, +v: Spec.Id, +n: String, +i: Spec.Id, t: String, +q: Spec.Ask) -> {
-  State.cell(s, Spec.Slot.Vote{n, c, v}) == Some{Cells.One{Spec.Entry.Vote{i}}}: Maybe<&2, Cells.Cell<Spec.Entry>>
+def Next.one(
+  +s: Spec.State(),
+  +c: Spec.Chain,
+  +v: Spec.Id,
+  +n: String,
+  i: Spec.Id,
+  t: String,
+  q: Spec.Ask
+) -> {
+  State.cell(
+    s,
+    Spec.Slot.Vote{n, c, v}
+  )
+    == Some{Cells.One{Spec.Entry.Vote{i}}}: Maybe<&2, Cells.Cell<Spec.Entry>>
 } -> {
   State.asked(s, i) == Some{Asked{t, q}}: Maybe<&2, Asked>
-} -> {Spec.Chain.same(Spec.Ask.chain(q), c) == True{}: Bool} -> {Chain.next(s, c, Step{v, [n]}) == Some{Step{i, Ask.owners(q, [n])}}: Maybe<&2, Step>}:
+} -> {
+  Spec.Chain.same(Spec.Ask.chain(q), c) == True{}: Bool
+} -> {Chain.next(s, c, Step{v, [n]}) == Some{Step{i, Ask.owners(q, [n])}}: Maybe<&2, Step>}:
   hv => ha => hq =>
     %Equal.sym(
       Maybe<&2, Spec.Id>,
-      Quorums.Quorum.winner(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, [n], [n], Spot{s, c, v}),
+      Quorums.Quorum.winner(
+        ~String,
+        ~Spec.Id,
+        ~Spot,
+        ~Spot.vote,
+        ~Spec.Id.same,
+        [n],
+        [n],
+        Spot{s, c, v}
+      ),
       Some{i},
-      Quorums.Quorum.winner_one(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, ~Id.same_refl, n, Spot{s, c, v}, i)(
-        Spot.vote_of(s, c, v, n, Some{Cells.One{Spec.Entry.Vote{i}}})(hv)
-      )
-    ) :
+      Quorums.Quorum.winner_one(
+        ~String,
+        ~Spec.Id,
+        ~Spot,
+        ~Spot.vote,
+        ~Spec.Id.same,
+        ~Id.same_refl,
+        n,
+        Spot{s, c, v},
+        i
+      )(Spot.vote_of(s, c, v, n, Some{Cells.One{Spec.Entry.Vote{i}}})(hv))
+    ):
       {Step.won(s, c, [n], _) == Some{Step{i, Ask.owners(q, [n])}}: Maybe<&2, Step>}
-    %Equal.sym(Maybe<&2, Asked>, State.asked(s, i), Some{Asked{t, q}}, ha) :
+    %Equal.sym(Maybe<&2, Asked>, State.asked(s, i), Some{Asked{t, q}}, ha):
       {Step.ask(c, i, [n], _) == Some{Step{i, Ask.owners(q, [n])}}: Maybe<&2, Step>}
-    %Equal.sym(Bool, Spec.Chain.same(Spec.Ask.chain(q), c), True{}, hq) :
+    %Equal.sym(Bool, Spec.Chain.same(Spec.Ask.chain(q), c), True{}, hq):
       {Step.if(_, i, q, [n]) == Some{Step{i, Ask.owners(q, [n])}}: Maybe<&2, Step>}
     {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the last step of a chain with the head v and the sole owner n is the step to v
-def Owner.cursor(+m: Maybe<&2, Step>, +n: String, +v: Spec.Id) -> {Step.owners.of(m) == [n]: List<&2, String>} -> {
+def Owner.cursor(
+  +m: Maybe<&2, Step>,
+  n: String,
+  v: Spec.Id
+) -> {
+  Step.owners.of(m) == [n]: List<&2, String>
+} -> {
   Maybe.map(&2, Step, Spec.Id, k => Step.version(k), m) == Some{v}: Maybe<&2, Spec.Id>
 } -> {m == Some{Step{v, [n]}}: Maybe<&2, Step>}:
   match m:
     case None{}:
-      ho => hh => Empty.absurd({None{} == Some{Step{v, [n]}}: Maybe<&2, Step>}, Maybes.Maybe.none_ne_some(Spec.Id, v, hh))
-    case Some{Step{+kv, +kms}}:
+      ho => hh => Empty.absurd(
+        {None{} == Some{Step{v, [n]}}: Maybe<&2, Step>},
+        Maybes.Maybe.none_ne_some(Spec.Id, v, hh)
+      )
+    case Some{Step{kv, kms}}:
       ho => hh =>
-        %Maybes.Maybe.some_inj(Spec.Id, kv, v, hh) : {Some{Step{kv, kms}} == Some{Step{_, [n]}}: Maybe<&2, Step>}
-        %ho : {Some{Step{kv, kms}} == Some{Step{kv, _}}: Maybe<&2, Step>}
+        %Maybes.Maybe.some_inj(
+          Spec.Id,
+          kv,
+          v,
+          hh
+        ): {Some{Step{kv, kms}} == Some{Step{_, [n]}}: Maybe<&2, Step>}
+        %ho: {Some{Step{kv, kms}} == Some{Step{kv, _}}: Maybe<&2, Step>}
         {==}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a chain that has a last step has a claim
-def Claim.of(+s: Spec.State(), +c: Spec.Chain, m: Maybe<&2, Spec.Entry>, em: {Spec.Node.claim(s, c) == m: Maybe<&2, Spec.Entry>}, -l: Step) -> {
+def Claim.of(
+  s: Spec.State(),
+  c: Spec.Chain,
+  m: Maybe<&2, Spec.Entry>,
+  em: {Spec.Node.claim(s, c) == m: Maybe<&2, Spec.Entry>},
+  -l: Step
+) -> {
   Chain.cursor(s, c) == Some{l}: Maybe<&2, Step>
 } -> (&x: Spec.Entry -> {m == Some{x}: Maybe<&2, Spec.Entry>}):
   match m:
@@ -2267,27 +3478,71 @@ def Claim.of(+s: Spec.State(), +c: Spec.Chain, m: Maybe<&2, Spec.Entry>, em: {Sp
               Maybe<&2, Step>,
               Chain.cursor(s, c),
               None{},
-              Equal.cong(Maybe<&2, Spec.Entry>, Maybe<&2, Step>, z => Chain.cursor.of(s, c, Chain.root.of(s, c, Root.of(z))), Spec.Node.claim(s, c), None{}, em)
+              Equal.cong(
+                Maybe<&2, Spec.Entry>,
+                Maybe<&2, Step>,
+                z => Chain.cursor.of(s, c, Chain.root.of(s, c, Root.of(z))),
+                Spec.Node.claim(s, c),
+                None{},
+                em
+              )
             ),
             h
           )
         )
       )
-    case Some{+x}:
+    case Some{x}:
       h => (x, {==})
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a node that took in a new request q of i at the time t, whose chain has the
 # claim m, votes or not as Node.ask.at says
-def Owner.ask(+n: String, +s: Spec.State(), +i: Spec.Id, +t: String, +q: Spec.Ask, m: Maybe<&2, Spec.Entry>, hm: &x: Spec.Entry -> {m == Some{x}: Maybe<&2, Spec.Entry>}) -> {
-  Node.ask.root(n, s, State.put(s, Spec.Slot.Ask{i}, Spec.Entry.Ask{i, t, q}), i, q, m)
-    == Node.ask.at(n, s, State.put(s, Spec.Slot.Ask{i}, Spec.Entry.Ask{i, t, q}), i, q, Chain.cursor(s, Spec.Ask.chain(q))): Spec.State()
+def Owner.ask(
+  n: String,
+  s: Spec.State(),
+  i: Spec.Id,
+  t: String,
+  q: Spec.Ask,
+  m: Maybe<&2, Spec.Entry>,
+  hm: &x: Spec.Entry -> {m == Some{x}: Maybe<&2, Spec.Entry>}
+) -> {
+  Node.ask.root(
+    n,
+    s,
+    State.put(s, Spec.Slot.Ask{i}, Spec.Entry.Ask{i, t, q}),
+    i,
+    q,
+    m
+  )
+    == Node.ask.at(
+      n,
+      s,
+      State.put(s, Spec.Slot.Ask{i}, Spec.Entry.Ask{i, t, q}),
+      i,
+      q,
+      Chain.cursor(s, Spec.Ask.chain(q))
+    ): Spec.State()
 }:
   match hm:
-    case (+x, ex):
-      %Equal.sym(Maybe<&2, Spec.Entry>, m, Some{x}, ex) :
+    case (x, ex):
+      %Equal.sym(Maybe<&2, Spec.Entry>, m, Some{x}, ex):
         {
-          Node.ask.root(n, s, State.put(s, Spec.Slot.Ask{i}, Spec.Entry.Ask{i, t, q}), i, q, _)
-            == Node.ask.at(n, s, State.put(s, Spec.Slot.Ask{i}, Spec.Entry.Ask{i, t, q}), i, q, Chain.cursor(s, Spec.Ask.chain(q))): Spec.State()
+          Node.ask.root(
+            n,
+            s,
+            State.put(s, Spec.Slot.Ask{i}, Spec.Entry.Ask{i, t, q}),
+            i,
+            q,
+            _
+          )
+            == Node.ask.at(
+              n,
+              s,
+              State.put(s, Spec.Slot.Ask{i}, Spec.Entry.Ask{i, t, q}),
+              i,
+              q,
+              Chain.cursor(s, Spec.Ask.chain(q))
+            ): Spec.State()
         }
       {==}
 
@@ -2300,67 +3555,121 @@ def And.false_right(a: Bool) -> {Bool.and(a, False{}) == False{}: Bool}:
       {==}
 
 # the cell of s and one entry at k, at a key p apart from k, is the cell of s
-def Fresh.cell(+s: Spec.State(), +k: List<&2, Bool>, +p: List<&2, Bool>, +x: Cells.Cell<Spec.Entry>) -> {Tries.Trie.apart(k, p) == True{}: Bool} -> {
-  Tries.Trie.get(Cells.Cell<Spec.Entry>, Spec.Node.join(s, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x)), p)
+def Fresh.cell(
+  +s: Spec.State(),
+  +k: List<&2, Bool>,
+  +p: List<&2, Bool>,
+  +x: Cells.Cell<Spec.Entry>
+) -> {
+  Tries.Trie.apart(k, p) == True{}: Bool
+} -> {
+  Tries.Trie.get(
+    Cells.Cell<Spec.Entry>,
+    Spec.Node.join(s, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x)),
+    p
+  )
     == Tries.Trie.get(Cells.Cell<Spec.Entry>, s, p): Maybe<&2, Cells.Cell<Spec.Entry>>
 }:
   ap =>
     %Equal.sym(
       Maybe<&2, Cells.Cell<Spec.Entry>>,
-      Tries.Trie.get(Cells.Cell<Spec.Entry>, Spec.Node.join(s, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x)), p),
+      Tries.Trie.get(
+        Cells.Cell<Spec.Entry>,
+        Spec.Node.join(s, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x)),
+        p
+      ),
       Tries.Trie.pick(
         ~Cells.Cell<Spec.Entry>,
         ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
         Tries.Trie.get(Cells.Cell<Spec.Entry>, s, p),
         Tries.Trie.get(Cells.Cell<Spec.Entry>, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x), p)
       ),
-      Tries.Trie.get_union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x), p)
-    ) :
+      Tries.Trie.get_union(
+        ~Cells.Cell<Spec.Entry>,
+        ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
+        s,
+        Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x),
+        p
+      )
+    ):
       {_ == Tries.Trie.get(Cells.Cell<Spec.Entry>, s, p): Maybe<&2, Cells.Cell<Spec.Entry>>}
     %Equal.sym(
       Maybe<&2, Cells.Cell<Spec.Entry>>,
       Tries.Trie.get(Cells.Cell<Spec.Entry>, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x), p),
       None{},
       Tries.Trie.get_one_apart(Cells.Cell<Spec.Entry>, k, p, x)(ap)
-    ) :
+    ):
       {
-        Tries.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), Tries.Trie.get(Cells.Cell<Spec.Entry>, s, p), _)
+        Tries.Trie.pick(
+          ~Cells.Cell<Spec.Entry>,
+          ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
+          Tries.Trie.get(Cells.Cell<Spec.Entry>, s, p),
+          _
+        )
           == Tries.Trie.get(Cells.Cell<Spec.Entry>, s, p): Maybe<&2, Cells.Cell<Spec.Entry>>
       }
-    Tries.Trie.pick_none(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), Tries.Trie.get(Cells.Cell<Spec.Entry>, s, p))
+    Tries.Trie.pick_none(
+      ~Cells.Cell<Spec.Entry>,
+      ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
+      Tries.Trie.get(Cells.Cell<Spec.Entry>, s, p)
+    )
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # the claim of a chain stays when one entry joins apart from its roots
-def Fresh.claim(+s: Spec.State(), +k: List<&2, Bool>, +c: Spec.Chain, +x: Cells.Cell<Spec.Entry>) -> {Tries.Trie.apart(k, Spec.Root.key(c)) == True{}: Bool} -> {
-  Spec.Node.claim(Spec.Node.join(s, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x)), c) == Spec.Node.claim(s, c): Maybe<&2, Spec.Entry>
+def Fresh.claim(
+  s: Spec.State(),
+  k: List<&2, Bool>,
+  c: Spec.Chain,
+  x: Cells.Cell<Spec.Entry>
+) -> {
+  Tries.Trie.apart(k, Spec.Root.key(c)) == True{}: Bool
+} -> {
+  Spec.Node.claim(
+    Spec.Node.join(s, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x)),
+    c
+  )
+    == Spec.Node.claim(s, c): Maybe<&2, Spec.Entry>
 }:
   ap => Equal.cong(
     Tries.Trie<Cells.Cell<Spec.Entry>>,
     Maybe<&2, Spec.Entry>,
     z => Spec.Root.first(Tries.Trie.values(Cells.Cell<Spec.Entry>, z)),
-    Tries.Trie.under(Cells.Cell<Spec.Entry>, Spec.Node.join(s, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x)), Spec.Root.key(c)),
+    Tries.Trie.under(
+      Cells.Cell<Spec.Entry>,
+      Spec.Node.join(s, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x)),
+      Spec.Root.key(c)
+    ),
     Tries.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Root.key(c)),
-    Tries.Trie.under_union_apart(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, k, Spec.Root.key(c), x)(ap)
+    Tries.Trie.under_union_apart(
+      ~Cells.Cell<Spec.Entry>,
+      ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
+      s,
+      k,
+      Spec.Root.key(c),
+      x
+    )(ap)
   )
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality, or a proof, keeps each and/or as one value for the proofs to split on
 def Spec.Node.write_stale(n, s, e, b, name, base, x, v):
   match e:
-    case Spec.Envelope{+r, +w, +t}:
+    case Spec.Envelope{r, w, +t}:
       +n = n
       +s = s
       +b = b
-      +name = name
-      +base = base
-      +x = x
+      name = name
+      base = base
+      x = x
       +v = v
       +i = {Spec.Id{w, r}: Spec.Id}
       +c = {Spec.Chain.Branch{b}: Spec.Chain}
       +q = {Spec.Ask.Write{b, name, base, x}: Spec.Ask}
-      +l = {Step{v, [n]}: Step}
+      l = {Step{v, [n]}: Step}
       +ka = Spec.Slot.key(Spec.Slot.Ask{i})
-      +kv = Spec.Slot.key(Spec.Slot.Vote{n, c, v})
+      kv = Spec.Slot.key(Spec.Slot.Vote{n, c, v})
       +ea = {Cells.One{Spec.Entry.Ask{i, t, q}}: Cells.Cell<Spec.Entry>}
       +ta = Tries.Trie.one(Cells.Cell<Spec.Entry>, ka, ea)
-      +s1 = Spec.Node.join(s, ta)
+      s1 = Spec.Node.join(s, ta)
       +h1 => +h2 => +h3 => +h4 => h5 =>
         +ecur = Owner.cursor(Chain.cursor(s, c), n, v)(h1)(h2)
         +a = Cells.Cell.agrees_one(~Spec.Entry, ~Spec.Entry.same, s, ka, ea)(h3)
@@ -2377,16 +3686,31 @@ def Spec.Node.write_stale(n, s, e, b, name, base, x, v):
         +fits = Equal.trans(
           Bool,
           Ask.fits(s, q, v),
-          Maybes.Maybe.same(~Octets.Bytes(), ~Octets.Bytes.is_eq, Spec.Node.content(s, name, Spec.Point.Head{b}), Spec.Node.content_at(s, name, base)),
+          Maybes.Maybe.same(
+            ~Octets.Bytes(),
+            ~Octets.Bytes.is_eq,
+            Spec.Node.content(s, name, Spec.Point.Head{b}),
+            Spec.Node.content_at(s, name, base)
+          ),
           False{},
           Equal.sym(
             Bool,
-            Maybes.Maybe.same(~Octets.Bytes(), ~Octets.Bytes.is_eq, Spec.Node.content(s, name, Spec.Point.Head{b}), Spec.Node.content_at(s, name, base)),
+            Maybes.Maybe.same(
+              ~Octets.Bytes(),
+              ~Octets.Bytes.is_eq,
+              Spec.Node.content(s, name, Spec.Point.Head{b}),
+              Spec.Node.content_at(s, name, base)
+            ),
             Ask.fits(s, q, v),
             Equal.cong(
               Maybe<&2, Spec.Id>,
               Bool,
-              z => Maybes.Maybe.same(~Octets.Bytes(), ~Octets.Bytes.is_eq, Res.of(s, name, z), Res.of(s, name, base)),
+              z => Maybes.Maybe.same(
+                ~Octets.Bytes(),
+                ~Octets.Bytes.is_eq,
+                Res.of(s, name, z),
+                Res.of(s, name, base)
+              ),
               Spec.Node.head(s, b),
               Some{v},
               h2
@@ -2400,23 +3724,50 @@ def Spec.Node.write_stale(n, s, e, b, name, base, x, v):
           Spec.Node.ask(n, s, Spec.Envelope{r, w, t}, q),
           Node.ask.root(n, s, s1, i, q, Spec.Node.claim(s, c)),
           s1,
-          Equal.cong(Maybe<&2, Cells.Cell<Spec.Entry>>, Spec.State(), z => Node.ask.fresh(n, s, i, t, q, z), State.cell(s, Spec.Slot.Ask{i}), None{}, h3),
+          Equal.cong(
+            Maybe<&2, Cells.Cell<Spec.Entry>>,
+            Spec.State(),
+            z => Node.ask.fresh(n, s, i, t, q, z),
+            State.cell(s, Spec.Slot.Ask{i}),
+            None{},
+            h3
+          ),
           Equal.trans(
             Spec.State(),
             Node.ask.root(n, s, s1, i, q, Spec.Node.claim(s, c)),
             Node.ask.at(n, s, s1, i, q, Chain.cursor(s, c)),
             s1,
-            Owner.ask(n, s, i, t, q, Spec.Node.claim(s, c), Claim.of(s, c, Spec.Node.claim(s, c), {==}, l)(ecur)),
+            Owner.ask(
+              n,
+              s,
+              i,
+              t,
+              q,
+              Spec.Node.claim(s, c),
+              Claim.of(s, c, Spec.Node.claim(s, c), {==}, l)(ecur)
+            ),
             Equal.trans(
               Spec.State(),
               Node.ask.at(n, s, s1, i, q, Chain.cursor(s, c)),
               Node.ask.at(n, s, s1, i, q, Some{l}),
               s1,
-              Equal.cong(Maybe<&2, Step>, Spec.State(), z => Node.ask.at(n, s, s1, i, q, z), Chain.cursor(s, c), Some{l}, ecur),
+              Equal.cong(
+                Maybe<&2, Step>,
+                Spec.State(),
+                z => Node.ask.at(n, s, s1, i, q, z),
+                Chain.cursor(s, c),
+                Some{l},
+                ecur
+              ),
               Equal.cong(
                 Bool,
                 Spec.State(),
-                z => Node.vote.if(z, s1, Spec.Slot.Vote{n, c, v}, i),
+                z => Bool.pick(
+                  Spec.State(),
+                  z,
+                  State.put(s1, Spec.Slot.Vote{n, c, v}, Spec.Entry.Vote{i}),
+                  s1
+                ),
                 Bool.and(may, Ask.fits(s, q, v)),
                 False{},
                 Equal.trans(
@@ -2436,76 +3787,136 @@ def Spec.Node.write_stale(n, s, e, b, name, base, x, v):
           Spec.Node.chain(Spec.Node.ask(n, s, Spec.Envelope{r, w, t}, q), c),
           Spec.Node.chain(s1, c),
           Spec.Node.chain(s, c),
-          Equal.cong(Spec.State(), List<&2, Spec.Id>, z => Spec.Node.chain(z, c), Spec.Node.ask(n, s, Spec.Envelope{r, w, t}, q), s1, ask),
+          Equal.cong(
+            Spec.State(),
+            List<&2, Spec.Id>,
+            z => Spec.Node.chain(z, c),
+            Spec.Node.ask(n, s, Spec.Envelope{r, w, t}, q),
+            s1,
+            ask
+          ),
           same
         )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # a list that holds a node holds it
-def Owners.has(+n: String) -> {Shared.List.has(~String, ~String.eq, [n], n) == True{}: Bool}:
-  %Equal.sym(Bool, String.eq(n, n), True{}, Strings.String.eq_refl(n)) :
+def Owners.has(n: String) -> {Shared.List.has(~String, ~String.eq, [n], n) == True{}: Bool}:
+  %Equal.sym(Bool, String.eq(n, n), True{}, Strings.String.eq_refl(n)):
     {List.any.if(u => Shared.List.has(~String, ~String.eq, [], n), _) == True{}: Bool}
   {==}
 
 # one entry at a free key walks one step further
-def Grow.fuel(+s: Spec.State(), +k: List<&2, Bool>, +x: Cells.Cell<Spec.Entry>) -> {
+def Grow.fuel(
+  +s: Spec.State(),
+  k: List<&2, Bool>,
+  x: Cells.Cell<Spec.Entry>
+) -> {
   Tries.Trie.get(Cells.Cell<Spec.Entry>, s, k) == None{}: Maybe<&2, Cells.Cell<Spec.Entry>>
-} -> {Nat.is_lt(State.fuel(s), State.fuel(Spec.Node.join(s, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x)))) == True{}: Bool}:
+} -> {
+  Nat.is_lt(
+    State.fuel(s),
+    State.fuel(Spec.Node.join(s, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x)))
+  )
+    == True{}: Bool
+}:
   h =>
     %Equal.sym(
       Nat,
-      Tries.Trie.size(Cells.Cell<Spec.Entry>, Spec.Node.join(s, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x))),
+      Tries.Trie.size(
+        Cells.Cell<Spec.Entry>,
+        Spec.Node.join(s, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x))
+      ),
       1n+Tries.Trie.size(Cells.Cell<Spec.Entry>, s),
-      Tries.Trie.size_union_one(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, k, x)(h)
-    ) :
+      Tries.Trie.size_union_one(
+        ~Cells.Cell<Spec.Entry>,
+        ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
+        s,
+        k,
+        x
+      )(h)
+    ):
       {Nat.is_lt(State.fuel(s), 1n+_) == True{}: Bool}
     Nats.Nat.lt_succ(Tries.Trie.size(Cells.Cell<Spec.Entry>, s))
 
 # the request i is in the chain of s2, s1 and the sole owner's vote for it
 # after v, once the first step of the chain of s1 is known
 def Written.has(
-  +n: String,
+  n: String,
   +s1: Spec.State(),
   +i: Spec.Id,
   +c: Spec.Chain,
-  +v: Spec.Id,
+  v: Spec.Id,
   +tv: Spec.State(),
   +a2: {Spec.Node.agrees(s1, tv) == True{}: Bool},
-  +hc2: {Spec.Node.claim(Spec.Node.join(s1, tv), c) == Spec.Node.claim(s1, c): Maybe<&2, Spec.Entry>},
-  +next2: {Chain.next(Spec.Node.join(s1, tv), c, Step{v, [n]}) == Some{Step{i, [n]}}: Maybe<&2, Step>},
-  +grow: {Nat.is_lt(State.fuel(s1), State.fuel(Spec.Node.join(s1, tv))) == True{}: Bool},
-  pr: &st: Step -> {Chain.root(s1, c) == Some{st}: Maybe<&2, Step>} & {Chain.last(State.fuel(s1), s1, c, st, Chain.next(s1, c, st)) == Step{v, [n]}: Step}
-) -> {Shared.List.has(~Spec.Id, ~Spec.Id.same, Spec.Node.chain(Spec.Node.join(s1, tv), c), i) == True{}: Bool}:
+  hc2: {
+    Spec.Node.claim(Spec.Node.join(s1, tv), c) == Spec.Node.claim(s1, c): Maybe<&2, Spec.Entry>
+  },
+  next2: {
+    Chain.next(Spec.Node.join(s1, tv), c, Step{v, [n]}) == Some{Step{i, [n]}}: Maybe<&2, Step>
+  },
+  grow: {Nat.is_lt(State.fuel(s1), State.fuel(Spec.Node.join(s1, tv))) == True{}: Bool},
+  pr: &st: Step -> {
+    Chain.root(s1, c) == Some{st}: Maybe<&2, Step>
+  }
+    & {Chain.last(State.fuel(s1), s1, c, st, Chain.next(s1, c, st)) == Step{v, [n]}: Step}
+) -> {
+  Shared.List.has(
+    ~Spec.Id,
+    ~Spec.Id.same,
+    Spec.Node.chain(Spec.Node.join(s1, tv), c),
+    i
+  )
+    == True{}: Bool
+}:
   match pr:
-    case (+st, (+er, el)):
+    case (+st, (er, el)):
       +s2 = Spec.Node.join(s1, tv)
       +w1 = Chain.walk(State.fuel(s1), s1, c, Chain.next(s1, c, st))
-      +x1 = Chain.from(s1, c, Some{st})
-      +g = Nat.sub(State.fuel(s2), List.length(&2, Spec.Id, w1))
-      +g1 = Nat.sub(State.fuel(s2), 1n+List.length(&2, Spec.Id, w1))
-      +rest = Chain.walk(g1, s2, c, Chain.next(s2, c, Step{i, [n]}))
-      +gs = Nats.Nat.sub_pos(List.length(&2, Spec.Id, w1), State.fuel(s2))(
-        Nats.Nat.le_lt(List.length(&2, Spec.Id, w1), State.fuel(s1), State.fuel(s2))(Walk.length(State.fuel(s1), s1, c, Chain.next(s1, c, st)))(grow)
+      x1 = Chain.from(s1, c, Some{st})
+      g = Nat.sub(State.fuel(s2), List.length(&2, Spec.Id, w1))
+      g1 = Nat.sub(State.fuel(s2), 1n+List.length(&2, Spec.Id, w1))
+      rest = Chain.walk(g1, s2, c, Chain.next(s2, c, Step{i, [n]}))
+      gs = Nats.Nat.sub_pos(
+        List.length(&2, Spec.Id, w1),
+        State.fuel(s2)
+      )(
+        Nats.Nat.le_lt(
+          List.length(&2, Spec.Id, w1),
+          State.fuel(s1),
+          State.fuel(s2)
+        )(Walk.length(State.fuel(s1), s1, c, Chain.next(s1, c, st)))(grow)
       )
-      +shape = Equal.trans(
+      shape = Equal.trans(
         List<&2, Spec.Id>,
         Chain.from(s2, c, Chain.root(s2, c)),
         Chain.from(s2, c, Some{st}),
         List.append(&2, Spec.Id, x1, i <> rest),
-        Equal.cong(Maybe<&2, Step>, List<&2, Spec.Id>, z => Chain.from(s2, c, z), Chain.root(s2, c), Some{st}, Grow.root(s1, tv, c, a2, hc2, st)(er)),
+        Equal.cong(
+          Maybe<&2, Step>,
+          List<&2, Spec.Id>,
+          z => Chain.from(s2, c, z),
+          Chain.root(s2, c),
+          Some{st},
+          Grow.root(s1, tv, c, a2, hc2, st)(er)
+        ),
         Equal.trans(
           List<&2, Spec.Id>,
           Chain.from(s2, c, Some{st}),
           List.append(&2, Spec.Id, x1, Chain.walk(g, s2, c, Chain.next(s2, c, Step{v, [n]}))),
           List.append(&2, Spec.Id, x1, i <> rest),
           Grow.from(s1, tv, c, a2, st, Step{v, [n]}, el),
-          %Equal.sym(Maybe<&2, Step>, Chain.next(s2, c, Step{v, [n]}), Some{Step{i, [n]}}, next2) :
+          %Equal.sym(Maybe<&2, Step>, Chain.next(s2, c, Step{v, [n]}), Some{Step{i, [n]}}, next2):
             {List.append(&2, Spec.Id, x1, Chain.walk(g, s2, c, _)) == List.append(&2, Spec.Id, x1, i <> rest): List<&2, Spec.Id>}
-          %Equal.sym(Nat, g, 1n+g1, gs) :
+          %Equal.sym(Nat, g, 1n+g1, gs):
             {List.append(&2, Spec.Id, x1, Chain.walk(_, s2, c, Some{Step{i, [n]}})) == List.append(&2, Spec.Id, x1, i <> rest): List<&2, Spec.Id>}
-          {==}
-        )
+          {==})
       )
-      %Equal.sym(List<&2, Spec.Id>, Spec.Node.chain(s2, c), List.append(&2, Spec.Id, x1, i <> rest), shape) :
+      %Equal.sym(
+        List<&2, Spec.Id>,
+        Spec.Node.chain(s2, c),
+        List.append(&2, Spec.Id, x1, i <> rest),
+        shape
+      ):
         {Shared.List.has(~Spec.Id, ~Spec.Id.same, _, i) == True{}: Bool}
       Shared.List.has_middle(~Spec.Id, ~Spec.Id.same, ~Id.same_refl, x1, i, rest)
 
@@ -2518,22 +3929,52 @@ def Written.at(
   +t: String,
   +b: String,
   +name: Resources.Name,
-  +base: Maybe<&2, Spec.Id>,
-  +x: Octets.Bytes(),
+  base: Maybe<&2, Spec.Id>,
+  x: Octets.Bytes(),
   +v: Spec.Id,
   ecur1: {Chain.cursor(s1, Spec.Chain.Branch{b}) == Some{Step{v, [n]}}: Maybe<&2, Step>},
-  +f4: {Tries.Trie.get(Cells.Cell<Spec.Entry>, s1, Spec.Slot.key(Spec.Slot.Vote{n, Spec.Chain.Branch{b}, v})) == None{}: Maybe<&2, Cells.Cell<Spec.Entry>>},
-  +cell1a: {
-    Tries.Trie.get(Cells.Cell<Spec.Entry>, s1, Spec.Slot.key(Spec.Slot.Ask{i}))
-      == Some{Cells.One{Spec.Entry.Ask{i, t, Spec.Ask.Write{b, name, base, Spec.Content.Bytes{x}}}}}: Maybe<&2, Cells.Cell<Spec.Entry>>
+  +f4: {
+    Tries.Trie.get(
+      Cells.Cell<Spec.Entry>,
+      s1,
+      Spec.Slot.key(Spec.Slot.Vote{n, Spec.Chain.Branch{b}, v})
+    )
+      == None{}: Maybe<&2, Cells.Cell<Spec.Entry>>
+  },
+  cell1a: {
+    Tries.Trie.get(
+      Cells.Cell<Spec.Entry>,
+      s1,
+      Spec.Slot.key(Spec.Slot.Ask{i})
+    )
+      == Some{
+        Cells.One{Spec.Entry.Ask{i, t, Spec.Ask.Write{b, name, base, Spec.Content.Bytes{x}}}}
+      }: Maybe<&2, Cells.Cell<Spec.Entry>>
   }
 ) -> {
-  Spec.Node.answer(Spec.Node.join(s1, Tries.Trie.one(Cells.Cell<Spec.Entry>, Spec.Slot.key(Spec.Slot.Vote{n, Spec.Chain.Branch{b}, v}), Cells.One{Spec.Entry.Vote{i}})), i)
+  Spec.Node.answer(
+    Spec.Node.join(
+      s1,
+      Tries.Trie.one(
+        Cells.Cell<Spec.Entry>,
+        Spec.Slot.key(Spec.Slot.Vote{n, Spec.Chain.Branch{b}, v}),
+        Cells.One{Spec.Entry.Vote{i}}
+      )
+    ),
+    i
+  )
     == Spec.Answer.Written{i}: Spec.Answer
 }
   & {
     Spec.Node.content(
-      Spec.Node.join(s1, Tries.Trie.one(Cells.Cell<Spec.Entry>, Spec.Slot.key(Spec.Slot.Vote{n, Spec.Chain.Branch{b}, v}), Cells.One{Spec.Entry.Vote{i}})),
+      Spec.Node.join(
+        s1,
+        Tries.Trie.one(
+          Cells.Cell<Spec.Entry>,
+          Spec.Slot.key(Spec.Slot.Vote{n, Spec.Chain.Branch{b}, v}),
+          Cells.One{Spec.Entry.Vote{i}}
+        )
+      ),
       name,
       Spec.Point.At{i}
     )
@@ -2541,33 +3982,24 @@ def Written.at(
   }:
   +c = {Spec.Chain.Branch{b}: Spec.Chain}
   +q = {Spec.Ask.Write{b, name, base, Spec.Content.Bytes{x}}: Spec.Ask}
-  +l = {Step{v, [n]}: Step}
-  +ka = Spec.Slot.key(Spec.Slot.Ask{i})
+  l = {Step{v, [n]}: Step}
+  ka = Spec.Slot.key(Spec.Slot.Ask{i})
   +kv = Spec.Slot.key(Spec.Slot.Vote{n, c, v})
-  +ea = {Cells.One{Spec.Entry.Ask{i, t, q}}: Cells.Cell<Spec.Entry>}
+  ea = {Cells.One{Spec.Entry.Ask{i, t, q}}: Cells.Cell<Spec.Entry>}
   +ev = {Cells.One{Spec.Entry.Vote{i}}: Cells.Cell<Spec.Entry>}
   +tv = Tries.Trie.one(Cells.Cell<Spec.Entry>, kv, ev)
-  +s2 = Spec.Node.join(s1, tv)
-  +a2 = Cells.Cell.agrees_one(~Spec.Entry, ~Spec.Entry.same, s1, kv, ev)(f4)
-  +hc2 = Fresh.claim(s1, kv, c, ev)({==})
-  +cell2v = Equal.trans(
+  s2 = Spec.Node.join(s1, tv)
+  a2 = Cells.Cell.agrees_one(~Spec.Entry, ~Spec.Entry.same, s1, kv, ev)(f4)
+  hc2 = Fresh.claim(s1, kv, c, ev)({==})
+  cell2v = Equal.trans(
     Maybe<&2, Cells.Cell<Spec.Entry>>,
     Tries.Trie.get(Cells.Cell<Spec.Entry>, s2, kv),
-    Tries.Trie.pick(
-      ~Cells.Cell<Spec.Entry>,
-      ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
-      Tries.Trie.get(Cells.Cell<Spec.Entry>, s1, kv),
-      Tries.Trie.get(Cells.Cell<Spec.Entry>, tv, kv)
-    ),
+    Tries.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), Tries.Trie.get(Cells.Cell<Spec.Entry>, s1, kv), Tries.Trie.get(Cells.Cell<Spec.Entry>, tv, kv)),
     Some{ev},
     Tries.Trie.get_union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s1, tv, kv),
-    %Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, Tries.Trie.get(Cells.Cell<Spec.Entry>, s1, kv), None{}, f4) :
-      {
-        Tries.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), _, Tries.Trie.get(Cells.Cell<Spec.Entry>, tv, kv))
-          == Some{ev}: Maybe<&2, Cells.Cell<Spec.Entry>>
-      }
-    Tries.Trie.get_one(Cells.Cell<Spec.Entry>, kv, ev)
-  )
+    %Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, Tries.Trie.get(Cells.Cell<Spec.Entry>, s1, kv), None{}, f4):
+      {Tries.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), _, Tries.Trie.get(Cells.Cell<Spec.Entry>, tv, kv)) == Some{ev}: Maybe<&2, Cells.Cell<Spec.Entry>>}
+    Tries.Trie.get_one(Cells.Cell<Spec.Entry>, kv, ev))
   +cell2a = Equal.trans(
     Maybe<&2, Cells.Cell<Spec.Entry>>,
     Tries.Trie.get(Cells.Cell<Spec.Entry>, s2, ka),
@@ -2576,26 +4008,45 @@ def Written.at(
     Fresh.cell(s1, kv, ka, ev)({==}),
     cell1a
   )
-  +asked2 = Equal.cong(Maybe<&2, Cells.Cell<Spec.Entry>>, Maybe<&2, Asked>, z => Asked.of(Cell.entry(z)), Tries.Trie.get(Cells.Cell<Spec.Entry>, s2, ka), Some{ea}, cell2a)
-  +next2 = Next.one(s2, c, v, n, i, t, q)(cell2v)(asked2)(Chain.same_refl(c))
-  +grow = Grow.fuel(s1, kv, ev)(f4)
-  +has = Written.has(n, s1, i, c, v, tv, a2, hc2, next2, grow, Start.of(s1, c, Chain.root(s1, c), l)(ecur1))
+  +asked2 = Equal.cong(
+    Maybe<&2, Cells.Cell<Spec.Entry>>,
+    Maybe<&2, Asked>,
+    z => Asked.of(Cell.entry(z)),
+    Tries.Trie.get(Cells.Cell<Spec.Entry>, s2, ka),
+    Some{ea},
+    cell2a
+  )
+  next2 = Next.one(s2, c, v, n, i, t, q)(cell2v)(asked2)(Chain.same_refl(c))
+  grow = Grow.fuel(s1, kv, ev)(f4)
+  has = Written.has(
+    n,
+    s1,
+    i,
+    c,
+    v,
+    tv,
+    a2,
+    hc2,
+    next2,
+    grow,
+    Start.of(s1, c, Chain.root(s1, c), l)(ecur1)
+  )
   (
-    %Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, Tries.Trie.get(Cells.Cell<Spec.Entry>, s2, ka), Some{ea}, cell2a) :
+    %Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, Tries.Trie.get(Cells.Cell<Spec.Entry>, s2, ka), Some{ea}, cell2a):
       {Answer.of(s2, i, _) == Spec.Answer.Written{i}: Spec.Answer}
-    %Equal.sym(Bool, Shared.List.has(~Spec.Id, ~Spec.Id.same, Spec.Node.chain(s2, c), i), True{}, has) :
+    %Equal.sym(Bool, Shared.List.has(~Spec.Id, ~Spec.Id.same, Spec.Node.chain(s2, c), i), True{}, has):
       {Answer.in(s2, i, q, _) == Spec.Answer.Written{i}: Spec.Answer}
     {==},
-    %Equal.sym(Maybe<&2, Asked>, State.asked(s2, i), Some{Asked{t, q}}, asked2) :
+    %Equal.sym(Maybe<&2, Asked>, State.asked(s2, i), Some{Asked{t, q}}, asked2):
       {Res.at(State.fuel(s2), s2, Some{i}, name, _, Asked.hits(_, name)) == Some{x}: Maybe<&2, Octets.Bytes()>}
-    %Equal.sym(Bool, Spec.Name.same(name, name), True{}, Name.same_refl(name)) :
+    %Equal.sym(Bool, Resources.Name.same(name, name), True{}, Resources.Name.same_refl(name)):
       {Res.at(State.fuel(s2), s2, Some{i}, name, Some{Asked{t, q}}, _) == Some{x}: Maybe<&2, Octets.Bytes()>}
-    {==}
-  )
+    {==})
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality, or a proof, keeps each and/or as one value for the proofs to split on
 def Spec.Node.write_written(n, s, e, b, name, base, x, v):
   match e:
-    case Spec.Envelope{+r, +w, +t}:
+    case Spec.Envelope{r, w, +t}:
       +n = n
       +s = s
       +b = b
@@ -2606,15 +4057,15 @@ def Spec.Node.write_written(n, s, e, b, name, base, x, v):
       +i = {Spec.Id{w, r}: Spec.Id}
       +c = {Spec.Chain.Branch{b}: Spec.Chain}
       +q = {Spec.Ask.Write{b, name, base, Spec.Content.Bytes{x}}: Spec.Ask}
-      +l = {Step{v, [n]}: Step}
+      l = {Step{v, [n]}: Step}
       +ka = Spec.Slot.key(Spec.Slot.Ask{i})
       +kv = Spec.Slot.key(Spec.Slot.Vote{n, c, v})
       +ea = {Cells.One{Spec.Entry.Ask{i, t, q}}: Cells.Cell<Spec.Entry>}
-      +ev = {Cells.One{Spec.Entry.Vote{i}}: Cells.Cell<Spec.Entry>}
+      ev = {Cells.One{Spec.Entry.Vote{i}}: Cells.Cell<Spec.Entry>}
       +ta = Tries.Trie.one(Cells.Cell<Spec.Entry>, ka, ea)
-      +tv = Tries.Trie.one(Cells.Cell<Spec.Entry>, kv, ev)
+      tv = Tries.Trie.one(Cells.Cell<Spec.Entry>, kv, ev)
       +s1 = Spec.Node.join(s, ta)
-      +s2 = Spec.Node.join(s1, tv)
+      s2 = Spec.Node.join(s1, tv)
       +h1 => +h2 => +h3 => +h4 => h5 =>
         +ecur = Owner.cursor(Chain.cursor(s, c), n, v)(h1)(h2)
         +a = Cells.Cell.agrees_one(~Spec.Entry, ~Spec.Entry.same, s, ka, ea)(h3)
@@ -2649,76 +4100,120 @@ def Spec.Node.write_written(n, s, e, b, name, base, x, v):
                 Maybe<&2, Octets.Bytes()>,
                 Spec.Node.content(s, name, Spec.Point.Head{b}),
                 Res.of(s, name, Some{v}),
-                Equal.cong(Maybe<&2, Spec.Id>, Maybe<&2, Octets.Bytes()>, z => Res.of(s, name, z), Spec.Node.head(s, b), Some{v}, h2)
+                Equal.cong(
+                  Maybe<&2, Spec.Id>,
+                  Maybe<&2, Octets.Bytes()>,
+                  z => Res.of(s, name, z),
+                  Spec.Node.head(s, b),
+                  Some{v},
+                  h2
+                )
               ),
               h5
             )
           ),
-          Maybes.Maybe.same_refl(~Octets.Bytes(), ~Octets.Bytes.is_eq, ~Octets.Bytes.is_eq_refl, base_bytes)
+          Maybes.Maybe.same_refl(
+            ~Octets.Bytes(),
+            ~Octets.Bytes.is_eq,
+            ~Octets.Bytes.is_eq_refl,
+            base_bytes
+          )
         )
         +may = Equal.trans(
           Bool,
           Node.may_vote(n, s, c, v, [n]),
-          Bool.and(True{}, Maybe.is_none(&2, Cells.Cell<Spec.Entry>, State.cell(s, Spec.Slot.Vote{n, c, v}))),
+          Bool.and(
+            True{},
+            Maybe.is_none(&2, Cells.Cell<Spec.Entry>, State.cell(s, Spec.Slot.Vote{n, c, v}))
+          ),
           True{},
           Equal.cong(
             Bool,
             Bool,
-            z => Bool.and(z, Maybe.is_none(&2, Cells.Cell<Spec.Entry>, State.cell(s, Spec.Slot.Vote{n, c, v}))),
+            z => Bool.and(
+              z,
+              Maybe.is_none(&2, Cells.Cell<Spec.Entry>, State.cell(s, Spec.Slot.Vote{n, c, v}))
+            ),
             Shared.List.has(~String, ~String.eq, [n], n),
             True{},
             Owners.has(n)
           ),
-          Equal.cong(Maybe<&2, Cells.Cell<Spec.Entry>>, Bool, z => Maybe.is_none(&2, Cells.Cell<Spec.Entry>, z), State.cell(s, Spec.Slot.Vote{n, c, v}), None{}, h4)
+          Equal.cong(
+            Maybe<&2, Cells.Cell<Spec.Entry>>,
+            Bool,
+            z => Maybe.is_none(&2, Cells.Cell<Spec.Entry>, z),
+            State.cell(s, Spec.Slot.Vote{n, c, v}),
+            None{},
+            h4
+          )
         )
         +ask = Equal.trans(
           Spec.State(),
           Spec.Node.ask(n, s, Spec.Envelope{r, w, t}, q),
           Node.ask.root(n, s, s1, i, q, Spec.Node.claim(s, c)),
           s2,
-          Equal.cong(Maybe<&2, Cells.Cell<Spec.Entry>>, Spec.State(), z => Node.ask.fresh(n, s, i, t, q, z), State.cell(s, Spec.Slot.Ask{i}), None{}, h3),
+          Equal.cong(
+            Maybe<&2, Cells.Cell<Spec.Entry>>,
+            Spec.State(),
+            z => Node.ask.fresh(n, s, i, t, q, z),
+            State.cell(s, Spec.Slot.Ask{i}),
+            None{},
+            h3
+          ),
           Equal.trans(
             Spec.State(),
             Node.ask.root(n, s, s1, i, q, Spec.Node.claim(s, c)),
             Node.ask.at(n, s, s1, i, q, Chain.cursor(s, c)),
             s2,
-            Owner.ask(n, s, i, t, q, Spec.Node.claim(s, c), Claim.of(s, c, Spec.Node.claim(s, c), {==}, l)(ecur)),
+            Owner.ask(
+              n,
+              s,
+              i,
+              t,
+              q,
+              Spec.Node.claim(s, c),
+              Claim.of(s, c, Spec.Node.claim(s, c), {==}, l)(ecur)
+            ),
             Equal.trans(
               Spec.State(),
               Node.ask.at(n, s, s1, i, q, Chain.cursor(s, c)),
               Node.ask.at(n, s, s1, i, q, Some{l}),
               s2,
-              Equal.cong(Maybe<&2, Step>, Spec.State(), z => Node.ask.at(n, s, s1, i, q, z), Chain.cursor(s, c), Some{l}, ecur),
+              Equal.cong(
+                Maybe<&2, Step>,
+                Spec.State(),
+                z => Node.ask.at(n, s, s1, i, q, z),
+                Chain.cursor(s, c),
+                Some{l},
+                ecur
+              ),
               Equal.cong(
                 Bool,
                 Spec.State(),
-                z => Node.vote.if(z, s1, Spec.Slot.Vote{n, c, v}, i),
+                z => Bool.pick(Spec.State(), z, State.put(s1, Spec.Slot.Vote{n, c, v}, Spec.Entry.Vote{i}), s1),
                 Bool.and(Node.may_vote(n, s, c, v, [n]), Ask.fits(s, q, v)),
                 True{},
-                %Equal.sym(Bool, Node.may_vote(n, s, c, v, [n]), True{}, may) : {Bool.and(_, Ask.fits(s, q, v)) == True{}: Bool}
-                fits
-              )
+                %Equal.sym(Bool, Node.may_vote(n, s, c, v, [n]), True{}, may): {Bool.and(_, Ask.fits(s, q, v)) == True{}: Bool}
+                fits)
             )
           )
         )
         +cell1a = Equal.trans(
           Maybe<&2, Cells.Cell<Spec.Entry>>,
           Tries.Trie.get(Cells.Cell<Spec.Entry>, s1, ka),
-          Tries.Trie.pick(
-            ~Cells.Cell<Spec.Entry>,
-            ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
-            Tries.Trie.get(Cells.Cell<Spec.Entry>, s, ka),
-            Tries.Trie.get(Cells.Cell<Spec.Entry>, ta, ka)
-          ),
+          Tries.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), Tries.Trie.get(Cells.Cell<Spec.Entry>, s, ka), Tries.Trie.get(Cells.Cell<Spec.Entry>, ta, ka)),
           Some{ea},
           Tries.Trie.get_union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, ta, ka),
-          %Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, Tries.Trie.get(Cells.Cell<Spec.Entry>, s, ka), None{}, h3) :
+          %Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, Tries.Trie.get(Cells.Cell<Spec.Entry>, s, ka), None{}, h3):
+            {Tries.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), _, Tries.Trie.get(Cells.Cell<Spec.Entry>, ta, ka)) == Some{ea}: Maybe<&2, Cells.Cell<Spec.Entry>>}
+          Tries.Trie.get_one(Cells.Cell<Spec.Entry>, ka, ea))
+        %Equal.sym(Spec.State(), Spec.Node.ask(n, s, Spec.Envelope{r, w, t}, q), s2, ask):
+          (
             {
-              Tries.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), _, Tries.Trie.get(Cells.Cell<Spec.Entry>, ta, ka))
-                == Some{ea}: Maybe<&2, Cells.Cell<Spec.Entry>>
+              Spec.Node.answer(_, i) == Spec.Answer.Written{i}: Spec.Answer
             }
-          Tries.Trie.get_one(Cells.Cell<Spec.Entry>, ka, ea)
-        )
-        %Equal.sym(Spec.State(), Spec.Node.ask(n, s, Spec.Envelope{r, w, t}, q), s2, ask) :
-          ({Spec.Node.answer(_, i) == Spec.Answer.Written{i}: Spec.Answer} & {Spec.Node.content(_, name, Spec.Point.At{i}) == Some{x}: Maybe<&2, Octets.Bytes()>})
+              & {Spec.Node.content(_, name, Spec.Point.At{i}) == Some{x}: Maybe<&2, Octets.Bytes()>}
+          )
         Written.at(n, s1, i, t, b, name, base, x, v, ecur1, f4, cell1a)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information

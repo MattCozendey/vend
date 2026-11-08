@@ -38,26 +38,44 @@ def List.append_assoc(
   ys: List<&2, A>,
   zs: List<&2, A>
 ) -> {
-  List.append(&2, A, List.append(&2, A, xs, ys), zs)
+  List.append(
+    &2,
+    A,
+    List.append(&2, A, xs, ys),
+    zs
+  )
     == List.append(&2, A, xs, List.append(&2, A, ys, zs)): List<&2, A>
 }:
   match xs:
     case Nil{}:
       {==}
     case Con{h, t}:
-      %List.append_assoc(A, t, ys, zs) :
+      %List.append_assoc(A, t, ys, zs):
         {h <> List.append(&2, A, List.append(&2, A, t, ys), zs) == h <> _: List<&2, A>}
       {==}
 
 # the first n elements, then the rest, are the list
-def List.take_drop(-A: Data, xs: List<&2, A>, n: Nat) -> {List.append(&2, A, List.take(&2, A, xs, n), List.drop(&2, A, xs, n)) == xs: List<&2, A>}:
+def List.take_drop(
+  -A: Data,
+  xs: List<&2, A>,
+  n: Nat
+) -> {List.append(&2, A, List.take(&2, A, xs, n), List.drop(&2, A, xs, n)) == xs: List<&2, A>}:
   match xs n:
     case Nil{} k:
       {==}
     case Con{h, t} 0n:
       {==}
     case Con{h, t} 1n+p:
-      %List.take_drop(A, t, p) : {h <> List.append(&2, A, List.take(&2, A, t, p), List.drop(&2, A, t, p)) == h <> _: List<&2, A>}
+      %List.take_drop(
+        A,
+        t,
+        p
+      ): {
+        h
+          <> List.append(&2, A, List.take(&2, A, t, p), List.drop(&2, A, t, p))
+          == h
+          <> _: List<&2, A>
+      }
       {==}
 
 # Forks
@@ -83,7 +101,15 @@ def Fork.right(-A: Data, f: Fork<A>) -> List<&2, A>:
 
 # the fork of x <> ra and y <> rb, by whether x and y are the same (held); f is
 # the fork of ra and rb
-def List.fork.on(-A: Data, held: Bool, x: A, y: A, ra: List<&2, A>, rb: List<&2, A>, f: Fork<A>) -> Fork<A>:
+def List.fork.on(
+  -A: Data,
+  held: Bool,
+  x: A,
+  y: A,
+  ra: List<&2, A>,
+  rb: List<&2, A>,
+  f: Fork<A>
+) -> Fork<A>:
   match held f:
     case True{} Fork{s, fa, fb}:
       Fork{x <> s, fa, fb}
@@ -170,7 +196,7 @@ def List.fork_left.on(
 ) -> {Fork.left(A, List.fork.on(A, held, x, y, ra, rb, f)) == x <> ra: List<&2, A>}:
   match held f:
     case True{} Fork{s, fa, fb}:
-      %ih : {x <> List.append(&2, A, s, fa) == x <> _: List<&2, A>}
+      %ih: {x <> List.append(&2, A, s, fa) == x <> _: List<&2, A>}
       {==}
     case False{} g:
       {==}
@@ -183,10 +209,19 @@ law List.fork_left:
   for b: List<&2, A>
   {Fork.left(A, List.fork(~A, ~same, a, b)) == a: List<&2, A>}
 
-def List.fork_left(A, same, a, b):
+def List.fork_left(ty, same, a, b):
   match a b:
     case Con{+x, +ra} Con{+y, +rb}:
-      List.fork_left.on(A, same(x, y), x, y, ra, rb, List.fork(~A, ~same, ra, rb), List.fork_left(~A, ~same, ra, rb))
+      List.fork_left.on(
+        ty,
+        same(x, y),
+        x,
+        y,
+        ra,
+        rb,
+        List.fork(~ty, ~same, ra, rb),
+        List.fork_left(~ty, ~same, ra, rb)
+      )
     case Nil{} y:
       {==}
     case Con{x, ra} Nil{}:
@@ -198,8 +233,8 @@ def List.fork_right.on(
   ~same: A -> A -> Bool,
   ~sound: @x: A -> @y: A -> {same(x, y) == True{}: Bool} -> {x == y: A},
   held: Bool,
-  +x: A,
-  +y: A,
+  x: A,
+  y: A,
   ra: List<&2, A>,
   rb: List<&2, A>,
   f: Fork<A>,
@@ -208,8 +243,10 @@ def List.fork_right.on(
 ) -> {Fork.right(A, List.fork.on(A, held, x, y, ra, rb, f)) == y <> rb: List<&2, A>}:
   match held f:
     case True{} Fork{s, fa, fb}:
-      %ih : {x <> List.append(&2, A, s, fb) == y <> _: List<&2, A>}
-      %sound(x)(y)(e) : {x <> List.append(&2, A, s, fb) == _ <> List.append(&2, A, s, fb): List<&2, A>}
+      %ih: {x <> List.append(&2, A, s, fb) == y <> _: List<&2, A>}
+      %sound(
+        x
+      )(y)(e): {x <> List.append(&2, A, s, fb) == _ <> List.append(&2, A, s, fb): List<&2, A>}
       {==}
     case False{} g:
       {==}
@@ -223,11 +260,11 @@ law List.fork_right:
   for b: List<&2, A>
   {Fork.right(A, List.fork(~A, ~same, a, b)) == b: List<&2, A>}
 
-def List.fork_right(A, same, sound, a, b):
+def List.fork_right(ty, same, sound, a, b):
   match a b:
     case Con{+x, +ra} Con{+y, +rb}:
       List.fork_right.on(
-        ~A,
+        ~ty,
         ~same,
         ~sound,
         same(x, y),
@@ -235,9 +272,9 @@ def List.fork_right(A, same, sound, a, b):
         y,
         ra,
         rb,
-        List.fork(~A, ~same, ra, rb),
+        List.fork(~ty, ~same, ra, rb),
         {==},
-        List.fork_right(~A, ~same, ~sound, ra, rb)
+        List.fork_right(~ty, ~same, ~sound, ra, rb)
       )
     case Nil{} y:
       {==}
@@ -256,16 +293,16 @@ def List.tails_left.on(
 ) -> {Ends.left(A, List.tails.on(A, held, x, y, e)) == x <> ra: List<&2, A>}:
   match held e:
     case True{} Ends{Nil{}, Nil{}, s}:
-      %ih : {x <> s == x <> _: List<&2, A>}
+      %ih: {x <> s == x <> _: List<&2, A>}
       {==}
     case True{} Ends{Nil{}, Con{q, qs}, s}:
-      %ih : {x <> s == x <> _: List<&2, A>}
+      %ih: {x <> s == x <> _: List<&2, A>}
       {==}
     case True{} Ends{Con{p, ps}, eb, s}:
-      %ih : {x <> List.append(&2, A, p <> ps, s) == x <> _: List<&2, A>}
+      %ih: {x <> List.append(&2, A, p <> ps, s) == x <> _: List<&2, A>}
       {==}
     case False{} Ends{ea, eb, s}:
-      %ih : {x <> List.append(&2, A, ea, s) == x <> _: List<&2, A>}
+      %ih: {x <> List.append(&2, A, ea, s) == x <> _: List<&2, A>}
       {==}
 
 # the ends of two lists give back the first
@@ -276,14 +313,22 @@ law List.tails_left:
   for b: List<&2, A>
   {Ends.left(A, List.tails(~A, ~same, a, b)) == a: List<&2, A>}
 
-def List.tails_left(A, same, a, b):
+def List.tails_left(ty, same, a, b):
   match a b:
     case Con{+x, +ra} Con{+y, +rb}:
-      List.tails_left.on(A, same(x, y), x, y, ra, List.tails(~A, ~same, ra, rb), List.tails_left(~A, ~same, ra, rb))
+      List.tails_left.on(
+        ty,
+        same(x, y),
+        x,
+        y,
+        ra,
+        List.tails(~ty, ~same, ra, rb),
+        List.tails_left(~ty, ~same, ra, rb)
+      )
     case Nil{} y:
       {==}
     case Con{x, ra} Nil{}:
-      List.append_nil(A, x <> ra)
+      List.append_nil(ty, x <> ra)
 
 # List.tails_right after the first elements
 def List.tails_right.on(
@@ -291,8 +336,8 @@ def List.tails_right.on(
   ~same: A -> A -> Bool,
   ~sound: @x: A -> @y: A -> {same(x, y) == True{}: Bool} -> {x == y: A},
   held: Bool,
-  +x: A,
-  +y: A,
+  x: A,
+  y: A,
   rb: List<&2, A>,
   e: Ends<A>,
   h: {same(x, y) == held: Bool},
@@ -300,17 +345,17 @@ def List.tails_right.on(
 ) -> {Ends.right(A, List.tails.on(A, held, x, y, e)) == y <> rb: List<&2, A>}:
   match held e:
     case True{} Ends{Nil{}, Nil{}, s}:
-      %ih : {x <> s == y <> _: List<&2, A>}
-      %sound(x)(y)(h) : {x <> s == _ <> s: List<&2, A>}
+      %ih: {x <> s == y <> _: List<&2, A>}
+      %sound(x)(y)(h): {x <> s == _ <> s: List<&2, A>}
       {==}
     case True{} Ends{Nil{}, Con{q, qs}, s}:
-      %ih : {y <> List.append(&2, A, q <> qs, s) == y <> _: List<&2, A>}
+      %ih: {y <> List.append(&2, A, q <> qs, s) == y <> _: List<&2, A>}
       {==}
     case True{} Ends{Con{p, ps}, eb, s}:
-      %ih : {y <> List.append(&2, A, eb, s) == y <> _: List<&2, A>}
+      %ih: {y <> List.append(&2, A, eb, s) == y <> _: List<&2, A>}
       {==}
     case False{} Ends{ea, eb, s}:
-      %ih : {y <> List.append(&2, A, eb, s) == y <> _: List<&2, A>}
+      %ih: {y <> List.append(&2, A, eb, s) == y <> _: List<&2, A>}
       {==}
 
 # the ends of two lists give back the second
@@ -322,34 +367,46 @@ law List.tails_right:
   for b: List<&2, A>
   {Ends.right(A, List.tails(~A, ~same, a, b)) == b: List<&2, A>}
 
-def List.tails_right(A, same, sound, a, b):
+def List.tails_right(ty, same, sound, a, b):
   match a b:
     case Con{+x, +ra} Con{+y, +rb}:
       List.tails_right.on(
-        ~A,
+        ~ty,
         ~same,
         ~sound,
         same(x, y),
         x,
         y,
         rb,
-        List.tails(~A, ~same, ra, rb),
+        List.tails(~ty, ~same, ra, rb),
         {==},
-        List.tails_right(~A, ~same, ~sound, ra, rb)
+        List.tails_right(~ty, ~same, ~sound, ra, rb)
       )
     case Nil{} y:
-      List.append_nil(A, y)
+      List.append_nil(ty, y)
     case Con{x, ra} Nil{}:
       {==}
 
 # the first list of e after a comes before it is a, then the first list of e
-def Ends.after_left(-A: Data, a: List<&2, A>, b: List<&2, A>, e: Ends<A>) -> {Ends.left(A, Ends.after(A, a, b, e)) == List.append(&2, A, a, Ends.left(A, e)): List<&2, A>}:
+def Ends.after_left(
+  -A: Data,
+  a: List<&2, A>,
+  b: List<&2, A>,
+  e: Ends<A>
+) -> {Ends.left(A, Ends.after(A, a, b, e)) == List.append(&2, A, a, Ends.left(A, e)): List<&2, A>}:
   match e:
     case Ends{ea, eb, s}:
       List.append_assoc(A, a, ea, s)
 
 # the second list of e after b comes before it is b, then the second list of e
-def Ends.after_right(-A: Data, a: List<&2, A>, b: List<&2, A>, e: Ends<A>) -> {Ends.right(A, Ends.after(A, a, b, e)) == List.append(&2, A, b, Ends.right(A, e)): List<&2, A>}:
+def Ends.after_right(
+  -A: Data,
+  a: List<&2, A>,
+  b: List<&2, A>,
+  e: Ends<A>
+) -> {
+  Ends.right(A, Ends.after(A, a, b, e)) == List.append(&2, A, b, Ends.right(A, e)): List<&2, A>
+}:
   match e:
     case Ends{ea, eb, s}:
       List.append_assoc(A, b, eb, s)
@@ -362,28 +419,37 @@ law List.ends_left:
   for +b: List<&2, A>
   {Ends.left(A, List.ends(~A, ~same, a, b)) == a: List<&2, A>}
 
-def List.ends_left(A, same, a, b):
-  +da = Nat.sub(List.length(&2, A, a), List.length(&2, A, b))
-  +db = Nat.sub(List.length(&2, A, b), List.length(&2, A, a))
-  +pa = List.take(&2, A, a, da)
-  +ra = List.drop(&2, A, a, da)
-  +rb = List.drop(&2, A, b, db)
-  +t = List.tails(~A, ~same, ra, rb)
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+def List.ends_left(ty, same, a, b):
+  +da = Nat.sub(List.length(&2, ty, a), List.length(&2, ty, b))
+  +db = Nat.sub(List.length(&2, ty, b), List.length(&2, ty, a))
+  pa = List.take(&2, ty, a, da)
+  +ra = List.drop(&2, ty, a, da)
+  +rb = List.drop(&2, ty, b, db)
+  t = List.tails(~ty, ~same, ra, rb)
   Equal.trans(
-    List<&2, A>,
-    Ends.left(A, Ends.after(A, pa, List.take(&2, A, b, db), t)),
-    List.append(&2, A, pa, Ends.left(A, t)),
+    List<&2, ty>,
+    Ends.left(ty, Ends.after(ty, pa, List.take(&2, ty, b, db), t)),
+    List.append(&2, ty, pa, Ends.left(ty, t)),
     a,
-    Ends.after_left(A, pa, List.take(&2, A, b, db), t),
+    Ends.after_left(ty, pa, List.take(&2, ty, b, db), t),
     Equal.trans(
-      List<&2, A>,
-      List.append(&2, A, pa, Ends.left(A, t)),
-      List.append(&2, A, pa, ra),
+      List<&2, ty>,
+      List.append(&2, ty, pa, Ends.left(ty, t)),
+      List.append(&2, ty, pa, ra),
       a,
-      Equal.cong(List<&2, A>, List<&2, A>, z => List.append(&2, A, pa, z), Ends.left(A, t), ra, List.tails_left(~A, ~same, ra, rb)),
-      List.take_drop(A, a, da)
+      Equal.cong(
+        List<&2, ty>,
+        List<&2, ty>,
+        z => List.append(&2, ty, pa, z),
+        Ends.left(ty, t),
+        ra,
+        List.tails_left(~ty, ~same, ra, rb)
+      ),
+      List.take_drop(ty, a, da)
     )
   )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the ends of two lists, lined up at their end, give back the second
 law List.ends_right:
@@ -394,32 +460,42 @@ law List.ends_right:
   for +b: List<&2, A>
   {Ends.right(A, List.ends(~A, ~same, a, b)) == b: List<&2, A>}
 
-def List.ends_right(A, same, sound, a, b):
-  +da = Nat.sub(List.length(&2, A, a), List.length(&2, A, b))
-  +db = Nat.sub(List.length(&2, A, b), List.length(&2, A, a))
-  +pb = List.take(&2, A, b, db)
-  +ra = List.drop(&2, A, a, da)
-  +rb = List.drop(&2, A, b, db)
-  +t = List.tails(~A, ~same, ra, rb)
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+def List.ends_right(ty, same, sound, a, b):
+  +da = Nat.sub(List.length(&2, ty, a), List.length(&2, ty, b))
+  +db = Nat.sub(List.length(&2, ty, b), List.length(&2, ty, a))
+  pb = List.take(&2, ty, b, db)
+  +ra = List.drop(&2, ty, a, da)
+  +rb = List.drop(&2, ty, b, db)
+  t = List.tails(~ty, ~same, ra, rb)
   Equal.trans(
-    List<&2, A>,
-    Ends.right(A, Ends.after(A, List.take(&2, A, a, da), pb, t)),
-    List.append(&2, A, pb, Ends.right(A, t)),
+    List<&2, ty>,
+    Ends.right(ty, Ends.after(ty, List.take(&2, ty, a, da), pb, t)),
+    List.append(&2, ty, pb, Ends.right(ty, t)),
     b,
-    Ends.after_right(A, List.take(&2, A, a, da), pb, t),
+    Ends.after_right(ty, List.take(&2, ty, a, da), pb, t),
     Equal.trans(
-      List<&2, A>,
-      List.append(&2, A, pb, Ends.right(A, t)),
-      List.append(&2, A, pb, rb),
+      List<&2, ty>,
+      List.append(&2, ty, pb, Ends.right(ty, t)),
+      List.append(&2, ty, pb, rb),
       b,
-      Equal.cong(List<&2, A>, List<&2, A>, z => List.append(&2, A, pb, z), Ends.right(A, t), rb, List.tails_right(~A, ~same, ~sound, ra, rb)),
-      List.take_drop(A, b, db)
+      Equal.cong(
+        List<&2, ty>,
+        List<&2, ty>,
+        z => List.append(&2, ty, pb, z),
+        Ends.right(ty, t),
+        rb,
+        List.tails_right(~ty, ~same, ~sound, ra, rb)
+      ),
+      List.take_drop(ty, b, db)
     )
   )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Equality
 # --------
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality, or a proof, keeps each and/or as one value for the proofs to split on
 # xs and ys hold the same elements in the same order, as same calls them
 def List.same(~A: Data, ~same: A -> A -> Bool, xs: List<&2, A>, ys: List<&2, A>) -> Bool:
   match xs ys:
@@ -429,6 +505,7 @@ def List.same(~A: Data, ~same: A -> A -> Bool, xs: List<&2, A>, ys: List<&2, A>)
       Bool.and(same(x, y), List.same(~A, ~same, xr, yr))
     case _ _:
       False{}
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # List.same is True for a list and itself
 law List.same_refl:
@@ -438,13 +515,18 @@ law List.same_refl:
   for xs: List<&2, A>
   {List.same(~A, ~same, xs, xs) == True{}: Bool}
 
-def List.same_refl(A, same, refl, xs):
+def List.same_refl(ty, same, refl, xs):
   match xs:
     case Nil{}:
       {==}
-    case Con{+x, +r}:
-      %Equal.sym(Bool, same(x, x), True{}, refl(x)) : {Bool.and(_, List.same(~A, ~same, r, r)) == True{}: Bool}
-      List.same_refl(~A, ~same, ~refl, r)
+    case Con{x, r}:
+      %Equal.sym(
+        Bool,
+        same(x, x),
+        True{},
+        refl(x)
+      ): {Bool.and(_, List.same(~ty, ~same, r, r)) == True{}: Bool}
+      List.same_refl(~ty, ~same, ~refl, r)
 
 # List.same is True only for equal lists
 law List.same_sound:
@@ -455,23 +537,41 @@ law List.same_sound:
   for ys: List<&2, A>
   {List.same(~A, ~same, xs, ys) == True{}: Bool} -> {xs == ys: List<&2, A>}
 
-def List.same_sound(A, same, sound, xs, ys):
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+def List.same_sound(ty, same, sound, xs, ys):
   match xs ys:
     case Nil{} Nil{}:
       h => {==}
     case Nil{} Con{y, yr}:
-      h => Empty.absurd({Nil{} == Con{y, yr}: List<&2, A>}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd({Nil{} == Con{y, yr}: List<&2, ty>}, Shared.Bool.false_ne_true(h))
     case Con{x, xr} Nil{}:
-      h => Empty.absurd({Con{x, xr} == Nil{}: List<&2, A>}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd({Con{x, xr} == Nil{}: List<&2, ty>}, Shared.Bool.false_ne_true(h))
     case Con{+x, +xr} Con{+y, +yr}:
       +h =>
-        %sound(x)(y)(Bools.Bool.and_true_left(same(x, y), List.same(~A, ~same, xr, yr))(h)) : {x <> xr == _ <> yr: List<&2, A>}
-        %List.same_sound(~A, ~same, ~sound, xr, yr)(Bools.Bool.and_true_right(same(x, y), List.same(~A, ~same, xr, yr))(h)) :
-          {x <> xr == x <> _: List<&2, A>}
+        %sound(
+          x
+        )(
+          y
+        )(
+          Bools.Bool.and_true_left(same(x, y), List.same(~ty, ~same, xr, yr))(h)
+        ): {x <> xr == _ <> yr: List<&2, ty>}
+        %List.same_sound(
+          ~ty,
+          ~same,
+          ~sound,
+          xr,
+          yr
+        )(Bools.Bool.and_true_right(same(x, y), List.same(~ty, ~same, xr, yr))(h)):
+          {x <> xr == x <> _: List<&2, ty>}
         {==}
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # the first elements of xs ++ ys, as many as xs has, are xs
-def List.take_append(-A: Data, xs: List<&2, A>, ys: List<&2, A>) -> {List.take(&2, A, List.append(&2, A, xs, ys), List.length(&2, A, xs)) == xs: List<&2, A>}:
+def List.take_append(
+  -A: Data,
+  xs: List<&2, A>,
+  ys: List<&2, A>
+) -> {List.take(&2, A, List.append(&2, A, xs, ys), List.length(&2, A, xs)) == xs: List<&2, A>}:
   match xs:
     case Nil{}:
       match ys:
@@ -480,5 +580,14 @@ def List.take_append(-A: Data, xs: List<&2, A>, ys: List<&2, A>) -> {List.take(&
         case Con{h, t}:
           {==}
     case Con{h, t}:
-      %List.take_append(A, t, ys) : {h <> List.take(&2, A, List.append(&2, A, t, ys), List.length(&2, A, t)) == h <> _: List<&2, A>}
+      %List.take_append(
+        A,
+        t,
+        ys
+      ): {
+        h
+          <> List.take(&2, A, List.append(&2, A, t, ys), List.length(&2, A, t))
+          == h
+          <> _: List<&2, A>
+      }
       {==}

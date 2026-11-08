@@ -59,9 +59,11 @@ def Trie.values(-V: Data, t: Trie<V>) -> List<&2, V>:
     case Tip{}:
       []
     case Bin{None{}, z, o}:
-      List.append(&2, V, Trie.values(V, z), Trie.values(V, o))
+      zs os = Trie.values(V, z) Trie.values(V, o)
+      List.append(&2, V, zs, os)
     case Bin{Some{v}, z, o}:
-      v <> List.append(&2, V, Trie.values(V, z), Trie.values(V, o))
+      zs os = Trie.values(V, z) Trie.values(V, o)
+      v <> List.append(&2, V, zs, os)
 
 # the number of entries of t
 def Trie.size(-V: Data, t: Trie<V>) -> Nat:
@@ -69,9 +71,11 @@ def Trie.size(-V: Data, t: Trie<V>) -> Nat:
     case Tip{}:
       0n
     case Bin{None{}, z, o}:
-      Nat.add(Trie.size(V, z), Trie.size(V, o))
+      zs os = Trie.size(V, z) Trie.size(V, o)
+      Nat.add(zs, os)
     case Bin{Some{v}, z, o}:
-      1n+Nat.add(Trie.size(V, z), Trie.size(V, o))
+      zs os = Trie.size(V, z) Trie.size(V, o)
+      1n+Nat.add(zs, os)
 
 # the entries of t whose keys start with k, under the rest of their keys
 def Trie.under(-V: Data, t: Trie<V>, k: List<&2, Bool>) -> Trie<V>:
@@ -136,23 +140,20 @@ def Trie.union(~V: Data, ~join: V -> V -> V, a: Trie<V>, b: Trie<V>) -> Trie<V>:
       zs os = Trie.union(~V, ~join, z1, z2) Trie.union(~V, ~join, o1, o2)
       Bin{Trie.pick(~V, ~join, h1, h2), zs, os}
 
-# x, unless it is the same (held)
-def Trie.minus.if(-V: Data, held: Bool, x: V) -> Maybe<&2, V>:
-  match held:
-    case True{}:
-      None{}
-    case False{}:
-      Some{x}
-
 # a, unless b holds the same value
-def Trie.minus.here(~V: Data, ~same: V -> V -> Bool, a: Maybe<&2, V>, b: Maybe<&2, V>) -> Maybe<&2, V>:
+def Trie.minus.here(
+  ~V: Data,
+  ~same: V -> V -> Bool,
+  a: Maybe<&2, V>,
+  b: Maybe<&2, V>
+) -> Maybe<&2, V>:
   match a b:
     case None{} y:
       None{}
     case Some{x} None{}:
       Some{x}
     case Some{+x} Some{y}:
-      Trie.minus.if(V, same(x, y), x)
+      Bool.pick(Maybe<&2, V>, same(x, y), None{}, Some{x})
 
 # the entries of s that r does not hold with the same value: what a holder of
 # r lacks of s
@@ -170,7 +171,11 @@ def Trie.minus(~V: Data, ~same: V -> V -> Bool, s: Trie<V>, r: Trie<V>) -> Trie<
 # ----
 
 # the trie of one key has its value
-def Trie.get_one(-V: Data, k: List<&2, Bool>, v: V) -> {Trie.get(V, Trie.one(V, k, v), k) == Some{v}: Maybe<&2, V>}:
+def Trie.get_one(
+  -V: Data,
+  k: List<&2, Bool>,
+  v: V
+) -> {Trie.get(V, Trie.one(V, k, v), k) == Some{v}: Maybe<&2, V>}:
   match k:
     case Nil{}:
       {==}
@@ -187,19 +192,23 @@ law Trie.get_after_set:
   for v: V
   {Trie.get(V, Trie.set(V, t, k, v), k) == Some{v}: Maybe<&2, V>}
 
-def Trie.get_after_set(V, t, k, v):
+def Trie.get_after_set(ty, t, k, v):
   match t k:
     case Tip{} r:
-      Trie.get_one(V, r, v)
+      Trie.get_one(ty, r, v)
     case Bin{h, z, o} Nil{}:
       {==}
     case Bin{h, z, o} Con{False{}, r}:
-      Trie.get_after_set(V, z, r, v)
+      Trie.get_after_set(ty, z, r, v)
     case Bin{h, z, o} Con{True{}, r}:
-      Trie.get_after_set(V, o, r, v)
+      Trie.get_after_set(ty, o, r, v)
 
 # nothing joined to a value is that value
-def Trie.pick_none(~V: Data, ~join: V -> V -> V, a: Maybe<&2, V>) -> {Trie.pick(~V, ~join, a, None{}) == a: Maybe<&2, V>}:
+def Trie.pick_none(
+  ~V: Data,
+  ~join: V -> V -> V,
+  a: Maybe<&2, V>
+) -> {Trie.pick(~V, ~join, a, None{}) == a: Maybe<&2, V>}:
   match a:
     case None{}:
       {==}
@@ -214,27 +223,31 @@ law Trie.get_union:
   for b: Trie<V>
   for k: List<&2, Bool>
   {
-    Trie.get(V, Trie.union(~V, ~join, a, b), k)
+    Trie.get(
+      V,
+      Trie.union(~V, ~join, a, b),
+      k
+    )
       == Trie.pick(~V, ~join, Trie.get(V, a, k), Trie.get(V, b, k)): Maybe<&2, V>
   }
 
-def Trie.get_union(V, join, a, b, k):
+def Trie.get_union(ty, join, a, b, k):
   match a b k:
     case Tip{} y q:
       {==}
     case Bin{h, z, o} Tip{} q:
       Equal.sym(
-        Maybe<&2, V>,
-        Trie.pick(~V, ~join, Trie.get(V, Bin{h, z, o}, q), None{}),
-        Trie.get(V, Bin{h, z, o}, q),
-        Trie.pick_none(~V, ~join, Trie.get(V, Bin{h, z, o}, q))
+        Maybe<&2, ty>,
+        Trie.pick(~ty, ~join, Trie.get(ty, Bin{h, z, o}, q), None{}),
+        Trie.get(ty, Bin{h, z, o}, q),
+        Trie.pick_none(~ty, ~join, Trie.get(ty, Bin{h, z, o}, q))
       )
     case Bin{h1, z1, o1} Bin{h2, z2, o2} Nil{}:
       {==}
     case Bin{h1, z1, o1} Bin{h2, z2, o2} Con{False{}, r}:
-      Trie.get_union(~V, ~join, z1, z2, r)
+      Trie.get_union(~ty, ~join, z1, z2, r)
     case Bin{h1, z1, o1} Bin{h2, z2, o2} Con{True{}, r}:
-      Trie.get_union(~V, ~join, o1, o2, r)
+      Trie.get_union(~ty, ~join, o1, o2, r)
 
 # a pick is the same either way round, when join is
 def Trie.pick_comm(
@@ -252,7 +265,7 @@ def Trie.pick_comm(
     case Some{x} None{}:
       {==}
     case Some{x} Some{y}:
-      %comm(x)(y) : {Some{join(x, y)} == Some{_}: Maybe<&2, V>}
+      %comm(x)(y): {Some{join(x, y)} == Some{_}: Maybe<&2, V>}
       {==}
 
 # a union is the same either way round
@@ -264,7 +277,7 @@ law Trie.union_comm:
   for b: Trie<V>
   {Trie.union(~V, ~join, a, b) == Trie.union(~V, ~join, b, a): Trie<V>}
 
-def Trie.union_comm(V, join, comm, a, b):
+def Trie.union_comm(ty, join, comm, a, b):
   match a b:
     case Tip{} Tip{}:
       {==}
@@ -273,20 +286,32 @@ def Trie.union_comm(V, join, comm, a, b):
     case Bin{h, z, o} Tip{}:
       {==}
     case Bin{h1, z1, o1} Bin{h2, z2, o2}:
-      %Trie.pick_comm(~V, ~join, ~comm, h1, h2) :
+      %Trie.pick_comm(~ty, ~join, ~comm, h1, h2):
         {
-          Bin{Trie.pick(~V, ~join, h1, h2), Trie.union(~V, ~join, z1, z2), Trie.union(~V, ~join, o1, o2)}
-            == Bin{_, Trie.union(~V, ~join, z2, z1), Trie.union(~V, ~join, o2, o1)}: Trie<V>
+          Bin{
+            Trie.pick(~ty, ~join, h1, h2),
+            Trie.union(~ty, ~join, z1, z2),
+            Trie.union(~ty, ~join, o1, o2)
+          }
+            == Bin{_, Trie.union(~ty, ~join, z2, z1), Trie.union(~ty, ~join, o2, o1)}: Trie<ty>
         }
-      %Trie.union_comm(~V, ~join, ~comm, z1, z2) :
+      %Trie.union_comm(~ty, ~join, ~comm, z1, z2):
         {
-          Bin{Trie.pick(~V, ~join, h1, h2), Trie.union(~V, ~join, z1, z2), Trie.union(~V, ~join, o1, o2)}
-            == Bin{Trie.pick(~V, ~join, h1, h2), _, Trie.union(~V, ~join, o2, o1)}: Trie<V>
+          Bin{
+            Trie.pick(~ty, ~join, h1, h2),
+            Trie.union(~ty, ~join, z1, z2),
+            Trie.union(~ty, ~join, o1, o2)
+          }
+            == Bin{Trie.pick(~ty, ~join, h1, h2), _, Trie.union(~ty, ~join, o2, o1)}: Trie<ty>
         }
-      %Trie.union_comm(~V, ~join, ~comm, o1, o2) :
+      %Trie.union_comm(~ty, ~join, ~comm, o1, o2):
         {
-          Bin{Trie.pick(~V, ~join, h1, h2), Trie.union(~V, ~join, z1, z2), Trie.union(~V, ~join, o1, o2)}
-            == Bin{Trie.pick(~V, ~join, h1, h2), Trie.union(~V, ~join, z1, z2), _}: Trie<V>
+          Bin{
+            Trie.pick(~ty, ~join, h1, h2),
+            Trie.union(~ty, ~join, z1, z2),
+            Trie.union(~ty, ~join, o1, o2)
+          }
+            == Bin{Trie.pick(~ty, ~join, h1, h2), Trie.union(~ty, ~join, z1, z2), _}: Trie<ty>
         }
       {==}
 
@@ -299,7 +324,12 @@ def Trie.pick_assoc(
   b: Maybe<&2, V>,
   c: Maybe<&2, V>
 ) -> {
-  Trie.pick(~V, ~join, Trie.pick(~V, ~join, a, b), c)
+  Trie.pick(
+    ~V,
+    ~join,
+    Trie.pick(~V, ~join, a, b),
+    c
+  )
     == Trie.pick(~V, ~join, a, Trie.pick(~V, ~join, b, c)): Maybe<&2, V>
 }:
   match a b c:
@@ -310,7 +340,7 @@ def Trie.pick_assoc(
     case Some{x} Some{y} None{}:
       {==}
     case Some{x} Some{y} Some{w}:
-      %assoc(x)(y)(w) : {Some{join(join(x, y), w)} == Some{_}: Maybe<&2, V>}
+      %assoc(x)(y)(w): {Some{join(join(x, y), w)} == Some{_}: Maybe<&2, V>}
       {==}
 
 # a union groups either way
@@ -322,11 +352,16 @@ law Trie.union_assoc:
   for b: Trie<V>
   for c: Trie<V>
   {
-    Trie.union(~V, ~join, Trie.union(~V, ~join, a, b), c)
+    Trie.union(
+      ~V,
+      ~join,
+      Trie.union(~V, ~join, a, b),
+      c
+    )
       == Trie.union(~V, ~join, a, Trie.union(~V, ~join, b, c)): Trie<V>
   }
 
-def Trie.union_assoc(V, join, assoc, a, b, c):
+def Trie.union_assoc(ty, join, assoc, a, b, c):
   match a b c:
     case Tip{} y w:
       {==}
@@ -335,44 +370,44 @@ def Trie.union_assoc(V, join, assoc, a, b, c):
     case Bin{h1, z1, o1} Bin{h2, z2, o2} Tip{}:
       {==}
     case Bin{h1, z1, o1} Bin{h2, z2, o2} Bin{h3, z3, o3}:
-      %Trie.pick_assoc(~V, ~join, ~assoc, h1, h2, h3) :
+      %Trie.pick_assoc(~ty, ~join, ~assoc, h1, h2, h3):
         {
           Bin{
-            Trie.pick(~V, ~join, Trie.pick(~V, ~join, h1, h2), h3),
-            Trie.union(~V, ~join, Trie.union(~V, ~join, z1, z2), z3),
-            Trie.union(~V, ~join, Trie.union(~V, ~join, o1, o2), o3)
+            Trie.pick(~ty, ~join, Trie.pick(~ty, ~join, h1, h2), h3),
+            Trie.union(~ty, ~join, Trie.union(~ty, ~join, z1, z2), z3),
+            Trie.union(~ty, ~join, Trie.union(~ty, ~join, o1, o2), o3)
           }
             == Bin{
               _,
-              Trie.union(~V, ~join, z1, Trie.union(~V, ~join, z2, z3)),
-              Trie.union(~V, ~join, o1, Trie.union(~V, ~join, o2, o3))
-            }: Trie<V>
+              Trie.union(~ty, ~join, z1, Trie.union(~ty, ~join, z2, z3)),
+              Trie.union(~ty, ~join, o1, Trie.union(~ty, ~join, o2, o3))
+            }: Trie<ty>
         }
-      %Trie.union_assoc(~V, ~join, ~assoc, z1, z2, z3) :
+      %Trie.union_assoc(~ty, ~join, ~assoc, z1, z2, z3):
         {
           Bin{
-            Trie.pick(~V, ~join, Trie.pick(~V, ~join, h1, h2), h3),
-            Trie.union(~V, ~join, Trie.union(~V, ~join, z1, z2), z3),
-            Trie.union(~V, ~join, Trie.union(~V, ~join, o1, o2), o3)
+            Trie.pick(~ty, ~join, Trie.pick(~ty, ~join, h1, h2), h3),
+            Trie.union(~ty, ~join, Trie.union(~ty, ~join, z1, z2), z3),
+            Trie.union(~ty, ~join, Trie.union(~ty, ~join, o1, o2), o3)
           }
             == Bin{
-              Trie.pick(~V, ~join, Trie.pick(~V, ~join, h1, h2), h3),
+              Trie.pick(~ty, ~join, Trie.pick(~ty, ~join, h1, h2), h3),
               _,
-              Trie.union(~V, ~join, o1, Trie.union(~V, ~join, o2, o3))
-            }: Trie<V>
+              Trie.union(~ty, ~join, o1, Trie.union(~ty, ~join, o2, o3))
+            }: Trie<ty>
         }
-      %Trie.union_assoc(~V, ~join, ~assoc, o1, o2, o3) :
+      %Trie.union_assoc(~ty, ~join, ~assoc, o1, o2, o3):
         {
           Bin{
-            Trie.pick(~V, ~join, Trie.pick(~V, ~join, h1, h2), h3),
-            Trie.union(~V, ~join, Trie.union(~V, ~join, z1, z2), z3),
-            Trie.union(~V, ~join, Trie.union(~V, ~join, o1, o2), o3)
+            Trie.pick(~ty, ~join, Trie.pick(~ty, ~join, h1, h2), h3),
+            Trie.union(~ty, ~join, Trie.union(~ty, ~join, z1, z2), z3),
+            Trie.union(~ty, ~join, Trie.union(~ty, ~join, o1, o2), o3)
           }
             == Bin{
-              Trie.pick(~V, ~join, Trie.pick(~V, ~join, h1, h2), h3),
-              Trie.union(~V, ~join, Trie.union(~V, ~join, z1, z2), z3),
+              Trie.pick(~ty, ~join, Trie.pick(~ty, ~join, h1, h2), h3),
+              Trie.union(~ty, ~join, Trie.union(~ty, ~join, z1, z2), z3),
               _
-            }: Trie<V>
+            }: Trie<ty>
         }
       {==}
 
@@ -387,7 +422,7 @@ def Trie.pick_idem(
     case None{}:
       {==}
     case Some{x}:
-      %Equal.sym(V, join(x, x), x, idem(x)) : {Some{_} == Some{x}: Maybe<&2, V>}
+      %Equal.sym(V, join(x, x), x, idem(x)): {Some{_} == Some{x}: Maybe<&2, V>}
       {==}
 
 # a trie joined with itself is itself
@@ -398,18 +433,36 @@ law Trie.union_idem:
   for a: Trie<V>
   {Trie.union(~V, ~join, a, a) == a: Trie<V>}
 
-def Trie.union_idem(V, join, idem, a):
+def Trie.union_idem(ty, join, idem, a):
   match a:
     case Tip{}:
       {==}
     case Bin{h, z, o}:
-      %Equal.sym(Maybe<&2, V>, Trie.pick(~V, ~join, h, h), h, Trie.pick_idem(~V, ~join, ~idem, h)) :
-        {Bin{_, Trie.union(~V, ~join, z, z), Trie.union(~V, ~join, o, o)} == Bin{h, z, o}: Trie<V>}
-      %Equal.sym(Trie<V>, Trie.union(~V, ~join, z, z), z, Trie.union_idem(~V, ~join, ~idem, z)) :
-        {Bin{h, _, Trie.union(~V, ~join, o, o)} == Bin{h, z, o}: Trie<V>}
-      %Equal.sym(Trie<V>, Trie.union(~V, ~join, o, o), o, Trie.union_idem(~V, ~join, ~idem, o)) : {Bin{h, z, _} == Bin{h, z, o}: Trie<V>}
+      %Equal.sym(
+        Maybe<&2, ty>,
+        Trie.pick(~ty, ~join, h, h),
+        h,
+        Trie.pick_idem(~ty, ~join, ~idem, h)
+      ):
+        {
+          Bin{
+            _,
+            Trie.union(~ty, ~join, z, z),
+            Trie.union(~ty, ~join, o, o)
+          }
+            == Bin{h, z, o}: Trie<ty>
+        }
+      %Equal.sym(Trie<ty>, Trie.union(~ty, ~join, z, z), z, Trie.union_idem(~ty, ~join, ~idem, z)):
+        {Bin{h, _, Trie.union(~ty, ~join, o, o)} == Bin{h, z, o}: Trie<ty>}
+      %Equal.sym(
+        Trie<ty>,
+        Trie.union(~ty, ~join, o, o),
+        o,
+        Trie.union_idem(~ty, ~join, ~idem, o)
+      ): {Bin{h, z, _} == Bin{h, z, o}: Trie<ty>}
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Trie.pick_minus once same(x, y) is known (held)
 def Trie.pick_minus.if(
   ~V: Data,
@@ -418,19 +471,26 @@ def Trie.pick_minus.if(
   ~idem: @x: V -> {join(x, x) == x: V},
   ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V},
   held: Bool,
-  +x: V,
+  x: V,
   +y: V,
   e: {same(x, y) == held: Bool}
 ) -> {
-  Trie.pick(~V, ~join, Some{y}, Trie.minus.if(V, held, x)) == Some{join(y, x)}: Maybe<&2, V>
+  Trie.pick(
+    ~V,
+    ~join,
+    Some{y},
+    Bool.pick(Maybe<&2, V>, held, None{}, Some{x})
+  )
+    == Some{join(y, x)}: Maybe<&2, V>
 }:
   match held:
     case True{}:
-      %Equal.sym(V, x, y, sound(x)(y)(e)) : {Some{y} == Some{join(y, _)}: Maybe<&2, V>}
-      %Equal.sym(V, join(y, y), y, idem(y)) : {Some{y} == Some{_}: Maybe<&2, V>}
+      %Equal.sym(V, x, y, sound(x)(y)(e)): {Some{y} == Some{join(y, _)}: Maybe<&2, V>}
+      %Equal.sym(V, join(y, y), y, idem(y)): {Some{y} == Some{_}: Maybe<&2, V>}
       {==}
     case False{}:
       {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # what r holds for a key, joined with what r lacks of s there, is r's joined
 # with s's
@@ -443,7 +503,12 @@ def Trie.pick_minus(
   s: Maybe<&2, V>,
   r: Maybe<&2, V>
 ) -> {
-  Trie.pick(~V, ~join, r, Trie.minus.here(~V, ~same, s, r))
+  Trie.pick(
+    ~V,
+    ~join,
+    r,
+    Trie.minus.here(~V, ~same, s, r)
+  )
     == Trie.pick(~V, ~join, r, s): Maybe<&2, V>
 }:
   match s r:
@@ -463,48 +528,49 @@ law Trie.union_minus:
   for ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V}
   for s: Trie<V>
   for r: Trie<V>
-  {
-    Trie.union(~V, ~join, r, Trie.minus(~V, ~same, s, r))
-      == Trie.union(~V, ~join, r, s): Trie<V>
-  }
+  {Trie.union(~V, ~join, r, Trie.minus(~V, ~same, s, r)) == Trie.union(~V, ~join, r, s): Trie<V>}
 
-def Trie.union_minus(V, join, same, idem, sound, s, r):
+def Trie.union_minus(ty, join, same, idem, sound, s, r):
   match s r:
     case Tip{} y:
       {==}
     case Bin{h, z, o} Tip{}:
       {==}
     case Bin{h1, z1, o1} Bin{h2, z2, o2}:
-      %Trie.pick_minus(~V, ~join, ~same, ~idem, ~sound, h1, h2) :
+      %Trie.pick_minus(~ty, ~join, ~same, ~idem, ~sound, h1, h2):
         {
           Bin{
-            Trie.pick(~V, ~join, h2, Trie.minus.here(~V, ~same, h1, h2)),
-            Trie.union(~V, ~join, z2, Trie.minus(~V, ~same, z1, z2)),
-            Trie.union(~V, ~join, o2, Trie.minus(~V, ~same, o1, o2))
+            Trie.pick(~ty, ~join, h2, Trie.minus.here(~ty, ~same, h1, h2)),
+            Trie.union(~ty, ~join, z2, Trie.minus(~ty, ~same, z1, z2)),
+            Trie.union(~ty, ~join, o2, Trie.minus(~ty, ~same, o1, o2))
           }
-            == Bin{_, Trie.union(~V, ~join, z2, z1), Trie.union(~V, ~join, o2, o1)}: Trie<V>
+            == Bin{_, Trie.union(~ty, ~join, z2, z1), Trie.union(~ty, ~join, o2, o1)}: Trie<ty>
         }
-      %Trie.union_minus(~V, ~join, ~same, ~idem, ~sound, z1, z2) :
+      %Trie.union_minus(~ty, ~join, ~same, ~idem, ~sound, z1, z2):
         {
           Bin{
-            Trie.pick(~V, ~join, h2, Trie.minus.here(~V, ~same, h1, h2)),
-            Trie.union(~V, ~join, z2, Trie.minus(~V, ~same, z1, z2)),
-            Trie.union(~V, ~join, o2, Trie.minus(~V, ~same, o1, o2))
-          }
-            == Bin{Trie.pick(~V, ~join, h2, Trie.minus.here(~V, ~same, h1, h2)), _, Trie.union(~V, ~join, o2, o1)}: Trie<V>
-        }
-      %Trie.union_minus(~V, ~join, ~same, ~idem, ~sound, o1, o2) :
-        {
-          Bin{
-            Trie.pick(~V, ~join, h2, Trie.minus.here(~V, ~same, h1, h2)),
-            Trie.union(~V, ~join, z2, Trie.minus(~V, ~same, z1, z2)),
-            Trie.union(~V, ~join, o2, Trie.minus(~V, ~same, o1, o2))
+            Trie.pick(~ty, ~join, h2, Trie.minus.here(~ty, ~same, h1, h2)),
+            Trie.union(~ty, ~join, z2, Trie.minus(~ty, ~same, z1, z2)),
+            Trie.union(~ty, ~join, o2, Trie.minus(~ty, ~same, o1, o2))
           }
             == Bin{
-              Trie.pick(~V, ~join, h2, Trie.minus.here(~V, ~same, h1, h2)),
-              Trie.union(~V, ~join, z2, Trie.minus(~V, ~same, z1, z2)),
+              Trie.pick(~ty, ~join, h2, Trie.minus.here(~ty, ~same, h1, h2)),
+              _,
+              Trie.union(~ty, ~join, o2, o1)
+            }: Trie<ty>
+        }
+      %Trie.union_minus(~ty, ~join, ~same, ~idem, ~sound, o1, o2):
+        {
+          Bin{
+            Trie.pick(~ty, ~join, h2, Trie.minus.here(~ty, ~same, h1, h2)),
+            Trie.union(~ty, ~join, z2, Trie.minus(~ty, ~same, z1, z2)),
+            Trie.union(~ty, ~join, o2, Trie.minus(~ty, ~same, o1, o2))
+          }
+            == Bin{
+              Trie.pick(~ty, ~join, h2, Trie.minus.here(~ty, ~same, h1, h2)),
+              Trie.union(~ty, ~join, z2, Trie.minus(~ty, ~same, z1, z2)),
               _
-            }: Trie<V>
+            }: Trie<ty>
         }
       {==}
 
@@ -526,15 +592,27 @@ def Trie.apart(k: List<&2, Bool>, p: List<&2, Bool>) -> Bool:
       False{}
 
 # a trie joined with nothing is itself
-def Trie.union_tip(~V: Data, ~join: V -> V -> V, a: Trie<V>) -> {Trie.union(~V, ~join, a, Tip{}) == a: Trie<V>}:
+def Trie.union_tip(
+  ~V: Data,
+  ~join: V -> V -> V,
+  a: Trie<V>
+) -> {Trie.union(~V, ~join, a, Tip{}) == a: Trie<V>}:
   match a:
     case Tip{}:
       {==}
     case Bin{h, z, o}:
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # the trie of one key holds nothing at a key apart from it
-def Trie.get_one_apart(-V: Data, k: List<&2, Bool>, p: List<&2, Bool>, v: V) -> {Trie.apart(k, p) == True{}: Bool} -> {Trie.get(V, Trie.one(V, k, v), p) == None{}: Maybe<&2, V>}:
+def Trie.get_one_apart(
+  -V: Data,
+  k: List<&2, Bool>,
+  p: List<&2, Bool>,
+  v: V
+) -> {
+  Trie.apart(k, p) == True{}: Bool
+} -> {Trie.get(V, Trie.one(V, k, v), p) == None{}: Maybe<&2, V>}:
   match k p:
     case Con{False{}, r} Con{False{}, q}:
       Trie.get_one_apart(V, r, q, v)
@@ -545,9 +623,16 @@ def Trie.get_one_apart(-V: Data, k: List<&2, Bool>, p: List<&2, Bool>, v: V) -> 
     case Con{True{}, r} Con{False{}, q}:
       h => {==}
     case Nil{} q:
-      h => Empty.absurd({Trie.get(V, Trie.one(V, Nil{}, v), q) == None{}: Maybe<&2, V>}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Trie.get(V, Trie.one(V, Nil{}, v), q) == None{}: Maybe<&2, V>},
+        Shared.Bool.false_ne_true(h)
+      )
     case Con{b, r} Nil{}:
-      h => Empty.absurd({Trie.get(V, Trie.one(V, b <> r, v), Nil{}) == None{}: Maybe<&2, V>}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Trie.get(V, Trie.one(V, b <> r, v), Nil{}) == None{}: Maybe<&2, V>},
+        Shared.Bool.false_ne_true(h)
+      )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # a key apart from k keeps its entries when one entry at k joins
 law Trie.under_union_apart:
@@ -558,42 +643,60 @@ law Trie.under_union_apart:
   for p: List<&2, Bool>
   for +v: V
   {Trie.apart(k, p) == True{}: Bool}
-    -> {Trie.under(V, Trie.union(~V, ~join, s, Trie.one(V, k, v)), p) == Trie.under(V, s, p): Trie<V>}
+    -> {
+      Trie.under(V, Trie.union(~V, ~join, s, Trie.one(V, k, v)), p) == Trie.under(V, s, p): Trie<V>
+    }
 
-def Trie.under_union_apart(V, join, s, k, p, v):
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+def Trie.under_union_apart(ty, join, s, k, p, v):
   match s k p:
     case Tip{} Con{False{}, r} Con{False{}, q}:
-      Trie.under_union_apart(~V, ~join, Tip{}, r, q, v)
+      Trie.under_union_apart(~ty, ~join, Tip{}, r, q, v)
     case Tip{} Con{True{}, r} Con{True{}, q}:
-      Trie.under_union_apart(~V, ~join, Tip{}, r, q, v)
+      Trie.under_union_apart(~ty, ~join, Tip{}, r, q, v)
     case Tip{} Con{False{}, r} Con{True{}, q}:
       h => {==}
     case Tip{} Con{True{}, r} Con{False{}, q}:
       h => {==}
     case Bin{h, z, o} Con{False{}, r} Con{False{}, q}:
-      Trie.under_union_apart(~V, ~join, z, r, q, v)
+      Trie.under_union_apart(~ty, ~join, z, r, q, v)
     case Bin{h, z, +o} Con{False{}, r} Con{True{}, q}:
       e =>
-        %Equal.sym(Trie<V>, Trie.union(~V, ~join, o, Tip{}), o, Trie.union_tip(~V, ~join, o)) :
-          {Trie.under(V, _, q) == Trie.under(V, o, q): Trie<V>}
+        %Equal.sym(Trie<ty>, Trie.union(~ty, ~join, o, Tip{}), o, Trie.union_tip(~ty, ~join, o)):
+          {Trie.under(ty, _, q) == Trie.under(ty, o, q): Trie<ty>}
         {==}
     case Bin{h, +z, o} Con{True{}, r} Con{False{}, q}:
       e =>
-        %Equal.sym(Trie<V>, Trie.union(~V, ~join, z, Tip{}), z, Trie.union_tip(~V, ~join, z)) :
-          {Trie.under(V, _, q) == Trie.under(V, z, q): Trie<V>}
+        %Equal.sym(Trie<ty>, Trie.union(~ty, ~join, z, Tip{}), z, Trie.union_tip(~ty, ~join, z)):
+          {Trie.under(ty, _, q) == Trie.under(ty, z, q): Trie<ty>}
         {==}
     case Bin{h, z, o} Con{True{}, r} Con{True{}, q}:
-      Trie.under_union_apart(~V, ~join, o, r, q, v)
+      Trie.under_union_apart(~ty, ~join, o, r, q, v)
     case w Nil{} q:
       e => Empty.absurd(
-        {Trie.under(V, Trie.union(~V, ~join, w, Trie.one(V, Nil{}, v)), q) == Trie.under(V, w, q): Trie<V>},
+        {
+          Trie.under(
+            ty,
+            Trie.union(~ty, ~join, w, Trie.one(ty, Nil{}, v)),
+            q
+          )
+            == Trie.under(ty, w, q): Trie<ty>
+        },
         Shared.Bool.false_ne_true(e)
       )
     case w Con{b, r} Nil{}:
       e => Empty.absurd(
-        {Trie.under(V, Trie.union(~V, ~join, w, Trie.one(V, b <> r, v)), Nil{}) == Trie.under(V, w, Nil{}): Trie<V>},
+        {
+          Trie.under(
+            ty,
+            Trie.union(~ty, ~join, w, Trie.one(ty, b <> r, v)),
+            Nil{}
+          )
+            == Trie.under(ty, w, Nil{}): Trie<ty>
+        },
         Shared.Bool.false_ne_true(e)
       )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # a union holds at least the entries of its first side
 law Trie.size_union:
@@ -603,57 +706,78 @@ law Trie.size_union:
   for b: Trie<V>
   {Nat.is_le(Trie.size(V, a), Trie.size(V, Trie.union(~V, ~join, a, b))) == True{}: Bool}
 
-def Trie.size_union(V, join, a, b):
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run
+def Trie.size_union(ty, join, a, b):
   match a b:
     case Tip{} y:
-      Nats.Nat.le_zero(Trie.size(V, y))
+      Nats.Nat.le_zero(Trie.size(ty, y))
     case Bin{h, z, o} Tip{}:
-      Nats.Nat.le_refl(Trie.size(V, Bin{h, z, o}))
+      Nats.Nat.le_refl(Trie.size(ty, Bin{h, z, o}))
     case Bin{None{}, +z1, +o1} Bin{None{}, +z2, +o2}:
       Nats.Nat.add_le(
-        Trie.size(V, z1),
-        Trie.size(V, Trie.union(~V, ~join, z1, z2)),
-        Trie.size(V, o1),
-        Trie.size(V, Trie.union(~V, ~join, o1, o2))
-      )(Trie.size_union(~V, ~join, z1, z2))(Trie.size_union(~V, ~join, o1, o2))
+        Trie.size(ty, z1),
+        Trie.size(ty, Trie.union(~ty, ~join, z1, z2)),
+        Trie.size(ty, o1),
+        Trie.size(ty, Trie.union(~ty, ~join, o1, o2))
+      )(Trie.size_union(~ty, ~join, z1, z2))(Trie.size_union(~ty, ~join, o1, o2))
     case Bin{None{}, +z1, +o1} Bin{Some{y}, +z2, +o2}:
       Nats.Nat.le_succ(
-        Nat.add(Trie.size(V, z1), Trie.size(V, o1)),
-        Nat.add(Trie.size(V, Trie.union(~V, ~join, z1, z2)), Trie.size(V, Trie.union(~V, ~join, o1, o2)))
+        Nat.add(Trie.size(ty, z1), Trie.size(ty, o1)),
+        Nat.add(
+          Trie.size(ty, Trie.union(~ty, ~join, z1, z2)),
+          Trie.size(ty, Trie.union(~ty, ~join, o1, o2))
+        )
       )(
         Nats.Nat.add_le(
-          Trie.size(V, z1),
-          Trie.size(V, Trie.union(~V, ~join, z1, z2)),
-          Trie.size(V, o1),
-          Trie.size(V, Trie.union(~V, ~join, o1, o2))
-        )(Trie.size_union(~V, ~join, z1, z2))(Trie.size_union(~V, ~join, o1, o2))
+          Trie.size(ty, z1),
+          Trie.size(ty, Trie.union(~ty, ~join, z1, z2)),
+          Trie.size(ty, o1),
+          Trie.size(ty, Trie.union(~ty, ~join, o1, o2))
+        )(Trie.size_union(~ty, ~join, z1, z2))(Trie.size_union(~ty, ~join, o1, o2))
       )
     case Bin{Some{x}, +z1, +o1} Bin{None{}, +z2, +o2}:
       Nats.Nat.add_le(
-        Trie.size(V, z1),
-        Trie.size(V, Trie.union(~V, ~join, z1, z2)),
-        Trie.size(V, o1),
-        Trie.size(V, Trie.union(~V, ~join, o1, o2))
-      )(Trie.size_union(~V, ~join, z1, z2))(Trie.size_union(~V, ~join, o1, o2))
+        Trie.size(ty, z1),
+        Trie.size(ty, Trie.union(~ty, ~join, z1, z2)),
+        Trie.size(ty, o1),
+        Trie.size(ty, Trie.union(~ty, ~join, o1, o2))
+      )(Trie.size_union(~ty, ~join, z1, z2))(Trie.size_union(~ty, ~join, o1, o2))
     case Bin{Some{x}, +z1, +o1} Bin{Some{y}, +z2, +o2}:
       Nats.Nat.add_le(
-        Trie.size(V, z1),
-        Trie.size(V, Trie.union(~V, ~join, z1, z2)),
-        Trie.size(V, o1),
-        Trie.size(V, Trie.union(~V, ~join, o1, o2))
-      )(Trie.size_union(~V, ~join, z1, z2))(Trie.size_union(~V, ~join, o1, o2))
+        Trie.size(ty, z1),
+        Trie.size(ty, Trie.union(~ty, ~join, z1, z2)),
+        Trie.size(ty, o1),
+        Trie.size(ty, Trie.union(~ty, ~join, o1, o2))
+      )(Trie.size_union(~ty, ~join, z1, z2))(Trie.size_union(~ty, ~join, o1, o2))
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # the trie of one key has one entry
-def Trie.size_one(-V: Data, k: List<&2, Bool>, v: V) -> {Trie.size(V, Trie.one(V, k, v)) == 1n: Nat}:
+def Trie.size_one(
+  -V: Data,
+  k: List<&2, Bool>,
+  v: V
+) -> {Trie.size(V, Trie.one(V, k, v)) == 1n: Nat}:
   match k:
     case Nil{}:
       {==}
     case Con{False{}, r}:
-      %Equal.sym(Nat, Trie.size(V, Trie.one(V, r, v)), 1n, Trie.size_one(V, r, v)) : {Nat.add(_, 0n) == 1n: Nat}
+      %Equal.sym(
+        Nat,
+        Trie.size(V, Trie.one(V, r, v)),
+        1n,
+        Trie.size_one(V, r, v)
+      ): {Nat.add(_, 0n) == 1n: Nat}
       {==}
     case Con{True{}, r}:
-      %Equal.sym(Nat, Trie.size(V, Trie.one(V, r, v)), 1n, Trie.size_one(V, r, v)) : {Nat.add(0n, _) == 1n: Nat}
+      %Equal.sym(
+        Nat,
+        Trie.size(V, Trie.one(V, r, v)),
+        1n,
+        Trie.size_one(V, r, v)
+      ): {Nat.add(0n, _) == 1n: Nat}
       {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # one entry at a key that s does not hold adds one entry
 law Trie.size_union_one:
@@ -665,49 +789,139 @@ law Trie.size_union_one:
   {Trie.get(V, s, k) == None{}: Maybe<&2, V>}
     -> {Trie.size(V, Trie.union(~V, ~join, s, Trie.one(V, k, v))) == 1n+Trie.size(V, s): Nat}
 
-def Trie.size_union_one(V, join, s, k, v):
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+def Trie.size_union_one(ty, join, s, k, v):
   match s k:
     case Tip{} q:
-      g => Trie.size_one(V, q, v)
+      g => Trie.size_one(ty, q, v)
     case Bin{None{}, +z, +o} Nil{}:
       g =>
-        %Equal.sym(Trie<V>, Trie.union(~V, ~join, z, Tip{}), z, Trie.union_tip(~V, ~join, z)) :
-          {1n+Nat.add(Trie.size(V, _), Trie.size(V, Trie.union(~V, ~join, o, Tip{}))) == 1n+Nat.add(Trie.size(V, z), Trie.size(V, o)): Nat}
-        %Equal.sym(Trie<V>, Trie.union(~V, ~join, o, Tip{}), o, Trie.union_tip(~V, ~join, o)) :
-          {1n+Nat.add(Trie.size(V, z), Trie.size(V, _)) == 1n+Nat.add(Trie.size(V, z), Trie.size(V, o)): Nat}
+        %Equal.sym(Trie<ty>, Trie.union(~ty, ~join, z, Tip{}), z, Trie.union_tip(~ty, ~join, z)):
+          {
+            1n+Nat.add(
+              Trie.size(ty, _),
+              Trie.size(ty, Trie.union(~ty, ~join, o, Tip{}))
+            )
+              == 1n+Nat.add(Trie.size(ty, z), Trie.size(ty, o)): Nat
+          }
+        %Equal.sym(Trie<ty>, Trie.union(~ty, ~join, o, Tip{}), o, Trie.union_tip(~ty, ~join, o)):
+          {
+            1n+Nat.add(
+              Trie.size(ty, z),
+              Trie.size(ty, _)
+            )
+              == 1n+Nat.add(Trie.size(ty, z), Trie.size(ty, o)): Nat
+          }
         {==}
     case Bin{Some{y}, z, o} Nil{}:
       g => Empty.absurd(
-        {Trie.size(V, Trie.union(~V, ~join, Bin{Some{y}, z, o}, Trie.one(V, Nil{}, v))) == 1n+Trie.size(V, Bin{Some{y}, z, o}): Nat},
-        Shared.Bool.false_ne_true(Equal.cong(Maybe<&2, V>, Bool, m => Maybe.is_some(&2, V, m), None{}, Some{y}, Equal.sym(Maybe<&2, V>, Some{y}, None{}, g)))
+        {
+          Trie.size(
+            ty,
+            Trie.union(~ty, ~join, Bin{Some{y}, z, o}, Trie.one(ty, Nil{}, v))
+          )
+            == 1n+Trie.size(ty, Bin{Some{y}, z, o}): Nat
+        },
+        Shared.Bool.false_ne_true(
+          Equal.cong(
+            Maybe<&2, ty>,
+            Bool,
+            m => Maybe.is_some(&2, ty, m),
+            None{},
+            Some{y},
+            Equal.sym(Maybe<&2, ty>, Some{y}, None{}, g)
+          )
+        )
       )
-    case Bin{None{}, +z, +o} Con{False{}, +r}:
+    case Bin{None{}, +z, +o} Con{False{}, r}:
       g =>
-        %Equal.sym(Trie<V>, Trie.union(~V, ~join, o, Tip{}), o, Trie.union_tip(~V, ~join, o)) :
-          {Nat.add(Trie.size(V, Trie.union(~V, ~join, z, Trie.one(V, r, v))), Trie.size(V, _)) == 1n+Nat.add(Trie.size(V, z), Trie.size(V, o)): Nat}
-        %Equal.sym(Nat, Trie.size(V, Trie.union(~V, ~join, z, Trie.one(V, r, v))), 1n+Trie.size(V, z), Trie.size_union_one(~V, ~join, z, r, v)(g)) :
-          {Nat.add(_, Trie.size(V, o)) == 1n+Nat.add(Trie.size(V, z), Trie.size(V, o)): Nat}
+        %Equal.sym(Trie<ty>, Trie.union(~ty, ~join, o, Tip{}), o, Trie.union_tip(~ty, ~join, o)):
+          {
+            Nat.add(
+              Trie.size(ty, Trie.union(~ty, ~join, z, Trie.one(ty, r, v))),
+              Trie.size(ty, _)
+            )
+              == 1n+Nat.add(Trie.size(ty, z), Trie.size(ty, o)): Nat
+          }
+        %Equal.sym(
+          Nat,
+          Trie.size(ty, Trie.union(~ty, ~join, z, Trie.one(ty, r, v))),
+          1n+Trie.size(ty, z),
+          Trie.size_union_one(~ty, ~join, z, r, v)(g)
+        ):
+          {Nat.add(_, Trie.size(ty, o)) == 1n+Nat.add(Trie.size(ty, z), Trie.size(ty, o)): Nat}
         {==}
-    case Bin{Some{y}, +z, +o} Con{False{}, +r}:
+    case Bin{Some{y}, +z, +o} Con{False{}, r}:
       g =>
-        %Equal.sym(Trie<V>, Trie.union(~V, ~join, o, Tip{}), o, Trie.union_tip(~V, ~join, o)) :
-          {1n+Nat.add(Trie.size(V, Trie.union(~V, ~join, z, Trie.one(V, r, v))), Trie.size(V, _)) == 1n+1n+Nat.add(Trie.size(V, z), Trie.size(V, o)): Nat}
-        %Equal.sym(Nat, Trie.size(V, Trie.union(~V, ~join, z, Trie.one(V, r, v))), 1n+Trie.size(V, z), Trie.size_union_one(~V, ~join, z, r, v)(g)) :
-          {1n+Nat.add(_, Trie.size(V, o)) == 1n+1n+Nat.add(Trie.size(V, z), Trie.size(V, o)): Nat}
+        %Equal.sym(Trie<ty>, Trie.union(~ty, ~join, o, Tip{}), o, Trie.union_tip(~ty, ~join, o)):
+          {
+            1n+Nat.add(
+              Trie.size(ty, Trie.union(~ty, ~join, z, Trie.one(ty, r, v))),
+              Trie.size(ty, _)
+            )
+              == 1n+1n+Nat.add(Trie.size(ty, z), Trie.size(ty, o)): Nat
+          }
+        %Equal.sym(
+          Nat,
+          Trie.size(ty, Trie.union(~ty, ~join, z, Trie.one(ty, r, v))),
+          1n+Trie.size(ty, z),
+          Trie.size_union_one(~ty, ~join, z, r, v)(g)
+        ):
+          {
+            1n+Nat.add(
+              _,
+              Trie.size(ty, o)
+            )
+              == 1n+1n+Nat.add(Trie.size(ty, z), Trie.size(ty, o)): Nat
+          }
         {==}
     case Bin{None{}, +z, +o} Con{True{}, +r}:
       g =>
-        %Equal.sym(Trie<V>, Trie.union(~V, ~join, z, Tip{}), z, Trie.union_tip(~V, ~join, z)) :
-          {Nat.add(Trie.size(V, _), Trie.size(V, Trie.union(~V, ~join, o, Trie.one(V, r, v)))) == 1n+Nat.add(Trie.size(V, z), Trie.size(V, o)): Nat}
-        %Equal.sym(Nat, Trie.size(V, Trie.union(~V, ~join, o, Trie.one(V, r, v))), 1n+Trie.size(V, o), Trie.size_union_one(~V, ~join, o, r, v)(g)) :
-          {Nat.add(Trie.size(V, z), _) == 1n+Nat.add(Trie.size(V, z), Trie.size(V, o)): Nat}
-        Nats.Nat.add_succ(Trie.size(V, z), Trie.size(V, o))
+        %Equal.sym(Trie<ty>, Trie.union(~ty, ~join, z, Tip{}), z, Trie.union_tip(~ty, ~join, z)):
+          {
+            Nat.add(
+              Trie.size(ty, _),
+              Trie.size(ty, Trie.union(~ty, ~join, o, Trie.one(ty, r, v)))
+            )
+              == 1n+Nat.add(Trie.size(ty, z), Trie.size(ty, o)): Nat
+          }
+        %Equal.sym(
+          Nat,
+          Trie.size(ty, Trie.union(~ty, ~join, o, Trie.one(ty, r, v))),
+          1n+Trie.size(ty, o),
+          Trie.size_union_one(~ty, ~join, o, r, v)(g)
+        ):
+          {Nat.add(Trie.size(ty, z), _) == 1n+Nat.add(Trie.size(ty, z), Trie.size(ty, o)): Nat}
+        Nats.Nat.add_succ(Trie.size(ty, z), Trie.size(ty, o))
     case Bin{Some{y}, +z, +o} Con{True{}, +r}:
       g =>
-        %Equal.sym(Trie<V>, Trie.union(~V, ~join, z, Tip{}), z, Trie.union_tip(~V, ~join, z)) :
-          {1n+Nat.add(Trie.size(V, _), Trie.size(V, Trie.union(~V, ~join, o, Trie.one(V, r, v)))) == 1n+1n+Nat.add(Trie.size(V, z), Trie.size(V, o)): Nat}
-        %Equal.sym(Nat, Trie.size(V, Trie.union(~V, ~join, o, Trie.one(V, r, v))), 1n+Trie.size(V, o), Trie.size_union_one(~V, ~join, o, r, v)(g)) :
-          {1n+Nat.add(Trie.size(V, z), _) == 1n+1n+Nat.add(Trie.size(V, z), Trie.size(V, o)): Nat}
-        %Equal.sym(Nat, Nat.add(Trie.size(V, z), 1n+Trie.size(V, o)), 1n+Nat.add(Trie.size(V, z), Trie.size(V, o)), Nats.Nat.add_succ(Trie.size(V, z), Trie.size(V, o))) :
-          {1n+_ == 1n+1n+Nat.add(Trie.size(V, z), Trie.size(V, o)): Nat}
+        %Equal.sym(Trie<ty>, Trie.union(~ty, ~join, z, Tip{}), z, Trie.union_tip(~ty, ~join, z)):
+          {
+            1n+Nat.add(
+              Trie.size(ty, _),
+              Trie.size(ty, Trie.union(~ty, ~join, o, Trie.one(ty, r, v)))
+            )
+              == 1n+1n+Nat.add(Trie.size(ty, z), Trie.size(ty, o)): Nat
+          }
+        %Equal.sym(
+          Nat,
+          Trie.size(ty, Trie.union(~ty, ~join, o, Trie.one(ty, r, v))),
+          1n+Trie.size(ty, o),
+          Trie.size_union_one(~ty, ~join, o, r, v)(g)
+        ):
+          {
+            1n+Nat.add(
+              Trie.size(ty, z),
+              _
+            )
+              == 1n+1n+Nat.add(Trie.size(ty, z), Trie.size(ty, o)): Nat
+          }
+        %Equal.sym(
+          Nat,
+          Nat.add(Trie.size(ty, z), 1n+Trie.size(ty, o)),
+          1n+Nat.add(Trie.size(ty, z), Trie.size(ty, o)),
+          Nats.Nat.add_succ(Trie.size(ty, z), Trie.size(ty, o))
+        ):
+          {1n+_ == 1n+1n+Nat.add(Trie.size(ty, z), Trie.size(ty, o)): Nat}
         {==}
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
