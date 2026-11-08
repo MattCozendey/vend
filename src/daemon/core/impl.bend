@@ -1845,16 +1845,32 @@ def Uses.named(es: List<&2, Formats.Edge>, +n: Resources.Name) -> List<&2, Resou
       Resources.Name.at(n, Shared.Bytes.to_text(t)) <> Uses.named(r, n)
 
 # what the resource n imports at the version h of s, as its format reads it
-def Uses.edges(+s: Spec.State(), +h: Maybe<&2, Spec.Id>, +n: Resources.Name) -> List<&2, Resources.Name>:
-  Uses.named(Formats.Format.uses(Formats.Format.of(Resources.Name.path(n)), Uses.items(Res.of(s, n, h))), n)
+def Uses.edges(
+  s: Spec.State(),
+  h: Maybe<&2, Spec.Id>,
+  +n: Resources.Name
+) -> List<&2, Resources.Name>:
+  Uses.named(
+    Formats.Format.uses(Formats.Format.of(Resources.Name.path(n)), Uses.items(Res.of(s, n, h))),
+    n
+  )
 
 # the imports of each of the resources ns at the version h of s, by name
-def Uses.table(ns: List<&2, Resources.Name>, +s: Spec.State(), +h: Maybe<&2, Spec.Id>) -> Shared.Trie<List<&2, Resources.Name>>:
+def Uses.table(
+  ns: List<&2, Resources.Name>,
+  +s: Spec.State(),
+  +h: Maybe<&2, Spec.Id>
+) -> Shared.Trie<List<&2, Resources.Name>>:
   match ns:
     case Nil{}:
       Shared.Trie.new(List<&2, Resources.Name>)
     case Con{+n, r}:
-      Shared.Trie.set(List<&2, Resources.Name>, Uses.table(r, s, h), Shared.Trie.text(Resources.Name.show(n)), Uses.edges(s, h, n))
+      Shared.Trie.set(
+        List<&2, Resources.Name>,
+        Uses.table(r, s, h),
+        Shared.Trie.text(Resources.Name.show(n)),
+        Uses.edges(s, h, n)
+      )
 
 # a branch at its head: its resources, and what each imports, read once
 type Uses is Data:
@@ -1862,7 +1878,7 @@ type Uses is Data:
 
 # the branch b of s, as a graph
 def Uses.of(+s: Spec.State(), +b: String) -> Uses:
-  +h = Spec.Node.head(s, b)
+  h = Spec.Node.head(s, b)
   +ns = Spec.Node.resources(s, b)
   Uses{ns, Uses.table(ns, s, h)}
 
@@ -1873,10 +1889,15 @@ def Uses.nodes(g: Uses) -> List<&2, Resources.Name>:
       ns
 
 # what the resource n imports in the branch of g
-def Uses.targets(g: Uses, +n: Resources.Name) -> List<&2, Resources.Name>:
+def Uses.targets(g: Uses, n: Resources.Name) -> List<&2, Resources.Name>:
   match g:
     case Uses{ns, t}:
-      Maybe.default(&2, List<&2, Resources.Name>, Shared.Trie.get(List<&2, Resources.Name>, t, Shared.Trie.text(Resources.Name.show(n))), [])
+      Maybe.default(
+        &2,
+        List<&2, Resources.Name>,
+        Shared.Trie.get(List<&2, Resources.Name>, t, Shared.Trie.text(Resources.Name.show(n))),
+        []
+      )
 
 # what n imports in g, when it is a resource of g
 def Uses.succ(g: Uses, n: Resources.Name) -> List<&2, Resources.Name>:
@@ -2036,7 +2057,14 @@ type Affects is Data:
 
 # the branch b of s, read once
 def Affects.of(+s: Spec.State(), +b: String) -> Affects:
-  Affects{s, b, Spec.Branch.names(Spec.Node.branches(s)), Touch.versions(s), Spec.Node.resources(s, b), Uses.of(s, b)}
+  Affects{
+    s,
+    b,
+    Spec.Branch.names(Spec.Node.branches(s)),
+    Touch.versions(s),
+    Spec.Node.resources(s, b),
+    Uses.of(s, b)
+  }
 
 # the branch of g
 def Affects.branch(g: Affects) -> String:
@@ -2068,7 +2096,16 @@ def Affects.holds(g: Affects, t: Spec.Touch) -> Bool:
             w => List.all.if(
               w => List.all.if(
                 w => List.any.if(
-                  w => Reaches.Reach.in_fast(~Resources.Name, ~Uses, ~Resources.Name.same, ~Uses.succ, ~Uses.nodes, gr, u, c),
+                  w => Reaches.Reach.in_fast(
+                    ~Resources.Name,
+                    ~Uses,
+                    ~Resources.Name.same,
+                    ~Uses.succ,
+                    ~Uses.nodes,
+                    gr,
+                    u,
+                    c
+                  ),
                   Resources.Name.same(u, c)
                 ),
                 Shared.List.has(~Resources.Name, ~Resources.Name.same, us, u)
@@ -2110,6 +2147,7 @@ def Spec.Node.affects(s, b):
 type Impacted is Data:
   Impacted{affects: Affects, version: Maybe<&2, Spec.Id>}
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the point's version is None only when the point names nothing, and then the impact is empty
 # the touch t is of the version of g, or a version that it came from, and of
 # the branch of g, and holds
 def Impacted.keeps(g: Impacted, t: Spec.Touch) -> Bool:
@@ -2120,9 +2158,14 @@ def Impacted.keeps(g: Impacted, t: Spec.Touch) -> Bool:
         w => Affects.keeps(a, t),
         Bool.and(
           Maybe.is_some(&2, Spec.Id, m),
-          Spec.Node.has(Affects.state(a), Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))
+          Spec.Node.has(
+            Affects.state(a),
+            Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)),
+            Spec.Touch.version(t)
+          )
         )
       )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the impact of the version m of a point of s
 type Impact is Data:
@@ -2133,11 +2176,24 @@ def Impact.at(g: Impact, b: String) -> List<&2, Spec.Touch>:
   match g:
     case Impact{+s, m}:
       +b = b
-      Shared.List.keep(~Spec.Touch, ~Impacted, ~Impacted.keeps, Affects.cands(s, b), Impacted{Affects.of(s, b), m})
+      Shared.List.keep(
+        ~Spec.Touch,
+        ~Impacted,
+        ~Impacted.keeps,
+        Affects.cands(s, b),
+        Impacted{Affects.of(s, b), m}
+      )
 
 def Spec.Node.impact(s, p):
   +s = s
-  Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, Spec.Branch.names(Spec.Node.branches(s)), Impact{s, Spec.Node.version(s, p)})
+  Shared.List.flat(
+    ~String,
+    ~Spec.Touch,
+    ~Impact,
+    ~Impact.at,
+    Spec.Branch.names(Spec.Node.branches(s)),
+    Impact{s, Spec.Node.version(s, p)}
+  )
 
 # Notices
 # -------
@@ -4325,7 +4381,7 @@ def Grow.fuel(
 def Written.shape(
   n: String,
   +s1: Spec.State(),
-  +i: Spec.Id,
+  i: Spec.Id,
   +c: Spec.Chain,
   v: Spec.Id,
   +tv: Spec.State(),
@@ -4341,8 +4397,25 @@ def Written.shape(
   er: {Chain.root(s1, c) == Some{st}: Maybe<&2, Step>},
   el: {Chain.last(State.fuel(s1), s1, c, st, Chain.next(s1, c, st)) == Step{v, [n]}: Step}
 ) -> {
-  Spec.Node.chain(Spec.Node.join(s1, tv), c)
-    == List.append(&2, Spec.Id, Chain.from(s1, c, Some{st}), i <> Chain.walk(Nat.sub(State.fuel(Spec.Node.join(s1, tv)), 1n+List.length(&2, Spec.Id, Chain.walk(State.fuel(s1), s1, c, Chain.next(s1, c, st)))), Spec.Node.join(s1, tv), c, Chain.next(Spec.Node.join(s1, tv), c, Step{i, [n]}))): List<&2, Spec.Id>
+  Spec.Node.chain(
+    Spec.Node.join(s1, tv),
+    c
+  )
+    == List.append(
+      &2,
+      Spec.Id,
+      Chain.from(s1, c, Some{st}),
+      i
+        <> Chain.walk(
+          Nat.sub(
+            State.fuel(Spec.Node.join(s1, tv)),
+            1n+List.length(&2, Spec.Id, Chain.walk(State.fuel(s1), s1, c, Chain.next(s1, c, st)))
+          ),
+          Spec.Node.join(s1, tv),
+          c,
+          Chain.next(Spec.Node.join(s1, tv), c, Step{i, [n]})
+        )
+    ): List<&2, Spec.Id>
 }:
   +s2 = Spec.Node.join(s1, tv)
   +w1 = Chain.walk(State.fuel(s1), s1, c, Chain.next(s1, c, st))
@@ -4361,40 +4434,40 @@ def Written.shape(
     )(Walk.length(State.fuel(s1), s1, c, Chain.next(s1, c, st)))(grow)
   )
   Equal.trans(
-        List<&2, Spec.Id>,
-        Chain.from(s2, c, Chain.root(s2, c)),
-        Chain.from(s2, c, Some{st}),
-        List.append(&2, Spec.Id, x1, i <> rest),
-        Equal.cong(
-          Maybe<&2, Step>,
-          List<&2, Spec.Id>,
-          z => Chain.from(s2, c, z),
-          Chain.root(s2, c),
-          Some{st},
-          Grow.root(s1, tv, c, a2, hc2, st)(er)
-        ),
-        Equal.trans(
-          List<&2, Spec.Id>,
-          Chain.from(s2, c, Some{st}),
-          List.append(&2, Spec.Id, x1, Chain.walk(g, s2, c, Chain.next(s2, c, Step{v, [n]}))),
-          List.append(&2, Spec.Id, x1, i <> rest),
-          Grow.from(s1, tv, c, a2, st, Step{v, [n]}, el),
-          %Equal.sym(Maybe<&2, Step>, Chain.next(s2, c, Step{v, [n]}), Some{Step{i, [n]}}, next2):
-            {List.append(&2, Spec.Id, x1, Chain.walk(g, s2, c, _)) == List.append(&2, Spec.Id, x1, i <> rest): List<&2, Spec.Id>}
-          %Equal.sym(Nat, g, 1n+g1, gs):
-            {List.append(&2, Spec.Id, x1, Chain.walk(_, s2, c, Some{Step{i, [n]}})) == List.append(&2, Spec.Id, x1, i <> rest): List<&2, Spec.Id>}
-          {==})
-      )
+    List<&2, Spec.Id>,
+    Chain.from(s2, c, Chain.root(s2, c)),
+    Chain.from(s2, c, Some{st}),
+    List.append(&2, Spec.Id, x1, i <> rest),
+    Equal.cong(
+      Maybe<&2, Step>,
+      List<&2, Spec.Id>,
+      z => Chain.from(s2, c, z),
+      Chain.root(s2, c),
+      Some{st},
+      Grow.root(s1, tv, c, a2, hc2, st)(er)
+    ),
+    Equal.trans(
+      List<&2, Spec.Id>,
+      Chain.from(s2, c, Some{st}),
+      List.append(&2, Spec.Id, x1, Chain.walk(g, s2, c, Chain.next(s2, c, Step{v, [n]}))),
+      List.append(&2, Spec.Id, x1, i <> rest),
+      Grow.from(s1, tv, c, a2, st, Step{v, [n]}, el),
+      %Equal.sym(Maybe<&2, Step>, Chain.next(s2, c, Step{v, [n]}), Some{Step{i, [n]}}, next2):
+        {List.append(&2, Spec.Id, x1, Chain.walk(g, s2, c, _)) == List.append(&2, Spec.Id, x1, i <> rest): List<&2, Spec.Id>}
+      %Equal.sym(Nat, g, 1n+g1, gs):
+        {List.append(&2, Spec.Id, x1, Chain.walk(_, s2, c, Some{Step{i, [n]}})) == List.append(&2, Spec.Id, x1, i <> rest): List<&2, Spec.Id>}
+      {==})
+  )
 
 def Written.has(
   +n: String,
   +s1: Spec.State(),
   +i: Spec.Id,
   +c: Spec.Chain,
-  +v: Spec.Id,
+  v: Spec.Id,
   +tv: Spec.State(),
-  +a2: {Spec.Node.agrees(s1, tv) == True{}: Bool},
-  +hc2: {
+  a2: {Spec.Node.agrees(s1, tv) == True{}: Bool},
+  hc2: {
     Spec.Node.claim(Spec.Node.join(s1, tv), c) == Spec.Node.claim(s1, c): Maybe<&2, Spec.Entry>
   },
   next2: {
@@ -4416,8 +4489,16 @@ def Written.has(
 }:
   match pr:
     case (+st, (er, el)):
-      +x1 = Chain.from(s1, c, Some{st})
-      +rest = Chain.walk(Nat.sub(State.fuel(Spec.Node.join(s1, tv)), 1n+List.length(&2, Spec.Id, Chain.walk(State.fuel(s1), s1, c, Chain.next(s1, c, st)))), Spec.Node.join(s1, tv), c, Chain.next(Spec.Node.join(s1, tv), c, Step{i, [n]}))
+      x1 = Chain.from(s1, c, Some{st})
+      rest = Chain.walk(
+        Nat.sub(
+          State.fuel(Spec.Node.join(s1, tv)),
+          1n+List.length(&2, Spec.Id, Chain.walk(State.fuel(s1), s1, c, Chain.next(s1, c, st)))
+        ),
+        Spec.Node.join(s1, tv),
+        c,
+        Chain.next(Spec.Node.join(s1, tv), c, Step{i, [n]})
+      )
       %Equal.sym(
         List<&2, Spec.Id>,
         Spec.Node.chain(Spec.Node.join(s1, tv), c),
@@ -4557,16 +4638,40 @@ def Owner.takes(
   e: Spec.Envelope,
   q: Spec.Ask,
   v: Spec.Id
-) -> {Spec.Node.owners(s, Spec.Ask.chain(q)) == [n]: List<&2, String>} -> {
-  Maybe.map(&2, Step, Spec.Id, k => Step.version(k), Chain.cursor(s, Spec.Ask.chain(q))) == Some{v}: Maybe<&2, Spec.Id>
+) -> {
+  Spec.Node.owners(s, Spec.Ask.chain(q)) == [n]: List<&2, String>
 } -> {
-  Shared.Trie.get(Cells.Cell<Spec.Entry>, s, Spec.Slot.key(Spec.Slot.ask{Spec.Envelope.of(e)}))
+  Maybe.map(
+    &2,
+    Step,
+    Spec.Id,
+    k => Step.version(k),
+    Chain.cursor(s, Spec.Ask.chain(q))
+  )
+    == Some{v}: Maybe<&2, Spec.Id>
+} -> {
+  Shared.Trie.get(
+    Cells.Cell<Spec.Entry>,
+    s,
+    Spec.Slot.key(Spec.Slot.ask{Spec.Envelope.of(e)})
+  )
     == None{}: Maybe<&2, Cells.Cell<Spec.Entry>>
 } -> {
-  Shared.Trie.get(Cells.Cell<Spec.Entry>, s, Spec.Slot.key(Spec.Slot.vote{n, Spec.Ask.chain(q), v}))
+  Shared.Trie.get(
+    Cells.Cell<Spec.Entry>,
+    s,
+    Spec.Slot.key(Spec.Slot.vote{n, Spec.Ask.chain(q), v})
+  )
     == None{}: Maybe<&2, Cells.Cell<Spec.Entry>>
-} -> {Ask.fits(s, q, v) == True{}: Bool} -> {
-  Spec.Node.ask(n, s, e, q)
+} -> {
+  Ask.fits(s, q, v) == True{}: Bool
+} -> {
+  Spec.Node.ask(
+    n,
+    s,
+    e,
+    q
+  )
     == Spec.Node.join(
       Spec.Node.join(
         s,
@@ -4592,11 +4697,18 @@ def Owner.takes(
       +i = {Spec.Id{w, r}: Spec.Id}
       +c = Spec.Ask.chain(q)
       l = {Step{v, [n]}: Step}
-      +ka = Spec.Slot.key(Spec.Slot.ask{i})
-      +ea = {Cells.one{Spec.Entry.ask{i, t, q}}: Cells.Cell<Spec.Entry>}
-      +ta = Shared.Trie.one(Cells.Cell<Spec.Entry>, ka, ea)
-      +s1 = Spec.Node.join(s, ta)
-      s2 = Spec.Node.join(s1, Shared.Trie.one(Cells.Cell<Spec.Entry>, Spec.Slot.key(Spec.Slot.vote{n, c, v}), Cells.one{Spec.Entry.vote{i}}))
+      ka = Spec.Slot.key(Spec.Slot.ask{i})
+      ea = {Cells.one{Spec.Entry.ask{i, t, q}}: Cells.Cell<Spec.Entry>}
+      ta = Shared.Trie.one(Cells.Cell<Spec.Entry>, ka, ea)
+      s1 = Spec.Node.join(s, ta)
+      s2 = Spec.Node.join(
+        s1,
+        Shared.Trie.one(
+          Cells.Cell<Spec.Entry>,
+          Spec.Slot.key(Spec.Slot.vote{n, c, v}),
+          Cells.one{Spec.Entry.vote{i}}
+        )
+      )
       +h1 => +h2 => +h3 => +h4 => fits =>
         +ecur = Owner.cursor(Chain.cursor(s, c), n, v)(h1)(h2)
         +may = Equal.trans(
@@ -5382,8 +5494,14 @@ def Affects.complete(
           String,
           b,
           d,
-          Shared.String.eq_sound(b, d)(
-            Shared.Bool.and_true_left(String.eq(b, d), Spec.Node.touches(s, Spec.Touch{v, c, d, u}))(h)
+          Shared.String.eq_sound(
+            b,
+            d
+          )(
+            Shared.Bool.and_true_left(
+              String.eq(b, d),
+              Spec.Node.touches(s, Spec.Touch{v, c, d, u})
+            )(h)
           )
         ): {
           Shared.List.has(
@@ -5407,21 +5525,40 @@ def Affects.complete(
           )(h)
         )
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a touch of the branch b holds by what Affects.of read exactly when it holds
-def Affects.holds_eq(+s: Spec.State(), +b: String, t: Spec.Touch) -> {String.eq(b, Spec.Touch.branch(t)) == True{}: Bool} -> {
-  Affects.holds(Affects.of(s, b), t) == Spec.Node.touches(s, t): Bool
-}:
+def Affects.holds_eq(
+  s: Spec.State(),
+  b: String,
+  t: Spec.Touch
+) -> {
+  String.eq(b, Spec.Touch.branch(t)) == True{}: Bool
+} -> {Affects.holds(Affects.of(s, b), t) == Spec.Node.touches(s, t): Bool}:
   match t:
-    case Spec.Touch{+v, +c, +d, +u}:
+    case Spec.Touch{v, c, d, u}:
       h =>
         %Shared.String.eq_sound(b, d)(h):
-          {Affects.holds(Affects.of(s, b), Spec.Touch{v, c, _, u}) == Spec.Node.touches(s, Spec.Touch{v, c, _, u}): Bool}
+          {
+            Affects.holds(
+              Affects.of(s, b),
+              Spec.Touch{v, c, _, u}
+            )
+              == Spec.Node.touches(s, Spec.Touch{v, c, _, u}): Bool
+          }
         {==}
 
 # Affects.keeps_eq once t is known to be of the branch b or not (k)
-def Affects.keeps_eq.at(k: Bool, +s: Spec.State(), +b: String, +t: Spec.Touch, ek: {String.eq(b, Spec.Touch.branch(t)) == k: Bool}) -> {
-  List.all.if(w => Affects.holds(Affects.of(s, b), t), k) == Bool.and(k, Spec.Node.touches(s, t)): Bool
+def Affects.keeps_eq.at(
+  k: Bool,
+  s: Spec.State(),
+  b: String,
+  t: Spec.Touch,
+  ek: {String.eq(b, Spec.Touch.branch(t)) == k: Bool}
+) -> {
+  List.all.if(
+    w => Affects.holds(Affects.of(s, b), t),
+    k
+  )
+    == Bool.and(k, Spec.Node.touches(s, t)): Bool
 }:
   match k:
     case False{}:
@@ -5430,11 +5567,20 @@ def Affects.keeps_eq.at(k: Bool, +s: Spec.State(), +b: String, +t: Spec.Touch, e
       Affects.holds_eq(s, b, t)(ek)
 
 # what Affects.of(s, b) keeps is the touches of b that hold
-def Affects.keeps_eq(+s: Spec.State(), +b: String, +t: Spec.Touch) -> {
-  Affects.keeps(Affects.of(s, b), t) == Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t)): Bool
+def Affects.keeps_eq(
+  s: Spec.State(),
+  +b: String,
+  +t: Spec.Touch
+) -> {
+  Affects.keeps(
+    Affects.of(s, b),
+    t
+  )
+    == Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t)): Bool
 }:
   Affects.keeps_eq.at(String.eq(b, Spec.Touch.branch(t)), s, b, t, {==})
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement keeps each and/or as one value for the proof to split on; a proof does not run
 def Spec.Node.affects_exactly(s, b, t):
   +s = s
   +b = b
@@ -5454,27 +5600,63 @@ def Spec.Node.affects_exactly(s, b, t):
       Affects.cands(s, b),
       Affects.of(s, b),
       t,
-      h => Affects.complete(s, b, t)(
+      h => Affects.complete(
+        s,
+        b,
+        t
+      )(
         Equal.trans(
           Bool,
           Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t)),
           Affects.keeps(Affects.of(s, b), t),
           True{},
-          Equal.sym(Bool, Affects.keeps(Affects.of(s, b), t), Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t)), ke),
+          Equal.sym(
+            Bool,
+            Affects.keeps(Affects.of(s, b), t),
+            Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t)),
+            ke
+          ),
           h
         )
       )
     ),
     ke
   )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement keeps each and/or as one value for the proof to split on; a proof does not run
 # the touches of the branch b that the version m touches are those of b
 # that hold, of m or a version that it came from
-def Impact.at_has(+s: Spec.State(), +m: Maybe<&2, Spec.Id>, +b: String, +t: Spec.Touch) -> {
-  Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Impact.at(Impact{s, m}, b), t) == Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t))): Bool
+def Impact.at_has(
+  +s: Spec.State(),
+  +m: Maybe<&2, Spec.Id>,
+  +b: String,
+  +t: Spec.Touch
+) -> {
+  Shared.List.has(
+    ~Spec.Touch,
+    ~Spec.Touch.same,
+    Impact.at(Impact{s, m}, b),
+    t
+  )
+    == Bool.and(
+      Bool.and(
+        Maybe.is_some(&2, Spec.Id, m),
+        Spec.Node.has(
+          s,
+          Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)),
+          Spec.Touch.version(t)
+        )
+      ),
+      Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t))
+    ): Bool
 }:
-  +k = Affects.keeps(Affects.of(s, b), t)
-  +f = Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t)))
+  k = Affects.keeps(Affects.of(s, b), t)
+  +f = Bool.and(
+    Maybe.is_some(&2, Spec.Id, m),
+    Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))
+  )
   +ke = Affects.keeps_eq(s, b, t)
   Equal.trans(
     Bool,
@@ -5490,13 +5672,22 @@ def Impact.at_has(+s: Spec.State(), +m: Maybe<&2, Spec.Id>, +b: String, +t: Spec
       Affects.cands(s, b),
       Impacted{Affects.of(s, b), m},
       t,
-      h => Affects.complete(s, b, t)(
+      h => Affects.complete(
+        s,
+        b,
+        t
+      )(
         Equal.trans(
           Bool,
           Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t)),
           k,
           True{},
-          Equal.sym(Bool, k, Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t)), ke),
+          Equal.sym(
+            Bool,
+            k,
+            Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t)),
+            ke
+          ),
           Shared.List.all.if_rest(f, w => k)(h)
         )
       )
@@ -5507,14 +5698,48 @@ def Impact.at_has(+s: Spec.State(), +m: Maybe<&2, Spec.Id>, +b: String, +t: Spec
       Bool.and(f, k),
       Bool.and(f, Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t))),
       Shared.Bool.and_lazy(f, k),
-      Equal.cong(Bool, Bool, z => Bool.and(f, z), k, Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t)), ke)
+      Equal.cong(
+        Bool,
+        Bool,
+        z => Bool.and(f, z),
+        k,
+        Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t)),
+        ke
+      )
     )
   )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement keeps each and/or as one value for the proof to split on; a proof does not run
 # the impact over the branches ns holds exactly the touches that hold, of
 # one of ns
-def Impact.flat_has(ns: List<&2, String>, +s: Spec.State(), +m: Maybe<&2, Spec.Id>, +t: Spec.Touch) -> {
-  Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, ns, Impact{s, m}), t) == Bool.and(Shared.List.has(~String, ~String.eq, ns, Spec.Touch.branch(t)), Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Spec.Node.touches(s, t))): Bool
+def Impact.flat_has(
+  ns: List<&2, String>,
+  +s: Spec.State(),
+  +m: Maybe<&2, Spec.Id>,
+  +t: Spec.Touch
+) -> {
+  Shared.List.has(
+    ~Spec.Touch,
+    ~Spec.Touch.same,
+    Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, ns, Impact{s, m}),
+    t
+  )
+    == Bool.and(
+      Shared.List.has(~String, ~String.eq, ns, Spec.Touch.branch(t)),
+      Bool.and(
+        Bool.and(
+          Maybe.is_some(&2, Spec.Id, m),
+          Spec.Node.has(
+            s,
+            Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)),
+            Spec.Touch.version(t)
+          )
+        ),
+        Spec.Node.touches(s, t)
+      )
+    ): Bool
 }:
   match ns:
     case Nil{}:
@@ -5522,29 +5747,173 @@ def Impact.flat_has(ns: List<&2, String>, +s: Spec.State(), +m: Maybe<&2, Spec.I
     case Con{+b, +r}:
       %Equal.sym(
         Bool,
-        Shared.List.has(~Spec.Touch, ~Spec.Touch.same, List.append(&2, Spec.Touch, Impact.at(Impact{s, m}, b), Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, r, Impact{s, m})), t),
-        Bool.or(Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Impact.at(Impact{s, m}, b), t), Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, r, Impact{s, m}), t)),
-        Shared.List.has_append(~Spec.Touch, ~Spec.Touch.same, Impact.at(Impact{s, m}, b), Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, r, Impact{s, m}), t)
-      ): {_ == Bool.and(Shared.List.has(~String, ~String.eq, b <> r, Spec.Touch.branch(t)), Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Spec.Node.touches(s, t))): Bool}
+        Shared.List.has(
+          ~Spec.Touch,
+          ~Spec.Touch.same,
+          List.append(
+            &2,
+            Spec.Touch,
+            Impact.at(Impact{s, m}, b),
+            Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, r, Impact{s, m})
+          ),
+          t
+        ),
+        Bool.or(
+          Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Impact.at(Impact{s, m}, b), t),
+          Shared.List.has(
+            ~Spec.Touch,
+            ~Spec.Touch.same,
+            Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, r, Impact{s, m}),
+            t
+          )
+        ),
+        Shared.List.has_append(
+          ~Spec.Touch,
+          ~Spec.Touch.same,
+          Impact.at(Impact{s, m}, b),
+          Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, r, Impact{s, m}),
+          t
+        )
+      ): {
+        _
+          == Bool.and(
+            Shared.List.has(~String, ~String.eq, b <> r, Spec.Touch.branch(t)),
+            Bool.and(
+              Bool.and(
+                Maybe.is_some(&2, Spec.Id, m),
+                Spec.Node.has(
+                  s,
+                  Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)),
+                  Spec.Touch.version(t)
+                )
+              ),
+              Spec.Node.touches(s, t)
+            )
+          ): Bool
+      }
       %Equal.sym(
         Bool,
         Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Impact.at(Impact{s, m}, b), t),
-        Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t))),
+        Bool.and(
+          Bool.and(
+            Maybe.is_some(&2, Spec.Id, m),
+            Spec.Node.has(
+              s,
+              Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)),
+              Spec.Touch.version(t)
+            )
+          ),
+          Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t))
+        ),
         Impact.at_has(s, m, b, t)
-      ): {Bool.or(_, Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, r, Impact{s, m}), t)) == Bool.and(Shared.List.has(~String, ~String.eq, b <> r, Spec.Touch.branch(t)), Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Spec.Node.touches(s, t))): Bool}
+      ): {
+        Bool.or(
+          _,
+          Shared.List.has(
+            ~Spec.Touch,
+            ~Spec.Touch.same,
+            Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, r, Impact{s, m}),
+            t
+          )
+        )
+          == Bool.and(
+            Shared.List.has(~String, ~String.eq, b <> r, Spec.Touch.branch(t)),
+            Bool.and(
+              Bool.and(
+                Maybe.is_some(&2, Spec.Id, m),
+                Spec.Node.has(
+                  s,
+                  Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)),
+                  Spec.Touch.version(t)
+                )
+              ),
+              Spec.Node.touches(s, t)
+            )
+          ): Bool
+      }
       %Equal.sym(
         Bool,
-        Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, r, Impact{s, m}), t),
-        Bool.and(Shared.List.has(~String, ~String.eq, r, Spec.Touch.branch(t)), Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Spec.Node.touches(s, t))),
+        Shared.List.has(
+          ~Spec.Touch,
+          ~Spec.Touch.same,
+          Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, r, Impact{s, m}),
+          t
+        ),
+        Bool.and(
+          Shared.List.has(~String, ~String.eq, r, Spec.Touch.branch(t)),
+          Bool.and(
+            Bool.and(
+              Maybe.is_some(&2, Spec.Id, m),
+              Spec.Node.has(
+                s,
+                Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)),
+                Spec.Touch.version(t)
+              )
+            ),
+            Spec.Node.touches(s, t)
+          )
+        ),
         Impact.flat_has(r, s, m, t)
       ): {
-        Bool.or(Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t))), _) == Bool.and(Shared.List.has(~String, ~String.eq, b <> r, Spec.Touch.branch(t)), Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Spec.Node.touches(s, t))): Bool
+        Bool.or(
+          Bool.and(
+            Bool.and(
+              Maybe.is_some(&2, Spec.Id, m),
+              Spec.Node.has(
+                s,
+                Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)),
+                Spec.Touch.version(t)
+              )
+            ),
+            Bool.and(String.eq(b, Spec.Touch.branch(t)), Spec.Node.touches(s, t))
+          ),
+          _
+        )
+          == Bool.and(
+            Shared.List.has(~String, ~String.eq, b <> r, Spec.Touch.branch(t)),
+            Bool.and(
+              Bool.and(
+                Maybe.is_some(&2, Spec.Id, m),
+                Spec.Node.has(
+                  s,
+                  Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)),
+                  Spec.Touch.version(t)
+                )
+              ),
+              Spec.Node.touches(s, t)
+            )
+          ): Bool
       }
-      Shared.Bool.or_split(String.eq(b, Spec.Touch.branch(t)), Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Spec.Node.touches(s, t), Shared.List.has(~String, ~String.eq, r, Spec.Touch.branch(t)))
+      Shared.Bool.or_split(
+        String.eq(b, Spec.Touch.branch(t)),
+        Bool.and(
+          Maybe.is_some(&2, Spec.Id, m),
+          Spec.Node.has(
+            s,
+            Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)),
+            Spec.Touch.version(t)
+          )
+        ),
+        Spec.Node.touches(s, t),
+        Shared.List.has(~String, ~String.eq, r, Spec.Touch.branch(t))
+      )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement keeps each and/or as one value for the proof to split on; a proof does not run
 # a touch that holds is of a branch
-def Impact.named(+s: Spec.State(), t: Spec.Touch) -> {Spec.Node.touches(s, t) == True{}: Bool} -> {
-  Shared.List.has(~String, ~String.eq, Spec.Branch.names(Spec.Node.branches(s)), Spec.Touch.branch(t)) == True{}: Bool
+def Impact.named(
+  +s: Spec.State(),
+  t: Spec.Touch
+) -> {
+  Spec.Node.touches(s, t) == True{}: Bool
+} -> {
+  Shared.List.has(
+    ~String,
+    ~String.eq,
+    Spec.Branch.names(Spec.Node.branches(s)),
+    Spec.Touch.branch(t)
+  )
+    == True{}: Bool
 }:
   match t:
     case Spec.Touch{+v, +c, +d, +u}:
@@ -5552,10 +5921,15 @@ def Impact.named(+s: Spec.State(), t: Spec.Touch) -> {Spec.Node.touches(s, t) ==
         Touch.named(s, d),
         Bool.and(
           Touch.made(s, v),
-          Bool.and(Touch.lacks(s, d, v), Bool.and(Touch.wrote(s, v, c), Bool.and(Touch.held(s, d, u), Touch.reaches(s, d, u, c))))
+          Bool.and(
+            Touch.lacks(s, d, v),
+            Bool.and(Touch.wrote(s, v, c), Bool.and(Touch.held(s, d, u), Touch.reaches(s, d, u, c)))
+          )
         )
       )(Touch.whole(s, v, c, d, u)(h))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement keeps each and/or as one value for the proof to split on; a proof does not run
 def Spec.Node.impact_exactly(s, p, t):
   +s = s
   +t = t
@@ -5563,18 +5937,70 @@ def Spec.Node.impact_exactly(s, p, t):
   +ns = Spec.Branch.names(Spec.Node.branches(s))
   Equal.trans(
     Bool,
-    Shared.List.has(~Spec.Touch, ~Spec.Touch.same, Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, ns, Impact{s, m}), t),
-    Bool.and(Shared.List.has(~String, ~String.eq, ns, Spec.Touch.branch(t)), Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Spec.Node.touches(s, t))),
-    Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Spec.Node.touches(s, t)),
+    Shared.List.has(
+      ~Spec.Touch,
+      ~Spec.Touch.same,
+      Shared.List.flat(~String, ~Spec.Touch, ~Impact, ~Impact.at, ns, Impact{s, m}),
+      t
+    ),
+    Bool.and(
+      Shared.List.has(~String, ~String.eq, ns, Spec.Touch.branch(t)),
+      Bool.and(
+        Bool.and(
+          Maybe.is_some(&2, Spec.Id, m),
+          Spec.Node.has(
+            s,
+            Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)),
+            Spec.Touch.version(t)
+          )
+        ),
+        Spec.Node.touches(s, t)
+      )
+    ),
+    Bool.and(
+      Bool.and(
+        Maybe.is_some(&2, Spec.Id, m),
+        Spec.Node.has(
+          s,
+          Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)),
+          Spec.Touch.version(t)
+        )
+      ),
+      Spec.Node.touches(s, t)
+    ),
     Impact.flat_has(ns, s, m, t),
     Shared.Bool.and_implied_right(
       Shared.List.has(~String, ~String.eq, ns, Spec.Touch.branch(t)),
-      Bool.and(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Spec.Node.touches(s, t)),
-      h => Impact.named(s, t)(Shared.Bool.and_true_right(Bool.and(Maybe.is_some(&2, Spec.Id, m), Spec.Node.has(s, Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)), Spec.Touch.version(t))), Spec.Node.touches(s, t))(h))
+      Bool.and(
+        Bool.and(
+          Maybe.is_some(&2, Spec.Id, m),
+          Spec.Node.has(
+            s,
+            Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)),
+            Spec.Touch.version(t)
+          )
+        ),
+        Spec.Node.touches(s, t)
+      ),
+      h => Impact.named(
+        s,
+        t
+      )(
+        Shared.Bool.and_true_right(
+          Bool.and(
+            Maybe.is_some(&2, Spec.Id, m),
+            Spec.Node.has(
+              s,
+              Maybe.default(&2, Spec.Id, m, Spec.Touch.version(t)),
+              Spec.Touch.version(t)
+            )
+          ),
+          Spec.Node.touches(s, t)
+        )(h)
+      )
     )
   )
-
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # Group cycles
 # ------------
@@ -6795,7 +7221,7 @@ def Spec.Node.notices_exactly(t, k, since, x):
 # -------------------
 
 # x is a root entry that names the chain c
-def Root.names(x: Spec.Entry, +c: Spec.Chain) -> Bool:
+def Root.names(x: Spec.Entry, c: Spec.Chain) -> Bool:
   match x:
     case Spec.Entry.root{d, i, n}:
       Spec.Chain.same(d, c)
@@ -6803,26 +7229,84 @@ def Root.names(x: Spec.Entry, +c: Spec.Chain) -> Bool:
       False{}
 
 # what the cells r hold, the cells y <> r hold
-def Root.first_has.cons(+y: Cells.Cell<Spec.Entry>, +r: List<&2, Cells.Cell<Spec.Entry>>, -c: Spec.Chain, +x: Spec.Entry, e: &e: {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), r, Cells.one{x}) == True{}: Bool} -> {Root.names(x, c) == True{}: Bool}) -> &e: {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), y <> r, Cells.one{x}) == True{}: Bool} -> {Root.names(x, c) == True{}: Bool}:
+def Root.first_has.cons(
+  y: Cells.Cell<Spec.Entry>,
+  r: List<&2, Cells.Cell<Spec.Entry>>,
+  -c: Spec.Chain,
+  x: Spec.Entry,
+  e: &e: {
+    Shared.List.has(
+      ~Cells.Cell<Spec.Entry>,
+      ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same),
+      r,
+      Cells.one{x}
+    )
+      == True{}: Bool
+  } -> {Root.names(x, c) == True{}: Bool}
+) -> &e:
+  {
+    Shared.List.has(
+      ~Cells.Cell<Spec.Entry>,
+      ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same),
+      y <> r,
+      Cells.one{x}
+    )
+      == True{}: Bool
+  } -> {Root.names(x, c) == True{}: Bool}:
   match e:
     case (hr, hn):
-      (Shared.List.has_cons(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), y, r, Cells.one{x})(hr), hn)
+      (
+        Shared.List.has_cons(
+          ~Cells.Cell<Spec.Entry>,
+          ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same),
+          y,
+          r,
+          Cells.one{x}
+        )(hr),
+        hn
+      )
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Root.first_has at a root entry that names d, once d is known to be c or
 # not (hit)
 def Root.first_has.at(
   hit: Bool,
-  +c: Spec.Chain,
-  +d: Spec.Chain,
-  +i: Spec.Id,
-  +n: String,
-  +r: List<&2, Cells.Cell<Spec.Entry>>,
-  +x: Spec.Entry,
+  c: Spec.Chain,
+  d: Spec.Chain,
+  i: Spec.Id,
+  n: String,
+  r: List<&2, Cells.Cell<Spec.Entry>>,
+  x: Spec.Entry,
   eh: {Spec.Chain.same(d, c) == hit: Bool},
-  ih: {Spec.Root.first(c, r) == Some{x}: Maybe<&2, Spec.Entry>} -> &e: {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), r, Cells.one{x}) == True{}: Bool} -> {Root.names(x, c) == True{}: Bool}
+  ih: {
+    Spec.Root.first(c, r) == Some{x}: Maybe<&2, Spec.Entry>
+  } -> &e: {
+    Shared.List.has(
+      ~Cells.Cell<Spec.Entry>,
+      ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same),
+      r,
+      Cells.one{x}
+    )
+      == True{}: Bool
+  } -> {Root.names(x, c) == True{}: Bool}
 ) -> {
-  Shared.Bool.when(Maybe<&2, Spec.Entry>, hit, u => Some{Spec.Entry.root{d, i, n}}, u => Spec.Root.first(c, r)) == Some{x}: Maybe<&2, Spec.Entry>
-} -> &e: {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), Cells.one{Spec.Entry.root{d, i, n}} <> r, Cells.one{x}) == True{}: Bool} -> {Root.names(x, c) == True{}: Bool}:
+  Shared.Bool.when(
+    Maybe<&2, Spec.Entry>,
+    hit,
+    u => Some{Spec.Entry.root{d, i, n}},
+    u => Spec.Root.first(c, r)
+  )
+    == Some{x}: Maybe<&2, Spec.Entry>
+} -> &e:
+  {
+    Shared.List.has(
+      ~Cells.Cell<Spec.Entry>,
+      ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same),
+      Cells.one{Spec.Entry.root{d, i, n}} <> r,
+      Cells.one{x}
+    )
+      == True{}: Bool
+  } -> {Root.names(x, c) == True{}: Bool}:
   match hit:
     case True{}:
       h =>
@@ -6833,32 +7317,83 @@ def Root.first_has.at(
             {List.any.if(u => Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), r, Cells.one{Spec.Entry.root{d, i, n}}), _) == True{}: Bool}
           {==},
           %ex: {Root.names(_, c) == True{}: Bool}
-          eh
-        )
+          eh)
     case False{}:
       h =>
         Root.first_has.cons(Cells.one{Spec.Entry.root{d, i, n}}, r, c, x, ih(h))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a claim of the chain c among the cells cs is a root entry among them that
 # names c
-def Root.first_has(+c: Spec.Chain, cs: List<&2, Cells.Cell<Spec.Entry>>, +x: Spec.Entry) -> {
-  Spec.Root.first(c, cs) == Some{x}: Maybe<&2, Spec.Entry>
-} -> &e: {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), cs, Cells.one{x}) == True{}: Bool} -> {Root.names(x, c) == True{}: Bool}:
+def Root.first_has(
+  +c: Spec.Chain,
+  cs: List<&2, Cells.Cell<Spec.Entry>>,
+  +x: Spec.Entry
+) -> {Spec.Root.first(c, cs) == Some{x}: Maybe<&2, Spec.Entry>} -> &e:
+  {
+    Shared.List.has(
+      ~Cells.Cell<Spec.Entry>,
+      ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same),
+      cs,
+      Cells.one{x}
+    )
+      == True{}: Bool
+  } -> {Root.names(x, c) == True{}: Bool}:
   match cs:
     case Nil{}:
-      h => Empty.absurd(&e: {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), [], Cells.one{x}) == True{}: Bool} -> {Root.names(x, c) == True{}: Bool}, Shared.Maybe.none_ne_some(Spec.Entry, x, h))
-    case Con{Cells.one{Spec.Entry.root{+d, +i, +n}}, +r}:
-      Root.first_has.at(Spec.Chain.same(d, c), c, d, i, n, r, x, {==}, z => Root.first_has(c, r, x)(z))
-    case Con{Cells.one{Spec.Entry.ask{+a, +t, +q}}, +r}:
-      h => Root.first_has.cons(Cells.one{Spec.Entry.ask{a, t, q}}, r, c, x, Root.first_has(c, r, x)(h))
-    case Con{Cells.one{Spec.Entry.vote{+a}}, +r}:
+      h => Empty.absurd(
+        &e: {
+          Shared.List.has(
+            ~Cells.Cell<Spec.Entry>,
+            ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same),
+            [],
+            Cells.one{x}
+          )
+            == True{}: Bool
+        } -> {Root.names(x, c) == True{}: Bool},
+        Shared.Maybe.none_ne_some(Spec.Entry, x, h)
+      )
+    case Con{Cells.one{Spec.Entry.root{+d, i, n}}, +r}:
+      Root.first_has.at(
+        Spec.Chain.same(d, c),
+        c,
+        d,
+        i,
+        n,
+        r,
+        x,
+        {==},
+        z => Root.first_has(c, r, x)(z)
+      )
+    case Con{Cells.one{Spec.Entry.ask{a, t, q}}, +r}:
+      h => Root.first_has.cons(
+        Cells.one{Spec.Entry.ask{a, t, q}},
+        r,
+        c,
+        x,
+        Root.first_has(c, r, x)(h)
+      )
+    case Con{Cells.one{Spec.Entry.vote{a}}, +r}:
       h => Root.first_has.cons(Cells.one{Spec.Entry.vote{a}}, r, c, x, Root.first_has(c, r, x)(h))
     case Con{Cells.many{}, +r}:
       h => Root.first_has.cons(Cells.many{}, r, c, x, Root.first_has(c, r, x)(h))
 
 # a member that a list has, the list with one more put before it has
-def Group.put_keeps(+a: Spec.Member, +rs: List<&2, Spec.Member>, k: Bool, +m: Spec.Member) -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, rs, m) == True{}: Bool} -> {
-  Shared.List.has(~Spec.Member, ~Spec.Member.same, List.filter.put(Spec.Member, a, rs, k), m) == True{}: Bool
+def Group.put_keeps(
+  a: Spec.Member,
+  rs: List<&2, Spec.Member>,
+  k: Bool,
+  m: Spec.Member
+) -> {
+  Shared.List.has(~Spec.Member, ~Spec.Member.same, rs, m) == True{}: Bool
+} -> {
+  Shared.List.has(
+    ~Spec.Member,
+    ~Spec.Member.same,
+    List.filter.put(Spec.Member, a, rs, k),
+    m
+  )
+    == True{}: Bool
 }:
   match k:
     case True{}:
@@ -6866,26 +7401,59 @@ def Group.put_keeps(+a: Spec.Member, +rs: List<&2, Spec.Member>, k: Bool, +m: Sp
     case False{}:
       h => h
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Group.put_has once rs is known to have the group g or not (k)
-def Group.put_has.at(k: Bool, +g: String, +rs: List<&2, Spec.Member>, ek: {Shared.List.has(~Spec.Member, ~Spec.Member.same, rs, Spec.Member.group{g}) == k: Bool}) -> {
-  Shared.List.has(~Spec.Member, ~Spec.Member.same, List.filter.put(Spec.Member, Spec.Member.group{g}, rs, Bool.not(k)), Spec.Member.group{g}) == True{}: Bool
+def Group.put_has.at(
+  k: Bool,
+  g: String,
+  rs: List<&2, Spec.Member>,
+  ek: {Shared.List.has(~Spec.Member, ~Spec.Member.same, rs, Spec.Member.group{g}) == k: Bool}
+) -> {
+  Shared.List.has(
+    ~Spec.Member,
+    ~Spec.Member.same,
+    List.filter.put(Spec.Member, Spec.Member.group{g}, rs, Bool.not(k)),
+    Spec.Member.group{g}
+  )
+    == True{}: Bool
 }:
   match k:
     case True{}:
       ek
     case False{}:
-      %Equal.sym(Bool, Spec.Member.same(Spec.Member.group{g}, Spec.Member.group{g}), True{}, Member.same_refl(Spec.Member.group{g})):
-        {List.any.if(u => Shared.List.has(~Spec.Member, ~Spec.Member.same, rs, Spec.Member.group{g}), _) == True{}: Bool}
+      %Equal.sym(
+        Bool,
+        Spec.Member.same(Spec.Member.group{g}, Spec.Member.group{g}),
+        True{},
+        Member.same_refl(Spec.Member.group{g})
+      ):
+        {
+          List.any.if(
+            u => Shared.List.has(~Spec.Member, ~Spec.Member.same, rs, Spec.Member.group{g}),
+            _
+          )
+            == True{}: Bool
+        }
       {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the roots of the cells after one more hold the roots of the cells
-def Group.roots_cons(y: Cells.Cell<Spec.Entry>, +r: List<&2, Cells.Cell<Spec.Entry>>, +m: Spec.Member) -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.roots(r), m) == True{}: Bool} -> {
-  Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.roots(y <> r), m) == True{}: Bool
-}:
+def Group.roots_cons(
+  y: Cells.Cell<Spec.Entry>,
+  r: List<&2, Cells.Cell<Spec.Entry>>,
+  m: Spec.Member
+) -> {
+  Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.roots(r), m) == True{}: Bool
+} -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.roots(y <> r), m) == True{}: Bool}:
   match y:
     case Cells.one{Spec.Entry.root{Spec.Chain.group{+h}, i, n}}:
       +rest = Group.roots(r)
-      Group.put_keeps(Spec.Member.group{h}, rest, Bool.not(Shared.List.has(~Spec.Member, ~Spec.Member.same, rest, Spec.Member.group{h})), m)
+      Group.put_keeps(
+        Spec.Member.group{h},
+        rest,
+        Bool.not(Shared.List.has(~Spec.Member, ~Spec.Member.same, rest, Spec.Member.group{h})),
+        m
+      )
     case Cells.one{Spec.Entry.root{Spec.Chain.branch{b}, i, n}}:
       x => x
     case Cells.one{Spec.Entry.ask{a, t, q}}:
@@ -6895,36 +7463,135 @@ def Group.roots_cons(y: Cells.Cell<Spec.Entry>, +r: List<&2, Cells.Cell<Spec.Ent
     case Cells.many{}:
       x => x
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Group.roots_has at the first cell y, once it is known to be the root of
 # the group g or not (hit)
 def Group.roots_has.at(
   hit: Bool,
-  +y: Cells.Cell<Spec.Entry>,
+  y: Cells.Cell<Spec.Entry>,
   +r: List<&2, Cells.Cell<Spec.Entry>>,
   +g: String,
-  +i: Spec.Id,
-  +n: String,
-  +eh: {Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same)(y, Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}}) == hit: Bool},
-  hc: {List.any.if(u => Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), r, Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}}), hit) == True{}: Bool},
-  ih: {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), r, Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}}) == True{}: Bool} -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.roots(r), Spec.Member.group{g}) == True{}: Bool}
-) -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.roots(y <> r), Spec.Member.group{g}) == True{}: Bool}:
+  i: Spec.Id,
+  n: String,
+  eh: {
+    Cells.Cell.same(
+      ~Spec.Entry,
+      ~Spec.Entry.same
+    )(y, Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}})
+      == hit: Bool
+  },
+  hc: {
+    List.any.if(
+      u => Shared.List.has(
+        ~Cells.Cell<Spec.Entry>,
+        ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same),
+        r,
+        Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}}
+      ),
+      hit
+    )
+      == True{}: Bool
+  },
+  ih: {
+    Shared.List.has(
+      ~Cells.Cell<Spec.Entry>,
+      ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same),
+      r,
+      Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}}
+    )
+      == True{}: Bool
+  } -> {
+    Shared.List.has(
+      ~Spec.Member,
+      ~Spec.Member.same,
+      Group.roots(r),
+      Spec.Member.group{g}
+    )
+      == True{}: Bool
+  }
+) -> {
+  Shared.List.has(
+    ~Spec.Member,
+    ~Spec.Member.same,
+    Group.roots(y <> r),
+    Spec.Member.group{g}
+  )
+    == True{}: Bool
+}:
   match hit:
     case True{}:
-      %Equal.sym(Cells.Cell<Spec.Entry>, y, Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}}, Cells.Cell.same_sound(~Spec.Entry, ~Spec.Entry.same, ~Spec.Entry.same_sound, y, Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}})(eh)):
-        {Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.roots(_ <> r), Spec.Member.group{g}) == True{}: Bool}
-      Group.put_has.at(Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.roots(r), Spec.Member.group{g}), g, Group.roots(r), {==})
+      %Equal.sym(
+        Cells.Cell<Spec.Entry>,
+        y,
+        Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}},
+        Cells.Cell.same_sound(
+          ~Spec.Entry,
+          ~Spec.Entry.same,
+          ~Spec.Entry.same_sound,
+          y,
+          Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}}
+        )(eh)
+      ):
+        {
+          Shared.List.has(
+            ~Spec.Member,
+            ~Spec.Member.same,
+            Group.roots(_ <> r),
+            Spec.Member.group{g}
+          )
+            == True{}: Bool
+        }
+      Group.put_has.at(
+        Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.roots(r), Spec.Member.group{g}),
+        g,
+        Group.roots(r),
+        {==}
+      )
     case False{}:
       Group.roots_cons(y, r, Spec.Member.group{g})(ih(hc))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a root of the group g among the cells makes g one of their groups
-def Group.roots_has(cs: List<&2, Cells.Cell<Spec.Entry>>, +g: String, +i: Spec.Id, +n: String) -> {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), cs, Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}}) == True{}: Bool} -> {
-  Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.roots(cs), Spec.Member.group{g}) == True{}: Bool
+def Group.roots_has(
+  cs: List<&2, Cells.Cell<Spec.Entry>>,
+  +g: String,
+  +i: Spec.Id,
+  +n: String
+) -> {
+  Shared.List.has(
+    ~Cells.Cell<Spec.Entry>,
+    ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same),
+    cs,
+    Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}}
+  )
+    == True{}: Bool
+} -> {
+  Shared.List.has(
+    ~Spec.Member,
+    ~Spec.Member.same,
+    Group.roots(cs),
+    Spec.Member.group{g}
+  )
+    == True{}: Bool
 }:
   match cs:
     case Nil{}:
       h => h
     case Con{+y, +r}:
-      h => Group.roots_has.at(Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same)(y, Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}}), y, r, g, i, n, {==}, h, z => Group.roots_has(r, g, i, n)(z))
+      h => Group.roots_has.at(
+        Cells.Cell.same(
+          ~Spec.Entry,
+          ~Spec.Entry.same
+        )(y, Cells.one{Spec.Entry.root{Spec.Chain.group{g}, i, n}}),
+        y,
+        r,
+        g,
+        i,
+        n,
+        {==},
+        h,
+        z => Group.roots_has(r, g, i, n)(z)
+      )
 
 # Id.key_join once the writers are known to be the same (ew)
 def Id.key_join.done(
@@ -6947,7 +7614,9 @@ def Id.key_join.next(
   +r1: String,
   -w2: String,
   +r2: String,
-  e: &ew: {w1 == w2: String} -> {Shared.Trie.apart(Shared.Trie.text(r1), Shared.Trie.text(r2)) == False{}: Bool}
+  e: &ew: {
+    w1 == w2: String
+  } -> {Shared.Trie.apart(Shared.Trie.text(r1), Shared.Trie.text(r2)) == False{}: Bool}
 ) -> {Spec.Id{w1, r1} == Spec.Id{w2, r2}: Spec.Id}:
   match e:
     case (ew, h):
@@ -6957,19 +7626,47 @@ def Id.key_join.next(
         w2,
         r2,
         ew,
-        Shared.Trie.text_join(r1, r2, [], [])(
+        Shared.Trie.text_join(
+          r1,
+          r2,
+          [],
+          []
+        )(
           Equal.trans(
             Bool,
-            Shared.Trie.apart(List.append(&2, Bool, Shared.Trie.text(r1), []), List.append(&2, Bool, Shared.Trie.text(r2), [])),
-            Shared.Trie.apart(Shared.Trie.text(r1), List.append(&2, Bool, Shared.Trie.text(r2), [])),
+            Shared.Trie.apart(
+              List.append(&2, Bool, Shared.Trie.text(r1), []),
+              List.append(&2, Bool, Shared.Trie.text(r2), [])
+            ),
+            Shared.Trie.apart(
+              Shared.Trie.text(r1),
+              List.append(&2, Bool, Shared.Trie.text(r2), [])
+            ),
             False{},
-            Equal.cong(List<&2, Bool>, Bool, z => Shared.Trie.apart(z, List.append(&2, Bool, Shared.Trie.text(r2), [])), List.append(&2, Bool, Shared.Trie.text(r1), []), Shared.Trie.text(r1), Shared.List.append_nil(Bool, Shared.Trie.text(r1))),
+            Equal.cong(
+              List<&2, Bool>,
+              Bool,
+              z => Shared.Trie.apart(z, List.append(&2, Bool, Shared.Trie.text(r2), [])),
+              List.append(&2, Bool, Shared.Trie.text(r1), []),
+              Shared.Trie.text(r1),
+              Shared.List.append_nil(Bool, Shared.Trie.text(r1))
+            ),
             Equal.trans(
               Bool,
-              Shared.Trie.apart(Shared.Trie.text(r1), List.append(&2, Bool, Shared.Trie.text(r2), [])),
+              Shared.Trie.apart(
+                Shared.Trie.text(r1),
+                List.append(&2, Bool, Shared.Trie.text(r2), [])
+              ),
               Shared.Trie.apart(Shared.Trie.text(r1), Shared.Trie.text(r2)),
               False{},
-              Equal.cong(List<&2, Bool>, Bool, z => Shared.Trie.apart(Shared.Trie.text(r1), z), List.append(&2, Bool, Shared.Trie.text(r2), []), Shared.Trie.text(r2), Shared.List.append_nil(Bool, Shared.Trie.text(r2))),
+              Equal.cong(
+                List<&2, Bool>,
+                Bool,
+                z => Shared.Trie.apart(Shared.Trie.text(r1), z),
+                List.append(&2, Bool, Shared.Trie.text(r2), []),
+                Shared.Trie.text(r2),
+                Shared.List.append_nil(Bool, Shared.Trie.text(r2))
+              ),
               h
             )
           )
@@ -6977,58 +7674,103 @@ def Id.key_join.next(
       )
 
 # requests whose keys are not apart are the same request
-def Id.key_join(i: Spec.Id, v: Spec.Id) -> {Shared.Trie.apart(Spec.Id.key(i), Spec.Id.key(v)) == False{}: Bool} -> {i == v: Spec.Id}:
+def Id.key_join(
+  i: Spec.Id,
+  v: Spec.Id
+) -> {Shared.Trie.apart(Spec.Id.key(i), Spec.Id.key(v)) == False{}: Bool} -> {i == v: Spec.Id}:
   match i v:
-    case Spec.Id{+w1, +r1} Spec.Id{+w2, +r2}:
-      h => Id.key_join.next(w1, r1, w2, r2, Shared.Trie.text_join(w1, w2, Shared.Trie.text(r1), Shared.Trie.text(r2))(h))
+    case Spec.Id{w1, +r1} Spec.Id{w2, +r2}:
+      h => Id.key_join.next(
+        w1,
+        r1,
+        w2,
+        r2,
+        Shared.Trie.text_join(w1, w2, Shared.Trie.text(r1), Shared.Trie.text(r2))(h)
+      )
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Vote.apart once the requests' keys are known to be apart or not (k)
-def Vote.apart.at(k: Bool, +i: Spec.Id, +v: Spec.Id, ek: {Shared.Trie.apart(Spec.Id.key(v), Spec.Id.key(i)) == k: Bool}, hs: {Spec.Id.same(i, v) == False{}: Bool}) -> {
-  k == True{}: Bool
-}:
+def Vote.apart.at(
+  k: Bool,
+  +i: Spec.Id,
+  v: Spec.Id,
+  ek: {Shared.Trie.apart(Spec.Id.key(v), Spec.Id.key(i)) == k: Bool},
+  hs: {Spec.Id.same(i, v) == False{}: Bool}
+) -> {k == True{}: Bool}:
   match k:
     case True{}:
       {==}
     case False{}:
-      Empty.absurd(
-        {False{} == True{}: Bool},
-        Shared.Bool.false_ne_true(
-          Equal.trans(
+      Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(Equal.trans(
             Bool,
             False{},
             Spec.Id.same(i, v),
             True{},
             Equal.sym(Bool, Spec.Id.same(i, v), False{}, hs),
             %Equal.sym(Spec.Id, v, i, Id.key_join(v, i)(ek)): {Spec.Id.same(i, _) == True{}: Bool}
-            Id.same_refl(i)
-          )
-        )
-      )
+            Id.same_refl(i))))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # the votes of one node on one chain, after two different requests, are in
 # slots apart
-def Vote.apart(+n: String, +c: Spec.Chain, +i: Spec.Id, +v: Spec.Id) -> {Spec.Id.same(i, v) == False{}: Bool} -> {
-  Shared.Trie.apart(Spec.Slot.key(Spec.Slot.vote{n, c, v}), Spec.Slot.key(Spec.Slot.vote{n, c, i})) == True{}: Bool
+def Vote.apart(
+  n: String,
+  c: Spec.Chain,
+  +i: Spec.Id,
+  +v: Spec.Id
+) -> {
+  Spec.Id.same(i, v) == False{}: Bool
+} -> {
+  Shared.Trie.apart(
+    Spec.Slot.key(Spec.Slot.vote{n, c, v}),
+    Spec.Slot.key(Spec.Slot.vote{n, c, i})
+  )
+    == True{}: Bool
 }:
   +ck = Spec.Chain.key(c)
   hs =>
     %Equal.sym(
       Bool,
-      Shared.Trie.apart(List.append(&2, Bool, Shared.Trie.text(n), List.append(&2, Bool, ck, Spec.Id.key(v))), List.append(&2, Bool, Shared.Trie.text(n), List.append(&2, Bool, ck, Spec.Id.key(i)))),
-      Shared.Trie.apart(List.append(&2, Bool, ck, Spec.Id.key(v)), List.append(&2, Bool, ck, Spec.Id.key(i))),
-      Shared.Trie.prefix_apart(Shared.Trie.text(n), List.append(&2, Bool, ck, Spec.Id.key(v)), List.append(&2, Bool, ck, Spec.Id.key(i)))
+      Shared.Trie.apart(
+        List.append(&2, Bool, Shared.Trie.text(n), List.append(&2, Bool, ck, Spec.Id.key(v))),
+        List.append(&2, Bool, Shared.Trie.text(n), List.append(&2, Bool, ck, Spec.Id.key(i)))
+      ),
+      Shared.Trie.apart(
+        List.append(&2, Bool, ck, Spec.Id.key(v)),
+        List.append(&2, Bool, ck, Spec.Id.key(i))
+      ),
+      Shared.Trie.prefix_apart(
+        Shared.Trie.text(n),
+        List.append(&2, Bool, ck, Spec.Id.key(v)),
+        List.append(&2, Bool, ck, Spec.Id.key(i))
+      )
     ): {_ == True{}: Bool}
     %Equal.sym(
       Bool,
-      Shared.Trie.apart(List.append(&2, Bool, ck, Spec.Id.key(v)), List.append(&2, Bool, ck, Spec.Id.key(i))),
+      Shared.Trie.apart(
+        List.append(&2, Bool, ck, Spec.Id.key(v)),
+        List.append(&2, Bool, ck, Spec.Id.key(i))
+      ),
       Shared.Trie.apart(Spec.Id.key(v), Spec.Id.key(i)),
       Shared.Trie.prefix_apart(ck, Spec.Id.key(v), Spec.Id.key(i))
     ): {_ == True{}: Bool}
     Vote.apart.at(Shared.Trie.apart(Spec.Id.key(v), Spec.Id.key(i)), i, v, {==}, hs)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the members that the last set-group of xs, then i, sets
-def Group.last_append(+s: Spec.State(), xs: List<&2, Spec.Id>, +i: Spec.Id, f: Maybe<&2, List<&2, Spec.Member>>) -> {
-  Group.last(s, List.append(&2, Spec.Id, xs, [i]), f) == Group.set(State.asked(s, i), Group.last(s, xs, f)): Maybe<&2, List<&2, Spec.Member>>
+def Group.last_append(
+  +s: Spec.State(),
+  xs: List<&2, Spec.Id>,
+  i: Spec.Id,
+  f: Maybe<&2, List<&2, Spec.Member>>
+) -> {
+  Group.last(
+    s,
+    List.append(&2, Spec.Id, xs, [i]),
+    f
+  )
+    == Group.set(State.asked(s, i), Group.last(s, xs, f)): Maybe<&2, List<&2, Spec.Member>>
 }:
   match xs:
     case Nil{}:
@@ -7038,101 +7780,376 @@ def Group.last_append(+s: Spec.State(), xs: List<&2, Spec.Id>, +i: Spec.Id, f: M
 
 # a root entry x among the cells of s that names the group g makes g one of
 # the groups of s
-def Group.known(x: Spec.Entry, +s: Spec.State(), +g: String) -> {
-  Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), Shared.Trie.values(Cells.Cell<Spec.Entry>, s), Cells.one{x}) == True{}: Bool
-} -> {Root.names(x, Spec.Chain.group{g}) == True{}: Bool} -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s), Spec.Member.group{g}) == True{}: Bool}:
+def Group.known(
+  x: Spec.Entry,
+  s: Spec.State(),
+  +g: String
+) -> {
+  Shared.List.has(
+    ~Cells.Cell<Spec.Entry>,
+    ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same),
+    Shared.Trie.values(Cells.Cell<Spec.Entry>, s),
+    Cells.one{x}
+  )
+    == True{}: Bool
+} -> {
+  Root.names(x, Spec.Chain.group{g}) == True{}: Bool
+} -> {
+  Shared.List.has(
+    ~Spec.Member,
+    ~Spec.Member.same,
+    Group.all(s),
+    Spec.Member.group{g}
+  )
+    == True{}: Bool
+}:
   match x:
-    case Spec.Entry.root{+d, +i, +n}:
+    case Spec.Entry.root{d, i, n}:
       hc => hn =>
         Group.roots_has(Shared.Trie.values(Cells.Cell<Spec.Entry>, s), g, i, n)(
           %Chain.same_sound(d, Spec.Chain.group{g})(hn): {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), Shared.Trie.values(Cells.Cell<Spec.Entry>, s), Cells.one{Spec.Entry.root{_, i, n}}) == True{}: Bool}
-          hc
-        )
+          hc)
     case Spec.Entry.ask{a, t, q}:
-      hc => hn => Empty.absurd({Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s), Spec.Member.group{g}) == True{}: Bool}, Shared.Bool.false_ne_true(hn))
+      hc => hn => Empty.absurd(
+        {
+          Shared.List.has(
+            ~Spec.Member,
+            ~Spec.Member.same,
+            Group.all(s),
+            Spec.Member.group{g}
+          )
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(hn)
+      )
     case Spec.Entry.vote{a}:
-      hc => hn => Empty.absurd({Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s), Spec.Member.group{g}) == True{}: Bool}, Shared.Bool.false_ne_true(hn))
+      hc => hn => Empty.absurd(
+        {
+          Shared.List.has(
+            ~Spec.Member,
+            ~Spec.Member.same,
+            Group.all(s),
+            Spec.Member.group{g}
+          )
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(hn)
+      )
 
 # Group.claimed, from what the claim is
 def Group.claimed.of(
   +s: Spec.State(),
   +g: String,
   +x: Spec.Entry,
-  e: &e: {Shared.List.has(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), Shared.Trie.values(Cells.Cell<Spec.Entry>, Shared.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Root.key(Spec.Chain.group{g}))), Cells.one{x}) == True{}: Bool}
-    -> {Root.names(x, Spec.Chain.group{g}) == True{}: Bool}
-) -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s), Spec.Member.group{g}) == True{}: Bool}:
+  e: &e: {
+    Shared.List.has(
+      ~Cells.Cell<Spec.Entry>,
+      ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same),
+      Shared.Trie.values(
+        Cells.Cell<Spec.Entry>,
+        Shared.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Root.key(Spec.Chain.group{g}))
+      ),
+      Cells.one{x}
+    )
+      == True{}: Bool
+  } -> {Root.names(x, Spec.Chain.group{g}) == True{}: Bool}
+) -> {
+  Shared.List.has(
+    ~Spec.Member,
+    ~Spec.Member.same,
+    Group.all(s),
+    Spec.Member.group{g}
+  )
+    == True{}: Bool
+}:
   match e:
     case (hc, hn):
-      Group.known(x, s, g)(
-        Shared.Trie.values_under(~Cells.Cell<Spec.Entry>, ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same), s, Spec.Root.key(Spec.Chain.group{g}), Cells.one{x})(hc)
+      Group.known(
+        x,
+        s,
+        g
+      )(
+        Shared.Trie.values_under(
+          ~Cells.Cell<Spec.Entry>,
+          ~Cells.Cell.same(~Spec.Entry, ~Spec.Entry.same),
+          s,
+          Spec.Root.key(Spec.Chain.group{g}),
+          Cells.one{x}
+        )(hc)
       )(hn)
 
 # the claim x of the group g in s makes g one of the groups of s
-def Group.claimed(+s: Spec.State(), +g: String, +x: Spec.Entry) -> {
+def Group.claimed(
+  +s: Spec.State(),
+  +g: String,
+  +x: Spec.Entry
+) -> {
   Spec.Node.claim(s, Spec.Chain.group{g}) == Some{x}: Maybe<&2, Spec.Entry>
-} -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s), Spec.Member.group{g}) == True{}: Bool}:
-  h => Group.claimed.of(s, g, x, Root.first_has(Spec.Chain.group{g}, Shared.Trie.values(Cells.Cell<Spec.Entry>, Shared.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Root.key(Spec.Chain.group{g}))), x)(h))
+} -> {
+  Shared.List.has(
+    ~Spec.Member,
+    ~Spec.Member.same,
+    Group.all(s),
+    Spec.Member.group{g}
+  )
+    == True{}: Bool
+}:
+  h => Group.claimed.of(
+    s,
+    g,
+    x,
+    Root.first_has(
+      Spec.Chain.group{g},
+      Shared.Trie.values(
+        Cells.Cell<Spec.Entry>,
+        Shared.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Root.key(Spec.Chain.group{g}))
+      ),
+      x
+    )(h)
+  )
 
-
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # the members of the group g after the sole owner's vote for the set-group i
 # to ms, with nothing after i, once the chain before the vote is known (pr)
 def Members.last(
-  +n: String,
+  n: String,
   +s1: Spec.State(),
   +i: Spec.Id,
   +g: String,
-  +v: Spec.Id,
+  v: Spec.Id,
   -t: String,
   -ms: List<&2, Spec.Member>,
   +tv: Spec.State(),
-  +a2: {Spec.Node.agrees(s1, tv) == True{}: Bool},
-  +hc2: {Spec.Node.claim(Spec.Node.join(s1, tv), Spec.Chain.group{g}) == Spec.Node.claim(s1, Spec.Chain.group{g}): Maybe<&2, Spec.Entry>},
-  +next2: {Chain.next(Spec.Node.join(s1, tv), Spec.Chain.group{g}, Step{v, [n]}) == Some{Step{i, [n]}}: Maybe<&2, Step>},
-  +grow: {Nat.is_lt(State.fuel(s1), State.fuel(Spec.Node.join(s1, tv))) == True{}: Bool},
-  nexti: {Chain.next(Spec.Node.join(s1, tv), Spec.Chain.group{g}, Step{i, [n]}) == None{}: Maybe<&2, Step>},
-  asked2: {State.asked(Spec.Node.join(s1, tv), i) == Some{Asked{t, Spec.Ask.set_group{g, ms}}}: Maybe<&2, Asked>},
-  pr: &st: Step -> {Chain.root(s1, Spec.Chain.group{g}) == Some{st}: Maybe<&2, Step>}
-    & {Chain.last(State.fuel(s1), s1, Spec.Chain.group{g}, st, Chain.next(s1, Spec.Chain.group{g}, st)) == Step{v, [n]}: Step}
-) -> {Group.last(Spec.Node.join(s1, tv), Spec.Node.chain(Spec.Node.join(s1, tv), Spec.Chain.group{g}), None{}) == Some{ms}: Maybe<&2, List<&2, Spec.Member>>}:
+  a2: {Spec.Node.agrees(s1, tv) == True{}: Bool},
+  hc2: {
+    Spec.Node.claim(
+      Spec.Node.join(s1, tv),
+      Spec.Chain.group{g}
+    )
+      == Spec.Node.claim(s1, Spec.Chain.group{g}): Maybe<&2, Spec.Entry>
+  },
+  next2: {
+    Chain.next(
+      Spec.Node.join(s1, tv),
+      Spec.Chain.group{g},
+      Step{v, [n]}
+    )
+      == Some{Step{i, [n]}}: Maybe<&2, Step>
+  },
+  grow: {Nat.is_lt(State.fuel(s1), State.fuel(Spec.Node.join(s1, tv))) == True{}: Bool},
+  nexti: {
+    Chain.next(Spec.Node.join(s1, tv), Spec.Chain.group{g}, Step{i, [n]}) == None{}: Maybe<&2, Step>
+  },
+  asked2: {
+    State.asked(
+      Spec.Node.join(s1, tv),
+      i
+    )
+      == Some{Asked{t, Spec.Ask.set_group{g, ms}}}: Maybe<&2, Asked>
+  },
+  pr: &st: Step -> {
+    Chain.root(s1, Spec.Chain.group{g}) == Some{st}: Maybe<&2, Step>
+  }
+    & {
+      Chain.last(
+        State.fuel(s1),
+        s1,
+        Spec.Chain.group{g},
+        st,
+        Chain.next(s1, Spec.Chain.group{g}, st)
+      )
+        == Step{v, [n]}: Step
+    }
+) -> {
+  Group.last(
+    Spec.Node.join(s1, tv),
+    Spec.Node.chain(Spec.Node.join(s1, tv), Spec.Chain.group{g}),
+    None{}
+  )
+    == Some{ms}: Maybe<&2, List<&2, Spec.Member>>
+}:
   match pr:
     case (+st, (er, el)):
-      +x1 = Chain.from(s1, Spec.Chain.group{g}, Some{st})
+      x1 = Chain.from(s1, Spec.Chain.group{g}, Some{st})
       %Equal.sym(
         List<&2, Spec.Id>,
         Spec.Node.chain(Spec.Node.join(s1, tv), Spec.Chain.group{g}),
-        List.append(&2, Spec.Id, x1, i <> Chain.walk(Nat.sub(State.fuel(Spec.Node.join(s1, tv)), 1n+List.length(&2, Spec.Id, Chain.walk(State.fuel(s1), s1, Spec.Chain.group{g}, Chain.next(s1, Spec.Chain.group{g}, st)))), Spec.Node.join(s1, tv), Spec.Chain.group{g}, Chain.next(Spec.Node.join(s1, tv), Spec.Chain.group{g}, Step{i, [n]}))),
+        List.append(
+          &2,
+          Spec.Id,
+          x1,
+          i
+            <> Chain.walk(
+              Nat.sub(
+                State.fuel(Spec.Node.join(s1, tv)),
+                1n+List.length(
+                  &2,
+                  Spec.Id,
+                  Chain.walk(
+                    State.fuel(s1),
+                    s1,
+                    Spec.Chain.group{g},
+                    Chain.next(s1, Spec.Chain.group{g}, st)
+                  )
+                )
+              ),
+              Spec.Node.join(s1, tv),
+              Spec.Chain.group{g},
+              Chain.next(Spec.Node.join(s1, tv), Spec.Chain.group{g}, Step{i, [n]})
+            )
+        ),
         Written.shape(n, s1, i, Spec.Chain.group{g}, v, tv, a2, hc2, next2, grow, st, er, el)
-      ): {Group.last(Spec.Node.join(s1, tv), _, None{}) == Some{ms}: Maybe<&2, List<&2, Spec.Member>>}
-      %Equal.sym(Maybe<&2, Step>, Chain.next(Spec.Node.join(s1, tv), Spec.Chain.group{g}, Step{i, [n]}), None{}, nexti):
-        {Group.last(Spec.Node.join(s1, tv), List.append(&2, Spec.Id, x1, i <> Chain.walk(Nat.sub(State.fuel(Spec.Node.join(s1, tv)), 1n+List.length(&2, Spec.Id, Chain.walk(State.fuel(s1), s1, Spec.Chain.group{g}, Chain.next(s1, Spec.Chain.group{g}, st)))), Spec.Node.join(s1, tv), Spec.Chain.group{g}, _)), None{}) == Some{ms}: Maybe<&2, List<&2, Spec.Member>>}
-      %Equal.sym(List<&2, Spec.Id>, Chain.walk(Nat.sub(State.fuel(Spec.Node.join(s1, tv)), 1n+List.length(&2, Spec.Id, Chain.walk(State.fuel(s1), s1, Spec.Chain.group{g}, Chain.next(s1, Spec.Chain.group{g}, st)))), Spec.Node.join(s1, tv), Spec.Chain.group{g}, None{}), [], Walk.none(Nat.sub(State.fuel(Spec.Node.join(s1, tv)), 1n+List.length(&2, Spec.Id, Chain.walk(State.fuel(s1), s1, Spec.Chain.group{g}, Chain.next(s1, Spec.Chain.group{g}, st)))), Spec.Node.join(s1, tv), Spec.Chain.group{g})):
-        {Group.last(Spec.Node.join(s1, tv), List.append(&2, Spec.Id, x1, i <> _), None{}) == Some{ms}: Maybe<&2, List<&2, Spec.Member>>}
+      ): {
+        Group.last(Spec.Node.join(s1, tv), _, None{}) == Some{ms}: Maybe<&2, List<&2, Spec.Member>>
+      }
+      %Equal.sym(
+        Maybe<&2, Step>,
+        Chain.next(Spec.Node.join(s1, tv), Spec.Chain.group{g}, Step{i, [n]}),
+        None{},
+        nexti
+      ):
+        {
+          Group.last(
+            Spec.Node.join(s1, tv),
+            List.append(
+              &2,
+              Spec.Id,
+              x1,
+              i
+                <> Chain.walk(
+                  Nat.sub(
+                    State.fuel(Spec.Node.join(s1, tv)),
+                    1n+List.length(
+                      &2,
+                      Spec.Id,
+                      Chain.walk(
+                        State.fuel(s1),
+                        s1,
+                        Spec.Chain.group{g},
+                        Chain.next(s1, Spec.Chain.group{g}, st)
+                      )
+                    )
+                  ),
+                  Spec.Node.join(s1, tv),
+                  Spec.Chain.group{g},
+                  _
+                )
+            ),
+            None{}
+          )
+            == Some{ms}: Maybe<&2, List<&2, Spec.Member>>
+        }
+      %Equal.sym(
+        List<&2, Spec.Id>,
+        Chain.walk(
+          Nat.sub(
+            State.fuel(Spec.Node.join(s1, tv)),
+            1n+List.length(
+              &2,
+              Spec.Id,
+              Chain.walk(
+                State.fuel(s1),
+                s1,
+                Spec.Chain.group{g},
+                Chain.next(s1, Spec.Chain.group{g}, st)
+              )
+            )
+          ),
+          Spec.Node.join(s1, tv),
+          Spec.Chain.group{g},
+          None{}
+        ),
+        [],
+        Walk.none(
+          Nat.sub(
+            State.fuel(Spec.Node.join(s1, tv)),
+            1n+List.length(
+              &2,
+              Spec.Id,
+              Chain.walk(
+                State.fuel(s1),
+                s1,
+                Spec.Chain.group{g},
+                Chain.next(s1, Spec.Chain.group{g}, st)
+              )
+            )
+          ),
+          Spec.Node.join(s1, tv),
+          Spec.Chain.group{g}
+        )
+      ):
+        {
+          Group.last(
+            Spec.Node.join(s1, tv),
+            List.append(&2, Spec.Id, x1, i <> _),
+            None{}
+          )
+            == Some{ms}: Maybe<&2, List<&2, Spec.Member>>
+        }
       %Equal.sym(
         Maybe<&2, List<&2, Spec.Member>>,
         Group.last(Spec.Node.join(s1, tv), List.append(&2, Spec.Id, x1, [i]), None{}),
-        Group.set(State.asked(Spec.Node.join(s1, tv), i), Group.last(Spec.Node.join(s1, tv), x1, None{})),
+        Group.set(
+          State.asked(Spec.Node.join(s1, tv), i),
+          Group.last(Spec.Node.join(s1, tv), x1, None{})
+        ),
         Group.last_append(Spec.Node.join(s1, tv), x1, i, None{})
       ): {_ == Some{ms}: Maybe<&2, List<&2, Spec.Member>>}
-      %Equal.sym(Maybe<&2, Asked>, State.asked(Spec.Node.join(s1, tv), i), Some{Asked{t, Spec.Ask.set_group{g, ms}}}, asked2):
-        {Group.set(_, Group.last(Spec.Node.join(s1, tv), x1, None{})) == Some{ms}: Maybe<&2, List<&2, Spec.Member>>}
+      %Equal.sym(
+        Maybe<&2, Asked>,
+        State.asked(Spec.Node.join(s1, tv), i),
+        Some{Asked{t, Spec.Ask.set_group{g, ms}}},
+        asked2
+      ):
+        {
+          Group.set(
+            _,
+            Group.last(Spec.Node.join(s1, tv), x1, None{})
+          )
+            == Some{ms}: Maybe<&2, List<&2, Spec.Member>>
+        }
       {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # the group g, claimed in s, is one of the groups after two entries that keep
 # its claim
 def Members.known(
-  +s: Spec.State(),
-  +t1: Spec.State(),
-  +t2: Spec.State(),
-  +g: String,
-  hc: {Spec.Node.claim(Spec.Node.join(s, t1), Spec.Chain.group{g}) == Spec.Node.claim(s, Spec.Chain.group{g}): Maybe<&2, Spec.Entry>},
+  s: Spec.State(),
+  t1: Spec.State(),
+  t2: Spec.State(),
+  g: String,
+  hc: {
+    Spec.Node.claim(
+      Spec.Node.join(s, t1),
+      Spec.Chain.group{g}
+    )
+      == Spec.Node.claim(s, Spec.Chain.group{g}): Maybe<&2, Spec.Entry>
+  },
   hc2: {
-    Spec.Node.claim(Spec.Node.join(Spec.Node.join(s, t1), t2), Spec.Chain.group{g}) == Spec.Node.claim(Spec.Node.join(s, t1), Spec.Chain.group{g}): Maybe<&2, Spec.Entry>
+    Spec.Node.claim(
+      Spec.Node.join(Spec.Node.join(s, t1), t2),
+      Spec.Chain.group{g}
+    )
+      == Spec.Node.claim(Spec.Node.join(s, t1), Spec.Chain.group{g}): Maybe<&2, Spec.Entry>
   },
   e: &x: Spec.Entry -> {Spec.Node.claim(s, Spec.Chain.group{g}) == Some{x}: Maybe<&2, Spec.Entry>}
-) -> {Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(Spec.Node.join(Spec.Node.join(s, t1), t2)), Spec.Member.group{g}) == True{}: Bool}:
+) -> {
+  Shared.List.has(
+    ~Spec.Member,
+    ~Spec.Member.same,
+    Group.all(Spec.Node.join(Spec.Node.join(s, t1), t2)),
+    Spec.Member.group{g}
+  )
+    == True{}: Bool
+}:
   match e:
-    case (+x, hx):
-      Group.claimed(Spec.Node.join(Spec.Node.join(s, t1), t2), g, x)(
+    case (x, hx):
+      Group.claimed(
+        Spec.Node.join(Spec.Node.join(s, t1), t2),
+        g,
+        x
+      )(
         Equal.trans(
           Maybe<&2, Spec.Entry>,
           Spec.Node.claim(Spec.Node.join(Spec.Node.join(s, t1), t2), Spec.Chain.group{g}),
@@ -7149,19 +8166,20 @@ def Members.known(
           hx
         )
       )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 def Spec.Node.members_after_set(n, s, e, g, ms, v):
   match e:
     case Spec.Envelope{+r, +w, +t}:
       +n = n
       +s = s
       +g = g
-      +ms = ms
       +v = v
       +i = {Spec.Id{w, r}: Spec.Id}
       +c = {Spec.Chain.group{g}: Spec.Chain}
       +q = {Spec.Ask.set_group{g, ms}: Spec.Ask}
-      +l = {Step{v, [n]}: Step}
+      l = {Step{v, [n]}: Step}
       +ka = Spec.Slot.key(Spec.Slot.ask{i})
       +kv = Spec.Slot.key(Spec.Slot.vote{n, c, v})
       +kvi = Spec.Slot.key(Spec.Slot.vote{n, c, i})
@@ -7206,8 +8224,7 @@ def Spec.Node.members_after_set(n, s, e, g, ms, v):
           Shared.Trie.get_union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, ta, ka),
           %Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, Shared.Trie.get(Cells.Cell<Spec.Entry>, s, ka), None{}, h3):
             {Shared.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), _, Shared.Trie.get(Cells.Cell<Spec.Entry>, ta, ka)) == Some{ea}: Maybe<&2, Cells.Cell<Spec.Entry>>}
-          Shared.Trie.get_one(Cells.Cell<Spec.Entry>, ka, ea)
-        )
+          Shared.Trie.get_one(Cells.Cell<Spec.Entry>, ka, ea))
         +a2 = Cells.Cell.agrees_one(~Spec.Entry, ~Spec.Entry.same, s1, kv, ev)(f4)
         +hc2 = Fresh.claim(s1, kv, c, ev)({==})
         +cell2v = Equal.trans(
@@ -7218,8 +8235,7 @@ def Spec.Node.members_after_set(n, s, e, g, ms, v):
           Shared.Trie.get_union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s1, tv, kv),
           %Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, Shared.Trie.get(Cells.Cell<Spec.Entry>, s1, kv), None{}, f4):
             {Shared.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), _, Shared.Trie.get(Cells.Cell<Spec.Entry>, tv, kv)) == Some{ev}: Maybe<&2, Cells.Cell<Spec.Entry>>}
-          Shared.Trie.get_one(Cells.Cell<Spec.Entry>, kv, ev)
-        )
+          Shared.Trie.get_one(Cells.Cell<Spec.Entry>, kv, ev))
         +cell2a = Equal.trans(
           Maybe<&2, Cells.Cell<Spec.Entry>>,
           Shared.Trie.get(Cells.Cell<Spec.Entry>, s2, ka),
@@ -7228,14 +8244,28 @@ def Spec.Node.members_after_set(n, s, e, g, ms, v):
           Fresh.cell(s1, kv, ka, ev)({==}),
           cell1a
         )
-        +asked2 = Equal.cong(Maybe<&2, Cells.Cell<Spec.Entry>>, Maybe<&2, Asked>, z => Asked.of(Cell.entry(z)), Shared.Trie.get(Cells.Cell<Spec.Entry>, s2, ka), Some{ea}, cell2a)
+        +asked2 = Equal.cong(
+          Maybe<&2, Cells.Cell<Spec.Entry>>,
+          Maybe<&2, Asked>,
+          z => Asked.of(Cell.entry(z)),
+          Shared.Trie.get(Cells.Cell<Spec.Entry>, s2, ka),
+          Some{ea},
+          cell2a
+        )
         +f5 = Equal.trans(
           Maybe<&2, Cells.Cell<Spec.Entry>>,
           Shared.Trie.get(Cells.Cell<Spec.Entry>, s2, kvi),
           Shared.Trie.get(Cells.Cell<Spec.Entry>, s1, kvi),
           None{},
           Fresh.cell(s1, kv, kvi, ev)(Vote.apart(n, c, i, v)(h6)),
-          Equal.trans(Maybe<&2, Cells.Cell<Spec.Entry>>, Shared.Trie.get(Cells.Cell<Spec.Entry>, s1, kvi), Shared.Trie.get(Cells.Cell<Spec.Entry>, s, kvi), None{}, Fresh.cell(s, ka, kvi, ea)({==}), h5)
+          Equal.trans(
+            Maybe<&2, Cells.Cell<Spec.Entry>>,
+            Shared.Trie.get(Cells.Cell<Spec.Entry>, s1, kvi),
+            Shared.Trie.get(Cells.Cell<Spec.Entry>, s, kvi),
+            None{},
+            Fresh.cell(s, ka, kvi, ea)({==}),
+            h5
+          )
         )
         +last = Members.last(
           n,
@@ -7254,10 +8284,23 @@ def Spec.Node.members_after_set(n, s, e, g, ms, v):
           asked2,
           Start.of(s1, c, Chain.root(s1, c), l)(ecur1)
         )
-        +hall = Members.known(s, ta, tv, g, hc, hc2, Claim.of(s, c, Spec.Node.claim(s, c), {==}, l)(ecur))
+        +hall = Members.known(
+          s,
+          ta,
+          tv,
+          g,
+          hc,
+          hc2,
+          Claim.of(s, c, Spec.Node.claim(s, c), {==}, l)(ecur)
+        )
         %Equal.sym(Spec.State(), Spec.Node.ask(n, s, Spec.Envelope{r, w, t}, q), s2, ask):
           {Spec.Node.members(_, g) == Some{ms}: Maybe<&2, List<&2, Spec.Member>>}
-        %Equal.sym(Bool, Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s2), Spec.Member.group{g}), True{}, hall):
+        %Equal.sym(
+          Bool,
+          Shared.List.has(~Spec.Member, ~Spec.Member.same, Group.all(s2), Spec.Member.group{g}),
+          True{},
+          hall
+        ):
           {
             Shared.Bool.when(
               Maybe<&2, List<&2, Spec.Member>>,
@@ -7268,3 +8311,4 @@ def Spec.Node.members_after_set(n, s, e, g, ms, v):
               == Some{ms}: Maybe<&2, List<&2, Spec.Member>>
           }
         last
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning

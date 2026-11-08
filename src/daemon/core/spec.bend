@@ -273,15 +273,23 @@ def Root.first(+c: Chain, cs: List<&2, Cells.Cell<Entry>>) -> Maybe<&2, Entry>:
   match cs:
     case Nil{}:
       None{}
-    case Con{Cells.one{Entry.root{+d, +i, +n}}, r}:
-      Shared.Bool.when(Maybe<&2, Entry>, Chain.same(d, c), u => Some{Entry.root{d, i, n}}, u => Root.first(c, r))
+    case Con{Cells.one{Entry.root{+d, i, n}}, r}:
+      Shared.Bool.when(
+        Maybe<&2, Entry>,
+        Chain.same(d, c),
+        u => Some{Entry.root{d, i, n}},
+        u => Root.first(c, r)
+      )
     case Con{x, r}:
       Root.first(c, r)
 
 # the claim of the first version of the chain c: when nodes claim it apart,
 # the one with the smallest key
-def Node.claim(+s: State(), +c: Chain) -> Maybe<&2, Entry>:
-  Root.first(c, Shared.Trie.values(Cells.Cell<Entry>, Shared.Trie.under(Cells.Cell<Entry>, s, Root.key(c))))
+def Node.claim(s: State(), +c: Chain) -> Maybe<&2, Entry>:
+  Root.first(
+    c,
+    Shared.Trie.values(Cells.Cell<Entry>, Shared.Trie.under(Cells.Cell<Entry>, s, Root.key(c)))
+  )
 
 # Answers
 # -------
@@ -772,21 +780,36 @@ law Node.members_after_set:
   {Node.owners(s, Chain.group{g}) == [n]: List<&2, String>}
     -> {List.last(&2, Id, Node.chain(s, Chain.group{g})) == Some{v}: Maybe<&2, Id>}
     -> {
-      Shared.Trie.get(Cells.Cell<Entry>, s, Slot.key(Slot.ask{Envelope.of(e)}))
+      Shared.Trie.get(
+        Cells.Cell<Entry>,
+        s,
+        Slot.key(Slot.ask{Envelope.of(e)})
+      )
         == None{}: Maybe<&2, Cells.Cell<Entry>>
     }
     -> {
-      Shared.Trie.get(Cells.Cell<Entry>, s, Slot.key(Slot.vote{n, Chain.group{g}, v}))
+      Shared.Trie.get(
+        Cells.Cell<Entry>,
+        s,
+        Slot.key(Slot.vote{n, Chain.group{g}, v})
+      )
         == None{}: Maybe<&2, Cells.Cell<Entry>>
     }
     -> {
-      Shared.Trie.get(Cells.Cell<Entry>, s, Slot.key(Slot.vote{n, Chain.group{g}, Envelope.of(e)}))
+      Shared.Trie.get(
+        Cells.Cell<Entry>,
+        s,
+        Slot.key(Slot.vote{n, Chain.group{g}, Envelope.of(e)})
+      )
         == None{}: Maybe<&2, Cells.Cell<Entry>>
     }
     -> {Id.same(Envelope.of(e), v) == False{}: Bool}
     -> {Node.fits(s, Ask.set_group{g, ms}, v) == True{}: Bool}
     -> {
-      Node.members(Node.ask(n, s, e, Ask.set_group{g, ms}), g)
+      Node.members(
+        Node.ask(n, s, e, Ask.set_group{g, ms}),
+        g
+      )
         == Some{ms}: Maybe<&2, List<&2, Member>>
     }
 

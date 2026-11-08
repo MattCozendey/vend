@@ -2266,8 +2266,16 @@ def Trie.under(-V: Data, t: Trie<V>, k: List<&2, Bool>) -> Trie<V>:
     case bin{h, z, o} Con{True{}, r}:
       Trie.under(V, o, r)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement keeps each and/or as one value for the proof to split on; a proof does not run
 # what a list has, the list with more after it has
-def List.has_left(~A: Data, ~same: A -> A -> Bool, a: List<&2, A>, +b: List<&2, A>, +m: A) -> {
+def List.has_left(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  a: List<&2, A>,
+  b: List<&2, A>,
+  m: A
+) -> {
   List.has(~A, ~same, a, m) == True{}: Bool
 } -> {List.has(~A, ~same, List.append(&2, A, a, b), m) == True{}: Bool}:
   h =>
@@ -2277,11 +2285,26 @@ def List.has_left(~A: Data, ~same: A -> A -> Bool, a: List<&2, A>, +b: List<&2, 
       Bool.or(List.has(~A, ~same, a, m), List.has(~A, ~same, b, m)),
       List.has_append(~A, ~same, a, b, m)
     ): {_ == True{}: Bool}
-    %Equal.sym(Bool, List.has(~A, ~same, a, m), True{}, h): {Bool.or(_, List.has(~A, ~same, b, m)) == True{}: Bool}
+    %Equal.sym(
+      Bool,
+      List.has(~A, ~same, a, m),
+      True{},
+      h
+    ): {Bool.or(_, List.has(~A, ~same, b, m)) == True{}: Bool}
     {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement keeps each and/or as one value for the proof to split on; a proof does not run
 # what a list has, the list with more before it has
-def List.has_right(~A: Data, ~same: A -> A -> Bool, +a: List<&2, A>, +b: List<&2, A>, +m: A) -> {
+def List.has_right(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  +a: List<&2, A>,
+  b: List<&2, A>,
+  +m: A
+) -> {
   List.has(~A, ~same, b, m) == True{}: Bool
 } -> {List.has(~A, ~same, List.append(&2, A, a, b), m) == True{}: Bool}:
   h =>
@@ -2291,11 +2314,24 @@ def List.has_right(~A: Data, ~same: A -> A -> Bool, +a: List<&2, A>, +b: List<&2
       Bool.or(List.has(~A, ~same, a, m), List.has(~A, ~same, b, m)),
       List.has_append(~A, ~same, a, b, m)
     ): {_ == True{}: Bool}
-    %Equal.sym(Bool, List.has(~A, ~same, b, m), True{}, h): {Bool.or(List.has(~A, ~same, a, m), _) == True{}: Bool}
+    %Equal.sym(
+      Bool,
+      List.has(~A, ~same, b, m),
+      True{},
+      h
+    ): {Bool.or(List.has(~A, ~same, a, m), _) == True{}: Bool}
     Bool.or_true_right(List.has(~A, ~same, a, m))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # a value under a key is a value of the trie
-def Trie.values_under(~V: Data, ~same: V -> V -> Bool, t: Trie<V>, p: List<&2, Bool>, +v: V) -> {
+def Trie.values_under(
+  ~V: Data,
+  ~same: V -> V -> Bool,
+  t: Trie<V>,
+  p: List<&2, Bool>,
+  +v: V
+) -> {
   List.has(~V, ~same, Trie.values(V, Trie.under(V, t, p)), v) == True{}: Bool
 } -> {List.has(~V, ~same, Trie.values(V, t), v) == True{}: Bool}:
   match t p:
@@ -2304,16 +2340,52 @@ def Trie.values_under(~V: Data, ~same: V -> V -> Bool, t: Trie<V>, p: List<&2, B
     case bin{m, z, o} Nil{}:
       h => h
     case bin{None{}, +z, +o} Con{False{}, r}:
-      h => List.has_left(~V, ~same, Trie.values(V, z), Trie.values(V, o), v)(Trie.values_under(~V, ~same, z, r, v)(h))
+      h => List.has_left(
+        ~V,
+        ~same,
+        Trie.values(V, z),
+        Trie.values(V, o),
+        v
+      )(Trie.values_under(~V, ~same, z, r, v)(h))
     case bin{None{}, +z, +o} Con{True{}, r}:
-      h => List.has_right(~V, ~same, Trie.values(V, z), Trie.values(V, o), v)(Trie.values_under(~V, ~same, o, r, v)(h))
-    case bin{Some{+x}, +z, +o} Con{False{}, r}:
-      h => List.has_cons(~V, ~same, x, List.append(&2, V, Trie.values(V, z), Trie.values(V, o)), v)(
-        List.has_left(~V, ~same, Trie.values(V, z), Trie.values(V, o), v)(Trie.values_under(~V, ~same, z, r, v)(h))
+      h => List.has_right(
+        ~V,
+        ~same,
+        Trie.values(V, z),
+        Trie.values(V, o),
+        v
+      )(Trie.values_under(~V, ~same, o, r, v)(h))
+    case bin{Some{x}, +z, +o} Con{False{}, r}:
+      h => List.has_cons(
+        ~V,
+        ~same,
+        x,
+        List.append(&2, V, Trie.values(V, z), Trie.values(V, o)),
+        v
+      )(
+        List.has_left(
+          ~V,
+          ~same,
+          Trie.values(V, z),
+          Trie.values(V, o),
+          v
+        )(Trie.values_under(~V, ~same, z, r, v)(h))
       )
     case bin{Some{+x}, +z, +o} Con{True{}, r}:
-      h => List.has_cons(~V, ~same, x, List.append(&2, V, Trie.values(V, z), Trie.values(V, o)), v)(
-        List.has_right(~V, ~same, Trie.values(V, z), Trie.values(V, o), v)(Trie.values_under(~V, ~same, o, r, v)(h))
+      h => List.has_cons(
+        ~V,
+        ~same,
+        x,
+        List.append(&2, V, Trie.values(V, z), Trie.values(V, o)),
+        v
+      )(
+        List.has_right(
+          ~V,
+          ~same,
+          Trie.values(V, z),
+          Trie.values(V, o),
+          v
+        )(Trie.values_under(~V, ~same, o, r, v)(h))
       )
 
 # Keys of text
@@ -2856,7 +2928,13 @@ def Trie.apart(k: List<&2, Bool>, p: List<&2, Bool>) -> Bool:
       False{}
 
 # keys that share a start are apart exactly when what follows it is
-def Trie.prefix_apart(p: List<&2, Bool>, +k: List<&2, Bool>, +q: List<&2, Bool>) -> {Trie.apart(List.append(&2, Bool, p, k), List.append(&2, Bool, p, q)) == Trie.apart(k, q): Bool}:
+def Trie.prefix_apart(
+  p: List<&2, Bool>,
+  k: List<&2, Bool>,
+  q: List<&2, Bool>
+) -> {
+  Trie.apart(List.append(&2, Bool, p, k), List.append(&2, Bool, p, q)) == Trie.apart(k, q): Bool
+}:
   match p:
     case Nil{}:
       {==}
@@ -2874,22 +2952,28 @@ def Trie.word_join.next(
   -x: List<&2, Bool>,
   -y: List<&2, Bool>,
   e: &e1: {t1 == t2: Word(k)} -> {Trie.apart(x, y) == False{}: Bool}
-) -> &e2: {WCon{b, t1} == WCon{b, t2}: Word(1n+k)} -> {Trie.apart(x, y) == False{}: Bool}:
+) -> &e2:
+  {WCon{b, t1} == WCon{b, t2}: Word(1n+k)} -> {Trie.apart(x, y) == False{}: Bool}:
   match e:
     case (e1, h):
       (Equal.cong(Word(k), Word(1n+k), z => WCon{b, z}, t1, t2, e1), h)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # keys that start with the bits of two words, and are not apart, start with
 # the same word, and are not apart after it
 def Trie.word_join(
   n: Nat,
   w1: Word(n),
   w2: Word(n),
-  +x: List<&2, Bool>,
-  +y: List<&2, Bool>
-) -> {Trie.apart(List.append(&2, Bool, Trie.word(n, w1), x), List.append(&2, Bool, Trie.word(n, w2), y)) == False{}: Bool} -> (&e: {w1 == w2: Word(n)} -> {
-  Trie.apart(x, y) == False{}: Bool
-}):
+  x: List<&2, Bool>,
+  y: List<&2, Bool>
+) -> {
+  Trie.apart(
+    List.append(&2, Bool, Trie.word(n, w1), x),
+    List.append(&2, Bool, Trie.word(n, w2), y)
+  )
+    == False{}: Bool
+} -> (&e: {w1 == w2: Word(n)} -> {Trie.apart(x, y) == False{}: Bool}):
   match n:
     case 0n:
       match w1 w2:
@@ -2903,19 +2987,29 @@ def Trie.word_join(
           h => Trie.word_join.next(k, True{}, t1, t2, x, y, Trie.word_join(k, t1, t2, x, y)(h))
         case WCon{False{}, t1} WCon{True{}, t2}:
           h => Empty.absurd(
-            &e: {WCon{False{}, t1} == WCon{True{}, t2}: Word(1n+k)} -> {Trie.apart(x, y) == False{}: Bool},
+            &e: {
+              WCon{False{}, t1} == WCon{True{}, t2}: Word(1n+k)
+            } -> {Trie.apart(x, y) == False{}: Bool},
             Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
           )
         case WCon{True{}, t1} WCon{False{}, t2}:
           h => Empty.absurd(
-            &e: {WCon{True{}, t1} == WCon{False{}, t2}: Word(1n+k)} -> {Trie.apart(x, y) == False{}: Bool},
+            &e: {
+              WCon{True{}, t1} == WCon{False{}, t2}: Word(1n+k)
+            } -> {Trie.apart(x, y) == False{}: Bool},
             Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
           )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # texts whose first characters and rests are the same are the same
-def Text.cons_eq(-w1: Word(32n), -r1: String, -w2: Word(32n), -r2: String, ew: {w1 == w2: Word(32n)}, er: {r1 == r2: String}) -> {
-  SCon{Chr{U32{w1}}, r1} == SCon{Chr{U32{w2}}, r2}: String
-}:
+def Text.cons_eq(
+  -w1: Word(32n),
+  -r1: String,
+  -w2: Word(32n),
+  -r2: String,
+  ew: {w1 == w2: Word(32n)},
+  er: {r1 == r2: String}
+) -> {SCon{Chr{U32{w1}}, r1} == SCon{Chr{U32{w2}}, r2}: String}:
   %Equal.sym(Word(32n), w1, w2, ew): {SCon{Chr{U32{_}}, r1} == SCon{Chr{U32{w2}}, r2}: String}
   %Equal.sym(String, r1, r2, er): {SCon{Chr{U32{w2}}, _} == SCon{Chr{U32{w2}}, r2}: String}
   {==}
@@ -2930,7 +3024,8 @@ def Text.join.done(
   -y: List<&2, Bool>,
   ew: {w1 == w2: Word(32n)},
   e: &e: {r1 == r2: String} -> {Trie.apart(x, y) == False{}: Bool}
-) -> &e: {SCon{Chr{U32{w1}}, r1} == SCon{Chr{U32{w2}}, r2}: String} -> {Trie.apart(x, y) == False{}: Bool}:
+) -> &e:
+  {SCon{Chr{U32{w1}}, r1} == SCon{Chr{U32{w2}}, r2}: String} -> {Trie.apart(x, y) == False{}: Bool}:
   match e:
     case (er, h):
       (Text.cons_eq(w1, r1, w2, r2, ew, er), h)
@@ -2943,26 +3038,58 @@ def Text.join.word(
   -r2: String,
   -x: List<&2, Bool>,
   -y: List<&2, Bool>,
-  e: &ew: {w1 == w2: Word(32n)} -> {Trie.apart(List.append(&2, Bool, Trie.text(r1), x), List.append(&2, Bool, Trie.text(r2), y)) == False{}: Bool},
-  rec: {Trie.apart(List.append(&2, Bool, Trie.text(r1), x), List.append(&2, Bool, Trie.text(r2), y)) == False{}: Bool} -> &e: {r1 == r2: String} -> {Trie.apart(x, y) == False{}: Bool}
-) -> &e: {SCon{Chr{U32{w1}}, r1} == SCon{Chr{U32{w2}}, r2}: String} -> {Trie.apart(x, y) == False{}: Bool}:
+  e: &ew: {
+    w1 == w2: Word(32n)
+  } -> {
+    Trie.apart(
+      List.append(&2, Bool, Trie.text(r1), x),
+      List.append(&2, Bool, Trie.text(r2), y)
+    )
+      == False{}: Bool
+  },
+  rec: {
+    Trie.apart(
+      List.append(&2, Bool, Trie.text(r1), x),
+      List.append(&2, Bool, Trie.text(r2), y)
+    )
+      == False{}: Bool
+  } -> &e: {r1 == r2: String} -> {Trie.apart(x, y) == False{}: Bool}
+) -> &e:
+  {SCon{Chr{U32{w1}}, r1} == SCon{Chr{U32{w2}}, r2}: String} -> {Trie.apart(x, y) == False{}: Bool}:
   match e:
     case (ew, h):
       Text.join.done(w1, r1, w2, r2, x, y, ew, rec(h))
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # keys that start with the keys of two texts, and are not apart, start with
 # the same text, and are not apart after it: a text's key never starts
 # another's
-def Trie.text_join(a: String, b: String, +x: List<&2, Bool>, +y: List<&2, Bool>) -> {
-  Trie.apart(List.append(&2, Bool, Trie.text(a), x), List.append(&2, Bool, Trie.text(b), y)) == False{}: Bool
-} -> &e: {a == b: String} -> {Trie.apart(x, y) == False{}: Bool}:
+def Trie.text_join(
+  a: String,
+  b: String,
+  +x: List<&2, Bool>,
+  +y: List<&2, Bool>
+) -> {
+  Trie.apart(
+    List.append(&2, Bool, Trie.text(a), x),
+    List.append(&2, Bool, Trie.text(b), y)
+  )
+    == False{}: Bool
+} -> &e:
+  {a == b: String} -> {Trie.apart(x, y) == False{}: Bool}:
   match a b:
     case SNil{} SNil{}:
       h => ({==}, h)
     case SNil{} SCon{Chr{U32{w}}, r}:
-      h => Empty.absurd(&e: {SNil{} == SCon{Chr{U32{w}}, r}: String} -> {Trie.apart(x, y) == False{}: Bool}, Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h)))
+      h => Empty.absurd(
+        &e: {SNil{} == SCon{Chr{U32{w}}, r}: String} -> {Trie.apart(x, y) == False{}: Bool},
+        Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
+      )
     case SCon{Chr{U32{w}}, r} SNil{}:
-      h => Empty.absurd(&e: {SCon{Chr{U32{w}}, r} == SNil{}: String} -> {Trie.apart(x, y) == False{}: Bool}, Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h)))
+      h => Empty.absurd(
+        &e: {SCon{Chr{U32{w}}, r} == SNil{}: String} -> {Trie.apart(x, y) == False{}: Bool},
+        Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
+      )
     case SCon{Chr{U32{+w1}}, +r1} SCon{Chr{U32{+w2}}, +r2}:
       h =>
         Text.join.word(
@@ -2972,32 +3099,111 @@ def Trie.text_join(a: String, b: String, +x: List<&2, Bool>, +y: List<&2, Bool>)
           r2,
           x,
           y,
-          Trie.word_join(32n, w1, w2, List.append(&2, Bool, Trie.text(r1), x), List.append(&2, Bool, Trie.text(r2), y))(
+          Trie.word_join(
+            32n,
+            w1,
+            w2,
+            List.append(&2, Bool, Trie.text(r1), x),
+            List.append(&2, Bool, Trie.text(r2), y)
+          )(
             Equal.trans(
               Bool,
-              Trie.apart(List.append(&2, Bool, Trie.word(32n, w1), List.append(&2, Bool, Trie.text(r1), x)), List.append(&2, Bool, Trie.word(32n, w2), List.append(&2, Bool, Trie.text(r2), y))),
-              Trie.apart(List.append(&2, Bool, List.append(&2, Bool, Trie.word(32n, w1), Trie.text(r1)), x), List.append(&2, Bool, Trie.word(32n, w2), List.append(&2, Bool, Trie.text(r2), y))),
+              Trie.apart(
+                List.append(&2, Bool, Trie.word(32n, w1), List.append(&2, Bool, Trie.text(r1), x)),
+                List.append(&2, Bool, Trie.word(32n, w2), List.append(&2, Bool, Trie.text(r2), y))
+              ),
+              Trie.apart(
+                List.append(&2, Bool, List.append(&2, Bool, Trie.word(32n, w1), Trie.text(r1)), x),
+                List.append(&2, Bool, Trie.word(32n, w2), List.append(&2, Bool, Trie.text(r2), y))
+              ),
               False{},
               Equal.cong(
                 List<&2, Bool>,
                 Bool,
-                z => Trie.apart(z, List.append(&2, Bool, Trie.word(32n, w2), List.append(&2, Bool, Trie.text(r2), y))),
+                z => Trie.apart(
+                  z,
+                  List.append(&2, Bool, Trie.word(32n, w2), List.append(&2, Bool, Trie.text(r2), y))
+                ),
                 List.append(&2, Bool, Trie.word(32n, w1), List.append(&2, Bool, Trie.text(r1), x)),
                 List.append(&2, Bool, List.append(&2, Bool, Trie.word(32n, w1), Trie.text(r1)), x),
-                Equal.sym(List<&2, Bool>, List.append(&2, Bool, List.append(&2, Bool, Trie.word(32n, w1), Trie.text(r1)), x), List.append(&2, Bool, Trie.word(32n, w1), List.append(&2, Bool, Trie.text(r1), x)), List.append_assoc(Bool, Trie.word(32n, w1), Trie.text(r1), x))
+                Equal.sym(
+                  List<&2, Bool>,
+                  List.append(
+                    &2,
+                    Bool,
+                    List.append(&2, Bool, Trie.word(32n, w1), Trie.text(r1)),
+                    x
+                  ),
+                  List.append(
+                    &2,
+                    Bool,
+                    Trie.word(32n, w1),
+                    List.append(&2, Bool, Trie.text(r1), x)
+                  ),
+                  List.append_assoc(Bool, Trie.word(32n, w1), Trie.text(r1), x)
+                )
               ),
               Equal.trans(
                 Bool,
-                Trie.apart(List.append(&2, Bool, List.append(&2, Bool, Trie.word(32n, w1), Trie.text(r1)), x), List.append(&2, Bool, Trie.word(32n, w2), List.append(&2, Bool, Trie.text(r2), y))),
-                Trie.apart(List.append(&2, Bool, List.append(&2, Bool, Trie.word(32n, w1), Trie.text(r1)), x), List.append(&2, Bool, List.append(&2, Bool, Trie.word(32n, w2), Trie.text(r2)), y)),
+                Trie.apart(
+                  List.append(
+                    &2,
+                    Bool,
+                    List.append(&2, Bool, Trie.word(32n, w1), Trie.text(r1)),
+                    x
+                  ),
+                  List.append(&2, Bool, Trie.word(32n, w2), List.append(&2, Bool, Trie.text(r2), y))
+                ),
+                Trie.apart(
+                  List.append(
+                    &2,
+                    Bool,
+                    List.append(&2, Bool, Trie.word(32n, w1), Trie.text(r1)),
+                    x
+                  ),
+                  List.append(&2, Bool, List.append(&2, Bool, Trie.word(32n, w2), Trie.text(r2)), y)
+                ),
                 False{},
                 Equal.cong(
                   List<&2, Bool>,
                   Bool,
-                  z => Trie.apart(List.append(&2, Bool, List.append(&2, Bool, Trie.word(32n, w1), Trie.text(r1)), x), z),
-                  List.append(&2, Bool, Trie.word(32n, w2), List.append(&2, Bool, Trie.text(r2), y)),
-                  List.append(&2, Bool, List.append(&2, Bool, Trie.word(32n, w2), Trie.text(r2)), y),
-                  Equal.sym(List<&2, Bool>, List.append(&2, Bool, List.append(&2, Bool, Trie.word(32n, w2), Trie.text(r2)), y), List.append(&2, Bool, Trie.word(32n, w2), List.append(&2, Bool, Trie.text(r2), y)), List.append_assoc(Bool, Trie.word(32n, w2), Trie.text(r2), y))
+                  z => Trie.apart(
+                    List.append(
+                      &2,
+                      Bool,
+                      List.append(&2, Bool, Trie.word(32n, w1), Trie.text(r1)),
+                      x
+                    ),
+                    z
+                  ),
+                  List.append(
+                    &2,
+                    Bool,
+                    Trie.word(32n, w2),
+                    List.append(&2, Bool, Trie.text(r2), y)
+                  ),
+                  List.append(
+                    &2,
+                    Bool,
+                    List.append(&2, Bool, Trie.word(32n, w2), Trie.text(r2)),
+                    y
+                  ),
+                  Equal.sym(
+                    List<&2, Bool>,
+                    List.append(
+                      &2,
+                      Bool,
+                      List.append(&2, Bool, Trie.word(32n, w2), Trie.text(r2)),
+                      y
+                    ),
+                    List.append(
+                      &2,
+                      Bool,
+                      Trie.word(32n, w2),
+                      List.append(&2, Bool, Trie.text(r2), y)
+                    ),
+                    List.append_assoc(Bool, Trie.word(32n, w2), Trie.text(r2), y)
+                  )
                 ),
                 h
               )
@@ -3005,6 +3211,7 @@ def Trie.text_join(a: String, b: String, +x: List<&2, Bool>, +y: List<&2, Bool>)
           ),
           z => Trie.text_join(r1, r2, x, y)(z)
         )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # a trie joined with nothing is itself
 def Trie.union_tip(
@@ -3359,7 +3566,11 @@ def Bool.iff(
       {==}
 
 # h and k is k, when k makes h true
-def Bool.and_implied_right(h: Bool, k: Bool, c: {k == True{}: Bool} -> {h == True{}: Bool}) -> {Bool.and(h, k) == k: Bool}:
+def Bool.and_implied_right(
+  h: Bool,
+  k: Bool,
+  c: {k == True{}: Bool} -> {h == True{}: Bool}
+) -> {Bool.and(h, k) == k: Bool}:
   match h k:
     case True{} True{}:
       {==}
@@ -3378,10 +3589,19 @@ def Bool.or_absorb(x: Bool, y: Bool) -> {Bool.or(x, Bool.and(y, x)) == x: Bool}:
     case False{}:
       Bool.and_false_right(y)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # one place among a list that holds hit, then the rest that holds r: the "and"
 # of f and t holds at the first place when hit does, or later
-def Bool.or_split(hit: Bool, +f: Bool, +t: Bool, r: Bool) -> {
-  Bool.or(Bool.and(f, Bool.and(hit, t)), Bool.and(r, Bool.and(f, t)))
+def Bool.or_split(
+  hit: Bool,
+  f: Bool,
+  t: Bool,
+  r: Bool
+) -> {
+  Bool.or(
+    Bool.and(f, Bool.and(hit, t)),
+    Bool.and(r, Bool.and(f, t))
+  )
     == Bool.and(List.any.if(u => r, hit), Bool.and(f, t)): Bool
 }:
   match hit:
@@ -3391,3 +3611,4 @@ def Bool.or_split(hit: Bool, +f: Bool, +t: Bool, r: Bool) -> {
       %Equal.sym(Bool, Bool.and(f, False{}), False{}, Bool.and_false_right(f)):
         {Bool.or(_, Bool.and(r, Bool.and(f, t))) == Bool.and(r, Bool.and(f, t)): Bool}
       {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
