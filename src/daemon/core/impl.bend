@@ -1968,3 +1968,759 @@ def Spec.Node.chain_kept(s, t, c):
           == Spec.Node.chain(s, c): List<&2, Spec.Id>
       }
     Kept.chain.root(s, t, c, a, Root.of(Spec.Node.claim(s, c)))
+
+# Growth
+# ------
+
+# a chain of s and t, from its first step st, is the chain of s, then the walk
+# of s and t from the last step L of s
+def Grow.from(
+  +s: Spec.State(),
+  +t: Spec.State(),
+  +c: Spec.Chain,
+  +a: {Spec.Node.agrees(s, t) == True{}: Bool},
+  st: Step,
+  -l: Step,
+  el: {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step}
+) -> {
+  Chain.from(Spec.Node.join(s, t), c, Some{st})
+    == List.append(
+      &2,
+      Spec.Id,
+      Chain.from(s, c, Some{st}),
+      Chain.walk(
+        Nat.sub(State.fuel(Spec.Node.join(s, t)), List.length(&2, Spec.Id, Chain.walk(State.fuel(s), s, c, Chain.next(s, c, st)))),
+        Spec.Node.join(s, t),
+        c,
+        Chain.next(Spec.Node.join(s, t), c, l)
+      )
+    ): List<&2, Spec.Id>
+}:
+  match st:
+    case Step{+i, +ms}:
+      +w = Chain.walk(State.fuel(s), s, c, Chain.next(s, c, Step{i, ms}))
+      +g = Nat.sub(State.fuel(Spec.Node.join(s, t)), List.length(&2, Spec.Id, w))
+      %el :
+        {
+          i <> Chain.walk(State.fuel(Spec.Node.join(s, t)), Spec.Node.join(s, t), c, Chain.next(Spec.Node.join(s, t), c, Step{i, ms}))
+            == i <> List.append(&2, Spec.Id, w, Chain.walk(g, Spec.Node.join(s, t), c, Chain.next(Spec.Node.join(s, t), c, _))): List<&2, Spec.Id>
+        }
+      %Ext.walk(State.fuel(s), State.fuel(Spec.Node.join(s, t)), s, t, c, Step{i, ms}, a)(State.fuel_le(s, t)) :
+        {
+          i <> Chain.walk(State.fuel(Spec.Node.join(s, t)), Spec.Node.join(s, t), c, Chain.next(Spec.Node.join(s, t), c, Step{i, ms}))
+            == i <> _: List<&2, Spec.Id>
+        }
+      {==}
+
+# the last step of s and t, from the first step st, is the last step of the
+# walk of s and t from the last step l of s
+def Grow.last(
+  +s: Spec.State(),
+  +t: Spec.State(),
+  +c: Spec.Chain,
+  +a: {Spec.Node.agrees(s, t) == True{}: Bool},
+  +st: Step,
+  -l: Step,
+  el: {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step}
+) -> {
+  Chain.last(State.fuel(Spec.Node.join(s, t)), Spec.Node.join(s, t), c, st, Chain.next(Spec.Node.join(s, t), c, st))
+    == Chain.last(
+      Nat.sub(State.fuel(Spec.Node.join(s, t)), List.length(&2, Spec.Id, Chain.walk(State.fuel(s), s, c, Chain.next(s, c, st)))),
+      Spec.Node.join(s, t),
+      c,
+      l,
+      Chain.next(Spec.Node.join(s, t), c, l)
+    ): Step
+}:
+  +g = Nat.sub(State.fuel(Spec.Node.join(s, t)), List.length(&2, Spec.Id, Chain.walk(State.fuel(s), s, c, Chain.next(s, c, st))))
+  %el :
+    {
+      Chain.last(State.fuel(Spec.Node.join(s, t)), Spec.Node.join(s, t), c, st, Chain.next(Spec.Node.join(s, t), c, st))
+        == Chain.last(g, Spec.Node.join(s, t), c, _, Chain.next(Spec.Node.join(s, t), c, _)): Step
+    }
+  Ext.last(State.fuel(s), State.fuel(Spec.Node.join(s, t)), s, t, c, st, a)(State.fuel_le(s, t))
+
+# a first step of s stays when the claim stays
+def Grow.root.of(
+  +s: Spec.State(),
+  +t: Spec.State(),
+  +c: Spec.Chain,
+  +a: {Spec.Node.agrees(s, t) == True{}: Bool},
+  mr: Maybe<&2, Step>,
+  -st: Step
+) -> {Chain.root.of(s, c, mr) == Some{st}: Maybe<&2, Step>} -> {Chain.root.of(Spec.Node.join(s, t), c, mr) == Some{st}: Maybe<&2, Step>}:
+  match mr:
+    case None{}:
+      h => Empty.absurd({Chain.root.of(Spec.Node.join(s, t), c, None{}) == Some{st}: Maybe<&2, Step>}, Maybes.Maybe.none_ne_some(Step, st, h))
+    case Some{Step{+i, +ms}}:
+      Kept.step.ask(s, t, c, i, ms, st, a, State.asked(s, i), {==})
+
+# a first step of s stays in s and t when the claim stays
+def Grow.root(
+  +s: Spec.State(),
+  +t: Spec.State(),
+  +c: Spec.Chain,
+  +a: {Spec.Node.agrees(s, t) == True{}: Bool},
+  hc: {Spec.Node.claim(Spec.Node.join(s, t), c) == Spec.Node.claim(s, c): Maybe<&2, Spec.Entry>},
+  -st: Step
+) -> {Chain.root(s, c) == Some{st}: Maybe<&2, Step>} -> {Chain.root(Spec.Node.join(s, t), c) == Some{st}: Maybe<&2, Step>}:
+  h =>
+    %Equal.sym(Maybe<&2, Spec.Entry>, Spec.Node.claim(Spec.Node.join(s, t), c), Spec.Node.claim(s, c), hc) :
+      {Chain.root.of(Spec.Node.join(s, t), c, Root.of(_)) == Some{st}: Maybe<&2, Step>}
+    Grow.root.of(s, t, c, a, Root.of(Spec.Node.claim(s, c)), st)(h)
+
+# a chain whose last step is l has a first step that leads to l, when r is its
+# first step
+def Start.of(+s: Spec.State(), +c: Spec.Chain, r: Maybe<&2, Step>, -l: Step) -> {Chain.cursor.of(s, c, r) == Some{l}: Maybe<&2, Step>} -> (
+  &st: Step -> {r == Some{st}: Maybe<&2, Step>} & {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step}
+):
+  match r:
+    case None{}:
+      h => Empty.absurd(
+        &st: Step -> {None{} == Some{st}: Maybe<&2, Step>} & {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step},
+        Maybes.Maybe.none_ne_some(Step, l, h)
+      )
+    case Some{+st}:
+      h => (st, ({==}, Maybes.Maybe.some_inj(Step, Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)), l, h)))
+
+# Stay.chain once the first step st of the chain is known
+def Stay.chain.of(
+  +s: Spec.State(),
+  +t: Spec.State(),
+  +c: Spec.Chain,
+  +a: {Spec.Node.agrees(s, t) == True{}: Bool},
+  +hc: {Spec.Node.claim(Spec.Node.join(s, t), c) == Spec.Node.claim(s, c): Maybe<&2, Spec.Entry>},
+  +l: Step,
+  en: {Chain.next(Spec.Node.join(s, t), c, l) == None{}: Maybe<&2, Step>},
+  pr: &st: Step -> {Chain.root(s, c) == Some{st}: Maybe<&2, Step>} & {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step}
+) -> {Spec.Node.chain(Spec.Node.join(s, t), c) == Spec.Node.chain(s, c): List<&2, Spec.Id>}:
+  match pr:
+    case (+st, (+er, el)):
+      +j = Spec.Node.join(s, t)
+      +g = Nat.sub(State.fuel(j), List.length(&2, Spec.Id, Chain.walk(State.fuel(s), s, c, Chain.next(s, c, st))))
+      +x = Chain.from(s, c, Some{st})
+      Equal.trans(
+        List<&2, Spec.Id>,
+        Chain.from(j, c, Chain.root(j, c)),
+        Chain.from(j, c, Some{st}),
+        Chain.from(s, c, Chain.root(s, c)),
+        Equal.cong(Maybe<&2, Step>, List<&2, Spec.Id>, z => Chain.from(j, c, z), Chain.root(j, c), Some{st}, Grow.root(s, t, c, a, hc, st)(er)),
+        Equal.trans(
+          List<&2, Spec.Id>,
+          Chain.from(j, c, Some{st}),
+          List.append(&2, Spec.Id, x, Chain.walk(g, j, c, Chain.next(j, c, l))),
+          Chain.from(s, c, Chain.root(s, c)),
+          Grow.from(s, t, c, a, st, l, el),
+          Equal.trans(
+            List<&2, Spec.Id>,
+            List.append(&2, Spec.Id, x, Chain.walk(g, j, c, Chain.next(j, c, l))),
+            List.append(&2, Spec.Id, x, []),
+            Chain.from(s, c, Chain.root(s, c)),
+            %Equal.sym(Maybe<&2, Step>, Chain.next(j, c, l), None{}, en) :
+              {List.append(&2, Spec.Id, x, Chain.walk(g, j, c, _)) == List.append(&2, Spec.Id, x, []): List<&2, Spec.Id>}
+            Equal.cong(List<&2, Spec.Id>, List<&2, Spec.Id>, z => List.append(&2, Spec.Id, x, z), Chain.walk(g, j, c, None{}), [], Walk.none(g, j, c)),
+            Equal.trans(
+              List<&2, Spec.Id>,
+              List.append(&2, Spec.Id, x, []),
+              x,
+              Chain.from(s, c, Chain.root(s, c)),
+              Lists.List.append_nil(Spec.Id, x),
+              Equal.sym(
+                List<&2, Spec.Id>,
+                Chain.from(s, c, Chain.root(s, c)),
+                x,
+                Equal.cong(Maybe<&2, Step>, List<&2, Spec.Id>, z => Chain.from(s, c, z), Chain.root(s, c), Some{st}, er)
+              )
+            )
+          )
+        )
+      )
+
+# a chain stays as it was when nothing follows its last step l in s and t
+def Stay.chain(
+  +s: Spec.State(),
+  +t: Spec.State(),
+  +c: Spec.Chain,
+  +a: {Spec.Node.agrees(s, t) == True{}: Bool},
+  +hc: {Spec.Node.claim(Spec.Node.join(s, t), c) == Spec.Node.claim(s, c): Maybe<&2, Spec.Entry>},
+  +l: Step,
+  ecur: {Chain.cursor(s, c) == Some{l}: Maybe<&2, Step>},
+  en: {Chain.next(Spec.Node.join(s, t), c, l) == None{}: Maybe<&2, Step>}
+) -> {Spec.Node.chain(Spec.Node.join(s, t), c) == Spec.Node.chain(s, c): List<&2, Spec.Id>}:
+  Stay.chain.of(s, t, c, a, hc, l, en, Start.of(s, c, Chain.root(s, c), l)(ecur))
+
+# Stay.cursor once the first step st of the chain is known
+def Stay.cursor.of(
+  +s: Spec.State(),
+  +t: Spec.State(),
+  +c: Spec.Chain,
+  +a: {Spec.Node.agrees(s, t) == True{}: Bool},
+  +hc: {Spec.Node.claim(Spec.Node.join(s, t), c) == Spec.Node.claim(s, c): Maybe<&2, Spec.Entry>},
+  +l: Step,
+  en: {Chain.next(Spec.Node.join(s, t), c, l) == None{}: Maybe<&2, Step>},
+  pr: &st: Step -> {Chain.root(s, c) == Some{st}: Maybe<&2, Step>} & {Chain.last(State.fuel(s), s, c, st, Chain.next(s, c, st)) == l: Step}
+) -> {Chain.cursor(Spec.Node.join(s, t), c) == Some{l}: Maybe<&2, Step>}:
+  match pr:
+    case (+st, (+er, el)):
+      +j = Spec.Node.join(s, t)
+      +g = Nat.sub(State.fuel(j), List.length(&2, Spec.Id, Chain.walk(State.fuel(s), s, c, Chain.next(s, c, st))))
+      %Equal.sym(Maybe<&2, Step>, Chain.root(j, c), Some{st}, Grow.root(s, t, c, a, hc, st)(er)) :
+        {Chain.cursor.of(j, c, _) == Some{l}: Maybe<&2, Step>}
+      %Equal.sym(
+        Step,
+        Chain.last(State.fuel(j), j, c, st, Chain.next(j, c, st)),
+        Chain.last(g, j, c, l, Chain.next(j, c, l)),
+        Grow.last(s, t, c, a, st, l, el)
+      ) :
+        {Some{_} == Some{l}: Maybe<&2, Step>}
+      %Equal.sym(Maybe<&2, Step>, Chain.next(j, c, l), None{}, en) : {Some{Chain.last(g, j, c, l, _)} == Some{l}: Maybe<&2, Step>}
+      %Equal.sym(Step, Chain.last(g, j, c, l, None{}), l, Last.none(g, j, c, l)) : {Some{_} == Some{l}: Maybe<&2, Step>}
+      {==}
+
+# the last step of a chain stays when nothing follows it in s and t
+def Stay.cursor(
+  +s: Spec.State(),
+  +t: Spec.State(),
+  +c: Spec.Chain,
+  +a: {Spec.Node.agrees(s, t) == True{}: Bool},
+  +hc: {Spec.Node.claim(Spec.Node.join(s, t), c) == Spec.Node.claim(s, c): Maybe<&2, Spec.Entry>},
+  +l: Step,
+  ecur: {Chain.cursor(s, c) == Some{l}: Maybe<&2, Step>},
+  en: {Chain.next(Spec.Node.join(s, t), c, l) == None{}: Maybe<&2, Step>}
+) -> {Chain.cursor(Spec.Node.join(s, t), c) == Some{l}: Maybe<&2, Step>}:
+  Stay.cursor.of(s, t, c, a, hc, l, en, Start.of(s, c, Chain.root(s, c), l)(ecur))
+
+# Owner steps
+# -----------
+
+# the vote of n at the spot of s is the entry of its slot
+def Spot.vote_of(+s: Spec.State(), +c: Spec.Chain, +v: Spec.Id, +n: String, -m: Maybe<&2, Cells.Cell<Spec.Entry>>) -> {
+  State.cell(s, Spec.Slot.Vote{n, c, v}) == m: Maybe<&2, Cells.Cell<Spec.Entry>>
+} -> {Spot.vote(Spot{s, c, v}, n) == Vote.of(Cell.entry(m)): Maybe<&2, Spec.Id>}:
+  h => Equal.cong(Maybe<&2, Cells.Cell<Spec.Entry>>, Maybe<&2, Spec.Id>, z => Vote.of(Cell.entry(z)), State.cell(s, Spec.Slot.Vote{n, c, v}), m, h)
+
+# nothing follows the step to v when its sole owner n has not voted after it
+def Next.none(+s: Spec.State(), +c: Spec.Chain, +v: Spec.Id, +n: String) -> {
+  State.cell(s, Spec.Slot.Vote{n, c, v}) == None{}: Maybe<&2, Cells.Cell<Spec.Entry>>
+} -> {Chain.next(s, c, Step{v, [n]}) == None{}: Maybe<&2, Step>}:
+  h =>
+    %Equal.sym(
+      Maybe<&2, Spec.Id>,
+      Quorums.Quorum.winner(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, [n], [n], Spot{s, c, v}),
+      None{},
+      Quorums.Quorum.winner_none(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, n, Spot{s, c, v})(Spot.vote_of(s, c, v, n, None{})(h))
+    ) :
+      {Step.won(s, c, [n], _) == None{}: Maybe<&2, Step>}
+    {==}
+
+# the version i follows v when its sole owner n voted for it, and its change q
+# is on the chain
+def Next.one(+s: Spec.State(), +c: Spec.Chain, +v: Spec.Id, +n: String, +i: Spec.Id, t: String, +q: Spec.Ask) -> {
+  State.cell(s, Spec.Slot.Vote{n, c, v}) == Some{Cells.One{Spec.Entry.Vote{i}}}: Maybe<&2, Cells.Cell<Spec.Entry>>
+} -> {
+  State.asked(s, i) == Some{Asked{t, q}}: Maybe<&2, Asked>
+} -> {Spec.Chain.same(Spec.Ask.chain(q), c) == True{}: Bool} -> {Chain.next(s, c, Step{v, [n]}) == Some{Step{i, Ask.owners(q, [n])}}: Maybe<&2, Step>}:
+  hv => ha => hq =>
+    %Equal.sym(
+      Maybe<&2, Spec.Id>,
+      Quorums.Quorum.winner(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, [n], [n], Spot{s, c, v}),
+      Some{i},
+      Quorums.Quorum.winner_one(~String, ~Spec.Id, ~Spot, ~Spot.vote, ~Spec.Id.same, ~Id.same_refl, n, Spot{s, c, v}, i)(
+        Spot.vote_of(s, c, v, n, Some{Cells.One{Spec.Entry.Vote{i}}})(hv)
+      )
+    ) :
+      {Step.won(s, c, [n], _) == Some{Step{i, Ask.owners(q, [n])}}: Maybe<&2, Step>}
+    %Equal.sym(Maybe<&2, Asked>, State.asked(s, i), Some{Asked{t, q}}, ha) :
+      {Step.ask(c, i, [n], _) == Some{Step{i, Ask.owners(q, [n])}}: Maybe<&2, Step>}
+    %Equal.sym(Bool, Spec.Chain.same(Spec.Ask.chain(q), c), True{}, hq) :
+      {Step.if(_, i, q, [n]) == Some{Step{i, Ask.owners(q, [n])}}: Maybe<&2, Step>}
+    {==}
+
+# the last step of a chain with the head v and the sole owner n is the step to v
+def Owner.cursor(+m: Maybe<&2, Step>, +n: String, +v: Spec.Id) -> {Step.owners.of(m) == [n]: List<&2, String>} -> {
+  Maybe.map(&2, Step, Spec.Id, k => Step.version(k), m) == Some{v}: Maybe<&2, Spec.Id>
+} -> {m == Some{Step{v, [n]}}: Maybe<&2, Step>}:
+  match m:
+    case None{}:
+      ho => hh => Empty.absurd({None{} == Some{Step{v, [n]}}: Maybe<&2, Step>}, Maybes.Maybe.none_ne_some(Spec.Id, v, hh))
+    case Some{Step{+kv, +kms}}:
+      ho => hh =>
+        %Maybes.Maybe.some_inj(Spec.Id, kv, v, hh) : {Some{Step{kv, kms}} == Some{Step{_, [n]}}: Maybe<&2, Step>}
+        %ho : {Some{Step{kv, kms}} == Some{Step{kv, _}}: Maybe<&2, Step>}
+        {==}
+
+# a chain that has a last step has a claim
+def Claim.of(+s: Spec.State(), +c: Spec.Chain, m: Maybe<&2, Spec.Entry>, em: {Spec.Node.claim(s, c) == m: Maybe<&2, Spec.Entry>}, -l: Step) -> {
+  Chain.cursor(s, c) == Some{l}: Maybe<&2, Step>
+} -> (&x: Spec.Entry -> {m == Some{x}: Maybe<&2, Spec.Entry>}):
+  match m:
+    case None{}:
+      h => Empty.absurd(
+        &x: Spec.Entry -> {None{} == Some{x}: Maybe<&2, Spec.Entry>},
+        Maybes.Maybe.none_ne_some(
+          Step,
+          l,
+          Equal.trans(
+            Maybe<&2, Step>,
+            None{},
+            Chain.cursor(s, c),
+            Some{l},
+            Equal.sym(
+              Maybe<&2, Step>,
+              Chain.cursor(s, c),
+              None{},
+              Equal.cong(Maybe<&2, Spec.Entry>, Maybe<&2, Step>, z => Chain.cursor.of(s, c, Chain.root.of(s, c, Root.of(z))), Spec.Node.claim(s, c), None{}, em)
+            ),
+            h
+          )
+        )
+      )
+    case Some{+x}:
+      h => (x, {==})
+
+# a node that took in a new request q of i at the time t, whose chain has the
+# claim m, votes or not as Node.ask.at says
+def Owner.ask(+n: String, +s: Spec.State(), +i: Spec.Id, +t: String, +q: Spec.Ask, m: Maybe<&2, Spec.Entry>, hm: &x: Spec.Entry -> {m == Some{x}: Maybe<&2, Spec.Entry>}) -> {
+  Node.ask.root(n, s, State.put(s, Spec.Slot.Ask{i}, Spec.Entry.Ask{i, t, q}), i, q, m)
+    == Node.ask.at(n, s, State.put(s, Spec.Slot.Ask{i}, Spec.Entry.Ask{i, t, q}), i, q, Chain.cursor(s, Spec.Ask.chain(q))): Spec.State()
+}:
+  match hm:
+    case (+x, ex):
+      %Equal.sym(Maybe<&2, Spec.Entry>, m, Some{x}, ex) :
+        {
+          Node.ask.root(n, s, State.put(s, Spec.Slot.Ask{i}, Spec.Entry.Ask{i, t, q}), i, q, _)
+            == Node.ask.at(n, s, State.put(s, Spec.Slot.Ask{i}, Spec.Entry.Ask{i, t, q}), i, q, Chain.cursor(s, Spec.Ask.chain(q))): Spec.State()
+        }
+      {==}
+
+# an "and" with False is False
+def And.false_right(a: Bool) -> {Bool.and(a, False{}) == False{}: Bool}:
+  match a:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# the cell of s and one entry at k, at a key p apart from k, is the cell of s
+def Fresh.cell(+s: Spec.State(), +k: List<&2, Bool>, +p: List<&2, Bool>, +x: Cells.Cell<Spec.Entry>) -> {Tries.Trie.apart(k, p) == True{}: Bool} -> {
+  Tries.Trie.get(Cells.Cell<Spec.Entry>, Spec.Node.join(s, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x)), p)
+    == Tries.Trie.get(Cells.Cell<Spec.Entry>, s, p): Maybe<&2, Cells.Cell<Spec.Entry>>
+}:
+  ap =>
+    %Equal.sym(
+      Maybe<&2, Cells.Cell<Spec.Entry>>,
+      Tries.Trie.get(Cells.Cell<Spec.Entry>, Spec.Node.join(s, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x)), p),
+      Tries.Trie.pick(
+        ~Cells.Cell<Spec.Entry>,
+        ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
+        Tries.Trie.get(Cells.Cell<Spec.Entry>, s, p),
+        Tries.Trie.get(Cells.Cell<Spec.Entry>, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x), p)
+      ),
+      Tries.Trie.get_union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x), p)
+    ) :
+      {_ == Tries.Trie.get(Cells.Cell<Spec.Entry>, s, p): Maybe<&2, Cells.Cell<Spec.Entry>>}
+    %Equal.sym(
+      Maybe<&2, Cells.Cell<Spec.Entry>>,
+      Tries.Trie.get(Cells.Cell<Spec.Entry>, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x), p),
+      None{},
+      Tries.Trie.get_one_apart(Cells.Cell<Spec.Entry>, k, p, x)(ap)
+    ) :
+      {
+        Tries.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), Tries.Trie.get(Cells.Cell<Spec.Entry>, s, p), _)
+          == Tries.Trie.get(Cells.Cell<Spec.Entry>, s, p): Maybe<&2, Cells.Cell<Spec.Entry>>
+      }
+    Tries.Trie.pick_none(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), Tries.Trie.get(Cells.Cell<Spec.Entry>, s, p))
+
+# the claim of a chain stays when one entry joins apart from its roots
+def Fresh.claim(+s: Spec.State(), +k: List<&2, Bool>, +c: Spec.Chain, +x: Cells.Cell<Spec.Entry>) -> {Tries.Trie.apart(k, Spec.Root.key(c)) == True{}: Bool} -> {
+  Spec.Node.claim(Spec.Node.join(s, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x)), c) == Spec.Node.claim(s, c): Maybe<&2, Spec.Entry>
+}:
+  ap => Equal.cong(
+    Tries.Trie<Cells.Cell<Spec.Entry>>,
+    Maybe<&2, Spec.Entry>,
+    z => Spec.Root.first(Tries.Trie.values(Cells.Cell<Spec.Entry>, z)),
+    Tries.Trie.under(Cells.Cell<Spec.Entry>, Spec.Node.join(s, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x)), Spec.Root.key(c)),
+    Tries.Trie.under(Cells.Cell<Spec.Entry>, s, Spec.Root.key(c)),
+    Tries.Trie.under_union_apart(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, k, Spec.Root.key(c), x)(ap)
+  )
+
+def Spec.Node.write_stale(n, s, e, b, name, base, x, v):
+  match e:
+    case Spec.Envelope{+r, +w, +t}:
+      +n = n
+      +s = s
+      +b = b
+      +name = name
+      +base = base
+      +x = x
+      +v = v
+      +i = {Spec.Id{w, r}: Spec.Id}
+      +c = {Spec.Chain.Branch{b}: Spec.Chain}
+      +q = {Spec.Ask.Write{b, name, base, x}: Spec.Ask}
+      +l = {Step{v, [n]}: Step}
+      +ka = Spec.Slot.key(Spec.Slot.Ask{i})
+      +kv = Spec.Slot.key(Spec.Slot.Vote{n, c, v})
+      +ea = {Cells.One{Spec.Entry.Ask{i, t, q}}: Cells.Cell<Spec.Entry>}
+      +ta = Tries.Trie.one(Cells.Cell<Spec.Entry>, ka, ea)
+      +s1 = Spec.Node.join(s, ta)
+      +h1 => +h2 => +h3 => +h4 => h5 =>
+        +ecur = Owner.cursor(Chain.cursor(s, c), n, v)(h1)(h2)
+        +a = Cells.Cell.agrees_one(~Spec.Entry, ~Spec.Entry.same, s, ka, ea)(h3)
+        +hc = Fresh.claim(s, ka, c, ea)({==})
+        +f4 = Equal.trans(
+          Maybe<&2, Cells.Cell<Spec.Entry>>,
+          Tries.Trie.get(Cells.Cell<Spec.Entry>, s1, kv),
+          Tries.Trie.get(Cells.Cell<Spec.Entry>, s, kv),
+          None{},
+          Fresh.cell(s, ka, kv, ea)({==}),
+          h4
+        )
+        +same = Stay.chain(s, ta, c, a, hc, l, ecur, Next.none(s1, c, v, n)(f4))
+        +fits = Equal.trans(
+          Bool,
+          Ask.fits(s, q, v),
+          Maybes.Maybe.same(~Octets.Bytes(), ~Octets.Bytes.is_eq, Spec.Node.content(s, name, Spec.Point.Head{b}), Spec.Node.content_at(s, name, base)),
+          False{},
+          Equal.sym(
+            Bool,
+            Maybes.Maybe.same(~Octets.Bytes(), ~Octets.Bytes.is_eq, Spec.Node.content(s, name, Spec.Point.Head{b}), Spec.Node.content_at(s, name, base)),
+            Ask.fits(s, q, v),
+            Equal.cong(
+              Maybe<&2, Spec.Id>,
+              Bool,
+              z => Maybes.Maybe.same(~Octets.Bytes(), ~Octets.Bytes.is_eq, Res.of(s, name, z), Res.of(s, name, base)),
+              Spec.Node.head(s, b),
+              Some{v},
+              h2
+            )
+          ),
+          h5
+        )
+        +may = Node.may_vote(n, s, c, v, [n])
+        +ask = Equal.trans(
+          Spec.State(),
+          Spec.Node.ask(n, s, Spec.Envelope{r, w, t}, q),
+          Node.ask.root(n, s, s1, i, q, Spec.Node.claim(s, c)),
+          s1,
+          Equal.cong(Maybe<&2, Cells.Cell<Spec.Entry>>, Spec.State(), z => Node.ask.fresh(n, s, i, t, q, z), State.cell(s, Spec.Slot.Ask{i}), None{}, h3),
+          Equal.trans(
+            Spec.State(),
+            Node.ask.root(n, s, s1, i, q, Spec.Node.claim(s, c)),
+            Node.ask.at(n, s, s1, i, q, Chain.cursor(s, c)),
+            s1,
+            Owner.ask(n, s, i, t, q, Spec.Node.claim(s, c), Claim.of(s, c, Spec.Node.claim(s, c), {==}, l)(ecur)),
+            Equal.trans(
+              Spec.State(),
+              Node.ask.at(n, s, s1, i, q, Chain.cursor(s, c)),
+              Node.ask.at(n, s, s1, i, q, Some{l}),
+              s1,
+              Equal.cong(Maybe<&2, Step>, Spec.State(), z => Node.ask.at(n, s, s1, i, q, z), Chain.cursor(s, c), Some{l}, ecur),
+              Equal.cong(
+                Bool,
+                Spec.State(),
+                z => Node.vote.if(z, s1, Spec.Slot.Vote{n, c, v}, i),
+                Bool.and(may, Ask.fits(s, q, v)),
+                False{},
+                Equal.trans(
+                  Bool,
+                  Bool.and(may, Ask.fits(s, q, v)),
+                  Bool.and(may, False{}),
+                  False{},
+                  Equal.cong(Bool, Bool, z => Bool.and(may, z), Ask.fits(s, q, v), False{}, fits),
+                  And.false_right(may)
+                )
+              )
+            )
+          )
+        )
+        Equal.trans(
+          List<&2, Spec.Id>,
+          Spec.Node.chain(Spec.Node.ask(n, s, Spec.Envelope{r, w, t}, q), c),
+          Spec.Node.chain(s1, c),
+          Spec.Node.chain(s, c),
+          Equal.cong(Spec.State(), List<&2, Spec.Id>, z => Spec.Node.chain(z, c), Spec.Node.ask(n, s, Spec.Envelope{r, w, t}, q), s1, ask),
+          same
+        )
+
+# a list that holds a node holds it
+def Owners.has(+n: String) -> {Shared.List.has(~String, ~String.eq, [n], n) == True{}: Bool}:
+  %Equal.sym(Bool, String.eq(n, n), True{}, Strings.String.eq_refl(n)) :
+    {List.any.if(u => Shared.List.has(~String, ~String.eq, [], n), _) == True{}: Bool}
+  {==}
+
+# one entry at a free key walks one step further
+def Grow.fuel(+s: Spec.State(), +k: List<&2, Bool>, +x: Cells.Cell<Spec.Entry>) -> {
+  Tries.Trie.get(Cells.Cell<Spec.Entry>, s, k) == None{}: Maybe<&2, Cells.Cell<Spec.Entry>>
+} -> {Nat.is_lt(State.fuel(s), State.fuel(Spec.Node.join(s, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x)))) == True{}: Bool}:
+  h =>
+    %Equal.sym(
+      Nat,
+      Tries.Trie.size(Cells.Cell<Spec.Entry>, Spec.Node.join(s, Tries.Trie.one(Cells.Cell<Spec.Entry>, k, x))),
+      1n+Tries.Trie.size(Cells.Cell<Spec.Entry>, s),
+      Tries.Trie.size_union_one(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, k, x)(h)
+    ) :
+      {Nat.is_lt(State.fuel(s), 1n+_) == True{}: Bool}
+    Nats.Nat.lt_succ(Tries.Trie.size(Cells.Cell<Spec.Entry>, s))
+
+# the request i is in the chain of s2, s1 and the sole owner's vote for it
+# after v, once the first step of the chain of s1 is known
+def Written.has(
+  +n: String,
+  +s1: Spec.State(),
+  +i: Spec.Id,
+  +c: Spec.Chain,
+  +v: Spec.Id,
+  +tv: Spec.State(),
+  +a2: {Spec.Node.agrees(s1, tv) == True{}: Bool},
+  +hc2: {Spec.Node.claim(Spec.Node.join(s1, tv), c) == Spec.Node.claim(s1, c): Maybe<&2, Spec.Entry>},
+  +next2: {Chain.next(Spec.Node.join(s1, tv), c, Step{v, [n]}) == Some{Step{i, [n]}}: Maybe<&2, Step>},
+  +grow: {Nat.is_lt(State.fuel(s1), State.fuel(Spec.Node.join(s1, tv))) == True{}: Bool},
+  pr: &st: Step -> {Chain.root(s1, c) == Some{st}: Maybe<&2, Step>} & {Chain.last(State.fuel(s1), s1, c, st, Chain.next(s1, c, st)) == Step{v, [n]}: Step}
+) -> {Shared.List.has(~Spec.Id, ~Spec.Id.same, Spec.Node.chain(Spec.Node.join(s1, tv), c), i) == True{}: Bool}:
+  match pr:
+    case (+st, (+er, el)):
+      +s2 = Spec.Node.join(s1, tv)
+      +w1 = Chain.walk(State.fuel(s1), s1, c, Chain.next(s1, c, st))
+      +x1 = Chain.from(s1, c, Some{st})
+      +g = Nat.sub(State.fuel(s2), List.length(&2, Spec.Id, w1))
+      +g1 = Nat.sub(State.fuel(s2), 1n+List.length(&2, Spec.Id, w1))
+      +rest = Chain.walk(g1, s2, c, Chain.next(s2, c, Step{i, [n]}))
+      +gs = Nats.Nat.sub_pos(List.length(&2, Spec.Id, w1), State.fuel(s2))(
+        Nats.Nat.le_lt(List.length(&2, Spec.Id, w1), State.fuel(s1), State.fuel(s2))(Walk.length(State.fuel(s1), s1, c, Chain.next(s1, c, st)))(grow)
+      )
+      +shape = Equal.trans(
+        List<&2, Spec.Id>,
+        Chain.from(s2, c, Chain.root(s2, c)),
+        Chain.from(s2, c, Some{st}),
+        List.append(&2, Spec.Id, x1, i <> rest),
+        Equal.cong(Maybe<&2, Step>, List<&2, Spec.Id>, z => Chain.from(s2, c, z), Chain.root(s2, c), Some{st}, Grow.root(s1, tv, c, a2, hc2, st)(er)),
+        Equal.trans(
+          List<&2, Spec.Id>,
+          Chain.from(s2, c, Some{st}),
+          List.append(&2, Spec.Id, x1, Chain.walk(g, s2, c, Chain.next(s2, c, Step{v, [n]}))),
+          List.append(&2, Spec.Id, x1, i <> rest),
+          Grow.from(s1, tv, c, a2, st, Step{v, [n]}, el),
+          %Equal.sym(Maybe<&2, Step>, Chain.next(s2, c, Step{v, [n]}), Some{Step{i, [n]}}, next2) :
+            {List.append(&2, Spec.Id, x1, Chain.walk(g, s2, c, _)) == List.append(&2, Spec.Id, x1, i <> rest): List<&2, Spec.Id>}
+          %Equal.sym(Nat, g, 1n+g1, gs) :
+            {List.append(&2, Spec.Id, x1, Chain.walk(_, s2, c, Some{Step{i, [n]}})) == List.append(&2, Spec.Id, x1, i <> rest): List<&2, Spec.Id>}
+          {==}
+        )
+      )
+      %Equal.sym(List<&2, Spec.Id>, Spec.Node.chain(s2, c), List.append(&2, Spec.Id, x1, i <> rest), shape) :
+        {Shared.List.has(~Spec.Id, ~Spec.Id.same, _, i) == True{}: Bool}
+      Shared.List.has_middle(~Spec.Id, ~Spec.Id.same, ~Id.same_refl, x1, i, rest)
+
+# the sole owner's vote at its head v puts the request i in the chain: it is
+# Written, and its version holds the bytes x
+def Written.at(
+  +n: String,
+  +s1: Spec.State(),
+  +i: Spec.Id,
+  +t: String,
+  +b: String,
+  +name: Resources.Name,
+  +base: Maybe<&2, Spec.Id>,
+  +x: Octets.Bytes(),
+  +v: Spec.Id,
+  ecur1: {Chain.cursor(s1, Spec.Chain.Branch{b}) == Some{Step{v, [n]}}: Maybe<&2, Step>},
+  +f4: {Tries.Trie.get(Cells.Cell<Spec.Entry>, s1, Spec.Slot.key(Spec.Slot.Vote{n, Spec.Chain.Branch{b}, v})) == None{}: Maybe<&2, Cells.Cell<Spec.Entry>>},
+  +cell1a: {
+    Tries.Trie.get(Cells.Cell<Spec.Entry>, s1, Spec.Slot.key(Spec.Slot.Ask{i}))
+      == Some{Cells.One{Spec.Entry.Ask{i, t, Spec.Ask.Write{b, name, base, Spec.Content.Bytes{x}}}}}: Maybe<&2, Cells.Cell<Spec.Entry>>
+  }
+) -> {
+  Spec.Node.answer(Spec.Node.join(s1, Tries.Trie.one(Cells.Cell<Spec.Entry>, Spec.Slot.key(Spec.Slot.Vote{n, Spec.Chain.Branch{b}, v}), Cells.One{Spec.Entry.Vote{i}})), i)
+    == Spec.Answer.Written{i}: Spec.Answer
+}
+  & {
+    Spec.Node.content(
+      Spec.Node.join(s1, Tries.Trie.one(Cells.Cell<Spec.Entry>, Spec.Slot.key(Spec.Slot.Vote{n, Spec.Chain.Branch{b}, v}), Cells.One{Spec.Entry.Vote{i}})),
+      name,
+      Spec.Point.At{i}
+    )
+      == Some{x}: Maybe<&2, Octets.Bytes()>
+  }:
+  +c = {Spec.Chain.Branch{b}: Spec.Chain}
+  +q = {Spec.Ask.Write{b, name, base, Spec.Content.Bytes{x}}: Spec.Ask}
+  +l = {Step{v, [n]}: Step}
+  +ka = Spec.Slot.key(Spec.Slot.Ask{i})
+  +kv = Spec.Slot.key(Spec.Slot.Vote{n, c, v})
+  +ea = {Cells.One{Spec.Entry.Ask{i, t, q}}: Cells.Cell<Spec.Entry>}
+  +ev = {Cells.One{Spec.Entry.Vote{i}}: Cells.Cell<Spec.Entry>}
+  +tv = Tries.Trie.one(Cells.Cell<Spec.Entry>, kv, ev)
+  +s2 = Spec.Node.join(s1, tv)
+  +a2 = Cells.Cell.agrees_one(~Spec.Entry, ~Spec.Entry.same, s1, kv, ev)(f4)
+  +hc2 = Fresh.claim(s1, kv, c, ev)({==})
+  +cell2v = Equal.trans(
+    Maybe<&2, Cells.Cell<Spec.Entry>>,
+    Tries.Trie.get(Cells.Cell<Spec.Entry>, s2, kv),
+    Tries.Trie.pick(
+      ~Cells.Cell<Spec.Entry>,
+      ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
+      Tries.Trie.get(Cells.Cell<Spec.Entry>, s1, kv),
+      Tries.Trie.get(Cells.Cell<Spec.Entry>, tv, kv)
+    ),
+    Some{ev},
+    Tries.Trie.get_union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s1, tv, kv),
+    %Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, Tries.Trie.get(Cells.Cell<Spec.Entry>, s1, kv), None{}, f4) :
+      {
+        Tries.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), _, Tries.Trie.get(Cells.Cell<Spec.Entry>, tv, kv))
+          == Some{ev}: Maybe<&2, Cells.Cell<Spec.Entry>>
+      }
+    Tries.Trie.get_one(Cells.Cell<Spec.Entry>, kv, ev)
+  )
+  +cell2a = Equal.trans(
+    Maybe<&2, Cells.Cell<Spec.Entry>>,
+    Tries.Trie.get(Cells.Cell<Spec.Entry>, s2, ka),
+    Tries.Trie.get(Cells.Cell<Spec.Entry>, s1, ka),
+    Some{ea},
+    Fresh.cell(s1, kv, ka, ev)({==}),
+    cell1a
+  )
+  +asked2 = Equal.cong(Maybe<&2, Cells.Cell<Spec.Entry>>, Maybe<&2, Asked>, z => Asked.of(Cell.entry(z)), Tries.Trie.get(Cells.Cell<Spec.Entry>, s2, ka), Some{ea}, cell2a)
+  +next2 = Next.one(s2, c, v, n, i, t, q)(cell2v)(asked2)(Chain.same_refl(c))
+  +grow = Grow.fuel(s1, kv, ev)(f4)
+  +has = Written.has(n, s1, i, c, v, tv, a2, hc2, next2, grow, Start.of(s1, c, Chain.root(s1, c), l)(ecur1))
+  (
+    %Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, Tries.Trie.get(Cells.Cell<Spec.Entry>, s2, ka), Some{ea}, cell2a) :
+      {Answer.of(s2, i, _) == Spec.Answer.Written{i}: Spec.Answer}
+    %Equal.sym(Bool, Shared.List.has(~Spec.Id, ~Spec.Id.same, Spec.Node.chain(s2, c), i), True{}, has) :
+      {Answer.in(s2, i, q, _) == Spec.Answer.Written{i}: Spec.Answer}
+    {==},
+    %Equal.sym(Maybe<&2, Asked>, State.asked(s2, i), Some{Asked{t, q}}, asked2) :
+      {Res.at(State.fuel(s2), s2, Some{i}, name, _, Asked.hits(_, name)) == Some{x}: Maybe<&2, Octets.Bytes()>}
+    %Equal.sym(Bool, Spec.Name.same(name, name), True{}, Name.same_refl(name)) :
+      {Res.at(State.fuel(s2), s2, Some{i}, name, Some{Asked{t, q}}, _) == Some{x}: Maybe<&2, Octets.Bytes()>}
+    {==}
+  )
+
+def Spec.Node.write_written(n, s, e, b, name, base, x, v):
+  match e:
+    case Spec.Envelope{+r, +w, +t}:
+      +n = n
+      +s = s
+      +b = b
+      +name = name
+      +base = base
+      +x = x
+      +v = v
+      +i = {Spec.Id{w, r}: Spec.Id}
+      +c = {Spec.Chain.Branch{b}: Spec.Chain}
+      +q = {Spec.Ask.Write{b, name, base, Spec.Content.Bytes{x}}: Spec.Ask}
+      +l = {Step{v, [n]}: Step}
+      +ka = Spec.Slot.key(Spec.Slot.Ask{i})
+      +kv = Spec.Slot.key(Spec.Slot.Vote{n, c, v})
+      +ea = {Cells.One{Spec.Entry.Ask{i, t, q}}: Cells.Cell<Spec.Entry>}
+      +ev = {Cells.One{Spec.Entry.Vote{i}}: Cells.Cell<Spec.Entry>}
+      +ta = Tries.Trie.one(Cells.Cell<Spec.Entry>, ka, ea)
+      +tv = Tries.Trie.one(Cells.Cell<Spec.Entry>, kv, ev)
+      +s1 = Spec.Node.join(s, ta)
+      +s2 = Spec.Node.join(s1, tv)
+      +h1 => +h2 => +h3 => +h4 => h5 =>
+        +ecur = Owner.cursor(Chain.cursor(s, c), n, v)(h1)(h2)
+        +a = Cells.Cell.agrees_one(~Spec.Entry, ~Spec.Entry.same, s, ka, ea)(h3)
+        +hc = Fresh.claim(s, ka, c, ea)({==})
+        +f4 = Equal.trans(
+          Maybe<&2, Cells.Cell<Spec.Entry>>,
+          Tries.Trie.get(Cells.Cell<Spec.Entry>, s1, kv),
+          Tries.Trie.get(Cells.Cell<Spec.Entry>, s, kv),
+          None{},
+          Fresh.cell(s, ka, kv, ea)({==}),
+          h4
+        )
+        +ecur1 = Stay.cursor(s, ta, c, a, hc, l, ecur, Next.none(s1, c, v, n)(f4))
+        +base_bytes = Res.of(s, name, base)
+        +fits = Equal.trans(
+          Bool,
+          Ask.fits(s, q, v),
+          Maybes.Maybe.same(~Octets.Bytes(), ~Octets.Bytes.is_eq, base_bytes, base_bytes),
+          True{},
+          Equal.cong(
+            Maybe<&2, Octets.Bytes()>,
+            Bool,
+            z => Maybes.Maybe.same(~Octets.Bytes(), ~Octets.Bytes.is_eq, z, base_bytes),
+            Res.of(s, name, Some{v}),
+            base_bytes,
+            Equal.trans(
+              Maybe<&2, Octets.Bytes()>,
+              Res.of(s, name, Some{v}),
+              Spec.Node.content(s, name, Spec.Point.Head{b}),
+              base_bytes,
+              Equal.sym(
+                Maybe<&2, Octets.Bytes()>,
+                Spec.Node.content(s, name, Spec.Point.Head{b}),
+                Res.of(s, name, Some{v}),
+                Equal.cong(Maybe<&2, Spec.Id>, Maybe<&2, Octets.Bytes()>, z => Res.of(s, name, z), Spec.Node.head(s, b), Some{v}, h2)
+              ),
+              h5
+            )
+          ),
+          Maybes.Maybe.same_refl(~Octets.Bytes(), ~Octets.Bytes.is_eq, ~Octets.Bytes.is_eq_refl, base_bytes)
+        )
+        +may = Equal.trans(
+          Bool,
+          Node.may_vote(n, s, c, v, [n]),
+          Bool.and(True{}, Maybe.is_none(&2, Cells.Cell<Spec.Entry>, State.cell(s, Spec.Slot.Vote{n, c, v}))),
+          True{},
+          Equal.cong(
+            Bool,
+            Bool,
+            z => Bool.and(z, Maybe.is_none(&2, Cells.Cell<Spec.Entry>, State.cell(s, Spec.Slot.Vote{n, c, v}))),
+            Shared.List.has(~String, ~String.eq, [n], n),
+            True{},
+            Owners.has(n)
+          ),
+          Equal.cong(Maybe<&2, Cells.Cell<Spec.Entry>>, Bool, z => Maybe.is_none(&2, Cells.Cell<Spec.Entry>, z), State.cell(s, Spec.Slot.Vote{n, c, v}), None{}, h4)
+        )
+        +ask = Equal.trans(
+          Spec.State(),
+          Spec.Node.ask(n, s, Spec.Envelope{r, w, t}, q),
+          Node.ask.root(n, s, s1, i, q, Spec.Node.claim(s, c)),
+          s2,
+          Equal.cong(Maybe<&2, Cells.Cell<Spec.Entry>>, Spec.State(), z => Node.ask.fresh(n, s, i, t, q, z), State.cell(s, Spec.Slot.Ask{i}), None{}, h3),
+          Equal.trans(
+            Spec.State(),
+            Node.ask.root(n, s, s1, i, q, Spec.Node.claim(s, c)),
+            Node.ask.at(n, s, s1, i, q, Chain.cursor(s, c)),
+            s2,
+            Owner.ask(n, s, i, t, q, Spec.Node.claim(s, c), Claim.of(s, c, Spec.Node.claim(s, c), {==}, l)(ecur)),
+            Equal.trans(
+              Spec.State(),
+              Node.ask.at(n, s, s1, i, q, Chain.cursor(s, c)),
+              Node.ask.at(n, s, s1, i, q, Some{l}),
+              s2,
+              Equal.cong(Maybe<&2, Step>, Spec.State(), z => Node.ask.at(n, s, s1, i, q, z), Chain.cursor(s, c), Some{l}, ecur),
+              Equal.cong(
+                Bool,
+                Spec.State(),
+                z => Node.vote.if(z, s1, Spec.Slot.Vote{n, c, v}, i),
+                Bool.and(Node.may_vote(n, s, c, v, [n]), Ask.fits(s, q, v)),
+                True{},
+                %Equal.sym(Bool, Node.may_vote(n, s, c, v, [n]), True{}, may) : {Bool.and(_, Ask.fits(s, q, v)) == True{}: Bool}
+                fits
+              )
+            )
+          )
+        )
+        +cell1a = Equal.trans(
+          Maybe<&2, Cells.Cell<Spec.Entry>>,
+          Tries.Trie.get(Cells.Cell<Spec.Entry>, s1, ka),
+          Tries.Trie.pick(
+            ~Cells.Cell<Spec.Entry>,
+            ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same),
+            Tries.Trie.get(Cells.Cell<Spec.Entry>, s, ka),
+            Tries.Trie.get(Cells.Cell<Spec.Entry>, ta, ka)
+          ),
+          Some{ea},
+          Tries.Trie.get_union(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), s, ta, ka),
+          %Equal.sym(Maybe<&2, Cells.Cell<Spec.Entry>>, Tries.Trie.get(Cells.Cell<Spec.Entry>, s, ka), None{}, h3) :
+            {
+              Tries.Trie.pick(~Cells.Cell<Spec.Entry>, ~Cells.Cell.join(~Spec.Entry, ~Spec.Entry.same), _, Tries.Trie.get(Cells.Cell<Spec.Entry>, ta, ka))
+                == Some{ea}: Maybe<&2, Cells.Cell<Spec.Entry>>
+            }
+          Tries.Trie.get_one(Cells.Cell<Spec.Entry>, ka, ea)
+        )
+        %Equal.sym(Spec.State(), Spec.Node.ask(n, s, Spec.Envelope{r, w, t}, q), s2, ask) :
+          ({Spec.Node.answer(_, i) == Spec.Answer.Written{i}: Spec.Answer} & {Spec.Node.content(_, name, Spec.Point.At{i}) == Some{x}: Maybe<&2, Octets.Bytes()>})
+        Written.at(n, s1, i, t, b, name, base, x, v, ecur1, f4, cell1a)

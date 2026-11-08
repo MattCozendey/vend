@@ -792,3 +792,59 @@ def Quorum.winner_of(A, B, V, vote, same, refl, sound, ms, g, x):
         Quorum.yes(~A, ~B, ~V, ~vote, ~same, ms, g, x)
       )(hx)
     )
+
+# One member
+# ----------
+
+# the one member of [m] decides alone: its vote wins
+law Quorum.winner_one:
+  for ~A: Data
+  for ~B: Data
+  for ~V: Data
+  for ~vote: V -> A -> Maybe<&2, B>
+  for ~same: B -> B -> Bool
+  for ~refl: @x: B -> {same(x, x) == True{}: Bool}
+  for +m: A
+  for +g: V
+  for +x: B
+  {vote(g)(m) == Some{x}: Maybe<&2, B>}
+    -> {Quorum.winner(~A, ~B, ~V, ~vote, ~same, [m], [m], g) == Some{x}: Maybe<&2, B>}
+
+def Quorum.winner_one(A, B, V, vote, same, refl, m, g, x):
+  +h =>
+    %Equal.sym(Maybe<&2, B>, vote(g)(m), Some{x}, h) :
+      {Quorum.winner.at(~A, ~B, ~V, ~vote, ~same, _, None{}, [m], g) == Some{x}: Maybe<&2, B>}
+    %Equal.sym(Maybe<&2, B>, vote(g)(m), Some{x}, h) :
+      {
+        Quorum.winner.if(
+          B,
+          Nat.is_lt(
+            Nats.Nat.add_if(Bool.not(Quorum.hit(~B, ~same, _, x)), 0n),
+            Nats.Nat.add_if(Quorum.hit(~B, ~same, _, x), 0n)
+          ),
+          x,
+          None{}
+        )
+          == Some{x}: Maybe<&2, B>
+      }
+    %Equal.sym(Bool, same(x, x), True{}, refl(x)) :
+      {Quorum.winner.if(B, Nat.is_lt(Nats.Nat.add_if(Bool.not(_), 0n), Nats.Nat.add_if(_, 0n)), x, None{}) == Some{x}: Maybe<&2, B>}
+    {==}
+
+# the one member of [m] has not voted: nothing wins
+law Quorum.winner_none:
+  for ~A: Data
+  for ~B: Data
+  for ~V: Data
+  for ~vote: V -> A -> Maybe<&2, B>
+  for ~same: B -> B -> Bool
+  for +m: A
+  for +g: V
+  {vote(g)(m) == None{}: Maybe<&2, B>}
+    -> {Quorum.winner(~A, ~B, ~V, ~vote, ~same, [m], [m], g) == None{}: Maybe<&2, B>}
+
+def Quorum.winner_none(A, B, V, vote, same, m, g):
+  h =>
+    %Equal.sym(Maybe<&2, B>, vote(g)(m), None{}, h) :
+      {Quorum.winner.at(~A, ~B, ~V, ~vote, ~same, _, None{}, [m], g) == None{}: Maybe<&2, B>}
+    {==}
