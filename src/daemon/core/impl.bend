@@ -4011,7 +4011,7 @@ def Fresh.claim(
   ap => Equal.cong(
     Shared.Trie<Cells.Cell<Spec.Entry>>,
     Maybe<&2, Spec.Entry>,
-    z => Spec.Root.first(Shared.Trie.values(Cells.Cell<Spec.Entry>, z)),
+    z => Spec.Root.first(c, Shared.Trie.values(Cells.Cell<Spec.Entry>, z)),
     Shared.Trie.under(
       Cells.Cell<Spec.Entry>,
       Spec.Node.join(s, Shared.Trie.one(Cells.Cell<Spec.Entry>, k, x)),
@@ -4271,7 +4271,9 @@ def Grow.fuel(
 
 # the request i is in the chain of s2, s1 and the sole owner's vote for it
 # after v, once the first step of the chain of s1 is known
-def Written.has(
+# the chain after the sole owner's vote at its head v for the request i: the
+# chain before it, then i, then what follows i
+def Written.shape(
   n: String,
   +s1: Spec.State(),
   +i: Spec.Id,
@@ -4286,38 +4288,30 @@ def Written.has(
     Chain.next(Spec.Node.join(s1, tv), c, Step{v, [n]}) == Some{Step{i, [n]}}: Maybe<&2, Step>
   },
   grow: {Nat.is_lt(State.fuel(s1), State.fuel(Spec.Node.join(s1, tv))) == True{}: Bool},
-  pr: &st: Step -> {
-    Chain.root(s1, c) == Some{st}: Maybe<&2, Step>
-  }
-    & {Chain.last(State.fuel(s1), s1, c, st, Chain.next(s1, c, st)) == Step{v, [n]}: Step}
+  +st: Step,
+  er: {Chain.root(s1, c) == Some{st}: Maybe<&2, Step>},
+  el: {Chain.last(State.fuel(s1), s1, c, st, Chain.next(s1, c, st)) == Step{v, [n]}: Step}
 ) -> {
-  Shared.List.has(
-    ~Spec.Id,
-    ~Spec.Id.same,
-    Spec.Node.chain(Spec.Node.join(s1, tv), c),
-    i
-  )
-    == True{}: Bool
+  Spec.Node.chain(Spec.Node.join(s1, tv), c)
+    == List.append(&2, Spec.Id, Chain.from(s1, c, Some{st}), i <> Chain.walk(Nat.sub(State.fuel(Spec.Node.join(s1, tv)), 1n+List.length(&2, Spec.Id, Chain.walk(State.fuel(s1), s1, c, Chain.next(s1, c, st)))), Spec.Node.join(s1, tv), c, Chain.next(Spec.Node.join(s1, tv), c, Step{i, [n]}))): List<&2, Spec.Id>
 }:
-  match pr:
-    case (+st, (er, el)):
-      +s2 = Spec.Node.join(s1, tv)
-      +w1 = Chain.walk(State.fuel(s1), s1, c, Chain.next(s1, c, st))
-      x1 = Chain.from(s1, c, Some{st})
-      g = Nat.sub(State.fuel(s2), List.length(&2, Spec.Id, w1))
-      g1 = Nat.sub(State.fuel(s2), 1n+List.length(&2, Spec.Id, w1))
-      rest = Chain.walk(g1, s2, c, Chain.next(s2, c, Step{i, [n]}))
-      gs = Shared.Nat.sub_pos(
-        List.length(&2, Spec.Id, w1),
-        State.fuel(s2)
-      )(
-        Shared.Nat.le_lt(
-          List.length(&2, Spec.Id, w1),
-          State.fuel(s1),
-          State.fuel(s2)
-        )(Walk.length(State.fuel(s1), s1, c, Chain.next(s1, c, st)))(grow)
-      )
-      shape = Equal.trans(
+  +s2 = Spec.Node.join(s1, tv)
+  +w1 = Chain.walk(State.fuel(s1), s1, c, Chain.next(s1, c, st))
+  x1 = Chain.from(s1, c, Some{st})
+  g = Nat.sub(State.fuel(s2), List.length(&2, Spec.Id, w1))
+  g1 = Nat.sub(State.fuel(s2), 1n+List.length(&2, Spec.Id, w1))
+  rest = Chain.walk(g1, s2, c, Chain.next(s2, c, Step{i, [n]}))
+  gs = Shared.Nat.sub_pos(
+    List.length(&2, Spec.Id, w1),
+    State.fuel(s2)
+  )(
+    Shared.Nat.le_lt(
+      List.length(&2, Spec.Id, w1),
+      State.fuel(s1),
+      State.fuel(s2)
+    )(Walk.length(State.fuel(s1), s1, c, Chain.next(s1, c, st)))(grow)
+  )
+  Equal.trans(
         List<&2, Spec.Id>,
         Chain.from(s2, c, Chain.root(s2, c)),
         Chain.from(s2, c, Some{st}),
@@ -4342,11 +4336,44 @@ def Written.has(
             {List.append(&2, Spec.Id, x1, Chain.walk(_, s2, c, Some{Step{i, [n]}})) == List.append(&2, Spec.Id, x1, i <> rest): List<&2, Spec.Id>}
           {==})
       )
+
+def Written.has(
+  +n: String,
+  +s1: Spec.State(),
+  +i: Spec.Id,
+  +c: Spec.Chain,
+  +v: Spec.Id,
+  +tv: Spec.State(),
+  +a2: {Spec.Node.agrees(s1, tv) == True{}: Bool},
+  +hc2: {
+    Spec.Node.claim(Spec.Node.join(s1, tv), c) == Spec.Node.claim(s1, c): Maybe<&2, Spec.Entry>
+  },
+  next2: {
+    Chain.next(Spec.Node.join(s1, tv), c, Step{v, [n]}) == Some{Step{i, [n]}}: Maybe<&2, Step>
+  },
+  grow: {Nat.is_lt(State.fuel(s1), State.fuel(Spec.Node.join(s1, tv))) == True{}: Bool},
+  pr: &st: Step -> {
+    Chain.root(s1, c) == Some{st}: Maybe<&2, Step>
+  }
+    & {Chain.last(State.fuel(s1), s1, c, st, Chain.next(s1, c, st)) == Step{v, [n]}: Step}
+) -> {
+  Shared.List.has(
+    ~Spec.Id,
+    ~Spec.Id.same,
+    Spec.Node.chain(Spec.Node.join(s1, tv), c),
+    i
+  )
+    == True{}: Bool
+}:
+  match pr:
+    case (+st, (er, el)):
+      +x1 = Chain.from(s1, c, Some{st})
+      +rest = Chain.walk(Nat.sub(State.fuel(Spec.Node.join(s1, tv)), 1n+List.length(&2, Spec.Id, Chain.walk(State.fuel(s1), s1, c, Chain.next(s1, c, st)))), Spec.Node.join(s1, tv), c, Chain.next(Spec.Node.join(s1, tv), c, Step{i, [n]}))
       %Equal.sym(
         List<&2, Spec.Id>,
-        Spec.Node.chain(s2, c),
+        Spec.Node.chain(Spec.Node.join(s1, tv), c),
         List.append(&2, Spec.Id, x1, i <> rest),
-        shape
+        Written.shape(n, s1, i, c, v, tv, a2, hc2, next2, grow, st, er, el)
       ):
         {Shared.List.has(~Spec.Id, ~Spec.Id.same, _, i) == True{}: Bool}
       Shared.List.has_middle(~Spec.Id, ~Spec.Id.same, ~Id.same_refl, x1, i, rest)
@@ -4475,81 +4502,54 @@ def Written.at(
     {==})
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality, or a proof, keeps each and/or as one value for the proofs to split on
-def Spec.Node.write_written(n, s, e, b, name, base, x, v):
+def Owner.takes(
+  n: String,
+  s: Spec.State(),
+  e: Spec.Envelope,
+  q: Spec.Ask,
+  v: Spec.Id
+) -> {Spec.Node.owners(s, Spec.Ask.chain(q)) == [n]: List<&2, String>} -> {
+  Maybe.map(&2, Step, Spec.Id, k => Step.version(k), Chain.cursor(s, Spec.Ask.chain(q))) == Some{v}: Maybe<&2, Spec.Id>
+} -> {
+  Shared.Trie.get(Cells.Cell<Spec.Entry>, s, Spec.Slot.key(Spec.Slot.ask{Spec.Envelope.of(e)}))
+    == None{}: Maybe<&2, Cells.Cell<Spec.Entry>>
+} -> {
+  Shared.Trie.get(Cells.Cell<Spec.Entry>, s, Spec.Slot.key(Spec.Slot.vote{n, Spec.Ask.chain(q), v}))
+    == None{}: Maybe<&2, Cells.Cell<Spec.Entry>>
+} -> {Ask.fits(s, q, v) == True{}: Bool} -> {
+  Spec.Node.ask(n, s, e, q)
+    == Spec.Node.join(
+      Spec.Node.join(
+        s,
+        Shared.Trie.one(
+          Cells.Cell<Spec.Entry>,
+          Spec.Slot.key(Spec.Slot.ask{Spec.Envelope.of(e)}),
+          Cells.one{Spec.Entry.ask{Spec.Envelope.of(e), Spec.Envelope.time(e), q}}
+        )
+      ),
+      Shared.Trie.one(
+        Cells.Cell<Spec.Entry>,
+        Spec.Slot.key(Spec.Slot.vote{n, Spec.Ask.chain(q), v}),
+        Cells.one{Spec.Entry.vote{Spec.Envelope.of(e)}}
+      )
+    ): Spec.State()
+}:
   match e:
     case Spec.Envelope{r, w, +t}:
       +n = n
       +s = s
-      +b = b
-      +name = name
-      +base = base
-      +x = x
+      +q = q
       +v = v
       +i = {Spec.Id{w, r}: Spec.Id}
-      +c = {Spec.Chain.branch{b}: Spec.Chain}
-      +q = {Spec.Ask.write{b, name, base, Spec.Content.bytes{x}}: Spec.Ask}
+      +c = Spec.Ask.chain(q)
       l = {Step{v, [n]}: Step}
       +ka = Spec.Slot.key(Spec.Slot.ask{i})
-      +kv = Spec.Slot.key(Spec.Slot.vote{n, c, v})
       +ea = {Cells.one{Spec.Entry.ask{i, t, q}}: Cells.Cell<Spec.Entry>}
-      ev = {Cells.one{Spec.Entry.vote{i}}: Cells.Cell<Spec.Entry>}
       +ta = Shared.Trie.one(Cells.Cell<Spec.Entry>, ka, ea)
-      tv = Shared.Trie.one(Cells.Cell<Spec.Entry>, kv, ev)
       +s1 = Spec.Node.join(s, ta)
-      s2 = Spec.Node.join(s1, tv)
-      +h1 => +h2 => +h3 => +h4 => h5 =>
+      s2 = Spec.Node.join(s1, Shared.Trie.one(Cells.Cell<Spec.Entry>, Spec.Slot.key(Spec.Slot.vote{n, c, v}), Cells.one{Spec.Entry.vote{i}}))
+      +h1 => +h2 => +h3 => +h4 => fits =>
         +ecur = Owner.cursor(Chain.cursor(s, c), n, v)(h1)(h2)
-        +a = Cells.Cell.agrees_one(~Spec.Entry, ~Spec.Entry.same, s, ka, ea)(h3)
-        +hc = Fresh.claim(s, ka, c, ea)({==})
-        +f4 = Equal.trans(
-          Maybe<&2, Cells.Cell<Spec.Entry>>,
-          Shared.Trie.get(Cells.Cell<Spec.Entry>, s1, kv),
-          Shared.Trie.get(Cells.Cell<Spec.Entry>, s, kv),
-          None{},
-          Fresh.cell(s, ka, kv, ea)({==}),
-          h4
-        )
-        +ecur1 = Stay.cursor(s, ta, c, a, hc, l, ecur, Next.none(s1, c, v, n)(f4))
-        +base_bytes = Res.of(s, name, base)
-        +fits = Equal.trans(
-          Bool,
-          Ask.fits(s, q, v),
-          Shared.Maybe.same(~Shared.Bytes(), ~Shared.Bytes.is_eq, base_bytes, base_bytes),
-          True{},
-          Equal.cong(
-            Maybe<&2, Shared.Bytes()>,
-            Bool,
-            z => Shared.Maybe.same(~Shared.Bytes(), ~Shared.Bytes.is_eq, z, base_bytes),
-            Res.of(s, name, Some{v}),
-            base_bytes,
-            Equal.trans(
-              Maybe<&2, Shared.Bytes()>,
-              Res.of(s, name, Some{v}),
-              Spec.Node.content(s, name, Spec.Point.head{b}),
-              base_bytes,
-              Equal.sym(
-                Maybe<&2, Shared.Bytes()>,
-                Spec.Node.content(s, name, Spec.Point.head{b}),
-                Res.of(s, name, Some{v}),
-                Equal.cong(
-                  Maybe<&2, Spec.Id>,
-                  Maybe<&2, Shared.Bytes()>,
-                  z => Res.of(s, name, z),
-                  Spec.Node.head(s, b),
-                  Some{v},
-                  h2
-                )
-              ),
-              h5
-            )
-          ),
-          Shared.Maybe.same_refl(
-            ~Shared.Bytes(),
-            ~Shared.Bytes.is_eq,
-            ~Shared.Bytes.is_eq_refl,
-            base_bytes
-          )
-        )
         +may = Equal.trans(
           Bool,
           Node.may_vote(n, s, c, v, [n]),
@@ -4629,6 +4629,84 @@ def Spec.Node.write_written(n, s, e, b, name, base, x, v):
             )
           )
         )
+        ask
+
+def Spec.Node.write_written(n, s, e, b, name, base, x, v):
+  match e:
+    case Spec.Envelope{+r, +w, +t}:
+      +n = n
+      +s = s
+      +b = b
+      +name = name
+      +base = base
+      +x = x
+      +v = v
+      +i = {Spec.Id{w, r}: Spec.Id}
+      +c = {Spec.Chain.branch{b}: Spec.Chain}
+      +q = {Spec.Ask.write{b, name, base, Spec.Content.bytes{x}}: Spec.Ask}
+      l = {Step{v, [n]}: Step}
+      +ka = Spec.Slot.key(Spec.Slot.ask{i})
+      +kv = Spec.Slot.key(Spec.Slot.vote{n, c, v})
+      +ea = {Cells.one{Spec.Entry.ask{i, t, q}}: Cells.Cell<Spec.Entry>}
+      ev = {Cells.one{Spec.Entry.vote{i}}: Cells.Cell<Spec.Entry>}
+      +ta = Shared.Trie.one(Cells.Cell<Spec.Entry>, ka, ea)
+      tv = Shared.Trie.one(Cells.Cell<Spec.Entry>, kv, ev)
+      +s1 = Spec.Node.join(s, ta)
+      s2 = Spec.Node.join(s1, tv)
+      +h1 => +h2 => +h3 => +h4 => h5 =>
+        +ecur = Owner.cursor(Chain.cursor(s, c), n, v)(h1)(h2)
+        +a = Cells.Cell.agrees_one(~Spec.Entry, ~Spec.Entry.same, s, ka, ea)(h3)
+        +hc = Fresh.claim(s, ka, c, ea)({==})
+        +f4 = Equal.trans(
+          Maybe<&2, Cells.Cell<Spec.Entry>>,
+          Shared.Trie.get(Cells.Cell<Spec.Entry>, s1, kv),
+          Shared.Trie.get(Cells.Cell<Spec.Entry>, s, kv),
+          None{},
+          Fresh.cell(s, ka, kv, ea)({==}),
+          h4
+        )
+        +ecur1 = Stay.cursor(s, ta, c, a, hc, l, ecur, Next.none(s1, c, v, n)(f4))
+        +base_bytes = Res.of(s, name, base)
+        +fits = Equal.trans(
+          Bool,
+          Ask.fits(s, q, v),
+          Shared.Maybe.same(~Shared.Bytes(), ~Shared.Bytes.is_eq, base_bytes, base_bytes),
+          True{},
+          Equal.cong(
+            Maybe<&2, Shared.Bytes()>,
+            Bool,
+            z => Shared.Maybe.same(~Shared.Bytes(), ~Shared.Bytes.is_eq, z, base_bytes),
+            Res.of(s, name, Some{v}),
+            base_bytes,
+            Equal.trans(
+              Maybe<&2, Shared.Bytes()>,
+              Res.of(s, name, Some{v}),
+              Spec.Node.content(s, name, Spec.Point.head{b}),
+              base_bytes,
+              Equal.sym(
+                Maybe<&2, Shared.Bytes()>,
+                Spec.Node.content(s, name, Spec.Point.head{b}),
+                Res.of(s, name, Some{v}),
+                Equal.cong(
+                  Maybe<&2, Spec.Id>,
+                  Maybe<&2, Shared.Bytes()>,
+                  z => Res.of(s, name, z),
+                  Spec.Node.head(s, b),
+                  Some{v},
+                  h2
+                )
+              ),
+              h5
+            )
+          ),
+          Shared.Maybe.same_refl(
+            ~Shared.Bytes(),
+            ~Shared.Bytes.is_eq,
+            ~Shared.Bytes.is_eq_refl,
+            base_bytes
+          )
+        )
+        +ask = Owner.takes(n, s, Spec.Envelope{r, w, t}, q, v)(h1)(h2)(h3)(h4)(fits)
         +cell1a = Equal.trans(
           Maybe<&2, Cells.Cell<Spec.Entry>>,
           Shared.Trie.get(Cells.Cell<Spec.Entry>, s1, ka),

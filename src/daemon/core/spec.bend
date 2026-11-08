@@ -92,6 +92,12 @@ def Envelope.of(e: Envelope) -> Id:
     case Envelope{r, w, t}:
       Id{w, r}
 
+# the time of e
+def Envelope.time(e: Envelope) -> String:
+  match e:
+    case Envelope{r, w, t}:
+      t
+
 # Entries
 # -------
 
@@ -261,22 +267,21 @@ def Node.missing(s: State(), r: State()) -> State():
 def Node.agrees(s: State(), t: State()) -> Bool:
   Cells.Cell.agrees(~Entry, ~Entry.same, s, t)
 
-# the first claim among the cells cs that every holder agrees on
-def Root.first(cs: List<&2, Cells.Cell<Entry>>) -> Maybe<&2, Entry>:
+# the first claim of the chain c among the cells cs that every holder agrees
+# on: a root entry that names c
+def Root.first(+c: Chain, cs: List<&2, Cells.Cell<Entry>>) -> Maybe<&2, Entry>:
   match cs:
     case Nil{}:
       None{}
-    case Con{Cells.one{e}, r}:
-      Some{e}
-    case Con{Cells.many{}, r}:
-      Root.first(r)
+    case Con{Cells.one{Entry.root{+d, +i, +n}}, r}:
+      Shared.Bool.when(Maybe<&2, Entry>, Chain.same(d, c), u => Some{Entry.root{d, i, n}}, u => Root.first(c, r))
+    case Con{x, r}:
+      Root.first(c, r)
 
 # the claim of the first version of the chain c: when nodes claim it apart,
 # the one with the smallest key
-def Node.claim(s: State(), c: Chain) -> Maybe<&2, Entry>:
-  Root.first(
-    Shared.Trie.values(Cells.Cell<Entry>, Shared.Trie.under(Cells.Cell<Entry>, s, Root.key(c)))
-  )
+def Node.claim(+s: State(), +c: Chain) -> Maybe<&2, Entry>:
+  Root.first(c, Shared.Trie.values(Cells.Cell<Entry>, Shared.Trie.under(Cells.Cell<Entry>, s, Root.key(c))))
 
 # Answers
 # -------
