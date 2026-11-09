@@ -6,8 +6,8 @@ Only human hands may touch this file and it is the ultimate source of truth for 
 
 ## Vend Node
 
-A Vend Node is a P2P decentralized versioning program that runs anywhere and syncs with other nodes bidirectionally. Vend Nodes hold:
-1 - A name
+A Vend Node is a P2P decentralized versioning program that runs anywhere and syncs with other nodes bidirectionally. A Vend Node holds:
+1 - Its own name
 2 - The parts of the Vend Stores it uses (any number)
 3 - The Vend Writers connected to it (any number)
 4 - The resources mounted to it, like folders (any number)
