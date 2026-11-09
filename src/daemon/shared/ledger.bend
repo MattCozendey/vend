@@ -1990,15 +1990,17 @@ def Chain.tip(
         Chain.tip(~Q, ~view, o, s, Step.next(~Q, ~view, s, Step.owners(Q, st), z))
       )
 
+# the tip of the steps xs
+def Steps.tip(-Q: Data, xs: List<&2, Step<Q>>) -> Maybe<&2, Tip>:
+  match xs:
+    case Nil{}:
+      None{}
+    case Con{st, r}:
+      Tip.after(Step.owners(Q, st), Steps.tip(Q, r))
+
 # the tip of the chain k
 def State.tip(~Q: Data, ~view: Q -> View, +s: State(Q), +k: Chain) -> Maybe<&2, Tip>:
-  Chain.tip(
-    ~Q,
-    ~view,
-    Tries.Trie.under(Cell<Entry<Q>>, s, Slot.votes(k)),
-    s,
-    Chain.first(~Q, ~view, s, k)
-  )
+  Steps.tip(Q, State.chain(~Q, ~view, s, k))
 
 # Status
 # ------
@@ -2168,7 +2170,7 @@ def Vote.ask(
         State.chain(~Q, ~view, s, c),
         i,
         q,
-        State.tip(~Q, ~view, s, c)
+        Steps.tip(Q, State.chain(~Q, ~view, s, c))
       )
 
 # s after the node n took in the request i of q at the time t, whose cell in s
@@ -3885,6 +3887,24 @@ def Chain.tip_none(
     case Tries.bin{h, z, o}:
       {==}
 
+# the tip of a walk is the tip of its steps
+def Chain.tip_walk(~Q: Data, ~view: Q -> View, t: State(Q), +s: State(Q), m: Maybe<&2, Step<Q>>) -> {
+  Chain.tip(~Q, ~view, t, s, m) == Steps.tip(Q, Chain.walk(~Q, ~view, t, s, m)): Maybe<&2, Tip>
+}:
+  match t m:
+    case w None{}:
+      %Equal.sym(Maybe<&2, Tip>, Chain.tip(~Q, ~view, w, s, None{}), None{}, Chain.tip_none(~Q, ~view, w, s)):
+        {_ == Steps.tip(Q, Chain.walk(~Q, ~view, w, s, None{})): Maybe<&2, Tip>}
+      %Equal.sym(List<&2, Step<Q>>, Chain.walk(~Q, ~view, w, s, None{}), [], Chain.walk_none(~Q, ~view, w, s)):
+        {None{} == Steps.tip(Q, _): Maybe<&2, Tip>}
+      {==}
+    case Tries.tip{} Some{st}:
+      {==}
+    case Tries.bin{+h, +z, +o} Some{+st}:
+      %Chain.tip_walk(~Q, ~view, o, s, Step.next(~Q, ~view, s, Step.owners(Q, st), z)):
+        {Tip.after(Step.owners(Q, st), Chain.tip(~Q, ~view, o, s, Step.next(~Q, ~view, s, Step.owners(Q, st), z))) == Tip.after(Step.owners(Q, st), _): Maybe<&2, Tip>}
+      {==}
+
 # m is not the tip of a first step alone
 def Tip.is_up(m: Maybe<&2, Tip>) -> Bool:
   match m:
@@ -5474,7 +5494,16 @@ def Ask.decided(
           Some{one{Entry.ask{i, t, q}}},
           hask2
         )
-      )(ht)(hg)(hv)
+      )(
+        Equal.trans(
+          Maybe<&2, Tip>,
+          Chain.tip(~Q, ~view, Tries.Trie.under(Cell<Entry<Q>>, s1, Slot.votes(c)), s1, Chain.first(~Q, ~view, s1, c)),
+          Steps.tip(Q, Chain.walk(~Q, ~view, Tries.Trie.under(Cell<Entry<Q>>, s1, Slot.votes(c)), s1, Chain.first(~Q, ~view, s1, c))),
+          Some{Tip{h, [n]}},
+          Chain.tip_walk(~Q, ~view, Tries.Trie.under(Cell<Entry<Q>>, s1, Slot.votes(c)), s1, Chain.first(~Q, ~view, s1, c)),
+          ht
+        )
+      )(hg)(hv)
     ): {Status.of.verdict(_) == Status.done{k}: Status}
     {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
