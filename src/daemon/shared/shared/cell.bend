@@ -819,7 +819,12 @@ def Cell.agrees_under(
 # grows a trie (Cell.grows_join), and growth composes (Cell.grows_trans).
 
 # the cell b keeps what the cell a holds
-def Cell.keeps(~V: Data, ~same: V -> V -> Bool, a: Maybe<&2, Cell<V>>, b: Maybe<&2, Cell<V>>) -> Bool:
+def Cell.keeps(
+  ~V: Data,
+  ~same: V -> V -> Bool,
+  a: Maybe<&2, Cell<V>>,
+  b: Maybe<&2, Cell<V>>
+) -> Bool:
   match a b:
     case None{} y:
       True{}
@@ -844,35 +849,63 @@ def Cell.none(-V: Data, t: Tries.Trie<Cell<V>>) -> Bool:
       Bool.and(Maybe.is_none(&2, Cell<V>, h), Bool.and(Cell.none(V, z), Cell.none(V, o)))
 
 # every cell of s is kept in s2
-def Cell.grows(~V: Data, ~same: V -> V -> Bool, s: Tries.Trie<Cell<V>>, s2: Tries.Trie<Cell<V>>) -> Bool:
+def Cell.grows(
+  ~V: Data,
+  ~same: V -> V -> Bool,
+  s: Tries.Trie<Cell<V>>,
+  s2: Tries.Trie<Cell<V>>
+) -> Bool:
   match s s2:
     case Tries.tip{} y:
       True{}
     case Tries.bin{h, z, o} Tries.tip{}:
       Bool.and(Maybe.is_none(&2, Cell<V>, h), Bool.and(Cell.none(V, z), Cell.none(V, o)))
     case Tries.bin{h1, z1, o1} Tries.bin{h2, z2, o2}:
-      Bool.and(Cell.keeps(~V, ~same, h1, h2), Bool.and(Cell.grows(~V, ~same, z1, z2), Cell.grows(~V, ~same, o1, o2)))
+      Bool.and(
+        Cell.keeps(~V, ~same, h1, h2),
+        Bool.and(Cell.grows(~V, ~same, z1, z2), Cell.grows(~V, ~same, o1, o2))
+      )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement, or code that the laws split on, keeps each and/or as one value
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a trie that holds no cell has none at any key
 def Cell.none_get(
   -V: Data,
   t: Tries.Trie<Cell<V>>,
   k: List<&2, Bool>
-) -> {Cell.none(V, t) == True{}: Bool} -> {Tries.Trie.get(Cell<V>, t, k) == None{}: Maybe<&2, Cell<V>>}:
+) -> {
+  Cell.none(V, t) == True{}: Bool
+} -> {Tries.Trie.get(Cell<V>, t, k) == None{}: Maybe<&2, Cell<V>>}:
   match t k:
     case Tries.tip{} r:
       h => {==}
     case Tries.bin{+h0, +z, +o} Nil{}:
-      +h => Shared.Maybe.is_none_eq(Cell<V>, h0)(Shared.Bool.and_true_left(Maybe.is_none(&2, Cell<V>, h0), Bool.and(Cell.none(V, z), Cell.none(V, o)))(h))
+      +h => Shared.Maybe.is_none_eq(
+        Cell<V>,
+        h0
+      )(
+        Shared.Bool.and_true_left(
+          Maybe.is_none(&2, Cell<V>, h0),
+          Bool.and(Cell.none(V, z), Cell.none(V, o))
+        )(h)
+      )
     case Tries.bin{h0, +z, +o} Con{False{}, r}:
       +h =>
-        +rest = Shared.Bool.and_true_right(Maybe.is_none(&2, Cell<V>, h0), Bool.and(Cell.none(V, z), Cell.none(V, o)))(h)
+        +rest = Shared.Bool.and_true_right(
+          Maybe.is_none(&2, Cell<V>, h0),
+          Bool.and(Cell.none(V, z), Cell.none(V, o))
+        )(h)
         Cell.none_get(V, z, r)(Shared.Bool.and_true_left(Cell.none(V, z), Cell.none(V, o))(rest))
     case Tries.bin{h0, +z, +o} Con{True{}, r}:
       +h =>
-        +rest = Shared.Bool.and_true_right(Maybe.is_none(&2, Cell<V>, h0), Bool.and(Cell.none(V, z), Cell.none(V, o)))(h)
+        +rest = Shared.Bool.and_true_right(
+          Maybe.is_none(&2, Cell<V>, h0),
+          Bool.and(Cell.none(V, z), Cell.none(V, o))
+        )(h)
         Cell.none_get(V, o, r)(Shared.Bool.and_true_right(Cell.none(V, z), Cell.none(V, o))(rest))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # every cell of s is kept in s2 at the key k
 law Cell.grows_get:
@@ -882,8 +915,18 @@ law Cell.grows_get:
   for s2: Tries.Trie<Cell<V>>
   for k: List<&2, Bool>
   {Cell.grows(~V, ~same, s, s2) == True{}: Bool}
-    -> {Cell.keeps(~V, ~same, Tries.Trie.get(Cell<V>, s, k), Tries.Trie.get(Cell<V>, s2, k)) == True{}: Bool}
+    -> {
+      Cell.keeps(
+        ~V,
+        ~same,
+        Tries.Trie.get(Cell<V>, s, k),
+        Tries.Trie.get(Cell<V>, s2, k)
+      )
+        == True{}: Bool
+    }
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement, or code that the laws split on, keeps each and/or as one value
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 def Cell.grows_get(ty, same, s, s2, k):
   match s s2 k:
     case Tries.tip{} y q:
@@ -908,14 +951,38 @@ def Cell.grows_get(ty, same, s, s2, k):
           Cell.keeps(~ty, ~same, h1, h2),
           Bool.and(Cell.grows(~ty, ~same, z1, z2), Cell.grows(~ty, ~same, o1, o2))
         )(h)
-        Cell.grows_get(~ty, ~same, z1, z2, r)(Shared.Bool.and_true_left(Cell.grows(~ty, ~same, z1, z2), Cell.grows(~ty, ~same, o1, o2))(rest))
+        Cell.grows_get(
+          ~ty,
+          ~same,
+          z1,
+          z2,
+          r
+        )(
+          Shared.Bool.and_true_left(
+            Cell.grows(~ty, ~same, z1, z2),
+            Cell.grows(~ty, ~same, o1, o2)
+          )(rest)
+        )
     case Tries.bin{h1, +z1, +o1} Tries.bin{h2, +z2, +o2} Con{True{}, r}:
       +h =>
         +rest = Shared.Bool.and_true_right(
           Cell.keeps(~ty, ~same, h1, h2),
           Bool.and(Cell.grows(~ty, ~same, z1, z2), Cell.grows(~ty, ~same, o1, o2))
         )(h)
-        Cell.grows_get(~ty, ~same, o1, o2, r)(Shared.Bool.and_true_right(Cell.grows(~ty, ~same, z1, z2), Cell.grows(~ty, ~same, o1, o2))(rest))
+        Cell.grows_get(
+          ~ty,
+          ~same,
+          o1,
+          o2,
+          r
+        )(
+          Shared.Bool.and_true_right(
+            Cell.grows(~ty, ~same, z1, z2),
+            Cell.grows(~ty, ~same, o1, o2)
+          )(rest)
+        )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a cell keeps itself
@@ -947,40 +1014,67 @@ def Cell.keeps_trans(
   match a b c:
     case None{} y w:
       h1 => h2 => {==}
-    case Some{one{+x}} Some{one{+y}} Some{one{z}}:
+    case Some{one{x}} Some{one{y}} Some{one{z}}:
       h1 => h2 =>
-        %Equal.sym(V, x, y, Shared.Eq.sound(~V, ~same, laws, x, y)(h1)): {same(_, z) == True{}: Bool}
+        %Equal.sym(
+          V,
+          x,
+          y,
+          Shared.Eq.sound(~V, ~same, laws, x, y)(h1)
+        ): {same(_, z) == True{}: Bool}
         h2
     case Some{one{x}} Some{one{y}} Some{many{}}:
       h1 => h2 => h2
     case Some{one{x}} Some{one{y}} None{}:
       h1 => h2 => h2
     case Some{one{x}} Some{many{}} w:
-      h1 => h2 => Empty.absurd({Cell.keeps(~V, ~same, Some{one{x}}, w) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+      h1 => h2 => Empty.absurd(
+        {Cell.keeps(~V, ~same, Some{one{x}}, w) == True{}: Bool},
+        Shared.Bool.false_ne_true(h1)
+      )
     case Some{one{x}} None{} w:
-      h1 => h2 => Empty.absurd({Cell.keeps(~V, ~same, Some{one{x}}, w) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+      h1 => h2 => Empty.absurd(
+        {Cell.keeps(~V, ~same, Some{one{x}}, w) == True{}: Bool},
+        Shared.Bool.false_ne_true(h1)
+      )
     case Some{many{}} Some{many{}} w:
       h1 => h2 => h2
     case Some{many{}} Some{one{y}} w:
-      h1 => h2 => Empty.absurd({Cell.keeps(~V, ~same, Some{many{}}, w) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+      h1 => h2 => Empty.absurd(
+        {Cell.keeps(~V, ~same, Some{many{}}, w) == True{}: Bool},
+        Shared.Bool.false_ne_true(h1)
+      )
     case Some{many{}} None{} w:
-      h1 => h2 => Empty.absurd({Cell.keeps(~V, ~same, Some{many{}}, w) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+      h1 => h2 => Empty.absurd(
+        {Cell.keeps(~V, ~same, Some{many{}}, w) == True{}: Bool},
+        Shared.Bool.false_ne_true(h1)
+      )
 
 # a cell that keeps the value x is x
 def Cell.keeps_value(
   ~V: Data,
   ~same: V -> V -> Bool,
   ~laws: Shared.Eq.Laws(V, same),
-  +x: V,
+  x: V,
   b: Maybe<&2, Cell<V>>
-) -> {Cell.keeps(~V, ~same, Some{one{x}}, b) == True{}: Bool} -> {b == Some{one{x}}: Maybe<&2, Cell<V>>}:
+) -> {
+  Cell.keeps(~V, ~same, Some{one{x}}, b) == True{}: Bool
+} -> {b == Some{one{x}}: Maybe<&2, Cell<V>>}:
   match b:
     case Some{one{z}}:
       h =>
-        %Equal.sym(V, x, z, Shared.Eq.sound(~V, ~same, laws, x, z)(h)): {Some{one{z}} == Some{one{_}}: Maybe<&2, Cell<V>>}
+        %Equal.sym(
+          V,
+          x,
+          z,
+          Shared.Eq.sound(~V, ~same, laws, x, z)(h)
+        ): {Some{one{z}} == Some{one{_}}: Maybe<&2, Cell<V>>}
         {==}
     case Some{many{}}:
-      h => Empty.absurd({Some{many{}} == Some{one{x}}: Maybe<&2, Cell<V>>}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Some{many{}} == Some{one{x}}: Maybe<&2, Cell<V>>},
+        Shared.Bool.false_ne_true(h)
+      )
     case None{}:
       h => Empty.absurd({None{} == Some{one{x}}: Maybe<&2, Cell<V>>}, Shared.Bool.false_ne_true(h))
 
@@ -997,22 +1091,51 @@ def Cell.read_grows(
   -w: W
 ) -> {
   Cell.keeps(~V, ~same, a, b) == True{}: Bool
-} -> {f(Cell.value(V, a)) == Some{w}: Maybe<&2, W>} -> {f(Cell.value(V, b)) == Some{w}: Maybe<&2, W>}:
+} -> {
+  f(Cell.value(V, a)) == Some{w}: Maybe<&2, W>
+} -> {f(Cell.value(V, b)) == Some{w}: Maybe<&2, W>}:
   match a:
-    case Some{one{+x}}:
+    case Some{one{x}}:
       k => h =>
-        %Equal.sym(Maybe<&2, Cell<V>>, b, Some{one{x}}, Cell.keeps_value(~V, ~same, ~laws, x, b)(k)):
+        %Equal.sym(
+          Maybe<&2, Cell<V>>,
+          b,
+          Some{one{x}},
+          Cell.keeps_value(~V, ~same, ~laws, x, b)(k)
+        ):
           {f(Cell.value(V, _)) == Some{w}: Maybe<&2, W>}
         h
     case Some{many{}}:
       k => h => Empty.absurd(
         {f(Cell.value(V, b)) == Some{w}: Maybe<&2, W>},
-        Shared.Maybe.none_ne_some(W, w, Equal.trans(Maybe<&2, W>, None{}, f(None{}), Some{w}, Equal.sym(Maybe<&2, W>, f(None{}), None{}, fnone), h))
+        Shared.Maybe.none_ne_some(
+          W,
+          w,
+          Equal.trans(
+            Maybe<&2, W>,
+            None{},
+            f(None{}),
+            Some{w},
+            Equal.sym(Maybe<&2, W>, f(None{}), None{}, fnone),
+            h
+          )
+        )
       )
     case None{}:
       k => h => Empty.absurd(
         {f(Cell.value(V, b)) == Some{w}: Maybe<&2, W>},
-        Shared.Maybe.none_ne_some(W, w, Equal.trans(Maybe<&2, W>, None{}, f(None{}), Some{w}, Equal.sym(Maybe<&2, W>, f(None{}), None{}, fnone), h))
+        Shared.Maybe.none_ne_some(
+          W,
+          w,
+          Equal.trans(
+            Maybe<&2, W>,
+            None{},
+            f(None{}),
+            Some{w},
+            Equal.sym(Maybe<&2, W>, f(None{}), None{}, fnone),
+            h
+          )
+        )
       )
 
 # a cell keeps its join with one that agrees with it
@@ -1024,16 +1147,26 @@ def Cell.keeps_pick(
   b: Maybe<&2, Cell<V>>
 ) -> {
   Cell.agrees.here(~V, ~same, a, b) == True{}: Bool
-} -> {Cell.keeps(~V, ~same, a, Tries.Trie.pick(~Cell<V>, ~Cell.join(~V, ~same), a, b)) == True{}: Bool}:
+} -> {
+  Cell.keeps(~V, ~same, a, Tries.Trie.pick(~Cell<V>, ~Cell.join(~V, ~same), a, b)) == True{}: Bool
+}:
   match a b:
     case None{} y:
       h => {==}
-    case Some{one{+x}} None{}:
+    case Some{one{x}} None{}:
       h => Shared.Eq.refl(~V, ~same, laws, x)
-    case Some{one{+x}} Some{one{+y}}:
+    case Some{one{+x}} Some{one{y}}:
       h =>
         %Equal.sym(Bool, same(x, y), True{}, h):
-          {Cell.keeps(~V, ~same, Some{one{x}}, Some{Bool.pick(Cell<V>, _, one{x}, many{})}) == True{}: Bool}
+          {
+            Cell.keeps(
+              ~V,
+              ~same,
+              Some{one{x}},
+              Some{Bool.pick(Cell<V>, _, one{x}, many{})}
+            )
+              == True{}: Bool
+          }
         Shared.Eq.refl(~V, ~same, laws, x)
     case Some{one{x}} Some{many{}}:
       h => Empty.absurd(
@@ -1046,7 +1179,8 @@ def Cell.keeps_pick(
       h => {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement, or code that the laws split on, keeps each and/or as one value
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run, so it gains nothing from a fork
 # a trie grows to itself
 def Cell.grows_refl(
   ~V: Data,
@@ -1061,12 +1195,20 @@ def Cell.grows_refl(
       Shared.Bool.and_both(
         Cell.keeps(~V, ~same, h, h),
         Bool.and(Cell.grows(~V, ~same, z, z), Cell.grows(~V, ~same, o, o))
-      )(Cell.keeps_refl(~V, ~same, ~laws, h))(
-        Shared.Bool.and_both(Cell.grows(~V, ~same, z, z), Cell.grows(~V, ~same, o, o))(
-          Cell.grows_refl(~V, ~same, ~laws, z)
-        )(Cell.grows_refl(~V, ~same, ~laws, o))
+      )(
+        Cell.keeps_refl(~V, ~same, ~laws, h)
+      )(
+        Shared.Bool.and_both(
+          Cell.grows(~V, ~same, z, z),
+          Cell.grows(~V, ~same, o, o)
+        )(Cell.grows_refl(~V, ~same, ~laws, z))(Cell.grows_refl(~V, ~same, ~laws, o))
       )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement, or code that the laws split on, keeps each and/or as one value
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run, so it gains nothing from a fork
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a trie that holds no cell grows to any trie
 def Cell.none_grows(
   ~V: Data,
@@ -1081,25 +1223,60 @@ def Cell.none_grows(
       h => h
     case Tries.bin{+h1, +z1, +o1} Tries.bin{h2, +z2, +o2}:
       +h =>
-        +rest = Shared.Bool.and_true_right(Maybe.is_none(&2, Cell<V>, h1), Bool.and(Cell.none(V, z1), Cell.none(V, o1)))(h)
+        +rest = Shared.Bool.and_true_right(
+          Maybe.is_none(&2, Cell<V>, h1),
+          Bool.and(Cell.none(V, z1), Cell.none(V, o1))
+        )(h)
         %Equal.sym(
           Maybe<&2, Cell<V>>,
           h1,
           None{},
-          Shared.Maybe.is_none_eq(Cell<V>, h1)(
-            Shared.Bool.and_true_left(Maybe.is_none(&2, Cell<V>, h1), Bool.and(Cell.none(V, z1), Cell.none(V, o1)))(h)
+          Shared.Maybe.is_none_eq(
+            Cell<V>,
+            h1
+          )(
+            Shared.Bool.and_true_left(
+              Maybe.is_none(&2, Cell<V>, h1),
+              Bool.and(Cell.none(V, z1), Cell.none(V, o1))
+            )(h)
           )
-        ): {Bool.and(Cell.keeps(~V, ~same, _, h2), Bool.and(Cell.grows(~V, ~same, z1, z2), Cell.grows(~V, ~same, o1, o2))) == True{}: Bool}
-        Shared.Bool.and_both(Cell.grows(~V, ~same, z1, z2), Cell.grows(~V, ~same, o1, o2))(
-          Cell.none_grows(~V, ~same, z1, z2)(Shared.Bool.and_true_left(Cell.none(V, z1), Cell.none(V, o1))(rest))
-        )(Cell.none_grows(~V, ~same, o1, o2)(Shared.Bool.and_true_right(Cell.none(V, z1), Cell.none(V, o1))(rest)))
+        ): {
+          Bool.and(
+            Cell.keeps(~V, ~same, _, h2),
+            Bool.and(Cell.grows(~V, ~same, z1, z2), Cell.grows(~V, ~same, o1, o2))
+          )
+            == True{}: Bool
+        }
+        Shared.Bool.and_both(
+          Cell.grows(~V, ~same, z1, z2),
+          Cell.grows(~V, ~same, o1, o2)
+        )(
+          Cell.none_grows(
+            ~V,
+            ~same,
+            z1,
+            z2
+          )(Shared.Bool.and_true_left(Cell.none(V, z1), Cell.none(V, o1))(rest))
+        )(
+          Cell.none_grows(
+            ~V,
+            ~same,
+            o1,
+            o2
+          )(Shared.Bool.and_true_right(Cell.none(V, z1), Cell.none(V, o1))(rest))
+        )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # a cell kept as none was none
 def Cell.keeps_none(
   ~V: Data,
   ~same: V -> V -> Bool,
   a: Maybe<&2, Cell<V>>
-) -> {Cell.keeps(~V, ~same, a, None{}) == True{}: Bool} -> {Maybe.is_none(&2, Cell<V>, a) == True{}: Bool}:
+) -> {
+  Cell.keeps(~V, ~same, a, None{}) == True{}: Bool
+} -> {Maybe.is_none(&2, Cell<V>, a) == True{}: Bool}:
   match a:
     case None{}:
       h => {==}
@@ -1108,13 +1285,18 @@ def Cell.keeps_none(
     case Some{many{}}:
       h => h
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement, or code that the laws split on, keeps each and/or as one value
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run, so it gains nothing from a fork
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a trie that grows to one that holds no cell holds none
 def Cell.grows_none(
   ~V: Data,
   ~same: V -> V -> Bool,
   s: Tries.Trie<Cell<V>>,
   s2: Tries.Trie<Cell<V>>
-) -> {Cell.grows(~V, ~same, s, s2) == True{}: Bool} -> {Cell.none(V, s2) == True{}: Bool} -> {Cell.none(V, s) == True{}: Bool}:
+) -> {
+  Cell.grows(~V, ~same, s, s2) == True{}: Bool
+} -> {Cell.none(V, s2) == True{}: Bool} -> {Cell.none(V, s) == True{}: Bool}:
   match s s2:
     case Tries.tip{} y:
       g => h => {==}
@@ -1122,25 +1304,53 @@ def Cell.grows_none(
       g => h => g
     case Tries.bin{+h1, +z1, +o1} Tries.bin{+h2, +z2, +o2}:
       +g => +h =>
-        +gr = Shared.Bool.and_true_right(Cell.keeps(~V, ~same, h1, h2), Bool.and(Cell.grows(~V, ~same, z1, z2), Cell.grows(~V, ~same, o1, o2)))(g)
-        +nr = Shared.Bool.and_true_right(Maybe.is_none(&2, Cell<V>, h2), Bool.and(Cell.none(V, z2), Cell.none(V, o2)))(h)
-        Shared.Bool.and_both(Maybe.is_none(&2, Cell<V>, h1), Bool.and(Cell.none(V, z1), Cell.none(V, o1)))(
-          Cell.keeps_none(~V, ~same, h1)(
+        +gr = Shared.Bool.and_true_right(
+          Cell.keeps(~V, ~same, h1, h2),
+          Bool.and(Cell.grows(~V, ~same, z1, z2), Cell.grows(~V, ~same, o1, o2))
+        )(g)
+        +nr = Shared.Bool.and_true_right(
+          Maybe.is_none(&2, Cell<V>, h2),
+          Bool.and(Cell.none(V, z2), Cell.none(V, o2))
+        )(h)
+        Shared.Bool.and_both(
+          Maybe.is_none(&2, Cell<V>, h1),
+          Bool.and(Cell.none(V, z1), Cell.none(V, o1))
+        )(Cell.keeps_none(~V, ~same, h1)(
             %Shared.Maybe.is_none_eq(Cell<V>, h2)(Shared.Bool.and_true_left(Maybe.is_none(&2, Cell<V>, h2), Bool.and(Cell.none(V, z2), Cell.none(V, o2)))(h)):
               {Cell.keeps(~V, ~same, h1, _) == True{}: Bool}
-            Shared.Bool.and_true_left(Cell.keeps(~V, ~same, h1, h2), Bool.and(Cell.grows(~V, ~same, z1, z2), Cell.grows(~V, ~same, o1, o2)))(g)
-          )
-        )(
-          Shared.Bool.and_both(Cell.none(V, z1), Cell.none(V, o1))(
-            Cell.grows_none(~V, ~same, z1, z2)(Shared.Bool.and_true_left(Cell.grows(~V, ~same, z1, z2), Cell.grows(~V, ~same, o1, o2))(gr))(
-              Shared.Bool.and_true_left(Cell.none(V, z2), Cell.none(V, o2))(nr)
-            )
+            Shared.Bool.and_true_left(Cell.keeps(~V, ~same, h1, h2), Bool.and(Cell.grows(~V, ~same, z1, z2), Cell.grows(~V, ~same, o1, o2)))(g)))(
+          Shared.Bool.and_both(
+            Cell.none(V, z1),
+            Cell.none(V, o1)
           )(
-            Cell.grows_none(~V, ~same, o1, o2)(Shared.Bool.and_true_right(Cell.grows(~V, ~same, z1, z2), Cell.grows(~V, ~same, o1, o2))(gr))(
-              Shared.Bool.and_true_right(Cell.none(V, z2), Cell.none(V, o2))(nr)
-            )
+            Cell.grows_none(
+              ~V,
+              ~same,
+              z1,
+              z2
+            )(
+              Shared.Bool.and_true_left(
+                Cell.grows(~V, ~same, z1, z2),
+                Cell.grows(~V, ~same, o1, o2)
+              )(gr)
+            )(Shared.Bool.and_true_left(Cell.none(V, z2), Cell.none(V, o2))(nr))
+          )(
+            Cell.grows_none(
+              ~V,
+              ~same,
+              o1,
+              o2
+            )(
+              Shared.Bool.and_true_right(
+                Cell.grows(~V, ~same, z1, z2),
+                Cell.grows(~V, ~same, o1, o2)
+              )(gr)
+            )(Shared.Bool.and_true_right(Cell.none(V, z2), Cell.none(V, o2))(nr))
           )
         )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # growth composes
 law Cell.grows_trans:
@@ -1154,6 +1364,9 @@ law Cell.grows_trans:
     -> {Cell.grows(~V, ~same, s2, s3) == True{}: Bool}
     -> {Cell.grows(~V, ~same, s1, s3) == True{}: Bool}
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement, or code that the laws split on, keeps each and/or as one value
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run, so it gains nothing from a fork
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 def Cell.grows_trans(ty, same, laws, s1, s2, s3):
   match s1 s2 s3:
     case Tries.tip{} y w:
@@ -1164,26 +1377,83 @@ def Cell.grows_trans(ty, same, laws, s1, s2, s3):
       g1 => g2 => Cell.grows_none(~ty, ~same, Tries.bin{h1, z1, o1}, Tries.bin{h2, z2, o2})(g1)(g2)
     case Tries.bin{+h1, +z1, +o1} Tries.bin{+h2, +z2, +o2} Tries.bin{+h3, +z3, +o3}:
       +g1 => +g2 =>
-        +a1 = Shared.Bool.and_true_right(Cell.keeps(~ty, ~same, h1, h2), Bool.and(Cell.grows(~ty, ~same, z1, z2), Cell.grows(~ty, ~same, o1, o2)))(g1)
-        +a2 = Shared.Bool.and_true_right(Cell.keeps(~ty, ~same, h2, h3), Bool.and(Cell.grows(~ty, ~same, z2, z3), Cell.grows(~ty, ~same, o2, o3)))(g2)
+        +a1 = Shared.Bool.and_true_right(
+          Cell.keeps(~ty, ~same, h1, h2),
+          Bool.and(Cell.grows(~ty, ~same, z1, z2), Cell.grows(~ty, ~same, o1, o2))
+        )(g1)
+        +a2 = Shared.Bool.and_true_right(
+          Cell.keeps(~ty, ~same, h2, h3),
+          Bool.and(Cell.grows(~ty, ~same, z2, z3), Cell.grows(~ty, ~same, o2, o3))
+        )(g2)
         Shared.Bool.and_both(
           Cell.keeps(~ty, ~same, h1, h3),
           Bool.and(Cell.grows(~ty, ~same, z1, z3), Cell.grows(~ty, ~same, o1, o3))
         )(
-          Cell.keeps_trans(~ty, ~same, ~laws, h1, h2, h3)(
-            Shared.Bool.and_true_left(Cell.keeps(~ty, ~same, h1, h2), Bool.and(Cell.grows(~ty, ~same, z1, z2), Cell.grows(~ty, ~same, o1, o2)))(g1)
-          )(Shared.Bool.and_true_left(Cell.keeps(~ty, ~same, h2, h3), Bool.and(Cell.grows(~ty, ~same, z2, z3), Cell.grows(~ty, ~same, o2, o3)))(g2))
+          Cell.keeps_trans(
+            ~ty,
+            ~same,
+            ~laws,
+            h1,
+            h2,
+            h3
+          )(
+            Shared.Bool.and_true_left(
+              Cell.keeps(~ty, ~same, h1, h2),
+              Bool.and(Cell.grows(~ty, ~same, z1, z2), Cell.grows(~ty, ~same, o1, o2))
+            )(g1)
+          )(
+            Shared.Bool.and_true_left(
+              Cell.keeps(~ty, ~same, h2, h3),
+              Bool.and(Cell.grows(~ty, ~same, z2, z3), Cell.grows(~ty, ~same, o2, o3))
+            )(g2)
+          )
         )(
-          Shared.Bool.and_both(Cell.grows(~ty, ~same, z1, z3), Cell.grows(~ty, ~same, o1, o3))(
-            Cell.grows_trans(~ty, ~same, ~laws, z1, z2, z3)(Shared.Bool.and_true_left(Cell.grows(~ty, ~same, z1, z2), Cell.grows(~ty, ~same, o1, o2))(a1))(
-              Shared.Bool.and_true_left(Cell.grows(~ty, ~same, z2, z3), Cell.grows(~ty, ~same, o2, o3))(a2)
+          Shared.Bool.and_both(
+            Cell.grows(~ty, ~same, z1, z3),
+            Cell.grows(~ty, ~same, o1, o3)
+          )(
+            Cell.grows_trans(
+              ~ty,
+              ~same,
+              ~laws,
+              z1,
+              z2,
+              z3
+            )(
+              Shared.Bool.and_true_left(
+                Cell.grows(~ty, ~same, z1, z2),
+                Cell.grows(~ty, ~same, o1, o2)
+              )(a1)
+            )(
+              Shared.Bool.and_true_left(
+                Cell.grows(~ty, ~same, z2, z3),
+                Cell.grows(~ty, ~same, o2, o3)
+              )(a2)
             )
           )(
-            Cell.grows_trans(~ty, ~same, ~laws, o1, o2, o3)(Shared.Bool.and_true_right(Cell.grows(~ty, ~same, z1, z2), Cell.grows(~ty, ~same, o1, o2))(a1))(
-              Shared.Bool.and_true_right(Cell.grows(~ty, ~same, z2, z3), Cell.grows(~ty, ~same, o2, o3))(a2)
+            Cell.grows_trans(
+              ~ty,
+              ~same,
+              ~laws,
+              o1,
+              o2,
+              o3
+            )(
+              Shared.Bool.and_true_right(
+                Cell.grows(~ty, ~same, z1, z2),
+                Cell.grows(~ty, ~same, o1, o2)
+              )(a1)
+            )(
+              Shared.Bool.and_true_right(
+                Cell.grows(~ty, ~same, z2, z3),
+                Cell.grows(~ty, ~same, o2, o3)
+              )(a2)
             )
           )
         )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # a sync that agrees grows a trie
 law Cell.grows_join:
@@ -1193,8 +1463,19 @@ law Cell.grows_join:
   for s: Tries.Trie<Cell<V>>
   for t: Tries.Trie<Cell<V>>
   {Cell.agrees(~V, ~same, s, t) == True{}: Bool}
-    -> {Cell.grows(~V, ~same, s, Tries.Trie.union(~Cell<V>, ~Cell.join(~V, ~same), s, t)) == True{}: Bool}
+    -> {
+      Cell.grows(
+        ~V,
+        ~same,
+        s,
+        Tries.Trie.union(~Cell<V>, ~Cell.join(~V, ~same), s, t)
+      )
+        == True{}: Bool
+    }
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement, or code that the laws split on, keeps each and/or as one value
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run, so it gains nothing from a fork
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 def Cell.grows_join(ty, same, laws, s, t):
   match s t:
     case Tries.tip{} y:
@@ -1203,7 +1484,10 @@ def Cell.grows_join(ty, same, laws, s, t):
       a => Cell.grows_refl(~ty, ~same, ~laws, Tries.bin{h, z, o})
     case Tries.bin{+h1, +z1, +o1} Tries.bin{+h2, +z2, +o2}:
       +a =>
-        +ar = Shared.Bool.and_true_right(Cell.agrees.here(~ty, ~same, h1, h2), Bool.and(Cell.agrees(~ty, ~same, z1, z2), Cell.agrees(~ty, ~same, o1, o2)))(a)
+        +ar = Shared.Bool.and_true_right(
+          Cell.agrees.here(~ty, ~same, h1, h2),
+          Bool.and(Cell.agrees(~ty, ~same, z1, z2), Cell.agrees(~ty, ~same, o1, o2))
+        )(a)
         Shared.Bool.and_both(
           Cell.keeps(~ty, ~same, h1, Tries.Trie.pick(~Cell<ty>, ~Cell.join(~ty, ~same), h1, h2)),
           Bool.and(
@@ -1211,15 +1495,50 @@ def Cell.grows_join(ty, same, laws, s, t):
             Cell.grows(~ty, ~same, o1, Tries.Trie.union(~Cell<ty>, ~Cell.join(~ty, ~same), o1, o2))
           )
         )(
-          Cell.keeps_pick(~ty, ~same, ~laws, h1, h2)(
-            Shared.Bool.and_true_left(Cell.agrees.here(~ty, ~same, h1, h2), Bool.and(Cell.agrees(~ty, ~same, z1, z2), Cell.agrees(~ty, ~same, o1, o2)))(a)
+          Cell.keeps_pick(
+            ~ty,
+            ~same,
+            ~laws,
+            h1,
+            h2
+          )(
+            Shared.Bool.and_true_left(
+              Cell.agrees.here(~ty, ~same, h1, h2),
+              Bool.and(Cell.agrees(~ty, ~same, z1, z2), Cell.agrees(~ty, ~same, o1, o2))
+            )(a)
           )
         )(
           Shared.Bool.and_both(
             Cell.grows(~ty, ~same, z1, Tries.Trie.union(~Cell<ty>, ~Cell.join(~ty, ~same), z1, z2)),
             Cell.grows(~ty, ~same, o1, Tries.Trie.union(~Cell<ty>, ~Cell.join(~ty, ~same), o1, o2))
-          )(Cell.grows_join(~ty, ~same, ~laws, z1, z2)(Shared.Bool.and_true_left(Cell.agrees(~ty, ~same, z1, z2), Cell.agrees(~ty, ~same, o1, o2))(ar)))(
-            Cell.grows_join(~ty, ~same, ~laws, o1, o2)(Shared.Bool.and_true_right(Cell.agrees(~ty, ~same, z1, z2), Cell.agrees(~ty, ~same, o1, o2))(ar))
+          )(
+            Cell.grows_join(
+              ~ty,
+              ~same,
+              ~laws,
+              z1,
+              z2
+            )(
+              Shared.Bool.and_true_left(
+                Cell.agrees(~ty, ~same, z1, z2),
+                Cell.agrees(~ty, ~same, o1, o2)
+              )(ar)
+            )
+          )(
+            Cell.grows_join(
+              ~ty,
+              ~same,
+              ~laws,
+              o1,
+              o2
+            )(
+              Shared.Bool.and_true_right(
+                Cell.agrees(~ty, ~same, z1, z2),
+                Cell.agrees(~ty, ~same, o1, o2)
+              )(ar)
+            )
           )
         )
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information

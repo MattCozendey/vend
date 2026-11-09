@@ -1016,7 +1016,11 @@ def Maybe.is_eq_refl(
       Eq.refl(~A, ~eq, laws, x)
 
 # the laws of Maybe.is_eq, by the laws of eq
-def Maybe.laws(~A: Data, ~eq: A -> A -> Bool, ~laws: Eq.Laws(A, eq)) -> Eq.Laws(Maybe<&2, A>, Maybe.is_eq(~A, ~eq)):
+def Maybe.laws(
+  ~A: Data,
+  ~eq: A -> A -> Bool,
+  ~laws: Eq.Laws(A, eq)
+) -> Eq.Laws(Maybe<&2, A>, Maybe.is_eq(~A, ~eq)):
   (
     a => Maybe.is_eq_refl(~A, ~eq, ~laws, a),
     a => b => Maybe.is_eq_sound(~A, ~eq, x => y => Eq.sound(~A, ~eq, laws, x, y), a, b)
@@ -1042,14 +1046,24 @@ def Maybe.then_kept(
   -x: B,
   hm: @a: A -> {m == Some{a}: Maybe<&2, A>} -> {m2 == Some{a}: Maybe<&2, A>},
   hk: @a: A -> {k(a) == Some{x}: Maybe<&2, B>} -> {k2(a) == Some{x}: Maybe<&2, B>}
-) -> {Maybe.then(A, B, m, k) == Some{x}: Maybe<&2, B>} -> {Maybe.then(A, B, m2, k2) == Some{x}: Maybe<&2, B>}:
+) -> {
+  Maybe.then(A, B, m, k) == Some{x}: Maybe<&2, B>
+} -> {Maybe.then(A, B, m2, k2) == Some{x}: Maybe<&2, B>}:
   match m:
     case Some{+a}:
       h =>
-        %Equal.sym(Maybe<&2, A>, m2, Some{a}, hm(a)({==})): {Maybe.then(A, B, _, k2) == Some{x}: Maybe<&2, B>}
+        %Equal.sym(
+          Maybe<&2, A>,
+          m2,
+          Some{a},
+          hm(a)({==})
+        ): {Maybe.then(A, B, _, k2) == Some{x}: Maybe<&2, B>}
         hk(a)(h)
     case None{}:
-      h => Empty.absurd({Maybe.then(A, B, m2, k2) == Some{x}: Maybe<&2, B>}, Maybe.none_ne_some(B, x, h))
+      h => Empty.absurd(
+        {Maybe.then(A, B, m2, k2) == Some{x}: Maybe<&2, B>},
+        Maybe.none_ne_some(B, x, h)
+      )
 
 # k when b holds, else nothing
 def Maybe.when(-B: Data, b: Bool, k: Unit -> Maybe<&2, B>) -> Maybe<&2, B>:
@@ -1068,7 +1082,9 @@ def Maybe.when_kept(
   -k2: Unit -> Maybe<&2, B>,
   -x: B,
   hk: {k(Unit{}) == Some{x}: Maybe<&2, B>} -> {k2(Unit{}) == Some{x}: Maybe<&2, B>}
-) -> {Maybe.when(B, b, k) == Some{x}: Maybe<&2, B>} -> {Maybe.when(B, b, k2) == Some{x}: Maybe<&2, B>}:
+) -> {
+  Maybe.when(B, b, k) == Some{x}: Maybe<&2, B>
+} -> {Maybe.when(B, b, k2) == Some{x}: Maybe<&2, B>}:
   match b:
     case True{}:
       hk
