@@ -2689,3 +2689,43 @@ law Node.write_written:
         )
           == Some{x}: Maybe<&2, Texts.Bytes()>
       }
+
+# the content of a resource at a version stays as the node's state grows (by
+# a sync that agrees, or by its own writes): a version never changes
+law Node.content_kept:
+  for +s: State()
+  for +s2: State()
+  for +n: Resources.Name
+  for +v: Ledgers.Id
+  for +x: Texts.Bytes()
+  {Ledgers.State.grows(~Ask, ~Ask.is_eq, s, s2) == True{}: Bool}
+    -> {Node.content(s, n, Point.At{v}) == Some{x}: Maybe<&2, Texts.Bytes()>}
+    -> {Node.content(s2, n, Point.At{v}) == Some{x}: Maybe<&2, Texts.Bytes()>}
+
+# a version stays a version as the state grows: a step that took a request
+# is final
+law Node.version_kept:
+  for +s: State()
+  for +s2: State()
+  for +v: Ledgers.Id
+  {Ledgers.State.grows(~Ask, ~Ask.is_eq, s, s2) == True{}: Bool}
+    -> {Node.is_version(s, v) == True{}: Bool}
+    -> {Node.is_version(s2, v) == True{}: Bool}
+
+# a request answered Stale stays Stale as the state grows: its owners refused
+# it at their newest version, once
+law Node.stale_kept:
+  for +s: State()
+  for +s2: State()
+  for +i: Ledgers.Id
+  {Ledgers.State.grows(~Ask, ~Ask.is_eq, s, s2) == True{}: Bool}
+    -> {Node.answer(s, i) == Answer.Stale{}: Answer}
+    -> {Node.answer(s2, i) == Answer.Stale{}: Answer}
+
+# a request answered Refused stays Refused after any sync
+law Node.refused_kept:
+  for +s: State()
+  for +t: State()
+  for +i: Ledgers.Id
+  {Node.answer(s, i) == Answer.Refused{}: Answer}
+    -> {Node.answer(Node.join(s, t), i) == Answer.Refused{}: Answer}
