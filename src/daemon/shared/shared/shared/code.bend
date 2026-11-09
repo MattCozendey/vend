@@ -22,6 +22,19 @@ def Code.Laws(
 ) -> Type:
   @a: A -> @r: List<&2, U32> -> {dec(enc(a)(r)) == Some{Read{a, r}}: Maybe<&2, Read<A>>}
 
+# a value that dec reads, written by enc in front of what follows it, gives
+# back the tokens read: dec reads each value from one code only
+def Code.Back(
+  -A: Data,
+  enc: A -> List<&2, U32> -> List<&2, U32>,
+  dec: List<&2, U32> -> Maybe<&2, Read<A>>
+) -> Type:
+  @ts: List<
+    &2,
+    U32> -> @a: A -> @r: List<
+    &2,
+    U32> -> {dec(ts) == Some{Read{a, r}}: Maybe<&2, Read<A>>} -> {enc(a)(r) == ts: List<&2, U32>}
+
 # the read m, then k on its value and rest
 def Read.then(
   -A: Data,
@@ -90,12 +103,17 @@ def Code.count.read(ts: List<&2, U32>) -> Maybe<&2, Read<Nat>>:
   match ts:
     case Nil{}:
       None{}
-    case Con{x, +r}:
+    case Con{+x, +r}:
       Shared.Bool.when(
         Maybe<&2, Read<Nat>>,
         U32.is_eq(x, 0),
         u => Some{Read{0n, r}},
-        u => Read.then(Nat, Nat, Code.count.read(r), n => r2 => Some{Read{1n+n, r2}})
+        u => Shared.Bool.when(
+          Maybe<&2, Read<Nat>>,
+          U32.is_eq(x, 1),
+          u => Read.then(Nat, Nat, Code.count.read(r), n => r2 => Some{Read{1n+n, r2}}),
+          u => None{}
+        )
       )
 
 # the characters of t, then r
@@ -155,12 +173,17 @@ def Code.maybe.read(
   match ts:
     case Nil{}:
       None{}
-    case Con{x, +r}:
+    case Con{+x, +r}:
       Shared.Bool.when(
         Maybe<&2, Read<Maybe<&2, A>>>,
         U32.is_eq(x, 0),
         u => Some{Read{None{}, r}},
-        u => Read.then(A, Maybe<&2, A>, dec(r), a => r2 => Some{Read{Some{a}, r2}})
+        u => Shared.Bool.when(
+          Maybe<&2, Read<Maybe<&2, A>>>,
+          U32.is_eq(x, 1),
+          u => Read.then(A, Maybe<&2, A>, dec(r), a => r2 => Some{Read{Some{a}, r2}}),
+          u => None{}
+        )
       )
 
 # the items xs, then r
@@ -684,3 +707,439 @@ def Code.eq_laws(~A: Data, ~c: Codec(A)) -> Shared.Eq.Laws(A, Code.is_eq(~A, ~Co
     a => Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), Codec.enc(A, c)(a)([])),
     a => b => Code.is_eq_sound(~A, ~Codec.enc(A, c), ~Codec.dec(A, c), ~Codec.laws(A, c), a, b)
   )
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# a read m, then k, that gives x is a read of m that gives a and r, and k
+# on a and r that gives x
+def Read.then_back(
+  -A: Data,
+  -B: Data,
+  m: Maybe<&2, Read<A>>,
+  -k: A -> List<&2, U32> -> Maybe<&2, Read<B>>,
+  -x: Read<B>,
+  -G: Type,
+  g: @a: A -> @r: List<
+    &2,
+    U32> -> {
+    m == Some{Read{a, r}}: Maybe<&2, Read<A>>
+  } -> {k(a)(r) == Some{x}: Maybe<&2, Read<B>>} -> G
+) -> {Read.then(A, B, m, k) == Some{x}: Maybe<&2, Read<B>>} -> G:
+  match m:
+    case None{}:
+      e => Empty.absurd(G, Shared.Maybe.none_ne_some(Read<B>, x, e))
+    case Some{Read{a, r}}:
+      e => g(a)(r)({==})(e)
+
+# the rest of the read m, if any, else d
+def Code.read_rest(-A: Data, m: Maybe<&2, Read<A>>, d: List<&2, U32>) -> List<&2, U32>:
+  match m:
+    case Some{Read{a, r}}:
+      r
+    case None{}:
+      d
+
+# two reads that are the same read the same value
+def Read.value_eq(
+  -A: Data,
+  -a: A,
+  -b: A,
+  -r: List<&2, U32>,
+  -q: List<&2, U32>,
+  e: {Some{Read{a, r}} == Some{Read{b, q}}: Maybe<&2, Read<A>>}
+) -> {a == b: A}:
+  Equal.cong(
+    Maybe<&2, Read<A>>,
+    A,
+    m => Code.read_value(A, m, a),
+    Some{Read{a, r}},
+    Some{Read{b, q}},
+    e
+  )
+
+# two reads that are the same leave the same rest
+def Read.rest_eq(
+  -A: Data,
+  -a: A,
+  -b: A,
+  -r: List<&2, U32>,
+  -q: List<&2, U32>,
+  e: {Some{Read{a, r}} == Some{Read{b, q}}: Maybe<&2, Read<A>>}
+) -> {r == q: List<&2, U32>}:
+  Equal.cong(
+    Maybe<&2, Read<A>>,
+    List<&2, U32>,
+    m => Code.read_rest(A, m, r),
+    Some{Read{a, r}},
+    Some{Read{b, q}},
+    e
+  )
+
+# a token that reads as a, before r, is a before r
+def Code.token_back.at(
+  ts: List<&2, U32>,
+  -a: U32,
+  -r: List<&2, U32>
+) -> {
+  Code.token.read(ts) == Some{Read{a, r}}: Maybe<&2, Read<U32>>
+} -> {a <> r == ts: List<&2, U32>}:
+  match ts:
+    case Nil{}:
+      e => Empty.absurd(
+        {a <> r == []: List<&2, U32>},
+        Shared.Maybe.none_ne_some(Read<U32>, Read{a, r}, e)
+      )
+    case Con{x, q}:
+      +e =>
+        %Read.value_eq(U32, x, a, q, r, e): {_ <> r == x <> q: List<&2, U32>}
+        %Read.rest_eq(U32, x, a, q, r, e): {x <> _ == x <> q: List<&2, U32>}
+        {==}
+
+# a token reads from its code only
+def Code.token_back() -> Code.Back(U32, Code.token, Code.token.read):
+  ts => a => r => Code.token_back.at(ts, a, r)
+
+# a count whose first token is 1 reads from its code only, when the rest does
+def Code.count_back.one(
+  x: U32,
+  q: List<&2, U32>,
+  -n: Nat,
+  -r: List<&2, U32>,
+  c: Bool,
+  ec: {U32.is_eq(x, 1) == c: Bool},
+  ih: @a: Nat -> @r2: List<
+    &2,
+    U32> -> {
+    Code.count.read(q) == Some{Read{a, r2}}: Maybe<&2, Read<Nat>>
+  } -> {Code.count(a, r2) == q: List<&2, U32>}
+) -> {
+  Shared.Bool.when(
+    Maybe<&2, Read<Nat>>,
+    c,
+    u => Read.then(Nat, Nat, Code.count.read(q), n2 => r2 => Some{Read{1n+n2, r2}}),
+    u => None{}
+  )
+    == Some{Read{n, r}}: Maybe<&2, Read<Nat>>
+} -> {Code.count(n, r) == x <> q: List<&2, U32>}:
+  match c:
+    case True{}:
+      Read.then_back(
+        Nat,
+        Nat,
+        Code.count.read(q),
+        n2 => r2 => Some{Read{1n+n2, r2}},
+        Read{n, r},
+        {Code.count(n, r) == x <> q: List<&2, U32>},
+        a => r2 => em => +ek =>
+          %Read.value_eq(Nat, 1n+a, n, r2, r, ek): {Code.count(_, r) == x <> q: List<&2, U32>}
+          %Read.rest_eq(Nat, 1n+a, n, r2, r, ek): {Code.count(1n+a, _) == x <> q: List<&2, U32>}
+          %Equal.sym(U32, x, 1, Shared.U32.is_eq_sound(x, 1)(ec)): {Code.count(1n+a, r2) == _ <> q: List<&2, U32>}
+          %Equal.sym(List<&2, U32>, Code.count(a, r2), q, ih(a)(r2)(em)): {1 <> _ == 1 <> q: List<&2, U32>}
+          {==})
+    case False{}:
+      e => Empty.absurd(
+        {Code.count(n, r) == x <> q: List<&2, U32>},
+        Shared.Maybe.none_ne_some(Read<Nat>, Read{n, r}, e)
+      )
+
+# a count whose first token is x reads from its code only, when the rest does
+def Code.count_back.zero(
+  +x: U32,
+  q: List<&2, U32>,
+  -n: Nat,
+  -r: List<&2, U32>,
+  c: Bool,
+  ec: {U32.is_eq(x, 0) == c: Bool},
+  ih: @a: Nat -> @r2: List<
+    &2,
+    U32> -> {
+    Code.count.read(q) == Some{Read{a, r2}}: Maybe<&2, Read<Nat>>
+  } -> {Code.count(a, r2) == q: List<&2, U32>}
+) -> {
+  Shared.Bool.when(
+    Maybe<&2, Read<Nat>>,
+    c,
+    u => Some{Read{0n, q}},
+    u => Shared.Bool.when(
+      Maybe<&2, Read<Nat>>,
+      U32.is_eq(x, 1),
+      u => Read.then(Nat, Nat, Code.count.read(q), n2 => r2 => Some{Read{1n+n2, r2}}),
+      u => None{}
+    )
+  )
+    == Some{Read{n, r}}: Maybe<&2, Read<Nat>>
+} -> {Code.count(n, r) == x <> q: List<&2, U32>}:
+  match c:
+    case True{}:
+      +e =>
+        %Read.value_eq(Nat, 0n, n, q, r, e): {Code.count(_, r) == x <> q: List<&2, U32>}
+        %Read.rest_eq(Nat, 0n, n, q, r, e): {Code.count(0n, _) == x <> q: List<&2, U32>}
+        %Equal.sym(U32, x, 0, Shared.U32.is_eq_sound(x, 0)(ec)): {0 <> q == _ <> q: List<&2, U32>}
+        {==}
+    case False{}:
+      Code.count_back.one(x, q, n, r, U32.is_eq(x, 1), {==}, ih)
+
+# a count reads from its code only
+def Code.count_back(
+  ts: List<&2, U32>,
+  -n: Nat,
+  -r: List<&2, U32>
+) -> {
+  Code.count.read(ts) == Some{Read{n, r}}: Maybe<&2, Read<Nat>>
+} -> {Code.count(n, r) == ts: List<&2, U32>}:
+  match ts:
+    case Nil{}:
+      e => Empty.absurd(
+        {Code.count(n, r) == []: List<&2, U32>},
+        Shared.Maybe.none_ne_some(Read<Nat>, Read{n, r}, e)
+      )
+    case Con{+x, +q}:
+      Code.count_back.zero(x, q, n, r, U32.is_eq(x, 0), {==}, a => r2 => Code.count_back(q, a, r2))
+
+# a value whose first token is 1 reads from its code only
+def Code.maybe_back.one(
+  ~A: Data,
+  ~enc: A -> List<&2, U32> -> List<&2, U32>,
+  ~dec: List<&2, U32> -> Maybe<&2, Read<A>>,
+  ~back: Code.Back(A, enc, dec),
+  x: U32,
+  +q: List<&2, U32>,
+  -m: Maybe<&2, A>,
+  -r: List<&2, U32>,
+  c: Bool,
+  ec: {U32.is_eq(x, 1) == c: Bool}
+) -> {
+  Shared.Bool.when(
+    Maybe<&2, Read<Maybe<&2, A>>>,
+    c,
+    u => Read.then(A, Maybe<&2, A>, dec(q), a => r2 => Some{Read{Some{a}, r2}}),
+    u => None{}
+  )
+    == Some{Read{m, r}}: Maybe<&2, Read<Maybe<&2, A>>>
+} -> {Code.maybe(~A, ~enc, m, r) == x <> q: List<&2, U32>}:
+  match c:
+    case True{}:
+      Read.then_back(
+        A,
+        Maybe<&2, A>,
+        dec(q),
+        a => r2 => Some{Read{Some{a}, r2}},
+        Read{m, r},
+        {Code.maybe(~A, ~enc, m, r) == x <> q: List<&2, U32>},
+        a => r2 => em => +ek =>
+          %Read.value_eq(Maybe<&2, A>, Some{a}, m, r2, r, ek): {Code.maybe(~A, ~enc, _, r) == x <> q: List<&2, U32>}
+          %Read.rest_eq(Maybe<&2, A>, Some{a}, m, r2, r, ek): {Code.maybe(~A, ~enc, Some{a}, _) == x <> q: List<&2, U32>}
+          %Equal.sym(U32, x, 1, Shared.U32.is_eq_sound(x, 1)(ec)): {Code.maybe(~A, ~enc, Some{a}, r2) == _ <> q: List<&2, U32>}
+          %Equal.sym(List<&2, U32>, enc(a)(r2), q, back(q)(a)(r2)(em)): {1 <> _ == 1 <> q: List<&2, U32>}
+          {==})
+    case False{}:
+      e => Empty.absurd(
+        {Code.maybe(~A, ~enc, m, r) == x <> q: List<&2, U32>},
+        Shared.Maybe.none_ne_some(Read<Maybe<&2, A>>, Read{m, r}, e)
+      )
+
+# a value whose first token is x reads from its code only
+def Code.maybe_back.zero(
+  ~A: Data,
+  ~enc: A -> List<&2, U32> -> List<&2, U32>,
+  ~dec: List<&2, U32> -> Maybe<&2, Read<A>>,
+  ~back: Code.Back(A, enc, dec),
+  +x: U32,
+  q: List<&2, U32>,
+  -m: Maybe<&2, A>,
+  -r: List<&2, U32>,
+  c: Bool,
+  ec: {U32.is_eq(x, 0) == c: Bool}
+) -> {
+  Shared.Bool.when(
+    Maybe<&2, Read<Maybe<&2, A>>>,
+    c,
+    u => Some{Read{None{}, q}},
+    u => Shared.Bool.when(
+      Maybe<&2, Read<Maybe<&2, A>>>,
+      U32.is_eq(x, 1),
+      u => Read.then(A, Maybe<&2, A>, dec(q), a => r2 => Some{Read{Some{a}, r2}}),
+      u => None{}
+    )
+  )
+    == Some{Read{m, r}}: Maybe<&2, Read<Maybe<&2, A>>>
+} -> {Code.maybe(~A, ~enc, m, r) == x <> q: List<&2, U32>}:
+  match c:
+    case True{}:
+      +e =>
+        %Read.value_eq(
+          Maybe<&2, A>,
+          None{},
+          m,
+          q,
+          r,
+          e
+        ): {Code.maybe(~A, ~enc, _, r) == x <> q: List<&2, U32>}
+        %Read.rest_eq(
+          Maybe<&2, A>,
+          None{},
+          m,
+          q,
+          r,
+          e
+        ): {Code.maybe(~A, ~enc, None{}, _) == x <> q: List<&2, U32>}
+        %Equal.sym(U32, x, 0, Shared.U32.is_eq_sound(x, 0)(ec)): {0 <> q == _ <> q: List<&2, U32>}
+        {==}
+    case False{}:
+      Code.maybe_back.one(~A, ~enc, ~dec, ~back, x, q, m, r, U32.is_eq(x, 1), {==})
+
+# a value, if any, reads from its code only, when a value does
+def Code.maybe_back.at(
+  ~A: Data,
+  ~enc: A -> List<&2, U32> -> List<&2, U32>,
+  ~dec: List<&2, U32> -> Maybe<&2, Read<A>>,
+  ~back: Code.Back(A, enc, dec),
+  ts: List<&2, U32>,
+  -m: Maybe<&2, A>,
+  -r: List<&2, U32>
+) -> {
+  Code.maybe.read(~A, ~dec, ts) == Some{Read{m, r}}: Maybe<&2, Read<Maybe<&2, A>>>
+} -> {Code.maybe(~A, ~enc, m, r) == ts: List<&2, U32>}:
+  match ts:
+    case Nil{}:
+      e => Empty.absurd(
+        {Code.maybe(~A, ~enc, m, r) == []: List<&2, U32>},
+        Shared.Maybe.none_ne_some(Read<Maybe<&2, A>>, Read{m, r}, e)
+      )
+    case Con{+x, q}:
+      Code.maybe_back.zero(~A, ~enc, ~dec, ~back, x, q, m, r, U32.is_eq(x, 0), {==})
+
+# a value, if any, reads from its code only, when a value does
+def Code.maybe_back(
+  ~A: Data,
+  ~enc: A -> List<&2, U32> -> List<&2, U32>,
+  ~dec: List<&2, U32> -> Maybe<&2, Read<A>>,
+  ~back: Code.Back(A, enc, dec)
+) -> Code.Back(
+  Maybe<&2, A>,
+  m => r => Code.maybe(~A, ~enc, m, r),
+  ts => Code.maybe.read(~A, ~dec, ts)
+):
+  ts => m => r => Code.maybe_back.at(~A, ~enc, ~dec, ~back, ts, m, r)
+
+# n items read from their code only, when an item does
+def Code.items_back(
+  ~A: Data,
+  ~enc: A -> List<&2, U32> -> List<&2, U32>,
+  ~dec: List<&2, U32> -> Maybe<&2, Read<A>>,
+  ~back: Code.Back(A, enc, dec),
+  n: Nat,
+  +ts: List<&2, U32>,
+  -xs: List<&2, A>,
+  -r: List<&2, U32>
+) -> {
+  Code.items.read(~A, ~dec, n, ts) == Some{Read{xs, r}}: Maybe<&2, Read<List<&2, A>>>
+} -> {Code.items(~A, ~enc, xs, r) == ts: List<&2, U32>}:
+  match n:
+    case 0n:
+      +e =>
+        %Read.value_eq(
+          List<&2, A>,
+          [],
+          xs,
+          ts,
+          r,
+          e
+        ): {Code.items(~A, ~enc, _, r) == ts: List<&2, U32>}
+        Equal.sym(List<&2, U32>, ts, r, Read.rest_eq(List<&2, A>, [], xs, ts, r, e))
+    case 1n+(+p):
+      Read.then_back(
+        A,
+        List<&2, A>,
+        dec(ts),
+        a => r1 => Read.then(
+          List<&2, A>,
+          List<&2, A>,
+          Code.items.read(~A, ~dec, p, r1),
+          ys => r2 => Some{Read{a <> ys, r2}}
+        ),
+        Read{xs, r},
+        {Code.items(~A, ~enc, xs, r) == ts: List<&2, U32>},
+        a => +r1 => em1 => Read.then_back(
+          List<&2, A>,
+          List<&2, A>,
+          Code.items.read(~A, ~dec, p, r1),
+          ys => r2 => Some{Read{a <> ys, r2}},
+          Read{xs, r},
+          {Code.items(~A, ~enc, xs, r) == ts: List<&2, U32>},
+          ys => r2 => em2 => +ek =>
+            %Read.value_eq(List<&2, A>, a <> ys, xs, r2, r, ek): {Code.items(~A, ~enc, _, r) == ts: List<&2, U32>}
+            %Read.rest_eq(List<&2, A>, a <> ys, xs, r2, r, ek): {Code.items(~A, ~enc, a <> ys, _) == ts: List<&2, U32>}
+            %Equal.sym(List<&2, U32>, Code.items(~A, ~enc, ys, r2), r1, Code.items_back(~A, ~enc, ~dec, ~back, p, r1, ys, r2)(em2)): {enc(a)(_) == ts: List<&2, U32>}
+            back(ts)(a)(r1)(em1))
+      )
+
+# n items read as a list of length n
+def Code.items_length(
+  ~A: Data,
+  ~dec: List<&2, U32> -> Maybe<&2, Read<A>>,
+  n: Nat,
+  ts: List<&2, U32>,
+  -xs: List<&2, A>,
+  -r: List<&2, U32>
+) -> {
+  Code.items.read(~A, ~dec, n, ts) == Some{Read{xs, r}}: Maybe<&2, Read<List<&2, A>>>
+} -> {List.length(&2, A, xs) == n: Nat}:
+  match n:
+    case 0n:
+      e =>
+        %Read.value_eq(List<&2, A>, [], xs, ts, r, e): {List.length(&2, A, _) == 0n: Nat}
+        {==}
+    case 1n+(+p):
+      Read.then_back(
+        A,
+        List<&2, A>,
+        dec(ts),
+        a => r1 => Read.then(
+          List<&2, A>,
+          List<&2, A>,
+          Code.items.read(~A, ~dec, p, r1),
+          ys => r2 => Some{Read{a <> ys, r2}}
+        ),
+        Read{xs, r},
+        {List.length(&2, A, xs) == 1n+p: Nat},
+        a => +r1 => em1 => Read.then_back(
+          List<&2, A>,
+          List<&2, A>,
+          Code.items.read(~A, ~dec, p, r1),
+          ys => r2 => Some{Read{a <> ys, r2}},
+          Read{xs, r},
+          {List.length(&2, A, xs) == 1n+p: Nat},
+          ys => r2 => em2 => ek =>
+            %Read.value_eq(List<&2, A>, a <> ys, xs, r2, r, ek): {List.length(&2, A, _) == 1n+p: Nat}
+            Equal.cong(Nat, Nat, z => 1n+z, List.length(&2, A, ys), p, Code.items_length(~A, ~dec, p, r1, ys, r2)(em2)))
+      )
+
+# a list reads from its code only, when an item does
+def Code.list_back(
+  ~A: Data,
+  ~enc: A -> List<&2, U32> -> List<&2, U32>,
+  ~dec: List<&2, U32> -> Maybe<&2, Read<A>>,
+  ~back: Code.Back(A, enc, dec)
+) -> Code.Back(
+  List<&2, A>,
+  xs => r => Code.list(~A, ~enc, xs, r),
+  ts => Code.list.read(~A, ~dec, ts)
+):
+  +ts => xs => r => Read.then_back(
+    Nat,
+    List<&2, A>,
+    Code.count.read(ts),
+    n => r1 => Code.items.read(~A, ~dec, n, r1),
+    Read{xs, r},
+    {Code.list(~A, ~enc, xs, r) == ts: List<&2, U32>},
+    +n => +r1 => em => +ek =>
+      %Equal.sym(List<&2, U32>, Code.items(~A, ~enc, xs, r), r1, Code.items_back(~A, ~enc, ~dec, ~back, n, r1, xs, r)(ek)): {Code.count(List.length(&2, A, xs), _) == ts: List<&2, U32>}
+      %Equal.sym(Nat, List.length(&2, A, xs), n, Code.items_length(~A, ~dec, n, r1, xs, r)(ek)): {Code.count(_, r1) == ts: List<&2, U32>}
+      Code.count_back(ts, n, r1)(em))
+
+# words read from their code only
+def Code.words_back() -> Code.Back(List<&2, U32>, Code.words, Code.words.read):
+  Code.list_back(~U32, ~Code.token, ~Code.token.read, ~Code.token_back())
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
