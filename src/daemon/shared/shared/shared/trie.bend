@@ -2575,5 +2575,100 @@ def Trie.take_keeps_right(
             )
           )
         )
+# a's value stays, whether b's is the same or not (hit)
+def Trie.take_minus.pick(
+  ~V: Data,
+  x: V,
+  y: V,
+  hit: Bool
+) -> {
+  Shared.Maybe.join(
+    ~V,
+    ~(c => d => c),
+    Some{x},
+    Bool.pick(Maybe<&2, V>, hit, None{}, Some{y})
+  )
+    == Some{x}: Maybe<&2, V>
+}:
+  match hit:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# Trie.take_minus at one key
+def Trie.take_minus.here(
+  ~V: Data,
+  ~same: V -> V -> Bool,
+  a: Maybe<&2, V>,
+  b: Maybe<&2, V>
+) -> {
+  Shared.Maybe.join(
+    ~V,
+    ~(x => y => x),
+    a,
+    Trie.minus.here(~V, ~same, b, a)
+  )
+    == Shared.Maybe.join(~V, ~(x => y => x), a, b): Maybe<&2, V>
+}:
+  match a b:
+    case None{} None{}:
+      {==}
+    case None{} Some{y}:
+      {==}
+    case Some{x} None{}:
+      {==}
+    case Some{+x} Some{+y}:
+      Trie.take_minus.pick(~V, x, y, same(y, x))
+
+# what a takes of what it lacks of b is what it takes of b: the entries that a
+# sync sends are enough
+def Trie.take_minus(
+  ~V: Data,
+  ~same: V -> V -> Bool,
+  a: Trie<V>,
+  b: Trie<V>
+) -> {Trie.take(~V, a, Trie.minus(~V, ~same, b, a)) == Trie.take(~V, a, b): Trie<V>}:
+  match a b:
+    case Tip{} Tip{}:
+      {==}
+    case Tip{} Bin{h, z, o}:
+      {==}
+    case Bin{h, z, o} Tip{}:
+      {==}
+    case Bin{+h1, +z1, +o1} Bin{+h2, +z2, +o2}:
+      %Trie.take_minus(~V, ~same, z1, z2): {
+        Bin{
+          Shared.Maybe.join(~V, ~(x => y => x), h1, Trie.minus.here(~V, ~same, h2, h1)),
+          Trie.take(~V, z1, Trie.minus(~V, ~same, z2, z1)),
+          Trie.take(~V, o1, Trie.minus(~V, ~same, o2, o1))
+        }
+          == Bin{Shared.Maybe.join(~V, ~(x => y => x), h1, h2), _, Trie.take(~V, o1, o2)}: Trie<V>
+      }
+      %Trie.take_minus(~V, ~same, o1, o2): {
+        Bin{
+          Shared.Maybe.join(~V, ~(x => y => x), h1, Trie.minus.here(~V, ~same, h2, h1)),
+          Trie.take(~V, z1, Trie.minus(~V, ~same, z2, z1)),
+          Trie.take(~V, o1, Trie.minus(~V, ~same, o2, o1))
+        }
+          == Bin{
+            Shared.Maybe.join(~V, ~(x => y => x), h1, h2),
+            Trie.take(~V, z1, Trie.minus(~V, ~same, z2, z1)),
+            _
+          }: Trie<V>
+      }
+      %Trie.take_minus.here(~V, ~same, h1, h2): {
+        Bin{
+          Shared.Maybe.join(~V, ~(x => y => x), h1, Trie.minus.here(~V, ~same, h2, h1)),
+          Trie.take(~V, z1, Trie.minus(~V, ~same, z2, z1)),
+          Trie.take(~V, o1, Trie.minus(~V, ~same, o2, o1))
+        }
+          == Bin{
+            _,
+            Trie.take(~V, z1, Trie.minus(~V, ~same, z2, z1)),
+            Trie.take(~V, o1, Trie.minus(~V, ~same, o2, o1))
+          }: Trie<V>
+      }
+      {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning

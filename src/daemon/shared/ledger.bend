@@ -2127,6 +2127,23 @@ def State.take_all(ty, same, laws, s, t):
     t
   )
 
+# what a sync sends is enough: a holder that takes in what it lacks of s holds
+# what it would hold had it taken all of s
+law State.take_missing:
+  for ~Q: Data
+  for ~same: Q -> Q -> Bool
+  for r: State(Q)
+  for s: State(Q)
+  {State.take(~Q, r, State.missing(~Q, ~same, s, r)) == State.take(~Q, r, s): State(Q)}
+
+def State.take_missing(ty, same, r, s):
+  Tries.Trie.take_minus(
+    ~Cells.Cell<Entry<ty>>,
+    ~Cells.Cell.is_eq(~Entry<ty>, ~Entry.is_eq(~ty, ~same)),
+    r,
+    s
+  )
+
 # a read f of the entry of a slot stays (f gives nothing of no entry)
 def State.read_grows(
   ~Q: Data,
