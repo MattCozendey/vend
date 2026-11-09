@@ -1,7 +1,7 @@
 import Base
-import ./shared.bend as Shared
-import ./text.bend as Texts
-import ./trie.bend as Tries
+import ../../shared.bend as Shared
+import ./shared/text.bend as Texts
+import ./shared/trie.bend as Tries
 
 # Cells
 # -----

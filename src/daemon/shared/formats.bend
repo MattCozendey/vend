@@ -1,6 +1,6 @@
 import Base
-import ./shared.bend as Shared
-import ./text.bend as Texts
+import ../../shared.bend as Shared
+import ./shared/text.bend as Texts
 
 # Forks
 # -----

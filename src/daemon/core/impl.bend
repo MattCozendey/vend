@@ -1,11 +1,11 @@
 import Base
-import ../../shared/formats.bend as Formats
-import ../../shared/reach.bend as Reaches
-import ../../shared/replica.bend as Replicas
-import ../../shared/resources.bend as Resources
-import ../../shared/shared.bend as Shared
-import ../../shared/text.bend as Texts
-import ../../shared/trie.bend as Tries
+import ../../shared.bend as Shared
+import ../shared/formats.bend as Formats
+import ../shared/replica.bend as Replicas
+import ../shared/resources.bend as Resources
+import ../shared/shared/reach.bend as Reaches
+import ../shared/shared/text.bend as Texts
+import ../shared/shared/trie.bend as Tries
 import ./spec.bend as Spec
 
 # The pure core of a Vend Node.

@@ -90,9 +90,12 @@ A test starts with a comment that says why steps 1 and 2 cannot state the behavi
   `shared.bend` file XOR a `shared` folder if the utility earns it(file grows too large or has
   effects, for example). A `shared` folder, being a feature, may too contain `shared.bend` XOR a
   nested `shared` folder if needed.
-- A `shared` module never imports a cousin. When a module that is not a descendant of a helper's
-  layer needs the helper, move the helper to the `shared` of the nearest common ancestor layer, not
-  higher.
+- A module may import any module in the `shared` tree of an ancestor folder, at any depth, unless
+  that tree contains the module itself. So a module never imports a sibling or a cousin, and an
+  import never makes a cycle. Inside a `shared` folder, the nested `shared` holds what its modules
+  share.
+- When modules in different layers need one helper, move the helper to the `shared` of their
+  nearest common ancestor layer, not higher.
 - A module that needs another feature, not one of its helpers, imports that feature's `spec.bend`
   and `impl.bend` (see Layout), never its `shared`. Do not move a feature into a `shared` module to
   get around the rule above.

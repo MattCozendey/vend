@@ -1,10 +1,10 @@
 import Base
-import ../../shared/formats.bend as Formats
-import ../../shared/replica.bend as Replicas
-import ../../shared/resources.bend as Resources
-import ../../shared/text.bend as Texts
-import ../../shared/uris.bend as Uris
 import ../core/spec.bend as Core
+import ../shared/formats.bend as Formats
+import ../shared/replica.bend as Replicas
+import ../shared/resources.bend as Resources
+import ../shared/shared/text.bend as Texts
+import ../shared/uris.bend as Uris
 
 # The public API of a Vend Node (README, Public API): the core, carried over
 # IO. Every front offers exactly these operations. A change is a request, sent

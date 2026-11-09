@@ -1,5 +1,5 @@
 import Base
-import ../shared/shared.bend as Shared
+import ../shared.bend as Shared
 import ./spec.bend as Spec
 
 # Equality
