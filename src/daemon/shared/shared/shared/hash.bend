@@ -1,4 +1,5 @@
 import Base
+import ../../../../shared.bend as Shared
 
 # Hashes
 # ------
@@ -299,3 +300,259 @@ def Sha.hash(+ws: List<&2, U32>) -> Hash:
     0,
     Block.of(List.take(&2, U32, ws, 16n))
   )
+
+# a and b are the same hash
+def Hash.is_eq(a: Hash, b: Hash) -> Bool:
+  match a b:
+    case Hash{a0, a1, a2, a3, a4, a5, a6, a7} Hash{b0, b1, b2, b3, b4, b5, b6, b7}:
+      Bool.and(
+        U32.is_eq(a0, b0),
+        Bool.and(
+          U32.is_eq(a1, b1),
+          Bool.and(
+            U32.is_eq(a2, b2),
+            Bool.and(
+              U32.is_eq(a3, b3),
+              Bool.and(
+                U32.is_eq(a4, b4),
+                Bool.and(U32.is_eq(a5, b5), Bool.and(U32.is_eq(a6, b6), U32.is_eq(a7, b7)))
+              )
+            )
+          )
+        )
+      )
+
+# Hash.is_eq is True for a hash and itself
+def Hash.is_eq_refl(a: Hash) -> {Hash.is_eq(a, a) == True{}: Bool}:
+  match a:
+    case Hash{+a0, +a1, +a2, +a3, +a4, +a5, +a6, +a7}:
+      Shared.Bool.and_both(
+        U32.is_eq(a0, a0),
+        Bool.and(
+          U32.is_eq(a1, a1),
+          Bool.and(
+            U32.is_eq(a2, a2),
+            Bool.and(
+              U32.is_eq(a3, a3),
+              Bool.and(
+                U32.is_eq(a4, a4),
+                Bool.and(U32.is_eq(a5, a5), Bool.and(U32.is_eq(a6, a6), U32.is_eq(a7, a7)))
+              )
+            )
+          )
+        )
+      )(
+        Shared.U32.is_eq_refl(a0)
+      )(
+        Shared.Bool.and_both(
+          U32.is_eq(a1, a1),
+          Bool.and(
+            U32.is_eq(a2, a2),
+            Bool.and(
+              U32.is_eq(a3, a3),
+              Bool.and(
+                U32.is_eq(a4, a4),
+                Bool.and(U32.is_eq(a5, a5), Bool.and(U32.is_eq(a6, a6), U32.is_eq(a7, a7)))
+              )
+            )
+          )
+        )(
+          Shared.U32.is_eq_refl(a1)
+        )(
+          Shared.Bool.and_both(
+            U32.is_eq(a2, a2),
+            Bool.and(
+              U32.is_eq(a3, a3),
+              Bool.and(
+                U32.is_eq(a4, a4),
+                Bool.and(U32.is_eq(a5, a5), Bool.and(U32.is_eq(a6, a6), U32.is_eq(a7, a7)))
+              )
+            )
+          )(
+            Shared.U32.is_eq_refl(a2)
+          )(
+            Shared.Bool.and_both(
+              U32.is_eq(a3, a3),
+              Bool.and(
+                U32.is_eq(a4, a4),
+                Bool.and(U32.is_eq(a5, a5), Bool.and(U32.is_eq(a6, a6), U32.is_eq(a7, a7)))
+              )
+            )(
+              Shared.U32.is_eq_refl(a3)
+            )(
+              Shared.Bool.and_both(
+                U32.is_eq(a4, a4),
+                Bool.and(U32.is_eq(a5, a5), Bool.and(U32.is_eq(a6, a6), U32.is_eq(a7, a7)))
+              )(
+                Shared.U32.is_eq_refl(a4)
+              )(
+                Shared.Bool.and_both(
+                  U32.is_eq(a5, a5),
+                  Bool.and(U32.is_eq(a6, a6), U32.is_eq(a7, a7))
+                )(
+                  Shared.U32.is_eq_refl(a5)
+                )(
+                  Shared.Bool.and_both(
+                    U32.is_eq(a6, a6),
+                    U32.is_eq(a7, a7)
+                  )(Shared.U32.is_eq_refl(a6))(Shared.U32.is_eq_refl(a7))
+                )
+              )
+            )
+          )
+        )
+      )
+
+# Hash.is_eq is True only for equal hashes
+def Hash.is_eq_sound(a: Hash, b: Hash) -> {Hash.is_eq(a, b) == True{}: Bool} -> {a == b: Hash}:
+  match a b:
+    case Hash{+a0, +a1, +a2, +a3, +a4, +a5, +a6, +a7} Hash{+b0, +b1, +b2, +b3, +b4, +b5, +b6, +b7}:
+      +h =>
+        +e0 = Shared.Bool.and_true_left(
+          U32.is_eq(a0, b0),
+          Bool.and(
+            U32.is_eq(a1, b1),
+            Bool.and(
+              U32.is_eq(a2, b2),
+              Bool.and(
+                U32.is_eq(a3, b3),
+                Bool.and(
+                  U32.is_eq(a4, b4),
+                  Bool.and(U32.is_eq(a5, b5), Bool.and(U32.is_eq(a6, b6), U32.is_eq(a7, b7)))
+                )
+              )
+            )
+          )
+        )(h)
+        +r0 = Shared.Bool.and_true_right(
+          U32.is_eq(a0, b0),
+          Bool.and(
+            U32.is_eq(a1, b1),
+            Bool.and(
+              U32.is_eq(a2, b2),
+              Bool.and(
+                U32.is_eq(a3, b3),
+                Bool.and(
+                  U32.is_eq(a4, b4),
+                  Bool.and(U32.is_eq(a5, b5), Bool.and(U32.is_eq(a6, b6), U32.is_eq(a7, b7)))
+                )
+              )
+            )
+          )
+        )(h)
+        +e1 = Shared.Bool.and_true_left(
+          U32.is_eq(a1, b1),
+          Bool.and(
+            U32.is_eq(a2, b2),
+            Bool.and(
+              U32.is_eq(a3, b3),
+              Bool.and(
+                U32.is_eq(a4, b4),
+                Bool.and(U32.is_eq(a5, b5), Bool.and(U32.is_eq(a6, b6), U32.is_eq(a7, b7)))
+              )
+            )
+          )
+        )(r0)
+        +r1 = Shared.Bool.and_true_right(
+          U32.is_eq(a1, b1),
+          Bool.and(
+            U32.is_eq(a2, b2),
+            Bool.and(
+              U32.is_eq(a3, b3),
+              Bool.and(
+                U32.is_eq(a4, b4),
+                Bool.and(U32.is_eq(a5, b5), Bool.and(U32.is_eq(a6, b6), U32.is_eq(a7, b7)))
+              )
+            )
+          )
+        )(r0)
+        +e2 = Shared.Bool.and_true_left(
+          U32.is_eq(a2, b2),
+          Bool.and(
+            U32.is_eq(a3, b3),
+            Bool.and(
+              U32.is_eq(a4, b4),
+              Bool.and(U32.is_eq(a5, b5), Bool.and(U32.is_eq(a6, b6), U32.is_eq(a7, b7)))
+            )
+          )
+        )(r1)
+        +r2 = Shared.Bool.and_true_right(
+          U32.is_eq(a2, b2),
+          Bool.and(
+            U32.is_eq(a3, b3),
+            Bool.and(
+              U32.is_eq(a4, b4),
+              Bool.and(U32.is_eq(a5, b5), Bool.and(U32.is_eq(a6, b6), U32.is_eq(a7, b7)))
+            )
+          )
+        )(r1)
+        +e3 = Shared.Bool.and_true_left(
+          U32.is_eq(a3, b3),
+          Bool.and(
+            U32.is_eq(a4, b4),
+            Bool.and(U32.is_eq(a5, b5), Bool.and(U32.is_eq(a6, b6), U32.is_eq(a7, b7)))
+          )
+        )(r2)
+        +r3 = Shared.Bool.and_true_right(
+          U32.is_eq(a3, b3),
+          Bool.and(
+            U32.is_eq(a4, b4),
+            Bool.and(U32.is_eq(a5, b5), Bool.and(U32.is_eq(a6, b6), U32.is_eq(a7, b7)))
+          )
+        )(r2)
+        +e4 = Shared.Bool.and_true_left(
+          U32.is_eq(a4, b4),
+          Bool.and(U32.is_eq(a5, b5), Bool.and(U32.is_eq(a6, b6), U32.is_eq(a7, b7)))
+        )(r3)
+        +r4 = Shared.Bool.and_true_right(
+          U32.is_eq(a4, b4),
+          Bool.and(U32.is_eq(a5, b5), Bool.and(U32.is_eq(a6, b6), U32.is_eq(a7, b7)))
+        )(r3)
+        +e5 = Shared.Bool.and_true_left(
+          U32.is_eq(a5, b5),
+          Bool.and(U32.is_eq(a6, b6), U32.is_eq(a7, b7))
+        )(r4)
+        +r5 = Shared.Bool.and_true_right(
+          U32.is_eq(a5, b5),
+          Bool.and(U32.is_eq(a6, b6), U32.is_eq(a7, b7))
+        )(r4)
+        +e6 = Shared.Bool.and_true_left(U32.is_eq(a6, b6), U32.is_eq(a7, b7))(r5)
+        +r6 = Shared.Bool.and_true_right(U32.is_eq(a6, b6), U32.is_eq(a7, b7))(r5)
+        +e7 = r6
+        %Shared.U32.is_eq_sound(
+          a0,
+          b0
+        )(e0): {Hash{a0, a1, a2, a3, a4, a5, a6, a7} == Hash{_, b1, b2, b3, b4, b5, b6, b7}: Hash}
+        %Shared.U32.is_eq_sound(
+          a1,
+          b1
+        )(e1): {Hash{a0, a1, a2, a3, a4, a5, a6, a7} == Hash{a0, _, b2, b3, b4, b5, b6, b7}: Hash}
+        %Shared.U32.is_eq_sound(
+          a2,
+          b2
+        )(e2): {Hash{a0, a1, a2, a3, a4, a5, a6, a7} == Hash{a0, a1, _, b3, b4, b5, b6, b7}: Hash}
+        %Shared.U32.is_eq_sound(
+          a3,
+          b3
+        )(e3): {Hash{a0, a1, a2, a3, a4, a5, a6, a7} == Hash{a0, a1, a2, _, b4, b5, b6, b7}: Hash}
+        %Shared.U32.is_eq_sound(
+          a4,
+          b4
+        )(e4): {Hash{a0, a1, a2, a3, a4, a5, a6, a7} == Hash{a0, a1, a2, a3, _, b5, b6, b7}: Hash}
+        %Shared.U32.is_eq_sound(
+          a5,
+          b5
+        )(e5): {Hash{a0, a1, a2, a3, a4, a5, a6, a7} == Hash{a0, a1, a2, a3, a4, _, b6, b7}: Hash}
+        %Shared.U32.is_eq_sound(
+          a6,
+          b6
+        )(e6): {Hash{a0, a1, a2, a3, a4, a5, a6, a7} == Hash{a0, a1, a2, a3, a4, a5, _, b7}: Hash}
+        %Shared.U32.is_eq_sound(
+          a7,
+          b7
+        )(e7): {Hash{a0, a1, a2, a3, a4, a5, a6, a7} == Hash{a0, a1, a2, a3, a4, a5, a6, _}: Hash}
+        {==}
+
+# the laws of Hash.is_eq
+def Hash.laws() -> Shared.Eq.Laws(Hash, Hash.is_eq):
+  (a => Hash.is_eq_refl(a), a => b => Hash.is_eq_sound(a, b))
