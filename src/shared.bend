@@ -994,6 +994,159 @@ def List.drop_step(
       e => List.drop_step(a, A, t, m, x, r)(e)
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# a number plus nothing is itself
+def Nat.add_zero(a: Nat) -> {Nat.add(a, 0n) == a: Nat}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+ap:
+      %Equal.sym(Nat, Nat.add(ap, 0n), ap, Nat.add_zero(ap)):
+        {1n+_ == 1n+ap: Nat}
+      {==}
+
+# Nat.is_eq is True for a number and itself
+def Nat.is_eq_refl(a: Nat) -> {Nat.is_eq(a, a) == True{}: Bool}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+ap:
+      %Equal.sym(Bool, Nat.is_eq(ap, ap), True{}, Nat.is_eq_refl(ap)):
+        {_ == True{}: Bool}
+      {==}
+
+# the laws of Nat.is_eq
+def Nat.laws() -> Eq.Laws(Nat, Nat.is_eq):
+  (a => Nat.is_eq_refl(a), a => b => Nat.is_eq_sound(a, b))
+
+# a list with one more item at its end is one longer
+def List.length_snoc(
+  -A: Data,
+  xs: List<&2, A>,
+  -z: A
+) -> {List.length(&2, A, List.append(&2, A, xs, [z])) == 1n+List.length(&2, A, xs): Nat}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{head, tail}:
+      %Equal.sym(
+        Nat,
+        List.length(&2, A, List.append(&2, A, tail, [z])),
+        1n+List.length(&2, A, tail),
+        List.length_snoc(A, tail, z)
+      ):
+        {1n+_ == 2n+List.length(&2, A, tail): Nat}
+      {==}
+
+# the first item of xs, else d
+def List.head_or(-A: Data, xs: List<&2, A>, d: A) -> A:
+  match xs:
+    case Nil{}:
+      d
+    case Con{x, r}:
+      x
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# equal lists have equal first items
+def List.head_eq(
+  -A: Data,
+  h: A,
+  -z: A,
+  -t: List<&2, A>,
+  -r: List<&2, A>,
+  e: {h <> t == z <> r: List<&2, A>}
+) -> {h == z: A}:
+  Equal.cong(List<&2, A>, A, l => List.head_or(A, l, h), h <> t, z <> r, e)
+
+# equal lists have equal rests
+def List.tail_eq(
+  -A: Data,
+  -h: A,
+  -z: A,
+  t: List<&2, A>,
+  r: List<&2, A>,
+  e: {h <> t == z <> r: List<&2, A>}
+) -> {t == r: List<&2, A>}:
+  %List.drop_zero(&2, A, t): {_ == r: List<&2, A>}
+  %List.drop_zero(&2, A, r): {List.drop(&2, A, t, 0n) == _: List<&2, A>}
+  Equal.cong(List<&2, A>, List<&2, A>, l => List.drop(&2, A, l, 1n), h <> t, z <> r, e)
+
+# when q starts xs and z comes after it there, q then z starts xs
+def List.take_snoc(
+  -A: Data,
+  xs: List<&2, A>,
+  q: List<&2, A>,
+  -z: A,
+  -r: List<&2, A>,
+  +hq: {List.take(&2, A, xs, List.length(&2, A, q)) == q: List<&2, A>},
+  hz: {List.drop(&2, A, xs, List.length(&2, A, q)) == z <> r: List<&2, A>}
+) -> {
+  List.take(
+    &2,
+    A,
+    xs,
+    List.length(&2, A, List.append(&2, A, q, [z]))
+  )
+    == List.append(&2, A, q, [z]): List<&2, A>
+}:
+  match xs q:
+    case Nil{} w:
+      Empty.absurd(
+        {
+          List.take(
+            &2,
+            A,
+            [],
+            List.length(&2, A, List.append(&2, A, w, [z]))
+          )
+            == List.append(&2, A, w, [z]): List<&2, A>
+        },
+        Bool.false_ne_true(
+          Equal.cong(
+            List<&2, A>,
+            Bool,
+            l => List.is_empty(&2, A, l),
+            z <> r,
+            [],
+            Equal.sym(List<&2, A>, [], z <> r, hz)
+          )
+        )
+      )
+    case Con{h, +ts} Nil{}:
+      %Equal.sym(
+        List<&2, A>,
+        List.take(&2, A, ts, 0n),
+        [],
+        List.take_zero(A, ts)
+      ): {h <> _ == [z]: List<&2, A>}
+      %Equal.sym(A, h, z, List.head_eq(A, h, z, ts, r, hz)): {_ <> [] == [z]: List<&2, A>}
+      {==}
+    case Con{+h, +ts} Con{a, +qs}:
+      hq2 = hq
+      %Equal.sym(
+        List<&2, A>,
+        List.take(&2, A, ts, List.length(&2, A, List.append(&2, A, qs, [z]))),
+        List.append(&2, A, qs, [z]),
+        List.take_snoc(
+          A,
+          ts,
+          qs,
+          z,
+          r,
+          List.tail_eq(A, h, a, List.take(&2, A, ts, List.length(&2, A, qs)), qs, hq),
+          hz
+        )
+      ): {h <> _ == a <> List.append(&2, A, qs, [z]): List<&2, A>}
+      %Equal.sym(
+        A,
+        h,
+        a,
+        List.head_eq(A, h, a, List.take(&2, A, ts, List.length(&2, A, qs)), qs, hq2)
+      ): {_ <> List.append(&2, A, qs, [z]) == a <> List.append(&2, A, qs, [z]): List<&2, A>}
+      {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
 # appending nothing keeps a list
 def List.append_nil(-A: Data, xs: List<&2, A>) -> {List.append(&2, A, xs, []) == xs: List<&2, A>}:
   match xs:
