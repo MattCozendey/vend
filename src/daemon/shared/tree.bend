@@ -453,7 +453,301 @@ def Tree.set(
 # Laws
 # ----
 
+# the paths p1 and p2 differ before either ends
+def Tree.split.ok(p1: List<&2, Nat>, p2: List<&2, Nat>) -> Bool:
+  match p1 p2:
+    case Con{a, r1} Con{b, r2}:
+      Shared.Bool.when(Bool, Nat.is_eq(a, b), u => Tree.split.ok(r1, r2), u => True{})
+    case q w:
+      False{}
+
+# the store s holds every node on the path p from the node m (none: not in the
+# store) at depth d, and the leaf at its end, if any, is the key k's, or its
+# path parts from p
+def Tree.set.ok(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  p: List<&2, Nat>,
+  d: Nat,
+  k: List<&2, U32>,
+  m: Maybe<&2, Node>
+) -> Bool:
+  match p m:
+    case q None{}:
+      False{}
+    case q Some{Node.empty{}}:
+      True{}
+    case q Some{Node.leaf{+k2, v2}}:
+      Shared.Bool.when(
+        Bool,
+        Shared.List.is_eq(~U32, ~U32.is_eq, k2, k),
+        u => True{},
+        u => Tree.split.ok(q, List.drop(&2, Nat, Tree.path(k2), d))
+      )
+    case Con{x, r} Some{Node.branch{ks}}:
+      Tree.set.ok(~S, ~fetch, s, r, 1n+d, k, Tree.part(~S, ~fetch, s, Parts.at(ks, x)))
+    case Nil{} Some{Node.branch{ks}}:
+      False{}
+
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a binder of an erased argument of a proof; a proof does not run
+# a read m, made a subtree by f, gives a subtree when m does
+def Tree.some_then(
+  m: Maybe<&2, Put>,
+  -f: Put -> Put
+) -> {
+  Maybe.is_some(
+    &2,
+    Put,
+    Shared.Maybe.then(Put, Put, m, p => Some{f(p)})
+  )
+    == Maybe.is_some(&2, Put, m): Bool
+}:
+  match m:
+    case None{}:
+      {==}
+    case Some{q}:
+      {==}
+
+# the part c of a split of paths that part gives a subtree
+def Tree.split_some.when(
+  a: Nat,
+  r1: List<&2, Nat>,
+  b: Nat,
+  r2: List<&2, Nat>,
+  l: Put,
+  o: Maybe<&2, Hashes.Hash>,
+  c: Bool,
+  ih: {
+    Tree.split.ok(r1, r2) == True{}: Bool
+  } -> {Maybe.is_some(&2, Put, Tree.split(r1, r2, l, o)) == True{}: Bool}
+) -> {
+  Shared.Bool.when(Bool, c, u => Tree.split.ok(r1, r2), u => True{}) == True{}: Bool
+} -> {
+  Maybe.is_some(
+    &2,
+    Put,
+    Shared.Bool.when(
+      Maybe<&2, Put>,
+      c,
+      u => Shared.Maybe.then(
+        Put,
+        Put,
+        Tree.split(r1, r2, l, o),
+        p => Some{Put.into(Parts.none(), a, p)}
+      ),
+      u => Some{
+        Put.node(
+          Node.branch{Parts.put(Parts.put(Parts.none(), a, Some{Put.root(l)}), b, o)},
+          Put.nodes(l)
+        )
+      }
+    )
+  )
+    == True{}: Bool
+}:
+  match c:
+    case True{}:
+      e =>
+        %Equal.sym(
+          Bool,
+          Maybe.is_some(
+            &2,
+            Put,
+            Shared.Maybe.then(
+              Put,
+              Put,
+              Tree.split(r1, r2, l, o),
+              p => Some{Put.into(Parts.none(), a, p)}
+            )
+          ),
+          Maybe.is_some(&2, Put, Tree.split(r1, r2, l, o)),
+          Tree.some_then(Tree.split(r1, r2, l, o), p => Put.into(Parts.none(), a, p))
+        ): {_ == True{}: Bool}
+        ih(e)
+    case False{}:
+      e => {==}
+
+# a split of paths that part gives a subtree
+def Tree.split_some(
+  p1: List<&2, Nat>,
+  p2: List<&2, Nat>,
+  +l: Put,
+  +o: Maybe<&2, Hashes.Hash>
+) -> {
+  Tree.split.ok(p1, p2) == True{}: Bool
+} -> {Maybe.is_some(&2, Put, Tree.split(p1, p2, l, o)) == True{}: Bool}:
+  match p1 p2:
+    case Con{+a, +r1} Con{+b, +r2}:
+      Tree.split_some.when(a, r1, b, r2, l, o, Nat.is_eq(a, b), Tree.split_some(r1, r2, l, o))
+    case Con{a, r1} Nil{}:
+      e => Empty.absurd(
+        {Maybe.is_some(&2, Put, Tree.split(a <> r1, [], l, o)) == True{}: Bool},
+        Shared.Bool.false_ne_true(e)
+      )
+    case Nil{} w:
+      e => Empty.absurd(
+        {Maybe.is_some(&2, Put, Tree.split([], w, l, o)) == True{}: Bool},
+        Shared.Bool.false_ne_true(e)
+      )
+
+# a write along a path that the store holds, with no other key at its end,
+# gives a subtree
+# the part c of a write at a leaf of k2 gives a subtree, when the paths part
+def Tree.set_some.leaf(
+  q: List<&2, Nat>,
+  d: Nat,
+  k: List<&2, U32>,
+  v: List<&2, U32>,
+  o: Maybe<&2, Hashes.Hash>,
+  k2: List<&2, U32>,
+  c: Bool
+) -> {
+  Shared.Bool.when(
+    Bool,
+    c,
+    u => True{},
+    u => Tree.split.ok(q, List.drop(&2, Nat, Tree.path(k2), d))
+  )
+    == True{}: Bool
+} -> {
+  Maybe.is_some(
+    &2,
+    Put,
+    Shared.Bool.when(
+      Maybe<&2, Put>,
+      c,
+      u => Some{Put.node(Node.leaf{k, v}, [])},
+      w => Tree.split(q, List.drop(&2, Nat, Tree.path(k2), d), Put.node(Node.leaf{k, v}, []), o)
+    )
+  )
+    == True{}: Bool
+}:
+  match c:
+    case True{}:
+      e => {==}
+    case False{}:
+      Tree.split_some(q, List.drop(&2, Nat, Tree.path(k2), d), Put.node(Node.leaf{k, v}, []), o)
+
+def Tree.set_some.go(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  p: List<&2, Nat>,
+  +d: Nat,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  o: Maybe<&2, Hashes.Hash>,
+  m: Maybe<&2, Node>
+) -> {
+  Tree.set.ok(~S, ~fetch, s, p, d, k, m) == True{}: Bool
+} -> {Maybe.is_some(&2, Put, Tree.set.go(~S, ~fetch, s, p, d, k, v, o, m)) == True{}: Bool}:
+  match p m:
+    case q None{}:
+      e => Empty.absurd(
+        {Maybe.is_some(&2, Put, Tree.set.go(~S, ~fetch, s, q, d, k, v, o, None{})) == True{}: Bool},
+        Shared.Bool.false_ne_true(e)
+      )
+    case q Some{Node.empty{}}:
+      e => {==}
+    case q Some{Node.leaf{+k2, v2}}:
+      Tree.set_some.leaf(q, d, k, v, o, k2, Shared.List.is_eq(~U32, ~U32.is_eq, k2, k))
+    case Con{+x, +r} Some{Node.branch{+ks}}:
+      e =>
+        %Equal.sym(
+          Bool,
+          Maybe.is_some(
+            &2,
+            Put,
+            Shared.Maybe.then(
+              Put,
+              Put,
+              Tree.set.go(
+                ~S,
+                ~fetch,
+                s,
+                r,
+                1n+d,
+                k,
+                v,
+                Parts.at(ks, x),
+                Tree.part(~S, ~fetch, s, Parts.at(ks, x))
+              ),
+              p2 => Some{Put.into(ks, x, p2)}
+            )
+          ),
+          Maybe.is_some(
+            &2,
+            Put,
+            Tree.set.go(
+              ~S,
+              ~fetch,
+              s,
+              r,
+              1n+d,
+              k,
+              v,
+              Parts.at(ks, x),
+              Tree.part(~S, ~fetch, s, Parts.at(ks, x))
+            )
+          ),
+          Tree.some_then(
+            Tree.set.go(
+              ~S,
+              ~fetch,
+              s,
+              r,
+              1n+d,
+              k,
+              v,
+              Parts.at(ks, x),
+              Tree.part(~S, ~fetch, s, Parts.at(ks, x))
+            ),
+            p2 => Put.into(ks, x, p2)
+          )
+        ): {_ == True{}: Bool}
+        Tree.set_some.go(
+          ~S,
+          ~fetch,
+          s,
+          r,
+          1n+d,
+          k,
+          v,
+          Parts.at(ks, x),
+          Tree.part(~S, ~fetch, s, Parts.at(ks, x))
+        )(e)
+    case Nil{} Some{Node.branch{ks}}:
+      e => Empty.absurd(
+        {
+          Maybe.is_some(
+            &2,
+            Put,
+            Tree.set.go(~S, ~fetch, s, [], d, k, v, o, Some{Node.branch{ks}})
+          )
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(e)
+      )
+
+# a write gives a subtree when the store holds every node on the key's path,
+# and no other key has the key's whole path
+law Tree.set_some:
+  for ~S: Data
+  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
+  for +s: S
+  for +h: Maybe<&2, Hashes.Hash>
+  for +k: List<&2, U32>
+  for v: List<&2, U32>
+  {Tree.set.ok(~S, ~fetch, s, Tree.path(k), 0n, k, Tree.part(~S, ~fetch, s, h)) == True{}: Bool}
+    -> {Maybe.is_some(&2, Put, Tree.set(~S, ~fetch, s, h, k, v)) == True{}: Bool}
+
+def Tree.set_some(ty, fetch, s, h, k, v):
+  Tree.set_some.go(~ty, ~fetch, s, Tree.path(k), 0n, k, v, h, Tree.part(~ty, ~fetch, s, h))
+
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
 # a hash reads back
 def Hash.code_read(
   h: Hashes.Hash,
