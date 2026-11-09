@@ -80,6 +80,34 @@ def Trie.size(-V: Data, t: Trie<V>) -> Nat:
 def Trie.has(-V: Data, t: Trie<V>, k: List<&2, Bool>) -> Bool:
   Maybe.is_some(&2, V, Trie.get(V, t, k))
 
+# xs, each once, but for the keys seen
+def Trie.unique(~A: Data, ~key: A -> List<&2, Bool>, xs: List<&2, A>, +seen: Trie<Unit>) -> List<&2, A>:
+  match xs:
+    case Nil{}:
+      []
+    case Con{+x, +r}:
+      +k = key(x)
+      Shared.Bool.when(
+        List<&2, A>,
+        Trie.has(Unit, seen, k),
+        u => Trie.unique(~A, ~key, r, seen),
+        u => x <> Trie.unique(~A, ~key, r, Trie.set(Unit, seen, k, Unit{}))
+      )
+
+# no two of xs have the same key, nor one of the keys seen
+def Trie.distinct(~A: Data, ~key: A -> List<&2, Bool>, xs: List<&2, A>, +seen: Trie<Unit>) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case Con{x, r}:
+      +k = key(x)
+      Shared.Bool.when(
+        Bool,
+        Trie.has(Unit, seen, k),
+        u => False{},
+        u => Trie.distinct(~A, ~key, r, Trie.set(Unit, seen, k, Unit{}))
+      )
+
 # t with the key of each of xs, as a set
 def Trie.put_keys(
   ~A: Data,

@@ -1067,20 +1067,6 @@ def Res.names(s: State(), h: Maybe<&2, Hashes.Hash>) -> List<&2, Resources.Name>
 def Name.key(n: Resources.Name) -> List<&2, Bool>:
   Tries.Trie.text(Resources.Name.show(n))
 
-# the names ns, each once, but for the keys seen
-def Names.unique(ns: List<&2, Resources.Name>, +seen: Tries.Trie<Unit>) -> List<&2, Resources.Name>:
-  match ns:
-    case Nil{}:
-      []
-    case Con{+n, +r}:
-      +k = Name.key(n)
-      Shared.Bool.when(
-        List<&2, Resources.Name>,
-        Tries.Trie.has(Unit, seen, k),
-        u => Names.unique(r, seen),
-        u => n <> Names.unique(r, Tries.Trie.set(Unit, seen, k, Unit{}))
-      )
-
 # the resources that ours (the tree h) and theirs (ht) may hold differently,
 # once each: a walk of both trees skips what they share, and where both hold
 # the same bytes a merge keeps them (Format.merge_same)
@@ -1089,7 +1075,7 @@ def Merge.names(
   h: Maybe<&2, Hashes.Hash>,
   ht: Maybe<&2, Hashes.Hash>
 ) -> List<&2, Resources.Name>:
-  Names.unique(
+  Tries.Trie.unique(~Resources.Name, ~Name.key, 
     Res.of.bindings(Trees.Tree.diff(~State(), ~Store.fetch, s, h, ht)),
     Tries.Trie.new(Unit)
   )
@@ -1168,13 +1154,17 @@ def Group.nodes.of(ms: List<&2, Member>) -> List<&2, String>:
     case Con{Member.Group{g}, r}:
       Group.nodes.of(r)
 
-# the nodes that some group of gs names
-def Group.named(+g: Groups, gs: List<&2, Member>) -> List<&2, String>:
+# the nodes that each group of gs names, as they come
+def Group.named.all(+g: Groups, gs: List<&2, Member>) -> List<&2, String>:
   match gs:
     case Nil{}:
       []
     case Con{m, r}:
-      Shared.List.union(~String, ~String.eq, Group.nodes.of(Group.succ(g, m)), Group.named(g, r))
+      List.append(&2, String, Group.nodes.of(Group.succ(g, m)), Group.named.all(g, r))
+
+# the nodes that some group of gs names
+def Group.named(+g: Groups, gs: List<&2, Member>) -> List<&2, String>:
+  Tries.Trie.unique(~String, ~Tries.Trie.text, Group.named.all(g, gs), Tries.Trie.new(Unit))
 
 # the nodes of ns that are inside the group h of the store r
 def Group.inside(+s: State(), +r: Ledgers.Id, ns: List<&2, String>, +h: String) -> List<&2, String>:
@@ -1216,14 +1206,6 @@ def Group.loops.any(+s: State(), +r: Ledgers.Id, +g: String, ms: List<&2, Member
 # it, with the tree that the line holds after it, or refuse it as stale. They
 # wait while a version it names is not decided yet, or the state lacks a node
 # of a tree it reads.
-
-# no text of xs comes twice
-def Names.distinct(+xs: List<&2, String>) -> Bool:
-  match xs:
-    case Nil{}:
-      True{}
-    case Con{x, r}:
-      List.all.if(u => Names.distinct(r), Bool.not(List.contains(~String, ~String.eq, r, x)))
 
 # the verdict that the status st of a version gives a request that names it:
 # take it when it is a version, refuse it when it never will be, else wait
@@ -1596,7 +1578,7 @@ def Judge.change(
     case w Change.Own{+os}:
       Some{
         Ledgers.Verdict{
-          List.all.if(u => Names.distinct(os), Bool.not(List.is_empty(&2, String, os))),
+          List.all.if(u => Tries.Trie.distinct(~String, ~Tries.Trie.text, os, Tries.Trie.new(Unit)), Bool.not(List.is_empty(&2, String, os))),
           h,
           []
         }
