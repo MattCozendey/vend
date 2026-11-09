@@ -1,5 +1,7 @@
 import Base
 import ./shared.bend as Shared
+import ./text.bend as Texts
+import ./trie.bend as Tries
 
 # Cells
 # -----
@@ -308,15 +310,15 @@ def Cell.agrees.here(
 def Cell.agrees(
   ~V: Data,
   ~same: V -> V -> Bool,
-  s: Shared.Trie<Cell<V>>,
-  t: Shared.Trie<Cell<V>>
+  s: Tries.Trie<Cell<V>>,
+  t: Tries.Trie<Cell<V>>
 ) -> Bool:
   match s t:
-    case Shared.tip{} y:
+    case Tries.tip{} y:
       True{}
-    case Shared.bin{h, z, o} Shared.tip{}:
+    case Tries.bin{h, z, o} Tries.tip{}:
       True{}
-    case Shared.bin{h1, z1, o1} Shared.bin{h2, z2, o2}:
+    case Tries.bin{h1, z1, o1} Tries.bin{h2, z2, o2}:
       Bool.and(
         Cell.agrees.here(~V, ~same, h1, h2),
         Bool.and(Cell.agrees(~V, ~same, z1, z2), Cell.agrees(~V, ~same, o1, o2))
@@ -343,12 +345,12 @@ def Cell.kept.here(
   Cell.agrees.here(~V, ~same, a, b) == True{}: Bool
 } -> {
   a == Some{one{v}}: Maybe<&2, Cell<V>>
-} -> {Shared.Trie.pick(~Cell<V>, ~Cell.join(~V, ~same), a, b) == Some{one{v}}: Maybe<&2, Cell<V>>}:
+} -> {Tries.Trie.pick(~Cell<V>, ~Cell.join(~V, ~same), a, b) == Some{one{v}}: Maybe<&2, Cell<V>>}:
   match a b:
     case None{} y:
       h => g => Empty.absurd(
         {
-          Shared.Trie.pick(
+          Tries.Trie.pick(
             ~Cell<V>,
             ~Cell.join(~V, ~same),
             None{},
@@ -363,7 +365,7 @@ def Cell.kept.here(
     case Some{many{}} y:
       h => g => Empty.absurd(
         {
-          Shared.Trie.pick(
+          Tries.Trie.pick(
             ~Cell<V>,
             ~Cell.join(~V, ~same),
             Some{many{}},
@@ -404,16 +406,16 @@ law Cell.agrees_kept:
   for ~V: Data
   for ~same: V -> V -> Bool
   for ~laws: Shared.Eq.Laws(V, same)
-  for s: Shared.Trie<Cell<V>>
-  for t: Shared.Trie<Cell<V>>
+  for s: Tries.Trie<Cell<V>>
+  for t: Tries.Trie<Cell<V>>
   for k: List<&2, Bool>
   for -v: V
   {Cell.agrees(~V, ~same, s, t) == True{}: Bool}
-    -> {Shared.Trie.get(Cell<V>, s, k) == Some{one{v}}: Maybe<&2, Cell<V>>}
+    -> {Tries.Trie.get(Cell<V>, s, k) == Some{one{v}}: Maybe<&2, Cell<V>>}
     -> {
-      Shared.Trie.get(
+      Tries.Trie.get(
         Cell<V>,
-        Shared.Trie.union(~Cell<V>, ~Cell.join(~V, ~same), s, t),
+        Tries.Trie.union(~Cell<V>, ~Cell.join(~V, ~same), s, t),
         k
       )
         == Some{one{v}}: Maybe<&2, Cell<V>>
@@ -423,16 +425,16 @@ law Cell.agrees_kept:
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 def Cell.agrees_kept(ty, same, laws, s, t, k, v):
   match s t k:
-    case Shared.tip{} y q:
+    case Tries.tip{} y q:
       a => g => Empty.absurd(
-        {Shared.Trie.get(Cell<ty>, y, q) == Some{one{v}}: Maybe<&2, Cell<ty>>},
+        {Tries.Trie.get(Cell<ty>, y, q) == Some{one{v}}: Maybe<&2, Cell<ty>>},
         Shared.Bool.false_ne_true(
           Equal.cong(Maybe<&2, Cell<ty>>, Bool, m => Cell.is_one(ty, m), None{}, Some{one{v}}, g)
         )
       )
-    case Shared.bin{h, z, o} Shared.tip{} q:
+    case Tries.bin{h, z, o} Tries.tip{} q:
       a => g => g
-    case Shared.bin{+h1, +z1, +o1} Shared.bin{+h2, +z2, +o2} Nil{}:
+    case Tries.bin{+h1, +z1, +o1} Tries.bin{+h2, +z2, +o2} Nil{}:
       +a => g => Cell.kept.here(
         ~ty,
         ~same,
@@ -446,7 +448,7 @@ def Cell.agrees_kept(ty, same, laws, s, t, k, v):
           Bool.and(Cell.agrees(~ty, ~same, z1, z2), Cell.agrees(~ty, ~same, o1, o2))
         )(a)
       )(g)
-    case Shared.bin{+h1, +z1, +o1} Shared.bin{+h2, +z2, +o2} Con{False{}, r}:
+    case Tries.bin{+h1, +z1, +o1} Tries.bin{+h2, +z2, +o2} Con{False{}, r}:
       +a => g => Cell.agrees_kept(
         ~ty,
         ~same,
@@ -466,7 +468,7 @@ def Cell.agrees_kept(ty, same, laws, s, t, k, v):
           )(a)
         )
       )(g)
-    case Shared.bin{+h1, +z1, +o1} Shared.bin{+h2, +z2, +o2} Con{True{}, r}:
+    case Tries.bin{+h1, +z1, +o1} Tries.bin{+h2, +z2, +o2} Con{True{}, r}:
       +a => g => Cell.agrees_kept(
         ~ty,
         ~same,
@@ -493,12 +495,12 @@ def Cell.agrees_kept(ty, same, laws, s, t, k, v):
 def Cell.agrees_tip(
   ~V: Data,
   ~same: V -> V -> Bool,
-  s: Shared.Trie<Cell<V>>
-) -> {Cell.agrees(~V, ~same, s, Shared.tip{}) == True{}: Bool}:
+  s: Tries.Trie<Cell<V>>
+) -> {Cell.agrees(~V, ~same, s, Tries.tip{}) == True{}: Bool}:
   match s:
-    case Shared.tip{}:
+    case Tries.tip{}:
       {==}
-    case Shared.bin{h, z, o}:
+    case Tries.bin{h, z, o}:
       {==}
 
 # nothing at a key does not contradict what a holds there
@@ -519,19 +521,19 @@ def Cell.agrees_none(
 law Cell.agrees_one:
   for ~V: Data
   for ~same: V -> V -> Bool
-  for s: Shared.Trie<Cell<V>>
+  for s: Tries.Trie<Cell<V>>
   for k: List<&2, Bool>
   for +x: Cell<V>
-  {Shared.Trie.get(Cell<V>, s, k) == None{}: Maybe<&2, Cell<V>>}
-    -> {Cell.agrees(~V, ~same, s, Shared.Trie.one(Cell<V>, k, x)) == True{}: Bool}
+  {Tries.Trie.get(Cell<V>, s, k) == None{}: Maybe<&2, Cell<V>>}
+    -> {Cell.agrees(~V, ~same, s, Tries.Trie.one(Cell<V>, k, x)) == True{}: Bool}
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality, or a proof, keeps each and/or as one value for the proofs to split on
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 def Cell.agrees_one(ty, same, s, k, x):
   match s k:
-    case Shared.tip{} q:
+    case Tries.tip{} q:
       g => {==}
-    case Shared.bin{+h, +z, +o} Nil{}:
+    case Tries.bin{+h, +z, +o} Nil{}:
       g =>
         %Equal.sym(
           Maybe<&2, Cell<ty>>,
@@ -542,48 +544,48 @@ def Cell.agrees_one(ty, same, s, k, x):
           Bool.and(
             Cell.agrees.here(~ty, ~same, _, Some{x}),
             Bool.and(
-              Cell.agrees(~ty, ~same, z, Shared.tip{}),
-              Cell.agrees(~ty, ~same, o, Shared.tip{})
+              Cell.agrees(~ty, ~same, z, Tries.tip{}),
+              Cell.agrees(~ty, ~same, o, Tries.tip{})
             )
           )
             == True{}: Bool
         }
         %Equal.sym(
           Bool,
-          Cell.agrees(~ty, ~same, z, Shared.tip{}),
+          Cell.agrees(~ty, ~same, z, Tries.tip{}),
           True{},
           Cell.agrees_tip(~ty, ~same, z)
         ):
-          {Bool.and(_, Cell.agrees(~ty, ~same, o, Shared.tip{})) == True{}: Bool}
+          {Bool.and(_, Cell.agrees(~ty, ~same, o, Tries.tip{})) == True{}: Bool}
         Cell.agrees_tip(~ty, ~same, o)
-    case Shared.bin{+h, +z, +o} Con{False{}, +r}:
+    case Tries.bin{+h, +z, +o} Con{False{}, +r}:
       g => Shared.Bool.and_both(
         Cell.agrees.here(~ty, ~same, h, None{}),
         Bool.and(
-          Cell.agrees(~ty, ~same, z, Shared.Trie.one(Cell<ty>, r, x)),
-          Cell.agrees(~ty, ~same, o, Shared.tip{})
+          Cell.agrees(~ty, ~same, z, Tries.Trie.one(Cell<ty>, r, x)),
+          Cell.agrees(~ty, ~same, o, Tries.tip{})
         )
       )(
         Cell.agrees_none(~ty, ~same, h)
       )(
         Shared.Bool.and_both(
-          Cell.agrees(~ty, ~same, z, Shared.Trie.one(Cell<ty>, r, x)),
-          Cell.agrees(~ty, ~same, o, Shared.tip{})
+          Cell.agrees(~ty, ~same, z, Tries.Trie.one(Cell<ty>, r, x)),
+          Cell.agrees(~ty, ~same, o, Tries.tip{})
         )(Cell.agrees_one(~ty, ~same, z, r, x)(g))(Cell.agrees_tip(~ty, ~same, o))
       )
-    case Shared.bin{+h, +z, +o} Con{True{}, +r}:
+    case Tries.bin{+h, +z, +o} Con{True{}, +r}:
       g => Shared.Bool.and_both(
         Cell.agrees.here(~ty, ~same, h, None{}),
         Bool.and(
-          Cell.agrees(~ty, ~same, z, Shared.tip{}),
-          Cell.agrees(~ty, ~same, o, Shared.Trie.one(Cell<ty>, r, x))
+          Cell.agrees(~ty, ~same, z, Tries.tip{}),
+          Cell.agrees(~ty, ~same, o, Tries.Trie.one(Cell<ty>, r, x))
         )
       )(
         Cell.agrees_none(~ty, ~same, h)
       )(
         Shared.Bool.and_both(
-          Cell.agrees(~ty, ~same, z, Shared.tip{}),
-          Cell.agrees(~ty, ~same, o, Shared.Trie.one(Cell<ty>, r, x))
+          Cell.agrees(~ty, ~same, z, Tries.tip{}),
+          Cell.agrees(~ty, ~same, o, Tries.Trie.one(Cell<ty>, r, x))
         )(Cell.agrees_tip(~ty, ~same, z))(Cell.agrees_one(~ty, ~same, o, r, x)(g))
       )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
@@ -1597,7 +1599,7 @@ def Quorum.winner_none(member, choice, state, vote, same, m, g):
 # of nodes, and the claims of nodes to the first version of a chain. Replicas
 # sync by joining what they hold, so every replica that took in the same
 # entries holds the same state, in any order and any number of times
-# (Shared.Trie.union_comm, union_assoc, union_idem, with the laws of
+# (Tries.Trie.union_comm, union_assoc, union_idem, with the laws of
 # Cell.join).
 #
 # A chain is named by a key. It is a list of versions: its first version is
@@ -1662,7 +1664,7 @@ type Slot is Data:
 def Id.key(i: Id) -> List<&2, Bool>:
   match i:
     case Id{w, r}:
-      List.append(&2, Bool, Shared.Trie.text(w), Shared.Trie.text(r))
+      List.append(&2, Bool, Tries.Trie.text(w), Tries.Trie.text(r))
 
 # the start of the keys of the roots of the chain c
 def Root.key(c: List<&2, Bool>) -> List<&2, Bool>:
@@ -1676,9 +1678,9 @@ def Slot.key(k: Slot) -> List<&2, Bool>:
     case Slot.vote{n, c, i}:
       True{}
         <> False{}
-        <> List.append(&2, Bool, Shared.Trie.text(n), List.append(&2, Bool, c, Id.key(i)))
+        <> List.append(&2, Bool, Tries.Trie.text(n), List.append(&2, Bool, c, Id.key(i)))
     case Slot.root{c, n}:
-      List.append(&2, Bool, Root.key(c), Shared.Trie.text(n))
+      List.append(&2, Bool, Root.key(c), Tries.Trie.text(n))
 
 # Entry equality
 # --------------
@@ -1712,19 +1714,19 @@ def Id.same_refl(a: Id) -> {Id.same(a, a) == True{}: Bool}:
       Shared.Bool.and_both(
         String.eq(w, w),
         String.eq(r, r)
-      )(Shared.String.eq_refl(w))(Shared.String.eq_refl(r))
+      )(Texts.String.eq_refl(w))(Texts.String.eq_refl(r))
 
 # Id.same is True only for equal requests
 def Id.same_sound(a: Id, b: Id) -> {Id.same(a, b) == True{}: Bool} -> {a == b: Id}:
   match a b:
     case Id{+w1, +r1} Id{+w2, +r2}:
       +h =>
-        %Shared.String.eq_sound(
+        %Texts.String.eq_sound(
           w1,
           w2
         )(Shared.Bool.and_true_left(String.eq(w1, w2), String.eq(r1, r2))(h)):
           {Id{w1, r1} == Id{_, r2}: Id}
-        %Shared.String.eq_sound(
+        %Texts.String.eq_sound(
           r1,
           r2
         )(Shared.Bool.and_true_right(String.eq(w1, w2), String.eq(r1, r2))(h)):
@@ -1763,7 +1765,7 @@ def Entry.same_refl(
         Shared.Bool.and_both(
           String.eq(t, t),
           same(q, q)
-        )(Shared.String.eq_refl(t))(Shared.Eq.refl(~Q, ~same, laws, q))
+        )(Texts.String.eq_refl(t))(Shared.Eq.refl(~Q, ~same, laws, q))
       )
     case Entry.vote{i}:
       Id.same_refl(i)
@@ -1777,7 +1779,7 @@ def Entry.same_refl(
         Shared.Bool.and_both(
           Id.same(i, i),
           String.eq(n, n)
-        )(Id.same_refl(i))(Shared.String.eq_refl(n))
+        )(Id.same_refl(i))(Texts.String.eq_refl(n))
       )
 
 # Entry.same is True only for equal entries
@@ -1795,7 +1797,7 @@ def Entry.same_sound(
         +h1 = Shared.Bool.and_true_right(Id.same(i1, i2), r1)(h)
         %Id.same_sound(i1, i2)(Shared.Bool.and_true_left(Id.same(i1, i2), r1)(h)):
           {Entry.ask{i1, t1, q1} == Entry.ask{_, t2, q2}: Entry<Q>}
-        %Shared.String.eq_sound(
+        %Texts.String.eq_sound(
           t1,
           t2
         )(Shared.Bool.and_true_left(String.eq(t1, t2), same(q1, q2))(h1)):
@@ -1821,7 +1823,7 @@ def Entry.same_sound(
           {Entry.root{c1, i1, n1} == Entry.root{_, i2, n2}: Entry<Q>}
         %Id.same_sound(i1, i2)(Shared.Bool.and_true_left(Id.same(i1, i2), String.eq(n1, n2))(h1)):
           {Entry.root{c1, i1, n1} == Entry.root{c1, _, n2}: Entry<Q>}
-        %Shared.String.eq_sound(
+        %Texts.String.eq_sound(
           n1,
           n2
         )(Shared.Bool.and_true_right(Id.same(i1, i2), String.eq(n1, n2))(h1)):
@@ -1870,20 +1872,20 @@ def Entry.laws(
 
 # what a replica of changes Q holds: the cell of each slot, by the slot's key
 def State(-Q: Data) -> Data:
-  Shared.Trie<Cell<Entry<Q>>>
+  Tries.Trie<Cell<Entry<Q>>>
 
 # a replica that holds nothing yet
 def State.empty(~Q: Data) -> State(Q):
-  Shared.Trie.new(Cell<Entry<Q>>)
+  Tries.Trie.new(Cell<Entry<Q>>)
 
 # what a holder of a and of b holds: a sync
 def State.join(~Q: Data, ~same: Q -> Q -> Bool, a: State(Q), b: State(Q)) -> State(Q):
-  Shared.Trie.union(~Cell<Entry<Q>>, ~Cell.join(~Entry<Q>, ~Entry.same(~Q, ~same)), a, b)
+  Tries.Trie.union(~Cell<Entry<Q>>, ~Cell.join(~Entry<Q>, ~Entry.same(~Q, ~same)), a, b)
 
 # what a holder of r lacks of s: what a sync from s to r sends
-# (Shared.Trie.union_minus)
+# (Tries.Trie.union_minus)
 def State.missing(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), r: State(Q)) -> State(Q):
-  Shared.Trie.minus(~Cell<Entry<Q>>, ~Cell.same(~Entry<Q>, ~Entry.same(~Q, ~same)), s, r)
+  Tries.Trie.minus(~Cell<Entry<Q>>, ~Cell.same(~Entry<Q>, ~Entry.same(~Q, ~same)), s, r)
 
 # no entry of t contradicts one of s
 def State.agrees(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), t: State(Q)) -> Bool:
@@ -1904,7 +1906,7 @@ def Root.first(~Q: Data, cs: List<&2, Cell<Entry<Q>>>) -> Maybe<&2, Entry<Q>>:
 def State.claim(~Q: Data, s: State(Q), c: List<&2, Bool>) -> Maybe<&2, Entry<Q>>:
   Root.first(
     ~Q,
-    Shared.Trie.values(Cell<Entry<Q>>, Shared.Trie.under(Cell<Entry<Q>>, s, Root.key(c)))
+    Tries.Trie.values(Cell<Entry<Q>>, Tries.Trie.under(Cell<Entry<Q>>, s, Root.key(c)))
   )
 
 # Lookups
@@ -1920,7 +1922,7 @@ def Cell.entry(~Q: Data, m: Maybe<&2, Cell<Entry<Q>>>) -> Maybe<&2, Entry<Q>>:
 
 # the cell of the slot k in s
 def State.cell(~Q: Data, s: State(Q), k: Slot) -> Maybe<&2, Cell<Entry<Q>>>:
-  Shared.Trie.get(Cell<Entry<Q>>, s, Slot.key(k))
+  Tries.Trie.get(Cell<Entry<Q>>, s, Slot.key(k))
 
 # a request that s holds: its time and change
 type Asked<-Q: Data> is Data:
@@ -2065,7 +2067,7 @@ def Chain.last(
 
 # enough steps for any chain of s: one more than it has entries
 def State.fuel(~Q: Data, s: State(Q)) -> Nat:
-  1n+Shared.Trie.size(Cell<Entry<Q>>, s)
+  1n+Tries.Trie.size(Cell<Entry<Q>>, s)
 
 # the first step of a chain, from its root entry m
 def Root.of(~Q: Data, m: Maybe<&2, Entry<Q>>) -> Maybe<&2, Step>:
@@ -2162,7 +2164,7 @@ def State.head(~Q: Data, ~view: Q -> View, s: State(Q), c: List<&2, Bool>) -> Ma
 
 # s with the entry e in the slot k
 def State.put(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), k: Slot, e: Entry<Q>) -> State(Q):
-  State.join(~Q, ~same, s, Shared.Trie.one(Cell<Entry<Q>>, Slot.key(k), one{e}))
+  State.join(~Q, ~same, s, Tries.Trie.one(Cell<Entry<Q>>, Slot.key(k), one{e}))
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the laws of State.ask split on this and; a request is taken in once
 # the node n may vote at the step h of the chain c, whose owners are ms
@@ -2378,9 +2380,9 @@ def Vote.pick(
 def Vote.cast(~Q: Data, held: Bool, k: Slot, m: Maybe<&2, Id>) -> State(Q):
   match held m:
     case True{} Some{i}:
-      Shared.Trie.one(Cell<Entry<Q>>, Slot.key(k), one{Entry.vote{i}})
+      Tries.Trie.one(Cell<Entry<Q>>, Slot.key(k), one{Entry.vote{i}})
     case h w:
-      Shared.tip{}
+      Tries.tip{}
 
 # the vote of the node n on the chain c of s, at its last step m
 def Vote.at(
@@ -2394,7 +2396,7 @@ def Vote.at(
 ) -> State(Q):
   match m:
     case None{}:
-      Shared.tip{}
+      Tries.tip{}
     case Some{Step{+h, ms}}:
       Vote.cast(
         ~Q,
@@ -2405,7 +2407,7 @@ def Vote.at(
           ~view,
           ~fits,
           s,
-          Shared.Trie.values(Cell<Entry<Q>>, s),
+          Tries.Trie.values(Cell<Entry<Q>>, s),
           c,
           State.chain(~Q, ~view, s, c),
           h
@@ -2440,7 +2442,7 @@ def Vote.all(
 ) -> State(Q):
   match cs:
     case Nil{}:
-      Shared.tip{}
+      Tries.tip{}
     case Con{+c, r}:
       State.join(
         ~Q,
@@ -2463,7 +2465,7 @@ def State.vote(
     ~Q,
     ~same,
     s,
-    Vote.all(~Q, ~same, ~view, ~fits, n, s, Vote.chains(~Q, Shared.Trie.values(Cell<Entry<Q>>, s)))
+    Vote.all(~Q, ~same, ~view, ~fits, n, s, Vote.chains(~Q, Tries.Trie.values(Cell<Entry<Q>>, s)))
   )
 
 # Status
@@ -3635,7 +3637,7 @@ def State.fuel_le(
   s: State(Q),
   t: State(Q)
 ) -> {Nat.is_le(State.fuel(~Q, s), State.fuel(~Q, State.join(~Q, ~same, s, t))) == True{}: Bool}:
-  Shared.Trie.size_union(~Cell<Entry<Q>>, ~Cell.join(~Entry<Q>, ~Entry.same(~Q, ~same)), s, t)
+  Tries.Trie.size_union(~Cell<Entry<Q>>, ~Cell.join(~Entry<Q>, ~Entry.same(~Q, ~same)), s, t)
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # State.chain_kept from the first step m
@@ -4686,57 +4688,57 @@ def Fresh.cell(
   +p: List<&2, Bool>,
   +x: Cell<Entry<Q>>
 ) -> {
-  Shared.Trie.apart(k, p) == True{}: Bool
+  Tries.Trie.apart(k, p) == True{}: Bool
 } -> {
-  Shared.Trie.get(
+  Tries.Trie.get(
     Cell<Entry<Q>>,
-    State.join(~Q, ~same, s, Shared.Trie.one(Cell<Entry<Q>>, k, x)),
+    State.join(~Q, ~same, s, Tries.Trie.one(Cell<Entry<Q>>, k, x)),
     p
   )
-    == Shared.Trie.get(Cell<Entry<Q>>, s, p): Maybe<&2, Cell<Entry<Q>>>
+    == Tries.Trie.get(Cell<Entry<Q>>, s, p): Maybe<&2, Cell<Entry<Q>>>
 }:
   ap =>
     %Equal.sym(
       Maybe<&2, Cell<Entry<Q>>>,
-      Shared.Trie.get(
+      Tries.Trie.get(
         Cell<Entry<Q>>,
-        State.join(~Q, ~same, s, Shared.Trie.one(Cell<Entry<Q>>, k, x)),
+        State.join(~Q, ~same, s, Tries.Trie.one(Cell<Entry<Q>>, k, x)),
         p
       ),
-      Shared.Trie.pick(
+      Tries.Trie.pick(
         ~Cell<Entry<Q>>,
         ~Cell.join(~Entry<Q>, ~Entry.same(~Q, ~same)),
-        Shared.Trie.get(Cell<Entry<Q>>, s, p),
-        Shared.Trie.get(Cell<Entry<Q>>, Shared.Trie.one(Cell<Entry<Q>>, k, x), p)
+        Tries.Trie.get(Cell<Entry<Q>>, s, p),
+        Tries.Trie.get(Cell<Entry<Q>>, Tries.Trie.one(Cell<Entry<Q>>, k, x), p)
       ),
-      Shared.Trie.get_union(
+      Tries.Trie.get_union(
         ~Cell<Entry<Q>>,
         ~Cell.join(~Entry<Q>, ~Entry.same(~Q, ~same)),
         s,
-        Shared.Trie.one(Cell<Entry<Q>>, k, x),
+        Tries.Trie.one(Cell<Entry<Q>>, k, x),
         p
       )
     ):
-      {_ == Shared.Trie.get(Cell<Entry<Q>>, s, p): Maybe<&2, Cell<Entry<Q>>>}
+      {_ == Tries.Trie.get(Cell<Entry<Q>>, s, p): Maybe<&2, Cell<Entry<Q>>>}
     %Equal.sym(
       Maybe<&2, Cell<Entry<Q>>>,
-      Shared.Trie.get(Cell<Entry<Q>>, Shared.Trie.one(Cell<Entry<Q>>, k, x), p),
+      Tries.Trie.get(Cell<Entry<Q>>, Tries.Trie.one(Cell<Entry<Q>>, k, x), p),
       None{},
-      Shared.Trie.get_one_apart(Cell<Entry<Q>>, k, p, x)(ap)
+      Tries.Trie.get_one_apart(Cell<Entry<Q>>, k, p, x)(ap)
     ):
       {
-        Shared.Trie.pick(
+        Tries.Trie.pick(
           ~Cell<Entry<Q>>,
           ~Cell.join(~Entry<Q>, ~Entry.same(~Q, ~same)),
-          Shared.Trie.get(Cell<Entry<Q>>, s, p),
+          Tries.Trie.get(Cell<Entry<Q>>, s, p),
           _
         )
-          == Shared.Trie.get(Cell<Entry<Q>>, s, p): Maybe<&2, Cell<Entry<Q>>>
+          == Tries.Trie.get(Cell<Entry<Q>>, s, p): Maybe<&2, Cell<Entry<Q>>>
       }
-    Shared.Trie.pick_none(
+    Tries.Trie.pick_none(
       ~Cell<Entry<Q>>,
       ~Cell.join(~Entry<Q>, ~Entry.same(~Q, ~same)),
-      Shared.Trie.get(Cell<Entry<Q>>, s, p)
+      Tries.Trie.get(Cell<Entry<Q>>, s, p)
     )
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
@@ -4749,26 +4751,26 @@ def Fresh.claim(
   c: List<&2, Bool>,
   x: Cell<Entry<Q>>
 ) -> {
-  Shared.Trie.apart(k, Root.key(c)) == True{}: Bool
+  Tries.Trie.apart(k, Root.key(c)) == True{}: Bool
 } -> {
   State.claim(
     ~Q,
-    State.join(~Q, ~same, s, Shared.Trie.one(Cell<Entry<Q>>, k, x)),
+    State.join(~Q, ~same, s, Tries.Trie.one(Cell<Entry<Q>>, k, x)),
     c
   )
     == State.claim(~Q, s, c): Maybe<&2, Entry<Q>>
 }:
   ap => Equal.cong(
-    Shared.Trie<Cell<Entry<Q>>>,
+    Tries.Trie<Cell<Entry<Q>>>,
     Maybe<&2, Entry<Q>>,
-    z => Root.first(~Q, Shared.Trie.values(Cell<Entry<Q>>, z)),
-    Shared.Trie.under(
+    z => Root.first(~Q, Tries.Trie.values(Cell<Entry<Q>>, z)),
+    Tries.Trie.under(
       Cell<Entry<Q>>,
-      State.join(~Q, ~same, s, Shared.Trie.one(Cell<Entry<Q>>, k, x)),
+      State.join(~Q, ~same, s, Tries.Trie.one(Cell<Entry<Q>>, k, x)),
       Root.key(c)
     ),
-    Shared.Trie.under(Cell<Entry<Q>>, s, Root.key(c)),
-    Shared.Trie.under_union_apart(
+    Tries.Trie.under(Cell<Entry<Q>>, s, Root.key(c)),
+    Tries.Trie.under_union_apart(
       ~Cell<Entry<Q>>,
       ~Cell.join(~Entry<Q>, ~Entry.same(~Q, ~same)),
       s,
@@ -4822,7 +4824,7 @@ def State.chain_after_unfit_ask(Q, same, laws, view, fits, n, s, i, t, q, v):
   +ka = Slot.key(Slot.ask{i})
   kv = Slot.key(Slot.vote{n, c, v})
   +ea = {one{Entry.ask{i, t, q}}: Cell<Entry<Q>>}
-  +ta = Shared.Trie.one(Cell<Entry<Q>>, ka, ea)
+  +ta = Tries.Trie.one(Cell<Entry<Q>>, ka, ea)
   s1 = State.join(~Q, ~same, s, ta)
   +h1 => +h2 => +h3 => +h4 => hf =>
     +ecur = Owner.cursor(Chain.cursor(~Q, ~view, s, c), n, v)(h1)(h2)
@@ -4830,8 +4832,8 @@ def State.chain_after_unfit_ask(Q, same, laws, view, fits, n, s, i, t, q, v):
     +hc = Fresh.claim(~Q, ~same, s, ka, c, ea)({==})
     +f4 = Equal.trans(
       Maybe<&2, Cell<Entry<Q>>>,
-      Shared.Trie.get(Cell<Entry<Q>>, s1, kv),
-      Shared.Trie.get(Cell<Entry<Q>>, s, kv),
+      Tries.Trie.get(Cell<Entry<Q>>, s1, kv),
+      Tries.Trie.get(Cell<Entry<Q>>, s, kv),
       None{},
       Fresh.cell(~Q, ~same, s, ka, kv, ea)({==}),
       h4
@@ -4937,7 +4939,7 @@ def State.chain_after_unfit_ask(Q, same, laws, view, fits, n, s, i, t, q, v):
 
 # a list that holds a node holds it
 def Owners.has(n: String) -> {List.contains(~String, ~String.eq, [n], n) == True{}: Bool}:
-  %Equal.sym(Bool, String.eq(n, n), True{}, Shared.String.eq_refl(n)):
+  %Equal.sym(Bool, String.eq(n, n), True{}, Texts.String.eq_refl(n)):
     {List.any.if(u => List.contains(~String, ~String.eq, [], n), _) == True{}: Bool}
   {==}
 
@@ -4949,23 +4951,23 @@ def Grow.fuel(
   k: List<&2, Bool>,
   x: Cell<Entry<Q>>
 ) -> {
-  Shared.Trie.get(Cell<Entry<Q>>, s, k) == None{}: Maybe<&2, Cell<Entry<Q>>>
+  Tries.Trie.get(Cell<Entry<Q>>, s, k) == None{}: Maybe<&2, Cell<Entry<Q>>>
 } -> {
   Nat.is_lt(
     State.fuel(~Q, s),
-    State.fuel(~Q, State.join(~Q, ~same, s, Shared.Trie.one(Cell<Entry<Q>>, k, x)))
+    State.fuel(~Q, State.join(~Q, ~same, s, Tries.Trie.one(Cell<Entry<Q>>, k, x)))
   )
     == True{}: Bool
 }:
   h =>
     %Equal.sym(
       Nat,
-      Shared.Trie.size(
+      Tries.Trie.size(
         Cell<Entry<Q>>,
-        State.join(~Q, ~same, s, Shared.Trie.one(Cell<Entry<Q>>, k, x))
+        State.join(~Q, ~same, s, Tries.Trie.one(Cell<Entry<Q>>, k, x))
       ),
-      1n+Shared.Trie.size(Cell<Entry<Q>>, s),
-      Shared.Trie.size_union_one(
+      1n+Tries.Trie.size(Cell<Entry<Q>>, s),
+      Tries.Trie.size_union_one(
         ~Cell<Entry<Q>>,
         ~Cell.join(~Entry<Q>, ~Entry.same(~Q, ~same)),
         s,
@@ -4974,7 +4976,7 @@ def Grow.fuel(
       )(h)
     ):
       {Nat.is_lt(State.fuel(~Q, s), 1n+_) == True{}: Bool}
-    Shared.Nat.lt_succ(Shared.Trie.size(Cell<Entry<Q>>, s))
+    Shared.Nat.lt_succ(Tries.Trie.size(Cell<Entry<Q>>, s))
 
 # the request i is in the chain of s2, s1 and the sole owner's vote for it
 # after v, once the first step of the chain of s1 is known

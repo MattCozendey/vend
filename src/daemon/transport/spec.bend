@@ -3,6 +3,7 @@ import ../../shared/formats.bend as Formats
 import ../../shared/replica.bend as Replica
 import ../../shared/resources.bend as Resources
 import ../../shared/shared.bend as Shared
+import ../../shared/text.bend as Texts
 import ../../shared/uris.bend as Uris
 import ../core/spec.bend as Core
 
@@ -133,7 +134,7 @@ law Client.try_get_content:
   for c: Client
   for n: Resources.Name
   for p: Core.Point
-  IO(Client & Reply<&2, Maybe<&2, Shared.Bytes()>>)
+  IO(Client & Reply<&2, Maybe<&2, Texts.Bytes()>>)
 
 # what changed in the resource n from the point a to the point b
 law Client.try_get_diff:

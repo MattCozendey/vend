@@ -4,6 +4,8 @@ import ../../shared/reach.bend as Reaches
 import ../../shared/replica.bend as Replica
 import ../../shared/resources.bend as Resources
 import ../../shared/shared.bend as Shared
+import ../../shared/text.bend as Texts
+import ../../shared/trie.bend as Tries
 
 # The pure core of a Vend Node: what it holds, what it answers, and the laws
 # about both. transport/spec.bend carries it over IO as the public API
@@ -31,7 +33,7 @@ type Member is Data:
 
 # new content: bytes, or what an old version held
 type Content is Data:
-  Content.bytes{bytes: Shared.Bytes()}
+  Content.bytes{bytes: Texts.Bytes()}
   Content.of{version: Replica.Id}
 
 # a version, the newest version of a branch, or a mark of a branch
@@ -44,9 +46,9 @@ type Point is Data:
 def Chain.key(c: Chain) -> List<&2, Bool>:
   match c:
     case Chain.branch{n}:
-      False{} <> Shared.Trie.text(n)
+      False{} <> Tries.Trie.text(n)
     case Chain.group{n}:
-      True{} <> Shared.Trie.text(n)
+      True{} <> Tries.Trie.text(n)
 
 # Requests
 # --------
@@ -150,7 +152,7 @@ def Member.same(a: Member, b: Member) -> Bool:
 def Content.same(a: Content, b: Content) -> Bool:
   match a b:
     case Content.bytes{x} Content.bytes{y}:
-      Shared.Bytes.is_eq(x, y)
+      Texts.Bytes.is_eq(x, y)
     case Content.of{x} Content.of{y}:
       Replica.Id.same(x, y)
     case _ _:
@@ -206,7 +208,7 @@ def Node.join(a: State(), b: State()) -> State():
   Replica.State.join(~Ask, ~Ask.same, a, b)
 
 # what a holder of r lacks of s: what a sync from s to r sends
-# (Shared.Trie.union_minus)
+# (Tries.Trie.union_minus)
 def Node.missing(s: State(), r: State()) -> State():
   Replica.State.missing(~Ask, ~Ask.same, s, r)
 
@@ -300,14 +302,14 @@ law Node.content:
   for s: State()
   for n: Resources.Name
   for p: Point
-  Maybe<&2, Shared.Bytes()>
+  Maybe<&2, Texts.Bytes()>
 
 # the bytes of the resource n at the version base, if any
 law Node.content_at:
   for s: State()
   for n: Resources.Name
   for base: Maybe<&2, Replica.Id>
-  Maybe<&2, Shared.Bytes()>
+  Maybe<&2, Texts.Bytes()>
 
 # every branch
 law Node.branches:
@@ -454,23 +456,23 @@ def Pointer.version(p: Pointer) -> Replica.Id:
     case Pointer{sp, b, v}:
       v
 
-# the bytes of the pointer p (Shared.Text.cuts_after_join reads them back)
-def Pointer.show(p: Pointer) -> Shared.Bytes():
+# the bytes of the pointer p (Texts.Text.cuts_after_join reads them back)
+def Pointer.show(p: Pointer) -> Texts.Bytes():
   match p:
     case Pointer{sp, b, Replica.Id{w, r}}:
-      Shared.Bytes.of_text(Shared.Text.join([sp, b, w], Chr{10}, r))
+      Texts.Bytes.of_text(Texts.Text.join([sp, b, w], Chr{10}, r))
 
 # the pointer of the lines that a text cut into (m)
-def Pointer.read.of(m: Maybe<&2, Shared.Parts>) -> Maybe<&2, Pointer>:
+def Pointer.read.of(m: Maybe<&2, Texts.Parts>) -> Maybe<&2, Pointer>:
   match m:
-    case Some{Shared.Parts{Con{sp, Con{b, Con{w, Nil{}}}}, r}}:
+    case Some{Texts.Parts{Con{sp, Con{b, Con{w, Nil{}}}}, r}}:
       Some{Pointer{sp, b, Replica.Id{w, r}}}
     case _:
       None{}
 
 # the pointer in the bytes b
-def Pointer.read(b: Shared.Bytes()) -> Maybe<&2, Pointer>:
-  Pointer.read.of(Shared.Text.cuts(3n, Shared.Bytes.to_text(b), 10))
+def Pointer.read(b: Texts.Bytes()) -> Maybe<&2, Pointer>:
+  Pointer.read.of(Texts.Text.cuts(3n, Texts.Bytes.to_text(b), 10))
 
 # Touches
 # -------
@@ -563,8 +565,8 @@ law Node.fits_write:
       h
     )
       == Shared.Maybe.same(
-        ~Shared.Bytes(),
-        ~Shared.Bytes.is_eq,
+        ~Texts.Bytes(),
+        ~Texts.Bytes.is_eq,
         Node.content_at(s, name, Some{h}),
         Node.content_at(s, name, base)
       ): Bool
@@ -591,7 +593,7 @@ law Node.write_written:
   for b: String
   for name: Resources.Name
   for base: Maybe<&2, Replica.Id>
-  for x: Shared.Bytes()
+  for x: Texts.Bytes()
   for v: Replica.Id
   {Node.owners(s, Chain.branch{b}) == [n]: List<&2, String>}
     -> {Node.head(s, b) == Some{v}: Maybe<&2, Replica.Id>}
@@ -617,7 +619,7 @@ law Node.write_written:
         name,
         Point.head{b}
       )
-        == Node.content_at(s, name, base): Maybe<&2, Shared.Bytes()>
+        == Node.content_at(s, name, base): Maybe<&2, Texts.Bytes()>
     }
     -> {
       Node.answer(
@@ -632,7 +634,7 @@ law Node.write_written:
           name,
           Point.at{Envelope.of(e)}
         )
-          == Some{x}: Maybe<&2, Shared.Bytes()>
+          == Some{x}: Maybe<&2, Texts.Bytes()>
       }
 
 # a touch holds when its branch is a branch and lacks its version, which is a
