@@ -87,7 +87,7 @@ def Member.laws() -> Shared.Eq.Laws(Spec.Member, Spec.Member.same):
 def Content.same_refl(a: Spec.Content) -> {Spec.Content.same(a, a) == True{}: Bool}:
   match a:
     case Spec.Content.bytes{x}:
-      Texts.Bytes.is_eq_refl(x)
+      Shared.List.same_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), x)
     case Spec.Content.of{v}:
       Replica.Id.same_refl(v)
 
@@ -99,7 +99,10 @@ def Content.same_sound(
   match a b:
     case Spec.Content.bytes{x} Spec.Content.bytes{y}:
       h =>
-        %Texts.Bytes.is_eq_sound(
+        %Shared.List.same_sound(
+          ~U32,
+          ~U32.is_eq,
+          ~Shared.U32.laws(),
           x,
           y
         )(h): {Spec.Content.bytes{x} == Spec.Content.bytes{_}: Spec.Content}
@@ -864,7 +867,14 @@ def Pick.of.right(
     case True{}:
       Pick.take{o}
     case False{}:
-      Pick.of.same(Shared.Maybe.same(~Texts.Bytes(), ~Texts.Bytes.is_eq, o, t), f, s, b, o, t)
+      Pick.of.same(
+        Shared.Maybe.same(~Texts.Bytes(), ~Shared.List.same(~U32, ~U32.is_eq), o, t),
+        f,
+        s,
+        b,
+        o,
+        t
+      )
 
 # the merge of a resource, once ours is known to be the base or not (held)
 def Pick.of(
@@ -879,7 +889,14 @@ def Pick.of(
     case True{}:
       Pick.take{t}
     case False{}:
-      Pick.of.right(Shared.Maybe.same(~Texts.Bytes(), ~Texts.Bytes.is_eq, t, b), f, s, b, o, t)
+      Pick.of.right(
+        Shared.Maybe.same(~Texts.Bytes(), ~Shared.List.same(~U32, ~U32.is_eq), t, b),
+        f,
+        s,
+        b,
+        o,
+        t
+      )
 
 # what a merge of the base b, ours o and theirs t keeps of a resource in the
 # format f
@@ -890,7 +907,14 @@ def Pick.merge(
   +o: Maybe<&2, Texts.Bytes()>,
   t: Maybe<&2, Texts.Bytes()>
 ) -> Pick:
-  Pick.of(Shared.Maybe.same(~Texts.Bytes(), ~Texts.Bytes.is_eq, o, b), f, s, b, o, t)
+  Pick.of(
+    Shared.Maybe.same(~Texts.Bytes(), ~Shared.List.same(~U32, ~U32.is_eq), o, b),
+    f,
+    s,
+    b,
+    o,
+    t
+  )
 
 # the bytes of a merge: ours on a clash
 def Pick.kept(p: Pick, o: Maybe<&2, Texts.Bytes()>) -> Maybe<&2, Texts.Bytes()>:
@@ -1353,7 +1377,7 @@ def Spec.Node.fits(s, q, h):
       +s = s
       Shared.Maybe.same(
         ~Texts.Bytes(),
-        ~Texts.Bytes.is_eq,
+        ~Shared.List.same(~U32, ~U32.is_eq),
         Res.of(s, n, Some{h}),
         Res.of(s, n, base)
       )
@@ -1519,7 +1543,7 @@ def Log.of(
         Bool.not(
           Shared.Maybe.same(
             ~Texts.Bytes(),
-            ~Texts.Bytes.is_eq,
+            ~Shared.List.same(~U32, ~U32.is_eq),
             Res.of(s, n, Some{x}),
             Res.of(s, n, prev)
           )
@@ -2152,12 +2176,22 @@ def Spec.Node.write_written(n, s, e, b, name, base, x, v):
         +fits = Equal.trans(
           Bool,
           Spec.Node.fits(s, q, v),
-          Shared.Maybe.same(~Texts.Bytes(), ~Texts.Bytes.is_eq, base_bytes, base_bytes),
+          Shared.Maybe.same(
+            ~Texts.Bytes(),
+            ~Shared.List.same(~U32, ~U32.is_eq),
+            base_bytes,
+            base_bytes
+          ),
           True{},
           Equal.cong(
             Maybe<&2, Texts.Bytes()>,
             Bool,
-            z => Shared.Maybe.same(~Texts.Bytes(), ~Texts.Bytes.is_eq, z, base_bytes),
+            z => Shared.Maybe.same(
+              ~Texts.Bytes(),
+              ~Shared.List.same(~U32, ~U32.is_eq),
+              z,
+              base_bytes
+            ),
             Res.of(s, name, Some{v}),
             base_bytes,
             Equal.trans(
@@ -2183,8 +2217,8 @@ def Spec.Node.write_written(n, s, e, b, name, base, x, v):
           ),
           Shared.Maybe.same_refl(
             ~Texts.Bytes(),
-            ~Texts.Bytes.is_eq,
-            ~Texts.Bytes.laws(),
+            ~Shared.List.same(~U32, ~U32.is_eq),
+            ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
             base_bytes
           )
         )

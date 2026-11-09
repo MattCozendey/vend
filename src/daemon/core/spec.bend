@@ -152,7 +152,7 @@ def Member.same(a: Member, b: Member) -> Bool:
 def Content.same(a: Content, b: Content) -> Bool:
   match a b:
     case Content.bytes{x} Content.bytes{y}:
-      Texts.Bytes.is_eq(x, y)
+      Shared.List.same(~U32, ~U32.is_eq, x, y)
     case Content.of{x} Content.of{y}:
       Replica.Id.same(x, y)
     case _ _:
@@ -566,7 +566,7 @@ law Node.fits_write:
     )
       == Shared.Maybe.same(
         ~Texts.Bytes(),
-        ~Texts.Bytes.is_eq,
+        ~Shared.List.same(~U32, ~U32.is_eq),
         Node.content_at(s, name, Some{h}),
         Node.content_at(s, name, base)
       ): Bool

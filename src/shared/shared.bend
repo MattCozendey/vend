@@ -673,6 +673,10 @@ def U32.is_eq_refl(x: U32) -> {U32.is_eq(x, x) == True{}: Bool}:
   {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# the laws of U32.is_eq
+def U32.laws() -> Eq.Laws(U32, U32.is_eq):
+  (U32.is_eq_refl, U32.is_eq_sound)
+
 # k(), when b holds, else e(); only the chosen one runs
 def Bool.when(-A: Type, b: Bool, k: Unit -> A, e: Unit -> A) -> A:
   match b:
@@ -1184,17 +1188,16 @@ def List.take_drop(
 
 # List equality
 # -------------
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality, or a proof, keeps each and/or as one value for the proofs to split on
-# xs and ys hold the same elements in the same order, as same calls them
+# xs and ys hold the same elements in the same order, as same calls them: the
+# check stops at the first difference
 def List.same(~A: Data, ~same: A -> A -> Bool, xs: List<&2, A>, ys: List<&2, A>) -> Bool:
   match xs ys:
     case Nil{} Nil{}:
       True{}
     case Con{x, xr} Con{y, yr}:
-      Bool.and(same(x, y), List.same(~A, ~same, xr, yr))
+      List.all.if(u => List.same(~A, ~same, xr, yr), same(x, y))
     case _ _:
       False{}
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # List.same is True for a list and itself
 law List.same_refl:
@@ -1214,7 +1217,7 @@ def List.same_refl(ty, same, laws, xs):
         same(x, x),
         True{},
         Eq.refl(~ty, ~same, laws, x)
-      ): {Bool.and(_, List.same(~ty, ~same, r, r)) == True{}: Bool}
+      ): {List.all.if(u => List.same(~ty, ~same, r, r), _) == True{}: Bool}
       List.same_refl(~ty, ~same, ~laws, r)
 
 # List.same is True only for equal lists
@@ -1241,11 +1244,10 @@ def List.same_sound(ty, same, laws, xs, ys):
           ~ty,
           ~same,
           laws,
-          x
-        )(
+          x,
           y
         )(
-          Bool.and_true_left(same(x, y), List.same(~ty, ~same, xr, yr))(h)
+          List.all.if_hit(same(x, y), u => List.same(~ty, ~same, xr, yr))(h)
         ): {x <> xr == _ <> yr: List<&2, ty>}
         %List.same_sound(
           ~ty,
@@ -1253,10 +1255,21 @@ def List.same_sound(ty, same, laws, xs, ys):
           ~laws,
           xr,
           yr
-        )(Bool.and_true_right(same(x, y), List.same(~ty, ~same, xr, yr))(h)):
+        )(List.all.if_rest(same(x, y), u => List.same(~ty, ~same, xr, yr))(h)):
           {x <> xr == x <> _: List<&2, ty>}
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# the laws of List.same, by the laws of same
+def List.laws(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  ~laws: Eq.Laws(A, same)
+) -> Eq.Laws(List<&2, A>, List.same(~A, ~same)):
+  (
+    xs => List.same_refl(~A, ~same, ~laws, xs),
+    xs => ys => List.same_sound(~A, ~same, ~laws, xs, ys)
+  )
 
 # the first elements of xs ++ ys, as many as xs has, are xs
 def List.take_append(

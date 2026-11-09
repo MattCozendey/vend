@@ -555,11 +555,11 @@ def Lines.cut.ends(s: List<&2, Texts.Bytes()>, e: Ends<Texts.Bytes()>) -> Cut:
 def Lines.cut.of(f: Fork<Texts.Bytes()>) -> Cut:
   match f:
     case Fork{s, ra, rb}:
-      Lines.cut.ends(s, List.ends(~Texts.Bytes(), ~Texts.Bytes.is_eq, ra, rb))
+      Lines.cut.ends(s, List.ends(~Texts.Bytes(), ~Shared.List.same(~U32, ~U32.is_eq), ra, rb))
 
 # the lines that a and b share at the start and at the end, and what differs
 def Lines.cut(a: List<&2, Texts.Bytes()>, b: List<&2, Texts.Bytes()>) -> Cut:
-  Lines.cut.of(List.fork(~Texts.Bytes(), ~Texts.Bytes.is_eq, a, b))
+  Lines.cut.of(List.fork(~Texts.Bytes(), ~Shared.List.same(~U32, ~U32.is_eq), a, b))
 
 # the old lines of a cut by ends e are its start, then the first list of e
 def Lines.cut.ends_left(
@@ -596,7 +596,7 @@ def Lines.cut.of_left(
 ) -> {Cut.left(Lines.cut.of(f)) == Fork.left(Texts.Bytes(), f): List<&2, Texts.Bytes()>}:
   match f:
     case Fork{s, +ra, +rb}:
-      e = List.ends(~Texts.Bytes(), ~Texts.Bytes.is_eq, ra, rb)
+      e = List.ends(~Texts.Bytes(), ~Shared.List.same(~U32, ~U32.is_eq), ra, rb)
       Equal.trans(
         List<&2, Texts.Bytes()>,
         Cut.left(Lines.cut.ends(s, e)),
@@ -609,7 +609,7 @@ def Lines.cut.of_left(
           z => List.append(&2, Texts.Bytes(), s, z),
           Ends.left(Texts.Bytes(), e),
           ra,
-          List.ends_left(~Texts.Bytes(), ~Texts.Bytes.is_eq, ra, rb)
+          List.ends_left(~Texts.Bytes(), ~Shared.List.same(~U32, ~U32.is_eq), ra, rb)
         )
       )
 
@@ -619,7 +619,7 @@ def Lines.cut.of_right(
 ) -> {Cut.right(Lines.cut.of(f)) == Fork.right(Texts.Bytes(), f): List<&2, Texts.Bytes()>}:
   match f:
     case Fork{s, +ra, +rb}:
-      e = List.ends(~Texts.Bytes(), ~Texts.Bytes.is_eq, ra, rb)
+      e = List.ends(~Texts.Bytes(), ~Shared.List.same(~U32, ~U32.is_eq), ra, rb)
       Equal.trans(
         List<&2, Texts.Bytes()>,
         Cut.right(Lines.cut.ends(s, e)),
@@ -632,7 +632,13 @@ def Lines.cut.of_right(
           z => List.append(&2, Texts.Bytes(), s, z),
           Ends.right(Texts.Bytes(), e),
           rb,
-          List.ends_right(~Texts.Bytes(), ~Texts.Bytes.is_eq, ~Texts.Bytes.laws(), ra, rb)
+          List.ends_right(
+            ~Texts.Bytes(),
+            ~Shared.List.same(~U32, ~U32.is_eq),
+            ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
+            ra,
+            rb
+          )
         )
       )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
@@ -645,14 +651,14 @@ law Lines.cut_left:
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 def Lines.cut_left(a, b):
-  f = List.fork(~Texts.Bytes(), ~Texts.Bytes.is_eq, a, b)
+  f = List.fork(~Texts.Bytes(), ~Shared.List.same(~U32, ~U32.is_eq), a, b)
   Equal.trans(
     List<&2, Texts.Bytes()>,
     Cut.left(Lines.cut.of(f)),
     Fork.left(Texts.Bytes(), f),
     a,
     Lines.cut.of_left(f),
-    List.fork_left(~Texts.Bytes(), ~Texts.Bytes.is_eq, a, b)
+    List.fork_left(~Texts.Bytes(), ~Shared.List.same(~U32, ~U32.is_eq), a, b)
   )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
@@ -664,14 +670,20 @@ law Lines.cut_right:
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 def Lines.cut_right(a, b):
-  f = List.fork(~Texts.Bytes(), ~Texts.Bytes.is_eq, a, b)
+  f = List.fork(~Texts.Bytes(), ~Shared.List.same(~U32, ~U32.is_eq), a, b)
   Equal.trans(
     List<&2, Texts.Bytes()>,
     Cut.right(Lines.cut.of(f)),
     Fork.right(Texts.Bytes(), f),
     b,
     Lines.cut.of_right(f),
-    List.fork_right(~Texts.Bytes(), ~Texts.Bytes.is_eq, ~Texts.Bytes.laws(), a, b)
+    List.fork_right(
+      ~Texts.Bytes(),
+      ~Shared.List.same(~U32, ~U32.is_eq),
+      ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
+      a,
+      b
+    )
   )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
@@ -985,7 +997,7 @@ def Merge.decide.right(held: Bool, x: Texts.Bytes(), y: Texts.Bytes()) -> Decisi
     case True{}:
       Decision.ours{}
     case False{}:
-      Merge.decide.same(Texts.Bytes.is_eq(x, y))
+      Merge.decide.same(Shared.List.same(~U32, ~U32.is_eq, x, y))
 
 # theirs when x is b (held), else as y is b or not
 def Merge.decide.left(
@@ -998,11 +1010,11 @@ def Merge.decide.left(
     case True{}:
       Decision.theirs{}
     case False{}:
-      Merge.decide.right(Texts.Bytes.is_eq(y, b), x, y)
+      Merge.decide.right(Shared.List.same(~U32, ~U32.is_eq, y, b), x, y)
 
 # what a merge of x and y, two changes of b, takes before any format looks
 def Merge.decide(+b: Texts.Bytes(), +x: Texts.Bytes(), y: Texts.Bytes()) -> Decision:
-  Merge.decide.left(Texts.Bytes.is_eq(x, b), b, x, y)
+  Merge.decide.left(Shared.List.same(~U32, ~U32.is_eq, x, b), b, x, y)
 
 # the change that the decision d takes of x and y, none for both
 def Decision.take(d: Decision, x: Texts.Bytes(), y: Texts.Bytes()) -> Maybe<&2, Texts.Bytes()>:
@@ -1022,7 +1034,7 @@ def Merge.left_only.at(
   held: Bool,
   b: Texts.Bytes(),
   x: Texts.Bytes(),
-  e: {Texts.Bytes.is_eq(x, b) == held: Bool}
+  e: {Shared.List.same(~U32, ~U32.is_eq, x, b) == held: Bool}
 ) -> {Decision.take(Merge.decide.left(held, b, x, b), x, b) == Some{x}: Maybe<&2, Texts.Bytes()>}:
   match held:
     case True{}:
@@ -1030,11 +1042,16 @@ def Merge.left_only.at(
         Texts.Bytes(),
         x,
         b,
-        Texts.Bytes.is_eq_sound(x, b)(e)
+        Shared.List.same_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), x, b)(e)
       ): {Some{b} == Some{_}: Maybe<&2, Texts.Bytes()>}
       {==}
     case False{}:
-      %Equal.sym(Bool, Texts.Bytes.is_eq(b, b), True{}, Texts.Bytes.is_eq_refl(b)):
+      %Equal.sym(
+        Bool,
+        Shared.List.same(~U32, ~U32.is_eq, b, b),
+        True{},
+        Shared.List.same_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), b)
+      ):
         {Decision.take(Merge.decide.right(_, x, b), x, b) == Some{x}: Maybe<&2, Texts.Bytes()>}
       {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
@@ -1044,7 +1061,7 @@ def Merge.left_only(
   +b: Texts.Bytes(),
   +x: Texts.Bytes()
 ) -> {Decision.take(Merge.decide(b, x, b), x, b) == Some{x}: Maybe<&2, Texts.Bytes()>}:
-  Merge.left_only.at(Texts.Bytes.is_eq(x, b), b, x, {==})
+  Merge.left_only.at(Shared.List.same(~U32, ~U32.is_eq, x, b), b, x, {==})
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # when only y changed b, the decision takes y
@@ -1052,7 +1069,12 @@ def Merge.right_only(
   b: Texts.Bytes(),
   y: Texts.Bytes()
 ) -> {Decision.take(Merge.decide(b, b, y), b, y) == Some{y}: Maybe<&2, Texts.Bytes()>}:
-  %Equal.sym(Bool, Texts.Bytes.is_eq(b, b), True{}, Texts.Bytes.is_eq_refl(b)):
+  %Equal.sym(
+    Bool,
+    Shared.List.same(~U32, ~U32.is_eq, b, b),
+    True{},
+    Shared.List.same_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), b)
+  ):
     {Decision.take(Merge.decide.left(_, b, b, y), b, y) == Some{y}: Maybe<&2, Texts.Bytes()>}
   {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
@@ -1063,15 +1085,20 @@ def Merge.same.at(
   held: Bool,
   b: Texts.Bytes(),
   x: Texts.Bytes(),
-  e: {Texts.Bytes.is_eq(x, b) == held: Bool}
+  e: {Shared.List.same(~U32, ~U32.is_eq, x, b) == held: Bool}
 ) -> {Decision.take(Merge.decide.left(held, b, x, x), x, x) == Some{x}: Maybe<&2, Texts.Bytes()>}:
   match held:
     case True{}:
       {==}
     case False{}:
-      %Equal.sym(Bool, Texts.Bytes.is_eq(x, b), False{}, e):
+      %Equal.sym(Bool, Shared.List.same(~U32, ~U32.is_eq, x, b), False{}, e):
         {Decision.take(Merge.decide.right(_, x, x), x, x) == Some{x}: Maybe<&2, Texts.Bytes()>}
-      %Equal.sym(Bool, Texts.Bytes.is_eq(x, x), True{}, Texts.Bytes.is_eq_refl(x)):
+      %Equal.sym(
+        Bool,
+        Shared.List.same(~U32, ~U32.is_eq, x, x),
+        True{},
+        Shared.List.same_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), x)
+      ):
         {Decision.take(Merge.decide.same(_), x, x) == Some{x}: Maybe<&2, Texts.Bytes()>}
       {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
@@ -1081,7 +1108,7 @@ def Merge.same(
   +b: Texts.Bytes(),
   +x: Texts.Bytes()
 ) -> {Decision.take(Merge.decide(b, x, x), x, x) == Some{x}: Maybe<&2, Texts.Bytes()>}:
-  Merge.same.at(Texts.Bytes.is_eq(x, b), b, x, {==})
+  Merge.same.at(Shared.List.same(~U32, ~U32.is_eq, x, b), b, x, {==})
 
 # Embedding
 # ---------
@@ -1672,7 +1699,7 @@ def Plain.changes.of(+a: Texts.Bytes(), p: Patch) -> List<&2, Change>:
         Lines.changes(~(i => Change.added{i}), put, 1n+k)
       )
     case Patch.whole{+x}:
-      Plain.changes.whole(Texts.Bytes.is_eq(a, x), a, x)
+      Plain.changes.whole(Shared.List.same(~U32, ~U32.is_eq, a, x), a, x)
     case Patch.pieces{sh, ts, rs}:
       []
 
@@ -2483,7 +2510,7 @@ def Format.changes(f: Format, +a: Texts.Bytes(), +b: Texts.Bytes()) -> List<&2, 
     case Format.leaf{Leaf.lines{}}:
       Plain.changes(a, b)
     case Format.leaf{k}:
-      Plain.changes.whole(Texts.Bytes.is_eq(a, b), a, b)
+      Plain.changes.whole(Shared.List.same(~U32, ~U32.is_eq, a, b), a, b)
     case Format.embed{o, op, cl, i}:
       Format.changes(o, a, b)
     case Format.code{base, r}:
