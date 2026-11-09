@@ -5672,3 +5672,1351 @@ def Tree.list_sound(ty, fetch, s, h, k, v):
   Tree.list_found.root(~ty, ~fetch, s, k, v, Tree.part(~ty, ~fetch, s, h))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# Canonical trees
+# ---------------
+# The root of a tree is a function of its bindings alone: Canon.root builds
+# it from a list of bindings with distinct keys. A write gives the Canon.root
+# of the bindings with its own (Tree.set_canon), and the store then holds the
+# canonical tree (Tree.set_canon_holds). So writes of different keys commute
+# (Tree.set_comm), and a second write of a key replaces the first
+# (Tree.set_twice).
+
+# the nibble at depth d of the path of the key k
+def Key.nibble(k: List<&2, U32>, d: Nat) -> Nat:
+  Shared.List.head_or(Nat, List.drop(&2, Nat, Tree.path(k), d), 0n)
+
+# the binding b before the bindings r when c holds, else r
+def Binds.keep(c: Bool, b: Binding, r: List<&2, Binding>) -> List<&2, Binding>:
+  match c:
+    case True{}:
+      b <> r
+    case False{}:
+      r
+
+# the bindings of bs whose key's nibble at depth d is x
+def Binds.at(bs: List<&2, Binding>, +d: Nat, +x: Nat) -> List<&2, Binding>:
+  match bs:
+    case Nil{}:
+      []
+    case Con{+b, r}:
+      Binds.keep(Nat.is_eq(x, Key.nibble(Binding.key(b), d)), b, Binds.at(r, d, x))
+
+# the key k is not the key j
+def Key.other(k: List<&2, U32>, j: List<&2, U32>) -> Bool:
+  Bool.not(Shared.List.is_eq(~U32, ~U32.is_eq, k, j))
+
+# the bindings of bs whose key is not k
+def Binds.drop(bs: List<&2, Binding>, +k: List<&2, U32>) -> List<&2, Binding>:
+  match bs:
+    case Nil{}:
+      []
+    case Con{+b, r}:
+      Binds.keep(Key.other(Binding.key(b), k), b, Binds.drop(r, k))
+
+# the bindings bs with the key k bound to the value v
+def Binds.put(bs: List<&2, Binding>, +k: List<&2, U32>, v: List<&2, U32>) -> List<&2, Binding>:
+  Binding{k, v} <> Binds.drop(bs, k)
+
+# some binding of bs has the key k
+def Binds.has(bs: List<&2, Binding>, +k: List<&2, U32>) -> Bool:
+  match bs:
+    case Nil{}:
+      False{}
+    case Con{b, r}:
+      Shared.Bool.when(
+        Bool,
+        Shared.List.is_eq(~U32, ~U32.is_eq, Binding.key(b), k),
+        u => True{},
+        u => Binds.has(r, k)
+      )
+
+# no two bindings of bs have the same key
+def Binds.distinct(bs: List<&2, Binding>) -> Bool:
+  match bs:
+    case Nil{}:
+      True{}
+    case Con{b, +r}:
+      List.all.if(u => Binds.distinct(r), Bool.not(Binds.has(r, Binding.key(b))))
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a binder of a premise of a proof; a proof does not run
+# the keys a and b are the same, when one is not other than the other
+def Key.same(
+  +a: List<&2, U32>,
+  +b: List<&2, U32>
+) -> {Key.other(a, b) == False{}: Bool} -> {a == b: List<&2, U32>}:
+  e => Shared.List.is_eq_sound(
+    ~U32,
+    ~U32.is_eq,
+    ~Shared.U32.laws(),
+    a,
+    b
+  )(Shared.Bool.not_false(Shared.List.is_eq(~U32, ~U32.is_eq, a, b))(e))
+
+# the same keys are equal
+def Key.eq_of(
+  a: List<&2, U32>,
+  b: List<&2, U32>
+) -> {a == b: List<&2, U32>} -> {Shared.List.is_eq(~U32, ~U32.is_eq, a, b) == True{}: Bool}:
+  e =>
+    %e: {Shared.List.is_eq(~U32, ~U32.is_eq, a, _) == True{}: Bool}
+    Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), a)
+
+# a drop of the key k from the binding b, kept when c, before r, which has no k
+def Binds.drop_twice.at(
+  c: Bool,
+  b: Binding,
+  r: List<&2, Binding>,
+  k: List<&2, U32>,
+  e: {Key.other(Binding.key(b), k) == c: Bool},
+  ih: {Binds.drop(r, k) == r: List<&2, Binding>}
+) -> {Binds.drop(Binds.keep(c, b, r), k) == Binds.keep(c, b, r): List<&2, Binding>}:
+  match c:
+    case True{}:
+      %Equal.sym(Bool, Key.other(Binding.key(b), k), True{}, e):
+        {Binds.keep(_, b, Binds.drop(r, k)) == b <> r: List<&2, Binding>}
+      %Equal.sym(List<&2, Binding>, Binds.drop(r, k), r, ih): {b <> _ == b <> r: List<&2, Binding>}
+      {==}
+    case False{}:
+      ih
+
+# dropping a key twice drops it once
+def Binds.drop_twice(
+  bs: List<&2, Binding>,
+  +k: List<&2, U32>
+) -> {Binds.drop(Binds.drop(bs, k), k) == Binds.drop(bs, k): List<&2, Binding>}:
+  match bs:
+    case Nil{}:
+      {==}
+    case Con{+b, +r}:
+      Binds.drop_twice.at(
+        Key.other(Binding.key(b), k),
+        b,
+        Binds.drop(r, k),
+        k,
+        {==},
+        Binds.drop_twice(r, k)
+      )
+
+# dropping k1 and k2 after the binding b, kept when c1 or c2, in either order
+def Binds.drop_comm.at(
+  c1: Bool,
+  c2: Bool,
+  b: Binding,
+  r: List<&2, Binding>,
+  k1: List<&2, U32>,
+  k2: List<&2, U32>,
+  e1: {Key.other(Binding.key(b), k1) == c1: Bool},
+  e2: {Key.other(Binding.key(b), k2) == c2: Bool},
+  ih: {Binds.drop(Binds.drop(r, k1), k2) == Binds.drop(Binds.drop(r, k2), k1): List<&2, Binding>}
+) -> {
+  Binds.drop(
+    Binds.keep(c1, b, Binds.drop(r, k1)),
+    k2
+  )
+    == Binds.drop(Binds.keep(c2, b, Binds.drop(r, k2)), k1): List<&2, Binding>
+}:
+  match c1 c2:
+    case True{} True{}:
+      %Equal.sym(Bool, Key.other(Binding.key(b), k2), True{}, e2):
+        {
+          Binds.keep(
+            _,
+            b,
+            Binds.drop(Binds.drop(r, k1), k2)
+          )
+            == Binds.keep(
+              Key.other(Binding.key(b), k1),
+              b,
+              Binds.drop(Binds.drop(r, k2), k1)
+            ): List<&2, Binding>
+        }
+      %Equal.sym(Bool, Key.other(Binding.key(b), k1), True{}, e1):
+        {
+          b
+            <> Binds.drop(Binds.drop(r, k1), k2)
+            == Binds.keep(_, b, Binds.drop(Binds.drop(r, k2), k1)): List<&2, Binding>
+        }
+      %ih:
+        {b <> Binds.drop(Binds.drop(r, k1), k2) == b <> _: List<&2, Binding>}
+      {==}
+    case True{} False{}:
+      %Equal.sym(Bool, Key.other(Binding.key(b), k2), False{}, e2):
+        {
+          Binds.keep(
+            _,
+            b,
+            Binds.drop(Binds.drop(r, k1), k2)
+          )
+            == Binds.drop(Binds.drop(r, k2), k1): List<&2, Binding>
+        }
+      ih
+    case False{} True{}:
+      %Equal.sym(Bool, Key.other(Binding.key(b), k1), False{}, e1):
+        {
+          Binds.drop(
+            Binds.drop(r, k1),
+            k2
+          )
+            == Binds.keep(_, b, Binds.drop(Binds.drop(r, k2), k1)): List<&2, Binding>
+        }
+      ih
+    case False{} False{}:
+      ih
+
+# dropping two keys does not depend on their order
+def Binds.drop_comm(
+  bs: List<&2, Binding>,
+  +k1: List<&2, U32>,
+  +k2: List<&2, U32>
+) -> {Binds.drop(Binds.drop(bs, k1), k2) == Binds.drop(Binds.drop(bs, k2), k1): List<&2, Binding>}:
+  match bs:
+    case Nil{}:
+      {==}
+    case Con{+b, +r}:
+      Binds.drop_comm.at(
+        Key.other(Binding.key(b), k1),
+        Key.other(Binding.key(b), k2),
+        b,
+        r,
+        k1,
+        k2,
+        {==},
+        {==},
+        Binds.drop_comm(r, k1, k2)
+      )
+
+# the bindings under the nibble x, without the key k, after the binding b, kept
+# when cd (by the key) and ca (by the nibble)
+def Binds.at_drop.at(
+  cd: Bool,
+  ca: Bool,
+  b: Binding,
+  r: List<&2, Binding>,
+  d: Nat,
+  x: Nat,
+  k: List<&2, U32>,
+  ed: {Key.other(Binding.key(b), k) == cd: Bool},
+  ea: {Nat.is_eq(x, Key.nibble(Binding.key(b), d)) == ca: Bool},
+  ih: {Binds.at(Binds.drop(r, k), d, x) == Binds.drop(Binds.at(r, d, x), k): List<&2, Binding>}
+) -> {
+  Binds.at(
+    Binds.keep(cd, b, Binds.drop(r, k)),
+    d,
+    x
+  )
+    == Binds.drop(Binds.keep(ca, b, Binds.at(r, d, x)), k): List<&2, Binding>
+}:
+  match cd ca:
+    case True{} True{}:
+      %Equal.sym(Bool, Nat.is_eq(x, Key.nibble(Binding.key(b), d)), True{}, ea):
+        {
+          Binds.keep(
+            _,
+            b,
+            Binds.at(Binds.drop(r, k), d, x)
+          )
+            == Binds.keep(
+              Key.other(Binding.key(b), k),
+              b,
+              Binds.drop(Binds.at(r, d, x), k)
+            ): List<&2, Binding>
+        }
+      %Equal.sym(Bool, Key.other(Binding.key(b), k), True{}, ed):
+        {
+          b
+            <> Binds.at(Binds.drop(r, k), d, x)
+            == Binds.keep(_, b, Binds.drop(Binds.at(r, d, x), k)): List<&2, Binding>
+        }
+      %ih:
+        {b <> Binds.at(Binds.drop(r, k), d, x) == b <> _: List<&2, Binding>}
+      {==}
+    case True{} False{}:
+      %Equal.sym(Bool, Nat.is_eq(x, Key.nibble(Binding.key(b), d)), False{}, ea):
+        {
+          Binds.keep(
+            _,
+            b,
+            Binds.at(Binds.drop(r, k), d, x)
+          )
+            == Binds.drop(Binds.at(r, d, x), k): List<&2, Binding>
+        }
+      ih
+    case False{} True{}:
+      %Equal.sym(Bool, Key.other(Binding.key(b), k), False{}, ed):
+        {
+          Binds.at(
+            Binds.drop(r, k),
+            d,
+            x
+          )
+            == Binds.keep(_, b, Binds.drop(Binds.at(r, d, x), k)): List<&2, Binding>
+        }
+      ih
+    case False{} False{}:
+      ih
+
+# the bindings under a nibble, without a key, are those without the key, under
+# the nibble
+def Binds.at_drop(
+  bs: List<&2, Binding>,
+  +d: Nat,
+  +x: Nat,
+  +k: List<&2, U32>
+) -> {Binds.at(Binds.drop(bs, k), d, x) == Binds.drop(Binds.at(bs, d, x), k): List<&2, Binding>}:
+  match bs:
+    case Nil{}:
+      {==}
+    case Con{+b, +r}:
+      Binds.at_drop.at(
+        Key.other(Binding.key(b), k),
+        Nat.is_eq(x, Key.nibble(Binding.key(b), d)),
+        b,
+        r,
+        d,
+        x,
+        k,
+        {==},
+        {==},
+        Binds.at_drop(r, d, x, k)
+      )
+
+# the bindings under the nibble z, without the key k, whose nibble is not z,
+# after the binding b, kept when cd
+def Binds.at_drop_other.at(
+  cd: Bool,
+  b: Binding,
+  r: List<&2, Binding>,
+  d: Nat,
+  z: Nat,
+  k: List<&2, U32>,
+  ed: {Key.other(Binding.key(b), k) == cd: Bool},
+  hz: {Nat.is_eq(z, Key.nibble(k, d)) == False{}: Bool},
+  ih: {Binds.at(Binds.drop(r, k), d, z) == Binds.at(r, d, z): List<&2, Binding>}
+) -> {
+  Binds.at(
+    Binds.keep(cd, b, Binds.drop(r, k)),
+    d,
+    z
+  )
+    == Binds.keep(
+      Nat.is_eq(z, Key.nibble(Binding.key(b), d)),
+      b,
+      Binds.at(r, d, z)
+    ): List<&2, Binding>
+}:
+  match cd:
+    case True{}:
+      %Equal.sym(List<&2, Binding>, Binds.at(Binds.drop(r, k), d, z), Binds.at(r, d, z), ih):
+        {
+          Binds.keep(
+            Nat.is_eq(z, Key.nibble(Binding.key(b), d)),
+            b,
+            _
+          )
+            == Binds.keep(
+              Nat.is_eq(z, Key.nibble(Binding.key(b), d)),
+              b,
+              Binds.at(r, d, z)
+            ): List<&2, Binding>
+        }
+      {==}
+    case False{}:
+      %Equal.sym(List<&2, U32>, Binding.key(b), k, Key.same(Binding.key(b), k)(ed)):
+        {
+          Binds.at(
+            Binds.drop(r, k),
+            d,
+            z
+          )
+            == Binds.keep(Nat.is_eq(z, Key.nibble(_, d)), b, Binds.at(r, d, z)): List<&2, Binding>
+        }
+      %Equal.sym(Bool, Nat.is_eq(z, Key.nibble(k, d)), False{}, hz):
+        {Binds.at(Binds.drop(r, k), d, z) == Binds.keep(_, b, Binds.at(r, d, z)): List<&2, Binding>}
+      ih
+
+# the bindings under a nibble that the key k is not under are the same
+# without k
+def Binds.at_drop_other(
+  bs: List<&2, Binding>,
+  +d: Nat,
+  +z: Nat,
+  +k: List<&2, U32>
+) -> {
+  Nat.is_eq(z, Key.nibble(k, d)) == False{}: Bool
+} -> {Binds.at(Binds.drop(bs, k), d, z) == Binds.at(bs, d, z): List<&2, Binding>}:
+  match bs:
+    case Nil{}:
+      hz => {==}
+    case Con{+b, +r}:
+      +hz => Binds.at_drop_other.at(
+        Key.other(Binding.key(b), k),
+        b,
+        r,
+        d,
+        z,
+        k,
+        {==},
+        hz,
+        Binds.at_drop_other(r, d, z, k)(hz)
+      )
+
+# the binding b, kept when c before r, which has no key j, has no j when b's
+# key is not j
+def Binds.has_keep(
+  c: Bool,
+  b: Binding,
+  r: List<&2, Binding>,
+  j: List<&2, U32>,
+  e: {Shared.List.is_eq(~U32, ~U32.is_eq, Binding.key(b), j) == False{}: Bool},
+  h: {Binds.has(r, j) == False{}: Bool}
+) -> {Binds.has(Binds.keep(c, b, r), j) == False{}: Bool}:
+  match c:
+    case True{}:
+      %Equal.sym(Bool, Shared.List.is_eq(~U32, ~U32.is_eq, Binding.key(b), j), False{}, e):
+        {Shared.Bool.when(Bool, _, u => True{}, u => Binds.has(r, j)) == False{}: Bool}
+      h
+    case False{}:
+      h
+
+# the first key of a list without the key j is not j, when that is c
+def Binds.has_head.at(
+  c: Bool,
+  b: Binding,
+  r: List<&2, Binding>,
+  j: List<&2, U32>,
+  e: {Shared.List.is_eq(~U32, ~U32.is_eq, Binding.key(b), j) == c: Bool}
+) -> {
+  Shared.Bool.when(Bool, c, u => True{}, u => Binds.has(r, j)) == False{}: Bool
+} -> {c == False{}: Bool}:
+  match c:
+    case True{}:
+      h => Empty.absurd(
+        {True{} == False{}: Bool},
+        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
+      )
+    case False{}:
+      h => {==}
+
+# the first key of a list without the key j is not j
+def Binds.has_head(
+  +b: Binding,
+  r: List<&2, Binding>,
+  +j: List<&2, U32>
+) -> {
+  Binds.has(b <> r, j) == False{}: Bool
+} -> {Shared.List.is_eq(~U32, ~U32.is_eq, Binding.key(b), j) == False{}: Bool}:
+  Binds.has_head.at(Shared.List.is_eq(~U32, ~U32.is_eq, Binding.key(b), j), b, r, j, {==})
+
+# the rest of a list without the key j has no j, when the first key is c
+def Binds.has_tail.at(
+  c: Bool,
+  r: List<&2, Binding>,
+  j: List<&2, U32>
+) -> {
+  Shared.Bool.when(Bool, c, u => True{}, u => Binds.has(r, j)) == False{}: Bool
+} -> {Binds.has(r, j) == False{}: Bool}:
+  match c:
+    case True{}:
+      h => Empty.absurd(
+        {Binds.has(r, j) == False{}: Bool},
+        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
+      )
+    case False{}:
+      h => h
+
+# the rest of a list without the key j has no j
+def Binds.has_tail(
+  b: Binding,
+  r: List<&2, Binding>,
+  +j: List<&2, U32>
+) -> {Binds.has(b <> r, j) == False{}: Bool} -> {Binds.has(r, j) == False{}: Bool}:
+  Binds.has_tail.at(Shared.List.is_eq(~U32, ~U32.is_eq, Binding.key(b), j), r, j)
+
+# a list without the key k has no k
+def Binds.has_drop.at(
+  c: Bool,
+  +b: Binding,
+  r: List<&2, Binding>,
+  +k: List<&2, U32>,
+  e: {Key.other(Binding.key(b), k) == c: Bool},
+  ih: {Binds.has(r, k) == False{}: Bool}
+) -> {Binds.has(Binds.keep(c, b, r), k) == False{}: Bool}:
+  match c:
+    case True{}:
+      Binds.has_keep(
+        True{},
+        b,
+        r,
+        k,
+        Shared.Bool.not_true(Shared.List.is_eq(~U32, ~U32.is_eq, Binding.key(b), k))(e),
+        ih
+      )
+    case False{}:
+      ih
+
+# the bindings without the key k have no k
+def Binds.has_drop(
+  bs: List<&2, Binding>,
+  +k: List<&2, U32>
+) -> {Binds.has(Binds.drop(bs, k), k) == False{}: Bool}:
+  match bs:
+    case Nil{}:
+      {==}
+    case Con{+b, +r}:
+      Binds.has_drop.at(
+        Key.other(Binding.key(b), k),
+        b,
+        Binds.drop(r, k),
+        k,
+        {==},
+        Binds.has_drop(r, k)
+      )
+
+# the bindings bs without a key k have no key j that bs has not
+def Binds.has_drop_other(
+  bs: List<&2, Binding>,
+  +j: List<&2, U32>,
+  +k: List<&2, U32>
+) -> {Binds.has(bs, j) == False{}: Bool} -> {Binds.has(Binds.drop(bs, k), j) == False{}: Bool}:
+  match bs:
+    case Nil{}:
+      h => {==}
+    case Con{+b, +r}:
+      +h => Binds.has_keep(
+        Key.other(Binding.key(b), k),
+        b,
+        Binds.drop(r, k),
+        j,
+        Binds.has_head(b, r, j)(h),
+        Binds.has_drop_other(r, j, k)(Binds.has_tail(b, r, j)(h))
+      )
+
+# the bindings of bs under a nibble have no key j that bs has not
+def Binds.has_at(
+  bs: List<&2, Binding>,
+  +j: List<&2, U32>,
+  +d: Nat,
+  +x: Nat
+) -> {Binds.has(bs, j) == False{}: Bool} -> {Binds.has(Binds.at(bs, d, x), j) == False{}: Bool}:
+  match bs:
+    case Nil{}:
+      h => {==}
+    case Con{+b, +r}:
+      +h => Binds.has_keep(
+        Nat.is_eq(x, Key.nibble(Binding.key(b), d)),
+        b,
+        Binds.at(r, d, x),
+        j,
+        Binds.has_head(b, r, j)(h),
+        Binds.has_at(r, j, d, x)(Binds.has_tail(b, r, j)(h))
+      )
+
+# the rest of distinct bindings has no first key
+def Binds.distinct_has(
+  +b: Binding,
+  +r: List<&2, Binding>
+) -> {Binds.distinct(b <> r) == True{}: Bool} -> {Binds.has(r, Binding.key(b)) == False{}: Bool}:
+  h => Shared.Bool.not_true(
+    Binds.has(r, Binding.key(b))
+  )(Shared.List.all.if_hit(Bool.not(Binds.has(r, Binding.key(b))), u => Binds.distinct(r))(h))
+
+# the rest of distinct bindings is distinct
+def Binds.distinct_rest(
+  b: Binding,
+  +r: List<&2, Binding>
+) -> {Binds.distinct(b <> r) == True{}: Bool} -> {Binds.distinct(r) == True{}: Bool}:
+  h => Shared.List.all.if_rest(Bool.not(Binds.has(r, Binding.key(b))), u => Binds.distinct(r))(h)
+
+# the binding b, kept when c before distinct bindings without its key, gives
+# distinct bindings
+def Binds.distinct_keep(
+  c: Bool,
+  b: Binding,
+  r: List<&2, Binding>
+) -> {
+  Binds.has(r, Binding.key(b)) == False{}: Bool
+} -> {Binds.distinct(r) == True{}: Bool} -> {Binds.distinct(Binds.keep(c, b, r)) == True{}: Bool}:
+  match c:
+    case True{}:
+      h1 => h2 =>
+        %Equal.sym(Bool, Binds.has(r, Binding.key(b)), False{}, h1):
+          {List.all.if(u => Binds.distinct(r), Bool.not(_)) == True{}: Bool}
+        h2
+    case False{}:
+      h1 => h2 => h2
+
+# distinct bindings without a key are distinct
+def Binds.distinct_drop(
+  bs: List<&2, Binding>,
+  +k: List<&2, U32>
+) -> {Binds.distinct(bs) == True{}: Bool} -> {Binds.distinct(Binds.drop(bs, k)) == True{}: Bool}:
+  match bs:
+    case Nil{}:
+      h => {==}
+    case Con{+b, +r}:
+      +h => Binds.distinct_keep(
+        Key.other(Binding.key(b), k),
+        b,
+        Binds.drop(r, k)
+      )(
+        Binds.has_drop_other(r, Binding.key(b), k)(Binds.distinct_has(b, r)(h))
+      )(Binds.distinct_drop(r, k)(Binds.distinct_rest(b, r)(h)))
+
+# distinct bindings under a nibble are distinct
+def Binds.distinct_at(
+  bs: List<&2, Binding>,
+  +d: Nat,
+  +x: Nat
+) -> {Binds.distinct(bs) == True{}: Bool} -> {Binds.distinct(Binds.at(bs, d, x)) == True{}: Bool}:
+  match bs:
+    case Nil{}:
+      h => {==}
+    case Con{+b, +r}:
+      +h => Binds.distinct_keep(
+        Nat.is_eq(x, Key.nibble(Binding.key(b), d)),
+        b,
+        Binds.at(r, d, x)
+      )(
+        Binds.has_at(r, Binding.key(b), d, x)(Binds.distinct_has(b, r)(h))
+      )(Binds.distinct_at(r, d, x)(Binds.distinct_rest(b, r)(h)))
+
+# distinct bindings with a key bound are distinct
+def Binds.distinct_put(
+  +bs: List<&2, Binding>,
+  +k: List<&2, U32>,
+  v: List<&2, U32>
+) -> {Binds.distinct(bs) == True{}: Bool} -> {Binds.distinct(Binds.put(bs, k, v)) == True{}: Bool}:
+  h =>
+    %Equal.sym(Bool, Binds.has(Binds.drop(bs, k), k), False{}, Binds.has_drop(bs, k)):
+      {List.all.if(u => Binds.distinct(Binds.drop(bs, k)), Bool.not(_)) == True{}: Bool}
+    Binds.distinct_drop(bs, k)(h)
+
+# two distinct bindings, kept when c1 and c2, without the key k, leave one
+def Binds.drop_many.at(
+  c1: Bool,
+  c2: Bool,
+  +b1: Binding,
+  +b2: Binding,
+  +r: List<&2, Binding>,
+  +k: List<&2, U32>,
+  e1: {Key.other(Binding.key(b1), k) == c1: Bool},
+  e2: {Key.other(Binding.key(b2), k) == c2: Bool},
+  h: {Binds.distinct(b1 <> b2 <> r) == True{}: Bool}
+) -> {
+  List.is_empty(
+    &2,
+    Binding,
+    Binds.keep(c1, b1, Binds.keep(c2, b2, Binds.drop(r, k)))
+  )
+    == False{}: Bool
+}:
+  match c1 c2:
+    case True{} c:
+      {==}
+    case False{} True{}:
+      {==}
+    case False{} False{}:
+      Empty.absurd(
+        {List.is_empty(&2, Binding, Binds.drop(r, k)) == False{}: Bool},
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            Shared.List.is_eq(~U32, ~U32.is_eq, Binding.key(b2), Binding.key(b1)),
+            True{},
+            Equal.sym(
+              Bool,
+              Shared.List.is_eq(~U32, ~U32.is_eq, Binding.key(b2), Binding.key(b1)),
+              False{},
+              Binds.has_head(b2, r, Binding.key(b1))(Binds.distinct_has(b1, b2 <> r)(h))
+            ),
+            Key.eq_of(
+              Binding.key(b2),
+              Binding.key(b1)
+            )(
+              Equal.trans(
+                List<&2, U32>,
+                Binding.key(b2),
+                k,
+                Binding.key(b1),
+                Key.same(Binding.key(b2), k)(e2),
+                Equal.sym(List<&2, U32>, Binding.key(b1), k, Key.same(Binding.key(b1), k)(e1))
+              )
+            )
+          )
+        )
+      )
+
+# distinct bindings, two or more, without a key, leave one
+def Binds.drop_many(
+  +b1: Binding,
+  +b2: Binding,
+  r: List<&2, Binding>,
+  +k: List<&2, U32>
+) -> {
+  Binds.distinct(b1 <> b2 <> r) == True{}: Bool
+} -> {List.is_empty(&2, Binding, Binds.drop(b1 <> b2 <> r, k)) == False{}: Bool}:
+  h => Binds.drop_many.at(
+    Key.other(Binding.key(b1), k),
+    Key.other(Binding.key(b2), k),
+    b1,
+    b2,
+    r,
+    k,
+    {==},
+    {==},
+    h
+  )
+
+# the part x, then the parts l, trimmed twice, are trimmed once, when l is
+def Parts.trim_of_twice(
+  x: Maybe<&2, Hashes.Hash>,
+  l: List<&2, Maybe<&2, Hashes.Hash>>
+) -> {
+  Parts.trim(l) == l: List<&2, Maybe<&2, Hashes.Hash>>
+} -> {Parts.trim(Parts.trim.of(x, l)) == Parts.trim.of(x, l): List<&2, Maybe<&2, Hashes.Hash>>}:
+  match x l:
+    case None{} Nil{}:
+      h => {==}
+    case None{} Con{h1, q}:
+      h =>
+        %Equal.sym(List<&2, Maybe<&2, Hashes.Hash>>, Parts.trim(h1 <> q), h1 <> q, h):
+          {Parts.trim.of(None{}, _) == None{} <> h1 <> q: List<&2, Maybe<&2, Hashes.Hash>>}
+        {==}
+    case Some{z} q:
+      h =>
+        %Equal.sym(
+          List<&2, Maybe<&2, Hashes.Hash>>,
+          Parts.trim(q),
+          q,
+          h
+        ): {Parts.trim.of(Some{z}, _) == Some{z} <> q: List<&2, Maybe<&2, Hashes.Hash>>}
+        {==}
+
+# trimming twice trims once
+def Parts.trim_twice(
+  ks: List<&2, Maybe<&2, Hashes.Hash>>
+) -> {Parts.trim(Parts.trim(ks)) == Parts.trim(ks): List<&2, Maybe<&2, Hashes.Hash>>}:
+  match ks:
+    case Nil{}:
+      {==}
+    case Con{x, +r}:
+      Parts.trim_of_twice(x, Parts.trim(r))(Parts.trim_twice(r))
+
+# setting the first of the part x then the trimmed parts t, trimmed
+def Parts.trim_set.zero(
+  x: Maybe<&2, Hashes.Hash>,
+  t: List<&2, Maybe<&2, Hashes.Hash>>,
+  y: Maybe<&2, Hashes.Hash>
+) -> {
+  Parts.trim(t) == t: List<&2, Maybe<&2, Hashes.Hash>>
+} -> {
+  Parts.trim(
+    Parts.set(Parts.trim.of(x, t), 0n, y)
+  )
+    == Parts.trim.of(y, t): List<&2, Maybe<&2, Hashes.Hash>>
+}:
+  match x t:
+    case None{} Nil{}:
+      h => {==}
+    case None{} Con{h1, q}:
+      h =>
+        %Equal.sym(List<&2, Maybe<&2, Hashes.Hash>>, Parts.trim(h1 <> q), h1 <> q, h):
+          {Parts.trim.of(y, _) == Parts.trim.of(y, h1 <> q): List<&2, Maybe<&2, Hashes.Hash>>}
+        {==}
+    case Some{z} q:
+      h =>
+        %Equal.sym(
+          List<&2, Maybe<&2, Hashes.Hash>>,
+          Parts.trim(q),
+          q,
+          h
+        ): {Parts.trim.of(y, _) == Parts.trim.of(y, q): List<&2, Maybe<&2, Hashes.Hash>>}
+        {==}
+
+# setting a later part of the part x then the parts t, trimmed
+def Parts.trim_set.succ(
+  x: Maybe<&2, Hashes.Hash>,
+  t: List<&2, Maybe<&2, Hashes.Hash>>,
+  p: Nat,
+  y: Maybe<&2, Hashes.Hash>
+) -> {
+  Parts.trim(
+    Parts.set(Parts.trim.of(x, t), 1n+p, y)
+  )
+    == Parts.trim.of(x, Parts.trim(Parts.set(t, p, y))): List<&2, Maybe<&2, Hashes.Hash>>
+}:
+  match x t:
+    case None{} Nil{}:
+      {==}
+    case None{} Con{h1, q}:
+      {==}
+    case Some{z} q:
+      {==}
+
+# a set part of trimmed parts, trimmed, is the set part of the parts, trimmed
+def Parts.trim_set(
+  l: List<&2, Maybe<&2, Hashes.Hash>>,
+  n: Nat,
+  +y: Maybe<&2, Hashes.Hash>
+) -> {
+  Parts.trim(
+    Parts.set(Parts.trim(l), n, y)
+  )
+    == Parts.trim(Parts.set(l, n, y)): List<&2, Maybe<&2, Hashes.Hash>>
+}:
+  match l n:
+    case Nil{} m:
+      {==}
+    case Con{x, r} 0n:
+      Parts.trim_set.zero(x, Parts.trim(r), y)(Parts.trim_twice(r))
+    case Con{x, +r} 1n+(+p):
+      %Parts.trim_set(r, p, y):
+        {
+          Parts.trim(
+            Parts.set(Parts.trim.of(x, Parts.trim(r)), 1n+p, y)
+          )
+            == Parts.trim.of(x, _): List<&2, Maybe<&2, Hashes.Hash>>
+        }
+      Parts.trim_set.succ(x, Parts.trim(r), p, y)
+
+# setting two other parts does not depend on their order
+def Parts.set_comm(
+  ks: List<&2, Maybe<&2, Hashes.Hash>>,
+  a: Nat,
+  b: Nat,
+  x: Maybe<&2, Hashes.Hash>,
+  y: Maybe<&2, Hashes.Hash>
+) -> {
+  Nat.is_eq(a, b) == False{}: Bool
+} -> {
+  Parts.set(
+    Parts.set(ks, a, x),
+    b,
+    y
+  )
+    == Parts.set(Parts.set(ks, b, y), a, x): List<&2, Maybe<&2, Hashes.Hash>>
+}:
+  match ks a b:
+    case Nil{} 0n 0n:
+      e => Empty.absurd(
+        {
+          Parts.set(
+            Parts.set([], 0n, x),
+            0n,
+            y
+          )
+            == Parts.set(Parts.set([], 0n, y), 0n, x): List<&2, Maybe<&2, Hashes.Hash>>
+        },
+        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, e))
+      )
+    case Nil{} 0n 1n+q:
+      e => {==}
+    case Nil{} 1n+p 0n:
+      e => {==}
+    case Nil{} 1n+p 1n+q:
+      e =>
+        %Equal.sym(
+          List<&2, Maybe<&2, Hashes.Hash>>,
+          Parts.set(Parts.set([], p, x), q, y),
+          Parts.set(Parts.set([], q, y), p, x),
+          Parts.set_comm([], p, q, x, y)(e)
+        ):
+          {
+            None{}
+              <> _
+              == None{}
+              <> Parts.set(Parts.set([], q, y), p, x): List<&2, Maybe<&2, Hashes.Hash>>
+          }
+        {==}
+    case Con{h, t} 0n 0n:
+      e => Empty.absurd(
+        {
+          Parts.set(
+            Parts.set(h <> t, 0n, x),
+            0n,
+            y
+          )
+            == Parts.set(Parts.set(h <> t, 0n, y), 0n, x): List<&2, Maybe<&2, Hashes.Hash>>
+        },
+        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, e))
+      )
+    case Con{h, t} 0n 1n+q:
+      e => {==}
+    case Con{h, t} 1n+p 0n:
+      e => {==}
+    case Con{h, t} 1n+p 1n+q:
+      e =>
+        %Equal.sym(
+          List<&2, Maybe<&2, Hashes.Hash>>,
+          Parts.set(Parts.set(t, p, x), q, y),
+          Parts.set(Parts.set(t, q, y), p, x),
+          Parts.set_comm(t, p, q, x, y)(e)
+        ):
+          {h <> _ == h <> Parts.set(Parts.set(t, q, y), p, x): List<&2, Maybe<&2, Hashes.Hash>>}
+        {==}
+
+# setting a part twice sets it once
+def Parts.set_twice(
+  ks: List<&2, Maybe<&2, Hashes.Hash>>,
+  a: Nat,
+  x: Maybe<&2, Hashes.Hash>,
+  y: Maybe<&2, Hashes.Hash>
+) -> {
+  Parts.set(Parts.set(ks, a, x), a, y) == Parts.set(ks, a, y): List<&2, Maybe<&2, Hashes.Hash>>
+}:
+  match ks a:
+    case Nil{} 0n:
+      {==}
+    case Nil{} 1n+p:
+      %Equal.sym(
+        List<&2, Maybe<&2, Hashes.Hash>>,
+        Parts.set(Parts.set([], p, x), p, y),
+        Parts.set([], p, y),
+        Parts.set_twice([], p, x, y)
+      ):
+        {None{} <> _ == None{} <> Parts.set([], p, y): List<&2, Maybe<&2, Hashes.Hash>>}
+      {==}
+    case Con{h, t} 0n:
+      {==}
+    case Con{h, t} 1n+p:
+      %Equal.sym(
+        List<&2, Maybe<&2, Hashes.Hash>>,
+        Parts.set(Parts.set(t, p, x), p, y),
+        Parts.set(t, p, y),
+        Parts.set_twice(t, p, x, y)
+      ):
+        {h <> _ == h <> Parts.set(t, p, y): List<&2, Maybe<&2, Hashes.Hash>>}
+      {==}
+
+# putting two other parts does not depend on their order
+def Parts.put_comm(
+  +ks: List<&2, Maybe<&2, Hashes.Hash>>,
+  +a: Nat,
+  +b: Nat,
+  +x: Maybe<&2, Hashes.Hash>,
+  +y: Maybe<&2, Hashes.Hash>
+) -> {
+  Nat.is_eq(a, b) == False{}: Bool
+} -> {
+  Parts.put(
+    Parts.put(ks, a, x),
+    b,
+    y
+  )
+    == Parts.put(Parts.put(ks, b, y), a, x): List<&2, Maybe<&2, Hashes.Hash>>
+}:
+  e =>
+    %Equal.sym(
+      List<&2, Maybe<&2, Hashes.Hash>>,
+      Parts.trim(Parts.set(Parts.trim(Parts.set(ks, a, x)), b, y)),
+      Parts.trim(Parts.set(Parts.set(ks, a, x), b, y)),
+      Parts.trim_set(Parts.set(ks, a, x), b, y)
+    ): {_ == Parts.put(Parts.put(ks, b, y), a, x): List<&2, Maybe<&2, Hashes.Hash>>}
+    %Equal.sym(
+      List<&2, Maybe<&2, Hashes.Hash>>,
+      Parts.trim(Parts.set(Parts.trim(Parts.set(ks, b, y)), a, x)),
+      Parts.trim(Parts.set(Parts.set(ks, b, y), a, x)),
+      Parts.trim_set(Parts.set(ks, b, y), a, x)
+    ): {Parts.trim(Parts.set(Parts.set(ks, a, x), b, y)) == _: List<&2, Maybe<&2, Hashes.Hash>>}
+    %Equal.sym(
+      List<&2, Maybe<&2, Hashes.Hash>>,
+      Parts.set(Parts.set(ks, a, x), b, y),
+      Parts.set(Parts.set(ks, b, y), a, x),
+      Parts.set_comm(ks, a, b, x, y)(e)
+    ): {
+      Parts.trim(
+        _
+      )
+        == Parts.trim(Parts.set(Parts.set(ks, b, y), a, x)): List<&2, Maybe<&2, Hashes.Hash>>
+    }
+    {==}
+
+# putting a part twice puts it once
+def Parts.put_twice(
+  +ks: List<&2, Maybe<&2, Hashes.Hash>>,
+  +a: Nat,
+  +x: Maybe<&2, Hashes.Hash>,
+  +y: Maybe<&2, Hashes.Hash>
+) -> {
+  Parts.put(Parts.put(ks, a, x), a, y) == Parts.put(ks, a, y): List<&2, Maybe<&2, Hashes.Hash>>
+}:
+  %Equal.sym(
+    List<&2, Maybe<&2, Hashes.Hash>>,
+    Parts.trim(Parts.set(Parts.trim(Parts.set(ks, a, x)), a, y)),
+    Parts.trim(Parts.set(Parts.set(ks, a, x), a, y)),
+    Parts.trim_set(Parts.set(ks, a, x), a, y)
+  ): {_ == Parts.put(ks, a, y): List<&2, Maybe<&2, Hashes.Hash>>}
+  %Equal.sym(
+    List<&2, Maybe<&2, Hashes.Hash>>,
+    Parts.set(Parts.set(ks, a, x), a, y),
+    Parts.set(ks, a, y),
+    Parts.set_twice(ks, a, x, y)
+  ):
+    {Parts.trim(_) == Parts.put(ks, a, y): List<&2, Maybe<&2, Hashes.Hash>>}
+  {==}
+
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+# the leaf of the binding b
+def Binding.node(b: Binding) -> Node:
+  match b:
+    case Binding{k, v}:
+      Node.leaf{k, v}
+
+# the root of the canonical tree of the bindings bs whose branch, if any, has
+# the parts ps: none (no binding), a leaf (one binding) or a branch
+def Canon.node(
+  bs: List<&2, Binding>,
+  ps: List<&2, Maybe<&2, Hashes.Hash>>
+) -> Maybe<&2, Hashes.Hash>:
+  match bs:
+    case Nil{}:
+      None{}
+    case Con{b, Nil{}}:
+      Some{Node.hash(Binding.node(b))}
+    case Con{b, Con{c, r}}:
+      Some{Node.hash(Node.branch{ps})}
+
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a law's measure of a tree, run by no node
+# the parts of the canonical branch of the bindings all at depth d, n nibbles
+# above the end of a path: for the nibble of each binding of bs, the canonical
+# root of the bindings of all under it
+def Canon.parts(
+  n: Nat,
+  +d: Nat,
+  +all: List<&2, Binding>,
+  bs: List<&2, Binding>
+) -> List<&2, Maybe<&2, Hashes.Hash>>:
+  match n bs:
+    case m Nil{}:
+      []
+    case 0n Con{b, r}:
+      +x = Key.nibble(Binding.key(b), d)
+      Parts.put(Canon.parts(0n, d, all, r), x, Canon.node(Binds.at(all, d, x), []))
+    case 1n+(+m) Con{b, r}:
+      +x = Key.nibble(Binding.key(b), d)
+      +sub = Binds.at(all, d, x)
+      Parts.put(Canon.parts(1n+m, d, all, r), x, Canon.node(sub, Canon.parts(m, 1n+d, sub, sub)))
+
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
+# the canonical root of the bindings bs at depth d, n nibbles above the end of
+# a path
+def Canon.root(n: Nat, d: Nat, +bs: List<&2, Binding>) -> Maybe<&2, Hashes.Hash>:
+  Canon.node(bs, Canon.parts(n, d, bs, bs))
+
+# the canonical root of the bindings sub under a nibble of a branch at depth d,
+# n nibbles above the end of a path
+def Canon.sub(n: Nat, d: Nat, sub: List<&2, Binding>) -> Maybe<&2, Hashes.Hash>:
+  match n:
+    case 0n:
+      Canon.node(sub, [])
+    case 1n+m:
+      Canon.root(m, 1n+d, sub)
+
+# the canonical root of the bindings bs of a whole tree
+def Canon.of(bs: List<&2, Binding>) -> Maybe<&2, Hashes.Hash>:
+  Canon.root(64n, 0n, bs)
+
+# the store s holds the node of the canonical root of bs, whose branch, if any,
+# has the parts ps, and holds what is below it when below
+def Canon.holds.node(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  bs: List<&2, Binding>,
+  ps: List<&2, Maybe<&2, Hashes.Hash>>,
+  below: Bool
+) -> Bool:
+  match bs:
+    case Nil{}:
+      True{}
+    case Con{b, Nil{}}:
+      Tree.has(~S, ~fetch, s, Node.words(Binding.node(b)))
+    case Con{b, Con{c, r}}:
+      List.all.if(u => below, Tree.has(~S, ~fetch, s, Node.words(Node.branch{ps})))
+
+# the store s holds the canonical tree under the nibble of each binding of bs,
+# below a branch of the bindings all at depth d, n nibbles above the end of a
+# path
+def Canon.holds.parts(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  n: Nat,
+  +d: Nat,
+  +all: List<&2, Binding>,
+  bs: List<&2, Binding>
+) -> Bool:
+  match n bs:
+    case m Nil{}:
+      True{}
+    case 0n Con{b, r}:
+      True{}
+    case 1n+(+m) Con{b, r}:
+      +sub = Binds.at(all, d, Key.nibble(Binding.key(b), d))
+      List.all.if(
+        u => Canon.holds.parts(~S, ~fetch, s, 1n+m, d, all, r),
+        Canon.holds.node(
+          ~S,
+          ~fetch,
+          s,
+          sub,
+          Canon.parts(m, 1n+d, sub, sub),
+          Canon.holds.parts(~S, ~fetch, s, m, 1n+d, sub, sub)
+        )
+      )
+
+# the store s holds the canonical tree of the bindings bs at depth d, n nibbles
+# above the end of a path
+def Canon.holds(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +n: Nat,
+  +d: Nat,
+  +bs: List<&2, Binding>
+) -> Bool:
+  Canon.holds.node(
+    ~S,
+    ~fetch,
+    s,
+    bs,
+    Canon.parts(n, d, bs, bs),
+    Canon.holds.parts(~S, ~fetch, s, n, d, bs, bs)
+  )
+
+# the store s holds the canonical tree of the bindings sub under a nibble of a
+# branch at depth d, n nibbles above the end of a path
+def Canon.holds.sub(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  n: Nat,
+  d: Nat,
+  sub: List<&2, Binding>
+) -> Bool:
+  match n:
+    case 0n:
+      True{}
+    case 1n+m:
+      Canon.holds(~S, ~fetch, s, m, 1n+d, sub)
+
+# the store s holds the canonical tree of the bindings bs of a whole tree
+def Canon.holds.of(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  bs: List<&2, Binding>
+) -> Bool:
+  Canon.holds(~S, ~fetch, s, 64n, 0n, bs)
+
+# canonical parts are in their one code
+def Canon.parts_ok(
+  n: Nat,
+  +d: Nat,
+  +all: List<&2, Binding>,
+  bs: List<&2, Binding>
+) -> {Parts.ok(Canon.parts(n, d, all, bs)) == True{}: Bool}:
+  match n bs:
+    case m Nil{}:
+      {==}
+    case 0n Con{+b, r}:
+      Parts.ok_trim(
+        Parts.set(
+          Canon.parts(0n, d, all, r),
+          Key.nibble(Binding.key(b), d),
+          Canon.node(Binds.at(all, d, Key.nibble(Binding.key(b), d)), [])
+        )
+      )
+    case 1n+(+m) Con{+b, r}:
+      Parts.ok_trim(
+        Parts.set(
+          Canon.parts(1n+m, d, all, r),
+          Key.nibble(Binding.key(b), d),
+          Canon.sub(1n+m, d, Binds.at(all, d, Key.nibble(Binding.key(b), d)))
+        )
+      )
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the picks are terms of proofs, which do not run
+# the part z of canonical parts, put at the nibble x to v before the parts a,
+# when c tells whether z is x
+def Canon.at_parts.at(
+  c: Bool,
+  b: Binding,
+  e: List<&2, Binding>,
+  v: Maybe<&2, Hashes.Hash>,
+  a: Maybe<&2, Hashes.Hash>,
+  w: Maybe<&2, Hashes.Hash>,
+  hv: {c == True{}: Bool} -> {v == w: Maybe<&2, Hashes.Hash>},
+  ih: {
+    a
+      == Bool.pick(
+        Maybe<&2, Hashes.Hash>,
+        List.is_empty(&2, Binding, e),
+        None{},
+        w
+      ): Maybe<&2, Hashes.Hash>
+  }
+) -> {
+  Bool.pick(
+    Maybe<&2, Hashes.Hash>,
+    c,
+    v,
+    a
+  )
+    == Bool.pick(
+      Maybe<&2, Hashes.Hash>,
+      List.is_empty(&2, Binding, Binds.keep(c, b, e)),
+      None{},
+      w
+    ): Maybe<&2, Hashes.Hash>
+}:
+  match c:
+    case True{}:
+      hv({==})
+    case False{}:
+      ih
+
+# the part z of canonical parts for the nibbles of bs: the canonical root of
+# the bindings of all under z, when a binding of bs is under z, else empty
+def Canon.at_parts(
+  n: Nat,
+  +d: Nat,
+  +all: List<&2, Binding>,
+  bs: List<&2, Binding>,
+  +z: Nat
+) -> {
+  Parts.at(
+    Canon.parts(n, d, all, bs),
+    z
+  )
+    == Bool.pick(
+      Maybe<&2, Hashes.Hash>,
+      List.is_empty(&2, Binding, Binds.at(bs, d, z)),
+      None{},
+      Canon.sub(n, d, Binds.at(all, d, z))
+    ): Maybe<&2, Hashes.Hash>
+}:
+  match n bs:
+    case m Nil{}:
+      {==}
+    case 0n Con{+b, +r}:
+      +x = Key.nibble(Binding.key(b), d)
+      +v = Canon.node(Binds.at(all, d, x), [])
+      %Equal.sym(
+        Maybe<&2, Hashes.Hash>,
+        Parts.at(Parts.put(Canon.parts(0n, d, all, r), x, v), z),
+        Bool.pick(
+          Maybe<&2, Hashes.Hash>,
+          Nat.is_eq(z, x),
+          v,
+          Parts.at(Canon.parts(0n, d, all, r), z)
+        ),
+        Parts.at_put_pick(Canon.parts(0n, d, all, r), z, x, v)
+      ): {
+        _
+          == Bool.pick(
+            Maybe<&2, Hashes.Hash>,
+            List.is_empty(&2, Binding, Binds.at(b <> r, d, z)),
+            None{},
+            Canon.sub(0n, d, Binds.at(all, d, z))
+          ): Maybe<&2, Hashes.Hash>
+      }
+      Canon.at_parts.at(
+        Nat.is_eq(z, x),
+        b,
+        Binds.at(r, d, z),
+        v,
+        Parts.at(Canon.parts(0n, d, all, r), z),
+        Canon.sub(0n, d, Binds.at(all, d, z)),
+        e =>
+          %Equal.sym(Nat, z, x, Shared.Nat.is_eq_sound(z, x)(e)): {v == Canon.node(Binds.at(all, d, _), []): Maybe<&2, Hashes.Hash>}
+          {==},
+        Canon.at_parts(0n, d, all, r, z))
+    case 1n+(+m) Con{+b, +r}:
+      +x = Key.nibble(Binding.key(b), d)
+      +v = Canon.sub(1n+m, d, Binds.at(all, d, x))
+      %Equal.sym(
+        Maybe<&2, Hashes.Hash>,
+        Parts.at(Parts.put(Canon.parts(1n+m, d, all, r), x, v), z),
+        Bool.pick(
+          Maybe<&2, Hashes.Hash>,
+          Nat.is_eq(z, x),
+          v,
+          Parts.at(Canon.parts(1n+m, d, all, r), z)
+        ),
+        Parts.at_put_pick(Canon.parts(1n+m, d, all, r), z, x, v)
+      ): {
+        _
+          == Bool.pick(
+            Maybe<&2, Hashes.Hash>,
+            List.is_empty(&2, Binding, Binds.at(b <> r, d, z)),
+            None{},
+            Canon.sub(1n+m, d, Binds.at(all, d, z))
+          ): Maybe<&2, Hashes.Hash>
+      }
+      Canon.at_parts.at(
+        Nat.is_eq(z, x),
+        b,
+        Binds.at(r, d, z),
+        v,
+        Parts.at(Canon.parts(1n+m, d, all, r), z),
+        Canon.sub(1n+m, d, Binds.at(all, d, z)),
+        e =>
+          %Equal.sym(Nat, z, x, Shared.Nat.is_eq_sound(z, x)(e)): {v == Canon.sub(1n+m, d, Binds.at(all, d, _)): Maybe<&2, Hashes.Hash>}
+          {==},
+        Canon.at_parts(1n+m, d, all, r, z))
+
+# the canonical root of the bindings e, or none when there are none
+def Canon.pick_sub(
+  n: Nat,
+  d: Nat,
+  e: List<&2, Binding>
+) -> {
+  Bool.pick(
+    Maybe<&2, Hashes.Hash>,
+    List.is_empty(&2, Binding, e),
+    None{},
+    Canon.sub(n, d, e)
+  )
+    == Canon.sub(n, d, e): Maybe<&2, Hashes.Hash>
+}:
+  match n e:
+    case 0n Nil{}:
+      {==}
+    case 1n+m Nil{}:
+      {==}
+    case m Con{b, r}:
+      {==}
+
+# the part z of the canonical parts of the bindings all is the canonical root
+# of those under z
+def Canon.at_parts_all(
+  +n: Nat,
+  +d: Nat,
+  +all: List<&2, Binding>,
+  +z: Nat
+) -> {
+  Parts.at(
+    Canon.parts(n, d, all, all),
+    z
+  )
+    == Canon.sub(n, d, Binds.at(all, d, z)): Maybe<&2, Hashes.Hash>
+}:
+  Equal.trans(
+    Maybe<&2, Hashes.Hash>,
+    Parts.at(Canon.parts(n, d, all, all), z),
+    Bool.pick(
+      Maybe<&2, Hashes.Hash>,
+      List.is_empty(&2, Binding, Binds.at(all, d, z)),
+      None{},
+      Canon.sub(n, d, Binds.at(all, d, z))
+    ),
+    Canon.sub(n, d, Binds.at(all, d, z)),
+    Canon.at_parts(n, d, all, all, z),
+    Canon.pick_sub(n, d, Binds.at(all, d, z))
+  )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information

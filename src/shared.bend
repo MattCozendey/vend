@@ -658,6 +658,17 @@ def Bool.not_true(a: Bool) -> {Bool.not(a) == True{}: Bool} -> {a == False{}: Bo
     case True{}:
       h => Empty.absurd({True{} == False{}: Bool}, Bool.false_ne_true(h))
 
+# a is true when its "not" is false
+def Bool.not_false(a: Bool) -> {Bool.not(a) == False{}: Bool} -> {a == True{}: Bool}:
+  match a:
+    case True{}:
+      h => {==}
+    case False{}:
+      h => Empty.absurd(
+        {False{} == True{}: Bool},
+        Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
+      )
+
 # both sides are true, so their "and" is
 def Bool.and_both(
   a: Bool,
@@ -1012,6 +1023,20 @@ def Nat.is_eq_refl(a: Nat) -> {Nat.is_eq(a, a) == True{}: Bool}:
     case 1n+ap:
       %Equal.sym(Bool, Nat.is_eq(ap, ap), True{}, Nat.is_eq_refl(ap)):
         {_ == True{}: Bool}
+      {==}
+
+# Nat.is_eq does not depend on the order of its arguments
+def Nat.is_eq_comm(a: Nat, b: Nat) -> {Nat.is_eq(a, b) == Nat.is_eq(b, a): Bool}:
+  match a b:
+    case 0n 0n:
+      {==}
+    case 0n 1n+bp:
+      {==}
+    case 1n+ap 0n:
+      {==}
+    case 1n+ap 1n+bp:
+      %Equal.sym(Bool, Nat.is_eq(ap, bp), Nat.is_eq(bp, ap), Nat.is_eq_comm(ap, bp)):
+        {_ == Nat.is_eq(bp, ap): Bool}
       {==}
 
 # the laws of Nat.is_eq
