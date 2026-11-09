@@ -2087,15 +2087,6 @@ def Uses.succ(g: Uses, n: Resources.Name) -> List<&2, Resources.Name>:
 def Uses.reach(g: Uses, u: Resources.Name, c: Resources.Name) -> Bool:
   Reaches.Reach.in(~Resources.Name, ~Uses, ~Resources.Name.is_eq, ~Uses.succ, ~Uses.nodes, g, u, c)
 
-# the resources that the resource u of the branch b imports, at its head
-def Node.imports(+s: State(), b: Branch, u: Resources.Name) -> List<&2, Resources.Name>:
-  Uses.targets(s, Branch.head(s, b), u)
-
-# the resource u of the branch b uses c: c is reached from u through the
-# imports of the resources of b, at any depth
-def Node.uses(s: State(), b: Branch, u: Resources.Name, c: Resources.Name) -> Bool:
-  Uses.reach(Uses.of(s, b), u, c)
-
 # Touches
 # -------
 
