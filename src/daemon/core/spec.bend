@@ -2729,3 +2729,16 @@ law Node.refused_kept:
   for +i: Ledgers.Id
   {Node.answer(s, i) == Answer.Refused{}: Answer}
     -> {Node.answer(Node.join(s, t), i) == Answer.Refused{}: Answer}
+
+# the versions of a branch only grow at their end as the state grows: its
+# history is never rewritten
+law Node.versions_grow:
+  for +s: State()
+  for +s2: State()
+  for +r: Ledgers.Id
+  for +b: String
+  {Ledgers.State.grows(~Ask, ~Ask.is_eq, s, s2) == True{}: Bool}
+    -> {
+      List.take(&2, Ledgers.Id, Node.versions(s2, r, b), List.length(&2, Ledgers.Id, Node.versions(s, r, b)))
+        == Node.versions(s, r, b): List<&2, Ledgers.Id>
+    }

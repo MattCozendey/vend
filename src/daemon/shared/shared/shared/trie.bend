@@ -1514,7 +1514,7 @@ law Trie.all2_under:
   } -> {Trie.all2(~V, ~W, ~r, ~left, Trie.under(V, t, k), Tip{}) == True{}: Bool}
   for a: Trie<V>
   for b: Trie<W>
-  for k: List<&2, Bool>
+  for +k: List<&2, Bool>
   {Trie.all2(~V, ~W, ~r, ~left, a, b) == True{}: Bool}
     -> {Trie.all2(~V, ~W, ~r, ~left, Trie.under(V, a, k), Trie.under(W, b, k)) == True{}: Bool}
 
@@ -1841,7 +1841,7 @@ def Trie.keeps_under(
   ~r: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
   a: Trie<V>,
   b: Trie<V>,
-  k: List<&2, Bool>
+  +k: List<&2, Bool>
 ) -> {
   Trie.keeps(~V, ~r, a, b) == True{}: Bool
 } -> {Trie.keeps(~V, ~r, Trie.under(V, a, k), Trie.under(V, b, k)) == True{}: Bool}:
@@ -1851,7 +1851,7 @@ def Trie.keeps_under(
     ~r,
     ~(t => Trie.all(~V, ~(m => r(m, None{})), t)),
     ~(
-      t => q => e => Trie.keeps_tip(
+      +t => +q => e => Trie.keeps_tip(
         ~V,
         ~r,
         Trie.under(V, t, q)

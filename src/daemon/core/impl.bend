@@ -1080,3 +1080,142 @@ def Spec.Node.stale_kept(s, s2, i):
 
 def Spec.Node.refused_kept(s, t, i):
   Answer.refused_kept.at(s, t, i, Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s, i), {==})
+
+# Histories
+# ---------
+
+# Steps.taken_prefix after the first step x of both
+def Steps.taken_prefix.at(
+  x: Ledgers.Vote,
+  +xr: List<&2, Ledgers.Vote>,
+  +yr: List<&2, Ledgers.Vote>,
+  ih: {
+    List.take(&2, Ledgers.Id, Spec.Steps.taken(yr), List.length(&2, Ledgers.Id, Spec.Steps.taken(xr)))
+      == Spec.Steps.taken(xr): List<&2, Ledgers.Id>
+  }
+) -> {
+  List.take(&2, Ledgers.Id, Spec.Steps.taken(x <> yr), List.length(&2, Ledgers.Id, Spec.Steps.taken(x <> xr)))
+    == Spec.Steps.taken(x <> xr): List<&2, Ledgers.Id>
+}:
+  match x:
+    case Ledgers.Vote{+i, True{}, w, h}:
+      %ih: {
+        i <> List.take(&2, Ledgers.Id, Spec.Steps.taken(yr), List.length(&2, Ledgers.Id, Spec.Steps.taken(xr)))
+          == i <> _: List<&2, Ledgers.Id>
+      }
+      {==}
+    case Ledgers.Vote{i, False{}, w, h}:
+      ih
+
+# the versions of steps that start longer steps start the versions of those
+def Steps.taken_prefix(
+  xs: List<&2, Ledgers.Vote>,
+  ys: List<&2, Ledgers.Vote>
+) -> {
+  List.take(&2, Ledgers.Vote, ys, List.length(&2, Ledgers.Vote, xs)) == xs: List<&2, Ledgers.Vote>
+} -> {
+  List.take(&2, Ledgers.Id, Spec.Steps.taken(ys), List.length(&2, Ledgers.Id, Spec.Steps.taken(xs)))
+    == Spec.Steps.taken(xs): List<&2, Ledgers.Id>
+}:
+  match xs ys:
+    case Nil{} y:
+      e => Shared.List.take_zero(Ledgers.Id, Spec.Steps.taken(y))
+    case Con{x, xr} Nil{}:
+      e => Empty.absurd(
+        {
+          List.take(&2, Ledgers.Id, [], List.length(&2, Ledgers.Id, Spec.Steps.taken(x <> xr)))
+            == Spec.Steps.taken(x <> xr): List<&2, Ledgers.Id>
+        },
+        Shared.Bool.false_ne_true(
+          Equal.cong(List<&2, Ledgers.Vote>, Bool, l => List.is_empty(&2, Ledgers.Vote, l), x <> xr, [], Equal.sym(List<&2, Ledgers.Vote>, [], x <> xr, e))
+        )
+      )
+    case Con{+x, +xr} Con{y, +yr}:
+      +e =>
+        %Equal.sym(
+          Ledgers.Vote,
+          y,
+          x,
+          Shared.List.head_eq(Ledgers.Vote, y, x, List.take(&2, Ledgers.Vote, yr, List.length(&2, Ledgers.Vote, xr)), xr, e)
+        ): {
+          List.take(&2, Ledgers.Id, Spec.Steps.taken(_ <> yr), List.length(&2, Ledgers.Id, Spec.Steps.taken(x <> xr)))
+            == Spec.Steps.taken(x <> xr): List<&2, Ledgers.Id>
+        }
+        Steps.taken_prefix.at(
+          x,
+          xr,
+          yr,
+          Steps.taken_prefix(
+            xr,
+            yr
+          )(Shared.List.tail_eq(Ledgers.Vote, y, x, List.take(&2, Ledgers.Vote, yr, List.length(&2, Ledgers.Vote, xr)), xr, e))
+        )
+
+# a listing that starts with xs, once the listing m of the grown state is known
+def Steps.of_bind(
+  +xs: List<&2, Ledgers.Vote>,
+  m: Maybe<&2, List<&2, Ledgers.Vote>>
+) -> {
+  Maybe.bind(&2, List<&2, Ledgers.Vote>, List<&2, Ledgers.Vote>, m, ys => Some{List.take(&2, Ledgers.Vote, ys, List.length(&2, Ledgers.Vote, xs))})
+    == Some{xs}: Maybe<&2, List<&2, Ledgers.Vote>>
+} -> {
+  List.take(&2, Ledgers.Vote, Maybe.default(&2, List<&2, Ledgers.Vote>, m, []), List.length(&2, Ledgers.Vote, xs))
+    == xs: List<&2, Ledgers.Vote>
+}:
+  match m:
+    case None{}:
+      h => Empty.absurd(
+        {List.take(&2, Ledgers.Vote, [], List.length(&2, Ledgers.Vote, xs)) == xs: List<&2, Ledgers.Vote>},
+        Shared.Maybe.none_ne_some(List<&2, Ledgers.Vote>, xs, h)
+      )
+    case Some{ys}:
+      h => Shared.Maybe.some_inj(
+        List<&2, Ledgers.Vote>,
+        List.take(&2, Ledgers.Vote, ys, List.length(&2, Ledgers.Vote, xs)),
+        xs,
+        h
+      )
+
+# the versions grow at their end, once the listing m of the line is known
+def Versions.grow.at(
+  +s: Spec.State(),
+  +s2: Spec.State(),
+  +c: Ledgers.Chain,
+  +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
+  m: Maybe<&2, List<&2, Ledgers.Vote>>,
+  e: {Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s, c) == m: Maybe<&2, List<&2, Ledgers.Vote>>}
+) -> {
+  List.take(
+    &2,
+    Ledgers.Id,
+    Spec.Steps.taken(Maybe.default(&2, List<&2, Ledgers.Vote>, Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s2, c), [])),
+    List.length(&2, Ledgers.Id, Spec.Steps.taken(Maybe.default(&2, List<&2, Ledgers.Vote>, m, [])))
+  )
+    == Spec.Steps.taken(Maybe.default(&2, List<&2, Ledgers.Vote>, m, [])): List<&2, Ledgers.Id>
+}:
+  match m:
+    case None{}:
+      Shared.List.take_zero(
+        Ledgers.Id,
+        Spec.Steps.taken(Maybe.default(&2, List<&2, Ledgers.Vote>, Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s2, c), []))
+      )
+    case Some{+xs}:
+      Steps.taken_prefix(
+        xs,
+        Maybe.default(&2, List<&2, Ledgers.Vote>, Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s2, c), [])
+      )(
+        Steps.of_bind(
+          xs,
+          Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s2, c)
+        )(Ledgers.Line.steps_grow(~Spec.Ask, ~Spec.Ask.is_eq, ~Ask.laws(), ~Spec.Ask.view, s, s2, c, xs)(gr)(e))
+      )
+
+def Spec.Node.versions_grow(s, s2, r, b):
+  +gr => Versions.grow.at(
+    s,
+    s2,
+    Spec.Line.chain(r, Some{Spec.Line.Branch{b}}),
+    gr,
+    Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s, Spec.Line.chain(r, Some{Spec.Line.Branch{b}})),
+    {==}
+  )
