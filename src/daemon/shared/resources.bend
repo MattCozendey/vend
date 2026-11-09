@@ -30,17 +30,6 @@ def Name.is_eq_refl(a: Name) -> {Name.is_eq(a, a) == True{}: Bool}:
     case Name{t}:
       Texts.String.eq_refl(t)
 
-# Name.is_eq is True only for equal names
-def Name.is_eq_sound(a: Name, b: Name) -> {Name.is_eq(a, b) == True{}: Bool} -> {a == b: Name}:
-  match a b:
-    case Name{x} Name{y}:
-      h =>
-        %Texts.String.eq_sound(x, y)(h): {Name{x} == Name{_}: Name}
-        {==}
-
-# the laws of Name.is_eq
-def Name.laws() -> Shared.Eq.Laws(Name, Name.is_eq):
-  (Name.is_eq_refl, Name.is_eq_sound)
 # the space in the cut c of the text t: t itself when it has no ':'
 def Name.space.cut(c: Maybe<&2, Texts.Cut<String>>, t: String) -> String:
   match c:

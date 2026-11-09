@@ -35,44 +35,8 @@ def Read.then(
     case Some{Read{a, r}}:
       k(a)(r)
 
-# a read that gave a, then k
-def Read.then_some(
-  -A: Data,
-  -B: Data,
-  m: Maybe<&2, Read<A>>,
-  k: A -> List<&2, U32> -> Maybe<&2, Read<B>>,
-  -a: A,
-  -r: List<&2, U32>
-) -> {
-  m == Some{Read{a, r}}: Maybe<&2, Read<A>>
-} -> {Read.then(A, B, m, k) == k(a)(r): Maybe<&2, Read<B>>}:
-  h =>
-    %Equal.sym(
-      Maybe<&2, Read<A>>,
-      m,
-      Some{Read{a, r}},
-      h
-    ): {Read.then(A, B, _, k) == k(a)(r): Maybe<&2, Read<B>>}
-    {==}
-
 # Basic codes
 # -----------
-
-# the bit b, then r
-def Code.bool(b: Bool, r: List<&2, U32>) -> List<&2, U32>:
-  match b:
-    case False{}:
-      0 <> r
-    case True{}:
-      1 <> r
-
-# a bit
-def Code.bool.read(ts: List<&2, U32>) -> Maybe<&2, Read<Bool>>:
-  match ts:
-    case Nil{}:
-      None{}
-    case Con{x, r}:
-      Some{Read{Bool.not(U32.is_eq(x, 0)), r}}
 
 # the count n, in unary, then r
 def Code.count(n: Nat, r: List<&2, U32>) -> List<&2, U32>:
@@ -215,17 +179,6 @@ def Code.list.read(
 
 # Laws
 # ----
-
-# a bit reads back
-def Code.bool_read(
-  b: Bool,
-  r: List<&2, U32>
-) -> {Code.bool.read(Code.bool(b, r)) == Some{Read{b, r}}: Maybe<&2, Read<Bool>>}:
-  match b:
-    case False{}:
-      {==}
-    case True{}:
-      {==}
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run

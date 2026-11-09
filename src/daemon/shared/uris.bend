@@ -740,13 +740,3 @@ def uri_show_after_read(t, u, h):
 # The kinds of endpoint. A mount's URI scheme picks one.
 type Endpoint is Data:
   file_endpoint{}
-# the endpoint of u's scheme, or None for a scheme with none yet
-def Endpoint.of(u: Uri) -> Maybe<&2, Endpoint>:
-  match u:
-    case Uri{sc, a, p}:
-      Shared.Bool.when(
-        Maybe<&2, Endpoint>,
-        String.eq(sc, "file"),
-        v => Some{file_endpoint{}},
-        v => None{}
-      )

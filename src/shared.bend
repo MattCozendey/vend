@@ -205,33 +205,6 @@ def List.contains_cons(
     List.any.if_true(same(x, y))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
-# an element in the middle of a list is in the list
-def List.contains_middle(
-  ~A: Data,
-  ~same: A -> A -> Bool,
-  ~laws: Eq.Laws(A, same),
-  ys: List<&2, A>,
-  +m: A,
-  +zs: List<&2, A>
-) -> {List.contains(~A, ~same, List.append(&2, A, ys, m <> zs), m) == True{}: Bool}:
-  match ys:
-    case Nil{}:
-      %Equal.sym(
-        Bool,
-        same(m, m),
-        True{},
-        Eq.refl(~A, ~same, laws, m)
-      ): {List.any.if(u => List.contains(~A, ~same, zs, m), _) == True{}: Bool}
-      {==}
-    case Con{x, +r}:
-      List.contains_cons(
-        ~A,
-        ~same,
-        x,
-        List.append(&2, A, r, m <> zs),
-        m
-      )(List.contains_middle(~A, ~same, ~laws, r, m, zs))
-
 # the elements of xs that p keeps, given g
 def List.keep(~A: Data, ~V: Data, ~p: V -> A -> Bool, xs: List<&2, A>, +g: V) -> List<&2, A>:
   match xs:
@@ -474,56 +447,8 @@ def List.contains_flat(
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# k and h is k, when k makes h true
-def Bool.and_implied(
-  k: Bool,
-  -h: Bool,
-  c: {k == True{}: Bool} -> {h == True{}: Bool}
-) -> {Bool.and(k, h) == k: Bool}:
-  match k:
-    case False{}:
-      {==}
-    case True{}:
-      c({==})
-
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# m is kept exactly when p keeps it, when p keeps only what xs has
-def List.keep_exactly(
-  ~A: Data,
-  ~V: Data,
-  ~same: A -> A -> Bool,
-  ~p: V -> A -> Bool,
-  ~laws: Eq.Laws(A, same),
-  xs: List<&2, A>,
-  +g: V,
-  +m: A,
-  c: {p(g)(m) == True{}: Bool} -> {List.contains(~A, ~same, xs, m) == True{}: Bool}
-) -> {List.contains(~A, ~same, List.keep(~A, ~V, ~p, xs, g), m) == p(g)(m): Bool}:
-  Equal.trans(
-    Bool,
-    List.contains(~A, ~same, List.keep(~A, ~V, ~p, xs, g), m),
-    Bool.and(p(g)(m), List.contains(~A, ~same, xs, m)),
-    p(g)(m),
-    List.contains_keep(~A, ~V, ~same, ~p, ~laws, xs, g, m),
-    Bool.and_implied(p(g)(m), List.contains(~A, ~same, xs, m), c)
-  )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# a lazy "and" is the "and"
-def Bool.and_lazy(a: Bool, -b: Bool) -> {List.all.if(u => b, a) == Bool.and(a, b): Bool}:
-  match a:
-    case True{}:
-      {==}
-    case False{}:
-      {==}
-
-# a lazy "or" is the "or"
-def Bool.or_lazy(a: Bool, -b: Bool) -> {List.any.if(u => b, a) == Bool.or(a, b): Bool}:
-  match a:
-    case True{}:
-      {==}
-    case False{}:
-      {==}
 
 # Comparisons
 # -----------
@@ -732,9 +657,6 @@ def Bool.is_eq_sound(a: Bool, b: Bool) -> {Bool.is_eq(a, b) == True{}: Bool} -> 
     case False{} True{}:
       h => Empty.absurd({False{} == True{}: Bool}, Bool.false_ne_true(h))
 
-# the laws of Bool.is_eq
-def Bool.laws() -> Eq.Laws(Bool, Bool.is_eq):
-  (Bool.is_eq_refl, Bool.is_eq_sound)
 # a "not" that is True is of False
 def Bool.not_true(a: Bool) -> {Bool.not(a) == True{}: Bool} -> {a == False{}: Bool}:
   match a:
@@ -753,14 +675,6 @@ def Bool.and_both(
       ha => hb => hb
     case False{}:
       ha => hb => Empty.absurd({False{} == True{}: Bool}, Bool.false_ne_true(ha))
-
-# a number is less than the one after it
-def Nat.lt_succ(e: Nat) -> {Nat.is_lt(e, 1n+e) == True{}: Bool}:
-  match e:
-    case 0n:
-      {==}
-    case 1n+p:
-      Nat.lt_succ(p)
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a plus one more is one more than a plus
@@ -997,31 +911,7 @@ def Nat.add_le(
     Nat.add(a2, b2)
   )(Nat.add_le_right(a2, a, b)(h))(Nat.add_le_left(a2, b, b2)(k))
 
-# taking nothing away leaves a number
-def Nat.sub_zero(a: Nat) -> {Nat.sub(a, 0n) == a: Nat}:
-  match a:
-    case 0n:
-      {==}
-    case 1n+p:
-      {==}
-
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-# what is left of g after a below g is one more than what is left after a + 1
-def Nat.sub_pos(
-  a: Nat,
-  g: Nat
-) -> {Nat.is_lt(a, g) == True{}: Bool} -> {Nat.sub(g, a) == 1n+Nat.sub(g, 1n+a): Nat}:
-  match a g:
-    case 0n 0n:
-      h => Empty.absurd({0n == 1n: Nat}, Bool.false_ne_true(h))
-    case 0n 1n+p:
-      h =>
-        %Equal.sym(Nat, Nat.sub(p, 0n), p, Nat.sub_zero(p)): {1n+p == 1n+_: Nat}
-        {==}
-    case 1n+q 0n:
-      h => Empty.absurd({0n == 1n+Nat.sub(0n, 1n+1n+q): Nat}, Bool.false_ne_true(h))
-    case 1n+q 1n+p:
-      Nat.sub_pos(q, p)
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # what holds when m is None
@@ -1050,39 +940,6 @@ def Maybe.is_eq(~A: Data, ~eq: A -> A -> Bool, a: Maybe<&2, A>, b: Maybe<&2, A>)
       eq(x, y)
     case _ _:
       False{}
-
-# Maybe.is_eq is True only for equal values, when eq is True only for equal ones
-def Maybe.is_eq_sound(
-  ~A: Data,
-  ~eq: A -> A -> Bool,
-  eqs: @x: A -> @y: A -> {eq(x, y) == True{}: Bool} -> {x == y: A},
-  a: Maybe<&2, A>,
-  b: Maybe<&2, A>
-) -> {Maybe.is_eq(~A, ~eq, a, b) == True{}: Bool} -> {a == b: Maybe<&2, A>}:
-  match a b:
-    case None{} None{}:
-      h => {==}
-    case None{} Some{y}:
-      h => Empty.absurd({None{} == Some{y}: Maybe<&2, A>}, Bool.false_ne_true(h))
-    case Some{x} None{}:
-      h => Empty.absurd({Some{x} == None{}: Maybe<&2, A>}, Bool.false_ne_true(h))
-    case Some{+x} Some{y}:
-      h =>
-        %eqs(x)(y)(h): {Some{x} == Some{_}: Maybe<&2, A>}
-        {==}
-
-# Maybe.is_eq is True for a value and itself, when eq is
-def Maybe.is_eq_refl(
-  ~A: Data,
-  ~eq: A -> A -> Bool,
-  ~laws: Eq.Laws(A, eq),
-  m: Maybe<&2, A>
-) -> {Maybe.is_eq(~A, ~eq, m, m) == True{}: Bool}:
-  match m:
-    case None{}:
-      {==}
-    case Some{y}:
-      Eq.refl(~A, ~eq, laws, y)
 
 # nothing taken of a list is nothing
 def List.take_zero(-A: Data, xs: List<&2, A>) -> {List.take(&2, A, xs, 0n) == []: List<&2, A>}:
@@ -1266,32 +1123,6 @@ def List.laws(
     xs => List.is_eq_refl(~A, ~same, ~laws, xs),
     xs => ys => List.is_eq_sound(~A, ~same, ~laws, xs, ys)
   )
-
-# the first elements of xs ++ ys, as many as xs has, are xs
-def List.take_append(
-  -A: Data,
-  xs: List<&2, A>,
-  ys: List<&2, A>
-) -> {List.take(&2, A, List.append(&2, A, xs, ys), List.length(&2, A, xs)) == xs: List<&2, A>}:
-  match xs:
-    case Nil{}:
-      match ys:
-        case Nil{}:
-          {==}
-        case Con{h, t}:
-          {==}
-    case Con{h, t}:
-      %List.take_append(
-        A,
-        t,
-        ys
-      ): {
-        h
-          <> List.take(&2, A, List.append(&2, A, t, ys), List.length(&2, A, t))
-          == h
-          <> _: List<&2, A>
-      }
-      {==}
 
 # ks, with each element of ns that ks does not hold, as same compares them
 def List.union(~A: Data, ~same: A -> A -> Bool, ns: List<&2, A>, +ks: List<&2, A>) -> List<&2, A>:
