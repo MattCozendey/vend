@@ -2112,3 +2112,84 @@ law State.refused_kept:
 
 def State.refused_kept(ty, same, view, s, t, i):
   Refused.kept.at(~ty, ~same, ~view, s, t, i, State.get(~ty, s, Slot.ask(i)), {==})
+
+# Writes
+# ------
+# A node's own writes only add entries that agree with what it holds: each
+# write grows the state (Grows), so every kept read stays through it.
+
+# s2 is s joined with entries that agree with it
+def Grows(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), s2: State(Q)) -> Type:
+  &t: State(Q) -> {State.agrees(~Q, ~same, s, t) == True{}: Bool} & {s2 == State.join(~Q, ~same, s, t): State(Q)}
+
+# a state grows to itself
+def Grows.self(~Q: Data, ~same: Q -> Q -> Bool, +s: State(Q)) -> Grows(~Q, ~same, s, s):
+  (
+    Tries.tip{},
+    (
+      Cells.Cell.agrees_tip(~Entry<Q>, ~Entry.is_eq(~Q, ~same), s),
+      Equal.sym(
+        State(Q),
+        State.join(~Q, ~same, s, Tries.tip{}),
+        s,
+        Tries.Trie.union_tip(~Cells.Cell<Entry<Q>>, ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), s)
+      )
+    )
+  )
+
+# a put at an empty slot grows the state
+def Grows.put(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  s: State(Q),
+  +k: List<&2, Bool>,
+  +e: Entry<Q>,
+  h: {State.get(~Q, s, k) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>}
+) -> Grows(~Q, ~same, s, State.put(~Q, ~same, s, k, e)):
+  (State.one(~Q, k, e), (Cells.Cell.agrees_one(~Entry<Q>, ~Entry.is_eq(~Q, ~same), s, k, Cells.one{e})(h), {==}))
+
+# a put at an empty slot holds the entry there
+def State.put_get(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  +s: State(Q),
+  +k: List<&2, Bool>,
+  +e: Entry<Q>
+) -> {
+  State.get(~Q, s, k) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>
+} -> {State.get(~Q, State.put(~Q, ~same, s, k, e), k) == Some{Cells.one{e}}: Maybe<&2, Cells.Cell<Entry<Q>>>}:
+  h =>
+    +one1 = State.one(~Q, k, e)
+    +get1 = State.get(~Q, s, k)
+    %Equal.sym(
+      Maybe<&2, Cells.Cell<Entry<Q>>>,
+      State.get(~Q, State.put(~Q, ~same, s, k, e), k),
+      Tries.Trie.pick(~Cells.Cell<Entry<Q>>, ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), get1, State.get(~Q, one1, k)),
+      Tries.Trie.get_union(~Cells.Cell<Entry<Q>>, ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), s, one1, k)
+    ): {_ == Some{Cells.one{e}}: Maybe<&2, Cells.Cell<Entry<Q>>>}
+    %Equal.sym(Maybe<&2, Cells.Cell<Entry<Q>>>, get1, None{}, h):
+      {
+        Tries.Trie.pick(~Cells.Cell<Entry<Q>>, ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), _, State.get(~Q, one1, k))
+          == Some{Cells.one{e}}: Maybe<&2, Cells.Cell<Entry<Q>>>
+      }
+    Tries.Trie.get_one(Cells.Cell<Entry<Q>>, k, Cells.one{e})
+
+# a read f of a slot stays through growth
+def Grows.read(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~W: Data,
+  f: Maybe<&2, Entry<Q>> -> Maybe<&2, W>,
+  fnone: {f(None{}) == None{}: Maybe<&2, W>},
+  +s: State(Q),
+  -s2: State(Q),
+  +k: List<&2, Bool>,
+  -w: W,
+  g: Grows(~Q, ~same, s, s2)
+) -> {f(State.entry(~Q, s, k)) == Some{w}: Maybe<&2, W>} -> {f(State.entry(~Q, s2, k)) == Some{w}: Maybe<&2, W>}:
+  match g:
+    case (t, (ag, eq)):
+      %Equal.sym(State(Q), s2, State.join(~Q, ~same, s, t), eq):
+        {f(State.entry(~Q, s, k)) == Some{w}: Maybe<&2, W>} -> {f(State.entry(~Q, _, k)) == Some{w}: Maybe<&2, W>}
+      State.read_kept(~Q, ~same, ~laws, ~W, f, fnone, s, t, k, w)(ag)
