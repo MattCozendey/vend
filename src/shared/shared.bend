@@ -679,7 +679,10 @@ def Bool.when(-A: Type, b: Bool, k: Unit -> A, e: Unit -> A) -> A:
       k(Unit{})
 
 # both sides of a true "and" are true
-def Bool.and_true_left(a: Bool, b: Bool) -> {Bool.and(a, b) == True{}: Bool} -> {a == True{}: Bool}:
+def Bool.and_true_left(
+  a: Bool,
+  -b: Bool
+) -> {Bool.and(a, b) == True{}: Bool} -> {a == True{}: Bool}:
   match a:
     case False{}:
       h => Empty.absurd({False{} == True{}: Bool}, Bool.false_ne_true(h))
