@@ -43,8 +43,8 @@ type Chain is Data:
 # or it changes the line on, gives it owners (if any: a new epoch) and, on a
 # root, makes the line below it of that key (if any)
 type View is Data:
-  View.root{owners: List<&2, String>}
-  View.on{chain: Chain, owners: Maybe<&2, List<&2, String>>, makes: Maybe<&2, List<&2, Bool>>}
+  View.Root{owners: List<&2, String>}
+  View.On{chain: Chain, owners: Maybe<&2, List<&2, String>>, makes: Maybe<&2, List<&2, Bool>>}
 
 # a vote for a request, whose change has the view: its owners take it, or
 # refuse it as stale, and the hash of what the line holds after it (result)
@@ -62,10 +62,10 @@ type Where is Data:
 
 # a request of a change, with its time; a vote of a node; or a fact
 type Entry<-Q: Data> is Data:
-  Entry.ask{id: Id, time: String, ask: Q}
-  Entry.vote{vote: Vote}
-  Entry.at{at: Where}
-  Entry.data{words: List<&2, U32>}
+  Entry.Ask{id: Id, time: String, ask: Q}
+  Entry.Vote{vote: Vote}
+  Entry.At{at: Where}
+  Entry.Data{words: List<&2, U32>}
 
 # Keys
 # ----
@@ -172,9 +172,9 @@ def Owners.is_eq(a: List<&2, String>, b: List<&2, String>) -> Bool:
 # a and b are the same views
 def View.is_eq(a: View, b: View) -> Bool:
   match a b:
-    case View.root{x} View.root{y}:
+    case View.Root{x} View.Root{y}:
       Owners.is_eq(x, y)
-    case View.on{c1, o1, m1} View.on{c2, o2, m2}:
+    case View.On{c1, o1, m1} View.On{c2, o2, m2}:
       Bool.and(
         Chain.is_eq(c1, c2),
         Bool.and(Shared.Maybe.is_eq(~List<&2, String>, ~Owners.is_eq, o1, o2), Sub.is_eq(m1, m2))
@@ -206,13 +206,13 @@ def Where.is_eq(a: Where, b: Where) -> Bool:
 # a and b are the same entry, when same compares changes
 def Entry.is_eq(~Q: Data, ~same: Q -> Q -> Bool, a: Entry<Q>, b: Entry<Q>) -> Bool:
   match a b:
-    case Entry.ask{i1, t1, q1} Entry.ask{i2, t2, q2}:
+    case Entry.Ask{i1, t1, q1} Entry.Ask{i2, t2, q2}:
       Bool.and(Id.is_eq(i1, i2), Bool.and(String.eq(t1, t2), same(q1, q2)))
-    case Entry.vote{v1} Entry.vote{v2}:
+    case Entry.Vote{v1} Entry.Vote{v2}:
       Vote.is_eq(v1, v2)
-    case Entry.at{w1} Entry.at{w2}:
+    case Entry.At{w1} Entry.At{w2}:
       Where.is_eq(w1, w2)
-    case Entry.data{d1} Entry.data{d2}:
+    case Entry.Data{d1} Entry.Data{d2}:
       Shared.List.is_eq(~U32, ~U32.is_eq, d1, d2)
     case _ _:
       False{}
@@ -347,9 +347,9 @@ def Eq.three(
 # View.is_eq is True for a view and itself
 def View.is_eq_refl(a: View) -> {View.is_eq(a, a) == True{}: Bool}:
   match a:
-    case View.root{x}:
+    case View.Root{x}:
       Shared.Eq.refl(~List<&2, String>, ~Owners.is_eq, Owners.laws(), x)
-    case View.on{+c, +o, +m}:
+    case View.On{+c, +o, +m}:
       +mo = Shared.Maybe.is_eq(~List<&2, String>, ~Owners.is_eq, o, o)
       Shared.Bool.and_both(
         Chain.is_eq(c, c),
@@ -369,7 +369,7 @@ def View.is_eq_refl(a: View) -> {View.is_eq(a, a) == True{}: Bool}:
 # View.is_eq is True only for equal views
 def View.is_eq_sound(a: View, b: View) -> {View.is_eq(a, b) == True{}: Bool} -> {a == b: View}:
   match a b:
-    case View.root{x} View.root{y}:
+    case View.Root{x} View.Root{y}:
       h =>
         %Shared.Eq.sound(
           ~List<&2, String>,
@@ -377,9 +377,9 @@ def View.is_eq_sound(a: View, b: View) -> {View.is_eq(a, b) == True{}: Bool} -> 
           Owners.laws(),
           x,
           y
-        )(h): {View.root{x} == View.root{_}: View}
+        )(h): {View.Root{x} == View.Root{_}: View}
         {==}
-    case View.on{+c1, +o1, +m1} View.on{+c2, +o2, +m2}:
+    case View.On{+c1, +o1, +m1} View.On{+c2, +o2, +m2}:
       +h =>
         +x = Chain.is_eq(c1, c2)
         +mo = Shared.Maybe.is_eq(~List<&2, String>, ~Owners.is_eq, o1, o2)
@@ -390,7 +390,7 @@ def View.is_eq_sound(a: View, b: View) -> {View.is_eq(a, b) == True{}: Bool} -> 
           Maybe<&2, List<&2, String>>,
           Maybe<&2, List<&2, Bool>>,
           View,
-          p => q => w => View.on{p, q, w},
+          p => q => w => View.On{p, q, w},
           c1,
           c2,
           o1,
@@ -413,10 +413,10 @@ def View.is_eq_sound(a: View, b: View) -> {View.is_eq(a, b) == True{}: Bool} -> 
             m2
           )(Shared.Bool.and_true_right(mo, mm)(r))
         )
-    case View.root{x} View.on{c, o, m}:
-      h => Empty.absurd({View.root{x} == View.on{c, o, m}: View}, Shared.Bool.false_ne_true(h))
-    case View.on{c, o, m} View.root{x}:
-      h => Empty.absurd({View.on{c, o, m} == View.root{x}: View}, Shared.Bool.false_ne_true(h))
+    case View.Root{x} View.On{c, o, m}:
+      h => Empty.absurd({View.Root{x} == View.On{c, o, m}: View}, Shared.Bool.false_ne_true(h))
+    case View.On{c, o, m} View.Root{x}:
+      h => Empty.absurd({View.On{c, o, m} == View.Root{x}: View}, Shared.Bool.false_ne_true(h))
 
 # the laws of View.is_eq
 def View.laws() -> Shared.Eq.Laws(View, View.is_eq):
@@ -532,7 +532,7 @@ def Entry.is_eq_refl(
   a: Entry<Q>
 ) -> {Entry.is_eq(~Q, ~same, a, a) == True{}: Bool}:
   match a:
-    case Entry.ask{+i, +t, +q}:
+    case Entry.Ask{+i, +t, +q}:
       +st = String.eq(t, t)
       Shared.Bool.and_both(
         Id.is_eq(i, i),
@@ -545,11 +545,11 @@ def Entry.is_eq_refl(
           same(q, q)
         )(Texts.String.eq_refl(t))(Shared.Eq.refl(~Q, ~same, laws, q))
       )
-    case Entry.vote{v}:
+    case Entry.Vote{v}:
       Vote.is_eq_refl(v)
-    case Entry.at{w}:
+    case Entry.At{w}:
       Where.is_eq_refl(w)
-    case Entry.data{d}:
+    case Entry.Data{d}:
       Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), d)
 
 # Entry.is_eq is True only for equal entries
@@ -561,7 +561,7 @@ def Entry.is_eq_sound(
   b: Entry<Q>
 ) -> {Entry.is_eq(~Q, ~same, a, b) == True{}: Bool} -> {a == b: Entry<Q>}:
   match a b:
-    case Entry.ask{+i1, +t1, +q1} Entry.ask{+i2, +t2, +q2}:
+    case Entry.Ask{+i1, +t1, +q1} Entry.Ask{+i2, +t2, +q2}:
       +h =>
         +x = Id.is_eq(i1, i2)
         +y = String.eq(t1, t2)
@@ -572,7 +572,7 @@ def Entry.is_eq_sound(
           String,
           Q,
           Entry<Q>,
-          p => u => w => Entry.ask{p, u, w},
+          p => u => w => Entry.Ask{p, u, w},
           i1,
           i2,
           t1,
@@ -583,15 +583,15 @@ def Entry.is_eq_sound(
           Texts.String.eq_sound(t1, t2)(Shared.Bool.and_true_left(y, z)(r)),
           Shared.Eq.sound(~Q, ~same, laws, q1, q2)(Shared.Bool.and_true_right(y, z)(r))
         )
-    case Entry.vote{v1} Entry.vote{v2}:
+    case Entry.Vote{v1} Entry.Vote{v2}:
       h =>
-        %Vote.is_eq_sound(v1, v2)(h): {Entry.vote{v1} == Entry.vote{_}: Entry<Q>}
+        %Vote.is_eq_sound(v1, v2)(h): {Entry.Vote{v1} == Entry.Vote{_}: Entry<Q>}
         {==}
-    case Entry.at{w1} Entry.at{w2}:
+    case Entry.At{w1} Entry.At{w2}:
       h =>
-        %Where.is_eq_sound(w1, w2)(h): {Entry.at{w1} == Entry.at{_}: Entry<Q>}
+        %Where.is_eq_sound(w1, w2)(h): {Entry.At{w1} == Entry.At{_}: Entry<Q>}
         {==}
-    case Entry.data{d1} Entry.data{d2}:
+    case Entry.Data{d1} Entry.Data{d2}:
       h =>
         %Shared.List.is_eq_sound(
           ~U32,
@@ -599,44 +599,44 @@ def Entry.is_eq_sound(
           ~Shared.U32.laws(),
           d1,
           d2
-        )(h): {Entry.data{d1} == Entry.data{_}: Entry<Q>}
+        )(h): {Entry.Data{d1} == Entry.Data{_}: Entry<Q>}
         {==}
-    case Entry.ask{i, t, q} Entry.vote{v}:
+    case Entry.Ask{i, t, q} Entry.Vote{v}:
       h => Empty.absurd(
-        {Entry.ask{i, t, q} == Entry.vote{v}: Entry<Q>},
+        {Entry.Ask{i, t, q} == Entry.Vote{v}: Entry<Q>},
         Shared.Bool.false_ne_true(h)
       )
-    case Entry.ask{i, t, q} Entry.at{w}:
-      h => Empty.absurd({Entry.ask{i, t, q} == Entry.at{w}: Entry<Q>}, Shared.Bool.false_ne_true(h))
-    case Entry.ask{i, t, q} Entry.data{d}:
+    case Entry.Ask{i, t, q} Entry.At{w}:
+      h => Empty.absurd({Entry.Ask{i, t, q} == Entry.At{w}: Entry<Q>}, Shared.Bool.false_ne_true(h))
+    case Entry.Ask{i, t, q} Entry.Data{d}:
       h => Empty.absurd(
-        {Entry.ask{i, t, q} == Entry.data{d}: Entry<Q>},
+        {Entry.Ask{i, t, q} == Entry.Data{d}: Entry<Q>},
         Shared.Bool.false_ne_true(h)
       )
-    case Entry.vote{v} Entry.ask{i, t, q}:
+    case Entry.Vote{v} Entry.Ask{i, t, q}:
       h => Empty.absurd(
-        {Entry.vote{v} == Entry.ask{i, t, q}: Entry<Q>},
+        {Entry.Vote{v} == Entry.Ask{i, t, q}: Entry<Q>},
         Shared.Bool.false_ne_true(h)
       )
-    case Entry.vote{v} Entry.at{w}:
-      h => Empty.absurd({Entry.vote{v} == Entry.at{w}: Entry<Q>}, Shared.Bool.false_ne_true(h))
-    case Entry.vote{v} Entry.data{d}:
-      h => Empty.absurd({Entry.vote{v} == Entry.data{d}: Entry<Q>}, Shared.Bool.false_ne_true(h))
-    case Entry.at{w} Entry.ask{i, t, q}:
-      h => Empty.absurd({Entry.at{w} == Entry.ask{i, t, q}: Entry<Q>}, Shared.Bool.false_ne_true(h))
-    case Entry.at{w} Entry.vote{v}:
-      h => Empty.absurd({Entry.at{w} == Entry.vote{v}: Entry<Q>}, Shared.Bool.false_ne_true(h))
-    case Entry.at{w} Entry.data{d}:
-      h => Empty.absurd({Entry.at{w} == Entry.data{d}: Entry<Q>}, Shared.Bool.false_ne_true(h))
-    case Entry.data{d} Entry.ask{i, t, q}:
+    case Entry.Vote{v} Entry.At{w}:
+      h => Empty.absurd({Entry.Vote{v} == Entry.At{w}: Entry<Q>}, Shared.Bool.false_ne_true(h))
+    case Entry.Vote{v} Entry.Data{d}:
+      h => Empty.absurd({Entry.Vote{v} == Entry.Data{d}: Entry<Q>}, Shared.Bool.false_ne_true(h))
+    case Entry.At{w} Entry.Ask{i, t, q}:
+      h => Empty.absurd({Entry.At{w} == Entry.Ask{i, t, q}: Entry<Q>}, Shared.Bool.false_ne_true(h))
+    case Entry.At{w} Entry.Vote{v}:
+      h => Empty.absurd({Entry.At{w} == Entry.Vote{v}: Entry<Q>}, Shared.Bool.false_ne_true(h))
+    case Entry.At{w} Entry.Data{d}:
+      h => Empty.absurd({Entry.At{w} == Entry.Data{d}: Entry<Q>}, Shared.Bool.false_ne_true(h))
+    case Entry.Data{d} Entry.Ask{i, t, q}:
       h => Empty.absurd(
-        {Entry.data{d} == Entry.ask{i, t, q}: Entry<Q>},
+        {Entry.Data{d} == Entry.Ask{i, t, q}: Entry<Q>},
         Shared.Bool.false_ne_true(h)
       )
-    case Entry.data{d} Entry.vote{v}:
-      h => Empty.absurd({Entry.data{d} == Entry.vote{v}: Entry<Q>}, Shared.Bool.false_ne_true(h))
-    case Entry.data{d} Entry.at{w}:
-      h => Empty.absurd({Entry.data{d} == Entry.at{w}: Entry<Q>}, Shared.Bool.false_ne_true(h))
+    case Entry.Data{d} Entry.Vote{v}:
+      h => Empty.absurd({Entry.Data{d} == Entry.Vote{v}: Entry<Q>}, Shared.Bool.false_ne_true(h))
+    case Entry.Data{d} Entry.At{w}:
+      h => Empty.absurd({Entry.Data{d} == Entry.At{w}: Entry<Q>}, Shared.Bool.false_ne_true(h))
 
 # the laws of Entry.is_eq, by the laws of same
 def Entry.laws(
@@ -719,7 +719,7 @@ type Asked<-Q: Data> is Data:
 # the request in the entry m
 def Asked.of(~Q: Data, m: Maybe<&2, Entry<Q>>) -> Maybe<&2, Asked<Q>>:
   match m:
-    case Some{Entry.ask{i, t, q}}:
+    case Some{Entry.Ask{i, t, q}}:
       Some{Asked{t, q}}
     case _:
       None{}
@@ -731,7 +731,7 @@ def State.asked(~Q: Data, s: State(Q), i: Id) -> Maybe<&2, Asked<Q>>:
 # the place in the entry m, when it is a fact
 def Where.of(~Q: Data, m: Maybe<&2, Entry<Q>>) -> Maybe<&2, Where>:
   match m:
-    case Some{Entry.at{w}}:
+    case Some{Entry.At{w}}:
       Some{w}
     case _:
       None{}
@@ -745,7 +745,7 @@ def Entry.ballot(~Q: Data, m: Maybe<&2, Cells.Cell<Entry<Q>>>) -> Maybe<&2, Cell
   match m:
     case None{}:
       None{}
-    case Some{Cells.One{Entry.vote{v}}}:
+    case Some{Cells.One{Entry.Vote{v}}}:
       Some{Cells.One{v}}
     case Some{c}:
       Some{Cells.Many{}}
@@ -788,7 +788,7 @@ def State.decide(~Q: Data, s: State(Q), w: Where, ms: List<&2, String>) -> Maybe
 # the owners of a view that starts a store
 def Root.owners.view(v: View) -> Maybe<&2, List<&2, String>>:
   match v:
-    case View.root{ms}:
+    case View.Root{ms}:
       Some{ms}
     case _:
       None{}
@@ -813,7 +813,7 @@ def Root.owners(~Q: Data, ~view: Q -> View, s: State(Q), r: Id) -> Maybe<&2, Lis
 # that gives it owners
 def Owners.of(c: Chain, v: Vote) -> Maybe<&2, List<&2, String>>:
   match v:
-    case Vote{i, True{}, View.on{c2, Some{os}, mk}, r}:
+    case Vote{i, True{}, View.On{c2, Some{os}, mk}, r}:
       Shared.Maybe.when(List<&2, String>, Chain.is_eq(c2, c), u => Some{os})
     case _:
       None{}
@@ -892,7 +892,7 @@ def Root.at(
 # the owners ms, when the vote v makes the line of the key k
 def Made.vote(k: List<&2, Bool>, ms: List<&2, String>, v: Vote) -> Maybe<&2, List<&2, String>>:
   match v:
-    case Vote{i, True{}, View.on{c, o, Some{k2}}, r}:
+    case Vote{i, True{}, View.On{c, o, Some{k2}}, r}:
       Shared.Maybe.when(
         List<&2, String>,
         Shared.List.is_eq(~Bool, ~Shared.Bool.is_eq, k2, k),
@@ -1281,20 +1281,20 @@ def State.place(~Q: Data, ~view: Q -> View, +s: State(Q), +i: Id) -> Maybe<&2, W
 # stale. Pending: no step decided it yet. Refused: it is contradicted. NotSeen:
 # the ledger does not hold it.
 type Status is Data:
-  Status.done{takes: Bool}
-  Status.pending{}
-  Status.refused{}
-  Status.not_seen{}
+  Status.Done{takes: Bool}
+  Status.Pending{}
+  Status.Refused{}
+  Status.NotSeen{}
 
 # the status of a request whose change has the view v, decided by the vote m
 def Status.of.view(v: View, m: Maybe<&2, Vote>) -> Status:
   match v m:
-    case View.root{ms} w:
-      Status.done{True{}}
-    case View.on{c, o, mk} Some{Vote{j, k, u, r}}:
-      Status.done{k}
-    case View.on{c, o, mk} None{}:
-      Status.pending{}
+    case View.Root{ms} w:
+      Status.Done{True{}}
+    case View.On{c, o, mk} Some{Vote{j, k, u, r}}:
+      Status.Done{k}
+    case View.On{c, o, mk} None{}:
+      Status.Pending{}
 
 # the status of the request i, whose cell is m
 def Status.of(
@@ -1306,13 +1306,13 @@ def Status.of(
 ) -> Status:
   match m:
     case None{}:
-      Status.not_seen{}
+      Status.NotSeen{}
     case Some{Cells.Many{}}:
-      Status.refused{}
-    case Some{Cells.One{Entry.ask{j, t, q}}}:
+      Status.Refused{}
+    case Some{Cells.One{Entry.Ask{j, t, q}}}:
       Status.of.view(view(q), State.decided(~Q, ~view, s, i))
     case Some{Cells.One{e}}:
-      Status.not_seen{}
+      Status.NotSeen{}
 
 # where the request i is
 def State.status(~Q: Data, ~view: Q -> View, +s: State(Q), +i: Id) -> Status:
@@ -1327,7 +1327,7 @@ def State.status(~Q: Data, ~view: Q -> View, +s: State(Q), +i: Id) -> Status:
 # the words in the entry m, when it is data
 def Data.of(~Q: Data, m: Maybe<&2, Entry<Q>>) -> Maybe<&2, List<&2, U32>>:
   match m:
-    case Some{Entry.data{ws}}:
+    case Some{Entry.Data{ws}}:
       Some{ws}
     case _:
       None{}
@@ -1357,7 +1357,7 @@ def Data.put.of(
 ) -> State(Q):
   match m:
     case None{}:
-      State.put(~Q, ~same, s, k, Entry.data{ws})
+      State.put(~Q, ~same, s, k, Entry.Data{ws})
     case Some{x}:
       s
 
@@ -1431,7 +1431,7 @@ def Fact.put.of(
 ) -> State(Q):
   match m:
     case None{}:
-      State.put(~Q, ~same, s, k, Entry.at{w})
+      State.put(~Q, ~same, s, k, Entry.At{w})
     case Some{x}:
       s
 
@@ -1457,9 +1457,9 @@ def Settle.view(
   v: View
 ) -> State(Q):
   match k v:
-    case True{} View.on{+c, Some{os}, mk}:
+    case True{} View.On{+c, Some{os}, mk}:
       Fact.put(~Q, ~same, s, Slot.epoch(c, U32.inc(Where.epoch(w))), w)
-    case True{} View.on{Chain{r, b}, None{}, Some{key}}:
+    case True{} View.On{Chain{r, b}, None{}, Some{key}}:
       Fact.put(~Q, ~same, s, Slot.made(Chain{r, Some{key}}), w)
     case x y:
       s
@@ -1517,7 +1517,7 @@ def Vote.verdict(
   +head: Maybe<&2, Vote>
 ) -> Maybe<&2, Verdict>:
   match v:
-    case View.on{Chain{r, b}, o, Some{m}}:
+    case View.On{Chain{r, b}, o, Some{m}}:
       Shared.Bool.when(
         Maybe<&2, Verdict>,
         Maybe.is_none(&2, List<&2, String>, Line.first(~Q, ~view, s, Chain{r, Some{m}})),
@@ -1541,7 +1541,7 @@ def Vote.put(
 ) -> State(Q):
   match held m:
     case True{} Some{Verdict{x, r, ds}}:
-      State.put(~Q, ~same, State.put_datas(~Q, ~same, ds, s), k, Entry.vote{Vote{i, x, v, r}})
+      State.put(~Q, ~same, State.put_datas(~Q, ~same, ds, s), k, Entry.Vote{Vote{i, x, v, r}})
     case h w:
       s
 
@@ -1600,9 +1600,9 @@ def Vote.ask(
   v: View
 ) -> State(Q):
   match v:
-    case View.root{ms}:
+    case View.Root{ms}:
       s
-    case View.on{+c, o, mk}:
+    case View.On{+c, o, mk}:
       Vote.cast(
         ~Q,
         ~same,
@@ -1613,7 +1613,7 @@ def Vote.ask(
         c,
         i,
         q,
-        View.on{c, o, mk},
+        View.On{c, o, mk},
         Line.tip(~Q, ~view, s, c)
       )
 
@@ -1641,7 +1641,7 @@ def State.ask.fresh(
         ~view,
         ~judge,
         n,
-        State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+        State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
         i,
         q,
         view(q)
@@ -1675,7 +1675,7 @@ def Vote.all(
   match cs:
     case Nil{}:
       s
-    case Con{Cells.One{Entry.ask{i, t, +q}}, r}:
+    case Con{Cells.One{Entry.Ask{i, t, +q}}, r}:
       Vote.all(
         ~Q,
         ~same,
@@ -1951,13 +1951,13 @@ def Ballot.refl(
     == True{}: Bool
 }:
   match e:
-    case Entry.vote{v}:
+    case Entry.Vote{v}:
       Vote.is_eq_refl(v)
-    case Entry.ask{i, t, q}:
+    case Entry.Ask{i, t, q}:
       {==}
-    case Entry.at{w}:
+    case Entry.At{w}:
       {==}
-    case Entry.data{d}:
+    case Entry.Data{d}:
       {==}
 
 # a cell kept from many gives a void ballot
@@ -2563,7 +2563,7 @@ def State.decided_grows(ty, same, laws, view, s, s2, i, a):
 # the verdict of a status, if it is done
 def Status.verdict(st: Status) -> Maybe<&2, Bool>:
   match st:
-    case Status.done{k}:
+    case Status.Done{k}:
       Some{k}
     case _:
       None{}
@@ -2571,7 +2571,7 @@ def Status.verdict(st: Status) -> Maybe<&2, Bool>:
 # st is refused
 def Status.is_refused(st: Status) -> Bool:
   match st:
-    case Status.refused{}:
+    case Status.Refused{}:
       True{}
     case _:
       False{}
@@ -2582,7 +2582,7 @@ def Status.not_done(
   st: Status,
   -k: Bool,
   h: {Status.verdict(st) == None{}: Maybe<&2, Bool>}
-) -> {st == Status.done{k}: Status} -> Empty:
+) -> {st == Status.Done{k}: Status} -> Empty:
   d => Shared.Maybe.none_ne_some(
     Bool,
     k,
@@ -2592,7 +2592,7 @@ def Status.not_done(
       Status.verdict(st),
       Some{k},
       Equal.sym(Maybe<&2, Bool>, Status.verdict(st), None{}, h),
-      Equal.cong(Status, Maybe<&2, Bool>, x => Status.verdict(x), st, Status.done{k}, d)
+      Equal.cong(Status, Maybe<&2, Bool>, x => Status.verdict(x), st, Status.Done{k}, d)
     )
   )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
@@ -2602,7 +2602,7 @@ def Status.not_done(
 def Status.not_refused(
   st: Status,
   h: {Status.is_refused(st) == False{}: Bool}
-) -> {st == Status.refused{}: Status} -> Empty:
+) -> {st == Status.Refused{}: Status} -> Empty:
   d => Shared.Bool.false_ne_true(
     Equal.trans(
       Bool,
@@ -2610,7 +2610,7 @@ def Status.not_refused(
       Status.is_refused(st),
       True{},
       Equal.sym(Bool, Status.is_refused(st), False{}, h),
-      Equal.cong(Status, Bool, x => Status.is_refused(x), st, Status.refused{}, d)
+      Equal.cong(Status, Bool, x => Status.is_refused(x), st, Status.Refused{}, d)
     )
   )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
@@ -2631,30 +2631,30 @@ def Status.kept.view(
   edm: {State.decided(~Q, ~view, s, i) == dm: Maybe<&2, Vote>},
   gr: {State.grows(~Q, ~same, s, s2) == True{}: Bool}
 ) -> {
-  Status.of.view(v, dm) == Status.done{k}: Status
-} -> {Status.of.view(v, State.decided(~Q, ~view, s2, i)) == Status.done{k}: Status}:
+  Status.of.view(v, dm) == Status.Done{k}: Status
+} -> {Status.of.view(v, State.decided(~Q, ~view, s2, i)) == Status.Done{k}: Status}:
   match v dm:
-    case View.root{ms} w:
+    case View.Root{ms} w:
       h => h
-    case View.on{c, o, mk} Some{x}:
+    case View.On{c, o, mk} Some{x}:
       h =>
         %Equal.sym(
           Maybe<&2, Vote>,
           State.decided(~Q, ~view, s2, i),
           Some{x},
           State.decided_grows(~Q, ~same, ~laws, ~view, s, s2, i, x)(gr)(edm)
-        ): {Status.of.view(View.on{c, o, mk}, _) == Status.done{k}: Status}
+        ): {Status.of.view(View.On{c, o, mk}, _) == Status.Done{k}: Status}
         h
-    case View.on{c, o, mk} None{}:
+    case View.On{c, o, mk} None{}:
       h => Empty.absurd(
         {
           Status.of.view(
-            View.on{c, o, mk},
+            View.On{c, o, mk},
             State.decided(~Q, ~view, s2, i)
           )
-            == Status.done{k}: Status
+            == Status.Done{k}: Status
         },
-        Status.not_done(Status.pending{}, k, {==})(h)
+        Status.not_done(Status.Pending{}, k, {==})(h)
       )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
@@ -2672,35 +2672,35 @@ def Status.kept.at(
   em: {State.get(~Q, s, Slot.ask(i)) == m: Maybe<&2, Cells.Cell<Entry<Q>>>},
   +gr: {State.grows(~Q, ~same, s, s2) == True{}: Bool}
 ) -> {
-  Status.of(~Q, ~view, s, i, m) == Status.done{k}: Status
-} -> {State.status(~Q, ~view, s2, i) == Status.done{k}: Status}:
+  Status.of(~Q, ~view, s, i, m) == Status.Done{k}: Status
+} -> {State.status(~Q, ~view, s2, i) == Status.Done{k}: Status}:
   match m:
     case None{}:
       h => Empty.absurd(
-        {State.status(~Q, ~view, s2, i) == Status.done{k}: Status},
-        Status.not_done(Status.not_seen{}, k, {==})(h)
+        {State.status(~Q, ~view, s2, i) == Status.Done{k}: Status},
+        Status.not_done(Status.NotSeen{}, k, {==})(h)
       )
     case Some{Cells.Many{}}:
       h => Empty.absurd(
-        {State.status(~Q, ~view, s2, i) == Status.done{k}: Status},
-        Status.not_done(Status.refused{}, k, {==})(h)
+        {State.status(~Q, ~view, s2, i) == Status.Done{k}: Status},
+        Status.not_done(Status.Refused{}, k, {==})(h)
       )
-    case Some{Cells.One{Entry.ask{j, t0, +q}}}:
+    case Some{Cells.One{Entry.Ask{j, t0, +q}}}:
       h =>
         %Equal.sym(
           Maybe<&2, Cells.Cell<Entry<Q>>>,
           State.get(~Q, s2, Slot.ask(i)),
-          Some{Cells.One{Entry.ask{j, t0, q}}},
+          Some{Cells.One{Entry.Ask{j, t0, q}}},
           Cells.Cell.keeps_value(
             ~Entry<Q>,
             ~Entry.is_eq(~Q, ~same),
             ~Entry.laws(~Q, ~same, ~laws),
-            Entry.ask{j, t0, q},
+            Entry.Ask{j, t0, q},
             State.get(~Q, s2, Slot.ask(i))
           )(
             %em: {Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), _, State.get(~Q, s2, Slot.ask(i))) == True{}: Bool}
             Tries.Trie.keeps_get(~Cells.Cell<Entry<Q>>, ~Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), ~Cells.Cell.none_kept(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), s, s2, Slot.ask(i))(gr))
-        ): {Status.of(~Q, ~view, s2, i, _) == Status.done{k}: Status}
+        ): {Status.of(~Q, ~view, s2, i, _) == Status.Done{k}: Status}
         Status.kept.view(
           ~Q,
           ~same,
@@ -2715,20 +2715,20 @@ def Status.kept.at(
           {==},
           gr
         )(h)
-    case Some{Cells.One{Entry.vote{v}}}:
+    case Some{Cells.One{Entry.Vote{v}}}:
       h => Empty.absurd(
-        {State.status(~Q, ~view, s2, i) == Status.done{k}: Status},
-        Status.not_done(Status.not_seen{}, k, {==})(h)
+        {State.status(~Q, ~view, s2, i) == Status.Done{k}: Status},
+        Status.not_done(Status.NotSeen{}, k, {==})(h)
       )
-    case Some{Cells.One{Entry.at{w}}}:
+    case Some{Cells.One{Entry.At{w}}}:
       h => Empty.absurd(
-        {State.status(~Q, ~view, s2, i) == Status.done{k}: Status},
-        Status.not_done(Status.not_seen{}, k, {==})(h)
+        {State.status(~Q, ~view, s2, i) == Status.Done{k}: Status},
+        Status.not_done(Status.NotSeen{}, k, {==})(h)
       )
-    case Some{Cells.One{Entry.data{d}}}:
+    case Some{Cells.One{Entry.Data{d}}}:
       h => Empty.absurd(
-        {State.status(~Q, ~view, s2, i) == Status.done{k}: Status},
-        Status.not_done(Status.not_seen{}, k, {==})(h)
+        {State.status(~Q, ~view, s2, i) == Status.Done{k}: Status},
+        Status.not_done(Status.NotSeen{}, k, {==})(h)
       )
 
 # a request that is done stays done, with the same verdict, as the state grows
@@ -2742,8 +2742,8 @@ law State.status_grows:
   for +i: Id
   for -k: Bool
   {State.grows(~Q, ~same, s, s2) == True{}: Bool}
-    -> {State.status(~Q, ~view, s, i) == Status.done{k}: Status}
-    -> {State.status(~Q, ~view, s2, i) == Status.done{k}: Status}
+    -> {State.status(~Q, ~view, s, i) == Status.Done{k}: Status}
+    -> {State.status(~Q, ~view, s2, i) == Status.Done{k}: Status}
 
 def State.status_grows(ty, same, laws, view, s, s2, i, k):
   gr => Status.kept.at(
@@ -2766,11 +2766,11 @@ def Status.view_not_refused(
   dm: Maybe<&2, Vote>
 ) -> {Status.is_refused(Status.of.view(v, dm)) == False{}: Bool}:
   match v dm:
-    case View.root{ms} w:
+    case View.Root{ms} w:
       {==}
-    case View.on{c, o, mk} Some{Vote{j, k, u, r}}:
+    case View.On{c, o, mk} Some{Vote{j, k, u, r}}:
       {==}
-    case View.on{c, o, mk} None{}:
+    case View.On{c, o, mk} None{}:
       {==}
 
 # a request that is many stays refused, whatever else a sync brings (m2)
@@ -2794,7 +2794,7 @@ def Refused.many(
       m2
     )
   )
-    == Status.refused{}: Status
+    == Status.Refused{}: Status
 }:
   match m2:
     case None{}:
@@ -2813,8 +2813,8 @@ def Refused.kept.at(
   m: Maybe<&2, Cells.Cell<Entry<Q>>>,
   em: {State.get(~Q, s, Slot.ask(i)) == m: Maybe<&2, Cells.Cell<Entry<Q>>>}
 ) -> {
-  Status.of(~Q, ~view, s, i, m) == Status.refused{}: Status
-} -> {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.refused{}: Status}:
+  Status.of(~Q, ~view, s, i, m) == Status.Refused{}: Status
+} -> {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.Refused{}: Status}:
   match m:
     case Some{Cells.Many{}}:
       h =>
@@ -2834,7 +2834,7 @@ def Refused.kept.at(
             t,
             Slot.ask(i)
           )
-        ): {Status.of(~Q, ~view, State.join(~Q, ~same, s, t), i, _) == Status.refused{}: Status}
+        ): {Status.of(~Q, ~view, State.join(~Q, ~same, s, t), i, _) == Status.Refused{}: Status}
         %Equal.sym(
           Maybe<&2, Cells.Cell<Entry<Q>>>,
           State.get(~Q, s, Slot.ask(i)),
@@ -2854,7 +2854,7 @@ def Refused.kept.at(
                 State.get(~Q, t, Slot.ask(i))
               )
             )
-              == Status.refused{}: Status
+              == Status.Refused{}: Status
           }
         Refused.many(
           ~Q,
@@ -2866,31 +2866,31 @@ def Refused.kept.at(
         )
     case None{}:
       h => Empty.absurd(
-        {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.refused{}: Status},
-        Status.not_refused(Status.not_seen{}, {==})(h)
+        {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.Refused{}: Status},
+        Status.not_refused(Status.NotSeen{}, {==})(h)
       )
-    case Some{Cells.One{Entry.ask{j, t0, +q}}}:
+    case Some{Cells.One{Entry.Ask{j, t0, +q}}}:
       h => Empty.absurd(
-        {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.refused{}: Status},
+        {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.Refused{}: Status},
         Status.not_refused(
           Status.of.view(view(q), State.decided(~Q, ~view, s, i)),
           Status.view_not_refused(view(q), State.decided(~Q, ~view, s, i))
         )(h)
       )
-    case Some{Cells.One{Entry.vote{v}}}:
+    case Some{Cells.One{Entry.Vote{v}}}:
       h => Empty.absurd(
-        {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.refused{}: Status},
-        Status.not_refused(Status.not_seen{}, {==})(h)
+        {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.Refused{}: Status},
+        Status.not_refused(Status.NotSeen{}, {==})(h)
       )
-    case Some{Cells.One{Entry.at{w}}}:
+    case Some{Cells.One{Entry.At{w}}}:
       h => Empty.absurd(
-        {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.refused{}: Status},
-        Status.not_refused(Status.not_seen{}, {==})(h)
+        {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.Refused{}: Status},
+        Status.not_refused(Status.NotSeen{}, {==})(h)
       )
-    case Some{Cells.One{Entry.data{d}}}:
+    case Some{Cells.One{Entry.Data{d}}}:
       h => Empty.absurd(
-        {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.refused{}: Status},
-        Status.not_refused(Status.not_seen{}, {==})(h)
+        {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.Refused{}: Status},
+        Status.not_refused(Status.NotSeen{}, {==})(h)
       )
 
 # a refused request stays refused after any sync: a contradiction is final
@@ -2901,8 +2901,8 @@ law State.refused_kept:
   for +s: State(Q)
   for +t: State(Q)
   for +i: Id
-  {State.status(~Q, ~view, s, i) == Status.refused{}: Status}
-    -> {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.refused{}: Status}
+  {State.status(~Q, ~view, s, i) == Status.Refused{}: Status}
+    -> {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.Refused{}: Status}
 
 def State.refused_kept(ty, same, view, s, t, i):
   Refused.kept.at(~ty, ~same, ~view, s, t, i, State.get(~ty, s, Slot.ask(i)), {==})
@@ -3065,7 +3065,7 @@ def Fact.put.of.grows(
 ) -> {State.grows(~Q, ~same, s, Fact.put.of(~Q, ~same, s, k, w, m)) == True{}: Bool}:
   match m:
     case None{}:
-      State.grows_put(~Q, ~same, ~laws, s, k, Entry.at{w})(em)
+      State.grows_put(~Q, ~same, ~laws, s, k, Entry.At{w})(em)
     case Some{x}:
       State.grows_refl(~Q, ~same, ~laws, s)
 
@@ -3091,13 +3091,13 @@ def Settle.view.grows(
   v: View
 ) -> {State.grows(~Q, ~same, s, Settle.view(~Q, ~same, s, w, k, v)) == True{}: Bool}:
   match k v:
-    case True{} View.on{+c, Some{os}, mk}:
+    case True{} View.On{+c, Some{os}, mk}:
       Fact.put.grows(~Q, ~same, ~laws, s, Slot.epoch(c, U32.inc(Where.epoch(w))), w)
-    case True{} View.on{Chain{r, b}, None{}, Some{key}}:
+    case True{} View.On{Chain{r, b}, None{}, Some{key}}:
       Fact.put.grows(~Q, ~same, ~laws, s, Slot.made(Chain{r, Some{key}}), w)
-    case True{} View.on{Chain{r, b}, None{}, None{}}:
+    case True{} View.On{Chain{r, b}, None{}, None{}}:
       State.grows_refl(~Q, ~same, ~laws, s)
-    case True{} View.root{ms}:
+    case True{} View.Root{ms}:
       State.grows_refl(~Q, ~same, ~laws, s)
     case False{} y:
       State.grows_refl(~Q, ~same, ~laws, s)
@@ -3205,7 +3205,7 @@ def Data.put.grows(
 ) -> {State.grows(~Q, ~same, s, Data.put.of(~Q, ~same, s, k, ws, m)) == True{}: Bool}:
   match m:
     case None{}:
-      State.grows_put(~Q, ~same, ~laws, s, k, Entry.data{ws})(em)
+      State.grows_put(~Q, ~same, ~laws, s, k, Entry.Data{ws})(em)
     case Some{x}:
       State.grows_refl(~Q, ~same, ~laws, s)
 
@@ -3282,7 +3282,7 @@ def Data.put_keeps.of(
 }:
   match m:
     case None{}:
-      State.put_apart(~Q, ~same, s, k, Entry.data{ws}, k2)
+      State.put_apart(~Q, ~same, s, k, Entry.Data{ws}, k2)
     case Some{x}:
       ap => {==}
 
@@ -3393,7 +3393,7 @@ def Vote.put.grows(
         ~laws,
         s,
         sd,
-        State.put(~Q, ~same, sd, k, Entry.vote{Vote{i, x, v, r}})
+        State.put(~Q, ~same, sd, k, Entry.Vote{Vote{i, x, v, r}})
       )(
         State.put_datas_grows(~Q, ~same, ~laws, ds, s)
       )(
@@ -3403,7 +3403,7 @@ def Vote.put.grows(
           ~laws,
           sd,
           k,
-          Entry.vote{Vote{i, x, v, r}}
+          Entry.Vote{Vote{i, x, v, r}}
         )(
           Equal.trans(
             Maybe<&2, Cells.Cell<Entry<Q>>>,
@@ -3507,9 +3507,9 @@ def Vote.ask.grows(
   v: View
 ) -> {State.grows(~Q, ~same, s, Vote.ask(~Q, ~same, ~view, ~judge, n, s, i, q, v)) == True{}: Bool}:
   match v:
-    case View.root{ms}:
+    case View.Root{ms}:
       State.grows_refl(~Q, ~same, ~laws, s)
-    case View.on{+c, o, mk}:
+    case View.On{+c, o, mk}:
       Vote.cast.grows(
         ~Q,
         ~same,
@@ -3521,7 +3521,7 @@ def Vote.ask.grows(
         c,
         i,
         q,
-        View.on{c, o, mk},
+        View.On{c, o, mk},
         Line.tip(~Q, ~view, s, c)
       )
 
@@ -3552,7 +3552,7 @@ def State.ask.grows.at(
     case Some{x}:
       State.grows_refl(~Q, ~same, ~laws, s)
     case None{}:
-      +s1 = State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q})
+      +s1 = State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q})
       State.grows_trans(
         ~Q,
         ~same,
@@ -3561,7 +3561,7 @@ def State.ask.grows.at(
         s1,
         Vote.ask(~Q, ~same, ~view, ~judge, n, s1, i, q, view(q))
       )(
-        State.grows_put(~Q, ~same, ~laws, s, Slot.ask(i), Entry.ask{i, t, q})(em)
+        State.grows_put(~Q, ~same, ~laws, s, Slot.ask(i), Entry.Ask{i, t, q})(em)
       )(Vote.ask.grows(~Q, ~same, ~laws, ~view, ~judge, n, s1, i, q, view(q)))
 
 # a node that takes in a request only grows its state: nothing it held
@@ -3619,7 +3619,7 @@ law State.ask_holds:
 
 def State.ask_holds(ty, same, laws, view, judge, n, s, i, t, q):
   +h =>
-    +s1 = State.put(~ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q})
+    +s1 = State.put(~ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q})
     %Equal.sym(Maybe<&2, Cells.Cell<Entry<ty>>>, State.get(~ty, s, Slot.ask(i)), None{}, h):
       {
         State.asked(
@@ -3641,7 +3641,7 @@ def State.ask_holds(ty, same, laws, view, judge, n, s, i, t, q):
       Slot.ask(i),
       Asked{t, q}
     )(Vote.ask.grows(~ty, ~same, ~laws, ~view, ~judge, n, s1, i, q, view(q)))(
-      %Equal.sym(Maybe<&2, Cells.Cell<Entry<ty>>>, State.get(~ty, s1, Slot.ask(i)), Some{Cells.One{Entry.ask{i, t, q}}}, State.put_get(~ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q})(h)): {Asked.of(~ty, Cells.Cell.value(Entry<ty>, _)) == Some{Asked{t, q}}: Maybe<&2, Asked<ty>>}
+      %Equal.sym(Maybe<&2, Cells.Cell<Entry<ty>>>, State.get(~ty, s1, Slot.ask(i)), Some{Cells.One{Entry.Ask{i, t, q}}}, State.put_get(~ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q})(h)): {Asked.of(~ty, Cells.Cell.value(Entry<ty>, _)) == Some{Asked{t, q}}: Maybe<&2, Asked<ty>>}
       {==})
 
 # Landing
@@ -3712,7 +3712,7 @@ def Cast.puts(
         ~same,
         State.put_datas(~Q, ~same, ds, s),
         Slot.vote(Where{c, e, h}, n),
-        Entry.vote{Vote{i, k, v, r}}
+        Entry.Vote{Vote{i, k, v, r}}
       ),
       Where{c, e, h},
       [n]
@@ -3724,7 +3724,7 @@ def Cast.puts(
     +rhs = State.settle(
       ~Q,
       ~same,
-      State.put(~Q, ~same, State.put_datas(~Q, ~same, ds, s), sk, Entry.vote{Vote{i, k, v, r}}),
+      State.put(~Q, ~same, State.put_datas(~Q, ~same, ds, s), sk, Entry.Vote{Vote{i, k, v, r}}),
       w,
       [n]
     )
@@ -3838,7 +3838,7 @@ def Decide.one_put(
 } -> {
   State.decide(
     ~Q,
-    State.put(~Q, ~same, s, Slot.vote(w, n), Entry.vote{x}),
+    State.put(~Q, ~same, s, Slot.vote(w, n), Entry.Vote{x}),
     w,
     [n]
   )
@@ -3848,7 +3848,7 @@ def Decide.one_put(
     case Where{+c, +e, +h}:
       hg =>
         +p = Slot.bucket(c, e, h)
-        +s1 = State.put(~Q, ~same, s, Slot.vote(Where{c, e, h}, n), Entry.vote{x})
+        +s1 = State.put(~Q, ~same, s, Slot.vote(Where{c, e, h}, n), Entry.Vote{x})
         %Equal.sym(
           Maybe<&2, Cells.Cell<Entry<Q>>>,
           State.get(~Q, State.under(~Q, s1, p), Slot.ballot(n)),
@@ -3865,8 +3865,8 @@ def Decide.one_put(
         %Equal.sym(
           Maybe<&2, Cells.Cell<Entry<Q>>>,
           State.get(~Q, s1, Slot.vote(Where{c, e, h}, n)),
-          Some{Cells.One{Entry.vote{x}}},
-          State.put_get(~Q, ~same, s, Slot.vote(Where{c, e, h}, n), Entry.vote{x})(hg)
+          Some{Cells.One{Entry.Vote{x}}},
+          State.put_get(~Q, ~same, s, Slot.vote(Where{c, e, h}, n), Entry.Vote{x})(hg)
         ): {
           Quorums.Quorum.decide(
             ~Vote,
@@ -3903,7 +3903,7 @@ def Decided.after(
   State.decided(
     ~Q,
     ~view,
-    State.put(~Q, ~same, s2, Slot.where(i), Entry.at{Where{c, e, h}}),
+    State.put(~Q, ~same, s2, Slot.where(i), Entry.At{Where{c, e, h}}),
     i
   )
     == Some{Vote{i, k, v, r}}: Maybe<&2, Vote>
@@ -3911,13 +3911,13 @@ def Decided.after(
   +hw2 => ho2 => hd =>
     +w = {Where{c, e, h}: Where}
     +x = {Vote{i, k, v, r}: Vote}
-    +s3 = State.put(~Q, ~same, s2, Slot.where(i), Entry.at{w})
-    +gr = State.grows_put(~Q, ~same, ~laws, s2, Slot.where(i), Entry.at{w})(hw2)
+    +s3 = State.put(~Q, ~same, s2, Slot.where(i), Entry.At{w})
+    +gr = State.grows_put(~Q, ~same, ~laws, s2, Slot.where(i), Entry.At{w})(hw2)
     %Equal.sym(
       Maybe<&2, Cells.Cell<Entry<Q>>>,
       State.get(~Q, s3, Slot.where(i)),
-      Some{Cells.One{Entry.at{w}}},
-      State.put_get(~Q, ~same, s2, Slot.where(i), Entry.at{w})(hw2)
+      Some{Cells.One{Entry.At{w}}},
+      State.put_get(~Q, ~same, s2, Slot.where(i), Entry.At{w})(hw2)
     ): {
       Maybe.bind(
         &2,
@@ -3978,12 +3978,12 @@ def State.ask_decides(
   +r: Maybe<&2, Hashes.Hash>,
   +ds: List<&2, List<&2, U32>>
 ) -> {State.get(~Ty, s, Slot.ask(i)) == None{}: Maybe<&2, Cells.Cell<Entry<Ty>>>}
-  -> {view(q) == View.on{c, o, mk}: View}
+  -> {view(q) == View.On{c, o, mk}: View}
   -> {
     Line.tip(
       ~Ty,
       ~view,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
       c
     )
       == Some{Tip{e, [n], h, last}}: Maybe<&2, Tip>
@@ -3992,7 +3992,7 @@ def State.ask_decides(
     Line.owners(
       ~Ty,
       ~view,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
       c,
       e
     )
@@ -4001,7 +4001,7 @@ def State.ask_decides(
   -> {
     State.get(
       ~Ty,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
       Slot.vote(Where{c, e, h}, n)
     )
       == None{}: Maybe<&2, Cells.Cell<Entry<Ty>>>
@@ -4009,7 +4009,7 @@ def State.ask_decides(
   -> {
     State.get(
       ~Ty,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
       Slot.where(i)
     )
       == None{}: Maybe<&2, Cells.Cell<Entry<Ty>>>
@@ -4019,13 +4019,13 @@ def State.ask_decides(
       ~Ty,
       ~view,
       ~judge,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
       q,
-      View.on{c, o, mk},
+      View.On{c, o, mk},
       Line.head(
         ~Ty,
         ~view,
-        State.put(~Ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+        State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
         c,
         e,
         [n],
@@ -4041,16 +4041,16 @@ def State.ask_decides(
       State.ask(~Ty, ~same, ~view, ~judge, n, s, i, t, q),
       i
     )
-      == Status.done{k}: Status
+      == Status.Done{k}: Status
   }:
   +h1 => +h2 => ht => ho => +hg => +hw => hv =>
-    +v = {View.on{c, o, mk}: View}
+    +v = {View.On{c, o, mk}: View}
     +w = {Where{c, e, h}: Where}
     +x = {Vote{i, k, v, r}: Vote}
-    +a = {Entry.ask{i, t, q}: Entry<Ty>}
+    +a = {Entry.Ask{i, t, q}: Entry<Ty>}
     +s1 = State.put(~Ty, ~same, s, Slot.ask(i), a)
     +sd = State.put_datas(~Ty, ~same, ds, s1)
-    +s2 = State.put(~Ty, ~same, sd, Slot.vote(w, n), Entry.vote{x})
+    +s2 = State.put(~Ty, ~same, sd, Slot.vote(w, n), Entry.Vote{x})
     +hgd = Equal.trans(
       Maybe<&2, Cells.Cell<Entry<Ty>>>,
       State.get(~Ty, sd, Slot.vote(w, n)),
@@ -4069,12 +4069,12 @@ def State.ask_decides(
         State.get(~Ty, s2, Slot.where(i)),
         State.get(~Ty, sd, Slot.where(i)),
         State.get(~Ty, s1, Slot.where(i)),
-        State.put_apart(~Ty, ~same, sd, Slot.vote(w, n), Entry.vote{x}, Slot.where(i))({==}),
+        State.put_apart(~Ty, ~same, sd, Slot.vote(w, n), Entry.Vote{x}, Slot.where(i))({==}),
         State.put_datas_keeps(~Ty, ~same, ds, s1, Slot.where(i))({==})
       ),
       hw
     )
-    +s3 = State.put(~Ty, ~same, s2, Slot.where(i), Entry.at{w})
+    +s3 = State.put(~Ty, ~same, s2, Slot.where(i), Entry.At{w})
     +gr12 = State.grows_trans(
       ~Ty,
       ~same,
@@ -4084,7 +4084,7 @@ def State.ask_decides(
       s2
     )(
       State.put_datas_grows(~Ty, ~same, ~laws, ds, s1)
-    )(State.grows_put(~Ty, ~same, ~laws, sd, Slot.vote(w, n), Entry.vote{x})(hgd))
+    )(State.grows_put(~Ty, ~same, ~laws, sd, Slot.vote(w, n), Entry.Vote{x})(hgd))
     +gr13 = State.grows_trans(
       ~Ty,
       ~same,
@@ -4092,7 +4092,7 @@ def State.ask_decides(
       s1,
       s2,
       s3
-    )(gr12)(State.grows_put(~Ty, ~same, ~laws, s2, Slot.where(i), Entry.at{w})(hw2))
+    )(gr12)(State.grows_put(~Ty, ~same, ~laws, s2, Slot.where(i), Entry.At{w})(hw2))
     %Equal.sym(Maybe<&2, Cells.Cell<Entry<Ty>>>, State.get(~Ty, s, Slot.ask(i)), None{}, h1):
       {
         State.status(
@@ -4101,7 +4101,7 @@ def State.ask_decides(
           State.ask.fresh(~Ty, ~same, ~view, ~judge, n, s, i, t, q, _),
           i
         )
-          == Status.done{k}: Status
+          == Status.Done{k}: Status
       }
     %Equal.sym(View, view(q), v, h2):
       {
@@ -4111,7 +4111,7 @@ def State.ask_decides(
           Vote.ask(~Ty, ~same, ~view, ~judge, n, s1, i, q, _),
           i
         )
-          == Status.done{k}: Status
+          == Status.Done{k}: Status
       }
     %Equal.sym(Maybe<&2, Tip>, Line.tip(~Ty, ~view, s1, c), Some{Tip{e, [n], h, last}}, ht):
       {
@@ -4121,21 +4121,21 @@ def State.ask_decides(
           Vote.cast(~Ty, ~same, ~view, ~judge, n, s1, c, i, q, v, _),
           i
         )
-          == Status.done{k}: Status
+          == Status.Done{k}: Status
       }
     %Equal.sym(
       State(Ty),
       Vote.cast(~Ty, ~same, ~view, ~judge, n, s1, c, i, q, v, Some{Tip{e, [n], h, last}}),
       State.settle(~Ty, ~same, s2, w, [n]),
       Cast.puts(~Ty, ~same, ~view, ~judge, n, s1, c, i, q, v, e, h, last, k, r, ds)(hg)(hw)(hv)
-    ): {State.status(~Ty, ~view, _, i) == Status.done{k}: Status}
+    ): {State.status(~Ty, ~view, _, i) == Status.Done{k}: Status}
     %Equal.sym(
       Maybe<&2, Vote>,
       State.decide(~Ty, s2, w, [n]),
       Some{x},
       Decide.one_put(~Ty, ~same, sd, w, n, x)(hgd)
     ):
-      {State.status(~Ty, ~view, Settle.of(~Ty, ~same, s2, w, _), i) == Status.done{k}: Status}
+      {State.status(~Ty, ~view, Settle.of(~Ty, ~same, s2, w, _), i) == Status.Done{k}: Status}
     %Equal.sym(Maybe<&2, Cells.Cell<Entry<Ty>>>, State.get(~Ty, s2, Slot.where(i)), None{}, hw2):
       {
         State.status(
@@ -4144,7 +4144,7 @@ def State.ask_decides(
           Settle.view(~Ty, ~same, Fact.put.of(~Ty, ~same, s2, Slot.where(i), w, _), w, k, v),
           i
         )
-          == Status.done{k}: Status
+          == Status.Done{k}: Status
       }
     State.status_grows(
       ~Ty,
@@ -4159,9 +4159,9 @@ def State.ask_decides(
       %Equal.sym(Maybe<&2, Cells.Cell<Entry<Ty>>>, State.get(~Ty, s3, Slot.ask(i)), Some{Cells.One{a}}, Cells.Cell.keeps_value(~Entry<Ty>, ~Entry.is_eq(~Ty, ~same), ~Entry.laws(~Ty, ~same, ~laws), a, State.get(~Ty, s3, Slot.ask(i)))(
         %State.put_get(~Ty, ~same, s, Slot.ask(i), a)(h1):
           {Cells.Cell.keeps(~Entry<Ty>, ~Entry.is_eq(~Ty, ~same), _, State.get(~Ty, s3, Slot.ask(i))) == True{}: Bool}
-        Tries.Trie.keeps_get(~Cells.Cell<Entry<Ty>>, ~Cells.Cell.keeps(~Entry<Ty>, ~Entry.is_eq(~Ty, ~same)), ~Cells.Cell.none_kept(~Entry<Ty>, ~Entry.is_eq(~Ty, ~same)), s1, s3, Slot.ask(i))(gr13))): {Status.of(~Ty, ~view, s3, i, _) == Status.done{k}: Status}
-      %Equal.sym(View, view(q), v, h2): {Status.of.view(_, State.decided(~Ty, ~view, s3, i)) == Status.done{k}: Status}
-      %Equal.sym(Maybe<&2, Vote>, State.decided(~Ty, ~view, s3, i), Some{x}, Decided.after(~Ty, ~same, ~laws, ~view, s2, c, e, h, n, i, k, v, r)(hw2)(Line.owners.kept(~Ty, ~same, ~laws, ~view, s1, s2, c, e, gr12, [n])(ho))(Decide.one_put(~Ty, ~same, sd, w, n, x)(hgd))): {Status.of.view(v, _) == Status.done{k}: Status}
+        Tries.Trie.keeps_get(~Cells.Cell<Entry<Ty>>, ~Cells.Cell.keeps(~Entry<Ty>, ~Entry.is_eq(~Ty, ~same)), ~Cells.Cell.none_kept(~Entry<Ty>, ~Entry.is_eq(~Ty, ~same)), s1, s3, Slot.ask(i))(gr13))): {Status.of(~Ty, ~view, s3, i, _) == Status.Done{k}: Status}
+      %Equal.sym(View, view(q), v, h2): {Status.of.view(_, State.decided(~Ty, ~view, s3, i)) == Status.Done{k}: Status}
+      %Equal.sym(Maybe<&2, Vote>, State.decided(~Ty, ~view, s3, i), Some{x}, Decided.after(~Ty, ~same, ~laws, ~view, s2, c, e, h, n, i, k, v, r)(hw2)(Line.owners.kept(~Ty, ~same, ~laws, ~view, s1, s2, c, e, gr12, [n])(ho))(Decide.one_put(~Ty, ~same, sd, w, n, x)(hgd))): {Status.of.view(v, _) == Status.Done{k}: Status}
       {==})
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
@@ -4189,12 +4189,12 @@ def State.ask_decided(
   +r: Maybe<&2, Hashes.Hash>,
   +ds: List<&2, List<&2, U32>>
 ) -> {State.get(~Ty, s, Slot.ask(i)) == None{}: Maybe<&2, Cells.Cell<Entry<Ty>>>}
-  -> {view(q) == View.on{c, o, mk}: View}
+  -> {view(q) == View.On{c, o, mk}: View}
   -> {
     Line.tip(
       ~Ty,
       ~view,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
       c
     )
       == Some{Tip{e, [n], h, last}}: Maybe<&2, Tip>
@@ -4203,7 +4203,7 @@ def State.ask_decided(
     Line.owners(
       ~Ty,
       ~view,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
       c,
       e
     )
@@ -4212,7 +4212,7 @@ def State.ask_decided(
   -> {
     State.get(
       ~Ty,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
       Slot.vote(Where{c, e, h}, n)
     )
       == None{}: Maybe<&2, Cells.Cell<Entry<Ty>>>
@@ -4220,7 +4220,7 @@ def State.ask_decided(
   -> {
     State.get(
       ~Ty,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
       Slot.where(i)
     )
       == None{}: Maybe<&2, Cells.Cell<Entry<Ty>>>
@@ -4230,13 +4230,13 @@ def State.ask_decided(
       ~Ty,
       ~view,
       ~judge,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
       q,
-      View.on{c, o, mk},
+      View.On{c, o, mk},
       Line.head(
         ~Ty,
         ~view,
-        State.put(~Ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+        State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
         c,
         e,
         [n],
@@ -4252,16 +4252,16 @@ def State.ask_decided(
       State.ask(~Ty, ~same, ~view, ~judge, n, s, i, t, q),
       i
     )
-      == Some{Vote{i, k, View.on{c, o, mk}, r}}: Maybe<&2, Vote>
+      == Some{Vote{i, k, View.On{c, o, mk}, r}}: Maybe<&2, Vote>
   }:
   +h1 => +h2 => ht => ho => +hg => +hw => hv =>
-    +v = {View.on{c, o, mk}: View}
+    +v = {View.On{c, o, mk}: View}
     +w = {Where{c, e, h}: Where}
     +x = {Vote{i, k, v, r}: Vote}
-    +a = {Entry.ask{i, t, q}: Entry<Ty>}
+    +a = {Entry.Ask{i, t, q}: Entry<Ty>}
     +s1 = State.put(~Ty, ~same, s, Slot.ask(i), a)
     +sd = State.put_datas(~Ty, ~same, ds, s1)
-    +s2 = State.put(~Ty, ~same, sd, Slot.vote(w, n), Entry.vote{x})
+    +s2 = State.put(~Ty, ~same, sd, Slot.vote(w, n), Entry.Vote{x})
     +hgd = Equal.trans(
       Maybe<&2, Cells.Cell<Entry<Ty>>>,
       State.get(~Ty, sd, Slot.vote(w, n)),
@@ -4280,12 +4280,12 @@ def State.ask_decided(
         State.get(~Ty, s2, Slot.where(i)),
         State.get(~Ty, sd, Slot.where(i)),
         State.get(~Ty, s1, Slot.where(i)),
-        State.put_apart(~Ty, ~same, sd, Slot.vote(w, n), Entry.vote{x}, Slot.where(i))({==}),
+        State.put_apart(~Ty, ~same, sd, Slot.vote(w, n), Entry.Vote{x}, Slot.where(i))({==}),
         State.put_datas_keeps(~Ty, ~same, ds, s1, Slot.where(i))({==})
       ),
       hw
     )
-    +s3 = State.put(~Ty, ~same, s2, Slot.where(i), Entry.at{w})
+    +s3 = State.put(~Ty, ~same, s2, Slot.where(i), Entry.At{w})
     +gr12 = State.grows_trans(
       ~Ty,
       ~same,
@@ -4295,7 +4295,7 @@ def State.ask_decided(
       s2
     )(
       State.put_datas_grows(~Ty, ~same, ~laws, ds, s1)
-    )(State.grows_put(~Ty, ~same, ~laws, sd, Slot.vote(w, n), Entry.vote{x})(hgd))
+    )(State.grows_put(~Ty, ~same, ~laws, sd, Slot.vote(w, n), Entry.Vote{x})(hgd))
     +gr13 = State.grows_trans(
       ~Ty,
       ~same,
@@ -4303,7 +4303,7 @@ def State.ask_decided(
       s1,
       s2,
       s3
-    )(gr12)(State.grows_put(~Ty, ~same, ~laws, s2, Slot.where(i), Entry.at{w})(hw2))
+    )(gr12)(State.grows_put(~Ty, ~same, ~laws, s2, Slot.where(i), Entry.At{w})(hw2))
     %Equal.sym(Maybe<&2, Cells.Cell<Entry<Ty>>>, State.get(~Ty, s, Slot.ask(i)), None{}, h1):
       {
         State.decided(
@@ -4530,9 +4530,9 @@ def State.put_data_get(ty, same, s, ws):
       }
     %Equal.sym(
       Maybe<&2, Cells.Cell<Entry<ty>>>,
-      State.get(~ty, State.put(~ty, ~same, s, k, Entry.data{ws}), k),
-      Some{Cells.One{Entry.data{ws}}},
-      State.put_get(~ty, ~same, s, k, Entry.data{ws})(h0)
+      State.get(~ty, State.put(~ty, ~same, s, k, Entry.Data{ws}), k),
+      Some{Cells.One{Entry.Data{ws}}},
+      State.put_get(~ty, ~same, s, k, Entry.Data{ws})(h0)
     ): {
       Maybe.bind(
         &2,
@@ -5549,7 +5549,7 @@ def Vote.all.grows(
   match cs:
     case Nil{}:
       State.grows_refl(~Q, ~same, ~laws, s)
-    case Con{Cells.One{Entry.ask{+i, t, +q}}, +r}:
+    case Con{Cells.One{Entry.Ask{+i, t, +q}}, +r}:
       +s1 = Vote.ask(~Q, ~same, ~view, ~judge, n, s, i, q, view(q))
       State.grows_trans(
         ~Q,
@@ -5561,11 +5561,11 @@ def Vote.all.grows(
       )(
         Vote.ask.grows(~Q, ~same, ~laws, ~view, ~judge, n, s, i, q, view(q))
       )(Vote.all.grows(~Q, ~same, ~laws, ~view, ~judge, r, n, s1))
-    case Con{Cells.One{Entry.vote{x}}, r}:
+    case Con{Cells.One{Entry.Vote{x}}, r}:
       Vote.all.grows(~Q, ~same, ~laws, ~view, ~judge, r, n, s)
-    case Con{Cells.One{Entry.at{w}}, r}:
+    case Con{Cells.One{Entry.At{w}}, r}:
       Vote.all.grows(~Q, ~same, ~laws, ~view, ~judge, r, n, s)
-    case Con{Cells.One{Entry.data{ws}}, r}:
+    case Con{Cells.One{Entry.Data{ws}}, r}:
       Vote.all.grows(~Q, ~same, ~laws, ~view, ~judge, r, n, s)
     case Con{Cells.Many{}, r}:
       Vote.all.grows(~Q, ~same, ~laws, ~view, ~judge, r, n, s)
@@ -5810,12 +5810,12 @@ def State.ask_data(
   +r: Maybe<&2, Hashes.Hash>,
   +ds: List<&2, List<&2, U32>>
 ) -> {State.get(~Ty, s, Slot.ask(i)) == None{}: Maybe<&2, Cells.Cell<Entry<Ty>>>}
-  -> {view(q) == View.on{c, o, mk}: View}
+  -> {view(q) == View.On{c, o, mk}: View}
   -> {
     Line.tip(
       ~Ty,
       ~view,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
       c
     )
       == Some{Tip{e, [n], h, last}}: Maybe<&2, Tip>
@@ -5824,7 +5824,7 @@ def State.ask_data(
     Line.owners(
       ~Ty,
       ~view,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
       c,
       e
     )
@@ -5833,7 +5833,7 @@ def State.ask_data(
   -> {
     State.get(
       ~Ty,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
       Slot.vote(Where{c, e, h}, n)
     )
       == None{}: Maybe<&2, Cells.Cell<Entry<Ty>>>
@@ -5841,7 +5841,7 @@ def State.ask_data(
   -> {
     State.get(
       ~Ty,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
       Slot.where(i)
     )
       == None{}: Maybe<&2, Cells.Cell<Entry<Ty>>>
@@ -5851,13 +5851,13 @@ def State.ask_data(
       ~Ty,
       ~view,
       ~judge,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
       q,
-      View.on{c, o, mk},
+      View.On{c, o, mk},
       Line.head(
         ~Ty,
         ~view,
-        State.put(~Ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+        State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
         c,
         e,
         [n],
@@ -5871,19 +5871,19 @@ def State.ask_data(
       ~Ty,
       ~same,
       ds,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q})
+      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q})
     )
       == True{}: Bool
   }
   -> {Data.holds(~Ty, State.ask(~Ty, ~same, ~view, ~judge, n, s, i, t, q), ds) == True{}: Bool}:
   +h1 => +h2 => ht => ho => +hg => +hw => hv => hf =>
-    +v = {View.on{c, o, mk}: View}
+    +v = {View.On{c, o, mk}: View}
     +w = {Where{c, e, h}: Where}
     +x = {Vote{i, k, v, r}: Vote}
-    +a = {Entry.ask{i, t, q}: Entry<Ty>}
+    +a = {Entry.Ask{i, t, q}: Entry<Ty>}
     +s1 = State.put(~Ty, ~same, s, Slot.ask(i), a)
     +sd = State.put_datas(~Ty, ~same, ds, s1)
-    +s2 = State.put(~Ty, ~same, sd, Slot.vote(w, n), Entry.vote{x})
+    +s2 = State.put(~Ty, ~same, sd, Slot.vote(w, n), Entry.Vote{x})
     +hgd = Equal.trans(
       Maybe<&2, Cells.Cell<Entry<Ty>>>,
       State.get(~Ty, sd, Slot.vote(w, n)),
@@ -5902,12 +5902,12 @@ def State.ask_data(
         State.get(~Ty, s2, Slot.where(i)),
         State.get(~Ty, sd, Slot.where(i)),
         State.get(~Ty, s1, Slot.where(i)),
-        State.put_apart(~Ty, ~same, sd, Slot.vote(w, n), Entry.vote{x}, Slot.where(i))({==}),
+        State.put_apart(~Ty, ~same, sd, Slot.vote(w, n), Entry.Vote{x}, Slot.where(i))({==}),
         State.put_datas_keeps(~Ty, ~same, ds, s1, Slot.where(i))({==})
       ),
       hw
     )
-    +s3 = State.put(~Ty, ~same, s2, Slot.where(i), Entry.at{w})
+    +s3 = State.put(~Ty, ~same, s2, Slot.where(i), Entry.At{w})
     +gr12 = State.grows_trans(
       ~Ty,
       ~same,
@@ -5917,7 +5917,7 @@ def State.ask_data(
       s2
     )(
       State.put_datas_grows(~Ty, ~same, ~laws, ds, s1)
-    )(State.grows_put(~Ty, ~same, ~laws, sd, Slot.vote(w, n), Entry.vote{x})(hgd))
+    )(State.grows_put(~Ty, ~same, ~laws, sd, Slot.vote(w, n), Entry.Vote{x})(hgd))
     +gr13 = State.grows_trans(
       ~Ty,
       ~same,
@@ -5925,7 +5925,7 @@ def State.ask_data(
       s1,
       s2,
       s3
-    )(gr12)(State.grows_put(~Ty, ~same, ~laws, s2, Slot.where(i), Entry.at{w})(hw2))
+    )(gr12)(State.grows_put(~Ty, ~same, ~laws, s2, Slot.where(i), Entry.At{w})(hw2))
     %Equal.sym(Maybe<&2, Cells.Cell<Entry<Ty>>>, State.get(~Ty, s, Slot.ask(i)), None{}, h1):
       {
         Data.holds(
@@ -5967,7 +5967,7 @@ def State.ask_data(
         s2,
         State.settle(~Ty, ~same, s2, w, [n])
       )(
-        State.grows_put(~Ty, ~same, ~laws, sd, Slot.vote(w, n), Entry.vote{x})(hgd)
+        State.grows_put(~Ty, ~same, ~laws, sd, Slot.vote(w, n), Entry.Vote{x})(hgd)
       )(Settle.of.grows(~Ty, ~same, ~laws, s2, w, State.decide(~Ty, s2, w, [n])))
     )(State.put_datas_holds(~Ty, ~same, ~laws, ds, s1)(hf))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
@@ -5996,12 +5996,12 @@ law State.ask_sole:
   for +r: Maybe<&2, Hashes.Hash>
   for +ds: List<&2, List<&2, U32>>
   {State.get(~Q, s, Slot.ask(i)) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>}
-    -> {view(q) == View.on{c, o, mk}: View}
+    -> {view(q) == View.On{c, o, mk}: View}
     -> {
       Line.tip(
         ~Q,
         ~view,
-        State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+        State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
         c
       )
         == Some{Tip{e, [n], h, last}}: Maybe<&2, Tip>
@@ -6010,7 +6010,7 @@ law State.ask_sole:
       Line.owners(
         ~Q,
         ~view,
-        State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+        State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
         c,
         e
       )
@@ -6019,7 +6019,7 @@ law State.ask_sole:
     -> {
       State.get(
         ~Q,
-        State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+        State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
         Slot.vote(Where{c, e, h}, n)
       )
         == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>
@@ -6027,7 +6027,7 @@ law State.ask_sole:
     -> {
       State.get(
         ~Q,
-        State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+        State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
         Slot.where(i)
       )
         == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>
@@ -6037,13 +6037,13 @@ law State.ask_sole:
         ~Q,
         ~view,
         ~judge,
-        State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+        State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
         q,
-        View.on{c, o, mk},
+        View.On{c, o, mk},
         Line.head(
           ~Q,
           ~view,
-          State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+          State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
           c,
           e,
           [n],
@@ -6057,7 +6057,7 @@ law State.ask_sole:
         ~Q,
         ~same,
         ds,
-        State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q})
+        State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q})
       )
         == True{}: Bool
     }
@@ -6069,7 +6069,7 @@ law State.ask_sole:
           State.ask(~Q, ~same, ~view, ~judge, n, s, i, t, q),
           i
         )
-          == Status.done{k}: Status
+          == Status.Done{k}: Status
       }
         & {
           State.decided(
@@ -6078,7 +6078,7 @@ law State.ask_sole:
             State.ask(~Q, ~same, ~view, ~judge, n, s, i, t, q),
             i
           )
-            == Some{Vote{i, k, View.on{c, o, mk}, r}}: Maybe<&2, Vote>
+            == Some{Vote{i, k, View.On{c, o, mk}, r}}: Maybe<&2, Vote>
         }
         & {Data.holds(~Q, State.ask(~Q, ~same, ~view, ~judge, n, s, i, t, q), ds) == True{}: Bool}
     )

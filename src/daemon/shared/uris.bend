@@ -690,4 +690,4 @@ def uri_show_after_read(t, u, h):
 
 # The kinds of endpoint. A mount's URI scheme picks one.
 type Endpoint is Data:
-  file_endpoint{}
+  FileEndpoint{}

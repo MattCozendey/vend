@@ -59,23 +59,23 @@ def Chars.is_eq_sound(
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
 def Glob.is_eq(a: Spec.Glob, b: Spec.Glob) -> Bool:
   match a b:
-    case Spec.void{} Spec.void{}:
+    case Spec.Void{} Spec.Void{}:
       True{}
-    case Spec.eps{} Spec.eps{}:
+    case Spec.Eps{} Spec.Eps{}:
       True{}
-    case Spec.lit{x1} Spec.lit{x2}:
+    case Spec.Lit{x1} Spec.Lit{x2}:
       Char.is_eq(x1, x2)
-    case Spec.any{} Spec.any{}:
+    case Spec.Any{} Spec.Any{}:
       True{}
-    case Spec.star{} Spec.star{}:
+    case Spec.Star{} Spec.Star{}:
       True{}
-    case Spec.class{n1, cs1} Spec.class{n2, cs2}:
+    case Spec.Class{n1, cs1} Spec.Class{n2, cs2}:
       Bool.and(Shared.Bool.is_eq(n1, n2), Chars.is_eq(cs1, cs2))
-    case Spec.deep{} Spec.deep{}:
+    case Spec.Deep{} Spec.Deep{}:
       True{}
-    case Spec.cat{a1, b1} Spec.cat{a2, b2}:
+    case Spec.Cat{a1, b1} Spec.Cat{a2, b2}:
       Bool.and(Glob.is_eq(a1, a2), Glob.is_eq(b1, b2))
-    case Spec.alt{a1, b1} Spec.alt{a2, b2}:
+    case Spec.Alt{a1, b1} Spec.Alt{a2, b2}:
       Bool.and(Glob.is_eq(a1, a2), Glob.is_eq(b1, b2))
     case _ _:
       False{}
@@ -88,266 +88,266 @@ def Glob.is_eq_sound(
   b: Spec.Glob
 ) -> {Glob.is_eq(a, b) == True{}: Bool} -> {a == b: Spec.Glob}:
   match a b:
-    case Spec.void{} Spec.void{}:
+    case Spec.Void{} Spec.Void{}:
       _ => {==}
-    case Spec.void{} Spec.eps{}:
-      h => Empty.absurd({Spec.void{} == Spec.eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.void{} Spec.lit{x2}:
-      h => Empty.absurd({Spec.void{} == Spec.lit{x2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.void{} Spec.any{}:
-      h => Empty.absurd({Spec.void{} == Spec.any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.void{} Spec.star{}:
-      h => Empty.absurd({Spec.void{} == Spec.star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.void{} Spec.class{n2, cs2}:
+    case Spec.Void{} Spec.Eps{}:
+      h => Empty.absurd({Spec.Void{} == Spec.Eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Void{} Spec.Lit{x2}:
+      h => Empty.absurd({Spec.Void{} == Spec.Lit{x2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Void{} Spec.Any{}:
+      h => Empty.absurd({Spec.Void{} == Spec.Any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Void{} Spec.Star{}:
+      h => Empty.absurd({Spec.Void{} == Spec.Star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Void{} Spec.Class{n2, cs2}:
       h => Empty.absurd(
-        {Spec.void{} == Spec.class{n2, cs2}: Spec.Glob},
+        {Spec.Void{} == Spec.Class{n2, cs2}: Spec.Glob},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.void{} Spec.deep{}:
-      h => Empty.absurd({Spec.void{} == Spec.deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.void{} Spec.cat{a2, b2}:
-      h => Empty.absurd({Spec.void{} == Spec.cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.void{} Spec.alt{a2, b2}:
-      h => Empty.absurd({Spec.void{} == Spec.alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.eps{} Spec.void{}:
-      h => Empty.absurd({Spec.eps{} == Spec.void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.eps{} Spec.eps{}:
+    case Spec.Void{} Spec.Deep{}:
+      h => Empty.absurd({Spec.Void{} == Spec.Deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Void{} Spec.Cat{a2, b2}:
+      h => Empty.absurd({Spec.Void{} == Spec.Cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Void{} Spec.Alt{a2, b2}:
+      h => Empty.absurd({Spec.Void{} == Spec.Alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Eps{} Spec.Void{}:
+      h => Empty.absurd({Spec.Eps{} == Spec.Void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Eps{} Spec.Eps{}:
       _ => {==}
-    case Spec.eps{} Spec.lit{x2}:
-      h => Empty.absurd({Spec.eps{} == Spec.lit{x2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.eps{} Spec.any{}:
-      h => Empty.absurd({Spec.eps{} == Spec.any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.eps{} Spec.star{}:
-      h => Empty.absurd({Spec.eps{} == Spec.star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.eps{} Spec.class{n2, cs2}:
+    case Spec.Eps{} Spec.Lit{x2}:
+      h => Empty.absurd({Spec.Eps{} == Spec.Lit{x2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Eps{} Spec.Any{}:
+      h => Empty.absurd({Spec.Eps{} == Spec.Any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Eps{} Spec.Star{}:
+      h => Empty.absurd({Spec.Eps{} == Spec.Star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Eps{} Spec.Class{n2, cs2}:
       h => Empty.absurd(
-        {Spec.eps{} == Spec.class{n2, cs2}: Spec.Glob},
+        {Spec.Eps{} == Spec.Class{n2, cs2}: Spec.Glob},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.eps{} Spec.deep{}:
-      h => Empty.absurd({Spec.eps{} == Spec.deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.eps{} Spec.cat{a2, b2}:
-      h => Empty.absurd({Spec.eps{} == Spec.cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.eps{} Spec.alt{a2, b2}:
-      h => Empty.absurd({Spec.eps{} == Spec.alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.lit{x1} Spec.void{}:
-      h => Empty.absurd({Spec.lit{x1} == Spec.void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.lit{+x1} Spec.eps{}:
-      h => Empty.absurd({Spec.lit{x1} == Spec.eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.lit{+x1} Spec.lit{x2}:
-      h => Equal.cong(Char, Spec.Glob, c => Spec.lit{c}, x1, x2, Char.is_eq_sound(x1, x2)(h))
-    case Spec.lit{+x1} Spec.any{}:
-      h => Empty.absurd({Spec.lit{x1} == Spec.any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.lit{+x1} Spec.star{}:
-      h => Empty.absurd({Spec.lit{x1} == Spec.star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.lit{+x1} Spec.class{n2, cs2}:
+    case Spec.Eps{} Spec.Deep{}:
+      h => Empty.absurd({Spec.Eps{} == Spec.Deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Eps{} Spec.Cat{a2, b2}:
+      h => Empty.absurd({Spec.Eps{} == Spec.Cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Eps{} Spec.Alt{a2, b2}:
+      h => Empty.absurd({Spec.Eps{} == Spec.Alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Lit{x1} Spec.Void{}:
+      h => Empty.absurd({Spec.Lit{x1} == Spec.Void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Lit{+x1} Spec.Eps{}:
+      h => Empty.absurd({Spec.Lit{x1} == Spec.Eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Lit{+x1} Spec.Lit{x2}:
+      h => Equal.cong(Char, Spec.Glob, c => Spec.Lit{c}, x1, x2, Char.is_eq_sound(x1, x2)(h))
+    case Spec.Lit{+x1} Spec.Any{}:
+      h => Empty.absurd({Spec.Lit{x1} == Spec.Any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Lit{+x1} Spec.Star{}:
+      h => Empty.absurd({Spec.Lit{x1} == Spec.Star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Lit{+x1} Spec.Class{n2, cs2}:
       h => Empty.absurd(
-        {Spec.lit{x1} == Spec.class{n2, cs2}: Spec.Glob},
+        {Spec.Lit{x1} == Spec.Class{n2, cs2}: Spec.Glob},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.lit{+x1} Spec.deep{}:
-      h => Empty.absurd({Spec.lit{x1} == Spec.deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.lit{+x1} Spec.cat{a2, b2}:
-      h => Empty.absurd({Spec.lit{x1} == Spec.cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.lit{+x1} Spec.alt{a2, b2}:
-      h => Empty.absurd({Spec.lit{x1} == Spec.alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.any{} Spec.void{}:
-      h => Empty.absurd({Spec.any{} == Spec.void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.any{} Spec.eps{}:
-      h => Empty.absurd({Spec.any{} == Spec.eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.any{} Spec.lit{x2}:
-      h => Empty.absurd({Spec.any{} == Spec.lit{x2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.any{} Spec.any{}:
+    case Spec.Lit{+x1} Spec.Deep{}:
+      h => Empty.absurd({Spec.Lit{x1} == Spec.Deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Lit{+x1} Spec.Cat{a2, b2}:
+      h => Empty.absurd({Spec.Lit{x1} == Spec.Cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Lit{+x1} Spec.Alt{a2, b2}:
+      h => Empty.absurd({Spec.Lit{x1} == Spec.Alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Any{} Spec.Void{}:
+      h => Empty.absurd({Spec.Any{} == Spec.Void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Any{} Spec.Eps{}:
+      h => Empty.absurd({Spec.Any{} == Spec.Eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Any{} Spec.Lit{x2}:
+      h => Empty.absurd({Spec.Any{} == Spec.Lit{x2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Any{} Spec.Any{}:
       _ => {==}
-    case Spec.any{} Spec.star{}:
-      h => Empty.absurd({Spec.any{} == Spec.star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.any{} Spec.class{n2, cs2}:
+    case Spec.Any{} Spec.Star{}:
+      h => Empty.absurd({Spec.Any{} == Spec.Star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Any{} Spec.Class{n2, cs2}:
       h => Empty.absurd(
-        {Spec.any{} == Spec.class{n2, cs2}: Spec.Glob},
+        {Spec.Any{} == Spec.Class{n2, cs2}: Spec.Glob},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.any{} Spec.deep{}:
-      h => Empty.absurd({Spec.any{} == Spec.deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.any{} Spec.cat{a2, b2}:
-      h => Empty.absurd({Spec.any{} == Spec.cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.any{} Spec.alt{a2, b2}:
-      h => Empty.absurd({Spec.any{} == Spec.alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.star{} Spec.void{}:
-      h => Empty.absurd({Spec.star{} == Spec.void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.star{} Spec.eps{}:
-      h => Empty.absurd({Spec.star{} == Spec.eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.star{} Spec.lit{x2}:
-      h => Empty.absurd({Spec.star{} == Spec.lit{x2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.star{} Spec.any{}:
-      h => Empty.absurd({Spec.star{} == Spec.any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.star{} Spec.star{}:
+    case Spec.Any{} Spec.Deep{}:
+      h => Empty.absurd({Spec.Any{} == Spec.Deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Any{} Spec.Cat{a2, b2}:
+      h => Empty.absurd({Spec.Any{} == Spec.Cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Any{} Spec.Alt{a2, b2}:
+      h => Empty.absurd({Spec.Any{} == Spec.Alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Star{} Spec.Void{}:
+      h => Empty.absurd({Spec.Star{} == Spec.Void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Star{} Spec.Eps{}:
+      h => Empty.absurd({Spec.Star{} == Spec.Eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Star{} Spec.Lit{x2}:
+      h => Empty.absurd({Spec.Star{} == Spec.Lit{x2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Star{} Spec.Any{}:
+      h => Empty.absurd({Spec.Star{} == Spec.Any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Star{} Spec.Star{}:
       _ => {==}
-    case Spec.star{} Spec.class{n2, cs2}:
+    case Spec.Star{} Spec.Class{n2, cs2}:
       h => Empty.absurd(
-        {Spec.star{} == Spec.class{n2, cs2}: Spec.Glob},
+        {Spec.Star{} == Spec.Class{n2, cs2}: Spec.Glob},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.star{} Spec.deep{}:
-      h => Empty.absurd({Spec.star{} == Spec.deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.star{} Spec.cat{a2, b2}:
-      h => Empty.absurd({Spec.star{} == Spec.cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.star{} Spec.alt{a2, b2}:
-      h => Empty.absurd({Spec.star{} == Spec.alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.class{+n1, +cs1} Spec.void{}:
+    case Spec.Star{} Spec.Deep{}:
+      h => Empty.absurd({Spec.Star{} == Spec.Deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Star{} Spec.Cat{a2, b2}:
+      h => Empty.absurd({Spec.Star{} == Spec.Cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Star{} Spec.Alt{a2, b2}:
+      h => Empty.absurd({Spec.Star{} == Spec.Alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Class{+n1, +cs1} Spec.Void{}:
       +h => Empty.absurd(
-        {Spec.class{n1, cs1} == Spec.void{}: Spec.Glob},
+        {Spec.Class{n1, cs1} == Spec.Void{}: Spec.Glob},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.class{+n1, +cs1} Spec.eps{}:
+    case Spec.Class{+n1, +cs1} Spec.Eps{}:
       +h => Empty.absurd(
-        {Spec.class{n1, cs1} == Spec.eps{}: Spec.Glob},
+        {Spec.Class{n1, cs1} == Spec.Eps{}: Spec.Glob},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.class{+n1, +cs1} Spec.lit{x2}:
+    case Spec.Class{+n1, +cs1} Spec.Lit{x2}:
       +h => Empty.absurd(
-        {Spec.class{n1, cs1} == Spec.lit{x2}: Spec.Glob},
+        {Spec.Class{n1, cs1} == Spec.Lit{x2}: Spec.Glob},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.class{+n1, +cs1} Spec.any{}:
+    case Spec.Class{+n1, +cs1} Spec.Any{}:
       +h => Empty.absurd(
-        {Spec.class{n1, cs1} == Spec.any{}: Spec.Glob},
+        {Spec.Class{n1, cs1} == Spec.Any{}: Spec.Glob},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.class{+n1, +cs1} Spec.star{}:
+    case Spec.Class{+n1, +cs1} Spec.Star{}:
       +h => Empty.absurd(
-        {Spec.class{n1, cs1} == Spec.star{}: Spec.Glob},
+        {Spec.Class{n1, cs1} == Spec.Star{}: Spec.Glob},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.class{+n1, +cs1} Spec.class{+n2, +cs2}:
+    case Spec.Class{+n1, +cs1} Spec.Class{+n2, +cs2}:
       +h =>
         %Shared.Bool.is_eq_sound(
           n1,
           n2
         )(
           Shared.Bool.and_true_left(Shared.Bool.is_eq(n1, n2), Chars.is_eq(cs1, cs2))(h)
-        ): {Spec.class{n1, cs1} == Spec.class{_, cs2}: Spec.Glob}
+        ): {Spec.Class{n1, cs1} == Spec.Class{_, cs2}: Spec.Glob}
         %Chars.is_eq_sound(
           cs1,
           cs2
         )(
           Shared.Bool.and_true_right(Shared.Bool.is_eq(n1, n2), Chars.is_eq(cs1, cs2))(h)
-        ): {Spec.class{n1, cs1} == Spec.class{n1, _}: Spec.Glob}
+        ): {Spec.Class{n1, cs1} == Spec.Class{n1, _}: Spec.Glob}
         {==}
-    case Spec.class{+n1, +cs1} Spec.deep{}:
+    case Spec.Class{+n1, +cs1} Spec.Deep{}:
       +h => Empty.absurd(
-        {Spec.class{n1, cs1} == Spec.deep{}: Spec.Glob},
+        {Spec.Class{n1, cs1} == Spec.Deep{}: Spec.Glob},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.class{+n1, +cs1} Spec.cat{a2, b2}:
+    case Spec.Class{+n1, +cs1} Spec.Cat{a2, b2}:
       +h => Empty.absurd(
-        {Spec.class{n1, cs1} == Spec.cat{a2, b2}: Spec.Glob},
+        {Spec.Class{n1, cs1} == Spec.Cat{a2, b2}: Spec.Glob},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.class{+n1, +cs1} Spec.alt{a2, b2}:
+    case Spec.Class{+n1, +cs1} Spec.Alt{a2, b2}:
       +h => Empty.absurd(
-        {Spec.class{n1, cs1} == Spec.alt{a2, b2}: Spec.Glob},
+        {Spec.Class{n1, cs1} == Spec.Alt{a2, b2}: Spec.Glob},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.deep{} Spec.void{}:
-      h => Empty.absurd({Spec.deep{} == Spec.void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.deep{} Spec.eps{}:
-      h => Empty.absurd({Spec.deep{} == Spec.eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.deep{} Spec.lit{x2}:
-      h => Empty.absurd({Spec.deep{} == Spec.lit{x2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.deep{} Spec.any{}:
-      h => Empty.absurd({Spec.deep{} == Spec.any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.deep{} Spec.star{}:
-      h => Empty.absurd({Spec.deep{} == Spec.star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.deep{} Spec.class{n2, cs2}:
+    case Spec.Deep{} Spec.Void{}:
+      h => Empty.absurd({Spec.Deep{} == Spec.Void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Deep{} Spec.Eps{}:
+      h => Empty.absurd({Spec.Deep{} == Spec.Eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Deep{} Spec.Lit{x2}:
+      h => Empty.absurd({Spec.Deep{} == Spec.Lit{x2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Deep{} Spec.Any{}:
+      h => Empty.absurd({Spec.Deep{} == Spec.Any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Deep{} Spec.Star{}:
+      h => Empty.absurd({Spec.Deep{} == Spec.Star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Deep{} Spec.Class{n2, cs2}:
       h => Empty.absurd(
-        {Spec.deep{} == Spec.class{n2, cs2}: Spec.Glob},
+        {Spec.Deep{} == Spec.Class{n2, cs2}: Spec.Glob},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.deep{} Spec.deep{}:
+    case Spec.Deep{} Spec.Deep{}:
       _ => {==}
-    case Spec.deep{} Spec.cat{a2, b2}:
-      h => Empty.absurd({Spec.deep{} == Spec.cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.deep{} Spec.alt{a2, b2}:
-      h => Empty.absurd({Spec.deep{} == Spec.alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.cat{+a1, +b1} Spec.void{}:
-      +h => Empty.absurd({Spec.cat{a1, b1} == Spec.void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.cat{+a1, +b1} Spec.eps{}:
-      +h => Empty.absurd({Spec.cat{a1, b1} == Spec.eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.cat{+a1, +b1} Spec.lit{x2}:
+    case Spec.Deep{} Spec.Cat{a2, b2}:
+      h => Empty.absurd({Spec.Deep{} == Spec.Cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Deep{} Spec.Alt{a2, b2}:
+      h => Empty.absurd({Spec.Deep{} == Spec.Alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Cat{+a1, +b1} Spec.Void{}:
+      +h => Empty.absurd({Spec.Cat{a1, b1} == Spec.Void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Cat{+a1, +b1} Spec.Eps{}:
+      +h => Empty.absurd({Spec.Cat{a1, b1} == Spec.Eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Cat{+a1, +b1} Spec.Lit{x2}:
       +h => Empty.absurd(
-        {Spec.cat{a1, b1} == Spec.lit{x2}: Spec.Glob},
+        {Spec.Cat{a1, b1} == Spec.Lit{x2}: Spec.Glob},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.cat{+a1, +b1} Spec.any{}:
-      +h => Empty.absurd({Spec.cat{a1, b1} == Spec.any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.cat{+a1, +b1} Spec.star{}:
-      +h => Empty.absurd({Spec.cat{a1, b1} == Spec.star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.cat{+a1, +b1} Spec.class{n2, cs2}:
+    case Spec.Cat{+a1, +b1} Spec.Any{}:
+      +h => Empty.absurd({Spec.Cat{a1, b1} == Spec.Any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Cat{+a1, +b1} Spec.Star{}:
+      +h => Empty.absurd({Spec.Cat{a1, b1} == Spec.Star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Cat{+a1, +b1} Spec.Class{n2, cs2}:
       +h => Empty.absurd(
-        {Spec.cat{a1, b1} == Spec.class{n2, cs2}: Spec.Glob},
+        {Spec.Cat{a1, b1} == Spec.Class{n2, cs2}: Spec.Glob},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.cat{+a1, +b1} Spec.deep{}:
-      +h => Empty.absurd({Spec.cat{a1, b1} == Spec.deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.cat{+a1, +b1} Spec.cat{+a2, +b2}:
+    case Spec.Cat{+a1, +b1} Spec.Deep{}:
+      +h => Empty.absurd({Spec.Cat{a1, b1} == Spec.Deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Cat{+a1, +b1} Spec.Cat{+a2, +b2}:
       +h =>
         %Glob.is_eq_sound(
           a1,
           a2
         )(
           Shared.Bool.and_true_left(Glob.is_eq(a1, a2), Glob.is_eq(b1, b2))(h)
-        ): {Spec.cat{a1, b1} == Spec.cat{_, b2}: Spec.Glob}
+        ): {Spec.Cat{a1, b1} == Spec.Cat{_, b2}: Spec.Glob}
         %Glob.is_eq_sound(
           b1,
           b2
         )(
           Shared.Bool.and_true_right(Glob.is_eq(a1, a2), Glob.is_eq(b1, b2))(h)
-        ): {Spec.cat{a1, b1} == Spec.cat{a1, _}: Spec.Glob}
+        ): {Spec.Cat{a1, b1} == Spec.Cat{a1, _}: Spec.Glob}
         {==}
-    case Spec.cat{+a1, +b1} Spec.alt{a2, b2}:
+    case Spec.Cat{+a1, +b1} Spec.Alt{a2, b2}:
       +h => Empty.absurd(
-        {Spec.cat{a1, b1} == Spec.alt{a2, b2}: Spec.Glob},
+        {Spec.Cat{a1, b1} == Spec.Alt{a2, b2}: Spec.Glob},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.alt{+a1, +b1} Spec.void{}:
-      +h => Empty.absurd({Spec.alt{a1, b1} == Spec.void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.alt{+a1, +b1} Spec.eps{}:
-      +h => Empty.absurd({Spec.alt{a1, b1} == Spec.eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.alt{+a1, +b1} Spec.lit{x2}:
+    case Spec.Alt{+a1, +b1} Spec.Void{}:
+      +h => Empty.absurd({Spec.Alt{a1, b1} == Spec.Void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Alt{+a1, +b1} Spec.Eps{}:
+      +h => Empty.absurd({Spec.Alt{a1, b1} == Spec.Eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Alt{+a1, +b1} Spec.Lit{x2}:
       +h => Empty.absurd(
-        {Spec.alt{a1, b1} == Spec.lit{x2}: Spec.Glob},
+        {Spec.Alt{a1, b1} == Spec.Lit{x2}: Spec.Glob},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.alt{+a1, +b1} Spec.any{}:
-      +h => Empty.absurd({Spec.alt{a1, b1} == Spec.any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.alt{+a1, +b1} Spec.star{}:
-      +h => Empty.absurd({Spec.alt{a1, b1} == Spec.star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.alt{+a1, +b1} Spec.class{n2, cs2}:
+    case Spec.Alt{+a1, +b1} Spec.Any{}:
+      +h => Empty.absurd({Spec.Alt{a1, b1} == Spec.Any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Alt{+a1, +b1} Spec.Star{}:
+      +h => Empty.absurd({Spec.Alt{a1, b1} == Spec.Star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Alt{+a1, +b1} Spec.Class{n2, cs2}:
       +h => Empty.absurd(
-        {Spec.alt{a1, b1} == Spec.class{n2, cs2}: Spec.Glob},
+        {Spec.Alt{a1, b1} == Spec.Class{n2, cs2}: Spec.Glob},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.alt{+a1, +b1} Spec.deep{}:
-      +h => Empty.absurd({Spec.alt{a1, b1} == Spec.deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.alt{+a1, +b1} Spec.cat{a2, b2}:
+    case Spec.Alt{+a1, +b1} Spec.Deep{}:
+      +h => Empty.absurd({Spec.Alt{a1, b1} == Spec.Deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
+    case Spec.Alt{+a1, +b1} Spec.Cat{a2, b2}:
       +h => Empty.absurd(
-        {Spec.alt{a1, b1} == Spec.cat{a2, b2}: Spec.Glob},
+        {Spec.Alt{a1, b1} == Spec.Cat{a2, b2}: Spec.Glob},
         Shared.Bool.false_ne_true(h)
       )
-    case Spec.alt{+a1, +b1} Spec.alt{+a2, +b2}:
+    case Spec.Alt{+a1, +b1} Spec.Alt{+a2, +b2}:
       +h =>
         %Glob.is_eq_sound(
           a1,
           a2
         )(
           Shared.Bool.and_true_left(Glob.is_eq(a1, a2), Glob.is_eq(b1, b2))(h)
-        ): {Spec.alt{a1, b1} == Spec.alt{_, b2}: Spec.Glob}
+        ): {Spec.Alt{a1, b1} == Spec.Alt{_, b2}: Spec.Glob}
         %Glob.is_eq_sound(
           b1,
           b2
         )(
           Shared.Bool.and_true_right(Glob.is_eq(a1, a2), Glob.is_eq(b1, b2))(h)
-        ): {Spec.alt{a1, b1} == Spec.alt{a1, _}: Spec.Glob}
+        ): {Spec.Alt{a1, b1} == Spec.Alt{a1, _}: Spec.Glob}
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
@@ -381,7 +381,7 @@ def Bool.and_false(a: Bool) -> {False{} == Bool.and(a, False{}): Bool}:
       {==}
 
 # Void matches nothing
-def Glob.void_never(p: String) -> {False{} == Spec.Glob.matches(p, Spec.void{}): Bool}:
+def Glob.void_never(p: String) -> {False{} == Spec.Glob.matches(p, Spec.Void{}): Bool}:
   match p:
     case SNil{}:
       {==}
@@ -398,7 +398,7 @@ def Glob.alt_or(
     Spec.Glob.matches(p, a),
     Spec.Glob.matches(p, b)
   )
-    == Spec.Glob.matches(p, Spec.alt{a, b}): Bool
+    == Spec.Glob.matches(p, Spec.Alt{a, b}): Bool
 }:
   match p:
     case SNil{}:
@@ -410,42 +410,42 @@ def Glob.alt_or(
 def Glob.cat_void_l(
   p: String,
   +x: Spec.Glob
-) -> {False{} == Spec.Glob.matches(p, Spec.cat{Spec.void{}, x}): Bool}:
+) -> {False{} == Spec.Glob.matches(p, Spec.Cat{Spec.Void{}, x}): Bool}:
   match p:
     case SNil{}:
       {==}
     case SCon{c, +t}:
       +x2 = Spec.Glob.step(x, c)
-      %Glob.alt_or(t, Spec.cat{Spec.void{}, x}, Spec.cat{Spec.void{}, x2}): {False{} == _: Bool}
+      %Glob.alt_or(t, Spec.Cat{Spec.Void{}, x}, Spec.Cat{Spec.Void{}, x2}): {False{} == _: Bool}
       %Glob.cat_void_l(
         t,
         x
-      ): {False{} == Bool.or(_, Spec.Glob.matches(t, Spec.cat{Spec.void{}, x2})): Bool}
+      ): {False{} == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Void{}, x2})): Bool}
       Glob.cat_void_l(t, x2)
 
 # Cat before Void matches nothing
 def Glob.cat_void_r(
   p: String,
   +x: Spec.Glob
-) -> {False{} == Spec.Glob.matches(p, Spec.cat{x, Spec.void{}}): Bool}:
+) -> {False{} == Spec.Glob.matches(p, Spec.Cat{x, Spec.Void{}}): Bool}:
   match p:
     case SNil{}:
       Bool.and_false(Spec.Glob.is_nullable(x))
     case SCon{c, +t}:
       +x2 = Spec.Glob.step(x, c)
       +n = Spec.Glob.of_bool(Spec.Glob.is_nullable(x))
-      %Glob.alt_or(t, Spec.cat{x2, Spec.void{}}, Spec.cat{n, Spec.void{}}): {False{} == _: Bool}
+      %Glob.alt_or(t, Spec.Cat{x2, Spec.Void{}}, Spec.Cat{n, Spec.Void{}}): {False{} == _: Bool}
       %Glob.cat_void_r(
         t,
         x2
-      ): {False{} == Bool.or(_, Spec.Glob.matches(t, Spec.cat{n, Spec.void{}})): Bool}
+      ): {False{} == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{n, Spec.Void{}})): Bool}
       Glob.cat_void_r(t, n)
 
 # Cat after Eps matches what its right side matches
 def Glob.cat_eps_l(
   p: String,
   +x: Spec.Glob
-) -> {Spec.Glob.matches(p, x) == Spec.Glob.matches(p, Spec.cat{Spec.eps{}, x}): Bool}:
+) -> {Spec.Glob.matches(p, x) == Spec.Glob.matches(p, Spec.Cat{Spec.Eps{}, x}): Bool}:
   match p:
     case SNil{}:
       {==}
@@ -453,14 +453,14 @@ def Glob.cat_eps_l(
       +x2 = Spec.Glob.step(x, c)
       %Glob.alt_or(
         t,
-        Spec.cat{Spec.void{}, x},
-        Spec.cat{Spec.eps{}, x2}
+        Spec.Cat{Spec.Void{}, x},
+        Spec.Cat{Spec.Eps{}, x2}
       ): {Spec.Glob.matches(t, x2) == _: Bool}
       %Glob.cat_void_l(
         t,
         x
       ): {
-        Spec.Glob.matches(t, x2) == Bool.or(_, Spec.Glob.matches(t, Spec.cat{Spec.eps{}, x2})): Bool
+        Spec.Glob.matches(t, x2) == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Eps{}, x2})): Bool
       }
       Glob.cat_eps_l(t, x2)
 
@@ -468,7 +468,7 @@ def Glob.cat_eps_l(
 def Glob.cat_eps_r(
   p: String,
   +x: Spec.Glob
-) -> {Spec.Glob.matches(p, x) == Spec.Glob.matches(p, Spec.cat{x, Spec.eps{}}): Bool}:
+) -> {Spec.Glob.matches(p, x) == Spec.Glob.matches(p, Spec.Cat{x, Spec.Eps{}}): Bool}:
   match p:
     case SNil{}:
       Bool.and_true(Spec.Glob.is_nullable(x))
@@ -477,17 +477,17 @@ def Glob.cat_eps_r(
       +n = Spec.Glob.of_bool(Spec.Glob.is_nullable(x))
       %Glob.alt_or(
         t,
-        Spec.cat{x2, Spec.eps{}},
-        Spec.cat{n, Spec.void{}}
+        Spec.Cat{x2, Spec.Eps{}},
+        Spec.Cat{n, Spec.Void{}}
       ): {Spec.Glob.matches(t, x2) == _: Bool}
       %Glob.cat_void_r(
         t,
         n
       ): {
-        Spec.Glob.matches(t, x2) == Bool.or(Spec.Glob.matches(t, Spec.cat{x2, Spec.eps{}}), _): Bool
+        Spec.Glob.matches(t, x2) == Bool.or(Spec.Glob.matches(t, Spec.Cat{x2, Spec.Eps{}}), _): Bool
       }
       %Bool.or_false(
-        Spec.Glob.matches(t, Spec.cat{x2, Spec.eps{}})
+        Spec.Glob.matches(t, Spec.Cat{x2, Spec.Eps{}})
       ): {Spec.Glob.matches(t, x2) == _: Bool}
       Glob.cat_eps_r(t, x2)
 
@@ -709,7 +709,7 @@ def Glob.cat_of_bool(
     b,
     Spec.Glob.matches(p, r)
   )
-    == Spec.Glob.matches(p, Spec.cat{Spec.Glob.of_bool(b), r}): Bool
+    == Spec.Glob.matches(p, Spec.Cat{Spec.Glob.of_bool(b), r}): Bool
 }:
   match b:
     case False{}:
@@ -725,10 +725,10 @@ def Glob.cat_alt(
   +r: Spec.Glob
 ) -> {
   Bool.or(
-    Spec.Glob.matches(p, Spec.cat{a, r}),
-    Spec.Glob.matches(p, Spec.cat{b, r})
+    Spec.Glob.matches(p, Spec.Cat{a, r}),
+    Spec.Glob.matches(p, Spec.Cat{b, r})
   )
-    == Spec.Glob.matches(p, Spec.cat{Spec.alt{a, b}, r}): Bool
+    == Spec.Glob.matches(p, Spec.Cat{Spec.Alt{a, b}, r}): Bool
 }:
   match p:
     case SNil{}:
@@ -739,17 +739,17 @@ def Glob.cat_alt(
       +r2 = Spec.Glob.step(r, c)
       +na = Spec.Glob.is_nullable(a)
       +nb = Spec.Glob.is_nullable(b)
-      +p1 = {Spec.cat{a2, r}: Spec.Glob}
-      q1 = {Spec.cat{Spec.Glob.of_bool(na), r2}: Spec.Glob}
-      +p2 = {Spec.cat{b2, r}: Spec.Glob}
-      q2 = {Spec.cat{Spec.Glob.of_bool(nb), r2}: Spec.Glob}
-      +ab = {Spec.cat{Spec.alt{a2, b2}, r}: Spec.Glob}
-      +qab = {Spec.cat{Spec.Glob.of_bool(Bool.or(na, nb)), r2}: Spec.Glob}
+      +p1 = {Spec.Cat{a2, r}: Spec.Glob}
+      q1 = {Spec.Cat{Spec.Glob.of_bool(na), r2}: Spec.Glob}
+      +p2 = {Spec.Cat{b2, r}: Spec.Glob}
+      q2 = {Spec.Cat{Spec.Glob.of_bool(nb), r2}: Spec.Glob}
+      +ab = {Spec.Cat{Spec.Alt{a2, b2}, r}: Spec.Glob}
+      +qab = {Spec.Cat{Spec.Glob.of_bool(Bool.or(na, nb)), r2}: Spec.Glob}
       +x = Spec.Glob.matches(t, p1)
       +y = Spec.Glob.matches(t, p2)
       +z = Spec.Glob.matches(t, r2)
-      rhs = Spec.Glob.matches(t, Spec.alt{ab, qab})
-      %Glob.alt_or(t, p1, q1): {Bool.or(_, Spec.Glob.matches(t, Spec.alt{p2, q2})) == rhs: Bool}
+      rhs = Spec.Glob.matches(t, Spec.Alt{ab, qab})
+      %Glob.alt_or(t, p1, q1): {Bool.or(_, Spec.Glob.matches(t, Spec.Alt{p2, q2})) == rhs: Bool}
       %Glob.alt_or(t, p2, q2): {Bool.or(Bool.or(x, Spec.Glob.matches(t, q1)), _) == rhs: Bool}
       %Glob.cat_of_bool(
         t,
@@ -776,9 +776,9 @@ def Glob.cat_assoc(
 ) -> {
   Spec.Glob.matches(
     p,
-    Spec.cat{a, Spec.cat{b, r}}
+    Spec.Cat{a, Spec.Cat{b, r}}
   )
-    == Spec.Glob.matches(p, Spec.cat{Spec.cat{a, b}, r}): Bool
+    == Spec.Glob.matches(p, Spec.Cat{Spec.Cat{a, b}, r}): Bool
 }:
   match p:
     case SNil{}:
@@ -789,27 +789,27 @@ def Glob.cat_assoc(
       +r2 = Spec.Glob.step(r, c)
       +na = Spec.Glob.is_nullable(a)
       +nb = Spec.Glob.is_nullable(b)
-      +x1 = {Spec.cat{a2, Spec.cat{b, r}}: Spec.Glob}
-      +br = {Spec.cat{b2, r}: Spec.Glob}
-      +inner = {Spec.alt{br, Spec.cat{Spec.Glob.of_bool(nb), r2}}: Spec.Glob}
-      q = {Spec.cat{Spec.Glob.of_bool(na), inner}: Spec.Glob}
-      +c1 = {Spec.cat{a2, b}: Spec.Glob}
-      +c2 = {Spec.cat{Spec.Glob.of_bool(na), b2}: Spec.Glob}
-      +qn = {Spec.cat{Spec.Glob.of_bool(Bool.and(na, nb)), r2}: Spec.Glob}
+      +x1 = {Spec.Cat{a2, Spec.Cat{b, r}}: Spec.Glob}
+      +br = {Spec.Cat{b2, r}: Spec.Glob}
+      +inner = {Spec.Alt{br, Spec.Cat{Spec.Glob.of_bool(nb), r2}}: Spec.Glob}
+      q = {Spec.Cat{Spec.Glob.of_bool(na), inner}: Spec.Glob}
+      +c1 = {Spec.Cat{a2, b}: Spec.Glob}
+      +c2 = {Spec.Cat{Spec.Glob.of_bool(na), b2}: Spec.Glob}
+      +qn = {Spec.Cat{Spec.Glob.of_bool(Bool.and(na, nb)), r2}: Spec.Glob}
       +x = Spec.Glob.matches(t, x1)
       +y = Spec.Glob.matches(t, br)
       +z = Spec.Glob.matches(t, r2)
-      rhs = Spec.Glob.matches(t, Spec.alt{Spec.cat{Spec.alt{c1, c2}, r}, qn})
+      rhs = Spec.Glob.matches(t, Spec.Alt{Spec.Cat{Spec.Alt{c1, c2}, r}, qn})
       %Glob.alt_or(t, x1, q): {_ == rhs: Bool}
       %Glob.cat_of_bool(t, na, inner): {Bool.or(x, _) == rhs: Bool}
       %Glob.alt_or(
         t,
         br,
-        Spec.cat{Spec.Glob.of_bool(nb), r2}
+        Spec.Cat{Spec.Glob.of_bool(nb), r2}
       ): {Bool.or(x, Bool.and(na, _)) == rhs: Bool}
       %Glob.cat_of_bool(t, nb, r2): {Bool.or(x, Bool.and(na, Bool.or(y, _))) == rhs: Bool}
       +l = Bool.or(x, Bool.and(na, Bool.or(y, Bool.and(nb, z))))
-      %Glob.alt_or(t, Spec.cat{Spec.alt{c1, c2}, r}, qn): {l == _: Bool}
+      %Glob.alt_or(t, Spec.Cat{Spec.Alt{c1, c2}, r}, qn): {l == _: Bool}
       %Glob.cat_alt(t, c1, c2, r): {l == Bool.or(_, Spec.Glob.matches(t, qn)): Bool}
       %Glob.cat_assoc(
         t,
@@ -819,7 +819,7 @@ def Glob.cat_assoc(
       ): {
         l
           == Bool.or(
-            Bool.or(_, Spec.Glob.matches(t, Spec.cat{c2, r})),
+            Bool.or(_, Spec.Glob.matches(t, Spec.Cat{c2, r})),
             Spec.Glob.matches(t, qn)
           ): Bool
       }
@@ -871,9 +871,9 @@ def Bool.or_assoc(
 def Seq.glob(s: List<&2, Spec.Glob>) -> Spec.Glob:
   match s:
     case Nil{}:
-      Spec.eps{}
+      Spec.Eps{}
     case Con{h, t}:
-      Spec.cat{h, Seq.glob(t)}
+      Spec.Cat{h, Seq.glob(t)}
 
 # some Seq of xs matches p
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
@@ -935,24 +935,24 @@ def Seq.step.head(
   +k: List<&2, List<&2, Spec.Glob>>
 ) -> List<&2, List<&2, Spec.Glob>>:
   match h:
-    case Spec.void{}:
+    case Spec.Void{}:
       []
-    case Spec.eps{}:
+    case Spec.Eps{}:
       k
-    case Spec.lit{x}:
+    case Spec.Lit{x}:
       Seq.keep(Char.is_eq(x, c), r)
-    case Spec.any{}:
+    case Spec.Any{}:
       Seq.keep(Spec.is_inner(c), r)
-    case Spec.star{}:
-      List.append(&2, List<&2, Spec.Glob>, Seq.keep(Spec.is_inner(c), Con{Spec.star{}, r}), k)
-    case Spec.class{neg, cs}:
+    case Spec.Star{}:
+      List.append(&2, List<&2, Spec.Glob>, Seq.keep(Spec.is_inner(c), Con{Spec.Star{}, r}), k)
+    case Spec.Class{neg, cs}:
       hit = Bool.xor(neg, List.contains(~Char, ~Char.is_eq, cs, c))
       Seq.keep(Bool.and(Spec.is_inner(c), hit), r)
-    case Spec.deep{}:
-      Con{Con{Spec.deep{}, r}, k}
-    case Spec.cat{a, +b}:
+    case Spec.Deep{}:
+      Con{Con{Spec.Deep{}, r}, k}
+    case Spec.Cat{a, +b}:
       Seq.step.head(a, Con{b, r}, c, Seq.step.head(b, r, c, k))
-    case Spec.alt{a, b}:
+    case Spec.Alt{a, b}:
       List.append(&2, List<&2, Spec.Glob>, Seq.step.head(a, r, c, k), Seq.step.head(b, r, c, k))
 # bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
@@ -995,21 +995,21 @@ def Seq.step_head_one(
   )
     == Spec.Glob.matches(
       t,
-      Spec.alt{
-        Spec.cat{Spec.Glob.of_bool(hit), Seq.glob(r)},
-        Spec.cat{Spec.void{}, Spec.Glob.step(Seq.glob(r), c)}
+      Spec.Alt{
+        Spec.Cat{Spec.Glob.of_bool(hit), Seq.glob(r)},
+        Spec.Cat{Spec.Void{}, Spec.Glob.step(Seq.glob(r), c)}
       }
     ): Bool
 }:
   +g = Seq.glob(r)
   +g2 = Spec.Glob.step(g, c)
   l = Seqs.matches(t, Seq.keep(hit, r))
-  %Glob.alt_or(t, Spec.cat{Spec.Glob.of_bool(hit), g}, Spec.cat{Spec.void{}, g2}): {l == _: Bool}
+  %Glob.alt_or(t, Spec.Cat{Spec.Glob.of_bool(hit), g}, Spec.Cat{Spec.Void{}, g2}): {l == _: Bool}
   %Glob.cat_of_bool(
     t,
     hit,
     g
-  ): {l == Bool.or(_, Spec.Glob.matches(t, Spec.cat{Spec.void{}, g2})): Bool}
+  ): {l == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Void{}, g2})): Bool}
   %Glob.cat_void_l(t, g2): {l == Bool.or(Bool.and(hit, Spec.Glob.matches(t, g)), _): Bool}
   Seq.keep_ok(hit, t, r)
 
@@ -1028,29 +1028,29 @@ def Seq.step_head_ok(
     t,
     Seq.step.head(h, r, c, k)
   )
-    == Spec.Glob.matches(SCon{c, t}, Spec.cat{h, Seq.glob(r)}): Bool
+    == Spec.Glob.matches(SCon{c, t}, Spec.Cat{h, Seq.glob(r)}): Bool
 }:
   match h:
-    case Spec.void{}:
+    case Spec.Void{}:
       g = Seq.glob(r)
       Glob.cat_void_l(SCon{c, t}, g)
-    case Spec.eps{}:
+    case Spec.Eps{}:
       g = Seq.glob(r)
       %Glob.cat_eps_l(SCon{c, t}, g): {Seqs.matches(t, k) == _: Bool}
       hk
-    case Spec.lit{x}:
+    case Spec.Lit{x}:
       Seq.step_head_one(Char.is_eq(x, c), r, c, t)
-    case Spec.any{}:
+    case Spec.Any{}:
       Seq.step_head_one(Spec.is_inner(c), r, c, t)
-    case Spec.star{}:
+    case Spec.Star{}:
       +i = Spec.is_inner(c)
-      +s = {Con{Spec.star{}, r}: List<&2, Spec.Glob>}
+      +s = {Con{Spec.Star{}, r}: List<&2, Spec.Glob>}
       +g = Seq.glob(r)
       +g2 = Spec.Glob.step(g, c)
-      +m = Spec.Glob.matches(t, Spec.cat{Spec.star{}, g})
+      +m = Spec.Glob.matches(t, Spec.Cat{Spec.Star{}, g})
       sk = Seqs.matches(t, k)
-      +cs = {Spec.cat{Spec.cat{Spec.Glob.of_bool(i), Spec.star{}}, g}: Spec.Glob}
-      rhs = Spec.Glob.matches(t, Spec.alt{cs, Spec.cat{Spec.eps{}, g2}})
+      +cs = {Spec.Cat{Spec.Cat{Spec.Glob.of_bool(i), Spec.Star{}}, g}: Spec.Glob}
+      rhs = Spec.Glob.matches(t, Spec.Alt{cs, Spec.Cat{Spec.Eps{}, g2}})
       %Seqs.matches_append(t, Seq.keep(i, s), k): {_ == rhs: Bool}
       %Equal.sym(
         Bool,
@@ -1060,36 +1060,36 @@ def Seq.step_head_ok(
       ): {Bool.or(_, sk) == rhs: Bool}
       %Bool.or_false(Bool.and(i, m)): {Bool.or(_, sk) == rhs: Bool}
       +l = Bool.or(Bool.and(i, m), sk)
-      %Glob.alt_or(t, cs, Spec.cat{Spec.eps{}, g2}): {l == _: Bool}
+      %Glob.alt_or(t, cs, Spec.Cat{Spec.Eps{}, g2}): {l == _: Bool}
       %Glob.cat_assoc(
         t,
         Spec.Glob.of_bool(i),
-        Spec.star{},
+        Spec.Star{},
         g
-      ): {l == Bool.or(_, Spec.Glob.matches(t, Spec.cat{Spec.eps{}, g2})): Bool}
+      ): {l == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Eps{}, g2})): Bool}
       %Glob.cat_of_bool(
         t,
         i,
-        Spec.cat{Spec.star{}, g}
-      ): {l == Bool.or(_, Spec.Glob.matches(t, Spec.cat{Spec.eps{}, g2})): Bool}
+        Spec.Cat{Spec.Star{}, g}
+      ): {l == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Eps{}, g2})): Bool}
       %Glob.cat_eps_l(t, g2): {l == Bool.or(Bool.and(i, m), _): Bool}
       %hk: {l == Bool.or(Bool.and(i, m), _): Bool}
       {==}
-    case Spec.class{neg, cs}:
+    case Spec.Class{neg, cs}:
       hit = Bool.xor(neg, List.contains(~Char, ~Char.is_eq, cs, c))
       Seq.step_head_one(Bool.and(Spec.is_inner(c), hit), r, c, t)
-    case Spec.deep{}:
+    case Spec.Deep{}:
       +g = Seq.glob(r)
       +g2 = Spec.Glob.step(g, c)
-      l = Seqs.matches(t, Con{Con{Spec.deep{}, r}, k})
-      %Glob.alt_or(t, Spec.cat{Spec.deep{}, g}, Spec.cat{Spec.eps{}, g2}): {l == _: Bool}
+      l = Seqs.matches(t, Con{Con{Spec.Deep{}, r}, k})
+      %Glob.alt_or(t, Spec.Cat{Spec.Deep{}, g}, Spec.Cat{Spec.Eps{}, g2}): {l == _: Bool}
       %Glob.cat_eps_l(
         t,
         g2
-      ): {l == Bool.or(Spec.Glob.matches(t, Spec.cat{Spec.deep{}, g}), _): Bool}
-      %hk: {l == Bool.or(Spec.Glob.matches(t, Spec.cat{Spec.deep{}, g}), _): Bool}
+      ): {l == Bool.or(Spec.Glob.matches(t, Spec.Cat{Spec.Deep{}, g}), _): Bool}
+      %hk: {l == Bool.or(Spec.Glob.matches(t, Spec.Cat{Spec.Deep{}, g}), _): Bool}
       {==}
-    case Spec.cat{+a, +b}:
+    case Spec.Cat{+a, +b}:
       g = Seq.glob(r)
       kb = Seq.step.head(b, r, c, k)
       hb = Seq.step_head_ok(b, r, c, t, k, hk)
@@ -1100,7 +1100,7 @@ def Seq.step_head_ok(
         g
       ): {Seqs.matches(t, Seq.step.head(a, Con{b, r}, c, kb)) == _: Bool}
       Seq.step_head_ok(a, Con{b, r}, c, t, kb, hb)
-    case Spec.alt{+a, +b}:
+    case Spec.Alt{+a, +b}:
       g = Seq.glob(r)
       +ka = Seq.step.head(a, r, c, k)
       +kb = Seq.step.head(b, r, c, k)
@@ -1109,7 +1109,7 @@ def Seq.step_head_ok(
         t,
         ka,
         kb
-      ): {_ == Spec.Glob.matches(SCon{c, t}, Spec.cat{Spec.alt{a, b}, g}): Bool}
+      ): {_ == Spec.Glob.matches(SCon{c, t}, Spec.Cat{Spec.Alt{a, b}, g}): Bool}
       %Glob.cat_alt(SCon{c, t}, a, b, g): {l == _: Bool}
       %Seq.step_head_ok(
         a,
@@ -1118,7 +1118,7 @@ def Seq.step_head_ok(
         t,
         k,
         hk
-      ): {l == Bool.or(_, Spec.Glob.matches(SCon{c, t}, Spec.cat{b, g})): Bool}
+      ): {l == Bool.or(_, Spec.Glob.matches(SCon{c, t}, Spec.Cat{b, g})): Bool}
       %Seq.step_head_ok(b, r, c, t, k, hk): {l == Bool.or(Seqs.matches(t, ka), _): Bool}
       {==}
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
@@ -1409,21 +1409,21 @@ def Seqs.step_ok(
 
 # A rule whose glob is a set of Seqs.
 type Slot is Data:
-  inc{xs: List<&2, List<&2, Spec.Glob>>}
-  exc{xs: List<&2, List<&2, Spec.Glob>>}
+  Inc{xs: List<&2, List<&2, Spec.Glob>>}
+  Exc{xs: List<&2, List<&2, Spec.Glob>>}
 
 # the answer for p after slots, given the answer acc before them
 def Slot.selects.go(slots: List<&2, Slot>, +p: String, acc: Bool) -> Bool:
   match slots acc:
     case Nil{} _:
       acc
-    case Con{inc{xs}, t} False{}:
+    case Con{Inc{xs}, t} False{}:
       Slot.selects.go(t, p, Seqs.matches(p, xs))
-    case Con{inc{xs}, t} True{}:
+    case Con{Inc{xs}, t} True{}:
       Slot.selects.go(t, p, True{})
-    case Con{exc{xs}, t} False{}:
+    case Con{Exc{xs}, t} False{}:
       Slot.selects.go(t, p, False{})
-    case Con{exc{xs}, t} True{}:
+    case Con{Exc{xs}, t} True{}:
       Slot.selects.go(t, p, Bool.not(Seqs.matches(p, xs)))
 
 # the slots of rules
@@ -1431,20 +1431,20 @@ def Slot.of_rules(rules: List<&2, Spec.Rule>) -> List<&2, Slot>:
   match rules:
     case Nil{}:
       Nil{}
-    case Con{Spec.include{g}, t}:
-      Con{inc{[[g]]}, Slot.of_rules(t)}
-    case Con{Spec.exclude{g}, t}:
-      Con{exc{[[g]]}, Slot.of_rules(t)}
+    case Con{Spec.Include{g}, t}:
+      Con{Inc{[[g]]}, Slot.of_rules(t)}
+    case Con{Spec.Exclude{g}, t}:
+      Con{Exc{[[g]]}, Slot.of_rules(t)}
 
 # the slots after c
 def Slot.step(slots: List<&2, Slot>, +c: Char) -> List<&2, Slot>:
   match slots:
     case Nil{}:
       Nil{}
-    case Con{inc{xs}, t}:
-      Con{inc{Seqs.step(xs, c)}, Slot.step(t, c)}
-    case Con{exc{xs}, t}:
-      Con{exc{Seqs.step(xs, c)}, Slot.step(t, c)}
+    case Con{Inc{xs}, t}:
+      Con{Inc{Seqs.step(xs, c)}, Slot.step(t, c)}
+    case Con{Exc{xs}, t}:
+      Con{Exc{Seqs.step(xs, c)}, Slot.step(t, c)}
 
 # the one-Seq set of g matches what g matches
 def Seqs.single_ok(
@@ -1452,7 +1452,7 @@ def Seqs.single_ok(
   +g: Spec.Glob
 ) -> {Spec.Glob.matches(p, g) == Seqs.matches(p, [[g]]): Bool}:
   %Bool.or_false(
-    Spec.Glob.matches(p, Spec.cat{g, Spec.eps{}})
+    Spec.Glob.matches(p, Spec.Cat{g, Spec.Eps{}})
   ): {Spec.Glob.matches(p, g) == _: Bool}
   Glob.cat_eps_r(p, g)
 
@@ -1465,7 +1465,7 @@ def Slot.of_rules_ok(
   match rules acc:
     case Nil{} _:
       {==}
-    case Con{Spec.include{+g}, t} False{}:
+    case Con{Spec.Include{+g}, t} False{}:
       %Seqs.single_ok(
         p,
         g
@@ -1478,11 +1478,11 @@ def Slot.of_rules_ok(
           == Slot.selects.go(Slot.of_rules(t), p, _): Bool
       }
       Slot.of_rules_ok(t, p, Spec.Glob.matches(p, g))
-    case Con{Spec.include{g}, t} True{}:
+    case Con{Spec.Include{g}, t} True{}:
       Slot.of_rules_ok(t, p, True{})
-    case Con{Spec.exclude{g}, t} False{}:
+    case Con{Spec.Exclude{g}, t} False{}:
       Slot.of_rules_ok(t, p, False{})
-    case Con{Spec.exclude{+g}, +t} True{}:
+    case Con{Spec.Exclude{+g}, +t} True{}:
       %Seqs.single_ok(
         p,
         g
@@ -1508,7 +1508,7 @@ def Slot.step_ok(
   match slots acc:
     case Nil{} _:
       {==}
-    case Con{inc{+xs}, r} False{}:
+    case Con{Inc{+xs}, r} False{}:
       %Seqs.step_ok(
         xs,
         c,
@@ -1522,11 +1522,11 @@ def Slot.step_ok(
           == Slot.selects.go(r, SCon{c, t}, _): Bool
       }
       Slot.step_ok(r, c, t, Seqs.matches(t, Seqs.step(xs, c)))
-    case Con{inc{xs}, r} True{}:
+    case Con{Inc{xs}, r} True{}:
       Slot.step_ok(r, c, t, True{})
-    case Con{exc{xs}, r} False{}:
+    case Con{Exc{xs}, r} False{}:
       Slot.step_ok(r, c, t, False{})
-    case Con{exc{+xs}, +r} True{}:
+    case Con{Exc{+xs}, +r} True{}:
       %Seqs.step_ok(
         xs,
         c,
@@ -1593,9 +1593,9 @@ def Slots.is_eq(a: List<&2, Slot>, b: List<&2, Slot>) -> Bool:
   match a b:
     case Nil{} Nil{}:
       True{}
-    case Con{inc{x}, at} Con{inc{y}, bt}:
+    case Con{Inc{x}, at} Con{Inc{y}, bt}:
       Bool.and(Seqs.is_eq(x, y), Slots.is_eq(at, bt))
-    case Con{exc{x}, at} Con{exc{y}, bt}:
+    case Con{Exc{x}, at} Con{Exc{y}, bt}:
       Bool.and(Seqs.is_eq(x, y), Slots.is_eq(at, bt))
     case _ _:
       False{}
@@ -1614,41 +1614,41 @@ def Slots.is_eq_sound(
       h => Empty.absurd({Nil{} == Con{y, bt}: List<&2, Slot>}, Shared.Bool.false_ne_true(h))
     case Con{x, at} Nil{}:
       h => Empty.absurd({Con{x, at} == Nil{}: List<&2, Slot>}, Shared.Bool.false_ne_true(h))
-    case Con{inc{x}, at} Con{exc{y}, bt}:
+    case Con{Inc{x}, at} Con{Exc{y}, bt}:
       h => Empty.absurd(
-        {Con{inc{x}, at} == Con{exc{y}, bt}: List<&2, Slot>},
+        {Con{Inc{x}, at} == Con{Exc{y}, bt}: List<&2, Slot>},
         Shared.Bool.false_ne_true(h)
       )
-    case Con{exc{x}, at} Con{inc{y}, bt}:
+    case Con{Exc{x}, at} Con{Inc{y}, bt}:
       h => Empty.absurd(
-        {Con{exc{x}, at} == Con{inc{y}, bt}: List<&2, Slot>},
+        {Con{Exc{x}, at} == Con{Inc{y}, bt}: List<&2, Slot>},
         Shared.Bool.false_ne_true(h)
       )
-    case Con{inc{+x}, +at} Con{inc{+y}, +bt}:
+    case Con{Inc{+x}, +at} Con{Inc{+y}, +bt}:
       +h =>
         %Seqs.is_eq_sound(
           x,
           y
         )(Shared.Bool.and_true_left(Seqs.is_eq(x, y), Slots.is_eq(at, bt))(h)):
-          {Con{inc{x}, at} == Con{inc{_}, bt}: List<&2, Slot>}
+          {Con{Inc{x}, at} == Con{Inc{_}, bt}: List<&2, Slot>}
         %Slots.is_eq_sound(
           at,
           bt
         )(Shared.Bool.and_true_right(Seqs.is_eq(x, y), Slots.is_eq(at, bt))(h)):
-          {Con{inc{x}, at} == Con{inc{x}, _}: List<&2, Slot>}
+          {Con{Inc{x}, at} == Con{Inc{x}, _}: List<&2, Slot>}
         {==}
-    case Con{exc{+x}, +at} Con{exc{+y}, +bt}:
+    case Con{Exc{+x}, +at} Con{Exc{+y}, +bt}:
       +h =>
         %Seqs.is_eq_sound(
           x,
           y
         )(Shared.Bool.and_true_left(Seqs.is_eq(x, y), Slots.is_eq(at, bt))(h)):
-          {Con{exc{x}, at} == Con{exc{_}, bt}: List<&2, Slot>}
+          {Con{Exc{x}, at} == Con{Exc{_}, bt}: List<&2, Slot>}
         %Slots.is_eq_sound(
           at,
           bt
         )(Shared.Bool.and_true_right(Seqs.is_eq(x, y), Slots.is_eq(at, bt))(h)):
-          {Con{exc{x}, at} == Con{exc{x}, _}: List<&2, Slot>}
+          {Con{Exc{x}, at} == Con{Exc{x}, _}: List<&2, Slot>}
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
@@ -1676,9 +1676,9 @@ def St.holds(x: St, +p: String) -> Bool:
 # the state that a query starts in
 def St.of(q: Spec.Query) -> St:
   match q:
-    case Spec.both{a, b}:
+    case Spec.Both{a, b}:
       St{True{}, Slot.of_rules(a), Slot.of_rules(b)}
-    case Spec.only{a, b}:
+    case Spec.Only{a, b}:
       St{False{}, Slot.of_rules(a), Slot.of_rules(b)}
 
 # the state after c
@@ -1763,8 +1763,8 @@ def St.of_ok(
   +p: String
 ) -> {Bool.and(Spec.is_path(p), St.holds(St.of(q), p)) == Spec.Query.holds(q, p): Bool}:
   match q:
-    case Spec.both{+a, +b}:
-      r = Spec.Query.holds(Spec.both{a, b}, p)
+    case Spec.Both{+a, +b}:
+      r = Spec.Query.holds(Spec.Both{a, b}, p)
       %Slot.of_rules_ok(
         a,
         p,
@@ -1782,8 +1782,8 @@ def St.of_ok(
         False{}
       ): {Bool.and(Spec.is_path(p), Bool.and(Spec.Rule.selects.go(a, p, False{}), _)) == r: Bool}
       {==}
-    case Spec.only{+a, +b}:
-      r = Spec.Query.holds(Spec.only{a, b}, p)
+    case Spec.Only{+a, +b}:
+      r = Spec.Query.holds(Spec.Only{a, b}, p)
       %Slot.of_rules_ok(
         a,
         p,
@@ -1837,23 +1837,23 @@ def Chars.all_in(xs: List<&2, Char>, +cs: List<&2, Char>) -> Bool:
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
 def Glob.within(g: Spec.Glob, +cs: List<&2, Char>) -> Bool:
   match g:
-    case Spec.void{}:
+    case Spec.Void{}:
       True{}
-    case Spec.eps{}:
+    case Spec.Eps{}:
       True{}
-    case Spec.lit{x}:
+    case Spec.Lit{x}:
       Chars.has(cs, x)
-    case Spec.any{}:
+    case Spec.Any{}:
       True{}
-    case Spec.star{}:
+    case Spec.Star{}:
       True{}
-    case Spec.class{n, xs}:
+    case Spec.Class{n, xs}:
       Chars.all_in(xs, cs)
-    case Spec.deep{}:
+    case Spec.Deep{}:
       True{}
-    case Spec.cat{a, b}:
+    case Spec.Cat{a, b}:
       Bool.and(Glob.within(a, cs), Glob.within(b, cs))
-    case Spec.alt{a, b}:
+    case Spec.Alt{a, b}:
       Bool.and(Glob.within(a, cs), Glob.within(b, cs))
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
@@ -1883,9 +1883,9 @@ def Slots.within(slots: List<&2, Slot>, +cs: List<&2, Char>) -> Bool:
   match slots:
     case Nil{}:
       True{}
-    case Con{inc{xs}, t}:
+    case Con{Inc{xs}, t}:
       Bool.and(Seqs.within(xs, cs), Slots.within(t, cs))
-    case Con{exc{xs}, t}:
+    case Con{Exc{xs}, t}:
       Bool.and(Seqs.within(xs, cs), Slots.within(t, cs))
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
@@ -2035,11 +2035,11 @@ def Seq.step.head_rep(
   Glob.within(h, cs) == True{}: Bool
 } -> {Seq.step.head(h, r, c, kc) == Seq.step.head(h, r, f, kf): List<&2, List<&2, Spec.Glob>>}:
   match h:
-    case Spec.void{}:
+    case Spec.Void{}:
       _ => {==}
-    case Spec.eps{}:
+    case Spec.Eps{}:
       _ => ek
-    case Spec.lit{+x}:
+    case Spec.Lit{+x}:
       +hw =>
         %Char.ne_in(
           cs,
@@ -2056,7 +2056,7 @@ def Seq.step.head_rep(
           hf
         ): {Seq.keep(False{}, r) == Seq.keep(_, r): List<&2, List<&2, Spec.Glob>>}
         {==}
-    case Spec.any{}:
+    case Spec.Any{}:
       _ =>
         %Char.ne_in_r(
           cs,
@@ -2075,9 +2075,9 @@ def Seq.step.head_rep(
           hf
         ): {Seq.keep(True{}, r) == Seq.keep(Bool.not(_), r): List<&2, List<&2, Spec.Glob>>}
         {==}
-    case Spec.star{}:
+    case Spec.Star{}:
       _ =>
-        +s = {Con{Spec.star{}, r}: List<&2, Spec.Glob>}
+        +s = {Con{Spec.Star{}, r}: List<&2, Spec.Glob>}
         %Char.ne_in_r(
           cs,
           '/',
@@ -2133,7 +2133,7 @@ def Seq.step.head_rep(
             ): List<&2, List<&2, Spec.Glob>>
         }
         {==}
-    case Spec.class{n, +xs}:
+    case Spec.Class{n, +xs}:
       +hw =>
         +cc = List.contains(~Char, ~Char.is_eq, xs, c)
         +cf = List.contains(~Char, ~Char.is_eq, xs, f)
@@ -2195,13 +2195,13 @@ def Seq.step.head_rep(
             == Seq.keep(Bool.and(True{}, Bool.xor(n, _)), r): List<&2, List<&2, Spec.Glob>>
         }
         {==}
-    case Spec.deep{}:
+    case Spec.Deep{}:
       _ =>
         %ek: {
-          Con{Con{Spec.deep{}, r}, kc} == Con{Con{Spec.deep{}, r}, _}: List<&2, List<&2, Spec.Glob>>
+          Con{Con{Spec.Deep{}, r}, kc} == Con{Con{Spec.Deep{}, r}, _}: List<&2, List<&2, Spec.Glob>>
         }
         {==}
-    case Spec.cat{+a, +b}:
+    case Spec.Cat{+a, +b}:
       +hw =>
         +wa = Glob.within(a, cs)
         +wb = Glob.within(b, cs)
@@ -2231,7 +2231,7 @@ def Seq.step.head_rep(
           hs,
           eb
         )(Shared.Bool.and_true_left(wa, wb)(hw))
-    case Spec.alt{+a, +b}:
+    case Spec.Alt{+a, +b}:
       +hw =>
         +wa = Glob.within(a, cs)
         +wb = Glob.within(b, cs)
@@ -2370,27 +2370,27 @@ def Slot.step_rep(
   match slots:
     case Nil{}:
       _ => {==}
-    case Con{inc{+xs}, +t}:
+    case Con{Inc{+xs}, +t}:
       +hw =>
         +wx = Seqs.within(xs, cs)
         +wt = Slots.within(t, cs)
         +xc = Seqs.step(xs, c)
         +tc = Slot.step(t, c)
         %Seqs.step_rep(xs, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_left(wx, wt)(hw)):
-          {Con{inc{xc}, tc} == Con{inc{_}, Slot.step(t, f)}: List<&2, Slot>}
+          {Con{Inc{xc}, tc} == Con{Inc{_}, Slot.step(t, f)}: List<&2, Slot>}
         %Slot.step_rep(t, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_right(wx, wt)(hw)):
-          {Con{inc{xc}, tc} == Con{inc{xc}, _}: List<&2, Slot>}
+          {Con{Inc{xc}, tc} == Con{Inc{xc}, _}: List<&2, Slot>}
         {==}
-    case Con{exc{+xs}, +t}:
+    case Con{Exc{+xs}, +t}:
       +hw =>
         +wx = Seqs.within(xs, cs)
         +wt = Slots.within(t, cs)
         +xc = Seqs.step(xs, c)
         +tc = Slot.step(t, c)
         %Seqs.step_rep(xs, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_left(wx, wt)(hw)):
-          {Con{exc{xc}, tc} == Con{exc{_}, Slot.step(t, f)}: List<&2, Slot>}
+          {Con{Exc{xc}, tc} == Con{Exc{_}, Slot.step(t, f)}: List<&2, Slot>}
         %Slot.step_rep(t, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_right(wx, wt)(hw)):
-          {Con{exc{xc}, tc} == Con{exc{xc}, _}: List<&2, Slot>}
+          {Con{Exc{xc}, tc} == Con{Exc{xc}, _}: List<&2, Slot>}
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
@@ -2702,23 +2702,23 @@ def Cert.sound(
 # bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a glob tree is a few nodes, where a fork costs more than it saves
 def Glob.chars(g: Spec.Glob) -> List<&2, Char>:
   match g:
-    case Spec.void{}:
+    case Spec.Void{}:
       []
-    case Spec.eps{}:
+    case Spec.Eps{}:
       []
-    case Spec.lit{x}:
+    case Spec.Lit{x}:
       [x]
-    case Spec.any{}:
+    case Spec.Any{}:
       []
-    case Spec.star{}:
+    case Spec.Star{}:
       []
-    case Spec.class{n, xs}:
+    case Spec.Class{n, xs}:
       xs
-    case Spec.deep{}:
+    case Spec.Deep{}:
       []
-    case Spec.cat{a, b}:
+    case Spec.Cat{a, b}:
       List.append(&2, Char, Glob.chars(a), Glob.chars(b))
-    case Spec.alt{a, b}:
+    case Spec.Alt{a, b}:
       List.append(&2, Char, Glob.chars(a), Glob.chars(b))
 # bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
@@ -2727,17 +2727,17 @@ def Rules.chars(rules: List<&2, Spec.Rule>) -> List<&2, Char>:
   match rules:
     case Nil{}:
       []
-    case Con{Spec.include{g}, t}:
+    case Con{Spec.Include{g}, t}:
       List.append(&2, Char, Glob.chars(g), Rules.chars(t))
-    case Con{Spec.exclude{g}, t}:
+    case Con{Spec.Exclude{g}, t}:
       List.append(&2, Char, Glob.chars(g), Rules.chars(t))
 
 # '/' and the characters that the globs of q name
 def Query.chars(q: Spec.Query) -> List<&2, Char>:
   match q:
-    case Spec.both{a, b}:
+    case Spec.Both{a, b}:
       Con{'/', List.append(&2, Char, Rules.chars(a), Rules.chars(b))}
-    case Spec.only{a, b}:
+    case Spec.Only{a, b}:
       Con{'/', List.append(&2, Char, Rules.chars(a), Rules.chars(b))}
 
 # the largest code in cs, or acc
@@ -2808,18 +2808,18 @@ def Search.close(
 # Where a valid path is: at a segment start, after "." or "..", inside a
 # valid segment, or past a mistake.
 type Path is Data:
-  p_start{}
-  p_dot{}
-  p_dots{}
-  p_seg{}
-  p_dead{}
+  PStart{}
+  PDot{}
+  PDots{}
+  PSeg{}
+  PDead{}
 
 # What a character is to a path: '/', '.', a banned character, or another.
 type Role is Data:
-  k_slash{}
-  k_dot{}
-  k_bad{}
-  k_other{}
+  KSlash{}
+  KDot{}
+  KBad{}
+  KOther{}
 
 # what c is to a path
 def Role.of(c: Char) -> Role:
@@ -2828,45 +2828,45 @@ def Role.of(c: Char) -> Role:
       Bool.pick(
         Role,
         U32.is_eq(x, 47),
-        k_slash{},
+        KSlash{},
         Bool.pick(
           Role,
           U32.is_eq(x, 46),
-          k_dot{},
-          Bool.pick(Role, Bool.or(U32.is_eq(x, 0), U32.is_eq(x, 92)), k_bad{}, k_other{})
+          KDot{},
+          Bool.pick(Role, Bool.or(U32.is_eq(x, 0), U32.is_eq(x, 92)), KBad{}, KOther{})
         )
       )
 
 # where a path is after a character of kind k
 def Path.step(s: Path, k: Role) -> Path:
   match s k:
-    case p_seg{} k_slash{}:
-      p_start{}
-    case _ k_slash{}:
-      p_dead{}
-    case _ k_bad{}:
-      p_dead{}
-    case p_dead{} _:
-      p_dead{}
-    case p_start{} k_dot{}:
-      p_dot{}
-    case p_dot{} k_dot{}:
-      p_dots{}
+    case PSeg{} KSlash{}:
+      PStart{}
+    case _ KSlash{}:
+      PDead{}
+    case _ KBad{}:
+      PDead{}
+    case PDead{} _:
+      PDead{}
+    case PStart{} KDot{}:
+      PDot{}
+    case PDot{} KDot{}:
+      PDots{}
     case _ _:
-      p_seg{}
+      PSeg{}
 
 # a and b are the same place
 def Path.is_eq(a: Path, b: Path) -> Bool:
   match a b:
-    case p_start{} p_start{}:
+    case PStart{} PStart{}:
       True{}
-    case p_dot{} p_dot{}:
+    case PDot{} PDot{}:
       True{}
-    case p_dots{} p_dots{}:
+    case PDots{} PDots{}:
       True{}
-    case p_seg{} p_seg{}:
+    case PSeg{} PSeg{}:
       True{}
-    case p_dead{} p_dead{}:
+    case PDead{} PDead{}:
       True{}
     case _ _:
       False{}
@@ -2874,7 +2874,7 @@ def Path.is_eq(a: Path, b: Path) -> Bool:
 # a valid path can end here
 def Path.is_end(s: Path) -> Bool:
   match s:
-    case p_seg{}:
+    case PSeg{}:
       True{}
     case _:
       False{}
@@ -2901,7 +2901,7 @@ def Node.add(known: Bool, n: Node, acc: List<&2, Node>) -> List<&2, Node>:
   match known n:
     case True{} _:
       acc
-    case False{} Node{p_dead{}, x, r}:
+    case False{} Node{PDead{}, x, r}:
       acc
     case False{} n:
       Con{n, acc}
@@ -2960,9 +2960,9 @@ def Search.witness(
 
 # What the search found: a path to check, a certificate to check, or neither.
 type Outcome is Data:
-  witness{path: String}
-  proof{xs: List<&2, St>, cs: List<&2, Char>, f: Char}
-  no_answer{}
+  Witness{path: String}
+  Proof{xs: List<&2, St>, cs: List<&2, Char>, f: Char}
+  NoAnswer{}
 
 # the states a search may visit before it gives up
 def Search.fuel() -> Nat:
@@ -2972,9 +2972,9 @@ def Search.fuel() -> Nat:
 def Search.run.witness(found: Maybe<&2, String>) -> Outcome:
   match found:
     case None{}:
-      no_answer{}
+      NoAnswer{}
     case Some{p}:
-      witness{p}
+      Witness{p}
 
 # the certificate of phase one, or phase two when there is none
 def Search.run.closed(
@@ -2985,10 +2985,10 @@ def Search.run.closed(
 ) -> Outcome:
   match closed:
     case Some{xs}:
-      proof{xs, cs, f}
+      Proof{xs, cs, f}
     case None{}:
       ds = {Con{'x', Con{f, cs}}: List<&2, Char>}
-      +start = {Node{p_start{}, x0, SNil{}}: Node}
+      +start = {Node{PStart{}, x0, SNil{}}: Node}
       Search.run.witness(Search.witness(Search.fuel(), [start], [start], ds))
 
 # what the search finds for q
@@ -3002,28 +3002,28 @@ def Search.run(+q: Spec.Query) -> Outcome:
 def Search.found_if(p: String, ok: Bool) -> Spec.Search:
   match ok:
     case False{}:
-      Spec.unknown{}
+      Spec.Unknown{}
     case True{}:
-      Spec.found{p}
+      Spec.Found{p}
 
 # Absent when ok, else Unknown
 def Search.absent_if(ok: Bool) -> Spec.Search:
   match ok:
     case False{}:
-      Spec.unknown{}
+      Spec.Unknown{}
     case True{}:
-      Spec.absent{}
+      Spec.Absent{}
 
 # the answer to q, from what the search found, once checked
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
 def Search.decide(q: Spec.Query, r: Outcome) -> Spec.Search:
   match r:
-    case witness{+p}:
+    case Witness{+p}:
       Search.found_if(p, Spec.Query.holds(q, p))
-    case proof{+xs, cs, f}:
+    case Proof{+xs, cs, f}:
       Search.absent_if(Bool.and(Cert.check(xs, cs, f), St.has(xs, St.of(q))))
-    case no_answer{}:
-      Spec.unknown{}
+    case NoAnswer{}:
+      Spec.Unknown{}
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 def Spec.Query.search(q):
   +q = q
@@ -3032,21 +3032,21 @@ def Spec.Query.search(q):
 # Empty when s is Found
 def Search.NotFound(s: Spec.Search) -> Type:
   match s:
-    case Spec.found{p}:
+    case Spec.Found{p}:
       Empty
-    case Spec.absent{}:
+    case Spec.Absent{}:
       Unit
-    case Spec.unknown{}:
+    case Spec.Unknown{}:
       Unit
 
 # Empty when s is Absent
 def Search.NotAbsent(s: Spec.Search) -> Type:
   match s:
-    case Spec.found{p}:
+    case Spec.Found{p}:
       Unit
-    case Spec.absent{}:
+    case Spec.Absent{}:
       Empty
-    case Spec.unknown{}:
+    case Spec.Unknown{}:
       Unit
 
 # no s that is not Found equals Found{p}
@@ -3054,7 +3054,7 @@ def Search.ne_found(
   -s: Spec.Search,
   -p: String,
   n: Search.NotFound(s),
-  e: {s == Spec.found{p}: Spec.Search}
+  e: {s == Spec.Found{p}: Spec.Search}
 ) -> Empty:
   %e: Search.NotFound(_)
   n
@@ -3063,7 +3063,7 @@ def Search.ne_found(
 def Search.ne_absent(
   -s: Spec.Search,
   n: Search.NotAbsent(s),
-  e: {s == Spec.absent{}: Spec.Search}
+  e: {s == Spec.Absent{}: Spec.Search}
 ) -> Empty:
   %e: Search.NotAbsent(_)
   n
@@ -3071,11 +3071,11 @@ def Search.ne_absent(
 # the path of a Found answer
 def Search.path(s: Spec.Search) -> String:
   match s:
-    case Spec.found{p}:
+    case Spec.Found{p}:
       p
-    case Spec.absent{}:
+    case Spec.Absent{}:
       SNil{}
-    case Spec.unknown{}:
+    case Spec.Unknown{}:
       SNil{}
 
 # found_if answers Found{p} only for a path that holds, given b: holds(q, p0)
@@ -3087,13 +3087,13 @@ def Search.found_if_found(
 ) -> {
   Spec.Query.holds(q, p0) == b: Bool
 } -> {
-  Search.found_if(p0, b) == Spec.found{p}: Spec.Search
+  Search.found_if(p0, b) == Spec.Found{p}: Spec.Search
 } -> {Spec.Query.holds(q, p) == True{}: Bool}:
   match b:
     case False{}:
       e => h => Empty.absurd(
         {Spec.Query.holds(q, p) == True{}: Bool},
-        Search.ne_found(Spec.unknown{}, p, Unit{}, h)
+        Search.ne_found(Spec.Unknown{}, p, Unit{}, h)
       )
     case True{}:
       e => h =>
@@ -3101,8 +3101,8 @@ def Search.found_if_found(
           Spec.Search,
           String,
           s => Search.path(s),
-          Spec.found{p0},
-          Spec.found{p},
+          Spec.Found{p0},
+          Spec.Found{p},
           h
         )
         %same: {Spec.Query.holds(q, _) == True{}: Bool}
@@ -3112,23 +3112,23 @@ def Search.found_if_found(
 def Search.absent_if_found(
   b: Bool,
   -p: String
-) -> {Search.absent_if(b) == Spec.found{p}: Spec.Search} -> Empty:
+) -> {Search.absent_if(b) == Spec.Found{p}: Spec.Search} -> Empty:
   match b:
     case False{}:
-      h => Search.ne_found(Spec.unknown{}, p, Unit{}, h)
+      h => Search.ne_found(Spec.Unknown{}, p, Unit{}, h)
     case True{}:
-      h => Search.ne_found(Spec.absent{}, p, Unit{}, h)
+      h => Search.ne_found(Spec.Absent{}, p, Unit{}, h)
 
 # found_if never answers Absent
 def Search.found_if_absent(
   -p: String,
   b: Bool
-) -> {Search.found_if(p, b) == Spec.absent{}: Spec.Search} -> Empty:
+) -> {Search.found_if(p, b) == Spec.Absent{}: Spec.Search} -> Empty:
   match b:
     case False{}:
-      h => Search.ne_absent(Spec.unknown{}, Unit{}, h)
+      h => Search.ne_absent(Spec.Unknown{}, Unit{}, h)
     case True{}:
-      h => Search.ne_absent(Spec.found{p}, Unit{}, h)
+      h => Search.ne_absent(Spec.Found{p}, Unit{}, h)
 
 # a Found answer of decide names a path that holds
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
@@ -3137,20 +3137,20 @@ def Search.decide_found(
   r: Outcome,
   p: String
 ) -> {
-  Search.decide(q, r) == Spec.found{p}: Spec.Search
+  Search.decide(q, r) == Spec.Found{p}: Spec.Search
 } -> {Spec.Query.holds(q, p) == True{}: Bool}:
   match r:
-    case witness{+p0}:
+    case Witness{+p0}:
       h => Search.found_if_found(q, p0, p, Spec.Query.holds(q, p0))({==}, h)
-    case proof{+xs, cs, f}:
+    case Proof{+xs, cs, f}:
       h => Empty.absurd(
         {Spec.Query.holds(q, p) == True{}: Bool},
         Search.absent_if_found(Bool.and(Cert.check(xs, cs, f), St.has(xs, St.of(q))), p)(h)
       )
-    case no_answer{}:
+    case NoAnswer{}:
       h => Empty.absurd(
         {Spec.Query.holds(q, p) == True{}: Bool},
-        Search.ne_found(Spec.unknown{}, p, Unit{}, h)
+        Search.ne_found(Spec.Unknown{}, p, Unit{}, h)
       )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
@@ -3165,13 +3165,13 @@ def Search.absent_if_absent(
 ) -> {
   Bool.and(Cert.check(xs, cs, f), St.has(xs, St.of(q))) == b: Bool
 } -> {
-  Search.absent_if(b) == Spec.absent{}: Spec.Search
+  Search.absent_if(b) == Spec.Absent{}: Spec.Search
 } -> {Spec.Query.holds(q, p) == False{}: Bool}:
   match b:
     case False{}:
       e => h => Empty.absurd(
         {Spec.Query.holds(q, p) == False{}: Bool},
-        Search.ne_absent(Spec.unknown{}, Unit{}, h)
+        Search.ne_absent(Spec.Unknown{}, Unit{}, h)
       )
     case True{}:
       +e => h =>
@@ -3207,15 +3207,15 @@ def Search.decide_absent(
   r: Outcome,
   p: String
 ) -> {
-  Search.decide(q, r) == Spec.absent{}: Spec.Search
+  Search.decide(q, r) == Spec.Absent{}: Spec.Search
 } -> {Spec.Query.holds(q, p) == False{}: Bool}:
   match r:
-    case witness{p0}:
+    case Witness{p0}:
       h => Empty.absurd(
         {Spec.Query.holds(q, p) == False{}: Bool},
         Search.found_if_absent(p0, Spec.Query.holds(q, p0))(h)
       )
-    case proof{+xs, +cs, +f}:
+    case Proof{+xs, +cs, +f}:
       h => Search.absent_if_absent(
         q,
         xs,
@@ -3224,10 +3224,10 @@ def Search.decide_absent(
         p,
         Bool.and(Cert.check(xs, cs, f), St.has(xs, St.of(q)))
       )({==}, h)
-    case no_answer{}:
+    case NoAnswer{}:
       h => Empty.absurd(
         {Spec.Query.holds(q, p) == False{}: Bool},
-        Search.ne_absent(Spec.unknown{}, Unit{}, h)
+        Search.ne_absent(Spec.Unknown{}, Unit{}, h)
       )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 def Spec.search_found(q, p, h):
@@ -3291,7 +3291,7 @@ def Sym.char_is(
 # the text of c before rest: a character with a role is escaped
 def Glob.show.char(c: Char, k: Spec.Sym, rest: String) -> String:
   match k:
-    case Spec.s_char{x}:
+    case Spec.SChar{x}:
       SCon{c, rest}
     case _:
       SCon{Chr{92}, SCon{c, rest}}
@@ -3315,23 +3315,23 @@ def Glob.show.neg(neg: Bool, text: String) -> String:
 # the text of g before rest
 def Glob.show.go(g: Spec.Glob, rest: String) -> String:
   match g:
-    case Spec.void{}:
+    case Spec.Void{}:
       "[]" ++ rest
-    case Spec.eps{}:
+    case Spec.Eps{}:
       "{}" ++ rest
-    case Spec.lit{+c}:
+    case Spec.Lit{+c}:
       Glob.show.char(c, Spec.Sym.of(c), rest)
-    case Spec.any{}:
+    case Spec.Any{}:
       "?" ++ rest
-    case Spec.star{}:
+    case Spec.Star{}:
       "{*}" ++ rest
-    case Spec.class{neg, cs}:
+    case Spec.Class{neg, cs}:
       "[" ++ Glob.show.neg(neg, Glob.show.chars(cs, "]" ++ rest))
-    case Spec.deep{}:
+    case Spec.Deep{}:
       "{*{,/**}}" ++ rest
-    case Spec.cat{a, b}:
+    case Spec.Cat{a, b}:
       "{" ++ Glob.show.go(a, Glob.show.go(b, "}" ++ rest))
-    case Spec.alt{a, b}:
+    case Spec.Alt{a, b}:
       "{" ++ Glob.show.go(a, "," ++ Glob.show.go(b, "}" ++ rest))
 
 def Spec.Glob.show(g):
@@ -3340,37 +3340,37 @@ def Spec.Glob.show(g):
 # the glob that the text of Deep reads back as
 def Show.deep() -> Spec.Glob:
   dirs = {
-    Spec.alt{
-      Spec.eps{},
-      Spec.alt{Spec.cat{Spec.lit{Chr{47}}, Spec.cat{Spec.deep{}, Spec.eps{}}}, Spec.void{}}
+    Spec.Alt{
+      Spec.Eps{},
+      Spec.Alt{Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}}, Spec.Void{}}
     }: Spec.Glob
   }
-  Spec.alt{Spec.cat{Spec.star{}, Spec.cat{dirs, Spec.eps{}}}, Spec.void{}}
+  Spec.Alt{Spec.Cat{Spec.Star{}, Spec.Cat{dirs, Spec.Eps{}}}, Spec.Void{}}
 
 # the glob that the text of g reads back as
 # bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a glob tree is a few nodes, where a fork costs more than it saves
 def Show.glob(g: Spec.Glob) -> Spec.Glob:
   match g:
-    case Spec.void{}:
-      Spec.class{False{}, []}
-    case Spec.eps{}:
-      Spec.alt{Spec.eps{}, Spec.void{}}
-    case Spec.lit{c}:
-      Spec.lit{c}
-    case Spec.any{}:
-      Spec.any{}
-    case Spec.star{}:
-      Spec.alt{Spec.cat{Spec.star{}, Spec.eps{}}, Spec.void{}}
-    case Spec.class{neg, cs}:
-      Spec.class{neg, List.reverse(&2, Char, cs)}
-    case Spec.deep{}:
+    case Spec.Void{}:
+      Spec.Class{False{}, []}
+    case Spec.Eps{}:
+      Spec.Alt{Spec.Eps{}, Spec.Void{}}
+    case Spec.Lit{c}:
+      Spec.Lit{c}
+    case Spec.Any{}:
+      Spec.Any{}
+    case Spec.Star{}:
+      Spec.Alt{Spec.Cat{Spec.Star{}, Spec.Eps{}}, Spec.Void{}}
+    case Spec.Class{neg, cs}:
+      Spec.Class{neg, List.reverse(&2, Char, cs)}
+    case Spec.Deep{}:
       Show.deep()
-    case Spec.cat{a, b}:
-      Spec.alt{Spec.cat{Show.glob(a), Spec.cat{Show.glob(b), Spec.eps{}}}, Spec.void{}}
-    case Spec.alt{a, b}:
-      Spec.alt{
-        Spec.cat{Show.glob(a), Spec.eps{}},
-        Spec.alt{Spec.cat{Show.glob(b), Spec.eps{}}, Spec.void{}}
+    case Spec.Cat{a, b}:
+      Spec.Alt{Spec.Cat{Show.glob(a), Spec.Cat{Show.glob(b), Spec.Eps{}}}, Spec.Void{}}
+    case Spec.Alt{a, b}:
+      Spec.Alt{
+        Spec.Cat{Show.glob(a), Spec.Eps{}},
+        Spec.Alt{Spec.Cat{Show.glob(b), Spec.Eps{}}, Spec.Void{}}
       }
 # bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
@@ -3388,96 +3388,96 @@ def Step.char(
 ) -> {
   Spec.Glob.read.go(
     l,
-    Spec.out{},
-    Spec.Frame.add(st, Spec.lit{x}),
+    Spec.Out{},
+    Spec.Frame.add(st, Spec.Lit{x}),
     False{}
   )
-    == Spec.Glob.read.go(Con{Spec.s_char{x}, l}, Spec.out{}, st, seg): Maybe<&2, Spec.Glob>
+    == Spec.Glob.read.go(Con{Spec.SChar{x}, l}, Spec.Out{}, st, seg): Maybe<&2, Spec.Glob>
 }:
   match l:
     case Nil{}:
       {==}
     case Con{y1, l2}:
       match y1:
-        case Spec.s_esc{}:
+        case Spec.SEsc{}:
           {==}
-        case Spec.s_any{}:
+        case Spec.SAny{}:
           {==}
-        case Spec.s_star{}:
+        case Spec.SStar{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y6, l7}:
               match y6:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch19}:
+                case Spec.SChar{ch19}:
                   {==}
-        case Spec.s_slash{}:
+        case Spec.SSlash{}:
           {==}
-        case Spec.s_open{}:
+        case Spec.SOpen{}:
           {==}
-        case Spec.s_comma{}:
+        case Spec.SComma{}:
           {==}
-        case Spec.s_close{}:
+        case Spec.SClose{}:
           {==}
-        case Spec.s_left{}:
+        case Spec.SLeft{}:
           {==}
-        case Spec.s_right{}:
+        case Spec.SRight{}:
           {==}
-        case Spec.s_bang{}:
+        case Spec.SBang{}:
           {==}
-        case Spec.s_dash{}:
+        case Spec.SDash{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y28, l29}:
               match y28:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch41}:
+                case Spec.SChar{ch41}:
                   {==}
-        case Spec.s_char{ch42}:
+        case Spec.SChar{ch42}:
           {==}
 
 # an escaped symbol is a Lit of its character
@@ -3489,92 +3489,92 @@ def Step.esc(
 ) -> {
   Spec.Glob.read.go(
     l,
-    Spec.out{},
-    Spec.Frame.add(st, Spec.lit{Spec.Sym.char(y)}),
+    Spec.Out{},
+    Spec.Frame.add(st, Spec.Lit{Spec.Sym.char(y)}),
     False{}
   )
-    == Spec.Glob.read.go(Con{Spec.s_esc{}, Con{y, l}}, Spec.out{}, st, seg): Maybe<&2, Spec.Glob>
+    == Spec.Glob.read.go(Con{Spec.SEsc{}, Con{y, l}}, Spec.Out{}, st, seg): Maybe<&2, Spec.Glob>
 }:
   match y:
-    case Spec.s_esc{}:
+    case Spec.SEsc{}:
       {==}
-    case Spec.s_any{}:
+    case Spec.SAny{}:
       {==}
-    case Spec.s_star{}:
+    case Spec.SStar{}:
       match l:
         case Nil{}:
           {==}
         case Con{y4, l5}:
           match y4:
-            case Spec.s_esc{}:
+            case Spec.SEsc{}:
               {==}
-            case Spec.s_any{}:
+            case Spec.SAny{}:
               {==}
-            case Spec.s_star{}:
+            case Spec.SStar{}:
               {==}
-            case Spec.s_slash{}:
+            case Spec.SSlash{}:
               {==}
-            case Spec.s_open{}:
+            case Spec.SOpen{}:
               {==}
-            case Spec.s_comma{}:
+            case Spec.SComma{}:
               {==}
-            case Spec.s_close{}:
+            case Spec.SClose{}:
               {==}
-            case Spec.s_left{}:
+            case Spec.SLeft{}:
               {==}
-            case Spec.s_right{}:
+            case Spec.SRight{}:
               {==}
-            case Spec.s_bang{}:
+            case Spec.SBang{}:
               {==}
-            case Spec.s_dash{}:
+            case Spec.SDash{}:
               {==}
-            case Spec.s_char{ch17}:
+            case Spec.SChar{ch17}:
               {==}
-    case Spec.s_slash{}:
+    case Spec.SSlash{}:
       {==}
-    case Spec.s_open{}:
+    case Spec.SOpen{}:
       {==}
-    case Spec.s_comma{}:
+    case Spec.SComma{}:
       {==}
-    case Spec.s_close{}:
+    case Spec.SClose{}:
       {==}
-    case Spec.s_left{}:
+    case Spec.SLeft{}:
       {==}
-    case Spec.s_right{}:
+    case Spec.SRight{}:
       {==}
-    case Spec.s_bang{}:
+    case Spec.SBang{}:
       {==}
-    case Spec.s_dash{}:
+    case Spec.SDash{}:
       match l:
         case Nil{}:
           {==}
         case Con{y26, l27}:
           match y26:
-            case Spec.s_esc{}:
+            case Spec.SEsc{}:
               {==}
-            case Spec.s_any{}:
+            case Spec.SAny{}:
               {==}
-            case Spec.s_star{}:
+            case Spec.SStar{}:
               {==}
-            case Spec.s_slash{}:
+            case Spec.SSlash{}:
               {==}
-            case Spec.s_open{}:
+            case Spec.SOpen{}:
               {==}
-            case Spec.s_comma{}:
+            case Spec.SComma{}:
               {==}
-            case Spec.s_close{}:
+            case Spec.SClose{}:
               {==}
-            case Spec.s_left{}:
+            case Spec.SLeft{}:
               {==}
-            case Spec.s_right{}:
+            case Spec.SRight{}:
               {==}
-            case Spec.s_bang{}:
+            case Spec.SBang{}:
               {==}
-            case Spec.s_dash{}:
+            case Spec.SDash{}:
               {==}
-            case Spec.s_char{ch39}:
+            case Spec.SChar{ch39}:
               {==}
-    case Spec.s_char{ch40}:
+    case Spec.SChar{ch40}:
       {==}
 
 # `?` is Any
@@ -3585,96 +3585,96 @@ def Step.any(
 ) -> {
   Spec.Glob.read.go(
     l,
-    Spec.out{},
-    Spec.Frame.add(st, Spec.any{}),
+    Spec.Out{},
+    Spec.Frame.add(st, Spec.Any{}),
     False{}
   )
-    == Spec.Glob.read.go(Con{Spec.s_any{}, l}, Spec.out{}, st, seg): Maybe<&2, Spec.Glob>
+    == Spec.Glob.read.go(Con{Spec.SAny{}, l}, Spec.Out{}, st, seg): Maybe<&2, Spec.Glob>
 }:
   match l:
     case Nil{}:
       {==}
     case Con{y1, l2}:
       match y1:
-        case Spec.s_esc{}:
+        case Spec.SEsc{}:
           {==}
-        case Spec.s_any{}:
+        case Spec.SAny{}:
           {==}
-        case Spec.s_star{}:
+        case Spec.SStar{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y6, l7}:
               match y6:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch19}:
+                case Spec.SChar{ch19}:
                   {==}
-        case Spec.s_slash{}:
+        case Spec.SSlash{}:
           {==}
-        case Spec.s_open{}:
+        case Spec.SOpen{}:
           {==}
-        case Spec.s_comma{}:
+        case Spec.SComma{}:
           {==}
-        case Spec.s_close{}:
+        case Spec.SClose{}:
           {==}
-        case Spec.s_left{}:
+        case Spec.SLeft{}:
           {==}
-        case Spec.s_right{}:
+        case Spec.SRight{}:
           {==}
-        case Spec.s_bang{}:
+        case Spec.SBang{}:
           {==}
-        case Spec.s_dash{}:
+        case Spec.SDash{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y28, l29}:
               match y28:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch41}:
+                case Spec.SChar{ch41}:
                   {==}
-        case Spec.s_char{ch42}:
+        case Spec.SChar{ch42}:
           {==}
 
 # `{` opens a frame
@@ -3685,96 +3685,96 @@ def Step.open(
 ) -> {
   Spec.Glob.read.go(
     l,
-    Spec.out{},
+    Spec.Out{},
     Con{Spec.Frame{[], [], seg}, st},
     seg
   )
-    == Spec.Glob.read.go(Con{Spec.s_open{}, l}, Spec.out{}, st, seg): Maybe<&2, Spec.Glob>
+    == Spec.Glob.read.go(Con{Spec.SOpen{}, l}, Spec.Out{}, st, seg): Maybe<&2, Spec.Glob>
 }:
   match l:
     case Nil{}:
       {==}
     case Con{y1, l2}:
       match y1:
-        case Spec.s_esc{}:
+        case Spec.SEsc{}:
           {==}
-        case Spec.s_any{}:
+        case Spec.SAny{}:
           {==}
-        case Spec.s_star{}:
+        case Spec.SStar{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y6, l7}:
               match y6:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch19}:
+                case Spec.SChar{ch19}:
                   {==}
-        case Spec.s_slash{}:
+        case Spec.SSlash{}:
           {==}
-        case Spec.s_open{}:
+        case Spec.SOpen{}:
           {==}
-        case Spec.s_comma{}:
+        case Spec.SComma{}:
           {==}
-        case Spec.s_close{}:
+        case Spec.SClose{}:
           {==}
-        case Spec.s_left{}:
+        case Spec.SLeft{}:
           {==}
-        case Spec.s_right{}:
+        case Spec.SRight{}:
           {==}
-        case Spec.s_bang{}:
+        case Spec.SBang{}:
           {==}
-        case Spec.s_dash{}:
+        case Spec.SDash{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y28, l29}:
               match y28:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch41}:
+                case Spec.SChar{ch41}:
                   {==}
-        case Spec.s_char{ch42}:
+        case Spec.SChar{ch42}:
           {==}
 
 # `}` closes a frame into one Alt
@@ -3789,16 +3789,16 @@ def Step.close(
 ) -> {
   Spec.Glob.read.go(
     l,
-    Spec.out{},
+    Spec.Out{},
     Spec.Frame.add(
       Con{f, r},
-      Spec.Glob.of_alts(Con{Spec.Glob.of_seq(s, Spec.eps{}), a}, Spec.void{})
+      Spec.Glob.of_alts(Con{Spec.Glob.of_seq(s, Spec.Eps{}), a}, Spec.Void{})
     ),
     False{}
   )
     == Spec.Glob.read.go(
-      Con{Spec.s_close{}, l},
-      Spec.out{},
+      Con{Spec.SClose{}, l},
+      Spec.Out{},
       Con{Spec.Frame{a, s, b}, Con{f, r}},
       seg
     ): Maybe<&2, Spec.Glob>
@@ -3808,85 +3808,85 @@ def Step.close(
       {==}
     case Con{y1, l2}:
       match y1:
-        case Spec.s_esc{}:
+        case Spec.SEsc{}:
           {==}
-        case Spec.s_any{}:
+        case Spec.SAny{}:
           {==}
-        case Spec.s_star{}:
+        case Spec.SStar{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y6, l7}:
               match y6:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch19}:
+                case Spec.SChar{ch19}:
                   {==}
-        case Spec.s_slash{}:
+        case Spec.SSlash{}:
           {==}
-        case Spec.s_open{}:
+        case Spec.SOpen{}:
           {==}
-        case Spec.s_comma{}:
+        case Spec.SComma{}:
           {==}
-        case Spec.s_close{}:
+        case Spec.SClose{}:
           {==}
-        case Spec.s_left{}:
+        case Spec.SLeft{}:
           {==}
-        case Spec.s_right{}:
+        case Spec.SRight{}:
           {==}
-        case Spec.s_bang{}:
+        case Spec.SBang{}:
           {==}
-        case Spec.s_dash{}:
+        case Spec.SDash{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y28, l29}:
               match y28:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch41}:
+                case Spec.SChar{ch41}:
                   {==}
-        case Spec.s_char{ch42}:
+        case Spec.SChar{ch42}:
           {==}
 
 # `,` starts the next alternative
@@ -3901,13 +3901,13 @@ def Step.comma(
 ) -> {
   Spec.Glob.read.go(
     l,
-    Spec.out{},
-    Con{Spec.Frame{Con{Spec.Glob.of_seq(s, Spec.eps{}), a}, [], b}, Con{f, r}},
+    Spec.Out{},
+    Con{Spec.Frame{Con{Spec.Glob.of_seq(s, Spec.Eps{}), a}, [], b}, Con{f, r}},
     b
   )
     == Spec.Glob.read.go(
-      Con{Spec.s_comma{}, l},
-      Spec.out{},
+      Con{Spec.SComma{}, l},
+      Spec.Out{},
       Con{Spec.Frame{a, s, b}, Con{f, r}},
       seg
     ): Maybe<&2, Spec.Glob>
@@ -3917,85 +3917,85 @@ def Step.comma(
       {==}
     case Con{y1, l2}:
       match y1:
-        case Spec.s_esc{}:
+        case Spec.SEsc{}:
           {==}
-        case Spec.s_any{}:
+        case Spec.SAny{}:
           {==}
-        case Spec.s_star{}:
+        case Spec.SStar{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y6, l7}:
               match y6:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch19}:
+                case Spec.SChar{ch19}:
                   {==}
-        case Spec.s_slash{}:
+        case Spec.SSlash{}:
           {==}
-        case Spec.s_open{}:
+        case Spec.SOpen{}:
           {==}
-        case Spec.s_comma{}:
+        case Spec.SComma{}:
           {==}
-        case Spec.s_close{}:
+        case Spec.SClose{}:
           {==}
-        case Spec.s_left{}:
+        case Spec.SLeft{}:
           {==}
-        case Spec.s_right{}:
+        case Spec.SRight{}:
           {==}
-        case Spec.s_bang{}:
+        case Spec.SBang{}:
           {==}
-        case Spec.s_dash{}:
+        case Spec.SDash{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y28, l29}:
               match y28:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch41}:
+                case Spec.SChar{ch41}:
                   {==}
-        case Spec.s_char{ch42}:
+        case Spec.SChar{ch42}:
           {==}
 
 # `*` before `}` is Star
@@ -4005,14 +4005,14 @@ def Step.star(
   seg: Bool
 ) -> {
   Spec.Glob.read.go(
-    Con{Spec.s_close{}, l},
-    Spec.out{},
-    Spec.Frame.add(st, Spec.star{}),
+    Con{Spec.SClose{}, l},
+    Spec.Out{},
+    Spec.Frame.add(st, Spec.Star{}),
     False{}
   )
     == Spec.Glob.read.go(
-      Con{Spec.s_star{}, Con{Spec.s_close{}, l}},
-      Spec.out{},
+      Con{Spec.SStar{}, Con{Spec.SClose{}, l}},
+      Spec.Out{},
       st,
       seg
     ): Maybe<&2, Spec.Glob>
@@ -4022,85 +4022,85 @@ def Step.star(
       {==}
     case Con{y1, l2}:
       match y1:
-        case Spec.s_esc{}:
+        case Spec.SEsc{}:
           {==}
-        case Spec.s_any{}:
+        case Spec.SAny{}:
           {==}
-        case Spec.s_star{}:
+        case Spec.SStar{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y6, l7}:
               match y6:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch19}:
+                case Spec.SChar{ch19}:
                   {==}
-        case Spec.s_slash{}:
+        case Spec.SSlash{}:
           {==}
-        case Spec.s_open{}:
+        case Spec.SOpen{}:
           {==}
-        case Spec.s_comma{}:
+        case Spec.SComma{}:
           {==}
-        case Spec.s_close{}:
+        case Spec.SClose{}:
           {==}
-        case Spec.s_left{}:
+        case Spec.SLeft{}:
           {==}
-        case Spec.s_right{}:
+        case Spec.SRight{}:
           {==}
-        case Spec.s_bang{}:
+        case Spec.SBang{}:
           {==}
-        case Spec.s_dash{}:
+        case Spec.SDash{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y28, l29}:
               match y28:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch41}:
+                case Spec.SChar{ch41}:
                   {==}
-        case Spec.s_char{ch42}:
+        case Spec.SChar{ch42}:
           {==}
 
 # `[` before an escape opens a class
@@ -4110,14 +4110,14 @@ def Step.left_esc(
   seg: Bool
 ) -> {
   Spec.Glob.read.go(
-    Con{Spec.s_esc{}, l},
-    Spec.in{False{}, []},
+    Con{Spec.SEsc{}, l},
+    Spec.In{False{}, []},
     st,
     seg
   )
     == Spec.Glob.read.go(
-      Con{Spec.s_left{}, Con{Spec.s_esc{}, l}},
-      Spec.out{},
+      Con{Spec.SLeft{}, Con{Spec.SEsc{}, l}},
+      Spec.Out{},
       st,
       seg
     ): Maybe<&2, Spec.Glob>
@@ -4127,85 +4127,85 @@ def Step.left_esc(
       {==}
     case Con{y1, l2}:
       match y1:
-        case Spec.s_esc{}:
+        case Spec.SEsc{}:
           {==}
-        case Spec.s_any{}:
+        case Spec.SAny{}:
           {==}
-        case Spec.s_star{}:
+        case Spec.SStar{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y6, l7}:
               match y6:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch19}:
+                case Spec.SChar{ch19}:
                   {==}
-        case Spec.s_slash{}:
+        case Spec.SSlash{}:
           {==}
-        case Spec.s_open{}:
+        case Spec.SOpen{}:
           {==}
-        case Spec.s_comma{}:
+        case Spec.SComma{}:
           {==}
-        case Spec.s_close{}:
+        case Spec.SClose{}:
           {==}
-        case Spec.s_left{}:
+        case Spec.SLeft{}:
           {==}
-        case Spec.s_right{}:
+        case Spec.SRight{}:
           {==}
-        case Spec.s_bang{}:
+        case Spec.SBang{}:
           {==}
-        case Spec.s_dash{}:
+        case Spec.SDash{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y28, l29}:
               match y28:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch41}:
+                case Spec.SChar{ch41}:
                   {==}
-        case Spec.s_char{ch42}:
+        case Spec.SChar{ch42}:
           {==}
 
 # `[` before `]` opens a class
@@ -4215,14 +4215,14 @@ def Step.left_right(
   seg: Bool
 ) -> {
   Spec.Glob.read.go(
-    Con{Spec.s_right{}, l},
-    Spec.in{False{}, []},
+    Con{Spec.SRight{}, l},
+    Spec.In{False{}, []},
     st,
     seg
   )
     == Spec.Glob.read.go(
-      Con{Spec.s_left{}, Con{Spec.s_right{}, l}},
-      Spec.out{},
+      Con{Spec.SLeft{}, Con{Spec.SRight{}, l}},
+      Spec.Out{},
       st,
       seg
     ): Maybe<&2, Spec.Glob>
@@ -4232,85 +4232,85 @@ def Step.left_right(
       {==}
     case Con{y1, l2}:
       match y1:
-        case Spec.s_esc{}:
+        case Spec.SEsc{}:
           {==}
-        case Spec.s_any{}:
+        case Spec.SAny{}:
           {==}
-        case Spec.s_star{}:
+        case Spec.SStar{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y6, l7}:
               match y6:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch19}:
+                case Spec.SChar{ch19}:
                   {==}
-        case Spec.s_slash{}:
+        case Spec.SSlash{}:
           {==}
-        case Spec.s_open{}:
+        case Spec.SOpen{}:
           {==}
-        case Spec.s_comma{}:
+        case Spec.SComma{}:
           {==}
-        case Spec.s_close{}:
+        case Spec.SClose{}:
           {==}
-        case Spec.s_left{}:
+        case Spec.SLeft{}:
           {==}
-        case Spec.s_right{}:
+        case Spec.SRight{}:
           {==}
-        case Spec.s_bang{}:
+        case Spec.SBang{}:
           {==}
-        case Spec.s_dash{}:
+        case Spec.SDash{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y28, l29}:
               match y28:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch41}:
+                case Spec.SChar{ch41}:
                   {==}
-        case Spec.s_char{ch42}:
+        case Spec.SChar{ch42}:
           {==}
 
 # `[!` opens a negated class
@@ -4321,13 +4321,13 @@ def Step.left_bang(
 ) -> {
   Spec.Glob.read.go(
     l,
-    Spec.in{True{}, []},
+    Spec.In{True{}, []},
     st,
     seg
   )
     == Spec.Glob.read.go(
-      Con{Spec.s_left{}, Con{Spec.s_bang{}, l}},
-      Spec.out{},
+      Con{Spec.SLeft{}, Con{Spec.SBang{}, l}},
+      Spec.Out{},
       st,
       seg
     ): Maybe<&2, Spec.Glob>
@@ -4337,85 +4337,85 @@ def Step.left_bang(
       {==}
     case Con{y1, l2}:
       match y1:
-        case Spec.s_esc{}:
+        case Spec.SEsc{}:
           {==}
-        case Spec.s_any{}:
+        case Spec.SAny{}:
           {==}
-        case Spec.s_star{}:
+        case Spec.SStar{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y6, l7}:
               match y6:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch19}:
+                case Spec.SChar{ch19}:
                   {==}
-        case Spec.s_slash{}:
+        case Spec.SSlash{}:
           {==}
-        case Spec.s_open{}:
+        case Spec.SOpen{}:
           {==}
-        case Spec.s_comma{}:
+        case Spec.SComma{}:
           {==}
-        case Spec.s_close{}:
+        case Spec.SClose{}:
           {==}
-        case Spec.s_left{}:
+        case Spec.SLeft{}:
           {==}
-        case Spec.s_right{}:
+        case Spec.SRight{}:
           {==}
-        case Spec.s_bang{}:
+        case Spec.SBang{}:
           {==}
-        case Spec.s_dash{}:
+        case Spec.SDash{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y28, l29}:
               match y28:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch41}:
+                case Spec.SChar{ch41}:
                   {==}
-        case Spec.s_char{ch42}:
+        case Spec.SChar{ch42}:
           {==}
 
 # an escaped symbol in a class adds its character
@@ -4429,97 +4429,92 @@ def Step.esc_in(
 ) -> {
   Spec.Glob.read.go(
     l,
-    Spec.in{n, Con{Spec.Sym.char(y), cs}},
+    Spec.In{n, Con{Spec.Sym.char(y), cs}},
     st,
     seg
   )
-    == Spec.Glob.read.go(
-      Con{Spec.s_esc{}, Con{y, l}},
-      Spec.in{n, cs},
-      st,
-      seg
-    ): Maybe<&2, Spec.Glob>
+    == Spec.Glob.read.go(Con{Spec.SEsc{}, Con{y, l}}, Spec.In{n, cs}, st, seg): Maybe<&2, Spec.Glob>
 }:
   match y:
-    case Spec.s_esc{}:
+    case Spec.SEsc{}:
       {==}
-    case Spec.s_any{}:
+    case Spec.SAny{}:
       {==}
-    case Spec.s_star{}:
+    case Spec.SStar{}:
       match l:
         case Nil{}:
           {==}
         case Con{y4, l5}:
           match y4:
-            case Spec.s_esc{}:
+            case Spec.SEsc{}:
               {==}
-            case Spec.s_any{}:
+            case Spec.SAny{}:
               {==}
-            case Spec.s_star{}:
+            case Spec.SStar{}:
               {==}
-            case Spec.s_slash{}:
+            case Spec.SSlash{}:
               {==}
-            case Spec.s_open{}:
+            case Spec.SOpen{}:
               {==}
-            case Spec.s_comma{}:
+            case Spec.SComma{}:
               {==}
-            case Spec.s_close{}:
+            case Spec.SClose{}:
               {==}
-            case Spec.s_left{}:
+            case Spec.SLeft{}:
               {==}
-            case Spec.s_right{}:
+            case Spec.SRight{}:
               {==}
-            case Spec.s_bang{}:
+            case Spec.SBang{}:
               {==}
-            case Spec.s_dash{}:
+            case Spec.SDash{}:
               {==}
-            case Spec.s_char{ch17}:
+            case Spec.SChar{ch17}:
               {==}
-    case Spec.s_slash{}:
+    case Spec.SSlash{}:
       {==}
-    case Spec.s_open{}:
+    case Spec.SOpen{}:
       {==}
-    case Spec.s_comma{}:
+    case Spec.SComma{}:
       {==}
-    case Spec.s_close{}:
+    case Spec.SClose{}:
       {==}
-    case Spec.s_left{}:
+    case Spec.SLeft{}:
       {==}
-    case Spec.s_right{}:
+    case Spec.SRight{}:
       {==}
-    case Spec.s_bang{}:
+    case Spec.SBang{}:
       {==}
-    case Spec.s_dash{}:
+    case Spec.SDash{}:
       match l:
         case Nil{}:
           {==}
         case Con{y26, l27}:
           match y26:
-            case Spec.s_esc{}:
+            case Spec.SEsc{}:
               {==}
-            case Spec.s_any{}:
+            case Spec.SAny{}:
               {==}
-            case Spec.s_star{}:
+            case Spec.SStar{}:
               {==}
-            case Spec.s_slash{}:
+            case Spec.SSlash{}:
               {==}
-            case Spec.s_open{}:
+            case Spec.SOpen{}:
               {==}
-            case Spec.s_comma{}:
+            case Spec.SComma{}:
               {==}
-            case Spec.s_close{}:
+            case Spec.SClose{}:
               {==}
-            case Spec.s_left{}:
+            case Spec.SLeft{}:
               {==}
-            case Spec.s_right{}:
+            case Spec.SRight{}:
               {==}
-            case Spec.s_bang{}:
+            case Spec.SBang{}:
               {==}
-            case Spec.s_dash{}:
+            case Spec.SDash{}:
               {==}
-            case Spec.s_char{ch39}:
+            case Spec.SChar{ch39}:
               {==}
-    case Spec.s_char{ch40}:
+    case Spec.SChar{ch40}:
       {==}
 
 # `]` closes a class
@@ -4532,96 +4527,96 @@ def Step.right(
 ) -> {
   Spec.Glob.read.go(
     l,
-    Spec.out{},
-    Spec.Frame.add(st, Spec.class{n, cs}),
+    Spec.Out{},
+    Spec.Frame.add(st, Spec.Class{n, cs}),
     False{}
   )
-    == Spec.Glob.read.go(Con{Spec.s_right{}, l}, Spec.in{n, cs}, st, seg): Maybe<&2, Spec.Glob>
+    == Spec.Glob.read.go(Con{Spec.SRight{}, l}, Spec.In{n, cs}, st, seg): Maybe<&2, Spec.Glob>
 }:
   match l:
     case Nil{}:
       {==}
     case Con{y1, l2}:
       match y1:
-        case Spec.s_esc{}:
+        case Spec.SEsc{}:
           {==}
-        case Spec.s_any{}:
+        case Spec.SAny{}:
           {==}
-        case Spec.s_star{}:
+        case Spec.SStar{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y6, l7}:
               match y6:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch19}:
+                case Spec.SChar{ch19}:
                   {==}
-        case Spec.s_slash{}:
+        case Spec.SSlash{}:
           {==}
-        case Spec.s_open{}:
+        case Spec.SOpen{}:
           {==}
-        case Spec.s_comma{}:
+        case Spec.SComma{}:
           {==}
-        case Spec.s_close{}:
+        case Spec.SClose{}:
           {==}
-        case Spec.s_left{}:
+        case Spec.SLeft{}:
           {==}
-        case Spec.s_right{}:
+        case Spec.SRight{}:
           {==}
-        case Spec.s_bang{}:
+        case Spec.SBang{}:
           {==}
-        case Spec.s_dash{}:
+        case Spec.SDash{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y28, l29}:
               match y28:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch41}:
+                case Spec.SChar{ch41}:
                   {==}
-        case Spec.s_char{ch42}:
+        case Spec.SChar{ch42}:
           {==}
 
 # `/` is a Lit that starts a segment
@@ -4632,96 +4627,96 @@ def Step.slash(
 ) -> {
   Spec.Glob.read.go(
     l,
-    Spec.out{},
-    Spec.Frame.add(st, Spec.lit{Chr{47}}),
+    Spec.Out{},
+    Spec.Frame.add(st, Spec.Lit{Chr{47}}),
     True{}
   )
-    == Spec.Glob.read.go(Con{Spec.s_slash{}, l}, Spec.out{}, st, seg): Maybe<&2, Spec.Glob>
+    == Spec.Glob.read.go(Con{Spec.SSlash{}, l}, Spec.Out{}, st, seg): Maybe<&2, Spec.Glob>
 }:
   match l:
     case Nil{}:
       {==}
     case Con{y1, l2}:
       match y1:
-        case Spec.s_esc{}:
+        case Spec.SEsc{}:
           {==}
-        case Spec.s_any{}:
+        case Spec.SAny{}:
           {==}
-        case Spec.s_star{}:
+        case Spec.SStar{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y6, l7}:
               match y6:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch19}:
+                case Spec.SChar{ch19}:
                   {==}
-        case Spec.s_slash{}:
+        case Spec.SSlash{}:
           {==}
-        case Spec.s_open{}:
+        case Spec.SOpen{}:
           {==}
-        case Spec.s_comma{}:
+        case Spec.SComma{}:
           {==}
-        case Spec.s_close{}:
+        case Spec.SClose{}:
           {==}
-        case Spec.s_left{}:
+        case Spec.SLeft{}:
           {==}
-        case Spec.s_right{}:
+        case Spec.SRight{}:
           {==}
-        case Spec.s_bang{}:
+        case Spec.SBang{}:
           {==}
-        case Spec.s_dash{}:
+        case Spec.SDash{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y28, l29}:
               match y28:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch41}:
+                case Spec.SChar{ch41}:
                   {==}
-        case Spec.s_char{ch42}:
+        case Spec.SChar{ch42}:
           {==}
 
 # the text of Deep is one atom
@@ -4735,28 +4730,28 @@ def Step.deep(
 ) -> {
   Spec.Glob.read.go(
     l,
-    Spec.out{},
+    Spec.Out{},
     Con{Spec.Frame{a, Con{Show.deep(), s}, b}, r},
     False{}
   )
     == Spec.Glob.read.go(
       Con{
-        Spec.s_open{},
+        Spec.SOpen{},
         Con{
-          Spec.s_star{},
+          Spec.SStar{},
           Con{
-            Spec.s_open{},
+            Spec.SOpen{},
             Con{
-              Spec.s_comma{},
+              Spec.SComma{},
               Con{
-                Spec.s_slash{},
-                Con{Spec.s_star{}, Con{Spec.s_star{}, Con{Spec.s_close{}, Con{Spec.s_close{}, l}}}}
+                Spec.SSlash{},
+                Con{Spec.SStar{}, Con{Spec.SStar{}, Con{Spec.SClose{}, Con{Spec.SClose{}, l}}}}
               }
             }
           }
         }
       },
-      Spec.out{},
+      Spec.Out{},
       Con{Spec.Frame{a, s, b}, r},
       seg
     ): Maybe<&2, Spec.Glob>
@@ -4766,85 +4761,85 @@ def Step.deep(
       {==}
     case Con{y1, l2}:
       match y1:
-        case Spec.s_esc{}:
+        case Spec.SEsc{}:
           {==}
-        case Spec.s_any{}:
+        case Spec.SAny{}:
           {==}
-        case Spec.s_star{}:
+        case Spec.SStar{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y6, l7}:
               match y6:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch19}:
+                case Spec.SChar{ch19}:
                   {==}
-        case Spec.s_slash{}:
+        case Spec.SSlash{}:
           {==}
-        case Spec.s_open{}:
+        case Spec.SOpen{}:
           {==}
-        case Spec.s_comma{}:
+        case Spec.SComma{}:
           {==}
-        case Spec.s_close{}:
+        case Spec.SClose{}:
           {==}
-        case Spec.s_left{}:
+        case Spec.SLeft{}:
           {==}
-        case Spec.s_right{}:
+        case Spec.SRight{}:
           {==}
-        case Spec.s_bang{}:
+        case Spec.SBang{}:
           {==}
-        case Spec.s_dash{}:
+        case Spec.SDash{}:
           match l2:
             case Nil{}:
               {==}
             case Con{y28, l29}:
               match y28:
-                case Spec.s_esc{}:
+                case Spec.SEsc{}:
                   {==}
-                case Spec.s_any{}:
+                case Spec.SAny{}:
                   {==}
-                case Spec.s_star{}:
+                case Spec.SStar{}:
                   {==}
-                case Spec.s_slash{}:
+                case Spec.SSlash{}:
                   {==}
-                case Spec.s_open{}:
+                case Spec.SOpen{}:
                   {==}
-                case Spec.s_comma{}:
+                case Spec.SComma{}:
                   {==}
-                case Spec.s_close{}:
+                case Spec.SClose{}:
                   {==}
-                case Spec.s_left{}:
+                case Spec.SLeft{}:
                   {==}
-                case Spec.s_right{}:
+                case Spec.SRight{}:
                   {==}
-                case Spec.s_bang{}:
+                case Spec.SBang{}:
                   {==}
-                case Spec.s_dash{}:
+                case Spec.SDash{}:
                   {==}
-                case Spec.s_char{ch41}:
+                case Spec.SChar{ch41}:
                   {==}
-        case Spec.s_char{ch42}:
+        case Spec.SChar{ch42}:
           {==}
 
 # Parsing shown text
@@ -4862,13 +4857,13 @@ def Show.parse_chars(
 ) -> {
   Spec.Glob.read.go(
     Spec.Sym.list(rest),
-    Spec.in{n, List.reverse.go(&2, Char, cs, acc)},
+    Spec.In{n, List.reverse.go(&2, Char, cs, acc)},
     st,
     seg
   )
     == Spec.Glob.read.go(
       Spec.Sym.list(Glob.show.chars(cs, rest)),
-      Spec.in{n, acc},
+      Spec.In{n, acc},
       st,
       seg
     ): Maybe<&2, Spec.Glob>
@@ -4880,14 +4875,14 @@ def Show.parse_chars(
       l = Spec.Sym.list(Glob.show.chars(t, rest))
       -tgt = Spec.Glob.read.go(
         Spec.Sym.list(rest),
-        Spec.in{n, List.reverse.go(&2, Char, t, Con{h, acc})},
+        Spec.In{n, List.reverse.go(&2, Char, t, Con{h, acc})},
         st,
         seg
       )
       %Step.esc_in(Spec.Sym.of(h), l, n, acc, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
       %Sym.char_of(
         h
-      ): {tgt == Spec.Glob.read.go(l, Spec.in{n, Con{_, acc}}, st, seg): Maybe<&2, Spec.Glob>}
+      ): {tgt == Spec.Glob.read.go(l, Spec.In{n, Con{_, acc}}, st, seg): Maybe<&2, Spec.Glob>}
       Show.parse_chars(t, rest, n, Con{h, acc}, st, seg)
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
@@ -4906,52 +4901,52 @@ def Show.parse_lit(
 } -> {
   Spec.Glob.read.go(
     Spec.Sym.list(rest),
-    Spec.out{},
-    Con{Spec.Frame{a, Con{Spec.lit{c}, s}, b}, r},
+    Spec.Out{},
+    Con{Spec.Frame{a, Con{Spec.Lit{c}, s}, b}, r},
     False{}
   )
     == Spec.Glob.read.go(
       Spec.Sym.list(Glob.show.char(c, k, rest)),
-      Spec.out{},
+      Spec.Out{},
       Con{Spec.Frame{a, s, b}, r},
       seg
     ): Maybe<&2, Spec.Glob>
 }:
   match k:
-    case Spec.s_char{+x}:
+    case Spec.SChar{+x}:
       +e =>
         +l = Spec.Sym.list(rest)
         +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
         +tgt = Spec.Glob.read.go(
           l,
-          Spec.out{},
-          Con{Spec.Frame{a, Con{Spec.lit{c}, s}, b}, r},
+          Spec.Out{},
+          Con{Spec.Frame{a, Con{Spec.Lit{c}, s}, b}, r},
           False{}
         )
-        %e: {tgt == Spec.Glob.read.go(Con{_, l}, Spec.out{}, st, seg): Maybe<&2, Spec.Glob>}
+        %e: {tgt == Spec.Glob.read.go(Con{_, l}, Spec.Out{}, st, seg): Maybe<&2, Spec.Glob>}
         %Step.char(x, l, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
         %Sym.char_is(
           c,
-          Spec.s_char{x},
+          Spec.SChar{x},
           e
         ): {
           tgt
             == Spec.Glob.read.go(
               l,
-              Spec.out{},
-              Spec.Frame.add(st, Spec.lit{_}),
+              Spec.Out{},
+              Spec.Frame.add(st, Spec.Lit{_}),
               False{}
             ): Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_esc{}:
+    case Spec.SEsc{}:
       e =>
         +l = Spec.Sym.list(rest)
         +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
         +tgt = Spec.Glob.read.go(
           l,
-          Spec.out{},
-          Con{Spec.Frame{a, Con{Spec.lit{c}, s}, b}, r},
+          Spec.Out{},
+          Con{Spec.Frame{a, Con{Spec.Lit{c}, s}, b}, r},
           False{}
         )
         %Step.esc(Spec.Sym.of(c), l, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
@@ -4961,20 +4956,20 @@ def Show.parse_lit(
           tgt
             == Spec.Glob.read.go(
               l,
-              Spec.out{},
-              Spec.Frame.add(st, Spec.lit{_}),
+              Spec.Out{},
+              Spec.Frame.add(st, Spec.Lit{_}),
               False{}
             ): Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_any{}:
+    case Spec.SAny{}:
       e =>
         +l = Spec.Sym.list(rest)
         +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
         +tgt = Spec.Glob.read.go(
           l,
-          Spec.out{},
-          Con{Spec.Frame{a, Con{Spec.lit{c}, s}, b}, r},
+          Spec.Out{},
+          Con{Spec.Frame{a, Con{Spec.Lit{c}, s}, b}, r},
           False{}
         )
         %Step.esc(Spec.Sym.of(c), l, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
@@ -4984,20 +4979,20 @@ def Show.parse_lit(
           tgt
             == Spec.Glob.read.go(
               l,
-              Spec.out{},
-              Spec.Frame.add(st, Spec.lit{_}),
+              Spec.Out{},
+              Spec.Frame.add(st, Spec.Lit{_}),
               False{}
             ): Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_star{}:
+    case Spec.SStar{}:
       e =>
         +l = Spec.Sym.list(rest)
         +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
         +tgt = Spec.Glob.read.go(
           l,
-          Spec.out{},
-          Con{Spec.Frame{a, Con{Spec.lit{c}, s}, b}, r},
+          Spec.Out{},
+          Con{Spec.Frame{a, Con{Spec.Lit{c}, s}, b}, r},
           False{}
         )
         %Step.esc(Spec.Sym.of(c), l, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
@@ -5007,20 +5002,20 @@ def Show.parse_lit(
           tgt
             == Spec.Glob.read.go(
               l,
-              Spec.out{},
-              Spec.Frame.add(st, Spec.lit{_}),
+              Spec.Out{},
+              Spec.Frame.add(st, Spec.Lit{_}),
               False{}
             ): Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_slash{}:
+    case Spec.SSlash{}:
       e =>
         +l = Spec.Sym.list(rest)
         +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
         +tgt = Spec.Glob.read.go(
           l,
-          Spec.out{},
-          Con{Spec.Frame{a, Con{Spec.lit{c}, s}, b}, r},
+          Spec.Out{},
+          Con{Spec.Frame{a, Con{Spec.Lit{c}, s}, b}, r},
           False{}
         )
         %Step.esc(Spec.Sym.of(c), l, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
@@ -5030,20 +5025,20 @@ def Show.parse_lit(
           tgt
             == Spec.Glob.read.go(
               l,
-              Spec.out{},
-              Spec.Frame.add(st, Spec.lit{_}),
+              Spec.Out{},
+              Spec.Frame.add(st, Spec.Lit{_}),
               False{}
             ): Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_open{}:
+    case Spec.SOpen{}:
       e =>
         +l = Spec.Sym.list(rest)
         +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
         +tgt = Spec.Glob.read.go(
           l,
-          Spec.out{},
-          Con{Spec.Frame{a, Con{Spec.lit{c}, s}, b}, r},
+          Spec.Out{},
+          Con{Spec.Frame{a, Con{Spec.Lit{c}, s}, b}, r},
           False{}
         )
         %Step.esc(Spec.Sym.of(c), l, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
@@ -5053,20 +5048,20 @@ def Show.parse_lit(
           tgt
             == Spec.Glob.read.go(
               l,
-              Spec.out{},
-              Spec.Frame.add(st, Spec.lit{_}),
+              Spec.Out{},
+              Spec.Frame.add(st, Spec.Lit{_}),
               False{}
             ): Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_comma{}:
+    case Spec.SComma{}:
       e =>
         +l = Spec.Sym.list(rest)
         +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
         +tgt = Spec.Glob.read.go(
           l,
-          Spec.out{},
-          Con{Spec.Frame{a, Con{Spec.lit{c}, s}, b}, r},
+          Spec.Out{},
+          Con{Spec.Frame{a, Con{Spec.Lit{c}, s}, b}, r},
           False{}
         )
         %Step.esc(Spec.Sym.of(c), l, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
@@ -5076,20 +5071,20 @@ def Show.parse_lit(
           tgt
             == Spec.Glob.read.go(
               l,
-              Spec.out{},
-              Spec.Frame.add(st, Spec.lit{_}),
+              Spec.Out{},
+              Spec.Frame.add(st, Spec.Lit{_}),
               False{}
             ): Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_close{}:
+    case Spec.SClose{}:
       e =>
         +l = Spec.Sym.list(rest)
         +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
         +tgt = Spec.Glob.read.go(
           l,
-          Spec.out{},
-          Con{Spec.Frame{a, Con{Spec.lit{c}, s}, b}, r},
+          Spec.Out{},
+          Con{Spec.Frame{a, Con{Spec.Lit{c}, s}, b}, r},
           False{}
         )
         %Step.esc(Spec.Sym.of(c), l, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
@@ -5099,20 +5094,20 @@ def Show.parse_lit(
           tgt
             == Spec.Glob.read.go(
               l,
-              Spec.out{},
-              Spec.Frame.add(st, Spec.lit{_}),
+              Spec.Out{},
+              Spec.Frame.add(st, Spec.Lit{_}),
               False{}
             ): Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_left{}:
+    case Spec.SLeft{}:
       e =>
         +l = Spec.Sym.list(rest)
         +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
         +tgt = Spec.Glob.read.go(
           l,
-          Spec.out{},
-          Con{Spec.Frame{a, Con{Spec.lit{c}, s}, b}, r},
+          Spec.Out{},
+          Con{Spec.Frame{a, Con{Spec.Lit{c}, s}, b}, r},
           False{}
         )
         %Step.esc(Spec.Sym.of(c), l, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
@@ -5122,20 +5117,20 @@ def Show.parse_lit(
           tgt
             == Spec.Glob.read.go(
               l,
-              Spec.out{},
-              Spec.Frame.add(st, Spec.lit{_}),
+              Spec.Out{},
+              Spec.Frame.add(st, Spec.Lit{_}),
               False{}
             ): Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_right{}:
+    case Spec.SRight{}:
       e =>
         +l = Spec.Sym.list(rest)
         +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
         +tgt = Spec.Glob.read.go(
           l,
-          Spec.out{},
-          Con{Spec.Frame{a, Con{Spec.lit{c}, s}, b}, r},
+          Spec.Out{},
+          Con{Spec.Frame{a, Con{Spec.Lit{c}, s}, b}, r},
           False{}
         )
         %Step.esc(Spec.Sym.of(c), l, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
@@ -5145,20 +5140,20 @@ def Show.parse_lit(
           tgt
             == Spec.Glob.read.go(
               l,
-              Spec.out{},
-              Spec.Frame.add(st, Spec.lit{_}),
+              Spec.Out{},
+              Spec.Frame.add(st, Spec.Lit{_}),
               False{}
             ): Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_bang{}:
+    case Spec.SBang{}:
       e =>
         +l = Spec.Sym.list(rest)
         +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
         +tgt = Spec.Glob.read.go(
           l,
-          Spec.out{},
-          Con{Spec.Frame{a, Con{Spec.lit{c}, s}, b}, r},
+          Spec.Out{},
+          Con{Spec.Frame{a, Con{Spec.Lit{c}, s}, b}, r},
           False{}
         )
         %Step.esc(Spec.Sym.of(c), l, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
@@ -5168,20 +5163,20 @@ def Show.parse_lit(
           tgt
             == Spec.Glob.read.go(
               l,
-              Spec.out{},
-              Spec.Frame.add(st, Spec.lit{_}),
+              Spec.Out{},
+              Spec.Frame.add(st, Spec.Lit{_}),
               False{}
             ): Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_dash{}:
+    case Spec.SDash{}:
       e =>
         +l = Spec.Sym.list(rest)
         +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
         +tgt = Spec.Glob.read.go(
           l,
-          Spec.out{},
-          Con{Spec.Frame{a, Con{Spec.lit{c}, s}, b}, r},
+          Spec.Out{},
+          Con{Spec.Frame{a, Con{Spec.Lit{c}, s}, b}, r},
           False{}
         )
         %Step.esc(Spec.Sym.of(c), l, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
@@ -5191,8 +5186,8 @@ def Show.parse_lit(
           tgt
             == Spec.Glob.read.go(
               l,
-              Spec.out{},
-              Spec.Frame.add(st, Spec.lit{_}),
+              Spec.Out{},
+              Spec.Frame.add(st, Spec.Lit{_}),
               False{}
             ): Maybe<&2, Spec.Glob>
         }
@@ -5211,13 +5206,13 @@ def Show.parse_class(
 ) -> {
   Spec.Glob.read.go(
     Spec.Sym.list(rest),
-    Spec.out{},
-    Con{Spec.Frame{a, Con{Show.glob(Spec.class{neg, cs}), s}, b}, r},
+    Spec.Out{},
+    Con{Spec.Frame{a, Con{Show.glob(Spec.Class{neg, cs}), s}, b}, r},
     False{}
   )
     == Spec.Glob.read.go(
-      Spec.Sym.list(Glob.show.go(Spec.class{neg, cs}, rest)),
-      Spec.out{},
+      Spec.Sym.list(Glob.show.go(Spec.Class{neg, cs}, rest)),
+      Spec.Out{},
       Con{Spec.Frame{a, s, b}, r},
       seg
     ): Maybe<&2, Spec.Glob>
@@ -5228,8 +5223,8 @@ def Show.parse_class(
       +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
       tgt = Spec.Glob.read.go(
         l,
-        Spec.out{},
-        Con{Spec.Frame{a, Con{Spec.class{True{}, List.reverse(&2, Char, cs)}, s}, b}, r},
+        Spec.Out{},
+        Con{Spec.Frame{a, Con{Spec.Class{True{}, List.reverse(&2, Char, cs)}, s}, b}, r},
         False{}
       )
       lc = Spec.Sym.list(Glob.show.chars(cs, "]" ++ rest))
@@ -5242,8 +5237,8 @@ def Show.parse_class(
       +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
       tgt = Spec.Glob.read.go(
         l,
-        Spec.out{},
-        Con{Spec.Frame{a, Con{Spec.class{False{}, []}, s}, b}, r},
+        Spec.Out{},
+        Con{Spec.Frame{a, Con{Spec.Class{False{}, []}, s}, b}, r},
         False{}
       )
       %Step.left_right(l, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
@@ -5255,8 +5250,8 @@ def Show.parse_class(
       +rv = List.reverse(&2, Char, Con{h, t})
       tgt = Spec.Glob.read.go(
         l,
-        Spec.out{},
-        Con{Spec.Frame{a, Con{Spec.class{False{}, rv}, s}, b}, r},
+        Spec.Out{},
+        Con{Spec.Frame{a, Con{Spec.Class{False{}, rv}, s}, b}, r},
         False{}
       )
       lc = Spec.Sym.list(SCon{h, Glob.show.chars(t, "]" ++ rest)})
@@ -5285,57 +5280,57 @@ def Show.parse(
 ) -> {
   Spec.Glob.read.go(
     Spec.Sym.list(rest),
-    Spec.out{},
+    Spec.Out{},
     Con{Spec.Frame{a, Con{Show.glob(g), s}, b}, r},
     False{}
   )
     == Spec.Glob.read.go(
       Spec.Sym.list(Glob.show.go(g, rest)),
-      Spec.out{},
+      Spec.Out{},
       Con{Spec.Frame{a, s, b}, r},
       seg
     ): Maybe<&2, Spec.Glob>
 }:
   match g:
-    case Spec.void{}:
+    case Spec.Void{}:
       +l = Spec.Sym.list(rest)
       +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
       -tgt = Spec.Glob.read.go(
         l,
-        Spec.out{},
-        Con{Spec.Frame{a, Con{Spec.class{False{}, []}, s}, b}, r},
+        Spec.Out{},
+        Con{Spec.Frame{a, Con{Spec.Class{False{}, []}, s}, b}, r},
         False{}
       )
       %Step.left_right(l, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
       %Step.right(l, False{}, [], st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
       {==}
-    case Spec.eps{}:
+    case Spec.Eps{}:
       +l = Spec.Sym.list(rest)
       st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
       -tgt = Spec.Glob.read.go(
         l,
-        Spec.out{},
-        Con{Spec.Frame{a, Con{Spec.alt{Spec.eps{}, Spec.void{}}, s}, b}, r},
+        Spec.Out{},
+        Con{Spec.Frame{a, Con{Spec.Alt{Spec.Eps{}, Spec.Void{}}, s}, b}, r},
         False{}
       )
-      %Step.open(Con{Spec.s_close{}, l}, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
+      %Step.open(Con{Spec.SClose{}, l}, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
       %Step.close(l, [], [], seg, Spec.Frame{a, s, b}, r, seg): {tgt == _: Maybe<&2, Spec.Glob>}
       {==}
-    case Spec.lit{+c}:
+    case Spec.Lit{+c}:
       Show.parse_lit(c, Spec.Sym.of(c), rest, a, s, b, r, seg)({==})
-    case Spec.any{}:
+    case Spec.Any{}:
       Step.any(Spec.Sym.list(rest), Con{Spec.Frame{a, s, b}, r}, seg)
-    case Spec.star{}:
+    case Spec.Star{}:
       +l = Spec.Sym.list(rest)
       +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
       -tgt = Spec.Glob.read.go(
         l,
-        Spec.out{},
-        Con{Spec.Frame{a, Con{Show.glob(Spec.star{}), s}, b}, r},
+        Spec.Out{},
+        Con{Spec.Frame{a, Con{Show.glob(Spec.Star{}), s}, b}, r},
         False{}
       )
       %Step.open(
-        Con{Spec.s_star{}, Con{Spec.s_close{}, l}},
+        Con{Spec.SStar{}, Con{Spec.SClose{}, l}},
         st,
         seg
       ): {tgt == _: Maybe<&2, Spec.Glob>}
@@ -5343,18 +5338,18 @@ def Show.parse(
       %Step.close(
         l,
         [],
-        [Spec.star{}],
+        [Spec.Star{}],
         seg,
         Spec.Frame{a, s, b},
         r,
         False{}
       ): {tgt == _: Maybe<&2, Spec.Glob>}
       {==}
-    case Spec.class{neg, cs}:
+    case Spec.Class{neg, cs}:
       Show.parse_class(neg, cs, rest, a, s, b, r, seg)
-    case Spec.deep{}:
+    case Spec.Deep{}:
       Step.deep(Spec.Sym.list(rest), a, s, b, r, seg)
-    case Spec.cat{+x, +y}:
+    case Spec.Cat{+x, +y}:
       +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
       +ty = Glob.show.go(y, "}" ++ rest)
       tx = Glob.show.go(x, ty)
@@ -5362,8 +5357,8 @@ def Show.parse(
       gy = Show.glob(y)
       -tgt = Spec.Glob.read.go(
         Spec.Sym.list(rest),
-        Spec.out{},
-        Con{Spec.Frame{a, Con{Show.glob(Spec.cat{x, y}), s}, b}, r},
+        Spec.Out{},
+        Con{Spec.Frame{a, Con{Show.glob(Spec.Cat{x, y}), s}, b}, r},
         False{}
       )
       %Step.open(Spec.Sym.list(tx), st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
@@ -5379,17 +5374,17 @@ def Show.parse(
         False{}
       ): {tgt == _: Maybe<&2, Spec.Glob>}
       {==}
-    case Spec.alt{+x, +y}:
+    case Spec.Alt{+x, +y}:
       +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
       +ty = Glob.show.go(y, "}" ++ rest)
       tx = Glob.show.go(x, "," ++ ty)
       +gx = Show.glob(x)
       gy = Show.glob(y)
-      +ax = {Spec.cat{gx, Spec.eps{}}: Spec.Glob}
+      +ax = {Spec.Cat{gx, Spec.Eps{}}: Spec.Glob}
       -tgt = Spec.Glob.read.go(
         Spec.Sym.list(rest),
-        Spec.out{},
-        Con{Spec.Frame{a, Con{Show.glob(Spec.alt{x, y}), s}, b}, r},
+        Spec.Out{},
+        Con{Spec.Frame{a, Con{Show.glob(Spec.Alt{x, y}), s}, b}, r},
         False{}
       )
       %Step.open(Spec.Sym.list(tx), st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
@@ -5492,7 +5487,7 @@ def Glob.cat_split(
   +pre: String,
   +x: Spec.Glob,
   +y: Spec.Glob
-) -> {Glob.split(suf, pre, x, y) == Spec.Glob.matches(suf, Spec.cat{Glob.walk(pre, x), y}): Bool}:
+) -> {Glob.split(suf, pre, x, y) == Spec.Glob.matches(suf, Spec.Cat{Glob.walk(pre, x), y}): Bool}:
   match suf:
     case SNil{}:
       l = Glob.split(SNil{}, pre, x, y)
@@ -5506,14 +5501,14 @@ def Glob.cat_split(
       l = Glob.split(SCon{c, t}, pre, x, y)
       %Glob.alt_or(
         t,
-        Spec.cat{Spec.Glob.step(wx, c), y},
-        Spec.cat{Spec.Glob.of_bool(Spec.Glob.is_nullable(wx)), ny}
+        Spec.Cat{Spec.Glob.step(wx, c), y},
+        Spec.Cat{Spec.Glob.of_bool(Spec.Glob.is_nullable(wx)), ny}
       ): {l == _: Bool}
       %Glob.cat_of_bool(
         t,
         Spec.Glob.is_nullable(wx),
         ny
-      ): {l == Bool.or(Spec.Glob.matches(t, Spec.cat{Spec.Glob.step(wx, c), y}), _): Bool}
+      ): {l == Bool.or(Spec.Glob.matches(t, Spec.Cat{Spec.Glob.step(wx, c), y}), _): Bool}
       %Glob.walk_snoc(
         pre,
         c,
@@ -5521,7 +5516,7 @@ def Glob.cat_split(
       ): {
         l
           == Bool.or(
-            Spec.Glob.matches(t, Spec.cat{_, y}),
+            Spec.Glob.matches(t, Spec.Cat{_, y}),
             Bool.and(Spec.Glob.is_nullable(wx), Spec.Glob.matches(t, ny))
           ): Bool
       }
@@ -5624,9 +5619,9 @@ def Glob.cat_agree(
   +y2: Spec.Glob,
   ea: Glob.AgreePre(x, x2, SNil{}, p),
   eb: Glob.AgreeSuf(y, y2, p)
-) -> {Spec.Glob.matches(p, Spec.cat{x, y}) == Spec.Glob.matches(p, Spec.cat{x2, y2}): Bool}:
+) -> {Spec.Glob.matches(p, Spec.Cat{x, y}) == Spec.Glob.matches(p, Spec.Cat{x2, y2}): Bool}:
   +p = p
-  %Glob.cat_split(p, SNil{}, x, y): {_ == Spec.Glob.matches(p, Spec.cat{x2, y2}): Bool}
+  %Glob.cat_split(p, SNil{}, x, y): {_ == Spec.Glob.matches(p, Spec.Cat{x2, y2}): Bool}
   %Glob.cat_split(p, SNil{}, x2, y2): {Glob.split(p, SNil{}, x, y) == _: Bool}
   Glob.split_agree(p, SNil{}, x, x2, y, y2, ea, eb)
 
@@ -5658,22 +5653,22 @@ def Bool.contains_rev_step(
 def Glob.alt_void(
   +p: String,
   +x: Spec.Glob
-) -> {Spec.Glob.matches(p, x) == Spec.Glob.matches(p, Spec.alt{x, Spec.void{}}): Bool}:
-  %Glob.alt_or(p, x, Spec.void{}): {Spec.Glob.matches(p, x) == _: Bool}
+) -> {Spec.Glob.matches(p, x) == Spec.Glob.matches(p, Spec.Alt{x, Spec.Void{}}): Bool}:
+  %Glob.alt_or(p, x, Spec.Void{}): {Spec.Glob.matches(p, x) == _: Bool}
   %Glob.void_never(p): {Spec.Glob.matches(p, x) == Bool.or(Spec.Glob.matches(p, x), _): Bool}
   Bool.or_false(Spec.Glob.matches(p, x))
 
 # an empty class matches nothing, as Void
 def Show.void_point(
   p: String
-) -> {Spec.Glob.matches(p, Spec.class{False{}, []}) == Spec.Glob.matches(p, Spec.void{}): Bool}:
+) -> {Spec.Glob.matches(p, Spec.Class{False{}, []}) == Spec.Glob.matches(p, Spec.Void{}): Bool}:
   match p:
     case SNil{}:
       {==}
     case SCon{c, t}:
       %Bool.and_false(
         Spec.is_inner(c)
-      ): {Spec.Glob.matches(t, Spec.Glob.of_bool(_)) == Spec.Glob.matches(t, Spec.void{}): Bool}
+      ): {Spec.Glob.matches(t, Spec.Glob.of_bool(_)) == Spec.Glob.matches(t, Spec.Void{}): Bool}
       {==}
 
 # the text of Eps reads back as Eps
@@ -5681,13 +5676,13 @@ def Show.void_point(
 def Show.eps_point(
   p: String
 ) -> {
-  Spec.Glob.matches(p, Spec.alt{Spec.eps{}, Spec.void{}}) == Spec.Glob.matches(p, Spec.eps{}): Bool
+  Spec.Glob.matches(p, Spec.Alt{Spec.Eps{}, Spec.Void{}}) == Spec.Glob.matches(p, Spec.Eps{}): Bool
 }:
   Equal.sym(
     Bool,
-    Spec.Glob.matches(p, Spec.eps{}),
-    Spec.Glob.matches(p, Spec.alt{Spec.eps{}, Spec.void{}}),
-    Glob.alt_void(p, Spec.eps{})
+    Spec.Glob.matches(p, Spec.Eps{}),
+    Spec.Glob.matches(p, Spec.Alt{Spec.Eps{}, Spec.Void{}}),
+    Glob.alt_void(p, Spec.Eps{})
   )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
@@ -5697,15 +5692,15 @@ def Show.star_point(
 ) -> {
   Spec.Glob.matches(
     p,
-    Spec.alt{Spec.cat{Spec.star{}, Spec.eps{}}, Spec.void{}}
+    Spec.Alt{Spec.Cat{Spec.Star{}, Spec.Eps{}}, Spec.Void{}}
   )
-    == Spec.Glob.matches(p, Spec.star{}): Bool
+    == Spec.Glob.matches(p, Spec.Star{}): Bool
 }:
   %Glob.alt_void(
     p,
-    Spec.cat{Spec.star{}, Spec.eps{}}
-  ): {_ == Spec.Glob.matches(p, Spec.star{}): Bool}
-  %Glob.cat_eps_r(p, Spec.star{}): {_ == Spec.Glob.matches(p, Spec.star{}): Bool}
+    Spec.Cat{Spec.Star{}, Spec.Eps{}}
+  ): {_ == Spec.Glob.matches(p, Spec.Star{}): Bool}
+  %Glob.cat_eps_r(p, Spec.Star{}): {_ == Spec.Glob.matches(p, Spec.Star{}): Bool}
   {==}
 
 # a list holds c when its head is c or its tail holds c, given b, the first
@@ -5792,9 +5787,9 @@ def Show.class_point(
 ) -> {
   Spec.Glob.matches(
     p,
-    Spec.class{n, List.reverse(&2, Char, cs)}
+    Spec.Class{n, List.reverse(&2, Char, cs)}
   )
-    == Spec.Glob.matches(p, Spec.class{n, cs}): Bool
+    == Spec.Glob.matches(p, Spec.Class{n, cs}): Bool
 }:
   match p:
     case SNil{}:
@@ -5814,7 +5809,7 @@ def Show.class_point(
       {==}
 
 # Deep matches everything
-def Glob.deep_true(p: String) -> {True{} == Spec.Glob.matches(p, Spec.deep{}): Bool}:
+def Glob.deep_true(p: String) -> {True{} == Spec.Glob.matches(p, Spec.Deep{}): Bool}:
   match p:
     case SNil{}:
       {==}
@@ -5828,21 +5823,21 @@ def Show.slash_deep(
   True{}
     == Spec.Glob.matches(
       SCon{Chr{47}, t},
-      Spec.cat{Spec.lit{Chr{47}}, Spec.cat{Spec.deep{}, Spec.eps{}}}
+      Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}}
     ): Bool
 }:
-  +de = {Spec.cat{Spec.deep{}, Spec.eps{}}: Spec.Glob}
+  +de = {Spec.Cat{Spec.Deep{}, Spec.Eps{}}: Spec.Glob}
   x = Spec.Glob.step(de, Chr{47})
-  %Glob.alt_or(t, Spec.cat{Spec.eps{}, de}, Spec.cat{Spec.void{}, x}): {True{} == _: Bool}
+  %Glob.alt_or(t, Spec.Cat{Spec.Eps{}, de}, Spec.Cat{Spec.Void{}, x}): {True{} == _: Bool}
   %Glob.cat_eps_l(
     t,
     de
-  ): {True{} == Bool.or(_, Spec.Glob.matches(t, Spec.cat{Spec.void{}, x})): Bool}
+  ): {True{} == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Void{}, x})): Bool}
   %Glob.cat_eps_r(
     t,
-    Spec.deep{}
-  ): {True{} == Bool.or(_, Spec.Glob.matches(t, Spec.cat{Spec.void{}, x})): Bool}
-  %Glob.deep_true(t): {True{} == Bool.or(_, Spec.Glob.matches(t, Spec.cat{Spec.void{}, x})): Bool}
+    Spec.Deep{}
+  ): {True{} == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Void{}, x})): Bool}
+  %Glob.deep_true(t): {True{} == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Void{}, x})): Bool}
   {==}
 
 # Show.star_k, one step, given b, the answer of c == '/'
@@ -5855,14 +5850,14 @@ def Show.star_k.at(
     True{}
       == Spec.Glob.matches(
         t,
-        Spec.cat{
-          Spec.star{},
-          Spec.cat{
-            Spec.alt{
-              Spec.eps{},
-              Spec.alt{Spec.cat{Spec.lit{Chr{47}}, Spec.cat{Spec.deep{}, Spec.eps{}}}, Spec.void{}}
+        Spec.Cat{
+          Spec.Star{},
+          Spec.Cat{
+            Spec.Alt{
+              Spec.Eps{},
+              Spec.Alt{Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}}, Spec.Void{}}
             },
-            Spec.eps{}
+            Spec.Eps{}
           }
         }
       ): Bool
@@ -5873,14 +5868,14 @@ def Show.star_k.at(
   True{}
     == Spec.Glob.matches(
       SCon{c, t},
-      Spec.cat{
-        Spec.star{},
-        Spec.cat{
-          Spec.alt{
-            Spec.eps{},
-            Spec.alt{Spec.cat{Spec.lit{Chr{47}}, Spec.cat{Spec.deep{}, Spec.eps{}}}, Spec.void{}}
+      Spec.Cat{
+        Spec.Star{},
+        Spec.Cat{
+          Spec.Alt{
+            Spec.Eps{},
+            Spec.Alt{Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}}, Spec.Void{}}
           },
-          Spec.eps{}
+          Spec.Eps{}
         }
       }
     ): Bool
@@ -5889,26 +5884,26 @@ def Show.star_k.at(
     case False{}:
       e =>
         +ke = {
-          Spec.cat{
-            Spec.alt{
-              Spec.eps{},
-              Spec.alt{Spec.cat{Spec.lit{Chr{47}}, Spec.cat{Spec.deep{}, Spec.eps{}}}, Spec.void{}}
+          Spec.Cat{
+            Spec.Alt{
+              Spec.Eps{},
+              Spec.Alt{Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}}, Spec.Void{}}
             },
-            Spec.eps{}
+            Spec.Eps{}
           }: Spec.Glob
         }
         +sk = {
-          Spec.cat{
-            Spec.star{},
-            Spec.cat{
-              Spec.alt{
-                Spec.eps{},
-                Spec.alt{
-                  Spec.cat{Spec.lit{Chr{47}}, Spec.cat{Spec.deep{}, Spec.eps{}}},
-                  Spec.void{}
+          Spec.Cat{
+            Spec.Star{},
+            Spec.Cat{
+              Spec.Alt{
+                Spec.Eps{},
+                Spec.Alt{
+                  Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}},
+                  Spec.Void{}
                 }
               },
-              Spec.eps{}
+              Spec.Eps{}
             }
           }: Spec.Glob
         }
@@ -5916,98 +5911,98 @@ def Show.star_k.at(
           True{}
             == Spec.Glob.matches(
               t,
-              Spec.alt{
-                Spec.cat{Spec.cat{Spec.Glob.of_bool(Bool.not(_)), Spec.star{}}, ke},
-                Spec.cat{Spec.eps{}, Spec.Glob.step(ke, c)}
+              Spec.Alt{
+                Spec.Cat{Spec.Cat{Spec.Glob.of_bool(Bool.not(_)), Spec.Star{}}, ke},
+                Spec.Cat{Spec.Eps{}, Spec.Glob.step(ke, c)}
               }
             ): Bool
         }
         %Glob.alt_or(
           t,
-          Spec.cat{Spec.cat{Spec.eps{}, Spec.star{}}, ke},
-          Spec.cat{Spec.eps{}, Spec.Glob.step(ke, c)}
+          Spec.Cat{Spec.Cat{Spec.Eps{}, Spec.Star{}}, ke},
+          Spec.Cat{Spec.Eps{}, Spec.Glob.step(ke, c)}
         ):
           {True{} == _: Bool}
-        %Glob.cat_assoc(t, Spec.eps{}, Spec.star{}, ke):
+        %Glob.cat_assoc(t, Spec.Eps{}, Spec.Star{}, ke):
           {
             True{}
-              == Bool.or(_, Spec.Glob.matches(t, Spec.cat{Spec.eps{}, Spec.Glob.step(ke, c)})): Bool
+              == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Eps{}, Spec.Glob.step(ke, c)})): Bool
           }
         %Glob.cat_eps_l(
           t,
           sk
         ): {
           True{}
-            == Bool.or(_, Spec.Glob.matches(t, Spec.cat{Spec.eps{}, Spec.Glob.step(ke, c)})): Bool
+            == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Eps{}, Spec.Glob.step(ke, c)})): Bool
         }
         %ih: {
           True{}
-            == Bool.or(_, Spec.Glob.matches(t, Spec.cat{Spec.eps{}, Spec.Glob.step(ke, c)})): Bool
+            == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Eps{}, Spec.Glob.step(ke, c)})): Bool
         }
         {==}
     case True{}:
       e =>
         +ke = {
-          Spec.cat{
-            Spec.alt{
-              Spec.eps{},
-              Spec.alt{Spec.cat{Spec.lit{Chr{47}}, Spec.cat{Spec.deep{}, Spec.eps{}}}, Spec.void{}}
+          Spec.Cat{
+            Spec.Alt{
+              Spec.Eps{},
+              Spec.Alt{Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}}, Spec.Void{}}
             },
-            Spec.eps{}
+            Spec.Eps{}
           }: Spec.Glob
         }
         +sk = {
-          Spec.cat{
-            Spec.star{},
-            Spec.cat{
-              Spec.alt{
-                Spec.eps{},
-                Spec.alt{
-                  Spec.cat{Spec.lit{Chr{47}}, Spec.cat{Spec.deep{}, Spec.eps{}}},
-                  Spec.void{}
+          Spec.Cat{
+            Spec.Star{},
+            Spec.Cat{
+              Spec.Alt{
+                Spec.Eps{},
+                Spec.Alt{
+                  Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}},
+                  Spec.Void{}
                 }
               },
-              Spec.eps{}
+              Spec.Eps{}
             }
           }: Spec.Glob
         }
         +ec = Char.is_eq_sound(c, Chr{47})(Equal.sym(Bool, True{}, Char.is_eq(c, Chr{47}), e))
         %Equal.sym(Char, c, Chr{47}, ec): {True{} == Spec.Glob.matches(SCon{_, t}, sk): Bool}
-        +st = {Spec.cat{Spec.cat{Spec.void{}, Spec.star{}}, ke}: Spec.Glob}
+        +st = {Spec.Cat{Spec.Cat{Spec.Void{}, Spec.Star{}}, ke}: Spec.Glob}
         +x = Spec.Glob.step(ke, Chr{47})
         +p = {SCon{Chr{47}, t}: String}
-        %Glob.alt_or(t, st, Spec.cat{Spec.eps{}, x}): {True{} == _: Bool}
+        %Glob.alt_or(t, st, Spec.Cat{Spec.Eps{}, x}): {True{} == _: Bool}
         %Glob.cat_eps_l(t, x): {True{} == Bool.or(Spec.Glob.matches(t, st), _): Bool}
         %Glob.cat_eps_r(
           p,
-          Spec.alt{
-            Spec.eps{},
-            Spec.alt{Spec.cat{Spec.lit{Chr{47}}, Spec.cat{Spec.deep{}, Spec.eps{}}}, Spec.void{}}
+          Spec.Alt{
+            Spec.Eps{},
+            Spec.Alt{Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}}, Spec.Void{}}
           }
         ): {True{} == Bool.or(Spec.Glob.matches(t, st), _): Bool}
         %Glob.alt_or(
           p,
-          Spec.eps{},
-          Spec.alt{Spec.cat{Spec.lit{Chr{47}}, Spec.cat{Spec.deep{}, Spec.eps{}}}, Spec.void{}}
+          Spec.Eps{},
+          Spec.Alt{Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}}, Spec.Void{}}
         ): {True{} == Bool.or(Spec.Glob.matches(t, st), _): Bool}
         %Glob.alt_void(
           p,
-          Spec.cat{Spec.lit{Chr{47}}, Spec.cat{Spec.deep{}, Spec.eps{}}}
+          Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}}
         ): {
           True{}
-            == Bool.or(Spec.Glob.matches(t, st), Bool.or(Spec.Glob.matches(p, Spec.eps{}), _)): Bool
+            == Bool.or(Spec.Glob.matches(t, st), Bool.or(Spec.Glob.matches(p, Spec.Eps{}), _)): Bool
         }
         %Show.slash_deep(
           t
         ): {
           True{}
-            == Bool.or(Spec.Glob.matches(t, st), Bool.or(Spec.Glob.matches(p, Spec.eps{}), _)): Bool
+            == Bool.or(Spec.Glob.matches(t, st), Bool.or(Spec.Glob.matches(p, Spec.Eps{}), _)): Bool
         }
         %Equal.sym(
           Bool,
-          Bool.or(Spec.Glob.matches(p, Spec.eps{}), True{}),
+          Bool.or(Spec.Glob.matches(p, Spec.Eps{}), True{}),
           True{},
-          Shared.Bool.or_true_right(Spec.Glob.matches(p, Spec.eps{}))
+          Shared.Bool.or_true_right(Spec.Glob.matches(p, Spec.Eps{}))
         ): {True{} == Bool.or(Spec.Glob.matches(t, st), _): Bool}
         Equal.sym(
           Bool,
@@ -6024,14 +6019,14 @@ def Show.star_k(
   True{}
     == Spec.Glob.matches(
       p,
-      Spec.cat{
-        Spec.star{},
-        Spec.cat{
-          Spec.alt{
-            Spec.eps{},
-            Spec.alt{Spec.cat{Spec.lit{Chr{47}}, Spec.cat{Spec.deep{}, Spec.eps{}}}, Spec.void{}}
+      Spec.Cat{
+        Spec.Star{},
+        Spec.Cat{
+          Spec.Alt{
+            Spec.Eps{},
+            Spec.Alt{Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}}, Spec.Void{}}
           },
-          Spec.eps{}
+          Spec.Eps{}
         }
       }
     ): Bool
@@ -6045,21 +6040,21 @@ def Show.star_k(
 # the text of Deep reads back as Deep
 def Show.deep_point(
   +p: String
-) -> {Spec.Glob.matches(p, Show.deep()) == Spec.Glob.matches(p, Spec.deep{}): Bool}:
+) -> {Spec.Glob.matches(p, Show.deep()) == Spec.Glob.matches(p, Spec.Deep{}): Bool}:
   %Glob.alt_void(
     p,
-    Spec.cat{
-      Spec.star{},
-      Spec.cat{
-        Spec.alt{
-          Spec.eps{},
-          Spec.alt{Spec.cat{Spec.lit{Chr{47}}, Spec.cat{Spec.deep{}, Spec.eps{}}}, Spec.void{}}
+    Spec.Cat{
+      Spec.Star{},
+      Spec.Cat{
+        Spec.Alt{
+          Spec.Eps{},
+          Spec.Alt{Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}}, Spec.Void{}}
         },
-        Spec.eps{}
+        Spec.Eps{}
       }
     }
-  ): {_ == Spec.Glob.matches(p, Spec.deep{}): Bool}
-  %Show.star_k(p): {_ == Spec.Glob.matches(p, Spec.deep{}): Bool}
+  ): {_ == Spec.Glob.matches(p, Spec.Deep{}): Bool}
+  %Show.star_k(p): {_ == Spec.Glob.matches(p, Spec.Deep{}): Bool}
   Glob.deep_true(p)
 
 # the facts Show.ok gives about g at rank: 0, Show.glob(g) and g agree on suf;
@@ -6085,7 +6080,7 @@ def Show.Ok(+g: Spec.Glob, rank: Nat, suf: String, pre: String) -> Type:
 # bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- only proofs use it; no program runs it
 def Show.ok(+g: Spec.Glob, +rank: Nat, +suf: String, +pre: String) -> Show.Ok(g, rank, suf, pre):
   match g:
-    case Spec.void{}:
+    case Spec.Void{}:
       match rank:
         case 0n:
           Show.void_point(suf)
@@ -6110,7 +6105,7 @@ def Show.ok(+g: Spec.Glob, +rank: Nat, +suf: String, +pre: String) -> Show.Ok(g,
                       (Show.ok(g, 0n, SCon{c2, t}, pre), Show.ok(g, 2n, t, pre))
                 case 1n+i:
                   Unit{}
-    case Spec.eps{}:
+    case Spec.Eps{}:
       match rank:
         case 0n:
           Show.eps_point(suf)
@@ -6135,7 +6130,7 @@ def Show.ok(+g: Spec.Glob, +rank: Nat, +suf: String, +pre: String) -> Show.Ok(g,
                       (Show.ok(g, 0n, SCon{c2, t}, pre), Show.ok(g, 2n, t, pre))
                 case 1n+i:
                   Unit{}
-    case Spec.lit{c}:
+    case Spec.Lit{c}:
       match rank:
         case 0n:
           {==}
@@ -6160,7 +6155,7 @@ def Show.ok(+g: Spec.Glob, +rank: Nat, +suf: String, +pre: String) -> Show.Ok(g,
                       (Show.ok(g, 0n, SCon{c2, t}, pre), Show.ok(g, 2n, t, pre))
                 case 1n+i:
                   Unit{}
-    case Spec.any{}:
+    case Spec.Any{}:
       match rank:
         case 0n:
           {==}
@@ -6185,7 +6180,7 @@ def Show.ok(+g: Spec.Glob, +rank: Nat, +suf: String, +pre: String) -> Show.Ok(g,
                       (Show.ok(g, 0n, SCon{c2, t}, pre), Show.ok(g, 2n, t, pre))
                 case 1n+i:
                   Unit{}
-    case Spec.star{}:
+    case Spec.Star{}:
       match rank:
         case 0n:
           Show.star_point(suf)
@@ -6210,7 +6205,7 @@ def Show.ok(+g: Spec.Glob, +rank: Nat, +suf: String, +pre: String) -> Show.Ok(g,
                       (Show.ok(g, 0n, SCon{c2, t}, pre), Show.ok(g, 2n, t, pre))
                 case 1n+i:
                   Unit{}
-    case Spec.class{+n, +cs}:
+    case Spec.Class{+n, +cs}:
       match rank:
         case 0n:
           Show.class_point(suf, n, cs)
@@ -6235,7 +6230,7 @@ def Show.ok(+g: Spec.Glob, +rank: Nat, +suf: String, +pre: String) -> Show.Ok(g,
                       (Show.ok(g, 0n, SCon{c2, t}, pre), Show.ok(g, 2n, t, pre))
                 case 1n+i:
                   Unit{}
-    case Spec.deep{}:
+    case Spec.Deep{}:
       match rank:
         case 0n:
           Show.deep_point(suf)
@@ -6260,20 +6255,20 @@ def Show.ok(+g: Spec.Glob, +rank: Nat, +suf: String, +pre: String) -> Show.Ok(g,
                       (Show.ok(g, 0n, SCon{c2, t}, pre), Show.ok(g, 2n, t, pre))
                 case 1n+i:
                   Unit{}
-    case Spec.cat{+a, +b}:
+    case Spec.Cat{+a, +b}:
       match rank:
         case 0n:
           +ta = Show.glob(a)
           +tb = Show.glob(b)
-          r = Spec.Glob.matches(suf, Spec.cat{a, b})
-          %Glob.alt_void(suf, Spec.cat{ta, Spec.cat{tb, Spec.eps{}}}): {_ == r: Bool}
+          r = Spec.Glob.matches(suf, Spec.Cat{a, b})
+          %Glob.alt_void(suf, Spec.Cat{ta, Spec.Cat{tb, Spec.Eps{}}}): {_ == r: Bool}
           %Equal.sym(
             Bool,
-            Spec.Glob.matches(suf, Spec.cat{ta, Spec.cat{tb, Spec.eps{}}}),
-            Spec.Glob.matches(suf, Spec.cat{Spec.cat{ta, tb}, Spec.eps{}}),
-            Glob.cat_assoc(suf, ta, tb, Spec.eps{})
+            Spec.Glob.matches(suf, Spec.Cat{ta, Spec.Cat{tb, Spec.Eps{}}}),
+            Spec.Glob.matches(suf, Spec.Cat{Spec.Cat{ta, tb}, Spec.Eps{}}),
+            Glob.cat_assoc(suf, ta, tb, Spec.Eps{})
           ): {_ == r: Bool}
-          %Glob.cat_eps_r(suf, Spec.cat{ta, tb}): {_ == r: Bool}
+          %Glob.cat_eps_r(suf, Spec.Cat{ta, tb}): {_ == r: Bool}
           Glob.cat_agree(
             suf,
             ta,
@@ -6304,27 +6299,27 @@ def Show.ok(+g: Spec.Glob, +rank: Nat, +suf: String, +pre: String) -> Show.Ok(g,
                       (Show.ok(g, 0n, SCon{c2, t}, pre), Show.ok(g, 2n, t, pre))
                 case 1n+i:
                   Unit{}
-    case Spec.alt{+a, +b}:
+    case Spec.Alt{+a, +b}:
       match rank:
         case 0n:
           +ta = Show.glob(a)
           +tb = Show.glob(b)
-          r = Spec.Glob.matches(suf, Spec.alt{a, b})
+          r = Spec.Glob.matches(suf, Spec.Alt{a, b})
           ma = Spec.Glob.matches(suf, ta)
           mb = Spec.Glob.matches(suf, tb)
           %Glob.alt_or(
             suf,
-            Spec.cat{ta, Spec.eps{}},
-            Spec.alt{Spec.cat{tb, Spec.eps{}}, Spec.void{}}
+            Spec.Cat{ta, Spec.Eps{}},
+            Spec.Alt{Spec.Cat{tb, Spec.Eps{}}, Spec.Void{}}
           ): {_ == r: Bool}
           %Glob.alt_void(
             suf,
-            Spec.cat{tb, Spec.eps{}}
-          ): {Bool.or(Spec.Glob.matches(suf, Spec.cat{ta, Spec.eps{}}), _) == r: Bool}
+            Spec.Cat{tb, Spec.Eps{}}
+          ): {Bool.or(Spec.Glob.matches(suf, Spec.Cat{ta, Spec.Eps{}}), _) == r: Bool}
           %Glob.cat_eps_r(
             suf,
             ta
-          ): {Bool.or(_, Spec.Glob.matches(suf, Spec.cat{tb, Spec.eps{}})) == r: Bool}
+          ): {Bool.or(_, Spec.Glob.matches(suf, Spec.Cat{tb, Spec.Eps{}})) == r: Bool}
           %Glob.cat_eps_r(suf, tb): {Bool.or(ma, _) == r: Bool}
           %Glob.alt_or(suf, a, b): {Bool.or(ma, mb) == _: Bool}
           %Show.ok(
@@ -6367,97 +6362,97 @@ def Show.read_lit(
   k == Spec.Sym.of(c): Spec.Sym
 } -> {
   Some{
-    Spec.cat{Spec.lit{c}, Spec.eps{}}
+    Spec.Cat{Spec.Lit{c}, Spec.Eps{}}
   }
     == Spec.Glob.read.syms(Spec.Sym.list(Glob.show.char(c, k, ""))): Maybe<&2, Spec.Glob>
 }:
   match k:
-    case Spec.s_char{x}:
+    case Spec.SChar{x}:
       +e =>
-        +tgt = {Some{Spec.cat{Spec.lit{c}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        +tgt = {Some{Spec.Cat{Spec.Lit{c}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         %e: {tgt == Spec.Glob.read.syms(Con{_, Nil{}}): Maybe<&2, Spec.Glob>}
         %Sym.char_is(
           c,
-          Spec.s_char{x},
+          Spec.SChar{x},
           e
-        ): {tgt == Some{Spec.cat{Spec.lit{_}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        ): {tgt == Some{Spec.Cat{Spec.Lit{_}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         {==}
-    case Spec.s_esc{}:
+    case Spec.SEsc{}:
       e =>
-        +tgt = {Some{Spec.cat{Spec.lit{c}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        +tgt = {Some{Spec.Cat{Spec.Lit{c}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         +f = {[Spec.Frame{[], [], True{}}]: List<&2, Spec.Frame>}
         %Step.esc(Spec.Sym.of(c), Nil{}, f, True{}): {tgt == _: Maybe<&2, Spec.Glob>}
-        %Sym.char_of(c): {tgt == Some{Spec.cat{Spec.lit{_}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        %Sym.char_of(c): {tgt == Some{Spec.Cat{Spec.Lit{_}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         {==}
-    case Spec.s_any{}:
+    case Spec.SAny{}:
       e =>
-        +tgt = {Some{Spec.cat{Spec.lit{c}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        +tgt = {Some{Spec.Cat{Spec.Lit{c}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         +f = {[Spec.Frame{[], [], True{}}]: List<&2, Spec.Frame>}
         %Step.esc(Spec.Sym.of(c), Nil{}, f, True{}): {tgt == _: Maybe<&2, Spec.Glob>}
-        %Sym.char_of(c): {tgt == Some{Spec.cat{Spec.lit{_}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        %Sym.char_of(c): {tgt == Some{Spec.Cat{Spec.Lit{_}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         {==}
-    case Spec.s_star{}:
+    case Spec.SStar{}:
       e =>
-        +tgt = {Some{Spec.cat{Spec.lit{c}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        +tgt = {Some{Spec.Cat{Spec.Lit{c}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         +f = {[Spec.Frame{[], [], True{}}]: List<&2, Spec.Frame>}
         %Step.esc(Spec.Sym.of(c), Nil{}, f, True{}): {tgt == _: Maybe<&2, Spec.Glob>}
-        %Sym.char_of(c): {tgt == Some{Spec.cat{Spec.lit{_}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        %Sym.char_of(c): {tgt == Some{Spec.Cat{Spec.Lit{_}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         {==}
-    case Spec.s_slash{}:
+    case Spec.SSlash{}:
       e =>
-        +tgt = {Some{Spec.cat{Spec.lit{c}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        +tgt = {Some{Spec.Cat{Spec.Lit{c}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         +f = {[Spec.Frame{[], [], True{}}]: List<&2, Spec.Frame>}
         %Step.esc(Spec.Sym.of(c), Nil{}, f, True{}): {tgt == _: Maybe<&2, Spec.Glob>}
-        %Sym.char_of(c): {tgt == Some{Spec.cat{Spec.lit{_}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        %Sym.char_of(c): {tgt == Some{Spec.Cat{Spec.Lit{_}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         {==}
-    case Spec.s_open{}:
+    case Spec.SOpen{}:
       e =>
-        +tgt = {Some{Spec.cat{Spec.lit{c}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        +tgt = {Some{Spec.Cat{Spec.Lit{c}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         +f = {[Spec.Frame{[], [], True{}}]: List<&2, Spec.Frame>}
         %Step.esc(Spec.Sym.of(c), Nil{}, f, True{}): {tgt == _: Maybe<&2, Spec.Glob>}
-        %Sym.char_of(c): {tgt == Some{Spec.cat{Spec.lit{_}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        %Sym.char_of(c): {tgt == Some{Spec.Cat{Spec.Lit{_}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         {==}
-    case Spec.s_comma{}:
+    case Spec.SComma{}:
       e =>
-        +tgt = {Some{Spec.cat{Spec.lit{c}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        +tgt = {Some{Spec.Cat{Spec.Lit{c}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         +f = {[Spec.Frame{[], [], True{}}]: List<&2, Spec.Frame>}
         %Step.esc(Spec.Sym.of(c), Nil{}, f, True{}): {tgt == _: Maybe<&2, Spec.Glob>}
-        %Sym.char_of(c): {tgt == Some{Spec.cat{Spec.lit{_}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        %Sym.char_of(c): {tgt == Some{Spec.Cat{Spec.Lit{_}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         {==}
-    case Spec.s_close{}:
+    case Spec.SClose{}:
       e =>
-        +tgt = {Some{Spec.cat{Spec.lit{c}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        +tgt = {Some{Spec.Cat{Spec.Lit{c}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         +f = {[Spec.Frame{[], [], True{}}]: List<&2, Spec.Frame>}
         %Step.esc(Spec.Sym.of(c), Nil{}, f, True{}): {tgt == _: Maybe<&2, Spec.Glob>}
-        %Sym.char_of(c): {tgt == Some{Spec.cat{Spec.lit{_}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        %Sym.char_of(c): {tgt == Some{Spec.Cat{Spec.Lit{_}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         {==}
-    case Spec.s_left{}:
+    case Spec.SLeft{}:
       e =>
-        +tgt = {Some{Spec.cat{Spec.lit{c}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        +tgt = {Some{Spec.Cat{Spec.Lit{c}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         +f = {[Spec.Frame{[], [], True{}}]: List<&2, Spec.Frame>}
         %Step.esc(Spec.Sym.of(c), Nil{}, f, True{}): {tgt == _: Maybe<&2, Spec.Glob>}
-        %Sym.char_of(c): {tgt == Some{Spec.cat{Spec.lit{_}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        %Sym.char_of(c): {tgt == Some{Spec.Cat{Spec.Lit{_}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         {==}
-    case Spec.s_right{}:
+    case Spec.SRight{}:
       e =>
-        +tgt = {Some{Spec.cat{Spec.lit{c}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        +tgt = {Some{Spec.Cat{Spec.Lit{c}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         +f = {[Spec.Frame{[], [], True{}}]: List<&2, Spec.Frame>}
         %Step.esc(Spec.Sym.of(c), Nil{}, f, True{}): {tgt == _: Maybe<&2, Spec.Glob>}
-        %Sym.char_of(c): {tgt == Some{Spec.cat{Spec.lit{_}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        %Sym.char_of(c): {tgt == Some{Spec.Cat{Spec.Lit{_}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         {==}
-    case Spec.s_bang{}:
+    case Spec.SBang{}:
       e =>
-        +tgt = {Some{Spec.cat{Spec.lit{c}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        +tgt = {Some{Spec.Cat{Spec.Lit{c}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         +f = {[Spec.Frame{[], [], True{}}]: List<&2, Spec.Frame>}
         %Step.esc(Spec.Sym.of(c), Nil{}, f, True{}): {tgt == _: Maybe<&2, Spec.Glob>}
-        %Sym.char_of(c): {tgt == Some{Spec.cat{Spec.lit{_}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        %Sym.char_of(c): {tgt == Some{Spec.Cat{Spec.Lit{_}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         {==}
-    case Spec.s_dash{}:
+    case Spec.SDash{}:
       e =>
-        +tgt = {Some{Spec.cat{Spec.lit{c}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        +tgt = {Some{Spec.Cat{Spec.Lit{c}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         +f = {[Spec.Frame{[], [], True{}}]: List<&2, Spec.Frame>}
         %Step.esc(Spec.Sym.of(c), Nil{}, f, True{}): {tgt == _: Maybe<&2, Spec.Glob>}
-        %Sym.char_of(c): {tgt == Some{Spec.cat{Spec.lit{_}, Spec.eps{}}}: Maybe<&2, Spec.Glob>}
+        %Sym.char_of(c): {tgt == Some{Spec.Cat{Spec.Lit{_}, Spec.Eps{}}}: Maybe<&2, Spec.Glob>}
         {==}
 
 # the text of g reads back as Show.glob(g)
@@ -6465,35 +6460,35 @@ def Show.read(
   g: Spec.Glob
 ) -> {
   Some{
-    Spec.cat{Show.glob(g), Spec.eps{}}
+    Spec.Cat{Show.glob(g), Spec.Eps{}}
   }
     == Spec.Glob.read(Spec.Glob.show(g)): Maybe<&2, Spec.Glob>
 }:
   match g:
-    case Spec.void{}:
-      Show.parse(Spec.void{}, "", [], [], True{}, [], True{})
-    case Spec.eps{}:
-      Show.parse(Spec.eps{}, "", [], [], True{}, [], True{})
-    case Spec.any{}:
-      Show.parse(Spec.any{}, "", [], [], True{}, [], True{})
-    case Spec.star{}:
-      Show.parse(Spec.star{}, "", [], [], True{}, [], True{})
-    case Spec.class{n, cs}:
-      Show.parse(Spec.class{n, cs}, "", [], [], True{}, [], True{})
-    case Spec.deep{}:
-      Show.parse(Spec.deep{}, "", [], [], True{}, [], True{})
-    case Spec.cat{x, y}:
-      Show.parse(Spec.cat{x, y}, "", [], [], True{}, [], True{})
-    case Spec.alt{x, y}:
-      Show.parse(Spec.alt{x, y}, "", [], [], True{}, [], True{})
-    case Spec.lit{+c}:
+    case Spec.Void{}:
+      Show.parse(Spec.Void{}, "", [], [], True{}, [], True{})
+    case Spec.Eps{}:
+      Show.parse(Spec.Eps{}, "", [], [], True{}, [], True{})
+    case Spec.Any{}:
+      Show.parse(Spec.Any{}, "", [], [], True{}, [], True{})
+    case Spec.Star{}:
+      Show.parse(Spec.Star{}, "", [], [], True{}, [], True{})
+    case Spec.Class{n, cs}:
+      Show.parse(Spec.Class{n, cs}, "", [], [], True{}, [], True{})
+    case Spec.Deep{}:
+      Show.parse(Spec.Deep{}, "", [], [], True{}, [], True{})
+    case Spec.Cat{x, y}:
+      Show.parse(Spec.Cat{x, y}, "", [], [], True{}, [], True{})
+    case Spec.Alt{x, y}:
+      Show.parse(Spec.Alt{x, y}, "", [], [], True{}, [], True{})
+    case Spec.Lit{+c}:
       Show.read_lit(c, Spec.Sym.of(c))({==})
 
 # g matches what the glob its text reads back as matches
 def Show.same(
   +g: Spec.Glob,
   +p: String
-) -> {Spec.Glob.matches(p, g) == Spec.Glob.matches(p, Spec.cat{Show.glob(g), Spec.eps{}}): Bool}:
+) -> {Spec.Glob.matches(p, g) == Spec.Glob.matches(p, Spec.Cat{Show.glob(g), Spec.Eps{}}): Bool}:
   %Glob.cat_eps_r(p, Show.glob(g)): {Spec.Glob.matches(p, g) == _: Bool}
   Equal.sym(
     Bool,
@@ -6505,7 +6500,7 @@ def Show.same(
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
 def Spec.read_after_show(g):
   +g = g
-  h = {Spec.cat{Show.glob(g), Spec.eps{}}: Spec.Glob}
+  h = {Spec.Cat{Show.glob(g), Spec.Eps{}}: Spec.Glob}
   read = Equal.sym(Maybe<&2, Spec.Glob>, Some{h}, Spec.Glob.read(Spec.Glob.show(g)), Show.read(g))
   (h, (read, p => Show.same(g, p)))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
@@ -6519,9 +6514,9 @@ def Spec.read_rejects_root(s):
 # except '/', which stays a separator
 def Glob.escape.char(c: Char, k: Spec.Sym, rest: String) -> String:
   match k:
-    case Spec.s_char{x}:
+    case Spec.SChar{x}:
       SCon{c, rest}
-    case Spec.s_slash{}:
+    case Spec.SSlash{}:
       SCon{c, rest}
     case _:
       SCon{Chr{92}, SCon{c, rest}}
@@ -6537,9 +6532,9 @@ def Spec.Glob.escape(p):
 def Glob.lits(p: String) -> Spec.Glob:
   match p:
     case SNil{}:
-      Spec.eps{}
+      Spec.Eps{}
     case SCon{c, t}:
-      Spec.cat{Spec.lit{c}, Glob.lits(t)}
+      Spec.Cat{Spec.Lit{c}, Glob.lits(t)}
 
 # Esc.parse, one character c, given k, the role of c
 def Esc.parse_at(
@@ -6556,7 +6551,7 @@ def Esc.parse_at(
     }
       == Spec.Glob.read.go(
         Spec.Sym.list(Spec.Glob.escape(t)),
-        Spec.out{},
+        Spec.Out{},
         [Spec.Frame{[], s2, True{}}],
         seg2
       ): Maybe<&2, Spec.Glob>
@@ -6565,242 +6560,242 @@ def Esc.parse_at(
   k == Spec.Sym.of(c): Spec.Sym
 } -> {
   Some{
-    Spec.Glob.of_seq(s, Spec.cat{Spec.lit{c}, Glob.lits(t)})
+    Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{c}, Glob.lits(t)})
   }
     == Spec.Glob.read.go(
       Spec.Sym.list(Glob.escape.char(c, k, Spec.Glob.escape(t))),
-      Spec.out{},
+      Spec.Out{},
       [Spec.Frame{[], s, True{}}],
       seg
     ): Maybe<&2, Spec.Glob>
 }:
   match k:
-    case Spec.s_char{+x}:
+    case Spec.SChar{+x}:
       +e =>
         +l = Spec.Sym.list(Spec.Glob.escape(t))
         +f = {[Spec.Frame{[], s, True{}}]: List<&2, Spec.Frame>}
         +tgt = {
-          Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+          Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
-        %e: {tgt == Spec.Glob.read.go(Con{_, l}, Spec.out{}, f, seg): Maybe<&2, Spec.Glob>}
+        %e: {tgt == Spec.Glob.read.go(Con{_, l}, Spec.Out{}, f, seg): Maybe<&2, Spec.Glob>}
         %Step.char(x, l, f, seg): {tgt == _: Maybe<&2, Spec.Glob>}
-        %ih(Con{Spec.lit{x}, s}, False{}): {tgt == _: Maybe<&2, Spec.Glob>}
+        %ih(Con{Spec.Lit{x}, s}, False{}): {tgt == _: Maybe<&2, Spec.Glob>}
         %Sym.char_is(
           c,
-          Spec.s_char{x},
+          Spec.SChar{x},
           e
         ): {
           tgt
-            == Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+            == Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_slash{}:
+    case Spec.SSlash{}:
       +e =>
         +l = Spec.Sym.list(Spec.Glob.escape(t))
         +f = {[Spec.Frame{[], s, True{}}]: List<&2, Spec.Frame>}
         +tgt = {
-          Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+          Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
-        %e: {tgt == Spec.Glob.read.go(Con{_, l}, Spec.out{}, f, seg): Maybe<&2, Spec.Glob>}
+        %e: {tgt == Spec.Glob.read.go(Con{_, l}, Spec.Out{}, f, seg): Maybe<&2, Spec.Glob>}
         %Step.slash(l, f, seg): {tgt == _: Maybe<&2, Spec.Glob>}
-        %ih(Con{Spec.lit{Chr{47}}, s}, True{}): {tgt == _: Maybe<&2, Spec.Glob>}
+        %ih(Con{Spec.Lit{Chr{47}}, s}, True{}): {tgt == _: Maybe<&2, Spec.Glob>}
         %Sym.char_is(
           c,
-          Spec.s_slash{},
+          Spec.SSlash{},
           e
         ): {
           tgt
-            == Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+            == Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_esc{}:
+    case Spec.SEsc{}:
       e =>
         +l = Spec.Sym.list(Spec.Glob.escape(t))
         +f = {[Spec.Frame{[], s, True{}}]: List<&2, Spec.Frame>}
         +tgt = {
-          Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+          Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         %Step.esc(Spec.Sym.of(c), l, f, seg): {tgt == _: Maybe<&2, Spec.Glob>}
         %ih(
-          Con{Spec.lit{Spec.Sym.char(Spec.Sym.of(c))}, s},
+          Con{Spec.Lit{Spec.Sym.char(Spec.Sym.of(c))}, s},
           False{}
         ): {tgt == _: Maybe<&2, Spec.Glob>}
         %Sym.char_of(
           c
         ): {
           tgt
-            == Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+            == Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_any{}:
+    case Spec.SAny{}:
       e =>
         +l = Spec.Sym.list(Spec.Glob.escape(t))
         +f = {[Spec.Frame{[], s, True{}}]: List<&2, Spec.Frame>}
         +tgt = {
-          Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+          Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         %Step.esc(Spec.Sym.of(c), l, f, seg): {tgt == _: Maybe<&2, Spec.Glob>}
         %ih(
-          Con{Spec.lit{Spec.Sym.char(Spec.Sym.of(c))}, s},
+          Con{Spec.Lit{Spec.Sym.char(Spec.Sym.of(c))}, s},
           False{}
         ): {tgt == _: Maybe<&2, Spec.Glob>}
         %Sym.char_of(
           c
         ): {
           tgt
-            == Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+            == Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_star{}:
+    case Spec.SStar{}:
       e =>
         +l = Spec.Sym.list(Spec.Glob.escape(t))
         +f = {[Spec.Frame{[], s, True{}}]: List<&2, Spec.Frame>}
         +tgt = {
-          Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+          Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         %Step.esc(Spec.Sym.of(c), l, f, seg): {tgt == _: Maybe<&2, Spec.Glob>}
         %ih(
-          Con{Spec.lit{Spec.Sym.char(Spec.Sym.of(c))}, s},
+          Con{Spec.Lit{Spec.Sym.char(Spec.Sym.of(c))}, s},
           False{}
         ): {tgt == _: Maybe<&2, Spec.Glob>}
         %Sym.char_of(
           c
         ): {
           tgt
-            == Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+            == Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_open{}:
+    case Spec.SOpen{}:
       e =>
         +l = Spec.Sym.list(Spec.Glob.escape(t))
         +f = {[Spec.Frame{[], s, True{}}]: List<&2, Spec.Frame>}
         +tgt = {
-          Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+          Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         %Step.esc(Spec.Sym.of(c), l, f, seg): {tgt == _: Maybe<&2, Spec.Glob>}
         %ih(
-          Con{Spec.lit{Spec.Sym.char(Spec.Sym.of(c))}, s},
+          Con{Spec.Lit{Spec.Sym.char(Spec.Sym.of(c))}, s},
           False{}
         ): {tgt == _: Maybe<&2, Spec.Glob>}
         %Sym.char_of(
           c
         ): {
           tgt
-            == Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+            == Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_comma{}:
+    case Spec.SComma{}:
       e =>
         +l = Spec.Sym.list(Spec.Glob.escape(t))
         +f = {[Spec.Frame{[], s, True{}}]: List<&2, Spec.Frame>}
         +tgt = {
-          Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+          Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         %Step.esc(Spec.Sym.of(c), l, f, seg): {tgt == _: Maybe<&2, Spec.Glob>}
         %ih(
-          Con{Spec.lit{Spec.Sym.char(Spec.Sym.of(c))}, s},
+          Con{Spec.Lit{Spec.Sym.char(Spec.Sym.of(c))}, s},
           False{}
         ): {tgt == _: Maybe<&2, Spec.Glob>}
         %Sym.char_of(
           c
         ): {
           tgt
-            == Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+            == Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_close{}:
+    case Spec.SClose{}:
       e =>
         +l = Spec.Sym.list(Spec.Glob.escape(t))
         +f = {[Spec.Frame{[], s, True{}}]: List<&2, Spec.Frame>}
         +tgt = {
-          Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+          Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         %Step.esc(Spec.Sym.of(c), l, f, seg): {tgt == _: Maybe<&2, Spec.Glob>}
         %ih(
-          Con{Spec.lit{Spec.Sym.char(Spec.Sym.of(c))}, s},
+          Con{Spec.Lit{Spec.Sym.char(Spec.Sym.of(c))}, s},
           False{}
         ): {tgt == _: Maybe<&2, Spec.Glob>}
         %Sym.char_of(
           c
         ): {
           tgt
-            == Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+            == Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_left{}:
+    case Spec.SLeft{}:
       e =>
         +l = Spec.Sym.list(Spec.Glob.escape(t))
         +f = {[Spec.Frame{[], s, True{}}]: List<&2, Spec.Frame>}
         +tgt = {
-          Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+          Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         %Step.esc(Spec.Sym.of(c), l, f, seg): {tgt == _: Maybe<&2, Spec.Glob>}
         %ih(
-          Con{Spec.lit{Spec.Sym.char(Spec.Sym.of(c))}, s},
+          Con{Spec.Lit{Spec.Sym.char(Spec.Sym.of(c))}, s},
           False{}
         ): {tgt == _: Maybe<&2, Spec.Glob>}
         %Sym.char_of(
           c
         ): {
           tgt
-            == Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+            == Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_right{}:
+    case Spec.SRight{}:
       e =>
         +l = Spec.Sym.list(Spec.Glob.escape(t))
         +f = {[Spec.Frame{[], s, True{}}]: List<&2, Spec.Frame>}
         +tgt = {
-          Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+          Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         %Step.esc(Spec.Sym.of(c), l, f, seg): {tgt == _: Maybe<&2, Spec.Glob>}
         %ih(
-          Con{Spec.lit{Spec.Sym.char(Spec.Sym.of(c))}, s},
+          Con{Spec.Lit{Spec.Sym.char(Spec.Sym.of(c))}, s},
           False{}
         ): {tgt == _: Maybe<&2, Spec.Glob>}
         %Sym.char_of(
           c
         ): {
           tgt
-            == Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+            == Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_bang{}:
+    case Spec.SBang{}:
       e =>
         +l = Spec.Sym.list(Spec.Glob.escape(t))
         +f = {[Spec.Frame{[], s, True{}}]: List<&2, Spec.Frame>}
         +tgt = {
-          Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+          Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         %Step.esc(Spec.Sym.of(c), l, f, seg): {tgt == _: Maybe<&2, Spec.Glob>}
         %ih(
-          Con{Spec.lit{Spec.Sym.char(Spec.Sym.of(c))}, s},
+          Con{Spec.Lit{Spec.Sym.char(Spec.Sym.of(c))}, s},
           False{}
         ): {tgt == _: Maybe<&2, Spec.Glob>}
         %Sym.char_of(
           c
         ): {
           tgt
-            == Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+            == Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         {==}
-    case Spec.s_dash{}:
+    case Spec.SDash{}:
       e =>
         +l = Spec.Sym.list(Spec.Glob.escape(t))
         +f = {[Spec.Frame{[], s, True{}}]: List<&2, Spec.Frame>}
         +tgt = {
-          Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+          Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{c}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         %Step.esc(Spec.Sym.of(c), l, f, seg): {tgt == _: Maybe<&2, Spec.Glob>}
         %ih(
-          Con{Spec.lit{Spec.Sym.char(Spec.Sym.of(c))}, s},
+          Con{Spec.Lit{Spec.Sym.char(Spec.Sym.of(c))}, s},
           False{}
         ): {tgt == _: Maybe<&2, Spec.Glob>}
         %Sym.char_of(
           c
         ): {
           tgt
-            == Some{Spec.Glob.of_seq(s, Spec.cat{Spec.lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
+            == Some{Spec.Glob.of_seq(s, Spec.Cat{Spec.Lit{_}, Glob.lits(t)})}: Maybe<&2, Spec.Glob>
         }
         {==}
 
@@ -6815,7 +6810,7 @@ def Esc.parse(
   }
     == Spec.Glob.read.go(
       Spec.Sym.list(Spec.Glob.escape(p)),
-      Spec.out{},
+      Spec.Out{},
       [Spec.Frame{[], s, True{}}],
       seg
     ): Maybe<&2, Spec.Glob>
@@ -6829,7 +6824,7 @@ def Esc.parse(
 # syms start with '/'
 def Sym.starts_slash(syms: List<&2, Spec.Sym>) -> Bool:
   match syms:
-    case Con{Spec.s_slash{}, t}:
+    case Con{Spec.SSlash{}, t}:
       True{}
     case _:
       False{}
@@ -6842,7 +6837,7 @@ def Read.syms_go(
 } -> {
   Spec.Glob.read.go(
     syms,
-    Spec.out{},
+    Spec.Out{},
     [Spec.Frame{[], [], True{}}],
     True{}
   )
@@ -6853,40 +6848,40 @@ def Read.syms_go(
       h => {==}
     case Con{y, l}:
       match y:
-        case Spec.s_esc{}:
+        case Spec.SEsc{}:
           h => {==}
-        case Spec.s_any{}:
+        case Spec.SAny{}:
           h => {==}
-        case Spec.s_star{}:
+        case Spec.SStar{}:
           h => {==}
-        case Spec.s_slash{}:
+        case Spec.SSlash{}:
           h => Empty.absurd(
             {
               Spec.Glob.read.go(
-                Con{Spec.s_slash{}, l},
-                Spec.out{},
+                Con{Spec.SSlash{}, l},
+                Spec.Out{},
                 [Spec.Frame{[], [], True{}}],
                 True{}
               )
-                == Spec.Glob.read.syms(Con{Spec.s_slash{}, l}): Maybe<&2, Spec.Glob>
+                == Spec.Glob.read.syms(Con{Spec.SSlash{}, l}): Maybe<&2, Spec.Glob>
             },
             Bool.true_ne_false(h)
           )
-        case Spec.s_open{}:
+        case Spec.SOpen{}:
           h => {==}
-        case Spec.s_comma{}:
+        case Spec.SComma{}:
           h => {==}
-        case Spec.s_close{}:
+        case Spec.SClose{}:
           h => {==}
-        case Spec.s_left{}:
+        case Spec.SLeft{}:
           h => {==}
-        case Spec.s_right{}:
+        case Spec.SRight{}:
           h => {==}
-        case Spec.s_bang{}:
+        case Spec.SBang{}:
           h => {==}
-        case Spec.s_dash{}:
+        case Spec.SDash{}:
           h => {==}
-        case Spec.s_char{x}:
+        case Spec.SChar{x}:
           h => {==}
 
 # a text that starts with '/' is no valid path
@@ -6924,39 +6919,39 @@ def Esc.no_slash_at(
   Sym.starts_slash(Spec.Sym.list(Glob.escape.char(c, k, Spec.Glob.escape(t)))) == False{}: Bool
 }:
   match k:
-    case Spec.s_esc{}:
+    case Spec.SEsc{}:
       e => {==}
-    case Spec.s_any{}:
+    case Spec.SAny{}:
       e => {==}
-    case Spec.s_star{}:
+    case Spec.SStar{}:
       e => {==}
-    case Spec.s_slash{}:
+    case Spec.SSlash{}:
       +e =>
-        ec = Equal.sym(Char, c, Chr{47}, Sym.char_is(c, Spec.s_slash{}, e))
+        ec = Equal.sym(Char, c, Chr{47}, Sym.char_is(c, Spec.SSlash{}, e))
         Empty.absurd(
           {
             Sym.starts_slash(
-              Spec.Sym.list(Glob.escape.char(c, Spec.s_slash{}, Spec.Glob.escape(t)))
+              Spec.Sym.list(Glob.escape.char(c, Spec.SSlash{}, Spec.Glob.escape(t)))
             )
               == False{}: Bool
           },
           Esc.no_root(c, t, ec, v)
         )
-    case Spec.s_open{}:
+    case Spec.SOpen{}:
       e => {==}
-    case Spec.s_comma{}:
+    case Spec.SComma{}:
       e => {==}
-    case Spec.s_close{}:
+    case Spec.SClose{}:
       e => {==}
-    case Spec.s_left{}:
+    case Spec.SLeft{}:
       e => {==}
-    case Spec.s_right{}:
+    case Spec.SRight{}:
       e => {==}
-    case Spec.s_bang{}:
+    case Spec.SBang{}:
       e => {==}
-    case Spec.s_dash{}:
+    case Spec.SDash{}:
       e => {==}
-    case Spec.s_char{x}:
+    case Spec.SChar{x}:
       +e =>
         %e: {Sym.starts_slash(Con{_, Spec.Sym.list(Spec.Glob.escape(t))}) == False{}: Bool}
         {==}
@@ -7235,12 +7230,12 @@ def Lits.cons(
   +e1 = Cmp.is_eq(U32.cmp(cx, dx))
   +x = Spec.Glob.step(l, Chr{dx})
   s = String.eq(SCon{Chr{dx}, qt}, SCon{Chr{cx}, pt})
-  %Glob.alt_or(qt, Spec.cat{Spec.Glob.of_bool(e1), l}, Spec.cat{Spec.void{}, x}): {s == _: Bool}
+  %Glob.alt_or(qt, Spec.Cat{Spec.Glob.of_bool(e1), l}, Spec.Cat{Spec.Void{}, x}): {s == _: Bool}
   %Glob.cat_of_bool(
     qt,
     e1,
     l
-  ): {s == Bool.or(_, Spec.Glob.matches(qt, Spec.cat{Spec.void{}, x})): Bool}
+  ): {s == Bool.or(_, Spec.Glob.matches(qt, Spec.Cat{Spec.Void{}, x})): Bool}
   %Glob.cat_void_l(qt, x): {s == Bool.or(Bool.and(e1, Spec.Glob.matches(qt, l)), _): Bool}
   %Bool.or_false(Bool.and(e1, Spec.Glob.matches(qt, l))): {s == _: Bool}
   %ih: {s == Bool.and(e1, _): Bool}

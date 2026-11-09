@@ -499,8 +499,8 @@ def Bytes.of_text(s: String) -> Bytes():
 # what a reader of UTF-8 bytes waits for: the start of a character, or need
 # more bytes of a character whose bits so far are acc (the lowest first)
 type Utf8.Wait is Data:
-  Utf8.start{}
-  Utf8.more{need: Nat, acc: List<&2, Bool>}
+  Utf8.Start{}
+  Utf8.More{need: Nat, acc: List<&2, Bool>}
 
 # what a byte gives the reader: what it waits for next, and the characters
 # that the byte ends
@@ -557,19 +557,19 @@ def Utf8.lead(
                 case True{}:
                   match x7:
                     case True{}:
-                      Utf8.Out{Utf8.start{}, [Utf8.bad()]}
+                      Utf8.Out{Utf8.Start{}, [Utf8.bad()]}
                     case False{}:
                       Utf8.Out{
-                        Utf8.start{},
+                        Utf8.Start{},
                         [Utf8.char_of([x0, x1, x2, True{}, True{}, True{}, True{}])]
                       }
                 case False{}:
                   match x7:
                     case True{}:
-                      Utf8.Out{Utf8.start{}, [Utf8.bad()]}
+                      Utf8.Out{Utf8.Start{}, [Utf8.bad()]}
                     case False{}:
                       Utf8.Out{
-                        Utf8.start{},
+                        Utf8.Start{},
                         [Utf8.char_of([x0, x1, x2, True{}, True{}, True{}, False{}])]
                       }
             case False{}:
@@ -577,19 +577,19 @@ def Utf8.lead(
                 case True{}:
                   match x7:
                     case True{}:
-                      Utf8.Out{Utf8.more{1n, [x0, x1, x2, True{}, True{}]}, []}
+                      Utf8.Out{Utf8.More{1n, [x0, x1, x2, True{}, True{}]}, []}
                     case False{}:
                       Utf8.Out{
-                        Utf8.start{},
+                        Utf8.Start{},
                         [Utf8.char_of([x0, x1, x2, True{}, True{}, False{}, True{}])]
                       }
                 case False{}:
                   match x7:
                     case True{}:
-                      Utf8.Out{Utf8.start{}, [Utf8.bad()]}
+                      Utf8.Out{Utf8.Start{}, [Utf8.bad()]}
                     case False{}:
                       Utf8.Out{
-                        Utf8.start{},
+                        Utf8.Start{},
                         [Utf8.char_of([x0, x1, x2, True{}, True{}, False{}, False{}])]
                       }
         case False{}:
@@ -599,19 +599,19 @@ def Utf8.lead(
                 case True{}:
                   match x7:
                     case True{}:
-                      Utf8.Out{Utf8.more{2n, [x0, x1, x2, True{}]}, []}
+                      Utf8.Out{Utf8.More{2n, [x0, x1, x2, True{}]}, []}
                     case False{}:
                       Utf8.Out{
-                        Utf8.start{},
+                        Utf8.Start{},
                         [Utf8.char_of([x0, x1, x2, True{}, False{}, True{}, True{}])]
                       }
                 case False{}:
                   match x7:
                     case True{}:
-                      Utf8.Out{Utf8.start{}, [Utf8.bad()]}
+                      Utf8.Out{Utf8.Start{}, [Utf8.bad()]}
                     case False{}:
                       Utf8.Out{
-                        Utf8.start{},
+                        Utf8.Start{},
                         [Utf8.char_of([x0, x1, x2, True{}, False{}, True{}, False{}])]
                       }
             case False{}:
@@ -619,19 +619,19 @@ def Utf8.lead(
                 case True{}:
                   match x7:
                     case True{}:
-                      Utf8.Out{Utf8.more{1n, [x0, x1, x2, True{}, False{}]}, []}
+                      Utf8.Out{Utf8.More{1n, [x0, x1, x2, True{}, False{}]}, []}
                     case False{}:
                       Utf8.Out{
-                        Utf8.start{},
+                        Utf8.Start{},
                         [Utf8.char_of([x0, x1, x2, True{}, False{}, False{}, True{}])]
                       }
                 case False{}:
                   match x7:
                     case True{}:
-                      Utf8.Out{Utf8.start{}, [Utf8.bad()]}
+                      Utf8.Out{Utf8.Start{}, [Utf8.bad()]}
                     case False{}:
                       Utf8.Out{
-                        Utf8.start{},
+                        Utf8.Start{},
                         [Utf8.char_of([x0, x1, x2, True{}, False{}, False{}, False{}])]
                       }
     case False{}:
@@ -643,19 +643,19 @@ def Utf8.lead(
                 case True{}:
                   match x7:
                     case True{}:
-                      Utf8.Out{Utf8.more{3n, [x0, x1, x2]}, []}
+                      Utf8.Out{Utf8.More{3n, [x0, x1, x2]}, []}
                     case False{}:
                       Utf8.Out{
-                        Utf8.start{},
+                        Utf8.Start{},
                         [Utf8.char_of([x0, x1, x2, False{}, True{}, True{}, True{}])]
                       }
                 case False{}:
                   match x7:
                     case True{}:
-                      Utf8.Out{Utf8.start{}, [Utf8.bad()]}
+                      Utf8.Out{Utf8.Start{}, [Utf8.bad()]}
                     case False{}:
                       Utf8.Out{
-                        Utf8.start{},
+                        Utf8.Start{},
                         [Utf8.char_of([x0, x1, x2, False{}, True{}, True{}, False{}])]
                       }
             case False{}:
@@ -663,19 +663,19 @@ def Utf8.lead(
                 case True{}:
                   match x7:
                     case True{}:
-                      Utf8.Out{Utf8.more{1n, [x0, x1, x2, False{}, True{}]}, []}
+                      Utf8.Out{Utf8.More{1n, [x0, x1, x2, False{}, True{}]}, []}
                     case False{}:
                       Utf8.Out{
-                        Utf8.start{},
+                        Utf8.Start{},
                         [Utf8.char_of([x0, x1, x2, False{}, True{}, False{}, True{}])]
                       }
                 case False{}:
                   match x7:
                     case True{}:
-                      Utf8.Out{Utf8.start{}, [Utf8.bad()]}
+                      Utf8.Out{Utf8.Start{}, [Utf8.bad()]}
                     case False{}:
                       Utf8.Out{
-                        Utf8.start{},
+                        Utf8.Start{},
                         [Utf8.char_of([x0, x1, x2, False{}, True{}, False{}, False{}])]
                       }
         case False{}:
@@ -685,19 +685,19 @@ def Utf8.lead(
                 case True{}:
                   match x7:
                     case True{}:
-                      Utf8.Out{Utf8.more{2n, [x0, x1, x2, False{}]}, []}
+                      Utf8.Out{Utf8.More{2n, [x0, x1, x2, False{}]}, []}
                     case False{}:
                       Utf8.Out{
-                        Utf8.start{},
+                        Utf8.Start{},
                         [Utf8.char_of([x0, x1, x2, False{}, False{}, True{}, True{}])]
                       }
                 case False{}:
                   match x7:
                     case True{}:
-                      Utf8.Out{Utf8.start{}, [Utf8.bad()]}
+                      Utf8.Out{Utf8.Start{}, [Utf8.bad()]}
                     case False{}:
                       Utf8.Out{
-                        Utf8.start{},
+                        Utf8.Start{},
                         [Utf8.char_of([x0, x1, x2, False{}, False{}, True{}, False{}])]
                       }
             case False{}:
@@ -705,19 +705,19 @@ def Utf8.lead(
                 case True{}:
                   match x7:
                     case True{}:
-                      Utf8.Out{Utf8.more{1n, [x0, x1, x2, False{}, False{}]}, []}
+                      Utf8.Out{Utf8.More{1n, [x0, x1, x2, False{}, False{}]}, []}
                     case False{}:
                       Utf8.Out{
-                        Utf8.start{},
+                        Utf8.Start{},
                         [Utf8.char_of([x0, x1, x2, False{}, False{}, False{}, True{}])]
                       }
                 case False{}:
                   match x7:
                     case True{}:
-                      Utf8.Out{Utf8.start{}, [Utf8.bad()]}
+                      Utf8.Out{Utf8.Start{}, [Utf8.bad()]}
                     case False{}:
                       Utf8.Out{
-                        Utf8.start{},
+                        Utf8.Start{},
                         [Utf8.char_of([x0, x1, x2, False{}, False{}, False{}, False{}])]
                       }
 
@@ -751,13 +751,13 @@ def Utf8.cont(
           match k:
             case 0n:
               Utf8.Out{
-                Utf8.start{},
+                Utf8.Start{},
                 [Utf8.char_of(List.append(&2, Bool, [x0, x1, x2, x3, x4, x5], acc))]
               }
             case 1n+j:
-              Utf8.Out{Utf8.more{k, List.append(&2, Bool, [x0, x1, x2, x3, x4, x5], acc)}, []}
+              Utf8.Out{Utf8.More{k, List.append(&2, Bool, [x0, x1, x2, x3, x4, x5], acc)}, []}
         case 0n:
-          Utf8.Out{Utf8.start{}, [Utf8.bad()]}
+          Utf8.Out{Utf8.Start{}, [Utf8.bad()]}
     case _ _:
       Utf8.bad_then(Utf8.lead(x0, x1, x2, x3, x4, x5, x6, x7))
 
@@ -774,17 +774,17 @@ def Utf8.step(
   +x7: Bool
 ) -> Utf8.Out:
   match w:
-    case Utf8.start{}:
+    case Utf8.Start{}:
       Utf8.lead(x0, x1, x2, x3, x4, x5, x6, x7)
-    case Utf8.more{need, acc}:
+    case Utf8.More{need, acc}:
       Utf8.cont(x6, x7, need, acc, x0, x1, x2, x3, x4, x5, x6, x7)
 
 # the end of the bytes, while the reader waits for w
 def Utf8.end(w: Utf8.Wait) -> String:
   match w:
-    case Utf8.start{}:
+    case Utf8.Start{}:
       SNil{}
-    case Utf8.more{need, acc}:
+    case Utf8.More{need, acc}:
       SCon{Utf8.bad(), SNil{}}
 
 # the characters cs, then t
@@ -811,7 +811,7 @@ def Utf8.read(b: List<&2, U32>, w: Utf8.Wait) -> String:
 # the text of the UTF-8 bytes b: a byte that starts no character, or a
 # character cut short, reads as the replacement character
 def Bytes.to_text(b: Bytes()) -> String:
-  Utf8.read(b, Utf8.start{})
+  Utf8.read(b, Utf8.Start{})
 
 # the text of the bytes of c, then of the bytes b: c, then b read, when c
 # holds no bit above the 21st (fits); else that text as it is

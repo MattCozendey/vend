@@ -17,9 +17,9 @@ import ./shared/shared/hash.bend as Hashes
 # holds one key and its value, or a branch, which holds the root of each of
 # its 16 parts (none: empty)
 type Node is Data:
-  Node.empty{}
-  Node.leaf{key: List<&2, U32>, value: List<&2, U32>}
-  Node.branch{parts: List<&2, Maybe<&2, Hashes.Hash>>}
+  Node.Empty{}
+  Node.Leaf{key: List<&2, U32>, value: List<&2, U32>}
+  Node.Branch{parts: List<&2, Maybe<&2, Hashes.Hash>>}
 
 # Codes
 # -----
@@ -70,7 +70,7 @@ def Parts.ok(ps: List<&2, Maybe<&2, Hashes.Hash>>) -> Bool:
 # the node n is in its one code: a branch's parts are (Parts.ok)
 def Node.ok(n: Node) -> Bool:
   match n:
-    case Node.branch{ps}:
+    case Node.Branch{ps}:
       Parts.ok(ps)
     case _:
       True{}
@@ -80,16 +80,16 @@ def Node.branch.of(
   +ps: List<&2, Maybe<&2, Hashes.Hash>>,
   r: List<&2, U32>
 ) -> Maybe<&2, Codes.Read<Node>>:
-  Shared.Maybe.when(Codes.Read<Node>, Parts.ok(ps), u => Some{Codes.Read{Node.branch{ps}, r}})
+  Shared.Maybe.when(Codes.Read<Node>, Parts.ok(ps), u => Some{Codes.Read{Node.Branch{ps}, r}})
 
 # the node n, then r
 def Node.code(n: Node, r: List<&2, U32>) -> List<&2, U32>:
   match n:
-    case Node.empty{}:
+    case Node.Empty{}:
       0 <> r
-    case Node.leaf{k, v}:
+    case Node.Leaf{k, v}:
       1 <> Codes.Code.words(k, Codes.Code.words(v, r))
-    case Node.branch{ks}:
+    case Node.Branch{ks}:
       2 <> Parts.code(ks, r)
 
 # a node whose tag is x: empty (0), a leaf (1) or a branch (2)
@@ -97,7 +97,7 @@ def Node.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Node>>
   Shared.Bool.when(
     Maybe<&2, Codes.Read<Node>>,
     U32.is_eq(x, 0),
-    u => Some{Codes.Read{Node.empty{}, r}},
+    u => Some{Codes.Read{Node.Empty{}, r}},
     u => Shared.Bool.when(
       Maybe<&2, Codes.Read<Node>>,
       U32.is_eq(x, 1),
@@ -107,7 +107,7 @@ def Node.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Node>>
         ~Node,
         ~Codes.Code.words.read,
         ~Codes.Code.words.read,
-        k => v => Node.leaf{k, v},
+        k => v => Node.Leaf{k, v},
         r
       ),
       u => Shared.Bool.when(
@@ -305,7 +305,7 @@ def Tree.part(
 ) -> Maybe<&2, Node>:
   match x:
     case None{}:
-      Some{Node.empty{}}
+      Some{Node.Empty{}}
     case Some{h}:
       Tree.node(~S, ~fetch, s, h)
 
@@ -322,13 +322,13 @@ def Tree.get.go(
   match p m:
     case q None{}:
       None{}
-    case q Some{Node.empty{}}:
+    case q Some{Node.Empty{}}:
       None{}
-    case q Some{Node.leaf{k2, v}}:
+    case q Some{Node.Leaf{k2, v}}:
       Shared.Maybe.when(List<&2, U32>, Shared.List.is_eq(~U32, ~U32.is_eq, k2, k), u => Some{v})
-    case Nil{} Some{Node.branch{ks}}:
+    case Nil{} Some{Node.Branch{ks}}:
       None{}
-    case Con{x, r} Some{Node.branch{ks}}:
+    case Con{x, r} Some{Node.Branch{ks}}:
       Tree.get.go(~S, ~fetch, s, r, k, Tree.part(~S, ~fetch, s, Parts.at(ks, x)))
 
 # the value of the key k in the tree whose root is h, in the store s
@@ -388,7 +388,7 @@ def Tree.list.go(
   match f ps m:
     case g Nil{} w:
       []
-    case g Con{y, +r} Some{Node.leaf{+k, v}}:
+    case g Con{y, +r} Some{Node.Leaf{+k, v}}:
       +rest = Tree.list.go(~S, ~fetch, g, s, r, pre, 1n+x, Tree.first(~S, ~fetch, s, r))
       Shared.Bool.when(
         List<&2, Binding>,
@@ -396,7 +396,7 @@ def Tree.list.go(
         u => Binding{k, v} <> rest,
         u => rest
       )
-    case 1n+(+p) Con{y, r} Some{Node.branch{+qs}}:
+    case 1n+(+p) Con{y, r} Some{Node.Branch{+qs}}:
       here = List.append(&2, Nat, pre, [x])
       below rest = Tree.list.go(
         ~S,
@@ -421,9 +421,9 @@ def Tree.list.root(
   m: Maybe<&2, Node>
 ) -> List<&2, Binding>:
   match m:
-    case Some{Node.leaf{k, v}}:
+    case Some{Node.Leaf{k, v}}:
       [Binding{k, v}]
-    case Some{Node.branch{+qs}}:
+    case Some{Node.Branch{+qs}}:
       Tree.list.go(~S, ~fetch, 63n, s, qs, [], 0n, Tree.first(~S, ~fetch, s, qs))
     case w:
       []
@@ -465,7 +465,7 @@ def Put.node(n: Node, ns: List<&2, List<&2, U32>>) -> Put:
 
 # the subtree of a branch of parts ks whose part n is the new subtree p
 def Put.into(ks: List<&2, Maybe<&2, Hashes.Hash>>, n: Nat, +p: Put) -> Put:
-  Put.node(Node.branch{Parts.put(ks, n, Some{Put.root(p)})}, Put.nodes(p))
+  Put.node(Node.Branch{Parts.put(ks, n, Some{Put.root(p)})}, Put.nodes(p))
 
 # the subtree that holds the new leaf l, whose path below here is p1, and the
 # part o already there, whose path below here is p2: branches down to where
@@ -481,7 +481,8 @@ def Tree.split(
       Shared.Bool.when(
         Maybe<&2, Put>,
         Nat.is_eq(a, b),
-        u => Maybe.bind(&2, 
+        u => Maybe.bind(
+          &2,
           Put,
           Put,
           Tree.split(r1, r2, l, o),
@@ -489,7 +490,7 @@ def Tree.split(
         ),
         u => Some{
           Put.node(
-            Node.branch{Parts.put(Parts.put(Parts.none(), a, Some{Put.root(l)}), b, o)},
+            Node.Branch{Parts.put(Parts.put(Parts.none(), a, Some{Put.root(l)}), b, o)},
             Put.nodes(l)
           )
         }
@@ -513,25 +514,26 @@ def Tree.set.go(
   match p m:
     case q None{}:
       None{}
-    case q Some{Node.empty{}}:
-      Some{Put.node(Node.leaf{k, v}, [])}
-    case q Some{Node.leaf{+k2, v2}}:
-      +l = Put.node(Node.leaf{k, v}, [])
+    case q Some{Node.Empty{}}:
+      Some{Put.node(Node.Leaf{k, v}, [])}
+    case q Some{Node.Leaf{+k2, v2}}:
+      +l = Put.node(Node.Leaf{k, v}, [])
       Shared.Bool.when(
         Maybe<&2, Put>,
         Shared.List.is_eq(~U32, ~U32.is_eq, k2, k),
         u => Some{l},
         w => Tree.split(q, List.drop(&2, Nat, Tree.path(k2), d), l, o)
       )
-    case Con{+x, r} Some{Node.branch{+ks}}:
+    case Con{+x, r} Some{Node.Branch{+ks}}:
       +kid = Parts.at(ks, x)
-      Maybe.bind(&2, 
+      Maybe.bind(
+        &2,
         Put,
         Put,
         Tree.set.go(~S, ~fetch, s, r, 1n+d, k, v, kid, Tree.part(~S, ~fetch, s, kid)),
         p2 => Some{Put.into(ks, x, p2)}
       )
-    case Nil{} Some{Node.branch{ks}}:
+    case Nil{} Some{Node.Branch{ks}}:
       None{}
 
 # the tree whose root is h, in the store s, with the key k set to the value
@@ -572,18 +574,18 @@ def Tree.set.ok(
   match p m:
     case q None{}:
       False{}
-    case q Some{Node.empty{}}:
+    case q Some{Node.Empty{}}:
       True{}
-    case q Some{Node.leaf{+k2, v2}}:
+    case q Some{Node.Leaf{+k2, v2}}:
       Shared.Bool.when(
         Bool,
         Shared.List.is_eq(~U32, ~U32.is_eq, k2, k),
         u => True{},
         u => Tree.split.ok(q, List.drop(&2, Nat, Tree.path(k2), d))
       )
-    case Con{x, r} Some{Node.branch{ks}}:
+    case Con{x, r} Some{Node.Branch{ks}}:
       Tree.set.ok(~S, ~fetch, s, r, 1n+d, k, Tree.part(~S, ~fetch, s, Parts.at(ks, x)))
-    case Nil{} Some{Node.branch{ks}}:
+    case Nil{} Some{Node.Branch{ks}}:
       False{}
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
@@ -627,7 +629,8 @@ def Tree.split_some.when(
     Shared.Bool.when(
       Maybe<&2, Put>,
       c,
-      u => Maybe.bind(&2, 
+      u => Maybe.bind(
+        &2,
         Put,
         Put,
         Tree.split(r1, r2, l, o),
@@ -635,7 +638,7 @@ def Tree.split_some.when(
       ),
       u => Some{
         Put.node(
-          Node.branch{Parts.put(Parts.put(Parts.none(), a, Some{Put.root(l)}), b, o)},
+          Node.Branch{Parts.put(Parts.put(Parts.none(), a, Some{Put.root(l)}), b, o)},
           Put.nodes(l)
         )
       }
@@ -651,7 +654,8 @@ def Tree.split_some.when(
           Maybe.is_some(
             &2,
             Put,
-            Maybe.bind(&2, 
+            Maybe.bind(
+              &2,
               Put,
               Put,
               Tree.split(r1, r2, l, o),
@@ -714,8 +718,8 @@ def Tree.set_some.leaf(
     Shared.Bool.when(
       Maybe<&2, Put>,
       c,
-      u => Some{Put.node(Node.leaf{k, v}, [])},
-      w => Tree.split(q, List.drop(&2, Nat, Tree.path(k2), d), Put.node(Node.leaf{k, v}, []), o)
+      u => Some{Put.node(Node.Leaf{k, v}, [])},
+      w => Tree.split(q, List.drop(&2, Nat, Tree.path(k2), d), Put.node(Node.Leaf{k, v}, []), o)
     )
   )
     == True{}: Bool
@@ -724,7 +728,7 @@ def Tree.set_some.leaf(
     case True{}:
       e => {==}
     case False{}:
-      Tree.split_some(q, List.drop(&2, Nat, Tree.path(k2), d), Put.node(Node.leaf{k, v}, []), o)
+      Tree.split_some(q, List.drop(&2, Nat, Tree.path(k2), d), Put.node(Node.Leaf{k, v}, []), o)
 
 def Tree.set_some.go(
   ~S: Data,
@@ -745,18 +749,19 @@ def Tree.set_some.go(
         {Maybe.is_some(&2, Put, Tree.set.go(~S, ~fetch, s, q, d, k, v, o, None{})) == True{}: Bool},
         Shared.Bool.false_ne_true(e)
       )
-    case q Some{Node.empty{}}:
+    case q Some{Node.Empty{}}:
       e => {==}
-    case q Some{Node.leaf{+k2, v2}}:
+    case q Some{Node.Leaf{+k2, v2}}:
       Tree.set_some.leaf(q, d, k, v, o, k2, Shared.List.is_eq(~U32, ~U32.is_eq, k2, k))
-    case Con{+x, +r} Some{Node.branch{+ks}}:
+    case Con{+x, +r} Some{Node.Branch{+ks}}:
       e =>
         %Equal.sym(
           Bool,
           Maybe.is_some(
             &2,
             Put,
-            Maybe.bind(&2, 
+            Maybe.bind(
+              &2,
               Put,
               Put,
               Tree.set.go(
@@ -814,13 +819,13 @@ def Tree.set_some.go(
           Parts.at(ks, x),
           Tree.part(~S, ~fetch, s, Parts.at(ks, x))
         )(e)
-    case Nil{} Some{Node.branch{ks}}:
+    case Nil{} Some{Node.Branch{ks}}:
       e => Empty.absurd(
         {
           Maybe.is_some(
             &2,
             Put,
-            Tree.set.go(~S, ~fetch, s, [], d, k, v, o, Some{Node.branch{ks}})
+            Tree.set.go(~S, ~fetch, s, [], d, k, v, o, Some{Node.Branch{ks}})
           )
             == True{}: Bool
         },
@@ -874,21 +879,21 @@ def Node.code_read(
   Node.ok(n) == True{}: Bool
 } -> {Node.code.read(Node.code(n, r)) == Some{Codes.Read{n, r}}: Maybe<&2, Codes.Read<Node>>}:
   match n:
-    case Node.empty{}:
+    case Node.Empty{}:
       ok => {==}
-    case Node.leaf{k, v}:
+    case Node.Leaf{k, v}:
       ok => Codes.Code.two_read(
         ~List<&2, U32>,
         ~List<&2, U32>,
         ~Node,
         ~Codes.Code.words.codec(),
         ~Codes.Code.words.codec(),
-        a => b => Node.leaf{a, b},
+        a => b => Node.Leaf{a, b},
         k,
         v,
         r
       )
-    case Node.branch{ks}:
+    case Node.Branch{ks}:
       ok =>
         %Codes.Read.then_some(
           List<&2, Maybe<&2, Hashes.Hash>>,
@@ -901,7 +906,7 @@ def Node.code_read(
           ks,
           r,
           Codes.Codec.laws(List<&2, Maybe<&2, Hashes.Hash>>, Parts.codec())(ks)(r)
-        ): {_ == Some{Codes.Read{Node.branch{ks}, r}}: Maybe<&2, Codes.Read<Node>>}
+        ): {_ == Some{Codes.Read{Node.Branch{ks}, r}}: Maybe<&2, Codes.Read<Node>>}
         %Equal.sym(
           Bool,
           Parts.ok(ks),
@@ -911,9 +916,9 @@ def Node.code_read(
           Shared.Maybe.when(
             Codes.Read<Node>,
             _,
-            u => Some{Codes.Read{Node.branch{ks}, r}}
+            u => Some{Codes.Read{Node.Branch{ks}, r}}
           )
-            == Some{Codes.Read{Node.branch{ks}, r}}: Maybe<&2, Codes.Read<Node>>
+            == Some{Codes.Read{Node.Branch{ks}, r}}: Maybe<&2, Codes.Read<Node>>
         }
         {==}
 
@@ -1045,10 +1050,10 @@ def Node.branch.of_back(
   Shared.Maybe.when(
     Codes.Read<Node>,
     c,
-    u => Some{Codes.Read{Node.branch{ps}, r1}}
+    u => Some{Codes.Read{Node.Branch{ps}, r1}}
   )
     == Some{Codes.Read{n, r}}: Maybe<&2, Codes.Read<Node>>
-} -> {Some{Codes.Read{Node.branch{ps}, r1}} == Some{Codes.Read{n, r}}: Maybe<&2, Codes.Read<Node>>}:
+} -> {Some{Codes.Read{Node.Branch{ps}, r1}} == Some{Codes.Read{n, r}}: Maybe<&2, Codes.Read<Node>>}:
   match c:
     case True{}:
       e => e
@@ -1056,7 +1061,7 @@ def Node.branch.of_back(
       e => Empty.absurd(
         {
           Some{
-            Codes.Read{Node.branch{ps}, r1}
+            Codes.Read{Node.Branch{ps}, r1}
           }
             == Some{Codes.Read{n, r}}: Maybe<&2, Codes.Read<Node>>
         },
@@ -1096,9 +1101,9 @@ def Node.code_back.branch(
         {Node.code(n, r) == x <> q: List<&2, U32>},
         +ps => +r1 => em => ek =>
           +k2 = Node.branch.of_back(ps, r1, n, r, Parts.ok(ps), {==})(ek)
-          %Codes.Read.value_eq(Node, Node.branch{ps}, n, r1, r, k2): {Node.code(_, r) == x <> q: List<&2, U32>}
-          %Codes.Read.rest_eq(Node, Node.branch{ps}, n, r1, r, k2): {Node.code(Node.branch{ps}, _) == x <> q: List<&2, U32>}
-          %Equal.sym(U32, x, 2, Shared.U32.is_eq_sound(x, 2)(ec)): {Node.code(Node.branch{ps}, r1) == _ <> q: List<&2, U32>}
+          %Codes.Read.value_eq(Node, Node.Branch{ps}, n, r1, r, k2): {Node.code(_, r) == x <> q: List<&2, U32>}
+          %Codes.Read.rest_eq(Node, Node.Branch{ps}, n, r1, r, k2): {Node.code(Node.Branch{ps}, _) == x <> q: List<&2, U32>}
+          %Equal.sym(U32, x, 2, Shared.U32.is_eq_sound(x, 2)(ec)): {Node.code(Node.Branch{ps}, r1) == _ <> q: List<&2, U32>}
           %Equal.sym(List<&2, U32>, Parts.code(ps, r1), q, Parts.code_back()(q)(ps)(r1)(em)): {2 <> _ == 2 <> q: List<&2, U32>}
           {==})
     case False{}:
@@ -1125,7 +1130,7 @@ def Node.code_back.leaf(
       ~Node,
       ~Codes.Code.words.read,
       ~Codes.Code.words.read,
-      k => v => Node.leaf{k, v},
+      k => v => Node.Leaf{k, v},
       q
     ),
     u => Shared.Bool.when(
@@ -1152,7 +1157,7 @@ def Node.code_back.leaf(
           ~List<&2, U32>,
           ~Node,
           ~Codes.Code.words.read,
-          v => Node.leaf{k, v},
+          v => Node.Leaf{k, v},
           r1
         ),
         Codes.Read{n, r},
@@ -1161,13 +1166,13 @@ def Node.code_back.leaf(
           List<&2, U32>,
           Node,
           Codes.Code.words.read(r1),
-          v => r2 => Some{Codes.Read{Node.leaf{k, v}, r2}},
+          v => r2 => Some{Codes.Read{Node.Leaf{k, v}, r2}},
           Codes.Read{n, r},
           {Node.code(n, r) == x <> q: List<&2, U32>},
           v => r2 => em2 => +ek =>
-            %Codes.Read.value_eq(Node, Node.leaf{k, v}, n, r2, r, ek): {Node.code(_, r) == x <> q: List<&2, U32>}
-            %Codes.Read.rest_eq(Node, Node.leaf{k, v}, n, r2, r, ek): {Node.code(Node.leaf{k, v}, _) == x <> q: List<&2, U32>}
-            %Equal.sym(U32, x, 1, Shared.U32.is_eq_sound(x, 1)(ec)): {Node.code(Node.leaf{k, v}, r2) == _ <> q: List<&2, U32>}
+            %Codes.Read.value_eq(Node, Node.Leaf{k, v}, n, r2, r, ek): {Node.code(_, r) == x <> q: List<&2, U32>}
+            %Codes.Read.rest_eq(Node, Node.Leaf{k, v}, n, r2, r, ek): {Node.code(Node.Leaf{k, v}, _) == x <> q: List<&2, U32>}
+            %Equal.sym(U32, x, 1, Shared.U32.is_eq_sound(x, 1)(ec)): {Node.code(Node.Leaf{k, v}, r2) == _ <> q: List<&2, U32>}
             %Equal.sym(List<&2, U32>, Codes.Code.words(v, r2), r1, Codes.Code.words_back()(r1)(v)(r2)(em2)): {1 <> Codes.Code.words(k, _) == 1 <> q: List<&2, U32>}
             %Equal.sym(List<&2, U32>, Codes.Code.words(k, r1), q, Codes.Code.words_back()(q)(k)(r1)(em1)): {1 <> _ == 1 <> q: List<&2, U32>}
             {==})
@@ -1187,7 +1192,7 @@ def Node.code_back.of(
   Shared.Bool.when(
     Maybe<&2, Codes.Read<Node>>,
     c,
-    u => Some{Codes.Read{Node.empty{}, q}},
+    u => Some{Codes.Read{Node.Empty{}, q}},
     u => Shared.Bool.when(
       Maybe<&2, Codes.Read<Node>>,
       U32.is_eq(x, 1),
@@ -1197,7 +1202,7 @@ def Node.code_back.of(
         ~Node,
         ~Codes.Code.words.read,
         ~Codes.Code.words.read,
-        k => v => Node.leaf{k, v},
+        k => v => Node.Leaf{k, v},
         q
       ),
       u => Shared.Bool.when(
@@ -1220,7 +1225,7 @@ def Node.code_back.of(
       +e =>
         %Codes.Read.value_eq(
           Node,
-          Node.empty{},
+          Node.Empty{},
           n,
           q,
           r,
@@ -1228,12 +1233,12 @@ def Node.code_back.of(
         ): {Node.code(_, r) == x <> q: List<&2, U32>}
         %Codes.Read.rest_eq(
           Node,
-          Node.empty{},
+          Node.Empty{},
           n,
           q,
           r,
           e
-        ): {Node.code(Node.empty{}, _) == x <> q: List<&2, U32>}
+        ): {Node.code(Node.Empty{}, _) == x <> q: List<&2, U32>}
         %Equal.sym(U32, x, 0, Shared.U32.is_eq_sound(x, 0)(ec)): {0 <> q == _ <> q: List<&2, U32>}
         {==}
     case False{}:
@@ -1504,7 +1509,7 @@ def Node.ok_put(
   ks: List<&2, Maybe<&2, Hashes.Hash>>,
   n: Nat,
   y: Maybe<&2, Hashes.Hash>
-) -> {Node.ok(Node.branch{Parts.put(ks, n, y)}) == True{}: Bool}:
+) -> {Node.ok(Node.Branch{Parts.put(ks, n, y)}) == True{}: Bool}:
   Parts.ok_trim(Parts.set(ks, n, y))
 
 # the store s holds the words ws, under their hash
@@ -1573,7 +1578,7 @@ def Tree.get.go_leaf(
     s,
     p,
     k,
-    Some{Node.leaf{k1, v1}}
+    Some{Node.Leaf{k1, v1}}
   )
     == Shared.Maybe.when(
       List<&2, U32>,
@@ -1595,10 +1600,10 @@ def Tree.read_leaf(
   p: List<&2, Nat>,
   +k: List<&2, U32>,
   v: List<&2, U32>
-) -> {Tree.get.go(~S, ~fetch, s, p, k, Some{Node.leaf{k, v}}) == Some{v}: Maybe<&2, List<&2, U32>>}:
+) -> {Tree.get.go(~S, ~fetch, s, p, k, Some{Node.Leaf{k, v}}) == Some{v}: Maybe<&2, List<&2, U32>>}:
   %Equal.sym(
     Maybe<&2, List<&2, U32>>,
-    Tree.get.go(~S, ~fetch, s, p, k, Some{Node.leaf{k, v}}),
+    Tree.get.go(~S, ~fetch, s, p, k, Some{Node.Leaf{k, v}}),
     Shared.Maybe.when(List<&2, U32>, Shared.List.is_eq(~U32, ~U32.is_eq, k, k), u => Some{v}),
     Tree.get.go_leaf(~S, ~fetch, s, p, k, k, v)
   ): {_ == Some{v}: Maybe<&2, List<&2, U32>>}
@@ -1677,20 +1682,20 @@ def Tree.read_new_leaf(
   p: List<&2, Nat>,
   +k: List<&2, U32>,
   +v: List<&2, U32>
-) -> Tree.Reads(~S, ~fetch, s2, p, k, Some{v}, Some{Put.node(Node.leaf{k, v}, [])}):
+) -> Tree.Reads(~S, ~fetch, s2, p, k, Some{v}, Some{Put.node(Node.Leaf{k, v}, [])}):
   e =>
     %Equal.sym(
       Maybe<&2, Node>,
-      Tree.node(~S, ~fetch, s2, Node.hash(Node.leaf{k, v})),
-      Some{Node.leaf{k, v}},
+      Tree.node(~S, ~fetch, s2, Node.hash(Node.Leaf{k, v})),
+      Some{Node.Leaf{k, v}},
       Tree.has_node(
         ~S,
         ~fetch,
         s2,
-        Node.leaf{k, v},
+        Node.Leaf{k, v},
         {==},
         Shared.List.all.if_hit(
-          Tree.has(~S, ~fetch, s2, Node.words(Node.leaf{k, v})),
+          Tree.has(~S, ~fetch, s2, Node.words(Node.Leaf{k, v})),
           u => True{}
         )(e)
       )
@@ -1714,7 +1719,7 @@ def Tree.read_into(
   ih: Tree.Reads(~S, ~fetch, s2, r, k, w, Some{q})
 ) -> Tree.Reads(~S, ~fetch, s2, Con{x, r}, k, w, Some{Put.into(ks, n, q)}):
   +e =>
-    +b = {Node.branch{Parts.put(ks, n, Some{Put.root(q)})}: Node}
+    +b = {Node.Branch{Parts.put(ks, n, Some{Put.root(q)})}: Node}
     +rest = Tree.holds(~S, ~fetch, s2, Put.nodes(q))
     %Equal.sym(
       Maybe<&2, Node>,
@@ -1777,7 +1782,7 @@ def Tree.read_split.when(
     r1,
     k,
     Some{v},
-    Tree.split(r1, r2, Put.node(Node.leaf{k, v}, []), o)
+    Tree.split(r1, r2, Put.node(Node.Leaf{k, v}, []), o)
   )
 ) -> Tree.Reads(
   ~S,
@@ -1789,16 +1794,17 @@ def Tree.read_split.when(
   Shared.Bool.when(
     Maybe<&2, Put>,
     c,
-    u => Maybe.bind(&2, 
+    u => Maybe.bind(
+      &2,
       Put,
       Put,
-      Tree.split(r1, r2, Put.node(Node.leaf{k, v}, []), o),
+      Tree.split(r1, r2, Put.node(Node.Leaf{k, v}, []), o),
       p => Some{Put.into(Parts.none(), a, p)}
     ),
     u => Some{
       Put.node(
-        Node.branch{Parts.put(Parts.put(Parts.none(), a, Some{Node.hash(Node.leaf{k, v})}), b, o)},
-        [Node.words(Node.leaf{k, v})]
+        Node.Branch{Parts.put(Parts.put(Parts.none(), a, Some{Node.hash(Node.Leaf{k, v})}), b, o)},
+        [Node.words(Node.Leaf{k, v})]
       )
     }
   )
@@ -1814,16 +1820,16 @@ def Tree.read_split.when(
         k,
         Some{v},
         Some{v},
-        Tree.split(r1, r2, Put.node(Node.leaf{k, v}, []), o),
+        Tree.split(r1, r2, Put.node(Node.Leaf{k, v}, []), o),
         p => Some{Put.into(Parts.none(), a, p)},
         q => iq => Tree.read_into(~S, ~fetch, s2, Parts.none(), a, a, r1, k, Some{v}, q, {==}, iq),
         ih
       )
     case False{}:
       +e =>
-        +l = {Node.leaf{k, v}: Node}
+        +l = {Node.Leaf{k, v}: Node}
         +ka = Parts.put(Parts.none(), a, Some{Node.hash(l)})
-        +n = {Node.branch{Parts.put(ka, b, o)}: Node}
+        +n = {Node.Branch{Parts.put(ka, b, o)}: Node}
         +rest = Tree.holds(~S, ~fetch, s2, [Node.words(l)])
         %Equal.sym(
           Maybe<&2, Node>,
@@ -1905,7 +1911,7 @@ def Tree.read_split(
   p1,
   k,
   Some{v},
-  Tree.split(p1, p2, Put.node(Node.leaf{k, v}, []), o)
+  Tree.split(p1, p2, Put.node(Node.Leaf{k, v}, []), o)
 ):
   match p1 p2:
     case Con{+a, +r1} Con{+b, +r2}:
@@ -1951,8 +1957,8 @@ def Tree.set_reads.when(
   Shared.Bool.when(
     Maybe<&2, Put>,
     c,
-    u => Some{Put.node(Node.leaf{k, v}, [])},
-    w => Tree.split(q, List.drop(&2, Nat, Tree.path(k2), d), Put.node(Node.leaf{k, v}, []), o)
+    u => Some{Put.node(Node.Leaf{k, v}, [])},
+    w => Tree.split(q, List.drop(&2, Nat, Tree.path(k2), d), Put.node(Node.Leaf{k, v}, []), o)
   )
 ):
   match c:
@@ -1979,9 +1985,9 @@ def Tree.set_reads(
   match p m:
     case q None{}:
       Unit{}
-    case q Some{Node.empty{}}:
+    case q Some{Node.Empty{}}:
       Tree.read_new_leaf(~S, ~fetch, s2, q, k, v)
-    case q Some{Node.leaf{+k2, v2}}:
+    case q Some{Node.Leaf{+k2, v2}}:
       Tree.set_reads.when(
         ~S,
         ~fetch,
@@ -1994,7 +2000,7 @@ def Tree.set_reads(
         o,
         Shared.List.is_eq(~U32, ~U32.is_eq, k2, k)
       )
-    case Con{+x, +r} Some{Node.branch{+ks}}:
+    case Con{+x, +r} Some{Node.Branch{+ks}}:
       +kid = Parts.at(ks, x)
       Tree.reads_then(
         ~S,
@@ -2010,7 +2016,7 @@ def Tree.set_reads(
         q => iq => Tree.read_into(~S, ~fetch, s2, ks, x, x, r, k, Some{v}, q, {==}, iq),
         Tree.set_reads(~S, ~fetch, s, s2, r, 1n+d, k, v, kid, Tree.part(~S, ~fetch, s, kid))
       )
-    case Nil{} Some{Node.branch{ks}}:
+    case Nil{} Some{Node.Branch{ks}}:
       Unit{}
 
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
@@ -2122,32 +2128,32 @@ def Tree.get.go_kept(
         {Tree.get.go(~S, ~fetch, b, q, k, m2) == Some{x}: Maybe<&2, List<&2, U32>>},
         Shared.Maybe.none_ne_some(List<&2, U32>, x, e)
       )
-    case q Some{Node.empty{}}:
+    case q Some{Node.Empty{}}:
       e => Empty.absurd(
         {Tree.get.go(~S, ~fetch, b, q, k, m2) == Some{x}: Maybe<&2, List<&2, U32>>},
         Shared.Maybe.none_ne_some(List<&2, U32>, x, e)
       )
-    case q Some{Node.leaf{k2, v}}:
+    case q Some{Node.Leaf{k2, v}}:
       e =>
         %Equal.sym(
           Maybe<&2, Node>,
           m2,
-          Some{Node.leaf{k2, v}},
-          hm(Node.leaf{k2, v})({==})
+          Some{Node.Leaf{k2, v}},
+          hm(Node.Leaf{k2, v})({==})
         ): {Tree.get.go(~S, ~fetch, b, q, k, _) == Some{x}: Maybe<&2, List<&2, U32>>}
         e
-    case Nil{} Some{Node.branch{ks}}:
+    case Nil{} Some{Node.Branch{ks}}:
       e => Empty.absurd(
         {Tree.get.go(~S, ~fetch, b, [], k, m2) == Some{x}: Maybe<&2, List<&2, U32>>},
         Shared.Maybe.none_ne_some(List<&2, U32>, x, e)
       )
-    case Con{+y, r} Some{Node.branch{+ks}}:
+    case Con{+y, r} Some{Node.Branch{+ks}}:
       e =>
         %Equal.sym(
           Maybe<&2, Node>,
           m2,
-          Some{Node.branch{ks}},
-          hm(Node.branch{ks})({==})
+          Some{Node.Branch{ks}},
+          hm(Node.Branch{ks})({==})
         ): {Tree.get.go(~S, ~fetch, b, Con{y, r}, k, _) == Some{x}: Maybe<&2, List<&2, U32>>}
         Tree.get.go_kept(
           ~S,
@@ -2204,7 +2210,7 @@ def Tree.get.go_empty(
   s: S,
   p: List<&2, Nat>,
   k: List<&2, U32>
-) -> {Tree.get.go(~S, ~fetch, s, p, k, Some{Node.empty{}}) == None{}: Maybe<&2, List<&2, U32>>}:
+) -> {Tree.get.go(~S, ~fetch, s, p, k, Some{Node.Empty{}}) == None{}: Maybe<&2, List<&2, U32>>}:
   match p:
     case Nil{}:
       {==}
@@ -2235,7 +2241,7 @@ def Tree.read_into_nil(
       Unit{}
     case Some{+q}:
       +e =>
-        +b = {Node.branch{Parts.put(ks, n, Some{Put.root(q)})}: Node}
+        +b = {Node.Branch{Parts.put(ks, n, Some{Put.root(q)})}: Node}
         %Equal.sym(
           Maybe<&2, Node>,
           Tree.node(~S, ~fetch, s2, Node.hash(b)),
@@ -2277,7 +2283,7 @@ def Tree.read_into_off(
   Some{Put.into(ks, n, q)}
 ):
   +e =>
-    +b = {Node.branch{Parts.put(ks, n, Some{Put.root(q)})}: Node}
+    +b = {Node.Branch{Parts.put(ks, n, Some{Put.root(q)})}: Node}
     %Equal.sym(
       Maybe<&2, Node>,
       Tree.node(~S, ~fetch, s2, Node.hash(b)),
@@ -2346,10 +2352,10 @@ def Tree.get.go_leaf_off(
   k: List<&2, U32>,
   v: List<&2, U32>,
   ne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool}
-) -> {Tree.get.go(~S, ~fetch, s, p, k2, Some{Node.leaf{k, v}}) == None{}: Maybe<&2, List<&2, U32>>}:
+) -> {Tree.get.go(~S, ~fetch, s, p, k2, Some{Node.Leaf{k, v}}) == None{}: Maybe<&2, List<&2, U32>>}:
   %Equal.sym(
     Maybe<&2, List<&2, U32>>,
-    Tree.get.go(~S, ~fetch, s, p, k2, Some{Node.leaf{k, v}}),
+    Tree.get.go(~S, ~fetch, s, p, k2, Some{Node.Leaf{k, v}}),
     Shared.Maybe.when(List<&2, U32>, Shared.List.is_eq(~U32, ~U32.is_eq, k, k2), u => Some{v}),
     Tree.get.go_leaf(~S, ~fetch, s, p, k2, k, v)
   ): {_ == None{}: Maybe<&2, List<&2, U32>>}
@@ -2392,9 +2398,9 @@ def Tree.read_new_leaf_off(
   +v: List<&2, U32>,
   k2: List<&2, U32>,
   ne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool}
-) -> Tree.Reads(~S, ~fetch, s2, p, k2, None{}, Some{Put.node(Node.leaf{k, v}, [])}):
+) -> Tree.Reads(~S, ~fetch, s2, p, k2, None{}, Some{Put.node(Node.Leaf{k, v}, [])}):
   e =>
-    +l = {Node.leaf{k, v}: Node}
+    +l = {Node.Leaf{k, v}: Node}
     %Equal.sym(
       Maybe<&2, Node>,
       Tree.node(~S, ~fetch, s2, Node.hash(l)),
@@ -2427,7 +2433,7 @@ def Tree.other_split_old.when(
   v1: List<&2, U32>,
   c: Bool,
   ec: {Nat.is_eq(a, b) == c: Bool},
-  eo: {Tree.part(~S, ~fetch, s2, o) == Some{Node.leaf{k1, v1}}: Maybe<&2, Node>},
+  eo: {Tree.part(~S, ~fetch, s2, o) == Some{Node.Leaf{k1, v1}}: Maybe<&2, Node>},
   ih: Tree.Reads(
     ~S,
     ~fetch,
@@ -2447,7 +2453,8 @@ def Tree.other_split_old.when(
   Shared.Bool.when(
     Maybe<&2, Put>,
     c,
-    u => Maybe.bind(&2, 
+    u => Maybe.bind(
+      &2,
       Put,
       Put,
       Tree.split(r1, r2, l, o),
@@ -2455,7 +2462,7 @@ def Tree.other_split_old.when(
     ),
     u => Some{
       Put.node(
-        Node.branch{Parts.put(Parts.put(Parts.none(), a, Some{Put.root(l)}), b, o)},
+        Node.Branch{Parts.put(Parts.put(Parts.none(), a, Some{Put.root(l)}), b, o)},
         Put.nodes(l)
       )
     }
@@ -2505,7 +2512,7 @@ def Tree.other_split_old.when(
     case False{}:
       +e =>
         +ka = Parts.put(Parts.none(), a, Some{Put.root(l)})
-        +n = {Node.branch{Parts.put(ka, b, o)}: Node}
+        +n = {Node.Branch{Parts.put(ka, b, o)}: Node}
         %Equal.sym(
           Maybe<&2, Node>,
           Tree.node(~S, ~fetch, s2, Node.hash(n)),
@@ -2559,7 +2566,7 @@ def Tree.other_split_old.when(
         %Equal.sym(
           Maybe<&2, Node>,
           Tree.part(~S, ~fetch, s2, o),
-          Some{Node.leaf{k1, v1}},
+          Some{Node.Leaf{k1, v1}},
           eo
         ): {
           Tree.get.go(
@@ -2591,7 +2598,7 @@ def Tree.other_split_old(
   +k2: List<&2, U32>,
   +k1: List<&2, U32>,
   +v1: List<&2, U32>,
-  +eo: {Tree.part(~S, ~fetch, s2, o) == Some{Node.leaf{k1, v1}}: Maybe<&2, Node>}
+  +eo: {Tree.part(~S, ~fetch, s2, o) == Some{Node.Leaf{k1, v1}}: Maybe<&2, Node>}
 ) -> Tree.Reads(
   ~S,
   ~fetch,
@@ -2643,8 +2650,8 @@ def Tree.other_pick(
   v1: List<&2, U32>,
   c1: Bool,
   c2: Bool,
-  eo: {Tree.part(~S, ~fetch, s2, o) == Some{Node.leaf{k1, v1}}: Maybe<&2, Node>},
-  eh: {Tree.node(~S, ~fetch, s2, h) == Some{Node.leaf{k, v}}: Maybe<&2, Node>},
+  eo: {Tree.part(~S, ~fetch, s2, o) == Some{Node.Leaf{k1, v1}}: Maybe<&2, Node>},
+  eh: {Tree.node(~S, ~fetch, s2, h) == Some{Node.Leaf{k, v}}: Maybe<&2, Node>},
   ne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool},
   n1: {Shared.List.is_eq(~U32, ~U32.is_eq, k1, k2) == False{}: Bool}
 ) -> {
@@ -2673,7 +2680,7 @@ def Tree.other_pick(
       %Equal.sym(
         Maybe<&2, Node>,
         Tree.part(~S, ~fetch, s2, o),
-        Some{Node.leaf{k1, v1}},
+        Some{Node.Leaf{k1, v1}},
         eo
       ): {Tree.get.go(~S, ~fetch, s2, r, k2, _) == None{}: Maybe<&2, List<&2, U32>>}
       Tree.get.go_leaf_off(~S, ~fetch, s2, r, k2, k1, v1, n1)
@@ -2681,7 +2688,7 @@ def Tree.other_pick(
       %Equal.sym(
         Maybe<&2, Node>,
         Tree.node(~S, ~fetch, s2, h),
-        Some{Node.leaf{k, v}},
+        Some{Node.Leaf{k, v}},
         eh
       ): {Tree.get.go(~S, ~fetch, s2, r, k2, _) == None{}: Maybe<&2, List<&2, U32>>}
       Tree.get.go_leaf_off(~S, ~fetch, s2, r, k2, k, v, ne)
@@ -2797,22 +2804,23 @@ def Tree.other_split_new.nil(
   Shared.Bool.when(
     Maybe<&2, Put>,
     c,
-    u => Maybe.bind(&2, 
+    u => Maybe.bind(
+      &2,
       Put,
       Put,
-      Tree.split(r1, r1o, Put.node(Node.leaf{k, v}, []), o),
+      Tree.split(r1, r1o, Put.node(Node.Leaf{k, v}, []), o),
       p => Some{Put.into(Parts.none(), a, p)}
     ),
     u => Some{
       Put.node(
-        Node.branch{
+        Node.Branch{
           Parts.put(
-            Parts.put(Parts.none(), a, Some{Hashes.Sha.hash(Node.words(Node.leaf{k, v}))}),
+            Parts.put(Parts.none(), a, Some{Hashes.Sha.hash(Node.words(Node.Leaf{k, v}))}),
             b,
             o
           )
         },
-        [Node.words(Node.leaf{k, v})]
+        [Node.words(Node.Leaf{k, v})]
       )
     }
   )
@@ -2826,12 +2834,12 @@ def Tree.other_split_new.nil(
         Parts.none(),
         a,
         k2,
-        Tree.split(r1, r1o, Put.node(Node.leaf{k, v}, []), o)
+        Tree.split(r1, r1o, Put.node(Node.Leaf{k, v}, []), o)
       )
     case False{}:
       +e =>
-        +l = {Node.leaf{k, v}: Node}
-        +n = {Node.branch{Parts.put(Parts.put(Parts.none(), a, Some{Node.hash(l)}), b, o)}: Node}
+        +l = {Node.Leaf{k, v}: Node}
+        +n = {Node.Branch{Parts.put(Parts.put(Parts.none(), a, Some{Node.hash(l)}), b, o)}: Node}
         %Equal.sym(
           Maybe<&2, Node>,
           Tree.node(~S, ~fetch, s2, Node.hash(n)),
@@ -2871,7 +2879,7 @@ def Tree.other_split_new.con(
   v1: List<&2, U32>,
   c: Bool,
   ec: {Nat.is_eq(a, b) == c: Bool},
-  eo: {Tree.part(~S, ~fetch, s2, o) == Some{Node.leaf{k1, v1}}: Maybe<&2, Node>},
+  eo: {Tree.part(~S, ~fetch, s2, o) == Some{Node.Leaf{k1, v1}}: Maybe<&2, Node>},
   ne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool},
   n1: {Shared.List.is_eq(~U32, ~U32.is_eq, k1, k2) == False{}: Bool},
   ih: Tree.Reads(
@@ -2881,7 +2889,7 @@ def Tree.other_split_new.con(
     r2,
     k2,
     None{},
-    Tree.split(r1, r1o, Put.node(Node.leaf{k, v}, []), o)
+    Tree.split(r1, r1o, Put.node(Node.Leaf{k, v}, []), o)
   )
 ) -> Tree.Reads(
   ~S,
@@ -2893,22 +2901,23 @@ def Tree.other_split_new.con(
   Shared.Bool.when(
     Maybe<&2, Put>,
     c,
-    u => Maybe.bind(&2, 
+    u => Maybe.bind(
+      &2,
       Put,
       Put,
-      Tree.split(r1, r1o, Put.node(Node.leaf{k, v}, []), o),
+      Tree.split(r1, r1o, Put.node(Node.Leaf{k, v}, []), o),
       p => Some{Put.into(Parts.none(), a, p)}
     ),
     u => Some{
       Put.node(
-        Node.branch{
+        Node.Branch{
           Parts.put(
-            Parts.put(Parts.none(), a, Some{Hashes.Sha.hash(Node.words(Node.leaf{k, v}))}),
+            Parts.put(Parts.none(), a, Some{Hashes.Sha.hash(Node.words(Node.Leaf{k, v}))}),
             b,
             o
           )
         },
-        [Node.words(Node.leaf{k, v})]
+        [Node.words(Node.Leaf{k, v})]
       )
     }
   )
@@ -2923,16 +2932,16 @@ def Tree.other_split_new.con(
         z,
         r2,
         k2,
-        Tree.split(r1, r1o, Put.node(Node.leaf{k, v}, []), o),
+        Tree.split(r1, r1o, Put.node(Node.Leaf{k, v}, []), o),
         Nat.is_eq(z, a),
         {==},
         ih
       )
     case False{}:
       +e =>
-        +l = {Node.leaf{k, v}: Node}
+        +l = {Node.Leaf{k, v}: Node}
         +ka = Parts.put(Parts.none(), a, Some{Node.hash(l)})
-        +n = {Node.branch{Parts.put(ka, b, o)}: Node}
+        +n = {Node.Branch{Parts.put(ka, b, o)}: Node}
         +rest = Tree.holds(~S, ~fetch, s2, [Node.words(l)])
         %Equal.sym(
           Maybe<&2, Node>,
@@ -3030,7 +3039,7 @@ def Tree.other_split_new(
   +k2: List<&2, U32>,
   +k1: List<&2, U32>,
   +v1: List<&2, U32>,
-  +eo: {Tree.part(~S, ~fetch, s2, o) == Some{Node.leaf{k1, v1}}: Maybe<&2, Node>},
+  +eo: {Tree.part(~S, ~fetch, s2, o) == Some{Node.Leaf{k1, v1}}: Maybe<&2, Node>},
   +ne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool},
   +n1: {Shared.List.is_eq(~U32, ~U32.is_eq, k1, k2) == False{}: Bool}
 ) -> Tree.Reads(
@@ -3040,7 +3049,7 @@ def Tree.other_split_new(
   p2,
   k2,
   None{},
-  Tree.split(p1, p1o, Put.node(Node.leaf{k, v}, []), o)
+  Tree.split(p1, p1o, Put.node(Node.Leaf{k, v}, []), o)
 ):
   match p1 p1o p2:
     case Con{+a, +r1} Con{+b, +r1o} Nil{}:
@@ -3091,7 +3100,7 @@ def Tree.set_keeps.split(
   p2: List<&2, Nat>,
   c: Bool,
   +ec: {Shared.List.is_eq(~U32, ~U32.is_eq, k1, k2) == c: Bool},
-  eo: {Tree.part(~S, ~fetch, s2, o) == Some{Node.leaf{k1, v1}}: Maybe<&2, Node>},
+  eo: {Tree.part(~S, ~fetch, s2, o) == Some{Node.Leaf{k1, v1}}: Maybe<&2, Node>},
   hp: {List.drop(&2, Nat, Tree.path(k2), d) == p2: List<&2, Nat>},
   ne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool}
 ) -> Tree.Reads(
@@ -3101,7 +3110,7 @@ def Tree.set_keeps.split(
   p2,
   k2,
   Shared.Maybe.when(List<&2, U32>, Shared.List.is_eq(~U32, ~U32.is_eq, k1, k2), u => Some{v1}),
-  Tree.split(q, List.drop(&2, Nat, Tree.path(k1), d), Put.node(Node.leaf{k, v}, []), o)
+  Tree.split(q, List.drop(&2, Nat, Tree.path(k1), d), Put.node(Node.Leaf{k, v}, []), o)
 ):
   match c:
     case True{}:
@@ -3116,7 +3125,7 @@ def Tree.set_keeps.split(
           Shared.List.is_eq(~U32, ~U32.is_eq, k1, k2),
           u => Some{v1}
         ),
-        Tree.split(q, List.drop(&2, Nat, Tree.path(k1), d), Put.node(Node.leaf{k, v}, []), o)
+        Tree.split(q, List.drop(&2, Nat, Tree.path(k1), d), Put.node(Node.Leaf{k, v}, []), o)
       )
       %Shared.List.is_eq_sound(
         ~U32,
@@ -3137,7 +3146,7 @@ def Tree.set_keeps.split(
           Shared.List.is_eq(~U32, ~U32.is_eq, k1, k2),
           u => Some{v1}
         ),
-        Tree.split(q, List.drop(&2, Nat, Tree.path(k1), d), Put.node(Node.leaf{k, v}, []), o)
+        Tree.split(q, List.drop(&2, Nat, Tree.path(k1), d), Put.node(Node.Leaf{k, v}, []), o)
       )
       Tree.other_split_old(
         ~S,
@@ -3145,7 +3154,7 @@ def Tree.set_keeps.split(
         s2,
         q,
         List.drop(&2, Nat, Tree.path(k1), d),
-        Put.node(Node.leaf{k, v}, []),
+        Put.node(Node.Leaf{k, v}, []),
         o,
         k2,
         k1,
@@ -3165,7 +3174,7 @@ def Tree.set_keeps.split(
         p2,
         k2,
         Shared.Maybe.when(List<&2, U32>, _, u => Some{v1}),
-        Tree.split(q, List.drop(&2, Nat, Tree.path(k1), d), Put.node(Node.leaf{k, v}, []), o)
+        Tree.split(q, List.drop(&2, Nat, Tree.path(k1), d), Put.node(Node.Leaf{k, v}, []), o)
       )
       Tree.other_split_new(
         ~S,
@@ -3202,7 +3211,7 @@ def Tree.set_keeps.leaf(
   p2: List<&2, Nat>,
   c: Bool,
   ec: {Shared.List.is_eq(~U32, ~U32.is_eq, k1, k) == c: Bool},
-  eo: {Tree.part(~S, ~fetch, s2, o) == Some{Node.leaf{k1, v1}}: Maybe<&2, Node>},
+  eo: {Tree.part(~S, ~fetch, s2, o) == Some{Node.Leaf{k1, v1}}: Maybe<&2, Node>},
   hp: {List.drop(&2, Nat, Tree.path(k2), d) == p2: List<&2, Nat>},
   +ne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool}
 ) -> Tree.Reads(
@@ -3215,8 +3224,8 @@ def Tree.set_keeps.leaf(
   Shared.Bool.when(
     Maybe<&2, Put>,
     c,
-    u => Some{Put.node(Node.leaf{k, v}, [])},
-    w => Tree.split(q, List.drop(&2, Nat, Tree.path(k1), d), Put.node(Node.leaf{k, v}, []), o)
+    u => Some{Put.node(Node.Leaf{k, v}, [])},
+    w => Tree.split(q, List.drop(&2, Nat, Tree.path(k1), d), Put.node(Node.Leaf{k, v}, []), o)
   )
 ):
   match c:
@@ -3233,7 +3242,7 @@ def Tree.set_keeps.leaf(
         p2,
         k2,
         Shared.Maybe.when(List<&2, U32>, Shared.List.is_eq(~U32, ~U32.is_eq, _, k2), u => Some{v1}),
-        Some{Put.node(Node.leaf{k, v}, [])}
+        Some{Put.node(Node.Leaf{k, v}, [])}
       )
       %Equal.sym(
         Bool,
@@ -3247,7 +3256,7 @@ def Tree.set_keeps.leaf(
         p2,
         k2,
         Shared.Maybe.when(List<&2, U32>, _, u => Some{v1}),
-        Some{Put.node(Node.leaf{k, v}, [])}
+        Some{Put.node(Node.Leaf{k, v}, [])}
       )
       Tree.read_new_leaf_off(~S, ~fetch, s2, p2, k, v, k2, ne)
     case False{}:
@@ -3395,7 +3404,7 @@ def Tree.set_keeps.branch(
   s2,
   p2,
   k2,
-  Tree.get.go(~S, ~fetch, s2, p2, k2, Some{Node.branch{ks}}),
+  Tree.get.go(~S, ~fetch, s2, p2, k2, Some{Node.Branch{ks}}),
   Maybe.bind(&2, Put, Put, m, p => Some{Put.into(ks, n, p)})
 ):
   match p2:
@@ -3453,12 +3462,12 @@ def Tree.set_keeps(
   match p m:
     case q None{}:
       Unit{}
-    case q Some{Node.empty{}}:
+    case q Some{Node.Empty{}}:
       %Equal.sym(
         Maybe<&2, Node>,
         Tree.part(~S, ~fetch, s2, o),
-        Some{Node.empty{}},
-        hm(Node.empty{})({==})
+        Some{Node.Empty{}},
+        hm(Node.Empty{})({==})
       ): Tree.Reads(
         ~S,
         ~fetch,
@@ -3466,21 +3475,21 @@ def Tree.set_keeps(
         p2,
         k2,
         Tree.get.go(~S, ~fetch, s2, p2, k2, _),
-        Some{Put.node(Node.leaf{k, v}, [])}
+        Some{Put.node(Node.Leaf{k, v}, [])}
       )
       %Equal.sym(
         Maybe<&2, List<&2, U32>>,
-        Tree.get.go(~S, ~fetch, s2, p2, k2, Some{Node.empty{}}),
+        Tree.get.go(~S, ~fetch, s2, p2, k2, Some{Node.Empty{}}),
         None{},
         Tree.get.go_empty(~S, ~fetch, s2, p2, k2)
-      ): Tree.Reads(~S, ~fetch, s2, p2, k2, _, Some{Put.node(Node.leaf{k, v}, [])})
+      ): Tree.Reads(~S, ~fetch, s2, p2, k2, _, Some{Put.node(Node.Leaf{k, v}, [])})
       Tree.read_new_leaf_off(~S, ~fetch, s2, p2, k, v, k2, ne)
-    case q Some{Node.leaf{+k1, +v1}}:
-      +eo = hm(Node.leaf{k1, v1})({==})
+    case q Some{Node.Leaf{+k1, +v1}}:
+      +eo = hm(Node.Leaf{k1, v1})({==})
       %Equal.sym(
         Maybe<&2, Node>,
         Tree.part(~S, ~fetch, s2, o),
-        Some{Node.leaf{k1, v1}},
+        Some{Node.Leaf{k1, v1}},
         eo
       ): Tree.Reads(
         ~S,
@@ -3489,11 +3498,11 @@ def Tree.set_keeps(
         p2,
         k2,
         Tree.get.go(~S, ~fetch, s2, p2, k2, _),
-        Tree.set.go(~S, ~fetch, s, q, d, k, v, o, Some{Node.leaf{k1, v1}})
+        Tree.set.go(~S, ~fetch, s, q, d, k, v, o, Some{Node.Leaf{k1, v1}})
       )
       %Equal.sym(
         Maybe<&2, List<&2, U32>>,
-        Tree.get.go(~S, ~fetch, s2, p2, k2, Some{Node.leaf{k1, v1}}),
+        Tree.get.go(~S, ~fetch, s2, p2, k2, Some{Node.Leaf{k1, v1}}),
         Shared.Maybe.when(
           List<&2, U32>,
           Shared.List.is_eq(~U32, ~U32.is_eq, k1, k2),
@@ -3507,7 +3516,7 @@ def Tree.set_keeps(
         p2,
         k2,
         _,
-        Tree.set.go(~S, ~fetch, s, q, d, k, v, o, Some{Node.leaf{k1, v1}})
+        Tree.set.go(~S, ~fetch, s, q, d, k, v, o, Some{Node.Leaf{k1, v1}})
       )
       Tree.set_keeps.leaf(
         ~S,
@@ -3528,13 +3537,13 @@ def Tree.set_keeps(
         hp,
         ne
       )
-    case Con{+x, +r} Some{Node.branch{+ks}}:
+    case Con{+x, +r} Some{Node.Branch{+ks}}:
       +kid = Parts.at(ks, x)
       %Equal.sym(
         Maybe<&2, Node>,
         Tree.part(~S, ~fetch, s2, o),
-        Some{Node.branch{ks}},
-        hm(Node.branch{ks})({==})
+        Some{Node.Branch{ks}},
+        hm(Node.Branch{ks})({==})
       ): Tree.Reads(
         ~S,
         ~fetch,
@@ -3542,7 +3551,7 @@ def Tree.set_keeps(
         p2,
         k2,
         Tree.get.go(~S, ~fetch, s2, p2, k2, _),
-        Tree.set.go(~S, ~fetch, s, Con{x, r}, d, k, v, o, Some{Node.branch{ks}})
+        Tree.set.go(~S, ~fetch, s, Con{x, r}, d, k, v, o, Some{Node.Branch{ks}})
       )
       Tree.set_keeps.branch(
         ~S,
@@ -3576,7 +3585,7 @@ def Tree.set_keeps(
           ne
         )
       )
-    case Nil{} Some{Node.branch{ks}}:
+    case Nil{} Some{Node.Branch{ks}}:
       Unit{}
 
 # after the key k is set to v in the tree whose root is h in the store s, a
@@ -3769,7 +3778,7 @@ def Binding.is_eq_sound(
 def Binding.leaf(b: Binding) -> Maybe<&2, Node>:
   match b:
     case Binding{k, v}:
-      Some{Node.leaf{k, v}}
+      Some{Node.Leaf{k, v}}
 
 # the path of a key has 64 nibbles
 def Nibbles.of_length(h: Hashes.Hash) -> {List.length(&2, Nat, Nibbles.of(h)) == 64n: Nat}:
@@ -3826,7 +3835,7 @@ def Tree.list_skip(
     == True{}: Bool
 }:
   match f m:
-    case g Some{Node.leaf{+k2, v2}}:
+    case g Some{Node.Leaf{+k2, v2}}:
       Tree.list_skip.leaf(
         ~S,
         ~fetch,
@@ -3841,7 +3850,7 @@ def Tree.list_skip(
         b,
         Tree.leads(k2, List.append(&2, Nat, pre, [x]))
       )
-    case 1n+(+p) Some{Node.branch{+qs}}:
+    case 1n+(+p) Some{Node.Branch{+qs}}:
       +below = Tree.list.go(
         ~S,
         ~fetch,
@@ -3870,9 +3879,9 @@ def Tree.list_skip(
           h
         ): {Bool.or(List.contains(~Binding, ~Binding.is_eq, below, b), _) == True{}: Bool}
         Shared.Bool.or_true_right(List.contains(~Binding, ~Binding.is_eq, below, b))
-    case 0n Some{Node.branch{qs}}:
+    case 0n Some{Node.Branch{qs}}:
       h => h
-    case g Some{Node.empty{}}:
+    case g Some{Node.Empty{}}:
       h => h
     case g None{}:
       h => h
@@ -4126,11 +4135,11 @@ def Tree.list_part(
           Equal.trans(
             Maybe<&2, List<&2, U32>>,
             None{},
-            Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.empty{}}),
+            Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.Empty{}}),
             Some{v},
             Equal.sym(
               Maybe<&2, List<&2, U32>>,
-              Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.empty{}}),
+              Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.Empty{}}),
               None{},
               Tree.get.go_empty(~S, ~fetch, s, pth2, k)
             ),
@@ -4173,7 +4182,7 @@ def Tree.list_part(
           hg
         )
       )
-    case g Con{y, +r} Some{Node.leaf{+k2, +v2}} 0n pth2:
+    case g Con{y, +r} Some{Node.Leaf{+k2, +v2}} 0n pth2:
       %Equal.sym(
         Nat,
         x,
@@ -4183,7 +4192,7 @@ def Tree.list_part(
         List.contains(
           ~Binding,
           ~Binding.is_eq,
-          Tree.list.go(~S, ~fetch, g, s, Con{y, r}, pre, _, Some{Node.leaf{k2, v2}}),
+          Tree.list.go(~S, ~fetch, g, s, Con{y, r}, pre, _, Some{Node.Leaf{k2, v2}}),
           Binding{k, v}
         )
           == True{}: Bool
@@ -4220,11 +4229,11 @@ def Tree.list_part(
               Shared.List.is_eq(~U32, ~U32.is_eq, k2, k),
               u => Some{v2}
             ),
-            Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.leaf{k2, v2}}),
+            Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.Leaf{k2, v2}}),
             Tree.get.go(~S, ~fetch, s, pth2, k, Tree.part(~S, ~fetch, s, y)),
             Equal.sym(
               Maybe<&2, List<&2, U32>>,
-              Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.leaf{k2, v2}}),
+              Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.Leaf{k2, v2}}),
               Shared.Maybe.when(
                 List<&2, U32>,
                 Shared.List.is_eq(~U32, ~U32.is_eq, k2, k),
@@ -4236,21 +4245,21 @@ def Tree.list_part(
               Maybe<&2, Node>,
               Maybe<&2, List<&2, U32>>,
               mm => Tree.get.go(~S, ~fetch, s, pth2, k, mm),
-              Some{Node.leaf{k2, v2}},
+              Some{Node.Leaf{k2, v2}},
               Tree.part(~S, ~fetch, s, y),
-              Equal.sym(Maybe<&2, Node>, Tree.part(~S, ~fetch, s, y), Some{Node.leaf{k2, v2}}, em)
+              Equal.sym(Maybe<&2, Node>, Tree.part(~S, ~fetch, s, y), Some{Node.Leaf{k2, v2}}, em)
             )
           ),
           hg
         )
       )
-    case 1n+p Con{y, r} Some{Node.branch{+qs}} 0n Nil{}:
+    case 1n+p Con{y, r} Some{Node.Branch{+qs}} 0n Nil{}:
       Empty.absurd(
         {
           List.contains(
             ~Binding,
             ~Binding.is_eq,
-            Tree.list.go(~S, ~fetch, 1n+p, s, Con{y, r}, pre, x, Some{Node.branch{qs}}),
+            Tree.list.go(~S, ~fetch, 1n+p, s, Con{y, r}, pre, x, Some{Node.Branch{qs}}),
             Binding{k, v}
           )
             == True{}: Bool
@@ -4260,28 +4269,28 @@ def Tree.list_part(
           v,
           Equal.trans(
             Maybe<&2, List<&2, U32>>,
-            Tree.get.go(~S, ~fetch, s, [], k, Some{Node.branch{qs}}),
+            Tree.get.go(~S, ~fetch, s, [], k, Some{Node.Branch{qs}}),
             Tree.get.go(~S, ~fetch, s, [], k, Tree.part(~S, ~fetch, s, y)),
             Some{v},
             Equal.cong(
               Maybe<&2, Node>,
               Maybe<&2, List<&2, U32>>,
               mm => Tree.get.go(~S, ~fetch, s, [], k, mm),
-              Some{Node.branch{qs}},
+              Some{Node.Branch{qs}},
               Tree.part(~S, ~fetch, s, y),
-              Equal.sym(Maybe<&2, Node>, Tree.part(~S, ~fetch, s, y), Some{Node.branch{qs}}, em)
+              Equal.sym(Maybe<&2, Node>, Tree.part(~S, ~fetch, s, y), Some{Node.Branch{qs}}, em)
             ),
             hg
           )
         )
       )
-    case 0n Con{y, r} Some{Node.branch{qs}} 0n Nil{}:
+    case 0n Con{y, r} Some{Node.Branch{qs}} 0n Nil{}:
       Empty.absurd(
         {
           List.contains(
             ~Binding,
             ~Binding.is_eq,
-            Tree.list.go(~S, ~fetch, 0n, s, Con{y, r}, pre, x, Some{Node.branch{qs}}),
+            Tree.list.go(~S, ~fetch, 0n, s, Con{y, r}, pre, x, Some{Node.Branch{qs}}),
             Binding{k, v}
           )
             == True{}: Bool
@@ -4291,28 +4300,28 @@ def Tree.list_part(
           v,
           Equal.trans(
             Maybe<&2, List<&2, U32>>,
-            Tree.get.go(~S, ~fetch, s, [], k, Some{Node.branch{qs}}),
+            Tree.get.go(~S, ~fetch, s, [], k, Some{Node.Branch{qs}}),
             Tree.get.go(~S, ~fetch, s, [], k, Tree.part(~S, ~fetch, s, y)),
             Some{v},
             Equal.cong(
               Maybe<&2, Node>,
               Maybe<&2, List<&2, U32>>,
               mm => Tree.get.go(~S, ~fetch, s, [], k, mm),
-              Some{Node.branch{qs}},
+              Some{Node.Branch{qs}},
               Tree.part(~S, ~fetch, s, y),
-              Equal.sym(Maybe<&2, Node>, Tree.part(~S, ~fetch, s, y), Some{Node.branch{qs}}, em)
+              Equal.sym(Maybe<&2, Node>, Tree.part(~S, ~fetch, s, y), Some{Node.Branch{qs}}, em)
             ),
             hg
           )
         )
       )
-    case 0n Con{y, r} Some{Node.branch{qs}} 0n Con{z, rp}:
+    case 0n Con{y, r} Some{Node.Branch{qs}} 0n Con{z, rp}:
       Empty.absurd(
         {
           List.contains(
             ~Binding,
             ~Binding.is_eq,
-            Tree.list.go(~S, ~fetch, 0n, s, Con{y, r}, pre, x, Some{Node.branch{qs}}),
+            Tree.list.go(~S, ~fetch, 0n, s, Con{y, r}, pre, x, Some{Node.Branch{qs}}),
             Binding{k, v}
           )
             == True{}: Bool
@@ -4362,13 +4371,13 @@ def Tree.list_part(
           )
         )
       )
-    case g Con{y, r} Some{Node.empty{}} 0n +pth2:
+    case g Con{y, r} Some{Node.Empty{}} 0n +pth2:
       Empty.absurd(
         {
           List.contains(
             ~Binding,
             ~Binding.is_eq,
-            Tree.list.go(~S, ~fetch, g, s, Con{y, r}, pre, x, Some{Node.empty{}}),
+            Tree.list.go(~S, ~fetch, g, s, Con{y, r}, pre, x, Some{Node.Empty{}}),
             Binding{k, v}
           )
             == True{}: Bool
@@ -4379,33 +4388,33 @@ def Tree.list_part(
           Equal.trans(
             Maybe<&2, List<&2, U32>>,
             None{},
-            Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.empty{}}),
+            Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.Empty{}}),
             Some{v},
             Equal.sym(
               Maybe<&2, List<&2, U32>>,
-              Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.empty{}}),
+              Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.Empty{}}),
               None{},
               Tree.get.go_empty(~S, ~fetch, s, pth2, k)
             ),
             Equal.trans(
               Maybe<&2, List<&2, U32>>,
-              Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.empty{}}),
+              Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.Empty{}}),
               Tree.get.go(~S, ~fetch, s, pth2, k, Tree.part(~S, ~fetch, s, y)),
               Some{v},
               Equal.cong(
                 Maybe<&2, Node>,
                 Maybe<&2, List<&2, U32>>,
                 mm => Tree.get.go(~S, ~fetch, s, pth2, k, mm),
-                Some{Node.empty{}},
+                Some{Node.Empty{}},
                 Tree.part(~S, ~fetch, s, y),
-                Equal.sym(Maybe<&2, Node>, Tree.part(~S, ~fetch, s, y), Some{Node.empty{}}, em)
+                Equal.sym(Maybe<&2, Node>, Tree.part(~S, ~fetch, s, y), Some{Node.Empty{}}, em)
               ),
               hg
             )
           )
         )
       )
-    case 1n+(+p) Con{y, +r} Some{Node.branch{+qs}} 0n Con{+z, +rp}:
+    case 1n+(+p) Con{y, +r} Some{Node.Branch{+qs}} 0n Con{+z, +rp}:
       +here = List.append(&2, Nat, pre, [t])
       %Equal.sym(
         Nat,
@@ -4416,7 +4425,7 @@ def Tree.list_part(
         List.contains(
           ~Binding,
           ~Binding.is_eq,
-          Tree.list.go(~S, ~fetch, 1n+p, s, Con{y, r}, pre, _, Some{Node.branch{qs}}),
+          Tree.list.go(~S, ~fetch, 1n+p, s, Con{y, r}, pre, _, Some{Node.Branch{qs}}),
           Binding{k, v}
         )
           == True{}: Bool
@@ -4469,9 +4478,9 @@ def Tree.list_part(
               Maybe<&2, Node>,
               Maybe<&2, List<&2, U32>>,
               mm => Tree.get.go(~S, ~fetch, s, Con{z, rp}, k, mm),
-              Some{Node.branch{qs}},
+              Some{Node.Branch{qs}},
               Tree.part(~S, ~fetch, s, y),
-              Equal.sym(Maybe<&2, Node>, Tree.part(~S, ~fetch, s, y), Some{Node.branch{qs}}, em)
+              Equal.sym(Maybe<&2, Node>, Tree.part(~S, ~fetch, s, y), Some{Node.Branch{qs}}, em)
             ),
             hg
           )
@@ -4614,7 +4623,7 @@ def Tree.list_root(
     == True{}: Bool
 }:
   match pth m:
-    case +pth2 Some{Node.leaf{+k2, +v2}}:
+    case +pth2 Some{Node.Leaf{+k2, +v2}}:
       Tree.list_root_leaf(
         k,
         v,
@@ -4629,11 +4638,11 @@ def Tree.list_root(
             Shared.List.is_eq(~U32, ~U32.is_eq, k2, k),
             u => Some{v2}
           ),
-          Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.leaf{k2, v2}}),
+          Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.Leaf{k2, v2}}),
           Some{v},
           Equal.sym(
             Maybe<&2, List<&2, U32>>,
-            Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.leaf{k2, v2}}),
+            Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.Leaf{k2, v2}}),
             Shared.Maybe.when(
               List<&2, U32>,
               Shared.List.is_eq(~U32, ~U32.is_eq, k2, k),
@@ -4644,7 +4653,7 @@ def Tree.list_root(
           hg
         )
       )
-    case Con{+z, +rp} Some{Node.branch{+qs}}:
+    case Con{+z, +rp} Some{Node.Branch{+qs}}:
       Tree.list_part(
         ~S,
         ~fetch,
@@ -4666,13 +4675,13 @@ def Tree.list_root(
         Tree.list_root.deep(k, z, rp, hpath),
         hg
       )
-    case Nil{} Some{Node.branch{qs}}:
+    case Nil{} Some{Node.Branch{qs}}:
       Empty.absurd(
         {
           List.contains(
             ~Binding,
             ~Binding.is_eq,
-            Tree.list.root(~S, ~fetch, s, Some{Node.branch{qs}}),
+            Tree.list.root(~S, ~fetch, s, Some{Node.Branch{qs}}),
             Binding{k, v}
           )
             == True{}: Bool
@@ -4708,13 +4717,13 @@ def Tree.list_root(
           )
         )
       )
-    case +pth2 Some{Node.empty{}}:
+    case +pth2 Some{Node.Empty{}}:
       Empty.absurd(
         {
           List.contains(
             ~Binding,
             ~Binding.is_eq,
-            Tree.list.root(~S, ~fetch, s, Some{Node.empty{}}),
+            Tree.list.root(~S, ~fetch, s, Some{Node.Empty{}}),
             Binding{k, v}
           )
             == True{}: Bool
@@ -4725,11 +4734,11 @@ def Tree.list_root(
           Equal.trans(
             Maybe<&2, List<&2, U32>>,
             None{},
-            Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.empty{}}),
+            Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.Empty{}}),
             Some{v},
             Equal.sym(
               Maybe<&2, List<&2, U32>>,
-              Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.empty{}}),
+              Tree.get.go(~S, ~fetch, s, pth2, k, Some{Node.Empty{}}),
               None{},
               Tree.get.go_empty(~S, ~fetch, s, pth2, k)
             ),
@@ -4864,7 +4873,7 @@ def Tree.list_found.up(
   -j: Nat,
   t: Nat,
   jt: {j == t: Nat},
-  em: {m == Some{Node.branch{qs}}: Maybe<&2, Node>},
+  em: {m == Some{Node.Branch{qs}}: Maybe<&2, Node>},
   hq: {
     List.take(
       &2,
@@ -4899,7 +4908,7 @@ def Tree.list_found.up(
   %Equal.sym(
     Maybe<&2, Node>,
     m,
-    Some{Node.branch{qs}},
+    Some{Node.Branch{qs}},
     em
   ): {
     Tree.get.go(
@@ -4917,7 +4926,7 @@ def Tree.list_found.up(
     List.drop(&2, Nat, Tree.path(k), List.length(&2, Nat, q)),
     t <> List.drop(&2, Nat, Tree.path(k), List.length(&2, Nat, List.append(&2, Nat, q, [t]))),
     Shared.List.drop_at(Nat, Tree.path(k), q, t, hq)
-  ): {Tree.get.go(~S, ~fetch, s, _, k, Some{Node.branch{qs}}) == Some{v}: Maybe<&2, List<&2, U32>>}
+  ): {Tree.get.go(~S, ~fetch, s, _, k, Some{Node.Branch{qs}}) == Some{v}: Maybe<&2, List<&2, U32>>}
   %jt: {
     Tree.get.go(
       ~S,
@@ -4943,7 +4952,7 @@ def Tree.Found.up(
   +pre: List<&2, Nat>,
   +x: Nat,
   qs: List<&2, Maybe<&2, Hashes.Hash>>,
-  em: {Tree.part(~S, ~fetch, s, y) == Some{Node.branch{qs}}: Maybe<&2, Node>},
+  em: {Tree.part(~S, ~fetch, s, y) == Some{Node.Branch{qs}}: Maybe<&2, Node>},
   fd: Tree.Found(~S, ~fetch, s, k, v, qs, List.append(&2, Nat, pre, [x]), 0n)
 ) -> Tree.Found(~S, ~fetch, s, k, v, Con{y, r}, pre, x):
   match fd:
@@ -4995,7 +5004,7 @@ def Tree.list_found.read(
   v2: List<&2, U32>,
   y: Maybe<&2, Hashes.Hash>,
   pth: List<&2, Nat>,
-  em: {Tree.part(~S, ~fetch, s, y) == Some{Node.leaf{k2, v2}}: Maybe<&2, Node>},
+  em: {Tree.part(~S, ~fetch, s, y) == Some{Node.Leaf{k2, v2}}: Maybe<&2, Node>},
   eb: {Binding{k2, v2} == Binding{k, v}: Binding}
 ) -> {
   Tree.get.go(
@@ -5011,13 +5020,13 @@ def Tree.list_found.read(
   %Equal.sym(
     Maybe<&2, Node>,
     Tree.part(~S, ~fetch, s, y),
-    Some{Node.leaf{k2, v2}},
+    Some{Node.Leaf{k2, v2}},
     em
   ): {Tree.get.go(~S, ~fetch, s, pth, k, _) == Some{v}: Maybe<&2, List<&2, U32>>}
   %Equal.sym(
     Maybe<&2, Node>,
-    Some{Node.leaf{k2, v2}},
-    Some{Node.leaf{k, v}},
+    Some{Node.Leaf{k2, v2}},
+    Some{Node.Leaf{k, v}},
     Equal.cong(Binding, Maybe<&2, Node>, b => Binding.leaf(b), Binding{k2, v2}, Binding{k, v}, eb)
   ): {Tree.get.go(~S, ~fetch, s, pth, k, _) == Some{v}: Maybe<&2, List<&2, U32>>}
   Tree.read_leaf(~S, ~fetch, s, pth, k, v)
@@ -5065,7 +5074,7 @@ def Tree.list_found.hit(
   d: Bool,
   ed: {Binding.is_eq(Binding{k2, v2}, Binding{k, v}) == d: Bool},
   ec: {Tree.leads(k2, List.append(&2, Nat, pre, [x])) == True{}: Bool},
-  em: {Tree.part(~S, ~fetch, s, y) == Some{Node.leaf{k2, v2}}: Maybe<&2, Node>},
+  em: {Tree.part(~S, ~fetch, s, y) == Some{Node.Leaf{k2, v2}}: Maybe<&2, Node>},
   ih: {
     List.contains(
       ~Binding,
@@ -5167,7 +5176,7 @@ def Tree.list_found.leaf(
   +v2: List<&2, U32>,
   c: Bool,
   ec: {Tree.leads(k2, List.append(&2, Nat, pre, [x])) == c: Bool},
-  em: {Tree.part(~S, ~fetch, s, y) == Some{Node.leaf{k2, v2}}: Maybe<&2, Node>},
+  em: {Tree.part(~S, ~fetch, s, y) == Some{Node.Leaf{k2, v2}}: Maybe<&2, Node>},
   ih: {
     List.contains(
       ~Binding,
@@ -5247,7 +5256,7 @@ def Tree.list_found.go(
   match f ps m:
     case g Nil{} w:
       e => Empty.absurd(Tree.Found(~S, ~fetch, s, k, v, [], pre, x), Shared.Bool.false_ne_true(e))
-    case g Con{+y, +r} Some{Node.leaf{+k2, v2}}:
+    case g Con{+y, +r} Some{Node.Leaf{+k2, v2}}:
       Tree.list_found.leaf(
         ~S,
         ~fetch,
@@ -5289,7 +5298,7 @@ def Tree.list_found.go(
           )(e2)
         )
       )
-    case 1n+(+p) Con{+y, +r} Some{Node.branch{+qs}}:
+    case 1n+(+p) Con{+y, +r} Some{Node.Branch{+qs}}:
       +below = Tree.list.go(
         ~S,
         ~fetch,
@@ -5386,7 +5395,7 @@ def Tree.list_found.go(
           e
         )
       )
-    case 0n Con{+y, +r} Some{Node.branch{qs}}:
+    case 0n Con{+y, +r} Some{Node.Branch{qs}}:
       e2 => Tree.Found.next(
         ~S,
         ~fetch,
@@ -5411,7 +5420,7 @@ def Tree.list_found.go(
           {==}
         )(e2)
       )
-    case g Con{+y, +r} Some{Node.empty{}}:
+    case g Con{+y, +r} Some{Node.Empty{}}:
       e2 => Tree.Found.next(
         ~S,
         ~fetch,
@@ -5480,7 +5489,7 @@ def Tree.Found.root(
     s,
     Tree.path(k),
     k,
-    Some{Node.branch{qs}}
+    Some{Node.Branch{qs}}
   )
     == Some{v}: Maybe<&2, List<&2, U32>>
 }:
@@ -5491,7 +5500,7 @@ def Tree.Found.root(
         Nat,
         Tree.path(k)
       ): {
-        Tree.get.go(~S, ~fetch, s, _, k, Some{Node.branch{qs}}) == Some{v}: Maybe<&2, List<&2, U32>>
+        Tree.get.go(~S, ~fetch, s, _, k, Some{Node.Branch{qs}}) == Some{v}: Maybe<&2, List<&2, U32>>
       }
       Tree.list_found.up(
         ~S,
@@ -5500,7 +5509,7 @@ def Tree.Found.root(
         k,
         v,
         [],
-        Some{Node.branch{qs}},
+        Some{Node.Branch{qs}},
         qs,
         j,
         t,
@@ -5537,7 +5546,7 @@ def Tree.list_found.root.hit(
     s,
     Tree.path(k),
     k,
-    Some{Node.leaf{k2, v2}}
+    Some{Node.Leaf{k2, v2}}
   )
     == Some{v}: Maybe<&2, List<&2, U32>>
 }:
@@ -5546,8 +5555,8 @@ def Tree.list_found.root.hit(
       e =>
         %Equal.sym(
           Maybe<&2, Node>,
-          Some{Node.leaf{k2, v2}},
-          Some{Node.leaf{k, v}},
+          Some{Node.Leaf{k2, v2}},
+          Some{Node.Leaf{k, v}},
           Equal.cong(
             Binding,
             Maybe<&2, Node>,
@@ -5567,7 +5576,7 @@ def Tree.list_found.root.hit(
             s,
             Tree.path(k),
             k,
-            Some{Node.leaf{k2, v2}}
+            Some{Node.Leaf{k2, v2}}
           )
             == Some{v}: Maybe<&2, List<&2, U32>>
         },
@@ -5592,7 +5601,7 @@ def Tree.list_found.root(
     == True{}: Bool
 } -> {Tree.get.go(~S, ~fetch, s, Tree.path(k), k, m) == Some{v}: Maybe<&2, List<&2, U32>>}:
   match m:
-    case Some{Node.leaf{+k2, +v2}}:
+    case Some{Node.Leaf{+k2, +v2}}:
       Tree.list_found.root.hit(
         ~S,
         ~fetch,
@@ -5604,7 +5613,7 @@ def Tree.list_found.root(
         Binding.is_eq(Binding{k2, v2}, Binding{k, v}),
         {==}
       )
-    case Some{Node.branch{+qs}}:
+    case Some{Node.Branch{+qs}}:
       e => Tree.Found.root(
         ~S,
         ~fetch,
@@ -5626,7 +5635,7 @@ def Tree.list_found.root(
           {==}
         )(e)
       )
-    case Some{Node.empty{}}:
+    case Some{Node.Empty{}}:
       e => Empty.absurd(
         {
           Tree.get.go(
@@ -5635,7 +5644,7 @@ def Tree.list_found.root(
             s,
             Tree.path(k),
             k,
-            Some{Node.empty{}}
+            Some{Node.Empty{}}
           )
             == Some{v}: Maybe<&2, List<&2, U32>>
         },
@@ -6662,7 +6671,7 @@ def Parts.put_twice(
 def Binding.node(b: Binding) -> Node:
   match b:
     case Binding{k, v}:
-      Node.leaf{k, v}
+      Node.Leaf{k, v}
 
 # the root of the canonical tree of the bindings bs whose branch, if any, has
 # the parts ps: none (no binding), a leaf (one binding) or a branch
@@ -6676,7 +6685,7 @@ def Canon.node(
     case Con{b, Nil{}}:
       Some{Node.hash(Binding.node(b))}
     case Con{b, Con{c, r}}:
-      Some{Node.hash(Node.branch{ps})}
+      Some{Node.hash(Node.Branch{ps})}
 
 # bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a law's measure of a tree, run by no node
 # the parts of the canonical branch of the bindings all at depth d, n nibbles
@@ -6734,7 +6743,7 @@ def Canon.holds.node(
     case Con{b, Nil{}}:
       Tree.has(~S, ~fetch, s, Node.words(Binding.node(b)))
     case Con{b, Con{c, r}}:
-      List.all.if(u => below, Tree.has(~S, ~fetch, s, Node.words(Node.branch{ps})))
+      List.all.if(u => below, Tree.has(~S, ~fetch, s, Node.words(Node.Branch{ps})))
 
 # the store s holds the canonical tree under the nibble of each binding of bs,
 # below a branch of the bindings all at depth d, n nibbles above the end of a
@@ -7360,7 +7369,7 @@ def Canon.into(
 ) -> {
   Maybe.bind(&2, Put, Put, m, p => Some{Put.into(ks, a, p)}) == Some{t}: Maybe<&2, Put>
 } -> {
-  Some{Put.root(t)} == Some{Node.hash(Node.branch{Parts.put(ks, a, w)})}: Maybe<&2, Hashes.Hash>
+  Some{Put.root(t)} == Some{Node.hash(Node.Branch{Parts.put(ks, a, w)})}: Maybe<&2, Hashes.Hash>
 }:
   match m:
     case None{}:
@@ -7369,7 +7378,7 @@ def Canon.into(
           Some{
             Put.root(t)
           }
-            == Some{Node.hash(Node.branch{Parts.put(ks, a, w)})}: Maybe<&2, Hashes.Hash>
+            == Some{Node.hash(Node.Branch{Parts.put(ks, a, w)})}: Maybe<&2, Hashes.Hash>
         },
         Shared.Maybe.none_ne_some(Put, t, h)
       )
@@ -7380,7 +7389,7 @@ def Canon.into(
             Some{
               Put.root(_)
             }
-              == Some{Node.hash(Node.branch{Parts.put(ks, a, w)})}: Maybe<&2, Hashes.Hash>
+              == Some{Node.hash(Node.Branch{Parts.put(ks, a, w)})}: Maybe<&2, Hashes.Hash>
           }
         %ih(
           t2
@@ -7390,7 +7399,7 @@ def Canon.into(
           Some{
             Put.root(Put.into(ks, a, t2))
           }
-            == Some{Node.hash(Node.branch{Parts.put(ks, a, _)})}: Maybe<&2, Hashes.Hash>
+            == Some{Node.hash(Node.Branch{Parts.put(ks, a, _)})}: Maybe<&2, Hashes.Hash>
         }
         {==}
 
@@ -7416,8 +7425,8 @@ def Canon.split.at(
     Tree.split(
       r1,
       r2,
-      Put{Node.hash(Node.leaf{k1, v1}), ns},
-      Some{Node.hash(Node.leaf{k2, v2})}
+      Put{Node.hash(Node.Leaf{k1, v1}), ns},
+      Some{Node.hash(Node.Leaf{k2, v2})}
     )
       == Some{t2}: Maybe<&2, Put>
   } -> {
@@ -7434,19 +7443,20 @@ def Canon.split.at(
   Shared.Bool.when(
     Maybe<&2, Put>,
     c,
-    u => Maybe.bind(&2, 
+    u => Maybe.bind(
+      &2,
       Put,
       Put,
-      Tree.split(r1, r2, Put{Node.hash(Node.leaf{k1, v1}), ns}, Some{Node.hash(Node.leaf{k2, v2})}),
+      Tree.split(r1, r2, Put{Node.hash(Node.Leaf{k1, v1}), ns}, Some{Node.hash(Node.Leaf{k2, v2})}),
       p => Some{Put.into(Parts.none(), a, p)}
     ),
     u => Some{
       Put.node(
-        Node.branch{
+        Node.Branch{
           Parts.put(
-            Parts.put(Parts.none(), a, Some{Node.hash(Node.leaf{k1, v1})}),
+            Parts.put(Parts.none(), a, Some{Node.hash(Node.Leaf{k1, v1})}),
             b,
-            Some{Node.hash(Node.leaf{k2, v2})}
+            Some{Node.hash(Node.Leaf{k2, v2})}
           )
         },
         ns
@@ -7481,13 +7491,13 @@ def Canon.split.at(
             Binding{k2, v2},
             a
           )(e1)(Equal.trans(Nat, Key.nibble(k2, d), b, a, e2, Equal.sym(Nat, a, b, ba)))
-        ): {Some{Put.root(t)} == Some{Node.hash(Node.branch{_})}: Maybe<&2, Hashes.Hash>}
+        ): {Some{Put.root(t)} == Some{Node.hash(Node.Branch{_})}: Maybe<&2, Hashes.Hash>}
         Canon.into(
           Tree.split(
             r1,
             r2,
-            Put{Node.hash(Node.leaf{k1, v1}), ns},
-            Some{Node.hash(Node.leaf{k2, v2})}
+            Put{Node.hash(Node.Leaf{k1, v1}), ns},
+            Some{Node.hash(Node.Leaf{k2, v2})}
           ),
           [],
           a,
@@ -7503,20 +7513,20 @@ def Canon.split.at(
           List<&2, Maybe<&2, Hashes.Hash>>,
           Canon.parts(1n+m, d, l, l),
           Parts.put(
-            Parts.put([], a, Some{Node.hash(Node.leaf{k1, v1})}),
+            Parts.put([], a, Some{Node.hash(Node.Leaf{k1, v1})}),
             b,
-            Some{Node.hash(Node.leaf{k2, v2})}
+            Some{Node.hash(Node.Leaf{k2, v2})}
           ),
           Canon.two_other(m, d, Binding{k1, v1}, Binding{k2, v2}, a, b)(e1)(e2)(ec)
-        ): {Some{Put.root(t)} == Some{Node.hash(Node.branch{_})}: Maybe<&2, Hashes.Hash>}
+        ): {Some{Put.root(t)} == Some{Node.hash(Node.Branch{_})}: Maybe<&2, Hashes.Hash>}
         %Shared.Maybe.some_inj(
           Put,
           Put.node(
-            Node.branch{
+            Node.Branch{
               Parts.put(
-                Parts.put([], a, Some{Node.hash(Node.leaf{k1, v1})}),
+                Parts.put([], a, Some{Node.hash(Node.Leaf{k1, v1})}),
                 b,
-                Some{Node.hash(Node.leaf{k2, v2})}
+                Some{Node.hash(Node.Leaf{k2, v2})}
               )
             },
             ns
@@ -7529,11 +7539,11 @@ def Canon.split.at(
           }
             == Some{
               Node.hash(
-                Node.branch{
+                Node.Branch{
                   Parts.put(
-                    Parts.put([], a, Some{Node.hash(Node.leaf{k1, v1})}),
+                    Parts.put([], a, Some{Node.hash(Node.Leaf{k1, v1})}),
                     b,
-                    Some{Node.hash(Node.leaf{k2, v2})}
+                    Some{Node.hash(Node.Leaf{k2, v2})}
                   )
                 }
               )
@@ -7561,8 +7571,8 @@ def Canon.split(
   Tree.split(
     p1,
     p2,
-    Put{Node.hash(Node.leaf{k1, v1}), ns},
-    Some{Node.hash(Node.leaf{k2, v2})}
+    Put{Node.hash(Node.Leaf{k1, v1}), ns},
+    Some{Node.hash(Node.Leaf{k2, v2})}
   )
     == Some{t}: Maybe<&2, Put>
 } -> {
@@ -7799,7 +7809,7 @@ def Canon.root_many(
     d,
     b <> x
   )
-    == Some{Node.hash(Node.branch{Canon.parts(n, d, b <> x, b <> x)})}: Maybe<&2, Hashes.Hash>
+    == Some{Node.hash(Node.Branch{Canon.parts(n, d, b <> x, b <> x)})}: Maybe<&2, Hashes.Hash>
 }:
   match x:
     case Nil{}:
@@ -7810,7 +7820,7 @@ def Canon.root_many(
             d,
             [b]
           )
-            == Some{Node.hash(Node.branch{Canon.parts(n, d, [b], [b])})}: Maybe<&2, Hashes.Hash>
+            == Some{Node.hash(Node.Branch{Canon.parts(n, d, [b], [b])})}: Maybe<&2, Hashes.Hash>
         },
         Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, e))
       )
@@ -8292,7 +8302,7 @@ def Canon.root_put(
   )
     == Some{
       Node.hash(
-        Node.branch{
+        Node.Branch{
           Parts.put(
             Canon.parts(1n+m, d, bs, bs),
             x,
@@ -8307,7 +8317,7 @@ def Canon.root_put(
     +goal = {
       Some{
         Node.hash(
-          Node.branch{
+          Node.Branch{
             Parts.put(
               Canon.parts(1n+m, d, bs, bs),
               x,
@@ -8320,7 +8330,7 @@ def Canon.root_put(
     %Equal.sym(
       Maybe<&2, Hashes.Hash>,
       Canon.root(1n+m, d, b2),
-      Some{Node.hash(Node.branch{Canon.parts(1n+m, d, b2, b2)})},
+      Some{Node.hash(Node.Branch{Canon.parts(1n+m, d, b2, b2)})},
       Canon.root_many(1n+m, d, Binding{k, v}, Binds.drop(bs, k))(hne)
     ):
       {_ == goal: Maybe<&2, Hashes.Hash>}
@@ -8334,7 +8344,7 @@ def Canon.root_put(
       ),
       Canon.parts_of_put(m, d, bs, k, v, x)(hx)
     ):
-      {Some{Node.hash(Node.branch{_})} == goal: Maybe<&2, Hashes.Hash>}
+      {Some{Node.hash(Node.Branch{_})} == goal: Maybe<&2, Hashes.Hash>}
     {==}
 
 # a step of a write down a branch of the parts ks, at its part x, whose root
@@ -8351,7 +8361,8 @@ def Canon.step(
   x: Nat,
   +kid: Maybe<&2, Hashes.Hash>
 ) -> Maybe<&2, Put>:
-  Maybe.bind(&2, 
+  Maybe.bind(
+    &2,
     Put,
     Put,
     Tree.set.go(~S, ~fetch, s, r, 1n+d, k, v, kid, Tree.part(~S, ~fetch, s, kid)),
@@ -8364,15 +8375,15 @@ def Canon.set_root.empty(
   k: List<&2, U32>,
   v: List<&2, U32>
 ) -> {
-  Some{Put.node(Node.leaf{k, v}, [])} == Some{t}: Maybe<&2, Put>
-} -> {Some{Put.root(t)} == Some{Node.hash(Node.leaf{k, v})}: Maybe<&2, Hashes.Hash>}:
+  Some{Put.node(Node.Leaf{k, v}, [])} == Some{t}: Maybe<&2, Put>
+} -> {Some{Put.root(t)} == Some{Node.hash(Node.Leaf{k, v})}: Maybe<&2, Hashes.Hash>}:
   h =>
     %Shared.Maybe.some_inj(
       Put,
-      Put.node(Node.leaf{k, v}, []),
+      Put.node(Node.Leaf{k, v}, []),
       t,
       h
-    ): {Some{Put.root(_)} == Some{Node.hash(Node.leaf{k, v})}: Maybe<&2, Hashes.Hash>}
+    ): {Some{Put.root(_)} == Some{Node.hash(Node.Leaf{k, v})}: Maybe<&2, Hashes.Hash>}
     {==}
 
 # a write of the key k at the leaf of the key k2, when c tells whether k2 is k
@@ -8391,12 +8402,12 @@ def Canon.set_root.leaf(
   Shared.Bool.when(
     Maybe<&2, Put>,
     c,
-    u => Some{Put.node(Node.leaf{k, v}, [])},
+    u => Some{Put.node(Node.Leaf{k, v}, [])},
     w => Tree.split(
       q,
       List.drop(&2, Nat, Tree.path(k2), d),
-      Put.node(Node.leaf{k, v}, []),
-      Some{Node.hash(Node.leaf{k2, v2})}
+      Put.node(Node.Leaf{k, v}, []),
+      Some{Node.hash(Node.Leaf{k2, v2})}
     )
   )
     == Some{t}: Maybe<&2, Put>
@@ -8422,7 +8433,7 @@ def Canon.set_root.leaf(
         v,
         k2,
         v2,
-        [Node.words(Node.leaf{k, v})],
+        [Node.words(Node.Leaf{k, v})],
         t
       )(hq)({==})(hs)
 
@@ -8500,7 +8511,7 @@ def Canon.set_root.branch(
   hs => Equal.trans(
     Maybe<&2, Hashes.Hash>,
     Some{Put.root(t)},
-    Some{Node.hash(Node.branch{Parts.put(ps, x, w)})},
+    Some{Node.hash(Node.Branch{Parts.put(ps, x, w)})},
     Canon.root(1n+m, d, Binds.put(bs, k, v)),
     Canon.into(
       Tree.set.go(~S, ~fetch, s, r, 1n+d, k, v, kid, Tree.part(~S, ~fetch, s, kid)),
@@ -8513,7 +8524,7 @@ def Canon.set_root.branch(
     Equal.sym(
       Maybe<&2, Hashes.Hash>,
       Canon.root(1n+m, d, Binds.put(bs, k, v)),
-      Some{Node.hash(Node.branch{Parts.put(ps, x, w)})},
+      Some{Node.hash(Node.Branch{Parts.put(ps, x, w)})},
       Canon.root_put(m, d, bs, k, v, x)(hx)(hne)
     )
   )
@@ -8565,9 +8576,9 @@ def Canon.set_root(
       hp => hd => hh =>
         %Equal.sym(
           Maybe<&2, Node>,
-          Tree.node(~S, ~fetch, s, Node.hash(Node.leaf{k2, v2})),
-          Some{Node.leaf{k2, v2}},
-          Tree.has_node(~S, ~fetch, s, Node.leaf{k2, v2}, {==}, hh)
+          Tree.node(~S, ~fetch, s, Node.hash(Node.Leaf{k2, v2})),
+          Some{Node.Leaf{k2, v2}},
+          Tree.has_node(~S, ~fetch, s, Node.Leaf{k2, v2}, {==}, hh)
         ): {
           Tree.set.go(
             ~S,
@@ -8577,7 +8588,7 @@ def Canon.set_root(
             d,
             k,
             v,
-            Some{Node.hash(Node.leaf{k2, v2})},
+            Some{Node.hash(Node.Leaf{k2, v2})},
             _
           )
             == Some{t}: Maybe<&2, Put>
@@ -8603,9 +8614,9 @@ def Canon.set_root(
       hp => hd => hh =>
         %Equal.sym(
           Maybe<&2, Node>,
-          Tree.node(~S, ~fetch, s, Node.hash(Node.leaf{k2, v2})),
-          Some{Node.leaf{k2, v2}},
-          Tree.has_node(~S, ~fetch, s, Node.leaf{k2, v2}, {==}, hh)
+          Tree.node(~S, ~fetch, s, Node.hash(Node.Leaf{k2, v2})),
+          Some{Node.Leaf{k2, v2}},
+          Tree.has_node(~S, ~fetch, s, Node.Leaf{k2, v2}, {==}, hh)
         ): {
           Tree.set.go(
             ~S,
@@ -8615,7 +8626,7 @@ def Canon.set_root(
             d,
             k,
             v,
-            Some{Node.hash(Node.leaf{k2, v2})},
+            Some{Node.hash(Node.Leaf{k2, v2})},
             _
           )
             == Some{t}: Maybe<&2, Put>
@@ -8649,21 +8660,21 @@ def Canon.set_root(
             ~S,
             ~fetch,
             s,
-            Node.hash(Node.branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)})
+            Node.hash(Node.Branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)})
           ),
-          Some{Node.branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)}},
+          Some{Node.Branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)}},
           Tree.has_node(
             ~S,
             ~fetch,
             s,
-            Node.branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)},
+            Node.Branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)},
             Canon.parts_ok(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest),
             Shared.List.all.if_hit(
               Tree.has(
                 ~S,
                 ~fetch,
                 s,
-                Node.words(Node.branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)})
+                Node.words(Node.Branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)})
               ),
               u => Canon.holds.parts(~S, ~fetch, s, 0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)
             )(hh)
@@ -8677,7 +8688,7 @@ def Canon.set_root(
             d,
             k,
             v,
-            Some{Node.hash(Node.branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)})},
+            Some{Node.hash(Node.Branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)})},
             _
           )
             == Some{t}: Maybe<&2, Put>
@@ -8705,13 +8716,13 @@ def Canon.set_root(
             ~fetch,
             s,
             Node.hash(
-              Node.branch{
+              Node.Branch{
                 Canon.parts(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest)
               }
             )
           ),
           Some{
-            Node.branch{
+            Node.Branch{
               Canon.parts(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest)
             }
           },
@@ -8719,7 +8730,7 @@ def Canon.set_root(
             ~S,
             ~fetch,
             s,
-            Node.branch{
+            Node.Branch{
               Canon.parts(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest)
             },
             Canon.parts_ok(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest),
@@ -8729,7 +8740,7 @@ def Canon.set_root(
                 ~fetch,
                 s,
                 Node.words(
-                  Node.branch{
+                  Node.Branch{
                     Canon.parts(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest)
                   }
                 )
@@ -8756,7 +8767,7 @@ def Canon.set_root(
             v,
             Some{
               Node.hash(
-                Node.branch{
+                Node.Branch{
                   Canon.parts(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest)
                 }
               )
@@ -8817,7 +8828,7 @@ def Canon.set_root(
                   ~fetch,
                   s,
                   Node.words(
-                    Node.branch{
+                    Node.Branch{
                       Canon.parts(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest)
                     }
                   )
@@ -8913,7 +8924,7 @@ def Canon.holds.node_grows(
       h => hb => Tree.has_kept(~S, ~fetch, ~grows, ~kept, a, b, Node.words(Binding.node(c)), gr)(h)
     case Con{c, Con{c2, r}}:
       +h => hb => Shared.List.all.if_both(
-        Tree.has(~S, ~fetch, b, Node.words(Node.branch{ps})),
+        Tree.has(~S, ~fetch, b, Node.words(Node.Branch{ps})),
         u => bb
       )(
         Tree.has_kept(
@@ -8923,12 +8934,12 @@ def Canon.holds.node_grows(
           ~kept,
           a,
           b,
-          Node.words(Node.branch{ps}),
+          Node.words(Node.Branch{ps}),
           gr
-        )(Shared.List.all.if_hit(Tree.has(~S, ~fetch, a, Node.words(Node.branch{ps})), u => ba)(h))
+        )(Shared.List.all.if_hit(Tree.has(~S, ~fetch, a, Node.words(Node.Branch{ps})), u => ba)(h))
       )(
         hb(
-          Shared.List.all.if_rest(Tree.has(~S, ~fetch, a, Node.words(Node.branch{ps})), u => ba)(h)
+          Shared.List.all.if_rest(Tree.has(~S, ~fetch, a, Node.words(Node.Branch{ps})), u => ba)(h)
         )
       )
 
@@ -9088,7 +9099,7 @@ def Canon.holds_make(
     ~S,
     ~fetch,
     s,
-    Node.words(Node.branch{Canon.parts(n, d, b <> x, b <> x)})
+    Node.words(Node.Branch{Canon.parts(n, d, b <> x, b <> x)})
   )
     == True{}: Bool
 } -> {
@@ -9106,7 +9117,7 @@ def Canon.holds_make(
           ~S,
           ~fetch,
           s,
-          Node.words(Node.branch{Canon.parts(n, d, b <> c <> r, b <> c <> r)})
+          Node.words(Node.Branch{Canon.parts(n, d, b <> c <> r, b <> c <> r)})
         ),
         u => Canon.holds.parts(~S, ~fetch, s, n, d, b <> c <> r, b <> c <> r)
       )(h1)(h2)
@@ -9156,8 +9167,8 @@ def Canon.split_holds.at(
     Tree.split(
       r1,
       r2,
-      Put{Node.hash(Node.leaf{k1, v1}), [Node.words(Node.leaf{k1, v1})]},
-      Some{Node.hash(Node.leaf{k2, v2})}
+      Put{Node.hash(Node.Leaf{k1, v1}), [Node.words(Node.Leaf{k1, v1})]},
+      Some{Node.hash(Node.Leaf{k2, v2})}
     )
       == Some{t2}: Maybe<&2, Put>
   } -> {
@@ -9174,8 +9185,8 @@ def Canon.split_holds.at(
     Tree.split(
       r1,
       r2,
-      Put{Node.hash(Node.leaf{k1, v1}), [Node.words(Node.leaf{k1, v1})]},
-      Some{Node.hash(Node.leaf{k2, v2})}
+      Put{Node.hash(Node.Leaf{k1, v1}), [Node.words(Node.Leaf{k1, v1})]},
+      Some{Node.hash(Node.Leaf{k2, v2})}
     )
       == Some{t2}: Maybe<&2, Put>
   } -> {
@@ -9195,8 +9206,8 @@ def Canon.split_holds.at(
     Tree.split(
       r1,
       r2,
-      Put{Node.hash(Node.leaf{k1, v1}), [Node.words(Node.leaf{k1, v1})]},
-      Some{Node.hash(Node.leaf{k2, v2})}
+      Put{Node.hash(Node.Leaf{k1, v1}), [Node.words(Node.Leaf{k1, v1})]},
+      Some{Node.hash(Node.Leaf{k2, v2})}
     )
       == Some{t2}: Maybe<&2, Put>
   } -> {
@@ -9212,32 +9223,33 @@ def Canon.split_holds.at(
     )
       == True{}: Bool
   },
-  hl2: {Tree.has(~S, ~fetch, s2, Node.words(Node.leaf{k2, v2})) == True{}: Bool}
+  hl2: {Tree.has(~S, ~fetch, s2, Node.words(Node.Leaf{k2, v2})) == True{}: Bool}
 ) -> {
   Shared.Bool.when(
     Maybe<&2, Put>,
     c,
-    u => Maybe.bind(&2, 
+    u => Maybe.bind(
+      &2,
       Put,
       Put,
       Tree.split(
         r1,
         r2,
-        Put{Node.hash(Node.leaf{k1, v1}), [Node.words(Node.leaf{k1, v1})]},
-        Some{Node.hash(Node.leaf{k2, v2})}
+        Put{Node.hash(Node.Leaf{k1, v1}), [Node.words(Node.Leaf{k1, v1})]},
+        Some{Node.hash(Node.Leaf{k2, v2})}
       ),
       p => Some{Put.into(Parts.none(), a, p)}
     ),
     u => Some{
       Put.node(
-        Node.branch{
+        Node.Branch{
           Parts.put(
-            Parts.put(Parts.none(), a, Some{Node.hash(Node.leaf{k1, v1})}),
+            Parts.put(Parts.none(), a, Some{Node.hash(Node.Leaf{k1, v1})}),
             b,
-            Some{Node.hash(Node.leaf{k2, v2})}
+            Some{Node.hash(Node.Leaf{k2, v2})}
           )
         },
-        [Node.words(Node.leaf{k1, v1})]
+        [Node.words(Node.Leaf{k1, v1})]
       )
     }
   )
@@ -9266,8 +9278,8 @@ def Canon.split_holds.at(
           Tree.split(
             r1,
             r2,
-            Put{Node.hash(Node.leaf{k1, v1}), [Node.words(Node.leaf{k1, v1})]},
-            Some{Node.hash(Node.leaf{k2, v2})}
+            Put{Node.hash(Node.Leaf{k1, v1}), [Node.words(Node.Leaf{k1, v1})]},
+            Some{Node.hash(Node.Leaf{k2, v2})}
           ),
           [],
           a,
@@ -9285,18 +9297,18 @@ def Canon.split_holds.at(
             [Binding{k2, v2}]
           )({==})(
             %Equal.sym(List<&2, Maybe<&2, Hashes.Hash>>, Canon.parts(1n+m, d, l, l), Parts.put([], a, Canon.root(m, 1n+d, l)), Canon.two_same(m, d, Binding{k1, v1}, Binding{k2, v2}, a)(e1)(e2a)):
-              {Tree.has(~S, ~fetch, s2, Node.words(Node.branch{_})) == True{}: Bool}
-            %ihr(t2)(e): {Tree.has(~S, ~fetch, s2, Node.words(Node.branch{Parts.put([], a, _)})) == True{}: Bool}
-            Shared.List.all.if_hit(Tree.has(~S, ~fetch, s2, Node.words(Node.branch{Parts.put([], a, Some{Put.root(t2)})})), u => Tree.holds(~S, ~fetch, s2, Put.nodes(t2)))(hn))(
+              {Tree.has(~S, ~fetch, s2, Node.words(Node.Branch{_})) == True{}: Bool}
+            %ihr(t2)(e): {Tree.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put([], a, _)})) == True{}: Bool}
+            Shared.List.all.if_hit(Tree.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put([], a, Some{Put.root(t2)})})), u => Tree.holds(~S, ~fetch, s2, Put.nodes(t2)))(hn))(
             Canon.holds_pair(~S, ~fetch, s2, m, d, Binding{k1, v1}, Binding{k2, v2})(
               %Equal.sym(Nat, Key.nibble(k1, d), a, e1): {Canon.holds(~S, ~fetch, s2, m, 1n+d, Binds.at(l, d, _)) == True{}: Bool}
               %Equal.sym(List<&2, Binding>, Binds.at(l, d, a), l, Binds.at_same(Binding{k1, v1}, Binding{k2, v2}, d, a)(e1)(e2a)):
                 {Canon.holds(~S, ~fetch, s2, m, 1n+d, _) == True{}: Bool}
-              ihh1(t2)(e)(Shared.List.all.if_rest(Tree.has(~S, ~fetch, s2, Node.words(Node.branch{Parts.put([], a, Some{Put.root(t2)})})), u => Tree.holds(~S, ~fetch, s2, Put.nodes(t2)))(hn)))(
+              ihh1(t2)(e)(Shared.List.all.if_rest(Tree.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put([], a, Some{Put.root(t2)})})), u => Tree.holds(~S, ~fetch, s2, Put.nodes(t2)))(hn)))(
               %Equal.sym(Nat, Key.nibble(k2, d), a, e2a): {Canon.holds(~S, ~fetch, s2, m, 1n+d, Binds.at(l, d, _)) == True{}: Bool}
               %Equal.sym(List<&2, Binding>, Binds.at(l, d, a), l, Binds.at_same(Binding{k1, v1}, Binding{k2, v2}, d, a)(e1)(e2a)):
                 {Canon.holds(~S, ~fetch, s2, m, 1n+d, _) == True{}: Bool}
-              ihh2(t2)(e)(Shared.List.all.if_rest(Tree.has(~S, ~fetch, s2, Node.words(Node.branch{Parts.put([], a, Some{Put.root(t2)})})), u => Tree.holds(~S, ~fetch, s2, Put.nodes(t2)))(hn)))
+              ihh2(t2)(e)(Shared.List.all.if_rest(Tree.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put([], a, Some{Put.root(t2)})})), u => Tree.holds(~S, ~fetch, s2, Put.nodes(t2)))(hn)))
           )
         )(hs)
     case False{}:
@@ -9304,9 +9316,9 @@ def Canon.split_holds.at(
         +l = {[Binding{k1, v1}, Binding{k2, v2}]: List<&2, Binding>}
         +m = List.length(&2, Nat, r1)
         +pp = Parts.put(
-          Parts.put([], a, Some{Node.hash(Node.leaf{k1, v1})}),
+          Parts.put([], a, Some{Node.hash(Node.Leaf{k1, v1})}),
           b,
-          Some{Node.hash(Node.leaf{k2, v2})}
+          Some{Node.hash(Node.Leaf{k2, v2})}
         )
         +nb = Equal.trans(
           Bool,
@@ -9318,7 +9330,7 @@ def Canon.split_holds.at(
         )
         %Shared.Maybe.some_inj(
           Put,
-          Put.node(Node.branch{pp}, [Node.words(Node.leaf{k1, v1})]),
+          Put.node(Node.Branch{pp}, [Node.words(Node.Leaf{k1, v1})]),
           t,
           hs
         ):
@@ -9327,12 +9339,12 @@ def Canon.split_holds.at(
           } -> {Canon.holds(~S, ~fetch, s2, 1n+m, d, l) == True{}: Bool}
         +hn => Canon.holds_make(~S, ~fetch, s2, 1n+m, d, Binding{k1, v1}, [Binding{k2, v2}])({==})(
           %Equal.sym(List<&2, Maybe<&2, Hashes.Hash>>, Canon.parts(1n+m, d, l, l), pp, Canon.two_other(m, d, Binding{k1, v1}, Binding{k2, v2}, a, b)(e1)(e2)(ec)):
-            {Tree.has(~S, ~fetch, s2, Node.words(Node.branch{_})) == True{}: Bool}
-          Shared.List.all.if_hit(Tree.has(~S, ~fetch, s2, Node.words(Node.branch{pp})), u => Tree.holds(~S, ~fetch, s2, [Node.words(Node.leaf{k1, v1})]))(hn))(Canon.holds_pair(~S, ~fetch, s2, m, d, Binding{k1, v1}, Binding{k2, v2})(
+            {Tree.has(~S, ~fetch, s2, Node.words(Node.Branch{_})) == True{}: Bool}
+          Shared.List.all.if_hit(Tree.has(~S, ~fetch, s2, Node.words(Node.Branch{pp})), u => Tree.holds(~S, ~fetch, s2, [Node.words(Node.Leaf{k1, v1})]))(hn))(Canon.holds_pair(~S, ~fetch, s2, m, d, Binding{k1, v1}, Binding{k2, v2})(
             %Equal.sym(Nat, Key.nibble(k1, d), a, e1): {Canon.holds(~S, ~fetch, s2, m, 1n+d, Binds.at(l, d, _)) == True{}: Bool}
             %Equal.sym(List<&2, Binding>, Binds.at(l, d, a), [Binding{k1, v1}], Binds.at_first(Binding{k1, v1}, Binding{k2, v2}, d, a, b)(e1)(e2)(ec)):
               {Canon.holds(~S, ~fetch, s2, m, 1n+d, _) == True{}: Bool}
-            Shared.List.all.if_hit(Tree.has(~S, ~fetch, s2, Node.words(Node.leaf{k1, v1})), u => Tree.holds(~S, ~fetch, s2, []))(Shared.List.all.if_rest(Tree.has(~S, ~fetch, s2, Node.words(Node.branch{pp})), u => Tree.holds(~S, ~fetch, s2, [Node.words(Node.leaf{k1, v1})]))(hn)))(
+            Shared.List.all.if_hit(Tree.has(~S, ~fetch, s2, Node.words(Node.Leaf{k1, v1})), u => Tree.holds(~S, ~fetch, s2, []))(Shared.List.all.if_rest(Tree.has(~S, ~fetch, s2, Node.words(Node.Branch{pp})), u => Tree.holds(~S, ~fetch, s2, [Node.words(Node.Leaf{k1, v1})]))(hn)))(
             %Equal.sym(Nat, Key.nibble(k2, d), b, e2): {Canon.holds(~S, ~fetch, s2, m, 1n+d, Binds.at(l, d, _)) == True{}: Bool}
             %Equal.sym(List<&2, Binding>, Binds.at(l, d, b), [Binding{k2, v2}], Binds.at_second(Binding{k1, v1}, Binding{k2, v2}, d, a, b)(e1)(e2)(nb)):
               {Canon.holds(~S, ~fetch, s2, m, 1n+d, _) == True{}: Bool}
@@ -9360,14 +9372,14 @@ def Canon.split_holds(
   Tree.split(
     p1,
     p2,
-    Put{Node.hash(Node.leaf{k1, v1}), [Node.words(Node.leaf{k1, v1})]},
-    Some{Node.hash(Node.leaf{k2, v2})}
+    Put{Node.hash(Node.Leaf{k1, v1}), [Node.words(Node.Leaf{k1, v1})]},
+    Some{Node.hash(Node.Leaf{k2, v2})}
   )
     == Some{t}: Maybe<&2, Put>
 } -> {
   Tree.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
 } -> {
-  Tree.has(~S, ~fetch, s2, Node.words(Node.leaf{k2, v2})) == True{}: Bool
+  Tree.has(~S, ~fetch, s2, Node.words(Node.Leaf{k2, v2})) == True{}: Bool
 } -> {
   Canon.holds(
     ~S,
@@ -9410,7 +9422,7 @@ def Canon.split_holds(
             v1,
             k2,
             v2,
-            [Node.words(Node.leaf{k1, v1})],
+            [Node.words(Node.Leaf{k1, v1})],
             t2
           )(n1)(n2),
           t2 => e => hn2 => Canon.split_holds(
@@ -9649,17 +9661,17 @@ def Canon.set_holds.empty(
   k: List<&2, U32>,
   v: List<&2, U32>
 ) -> {
-  Some{Put.node(Node.leaf{k, v}, [])} == Some{t}: Maybe<&2, Put>
+  Some{Put.node(Node.Leaf{k, v}, [])} == Some{t}: Maybe<&2, Put>
 } -> {
   Tree.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
-} -> {Tree.has(~S, ~fetch, s2, Node.words(Node.leaf{k, v})) == True{}: Bool}:
+} -> {Tree.has(~S, ~fetch, s2, Node.words(Node.Leaf{k, v})) == True{}: Bool}:
   h =>
-    %Shared.Maybe.some_inj(Put, Put.node(Node.leaf{k, v}, []), t, h):
+    %Shared.Maybe.some_inj(Put, Put.node(Node.Leaf{k, v}, []), t, h):
       {
         Tree.holds(~S, ~fetch, s2, Put.nodes(_)) == True{}: Bool
-      } -> {Tree.has(~S, ~fetch, s2, Node.words(Node.leaf{k, v})) == True{}: Bool}
+      } -> {Tree.has(~S, ~fetch, s2, Node.words(Node.Leaf{k, v})) == True{}: Bool}
     hn => Shared.List.all.if_hit(
-      Tree.has(~S, ~fetch, s2, Node.words(Node.leaf{k, v})),
+      Tree.has(~S, ~fetch, s2, Node.words(Node.Leaf{k, v})),
       u => Tree.holds(~S, ~fetch, s2, [])
     )(hn)
 
@@ -9680,17 +9692,17 @@ def Canon.set_holds.leaf(
   s2: S,
   ec: {Shared.List.is_eq(~U32, ~U32.is_eq, k2, k) == c: Bool},
   hq: {q == List.drop(&2, Nat, Tree.path(k), d): List<&2, Nat>},
-  hl2: {Tree.has(~S, ~fetch, s2, Node.words(Node.leaf{k2, v2})) == True{}: Bool}
+  hl2: {Tree.has(~S, ~fetch, s2, Node.words(Node.Leaf{k2, v2})) == True{}: Bool}
 ) -> {
   Shared.Bool.when(
     Maybe<&2, Put>,
     c,
-    u => Some{Put.node(Node.leaf{k, v}, [])},
+    u => Some{Put.node(Node.Leaf{k, v}, [])},
     w => Tree.split(
       q,
       List.drop(&2, Nat, Tree.path(k2), d),
-      Put.node(Node.leaf{k, v}, []),
-      Some{Node.hash(Node.leaf{k2, v2})}
+      Put.node(Node.Leaf{k, v}, []),
+      Some{Node.hash(Node.Leaf{k2, v2})}
     )
   )
     == Some{t}: Maybe<&2, Put>
@@ -9835,12 +9847,12 @@ def Canon.set_holds.branch(
     t,
     t3 => {Tree.holds(~S, ~fetch, s2, Put.nodes(t3)) == True{}: Bool} -> {Canon.holds(~S, ~fetch, s2, 1n+m, d, Binds.put(bs, k, v)) == True{}: Bool},
     +t2 => +e => +hn =>
-      +rest = Shared.List.all.if_rest(Tree.has(~S, ~fetch, s2, Node.words(Node.branch{Parts.put(ps, x, Some{Put.root(t2)})})), u => Tree.holds(~S, ~fetch, s2, Put.nodes(t2)))(hn)
+      +rest = Shared.List.all.if_rest(Tree.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put(ps, x, Some{Put.root(t2)})})), u => Tree.holds(~S, ~fetch, s2, Put.nodes(t2)))(hn)
       Canon.holds_make(~S, ~fetch, s2, 1n+m, d, Binding{k, v}, Binds.drop(bs, k))(hne)(
     %Equal.sym(List<&2, Maybe<&2, Hashes.Hash>>, Canon.parts(1n+m, d, Binds.put(bs, k, v), Binds.put(bs, k, v)), Parts.put(ps, x, Canon.root(m, 1n+d, Binds.put(Binds.at(bs, d, x), k, v))), Canon.parts_of_put(m, d, bs, k, v, x)(hx)):
-      {Tree.has(~S, ~fetch, s2, Node.words(Node.branch{_})) == True{}: Bool}
-    %ihr(t2)(e): {Tree.has(~S, ~fetch, s2, Node.words(Node.branch{Parts.put(ps, x, _)})) == True{}: Bool}
-    Shared.List.all.if_hit(Tree.has(~S, ~fetch, s2, Node.words(Node.branch{Parts.put(ps, x, Some{Put.root(t2)})})), u => Tree.holds(~S, ~fetch, s2, Put.nodes(t2)))(hn))(Canon.holds_put(~S, ~fetch, ~grows, ~kept, Binds.put(bs, k, v), m, d, bs, k, v, x, s, s2, gr, hx, ihh(t2)(e)(rest), hold)))(hs)
+      {Tree.has(~S, ~fetch, s2, Node.words(Node.Branch{_})) == True{}: Bool}
+    %ihr(t2)(e): {Tree.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put(ps, x, _)})) == True{}: Bool}
+    Shared.List.all.if_hit(Tree.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put(ps, x, Some{Put.root(t2)})})), u => Tree.holds(~S, ~fetch, s2, Put.nodes(t2)))(hn))(Canon.holds_put(~S, ~fetch, ~grows, ~kept, Binds.put(bs, k, v), m, d, bs, k, v, x, s, s2, gr, hx, ihh(t2)(e)(rest), hold)))(hs)
 
 # a store s2 that grows from a store s that holds the canonical tree of
 # distinct bindings bs at depth d, whose path from there is p, and holds the
@@ -9891,9 +9903,9 @@ def Canon.set_holds(
       +hp => hd => +hh =>
         %Equal.sym(
           Maybe<&2, Node>,
-          Tree.node(~S, ~fetch, s, Node.hash(Node.leaf{k2, v2})),
-          Some{Node.leaf{k2, v2}},
-          Tree.has_node(~S, ~fetch, s, Node.leaf{k2, v2}, {==}, hh)
+          Tree.node(~S, ~fetch, s, Node.hash(Node.Leaf{k2, v2})),
+          Some{Node.Leaf{k2, v2}},
+          Tree.has_node(~S, ~fetch, s, Node.Leaf{k2, v2}, {==}, hh)
         ): {
           Tree.set.go(
             ~S,
@@ -9903,7 +9915,7 @@ def Canon.set_holds(
             d,
             k,
             v,
-            Some{Node.hash(Node.leaf{k2, v2})},
+            Some{Node.hash(Node.Leaf{k2, v2})},
             _
           )
             == Some{t}: Maybe<&2, Put>
@@ -9926,15 +9938,15 @@ def Canon.set_holds(
           s2,
           {==},
           hp,
-          Tree.has_kept(~S, ~fetch, ~grows, ~kept, s, s2, Node.words(Node.leaf{k2, v2}), gr)(hh)
+          Tree.has_kept(~S, ~fetch, ~grows, ~kept, s, s2, Node.words(Node.Leaf{k2, v2}), gr)(hh)
         )
     case Con{x, r} Con{Binding{+k2, +v2}, Nil{}}:
       +hp => hd => +hh =>
         %Equal.sym(
           Maybe<&2, Node>,
-          Tree.node(~S, ~fetch, s, Node.hash(Node.leaf{k2, v2})),
-          Some{Node.leaf{k2, v2}},
-          Tree.has_node(~S, ~fetch, s, Node.leaf{k2, v2}, {==}, hh)
+          Tree.node(~S, ~fetch, s, Node.hash(Node.Leaf{k2, v2})),
+          Some{Node.Leaf{k2, v2}},
+          Tree.has_node(~S, ~fetch, s, Node.Leaf{k2, v2}, {==}, hh)
         ): {
           Tree.set.go(
             ~S,
@@ -9944,7 +9956,7 @@ def Canon.set_holds(
             d,
             k,
             v,
-            Some{Node.hash(Node.leaf{k2, v2})},
+            Some{Node.hash(Node.Leaf{k2, v2})},
             _
           )
             == Some{t}: Maybe<&2, Put>
@@ -9975,7 +9987,7 @@ def Canon.set_holds(
           s2,
           {==},
           hp,
-          Tree.has_kept(~S, ~fetch, ~grows, ~kept, s, s2, Node.words(Node.leaf{k2, v2}), gr)(hh)
+          Tree.has_kept(~S, ~fetch, ~grows, ~kept, s, s2, Node.words(Node.Leaf{k2, v2}), gr)(hh)
         )
     case Nil{} Con{b1, Con{+b2, +rest}}:
       hp => hd => +hh =>
@@ -9985,21 +9997,21 @@ def Canon.set_holds(
             ~S,
             ~fetch,
             s,
-            Node.hash(Node.branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)})
+            Node.hash(Node.Branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)})
           ),
-          Some{Node.branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)}},
+          Some{Node.Branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)}},
           Tree.has_node(
             ~S,
             ~fetch,
             s,
-            Node.branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)},
+            Node.Branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)},
             Canon.parts_ok(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest),
             Shared.List.all.if_hit(
               Tree.has(
                 ~S,
                 ~fetch,
                 s,
-                Node.words(Node.branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)})
+                Node.words(Node.Branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)})
               ),
               u => Canon.holds.parts(~S, ~fetch, s, 0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)
             )(hh)
@@ -10013,7 +10025,7 @@ def Canon.set_holds(
             d,
             k,
             v,
-            Some{Node.hash(Node.branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)})},
+            Some{Node.hash(Node.Branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)})},
             _
           )
             == Some{t}: Maybe<&2, Put>
@@ -10033,13 +10045,13 @@ def Canon.set_holds(
             ~fetch,
             s,
             Node.hash(
-              Node.branch{
+              Node.Branch{
                 Canon.parts(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest)
               }
             )
           ),
           Some{
-            Node.branch{
+            Node.Branch{
               Canon.parts(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest)
             }
           },
@@ -10047,7 +10059,7 @@ def Canon.set_holds(
             ~S,
             ~fetch,
             s,
-            Node.branch{
+            Node.Branch{
               Canon.parts(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest)
             },
             Canon.parts_ok(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest),
@@ -10057,7 +10069,7 @@ def Canon.set_holds(
                 ~fetch,
                 s,
                 Node.words(
-                  Node.branch{
+                  Node.Branch{
                     Canon.parts(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest)
                   }
                 )
@@ -10084,7 +10096,7 @@ def Canon.set_holds(
             v,
             Some{
               Node.hash(
-                Node.branch{
+                Node.Branch{
                   Canon.parts(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest)
                 }
               )
@@ -10111,7 +10123,7 @@ def Canon.set_holds(
             ~fetch,
             s,
             Node.words(
-              Node.branch{
+              Node.Branch{
                 Canon.parts(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest)
               }
             )
@@ -10343,10 +10355,10 @@ def Canon.swap.entry(
         ih
       ): {
         Some{
-          Node.hash(Node.branch{_})
+          Node.hash(Node.Branch{_})
         }
           == Some{
-            Node.hash(Node.branch{Canon.parts(m, 1n+d, b <> a <> y, b <> a <> y)})
+            Node.hash(Node.Branch{Canon.parts(m, 1n+d, b <> a <> y, b <> a <> y)})
           }: Maybe<&2, Hashes.Hash>
       }
       {==}
@@ -10481,7 +10493,7 @@ def Canon.root_swap(
       Canon.swap.go(n, a <> b <> x, d, a, b, x),
       Canon.reorder(n, d, b <> a <> x, a, b, x)
     )
-  ): {Some{Node.hash(Node.branch{_})} == Canon.root(n, d, b <> a <> x): Maybe<&2, Hashes.Hash>}
+  ): {Some{Node.hash(Node.Branch{_})} == Canon.root(n, d, b <> a <> x): Maybe<&2, Hashes.Hash>}
   {==}
 
 # the key k1 is not k2 exactly when k2 is not k1, when c tells whether k2 is k1

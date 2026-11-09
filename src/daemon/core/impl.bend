@@ -74,21 +74,21 @@ def Line.code_read(
     == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Spec.Line>>
 }:
   match x:
-    case Spec.Line.branch{n}:
+    case Spec.Line.Branch{n}:
       Codes.Code.one_read(
         ~String,
         ~Spec.Line,
         ~Codes.Code.text.codec(),
-        a => Spec.Line.branch{a},
+        a => Spec.Line.Branch{a},
         n,
         r
       )
-    case Spec.Line.group{n}:
+    case Spec.Line.Group{n}:
       Codes.Code.one_read(
         ~String,
         ~Spec.Line,
         ~Codes.Code.text.codec(),
-        a => Spec.Line.group{a},
+        a => Spec.Line.Group{a},
         n,
         r
       )
@@ -108,21 +108,21 @@ def Member.code_read(
     == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Spec.Member>>
 }:
   match x:
-    case Spec.Member.node{n}:
+    case Spec.Member.Node{n}:
       Codes.Code.one_read(
         ~String,
         ~Spec.Member,
         ~Codes.Code.text.codec(),
-        a => Spec.Member.node{a},
+        a => Spec.Member.Node{a},
         n,
         r
       )
-    case Spec.Member.group{n}:
+    case Spec.Member.Group{n}:
       Codes.Code.one_read(
         ~String,
         ~Spec.Member,
         ~Codes.Code.text.codec(),
-        a => Spec.Member.group{a},
+        a => Spec.Member.Group{a},
         n,
         r
       )
@@ -142,17 +142,17 @@ def Content.code_read(
     == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Spec.Content>>
 }:
   match x:
-    case Spec.Content.bytes{b}:
+    case Spec.Content.Bytes{b}:
       Codes.Code.one_read(
         ~Texts.Bytes(),
         ~Spec.Content,
         ~Codes.Code.words.codec(),
-        a => Spec.Content.bytes{a},
+        a => Spec.Content.Bytes{a},
         b,
         r
       )
-    case Spec.Content.of{v}:
-      Codes.Code.one_read(~Ledgers.Id, ~Spec.Content, ~Id.codec(), a => Spec.Content.of{a}, v, r)
+    case Spec.Content.Of{v}:
+      Codes.Code.one_read(~Ledgers.Id, ~Spec.Content, ~Id.codec(), a => Spec.Content.Of{a}, v, r)
 
 # the code of contents
 def Content.codec() -> Codes.Codec(Spec.Content):
@@ -169,7 +169,7 @@ def Change.code_read(
     == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Spec.Change>>
 }:
   match x:
-    case Spec.Change.make{l, at, ms}:
+    case Spec.Change.Make{l, at, ms}:
       Codes.Code.three_read(
         ~Spec.Line,
         ~Maybe<&2, Ledgers.Id>,
@@ -178,22 +178,22 @@ def Change.code_read(
         ~Line.codec(),
         ~Codes.Code.maybe.codec(~Ledgers.Id, ~Id.codec()),
         ~Codes.Code.list.codec(~Spec.Member, ~Member.codec()),
-        a => b => c => Spec.Change.make{a, b, c},
+        a => b => c => Spec.Change.Make{a, b, c},
         l,
         at,
         ms,
         r
       )
-    case Spec.Change.own{os}:
+    case Spec.Change.Own{os}:
       Codes.Code.one_read(
         ~List<&2, String>,
         ~Spec.Change,
         ~Codes.Code.list.codec(~String, ~Codes.Code.text.codec()),
-        a => Spec.Change.own{a},
+        a => Spec.Change.Own{a},
         os,
         r
       )
-    case Spec.Change.write{n, base, c}:
+    case Spec.Change.Write{n, base, c}:
       Codes.Code.three_read(
         ~Resources.Name,
         ~Maybe<&2, Ledgers.Id>,
@@ -202,13 +202,13 @@ def Change.code_read(
         ~Name.codec(),
         ~Codes.Code.maybe.codec(~Ledgers.Id, ~Id.codec()),
         ~Content.codec(),
-        a => b => c => Spec.Change.write{a, b, c},
+        a => b => c => Spec.Change.Write{a, b, c},
         n,
         base,
         c,
         r
       )
-    case Spec.Change.resolve{k, n, c}:
+    case Spec.Change.Resolve{k, n, c}:
       Codes.Code.three_read(
         ~Ledgers.Id,
         ~Resources.Name,
@@ -217,34 +217,34 @@ def Change.code_read(
         ~Id.codec(),
         ~Name.codec(),
         ~Content.codec(),
-        a => b => c => Spec.Change.resolve{a, b, c},
+        a => b => c => Spec.Change.Resolve{a, b, c},
         k,
         n,
         c,
         r
       )
-    case Spec.Change.merge{v}:
-      Codes.Code.one_read(~Ledgers.Id, ~Spec.Change, ~Id.codec(), a => Spec.Change.merge{a}, v, r)
-    case Spec.Change.move{v}:
-      Codes.Code.one_read(~Ledgers.Id, ~Spec.Change, ~Id.codec(), a => Spec.Change.move{a}, v, r)
-    case Spec.Change.mark{m, n}:
+    case Spec.Change.Merge{v}:
+      Codes.Code.one_read(~Ledgers.Id, ~Spec.Change, ~Id.codec(), a => Spec.Change.Merge{a}, v, r)
+    case Spec.Change.Move{v}:
+      Codes.Code.one_read(~Ledgers.Id, ~Spec.Change, ~Id.codec(), a => Spec.Change.Move{a}, v, r)
+    case Spec.Change.Mark{m, n}:
       Codes.Code.two_read(
         ~String,
         ~String,
         ~Spec.Change,
         ~Codes.Code.text.codec(),
         ~Codes.Code.text.codec(),
-        a => b => Spec.Change.mark{a, b},
+        a => b => Spec.Change.Mark{a, b},
         m,
         n,
         r
       )
-    case Spec.Change.members{ms}:
+    case Spec.Change.Members{ms}:
       Codes.Code.one_read(
         ~List<&2, Spec.Member>,
         ~Spec.Change,
         ~Codes.Code.list.codec(~Spec.Member, ~Member.codec()),
-        a => Spec.Change.members{a},
+        a => Spec.Change.Members{a},
         ms,
         r
       )
@@ -261,16 +261,16 @@ def Ask.code_read(
   Spec.Ask.code.read(Spec.Ask.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Spec.Ask>>
 }:
   match x:
-    case Spec.Ask.start{os}:
+    case Spec.Ask.Start{os}:
       Codes.Code.one_read(
         ~List<&2, String>,
         ~Spec.Ask,
         ~Codes.Code.list.codec(~String, ~Codes.Code.text.codec()),
-        a => Spec.Ask.start{a},
+        a => Spec.Ask.Start{a},
         os,
         r
       )
-    case Spec.Ask.on{st, l, c}:
+    case Spec.Ask.On{st, l, c}:
       Codes.Code.three_read(
         ~Ledgers.Id,
         ~Maybe<&2, Spec.Line>,
@@ -279,7 +279,7 @@ def Ask.code_read(
         ~Id.codec(),
         ~Codes.Code.maybe.codec(~Spec.Line, ~Line.codec()),
         ~Change.codec(),
-        a => b => c => Spec.Ask.on{a, b, c},
+        a => b => c => Spec.Ask.On{a, b, c},
         st,
         l,
         c,
@@ -406,7 +406,7 @@ def Write.verdict(
     s,
     name,
     base,
-    Spec.Content.bytes{x},
+    Spec.Content.Bytes{x},
     h
   )
     == Some{
@@ -435,7 +435,7 @@ def Write.verdict(
               _,
               h,
               u => Spec.Judge.then(
-                Spec.Judge.content(s, Spec.Content.bytes{x}),
+                Spec.Judge.content(s, Spec.Content.Bytes{x}),
                 h,
                 w => Spec.Judge.when(
                   same1,
@@ -444,7 +444,7 @@ def Write.verdict(
                     Spec.Work.set(
                       Spec.Work{s, h, []},
                       Spec.Key.res(name),
-                      Spec.Res.code(Spec.Content.bytes(s, name, Spec.Content.bytes{x}))
+                      Spec.Res.code(Spec.Content.bytes(s, name, Spec.Content.Bytes{x}))
                     )
                   )
                 )
@@ -481,16 +481,16 @@ def Write.verdict(
 def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
   +h1 => +ht => +ho => +hg => +hw => hb => hs => +hp => +hf =>
     +q = {
-      Spec.Ask.on{
+      Spec.Ask.On{
         r,
-        Some{Spec.Line.branch{b}},
-        Spec.Change.write{name, base, Spec.Content.bytes{x}}
+        Some{Spec.Line.Branch{b}},
+        Spec.Change.Write{name, base, Spec.Content.Bytes{x}}
       }: Spec.Ask
     }
     +i = Spec.Envelope.of(e)
     +t = Spec.Envelope.time(e)
     +s1 = Spec.Node.taken(s, e, q)
-    +c = Spec.Line.chain(r, Some{Spec.Line.branch{b}})
+    +c = Spec.Line.chain(r, Some{Spec.Line.Branch{b}})
     +root = Spec.Judge.root(
       s1,
       c,
@@ -507,7 +507,7 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
           ask1,
           i
         )
-          == Ledgers.Status.done{True{}}: Ledgers.Status
+          == Ledgers.Status.Done{True{}}: Ledgers.Status
       },
       {
         Ledgers.State.decided(
@@ -517,7 +517,7 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
           i
         )
           == Some{
-            Ledgers.Vote{i, True{}, Ledgers.View.on{c, None{}, None{}}, Some{Trees.Put.root(p)}}
+            Ledgers.Vote{i, True{}, Ledgers.View.On{c, None{}, None{}}, Some{Trees.Put.root(p)}}
           }: Maybe<&2, Ledgers.Vote>
       }
         & {Ledgers.Data.holds(~Spec.Ask, ask1, ds) == True{}: Bool},
@@ -552,7 +552,7 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
           i
         )
           == Some{
-            Ledgers.Vote{i, True{}, Ledgers.View.on{c, None{}, None{}}, Some{Trees.Put.root(p)}}
+            Ledgers.Vote{i, True{}, Ledgers.View.On{c, None{}, None{}}, Some{Trees.Put.root(p)}}
           }: Maybe<&2, Ledgers.Vote>
       },
       {Ledgers.Data.holds(~Spec.Ask, ask1, ds) == True{}: Bool},
@@ -564,7 +564,7 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
             ask1,
             i
           )
-            == Ledgers.Status.done{True{}}: Ledgers.Status
+            == Ledgers.Status.Done{True{}}: Ledgers.Status
         },
         {
           Ledgers.State.decided(
@@ -574,7 +574,7 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
             i
           )
             == Some{
-              Ledgers.Vote{i, True{}, Ledgers.View.on{c, None{}, None{}}, Some{Trees.Put.root(p)}}
+              Ledgers.Vote{i, True{}, Ledgers.View.On{c, None{}, None{}}, Some{Trees.Put.root(p)}}
             }: Maybe<&2, Ledgers.Vote>
         }
           & {Ledgers.Data.holds(~Spec.Ask, ask1, ds) == True{}: Bool},
@@ -610,7 +610,7 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
           i
         )
           == Some{
-            Ledgers.Vote{i, True{}, Ledgers.View.on{c, None{}, None{}}, Some{Trees.Put.root(p)}}
+            Ledgers.Vote{i, True{}, Ledgers.View.On{c, None{}, None{}}, Some{Trees.Put.root(p)}}
           }: Maybe<&2, Ledgers.Vote>
       },
       {Ledgers.Data.holds(~Spec.Ask, ask1, ds) == True{}: Bool},
@@ -622,7 +622,7 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
             ask1,
             i
           )
-            == Ledgers.Status.done{True{}}: Ledgers.Status
+            == Ledgers.Status.Done{True{}}: Ledgers.Status
         },
         {
           Ledgers.State.decided(
@@ -632,7 +632,7 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
             i
           )
             == Some{
-              Ledgers.Vote{i, True{}, Ledgers.View.on{c, None{}, None{}}, Some{Trees.Put.root(p)}}
+              Ledgers.Vote{i, True{}, Ledgers.View.On{c, None{}, None{}}, Some{Trees.Put.root(p)}}
             }: Maybe<&2, Ledgers.Vote>
         }
           & {Ledgers.Data.holds(~Spec.Ask, ask1, ds) == True{}: Bool},
@@ -682,14 +682,14 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
       p
     )(hp)(Holds.of(Trees.Put.nodes(p), ask1)(hd))
     ((
-        %Equal.sym(Ledgers.Status, Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, ask1, i), Ledgers.Status.done{True{}}, hst):
-          {Spec.Answer.of(ask1, i, _) == Spec.Answer.written{i}: Spec.Answer}
+        %Equal.sym(Ledgers.Status, Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, ask1, i), Ledgers.Status.Done{True{}}, hst):
+          {Spec.Answer.of(ask1, i, _) == Spec.Answer.Written{i}: Spec.Answer}
         %Equal.sym(Maybe<&2, Ledgers.Asked<Spec.Ask>>, Ledgers.State.asked(~Spec.Ask, ask1, i), Some{Ledgers.Asked{t, q}}, ha):
-          {Spec.Answer.taken(ask1, i, _) == Spec.Answer.written{i}: Spec.Answer}
+          {Spec.Answer.taken(ask1, i, _) == Spec.Answer.Written{i}: Spec.Answer}
         {==}), (
-        %Equal.sym(Ledgers.Status, Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, ask1, i), Ledgers.Status.done{True{}}, hst):
+        %Equal.sym(Ledgers.Status, Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, ask1, i), Ledgers.Status.Done{True{}}, hst):
           {Spec.Res.at(ask1, name, Shared.Bool.when(Maybe<&2, Ledgers.Id>, Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Ledgers.Status.verdict(_), Some{True{}}), u => Some{i}, u => None{})) == Some{x}: Maybe<&2, Texts.Bytes()>}
-        %Equal.sym(Maybe<&2, Ledgers.Vote>, Ledgers.State.decided(~Spec.Ask, ~Spec.Ask.view, ask1, i), Some{Ledgers.Vote{i, True{}, Ledgers.View.on{c, None{}, None{}}, Some{Trees.Put.root(p)}}}, hdc):
+        %Equal.sym(Maybe<&2, Ledgers.Vote>, Ledgers.State.decided(~Spec.Ask, ~Spec.Ask.view, ask1, i), Some{Ledgers.Vote{i, True{}, Ledgers.View.On{c, None{}, None{}}, Some{Trees.Put.root(p)}}}, hdc):
           {Spec.Res.get(ask1, Maybe.bind(&2, Maybe<&2, Hashes.Hash>, Hashes.Hash, Maybe.bind(&2, Ledgers.Vote, Maybe<&2, Hashes.Hash>, Maybe.bind(&2, Ledgers.Vote, Ledgers.Vote, _, y => Spec.Vote.taken(y)), y => Some{Ledgers.Vote.result_of(Some{y})}), g => g), name) == Some{x}: Maybe<&2, Texts.Bytes()>}
         %Equal.sym(Maybe<&2, List<&2, U32>>, Trees.Tree.get(~Spec.State(), ~Spec.Store.fetch, ask1, Some{Trees.Put.root(p)}, Spec.Key.res(name)), Some{Spec.Res.code(Some{x})}, hgs): {Maybe.bind(&2, List<&2, U32>, Texts.Bytes(), _, ws => Spec.Res.read(ws)) == Some{x}: Maybe<&2, Texts.Bytes()>}
         Res.read_code(x)))
