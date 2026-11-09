@@ -6,10 +6,10 @@ import ./shared/cell.bend as Cells
 # -------
 # The owners of a decision each cast at most one ballot. A choice has a
 # majority when more ballots are for it than are not. A bucket is decided by a
-# majority; else, once every owner cast a ballot, by the choice with the most
-# ballots (the first owner's, on a tie). A decision only gains information as
-# ballots arrive, so it never changes (Quorum.decide_kept), and a split stops
-# no line whose owners all vote.
+# majority; else, once every owner cast a ballot, by the candidate of one pass
+# over the ballots (Quorum.pass). A decision only gains information as ballots
+# arrive, so it never changes (Quorum.decide_kept), and a split stops no line
+# whose owners all vote.
 
 # the ballot v is for x
 def Quorum.hit(~B: Data, ~same: B -> B -> Bool, v: Maybe<&2, Cells.Cell<B>>, x: B) -> Bool:
@@ -95,34 +95,67 @@ def Quorum.full(-B: Data, bs: List<&2, Maybe<&2, Cells.Cell<B>>>) -> Bool:
     case Con{Some{v}, r}:
       Quorum.full(B, r)
 
-# the vote of ks with the most ballots of bs, the first on a tie, after best
-# with n ballots
-def Quorum.most(
+# a candidate and its count
+type Pass<-B: Data> is Data:
+  Pass{cand: Maybe<&2, B>, count: Nat}
+
+# the candidate of the pass p
+def Pass.cand(-B: Data, p: Pass<B>) -> Maybe<&2, B>:
+  match p:
+    case Pass{c, k}:
+      c
+
+# the pass after the vote b, from the candidate c and the count 1 + j
+def Quorum.step.vote(~B: Data, ~same: B -> B -> Bool, b: B, c: Maybe<&2, B>, +j: Nat) -> Pass<B>:
+  match c:
+    case Some{+a}:
+      Bool.pick(Pass<B>, same(a, b), Pass{Some{a}, 2n+j}, Pass{Some{a}, j})
+    case None{}:
+      Pass{None{}, j}
+
+# the pass after the ballot v, from the candidate c and the count k
+def Quorum.step.of(
   ~B: Data,
   ~same: B -> B -> Bool,
-  ks: List<&2, Maybe<&2, Cells.Cell<B>>>,
-  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
-  best: Maybe<&2, B>,
-  +n: Nat
-) -> Maybe<&2, B>:
-  match ks:
+  v: Maybe<&2, Cells.Cell<B>>,
+  c: Maybe<&2, B>,
+  k: Nat
+) -> Pass<B>:
+  match v k:
+    case Some{Cells.One{b}} 0n:
+      Pass{Some{b}, 1n}
+    case Some{Cells.One{+b}} 1n+j:
+      Quorum.step.vote(~B, ~same, b, c, j)
+    case Some{Cells.Many{}} 0n:
+      Pass{c, 0n}
+    case Some{Cells.Many{}} 1n+j:
+      Pass{c, j}
+    case None{} 0n:
+      Pass{c, 0n}
+    case None{} 1n+j:
+      Pass{c, j}
+
+# the pass after the ballot v
+def Quorum.step(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  v: Maybe<&2, Cells.Cell<B>>,
+  p: Pass<B>
+) -> Pass<B>:
+  match p:
+    case Pass{c, k}:
+      Quorum.step.of(~B, ~same, v, c, k)
+
+# the pass over the ballots bs, the last first
+def Quorum.pass(~B: Data, ~same: B -> B -> Bool, bs: List<&2, Maybe<&2, Cells.Cell<B>>>) -> Pass<B>:
+  match bs:
     case Nil{}:
-      best
-    case Con{Some{Cells.One{+b}}, +r}:
-      +c = Quorum.yes(~B, ~same, bs, b)
-      Shared.Bool.when(
-        Maybe<&2, B>,
-        Nat.is_lt(n, c),
-        u => Quorum.most(~B, ~same, r, bs, Some{b}, c),
-        u => Quorum.most(~B, ~same, r, bs, best, n)
-      )
-    case Con{Some{Cells.Many{}}, r}:
-      Quorum.most(~B, ~same, r, bs, best, n)
-    case Con{None{}, r}:
-      Quorum.most(~B, ~same, r, bs, best, n)
+      Pass{None{}, 0n}
+    case Con{v, r}:
+      Quorum.step(~B, ~same, v, Quorum.pass(~B, ~same, r))
 
 # the decision of bs once the winner w is known: w; else, when every ballot is
-# cast, the vote with the most ballots
+# cast, the candidate of one pass over them
 def Quorum.decide.of(
   ~B: Data,
   ~same: B -> B -> Bool,
@@ -136,7 +169,7 @@ def Quorum.decide.of(
       Shared.Bool.when(
         Maybe<&2, B>,
         Quorum.full(B, bs),
-        u => Quorum.most(~B, ~same, bs, bs, None{}, 0n),
+        u => Pass.cand(B, Quorum.pass(~B, ~same, bs)),
         u => None{}
       )
 
@@ -832,7 +865,7 @@ def Quorum.decide_kept.full(
   Shared.Bool.when(
     Maybe<&2, B>,
     f,
-    u => Quorum.most(~B, ~same, bs, bs, None{}, 0n),
+    u => Pass.cand(B, Quorum.pass(~B, ~same, bs)),
     u => None{}
   )
     == Some{x}: Maybe<&2, B>
@@ -853,7 +886,7 @@ def Quorum.decide_kept.full(
             Shared.Bool.when(
               Maybe<&2, B>,
               _,
-              u => Quorum.most(~B, ~same, bs, bs, None{}, 0n),
+              u => Pass.cand(B, Quorum.pass(~B, ~same, bs)),
               u => None{}
             )
               == Some{x}: Maybe<&2, B>
@@ -975,65 +1008,6 @@ def Quorum.decide_one(ty, same, laws, x):
 # raises the count, any other ballot lowers it, and a ballot for another vote
 # takes over a count of zero. A choice with a majority is the candidate at the
 # end, so one more count tells whether it won (Quorum.winner_fast_eq).
-
-# a candidate and its count
-type Pass<-B: Data> is Data:
-  Pass{cand: Maybe<&2, B>, count: Nat}
-
-# the candidate of the pass p
-def Pass.cand(-B: Data, p: Pass<B>) -> Maybe<&2, B>:
-  match p:
-    case Pass{c, k}:
-      c
-
-# the pass after the vote b, from the candidate c and the count 1 + j
-def Quorum.step.vote(~B: Data, ~same: B -> B -> Bool, b: B, c: Maybe<&2, B>, +j: Nat) -> Pass<B>:
-  match c:
-    case Some{+a}:
-      Bool.pick(Pass<B>, same(a, b), Pass{Some{a}, 2n+j}, Pass{Some{a}, j})
-    case None{}:
-      Pass{None{}, j}
-
-# the pass after the ballot v, from the candidate c and the count k
-def Quorum.step.of(
-  ~B: Data,
-  ~same: B -> B -> Bool,
-  v: Maybe<&2, Cells.Cell<B>>,
-  c: Maybe<&2, B>,
-  k: Nat
-) -> Pass<B>:
-  match v k:
-    case Some{Cells.One{b}} 0n:
-      Pass{Some{b}, 1n}
-    case Some{Cells.One{+b}} 1n+j:
-      Quorum.step.vote(~B, ~same, b, c, j)
-    case Some{Cells.Many{}} 0n:
-      Pass{c, 0n}
-    case Some{Cells.Many{}} 1n+j:
-      Pass{c, j}
-    case None{} 0n:
-      Pass{c, 0n}
-    case None{} 1n+j:
-      Pass{c, j}
-
-# the pass after the ballot v
-def Quorum.step(
-  ~B: Data,
-  ~same: B -> B -> Bool,
-  v: Maybe<&2, Cells.Cell<B>>,
-  p: Pass<B>
-) -> Pass<B>:
-  match p:
-    case Pass{c, k}:
-      Quorum.step.of(~B, ~same, v, c, k)
-
-# the pass over the ballots bs, the last first
-def Quorum.pass(~B: Data, ~same: B -> B -> Bool, bs: List<&2, Maybe<&2, Cells.Cell<B>>>) -> Pass<B>:
-  match bs:
-    case Nil{}:
-      Pass{None{}, 0n}
-    case Con{v, r}:
-      Quorum.step(~B, ~same, v, Quorum.pass(~B, ~same, r))
 
 # the candidate of p, when it has a majority of bs
 def Quorum.winner_fast.of(
