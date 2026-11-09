@@ -12,11 +12,11 @@ A walk over history is replaced by fixed-key reads of replicated facts, so the c
 
 - Heights are 32-bit, high bit first. A line is a list of owner epochs (genesis cells); a step is the majority of the epoch's owners in its bucket; `where(i)` says where a request was decided.
 - Strict finality: a sync only appends to a listing (prefix-closed, as `chain_kept` today), not per-step only.
-- Versions are persistent trees in the ledger. Each vote names the tree root it makes, and the next tree is a proven function of the tip tree and the request: a decided step fixes its tree, and any node can recheck it.
+- Versions are persistent trees in the ledger, from resource name to content. Each vote names the tree root it makes, and the next tree is a proven function of the tip tree and the request: a decided step fixes its tree, and any node can recheck it.
 - Split votes: vote rounds, so a line with many owners does not stall on a split.
 - Owner epochs: each read checks the whole epoch chain back (no weaker one-level check).
-- Effects (file watching, sockets, files) live in transport/IO; the core stays pure.
-- Contents stored once by a hash; a collision shows as a conflict (many), never as wrong content.
+- Effects live in transport/IO, one adapter per resource type (file://, a server, any URI kind): each detects changes, retries and optimises in its own way (README). The core stays pure: it sees a resource only as a name (space:path) and bytes.
+- Resource contents (bytes, whatever type the resource is) stored once by a hash; a collision shows as a conflict (many), never as wrong content.
 - The ledger stays generic in the change type; equality is a structural is_eq per type, proven equal to code equality.
 - Scope is not reduced: item-level formats for Bend and C are in scope, with everything else in README.md.
 - First: experiments E1-E6 in scratch (32-bit descent and range scan; quorum over a list read once; tree get_set; flat write benchmark at 1k and 10k; visited-set reach transitivity; delta sync law), then the migration in order, each step checking.
