@@ -1717,16 +1717,36 @@ def Node.vote(n: String, s: State()) -> State():
 # Reads
 # -----
 
-# the step k (taken or not), whose request is a, names the mark m
-def Mark.names(k: Bool, a: Maybe<&2, Ledgers.Asked<Ask>>, m: String) -> Bool:
+# whether the step (taken or not: k) whose request is a names the mark m (none:
+# a taken step whose request the node does not hold yet)
+def Mark.at(k: Bool, a: Maybe<&2, Ledgers.Asked<Ask>>, m: String) -> Maybe<&2, Bool>:
   match k a:
+    case False{} w:
+      Some{False{}}
+    case True{} None{}:
+      None{}
     case True{} Some{Ledgers.Asked{t, Ask.On{st, l, Change.Mark{x, d}}}}:
-      String.eq(x, m)
-    case w b:
-      False{}
+      Some{String.eq(x, m)}
+    case True{} Some{b}:
+      Some{False{}}
+
+# prev when the step names the mark (x), else rest; none while x is not known
+def Mark.pick(
+  x: Maybe<&2, Bool>,
+  prev: Maybe<&2, Ledgers.Id>,
+  rest: Unit -> Maybe<&2, Ledgers.Id>
+) -> Maybe<&2, Ledgers.Id>:
+  match x:
+    case None{}:
+      None{}
+    case Some{True{}}:
+      prev
+    case Some{False{}}:
+      rest(Unit{})
 
 # the version that the first mark m of the steps xs names: the version before
-# it, after prev
+# it, after prev. It reads only steps whose requests the node holds, so a mark
+# that it finds is the mark for good (Node.mark_kept)
 def Mark.first(
   +s: State(),
   xs: List<&2, Ledgers.Vote>,
@@ -1737,10 +1757,9 @@ def Mark.first(
     case Nil{}:
       None{}
     case Con{Ledgers.Vote{+i, +k, w, h}, r}:
-      Shared.Bool.when(
-        Maybe<&2, Ledgers.Id>,
-        Mark.names(k, Ledgers.State.asked(~Ask, s, i), m),
-        u => prev,
+      Mark.pick(
+        Mark.at(k, Ledgers.State.asked(~Ask, s, i), m),
+        prev,
         u => Mark.first(
           s,
           r,
@@ -2836,6 +2855,19 @@ law Node.version_kept:
   {Ledgers.State.grows(~Ask, ~Ask.is_eq, s, s2) == True{}: Bool}
     -> {Node.is_version(s, v) == True{}: Bool}
     -> {Node.is_version(s2, v) == True{}: Bool}
+
+# a mark names its version for good: the version that a mark names stays as
+# the state grows
+law Node.mark_kept:
+  for +s: State()
+  for +s2: State()
+  for +r: Ledgers.Id
+  for +b: String
+  for +m: String
+  for +v: Ledgers.Id
+  {Ledgers.State.grows(~Ask, ~Ask.is_eq, s, s2) == True{}: Bool}
+    -> {Node.version(s, Point.Mark{r, b, m}) == Some{v}: Maybe<&2, Ledgers.Id>}
+    -> {Node.version(s2, Point.Mark{r, b, m}) == Some{v}: Maybe<&2, Ledgers.Id>}
 
 # the versions of a branch only grow at their end as the state grows: its
 # history is never rewritten

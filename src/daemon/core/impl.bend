@@ -1962,8 +1962,10 @@ def Steps.of_bind(
       )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
-# the versions grow at their end, once the listing m of the line is known
-def Versions.grow.at(
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# the steps of a line start its steps in a state that grows, once the listing m
+# of the line is known
+def Steps.grow.at(
   s: Spec.State(),
   +s2: Spec.State(),
   +c: Ledgers.Chain,
@@ -1973,65 +1975,315 @@ def Versions.grow.at(
 ) -> {
   List.take(
     &2,
-    Ledgers.Id,
-    Spec.Steps.taken(
-      Maybe.default(
-        &2,
-        List<&2, Ledgers.Vote>,
-        Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s2, c),
-        []
-      )
+    Ledgers.Vote,
+    Maybe.default(
+      &2,
+      List<&2, Ledgers.Vote>,
+      Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s2, c),
+      []
     ),
-    List.length(&2, Ledgers.Id, Spec.Steps.taken(Maybe.default(&2, List<&2, Ledgers.Vote>, m, [])))
+    List.length(&2, Ledgers.Vote, Maybe.default(&2, List<&2, Ledgers.Vote>, m, []))
   )
-    == Spec.Steps.taken(Maybe.default(&2, List<&2, Ledgers.Vote>, m, [])): List<&2, Ledgers.Id>
+    == Maybe.default(&2, List<&2, Ledgers.Vote>, m, []): List<&2, Ledgers.Vote>
 }:
   match m:
     case None{}:
       Shared.List.take_zero(
-        Ledgers.Id,
-        Spec.Steps.taken(
-          Maybe.default(
-            &2,
-            List<&2, Ledgers.Vote>,
-            Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s2, c),
-            []
-          )
-        )
-      )
-    case Some{+xs}:
-      Steps.taken_prefix(
-        xs,
+        Ledgers.Vote,
         Maybe.default(
           &2,
           List<&2, Ledgers.Vote>,
           Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s2, c),
           []
         )
+      )
+    case Some{+xs}:
+      Steps.of_bind(
+        xs,
+        Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s2, c)
       )(
-        Steps.of_bind(
-          xs,
-          Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s2, c)
-        )(
-          Ledgers.Line.steps_grow(
-            ~Spec.Ask,
-            ~Spec.Ask.is_eq,
-            ~Ask.laws(),
-            ~Spec.Ask.view,
-            s,
-            s2,
-            c,
-            xs
-          )(gr)(e)
-        )
+        Ledgers.Line.steps_grow(
+          ~Spec.Ask,
+          ~Spec.Ask.is_eq,
+          ~Ask.laws(),
+          ~Spec.Ask.view,
+          s,
+          s2,
+          c,
+          xs
+        )(gr)(e)
       )
 
 def Spec.Node.versions_grow(s, s2, r, b):
-  +gr => Versions.grow.at(
-    s,
-    s2,
-    Spec.Line.chain(r, Some{Spec.Line.Branch{b}}),
-    gr,
-    Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s, Spec.Line.chain(r, Some{Spec.Line.Branch{b}})),
-    {==}
+  +gr =>
+    +c = Spec.Line.chain(r, Some{Spec.Line.Branch{b}})
+    Steps.taken_prefix(
+      Spec.Node.steps(s, r, Some{Spec.Line.Branch{b}}),
+      Spec.Node.steps(s2, r, Some{Spec.Line.Branch{b}})
+    )(Steps.grow.at(s, s2, c, gr, Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s, c), {==}))
+
+# Marks
+# -----
+
+# what a step says of a mark stays, once its request a in s is known
+def At.kept.at(
+  +s: Spec.State(),
+  +s2: Spec.State(),
+  +i: Ledgers.Id,
+  k: Bool,
+  m: String,
+  -b: Bool,
+  gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
+  a: Maybe<&2, Ledgers.Asked<Spec.Ask>>,
+  ea: {Ledgers.State.asked(~Spec.Ask, s, i) == a: Maybe<&2, Ledgers.Asked<Spec.Ask>>}
+) -> {
+  Spec.Mark.at(k, a, m) == Some{b}: Maybe<&2, Bool>
+} -> {Spec.Mark.at(k, Ledgers.State.asked(~Spec.Ask, s2, i), m) == Some{b}: Maybe<&2, Bool>}:
+  match k a:
+    case False{} w:
+      h => h
+    case True{} None{}:
+      h => Empty.absurd(
+        {Spec.Mark.at(True{}, Ledgers.State.asked(~Spec.Ask, s2, i), m) == Some{b}: Maybe<&2, Bool>},
+        Shared.Maybe.none_ne_some(Bool, b, h)
+      )
+    case True{} Some{z}:
+      h =>
+        %Equal.sym(
+          Maybe<&2, Ledgers.Asked<Spec.Ask>>,
+          Ledgers.State.asked(~Spec.Ask, s2, i),
+          Some{z},
+          Ledgers.State.read_grows(
+            ~Spec.Ask,
+            ~Spec.Ask.is_eq,
+            ~Ask.laws(),
+            ~Ledgers.Asked<Spec.Ask>,
+            x => Ledgers.Asked.of(~Spec.Ask, x),
+            {==},
+            s,
+            s2,
+            Ledgers.Slot.ask(i),
+            z
+          )(gr)(ea)
+        ): {Spec.Mark.at(True{}, _, m) == Some{b}: Maybe<&2, Bool>}
+        h
+
+# Mark.kept.go at the first step, once what it says of the mark in s is known
+# (t0); ih is Mark.kept.go of the steps after it
+def Mark.kept.at(
+  +s: Spec.State(),
+  +s2: Spec.State(),
+  +i: Ledgers.Id,
+  +k: Bool,
+  +m: String,
+  -v: Ledgers.Id,
+  gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
+  +prev: Maybe<&2, Ledgers.Id>,
+  +xr: List<&2, Ledgers.Vote>,
+  +yr: List<&2, Ledgers.Vote>,
+  t0: Maybe<&2, Bool>,
+  et: {Spec.Mark.at(k, Ledgers.State.asked(~Spec.Ask, s, i), m) == t0: Maybe<&2, Bool>},
+  ih: {
+    Spec.Mark.first(
+      s,
+      xr,
+      Shared.Bool.when(Maybe<&2, Ledgers.Id>, k, u => Some{i}, u => prev),
+      m
+    )
+      == Some{v}: Maybe<&2, Ledgers.Id>
+  } -> {
+    Spec.Mark.first(
+      s2,
+      yr,
+      Shared.Bool.when(Maybe<&2, Ledgers.Id>, k, u => Some{i}, u => prev),
+      m
+    )
+      == Some{v}: Maybe<&2, Ledgers.Id>
+  }
+) -> {
+  Spec.Mark.pick(
+    t0,
+    prev,
+    u => Spec.Mark.first(
+      s,
+      xr,
+      Shared.Bool.when(Maybe<&2, Ledgers.Id>, k, w => Some{i}, w => prev),
+      m
+    )
   )
+    == Some{v}: Maybe<&2, Ledgers.Id>
+} -> {
+  Spec.Mark.pick(
+    Spec.Mark.at(k, Ledgers.State.asked(~Spec.Ask, s2, i), m),
+    prev,
+    u => Spec.Mark.first(
+      s2,
+      yr,
+      Shared.Bool.when(Maybe<&2, Ledgers.Id>, k, w => Some{i}, w => prev),
+      m
+    )
+  )
+    == Some{v}: Maybe<&2, Ledgers.Id>
+}:
+  match t0:
+    case None{}:
+      h => Empty.absurd(
+        {
+          Spec.Mark.pick(
+            Spec.Mark.at(k, Ledgers.State.asked(~Spec.Ask, s2, i), m),
+            prev,
+            u => Spec.Mark.first(
+              s2,
+              yr,
+              Shared.Bool.when(Maybe<&2, Ledgers.Id>, k, w => Some{i}, w => prev),
+              m
+            )
+          )
+            == Some{v}: Maybe<&2, Ledgers.Id>
+        },
+        Shared.Maybe.none_ne_some(Ledgers.Id, v, h)
+      )
+    case Some{True{}}:
+      h =>
+        %Equal.sym(
+          Maybe<&2, Bool>,
+          Spec.Mark.at(k, Ledgers.State.asked(~Spec.Ask, s2, i), m),
+          Some{True{}},
+          At.kept.at(s, s2, i, k, m, True{}, gr, Ledgers.State.asked(~Spec.Ask, s, i), {==})(et)
+        ): {
+          Spec.Mark.pick(
+            _,
+            prev,
+            u => Spec.Mark.first(
+              s2,
+              yr,
+              Shared.Bool.when(Maybe<&2, Ledgers.Id>, k, w => Some{i}, w => prev),
+              m
+            )
+          )
+            == Some{v}: Maybe<&2, Ledgers.Id>
+        }
+        h
+    case Some{False{}}:
+      h =>
+        %Equal.sym(
+          Maybe<&2, Bool>,
+          Spec.Mark.at(k, Ledgers.State.asked(~Spec.Ask, s2, i), m),
+          Some{False{}},
+          At.kept.at(s, s2, i, k, m, False{}, gr, Ledgers.State.asked(~Spec.Ask, s, i), {==})(et)
+        ): {
+          Spec.Mark.pick(
+            _,
+            prev,
+            u => Spec.Mark.first(
+              s2,
+              yr,
+              Shared.Bool.when(Maybe<&2, Ledgers.Id>, k, w => Some{i}, w => prev),
+              m
+            )
+          )
+            == Some{v}: Maybe<&2, Ledgers.Id>
+        }
+        ih(h)
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# the version that the first mark m of the steps xs names is the one that it
+# names in steps that start with xs, of a state that grows
+def Mark.kept.go(
+  +s: Spec.State(),
+  +s2: Spec.State(),
+  +m: String,
+  -v: Ledgers.Id,
+  +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
+  xs: List<&2, Ledgers.Vote>,
+  ys: List<&2, Ledgers.Vote>,
+  +prev: Maybe<&2, Ledgers.Id>
+) -> {
+  List.take(&2, Ledgers.Vote, ys, List.length(&2, Ledgers.Vote, xs)) == xs: List<&2, Ledgers.Vote>
+} -> {
+  Spec.Mark.first(s, xs, prev, m) == Some{v}: Maybe<&2, Ledgers.Id>
+} -> {Spec.Mark.first(s2, ys, prev, m) == Some{v}: Maybe<&2, Ledgers.Id>}:
+  match xs ys:
+    case Nil{} y:
+      e => h => Empty.absurd(
+        {Spec.Mark.first(s2, y, prev, m) == Some{v}: Maybe<&2, Ledgers.Id>},
+        Shared.Maybe.none_ne_some(Ledgers.Id, v, h)
+      )
+    case Con{x, xr} Nil{}:
+      e => h => Empty.absurd(
+        {Spec.Mark.first(s2, [], prev, m) == Some{v}: Maybe<&2, Ledgers.Id>},
+        Shared.Bool.false_ne_true(
+          Equal.cong(
+            List<&2, Ledgers.Vote>,
+            Bool,
+            l => List.is_empty(&2, Ledgers.Vote, l),
+            x <> xr,
+            [],
+            Equal.sym(List<&2, Ledgers.Vote>, [], x <> xr, e)
+          )
+        )
+      )
+    case Con{Ledgers.Vote{+i, +k, +w, +hh}, +xr} Con{y, +yr}:
+      +e => h =>
+        %Equal.sym(
+          Ledgers.Vote,
+          y,
+          Ledgers.Vote{i, k, w, hh},
+          Shared.List.head_eq(
+            Ledgers.Vote,
+            y,
+            Ledgers.Vote{i, k, w, hh},
+            List.take(&2, Ledgers.Vote, yr, List.length(&2, Ledgers.Vote, xr)),
+            xr,
+            e
+          )
+        ): {Spec.Mark.first(s2, _ <> yr, prev, m) == Some{v}: Maybe<&2, Ledgers.Id>}
+        Mark.kept.at(
+          s,
+          s2,
+          i,
+          k,
+          m,
+          v,
+          gr,
+          prev,
+          xr,
+          yr,
+          Spec.Mark.at(k, Ledgers.State.asked(~Spec.Ask, s, i), m),
+          {==},
+          Mark.kept.go(
+            s,
+            s2,
+            m,
+            v,
+            gr,
+            xr,
+            yr,
+            Shared.Bool.when(Maybe<&2, Ledgers.Id>, k, u => Some{i}, u => prev)
+          )(
+            Shared.List.tail_eq(
+              Ledgers.Vote,
+              y,
+              Ledgers.Vote{i, k, w, hh},
+              List.take(&2, Ledgers.Vote, yr, List.length(&2, Ledgers.Vote, xr)),
+              xr,
+              e
+            )
+          )
+        )(h)
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+def Spec.Node.mark_kept(s, s2, r, b, m, v):
+  +gr =>
+    +c = Spec.Line.chain(r, Some{Spec.Line.Branch{b}})
+    Mark.kept.go(
+      s,
+      s2,
+      m,
+      v,
+      gr,
+      Spec.Node.steps(s, r, Some{Spec.Line.Branch{b}}),
+      Spec.Node.steps(s2, r, Some{Spec.Line.Branch{b}}),
+      None{}
+    )(Steps.grow.at(s, s2, c, gr, Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s, c), {==}))
