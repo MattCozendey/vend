@@ -381,6 +381,7 @@ def Code.maybe_read(
       {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # items read back, given their count, when their code does
 def Code.items_read(
@@ -403,11 +404,13 @@ def Code.items_read(
     case Nil{}:
       {==}
     case Con{x, +rest}:
+      items1 = Code.items(~A, ~enc, rest, r)
+      length1 = List.length(&2, A, rest)
       %Equal.sym(
         Maybe<&2, Read<A>>,
-        dec(enc(x)(Code.items(~A, ~enc, rest, r))),
-        Some{Read{x, Code.items(~A, ~enc, rest, r)}},
-        laws(x)(Code.items(~A, ~enc, rest, r))
+        dec(enc(x)(items1)),
+        Some{Read{x, items1}},
+        laws(x)(items1)
       ): {
         Read.then(
           A,
@@ -416,7 +419,7 @@ def Code.items_read(
           a => r1 => Read.then(
             List<&2, A>,
             List<&2, A>,
-            Code.items.read(~A, ~dec, List.length(&2, A, rest), r1),
+            Code.items.read(~A, ~dec, length1, r1),
             xs => r2 => Some{Read{a <> xs, r2}}
           )
         )
@@ -424,7 +427,7 @@ def Code.items_read(
       }
       %Equal.sym(
         Maybe<&2, Read<List<&2, A>>>,
-        Code.items.read(~A, ~dec, List.length(&2, A, rest), Code.items(~A, ~enc, rest, r)),
+        Code.items.read(~A, ~dec, length1, items1),
         Some{Read{rest, r}},
         Code.items_read(~A, ~enc, ~dec, ~laws, rest, r)
       ): {
@@ -437,8 +440,10 @@ def Code.items_read(
           == Some{Read{x <> rest, r}}: Maybe<&2, Read<List<&2, A>>>
       }
       {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a list reads back, when the code of its items does
 def Code.list_read(
   ~A: Data,
@@ -455,11 +460,13 @@ def Code.list_read(
   )
     == Some{Read{xs, r}}: Maybe<&2, Read<List<&2, A>>>
 }:
+  items1 = Code.items(~A, ~enc, xs, r)
+  length1 = List.length(&2, A, xs)
   %Equal.sym(
     Maybe<&2, Read<Nat>>,
-    Code.count.read(Code.count(List.length(&2, A, xs), Code.items(~A, ~enc, xs, r))),
-    Some{Read{List.length(&2, A, xs), Code.items(~A, ~enc, xs, r)}},
-    Code.count_read(List.length(&2, A, xs), Code.items(~A, ~enc, xs, r))
+    Code.count.read(Code.count(length1, items1)),
+    Some{Read{length1, items1}},
+    Code.count_read(length1, items1)
   ): {
     Read.then(
       Nat,
@@ -470,6 +477,7 @@ def Code.list_read(
       == Some{Read{xs, r}}: Maybe<&2, Read<List<&2, A>>>
   }
   Code.items_read(~A, ~enc, ~dec, ~laws, xs, r)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a read m that gives a and r, then k, is k on a and r
@@ -639,6 +647,7 @@ def Code.read_value(-A: Data, m: Maybe<&2, Read<A>>, d: A) -> A:
     case None{}:
       d
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # two values with the same code are the same, when the code reads back
 def Code.is_eq_sound(
   ~A: Data,
@@ -648,12 +657,14 @@ def Code.is_eq_sound(
   +a: A,
   +b: A
 ) -> {Code.is_eq(~A, ~enc, a, b) == True{}: Bool} -> {a == b: A}:
-  h => Equal.trans(A, a, Code.read_value(A, dec(enc(b)([])), a), b, (
+  dec1 = dec(enc(b)([]))
+  h => Equal.trans(A, a, Code.read_value(A, dec1, a), b, (
       %Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), enc(a)([]), enc(b)([]))(h): {a == Code.read_value(A, dec(_), a): A}
       %Equal.sym(Maybe<&2, Read<A>>, dec(enc(a)([])), Some{Read{a, []}}, laws(a)([])): {a == Code.read_value(A, _, a): A}
       {==}), (
-      %Equal.sym(Maybe<&2, Read<A>>, dec(enc(b)([])), Some{Read{b, []}}, laws(b)([])): {Code.read_value(A, _, a) == b: A}
+      %Equal.sym(Maybe<&2, Read<A>>, dec1, Some{Read{b, []}}, laws(b)([])): {Code.read_value(A, _, a) == b: A}
       {==}))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # equality of codes is an equality
 def Code.eq_laws(~A: Data, ~c: Codec(A)) -> Shared.Eq.Laws(A, Code.is_eq(~A, ~Codec.enc(A, c))):

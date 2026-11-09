@@ -371,24 +371,19 @@ def List.contains_flat.at(
 }:
   match hit:
     case True{}:
+      contains1 = List.contains(~B, ~sb, List.flat(~A, ~B, ~V, ~f, r, g), y)
       %Equal.sym(A, h, x, Eq.sound(~A, ~sa, laws, h, x)(eh)):
-        {
-          Bool.or(
-            List.contains(~B, ~sb, f(g)(_), y),
-            List.contains(~B, ~sb, List.flat(~A, ~B, ~V, ~f, r, g), y)
-          )
-            == True{}: Bool
-        }
+        {Bool.or(List.contains(~B, ~sb, f(g)(_), y), contains1) == True{}: Bool}
       %Equal.sym(Bool, List.contains(~B, ~sb, f(g)(x), y), True{}, hy):
-        {Bool.or(_, List.contains(~B, ~sb, List.flat(~A, ~B, ~V, ~f, r, g), y)) == True{}: Bool}
+        {Bool.or(_, contains1) == True{}: Bool}
       {==}
     case False{}:
+      contains1 = List.contains(~B, ~sb, f(g)(h), y)
       %Equal.sym(Bool, List.contains(~B, ~sb, List.flat(~A, ~B, ~V, ~f, r, g), y), True{}, ih(hx)):
-        {Bool.or(List.contains(~B, ~sb, f(g)(h), y), _) == True{}: Bool}
-      Bool.or_true_right(List.contains(~B, ~sb, f(g)(h), y))
+        {Bool.or(contains1, _) == True{}: Bool}
+      Bool.or_true_right(contains1)
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement keeps each and/or as one value for the proof to split on; a proof does not run
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # what f gives for an element of xs is in the flat list
 def List.contains_flat(
@@ -416,14 +411,12 @@ def List.contains_flat(
       )
     case Con{+h, +r}:
       hx => +hy =>
+        +flat1 = List.flat(~A, ~B, ~V, ~f, r, g)
         %Equal.sym(
           Bool,
-          List.contains(~B, ~sb, List.append(&2, B, f(g)(h), List.flat(~A, ~B, ~V, ~f, r, g)), y),
-          Bool.or(
-            List.contains(~B, ~sb, f(g)(h), y),
-            List.contains(~B, ~sb, List.flat(~A, ~B, ~V, ~f, r, g), y)
-          ),
-          List.contains_append(~B, ~sb, f(g)(h), List.flat(~A, ~B, ~V, ~f, r, g), y)
+          List.contains(~B, ~sb, List.append(&2, B, f(g)(h), flat1), y),
+          Bool.or(List.contains(~B, ~sb, f(g)(h), y), List.contains(~B, ~sb, flat1, y)),
+          List.contains_append(~B, ~sb, f(g)(h), flat1, y)
         ): {_ == True{}: Bool}
         List.contains_flat.at(
           ~A,
@@ -444,7 +437,6 @@ def List.contains_flat(
           hy,
           hr => List.contains_flat(~A, ~B, ~V, ~sa, ~sb, ~f, ~laws, r, g, x, y)(hr)(hy)
         )
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # Comparisons
@@ -1111,22 +1103,15 @@ def List.is_eq_sound(ty, same, laws, xs, ys):
       h => Empty.absurd({Con{x, xr} == Nil{}: List<&2, ty>}, Bool.false_ne_true(h))
     case Con{+x, +xr} Con{+y, +yr}:
       +h =>
+        +iseq1 = List.is_eq(~ty, ~same, xr, yr)
         %Eq.sound(
           ~ty,
           ~same,
           laws,
           x,
           y
-        )(
-          List.all.if_hit(same(x, y), u => List.is_eq(~ty, ~same, xr, yr))(h)
-        ): {x <> xr == _ <> yr: List<&2, ty>}
-        %List.is_eq_sound(
-          ~ty,
-          ~same,
-          ~laws,
-          xr,
-          yr
-        )(List.all.if_rest(same(x, y), u => List.is_eq(~ty, ~same, xr, yr))(h)):
+        )(List.all.if_hit(same(x, y), u => iseq1)(h)): {x <> xr == _ <> yr: List<&2, ty>}
+        %List.is_eq_sound(~ty, ~same, ~laws, xr, yr)(List.all.if_rest(same(x, y), u => iseq1)(h)):
           {x <> xr == x <> _: List<&2, ty>}
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
@@ -1204,8 +1189,11 @@ def List.prefix_trans(
           )
         )
       )
-    case Con{+x, +r} Con{+y, +r2} Con{z, r3}:
+    case Con{+x, +r} Con{+y, +r2} Con{z, +r3}:
       +hxy => +hyz =>
+        +take1 = List.take(&2, A, r3, List.length(&2, A, r))
+        +take2 = List.take(&2, A, r3, List.length(&2, A, r2))
+        +take3 = List.take(&2, A, r2, List.length(&2, A, r))
         %Equal.sym(
           A,
           z,
@@ -1214,11 +1202,11 @@ def List.prefix_trans(
             List<&2, A>,
             A,
             l => Maybe.default(&2, A, List.head(&2, A, l), y),
-            z <> List.take(&2, A, r3, List.length(&2, A, r2)),
+            z <> take2,
             y <> r2,
             hyz
           )
-        ): {_ <> List.take(&2, A, r3, List.length(&2, A, r)) == x <> r: List<&2, A>}
+        ): {_ <> take1 == x <> r: List<&2, A>}
         %Equal.sym(
           A,
           y,
@@ -1227,14 +1215,14 @@ def List.prefix_trans(
             List<&2, A>,
             A,
             l => Maybe.default(&2, A, List.head(&2, A, l), x),
-            y <> List.take(&2, A, r2, List.length(&2, A, r)),
+            y <> take3,
             x <> r,
             hxy
           )
-        ): {_ <> List.take(&2, A, r3, List.length(&2, A, r)) == x <> r: List<&2, A>}
+        ): {_ <> take1 == x <> r: List<&2, A>}
         %Equal.sym(
           List<&2, A>,
-          List.take(&2, A, r3, List.length(&2, A, r)),
+          take1,
           r,
           List.prefix_trans(
             A,
@@ -1242,23 +1230,9 @@ def List.prefix_trans(
             r2,
             r3
           )(
-            Equal.cong(
-              List<&2, A>,
-              List<&2, A>,
-              l => List.tail(&2, A, l),
-              y <> List.take(&2, A, r2, List.length(&2, A, r)),
-              x <> r,
-              hxy
-            )
+            Equal.cong(List<&2, A>, List<&2, A>, l => List.tail(&2, A, l), y <> take3, x <> r, hxy)
           )(
-            Equal.cong(
-              List<&2, A>,
-              List<&2, A>,
-              l => List.tail(&2, A, l),
-              z <> List.take(&2, A, r3, List.length(&2, A, r2)),
-              y <> r2,
-              hyz
-            )
+            Equal.cong(List<&2, A>, List<&2, A>, l => List.tail(&2, A, l), z <> take2, y <> r2, hyz)
           )
         ):
           {x <> _ == x <> r: List<&2, A>}

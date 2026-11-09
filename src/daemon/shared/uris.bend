@@ -568,21 +568,22 @@ law uri_read_after_show:
 def uri_read_after_show(u, v):
   match u:
     case Uri{+sc, None{}, +p}:
+      +startswith1 = String.starts_with(p, "//")
       +v = v
       hsc = Shared.List.all.if_hit(
         Uri.is_scheme(sc),
-        w => List.all.if(x => Bool.not(String.starts_with(p, "//")), Uri.is_plain(p))
+        w => List.all.if(x => Bool.not(startswith1), Uri.is_plain(p))
       )(v)
       hns = Shared.Bool.not_true(
-        String.starts_with(p, "//")
+        startswith1
       )(
         Shared.List.all.if_rest(
           Uri.is_plain(p),
-          x => Bool.not(String.starts_with(p, "//"))
+          x => Bool.not(startswith1)
         )(
           Shared.List.all.if_rest(
             Uri.is_scheme(sc),
-            w => List.all.if(x => Bool.not(String.starts_with(p, "//")), Uri.is_plain(p))
+            w => List.all.if(x => Bool.not(startswith1), Uri.is_plain(p))
           )(v)
         )
       )
@@ -593,63 +594,50 @@ def uri_read_after_show(u, v):
         Some{Uri{sc, None{}, p}},
         read_at(sc, p)(scheme_no_colon(sc)(hsc)),
         read_cut_of(sc, p, Uri{sc, None{}, p})((
-            %Equal.sym(Bool, String.starts_with(p, "//"), False{}, hns): {Shared.Bool.when(Uri, _, w => Uri.read.auth(sc, Texts.Text.cut(String.drop(p, 2n), 47), String.drop(p, 2n)), w => Uri{sc, None{}, p}) == Uri{sc, None{}, p}: Uri}
+            %Equal.sym(Bool, startswith1, False{}, hns): {Shared.Bool.when(Uri, _, w => Uri.read.auth(sc, Texts.Text.cut(String.drop(p, 2n), 47), String.drop(p, 2n)), w => Uri{sc, None{}, p}) == Uri{sc, None{}, p}: Uri}
             {==}))(v)
       )
     case Uri{+sc, Some{+a}, +p}:
+      +has1 = Texts.Text.has(a, 47)
+      +or1 = Bool.or(String.is_empty(p), String.starts_with(p, "/"))
+      +not1 = Bool.not(has1)
+      +append1 = String.append("//", String.append(a, p))
       +v = v
       hsc = Shared.List.all.if_hit(
         Uri.is_scheme(sc),
         w => List.all.if(
-          x => Bool.and(
-            List.all.if(w => Bool.not(Texts.Text.has(a, 47)), Uri.is_plain(a)),
-            Bool.or(String.is_empty(p), String.starts_with(p, "/"))
-          ),
+          x => Bool.and(List.all.if(w => not1, Uri.is_plain(a)), or1),
           Uri.is_plain(p)
         )
       )(v)
       +h3 = Shared.List.all.if_rest(
         Uri.is_plain(p),
-        x => Bool.and(
-          List.all.if(w => Bool.not(Texts.Text.has(a, 47)), Uri.is_plain(a)),
-          Bool.or(String.is_empty(p), String.starts_with(p, "/"))
-        )
+        x => Bool.and(List.all.if(w => not1, Uri.is_plain(a)), or1)
       )(
         Shared.List.all.if_rest(
           Uri.is_scheme(sc),
           w => List.all.if(
-            x => Bool.and(
-              List.all.if(w => Bool.not(Texts.Text.has(a, 47)), Uri.is_plain(a)),
-              Bool.or(String.is_empty(p), String.starts_with(p, "/"))
-            ),
+            x => Bool.and(List.all.if(w => not1, Uri.is_plain(a)), or1),
             Uri.is_plain(p)
           )
         )(v)
       )
       ha = Shared.Bool.not_true(
-        Texts.Text.has(a, 47)
+        has1
       )(
         Shared.List.all.if_rest(
           Uri.is_plain(a),
-          w => Bool.not(Texts.Text.has(a, 47))
-        )(
-          Shared.Bool.and_true_left(
-            List.all.if(w => Bool.not(Texts.Text.has(a, 47)), Uri.is_plain(a)),
-            Bool.or(String.is_empty(p), String.starts_with(p, "/"))
-          )(h3)
-        )
+          w => not1
+        )(Shared.Bool.and_true_left(List.all.if(w => not1, Uri.is_plain(a)), or1)(h3))
       )
-      hp = Shared.Bool.and_true_right(
-        List.all.if(w => Bool.not(Texts.Text.has(a, 47)), Uri.is_plain(a)),
-        Bool.or(String.is_empty(p), String.starts_with(p, "/"))
-      )(h3)
+      hp = Shared.Bool.and_true_right(List.all.if(w => not1, Uri.is_plain(a)), or1)(h3)
       Equal.trans(
         Maybe<&2, Uri>,
-        Uri.read(String.append(sc, SCon{':', String.append("//", String.append(a, p))})),
-        Uri.read.cut(Some{Texts.Cut{sc, String.append("//", String.append(a, p))}}),
+        Uri.read(String.append(sc, SCon{':', append1})),
+        Uri.read.cut(Some{Texts.Cut{sc, append1}}),
         Some{Uri{sc, Some{a}, p}},
-        read_at(sc, String.append("//", String.append(a, p)))(scheme_no_colon(sc)(hsc)),
-        read_cut_of(sc, String.append("//", String.append(a, p)), Uri{sc, Some{a}, p})((
+        read_at(sc, append1)(scheme_no_colon(sc)(hsc)),
+        read_cut_of(sc, append1, Uri{sc, Some{a}, p})((
             %Equal.sym(String, String.drop(String.append(a, p), 0n), String.append(a, p), Texts.Text.drop_none(String.append(a, p))): {Uri.read.auth(sc, Texts.Text.cut(_, 47), _) == Uri{sc, Some{a}, p}: Uri}
             auth_back(sc, a, p)(ha)(hp)))(v)
       )

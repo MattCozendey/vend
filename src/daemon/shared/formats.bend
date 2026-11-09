@@ -114,13 +114,9 @@ def List.fork_right.on(
 ) -> {Fork.right(A, List.fork.on(A, held, x, y, ra, rb, f)) == y <> rb: List<&2, A>}:
   match held f:
     case True{} Fork{s, fa, fb}:
-      %ih: {x <> List.append(&2, A, s, fb) == y <> _: List<&2, A>}
-      %Shared.Eq.sound(
-        ~A,
-        ~same,
-        laws,
-        x
-      )(y)(e): {x <> List.append(&2, A, s, fb) == _ <> List.append(&2, A, s, fb): List<&2, A>}
+      append1 = List.append(&2, A, s, fb)
+      %ih: {x <> append1 == y <> _: List<&2, A>}
+      %Shared.Eq.sound(~A, ~same, laws, x)(y)(e): {x <> append1 == _ <> append1: List<&2, A>}
       {==}
     case False{} g:
       {==}
@@ -393,6 +389,7 @@ def Lines.cut.back_left(
 }:
   match f:
     case Fork{+e, a, b}:
+      reverse1 = List.reverse(&2, Texts.Bytes(), e)
       %List.reverse_append(Texts.Bytes(), e, a, []):
         {
           List.append(
@@ -403,13 +400,13 @@ def Lines.cut.back_left(
           )
             == Cut.left(Lines.cut.back(s, Fork{e, a, b})): List<&2, Texts.Bytes()>
         }
-      %List.reverse_onto(Texts.Bytes(), a, [], List.reverse(&2, Texts.Bytes(), e)):
+      %List.reverse_onto(Texts.Bytes(), a, [], reverse1):
         {
           List.append(
             &2,
             Texts.Bytes(),
             s,
-            List.reverse.go(&2, Texts.Bytes(), a, List.reverse(&2, Texts.Bytes(), e))
+            List.reverse.go(&2, Texts.Bytes(), a, reverse1)
           )
             == List.append(&2, Texts.Bytes(), s, _): List<&2, Texts.Bytes()>
         }
@@ -431,6 +428,7 @@ def Lines.cut.back_right(
 }:
   match f:
     case Fork{+e, a, b}:
+      reverse1 = List.reverse(&2, Texts.Bytes(), e)
       %List.reverse_append(Texts.Bytes(), e, b, []):
         {
           List.append(
@@ -441,13 +439,13 @@ def Lines.cut.back_right(
           )
             == Cut.right(Lines.cut.back(s, Fork{e, a, b})): List<&2, Texts.Bytes()>
         }
-      %List.reverse_onto(Texts.Bytes(), b, [], List.reverse(&2, Texts.Bytes(), e)):
+      %List.reverse_onto(Texts.Bytes(), b, [], reverse1):
         {
           List.append(
             &2,
             Texts.Bytes(),
             s,
-            List.reverse.go(&2, Texts.Bytes(), b, List.reverse(&2, Texts.Bytes(), e))
+            List.reverse.go(&2, Texts.Bytes(), b, reverse1)
           )
             == List.append(&2, Texts.Bytes(), s, _): List<&2, Texts.Bytes()>
         }
@@ -459,27 +457,17 @@ def Lines.cut.of_left(
   f: Fork<Texts.Bytes()>
 ) -> {Cut.left(Lines.cut.of(f)) == Fork.left(Texts.Bytes(), f): List<&2, Texts.Bytes()>}:
   match f:
-    case Fork{s, +ra, +rb}:
-      g = List.fork(
-        ~Texts.Bytes(),
-        ~Shared.List.is_eq(~U32, ~U32.is_eq),
-        List.reverse(&2, Texts.Bytes(), ra),
-        List.reverse(&2, Texts.Bytes(), rb)
-      )
-      %Lines.cut.back_left(
-        s,
-        g
-      ): {_ == List.append(&2, Texts.Bytes(), s, ra): List<&2, Texts.Bytes()>}
+    case Fork{+s, +ra, rb}:
+      append1 = List.append(&2, Texts.Bytes(), s, ra)
+      +reverse1 = List.reverse(&2, Texts.Bytes(), ra)
+      +reverse2 = List.reverse(&2, Texts.Bytes(), rb)
+      g = List.fork(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), reverse1, reverse2)
+      %Lines.cut.back_left(s, g): {_ == append1: List<&2, Texts.Bytes()>}
       %Equal.sym(
         List<&2, Texts.Bytes()>,
         Fork.left(Texts.Bytes(), g),
-        List.reverse(&2, Texts.Bytes(), ra),
-        List.fork_left(
-          ~Texts.Bytes(),
-          ~Shared.List.is_eq(~U32, ~U32.is_eq),
-          List.reverse(&2, Texts.Bytes(), ra),
-          List.reverse(&2, Texts.Bytes(), rb)
-        )
+        reverse1,
+        List.fork_left(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), reverse1, reverse2)
       ):
         {
           List.append(
@@ -488,18 +476,10 @@ def Lines.cut.of_left(
             s,
             List.reverse(&2, Texts.Bytes(), _)
           )
-            == List.append(&2, Texts.Bytes(), s, ra): List<&2, Texts.Bytes()>
+            == append1: List<&2, Texts.Bytes()>
         }
       %List.reverse_twice(Texts.Bytes(), ra, []):
-        {
-          List.append(
-            &2,
-            Texts.Bytes(),
-            s,
-            _
-          )
-            == List.append(&2, Texts.Bytes(), s, ra): List<&2, Texts.Bytes()>
-        }
+        {List.append(&2, Texts.Bytes(), s, _) == append1: List<&2, Texts.Bytes()>}
       {==}
 
 # the new lines of the cut of a fork are its second list
@@ -507,27 +487,22 @@ def Lines.cut.of_right(
   f: Fork<Texts.Bytes()>
 ) -> {Cut.right(Lines.cut.of(f)) == Fork.right(Texts.Bytes(), f): List<&2, Texts.Bytes()>}:
   match f:
-    case Fork{s, +ra, +rb}:
-      g = List.fork(
-        ~Texts.Bytes(),
-        ~Shared.List.is_eq(~U32, ~U32.is_eq),
-        List.reverse(&2, Texts.Bytes(), ra),
-        List.reverse(&2, Texts.Bytes(), rb)
-      )
-      %Lines.cut.back_right(
-        s,
-        g
-      ): {_ == List.append(&2, Texts.Bytes(), s, rb): List<&2, Texts.Bytes()>}
+    case Fork{+s, ra, +rb}:
+      append1 = List.append(&2, Texts.Bytes(), s, rb)
+      +reverse1 = List.reverse(&2, Texts.Bytes(), rb)
+      +reverse2 = List.reverse(&2, Texts.Bytes(), ra)
+      g = List.fork(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), reverse2, reverse1)
+      %Lines.cut.back_right(s, g): {_ == append1: List<&2, Texts.Bytes()>}
       %Equal.sym(
         List<&2, Texts.Bytes()>,
         Fork.right(Texts.Bytes(), g),
-        List.reverse(&2, Texts.Bytes(), rb),
+        reverse1,
         List.fork_right(
           ~Texts.Bytes(),
           ~Shared.List.is_eq(~U32, ~U32.is_eq),
           ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
-          List.reverse(&2, Texts.Bytes(), ra),
-          List.reverse(&2, Texts.Bytes(), rb)
+          reverse2,
+          reverse1
         )
       ):
         {
@@ -537,18 +512,10 @@ def Lines.cut.of_right(
             s,
             List.reverse(&2, Texts.Bytes(), _)
           )
-            == List.append(&2, Texts.Bytes(), s, rb): List<&2, Texts.Bytes()>
+            == append1: List<&2, Texts.Bytes()>
         }
       %List.reverse_twice(Texts.Bytes(), rb, []):
-        {
-          List.append(
-            &2,
-            Texts.Bytes(),
-            s,
-            _
-          )
-            == List.append(&2, Texts.Bytes(), s, rb): List<&2, Texts.Bytes()>
-        }
+        {List.append(&2, Texts.Bytes(), s, _) == append1: List<&2, Texts.Bytes()>}
       {==}
 
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
@@ -613,14 +580,14 @@ def Lines.apply(
     case 1n+k Con{l, r}:
       l <> Lines.apply(k, r, drop, put)
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # bend-lint: expect-begin bend-lint-rules/performance/list_index_loop@warning -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # applying the patch of a cut to its old lines gives its new lines
 def Lines.apply_cut(
   s: List<&2, Texts.Bytes()>,
-  o: List<&2, Texts.Bytes()>,
-  n: List<&2, Texts.Bytes()>,
-  e: List<&2, Texts.Bytes()>
+  +o: List<&2, Texts.Bytes()>,
+  +n: List<&2, Texts.Bytes()>,
+  +e: List<&2, Texts.Bytes()>
 ) -> {
   Lines.apply(
     List.length(&2, Texts.Bytes(), s),
@@ -653,7 +620,8 @@ def Lines.apply_cut(
             == List.append(&2, Texts.Bytes(), n, e): List<&2, Texts.Bytes()>
         }
       {==}
-    case Con{l, r}:
+    case Con{l, +r}:
+      right1 = Cut.right(Cut{r, o, n, e})
       %Equal.sym(
         List<&2, Texts.Bytes()>,
         Lines.apply(
@@ -662,13 +630,13 @@ def Lines.apply_cut(
           List.length(&2, Texts.Bytes(), o),
           n
         ),
-        Cut.right(Cut{r, o, n, e}),
+        right1,
         Lines.apply_cut(r, o, n, e)
       ):
-        {l <> _ == l <> Cut.right(Cut{r, o, n, e}): List<&2, Texts.Bytes()>}
+        {l <> _ == l <> right1: List<&2, Texts.Bytes()>}
       {==}
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 # bend-lint: expect-end bend-lint-rules/performance/list_index_loop@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # the lines of b
 def Lines.list.of(s: Texts.Bytes() & List<&2, Texts.Bytes()>) -> List<&2, Texts.Bytes()>:
@@ -770,15 +738,17 @@ def Plain.apply_patch(
   hr: {Cut.right(c) == lb: List<&2, Texts.Bytes()>}
 ) -> {Plain.apply(a, Lines.patch(c)) == Lines.bytes(lb): Texts.Bytes()}:
   match c:
-    case Cut{s, o, n, e}:
+    case Cut{+s, +o, n, e}:
+      length1 = List.length(&2, Texts.Bytes(), s)
+      length2 = List.length(&2, Texts.Bytes(), o)
       Equal.cong(
         List<&2, Texts.Bytes()>,
         Texts.Bytes(),
         z => Lines.bytes(z),
-        Lines.apply(List.length(&2, Texts.Bytes(), s), Lines.list(a), List.length(&2, Texts.Bytes(), o), n),
+        Lines.apply(length1, Lines.list(a), length2, n),
         lb,
-        %hl: {Lines.apply(List.length(&2, Texts.Bytes(), s), _, List.length(&2, Texts.Bytes(), o), n) == lb: List<&2, Texts.Bytes()>}
-        %hr: {Lines.apply(List.length(&2, Texts.Bytes(), s), Cut.left(Cut{s, o, n, e}), List.length(&2, Texts.Bytes(), o), n) == _: List<&2, Texts.Bytes()>}
+        %hl: {Lines.apply(length1, _, length2, n) == lb: List<&2, Texts.Bytes()>}
+        %hr: {Lines.apply(length1, Cut.left(Cut{s, o, n, e}), length2, n) == _: List<&2, Texts.Bytes()>}
         Lines.apply_cut(s, o, n, e))
 
 # Plain.apply_diff, by whether both are text (text)
@@ -1196,15 +1166,14 @@ def Bytes.starts_drop(
       )
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Bytes.find_cut at x <> r, by whether p starts there (hit)
 def Bytes.find_cut.at(
   -u: Texts.Bytes(),
   -w: Texts.Bytes(),
   hit: Bool,
-  p: Texts.Bytes(),
-  x: U32,
-  r: Texts.Bytes(),
+  +p: Texts.Bytes(),
+  +x: U32,
+  +r: Texts.Bytes(),
   rest: Maybe<&2, Texts.Cut<Texts.Bytes()>>,
   eh: {Bytes.starts(p, x <> r) == hit: Bool},
   ih: @u2: Texts.Bytes() -> @w2: Texts.Bytes() -> {
@@ -1222,11 +1191,12 @@ def Bytes.find_cut.at(
   match hit rest:
     case True{} m:
       +h =>
+        +drop1 = List.drop(&2, U32, x <> r, List.length(&2, U32, p))
         %Equal.cong(
           Maybe<&2, Texts.Cut<Texts.Bytes()>>,
           Texts.Bytes(),
           z => Bytes.find.before(z),
-          Some{Texts.Cut{[], List.drop(&2, U32, x <> r, List.length(&2, U32, p))}},
+          Some{Texts.Cut{[], drop1}},
           Some{Texts.Cut{u, w}},
           h
         ):
@@ -1235,7 +1205,7 @@ def Bytes.find_cut.at(
           Maybe<&2, Texts.Cut<Texts.Bytes()>>,
           Texts.Bytes(),
           z => Bytes.find.after(z),
-          Some{Texts.Cut{[], List.drop(&2, U32, x <> r, List.length(&2, U32, p))}},
+          Some{Texts.Cut{[], drop1}},
           Some{Texts.Cut{u, w}},
           h
         ):
@@ -1268,7 +1238,6 @@ def Bytes.find_cut.at(
           {x <> r == x <> List.append(&2, U32, u2, List.append(&2, U32, p, _)): Texts.Bytes()}
         %ih(u2)(w2)({==}): {x <> r == x <> _: Texts.Bytes()}
         {==}
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # what Bytes.find finds cuts b: the bytes before, the pattern, the bytes after
@@ -1383,10 +1352,11 @@ def Embed.join_split.go(
     case 1n+e True{} None{}:
       Shared.List.append_nil(U32, b)
     case 1n+e True{} Some{Texts.Cut{u, +w}}:
+      append1 = List.append(&2, U32, op, w)
       %Equal.sym(
         Texts.Bytes(),
         Embed.join(op, cl, Embed.split.go(e, op, cl, w, False{}, Bytes.find(cl, w))),
-        List.append(&2, U32, op, w),
+        append1,
         Embed.join_split.go(
           e,
           op,
@@ -1398,12 +1368,7 @@ def Embed.join_split.go(
         )
       ):
         {List.append(&2, U32, u, _) == b: Texts.Bytes()}
-      Equal.sym(
-        Texts.Bytes(),
-        b,
-        List.append(&2, U32, u, List.append(&2, U32, op, w)),
-        hm(u)(w)({==})
-      )
+      Equal.sym(Texts.Bytes(), b, List.append(&2, U32, u, append1), hm(u)(w)({==}))
     case 1n+e False{} None{}:
       Equal.cong(
         Texts.Bytes(),
@@ -1413,7 +1378,8 @@ def Embed.join_split.go(
         b,
         Shared.List.append_nil(U32, b)
       )
-    case 1n+e False{} Some{Texts.Cut{u, +w}}:
+    case 1n+e False{} Some{Texts.Cut{+u, +w}}:
+      append1 = List.append(&2, U32, u, List.append(&2, U32, cl, w))
       %Equal.sym(
         Texts.Bytes(),
         Embed.join(op, cl, Embed.split.go(e, op, cl, w, True{}, Bytes.find(op, w))),
@@ -1441,14 +1407,9 @@ def Embed.join_split.go(
         Texts.Bytes(),
         Texts.Bytes(),
         z => List.append(&2, U32, op, z),
-        List.append(&2, U32, u, List.append(&2, U32, cl, w)),
+        append1,
         b,
-        Equal.sym(
-          Texts.Bytes(),
-          b,
-          List.append(&2, U32, u, List.append(&2, U32, cl, w)),
-          hm(u)(w)({==})
-        )
+        Equal.sym(Texts.Bytes(), b, append1, hm(u)(w)({==}))
       )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 # bend-lint: expect-end bend-lint-rules/performance/list_index_loop@warning
@@ -1926,18 +1887,15 @@ def Format.apply_diffs(f, bs, as):
     case Format.leaf{k} Nil{}:
       {==}
     case Format.leaf{+k} Con{b, br}:
+      tail1 = List.tail(&2, Texts.Bytes(), as)
       Shared.List.cons_eq(
         Texts.Bytes(),
         Plain.apply(Items.first(as), Leaf.diff(k, Items.first(as), b)),
         b,
-        Format.applies(
-          Format.leaf{k},
-          Format.diffs(Format.leaf{k}, br, List.tail(&2, Texts.Bytes(), as)),
-          List.tail(&2, Texts.Bytes(), as)
-        ),
+        Format.applies(Format.leaf{k}, Format.diffs(Format.leaf{k}, br, tail1), tail1),
         br,
         Leaf.apply_diff(k, Items.first(as), b),
-        Format.apply_diffs(Format.leaf{k}, br, List.tail(&2, Texts.Bytes(), as))
+        Format.apply_diffs(Format.leaf{k}, br, tail1)
       )
     case Format.embed{o, op, cl, i} Nil{}:
       {==}
@@ -2500,14 +2458,16 @@ type Known is Data:
 
 # the formats of the paths that end with each suffix
 def Format.known() -> List<&2, Known>:
+  +oftext1 = Texts.Bytes.of_text("```")
+  +oftext2 = Texts.Bytes.of_text("\"")
   +css = Format.imports("@import ", "\"", "\"", "")
   +js = Format.imports("import ", "from \"", "\"", "")
   +c: Format = Format.code{
     Format.leaf{Leaf.lines{}},
     Rule{
       Texts.Bytes.of_text("#include"),
-      Texts.Bytes.of_text("\""),
-      Texts.Bytes.of_text("\""),
+      oftext2,
+      oftext2,
       [],
       Texts.Bytes.of_text("#if"),
       Texts.Bytes.of_text("#else"),
@@ -2544,12 +2504,7 @@ def Format.known() -> List<&2, Known>:
     Known{".wasm", Format.leaf{Leaf.whole{}}},
     Known{
       ".md",
-      Format.embed{
-        Format.leaf{Leaf.lines{}},
-        Texts.Bytes.of_text("```"),
-        Texts.Bytes.of_text("```"),
-        Format.leaf{Leaf.lines{}}
-      }
+      Format.embed{Format.leaf{Leaf.lines{}}, oftext1, oftext1, Format.leaf{Leaf.lines{}}}
     }
   ]
 

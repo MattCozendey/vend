@@ -956,13 +956,11 @@ def Char.of_bits(
 # the bytes of c, then the bytes b: they read back as c, then b read, when c
 # holds no bit above the 21st; and they are bytes when b is
 def Utf8.Char.Laws(c: Char, b: List<&2, U32>) -> Type:
+  append1 = List.append(&2, U32, Utf8.char(c), b)
   {
-    Bytes.to_text(
-      List.append(&2, U32, Utf8.char(c), b)
-    )
-      == Utf8.back(Char.fits_utf8(c), c, b): String
+    Bytes.to_text(append1) == Utf8.back(Char.fits_utf8(c), c, b): String
   }
-    & {Bytes.is_bytes(List.append(&2, U32, Utf8.char(c), b)) == Bytes.is_bytes(b): Bool}
+    & {Bytes.is_bytes(append1) == Bytes.is_bytes(b): Bool}
 
 # Utf8.char_laws, with the bits of the character from the highest
 def Utf8.char_laws.bits(
@@ -1481,19 +1479,15 @@ def Utf8.char_laws(c: Char, b: List<&2, U32>) -> Utf8.Char.Laws(c, b):
 # the bytes of a character, then the bytes b, read back as the character, then
 # b read, when the character holds no bit above the 21st
 def Utf8.char_back(
-  c: Char,
-  b: List<&2, U32>
+  +c: Char,
+  +b: List<&2, U32>
 ) -> {
   Bytes.to_text(List.append(&2, U32, Utf8.char(c), b)) == Utf8.back(Char.fits_utf8(c), c, b): String
 }:
+  append1 = List.append(&2, U32, Utf8.char(c), b)
   Pair.fst(
-    {
-      Bytes.to_text(
-        List.append(&2, U32, Utf8.char(c), b)
-      )
-        == Utf8.back(Char.fits_utf8(c), c, b): String
-    },
-    {Bytes.is_bytes(List.append(&2, U32, Utf8.char(c), b)) == Bytes.is_bytes(b): Bool},
+    {Bytes.to_text(append1) == Utf8.back(Char.fits_utf8(c), c, b): String},
+    {Bytes.is_bytes(append1) == Bytes.is_bytes(b): Bool},
     Utf8.char_laws(c, b)
   )
 
@@ -1532,17 +1526,13 @@ def Bytes.text_back(s):
 
 # the bytes of a character, then the bytes b, are bytes when b is
 def Utf8.char_bytes(
-  c: Char,
-  b: List<&2, U32>
+  +c: Char,
+  +b: List<&2, U32>
 ) -> {Bytes.is_bytes(List.append(&2, U32, Utf8.char(c), b)) == Bytes.is_bytes(b): Bool}:
+  append1 = List.append(&2, U32, Utf8.char(c), b)
   Pair.snd(
-    {
-      Bytes.to_text(
-        List.append(&2, U32, Utf8.char(c), b)
-      )
-        == Utf8.back(Char.fits_utf8(c), c, b): String
-    },
-    {Bytes.is_bytes(List.append(&2, U32, Utf8.char(c), b)) == Bytes.is_bytes(b): Bool},
+    {Bytes.to_text(append1) == Utf8.back(Char.fits_utf8(c), c, b): String},
+    {Bytes.is_bytes(append1) == Bytes.is_bytes(b): Bool},
     Utf8.char_laws(c, b)
   )
 
@@ -2120,21 +2110,18 @@ def String.order_keeps(
   +a: String,
   +b: String
 ) -> {String.order.go(a, b, c) == EQ{}: Cmp} -> {c == EQ{}: Cmp}:
+  go1 = String.order.go(a, b, EQ{})
+  go2 = String.order.go(a, b, c)
   h => Shared.Cmp.then_eq_left(
     c,
-    String.order.go(a, b, EQ{})
+    go1
   )(
     Equal.trans(
       Cmp,
-      Shared.Cmp.then(c, String.order.go(a, b, EQ{})),
-      String.order.go(a, b, c),
+      Shared.Cmp.then(c, go1),
+      go2,
       EQ{},
-      Equal.sym(
-        Cmp,
-        String.order.go(a, b, c),
-        Shared.Cmp.then(c, String.order.go(a, b, EQ{})),
-        String.order_then(c, a, b)
-      ),
+      Equal.sym(Cmp, go2, Shared.Cmp.then(c, go1), String.order_then(c, a, b)),
       h
     )
   )
@@ -2161,8 +2148,9 @@ def String.order_sound(
       h => Empty.absurd({SCon{x, t1} == SNil{}: String}, Shared.Cmp.ne_eq(GT{}, Unit{}, h))
     case SCon{Chr{U32{+w1}}, +t1} SCon{Chr{U32{+w2}}, +t2}:
       +h =>
-        +e = String.order_keeps(Word.cmp(32n, w1, w2), t1, t2)(h)
-        h2 = String.order_at(Word.cmp(32n, w1, w2), t1, t2, e)(h)
+        +cmp1 = Word.cmp(32n, w1, w2)
+        +e = String.order_keeps(cmp1, t1, t2)(h)
+        h2 = String.order_at(cmp1, t1, t2, e)(h)
         %Shared.Word.cmp_eq(
           32n,
           w1,
