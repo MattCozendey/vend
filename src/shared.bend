@@ -39,6 +39,55 @@ def Bool.false_ne_true(e: {False{} == True{}: Bool}) -> Empty:
   %e: Bool.pick(Type, _, Empty, Unit)
   Unit{}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# Eq.ne_flip once same(y, x) is known (back)
+def Eq.ne_flip.at(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  ~laws: Eq.Laws(A, same),
+  back: Bool,
+  +x: A,
+  y: A,
+  no: {same(x, y) == False{}: Bool},
+  e: {same(y, x) == back: Bool}
+) -> {back == False{}: Bool}:
+  match back:
+    case False{}:
+      {==}
+    case True{}:
+      Empty.absurd(
+        {True{} == False{}: Bool},
+        Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            same(x, y),
+            True{},
+            Equal.sym(Bool, same(x, y), False{}, no),
+            Equal.trans(
+              Bool,
+              same(x, y),
+              same(x, x),
+              True{},
+              Equal.cong(A, Bool, z => same(x, z), y, x, Eq.sound(~A, ~same, laws, y)(x)(e)),
+              Eq.refl(~A, ~same, laws, x)
+            )
+          )
+        )
+      )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# x is not y, so y is not x
+def Eq.ne_flip(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  ~laws: Eq.Laws(A, same),
+  +x: A,
+  +y: A,
+  no: {same(x, y) == False{}: Bool}
+) -> {same(y, x) == False{}: Bool}:
+  Eq.ne_flip.at(~A, ~same, ~laws, same(y, x), x, y, no, {==})
+
 # an "and" with False is False
 def Bool.and_false_right(a: Bool) -> {Bool.and(a, False{}) == False{}: Bool}:
   match a:
@@ -1733,3 +1782,107 @@ def Maybe.is_none_eq(
       h => {==}
     case Some{x}:
       h => Empty.absurd({Some{x} == None{}: Maybe<&2, A>}, Bool.false_ne_true(h))
+
+# Joins of Maybes
+# ---------------
+# None is below every value: a join keeps what either side holds, and joins
+# two values with join.
+
+# what a and b hold, joined
+def Maybe.join(~V: Data, ~join: V -> V -> V, a: Maybe<&2, V>, b: Maybe<&2, V>) -> Maybe<&2, V>:
+  match a b:
+    case None{} y:
+      y
+    case Some{x} None{}:
+      Some{x}
+    case Some{x} Some{y}:
+      Some{join(x, y)}
+
+# nothing joined to a is a
+def Maybe.join_none(
+  ~V: Data,
+  ~join: V -> V -> V,
+  a: Maybe<&2, V>
+) -> {Maybe.join(~V, ~join, a, None{}) == a: Maybe<&2, V>}:
+  match a:
+    case None{}:
+      {==}
+    case Some{x}:
+      {==}
+
+# a join is the same either way round, when join is
+def Maybe.join_comm(
+  ~V: Data,
+  ~join: V -> V -> V,
+  ~comm: @x: V -> @y: V -> {join(x, y) == join(y, x): V},
+  a: Maybe<&2, V>,
+  b: Maybe<&2, V>
+) -> {Maybe.join(~V, ~join, a, b) == Maybe.join(~V, ~join, b, a): Maybe<&2, V>}:
+  match a b:
+    case None{} None{}:
+      {==}
+    case None{} Some{y}:
+      {==}
+    case Some{x} None{}:
+      {==}
+    case Some{x} Some{y}:
+      %comm(x)(y): {Some{join(x, y)} == Some{_}: Maybe<&2, V>}
+      {==}
+
+# a join groups either way, when join does
+def Maybe.join_assoc(
+  ~V: Data,
+  ~join: V -> V -> V,
+  ~assoc: @x: V -> @y: V -> @z: V -> {join(join(x, y), z) == join(x, join(y, z)): V},
+  a: Maybe<&2, V>,
+  b: Maybe<&2, V>,
+  c: Maybe<&2, V>
+) -> {
+  Maybe.join(
+    ~V,
+    ~join,
+    Maybe.join(~V, ~join, a, b),
+    c
+  )
+    == Maybe.join(~V, ~join, a, Maybe.join(~V, ~join, b, c)): Maybe<&2, V>
+}:
+  match a b c:
+    case None{} y w:
+      {==}
+    case Some{x} None{} w:
+      {==}
+    case Some{x} Some{y} None{}:
+      {==}
+    case Some{x} Some{y} Some{w}:
+      %assoc(x)(y)(w): {Some{join(join(x, y), w)} == Some{_}: Maybe<&2, V>}
+      {==}
+
+# a value joined with itself is itself, when join is idempotent
+def Maybe.join_idem(
+  ~V: Data,
+  ~join: V -> V -> V,
+  ~idem: @x: V -> {join(x, x) == x: V},
+  a: Maybe<&2, V>
+) -> {Maybe.join(~V, ~join, a, a) == a: Maybe<&2, V>}:
+  match a:
+    case None{}:
+      {==}
+    case Some{x}:
+      %Equal.sym(V, join(x, x), x, idem(x)): {Some{_} == Some{x}: Maybe<&2, V>}
+      {==}
+
+# Pairwise checks
+# ---------------
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a check that proofs split on keeps each and as one value
+# r holds of each element of xs and the element of ys at its place, and the
+# lists are as long
+def List.all2(~A: Data, ~B: Data, ~r: A -> B -> Bool, xs: List<&2, A>, ys: List<&2, B>) -> Bool:
+  match xs ys:
+    case Nil{} Nil{}:
+      True{}
+    case Con{x, rx} Con{y, ry}:
+      Bool.and(r(x, y), List.all2(~A, ~B, ~r, rx, ry))
+    case _ _:
+      False{}
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
