@@ -659,6 +659,36 @@ def Bool.and_true_right(
     case True{}:
       h => h
 
+# a and b are the same bit
+def Bool.same(a: Bool, b: Bool) -> Bool:
+  match a b:
+    case True{} True{}:
+      True{}
+    case False{} False{}:
+      True{}
+    case _ _:
+      False{}
+
+# Bool.same is True for a bit and itself
+def Bool.same_refl(a: Bool) -> {Bool.same(a, a) == True{}: Bool}:
+  match a:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# Bool.same is True only for equal bits
+def Bool.same_sound(a: Bool, b: Bool) -> {Bool.same(a, b) == True{}: Bool} -> {a == b: Bool}:
+  match a b:
+    case True{} True{}:
+      h => {==}
+    case False{} False{}:
+      h => {==}
+    case True{} False{}:
+      h => Empty.absurd({True{} == False{}: Bool}, Bool.false_ne_true(h))
+    case False{} True{}:
+      h => Empty.absurd({False{} == True{}: Bool}, Bool.false_ne_true(h))
+
 # a "not" that is True is of False
 def Bool.not_true(a: Bool) -> {Bool.not(a) == True{}: Bool} -> {a == False{}: Bool}:
   match a:
@@ -1007,6 +1037,14 @@ def Maybe.same_refl(
       {==}
     case Some{y}:
       refl(y)
+
+# nothing taken of a list is nothing
+def List.take_zero(-A: Data, xs: List<&2, A>) -> {List.take(&2, A, xs, 0n) == []: List<&2, A>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{h, r}:
+      {==}
 
 # dropping nothing keeps a list
 def List.drop_zero(a, -A: Kind(a), xs: List<a, A>) -> {List.drop(a, A, xs, 0n) == xs: List<a, A>}:
@@ -1514,6 +1552,37 @@ def List.ends_right(ty, same, sound, a, b):
 
 # Equality
 # --------
+# A check same of A is an equality when Eq.Laws(A, same) holds. A def that
+# needs it takes same as a template, and its laws as one more: the code then
+# runs same inlined, and the laws cost nothing at run time.
+
+# same is True for a value and itself, and only for equal values
+def Eq.Laws(-A: Data, same: A -> A -> Bool) -> Type:
+  (
+    @x: A -> {same(x, x) == True{}: Bool}
+  )
+    & (@x: A -> @y: A -> {same(x, y) == True{}: Bool} -> {x == y: A})
+
+# same is True for x and itself, by its laws l
+def Eq.refl(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  l: Eq.Laws(A, same),
+  x: A
+) -> {same(x, x) == True{}: Bool}:
+  (r, d) = l
+  r(x)
+
+# same is True only for equal x and y, by its laws l
+def Eq.sound(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  l: Eq.Laws(A, same),
+  x: A,
+  y: A
+) -> {same(x, y) == True{}: Bool} -> {x == y: A}:
+  (r, d) = l
+  d(x, y)
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality, or a proof, keeps each and/or as one value for the proofs to split on
 # xs and ys hold the same elements in the same order, as same calls them
@@ -1612,35 +1681,4330 @@ def List.take_append(
       }
       {==}
 
-# a resource's content: one byte per U32, as Base's File effects use
+# a resource's content: one byte per U32, as Base's File effects use; the
+# bytes of a text are its UTF-8 (Bytes.of_text_bytes)
 def Bytes() -> Data:
   List<&2, U32>
-# the codes of the characters of s, one per byte: for ASCII text
+
+# no bit of w is set
+def Word.none(n: Nat, w: Word(n)) -> Bool:
+  match n:
+    case 0n:
+      True{}
+    case 1n+p:
+      match w:
+        case WCon{b, t}:
+          List.all.if(u => Word.none(p, t), Bool.not(b))
+
+# every code of b is a byte: no bit above the eighth is set
+def Bytes.are_bytes(b: List<&2, U32>) -> Bool:
+  match b:
+    case Nil{}:
+      True{}
+    case Con{U32{WCon{_, WCon{_, WCon{_, WCon{_, WCon{_, WCon{_, WCon{_, WCon{_, h}}}}}}}}}, r}:
+      List.all.if(u => Bytes.are_bytes(r), Word.none(24n, h))
+
+# the byte of the bits b0 (the lowest) to b7
+def Byte.of(b0: Bool, b1: Bool, b2: Bool, b3: Bool, b4: Bool, b5: Bool, b6: Bool, b7: Bool) -> U32:
+  U32{
+    WCon{b0, WCon{b1, WCon{b2, WCon{b3, WCon{b4, WCon{b5, WCon{b6, WCon{b7, Word.zero(24n)}}}}}}}}
+  }
+
+# UTF-8
+# -----
+# A character of up to 7 bits is one byte; of up to 11, 16 or 21 bits, two,
+# three or four. A character with a higher bit set is not Unicode: it gives the
+# replacement character U+FFFD.
+
+# the replacement character, U+FFFD
+def Utf8.bad() -> Char:
+  Chr{65533}
+
+# c holds no bit above the 21st: UTF-8 has its bytes
+def Char.fits_utf8(c: Char) -> Bool:
+  match c:
+    case Chr{
+      U32{
+        WCon{
+          _,
+          WCon{
+            _,
+            WCon{
+              _,
+              WCon{
+                _,
+                WCon{
+                  _,
+                  WCon{
+                    _,
+                    WCon{
+                      _,
+                      WCon{
+                        _,
+                        WCon{
+                          _,
+                          WCon{
+                            _,
+                            WCon{
+                              _,
+                              WCon{
+                                _,
+                                WCon{
+                                  _,
+                                  WCon{
+                                    _,
+                                    WCon{
+                                      _,
+                                      WCon{
+                                        _,
+                                        WCon{
+                                          _,
+                                          WCon{
+                                            _,
+                                            WCon{
+                                              _,
+                                              WCon{
+                                                _,
+                                                WCon{
+                                                  _,
+                                                  WCon{
+                                                    b21,
+                                                    WCon{
+                                                      b22,
+                                                      WCon{
+                                                        b23,
+                                                        WCon{
+                                                          b24,
+                                                          WCon{
+                                                            b25,
+                                                            WCon{
+                                                              b26,
+                                                              WCon{
+                                                                b27,
+                                                                WCon{
+                                                                  b28,
+                                                                  WCon{
+                                                                    b29,
+                                                                    WCon{b30, WCon{b31, WNil{}}}
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }:
+      Bool.not(
+        Bool.or(
+          b31,
+          Bool.or(
+            b30,
+            Bool.or(
+              b29,
+              Bool.or(
+                b28,
+                Bool.or(
+                  b27,
+                  Bool.or(b26, Bool.or(b25, Bool.or(b24, Bool.or(b23, Bool.or(b22, b21)))))
+                )
+              )
+            )
+          )
+        )
+      )
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only a law's premise calls it, so it never runs
+# every character of s holds no bit above the 21st
+def Text.fits_utf8(s: String) -> Bool:
+  match s:
+    case SNil{}:
+      True{}
+    case SCon{c, r}:
+      Bool.and(Char.fits_utf8(c), Text.fits_utf8(r))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# the bytes of a character of 8 to 11 bits, or of fewer (long)
+def Utf8.two(
+  long: Bool,
+  b0: Bool,
+  b1: Bool,
+  b2: Bool,
+  b3: Bool,
+  b4: Bool,
+  b5: Bool,
+  b6: Bool,
+  b7: Bool,
+  b8: Bool,
+  b9: Bool,
+  b10: Bool
+) -> List<&2, U32>:
+  match long:
+    case True{}:
+      [
+        Byte.of(b6, b7, b8, b9, b10, False{}, True{}, True{}),
+        Byte.of(b0, b1, b2, b3, b4, b5, False{}, True{})
+      ]
+    case False{}:
+      [Byte.of(b0, b1, b2, b3, b4, b5, b6, False{})]
+
+# the bytes of a character of 12 to 16 bits, or of fewer (long)
+def Utf8.three(
+  long: Bool,
+  b0: Bool,
+  b1: Bool,
+  b2: Bool,
+  b3: Bool,
+  b4: Bool,
+  b5: Bool,
+  b6: Bool,
+  +b7: Bool,
+  +b8: Bool,
+  +b9: Bool,
+  +b10: Bool,
+  b11: Bool,
+  b12: Bool,
+  b13: Bool,
+  b14: Bool,
+  b15: Bool
+) -> List<&2, U32>:
+  match long:
+    case True{}:
+      [
+        Byte.of(b12, b13, b14, b15, False{}, True{}, True{}, True{}),
+        Byte.of(b6, b7, b8, b9, b10, b11, False{}, True{}),
+        Byte.of(b0, b1, b2, b3, b4, b5, False{}, True{})
+      ]
+    case False{}:
+      Utf8.two(
+        Bool.or(b10, Bool.or(b9, Bool.or(b8, b7))),
+        b0,
+        b1,
+        b2,
+        b3,
+        b4,
+        b5,
+        b6,
+        b7,
+        b8,
+        b9,
+        b10
+      )
+
+# the bytes of a character of 17 to 21 bits, or of fewer (long)
+def Utf8.four(
+  long: Bool,
+  b0: Bool,
+  b1: Bool,
+  b2: Bool,
+  b3: Bool,
+  b4: Bool,
+  b5: Bool,
+  b6: Bool,
+  b7: Bool,
+  b8: Bool,
+  b9: Bool,
+  b10: Bool,
+  +b11: Bool,
+  +b12: Bool,
+  +b13: Bool,
+  +b14: Bool,
+  +b15: Bool,
+  b16: Bool,
+  b17: Bool,
+  b18: Bool,
+  b19: Bool,
+  b20: Bool
+) -> List<&2, U32>:
+  match long:
+    case True{}:
+      [
+        Byte.of(b18, b19, b20, False{}, True{}, True{}, True{}, True{}),
+        Byte.of(b12, b13, b14, b15, b16, b17, False{}, True{}),
+        Byte.of(b6, b7, b8, b9, b10, b11, False{}, True{}),
+        Byte.of(b0, b1, b2, b3, b4, b5, False{}, True{})
+      ]
+    case False{}:
+      Utf8.three(
+        Bool.or(b15, Bool.or(b14, Bool.or(b13, Bool.or(b12, b11)))),
+        b0,
+        b1,
+        b2,
+        b3,
+        b4,
+        b5,
+        b6,
+        b7,
+        b8,
+        b9,
+        b10,
+        b11,
+        b12,
+        b13,
+        b14,
+        b15
+      )
+
+# the bytes of a character of the bits b0 to b20, when no higher bit is set
+# (over); else the bytes of the replacement character
+def Utf8.fit(
+  over: Bool,
+  b0: Bool,
+  b1: Bool,
+  b2: Bool,
+  b3: Bool,
+  b4: Bool,
+  b5: Bool,
+  b6: Bool,
+  b7: Bool,
+  b8: Bool,
+  b9: Bool,
+  b10: Bool,
+  b11: Bool,
+  b12: Bool,
+  b13: Bool,
+  b14: Bool,
+  b15: Bool,
+  +b16: Bool,
+  +b17: Bool,
+  +b18: Bool,
+  +b19: Bool,
+  +b20: Bool
+) -> List<&2, U32>:
+  match over:
+    case True{}:
+      [
+        Byte.of(True{}, True{}, True{}, True{}, False{}, True{}, True{}, True{}),
+        Byte.of(True{}, True{}, True{}, True{}, True{}, True{}, False{}, True{}),
+        Byte.of(True{}, False{}, True{}, True{}, True{}, True{}, False{}, True{})
+      ]
+    case False{}:
+      Utf8.four(
+        Bool.or(b20, Bool.or(b19, Bool.or(b18, Bool.or(b17, b16)))),
+        b0,
+        b1,
+        b2,
+        b3,
+        b4,
+        b5,
+        b6,
+        b7,
+        b8,
+        b9,
+        b10,
+        b11,
+        b12,
+        b13,
+        b14,
+        b15,
+        b16,
+        b17,
+        b18,
+        b19,
+        b20
+      )
+
+# the UTF-8 bytes of c
+def Utf8.char(c: Char) -> List<&2, U32>:
+  match c:
+    case Chr{
+      U32{
+        WCon{
+          b0,
+          WCon{
+            b1,
+            WCon{
+              b2,
+              WCon{
+                b3,
+                WCon{
+                  b4,
+                  WCon{
+                    b5,
+                    WCon{
+                      b6,
+                      WCon{
+                        b7,
+                        WCon{
+                          b8,
+                          WCon{
+                            b9,
+                            WCon{
+                              b10,
+                              WCon{
+                                b11,
+                                WCon{
+                                  b12,
+                                  WCon{
+                                    b13,
+                                    WCon{
+                                      b14,
+                                      WCon{
+                                        b15,
+                                        WCon{
+                                          b16,
+                                          WCon{
+                                            b17,
+                                            WCon{
+                                              b18,
+                                              WCon{
+                                                b19,
+                                                WCon{
+                                                  b20,
+                                                  WCon{
+                                                    b21,
+                                                    WCon{
+                                                      b22,
+                                                      WCon{
+                                                        b23,
+                                                        WCon{
+                                                          b24,
+                                                          WCon{
+                                                            b25,
+                                                            WCon{
+                                                              b26,
+                                                              WCon{
+                                                                b27,
+                                                                WCon{
+                                                                  b28,
+                                                                  WCon{
+                                                                    b29,
+                                                                    WCon{b30, WCon{b31, WNil{}}}
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }:
+      Utf8.fit(
+        Bool.or(
+          b31,
+          Bool.or(
+            b30,
+            Bool.or(
+              b29,
+              Bool.or(
+                b28,
+                Bool.or(
+                  b27,
+                  Bool.or(b26, Bool.or(b25, Bool.or(b24, Bool.or(b23, Bool.or(b22, b21)))))
+                )
+              )
+            )
+          )
+        ),
+        b0,
+        b1,
+        b2,
+        b3,
+        b4,
+        b5,
+        b6,
+        b7,
+        b8,
+        b9,
+        b10,
+        b11,
+        b12,
+        b13,
+        b14,
+        b15,
+        b16,
+        b17,
+        b18,
+        b19,
+        b20
+      )
+
+# the UTF-8 bytes of s
 def Bytes.of_text(s: String) -> Bytes():
   match s:
     case SNil{}:
       []
-    case SCon{Chr{c}, r}:
-      c <> Bytes.of_text(r)
+    case SCon{c, r}:
+      List.append(&2, U32, Utf8.char(c), Bytes.of_text(r))
 
-# the text of the bytes b, one character per byte
-def Bytes.to_text(b: Bytes()) -> String:
+# what a reader of UTF-8 bytes waits for: the start of a character, or need
+# more bytes of a character whose bits so far are acc (the lowest first)
+type Utf8.Wait is Data:
+  Utf8.start{}
+  Utf8.more{need: Nat, acc: List<&2, Bool>}
+
+# what a byte gives the reader: what it waits for next, and the characters
+# that the byte ends
+type Utf8.Out is Data:
+  Utf8.Out{wait: Utf8.Wait, chars: List<&2, Char>}
+
+# what the reader waits for next, after o
+def Utf8.Out.wait(o: Utf8.Out) -> Utf8.Wait:
+  match o:
+    case Utf8.Out{w, cs}:
+      w
+
+# the characters that o ends
+def Utf8.Out.chars(o: Utf8.Out) -> List<&2, Char>:
+  match o:
+    case Utf8.Out{w, cs}:
+      cs
+
+# the n bits of bs (the lowest first), then unset bits
+def Utf8.word(n: Nat, bs: List<&2, Bool>) -> Word(n):
+  match n:
+    case 0n:
+      WNil{}
+    case 1n+p:
+      match bs:
+        case Nil{}:
+          WCon{False{}, Utf8.word(p, [])}
+        case Con{h, t}:
+          WCon{h, Utf8.word(p, t)}
+
+# the character of the bits bs (the lowest first)
+def Utf8.char_of(bs: List<&2, Bool>) -> Char:
+  Chr{U32{Utf8.word(32n, bs)}}
+
+# what the first byte of a character, of the bits x0 (the lowest) to x7, gives:
+# the kind is in the bits 3 to 7, which a match reads in that order
+def Utf8.lead(
+  x0: Bool,
+  x1: Bool,
+  x2: Bool,
+  x3: Bool,
+  x4: Bool,
+  x5: Bool,
+  x6: Bool,
+  x7: Bool
+) -> Utf8.Out:
+  match x3:
+    case True{}:
+      match x4:
+        case True{}:
+          match x5:
+            case True{}:
+              match x6:
+                case True{}:
+                  match x7:
+                    case True{}:
+                      Utf8.Out{Utf8.start{}, [Utf8.bad()]}
+                    case False{}:
+                      Utf8.Out{
+                        Utf8.start{},
+                        [Utf8.char_of([x0, x1, x2, True{}, True{}, True{}, True{}])]
+                      }
+                case False{}:
+                  match x7:
+                    case True{}:
+                      Utf8.Out{Utf8.start{}, [Utf8.bad()]}
+                    case False{}:
+                      Utf8.Out{
+                        Utf8.start{},
+                        [Utf8.char_of([x0, x1, x2, True{}, True{}, True{}, False{}])]
+                      }
+            case False{}:
+              match x6:
+                case True{}:
+                  match x7:
+                    case True{}:
+                      Utf8.Out{Utf8.more{1n, [x0, x1, x2, True{}, True{}]}, []}
+                    case False{}:
+                      Utf8.Out{
+                        Utf8.start{},
+                        [Utf8.char_of([x0, x1, x2, True{}, True{}, False{}, True{}])]
+                      }
+                case False{}:
+                  match x7:
+                    case True{}:
+                      Utf8.Out{Utf8.start{}, [Utf8.bad()]}
+                    case False{}:
+                      Utf8.Out{
+                        Utf8.start{},
+                        [Utf8.char_of([x0, x1, x2, True{}, True{}, False{}, False{}])]
+                      }
+        case False{}:
+          match x5:
+            case True{}:
+              match x6:
+                case True{}:
+                  match x7:
+                    case True{}:
+                      Utf8.Out{Utf8.more{2n, [x0, x1, x2, True{}]}, []}
+                    case False{}:
+                      Utf8.Out{
+                        Utf8.start{},
+                        [Utf8.char_of([x0, x1, x2, True{}, False{}, True{}, True{}])]
+                      }
+                case False{}:
+                  match x7:
+                    case True{}:
+                      Utf8.Out{Utf8.start{}, [Utf8.bad()]}
+                    case False{}:
+                      Utf8.Out{
+                        Utf8.start{},
+                        [Utf8.char_of([x0, x1, x2, True{}, False{}, True{}, False{}])]
+                      }
+            case False{}:
+              match x6:
+                case True{}:
+                  match x7:
+                    case True{}:
+                      Utf8.Out{Utf8.more{1n, [x0, x1, x2, True{}, False{}]}, []}
+                    case False{}:
+                      Utf8.Out{
+                        Utf8.start{},
+                        [Utf8.char_of([x0, x1, x2, True{}, False{}, False{}, True{}])]
+                      }
+                case False{}:
+                  match x7:
+                    case True{}:
+                      Utf8.Out{Utf8.start{}, [Utf8.bad()]}
+                    case False{}:
+                      Utf8.Out{
+                        Utf8.start{},
+                        [Utf8.char_of([x0, x1, x2, True{}, False{}, False{}, False{}])]
+                      }
+    case False{}:
+      match x4:
+        case True{}:
+          match x5:
+            case True{}:
+              match x6:
+                case True{}:
+                  match x7:
+                    case True{}:
+                      Utf8.Out{Utf8.more{3n, [x0, x1, x2]}, []}
+                    case False{}:
+                      Utf8.Out{
+                        Utf8.start{},
+                        [Utf8.char_of([x0, x1, x2, False{}, True{}, True{}, True{}])]
+                      }
+                case False{}:
+                  match x7:
+                    case True{}:
+                      Utf8.Out{Utf8.start{}, [Utf8.bad()]}
+                    case False{}:
+                      Utf8.Out{
+                        Utf8.start{},
+                        [Utf8.char_of([x0, x1, x2, False{}, True{}, True{}, False{}])]
+                      }
+            case False{}:
+              match x6:
+                case True{}:
+                  match x7:
+                    case True{}:
+                      Utf8.Out{Utf8.more{1n, [x0, x1, x2, False{}, True{}]}, []}
+                    case False{}:
+                      Utf8.Out{
+                        Utf8.start{},
+                        [Utf8.char_of([x0, x1, x2, False{}, True{}, False{}, True{}])]
+                      }
+                case False{}:
+                  match x7:
+                    case True{}:
+                      Utf8.Out{Utf8.start{}, [Utf8.bad()]}
+                    case False{}:
+                      Utf8.Out{
+                        Utf8.start{},
+                        [Utf8.char_of([x0, x1, x2, False{}, True{}, False{}, False{}])]
+                      }
+        case False{}:
+          match x5:
+            case True{}:
+              match x6:
+                case True{}:
+                  match x7:
+                    case True{}:
+                      Utf8.Out{Utf8.more{2n, [x0, x1, x2, False{}]}, []}
+                    case False{}:
+                      Utf8.Out{
+                        Utf8.start{},
+                        [Utf8.char_of([x0, x1, x2, False{}, False{}, True{}, True{}])]
+                      }
+                case False{}:
+                  match x7:
+                    case True{}:
+                      Utf8.Out{Utf8.start{}, [Utf8.bad()]}
+                    case False{}:
+                      Utf8.Out{
+                        Utf8.start{},
+                        [Utf8.char_of([x0, x1, x2, False{}, False{}, True{}, False{}])]
+                      }
+            case False{}:
+              match x6:
+                case True{}:
+                  match x7:
+                    case True{}:
+                      Utf8.Out{Utf8.more{1n, [x0, x1, x2, False{}, False{}]}, []}
+                    case False{}:
+                      Utf8.Out{
+                        Utf8.start{},
+                        [Utf8.char_of([x0, x1, x2, False{}, False{}, False{}, True{}])]
+                      }
+                case False{}:
+                  match x7:
+                    case True{}:
+                      Utf8.Out{Utf8.start{}, [Utf8.bad()]}
+                    case False{}:
+                      Utf8.Out{
+                        Utf8.start{},
+                        [Utf8.char_of([x0, x1, x2, False{}, False{}, False{}, False{}])]
+                      }
+
+# the replacement character before what w and the characters cs gave
+def Utf8.bad_then(p: Utf8.Out) -> Utf8.Out:
+  match p:
+    case Utf8.Out{w, cs}:
+      Utf8.Out{w, Utf8.bad() <> cs}
+
+# the next of need bytes of a character with the bits acc so far: a byte
+# 10xxxxxx (k7, k6: its bits 7 and 6) gives 6 more bits; another byte cuts the
+# character short
+def Utf8.cont(
+  k6: Bool,
+  k7: Bool,
+  need: Nat,
+  acc: List<&2, Bool>,
+  x0: Bool,
+  x1: Bool,
+  x2: Bool,
+  x3: Bool,
+  x4: Bool,
+  x5: Bool,
+  x6: Bool,
+  x7: Bool
+) -> Utf8.Out:
+  match k6 k7:
+    case False{} True{}:
+      match need:
+        case 1n+k:
+          match k:
+            case 0n:
+              Utf8.Out{
+                Utf8.start{},
+                [Utf8.char_of(List.append(&2, Bool, [x0, x1, x2, x3, x4, x5], acc))]
+              }
+            case 1n+j:
+              Utf8.Out{Utf8.more{k, List.append(&2, Bool, [x0, x1, x2, x3, x4, x5], acc)}, []}
+        case 0n:
+          Utf8.Out{Utf8.start{}, [Utf8.bad()]}
+    case _ _:
+      Utf8.bad_then(Utf8.lead(x0, x1, x2, x3, x4, x5, x6, x7))
+
+# what the byte of the bits x0 to x7 gives, while the reader waits for w
+def Utf8.step(
+  w: Utf8.Wait,
+  x0: Bool,
+  x1: Bool,
+  x2: Bool,
+  x3: Bool,
+  x4: Bool,
+  x5: Bool,
+  +x6: Bool,
+  +x7: Bool
+) -> Utf8.Out:
+  match w:
+    case Utf8.start{}:
+      Utf8.lead(x0, x1, x2, x3, x4, x5, x6, x7)
+    case Utf8.more{need, acc}:
+      Utf8.cont(x6, x7, need, acc, x0, x1, x2, x3, x4, x5, x6, x7)
+
+# the end of the bytes, while the reader waits for w
+def Utf8.end(w: Utf8.Wait) -> String:
+  match w:
+    case Utf8.start{}:
+      SNil{}
+    case Utf8.more{need, acc}:
+      SCon{Utf8.bad(), SNil{}}
+
+# the characters cs, then t
+def Utf8.emit(cs: List<&2, Char>, t: String) -> String:
+  match cs:
+    case Nil{}:
+      t
+    case Con{c, r}:
+      SCon{c, Utf8.emit(r, t)}
+
+# the text of the bytes b, read while waiting for w: a character cut short
+# reads as the replacement character
+def Utf8.read(b: List<&2, U32>, w: Utf8.Wait) -> String:
   match b:
     case Nil{}:
-      SNil{}
-    case Con{c, r}:
-      SCon{Chr{c}, Bytes.to_text(r)}
+      Utf8.end(w)
+    case Con{
+      U32{WCon{x0, WCon{x1, WCon{x2, WCon{x3, WCon{x4, WCon{x5, WCon{x6, WCon{x7, _}}}}}}}}},
+      r
+    }:
+      +o = Utf8.step(w, x0, x1, x2, x3, x4, x5, x6, x7)
+      Utf8.emit(Utf8.Out.chars(o), Utf8.read(r, Utf8.Out.wait(o)))
 
-# the bytes of a text read back as the text
-def Bytes.text_back(s: String) -> {Bytes.to_text(Bytes.of_text(s)) == s: String}:
+# the text of the UTF-8 bytes b: a byte that starts no character, or a
+# character cut short, reads as the replacement character
+def Bytes.to_text(b: Bytes()) -> String:
+  Utf8.read(b, Utf8.start{})
+
+# Utf8.char_back, with the bits of the character from the highest
+def Utf8.char_back.bits(
+  b31: Bool,
+  b30: Bool,
+  b29: Bool,
+  b28: Bool,
+  b27: Bool,
+  b26: Bool,
+  b25: Bool,
+  b24: Bool,
+  b23: Bool,
+  b22: Bool,
+  b21: Bool,
+  b20: Bool,
+  b19: Bool,
+  b18: Bool,
+  b17: Bool,
+  b16: Bool,
+  b15: Bool,
+  b14: Bool,
+  b13: Bool,
+  b12: Bool,
+  b11: Bool,
+  b10: Bool,
+  b9: Bool,
+  b8: Bool,
+  b7: Bool,
+  b6: Bool,
+  b5: Bool,
+  b4: Bool,
+  b3: Bool,
+  b2: Bool,
+  b1: Bool,
+  b0: Bool,
+  b: List<&2, U32>
+) -> {
+  Char.fits_utf8(
+    Chr{
+      U32{
+        WCon{
+          b0,
+          WCon{
+            b1,
+            WCon{
+              b2,
+              WCon{
+                b3,
+                WCon{
+                  b4,
+                  WCon{
+                    b5,
+                    WCon{
+                      b6,
+                      WCon{
+                        b7,
+                        WCon{
+                          b8,
+                          WCon{
+                            b9,
+                            WCon{
+                              b10,
+                              WCon{
+                                b11,
+                                WCon{
+                                  b12,
+                                  WCon{
+                                    b13,
+                                    WCon{
+                                      b14,
+                                      WCon{
+                                        b15,
+                                        WCon{
+                                          b16,
+                                          WCon{
+                                            b17,
+                                            WCon{
+                                              b18,
+                                              WCon{
+                                                b19,
+                                                WCon{
+                                                  b20,
+                                                  WCon{
+                                                    b21,
+                                                    WCon{
+                                                      b22,
+                                                      WCon{
+                                                        b23,
+                                                        WCon{
+                                                          b24,
+                                                          WCon{
+                                                            b25,
+                                                            WCon{
+                                                              b26,
+                                                              WCon{
+                                                                b27,
+                                                                WCon{
+                                                                  b28,
+                                                                  WCon{
+                                                                    b29,
+                                                                    WCon{b30, WCon{b31, WNil{}}}
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  )
+    == True{}: Bool
+} -> {
+  Bytes.to_text(
+    List.append(
+      &2,
+      U32,
+      Utf8.char(
+        Chr{
+          U32{
+            WCon{
+              b0,
+              WCon{
+                b1,
+                WCon{
+                  b2,
+                  WCon{
+                    b3,
+                    WCon{
+                      b4,
+                      WCon{
+                        b5,
+                        WCon{
+                          b6,
+                          WCon{
+                            b7,
+                            WCon{
+                              b8,
+                              WCon{
+                                b9,
+                                WCon{
+                                  b10,
+                                  WCon{
+                                    b11,
+                                    WCon{
+                                      b12,
+                                      WCon{
+                                        b13,
+                                        WCon{
+                                          b14,
+                                          WCon{
+                                            b15,
+                                            WCon{
+                                              b16,
+                                              WCon{
+                                                b17,
+                                                WCon{
+                                                  b18,
+                                                  WCon{
+                                                    b19,
+                                                    WCon{
+                                                      b20,
+                                                      WCon{
+                                                        b21,
+                                                        WCon{
+                                                          b22,
+                                                          WCon{
+                                                            b23,
+                                                            WCon{
+                                                              b24,
+                                                              WCon{
+                                                                b25,
+                                                                WCon{
+                                                                  b26,
+                                                                  WCon{
+                                                                    b27,
+                                                                    WCon{
+                                                                      b28,
+                                                                      WCon{
+                                                                        b29,
+                                                                        WCon{b30, WCon{b31, WNil{}}}
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ),
+      b
+    )
+  )
+    == SCon{
+      Chr{
+        U32{
+          WCon{
+            b0,
+            WCon{
+              b1,
+              WCon{
+                b2,
+                WCon{
+                  b3,
+                  WCon{
+                    b4,
+                    WCon{
+                      b5,
+                      WCon{
+                        b6,
+                        WCon{
+                          b7,
+                          WCon{
+                            b8,
+                            WCon{
+                              b9,
+                              WCon{
+                                b10,
+                                WCon{
+                                  b11,
+                                  WCon{
+                                    b12,
+                                    WCon{
+                                      b13,
+                                      WCon{
+                                        b14,
+                                        WCon{
+                                          b15,
+                                          WCon{
+                                            b16,
+                                            WCon{
+                                              b17,
+                                              WCon{
+                                                b18,
+                                                WCon{
+                                                  b19,
+                                                  WCon{
+                                                    b20,
+                                                    WCon{
+                                                      b21,
+                                                      WCon{
+                                                        b22,
+                                                        WCon{
+                                                          b23,
+                                                          WCon{
+                                                            b24,
+                                                            WCon{
+                                                              b25,
+                                                              WCon{
+                                                                b26,
+                                                                WCon{
+                                                                  b27,
+                                                                  WCon{
+                                                                    b28,
+                                                                    WCon{
+                                                                      b29,
+                                                                      WCon{b30, WCon{b31, WNil{}}}
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      Bytes.to_text(b)
+    }: String
+}:
+  match b31:
+    case True{}:
+      h => Empty.absurd(
+        {
+          Bytes.to_text(
+            List.append(
+              &2,
+              U32,
+              Utf8.char(
+                Chr{
+                  U32{
+                    WCon{
+                      b0,
+                      WCon{
+                        b1,
+                        WCon{
+                          b2,
+                          WCon{
+                            b3,
+                            WCon{
+                              b4,
+                              WCon{
+                                b5,
+                                WCon{
+                                  b6,
+                                  WCon{
+                                    b7,
+                                    WCon{
+                                      b8,
+                                      WCon{
+                                        b9,
+                                        WCon{
+                                          b10,
+                                          WCon{
+                                            b11,
+                                            WCon{
+                                              b12,
+                                              WCon{
+                                                b13,
+                                                WCon{
+                                                  b14,
+                                                  WCon{
+                                                    b15,
+                                                    WCon{
+                                                      b16,
+                                                      WCon{
+                                                        b17,
+                                                        WCon{
+                                                          b18,
+                                                          WCon{
+                                                            b19,
+                                                            WCon{
+                                                              b20,
+                                                              WCon{
+                                                                b21,
+                                                                WCon{
+                                                                  b22,
+                                                                  WCon{
+                                                                    b23,
+                                                                    WCon{
+                                                                      b24,
+                                                                      WCon{
+                                                                        b25,
+                                                                        WCon{
+                                                                          b26,
+                                                                          WCon{
+                                                                            b27,
+                                                                            WCon{
+                                                                              b28,
+                                                                              WCon{
+                                                                                b29,
+                                                                                WCon{
+                                                                                  b30,
+                                                                                  WCon{
+                                                                                    True{},
+                                                                                    WNil{}
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ),
+              b
+            )
+          )
+            == SCon{
+              Chr{
+                U32{
+                  WCon{
+                    b0,
+                    WCon{
+                      b1,
+                      WCon{
+                        b2,
+                        WCon{
+                          b3,
+                          WCon{
+                            b4,
+                            WCon{
+                              b5,
+                              WCon{
+                                b6,
+                                WCon{
+                                  b7,
+                                  WCon{
+                                    b8,
+                                    WCon{
+                                      b9,
+                                      WCon{
+                                        b10,
+                                        WCon{
+                                          b11,
+                                          WCon{
+                                            b12,
+                                            WCon{
+                                              b13,
+                                              WCon{
+                                                b14,
+                                                WCon{
+                                                  b15,
+                                                  WCon{
+                                                    b16,
+                                                    WCon{
+                                                      b17,
+                                                      WCon{
+                                                        b18,
+                                                        WCon{
+                                                          b19,
+                                                          WCon{
+                                                            b20,
+                                                            WCon{
+                                                              b21,
+                                                              WCon{
+                                                                b22,
+                                                                WCon{
+                                                                  b23,
+                                                                  WCon{
+                                                                    b24,
+                                                                    WCon{
+                                                                      b25,
+                                                                      WCon{
+                                                                        b26,
+                                                                        WCon{
+                                                                          b27,
+                                                                          WCon{
+                                                                            b28,
+                                                                            WCon{
+                                                                              b29,
+                                                                              WCon{
+                                                                                b30,
+                                                                                WCon{True{}, WNil{}}
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              Bytes.to_text(b)
+            }: String
+        },
+        Bool.false_ne_true(h)
+      )
+    case False{}:
+      match b30:
+        case True{}:
+          h => Empty.absurd(
+            {
+              Bytes.to_text(
+                List.append(
+                  &2,
+                  U32,
+                  Utf8.char(
+                    Chr{
+                      U32{
+                        WCon{
+                          b0,
+                          WCon{
+                            b1,
+                            WCon{
+                              b2,
+                              WCon{
+                                b3,
+                                WCon{
+                                  b4,
+                                  WCon{
+                                    b5,
+                                    WCon{
+                                      b6,
+                                      WCon{
+                                        b7,
+                                        WCon{
+                                          b8,
+                                          WCon{
+                                            b9,
+                                            WCon{
+                                              b10,
+                                              WCon{
+                                                b11,
+                                                WCon{
+                                                  b12,
+                                                  WCon{
+                                                    b13,
+                                                    WCon{
+                                                      b14,
+                                                      WCon{
+                                                        b15,
+                                                        WCon{
+                                                          b16,
+                                                          WCon{
+                                                            b17,
+                                                            WCon{
+                                                              b18,
+                                                              WCon{
+                                                                b19,
+                                                                WCon{
+                                                                  b20,
+                                                                  WCon{
+                                                                    b21,
+                                                                    WCon{
+                                                                      b22,
+                                                                      WCon{
+                                                                        b23,
+                                                                        WCon{
+                                                                          b24,
+                                                                          WCon{
+                                                                            b25,
+                                                                            WCon{
+                                                                              b26,
+                                                                              WCon{
+                                                                                b27,
+                                                                                WCon{
+                                                                                  b28,
+                                                                                  WCon{
+                                                                                    b29,
+                                                                                    WCon{
+                                                                                      True{},
+                                                                                      WCon{
+                                                                                        False{},
+                                                                                        WNil{}
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ),
+                  b
+                )
+              )
+                == SCon{
+                  Chr{
+                    U32{
+                      WCon{
+                        b0,
+                        WCon{
+                          b1,
+                          WCon{
+                            b2,
+                            WCon{
+                              b3,
+                              WCon{
+                                b4,
+                                WCon{
+                                  b5,
+                                  WCon{
+                                    b6,
+                                    WCon{
+                                      b7,
+                                      WCon{
+                                        b8,
+                                        WCon{
+                                          b9,
+                                          WCon{
+                                            b10,
+                                            WCon{
+                                              b11,
+                                              WCon{
+                                                b12,
+                                                WCon{
+                                                  b13,
+                                                  WCon{
+                                                    b14,
+                                                    WCon{
+                                                      b15,
+                                                      WCon{
+                                                        b16,
+                                                        WCon{
+                                                          b17,
+                                                          WCon{
+                                                            b18,
+                                                            WCon{
+                                                              b19,
+                                                              WCon{
+                                                                b20,
+                                                                WCon{
+                                                                  b21,
+                                                                  WCon{
+                                                                    b22,
+                                                                    WCon{
+                                                                      b23,
+                                                                      WCon{
+                                                                        b24,
+                                                                        WCon{
+                                                                          b25,
+                                                                          WCon{
+                                                                            b26,
+                                                                            WCon{
+                                                                              b27,
+                                                                              WCon{
+                                                                                b28,
+                                                                                WCon{
+                                                                                  b29,
+                                                                                  WCon{
+                                                                                    True{},
+                                                                                    WCon{
+                                                                                      False{},
+                                                                                      WNil{}
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  Bytes.to_text(b)
+                }: String
+            },
+            Bool.false_ne_true(h)
+          )
+        case False{}:
+          match b29:
+            case True{}:
+              h => Empty.absurd(
+                {
+                  Bytes.to_text(
+                    List.append(
+                      &2,
+                      U32,
+                      Utf8.char(
+                        Chr{
+                          U32{
+                            WCon{
+                              b0,
+                              WCon{
+                                b1,
+                                WCon{
+                                  b2,
+                                  WCon{
+                                    b3,
+                                    WCon{
+                                      b4,
+                                      WCon{
+                                        b5,
+                                        WCon{
+                                          b6,
+                                          WCon{
+                                            b7,
+                                            WCon{
+                                              b8,
+                                              WCon{
+                                                b9,
+                                                WCon{
+                                                  b10,
+                                                  WCon{
+                                                    b11,
+                                                    WCon{
+                                                      b12,
+                                                      WCon{
+                                                        b13,
+                                                        WCon{
+                                                          b14,
+                                                          WCon{
+                                                            b15,
+                                                            WCon{
+                                                              b16,
+                                                              WCon{
+                                                                b17,
+                                                                WCon{
+                                                                  b18,
+                                                                  WCon{
+                                                                    b19,
+                                                                    WCon{
+                                                                      b20,
+                                                                      WCon{
+                                                                        b21,
+                                                                        WCon{
+                                                                          b22,
+                                                                          WCon{
+                                                                            b23,
+                                                                            WCon{
+                                                                              b24,
+                                                                              WCon{
+                                                                                b25,
+                                                                                WCon{
+                                                                                  b26,
+                                                                                  WCon{
+                                                                                    b27,
+                                                                                    WCon{
+                                                                                      b28,
+                                                                                      WCon{
+                                                                                        True{},
+                                                                                        WCon{
+                                                                                          False{},
+                                                                                          WCon{
+                                                                                            False{},
+                                                                                            WNil{}
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ),
+                      b
+                    )
+                  )
+                    == SCon{
+                      Chr{
+                        U32{
+                          WCon{
+                            b0,
+                            WCon{
+                              b1,
+                              WCon{
+                                b2,
+                                WCon{
+                                  b3,
+                                  WCon{
+                                    b4,
+                                    WCon{
+                                      b5,
+                                      WCon{
+                                        b6,
+                                        WCon{
+                                          b7,
+                                          WCon{
+                                            b8,
+                                            WCon{
+                                              b9,
+                                              WCon{
+                                                b10,
+                                                WCon{
+                                                  b11,
+                                                  WCon{
+                                                    b12,
+                                                    WCon{
+                                                      b13,
+                                                      WCon{
+                                                        b14,
+                                                        WCon{
+                                                          b15,
+                                                          WCon{
+                                                            b16,
+                                                            WCon{
+                                                              b17,
+                                                              WCon{
+                                                                b18,
+                                                                WCon{
+                                                                  b19,
+                                                                  WCon{
+                                                                    b20,
+                                                                    WCon{
+                                                                      b21,
+                                                                      WCon{
+                                                                        b22,
+                                                                        WCon{
+                                                                          b23,
+                                                                          WCon{
+                                                                            b24,
+                                                                            WCon{
+                                                                              b25,
+                                                                              WCon{
+                                                                                b26,
+                                                                                WCon{
+                                                                                  b27,
+                                                                                  WCon{
+                                                                                    b28,
+                                                                                    WCon{
+                                                                                      True{},
+                                                                                      WCon{
+                                                                                        False{},
+                                                                                        WCon{
+                                                                                          False{},
+                                                                                          WNil{}
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      Bytes.to_text(b)
+                    }: String
+                },
+                Bool.false_ne_true(h)
+              )
+            case False{}:
+              match b28:
+                case True{}:
+                  h => Empty.absurd(
+                    {
+                      Bytes.to_text(
+                        List.append(
+                          &2,
+                          U32,
+                          Utf8.char(
+                            Chr{
+                              U32{
+                                WCon{
+                                  b0,
+                                  WCon{
+                                    b1,
+                                    WCon{
+                                      b2,
+                                      WCon{
+                                        b3,
+                                        WCon{
+                                          b4,
+                                          WCon{
+                                            b5,
+                                            WCon{
+                                              b6,
+                                              WCon{
+                                                b7,
+                                                WCon{
+                                                  b8,
+                                                  WCon{
+                                                    b9,
+                                                    WCon{
+                                                      b10,
+                                                      WCon{
+                                                        b11,
+                                                        WCon{
+                                                          b12,
+                                                          WCon{
+                                                            b13,
+                                                            WCon{
+                                                              b14,
+                                                              WCon{
+                                                                b15,
+                                                                WCon{
+                                                                  b16,
+                                                                  WCon{
+                                                                    b17,
+                                                                    WCon{
+                                                                      b18,
+                                                                      WCon{
+                                                                        b19,
+                                                                        WCon{
+                                                                          b20,
+                                                                          WCon{
+                                                                            b21,
+                                                                            WCon{
+                                                                              b22,
+                                                                              WCon{
+                                                                                b23,
+                                                                                WCon{
+                                                                                  b24,
+                                                                                  WCon{
+                                                                                    b25,
+                                                                                    WCon{
+                                                                                      b26,
+                                                                                      WCon{
+                                                                                        b27,
+                                                                                        WCon{
+                                                                                          True{},
+                                                                                          WCon{
+                                                                                            False{},
+                                                                                            WCon{
+                                                                                              False{},
+                                                                                              WCon{
+                                                                                                False{},
+                                                                                                WNil{}
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ),
+                          b
+                        )
+                      )
+                        == SCon{
+                          Chr{
+                            U32{
+                              WCon{
+                                b0,
+                                WCon{
+                                  b1,
+                                  WCon{
+                                    b2,
+                                    WCon{
+                                      b3,
+                                      WCon{
+                                        b4,
+                                        WCon{
+                                          b5,
+                                          WCon{
+                                            b6,
+                                            WCon{
+                                              b7,
+                                              WCon{
+                                                b8,
+                                                WCon{
+                                                  b9,
+                                                  WCon{
+                                                    b10,
+                                                    WCon{
+                                                      b11,
+                                                      WCon{
+                                                        b12,
+                                                        WCon{
+                                                          b13,
+                                                          WCon{
+                                                            b14,
+                                                            WCon{
+                                                              b15,
+                                                              WCon{
+                                                                b16,
+                                                                WCon{
+                                                                  b17,
+                                                                  WCon{
+                                                                    b18,
+                                                                    WCon{
+                                                                      b19,
+                                                                      WCon{
+                                                                        b20,
+                                                                        WCon{
+                                                                          b21,
+                                                                          WCon{
+                                                                            b22,
+                                                                            WCon{
+                                                                              b23,
+                                                                              WCon{
+                                                                                b24,
+                                                                                WCon{
+                                                                                  b25,
+                                                                                  WCon{
+                                                                                    b26,
+                                                                                    WCon{
+                                                                                      b27,
+                                                                                      WCon{
+                                                                                        True{},
+                                                                                        WCon{
+                                                                                          False{},
+                                                                                          WCon{
+                                                                                            False{},
+                                                                                            WCon{
+                                                                                              False{},
+                                                                                              WNil{}
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          Bytes.to_text(b)
+                        }: String
+                    },
+                    Bool.false_ne_true(h)
+                  )
+                case False{}:
+                  match b27:
+                    case True{}:
+                      h => Empty.absurd(
+                        {
+                          Bytes.to_text(
+                            List.append(
+                              &2,
+                              U32,
+                              Utf8.char(
+                                Chr{
+                                  U32{
+                                    WCon{
+                                      b0,
+                                      WCon{
+                                        b1,
+                                        WCon{
+                                          b2,
+                                          WCon{
+                                            b3,
+                                            WCon{
+                                              b4,
+                                              WCon{
+                                                b5,
+                                                WCon{
+                                                  b6,
+                                                  WCon{
+                                                    b7,
+                                                    WCon{
+                                                      b8,
+                                                      WCon{
+                                                        b9,
+                                                        WCon{
+                                                          b10,
+                                                          WCon{
+                                                            b11,
+                                                            WCon{
+                                                              b12,
+                                                              WCon{
+                                                                b13,
+                                                                WCon{
+                                                                  b14,
+                                                                  WCon{
+                                                                    b15,
+                                                                    WCon{
+                                                                      b16,
+                                                                      WCon{
+                                                                        b17,
+                                                                        WCon{
+                                                                          b18,
+                                                                          WCon{
+                                                                            b19,
+                                                                            WCon{
+                                                                              b20,
+                                                                              WCon{
+                                                                                b21,
+                                                                                WCon{
+                                                                                  b22,
+                                                                                  WCon{
+                                                                                    b23,
+                                                                                    WCon{
+                                                                                      b24,
+                                                                                      WCon{
+                                                                                        b25,
+                                                                                        WCon{
+                                                                                          b26,
+                                                                                          WCon{
+                                                                                            True{},
+                                                                                            WCon{
+                                                                                              False{},
+                                                                                              WCon{
+                                                                                                False{},
+                                                                                                WCon{
+                                                                                                  False{},
+                                                                                                  WCon{
+                                                                                                    False{},
+                                                                                                    WNil{}
+                                                                                                  }
+                                                                                                }
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ),
+                              b
+                            )
+                          )
+                            == SCon{
+                              Chr{
+                                U32{
+                                  WCon{
+                                    b0,
+                                    WCon{
+                                      b1,
+                                      WCon{
+                                        b2,
+                                        WCon{
+                                          b3,
+                                          WCon{
+                                            b4,
+                                            WCon{
+                                              b5,
+                                              WCon{
+                                                b6,
+                                                WCon{
+                                                  b7,
+                                                  WCon{
+                                                    b8,
+                                                    WCon{
+                                                      b9,
+                                                      WCon{
+                                                        b10,
+                                                        WCon{
+                                                          b11,
+                                                          WCon{
+                                                            b12,
+                                                            WCon{
+                                                              b13,
+                                                              WCon{
+                                                                b14,
+                                                                WCon{
+                                                                  b15,
+                                                                  WCon{
+                                                                    b16,
+                                                                    WCon{
+                                                                      b17,
+                                                                      WCon{
+                                                                        b18,
+                                                                        WCon{
+                                                                          b19,
+                                                                          WCon{
+                                                                            b20,
+                                                                            WCon{
+                                                                              b21,
+                                                                              WCon{
+                                                                                b22,
+                                                                                WCon{
+                                                                                  b23,
+                                                                                  WCon{
+                                                                                    b24,
+                                                                                    WCon{
+                                                                                      b25,
+                                                                                      WCon{
+                                                                                        b26,
+                                                                                        WCon{
+                                                                                          True{},
+                                                                                          WCon{
+                                                                                            False{},
+                                                                                            WCon{
+                                                                                              False{},
+                                                                                              WCon{
+                                                                                                False{},
+                                                                                                WCon{
+                                                                                                  False{},
+                                                                                                  WNil{}
+                                                                                                }
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              Bytes.to_text(b)
+                            }: String
+                        },
+                        Bool.false_ne_true(h)
+                      )
+                    case False{}:
+                      match b26:
+                        case True{}:
+                          h => Empty.absurd(
+                            {
+                              Bytes.to_text(
+                                List.append(
+                                  &2,
+                                  U32,
+                                  Utf8.char(
+                                    Chr{
+                                      U32{
+                                        WCon{
+                                          b0,
+                                          WCon{
+                                            b1,
+                                            WCon{
+                                              b2,
+                                              WCon{
+                                                b3,
+                                                WCon{
+                                                  b4,
+                                                  WCon{
+                                                    b5,
+                                                    WCon{
+                                                      b6,
+                                                      WCon{
+                                                        b7,
+                                                        WCon{
+                                                          b8,
+                                                          WCon{
+                                                            b9,
+                                                            WCon{
+                                                              b10,
+                                                              WCon{
+                                                                b11,
+                                                                WCon{
+                                                                  b12,
+                                                                  WCon{
+                                                                    b13,
+                                                                    WCon{
+                                                                      b14,
+                                                                      WCon{
+                                                                        b15,
+                                                                        WCon{
+                                                                          b16,
+                                                                          WCon{
+                                                                            b17,
+                                                                            WCon{
+                                                                              b18,
+                                                                              WCon{
+                                                                                b19,
+                                                                                WCon{
+                                                                                  b20,
+                                                                                  WCon{
+                                                                                    b21,
+                                                                                    WCon{
+                                                                                      b22,
+                                                                                      WCon{
+                                                                                        b23,
+                                                                                        WCon{
+                                                                                          b24,
+                                                                                          WCon{
+                                                                                            b25,
+                                                                                            WCon{
+                                                                                              True{},
+                                                                                              WCon{
+                                                                                                False{},
+                                                                                                WCon{
+                                                                                                  False{},
+                                                                                                  WCon{
+                                                                                                    False{},
+                                                                                                    WCon{
+                                                                                                      False{},
+                                                                                                      WCon{
+                                                                                                        False{},
+                                                                                                        WNil{}
+                                                                                                      }
+                                                                                                    }
+                                                                                                  }
+                                                                                                }
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  ),
+                                  b
+                                )
+                              )
+                                == SCon{
+                                  Chr{
+                                    U32{
+                                      WCon{
+                                        b0,
+                                        WCon{
+                                          b1,
+                                          WCon{
+                                            b2,
+                                            WCon{
+                                              b3,
+                                              WCon{
+                                                b4,
+                                                WCon{
+                                                  b5,
+                                                  WCon{
+                                                    b6,
+                                                    WCon{
+                                                      b7,
+                                                      WCon{
+                                                        b8,
+                                                        WCon{
+                                                          b9,
+                                                          WCon{
+                                                            b10,
+                                                            WCon{
+                                                              b11,
+                                                              WCon{
+                                                                b12,
+                                                                WCon{
+                                                                  b13,
+                                                                  WCon{
+                                                                    b14,
+                                                                    WCon{
+                                                                      b15,
+                                                                      WCon{
+                                                                        b16,
+                                                                        WCon{
+                                                                          b17,
+                                                                          WCon{
+                                                                            b18,
+                                                                            WCon{
+                                                                              b19,
+                                                                              WCon{
+                                                                                b20,
+                                                                                WCon{
+                                                                                  b21,
+                                                                                  WCon{
+                                                                                    b22,
+                                                                                    WCon{
+                                                                                      b23,
+                                                                                      WCon{
+                                                                                        b24,
+                                                                                        WCon{
+                                                                                          b25,
+                                                                                          WCon{
+                                                                                            True{},
+                                                                                            WCon{
+                                                                                              False{},
+                                                                                              WCon{
+                                                                                                False{},
+                                                                                                WCon{
+                                                                                                  False{},
+                                                                                                  WCon{
+                                                                                                    False{},
+                                                                                                    WCon{
+                                                                                                      False{},
+                                                                                                      WNil{}
+                                                                                                    }
+                                                                                                  }
+                                                                                                }
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  },
+                                  Bytes.to_text(b)
+                                }: String
+                            },
+                            Bool.false_ne_true(h)
+                          )
+                        case False{}:
+                          match b25:
+                            case True{}:
+                              h => Empty.absurd(
+                                {
+                                  Bytes.to_text(
+                                    List.append(
+                                      &2,
+                                      U32,
+                                      Utf8.char(
+                                        Chr{
+                                          U32{
+                                            WCon{
+                                              b0,
+                                              WCon{
+                                                b1,
+                                                WCon{
+                                                  b2,
+                                                  WCon{
+                                                    b3,
+                                                    WCon{
+                                                      b4,
+                                                      WCon{
+                                                        b5,
+                                                        WCon{
+                                                          b6,
+                                                          WCon{
+                                                            b7,
+                                                            WCon{
+                                                              b8,
+                                                              WCon{
+                                                                b9,
+                                                                WCon{
+                                                                  b10,
+                                                                  WCon{
+                                                                    b11,
+                                                                    WCon{
+                                                                      b12,
+                                                                      WCon{
+                                                                        b13,
+                                                                        WCon{
+                                                                          b14,
+                                                                          WCon{
+                                                                            b15,
+                                                                            WCon{
+                                                                              b16,
+                                                                              WCon{
+                                                                                b17,
+                                                                                WCon{
+                                                                                  b18,
+                                                                                  WCon{
+                                                                                    b19,
+                                                                                    WCon{
+                                                                                      b20,
+                                                                                      WCon{
+                                                                                        b21,
+                                                                                        WCon{
+                                                                                          b22,
+                                                                                          WCon{
+                                                                                            b23,
+                                                                                            WCon{
+                                                                                              b24,
+                                                                                              WCon{
+                                                                                                True{},
+                                                                                                WCon{
+                                                                                                  False{},
+                                                                                                  WCon{
+                                                                                                    False{},
+                                                                                                    WCon{
+                                                                                                      False{},
+                                                                                                      WCon{
+                                                                                                        False{},
+                                                                                                        WCon{
+                                                                                                          False{},
+                                                                                                          WCon{
+                                                                                                            False{},
+                                                                                                            WNil{}
+                                                                                                          }
+                                                                                                        }
+                                                                                                      }
+                                                                                                    }
+                                                                                                  }
+                                                                                                }
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ),
+                                      b
+                                    )
+                                  )
+                                    == SCon{
+                                      Chr{
+                                        U32{
+                                          WCon{
+                                            b0,
+                                            WCon{
+                                              b1,
+                                              WCon{
+                                                b2,
+                                                WCon{
+                                                  b3,
+                                                  WCon{
+                                                    b4,
+                                                    WCon{
+                                                      b5,
+                                                      WCon{
+                                                        b6,
+                                                        WCon{
+                                                          b7,
+                                                          WCon{
+                                                            b8,
+                                                            WCon{
+                                                              b9,
+                                                              WCon{
+                                                                b10,
+                                                                WCon{
+                                                                  b11,
+                                                                  WCon{
+                                                                    b12,
+                                                                    WCon{
+                                                                      b13,
+                                                                      WCon{
+                                                                        b14,
+                                                                        WCon{
+                                                                          b15,
+                                                                          WCon{
+                                                                            b16,
+                                                                            WCon{
+                                                                              b17,
+                                                                              WCon{
+                                                                                b18,
+                                                                                WCon{
+                                                                                  b19,
+                                                                                  WCon{
+                                                                                    b20,
+                                                                                    WCon{
+                                                                                      b21,
+                                                                                      WCon{
+                                                                                        b22,
+                                                                                        WCon{
+                                                                                          b23,
+                                                                                          WCon{
+                                                                                            b24,
+                                                                                            WCon{
+                                                                                              True{},
+                                                                                              WCon{
+                                                                                                False{},
+                                                                                                WCon{
+                                                                                                  False{},
+                                                                                                  WCon{
+                                                                                                    False{},
+                                                                                                    WCon{
+                                                                                                      False{},
+                                                                                                      WCon{
+                                                                                                        False{},
+                                                                                                        WCon{
+                                                                                                          False{},
+                                                                                                          WNil{}
+                                                                                                        }
+                                                                                                      }
+                                                                                                    }
+                                                                                                  }
+                                                                                                }
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      },
+                                      Bytes.to_text(b)
+                                    }: String
+                                },
+                                Bool.false_ne_true(h)
+                              )
+                            case False{}:
+                              match b24:
+                                case True{}:
+                                  h => Empty.absurd(
+                                    {
+                                      Bytes.to_text(
+                                        List.append(
+                                          &2,
+                                          U32,
+                                          Utf8.char(
+                                            Chr{
+                                              U32{
+                                                WCon{
+                                                  b0,
+                                                  WCon{
+                                                    b1,
+                                                    WCon{
+                                                      b2,
+                                                      WCon{
+                                                        b3,
+                                                        WCon{
+                                                          b4,
+                                                          WCon{
+                                                            b5,
+                                                            WCon{
+                                                              b6,
+                                                              WCon{
+                                                                b7,
+                                                                WCon{
+                                                                  b8,
+                                                                  WCon{
+                                                                    b9,
+                                                                    WCon{
+                                                                      b10,
+                                                                      WCon{
+                                                                        b11,
+                                                                        WCon{
+                                                                          b12,
+                                                                          WCon{
+                                                                            b13,
+                                                                            WCon{
+                                                                              b14,
+                                                                              WCon{
+                                                                                b15,
+                                                                                WCon{
+                                                                                  b16,
+                                                                                  WCon{
+                                                                                    b17,
+                                                                                    WCon{
+                                                                                      b18,
+                                                                                      WCon{
+                                                                                        b19,
+                                                                                        WCon{
+                                                                                          b20,
+                                                                                          WCon{
+                                                                                            b21,
+                                                                                            WCon{
+                                                                                              b22,
+                                                                                              WCon{
+                                                                                                b23,
+                                                                                                WCon{
+                                                                                                  True{},
+                                                                                                  WCon{
+                                                                                                    False{},
+                                                                                                    WCon{
+                                                                                                      False{},
+                                                                                                      WCon{
+                                                                                                        False{},
+                                                                                                        WCon{
+                                                                                                          False{},
+                                                                                                          WCon{
+                                                                                                            False{},
+                                                                                                            WCon{
+                                                                                                              False{},
+                                                                                                              WCon{
+                                                                                                                False{},
+                                                                                                                WNil{}
+                                                                                                              }
+                                                                                                            }
+                                                                                                          }
+                                                                                                        }
+                                                                                                      }
+                                                                                                    }
+                                                                                                  }
+                                                                                                }
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          ),
+                                          b
+                                        )
+                                      )
+                                        == SCon{
+                                          Chr{
+                                            U32{
+                                              WCon{
+                                                b0,
+                                                WCon{
+                                                  b1,
+                                                  WCon{
+                                                    b2,
+                                                    WCon{
+                                                      b3,
+                                                      WCon{
+                                                        b4,
+                                                        WCon{
+                                                          b5,
+                                                          WCon{
+                                                            b6,
+                                                            WCon{
+                                                              b7,
+                                                              WCon{
+                                                                b8,
+                                                                WCon{
+                                                                  b9,
+                                                                  WCon{
+                                                                    b10,
+                                                                    WCon{
+                                                                      b11,
+                                                                      WCon{
+                                                                        b12,
+                                                                        WCon{
+                                                                          b13,
+                                                                          WCon{
+                                                                            b14,
+                                                                            WCon{
+                                                                              b15,
+                                                                              WCon{
+                                                                                b16,
+                                                                                WCon{
+                                                                                  b17,
+                                                                                  WCon{
+                                                                                    b18,
+                                                                                    WCon{
+                                                                                      b19,
+                                                                                      WCon{
+                                                                                        b20,
+                                                                                        WCon{
+                                                                                          b21,
+                                                                                          WCon{
+                                                                                            b22,
+                                                                                            WCon{
+                                                                                              b23,
+                                                                                              WCon{
+                                                                                                True{},
+                                                                                                WCon{
+                                                                                                  False{},
+                                                                                                  WCon{
+                                                                                                    False{},
+                                                                                                    WCon{
+                                                                                                      False{},
+                                                                                                      WCon{
+                                                                                                        False{},
+                                                                                                        WCon{
+                                                                                                          False{},
+                                                                                                          WCon{
+                                                                                                            False{},
+                                                                                                            WCon{
+                                                                                                              False{},
+                                                                                                              WNil{}
+                                                                                                            }
+                                                                                                          }
+                                                                                                        }
+                                                                                                      }
+                                                                                                    }
+                                                                                                  }
+                                                                                                }
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          },
+                                          Bytes.to_text(b)
+                                        }: String
+                                    },
+                                    Bool.false_ne_true(h)
+                                  )
+                                case False{}:
+                                  match b23:
+                                    case True{}:
+                                      h => Empty.absurd(
+                                        {
+                                          Bytes.to_text(
+                                            List.append(
+                                              &2,
+                                              U32,
+                                              Utf8.char(
+                                                Chr{
+                                                  U32{
+                                                    WCon{
+                                                      b0,
+                                                      WCon{
+                                                        b1,
+                                                        WCon{
+                                                          b2,
+                                                          WCon{
+                                                            b3,
+                                                            WCon{
+                                                              b4,
+                                                              WCon{
+                                                                b5,
+                                                                WCon{
+                                                                  b6,
+                                                                  WCon{
+                                                                    b7,
+                                                                    WCon{
+                                                                      b8,
+                                                                      WCon{
+                                                                        b9,
+                                                                        WCon{
+                                                                          b10,
+                                                                          WCon{
+                                                                            b11,
+                                                                            WCon{
+                                                                              b12,
+                                                                              WCon{
+                                                                                b13,
+                                                                                WCon{
+                                                                                  b14,
+                                                                                  WCon{
+                                                                                    b15,
+                                                                                    WCon{
+                                                                                      b16,
+                                                                                      WCon{
+                                                                                        b17,
+                                                                                        WCon{
+                                                                                          b18,
+                                                                                          WCon{
+                                                                                            b19,
+                                                                                            WCon{
+                                                                                              b20,
+                                                                                              WCon{
+                                                                                                b21,
+                                                                                                WCon{
+                                                                                                  b22,
+                                                                                                  WCon{
+                                                                                                    True{},
+                                                                                                    WCon{
+                                                                                                      False{},
+                                                                                                      WCon{
+                                                                                                        False{},
+                                                                                                        WCon{
+                                                                                                          False{},
+                                                                                                          WCon{
+                                                                                                            False{},
+                                                                                                            WCon{
+                                                                                                              False{},
+                                                                                                              WCon{
+                                                                                                                False{},
+                                                                                                                WCon{
+                                                                                                                  False{},
+                                                                                                                  WCon{
+                                                                                                                    False{},
+                                                                                                                    WNil{}
+                                                                                                                  }
+                                                                                                                }
+                                                                                                              }
+                                                                                                            }
+                                                                                                          }
+                                                                                                        }
+                                                                                                      }
+                                                                                                    }
+                                                                                                  }
+                                                                                                }
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              ),
+                                              b
+                                            )
+                                          )
+                                            == SCon{
+                                              Chr{
+                                                U32{
+                                                  WCon{
+                                                    b0,
+                                                    WCon{
+                                                      b1,
+                                                      WCon{
+                                                        b2,
+                                                        WCon{
+                                                          b3,
+                                                          WCon{
+                                                            b4,
+                                                            WCon{
+                                                              b5,
+                                                              WCon{
+                                                                b6,
+                                                                WCon{
+                                                                  b7,
+                                                                  WCon{
+                                                                    b8,
+                                                                    WCon{
+                                                                      b9,
+                                                                      WCon{
+                                                                        b10,
+                                                                        WCon{
+                                                                          b11,
+                                                                          WCon{
+                                                                            b12,
+                                                                            WCon{
+                                                                              b13,
+                                                                              WCon{
+                                                                                b14,
+                                                                                WCon{
+                                                                                  b15,
+                                                                                  WCon{
+                                                                                    b16,
+                                                                                    WCon{
+                                                                                      b17,
+                                                                                      WCon{
+                                                                                        b18,
+                                                                                        WCon{
+                                                                                          b19,
+                                                                                          WCon{
+                                                                                            b20,
+                                                                                            WCon{
+                                                                                              b21,
+                                                                                              WCon{
+                                                                                                b22,
+                                                                                                WCon{
+                                                                                                  True{},
+                                                                                                  WCon{
+                                                                                                    False{},
+                                                                                                    WCon{
+                                                                                                      False{},
+                                                                                                      WCon{
+                                                                                                        False{},
+                                                                                                        WCon{
+                                                                                                          False{},
+                                                                                                          WCon{
+                                                                                                            False{},
+                                                                                                            WCon{
+                                                                                                              False{},
+                                                                                                              WCon{
+                                                                                                                False{},
+                                                                                                                WCon{
+                                                                                                                  False{},
+                                                                                                                  WNil{}
+                                                                                                                }
+                                                                                                              }
+                                                                                                            }
+                                                                                                          }
+                                                                                                        }
+                                                                                                      }
+                                                                                                    }
+                                                                                                  }
+                                                                                                }
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              Bytes.to_text(b)
+                                            }: String
+                                        },
+                                        Bool.false_ne_true(h)
+                                      )
+                                    case False{}:
+                                      match b22:
+                                        case True{}:
+                                          h => Empty.absurd(
+                                            {
+                                              Bytes.to_text(
+                                                List.append(
+                                                  &2,
+                                                  U32,
+                                                  Utf8.char(
+                                                    Chr{
+                                                      U32{
+                                                        WCon{
+                                                          b0,
+                                                          WCon{
+                                                            b1,
+                                                            WCon{
+                                                              b2,
+                                                              WCon{
+                                                                b3,
+                                                                WCon{
+                                                                  b4,
+                                                                  WCon{
+                                                                    b5,
+                                                                    WCon{
+                                                                      b6,
+                                                                      WCon{
+                                                                        b7,
+                                                                        WCon{
+                                                                          b8,
+                                                                          WCon{
+                                                                            b9,
+                                                                            WCon{
+                                                                              b10,
+                                                                              WCon{
+                                                                                b11,
+                                                                                WCon{
+                                                                                  b12,
+                                                                                  WCon{
+                                                                                    b13,
+                                                                                    WCon{
+                                                                                      b14,
+                                                                                      WCon{
+                                                                                        b15,
+                                                                                        WCon{
+                                                                                          b16,
+                                                                                          WCon{
+                                                                                            b17,
+                                                                                            WCon{
+                                                                                              b18,
+                                                                                              WCon{
+                                                                                                b19,
+                                                                                                WCon{
+                                                                                                  b20,
+                                                                                                  WCon{
+                                                                                                    b21,
+                                                                                                    WCon{
+                                                                                                      True{},
+                                                                                                      WCon{
+                                                                                                        False{},
+                                                                                                        WCon{
+                                                                                                          False{},
+                                                                                                          WCon{
+                                                                                                            False{},
+                                                                                                            WCon{
+                                                                                                              False{},
+                                                                                                              WCon{
+                                                                                                                False{},
+                                                                                                                WCon{
+                                                                                                                  False{},
+                                                                                                                  WCon{
+                                                                                                                    False{},
+                                                                                                                    WCon{
+                                                                                                                      False{},
+                                                                                                                      WCon{
+                                                                                                                        False{},
+                                                                                                                        WNil{}
+                                                                                                                      }
+                                                                                                                    }
+                                                                                                                  }
+                                                                                                                }
+                                                                                                              }
+                                                                                                            }
+                                                                                                          }
+                                                                                                        }
+                                                                                                      }
+                                                                                                    }
+                                                                                                  }
+                                                                                                }
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  ),
+                                                  b
+                                                )
+                                              )
+                                                == SCon{
+                                                  Chr{
+                                                    U32{
+                                                      WCon{
+                                                        b0,
+                                                        WCon{
+                                                          b1,
+                                                          WCon{
+                                                            b2,
+                                                            WCon{
+                                                              b3,
+                                                              WCon{
+                                                                b4,
+                                                                WCon{
+                                                                  b5,
+                                                                  WCon{
+                                                                    b6,
+                                                                    WCon{
+                                                                      b7,
+                                                                      WCon{
+                                                                        b8,
+                                                                        WCon{
+                                                                          b9,
+                                                                          WCon{
+                                                                            b10,
+                                                                            WCon{
+                                                                              b11,
+                                                                              WCon{
+                                                                                b12,
+                                                                                WCon{
+                                                                                  b13,
+                                                                                  WCon{
+                                                                                    b14,
+                                                                                    WCon{
+                                                                                      b15,
+                                                                                      WCon{
+                                                                                        b16,
+                                                                                        WCon{
+                                                                                          b17,
+                                                                                          WCon{
+                                                                                            b18,
+                                                                                            WCon{
+                                                                                              b19,
+                                                                                              WCon{
+                                                                                                b20,
+                                                                                                WCon{
+                                                                                                  b21,
+                                                                                                  WCon{
+                                                                                                    True{},
+                                                                                                    WCon{
+                                                                                                      False{},
+                                                                                                      WCon{
+                                                                                                        False{},
+                                                                                                        WCon{
+                                                                                                          False{},
+                                                                                                          WCon{
+                                                                                                            False{},
+                                                                                                            WCon{
+                                                                                                              False{},
+                                                                                                              WCon{
+                                                                                                                False{},
+                                                                                                                WCon{
+                                                                                                                  False{},
+                                                                                                                  WCon{
+                                                                                                                    False{},
+                                                                                                                    WCon{
+                                                                                                                      False{},
+                                                                                                                      WNil{}
+                                                                                                                    }
+                                                                                                                  }
+                                                                                                                }
+                                                                                                              }
+                                                                                                            }
+                                                                                                          }
+                                                                                                        }
+                                                                                                      }
+                                                                                                    }
+                                                                                                  }
+                                                                                                }
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  },
+                                                  Bytes.to_text(b)
+                                                }: String
+                                            },
+                                            Bool.false_ne_true(h)
+                                          )
+                                        case False{}:
+                                          match b21:
+                                            case True{}:
+                                              h => Empty.absurd(
+                                                {
+                                                  Bytes.to_text(
+                                                    List.append(
+                                                      &2,
+                                                      U32,
+                                                      Utf8.char(
+                                                        Chr{
+                                                          U32{
+                                                            WCon{
+                                                              b0,
+                                                              WCon{
+                                                                b1,
+                                                                WCon{
+                                                                  b2,
+                                                                  WCon{
+                                                                    b3,
+                                                                    WCon{
+                                                                      b4,
+                                                                      WCon{
+                                                                        b5,
+                                                                        WCon{
+                                                                          b6,
+                                                                          WCon{
+                                                                            b7,
+                                                                            WCon{
+                                                                              b8,
+                                                                              WCon{
+                                                                                b9,
+                                                                                WCon{
+                                                                                  b10,
+                                                                                  WCon{
+                                                                                    b11,
+                                                                                    WCon{
+                                                                                      b12,
+                                                                                      WCon{
+                                                                                        b13,
+                                                                                        WCon{
+                                                                                          b14,
+                                                                                          WCon{
+                                                                                            b15,
+                                                                                            WCon{
+                                                                                              b16,
+                                                                                              WCon{
+                                                                                                b17,
+                                                                                                WCon{
+                                                                                                  b18,
+                                                                                                  WCon{
+                                                                                                    b19,
+                                                                                                    WCon{
+                                                                                                      b20,
+                                                                                                      WCon{
+                                                                                                        True{},
+                                                                                                        WCon{
+                                                                                                          False{},
+                                                                                                          WCon{
+                                                                                                            False{},
+                                                                                                            WCon{
+                                                                                                              False{},
+                                                                                                              WCon{
+                                                                                                                False{},
+                                                                                                                WCon{
+                                                                                                                  False{},
+                                                                                                                  WCon{
+                                                                                                                    False{},
+                                                                                                                    WCon{
+                                                                                                                      False{},
+                                                                                                                      WCon{
+                                                                                                                        False{},
+                                                                                                                        WCon{
+                                                                                                                          False{},
+                                                                                                                          WCon{
+                                                                                                                            False{},
+                                                                                                                            WNil{}
+                                                                                                                          }
+                                                                                                                        }
+                                                                                                                      }
+                                                                                                                    }
+                                                                                                                  }
+                                                                                                                }
+                                                                                                              }
+                                                                                                            }
+                                                                                                          }
+                                                                                                        }
+                                                                                                      }
+                                                                                                    }
+                                                                                                  }
+                                                                                                }
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      ),
+                                                      b
+                                                    )
+                                                  )
+                                                    == SCon{
+                                                      Chr{
+                                                        U32{
+                                                          WCon{
+                                                            b0,
+                                                            WCon{
+                                                              b1,
+                                                              WCon{
+                                                                b2,
+                                                                WCon{
+                                                                  b3,
+                                                                  WCon{
+                                                                    b4,
+                                                                    WCon{
+                                                                      b5,
+                                                                      WCon{
+                                                                        b6,
+                                                                        WCon{
+                                                                          b7,
+                                                                          WCon{
+                                                                            b8,
+                                                                            WCon{
+                                                                              b9,
+                                                                              WCon{
+                                                                                b10,
+                                                                                WCon{
+                                                                                  b11,
+                                                                                  WCon{
+                                                                                    b12,
+                                                                                    WCon{
+                                                                                      b13,
+                                                                                      WCon{
+                                                                                        b14,
+                                                                                        WCon{
+                                                                                          b15,
+                                                                                          WCon{
+                                                                                            b16,
+                                                                                            WCon{
+                                                                                              b17,
+                                                                                              WCon{
+                                                                                                b18,
+                                                                                                WCon{
+                                                                                                  b19,
+                                                                                                  WCon{
+                                                                                                    b20,
+                                                                                                    WCon{
+                                                                                                      True{},
+                                                                                                      WCon{
+                                                                                                        False{},
+                                                                                                        WCon{
+                                                                                                          False{},
+                                                                                                          WCon{
+                                                                                                            False{},
+                                                                                                            WCon{
+                                                                                                              False{},
+                                                                                                              WCon{
+                                                                                                                False{},
+                                                                                                                WCon{
+                                                                                                                  False{},
+                                                                                                                  WCon{
+                                                                                                                    False{},
+                                                                                                                    WCon{
+                                                                                                                      False{},
+                                                                                                                      WCon{
+                                                                                                                        False{},
+                                                                                                                        WCon{
+                                                                                                                          False{},
+                                                                                                                          WNil{}
+                                                                                                                        }
+                                                                                                                      }
+                                                                                                                    }
+                                                                                                                  }
+                                                                                                                }
+                                                                                                              }
+                                                                                                            }
+                                                                                                          }
+                                                                                                        }
+                                                                                                      }
+                                                                                                    }
+                                                                                                  }
+                                                                                                }
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      },
+                                                      Bytes.to_text(b)
+                                                    }: String
+                                                },
+                                                Bool.false_ne_true(h)
+                                              )
+                                            case False{}:
+                                              match b20:
+                                                case True{}:
+                                                  h => {==}
+                                                case False{}:
+                                                  match b19:
+                                                    case True{}:
+                                                      h => {==}
+                                                    case False{}:
+                                                      match b18:
+                                                        case True{}:
+                                                          h => {==}
+                                                        case False{}:
+                                                          match b17:
+                                                            case True{}:
+                                                              h => {==}
+                                                            case False{}:
+                                                              match b16:
+                                                                case True{}:
+                                                                  h => {==}
+                                                                case False{}:
+                                                                  match b15:
+                                                                    case True{}:
+                                                                      h => {==}
+                                                                    case False{}:
+                                                                      match b14:
+                                                                        case True{}:
+                                                                          h => {==}
+                                                                        case False{}:
+                                                                          match b13:
+                                                                            case True{}:
+                                                                              h => {==}
+                                                                            case False{}:
+                                                                              match b12:
+                                                                                case True{}:
+                                                                                  h => {==}
+                                                                                case False{}:
+                                                                                  match b11:
+                                                                                    case True{}:
+                                                                                      h => {==}
+                                                                                    case False{}:
+                                                                                      match b10:
+                                                                                        case True{}:
+                                                                                          match b9:
+                                                                                            case True{}:
+                                                                                              h => {
+                                                                                                ==
+                                                                                              }
+                                                                                            case False{}:
+                                                                                              h => {
+                                                                                                ==
+                                                                                              }
+                                                                                        case False{}:
+                                                                                          match b9:
+                                                                                            case True{}:
+                                                                                              h => {
+                                                                                                ==
+                                                                                              }
+                                                                                            case False{}:
+                                                                                              match b8:
+                                                                                                case True{}:
+                                                                                                  h => {
+                                                                                                    ==
+                                                                                                  }
+                                                                                                case False{}:
+                                                                                                  match b7:
+                                                                                                    case True{}:
+                                                                                                      h => {
+                                                                                                        ==
+                                                                                                      }
+                                                                                                    case False{}:
+                                                                                                      match b6:
+                                                                                                        case True{}:
+                                                                                                          match b5:
+                                                                                                            case True{}:
+                                                                                                              match b4:
+                                                                                                                case True{}:
+                                                                                                                  match b3:
+                                                                                                                    case True{}:
+                                                                                                                      h => {
+                                                                                                                        ==
+                                                                                                                      }
+                                                                                                                    case False{}:
+                                                                                                                      h => {
+                                                                                                                        ==
+                                                                                                                      }
+                                                                                                                case False{}:
+                                                                                                                  match b3:
+                                                                                                                    case True{}:
+                                                                                                                      h => {
+                                                                                                                        ==
+                                                                                                                      }
+                                                                                                                    case False{}:
+                                                                                                                      h => {
+                                                                                                                        ==
+                                                                                                                      }
+                                                                                                            case False{}:
+                                                                                                              match b4:
+                                                                                                                case True{}:
+                                                                                                                  match b3:
+                                                                                                                    case True{}:
+                                                                                                                      h => {
+                                                                                                                        ==
+                                                                                                                      }
+                                                                                                                    case False{}:
+                                                                                                                      h => {
+                                                                                                                        ==
+                                                                                                                      }
+                                                                                                                case False{}:
+                                                                                                                  match b3:
+                                                                                                                    case True{}:
+                                                                                                                      h => {
+                                                                                                                        ==
+                                                                                                                      }
+                                                                                                                    case False{}:
+                                                                                                                      h => {
+                                                                                                                        ==
+                                                                                                                      }
+                                                                                                        case False{}:
+                                                                                                          match b5:
+                                                                                                            case True{}:
+                                                                                                              match b4:
+                                                                                                                case True{}:
+                                                                                                                  match b3:
+                                                                                                                    case True{}:
+                                                                                                                      h => {
+                                                                                                                        ==
+                                                                                                                      }
+                                                                                                                    case False{}:
+                                                                                                                      h => {
+                                                                                                                        ==
+                                                                                                                      }
+                                                                                                                case False{}:
+                                                                                                                  match b3:
+                                                                                                                    case True{}:
+                                                                                                                      h => {
+                                                                                                                        ==
+                                                                                                                      }
+                                                                                                                    case False{}:
+                                                                                                                      h => {
+                                                                                                                        ==
+                                                                                                                      }
+                                                                                                            case False{}:
+                                                                                                              match b4:
+                                                                                                                case True{}:
+                                                                                                                  match b3:
+                                                                                                                    case True{}:
+                                                                                                                      h => {
+                                                                                                                        ==
+                                                                                                                      }
+                                                                                                                    case False{}:
+                                                                                                                      h => {
+                                                                                                                        ==
+                                                                                                                      }
+                                                                                                                case False{}:
+                                                                                                                  match b3:
+                                                                                                                    case True{}:
+                                                                                                                      h => {
+                                                                                                                        ==
+                                                                                                                      }
+                                                                                                                    case False{}:
+                                                                                                                      h => {
+                                                                                                                        ==
+                                                                                                                      }
+
+# the bytes of a character with no bit above the 21st, then the bytes b, read
+# back as the character, then b read
+def Utf8.char_back(
+  c: Char,
+  b: List<&2, U32>
+) -> {
+  Char.fits_utf8(c) == True{}: Bool
+} -> {Bytes.to_text(List.append(&2, U32, Utf8.char(c), b)) == SCon{c, Bytes.to_text(b)}: String}:
+  match c:
+    case Chr{
+      U32{
+        WCon{
+          b0,
+          WCon{
+            b1,
+            WCon{
+              b2,
+              WCon{
+                b3,
+                WCon{
+                  b4,
+                  WCon{
+                    b5,
+                    WCon{
+                      b6,
+                      WCon{
+                        b7,
+                        WCon{
+                          b8,
+                          WCon{
+                            b9,
+                            WCon{
+                              b10,
+                              WCon{
+                                b11,
+                                WCon{
+                                  b12,
+                                  WCon{
+                                    b13,
+                                    WCon{
+                                      b14,
+                                      WCon{
+                                        b15,
+                                        WCon{
+                                          b16,
+                                          WCon{
+                                            b17,
+                                            WCon{
+                                              b18,
+                                              WCon{
+                                                b19,
+                                                WCon{
+                                                  b20,
+                                                  WCon{
+                                                    b21,
+                                                    WCon{
+                                                      b22,
+                                                      WCon{
+                                                        b23,
+                                                        WCon{
+                                                          b24,
+                                                          WCon{
+                                                            b25,
+                                                            WCon{
+                                                              b26,
+                                                              WCon{
+                                                                b27,
+                                                                WCon{
+                                                                  b28,
+                                                                  WCon{
+                                                                    b29,
+                                                                    WCon{b30, WCon{b31, WNil{}}}
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }:
+      Utf8.char_back.bits(
+        b31,
+        b30,
+        b29,
+        b28,
+        b27,
+        b26,
+        b25,
+        b24,
+        b23,
+        b22,
+        b21,
+        b20,
+        b19,
+        b18,
+        b17,
+        b16,
+        b15,
+        b14,
+        b13,
+        b12,
+        b11,
+        b10,
+        b9,
+        b8,
+        b7,
+        b6,
+        b5,
+        b4,
+        b3,
+        b2,
+        b1,
+        b0,
+        b
+      )
+
+# a text of characters with no bit above the 21st reads back from its bytes
+law Bytes.text_back:
+  for s: String
+  {Text.fits_utf8(s) == True{}: Bool} -> {Bytes.to_text(Bytes.of_text(s)) == s: String}
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+def Bytes.text_back(s):
+  match s:
+    case SNil{}:
+      h => {==}
+    case SCon{+c, +r}:
+      +h =>
+        %Equal.sym(
+          String,
+          Bytes.to_text(List.append(&2, U32, Utf8.char(c), Bytes.of_text(r))),
+          SCon{c, Bytes.to_text(Bytes.of_text(r))},
+          Utf8.char_back(
+            c,
+            Bytes.of_text(r)
+          )(Bool.and_true_left(Char.fits_utf8(c), Text.fits_utf8(r))(h))
+        ): {_ == SCon{c, r}: String}
+        %Equal.sym(
+          String,
+          Bytes.to_text(Bytes.of_text(r)),
+          r,
+          Bytes.text_back(r)(Bool.and_true_right(Char.fits_utf8(c), Text.fits_utf8(r))(h))
+        ): {SCon{c, _} == SCon{c, r}: String}
+        {==}
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# Utf8.char_bytes, with the bits of the character from the highest
+def Utf8.char_bytes.bits(
+  b31: Bool,
+  b30: Bool,
+  b29: Bool,
+  b28: Bool,
+  b27: Bool,
+  b26: Bool,
+  b25: Bool,
+  b24: Bool,
+  b23: Bool,
+  b22: Bool,
+  b21: Bool,
+  b20: Bool,
+  b19: Bool,
+  b18: Bool,
+  b17: Bool,
+  b16: Bool,
+  b15: Bool,
+  b14: Bool,
+  b13: Bool,
+  b12: Bool,
+  b11: Bool,
+  b10: Bool,
+  b9: Bool,
+  b8: Bool,
+  b7: Bool,
+  b6: Bool,
+  b5: Bool,
+  b4: Bool,
+  b3: Bool,
+  b2: Bool,
+  b1: Bool,
+  b0: Bool,
+  b: List<&2, U32>
+) -> {
+  Bytes.are_bytes(
+    List.append(
+      &2,
+      U32,
+      Utf8.char(
+        Chr{
+          U32{
+            WCon{
+              b0,
+              WCon{
+                b1,
+                WCon{
+                  b2,
+                  WCon{
+                    b3,
+                    WCon{
+                      b4,
+                      WCon{
+                        b5,
+                        WCon{
+                          b6,
+                          WCon{
+                            b7,
+                            WCon{
+                              b8,
+                              WCon{
+                                b9,
+                                WCon{
+                                  b10,
+                                  WCon{
+                                    b11,
+                                    WCon{
+                                      b12,
+                                      WCon{
+                                        b13,
+                                        WCon{
+                                          b14,
+                                          WCon{
+                                            b15,
+                                            WCon{
+                                              b16,
+                                              WCon{
+                                                b17,
+                                                WCon{
+                                                  b18,
+                                                  WCon{
+                                                    b19,
+                                                    WCon{
+                                                      b20,
+                                                      WCon{
+                                                        b21,
+                                                        WCon{
+                                                          b22,
+                                                          WCon{
+                                                            b23,
+                                                            WCon{
+                                                              b24,
+                                                              WCon{
+                                                                b25,
+                                                                WCon{
+                                                                  b26,
+                                                                  WCon{
+                                                                    b27,
+                                                                    WCon{
+                                                                      b28,
+                                                                      WCon{
+                                                                        b29,
+                                                                        WCon{b30, WCon{b31, WNil{}}}
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ),
+      b
+    )
+  )
+    == Bytes.are_bytes(b): Bool
+}:
+  match b31:
+    case True{}:
+      {==}
+    case False{}:
+      match b30:
+        case True{}:
+          {==}
+        case False{}:
+          match b29:
+            case True{}:
+              {==}
+            case False{}:
+              match b28:
+                case True{}:
+                  {==}
+                case False{}:
+                  match b27:
+                    case True{}:
+                      {==}
+                    case False{}:
+                      match b26:
+                        case True{}:
+                          {==}
+                        case False{}:
+                          match b25:
+                            case True{}:
+                              {==}
+                            case False{}:
+                              match b24:
+                                case True{}:
+                                  {==}
+                                case False{}:
+                                  match b23:
+                                    case True{}:
+                                      {==}
+                                    case False{}:
+                                      match b22:
+                                        case True{}:
+                                          {==}
+                                        case False{}:
+                                          match b21:
+                                            case True{}:
+                                              {==}
+                                            case False{}:
+                                              match b20:
+                                                case True{}:
+                                                  {==}
+                                                case False{}:
+                                                  match b19:
+                                                    case True{}:
+                                                      {==}
+                                                    case False{}:
+                                                      match b18:
+                                                        case True{}:
+                                                          {==}
+                                                        case False{}:
+                                                          match b17:
+                                                            case True{}:
+                                                              {==}
+                                                            case False{}:
+                                                              match b16:
+                                                                case True{}:
+                                                                  {==}
+                                                                case False{}:
+                                                                  match b15:
+                                                                    case True{}:
+                                                                      {==}
+                                                                    case False{}:
+                                                                      match b14:
+                                                                        case True{}:
+                                                                          {==}
+                                                                        case False{}:
+                                                                          match b13:
+                                                                            case True{}:
+                                                                              {==}
+                                                                            case False{}:
+                                                                              match b12:
+                                                                                case True{}:
+                                                                                  {==}
+                                                                                case False{}:
+                                                                                  match b11:
+                                                                                    case True{}:
+                                                                                      {==}
+                                                                                    case False{}:
+                                                                                      match b10:
+                                                                                        case True{}:
+                                                                                          {==}
+                                                                                        case False{}:
+                                                                                          match b9:
+                                                                                            case True{}:
+                                                                                              {==}
+                                                                                            case False{}:
+                                                                                              match b8:
+                                                                                                case True{}:
+                                                                                                  {
+                                                                                                    ==
+                                                                                                  }
+                                                                                                case False{}:
+                                                                                                  match b7:
+                                                                                                    case True{}:
+                                                                                                      {
+                                                                                                        ==
+                                                                                                      }
+                                                                                                    case False{}:
+                                                                                                      {
+                                                                                                        ==
+                                                                                                      }
+
+# the bytes of a character, then the bytes b, are bytes when b is
+def Utf8.char_bytes(
+  c: Char,
+  b: List<&2, U32>
+) -> {Bytes.are_bytes(List.append(&2, U32, Utf8.char(c), b)) == Bytes.are_bytes(b): Bool}:
+  match c:
+    case Chr{
+      U32{
+        WCon{
+          b0,
+          WCon{
+            b1,
+            WCon{
+              b2,
+              WCon{
+                b3,
+                WCon{
+                  b4,
+                  WCon{
+                    b5,
+                    WCon{
+                      b6,
+                      WCon{
+                        b7,
+                        WCon{
+                          b8,
+                          WCon{
+                            b9,
+                            WCon{
+                              b10,
+                              WCon{
+                                b11,
+                                WCon{
+                                  b12,
+                                  WCon{
+                                    b13,
+                                    WCon{
+                                      b14,
+                                      WCon{
+                                        b15,
+                                        WCon{
+                                          b16,
+                                          WCon{
+                                            b17,
+                                            WCon{
+                                              b18,
+                                              WCon{
+                                                b19,
+                                                WCon{
+                                                  b20,
+                                                  WCon{
+                                                    b21,
+                                                    WCon{
+                                                      b22,
+                                                      WCon{
+                                                        b23,
+                                                        WCon{
+                                                          b24,
+                                                          WCon{
+                                                            b25,
+                                                            WCon{
+                                                              b26,
+                                                              WCon{
+                                                                b27,
+                                                                WCon{
+                                                                  b28,
+                                                                  WCon{
+                                                                    b29,
+                                                                    WCon{b30, WCon{b31, WNil{}}}
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }:
+      Utf8.char_bytes.bits(
+        b31,
+        b30,
+        b29,
+        b28,
+        b27,
+        b26,
+        b25,
+        b24,
+        b23,
+        b22,
+        b21,
+        b20,
+        b19,
+        b18,
+        b17,
+        b16,
+        b15,
+        b14,
+        b13,
+        b12,
+        b11,
+        b10,
+        b9,
+        b8,
+        b7,
+        b6,
+        b5,
+        b4,
+        b3,
+        b2,
+        b1,
+        b0,
+        b
+      )
+
+# every code of the bytes of a text is a byte
+law Bytes.of_text_bytes:
+  for s: String
+  {Bytes.are_bytes(Bytes.of_text(s)) == True{}: Bool}
+
+def Bytes.of_text_bytes(s):
   match s:
     case SNil{}:
       {==}
-    case SCon{Chr{c}, r}:
-      %Equal.sym(String, Bytes.to_text(Bytes.of_text(r)), r, Bytes.text_back(r)):
-        {SCon{Chr{c}, _} == SCon{Chr{c}, r}: String}
-      {==}
-
+    case SCon{c, +r}:
+      %Equal.sym(
+        Bool,
+        Bytes.are_bytes(List.append(&2, U32, Utf8.char(c), Bytes.of_text(r))),
+        Bytes.are_bytes(Bytes.of_text(r)),
+        Utf8.char_bytes(c, Bytes.of_text(r))
+      ): {_ == True{}: Bool}
+      Bytes.of_text_bytes(r)
 # a and b are the same bytes
 def Bytes.is_eq(a: Bytes(), b: Bytes()) -> Bool:
   match a b:
@@ -2047,6 +6411,160 @@ def Text.cut_parts(
         b,
         a2 => b2 => Text.cut_parts(t, x, a2, b2)
       )({==})
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# Parts
+# -----
+# Texts joined by a character, and a text cut back into them.
+
+# texts cut at a character: the parts before each cut, and the rest after the
+# last one
+type Parts is Data:
+  Parts{parts: List<&2, String>, rest: String}
+
+# the texts ps, each then the character c, then last
+def Text.join(ps: List<&2, String>, +c: Char, last: String) -> String:
+  match ps:
+    case Nil{}:
+      last
+    case Con{p, r}:
+      String.append(p, SCon{c, Text.join(r, c, last)})
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only a law's premise calls it, so it never runs
+# no text of ps holds a character with code x
+def Text.lacks_all(ps: List<&2, String>, +x: U32) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case Con{p, r}:
+      Bool.and(Bool.not(Text.has(p, x)), Text.lacks_all(r, x))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# the text b before a cut, then the parts and the rest after it (m)
+def Text.cuts.put(b: String, m: Maybe<&2, Parts>) -> Maybe<&2, Parts>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Parts{ps, r}}:
+      Some{Parts{b <> ps, r}}
+
+# the parts of a text cut once already (c), then cut n more times at the code
+# x, and the rest
+def Text.cuts.of(n: Nat, c: Maybe<&2, Cut>, +x: U32) -> Maybe<&2, Parts>:
+  match n c:
+    case _ None{}:
+      None{}
+    case 0n Some{Cut{b, a}}:
+      Some{Parts{[b], a}}
+    case 1n+k Some{Cut{b, a}}:
+      Text.cuts.put(b, Text.cuts.of(k, Text.cut(a, x), x))
+
+# the first n parts of s cut at the code x, and the rest; None when s holds
+# fewer than n
+def Text.cuts(n: Nat, s: String, +x: U32) -> Maybe<&2, Parts>:
+  match n:
+    case 0n:
+      Some{Parts{[], s}}
+    case 1n+k:
+      Text.cuts.of(k, Text.cut(s, x), x)
+
+# a text cut once already into b and a, then cut n more times, is b before
+# the cuts of a
+def Text.cuts.of_cut(
+  +n: Nat,
+  b: String,
+  a: String,
+  x: U32
+) -> {
+  Text.cuts.of(n, Some{Cut{b, a}}, x) == Text.cuts.put(b, Text.cuts(n, a, x)): Maybe<&2, Parts>
+}:
+  match n:
+    case 0n:
+      {==}
+    case 1n+k:
+      {==}
+
+# texts joined by c cut back at c into them and the last text, when no text
+# but the last holds c
+law Text.cuts_after_join:
+  for ps: List<&2, String>
+  for c: Char
+  for last: String
+  {Text.lacks_all(ps, Char.to_u32(c)) == True{}: Bool}
+    -> {
+      Text.cuts(
+        List.length(&2, String, ps),
+        Text.join(ps, c, last),
+        Char.to_u32(c)
+      )
+        == Some{Parts{ps, last}}: Maybe<&2, Parts>
+    }
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+def Text.cuts_after_join(ps, c, last):
+  match ps:
+    case Nil{}:
+      h => {==}
+    case Con{+p, +r}:
+      +c = c
+      +last = last
+      +h =>
+        %Equal.sym(
+          Maybe<&2, Cut>,
+          Text.cut(String.append(p, SCon{c, Text.join(r, c, last)}), Char.to_u32(c)),
+          Some{Cut{p, Text.join(r, c, last)}},
+          Text.cut_at(
+            p,
+            c,
+            Text.join(r, c, last),
+            Char.to_u32(c)
+          )(
+            Bool.not_true(
+              Text.has(p, Char.to_u32(c))
+            )(
+              Bool.and_true_left(
+                Bool.not(Text.has(p, Char.to_u32(c))),
+                Text.lacks_all(r, Char.to_u32(c))
+              )(h)
+            )
+          )(U32.is_eq_refl(Char.to_u32(c)))
+        ): {
+          Text.cuts.of(
+            List.length(&2, String, r),
+            _,
+            Char.to_u32(c)
+          )
+            == Some{Parts{p <> r, last}}: Maybe<&2, Parts>
+        }
+        %Equal.sym(
+          Maybe<&2, Parts>,
+          Text.cuts.of(
+            List.length(&2, String, r),
+            Some{Cut{p, Text.join(r, c, last)}},
+            Char.to_u32(c)
+          ),
+          Text.cuts.put(
+            p,
+            Text.cuts(List.length(&2, String, r), Text.join(r, c, last), Char.to_u32(c))
+          ),
+          Text.cuts.of_cut(List.length(&2, String, r), p, Text.join(r, c, last), Char.to_u32(c))
+        ): {_ == Some{Parts{p <> r, last}}: Maybe<&2, Parts>}
+        %Equal.sym(
+          Maybe<&2, Parts>,
+          Text.cuts(List.length(&2, String, r), Text.join(r, c, last), Char.to_u32(c)),
+          Some{Parts{r, last}},
+          Text.cuts_after_join(
+            r,
+            c,
+            last
+          )(
+            Bool.and_true_right(
+              Bool.not(Text.has(p, Char.to_u32(c))),
+              Text.lacks_all(r, Char.to_u32(c))
+            )(h)
+          )
+        ): {Text.cuts.put(p, _) == Some{Parts{p <> r, last}}: Maybe<&2, Parts>}
+        {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it

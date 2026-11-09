@@ -21,7 +21,9 @@ def Reach.next(
   match xs:
     case Nil{}:
       []
-    case Con{x, r}:
+    # bend-lint: expect-begin bend-lint-rules/language/unneeded_plus@hint -- a succ that uses its node twice needs it: without the +, bend refuses that instance (x consumed more than once)
+    case Con{+x, r}:
+    # bend-lint: expect-end bend-lint-rules/language/unneeded_plus@hint
       List.append(&2, A, succ(g)(x), Reach.next(~A, ~V, ~succ, r, g))
 
 # m is in the level xs, or in one of the f levels below it
@@ -1865,3 +1867,206 @@ def Reach.path_in(
   )
 
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# Same graphs
+# -----------
+# A search of the graph g, and of a graph to(g) whose nodes have the same
+# successors, finds the same: a graph can keep what its successors compute.
+
+# the next level is the same in g and in to(g)
+def Reach.next_same(
+  ~A: Data,
+  ~V: Data,
+  ~W: Data,
+  ~succ: V -> A -> List<&2, A>,
+  ~succ2: W -> A -> List<&2, A>,
+  ~to: V -> W,
+  ~e: @g: V -> @x: A -> {succ(g)(x) == succ2(to(g))(x): List<&2, A>},
+  xs: List<&2, A>,
+  +g: V
+) -> {Reach.next(~A, ~V, ~succ, xs, g) == Reach.next(~A, ~W, ~succ2, xs, to(g)): List<&2, A>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      %e(
+        g,
+        x
+      ): {
+        List.append(
+          &2,
+          A,
+          succ(g)(x),
+          Reach.next(~A, ~V, ~succ, r, g)
+        )
+          == List.append(&2, A, _, Reach.next(~A, ~W, ~succ2, r, to(g))): List<&2, A>
+      }
+      %Reach.next_same(
+        ~A,
+        ~V,
+        ~W,
+        ~succ,
+        ~succ2,
+        ~to,
+        ~e,
+        r,
+        g
+      ): {
+        List.append(
+          &2,
+          A,
+          succ(g)(x),
+          Reach.next(~A, ~V, ~succ, r, g)
+        )
+          == List.append(&2, A, succ(g)(x), _): List<&2, A>
+      }
+      {==}
+
+# a search finds the same in g and in to(g)
+def Reach.go_same(
+  ~A: Data,
+  ~V: Data,
+  ~W: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  ~succ2: W -> A -> List<&2, A>,
+  ~to: V -> W,
+  ~e: @g: V -> @x: A -> {succ(g)(x) == succ2(to(g))(x): List<&2, A>},
+  f: Nat,
+  +xs: List<&2, A>,
+  +g: V,
+  m: A
+) -> {
+  Reach.go(
+    ~A,
+    ~V,
+    ~same,
+    ~succ,
+    f,
+    xs,
+    g,
+    m
+  )
+    == Reach.go(~A, ~W, ~same, ~succ2, f, xs, to(g), m): Bool
+}:
+  match f:
+    case 0n:
+      {==}
+    case 1n+k:
+      %Reach.next_same(
+        ~A,
+        ~V,
+        ~W,
+        ~succ,
+        ~succ2,
+        ~to,
+        ~e,
+        xs,
+        g
+      ): {
+        Bool.or(
+          Shared.List.has(~A, ~same, xs, m),
+          Reach.go(~A, ~V, ~same, ~succ, k, Reach.next(~A, ~V, ~succ, xs, g), g, m)
+        )
+          == Bool.or(
+            Shared.List.has(~A, ~same, xs, m),
+            Reach.go(~A, ~W, ~same, ~succ2, k, _, to(g), m)
+          ): Bool
+      }
+      %Reach.go_same(
+        ~A,
+        ~V,
+        ~W,
+        ~same,
+        ~succ,
+        ~succ2,
+        ~to,
+        ~e,
+        k,
+        Reach.next(~A, ~V, ~succ, xs, g),
+        g,
+        m
+      ): {
+        Bool.or(
+          Shared.List.has(~A, ~same, xs, m),
+          Reach.go(~A, ~V, ~same, ~succ, k, Reach.next(~A, ~V, ~succ, xs, g), g, m)
+        )
+          == Bool.or(Shared.List.has(~A, ~same, xs, m), _): Bool
+      }
+      {==}
+
+# m is inside x in g exactly when it is inside x in to(g), when both have the
+# same nodes
+def Reach.in_same(
+  ~A: Data,
+  ~V: Data,
+  ~W: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  ~succ2: W -> A -> List<&2, A>,
+  ~nodes: V -> List<&2, A>,
+  ~nodes2: W -> List<&2, A>,
+  ~to: V -> W,
+  ~e: @g: V -> @x: A -> {succ(g)(x) == succ2(to(g))(x): List<&2, A>},
+  ~en: @g: V -> {nodes(g) == nodes2(to(g)): List<&2, A>},
+  +g: V,
+  +x: A,
+  m: A
+) -> {
+  Reach.in(
+    ~A,
+    ~V,
+    ~same,
+    ~succ,
+    ~nodes,
+    g,
+    x,
+    m
+  )
+    == Reach.in(~A, ~W, ~same, ~succ2, ~nodes2, to(g), x, m): Bool
+}:
+  %en(
+    g
+  ): {
+    Reach.go(
+      ~A,
+      ~V,
+      ~same,
+      ~succ,
+      List.length(&2, A, nodes(g)),
+      succ(g)(x),
+      g,
+      m
+    )
+      == Reach.go(~A, ~W, ~same, ~succ2, List.length(&2, A, _), succ2(to(g))(x), to(g), m): Bool
+  }
+  %e(
+    g,
+    x
+  ): {
+    Reach.go(
+      ~A,
+      ~V,
+      ~same,
+      ~succ,
+      List.length(&2, A, nodes(g)),
+      succ(g)(x),
+      g,
+      m
+    )
+      == Reach.go(~A, ~W, ~same, ~succ2, List.length(&2, A, nodes(g)), _, to(g), m): Bool
+  }
+  Reach.go_same(
+    ~A,
+    ~V,
+    ~W,
+    ~same,
+    ~succ,
+    ~succ2,
+    ~to,
+    ~e,
+    List.length(&2, A, nodes(g)),
+    succ(g)(x),
+    g,
+    m
+  )

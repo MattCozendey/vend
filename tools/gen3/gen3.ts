@@ -12,7 +12,8 @@
 //       ?TODO holes: each hole. Prints the proof, or the best partial with each hole's goal.
 //       A def that returns data, with a ?TODO body: a body synthesized from the laws that name it
 //       (SYNTHESIZED: bend2 accepts it and the laws hold on small inputs; evidence, not a proof). The
-//       defs after it in the same call are proven against that body (prove <file> div2 div2_law).
+//       defs after it in the same call are proven against that body (prove <file> div2 div2_law), and
+//       a lemma proven in a call (without helpers) is a lemma for the defs after it (prove <file> a b).
 //       --write puts a full proof into the file (only if that body did not change meanwhile).
 //       --all: every def of the file with a ?TODO. --hole N: only the N-th ?TODO of a body.
 //       --helpers: on a miss, each open hole becomes a helper lemma (its goal over its context) and
@@ -50,7 +51,10 @@
 //   induction, deciding a stuck Bool call, and generalization.
 // * one fact list: hypotheses plus facts derived from them (symmetry, constructor injectivity, a
 //   constructor clash), each with its proof text. A clash or an injectivity is a rewrite whose motive
-//   is an inline match eliminator {\{C: ..; \{}} : T -> Type}(_): no predicate or projection def.
+//   is an inline match eliminator {\{C: ..; \{}} : T -> Type}(_): no predicate or projection def. A
+//   hypothesis that is a quantified equation (@x -> {f(x) == g(x)}) is a rewrite rule like a lemma.
+// * a template's ~ parameters are constants, as in bend2's def check: reusable binders, a template
+//   lemma is a candidate only inside a template, and a helper keeps them as ~ parameters.
 // * one normal form, memoized: bounded (fuel shared by all its steps, a node budget), and in a second
 //   variant with the calls that decide a branch kept folded (a def whose result is an enumeration,
 //   on small arguments): bend2's weak normal form unfolds such a wrapper (FileEp.is_resource) inside
@@ -588,7 +592,7 @@ const defSrc = (k: string): Src | null => {
 // a def with a ?TODO in its source body is open: not a lemma
 const isOpen = (k: string): boolean => {
   const source: string | undefined = BK.files.get(k)?.str;
-  if (!source) return false;
+  if (!source || installed.has(k)) return false;
   let names = BK.open.get(source);
   if (!names) {
     names = new Set();
@@ -1167,39 +1171,53 @@ const openMeta = (T: Term, n: number, sol: (Term | null)[] = []): { doms: Dom[];
 // every def with a body (or Base's), filed by the head of its conclusion and, for an equation, of each
 // side (as stated and in normal form); open defs are not lemmas
 const buildIndex = () => {
+  for (const k of Object.keys(BK.raw)) indexLemma(k);
+  sortIndex();
+};
+const indexLemma = (k: string) => {
   const add = <V>(m: Map<string, V[]>, k: string, v: V) => { let a = m.get(k); if (!a) m.set(k, a = []); a.push(v); };
-  for (const k of Object.keys(BK.raw)) {
-    const t = BK.raw[k];
-    if (t?.$ !== "Def" || t.x > 0 || (t.v === null && t.b !== true) || t.i || isOpen(k)) continue;
-    const L: Lemma = { k, order: BK.order.get(k) ?? -1, n: arity(t.T, t.n), np: t.n };
-    const o = withOwnFuel(FUEL_NF * 2, () => attempt(FUEL_NF * 2, () => openMeta(t.T, L.n)));
-    const c = o && attempt(20000, () => lower(o.concl, 0));
-    if (!o || !c) continue;
-    const hk = headKey(c);
-    if (hk === "V" || hk === "*" || hk === "Typ") continue;
-    add(BK.apply, hk, L);
-    const cn = t.n > 0 ? nf(o.concl, 0) : null;
-    const nk = cn ? headKey(cn) : "*";
-    if (nk !== hk && !/^(\*|V|E\|\*|E\|V)$/.test(nk)) add(BK.apply, nk, L);
-    for (const e of [c, cn]) {
-      if (e?.$ !== "Eql") continue;
-      for (const side of [0, 1] as const) {
-        const sk = headKey(side === 0 ? e.a : e.b);
-        const ok = sk.startsWith("R:") || (t.n === 0 && (sk.startsWith("C:") || sk.startsWith("A:")));
-        if (ok && !(BK.rw.get(sk) ?? []).some((x) => x.L.k === k && x.side === side)) add(BK.rw, sk, { L, side });
-      }
+  const t = BK.raw[k];
+  if (t?.$ !== "Def" || (t.v === null && t.b !== true) || t.i || isOpen(k)) return;
+  const L: Lemma = { k, order: BK.order.get(k) ?? -1, n: arity(t.T, t.n), np: t.n };
+  const o = withOwnFuel(FUEL_NF * 2, () => attempt(FUEL_NF * 2, () => openMeta(t.T, L.n)));
+  const c = o && attempt(20000, () => lower(o.concl, 0));
+  if (!o || !c) return;
+  const hk = headKey(c);
+  if (hk === "V" || hk === "*" || hk === "Typ") return;
+  add(BK.apply, hk, L);
+  const cn = t.n > 0 ? nf(o.concl, 0) : null;
+  const nk = cn ? headKey(cn) : "*";
+  if (nk !== hk && !/^(\*|V|E\|\*|E\|V)$/.test(nk)) add(BK.apply, nk, L);
+  for (const e of [c, cn]) {
+    if (e?.$ !== "Eql") continue;
+    for (const side of [0, 1] as const) {
+      const sk = headKey(side === 0 ? e.a : e.b);
+      const ok = sk.startsWith("R:") || (t.n === 0 && (sk.startsWith("C:") || sk.startsWith("A:")));
+      if (ok && !(BK.rw.get(sk) ?? []).some((x) => x.L.k === k && x.side === side)) add(BK.rw, sk, { L, side });
     }
-    // a premise with a definite head (an equation on a call, a stuck predicate): forward reasoning
-    o.doms.forEach((dm, j) => {
-      const P = attempt(20000, () => lower(dm.A, 0));
-      const pk = P && headKey(P);
-      if (pk && /^(E\|R:|R:)/.test(pk) && hasMeta(P)) add(BK.fwd, pk, { L, j });
-    });
   }
+  // a premise with a definite head (an equation on a call, a stuck predicate): forward reasoning (by
+  // plain lemmas: a fact needs no ~ argument)
+  if (t.x === 0) o.doms.forEach((dm, j) => {
+    const P = attempt(20000, () => lower(dm.A, 0));
+    const pk = P && headKey(P);
+    if (pk && /^(E\|R:|R:)/.test(pk) && hasMeta(P)) add(BK.fwd, pk, { L, j });
+  });
+};
+const sortIndex = () => {
   for (const v of BK.apply.values()) v.sort((a, b) => b.order - a.order);
   for (const v of BK.rw.values()) v.sort((a, b) => b.L.order - a.L.order);
   for (const v of BK.fwd.values()) v.sort((a, b) => b.L.order - a.L.order);
 };
+// def k out of the index (a body this task gave it is gone)
+const unindexLemma = (k: string) => {
+  for (const [hk, v] of BK.apply) BK.apply.set(hk, v.filter((L) => L.k !== k));
+  for (const [hk, v] of BK.rw) BK.rw.set(hk, v.filter((x) => x.L.k !== k));
+  for (const [hk, v] of BK.fwd) BK.fwd.set(hk, v.filter((x) => x.L.k !== k));
+};
+// a lemma that goal g may call: above g's def (bend2 checks defs in file order); a template's call
+// outside a template needs comptime ~ arguments and checks a new instance
+const usableLemma = (g: Goal, L: Lemma): boolean => L.order < g.own.order && L.k !== g.own.k && (BK.raw[L.k].x === 0 || BK.raw[g.own.k].x > 0);
 
 // ---- printing ----
 // bend2 prints a call of a zero-parameter def (def Bytes() -> Data) as its bare name, which reads back
@@ -1222,6 +1240,7 @@ type Owner = { k: string; short: string; root: string; T: Term; n: number; order
 type Goal = {
   own: Owner; ctx: Term; d: number; ty: Term; lhs: Term; qt: Term; env: Term; names: string[]; ckey: number;
   pend: number; pnames: string[]; pmany: boolean[]; split: boolean; path: string;
+  tmpl: number; // the leading binders that are ~ constants (a hole's context, from bend2, has none)
 };
 const owner = (k: string, level = 0, root = shortOf(k)): Owner => {
   const t = BK.raw[k];
@@ -1261,7 +1280,7 @@ const intro = (g: Goal, name: string, many: boolean): Goal | null => {
   if (!t) return null;
   const x = B.Var(name, g.d);
   const lhs = g.lhs.n > 0 ? { ...g.lhs, t: B.term_apply(g.lhs.t, x), n: g.lhs.n - 1 } : g.lhs;
-  const q = many && t.q.$ === "Lone" ? B.Many() : t.q;
+  const q = many && t.q.$ !== "Many" ? B.Many() : t.q; // an erased binder is many only as a ~ constant
   const Ah = attempt(FUEL_NF, () => H(lower(t.A, g.d))) ?? 0;
   return {
     ...g, ctx: B.ctx_bind(g.ctx, g.d, q, name, t.A), d: g.d + 1, ty: t.B(x), lhs, env: B.list_set(g.env, g.d, x),
@@ -1298,11 +1317,14 @@ const rootGoal = (own: Owner): Goal => {
   const pnames: string[] = [];
   let t = def.T;
   for (let j = 0; j < def.n; j++) { const s = B.term_strip(t); pnames.push(named?.[j] ?? s.k); t = s.B(B.Var(pnames[j], j)); }
+  // a ~ parameter is also a column of the descent check
   return {
-    own, ctx: B.ctx_nil(), d: 0, ty: def.T, lhs: { t: B.Ref(own.k), n: def.n - def.x, def: own.k, qs, u: def.u }, qt: B.Lone(), env: null,
-    names: [], ckey: 0, pend: def.n, pnames, pmany: pnames.map(() => false), split: false, path: "",
+    own, ctx: B.ctx_nil(), d: 0, ty: def.T, lhs: { t: B.Ref(own.k), n: def.n, def: own.k, qs, u: def.u }, qt: B.Lone(), env: null,
+    names: [], ckey: 0, pend: def.n, pnames, pmany: pnames.map((_, j) => j < def.x), split: false, path: "", tmpl: def.x,
   };
 };
+// a context binder's mark in a helper's header: a ~ constant stays one (the helper is a template too)
+const quantText = (g: Goal, i: number): string => (i < g.tmpl ? "~" : B.quant_show(ann(g, i).q));
 // the goal of the hole ?gen3hole, from bend2's error at it (null: the error is elsewhere)
 const holeGoal = (own: Owner, err: Term, at: string): Goal | null => {
   if (!err || err.$ !== "Err" || typeof err.exp === "string" || err.obs?.$ !== "Hol" || err.obs.k !== "gen3hole") return null;
@@ -1318,7 +1340,7 @@ const holeGoal = (own: Owner, err: Term, at: string): Goal | null => {
   }
   return {
     own, ctx: err.ctx, d, ty: err.exp, lhs: { t: B.Ref(own.k), n: 0, def: own.k, qs: [], u: true }, qt: B.Lone(), env, names, ckey,
-    pend: 0, pnames: [], pmany: [], split: false, path: at, // no self-call: bend2 checks a hole's descent only in the whole body
+    pend: 0, pnames: [], pmany: [], split: false, path: at, tmpl: 0, // no self-call: bend2 checks a hole's descent only in the whole body
   };
 };
 const isData = (g: Goal, A: Term) => attempt(FUEL_NF, () => { B.term_check(BK.book, g.lhs, A, B.None(), B.Typ(B.Qua(B.Many())), g.ctx, g.d); return true; }) === true;
@@ -1486,7 +1508,7 @@ const forward = (g: Goal, f: Fact, out: Fact[]) => {
   const seen = new Set<string>();
   for (const t of f.N && H(f.N) !== H(f.T) ? [f.T, f.N] : [f.T]) {
     for (const { L, j } of (BK.fwd.get(headKey(t)) ?? []).slice(0, 24)) {
-      if (made >= MAX_FORWARD || L.order >= g.own.order || L.k === g.own.k || seen.has(L.k + "#" + j)) continue;
+      if (made >= MAX_FORWARD || !usableLemma(g, L) || seen.has(L.k + "#" + j)) continue;
       seen.add(L.k + "#" + j);
       const c = lemmaCallee(g, L);
       const o = openMeta(c.T, c.n);
@@ -1679,6 +1701,8 @@ const step = () => {
 // the search until it proves the root, refutes it, or runs out; every 200 ms it yields to the event
 // loop (so the worker's progress messages leave the process), every second it reports progress
 const run = async (until: number, progress: () => void) => {
+  // an earlier search of the call stopped at the memory share: its tree is garbage now, so measure again
+  if (overMem) { BK.nfs.clear(); nfObj = new WeakMap(); Bun.gc(true); overMem = false; }
   deadline = until;
   searching = true;
   let yielded = performance.now(), reported = yielded;
@@ -1832,7 +1856,7 @@ const lemmaCands = (g: Goal, targets: Term[]): Callee[] => {
   for (const t of targets) {
     for (const hk of t.$ === "Eql" ? [headKey(t), "E|*"] : [headKey(t)]) {
       for (const L of BK.apply.get(hk) ?? []) {
-        if (L.order >= g.own.order || L.k === g.own.k || seen.has(L.k) || out.length >= 64) continue;
+        if (!usableLemma(g, L) || seen.has(L.k) || out.length >= 64) continue;
         seen.add(L.k);
         out.push(lemmaCallee(g, L));
       }
@@ -2020,7 +2044,8 @@ const rewriteAlts = (n: GNode): (Alt | null)[] => {
   for (const t of [nf(g.ty, LD(g)), nf(g.ty, LD(g), true), attempt(FUEL_NF, () => lower(g.ty, LD(g)))])
     if (t && size(t, RW_NODES) <= RW_NODES && !bases.some((x) => H(x) === H(t))) bases.push(t);
   const cands: RwCand[] = [];
-  for (const [bi, base] of bases.entries()) rwCands(g, base, bi > 0, cands);
+  const hyps = hypRules(g);
+  for (const [bi, base] of bases.entries()) rwCands(g, base, bi > 0, hyps, cands);
   cands.sort((a, b) => a.score - b.score);
   const out: (Alt | null)[] = [];
   const seen = new Set<number>();
@@ -2056,14 +2081,14 @@ const closingText = (g: Goal, G: Term): string | null => {
   const h = H(G);
   return factsOf(g).find((f) => !f.empty && usable(f, g.qt) && (H(f.T) === h || H(f.N) === h))?.pf ?? null;
 };
-type RwSite = { base: Term; subs: Map<number, Term>; score: (from: Term, base: number) => number };
-const rwCands = (g: Goal, N: Term, isRaw: boolean, cands: RwCand[]) => {
+type RwSite = { base: Term; subs: Map<number, Term>; hyps: Map<string, RwRule[]>; score: (from: Term, base: number) => number };
+const rwCands = (g: Goal, N: Term, isRaw: boolean, hyps: Map<string, RwRule[]>, cands: RwCand[]) => {
   const subs = new Map<number, Term>();
   subterms(N, subs);
   const blk: Term[] = [];
   blockers(N, blk);
   const blkKeys = new Set(blk.map(H));
-  const site: RwSite = { base: N, subs, score: (from, base) => base + (blkKeys.has(H(from)) ? 0 : 1) + (isRaw ? 0.2 : 0) };
+  const site: RwSite = { base: N, subs, hyps, score: (from, base) => base + (blkKeys.has(H(from)) ? 0 : 1) + (isRaw ? 0.2 : 0) };
   factRws(g, site, cands);
   calleeRws(g, site, cands);
 };
@@ -2077,17 +2102,32 @@ const factRws = (g: Goal, site: RwSite, cands: RwCand[]) => {
     }
   }
 };
-// the induction hypothesis and lemmas whose equation side matches a stuck call of the base
+type RwRule = { c: Callee; side: 0 | 1; tag: string };
+// the hypotheses that are quantified equations (@g -> @x -> {l == r}), by the head of each side (a call
+// of a def or of a context variable: matching that side fixes the binders)
+const hypRules = (g: Goal): Map<string, RwRule[]> => {
+  const out = new Map<string, RwRule[]>();
+  for (const c of hypCallees(g)) {
+    const E = attempt(FUEL_NF, () => { const o = openMeta(c.T, c.n); return o ? lower(o.concl, LD(g)) : null; });
+    if (E?.$ !== "Eql") continue;
+    for (const side of [0, 1] as const) {
+      const t = side === 0 ? E.a : E.b, hk = headKey(t);
+      if (hk.startsWith("R:") || (hk === "V" && t.$ === "App")) out.set(hk, [...(out.get(hk) ?? []), { c, side, tag: "rw:hyp" }]);
+    }
+  }
+  return out;
+};
+// the induction hypothesis, quantified hypotheses and lemmas whose equation side matches a stuck call of
+// the base
 const calleeRws = (g: Goal, site: RwSite, cands: RwCand[]) => {
   const ih = g.split ? ihCallee(g) : null;
   const ihEq = ih && attempt(FUEL_NF, () => { const o = openMeta(ih.T, ih.n); return o ? lower(o.concl, LD(g)) : null; });
   for (const s of site.subs.values()) {
     const hk = headKey(s);
-    if (!hk.startsWith("R:") && !(s.$ !== "App" && BK.rw.has(hk))) continue;
-    const entries: { c: Callee; side: 0 | 1; tag: string }[] = [];
+    const entries: RwRule[] = site.hyps.get(hk)?.slice() ?? [];
     if (ih && ihEq?.$ === "Eql" && hk.startsWith("R:")) for (const side of [0, 1] as const) if (headKey(side === 0 ? ihEq.a : ihEq.b) === hk) entries.push({ c: ih, side, tag: "rw:ih" });
     for (const { L, side } of BK.rw.get(hk) ?? []) {
-      if (L.order < g.own.order && L.k !== g.own.k && entries.length <= 24) entries.push({ c: lemmaCallee(g, L), side, tag: "rw:lemma" });
+      if (usableLemma(g, L) && entries.length <= 24) entries.push({ c: lemmaCallee(g, L), side, tag: "rw:lemma" });
     }
     for (const en of entries) {
       if (late()) throw TIMEOUT;
@@ -2095,7 +2135,7 @@ const calleeRws = (g: Goal, site: RwSite, cands: RwCand[]) => {
     }
   }
 };
-const calleeRw = (g: Goal, site: RwSite, s: Term, { c, side, tag: t }: { c: Callee; side: 0 | 1; tag: string }, cands: RwCand[]) => {
+const calleeRw = (g: Goal, site: RwSite, s: Term, { c, side, tag: t }: RwRule, cands: RwCand[]) => {
   const { sols } = conclSols(g, c, [s], (o) => (o.$ === "Eql" ? (side === 0 ? o.a : o.b) : null));
   for (const s0 of sols.slice(0, 2)) {
     const r = complete(g, c, s0, true);
@@ -2105,7 +2145,7 @@ const calleeRw = (g: Goal, site: RwSite, s: Term, { c, side, tag: t }: { c: Call
     const to = side === 0 ? E.b : E.a;
     if (H(to) === H(s)) continue;
     const call = callText(c, r.args);
-    cands.push({ base: site.base, from: s, to, e: side === 0 ? symText(g, E, call) : call, kids: r.kids, tag: t, score: site.score(s, c.n === 0 ? -0.5 : t === "rw:ih" ? 0 : 0.5) });
+    cands.push({ base: site.base, from: s, to, e: side === 0 ? symText(g, E, call) : call, kids: r.kids, tag: t, score: site.score(s, c.n === 0 ? -0.5 : c.kind === "lemma" ? 0.5 : 0) });
   }
 };
 
@@ -2187,10 +2227,9 @@ const liftAlt = (n: GNode, gen: { t: Term; T: Term } | null): Alt | null => {
     const first: string[] = [], later: string[] = [], argsFirst: string[] = [], argsLater: string[] = [];
     const movedIdx = new Set<number>();
     for (let i = 0; i < g.d; i++) {
-      const A = ann(g, i);
-      const r = gen1(A.T);
+      const r = gen1(ann(g, i).T);
       if (!r) return no("a context type does not print");
-      const p = B.quant_show(A.q) + names[i] + ": " + r.s;
+      const p = quantText(g, i) + names[i] + ": " + r.s;
       if (r.moved) { movedIdx.add(i); later.push(p); argsLater.push(names[i]); }
       else { first.push(p); argsFirst.push(names[i]); }
     }
@@ -2355,7 +2394,7 @@ const nearMisses = (n: GNode): string => {
   const t = n.raw ?? attempt(FUEL_NF, () => lower(n.g.ty, LD(n.g)));
   const hk = t && headKey(t);
   if (!hk || !/^(E\|)?(R|C|A):/.test(hk)) return "";
-  const ls = (BK.apply.get(hk) ?? []).filter((L) => L.order < n.g.own.order && L.k !== n.g.own.k).slice(0, 3);
+  const ls = (BK.apply.get(hk) ?? []).filter((L) => usableLemma(n.g, L)).slice(0, 3);
   return ls.length ? "\n# lemmas with the goal's head that do not match it (compare the arguments):\n" + ls.map((L) => "#   " + B.name_show(n.g.own.file, L.k) + " : " + clip(attempt(FUEL_NF, () => { const o = openMeta(BK.raw[L.k].T, L.n); return o ? show(lower(o.concl, 0), [], n.g.own.file) : "?"; }) ?? "?", 240)).join("\n") : "";
 };
 const tagsOf = () => [...S.tags.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t).join(" ");
@@ -2394,7 +2433,7 @@ const finalErr = (k: string, pf: Pf, body: string, cap = FUEL_FINAL): Term => {
   }
   return checkErr(k, body, undefined, cap);
 };
-type Result = { ok: boolean; text: string; edit?: Edit };
+type Result = { ok: boolean; text: string; edit?: Edit; proof?: string }; // proof: a proven body that calls no helper
 // finalErr before the hard deadline (past it: a Stop, "not decided")
 const finalErrBy = (hard: number, k: string, pf: Pf, body: string, cap = FUEL_FINAL): Term => {
   deadline = hard;
@@ -2448,7 +2487,7 @@ const provenText = (k: string, ds: Src, pf: Pf, ms: number, hard: number): Resul
   if (e instanceof Stop) return { ok: false, text: "# " + name + ": a proof was found, but gen3's re-check did not finish (" + errText(e) + "): unverified\n" + helperBlock(printed(hs), k, true) + bodyText(pf) };
   if (e) return { ok: false, text: "# " + name + ": a proof was found but fails bend2's def check (a gen3 bug; please report it):\n" + bodyText(pf) + "\n" + errText(e) };
   const { helpers, body } = tidied(k, pf, hard);
-  return { ok: true, text: "# " + name + ": PROVEN in " + Math.round(ms) + " ms [" + tagsOf() + "]\n" + helperBlock(helpers, k, true) + body, edit: editOf(ds, helpers, body) };
+  return { ok: true, text: "# " + name + ": PROVEN in " + Math.round(ms) + " ms [" + tagsOf() + "]\n" + helperBlock(helpers, k, true) + body, edit: editOf(ds, helpers, body), proof: helpers.length ? undefined : body };
 };
 // a proven proof's helpers and body without the + marks they do not need (before the hard deadline)
 const tidied = (k: string, pf: Pf, hard: number): { helpers: Printed[]; body: string } => {
@@ -2476,7 +2515,7 @@ const stubOf = (g: Goal, used: Set<string>, spent: Set<string>): { head: string;
   const named = new Set<number>();
   [goalT, ...types].forEach((t) => varsOf(t, named));
   const keep = names.map((x, i) => !spent.has(x) || named.has(i));
-  const params = names.flatMap((x, i) => (keep[i] ? [(spent.has(x) ? "-" : B.quant_show(ann(g, i).q)) + x + ": " + show(types[i], pad, g.own.file)] : []));
+  const params = names.flatMap((x, i) => (keep[i] ? [(spent.has(x) ? "-" : quantText(g, i)) + x + ": " + show(types[i], pad, g.own.file)] : []));
   const name = helperName(g.own, ".h", used);
   used.add(name);
   return { head: "def " + name + "(\n  " + params.join(",\n  ") + ") ->\n  " + sh(g, goalT) + ":", call: name + "(" + names.filter((_, i) => keep[i]).join(", ") + ")" };
@@ -2552,7 +2591,7 @@ const refsOf = (T: Term): Set<string> => {
 const templatesOf = (k: string): string => {
   const mine = refsOf(BK.raw[k].T);
   if (mine.size === 0) return "";
-  const scored = ownDefs().filter((d) => d !== k && BK.raw[d].v !== null && !isOpen(d)).map((d) => {
+  const scored = ownDefs().filter((d) => d !== k && BK.raw[d].v !== null && !isOpen(d) && !temps.includes(d)).map((d) => {
     const rs = refsOf(BK.raw[d].T);
     const both = [...rs].filter((r) => mine.has(r)).length;
     return { d, score: both / (rs.size + mine.size - both || 1) };
@@ -2605,7 +2644,7 @@ const proveHoles = async (k: string, ds: Src, until: number, hard: number, progr
       const ok = used.length === holes.length && todoAt(body).length === 0;
       const text = "# " + name + ": " + used.length + "/" + holes.length + " holes filled in " + secs(performance.now() - t0) + (S.tags.size ? " [" + tagsOf() + "]" : "") + "\n"
         + helperBlock(hs, k, true) + body + (notes.length || open.length ? "\n" + [...notes, ...open].join("\n") : "");
-      return { ok, text, edit: ok ? editOf(ds, hs, body) : undefined };
+      return { ok, text, edit: ok ? editOf(ds, hs, body) : undefined, proof: ok && !hs.length ? body : undefined };
     }
   } finally {
     dropTemps();
@@ -2856,7 +2895,7 @@ function* combosOf(sizes: number[], max: number): Generator<number[]> {
   }
 }
 const synthesize = async (k: string, ds: Src, until: number, hard: number, progress: (s: string) => void): Promise<Result> => {
-  const t0 = performance.now(), name = shortOf(k), def = BK.raw[k];
+  const t0 = performance.now(), name = shortOf(k);
   const laws = lawsOf(k);
   lawTerms.clear();
   for (const l of laws) { const L = attempt(FUEL_NF, () => lower0(BK.raw[l].T, 0)); if (L) lawTerms.set(l, L); }
@@ -2878,19 +2917,15 @@ const synthesize = async (k: string, ds: Src, until: number, hard: number, progr
         const v = attempt(FUEL_CHECK * 4, () => checkDef(k, body));
         if (TRACE && tried <= 3) console.error("[synth] try:\n" + body + "\n  " + (v ? "checks" : "rejected: " + firstLine(checkErr(k, body))));
         if (!v) continue;
-        BK.raw[k] = { ...def, v };
-        synthesized.set(k, def);
-        resetNf(k);
+        install(k, v);
         const res = insts.map(holds);
         if (TRACE && tried <= 3) console.error("[synth] instances: " + res.map((x) => (x === null ? "?" : x ? "+" : "-")).join(""));
         if (res.some((r) => r === false) || !res.some((r) => r === true)) continue;
         const n = res.filter((r) => r === true).length;
-        const open = undecided(k, def, v, sh, leaves, pick, insts);
+        const open = undecided(k, v, sh, leaves, pick, insts);
         const lawsText = laws.map(shortOf).join(", ");
         if (open.length === sh.arms.length) {
-          BK.raw[k] = def;
-          synthesized.delete(k);
-          resetNf(k);
+          uninstall(k);
           return refuse("its laws (" + lawsText + ") do not pin a body down on the inputs gen3 tries: " + body.trim().split("\n").join(" ") + " passes them, and so do bodies that answer differently (" + open.map((o) => o.alt).join("; ") + ")");
         }
         const notes = open.map((o) => "# the laws do not decide case " + o.arm + ": " + o.alt + " also passes them");
@@ -2906,14 +2941,12 @@ const synthesize = async (k: string, ds: Src, until: number, hard: number, progr
   } finally {
     deadline = Infinity;
   }
-  BK.raw[k] = def;
-  synthesized.delete(k);
-  resetNf(k);
+  uninstall(k);
   return refuse("no body of the shapes gen3 tries passed its laws (" + tried + " tried in " + secs(performance.now() - t0) + ")");
 };
 // the arms of an accepted body (v) that its laws do not decide: another leaf there also passes them and
 // answers differently on some small input; k is left with v
-const undecided = (k: string, def: Term, v: Term, sh: Shape, leaves: string[][], pick: number[], insts: Inst[]): { arm: string; alt: string }[] => {
+const undecided = (k: string, v: Term, sh: Shape, leaves: string[][], pick: number[], insts: Inst[]): { arm: string; alt: string }[] => {
   const inputs = inputsOf(k);
   const answers = (): (number | undefined)[] => inputs.map((xs) => {
     const call = xs.reduce((f: Term, x: Term) => B.App(f, B.term_higher(x, null)), B.Ref(k));
@@ -2928,15 +2961,13 @@ const undecided = (k: string, def: Term, v: Term, sh: Shape, leaves: string[][],
       const alt = pick.map((p, j) => leaves[j][j === i ? r : p]);
       const v2 = attempt(FUEL_CHECK * 4, () => checkDef(k, sh.text(alt)));
       if (!v2) continue;
-      BK.raw[k] = { ...def, v: v2 };
-      resetNf(k);
+      install(k, v2);
       const res = insts.map(holds);
       const differs = !res.some((x) => x === false) && res.some((x) => x === true) && answers().some((a, j) => a !== undefined && mine[j] !== undefined && a !== mine[j]);
       if (differs) { out.push({ arm: sh.arms[i].g.path || "/", alt: leaves[i][r] }); break; }
     }
   }
-  BK.raw[k] = { ...def, v };
-  resetNf(k);
+  install(k, v);
   return out;
 };
 // small argument tuples for k (each parameter from the values of its type), at most 16
@@ -2953,9 +2984,34 @@ const inputsOf = (k: string): Term[][] => {
   }
   return rows.map((r) => r.xs);
 };
-// the defs a task gave a synthesized body (their ?TODO defs, to restore after it: the book is cached)
-const synthesized = new Map<string, Term>();
-const restoreSynthesized = () => { for (const [k, d] of synthesized) { BK.raw[k] = d; resetNf(k); } synthesized.clear(); };
+// the defs a task gave a body, synthesized or proven (their ?TODO defs, to restore after it: the book is
+// cached); such a def is not open while the task runs
+const installed = new Map<string, Term>();
+const install = (k: string, v: Term) => {
+  if (!installed.has(k)) installed.set(k, BK.raw[k]);
+  BK.raw[k] = { ...installed.get(k), v };
+  resetNf(k);
+};
+const uninstall = (k: string) => {
+  const def = installed.get(k);
+  if (!def) return;
+  BK.raw[k] = def;
+  installed.delete(k);
+  resetNf(k);
+  unindexLemma(k);
+};
+const restoreInstalled = () => { for (const k of [...installed.keys()]) uninstall(k); };
+// a def proven by this call is a lemma for the defs after it in the call (a proof that calls no helper)
+const installProof = (k: string, body: string, hard: number) => {
+  if (installed.has(k)) return;
+  deadline = hard;
+  let v: Term;
+  try { v = attempt(FUEL_FINAL, () => checkDef(k, body)); } catch (e) { if (e !== TIMEOUT) throw e; } finally { deadline = Infinity; }
+  if (!v) return;
+  install(k, v);
+  indexLemma(k);
+  sortIndex();
+};
 // k's body changed: the memos that computed through it are stale
 const resetNf = (k: string) => { forget(k); BK.nfs.clear(); nfObj = new WeakMap(); BK.wraps = null; };
 const proveOne = async (k: string, until: number, hard: number, progress: (s: string) => void): Promise<Result> => {
@@ -2998,6 +3054,7 @@ const proveCmd = async (a: Args, until: number, hard: number, snap: Snap) => {
     const left = ks.length - i, now = performance.now();
     const r = await proveOne(k, now + (until - now) / left, now + (hard - now) / left, (s) => { parts[i] = s; publish(3); });
     parts[i] = r.text;
+    if (r.proof !== undefined && left > 1) installProof(k, r.proof, hard);
     if (!r.ok) code = Math.max(code, 2);
     if (r.edit) edits.push(r.edit);
     publish(i === ks.length - 1 ? code : 3);
@@ -3084,7 +3141,7 @@ const isLemmaType = (k: string): boolean => {
 };
 const isLemma = (k: string): boolean => {
   const t = BK.raw[k];
-  return t?.$ === "Def" && t.v !== null && !t.x && !t.i && !isOpen(k) && isLemmaType(k) && !!defSrc(k);
+  return t?.$ === "Def" && t.v !== null && !t.i && !isOpen(k) && isLemmaType(k) && !!defSrc(k);
 };
 
 const runTask = async (t: Task, send: Send) => {
@@ -3129,7 +3186,7 @@ const onTask = async (t: Task, send: Send) => {
     send({ id: t.id, t: "snap", s: HONEST + "\n# gen3: internal error (please report it): " + why, code: 1 });
   } finally {
     fuel = Infinity; deadline = Infinity;
-    if (BK) restoreSynthesized();
+    if (BK) restoreInstalled();
     if (overMem || process.memoryUsage.rss() > MEM_CAP * 0.7) { books.clear(); smemo.clear(); Bun.gc(true); }
     overMem = false;
     const retire = process.memoryUsage.rss() > MEM_CAP || !!process.env.GEN3_PROF;
