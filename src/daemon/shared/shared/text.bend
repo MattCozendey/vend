@@ -822,8 +822,53 @@ def Utf8.back(fits: Bool, c: Char, b: List<&2, U32>) -> String:
     case False{}:
       Bytes.to_text(List.append(&2, U32, Utf8.char(c), b))
 
-# Utf8.char_back, with the bits of the character from the highest
-def Utf8.char_back.bits(
+# the character of the bits b31 to b0, from the highest
+def Char.of_bits(
+  b31: Bool,
+  b30: Bool,
+  b29: Bool,
+  b28: Bool,
+  b27: Bool,
+  b26: Bool,
+  b25: Bool,
+  b24: Bool,
+  b23: Bool,
+  b22: Bool,
+  b21: Bool,
+  b20: Bool,
+  b19: Bool,
+  b18: Bool,
+  b17: Bool,
+  b16: Bool,
+  b15: Bool,
+  b14: Bool,
+  b13: Bool,
+  b12: Bool,
+  b11: Bool,
+  b10: Bool,
+  b9: Bool,
+  b8: Bool,
+  b7: Bool,
+  b6: Bool,
+  b5: Bool,
+  b4: Bool,
+  b3: Bool,
+  b2: Bool,
+  b1: Bool,
+  b0: Bool
+) -> Char:
+  Chr{U32{WCon{b0, WCon{b1, WCon{b2, WCon{b3, WCon{b4, WCon{b5, WCon{b6, WCon{b7, WCon{b8, WCon{b9, WCon{b10, WCon{b11, WCon{b12, WCon{b13, WCon{b14, WCon{b15, WCon{b16, WCon{b17, WCon{b18, WCon{b19, WCon{b20, WCon{b21, WCon{b22, WCon{b23, WCon{b24, WCon{b25, WCon{b26, WCon{b27, WCon{b28, WCon{b29, WCon{b30, WCon{b31, WNil{}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}
+
+# the bytes of c, then the bytes b: they read back as c, then b read, when c
+# holds no bit above the 21st; and they are bytes when b is
+def Utf8.Char.Laws(c: Char, b: List<&2, U32>) -> Type:
+  {
+    Bytes.to_text(List.append(&2, U32, Utf8.char(c), b)) == Utf8.back(Char.fits_utf8(c), c, b): String
+  }
+    & {Bytes.is_bytes(List.append(&2, U32, Utf8.char(c), b)) == Bytes.is_bytes(b): Bool}
+
+# Utf8.char_laws, with the bits of the character from the highest
+def Utf8.char_laws.bits(
   b31: Bool,
   b30: Bool,
   b29: Bool,
@@ -857,414 +902,110 @@ def Utf8.char_back.bits(
   b1: Bool,
   b0: Bool,
   b: List<&2, U32>
-) -> {
-  Bytes.to_text(
-    List.append(
-      &2,
-      U32,
-      Utf8.char(
-        Chr{
-          U32{
-            WCon{
-              b0,
-              WCon{
-                b1,
-                WCon{
-                  b2,
-                  WCon{
-                    b3,
-                    WCon{
-                      b4,
-                      WCon{
-                        b5,
-                        WCon{
-                          b6,
-                          WCon{
-                            b7,
-                            WCon{
-                              b8,
-                              WCon{
-                                b9,
-                                WCon{
-                                  b10,
-                                  WCon{
-                                    b11,
-                                    WCon{
-                                      b12,
-                                      WCon{
-                                        b13,
-                                        WCon{
-                                          b14,
-                                          WCon{
-                                            b15,
-                                            WCon{
-                                              b16,
-                                              WCon{
-                                                b17,
-                                                WCon{
-                                                  b18,
-                                                  WCon{
-                                                    b19,
-                                                    WCon{
-                                                      b20,
-                                                      WCon{
-                                                        b21,
-                                                        WCon{
-                                                          b22,
-                                                          WCon{
-                                                            b23,
-                                                            WCon{
-                                                              b24,
-                                                              WCon{
-                                                                b25,
-                                                                WCon{
-                                                                  b26,
-                                                                  WCon{
-                                                                    b27,
-                                                                    WCon{
-                                                                      b28,
-                                                                      WCon{
-                                                                        b29,
-                                                                        WCon{b30, WCon{b31, WNil{}}}
-                                                                      }
-                                                                    }
-                                                                  }
-                                                                }
-                                                              }
-                                                            }
-                                                          }
-                                                        }
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            }
-                                          }
-                                        }
-                                      }
-                                    }
-                                  }
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      ),
-      b
-    )
-  )
-    == Utf8.back(
-      Char.fits_utf8(
-        Chr{
-          U32{
-            WCon{
-              b0,
-              WCon{
-                b1,
-                WCon{
-                  b2,
-                  WCon{
-                    b3,
-                    WCon{
-                      b4,
-                      WCon{
-                        b5,
-                        WCon{
-                          b6,
-                          WCon{
-                            b7,
-                            WCon{
-                              b8,
-                              WCon{
-                                b9,
-                                WCon{
-                                  b10,
-                                  WCon{
-                                    b11,
-                                    WCon{
-                                      b12,
-                                      WCon{
-                                        b13,
-                                        WCon{
-                                          b14,
-                                          WCon{
-                                            b15,
-                                            WCon{
-                                              b16,
-                                              WCon{
-                                                b17,
-                                                WCon{
-                                                  b18,
-                                                  WCon{
-                                                    b19,
-                                                    WCon{
-                                                      b20,
-                                                      WCon{
-                                                        b21,
-                                                        WCon{
-                                                          b22,
-                                                          WCon{
-                                                            b23,
-                                                            WCon{
-                                                              b24,
-                                                              WCon{
-                                                                b25,
-                                                                WCon{
-                                                                  b26,
-                                                                  WCon{
-                                                                    b27,
-                                                                    WCon{
-                                                                      b28,
-                                                                      WCon{
-                                                                        b29,
-                                                                        WCon{b30, WCon{b31, WNil{}}}
-                                                                      }
-                                                                    }
-                                                                  }
-                                                                }
-                                                              }
-                                                            }
-                                                          }
-                                                        }
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            }
-                                          }
-                                        }
-                                      }
-                                    }
-                                  }
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      ),
-      Chr{
-        U32{
-          WCon{
-            b0,
-            WCon{
-              b1,
-              WCon{
-                b2,
-                WCon{
-                  b3,
-                  WCon{
-                    b4,
-                    WCon{
-                      b5,
-                      WCon{
-                        b6,
-                        WCon{
-                          b7,
-                          WCon{
-                            b8,
-                            WCon{
-                              b9,
-                              WCon{
-                                b10,
-                                WCon{
-                                  b11,
-                                  WCon{
-                                    b12,
-                                    WCon{
-                                      b13,
-                                      WCon{
-                                        b14,
-                                        WCon{
-                                          b15,
-                                          WCon{
-                                            b16,
-                                            WCon{
-                                              b17,
-                                              WCon{
-                                                b18,
-                                                WCon{
-                                                  b19,
-                                                  WCon{
-                                                    b20,
-                                                    WCon{
-                                                      b21,
-                                                      WCon{
-                                                        b22,
-                                                        WCon{
-                                                          b23,
-                                                          WCon{
-                                                            b24,
-                                                            WCon{
-                                                              b25,
-                                                              WCon{
-                                                                b26,
-                                                                WCon{
-                                                                  b27,
-                                                                  WCon{
-                                                                    b28,
-                                                                    WCon{
-                                                                      b29,
-                                                                      WCon{b30, WCon{b31, WNil{}}}
-                                                                    }
-                                                                  }
-                                                                }
-                                                              }
-                                                            }
-                                                          }
-                                                        }
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            }
-                                          }
-                                        }
-                                      }
-                                    }
-                                  }
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      b
-    ): String
-}:
+) -> Utf8.Char.Laws(Char.of_bits(b31, b30, b29, b28, b27, b26, b25, b24, b23, b22, b21, b20, b19, b18, b17, b16, b15, b14, b13, b12, b11, b10, b9, b8, b7, b6, b5, b4, b3, b2, b1, b0), b):
   match b31:
     case True{}:
-      {==}
+      ({==}, {==})
     case False{}:
       match b30:
         case True{}:
-          {==}
+          ({==}, {==})
         case False{}:
           match b29:
             case True{}:
-              {==}
+              ({==}, {==})
             case False{}:
               match b28:
                 case True{}:
-                  {==}
+                  ({==}, {==})
                 case False{}:
                   match b27:
                     case True{}:
-                      {==}
+                      ({==}, {==})
                     case False{}:
                       match b26:
                         case True{}:
-                          {==}
+                          ({==}, {==})
                         case False{}:
                           match b25:
                             case True{}:
-                              {==}
+                              ({==}, {==})
                             case False{}:
                               match b24:
                                 case True{}:
-                                  {==}
+                                  ({==}, {==})
                                 case False{}:
                                   match b23:
                                     case True{}:
-                                      {==}
+                                      ({==}, {==})
                                     case False{}:
                                       match b22:
                                         case True{}:
-                                          {==}
+                                          ({==}, {==})
                                         case False{}:
                                           match b21:
                                             case True{}:
-                                              {==}
+                                              ({==}, {==})
                                             case False{}:
                                               match b20:
                                                 case True{}:
-                                                  {==}
+                                                  ({==}, {==})
                                                 case False{}:
                                                   match b19:
                                                     case True{}:
-                                                      {==}
+                                                      ({==}, {==})
                                                     case False{}:
                                                       match b18:
                                                         case True{}:
-                                                          {==}
+                                                          ({==}, {==})
                                                         case False{}:
                                                           match b17:
                                                             case True{}:
-                                                              {==}
+                                                              ({==}, {==})
                                                             case False{}:
                                                               match b16:
                                                                 case True{}:
-                                                                  {==}
+                                                                  ({==}, {==})
                                                                 case False{}:
                                                                   match b15:
                                                                     case True{}:
-                                                                      {==}
+                                                                      ({==}, {==})
                                                                     case False{}:
                                                                       match b14:
                                                                         case True{}:
-                                                                          {==}
+                                                                          ({==}, {==})
                                                                         case False{}:
                                                                           match b13:
                                                                             case True{}:
-                                                                              {==}
+                                                                              ({==}, {==})
                                                                             case False{}:
                                                                               match b12:
                                                                                 case True{}:
-                                                                                  {==}
+                                                                                  ({==}, {==})
                                                                                 case False{}:
                                                                                   match b11:
                                                                                     case True{}:
-                                                                                      {==}
+                                                                                      ({==}, {==})
                                                                                     case False{}:
                                                                                       match b10:
                                                                                         case True{}:
                                                                                           match b9:
                                                                                             case True{}:
-                                                                                              {==}
+                                                                                              ({==}, {==})
                                                                                             case False{}:
-                                                                                              {==}
+                                                                                              ({==}, {==})
                                                                                         case False{}:
                                                                                           match b9:
                                                                                             case True{}:
-                                                                                              {==}
+                                                                                              ({==}, {==})
                                                                                             case False{}:
                                                                                               match b8:
                                                                                                 case True{}:
-                                                                                                  {
-                                                                                                    ==
-                                                                                                  }
+                                                                                                  ({==}, {==})
                                                                                                 case False{}:
                                                                                                   match b7:
                                                                                                     case True{}:
-                                                                                                      {
-                                                                                                        ==
-                                                                                                      }
+                                                                                                      ({==}, {==})
                                                                                                     case False{}:
                                                                                                       match b6:
                                                                                                         case True{}:
@@ -1274,45 +1015,29 @@ def Utf8.char_back.bits(
                                                                                                                 case True{}:
                                                                                                                   match b3:
                                                                                                                     case True{}:
-                                                                                                                      {
-                                                                                                                        ==
-                                                                                                                      }
+                                                                                                                      ({==}, {==})
                                                                                                                     case False{}:
-                                                                                                                      {
-                                                                                                                        ==
-                                                                                                                      }
+                                                                                                                      ({==}, {==})
                                                                                                                 case False{}:
                                                                                                                   match b3:
                                                                                                                     case True{}:
-                                                                                                                      {
-                                                                                                                        ==
-                                                                                                                      }
+                                                                                                                      ({==}, {==})
                                                                                                                     case False{}:
-                                                                                                                      {
-                                                                                                                        ==
-                                                                                                                      }
+                                                                                                                      ({==}, {==})
                                                                                                             case False{}:
                                                                                                               match b4:
                                                                                                                 case True{}:
                                                                                                                   match b3:
                                                                                                                     case True{}:
-                                                                                                                      {
-                                                                                                                        ==
-                                                                                                                      }
+                                                                                                                      ({==}, {==})
                                                                                                                     case False{}:
-                                                                                                                      {
-                                                                                                                        ==
-                                                                                                                      }
+                                                                                                                      ({==}, {==})
                                                                                                                 case False{}:
                                                                                                                   match b3:
                                                                                                                     case True{}:
-                                                                                                                      {
-                                                                                                                        ==
-                                                                                                                      }
+                                                                                                                      ({==}, {==})
                                                                                                                     case False{}:
-                                                                                                                      {
-                                                                                                                        ==
-                                                                                                                      }
+                                                                                                                      ({==}, {==})
                                                                                                         case False{}:
                                                                                                           match b5:
                                                                                                             case True{}:
@@ -1320,54 +1045,33 @@ def Utf8.char_back.bits(
                                                                                                                 case True{}:
                                                                                                                   match b3:
                                                                                                                     case True{}:
-                                                                                                                      {
-                                                                                                                        ==
-                                                                                                                      }
+                                                                                                                      ({==}, {==})
                                                                                                                     case False{}:
-                                                                                                                      {
-                                                                                                                        ==
-                                                                                                                      }
+                                                                                                                      ({==}, {==})
                                                                                                                 case False{}:
                                                                                                                   match b3:
                                                                                                                     case True{}:
-                                                                                                                      {
-                                                                                                                        ==
-                                                                                                                      }
+                                                                                                                      ({==}, {==})
                                                                                                                     case False{}:
-                                                                                                                      {
-                                                                                                                        ==
-                                                                                                                      }
+                                                                                                                      ({==}, {==})
                                                                                                             case False{}:
                                                                                                               match b4:
                                                                                                                 case True{}:
                                                                                                                   match b3:
                                                                                                                     case True{}:
-                                                                                                                      {
-                                                                                                                        ==
-                                                                                                                      }
+                                                                                                                      ({==}, {==})
                                                                                                                     case False{}:
-                                                                                                                      {
-                                                                                                                        ==
-                                                                                                                      }
+                                                                                                                      ({==}, {==})
                                                                                                                 case False{}:
                                                                                                                   match b3:
                                                                                                                     case True{}:
-                                                                                                                      {
-                                                                                                                        ==
-                                                                                                                      }
+                                                                                                                      ({==}, {==})
                                                                                                                     case False{}:
-                                                                                                                      {
-                                                                                                                        ==
-                                                                                                                      }
+                                                                                                                      ({==}, {==})
 
-# the bytes of a character, then the bytes b, read back as the character, then
-# b read, when the character holds no bit above the 21st
-def Utf8.char_back(
-  c: Char,
-  b: List<&2, U32>
-) -> {
-  Bytes.to_text(List.append(&2, U32, Utf8.char(c), b)) == Utf8.back(Char.fits_utf8(c), c, b): String
-}:
+# the bytes of a character, then the bytes b, read back as the character,
+# then b read, when it fits; and they are bytes when b is
+def Utf8.char_laws(c: Char, b: List<&2, U32>) -> Utf8.Char.Laws(c, b):
   match c:
     case Chr{
       U32{
@@ -1464,41 +1168,23 @@ def Utf8.char_back(
         }
       }
     }:
-      Utf8.char_back.bits(
-        b31,
-        b30,
-        b29,
-        b28,
-        b27,
-        b26,
-        b25,
-        b24,
-        b23,
-        b22,
-        b21,
-        b20,
-        b19,
-        b18,
-        b17,
-        b16,
-        b15,
-        b14,
-        b13,
-        b12,
-        b11,
-        b10,
-        b9,
-        b8,
-        b7,
-        b6,
-        b5,
-        b4,
-        b3,
-        b2,
-        b1,
-        b0,
-        b
-      )
+      Utf8.char_laws.bits(b31, b30, b29, b28, b27, b26, b25, b24, b23, b22, b21, b20, b19, b18, b17, b16, b15, b14, b13, b12, b11, b10, b9, b8, b7, b6, b5, b4, b3, b2, b1, b0, b)
+
+# the bytes of a character, then the bytes b, read back as the character, then
+# b read, when the character holds no bit above the 21st
+def Utf8.char_back(
+  c: Char,
+  b: List<&2, U32>
+) -> {
+  Bytes.to_text(List.append(&2, U32, Utf8.char(c), b)) == Utf8.back(Char.fits_utf8(c), c, b): String
+}:
+  Pair.fst(
+    {
+      Bytes.to_text(List.append(&2, U32, Utf8.char(c), b)) == Utf8.back(Char.fits_utf8(c), c, b): String
+    },
+    {Bytes.is_bytes(List.append(&2, U32, Utf8.char(c), b)) == Bytes.is_bytes(b): Bool},
+    Utf8.char_laws(c, b)
+  )
 
 # a text of characters with no bit above the 21st reads back from its bytes
 law Bytes.text_back:
@@ -1533,392 +1219,19 @@ def Bytes.text_back(s):
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# Utf8.char_bytes, with the bits of the character from the highest
-def Utf8.char_bytes.bits(
-  b31: Bool,
-  b30: Bool,
-  b29: Bool,
-  b28: Bool,
-  b27: Bool,
-  b26: Bool,
-  b25: Bool,
-  b24: Bool,
-  b23: Bool,
-  b22: Bool,
-  b21: Bool,
-  b20: Bool,
-  b19: Bool,
-  b18: Bool,
-  b17: Bool,
-  b16: Bool,
-  b15: Bool,
-  b14: Bool,
-  b13: Bool,
-  b12: Bool,
-  b11: Bool,
-  b10: Bool,
-  b9: Bool,
-  b8: Bool,
-  b7: Bool,
-  b6: Bool,
-  b5: Bool,
-  b4: Bool,
-  b3: Bool,
-  b2: Bool,
-  b1: Bool,
-  b0: Bool,
-  b: List<&2, U32>
-) -> {
-  Bytes.is_bytes(
-    List.append(
-      &2,
-      U32,
-      Utf8.char(
-        Chr{
-          U32{
-            WCon{
-              b0,
-              WCon{
-                b1,
-                WCon{
-                  b2,
-                  WCon{
-                    b3,
-                    WCon{
-                      b4,
-                      WCon{
-                        b5,
-                        WCon{
-                          b6,
-                          WCon{
-                            b7,
-                            WCon{
-                              b8,
-                              WCon{
-                                b9,
-                                WCon{
-                                  b10,
-                                  WCon{
-                                    b11,
-                                    WCon{
-                                      b12,
-                                      WCon{
-                                        b13,
-                                        WCon{
-                                          b14,
-                                          WCon{
-                                            b15,
-                                            WCon{
-                                              b16,
-                                              WCon{
-                                                b17,
-                                                WCon{
-                                                  b18,
-                                                  WCon{
-                                                    b19,
-                                                    WCon{
-                                                      b20,
-                                                      WCon{
-                                                        b21,
-                                                        WCon{
-                                                          b22,
-                                                          WCon{
-                                                            b23,
-                                                            WCon{
-                                                              b24,
-                                                              WCon{
-                                                                b25,
-                                                                WCon{
-                                                                  b26,
-                                                                  WCon{
-                                                                    b27,
-                                                                    WCon{
-                                                                      b28,
-                                                                      WCon{
-                                                                        b29,
-                                                                        WCon{b30, WCon{b31, WNil{}}}
-                                                                      }
-                                                                    }
-                                                                  }
-                                                                }
-                                                              }
-                                                            }
-                                                          }
-                                                        }
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            }
-                                          }
-                                        }
-                                      }
-                                    }
-                                  }
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      ),
-      b
-    )
-  )
-    == Bytes.is_bytes(b): Bool
-}:
-  match b31:
-    case True{}:
-      {==}
-    case False{}:
-      match b30:
-        case True{}:
-          {==}
-        case False{}:
-          match b29:
-            case True{}:
-              {==}
-            case False{}:
-              match b28:
-                case True{}:
-                  {==}
-                case False{}:
-                  match b27:
-                    case True{}:
-                      {==}
-                    case False{}:
-                      match b26:
-                        case True{}:
-                          {==}
-                        case False{}:
-                          match b25:
-                            case True{}:
-                              {==}
-                            case False{}:
-                              match b24:
-                                case True{}:
-                                  {==}
-                                case False{}:
-                                  match b23:
-                                    case True{}:
-                                      {==}
-                                    case False{}:
-                                      match b22:
-                                        case True{}:
-                                          {==}
-                                        case False{}:
-                                          match b21:
-                                            case True{}:
-                                              {==}
-                                            case False{}:
-                                              match b20:
-                                                case True{}:
-                                                  {==}
-                                                case False{}:
-                                                  match b19:
-                                                    case True{}:
-                                                      {==}
-                                                    case False{}:
-                                                      match b18:
-                                                        case True{}:
-                                                          {==}
-                                                        case False{}:
-                                                          match b17:
-                                                            case True{}:
-                                                              {==}
-                                                            case False{}:
-                                                              match b16:
-                                                                case True{}:
-                                                                  {==}
-                                                                case False{}:
-                                                                  match b15:
-                                                                    case True{}:
-                                                                      {==}
-                                                                    case False{}:
-                                                                      match b14:
-                                                                        case True{}:
-                                                                          {==}
-                                                                        case False{}:
-                                                                          match b13:
-                                                                            case True{}:
-                                                                              {==}
-                                                                            case False{}:
-                                                                              match b12:
-                                                                                case True{}:
-                                                                                  {==}
-                                                                                case False{}:
-                                                                                  match b11:
-                                                                                    case True{}:
-                                                                                      {==}
-                                                                                    case False{}:
-                                                                                      match b10:
-                                                                                        case True{}:
-                                                                                          {==}
-                                                                                        case False{}:
-                                                                                          match b9:
-                                                                                            case True{}:
-                                                                                              {==}
-                                                                                            case False{}:
-                                                                                              match b8:
-                                                                                                case True{}:
-                                                                                                  {
-                                                                                                    ==
-                                                                                                  }
-                                                                                                case False{}:
-                                                                                                  match b7:
-                                                                                                    case True{}:
-                                                                                                      {
-                                                                                                        ==
-                                                                                                      }
-                                                                                                    case False{}:
-                                                                                                      {
-                                                                                                        ==
-                                                                                                      }
 
 # the bytes of a character, then the bytes b, are bytes when b is
 def Utf8.char_bytes(
   c: Char,
   b: List<&2, U32>
 ) -> {Bytes.is_bytes(List.append(&2, U32, Utf8.char(c), b)) == Bytes.is_bytes(b): Bool}:
-  match c:
-    case Chr{
-      U32{
-        WCon{
-          b0,
-          WCon{
-            b1,
-            WCon{
-              b2,
-              WCon{
-                b3,
-                WCon{
-                  b4,
-                  WCon{
-                    b5,
-                    WCon{
-                      b6,
-                      WCon{
-                        b7,
-                        WCon{
-                          b8,
-                          WCon{
-                            b9,
-                            WCon{
-                              b10,
-                              WCon{
-                                b11,
-                                WCon{
-                                  b12,
-                                  WCon{
-                                    b13,
-                                    WCon{
-                                      b14,
-                                      WCon{
-                                        b15,
-                                        WCon{
-                                          b16,
-                                          WCon{
-                                            b17,
-                                            WCon{
-                                              b18,
-                                              WCon{
-                                                b19,
-                                                WCon{
-                                                  b20,
-                                                  WCon{
-                                                    b21,
-                                                    WCon{
-                                                      b22,
-                                                      WCon{
-                                                        b23,
-                                                        WCon{
-                                                          b24,
-                                                          WCon{
-                                                            b25,
-                                                            WCon{
-                                                              b26,
-                                                              WCon{
-                                                                b27,
-                                                                WCon{
-                                                                  b28,
-                                                                  WCon{
-                                                                    b29,
-                                                                    WCon{b30, WCon{b31, WNil{}}}
-                                                                  }
-                                                                }
-                                                              }
-                                                            }
-                                                          }
-                                                        }
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            }
-                                          }
-                                        }
-                                      }
-                                    }
-                                  }
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }:
-      Utf8.char_bytes.bits(
-        b31,
-        b30,
-        b29,
-        b28,
-        b27,
-        b26,
-        b25,
-        b24,
-        b23,
-        b22,
-        b21,
-        b20,
-        b19,
-        b18,
-        b17,
-        b16,
-        b15,
-        b14,
-        b13,
-        b12,
-        b11,
-        b10,
-        b9,
-        b8,
-        b7,
-        b6,
-        b5,
-        b4,
-        b3,
-        b2,
-        b1,
-        b0,
-        b
-      )
+  Pair.snd(
+    {
+      Bytes.to_text(List.append(&2, U32, Utf8.char(c), b)) == Utf8.back(Char.fits_utf8(c), c, b): String
+    },
+    {Bytes.is_bytes(List.append(&2, U32, Utf8.char(c), b)) == Bytes.is_bytes(b): Bool},
+    Utf8.char_laws(c, b)
+  )
 
 # every code of the bytes of a text is a byte
 law Bytes.of_text_bytes:
