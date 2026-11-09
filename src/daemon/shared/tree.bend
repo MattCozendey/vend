@@ -443,27 +443,47 @@ def Tree.list(
 # pair of parts with the same hash: it costs what differs, not what the trees
 # hold.
 
-# the bindings below the node m, whose path is pre
-def Tree.below(
-  ~S: Data,
-  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  +s: S,
-  +pre: List<&2, Nat>,
-  m: Maybe<&2, Node>
-) -> List<&2, Binding>:
-  match m:
-    case Some{Node.Leaf{k, v}}:
-      [Binding{k, v}]
-    case Some{Node.Branch{+qs}}:
-      Tree.list.go(~S, ~fetch, 64n, s, qs, pre, 0n, Tree.first(~S, ~fetch, s, qs))
-    case w:
-      []
-
 # the parts a and b hold the same root
 def Parts.same(a: Maybe<&2, Hashes.Hash>, b: Maybe<&2, Hashes.Hash>) -> Bool:
   Shared.Maybe.is_eq(~Hashes.Hash, ~Hashes.Hash.is_eq, a, b)
 
-# bend-lint: expect-begin bend-lint-rules/language/decreasing_call@warning -- g is f itself, bound by the match; the checker accepts these calls
+# the node m is a branch
+def Node.is_branch(m: Maybe<&2, Node>) -> Bool:
+  match m:
+    case Some{Node.Branch{qs}}:
+      True{}
+    case w:
+      False{}
+
+# the parts of the node m, when it is a branch (else none)
+def Node.kids(m: Maybe<&2, Node>) -> List<&2, Maybe<&2, Hashes.Hash>>:
+  match m:
+    case Some{Node.Branch{qs}}:
+      qs
+    case w:
+      []
+
+# the bindings below the parts ya and yb, at the place x of branches whose
+# path is pre, whose nodes are ma and mb; f levels deep at most
+def Tree.diff.sides(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  ya: Maybe<&2, Hashes.Hash>,
+  yb: Maybe<&2, Hashes.Hash>,
+  +pre: List<&2, Nat>,
+  +x: Nat,
+  ma: Maybe<&2, Node>,
+  mb: Maybe<&2, Node>
+) -> List<&2, Binding>:
+  List.append(
+    &2,
+    Binding,
+    Tree.list.go(~S, ~fetch, f, s, [ya], pre, x, ma),
+    Tree.list.go(~S, ~fetch, f, s, [yb], pre, x, mb)
+  )
+
 # the bindings of the parts ka and kb, from the part x of branches whose path
 # is pre, whose nodes are ma and mb, where the parts differ: f levels deep at
 # most
@@ -476,15 +496,29 @@ def Tree.diff.go(
   kb: List<&2, Maybe<&2, Hashes.Hash>>,
   +pre: List<&2, Nat>,
   +x: Nat,
-  ma: Maybe<&2, Node>,
-  mb: Maybe<&2, Node>
+  +ma: Maybe<&2, Node>,
+  +mb: Maybe<&2, Node>
 ) -> List<&2, Binding>:
-  match f ka kb ma mb:
-    case g Nil{} Nil{} wa wb:
+  match f ka kb:
+    case g Nil{} Nil{}:
       []
-    case 1n+(+p) Con{ya, +ra} Con{yb, +rb} Some{Node.Branch{+qa}} Some{Node.Branch{+qb}}:
-      +here = List.append(&2, Nat, pre, [x])
-      +rest = Tree.diff.go(~S, ~fetch, 1n+p, s, ra, rb, pre, 1n+x, Tree.first(~S, ~fetch, s, ra), Tree.first(~S, ~fetch, s, rb))
+    case g Con{ya, ra} Nil{}:
+      Tree.list.go(~S, ~fetch, g, s, ya <> ra, pre, x, ma)
+    case g Nil{} Con{yb, rb}:
+      Tree.list.go(~S, ~fetch, g, s, yb <> rb, pre, x, mb)
+    case 0n Con{+ya, +ra} Con{+yb, +rb}:
+      +rest = Tree.diff.go(
+        ~S,
+        ~fetch,
+        0n,
+        s,
+        ra,
+        rb,
+        pre,
+        1n+x,
+        Tree.first(~S, ~fetch, s, ra),
+        Tree.first(~S, ~fetch, s, rb)
+      )
       Shared.Bool.when(
         List<&2, Binding>,
         Parts.same(ya, yb),
@@ -492,13 +526,24 @@ def Tree.diff.go(
         u => List.append(
           &2,
           Binding,
-          Tree.diff.go(~S, ~fetch, p, s, qa, qb, here, 0n, Tree.first(~S, ~fetch, s, qa), Tree.first(~S, ~fetch, s, qb)),
+          Tree.diff.sides(~S, ~fetch, 0n, s, ya, yb, pre, x, ma, mb),
           rest
         )
       )
-    case g Con{ya, +ra} Con{yb, +rb} wa wb:
-      +here = List.append(&2, Nat, pre, [x])
-      +rest = Tree.diff.go(~S, ~fetch, g, s, ra, rb, pre, 1n+x, Tree.first(~S, ~fetch, s, ra), Tree.first(~S, ~fetch, s, rb))
+    case 1n+(+p) Con{+ya, +ra} Con{+yb, +rb}:
+      here = List.append(&2, Nat, pre, [x])
+      +rest = Tree.diff.go(
+        ~S,
+        ~fetch,
+        1n+p,
+        s,
+        ra,
+        rb,
+        pre,
+        1n+x,
+        Tree.first(~S, ~fetch, s, ra),
+        Tree.first(~S, ~fetch, s, rb)
+      )
       Shared.Bool.when(
         List<&2, Binding>,
         Parts.same(ya, yb),
@@ -506,30 +551,58 @@ def Tree.diff.go(
         u => List.append(
           &2,
           Binding,
-          Tree.below(~S, ~fetch, s, here, wa),
-          List.append(&2, Binding, Tree.below(~S, ~fetch, s, here, wb), rest)
+          Shared.Bool.when(
+            List<&2, Binding>,
+            Bool.and(Node.is_branch(ma), Node.is_branch(mb)),
+            u => Tree.diff.go(
+              ~S,
+              ~fetch,
+              p,
+              s,
+              Node.kids(ma),
+              Node.kids(mb),
+              here,
+              0n,
+              Tree.first(~S, ~fetch, s, Node.kids(ma)),
+              Tree.first(~S, ~fetch, s, Node.kids(mb))
+            ),
+            u => Tree.diff.sides(~S, ~fetch, 1n+p, s, ya, yb, pre, x, ma, mb)
+          ),
+          rest
         )
       )
-    case g Con{ya, ra} Nil{} wa wb:
-      Tree.list.go(~S, ~fetch, 64n, s, ya <> ra, pre, x, wa)
-    case g Nil{} Con{yb, rb} wa wb:
-      Tree.list.go(~S, ~fetch, 64n, s, yb <> rb, pre, x, wb)
-# bend-lint: expect-end bend-lint-rules/language/decreasing_call@warning
 
-# the bindings of the trees whose roots are a and b, where they may differ:
-# every key that the two read differently is listed
+# the bindings of the trees whose root nodes are ma and mb, where they may
+# differ: every key that the two read differently is listed
 def Tree.diff.root(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   +s: S,
-  ma: Maybe<&2, Node>,
-  mb: Maybe<&2, Node>
+  +ma: Maybe<&2, Node>,
+  +mb: Maybe<&2, Node>
 ) -> List<&2, Binding>:
-  match ma mb:
-    case Some{Node.Branch{+qa}} Some{Node.Branch{+qb}}:
-      Tree.diff.go(~S, ~fetch, 63n, s, qa, qb, [], 0n, Tree.first(~S, ~fetch, s, qa), Tree.first(~S, ~fetch, s, qb))
-    case wa wb:
-      List.append(&2, Binding, Tree.below(~S, ~fetch, s, [], wa), Tree.below(~S, ~fetch, s, [], wb))
+  Shared.Bool.when(
+    List<&2, Binding>,
+    Bool.and(Node.is_branch(ma), Node.is_branch(mb)),
+    u => Tree.diff.go(
+      ~S,
+      ~fetch,
+      63n,
+      s,
+      Node.kids(ma),
+      Node.kids(mb),
+      [],
+      0n,
+      Tree.first(~S, ~fetch, s, Node.kids(ma)),
+      Tree.first(~S, ~fetch, s, Node.kids(mb))
+    ),
+    u => List.append(
+      &2,
+      Binding,
+      Tree.list.root(~S, ~fetch, s, ma),
+      Tree.list.root(~S, ~fetch, s, mb)
+    )
+  )
 
 # the bindings of the trees whose roots are a and b, where they may differ
 def Tree.diff(
@@ -4877,6 +4950,1397 @@ law Tree.list_complete:
 
 def Tree.list_complete(ty, fetch, s, h, k, v):
   e => Tree.list_root(~ty, ~fetch, s, k, v, Tree.path(k), Tree.part(~ty, ~fetch, s, h), {==}, e)
+
+# a node that is a branch is the branch of its parts
+def Node.kids_of(
+  m: Maybe<&2, Node>
+) -> {Node.is_branch(m) == True{}: Bool} -> {m == Some{Node.Branch{Node.kids(m)}}: Maybe<&2, Node>}:
+  match m:
+    case Some{Node.Branch{qs}}:
+      h => {==}
+    case None{}:
+      h => Empty.absurd(
+        {None{} == Some{Node.Branch{[]}}: Maybe<&2, Node>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Some{Node.Empty{}}:
+      h => Empty.absurd(
+        {Some{Node.Empty{}} == Some{Node.Branch{[]}}: Maybe<&2, Node>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Some{Node.Leaf{k, v}}:
+      h => Empty.absurd(
+        {Some{Node.Leaf{k, v}} == Some{Node.Branch{[]}}: Maybe<&2, Node>},
+        Shared.Bool.false_ne_true(h)
+      )
+
+# the reads of k along p at the nodes ma and mb, side c, are those at the
+# nodes ma2 and mb2 that they equal
+def Tree.pick_at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  c: Bool,
+  p: List<&2, Nat>,
+  k: List<&2, U32>,
+  ma: Maybe<&2, Node>,
+  ma2: Maybe<&2, Node>,
+  mb: Maybe<&2, Node>,
+  mb2: Maybe<&2, Node>,
+  ea: {ma == ma2: Maybe<&2, Node>},
+  eb: {mb == mb2: Maybe<&2, Node>}
+) -> {
+  Bool.pick(
+    Maybe<&2, List<&2, U32>>,
+    c,
+    Tree.get.go(~S, ~fetch, s, p, k, ma),
+    Tree.get.go(~S, ~fetch, s, p, k, mb)
+  )
+    == Bool.pick(
+      Maybe<&2, List<&2, U32>>,
+      c,
+      Tree.get.go(~S, ~fetch, s, p, k, ma2),
+      Tree.get.go(~S, ~fetch, s, p, k, mb2)
+    ): Maybe<&2, List<&2, U32>>
+}:
+  %ea: {
+    Bool.pick(
+      Maybe<&2, List<&2, U32>>,
+      c,
+      Tree.get.go(~S, ~fetch, s, p, k, ma),
+      Tree.get.go(~S, ~fetch, s, p, k, mb)
+    )
+      == Bool.pick(
+        Maybe<&2, List<&2, U32>>,
+        c,
+        Tree.get.go(~S, ~fetch, s, p, k, _),
+        Tree.get.go(~S, ~fetch, s, p, k, mb2)
+      ): Maybe<&2, List<&2, U32>>
+  }
+  %eb: {
+    Bool.pick(
+      Maybe<&2, List<&2, U32>>,
+      c,
+      Tree.get.go(~S, ~fetch, s, p, k, ma),
+      Tree.get.go(~S, ~fetch, s, p, k, mb)
+    )
+      == Bool.pick(
+        Maybe<&2, List<&2, U32>>,
+        c,
+        Tree.get.go(~S, ~fetch, s, p, k, ma),
+        Tree.get.go(~S, ~fetch, s, p, k, _)
+      ): Maybe<&2, List<&2, U32>>
+  }
+  {==}
+
+# the read a reads v, when the side c of a and an empty part's read (a on the
+# side d) reads v
+def Tree.pick_one(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  c: Bool,
+  d: Bool,
+  a: Maybe<&2, List<&2, U32>>,
+  p: List<&2, Nat>,
+  k: List<&2, U32>,
+  v: List<&2, U32>,
+  h: {
+    Bool.pick(
+      Maybe<&2, List<&2, U32>>,
+      c,
+      Bool.pick(
+        Maybe<&2, List<&2, U32>>,
+        d,
+        a,
+        Tree.get.go(~S, ~fetch, s, p, k, Some{Node.Empty{}})
+      ),
+      Bool.pick(
+        Maybe<&2, List<&2, U32>>,
+        d,
+        Tree.get.go(~S, ~fetch, s, p, k, Some{Node.Empty{}}),
+        a
+      )
+    )
+      == Some{v}: Maybe<&2, List<&2, U32>>
+  }
+) -> {a == Some{v}: Maybe<&2, List<&2, U32>>}:
+  match c d:
+    case True{} True{}:
+      h
+    case False{} False{}:
+      h
+    case True{} False{}:
+      Empty.absurd(
+        {a == Some{v}: Maybe<&2, List<&2, U32>>},
+        Shared.Maybe.none_ne_some(
+          List<&2, U32>,
+          v,
+          Equal.trans(
+            Maybe<&2, List<&2, U32>>,
+            None{},
+            Tree.get.go(~S, ~fetch, s, p, k, Some{Node.Empty{}}),
+            Some{v},
+            Equal.sym(
+              Maybe<&2, List<&2, U32>>,
+              Tree.get.go(~S, ~fetch, s, p, k, Some{Node.Empty{}}),
+              None{},
+              Tree.get.go_empty(~S, ~fetch, s, p, k)
+            ),
+            h
+          )
+        )
+      )
+    case False{} True{}:
+      Empty.absurd(
+        {a == Some{v}: Maybe<&2, List<&2, U32>>},
+        Shared.Maybe.none_ne_some(
+          List<&2, U32>,
+          v,
+          Equal.trans(
+            Maybe<&2, List<&2, U32>>,
+            None{},
+            Tree.get.go(~S, ~fetch, s, p, k, Some{Node.Empty{}}),
+            Some{v},
+            Equal.sym(
+              Maybe<&2, List<&2, U32>>,
+              Tree.get.go(~S, ~fetch, s, p, k, Some{Node.Empty{}}),
+              None{},
+              Tree.get.go_empty(~S, ~fetch, s, p, k)
+            ),
+            h
+          )
+        )
+      )
+
+# a pick of d between xs and ys holds the binding of k and v, when ys holds it
+# and the side c of the parts ya and yb reads v for k along p while the other
+# does not (so d, whether they hold the same root, is False)
+def Tree.diff_here(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +ya: Maybe<&2, Hashes.Hash>,
+  +yb: Maybe<&2, Hashes.Hash>,
+  c: Bool,
+  p: List<&2, Nat>,
+  k: List<&2, U32>,
+  v: List<&2, U32>,
+  d: Bool,
+  ed: {Parts.same(ya, yb) == d: Bool},
+  xs: List<&2, Binding>,
+  ys: List<&2, Binding>,
+  hg: {
+    Bool.pick(
+      Maybe<&2, List<&2, U32>>,
+      c,
+      Tree.get.go(~S, ~fetch, s, p, k, Tree.part(~S, ~fetch, s, ya)),
+      Tree.get.go(~S, ~fetch, s, p, k, Tree.part(~S, ~fetch, s, yb))
+    )
+      == Some{v}: Maybe<&2, List<&2, U32>>
+  },
+  hn: {
+    Bool.pick(
+      Maybe<&2, List<&2, U32>>,
+      c,
+      Tree.get.go(~S, ~fetch, s, p, k, Tree.part(~S, ~fetch, s, yb)),
+      Tree.get.go(~S, ~fetch, s, p, k, Tree.part(~S, ~fetch, s, ya))
+    )
+      == Some{v}: Maybe<&2, List<&2, U32>>
+  } -> Empty,
+  hy: (
+    {
+      Bool.pick(
+        Maybe<&2, List<&2, U32>>,
+        c,
+        Tree.get.go(~S, ~fetch, s, p, k, Tree.part(~S, ~fetch, s, yb)),
+        Tree.get.go(~S, ~fetch, s, p, k, Tree.part(~S, ~fetch, s, ya))
+      )
+        == Some{v}: Maybe<&2, List<&2, U32>>
+    } -> Empty
+  ) -> {List.contains(~Binding, ~Binding.is_eq, ys, Binding{k, v}) == True{}: Bool}
+) -> {
+  List.contains(
+    ~Binding,
+    ~Binding.is_eq,
+    Shared.Bool.when(List<&2, Binding>, d, u => xs, u => ys),
+    Binding{k, v}
+  )
+    == True{}: Bool
+}:
+  match d:
+    case True{}:
+      +e = Shared.Maybe.is_eq_sound(
+        ~Hashes.Hash,
+        ~Hashes.Hash.is_eq,
+        x => y => Hashes.Hash.is_eq_sound(x, y),
+        ya,
+        yb
+      )(ed)
+      Empty.absurd(
+        {List.contains(~Binding, ~Binding.is_eq, xs, Binding{k, v}) == True{}: Bool},
+        hn(
+          Equal.trans(
+            Maybe<&2, List<&2, U32>>,
+            Bool.pick(
+              Maybe<&2, List<&2, U32>>,
+              c,
+              Tree.get.go(~S, ~fetch, s, p, k, Tree.part(~S, ~fetch, s, yb)),
+              Tree.get.go(~S, ~fetch, s, p, k, Tree.part(~S, ~fetch, s, ya))
+            ),
+            Bool.pick(
+              Maybe<&2, List<&2, U32>>,
+              c,
+              Tree.get.go(~S, ~fetch, s, p, k, Tree.part(~S, ~fetch, s, ya)),
+              Tree.get.go(~S, ~fetch, s, p, k, Tree.part(~S, ~fetch, s, yb))
+            ),
+            Some{v},
+            Tree.pick_at(
+              ~S,
+              ~fetch,
+              s,
+              c,
+              p,
+              k,
+              Tree.part(~S, ~fetch, s, yb),
+              Tree.part(~S, ~fetch, s, ya),
+              Tree.part(~S, ~fetch, s, ya),
+              Tree.part(~S, ~fetch, s, yb),
+              Equal.cong(
+                Maybe<&2, Hashes.Hash>,
+                Maybe<&2, Node>,
+                y => Tree.part(~S, ~fetch, s, y),
+                yb,
+                ya,
+                Equal.sym(Maybe<&2, Hashes.Hash>, ya, yb, e)
+              ),
+              Equal.cong(
+                Maybe<&2, Hashes.Hash>,
+                Maybe<&2, Node>,
+                y => Tree.part(~S, ~fetch, s, y),
+                ya,
+                yb,
+                e
+              )
+            ),
+            hg
+          )
+        )
+      )
+    case False{}:
+      hy(hn)
+
+# the listings of the parts ya and yb, at the place x of branches whose path
+# is pre, hold the binding of k and v, when the side c of them, at the place
+# t, reads v for k along P, the rest of k's path, and f levels are enough for P
+def Tree.diff_side(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  +ya: Maybe<&2, Hashes.Hash>,
+  +yb: Maybe<&2, Hashes.Hash>,
+  +pre: List<&2, Nat>,
+  +x: Nat,
+  t: Nat,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  pth: List<&2, Nat>,
+  c: Bool,
+  ht: {Nat.add(0n, x) == t: Nat},
+  hq: {
+    List.take(
+      &2,
+      Nat,
+      Tree.path(k),
+      List.length(&2, Nat, List.append(&2, Nat, pre, [t]))
+    )
+      == List.append(&2, Nat, pre, [t]): List<&2, Nat>
+  },
+  hd: {
+    List.drop(
+      &2,
+      Nat,
+      Tree.path(k),
+      List.length(&2, Nat, List.append(&2, Nat, pre, [t]))
+    )
+      == pth: List<&2, Nat>
+  },
+  hf: {Nat.is_le(List.length(&2, Nat, pth), f) == True{}: Bool},
+  hg: {
+    Bool.pick(
+      Maybe<&2, List<&2, U32>>,
+      c,
+      Tree.get.go(~S, ~fetch, s, pth, k, Tree.part(~S, ~fetch, s, ya)),
+      Tree.get.go(~S, ~fetch, s, pth, k, Tree.part(~S, ~fetch, s, yb))
+    )
+      == Some{v}: Maybe<&2, List<&2, U32>>
+  }
+) -> {
+  List.contains(
+    ~Binding,
+    ~Binding.is_eq,
+    Tree.diff.sides(
+      ~S,
+      ~fetch,
+      f,
+      s,
+      ya,
+      yb,
+      pre,
+      x,
+      Tree.part(~S, ~fetch, s, ya),
+      Tree.part(~S, ~fetch, s, yb)
+    ),
+    Binding{k, v}
+  )
+    == True{}: Bool
+}:
+  match c:
+    case True{}:
+      Shared.List.contains_left(
+        ~Binding,
+        ~Binding.is_eq,
+        Tree.list.go(~S, ~fetch, f, s, [ya], pre, x, Tree.part(~S, ~fetch, s, ya)),
+        Tree.list.go(~S, ~fetch, f, s, [yb], pre, x, Tree.part(~S, ~fetch, s, yb)),
+        Binding{k, v},
+        Tree.list_part(
+          ~S,
+          ~fetch,
+          f,
+          s,
+          [ya],
+          pre,
+          x,
+          Tree.part(~S, ~fetch, s, ya),
+          0n,
+          t,
+          k,
+          v,
+          pth,
+          {==},
+          ht,
+          hq,
+          hd,
+          hf,
+          hg
+        )
+      )
+    case False{}:
+      Shared.List.contains_right(
+        ~Binding,
+        ~Binding.is_eq,
+        Tree.list.go(~S, ~fetch, f, s, [ya], pre, x, Tree.part(~S, ~fetch, s, ya)),
+        Tree.list.go(~S, ~fetch, f, s, [yb], pre, x, Tree.part(~S, ~fetch, s, yb)),
+        Binding{k, v},
+        Tree.list_part(
+          ~S,
+          ~fetch,
+          f,
+          s,
+          [yb],
+          pre,
+          x,
+          Tree.part(~S, ~fetch, s, yb),
+          0n,
+          t,
+          k,
+          v,
+          pth,
+          {==},
+          ht,
+          hq,
+          hd,
+          hf,
+          hg
+        )
+      )
+
+# the listings of the trees whose root nodes are ma and mb hold the binding of
+# k and v, when the side c of them reads v for k
+def Tree.diff_roots(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +ma: Maybe<&2, Node>,
+  +mb: Maybe<&2, Node>,
+  c: Bool,
+  hg: {
+    Bool.pick(
+      Maybe<&2, List<&2, U32>>,
+      c,
+      Tree.get.go(~S, ~fetch, s, Tree.path(k), k, ma),
+      Tree.get.go(~S, ~fetch, s, Tree.path(k), k, mb)
+    )
+      == Some{v}: Maybe<&2, List<&2, U32>>
+  }
+) -> {
+  List.contains(
+    ~Binding,
+    ~Binding.is_eq,
+    List.append(&2, Binding, Tree.list.root(~S, ~fetch, s, ma), Tree.list.root(~S, ~fetch, s, mb)),
+    Binding{k, v}
+  )
+    == True{}: Bool
+}:
+  match c:
+    case True{}:
+      Shared.List.contains_left(
+        ~Binding,
+        ~Binding.is_eq,
+        Tree.list.root(~S, ~fetch, s, ma),
+        Tree.list.root(~S, ~fetch, s, mb),
+        Binding{k, v},
+        Tree.list_root(~S, ~fetch, s, k, v, Tree.path(k), ma, {==}, hg)
+      )
+    case False{}:
+      Shared.List.contains_right(
+        ~Binding,
+        ~Binding.is_eq,
+        Tree.list.root(~S, ~fetch, s, ma),
+        Tree.list.root(~S, ~fetch, s, mb),
+        Binding{k, v},
+        Tree.list_root(~S, ~fetch, s, k, v, Tree.path(k), mb, {==}, hg)
+      )
+
+# ds holds the binding of k and v, when the side c of two branches of the
+# parts qa and qb reads v for k along p while the other does not, and ds
+# holds it whenever that holds one level down (along rp, at their parts z)
+def Tree.diff_down(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  qa: List<&2, Maybe<&2, Hashes.Hash>>,
+  qb: List<&2, Maybe<&2, Hashes.Hash>>,
+  k: List<&2, U32>,
+  v: List<&2, U32>,
+  p: List<&2, Nat>,
+  c: Bool,
+  ds: List<&2, Binding>,
+  hg: {
+    Bool.pick(
+      Maybe<&2, List<&2, U32>>,
+      c,
+      Tree.get.go(~S, ~fetch, s, p, k, Some{Node.Branch{qa}}),
+      Tree.get.go(~S, ~fetch, s, p, k, Some{Node.Branch{qb}})
+    )
+      == Some{v}: Maybe<&2, List<&2, U32>>
+  },
+  hn: {
+    Bool.pick(
+      Maybe<&2, List<&2, U32>>,
+      c,
+      Tree.get.go(~S, ~fetch, s, p, k, Some{Node.Branch{qb}}),
+      Tree.get.go(~S, ~fetch, s, p, k, Some{Node.Branch{qa}})
+    )
+      == Some{v}: Maybe<&2, List<&2, U32>>
+  } -> Empty,
+  ih: @z: Nat -> @rp: List<
+    &2,
+    Nat> -> {
+    p == z <> rp: List<&2, Nat>
+  } -> {
+    Bool.pick(
+      Maybe<&2, List<&2, U32>>,
+      c,
+      Tree.get.go(~S, ~fetch, s, rp, k, Tree.part(~S, ~fetch, s, Parts.at(qa, z))),
+      Tree.get.go(~S, ~fetch, s, rp, k, Tree.part(~S, ~fetch, s, Parts.at(qb, z)))
+    )
+      == Some{v}: Maybe<&2, List<&2, U32>>
+  } -> (
+    {
+      Bool.pick(
+        Maybe<&2, List<&2, U32>>,
+        c,
+        Tree.get.go(~S, ~fetch, s, rp, k, Tree.part(~S, ~fetch, s, Parts.at(qb, z))),
+        Tree.get.go(~S, ~fetch, s, rp, k, Tree.part(~S, ~fetch, s, Parts.at(qa, z)))
+      )
+        == Some{v}: Maybe<&2, List<&2, U32>>
+    } -> Empty
+  ) -> {List.contains(~Binding, ~Binding.is_eq, ds, Binding{k, v}) == True{}: Bool}
+) -> {List.contains(~Binding, ~Binding.is_eq, ds, Binding{k, v}) == True{}: Bool}:
+  match p:
+    case Nil{}:
+      Empty.absurd(
+        {List.contains(~Binding, ~Binding.is_eq, ds, Binding{k, v}) == True{}: Bool},
+        hn(hg)
+      )
+    case Con{z, rp}:
+      ih(z, rp, {==}, hg, hn)
+
+# a pick of d between ds and fs holds the binding of k and v, when fs holds
+# it, the side c of the nodes ma and mb reads v for k along p while the other
+# does not, and ds holds it whenever that holds one level down (d: both are
+# branches)
+def Tree.diff_deep(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +ma: Maybe<&2, Node>,
+  +mb: Maybe<&2, Node>,
+  +k: List<&2, U32>,
+  v: List<&2, U32>,
+  +p: List<&2, Nat>,
+  +c: Bool,
+  d: Bool,
+  +ed: {Bool.and(Node.is_branch(ma), Node.is_branch(mb)) == d: Bool},
+  ds: List<&2, Binding>,
+  fs: List<&2, Binding>,
+  flat: {List.contains(~Binding, ~Binding.is_eq, fs, Binding{k, v}) == True{}: Bool},
+  hg: {
+    Bool.pick(
+      Maybe<&2, List<&2, U32>>,
+      c,
+      Tree.get.go(~S, ~fetch, s, p, k, ma),
+      Tree.get.go(~S, ~fetch, s, p, k, mb)
+    )
+      == Some{v}: Maybe<&2, List<&2, U32>>
+  },
+  hn: {
+    Bool.pick(
+      Maybe<&2, List<&2, U32>>,
+      c,
+      Tree.get.go(~S, ~fetch, s, p, k, mb),
+      Tree.get.go(~S, ~fetch, s, p, k, ma)
+    )
+      == Some{v}: Maybe<&2, List<&2, U32>>
+  } -> Empty,
+  ih: @z: Nat -> @rp: List<
+    &2,
+    Nat> -> {
+    p == z <> rp: List<&2, Nat>
+  } -> {
+    Bool.pick(
+      Maybe<&2, List<&2, U32>>,
+      c,
+      Tree.get.go(~S, ~fetch, s, rp, k, Tree.part(~S, ~fetch, s, Parts.at(Node.kids(ma), z))),
+      Tree.get.go(~S, ~fetch, s, rp, k, Tree.part(~S, ~fetch, s, Parts.at(Node.kids(mb), z)))
+    )
+      == Some{v}: Maybe<&2, List<&2, U32>>
+  } -> (
+    {
+      Bool.pick(
+        Maybe<&2, List<&2, U32>>,
+        c,
+        Tree.get.go(~S, ~fetch, s, rp, k, Tree.part(~S, ~fetch, s, Parts.at(Node.kids(mb), z))),
+        Tree.get.go(~S, ~fetch, s, rp, k, Tree.part(~S, ~fetch, s, Parts.at(Node.kids(ma), z)))
+      )
+        == Some{v}: Maybe<&2, List<&2, U32>>
+    } -> Empty
+  ) -> {List.contains(~Binding, ~Binding.is_eq, ds, Binding{k, v}) == True{}: Bool}
+) -> {
+  List.contains(
+    ~Binding,
+    ~Binding.is_eq,
+    Shared.Bool.when(List<&2, Binding>, d, u => ds, u => fs),
+    Binding{k, v}
+  )
+    == True{}: Bool
+}:
+  match d:
+    case False{}:
+      flat
+    case True{}:
+      +ea = Node.kids_of(ma)(Shared.Bool.and_true_left(Node.is_branch(ma), Node.is_branch(mb))(ed))
+      +eb = Node.kids_of(mb)(Shared.Bool.and_true_right(Node.is_branch(ma), Node.is_branch(mb))(ed))
+      Tree.diff_down(
+        ~S,
+        ~fetch,
+        s,
+        Node.kids(ma),
+        Node.kids(mb),
+        k,
+        v,
+        p,
+        c,
+        ds,
+        Equal.trans(
+          Maybe<&2, List<&2, U32>>,
+          Bool.pick(
+            Maybe<&2, List<&2, U32>>,
+            c,
+            Tree.get.go(~S, ~fetch, s, p, k, Some{Node.Branch{Node.kids(ma)}}),
+            Tree.get.go(~S, ~fetch, s, p, k, Some{Node.Branch{Node.kids(mb)}})
+          ),
+          Bool.pick(
+            Maybe<&2, List<&2, U32>>,
+            c,
+            Tree.get.go(~S, ~fetch, s, p, k, ma),
+            Tree.get.go(~S, ~fetch, s, p, k, mb)
+          ),
+          Some{v},
+          Equal.sym(
+            Maybe<&2, List<&2, U32>>,
+            Bool.pick(
+              Maybe<&2, List<&2, U32>>,
+              c,
+              Tree.get.go(~S, ~fetch, s, p, k, ma),
+              Tree.get.go(~S, ~fetch, s, p, k, mb)
+            ),
+            Bool.pick(
+              Maybe<&2, List<&2, U32>>,
+              c,
+              Tree.get.go(~S, ~fetch, s, p, k, Some{Node.Branch{Node.kids(ma)}}),
+              Tree.get.go(~S, ~fetch, s, p, k, Some{Node.Branch{Node.kids(mb)}})
+            ),
+            Tree.pick_at(
+              ~S,
+              ~fetch,
+              s,
+              c,
+              p,
+              k,
+              ma,
+              Some{Node.Branch{Node.kids(ma)}},
+              mb,
+              Some{Node.Branch{Node.kids(mb)}},
+              ea,
+              eb
+            )
+          ),
+          hg
+        ),
+        e => hn(
+          Equal.trans(
+            Maybe<&2, List<&2, U32>>,
+            Bool.pick(
+              Maybe<&2, List<&2, U32>>,
+              c,
+              Tree.get.go(~S, ~fetch, s, p, k, mb),
+              Tree.get.go(~S, ~fetch, s, p, k, ma)
+            ),
+            Bool.pick(
+              Maybe<&2, List<&2, U32>>,
+              c,
+              Tree.get.go(~S, ~fetch, s, p, k, Some{Node.Branch{Node.kids(mb)}}),
+              Tree.get.go(~S, ~fetch, s, p, k, Some{Node.Branch{Node.kids(ma)}})
+            ),
+            Some{v},
+            Tree.pick_at(
+              ~S,
+              ~fetch,
+              s,
+              c,
+              p,
+              k,
+              mb,
+              Some{Node.Branch{Node.kids(mb)}},
+              ma,
+              Some{Node.Branch{Node.kids(ma)}},
+              eb,
+              ea
+            ),
+            e
+          )
+        ),
+        ih
+      )
+
+# a pick of d between rest and xs then rest holds what rest holds
+def Tree.diff_skip.when(
+  d: Bool,
+  xs: List<&2, Binding>,
+  rest: List<&2, Binding>,
+  b: Binding,
+  h: {List.contains(~Binding, ~Binding.is_eq, rest, b) == True{}: Bool}
+) -> {
+  List.contains(
+    ~Binding,
+    ~Binding.is_eq,
+    Shared.Bool.when(List<&2, Binding>, d, u => rest, u => List.append(&2, Binding, xs, rest)),
+    b
+  )
+    == True{}: Bool
+}:
+  match d:
+    case True{}:
+      h
+    case False{}:
+      Shared.List.contains_right(~Binding, ~Binding.is_eq, xs, rest, b, h)
+
+# the difference of the parts ya <> ra and yb <> rb holds what the difference
+# of ra and rb holds
+def Tree.diff_skip(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  +ya: Maybe<&2, Hashes.Hash>,
+  +ra: List<&2, Maybe<&2, Hashes.Hash>>,
+  +yb: Maybe<&2, Hashes.Hash>,
+  +rb: List<&2, Maybe<&2, Hashes.Hash>>,
+  +pre: List<&2, Nat>,
+  +x: Nat,
+  b: Binding,
+  h: {
+    List.contains(
+      ~Binding,
+      ~Binding.is_eq,
+      Tree.diff.go(
+        ~S,
+        ~fetch,
+        f,
+        s,
+        ra,
+        rb,
+        pre,
+        1n+x,
+        Tree.first(~S, ~fetch, s, ra),
+        Tree.first(~S, ~fetch, s, rb)
+      ),
+      b
+    )
+      == True{}: Bool
+  }
+) -> {
+  List.contains(
+    ~Binding,
+    ~Binding.is_eq,
+    Tree.diff.go(
+      ~S,
+      ~fetch,
+      f,
+      s,
+      ya <> ra,
+      yb <> rb,
+      pre,
+      x,
+      Tree.part(~S, ~fetch, s, ya),
+      Tree.part(~S, ~fetch, s, yb)
+    ),
+    b
+  )
+    == True{}: Bool
+}:
+  match f:
+    case 0n:
+      Tree.diff_skip.when(
+        Parts.same(ya, yb),
+        Tree.diff.sides(
+          ~S,
+          ~fetch,
+          0n,
+          s,
+          ya,
+          yb,
+          pre,
+          x,
+          Tree.part(~S, ~fetch, s, ya),
+          Tree.part(~S, ~fetch, s, yb)
+        ),
+        Tree.diff.go(
+          ~S,
+          ~fetch,
+          0n,
+          s,
+          ra,
+          rb,
+          pre,
+          1n+x,
+          Tree.first(~S, ~fetch, s, ra),
+          Tree.first(~S, ~fetch, s, rb)
+        ),
+        b,
+        h
+      )
+    case 1n+(+p):
+      +ma = Tree.part(~S, ~fetch, s, ya)
+      +mb = Tree.part(~S, ~fetch, s, yb)
+      Tree.diff_skip.when(
+        Parts.same(ya, yb),
+        Shared.Bool.when(
+          List<&2, Binding>,
+          Bool.and(Node.is_branch(ma), Node.is_branch(mb)),
+          u => Tree.diff.go(
+            ~S,
+            ~fetch,
+            p,
+            s,
+            Node.kids(ma),
+            Node.kids(mb),
+            List.append(&2, Nat, pre, [x]),
+            0n,
+            Tree.first(~S, ~fetch, s, Node.kids(ma)),
+            Tree.first(~S, ~fetch, s, Node.kids(mb))
+          ),
+          u => Tree.diff.sides(~S, ~fetch, 1n+p, s, ya, yb, pre, x, ma, mb)
+        ),
+        Tree.diff.go(
+          ~S,
+          ~fetch,
+          1n+p,
+          s,
+          ra,
+          rb,
+          pre,
+          1n+x,
+          Tree.first(~S, ~fetch, s, ra),
+          Tree.first(~S, ~fetch, s, rb)
+        ),
+        b,
+        h
+      )
+
+# bend-lint: expect-begin bend-lint-rules/language/decreasing_call@warning -- g is f itself, bound by the match; the checker accepts these calls
+# the difference of the parts ka and kb, from the place x of branches whose
+# path is pre, holds the binding of k and v, when the side c of their parts j,
+# at the place t, reads v for k along P, the rest of k's path, while the other
+# does not, and f levels are enough for P
+def Tree.diff_part(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  ka: List<&2, Maybe<&2, Hashes.Hash>>,
+  kb: List<&2, Maybe<&2, Hashes.Hash>>,
+  +pre: List<&2, Nat>,
+  +x: Nat,
+  +j: Nat,
+  +t: Nat,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +pth: List<&2, Nat>,
+  +c: Bool,
+  ht: {Nat.add(j, x) == t: Nat},
+  +hq: {
+    List.take(
+      &2,
+      Nat,
+      Tree.path(k),
+      List.length(&2, Nat, List.append(&2, Nat, pre, [t]))
+    )
+      == List.append(&2, Nat, pre, [t]): List<&2, Nat>
+  },
+  +hd: {
+    List.drop(
+      &2,
+      Nat,
+      Tree.path(k),
+      List.length(&2, Nat, List.append(&2, Nat, pre, [t]))
+    )
+      == pth: List<&2, Nat>
+  },
+  +hf: {Nat.is_le(List.length(&2, Nat, pth), f) == True{}: Bool},
+  +hg: {
+    Bool.pick(
+      Maybe<&2, List<&2, U32>>,
+      c,
+      Tree.get.go(~S, ~fetch, s, pth, k, Tree.part(~S, ~fetch, s, Parts.at(ka, j))),
+      Tree.get.go(~S, ~fetch, s, pth, k, Tree.part(~S, ~fetch, s, Parts.at(kb, j)))
+    )
+      == Some{v}: Maybe<&2, List<&2, U32>>
+  },
+  hn: {
+    Bool.pick(
+      Maybe<&2, List<&2, U32>>,
+      c,
+      Tree.get.go(~S, ~fetch, s, pth, k, Tree.part(~S, ~fetch, s, Parts.at(kb, j))),
+      Tree.get.go(~S, ~fetch, s, pth, k, Tree.part(~S, ~fetch, s, Parts.at(ka, j)))
+    )
+      == Some{v}: Maybe<&2, List<&2, U32>>
+  } -> Empty
+) -> {
+  List.contains(
+    ~Binding,
+    ~Binding.is_eq,
+    Tree.diff.go(
+      ~S,
+      ~fetch,
+      f,
+      s,
+      ka,
+      kb,
+      pre,
+      x,
+      Tree.first(~S, ~fetch, s, ka),
+      Tree.first(~S, ~fetch, s, kb)
+    ),
+    Binding{k, v}
+  )
+    == True{}: Bool
+}:
+  match f ka kb j:
+    case g Nil{} Nil{} i:
+      Empty.absurd(
+        {
+          List.contains(
+            ~Binding,
+            ~Binding.is_eq,
+            Tree.diff.go(
+              ~S,
+              ~fetch,
+              g,
+              s,
+              [],
+              [],
+              pre,
+              x,
+              Tree.first(~S, ~fetch, s, []),
+              Tree.first(~S, ~fetch, s, [])
+            ),
+            Binding{k, v}
+          )
+            == True{}: Bool
+        },
+        hn(hg)
+      )
+    case g Con{ya, +ra} Con{yb, +rb} 1n+(+i):
+      Tree.diff_skip(
+        ~S,
+        ~fetch,
+        g,
+        s,
+        ya,
+        ra,
+        yb,
+        rb,
+        pre,
+        x,
+        Binding{k, v},
+        Tree.diff_part(
+          ~S,
+          ~fetch,
+          g,
+          s,
+          ra,
+          rb,
+          pre,
+          1n+x,
+          i,
+          t,
+          k,
+          v,
+          pth,
+          c,
+          Equal.trans(Nat, Nat.add(i, 1n+x), 1n+Nat.add(i, x), t, Shared.Nat.add_succ(i, x), ht),
+          hq,
+          hd,
+          hf,
+          hg,
+          hn
+        )
+      )
+    case 0n Con{+ya, +ra} Con{+yb, +rb} 0n:
+      +rest = Tree.diff.go(
+        ~S,
+        ~fetch,
+        0n,
+        s,
+        ra,
+        rb,
+        pre,
+        1n+x,
+        Tree.first(~S, ~fetch, s, ra),
+        Tree.first(~S, ~fetch, s, rb)
+      )
+      +flat = Tree.diff.sides(
+        ~S,
+        ~fetch,
+        0n,
+        s,
+        ya,
+        yb,
+        pre,
+        x,
+        Tree.part(~S, ~fetch, s, ya),
+        Tree.part(~S, ~fetch, s, yb)
+      )
+      Tree.diff_here(
+        ~S,
+        ~fetch,
+        s,
+        ya,
+        yb,
+        c,
+        pth,
+        k,
+        v,
+        Parts.same(ya, yb),
+        {==},
+        rest,
+        List.append(&2, Binding, flat, rest),
+        hg,
+        hn,
+        h => Shared.List.contains_left(
+          ~Binding,
+          ~Binding.is_eq,
+          flat,
+          rest,
+          Binding{k, v},
+          Tree.diff_side(~S, ~fetch, 0n, s, ya, yb, pre, x, t, k, v, pth, c, ht, hq, hd, hf, hg)
+        )
+      )
+    case 1n+(+p) Con{+ya, +ra} Con{+yb, +rb} 0n:
+      %Equal.sym(
+        Nat,
+        x,
+        t,
+        ht
+      ): {
+        List.contains(
+          ~Binding,
+          ~Binding.is_eq,
+          Tree.diff.go(
+            ~S,
+            ~fetch,
+            1n+p,
+            s,
+            Con{ya, ra},
+            Con{yb, rb},
+            pre,
+            _,
+            Tree.part(~S, ~fetch, s, ya),
+            Tree.part(~S, ~fetch, s, yb)
+          ),
+          Binding{k, v}
+        )
+          == True{}: Bool
+      }
+      +ma = Tree.part(~S, ~fetch, s, ya)
+      +mb = Tree.part(~S, ~fetch, s, yb)
+      +here = List.append(&2, Nat, pre, [t])
+      +rest = Tree.diff.go(
+        ~S,
+        ~fetch,
+        1n+p,
+        s,
+        ra,
+        rb,
+        pre,
+        1n+t,
+        Tree.first(~S, ~fetch, s, ra),
+        Tree.first(~S, ~fetch, s, rb)
+      )
+      +down = Tree.diff.go(
+        ~S,
+        ~fetch,
+        p,
+        s,
+        Node.kids(ma),
+        Node.kids(mb),
+        here,
+        0n,
+        Tree.first(~S, ~fetch, s, Node.kids(ma)),
+        Tree.first(~S, ~fetch, s, Node.kids(mb))
+      )
+      +flat = Tree.diff.sides(~S, ~fetch, 1n+p, s, ya, yb, pre, t, ma, mb)
+      +w = Shared.Bool.when(
+        List<&2, Binding>,
+        Bool.and(Node.is_branch(ma), Node.is_branch(mb)),
+        u => down,
+        u => flat
+      )
+      Tree.diff_here(
+        ~S,
+        ~fetch,
+        s,
+        ya,
+        yb,
+        c,
+        pth,
+        k,
+        v,
+        Parts.same(ya, yb),
+        {==},
+        rest,
+        List.append(&2, Binding, w, rest),
+        hg,
+        hn,
+        h => Shared.List.contains_left(
+          ~Binding,
+          ~Binding.is_eq,
+          w,
+          rest,
+          Binding{k, v},
+          Tree.diff_deep(
+            ~S,
+            ~fetch,
+            s,
+            ma,
+            mb,
+            k,
+            v,
+            pth,
+            c,
+            Bool.and(Node.is_branch(ma), Node.is_branch(mb)),
+            {==},
+            down,
+            flat,
+            Tree.diff_side(~S, ~fetch, 1n+p, s, ya, yb, pre, t, t, k, v, pth, c, {==}, hq, hd, hf, hg),
+            hg,
+            h,
+            +z => +rp => +e => a => b =>
+              +hd2 = Equal.trans(List<&2, Nat>, List.drop(&2, Nat, Tree.path(k), List.length(&2, Nat, here)), pth, z <> rp, hd, e)
+              Tree.diff_part(~S, ~fetch, p, s, Node.kids(ma), Node.kids(mb), here, 0n, z, z, k, v, rp, c, Shared.Nat.add_zero(z), Shared.List.take_snoc(Nat, Tree.path(k), here, z, rp, hq, hd2), Tree.drop_next(Tree.path(k), here, z, rp, hd2), Equal.trans(Bool, Nat.is_le(List.length(&2, Nat, z <> rp), 1n+p), Nat.is_le(List.length(&2, Nat, pth), 1n+p), True{}, Equal.cong(List<&2, Nat>, Bool, q => Nat.is_le(List.length(&2, Nat, q), 1n+p), z <> rp, pth, Equal.sym(List<&2, Nat>, pth, z <> rp, e)), hf), a, b))
+        )
+      )
+    case g Con{+ya, +ra} Nil{} i:
+      Tree.list_part(
+        ~S,
+        ~fetch,
+        g,
+        s,
+        ya <> ra,
+        pre,
+        x,
+        Tree.part(~S, ~fetch, s, ya),
+        i,
+        t,
+        k,
+        v,
+        pth,
+        {==},
+        ht,
+        hq,
+        hd,
+        hf,
+        Tree.pick_one(
+          ~S,
+          ~fetch,
+          s,
+          c,
+          True{},
+          Tree.get.go(~S, ~fetch, s, pth, k, Tree.part(~S, ~fetch, s, Parts.at(ya <> ra, i))),
+          pth,
+          k,
+          v,
+          hg
+        )
+      )
+    case g Nil{} Con{+yb, +rb} i:
+      Tree.list_part(
+        ~S,
+        ~fetch,
+        g,
+        s,
+        yb <> rb,
+        pre,
+        x,
+        Tree.part(~S, ~fetch, s, yb),
+        i,
+        t,
+        k,
+        v,
+        pth,
+        {==},
+        ht,
+        hq,
+        hd,
+        hf,
+        Tree.pick_one(
+          ~S,
+          ~fetch,
+          s,
+          c,
+          False{},
+          Tree.get.go(~S, ~fetch, s, pth, k, Tree.part(~S, ~fetch, s, Parts.at(yb <> rb, i))),
+          pth,
+          k,
+          v,
+          hg
+        )
+      )
+# bend-lint: expect-end bend-lint-rules/language/decreasing_call@warning
+
+# the difference of the trees whose root nodes are ma and mb holds the binding
+# of k and v, when the side c of them reads v for k while the other does not
+def Tree.diff_root(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +ma: Maybe<&2, Node>,
+  +mb: Maybe<&2, Node>,
+  +c: Bool,
+  +hg: {
+    Bool.pick(
+      Maybe<&2, List<&2, U32>>,
+      c,
+      Tree.get.go(~S, ~fetch, s, Tree.path(k), k, ma),
+      Tree.get.go(~S, ~fetch, s, Tree.path(k), k, mb)
+    )
+      == Some{v}: Maybe<&2, List<&2, U32>>
+  },
+  hn: {
+    Bool.pick(
+      Maybe<&2, List<&2, U32>>,
+      c,
+      Tree.get.go(~S, ~fetch, s, Tree.path(k), k, mb),
+      Tree.get.go(~S, ~fetch, s, Tree.path(k), k, ma)
+    )
+      == Some{v}: Maybe<&2, List<&2, U32>>
+  } -> Empty
+) -> {
+  List.contains(
+    ~Binding,
+    ~Binding.is_eq,
+    Tree.diff.root(~S, ~fetch, s, ma, mb),
+    Binding{k, v}
+  )
+    == True{}: Bool
+}:
+  Tree.diff_deep(
+    ~S,
+    ~fetch,
+    s,
+    ma,
+    mb,
+    k,
+    v,
+    Tree.path(k),
+    c,
+    Bool.and(Node.is_branch(ma), Node.is_branch(mb)),
+    {==},
+    Tree.diff.go(
+      ~S,
+      ~fetch,
+      63n,
+      s,
+      Node.kids(ma),
+      Node.kids(mb),
+      [],
+      0n,
+      Tree.first(~S, ~fetch, s, Node.kids(ma)),
+      Tree.first(~S, ~fetch, s, Node.kids(mb))
+    ),
+    List.append(&2, Binding, Tree.list.root(~S, ~fetch, s, ma), Tree.list.root(~S, ~fetch, s, mb)),
+    Tree.diff_roots(~S, ~fetch, s, k, v, ma, mb, c, hg),
+    hg,
+    hn,
+    +z => +rp => +e => a => b => Tree.diff_part(
+      ~S,
+      ~fetch,
+      63n,
+      s,
+      Node.kids(ma),
+      Node.kids(mb),
+      [],
+      0n,
+      z,
+      z,
+      k,
+      v,
+      rp,
+      c,
+      Shared.Nat.add_zero(z),
+      Tree.list_root.take(k, z, rp, e),
+      Tree.list_root.drop(k, z, rp, e),
+      Tree.list_root.deep(k, z, rp, e),
+      a,
+      b
+    )
+  )
+
+# a key that the tree a reads as v, and the tree b does not, is listed in
+# their difference (and so for b against a)
+law Tree.diff_complete:
+  for ~S: Data
+  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
+  for +s: S
+  for +a: Maybe<&2, Hashes.Hash>
+  for +b: Maybe<&2, Hashes.Hash>
+  for +k: List<&2, U32>
+  for +v: List<&2, U32>
+  {Tree.get(~S, ~fetch, s, a, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+    -> ({Tree.get(~S, ~fetch, s, b, k) == Some{v}: Maybe<&2, List<&2, U32>>} -> Empty)
+    -> {
+      List.contains(
+        ~Binding,
+        ~Binding.is_eq,
+        Tree.diff(~S, ~fetch, s, a, b),
+        Binding{k, v}
+      )
+        == True{}: Bool
+    }
+
+def Tree.diff_complete(ty, fetch, s, a, b, k, v):
+  +hg => hn =>
+    Tree.diff_here(
+      ~ty,
+      ~fetch,
+      s,
+      a,
+      b,
+      True{},
+      Tree.path(k),
+      k,
+      v,
+      Parts.same(a, b),
+      {==},
+      [],
+      Tree.diff.root(~ty, ~fetch, s, Tree.part(~ty, ~fetch, s, a), Tree.part(~ty, ~fetch, s, b)),
+      hg,
+      hn,
+      h => Tree.diff_root(
+        ~ty,
+        ~fetch,
+        s,
+        k,
+        v,
+        Tree.part(~ty, ~fetch, s, a),
+        Tree.part(~ty, ~fetch, s, b),
+        True{},
+        hg,
+        h
+      )
+    )
+
+# a key that the tree b reads as v, and the tree a does not, is listed in
+# their difference
+law Tree.diff_complete_right:
+  for ~S: Data
+  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
+  for +s: S
+  for +a: Maybe<&2, Hashes.Hash>
+  for +b: Maybe<&2, Hashes.Hash>
+  for +k: List<&2, U32>
+  for +v: List<&2, U32>
+  {Tree.get(~S, ~fetch, s, b, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+    -> ({Tree.get(~S, ~fetch, s, a, k) == Some{v}: Maybe<&2, List<&2, U32>>} -> Empty)
+    -> {
+      List.contains(
+        ~Binding,
+        ~Binding.is_eq,
+        Tree.diff(~S, ~fetch, s, a, b),
+        Binding{k, v}
+      )
+        == True{}: Bool
+    }
+
+def Tree.diff_complete_right(ty, fetch, s, a, b, k, v):
+  +hg => hn =>
+    Tree.diff_here(
+      ~ty,
+      ~fetch,
+      s,
+      a,
+      b,
+      False{},
+      Tree.path(k),
+      k,
+      v,
+      Parts.same(a, b),
+      {==},
+      [],
+      Tree.diff.root(~ty, ~fetch, s, Tree.part(~ty, ~fetch, s, a), Tree.part(~ty, ~fetch, s, b)),
+      hg,
+      hn,
+      h => Tree.diff_root(
+        ~ty,
+        ~fetch,
+        s,
+        k,
+        v,
+        Tree.part(~ty, ~fetch, s, a),
+        Tree.part(~ty, ~fetch, s, b),
+        False{},
+        hg,
+        h
+      )
+    )
 
 # the key of a binding
 def Binding.key(b: Binding) -> List<&2, U32>:

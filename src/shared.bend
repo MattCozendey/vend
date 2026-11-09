@@ -247,6 +247,56 @@ def List.contains_append(
       )
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a list holds what its front a holds
+def List.contains_left(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  a: List<&2, A>,
+  b: List<&2, A>,
+  m: A,
+  h: {List.contains(~A, ~same, a, m) == True{}: Bool}
+) -> {List.contains(~A, ~same, List.append(&2, A, a, b), m) == True{}: Bool}:
+  %Equal.sym(
+    Bool,
+    List.contains(~A, ~same, List.append(&2, A, a, b), m),
+    Bool.or(List.contains(~A, ~same, a, m), List.contains(~A, ~same, b, m)),
+    List.contains_append(~A, ~same, a, b, m)
+  ): {_ == True{}: Bool}
+  %Equal.sym(
+    Bool,
+    List.contains(~A, ~same, a, m),
+    True{},
+    h
+  ): {Bool.or(_, List.contains(~A, ~same, b, m)) == True{}: Bool}
+  {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a list holds what its back b holds
+def List.contains_right(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  +a: List<&2, A>,
+  b: List<&2, A>,
+  +m: A,
+  h: {List.contains(~A, ~same, b, m) == True{}: Bool}
+) -> {List.contains(~A, ~same, List.append(&2, A, a, b), m) == True{}: Bool}:
+  %Equal.sym(
+    Bool,
+    List.contains(~A, ~same, List.append(&2, A, a, b), m),
+    Bool.or(List.contains(~A, ~same, a, m), List.contains(~A, ~same, b, m)),
+    List.contains_append(~A, ~same, a, b, m)
+  ): {_ == True{}: Bool}
+  %Equal.sym(
+    Bool,
+    List.contains(~A, ~same, b, m),
+    True{},
+    h
+  ): {Bool.or(List.contains(~A, ~same, a, m), _) == True{}: Bool}
+  Bool.or_true_right(List.contains(~A, ~same, a, m))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a member of r is a member of x <> r
 def List.contains_cons(
   ~A: Data,
