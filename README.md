@@ -6,13 +6,13 @@ Only human hands may touch this file and it is the ultimate source of truth for 
 
 ## Vend Node
 
-A Vend Node is a P2P decentralized versioning program that runs anywhere and syncs with other nodes bidirectionally. A Vend Node holds:
+A Vend Node is a P2P decentralized versioning program that runs anywhere and syncs with other Vend Nodes bidirectionally. A Vend Node holds:
 1 - Its own name
 2 - The parts of the Vend Stores it uses (any number)
 3 - The Vend Writers connected to it (any number)
-4 - The resources mounted to it, like folders (any number)
+4 - The Vend Resources mounted to it, like folders (any number)
 
-All Vend Nodes are "equal", so a classic server can be defined as a Vend Node that owns the shared branches and keeps every part. A Vend Node that is behind catches up by itself. Catching up never creates conflicts, and a Vend Node checks everything it receives before it keeps it. Two Vend Nodes that hold the same changes give the same answers, whatever order they got them in. A Vend Node starts or resumes on a store address under its name, but only one Vend Node can run on an address at a time. Unless forced, a Vend Node only stops when no resources are mounted and no writers are connected.
+All Vend Nodes are "equal", so a classic server can be defined as a Vend Node that owns the shared branches and keeps every part. A Vend Node that is behind catches up by itself. Catching up never creates conflicts, and a Vend Node checks everything it receives before it keeps it. Two Vend Nodes that hold the same changes give the same answers, whatever order they got them in. A Vend Node starts or resumes on a data address under its name, but only one Vend Node can run on an address at a time. Unless forced, a Vend Node only stops when no resources are mounted and no writers are connected.
 
 ## Vend Store
 
