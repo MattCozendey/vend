@@ -2174,5 +2174,9 @@ def String.eq_sound(
 ) -> {String.eq(a, b) == True{}: Bool} -> {a == b: String}:
   h => String.order_sound(a, b)(Shared.Cmp.is_eq_sound(String.order.go(a, b, EQ{}))(h))
 
+
+# the laws of String.eq
+def String.laws() -> Shared.Eq.Laws(String, String.eq):
+  (a => String.eq_refl(a), a => b => String.eq_sound(a, b))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information

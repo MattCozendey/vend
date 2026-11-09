@@ -25,6 +25,14 @@ def Cell.join(~V: Data, ~same: V -> V -> Bool, a: Cell<V>, b: Cell<V>) -> Cell<V
     case many{} y:
       many{}
 
+# the value of a cell, when every holder agrees on it
+def Cell.value(-V: Data, m: Maybe<&2, Cell<V>>) -> Maybe<&2, V>:
+  match m:
+    case Some{one{e}}:
+      Some{e}
+    case _:
+      None{}
+
 # Laws
 # ----
 # Each law asks of same only its laws (Shared.Eq.Laws).
@@ -584,4 +592,222 @@ def Cell.agrees_one(ty, same, s, k, x):
           agrees1
         )(Cell.agrees_tip(~ty, ~same, z))(Cell.agrees_one(~ty, ~same, o, r, x)(g))
       )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# Cell.is_eq is True for a cell and itself
+def Cell.is_eq_refl(
+  ~V: Data,
+  ~same: V -> V -> Bool,
+  ~laws: Shared.Eq.Laws(V, same),
+  a: Cell<V>
+) -> {Cell.is_eq(~V, ~same, a, a) == True{}: Bool}:
+  match a:
+    case one{x}:
+      Shared.Eq.refl(~V, ~same, laws, x)
+    case many{}:
+      {==}
+
+# Syncs
+# -----
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# Cell.through once the cell m of k in s is known
+def Cell.through.at(
+  ~V: Data,
+  ~W: Data,
+  ~same: V -> V -> Bool,
+  ~laws: Shared.Eq.Laws(V, same),
+  f: Maybe<&2, V> -> Maybe<&2, W>,
+  fnone: {f(None{}) == None{}: Maybe<&2, W>},
+  s: Tries.Trie<Cell<V>>,
+  t: Tries.Trie<Cell<V>>,
+  k: List<&2, Bool>,
+  -w: W,
+  m: Maybe<&2, Cell<V>>,
+  e: {Tries.Trie.get(Cell<V>, s, k) == m: Maybe<&2, Cell<V>>}
+) -> {
+  Cell.agrees(~V, ~same, s, t) == True{}: Bool
+} -> {
+  f(Cell.value(V, m)) == Some{w}: Maybe<&2, W>
+} -> {
+  f(
+    Cell.value(
+      V,
+      Tries.Trie.get(Cell<V>, Tries.Trie.union(~Cell<V>, ~Cell.join(~V, ~same), s, t), k)
+    )
+  )
+    == Some{w}: Maybe<&2, W>
+}:
+  match m:
+    case None{}:
+      ag => h => Empty.absurd(
+        {
+          f(
+            Cell.value(
+              V,
+              Tries.Trie.get(Cell<V>, Tries.Trie.union(~Cell<V>, ~Cell.join(~V, ~same), s, t), k)
+            )
+          )
+            == Some{w}: Maybe<&2, W>
+        },
+        Shared.Maybe.none_ne_some(
+          W,
+          w,
+          Equal.trans(
+            Maybe<&2, W>,
+            None{},
+            f(None{}),
+            Some{w},
+            Equal.sym(Maybe<&2, W>, f(None{}), None{}, fnone),
+            h
+          )
+        )
+      )
+    case Some{many{}}:
+      ag => h => Empty.absurd(
+        {
+          f(
+            Cell.value(
+              V,
+              Tries.Trie.get(Cell<V>, Tries.Trie.union(~Cell<V>, ~Cell.join(~V, ~same), s, t), k)
+            )
+          )
+            == Some{w}: Maybe<&2, W>
+        },
+        Shared.Maybe.none_ne_some(
+          W,
+          w,
+          Equal.trans(
+            Maybe<&2, W>,
+            None{},
+            f(None{}),
+            Some{w},
+            Equal.sym(Maybe<&2, W>, f(None{}), None{}, fnone),
+            h
+          )
+        )
+      )
+    case Some{one{v}}:
+      ag => h =>
+        %Equal.sym(
+          Maybe<&2, Cell<V>>,
+          Tries.Trie.get(Cell<V>, Tries.Trie.union(~Cell<V>, ~Cell.join(~V, ~same), s, t), k),
+          Some{one{v}},
+          Cell.agrees_kept(~V, ~same, ~laws, s, t, k, v)(ag)(e)
+        ): {f(Cell.value(V, _)) == Some{w}: Maybe<&2, W>}
+        h
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# a value read through f (none from no value) of a cell of s stays in s and t,
+# when t agrees with s
+def Cell.through(
+  ~V: Data,
+  ~W: Data,
+  ~same: V -> V -> Bool,
+  ~laws: Shared.Eq.Laws(V, same),
+  f: Maybe<&2, V> -> Maybe<&2, W>,
+  fnone: {f(None{}) == None{}: Maybe<&2, W>},
+  +s: Tries.Trie<Cell<V>>,
+  t: Tries.Trie<Cell<V>>,
+  +k: List<&2, Bool>,
+  -w: W
+) -> {
+  Cell.agrees(~V, ~same, s, t) == True{}: Bool
+} -> {
+  f(Cell.value(V, Tries.Trie.get(Cell<V>, s, k))) == Some{w}: Maybe<&2, W>
+} -> {
+  f(
+    Cell.value(
+      V,
+      Tries.Trie.get(Cell<V>, Tries.Trie.union(~Cell<V>, ~Cell.join(~V, ~same), s, t), k)
+    )
+  )
+    == Some{w}: Maybe<&2, W>
+}:
+  Cell.through.at(~V, ~W, ~same, ~laws, f, fnone, s, t, k, w, Tries.Trie.get(Cell<V>, s, k), {==})
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# the entries at zero of tries that agree agree
+def Cell.agrees_zero(
+  ~V: Data,
+  ~same: V -> V -> Bool,
+  h1: Maybe<&2, Cell<V>>,
+  h2: Maybe<&2, Cell<V>>,
+  z1: Tries.Trie<Cell<V>>,
+  z2: Tries.Trie<Cell<V>>,
+  o1: Tries.Trie<Cell<V>>,
+  o2: Tries.Trie<Cell<V>>
+) -> {
+  Cell.agrees(~V, ~same, Tries.bin{h1, z1, o1}, Tries.bin{h2, z2, o2}) == True{}: Bool
+} -> {Cell.agrees(~V, ~same, z1, z2) == True{}: Bool}:
+  +agrees1 = Cell.agrees(~V, ~same, z1, z2)
+  agrees2 = Cell.agrees(~V, ~same, o1, o2)
+  h => Shared.Bool.and_true_left(
+    agrees1,
+    agrees2
+  )(Shared.Bool.and_true_right(Cell.agrees.here(~V, ~same, h1, h2), Bool.and(agrees1, agrees2))(h))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# the entries at one of tries that agree agree
+def Cell.agrees_one_side(
+  ~V: Data,
+  ~same: V -> V -> Bool,
+  h1: Maybe<&2, Cell<V>>,
+  h2: Maybe<&2, Cell<V>>,
+  z1: Tries.Trie<Cell<V>>,
+  z2: Tries.Trie<Cell<V>>,
+  o1: Tries.Trie<Cell<V>>,
+  o2: Tries.Trie<Cell<V>>
+) -> {
+  Cell.agrees(~V, ~same, Tries.bin{h1, z1, o1}, Tries.bin{h2, z2, o2}) == True{}: Bool
+} -> {Cell.agrees(~V, ~same, o1, o2) == True{}: Bool}:
+  +agrees1 = Cell.agrees(~V, ~same, z1, z2)
+  +agrees2 = Cell.agrees(~V, ~same, o1, o2)
+  h => Shared.Bool.and_true_right(
+    agrees1,
+    agrees2
+  )(Shared.Bool.and_true_right(Cell.agrees.here(~V, ~same, h1, h2), Bool.and(agrees1, agrees2))(h))
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# the entries under p of tries that agree agree
+def Cell.agrees_under(
+  ~V: Data,
+  ~same: V -> V -> Bool,
+  s: Tries.Trie<Cell<V>>,
+  t: Tries.Trie<Cell<V>>,
+  p: List<&2, Bool>
+) -> {
+  Cell.agrees(~V, ~same, s, t) == True{}: Bool
+} -> {
+  Cell.agrees(
+    ~V,
+    ~same,
+    Tries.Trie.under(Cell<V>, s, p),
+    Tries.Trie.under(Cell<V>, t, p)
+  )
+    == True{}: Bool
+}:
+  match s t p:
+    case Tries.tip{} y q:
+      h => {==}
+    case Tries.bin{h1, z1, o1} Tries.tip{} q:
+      h => Cell.agrees_tip(~V, ~same, Tries.Trie.under(Cell<V>, Tries.bin{h1, z1, o1}, q))
+    case Tries.bin{h1, z1, o1} Tries.bin{h2, z2, o2} Nil{}:
+      h => h
+    case Tries.bin{h1, +z1, +o1} Tries.bin{h2, +z2, +o2} Con{False{}, r}:
+      h => Cell.agrees_under(
+        ~V,
+        ~same,
+        z1,
+        z2,
+        r
+      )(Cell.agrees_zero(~V, ~same, h1, h2, z1, z2, o1, o2)(h))
+    case Tries.bin{h1, +z1, +o1} Tries.bin{h2, +z2, +o2} Con{True{}, r}:
+      h => Cell.agrees_under(
+        ~V,
+        ~same,
+        o1,
+        o2,
+        r
+      )(Cell.agrees_one_side(~V, ~same, h1, h2, z1, z2, o1, o2)(h))
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information

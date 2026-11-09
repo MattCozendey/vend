@@ -1002,6 +1002,79 @@ def Maybe.is_eq_sound(
         %eqs(x)(y)(h): {Some{x} == Some{_}: Maybe<&2, A>}
         {==}
 
+# Maybe.is_eq is True for a value and itself
+def Maybe.is_eq_refl(
+  ~A: Data,
+  ~eq: A -> A -> Bool,
+  ~laws: Eq.Laws(A, eq),
+  a: Maybe<&2, A>
+) -> {Maybe.is_eq(~A, ~eq, a, a) == True{}: Bool}:
+  match a:
+    case None{}:
+      {==}
+    case Some{x}:
+      Eq.refl(~A, ~eq, laws, x)
+
+# the laws of Maybe.is_eq, by the laws of eq
+def Maybe.laws(~A: Data, ~eq: A -> A -> Bool, ~laws: Eq.Laws(A, eq)) -> Eq.Laws(Maybe<&2, A>, Maybe.is_eq(~A, ~eq)):
+  (
+    a => Maybe.is_eq_refl(~A, ~eq, ~laws, a),
+    a => b => Maybe.is_eq_sound(~A, ~eq, x => y => Eq.sound(~A, ~eq, laws, x, y), a, b)
+  )
+
+# k on the value of m, if any
+def Maybe.then(-A: Data, -B: Data, m: Maybe<&2, A>, k: A -> Maybe<&2, B>) -> Maybe<&2, B>:
+  match m:
+    case Some{a}:
+      k(a)
+    case None{}:
+      None{}
+
+# a read m then k that gives x still gives x when m and each k keep what they
+# give (m2 and k2): a kept read of a kept read is kept
+def Maybe.then_kept(
+  -A: Data,
+  -B: Data,
+  m: Maybe<&2, A>,
+  -m2: Maybe<&2, A>,
+  -k: A -> Maybe<&2, B>,
+  -k2: A -> Maybe<&2, B>,
+  -x: B,
+  hm: @a: A -> {m == Some{a}: Maybe<&2, A>} -> {m2 == Some{a}: Maybe<&2, A>},
+  hk: @a: A -> {k(a) == Some{x}: Maybe<&2, B>} -> {k2(a) == Some{x}: Maybe<&2, B>}
+) -> {Maybe.then(A, B, m, k) == Some{x}: Maybe<&2, B>} -> {Maybe.then(A, B, m2, k2) == Some{x}: Maybe<&2, B>}:
+  match m:
+    case Some{+a}:
+      h =>
+        %Equal.sym(Maybe<&2, A>, m2, Some{a}, hm(a)({==})): {Maybe.then(A, B, _, k2) == Some{x}: Maybe<&2, B>}
+        hk(a)(h)
+    case None{}:
+      h => Empty.absurd({Maybe.then(A, B, m2, k2) == Some{x}: Maybe<&2, B>}, Maybe.none_ne_some(B, x, h))
+
+# k when b holds, else nothing
+def Maybe.when(-B: Data, b: Bool, k: Unit -> Maybe<&2, B>) -> Maybe<&2, B>:
+  match b:
+    case True{}:
+      k(Unit{})
+    case False{}:
+      None{}
+
+# a guarded read that gives x still gives x when its guard is the same and its
+# read k keeps what it gives (k2)
+def Maybe.when_kept(
+  -B: Data,
+  b: Bool,
+  -k: Unit -> Maybe<&2, B>,
+  -k2: Unit -> Maybe<&2, B>,
+  -x: B,
+  hk: {k(Unit{}) == Some{x}: Maybe<&2, B>} -> {k2(Unit{}) == Some{x}: Maybe<&2, B>}
+) -> {Maybe.when(B, b, k) == Some{x}: Maybe<&2, B>} -> {Maybe.when(B, b, k2) == Some{x}: Maybe<&2, B>}:
+  match b:
+    case True{}:
+      hk
+    case False{}:
+      h => Empty.absurd({None{} == Some{x}: Maybe<&2, B>}, Maybe.none_ne_some(B, x, h))
+
 # List equality
 # -------------
 # xs and ys hold the same elements in the same order, as same calls them: the
