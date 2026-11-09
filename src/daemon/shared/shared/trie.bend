@@ -119,6 +119,350 @@ def Trie.text(t: String) -> List<&2, Bool>:
     case SCon{Chr{x}, r}:
       True{} <> List.append(&2, Bool, Trie.char(x), Trie.text(r))
 
+# Highest keys
+# ------------
+# Keys of a fixed width, read high bit first, are ordered as numbers: one is
+# after zero. A descent finds the highest key whose entries a test accepts,
+# in the width's number of steps when the test accepts at the top.
+
+# the n bits of x, highest first
+def Trie.word(n: Nat, x: U32) -> List<&2, Bool>:
+  List.reverse(&2, Bool, Trie.bits(n, x))
+
+# the key k of the zero branch, if any
+def Trie.top.lo(m: Maybe<&2, List<&2, Bool>>) -> Maybe<&2, List<&2, Bool>>:
+  match m:
+    case Some{k}:
+      Some{False{} <> k}
+    case None{}:
+      None{}
+
+# the key hi of the one branch, if any; else the one that lo finds
+def Trie.top.of(
+  hi: Maybe<&2, List<&2, Bool>>,
+  lo: Unit -> Maybe<&2, List<&2, Bool>>
+) -> Maybe<&2, List<&2, Bool>>:
+  match hi:
+    case Some{k}:
+      Some{True{} <> k}
+    case None{}:
+      Trie.top.lo(lo(Unit{}))
+
+# the highest key of w bits whose entries (the trie under it) ok accepts, with
+# c; a key with no entries is never taken
+def Trie.top(
+  ~V: Data,
+  ~C: Data,
+  ~ok: C -> Trie<V> -> Bool,
+  w: Nat,
+  t: Trie<V>,
+  +c: C
+) -> Maybe<&2, List<&2, Bool>>:
+  match w t:
+    case n tip{}:
+      None{}
+    case 0n bin{h, z, o}:
+      Shared.Bool.when(Maybe<&2, List<&2, Bool>>, ok(c)(bin{h, z, o}), u => Some{[]}, u => None{})
+    case 1n+(+p) bin{h, z, o}:
+      Trie.top.of(Trie.top(~V, ~C, ~ok, p, o, c), u => Trie.top(~V, ~C, ~ok, p, z, c))
+
+# the key k has w bits
+def Trie.wide(k: List<&2, Bool>, w: Nat) -> Bool:
+  match k w:
+    case Nil{} 0n:
+      True{}
+    case Con{b, r} 1n+p:
+      Trie.wide(r, p)
+    case _ _:
+      False{}
+
+# a is not after b (keys of one width, high bit first)
+def Trie.key_le(a: List<&2, Bool>, b: List<&2, Bool>) -> Bool:
+  match a b:
+    case Con{False{}, ra} Con{False{}, rb}:
+      Trie.key_le(ra, rb)
+    case Con{True{}, ra} Con{True{}, rb}:
+      Trie.key_le(ra, rb)
+    case Con{True{}, ra} Con{False{}, rb}:
+      False{}
+    case _ _:
+      True{}
+
+# the key k is not after the key m (none: k is after every key)
+def Trie.below(k: List<&2, Bool>, m: Maybe<&2, List<&2, Bool>>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{x}:
+      Trie.key_le(k, x)
+
+# Laws of highest keys
+# --------------------
+
+# Trie.top_ok at a key's end, by whether ok accepts the entries there (held)
+def Trie.top_ok.here(
+  ~V: Data,
+  ~C: Data,
+  ~ok: C -> Trie<V> -> Bool,
+  -h0: Maybe<&2, V>,
+  -z: Trie<V>,
+  -o: Trie<V>,
+  -c: C,
+  -k: List<&2, Bool>,
+  held: Bool,
+  e: {ok(c)(bin{h0, z, o}) == held: Bool}
+) -> {
+  Shared.Bool.when(
+    Maybe<&2, List<&2, Bool>>,
+    held,
+    u => Some{[]},
+    u => None{}
+  )
+    == Some{k}: Maybe<&2, List<&2, Bool>>
+} -> {ok(c)(Trie.under(V, bin{h0, z, o}, k)) == True{}: Bool}:
+  match held:
+    case True{}:
+      h =>
+        %Shared.Maybe.some_inj(
+          List<&2, Bool>,
+          [],
+          k,
+          h
+        ): {ok(c)(Trie.under(V, bin{h0, z, o}, _)) == True{}: Bool}
+        e
+    case False{}:
+      h => Empty.absurd(
+        {ok(c)(Trie.under(V, bin{h0, z, o}, k)) == True{}: Bool},
+        Shared.Maybe.none_ne_some(List<&2, Bool>, k, h)
+      )
+
+# Trie.top_ok for a key k of the zero branch z (mz is what it finds there)
+def Trie.top_ok.lo(
+  ~V: Data,
+  ~C: Data,
+  ~ok: C -> Trie<V> -> Bool,
+  -h0: Maybe<&2, V>,
+  -z: Trie<V>,
+  -o: Trie<V>,
+  -c: C,
+  -k: List<&2, Bool>,
+  mz: Maybe<&2, List<&2, Bool>>,
+  ihz: @k2: List<
+    &2,
+    Bool> -> {
+    mz == Some{k2}: Maybe<&2, List<&2, Bool>>
+  } -> {ok(c)(Trie.under(V, z, k2)) == True{}: Bool}
+) -> {
+  Trie.top.lo(mz) == Some{k}: Maybe<&2, List<&2, Bool>>
+} -> {ok(c)(Trie.under(V, bin{h0, z, o}, k)) == True{}: Bool}:
+  match mz:
+    case Some{k2}:
+      h =>
+        %Shared.Maybe.some_inj(List<&2, Bool>, False{} <> k2, k, h):
+          {ok(c)(Trie.under(V, bin{h0, z, o}, _)) == True{}: Bool}
+        ihz(k2)({==})
+    case None{}:
+      h => Empty.absurd(
+        {ok(c)(Trie.under(V, bin{h0, z, o}, k)) == True{}: Bool},
+        Shared.Maybe.none_ne_some(List<&2, Bool>, k, h)
+      )
+
+# Trie.top_ok at a branch (mo is what the one branch o finds)
+def Trie.top_ok.hi(
+  ~V: Data,
+  ~C: Data,
+  ~ok: C -> Trie<V> -> Bool,
+  -h0: Maybe<&2, V>,
+  -z: Trie<V>,
+  -o: Trie<V>,
+  -c: C,
+  -k: List<&2, Bool>,
+  mo: Maybe<&2, List<&2, Bool>>,
+  -lo: Unit -> Maybe<&2, List<&2, Bool>>,
+  iho: @k2: List<
+    &2,
+    Bool> -> {
+    mo == Some{k2}: Maybe<&2, List<&2, Bool>>
+  } -> {ok(c)(Trie.under(V, o, k2)) == True{}: Bool},
+  lol: {
+    Trie.top.lo(lo(Unit{})) == Some{k}: Maybe<&2, List<&2, Bool>>
+  } -> {ok(c)(Trie.under(V, bin{h0, z, o}, k)) == True{}: Bool}
+) -> {
+  Trie.top.of(mo, lo) == Some{k}: Maybe<&2, List<&2, Bool>>
+} -> {ok(c)(Trie.under(V, bin{h0, z, o}, k)) == True{}: Bool}:
+  match mo:
+    case Some{k2}:
+      h =>
+        %Shared.Maybe.some_inj(List<&2, Bool>, True{} <> k2, k, h):
+          {ok(c)(Trie.under(V, bin{h0, z, o}, _)) == True{}: Bool}
+        iho(k2)({==})
+    case None{}:
+      h => lol(h)
+
+# the key that a descent finds is accepted
+law Trie.top_ok:
+  for ~V: Data
+  for ~C: Data
+  for ~ok: C -> Trie<V> -> Bool
+  for w: Nat
+  for t: Trie<V>
+  for +c: C
+  for -k: List<&2, Bool>
+  {
+    Trie.top(~V, ~C, ~ok, w, t, c) == Some{k}: Maybe<&2, List<&2, Bool>>
+  } -> {ok(c)(Trie.under(V, t, k)) == True{}: Bool}
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+def Trie.top_ok(ty, ctx, ok, w, t, c, k):
+  match w t:
+    case n tip{}:
+      h => Empty.absurd(
+        {ok(c)(Trie.under(ty, tip{}, k)) == True{}: Bool},
+        Shared.Maybe.none_ne_some(List<&2, Bool>, k, h)
+      )
+    case 0n bin{h0, z, o}:
+      Trie.top_ok.here(~ty, ~ctx, ~ok, h0, z, o, c, k, ok(c)(bin{h0, z, o}), {==})
+    case 1n+(+p) bin{h0, +z, +o}:
+      Trie.top_ok.hi(
+        ~ty,
+        ~ctx,
+        ~ok,
+        h0,
+        z,
+        o,
+        c,
+        k,
+        Trie.top(~ty, ~ctx, ~ok, p, o, c),
+        u => Trie.top(~ty, ~ctx, ~ok, p, z, c),
+        k2 => Trie.top_ok(~ty, ~ctx, ~ok, p, o, c, k2),
+        Trie.top_ok.lo(
+          ~ty,
+          ~ctx,
+          ~ok,
+          h0,
+          z,
+          o,
+          c,
+          k,
+          Trie.top(~ty, ~ctx, ~ok, p, z, c),
+          k2 => Trie.top_ok(~ty, ~ctx, ~ok, p, z, c, k2)
+        )
+      )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# Trie.top_max for a key True <> r, once what the one branch finds (mo) is known
+def Trie.top_max.one(
+  mo: Maybe<&2, List<&2, Bool>>,
+  lo: Unit -> Maybe<&2, List<&2, Bool>>,
+  -r: List<&2, Bool>,
+  ih: {Trie.below(r, mo) == True{}: Bool}
+) -> {Trie.below(True{} <> r, Trie.top.of(mo, lo)) == True{}: Bool}:
+  match mo:
+    case Some{k}:
+      ih
+    case None{}:
+      Empty.absurd(
+        {Trie.below(True{} <> r, Trie.top.of(None{}, lo)) == True{}: Bool},
+        Shared.Bool.false_ne_true(ih)
+      )
+
+# Trie.top_max for a key False <> r, once what the zero branch finds (mz) is known
+def Trie.top_max.lo(
+  mz: Maybe<&2, List<&2, Bool>>,
+  -r: List<&2, Bool>,
+  ih: {Trie.below(r, mz) == True{}: Bool}
+) -> {Trie.below(False{} <> r, Trie.top.lo(mz)) == True{}: Bool}:
+  match mz:
+    case Some{k}:
+      ih
+    case None{}:
+      Empty.absurd(
+        {Trie.below(False{} <> r, Trie.top.lo(None{})) == True{}: Bool},
+        Shared.Bool.false_ne_true(ih)
+      )
+
+# Trie.top_max for a key False <> r, once what the one branch finds (mo) is known
+def Trie.top_max.zero(
+  mo: Maybe<&2, List<&2, Bool>>,
+  lo: Unit -> Maybe<&2, List<&2, Bool>>,
+  -r: List<&2, Bool>,
+  ih: {Trie.below(r, lo(Unit{})) == True{}: Bool}
+) -> {Trie.below(False{} <> r, Trie.top.of(mo, lo)) == True{}: Bool}:
+  match mo:
+    case Some{k}:
+      {==}
+    case None{}:
+      Trie.top_max.lo(lo(Unit{}), r, ih)
+
+# no key after the one that a descent finds is accepted: every key of w bits
+# whose entries ok accepts is at or before it
+law Trie.top_max:
+  for ~V: Data
+  for ~C: Data
+  for ~ok: C -> Trie<V> -> Bool
+  for ~empty: @c: C -> {ok(c)(tip{}) == False{}: Bool}
+  for w: Nat
+  for t: Trie<V>
+  for +c: C
+  for k: List<&2, Bool>
+  {Trie.wide(k, w) == True{}: Bool}
+    -> {ok(c)(Trie.under(V, t, k)) == True{}: Bool}
+    -> {Trie.below(k, Trie.top(~V, ~C, ~ok, w, t, c)) == True{}: Bool}
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+def Trie.top_max(ty, ctx, ok, empty, w, t, c, k):
+  match w t k:
+    case n tip{} q:
+      hw => hok => Empty.absurd(
+        {Trie.below(q, Trie.top(~ty, ~ctx, ~ok, n, tip{}, c)) == True{}: Bool},
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            ok(c)(tip{}),
+            True{},
+            Equal.sym(Bool, ok(c)(tip{}), False{}, empty(c)),
+            hok
+          )
+        )
+      )
+    case 0n bin{h0, z, o} Nil{}:
+      hw => hok =>
+        %Equal.sym(Bool, ok(c)(bin{h0, z, o}), True{}, hok):
+          {
+            Trie.below(
+              [],
+              Shared.Bool.when(Maybe<&2, List<&2, Bool>>, _, u => Some{[]}, u => None{})
+            )
+              == True{}: Bool
+          }
+        {==}
+    case 0n bin{h0, z, o} Con{b, r}:
+      hw => hok => Empty.absurd(
+        {Trie.below(b <> r, Trie.top(~ty, ~ctx, ~ok, 0n, bin{h0, z, o}, c)) == True{}: Bool},
+        Shared.Bool.false_ne_true(hw)
+      )
+    case 1n+p bin{h0, z, o} Nil{}:
+      hw => hok => Empty.absurd(
+        {Trie.below([], Trie.top(~ty, ~ctx, ~ok, 1n+p, bin{h0, z, o}, c)) == True{}: Bool},
+        Shared.Bool.false_ne_true(hw)
+      )
+    case 1n+(+p) bin{h0, +z, +o} Con{True{}, r}:
+      hw => hok => Trie.top_max.one(
+        Trie.top(~ty, ~ctx, ~ok, p, o, c),
+        u => Trie.top(~ty, ~ctx, ~ok, p, z, c),
+        r,
+        Trie.top_max(~ty, ~ctx, ~ok, ~empty, p, o, c, r)(hw)(hok)
+      )
+    case 1n+(+p) bin{h0, +z, +o} Con{False{}, +r}:
+      hw => hok => Trie.top_max.zero(
+        Trie.top(~ty, ~ctx, ~ok, p, o, c),
+        u => Trie.top(~ty, ~ctx, ~ok, p, z, c),
+        r,
+        Trie.top_max(~ty, ~ctx, ~ok, ~empty, p, z, c, r)(hw)(hok)
+      )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
 # Unions
 # ------
 # A union joins the values of a key that both tries hold. When join is a
