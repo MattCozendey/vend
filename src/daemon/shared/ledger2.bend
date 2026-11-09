@@ -2143,3 +2143,247 @@ def State.put_get(
       }
     Tries.Trie.get_one(Cells.Cell<Entry<Q>>, k, Cells.one{e})
 
+
+# a fact put at k grows the state, once the cell m there is known
+def Fact.put.of.grows(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  +s: State(Q),
+  +k: List<&2, Bool>,
+  +w: Where,
+  m: Maybe<&2, Cells.Cell<Entry<Q>>>,
+  em: {State.get(~Q, s, k) == m: Maybe<&2, Cells.Cell<Entry<Q>>>}
+) -> {State.grows(~Q, ~same, s, Fact.put.of(~Q, ~same, s, k, w, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      State.grows_put(~Q, ~same, ~laws, s, k, Entry.at{w})(em)
+    case Some{x}:
+      State.grows_refl(~Q, ~same, ~laws, s)
+
+# a fact put grows the state
+def Fact.put.grows(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  +s: State(Q),
+  +k: List<&2, Bool>,
+  +w: Where
+) -> {State.grows(~Q, ~same, s, Fact.put(~Q, ~same, s, k, w)) == True{}: Bool}:
+  Fact.put.of.grows(~Q, ~same, ~laws, s, k, w, State.get(~Q, s, k), {==})
+
+# the facts of a step grow the state
+def Settle.view.grows(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  +s: State(Q),
+  +w: Where,
+  k: Bool,
+  v: View
+) -> {State.grows(~Q, ~same, s, Settle.view(~Q, ~same, s, w, k, v)) == True{}: Bool}:
+  match k v:
+    case True{} View.on{+c, Some{os}, mk}:
+      Fact.put.grows(~Q, ~same, ~laws, s, Slot.epoch(c, U32.inc(Where.epoch(w))), w)
+    case True{} View.on{Chain{r, b}, None{}, Some{key}}:
+      Fact.put.grows(~Q, ~same, ~laws, s, Slot.made(Chain{r, Some{key}}), w)
+    case True{} View.on{Chain{r, b}, None{}, None{}}:
+      State.grows_refl(~Q, ~same, ~laws, s)
+    case True{} View.root{ms}:
+      State.grows_refl(~Q, ~same, ~laws, s)
+    case False{} y:
+      State.grows_refl(~Q, ~same, ~laws, s)
+
+# the facts of a decision grow the state
+def Settle.of.grows(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  +s: State(Q),
+  +w: Where,
+  m: Maybe<&2, Vote>
+) -> {State.grows(~Q, ~same, s, Settle.of(~Q, ~same, s, w, m)) == True{}: Bool}:
+  match m:
+    case Some{Vote{+i, +k, +v}}:
+      +s1 = Fact.put(~Q, ~same, s, Slot.where(i), w)
+      State.grows_trans(~Q, ~same, ~laws, s, s1, Settle.view(~Q, ~same, s1, w, k, v))(
+        Fact.put.grows(~Q, ~same, ~laws, s, Slot.where(i), w)
+      )(Settle.view.grows(~Q, ~same, ~laws, s1, w, k, v))
+    case None{}:
+      State.grows_refl(~Q, ~same, ~laws, s)
+
+# a vote put where held says the slot is empty grows the state
+def Vote.put.grows(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  held: Bool,
+  m: Maybe<&2, Bool>,
+  +s: State(Q),
+  +k: List<&2, Bool>,
+  +i: Id,
+  +v: View,
+  hf: {held == True{}: Bool} -> {State.get(~Q, s, k) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>}
+) -> {State.grows(~Q, ~same, s, Vote.put(~Q, ~same, held, m, s, k, i, v)) == True{}: Bool}:
+  match held m:
+    case True{} Some{x}:
+      State.grows_put(~Q, ~same, ~laws, s, k, Entry.vote{Vote{i, x, v}})(hf({==}))
+    case True{} None{}:
+      State.grows_refl(~Q, ~same, ~laws, s)
+    case False{} w:
+      State.grows_refl(~Q, ~same, ~laws, s)
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement, or code that the laws split on, keeps each and/or as one value
+# a node's vote, and the facts of what it decides, grow the state
+def Vote.cast.grows(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~view: Q -> View,
+  ~judge: State(Q) -> Q -> Maybe<&2, Where> -> Maybe<&2, Bool>,
+  +n: String,
+  +s: State(Q),
+  +c: Chain,
+  +i: Id,
+  +q: Q,
+  +v: View,
+  m: Maybe<&2, Tip>
+) -> {State.grows(~Q, ~same, s, Vote.cast(~Q, ~same, ~view, ~judge, n, s, c, i, q, v, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      State.grows_refl(~Q, ~same, ~laws, s)
+    case Some{Tip{e, +ms, h, last}}:
+      +w = {Where{c, e, h}: Where}
+      +k = Slot.vote(w, n)
+      +held = Bool.and(Vote.may(~Q, n, s, w, ms), Maybe.is_none(&2, Vote, State.decided(~Q, ~view, s, i)))
+      +verdict = Vote.verdict(~Q, ~view, ~judge, s, q, v, last)
+      +s1 = Vote.put(~Q, ~same, held, verdict, s, k, i, v)
+      State.grows_trans(~Q, ~same, ~laws, s, s1, State.settle(~Q, ~same, s1, w, ms))(
+        Vote.put.grows(
+          ~Q,
+          ~same,
+          ~laws,
+          held,
+          verdict,
+          s,
+          k,
+          i,
+          v,
+          hd => Shared.Maybe.is_none_eq(Cells.Cell<Entry<Q>>, State.get(~Q, s, k))(
+            Shared.Bool.and_true_right(
+              List.contains(~String, ~String.eq, ms, n),
+              Maybe.is_none(&2, Cells.Cell<Entry<Q>>, State.get(~Q, s, k))
+            )(
+              Shared.Bool.and_true_left(
+                Vote.may(~Q, n, s, w, ms),
+                Maybe.is_none(&2, Vote, State.decided(~Q, ~view, s, i))
+              )(hd)
+            )
+          )
+        )
+      )(Settle.of.grows(~Q, ~same, ~laws, s1, w, State.decide(~Q, s1, w, ms)))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# a node's vote on a request grows the state
+def Vote.ask.grows(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~view: Q -> View,
+  ~judge: State(Q) -> Q -> Maybe<&2, Where> -> Maybe<&2, Bool>,
+  n: String,
+  +s: State(Q),
+  i: Id,
+  q: Q,
+  v: View
+) -> {State.grows(~Q, ~same, s, Vote.ask(~Q, ~same, ~view, ~judge, n, s, i, q, v)) == True{}: Bool}:
+  match v:
+    case View.root{ms}:
+      State.grows_refl(~Q, ~same, ~laws, s)
+    case View.on{+c, o, mk}:
+      Vote.cast.grows(~Q, ~same, ~laws, ~view, ~judge, n, s, c, i, q, View.on{c, o, mk}, Line.tip(~Q, ~view, s, c))
+
+# State.ask grows the state, once the cell m of the request is known
+def State.ask.grows.at(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~view: Q -> View,
+  ~judge: State(Q) -> Q -> Maybe<&2, Where> -> Maybe<&2, Bool>,
+  +n: String,
+  +s: State(Q),
+  +i: Id,
+  +t: String,
+  +q: Q,
+  m: Maybe<&2, Cells.Cell<Entry<Q>>>,
+  em: {State.get(~Q, s, Slot.ask(i)) == m: Maybe<&2, Cells.Cell<Entry<Q>>>}
+) -> {State.grows(~Q, ~same, s, State.ask.fresh(~Q, ~same, ~view, ~judge, n, s, i, t, q, m)) == True{}: Bool}:
+  match m:
+    case Some{x}:
+      State.grows_refl(~Q, ~same, ~laws, s)
+    case None{}:
+      +s1 = State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q})
+      State.grows_trans(~Q, ~same, ~laws, s, s1, Vote.ask(~Q, ~same, ~view, ~judge, n, s1, i, q, view(q)))(
+        State.grows_put(~Q, ~same, ~laws, s, Slot.ask(i), Entry.ask{i, t, q})(em)
+      )(Vote.ask.grows(~Q, ~same, ~laws, ~view, ~judge, n, s1, i, q, view(q)))
+
+# a node that takes in a request only grows its state: nothing it held
+# changes, so every kept read stays
+law State.ask_grows:
+  for ~Q: Data
+  for ~same: Q -> Q -> Bool
+  for ~laws: Shared.Eq.Laws(Q, same)
+  for ~view: Q -> View
+  for ~judge: State(Q) -> Q -> Maybe<&2, Where> -> Maybe<&2, Bool>
+  for n: String
+  for +s: State(Q)
+  for +i: Id
+  for t: String
+  for +q: Q
+  {State.grows(~Q, ~same, s, State.ask(~Q, ~same, ~view, ~judge, n, s, i, t, q)) == True{}: Bool}
+
+def State.ask_grows(ty, same, laws, view, judge, n, s, i, t, q):
+  State.ask.grows.at(~ty, ~same, ~laws, ~view, ~judge, n, s, i, t, q, State.get(~ty, s, Slot.ask(i)), {==})
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a node that takes in a fresh request holds it
+law State.ask_holds:
+  for ~Q: Data
+  for ~same: Q -> Q -> Bool
+  for ~laws: Shared.Eq.Laws(Q, same)
+  for ~view: Q -> View
+  for ~judge: State(Q) -> Q -> Maybe<&2, Where> -> Maybe<&2, Bool>
+  for +n: String
+  for +s: State(Q)
+  for +i: Id
+  for +t: String
+  for +q: Q
+  {State.get(~Q, s, Slot.ask(i)) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>}
+    -> {State.asked(~Q, State.ask(~Q, ~same, ~view, ~judge, n, s, i, t, q), i) == Some{Asked{t, q}}: Maybe<&2, Asked<Q>>}
+
+def State.ask_holds(ty, same, laws, view, judge, n, s, i, t, q):
+  +h =>
+    +s1 = State.put(~ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q})
+    %Equal.sym(Maybe<&2, Cells.Cell<Entry<ty>>>, State.get(~ty, s, Slot.ask(i)), None{}, h):
+      {State.asked(~ty, State.ask.fresh(~ty, ~same, ~view, ~judge, n, s, i, t, q, _), i) == Some{Asked{t, q}}: Maybe<&2, Asked<ty>>}
+    State.read_grows(
+      ~ty,
+      ~same,
+      ~laws,
+      ~Asked<ty>,
+      m => Asked.of(~ty, m),
+      {==},
+      s1,
+      Vote.ask(~ty, ~same, ~view, ~judge, n, s1, i, q, view(q)),
+      Slot.ask(i),
+      Asked{t, q}
+    )(Vote.ask.grows(~ty, ~same, ~laws, ~view, ~judge, n, s1, i, q, view(q)))(
+      %Equal.sym(
+        Maybe<&2, Cells.Cell<Entry<ty>>>,
+        State.get(~ty, s1, Slot.ask(i)),
+        Some{Cells.one{Entry.ask{i, t, q}}},
+        State.put_get(~ty, ~same, s, Slot.ask(i), Entry.ask{i, t, q})(h)
+      ): {Asked.of(~ty, Cells.Cell.value(Entry<ty>, _)) == Some{Asked{t, q}}: Maybe<&2, Asked<ty>>}
+      {==}
+    )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
