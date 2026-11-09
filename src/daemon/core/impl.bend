@@ -2335,133 +2335,61 @@ def Spec.Node.mark_kept(s, s2, r, b, m, v):
 # Owners
 # ------
 
-# the verdict v takes
-def Verdict.takes(v: Maybe<&2, Ledgers.Verdict>) -> Bool:
-  match v:
-    case Some{Ledgers.Verdict{k, x, ds}}:
-      k
-    case None{}:
-      False{}
-
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# a refusal does not take
-def Refuse.no(
-  h: Maybe<&2, Hashes.Hash>,
-  -x: Maybe<&2, Hashes.Hash>,
-  -ds: List<&2, List<&2, U32>>,
-  e: {Spec.Judge.refuse(h) == Some{Ledgers.Verdict{True{}, x, ds}}: Maybe<&2, Ledgers.Verdict>}
-) -> Empty:
-  Shared.Bool.false_ne_true(
-    Equal.cong(
-      Maybe<&2, Ledgers.Verdict>,
-      Bool,
-      v => Verdict.takes(v),
-      Spec.Judge.refuse(h),
-      Some{Ledgers.Verdict{True{}, x, ds}},
-      e
-    )
-  )
-
-# a verdict that takes when b holds: b holds
-def When.takes(
-  b: Bool,
-  h: Maybe<&2, Hashes.Hash>,
-  k: Unit -> Maybe<&2, Ledgers.Verdict>,
-  -x: Maybe<&2, Hashes.Hash>,
-  -ds: List<&2, List<&2, U32>>
-) -> {
-  Spec.Judge.when(b, h, k) == Some{Ledgers.Verdict{True{}, x, ds}}: Maybe<&2, Ledgers.Verdict>
-} -> {b == True{}: Bool}:
-  match b:
-    case True{}:
-      e => {==}
-    case False{}:
-      e => Empty.absurd({False{} == True{}: Bool}, Refuse.no(h, x, ds, e))
-
-# a verdict that takes after the verdict m: what comes after it takes
-def Then.takes(
-  m: Maybe<&2, Bool>,
-  h: Maybe<&2, Hashes.Hash>,
-  k: Unit -> Maybe<&2, Ledgers.Verdict>,
-  -x: Maybe<&2, Hashes.Hash>,
-  -ds: List<&2, List<&2, U32>>
-) -> {
-  Spec.Judge.then(m, h, k) == Some{Ledgers.Verdict{True{}, x, ds}}: Maybe<&2, Ledgers.Verdict>
-} -> {k(Unit{}) == Some{Ledgers.Verdict{True{}, x, ds}}: Maybe<&2, Ledgers.Verdict>}:
-  match m:
-    case Some{True{}}:
-      e => e
-    case Some{False{}}:
-      e => Empty.absurd(
-        {k(Unit{}) == Some{Ledgers.Verdict{True{}, x, ds}}: Maybe<&2, Ledgers.Verdict>},
-        Refuse.no(h, x, ds, e)
-      )
-    case None{}:
-      e => Empty.absurd(
-        {k(Unit{}) == Some{Ledgers.Verdict{True{}, x, ds}}: Maybe<&2, Ledgers.Verdict>},
-        Shared.Maybe.none_ne_some(Ledgers.Verdict, Ledgers.Verdict{True{}, x, ds}, e)
-      )
-
-# an Own that the owners take fits: its owners are the nodes inside its group
-def Take.inside(
-  +s: Spec.State(),
-  +g: String,
+# owners that fit the nodes ns are ns
+def Fits.same(
   +os: List<&2, String>,
-  +t: Maybe<&2, Hashes.Hash>,
-  +h: Maybe<&2, Hashes.Hash>,
-  -x: Maybe<&2, Hashes.Hash>,
-  -ds: List<&2, List<&2, U32>>
-) -> {
-  Spec.Own.take(
-    s,
-    g,
-    Spec.Own.fits(s, t, g, os),
-    h
-  )
-    == Some{Ledgers.Verdict{True{}, x, ds}}: Maybe<&2, Ledgers.Verdict>
-} -> {os == Spec.Group.nodes(s, t, g): List<&2, String>}:
+  +ns: List<&2, String>
+) -> {Spec.Own.fits(os, ns) == True{}: Bool} -> {os == ns: List<&2, String>}:
   e => Shared.Eq.sound(
     ~List<&2, String>,
     ~Ledgers.Owners.is_eq,
     Ledgers.Owners.laws(),
     os,
-    Spec.Group.nodes(s, t, g)
+    ns
   )(
     Shared.List.all.if_rest(
       Bool.not(List.is_empty(&2, String, os)),
-      u => Ledgers.Owners.is_eq(os, Spec.Group.nodes(s, t, g))
-    )(
-      When.takes(
-        Spec.Own.fits(s, t, g, os),
-        h,
-        u => Spec.Work.take(
-          Spec.Work.set(Spec.Work{s, h, []}, Spec.Key.owner(), Codes.Code.text(g, []))
-        ),
-        x,
-        ds
-      )(e)
-    )
+      u => Ledgers.Owners.is_eq(os, ns)
+    )(e)
   )
 
-def Spec.Judge.own_inside(s, r, l, g, at, os, h, x, ds):
-  match l at:
-    case None{} y:
-      e => Take.inside(s, g, os, h, h, x, ds)(e)
-    case Some{b} None{}:
-      e => Empty.absurd(
-        {os == Spec.Group.nodes(s, h, g): List<&2, String>},
-        Refuse.no(h, x, ds, e)
+# Own.takes_inside for a branch, once whether its step is the store's is known
+# (m)
+def Takes.at(
+  +os: List<&2, String>,
+  +ns: List<&2, String>,
+  m: Maybe<&2, Bool>
+) -> {
+  Maybe.bind(
+    &2,
+    Bool,
+    Bool,
+    m,
+    k => Some{List.all.if(u => Spec.Own.fits(os, ns), k)}
+  )
+    == Some{True{}}: Maybe<&2, Bool>
+} -> {os == ns: List<&2, String>}:
+  match m:
+    case None{}:
+      e => Empty.absurd({os == ns: List<&2, String>}, Shared.Maybe.none_ne_some(Bool, True{}, e))
+    case Some{k}:
+      e => Fits.same(os, ns)(
+        Shared.List.all.if_rest(
+          k,
+          u => Spec.Own.fits(os, ns)
+        )(
+          Shared.Maybe.some_inj(
+            Bool,
+            List.all.if(u => Spec.Own.fits(os, ns), k),
+            True{},
+            e
+          )
+        )
       )
-    case Some{b} Some{+v}:
-      e => Take.inside(s, g, os, Spec.Step.root(s, v), h, x, ds)(
-        Then.takes(
-          Spec.Own.at(r, Spec.Node.place(s, v)),
-          h,
-          u => Spec.Own.take(s, g, Spec.Own.fits(s, Spec.Step.root(s, v), g, os), h),
-          x,
-          ds
-        )(e)
-      )
+
+def Spec.Own.takes_inside(s, r, l, g, at, os, h):
+  Takes.at(os, Spec.Group.nodes(s, Spec.Own.tree(s, l, at, h), g), Spec.Own.ok(s, r, l, at))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Views
@@ -2808,20 +2736,24 @@ def Holds.rope(
         }
       {==}
 
-def Spec.Node.keep_reads(s, b):
+# a state with the nodes of the rope of the chunks cs reads them back
+def Keep.reads(
+  +s: Spec.State(),
+  +cs: List<&2, List<&2, U32>>
+) -> {
+  Ledgers.Data.fresh(~Spec.Ask, ~Spec.Ask.is_eq, Ropes.Put.nodes(Ropes.Rope.put(cs)), s) == True{}: Bool
+} -> {
+  Ropes.Rope.read(
+    ~Spec.State(),
+    ~Spec.Store.fetch,
+    Ledgers.State.put_datas(~Spec.Ask, ~Spec.Ask.is_eq, Ropes.Put.nodes(Ropes.Rope.put(cs)), s),
+    Ropes.Put.root(Ropes.Rope.put(cs))
+  )
+    == Some{List.concat(&2, U32, cs)}: Maybe<&2, Texts.Bytes()>
+}:
   hf =>
-    +cs = Ropes.Rope.cut(~U32, ~Spec.Byte.is_end, b)
     +ns = Ropes.Put.nodes(Ropes.Rope.put(cs))
-    +k = Spec.Node.keep(s, b)
-    %Ropes.Rope.cut_flat(~U32, ~Spec.Byte.is_end, b): {
-      Ropes.Rope.read(
-        ~Spec.State(),
-        ~Spec.Store.fetch,
-        k,
-        Ropes.Put.root(Ropes.Rope.put(cs))
-      )
-        == Some{_}: Maybe<&2, Texts.Bytes()>
-    }
+    +k = Ledgers.State.put_datas(~Spec.Ask, ~Spec.Ask.is_eq, ns, s)
     Ropes.Rope.read_put(
       ~Spec.State(),
       ~Spec.Store.fetch,
@@ -2836,4 +2768,17 @@ def Spec.Node.keep_reads(s, b):
       ): {_ == True{}: Bool}
       Ledgers.State.put_datas_holds(~Spec.Ask, ~Spec.Ask.is_eq, ~Ask.laws(), ns, s)(hf)
     )
+
+def Spec.Node.keep_reads(s, b):
+  hf =>
+    %Ropes.Rope.cut_flat(~U32, ~Spec.Byte.is_end, b): {
+      Ropes.Rope.read(
+        ~Spec.State(),
+        ~Spec.Store.fetch,
+        Spec.Node.keep(s, b),
+        Ropes.Put.root(Spec.Bytes.rope(b))
+      )
+        == Some{_}: Maybe<&2, Texts.Bytes()>
+    }
+    Keep.reads(s, Ropes.Rope.cut(~U32, ~Spec.Byte.is_end, b))(hf)
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning

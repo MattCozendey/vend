@@ -1678,22 +1678,9 @@ def Own.tree(
     case x y:
       h
 
-# the owners os are the nodes inside the group g of the store tree t, and there
-# is one
-def Own.fits(s: State(), t: Maybe<&2, Hashes.Hash>, g: String, +os: List<&2, String>) -> Bool:
-  List.all.if(
-    u => Ledgers.Owners.is_eq(os, Group.nodes(s, t, g)),
-    Bool.not(List.is_empty(&2, String, os))
-  )
-
-# the verdict on an Own of the group g, with the owners os, at the tree h, when
-# it fits: the line's owner group is g
-def Own.take(+s: State(), +g: String, fits: Bool, +h: Maybe<&2, Hashes.Hash>) -> Maybe<&2, Ledgers.Verdict>:
-  Judge.when(
-    fits,
-    h,
-    u => Work.take(Work.set(Work{s, h, []}, Key.owner(), Codes.Code.text(g, [])))
-  )
+# the owners os are the nodes ns, and there is one
+def Own.fits(+os: List<&2, String>, ns: List<&2, String>) -> Bool:
+  List.all.if(u => Ledgers.Owners.is_eq(os, ns), Bool.not(List.is_empty(&2, String, os)))
 
 # the step at is a step of the store r: decided at the place m
 def Own.at(r: Ledgers.Id, m: Maybe<&2, Ledgers.Where>) -> Maybe<&2, Bool>:
@@ -1703,28 +1690,53 @@ def Own.at(r: Ledgers.Id, m: Maybe<&2, Ledgers.Where>) -> Maybe<&2, Bool>:
     case Some{Ledgers.Where{c, e, h}}:
       Some{Ledgers.Chain.is_eq(c, Ledgers.Chain{r, None{}})}
 
-# the verdict on an Own of the line l of the store r: its owner group is g,
-# whose nodes in the tree that it names (Own.tree) are os
+# an Own of the line l of the store r may name the step at: a store reads its
+# own tree; a branch names a step of its store (none: wait for the step)
+def Own.ok(s: State(), r: Ledgers.Id, l: Maybe<&2, String>, at: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Bool>:
+  match l at:
+    case None{} y:
+      Some{True{}}
+    case Some{b} None{}:
+      Some{False{}}
+    case Some{b} Some{v}:
+      Own.at(r, Node.place(s, v))
+
+# whether the owners of the line l of the store r take an Own of the group g
+# with the owners os, at the tree h: os are the nodes inside g in the store
+# tree that it names (Own.tree; none: wait for its step)
+def Own.takes(
+  +s: State(),
+  r: Ledgers.Id,
+  +l: Maybe<&2, String>,
+  g: String,
+  +at: Maybe<&2, Ledgers.Id>,
+  os: List<&2, String>,
+  h: Maybe<&2, Hashes.Hash>
+) -> Maybe<&2, Bool>:
+  Maybe.bind(
+    &2,
+    Bool,
+    Bool,
+    Own.ok(s, r, l, at),
+    k => Some{List.all.if(u => Own.fits(os, Group.nodes(s, Own.tree(s, l, at, h), g)), k)}
+  )
+
+# the verdict on an Own of the line l of the store r: when its owners take it
+# (Own.takes), its owner group is g
 def Own.change(
   +s: State(),
   r: Ledgers.Id,
   l: Maybe<&2, String>,
   +g: String,
   at: Maybe<&2, Ledgers.Id>,
-  +os: List<&2, String>,
+  os: List<&2, String>,
   +h: Maybe<&2, Hashes.Hash>
 ) -> Maybe<&2, Ledgers.Verdict>:
-  match l at:
-    case None{} y:
-      Own.take(s, g, Own.fits(s, h, g, os), h)
-    case Some{b} None{}:
-      Judge.refuse(h)
-    case Some{b} Some{+v}:
-      Judge.then(
-        Own.at(r, Node.place(s, v)),
-        h,
-        u => Own.take(s, g, Own.fits(s, Step.root(s, v), g, os), h)
-      )
+  Judge.then(
+    Own.takes(s, r, l, g, at, os, h),
+    h,
+    u => Work.take(Work.set(Work{s, h, []}, Key.owner(), Codes.Code.text(g, [])))
+  )
 
 # the verdict on the change c of the line l of the store r, at the tree h
 def Judge.change(
@@ -2879,7 +2891,7 @@ def Vend.may_stop(v: Vend, force: Bool) -> Bool:
 # Answer, Node.ask_seen, Node.answer_kept. Reads show its own pending changes:
 # Node.draft_own.
 # Owner group. A majority decides, in sequence: Ledgers (Quorum). Its nodes
-# are those reachable through it, and own what it owns: Judge.own_inside,
+# are those reachable through it, and own what it owns: Own.takes_inside,
 # Node.adopt.
 # Branch, version. History only grows at its end: Node.versions_grow. A
 # version never changes: Node.version_kept, Node.content_kept. Marks for good:
@@ -2943,7 +2955,7 @@ law Node.answer_kept:
 # the owners of a line are the nodes inside its owner group: its owners take
 # an Own only when its owners are the nodes inside its group, in the store
 # tree that it names (Own.tree)
-law Judge.own_inside:
+law Own.takes_inside:
   for +s: State()
   for +r: Ledgers.Id
   for +l: Maybe<&2, String>
@@ -2951,18 +2963,7 @@ law Judge.own_inside:
   for +at: Maybe<&2, Ledgers.Id>
   for +os: List<&2, String>
   for +h: Maybe<&2, Hashes.Hash>
-  for +x: Maybe<&2, Hashes.Hash>
-  for +ds: List<&2, List<&2, U32>>
-  {
-    Judge.change(
-      s,
-      r,
-      l,
-      Change.Own{g, at, os},
-      h
-    )
-      == Some{Ledgers.Verdict{True{}, x, ds}}: Maybe<&2, Ledgers.Verdict>
-  }
+  {Own.takes(s, r, l, g, at, os, h) == Some{True{}}: Maybe<&2, Bool>}
     -> {os == Group.nodes(s, Own.tree(s, l, at, h), g): List<&2, String>}
 
 # every read of a writer shows its own pending change. When a node holds the
