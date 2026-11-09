@@ -3,7 +3,9 @@ import ../../shared.bend as Shared
 import ../shared/ledger2.bend as Ledgers
 import ../shared/resources.bend as Resources
 import ../shared/shared/shared/code.bend as Codes
+import ../shared/shared/shared/hash.bend as Hashes
 import ../shared/shared/text.bend as Texts
+import ../shared/tree.bend as Trees
 import ./spec2.bend as Spec
 
 # The proofs of the core's laws.
@@ -292,3 +294,306 @@ def Ask.codec() -> Codes.Codec(Spec.Ask):
 # are
 def Ask.laws() -> Shared.Eq.Laws(Spec.Ask, Spec.Ask.is_eq):
   Codes.Code.eq_laws(~Spec.Ask, ~Ask.codec())
+
+# Writes
+# ------
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# the value of a resource that holds the bytes x reads back as x
+def Res.read_code(
+  x: Texts.Bytes()
+) -> {Spec.Res.read(Spec.Res.code(Some{x})) == Some{x}: Maybe<&2, Texts.Bytes()>}:
+  %Equal.sym(
+    Maybe<&2, Codes.Read<Maybe<&2, Texts.Bytes()>>>,
+    Codes.Code.maybe.read(~Texts.Bytes(), ~Codes.Code.words.read, Spec.Res.code(Some{x})),
+    Some{Codes.Read{Some{x}, []}},
+    Codes.Code.maybe_read(
+      ~Texts.Bytes(),
+      ~Codes.Code.words,
+      ~Codes.Code.words.read,
+      Codes.Codec.laws(Texts.Bytes(), Codes.Code.words.codec()),
+      Some{x},
+      []
+    )
+  ): {Spec.Res.of.read(_) == Some{x}: Maybe<&2, Texts.Bytes()>}
+  {==}
+
+# a node's trees hold the words ds exactly when its ledger does
+def Holds.same(
+  ds: List<&2, List<&2, U32>>,
+  s: Spec.State()
+) -> {
+  Trees.Tree.holds(
+    ~Spec.State(),
+    ~Spec.Store.fetch,
+    s,
+    ds
+  )
+    == Ledgers.Data.holds(~Spec.Ask, s, ds): Bool
+}:
+  match ds:
+    case Nil{}:
+      {==}
+    case Con{ws, rest}:
+      %Equal.sym(
+        Bool,
+        Trees.Tree.holds(~Spec.State(), ~Spec.Store.fetch, s, rest),
+        Ledgers.Data.holds(~Spec.Ask, s, rest),
+        Holds.same(rest, s)
+      ):
+        {
+          List.all.if(
+            u => _,
+            Trees.Tree.has(~Spec.State(), ~Spec.Store.fetch, s, ws)
+          )
+            == List.all.if(
+              u => Ledgers.Data.holds(~Spec.Ask, s, rest),
+              Ledgers.Data.has(~Spec.Ask, s, ws)
+            ): Bool
+        }
+      {==}
+
+# the trees of a node hold the nodes ns when its ledger holds ns, then nothing
+def Holds.of(
+  +ns: List<&2, List<&2, U32>>,
+  s: Spec.State()
+) -> {
+  Ledgers.Data.holds(~Spec.Ask, s, List.append(&2, List<&2, U32>, ns, [])) == True{}: Bool
+} -> {Trees.Tree.holds(~Spec.State(), ~Spec.Store.fetch, s, ns) == True{}: Bool}:
+  hd =>
+    +ds = List.append(&2, List<&2, U32>, ns, [])
+    %Shared.List.append_nil(
+      List<&2, U32>,
+      ns
+    ): {Trees.Tree.holds(~Spec.State(), ~Spec.Store.fetch, s, _) == True{}: Bool}
+    %Equal.sym(
+      Bool,
+      Trees.Tree.holds(~Spec.State(), ~Spec.Store.fetch, s, ds),
+      Ledgers.Data.holds(~Spec.Ask, s, ds),
+      Holds.same(ds, s)
+    ): {_ == True{}: Bool}
+    hd
+
+# the owners take a write whose base is ready and whose resource did not change
+# since it, with the new subtree p
+def Write.verdict(
+  p: Trees.Put,
+  +s: Spec.State(),
+  +name: Resources.Name,
+  base: Maybe<&2, Ledgers.Id>,
+  x: Texts.Bytes(),
+  h: Maybe<&2, Hashes.Hash>
+) -> {
+  Spec.Judge.ready_maybe(s, base) == Some{True{}}: Maybe<&2, Bool>
+} -> {
+  Spec.Bytes.same(
+    Spec.Res.get(s, h, name),
+    Spec.Res.get(s, Spec.Node.root_of(s, base), name)
+  )
+    == True{}: Bool
+} -> {
+  Trees.Tree.set(
+    ~Spec.State(),
+    ~Spec.Store.fetch,
+    s,
+    h,
+    Spec.Key.res(name),
+    Spec.Res.code(Some{x})
+  )
+    == Some{p}: Maybe<&2, Trees.Put>
+} -> {
+  Spec.Judge.write(
+    s,
+    name,
+    base,
+    Spec.Content.bytes{x},
+    h
+  )
+    == Some{
+      Ledgers.Verdict{
+        True{},
+        Some{Trees.Put.root(p)},
+        List.append(&2, List<&2, U32>, Trees.Put.nodes(p), [])
+      }
+    }: Maybe<&2, Ledgers.Verdict>
+}:
+  match p:
+    case Trees.Put{h2, ws}:
+      hb => hs => hp =>
+        +v = {
+          Some{
+            Ledgers.Verdict{True{}, Some{h2}, List.append(&2, List<&2, U32>, ws, [])}
+          }: Maybe<&2, Ledgers.Verdict>
+        }
+        +same1 = Spec.Bytes.same(
+          Spec.Res.get(s, h, name),
+          Spec.Res.get(s, Spec.Node.root_of(s, base), name)
+        )
+        %Equal.sym(Maybe<&2, Bool>, Spec.Judge.ready_maybe(s, base), Some{True{}}, hb):
+          {
+            Spec.Judge.then(
+              _,
+              h,
+              u => Spec.Judge.then(
+                Spec.Judge.content(s, Spec.Content.bytes{x}),
+                h,
+                w => Spec.Judge.when(
+                  same1,
+                  h,
+                  y => Spec.Work.take(
+                    Spec.Work.set(
+                      Spec.Work{s, h, []},
+                      Spec.Key.res(name),
+                      Spec.Res.code(Spec.Content.bytes(s, name, Spec.Content.bytes{x}))
+                    )
+                  )
+                )
+              )
+            )
+              == v: Maybe<&2, Ledgers.Verdict>
+          }
+        %Equal.sym(Bool, same1, True{}, hs):
+          {
+            Spec.Judge.when(
+              _,
+              h,
+              y => Spec.Work.take(
+                Spec.Work.set(Spec.Work{s, h, []}, Spec.Key.res(name), Spec.Res.code(Some{x}))
+              )
+            )
+              == v: Maybe<&2, Ledgers.Verdict>
+          }
+        %Equal.sym(
+          Maybe<&2, Trees.Put>,
+          Trees.Tree.set(
+            ~Spec.State(),
+            ~Spec.Store.fetch,
+            s,
+            h,
+            Spec.Key.res(name),
+            Spec.Res.code(Some{x})
+          ),
+          Some{Trees.Put{h2, ws}},
+          hp
+        ): {Spec.Work.take(Spec.Work.of(s, [], _)) == v: Maybe<&2, Ledgers.Verdict>}
+        {==}
+
+def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
+  +h1 => +ht => +ho => +hg => +hw => hb => hs => +hp => hf =>
+    +q = {
+      Spec.Ask.on{
+        r,
+        Some{Spec.Line.branch{b}},
+        Spec.Change.write{name, base, Spec.Content.bytes{x}}
+      }: Spec.Ask
+    }
+    +i = Spec.Envelope.of(e)
+    +t = Spec.Envelope.time(e)
+    +s1 = Spec.Node.taken(s, e, q)
+    +c = Spec.Line.chain(r, Some{Spec.Line.branch{b}})
+    +root = Spec.Judge.root(
+      s1,
+      c,
+      Ledgers.Line.head(~Spec.Ask, ~Spec.Ask.view, s1, c, ep, [n], last)
+    )
+    +ask1 = Spec.Node.ask(n, s, e, q)
+    +ds = List.append(&2, List<&2, U32>, Trees.Put.nodes(p), [])
+    +hv = Write.verdict(p, s1, name, base, x, root)(hb)(hs)(hp)
+    +hst = Ledgers.State.ask_decides(
+      ~Spec.Ask,
+      ~Spec.Ask.is_eq,
+      ~Ask.laws(),
+      ~Spec.Ask.view,
+      ~Spec.Node.judge,
+      n,
+      s,
+      i,
+      t,
+      q,
+      c,
+      None{},
+      None{},
+      ep,
+      h,
+      last,
+      True{},
+      Some{Trees.Put.root(p)},
+      ds
+    )(h1)({==})(ht)(ho)(hg)(hw)(hv)
+    +hdc = Ledgers.State.ask_decided(
+      ~Spec.Ask,
+      ~Spec.Ask.is_eq,
+      ~Ask.laws(),
+      ~Spec.Ask.view,
+      ~Spec.Node.judge,
+      n,
+      s,
+      i,
+      t,
+      q,
+      c,
+      None{},
+      None{},
+      ep,
+      h,
+      last,
+      True{},
+      Some{Trees.Put.root(p)},
+      ds
+    )(h1)({==})(ht)(ho)(hg)(hw)(hv)
+    +hd = Ledgers.State.ask_data(
+      ~Spec.Ask,
+      ~Spec.Ask.is_eq,
+      ~Ask.laws(),
+      ~Spec.Ask.view,
+      ~Spec.Node.judge,
+      n,
+      s,
+      i,
+      t,
+      q,
+      c,
+      None{},
+      None{},
+      ep,
+      h,
+      last,
+      True{},
+      Some{Trees.Put.root(p)},
+      ds
+    )(h1)({==})(ht)(ho)(hg)(hw)(hv)(hf)
+    +ha = Ledgers.State.ask_holds(
+      ~Spec.Ask,
+      ~Spec.Ask.is_eq,
+      ~Ask.laws(),
+      ~Spec.Ask.view,
+      ~Spec.Node.judge,
+      n,
+      s,
+      i,
+      t,
+      q
+    )(h1)
+    +hgs = Trees.Tree.get_set(
+      ~Spec.State(),
+      ~Spec.Store.fetch,
+      s1,
+      ask1,
+      root,
+      Spec.Key.res(name),
+      Spec.Res.code(Some{x}),
+      p
+    )(hp)(Holds.of(Trees.Put.nodes(p), ask1)(hd))
+    ((
+        %Equal.sym(Ledgers.Status, Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, ask1, i), Ledgers.Status.done{True{}}, hst):
+          {Spec.Answer.of(ask1, i, _) == Spec.Answer.written{i}: Spec.Answer}
+        %Equal.sym(Maybe<&2, Ledgers.Asked<Spec.Ask>>, Ledgers.State.asked(~Spec.Ask, ask1, i), Some{Ledgers.Asked{t, q}}, ha):
+          {Spec.Answer.taken(ask1, i, _) == Spec.Answer.written{i}: Spec.Answer}
+        {==}), (
+        %Equal.sym(Ledgers.Status, Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, ask1, i), Ledgers.Status.done{True{}}, hst):
+          {Spec.Res.at(ask1, name, Shared.Bool.when(Maybe<&2, Ledgers.Id>, Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Ledgers.Status.verdict(_), Some{True{}}), u => Some{i}, u => None{})) == Some{x}: Maybe<&2, Texts.Bytes()>}
+        %Equal.sym(Maybe<&2, Ledgers.Vote>, Ledgers.State.decided(~Spec.Ask, ~Spec.Ask.view, ask1, i), Some{Ledgers.Vote{i, True{}, Ledgers.View.on{c, None{}, None{}}, Some{Trees.Put.root(p)}}}, hdc):
+          {Spec.Res.get(ask1, Shared.Maybe.then(Maybe<&2, Hashes.Hash>, Hashes.Hash, Shared.Maybe.then(Ledgers.Vote, Maybe<&2, Hashes.Hash>, Shared.Maybe.then(Ledgers.Vote, Ledgers.Vote, _, y => Spec.Vote.taken(y)), y => Some{Ledgers.Vote.result_of(Some{y})}), g => g), name) == Some{x}: Maybe<&2, Texts.Bytes()>}
+        %Equal.sym(Maybe<&2, List<&2, U32>>, Trees.Tree.get(~Spec.State(), ~Spec.Store.fetch, ask1, Some{Trees.Put.root(p)}, Spec.Key.res(name)), Some{Spec.Res.code(Some{x})}, hgs): {Shared.Maybe.then(List<&2, U32>, Texts.Bytes(), _, ws => Spec.Res.read(ws)) == Some{x}: Maybe<&2, Texts.Bytes()>}
+        Res.read_code(x)))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning

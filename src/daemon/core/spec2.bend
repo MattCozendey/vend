@@ -2390,3 +2390,214 @@ def Node.taken(s: State(), +e: Envelope, q: Ask) -> State():
     Ledgers.Slot.ask(Envelope.of(e)),
     Ledgers.Entry.ask{Envelope.of(e), Envelope.time(e), q}
   )
+
+# the sole owner n of the tip of a branch takes in a fresh write of a resource
+# that did not change since its base: the write is Written, and its version
+# holds the bytes. The node holds the tree of the branch's head (the write's
+# new subtree is p) and no other words under the hashes of the new nodes.
+law Node.write_written:
+  for +n: String
+  for +s: State()
+  for +e: Envelope
+  for +r: Ledgers.Id
+  for +b: String
+  for +name: Resources.Name
+  for +base: Maybe<&2, Ledgers.Id>
+  for +x: Texts.Bytes()
+  for +ep: U32
+  for +h: U32
+  for +last: Maybe<&2, Ledgers.Where>
+  for +p: Trees.Put
+  {
+    Ledgers.State.get(
+      ~Ask,
+      s,
+      Ledgers.Slot.ask(Envelope.of(e))
+    )
+      == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
+  }
+    -> {
+      Ledgers.Line.tip(
+        ~Ask,
+        ~Ask.view,
+        Node.taken(
+          s,
+          e,
+          Ask.on{r, Some{Line.branch{b}}, Change.write{name, base, Content.bytes{x}}}
+        ),
+        Line.chain(r, Some{Line.branch{b}})
+      )
+        == Some{Ledgers.Tip{ep, [n], h, last}}: Maybe<&2, Ledgers.Tip>
+    }
+    -> {
+      Ledgers.Line.owners(
+        ~Ask,
+        ~Ask.view,
+        Node.taken(
+          s,
+          e,
+          Ask.on{r, Some{Line.branch{b}}, Change.write{name, base, Content.bytes{x}}}
+        ),
+        Line.chain(r, Some{Line.branch{b}}),
+        ep
+      )
+        == Some{[n]}: Maybe<&2, List<&2, String>>
+    }
+    -> {
+      Ledgers.State.get(
+        ~Ask,
+        Node.taken(
+          s,
+          e,
+          Ask.on{r, Some{Line.branch{b}}, Change.write{name, base, Content.bytes{x}}}
+        ),
+        Ledgers.Slot.vote(Ledgers.Where{Line.chain(r, Some{Line.branch{b}}), ep, h}, n)
+      )
+        == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
+    }
+    -> {
+      Ledgers.State.get(
+        ~Ask,
+        Node.taken(
+          s,
+          e,
+          Ask.on{r, Some{Line.branch{b}}, Change.write{name, base, Content.bytes{x}}}
+        ),
+        Ledgers.Slot.where(Envelope.of(e))
+      )
+        == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
+    }
+    -> {
+      Judge.ready_maybe(
+        Node.taken(
+          s,
+          e,
+          Ask.on{r, Some{Line.branch{b}}, Change.write{name, base, Content.bytes{x}}}
+        ),
+        base
+      )
+        == Some{True{}}: Maybe<&2, Bool>
+    }
+    -> {
+      Bytes.same(
+        Res.get(
+          Node.taken(
+            s,
+            e,
+            Ask.on{r, Some{Line.branch{b}}, Change.write{name, base, Content.bytes{x}}}
+          ),
+          Judge.root(
+            Node.taken(
+              s,
+              e,
+              Ask.on{r, Some{Line.branch{b}}, Change.write{name, base, Content.bytes{x}}}
+            ),
+            Line.chain(r, Some{Line.branch{b}}),
+            Ledgers.Line.head(
+              ~Ask,
+              ~Ask.view,
+              Node.taken(
+                s,
+                e,
+                Ask.on{r, Some{Line.branch{b}}, Change.write{name, base, Content.bytes{x}}}
+              ),
+              Line.chain(r, Some{Line.branch{b}}),
+              ep,
+              [n],
+              last
+            )
+          ),
+          name
+        ),
+        Res.get(
+          Node.taken(
+            s,
+            e,
+            Ask.on{r, Some{Line.branch{b}}, Change.write{name, base, Content.bytes{x}}}
+          ),
+          Node.root_of(
+            Node.taken(
+              s,
+              e,
+              Ask.on{r, Some{Line.branch{b}}, Change.write{name, base, Content.bytes{x}}}
+            ),
+            base
+          ),
+          name
+        )
+      )
+        == True{}: Bool
+    }
+    -> {
+      Trees.Tree.set(
+        ~State(),
+        ~Store.fetch,
+        Node.taken(
+          s,
+          e,
+          Ask.on{r, Some{Line.branch{b}}, Change.write{name, base, Content.bytes{x}}}
+        ),
+        Judge.root(
+          Node.taken(
+            s,
+            e,
+            Ask.on{r, Some{Line.branch{b}}, Change.write{name, base, Content.bytes{x}}}
+          ),
+          Line.chain(r, Some{Line.branch{b}}),
+          Ledgers.Line.head(
+            ~Ask,
+            ~Ask.view,
+            Node.taken(
+              s,
+              e,
+              Ask.on{r, Some{Line.branch{b}}, Change.write{name, base, Content.bytes{x}}}
+            ),
+            Line.chain(r, Some{Line.branch{b}}),
+            ep,
+            [n],
+            last
+          )
+        ),
+        Key.res(name),
+        Res.code(Some{x})
+      )
+        == Some{p}: Maybe<&2, Trees.Put>
+    }
+    -> {
+      Ledgers.Data.fresh(
+        ~Ask,
+        ~Ask.is_eq,
+        List.append(&2, List<&2, U32>, Trees.Put.nodes(p), []),
+        Node.taken(
+          s,
+          e,
+          Ask.on{r, Some{Line.branch{b}}, Change.write{name, base, Content.bytes{x}}}
+        )
+      )
+        == True{}: Bool
+    }
+    -> {
+      Node.answer(
+        Node.ask(
+          n,
+          s,
+          e,
+          Ask.on{r, Some{Line.branch{b}}, Change.write{name, base, Content.bytes{x}}}
+        ),
+        Envelope.of(e)
+      )
+        == Answer.written{Envelope.of(e)}: Answer
+    }
+      & {
+        Node.content(
+          Node.ask(
+            n,
+            s,
+            e,
+            Ask.on{r, Some{Line.branch{b}}, Change.write{name, base, Content.bytes{x}}}
+          ),
+          name,
+          Point.at{Envelope.of(e)}
+        )
+          == Some{x}: Maybe<&2, Texts.Bytes()>
+      }
