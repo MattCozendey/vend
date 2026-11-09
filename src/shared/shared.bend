@@ -241,7 +241,6 @@ def List.keep(~A: Data, ~V: Data, ~p: V -> A -> Bool, xs: List<&2, A>, +g: V) ->
       List.filter.put(A, x, List.keep(~A, ~V, ~p, r, g), p(g)(x))
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement keeps each and/or as one value for the proof to split on; a proof does not run
 # List.contains_keep at the first element x, once p is known to keep it or not (k)
 # and x is known to be m or not (hit)
 def List.contains_keep.at(
@@ -311,7 +310,6 @@ def List.contains_keep.at(
     case False{} False{}:
       ih
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # m is kept exactly when p keeps it and xs has it
 def List.contains_keep(
@@ -489,7 +487,6 @@ def Bool.and_implied(
       c({==})
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement keeps each and/or as one value for the proof to split on; a proof does not run
 # m is kept exactly when p keeps it, when p keeps only what xs has
 def List.keep_exactly(
   ~A: Data,
@@ -511,7 +508,6 @@ def List.keep_exactly(
     Bool.and_implied(p(g)(m), List.contains(~A, ~same, xs, m), c)
   )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # a lazy "and" is the "and"
 def Bool.and_lazy(a: Bool, -b: Bool) -> {List.all.if(u => b, a) == Bool.and(a, b): Bool}:
@@ -707,7 +703,7 @@ def Bool.and_true_right(
       h => h
 
 # a and b are the same bit
-def Bool.same(a: Bool, b: Bool) -> Bool:
+def Bool.is_eq(a: Bool, b: Bool) -> Bool:
   match a b:
     case True{} True{}:
       True{}
@@ -716,16 +712,16 @@ def Bool.same(a: Bool, b: Bool) -> Bool:
     case _ _:
       False{}
 
-# Bool.same is True for a bit and itself
-def Bool.same_refl(a: Bool) -> {Bool.same(a, a) == True{}: Bool}:
+# Bool.is_eq is True for a bit and itself
+def Bool.is_eq_refl(a: Bool) -> {Bool.is_eq(a, a) == True{}: Bool}:
   match a:
     case True{}:
       {==}
     case False{}:
       {==}
 
-# Bool.same is True only for equal bits
-def Bool.same_sound(a: Bool, b: Bool) -> {Bool.same(a, b) == True{}: Bool} -> {a == b: Bool}:
+# Bool.is_eq is True only for equal bits
+def Bool.is_eq_sound(a: Bool, b: Bool) -> {Bool.is_eq(a, b) == True{}: Bool} -> {a == b: Bool}:
   match a b:
     case True{} True{}:
       h => {==}
@@ -736,9 +732,9 @@ def Bool.same_sound(a: Bool, b: Bool) -> {Bool.same(a, b) == True{}: Bool} -> {a
     case False{} True{}:
       h => Empty.absurd({False{} == True{}: Bool}, Bool.false_ne_true(h))
 
-# the laws of Bool.same
-def Bool.laws() -> Eq.Laws(Bool, Bool.same):
-  (Bool.same_refl, Bool.same_sound)
+# the laws of Bool.is_eq
+def Bool.laws() -> Eq.Laws(Bool, Bool.is_eq):
+  (Bool.is_eq_refl, Bool.is_eq_sound)
 # a "not" that is True is of False
 def Bool.not_true(a: Bool) -> {Bool.not(a) == True{}: Bool} -> {a == False{}: Bool}:
   match a:
@@ -1046,7 +1042,7 @@ def Maybe.some_inj(-A: Data, -x: A, -y: A, e: {Some{x} == Some{y}: Maybe<&2, A>}
   Equal.cong(Maybe<&2, A>, A, m => Maybe.default(&2, A, m, x), Some{x}, Some{y}, e)
 
 # a and b are both empty, or hold values that eq calls the same
-def Maybe.same(~A: Data, ~eq: A -> A -> Bool, a: Maybe<&2, A>, b: Maybe<&2, A>) -> Bool:
+def Maybe.is_eq(~A: Data, ~eq: A -> A -> Bool, a: Maybe<&2, A>, b: Maybe<&2, A>) -> Bool:
   match a b:
     case None{} None{}:
       True{}
@@ -1055,14 +1051,14 @@ def Maybe.same(~A: Data, ~eq: A -> A -> Bool, a: Maybe<&2, A>, b: Maybe<&2, A>) 
     case _ _:
       False{}
 
-# Maybe.same is True only for equal values, when eq is True only for equal ones
-def Maybe.same_sound(
+# Maybe.is_eq is True only for equal values, when eq is True only for equal ones
+def Maybe.is_eq_sound(
   ~A: Data,
   ~eq: A -> A -> Bool,
   eqs: @x: A -> @y: A -> {eq(x, y) == True{}: Bool} -> {x == y: A},
   a: Maybe<&2, A>,
   b: Maybe<&2, A>
-) -> {Maybe.same(~A, ~eq, a, b) == True{}: Bool} -> {a == b: Maybe<&2, A>}:
+) -> {Maybe.is_eq(~A, ~eq, a, b) == True{}: Bool} -> {a == b: Maybe<&2, A>}:
   match a b:
     case None{} None{}:
       h => {==}
@@ -1075,13 +1071,13 @@ def Maybe.same_sound(
         %eqs(x)(y)(h): {Some{x} == Some{_}: Maybe<&2, A>}
         {==}
 
-# Maybe.same is True for a value and itself, when eq is
-def Maybe.same_refl(
+# Maybe.is_eq is True for a value and itself, when eq is
+def Maybe.is_eq_refl(
   ~A: Data,
   ~eq: A -> A -> Bool,
   ~laws: Eq.Laws(A, eq),
   m: Maybe<&2, A>
-) -> {Maybe.same(~A, ~eq, m, m) == True{}: Bool}:
+) -> {Maybe.is_eq(~A, ~eq, m, m) == True{}: Bool}:
   match m:
     case None{}:
       {==}
@@ -1190,24 +1186,24 @@ def List.take_drop(
 # -------------
 # xs and ys hold the same elements in the same order, as same calls them: the
 # check stops at the first difference
-def List.same(~A: Data, ~same: A -> A -> Bool, xs: List<&2, A>, ys: List<&2, A>) -> Bool:
+def List.is_eq(~A: Data, ~same: A -> A -> Bool, xs: List<&2, A>, ys: List<&2, A>) -> Bool:
   match xs ys:
     case Nil{} Nil{}:
       True{}
     case Con{x, xr} Con{y, yr}:
-      List.all.if(u => List.same(~A, ~same, xr, yr), same(x, y))
+      List.all.if(u => List.is_eq(~A, ~same, xr, yr), same(x, y))
     case _ _:
       False{}
 
-# List.same is True for a list and itself
-law List.same_refl:
+# List.is_eq is True for a list and itself
+law List.is_eq_refl:
   for ~A: Data
   for ~same: A -> A -> Bool
   for ~laws: Eq.Laws(A, same)
   for xs: List<&2, A>
-  {List.same(~A, ~same, xs, xs) == True{}: Bool}
+  {List.is_eq(~A, ~same, xs, xs) == True{}: Bool}
 
-def List.same_refl(ty, same, laws, xs):
+def List.is_eq_refl(ty, same, laws, xs):
   match xs:
     case Nil{}:
       {==}
@@ -1217,20 +1213,20 @@ def List.same_refl(ty, same, laws, xs):
         same(x, x),
         True{},
         Eq.refl(~ty, ~same, laws, x)
-      ): {List.all.if(u => List.same(~ty, ~same, r, r), _) == True{}: Bool}
-      List.same_refl(~ty, ~same, ~laws, r)
+      ): {List.all.if(u => List.is_eq(~ty, ~same, r, r), _) == True{}: Bool}
+      List.is_eq_refl(~ty, ~same, ~laws, r)
 
-# List.same is True only for equal lists
-law List.same_sound:
+# List.is_eq is True only for equal lists
+law List.is_eq_sound:
   for ~A: Data
   for ~same: A -> A -> Bool
   for ~laws: Eq.Laws(A, same)
   for xs: List<&2, A>
   for ys: List<&2, A>
-  {List.same(~A, ~same, xs, ys) == True{}: Bool} -> {xs == ys: List<&2, A>}
+  {List.is_eq(~A, ~same, xs, ys) == True{}: Bool} -> {xs == ys: List<&2, A>}
 
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-def List.same_sound(ty, same, laws, xs, ys):
+def List.is_eq_sound(ty, same, laws, xs, ys):
   match xs ys:
     case Nil{} Nil{}:
       h => {==}
@@ -1247,28 +1243,28 @@ def List.same_sound(ty, same, laws, xs, ys):
           x,
           y
         )(
-          List.all.if_hit(same(x, y), u => List.same(~ty, ~same, xr, yr))(h)
+          List.all.if_hit(same(x, y), u => List.is_eq(~ty, ~same, xr, yr))(h)
         ): {x <> xr == _ <> yr: List<&2, ty>}
-        %List.same_sound(
+        %List.is_eq_sound(
           ~ty,
           ~same,
           ~laws,
           xr,
           yr
-        )(List.all.if_rest(same(x, y), u => List.same(~ty, ~same, xr, yr))(h)):
+        )(List.all.if_rest(same(x, y), u => List.is_eq(~ty, ~same, xr, yr))(h)):
           {x <> xr == x <> _: List<&2, ty>}
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# the laws of List.same, by the laws of same
+# the laws of List.is_eq, by the laws of same
 def List.laws(
   ~A: Data,
   ~same: A -> A -> Bool,
   ~laws: Eq.Laws(A, same)
-) -> Eq.Laws(List<&2, A>, List.same(~A, ~same)):
+) -> Eq.Laws(List<&2, A>, List.is_eq(~A, ~same)):
   (
-    xs => List.same_refl(~A, ~same, ~laws, xs),
-    xs => ys => List.same_sound(~A, ~same, ~laws, xs, ys)
+    xs => List.is_eq_refl(~A, ~same, ~laws, xs),
+    xs => ys => List.is_eq_sound(~A, ~same, ~laws, xs, ys)
   )
 
 # the first elements of xs ++ ys, as many as xs has, are xs

@@ -10,22 +10,22 @@ def Bytes() -> Data:
   List<&2, U32>
 
 # no bit of w is set
-def Word.none(n: Nat, w: Word(n)) -> Bool:
+def Word.is_zero(n: Nat, w: Word(n)) -> Bool:
   match n:
     case 0n:
       True{}
     case 1n+p:
       match w:
         case WCon{b, t}:
-          List.all.if(u => Word.none(p, t), Bool.not(b))
+          List.all.if(u => Word.is_zero(p, t), Bool.not(b))
 
 # every code of b is a byte: no bit above the eighth is set
-def Bytes.are_bytes(b: List<&2, U32>) -> Bool:
+def Bytes.is_bytes(b: List<&2, U32>) -> Bool:
   match b:
     case Nil{}:
       True{}
     case Con{U32{WCon{_, WCon{_, WCon{_, WCon{_, WCon{_, WCon{_, WCon{_, WCon{_, h}}}}}}}}}, r}:
-      List.all.if(u => Bytes.are_bytes(r), Word.none(24n, h))
+      List.all.if(u => Bytes.is_bytes(r), Word.is_zero(24n, h))
 
 # the byte of the bits b0 (the lowest) to b7
 def Byte.of(b0: Bool, b1: Bool, b2: Bool, b3: Bool, b4: Bool, b5: Bool, b6: Bool, b7: Bool) -> U32:
@@ -1569,7 +1569,7 @@ def Utf8.char_bytes.bits(
   b0: Bool,
   b: List<&2, U32>
 ) -> {
-  Bytes.are_bytes(
+  Bytes.is_bytes(
     List.append(
       &2,
       U32,
@@ -1673,7 +1673,7 @@ def Utf8.char_bytes.bits(
       b
     )
   )
-    == Bytes.are_bytes(b): Bool
+    == Bytes.is_bytes(b): Bool
 }:
   match b31:
     case True{}:
@@ -1787,7 +1787,7 @@ def Utf8.char_bytes.bits(
 def Utf8.char_bytes(
   c: Char,
   b: List<&2, U32>
-) -> {Bytes.are_bytes(List.append(&2, U32, Utf8.char(c), b)) == Bytes.are_bytes(b): Bool}:
+) -> {Bytes.is_bytes(List.append(&2, U32, Utf8.char(c), b)) == Bytes.is_bytes(b): Bool}:
   match c:
     case Chr{
       U32{
@@ -1923,7 +1923,7 @@ def Utf8.char_bytes(
 # every code of the bytes of a text is a byte
 law Bytes.of_text_bytes:
   for s: String
-  {Bytes.are_bytes(Bytes.of_text(s)) == True{}: Bool}
+  {Bytes.is_bytes(Bytes.of_text(s)) == True{}: Bool}
 
 def Bytes.of_text_bytes(s):
   match s:
@@ -1932,12 +1932,11 @@ def Bytes.of_text_bytes(s):
     case SCon{c, +r}:
       %Equal.sym(
         Bool,
-        Bytes.are_bytes(List.append(&2, U32, Utf8.char(c), Bytes.of_text(r))),
-        Bytes.are_bytes(Bytes.of_text(r)),
+        Bytes.is_bytes(List.append(&2, U32, Utf8.char(c), Bytes.of_text(r))),
+        Bytes.is_bytes(Bytes.of_text(r)),
         Utf8.char_bytes(c, Bytes.of_text(r))
       ): {_ == True{}: Bool}
       Bytes.of_text_bytes(r)
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 
 # Text
 # ----

@@ -1,8 +1,7 @@
 import Base
 import ../../shared/formats.bend as Formats
-import ../../shared/replica.bend as Replica
+import ../../shared/replica.bend as Replicas
 import ../../shared/resources.bend as Resources
-import ../../shared/shared.bend as Shared
 import ../../shared/text.bend as Texts
 import ../../shared/uris.bend as Uris
 import ../core/spec.bend as Core
@@ -160,12 +159,12 @@ law Client.try_get_impact:
 law Client.try_get_answer:
   for c: Client
   for r: String
-  IO(Client & Reply<&2, Replica.Status<Core.Done>>)
+  IO(Client & Reply<&2, Replicas.Status<Core.Done>>)
 
 # the resources that still clash after the merge k
 law Client.try_get_conflict:
   for c: Client
-  for k: Replica.Id
+  for k: Replicas.Id
   IO(Client & Reply<&2, List<&2, Resources.Name>>)
 
 # the notices of the topic t that since does not have (all without it)
@@ -182,9 +181,9 @@ law Client.try_write:
   for r: String
   for n: Resources.Name
   for b: String
-  for base: Maybe<&2, Replica.Id>
+  for base: Maybe<&2, Replicas.Id>
   for x: Source
-  IO(Client & Reply<&2, Replica.Status<Core.Done>>)
+  IO(Client & Reply<&2, Replicas.Status<Core.Done>>)
 
 # the request r: makes the branch b at the point p or, when b exists, records
 # a new version of b that equals p, with its submodules
@@ -193,7 +192,7 @@ law Client.try_set_branch:
   for r: String
   for b: String
   for p: Core.Point
-  IO(Client & Reply<&2, Replica.Status<Core.Done>>)
+  IO(Client & Reply<&2, Replicas.Status<Core.Done>>)
 
 # the request r: names the newest version of the branch b as the mark m, with
 # the message t
@@ -203,7 +202,7 @@ law Client.try_create_mark:
   for b: String
   for m: String
   for t: String
-  IO(Client & Reply<&2, Replica.Status<Core.Done>>)
+  IO(Client & Reply<&2, Replicas.Status<Core.Done>>)
 
 # the request r: merges the point p into the branch b, item by item
 law Client.try_merge:
@@ -211,16 +210,16 @@ law Client.try_merge:
   for r: String
   for p: Core.Point
   for b: String
-  IO(Client & Reply<&2, Replica.Status<Core.Done>>)
+  IO(Client & Reply<&2, Replicas.Status<Core.Done>>)
 
 # the request r: settles the resource n of the merge k with the content x
 law Client.try_resolve:
   for c: Client
   for r: String
-  for k: Replica.Id
+  for k: Replicas.Id
   for n: Resources.Name
   for x: Source
-  IO(Client & Reply<&2, Replica.Status<Core.Done>>)
+  IO(Client & Reply<&2, Replicas.Status<Core.Done>>)
 
 # ties the resource u to the branch b, with the settings ss that the kind of
 # u reads, and fills u when it is empty; when u is mounted, sets its settings
@@ -244,7 +243,7 @@ law Client.try_set_owner:
   for r: String
   for b: String
   for g: String
-  IO(Client & Reply<&2, Replica.Status<Core.Done>>)
+  IO(Client & Reply<&2, Replicas.Status<Core.Done>>)
 
 # the request r: makes the group g with the members ms or, when g exists,
 # replaces its members
@@ -253,7 +252,7 @@ law Client.try_set_group:
   for r: String
   for g: String
   for ms: List<&2, Core.Member>
-  IO(Client & Reply<&2, Replica.Status<Core.Done>>)
+  IO(Client & Reply<&2, Replicas.Status<Core.Done>>)
 
 # swaps entries with the node at n: each sends what the other lacks
 # (Core.Node.missing)

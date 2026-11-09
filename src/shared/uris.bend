@@ -21,38 +21,38 @@ def Uri.is_scheme_char(+c: Char) -> Bool:
     Bool.or(U32.is_eq(x, 43), Bool.or(U32.is_eq(x, 45), U32.is_eq(x, 46)))
   )
 # every character of s may go on a scheme
-def Uri.scheme_rest(s: String) -> Bool:
+def Uri.is_scheme_rest(s: String) -> Bool:
   match s:
     case SNil{}:
       True{}
     case SCon{c, t}:
-      List.all.if(u => Uri.scheme_rest(t), Uri.is_scheme_char(c))
+      List.all.if(u => Uri.is_scheme_rest(t), Uri.is_scheme_char(c))
 # s is a scheme: a letter, then letters, digits, '+', '-' or '.'
 def Uri.is_scheme(s: String) -> Bool:
   match s:
     case SNil{}:
       False{}
     case SCon{c, t}:
-      List.all.if(u => Uri.scheme_rest(t), Char.is_alpha(c))
+      List.all.if(u => Uri.is_scheme_rest(t), Char.is_alpha(c))
 # s holds no '?' (63) and no '#' (35): no query and no fragment
-def Uri.plain(+s: String) -> Bool:
+def Uri.is_plain(+s: String) -> Bool:
   Bool.not(List.any.if(u => Texts.Text.has(s, 35), Texts.Text.has(s, 63)))
 # u is a URI that this module reads and shows: its scheme is a scheme,
 # nothing holds a '?' or a '#', an authority holds no '/' and comes before
 # an empty path or one that starts with '/', and with no authority the path
 # does not start with "//"
-def Uri.valid(u: Uri) -> Bool:
+def Uri.is_valid(u: Uri) -> Bool:
   match u:
     case Uri{sc, None{}, +p}:
       List.all.if(
-        u => List.all.if(v => Bool.not(String.starts_with(p, "//")), Uri.plain(p)),
+        u => List.all.if(v => Bool.not(String.starts_with(p, "//")), Uri.is_plain(p)),
         Uri.is_scheme(sc)
       )
     case Uri{+sc, Some{+a}, +p}:
       path_ok = Bool.or(String.is_empty(p), String.starts_with(p, "/"))
-      auth_ok = List.all.if(u => Bool.not(Texts.Text.has(a, 47)), Uri.plain(a))
+      auth_ok = List.all.if(u => Bool.not(Texts.Text.has(a, 47)), Uri.is_plain(a))
       List.all.if(
-        u => List.all.if(v => Bool.and(auth_ok, path_ok), Uri.plain(p)),
+        u => List.all.if(v => Bool.and(auth_ok, path_ok), Uri.is_plain(p)),
         Uri.is_scheme(sc)
       )
 # the text of u
@@ -84,7 +84,7 @@ def Uri.read.cut(c: Maybe<&2, Texts.Cut<String>>) -> Maybe<&2, Uri>:
       None{}
     case Some{Texts.Cut{sc, t}}:
       +u = Uri.read.rest(sc, t)
-      Shared.Bool.when(Maybe<&2, Uri>, Uri.valid(u), v => Some{u}, v => None{})
+      Shared.Bool.when(Maybe<&2, Uri>, Uri.is_valid(u), v => Some{u}, v => None{})
 # the URI of the text t, or None when t is not a valid URI
 def Uri.read(t: String) -> Maybe<&2, Uri>:
   Uri.read.cut(Texts.Text.cut(t, 58))
@@ -144,7 +144,7 @@ def alpha_scheme(c):
 # scheme characters hold no ':'
 law rest_no_colon:
   for t: String
-  {Uri.scheme_rest(t) == True{}: Bool} -> {Texts.Text.has(t, 58) == False{}: Bool}
+  {Uri.is_scheme_rest(t) == True{}: Bool} -> {Texts.Text.has(t, 58) == False{}: Bool}
 
 def rest_no_colon(t):
   match t:
@@ -158,9 +158,11 @@ def rest_no_colon(t):
           False{},
           char_not_colon(
             c
-          )(Shared.List.all.if_hit(Uri.is_scheme_char(c), u => Uri.scheme_rest(r))(h))
+          )(Shared.List.all.if_hit(Uri.is_scheme_char(c), u => Uri.is_scheme_rest(r))(h))
         ): {List.any.if(u => Texts.Text.has(r, 58), _) == False{}: Bool}
-        rest_no_colon(r)(Shared.List.all.if_rest(Uri.is_scheme_char(c), u => Uri.scheme_rest(r))(h))
+        rest_no_colon(
+          r
+        )(Shared.List.all.if_rest(Uri.is_scheme_char(c), u => Uri.is_scheme_rest(r))(h))
 
 # a scheme holds no ':'
 law scheme_no_colon:
@@ -179,9 +181,11 @@ def scheme_no_colon(t):
           False{},
           char_not_colon(
             c
-          )(alpha_scheme(c)(Shared.List.all.if_hit(Char.is_alpha(c), u => Uri.scheme_rest(r))(h)))
+          )(
+            alpha_scheme(c)(Shared.List.all.if_hit(Char.is_alpha(c), u => Uri.is_scheme_rest(r))(h))
+          )
         ): {List.any.if(u => Texts.Text.has(r, 58), _) == False{}: Bool}
-        rest_no_colon(r)(Shared.List.all.if_rest(Char.is_alpha(c), u => Uri.scheme_rest(r))(h))
+        rest_no_colon(r)(Shared.List.all.if_rest(Char.is_alpha(c), u => Uri.is_scheme_rest(r))(h))
 
 # a character that is '/' is '/'
 law slash_head:
@@ -400,7 +404,7 @@ law read_cut_of:
   {
     Uri.read.rest(sc, rest) == u: Uri
   } -> {
-    Uri.valid(u) == True{}: Bool
+    Uri.is_valid(u) == True{}: Bool
   } -> {Uri.read.cut(Some{Texts.Cut{sc, rest}}) == Some{u}: Maybe<&2, Uri>}
 
 def read_cut_of(sc, rest, u):
@@ -414,7 +418,7 @@ def read_cut_of(sc, rest, u):
     ): {
       Shared.Bool.when(
         Maybe<&2, Uri>,
-        Uri.valid(_),
+        Uri.is_valid(_),
         w => Some{_},
         w => None{}
       )
@@ -422,7 +426,7 @@ def read_cut_of(sc, rest, u):
     }
     %Equal.sym(
       Bool,
-      Uri.valid(u),
+      Uri.is_valid(u),
       True{},
       v
     ): {Shared.Bool.when(Maybe<&2, Uri>, _, w => Some{u}, w => None{}) == Some{u}: Maybe<&2, Uri>}
@@ -558,7 +562,7 @@ def rest_show(sc, rest):
 # a valid URI reads back from its text
 law uri_read_after_show:
   for u: Uri
-  for v: {Uri.valid(u) == True{}: Bool}
+  for v: {Uri.is_valid(u) == True{}: Bool}
   {Uri.read(Uri.show(u)) == Some{u}: Maybe<&2, Uri>}
 
 def uri_read_after_show(u, v):
@@ -567,18 +571,18 @@ def uri_read_after_show(u, v):
       +v = v
       hsc = Shared.List.all.if_hit(
         Uri.is_scheme(sc),
-        w => List.all.if(x => Bool.not(String.starts_with(p, "//")), Uri.plain(p))
+        w => List.all.if(x => Bool.not(String.starts_with(p, "//")), Uri.is_plain(p))
       )(v)
       hns = Shared.Bool.not_true(
         String.starts_with(p, "//")
       )(
         Shared.List.all.if_rest(
-          Uri.plain(p),
+          Uri.is_plain(p),
           x => Bool.not(String.starts_with(p, "//"))
         )(
           Shared.List.all.if_rest(
             Uri.is_scheme(sc),
-            w => List.all.if(x => Bool.not(String.starts_with(p, "//")), Uri.plain(p))
+            w => List.all.if(x => Bool.not(String.starts_with(p, "//")), Uri.is_plain(p))
           )(v)
         )
       )
@@ -598,16 +602,16 @@ def uri_read_after_show(u, v):
         Uri.is_scheme(sc),
         w => List.all.if(
           x => Bool.and(
-            List.all.if(w => Bool.not(Texts.Text.has(a, 47)), Uri.plain(a)),
+            List.all.if(w => Bool.not(Texts.Text.has(a, 47)), Uri.is_plain(a)),
             Bool.or(String.is_empty(p), String.starts_with(p, "/"))
           ),
-          Uri.plain(p)
+          Uri.is_plain(p)
         )
       )(v)
       +h3 = Shared.List.all.if_rest(
-        Uri.plain(p),
+        Uri.is_plain(p),
         x => Bool.and(
-          List.all.if(w => Bool.not(Texts.Text.has(a, 47)), Uri.plain(a)),
+          List.all.if(w => Bool.not(Texts.Text.has(a, 47)), Uri.is_plain(a)),
           Bool.or(String.is_empty(p), String.starts_with(p, "/"))
         )
       )(
@@ -615,10 +619,10 @@ def uri_read_after_show(u, v):
           Uri.is_scheme(sc),
           w => List.all.if(
             x => Bool.and(
-              List.all.if(w => Bool.not(Texts.Text.has(a, 47)), Uri.plain(a)),
+              List.all.if(w => Bool.not(Texts.Text.has(a, 47)), Uri.is_plain(a)),
               Bool.or(String.is_empty(p), String.starts_with(p, "/"))
             ),
-            Uri.plain(p)
+            Uri.is_plain(p)
           )
         )(v)
       )
@@ -626,17 +630,17 @@ def uri_read_after_show(u, v):
         Texts.Text.has(a, 47)
       )(
         Shared.List.all.if_rest(
-          Uri.plain(a),
+          Uri.is_plain(a),
           w => Bool.not(Texts.Text.has(a, 47))
         )(
           Shared.Bool.and_true_left(
-            List.all.if(w => Bool.not(Texts.Text.has(a, 47)), Uri.plain(a)),
+            List.all.if(w => Bool.not(Texts.Text.has(a, 47)), Uri.is_plain(a)),
             Bool.or(String.is_empty(p), String.starts_with(p, "/"))
           )(h3)
         )
       )
       hp = Shared.Bool.and_true_right(
-        List.all.if(w => Bool.not(Texts.Text.has(a, 47)), Uri.plain(a)),
+        List.all.if(w => Bool.not(Texts.Text.has(a, 47)), Uri.is_plain(a)),
         Bool.or(String.is_empty(p), String.starts_with(p, "/"))
       )(h3)
       Equal.trans(
@@ -658,7 +662,7 @@ law show_read.valid:
   for u: Uri
   for t: String
   {
-    Uri.valid(Uri.read.rest(sc, rest)) == b: Bool
+    Uri.is_valid(Uri.read.rest(sc, rest)) == b: Bool
   } -> {
     Shared.Bool.when(
       Maybe<&2, Uri>,
@@ -711,7 +715,7 @@ def show_read.at(m, t, u):
         +t = t
         +u = u
         show_read.valid(
-          Uri.valid(Uri.read.rest(sc, rest)),
+          Uri.is_valid(Uri.read.rest(sc, rest)),
           sc,
           rest,
           u,

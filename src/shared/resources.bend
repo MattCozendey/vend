@@ -21,26 +21,26 @@ def Name.show(n: Name) -> String:
     case Name{t}:
       t
 # a and b are the same resource
-def Name.same(a: Name, b: Name) -> Bool:
+def Name.is_eq(a: Name, b: Name) -> Bool:
   String.eq(Name.show(a), Name.show(b))
 
-# Name.same is True for a name and itself
-def Name.same_refl(a: Name) -> {Name.same(a, a) == True{}: Bool}:
+# Name.is_eq is True for a name and itself
+def Name.is_eq_refl(a: Name) -> {Name.is_eq(a, a) == True{}: Bool}:
   match a:
     case Name{t}:
       Texts.String.eq_refl(t)
 
-# Name.same is True only for equal names
-def Name.same_sound(a: Name, b: Name) -> {Name.same(a, b) == True{}: Bool} -> {a == b: Name}:
+# Name.is_eq is True only for equal names
+def Name.is_eq_sound(a: Name, b: Name) -> {Name.is_eq(a, b) == True{}: Bool} -> {a == b: Name}:
   match a b:
     case Name{x} Name{y}:
       h =>
         %Texts.String.eq_sound(x, y)(h): {Name{x} == Name{_}: Name}
         {==}
 
-# the laws of Name.same
-def Name.laws() -> Shared.Eq.Laws(Name, Name.same):
-  (Name.same_refl, Name.same_sound)
+# the laws of Name.is_eq
+def Name.laws() -> Shared.Eq.Laws(Name, Name.is_eq):
+  (Name.is_eq_refl, Name.is_eq_sound)
 # the space in the cut c of the text t: t itself when it has no ':'
 def Name.space.cut(c: Maybe<&2, Texts.Cut<String>>, t: String) -> String:
   match c:

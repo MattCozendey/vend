@@ -629,7 +629,7 @@ def Reach.path_sub(
   +p: A,
   +r: List<&2, A>,
   +g: V,
-  +m: A
+  m: A
 ) -> {
   List.contains(~A, ~same, xs, p) == True{}: Bool
 } -> {
@@ -638,7 +638,7 @@ def Reach.path_sub(
   match r:
     case Nil{}:
       +hp => +h => Reach.found_sub(~A, ~V, ~same, ~succ, ~laws, xs, p, m, g)(hp)(h)
-    case Con{+q, +r2}:
+    case Con{+q, r2}:
       +hp => +h =>
         %Equal.sym(
           Bool,
@@ -815,6 +815,7 @@ def Reach.path_append(
           )(ha)
         )(hb)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a path starts in its level
 def Reach.path_first(
   ~A: Data,
@@ -823,7 +824,7 @@ def Reach.path_first(
   ~succ: V -> A -> List<&2, A>,
   +ps: List<&2, A>,
   ys: List<&2, A>,
-  +g: V,
+  g: V,
   m: A
 ) -> {
   Reach.path(~A, ~V, ~same, ~succ, ps, ys, g, m) == True{}: Bool
@@ -831,11 +832,12 @@ def Reach.path_first(
   match ps:
     case Nil{}:
       +h => h
-    case Con{+p, r}:
+    case Con{p, r}:
       +h => Shared.Bool.and_true_left(
         List.contains(~A, ~same, ys, p),
         Reach.path(~A, ~V, ~same, ~succ, r, succ(g)(p), g, m)
       )(h)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the nodes of a path have successors, so they are nodes of the graph
 def Reach.path_within(

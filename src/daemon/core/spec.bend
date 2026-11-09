@@ -1,7 +1,7 @@
 import Base
 import ../../shared/formats.bend as Formats
 import ../../shared/reach.bend as Reaches
-import ../../shared/replica.bend as Replica
+import ../../shared/replica.bend as Replicas
 import ../../shared/resources.bend as Resources
 import ../../shared/shared.bend as Shared
 import ../../shared/text.bend as Texts
@@ -19,7 +19,7 @@ import ../../shared/trie.bend as Tries
 # Names
 # -----
 # A node, writer, branch, group, mark, request ID and time are texts. A
-# request, and the version that it made, is a Replica.Id.
+# request, and the version that it made, is a Replicas.Id.
 
 # what has versions and owners: a branch, or an owner group
 type Chain is Data:
@@ -34,11 +34,11 @@ type Member is Data:
 # new content: bytes, or what an old version held
 type Content is Data:
   Content.bytes{bytes: Texts.Bytes()}
-  Content.of{version: Replica.Id}
+  Content.of{version: Replicas.Id}
 
 # a version, the newest version of a branch, or a mark of a branch
 type Point is Data:
-  Point.at{version: Replica.Id}
+  Point.at{version: Replicas.Id}
   Point.head{branch: String}
   Point.mark{branch: String, mark: String}
 
@@ -57,10 +57,10 @@ def Chain.key(c: Chain) -> List<&2, Bool>:
 
 # a change that a writer asks for
 type Ask is Data:
-  Ask.write{branch: String, name: Resources.Name, base: Maybe<&2, Replica.Id>, content: Content}
-  Ask.set_branch{branch: String, to: Replica.Id}
-  Ask.merge{branch: String, from: Replica.Id}
-  Ask.resolve{branch: String, conflict: Replica.Id, name: Resources.Name, content: Content}
+  Ask.write{branch: String, name: Resources.Name, base: Maybe<&2, Replicas.Id>, content: Content}
+  Ask.set_branch{branch: String, to: Replicas.Id}
+  Ask.merge{branch: String, from: Replicas.Id}
+  Ask.resolve{branch: String, conflict: Replicas.Id, name: Resources.Name, content: Content}
   Ask.mark{branch: String, mark: String, message: String}
   Ask.set_owner{chain: Chain, members: List<&2, String>}
   Ask.set_group{group: String, members: List<&2, Member>}
@@ -105,19 +105,19 @@ def Ask.creates(q: Ask) -> Bool:
       False{}
 
 # what the replica reads of q
-def Ask.view(q: Ask) -> Replica.View:
+def Ask.view(q: Ask) -> Replicas.View:
   +q = q
-  Replica.View{Chain.key(Ask.chain(q)), Ask.owners(q), Ask.creates(q)}
+  Replicas.View{Chain.key(Ask.chain(q)), Ask.owners(q), Ask.creates(q)}
 
 # who asks for a change, and when
 type Envelope is Data:
   Envelope{id: String, writer: String, time: String}
 
 # the request of e
-def Envelope.of(e: Envelope) -> Replica.Id:
+def Envelope.of(e: Envelope) -> Replicas.Id:
   match e:
     case Envelope{r, w, t}:
-      Replica.Id{w, r}
+      Replicas.Id{w, r}
 
 # the time of e
 def Envelope.time(e: Envelope) -> String:
@@ -129,7 +129,7 @@ def Envelope.time(e: Envelope) -> String:
 # --------
 
 # a and b are the same chain
-def Chain.same(a: Chain, b: Chain) -> Bool:
+def Chain.is_eq(a: Chain, b: Chain) -> Bool:
   match a b:
     case Chain.branch{x} Chain.branch{y}:
       String.eq(x, y)
@@ -139,7 +139,7 @@ def Chain.same(a: Chain, b: Chain) -> Bool:
       False{}
 
 # a and b are the same member
-def Member.same(a: Member, b: Member) -> Bool:
+def Member.is_eq(a: Member, b: Member) -> Bool:
   match a b:
     case Member.node{x} Member.node{y}:
       String.eq(x, y)
@@ -149,45 +149,48 @@ def Member.same(a: Member, b: Member) -> Bool:
       False{}
 
 # a and b are the same content
-def Content.same(a: Content, b: Content) -> Bool:
+def Content.is_eq(a: Content, b: Content) -> Bool:
   match a b:
     case Content.bytes{x} Content.bytes{y}:
-      Shared.List.same(~U32, ~U32.is_eq, x, y)
+      Shared.List.is_eq(~U32, ~U32.is_eq, x, y)
     case Content.of{x} Content.of{y}:
-      Replica.Id.same(x, y)
+      Replicas.Id.is_eq(x, y)
     case _ _:
       False{}
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality, or a proof, keeps each and/or as one value for the proofs to split on
 # a and b are the same change
-def Ask.same(a: Ask, b: Ask) -> Bool:
+def Ask.is_eq(a: Ask, b: Ask) -> Bool:
   match a b:
     case Ask.write{b1, n1, v1, c1} Ask.write{b2, n2, v2, c2}:
       Bool.and(
         String.eq(b1, b2),
         Bool.and(
-          Resources.Name.same(n1, n2),
-          Bool.and(Shared.Maybe.same(~Replica.Id, ~Replica.Id.same, v1, v2), Content.same(c1, c2))
+          Resources.Name.is_eq(n1, n2),
+          Bool.and(
+            Shared.Maybe.is_eq(~Replicas.Id, ~Replicas.Id.is_eq, v1, v2),
+            Content.is_eq(c1, c2)
+          )
         )
       )
     case Ask.set_branch{b1, v1} Ask.set_branch{b2, v2}:
-      Bool.and(String.eq(b1, b2), Replica.Id.same(v1, v2))
+      Bool.and(String.eq(b1, b2), Replicas.Id.is_eq(v1, v2))
     case Ask.merge{b1, v1} Ask.merge{b2, v2}:
-      Bool.and(String.eq(b1, b2), Replica.Id.same(v1, v2))
+      Bool.and(String.eq(b1, b2), Replicas.Id.is_eq(v1, v2))
     case Ask.resolve{b1, k1, n1, c1} Ask.resolve{b2, k2, n2, c2}:
       Bool.and(
         String.eq(b1, b2),
         Bool.and(
-          Replica.Id.same(k1, k2),
-          Bool.and(Resources.Name.same(n1, n2), Content.same(c1, c2))
+          Replicas.Id.is_eq(k1, k2),
+          Bool.and(Resources.Name.is_eq(n1, n2), Content.is_eq(c1, c2))
         )
       )
     case Ask.mark{b1, m1, t1} Ask.mark{b2, m2, t2}:
       Bool.and(String.eq(b1, b2), Bool.and(String.eq(m1, m2), String.eq(t1, t2)))
     case Ask.set_owner{c1, ms1} Ask.set_owner{c2, ms2}:
-      Bool.and(Chain.same(c1, c2), Shared.List.same(~String, ~String.eq, ms1, ms2))
+      Bool.and(Chain.is_eq(c1, c2), Shared.List.is_eq(~String, ~String.eq, ms1, ms2))
     case Ask.set_group{g1, ms1} Ask.set_group{g2, ms2}:
-      Bool.and(String.eq(g1, g2), Shared.List.same(~Member, ~Member.same, ms1, ms2))
+      Bool.and(String.eq(g1, g2), Shared.List.is_eq(~Member, ~Member.is_eq, ms1, ms2))
     case _ _:
       False{}
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
@@ -197,72 +200,72 @@ def Ask.same(a: Ask, b: Ask) -> Bool:
 
 # what a node holds
 def State() -> Data:
-  Replica.State(Ask)
+  Replicas.State(Ask)
 
 # a node that holds nothing yet
 def Node.empty() -> State():
-  Replica.State.empty(~Ask)
+  Replicas.State.empty(~Ask)
 
 # what a holder of a and of b holds: a sync
 def Node.join(a: State(), b: State()) -> State():
-  Replica.State.join(~Ask, ~Ask.same, a, b)
+  Replicas.State.join(~Ask, ~Ask.is_eq, a, b)
 
 # what a holder of r lacks of s: what a sync from s to r sends
 # (Tries.Trie.union_minus)
 def Node.missing(s: State(), r: State()) -> State():
-  Replica.State.missing(~Ask, ~Ask.same, s, r)
+  Replicas.State.missing(~Ask, ~Ask.is_eq, s, r)
 
 # no entry of t contradicts one of s
 def Node.agrees(s: State(), t: State()) -> Bool:
-  Replica.State.agrees(~Ask, ~Ask.same, s, t)
+  Replicas.State.agrees(~Ask, ~Ask.is_eq, s, t)
 
 # the versions of the chain c, in order
-def Node.chain(s: State(), c: Chain) -> List<&2, Replica.Id>:
-  Replica.State.chain(~Ask, ~Ask.view, s, Chain.key(c))
+def Node.chain(s: State(), c: Chain) -> List<&2, Replicas.Id>:
+  Replicas.State.chain(~Ask, ~Ask.view, s, Chain.key(c))
 
 # the nodes that vote for the next version of the chain c
 def Node.owners(s: State(), c: Chain) -> List<&2, String>:
-  Replica.State.owners(~Ask, ~Ask.view, s, Chain.key(c))
+  Replicas.State.owners(~Ask, ~Ask.view, s, Chain.key(c))
 
 # the newest version of the branch b, if b exists
-def Node.head(s: State(), b: String) -> Maybe<&2, Replica.Id>:
-  Replica.State.head(~Ask, ~Ask.view, s, Chain.key(Chain.branch{b}))
+def Node.head(s: State(), b: String) -> Maybe<&2, Replicas.Id>:
+  Replicas.State.head(~Ask, ~Ask.view, s, Chain.key(Chain.branch{b}))
 
 # Answers
 # -------
 
-# a request in its chain (Replica.Status.done). Written: its version.
+# a request in its chain (Replicas.Status.done). Written: its version.
 # Conflicted: a merge or a resolve after which resources still clash. A
-# request is stale (Replica.Status.stale) when it does not fit the head
+# request is stale (Replicas.Status.stale) when it does not fit the head
 # (Node.fits): a write whose resource changed since its base, a mark whose
 # name is taken, or a set-group that would make the group contain itself.
 type Done is Data:
-  Done.written{version: Replica.Id}
-  Done.conflicted{version: Replica.Id}
+  Done.written{version: Replicas.Id}
+  Done.conflicted{version: Replicas.Id}
 
 # a branch, as Node.branches lists it
 type BranchEntry is Data:
-  BranchEntry{branch: String, owners: List<&2, String>, head: Replica.Id}
+  BranchEntry{branch: String, owners: List<&2, String>, head: Replicas.Id}
 
 # a version that changed a resource, as Node.log lists it
 type LogEntry is Data:
-  LogEntry{version: Replica.Id, time: String}
+  LogEntry{version: Replicas.Id, time: String}
 
 # a change elsewhere that touches what a branch uses: the version wrote the
 # resource changed, and the resource used of the branch is that resource or
 # uses it (Node.affects_exactly)
 type Touch is Data:
-  Touch{version: Replica.Id, changed: Resources.Name, branch: String, used: Resources.Name}
+  Touch{version: Replicas.Id, changed: Resources.Name, branch: String, used: Resources.Name}
 
 # a and b are the same touch
-def Touch.same(a: Touch, b: Touch) -> Bool:
+def Touch.is_eq(a: Touch, b: Touch) -> Bool:
   match a b:
     case Touch{v1, c1, b1, u1} Touch{v2, c2, b2, u2}:
       Bool.and(
-        Replica.Id.same(v1, v2),
+        Replicas.Id.is_eq(v1, v2),
         Bool.and(
-          Resources.Name.same(c1, c2),
-          Bool.and(String.eq(b1, b2), Resources.Name.same(u1, u2))
+          Resources.Name.is_eq(c1, c2),
+          Bool.and(String.eq(b1, b2), Resources.Name.is_eq(u1, u2))
         )
       )
 
@@ -273,7 +276,7 @@ def Touch.branch(t: Touch) -> String:
       b
 
 # the version of t
-def Touch.version(t: Touch) -> Replica.Id:
+def Touch.version(t: Touch) -> Replicas.Id:
   match t:
     case Touch{v, c, b, u}:
       v
@@ -289,8 +292,8 @@ type Topic is Data:
 # an event of a topic. GroupCycle: the group is inside itself, as syncs can
 # leave groups; a set-group settles it
 type Notice is Data:
-  Notice.versioned{branch: String, version: Replica.Id}
-  Notice.conflicted{branch: String, version: Replica.Id}
+  Notice.versioned{branch: String, version: Replicas.Id}
+  Notice.conflicted{branch: String, version: Replicas.Id}
   Notice.touched{touch: Touch}
   Notice.group_cycle{group: String}
 
@@ -308,7 +311,7 @@ law Node.content:
 law Node.content_at:
   for s: State()
   for n: Resources.Name
-  for base: Maybe<&2, Replica.Id>
+  for base: Maybe<&2, Replicas.Id>
   Maybe<&2, Texts.Bytes()>
 
 # every branch
@@ -334,13 +337,13 @@ law Node.diff:
 # where the request i is
 law Node.answer:
   for s: State()
-  for i: Replica.Id
-  Replica.Status<Done>
+  for i: Replicas.Id
+  Replicas.Status<Done>
 
 # the resources that still clash after the merge k
 law Node.conflict:
   for s: State()
-  for k: Replica.Id
+  for k: Replicas.Id
   List<&2, Resources.Name>
 
 # the members of the group g, if g exists
@@ -373,19 +376,19 @@ law Node.notices:
 law Node.version:
   for s: State()
   for p: Point
-  Maybe<&2, Replica.Id>
+  Maybe<&2, Replicas.Id>
 
 # x is the version v, or a version that v came from
 law Node.has:
   for s: State()
-  for v: Replica.Id
-  for x: Replica.Id
+  for v: Replicas.Id
+  for x: Replicas.Id
   Bool
 
 # the resource that the version v wrote, when it is a write or a resolve
 law Node.wrote:
   for s: State()
-  for v: Replica.Id
+  for v: Replicas.Id
   Maybe<&2, Resources.Name>
 
 # the resources of the branch b at its head
@@ -415,9 +418,9 @@ law Node.uses:
 # (Node.forward_exactly)
 law Node.forward:
   for s: State()
-  for x: Replica.Id
-  for y: Replica.Id
-  Maybe<&2, Replica.Id>
+  for x: Replicas.Id
+  for y: Replicas.Id
+  Maybe<&2, Replicas.Id>
 
 # the touch t holds (Node.touches_exactly)
 law Node.touches:
@@ -448,10 +451,10 @@ law Node.impact:
 
 # a pointer to a child
 type Pointer is Data:
-  Pointer{space: String, branch: String, version: Replica.Id}
+  Pointer{space: String, branch: String, version: Replicas.Id}
 
 # the version of the child that p points to
-def Pointer.version(p: Pointer) -> Replica.Id:
+def Pointer.version(p: Pointer) -> Replicas.Id:
   match p:
     case Pointer{sp, b, v}:
       v
@@ -459,14 +462,14 @@ def Pointer.version(p: Pointer) -> Replica.Id:
 # the bytes of the pointer p (Texts.Text.cuts_after_join reads them back)
 def Pointer.show(p: Pointer) -> Texts.Bytes():
   match p:
-    case Pointer{sp, b, Replica.Id{w, r}}:
+    case Pointer{sp, b, Replicas.Id{w, r}}:
       Texts.Bytes.of_text(Texts.Text.join([sp, b, w], Chr{10}, r))
 
 # the pointer of the lines that a text cut into (m)
 def Pointer.read.of(m: Maybe<&2, Texts.Parts>) -> Maybe<&2, Pointer>:
   match m:
     case Some{Texts.Parts{Con{sp, Con{b, Con{w, Nil{}}}}, r}}:
-      Some{Pointer{sp, b, Replica.Id{w, r}}}
+      Some{Pointer{sp, b, Replicas.Id{w, r}}}
     case _:
       None{}
 
@@ -496,7 +499,7 @@ def Branch.names(es: List<&2, BranchEntry>) -> List<&2, String>:
 law Node.fits:
   for s: State()
   for q: Ask
-  for h: Replica.Id
+  for h: Replicas.Id
   Bool
 
 # s, after the node n took in the request q of e (Node.ask_exactly)
@@ -530,9 +533,9 @@ law Node.ask_exactly:
       e,
       q
     )
-      == Replica.State.ask(
+      == Replicas.State.ask(
         ~Ask,
-        ~Ask.same,
+        ~Ask.is_eq,
         ~Ask.view,
         ~Node.fits,
         n,
@@ -547,7 +550,7 @@ law Node.ask_exactly:
 law Node.vote_exactly:
   for n: String
   for s: State()
-  {Node.vote(n, s) == Replica.State.vote(~Ask, ~Ask.same, ~Ask.view, ~Node.fits, n, s): State()}
+  {Node.vote(n, s) == Replicas.State.vote(~Ask, ~Ask.is_eq, ~Ask.view, ~Node.fits, n, s): State()}
 
 # a write fits the head h exactly when its resource holds at h what it held at
 # its base
@@ -555,18 +558,18 @@ law Node.fits_write:
   for s: State()
   for b: String
   for name: Resources.Name
-  for base: Maybe<&2, Replica.Id>
+  for base: Maybe<&2, Replicas.Id>
   for x: Content
-  for h: Replica.Id
+  for h: Replicas.Id
   {
     Node.fits(
       s,
       Ask.write{b, name, base, x},
       h
     )
-      == Shared.Maybe.same(
+      == Shared.Maybe.is_eq(
         ~Texts.Bytes(),
-        ~Shared.List.same(~U32, ~U32.is_eq),
+        ~Shared.List.is_eq(~U32, ~U32.is_eq),
         Node.content_at(s, name, Some{h}),
         Node.content_at(s, name, base)
       ): Bool
@@ -579,8 +582,8 @@ law Node.fits_set_group:
   for g: String
   for ms: List<&2, Member>
   for h: String
-  for v: Replica.Id
-  {List.contains(~Member, ~Member.same, ms, Member.group{h}) == True{}: Bool}
+  for v: Replicas.Id
+  {List.contains(~Member, ~Member.is_eq, ms, Member.group{h}) == True{}: Bool}
     -> {Bool.or(String.eq(h, g), Node.is_inside(s, Member.group{g}, h)) == True{}: Bool}
     -> {Node.fits(s, Ask.set_group{g, ms}, v) == False{}: Bool}
 
@@ -592,26 +595,26 @@ law Node.write_written:
   for e: Envelope
   for b: String
   for name: Resources.Name
-  for base: Maybe<&2, Replica.Id>
+  for base: Maybe<&2, Replicas.Id>
   for x: Texts.Bytes()
-  for v: Replica.Id
+  for v: Replicas.Id
   {Node.owners(s, Chain.branch{b}) == [n]: List<&2, String>}
-    -> {Node.head(s, b) == Some{v}: Maybe<&2, Replica.Id>}
+    -> {Node.head(s, b) == Some{v}: Maybe<&2, Replicas.Id>}
     -> {
-      Replica.State.cell(
+      Replicas.State.cell(
         ~Ask,
         s,
-        Replica.Slot.ask{Envelope.of(e)}
+        Replicas.Slot.ask{Envelope.of(e)}
       )
-        == None{}: Maybe<&2, Replica.Cell<Replica.Entry<Ask>>>
+        == None{}: Maybe<&2, Replicas.Cell<Replicas.Entry<Ask>>>
     }
     -> {
-      Replica.State.cell(
+      Replicas.State.cell(
         ~Ask,
         s,
-        Replica.Slot.vote{n, Chain.key(Chain.branch{b}), v}
+        Replicas.Slot.vote{n, Chain.key(Chain.branch{b}), v}
       )
-        == None{}: Maybe<&2, Replica.Cell<Replica.Entry<Ask>>>
+        == None{}: Maybe<&2, Replicas.Cell<Replicas.Entry<Ask>>>
     }
     -> {
       Node.content(
@@ -626,7 +629,7 @@ law Node.write_written:
         Node.ask(n, s, e, Ask.write{b, name, base, Content.bytes{x}}),
         Envelope.of(e)
       )
-        == Replica.Status.done{Done.written{Envelope.of(e)}}: Replica.Status<Done>
+        == Replicas.Status.done{Done.written{Envelope.of(e)}}: Replicas.Status<Done>
     }
       & {
         Node.content(
@@ -642,7 +645,7 @@ law Node.write_written:
 # of the branch, and is the one changed or uses it
 law Node.touches_exactly:
   for s: State()
-  for v: Replica.Id
+  for v: Replicas.Id
   for c: Resources.Name
   for b: String
   for u: Resources.Name
@@ -655,11 +658,11 @@ law Node.touches_exactly:
         List.contains(~String, ~String.eq, Branch.names(Node.branches(s)), b),
         Bool.and(
           List.contains(
-            ~Replica.Id,
-            ~Replica.Id.same,
+            ~Replicas.Id,
+            ~Replicas.Id.is_eq,
             Shared.List.flat(
               ~String,
-              ~Replica.Id,
+              ~Replicas.Id,
               ~State(),
               ~(t => x => Node.chain(t, Chain.branch{x})),
               Branch.names(Node.branches(s)),
@@ -669,14 +672,14 @@ law Node.touches_exactly:
           ),
           Bool.and(
             Bool.and(
-              Maybe.is_some(&2, Replica.Id, Node.head(s, b)),
-              Bool.not(Node.has(s, Maybe.default(&2, Replica.Id, Node.head(s, b), v), v))
+              Maybe.is_some(&2, Replicas.Id, Node.head(s, b)),
+              Bool.not(Node.has(s, Maybe.default(&2, Replicas.Id, Node.head(s, b), v), v))
             ),
             Bool.and(
-              Shared.Maybe.same(~Resources.Name, ~Resources.Name.same, Node.wrote(s, v), Some{c}),
+              Shared.Maybe.is_eq(~Resources.Name, ~Resources.Name.is_eq, Node.wrote(s, v), Some{c}),
               Bool.and(
-                List.contains(~Resources.Name, ~Resources.Name.same, Node.resources(s, b), u),
-                Bool.or(Resources.Name.same(u, c), Node.uses(s, b, u, c))
+                List.contains(~Resources.Name, ~Resources.Name.is_eq, Node.resources(s, b), u),
+                Bool.or(Resources.Name.is_eq(u, c), Node.uses(s, b, u, c))
               )
             )
           )
@@ -693,7 +696,7 @@ law Node.affects_exactly:
   {
     List.contains(
       ~Touch,
-      ~Touch.same,
+      ~Touch.is_eq,
       Node.affects(s, b),
       t
     )
@@ -709,16 +712,16 @@ law Node.impact_exactly:
   {
     List.contains(
       ~Touch,
-      ~Touch.same,
+      ~Touch.is_eq,
       Node.impact(s, p),
       t
     )
       == Bool.and(
         Bool.and(
-          Maybe.is_some(&2, Replica.Id, Node.version(s, p)),
+          Maybe.is_some(&2, Replicas.Id, Node.version(s, p)),
           Node.has(
             s,
-            Maybe.default(&2, Replica.Id, Node.version(s, p), Touch.version(t)),
+            Maybe.default(&2, Replicas.Id, Node.version(s, p), Touch.version(t)),
             Touch.version(t)
           )
         ),
@@ -765,11 +768,11 @@ law Node.uses_exactly:
       == Reaches.Reach.in(
         ~Resources.Name,
         ~Uses,
-        ~Resources.Name.same,
+        ~Resources.Name.is_eq,
         ~(
           +g => +n => Shared.Bool.when(
             List<&2, Resources.Name>,
-            List.contains(~Resources.Name, ~Resources.Name.same, Uses.names(g), n),
+            List.contains(~Resources.Name, ~Resources.Name.is_eq, Uses.names(g), n),
             w => Node.imports(Uses.state(g), Uses.branch(g), n),
             w => []
           )
@@ -785,8 +788,8 @@ law Node.uses_exactly:
 # came from y, else none
 law Node.forward_exactly:
   for s: State()
-  for x: Replica.Id
-  for y: Replica.Id
+  for x: Replicas.Id
+  for y: Replicas.Id
   {
     Node.forward(
       s,
@@ -794,9 +797,9 @@ law Node.forward_exactly:
       y
     )
       == Bool.pick(
-        Maybe<&2, Replica.Id>,
+        Maybe<&2, Replicas.Id>,
         Node.has(s, y, x),
         Some{y},
-        Bool.pick(Maybe<&2, Replica.Id>, Node.has(s, x, y), Some{x}, None{})
-      ): Maybe<&2, Replica.Id>
+        Bool.pick(Maybe<&2, Replicas.Id>, Node.has(s, x, y), Some{x}, None{})
+      ): Maybe<&2, Replicas.Id>
   }

@@ -70,7 +70,7 @@ def Glob.is_eq(a: Spec.Glob, b: Spec.Glob) -> Bool:
     case Spec.star{} Spec.star{}:
       True{}
     case Spec.class{n1, cs1} Spec.class{n2, cs2}:
-      Bool.and(Shared.Bool.same(n1, n2), Chars.is_eq(cs1, cs2))
+      Bool.and(Shared.Bool.is_eq(n1, n2), Chars.is_eq(cs1, cs2))
     case Spec.deep{} Spec.deep{}:
       True{}
     case Spec.cat{a1, b1} Spec.cat{a2, b2}:
@@ -220,17 +220,17 @@ def Glob.is_eq_sound(
       )
     case Spec.class{+n1, +cs1} Spec.class{+n2, +cs2}:
       +h =>
-        %Shared.Bool.same_sound(
+        %Shared.Bool.is_eq_sound(
           n1,
           n2
         )(
-          Shared.Bool.and_true_left(Shared.Bool.same(n1, n2), Chars.is_eq(cs1, cs2))(h)
+          Shared.Bool.and_true_left(Shared.Bool.is_eq(n1, n2), Chars.is_eq(cs1, cs2))(h)
         ): {Spec.class{n1, cs1} == Spec.class{_, cs2}: Spec.Glob}
         %Chars.is_eq_sound(
           cs1,
           cs2
         )(
-          Shared.Bool.and_true_right(Shared.Bool.same(n1, n2), Chars.is_eq(cs1, cs2))(h)
+          Shared.Bool.and_true_right(Shared.Bool.is_eq(n1, n2), Chars.is_eq(cs1, cs2))(h)
         ): {Spec.class{n1, cs1} == Spec.class{n1, _}: Spec.Glob}
         {==}
     case Spec.class{+n1, +cs1} Spec.deep{}:
@@ -1692,7 +1692,7 @@ def St.step(x: St, +c: Char) -> St:
 def St.is_eq(x: St, y: St) -> Bool:
   match x y:
     case St{n, a, b} St{m, c, d}:
-      Bool.and(Shared.Bool.same(n, m), Bool.and(Slots.is_eq(a, c), Slots.is_eq(b, d)))
+      Bool.and(Shared.Bool.is_eq(n, m), Bool.and(Slots.is_eq(a, c), Slots.is_eq(b, d)))
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # St.is_eq is True only for the same state
@@ -1702,12 +1702,12 @@ def St.is_eq_sound(x: St, y: St) -> {St.is_eq(x, y) == True{}: Bool} -> {x == y:
       +h =>
         +sa = Slots.is_eq(a, c)
         +sb = Slots.is_eq(b, d)
-        +rest = Shared.Bool.and_true_right(Shared.Bool.same(n, m), Bool.and(sa, sb))(h)
-        %Shared.Bool.same_sound(
+        +rest = Shared.Bool.and_true_right(Shared.Bool.is_eq(n, m), Bool.and(sa, sb))(h)
+        %Shared.Bool.is_eq_sound(
           n,
           m
         )(
-          Shared.Bool.and_true_left(Shared.Bool.same(n, m), Bool.and(sa, sb))(h)
+          Shared.Bool.and_true_left(Shared.Bool.is_eq(n, m), Bool.and(sa, sb))(h)
         ): {St{n, a, b} == St{_, c, d}: St}
         %Slots.is_eq_sound(
           a,
