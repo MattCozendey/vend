@@ -3,6 +3,7 @@ import ../../shared.bend as Shared
 import ../shared/formats.bend as Formats
 import ../shared/ledger.bend as Ledgers
 import ../shared/resources.bend as Resources
+import ../shared/rope.bend as Ropes
 import ../shared/shared/reach.bend as Reaches
 import ../shared/shared/shared/cell.bend as Cells
 import ../shared/shared/shared/code.bend as Codes
@@ -15,7 +16,7 @@ import ../shared/tree.bend as Trees
 # the laws about both. transport/spec.bend carries it over IO.
 #
 # A node is a ledger of Vend's changes (Ledgers): it holds requests, votes and
-# data, and each line (a branch or an owner group) is a chain of steps that
+# data, and each line (a store, or one of its branches) is a chain of steps that
 # its owners decided. Each version of a line is a tree (Trees) held as data:
 # its root is the result of the vote that decided it. A store is the root
 # chain that makes its lines, so two nodes never make one line twice. Every
@@ -35,9 +36,11 @@ type Member is Data:
   Member.Node{name: String}
   Member.Group{name: String}
 
-# new content: bytes, or what an old version held
+# new content: what a node holds under a root (the root of the rope of its
+# bytes: Content.of), or what an old version held. A change names its content
+# and does not carry it, so a change of a huge resource is small
 type Content is Data:
-  Content.Bytes{bytes: Texts.Bytes()}
+  Content.Root{root: Ropes.Root}
   Content.Of{version: Ledgers.Id}
 
 # a version, the newest version of a branch, or a mark of a branch
@@ -157,8 +160,8 @@ def Members.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<List<&2, Member
 # the content c, then r
 def Content.code(c: Content, r: List<&2, U32>) -> List<&2, U32>:
   match c:
-    case Content.Bytes{b}:
-      0 <> Codes.Code.words(b, r)
+    case Content.Root{x}:
+      0 <> Ropes.Root.code(x, r)
     case Content.Of{v}:
       1 <> Ledgers.Id.code(v, r)
 
@@ -172,10 +175,10 @@ def Content.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Content>>:
         Maybe<&2, Codes.Read<Content>>,
         U32.is_eq(x, 0),
         u => Codes.Code.one.read(
-          ~Texts.Bytes(),
+          ~Ropes.Root,
           ~Content,
-          ~Codes.Code.words.read,
-          b => Content.Bytes{b},
+          ~Ropes.Root.code.read,
+          x => Content.Root{x},
           r
         ),
         u => Codes.Code.one.read(
@@ -433,8 +436,8 @@ def Node.take(s: State(), t: State()) -> State():
 # Versions
 # --------
 # A version of a line is a tree that holds what the line holds after it, in
-# key spaces: the first word of a key says which. 0: a resource's bytes (none:
-# removed). 1: a mark. 2 (in a store's tree): a group's members. 3: a merge's
+# key spaces: the first word of a key says which. 0: the root of a resource's
+# content (none: removed). 1: a mark. 2 (in a store's tree): a group's members. 3: a merge's
 # clash, open or settled. 4: the version vector, the newest place of each
 # other line that the version came from. 5 (in a store's tree): where each of
 # its branches starts. 6: the line's owner group. 7 (in a store's tree): the
@@ -476,21 +479,22 @@ def Key.vector(c: Ledgers.Chain) -> List<&2, U32>:
 def Key.start(k: List<&2, Bool>) -> List<&2, U32>:
   5 <> Ledgers.Bits.code(k, [])
 
-# the value of a resource whose bytes are m (none: removed)
-def Res.code(m: Maybe<&2, Texts.Bytes()>) -> List<&2, U32>:
-  Codes.Code.maybe(~Texts.Bytes(), ~Codes.Code.words, m, [])
+# the value of a resource whose content is under the root m (none: removed)
+def Res.code(m: Maybe<&2, Ropes.Root>) -> List<&2, U32>:
+  Codes.Code.maybe(~Ropes.Root, ~Ropes.Root.code, m, [])
 
-# the value of a resource, flattened: its bytes, when they are there
-def Res.of.read(m: Maybe<&2, Codes.Read<Maybe<&2, Texts.Bytes()>>>) -> Maybe<&2, Texts.Bytes()>:
+# the value of a resource, flattened: the root of its content, when it is
+# there
+def Res.of.read(m: Maybe<&2, Codes.Read<Maybe<&2, Ropes.Root>>>) -> Maybe<&2, Ropes.Root>:
   match m:
     case Some{Codes.Read{x, Nil{}}}:
       x
     case _:
       None{}
 
-# the bytes in the value ws of a resource, when they are there
-def Res.read(ws: List<&2, U32>) -> Maybe<&2, Texts.Bytes()>:
-  Res.of.read(Codes.Code.maybe.read(~Texts.Bytes(), ~Codes.Code.words.read, ws))
+# the root of the content in the value ws of a resource, when it is there
+def Res.read(ws: List<&2, U32>) -> Maybe<&2, Ropes.Root>:
+  Res.of.read(Codes.Code.maybe.read(~Ropes.Root, ~Ropes.Root.code.read, ws))
 
 # the value of where a line starts: the root of its first tree
 def Start.code(h: Maybe<&2, Hashes.Hash>) -> List<&2, U32>:
@@ -522,9 +526,46 @@ def Place.code(w: Ledgers.Where) -> List<&2, U32>:
 def Node.get(s: State(), h: Maybe<&2, Hashes.Hash>, k: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
   Trees.Tree.get(~State(), ~Store.fetch, s, h, k)
 
+# the root of the content of the resource n in the tree whose root is h (none:
+# it is not there)
+def Res.root(s: State(), h: Maybe<&2, Hashes.Hash>, n: Resources.Name) -> Maybe<&2, Ropes.Root>:
+  Maybe.bind(&2, List<&2, U32>, Ropes.Root, Node.get(s, h, Key.res(n)), ws => Res.read(ws))
+
+# a and b are the same root, or both none: the same content
+def Roots.same(a: Maybe<&2, Ropes.Root>, b: Maybe<&2, Ropes.Root>) -> Bool:
+  Shared.Maybe.is_eq(~Ropes.Root, ~Ropes.Root.is_eq, a, b)
+
+# the bytes under the root m, if any, when s holds their rope
+def Root.bytes(s: State(), m: Maybe<&2, Ropes.Root>) -> Maybe<&2, Texts.Bytes()>:
+  Maybe.bind(
+    &2,
+    Ropes.Root,
+    Texts.Bytes(),
+    m,
+    r => Ropes.Rope.read(~State(), ~Store.fetch, s, r)
+  )
+
 # the bytes of the resource n in the tree whose root is h
-def Res.get(s: State(), h: Maybe<&2, Hashes.Hash>, n: Resources.Name) -> Maybe<&2, Texts.Bytes()>:
-  Maybe.bind(&2, List<&2, U32>, Texts.Bytes(), Node.get(s, h, Key.res(n)), ws => Res.read(ws))
+def Res.get(+s: State(), h: Maybe<&2, Hashes.Hash>, n: Resources.Name) -> Maybe<&2, Texts.Bytes()>:
+  Root.bytes(s, Res.root(s, h, n))
+
+# x is the byte that ends a line
+def Byte.is_end(x: U32) -> Bool:
+  U32.is_eq(x, 10)
+
+# the rope of the bytes b, cut after each line: content is stored once by
+# hash, and two contents share every part that an edit did not touch
+def Bytes.rope(b: Texts.Bytes()) -> Ropes.Put:
+  Ropes.Rope.put(Ropes.Rope.cut(~U32, ~Byte.is_end, b))
+
+# the content of the bytes b: the root of their rope
+def Content.of(b: Texts.Bytes()) -> Content:
+  Content.Root{Ropes.Put.root(Bytes.rope(b))}
+
+# s with the bytes b: the nodes of their rope, each under its hash. A node
+# keeps new bytes before it asks for a write of their content
+def Node.keep(s: State(), b: Texts.Bytes()) -> State():
+  Ledgers.State.put_datas(~Ask, ~Ask.is_eq, Ropes.Put.nodes(Bytes.rope(b)), s)
 
 # the vote that took the version v (none: no step took it)
 def Vote.taken(x: Ledgers.Vote) -> Maybe<&2, Ledgers.Vote>:
@@ -806,6 +847,16 @@ def Work.set(w: Work, k: List<&2, U32>, x: List<&2, U32>) -> Maybe<&2, Work>:
     case Work{+s, h, ns}:
       Work.of(s, ns, Trees.Tree.set(~State(), ~Store.fetch, s, h, k, x))
 
+# w with the words ns as data, and among its new nodes
+def Work.keep(w: Work, +ns: List<&2, List<&2, U32>>) -> Work:
+  match w:
+    case Work{s, h, old}:
+      Work{
+        Ledgers.State.put_datas(~Ask, ~Ask.is_eq, ns, s),
+        h,
+        List.append(&2, List<&2, U32>, ns, old)
+      }
+
 # the root of w
 def Work.root(w: Work) -> Maybe<&2, Hashes.Hash>:
   match w:
@@ -926,16 +977,18 @@ def Pointer.read(b: Texts.Bytes()) -> Maybe<&2, Pointer>:
 # its target, a merge merges its base, the version before it and the one merged
 # in, and every other change keeps the version before it.
 
-# what a merge keeps of a resource: its bytes or none, or a clash
+# what a merge keeps of a resource: the content of one side (none: removed),
+# new bytes, or a clash
 type Pick is Data:
-  Pick.Take{bytes: Maybe<&2, Texts.Bytes()>}
+  Pick.Take{root: Maybe<&2, Ropes.Root>}
+  Pick.Make{bytes: Texts.Bytes()}
   Pick.Clash{}
 
 # the merge of a resource's bytes, when all three hold it
 def Pick.bytes(m: Formats.Merged) -> Pick:
   match m:
     case Formats.Merged.Clean{x}:
-      Pick.Take{Some{x}}
+      Pick.Make{x}
     case Formats.Merged.Clash{}:
       Pick.Clash{}
 
@@ -945,12 +998,10 @@ def Pick.module(m: Maybe<&2, Ledgers.Id>, px: Pointer, +py: Pointer) -> Pick:
     case None{}:
       Pick.Clash{}
     case Some{k}:
-      Pick.Take{
-        Some{
-          Pointer.show(
-            Shared.Bool.when(Pointer, Ledgers.Id.is_eq(k, Pointer.version(py)), u => py, u => px)
-          )
-        }
+      Pick.Make{
+        Pointer.show(
+          Shared.Bool.when(Pointer, Ledgers.Id.is_eq(k, Pointer.version(py)), u => py, u => px)
+        )
       }
 
 # the merge of two submodules that point as x and y
@@ -975,62 +1026,67 @@ def Pick.format(
     case g:
       Pick.bytes(Formats.Format.merge(g, b, x, y))
 
-# the merge of a resource that the base, ours and theirs hold or not, when
-# both sides changed it, in the format f
-def Pick.both(
+# the merge of the bytes x and y, two changes of mb, in the format f (none: the
+# node does not hold all of them yet)
+def Pick.read(
   f: Formats.Format,
   s: State(),
-  b: Maybe<&2, Texts.Bytes()>,
-  o: Maybe<&2, Texts.Bytes()>,
-  t: Maybe<&2, Texts.Bytes()>
-) -> Pick:
+  mb: Maybe<&2, Texts.Bytes()>,
+  mx: Maybe<&2, Texts.Bytes()>,
+  my: Maybe<&2, Texts.Bytes()>
+) -> Maybe<&2, Pick>:
+  match mb mx my:
+    case Some{b} Some{x} Some{y}:
+      Some{Pick.format(f, s, b, x, y)}
+    case u v w:
+      None{}
+
+# the bytes of the base b of a merge (none: the node does not hold them yet):
+# no base is no bytes
+def Pick.base(s: State(), b: Maybe<&2, Ropes.Root>) -> Maybe<&2, Texts.Bytes()>:
+  match b:
+    case None{}:
+      Some{[]}
+    case Some{r}:
+      Root.bytes(s, Some{r})
+
+# the merge of a resource that the base, ours and theirs hold or not, when
+# both sides changed it, in the format f (none: wait for its bytes)
+def Pick.both(
+  f: Formats.Format,
+  +s: State(),
+  b: Maybe<&2, Ropes.Root>,
+  o: Maybe<&2, Ropes.Root>,
+  t: Maybe<&2, Ropes.Root>
+) -> Maybe<&2, Pick>:
   match o t:
     case Some{x} Some{y}:
-      Pick.format(f, s, Maybe.default(&2, Texts.Bytes(), b, []), x, y)
+      Pick.read(f, s, Pick.base(s, b), Root.bytes(s, Some{x}), Root.bytes(s, Some{y}))
     case _ _:
-      Pick.Clash{}
-
-# a and b hold the same bytes, or both none
-def Bytes.same(a: Maybe<&2, Texts.Bytes()>, b: Maybe<&2, Texts.Bytes()>) -> Bool:
-  Shared.Maybe.is_eq(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), a, b)
+      Some{Pick.Clash{}}
 
 # what a merge of the base b, ours o and theirs t keeps of a resource in the
 # format f: theirs when ours is the base, ours when theirs is the base or both
-# agree, else both merged
+# agree, else both merged (none: wait for their bytes). So a merge never loses
+# a change that only one side made
 def Pick.merge(
   f: Formats.Format,
   s: State(),
-  +b: Maybe<&2, Texts.Bytes()>,
-  +o: Maybe<&2, Texts.Bytes()>,
-  +t: Maybe<&2, Texts.Bytes()>
-) -> Pick:
+  +b: Maybe<&2, Ropes.Root>,
+  +o: Maybe<&2, Ropes.Root>,
+  +t: Maybe<&2, Ropes.Root>
+) -> Maybe<&2, Pick>:
   Shared.Bool.when(
-    Pick,
-    Bytes.same(o, b),
-    u => Pick.Take{t},
+    Maybe<&2, Pick>,
+    Roots.same(o, b),
+    u => Some{Pick.Take{t}},
     u => Shared.Bool.when(
-      Pick,
-      List.any.if(v => Bytes.same(o, t), Bytes.same(t, b)),
-      w => Pick.Take{o},
+      Maybe<&2, Pick>,
+      List.any.if(v => Roots.same(o, t), Roots.same(t, b)),
+      w => Some{Pick.Take{o}},
       w => Pick.both(f, s, b, o, t)
     )
   )
-
-# the bytes of a merge: ours on a clash
-def Pick.kept(p: Pick, o: Maybe<&2, Texts.Bytes()>) -> Maybe<&2, Texts.Bytes()>:
-  match p:
-    case Pick.Take{x}:
-      x
-    case Pick.Clash{}:
-      o
-
-# p is a clash
-def Pick.is_clash(p: Pick) -> Bool:
-  match p:
-    case Pick.Take{x}:
-      False{}
-    case Pick.Clash{}:
-      True{}
 
 # Names
 # -----
@@ -1052,7 +1108,7 @@ def Res.binding(b: Trees.Binding) -> Maybe<&2, Resources.Name>:
     case Trees.Binding{Con{0, k}, ws}:
       Shared.Bool.when(
         Maybe<&2, Resources.Name>,
-        Maybe.is_some(&2, Texts.Bytes(), Res.read(ws)),
+        Maybe.is_some(&2, Ropes.Root, Res.read(ws)),
         u => Read.whole(Resources.Name, Resources.Name.code.read(k)),
         u => None{}
       )
@@ -1255,7 +1311,7 @@ def Judge.ready_maybe(s: State(), m: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Bool>:
 # the verdict on the content c: its version must be one
 def Judge.content(s: State(), c: Content) -> Maybe<&2, Bool>:
   match c:
-    case Content.Bytes{x}:
+    case Content.Root{x}:
       Some{True{}}
     case Content.Of{w}:
       Judge.ready(s, w)
@@ -1286,14 +1342,14 @@ def Judge.when(
 ) -> Maybe<&2, Ledgers.Verdict>:
   Shared.Bool.when(Maybe<&2, Ledgers.Verdict>, b, k, u => Judge.refuse(h))
 
-# the bytes that the content c gives the resource n (none: the version holds
+# the root that the content c gives the resource n (none: the version holds
 # none)
-def Content.bytes(+s: State(), n: Resources.Name, c: Content) -> Maybe<&2, Texts.Bytes()>:
+def Content.root(+s: State(), n: Resources.Name, c: Content) -> Maybe<&2, Ropes.Root>:
   match c:
-    case Content.Bytes{x}:
+    case Content.Root{x}:
       Some{x}
     case Content.Of{w}:
-      Res.get(s, Node.root_of(s, Some{w}), n)
+      Res.root(s, Node.root_of(s, Some{w}), n)
 
 # the verdict on a write of the resource n since base, with the content c, at
 # the tree h: take it when n holds at h what it held at base
@@ -1311,9 +1367,9 @@ def Judge.write(
       Judge.content(s, c),
       h,
       w => Judge.when(
-        Bytes.same(Res.get(s, h, n), Res.get(s, Node.root_of(s, base), n)),
+        Roots.same(Res.root(s, h, n), Res.root(s, Node.root_of(s, base), n)),
         h,
-        x => Work.take(Work.set(Work{s, h, []}, Key.res(n), Res.code(Content.bytes(s, n, c))))
+        x => Work.take(Work.set(Work{s, h, []}, Key.res(n), Res.code(Content.root(s, n, c))))
       )
     )
   )
@@ -1376,7 +1432,7 @@ def Judge.resolve(
             &2,
             Work,
             Work,
-            Work.set(Work{s, h, []}, Key.res(n), Res.code(Content.bytes(s, n, c))),
+            Work.set(Work{s, h, []}, Key.res(n), Res.code(Content.root(s, n, c))),
             y => Work.set(y, Key.clash(n), [])
           )
         )
@@ -1384,29 +1440,52 @@ def Judge.resolve(
     )
   )
 
-# m with the resource n merged: the bytes that the merge of the base b, ours o
-# and theirs t (of the version f) keeps, and its clash open when it clashes
+# w with what the merge of the version f keeps of the resource n (p): the
+# content of a side; new bytes, with their rope; or ours (o), and its clash
+# open
+def Merge.put(
+  +f: Ledgers.Id,
+  +n: Resources.Name,
+  o: Maybe<&2, Ropes.Root>,
+  p: Pick,
+  w: Work
+) -> Maybe<&2, Work>:
+  match p:
+    case Pick.Take{m}:
+      Work.set(w, Key.res(n), Res.code(m))
+    case Pick.Make{x}:
+      +rp = Bytes.rope(x)
+      Work.set(
+        Work.keep(w, Ropes.Put.nodes(rp)),
+        Key.res(n),
+        Res.code(Some{Ropes.Put.root(rp)})
+      )
+    case Pick.Clash{}:
+      Maybe.bind(
+        &2,
+        Work,
+        Work,
+        Work.set(w, Key.res(n), Res.code(o)),
+        y => Work.set(y, Key.clash(n), Clash.code(f))
+      )
+
+# w with the resource n merged: what the merge of the base b, ours o and theirs
+# t (of the version f) keeps (none: wait for a node)
 def Merge.one(
   s: State(),
   +f: Ledgers.Id,
   +n: Resources.Name,
-  b: Maybe<&2, Texts.Bytes()>,
-  +o: Maybe<&2, Texts.Bytes()>,
-  t: Maybe<&2, Texts.Bytes()>,
+  b: Maybe<&2, Ropes.Root>,
+  +o: Maybe<&2, Ropes.Root>,
+  t: Maybe<&2, Ropes.Root>,
   w: Work
 ) -> Maybe<&2, Work>:
-  +p = Pick.merge(Formats.Format.of(Resources.Name.path(n)), s, b, o, t)
   Maybe.bind(
     &2,
+    Pick,
     Work,
-    Work,
-    Work.set(w, Key.res(n), Res.code(Pick.kept(p, o))),
-    +y => Shared.Bool.when(
-      Maybe<&2, Work>,
-      Pick.is_clash(p),
-      u => Work.set(y, Key.clash(n), Clash.code(f)),
-      u => Some{y}
-    )
+    Pick.merge(Formats.Format.of(Resources.Name.path(n)), s, b, o, t),
+    p => Merge.put(f, n, o, p, w)
   )
 
 # m with each resource of ns merged, over the base hb, ours ho and theirs ht
@@ -1436,7 +1515,7 @@ def Merge.all(
           Work,
           Work,
           m,
-          w => Merge.one(s, f, n, Res.get(s, hb, n), Res.get(s, ho, n), Res.get(s, ht, n), w)
+          w => Merge.one(s, f, n, Res.root(s, hb, n), Res.root(s, ho, n), Res.root(s, ht, n), w)
         )
       )
 
@@ -1926,9 +2005,13 @@ def Node.version(+s: State(), p: Point) -> Maybe<&2, Ledgers.Id>:
     case Point.Mark{r, b, m}:
       Mark.first(s, Node.steps(s, r, Some{b}), None{}, m)
 
+# the root of the content of the resource n at the version m, if it holds it
+def Res.root_at(+s: State(), n: Resources.Name, m: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Ropes.Root>:
+  Maybe.bind(&2, Ledgers.Id, Ropes.Root, m, v => Res.root(s, Node.root_of(s, Some{v}), n))
+
 # the bytes of the resource n at the version m, if it holds them
 def Res.at(+s: State(), n: Resources.Name, m: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Texts.Bytes()>:
-  Maybe.bind(&2, Ledgers.Id, Texts.Bytes(), m, v => Res.get(s, Node.root_of(s, Some{v}), n))
+  Root.bytes(s, Res.root_at(s, n, m))
 
 # the bytes of the resource n at the point p, if it is there
 def Node.content(+s: State(), n: Resources.Name, p: Point) -> Maybe<&2, Texts.Bytes()>:
@@ -2039,7 +2122,7 @@ def Node.draft(
 def Read.of(+s: State(), n: Resources.Name, m: Maybe<&2, Content>, p: Point) -> Maybe<&2, Texts.Bytes()>:
   match m:
     case Some{c}:
-      Content.bytes(s, n, c)
+      Root.bytes(s, Content.root(s, n, c))
     case None{}:
       Node.content(s, n, p)
 
@@ -2081,7 +2164,7 @@ def Log.of(
       []
     case Con{+x, r}:
       Log.at(
-        Bool.not(Bytes.same(Res.at(s, n, Some{x}), Res.at(s, n, prev))),
+        Bool.not(Roots.same(Res.root_at(s, n, Some{x}), Res.root_at(s, n, prev))),
         x,
         Ledgers.State.asked(~Ask, s, x),
         Log.of(s, n, r, Some{x})
@@ -2914,11 +2997,12 @@ def Node.taken(s: State(), +e: Envelope, +q: Ask) -> State():
   )
 
 # the premises of Node.write_written, then C. t is what the node n holds once
-# it took in the write i of the resource name, with the bytes x since base, on
-# the line c. n is the sole owner of the tip of c, has not voted there, and no
-# fact says where i was decided; the base is a version, and the resource did
-# not change since it; t holds the tree of the head of c (the write's new
-# subtree is p) and no other words under the hashes of the new nodes
+# it took in the write i of the resource name, with the content under the root
+# rt since base, on the line c. n is the sole owner of the tip of c, has not
+# voted there, and no fact says where i was decided; the base is a version,
+# and the resource did not change since it; t holds the tree of the head of c
+# (the write's new subtree is p) and no other words under the hashes of the
+# new nodes
 def Write.Sole(
   n: String,
   t: State(),
@@ -2926,7 +3010,7 @@ def Write.Sole(
   c: Ledgers.Chain,
   name: Resources.Name,
   base: Maybe<&2, Ledgers.Id>,
-  x: Texts.Bytes(),
+  rt: Ropes.Root,
   ep: U32,
   h: U32,
   last: Maybe<&2, Ledgers.Where>,
@@ -2950,13 +3034,13 @@ def Write.Sole(
   }
   -> {Judge.ready_maybe(t, base) == Some{True{}}: Maybe<&2, Bool>}
   -> {
-    Bytes.same(
-      Res.get(
+    Roots.same(
+      Res.root(
         t,
         Judge.root(t, c, Ledgers.Line.head(~Ask, ~Ask.view, t, c, ep, [n], last)),
         name
       ),
-      Res.get(t, Node.root_of(t, base), name)
+      Res.root(t, Node.root_of(t, base), name)
     )
       == True{}: Bool
   }
@@ -2967,7 +3051,7 @@ def Write.Sole(
       t,
       Judge.root(t, c, Ledgers.Line.head(~Ask, ~Ask.view, t, c, ep, [n], last)),
       Key.res(name),
-      Res.code(Some{x})
+      Res.code(Some{rt})
     )
       == Some{p}: Maybe<&2, Trees.Put>
   }
@@ -2984,7 +3068,8 @@ def Write.Sole(
 
 # the sole owner of the tip of a branch takes in a new write of a resource
 # that did not change since its base (Write.Sole): the write is Written, and
-# its version holds the bytes
+# its version holds the content, which reads as the bytes x that the node holds
+# under its root
 law Node.write_written:
   for +n: String
   for +s: State()
@@ -2993,6 +3078,7 @@ law Node.write_written:
   for +b: String
   for +name: Resources.Name
   for +base: Maybe<&2, Ledgers.Id>
+  for +rt: Ropes.Root
   for +x: Texts.Bytes()
   for +ep: U32
   for +h: U32
@@ -3001,50 +3087,59 @@ law Node.write_written:
   {
     Ledgers.State.get(
       ~Ask,
-      Node.land(s, Ask.On{r, Some{b}, Change.Write{name, base, Content.Bytes{x}}}),
+      Node.land(s, Ask.On{r, Some{b}, Change.Write{name, base, Content.Root{rt}}}),
       Ledgers.Slot.ask(Envelope.of(e))
     )
       == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
   }
+    -> {
+      Root.bytes(
+        Node.taken(s, e, Ask.On{r, Some{b}, Change.Write{name, base, Content.Root{rt}}}),
+        Some{rt}
+      )
+        == Some{x}: Maybe<&2, Texts.Bytes()>
+    }
     -> Write.Sole(
       n,
-      Node.taken(s, e, Ask.On{r, Some{b}, Change.Write{name, base, Content.Bytes{x}}}),
+      Node.taken(s, e, Ask.On{r, Some{b}, Change.Write{name, base, Content.Root{rt}}}),
       Envelope.of(e),
       Line.chain(r, Some{b}),
       name,
       base,
-      x,
+      rt,
       ep,
       h,
       last,
       p,
       {
         Node.answer(
-          Node.ask(
-            n,
-            s,
-            e,
-            Ask.On{r, Some{b}, Change.Write{name, base, Content.Bytes{x}}}
-          ),
+          Node.ask(n, s, e, Ask.On{r, Some{b}, Change.Write{name, base, Content.Root{rt}}}),
           e,
-          Ask.On{r, Some{b}, Change.Write{name, base, Content.Bytes{x}}}
+          Ask.On{r, Some{b}, Change.Write{name, base, Content.Root{rt}}}
         )
           == Some{Answer.Written{Envelope.of(e)}}: Maybe<&2, Answer>
       }
         & {
           Node.content(
-            Node.ask(
-              n,
-              s,
-              e,
-              Ask.On{r, Some{b}, Change.Write{name, base, Content.Bytes{x}}}
-            ),
+            Node.ask(n, s, e, Ask.On{r, Some{b}, Change.Write{name, base, Content.Root{rt}}}),
             name,
             Point.At{Envelope.of(e)}
           )
             == Some{x}: Maybe<&2, Texts.Bytes()>
         }
     )
+
+# a node that keeps bytes reads them back under their content: the root names
+# the bytes (s holds no other words under the hashes of the new nodes)
+law Node.keep_reads:
+  for +s: State()
+  for +b: Texts.Bytes()
+  {
+    Ledgers.Data.fresh(~Ask, ~Ask.is_eq, Ropes.Put.nodes(Bytes.rope(b)), s) == True{}: Bool
+  }
+    -> {
+      Root.bytes(Node.keep(s, b), Some{Ropes.Put.root(Bytes.rope(b))}) == Some{b}: Maybe<&2, Texts.Bytes()>
+    }
 
 # the content of a resource at a version stays as the node's state grows (by
 # a sync that agrees, or by its own writes): a version never changes

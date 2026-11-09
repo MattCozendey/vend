@@ -16,9 +16,11 @@ import ../shared/uris.bend as Uris
 # Values that callers make
 # ------------------------
 
-# where new content comes from: content, or a resource that the node reads
-# first
+# where new content comes from: bytes, which the node keeps and names by
+# their root (Core.Node.keep, Core.Content.of); content that it holds; or a
+# resource that the node reads first
 type Source is Data:
+  Source.Bytes{bytes: Texts.Bytes()}
   Source.Content{content: Core.Content}
   Source.From{uri: Uris.Uri}
 

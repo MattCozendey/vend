@@ -2,6 +2,7 @@ import Base
 import ../../shared.bend as Shared
 import ../shared/ledger.bend as Ledgers
 import ../shared/resources.bend as Resources
+import ../shared/rope.bend as Ropes
 import ../shared/shared/shared/cell.bend as Cells
 import ../shared/shared/shared/code.bend as Codes
 import ../shared/shared/shared/hash.bend as Hashes
@@ -60,12 +61,12 @@ def Content.code_read(
     == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Spec.Content>>
 }:
   match x:
-    case Spec.Content.Bytes{b}:
+    case Spec.Content.Root{b}:
       Codes.Code.one_read(
-        ~Texts.Bytes(),
+        ~Ropes.Root,
         ~Spec.Content,
-        ~Codes.Code.words.codec(),
-        a => Spec.Content.Bytes{a},
+        ~Ropes.Root.codec(),
+        a => Spec.Content.Root{a},
         b,
         r
       )
@@ -406,23 +407,23 @@ def Slot.none_before(
 # ------
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# the value of a resource that holds the bytes x reads back as x
+# the value of a resource whose content is under the root x reads back as x
 def Res.read_code(
-  x: Texts.Bytes()
-) -> {Spec.Res.read(Spec.Res.code(Some{x})) == Some{x}: Maybe<&2, Texts.Bytes()>}:
+  x: Ropes.Root
+) -> {Spec.Res.read(Spec.Res.code(Some{x})) == Some{x}: Maybe<&2, Ropes.Root>}:
   %Equal.sym(
-    Maybe<&2, Codes.Read<Maybe<&2, Texts.Bytes()>>>,
-    Codes.Code.maybe.read(~Texts.Bytes(), ~Codes.Code.words.read, Spec.Res.code(Some{x})),
+    Maybe<&2, Codes.Read<Maybe<&2, Ropes.Root>>>,
+    Codes.Code.maybe.read(~Ropes.Root, ~Ropes.Root.code.read, Spec.Res.code(Some{x})),
     Some{Codes.Read{Some{x}, []}},
     Codes.Code.maybe_read(
-      ~Texts.Bytes(),
-      ~Codes.Code.words,
-      ~Codes.Code.words.read,
-      Codes.Codec.laws(Texts.Bytes(), Codes.Code.words.codec()),
+      ~Ropes.Root,
+      ~Ropes.Root.code,
+      ~Ropes.Root.code.read,
+      Codes.Codec.laws(Ropes.Root, Ropes.Root.codec()),
       Some{x},
       []
     )
-  ): {Spec.Res.of.read(_) == Some{x}: Maybe<&2, Texts.Bytes()>}
+  ): {Spec.Res.of.read(_) == Some{x}: Maybe<&2, Ropes.Root>}
   {==}
 
 # a node's trees hold the words ds exactly when its ledger does
@@ -481,6 +482,37 @@ def Holds.of(
     ): {_ == True{}: Bool}
     hd
 
+# the bytes under a root stay as the state grows
+def Rope.kept(
+  +s: Spec.State(),
+  +s2: Spec.State(),
+  r: Ropes.Root,
+  x: Texts.Bytes(),
+  gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool}
+) -> {
+  Ropes.Rope.read(~Spec.State(), ~Spec.Store.fetch, s, r) == Some{x}: Maybe<&2, Texts.Bytes()>
+} -> {Ropes.Rope.read(~Spec.State(), ~Spec.Store.fetch, s2, r) == Some{x}: Maybe<&2, Texts.Bytes()>}:
+  Ropes.Rope.read_grows(
+    ~Spec.State(),
+    ~Spec.Store.fetch,
+    ~Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq),
+    ~(
+      a => b => k => y => Ledgers.State.data_grows(
+        ~Spec.Ask,
+        ~Spec.Ask.is_eq,
+        ~Ask.laws(),
+        a,
+        b,
+        k,
+        y
+      )
+    ),
+    s,
+    s2,
+    r,
+    x
+  )(gr)
+
 # the owners take a write whose base is ready and whose resource did not change
 # since it, with the new subtree p
 def Write.verdict(
@@ -488,14 +520,14 @@ def Write.verdict(
   +s: Spec.State(),
   +name: Resources.Name,
   base: Maybe<&2, Ledgers.Id>,
-  x: Texts.Bytes(),
+  x: Ropes.Root,
   h: Maybe<&2, Hashes.Hash>
 ) -> {
   Spec.Judge.ready_maybe(s, base) == Some{True{}}: Maybe<&2, Bool>
 } -> {
-  Spec.Bytes.same(
-    Spec.Res.get(s, h, name),
-    Spec.Res.get(s, Spec.Node.root_of(s, base), name)
+  Spec.Roots.same(
+    Spec.Res.root(s, h, name),
+    Spec.Res.root(s, Spec.Node.root_of(s, base), name)
   )
     == True{}: Bool
 } -> {
@@ -513,7 +545,7 @@ def Write.verdict(
     s,
     name,
     base,
-    Spec.Content.Bytes{x},
+    Spec.Content.Root{x},
     h
   )
     == Some{
@@ -532,9 +564,9 @@ def Write.verdict(
             Ledgers.Verdict{True{}, Some{h2}, List.append(&2, List<&2, U32>, ws, [])}
           }: Maybe<&2, Ledgers.Verdict>
         }
-        +same1 = Spec.Bytes.same(
-          Spec.Res.get(s, h, name),
-          Spec.Res.get(s, Spec.Node.root_of(s, base), name)
+        +same1 = Spec.Roots.same(
+          Spec.Res.root(s, h, name),
+          Spec.Res.root(s, Spec.Node.root_of(s, base), name)
         )
         %Equal.sym(Maybe<&2, Bool>, Spec.Judge.ready_maybe(s, base), Some{True{}}, hb):
           {
@@ -542,7 +574,7 @@ def Write.verdict(
               _,
               h,
               u => Spec.Judge.then(
-                Spec.Judge.content(s, Spec.Content.Bytes{x}),
+                Spec.Judge.content(s, Spec.Content.Root{x}),
                 h,
                 w => Spec.Judge.when(
                   same1,
@@ -551,7 +583,7 @@ def Write.verdict(
                     Spec.Work.set(
                       Spec.Work{s, h, []},
                       Spec.Key.res(name),
-                      Spec.Res.code(Spec.Content.bytes(s, name, Spec.Content.Bytes{x}))
+                      Spec.Res.code(Spec.Content.root(s, name, Spec.Content.Root{x}))
                     )
                   )
                 )
@@ -662,13 +694,13 @@ def Ask.fresh(
     }
     {==}
 
-def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
-  +h1 => +ht => +ho => +hg => +hw => hb => hs => +hp => +hf =>
+def Spec.Node.write_written(n, s, e, r, b, name, base, rt, x, ep, h, last, p):
+  +h1 => hx => +ht => +ho => +hg => +hw => hb => hs => +hp => +hf =>
     +q = {
       Spec.Ask.On{
         r,
         Some{b},
-        Spec.Change.Write{name, base, Spec.Content.Bytes{x}}
+        Spec.Change.Write{name, base, Spec.Content.Root{rt}}
       }: Spec.Ask
     }
     +i = Spec.Envelope.of(e)
@@ -689,7 +721,7 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
       Ask.fresh(n, s, e, q)(Slot.none_before(s, s0, Ledgers.Slot.ask(i), Land.grows(s, q), h1))
     )
     +ds = List.append(&2, List<&2, U32>, Trees.Put.nodes(p), [])
-    +hv = Write.verdict(p, s1, name, base, x, root)(hb)(hs)(hp)
+    +hv = Write.verdict(p, s1, name, base, rt, root)(hb)(hs)(hp)
     +hst = Pair.fst(
       {
         Ledgers.State.status(
@@ -862,16 +894,19 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
       t,
       q
     )(h1)
+    +hgrow = {
+      (
+        %Equal.sym(Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>, Ledgers.State.get(~Spec.Ask, s0, Ledgers.Slot.ask(i)), None{}, h1):
+          {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s1, Ledgers.State.ask.fresh(~Spec.Ask, ~Spec.Ask.is_eq, ~Spec.Ask.view, ~Spec.Node.judge, n, s0, i, t, q, _)) == True{}: Bool}
+        Ledgers.Vote.ask.grows(~Spec.Ask, ~Spec.Ask.is_eq, ~Ask.laws(), ~Spec.Ask.view, ~Spec.Node.judge, n, s1, i, q, Spec.Ask.view(q))
+      ): {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s1, ask1) == True{}: Bool}
+    }
     +hcell = Slot.one_kept(
       s1,
       ask1,
       Ledgers.Slot.ask(i),
       Ledgers.Entry.Ask{i, t, q},
-      (
-        %Equal.sym(Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>, Ledgers.State.get(~Spec.Ask, s0, Ledgers.Slot.ask(i)), None{}, h1):
-          {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s1, Ledgers.State.ask.fresh(~Spec.Ask, ~Spec.Ask.is_eq, ~Spec.Ask.view, ~Spec.Node.judge, n, s0, i, t, q, _)) == True{}: Bool}
-        Ledgers.Vote.ask.grows(~Spec.Ask, ~Spec.Ask.is_eq, ~Ask.laws(), ~Spec.Ask.view, ~Spec.Node.judge, n, s1, i, q, Spec.Ask.view(q))
-      ),
+      hgrow,
       Ledgers.State.put_get(~Spec.Ask, ~Spec.Ask.is_eq, s0, Ledgers.Slot.ask(i), Ledgers.Entry.Ask{i, t, q})(h1)
     )
     +hgs = Trees.Tree.get_set(
@@ -881,7 +916,7 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
       ask1,
       root,
       Spec.Key.res(name),
-      Spec.Res.code(Some{x}),
+      Spec.Res.code(Some{rt}),
       p
     )(hp)(Holds.of(Trees.Put.nodes(p), ask1)(hd))
     ((
@@ -898,8 +933,9 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
           {Spec.Res.at(ask1, name, Shared.Bool.when(Maybe<&2, Ledgers.Id>, Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Ledgers.Status.verdict(_), Some{True{}}), u => Some{i}, u => None{})) == Some{x}: Maybe<&2, Texts.Bytes()>}
         %Equal.sym(Maybe<&2, Ledgers.Vote>, Ledgers.State.decided(~Spec.Ask, ~Spec.Ask.view, ask1, i), Some{Ledgers.Vote{i, True{}, Ledgers.View.On{c, None{}, None{}}, Some{Trees.Put.root(p)}}}, hdc):
           {Spec.Res.get(ask1, Maybe.bind(&2, Maybe<&2, Hashes.Hash>, Hashes.Hash, Maybe.bind(&2, Ledgers.Vote, Maybe<&2, Hashes.Hash>, Maybe.bind(&2, Ledgers.Vote, Ledgers.Vote, _, y => Spec.Vote.taken(y)), y => Some{Ledgers.Vote.result_of(Some{y})}), g => g), name) == Some{x}: Maybe<&2, Texts.Bytes()>}
-        %Equal.sym(Maybe<&2, List<&2, U32>>, Trees.Tree.get(~Spec.State(), ~Spec.Store.fetch, ask1, Some{Trees.Put.root(p)}, Spec.Key.res(name)), Some{Spec.Res.code(Some{x})}, hgs): {Maybe.bind(&2, List<&2, U32>, Texts.Bytes(), _, ws => Spec.Res.read(ws)) == Some{x}: Maybe<&2, Texts.Bytes()>}
-        Res.read_code(x)))
+        %Equal.sym(Maybe<&2, List<&2, U32>>, Trees.Tree.get(~Spec.State(), ~Spec.Store.fetch, ask1, Some{Trees.Put.root(p)}, Spec.Key.res(name)), Some{Spec.Res.code(Some{rt})}, hgs): {Spec.Root.bytes(ask1, Maybe.bind(&2, List<&2, U32>, Ropes.Root, _, ws => Spec.Res.read(ws))) == Some{x}: Maybe<&2, Texts.Bytes()>}
+        %Equal.sym(Maybe<&2, Ropes.Root>, Spec.Res.read(Spec.Res.code(Some{rt})), Some{rt}, Res.read_code(rt)): {Spec.Root.bytes(ask1, _) == Some{x}: Maybe<&2, Texts.Bytes()>}
+        Rope.kept(s1, ask1, rt, x, hgrow)(hx)))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Asks
@@ -1214,20 +1250,20 @@ def Root.kept(
     a => h => h
   )
 
-# the resource n of the tree h stays
-def Res.kept(
+# the root of the resource n of the tree h stays
+def Res.root_kept(
   +s: Spec.State(),
   s2: Spec.State(),
   +h: Maybe<&2, Hashes.Hash>,
   +n: Resources.Name,
-  -x: Texts.Bytes(),
+  -x: Ropes.Root,
   gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool}
 ) -> {
-  Spec.Res.get(s, h, n) == Some{x}: Maybe<&2, Texts.Bytes()>
-} -> {Spec.Res.get(s2, h, n) == Some{x}: Maybe<&2, Texts.Bytes()>}:
+  Spec.Res.root(s, h, n) == Some{x}: Maybe<&2, Ropes.Root>
+} -> {Spec.Res.root(s2, h, n) == Some{x}: Maybe<&2, Ropes.Root>}:
   Shared.Maybe.bind_kept(
     List<&2, U32>,
-    Texts.Bytes(),
+    Ropes.Root,
     Spec.Node.get(s, h, Spec.Key.res(n)),
     Spec.Node.get(s2, h, Spec.Key.res(n)),
     ws => Spec.Res.read(ws),
@@ -1255,6 +1291,29 @@ def Res.kept(
       w
     )(gr),
     w => e => e
+  )
+
+# the resource n of the tree h stays
+def Res.kept(
+  +s: Spec.State(),
+  +s2: Spec.State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  +n: Resources.Name,
+  +x: Texts.Bytes(),
+  +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool}
+) -> {
+  Spec.Res.get(s, h, n) == Some{x}: Maybe<&2, Texts.Bytes()>
+} -> {Spec.Res.get(s2, h, n) == Some{x}: Maybe<&2, Texts.Bytes()>}:
+  Shared.Maybe.bind_kept(
+    Ropes.Root,
+    Texts.Bytes(),
+    Spec.Res.root(s, h, n),
+    Spec.Res.root(s2, h, n),
+    r => Ropes.Rope.read(~Spec.State(), ~Spec.Store.fetch, s, r),
+    r => Ropes.Rope.read(~Spec.State(), ~Spec.Store.fetch, s2, r),
+    x,
+    a => Res.root_kept(s, s2, h, n, a, gr),
+    a => Rope.kept(s, s2, a, x, gr)
   )
 
 # a version stays a version, once its status is known (st)
@@ -1316,7 +1375,7 @@ def Content.kept.root(
   +s2: Spec.State(),
   v: Ledgers.Id,
   +n: Resources.Name,
-  -x: Texts.Bytes(),
+  +x: Texts.Bytes(),
   +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
   m: Maybe<&2, Maybe<&2, Hashes.Hash>>,
   e: {Spec.Node.root(s, v) == m: Maybe<&2, Maybe<&2, Hashes.Hash>>}
@@ -1343,7 +1402,7 @@ def Content.kept.root(
             Equal.cong(
               Maybe<&2, List<&2, U32>>,
               Maybe<&2, Texts.Bytes()>,
-              g => Maybe.bind(&2, List<&2, U32>, Texts.Bytes(), g, ws => Spec.Res.read(ws)),
+              g => Spec.Root.bytes(s, Maybe.bind(&2, List<&2, U32>, Ropes.Root, g, ws => Spec.Res.read(ws))),
               None{},
               Spec.Node.get(s, None{}, Spec.Key.res(n)),
               Equal.sym(
@@ -1386,7 +1445,7 @@ def Content.kept.at(
   +s2: Spec.State(),
   n: Resources.Name,
   +v: Ledgers.Id,
-  -x: Texts.Bytes(),
+  +x: Texts.Bytes(),
   +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
   b: Bool,
   e: {Spec.Node.is_version(s, v) == b: Bool}
@@ -2708,4 +2767,73 @@ def Spec.Node.draft_own(s, w, q, t, a, r, b, n, c):
         == Some{c}: Maybe<&2, Spec.Content>
     }
     Last.none(s, r, b, n, as, Some{c})(hn)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# Contents
+# --------
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a node's ropes hold the words ds exactly when its ledger does
+def Holds.rope(
+  ds: List<&2, List<&2, U32>>,
+  s: Spec.State()
+) -> {
+  Ropes.Rope.holds(
+    ~Spec.State(),
+    ~Spec.Store.fetch,
+    s,
+    ds
+  )
+    == Ledgers.Data.holds(~Spec.Ask, s, ds): Bool
+}:
+  match ds:
+    case Nil{}:
+      {==}
+    case Con{ws, rest}:
+      %Equal.sym(
+        Bool,
+        Ropes.Rope.holds(~Spec.State(), ~Spec.Store.fetch, s, rest),
+        Ledgers.Data.holds(~Spec.Ask, s, rest),
+        Holds.rope(rest, s)
+      ):
+        {
+          List.all.if(
+            u => _,
+            Ropes.Rope.has(~Spec.State(), ~Spec.Store.fetch, s, ws)
+          )
+            == List.all.if(
+              u => Ledgers.Data.holds(~Spec.Ask, s, rest),
+              Ledgers.Data.has(~Spec.Ask, s, ws)
+            ): Bool
+        }
+      {==}
+
+def Spec.Node.keep_reads(s, b):
+  hf =>
+    +cs = Ropes.Rope.cut(~U32, ~Spec.Byte.is_end, b)
+    +ns = Ropes.Put.nodes(Ropes.Rope.put(cs))
+    +k = Spec.Node.keep(s, b)
+    %Ropes.Rope.cut_flat(~U32, ~Spec.Byte.is_end, b): {
+      Ropes.Rope.read(
+        ~Spec.State(),
+        ~Spec.Store.fetch,
+        k,
+        Ropes.Put.root(Ropes.Rope.put(cs))
+      )
+        == Some{_}: Maybe<&2, Texts.Bytes()>
+    }
+    Ropes.Rope.read_put(
+      ~Spec.State(),
+      ~Spec.Store.fetch,
+      k,
+      cs
+    )(
+      %Equal.sym(
+        Bool,
+        Ropes.Rope.holds(~Spec.State(), ~Spec.Store.fetch, k, ns),
+        Ledgers.Data.holds(~Spec.Ask, k, ns),
+        Holds.rope(ns, k)
+      ): {_ == True{}: Bool}
+      Ledgers.State.put_datas_holds(~Spec.Ask, ~Spec.Ask.is_eq, ~Ask.laws(), ns, s)(hf)
+    )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
