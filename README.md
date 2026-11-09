@@ -16,7 +16,7 @@ All Vend Nodes are "equal" (a classic server is just one that owns the shared br
 
 ## Vend Store
 
-Can be held by many other Vend Nodes.
+A Vend Store is a permanently named (writer name + writer-chosen request id) set of branches and their Owner Groups sharing one history. A store can be held by many Vend Nodes, each keeping the part it uses and fetching the rest on demand, while every part is kept by enough Vend Nodes to never be lost. Content is stored once by hash and versions share every unchanged part, so an edit costs about its own size, even in huge files; its own Owner Group decides which branch and group names exist.
 
 ## Owner Group
 
