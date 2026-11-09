@@ -3015,8 +3015,6 @@ def Tree.other_split_new.con(
           n1
         )
 
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
 # Tree.split, with the new leaf of k and v and the old part o, a leaf of k1,
 # reads as nothing for a key k2 that is neither, along any path p2
 def Tree.other_split_new(
@@ -7020,3 +7018,1764 @@ def Canon.at_parts_all(
     Canon.pick_sub(n, d, Binds.at(all, d, z))
   )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a binder of a premise of a proof; a proof does not run
+# the nibble at depth d of the key k is the first of its path from there
+def Key.nibble_of(
+  k: List<&2, U32>,
+  d: Nat,
+  a: Nat,
+  r: List<&2, Nat>
+) -> {a <> r == List.drop(&2, Nat, Tree.path(k), d): List<&2, Nat>} -> {Key.nibble(k, d) == a: Nat}:
+  e =>
+    %e: {Shared.List.head_or(Nat, _, 0n) == a: Nat}
+    {==}
+
+# the path of the key k from depth d, after its first nibble, is its path from
+# the next depth
+def Key.drop_next(
+  k: List<&2, U32>,
+  d: Nat,
+  a: Nat,
+  r: List<&2, Nat>
+) -> {
+  a <> r == List.drop(&2, Nat, Tree.path(k), d): List<&2, Nat>
+} -> {r == List.drop(&2, Nat, Tree.path(k), 1n+d): List<&2, Nat>}:
+  e => Equal.sym(
+    List<&2, Nat>,
+    List.drop(&2, Nat, Tree.path(k), 1n+d),
+    r,
+    Shared.List.drop_step(
+      &2,
+      Nat,
+      Tree.path(k),
+      d,
+      a,
+      r
+    )(Equal.sym(List<&2, Nat>, a <> r, List.drop(&2, Nat, Tree.path(k), d), e))
+  )
+
+# two bindings under the nibble a both
+def Binds.at_same(
+  b1: Binding,
+  b2: Binding,
+  d: Nat,
+  +a: Nat
+) -> {
+  Key.nibble(Binding.key(b1), d) == a: Nat
+} -> {
+  Key.nibble(Binding.key(b2), d) == a: Nat
+} -> {Binds.at([b1, b2], d, a) == [b1, b2]: List<&2, Binding>}:
+  e1 => e2 =>
+    %Equal.sym(Nat, Key.nibble(Binding.key(b1), d), a, e1):
+      {
+        Binds.keep(
+          Nat.is_eq(a, _),
+          b1,
+          Binds.keep(Nat.is_eq(a, Key.nibble(Binding.key(b2), d)), b2, [])
+        )
+          == [b1, b2]: List<&2, Binding>
+      }
+    %Equal.sym(Nat, Key.nibble(Binding.key(b2), d), a, e2):
+      {
+        Binds.keep(
+          Nat.is_eq(a, a),
+          b1,
+          Binds.keep(Nat.is_eq(a, _), b2, [])
+        )
+          == [b1, b2]: List<&2, Binding>
+      }
+    %Equal.sym(Bool, Nat.is_eq(a, a), True{}, Shared.Nat.is_eq_refl(a)):
+      {Binds.keep(_, b1, Binds.keep(Nat.is_eq(a, a), b2, [])) == [b1, b2]: List<&2, Binding>}
+    %Equal.sym(Bool, Nat.is_eq(a, a), True{}, Shared.Nat.is_eq_refl(a)):
+      {b1 <> Binds.keep(_, b2, []) == [b1, b2]: List<&2, Binding>}
+    {==}
+
+# of two bindings under the nibbles a and b, another, the first is under a
+def Binds.at_first(
+  b1: Binding,
+  b2: Binding,
+  d: Nat,
+  a: Nat,
+  b: Nat
+) -> {
+  Key.nibble(Binding.key(b1), d) == a: Nat
+} -> {
+  Key.nibble(Binding.key(b2), d) == b: Nat
+} -> {Nat.is_eq(a, b) == False{}: Bool} -> {Binds.at([b1, b2], d, a) == [b1]: List<&2, Binding>}:
+  e1 => e2 => ne =>
+    %Equal.sym(Nat, Key.nibble(Binding.key(b1), d), a, e1):
+      {
+        Binds.keep(
+          Nat.is_eq(a, _),
+          b1,
+          Binds.keep(Nat.is_eq(a, Key.nibble(Binding.key(b2), d)), b2, [])
+        )
+          == [b1]: List<&2, Binding>
+      }
+    %Equal.sym(Nat, Key.nibble(Binding.key(b2), d), b, e2):
+      {
+        Binds.keep(
+          Nat.is_eq(a, a),
+          b1,
+          Binds.keep(Nat.is_eq(a, _), b2, [])
+        )
+          == [b1]: List<&2, Binding>
+      }
+    %Equal.sym(Bool, Nat.is_eq(a, a), True{}, Shared.Nat.is_eq_refl(a)):
+      {Binds.keep(_, b1, Binds.keep(Nat.is_eq(a, b), b2, [])) == [b1]: List<&2, Binding>}
+    %Equal.sym(Bool, Nat.is_eq(a, b), False{}, ne):
+      {b1 <> Binds.keep(_, b2, []) == [b1]: List<&2, Binding>}
+    {==}
+
+# of two bindings under the nibbles a and b, another, the second is under b
+def Binds.at_second(
+  b1: Binding,
+  b2: Binding,
+  d: Nat,
+  a: Nat,
+  b: Nat
+) -> {
+  Key.nibble(Binding.key(b1), d) == a: Nat
+} -> {
+  Key.nibble(Binding.key(b2), d) == b: Nat
+} -> {Nat.is_eq(b, a) == False{}: Bool} -> {Binds.at([b1, b2], d, b) == [b2]: List<&2, Binding>}:
+  e1 => e2 => ne =>
+    %Equal.sym(Nat, Key.nibble(Binding.key(b1), d), a, e1):
+      {
+        Binds.keep(
+          Nat.is_eq(b, _),
+          b1,
+          Binds.keep(Nat.is_eq(b, Key.nibble(Binding.key(b2), d)), b2, [])
+        )
+          == [b2]: List<&2, Binding>
+      }
+    %Equal.sym(Nat, Key.nibble(Binding.key(b2), d), b, e2):
+      {
+        Binds.keep(
+          Nat.is_eq(b, a),
+          b1,
+          Binds.keep(Nat.is_eq(b, _), b2, [])
+        )
+          == [b2]: List<&2, Binding>
+      }
+    %Equal.sym(Bool, Nat.is_eq(b, a), False{}, ne):
+      {Binds.keep(_, b1, Binds.keep(Nat.is_eq(b, b), b2, [])) == [b2]: List<&2, Binding>}
+    %Equal.sym(Bool, Nat.is_eq(b, b), True{}, Shared.Nat.is_eq_refl(b)):
+      {Binds.keep(_, b2, []) == [b2]: List<&2, Binding>}
+    {==}
+
+# the canonical parts of two bindings under the nibbles x1 and x2
+def Canon.two(
+  +m: Nat,
+  +d: Nat,
+  +l: List<&2, Binding>,
+  +x1: Nat,
+  +x2: Nat
+) -> List<&2, Maybe<&2, Hashes.Hash>>:
+  Parts.put(
+    Parts.put([], x2, Canon.sub(1n+m, d, Binds.at(l, d, x2))),
+    x1,
+    Canon.sub(1n+m, d, Binds.at(l, d, x1))
+  )
+
+# the canonical parts of two bindings under one nibble a: the part a only
+def Canon.two_same(
+  +m: Nat,
+  +d: Nat,
+  +b1: Binding,
+  +b2: Binding,
+  +a: Nat
+) -> {
+  Key.nibble(Binding.key(b1), d) == a: Nat
+} -> {
+  Key.nibble(Binding.key(b2), d) == a: Nat
+} -> {
+  Canon.parts(
+    1n+m,
+    d,
+    [b1, b2],
+    [b1, b2]
+  )
+    == Parts.put([], a, Canon.root(m, 1n+d, [b1, b2])): List<&2, Maybe<&2, Hashes.Hash>>
+}:
+  +e1 => +e2 =>
+    %Equal.sym(Nat, Key.nibble(Binding.key(b1), d), a, e1):
+      {
+        Canon.two(
+          m,
+          d,
+          [b1, b2],
+          _,
+          Key.nibble(Binding.key(b2), d)
+        )
+          == Parts.put([], a, Canon.root(m, 1n+d, [b1, b2])): List<&2, Maybe<&2, Hashes.Hash>>
+      }
+    %Equal.sym(Nat, Key.nibble(Binding.key(b2), d), a, e2):
+      {
+        Canon.two(
+          m,
+          d,
+          [b1, b2],
+          a,
+          _
+        )
+          == Parts.put([], a, Canon.root(m, 1n+d, [b1, b2])): List<&2, Maybe<&2, Hashes.Hash>>
+      }
+    %Equal.sym(
+      List<&2, Maybe<&2, Hashes.Hash>>,
+      Parts.put(
+        Parts.put([], a, Canon.sub(1n+m, d, Binds.at([b1, b2], d, a))),
+        a,
+        Canon.sub(1n+m, d, Binds.at([b1, b2], d, a))
+      ),
+      Parts.put([], a, Canon.sub(1n+m, d, Binds.at([b1, b2], d, a))),
+      Parts.put_twice(
+        [],
+        a,
+        Canon.sub(1n+m, d, Binds.at([b1, b2], d, a)),
+        Canon.sub(1n+m, d, Binds.at([b1, b2], d, a))
+      )
+    ):
+      {_ == Parts.put([], a, Canon.root(m, 1n+d, [b1, b2])): List<&2, Maybe<&2, Hashes.Hash>>}
+    %Equal.sym(
+      List<&2, Binding>,
+      Binds.at([b1, b2], d, a),
+      [b1, b2],
+      Binds.at_same(b1, b2, d, a)(e1)(e2)
+    ):
+      {
+        Parts.put(
+          [],
+          a,
+          Canon.sub(1n+m, d, _)
+        )
+          == Parts.put([], a, Canon.root(m, 1n+d, [b1, b2])): List<&2, Maybe<&2, Hashes.Hash>>
+      }
+    {==}
+
+# the canonical parts of two bindings under the nibbles a and b, another: the
+# leaf of each at its nibble
+def Canon.two_other(
+  m: Nat,
+  +d: Nat,
+  +b1: Binding,
+  +b2: Binding,
+  +a: Nat,
+  +b: Nat
+) -> {
+  Key.nibble(Binding.key(b1), d) == a: Nat
+} -> {
+  Key.nibble(Binding.key(b2), d) == b: Nat
+} -> {
+  Nat.is_eq(a, b) == False{}: Bool
+} -> {
+  Canon.parts(
+    1n+m,
+    d,
+    [b1, b2],
+    [b1, b2]
+  )
+    == Parts.put(
+      Parts.put([], a, Some{Node.hash(Binding.node(b1))}),
+      b,
+      Some{Node.hash(Binding.node(b2))}
+    ): List<&2, Maybe<&2, Hashes.Hash>>
+}:
+  +e1 => +e2 => +ne =>
+    +nb = Equal.trans(
+      Bool,
+      Nat.is_eq(b, a),
+      Nat.is_eq(a, b),
+      False{},
+      Shared.Nat.is_eq_comm(b, a),
+      ne
+    )
+    +goal = Parts.put(
+      Parts.put([], a, Some{Node.hash(Binding.node(b1))}),
+      b,
+      Some{Node.hash(Binding.node(b2))}
+    )
+    %Equal.sym(Nat, Key.nibble(Binding.key(b1), d), a, e1):
+      {
+        Canon.two(
+          m,
+          d,
+          [b1, b2],
+          _,
+          Key.nibble(Binding.key(b2), d)
+        )
+          == goal: List<&2, Maybe<&2, Hashes.Hash>>
+      }
+    %Equal.sym(Nat, Key.nibble(Binding.key(b2), d), b, e2):
+      {Canon.two(m, d, [b1, b2], a, _) == goal: List<&2, Maybe<&2, Hashes.Hash>>}
+    %Equal.sym(
+      List<&2, Binding>,
+      Binds.at([b1, b2], d, b),
+      [b2],
+      Binds.at_second(b1, b2, d, a, b)(e1)(e2)(nb)
+    ):
+      {
+        Parts.put(
+          Parts.put([], b, Canon.sub(1n+m, d, _)),
+          a,
+          Canon.sub(1n+m, d, Binds.at([b1, b2], d, a))
+        )
+          == goal: List<&2, Maybe<&2, Hashes.Hash>>
+      }
+    %Equal.sym(
+      List<&2, Binding>,
+      Binds.at([b1, b2], d, a),
+      [b1],
+      Binds.at_first(b1, b2, d, a, b)(e1)(e2)(ne)
+    ):
+      {
+        Parts.put(
+          Parts.put([], b, Canon.sub(1n+m, d, [b2])),
+          a,
+          Canon.sub(1n+m, d, _)
+        )
+          == goal: List<&2, Maybe<&2, Hashes.Hash>>
+      }
+    Parts.put_comm(
+      [],
+      b,
+      a,
+      Some{Node.hash(Binding.node(b2))},
+      Some{Node.hash(Binding.node(b1))}
+    )(nb)
+
+# the root of a branch whose part a is the new subtree that m gives, when m
+# gives one whose root is w
+def Canon.into(
+  m: Maybe<&2, Put>,
+  ks: List<&2, Maybe<&2, Hashes.Hash>>,
+  a: Nat,
+  t: Put,
+  w: Maybe<&2, Hashes.Hash>,
+  ih: @t2: Put -> {
+    m == Some{t2}: Maybe<&2, Put>
+  } -> {Some{Put.root(t2)} == w: Maybe<&2, Hashes.Hash>}
+) -> {
+  Shared.Maybe.then(Put, Put, m, p => Some{Put.into(ks, a, p)}) == Some{t}: Maybe<&2, Put>
+} -> {
+  Some{Put.root(t)} == Some{Node.hash(Node.branch{Parts.put(ks, a, w)})}: Maybe<&2, Hashes.Hash>
+}:
+  match m:
+    case None{}:
+      h => Empty.absurd(
+        {
+          Some{
+            Put.root(t)
+          }
+            == Some{Node.hash(Node.branch{Parts.put(ks, a, w)})}: Maybe<&2, Hashes.Hash>
+        },
+        Shared.Maybe.none_ne_some(Put, t, h)
+      )
+    case Some{t2}:
+      h =>
+        %Shared.Maybe.some_inj(Put, Put.into(ks, a, t2), t, h):
+          {
+            Some{
+              Put.root(_)
+            }
+              == Some{Node.hash(Node.branch{Parts.put(ks, a, w)})}: Maybe<&2, Hashes.Hash>
+          }
+        %ih(
+          t2
+        )(
+          {==}
+        ): {
+          Some{
+            Put.root(Put.into(ks, a, t2))
+          }
+            == Some{Node.hash(Node.branch{Parts.put(ks, a, _)})}: Maybe<&2, Hashes.Hash>
+        }
+        {==}
+
+# a split of two leaves under the nibbles a and b of their paths, when c tells
+# whether a is b: the canonical root of the two
+def Canon.split.at(
+  c: Bool,
+  +a: Nat,
+  b: Nat,
+  +r1: List<&2, Nat>,
+  r2: List<&2, Nat>,
+  +d: Nat,
+  +k1: List<&2, U32>,
+  +v1: List<&2, U32>,
+  +k2: List<&2, U32>,
+  +v2: List<&2, U32>,
+  ns: List<&2, List<&2, U32>>,
+  t: Put,
+  ec: {Nat.is_eq(a, b) == c: Bool},
+  e1: {Key.nibble(k1, d) == a: Nat},
+  e2: {Key.nibble(k2, d) == b: Nat},
+  ih: @t2: Put -> {
+    Tree.split(
+      r1,
+      r2,
+      Put{Node.hash(Node.leaf{k1, v1}), ns},
+      Some{Node.hash(Node.leaf{k2, v2})}
+    )
+      == Some{t2}: Maybe<&2, Put>
+  } -> {
+    Some{
+      Put.root(t2)
+    }
+      == Canon.root(
+        List.length(&2, Nat, r1),
+        1n+d,
+        [Binding{k1, v1}, Binding{k2, v2}]
+      ): Maybe<&2, Hashes.Hash>
+  }
+) -> {
+  Shared.Bool.when(
+    Maybe<&2, Put>,
+    c,
+    u => Shared.Maybe.then(
+      Put,
+      Put,
+      Tree.split(r1, r2, Put{Node.hash(Node.leaf{k1, v1}), ns}, Some{Node.hash(Node.leaf{k2, v2})}),
+      p => Some{Put.into(Parts.none(), a, p)}
+    ),
+    u => Some{
+      Put.node(
+        Node.branch{
+          Parts.put(
+            Parts.put(Parts.none(), a, Some{Node.hash(Node.leaf{k1, v1})}),
+            b,
+            Some{Node.hash(Node.leaf{k2, v2})}
+          )
+        },
+        ns
+      )
+    }
+  )
+    == Some{t}: Maybe<&2, Put>
+} -> {
+  Some{
+    Put.root(t)
+  }
+    == Canon.root(
+      1n+List.length(&2, Nat, r1),
+      d,
+      [Binding{k1, v1}, Binding{k2, v2}]
+    ): Maybe<&2, Hashes.Hash>
+}:
+  match c:
+    case True{}:
+      h =>
+        +l = {[Binding{k1, v1}, Binding{k2, v2}]: List<&2, Binding>}
+        +m = List.length(&2, Nat, r1)
+        +ba = Shared.Nat.is_eq_sound(a, b)(ec)
+        %Equal.sym(
+          List<&2, Maybe<&2, Hashes.Hash>>,
+          Canon.parts(1n+m, d, l, l),
+          Parts.put([], a, Canon.root(m, 1n+d, l)),
+          Canon.two_same(
+            m,
+            d,
+            Binding{k1, v1},
+            Binding{k2, v2},
+            a
+          )(e1)(Equal.trans(Nat, Key.nibble(k2, d), b, a, e2, Equal.sym(Nat, a, b, ba)))
+        ): {Some{Put.root(t)} == Some{Node.hash(Node.branch{_})}: Maybe<&2, Hashes.Hash>}
+        Canon.into(
+          Tree.split(
+            r1,
+            r2,
+            Put{Node.hash(Node.leaf{k1, v1}), ns},
+            Some{Node.hash(Node.leaf{k2, v2})}
+          ),
+          [],
+          a,
+          t,
+          Canon.root(m, 1n+d, l),
+          ih
+        )(h)
+    case False{}:
+      h =>
+        +l = {[Binding{k1, v1}, Binding{k2, v2}]: List<&2, Binding>}
+        +m = List.length(&2, Nat, r1)
+        %Equal.sym(
+          List<&2, Maybe<&2, Hashes.Hash>>,
+          Canon.parts(1n+m, d, l, l),
+          Parts.put(
+            Parts.put([], a, Some{Node.hash(Node.leaf{k1, v1})}),
+            b,
+            Some{Node.hash(Node.leaf{k2, v2})}
+          ),
+          Canon.two_other(m, d, Binding{k1, v1}, Binding{k2, v2}, a, b)(e1)(e2)(ec)
+        ): {Some{Put.root(t)} == Some{Node.hash(Node.branch{_})}: Maybe<&2, Hashes.Hash>}
+        %Shared.Maybe.some_inj(
+          Put,
+          Put.node(
+            Node.branch{
+              Parts.put(
+                Parts.put([], a, Some{Node.hash(Node.leaf{k1, v1})}),
+                b,
+                Some{Node.hash(Node.leaf{k2, v2})}
+              )
+            },
+            ns
+          ),
+          t,
+          h
+        ): {
+          Some{
+            Put.root(_)
+          }
+            == Some{
+              Node.hash(
+                Node.branch{
+                  Parts.put(
+                    Parts.put([], a, Some{Node.hash(Node.leaf{k1, v1})}),
+                    b,
+                    Some{Node.hash(Node.leaf{k2, v2})}
+                  )
+                }
+              )
+            }: Maybe<&2, Hashes.Hash>
+        }
+        {==}
+
+# a split of a new leaf and a leaf already there, whose paths from depth d are
+# p1 and p2, gives the canonical root of the two
+def Canon.split(
+  p1: List<&2, Nat>,
+  p2: List<&2, Nat>,
+  +d: Nat,
+  +k1: List<&2, U32>,
+  +v1: List<&2, U32>,
+  +k2: List<&2, U32>,
+  +v2: List<&2, U32>,
+  +ns: List<&2, List<&2, U32>>,
+  t: Put
+) -> {
+  p1 == List.drop(&2, Nat, Tree.path(k1), d): List<&2, Nat>
+} -> {
+  p2 == List.drop(&2, Nat, Tree.path(k2), d): List<&2, Nat>
+} -> {
+  Tree.split(
+    p1,
+    p2,
+    Put{Node.hash(Node.leaf{k1, v1}), ns},
+    Some{Node.hash(Node.leaf{k2, v2})}
+  )
+    == Some{t}: Maybe<&2, Put>
+} -> {
+  Some{
+    Put.root(t)
+  }
+    == Canon.root(
+      List.length(&2, Nat, p1),
+      d,
+      [Binding{k1, v1}, Binding{k2, v2}]
+    ): Maybe<&2, Hashes.Hash>
+}:
+  match p1 p2:
+    case Con{+a, +r1} Con{+b, +r2}:
+      +h1 => +h2 => hs => Canon.split.at(
+        Nat.is_eq(a, b),
+        a,
+        b,
+        r1,
+        r2,
+        d,
+        k1,
+        v1,
+        k2,
+        v2,
+        ns,
+        t,
+        {==},
+        Key.nibble_of(k1, d, a, r1)(h1),
+        Key.nibble_of(k2, d, b, r2)(h2),
+        t2 => Canon.split(
+          r1,
+          r2,
+          1n+d,
+          k1,
+          v1,
+          k2,
+          v2,
+          ns,
+          t2
+        )(Key.drop_next(k1, d, a, r1)(h1))(Key.drop_next(k2, d, b, r2)(h2))
+      )(hs)
+    case Nil{} q:
+      h1 => h2 => hs => Empty.absurd(
+        {
+          Some{
+            Put.root(t)
+          }
+            == Canon.root(0n, d, [Binding{k1, v1}, Binding{k2, v2}]): Maybe<&2, Hashes.Hash>
+        },
+        Shared.Maybe.none_ne_some(Put, t, hs)
+      )
+    case Con{a, r1} Nil{}:
+      h1 => h2 => hs => Empty.absurd(
+        {
+          Some{
+            Put.root(t)
+          }
+            == Canon.root(
+              1n+List.length(&2, Nat, r1),
+              d,
+              [Binding{k1, v1}, Binding{k2, v2}]
+            ): Maybe<&2, Hashes.Hash>
+        },
+        Shared.Maybe.none_ne_some(Put, t, hs)
+      )
+
+# a list that is empty is no list
+def List.empty_nil(
+  e: List<&2, Binding>
+) -> {List.is_empty(&2, Binding, e) == True{}: Bool} -> {e == []: List<&2, Binding>}:
+  match e:
+    case Nil{}:
+      h => {==}
+    case Con{b, r}:
+      h => Empty.absurd({b <> r == []: List<&2, Binding>}, Shared.Bool.false_ne_true(h))
+
+# the store holds the canonical tree under the nibble z, when the binding b,
+# kept when c (it is under z) before the bindings r, is under z
+def Canon.holds_at.at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  c: Bool,
+  +s: S,
+  +m: Nat,
+  +d: Nat,
+  +all: List<&2, Binding>,
+  +b: Binding,
+  r: List<&2, Binding>,
+  z: Nat,
+  ec: {Nat.is_eq(z, Key.nibble(Binding.key(b), d)) == c: Bool},
+  ih: {
+    List.is_empty(&2, Binding, Binds.at(r, d, z)) == False{}: Bool
+  } -> {Canon.holds(~S, ~fetch, s, m, 1n+d, Binds.at(all, d, z)) == True{}: Bool}
+) -> {
+  Canon.holds.parts(~S, ~fetch, s, 1n+m, d, all, b <> r) == True{}: Bool
+} -> {
+  List.is_empty(&2, Binding, Binds.keep(c, b, Binds.at(r, d, z))) == False{}: Bool
+} -> {Canon.holds(~S, ~fetch, s, m, 1n+d, Binds.at(all, d, z)) == True{}: Bool}:
+  match c:
+    case True{}:
+      h => he =>
+        %Equal.sym(
+          Nat,
+          z,
+          Key.nibble(Binding.key(b), d),
+          Shared.Nat.is_eq_sound(z, Key.nibble(Binding.key(b), d))(ec)
+        ):
+          {Canon.holds(~S, ~fetch, s, m, 1n+d, Binds.at(all, d, _)) == True{}: Bool}
+        Shared.List.all.if_hit(
+          Canon.holds(~S, ~fetch, s, m, 1n+d, Binds.at(all, d, Key.nibble(Binding.key(b), d))),
+          u => Canon.holds.parts(~S, ~fetch, s, 1n+m, d, all, r)
+        )(h)
+    case False{}:
+      h => he => ih(he)
+
+# the store holds the canonical tree under a nibble z that a binding of l is
+# under, when it holds the trees under the nibbles of l
+def Canon.holds_at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +m: Nat,
+  +d: Nat,
+  +all: List<&2, Binding>,
+  l: List<&2, Binding>,
+  +z: Nat
+) -> {
+  Canon.holds.parts(~S, ~fetch, s, 1n+m, d, all, l) == True{}: Bool
+} -> {
+  List.is_empty(&2, Binding, Binds.at(l, d, z)) == False{}: Bool
+} -> {Canon.holds(~S, ~fetch, s, m, 1n+d, Binds.at(all, d, z)) == True{}: Bool}:
+  match l:
+    case Nil{}:
+      h => he => Empty.absurd(
+        {Canon.holds(~S, ~fetch, s, m, 1n+d, Binds.at(all, d, z)) == True{}: Bool},
+        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, he))
+      )
+    case Con{+b, +r}:
+      +h => Canon.holds_at.at(
+        ~S,
+        ~fetch,
+        Nat.is_eq(z, Key.nibble(Binding.key(b), d)),
+        s,
+        m,
+        d,
+        all,
+        b,
+        r,
+        z,
+        {==},
+        Canon.holds_at(
+          ~S,
+          ~fetch,
+          s,
+          m,
+          d,
+          all,
+          r,
+          z
+        )(
+          Shared.List.all.if_rest(
+            Canon.holds(~S, ~fetch, s, m, 1n+d, Binds.at(all, d, Key.nibble(Binding.key(b), d))),
+            u => Canon.holds.parts(~S, ~fetch, s, 1n+m, d, all, r)
+          )(h)
+        )
+      )(h)
+
+# the store holds the canonical tree under the nibble z, whether its bindings
+# are empty (c) or not
+def Canon.holds_all.at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  c: Bool,
+  s: S,
+  m: Nat,
+  d: Nat,
+  +all: List<&2, Binding>,
+  z: Nat,
+  ec: {List.is_empty(&2, Binding, Binds.at(all, d, z)) == c: Bool}
+) -> {
+  Canon.holds.parts(~S, ~fetch, s, 1n+m, d, all, all) == True{}: Bool
+} -> {Canon.holds(~S, ~fetch, s, m, 1n+d, Binds.at(all, d, z)) == True{}: Bool}:
+  match c:
+    case True{}:
+      h =>
+        %Equal.sym(
+          List<&2, Binding>,
+          Binds.at(all, d, z),
+          [],
+          List.empty_nil(Binds.at(all, d, z))(ec)
+        ):
+          {Canon.holds(~S, ~fetch, s, m, 1n+d, _) == True{}: Bool}
+        {==}
+    case False{}:
+      h => Canon.holds_at(~S, ~fetch, s, m, d, all, all, z)(h)(ec)
+
+# the store holds the canonical tree under each nibble z of a branch whose
+# canonical subtrees it holds
+def Canon.holds_all(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  m: Nat,
+  +d: Nat,
+  +all: List<&2, Binding>,
+  +z: Nat
+) -> {
+  Canon.holds.parts(~S, ~fetch, s, 1n+m, d, all, all) == True{}: Bool
+} -> {Canon.holds(~S, ~fetch, s, m, 1n+d, Binds.at(all, d, z)) == True{}: Bool}:
+  Canon.holds_all.at(
+    ~S,
+    ~fetch,
+    List.is_empty(&2, Binding, Binds.at(all, d, z)),
+    s,
+    m,
+    d,
+    all,
+    z,
+    {==}
+  )
+
+# the canonical root of a binding before others is a branch
+def Canon.root_many(
+  n: Nat,
+  d: Nat,
+  b: Binding,
+  x: List<&2, Binding>
+) -> {
+  List.is_empty(&2, Binding, x) == False{}: Bool
+} -> {
+  Canon.root(
+    n,
+    d,
+    b <> x
+  )
+    == Some{Node.hash(Node.branch{Canon.parts(n, d, b <> x, b <> x)})}: Maybe<&2, Hashes.Hash>
+}:
+  match x:
+    case Nil{}:
+      e => Empty.absurd(
+        {
+          Canon.root(
+            n,
+            d,
+            [b]
+          )
+            == Some{Node.hash(Node.branch{Canon.parts(n, d, [b], [b])})}: Maybe<&2, Hashes.Hash>
+        },
+        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, e))
+      )
+    case Con{c, r}:
+      e => {==}
+
+# a put of the part x, under which the key k is, at the end of the canonical
+# parts of bs, for the bindings of l, is the same for the bindings bs with k
+# bound (when c1 tells whether the binding b is under x, and c2 whether its
+# key is not k)
+def Canon.parts_put.at(
+  ca: Bool,
+  cd: Bool,
+  +m: Nat,
+  +d: Nat,
+  +bs: List<&2, Binding>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +x: Nat,
+  +y: Maybe<&2, Hashes.Hash>,
+  +b: Binding,
+  +r: List<&2, Binding>,
+  +ea: {Nat.is_eq(x, Key.nibble(Binding.key(b), d)) == ca: Bool},
+  ed: {Key.other(Binding.key(b), k) == cd: Bool},
+  +hx: {Key.nibble(k, d) == x: Nat},
+  ih: {
+    Parts.put(
+      Canon.parts(1n+m, d, bs, r),
+      x,
+      y
+    )
+      == Parts.put(
+        Canon.parts(1n+m, d, Binds.put(bs, k, v), Binds.drop(r, k)),
+        x,
+        y
+      ): List<&2, Maybe<&2, Hashes.Hash>>
+  }
+) -> {
+  Parts.put(
+    Parts.put(
+      Canon.parts(1n+m, d, bs, r),
+      Key.nibble(Binding.key(b), d),
+      Canon.sub(1n+m, d, Binds.at(bs, d, Key.nibble(Binding.key(b), d)))
+    ),
+    x,
+    y
+  )
+    == Parts.put(
+      Canon.parts(1n+m, d, Binds.put(bs, k, v), Binds.keep(cd, b, Binds.drop(r, k))),
+      x,
+      y
+    ): List<&2, Maybe<&2, Hashes.Hash>>
+}:
+  match ca cd:
+    case True{} True{}:
+      +nb = Key.nibble(Binding.key(b), d)
+      q = Canon.parts(1n+m, d, bs, r)
+      q2 = Canon.parts(1n+m, d, Binds.put(bs, k, v), Binds.drop(r, k))
+      vb = Canon.sub(1n+m, d, Binds.at(bs, d, nb))
+      vb2 = Canon.sub(1n+m, d, Binds.at(Binds.put(bs, k, v), d, nb))
+      +xn = Shared.Nat.is_eq_sound(x, nb)(ea)
+      %xn: {
+        Parts.put(
+          Parts.put(q, _, vb),
+          x,
+          y
+        )
+          == Parts.put(Parts.put(q2, nb, vb2), x, y): List<&2, Maybe<&2, Hashes.Hash>>
+      }
+      %Equal.sym(
+        List<&2, Maybe<&2, Hashes.Hash>>,
+        Parts.put(Parts.put(q, x, vb), x, y),
+        Parts.put(q, x, y),
+        Parts.put_twice(q, x, vb, y)
+      ):
+        {_ == Parts.put(Parts.put(q2, nb, vb2), x, y): List<&2, Maybe<&2, Hashes.Hash>>}
+      %Equal.sym(
+        List<&2, Maybe<&2, Hashes.Hash>>,
+        Parts.put(q, x, y),
+        Parts.put(q2, x, y),
+        ih
+      ): {_ == Parts.put(Parts.put(q2, nb, vb2), x, y): List<&2, Maybe<&2, Hashes.Hash>>}
+      %xn: {
+        Parts.put(
+          q2,
+          x,
+          y
+        )
+          == Parts.put(Parts.put(q2, _, vb2), x, y): List<&2, Maybe<&2, Hashes.Hash>>
+      }
+      %Equal.sym(
+        List<&2, Maybe<&2, Hashes.Hash>>,
+        Parts.put(Parts.put(q2, x, vb2), x, y),
+        Parts.put(q2, x, y),
+        Parts.put_twice(q2, x, vb2, y)
+      ):
+        {Parts.put(q2, x, y) == _: List<&2, Maybe<&2, Hashes.Hash>>}
+      {==}
+    case True{} False{}:
+      +nb = Key.nibble(Binding.key(b), d)
+      q = Canon.parts(1n+m, d, bs, r)
+      q2 = Canon.parts(1n+m, d, Binds.put(bs, k, v), Binds.drop(r, k))
+      vb = Canon.sub(1n+m, d, Binds.at(bs, d, nb))
+      vb2 = Canon.sub(1n+m, d, Binds.at(Binds.put(bs, k, v), d, nb))
+      xn = Shared.Nat.is_eq_sound(x, nb)(ea)
+      %xn: {
+        Parts.put(
+          Parts.put(q, _, vb),
+          x,
+          y
+        )
+          == Parts.put(q2, x, y): List<&2, Maybe<&2, Hashes.Hash>>
+      }
+      %Equal.sym(
+        List<&2, Maybe<&2, Hashes.Hash>>,
+        Parts.put(Parts.put(q, x, vb), x, y),
+        Parts.put(q, x, y),
+        Parts.put_twice(q, x, vb, y)
+      ):
+        {_ == Parts.put(q2, x, y): List<&2, Maybe<&2, Hashes.Hash>>}
+      ih
+    case False{} True{}:
+      +nb = Key.nibble(Binding.key(b), d)
+      q = Canon.parts(1n+m, d, bs, r)
+      q2 = Canon.parts(1n+m, d, Binds.put(bs, k, v), Binds.drop(r, k))
+      +vb = Canon.sub(1n+m, d, Binds.at(bs, d, nb))
+      vb2 = Canon.sub(1n+m, d, Binds.at(Binds.put(bs, k, v), d, nb))
+      +nx = Equal.trans(
+        Bool,
+        Nat.is_eq(nb, x),
+        Nat.is_eq(x, nb),
+        False{},
+        Shared.Nat.is_eq_comm(nb, x),
+        ea
+      )
+      %Equal.sym(
+        List<&2, Maybe<&2, Hashes.Hash>>,
+        Parts.put(Parts.put(q, nb, vb), x, y),
+        Parts.put(Parts.put(q, x, y), nb, vb),
+        Parts.put_comm(q, nb, x, vb, y)(nx)
+      ):
+        {_ == Parts.put(Parts.put(q2, nb, vb2), x, y): List<&2, Maybe<&2, Hashes.Hash>>}
+      %Equal.sym(
+        List<&2, Maybe<&2, Hashes.Hash>>,
+        Parts.put(q, x, y),
+        Parts.put(q2, x, y),
+        ih
+      ): {
+        Parts.put(
+          _,
+          nb,
+          vb
+        )
+          == Parts.put(Parts.put(q2, nb, vb2), x, y): List<&2, Maybe<&2, Hashes.Hash>>
+      }
+      %Equal.sym(
+        List<&2, Maybe<&2, Hashes.Hash>>,
+        Parts.put(Parts.put(q2, x, y), nb, vb),
+        Parts.put(Parts.put(q2, nb, vb), x, y),
+        Parts.put_comm(q2, x, nb, y, vb)(ea)
+      ):
+        {_ == Parts.put(Parts.put(q2, nb, vb2), x, y): List<&2, Maybe<&2, Hashes.Hash>>}
+      %Equal.sym(
+        Nat,
+        Key.nibble(k, d),
+        x,
+        hx
+      ): {
+        Parts.put(
+          Parts.put(q2, nb, vb),
+          x,
+          y
+        )
+          == Parts.put(
+            Parts.put(
+              q2,
+              nb,
+              Canon.sub(
+                1n+m,
+                d,
+                Binds.keep(Nat.is_eq(nb, _), Binding{k, v}, Binds.at(Binds.drop(bs, k), d, nb))
+              )
+            ),
+            x,
+            y
+          ): List<&2, Maybe<&2, Hashes.Hash>>
+      }
+      %Equal.sym(
+        Bool,
+        Nat.is_eq(nb, x),
+        False{},
+        nx
+      ): {
+        Parts.put(
+          Parts.put(q2, nb, vb),
+          x,
+          y
+        )
+          == Parts.put(
+            Parts.put(
+              q2,
+              nb,
+              Canon.sub(1n+m, d, Binds.keep(_, Binding{k, v}, Binds.at(Binds.drop(bs, k), d, nb)))
+            ),
+            x,
+            y
+          ): List<&2, Maybe<&2, Hashes.Hash>>
+      }
+      %Equal.sym(
+        List<&2, Binding>,
+        Binds.at(Binds.drop(bs, k), d, nb),
+        Binds.at(bs, d, nb),
+        Binds.at_drop_other(
+          bs,
+          d,
+          nb,
+          k
+        )(
+          Equal.trans(
+            Bool,
+            Nat.is_eq(nb, Key.nibble(k, d)),
+            Nat.is_eq(nb, x),
+            False{},
+            Equal.cong(Nat, Bool, w => Nat.is_eq(nb, w), Key.nibble(k, d), x, hx),
+            nx
+          )
+        )
+      ): {
+        Parts.put(
+          Parts.put(q2, nb, vb),
+          x,
+          y
+        )
+          == Parts.put(
+            Parts.put(q2, nb, Canon.sub(1n+m, d, _)),
+            x,
+            y
+          ): List<&2, Maybe<&2, Hashes.Hash>>
+      }
+      {==}
+    case False{} False{}:
+      +nb = Key.nibble(Binding.key(b), d)
+      q = Canon.parts(1n+m, d, bs, r)
+      q2 = Canon.parts(1n+m, d, Binds.put(bs, k, v), Binds.drop(r, k))
+      vb = Canon.sub(1n+m, d, Binds.at(bs, d, nb))
+      vb2 = Canon.sub(1n+m, d, Binds.at(Binds.put(bs, k, v), d, nb))
+      bx = Equal.trans(
+        Nat,
+        nb,
+        Key.nibble(k, d),
+        x,
+        Equal.cong(
+          List<&2, U32>,
+          Nat,
+          w => Key.nibble(w, d),
+          Binding.key(b),
+          k,
+          Key.same(Binding.key(b), k)(ed)
+        ),
+        hx
+      )
+      Empty.absurd(
+        {
+          Parts.put(
+            Parts.put(q, nb, vb),
+            x,
+            y
+          )
+            == Parts.put(q2, x, y): List<&2, Maybe<&2, Hashes.Hash>>
+        },
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            Nat.is_eq(x, nb),
+            True{},
+            Equal.sym(Bool, Nat.is_eq(x, nb), False{}, ea),
+            Equal.trans(
+              Bool,
+              Nat.is_eq(x, nb),
+              Nat.is_eq(x, x),
+              True{},
+              Equal.cong(Nat, Bool, w => Nat.is_eq(x, w), nb, x, bx),
+              Shared.Nat.is_eq_refl(x)
+            )
+          )
+        )
+      )
+
+# a put of the part x, under which the key k is, at the end of the canonical
+# parts of bs, for the bindings of l, is the same for the bindings bs with k
+# bound, for the bindings of l other than k
+def Canon.parts_put(
+  +m: Nat,
+  +d: Nat,
+  +bs: List<&2, Binding>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +x: Nat,
+  +y: Maybe<&2, Hashes.Hash>,
+  l: List<&2, Binding>
+) -> {
+  Key.nibble(k, d) == x: Nat
+} -> {
+  Parts.put(
+    Canon.parts(1n+m, d, bs, l),
+    x,
+    y
+  )
+    == Parts.put(
+      Canon.parts(1n+m, d, Binds.put(bs, k, v), Binds.drop(l, k)),
+      x,
+      y
+    ): List<&2, Maybe<&2, Hashes.Hash>>
+}:
+  match l:
+    case Nil{}:
+      hx => {==}
+    case Con{+b, +r}:
+      +hx => Canon.parts_put.at(
+        Nat.is_eq(x, Key.nibble(Binding.key(b), d)),
+        Key.other(Binding.key(b), k),
+        m,
+        d,
+        bs,
+        k,
+        v,
+        x,
+        y,
+        b,
+        r,
+        {==},
+        {==},
+        hx,
+        Canon.parts_put(m, d, bs, k, v, x, y, r)(hx)
+      )
+
+# the canonical parts of the bindings bs with the binding b last, put at the
+# nibble z
+def Canon.last(
+  m: Nat,
+  +d: Nat,
+  bs: List<&2, Binding>,
+  q: List<&2, Maybe<&2, Hashes.Hash>>,
+  +z: Nat
+) -> List<&2, Maybe<&2, Hashes.Hash>>:
+  Parts.put(q, z, Canon.sub(1n+m, d, Binds.at(bs, d, z)))
+
+# the canonical root of distinct bindings bs, two or more, with the key k
+# bound, under whose nibble x the bindings with k bound have their root
+def Canon.root_put(
+  +m: Nat,
+  +d: Nat,
+  +bs: List<&2, Binding>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +x: Nat
+) -> {
+  Key.nibble(k, d) == x: Nat
+} -> {
+  List.is_empty(&2, Binding, Binds.drop(bs, k)) == False{}: Bool
+} -> {
+  Canon.root(
+    1n+m,
+    d,
+    Binds.put(bs, k, v)
+  )
+    == Some{
+      Node.hash(
+        Node.branch{
+          Parts.put(
+            Canon.parts(1n+m, d, bs, bs),
+            x,
+            Canon.root(m, 1n+d, Binds.put(Binds.at(bs, d, x), k, v))
+          )
+        }
+      )
+    }: Maybe<&2, Hashes.Hash>
+}:
+  +hx => hne =>
+    +b2 = Binds.put(bs, k, v)
+    +q2 = Canon.parts(1n+m, d, b2, Binds.drop(bs, k))
+    +w = Canon.root(m, 1n+d, Binds.put(Binds.at(bs, d, x), k, v))
+    +goal = {
+      Some{
+        Node.hash(Node.branch{Parts.put(Canon.parts(1n+m, d, bs, bs), x, w)})
+      }: Maybe<&2, Hashes.Hash>
+    }
+    %Equal.sym(
+      Maybe<&2, Hashes.Hash>,
+      Canon.root(1n+m, d, b2),
+      Some{Node.hash(Node.branch{Canon.parts(1n+m, d, b2, b2)})},
+      Canon.root_many(1n+m, d, Binding{k, v}, Binds.drop(bs, k))(hne)
+    ):
+      {_ == goal: Maybe<&2, Hashes.Hash>}
+    %Equal.sym(
+      Nat,
+      Key.nibble(k, d),
+      x,
+      hx
+    ): {Some{Node.hash(Node.branch{Canon.last(m, d, b2, q2, _)})} == goal: Maybe<&2, Hashes.Hash>}
+    %Equal.sym(
+      Nat,
+      Key.nibble(k, d),
+      x,
+      hx
+    ): {
+      Some{
+        Node.hash(
+          Node.branch{
+            Parts.put(
+              q2,
+              x,
+              Canon.sub(
+                1n+m,
+                d,
+                Binds.keep(Nat.is_eq(x, _), Binding{k, v}, Binds.at(Binds.drop(bs, k), d, x))
+              )
+            )
+          }
+        )
+      }
+        == goal: Maybe<&2, Hashes.Hash>
+    }
+    %Equal.sym(
+      Bool,
+      Nat.is_eq(x, x),
+      True{},
+      Shared.Nat.is_eq_refl(x)
+    ): {
+      Some{
+        Node.hash(
+          Node.branch{
+            Parts.put(
+              q2,
+              x,
+              Canon.sub(1n+m, d, Binds.keep(_, Binding{k, v}, Binds.at(Binds.drop(bs, k), d, x)))
+            )
+          }
+        )
+      }
+        == goal: Maybe<&2, Hashes.Hash>
+    }
+    %Equal.sym(
+      List<&2, Binding>,
+      Binds.at(Binds.drop(bs, k), d, x),
+      Binds.drop(Binds.at(bs, d, x), k),
+      Binds.at_drop(bs, d, x, k)
+    ): {
+      Some{
+        Node.hash(Node.branch{Parts.put(q2, x, Canon.sub(1n+m, d, Binding{k, v} <> _))})
+      }
+        == goal: Maybe<&2, Hashes.Hash>
+    }
+    %Equal.sym(
+      List<&2, Maybe<&2, Hashes.Hash>>,
+      Parts.put(Canon.parts(1n+m, d, bs, bs), x, w),
+      Parts.put(q2, x, w),
+      Canon.parts_put(m, d, bs, k, v, x, w, bs)(hx)
+    ): {
+      Some{
+        Node.hash(Node.branch{Parts.put(q2, x, w)})
+      }
+        == Some{Node.hash(Node.branch{_})}: Maybe<&2, Hashes.Hash>
+    }
+    {==}
+
+# a step of a write down a branch of the parts ks, at its part x, whose root
+# is kid
+def Canon.step(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  r: List<&2, Nat>,
+  d: Nat,
+  k: List<&2, U32>,
+  v: List<&2, U32>,
+  ks: List<&2, Maybe<&2, Hashes.Hash>>,
+  x: Nat,
+  +kid: Maybe<&2, Hashes.Hash>
+) -> Maybe<&2, Put>:
+  Shared.Maybe.then(
+    Put,
+    Put,
+    Tree.set.go(~S, ~fetch, s, r, 1n+d, k, v, kid, Tree.part(~S, ~fetch, s, kid)),
+    p2 => Some{Put.into(ks, x, p2)}
+  )
+
+# a new leaf: its root
+def Canon.set_root.empty(
+  t: Put,
+  k: List<&2, U32>,
+  v: List<&2, U32>
+) -> {
+  Some{Put.node(Node.leaf{k, v}, [])} == Some{t}: Maybe<&2, Put>
+} -> {Some{Put.root(t)} == Some{Node.hash(Node.leaf{k, v})}: Maybe<&2, Hashes.Hash>}:
+  h =>
+    %Shared.Maybe.some_inj(
+      Put,
+      Put.node(Node.leaf{k, v}, []),
+      t,
+      h
+    ): {Some{Put.root(_)} == Some{Node.hash(Node.leaf{k, v})}: Maybe<&2, Hashes.Hash>}
+    {==}
+
+# a write of the key k at the leaf of the key k2, when c tells whether k2 is k
+def Canon.set_root.leaf(
+  c: Bool,
+  q: List<&2, Nat>,
+  +d: Nat,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +k2: List<&2, U32>,
+  v2: List<&2, U32>,
+  t: Put,
+  ec: {Shared.List.is_eq(~U32, ~U32.is_eq, k2, k) == c: Bool},
+  hq: {q == List.drop(&2, Nat, Tree.path(k), d): List<&2, Nat>}
+) -> {
+  Shared.Bool.when(
+    Maybe<&2, Put>,
+    c,
+    u => Some{Put.node(Node.leaf{k, v}, [])},
+    w => Tree.split(
+      q,
+      List.drop(&2, Nat, Tree.path(k2), d),
+      Put.node(Node.leaf{k, v}, []),
+      Some{Node.hash(Node.leaf{k2, v2})}
+    )
+  )
+    == Some{t}: Maybe<&2, Put>
+} -> {
+  Some{
+    Put.root(t)
+  }
+    == Canon.root(
+      List.length(&2, Nat, q),
+      d,
+      Binding{k, v} <> Binds.keep(Bool.not(c), Binding{k2, v2}, [])
+    ): Maybe<&2, Hashes.Hash>
+}:
+  match c:
+    case True{}:
+      hs => Canon.set_root.empty(t, k, v)(hs)
+    case False{}:
+      hs => Canon.split(
+        q,
+        List.drop(&2, Nat, Tree.path(k2), d),
+        d,
+        k,
+        v,
+        k2,
+        v2,
+        [Node.words(Node.leaf{k, v})],
+        t
+      )(hq)({==})(hs)
+
+# a write down a branch, two or more distinct bindings, at the part x of its
+# path, gives the canonical root of the bindings with the new one, when the
+# write below gives that of the bindings under x
+def Canon.set_root.branch(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +x: Nat,
+  +r: List<&2, Nat>,
+  +d: Nat,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +bs: List<&2, Binding>,
+  t: Put,
+  hx: {Key.nibble(k, d) == x: Nat},
+  hne: {List.is_empty(&2, Binding, Binds.drop(bs, k)) == False{}: Bool},
+  ih: @t2: Put -> {
+    Tree.set.go(
+      ~S,
+      ~fetch,
+      s,
+      r,
+      1n+d,
+      k,
+      v,
+      Canon.root(List.length(&2, Nat, r), 1n+d, Binds.at(bs, d, x)),
+      Tree.part(~S, ~fetch, s, Canon.root(List.length(&2, Nat, r), 1n+d, Binds.at(bs, d, x)))
+    )
+      == Some{t2}: Maybe<&2, Put>
+  } -> {
+    Some{
+      Put.root(t2)
+    }
+      == Canon.root(
+        List.length(&2, Nat, r),
+        1n+d,
+        Binds.put(Binds.at(bs, d, x), k, v)
+      ): Maybe<&2, Hashes.Hash>
+  }
+) -> {
+  Canon.step(
+    ~S,
+    ~fetch,
+    s,
+    r,
+    d,
+    k,
+    v,
+    Canon.parts(1n+List.length(&2, Nat, r), d, bs, bs),
+    x,
+    Parts.at(Canon.parts(1n+List.length(&2, Nat, r), d, bs, bs), x)
+  )
+    == Some{t}: Maybe<&2, Put>
+} -> {
+  Some{
+    Put.root(t)
+  }
+    == Canon.root(1n+List.length(&2, Nat, r), d, Binds.put(bs, k, v)): Maybe<&2, Hashes.Hash>
+}:
+  +m = List.length(&2, Nat, r)
+  ps = Canon.parts(1n+m, d, bs, bs)
+  w = Canon.root(m, 1n+d, Binds.put(Binds.at(bs, d, x), k, v))
+  +kid = Canon.root(m, 1n+d, Binds.at(bs, d, x))
+  %Equal.sym(
+    Maybe<&2, Hashes.Hash>,
+    Parts.at(ps, x),
+    kid,
+    Canon.at_parts_all(1n+m, d, bs, x)
+  ): {
+    Canon.step(~S, ~fetch, s, r, d, k, v, ps, x, _) == Some{t}: Maybe<&2, Put>
+  } -> {Some{Put.root(t)} == Canon.root(1n+m, d, Binds.put(bs, k, v)): Maybe<&2, Hashes.Hash>}
+  hs => Equal.trans(
+    Maybe<&2, Hashes.Hash>,
+    Some{Put.root(t)},
+    Some{Node.hash(Node.branch{Parts.put(ps, x, w)})},
+    Canon.root(1n+m, d, Binds.put(bs, k, v)),
+    Canon.into(
+      Tree.set.go(~S, ~fetch, s, r, 1n+d, k, v, kid, Tree.part(~S, ~fetch, s, kid)),
+      ps,
+      x,
+      t,
+      w,
+      ih
+    )(hs),
+    Equal.sym(
+      Maybe<&2, Hashes.Hash>,
+      Canon.root(1n+m, d, Binds.put(bs, k, v)),
+      Some{Node.hash(Node.branch{Parts.put(ps, x, w)})},
+      Canon.root_put(m, d, bs, k, v, x)(hx)(hne)
+    )
+  )
+
+# a write of the key k into the canonical tree of distinct bindings bs, at
+# depth d, whose path from there is p, in a store that holds that tree, gives
+# the canonical root of bs with k bound
+def Canon.set_root(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  p: List<&2, Nat>,
+  +s: S,
+  +d: Nat,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  bs: List<&2, Binding>,
+  t: Put
+) -> {
+  p == List.drop(&2, Nat, Tree.path(k), d): List<&2, Nat>
+} -> {
+  Binds.distinct(bs) == True{}: Bool
+} -> {
+  Canon.holds(~S, ~fetch, s, List.length(&2, Nat, p), d, bs) == True{}: Bool
+} -> {
+  Tree.set.go(
+    ~S,
+    ~fetch,
+    s,
+    p,
+    d,
+    k,
+    v,
+    Canon.root(List.length(&2, Nat, p), d, bs),
+    Tree.part(~S, ~fetch, s, Canon.root(List.length(&2, Nat, p), d, bs))
+  )
+    == Some{t}: Maybe<&2, Put>
+} -> {
+  Some{
+    Put.root(t)
+  }
+    == Canon.root(List.length(&2, Nat, p), d, Binds.put(bs, k, v)): Maybe<&2, Hashes.Hash>
+}:
+  match p bs:
+    case Nil{} Nil{}:
+      hp => hd => hh => hs => Canon.set_root.empty(t, k, v)(hs)
+    case Con{+x, +r} Nil{}:
+      hp => hd => hh => hs => Canon.set_root.empty(t, k, v)(hs)
+    case Nil{} Con{Binding{+k2, +v2}, Nil{}}:
+      hp => hd => hh =>
+        %Equal.sym(
+          Maybe<&2, Node>,
+          Tree.node(~S, ~fetch, s, Node.hash(Node.leaf{k2, v2})),
+          Some{Node.leaf{k2, v2}},
+          Tree.has_node(~S, ~fetch, s, Node.leaf{k2, v2}, {==}, hh)
+        ): {
+          Tree.set.go(
+            ~S,
+            ~fetch,
+            s,
+            Nil{},
+            d,
+            k,
+            v,
+            Some{Node.hash(Node.leaf{k2, v2})},
+            _
+          )
+            == Some{t}: Maybe<&2, Put>
+        } -> {
+          Some{
+            Put.root(t)
+          }
+            == Canon.root(0n, d, Binds.put([Binding{k2, v2}], k, v)): Maybe<&2, Hashes.Hash>
+        }
+        hs => Canon.set_root.leaf(
+          Shared.List.is_eq(~U32, ~U32.is_eq, k2, k),
+          Nil{},
+          d,
+          k,
+          v,
+          k2,
+          v2,
+          t,
+          {==},
+          hp
+        )(hs)
+    case Con{x, r} Con{Binding{+k2, +v2}, Nil{}}:
+      hp => hd => hh =>
+        %Equal.sym(
+          Maybe<&2, Node>,
+          Tree.node(~S, ~fetch, s, Node.hash(Node.leaf{k2, v2})),
+          Some{Node.leaf{k2, v2}},
+          Tree.has_node(~S, ~fetch, s, Node.leaf{k2, v2}, {==}, hh)
+        ): {
+          Tree.set.go(
+            ~S,
+            ~fetch,
+            s,
+            Con{x, r},
+            d,
+            k,
+            v,
+            Some{Node.hash(Node.leaf{k2, v2})},
+            _
+          )
+            == Some{t}: Maybe<&2, Put>
+        } -> {
+          Some{
+            Put.root(t)
+          }
+            == Canon.root(
+              1n+List.length(&2, Nat, r),
+              d,
+              Binds.put([Binding{k2, v2}], k, v)
+            ): Maybe<&2, Hashes.Hash>
+        }
+        hs => Canon.set_root.leaf(
+          Shared.List.is_eq(~U32, ~U32.is_eq, k2, k),
+          Con{x, r},
+          d,
+          k,
+          v,
+          k2,
+          v2,
+          t,
+          {==},
+          hp
+        )(hs)
+    case Nil{} Con{b1, Con{+b2, +rest}}:
+      hp => hd => hh =>
+        %Equal.sym(
+          Maybe<&2, Node>,
+          Tree.node(
+            ~S,
+            ~fetch,
+            s,
+            Node.hash(Node.branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)})
+          ),
+          Some{Node.branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)}},
+          Tree.has_node(
+            ~S,
+            ~fetch,
+            s,
+            Node.branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)},
+            Canon.parts_ok(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest),
+            Shared.List.all.if_hit(
+              Tree.has(
+                ~S,
+                ~fetch,
+                s,
+                Node.words(Node.branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)})
+              ),
+              u => Canon.holds.parts(~S, ~fetch, s, 0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)
+            )(hh)
+          )
+        ): {
+          Tree.set.go(
+            ~S,
+            ~fetch,
+            s,
+            Nil{},
+            d,
+            k,
+            v,
+            Some{Node.hash(Node.branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)})},
+            _
+          )
+            == Some{t}: Maybe<&2, Put>
+        } -> {
+          Some{
+            Put.root(t)
+          }
+            == Canon.root(0n, d, Binds.put(b1 <> b2 <> rest, k, v)): Maybe<&2, Hashes.Hash>
+        }
+        hs => Empty.absurd(
+          {
+            Some{
+              Put.root(t)
+            }
+              == Canon.root(0n, d, Binds.put(b1 <> b2 <> rest, k, v)): Maybe<&2, Hashes.Hash>
+          },
+          Shared.Maybe.none_ne_some(Put, t, hs)
+        )
+    case Con{x, r} Con{b1, Con{+b2, +rest}}:
+      +hp => +hd => +hh =>
+        %Equal.sym(
+          Maybe<&2, Node>,
+          Tree.node(
+            ~S,
+            ~fetch,
+            s,
+            Node.hash(
+              Node.branch{
+                Canon.parts(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest)
+              }
+            )
+          ),
+          Some{
+            Node.branch{
+              Canon.parts(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest)
+            }
+          },
+          Tree.has_node(
+            ~S,
+            ~fetch,
+            s,
+            Node.branch{
+              Canon.parts(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest)
+            },
+            Canon.parts_ok(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest),
+            Shared.List.all.if_hit(
+              Tree.has(
+                ~S,
+                ~fetch,
+                s,
+                Node.words(
+                  Node.branch{
+                    Canon.parts(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest)
+                  }
+                )
+              ),
+              u => Canon.holds.parts(
+                ~S,
+                ~fetch,
+                s,
+                1n+List.length(&2, Nat, r),
+                d,
+                b1 <> b2 <> rest,
+                b1 <> b2 <> rest
+              )
+            )(hh)
+          )
+        ): {
+          Tree.set.go(
+            ~S,
+            ~fetch,
+            s,
+            Con{x, r},
+            d,
+            k,
+            v,
+            Some{
+              Node.hash(
+                Node.branch{
+                  Canon.parts(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest)
+                }
+              )
+            },
+            _
+          )
+            == Some{t}: Maybe<&2, Put>
+        } -> {
+          Some{
+            Put.root(t)
+          }
+            == Canon.root(
+              1n+List.length(&2, Nat, r),
+              d,
+              Binds.put(b1 <> b2 <> rest, k, v)
+            ): Maybe<&2, Hashes.Hash>
+        }
+        hs => Canon.set_root.branch(
+          ~S,
+          ~fetch,
+          s,
+          x,
+          r,
+          d,
+          k,
+          v,
+          b1 <> b2 <> rest,
+          t,
+          Key.nibble_of(k, d, x, r)(hp),
+          Binds.drop_many(b1, b2, rest, k)(hd),
+          t2 => Canon.set_root(
+            ~S,
+            ~fetch,
+            r,
+            s,
+            1n+d,
+            k,
+            v,
+            Binds.at(b1 <> b2 <> rest, d, x),
+            t2
+          )(
+            Key.drop_next(k, d, x, r)(hp)
+          )(
+            Binds.distinct_at(b1 <> b2 <> rest, d, x)(hd)
+          )(
+            Canon.holds_all(
+              ~S,
+              ~fetch,
+              s,
+              List.length(&2, Nat, r),
+              d,
+              b1 <> b2 <> rest,
+              x
+            )(
+              Shared.List.all.if_rest(
+                Tree.has(
+                  ~S,
+                  ~fetch,
+                  s,
+                  Node.words(
+                    Node.branch{
+                      Canon.parts(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest)
+                    }
+                  )
+                ),
+                u => Canon.holds.parts(
+                  ~S,
+                  ~fetch,
+                  s,
+                  1n+List.length(&2, Nat, r),
+                  d,
+                  b1 <> b2 <> rest,
+                  b1 <> b2 <> rest
+                )
+              )(hh)
+            )
+          )
+        )(hs)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
