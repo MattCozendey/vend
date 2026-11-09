@@ -2175,7 +2175,7 @@ def State.may_vote(
   ms: List<&2, String>
 ) -> Bool:
   Bool.and(
-    Shared.List.has(~String, ~String.eq, ms, n),
+    List.contains(~String, ~String.eq, ms, n),
     Maybe.is_none(&2, Cell<Entry<Q>>, State.cell(~Q, s, Slot.vote{n, c, h}))
   )
 
@@ -2324,7 +2324,7 @@ def Vote.open(
 ) -> Bool:
   match held:
     case True{}:
-      Vote.open.on(~Q, ~fits, Bool.not(Shared.List.has(~Id, ~Id.same, xs, i)), s, q, h)
+      Vote.open.on(~Q, ~fits, Bool.not(List.contains(~Id, ~Id.same, xs, i)), s, q, h)
     case False{}:
       False{}
 
@@ -2423,7 +2423,7 @@ def Vote.chains(~Q: Data, cs: List<&2, Cell<Entry<Q>>>) -> List<&2, List<&2, Boo
         List<&2, Bool>,
         c,
         rest,
-        Bool.not(Shared.List.has(~List<&2, Bool>, ~Key.same, rest, c))
+        Bool.not(List.contains(~List<&2, Bool>, ~Key.same, rest, c))
       )
     case Con{x, r}:
       Vote.chains(~Q, r)
@@ -2544,7 +2544,7 @@ def Status.of(
         ~fits,
         s,
         q,
-        Shared.List.has(~Id, ~Id.same, State.chain(~Q, ~view, s, View.chain(view(q))), i)
+        List.contains(~Id, ~Id.same, State.chain(~Q, ~view, s, View.chain(view(q))), i)
       )
     case Some{one{e}}:
       Status.not_seen{}
@@ -4936,9 +4936,9 @@ def State.chain_after_unfit_ask(Q, same, laws, view, fits, n, s, i, t, q, v):
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # a list that holds a node holds it
-def Owners.has(n: String) -> {Shared.List.has(~String, ~String.eq, [n], n) == True{}: Bool}:
+def Owners.has(n: String) -> {List.contains(~String, ~String.eq, [n], n) == True{}: Bool}:
   %Equal.sym(Bool, String.eq(n, n), True{}, Shared.String.eq_refl(n)):
-    {List.any.if(u => Shared.List.has(~String, ~String.eq, [], n), _) == True{}: Bool}
+    {List.any.if(u => List.contains(~String, ~String.eq, [], n), _) == True{}: Bool}
   {==}
 
 # one entry at a free key walks one step further
@@ -5022,7 +5022,7 @@ def Owner.puts(
         == Step{v, [n]}: Step
     }
 ) -> {
-  Shared.List.has(
+  List.contains(
     ~Id,
     ~Id.same,
     State.chain(~Q, ~view, State.join(~Q, ~same, s1, tv), c),
@@ -5079,6 +5079,6 @@ def Owner.puts(
         List.append(&2, Id, x1, i <> rest),
         shape
       ):
-        {Shared.List.has(~Id, ~Id.same, _, i) == True{}: Bool}
-      Shared.List.has_middle(~Id, ~Id.same, ~Id.laws(), x1, i, rest)
+        {List.contains(~Id, ~Id.same, _, i) == True{}: Bool}
+      Shared.List.contains_middle(~Id, ~Id.same, ~Id.laws(), x1, i, rest)
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning

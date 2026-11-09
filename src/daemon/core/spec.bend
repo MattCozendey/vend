@@ -578,7 +578,7 @@ law Node.fits_set_group:
   for ms: List<&2, Member>
   for h: String
   for v: Replica.Id
-  {Shared.List.has(~Member, ~Member.same, ms, Member.group{h}) == True{}: Bool}
+  {List.contains(~Member, ~Member.same, ms, Member.group{h}) == True{}: Bool}
     -> {Bool.or(String.eq(h, g), Node.is_inside(s, Member.group{g}, h)) == True{}: Bool}
     -> {Node.fits(s, Ask.set_group{g, ms}, v) == False{}: Bool}
 
@@ -650,9 +650,9 @@ law Node.touches_exactly:
       Touch{v, c, b, u}
     )
       == Bool.and(
-        Shared.List.has(~String, ~String.eq, Branch.names(Node.branches(s)), b),
+        List.contains(~String, ~String.eq, Branch.names(Node.branches(s)), b),
         Bool.and(
-          Shared.List.has(
+          List.contains(
             ~Replica.Id,
             ~Replica.Id.same,
             Shared.List.flat(
@@ -673,7 +673,7 @@ law Node.touches_exactly:
             Bool.and(
               Shared.Maybe.same(~Resources.Name, ~Resources.Name.same, Node.wrote(s, v), Some{c}),
               Bool.and(
-                Shared.List.has(~Resources.Name, ~Resources.Name.same, Node.resources(s, b), u),
+                List.contains(~Resources.Name, ~Resources.Name.same, Node.resources(s, b), u),
                 Bool.or(Resources.Name.same(u, c), Node.uses(s, b, u, c))
               )
             )
@@ -689,7 +689,7 @@ law Node.affects_exactly:
   for b: String
   for t: Touch
   {
-    Shared.List.has(
+    List.contains(
       ~Touch,
       ~Touch.same,
       Node.affects(s, b),
@@ -705,7 +705,7 @@ law Node.impact_exactly:
   for p: Point
   for t: Touch
   {
-    Shared.List.has(
+    List.contains(
       ~Touch,
       ~Touch.same,
       Node.impact(s, p),
@@ -767,7 +767,7 @@ law Node.uses_exactly:
         ~(
           +g => +n => Shared.Bool.when(
             List<&2, Resources.Name>,
-            Shared.List.has(~Resources.Name, ~Resources.Name.same, Uses.names(g), n),
+            List.contains(~Resources.Name, ~Resources.Name.same, Uses.names(g), n),
             w => Node.imports(Uses.state(g), Uses.branch(g), n),
             w => []
           )
