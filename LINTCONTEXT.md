@@ -6,7 +6,7 @@
 
 - File: `src/daemon/core/impl.bend` (about 2,800 lines; it imports `core/spec.bend`, `ledger.bend`,
   `tree.bend`, `rope.bend`).
-- Commit: `d3e3a7b` on branch `claude/daemon-core-impl-kahuc3` (the numbers below), and each commit
+- Commit: `5285de5` on branch `claude/daemon-core-impl-kahuc3` (the numbers below), and each commit
   after it.
 
 | Command | Time |
