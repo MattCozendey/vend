@@ -437,6 +437,115 @@ def Tree.list(
 ) -> List<&2, Binding>:
   Tree.list.root(~S, ~fetch, s, Tree.part(~S, ~fetch, s, h))
 
+# Differences
+# -----------
+# Two trees with the same root hold the same, so a walk of both skips each
+# pair of parts with the same hash: it costs what differs, not what the trees
+# hold.
+
+# the bindings below the node m, whose path is pre
+def Tree.below(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +pre: List<&2, Nat>,
+  m: Maybe<&2, Node>
+) -> List<&2, Binding>:
+  match m:
+    case Some{Node.Leaf{k, v}}:
+      [Binding{k, v}]
+    case Some{Node.Branch{+qs}}:
+      Tree.list.go(~S, ~fetch, 64n, s, qs, pre, 0n, Tree.first(~S, ~fetch, s, qs))
+    case w:
+      []
+
+# the parts a and b hold the same root
+def Parts.same(a: Maybe<&2, Hashes.Hash>, b: Maybe<&2, Hashes.Hash>) -> Bool:
+  Shared.Maybe.is_eq(~Hashes.Hash, ~Hashes.Hash.is_eq, a, b)
+
+# bend-lint: expect-begin bend-lint-rules/language/decreasing_call@warning -- g is f itself, bound by the match; the checker accepts these calls
+# the bindings of the parts ka and kb, from the part x of branches whose path
+# is pre, whose nodes are ma and mb, where the parts differ: f levels deep at
+# most
+def Tree.diff.go(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  ka: List<&2, Maybe<&2, Hashes.Hash>>,
+  kb: List<&2, Maybe<&2, Hashes.Hash>>,
+  +pre: List<&2, Nat>,
+  +x: Nat,
+  ma: Maybe<&2, Node>,
+  mb: Maybe<&2, Node>
+) -> List<&2, Binding>:
+  match f ka kb ma mb:
+    case g Nil{} Nil{} wa wb:
+      []
+    case 1n+(+p) Con{ya, +ra} Con{yb, +rb} Some{Node.Branch{+qa}} Some{Node.Branch{+qb}}:
+      +here = List.append(&2, Nat, pre, [x])
+      +rest = Tree.diff.go(~S, ~fetch, 1n+p, s, ra, rb, pre, 1n+x, Tree.first(~S, ~fetch, s, ra), Tree.first(~S, ~fetch, s, rb))
+      Shared.Bool.when(
+        List<&2, Binding>,
+        Parts.same(ya, yb),
+        u => rest,
+        u => List.append(
+          &2,
+          Binding,
+          Tree.diff.go(~S, ~fetch, p, s, qa, qb, here, 0n, Tree.first(~S, ~fetch, s, qa), Tree.first(~S, ~fetch, s, qb)),
+          rest
+        )
+      )
+    case g Con{ya, +ra} Con{yb, +rb} wa wb:
+      +here = List.append(&2, Nat, pre, [x])
+      +rest = Tree.diff.go(~S, ~fetch, g, s, ra, rb, pre, 1n+x, Tree.first(~S, ~fetch, s, ra), Tree.first(~S, ~fetch, s, rb))
+      Shared.Bool.when(
+        List<&2, Binding>,
+        Parts.same(ya, yb),
+        u => rest,
+        u => List.append(
+          &2,
+          Binding,
+          Tree.below(~S, ~fetch, s, here, wa),
+          List.append(&2, Binding, Tree.below(~S, ~fetch, s, here, wb), rest)
+        )
+      )
+    case g Con{ya, ra} Nil{} wa wb:
+      Tree.list.go(~S, ~fetch, 64n, s, ya <> ra, pre, x, wa)
+    case g Nil{} Con{yb, rb} wa wb:
+      Tree.list.go(~S, ~fetch, 64n, s, yb <> rb, pre, x, wb)
+# bend-lint: expect-end bend-lint-rules/language/decreasing_call@warning
+
+# the bindings of the trees whose roots are a and b, where they may differ:
+# every key that the two read differently is listed
+def Tree.diff.root(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  ma: Maybe<&2, Node>,
+  mb: Maybe<&2, Node>
+) -> List<&2, Binding>:
+  match ma mb:
+    case Some{Node.Branch{+qa}} Some{Node.Branch{+qb}}:
+      Tree.diff.go(~S, ~fetch, 63n, s, qa, qb, [], 0n, Tree.first(~S, ~fetch, s, qa), Tree.first(~S, ~fetch, s, qb))
+    case wa wb:
+      List.append(&2, Binding, Tree.below(~S, ~fetch, s, [], wa), Tree.below(~S, ~fetch, s, [], wb))
+
+# the bindings of the trees whose roots are a and b, where they may differ
+def Tree.diff(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +a: Maybe<&2, Hashes.Hash>,
+  +b: Maybe<&2, Hashes.Hash>
+) -> List<&2, Binding>:
+  Shared.Bool.when(
+    List<&2, Binding>,
+    Parts.same(a, b),
+    u => [],
+    u => Tree.diff.root(~S, ~fetch, s, Tree.part(~S, ~fetch, s, a), Tree.part(~S, ~fetch, s, b))
+  )
+
 # Writes
 # ------
 # A write fails (none) when the store does not hold a node on its path, or

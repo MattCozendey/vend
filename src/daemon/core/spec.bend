@@ -1129,25 +1129,29 @@ def Res.of.bindings(bs: List<&2, Trees.Binding>) -> List<&2, Resources.Name>:
 def Res.names(s: State(), h: Maybe<&2, Hashes.Hash>) -> List<&2, Resources.Name>:
   Res.of.bindings(Trees.Tree.list(~State(), ~Store.fetch, s, h))
 
-# the resources of ns that the tree h does not hold: a read for each, so a
-# merge lists its names in the time of its reads, not of comparing every
-# pair of names
-def Names.missing(
-  +s: State(),
-  +h: Maybe<&2, Hashes.Hash>,
-  ns: List<&2, Resources.Name>
-) -> List<&2, Resources.Name>:
+# the key of the resource n
+def Name.key(n: Resources.Name) -> List<&2, Bool>:
+  Tries.Trie.text(Resources.Name.show(n))
+
+# the names ns, each once, but for the keys seen
+def Names.unique(ns: List<&2, Resources.Name>, +seen: Tries.Trie<Unit>) -> List<&2, Resources.Name>:
   match ns:
     case Nil{}:
       []
-    case Con{+n, r}:
-      +rest = Names.missing(s, h, r)
-      Bool.pick(
+    case Con{+n, +r}:
+      +k = Name.key(n)
+      Shared.Bool.when(
         List<&2, Resources.Name>,
-        Maybe.is_none(&2, Texts.Bytes(), Res.get(s, h, n)),
-        n <> rest,
-        rest
+        Tries.Trie.has(Unit, seen, k),
+        u => Names.unique(r, seen),
+        u => n <> Names.unique(r, Tries.Trie.set(Unit, seen, k, Unit{}))
       )
+
+# the resources that ours (the tree h) and theirs (ht) may hold differently,
+# once each: a walk of both trees skips what they share, and where both hold
+# the same bytes a merge keeps them (Format.merge_same)
+def Merge.names(+s: State(), +h: Maybe<&2, Hashes.Hash>, +ht: Maybe<&2, Hashes.Hash>) -> List<&2, Resources.Name>:
+  Names.unique(Res.of.bindings(Trees.Tree.diff(~State(), ~Store.fetch, s, h, ht)), Tries.Trie.new(Unit))
 
 # Groups
 # ------
@@ -1550,7 +1554,7 @@ def Merge.work(
     from,
     Merge.all(
       s,
-      List.append(&2, Resources.Name, Res.names(s, h), Names.missing(s, h, Res.names(s, ht))),
+      Merge.names(s, h, ht),
       Node.root_of(s, Merge.base(s, c, from)),
       h,
       ht,
@@ -2064,10 +2068,6 @@ def Branch.head(s: State(), b: Branch) -> Maybe<&2, Ledgers.Id>:
 # the resources of the branch b at its head
 def Node.resources(+s: State(), b: Branch) -> List<&2, Resources.Name>:
   Res.names(s, Node.root_of(s, Branch.head(s, b)))
-
-# the key of the resource n
-def Name.key(n: Resources.Name) -> List<&2, Bool>:
-  Tries.Trie.text(Resources.Name.show(n))
 
 # the bytes m, as a list of one item or none
 def Uses.items(m: Maybe<&2, Texts.Bytes()>) -> List<&2, Texts.Bytes()>:
