@@ -1,1 +1,1 @@
-HEAVILY VIBECODED. USE IT AT YOUR OWN WILL. A REFACTOR IS UNDERWAY.
+Only human hands may touch this file.
