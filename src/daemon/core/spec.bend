@@ -886,38 +886,38 @@ def Vector.adds(
 # Submodules
 # ----------
 # A submodule is a resource whose bytes point to a child (Format.module): the
-# space of the child's resources, the branch that it follows, and its version,
-# on lines of their own. Never a node: any node that has the version can serve
-# it. A merge of two pointers takes the newer one when one came from the other
-# (Node.forward).
+# space of the child's resources, the store and the branch that it follows,
+# and its version, on lines of their own. Never a node: any node that has the
+# version can serve it. A merge of two pointers takes the newer one when one
+# came from the other (Node.forward).
 
-# a pointer to a child
+# a pointer to a child: a branch and a version of another store
 type Pointer is Data:
-  Pointer{space: String, branch: String, version: Ledgers.Id}
+  Pointer{space: String, store: Ledgers.Id, branch: String, version: Ledgers.Id}
 
 # the version of the child that p points to
 def Pointer.version(p: Pointer) -> Ledgers.Id:
   match p:
-    case Pointer{sp, b, v}:
+    case Pointer{sp, st, b, v}:
       v
 
 # the bytes of the pointer p (Texts.Text.cuts_after_join reads them back)
 def Pointer.show(p: Pointer) -> Texts.Bytes():
   match p:
-    case Pointer{sp, b, Ledgers.Id{w, r}}:
-      Texts.Bytes.of_text(Texts.Text.join([sp, b, w], Chr{10}, r))
+    case Pointer{sp, Ledgers.Id{sw, sr}, b, Ledgers.Id{w, r}}:
+      Texts.Bytes.of_text(Texts.Text.join([sp, sw, sr, b, w], Chr{10}, r))
 
 # the pointer of the lines that a text cut into (m)
 def Pointer.read.of(m: Maybe<&2, Texts.Parts>) -> Maybe<&2, Pointer>:
   match m:
-    case Some{Texts.Parts{Con{sp, Con{b, Con{w, Nil{}}}}, r}}:
-      Some{Pointer{sp, b, Ledgers.Id{w, r}}}
+    case Some{Texts.Parts{Con{sp, Con{sw, Con{sr, Con{b, Con{w, Nil{}}}}}}, r}}:
+      Some{Pointer{sp, Ledgers.Id{sw, sr}, b, Ledgers.Id{w, r}}}
     case _:
       None{}
 
 # the pointer in the bytes b
 def Pointer.read(b: Texts.Bytes()) -> Maybe<&2, Pointer>:
-  Pointer.read.of(Texts.Text.cuts(3n, Texts.Bytes.to_text(b), 10))
+  Pointer.read.of(Texts.Text.cuts(5n, Texts.Bytes.to_text(b), 10))
 
 # Content
 # -------
@@ -1760,6 +1760,11 @@ def Node.ask(n: String, +s: State(), +e: Envelope, q: Ask) -> State():
 # request that s holds
 def Node.vote(n: String, s: State()) -> State():
   Ledgers.State.vote(~Ask, ~Ask.is_eq, ~Ask.view, ~Node.judge, n, s)
+
+# s, after the node n took in t, which another node sent, and voted on what it
+# holds now: how a node that is behind catches up
+def Node.sync(n: String, s: State(), t: State()) -> State():
+  Node.vote(n, Node.take(s, t))
 
 # Owners
 # ------
@@ -2748,6 +2753,28 @@ def Node.notices(s: State(), +t: Topic, since: State()) -> List<&2, Notice>:
     Tries.Trie.put_keys(~Notice, ~Notice.key, Notice.all(since, t), Tries.Trie.new(Unit))
   )
 
+# The node
+# --------
+
+# a resource mounted to a branch
+type Mount is Data:
+  Mount{resource: String, branch: Branch}
+
+# what a Vend Node holds: its name, the parts of the stores that it uses, the
+# writers connected to it, and the resources mounted to it
+type Vend is Data:
+  Vend{name: String, state: State(), writers: List<&2, String>, mounts: List<&2, Mount>}
+
+# the node v may stop: it is forced to, or no resource is mounted and no
+# writer is connected
+def Vend.may_stop(v: Vend, force: Bool) -> Bool:
+  match v:
+    case Vend{n, s, ws, ms}:
+      List.any.if(
+        u => List.all.if(w => List.is_empty(&2, Mount, ms), List.is_empty(&2, String, ws)),
+        force
+      )
+
 # Laws
 # ----
 # What README says of a Vend Node's core, as laws. A law of the ledger that
@@ -2767,6 +2794,14 @@ law Node.ask_grows:
   for +e: Envelope
   for +q: Ask
   {Ledgers.State.grows(~Ask, ~Ask.is_eq, s, Node.ask(n, s, e, q)) == True{}: Bool}
+
+# a sync only grows a node's state: catching up loses and changes nothing
+# that the node holds, whatever the other node sent
+law Node.sync_grows:
+  for +n: String
+  for +s: State()
+  for +t: State()
+  {Ledgers.State.grows(~Ask, ~Ask.is_eq, s, Node.sync(n, s, t)) == True{}: Bool}
 
 # a change counts once, however often and wherever it is sent: a node that
 # took a request in changes nothing when any node sends its ID again

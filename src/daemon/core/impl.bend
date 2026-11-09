@@ -956,6 +956,19 @@ def Ask.grows.at(
 def Spec.Node.ask_grows(n, s, e, q):
   Ask.grows.at(n, s, e, q, Ledgers.State.get(~Spec.Ask, s, Ledgers.Slot.ask(Spec.Envelope.of(e))))
 
+def Spec.Node.sync_grows(n, s, t):
+  +s1 = Spec.Node.take(s, t)
+  Ledgers.State.grows_trans(
+    ~Spec.Ask,
+    ~Spec.Ask.is_eq,
+    ~Ask.laws(),
+    s,
+    s1,
+    Spec.Node.vote(n, s1)
+  )(
+    Ledgers.State.take_grows(~Spec.Ask, ~Spec.Ask.is_eq, ~Ask.laws(), s, t)
+  )(Ledgers.State.vote_grows(~Spec.Ask, ~Spec.Ask.is_eq, ~Ask.laws(), ~Spec.Ask.view, ~Spec.Node.judge, n, s1))
+
 # a ledger that took in the request i holds its slot, once the cell m of the
 # slot before is known
 def Ask.held.fresh(
