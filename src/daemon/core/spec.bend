@@ -1129,6 +1129,26 @@ def Res.of.bindings(bs: List<&2, Trees.Binding>) -> List<&2, Resources.Name>:
 def Res.names(s: State(), h: Maybe<&2, Hashes.Hash>) -> List<&2, Resources.Name>:
   Res.of.bindings(Trees.Tree.list(~State(), ~Store.fetch, s, h))
 
+# the resources of ns that the tree h does not hold: a read for each, so a
+# merge lists its names in the time of its reads, not of comparing every
+# pair of names
+def Names.missing(
+  +s: State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  ns: List<&2, Resources.Name>
+) -> List<&2, Resources.Name>:
+  match ns:
+    case Nil{}:
+      []
+    case Con{+n, r}:
+      +rest = Names.missing(s, h, r)
+      Bool.pick(
+        List<&2, Resources.Name>,
+        Maybe.is_none(&2, Texts.Bytes(), Res.get(s, h, n)),
+        n <> rest,
+        rest
+      )
+
 # Groups
 # ------
 
@@ -1530,7 +1550,7 @@ def Merge.work(
     from,
     Merge.all(
       s,
-      Shared.List.union(~Resources.Name, ~Resources.Name.is_eq, Res.names(s, h), Res.names(s, ht)),
+      List.append(&2, Resources.Name, Res.names(s, h), Names.missing(s, h, Res.names(s, ht))),
       Node.root_of(s, Merge.base(s, c, from)),
       h,
       ht,
@@ -2045,15 +2065,9 @@ def Branch.head(s: State(), b: Branch) -> Maybe<&2, Ledgers.Id>:
 def Node.resources(+s: State(), b: Branch) -> List<&2, Resources.Name>:
   Res.names(s, Node.root_of(s, Branch.head(s, b)))
 
-# a branch at its head h, with its resources: the graph of its imports
-type Uses is Data:
-  Uses{state: State(), head: Maybe<&2, Ledgers.Id>, names: List<&2, Resources.Name>}
-
-# the resources of the branch of g
-def Uses.nodes(g: Uses) -> List<&2, Resources.Name>:
-  match g:
-    case Uses{s, h, ns}:
-      ns
+# the key of the resource n
+def Name.key(n: Resources.Name) -> List<&2, Bool>:
+  Tries.Trie.text(Resources.Name.show(n))
 
 # the bytes m, as a list of one item or none
 def Uses.items(m: Maybe<&2, Texts.Bytes()>) -> List<&2, Texts.Bytes()>:
@@ -2082,17 +2096,65 @@ def Uses.targets(
     n
   )
 
+# the resources of a branch, each with what it imports, read once: the graph
+# of its imports
+type Uses is Data:
+  Uses{imports: Tries.Trie<List<&2, Resources.Name>>, names: List<&2, Resources.Name>}
+
+# t with what each resource of ns imports at the version h of s
+def Uses.read(
+  +s: State(),
+  +h: Maybe<&2, Ledgers.Id>,
+  ns: List<&2, Resources.Name>,
+  t: Tries.Trie<List<&2, Resources.Name>>
+) -> Tries.Trie<List<&2, Resources.Name>>:
+  match ns:
+    case Nil{}:
+      t
+    case Con{+n, r}:
+      Uses.read(
+        s,
+        h,
+        r,
+        Tries.Trie.set(List<&2, Resources.Name>, t, Name.key(n), Uses.targets(s, h, n))
+      )
+
+# the graph of the imports of the branch b, at its head
+def Uses.of(+s: State(), b: Branch) -> Uses:
+  +h = Branch.head(s, b)
+  +ns = Res.names(s, Node.root_of(s, h))
+  Uses{Uses.read(s, h, ns, Tries.Trie.new(List<&2, Resources.Name>)), ns}
+
+# the resources of g
+def Uses.nodes(g: Uses) -> List<&2, Resources.Name>:
+  match g:
+    case Uses{t, ns}:
+      ns
+
 # what n imports in g, when it is a resource of g
 def Uses.succ(g: Uses, n: Resources.Name) -> List<&2, Resources.Name>:
   match g:
-    case Uses{s, h, ns}:
-      +n = n
-      Shared.Bool.when(
+    case Uses{t, ns}:
+      Maybe.default(
+        &2,
         List<&2, Resources.Name>,
-        List.contains(~Resources.Name, ~Resources.Name.is_eq, ns, n),
-        u => Uses.targets(s, h, n),
-        u => []
+        Tries.Trie.get(List<&2, Resources.Name>, t, Name.key(n)),
+        []
       )
+
+# n is a resource of g
+def Uses.has(g: Uses, n: Resources.Name) -> Bool:
+  match g:
+    case Uses{t, ns}:
+      Maybe.is_some(
+        &2,
+        List<&2, Resources.Name>,
+        Tries.Trie.get(List<&2, Resources.Name>, t, Name.key(n))
+      )
+
+# u uses c in g: c is reached from u through the imports, at any depth
+def Uses.reach(g: Uses, u: Resources.Name, c: Resources.Name) -> Bool:
+  Reaches.Reach.in(~Resources.Name, ~Uses, ~Resources.Name.is_eq, ~Uses.succ, ~Uses.nodes, g, u, c)
 
 # the resources that the resource u of the branch b imports, at its head
 def Node.imports(+s: State(), b: Branch, u: Resources.Name) -> List<&2, Resources.Name>:
@@ -2100,17 +2162,8 @@ def Node.imports(+s: State(), b: Branch, u: Resources.Name) -> List<&2, Resource
 
 # the resource u of the branch b uses c: c is reached from u through the
 # imports of the resources of b, at any depth
-def Node.uses(+s: State(), +b: Branch, u: Resources.Name, c: Resources.Name) -> Bool:
-  Reaches.Reach.in(
-    ~Resources.Name,
-    ~Uses,
-    ~Resources.Name.is_eq,
-    ~Uses.succ,
-    ~Uses.nodes,
-    Uses{s, Branch.head(s, b), Node.resources(s, b)},
-    u,
-    c
-  )
+def Node.uses(s: State(), b: Branch, u: Resources.Name, c: Resources.Name) -> Bool:
+  Uses.reach(Uses.of(s, b), u, c)
 
 # Touches
 # -------
@@ -2120,18 +2173,6 @@ def Node.uses(+s: State(), +b: Branch, u: Resources.Name, c: Resources.Name) -> 
 # uses it (Node.touches)
 type Touch is Data:
   Touch{version: Ledgers.Id, changed: Resources.Name, branch: Branch, used: Resources.Name}
-
-# a and b are the same touch
-def Touch.is_eq(a: Touch, b: Touch) -> Bool:
-  match a b:
-    case Touch{v1, c1, b1, u1} Touch{v2, c2, b2, u2}:
-      Bool.and(
-        Ledgers.Id.is_eq(v1, v2),
-        Bool.and(
-          Resources.Name.is_eq(c1, c2),
-          Bool.and(Branch.is_eq(b1, b2), Resources.Name.is_eq(u1, u2))
-        )
-      )
 
 # the resource that the request r wrote: of a write or a resolve
 def Wrote.of(r: Maybe<&2, Ledgers.Asked<Ask>>) -> Maybe<&2, Resources.Name>:
@@ -2168,30 +2209,82 @@ def Touch.lacks(+s: State(), +b: Branch, +v: Ledgers.Id) -> Bool:
   )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
-# the touch t holds: its branch is a branch and lacks its version, which is a
-# version of a branch and wrote the resource changed, and the resource used is
-# of the branch, and is the one changed or uses it; each part runs only when
-# the ones before it hold, from the cheapest
-def Node.touches(s: State(), t: Touch) -> Bool:
-  match t:
-    case Touch{+v, +c, +b, +u}:
-      +s = s
+# the key of the branch b
+def Branch.key(b: Branch) -> List<&2, Bool>:
+  match b:
+    case Branch{r, n}:
+      List.append(&2, Bool, Ledgers.Id.key(r), Tries.Trie.text(n))
+
+# t with the key of each of xs
+def Keys.put(
+  ~A: Data,
+  ~key: A -> List<&2, Bool>,
+  xs: List<&2, A>,
+  t: Tries.Trie<Unit>
+) -> Tries.Trie<Unit>:
+  match xs:
+    case Nil{}:
+      t
+    case Con{x, r}:
+      Keys.put(~A, ~key, r, Tries.Trie.set(Unit, t, key(x), Unit{}))
+
+# t holds the key k
+def Keys.has(t: Tries.Trie<Unit>, k: List<&2, Bool>) -> Bool:
+  Maybe.is_some(&2, Unit, Tries.Trie.get(Unit, t, k))
+
+# what the checks of touches on one branch read of s once: a key for each
+# branch and for each version of a branch, the branch, and its imports
+type Seen is Data:
+  Seen{
+    state: State(),
+    branches: Tries.Trie<Unit>,
+    versions: Tries.Trie<Unit>,
+    branch: Branch,
+    uses: Uses
+  }
+
+# what the checks on the branch b read of s, with the keys of the branches bs
+# and of the versions vs
+def Seen.of(+s: State(), bs: Tries.Trie<Unit>, vs: Tries.Trie<Unit>, +b: Branch) -> Seen:
+  Seen{s, bs, vs, b, Uses.of(s, b)}
+
+# the keys of the branches of s
+def Branch.keys(s: State()) -> Tries.Trie<Unit>:
+  Keys.put(~Branch, ~Branch.key, Branch.names(Node.branches(s)), Tries.Trie.new(Unit))
+
+# the keys of the versions of every branch of s
+def Version.keys(s: State()) -> Tries.Trie<Unit>:
+  Keys.put(~Ledgers.Id, ~Ledgers.Id.key, Touch.versions(s), Tries.Trie.new(Unit))
+
+# the touch t, of the branch of g, holds: its branch is a branch and lacks
+# its version, which is a version of a branch and wrote the resource changed,
+# and the resource used is of the branch, and is the one changed or uses it;
+# each part runs only when the ones before it hold, from the cheapest
+def Touch.holds(g: Seen, t: Touch) -> Bool:
+  match g t:
+    case Seen{+s, bs, vs, gb, +us} Touch{+v, +c, +b, +u}:
       List.all.if(
         w => List.all.if(
           w => List.all.if(
             w => List.all.if(
               w => List.all.if(
-                w => List.any.if(w => Node.uses(s, b, u, c), Resources.Name.is_eq(u, c)),
-                List.contains(~Resources.Name, ~Resources.Name.is_eq, Node.resources(s, b), u)
+                w => List.any.if(w => Uses.reach(us, u, c), Resources.Name.is_eq(u, c)),
+                Uses.has(us, u)
               ),
               Shared.Maybe.is_eq(~Resources.Name, ~Resources.Name.is_eq, Node.wrote(s, v), Some{c})
             ),
             Touch.lacks(s, b, v)
           ),
-          List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Touch.versions(s), v)
+          Keys.has(vs, Ledgers.Id.key(v))
         ),
-        List.contains(~Branch, ~Branch.is_eq, Branch.names(Node.branches(s)), b)
+        Keys.has(bs, Branch.key(b))
       )
+
+# the touch t holds
+def Node.touches(+s: State(), t: Touch) -> Bool:
+  match t:
+    case Touch{v, c, +b, u}:
+      Touch.holds(Seen.of(s, Branch.keys(s), Version.keys(s), b), Touch{v, c, b, u})
 
 # the touches of the version v that wrote c, on the branch b, one for each of
 # its resources us
@@ -2221,78 +2314,63 @@ def Touch.of(
     case Some{c}:
       Touch.each(us, v, c, b)
 
-# a branch of s, with its resources
-type Affects is Data:
-  Affects{state: State(), branch: Branch, resources: List<&2, Resources.Name>}
-
 # the touches of the version v on the branch of g
-def Affects.at(g: Affects, v: Ledgers.Id) -> List<&2, Touch>:
+def Affects.at(g: Seen, v: Ledgers.Id) -> List<&2, Touch>:
   match g:
-    case Affects{s, b, us}:
+    case Seen{s, bs, vs, b, us}:
       +v = v
-      Touch.of(Node.wrote(s, v), v, b, us)
+      Touch.of(Node.wrote(s, v), v, b, Uses.nodes(us))
 
-# the touch t is of the branch of g, and holds
-def Affects.keeps(g: Affects, t: Touch) -> Bool:
-  match g t:
-    case Affects{s, b, us} Touch{v, c, +tb, u}:
-      List.all.if(w => Node.touches(s, Touch{v, c, tb, u}), Branch.is_eq(tb, b))
-
-# the touches that may hold of the branch b
-def Affects.cands(+s: State(), +b: Branch) -> List<&2, Touch>:
-  Shared.List.flat(
-    ~Ledgers.Id,
-    ~Touch,
-    ~Affects,
-    ~Affects.at,
-    Touch.versions(s),
-    Affects{s, b, Node.resources(s, b)}
-  )
+# the touches that may hold of the branch of g
+def Affects.cands(s: State(), g: Seen) -> List<&2, Touch>:
+  Shared.List.flat(~Ledgers.Id, ~Touch, ~Seen, ~Affects.at, Touch.versions(s), g)
 
 # the changes elsewhere that touch what the branch b uses, at any depth
-def Node.affects(+s: State(), +b: Branch) -> List<&2, Touch>:
-  Shared.List.keep(
-    ~Touch,
-    ~Affects,
-    ~Affects.keeps,
-    Affects.cands(s, b),
-    Affects{s, b, Node.resources(s, b)}
-  )
+def Node.affects(+s: State(), b: Branch) -> List<&2, Touch>:
+  +g = Seen.of(s, Branch.keys(s), Version.keys(s), b)
+  Shared.List.keep(~Touch, ~Seen, ~Touch.holds, Affects.cands(s, g), g)
 
-# the version of a point of s
+# the checks of one branch, and the version of a point
 type Impact is Data:
-  Impact{state: State(), version: Maybe<&2, Ledgers.Id>}
+  Impact{seen: Seen, version: Maybe<&2, Ledgers.Id>}
 
 # the touch t is of the version of g, or of a version that it came from, and
 # holds
 def Impact.keeps(g: Impact, t: Touch) -> Bool:
   match g t:
-    case Impact{+s, +m} Touch{+v, c, b, u}:
+    case Impact{Seen{+s, bs, vs, gb, us}, +m} Touch{+v, c, b, u}:
       List.all.if(
-        w => Node.touches(s, Touch{v, c, b, u}),
+        w => Touch.holds(Seen{s, bs, vs, gb, us}, Touch{v, c, b, u}),
         List.all.if(
           w => Node.has(s, Maybe.default(&2, Ledgers.Id, m, v), v),
           Maybe.is_some(&2, Ledgers.Id, m)
         )
       )
 
-# the touches that may hold of the branches es
-def Impact.cands(+s: State(), es: List<&2, Branch>) -> List<&2, Touch>:
+# what the changes up to the version m touch on the branches es, with the
+# keys of the branches bs and of the versions vs
+def Impact.of(
+  +s: State(),
+  +bs: Tries.Trie<Unit>,
+  +vs: Tries.Trie<Unit>,
+  +m: Maybe<&2, Ledgers.Id>,
+  es: List<&2, Branch>
+) -> List<&2, Touch>:
   match es:
     case Nil{}:
       []
     case Con{b, r}:
-      List.append(&2, Touch, Affects.cands(s, b), Impact.cands(s, r))
+      +g = Seen.of(s, bs, vs, b)
+      List.append(
+        &2,
+        Touch,
+        Shared.List.keep(~Touch, ~Impact, ~Impact.keeps, Affects.cands(s, g), Impact{g, m}),
+        Impact.of(s, bs, vs, m, r)
+      )
 
 # what the changes up to the point p touch elsewhere
 def Node.impact(+s: State(), p: Point) -> List<&2, Touch>:
-  Shared.List.keep(
-    ~Touch,
-    ~Impact,
-    ~Impact.keeps,
-    Impact.cands(s, Branch.names(Node.branches(s))),
-    Impact{s, Node.version(s, p)}
-  )
+  Impact.of(s, Branch.keys(s), Version.keys(s), Node.version(s, p), Branch.names(Node.branches(s)))
 
 # Notices
 # -------
@@ -2313,19 +2391,24 @@ type Notice is Data:
   Notice.Touched{touch: Touch}
   Notice.GroupCycle{store: Ledgers.Id, group: String}
 
-# a and b are the same notice
-def Notice.is_eq(a: Notice, b: Notice) -> Bool:
-  match a b:
-    case Notice.Versioned{b1, v1} Notice.Versioned{b2, v2}:
-      Bool.and(Branch.is_eq(b1, b2), Ledgers.Id.is_eq(v1, v2))
-    case Notice.Conflicted{b1, v1} Notice.Conflicted{b2, v2}:
-      Bool.and(Branch.is_eq(b1, b2), Ledgers.Id.is_eq(v1, v2))
-    case Notice.Touched{t1} Notice.Touched{t2}:
-      Touch.is_eq(t1, t2)
-    case Notice.GroupCycle{r1, g1} Notice.GroupCycle{r2, g2}:
-      Bool.and(Ledgers.Id.is_eq(r1, r2), String.eq(g1, g2))
-    case _ _:
-      False{}
+# the key of the notice n: its kind, then its parts
+def Notice.key(n: Notice) -> List<&2, Bool>:
+  match n:
+    case Notice.Versioned{b, v}:
+      False{} <> False{} <> List.append(&2, Bool, Branch.key(b), Ledgers.Id.key(v))
+    case Notice.Conflicted{b, v}:
+      False{} <> True{} <> List.append(&2, Bool, Branch.key(b), Ledgers.Id.key(v))
+    case Notice.Touched{Touch{v, c, b, u}}:
+      True{}
+        <> False{}
+        <> List.append(
+          &2,
+          Bool,
+          Ledgers.Id.key(v),
+          List.append(&2, Bool, Name.key(c), List.append(&2, Bool, Branch.key(b), Name.key(u)))
+        )
+    case Notice.GroupCycle{r, g}:
+      True{} <> True{} <> List.append(&2, Bool, Ledgers.Id.key(r), Tries.Trie.text(g))
 
 # the versions xs of the branch b, as notices
 def Notice.versions(+b: Branch, xs: List<&2, Ledgers.Id>) -> List<&2, Notice>:
@@ -2383,22 +2466,20 @@ def Notice.all(+s: State(), t: Topic) -> List<&2, Notice>:
     case Topic.Groups{+r}:
       Notice.cycles(s, r, Group.all(Groups{s, r}))
 
-# the notices of ns that old does not hold
-def Notice.new(ns: List<&2, Notice>, +old: List<&2, Notice>) -> List<&2, Notice>:
+# the notices of ns whose keys old does not hold
+def Notice.new(ns: List<&2, Notice>, +old: Tries.Trie<Unit>) -> List<&2, Notice>:
   match ns:
     case Nil{}:
       []
     case Con{+n, r}:
-      List.filter.put(
-        Notice,
-        n,
-        Notice.new(r, old),
-        Bool.not(List.contains(~Notice, ~Notice.is_eq, old, n))
-      )
+      List.filter.put(Notice, n, Notice.new(r, old), Bool.not(Keys.has(old, Notice.key(n))))
 
 # the notices of the topic t in s that since does not have
 def Node.notices(s: State(), +t: Topic, since: State()) -> List<&2, Notice>:
-  Notice.new(Notice.all(s, t), Notice.all(since, t))
+  Notice.new(
+    Notice.all(s, t),
+    Keys.put(~Notice, ~Notice.key, Notice.all(since, t), Tries.Trie.new(Unit))
+  )
 
 # Laws
 # ----
