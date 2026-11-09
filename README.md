@@ -22,6 +22,6 @@ A Vend Store is a permanently named (writer name + writer-chosen request id) set
 
 A Vend Writer is anyone (people, agents, tools) connected to a Vend Node under a name, reading and changing resources by request or through mounted resources (like a watched folder, whose every save becomes a version). Each change carries a writer-chosen request id, so it counts once however often and wherever it is sent; it is answered Written, Conflicted, Pending (owners not reached yet, still delivered later), Stale or Refused (both final). Writers are told only about changes to what their work uses, including everything it imports directly or not, and every read shows their own changes, even pending ones and even after switching Vend Nodes.
 
-## Owner Group
+## Vend Owner Group
 
-An Owner Group is a composition of Vend Nodes that decide and sign the changes of a branch or of the Store itself in sequence.
+A Vend Owner Group is a composition of Vend Nodes that decide and sign the changes of a branch or of the Store itself in sequence.
