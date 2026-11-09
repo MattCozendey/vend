@@ -1,5 +1,6 @@
 import Base
 import ../../shared.bend as Shared
+import ./shared/shared/code.bend as Codes
 import ./shared/text.bend as Texts
 
 # Names
@@ -23,12 +24,6 @@ def Name.show(n: Name) -> String:
 # a and b are the same resource
 def Name.is_eq(a: Name, b: Name) -> Bool:
   String.eq(Name.show(a), Name.show(b))
-
-# Name.is_eq is True for a name and itself
-def Name.is_eq_refl(a: Name) -> {Name.is_eq(a, a) == True{}: Bool}:
-  match a:
-    case Name{t}:
-      Texts.String.eq_refl(t)
 
 # the space in the cut c of the text t: t itself when it has no ':'
 def Name.space.cut(c: Maybe<&2, Texts.Cut<String>>, t: String) -> String:
@@ -62,6 +57,41 @@ law name_read_after_show:
   for n: Name
   for v: {Texts.Text.has(Name.show(n), 58) == True{}: Bool}
   {Name.read(Name.show(n)) == Some{n}: Maybe<&2, Name>}
+
+# the resource n, then r
+def Name.code(n: Name, r: List<&2, U32>) -> List<&2, U32>:
+  match n:
+    case Name{t}:
+      Codes.Code.text(t, r)
+
+# a resource name
+def Name.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Name>>:
+  Codes.Code.one.read(~String, ~Name, ~Codes.Code.text.read, n => Name{n}, ts)
+
+# a resource name reads back
+def Name.code_read(
+  x: Name,
+  r: List<&2, U32>
+) -> {
+  Name.code.read(
+    Name.code(x, r)
+  )
+    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Name>>
+}:
+  match x:
+    case Name{n}:
+      Codes.Code.one_read(
+        ~String,
+        ~Name,
+        ~Codes.Code.text.codec(),
+        a => Name{a},
+        n,
+        r
+      )
+
+# the code of resource names
+def Name.codec() -> Codes.Codec(Name):
+  (Name.code, (Name.code.read, x => r => Name.code_read(x, r)))
 
 def name_read_after_show(n, v):
   match n:

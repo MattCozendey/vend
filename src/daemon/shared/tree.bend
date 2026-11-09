@@ -6904,22 +6904,6 @@ def Canon.holds(
     Canon.holds.parts(~S, ~fetch, s, n, d, bs, bs)
   )
 
-# the store s holds the canonical tree of the bindings sub under a nibble of a
-# branch at depth d, n nibbles above the end of a path
-def Canon.holds.sub(
-  ~S: Data,
-  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  s: S,
-  n: Nat,
-  d: Nat,
-  sub: List<&2, Binding>
-) -> Bool:
-  match n:
-    case 0n:
-      True{}
-    case 1n+m:
-      Canon.holds(~S, ~fetch, s, m, 1n+d, sub)
-
 # the store s holds the canonical tree of the bindings bs of a whole tree
 def Canon.holds.of(
   ~S: Data,

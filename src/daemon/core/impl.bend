@@ -13,56 +13,6 @@ import ./spec.bend as Spec
 # Codes
 # -----
 
-# a request ID reads back
-def Id.code_read(
-  x: Ledgers.Id,
-  r: List<&2, U32>
-) -> {
-  Spec.Id.code.read(Spec.Id.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Ledgers.Id>>
-}:
-  match x:
-    case Ledgers.Id{w, q}:
-      Codes.Code.two_read(
-        ~String,
-        ~String,
-        ~Ledgers.Id,
-        ~Codes.Code.text.codec(),
-        ~Codes.Code.text.codec(),
-        a => b => Ledgers.Id{a, b},
-        w,
-        q,
-        r
-      )
-
-# the code of request IDs
-def Id.codec() -> Codes.Codec(Ledgers.Id):
-  (Spec.Id.code, (Spec.Id.code.read, x => r => Id.code_read(x, r)))
-
-# a resource name reads back
-def Name.code_read(
-  x: Resources.Name,
-  r: List<&2, U32>
-) -> {
-  Spec.Name.code.read(
-    Spec.Name.code(x, r)
-  )
-    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Resources.Name>>
-}:
-  match x:
-    case Resources.Name{n}:
-      Codes.Code.one_read(
-        ~String,
-        ~Resources.Name,
-        ~Codes.Code.text.codec(),
-        a => Resources.Name{a},
-        n,
-        r
-      )
-
-# the code of resource names
-def Name.codec() -> Codes.Codec(Resources.Name):
-  (Spec.Name.code, (Spec.Name.code.read, x => r => Name.code_read(x, r)))
-
 # a line reads back
 def Line.code_read(
   x: Spec.Line,
@@ -152,7 +102,7 @@ def Content.code_read(
         r
       )
     case Spec.Content.Of{v}:
-      Codes.Code.one_read(~Ledgers.Id, ~Spec.Content, ~Id.codec(), a => Spec.Content.Of{a}, v, r)
+      Codes.Code.one_read(~Ledgers.Id, ~Spec.Content, ~Ledgers.Id.codec(), a => Spec.Content.Of{a}, v, r)
 
 # the code of contents
 def Content.codec() -> Codes.Codec(Spec.Content):
@@ -176,7 +126,7 @@ def Change.code_read(
         ~List<&2, Spec.Member>,
         ~Spec.Change,
         ~Line.codec(),
-        ~Codes.Code.maybe.codec(~Ledgers.Id, ~Id.codec()),
+        ~Codes.Code.maybe.codec(~Ledgers.Id, ~Ledgers.Id.codec()),
         ~Codes.Code.list.codec(~Spec.Member, ~Member.codec()),
         a => b => c => Spec.Change.Make{a, b, c},
         l,
@@ -199,8 +149,8 @@ def Change.code_read(
         ~Maybe<&2, Ledgers.Id>,
         ~Spec.Content,
         ~Spec.Change,
-        ~Name.codec(),
-        ~Codes.Code.maybe.codec(~Ledgers.Id, ~Id.codec()),
+        ~Resources.Name.codec(),
+        ~Codes.Code.maybe.codec(~Ledgers.Id, ~Ledgers.Id.codec()),
         ~Content.codec(),
         a => b => c => Spec.Change.Write{a, b, c},
         n,
@@ -214,8 +164,8 @@ def Change.code_read(
         ~Resources.Name,
         ~Spec.Content,
         ~Spec.Change,
-        ~Id.codec(),
-        ~Name.codec(),
+        ~Ledgers.Id.codec(),
+        ~Resources.Name.codec(),
         ~Content.codec(),
         a => b => c => Spec.Change.Resolve{a, b, c},
         k,
@@ -224,9 +174,9 @@ def Change.code_read(
         r
       )
     case Spec.Change.Merge{v}:
-      Codes.Code.one_read(~Ledgers.Id, ~Spec.Change, ~Id.codec(), a => Spec.Change.Merge{a}, v, r)
+      Codes.Code.one_read(~Ledgers.Id, ~Spec.Change, ~Ledgers.Id.codec(), a => Spec.Change.Merge{a}, v, r)
     case Spec.Change.Move{v}:
-      Codes.Code.one_read(~Ledgers.Id, ~Spec.Change, ~Id.codec(), a => Spec.Change.Move{a}, v, r)
+      Codes.Code.one_read(~Ledgers.Id, ~Spec.Change, ~Ledgers.Id.codec(), a => Spec.Change.Move{a}, v, r)
     case Spec.Change.Mark{m, n}:
       Codes.Code.two_read(
         ~String,
@@ -276,7 +226,7 @@ def Ask.code_read(
         ~Maybe<&2, Spec.Line>,
         ~Spec.Change,
         ~Spec.Ask,
-        ~Id.codec(),
+        ~Ledgers.Id.codec(),
         ~Codes.Code.maybe.codec(~Spec.Line, ~Line.codec()),
         ~Change.codec(),
         a => b => c => Spec.Ask.On{a, b, c},

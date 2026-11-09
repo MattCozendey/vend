@@ -105,49 +105,13 @@ def Member.is_eq(a: Member, b: Member) -> Bool:
 # A request is sent and stored as its code (Codes); two requests are the same
 # exactly when their codes are.
 
-# the request i, then r
-def Id.code(i: Ledgers.Id, r: List<&2, U32>) -> List<&2, U32>:
-  match i:
-    case Ledgers.Id{w, q}:
-      Codes.Code.text(w, Codes.Code.text(q, r))
-
-# a request ID
-def Id.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ledgers.Id>>:
-  Codes.Code.two.read(
-    ~String,
-    ~String,
-    ~Ledgers.Id,
-    ~Codes.Code.text.read,
-    ~Codes.Code.text.read,
-    w => q => Ledgers.Id{w, q},
-    ts
-  )
-
 # the version m, if any (where a line starts, or the base of a write), then r
 def Base.code(m: Maybe<&2, Ledgers.Id>, r: List<&2, U32>) -> List<&2, U32>:
-  Codes.Code.maybe(~Ledgers.Id, ~Id.code, m, r)
+  Codes.Code.maybe(~Ledgers.Id, ~Ledgers.Id.code, m, r)
 
 # a version, if any
 def Base.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Maybe<&2, Ledgers.Id>>>:
-  Codes.Code.maybe.read(~Ledgers.Id, ~Id.code.read, ts)
-
-# the resource n, then r
-def Name.code(n: Resources.Name, r: List<&2, U32>) -> List<&2, U32>:
-  match n:
-    case Resources.Name{t}:
-      Codes.Code.text(t, r)
-
-# a resource name
-def Name.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Resources.Name>>:
-  Codes.Code.one.read(~String, ~Resources.Name, ~Codes.Code.text.read, n => Resources.Name{n}, ts)
-
-# the nodes os, then r
-def Owners.code(os: List<&2, String>, r: List<&2, U32>) -> List<&2, U32>:
-  Codes.Code.list(~String, ~Codes.Code.text, os, r)
-
-# nodes
-def Owners.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<List<&2, String>>>:
-  Codes.Code.list.read(~String, ~Codes.Code.text.read, ts)
+  Codes.Code.maybe.read(~Ledgers.Id, ~Ledgers.Id.code.read, ts)
 
 # the text t with the tag k, then r
 def Tag.text(k: U32, t: String, r: List<&2, U32>) -> List<&2, U32>:
@@ -217,7 +181,7 @@ def Content.code(c: Content, r: List<&2, U32>) -> List<&2, U32>:
     case Content.Bytes{b}:
       0 <> Codes.Code.words(b, r)
     case Content.Of{v}:
-      1 <> Id.code(v, r)
+      1 <> Ledgers.Id.code(v, r)
 
 # a content
 def Content.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Content>>:
@@ -235,7 +199,7 @@ def Content.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Content>>:
           b => Content.Bytes{b},
           r
         ),
-        u => Codes.Code.one.read(~Ledgers.Id, ~Content, ~Id.code.read, v => Content.Of{v}, r)
+        u => Codes.Code.one.read(~Ledgers.Id, ~Content, ~Ledgers.Id.code.read, v => Content.Of{v}, r)
       )
 
 # the change c, then r
@@ -244,15 +208,15 @@ def Change.code(c: Change, r: List<&2, U32>) -> List<&2, U32>:
     case Change.Make{l, at, ms}:
       0 <> Line.code(l, Base.code(at, Members.code(ms, r)))
     case Change.Own{os}:
-      1 <> Owners.code(os, r)
+      1 <> Ledgers.Owners.code(os, r)
     case Change.Write{n, base, x}:
-      2 <> Name.code(n, Base.code(base, Content.code(x, r)))
+      2 <> Resources.Name.code(n, Base.code(base, Content.code(x, r)))
     case Change.Resolve{k, n, x}:
-      3 <> Id.code(k, Name.code(n, Content.code(x, r)))
+      3 <> Ledgers.Id.code(k, Resources.Name.code(n, Content.code(x, r)))
     case Change.Merge{v}:
-      4 <> Id.code(v, r)
+      4 <> Ledgers.Id.code(v, r)
     case Change.Move{v}:
-      5 <> Id.code(v, r)
+      5 <> Ledgers.Id.code(v, r)
     case Change.Mark{m, t}:
       6 <> Codes.Code.text(m, Codes.Code.text(t, r))
     case Change.Members{ms}:
@@ -280,7 +244,7 @@ def Change.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Chan
       u => Codes.Code.one.read(
         ~List<&2, String>,
         ~Change,
-        ~Owners.code.read,
+        ~Ledgers.Owners.code.read,
         os => Change.Own{os},
         r
       ),
@@ -292,7 +256,7 @@ def Change.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Chan
           ~Maybe<&2, Ledgers.Id>,
           ~Content,
           ~Change,
-          ~Name.code.read,
+          ~Resources.Name.code.read,
           ~Base.code.read,
           ~Content.code.read,
           n => b => c => Change.Write{n, b, c},
@@ -306,8 +270,8 @@ def Change.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Chan
             ~Resources.Name,
             ~Content,
             ~Change,
-            ~Id.code.read,
-            ~Name.code.read,
+            ~Ledgers.Id.code.read,
+            ~Resources.Name.code.read,
             ~Content.code.read,
             k => n => c => Change.Resolve{k, n, c},
             r
@@ -315,11 +279,11 @@ def Change.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Chan
           u => Shared.Bool.when(
             Maybe<&2, Codes.Read<Change>>,
             U32.is_eq(x, 4),
-            u => Codes.Code.one.read(~Ledgers.Id, ~Change, ~Id.code.read, v => Change.Merge{v}, r),
+            u => Codes.Code.one.read(~Ledgers.Id, ~Change, ~Ledgers.Id.code.read, v => Change.Merge{v}, r),
             u => Shared.Bool.when(
               Maybe<&2, Codes.Read<Change>>,
               U32.is_eq(x, 5),
-              u => Codes.Code.one.read(~Ledgers.Id, ~Change, ~Id.code.read, v => Change.Move{v}, r),
+              u => Codes.Code.one.read(~Ledgers.Id, ~Change, ~Ledgers.Id.code.read, v => Change.Move{v}, r),
               u => Shared.Bool.when(
                 Maybe<&2, Codes.Read<Change>>,
                 U32.is_eq(x, 6),
@@ -359,9 +323,9 @@ def Change.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Change>>:
 def Ask.code(q: Ask, r: List<&2, U32>) -> List<&2, U32>:
   match q:
     case Ask.Start{os}:
-      0 <> Owners.code(os, r)
+      0 <> Ledgers.Owners.code(os, r)
     case Ask.On{st, l, c}:
-      1 <> Id.code(st, Target.code(l, Change.code(c, r)))
+      1 <> Ledgers.Id.code(st, Target.code(l, Change.code(c, r)))
 
 # a request
 def Ask.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ask>>:
@@ -375,7 +339,7 @@ def Ask.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ask>>:
         u => Codes.Code.one.read(
           ~List<&2, String>,
           ~Ask,
-          ~Owners.code.read,
+          ~Ledgers.Owners.code.read,
           os => Ask.Start{os},
           r
         ),
@@ -384,7 +348,7 @@ def Ask.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ask>>:
           ~Maybe<&2, Line>,
           ~Change,
           ~Ask,
-          ~Id.code.read,
+          ~Ledgers.Id.code.read,
           ~Target.code.read,
           ~Change.code.read,
           s => l => c => Ask.On{s, l, c},
@@ -474,57 +438,9 @@ def Node.agrees(s: State(), t: State()) -> Bool:
 def Store.fetch(s: State(), h: Hashes.Hash) -> Maybe<&2, List<&2, U32>>:
   Ledgers.State.data(~Ask, s, h)
 
-# the bit b, then r
-def Bit.code(b: Bool, r: List<&2, U32>) -> List<&2, U32>:
-  Bool.pick(U32, b, 1, 0) <> r
-
-# a bit
-def Bit.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Bool>>:
-  match ts:
-    case Nil{}:
-      None{}
-    case Con{+x, +r}:
-      Shared.Bool.when(
-        Maybe<&2, Codes.Read<Bool>>,
-        U32.is_eq(x, 0),
-        u => Some{Codes.Read{False{}, r}},
-        u => Shared.Bool.when(
-          Maybe<&2, Codes.Read<Bool>>,
-          U32.is_eq(x, 1),
-          u => Some{Codes.Read{True{}, r}},
-          u => None{}
-        )
-      )
-
-# the bits k, then r
-def Bits.code(k: List<&2, Bool>, r: List<&2, U32>) -> List<&2, U32>:
-  Codes.Code.list(~Bool, ~Bit.code, k, r)
-
-# bits
-def Bits.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<List<&2, Bool>>>:
-  Codes.Code.list.read(~Bool, ~Bit.code.read, ts)
-
-# the line c, then r
-def Chain.code(c: Ledgers.Chain, r: List<&2, U32>) -> List<&2, U32>:
-  match c:
-    case Ledgers.Chain{i, k}:
-      Id.code(i, Codes.Code.maybe(~List<&2, Bool>, ~Bits.code, k, r))
-
-# a line
-def Chain.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ledgers.Chain>>:
-  Codes.Code.two.read(
-    ~Ledgers.Id,
-    ~Maybe<&2, List<&2, Bool>>,
-    ~Ledgers.Chain,
-    ~Id.code.read,
-    ~(m => Codes.Code.maybe.read(~List<&2, Bool>, ~Bits.code.read, m)),
-    i => k => Ledgers.Chain{i, k},
-    ts
-  )
-
 # the key of the resource n
 def Key.res(n: Resources.Name) -> List<&2, U32>:
-  0 <> Name.code(n, [])
+  0 <> Resources.Name.code(n, [])
 
 # the key of the mark m
 def Key.mark(m: String) -> List<&2, U32>:
@@ -536,15 +452,15 @@ def Key.members() -> List<&2, U32>:
 
 # the key of the clash of the resource n
 def Key.clash(n: Resources.Name) -> List<&2, U32>:
-  3 <> Name.code(n, [])
+  3 <> Resources.Name.code(n, [])
 
 # the key of the line c in a version vector
 def Key.vector(c: Ledgers.Chain) -> List<&2, U32>:
-  4 <> Chain.code(c, [])
+  4 <> Ledgers.Chain.code(c, [])
 
 # the key of where the line of the key k below a store starts
 def Key.start(k: List<&2, Bool>) -> List<&2, U32>:
-  5 <> Bits.code(k, [])
+  5 <> Ledgers.Bits.code(k, [])
 
 # the value of a resource whose bytes are m (none: removed)
 def Res.code(m: Maybe<&2, Texts.Bytes()>) -> List<&2, U32>:
@@ -909,7 +825,7 @@ def Vector.entry(b: Trees.Binding) -> Maybe<&2, Ledgers.Where>:
         &2,
         Ledgers.Chain,
         Ledgers.Where,
-        Read.whole(Ledgers.Chain, Chain.code.read(k)),
+        Read.whole(Ledgers.Chain, Ledgers.Chain.code.read(k)),
         c => Place.read(c, ws)
       )
     case _:
@@ -1111,7 +1027,7 @@ def Res.binding(b: Trees.Binding) -> Maybe<&2, Resources.Name>:
       Shared.Bool.when(
         Maybe<&2, Resources.Name>,
         Maybe.is_some(&2, Texts.Bytes(), Res.read(ws)),
-        u => Read.whole(Resources.Name, Name.code.read(k)),
+        u => Read.whole(Resources.Name, Resources.Name.code.read(k)),
         u => None{}
       )
     case _:
@@ -1858,7 +1774,7 @@ def Node.diff(+s: State(), +n: Resources.Name, a: Point, b: Point) -> List<&2, F
 def Clash.binding(b: Trees.Binding) -> Maybe<&2, Resources.Name>:
   match b:
     case Trees.Binding{Con{3, k}, Con{1, Nil{}}}:
-      Read.whole(Resources.Name, Name.code.read(k))
+      Read.whole(Resources.Name, Resources.Name.code.read(k))
     case _:
       None{}
 
@@ -1964,12 +1880,6 @@ def Node.answer(+s: State(), +i: Ledgers.Id) -> Answer:
 # a branch: its store and its name
 type Branch is Data:
   Branch{store: Ledgers.Id, name: String}
-
-# a and b are the same branch
-def Branch.is_eq(a: Branch, b: Branch) -> Bool:
-  match a b:
-    case Branch{r1, n1} Branch{r2, n2}:
-      Bool.and(Ledgers.Id.is_eq(r1, r2), String.eq(n1, n2))
 
 # a branch, as Node.branches lists it
 type BranchEntry is Data:

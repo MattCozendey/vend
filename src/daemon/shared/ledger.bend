@@ -1,6 +1,7 @@
 import Base
 import ../../shared.bend as Shared
 import ./shared/quorum.bend as Quorums
+import ./shared/shared/code.bend as Codes
 import ./shared/shared/cell.bend as Cells
 import ./shared/shared/hash.bend as Hashes
 import ./shared/shared/trie.bend as Tries
@@ -66,6 +67,110 @@ type Entry<-Q: Data> is Data:
   Entry.Vote{vote: Vote}
   Entry.At{at: Where}
   Entry.Data{words: List<&2, U32>}
+
+# Codes
+# -----
+# Ledger values are sent and stored as their codes (Codes).
+
+# the request i, then r
+def Id.code(i: Id, r: List<&2, U32>) -> List<&2, U32>:
+  match i:
+    case Id{w, q}:
+      Codes.Code.text(w, Codes.Code.text(q, r))
+
+# a request ID
+def Id.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Id>>:
+  Codes.Code.two.read(
+    ~String,
+    ~String,
+    ~Id,
+    ~Codes.Code.text.read,
+    ~Codes.Code.text.read,
+    w => q => Id{w, q},
+    ts
+  )
+
+# the nodes os, then r
+def Owners.code(os: List<&2, String>, r: List<&2, U32>) -> List<&2, U32>:
+  Codes.Code.list(~String, ~Codes.Code.text, os, r)
+
+# nodes
+def Owners.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<List<&2, String>>>:
+  Codes.Code.list.read(~String, ~Codes.Code.text.read, ts)
+
+# the bit b, then r
+def Bit.code(b: Bool, r: List<&2, U32>) -> List<&2, U32>:
+  Bool.pick(U32, b, 1, 0) <> r
+
+# a bit
+def Bit.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Bool>>:
+  match ts:
+    case Nil{}:
+      None{}
+    case Con{+x, +r}:
+      Shared.Bool.when(
+        Maybe<&2, Codes.Read<Bool>>,
+        U32.is_eq(x, 0),
+        u => Some{Codes.Read{False{}, r}},
+        u => Shared.Bool.when(
+          Maybe<&2, Codes.Read<Bool>>,
+          U32.is_eq(x, 1),
+          u => Some{Codes.Read{True{}, r}},
+          u => None{}
+        )
+      )
+
+# the bits k, then r
+def Bits.code(k: List<&2, Bool>, r: List<&2, U32>) -> List<&2, U32>:
+  Codes.Code.list(~Bool, ~Bit.code, k, r)
+
+# bits
+def Bits.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<List<&2, Bool>>>:
+  Codes.Code.list.read(~Bool, ~Bit.code.read, ts)
+
+# the line c, then r
+def Chain.code(c: Chain, r: List<&2, U32>) -> List<&2, U32>:
+  match c:
+    case Chain{i, k}:
+      Id.code(i, Codes.Code.maybe(~List<&2, Bool>, ~Bits.code, k, r))
+
+# a line
+def Chain.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Chain>>:
+  Codes.Code.two.read(
+    ~Id,
+    ~Maybe<&2, List<&2, Bool>>,
+    ~Chain,
+    ~Id.code.read,
+    ~(m => Codes.Code.maybe.read(~List<&2, Bool>, ~Bits.code.read, m)),
+    i => k => Chain{i, k},
+    ts
+  )
+
+# a request ID reads back
+def Id.code_read(
+  x: Id,
+  r: List<&2, U32>
+) -> {
+  Id.code.read(Id.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Id>>
+}:
+  match x:
+    case Id{w, q}:
+      Codes.Code.two_read(
+        ~String,
+        ~String,
+        ~Id,
+        ~Codes.Code.text.codec(),
+        ~Codes.Code.text.codec(),
+        a => b => Id{a, b},
+        w,
+        q,
+        r
+      )
+
+# the code of request IDs
+def Id.codec() -> Codes.Codec(Id):
+  (Id.code, (Id.code.read, x => r => Id.code_read(x, r)))
+
 
 # Keys
 # ----
@@ -266,10 +371,6 @@ def Id.is_eq_sound(a: Id, b: Id) -> {Id.is_eq(a, b) == True{}: Bool} -> {a == b:
           Texts.String.eq_sound(r1, r2)(Shared.Bool.and_true_right(x, y)(h))
         )
 
-# the laws of Id.is_eq
-def Id.laws() -> Shared.Eq.Laws(Id, Id.is_eq):
-  (a => Id.is_eq_refl(a), a => b => Id.is_eq_sound(a, b))
-
 # the laws of Sub.is_eq
 def Sub.laws() -> Shared.Eq.Laws(Maybe<&2, List<&2, Bool>>, Sub.is_eq):
   Shared.Maybe.laws(
@@ -316,10 +417,6 @@ def Chain.is_eq_sound(a: Chain, b: Chain) -> {Chain.is_eq(a, b) == True{}: Bool}
             k2
           )(Shared.Bool.and_true_right(x, y)(h))
         )
-
-# the laws of Chain.is_eq
-def Chain.laws() -> Shared.Eq.Laws(Chain, Chain.is_eq):
-  (a => Chain.is_eq_refl(a), a => b => Chain.is_eq_sound(a, b))
 
 # a = b, from the three parts of an and that compares them
 def Eq.three(
@@ -417,10 +514,6 @@ def View.is_eq_sound(a: View, b: View) -> {View.is_eq(a, b) == True{}: Bool} -> 
       h => Empty.absurd({View.Root{x} == View.On{c, o, m}: View}, Shared.Bool.false_ne_true(h))
     case View.On{c, o, m} View.Root{x}:
       h => Empty.absurd({View.On{c, o, m} == View.Root{x}: View}, Shared.Bool.false_ne_true(h))
-
-# the laws of View.is_eq
-def View.laws() -> Shared.Eq.Laws(View, View.is_eq):
-  (a => View.is_eq_refl(a), a => b => View.is_eq_sound(a, b))
 
 # Vote.is_eq is True for a vote and itself
 def Vote.is_eq_refl(a: Vote) -> {Vote.is_eq(a, a) == True{}: Bool}:
@@ -973,20 +1066,6 @@ def Made.vote_at(
             +v => Maybe.bind(&2, List<&2, String>, Vote, Made.vote(k, ms, v), u => Some{v})
           )
         )
-      )
-
-# the vote that made the line c, when it is a line below a root
-def Line.made(~Q: Data, ~view: Q -> View, +s: State(Q), c: Chain) -> Maybe<&2, Vote>:
-  match c:
-    case Chain{r, None{}}:
-      None{}
-    case Chain{+r, Some{+k}}:
-      Maybe.bind(
-        &2,
-        Where,
-        Vote,
-        Where.of(~Q, State.entry(~Q, s, Slot.made(Chain{r, Some{k}}))),
-        w => Made.vote_at(~Q, ~view, s, r, k, w)
       )
 
 # the owners of the epoch e of the line c

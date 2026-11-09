@@ -416,22 +416,6 @@ def Cell.keeps_value(
     case None{}:
       h => Empty.absurd({None{} == Some{One{x}}: Maybe<&2, Cell<V>>}, Shared.Bool.false_ne_true(h))
 
-# a slot kept as empty was empty
-def Cell.keeps_none(
-  ~V: Data,
-  ~same: V -> V -> Bool,
-  a: Maybe<&2, Cell<V>>
-) -> {
-  Cell.keeps(~V, ~same, a, None{}) == True{}: Bool
-} -> {Maybe.is_none(&2, Cell<V>, a) == True{}: Bool}:
-  match a:
-    case None{}:
-      h => {==}
-    case Some{One{x}}:
-      h => h
-    case Some{Many{}}:
-      h => h
-
 # a slot that keeps a full slot is full
 def Cell.keeps_some(
   ~V: Data,
