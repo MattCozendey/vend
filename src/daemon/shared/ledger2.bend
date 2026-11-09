@@ -1067,33 +1067,17 @@ def Line.head(
 
 # Listings
 # --------
-# The steps of a line, in order: in each epoch, the decided heights from 0 up
-# to the first one that is not decided, or up to the step where the next epoch
-# began. A step that is decided past a gap waits until the gap is decided.
+# The steps of a line, in order, read from decided votes alone: in each epoch,
+# the decided heights from 0 up to the first one that is not decided, or up to
+# the first step that gives the line new owners; the next epoch has those
+# owners. Decisions never change, so a listing only grows at its end.
 
-# the height h is at most lim (none: no bound)
-def Height.within(h: U32, lim: Maybe<&2, U32>) -> Bool:
-  match lim:
-    case None{}:
-      True{}
-    case Some{l}:
-      U32.is_le(h, l)
-
-# what the owners ms decide at the height h of the epoch e of c, when h is at
-# most lim
-def Height.decide(
-  ~Q: Data,
-  s: State(Q),
-  c: Chain,
-  e: U32,
-  ms: List<&2, String>,
-  +h: U32,
-  lim: Maybe<&2, U32>
-) -> Maybe<&2, Vote>:
-  Shared.Maybe.when(Vote, Height.within(h, lim), u => State.decide(~Q, s, Where{c, e, h}, ms))
+# the start of the slots of the votes of the line c, in every epoch
+def Slot.line_votes(c: Chain) -> List<&2, Bool>:
+  False{} <> True{} <> Chain.key(c)
 
 # the steps of the epoch e of c, whose owners are ms, from the height h, whose
-# decision is m, up to lim; f steps at most
+# decision is m; f steps at most
 def Epoch.steps(
   ~Q: Data,
   f: Nat,
@@ -1102,25 +1086,23 @@ def Epoch.steps(
   +e: U32,
   +ms: List<&2, String>,
   h: U32,
-  +lim: Maybe<&2, U32>,
   m: Maybe<&2, Vote>
 ) -> List<&2, Vote>:
   match f m:
-    case 1n+p Some{v}:
+    case 1n+p Some{+v}:
       +up = U32.inc(h)
-      v <> Epoch.steps(~Q, p, s, c, e, ms, up, lim, Height.decide(~Q, s, c, e, ms, up, lim))
+      v
+        <> Shared.Bool.when(
+          List<&2, Vote>,
+          Maybe.is_none(&2, List<&2, String>, Owners.of(c, v)),
+          u => Epoch.steps(~Q, p, s, c, e, ms, up, State.decide(~Q, s, Where{c, e, up}, ms)),
+          u => []
+        )
     case g w:
       []
 
-# the steps of the epoch e of c, whose owners are ms, up to lim
-def Epoch.list(
-  ~Q: Data,
-  +s: State(Q),
-  +c: Chain,
-  +e: U32,
-  +ms: List<&2, String>,
-  +lim: Maybe<&2, U32>
-) -> List<&2, Vote>:
+# the steps of the epoch e of c, whose owners are ms
+def Epoch.list(~Q: Data, +s: State(Q), +c: Chain, +e: U32, +ms: List<&2, String>) -> List<&2, Vote>:
   Epoch.steps(
     ~Q,
     Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s, Slot.votes(c, e))),
@@ -1129,47 +1111,42 @@ def Epoch.list(
     e,
     ms,
     0,
-    lim,
-    Height.decide(~Q, s, c, e, ms, 0, lim)
+    State.decide(~Q, s, Where{c, e, 0}, ms)
   )
 
-# the height of the place w
-def Where.height(w: Where) -> U32:
-  match w:
-    case Where{c, e, h}:
-      h
+# the owners that the last of the steps vs gives the line c, if any
+def Steps.next(c: Chain, vs: List<&2, Vote>) -> Maybe<&2, List<&2, String>>:
+  match vs:
+    case Nil{}:
+      None{}
+    case Con{v, Nil{}}:
+      Owners.of(c, v)
+    case Con{v, Con{w, r}}:
+      Steps.next(c, Con{w, r})
 
-# the height where the epoch after e of c began, when s holds where
-def Epoch.end(~Q: Data, s: State(Q), c: Chain, e: U32) -> Maybe<&2, U32>:
-  Shared.Maybe.then(
-    Where,
-    U32,
-    Where.of(~Q, State.entry(~Q, s, Slot.epoch(c, U32.inc(e)))),
-    w => Some{Where.height(w)}
-  )
-
-# the steps of the line c from the epoch cur, whose owners are ms, when the
-# owners of the epoch after it are m; f epochs at most
+# the steps vs of the epoch cur of c, then those after, when the last of vs
+# gives the owners m; f epochs at most
 def Line.steps.go(
   ~Q: Data,
   f: Nat,
   +s: State(Q),
   +c: Chain,
-  +cur: U32,
-  ms: List<&2, String>,
+  cur: U32,
+  vs: List<&2, Vote>,
   m: Maybe<&2, List<&2, String>>
 ) -> List<&2, Vote>:
   match f m:
-    case 1n+p Some{+os}:
+    case 1n+p Some{os}:
       +up = U32.inc(cur)
-      List.append(
-        &2,
-        Vote,
-        Epoch.list(~Q, s, c, cur, ms, Epoch.end(~Q, s, c, cur)),
-        Line.steps.go(~Q, p, s, c, up, os, Epoch.next(~Q, s, c, up, os))
-      )
+      +ws = Epoch.list(~Q, s, c, up, os)
+      List.append(&2, Vote, vs, Line.steps.go(~Q, p, s, c, up, ws, Steps.next(c, ws)))
     case g w:
-      Epoch.list(~Q, s, c, cur, ms, None{})
+      vs
+
+# the steps of the line c from its first epoch, whose steps are vs; f epochs
+# at most
+def Line.steps.of(~Q: Data, f: Nat, s: State(Q), +c: Chain, +vs: List<&2, Vote>) -> List<&2, Vote>:
+  Line.steps.go(~Q, f, s, c, 0, vs, Steps.next(c, vs))
 
 # the steps of the line c, in order (none: the line does not exist)
 def Line.steps(~Q: Data, ~view: Q -> View, +s: State(Q), +c: Chain) -> Maybe<&2, List<&2, Vote>>:
@@ -1177,15 +1154,13 @@ def Line.steps(~Q: Data, ~view: Q -> View, +s: State(Q), +c: Chain) -> Maybe<&2,
     List<&2, String>,
     List<&2, Vote>,
     Line.first(~Q, ~view, s, c),
-    +ms => Some{
-      Line.steps.go(
+    ms => Some{
+      Line.steps.of(
         ~Q,
-        Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s, Slot.epochs(c))),
+        Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s, Slot.line_votes(c))),
         s,
         c,
-        0,
-        ms,
-        Epoch.next(~Q, s, c, 0, ms)
+        Epoch.list(~Q, s, c, 0, ms)
       )
     }
   )
@@ -4096,3 +4071,969 @@ def State.put_data_get(ty, same, s, ws):
     ):
       {Shared.Maybe.when(List<&2, U32>, _, u => Some{ws}) == Some{ws}: Maybe<&2, List<&2, U32>>}
     {==}
+
+# Listings only grow
+# ------------------
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# the slots below a key grow in number as the state grows
+def State.size_under_grows(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  +s: State(Q),
+  +s2: State(Q),
+  +k: List<&2, Bool>,
+  gr: {State.grows(~Q, ~same, s, s2) == True{}: Bool}
+) -> {
+  Nat.is_le(
+    Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s, k)),
+    Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s2, k))
+  )
+    == True{}: Bool
+}:
+  Cells.Cell.grows_size(
+    ~Entry<Q>,
+    ~Entry.is_eq(~Q, ~same),
+    State.under(~Q, s, k),
+    State.under(~Q, s2, k)
+  )(Cells.Cell.grows_under(~Entry<Q>, ~Entry.is_eq(~Q, ~same), s, s2, k)(gr))
+
+# a list m that is none is not some
+def Maybe.none_of_some(
+  -A: Data,
+  -m: Maybe<&2, A>,
+  -x: A,
+  bn: {Maybe.is_none(&2, A, m) == True{}: Bool},
+  e: {m == Some{x}: Maybe<&2, A>}
+) -> {False{} == True{}: Bool}:
+  %e: {Maybe.is_none(&2, A, _) == True{}: Bool}
+  bn
+
+# the owners that steps after a step that gives none give
+def Steps.next_tail(
+  c: Chain,
+  -v: Vote,
+  ts: List<&2, Vote>,
+  -os: List<&2, String>,
+  bn: {Maybe.is_none(&2, List<&2, String>, Owners.of(c, v)) == True{}: Bool}
+) -> {
+  Steps.next(c, v <> ts) == Some{os}: Maybe<&2, List<&2, String>>
+} -> {Steps.next(c, ts) == Some{os}: Maybe<&2, List<&2, String>>}:
+  match ts:
+    case Nil{}:
+      e => Empty.absurd(
+        {Steps.next(c, []) == Some{os}: Maybe<&2, List<&2, String>>},
+        Shared.Bool.false_ne_true(Maybe.none_of_some(List<&2, String>, Owners.of(c, v), os, bn, e))
+      )
+    case Con{w, r}:
+      e => e
+
+# a step v, then the steps T1 when b, starts v, then the steps T2 when b, when
+# T1 starts T2
+def Epoch.starts.at(
+  -v: Vote,
+  -t1: List<&2, Vote>,
+  -t2: List<&2, Vote>,
+  b: Bool,
+  ih: {List.take(&2, Vote, t2, List.length(&2, Vote, t1)) == t1: List<&2, Vote>}
+) -> {
+  List.take(
+    &2,
+    Vote,
+    v <> Shared.Bool.when(List<&2, Vote>, b, u => t2, u => []),
+    List.length(&2, Vote, v <> Shared.Bool.when(List<&2, Vote>, b, u => t1, u => []))
+  )
+    == v
+    <> Shared.Bool.when(List<&2, Vote>, b, u => t1, u => []): List<&2, Vote>
+}:
+  match b:
+    case True{}:
+      %Equal.sym(
+        List<&2, Vote>,
+        List.take(&2, Vote, t2, List.length(&2, Vote, t1)),
+        t1,
+        ih
+      ): {v <> _ == v <> t1: List<&2, Vote>}
+      {==}
+    case False{}:
+      {==}
+
+# the steps of an epoch, from the height h, start those of a state that grows
+# from it, with at least as many steps (f2), when the decision there is kept
+def Epoch.steps_starts(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  f: Nat,
+  f2: Nat,
+  +s: State(Q),
+  +s2: State(Q),
+  +c: Chain,
+  +e: U32,
+  +ms: List<&2, String>,
+  +h: U32,
+  m: Maybe<&2, Vote>,
+  m2: Maybe<&2, Vote>,
+  hm: @x: Vote -> {m == Some{x}: Maybe<&2, Vote>} -> {m2 == Some{x}: Maybe<&2, Vote>},
+  hf: {Nat.is_le(f, f2) == True{}: Bool},
+  +gr: {State.grows(~Q, ~same, s, s2) == True{}: Bool}
+) -> {
+  List.take(
+    &2,
+    Vote,
+    Epoch.steps(~Q, f2, s2, c, e, ms, h, m2),
+    List.length(&2, Vote, Epoch.steps(~Q, f, s, c, e, ms, h, m))
+  )
+    == Epoch.steps(~Q, f, s, c, e, ms, h, m): List<&2, Vote>
+}:
+  match f f2 m m2:
+    case 0n g2 w w2:
+      Shared.List.take_zero(Vote, Epoch.steps(~Q, g2, s2, c, e, ms, h, w2))
+    case 1n+p g2 None{} w2:
+      Shared.List.take_zero(Vote, Epoch.steps(~Q, g2, s2, c, e, ms, h, w2))
+    case 1n+p 0n Some{v} w2:
+      Empty.absurd(
+        {
+          List.take(
+            &2,
+            Vote,
+            Epoch.steps(~Q, 0n, s2, c, e, ms, h, w2),
+            List.length(&2, Vote, Epoch.steps(~Q, 1n+p, s, c, e, ms, h, Some{v}))
+          )
+            == Epoch.steps(~Q, 1n+p, s, c, e, ms, h, Some{v}): List<&2, Vote>
+        },
+        Shared.Bool.false_ne_true(hf)
+      )
+    case 1n+p 1n+p2 Some{v} None{}:
+      Empty.absurd(
+        {
+          List.take(
+            &2,
+            Vote,
+            Epoch.steps(~Q, 1n+p2, s2, c, e, ms, h, None{}),
+            List.length(&2, Vote, Epoch.steps(~Q, 1n+p, s, c, e, ms, h, Some{v}))
+          )
+            == Epoch.steps(~Q, 1n+p, s, c, e, ms, h, Some{v}): List<&2, Vote>
+        },
+        Shared.Maybe.none_ne_some(Vote, v, hm(v)({==}))
+      )
+    case 1n+(+p) 1n+(+p2) Some{+v} Some{v2}:
+      %Equal.sym(
+        Vote,
+        v2,
+        v,
+        Shared.Maybe.some_inj(Vote, v2, v, hm(v)({==}))
+      ): {
+        List.take(
+          &2,
+          Vote,
+          Epoch.steps(~Q, 1n+p2, s2, c, e, ms, h, Some{_}),
+          List.length(&2, Vote, Epoch.steps(~Q, 1n+p, s, c, e, ms, h, Some{v}))
+        )
+          == Epoch.steps(~Q, 1n+p, s, c, e, ms, h, Some{v}): List<&2, Vote>
+      }
+      Epoch.starts.at(
+        v,
+        Epoch.steps(
+          ~Q,
+          p,
+          s,
+          c,
+          e,
+          ms,
+          U32.inc(h),
+          State.decide(~Q, s, Where{c, e, U32.inc(h)}, ms)
+        ),
+        Epoch.steps(
+          ~Q,
+          p2,
+          s2,
+          c,
+          e,
+          ms,
+          U32.inc(h),
+          State.decide(~Q, s2, Where{c, e, U32.inc(h)}, ms)
+        ),
+        Maybe.is_none(&2, List<&2, String>, Owners.of(c, v)),
+        Epoch.steps_starts(
+          ~Q,
+          ~same,
+          ~laws,
+          p,
+          p2,
+          s,
+          s2,
+          c,
+          e,
+          ms,
+          U32.inc(h),
+          State.decide(~Q, s, Where{c, e, U32.inc(h)}, ms),
+          State.decide(~Q, s2, Where{c, e, U32.inc(h)}, ms),
+          x => State.decide_grows(~Q, ~same, ~laws, s, s2, Where{c, e, U32.inc(h)}, ms, x)(gr),
+          hf,
+          gr
+        )
+      )
+
+# a step v, then the steps T1 when b, ends the steps of a state that grows,
+# when it gives owners: then the steps T2 are T1
+def Epoch.cut.at(
+  c: Chain,
+  v: Vote,
+  t1: List<&2, Vote>,
+  -t2: List<&2, Vote>,
+  -os: List<&2, String>,
+  b: Bool,
+  eb: {Maybe.is_none(&2, List<&2, String>, Owners.of(c, v)) == b: Bool},
+  ih: {Steps.next(c, t1) == Some{os}: Maybe<&2, List<&2, String>>} -> {t2 == t1: List<&2, Vote>}
+) -> {
+  Steps.next(
+    c,
+    v <> Shared.Bool.when(List<&2, Vote>, b, u => t1, u => [])
+  )
+    == Some{os}: Maybe<&2, List<&2, String>>
+} -> {
+  v
+    <> Shared.Bool.when(List<&2, Vote>, b, u => t2, u => [])
+    == v
+    <> Shared.Bool.when(List<&2, Vote>, b, u => t1, u => []): List<&2, Vote>
+}:
+  match b:
+    case True{}:
+      e =>
+        %Equal.sym(
+          List<&2, Vote>,
+          t2,
+          t1,
+          ih(Steps.next_tail(c, v, t1, os, eb, e))
+        ): {v <> _ == v <> t1: List<&2, Vote>}
+        {==}
+    case False{}:
+      e => {==}
+
+# the steps of an epoch that end where the line gets new owners are the steps
+# of a state that grows from it, with at least as many steps (f2)
+def Epoch.steps_cut(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  f: Nat,
+  f2: Nat,
+  +s: State(Q),
+  +s2: State(Q),
+  +c: Chain,
+  +e: U32,
+  +ms: List<&2, String>,
+  +h: U32,
+  m: Maybe<&2, Vote>,
+  m2: Maybe<&2, Vote>,
+  -os: List<&2, String>,
+  hm: @x: Vote -> {m == Some{x}: Maybe<&2, Vote>} -> {m2 == Some{x}: Maybe<&2, Vote>},
+  hf: {Nat.is_le(f, f2) == True{}: Bool},
+  +gr: {State.grows(~Q, ~same, s, s2) == True{}: Bool}
+) -> {
+  Steps.next(c, Epoch.steps(~Q, f, s, c, e, ms, h, m)) == Some{os}: Maybe<&2, List<&2, String>>
+} -> {
+  Epoch.steps(~Q, f2, s2, c, e, ms, h, m2) == Epoch.steps(~Q, f, s, c, e, ms, h, m): List<&2, Vote>
+}:
+  match f f2 m m2:
+    case 0n g2 w w2:
+      e2 => Empty.absurd(
+        {Epoch.steps(~Q, g2, s2, c, e, ms, h, w2) == []: List<&2, Vote>},
+        Shared.Maybe.none_ne_some(List<&2, String>, os, e2)
+      )
+    case 1n+p g2 None{} w2:
+      e2 => Empty.absurd(
+        {Epoch.steps(~Q, g2, s2, c, e, ms, h, w2) == []: List<&2, Vote>},
+        Shared.Maybe.none_ne_some(List<&2, String>, os, e2)
+      )
+    case 1n+p 0n Some{v} w2:
+      e2 => Empty.absurd(
+        {
+          Epoch.steps(
+            ~Q,
+            0n,
+            s2,
+            c,
+            e,
+            ms,
+            h,
+            w2
+          )
+            == Epoch.steps(~Q, 1n+p, s, c, e, ms, h, Some{v}): List<&2, Vote>
+        },
+        Shared.Bool.false_ne_true(hf)
+      )
+    case 1n+p 1n+p2 Some{v} None{}:
+      e2 => Empty.absurd(
+        {
+          Epoch.steps(
+            ~Q,
+            1n+p2,
+            s2,
+            c,
+            e,
+            ms,
+            h,
+            None{}
+          )
+            == Epoch.steps(~Q, 1n+p, s, c, e, ms, h, Some{v}): List<&2, Vote>
+        },
+        Shared.Maybe.none_ne_some(Vote, v, hm(v)({==}))
+      )
+    case 1n+(+p) 1n+(+p2) Some{+v} Some{v2}:
+      %Equal.sym(
+        Vote,
+        v2,
+        v,
+        Shared.Maybe.some_inj(Vote, v2, v, hm(v)({==}))
+      ): {
+        Steps.next(
+          c,
+          Epoch.steps(~Q, 1n+p, s, c, e, ms, h, Some{v})
+        )
+          == Some{os}: Maybe<&2, List<&2, String>>
+      } -> {
+        Epoch.steps(
+          ~Q,
+          1n+p2,
+          s2,
+          c,
+          e,
+          ms,
+          h,
+          Some{_}
+        )
+          == Epoch.steps(~Q, 1n+p, s, c, e, ms, h, Some{v}): List<&2, Vote>
+      }
+      Epoch.cut.at(
+        c,
+        v,
+        Epoch.steps(
+          ~Q,
+          p,
+          s,
+          c,
+          e,
+          ms,
+          U32.inc(h),
+          State.decide(~Q, s, Where{c, e, U32.inc(h)}, ms)
+        ),
+        Epoch.steps(
+          ~Q,
+          p2,
+          s2,
+          c,
+          e,
+          ms,
+          U32.inc(h),
+          State.decide(~Q, s2, Where{c, e, U32.inc(h)}, ms)
+        ),
+        os,
+        Maybe.is_none(&2, List<&2, String>, Owners.of(c, v)),
+        {==},
+        Epoch.steps_cut(
+          ~Q,
+          ~same,
+          ~laws,
+          p,
+          p2,
+          s,
+          s2,
+          c,
+          e,
+          ms,
+          U32.inc(h),
+          State.decide(~Q, s, Where{c, e, U32.inc(h)}, ms),
+          State.decide(~Q, s2, Where{c, e, U32.inc(h)}, ms),
+          os,
+          x => State.decide_grows(~Q, ~same, ~laws, s, s2, Where{c, e, U32.inc(h)}, ms, x)(gr),
+          hf,
+          gr
+        )
+      )
+
+# the steps of an epoch start those of a state that grows from it
+def Epoch.list_starts(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  +s: State(Q),
+  +s2: State(Q),
+  +c: Chain,
+  +e: U32,
+  +ms: List<&2, String>,
+  +gr: {State.grows(~Q, ~same, s, s2) == True{}: Bool}
+) -> {
+  List.take(
+    &2,
+    Vote,
+    Epoch.list(~Q, s2, c, e, ms),
+    List.length(&2, Vote, Epoch.list(~Q, s, c, e, ms))
+  )
+    == Epoch.list(~Q, s, c, e, ms): List<&2, Vote>
+}:
+  Epoch.steps_starts(
+    ~Q,
+    ~same,
+    ~laws,
+    Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s, Slot.votes(c, e))),
+    Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s2, Slot.votes(c, e))),
+    s,
+    s2,
+    c,
+    e,
+    ms,
+    0,
+    State.decide(~Q, s, Where{c, e, 0}, ms),
+    State.decide(~Q, s2, Where{c, e, 0}, ms),
+    x => State.decide_grows(~Q, ~same, ~laws, s, s2, Where{c, e, 0}, ms, x)(gr),
+    State.size_under_grows(~Q, ~same, ~laws, s, s2, Slot.votes(c, e), gr),
+    gr
+  )
+
+# the steps of an epoch that end where the line gets new owners are those of a
+# state that grows from it
+def Epoch.list_cut(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  +s: State(Q),
+  +s2: State(Q),
+  +c: Chain,
+  +e: U32,
+  +ms: List<&2, String>,
+  -os: List<&2, String>,
+  +gr: {State.grows(~Q, ~same, s, s2) == True{}: Bool}
+) -> {
+  Steps.next(c, Epoch.list(~Q, s, c, e, ms)) == Some{os}: Maybe<&2, List<&2, String>>
+} -> {Epoch.list(~Q, s2, c, e, ms) == Epoch.list(~Q, s, c, e, ms): List<&2, Vote>}:
+  Epoch.steps_cut(
+    ~Q,
+    ~same,
+    ~laws,
+    Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s, Slot.votes(c, e))),
+    Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s2, Slot.votes(c, e))),
+    s,
+    s2,
+    c,
+    e,
+    ms,
+    0,
+    State.decide(~Q, s, Where{c, e, 0}, ms),
+    State.decide(~Q, s2, Where{c, e, 0}, ms),
+    os,
+    x => State.decide_grows(~Q, ~same, ~laws, s, s2, Where{c, e, 0}, ms, x)(gr),
+    State.size_under_grows(~Q, ~same, ~laws, s, s2, Slot.votes(c, e), gr),
+    gr
+  )
+
+# the steps of a line from an epoch, whose steps are vs, start with vs
+def Line.steps.go_starts(
+  ~Q: Data,
+  f: Nat,
+  +s: State(Q),
+  +c: Chain,
+  +cur: U32,
+  vs: List<&2, Vote>,
+  m: Maybe<&2, List<&2, String>>
+) -> {
+  List.take(
+    &2,
+    Vote,
+    Line.steps.go(~Q, f, s, c, cur, vs, m),
+    List.length(&2, Vote, vs)
+  )
+    == vs: List<&2, Vote>
+}:
+  match f m:
+    case 1n+p Some{+os}:
+      Shared.List.take_append(
+        Vote,
+        vs,
+        Line.steps.go(
+          ~Q,
+          p,
+          s,
+          c,
+          U32.inc(cur),
+          Epoch.list(~Q, s, c, U32.inc(cur), os),
+          Steps.next(c, Epoch.list(~Q, s, c, U32.inc(cur), os))
+        )
+      )
+    case 0n w:
+      Shared.List.take_length(Vote, vs)
+    case 1n+p None{}:
+      Shared.List.take_length(Vote, vs)
+
+# the steps of a line from an epoch, whose steps are vs, start those of a state
+# that grows from it, whose steps there are vs2, when vs starts vs2 and is vs2
+# once it gives new owners
+def Line.steps.go_grow(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  f: Nat,
+  +f2: Nat,
+  +s: State(Q),
+  +s2: State(Q),
+  +c: Chain,
+  +cur: U32,
+  vs: List<&2, Vote>,
+  +vs2: List<&2, Vote>,
+  m: Maybe<&2, List<&2, String>>,
+  +m2: Maybe<&2, List<&2, String>>,
+  hp: {List.take(&2, Vote, vs2, List.length(&2, Vote, vs)) == vs: List<&2, Vote>},
+  cut: @os: List<
+    &2,
+    String> -> {
+    Steps.next(c, vs) == Some{os}: Maybe<&2, List<&2, String>>
+  } -> {vs2 == vs: List<&2, Vote>},
+  +em: {m == Steps.next(c, vs): Maybe<&2, List<&2, String>>},
+  em2: {m2 == Steps.next(c, vs2): Maybe<&2, List<&2, String>>},
+  hf: {Nat.is_le(f, f2) == True{}: Bool},
+  +gr: {State.grows(~Q, ~same, s, s2) == True{}: Bool}
+) -> {
+  List.take(
+    &2,
+    Vote,
+    Line.steps.go(~Q, f2, s2, c, cur, vs2, m2),
+    List.length(&2, Vote, Line.steps.go(~Q, f, s, c, cur, vs, m))
+  )
+    == Line.steps.go(~Q, f, s, c, cur, vs, m): List<&2, Vote>
+}:
+  match f f2 m m2:
+    case 0n g2 w w2:
+      Shared.List.prefix_trans(
+        Vote,
+        vs,
+        vs2,
+        Line.steps.go(~Q, g2, s2, c, cur, vs2, w2)
+      )(hp)(Line.steps.go_starts(~Q, g2, s2, c, cur, vs2, w2))
+    case 1n+p g2 None{} w2:
+      Shared.List.prefix_trans(
+        Vote,
+        vs,
+        vs2,
+        Line.steps.go(~Q, g2, s2, c, cur, vs2, w2)
+      )(hp)(Line.steps.go_starts(~Q, g2, s2, c, cur, vs2, w2))
+    case 1n+p 0n Some{os} w2:
+      Empty.absurd(
+        {
+          List.take(
+            &2,
+            Vote,
+            Line.steps.go(~Q, 0n, s2, c, cur, vs2, w2),
+            List.length(&2, Vote, Line.steps.go(~Q, 1n+p, s, c, cur, vs, Some{os}))
+          )
+            == Line.steps.go(~Q, 1n+p, s, c, cur, vs, Some{os}): List<&2, Vote>
+        },
+        Shared.Bool.false_ne_true(hf)
+      )
+    case 1n+p 1n+p2 Some{+os} None{}:
+      Empty.absurd(
+        {
+          List.take(
+            &2,
+            Vote,
+            Line.steps.go(~Q, 1n+p2, s2, c, cur, vs2, None{}),
+            List.length(&2, Vote, Line.steps.go(~Q, 1n+p, s, c, cur, vs, Some{os}))
+          )
+            == Line.steps.go(~Q, 1n+p, s, c, cur, vs, Some{os}): List<&2, Vote>
+        },
+        Shared.Maybe.none_ne_some(
+          List<&2, String>,
+          os,
+          Equal.trans(
+            Maybe<&2, List<&2, String>>,
+            None{},
+            Steps.next(c, vs),
+            Some{os},
+            Equal.trans(
+              Maybe<&2, List<&2, String>>,
+              None{},
+              Steps.next(c, vs2),
+              Steps.next(c, vs),
+              em2,
+              Equal.cong(
+                List<&2, Vote>,
+                Maybe<&2, List<&2, String>>,
+                l => Steps.next(c, l),
+                vs2,
+                vs,
+                cut(os)(Equal.sym(Maybe<&2, List<&2, String>>, Some{os}, Steps.next(c, vs), em))
+              )
+            ),
+            Equal.sym(Maybe<&2, List<&2, String>>, Some{os}, Steps.next(c, vs), em)
+          )
+        )
+      )
+    case 1n+(+p) 1n+(+p2) Some{+os} Some{os2}:
+      +e1 = cut(os)(Equal.sym(Maybe<&2, List<&2, String>>, Some{os}, Steps.next(c, vs), em))
+      eo = Shared.Maybe.some_inj(
+        List<&2, String>,
+        os2,
+        os,
+        Equal.trans(
+          Maybe<&2, List<&2, String>>,
+          Some{os2},
+          Steps.next(c, vs),
+          Some{os},
+          Equal.trans(
+            Maybe<&2, List<&2, String>>,
+            Some{os2},
+            Steps.next(c, vs2),
+            Steps.next(c, vs),
+            em2,
+            Equal.cong(
+              List<&2, Vote>,
+              Maybe<&2, List<&2, String>>,
+              l => Steps.next(c, l),
+              vs2,
+              vs,
+              e1
+            )
+          ),
+          Equal.sym(Maybe<&2, List<&2, String>>, Some{os}, Steps.next(c, vs), em)
+        )
+      )
+      %Equal.sym(
+        List<&2, Vote>,
+        vs2,
+        vs,
+        e1
+      ): {
+        List.take(
+          &2,
+          Vote,
+          Line.steps.go(~Q, 1n+p2, s2, c, cur, _, Some{os2}),
+          List.length(&2, Vote, Line.steps.go(~Q, 1n+p, s, c, cur, vs, Some{os}))
+        )
+          == Line.steps.go(~Q, 1n+p, s, c, cur, vs, Some{os}): List<&2, Vote>
+      }
+      %Equal.sym(
+        List<&2, String>,
+        os2,
+        os,
+        eo
+      ): {
+        List.take(
+          &2,
+          Vote,
+          Line.steps.go(~Q, 1n+p2, s2, c, cur, vs, Some{_}),
+          List.length(&2, Vote, Line.steps.go(~Q, 1n+p, s, c, cur, vs, Some{os}))
+        )
+          == Line.steps.go(~Q, 1n+p, s, c, cur, vs, Some{os}): List<&2, Vote>
+      }
+      +up = U32.inc(cur)
+      +ws = Epoch.list(~Q, s, c, up, os)
+      +ws2 = Epoch.list(~Q, s2, c, up, os)
+      Shared.List.take_append_both(
+        Vote,
+        vs,
+        Line.steps.go(~Q, p, s, c, up, ws, Steps.next(c, ws)),
+        Line.steps.go(~Q, p2, s2, c, up, ws2, Steps.next(c, ws2)),
+        Line.steps.go_grow(
+          ~Q,
+          ~same,
+          ~laws,
+          p,
+          p2,
+          s,
+          s2,
+          c,
+          up,
+          ws,
+          ws2,
+          Steps.next(c, ws),
+          Steps.next(c, ws2),
+          Epoch.list_starts(~Q, ~same, ~laws, s, s2, c, up, os, gr),
+          o2 => Epoch.list_cut(~Q, ~same, ~laws, s, s2, c, up, os, o2, gr),
+          {==},
+          {==},
+          hf,
+          gr
+        )
+      )
+
+# the steps of a line whose first owners are m start those of a state that
+# grows from it, whose first owners are m2, when m2 keeps m
+def Line.steps_grow.at(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~view: Q -> View,
+  +s: State(Q),
+  +s2: State(Q),
+  +c: Chain,
+  -xs: List<&2, Vote>,
+  m: Maybe<&2, List<&2, String>>,
+  m2: Maybe<&2, List<&2, String>>,
+  hm: @ms: List<
+    &2,
+    String> -> {
+    m == Some{ms}: Maybe<&2, List<&2, String>>
+  } -> {m2 == Some{ms}: Maybe<&2, List<&2, String>>},
+  +gr: {State.grows(~Q, ~same, s, s2) == True{}: Bool}
+) -> {
+  Shared.Maybe.then(
+    List<&2, String>,
+    List<&2, Vote>,
+    m,
+    ms => Some{
+      Line.steps.of(
+        ~Q,
+        Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s, Slot.line_votes(c))),
+        s,
+        c,
+        Epoch.list(~Q, s, c, 0, ms)
+      )
+    }
+  )
+    == Some{xs}: Maybe<&2, List<&2, Vote>>
+} -> {
+  Shared.Maybe.then(
+    List<&2, Vote>,
+    List<&2, Vote>,
+    Shared.Maybe.then(
+      List<&2, String>,
+      List<&2, Vote>,
+      m2,
+      ms => Some{
+        Line.steps.of(
+          ~Q,
+          Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s2, Slot.line_votes(c))),
+          s2,
+          c,
+          Epoch.list(~Q, s2, c, 0, ms)
+        )
+      }
+    ),
+    ys => Some{List.take(&2, Vote, ys, List.length(&2, Vote, xs))}
+  )
+    == Some{xs}: Maybe<&2, List<&2, Vote>>
+}:
+  match m:
+    case None{}:
+      e => Empty.absurd(
+        {
+          Shared.Maybe.then(
+            List<&2, Vote>,
+            List<&2, Vote>,
+            Shared.Maybe.then(
+              List<&2, String>,
+              List<&2, Vote>,
+              m2,
+              ms => Some{
+                Line.steps.of(
+                  ~Q,
+                  Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s2, Slot.line_votes(c))),
+                  s2,
+                  c,
+                  Epoch.list(~Q, s2, c, 0, ms)
+                )
+              }
+            ),
+            ys => Some{List.take(&2, Vote, ys, List.length(&2, Vote, xs))}
+          )
+            == Some{xs}: Maybe<&2, List<&2, Vote>>
+        },
+        Shared.Maybe.none_ne_some(List<&2, Vote>, xs, e)
+      )
+    case Some{+ms}:
+      e =>
+        %Shared.Maybe.some_inj(
+          List<&2, Vote>,
+          Line.steps.of(
+            ~Q,
+            Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s, Slot.line_votes(c))),
+            s,
+            c,
+            Epoch.list(~Q, s, c, 0, ms)
+          ),
+          xs,
+          e
+        ): {
+          Shared.Maybe.then(
+            List<&2, Vote>,
+            List<&2, Vote>,
+            Shared.Maybe.then(
+              List<&2, String>,
+              List<&2, Vote>,
+              m2,
+              ms => Some{
+                Line.steps.of(
+                  ~Q,
+                  Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s2, Slot.line_votes(c))),
+                  s2,
+                  c,
+                  Epoch.list(~Q, s2, c, 0, ms)
+                )
+              }
+            ),
+            ys => Some{List.take(&2, Vote, ys, List.length(&2, Vote, _))}
+          )
+            == Some{_}: Maybe<&2, List<&2, Vote>>
+        }
+        %Equal.sym(
+          Maybe<&2, List<&2, String>>,
+          m2,
+          Some{ms},
+          hm(ms)({==})
+        ): {
+          Shared.Maybe.then(
+            List<&2, Vote>,
+            List<&2, Vote>,
+            Shared.Maybe.then(
+              List<&2, String>,
+              List<&2, Vote>,
+              _,
+              ms => Some{
+                Line.steps.of(
+                  ~Q,
+                  Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s2, Slot.line_votes(c))),
+                  s2,
+                  c,
+                  Epoch.list(~Q, s2, c, 0, ms)
+                )
+              }
+            ),
+            ys => Some{
+              List.take(
+                &2,
+                Vote,
+                ys,
+                List.length(
+                  &2,
+                  Vote,
+                  Line.steps.of(
+                    ~Q,
+                    Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s, Slot.line_votes(c))),
+                    s,
+                    c,
+                    Epoch.list(~Q, s, c, 0, ms)
+                  )
+                )
+              )
+            }
+          )
+            == Some{
+              Line.steps.of(
+                ~Q,
+                Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s, Slot.line_votes(c))),
+                s,
+                c,
+                Epoch.list(~Q, s, c, 0, ms)
+              )
+            }: Maybe<&2, List<&2, Vote>>
+        }
+        %Equal.sym(
+          List<&2, Vote>,
+          List.take(
+            &2,
+            Vote,
+            Line.steps.of(
+              ~Q,
+              Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s2, Slot.line_votes(c))),
+              s2,
+              c,
+              Epoch.list(~Q, s2, c, 0, ms)
+            ),
+            List.length(
+              &2,
+              Vote,
+              Line.steps.of(
+                ~Q,
+                Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s, Slot.line_votes(c))),
+                s,
+                c,
+                Epoch.list(~Q, s, c, 0, ms)
+              )
+            )
+          ),
+          Line.steps.of(
+            ~Q,
+            Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s, Slot.line_votes(c))),
+            s,
+            c,
+            Epoch.list(~Q, s, c, 0, ms)
+          ),
+          Line.steps.go_grow(
+            ~Q,
+            ~same,
+            ~laws,
+            Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s, Slot.line_votes(c))),
+            Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s2, Slot.line_votes(c))),
+            s,
+            s2,
+            c,
+            0,
+            Epoch.list(~Q, s, c, 0, ms),
+            Epoch.list(~Q, s2, c, 0, ms),
+            Steps.next(c, Epoch.list(~Q, s, c, 0, ms)),
+            Steps.next(c, Epoch.list(~Q, s2, c, 0, ms)),
+            Epoch.list_starts(~Q, ~same, ~laws, s, s2, c, 0, ms, gr),
+            o => Epoch.list_cut(~Q, ~same, ~laws, s, s2, c, 0, ms, o, gr),
+            {==},
+            {==},
+            State.size_under_grows(~Q, ~same, ~laws, s, s2, Slot.line_votes(c), gr),
+            gr
+          )
+        ): {
+          Some{
+            _
+          }
+            == Some{
+              Line.steps.of(
+                ~Q,
+                Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s, Slot.line_votes(c))),
+                s,
+                c,
+                Epoch.list(~Q, s, c, 0, ms)
+              )
+            }: Maybe<&2, List<&2, Vote>>
+        }
+        {==}
+
+# a line's listing only grows at its end: the steps of a line start the steps
+# of that line in any state that grows from it
+law Line.steps_grow:
+  for ~Q: Data
+  for ~same: Q -> Q -> Bool
+  for ~laws: Shared.Eq.Laws(Q, same)
+  for ~view: Q -> View
+  for +s: State(Q)
+  for +s2: State(Q)
+  for +c: Chain
+  for xs: List<&2, Vote>
+  {State.grows(~Q, ~same, s, s2) == True{}: Bool}
+    -> {Line.steps(~Q, ~view, s, c) == Some{xs}: Maybe<&2, List<&2, Vote>>}
+    -> {
+      Shared.Maybe.then(
+        List<&2, Vote>,
+        List<&2, Vote>,
+        Line.steps(~Q, ~view, s2, c),
+        ys => Some{List.take(&2, Vote, ys, List.length(&2, Vote, xs))}
+      )
+        == Some{xs}: Maybe<&2, List<&2, Vote>>
+    }
+
+def Line.steps_grow(ty, same, laws, view, s, s2, c, xs):
+  +gr => Line.steps_grow.at(
+    ~ty,
+    ~same,
+    ~laws,
+    ~view,
+    s,
+    s2,
+    c,
+    xs,
+    Line.first(~ty, ~view, s, c),
+    Line.first(~ty, ~view, s2, c),
+    ms => Line.first.kept(~ty, ~same, ~laws, ~view, s, s2, c, gr, ms),
+    gr
+  )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information

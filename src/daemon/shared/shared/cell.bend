@@ -1539,6 +1539,311 @@ def Cell.grows_join(ty, same, laws, s, t):
             )
           )
         )
+
+# a trie that holds no cell has no entry
+def Cell.none_size(
+  -V: Data,
+  t: Tries.Trie<Cell<V>>
+) -> {Cell.none(V, t) == True{}: Bool} -> {Tries.Trie.size(Cell<V>, t) == 0n: Nat}:
+  match t:
+    case Tries.tip{}:
+      e => {==}
+    case Tries.bin{None{}, +z, +o}:
+      +e =>
+        %Equal.sym(
+          Nat,
+          Tries.Trie.size(Cell<V>, z),
+          0n,
+          Cell.none_size(V, z)(Shared.Bool.and_true_left(Cell.none(V, z), Cell.none(V, o))(e))
+        ): {Nat.add(_, Tries.Trie.size(Cell<V>, o)) == 0n: Nat}
+        %Equal.sym(
+          Nat,
+          Tries.Trie.size(Cell<V>, o),
+          0n,
+          Cell.none_size(V, o)(Shared.Bool.and_true_right(Cell.none(V, z), Cell.none(V, o))(e))
+        ): {Nat.add(0n, _) == 0n: Nat}
+        {==}
+    case Tries.bin{Some{c}, z, o}:
+      e => Empty.absurd(
+        {Tries.Trie.size(Cell<V>, Tries.bin{Some{c}, z, o}) == 0n: Nat},
+        Shared.Bool.false_ne_true(e)
+      )
+
+# a trie that holds no cell holds none below any key
+def Cell.none_under(
+  -V: Data,
+  t: Tries.Trie<Cell<V>>,
+  k: List<&2, Bool>
+) -> {
+  Cell.none(V, t) == True{}: Bool
+} -> {Cell.none(V, Tries.Trie.under(Cell<V>, t, k)) == True{}: Bool}:
+  match t k:
+    case Tries.tip{} q:
+      e => {==}
+    case Tries.bin{h, z, o} Nil{}:
+      e => e
+    case Tries.bin{+h, +z, +o} Con{False{}, r}:
+      e => Cell.none_under(
+        V,
+        z,
+        r
+      )(
+        Shared.Bool.and_true_left(
+          Cell.none(V, z),
+          Cell.none(V, o)
+        )(
+          Shared.Bool.and_true_right(
+            Maybe.is_none(&2, Cell<V>, h),
+            Bool.and(Cell.none(V, z), Cell.none(V, o))
+          )(e)
+        )
+      )
+    case Tries.bin{+h, +z, +o} Con{True{}, r}:
+      e => Cell.none_under(
+        V,
+        o,
+        r
+      )(
+        Shared.Bool.and_true_right(
+          Cell.none(V, z),
+          Cell.none(V, o)
+        )(
+          Shared.Bool.and_true_right(
+            Maybe.is_none(&2, Cell<V>, h),
+            Bool.and(Cell.none(V, z), Cell.none(V, o))
+          )(e)
+        )
+      )
+
+# a trie grows into the empty trie only when it holds no cell
+def Cell.grows_tip(
+  ~V: Data,
+  ~same: V -> V -> Bool,
+  x: Tries.Trie<Cell<V>>
+) -> {Cell.grows(~V, ~same, x, Tries.tip{}) == Cell.none(V, x): Bool}:
+  match x:
+    case Tries.tip{}:
+      {==}
+    case Tries.bin{h, z, o}:
+      {==}
+
+# a trie grows from one no larger: what grows keeps every entry
+def Cell.grows_size(
+  ~V: Data,
+  ~same: V -> V -> Bool,
+  s: Tries.Trie<Cell<V>>,
+  s2: Tries.Trie<Cell<V>>
+) -> {
+  Cell.grows(~V, ~same, s, s2) == True{}: Bool
+} -> {Nat.is_le(Tries.Trie.size(Cell<V>, s), Tries.Trie.size(Cell<V>, s2)) == True{}: Bool}:
+  match s s2:
+    case Tries.tip{} y:
+      e => Shared.Nat.le_zero(Tries.Trie.size(Cell<V>, y))
+    case Tries.bin{+h, +z, +o} Tries.tip{}:
+      e =>
+        %Equal.sym(
+          Nat,
+          Tries.Trie.size(Cell<V>, Tries.bin{h, z, o}),
+          0n,
+          Cell.none_size(V, Tries.bin{h, z, o})(e)
+        ): {Nat.is_le(_, 0n) == True{}: Bool}
+        {==}
+    case Tries.bin{None{}, +z1, +o1} Tries.bin{None{}, +z2, +o2}:
+      +e => Shared.Nat.add_le(
+        Tries.Trie.size(Cell<V>, z1),
+        Tries.Trie.size(Cell<V>, z2),
+        Tries.Trie.size(Cell<V>, o1),
+        Tries.Trie.size(Cell<V>, o2)
+      )(
+        Cell.grows_size(
+          ~V,
+          ~same,
+          z1,
+          z2
+        )(
+          Shared.Bool.and_true_left(Cell.grows(~V, ~same, z1, z2), Cell.grows(~V, ~same, o1, o2))(e)
+        )
+      )(
+        Cell.grows_size(
+          ~V,
+          ~same,
+          o1,
+          o2
+        )(
+          Shared.Bool.and_true_right(
+            Cell.grows(~V, ~same, z1, z2),
+            Cell.grows(~V, ~same, o1, o2)
+          )(e)
+        )
+      )
+    case Tries.bin{None{}, +z1, +o1} Tries.bin{Some{c2}, +z2, +o2}:
+      +e => Shared.Nat.le_succ(
+        Nat.add(Tries.Trie.size(Cell<V>, z1), Tries.Trie.size(Cell<V>, o1)),
+        Nat.add(Tries.Trie.size(Cell<V>, z2), Tries.Trie.size(Cell<V>, o2))
+      )(
+        Shared.Nat.add_le(
+          Tries.Trie.size(Cell<V>, z1),
+          Tries.Trie.size(Cell<V>, z2),
+          Tries.Trie.size(Cell<V>, o1),
+          Tries.Trie.size(Cell<V>, o2)
+        )(
+          Cell.grows_size(
+            ~V,
+            ~same,
+            z1,
+            z2
+          )(
+            Shared.Bool.and_true_left(
+              Cell.grows(~V, ~same, z1, z2),
+              Cell.grows(~V, ~same, o1, o2)
+            )(e)
+          )
+        )(
+          Cell.grows_size(
+            ~V,
+            ~same,
+            o1,
+            o2
+          )(
+            Shared.Bool.and_true_right(
+              Cell.grows(~V, ~same, z1, z2),
+              Cell.grows(~V, ~same, o1, o2)
+            )(e)
+          )
+        )
+      )
+    case Tries.bin{Some{c1}, +z1, +o1} Tries.bin{Some{+c2}, +z2, +o2}:
+      +e => Shared.Nat.add_le(
+        Tries.Trie.size(Cell<V>, z1),
+        Tries.Trie.size(Cell<V>, z2),
+        Tries.Trie.size(Cell<V>, o1),
+        Tries.Trie.size(Cell<V>, o2)
+      )(
+        Cell.grows_size(
+          ~V,
+          ~same,
+          z1,
+          z2
+        )(
+          Shared.Bool.and_true_left(
+            Cell.grows(~V, ~same, z1, z2),
+            Cell.grows(~V, ~same, o1, o2)
+          )(
+            Shared.Bool.and_true_right(
+              Cell.keeps(~V, ~same, Some{c1}, Some{c2}),
+              Bool.and(Cell.grows(~V, ~same, z1, z2), Cell.grows(~V, ~same, o1, o2))
+            )(e)
+          )
+        )
+      )(
+        Cell.grows_size(
+          ~V,
+          ~same,
+          o1,
+          o2
+        )(
+          Shared.Bool.and_true_right(
+            Cell.grows(~V, ~same, z1, z2),
+            Cell.grows(~V, ~same, o1, o2)
+          )(
+            Shared.Bool.and_true_right(
+              Cell.keeps(~V, ~same, Some{c1}, Some{c2}),
+              Bool.and(Cell.grows(~V, ~same, z1, z2), Cell.grows(~V, ~same, o1, o2))
+            )(e)
+          )
+        )
+      )
+    case Tries.bin{Some{one{x}}, z1, o1} Tries.bin{None{}, z2, o2}:
+      e => Empty.absurd(
+        {
+          Nat.is_le(
+            Tries.Trie.size(Cell<V>, Tries.bin{Some{one{x}}, z1, o1}),
+            Tries.Trie.size(Cell<V>, Tries.bin{None{}, z2, o2})
+          )
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(e)
+      )
+    case Tries.bin{Some{many{}}, z1, o1} Tries.bin{None{}, z2, o2}:
+      e => Empty.absurd(
+        {
+          Nat.is_le(
+            Tries.Trie.size(Cell<V>, Tries.bin{Some{many{}}, z1, o1}),
+            Tries.Trie.size(Cell<V>, Tries.bin{None{}, z2, o2})
+          )
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(e)
+      )
+
+# the entries below a key grow as the trie does
+def Cell.grows_under(
+  ~V: Data,
+  ~same: V -> V -> Bool,
+  s: Tries.Trie<Cell<V>>,
+  s2: Tries.Trie<Cell<V>>,
+  k: List<&2, Bool>
+) -> {
+  Cell.grows(~V, ~same, s, s2) == True{}: Bool
+} -> {
+  Cell.grows(
+    ~V,
+    ~same,
+    Tries.Trie.under(Cell<V>, s, k),
+    Tries.Trie.under(Cell<V>, s2, k)
+  )
+    == True{}: Bool
+}:
+  match s s2 k:
+    case Tries.tip{} y q:
+      e => {==}
+    case Tries.bin{+h, +z, +o} Tries.tip{} +q:
+      e =>
+        %Equal.sym(
+          Bool,
+          Cell.grows(~V, ~same, Tries.Trie.under(Cell<V>, Tries.bin{h, z, o}, q), Tries.tip{}),
+          Cell.none(V, Tries.Trie.under(Cell<V>, Tries.bin{h, z, o}, q)),
+          Cell.grows_tip(~V, ~same, Tries.Trie.under(Cell<V>, Tries.bin{h, z, o}, q))
+        ): {_ == True{}: Bool}
+        Cell.none_under(V, Tries.bin{h, z, o}, q)(e)
+    case Tries.bin{h1, z1, o1} Tries.bin{h2, z2, o2} Nil{}:
+      e => e
+    case Tries.bin{+h1, +z1, +o1} Tries.bin{+h2, +z2, +o2} Con{False{}, r}:
+      e => Cell.grows_under(
+        ~V,
+        ~same,
+        z1,
+        z2,
+        r
+      )(
+        Shared.Bool.and_true_left(
+          Cell.grows(~V, ~same, z1, z2),
+          Cell.grows(~V, ~same, o1, o2)
+        )(
+          Shared.Bool.and_true_right(
+            Cell.keeps(~V, ~same, h1, h2),
+            Bool.and(Cell.grows(~V, ~same, z1, z2), Cell.grows(~V, ~same, o1, o2))
+          )(e)
+        )
+      )
+    case Tries.bin{+h1, +z1, +o1} Tries.bin{+h2, +z2, +o2} Con{True{}, r}:
+      e => Cell.grows_under(
+        ~V,
+        ~same,
+        o1,
+        o2,
+        r
+      )(
+        Shared.Bool.and_true_right(
+          Cell.grows(~V, ~same, z1, z2),
+          Cell.grows(~V, ~same, o1, o2)
+        )(
+          Shared.Bool.and_true_right(
+            Cell.keeps(~V, ~same, h1, h2),
+            Bool.and(Cell.grows(~V, ~same, z1, z2), Cell.grows(~V, ~same, o1, o2))
+          )(e)
+        )
+      )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 # bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information

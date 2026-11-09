@@ -1304,6 +1304,61 @@ def List.drop_at(
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a list starts what it is appended to
+def List.take_append(
+  -A: Data,
+  xs: List<&2, A>,
+  ys: List<&2, A>
+) -> {List.take(&2, A, List.append(&2, A, xs, ys), List.length(&2, A, xs)) == xs: List<&2, A>}:
+  match xs:
+    case Nil{}:
+      List.take_zero(A, ys)
+    case Con{head, tail}:
+      %Equal.sym(
+        List<&2, A>,
+        List.take(&2, A, List.append(&2, A, tail, ys), List.length(&2, A, tail)),
+        tail,
+        List.take_append(A, tail, ys)
+      ):
+        {head <> _ == head <> tail: List<&2, A>}
+      {==}
+
+# when a starts b, xs then a starts xs then b
+def List.take_append_both(
+  -A: Data,
+  xs: List<&2, A>,
+  a: List<&2, A>,
+  b: List<&2, A>,
+  h: {List.take(&2, A, b, List.length(&2, A, a)) == a: List<&2, A>}
+) -> {
+  List.take(
+    &2,
+    A,
+    List.append(&2, A, xs, b),
+    List.length(&2, A, List.append(&2, A, xs, a))
+  )
+    == List.append(&2, A, xs, a): List<&2, A>
+}:
+  match xs:
+    case Nil{}:
+      h
+    case Con{head, tail}:
+      %Equal.sym(
+        List<&2, A>,
+        List.take(
+          &2,
+          A,
+          List.append(&2, A, tail, b),
+          List.length(&2, A, List.append(&2, A, tail, a))
+        ),
+        List.append(&2, A, tail, a),
+        List.take_append_both(A, tail, a, b, h)
+      ):
+        {head <> _ == head <> List.append(&2, A, tail, a): List<&2, A>}
+      {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
 # appending nothing keeps a list
 def List.append_nil(-A: Data, xs: List<&2, A>) -> {List.append(&2, A, xs, []) == xs: List<&2, A>}:
   match xs:
