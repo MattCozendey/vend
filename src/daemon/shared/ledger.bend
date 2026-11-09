@@ -1888,31 +1888,33 @@ def View.makes(v: View, c: List<&2, Bool>) -> Bool:
     case _:
       False{}
 
-# the step k takes a request that makes the chain c
-def Step.makes(~Q: Data, ~view: Q -> View, k: Step<Q>, c: List<&2, Bool>) -> Bool:
-  match k:
-    case Step{i, True{}, t, q, ms}:
-      View.makes(view(q), c)
-    case Step{i, False{}, t, q, ms}:
-      False{}
+# m, or else what k gives
+def Maybe.else(-A: Data, m: Maybe<&2, A>, k: Unit -> Maybe<&2, A>) -> Maybe<&2, A>:
+  match m:
+    case Some{a}:
+      Some{a}
+    case None{}:
+      k(Unit{})
 
-# the first step of xs that takes a request that makes the chain c
-def Root.made(
-  ~Q: Data,
-  ~view: Q -> View,
-  xs: List<&2, Step<Q>>,
-  +c: List<&2, Bool>
-) -> Maybe<&2, Step<Q>>:
+# the first value that f gives, with x, of an item of xs
+def List.first(~A: Data, ~B: Data, ~C: Data, ~f: C -> A -> Maybe<&2, B>, xs: List<&2, A>, +x: C) -> Maybe<&2, B>:
   match xs:
     case Nil{}:
       None{}
-    case Con{+k, r}:
-      Shared.Bool.when(
-        Maybe<&2, Step<Q>>,
-        Step.makes(~Q, ~view, k, c),
-        u => Some{k},
-        u => Root.made(~Q, ~view, r, c)
-      )
+    case Con{a, r}:
+      Maybe.else(B, f(x)(a), u => List.first(~A, ~B, ~C, ~f, r, x))
+
+# the step k, when it takes a request that makes the chain c
+def Step.made(~Q: Data, ~view: Q -> View, c: List<&2, Bool>, +k: Step<Q>) -> Maybe<&2, Step<Q>>:
+  match k:
+    case Step{i, True{}, t, q, ms}:
+      Shared.Bool.when(Maybe<&2, Step<Q>>, View.makes(view(q), c), u => Some{k}, u => None{})
+    case Step{i, False{}, t, q, ms}:
+      None{}
+
+# the first step of xs that takes a request that makes the chain c
+def Root.made(~Q: Data, ~view: Q -> View, xs: List<&2, Step<Q>>, +c: List<&2, Bool>) -> Maybe<&2, Step<Q>>:
+  List.first(~Step<Q>, ~Step<Q>, ~List<&2, Bool>, ~(c => k => Step.made(~Q, ~view, c, k)), xs, c)
 
 # the first step of the chain k
 def Chain.first(~Q: Data, ~view: Q -> View, +s: State(Q), k: Chain) -> Maybe<&2, Step<Q>>:
@@ -1932,6 +1934,39 @@ def State.chain(~Q: Data, ~view: Q -> View, +s: State(Q), +k: Chain) -> List<&2,
     Chain.first(~Q, ~view, s, k)
   )
 
+# the end of a chain: the height of its last step's bucket, and its owners
+type Tip is Data:
+  Tip{height: Nat, owners: List<&2, String>}
+
+# the tip of a walk whose first step has the owners ms, and the tip m of the
+# walk after it
+def Tip.after(ms: List<&2, String>, m: Maybe<&2, Tip>) -> Maybe<&2, Tip>:
+  match m:
+    case None{}:
+      Some{Tip{0n, ms}}
+    case Some{Tip{h, ns}}:
+      Some{Tip{1n+h, ns}}
+
+# the tip of the walk of t from the step k, by height from t
+def Chain.tip(~Q: Data, ~view: Q -> View, t: State(Q), +s: State(Q), k: Maybe<&2, Step<Q>>) -> Maybe<&2, Tip>:
+  match t k:
+    case w None{}:
+      None{}
+    case Tries.tip{} Some{st}:
+      Some{Tip{0n, Step.owners(Q, st)}}
+    case Tries.bin{h, z, o} Some{+st}:
+      Tip.after(Step.owners(Q, st), Chain.tip(~Q, ~view, o, s, Step.next(~Q, ~view, s, Step.owners(Q, st), z)))
+
+# the tip of the chain k
+def State.tip(~Q: Data, ~view: Q -> View, +s: State(Q), +k: Chain) -> Maybe<&2, Tip>:
+  Chain.tip(
+    ~Q,
+    ~view,
+    Tries.Trie.under(Cell<Entry<Q>>, s, Slot.votes(k)),
+    s,
+    Chain.first(~Q, ~view, s, k)
+  )
+
 # Status
 # ------
 
@@ -1944,13 +1979,15 @@ type Status is Data:
   Status.refused{}
   Status.not_seen{}
 
+# the verdict of the step k, when it decided i
+def Step.verdict(-Q: Data, i: Id, k: Step<Q>) -> Maybe<&2, Bool>:
+  match k:
+    case Step{j, +v, t, q, ms}:
+      Shared.Bool.when(Maybe<&2, Bool>, Id.is_eq(j, i), u => Some{v}, u => None{})
+
 # the verdict of the step of xs that decided i, if one did
-def Steps.verdict(-Q: Data, xs: List<&2, Step<Q>>, +i: Id) -> Maybe<&2, Bool>:
-  match xs:
-    case Nil{}:
-      None{}
-    case Con{Step{j, +k, t, q, ms}, r}:
-      Shared.Bool.when(Maybe<&2, Bool>, Id.is_eq(j, i), u => Some{k}, u => Steps.verdict(Q, r, i))
+def Steps.verdict(~Q: Data, xs: List<&2, Step<Q>>, +i: Id) -> Maybe<&2, Bool>:
+  List.first(~Step<Q>, ~Bool, ~Id, ~(i => k => Step.verdict(Q, i, k)), xs, i)
 
 # the status of a request, from its verdict m
 def Status.of.verdict(m: Maybe<&2, Bool>) -> Status:
@@ -1966,7 +2003,7 @@ def Status.of.view(~Q: Data, ~view: Q -> View, s: State(Q), v: View, i: Id) -> S
     case View.root{ms}:
       Status.done{True{}}
     case View.on{c, o, m}:
-      Status.of.verdict(Steps.verdict(Q, State.chain(~Q, ~view, s, c), i))
+      Status.of.verdict(Steps.verdict(~Q, State.chain(~Q, ~view, s, c), i))
 
 # the status of the request i, whose cell is m
 def Status.of(~Q: Data, ~view: Q -> View, s: State(Q), i: Id, m: Maybe<&2, Cell<Entry<Q>>>) -> Status:
@@ -2032,37 +2069,34 @@ def Vote.put(
     case h w:
       s
 
-# s after the node n votes for the request i of q, at the last step of xs,
-# which is in the bucket h of the chain c whose steps are all, when it may
+# s after the node n votes for the request i of q, at the tip m of the chain c
+# whose steps are xs, when it may
 def Vote.cast(
   ~Q: Data,
   ~same: Q -> Q -> Bool,
   ~view: Q -> View,
   ~judge: State(Q) -> Q -> List<&2, Step<Q>> -> Maybe<&2, Bool>,
-  xs: List<&2, Step<Q>>,
-  +h: Nat,
   +n: String,
   +s: State(Q),
   +c: Chain,
-  +all: List<&2, Step<Q>>,
+  +xs: List<&2, Step<Q>>,
   +i: Id,
-  +q: Q
+  +q: Q,
+  m: Maybe<&2, Tip>
 ) -> State(Q):
-  match xs:
-    case Nil{}:
+  match m:
+    case None{}:
       s
-    case Con{Step{j, k, t, q2, +ms}, Nil{}}:
+    case Some{Tip{+h, ms}}:
       Vote.put(
         ~Q,
         ~same,
-        Bool.and(Vote.may(~Q, n, s, c, h, ms), Maybe.is_none(&2, Bool, Steps.verdict(Q, all, i))),
-        Vote.verdict(~Q, ~view, ~judge, s, q, view(q), all),
+        Bool.and(Vote.may(~Q, n, s, c, h, ms), Maybe.is_none(&2, Bool, Steps.verdict(~Q, xs, i))),
+        Vote.verdict(~Q, ~view, ~judge, s, q, view(q), xs),
         s,
         Slot.vote(c, h, n),
         i
       )
-    case Con{x, r}:
-      Vote.cast(~Q, ~same, ~view, ~judge, r, 1n+h, n, s, c, all, i, q)
 
 # s after the node n votes for the request i of q, whose view is v
 def Vote.ask(
@@ -2080,8 +2114,7 @@ def Vote.ask(
     case View.root{ms}:
       s
     case View.on{+c, o, m}:
-      +xs = State.chain(~Q, ~view, s, c)
-      Vote.cast(~Q, ~same, ~view, ~judge, xs, 0n, n, s, c, xs, i, q)
+      Vote.cast(~Q, ~same, ~view, ~judge, n, s, c, State.chain(~Q, ~view, s, c), i, q, State.tip(~Q, ~view, s, c))
 
 # s after the node n took in the request i of q at the time t, whose cell in s
 # is m: a request that s holds already changes nothing
@@ -2940,81 +2973,75 @@ def Chain.walk_kept(
           )
         )(ag)(Cell.agrees_zero(~Entry<Q>, ~Entry.is_eq(~Q, ~same), h1, h2, z1, z2, o1, o2)(agt))
 
-# Root.made_prefix at a first step k, once it is known to make c or not (hit)
-def Root.made_prefix.at(
-  ~Q: Data,
-  ~view: Q -> View,
-  hit: Bool,
-  +k: Step<Q>,
-  r: List<&2, Step<Q>>,
-  r2: List<&2, Step<Q>>,
-  +c: List<&2, Bool>,
-  -st: Step<Q>,
-  rec: {Root.made(~Q, ~view, r, c) == Some{st}: Maybe<&2, Step<Q>>} -> {Root.made(~Q, ~view, r2, c) == Some{st}: Maybe<&2, Step<Q>>}
-) -> {
-  Shared.Bool.when(Maybe<&2, Step<Q>>, hit, u => Some{k}, u => Root.made(~Q, ~view, r, c)) == Some{st}: Maybe<&2, Step<Q>>
-} -> {Shared.Bool.when(Maybe<&2, Step<Q>>, hit, u => Some{k}, u => Root.made(~Q, ~view, r2, c)) == Some{st}: Maybe<&2, Step<Q>>}:
-  match hit:
-    case True{}:
+# List.first_prefix at a first item, once what f gives of it (m) is known
+def List.first_prefix.at(
+  -B: Data,
+  m: Maybe<&2, B>,
+  k1: Unit -> Maybe<&2, B>,
+  k2: Unit -> Maybe<&2, B>,
+  -b: B,
+  rec: {k1(Unit{}) == Some{b}: Maybe<&2, B>} -> {k2(Unit{}) == Some{b}: Maybe<&2, B>}
+) -> {Maybe.else(B, m, k1) == Some{b}: Maybe<&2, B>} -> {Maybe.else(B, m, k2) == Some{b}: Maybe<&2, B>}:
+  match m:
+    case Some{a}:
       h => h
-    case False{}:
+    case None{}:
       h => rec(h)
 
-# the first step of xs that makes the chain c is the first of ys, when ys
+# the first value that f gives of an item of xs is the first of ys, when ys
 # starts with xs
-def Root.made_prefix(
-  ~Q: Data,
-  ~view: Q -> View,
-  xs: List<&2, Step<Q>>,
-  ys: List<&2, Step<Q>>,
-  +c: List<&2, Bool>,
-  -st: Step<Q>
+def List.first_prefix(
+  ~A: Data,
+  ~B: Data,
+  ~C: Data,
+  ~f: C -> A -> Maybe<&2, B>,
+  xs: List<&2, A>,
+  ys: List<&2, A>,
+  +x: C,
+  -b: B
 ) -> {
-  Root.made(~Q, ~view, xs, c) == Some{st}: Maybe<&2, Step<Q>>
+  List.first(~A, ~B, ~C, ~f, xs, x) == Some{b}: Maybe<&2, B>
 } -> {
-  List.take(&2, Step<Q>, ys, List.length(&2, Step<Q>, xs)) == xs: List<&2, Step<Q>>
-} -> {Root.made(~Q, ~view, ys, c) == Some{st}: Maybe<&2, Step<Q>>}:
+  List.take(&2, A, ys, List.length(&2, A, xs)) == xs: List<&2, A>
+} -> {List.first(~A, ~B, ~C, ~f, ys, x) == Some{b}: Maybe<&2, B>}:
   match xs ys:
     case Nil{} y:
-      h => p => Empty.absurd({Root.made(~Q, ~view, y, c) == Some{st}: Maybe<&2, Step<Q>>}, Shared.Maybe.none_ne_some(Step<Q>, st, h))
-    case Con{k, r} Nil{}:
+      h => p => Empty.absurd({List.first(~A, ~B, ~C, ~f, y, x) == Some{b}: Maybe<&2, B>}, Shared.Maybe.none_ne_some(B, b, h))
+    case Con{a, r} Nil{}:
       h => p => Empty.absurd(
-        {Root.made(~Q, ~view, [], c) == Some{st}: Maybe<&2, Step<Q>>},
+        {List.first(~A, ~B, ~C, ~f, [], x) == Some{b}: Maybe<&2, B>},
         Shared.Bool.false_ne_true(
-          Equal.sym(Bool, True{}, False{}, Equal.cong(List<&2, Step<Q>>, Bool, l => List.is_empty(&2, Step<Q>, l), [], k <> r, p))
+          Equal.sym(Bool, True{}, False{}, Equal.cong(List<&2, A>, Bool, l => List.is_empty(&2, A, l), [], a <> r, p))
         )
       )
-    case Con{+k, +r} Con{+k2, +r2}:
+    case Con{+a, +r} Con{+a2, +r2}:
       h => +p =>
         %Equal.sym(
-          Step<Q>,
-          k2,
-          k,
+          A,
+          a2,
+          a,
           Equal.cong(
-            List<&2, Step<Q>>,
-            Step<Q>,
-            l => Maybe.default(&2, Step<Q>, List.head(&2, Step<Q>, l), k),
-            k2 <> List.take(&2, Step<Q>, r2, List.length(&2, Step<Q>, r)),
-            k <> r,
+            List<&2, A>,
+            A,
+            l => Maybe.default(&2, A, List.head(&2, A, l), a),
+            a2 <> List.take(&2, A, r2, List.length(&2, A, r)),
+            a <> r,
             p
           )
-        ): {Root.made(~Q, ~view, _ <> r2, c) == Some{st}: Maybe<&2, Step<Q>>}
-        Root.made_prefix.at(
-          ~Q,
-          ~view,
-          Step.makes(~Q, ~view, k, c),
-          k,
-          r,
-          r2,
-          c,
-          st,
-          hr => Root.made_prefix(~Q, ~view, r, r2, c, st)(hr)(
+        ): {List.first(~A, ~B, ~C, ~f, _ <> r2, x) == Some{b}: Maybe<&2, B>}
+        List.first_prefix.at(
+          B,
+          f(x)(a),
+          u => List.first(~A, ~B, ~C, ~f, r, x),
+          u => List.first(~A, ~B, ~C, ~f, r2, x),
+          b,
+          hr => List.first_prefix(~A, ~B, ~C, ~f, r, r2, x, b)(hr)(
             Equal.cong(
-              List<&2, Step<Q>>,
-              List<&2, Step<Q>>,
-              l => List.tail(&2, Step<Q>, l),
-              k2 <> List.take(&2, Step<Q>, r2, List.length(&2, Step<Q>, r)),
-              k <> r,
+              List<&2, A>,
+              List<&2, A>,
+              l => List.tail(&2, A, l),
+              a2 <> List.take(&2, A, r2, List.length(&2, A, r)),
+              a <> r,
               p
             )
           )
@@ -3152,9 +3179,11 @@ def Chain.first_kept(
     case Chain{+i, None{}}:
       Root.of_kept(~Q, ~same, ~laws, ~view, s, t, i, st)
     case Chain{+i, Some{+c}}:
-      +ag => h => Root.made_prefix(
-        ~Q,
-        ~view,
+      +ag => h => List.first_prefix(
+        ~Step<Q>,
+        ~Step<Q>,
+        ~List<&2, Bool>,
+        ~(c => k => Step.made(~Q, ~view, c, k)),
         Chain.top(~Q, ~view, s, i),
         Chain.top(~Q, ~view, State.join(~Q, ~same, s, t), i),
         c,
@@ -3208,3 +3237,1141 @@ def State.chain_kept(Q, same, laws, view, s, t, k):
     Chain.first(~Q, ~view, State.join(~Q, ~same, s, t), k),
     st => e => Chain.first_kept(~Q, ~same, ~laws, ~view, s, t, k, st)(ag)(e)
   )(ag)
+
+# Landing
+# -------
+# A sole owner's vote at the tip of its chain puts the request on the chain.
+
+# m is none when m, else k, is none
+def Maybe.else_none(-A: Data, m: Maybe<&2, A>, k: Unit -> Maybe<&2, A>) -> {Maybe.else(A, m, k) == None{}: Maybe<&2, A>} -> {m == None{}: Maybe<&2, A>}:
+  match m:
+    case Some{a}:
+      h => Empty.absurd({Some{a} == None{}: Maybe<&2, A>}, Shared.Maybe.none_ne_some(A, a, Equal.sym(Maybe<&2, A>, Some{a}, None{}, h)))
+    case None{}:
+      h => {==}
+
+# k gives none when m, else k, is none
+def Maybe.else_none_rest(-A: Data, m: Maybe<&2, A>, k: Unit -> Maybe<&2, A>) -> {Maybe.else(A, m, k) == None{}: Maybe<&2, A>} -> {k(Unit{}) == None{}: Maybe<&2, A>}:
+  match m:
+    case Some{a}:
+      h => Empty.absurd({k(Unit{}) == None{}: Maybe<&2, A>}, Shared.Maybe.none_ne_some(A, a, Equal.sym(Maybe<&2, A>, Some{a}, None{}, h)))
+    case None{}:
+      h => h
+
+# a step that did not decide i leaves the verdict on i to the steps after it
+def Steps.verdict_cons(
+  ~Q: Data,
+  +i: Id,
+  +st: Step<Q>,
+  r: List<&2, Step<Q>>
+) -> {Step.verdict(Q, i, st) == None{}: Maybe<&2, Bool>} -> {Steps.verdict(~Q, st <> r, i) == Steps.verdict(~Q, r, i): Maybe<&2, Bool>}:
+  h =>
+    %Equal.sym(Maybe<&2, Bool>, Step.verdict(Q, i, st), None{}, h):
+      {Maybe.else(Bool, _, u => Steps.verdict(~Q, r, i)) == Steps.verdict(~Q, r, i): Maybe<&2, Bool>}
+    {==}
+
+# the step to i decides i
+def Step.verdict_self(-Q: Data, +i: Id, k: Bool, t: String, q: Q, ms: List<&2, String>) -> {
+  Step.verdict(Q, i, Step{i, k, t, q, ms}) == Some{k}: Maybe<&2, Bool>
+}:
+  %Equal.sym(Bool, Id.is_eq(i, i), True{}, Id.is_eq_refl(i)):
+    {Shared.Bool.when(Maybe<&2, Bool>, _, u => Some{k}, u => None{}) == Some{k}: Maybe<&2, Bool>}
+  {==}
+
+# a walk from a step that decides i gives its verdict on i
+def Steps.verdict_first(
+  ~Q: Data,
+  ~view: Q -> View,
+  t: State(Q),
+  +s: State(Q),
+  +x: Step<Q>,
+  +i: Id,
+  -k: Bool
+) -> {Step.verdict(Q, i, x) == Some{k}: Maybe<&2, Bool>} -> {Steps.verdict(~Q, Chain.walk(~Q, ~view, t, s, Some{x}), i) == Some{k}: Maybe<&2, Bool>}:
+  match t:
+    case Tries.tip{}:
+      h =>
+        %Equal.sym(Maybe<&2, Bool>, Step.verdict(Q, i, x), Some{k}, h):
+          {Maybe.else(Bool, _, u => Steps.verdict(~Q, [], i)) == Some{k}: Maybe<&2, Bool>}
+        {==}
+    case Tries.bin{h0, z, o}:
+      h =>
+        %Equal.sym(Maybe<&2, Bool>, Step.verdict(Q, i, x), Some{k}, h):
+          {
+            Maybe.else(
+              Bool,
+              _,
+              u => Steps.verdict(~Q, Chain.walk(~Q, ~view, o, s, Step.next(~Q, ~view, s, Step.owners(Q, x), z)), i)
+            )
+              == Some{k}: Maybe<&2, Bool>
+          }
+        {==}
+
+# a walk from no step has no tip
+def Chain.tip_none(~Q: Data, ~view: Q -> View, t: State(Q), s: State(Q)) -> {Chain.tip(~Q, ~view, t, s, None{}) == None{}: Maybe<&2, Tip>}:
+  match t:
+    case Tries.tip{}:
+      {==}
+    case Tries.bin{h, z, o}:
+      {==}
+
+# m is not the tip of a first step alone
+def Tip.is_up(m: Maybe<&2, Tip>) -> Bool:
+  match m:
+    case Some{Tip{1n+d, xs}}:
+      False{}
+    case _:
+      True{}
+
+# a tip after a first step has no height zero, unless no step follows it
+def Tip.after_zero(ms: List<&2, String>, m: Maybe<&2, Tip>, -ns: List<&2, String>) -> {
+  Tip.after(ms, m) == Some{Tip{0n, ns}}: Maybe<&2, Tip>
+} -> {m == None{}: Maybe<&2, Tip>}:
+  match m:
+    case None{}:
+      h => {==}
+    case Some{Tip{d, xs}}:
+      h => Empty.absurd(
+        {Some{Tip{d, xs}} == None{}: Maybe<&2, Tip>},
+        Shared.Bool.false_ne_true(
+          Equal.cong(
+            Maybe<&2, Tip>,
+            Bool,
+            u => Tip.is_up(u),
+            Some{Tip{1n+d, xs}},
+            Some{Tip{0n, ns}},
+            h
+          )
+        )
+      )
+
+# the owners of a tip, if any
+def Tip.owners_of(m: Maybe<&2, Tip>) -> List<&2, String>:
+  match m:
+    case Some{Tip{d, ns}}:
+      ns
+    case None{}:
+      []
+
+# the tip one step lower, if any
+def Tip.down(m: Maybe<&2, Tip>) -> Maybe<&2, Tip>:
+  match m:
+    case Some{Tip{1n+d, ns}}:
+      Some{Tip{d, ns}}
+    case _:
+      None{}
+
+# a first step alone is the tip of its owners
+def Tip.after_owners(ms: List<&2, String>, -ns: List<&2, String>) -> {
+  Tip.after(ms, None{}) == Some{Tip{0n, ns}}: Maybe<&2, Tip>
+} -> {ms == ns: List<&2, String>}:
+  h => Equal.cong(Maybe<&2, Tip>, List<&2, String>, u => Tip.owners_of(u), Some{Tip{0n, ms}}, Some{Tip{0n, ns}}, h)
+
+# a tip after a first step, one higher, is the tip of the walk after it
+def Tip.after_up(ms: List<&2, String>, m: Maybe<&2, Tip>, -e: Nat, -ns: List<&2, String>) -> {
+  Tip.after(ms, m) == Some{Tip{1n+e, ns}}: Maybe<&2, Tip>
+} -> {m == Some{Tip{e, ns}}: Maybe<&2, Tip>}:
+  match m:
+    case None{}:
+      h => Empty.absurd(
+        {None{} == Some{Tip{e, ns}}: Maybe<&2, Tip>},
+        Shared.Bool.false_ne_true(
+          Equal.sym(
+            Bool,
+            True{},
+            False{},
+            Equal.cong(Maybe<&2, Tip>, Bool, u => Tip.is_up(u), Some{Tip{0n, ms}}, Some{Tip{1n+e, ns}}, h)
+          )
+        )
+      )
+    case Some{Tip{d, xs}}:
+      h => Equal.cong(Maybe<&2, Tip>, Maybe<&2, Tip>, u => Tip.down(u), Some{Tip{1n+d, xs}}, Some{Tip{1n+e, ns}}, h)
+
+# a tip after a first step is a tip
+def Tip.after_some(ms: List<&2, String>, m: Maybe<&2, Tip>) -> {Tip.after(ms, m) == None{}: Maybe<&2, Tip>} -> Empty:
+  match m:
+    case None{}:
+      h => Shared.Maybe.none_ne_some(Tip, Tip{0n, ms}, Equal.sym(Maybe<&2, Tip>, Some{Tip{0n, ms}}, None{}, h))
+    case Some{Tip{d, xs}}:
+      h => Shared.Maybe.none_ne_some(Tip, Tip{1n+d, xs}, Equal.sym(Maybe<&2, Tip>, Some{Tip{1n+d, xs}}, None{}, h))
+
+# a walk from a step has a tip
+def Chain.tip_some(~Q: Data, ~view: Q -> View, t: State(Q), +s: State(Q), +x: Step<Q>) -> {
+  Chain.tip(~Q, ~view, t, s, Some{x}) == None{}: Maybe<&2, Tip>
+} -> Empty:
+  match t:
+    case Tries.tip{}:
+      h => Shared.Maybe.none_ne_some(
+        Tip,
+        Tip{0n, Step.owners(Q, x)},
+        Equal.sym(Maybe<&2, Tip>, Some{Tip{0n, Step.owners(Q, x)}}, None{}, h)
+      )
+    case Tries.bin{h0, z, o}:
+      h => Tip.after_some(
+        Step.owners(Q, x),
+        Chain.tip(~Q, ~view, o, s, Step.next(~Q, ~view, s, Step.owners(Q, x), z))
+      )(h)
+
+# the vote v of the node n, alone in a bucket b at n's key, is n's vote there
+def Bucket.vote_one(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  +b: State(Q),
+  +n: String,
+  +v: Vote
+) -> {
+  Tries.Trie.get(Cell<Entry<Q>>, b, Tries.Trie.text(n)) == None{}: Maybe<&2, Cell<Entry<Q>>>
+} -> {
+  Bucket.vote(
+    ~Q,
+    State.join(~Q, ~same, b, Tries.Trie.one(Cell<Entry<Q>>, Tries.Trie.text(n), one{Entry.vote{v}})),
+    n
+  )
+    == Some{v}: Maybe<&2, Vote>
+}:
+  h =>
+    %Equal.sym(
+      Maybe<&2, Cell<Entry<Q>>>,
+      Tries.Trie.get(
+        Cell<Entry<Q>>,
+        State.join(~Q, ~same, b, Tries.Trie.one(Cell<Entry<Q>>, Tries.Trie.text(n), one{Entry.vote{v}})),
+        Tries.Trie.text(n)
+      ),
+      Tries.Trie.pick(
+        ~Cell<Entry<Q>>,
+        ~Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+        Tries.Trie.get(Cell<Entry<Q>>, b, Tries.Trie.text(n)),
+        Tries.Trie.get(Cell<Entry<Q>>, Tries.Trie.one(Cell<Entry<Q>>, Tries.Trie.text(n), one{Entry.vote{v}}), Tries.Trie.text(n))
+      ),
+      Tries.Trie.get_union(
+        ~Cell<Entry<Q>>,
+        ~Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+        b,
+        Tries.Trie.one(Cell<Entry<Q>>, Tries.Trie.text(n), one{Entry.vote{v}}),
+        Tries.Trie.text(n)
+      )
+    ): {Vote.of(~Q, Cell.value(Entry<Q>, _)) == Some{v}: Maybe<&2, Vote>}
+    %Equal.sym(Maybe<&2, Cell<Entry<Q>>>, Tries.Trie.get(Cell<Entry<Q>>, b, Tries.Trie.text(n)), None{}, h):
+      {
+        Vote.of(
+          ~Q,
+          Cell.value(
+            Entry<Q>,
+            Tries.Trie.pick(
+              ~Cell<Entry<Q>>,
+              ~Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+              _,
+              Tries.Trie.get(Cell<Entry<Q>>, Tries.Trie.one(Cell<Entry<Q>>, Tries.Trie.text(n), one{Entry.vote{v}}), Tries.Trie.text(n))
+            )
+          )
+        )
+          == Some{v}: Maybe<&2, Vote>
+      }
+    %Equal.sym(
+      Maybe<&2, Cell<Entry<Q>>>,
+      Tries.Trie.get(Cell<Entry<Q>>, Tries.Trie.one(Cell<Entry<Q>>, Tries.Trie.text(n), one{Entry.vote{v}}), Tries.Trie.text(n)),
+      Some{one{Entry.vote{v}}},
+      Tries.Trie.get_one(Cell<Entry<Q>>, Tries.Trie.text(n), one{Entry.vote{v}})
+    ): {
+      Vote.of(
+        ~Q,
+        Cell.value(
+          Entry<Q>,
+          Tries.Trie.pick(~Cell<Entry<Q>>, ~Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), None{}, _)
+        )
+      )
+        == Some{v}: Maybe<&2, Vote>
+    }
+    {==}
+
+# the sole owner n's vote for i in the bucket b after st puts i on the walk
+def Vote.lands.final(
+  ~Q: Data,
+  ~view: Q -> View,
+  +t2: State(Q),
+  +s2: State(Q),
+  +st: Step<Q>,
+  +n: String,
+  +b: State(Q),
+  +i: Id,
+  +k: Bool,
+  +tm: String,
+  +q: Q
+) -> {
+  Step.verdict(Q, i, st) == None{}: Maybe<&2, Bool>
+} -> {
+  Step.owners(Q, st) == [n]: List<&2, String>
+} -> {
+  Bucket.vote(~Q, b, n) == Some{Vote{i, k}}: Maybe<&2, Vote>
+} -> {
+  State.asked(~Q, s2, i) == Some{Asked{tm, q}}: Maybe<&2, Asked<Q>>
+} -> {
+  Steps.verdict(~Q, st <> Chain.walk(~Q, ~view, t2, s2, Step.next(~Q, ~view, s2, Step.owners(Q, st), b)), i)
+    == Some{k}: Maybe<&2, Bool>
+}:
+  hv => ho => hb => ha =>
+    %Equal.sym(
+      Maybe<&2, Bool>,
+      Steps.verdict(~Q, st <> Chain.walk(~Q, ~view, t2, s2, Step.next(~Q, ~view, s2, Step.owners(Q, st), b)), i),
+      Steps.verdict(~Q, Chain.walk(~Q, ~view, t2, s2, Step.next(~Q, ~view, s2, Step.owners(Q, st), b)), i),
+      Steps.verdict_cons(~Q, i, st, Chain.walk(~Q, ~view, t2, s2, Step.next(~Q, ~view, s2, Step.owners(Q, st), b)))(hv)
+    ): {_ == Some{k}: Maybe<&2, Bool>}
+    %Equal.sym(List<&2, String>, Step.owners(Q, st), [n], ho):
+      {Steps.verdict(~Q, Chain.walk(~Q, ~view, t2, s2, Step.next(~Q, ~view, s2, _, b)), i) == Some{k}: Maybe<&2, Bool>}
+    %Equal.sym(
+      Maybe<&2, Vote>,
+      Quorum.winner(~String, ~Vote, ~State(Q), ~Bucket.vote(~Q), ~Vote.is_eq, [n], [n], b),
+      Some{Vote{i, k}},
+      Quorum.winner_one(~String, ~Vote, ~State(Q), ~Bucket.vote(~Q), ~Vote.is_eq, ~Vote.laws(), n, b, Vote{i, k})(hb)
+    ): {Steps.verdict(~Q, Chain.walk(~Q, ~view, t2, s2, Step.won(~Q, ~view, s2, [n], _)), i) == Some{k}: Maybe<&2, Bool>}
+    %Equal.sym(Maybe<&2, Asked<Q>>, State.asked(~Q, s2, i), Some{Asked{tm, q}}, ha):
+      {Steps.verdict(~Q, Chain.walk(~Q, ~view, t2, s2, Step.asked(~Q, ~view, [n], i, k, _)), i) == Some{k}: Maybe<&2, Bool>}
+    Steps.verdict_first(
+      ~Q,
+      ~view,
+      t2,
+      s2,
+      Step{i, k, tm, q, View.owners_of(view(q), k, [n])},
+      i,
+      k
+    )(Step.verdict_self(Q, i, k, tm, q, View.owners_of(view(q), k, [n])))
+
+# Vote.lands from a first step st whose next step n1 of s1 is known, at height 0
+def Vote.lands.zero(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~view: Q -> View,
+  +h0: Maybe<&2, Cell<Entry<Q>>>,
+  +z: State(Q),
+  +o: State(Q),
+  +s1: State(Q),
+  +tv: State(Q),
+  +n: String,
+  +i: Id,
+  +k: Bool,
+  +st: Step<Q>,
+  +tm: String,
+  +q: Q,
+  n1: Maybe<&2, Step<Q>>
+) -> {
+  State.asked(~Q, State.join(~Q, ~same, s1, tv), i) == Some{Asked{tm, q}}: Maybe<&2, Asked<Q>>
+} -> {
+  Tip.after(Step.owners(Q, st), Chain.tip(~Q, ~view, o, s1, n1)) == Some{Tip{0n, [n]}}: Maybe<&2, Tip>
+} -> {
+  Tries.Trie.get(Cell<Entry<Q>>, z, Tries.Trie.text(n)) == None{}: Maybe<&2, Cell<Entry<Q>>>
+} -> {
+  Steps.verdict(~Q, st <> Chain.walk(~Q, ~view, o, s1, n1), i) == None{}: Maybe<&2, Bool>
+} -> {
+  Steps.verdict(
+    ~Q,
+    Chain.walk(~Q, ~view, State.join(~Q, ~same, Tries.bin{h0, z, o}, Tries.Trie.one(Cell<Entry<Q>>, List.append(&2, Bool, Height.key(0n), Tries.Trie.text(n)), one{Entry.vote{Vote{i, k}}})), State.join(~Q, ~same, s1, tv), Some{st}),
+    i
+  )
+    == Some{k}: Maybe<&2, Bool>
+}:
+  match n1:
+    case None{}:
+      ha => ht => hg => hv =>
+        Vote.lands.final(
+          ~Q,
+          ~view,
+          State.join(~Q, ~same, o, Tries.tip{}),
+          State.join(~Q, ~same, s1, tv),
+          st,
+          n,
+          State.join(~Q, ~same, z, Tries.Trie.one(Cell<Entry<Q>>, Tries.Trie.text(n), one{Entry.vote{Vote{i, k}}})),
+          i,
+          k,
+          tm,
+          q
+        )(
+          Maybe.else_none(Bool, Step.verdict(Q, i, st), u => Steps.verdict(~Q, Chain.walk(~Q, ~view, o, s1, None{}), i))(hv)
+        )(
+          Tip.after_owners(
+            Step.owners(Q, st),
+            [n]
+          )(
+            Equal.trans(
+              Maybe<&2, Tip>,
+              Tip.after(Step.owners(Q, st), None{}),
+              Tip.after(Step.owners(Q, st), Chain.tip(~Q, ~view, o, s1, None{})),
+              Some{Tip{0n, [n]}},
+              Equal.cong(
+                Maybe<&2, Tip>,
+                Maybe<&2, Tip>,
+                m => Tip.after(Step.owners(Q, st), m),
+                None{},
+                Chain.tip(~Q, ~view, o, s1, None{}),
+                Equal.sym(Maybe<&2, Tip>, Chain.tip(~Q, ~view, o, s1, None{}), None{}, Chain.tip_none(~Q, ~view, o, s1))
+              ),
+              ht
+            )
+          )
+        )(Bucket.vote_one(~Q, ~same, z, n, Vote{i, k})(hg))(ha)
+    case Some{+st2}:
+      ha => ht => hg => hv => Empty.absurd(
+        {
+          Steps.verdict(
+            ~Q,
+            Chain.walk(~Q, ~view, State.join(~Q, ~same, Tries.bin{h0, z, o}, Tries.Trie.one(Cell<Entry<Q>>, List.append(&2, Bool, Height.key(0n), Tries.Trie.text(n)), one{Entry.vote{Vote{i, k}}})), State.join(~Q, ~same, s1, tv), Some{st}),
+            i
+          )
+            == Some{k}: Maybe<&2, Bool>
+        },
+        Chain.tip_some(~Q, ~view, o, s1, st2)(Tip.after_zero(Step.owners(Q, st), Chain.tip(~Q, ~view, o, s1, Some{st2}), [n])(ht))
+      )
+
+# Vote.lands from a first step st whose next step n1 of s1 is known, at height
+# 1+e, given the lemma for the walk after it (rec)
+def Vote.lands.up(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~view: Q -> View,
+  +h0: Maybe<&2, Cell<Entry<Q>>>,
+  +z: State(Q),
+  +o: State(Q),
+  +s1: State(Q),
+  +tv: State(Q),
+  +n: String,
+  +i: Id,
+  +k: Bool,
+  +e: Nat,
+  +st: Step<Q>,
+  n1: Maybe<&2, Step<Q>>,
+  e1: {Step.next(~Q, ~view, s1, Step.owners(Q, st), z) == n1: Maybe<&2, Step<Q>>},
+  rec: @st2: Step<Q> -> {
+    Chain.tip(~Q, ~view, o, s1, Some{st2}) == Some{Tip{e, [n]}}: Maybe<&2, Tip>
+  } -> {
+    Steps.verdict(~Q, Chain.walk(~Q, ~view, o, s1, Some{st2}), i) == None{}: Maybe<&2, Bool>
+  } -> {
+    Steps.verdict(~Q, Chain.walk(~Q, ~view, State.join(~Q, ~same, o, Tries.Trie.one(Cell<Entry<Q>>, List.append(&2, Bool, Height.key(e), Tries.Trie.text(n)), one{Entry.vote{Vote{i, k}}})), State.join(~Q, ~same, s1, tv), Some{st2}), i)
+      == Some{k}: Maybe<&2, Bool>
+  }
+) -> {
+  State.agrees(~Q, ~same, s1, tv) == True{}: Bool
+} -> {
+  Tip.after(Step.owners(Q, st), Chain.tip(~Q, ~view, o, s1, n1)) == Some{Tip{1n+e, [n]}}: Maybe<&2, Tip>
+} -> {
+  Steps.verdict(~Q, st <> Chain.walk(~Q, ~view, o, s1, n1), i) == None{}: Maybe<&2, Bool>
+} -> {
+  Steps.verdict(
+    ~Q,
+    Chain.walk(~Q, ~view, State.join(~Q, ~same, Tries.bin{h0, z, o}, Tries.Trie.one(Cell<Entry<Q>>, List.append(&2, Bool, Height.key(1n+e), Tries.Trie.text(n)), one{Entry.vote{Vote{i, k}}})), State.join(~Q, ~same, s1, tv), Some{st}),
+    i
+  )
+    == Some{k}: Maybe<&2, Bool>
+}:
+  match n1:
+    case None{}:
+      ag => ht => hv => Empty.absurd(
+        {
+          Steps.verdict(
+            ~Q,
+            Chain.walk(~Q, ~view, State.join(~Q, ~same, Tries.bin{h0, z, o}, Tries.Trie.one(Cell<Entry<Q>>, List.append(&2, Bool, Height.key(1n+e), Tries.Trie.text(n)), one{Entry.vote{Vote{i, k}}})), State.join(~Q, ~same, s1, tv), Some{st}),
+            i
+          )
+            == Some{k}: Maybe<&2, Bool>
+        },
+        Shared.Maybe.none_ne_some(
+          Tip,
+          Tip{e, [n]},
+          Equal.trans(
+            Maybe<&2, Tip>,
+            None{},
+            Chain.tip(~Q, ~view, o, s1, None{}),
+            Some{Tip{e, [n]}},
+            Equal.sym(Maybe<&2, Tip>, Chain.tip(~Q, ~view, o, s1, None{}), None{}, Chain.tip_none(~Q, ~view, o, s1)),
+            Tip.after_up(Step.owners(Q, st), Chain.tip(~Q, ~view, o, s1, None{}), e, [n])(ht)
+          )
+        )
+      )
+    case Some{+st2}:
+      +ag => ht => +hv =>
+        %Equal.sym(
+          Maybe<&2, Step<Q>>,
+          Step.next(~Q, ~view, State.join(~Q, ~same, s1, tv), Step.owners(Q, st), State.join(~Q, ~same, z, Tries.tip{})),
+          Some{st2},
+          Step.next_kept(~Q, ~same, ~laws, ~view, s1, tv, Step.owners(Q, st), z, Tries.tip{}, st2)(ag)(
+            Cell.agrees_tip(~Entry<Q>, ~Entry.is_eq(~Q, ~same), z)
+          )(e1)
+        ): {
+          Steps.verdict(~Q, st <> Chain.walk(~Q, ~view, State.join(~Q, ~same, o, Tries.Trie.one(Cell<Entry<Q>>, List.append(&2, Bool, Height.key(e), Tries.Trie.text(n)), one{Entry.vote{Vote{i, k}}})), State.join(~Q, ~same, s1, tv), _), i)
+            == Some{k}: Maybe<&2, Bool>
+        }
+        %Equal.sym(
+          Maybe<&2, Bool>,
+          Steps.verdict(~Q, st <> Chain.walk(~Q, ~view, State.join(~Q, ~same, o, Tries.Trie.one(Cell<Entry<Q>>, List.append(&2, Bool, Height.key(e), Tries.Trie.text(n)), one{Entry.vote{Vote{i, k}}})), State.join(~Q, ~same, s1, tv), Some{st2}), i),
+          Steps.verdict(~Q, Chain.walk(~Q, ~view, State.join(~Q, ~same, o, Tries.Trie.one(Cell<Entry<Q>>, List.append(&2, Bool, Height.key(e), Tries.Trie.text(n)), one{Entry.vote{Vote{i, k}}})), State.join(~Q, ~same, s1, tv), Some{st2}), i),
+          Steps.verdict_cons(~Q, i, st, Chain.walk(~Q, ~view, State.join(~Q, ~same, o, Tries.Trie.one(Cell<Entry<Q>>, List.append(&2, Bool, Height.key(e), Tries.Trie.text(n)), one{Entry.vote{Vote{i, k}}})), State.join(~Q, ~same, s1, tv), Some{st2}))(
+            Maybe.else_none(Bool, Step.verdict(Q, i, st), u => Steps.verdict(~Q, Chain.walk(~Q, ~view, o, s1, Some{st2}), i))(hv)
+          )
+        ): {_ == Some{k}: Maybe<&2, Bool>}
+        rec(st2)(Tip.after_up(Step.owners(Q, st), Chain.tip(~Q, ~view, o, s1, Some{st2}), e, [n])(ht))(
+          Maybe.else_none_rest(Bool, Step.verdict(Q, i, st), u => Steps.verdict(~Q, Chain.walk(~Q, ~view, o, s1, Some{st2}), i))(hv)
+        )
+
+# the sole owner n's vote for i, at the tip d of the walk of t from st, puts i
+# on the walk in a sync that agrees and holds i
+def Vote.lands(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~view: Q -> View,
+  t: State(Q),
+  +s1: State(Q),
+  +tv: State(Q),
+  +n: String,
+  +i: Id,
+  +k: Bool,
+  d: Nat,
+  +st: Step<Q>,
+  +tm: String,
+  +q: Q
+) -> {
+  State.agrees(~Q, ~same, s1, tv) == True{}: Bool
+} -> {
+  State.asked(~Q, State.join(~Q, ~same, s1, tv), i) == Some{Asked{tm, q}}: Maybe<&2, Asked<Q>>
+} -> {
+  Chain.tip(~Q, ~view, t, s1, Some{st}) == Some{Tip{d, [n]}}: Maybe<&2, Tip>
+} -> {
+  Tries.Trie.get(Cell<Entry<Q>>, t, List.append(&2, Bool, Height.key(d), Tries.Trie.text(n))) == None{}: Maybe<&2, Cell<Entry<Q>>>
+} -> {
+  Steps.verdict(~Q, Chain.walk(~Q, ~view, t, s1, Some{st}), i) == None{}: Maybe<&2, Bool>
+} -> {
+  Steps.verdict(~Q, Chain.walk(~Q, ~view, State.join(~Q, ~same, t, Tries.Trie.one(Cell<Entry<Q>>, List.append(&2, Bool, Height.key(d), Tries.Trie.text(n)), one{Entry.vote{Vote{i, k}}})), State.join(~Q, ~same, s1, tv), Some{st}), i)
+    == Some{k}: Maybe<&2, Bool>
+}:
+  match t d:
+    case Tries.tip{} 0n:
+      ag => ha => ht => hg => hv =>
+        Vote.lands.final(
+          ~Q,
+          ~view,
+          Tries.tip{},
+          State.join(~Q, ~same, s1, tv),
+          st,
+          n,
+          State.join(~Q, ~same, Tries.tip{}, Tries.Trie.one(Cell<Entry<Q>>, Tries.Trie.text(n), one{Entry.vote{Vote{i, k}}})),
+          i,
+          k,
+          tm,
+          q
+        )(Maybe.else_none(Bool, Step.verdict(Q, i, st), u => Steps.verdict(~Q, [], i))(hv))(
+          Equal.cong(Maybe<&2, Tip>, List<&2, String>, m => Tip.owners_of(m), Some{Tip{0n, Step.owners(Q, st)}}, Some{Tip{0n, [n]}}, ht)
+        )(Bucket.vote_one(~Q, ~same, Tries.tip{}, n, Vote{i, k})({==}))(ha)
+    case Tries.tip{} 1n+e:
+      ag => ha => ht => hg => hv => Empty.absurd(
+        {
+          Steps.verdict(~Q, Chain.walk(~Q, ~view, State.join(~Q, ~same, Tries.tip{}, Tries.Trie.one(Cell<Entry<Q>>, List.append(&2, Bool, Height.key(1n+e), Tries.Trie.text(n)), one{Entry.vote{Vote{i, k}}})), State.join(~Q, ~same, s1, tv), Some{st}), i)
+            == Some{k}: Maybe<&2, Bool>
+        },
+        Shared.Bool.false_ne_true(
+          Equal.sym(
+            Bool,
+            True{},
+            False{},
+            Equal.cong(Maybe<&2, Tip>, Bool, m => Tip.is_up(m), Some{Tip{0n, Step.owners(Q, st)}}, Some{Tip{1n+e, [n]}}, ht)
+          )
+        )
+      )
+    case Tries.bin{+h0, +z, +o} 0n:
+      ag => Vote.lands.zero(~Q, ~same, ~view, h0, z, o, s1, tv, n, i, k, st, tm, q, Step.next(~Q, ~view, s1, Step.owners(Q, st), z))
+    case Tries.bin{+h0, +z, +o} 1n+e2:
+      +e = e2
+      +ag => +ha => ht => +hg => hv => Vote.lands.up(
+        ~Q,
+        ~same,
+        ~laws,
+        ~view,
+        h0,
+        z,
+        o,
+        s1,
+        tv,
+        n,
+        i,
+        k,
+        e,
+        st,
+        Step.next(~Q, ~view, s1, Step.owners(Q, st), z),
+        {==},
+        st2 => ht2 => hv2 => Vote.lands(~Q, ~same, ~laws, ~view, o, s1, tv, n, i, k, e, st2, tm, q)(ag)(ha)(ht2)(hg)(hv2)
+      )(ag)(ht)(hv)
+
+# a list that holds a node holds it
+def Owners.has(n: String) -> {List.contains(~String, ~String.eq, [n], n) == True{}: Bool}:
+  %Equal.sym(Bool, String.eq(n, n), True{}, Texts.String.eq_refl(n)):
+    {List.any.if(u => List.contains(~String, ~String.eq, [], n), _) == True{}: Bool}
+  {==}
+
+# an entry put at a free slot is there
+def State.put_get(~Q: Data, ~same: Q -> Q -> Bool, +s: State(Q), +k: List<&2, Bool>, +e: Entry<Q>) -> {
+  Tries.Trie.get(Cell<Entry<Q>>, s, k) == None{}: Maybe<&2, Cell<Entry<Q>>>
+} -> {Tries.Trie.get(Cell<Entry<Q>>, State.put(~Q, ~same, s, k, e), k) == Some{one{e}}: Maybe<&2, Cell<Entry<Q>>>}:
+  h =>
+    %Equal.sym(
+      Maybe<&2, Cell<Entry<Q>>>,
+      Tries.Trie.get(Cell<Entry<Q>>, State.put(~Q, ~same, s, k, e), k),
+      Tries.Trie.pick(
+        ~Cell<Entry<Q>>,
+        ~Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+        Tries.Trie.get(Cell<Entry<Q>>, s, k),
+        Tries.Trie.get(Cell<Entry<Q>>, Tries.Trie.one(Cell<Entry<Q>>, k, one{e}), k)
+      ),
+      Tries.Trie.get_union(~Cell<Entry<Q>>, ~Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), s, Tries.Trie.one(Cell<Entry<Q>>, k, one{e}), k)
+    ): {_ == Some{one{e}}: Maybe<&2, Cell<Entry<Q>>>}
+    %Equal.sym(Maybe<&2, Cell<Entry<Q>>>, Tries.Trie.get(Cell<Entry<Q>>, s, k), None{}, h):
+      {
+        Tries.Trie.pick(~Cell<Entry<Q>>, ~Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), _, Tries.Trie.get(Cell<Entry<Q>>, Tries.Trie.one(Cell<Entry<Q>>, k, one{e}), k))
+          == Some{one{e}}: Maybe<&2, Cell<Entry<Q>>>
+      }
+    Tries.Trie.get_one(Cell<Entry<Q>>, k, one{e})
+
+# the node n votes for i at the tip of the chain c, when it owns it alone, has
+# not voted there, i is not decided yet, and judge gives the verdict k
+def Vote.cast_puts(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~view: Q -> View,
+  ~judge: State(Q) -> Q -> List<&2, Step<Q>> -> Maybe<&2, Bool>,
+  +n: String,
+  +s: State(Q),
+  +c: Chain,
+  +i: Id,
+  +q: Q,
+  +h: Nat,
+  +k: Bool
+) -> {
+  State.tip(~Q, ~view, s, c) == Some{Tip{h, [n]}}: Maybe<&2, Tip>
+} -> {
+  Tries.Trie.get(Cell<Entry<Q>>, s, Slot.vote(c, h, n)) == None{}: Maybe<&2, Cell<Entry<Q>>>
+} -> {
+  Steps.verdict(~Q, State.chain(~Q, ~view, s, c), i) == None{}: Maybe<&2, Bool>
+} -> {
+  Vote.verdict(~Q, ~view, ~judge, s, q, view(q), State.chain(~Q, ~view, s, c)) == Some{k}: Maybe<&2, Bool>
+} -> {
+  Vote.cast(~Q, ~same, ~view, ~judge, n, s, c, State.chain(~Q, ~view, s, c), i, q, State.tip(~Q, ~view, s, c))
+    == State.put(~Q, ~same, s, Slot.vote(c, h, n), Entry.vote{Vote{i, k}}): State(Q)
+}:
+  ht => hg => hv => hj =>
+    %Equal.sym(Maybe<&2, Tip>, State.tip(~Q, ~view, s, c), Some{Tip{h, [n]}}, ht):
+      {
+        Vote.cast(~Q, ~same, ~view, ~judge, n, s, c, State.chain(~Q, ~view, s, c), i, q, _)
+          == State.put(~Q, ~same, s, Slot.vote(c, h, n), Entry.vote{Vote{i, k}}): State(Q)
+      }
+    %Equal.sym(Bool, List.contains(~String, ~String.eq, [n], n), True{}, Owners.has(n)):
+      {
+        Vote.put(
+          ~Q,
+          ~same,
+          Bool.and(
+            Bool.and(_, Maybe.is_none(&2, Cell<Entry<Q>>, Tries.Trie.get(Cell<Entry<Q>>, s, Slot.vote(c, h, n)))),
+            Maybe.is_none(&2, Bool, Steps.verdict(~Q, State.chain(~Q, ~view, s, c), i))
+          ),
+          Vote.verdict(~Q, ~view, ~judge, s, q, view(q), State.chain(~Q, ~view, s, c)),
+          s,
+          Slot.vote(c, h, n),
+          i
+        )
+          == State.put(~Q, ~same, s, Slot.vote(c, h, n), Entry.vote{Vote{i, k}}): State(Q)
+      }
+    %Equal.sym(Maybe<&2, Cell<Entry<Q>>>, Tries.Trie.get(Cell<Entry<Q>>, s, Slot.vote(c, h, n)), None{}, hg):
+      {
+        Vote.put(
+          ~Q,
+          ~same,
+          Bool.and(
+            Maybe.is_none(&2, Cell<Entry<Q>>, _),
+            Maybe.is_none(&2, Bool, Steps.verdict(~Q, State.chain(~Q, ~view, s, c), i))
+          ),
+          Vote.verdict(~Q, ~view, ~judge, s, q, view(q), State.chain(~Q, ~view, s, c)),
+          s,
+          Slot.vote(c, h, n),
+          i
+        )
+          == State.put(~Q, ~same, s, Slot.vote(c, h, n), Entry.vote{Vote{i, k}}): State(Q)
+      }
+    %Equal.sym(Maybe<&2, Bool>, Steps.verdict(~Q, State.chain(~Q, ~view, s, c), i), None{}, hv):
+      {
+        Vote.put(
+          ~Q,
+          ~same,
+          Maybe.is_none(&2, Bool, _),
+          Vote.verdict(~Q, ~view, ~judge, s, q, view(q), State.chain(~Q, ~view, s, c)),
+          s,
+          Slot.vote(c, h, n),
+          i
+        )
+          == State.put(~Q, ~same, s, Slot.vote(c, h, n), Entry.vote{Vote{i, k}}): State(Q)
+      }
+    %Equal.sym(Maybe<&2, Bool>, Vote.verdict(~Q, ~view, ~judge, s, q, view(q), State.chain(~Q, ~view, s, c)), Some{k}, hj):
+      {Vote.put(~Q, ~same, True{}, _, s, Slot.vote(c, h, n), i) == State.put(~Q, ~same, s, Slot.vote(c, h, n), Entry.vote{Vote{i, k}}): State(Q)}
+    {==}
+
+# Ask.decided once the first step m of the chain c of s1 is known
+def Ask.decided.at(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~view: Q -> View,
+  +s1: State(Q),
+  +n: String,
+  +i: Id,
+  +t: String,
+  +q: Q,
+  +c: Chain,
+  +h: Nat,
+  +k: Bool,
+  m: Maybe<&2, Step<Q>>,
+  e: {Chain.first(~Q, ~view, s1, c) == m: Maybe<&2, Step<Q>>}
+) -> {
+  State.agrees(~Q, ~same, s1, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}})) == True{}: Bool
+} -> {
+  State.asked(~Q, State.join(~Q, ~same, s1, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}})), i) == Some{Asked{t, q}}: Maybe<&2, Asked<Q>>
+} -> {
+  Chain.tip(~Q, ~view, Tries.Trie.under(Cell<Entry<Q>>, s1, Slot.votes(c)), s1, m) == Some{Tip{h, [n]}}: Maybe<&2, Tip>
+} -> {
+  Tries.Trie.get(Cell<Entry<Q>>, s1, Slot.vote(c, h, n)) == None{}: Maybe<&2, Cell<Entry<Q>>>
+} -> {
+  Steps.verdict(~Q, Chain.walk(~Q, ~view, Tries.Trie.under(Cell<Entry<Q>>, s1, Slot.votes(c)), s1, m), i) == None{}: Maybe<&2, Bool>
+} -> {
+  Steps.verdict(~Q, State.chain(~Q, ~view, State.join(~Q, ~same, s1, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}})), c), i) == Some{k}: Maybe<&2, Bool>
+}:
+  match m:
+    case None{}:
+      ag => ha => ht => hg => hv => Empty.absurd(
+        {Steps.verdict(~Q, State.chain(~Q, ~view, State.join(~Q, ~same, s1, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}})), c), i) == Some{k}: Maybe<&2, Bool>},
+        Shared.Maybe.none_ne_some(
+          Tip,
+          Tip{h, [n]},
+          Equal.trans(
+            Maybe<&2, Tip>,
+            None{},
+            Chain.tip(~Q, ~view, Tries.Trie.under(Cell<Entry<Q>>, s1, Slot.votes(c)), s1, None{}),
+            Some{Tip{h, [n]}},
+            Equal.sym(Maybe<&2, Tip>, Chain.tip(~Q, ~view, Tries.Trie.under(Cell<Entry<Q>>, s1, Slot.votes(c)), s1, None{}), None{}, Chain.tip_none(~Q, ~view, Tries.Trie.under(Cell<Entry<Q>>, s1, Slot.votes(c)), s1)),
+            ht
+          )
+        )
+      )
+    case Some{+st}:
+      +ag => ha => ht => hg => hv =>
+        %Equal.sym(
+          Maybe<&2, Step<Q>>,
+          Chain.first(~Q, ~view, State.join(~Q, ~same, s1, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}})), c),
+          Some{st},
+          Chain.first_kept(~Q, ~same, ~laws, ~view, s1, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}}), c, st)(ag)(e)
+        ): {
+          Steps.verdict(~Q, Chain.walk(~Q, ~view, Tries.Trie.under(Cell<Entry<Q>>, State.join(~Q, ~same, s1, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}})), Slot.votes(c)), State.join(~Q, ~same, s1, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}})), _), i) == Some{k}: Maybe<&2, Bool>
+        }
+        %Equal.sym(
+          State(Q),
+          Tries.Trie.under(Cell<Entry<Q>>, State.join(~Q, ~same, s1, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}})), Slot.votes(c)),
+          State.join(~Q, ~same, Tries.Trie.under(Cell<Entry<Q>>, s1, Slot.votes(c)), Tries.Trie.under(Cell<Entry<Q>>, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}}), Slot.votes(c))),
+          Tries.Trie.under_union(~Cell<Entry<Q>>, ~Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), s1, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}}), Slot.votes(c))
+        ): {Steps.verdict(~Q, Chain.walk(~Q, ~view, _, State.join(~Q, ~same, s1, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}})), Some{st}), i) == Some{k}: Maybe<&2, Bool>}
+        %Equal.sym(
+          State(Q),
+          Tries.Trie.under(Cell<Entry<Q>>, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}}), Slot.votes(c)),
+          Tries.Trie.one(Cell<Entry<Q>>, List.append(&2, Bool, Height.key(h), Tries.Trie.text(n)), one{Entry.vote{Vote{i, k}}}),
+          Tries.Trie.under_one(Cell<Entry<Q>>, Slot.votes(c), List.append(&2, Bool, Height.key(h), Tries.Trie.text(n)), one{Entry.vote{Vote{i, k}}})
+        ): {
+          Steps.verdict(~Q, Chain.walk(~Q, ~view, State.join(~Q, ~same, Tries.Trie.under(Cell<Entry<Q>>, s1, Slot.votes(c)), _), State.join(~Q, ~same, s1, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}})), Some{st}), i) == Some{k}: Maybe<&2, Bool>
+        }
+        Vote.lands(~Q, ~same, ~laws, ~view, Tries.Trie.under(Cell<Entry<Q>>, s1, Slot.votes(c)), s1, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}}), n, i, k, h, st, t, q)(ag)(ha)(ht)(
+          Equal.trans(
+            Maybe<&2, Cell<Entry<Q>>>,
+            Tries.Trie.get(Cell<Entry<Q>>, Tries.Trie.under(Cell<Entry<Q>>, s1, Slot.votes(c)), List.append(&2, Bool, Height.key(h), Tries.Trie.text(n))),
+            Tries.Trie.get(Cell<Entry<Q>>, s1, Slot.vote(c, h, n)),
+            None{},
+            Tries.Trie.get_under(Cell<Entry<Q>>, s1, Slot.votes(c), List.append(&2, Bool, Height.key(h), Tries.Trie.text(n))),
+            hg
+          )
+        )(hv)
+
+# the sole owner n of the tip of a chain, after it takes in a request there
+# that is not decided yet and on which judge gives the verdict k, has decided
+# it with the verdict k
+def Ask.decided(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~view: Q -> View,
+  +s1: State(Q),
+  +n: String,
+  +i: Id,
+  +t: String,
+  +q: Q,
+  +c: Chain,
+  o: Maybe<&2, List<&2, String>>,
+  mk: Maybe<&2, List<&2, Bool>>,
+  +h: Nat,
+  +k: Bool
+) -> {
+  view(q) == View.on{c, o, mk}: View
+} -> {
+  Tries.Trie.get(Cell<Entry<Q>>, s1, Slot.ask(i)) == Some{one{Entry.ask{i, t, q}}}: Maybe<&2, Cell<Entry<Q>>>
+} -> {
+  State.tip(~Q, ~view, s1, c) == Some{Tip{h, [n]}}: Maybe<&2, Tip>
+} -> {
+  Tries.Trie.get(Cell<Entry<Q>>, s1, Slot.vote(c, h, n)) == None{}: Maybe<&2, Cell<Entry<Q>>>
+} -> {
+  Steps.verdict(~Q, State.chain(~Q, ~view, s1, c), i) == None{}: Maybe<&2, Bool>
+} -> {
+  State.status(~Q, ~view, State.join(~Q, ~same, s1, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}})), i) == Status.done{k}: Status
+}:
+  hq => hask => ht => +hg => hv =>
+    +ag = Cell.agrees_one(~Entry<Q>, ~Entry.is_eq(~Q, ~same), s1, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}})(hg)
+    +hask2 = Cell.agrees_kept(~Entry<Q>, ~Entry.is_eq(~Q, ~same), ~Entry.laws(~Q, ~same, ~laws), s1, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}}), Slot.ask(i), Entry.ask{i, t, q})(ag)(hask)
+    %Equal.sym(
+      Maybe<&2, Cell<Entry<Q>>>,
+      Tries.Trie.get(Cell<Entry<Q>>, State.join(~Q, ~same, s1, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}})), Slot.ask(i)),
+      Some{one{Entry.ask{i, t, q}}},
+      hask2
+    ): {Status.of(~Q, ~view, State.join(~Q, ~same, s1, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}})), i, _) == Status.done{k}: Status}
+    %Equal.sym(View, view(q), View.on{c, o, mk}, hq): {Status.of.view(~Q, ~view, State.join(~Q, ~same, s1, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}})), _, i) == Status.done{k}: Status}
+    %Equal.sym(
+      Maybe<&2, Bool>,
+      Steps.verdict(~Q, State.chain(~Q, ~view, State.join(~Q, ~same, s1, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}})), c), i),
+      Some{k},
+      Ask.decided.at(~Q, ~same, ~laws, ~view, s1, n, i, t, q, c, h, k, Chain.first(~Q, ~view, s1, c), {==})(ag)(
+        Equal.cong(
+          Maybe<&2, Cell<Entry<Q>>>,
+          Maybe<&2, Asked<Q>>,
+          m => Asked.of(~Q, Cell.value(Entry<Q>, m)),
+          Tries.Trie.get(Cell<Entry<Q>>, State.join(~Q, ~same, s1, Tries.Trie.one(Cell<Entry<Q>>, Slot.vote(c, h, n), one{Entry.vote{Vote{i, k}}})), Slot.ask(i)),
+          Some{one{Entry.ask{i, t, q}}},
+          hask2
+        )
+      )(ht)(hg)(hv)
+    ): {Status.of.verdict(_) == Status.done{k}: Status}
+    {==}
+
+# a node that owns the tip of a chain alone decides a request at once when it
+# takes it in: when judge gives the verdict k there, the request is done with
+# k
+law State.ask_decides:
+  for ~Q: Data
+  for ~same: Q -> Q -> Bool
+  for ~laws: Shared.Eq.Laws(Q, same)
+  for ~view: Q -> View
+  for ~judge: State(Q) -> Q -> List<&2, Step<Q>> -> Maybe<&2, Bool>
+  for +n: String
+  for +s: State(Q)
+  for +i: Id
+  for +t: String
+  for +q: Q
+  for +c: Chain
+  for o: Maybe<&2, List<&2, String>>
+  for mk: Maybe<&2, List<&2, Bool>>
+  for +h: Nat
+  for +k: Bool
+  {Tries.Trie.get(Cell<Entry<Q>>, s, Slot.ask(i)) == None{}: Maybe<&2, Cell<Entry<Q>>>}
+    -> {view(q) == View.on{c, o, mk}: View}
+    -> {
+      State.tip(~Q, ~view, State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q}), c)
+        == Some{Tip{h, [n]}}: Maybe<&2, Tip>
+    }
+    -> {
+      Tries.Trie.get(Cell<Entry<Q>>, State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q}), Slot.vote(c, h, n))
+        == None{}: Maybe<&2, Cell<Entry<Q>>>
+    }
+    -> {
+      Steps.verdict(~Q, State.chain(~Q, ~view, State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q}), c), i)
+        == None{}: Maybe<&2, Bool>
+    }
+    -> {
+      Vote.verdict(
+        ~Q,
+        ~view,
+        ~judge,
+        State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+        q,
+        view(q),
+        State.chain(~Q, ~view, State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q}), c)
+      )
+        == Some{k}: Maybe<&2, Bool>
+    }
+    -> {State.status(~Q, ~view, State.ask(~Q, ~same, ~view, ~judge, n, s, i, t, q), i) == Status.done{k}: Status}
+
+def State.ask_decides(Q, same, laws, view, judge, n, s, i, t, q, c, o, mk, h, k):
+  +h1 => +h2 => +ht => +hg => +hv => hj =>
+    %Equal.sym(Maybe<&2, Cell<Entry<Q>>>, Tries.Trie.get(Cell<Entry<Q>>, s, Slot.ask(i)), None{}, h1):
+      {State.status(~Q, ~view, State.ask.fresh(~Q, ~same, ~view, ~judge, n, s, i, t, q, _), i) == Status.done{k}: Status}
+    %Equal.sym(View, view(q), View.on{c, o, mk}, h2):
+      {
+        State.status(~Q, ~view, Vote.ask(~Q, ~same, ~view, ~judge, n, State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q}), i, q, _), i)
+          == Status.done{k}: Status
+      }
+    %Equal.sym(
+      State(Q),
+      Vote.cast(
+        ~Q,
+        ~same,
+        ~view,
+        ~judge,
+        n,
+        State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q}),
+        c,
+        State.chain(~Q, ~view, State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q}), c),
+        i,
+        q,
+        State.tip(~Q, ~view, State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q}), c)
+      ),
+      State.put(~Q, ~same, State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q}), Slot.vote(c, h, n), Entry.vote{Vote{i, k}}),
+      Vote.cast_puts(~Q, ~same, ~view, ~judge, n, State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q}), c, i, q, h, k)(ht)(hg)(hv)(hj)
+    ): {State.status(~Q, ~view, _, i) == Status.done{k}: Status}
+    Ask.decided(~Q, ~same, ~laws, ~view, State.put(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q}), n, i, t, q, c, o, mk, h, k)(h2)(
+      State.put_get(~Q, ~same, s, Slot.ask(i), Entry.ask{i, t, q})(h1)
+    )(ht)(hg)(hv)
+
+# Answers kept
+# ------------
+
+# the verdict of a status, if it is done
+def Status.verdict(st: Status) -> Maybe<&2, Bool>:
+  match st:
+    case Status.done{k}:
+      Some{k}
+    case _:
+      None{}
+
+# st is refused
+def Status.is_refused(st: Status) -> Bool:
+  match st:
+    case Status.refused{}:
+      True{}
+    case _:
+      False{}
+
+# the verdict of the status of a verdict m is m
+def Status.verdict_of(m: Maybe<&2, Bool>) -> {Status.verdict(Status.of.verdict(m)) == m: Maybe<&2, Bool>}:
+  match m:
+    case None{}:
+      {==}
+    case Some{k}:
+      {==}
+
+# a status that is not done is not done with k
+def Status.not_done(st: Status, -k: Bool) -> {Status.verdict(st) == None{}: Maybe<&2, Bool>} -> {st == Status.done{k}: Status} -> Empty:
+  h => d => Shared.Maybe.none_ne_some(
+    Bool,
+    k,
+    Equal.trans(
+      Maybe<&2, Bool>,
+      None{},
+      Status.verdict(st),
+      Some{k},
+      Equal.sym(Maybe<&2, Bool>, Status.verdict(st), None{}, h),
+      Equal.cong(Status, Maybe<&2, Bool>, x => Status.verdict(x), st, Status.done{k}, d)
+    )
+  )
+
+# a status that is not refused is not refused
+def Status.not_refused(st: Status) -> {Status.is_refused(st) == False{}: Bool} -> {st == Status.refused{}: Status} -> Empty:
+  h => d => Shared.Bool.false_ne_true(
+    Equal.trans(
+      Bool,
+      False{},
+      Status.is_refused(st),
+      True{},
+      Equal.sym(Bool, Status.is_refused(st), False{}, h),
+      Equal.cong(Status, Bool, x => Status.is_refused(x), st, Status.refused{}, d)
+    )
+  )
+
+# the status of a verdict is never refused
+def Status.verdict_not_refused(m: Maybe<&2, Bool>) -> {Status.is_refused(Status.of.verdict(m)) == False{}: Bool}:
+  match m:
+    case None{}:
+      {==}
+    case Some{k}:
+      {==}
+
+# a held request whose change has the view v is never refused
+def Status.view_not_refused(~Q: Data, ~view: Q -> View, s: State(Q), v: View, i: Id) -> {
+  Status.is_refused(Status.of.view(~Q, ~view, s, v, i)) == False{}: Bool
+}:
+  match v:
+    case View.root{ms}:
+      {==}
+    case View.on{c, o, m}:
+      Status.verdict_not_refused(Steps.verdict(~Q, State.chain(~Q, ~view, s, c), i))
+
+# Status.kept once the view v of the request is known
+def Status.kept.view(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~view: Q -> View,
+  +s: State(Q),
+  +t: State(Q),
+  +i: Id,
+  -k: Bool,
+  v: View
+) -> {
+  State.agrees(~Q, ~same, s, t) == True{}: Bool
+} -> {
+  Status.of.view(~Q, ~view, s, v, i) == Status.done{k}: Status
+} -> {Status.of.view(~Q, ~view, State.join(~Q, ~same, s, t), v, i) == Status.done{k}: Status}:
+  match v:
+    case View.root{ms}:
+      ag => h => h
+    case View.on{+c, o, m}:
+      ag => h =>
+        %Equal.sym(
+          Maybe<&2, Bool>,
+          Steps.verdict(~Q, State.chain(~Q, ~view, State.join(~Q, ~same, s, t), c), i),
+          Some{k},
+          List.first_prefix(
+            ~Step<Q>,
+            ~Bool,
+            ~Id,
+            ~(i => k => Step.verdict(Q, i, k)),
+            State.chain(~Q, ~view, s, c),
+            State.chain(~Q, ~view, State.join(~Q, ~same, s, t), c),
+            i,
+            k
+          )(
+            Equal.trans(
+              Maybe<&2, Bool>,
+              Steps.verdict(~Q, State.chain(~Q, ~view, s, c), i),
+              Status.verdict(Status.of.verdict(Steps.verdict(~Q, State.chain(~Q, ~view, s, c), i))),
+              Some{k},
+              Equal.sym(
+                Maybe<&2, Bool>,
+                Status.verdict(Status.of.verdict(Steps.verdict(~Q, State.chain(~Q, ~view, s, c), i))),
+                Steps.verdict(~Q, State.chain(~Q, ~view, s, c), i),
+                Status.verdict_of(Steps.verdict(~Q, State.chain(~Q, ~view, s, c), i))
+              ),
+              Equal.cong(Status, Maybe<&2, Bool>, x => Status.verdict(x), Status.of.verdict(Steps.verdict(~Q, State.chain(~Q, ~view, s, c), i)), Status.done{k}, h)
+            )
+          )(State.chain_kept(~Q, ~same, ~laws, ~view, s, t, c)(ag))
+        ): {Status.of.verdict(_) == Status.done{k}: Status}
+        {==}
+
+# Status.kept once the cell m of the request in s is known
+def Status.kept.at(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~view: Q -> View,
+  +s: State(Q),
+  +t: State(Q),
+  +i: Id,
+  -k: Bool,
+  m: Maybe<&2, Cell<Entry<Q>>>,
+  e: {Tries.Trie.get(Cell<Entry<Q>>, s, Slot.ask(i)) == m: Maybe<&2, Cell<Entry<Q>>>}
+) -> {
+  State.agrees(~Q, ~same, s, t) == True{}: Bool
+} -> {
+  Status.of(~Q, ~view, s, i, m) == Status.done{k}: Status
+} -> {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.done{k}: Status}:
+  match m:
+    case None{}:
+      ag => h => Empty.absurd({State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.done{k}: Status}, Status.not_done(Status.not_seen{}, k)({==})(h))
+    case Some{many{}}:
+      ag => h => Empty.absurd({State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.done{k}: Status}, Status.not_done(Status.refused{}, k)({==})(h))
+    case Some{one{Entry.vote{v}}}:
+      ag => h => Empty.absurd({State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.done{k}: Status}, Status.not_done(Status.not_seen{}, k)({==})(h))
+    case Some{one{Entry.ask{+j, +tm, +q}}}:
+      +ag => h =>
+        %Equal.sym(
+          Maybe<&2, Cell<Entry<Q>>>,
+          Tries.Trie.get(Cell<Entry<Q>>, State.join(~Q, ~same, s, t), Slot.ask(i)),
+          Some{one{Entry.ask{j, tm, q}}},
+          Cell.agrees_kept(~Entry<Q>, ~Entry.is_eq(~Q, ~same), ~Entry.laws(~Q, ~same, ~laws), s, t, Slot.ask(i), Entry.ask{j, tm, q})(ag)(e)
+        ): {Status.of(~Q, ~view, State.join(~Q, ~same, s, t), i, _) == Status.done{k}: Status}
+        Status.kept.view(~Q, ~same, ~laws, ~view, s, t, i, k, view(q))(ag)(h)
+
+# a request that a ledger decided stays decided, with the same verdict, in a
+# sync that contradicts nothing
+law State.status_kept:
+  for ~Q: Data
+  for ~same: Q -> Q -> Bool
+  for ~laws: Shared.Eq.Laws(Q, same)
+  for ~view: Q -> View
+  for +s: State(Q)
+  for +t: State(Q)
+  for +i: Id
+  for -k: Bool
+  {State.agrees(~Q, ~same, s, t) == True{}: Bool}
+    -> {State.status(~Q, ~view, s, i) == Status.done{k}: Status}
+    -> {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.done{k}: Status}
+
+def State.status_kept(Q, same, laws, view, s, t, i, k):
+  Status.kept.at(~Q, ~same, ~laws, ~view, s, t, i, k, Tries.Trie.get(Cell<Entry<Q>>, s, Slot.ask(i)), {==})
+
+# a contradicted request stays refused, whatever another cell it meets
+def Status.refused_pick(~Q: Data, ~same: Q -> Q -> Bool, ~view: Q -> View, s: State(Q), i: Id, x: Maybe<&2, Cell<Entry<Q>>>) -> {
+  Status.of(~Q, ~view, s, i, Tries.Trie.pick(~Cell<Entry<Q>>, ~Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), Some{many{}}, x)) == Status.refused{}: Status
+}:
+  match x:
+    case None{}:
+      {==}
+    case Some{y}:
+      {==}
+
+# State.refused_kept once the cell m of the request in s is known
+def Status.refused.at(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~view: Q -> View,
+  +s: State(Q),
+  +t: State(Q),
+  +i: Id,
+  m: Maybe<&2, Cell<Entry<Q>>>,
+  e: {Tries.Trie.get(Cell<Entry<Q>>, s, Slot.ask(i)) == m: Maybe<&2, Cell<Entry<Q>>>}
+) -> {
+  Status.of(~Q, ~view, s, i, m) == Status.refused{}: Status
+} -> {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.refused{}: Status}:
+  match m:
+    case None{}:
+      h => Empty.absurd({State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.refused{}: Status}, Status.not_refused(Status.not_seen{})({==})(h))
+    case Some{one{Entry.vote{v}}}:
+      h => Empty.absurd({State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.refused{}: Status}, Status.not_refused(Status.not_seen{})({==})(h))
+    case Some{one{Entry.ask{j, tm, +q}}}:
+      h => Empty.absurd(
+        {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.refused{}: Status},
+        Status.not_refused(Status.of.view(~Q, ~view, s, view(q), i))(Status.view_not_refused(~Q, ~view, s, view(q), i))(h)
+      )
+    case Some{many{}}:
+      h =>
+        %Equal.sym(
+          Maybe<&2, Cell<Entry<Q>>>,
+          Tries.Trie.get(Cell<Entry<Q>>, State.join(~Q, ~same, s, t), Slot.ask(i)),
+          Tries.Trie.pick(
+            ~Cell<Entry<Q>>,
+            ~Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+            Tries.Trie.get(Cell<Entry<Q>>, s, Slot.ask(i)),
+            Tries.Trie.get(Cell<Entry<Q>>, t, Slot.ask(i))
+          ),
+          Tries.Trie.get_union(~Cell<Entry<Q>>, ~Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), s, t, Slot.ask(i))
+        ): {Status.of(~Q, ~view, State.join(~Q, ~same, s, t), i, _) == Status.refused{}: Status}
+        %Equal.sym(Maybe<&2, Cell<Entry<Q>>>, Tries.Trie.get(Cell<Entry<Q>>, s, Slot.ask(i)), Some{many{}}, e):
+          {
+            Status.of(
+              ~Q,
+              ~view,
+              State.join(~Q, ~same, s, t),
+              i,
+              Tries.Trie.pick(~Cell<Entry<Q>>, ~Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), _, Tries.Trie.get(Cell<Entry<Q>>, t, Slot.ask(i)))
+            )
+              == Status.refused{}: Status
+          }
+        Status.refused_pick(~Q, ~same, ~view, State.join(~Q, ~same, s, t), i, Tries.Trie.get(Cell<Entry<Q>>, t, Slot.ask(i)))
+
+# a contradicted request stays refused in any sync
+law State.refused_kept:
+  for ~Q: Data
+  for ~same: Q -> Q -> Bool
+  for ~view: Q -> View
+  for +s: State(Q)
+  for +t: State(Q)
+  for +i: Id
+  {State.status(~Q, ~view, s, i) == Status.refused{}: Status}
+    -> {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.refused{}: Status}
+
+def State.refused_kept(Q, same, view, s, t, i):
+  Status.refused.at(~Q, ~same, ~view, s, t, i, Tries.Trie.get(Cell<Entry<Q>>, s, Slot.ask(i)), {==})

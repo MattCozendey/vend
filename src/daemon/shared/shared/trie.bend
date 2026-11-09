@@ -957,3 +957,37 @@ def Trie.under_union(
       Trie.under_union(~V, ~join, z1, z2, r)
     case bin{h1, z1, o1} bin{h2, z2, o2} Con{True{}, r}:
       Trie.under_union(~V, ~join, o1, o2, r)
+
+# a key under p is the key after p
+def Trie.get_under(-V: Data, t: Trie<V>, p: List<&2, Bool>, r: List<&2, Bool>) -> {
+  Trie.get(V, Trie.under(V, t, p), r) == Trie.get(V, t, List.append(&2, Bool, p, r)): Maybe<&2, V>
+}:
+  match t p:
+    case tip{} q:
+      {==}
+    case bin{h, z, o} Nil{}:
+      {==}
+    case bin{h, z, o} Con{False{}, q}:
+      Trie.get_under(V, z, q, r)
+    case bin{h, z, o} Con{True{}, q}:
+      Trie.get_under(V, o, q, r)
+
+# the entries under no key are all the entries
+def Trie.under_all(-V: Data, t: Trie<V>) -> {Trie.under(V, t, []) == t: Trie<V>}:
+  match t:
+    case tip{}:
+      {==}
+    case bin{h, z, o}:
+      {==}
+
+# the entries under p of the trie of one key after p are the trie of the rest
+def Trie.under_one(-V: Data, p: List<&2, Bool>, r: List<&2, Bool>, v: V) -> {
+  Trie.under(V, Trie.one(V, List.append(&2, Bool, p, r), v), p) == Trie.one(V, r, v): Trie<V>
+}:
+  match p:
+    case Nil{}:
+      Trie.under_all(V, Trie.one(V, r, v))
+    case Con{False{}, q}:
+      Trie.under_one(V, q, r, v)
+    case Con{True{}, q}:
+      Trie.under_one(V, q, r, v)
