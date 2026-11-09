@@ -3953,6 +3953,90 @@ def Decided.after(
       {Shared.Maybe.when(Vote, _, u => Some{x}) == Some{x}: Maybe<&2, Vote>}
     {==}
 
+# what a sole owner n at the tip of the line c needs to take the request q (id
+# i, time t) at once, then C: q is new and on c, the tip of c is at epoch e
+# and height h with n its only owner, n has not voted there, no fact says
+# where i is, and the judge gives the verdict k, r, ds at the head
+def State.Sole(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~view: Q -> View,
+  ~judge: State(Q) -> Q -> Maybe<&2, Vote> -> Maybe<&2, Verdict>,
+  n: String,
+  s: State(Q),
+  i: Id,
+  t: String,
+  q: Q,
+  c: Chain,
+  o: Maybe<&2, List<&2, String>>,
+  mk: Maybe<&2, List<&2, Bool>>,
+  e: U32,
+  h: U32,
+  last: Maybe<&2, Where>,
+  k: Bool,
+  r: Maybe<&2, Hashes.Hash>,
+  ds: List<&2, List<&2, U32>>,
+  C: Type
+) -> Type:
+  {State.get(~Q, s, Slot.ask(i)) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>}
+  -> {view(q) == View.On{c, o, mk}: View}
+  -> {
+    Line.tip(
+      ~Q,
+      ~view,
+      State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
+      c
+    )
+      == Some{Tip{e, [n], h, last}}: Maybe<&2, Tip>
+  }
+  -> {
+    Line.owners(
+      ~Q,
+      ~view,
+      State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
+      c,
+      e
+    )
+      == Some{[n]}: Maybe<&2, List<&2, String>>
+  }
+  -> {
+    State.get(
+      ~Q,
+      State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
+      Slot.vote(Where{c, e, h}, n)
+    )
+      == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>
+  }
+  -> {
+    State.get(
+      ~Q,
+      State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
+      Slot.where(i)
+    )
+      == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>
+  }
+  -> {
+    Vote.verdict(
+      ~Q,
+      ~view,
+      ~judge,
+      State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
+      q,
+      View.On{c, o, mk},
+      Line.head(
+        ~Q,
+        ~view,
+        State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
+        c,
+        e,
+        [n],
+        last
+      )
+    )
+      == Some{Verdict{k, r, ds}}: Maybe<&2, Verdict>
+  }
+  -> C
+
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a node that owns the tip of a line alone decides a request at once when it
 # takes it in: when it has not voted there, no fact says where the request
@@ -3977,64 +4061,26 @@ def State.ask_decides(
   +k: Bool,
   +r: Maybe<&2, Hashes.Hash>,
   +ds: List<&2, List<&2, U32>>
-) -> {State.get(~Ty, s, Slot.ask(i)) == None{}: Maybe<&2, Cells.Cell<Entry<Ty>>>}
-  -> {view(q) == View.On{c, o, mk}: View}
-  -> {
-    Line.tip(
-      ~Ty,
-      ~view,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-      c
-    )
-      == Some{Tip{e, [n], h, last}}: Maybe<&2, Tip>
-  }
-  -> {
-    Line.owners(
-      ~Ty,
-      ~view,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-      c,
-      e
-    )
-      == Some{[n]}: Maybe<&2, List<&2, String>>
-  }
-  -> {
-    State.get(
-      ~Ty,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-      Slot.vote(Where{c, e, h}, n)
-    )
-      == None{}: Maybe<&2, Cells.Cell<Entry<Ty>>>
-  }
-  -> {
-    State.get(
-      ~Ty,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-      Slot.where(i)
-    )
-      == None{}: Maybe<&2, Cells.Cell<Entry<Ty>>>
-  }
-  -> {
-    Vote.verdict(
-      ~Ty,
-      ~view,
-      ~judge,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-      q,
-      View.On{c, o, mk},
-      Line.head(
-        ~Ty,
-        ~view,
-        State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-        c,
-        e,
-        [n],
-        last
-      )
-    )
-      == Some{Verdict{k, r, ds}}: Maybe<&2, Verdict>
-  }
-  -> {
+) -> State.Sole(
+  ~Ty,
+  ~same,
+  ~view,
+  ~judge,
+  n,
+  s,
+  i,
+  t,
+  q,
+  c,
+  o,
+  mk,
+  e,
+  h,
+  last,
+  k,
+  r,
+  ds,
+  {
     State.status(
       ~Ty,
       ~view,
@@ -4042,7 +4088,8 @@ def State.ask_decides(
       i
     )
       == Status.Done{k}: Status
-  }:
+  }
+):
   +h1 => +h2 => ht => ho => +hg => +hw => hv =>
     +v = {View.On{c, o, mk}: View}
     +w = {Where{c, e, h}: Where}
@@ -4188,64 +4235,26 @@ def State.ask_decided(
   +k: Bool,
   +r: Maybe<&2, Hashes.Hash>,
   +ds: List<&2, List<&2, U32>>
-) -> {State.get(~Ty, s, Slot.ask(i)) == None{}: Maybe<&2, Cells.Cell<Entry<Ty>>>}
-  -> {view(q) == View.On{c, o, mk}: View}
-  -> {
-    Line.tip(
-      ~Ty,
-      ~view,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-      c
-    )
-      == Some{Tip{e, [n], h, last}}: Maybe<&2, Tip>
-  }
-  -> {
-    Line.owners(
-      ~Ty,
-      ~view,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-      c,
-      e
-    )
-      == Some{[n]}: Maybe<&2, List<&2, String>>
-  }
-  -> {
-    State.get(
-      ~Ty,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-      Slot.vote(Where{c, e, h}, n)
-    )
-      == None{}: Maybe<&2, Cells.Cell<Entry<Ty>>>
-  }
-  -> {
-    State.get(
-      ~Ty,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-      Slot.where(i)
-    )
-      == None{}: Maybe<&2, Cells.Cell<Entry<Ty>>>
-  }
-  -> {
-    Vote.verdict(
-      ~Ty,
-      ~view,
-      ~judge,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-      q,
-      View.On{c, o, mk},
-      Line.head(
-        ~Ty,
-        ~view,
-        State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-        c,
-        e,
-        [n],
-        last
-      )
-    )
-      == Some{Verdict{k, r, ds}}: Maybe<&2, Verdict>
-  }
-  -> {
+) -> State.Sole(
+  ~Ty,
+  ~same,
+  ~view,
+  ~judge,
+  n,
+  s,
+  i,
+  t,
+  q,
+  c,
+  o,
+  mk,
+  e,
+  h,
+  last,
+  k,
+  r,
+  ds,
+  {
     State.decided(
       ~Ty,
       ~view,
@@ -4253,7 +4262,8 @@ def State.ask_decided(
       i
     )
       == Some{Vote{i, k, View.On{c, o, mk}, r}}: Maybe<&2, Vote>
-  }:
+  }
+):
   +h1 => +h2 => ht => ho => +hg => +hw => hv =>
     +v = {View.On{c, o, mk}: View}
     +w = {Where{c, e, h}: Where}
@@ -5809,64 +5819,26 @@ def State.ask_data(
   +k: Bool,
   +r: Maybe<&2, Hashes.Hash>,
   +ds: List<&2, List<&2, U32>>
-) -> {State.get(~Ty, s, Slot.ask(i)) == None{}: Maybe<&2, Cells.Cell<Entry<Ty>>>}
-  -> {view(q) == View.On{c, o, mk}: View}
-  -> {
-    Line.tip(
-      ~Ty,
-      ~view,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-      c
-    )
-      == Some{Tip{e, [n], h, last}}: Maybe<&2, Tip>
-  }
-  -> {
-    Line.owners(
-      ~Ty,
-      ~view,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-      c,
-      e
-    )
-      == Some{[n]}: Maybe<&2, List<&2, String>>
-  }
-  -> {
-    State.get(
-      ~Ty,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-      Slot.vote(Where{c, e, h}, n)
-    )
-      == None{}: Maybe<&2, Cells.Cell<Entry<Ty>>>
-  }
-  -> {
-    State.get(
-      ~Ty,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-      Slot.where(i)
-    )
-      == None{}: Maybe<&2, Cells.Cell<Entry<Ty>>>
-  }
-  -> {
-    Vote.verdict(
-      ~Ty,
-      ~view,
-      ~judge,
-      State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-      q,
-      View.On{c, o, mk},
-      Line.head(
-        ~Ty,
-        ~view,
-        State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-        c,
-        e,
-        [n],
-        last
-      )
-    )
-      == Some{Verdict{k, r, ds}}: Maybe<&2, Verdict>
-  }
-  -> {
+) -> State.Sole(
+  ~Ty,
+  ~same,
+  ~view,
+  ~judge,
+  n,
+  s,
+  i,
+  t,
+  q,
+  c,
+  o,
+  mk,
+  e,
+  h,
+  last,
+  k,
+  r,
+  ds,
+  {
     Data.fresh(
       ~Ty,
       ~same,
@@ -5874,8 +5846,8 @@ def State.ask_data(
       State.put(~Ty, ~same, s, Slot.ask(i), Entry.Ask{i, t, q})
     )
       == True{}: Bool
-  }
-  -> {Data.holds(~Ty, State.ask(~Ty, ~same, ~view, ~judge, n, s, i, t, q), ds) == True{}: Bool}:
+  } -> {Data.holds(~Ty, State.ask(~Ty, ~same, ~view, ~judge, n, s, i, t, q), ds) == True{}: Bool}
+):
   +h1 => +h2 => ht => ho => +hg => +hw => hv => hf =>
     +v = {View.On{c, o, mk}: View}
     +w = {Where{c, e, h}: Where}
@@ -5995,64 +5967,26 @@ law State.ask_sole:
   for +k: Bool
   for +r: Maybe<&2, Hashes.Hash>
   for +ds: List<&2, List<&2, U32>>
-  {State.get(~Q, s, Slot.ask(i)) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>}
-    -> {view(q) == View.On{c, o, mk}: View}
-    -> {
-      Line.tip(
-        ~Q,
-        ~view,
-        State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-        c
-      )
-        == Some{Tip{e, [n], h, last}}: Maybe<&2, Tip>
-    }
-    -> {
-      Line.owners(
-        ~Q,
-        ~view,
-        State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-        c,
-        e
-      )
-        == Some{[n]}: Maybe<&2, List<&2, String>>
-    }
-    -> {
-      State.get(
-        ~Q,
-        State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-        Slot.vote(Where{c, e, h}, n)
-      )
-        == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>
-    }
-    -> {
-      State.get(
-        ~Q,
-        State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-        Slot.where(i)
-      )
-        == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>
-    }
-    -> {
-      Vote.verdict(
-        ~Q,
-        ~view,
-        ~judge,
-        State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-        q,
-        View.On{c, o, mk},
-        Line.head(
-          ~Q,
-          ~view,
-          State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q}),
-          c,
-          e,
-          [n],
-          last
-        )
-      )
-        == Some{Verdict{k, r, ds}}: Maybe<&2, Verdict>
-    }
-    -> {
+  State.Sole(
+    ~Q,
+    ~same,
+    ~view,
+    ~judge,
+    n,
+    s,
+    i,
+    t,
+    q,
+    c,
+    o,
+    mk,
+    e,
+    h,
+    last,
+    k,
+    r,
+    ds,
+    {
       Data.fresh(
         ~Q,
         ~same,
@@ -6060,8 +5994,7 @@ law State.ask_sole:
         State.put(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q})
       )
         == True{}: Bool
-    }
-    -> (
+    } -> (
       {
         State.status(
           ~Q,
@@ -6082,6 +6015,7 @@ law State.ask_sole:
         }
         & {Data.holds(~Q, State.ask(~Q, ~same, ~view, ~judge, n, s, i, t, q), ds) == True{}: Bool}
     )
+  )
 
 def State.ask_sole(ty, same, laws, view, judge, n, s, i, t, q, c, o, mk, e, h, last, k, r, ds):
   +h1 => +hv => +ht => +ho => +hg => +hw => +hd => hf =>

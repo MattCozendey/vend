@@ -76,6 +76,23 @@ def Trie.size(-V: Data, t: Trie<V>) -> Nat:
       zs os = Trie.size(V, z) Trie.size(V, o)
       1n+Nat.add(zs, os)
 
+# t holds the key k
+def Trie.has(-V: Data, t: Trie<V>, k: List<&2, Bool>) -> Bool:
+  Maybe.is_some(&2, V, Trie.get(V, t, k))
+
+# t with the key of each of xs, as a set
+def Trie.put_keys(
+  ~A: Data,
+  ~key: A -> List<&2, Bool>,
+  xs: List<&2, A>,
+  t: Trie<Unit>
+) -> Trie<Unit>:
+  match xs:
+    case Nil{}:
+      t
+    case Con{x, r}:
+      Trie.put_keys(~A, ~key, r, Trie.set(Unit, t, key(x), Unit{}))
+
 # the entries of t whose keys start with k, under the rest of their keys
 def Trie.under(-V: Data, t: Trie<V>, k: List<&2, Bool>) -> Trie<V>:
   match t k:
