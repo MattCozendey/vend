@@ -3719,6 +3719,60 @@ def Tree.list_skip.leaf(
     case False{}:
       h => h
 
+# a binding of keys that Binding.is_eq compares as c (the keys are equal
+# when it is True) is the other one, when Binding.is_eq says so
+def Binding.is_eq_sound.at(
+  k1: List<&2, U32>,
+  v1: List<&2, U32>,
+  k2: List<&2, U32>,
+  v2: List<&2, U32>,
+  c: Bool,
+  ec: {Shared.List.is_eq(~U32, ~U32.is_eq, k1, k2) == c: Bool}
+) -> {
+  Shared.Bool.when(
+    Bool,
+    c,
+    u => Shared.List.is_eq(~U32, ~U32.is_eq, v1, v2),
+    u => False{}
+  )
+    == True{}: Bool
+} -> {Binding{k1, v1} == Binding{k2, v2}: Binding}:
+  match c:
+    case True{}:
+      e =>
+        %Shared.List.is_eq_sound(
+          ~U32,
+          ~U32.is_eq,
+          ~Shared.U32.laws(),
+          k1,
+          k2
+        )(ec): {Binding{k1, v1} == Binding{_, v2}: Binding}
+        %Shared.List.is_eq_sound(
+          ~U32,
+          ~U32.is_eq,
+          ~Shared.U32.laws(),
+          v1,
+          v2
+        )(e): {Binding{k1, v1} == Binding{k1, _}: Binding}
+        {==}
+    case False{}:
+      e => Empty.absurd({Binding{k1, v1} == Binding{k2, v2}: Binding}, Shared.Bool.false_ne_true(e))
+
+# Binding.is_eq is True only for equal bindings
+def Binding.is_eq_sound(
+  a: Binding,
+  b: Binding
+) -> {Binding.is_eq(a, b) == True{}: Bool} -> {a == b: Binding}:
+  match a b:
+    case Binding{+k1, v1} Binding{+k2, v2}:
+      Binding.is_eq_sound.at(k1, v1, k2, v2, Shared.List.is_eq(~U32, ~U32.is_eq, k1, k2), {==})
+
+# the leaf of a binding
+def Binding.leaf(b: Binding) -> Maybe<&2, Node>:
+  match b:
+    case Binding{k, v}:
+      Some{Node.leaf{k, v}}
+
 # the path of a key has 64 nibbles
 def Nibbles.of_length(h: Hashes.Hash) -> {List.length(&2, Nat, Nibbles.of(h)) == 64n: Nat}:
   match h:
@@ -4707,5 +4761,914 @@ law Tree.list_complete:
 
 def Tree.list_complete(ty, fetch, s, h, k, v):
   e => Tree.list_root(~ty, ~fetch, s, k, v, Tree.path(k), Tree.part(~ty, ~fetch, s, h), {==}, e)
+
+# the key of a binding
+def Binding.key(b: Binding) -> List<&2, U32>:
+  match b:
+    case Binding{k, v}:
+      k
+
+# a binding of k and v, found under the parts ps of a branch whose path is pre,
+# from the place x: the part j there, at the place t, reads v for k
+def Tree.Found(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  k: List<&2, U32>,
+  v: List<&2, U32>,
+  ps: List<&2, Maybe<&2, Hashes.Hash>>,
+  pre: List<&2, Nat>,
+  x: Nat
+) -> Type:
+  Sigma<
+    &1,
+    &1,
+    Nat,
+    j => Sigma<
+      &1,
+      &1,
+      Nat,
+      t => {
+        Nat.add(j, x) == t: Nat
+      }
+        & (
+          {
+            List.take(
+              &2,
+              Nat,
+              Tree.path(k),
+              List.length(&2, Nat, List.append(&2, Nat, pre, [t]))
+            )
+              == List.append(&2, Nat, pre, [t]): List<&2, Nat>
+          }
+            & {
+              Tree.get.go(
+                ~S,
+                ~fetch,
+                s,
+                List.drop(
+                  &2,
+                  Nat,
+                  Tree.path(k),
+                  List.length(&2, Nat, List.append(&2, Nat, pre, [t]))
+                ),
+                k,
+                Tree.part(~S, ~fetch, s, Parts.at(ps, j))
+              )
+                == Some{v}: Maybe<&2, List<&2, U32>>
+            }
+        )>>
+
+# a binding found under the parts after the first is found under them all
+def Tree.Found.next(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  k: List<&2, U32>,
+  v: List<&2, U32>,
+  y: Maybe<&2, Hashes.Hash>,
+  r: List<&2, Maybe<&2, Hashes.Hash>>,
+  pre: List<&2, Nat>,
+  x: Nat,
+  fd: Tree.Found(~S, ~fetch, s, k, v, r, pre, 1n+x)
+) -> Tree.Found(~S, ~fetch, s, k, v, Con{y, r}, pre, x):
+  match fd:
+    case Tuple{+j, Tuple{t, Tuple{ht, Tuple{hq, hg}}}}:
+      (
+        1n+j,
+        (
+          t,
+          (
+            Equal.trans(
+              Nat,
+              1n+Nat.add(j, x),
+              Nat.add(j, 1n+x),
+              t,
+              Equal.sym(Nat, Nat.add(j, 1n+x), 1n+Nat.add(j, x), Shared.Nat.add_succ(j, x)),
+              ht
+            ),
+            (hq, hg)
+          )
+        )
+      )
+
+# a key whose path starts with q, then t, read along what follows in a branch
+# of parts qs, reads in the branch m along what follows q
+def Tree.list_found.up(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  k: List<&2, U32>,
+  -v: List<&2, U32>,
+  q: List<&2, Nat>,
+  -m: Maybe<&2, Node>,
+  qs: List<&2, Maybe<&2, Hashes.Hash>>,
+  -j: Nat,
+  t: Nat,
+  jt: {j == t: Nat},
+  em: {m == Some{Node.branch{qs}}: Maybe<&2, Node>},
+  hq: {
+    List.take(
+      &2,
+      Nat,
+      Tree.path(k),
+      List.length(&2, Nat, List.append(&2, Nat, q, [t]))
+    )
+      == List.append(&2, Nat, q, [t]): List<&2, Nat>
+  },
+  hg: {
+    Tree.get.go(
+      ~S,
+      ~fetch,
+      s,
+      List.drop(&2, Nat, Tree.path(k), List.length(&2, Nat, List.append(&2, Nat, q, [t]))),
+      k,
+      Tree.part(~S, ~fetch, s, Parts.at(qs, j))
+    )
+      == Some{v}: Maybe<&2, List<&2, U32>>
+  }
+) -> {
+  Tree.get.go(
+    ~S,
+    ~fetch,
+    s,
+    List.drop(&2, Nat, Tree.path(k), List.length(&2, Nat, q)),
+    k,
+    m
+  )
+    == Some{v}: Maybe<&2, List<&2, U32>>
+}:
+  %Equal.sym(
+    Maybe<&2, Node>,
+    m,
+    Some{Node.branch{qs}},
+    em
+  ): {
+    Tree.get.go(
+      ~S,
+      ~fetch,
+      s,
+      List.drop(&2, Nat, Tree.path(k), List.length(&2, Nat, q)),
+      k,
+      _
+    )
+      == Some{v}: Maybe<&2, List<&2, U32>>
+  }
+  %Equal.sym(
+    List<&2, Nat>,
+    List.drop(&2, Nat, Tree.path(k), List.length(&2, Nat, q)),
+    t <> List.drop(&2, Nat, Tree.path(k), List.length(&2, Nat, List.append(&2, Nat, q, [t]))),
+    Shared.List.drop_at(Nat, Tree.path(k), q, t, hq)
+  ): {Tree.get.go(~S, ~fetch, s, _, k, Some{Node.branch{qs}}) == Some{v}: Maybe<&2, List<&2, U32>>}
+  %jt: {
+    Tree.get.go(
+      ~S,
+      ~fetch,
+      s,
+      List.drop(&2, Nat, Tree.path(k), List.length(&2, Nat, List.append(&2, Nat, q, [t]))),
+      k,
+      Tree.part(~S, ~fetch, s, Parts.at(qs, _))
+    )
+      == Some{v}: Maybe<&2, List<&2, U32>>
+  }
+  hg
+
+# a binding found under a branch that is the first part is found under the parts
+def Tree.Found.up(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  +k: List<&2, U32>,
+  v: List<&2, U32>,
+  y: Maybe<&2, Hashes.Hash>,
+  r: List<&2, Maybe<&2, Hashes.Hash>>,
+  +pre: List<&2, Nat>,
+  +x: Nat,
+  qs: List<&2, Maybe<&2, Hashes.Hash>>,
+  em: {Tree.part(~S, ~fetch, s, y) == Some{Node.branch{qs}}: Maybe<&2, Node>},
+  fd: Tree.Found(~S, ~fetch, s, k, v, qs, List.append(&2, Nat, pre, [x]), 0n)
+) -> Tree.Found(~S, ~fetch, s, k, v, Con{y, r}, pre, x):
+  match fd:
+    case Tuple{j, Tuple{+t, Tuple{ht, Tuple{+hq, hg}}}}:
+      (
+        0n,
+        (
+          x,
+          (
+            {==},
+            (
+              Shared.List.take_shorten(Nat, Tree.path(k), List.append(&2, Nat, pre, [x]), t, hq),
+              Tree.list_found.up(
+                ~S,
+                ~fetch,
+                s,
+                k,
+                v,
+                List.append(&2, Nat, pre, [x]),
+                Tree.part(~S, ~fetch, s, y),
+                qs,
+                j,
+                t,
+                Equal.trans(
+                  Nat,
+                  j,
+                  Nat.add(j, 0n),
+                  t,
+                  Equal.sym(Nat, Nat.add(j, 0n), j, Shared.Nat.add_zero(j)),
+                  ht
+                ),
+                em,
+                hq,
+                hg
+              )
+            )
+          )
+        )
+      )
+
+# the leaf of k2 and v2, the binding of k and v, reads v for k along any path
+def Tree.list_found.read(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  k: List<&2, U32>,
+  v: List<&2, U32>,
+  k2: List<&2, U32>,
+  v2: List<&2, U32>,
+  y: Maybe<&2, Hashes.Hash>,
+  pth: List<&2, Nat>,
+  em: {Tree.part(~S, ~fetch, s, y) == Some{Node.leaf{k2, v2}}: Maybe<&2, Node>},
+  eb: {Binding{k2, v2} == Binding{k, v}: Binding}
+) -> {
+  Tree.get.go(
+    ~S,
+    ~fetch,
+    s,
+    pth,
+    k,
+    Tree.part(~S, ~fetch, s, y)
+  )
+    == Some{v}: Maybe<&2, List<&2, U32>>
+}:
+  %Equal.sym(
+    Maybe<&2, Node>,
+    Tree.part(~S, ~fetch, s, y),
+    Some{Node.leaf{k2, v2}},
+    em
+  ): {Tree.get.go(~S, ~fetch, s, pth, k, _) == Some{v}: Maybe<&2, List<&2, U32>>}
+  %Equal.sym(
+    Maybe<&2, Node>,
+    Some{Node.leaf{k2, v2}},
+    Some{Node.leaf{k, v}},
+    Equal.cong(Binding, Maybe<&2, Node>, b => Binding.leaf(b), Binding{k2, v2}, Binding{k, v}, eb)
+  ): {Tree.get.go(~S, ~fetch, s, pth, k, _) == Some{v}: Maybe<&2, List<&2, U32>>}
+  Tree.read_leaf(~S, ~fetch, s, pth, k, v)
+
+# a key that leads as k2 does, when k2 is k
+def Tree.leads_of(
+  -k: List<&2, U32>,
+  -k2: List<&2, U32>,
+  -q: List<&2, Nat>,
+  ek: {k2 == k: List<&2, U32>},
+  ec: {Tree.leads(k2, q) == True{}: Bool}
+) -> {Tree.leads(k, q) == True{}: Bool}:
+  %ek: {Tree.leads(_, q) == True{}: Bool}
+  ec
+
+# a or b holds, so G holds when each gives it
+def Tree.or_cases(
+  -G: Type,
+  a: Bool,
+  -b: Bool,
+  ga: {a == True{}: Bool} -> G,
+  gb: {b == True{}: Bool} -> G
+) -> {Bool.or(a, b) == True{}: Bool} -> G:
+  match a:
+    case True{}:
+      e => ga({==})
+    case False{}:
+      e => gb(e)
+
+# the binding of k and v, in the listing of parts whose first is a leaf of k2
+# and v2 that is listed (c: the leaf is the binding of k and v), is found there
+def Tree.list_found.hit(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  s: S,
+  y: Maybe<&2, Hashes.Hash>,
+  r: List<&2, Maybe<&2, Hashes.Hash>>,
+  +pre: List<&2, Nat>,
+  +x: Nat,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +k2: List<&2, U32>,
+  +v2: List<&2, U32>,
+  d: Bool,
+  ed: {Binding.is_eq(Binding{k2, v2}, Binding{k, v}) == d: Bool},
+  ec: {Tree.leads(k2, List.append(&2, Nat, pre, [x])) == True{}: Bool},
+  em: {Tree.part(~S, ~fetch, s, y) == Some{Node.leaf{k2, v2}}: Maybe<&2, Node>},
+  ih: {
+    List.contains(
+      ~Binding,
+      ~Binding.is_eq,
+      Tree.list.go(~S, ~fetch, f, s, r, pre, 1n+x, Tree.first(~S, ~fetch, s, r)),
+      Binding{k, v}
+    )
+      == True{}: Bool
+  } -> Tree.Found(~S, ~fetch, s, k, v, Con{y, r}, pre, x)
+) -> {
+  List.any.if(
+    u => List.contains(
+      ~Binding,
+      ~Binding.is_eq,
+      Tree.list.go(~S, ~fetch, f, s, r, pre, 1n+x, Tree.first(~S, ~fetch, s, r)),
+      Binding{k, v}
+    ),
+    d
+  )
+    == True{}: Bool
+} -> Tree.Found(~S, ~fetch, s, k, v, Con{y, r}, pre, x):
+  match d:
+    case True{}:
+      e =>
+        +eb = Binding.is_eq_sound(Binding{k2, v2}, Binding{k, v})(ed)
+        (
+          0n,
+          (
+            x,
+            (
+              {==},
+              (
+                Shared.List.is_eq_sound(
+                  ~Nat,
+                  ~Nat.is_eq,
+                  ~Shared.Nat.laws(),
+                  List.take(
+                    &2,
+                    Nat,
+                    Tree.path(k),
+                    List.length(&2, Nat, List.append(&2, Nat, pre, [x]))
+                  ),
+                  List.append(&2, Nat, pre, [x])
+                )(
+                  Tree.leads_of(
+                    k,
+                    k2,
+                    List.append(&2, Nat, pre, [x]),
+                    Equal.cong(
+                      Binding,
+                      List<&2, U32>,
+                      b => Binding.key(b),
+                      Binding{k2, v2},
+                      Binding{k, v},
+                      eb
+                    ),
+                    ec
+                  )
+                ),
+                Tree.list_found.read(
+                  ~S,
+                  ~fetch,
+                  s,
+                  k,
+                  v,
+                  k2,
+                  v2,
+                  y,
+                  List.drop(
+                    &2,
+                    Nat,
+                    Tree.path(k),
+                    List.length(&2, Nat, List.append(&2, Nat, pre, [x]))
+                  ),
+                  em,
+                  eb
+                )
+              )
+            )
+          )
+        )
+    case False{}:
+      e => ih(e)
+
+# the binding of k and v, in the listing of parts whose first is a leaf of k2
+# and v2, listed as c says, is found there
+def Tree.list_found.leaf(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  s: S,
+  y: Maybe<&2, Hashes.Hash>,
+  r: List<&2, Maybe<&2, Hashes.Hash>>,
+  pre: List<&2, Nat>,
+  x: Nat,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +k2: List<&2, U32>,
+  +v2: List<&2, U32>,
+  c: Bool,
+  ec: {Tree.leads(k2, List.append(&2, Nat, pre, [x])) == c: Bool},
+  em: {Tree.part(~S, ~fetch, s, y) == Some{Node.leaf{k2, v2}}: Maybe<&2, Node>},
+  ih: {
+    List.contains(
+      ~Binding,
+      ~Binding.is_eq,
+      Tree.list.go(~S, ~fetch, f, s, r, pre, 1n+x, Tree.first(~S, ~fetch, s, r)),
+      Binding{k, v}
+    )
+      == True{}: Bool
+  } -> Tree.Found(~S, ~fetch, s, k, v, Con{y, r}, pre, x)
+) -> {
+  List.contains(
+    ~Binding,
+    ~Binding.is_eq,
+    Shared.Bool.when(
+      List<&2, Binding>,
+      c,
+      u => Binding{
+        k2,
+        v2
+      }
+        <> Tree.list.go(~S, ~fetch, f, s, r, pre, 1n+x, Tree.first(~S, ~fetch, s, r)),
+      u => Tree.list.go(~S, ~fetch, f, s, r, pre, 1n+x, Tree.first(~S, ~fetch, s, r))
+    ),
+    Binding{k, v}
+  )
+    == True{}: Bool
+} -> Tree.Found(~S, ~fetch, s, k, v, Con{y, r}, pre, x):
+  match c:
+    case True{}:
+      Tree.list_found.hit(
+        ~S,
+        ~fetch,
+        f,
+        s,
+        y,
+        r,
+        pre,
+        x,
+        k,
+        v,
+        k2,
+        v2,
+        Binding.is_eq(Binding{k2, v2}, Binding{k, v}),
+        {==},
+        ec,
+        em,
+        ih
+      )
+    case False{}:
+      ih
+
+# bend-lint: expect-begin bend-lint-rules/language/decreasing_call@warning -- g is f itself, bound by the match; the checker accepts these calls
+# bend-lint: expect-begin bend-lint-rules/performance/append_in_loop@warning -- a proof does not run
+# a binding in the listing of the parts ps of a branch whose path is pre, from
+# the place x, whose first node is m, is found there; f levels deep at most
+def Tree.list_found.go(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  ps: List<&2, Maybe<&2, Hashes.Hash>>,
+  +pre: List<&2, Nat>,
+  +x: Nat,
+  m: Maybe<&2, Node>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  em: {Tree.first(~S, ~fetch, s, ps) == m: Maybe<&2, Node>}
+) -> {
+  List.contains(
+    ~Binding,
+    ~Binding.is_eq,
+    Tree.list.go(~S, ~fetch, f, s, ps, pre, x, m),
+    Binding{k, v}
+  )
+    == True{}: Bool
+} -> Tree.Found(~S, ~fetch, s, k, v, ps, pre, x):
+  match f ps m:
+    case g Nil{} w:
+      e => Empty.absurd(Tree.Found(~S, ~fetch, s, k, v, [], pre, x), Shared.Bool.false_ne_true(e))
+    case g Con{+y, +r} Some{Node.leaf{+k2, v2}}:
+      Tree.list_found.leaf(
+        ~S,
+        ~fetch,
+        g,
+        s,
+        y,
+        r,
+        pre,
+        x,
+        k,
+        v,
+        k2,
+        v2,
+        Tree.leads(k2, List.append(&2, Nat, pre, [x])),
+        {==},
+        em,
+        e2 => Tree.Found.next(
+          ~S,
+          ~fetch,
+          s,
+          k,
+          v,
+          y,
+          r,
+          pre,
+          x,
+          Tree.list_found.go(
+            ~S,
+            ~fetch,
+            g,
+            s,
+            r,
+            pre,
+            1n+x,
+            Tree.first(~S, ~fetch, s, r),
+            k,
+            v,
+            {==}
+          )(e2)
+        )
+      )
+    case 1n+(+p) Con{+y, +r} Some{Node.branch{+qs}}:
+      +below = Tree.list.go(
+        ~S,
+        ~fetch,
+        p,
+        s,
+        qs,
+        List.append(&2, Nat, pre, [x]),
+        0n,
+        Tree.first(~S, ~fetch, s, qs)
+      )
+      rest = Tree.list.go(~S, ~fetch, 1n+p, s, r, pre, 1n+x, Tree.first(~S, ~fetch, s, r))
+      e => Tree.or_cases(
+        Tree.Found(~S, ~fetch, s, k, v, Con{y, r}, pre, x),
+        List.contains(~Binding, ~Binding.is_eq, below, Binding{k, v}),
+        List.contains(~Binding, ~Binding.is_eq, rest, Binding{k, v}),
+        e1 => Tree.Found.up(
+          ~S,
+          ~fetch,
+          s,
+          k,
+          v,
+          y,
+          r,
+          pre,
+          x,
+          qs,
+          em,
+          Tree.list_found.go(
+            ~S,
+            ~fetch,
+            p,
+            s,
+            qs,
+            List.append(&2, Nat, pre, [x]),
+            0n,
+            Tree.first(~S, ~fetch, s, qs),
+            k,
+            v,
+            {==}
+          )(e1)
+        ),
+        e2 => Tree.Found.next(
+          ~S,
+          ~fetch,
+          s,
+          k,
+          v,
+          y,
+          r,
+          pre,
+          x,
+          Tree.list_found.go(
+            ~S,
+            ~fetch,
+            1n+p,
+            s,
+            r,
+            pre,
+            1n+x,
+            Tree.first(~S, ~fetch, s, r),
+            k,
+            v,
+            {==}
+          )(e2)
+        )
+      )(
+        Equal.trans(
+          Bool,
+          Bool.or(
+            List.contains(~Binding, ~Binding.is_eq, below, Binding{k, v}),
+            List.contains(~Binding, ~Binding.is_eq, rest, Binding{k, v})
+          ),
+          List.contains(
+            ~Binding,
+            ~Binding.is_eq,
+            List.append(&2, Binding, below, rest),
+            Binding{k, v}
+          ),
+          True{},
+          Equal.sym(
+            Bool,
+            List.contains(
+              ~Binding,
+              ~Binding.is_eq,
+              List.append(&2, Binding, below, rest),
+              Binding{k, v}
+            ),
+            Bool.or(
+              List.contains(~Binding, ~Binding.is_eq, below, Binding{k, v}),
+              List.contains(~Binding, ~Binding.is_eq, rest, Binding{k, v})
+            ),
+            Shared.List.contains_append(~Binding, ~Binding.is_eq, below, rest, Binding{k, v})
+          ),
+          e
+        )
+      )
+    case 0n Con{+y, +r} Some{Node.branch{qs}}:
+      e2 => Tree.Found.next(
+        ~S,
+        ~fetch,
+        s,
+        k,
+        v,
+        y,
+        r,
+        pre,
+        x,
+        Tree.list_found.go(
+          ~S,
+          ~fetch,
+          0n,
+          s,
+          r,
+          pre,
+          1n+x,
+          Tree.first(~S, ~fetch, s, r),
+          k,
+          v,
+          {==}
+        )(e2)
+      )
+    case g Con{+y, +r} Some{Node.empty{}}:
+      e2 => Tree.Found.next(
+        ~S,
+        ~fetch,
+        s,
+        k,
+        v,
+        y,
+        r,
+        pre,
+        x,
+        Tree.list_found.go(
+          ~S,
+          ~fetch,
+          g,
+          s,
+          r,
+          pre,
+          1n+x,
+          Tree.first(~S, ~fetch, s, r),
+          k,
+          v,
+          {==}
+        )(e2)
+      )
+    case g Con{+y, +r} None{}:
+      e2 => Tree.Found.next(
+        ~S,
+        ~fetch,
+        s,
+        k,
+        v,
+        y,
+        r,
+        pre,
+        x,
+        Tree.list_found.go(
+          ~S,
+          ~fetch,
+          g,
+          s,
+          r,
+          pre,
+          1n+x,
+          Tree.first(~S, ~fetch, s, r),
+          k,
+          v,
+          {==}
+        )(e2)
+      )
+# bend-lint: expect-end bend-lint-rules/language/decreasing_call@warning
+# bend-lint: expect-end bend-lint-rules/performance/append_in_loop@warning
+
+# a binding found under the parts qs of the root reads at the root branch
+def Tree.Found.root(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  +k: List<&2, U32>,
+  v: List<&2, U32>,
+  qs: List<&2, Maybe<&2, Hashes.Hash>>,
+  fd: Tree.Found(~S, ~fetch, s, k, v, qs, [], 0n)
+) -> {
+  Tree.get.go(
+    ~S,
+    ~fetch,
+    s,
+    Tree.path(k),
+    k,
+    Some{Node.branch{qs}}
+  )
+    == Some{v}: Maybe<&2, List<&2, U32>>
+}:
+  match fd:
+    case Tuple{j, Tuple{t, Tuple{ht, Tuple{hq, hg}}}}:
+      %Shared.List.drop_zero(
+        &2,
+        Nat,
+        Tree.path(k)
+      ): {
+        Tree.get.go(~S, ~fetch, s, _, k, Some{Node.branch{qs}}) == Some{v}: Maybe<&2, List<&2, U32>>
+      }
+      Tree.list_found.up(
+        ~S,
+        ~fetch,
+        s,
+        k,
+        v,
+        [],
+        Some{Node.branch{qs}},
+        qs,
+        j,
+        t,
+        Equal.trans(
+          Nat,
+          j,
+          Nat.add(j, 0n),
+          t,
+          Equal.sym(Nat, Nat.add(j, 0n), j, Shared.Nat.add_zero(j)),
+          ht
+        ),
+        {==},
+        hq,
+        hg
+      )
+
+# the binding of k and v, when the leaf of k2 and v2 is it, reads v for k
+def Tree.list_found.root.hit(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  k2: List<&2, U32>,
+  v2: List<&2, U32>,
+  d: Bool,
+  ed: {Binding.is_eq(Binding{k2, v2}, Binding{k, v}) == d: Bool}
+) -> {
+  List.any.if(u => List.contains(~Binding, ~Binding.is_eq, [], Binding{k, v}), d) == True{}: Bool
+} -> {
+  Tree.get.go(
+    ~S,
+    ~fetch,
+    s,
+    Tree.path(k),
+    k,
+    Some{Node.leaf{k2, v2}}
+  )
+    == Some{v}: Maybe<&2, List<&2, U32>>
+}:
+  match d:
+    case True{}:
+      e =>
+        %Equal.sym(
+          Maybe<&2, Node>,
+          Some{Node.leaf{k2, v2}},
+          Some{Node.leaf{k, v}},
+          Equal.cong(
+            Binding,
+            Maybe<&2, Node>,
+            b => Binding.leaf(b),
+            Binding{k2, v2},
+            Binding{k, v},
+            Binding.is_eq_sound(Binding{k2, v2}, Binding{k, v})(ed)
+          )
+        ): {Tree.get.go(~S, ~fetch, s, Tree.path(k), k, _) == Some{v}: Maybe<&2, List<&2, U32>>}
+        Tree.read_leaf(~S, ~fetch, s, Tree.path(k), k, v)
+    case False{}:
+      e => Empty.absurd(
+        {
+          Tree.get.go(
+            ~S,
+            ~fetch,
+            s,
+            Tree.path(k),
+            k,
+            Some{Node.leaf{k2, v2}}
+          )
+            == Some{v}: Maybe<&2, List<&2, U32>>
+        },
+        Shared.Bool.false_ne_true(e)
+      )
+
+# a binding in the listing of a tree whose root node is m reads in it
+def Tree.list_found.root(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  m: Maybe<&2, Node>
+) -> {
+  List.contains(
+    ~Binding,
+    ~Binding.is_eq,
+    Tree.list.root(~S, ~fetch, s, m),
+    Binding{k, v}
+  )
+    == True{}: Bool
+} -> {Tree.get.go(~S, ~fetch, s, Tree.path(k), k, m) == Some{v}: Maybe<&2, List<&2, U32>>}:
+  match m:
+    case Some{Node.leaf{+k2, +v2}}:
+      Tree.list_found.root.hit(
+        ~S,
+        ~fetch,
+        s,
+        k,
+        v,
+        k2,
+        v2,
+        Binding.is_eq(Binding{k2, v2}, Binding{k, v}),
+        {==}
+      )
+    case Some{Node.branch{+qs}}:
+      e => Tree.Found.root(
+        ~S,
+        ~fetch,
+        s,
+        k,
+        v,
+        qs,
+        Tree.list_found.go(
+          ~S,
+          ~fetch,
+          63n,
+          s,
+          qs,
+          [],
+          0n,
+          Tree.first(~S, ~fetch, s, qs),
+          k,
+          v,
+          {==}
+        )(e)
+      )
+    case Some{Node.empty{}}:
+      e => Empty.absurd(
+        {
+          Tree.get.go(
+            ~S,
+            ~fetch,
+            s,
+            Tree.path(k),
+            k,
+            Some{Node.empty{}}
+          )
+            == Some{v}: Maybe<&2, List<&2, U32>>
+        },
+        Shared.Bool.false_ne_true(e)
+      )
+    case None{}:
+      e => Empty.absurd(
+        {Tree.get.go(~S, ~fetch, s, Tree.path(k), k, None{}) == Some{v}: Maybe<&2, List<&2, U32>>},
+        Shared.Bool.false_ne_true(e)
+      )
+
+# a listed binding reads: a listing lists only what a tree holds
+law Tree.list_sound:
+  for ~S: Data
+  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
+  for +s: S
+  for +h: Maybe<&2, Hashes.Hash>
+  for +k: List<&2, U32>
+  for +v: List<&2, U32>
+  {
+    List.contains(
+      ~Binding,
+      ~Binding.is_eq,
+      Tree.list(~S, ~fetch, s, h),
+      Binding{k, v}
+    )
+      == True{}: Bool
+  }
+    -> {Tree.get(~S, ~fetch, s, h, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+
+def Tree.list_sound(ty, fetch, s, h, k, v):
+  Tree.list_found.root(~ty, ~fetch, s, k, v, Tree.part(~ty, ~fetch, s, h))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information

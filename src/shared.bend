@@ -1144,6 +1144,163 @@ def List.take_snoc(
         List.head_eq(A, h, a, List.take(&2, A, ts, List.length(&2, A, qs)), qs, hq2)
       ): {_ <> List.append(&2, A, qs, [z]) == a <> List.append(&2, A, qs, [z]): List<&2, A>}
       {==}
+
+# when q then a starts xs, q starts xs
+def List.take_shorten(
+  -A: Data,
+  xs: List<&2, A>,
+  q: List<&2, A>,
+  +a: A,
+  +h: {
+    List.take(
+      &2,
+      A,
+      xs,
+      List.length(&2, A, List.append(&2, A, q, [a]))
+    )
+      == List.append(&2, A, q, [a]): List<&2, A>
+  }
+) -> {List.take(&2, A, xs, List.length(&2, A, q)) == q: List<&2, A>}:
+  match xs q:
+    case Nil{} Nil{}:
+      {==}
+    case Nil{} Con{hd, tl}:
+      Empty.absurd(
+        {List.take(&2, A, [], List.length(&2, A, hd <> tl)) == hd <> tl: List<&2, A>},
+        Bool.false_ne_true(
+          Equal.cong(
+            List<&2, A>,
+            Bool,
+            l => List.is_empty(&2, A, l),
+            hd <> List.append(&2, A, tl, [a]),
+            [],
+            Equal.sym(List<&2, A>, [], hd <> List.append(&2, A, tl, [a]), h)
+          )
+        )
+      )
+    case Con{x, ts} Nil{}:
+      {==}
+    case Con{+x, +ts} Con{hd, +tl}:
+      h2 = h
+      %Equal.sym(
+        List<&2, A>,
+        List.take(&2, A, ts, List.length(&2, A, tl)),
+        tl,
+        List.take_shorten(
+          A,
+          ts,
+          tl,
+          a,
+          List.tail_eq(
+            A,
+            x,
+            hd,
+            List.take(&2, A, ts, List.length(&2, A, List.append(&2, A, tl, [a]))),
+            List.append(&2, A, tl, [a]),
+            h
+          )
+        )
+      ): {x <> _ == hd <> tl: List<&2, A>}
+      %Equal.sym(
+        A,
+        x,
+        hd,
+        List.head_eq(
+          A,
+          x,
+          hd,
+          List.take(&2, A, ts, List.length(&2, A, List.append(&2, A, tl, [a]))),
+          List.append(&2, A, tl, [a]),
+          h2
+        )
+      ): {_ <> tl == hd <> tl: List<&2, A>}
+      {==}
+
+# when q then a starts xs, a comes right after q in xs
+def List.drop_at(
+  -A: Data,
+  xs: List<&2, A>,
+  q: List<&2, A>,
+  +a: A,
+  h: {
+    List.take(
+      &2,
+      A,
+      xs,
+      List.length(&2, A, List.append(&2, A, q, [a]))
+    )
+      == List.append(&2, A, q, [a]): List<&2, A>
+  }
+) -> {
+  List.drop(
+    &2,
+    A,
+    xs,
+    List.length(&2, A, q)
+  )
+    == a
+    <> List.drop(&2, A, xs, List.length(&2, A, List.append(&2, A, q, [a]))): List<&2, A>
+}:
+  match xs q:
+    case Nil{} Nil{}:
+      h
+    case Nil{} Con{hd, tl}:
+      Empty.absurd(
+        {
+          List.drop(
+            &2,
+            A,
+            [],
+            List.length(&2, A, hd <> tl)
+          )
+            == a
+            <> List.drop(
+              &2,
+              A,
+              [],
+              List.length(&2, A, List.append(&2, A, hd <> tl, [a]))
+            ): List<&2, A>
+        },
+        Bool.false_ne_true(
+          Equal.cong(
+            List<&2, A>,
+            Bool,
+            l => List.is_empty(&2, A, l),
+            hd <> List.append(&2, A, tl, [a]),
+            [],
+            Equal.sym(List<&2, A>, [], hd <> List.append(&2, A, tl, [a]), h)
+          )
+        )
+      )
+    case Con{x, +ts} Nil{}:
+      %Equal.sym(
+        A,
+        x,
+        a,
+        List.head_eq(A, x, a, List.take(&2, A, ts, 0n), [], h)
+      ): {_ <> ts == a <> List.drop(&2, A, ts, 0n): List<&2, A>}
+      %Equal.sym(
+        List<&2, A>,
+        List.drop(&2, A, ts, 0n),
+        ts,
+        List.drop_zero(&2, A, ts)
+      ): {a <> ts == a <> _: List<&2, A>}
+      {==}
+    case Con{+x, +ts} Con{hd, +tl}:
+      List.drop_at(
+        A,
+        ts,
+        tl,
+        a,
+        List.tail_eq(
+          A,
+          x,
+          hd,
+          List.take(&2, A, ts, List.length(&2, A, List.append(&2, A, tl, [a]))),
+          List.append(&2, A, tl, [a]),
+          h
+        )
+      )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
