@@ -3693,23 +3693,23 @@ def Bytes.laws() -> Eq.Laws(Bytes(), Bytes.is_eq):
 # ----
 
 # A text cut in two at a character: what comes before it, and after it.
-type Cut is Data:
-  Cut{before: String, after: String}
+type Cut<-A: Data> is Data:
+  Cut{before: A, after: A}
 # the cut of c then a text, given the cut of that text
-def Text.cut.on(c: Char, r: Maybe<&2, Cut>) -> Maybe<&2, Cut>:
+def Text.cut.on(c: Char, r: Maybe<&2, Cut<String>>) -> Maybe<&2, Cut<String>>:
   match r:
     case None{}:
       None{}
     case Some{Cut{b, a}}:
       Some{Cut{SCon{c, b}, a}}
 # s cut at its first character with code x, or None when it has none
-def Text.cut(s: String, +x: U32) -> Maybe<&2, Cut>:
+def Text.cut(s: String, +x: U32) -> Maybe<&2, Cut<String>>:
   match s:
     case SNil{}:
       None{}
     case SCon{+c, +t}:
       Bool.when(
-        Maybe<&2, Cut>,
+        Maybe<&2, Cut<String>>,
         U32.is_eq(Char.to_u32(c), x),
         u => Some{Cut{SNil{}, t}},
         u => Text.cut.on(c, Text.cut(t, x))
@@ -3723,13 +3723,13 @@ def Text.has(s: String, +x: U32) -> Bool:
       List.any.if(u => Text.has(t, x), U32.is_eq(Char.to_u32(c), x))
 
 # the text before the cut
-def Cut.before(c: Cut) -> String:
+def Cut.before(-A: Data, c: Cut<A>) -> A:
   match c:
     case Cut{b, a}:
       b
 
 # the text after the cut
-def Cut.after(c: Cut) -> String:
+def Cut.after(-A: Data, c: Cut<A>) -> A:
   match c:
     case Cut{b, a}:
       a
@@ -3757,41 +3757,41 @@ def Text.cut_none.at(
   c: Char,
   t: String,
   x: U32,
-  ih: {Text.has(t, x) == False{}: Bool} -> {Text.cut(t, x) == None{}: Maybe<&2, Cut>}
+  ih: {Text.has(t, x) == False{}: Bool} -> {Text.cut(t, x) == None{}: Maybe<&2, Cut<String>>}
 ) -> {
   U32.is_eq(Char.to_u32(c), x) == hit: Bool
 } -> {
   List.any.if(u => Text.has(t, x), hit) == False{}: Bool
 } -> {
   Bool.when(
-    Maybe<&2, Cut>,
+    Maybe<&2, Cut<String>>,
     hit,
     u => Some{Cut{SNil{}, t}},
     u => Text.cut.on(c, Text.cut(t, x))
   )
-    == None{}: Maybe<&2, Cut>
+    == None{}: Maybe<&2, Cut<String>>
 }:
   match hit:
     case True{}:
       e => h => Empty.absurd(
-        {Some{Cut{SNil{}, t}} == None{}: Maybe<&2, Cut>},
+        {Some{Cut{SNil{}, t}} == None{}: Maybe<&2, Cut<String>>},
         Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
       )
     case False{}:
       e => h =>
         %Equal.sym(
-          Maybe<&2, Cut>,
+          Maybe<&2, Cut<String>>,
           Text.cut(t, x),
           None{},
           ih(h)
-        ): {Text.cut.on(c, _) == None{}: Maybe<&2, Cut>}
+        ): {Text.cut.on(c, _) == None{}: Maybe<&2, Cut<String>>}
         {==}
 
 # a text without the code x has no cut at x
 def Text.cut_none(
   s: String,
   +x: U32
-) -> {Text.has(s, x) == False{}: Bool} -> {Text.cut(s, x) == None{}: Maybe<&2, Cut>}:
+) -> {Text.has(s, x) == False{}: Bool} -> {Text.cut(s, x) == None{}: Maybe<&2, Cut<String>>}:
   match s:
     case SNil{}:
       h => {==}
@@ -3809,19 +3809,19 @@ def Text.cut_at.at(
   x: U32,
   ih: {
     Text.has(t, x) == False{}: Bool
-  } -> {Text.cut(String.append(t, SCon{c, b}), x) == Some{Cut{t, b}}: Maybe<&2, Cut>}
+  } -> {Text.cut(String.append(t, SCon{c, b}), x) == Some{Cut{t, b}}: Maybe<&2, Cut<String>>}
 ) -> {
   U32.is_eq(Char.to_u32(h), x) == hit: Bool
 } -> {
   List.any.if(u => Text.has(t, x), hit) == False{}: Bool
 } -> {
   Bool.when(
-    Maybe<&2, Cut>,
+    Maybe<&2, Cut<String>>,
     hit,
     u => Some{Cut{SNil{}, String.append(t, SCon{c, b})}},
     u => Text.cut.on(h, Text.cut(String.append(t, SCon{c, b}), x))
   )
-    == Some{Cut{SCon{h, t}, b}}: Maybe<&2, Cut>
+    == Some{Cut{SCon{h, t}, b}}: Maybe<&2, Cut<String>>
 }:
   match hit:
     case True{}:
@@ -3830,18 +3830,18 @@ def Text.cut_at.at(
           Some{
             Cut{SNil{}, String.append(t, SCon{c, b})}
           }
-            == Some{Cut{SCon{h, t}, b}}: Maybe<&2, Cut>
+            == Some{Cut{SCon{h, t}, b}}: Maybe<&2, Cut<String>>
         },
         Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, hh))
       )
     case False{}:
       e => hh =>
         %Equal.sym(
-          Maybe<&2, Cut>,
+          Maybe<&2, Cut<String>>,
           Text.cut(String.append(t, SCon{c, b}), x),
           Some{Cut{t, b}},
           ih(hh)
-        ): {Text.cut.on(h, _) == Some{Cut{SCon{h, t}, b}}: Maybe<&2, Cut>}
+        ): {Text.cut.on(h, _) == Some{Cut{SCon{h, t}, b}}: Maybe<&2, Cut<String>>}
         {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
@@ -3856,7 +3856,7 @@ def Text.cut_at(
   Text.has(a, x) == False{}: Bool
 } -> {
   U32.is_eq(Char.to_u32(c), x) == True{}: Bool
-} -> {Text.cut(String.append(a, SCon{c, b}), x) == Some{Cut{a, b}}: Maybe<&2, Cut>}:
+} -> {Text.cut(String.append(a, SCon{c, b}), x) == Some{Cut{a, b}}: Maybe<&2, Cut<String>>}:
   match a:
     case SNil{}:
       ha => hc =>
@@ -3867,12 +3867,12 @@ def Text.cut_at(
           hc
         ): {
           Bool.when(
-            Maybe<&2, Cut>,
+            Maybe<&2, Cut<String>>,
             _,
             u => Some{Cut{SNil{}, b}},
             u => Text.cut.on(c, Text.cut(b, x))
           )
-            == Some{Cut{SNil{}, b}}: Maybe<&2, Cut>
+            == Some{Cut{SNil{}, b}}: Maybe<&2, Cut<String>>
         }
         {==}
     case SCon{+h, +t}:
@@ -3889,19 +3889,19 @@ def Text.cut_at(
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Text.cut_parts once the rest is cut: by what it held (m)
 def Text.cut_parts.on(
-  m: Maybe<&2, Cut>,
+  m: Maybe<&2, Cut<String>>,
   c: Char,
   t: String,
   x: U32,
   a: String,
   b: String,
   ih: @a2: String -> @b2: String -> {
-    Text.cut(t, x) == Some{Cut{a2, b2}}: Maybe<&2, Cut>
+    Text.cut(t, x) == Some{Cut{a2, b2}}: Maybe<&2, Cut<String>>
   } -> {t == String.append(a2, SCon{Chr{x}, b2}): String}
 ) -> {
-  Text.cut(t, x) == m: Maybe<&2, Cut>
+  Text.cut(t, x) == m: Maybe<&2, Cut<String>>
 } -> {
-  Text.cut.on(c, m) == Some{Cut{a, b}}: Maybe<&2, Cut>
+  Text.cut.on(c, m) == Some{Cut{a, b}}: Maybe<&2, Cut<String>>
 } -> {SCon{c, t} == String.append(a, SCon{Chr{x}, b}): String}:
   match m:
     case None{}:
@@ -3909,9 +3909,9 @@ def Text.cut_parts.on(
         {SCon{c, t} == String.append(a, SCon{Chr{x}, b}): String},
         Bool.false_ne_true(
           Equal.cong(
-            Maybe<&2, Cut>,
+            Maybe<&2, Cut<String>>,
             Bool,
-            z => Maybe.is_some(&2, Cut, z),
+            z => Maybe.is_some(&2, Cut<String>, z),
             None{},
             Some{Cut{a, b}},
             h
@@ -3921,17 +3921,17 @@ def Text.cut_parts.on(
     case Some{Cut{a2, b2}}:
       e => +h =>
         %Equal.cong(
-          Maybe<&2, Cut>,
+          Maybe<&2, Cut<String>>,
           String,
-          z => Cut.before(Maybe.default(&2, Cut, z, Cut{"", ""})),
+          z => Cut.before(String, Maybe.default(&2, Cut<String>, z, Cut{"", ""})),
           Some{Cut{SCon{c, a2}, b2}},
           Some{Cut{a, b}},
           h
         ): {SCon{c, t} == String.append(_, SCon{Chr{x}, b}): String}
         %Equal.cong(
-          Maybe<&2, Cut>,
+          Maybe<&2, Cut<String>>,
           String,
-          z => Cut.after(Maybe.default(&2, Cut, z, Cut{"", ""})),
+          z => Cut.after(String, Maybe.default(&2, Cut<String>, z, Cut{"", ""})),
           Some{Cut{SCon{c, a2}, b2}},
           Some{Cut{a, b}},
           h
@@ -3968,34 +3968,34 @@ def Text.cut_parts.at(
   a: String,
   b: String,
   ih: @a2: String -> @b2: String -> {
-    Text.cut(t, x) == Some{Cut{a2, b2}}: Maybe<&2, Cut>
+    Text.cut(t, x) == Some{Cut{a2, b2}}: Maybe<&2, Cut<String>>
   } -> {t == String.append(a2, SCon{Chr{x}, b2}): String}
 ) -> {
   U32.is_eq(Char.to_u32(c), x) == hit: Bool
 } -> {
   Bool.when(
-    Maybe<&2, Cut>,
+    Maybe<&2, Cut<String>>,
     hit,
     u => Some{Cut{SNil{}, t}},
     u => Text.cut.on(c, Text.cut(t, x))
   )
-    == Some{Cut{a, b}}: Maybe<&2, Cut>
+    == Some{Cut{a, b}}: Maybe<&2, Cut<String>>
 } -> {SCon{c, t} == String.append(a, SCon{Chr{x}, b}): String}:
   match hit:
     case True{}:
       +e => +h =>
         %Equal.cong(
-          Maybe<&2, Cut>,
+          Maybe<&2, Cut<String>>,
           String,
-          z => Cut.before(Maybe.default(&2, Cut, z, Cut{"", ""})),
+          z => Cut.before(String, Maybe.default(&2, Cut<String>, z, Cut{"", ""})),
           Some{Cut{SNil{}, t}},
           Some{Cut{a, b}},
           h
         ): {SCon{c, t} == String.append(_, SCon{Chr{x}, b}): String}
         %Equal.cong(
-          Maybe<&2, Cut>,
+          Maybe<&2, Cut<String>>,
           String,
-          z => Cut.after(Maybe.default(&2, Cut, z, Cut{"", ""})),
+          z => Cut.after(String, Maybe.default(&2, Cut<String>, z, Cut{"", ""})),
           Some{Cut{SNil{}, t}},
           Some{Cut{a, b}},
           h
@@ -4013,7 +4013,7 @@ def Text.cut_parts(
   a: String,
   b: String
 ) -> {
-  Text.cut(s, x) == Some{Cut{a, b}}: Maybe<&2, Cut>
+  Text.cut(s, x) == Some{Cut{a, b}}: Maybe<&2, Cut<String>>
 } -> {s == String.append(a, SCon{Chr{x}, b}): String}:
   match s:
     case SNil{}:
@@ -4021,9 +4021,9 @@ def Text.cut_parts(
         {SNil{} == String.append(a, SCon{Chr{x}, b}): String},
         Bool.false_ne_true(
           Equal.cong(
-            Maybe<&2, Cut>,
+            Maybe<&2, Cut<String>>,
             Bool,
-            z => Maybe.is_some(&2, Cut, z),
+            z => Maybe.is_some(&2, Cut<String>, z),
             None{},
             Some{Cut{a, b}},
             h
@@ -4079,7 +4079,7 @@ def Text.cuts.put(b: String, m: Maybe<&2, Parts>) -> Maybe<&2, Parts>:
 
 # the parts of a text cut once already (c), then cut n more times at the code
 # x, and the rest
-def Text.cuts.of(n: Nat, c: Maybe<&2, Cut>, +x: U32) -> Maybe<&2, Parts>:
+def Text.cuts.of(n: Nat, c: Maybe<&2, Cut<String>>, +x: U32) -> Maybe<&2, Parts>:
   match n c:
     case _ None{}:
       None{}
@@ -4139,7 +4139,7 @@ def Text.cuts_after_join(ps, c, last):
       +last = last
       +h =>
         %Equal.sym(
-          Maybe<&2, Cut>,
+          Maybe<&2, Cut<String>>,
           Text.cut(String.append(p, SCon{c, Text.join(r, c, last)}), Char.to_u32(c)),
           Some{Cut{p, Text.join(r, c, last)}},
           Text.cut_at(

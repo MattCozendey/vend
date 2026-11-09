@@ -62,7 +62,7 @@ def Uri.show(u: Uri) -> String:
     case Uri{sc, Some{a}, p}:
       String.append(sc, String.append("://", String.append(a, p)))
 # the URI with an authority: up to the first '/', or all of t when it has none
-def Uri.read.auth(sc: String, c: Maybe<&2, Shared.Cut>, t: String) -> Uri:
+def Uri.read.auth(sc: String, c: Maybe<&2, Shared.Cut<String>>, t: String) -> Uri:
   match c:
     case None{}:
       Uri{sc, Some{t}, ""}
@@ -77,7 +77,7 @@ def Uri.read.rest(+sc: String, +t: String) -> Uri:
     u => Uri{sc, None{}, t}
   )
 # the URI of a cut at the first ':'
-def Uri.read.cut(c: Maybe<&2, Shared.Cut>) -> Maybe<&2, Uri>:
+def Uri.read.cut(c: Maybe<&2, Shared.Cut<String>>) -> Maybe<&2, Uri>:
   match c:
     case None{}:
       None{}
@@ -356,7 +356,7 @@ def auth_back(sc, a, p):
           Shared.Text.append_none(a)
         ): {Uri.read.auth(sc, Shared.Text.cut(_, 47), _) == Uri{sc, Some{a}, ""}: Uri}
         %Equal.sym(
-          Maybe<&2, Shared.Cut>,
+          Maybe<&2, Shared.Cut<String>>,
           Shared.Text.cut(a, 47),
           None{},
           Shared.Text.cut_none(a, 47)(ha)
@@ -380,7 +380,7 @@ def auth_back(sc, a, p):
             == Uri{sc, Some{a}, _}: Uri
         }
         %Equal.sym(
-          Maybe<&2, Shared.Cut>,
+          Maybe<&2, Shared.Cut<String>>,
           Shared.Text.cut(String.append(a, SCon{'/', q}), 47),
           Some{Shared.Cut{a, q}},
           Shared.Text.cut_at(a, '/', q, 47)(ha)({==})
@@ -448,7 +448,7 @@ def read_at(sc, rest):
     +sc = sc
     +rest = rest
     Equal.cong(
-      Maybe<&2, Shared.Cut>,
+      Maybe<&2, Shared.Cut<String>>,
       Maybe<&2, Uri>,
       z => Uri.read.cut(z),
       Shared.Text.cut(String.append(sc, SCon{':', rest}), 58),
@@ -458,11 +458,11 @@ def read_at(sc, rest):
 
 # an authority read back shows as "//" and its text: by its cut at '/' (m)
 law auth_show:
-  for m: Maybe<&2, Shared.Cut>
+  for m: Maybe<&2, Shared.Cut<String>>
   for sc: String
   for r2: String
   {
-    Shared.Text.cut(r2, 47) == m: Maybe<&2, Shared.Cut>
+    Shared.Text.cut(r2, 47) == m: Maybe<&2, Shared.Cut<String>>
   } -> {
     Uri.show(
       Uri.read.auth(sc, m, r2)
@@ -472,10 +472,10 @@ law auth_show:
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 def auth_show.g1(
-  +m: Maybe<&2, Shared.Cut>,
+  +m: Maybe<&2, Shared.Cut<String>>,
   sc: String,
   r2: String,
-  x: {Shared.Text.cut(r2, 47) == m: Maybe<&2, Shared.Cut>}
+  x: {Shared.Text.cut(r2, 47) == m: Maybe<&2, Shared.Cut<String>>}
 ) -> {
   Uri.show(
     Uri.read.auth(sc, m, r2)
@@ -692,11 +692,11 @@ def show_read.valid(b, sc, rest, u, t):
 
 # show_read, by whether the text holds a ':' (m is its cut there)
 law show_read.at:
-  for m: Maybe<&2, Shared.Cut>
+  for m: Maybe<&2, Shared.Cut<String>>
   for t: String
   for u: Uri
   {
-    Shared.Text.cut(t, 58) == m: Maybe<&2, Shared.Cut>
+    Shared.Text.cut(t, 58) == m: Maybe<&2, Shared.Cut<String>>
   } -> {Uri.read.cut(m) == Some{u}: Maybe<&2, Uri>} -> {Uri.show(u) == t: String}
 
 def show_read.at(m, t, u):

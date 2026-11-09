@@ -694,10 +694,6 @@ type Shape is Data:
   Shape.text{}
   Shape.region{closed: Bool}
 
-# where p first occurs in some bytes: the bytes before it, and after it
-type Found is Data:
-  Found{before: Shared.Bytes(), after: Shared.Bytes()}
-
 # b starts with p
 def Bytes.starts(p: Shared.Bytes(), b: Shared.Bytes()) -> Bool:
   match p b:
@@ -709,25 +705,33 @@ def Bytes.starts(p: Shared.Bytes(), b: Shared.Bytes()) -> Bool:
       False{}
 
 # the place m of p in some bytes, after the byte x
-def Found.put(x: U32, m: Maybe<&2, Found>) -> Maybe<&2, Found>:
+def Bytes.find.put(
+  x: U32,
+  m: Maybe<&2, Shared.Cut<Shared.Bytes()>>
+) -> Maybe<&2, Shared.Cut<Shared.Bytes()>>:
   match m:
     case None{}:
       None{}
-    case Some{Found{u, w}}:
-      Some{Found{x <> u, w}}
+    case Some{Shared.Cut{u, w}}:
+      Some{Shared.Cut{x <> u, w}}
 
 # bend-lint: expect-begin bend-lint-rules/performance/list_index_loop@warning -- List.length runs only at the hit, where the lazy search stops: once per search
 # where p first occurs in b, if it does
-def Bytes.find(+p: Shared.Bytes(), b: Shared.Bytes()) -> Maybe<&2, Found>:
+def Bytes.find(+p: Shared.Bytes(), b: Shared.Bytes()) -> Maybe<&2, Shared.Cut<Shared.Bytes()>>:
   match b:
     case Nil{}:
-      Bool.pick(Maybe<&2, Found>, List.is_empty(&2, U32, p), Some{Found{[], []}}, None{})
+      Bool.pick(
+        Maybe<&2, Shared.Cut<Shared.Bytes()>>,
+        List.is_empty(&2, U32, p),
+        Some{Shared.Cut{[], []}},
+        None{}
+      )
     case Con{+x, +r}:
       Shared.Bool.when(
-        Maybe<&2, Found>,
+        Maybe<&2, Shared.Cut<Shared.Bytes()>>,
         Bytes.starts(p, x <> r),
-        u => Some{Found{[], List.drop(&2, U32, x <> r, List.length(&2, U32, p))}},
-        u => Found.put(x, Bytes.find(p, r))
+        u => Some{Shared.Cut{[], List.drop(&2, U32, x <> r, List.length(&2, U32, p))}},
+        u => Bytes.find.put(x, Bytes.find(p, r))
       )
 # bend-lint: expect-end bend-lint-rules/performance/list_index_loop@warning
 
@@ -740,7 +744,7 @@ def Embed.split.go(
   +cl: Shared.Bytes(),
   b: Shared.Bytes(),
   opening: Bool,
-  m: Maybe<&2, Found>
+  m: Maybe<&2, Shared.Cut<Shared.Bytes()>>
 ) -> List<&2, Piece>:
   match f opening m:
     case 0n True{} w:
@@ -749,11 +753,11 @@ def Embed.split.go(
       [Piece.region{b, False{}}]
     case 1n+e True{} None{}:
       [Piece.text{b}]
-    case 1n+e True{} Some{Found{u, +w}}:
+    case 1n+e True{} Some{Shared.Cut{u, +w}}:
       Piece.text{u} <> Embed.split.go(e, op, cl, w, False{}, Bytes.find(cl, w))
     case 1n+e False{} None{}:
       [Piece.region{b, False{}}]
-    case 1n+e False{} Some{Found{u, +w}}:
+    case 1n+e False{} Some{Shared.Cut{u, +w}}:
       Piece.region{u, True{}} <> Embed.split.go(e, op, cl, w, True{}, Bytes.find(op, w))
 
 # the pieces of b, between the markers op and cl
@@ -778,17 +782,17 @@ def Embed.join(+op: Shared.Bytes(), +cl: Shared.Bytes(), ps: List<&2, Piece>) ->
       List.append(&2, U32, op, List.append(&2, U32, c, Embed.join(op, cl, r)))
 
 # the bytes before a found place
-def Found.before(m: Maybe<&2, Found>) -> Shared.Bytes():
+def Bytes.find.before(m: Maybe<&2, Shared.Cut<Shared.Bytes()>>) -> Shared.Bytes():
   match m:
-    case Some{Found{u, w}}:
+    case Some{Shared.Cut{u, w}}:
       u
     case None{}:
       []
 
 # the bytes after a found place
-def Found.after(m: Maybe<&2, Found>) -> Shared.Bytes():
+def Bytes.find.after(m: Maybe<&2, Shared.Cut<Shared.Bytes()>>) -> Shared.Bytes():
   match m:
-    case Some{Found{u, w}}:
+    case Some{Shared.Cut{u, w}}:
       w
     case None{}:
       []
@@ -861,38 +865,38 @@ def Bytes.find_cut.at(
   p: Shared.Bytes(),
   x: U32,
   r: Shared.Bytes(),
-  rest: Maybe<&2, Found>,
+  rest: Maybe<&2, Shared.Cut<Shared.Bytes()>>,
   eh: {Bytes.starts(p, x <> r) == hit: Bool},
   ih: @u2: Shared.Bytes() -> @w2: Shared.Bytes() -> {
-    rest == Some{Found{u2, w2}}: Maybe<&2, Found>
+    rest == Some{Shared.Cut{u2, w2}}: Maybe<&2, Shared.Cut<Shared.Bytes()>>
   } -> {r == List.append(&2, U32, u2, List.append(&2, U32, p, w2)): Shared.Bytes()}
 ) -> {
   Shared.Bool.when(
-    Maybe<&2, Found>,
+    Maybe<&2, Shared.Cut<Shared.Bytes()>>,
     hit,
-    z => Some{Found{[], List.drop(&2, U32, x <> r, List.length(&2, U32, p))}},
-    z => Found.put(x, rest)
+    z => Some{Shared.Cut{[], List.drop(&2, U32, x <> r, List.length(&2, U32, p))}},
+    z => Bytes.find.put(x, rest)
   )
-    == Some{Found{u, w}}: Maybe<&2, Found>
+    == Some{Shared.Cut{u, w}}: Maybe<&2, Shared.Cut<Shared.Bytes()>>
 } -> {x <> r == List.append(&2, U32, u, List.append(&2, U32, p, w)): Shared.Bytes()}:
   match hit rest:
     case True{} m:
       +h =>
         %Equal.cong(
-          Maybe<&2, Found>,
+          Maybe<&2, Shared.Cut<Shared.Bytes()>>,
           Shared.Bytes(),
-          z => Found.before(z),
-          Some{Found{[], List.drop(&2, U32, x <> r, List.length(&2, U32, p))}},
-          Some{Found{u, w}},
+          z => Bytes.find.before(z),
+          Some{Shared.Cut{[], List.drop(&2, U32, x <> r, List.length(&2, U32, p))}},
+          Some{Shared.Cut{u, w}},
           h
         ):
           {x <> r == List.append(&2, U32, _, List.append(&2, U32, p, w)): Shared.Bytes()}
         %Equal.cong(
-          Maybe<&2, Found>,
+          Maybe<&2, Shared.Cut<Shared.Bytes()>>,
           Shared.Bytes(),
-          z => Found.after(z),
-          Some{Found{[], List.drop(&2, U32, x <> r, List.length(&2, U32, p))}},
-          Some{Found{u, w}},
+          z => Bytes.find.after(z),
+          Some{Shared.Cut{[], List.drop(&2, U32, x <> r, List.length(&2, U32, p))}},
+          Some{Shared.Cut{u, w}},
           h
         ):
           {x <> r == List.append(&2, U32, p, _): Shared.Bytes()}
@@ -900,25 +904,25 @@ def Bytes.find_cut.at(
     case False{} None{}:
       h => Empty.absurd(
         {x <> r == List.append(&2, U32, u, List.append(&2, U32, p, w)): Shared.Bytes()},
-        Shared.Maybe.none_ne_some(Found, Found{u, w}, h)
+        Shared.Maybe.none_ne_some(Shared.Cut<Shared.Bytes()>, Shared.Cut{u, w}, h)
       )
-    case False{} Some{Found{u2, w2}}:
+    case False{} Some{Shared.Cut{u2, w2}}:
       +h =>
         %Equal.cong(
-          Maybe<&2, Found>,
+          Maybe<&2, Shared.Cut<Shared.Bytes()>>,
           Shared.Bytes(),
-          z => Found.before(z),
-          Some{Found{x <> u2, w2}},
-          Some{Found{u, w}},
+          z => Bytes.find.before(z),
+          Some{Shared.Cut{x <> u2, w2}},
+          Some{Shared.Cut{u, w}},
           h
         ):
           {x <> r == List.append(&2, U32, _, List.append(&2, U32, p, w)): Shared.Bytes()}
         %Equal.cong(
-          Maybe<&2, Found>,
+          Maybe<&2, Shared.Cut<Shared.Bytes()>>,
           Shared.Bytes(),
-          z => Found.after(z),
-          Some{Found{x <> u2, w2}},
-          Some{Found{u, w}},
+          z => Bytes.find.after(z),
+          Some{Shared.Cut{x <> u2, w2}},
+          Some{Shared.Cut{u, w}},
           h
         ):
           {x <> r == x <> List.append(&2, U32, u2, List.append(&2, U32, p, _)): Shared.Bytes()}
@@ -934,26 +938,26 @@ def Bytes.find_cut(
   b: Shared.Bytes(),
   +p: Shared.Bytes()
 ) -> {
-  Bytes.find(p, b) == Some{Found{u, w}}: Maybe<&2, Found>
+  Bytes.find(p, b) == Some{Shared.Cut{u, w}}: Maybe<&2, Shared.Cut<Shared.Bytes()>>
 } -> {b == List.append(&2, U32, u, List.append(&2, U32, p, w)): Shared.Bytes()}:
   match b p:
     case Nil{} Nil{}:
       +h =>
         %Equal.cong(
-          Maybe<&2, Found>,
+          Maybe<&2, Shared.Cut<Shared.Bytes()>>,
           Shared.Bytes(),
-          z => Found.before(z),
-          Some{Found{[], []}},
-          Some{Found{u, w}},
+          z => Bytes.find.before(z),
+          Some{Shared.Cut{[], []}},
+          Some{Shared.Cut{u, w}},
           h
         ):
           {Nil{} == List.append(&2, U32, _, List.append(&2, U32, Nil{}, w)): Shared.Bytes()}
         %Equal.cong(
-          Maybe<&2, Found>,
+          Maybe<&2, Shared.Cut<Shared.Bytes()>>,
           Shared.Bytes(),
-          z => Found.after(z),
-          Some{Found{[], []}},
-          Some{Found{u, w}},
+          z => Bytes.find.after(z),
+          Some{Shared.Cut{[], []}},
+          Some{Shared.Cut{u, w}},
           h
         ):
           {Nil{} == List.append(&2, U32, Nil{}, List.append(&2, U32, Nil{}, _)): Shared.Bytes()}
@@ -961,7 +965,7 @@ def Bytes.find_cut(
     case Nil{} Con{y, q}:
       h => Empty.absurd(
         {Nil{} == List.append(&2, U32, u, List.append(&2, U32, y <> q, w)): Shared.Bytes()},
-        Shared.Maybe.none_ne_some(Found, Found{u, w}, h)
+        Shared.Maybe.none_ne_some(Shared.Cut<Shared.Bytes()>, Shared.Cut{u, w}, h)
       )
     case Con{+x, +r} m:
       Bytes.find_cut.at(
@@ -1004,9 +1008,9 @@ def Embed.join_split.go(
   +cl: Shared.Bytes(),
   b: Shared.Bytes(),
   opening: Bool,
-  m: Maybe<&2, Found>,
+  m: Maybe<&2, Shared.Cut<Shared.Bytes()>>,
   hm: @u: Shared.Bytes() -> @w: Shared.Bytes() -> {
-    m == Some{Found{u, w}}: Maybe<&2, Found>
+    m == Some{Shared.Cut{u, w}}: Maybe<&2, Shared.Cut<Shared.Bytes()>>
   } -> {
     b
       == List.append(
@@ -1038,7 +1042,7 @@ def Embed.join_split.go(
       )
     case 1n+e True{} None{}:
       Shared.List.append_nil(U32, b)
-    case 1n+e True{} Some{Found{u, +w}}:
+    case 1n+e True{} Some{Shared.Cut{u, +w}}:
       %Equal.sym(
         Shared.Bytes(),
         Embed.join(op, cl, Embed.split.go(e, op, cl, w, False{}, Bytes.find(cl, w))),
@@ -1069,7 +1073,7 @@ def Embed.join_split.go(
         b,
         Shared.List.append_nil(U32, b)
       )
-    case 1n+e False{} Some{Found{u, +w}}:
+    case 1n+e False{} Some{Shared.Cut{u, +w}}:
       %Equal.sym(
         Shared.Bytes(),
         Embed.join(op, cl, Embed.split.go(e, op, cl, w, True{}, Bytes.find(op, w))),
@@ -1331,35 +1335,33 @@ def Line.marks(+p: Shared.Bytes(), l: Shared.Bytes()) -> Bool:
 
 # x cut where the marker m was found, when it is not empty (held): all of x
 # comes before it when it is empty or not in x
-def Rule.cut.of(held: Bool, m: Maybe<&2, Found>, x: Shared.Bytes()) -> Found:
+def Rule.cut.of(
+  held: Bool,
+  m: Maybe<&2, Shared.Cut<Shared.Bytes()>>,
+  x: Shared.Bytes()
+) -> Shared.Cut<Shared.Bytes()>:
   match held m:
     case True{} Some{f}:
       f
     case h n:
-      Found{x, []}
+      Shared.Cut{x, []}
 
 # x cut at the first marker p
-def Rule.cut(+p: Shared.Bytes(), +x: Shared.Bytes()) -> Found:
+def Rule.cut(+p: Shared.Bytes(), +x: Shared.Bytes()) -> Shared.Cut<Shared.Bytes()>:
   Rule.cut.of(Bool.not(List.is_empty(&2, U32, p)), Bytes.find(p, x), x)
-
-# the bytes after a cut
-def Found.rest(c: Found) -> Shared.Bytes():
-  match c:
-    case Found{u, w}:
-      w
 
 # the edge whose target and what follows it are cut at the close marker (c),
 # with the alias marker al, under the conditions cs
-def Rule.named(c: Found, al: Shared.Bytes(), cs: List<&2, Cond>) -> Edge:
+def Rule.named(c: Shared.Cut<Shared.Bytes()>, al: Shared.Bytes(), cs: List<&2, Cond>) -> Edge:
   match c:
-    case Found{t, w}:
-      Edge{t, Found.rest(Rule.cut(al, w)), cs}
+    case Shared.Cut{t, w}:
+      Edge{t, Shared.Cut.after(Shared.Bytes(), Rule.cut(al, w)), cs}
 
 # the edges of the bytes w after a start marker, once the open marker is
 # known to be empty or not (held), and m is where it first occurs in w
 def Rule.opened(
   held: Bool,
-  m: Maybe<&2, Found>,
+  m: Maybe<&2, Shared.Cut<Shared.Bytes()>>,
   w: Shared.Bytes(),
   cl: Shared.Bytes(),
   al: Shared.Bytes(),
@@ -1370,7 +1372,7 @@ def Rule.opened(
       [Rule.named(Rule.cut(cl, w), al, cs)]
     case True{} None{}:
       []
-    case True{} Some{Found{u, a}}:
+    case True{} Some{Shared.Cut{u, a}}:
       [Rule.named(Rule.cut(cl, a), al, cs)]
 
 # the edges of the trimmed line t, once it is known to start with the start
