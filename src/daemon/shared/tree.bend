@@ -1125,5 +1125,5 @@ def Tree.get_grows(ty, fetch, grows, kept, a, b, h, k, x):
     n => Tree.node_kept(~ty, ~fetch, ~grows, ~kept, a, b, h, n, gr),
     gr
   )
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
