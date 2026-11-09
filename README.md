@@ -6,11 +6,22 @@ Only human hands may touch this file and it is the ultimate source of truth for 
 
 ## Vend Node
 
-A Vend Node is a decentralizable versioniong program that runs anywhere(your PC, in the cloud, etc) by holding copies of Stores
+A Vend Node is a P2P decentralized versioning program that runs anywhere and syncs with other nodes bidirectionally. Vend Nodes hold:
+1 - A name
+2 - The parts of the Vend Stores it uses (any number)
+3 - The Vend Writers connected to it (any number)
+4 - The folders mounted on its machine (any number)
 
-## Store
+All Vend Nodes are "equal", so a classic server can be defined as a Vend Node that owns the shared branches and keeps every part.
 
+Outdated Vend Nodes catch up by themselves, agree once they saw the same changes, and show their connected writers their own changes at once.
+
+A Vend Node starts or resumes on a store address under its name (a second one there is Busy) and, unless forced, stops only with no folders mounted or writers connected.
+
+## Vend Store
+
+Can be held by many other Vend Nodes.
 
 ## Owner Group
 
-An Owner Group is the composition of Vend nodes that decide the changes of a branch or of the Store itself
+An Owner Group is the composition of Vend nodes that decide the changes of a branch or of the Store itself, in order, signing each decision.
