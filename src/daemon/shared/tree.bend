@@ -150,7 +150,7 @@ def Node.of.read(r: Codes.Read<Node>) -> Maybe<&2, Node>:
 
 # the node of the words ws, when they hold one exactly
 def Node.of(ws: List<&2, U32>) -> Maybe<&2, Node>:
-  Shared.Maybe.then(Codes.Read<Node>, Node, Node.code.read(ws), Node.of.read)
+  Maybe.bind(&2, Codes.Read<Node>, Node, Node.code.read(ws), Node.of.read)
 
 # Paths
 # -----
@@ -294,7 +294,7 @@ def Tree.node(
   s: S,
   h: Hashes.Hash
 ) -> Maybe<&2, Node>:
-  Shared.Maybe.then(List<&2, U32>, Node, fetch(s)(h), Node.of)
+  Maybe.bind(&2, List<&2, U32>, Node, fetch(s)(h), Node.of)
 
 # the node of the part x of a branch (none: empty), in the store s
 def Tree.part(
@@ -481,7 +481,7 @@ def Tree.split(
       Shared.Bool.when(
         Maybe<&2, Put>,
         Nat.is_eq(a, b),
-        u => Shared.Maybe.then(
+        u => Maybe.bind(&2, 
           Put,
           Put,
           Tree.split(r1, r2, l, o),
@@ -525,7 +525,7 @@ def Tree.set.go(
       )
     case Con{+x, r} Some{Node.branch{+ks}}:
       +kid = Parts.at(ks, x)
-      Shared.Maybe.then(
+      Maybe.bind(&2, 
         Put,
         Put,
         Tree.set.go(~S, ~fetch, s, r, 1n+d, k, v, kid, Tree.part(~S, ~fetch, s, kid)),
@@ -596,7 +596,7 @@ def Tree.some_then(
   Maybe.is_some(
     &2,
     Put,
-    Shared.Maybe.then(Put, Put, m, p => Some{f(p)})
+    Maybe.bind(&2, Put, Put, m, p => Some{f(p)})
   )
     == Maybe.is_some(&2, Put, m): Bool
 }:
@@ -627,7 +627,7 @@ def Tree.split_some.when(
     Shared.Bool.when(
       Maybe<&2, Put>,
       c,
-      u => Shared.Maybe.then(
+      u => Maybe.bind(&2, 
         Put,
         Put,
         Tree.split(r1, r2, l, o),
@@ -651,7 +651,7 @@ def Tree.split_some.when(
           Maybe.is_some(
             &2,
             Put,
-            Shared.Maybe.then(
+            Maybe.bind(&2, 
               Put,
               Put,
               Tree.split(r1, r2, l, o),
@@ -756,7 +756,7 @@ def Tree.set_some.go(
           Maybe.is_some(
             &2,
             Put,
-            Shared.Maybe.then(
+            Maybe.bind(&2, 
               Put,
               Put,
               Tree.set.go(
@@ -929,7 +929,7 @@ def Node.of_words(n):
       Node.code.read(Node.words(n)),
       Some{Codes.Read{n, []}},
       Node.code_read(n, [])(ok)
-    ): {Shared.Maybe.then(Codes.Read<Node>, Node, _, Node.of.read) == Some{n}: Maybe<&2, Node>}
+    ): {Maybe.bind(&2, Codes.Read<Node>, Node, _, Node.of.read) == Some{n}: Maybe<&2, Node>}
     {==}
 
 # a hash reads from its code only
@@ -1261,7 +1261,7 @@ def Node.of_back.at(
   m: Maybe<&2, Codes.Read<Node>>,
   -n: Node
 ) -> {
-  Shared.Maybe.then(Codes.Read<Node>, Node, m, Node.of.read) == Some{n}: Maybe<&2, Node>
+  Maybe.bind(&2, Codes.Read<Node>, Node, m, Node.of.read) == Some{n}: Maybe<&2, Node>
 } -> {m == Some{Codes.Read{n, []}}: Maybe<&2, Codes.Read<Node>>}:
   match m:
     case None{}:
@@ -1554,7 +1554,7 @@ def Tree.has_node(
       fetch(s)(Node.hash(n)),
       Some{Node.words(n)}
     )(e)
-  ): {Shared.Maybe.then(List<&2, U32>, Node, _, Node.of) == Some{n}: Maybe<&2, Node>}
+  ): {Maybe.bind(&2, List<&2, U32>, Node, _, Node.of) == Some{n}: Maybe<&2, Node>}
   Node.of_words(n)(ok)
 
 # a read of the key k at the leaf of k1 and v1 gives v1 if k1 is k
@@ -1662,7 +1662,7 @@ def Tree.reads_then(
     Some{q}
   ) -> Tree.Reads(~S, ~fetch, s2, po, k, wo, f(q)),
   i: Tree.Reads(~S, ~fetch, s2, pi, k, wi, m)
-) -> Tree.Reads(~S, ~fetch, s2, po, k, wo, Shared.Maybe.then(Put, Put, m, f)):
+) -> Tree.Reads(~S, ~fetch, s2, po, k, wo, Maybe.bind(&2, Put, Put, m, f)):
   match m:
     case None{}:
       Unit{}
@@ -1789,7 +1789,7 @@ def Tree.read_split.when(
   Shared.Bool.when(
     Maybe<&2, Put>,
     c,
-    u => Shared.Maybe.then(
+    u => Maybe.bind(&2, 
       Put,
       Put,
       Tree.split(r1, r2, Put.node(Node.leaf{k, v}, []), o),
@@ -2064,7 +2064,7 @@ def Tree.node_kept(
 ) -> {
   Tree.node(~S, ~fetch, a, h) == Some{n}: Maybe<&2, Node>
 } -> {Tree.node(~S, ~fetch, b, h) == Some{n}: Maybe<&2, Node>}:
-  Shared.Maybe.then_kept(
+  Shared.Maybe.bind_kept(
     List<&2, U32>,
     Node,
     fetch(a)(h),
@@ -2228,7 +2228,7 @@ def Tree.read_into_nil(
   [],
   k,
   None{},
-  Shared.Maybe.then(Put, Put, m, p => Some{Put.into(ks, n, p)})
+  Maybe.bind(&2, Put, Put, m, p => Some{Put.into(ks, n, p)})
 ):
   match m:
     case None{}:
@@ -2447,7 +2447,7 @@ def Tree.other_split_old.when(
   Shared.Bool.when(
     Maybe<&2, Put>,
     c,
-    u => Shared.Maybe.then(
+    u => Maybe.bind(&2, 
       Put,
       Put,
       Tree.split(r1, r2, l, o),
@@ -2709,7 +2709,7 @@ def Tree.other_split_new.into(
   Con{z, r2},
   k2,
   None{},
-  Shared.Maybe.then(Put, Put, m, p => Some{Put.into(Parts.none(), n, p)})
+  Maybe.bind(&2, Put, Put, m, p => Some{Put.into(Parts.none(), n, p)})
 ):
   match c:
     case True{}:
@@ -2755,7 +2755,7 @@ def Tree.other_split_new.into(
         Con{z, r2},
         k2,
         _,
-        Shared.Maybe.then(Put, Put, m, p => Some{Put.into(Parts.none(), n, p)})
+        Maybe.bind(&2, Put, Put, m, p => Some{Put.into(Parts.none(), n, p)})
       )
       Tree.reads_then(
         ~S,
@@ -2797,7 +2797,7 @@ def Tree.other_split_new.nil(
   Shared.Bool.when(
     Maybe<&2, Put>,
     c,
-    u => Shared.Maybe.then(
+    u => Maybe.bind(&2, 
       Put,
       Put,
       Tree.split(r1, r1o, Put.node(Node.leaf{k, v}, []), o),
@@ -2893,7 +2893,7 @@ def Tree.other_split_new.con(
   Shared.Bool.when(
     Maybe<&2, Put>,
     c,
-    u => Shared.Maybe.then(
+    u => Maybe.bind(&2, 
       Put,
       Put,
       Tree.split(r1, r1o, Put.node(Node.leaf{k, v}, []), o),
@@ -3301,7 +3301,7 @@ def Tree.set_keeps.con(
   Con{z, r2},
   k2,
   Tree.get.go(~S, ~fetch, s2, r2, k2, Tree.part(~S, ~fetch, s2, Parts.at(ks, z))),
-  Shared.Maybe.then(Put, Put, m, p => Some{Put.into(ks, n, p)})
+  Maybe.bind(&2, Put, Put, m, p => Some{Put.into(ks, n, p)})
 ):
   match c:
     case True{}:
@@ -3318,7 +3318,7 @@ def Tree.set_keeps.con(
         Con{z, r2},
         k2,
         Tree.get.go(~S, ~fetch, s2, r2, k2, Tree.part(~S, ~fetch, s2, Parts.at(ks, _))),
-        Shared.Maybe.then(Put, Put, m, p => Some{Put.into(ks, n, p)})
+        Maybe.bind(&2, Put, Put, m, p => Some{Put.into(ks, n, p)})
       )
       Tree.reads_then(
         ~S,
@@ -3396,7 +3396,7 @@ def Tree.set_keeps.branch(
   p2,
   k2,
   Tree.get.go(~S, ~fetch, s2, p2, k2, Some{Node.branch{ks}}),
-  Shared.Maybe.then(Put, Put, m, p => Some{Put.into(ks, n, p)})
+  Maybe.bind(&2, Put, Put, m, p => Some{Put.into(ks, n, p)})
 ):
   match p2:
     case Nil{}:
@@ -7358,7 +7358,7 @@ def Canon.into(
     m == Some{t2}: Maybe<&2, Put>
   } -> {Some{Put.root(t2)} == w: Maybe<&2, Hashes.Hash>}
 ) -> {
-  Shared.Maybe.then(Put, Put, m, p => Some{Put.into(ks, a, p)}) == Some{t}: Maybe<&2, Put>
+  Maybe.bind(&2, Put, Put, m, p => Some{Put.into(ks, a, p)}) == Some{t}: Maybe<&2, Put>
 } -> {
   Some{Put.root(t)} == Some{Node.hash(Node.branch{Parts.put(ks, a, w)})}: Maybe<&2, Hashes.Hash>
 }:
@@ -7434,7 +7434,7 @@ def Canon.split.at(
   Shared.Bool.when(
     Maybe<&2, Put>,
     c,
-    u => Shared.Maybe.then(
+    u => Maybe.bind(&2, 
       Put,
       Put,
       Tree.split(r1, r2, Put{Node.hash(Node.leaf{k1, v1}), ns}, Some{Node.hash(Node.leaf{k2, v2})}),
@@ -8351,7 +8351,7 @@ def Canon.step(
   x: Nat,
   +kid: Maybe<&2, Hashes.Hash>
 ) -> Maybe<&2, Put>:
-  Shared.Maybe.then(
+  Maybe.bind(&2, 
     Put,
     Put,
     Tree.set.go(~S, ~fetch, s, r, 1n+d, k, v, kid, Tree.part(~S, ~fetch, s, kid)),
@@ -9121,7 +9121,7 @@ def Canon.into_elim(
   -G: Put -> Type,
   k: @t2: Put -> {mm == Some{t2}: Maybe<&2, Put>} -> G(Put.into(ks, a, t2))
 ) -> {
-  Shared.Maybe.then(Put, Put, mm, p => Some{Put.into(ks, a, p)}) == Some{t}: Maybe<&2, Put>
+  Maybe.bind(&2, Put, Put, mm, p => Some{Put.into(ks, a, p)}) == Some{t}: Maybe<&2, Put>
 } -> G(t):
   match mm:
     case None{}:
@@ -9217,7 +9217,7 @@ def Canon.split_holds.at(
   Shared.Bool.when(
     Maybe<&2, Put>,
     c,
-    u => Shared.Maybe.then(
+    u => Maybe.bind(&2, 
       Put,
       Put,
       Tree.split(

@@ -594,7 +594,7 @@ def Node.get(s: State(), h: Maybe<&2, Hashes.Hash>, k: List<&2, U32>) -> Maybe<&
 
 # the bytes of the resource n in the tree whose root is h
 def Res.get(s: State(), h: Maybe<&2, Hashes.Hash>, n: Resources.Name) -> Maybe<&2, Texts.Bytes()>:
-  Shared.Maybe.then(List<&2, U32>, Texts.Bytes(), Node.get(s, h, Key.res(n)), ws => Res.read(ws))
+  Maybe.bind(&2, List<&2, U32>, Texts.Bytes(), Node.get(s, h, Key.res(n)), ws => Res.read(ws))
 
 # the vote that took the version v (none: no step took it)
 def Vote.taken(x: Ledgers.Vote) -> Maybe<&2, Ledgers.Vote>:
@@ -606,7 +606,7 @@ def Vote.taken(x: Ledgers.Vote) -> Maybe<&2, Ledgers.Vote>:
 
 # the vote of the version v: the step that took it
 def Version.vote(s: State(), v: Ledgers.Id) -> Maybe<&2, Ledgers.Vote>:
-  Shared.Maybe.then(
+  Maybe.bind(&2, 
     Ledgers.Vote,
     Ledgers.Vote,
     Ledgers.State.decided(~Ask, ~Ask.view, s, v),
@@ -615,7 +615,7 @@ def Version.vote(s: State(), v: Ledgers.Id) -> Maybe<&2, Ledgers.Vote>:
 
 # the root of the tree of the version v (none: v is not a version)
 def Node.root(s: State(), v: Ledgers.Id) -> Maybe<&2, Maybe<&2, Hashes.Hash>>:
-  Shared.Maybe.then(
+  Maybe.bind(&2, 
     Ledgers.Vote,
     Maybe<&2, Hashes.Hash>,
     Version.vote(s, v),
@@ -629,7 +629,7 @@ def Node.root_of(s: State(), m: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Hashes.Hash>
     case None{}:
       None{}
     case Some{v}:
-      Shared.Maybe.then(Maybe<&2, Hashes.Hash>, Hashes.Hash, Node.root(s, v), h => h)
+      Maybe.bind(&2, Maybe<&2, Hashes.Hash>, Hashes.Hash, Node.root(s, v), h => h)
 
 # Lines
 # -----
@@ -702,7 +702,7 @@ def Read.whole(-A: Data, m: Maybe<&2, Codes.Read<A>>) -> Maybe<&2, A>:
 # where the line of the key k below the store r starts: the root that its make
 # gave it in the store's tree (none: the empty tree)
 def Line.start(+s: State(), r: Ledgers.Id, k: List<&2, Bool>) -> Maybe<&2, Hashes.Hash>:
-  Shared.Maybe.then(
+  Maybe.bind(&2, 
     List<&2, U32>,
     Hashes.Hash,
     Node.get(s, Steps.root(Chain.steps(s, Ledgers.Chain{r, None{}}), None{}), Key.start(k)),
@@ -724,7 +724,7 @@ def Chain.root(+s: State(), +c: Ledgers.Chain) -> Maybe<&2, Hashes.Hash>:
 
 # the members in the tree whose root is h, if it holds them
 def Members.in(s: State(), h: Maybe<&2, Hashes.Hash>) -> Maybe<&2, List<&2, Member>>:
-  Shared.Maybe.then(
+  Maybe.bind(&2, 
     List<&2, U32>,
     List<&2, Member>,
     Node.get(s, h, Key.members()),
@@ -758,7 +758,7 @@ def Node.vector(
   h: Maybe<&2, Hashes.Hash>,
   +c: Ledgers.Chain
 ) -> Maybe<&2, Ledgers.Where>:
-  Shared.Maybe.then(
+  Maybe.bind(&2, 
     List<&2, U32>,
     Ledgers.Where,
     Node.get(s, h, Key.vector(c)),
@@ -780,7 +780,7 @@ def Place.from(
     u => Maybe.default(
       &2,
       Bool,
-      Shared.Maybe.then(
+      Maybe.bind(&2, 
         Ledgers.Where,
         Bool,
         Node.vector(s, hx, Where.chain(pv)),
@@ -796,15 +796,15 @@ def Node.has(+s: State(), +v: Ledgers.Id, +x: Ledgers.Id) -> Bool:
     u => Maybe.default(
       &2,
       Bool,
-      Shared.Maybe.then(
+      Maybe.bind(&2, 
         Ledgers.Where,
         Bool,
         Node.place(s, x),
-        +px => Shared.Maybe.then(
+        +px => Maybe.bind(&2, 
           Ledgers.Where,
           Bool,
           Node.place(s, v),
-          pv => Shared.Maybe.then(
+          pv => Maybe.bind(&2, 
             Ledgers.Vote,
             Bool,
             Version.vote(s, x),
@@ -855,10 +855,6 @@ def Work.set(w: Work, k: List<&2, U32>, x: List<&2, U32>) -> Maybe<&2, Work>:
     case Work{+s, h, ns}:
       Work.of(s, ns, Trees.Tree.set(~State(), ~Store.fetch, s, h, k, x))
 
-# m, then f
-def Work.then(m: Maybe<&2, Work>, f: Work -> Maybe<&2, Work>) -> Maybe<&2, Work>:
-  Shared.Maybe.then(Work, Work, m, f)
-
 # the root of w
 def Work.root(w: Work) -> Maybe<&2, Hashes.Hash>:
   match w:
@@ -889,7 +885,7 @@ def Vector.add(w: Work, +c: Ledgers.Chain, +p: Ledgers.Where) -> Maybe<&2, Work>
         Maybe.default(
           &2,
           Bool,
-          Shared.Maybe.then(
+          Maybe.bind(&2, 
             Ledgers.Where,
             Bool,
             Node.vector(s, h, c),
@@ -905,7 +901,7 @@ def Vector.add(w: Work, +c: Ledgers.Chain, +p: Ledgers.Where) -> Maybe<&2, Work>
 def Vector.entry(b: Trees.Binding) -> Maybe<&2, Ledgers.Where>:
   match b:
     case Trees.Binding{Con{4, k}, ws}:
-      Shared.Maybe.then(
+      Maybe.bind(&2, 
         Ledgers.Chain,
         Ledgers.Where,
         Read.whole(Ledgers.Chain, Chain.code.read(k)),
@@ -938,7 +934,7 @@ def Vector.adds(
     case Nil{}:
       m
     case Con{b, r}:
-      Vector.adds(r, c, Work.then(m, w => Vector.add.if(w, c, Vector.entry(b))))
+      Vector.adds(r, c, Maybe.bind(&2, Work, Work, m, w => Vector.add.if(w, c, Vector.entry(b))))
 
 # Submodules
 # ----------
@@ -1389,7 +1385,7 @@ def Judge.resolve(
         ),
         h,
         x => Work.take(
-          Work.then(
+          Maybe.bind(&2, Work, Work, 
             Work.set(Work{s, h, []}, Key.res(n), Res.code(Content.bytes(s, n, c))),
             y => Work.set(y, Key.clash(n), [0])
           )
@@ -1409,7 +1405,7 @@ def Merge.one(
   w: Work
 ) -> Maybe<&2, Work>:
   +p = Pick.merge(Formats.Format.of(Resources.Name.path(n)), s, b, o, t)
-  Work.then(
+  Maybe.bind(&2, Work, Work, 
     Work.set(w, Key.res(n), Res.code(Pick.kept(p, o))),
     +y => Shared.Bool.when(
       Maybe<&2, Work>,
@@ -1438,7 +1434,7 @@ def Merge.all(
         hb,
         ho,
         ht,
-        Work.then(
+        Maybe.bind(&2, Work, Work, 
           m,
           w => Merge.one(s, n, Res.get(s, hb, n), Res.get(s, ho, n), Res.get(s, ht, n), w)
         )
@@ -1454,22 +1450,22 @@ def Vote.id(x: Ledgers.Vote) -> Maybe<&2, Ledgers.Id>:
 def Version.at(+s: State(), w: Ledgers.Where) -> Maybe<&2, Ledgers.Id>:
   match w:
     case Ledgers.Where{+c, +e, h}:
-      Shared.Maybe.then(
+      Maybe.bind(&2, 
         List<&2, String>,
         Ledgers.Id,
         Ledgers.Line.owners(~Ask, ~Ask.view, s, c, e),
-        ms => Shared.Maybe.then(
+        ms => Maybe.bind(&2, 
           Ledgers.Vote,
           Ledgers.Id,
           Ledgers.State.decide(~Ask, s, Ledgers.Where{c, e, h}, ms),
-          x => Shared.Maybe.then(Ledgers.Vote, Ledgers.Id, Vote.taken(x), y => Vote.id(y))
+          x => Maybe.bind(&2, Ledgers.Vote, Ledgers.Id, Vote.taken(x), y => Vote.id(y))
         )
       )
 
 # the base of a merge of from into the line c: from itself when it is of c,
 # else the version of c at the place that from's version vector gives c
 def Merge.base(+s: State(), +c: Ledgers.Chain, +from: Ledgers.Id) -> Maybe<&2, Ledgers.Id>:
-  Shared.Maybe.then(
+  Maybe.bind(&2, 
     Ledgers.Where,
     Ledgers.Id,
     Node.place(s, from),
@@ -1477,7 +1473,7 @@ def Merge.base(+s: State(), +c: Ledgers.Chain, +from: Ledgers.Id) -> Maybe<&2, L
       Maybe<&2, Ledgers.Id>,
       Ledgers.Chain.is_eq(Where.chain(pf), c),
       u => Some{from},
-      u => Shared.Maybe.then(
+      u => Maybe.bind(&2, 
         Ledgers.Where,
         Ledgers.Id,
         Node.vector(s, Node.root_of(s, Some{from}), c),
@@ -1494,7 +1490,7 @@ def Vector.joined(
   +v: Ledgers.Id,
   m: Maybe<&2, Work>
 ) -> Maybe<&2, Work>:
-  Work.then(
+  Maybe.bind(&2, Work, Work, 
     Vector.adds(Trees.Tree.list(~State(), ~Store.fetch, s, Node.root_of(s, Some{v})), c, m),
     w => Vector.add.if(w, c, Node.place(s, v))
   )
@@ -1547,7 +1543,7 @@ def Make.work(
   k: List<&2, Bool>,
   h: Maybe<&2, Hashes.Hash>
 ) -> Maybe<&2, Work>:
-  Work.then(start, +w => Work.set(Work.at(w, h), Key.start(k), Start.code(Work.root(w))))
+  Maybe.bind(&2, Work, Work, start, +w => Work.set(Work.at(w, h), Key.start(k), Start.code(Work.root(w))))
 
 # the first tree of a branch made at the version m, if any, of the line c: its
 # tree, with what it came from in its version vector
@@ -1751,7 +1747,7 @@ def Node.version(+s: State(), p: Point) -> Maybe<&2, Ledgers.Id>:
 
 # the bytes of the resource n at the version m, if it holds them
 def Res.at(+s: State(), n: Resources.Name, m: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Texts.Bytes()>:
-  Shared.Maybe.then(Ledgers.Id, Texts.Bytes(), m, v => Res.get(s, Node.root_of(s, Some{v}), n))
+  Maybe.bind(&2, Ledgers.Id, Texts.Bytes(), m, v => Res.get(s, Node.root_of(s, Some{v}), n))
 
 # the bytes of the resource n at the point p, if it is there
 def Node.content(+s: State(), n: Resources.Name, p: Point) -> Maybe<&2, Texts.Bytes()>:

@@ -1476,17 +1476,9 @@ def Maybe.laws(
     a => b => Maybe.is_eq_sound(~A, ~eq, x => y => Eq.sound(~A, ~eq, laws, x, y), a, b)
   )
 
-# k on the value of m, if any
-def Maybe.then(-A: Data, -B: Data, m: Maybe<&2, A>, k: A -> Maybe<&2, B>) -> Maybe<&2, B>:
-  match m:
-    case Some{a}:
-      k(a)
-    case None{}:
-      None{}
-
 # a read m then k that gives x still gives x when m and each k keep what they
 # give (m2 and k2): a kept read of a kept read is kept
-def Maybe.then_kept(
+def Maybe.bind_kept(
   -A: Data,
   -B: Data,
   m: Maybe<&2, A>,
@@ -1497,8 +1489,8 @@ def Maybe.then_kept(
   hm: @a: A -> {m == Some{a}: Maybe<&2, A>} -> {m2 == Some{a}: Maybe<&2, A>},
   hk: @a: A -> {k(a) == Some{x}: Maybe<&2, B>} -> {k2(a) == Some{x}: Maybe<&2, B>}
 ) -> {
-  Maybe.then(A, B, m, k) == Some{x}: Maybe<&2, B>
-} -> {Maybe.then(A, B, m2, k2) == Some{x}: Maybe<&2, B>}:
+  Maybe.bind(&2, A, B, m, k) == Some{x}: Maybe<&2, B>
+} -> {Maybe.bind(&2, A, B, m2, k2) == Some{x}: Maybe<&2, B>}:
   match m:
     case Some{+a}:
       h =>
@@ -1507,11 +1499,11 @@ def Maybe.then_kept(
           m2,
           Some{a},
           hm(a)({==})
-        ): {Maybe.then(A, B, _, k2) == Some{x}: Maybe<&2, B>}
+        ): {Maybe.bind(&2, A, B, _, k2) == Some{x}: Maybe<&2, B>}
         hk(a)(h)
     case None{}:
       h => Empty.absurd(
-        {Maybe.then(A, B, m2, k2) == Some{x}: Maybe<&2, B>},
+        {Maybe.bind(&2, A, B, m2, k2) == Some{x}: Maybe<&2, B>},
         Maybe.none_ne_some(B, x, h)
       )
 

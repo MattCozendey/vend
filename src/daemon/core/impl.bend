@@ -593,7 +593,7 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
         %Equal.sym(Ledgers.Status, Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, ask1, i), Ledgers.Status.done{True{}}, hst):
           {Spec.Res.at(ask1, name, Shared.Bool.when(Maybe<&2, Ledgers.Id>, Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Ledgers.Status.verdict(_), Some{True{}}), u => Some{i}, u => None{})) == Some{x}: Maybe<&2, Texts.Bytes()>}
         %Equal.sym(Maybe<&2, Ledgers.Vote>, Ledgers.State.decided(~Spec.Ask, ~Spec.Ask.view, ask1, i), Some{Ledgers.Vote{i, True{}, Ledgers.View.on{c, None{}, None{}}, Some{Trees.Put.root(p)}}}, hdc):
-          {Spec.Res.get(ask1, Shared.Maybe.then(Maybe<&2, Hashes.Hash>, Hashes.Hash, Shared.Maybe.then(Ledgers.Vote, Maybe<&2, Hashes.Hash>, Shared.Maybe.then(Ledgers.Vote, Ledgers.Vote, _, y => Spec.Vote.taken(y)), y => Some{Ledgers.Vote.result_of(Some{y})}), g => g), name) == Some{x}: Maybe<&2, Texts.Bytes()>}
-        %Equal.sym(Maybe<&2, List<&2, U32>>, Trees.Tree.get(~Spec.State(), ~Spec.Store.fetch, ask1, Some{Trees.Put.root(p)}, Spec.Key.res(name)), Some{Spec.Res.code(Some{x})}, hgs): {Shared.Maybe.then(List<&2, U32>, Texts.Bytes(), _, ws => Spec.Res.read(ws)) == Some{x}: Maybe<&2, Texts.Bytes()>}
+          {Spec.Res.get(ask1, Maybe.bind(&2, Maybe<&2, Hashes.Hash>, Hashes.Hash, Maybe.bind(&2, Ledgers.Vote, Maybe<&2, Hashes.Hash>, Maybe.bind(&2, Ledgers.Vote, Ledgers.Vote, _, y => Spec.Vote.taken(y)), y => Some{Ledgers.Vote.result_of(Some{y})}), g => g), name) == Some{x}: Maybe<&2, Texts.Bytes()>}
+        %Equal.sym(Maybe<&2, List<&2, U32>>, Trees.Tree.get(~Spec.State(), ~Spec.Store.fetch, ask1, Some{Trees.Put.root(p)}, Spec.Key.res(name)), Some{Spec.Res.code(Some{x})}, hgs): {Maybe.bind(&2, List<&2, U32>, Texts.Bytes(), _, ws => Spec.Res.read(ws)) == Some{x}: Maybe<&2, Texts.Bytes()>}
         Res.read_code(x)))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning

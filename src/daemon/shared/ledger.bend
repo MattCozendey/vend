@@ -772,7 +772,7 @@ def State.decide(~Q: Data, s: State(Q), w: Where, ms: List<&2, String>) -> Maybe
 # Epochs
 # ------
 # Each read is a chain of reads (Maybe.then, Maybe.when), so that a read that
-# a sync keeps is built of reads that it keeps (Maybe.then_kept).
+# a sync keeps is built of reads that it keeps (Maybe.bind_kept).
 
 # the owners of a view that starts a store
 def Root.owners.view(v: View) -> Maybe<&2, List<&2, String>>:
@@ -790,7 +790,7 @@ def Root.owners.ask(~Q: Data, ~view: Q -> View, a: Asked<Q>) -> Maybe<&2, List<&
 
 # the owners of the root line of r: those of the request that starts it
 def Root.owners(~Q: Data, ~view: Q -> View, s: State(Q), r: Id) -> Maybe<&2, List<&2, String>>:
-  Shared.Maybe.then(
+  Maybe.bind(&2, 
     Asked<Q>,
     List<&2, String>,
     State.asked(~Q, s, r),
@@ -821,7 +821,7 @@ def Epoch.at(
       Shared.Maybe.when(
         List<&2, String>,
         Bool.and(Chain.is_eq(c2, c), U32.is_eq(e2, e)),
-        u => Shared.Maybe.then(
+        u => Maybe.bind(&2, 
           Vote,
           List<&2, String>,
           State.decide(~Q, s, Where{c, e, h}, ms),
@@ -837,7 +837,7 @@ def Epoch.next(
   +e: U32,
   ms: List<&2, String>
 ) -> Maybe<&2, List<&2, String>>:
-  Shared.Maybe.then(
+  Maybe.bind(&2, 
     Where,
     List<&2, String>,
     Where.of(~Q, State.entry(~Q, s, Slot.epoch(c, U32.inc(e)))),
@@ -857,7 +857,7 @@ def Epoch.up(
     case 0n:
       m
     case 1n+p:
-      Shared.Maybe.then(
+      Maybe.bind(&2, 
         List<&2, String>,
         List<&2, String>,
         m,
@@ -901,11 +901,11 @@ def Made.at(
       Shared.Maybe.when(
         List<&2, String>,
         Chain.is_eq(c2, Chain{r, None{}}),
-        u => Shared.Maybe.then(
+        u => Maybe.bind(&2, 
           List<&2, String>,
           List<&2, String>,
           Root.at(~Q, ~view, s, r, e),
-          +ms => Shared.Maybe.then(
+          +ms => Maybe.bind(&2, 
             Vote,
             List<&2, String>,
             State.decide(~Q, s, Where{c2, e, h}, ms),
@@ -920,7 +920,7 @@ def Line.first(~Q: Data, ~view: Q -> View, +s: State(Q), +c: Chain) -> Maybe<&2,
     case Chain{r, None{}}:
       Root.owners(~Q, ~view, s, r)
     case Chain{+r, Some{+k}}:
-      Shared.Maybe.then(
+      Maybe.bind(&2, 
         Where,
         List<&2, String>,
         Where.of(~Q, State.entry(~Q, s, Slot.made(Chain{r, Some{k}}))),
@@ -942,15 +942,15 @@ def Made.vote_at(
       Shared.Maybe.when(
         Vote,
         Chain.is_eq(c2, Chain{r, None{}}),
-        u => Shared.Maybe.then(
+        u => Maybe.bind(&2, 
           List<&2, String>,
           Vote,
           Root.at(~Q, ~view, s, r, e),
-          +ms => Shared.Maybe.then(
+          +ms => Maybe.bind(&2, 
             Vote,
             Vote,
             State.decide(~Q, s, Where{c2, e, h}, ms),
-            +v => Shared.Maybe.then(List<&2, String>, Vote, Made.vote(k, ms, v), u => Some{v})
+            +v => Maybe.bind(&2, List<&2, String>, Vote, Made.vote(k, ms, v), u => Some{v})
           )
         )
       )
@@ -961,7 +961,7 @@ def Line.made(~Q: Data, ~view: Q -> View, +s: State(Q), c: Chain) -> Maybe<&2, V
     case Chain{r, None{}}:
       None{}
     case Chain{+r, Some{+k}}:
-      Shared.Maybe.then(
+      Maybe.bind(&2, 
         Where,
         Vote,
         Where.of(~Q, State.entry(~Q, s, Slot.made(Chain{r, Some{k}}))),
@@ -1093,11 +1093,11 @@ def Line.head(
       Shared.Maybe.when(
         Vote,
         Bool.not(U32.is_eq(e, 0)),
-        u => Shared.Maybe.then(
+        u => Maybe.bind(&2, 
           Where,
           Vote,
           Where.of(~Q, State.entry(~Q, s, Slot.epoch(c, e))),
-          w => Shared.Maybe.then(
+          w => Maybe.bind(&2, 
             List<&2, String>,
             Vote,
             Line.owners(~Q, ~view, s, c, U32.sub(e, 1)),
@@ -1191,7 +1191,7 @@ def Line.steps.of(~Q: Data, f: Nat, s: State(Q), +c: Chain, +vs: List<&2, Vote>)
 
 # the steps of the line c, in order (none: the line does not exist)
 def Line.steps(~Q: Data, ~view: Q -> View, +s: State(Q), +c: Chain) -> Maybe<&2, List<&2, Vote>>:
-  Shared.Maybe.then(
+  Maybe.bind(&2, 
     List<&2, String>,
     List<&2, Vote>,
     Line.first(~Q, ~view, s, c),
@@ -1219,11 +1219,11 @@ def Vote.for(i: Id, v: Vote) -> Maybe<&2, Vote>:
 def Where.at(~Q: Data, ~view: Q -> View, +s: State(Q), i: Id, w: Where) -> Maybe<&2, Vote>:
   match w:
     case Where{+c, +e, h}:
-      Shared.Maybe.then(
+      Maybe.bind(&2, 
         List<&2, String>,
         Vote,
         Line.owners(~Q, ~view, s, c, e),
-        ms => Shared.Maybe.then(
+        ms => Maybe.bind(&2, 
           Vote,
           Vote,
           State.decide(~Q, s, Where{c, e, h}, ms),
@@ -1233,7 +1233,7 @@ def Where.at(~Q: Data, ~view: Q -> View, +s: State(Q), i: Id, w: Where) -> Maybe
 
 # the vote that decided the request i, when s holds where and it checks
 def State.decided(~Q: Data, ~view: Q -> View, +s: State(Q), +i: Id) -> Maybe<&2, Vote>:
-  Shared.Maybe.then(
+  Maybe.bind(&2, 
     Where,
     Vote,
     Where.of(~Q, State.entry(~Q, s, Slot.where(i))),
@@ -1242,11 +1242,11 @@ def State.decided(~Q: Data, ~view: Q -> View, +s: State(Q), +i: Id) -> Maybe<&2,
 
 # the place where the request i was decided, when s holds it and it checks
 def State.place(~Q: Data, ~view: Q -> View, +s: State(Q), +i: Id) -> Maybe<&2, Where>:
-  Shared.Maybe.then(
+  Maybe.bind(&2, 
     Where,
     Where,
     Where.of(~Q, State.entry(~Q, s, Slot.where(i))),
-    +w => Shared.Maybe.then(Vote, Where, Where.at(~Q, ~view, s, i, w), u => Some{w})
+    +w => Maybe.bind(&2, Vote, Where, Where.at(~Q, ~view, s, i, w), u => Some{w})
   )
 
 # where a request is. Done: a step decided it, and took it or refused it as
@@ -1310,7 +1310,7 @@ def Data.check(h: Hashes.Hash, +ws: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
 
 # the data of s whose hash is h, when s holds it
 def State.data(~Q: Data, s: State(Q), +h: Hashes.Hash) -> Maybe<&2, List<&2, U32>>:
-  Shared.Maybe.then(
+  Maybe.bind(&2, 
     List<&2, U32>,
     List<&2, U32>,
     Data.of(~Q, State.entry(~Q, s, Slot.data(h))),
@@ -2044,7 +2044,7 @@ def Root.owners.kept(
 ) -> {
   Root.owners(~Q, ~view, s, r) == Some{a}: Maybe<&2, List<&2, String>>
 } -> {Root.owners(~Q, ~view, s2, r) == Some{a}: Maybe<&2, List<&2, String>>}:
-  Shared.Maybe.then_kept(
+  Shared.Maybe.bind_kept(
     Asked<Q>,
     List<&2, String>,
     State.asked(~Q, s, r),
@@ -2091,20 +2091,20 @@ def Epoch.at.kept(
       Shared.Maybe.when_kept(
         List<&2, String>,
         Bool.and(Chain.is_eq(c2, c), U32.is_eq(e2, e)),
-        u => Shared.Maybe.then(
+        u => Maybe.bind(&2, 
           Vote,
           List<&2, String>,
           State.decide(~Q, s, p, ms),
           v => Owners.of(c, v)
         ),
-        u => Shared.Maybe.then(
+        u => Maybe.bind(&2, 
           Vote,
           List<&2, String>,
           State.decide(~Q, s2, p, ms),
           v => Owners.of(c, v)
         ),
         a,
-        Shared.Maybe.then_kept(
+        Shared.Maybe.bind_kept(
           Vote,
           List<&2, String>,
           State.decide(~Q, s, p, ms),
@@ -2135,7 +2135,7 @@ def Epoch.next.kept(
   Epoch.next(~Q, s, c, e, ms) == Some{a}: Maybe<&2, List<&2, String>>
 } -> {Epoch.next(~Q, s2, c, e, ms) == Some{a}: Maybe<&2, List<&2, String>>}:
   +k = Slot.epoch(c, U32.inc(e))
-  Shared.Maybe.then_kept(
+  Shared.Maybe.bind_kept(
     Where,
     List<&2, String>,
     Where.of(~Q, State.entry(~Q, s, k)),
@@ -2177,7 +2177,7 @@ def Epoch.up.kept(
       hm(a)
     case 1n+p:
       up = U32.inc(cur)
-      Shared.Maybe.then_kept(
+      Shared.Maybe.bind_kept(
         List<&2, String>,
         List<&2, String>,
         m,
@@ -2259,22 +2259,22 @@ def Made.at.kept(
       Shared.Maybe.when_kept(
         List<&2, String>,
         Chain.is_eq(c2, Chain{r, None{}}),
-        u => Shared.Maybe.then(
+        u => Maybe.bind(&2, 
           List<&2, String>,
           List<&2, String>,
           Root.at(~Q, ~view, s, r, e),
-          ms => Shared.Maybe.then(
+          ms => Maybe.bind(&2, 
             Vote,
             List<&2, String>,
             State.decide(~Q, s, p, ms),
             v => Made.vote(k, ms, v)
           )
         ),
-        u => Shared.Maybe.then(
+        u => Maybe.bind(&2, 
           List<&2, String>,
           List<&2, String>,
           Root.at(~Q, ~view, s2, r, e),
-          ms => Shared.Maybe.then(
+          ms => Maybe.bind(&2, 
             Vote,
             List<&2, String>,
             State.decide(~Q, s2, p, ms),
@@ -2282,18 +2282,18 @@ def Made.at.kept(
           )
         ),
         a,
-        Shared.Maybe.then_kept(
+        Shared.Maybe.bind_kept(
           List<&2, String>,
           List<&2, String>,
           Root.at(~Q, ~view, s, r, e),
           Root.at(~Q, ~view, s2, r, e),
-          ms => Shared.Maybe.then(
+          ms => Maybe.bind(&2, 
             Vote,
             List<&2, String>,
             State.decide(~Q, s, p, ms),
             v => Made.vote(k, ms, v)
           ),
-          ms => Shared.Maybe.then(
+          ms => Maybe.bind(&2, 
             Vote,
             List<&2, String>,
             State.decide(~Q, s2, p, ms),
@@ -2301,7 +2301,7 @@ def Made.at.kept(
           ),
           a,
           x => Root.at.kept(~Q, ~same, ~laws, ~view, s, s2, r, e, gr, x),
-          +ms => Shared.Maybe.then_kept(
+          +ms => Shared.Maybe.bind_kept(
             Vote,
             List<&2, String>,
             State.decide(~Q, s, p, ms),
@@ -2336,7 +2336,7 @@ def Line.first.kept(
       Root.owners.kept(~Q, ~same, ~laws, ~view, s, s2, r, gr, a)
     case Chain{+r, Some{+k}}:
       +slot = Slot.made(Chain{r, Some{k}})
-      Shared.Maybe.then_kept(
+      Shared.Maybe.bind_kept(
         Where,
         List<&2, String>,
         Where.of(~Q, State.entry(~Q, s, slot)),
@@ -2410,16 +2410,16 @@ def Where.at.kept(
   match w:
     case Where{+c, +e, h}:
       +p = {Where{c, e, h}: Where}
-      Shared.Maybe.then_kept(
+      Shared.Maybe.bind_kept(
         List<&2, String>,
         Vote,
         Line.owners(~Q, ~view, s, c, e),
         Line.owners(~Q, ~view, s2, c, e),
-        ms => Shared.Maybe.then(Vote, Vote, State.decide(~Q, s, p, ms), v => Vote.for(i, v)),
-        ms => Shared.Maybe.then(Vote, Vote, State.decide(~Q, s2, p, ms), v => Vote.for(i, v)),
+        ms => Maybe.bind(&2, Vote, Vote, State.decide(~Q, s, p, ms), v => Vote.for(i, v)),
+        ms => Maybe.bind(&2, Vote, Vote, State.decide(~Q, s2, p, ms), v => Vote.for(i, v)),
         a,
         x => Line.owners.kept(~Q, ~same, ~laws, ~view, s, s2, c, e, gr, x),
-        +ms => Shared.Maybe.then_kept(
+        +ms => Shared.Maybe.bind_kept(
           Vote,
           Vote,
           State.decide(~Q, s, p, ms),
@@ -2450,7 +2450,7 @@ law State.decided_grows:
 def State.decided_grows(ty, same, laws, view, s, s2, i, a):
   +gr =>
     +k = Slot.where(i)
-    Shared.Maybe.then_kept(
+    Shared.Maybe.bind_kept(
       Where,
       Vote,
       Where.of(~ty, State.entry(~ty, s, k)),
@@ -3639,7 +3639,7 @@ def Cast.puts(
               Maybe.is_none(
                 &2,
                 Vote,
-                Shared.Maybe.then(
+                Maybe.bind(&2, 
                   Where,
                   Vote,
                   Where.of(~Q, Cells.Cell.value(Entry<Q>, _)),
@@ -3790,7 +3790,7 @@ def Decided.after(
       Some{Cells.one{Entry.at{w}}},
       State.put_get(~Q, ~same, s2, Slot.where(i), Entry.at{w})(hw2)
     ): {
-      Shared.Maybe.then(
+      Maybe.bind(&2, 
         Where,
         Vote,
         Where.of(~Q, Cells.Cell.value(Entry<Q>, _)),
@@ -3804,11 +3804,11 @@ def Decided.after(
       Some{[n]},
       Line.owners.kept(~Q, ~same, ~laws, ~view, s2, s3, c, e, gr, [n])(ho2)
     ): {
-      Shared.Maybe.then(
+      Maybe.bind(&2, 
         List<&2, String>,
         Vote,
         _,
-        ms => Shared.Maybe.then(Vote, Vote, State.decide(~Q, s3, w, ms), u => Vote.for(i, u))
+        ms => Maybe.bind(&2, Vote, Vote, State.decide(~Q, s3, w, ms), u => Vote.for(i, u))
       )
         == Some{x}: Maybe<&2, Vote>
     }
@@ -3817,7 +3817,7 @@ def Decided.after(
       State.decide(~Q, s3, w, [n]),
       Some{x},
       State.decide_grows(~Q, ~same, ~laws, s2, s3, w, [n], x)(gr)(hd)
-    ): {Shared.Maybe.then(Vote, Vote, _, u => Vote.for(i, u)) == Some{x}: Maybe<&2, Vote>}
+    ): {Maybe.bind(&2, Vote, Vote, _, u => Vote.for(i, u)) == Some{x}: Maybe<&2, Vote>}
     %Equal.sym(Bool, Id.is_eq(i, i), True{}, Id.is_eq_refl(i)):
       {Shared.Maybe.when(Vote, _, u => Some{x}) == Some{x}: Maybe<&2, Vote>}
     {==}
@@ -4311,7 +4311,7 @@ def Data.then_hash(
   -x: List<&2, U32>,
   m: Maybe<&2, List<&2, U32>>
 ) -> {
-  Shared.Maybe.then(
+  Maybe.bind(&2, 
     List<&2, U32>,
     List<&2, U32>,
     m,
@@ -4345,7 +4345,7 @@ law State.data_grows:
     -> {State.data(~Q, s2, h) == Some{x}: Maybe<&2, List<&2, U32>>}
 
 def State.data_grows(ty, same, laws, s, s2, h, x):
-  +gr => Shared.Maybe.then_kept(
+  +gr => Shared.Maybe.bind_kept(
     List<&2, U32>,
     List<&2, U32>,
     Data.of(~ty, State.entry(~ty, s, Slot.data(h))),
@@ -4402,7 +4402,7 @@ def State.put_data_get(ty, same, s, ws):
       Some{Cells.one{Entry.data{ws}}},
       State.put_get(~ty, ~same, s, k, Entry.data{ws})(h0)
     ): {
-      Shared.Maybe.then(
+      Maybe.bind(&2, 
         List<&2, U32>,
         List<&2, U32>,
         Data.of(~ty, Cells.Cell.value(Entry<ty>, _)),
@@ -5125,7 +5125,7 @@ def Line.steps_grow.at(
   } -> {m2 == Some{ms}: Maybe<&2, List<&2, String>>},
   +gr: {State.grows(~Q, ~same, s, s2) == True{}: Bool}
 ) -> {
-  Shared.Maybe.then(
+  Maybe.bind(&2, 
     List<&2, String>,
     List<&2, Vote>,
     m,
@@ -5141,10 +5141,10 @@ def Line.steps_grow.at(
   )
     == Some{xs}: Maybe<&2, List<&2, Vote>>
 } -> {
-  Shared.Maybe.then(
+  Maybe.bind(&2, 
     List<&2, Vote>,
     List<&2, Vote>,
-    Shared.Maybe.then(
+    Maybe.bind(&2, 
       List<&2, String>,
       List<&2, Vote>,
       m2,
@@ -5166,10 +5166,10 @@ def Line.steps_grow.at(
     case None{}:
       e => Empty.absurd(
         {
-          Shared.Maybe.then(
+          Maybe.bind(&2, 
             List<&2, Vote>,
             List<&2, Vote>,
-            Shared.Maybe.then(
+            Maybe.bind(&2, 
               List<&2, String>,
               List<&2, Vote>,
               m2,
@@ -5203,10 +5203,10 @@ def Line.steps_grow.at(
           xs,
           e
         ): {
-          Shared.Maybe.then(
+          Maybe.bind(&2, 
             List<&2, Vote>,
             List<&2, Vote>,
-            Shared.Maybe.then(
+            Maybe.bind(&2, 
               List<&2, String>,
               List<&2, Vote>,
               m2,
@@ -5230,10 +5230,10 @@ def Line.steps_grow.at(
           Some{ms},
           hm(ms)({==})
         ): {
-          Shared.Maybe.then(
+          Maybe.bind(&2, 
             List<&2, Vote>,
             List<&2, Vote>,
-            Shared.Maybe.then(
+            Maybe.bind(&2, 
               List<&2, String>,
               List<&2, Vote>,
               _,
@@ -5358,7 +5358,7 @@ law Line.steps_grow:
   {State.grows(~Q, ~same, s, s2) == True{}: Bool}
     -> {Line.steps(~Q, ~view, s, c) == Some{xs}: Maybe<&2, List<&2, Vote>>}
     -> {
-      Shared.Maybe.then(
+      Maybe.bind(&2, 
         List<&2, Vote>,
         List<&2, Vote>,
         Line.steps(~Q, ~view, s2, c),
