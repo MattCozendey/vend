@@ -91,14 +91,12 @@ def Uri.read(t: String) -> Maybe<&2, Uri>:
 
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a scheme character is not ':'
-law char_not_colon.at:
-  for hit: Bool
-  for c: Char
-  {
-    U32.is_eq(Char.to_u32(c), 58) == hit: Bool
-  } -> {Uri.is_scheme_char(c) == True{}: Bool} -> {hit == False{}: Bool}
-
-def char_not_colon.at(hit, c):
+def char_not_colon.at(
+  hit: Bool,
+  c: Char
+) -> {
+  U32.is_eq(Char.to_u32(c), 58) == hit: Bool
+} -> {Uri.is_scheme_char(c) == True{}: Bool} -> {hit == False{}: Bool}:
   match hit c:
     case True{} Chr{y}:
       e => h =>
@@ -108,20 +106,16 @@ def char_not_colon.at(hit, c):
     case False{} d:
       e => h => {==}
 
-law char_not_colon:
-  for c: Char
-  {Uri.is_scheme_char(c) == True{}: Bool} -> {U32.is_eq(Char.to_u32(c), 58) == False{}: Bool}
-
-def char_not_colon(c):
+def char_not_colon(
+  c: Char
+) -> {Uri.is_scheme_char(c) == True{}: Bool} -> {U32.is_eq(Char.to_u32(c), 58) == False{}: Bool}:
   +c = c
   char_not_colon.at(U32.is_eq(Char.to_u32(c), 58), c)({==})
 
 # a letter is a scheme character
-law alpha_scheme:
-  for c: Char
-  {Char.is_alpha(c) == True{}: Bool} -> {Uri.is_scheme_char(c) == True{}: Bool}
-
-def alpha_scheme(c):
+def alpha_scheme(
+  c: Char
+) -> {Char.is_alpha(c) == True{}: Bool} -> {Uri.is_scheme_char(c) == True{}: Bool}:
   +h =>
     +c = c
     %Equal.sym(
@@ -142,11 +136,9 @@ def alpha_scheme(c):
     {==}
 
 # scheme characters hold no ':'
-law rest_no_colon:
-  for t: String
-  {Uri.is_scheme_rest(t) == True{}: Bool} -> {Texts.Text.has(t, 58) == False{}: Bool}
-
-def rest_no_colon(t):
+def rest_no_colon(
+  t: String
+) -> {Uri.is_scheme_rest(t) == True{}: Bool} -> {Texts.Text.has(t, 58) == False{}: Bool}:
   match t:
     case SNil{}:
       h => {==}
@@ -165,11 +157,9 @@ def rest_no_colon(t):
         )(Shared.List.all.if_rest(Uri.is_scheme_char(c), u => Uri.is_scheme_rest(r))(h))
 
 # a scheme holds no ':'
-law scheme_no_colon:
-  for t: String
-  {Uri.is_scheme(t) == True{}: Bool} -> {Texts.Text.has(t, 58) == False{}: Bool}
-
-def scheme_no_colon(t):
+def scheme_no_colon(
+  t: String
+) -> {Uri.is_scheme(t) == True{}: Bool} -> {Texts.Text.has(t, 58) == False{}: Bool}:
   match t:
     case SNil{}:
       h => Empty.absurd({Texts.Text.has(SNil{}, 58) == False{}: Bool}, Shared.Bool.false_ne_true(h))
@@ -188,12 +178,10 @@ def scheme_no_colon(t):
         rest_no_colon(r)(Shared.List.all.if_rest(Char.is_alpha(c), u => Uri.is_scheme_rest(r))(h))
 
 # a character that is '/' is '/'
-law slash_head:
-  for c: Char
-  for t: String
-  {Char.is_eq(c, '/') == True{}: Bool} -> {SCon{c, t} == SCon{'/', t}: String}
-
-def slash_head(c, t):
+def slash_head(
+  c: Char,
+  t: String
+) -> {Char.is_eq(c, '/') == True{}: Bool} -> {SCon{c, t} == SCon{'/', t}: String}:
   match c:
     case Chr{y}:
       e =>
@@ -201,15 +189,13 @@ def slash_head(c, t):
         Equal.cong(U32, String, z => SCon{Chr{z}, t}, y, 47, Shared.U32.is_eq_sound(y, 47)(e))
 
 # slash_cons, by whether the first character is '/' (b)
-law slash_cons.at:
-  for b: Bool
-  for c: Char
-  for t: String
-  {
-    Char.is_eq(c, '/') == b: Bool
-  } -> {String.starts_with.go.if("", t, b) == True{}: Bool} -> {SCon{c, t} == SCon{'/', t}: String}
-
-def slash_cons.at(b, c, t):
+def slash_cons.at(
+  b: Bool,
+  c: Char,
+  t: String
+) -> {
+  Char.is_eq(c, '/') == b: Bool
+} -> {String.starts_with.go.if("", t, b) == True{}: Bool} -> {SCon{c, t} == SCon{'/', t}: String}:
   match b:
     case True{}:
       e => h => slash_head(c, t)(e)
@@ -217,27 +203,23 @@ def slash_cons.at(b, c, t):
       e => h => Empty.absurd({SCon{c, t} == SCon{'/', t}: String}, Shared.Bool.false_ne_true(h))
 
 # a text that starts with '/' starts with '/'
-law slash_cons:
-  for c: Char
-  for t: String
-  {String.starts_with(SCon{c, t}, "/") == True{}: Bool} -> {SCon{c, t} == SCon{'/', t}: String}
-
-def slash_cons(c, t):
+def slash_cons(
+  c: Char,
+  t: String
+) -> {String.starts_with(SCon{c, t}, "/") == True{}: Bool} -> {SCon{c, t} == SCon{'/', t}: String}:
   +c = c
   slash_cons.at(Char.is_eq(c, '/'), c, t)({==})
 
 # slash1, by whether the first character is '/' (b)
-law slash1.at:
-  for b: Bool
-  for c: Char
-  for r: String
-  {
-    Char.is_eq(c, '/') == b: Bool
-  } -> {
-    String.starts_with.go.if("", r, b) == True{}: Bool
-  } -> {SCon{c, r} == SCon{'/', String.drop(SCon{c, r}, 1n)}: String}
-
-def slash1.at(b, c, r):
+def slash1.at(
+  b: Bool,
+  c: Char,
+  r: String
+) -> {
+  Char.is_eq(c, '/') == b: Bool
+} -> {
+  String.starts_with.go.if("", r, b) == True{}: Bool
+} -> {SCon{c, r} == SCon{'/', String.drop(SCon{c, r}, 1n)}: String}:
   +r = r
   x => x1 => (%Equal.sym(
     String,
@@ -247,11 +229,11 @@ def slash1.at(b, c, r):
   ): {SCon{c, r} == SCon{'/', _}: String}; slash_cons.at(b, c, r)(x)(x1))
 
 # a text that starts with '/' is '/' then the rest
-law slash1:
-  for t: String
-  {String.starts_with.go("/", t) == True{}: Bool} -> {t == SCon{'/', String.drop(t, 1n)}: String}
-
-def slash1(t):
+def slash1(
+  t: String
+) -> {
+  String.starts_with.go("/", t) == True{}: Bool
+} -> {t == SCon{'/', String.drop(t, 1n)}: String}:
   match t:
     case SNil{}:
       h => Empty.absurd(
@@ -262,16 +244,6 @@ def slash1(t):
       slash1.at(Char.is_eq(c, '/'), c, r)({==})
 
 # slash2, by whether the first character is '/' (b)
-law slash2.at:
-  for b: Bool
-  for c: Char
-  for r: String
-  {
-    Char.is_eq(c, '/') == b: Bool
-  } -> {
-    String.starts_with.go.if("/", r, b) == True{}: Bool
-  } -> {SCon{c, r} == String.append("//", String.drop(SCon{c, r}, 2n)): String}
-
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 def slash2.at.g11(
   c: Char,
@@ -292,7 +264,15 @@ def slash2.at.g11(
     {SCon{c, SCon{head, tail}} == SCon{'/', _}: String}
   slash_head(c, SCon{head, tail})(x)
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-def slash2.at(b, c, r):
+def slash2.at(
+  b: Bool,
+  c: Char,
+  r: String
+) -> {
+  Char.is_eq(c, '/') == b: Bool
+} -> {
+  String.starts_with.go.if("/", r, b) == True{}: Bool
+} -> {SCon{c, r} == String.append("//", String.drop(SCon{c, r}, 2n)): String}:
   match b:
     case False{}:
       x => x1 => Empty.absurd(
@@ -310,13 +290,11 @@ def slash2.at(b, c, r):
           x => x1 => slash2.at.g11(c, head, tail, x, Char.is_eq(head, '/'), {==}, x1)
 
 # a text that starts with "//" is "//" then the rest
-law slash2:
-  for t: String
-  {
-    String.starts_with(t, "//") == True{}: Bool
-  } -> {t == String.append("//", String.drop(t, 2n)): String}
-
-def slash2(t):
+def slash2(
+  t: String
+) -> {
+  String.starts_with(t, "//") == True{}: Bool
+} -> {t == String.append("//", String.drop(t, 2n)): String}:
   match t:
     case SNil{}:
       h => Empty.absurd(
@@ -328,24 +306,22 @@ def slash2(t):
 
 # the authority part of a URI read back: an authority without '/', then an
 # empty path or one that starts with '/'
-law auth_back:
-  for sc: String
-  for a: String
-  for p: String
-  {
-    Texts.Text.has(a, 47) == False{}: Bool
-  } -> {
-    Bool.or(String.is_empty(p), String.starts_with(p, "/")) == True{}: Bool
-  } -> {
-    Uri.read.auth(
-      sc,
-      Texts.Text.cut(String.append(a, p), 47),
-      String.append(a, p)
-    )
-      == Uri{sc, Some{a}, p}: Uri
-  }
-
-def auth_back(sc, a, p):
+def auth_back(
+  sc: String,
+  a: String,
+  p: String
+) -> {
+  Texts.Text.has(a, 47) == False{}: Bool
+} -> {
+  Bool.or(String.is_empty(p), String.starts_with(p, "/")) == True{}: Bool
+} -> {
+  Uri.read.auth(
+    sc,
+    Texts.Text.cut(String.append(a, p), 47),
+    String.append(a, p)
+  )
+    == Uri{sc, Some{a}, p}: Uri
+}:
   match p:
     case SNil{}:
       +ha => hp =>
@@ -397,17 +373,15 @@ def auth_back(sc, a, p):
         {==}
 
 # the URI after a ':' is the one that read.rest reads, when it is valid
-law read_cut_of:
-  for sc: String
-  for rest: String
-  for u: Uri
-  {
-    Uri.read.rest(sc, rest) == u: Uri
-  } -> {
-    Uri.is_valid(u) == True{}: Bool
-  } -> {Uri.read.cut(Some{Texts.Cut{sc, rest}}) == Some{u}: Maybe<&2, Uri>}
-
-def read_cut_of(sc, rest, u):
+def read_cut_of(
+  sc: String,
+  rest: String,
+  u: Uri
+) -> {
+  Uri.read.rest(sc, rest) == u: Uri
+} -> {
+  Uri.is_valid(u) == True{}: Bool
+} -> {Uri.read.cut(Some{Texts.Cut{sc, rest}}) == Some{u}: Maybe<&2, Uri>}:
   e => v =>
     +u = u
     %Equal.sym(
@@ -433,19 +407,17 @@ def read_cut_of(sc, rest, u):
     {==}
 
 # the text of a scheme sc, ':' and rest reads at that ':'
-law read_at:
-  for sc: String
-  for rest: String
-  {
-    Texts.Text.has(sc, 58) == False{}: Bool
-  } -> {
-    Uri.read(
-      String.append(sc, SCon{':', rest})
-    )
-      == Uri.read.cut(Some{Texts.Cut{sc, rest}}): Maybe<&2, Uri>
-  }
-
-def read_at(sc, rest):
+def read_at(
+  sc: String,
+  rest: String
+) -> {
+  Texts.Text.has(sc, 58) == False{}: Bool
+} -> {
+  Uri.read(
+    String.append(sc, SCon{':', rest})
+  )
+    == Uri.read.cut(Some{Texts.Cut{sc, rest}}): Maybe<&2, Uri>
+}:
   h =>
     +sc = sc
     +rest = rest
@@ -459,19 +431,6 @@ def read_at(sc, rest):
     )
 
 # an authority read back shows as "//" and its text: by its cut at '/' (m)
-law auth_show:
-  for m: Maybe<&2, Texts.Cut<String>>
-  for sc: String
-  for r2: String
-  {
-    Texts.Text.cut(r2, 47) == m: Maybe<&2, Texts.Cut<String>>
-  } -> {
-    Uri.show(
-      Uri.read.auth(sc, m, r2)
-    )
-      == String.append(sc, SCon{':', String.append("//", r2)}): String
-  }
-
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 def auth_show.g1(
   +m: Maybe<&2, Texts.Cut<String>>,
@@ -508,30 +467,40 @@ def auth_show.g1(
             }
           {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-def auth_show(m, sc, r2):
+def auth_show(
+  m: Maybe<&2, Texts.Cut<String>>,
+  sc: String,
+  r2: String
+) -> {
+  Texts.Text.cut(r2, 47) == m: Maybe<&2, Texts.Cut<String>>
+} -> {
+  Uri.show(
+    Uri.read.auth(sc, m, r2)
+  )
+    == String.append(sc, SCon{':', String.append("//", r2)}): String
+}:
   x => auth_show.g1(m, sc, r2, x)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # the URI read after a ':' shows as that text: by whether it starts with "//"
 # (b)
-law rest_show.at:
-  for b: Bool
-  for sc: String
-  for rest: String
-  {
-    String.starts_with(rest, "//") == b: Bool
-  } -> {
-    Uri.show(
-      Shared.Bool.when(
-        Uri,
-        b,
-        w => Uri.read.auth(sc, Texts.Text.cut(String.drop(rest, 2n), 47), String.drop(rest, 2n)),
-        w => Uri{sc, None{}, rest}
-      )
+def rest_show.at(
+  b: Bool,
+  sc: String,
+  rest: String
+) -> {
+  String.starts_with(rest, "//") == b: Bool
+} -> {
+  Uri.show(
+    Shared.Bool.when(
+      Uri,
+      b,
+      w => Uri.read.auth(sc, Texts.Text.cut(String.drop(rest, 2n), 47), String.drop(rest, 2n)),
+      w => Uri{sc, None{}, rest}
     )
-      == String.append(sc, SCon{':', rest}): String
-  }
-
-def rest_show.at(b, sc, rest):
+  )
+    == String.append(sc, SCon{':', rest}): String
+}:
   match b:
     case False{}:
       x => {==}
@@ -549,13 +518,11 @@ def rest_show.at(b, sc, rest):
       }; (%slash2(
         rest
       )(x): {String.append(sc, SCon{':', _}) == String.append(sc, SCon{':', rest}): String}; {==}))
-
-law rest_show:
-  for sc: String
-  for rest: String
-  {Uri.show(Uri.read.rest(sc, rest)) == String.append(sc, SCon{':', rest}): String}
-
-def rest_show(sc, rest):
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+def rest_show(
+  sc: String,
+  rest: String
+) -> {Uri.show(Uri.read.rest(sc, rest)) == String.append(sc, SCon{':', rest}): String}:
   +rest = rest
   rest_show.at(String.starts_with(rest, "//"), sc, rest)({==})
 
@@ -643,25 +610,23 @@ def uri_read_after_show(u, v):
       )
 
 # show_read once the cut is found: by whether the URI read is valid (b)
-law show_read.valid:
-  for b: Bool
-  for sc: String
-  for rest: String
-  for u: Uri
-  for t: String
-  {
-    Uri.is_valid(Uri.read.rest(sc, rest)) == b: Bool
-  } -> {
-    Shared.Bool.when(
-      Maybe<&2, Uri>,
-      b,
-      w => Some{Uri.read.rest(sc, rest)},
-      w => None{}
-    )
-      == Some{u}: Maybe<&2, Uri>
-  } -> {t == String.append(sc, SCon{Chr{58}, rest}): String} -> {Uri.show(u) == t: String}
-
-def show_read.valid(b, sc, rest, u, t):
+def show_read.valid(
+  b: Bool,
+  sc: String,
+  rest: String,
+  u: Uri,
+  t: String
+) -> {
+  Uri.is_valid(Uri.read.rest(sc, rest)) == b: Bool
+} -> {
+  Shared.Bool.when(
+    Maybe<&2, Uri>,
+    b,
+    w => Some{Uri.read.rest(sc, rest)},
+    w => None{}
+  )
+    == Some{u}: Maybe<&2, Uri>
+} -> {t == String.append(sc, SCon{Chr{58}, rest}): String} -> {Uri.show(u) == t: String}:
   match b:
     case True{}:
       e => h => ht =>
@@ -681,15 +646,13 @@ def show_read.valid(b, sc, rest, u, t):
       )
 
 # show_read, by whether the text holds a ':' (m is its cut there)
-law show_read.at:
-  for m: Maybe<&2, Texts.Cut<String>>
-  for t: String
-  for u: Uri
-  {
-    Texts.Text.cut(t, 58) == m: Maybe<&2, Texts.Cut<String>>
-  } -> {Uri.read.cut(m) == Some{u}: Maybe<&2, Uri>} -> {Uri.show(u) == t: String}
-
-def show_read.at(m, t, u):
+def show_read.at(
+  m: Maybe<&2, Texts.Cut<String>>,
+  t: String,
+  u: Uri
+) -> {
+  Texts.Text.cut(t, 58) == m: Maybe<&2, Texts.Cut<String>>
+} -> {Uri.read.cut(m) == Some{u}: Maybe<&2, Uri>} -> {Uri.show(u) == t: String}:
   match m:
     case None{}:
       e => h => Empty.absurd(

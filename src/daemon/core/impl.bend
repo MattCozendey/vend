@@ -479,7 +479,7 @@ def Write.verdict(
         {==}
 
 def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
-  +h1 => +ht => +ho => +hg => +hw => hb => hs => +hp => hf =>
+  +h1 => +ht => +ho => +hg => +hw => hb => hs => +hp => +hf =>
     +q = {
       Spec.Ask.on{
         r,
@@ -499,69 +499,166 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
     +ask1 = Spec.Node.ask(n, s, e, q)
     +ds = List.append(&2, List<&2, U32>, Trees.Put.nodes(p), [])
     +hv = Write.verdict(p, s1, name, base, x, root)(hb)(hs)(hp)
-    +hst = Ledgers.State.ask_decides(
-      ~Spec.Ask,
-      ~Spec.Ask.is_eq,
-      ~Ask.laws(),
-      ~Spec.Ask.view,
-      ~Spec.Node.judge,
-      n,
-      s,
-      i,
-      t,
-      q,
-      c,
-      None{},
-      None{},
-      ep,
-      h,
-      last,
-      True{},
-      Some{Trees.Put.root(p)},
-      ds
-    )(h1)({==})(ht)(ho)(hg)(hw)(hv)
-    +hdc = Ledgers.State.ask_decided(
-      ~Spec.Ask,
-      ~Spec.Ask.is_eq,
-      ~Ask.laws(),
-      ~Spec.Ask.view,
-      ~Spec.Node.judge,
-      n,
-      s,
-      i,
-      t,
-      q,
-      c,
-      None{},
-      None{},
-      ep,
-      h,
-      last,
-      True{},
-      Some{Trees.Put.root(p)},
-      ds
-    )(h1)({==})(ht)(ho)(hg)(hw)(hv)
-    +hd = Ledgers.State.ask_data(
-      ~Spec.Ask,
-      ~Spec.Ask.is_eq,
-      ~Ask.laws(),
-      ~Spec.Ask.view,
-      ~Spec.Node.judge,
-      n,
-      s,
-      i,
-      t,
-      q,
-      c,
-      None{},
-      None{},
-      ep,
-      h,
-      last,
-      True{},
-      Some{Trees.Put.root(p)},
-      ds
-    )(h1)({==})(ht)(ho)(hg)(hw)(hv)(hf)
+    +hst = Pair.fst(
+      {
+        Ledgers.State.status(
+          ~Spec.Ask,
+          ~Spec.Ask.view,
+          ask1,
+          i
+        )
+          == Ledgers.Status.done{True{}}: Ledgers.Status
+      },
+      {
+        Ledgers.State.decided(
+          ~Spec.Ask,
+          ~Spec.Ask.view,
+          ask1,
+          i
+        )
+          == Some{
+            Ledgers.Vote{i, True{}, Ledgers.View.on{c, None{}, None{}}, Some{Trees.Put.root(p)}}
+          }: Maybe<&2, Ledgers.Vote>
+      }
+        & {Ledgers.Data.holds(~Spec.Ask, ask1, ds) == True{}: Bool},
+      Ledgers.State.ask_sole(
+        ~Spec.Ask,
+        ~Spec.Ask.is_eq,
+        ~Ask.laws(),
+        ~Spec.Ask.view,
+        ~Spec.Node.judge,
+        n,
+        s,
+        i,
+        t,
+        q,
+        c,
+        None{},
+        None{},
+        ep,
+        h,
+        last,
+        True{},
+        Some{Trees.Put.root(p)},
+        ds
+      )(h1)({==})(ht)(ho)(hg)(hw)(hv)(hf)
+    )
+    +hdc = Pair.fst(
+      {
+        Ledgers.State.decided(
+          ~Spec.Ask,
+          ~Spec.Ask.view,
+          ask1,
+          i
+        )
+          == Some{
+            Ledgers.Vote{i, True{}, Ledgers.View.on{c, None{}, None{}}, Some{Trees.Put.root(p)}}
+          }: Maybe<&2, Ledgers.Vote>
+      },
+      {Ledgers.Data.holds(~Spec.Ask, ask1, ds) == True{}: Bool},
+      Pair.snd(
+        {
+          Ledgers.State.status(
+            ~Spec.Ask,
+            ~Spec.Ask.view,
+            ask1,
+            i
+          )
+            == Ledgers.Status.done{True{}}: Ledgers.Status
+        },
+        {
+          Ledgers.State.decided(
+            ~Spec.Ask,
+            ~Spec.Ask.view,
+            ask1,
+            i
+          )
+            == Some{
+              Ledgers.Vote{i, True{}, Ledgers.View.on{c, None{}, None{}}, Some{Trees.Put.root(p)}}
+            }: Maybe<&2, Ledgers.Vote>
+        }
+          & {Ledgers.Data.holds(~Spec.Ask, ask1, ds) == True{}: Bool},
+        Ledgers.State.ask_sole(
+          ~Spec.Ask,
+          ~Spec.Ask.is_eq,
+          ~Ask.laws(),
+          ~Spec.Ask.view,
+          ~Spec.Node.judge,
+          n,
+          s,
+          i,
+          t,
+          q,
+          c,
+          None{},
+          None{},
+          ep,
+          h,
+          last,
+          True{},
+          Some{Trees.Put.root(p)},
+          ds
+        )(h1)({==})(ht)(ho)(hg)(hw)(hv)(hf)
+      )
+    )
+    +hd = Pair.snd(
+      {
+        Ledgers.State.decided(
+          ~Spec.Ask,
+          ~Spec.Ask.view,
+          ask1,
+          i
+        )
+          == Some{
+            Ledgers.Vote{i, True{}, Ledgers.View.on{c, None{}, None{}}, Some{Trees.Put.root(p)}}
+          }: Maybe<&2, Ledgers.Vote>
+      },
+      {Ledgers.Data.holds(~Spec.Ask, ask1, ds) == True{}: Bool},
+      Pair.snd(
+        {
+          Ledgers.State.status(
+            ~Spec.Ask,
+            ~Spec.Ask.view,
+            ask1,
+            i
+          )
+            == Ledgers.Status.done{True{}}: Ledgers.Status
+        },
+        {
+          Ledgers.State.decided(
+            ~Spec.Ask,
+            ~Spec.Ask.view,
+            ask1,
+            i
+          )
+            == Some{
+              Ledgers.Vote{i, True{}, Ledgers.View.on{c, None{}, None{}}, Some{Trees.Put.root(p)}}
+            }: Maybe<&2, Ledgers.Vote>
+        }
+          & {Ledgers.Data.holds(~Spec.Ask, ask1, ds) == True{}: Bool},
+        Ledgers.State.ask_sole(
+          ~Spec.Ask,
+          ~Spec.Ask.is_eq,
+          ~Ask.laws(),
+          ~Spec.Ask.view,
+          ~Spec.Node.judge,
+          n,
+          s,
+          i,
+          t,
+          q,
+          c,
+          None{},
+          None{},
+          ep,
+          h,
+          last,
+          True{},
+          Some{Trees.Put.root(p)},
+          ds
+        )(h1)({==})(ht)(ho)(hg)(hw)(hv)(hf)
+      )
+    )
     +ha = Ledgers.State.ask_holds(
       ~Spec.Ask,
       ~Spec.Ask.is_eq,

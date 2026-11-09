@@ -73,25 +73,23 @@ def List.fork_left.on(
       {==}
 
 # a fork gives back the first list
-law List.fork_left:
-  for ~A: Data
-  for ~same: A -> A -> Bool
-  for a: List<&2, A>
-  for b: List<&2, A>
-  {Fork.left(A, List.fork(~A, ~same, a, b)) == a: List<&2, A>}
-
-def List.fork_left(ty, same, a, b):
+def List.fork_left(
+  ~Ty: Data,
+  ~same: Ty -> Ty -> Bool,
+  a: List<&2, Ty>,
+  b: List<&2, Ty>
+) -> {Fork.left(Ty, List.fork(~Ty, ~same, a, b)) == a: List<&2, Ty>}:
   match a b:
     case Con{+x, +ra} Con{+y, +rb}:
       List.fork_left.on(
-        ty,
+        Ty,
         same(x, y),
         x,
         y,
         ra,
         rb,
-        List.fork(~ty, ~same, ra, rb),
-        List.fork_left(~ty, ~same, ra, rb)
+        List.fork(~Ty, ~same, ra, rb),
+        List.fork_left(~Ty, ~same, ra, rb)
       )
     case Nil{} y:
       {==}
@@ -122,19 +120,17 @@ def List.fork_right.on(
       {==}
 
 # a fork gives back the second list
-law List.fork_right:
-  for ~A: Data
-  for ~same: A -> A -> Bool
-  for ~laws: Shared.Eq.Laws(A, same)
-  for a: List<&2, A>
-  for b: List<&2, A>
-  {Fork.right(A, List.fork(~A, ~same, a, b)) == b: List<&2, A>}
-
-def List.fork_right(ty, same, laws, a, b):
+def List.fork_right(
+  ~Ty: Data,
+  ~same: Ty -> Ty -> Bool,
+  ~laws: Shared.Eq.Laws(Ty, same),
+  a: List<&2, Ty>,
+  b: List<&2, Ty>
+) -> {Fork.right(Ty, List.fork(~Ty, ~same, a, b)) == b: List<&2, Ty>}:
   match a b:
     case Con{+x, +ra} Con{+y, +rb}:
       List.fork_right.on(
-        ~ty,
+        ~Ty,
         ~same,
         ~laws,
         same(x, y),
@@ -142,9 +138,9 @@ def List.fork_right(ty, same, laws, a, b):
         y,
         ra,
         rb,
-        List.fork(~ty, ~same, ra, rb),
+        List.fork(~Ty, ~same, ra, rb),
         {==},
-        List.fork_right(~ty, ~same, ~laws, ra, rb)
+        List.fork_right(~Ty, ~same, ~laws, ra, rb)
       )
     case Nil{} y:
       {==}
@@ -307,11 +303,7 @@ def Lines.read_back.on(
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the lines of b join back into b
-law Lines.read_back:
-  for b: Texts.Bytes()
-  {Lines.join.of(Lines.split(b)) == b: Texts.Bytes()}
-
-def Lines.read_back(b):
+def Lines.read_back(b: Texts.Bytes()) -> {Lines.join.of(Lines.split(b)) == b: Texts.Bytes()}:
   match b:
     case Nil{}:
       {==}
@@ -521,13 +513,11 @@ def Lines.cut.of_right(
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a cut gives back the old lines
-law Lines.cut_left:
-  for +a: List<&2, Texts.Bytes()>
-  for +b: List<&2, Texts.Bytes()>
-  {Cut.left(Lines.cut(a, b)) == a: List<&2, Texts.Bytes()>}
-
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-def Lines.cut_left(a, b):
+def Lines.cut_left(
+  +a: List<&2, Texts.Bytes()>,
+  +b: List<&2, Texts.Bytes()>
+) -> {Cut.left(Lines.cut(a, b)) == a: List<&2, Texts.Bytes()>}:
   f = List.fork(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), a, b)
   Equal.trans(
     List<&2, Texts.Bytes()>,
@@ -540,13 +530,11 @@ def Lines.cut_left(a, b):
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a cut gives back the new lines
-law Lines.cut_right:
-  for +a: List<&2, Texts.Bytes()>
-  for +b: List<&2, Texts.Bytes()>
-  {Cut.right(Lines.cut(a, b)) == b: List<&2, Texts.Bytes()>}
-
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-def Lines.cut_right(a, b):
+def Lines.cut_right(
+  +a: List<&2, Texts.Bytes()>,
+  +b: List<&2, Texts.Bytes()>
+) -> {Cut.right(Lines.cut(a, b)) == b: List<&2, Texts.Bytes()>}:
   f = List.fork(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), a, b)
   Equal.trans(
     List<&2, Texts.Bytes()>,
@@ -665,11 +653,7 @@ def Lines.bytes_of(
       {==}
 
 # the lines of b give back b
-law Lines.bytes_list:
-  for b: Texts.Bytes()
-  {Lines.bytes(Lines.list(b)) == b: Texts.Bytes()}
-
-def Lines.bytes_list(b):
+def Lines.bytes_list(b: Texts.Bytes()) -> {Lines.bytes(Lines.list(b)) == b: Texts.Bytes()}:
   +b = b
   Equal.trans(
     Texts.Bytes(),
@@ -779,12 +763,10 @@ def Plain.apply_diff.by(
       {==}
 
 # the patch from a to b, applied to a, gives b
-law Plain.apply_diff:
-  for +a: Texts.Bytes()
-  for +b: Texts.Bytes()
-  {Plain.apply(a, Plain.diff(a, b)) == b: Texts.Bytes()}
-
-def Plain.apply_diff(a, b):
+def Plain.apply_diff(
+  +a: Texts.Bytes(),
+  +b: Texts.Bytes()
+) -> {Plain.apply(a, Plain.diff(a, b)) == b: Texts.Bytes()}:
   Plain.apply_diff.by(Bool.and(Plain.is_text(a), Plain.is_text(b)), a, b)
 
 # Merges
@@ -1416,13 +1398,11 @@ def Embed.join_split.go(
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # the pieces of b, joined, give back b: an embedding loses nothing
-law Embed.join_split:
-  for +op: Texts.Bytes()
-  for +cl: Texts.Bytes()
-  for +b: Texts.Bytes()
-  {Embed.join(op, cl, Embed.split(op, cl, b)) == b: Texts.Bytes()}
-
-def Embed.join_split(op, cl, b):
+def Embed.join_split(
+  +op: Texts.Bytes(),
+  cl: Texts.Bytes(),
+  +b: Texts.Bytes()
+) -> {Embed.join(op, cl, Embed.split(op, cl, b)) == b: Texts.Bytes()}:
   Embed.join_split.go(
     1n+List.length(&2, U32, b),
     op,

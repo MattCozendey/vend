@@ -1596,14 +1596,12 @@ def List.is_eq(~A: Data, ~same: A -> A -> Bool, xs: List<&2, A>, ys: List<&2, A>
       False{}
 
 # List.is_eq is True for a list and itself
-law List.is_eq_refl:
-  for ~A: Data
-  for ~same: A -> A -> Bool
-  for ~laws: Eq.Laws(A, same)
-  for xs: List<&2, A>
-  {List.is_eq(~A, ~same, xs, xs) == True{}: Bool}
-
-def List.is_eq_refl(ty, same, laws, xs):
+def List.is_eq_refl(
+  ~Ty: Data,
+  ~same: Ty -> Ty -> Bool,
+  ~laws: Eq.Laws(Ty, same),
+  xs: List<&2, Ty>
+) -> {List.is_eq(~Ty, ~same, xs, xs) == True{}: Bool}:
   match xs:
     case Nil{}:
       {==}
@@ -1612,40 +1610,38 @@ def List.is_eq_refl(ty, same, laws, xs):
         Bool,
         same(x, x),
         True{},
-        Eq.refl(~ty, ~same, laws, x)
-      ): {List.all.if(u => List.is_eq(~ty, ~same, r, r), _) == True{}: Bool}
-      List.is_eq_refl(~ty, ~same, ~laws, r)
+        Eq.refl(~Ty, ~same, laws, x)
+      ): {List.all.if(u => List.is_eq(~Ty, ~same, r, r), _) == True{}: Bool}
+      List.is_eq_refl(~Ty, ~same, ~laws, r)
 
 # List.is_eq is True only for equal lists
-law List.is_eq_sound:
-  for ~A: Data
-  for ~same: A -> A -> Bool
-  for ~laws: Eq.Laws(A, same)
-  for xs: List<&2, A>
-  for ys: List<&2, A>
-  {List.is_eq(~A, ~same, xs, ys) == True{}: Bool} -> {xs == ys: List<&2, A>}
-
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-def List.is_eq_sound(ty, same, laws, xs, ys):
+def List.is_eq_sound(
+  ~Ty: Data,
+  ~same: Ty -> Ty -> Bool,
+  ~laws: Eq.Laws(Ty, same),
+  xs: List<&2, Ty>,
+  ys: List<&2, Ty>
+) -> {List.is_eq(~Ty, ~same, xs, ys) == True{}: Bool} -> {xs == ys: List<&2, Ty>}:
   match xs ys:
     case Nil{} Nil{}:
       h => {==}
     case Nil{} Con{y, yr}:
-      h => Empty.absurd({Nil{} == Con{y, yr}: List<&2, ty>}, Bool.false_ne_true(h))
+      h => Empty.absurd({Nil{} == Con{y, yr}: List<&2, Ty>}, Bool.false_ne_true(h))
     case Con{x, xr} Nil{}:
-      h => Empty.absurd({Con{x, xr} == Nil{}: List<&2, ty>}, Bool.false_ne_true(h))
+      h => Empty.absurd({Con{x, xr} == Nil{}: List<&2, Ty>}, Bool.false_ne_true(h))
     case Con{+x, +xr} Con{+y, +yr}:
       +h =>
-        +iseq1 = List.is_eq(~ty, ~same, xr, yr)
+        +iseq1 = List.is_eq(~Ty, ~same, xr, yr)
         %Eq.sound(
-          ~ty,
+          ~Ty,
           ~same,
           laws,
           x,
           y
-        )(List.all.if_hit(same(x, y), u => iseq1)(h)): {x <> xr == _ <> yr: List<&2, ty>}
-        %List.is_eq_sound(~ty, ~same, ~laws, xr, yr)(List.all.if_rest(same(x, y), u => iseq1)(h)):
-          {x <> xr == x <> _: List<&2, ty>}
+        )(List.all.if_hit(same(x, y), u => iseq1)(h)): {x <> xr == _ <> yr: List<&2, Ty>}
+        %List.is_eq_sound(~Ty, ~same, ~laws, xr, yr)(List.all.if_rest(same(x, y), u => iseq1)(h)):
+          {x <> xr == x <> _: List<&2, Ty>}
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 

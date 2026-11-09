@@ -83,23 +83,21 @@ def name_read_after_show(n, v):
       {==}
 
 # name_show_after_read, by whether t holds a ':' (hit)
-law name_show_after_read.at:
-  for hit: Bool
-  for t: String
-  for n: Name
-  {
-    Texts.Text.has(t, 58) == hit: Bool
-  } -> {
-    Shared.Bool.when(
-      Maybe<&2, Name>,
-      hit,
-      u => Some{Name{t}},
-      u => None{}
-    )
-      == Some{n}: Maybe<&2, Name>
-  } -> {Name.show(n) == t: String}
-
-def name_show_after_read.at(hit, t, n):
+def name_show_after_read.at(
+  hit: Bool,
+  t: String,
+  n: Name
+) -> {
+  Texts.Text.has(t, 58) == hit: Bool
+} -> {
+  Shared.Bool.when(
+    Maybe<&2, Name>,
+    hit,
+    u => Some{Name{t}},
+    u => None{}
+  )
+    == Some{n}: Maybe<&2, Name>
+} -> {Name.show(n) == t: String}:
   match hit:
     case True{}:
       e => h =>
