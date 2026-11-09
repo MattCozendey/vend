@@ -23,6 +23,10 @@ A walk over history is replaced by fixed-key reads of replicated facts, so the c
 
 ### Ledger v2, concrete (shared)
 
+- Built so far (`daemon/shared/ledger2.bend`, operations only, no laws yet): keys, structural equality, state and sync, ballots read once, epochs from verified facts, tip by `Trie.top`, `where` checked on read, status, node ask with facts settled. Shared: `shared/quorum.bend` (majority, else most votes once all are cast; laws done), `shared/cell.bend` (cells moved out), `shared/shared/trie.bend` (moved one level down; `Trie.top` with `top_ok`/`top_max`, `Trie.get_set`).
+- Measured (native, sole owner, one line, judge always takes): 1,000 writes 0.23s, 10,000 writes 2.26s: 226us per write at any length (old: 8.2ms per write at 1,000 and growing). Bench: scratch `bench/v2.bend`.
+- Next: ledger v2 laws (join laws, decided_kept, status_kept, refused_kept, listing prefix kept, ask_decides, ask_holds, fast tip = spec tip under vote closure), then version trees, then the core.
+
 - Slots (bit keys, prefix-free): `ask(i)`; `vote(c, e, h, n)` = votes ++ chain key ++ 32-bit epoch ++ 32-bit height (high bit first) ++ node text; `genesis(c, e)`; `where(i)`.
 - A vote carries the request's View, so a decided step needs no lookup of its request.
 - Decide rule per bucket (c, e, h): the majority of the epoch's owners; else, once every owner voted (an owner that voted twice counts as voted, with no value), the most voted, ties by the smallest code. A pure function of the bucket: it only gains information as votes arrive, so a decision never changes, and a split no longer stalls a line whose owners all vote.

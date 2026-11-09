@@ -1,5 +1,5 @@
 import Base
-import ../../../shared.bend as Shared
+import ../../../../shared.bend as Shared
 
 # Tries
 # -----

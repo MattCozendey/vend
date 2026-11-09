@@ -3,8 +3,8 @@ import ../../shared.bend as Shared
 import ../shared/ledger.bend as Ledgers
 import ../shared/resources.bend as Resources
 import ../shared/shared/shared/code.bend as Codes
+import ../shared/shared/shared/trie.bend as Tries
 import ../shared/shared/text.bend as Texts
-import ../shared/shared/trie.bend as Tries
 import ./spec.bend as Spec
 
 # The proofs of the core's laws.
