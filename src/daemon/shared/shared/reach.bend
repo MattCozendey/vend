@@ -1781,26 +1781,27 @@ def Reach.in_through.one(
     case (ps1, (h1, f1)):
       Reach.in_through.two(~A, ~V, ~same, ~succ, ~nodes, ~laws, ~live, g, x, h, m, ps1, h1, w2)
 
-# what is inside a node h that is inside x is inside x
-def Reach.in_through(
-  ~A: Data,
-  ~V: Data,
-  ~same: A -> A -> Bool,
-  ~succ: V -> A -> List<&2, A>,
-  ~nodes: V -> List<&2, A>,
-  ~laws: Shared.Eq.Laws(A, same),
-  ~live: @g: V -> @p: A -> @q: A -> {
-    List.contains(~A, ~same, succ(g)(p), q) == True{}: Bool
-  } -> {List.contains(~A, ~same, nodes(g), p) == True{}: Bool},
-  +g: V,
-  +x: A,
-  +h: A,
-  +m: A
-) -> {
-  Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, h) == True{}: Bool
-} -> {
-  Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, h, m) == True{}: Bool
-} -> {Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, m) == True{}: Bool}:
+# what is inside a node h that is inside x is inside x: what a search finds
+# is reachable at any depth, through any node it finds
+law Reach.in_through:
+  for ~A: Data
+  for ~V: Data
+  for ~same: A -> A -> Bool
+  for ~succ: V -> A -> List<&2, A>
+  for ~nodes: V -> List<&2, A>
+  for ~laws: Shared.Eq.Laws(A, same)
+  for ~live: @g: V -> @p: A -> @q: A -> { List.contains(~A, ~same, succ(g)(p), q) == True{}: Bool } -> {List.contains(~A, ~same, nodes(g), p) == True{}: Bool}
+  for +g: V
+  for +x: A
+  for +h: A
+  for +m: A
+  {
+    Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, h) == True{}: Bool
+  } -> {
+    Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, h, m) == True{}: Bool
+  } -> {Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, m) == True{}: Bool}
+
+def Reach.in_through(A, V, same, succ, nodes, laws, live, g, x, h, m):
   +a => +b => Reach.in_through.one(
     ~A,
     ~V,
