@@ -5828,7 +5828,7 @@ def Seens.Inv(~Q: Data, ~view: Q -> View, s: State(Q), sn: Seens(Q)) -> Type:
 
 # the seen chains sn with the steps xs of the chain c
 def Seens.put(~Q: Data, sn: Seens(Q), +c: Chain, xs: List<&2, Step<Q>>) -> Seens(Q):
-  Tries.Trie.union(~Seen<Q>, ~(a => b => b), sn, Tries.Trie.one(Seen<Q>, Chain.key(c), Seen{c, xs}))
+  Tries.Trie.set(Seen<Q>, sn, Chain.key(c), Seen{c, xs})
 
 # the steps of the chain c of s, from what the node saw of it (m)
 def Fast.chain.of(
@@ -6021,39 +6021,40 @@ def Seen.steps_of(-Q: Data, m: Maybe<&2, Seen<Q>>, d: List<&2, Step<Q>>) -> List
     case None{}:
       d
 
-# a newer seen chain takes the place of an older one
-def Seens.pick_new(
-  -Q: Data,
-  x: Maybe<&2, Seen<Q>>,
-  w: Seen<Q>
-) -> {Tries.Trie.pick(~Seen<Q>, ~(a => b => b), x, Some{w}) == Some{w}: Maybe<&2, Seen<Q>>}:
-  match x:
-    case None{}:
-      {==}
-    case Some{y}:
-      {==}
+# what a node saw at k, after it records xs for c: xs, when k is the key of c
+def Seens.got(
+  ~Q: Data,
+  sn: Seens(Q),
+  +c: Chain,
+  xs: List<&2, Step<Q>>,
+  k: List<&2, Bool>,
+  -w: Seen<Q>,
+  e: {Tries.Trie.get(Seen<Q>, Seens.put(~Q, sn, c, xs), k) == Some{w}: Maybe<&2, Seen<Q>>}
+) -> {
+  Bool.pick(
+    Maybe<&2, Seen<Q>>,
+    Tries.Trie.same_key(k, Chain.key(c)),
+    Some{Seen{c, xs}},
+    Tries.Trie.get(Seen<Q>, sn, k)
+  )
+    == Some{w}: Maybe<&2, Seen<Q>>
+}:
+  %Tries.Trie.get_set(Seen<Q>, sn, Chain.key(c), Seen{c, xs}, k): {_ == Some{w}: Maybe<&2, Seen<Q>>}
+  e
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# Seens.put_inv once what the new entry holds at k (m) is known
+# Seens.put_inv once k is known to be the key of c or not (held)
 def Seens.put_inv.at(
   ~Q: Data,
   ~view: Q -> View,
   s: State(Q),
-  +sn: Seens(Q),
-  +c: Chain,
-  +xs: List<&2, Step<Q>>,
-  +k: List<&2, Bool>,
+  sn: Seens(Q),
+  c: Chain,
+  xs: List<&2, Step<Q>>,
+  k: List<&2, Bool>,
   c2: Chain,
   xs2: List<&2, Step<Q>>,
-  m: Maybe<&2, Seen<Q>>,
-  +em: {
-    Tries.Trie.get(
-      Seen<Q>,
-      Tries.Trie.one(Seen<Q>, Chain.key(c), Seen{c, xs}),
-      k
-    )
-      == m: Maybe<&2, Seen<Q>>
-  }
+  held: Bool
 ) -> (
   Seens.Inv(
     ~Q,
@@ -6075,7 +6076,13 @@ def Seens.put_inv.at(
   s,
   sn
 ) -> {
-  Tries.Trie.get(Seen<Q>, Seens.put(~Q, sn, c, xs), k) == Some{Seen{c2, xs2}}: Maybe<&2, Seen<Q>>
+  Bool.pick(
+    Maybe<&2, Seen<Q>>,
+    held,
+    Some{Seen{c, xs}},
+    Tries.Trie.get(Seen<Q>, sn, k)
+  )
+    == Some{Seen{c2, xs2}}: Maybe<&2, Seen<Q>>
 } -> {
   List.take(
     &2,
@@ -6085,96 +6092,18 @@ def Seens.put_inv.at(
   )
     == xs2: List<&2, Step<Q>>
 }:
-  match m:
-    case None{}:
-      +one1 = Tries.Trie.one(Seen<Q>, Chain.key(c), Seen{c, xs})
-      get1 = Tries.Trie.get(Seen<Q>, sn, k)
-      get2 = Tries.Trie.get(Seen<Q>, one1, k)
-      get3 = Tries.Trie.get(Seen<Q>, Seens.put(~Q, sn, c, xs), k)
-      hx => inv => +e => inv(
-        k
-      )(
-        c2
-      )(
-        xs2
-      )(
-        Equal.trans(
-          Maybe<&2, Seen<Q>>,
-          get1,
-          get3,
-          Some{Seen{c2, xs2}},
-          Equal.trans(
-            Maybe<&2, Seen<Q>>,
-            get1,
-            Tries.Trie.pick(~Seen<Q>, ~(a => b => b), get1, get2),
-            get3,
-            (
-              %Equal.sym(Maybe<&2, Seen<Q>>, get2, None{}, em): {get1 == Tries.Trie.pick(~Seen<Q>, ~(a => b => b), get1, _): Maybe<&2, Seen<Q>>}
-              Equal.sym(Maybe<&2, Seen<Q>>, Tries.Trie.pick(~Seen<Q>, ~(a => b => b), get1, None{}), get1, Tries.Trie.pick_none(~Seen<Q>, ~(a => b => b), get1))),
-            Equal.sym(
-              Maybe<&2, Seen<Q>>,
-              get3,
-              Tries.Trie.pick(~Seen<Q>, ~(a => b => b), get1, get2),
-              Tries.Trie.get_union(~Seen<Q>, ~(a => b => b), sn, one1, k)
-            )
-          ),
-          e
-        )
-      )
-    case Some{w}:
-      hxf => inv => e =>
-        +one1 = Tries.Trie.one(Seen<Q>, Chain.key(c), Seen{c, xs})
-        +get1 = Tries.Trie.get(Seen<Q>, Seens.put(~Q, sn, c, xs), k)
-        +get2 = Tries.Trie.get(Seen<Q>, one1, k)
-        +get3 = Tries.Trie.get(Seen<Q>, sn, k)
-        +same = Equal.trans(
-          Maybe<&2, Seen<Q>>,
-          Some{Seen{c, xs}},
-          get1,
-          Some{Seen{c2, xs2}},
-          Equal.trans(
-            Maybe<&2, Seen<Q>>,
-            Some{Seen{c, xs}},
-            Some{w},
-            get1,
-            Equal.cong(
-              Seen<Q>,
-              Maybe<&2, Seen<Q>>,
-              x => Some{x},
-              Seen{c, xs},
-              w,
-              Equal.sym(
-                Seen<Q>,
-                w,
-                Seen{c, xs},
-                Tries.Trie.get_one_value(Seen<Q>, Chain.key(c), k, Seen{c, xs}, w)(em)
-              )
-            ),
-            Equal.trans(
-              Maybe<&2, Seen<Q>>,
-              Some{w},
-              Tries.Trie.pick(~Seen<Q>, ~(a => b => b), get3, get2),
-              get1,
-              (
-                %Equal.sym(Maybe<&2, Seen<Q>>, get2, Some{w}, em): {Some{w} == Tries.Trie.pick(~Seen<Q>, ~(a => b => b), get3, _): Maybe<&2, Seen<Q>>}
-                Equal.sym(Maybe<&2, Seen<Q>>, Tries.Trie.pick(~Seen<Q>, ~(a => b => b), get3, Some{w}), Some{w}, Seens.pick_new(Q, get3, w))),
-              Equal.sym(
-                Maybe<&2, Seen<Q>>,
-                get1,
-                Tries.Trie.pick(~Seen<Q>, ~(a => b => b), get3, get2),
-                Tries.Trie.get_union(~Seen<Q>, ~(a => b => b), sn, one1, k)
-              )
-            )
-          ),
-          e
-        )
+  match held:
+    case False{}:
+      hxf => inv => e => inv(k)(c2)(xs2)(e)
+    case True{}:
+      hxf => inv => +e =>
         %Equal.cong(
           Maybe<&2, Seen<Q>>,
           Chain,
           x => Seen.chain_of(Q, x, c),
           Some{Seen{c, xs}},
           Some{Seen{c2, xs2}},
-          same
+          e
         ):
           {
             List.take(
@@ -6191,7 +6120,7 @@ def Seens.put_inv.at(
           x => Seen.steps_of(Q, x, xs),
           Some{Seen{c, xs}},
           Some{Seen{c2, xs2}},
-          same
+          e
         ):
           {
             List.take(
@@ -6210,7 +6139,7 @@ def Seens.put_inv(
   ~Q: Data,
   ~view: Q -> View,
   s: State(Q),
-  sn: Seens(Q),
+  +sn: Seens(Q),
   +c: Chain,
   +xs: List<&2, Step<Q>>
 ) -> {
@@ -6232,9 +6161,8 @@ def Seens.put_inv(
     k,
     c2,
     xs2,
-    Tries.Trie.get(Seen<Q>, Tries.Trie.one(Seen<Q>, Chain.key(c), Seen{c, xs}), k),
-    {==}
-  )(u => hx)(inv)(e)
+    Tries.Trie.same_key(k, Chain.key(c))
+  )(u => hx)(inv)(Seens.got(~Q, sn, c, xs, k, Seen{c2, xs2}, e))
 
 # a ledger, and the chains that its node saw
 type Fast<-Q: Data> is Data:
@@ -6448,13 +6376,14 @@ def Seens.record_inv(
     k,
     c2,
     xs2,
-    Tries.Trie.get(Seen<Q>, Tries.Trie.one(Seen<Q>, Chain.key(c), Seen{c, chain1}), k),
-    {==}
+    Tries.Trie.same_key(k, Chain.key(c))
   )(
     i2 =>
       %Equal.sym(List<&2, Step<Q>>, chain1, chain2, Fast.chain_exactly(~Q, ~view, s1, sn, c)(i2)):
         {List.take(&2, Step<Q>, chain2, List.length(&2, Step<Q>, _)) == _: List<&2, Step<Q>>}
-      Shared.List.take_length(Step<Q>, chain2))(inv)(e)
+      Shared.List.take_length(Step<Q>, chain2))(
+    inv
+  )(Seens.got(~Q, sn, c, chain1, k, Seen{c2, xs2}, e))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
@@ -6781,20 +6710,22 @@ def Fast.ask_seen(ty, same, laws, view, judge, n, s, sn, i, t, q):
   )
 
 # a node that saw nothing yet starts no chain wrong
-def Seens.empty_inv(
-  ~Q: Data,
-  ~view: Q -> View,
-  s: State(Q)
-) -> Seens.Inv(~Q, ~view, s, Tries.tip{}):
+law Seens.empty_inv:
+  for ~Q: Data
+  for ~view: Q -> View
+  for s: State(Q)
+  Seens.Inv(~Q, ~view, s, Tries.tip{})
+
+def Seens.empty_inv(ty, view, s):
   k => c => xs => e => Empty.absurd(
     {
       List.take(
         &2,
-        Step<Q>,
-        State.chain(~Q, ~view, s, c),
-        List.length(&2, Step<Q>, xs)
+        Step<ty>,
+        State.chain(~ty, ~view, s, c),
+        List.length(&2, Step<ty>, xs)
       )
-        == xs: List<&2, Step<Q>>
+        == xs: List<&2, Step<ty>>
     },
-    Shared.Maybe.none_ne_some(Seen<Q>, Seen{c, xs}, e)
+    Shared.Maybe.none_ne_some(Seen<ty>, Seen{c, xs}, e)
   )

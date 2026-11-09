@@ -191,24 +191,80 @@ def Trie.get_one(
     case Con{True{}, r}:
       Trie.get_one(V, r, v)
 
-# after setting k to v, k has v
-law Trie.get_after_set:
+# k is the key k0
+def Trie.same_key(k: List<&2, Bool>, k0: List<&2, Bool>) -> Bool:
+  Shared.List.is_eq(~Bool, ~Shared.Bool.is_eq, k, k0)
+
+# the trie of only k0, at k: v when k is k0, else nothing
+def Trie.get_one_at(
+  -V: Data,
+  k0: List<&2, Bool>,
+  v: V,
+  k: List<&2, Bool>
+) -> {
+  Trie.get(
+    V,
+    Trie.one(V, k0, v),
+    k
+  )
+    == Bool.pick(Maybe<&2, V>, Trie.same_key(k, k0), Some{v}, None{}): Maybe<&2, V>
+}:
+  match k0 k:
+    case Nil{} Nil{}:
+      {==}
+    case Nil{} Con{False{}, r}:
+      {==}
+    case Nil{} Con{True{}, r}:
+      {==}
+    case Con{b, r0} Nil{}:
+      {==}
+    case Con{False{}, r0} Con{False{}, r}:
+      Trie.get_one_at(V, r0, v, r)
+    case Con{False{}, r0} Con{True{}, r}:
+      {==}
+    case Con{True{}, r0} Con{False{}, r}:
+      {==}
+    case Con{True{}, r0} Con{True{}, r}:
+      Trie.get_one_at(V, r0, v, r)
+
+# t with k0 set to v holds v at k0, and what t holds at any other key
+law Trie.get_set:
   for -V: Data
   for t: Trie<V>
-  for k: List<&2, Bool>
+  for k0: List<&2, Bool>
   for v: V
-  {Trie.get(V, Trie.set(V, t, k, v), k) == Some{v}: Maybe<&2, V>}
+  for k: List<&2, Bool>
+  {
+    Trie.get(
+      V,
+      Trie.set(V, t, k0, v),
+      k
+    )
+      == Bool.pick(Maybe<&2, V>, Trie.same_key(k, k0), Some{v}, Trie.get(V, t, k)): Maybe<&2, V>
+  }
 
-def Trie.get_after_set(ty, t, k, v):
-  match t k:
-    case tip{} r:
-      Trie.get_one(ty, r, v)
-    case bin{h, z, o} Nil{}:
+def Trie.get_set(ty, t, k0, v, k):
+  match t k0 k:
+    case tip{} p q:
+      Trie.get_one_at(ty, p, v, q)
+    case bin{h, z, o} Nil{} Nil{}:
       {==}
-    case bin{h, z, o} Con{False{}, r}:
-      Trie.get_after_set(ty, z, r, v)
-    case bin{h, z, o} Con{True{}, r}:
-      Trie.get_after_set(ty, o, r, v)
+    case bin{h, z, o} Nil{} Con{False{}, r}:
+      {==}
+    case bin{h, z, o} Nil{} Con{True{}, r}:
+      {==}
+    case bin{h, z, o} Con{False{}, r0} Nil{}:
+      {==}
+    case bin{h, z, o} Con{True{}, r0} Nil{}:
+      {==}
+    case bin{h, z, o} Con{False{}, r0} Con{False{}, r}:
+      Trie.get_set(ty, z, r0, v, r)
+    case bin{h, z, o} Con{False{}, r0} Con{True{}, r}:
+      {==}
+    case bin{h, z, o} Con{True{}, r0} Con{False{}, r}:
+      {==}
+    case bin{h, z, o} Con{True{}, r0} Con{True{}, r}:
+      Trie.get_set(ty, o, r0, v, r)
 
 # nothing joined to a value is that value
 def Trie.pick_none(
@@ -917,33 +973,3 @@ def Trie.under_one(
       Trie.under_one(V, q, r, v)
     case Con{True{}, q}:
       Trie.under_one(V, q, r, v)
-
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# the trie of one key holds only its value
-def Trie.get_one_value(
-  -V: Data,
-  k: List<&2, Bool>,
-  p: List<&2, Bool>,
-  v: V,
-  -w: V
-) -> {Trie.get(V, Trie.one(V, k, v), p) == Some{w}: Maybe<&2, V>} -> {w == v: V}:
-  match k p:
-    case Nil{} Nil{}:
-      h => Equal.sym(V, v, w, Shared.Maybe.some_inj(V, v, w, h))
-    case Nil{} Con{False{}, q}:
-      h => Empty.absurd({w == v: V}, Shared.Maybe.none_ne_some(V, w, h))
-    case Nil{} Con{True{}, q}:
-      h => Empty.absurd({w == v: V}, Shared.Maybe.none_ne_some(V, w, h))
-    case Con{False{}, r} Nil{}:
-      h => Empty.absurd({w == v: V}, Shared.Maybe.none_ne_some(V, w, h))
-    case Con{True{}, r} Nil{}:
-      h => Empty.absurd({w == v: V}, Shared.Maybe.none_ne_some(V, w, h))
-    case Con{False{}, r} Con{False{}, q}:
-      Trie.get_one_value(V, r, q, v, w)
-    case Con{True{}, r} Con{True{}, q}:
-      Trie.get_one_value(V, r, q, v, w)
-    case Con{False{}, r} Con{True{}, q}:
-      h => Empty.absurd({w == v: V}, Shared.Maybe.none_ne_some(V, w, h))
-    case Con{True{}, r} Con{False{}, q}:
-      h => Empty.absurd({w == v: V}, Shared.Maybe.none_ne_some(V, w, h))
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning

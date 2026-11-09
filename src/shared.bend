@@ -982,53 +982,6 @@ def List.drop_after_append(
     case Con{h, t}:
       List.drop_after_append(A, t, ys)
 
-# appends group either way
-def List.append_assoc(
-  -A: Data,
-  xs: List<&2, A>,
-  ys: List<&2, A>,
-  zs: List<&2, A>
-) -> {
-  List.append(
-    &2,
-    A,
-    List.append(&2, A, xs, ys),
-    zs
-  )
-    == List.append(&2, A, xs, List.append(&2, A, ys, zs)): List<&2, A>
-}:
-  match xs:
-    case Nil{}:
-      {==}
-    case Con{h, t}:
-      %List.append_assoc(A, t, ys, zs):
-        {h <> List.append(&2, A, List.append(&2, A, t, ys), zs) == h <> _: List<&2, A>}
-      {==}
-
-# the first n elements, then the rest, are the list
-def List.take_drop(
-  -A: Data,
-  xs: List<&2, A>,
-  n: Nat
-) -> {List.append(&2, A, List.take(&2, A, xs, n), List.drop(&2, A, xs, n)) == xs: List<&2, A>}:
-  match xs n:
-    case Nil{} k:
-      {==}
-    case Con{h, t} 0n:
-      {==}
-    case Con{h, t} 1n+p:
-      %List.take_drop(
-        A,
-        t,
-        p
-      ): {
-        h
-          <> List.append(&2, A, List.take(&2, A, t, p), List.drop(&2, A, t, p))
-          == h
-          <> _: List<&2, A>
-      }
-      {==}
-
 # Maybe.is_eq is True only for equal values, when eq is True only for equal ones
 def Maybe.is_eq_sound(
   ~A: Data,
