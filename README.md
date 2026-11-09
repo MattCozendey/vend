@@ -29,3 +29,7 @@ A Vend Owner Group is a composition of Vend Nodes that decide and sign the chang
 ## Vend Branch
 
 A Vend Branch is a sequence of versions in a Vend Store, decided by one Owner Group at a time, whose history only grows at its end (never rewritten, even when moved to another point, which records a new version equal to it). Marks name the versions that matter, and any version, Vend Branch (its newest) or Vend Branch@mark can be pointed at. Merges go resource by resource, each in its own format; a conflict is stored and shared, and the merge turns Written once each clashing resource is resolved.
+
+## Vend Resource
+
+A Vend Resource is anything with an address (a file, a folder, a server) that may be reachable or not. Each one is read in its format: items like functions and types for code, nested formats in their own (CSS in HTML, code in Markdown, at any depth), lines for unknown text, one whole part otherwise. Diffs, merges and conflicts follow the format, and its imports are tracked with their conditions (like C's #ifdef) and aliases. A resource mounted to a Vend Branch takes its newest content, and what it held before is recorded as a change; mounting it to another Vend Branch is a checkout, and mounting another resource to a second Vend Branch alongside it is a worktree. A submodule is a resource that points to a Vend Branch and version of another Vend Store, served by any Vend Node that has it.
