@@ -24,4 +24,4 @@ Can be held by many other Vend Nodes.
 
 ## Owner Group
 
-An Owner Group is the composition of Vend nodes that decide the changes of a branch or of the Store itself, in order, signing each decision.
+An Owner Group is a composition of Vend nodes that decide and sign the changes of a branch or of the Store itself in sequence.
