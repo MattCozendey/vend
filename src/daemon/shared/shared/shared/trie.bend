@@ -2672,3 +2672,185 @@ def Trie.take_minus(
       {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# Orders
+# ------
+# The values of a trie come in the order of their keys, so the values around a
+# key are those before it and those after it.
+
+# the values of t whose keys come before k
+def Trie.before(-V: Data, t: Trie<V>, k: List<&2, Bool>) -> List<&2, V>:
+  match t k:
+    case Tip{} r:
+      []
+    case Bin{h, z, o} Nil{}:
+      []
+    case Bin{None{}, z, o} Con{False{}, r}:
+      Trie.before(V, z, r)
+    case Bin{Some{x}, z, o} Con{False{}, r}:
+      x <> Trie.before(V, z, r)
+    case Bin{None{}, z, o} Con{True{}, r}:
+      List.append(&2, V, Trie.values(V, z), Trie.before(V, o, r))
+    case Bin{Some{x}, z, o} Con{True{}, r}:
+      x <> List.append(&2, V, Trie.values(V, z), Trie.before(V, o, r))
+
+# the values of t whose keys come after k
+def Trie.after(-V: Data, t: Trie<V>, k: List<&2, Bool>) -> List<&2, V>:
+  match t k:
+    case Tip{} r:
+      []
+    case Bin{h, z, o} Nil{}:
+      List.append(&2, V, Trie.values(V, z), Trie.values(V, o))
+    case Bin{h, z, o} Con{False{}, r}:
+      List.append(&2, V, Trie.after(V, z, r), Trie.values(V, o))
+    case Bin{h, z, o} Con{True{}, r}:
+      Trie.after(V, o, r)
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# lists put one after the other group either way
+def Trie.append_assoc(
+  -V: Data,
+  xs: List<&2, V>,
+  ys: List<&2, V>,
+  zs: List<&2, V>
+) -> {
+  List.append(
+    &2,
+    V,
+    List.append(&2, V, xs, ys),
+    zs
+  )
+    == List.append(&2, V, xs, List.append(&2, V, ys, zs)): List<&2, V>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      %Trie.append_assoc(V, r, ys, zs): {
+        x <> List.append(&2, V, List.append(&2, V, r, ys), zs) == x <> _: List<&2, V>
+      }
+      {==}
+
+# the values of a trie are those before a key that it holds, its value, and
+# those after it
+def Trie.values_around(
+  -V: Data,
+  t: Trie<V>,
+  k: List<&2, Bool>,
+  +v: V
+) -> {
+  Trie.get(V, t, k) == Some{v}: Maybe<&2, V>
+} -> {
+  Trie.values(V, t) == List.append(&2, V, Trie.before(V, t, k), v <> Trie.after(V, t, k)): List<&2, V>
+}:
+  match t k:
+    case Tip{} r:
+      e => Empty.absurd(
+        {[] == List.append(&2, V, [], v <> []): List<&2, V>},
+        Shared.Maybe.none_ne_some(V, v, e)
+      )
+    case Bin{None{}, z, o} Nil{}:
+      e => Empty.absurd(
+        {
+          List.append(
+            &2,
+            V,
+            Trie.values(V, z),
+            Trie.values(V, o)
+          )
+            == v <> List.append(&2, V, Trie.values(V, z), Trie.values(V, o)): List<&2, V>
+        },
+        Shared.Maybe.none_ne_some(V, v, e)
+      )
+    case Bin{Some{x}, z, o} Nil{}:
+      e =>
+        %Shared.Maybe.some_inj(V, x, v, e): {
+          x
+            <> List.append(&2, V, Trie.values(V, z), Trie.values(V, o))
+            == _
+            <> List.append(&2, V, Trie.values(V, z), Trie.values(V, o)): List<&2, V>
+        }
+        {==}
+    case Bin{None{}, +z, +o} Con{False{}, +r}:
+      e =>
+        %Trie.append_assoc(V, Trie.before(V, z, r), v <> Trie.after(V, z, r), Trie.values(V, o)): {
+          List.append(&2, V, Trie.values(V, z), Trie.values(V, o)) == _: List<&2, V>
+        }
+        %Trie.values_around(V, z, r, v)(e): {
+          List.append(
+            &2,
+            V,
+            Trie.values(V, z),
+            Trie.values(V, o)
+          )
+            == List.append(&2, V, _, Trie.values(V, o)): List<&2, V>
+        }
+        {==}
+    case Bin{Some{x}, +z, +o} Con{False{}, +r}:
+      e =>
+        %Trie.append_assoc(V, Trie.before(V, z, r), v <> Trie.after(V, z, r), Trie.values(V, o)): {
+          x <> List.append(&2, V, Trie.values(V, z), Trie.values(V, o)) == x <> _: List<&2, V>
+        }
+        %Trie.values_around(V, z, r, v)(e): {
+          x
+            <> List.append(&2, V, Trie.values(V, z), Trie.values(V, o))
+            == x
+            <> List.append(&2, V, _, Trie.values(V, o)): List<&2, V>
+        }
+        {==}
+    case Bin{None{}, +z, +o} Con{True{}, +r}:
+      e =>
+        %Equal.sym(
+          List<&2, V>,
+          List.append(
+            &2,
+            V,
+            List.append(&2, V, Trie.values(V, z), Trie.before(V, o, r)),
+            v <> Trie.after(V, o, r)
+          ),
+          List.append(
+            &2,
+            V,
+            Trie.values(V, z),
+            List.append(&2, V, Trie.before(V, o, r), v <> Trie.after(V, o, r))
+          ),
+          Trie.append_assoc(V, Trie.values(V, z), Trie.before(V, o, r), v <> Trie.after(V, o, r))
+        ): {List.append(&2, V, Trie.values(V, z), Trie.values(V, o)) == _: List<&2, V>}
+        %Trie.values_around(V, o, r, v)(e): {
+          List.append(
+            &2,
+            V,
+            Trie.values(V, z),
+            Trie.values(V, o)
+          )
+            == List.append(&2, V, Trie.values(V, z), _): List<&2, V>
+        }
+        {==}
+    case Bin{Some{x}, +z, +o} Con{True{}, +r}:
+      e =>
+        %Equal.sym(
+          List<&2, V>,
+          List.append(
+            &2,
+            V,
+            List.append(&2, V, Trie.values(V, z), Trie.before(V, o, r)),
+            v <> Trie.after(V, o, r)
+          ),
+          List.append(
+            &2,
+            V,
+            Trie.values(V, z),
+            List.append(&2, V, Trie.before(V, o, r), v <> Trie.after(V, o, r))
+          ),
+          Trie.append_assoc(V, Trie.values(V, z), Trie.before(V, o, r), v <> Trie.after(V, o, r))
+        ): {
+          x <> List.append(&2, V, Trie.values(V, z), Trie.values(V, o)) == x <> _: List<&2, V>
+        }
+        %Trie.values_around(V, o, r, v)(e): {
+          x
+            <> List.append(&2, V, Trie.values(V, z), Trie.values(V, o))
+            == x
+            <> List.append(&2, V, Trie.values(V, z), _): List<&2, V>
+        }
+        {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning

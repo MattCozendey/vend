@@ -2016,6 +2016,14 @@ def Writer.asks(s: State(), w: String) -> List<&2, Cells.Cell<Ledgers.Entry<Ask>
     Ledgers.State.under(~Ask, s, Ledgers.Slot.writer(w))
   )
 
+# the requests of the writer w whose IDs come after q, as s holds them
+def Writer.after(s: State(), w: String, q: String) -> List<&2, Cells.Cell<Ledgers.Entry<Ask>>>:
+  Tries.Trie.after(
+    Cells.Cell<Ledgers.Entry<Ask>>,
+    Ledgers.State.under(~Ask, s, Ledgers.Slot.writer(w)),
+    Tries.Trie.text(q)
+  )
+
 # the content of the writer w's pending write of the resource n on the branch
 # b of the store r with the highest request ID, if it has one
 def Node.draft(
@@ -2860,6 +2868,39 @@ law Judge.own_inside:
       == Some{Ledgers.Verdict{True{}, x, ds}}: Maybe<&2, Ledgers.Verdict>
   }
     -> {os == Group.nodes(s, Own.tree(s, l, at, h), g): List<&2, String>}
+
+# every read of a writer shows its own pending change. When a node holds the
+# writer w's request q, which writes the content c to the resource n on the
+# branch b of the store r, its owners did not decide it yet, and w has no
+# pending write of n there under a higher ID, c is w's draft of n: what
+# Node.read gives at the head of b. A node that the writer switches to holds
+# the request once a sync brought it, and keeps it (Node.answer_kept)
+law Node.draft_own:
+  for +s: State()
+  for +w: String
+  for +q: String
+  for +t: String
+  for +a: Ask
+  for +r: Ledgers.Id
+  for +b: String
+  for +n: Resources.Name
+  for +c: Content
+  {
+    Ledgers.State.get(
+      ~Ask,
+      s,
+      Ledgers.Slot.ask(Ledgers.Id{w, q})
+    )
+      == Some{Cells.One{Ledgers.Entry.Ask{Ledgers.Id{w, q}, t, a}}}: Maybe<
+      &2,
+      Cells.Cell<Ledgers.Entry<Ask>>>
+  }
+    -> {Draft.content(r, b, n, a) == Some{c}: Maybe<&2, Content>}
+    -> {
+      Ledgers.State.status(~Ask, ~Ask.view, s, Ledgers.Id{w, q}) == Ledgers.Status.Pending{}: Ledgers.Status
+    }
+    -> {Draft.last(s, r, b, n, Writer.after(s, w, q), None{}) == None{}: Maybe<&2, Content>}
+    -> {Node.draft(s, w, r, b, n) == Some{c}: Maybe<&2, Content>}
 
 # s with the request q of e, before any vote: what a node holds once it takes
 # q in

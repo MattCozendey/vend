@@ -2404,3 +2404,308 @@ def Spec.Judge.own_inside(s, r, l, g, at, os, h, x, ds):
         )(e)
       )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# Views
+# -----
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# the last draft of cells one after the other is the last draft of the second
+# cells, after that of the first
+def Last.append(
+  +s: Spec.State(),
+  +r: Ledgers.Id,
+  +b: String,
+  +n: Resources.Name,
+  xs: List<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+  +ys: List<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+  f: Maybe<&2, Spec.Content>
+) -> {
+  Spec.Draft.last(
+    s,
+    r,
+    b,
+    n,
+    List.append(&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>, xs, ys),
+    f
+  )
+    == Spec.Draft.last(s, r, b, n, ys, Spec.Draft.last(s, r, b, n, xs, f)): Maybe<&2, Spec.Content>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{Cells.One{Ledgers.Entry.Ask{i, t, q}}, rest}:
+      Last.append(s, r, b, n, rest, ys, Spec.Draft.put(s, i, Spec.Draft.content(r, b, n, q), f))
+    case Con{Cells.One{Ledgers.Entry.Vote{v}}, rest}:
+      Last.append(s, r, b, n, rest, ys, f)
+    case Con{Cells.One{Ledgers.Entry.At{v}}, rest}:
+      Last.append(s, r, b, n, rest, ys, f)
+    case Con{Cells.One{Ledgers.Entry.Data{v}}, rest}:
+      Last.append(s, r, b, n, rest, ys, f)
+    case Con{Cells.Many{}, rest}:
+      Last.append(s, r, b, n, rest, ys, f)
+
+# a draft that is found stays found after a request, whether it is pending or
+# not (p)
+def Put.some.if(
+  p: Bool,
+  c2: Spec.Content,
+  f: Maybe<&2, Spec.Content>,
+  hf: {Maybe.is_some(&2, Spec.Content, f) == True{}: Bool}
+) -> {
+  Maybe.is_some(
+    &2,
+    Spec.Content,
+    Shared.Bool.when(Maybe<&2, Spec.Content>, p, u => Some{c2}, u => f)
+  )
+    == True{}: Bool
+}:
+  match p:
+    case True{}:
+      {==}
+    case False{}:
+      hf
+
+# a draft that is found stays found after a request
+def Put.some(
+  s: Spec.State(),
+  i: Ledgers.Id,
+  m: Maybe<&2, Spec.Content>,
+  f: Maybe<&2, Spec.Content>,
+  hf: {Maybe.is_some(&2, Spec.Content, f) == True{}: Bool}
+) -> {Maybe.is_some(&2, Spec.Content, Spec.Draft.put(s, i, m, f)) == True{}: Bool}:
+  match m:
+    case None{}:
+      hf
+    case Some{c2}:
+      Put.some.if(
+        Spec.Status.is_pending(Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s, i)),
+        c2,
+        f,
+        hf
+      )
+
+# a draft that is found stays found after any cells
+def Last.some(
+  +s: Spec.State(),
+  +r: Ledgers.Id,
+  +b: String,
+  +n: Resources.Name,
+  ys: List<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+  +f: Maybe<&2, Spec.Content>,
+  hf: {Maybe.is_some(&2, Spec.Content, f) == True{}: Bool}
+) -> {Maybe.is_some(&2, Spec.Content, Spec.Draft.last(s, r, b, n, ys, f)) == True{}: Bool}:
+  match ys:
+    case Nil{}:
+      hf
+    case Con{Cells.One{Ledgers.Entry.Ask{+i, t, +q}}, rest}:
+      Last.some(
+        s,
+        r,
+        b,
+        n,
+        rest,
+        Spec.Draft.put(s, i, Spec.Draft.content(r, b, n, q), f),
+        Put.some(s, i, Spec.Draft.content(r, b, n, q), f, hf)
+      )
+    case Con{Cells.One{Ledgers.Entry.Vote{v}}, rest}:
+      Last.some(s, r, b, n, rest, f, hf)
+    case Con{Cells.One{Ledgers.Entry.At{v}}, rest}:
+      Last.some(s, r, b, n, rest, f, hf)
+    case Con{Cells.One{Ledgers.Entry.Data{v}}, rest}:
+      Last.some(s, r, b, n, rest, f, hf)
+    case Con{Cells.Many{}, rest}:
+      Last.some(s, r, b, n, rest, f, hf)
+
+# Last.none at a request with the content c2, by whether it is pending (p)
+def Last.none.if(
+  +s: Spec.State(),
+  +r: Ledgers.Id,
+  +b: String,
+  +n: Resources.Name,
+  +rest: List<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+  f: Maybe<&2, Spec.Content>,
+  +c2: Spec.Content,
+  p: Bool,
+  ih: {
+    Spec.Draft.last(s, r, b, n, rest, None{}) == None{}: Maybe<&2, Spec.Content>
+  } -> {Spec.Draft.last(s, r, b, n, rest, f) == f: Maybe<&2, Spec.Content>}
+) -> {
+  Spec.Draft.last(
+    s,
+    r,
+    b,
+    n,
+    rest,
+    Shared.Bool.when(Maybe<&2, Spec.Content>, p, u => Some{c2}, u => None{})
+  )
+    == None{}: Maybe<&2, Spec.Content>
+} -> {
+  Spec.Draft.last(
+    s,
+    r,
+    b,
+    n,
+    rest,
+    Shared.Bool.when(Maybe<&2, Spec.Content>, p, u => Some{c2}, u => f)
+  )
+    == f: Maybe<&2, Spec.Content>
+}:
+  match p:
+    case False{}:
+      h => ih(h)
+    case True{}:
+      h => Empty.absurd(
+        {Spec.Draft.last(s, r, b, n, rest, Some{c2}) == f: Maybe<&2, Spec.Content>},
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            Maybe.is_some(&2, Spec.Content, Spec.Draft.last(s, r, b, n, rest, Some{c2})),
+            True{},
+            Equal.sym(
+              Bool,
+              Maybe.is_some(&2, Spec.Content, Spec.Draft.last(s, r, b, n, rest, Some{c2})),
+              False{},
+              Equal.cong(
+                Maybe<&2, Spec.Content>,
+                Bool,
+                x => Maybe.is_some(&2, Spec.Content, x),
+                Spec.Draft.last(s, r, b, n, rest, Some{c2}),
+                None{},
+                h
+              )
+            ),
+            Last.some(s, r, b, n, rest, Some{c2}, {==})
+          )
+        )
+      )
+
+# Last.none at a request whose content for the resource is m
+def Last.none.at(
+  +s: Spec.State(),
+  +r: Ledgers.Id,
+  +b: String,
+  +n: Resources.Name,
+  +i: Ledgers.Id,
+  +rest: List<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+  f: Maybe<&2, Spec.Content>,
+  m: Maybe<&2, Spec.Content>,
+  ih: {
+    Spec.Draft.last(s, r, b, n, rest, None{}) == None{}: Maybe<&2, Spec.Content>
+  } -> {Spec.Draft.last(s, r, b, n, rest, f) == f: Maybe<&2, Spec.Content>}
+) -> {
+  Spec.Draft.last(s, r, b, n, rest, Spec.Draft.put(s, i, m, None{})) == None{}: Maybe<&2, Spec.Content>
+} -> {Spec.Draft.last(s, r, b, n, rest, Spec.Draft.put(s, i, m, f)) == f: Maybe<&2, Spec.Content>}:
+  match m:
+    case None{}:
+      h => ih(h)
+    case Some{c2}:
+      Last.none.if(
+        s,
+        r,
+        b,
+        n,
+        rest,
+        f,
+        c2,
+        Spec.Status.is_pending(Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s, i)),
+        ih
+      )
+
+# cells that hold no draft keep the draft that was found
+def Last.none(
+  +s: Spec.State(),
+  +r: Ledgers.Id,
+  +b: String,
+  +n: Resources.Name,
+  ys: List<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+  +f: Maybe<&2, Spec.Content>
+) -> {
+  Spec.Draft.last(s, r, b, n, ys, None{}) == None{}: Maybe<&2, Spec.Content>
+} -> {Spec.Draft.last(s, r, b, n, ys, f) == f: Maybe<&2, Spec.Content>}:
+  match ys:
+    case Nil{}:
+      h => {==}
+    case Con{Cells.One{Ledgers.Entry.Ask{+i, t, +q}}, +rest}:
+      Last.none.at(
+        s,
+        r,
+        b,
+        n,
+        i,
+        rest,
+        f,
+        Spec.Draft.content(r, b, n, q),
+        Last.none(s, r, b, n, rest, f)
+      )
+    case Con{Cells.One{Ledgers.Entry.Vote{v}}, rest}:
+      Last.none(s, r, b, n, rest, f)
+    case Con{Cells.One{Ledgers.Entry.At{v}}, rest}:
+      Last.none(s, r, b, n, rest, f)
+    case Con{Cells.One{Ledgers.Entry.Data{v}}, rest}:
+      Last.none(s, r, b, n, rest, f)
+    case Con{Cells.Many{}, rest}:
+      Last.none(s, r, b, n, rest, f)
+
+def Spec.Node.draft_own(s, w, q, t, a, r, b, n, c):
+  hg => hc => hp => hn =>
+    +tr = Ledgers.State.under(~Spec.Ask, s, Ledgers.Slot.writer(w))
+    +k = Tries.Trie.text(q)
+    +i = {Ledgers.Id{w, q}: Ledgers.Id}
+    +cell = {Cells.One{Ledgers.Entry.Ask{i, t, a}}: Cells.Cell<Ledgers.Entry<Spec.Ask>>}
+    +bs = Tries.Trie.before(Cells.Cell<Ledgers.Entry<Spec.Ask>>, tr, k)
+    +as = Tries.Trie.after(Cells.Cell<Ledgers.Entry<Spec.Ask>>, tr, k)
+    +fb = Spec.Draft.last(s, r, b, n, bs, None{})
+    %Equal.sym(
+      List<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+      Tries.Trie.values(Cells.Cell<Ledgers.Entry<Spec.Ask>>, tr),
+      List.append(&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>, bs, cell <> as),
+      Tries.Trie.values_around(
+        Cells.Cell<Ledgers.Entry<Spec.Ask>>,
+        tr,
+        k,
+        cell
+      )(
+        Equal.trans(
+          Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+          Tries.Trie.get(Cells.Cell<Ledgers.Entry<Spec.Ask>>, tr, k),
+          Ledgers.State.get(~Spec.Ask, s, Ledgers.Slot.ask(i)),
+          Some{cell},
+          Tries.Trie.get_under(Cells.Cell<Ledgers.Entry<Spec.Ask>>, s, Ledgers.Slot.writer(w), k),
+          hg
+        )
+      )
+    ): {Spec.Draft.last(s, r, b, n, _, None{}) == Some{c}: Maybe<&2, Spec.Content>}
+    %Equal.sym(
+      Maybe<&2, Spec.Content>,
+      Spec.Draft.last(
+        s,
+        r,
+        b,
+        n,
+        List.append(&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>, bs, cell <> as),
+        None{}
+      ),
+      Spec.Draft.last(s, r, b, n, cell <> as, fb),
+      Last.append(s, r, b, n, bs, cell <> as, None{})
+    ): {_ == Some{c}: Maybe<&2, Spec.Content>}
+    %Equal.sym(Maybe<&2, Spec.Content>, Spec.Draft.content(r, b, n, a), Some{c}, hc):
+      {Spec.Draft.last(s, r, b, n, as, Spec.Draft.put(s, i, _, fb)) == Some{c}: Maybe<&2, Spec.Content>}
+    %Equal.sym(
+      Ledgers.Status,
+      Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s, i),
+      Ledgers.Status.Pending{},
+      hp
+    ): {
+      Spec.Draft.last(
+        s,
+        r,
+        b,
+        n,
+        as,
+        Shared.Bool.when(Maybe<&2, Spec.Content>, Spec.Status.is_pending(_), u => Some{c}, u => fb)
+      )
+        == Some{c}: Maybe<&2, Spec.Content>
+    }
+    Last.none(s, r, b, n, as, Some{c})(hn)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
