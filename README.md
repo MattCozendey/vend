@@ -25,3 +25,7 @@ A Vend Writer is anyone (people, agents, tools) connected to a Vend Node under a
 ## Vend Owner Group
 
 A Vend Owner Group is a composition of Vend Nodes that decide and sign the changes of a branch or of the Store itself in sequence.
+
+## Vend Branch
+
+A Vend Branch is a sequence of versions in a Vend Store, decided by one Owner Group at a time, whose history only grows at its end (never rewritten, even when moved to another point, which records a new version equal to it). Marks name the versions that matter, and any version, Vend Branch (its newest) or Vend Branch@mark can be pointed at. Merges go resource by resource, each in its own format; a conflict is stored and shared, and the merge turns Written once each clashing resource is resolved.
