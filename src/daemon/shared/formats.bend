@@ -50,59 +50,6 @@ def List.fork(~A: Data, ~same: A -> A -> Bool, a: List<&2, A>, b: List<&2, A>) -
     case Con{x, ra} Nil{}:
       Fork{[], x <> ra, []}
 
-# the ends that two lists share (same), after what comes before it in each (a
-# and b)
-type Ends<-A: Data> is Data:
-  Ends{a: List<&2, A>, b: List<&2, A>, same: List<&2, A>}
-
-# the first list of its ends, again
-def Ends.left(-A: Data, e: Ends<A>) -> List<&2, A>:
-  match e:
-    case Ends{a, b, s}:
-      List.append(&2, A, a, s)
-
-# the second list of its ends, again
-def Ends.right(-A: Data, e: Ends<A>) -> List<&2, A>:
-  match e:
-    case Ends{a, b, s}:
-      List.append(&2, A, b, s)
-
-# the ends of x <> ra and y <> rb, by whether x and y are the same (held); e
-# are the ends of ra and rb
-def List.tails.on(-A: Data, held: Bool, x: A, y: A, e: Ends<A>) -> Ends<A>:
-  match held e:
-    case True{} Ends{Nil{}, Nil{}, s}:
-      Ends{[], [], x <> s}
-    case h Ends{ea, eb, s}:
-      Ends{x <> ea, y <> eb, s}
-
-# the ends that a and b share, with the lists lined up from their start
-def List.tails(~A: Data, ~same: A -> A -> Bool, a: List<&2, A>, b: List<&2, A>) -> Ends<A>:
-  match a b:
-    case Con{+x, ra} Con{+y, rb}:
-      List.tails.on(A, same(x, y), x, y, List.tails(~A, ~same, ra, rb))
-    case Nil{} y:
-      Ends{[], y, []}
-    case Con{x, ra} Nil{}:
-      Ends{x <> ra, [], []}
-
-# e, after a comes before its first list and b before its second
-def Ends.after(-A: Data, a: List<&2, A>, b: List<&2, A>, e: Ends<A>) -> Ends<A>:
-  match e:
-    case Ends{ea, eb, s}:
-      Ends{List.append(&2, A, a, ea), List.append(&2, A, b, eb), s}
-
-# the ends that a and b share, with the lists lined up at their end
-def List.ends(~A: Data, ~same: A -> A -> Bool, +a: List<&2, A>, +b: List<&2, A>) -> Ends<A>:
-  +da = Nat.sub(List.length(&2, A, a), List.length(&2, A, b))
-  +db = Nat.sub(List.length(&2, A, b), List.length(&2, A, a))
-  Ends.after(
-    A,
-    List.take(&2, A, a, da),
-    List.take(&2, A, b, db),
-    List.tails(~A, ~same, List.drop(&2, A, a, da), List.drop(&2, A, b, db))
-  )
-
 # Laws
 # ----
 # Each law asks of same only that it is True only for equal elements (sound).
@@ -208,216 +155,56 @@ def List.fork_right(ty, same, laws, a, b):
     case Con{x, ra} Nil{}:
       {==}
 
-# List.tails_left after the first elements
-def List.tails_left.on(
+# Reversed lists
+# --------------
+# A fork of two lists reversed is where they agree to the end.
+
+# reversing xs then ys onto acc, as two reversals
+def List.reverse_append(
   -A: Data,
-  held: Bool,
-  x: A,
-  y: A,
-  ra: List<&2, A>,
-  e: Ends<A>,
-  ih: {Ends.left(A, e) == ra: List<&2, A>}
-) -> {Ends.left(A, List.tails.on(A, held, x, y, e)) == x <> ra: List<&2, A>}:
-  match held e:
-    case True{} Ends{Nil{}, Nil{}, s}:
-      %ih: {x <> s == x <> _: List<&2, A>}
-      {==}
-    case True{} Ends{Nil{}, Con{q, qs}, s}:
-      %ih: {x <> s == x <> _: List<&2, A>}
-      {==}
-    case True{} Ends{Con{p, ps}, eb, s}:
-      %ih: {x <> List.append(&2, A, p <> ps, s) == x <> _: List<&2, A>}
-      {==}
-    case False{} Ends{ea, eb, s}:
-      %ih: {x <> List.append(&2, A, ea, s) == x <> _: List<&2, A>}
-      {==}
-
-# the ends of two lists give back the first
-law List.tails_left:
-  for ~A: Data
-  for ~same: A -> A -> Bool
-  for a: List<&2, A>
-  for b: List<&2, A>
-  {Ends.left(A, List.tails(~A, ~same, a, b)) == a: List<&2, A>}
-
-def List.tails_left(ty, same, a, b):
-  match a b:
-    case Con{+x, +ra} Con{+y, +rb}:
-      List.tails_left.on(
-        ty,
-        same(x, y),
-        x,
-        y,
-        ra,
-        List.tails(~ty, ~same, ra, rb),
-        List.tails_left(~ty, ~same, ra, rb)
-      )
-    case Nil{} y:
-      {==}
-    case Con{x, ra} Nil{}:
-      Shared.List.append_nil(ty, x <> ra)
-
-# List.tails_right after the first elements
-def List.tails_right.on(
-  ~A: Data,
-  ~same: A -> A -> Bool,
-  ~laws: Shared.Eq.Laws(A, same),
-  held: Bool,
-  x: A,
-  y: A,
-  rb: List<&2, A>,
-  e: Ends<A>,
-  h: {same(x, y) == held: Bool},
-  ih: {Ends.right(A, e) == rb: List<&2, A>}
-) -> {Ends.right(A, List.tails.on(A, held, x, y, e)) == y <> rb: List<&2, A>}:
-  match held e:
-    case True{} Ends{Nil{}, Nil{}, s}:
-      %ih: {x <> s == y <> _: List<&2, A>}
-      %Shared.Eq.sound(~A, ~same, laws, x, y)(h): {x <> s == _ <> s: List<&2, A>}
-      {==}
-    case True{} Ends{Nil{}, Con{q, qs}, s}:
-      %ih: {y <> List.append(&2, A, q <> qs, s) == y <> _: List<&2, A>}
-      {==}
-    case True{} Ends{Con{p, ps}, eb, s}:
-      %ih: {y <> List.append(&2, A, eb, s) == y <> _: List<&2, A>}
-      {==}
-    case False{} Ends{ea, eb, s}:
-      %ih: {y <> List.append(&2, A, eb, s) == y <> _: List<&2, A>}
-      {==}
-
-# the ends of two lists give back the second
-law List.tails_right:
-  for ~A: Data
-  for ~same: A -> A -> Bool
-  for ~laws: Shared.Eq.Laws(A, same)
-  for a: List<&2, A>
-  for b: List<&2, A>
-  {Ends.right(A, List.tails(~A, ~same, a, b)) == b: List<&2, A>}
-
-def List.tails_right(ty, same, laws, a, b):
-  match a b:
-    case Con{+x, +ra} Con{+y, +rb}:
-      List.tails_right.on(
-        ~ty,
-        ~same,
-        ~laws,
-        same(x, y),
-        x,
-        y,
-        rb,
-        List.tails(~ty, ~same, ra, rb),
-        {==},
-        List.tails_right(~ty, ~same, ~laws, ra, rb)
-      )
-    case Nil{} y:
-      Shared.List.append_nil(ty, y)
-    case Con{x, ra} Nil{}:
-      {==}
-
-# the first list of e after a comes before it is a, then the first list of e
-def Ends.after_left(
-  -A: Data,
-  a: List<&2, A>,
-  b: List<&2, A>,
-  e: Ends<A>
-) -> {Ends.left(A, Ends.after(A, a, b, e)) == List.append(&2, A, a, Ends.left(A, e)): List<&2, A>}:
-  match e:
-    case Ends{ea, eb, s}:
-      Shared.List.append_assoc(A, a, ea, s)
-
-# the second list of e after b comes before it is b, then the second list of e
-def Ends.after_right(
-  -A: Data,
-  a: List<&2, A>,
-  b: List<&2, A>,
-  e: Ends<A>
+  xs: List<&2, A>,
+  ys: List<&2, A>,
+  acc: List<&2, A>
 ) -> {
-  Ends.right(A, Ends.after(A, a, b, e)) == List.append(&2, A, b, Ends.right(A, e)): List<&2, A>
+  List.reverse.go(&2, A, ys, List.reverse.go(&2, A, xs, acc))
+    == List.reverse.go(&2, A, List.append(&2, A, xs, ys), acc): List<&2, A>
 }:
-  match e:
-    case Ends{ea, eb, s}:
-      Shared.List.append_assoc(A, b, eb, s)
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      List.reverse_append(A, r, ys, x <> acc)
 
-# the ends of two lists, lined up at their end, give back the first
-law List.ends_left:
-  for ~A: Data
-  for ~same: A -> A -> Bool
-  for +a: List<&2, A>
-  for +b: List<&2, A>
-  {Ends.left(A, List.ends(~A, ~same, a, b)) == a: List<&2, A>}
+# reversing xs onto a, then acc, is reversing xs onto a then acc
+def List.reverse_onto(
+  -A: Data,
+  xs: List<&2, A>,
+  a: List<&2, A>,
+  acc: List<&2, A>
+) -> {
+  List.reverse.go(&2, A, xs, List.append(&2, A, a, acc))
+    == List.append(&2, A, List.reverse.go(&2, A, xs, a), acc): List<&2, A>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      List.reverse_onto(A, r, x <> a, acc)
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-def List.ends_left(ty, same, a, b):
-  +da = Nat.sub(List.length(&2, ty, a), List.length(&2, ty, b))
-  +db = Nat.sub(List.length(&2, ty, b), List.length(&2, ty, a))
-  pa = List.take(&2, ty, a, da)
-  +ra = List.drop(&2, ty, a, da)
-  +rb = List.drop(&2, ty, b, db)
-  t = List.tails(~ty, ~same, ra, rb)
-  Equal.trans(
-    List<&2, ty>,
-    Ends.left(ty, Ends.after(ty, pa, List.take(&2, ty, b, db), t)),
-    List.append(&2, ty, pa, Ends.left(ty, t)),
-    a,
-    Ends.after_left(ty, pa, List.take(&2, ty, b, db), t),
-    Equal.trans(
-      List<&2, ty>,
-      List.append(&2, ty, pa, Ends.left(ty, t)),
-      List.append(&2, ty, pa, ra),
-      a,
-      Equal.cong(
-        List<&2, ty>,
-        List<&2, ty>,
-        z => List.append(&2, ty, pa, z),
-        Ends.left(ty, t),
-        ra,
-        List.tails_left(~ty, ~same, ra, rb)
-      ),
-      Shared.List.take_drop(ty, a, da)
-    )
-  )
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# the ends of two lists, lined up at their end, give back the second
-law List.ends_right:
-  for ~A: Data
-  for ~same: A -> A -> Bool
-  for ~laws: Shared.Eq.Laws(A, same)
-  for +a: List<&2, A>
-  for +b: List<&2, A>
-  {Ends.right(A, List.ends(~A, ~same, a, b)) == b: List<&2, A>}
-
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-def List.ends_right(ty, same, laws, a, b):
-  +da = Nat.sub(List.length(&2, ty, a), List.length(&2, ty, b))
-  +db = Nat.sub(List.length(&2, ty, b), List.length(&2, ty, a))
-  pb = List.take(&2, ty, b, db)
-  +ra = List.drop(&2, ty, a, da)
-  +rb = List.drop(&2, ty, b, db)
-  t = List.tails(~ty, ~same, ra, rb)
-  Equal.trans(
-    List<&2, ty>,
-    Ends.right(ty, Ends.after(ty, List.take(&2, ty, a, da), pb, t)),
-    List.append(&2, ty, pb, Ends.right(ty, t)),
-    b,
-    Ends.after_right(ty, List.take(&2, ty, a, da), pb, t),
-    Equal.trans(
-      List<&2, ty>,
-      List.append(&2, ty, pb, Ends.right(ty, t)),
-      List.append(&2, ty, pb, rb),
-      b,
-      Equal.cong(
-        List<&2, ty>,
-        List<&2, ty>,
-        z => List.append(&2, ty, pb, z),
-        Ends.right(ty, t),
-        rb,
-        List.tails_right(~ty, ~same, ~laws, ra, rb)
-      ),
-      Shared.List.take_drop(ty, b, db)
-    )
-  )
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# reversing xs onto acc, then reversing that, is acc reversed onto xs
+def List.reverse_twice(
+  -A: Data,
+  xs: List<&2, A>,
+  acc: List<&2, A>
+) -> {
+  List.reverse.go(&2, A, acc, xs)
+    == List.reverse.go(&2, A, List.reverse.go(&2, A, xs, acc), []): List<&2, A>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      List.reverse_twice(A, r, x <> acc)
 
 # Formats
 # -------
@@ -545,103 +332,146 @@ def Cut.right(c: Cut) -> List<&2, Texts.Bytes()>:
     case Cut{s, o, n, e}:
       List.append(&2, Texts.Bytes(), s, List.append(&2, Texts.Bytes(), n, e))
 
-# the cut with the start s and the ends e
-def Lines.cut.ends(s: List<&2, Texts.Bytes()>, e: Ends<Texts.Bytes()>) -> Cut:
-  match e:
-    case Ends{ea, eb, se}:
-      Cut{s, ea, eb, se}
+# the cut with the start s, by the fork f of what follows it in each,
+# reversed: the lines that differ, then the end that they share
+def Lines.cut.back(s: List<&2, Texts.Bytes()>, f: Fork<Texts.Bytes()>) -> Cut:
+  match f:
+    case Fork{e, a, b}:
+      Cut{
+        s,
+        List.reverse(&2, Texts.Bytes(), a),
+        List.reverse(&2, Texts.Bytes(), b),
+        List.reverse(&2, Texts.Bytes(), e)
+      }
 
-# the cut of a fork, by the ends of what follows its shared start
+# the cut of a fork: what follows its shared start, forked again from the end
 def Lines.cut.of(f: Fork<Texts.Bytes()>) -> Cut:
   match f:
     case Fork{s, ra, rb}:
-      Lines.cut.ends(s, List.ends(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), ra, rb))
+      Lines.cut.back(
+        s,
+        List.fork(
+          ~Texts.Bytes(),
+          ~Shared.List.is_eq(~U32, ~U32.is_eq),
+          List.reverse(&2, Texts.Bytes(), ra),
+          List.reverse(&2, Texts.Bytes(), rb)
+        )
+      )
 
 # the lines that a and b share at the start and at the end, and what differs
 def Lines.cut(a: List<&2, Texts.Bytes()>, b: List<&2, Texts.Bytes()>) -> Cut:
   Lines.cut.of(List.fork(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), a, b))
 
-# the old lines of a cut by ends e are its start, then the first list of e
-def Lines.cut.ends_left(
+# the old lines of a cut from the end are its start, then the fork's first
+# list, reversed
+def Lines.cut.back_left(
   s: List<&2, Texts.Bytes()>,
-  e: Ends<Texts.Bytes()>
+  f: Fork<Texts.Bytes()>
 ) -> {
-  Cut.left(
-    Lines.cut.ends(s, e)
-  )
-    == List.append(&2, Texts.Bytes(), s, Ends.left(Texts.Bytes(), e)): List<&2, Texts.Bytes()>
+  List.append(&2, Texts.Bytes(), s, List.reverse(&2, Texts.Bytes(), Fork.left(Texts.Bytes(), f)))
+    == Cut.left(Lines.cut.back(s, f)): List<&2, Texts.Bytes()>
 }:
-  match e:
-    case Ends{ea, eb, se}:
+  match f:
+    case Fork{+e, +a, b}:
+      %List.reverse_append(Texts.Bytes(), e, a, []):
+        {
+          List.append(&2, Texts.Bytes(), s, _)
+            == Cut.left(Lines.cut.back(s, Fork{e, a, b})): List<&2, Texts.Bytes()>
+        }
+      %List.reverse_onto(Texts.Bytes(), a, [], List.reverse(&2, Texts.Bytes(), e)):
+        {
+          List.append(&2, Texts.Bytes(), s, List.reverse.go(&2, Texts.Bytes(), a, List.reverse(&2, Texts.Bytes(), e)))
+            == List.append(&2, Texts.Bytes(), s, _): List<&2, Texts.Bytes()>
+        }
       {==}
 
-# the new lines of a cut by ends e are its start, then the second list of e
-def Lines.cut.ends_right(
+# the new lines of a cut from the end are its start, then the fork's second
+# list, reversed
+def Lines.cut.back_right(
   s: List<&2, Texts.Bytes()>,
-  e: Ends<Texts.Bytes()>
+  f: Fork<Texts.Bytes()>
 ) -> {
-  Cut.right(
-    Lines.cut.ends(s, e)
-  )
-    == List.append(&2, Texts.Bytes(), s, Ends.right(Texts.Bytes(), e)): List<&2, Texts.Bytes()>
+  List.append(&2, Texts.Bytes(), s, List.reverse(&2, Texts.Bytes(), Fork.right(Texts.Bytes(), f)))
+    == Cut.right(Lines.cut.back(s, f)): List<&2, Texts.Bytes()>
 }:
-  match e:
-    case Ends{ea, eb, se}:
+  match f:
+    case Fork{+e, a, +b}:
+      %List.reverse_append(Texts.Bytes(), e, b, []):
+        {
+          List.append(&2, Texts.Bytes(), s, _)
+            == Cut.right(Lines.cut.back(s, Fork{e, a, b})): List<&2, Texts.Bytes()>
+        }
+      %List.reverse_onto(Texts.Bytes(), b, [], List.reverse(&2, Texts.Bytes(), e)):
+        {
+          List.append(&2, Texts.Bytes(), s, List.reverse.go(&2, Texts.Bytes(), b, List.reverse(&2, Texts.Bytes(), e)))
+            == List.append(&2, Texts.Bytes(), s, _): List<&2, Texts.Bytes()>
+        }
       {==}
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # the old lines of the cut of a fork are its first list
 def Lines.cut.of_left(
   f: Fork<Texts.Bytes()>
 ) -> {Cut.left(Lines.cut.of(f)) == Fork.left(Texts.Bytes(), f): List<&2, Texts.Bytes()>}:
   match f:
-    case Fork{s, +ra, +rb}:
-      e = List.ends(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), ra, rb)
-      Equal.trans(
-        List<&2, Texts.Bytes()>,
-        Cut.left(Lines.cut.ends(s, e)),
-        List.append(&2, Texts.Bytes(), s, Ends.left(Texts.Bytes(), e)),
-        List.append(&2, Texts.Bytes(), s, ra),
-        Lines.cut.ends_left(s, e),
-        Equal.cong(
-          List<&2, Texts.Bytes()>,
-          List<&2, Texts.Bytes()>,
-          z => List.append(&2, Texts.Bytes(), s, z),
-          Ends.left(Texts.Bytes(), e),
-          ra,
-          List.ends_left(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), ra, rb)
-        )
+    case Fork{+s, +ra, +rb}:
+      +g = List.fork(
+        ~Texts.Bytes(),
+        ~Shared.List.is_eq(~U32, ~U32.is_eq),
+        List.reverse(&2, Texts.Bytes(), ra),
+        List.reverse(&2, Texts.Bytes(), rb)
       )
+      %Lines.cut.back_left(s, g): {_ == List.append(&2, Texts.Bytes(), s, ra): List<&2, Texts.Bytes()>}
+      %Equal.sym(
+        List<&2, Texts.Bytes()>,
+        Fork.left(Texts.Bytes(), g),
+        List.reverse(&2, Texts.Bytes(), ra),
+        List.fork_left(
+          ~Texts.Bytes(),
+          ~Shared.List.is_eq(~U32, ~U32.is_eq),
+          List.reverse(&2, Texts.Bytes(), ra),
+          List.reverse(&2, Texts.Bytes(), rb)
+        )
+      ):
+        {
+          List.append(&2, Texts.Bytes(), s, List.reverse(&2, Texts.Bytes(), _))
+            == List.append(&2, Texts.Bytes(), s, ra): List<&2, Texts.Bytes()>
+        }
+      %List.reverse_twice(Texts.Bytes(), ra, []):
+        {List.append(&2, Texts.Bytes(), s, _) == List.append(&2, Texts.Bytes(), s, ra): List<&2, Texts.Bytes()>}
+      {==}
 
 # the new lines of the cut of a fork are its second list
 def Lines.cut.of_right(
   f: Fork<Texts.Bytes()>
 ) -> {Cut.right(Lines.cut.of(f)) == Fork.right(Texts.Bytes(), f): List<&2, Texts.Bytes()>}:
   match f:
-    case Fork{s, +ra, +rb}:
-      e = List.ends(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), ra, rb)
-      Equal.trans(
-        List<&2, Texts.Bytes()>,
-        Cut.right(Lines.cut.ends(s, e)),
-        List.append(&2, Texts.Bytes(), s, Ends.right(Texts.Bytes(), e)),
-        List.append(&2, Texts.Bytes(), s, rb),
-        Lines.cut.ends_right(s, e),
-        Equal.cong(
-          List<&2, Texts.Bytes()>,
-          List<&2, Texts.Bytes()>,
-          z => List.append(&2, Texts.Bytes(), s, z),
-          Ends.right(Texts.Bytes(), e),
-          rb,
-          List.ends_right(
-            ~Texts.Bytes(),
-            ~Shared.List.is_eq(~U32, ~U32.is_eq),
-            ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
-            ra,
-            rb
-          )
-        )
+    case Fork{+s, +ra, +rb}:
+      +g = List.fork(
+        ~Texts.Bytes(),
+        ~Shared.List.is_eq(~U32, ~U32.is_eq),
+        List.reverse(&2, Texts.Bytes(), ra),
+        List.reverse(&2, Texts.Bytes(), rb)
       )
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+      %Lines.cut.back_right(s, g): {_ == List.append(&2, Texts.Bytes(), s, rb): List<&2, Texts.Bytes()>}
+      %Equal.sym(
+        List<&2, Texts.Bytes()>,
+        Fork.right(Texts.Bytes(), g),
+        List.reverse(&2, Texts.Bytes(), rb),
+        List.fork_right(
+          ~Texts.Bytes(),
+          ~Shared.List.is_eq(~U32, ~U32.is_eq),
+          ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
+          List.reverse(&2, Texts.Bytes(), ra),
+          List.reverse(&2, Texts.Bytes(), rb)
+        )
+      ):
+        {
+          List.append(&2, Texts.Bytes(), s, List.reverse(&2, Texts.Bytes(), _))
+            == List.append(&2, Texts.Bytes(), s, rb): List<&2, Texts.Bytes()>
+        }
+      %List.reverse_twice(Texts.Bytes(), rb, []):
+        {List.append(&2, Texts.Bytes(), s, _) == List.append(&2, Texts.Bytes(), s, rb): List<&2, Texts.Bytes()>}
+      {==}
 
 # a cut gives back the old lines
 law Lines.cut_left:
