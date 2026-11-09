@@ -929,3 +929,31 @@ def Trie.size_union_one(ty, join, s, k, v):
           {1n+_ == 1n+1n+Nat.add(Trie.size(ty, z), Trie.size(ty, o)): Nat}
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# the entries under p of a union are the union of the entries under p
+def Trie.under_union(
+  ~V: Data,
+  ~join: V -> V -> V,
+  a: Trie<V>,
+  b: Trie<V>,
+  p: List<&2, Bool>
+) -> {
+  Trie.under(V, Trie.union(~V, ~join, a, b), p)
+    == Trie.union(~V, ~join, Trie.under(V, a, p), Trie.under(V, b, p)): Trie<V>
+}:
+  match a b p:
+    case tip{} y q:
+      {==}
+    case bin{h, z, o} tip{} q:
+      Equal.sym(
+        Trie<V>,
+        Trie.union(~V, ~join, Trie.under(V, bin{h, z, o}, q), tip{}),
+        Trie.under(V, bin{h, z, o}, q),
+        Trie.union_tip(~V, ~join, Trie.under(V, bin{h, z, o}, q))
+      )
+    case bin{h1, z1, o1} bin{h2, z2, o2} Nil{}:
+      {==}
+    case bin{h1, z1, o1} bin{h2, z2, o2} Con{False{}, r}:
+      Trie.under_union(~V, ~join, z1, z2, r)
+    case bin{h1, z1, o1} bin{h2, z2, o2} Con{True{}, r}:
+      Trie.under_union(~V, ~join, o1, o2, r)
