@@ -27,7 +27,7 @@
 - Stale and Refused are final: owners vote a verdict, once.
 - set-owner takes the nodes of a group as it is when the request is made: the owners of the next step must come from the line's own past, or two majorities could disagree.
 - Defs in the spec are the spec; laws that restated a def are gone (bend2 skill, Laws that matter).
-- The equality proofs in `core/impl.bend` follow one mechanical pattern per constructor (the checker needs each pair of constructors spelled out).
+- Two requests are the same exactly when their codes are; the round-trip proofs in `core/impl.bend` follow one pattern per field.
 
 ## Speed (native build, sole owner, one branch)
 
