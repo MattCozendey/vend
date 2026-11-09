@@ -49,12 +49,12 @@ type View is Data:
 # a vote for a request, whose change has the view: its owners take it, or
 # refuse it as stale, and the hash of what the line holds after it (result)
 type Vote is Data:
-  Vote{id: Id, takes: Bool, view: View, result: Hashes.Hash}
+  Vote{id: Id, takes: Bool, view: View, result: Maybe<&2, Hashes.Hash>}
 
 # what a judge says of a request: take it or refuse it, and the hash of what
 # the line holds after
 type Verdict is Data:
-  Verdict{takes: Bool, result: Hashes.Hash}
+  Verdict{takes: Bool, result: Maybe<&2, Hashes.Hash>}
 
 # a place on a line: an epoch and a height in it
 type Where is Data:
@@ -190,7 +190,10 @@ def Vote.is_eq(a: Vote, b: Vote) -> Bool:
     case Vote{i1, k1, v1, r1} Vote{i2, k2, v2, r2}:
       Bool.and(
         Id.is_eq(i1, i2),
-        Bool.and(Shared.Bool.is_eq(k1, k2), Bool.and(View.is_eq(v1, v2), Hashes.Hash.is_eq(r1, r2)))
+        Bool.and(
+          Shared.Bool.is_eq(k1, k2),
+          Bool.and(View.is_eq(v1, v2), Shared.Maybe.is_eq(~Hashes.Hash, ~Hashes.Hash.is_eq, r1, r2))
+        )
       )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
@@ -425,7 +428,7 @@ def Vote.is_eq_refl(a: Vote) -> {Vote.is_eq(a, a) == True{}: Bool}:
     case Vote{+i, +k, +v, +r}:
       +bk = Shared.Bool.is_eq(k, k)
       +bv = View.is_eq(v, v)
-      +br = Hashes.Hash.is_eq(r, r)
+      +br = Shared.Maybe.is_eq(~Hashes.Hash, ~Hashes.Hash.is_eq, r, r)
       Shared.Bool.and_both(
         Id.is_eq(i, i),
         Bool.and(bk, Bool.and(bv, br))
@@ -437,7 +440,14 @@ def Vote.is_eq_refl(a: Vote) -> {Vote.is_eq(a, a) == True{}: Bool}:
           Bool.and(bv, br)
         )(
           Shared.Bool.is_eq_refl(k)
-        )(Shared.Bool.and_both(bv, br)(View.is_eq_refl(v))(Hashes.Hash.is_eq_refl(r)))
+        )(
+          Shared.Bool.and_both(
+            bv,
+            br
+          )(
+            View.is_eq_refl(v)
+          )(Shared.Maybe.is_eq_refl(~Hashes.Hash, ~Hashes.Hash.is_eq, ~Hashes.Hash.laws(), r))
+        )
       )
 
 # Vote.is_eq is True only for equal votes
@@ -448,7 +458,7 @@ def Vote.is_eq_sound(a: Vote, b: Vote) -> {Vote.is_eq(a, b) == True{}: Bool} -> 
         +x = Id.is_eq(i1, i2)
         +y = Shared.Bool.is_eq(k1, k2)
         +z = View.is_eq(v1, v2)
-        +w = Hashes.Hash.is_eq(r1, r2)
+        +w = Shared.Maybe.is_eq(~Hashes.Hash, ~Hashes.Hash.is_eq, r1, r2)
         +ra = Shared.Bool.and_true_right(x, Bool.and(y, Bool.and(z, w)))(h)
         +rb = Shared.Bool.and_true_right(y, Bool.and(z, w))(ra)
         %Id.is_eq_sound(i1, i2)(Shared.Bool.and_true_left(x, Bool.and(y, Bool.and(z, w)))(h)):
@@ -457,7 +467,13 @@ def Vote.is_eq_sound(a: Vote, b: Vote) -> {Vote.is_eq(a, b) == True{}: Bool} -> 
           {Vote{i1, k1, v1, r1} == Vote{i1, _, v2, r2}: Vote}
         %View.is_eq_sound(v1, v2)(Shared.Bool.and_true_left(z, w)(rb)):
           {Vote{i1, k1, v1, r1} == Vote{i1, k1, _, r2}: Vote}
-        %Hashes.Hash.is_eq_sound(r1, r2)(Shared.Bool.and_true_right(z, w)(rb)):
+        %Shared.Maybe.is_eq_sound(
+          ~Hashes.Hash,
+          ~Hashes.Hash.is_eq,
+          x => y => Hashes.Hash.is_eq_sound(x, y),
+          r1,
+          r2
+        )(Shared.Bool.and_true_right(z, w)(rb)):
           {Vote{i1, k1, v1, r1} == Vote{i1, k1, v1, _}: Vote}
         {==}
 
@@ -1257,13 +1273,13 @@ def Vote.may(~Q: Data, +n: String, s: State(Q), w: Where, ms: List<&2, String>) 
   )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
-# the result of the vote m, if any; else the hash of nothing
-def Vote.result_of(m: Maybe<&2, Vote>) -> Hashes.Hash:
+# the result of the vote m, if any (none: nothing)
+def Vote.result_of(m: Maybe<&2, Vote>) -> Maybe<&2, Hashes.Hash>:
   match m:
     case Some{Vote{i, k, v, r}}:
       r
     case None{}:
-      Hashes.Hash{0, 0, 0, 0, 0, 0, 0, 0}
+      None{}
 
 # the verdict on the request q, whose view is v, after the step head: refused
 # when it makes a line that exists (changing nothing), else judge's (none: wait)
@@ -3078,7 +3094,7 @@ def Cast.puts(
   h: U32,
   last: Maybe<&2, Where>,
   k: Bool,
-  r: Hashes.Hash
+  r: Maybe<&2, Hashes.Hash>
 ) -> {
   State.get(~Q, s, Slot.vote(Where{c, e, h}, n)) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>
 } -> {
@@ -3289,7 +3305,7 @@ def Decided.after(
   +i: Id,
   k: Bool,
   v: View,
-  r: Hashes.Hash
+  r: Maybe<&2, Hashes.Hash>
 ) -> {
   State.get(~Q, s2, Slot.where(i)) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>
 } -> {
@@ -3369,7 +3385,7 @@ law State.ask_decides:
   for +h: U32
   for +last: Maybe<&2, Where>
   for +k: Bool
-  for +r: Hashes.Hash
+  for +r: Maybe<&2, Hashes.Hash>
   {State.get(~Q, s, Slot.ask(i)) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>}
     -> {view(q) == View.on{c, o, mk}: View}
     -> {

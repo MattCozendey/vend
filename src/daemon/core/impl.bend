@@ -145,7 +145,7 @@ def Content.code_read(
       Codes.Code.one_read(
         ~Texts.Bytes(),
         ~Spec.Content,
-        ~Codes.Code.list.codec(~U32, ~Codes.Code.token.codec()),
+        ~Codes.Code.words.codec(),
         a => Spec.Content.bytes{a},
         b,
         r

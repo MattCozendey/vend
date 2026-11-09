@@ -137,14 +137,6 @@ def Name.code(n: Resources.Name, r: List<&2, U32>) -> List<&2, U32>:
 def Name.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Resources.Name>>:
   Codes.Code.one.read(~String, ~Resources.Name, ~Codes.Code.text.read, n => Resources.Name{n}, ts)
 
-# the bytes b, then r
-def Bytes.code(b: Texts.Bytes(), r: List<&2, U32>) -> List<&2, U32>:
-  Codes.Code.list(~U32, ~Codes.Code.token, b, r)
-
-# bytes
-def Bytes.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Texts.Bytes()>>:
-  Codes.Code.list.read(~U32, ~Codes.Code.token.read, ts)
-
 # the nodes os, then r
 def Owners.code(os: List<&2, String>, r: List<&2, U32>) -> List<&2, U32>:
   Codes.Code.list(~String, ~Codes.Code.text, os, r)
@@ -219,7 +211,7 @@ def Members.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<List<&2, Member
 def Content.code(c: Content, r: List<&2, U32>) -> List<&2, U32>:
   match c:
     case Content.bytes{b}:
-      0 <> Bytes.code(b, r)
+      0 <> Codes.Code.words(b, r)
     case Content.of{v}:
       1 <> Id.code(v, r)
 
@@ -235,7 +227,7 @@ def Content.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Content>>:
         u => Codes.Code.one.read(
           ~Texts.Bytes(),
           ~Content,
-          ~Bytes.code.read,
+          ~Codes.Code.words.read,
           b => Content.bytes{b},
           r
         ),

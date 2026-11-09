@@ -216,6 +216,14 @@ def Code.list.read(
 ) -> Maybe<&2, Read<List<&2, A>>>:
   Read.then(Nat, List<&2, A>, Code.count.read(ts), n => r => Code.items.read(~A, ~dec, n, r))
 
+# the words ws, then r
+def Code.words(ws: List<&2, U32>, r: List<&2, U32>) -> List<&2, U32>:
+  Code.list(~U32, ~Code.token, ws, r)
+
+# words
+def Code.words.read(ts: List<&2, U32>) -> Maybe<&2, Read<List<&2, U32>>>:
+  Code.list.read(~U32, ~Code.token.read, ts)
+
 # Fields
 # ------
 # A value of a type T is the values of its fields, made into a T: it is read
@@ -634,6 +642,10 @@ def Code.list.codec(~A: Data, ~c: Codec(A)) -> Codec(List<&2, A>):
       xs => r => Code.list_read(~A, ~Codec.enc(A, c), ~Codec.dec(A, c), ~Codec.laws(A, c), xs, r)
     )
   )
+
+# the code of words
+def Code.words.codec() -> Codec(List<&2, U32>):
+  Code.list.codec(~U32, ~Code.token.codec())
 
 # a and b have the same code
 def Code.is_eq(~A: Data, ~enc: A -> List<&2, U32> -> List<&2, U32>, a: A, b: A) -> Bool:
