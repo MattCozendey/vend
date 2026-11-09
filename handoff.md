@@ -11,6 +11,7 @@
 - `src/shared.bend`: what glob and the daemon share (Eq, Bool, Maybe, List).
 - `src/daemon/shared/`: the daemon's helpers: `ledger` (the replicated ledger), `formats`, `resources`, `uris`.
 - `src/daemon/shared/shared/`: what those share: `text`, `trie`, `reach`.
+- `src/daemon/shared/shared/shared/code.bend`: codes (values as U32 tokens with proven round trips); equality from codes.
 - Import rule: `.agents/skills/experimental-bend-spec/SKILL.md`, Folder structure.
 
 ## Design (ledger + core)
@@ -28,8 +29,14 @@
 - Defs in the spec are the spec; laws that restated a def are gone (bend2 skill, Laws that matter).
 - The equality proofs in `core/impl.bend` follow one mechanical pattern per constructor (the checker needs each pair of constructors spelled out).
 
+## Speed (native build, sole owner, one branch)
+
+- Bench: build a `main() -> IO(Unit)` that imports `core/spec.bend` and `core/impl.bend` (the spec has an open law) and run `bend x.bend -o x`.
+- 200 writes of one file: 0.57s; 200 writes over 10 files: 0.96s (was 2.6x slower before the step-list content walk and 9-bit keys).
+- A request still walks its chain once (about 6 microseconds a step); removing that needs a cache of decided steps (not started, by request).
+
 ## Next
 
-1. Compress: equality from codes (encode/decode with a round-trip law) would replace the generated equality proofs and give the sync wire format; shorter rewrite motives in the ledger's Landing and Kept reads proofs; review the quorum section.
-2. Speed (after compression): a snapshot fold per version instead of per-resource walks; path-compressed trie keys; lazy forms where the shaders guide asks.
-3. Transport: implement the IO operations of `transport/spec.bend` (network, mounts, file watching).
+1. Transport: the IO operations of `transport/spec.bend` in Bend (TCP, files, `IO.fork`): tokens to bytes at the socket, codes for the messages and for a ledger's entries, a store file, sync by `Node.missing`.
+2. Compress: shorter rewrite types in the ledger's Landing and Kept reads proofs (lets unfold in rewrite types; `%e : P` needs `e : a == b` with the goal holding `b`).
+3. Speed: a decided-steps cache, once wanted; the quorum count reads each owner's vote three times.
