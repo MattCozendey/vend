@@ -54,7 +54,7 @@ type Vote is Data:
 # what a judge says of a request: take it or refuse it, and the hash of what
 # the line holds after
 type Verdict is Data:
-  Verdict{takes: Bool, result: Maybe<&2, Hashes.Hash>}
+  Verdict{takes: Bool, result: Maybe<&2, Hashes.Hash>, data: List<&2, List<&2, U32>>}
 
 # a place on a line: an epoch and a height in it
 type Where is Data:
@@ -1190,6 +1190,19 @@ def State.put_data(~Q: Data, ~same: Q -> Q -> Bool, +s: State(Q), +ws: List<&2, 
 # Changes
 # -------
 
+# s with the data ws, each under its hash
+def State.put_datas(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ds: List<&2, List<&2, U32>>,
+  s: State(Q)
+) -> State(Q):
+  match ds:
+    case Nil{}:
+      s
+    case Con{ws, r}:
+      State.put_datas(~Q, ~same, r, State.put_data(~Q, ~same, s, ws))
+
 # the epoch of the place w
 def Where.epoch(w: Where) -> U32:
   match w:
@@ -1298,7 +1311,7 @@ def Vote.verdict(
         Maybe<&2, Verdict>,
         Maybe.is_none(&2, List<&2, String>, Line.first(~Q, ~view, s, Chain{r, Some{m}})),
         u => judge(s, q, head),
-        u => Some{Verdict{False{}, Vote.result_of(head)}}
+        u => Some{Verdict{False{}, Vote.result_of(head), []}}
       )
     case w:
       judge(s, q, head)
@@ -1316,8 +1329,8 @@ def Vote.put(
   v: View
 ) -> State(Q):
   match held m:
-    case True{} Some{Verdict{x, r}}:
-      State.put(~Q, ~same, s, k, Entry.vote{Vote{i, x, v, r}})
+    case True{} Some{Verdict{x, r, ds}}:
+      State.put(~Q, ~same, State.put_datas(~Q, ~same, ds, s), k, Entry.vote{Vote{i, x, v, r}})
     case h w:
       s
 
@@ -2765,6 +2778,249 @@ def Settle.of.grows(
     case None{}:
       State.grows_refl(~Q, ~same, ~laws, s)
 
+# a put at k keeps what s holds at a key apart from k
+def State.put_apart(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  +s: State(Q),
+  +k: List<&2, Bool>,
+  +e: Entry<Q>,
+  +k2: List<&2, Bool>
+) -> {
+  Tries.Trie.apart(k, k2) == True{}: Bool
+} -> {
+  State.get(
+    ~Q,
+    State.put(~Q, ~same, s, k, e),
+    k2
+  )
+    == State.get(~Q, s, k2): Maybe<&2, Cells.Cell<Entry<Q>>>
+}:
+  ap =>
+    %Equal.sym(
+      Maybe<&2, Cells.Cell<Entry<Q>>>,
+      State.get(~Q, State.put(~Q, ~same, s, k, e), k2),
+      Tries.Trie.pick(
+        ~Cells.Cell<Entry<Q>>,
+        ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+        State.get(~Q, s, k2),
+        State.get(~Q, State.one(~Q, k, e), k2)
+      ),
+      Tries.Trie.get_union(
+        ~Cells.Cell<Entry<Q>>,
+        ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+        s,
+        State.one(~Q, k, e),
+        k2
+      )
+    ): {_ == State.get(~Q, s, k2): Maybe<&2, Cells.Cell<Entry<Q>>>}
+    %Equal.sym(
+      Maybe<&2, Cells.Cell<Entry<Q>>>,
+      State.get(~Q, State.one(~Q, k, e), k2),
+      None{},
+      Tries.Trie.get_one_apart(Cells.Cell<Entry<Q>>, k, k2, Cells.one{e})(ap)
+    ): {
+      Tries.Trie.pick(
+        ~Cells.Cell<Entry<Q>>,
+        ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+        State.get(~Q, s, k2),
+        _
+      )
+        == State.get(~Q, s, k2): Maybe<&2, Cells.Cell<Entry<Q>>>
+    }
+    Tries.Trie.pick_none(
+      ~Cells.Cell<Entry<Q>>,
+      ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+      State.get(~Q, s, k2)
+    )
+
+# putting data grows the state
+law State.put_data_grows:
+  for ~Q: Data
+  for ~same: Q -> Q -> Bool
+  for ~laws: Shared.Eq.Laws(Q, same)
+  for +s: State(Q)
+  for +ws: List<&2, U32>
+  {State.grows(~Q, ~same, s, State.put_data(~Q, ~same, s, ws)) == True{}: Bool}
+
+# State.put_data_grows once the cell m under the key is known
+def Data.put.grows(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  s: State(Q),
+  k: List<&2, Bool>,
+  ws: List<&2, U32>,
+  m: Maybe<&2, Cells.Cell<Entry<Q>>>,
+  em: {State.get(~Q, s, k) == m: Maybe<&2, Cells.Cell<Entry<Q>>>}
+) -> {State.grows(~Q, ~same, s, Data.put.of(~Q, ~same, s, k, ws, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      State.grows_put(~Q, ~same, ~laws, s, k, Entry.data{ws})(em)
+    case Some{x}:
+      State.grows_refl(~Q, ~same, ~laws, s)
+
+def State.put_data_grows(ty, same, laws, s, ws):
+  +k = Slot.data(Hashes.Sha.hash(ws))
+  Data.put.grows(~ty, ~same, ~laws, s, k, ws, State.get(~ty, s, k), {==})
+
+# a key that does not start as the slots of data do
+def Slot.off_data(k: List<&2, Bool>) -> Bool:
+  match k:
+    case Con{False{}, r}:
+      True{}
+    case Con{True{}, Con{False{}, r}}:
+      True{}
+    case Con{True{}, Con{True{}, Con{False{}, r}}}:
+      True{}
+    case Con{True{}, Con{True{}, Con{True{}, Con{False{}, r}}}}:
+      True{}
+    case _:
+      False{}
+
+# a key that does not start as the slots of data do is apart from each of them
+def Slot.data_apart(
+  h: Hashes.Hash,
+  k: List<&2, Bool>
+) -> {Slot.off_data(k) == True{}: Bool} -> {Tries.Trie.apart(Slot.data(h), k) == True{}: Bool}:
+  match h k:
+    case Hashes.Hash{a, b, c, d, f, g, i, j} Con{False{}, r}:
+      e => {==}
+    case Hashes.Hash{a, b, c, d, f, g, i, j} Con{True{}, Con{False{}, r}}:
+      e => {==}
+    case Hashes.Hash{a, b, c, d, f, g, i, j} Con{True{}, Con{True{}, Con{False{}, r}}}:
+      e => {==}
+    case Hashes.Hash{a, b, c, d, f, g, i, j} Con{True{}, Con{True{}, Con{True{}, Con{False{}, r}}}}:
+      e => {==}
+    case Hashes.Hash{a, b, c, d, f, g, i, j} Nil{}:
+      e => e
+    case Hashes.Hash{a, b, c, d, f, g, i, j} Con{True{}, Nil{}}:
+      e => e
+    case Hashes.Hash{a, b, c, d, f, g, i, j} Con{True{}, Con{True{}, Nil{}}}:
+      e => e
+    case Hashes.Hash{a, b, c, d, f, g, i, j} Con{True{}, Con{True{}, Con{True{}, Nil{}}}}:
+      e => e
+    case Hashes.Hash{a, b, c, d, f, g, i, j} Con{True{}, Con{True{}, Con{True{}, Con{True{}, r}}}}:
+      e => Empty.absurd(
+        {
+          Tries.Trie.apart(
+            Slot.data(Hashes.Hash{a, b, c, d, f, g, i, j}),
+            True{} <> True{} <> True{} <> True{} <> r
+          )
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(e)
+      )
+
+# Data.put.of keeps each slot apart from k
+def Data.put_keeps.of(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  s: State(Q),
+  k: List<&2, Bool>,
+  ws: List<&2, U32>,
+  m: Maybe<&2, Cells.Cell<Entry<Q>>>,
+  k2: List<&2, Bool>
+) -> {
+  Tries.Trie.apart(k, k2) == True{}: Bool
+} -> {
+  State.get(
+    ~Q,
+    Data.put.of(~Q, ~same, s, k, ws, m),
+    k2
+  )
+    == State.get(~Q, s, k2): Maybe<&2, Cells.Cell<Entry<Q>>>
+}:
+  match m:
+    case None{}:
+      State.put_apart(~Q, ~same, s, k, Entry.data{ws}, k2)
+    case Some{x}:
+      ap => {==}
+
+# data keeps each slot that does not start as the slots of data do
+def State.put_data_keeps(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  +s: State(Q),
+  +ws: List<&2, U32>,
+  +k: List<&2, Bool>
+) -> {
+  Slot.off_data(k) == True{}: Bool
+} -> {
+  State.get(
+    ~Q,
+    State.put_data(~Q, ~same, s, ws),
+    k
+  )
+    == State.get(~Q, s, k): Maybe<&2, Cells.Cell<Entry<Q>>>
+}:
+  e => Data.put_keeps.of(
+    ~Q,
+    ~same,
+    s,
+    Slot.data(Hashes.Sha.hash(ws)),
+    ws,
+    State.get(~Q, s, Slot.data(Hashes.Sha.hash(ws))),
+    k
+  )(Slot.data_apart(Hashes.Sha.hash(ws), k)(e))
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# data, one after the other, keeps each slot that does not start as the slots
+# of data do
+def State.put_datas_keeps(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ds: List<&2, List<&2, U32>>,
+  +s: State(Q),
+  +k: List<&2, Bool>
+) -> {
+  Slot.off_data(k) == True{}: Bool
+} -> {
+  State.get(
+    ~Q,
+    State.put_datas(~Q, ~same, ds, s),
+    k
+  )
+    == State.get(~Q, s, k): Maybe<&2, Cells.Cell<Entry<Q>>>
+}:
+  match ds:
+    case Nil{}:
+      e => {==}
+    case Con{+ws, r}:
+      +e =>
+        Equal.trans(
+          Maybe<&2, Cells.Cell<Entry<Q>>>,
+          State.get(~Q, State.put_datas(~Q, ~same, r, State.put_data(~Q, ~same, s, ws)), k),
+          State.get(~Q, State.put_data(~Q, ~same, s, ws), k),
+          State.get(~Q, s, k),
+          State.put_datas_keeps(~Q, ~same, r, State.put_data(~Q, ~same, s, ws), k)(e),
+          State.put_data_keeps(~Q, ~same, s, ws, k)(e)
+        )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# data, one after the other, grow the state
+def State.put_datas_grows(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ds: List<&2, List<&2, U32>>,
+  +s: State(Q)
+) -> {State.grows(~Q, ~same, s, State.put_datas(~Q, ~same, ds, s)) == True{}: Bool}:
+  match ds:
+    case Nil{}:
+      State.grows_refl(~Q, ~same, ~laws, s)
+    case Con{+ws, +r}:
+      State.grows_trans(
+        ~Q,
+        ~same,
+        ~laws,
+        s,
+        State.put_data(~Q, ~same, s, ws),
+        State.put_datas(~Q, ~same, r, State.put_data(~Q, ~same, s, ws))
+      )(
+        State.put_data_grows(~Q, ~same, ~laws, s, ws)
+      )(State.put_datas_grows(~Q, ~same, ~laws, r, State.put_data(~Q, ~same, s, ws)))
+
 # a vote put where held says the slot is empty grows the state
 def Vote.put.grows(
   ~Q: Data,
@@ -2772,15 +3028,44 @@ def Vote.put.grows(
   ~laws: Shared.Eq.Laws(Q, same),
   held: Bool,
   m: Maybe<&2, Verdict>,
-  s: State(Q),
-  k: List<&2, Bool>,
-  i: Id,
-  v: View,
+  +s: State(Q),
+  +k: List<&2, Bool>,
+  +i: Id,
+  +v: View,
+  ko: {Slot.off_data(k) == True{}: Bool},
   hf: {held == True{}: Bool} -> {State.get(~Q, s, k) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>}
 ) -> {State.grows(~Q, ~same, s, Vote.put(~Q, ~same, held, m, s, k, i, v)) == True{}: Bool}:
   match held m:
-    case True{} Some{Verdict{x, r}}:
-      State.grows_put(~Q, ~same, ~laws, s, k, Entry.vote{Vote{i, x, v, r}})(hf({==}))
+    case True{} Some{Verdict{+x, +r, +ds}}:
+      +sd = State.put_datas(~Q, ~same, ds, s)
+      State.grows_trans(
+        ~Q,
+        ~same,
+        ~laws,
+        s,
+        sd,
+        State.put(~Q, ~same, sd, k, Entry.vote{Vote{i, x, v, r}})
+      )(
+        State.put_datas_grows(~Q, ~same, ~laws, ds, s)
+      )(
+        State.grows_put(
+          ~Q,
+          ~same,
+          ~laws,
+          sd,
+          k,
+          Entry.vote{Vote{i, x, v, r}}
+        )(
+          Equal.trans(
+            Maybe<&2, Cells.Cell<Entry<Q>>>,
+            State.get(~Q, sd, k),
+            State.get(~Q, s, k),
+            None{},
+            State.put_datas_keeps(~Q, ~same, ds, s, k)(ko),
+            hf({==})
+          )
+        )
+      )
     case True{} None{}:
       State.grows_refl(~Q, ~same, ~laws, s)
     case False{} w:
@@ -2840,6 +3125,7 @@ def Vote.cast.grows(
           k,
           i,
           v,
+          {==},
           hd => Shared.Maybe.is_none_eq(
             Cells.Cell<Entry<Q>>,
             State.get(~Q, s, k)
@@ -3020,62 +3306,6 @@ def Owners.has(n: String) -> {List.contains(~String, ~String.eq, [n], n) == True
     {List.any.if(u => List.contains(~String, ~String.eq, [], n), _) == True{}: Bool}
   {==}
 
-# a put at k keeps what s holds at a key apart from k
-def State.put_apart(
-  ~Q: Data,
-  ~same: Q -> Q -> Bool,
-  +s: State(Q),
-  +k: List<&2, Bool>,
-  +e: Entry<Q>,
-  +k2: List<&2, Bool>
-) -> {
-  Tries.Trie.apart(k, k2) == True{}: Bool
-} -> {
-  State.get(
-    ~Q,
-    State.put(~Q, ~same, s, k, e),
-    k2
-  )
-    == State.get(~Q, s, k2): Maybe<&2, Cells.Cell<Entry<Q>>>
-}:
-  ap =>
-    %Equal.sym(
-      Maybe<&2, Cells.Cell<Entry<Q>>>,
-      State.get(~Q, State.put(~Q, ~same, s, k, e), k2),
-      Tries.Trie.pick(
-        ~Cells.Cell<Entry<Q>>,
-        ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
-        State.get(~Q, s, k2),
-        State.get(~Q, State.one(~Q, k, e), k2)
-      ),
-      Tries.Trie.get_union(
-        ~Cells.Cell<Entry<Q>>,
-        ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
-        s,
-        State.one(~Q, k, e),
-        k2
-      )
-    ): {_ == State.get(~Q, s, k2): Maybe<&2, Cells.Cell<Entry<Q>>>}
-    %Equal.sym(
-      Maybe<&2, Cells.Cell<Entry<Q>>>,
-      State.get(~Q, State.one(~Q, k, e), k2),
-      None{},
-      Tries.Trie.get_one_apart(Cells.Cell<Entry<Q>>, k, k2, Cells.one{e})(ap)
-    ): {
-      Tries.Trie.pick(
-        ~Cells.Cell<Entry<Q>>,
-        ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
-        State.get(~Q, s, k2),
-        _
-      )
-        == State.get(~Q, s, k2): Maybe<&2, Cells.Cell<Entry<Q>>>
-    }
-    Tries.Trie.pick_none(
-      ~Cells.Cell<Entry<Q>>,
-      ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
-      State.get(~Q, s, k2)
-    )
-
 # the sole owner n's vote for i at the tip: the vote put there, then the
 # facts of what it decides, when n has not voted there, i has no fact of where
 # it was decided, and the verdict is k
@@ -3094,7 +3324,8 @@ def Cast.puts(
   h: U32,
   last: Maybe<&2, Where>,
   k: Bool,
-  r: Maybe<&2, Hashes.Hash>
+  r: Maybe<&2, Hashes.Hash>,
+  ds: List<&2, List<&2, U32>>
 ) -> {
   State.get(~Q, s, Slot.vote(Where{c, e, h}, n)) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>
 } -> {
@@ -3109,7 +3340,7 @@ def Cast.puts(
     v,
     Line.head(~Q, ~view, s, c, e, [n], last)
   )
-    == Some{Verdict{k, r}}: Maybe<&2, Verdict>
+    == Some{Verdict{k, r, ds}}: Maybe<&2, Verdict>
 } -> {
   Vote.cast(
     ~Q,
@@ -3127,7 +3358,13 @@ def Cast.puts(
     == State.settle(
       ~Q,
       ~same,
-      State.put(~Q, ~same, s, Slot.vote(Where{c, e, h}, n), Entry.vote{Vote{i, k, v, r}}),
+      State.put(
+        ~Q,
+        ~same,
+        State.put_datas(~Q, ~same, ds, s),
+        Slot.vote(Where{c, e, h}, n),
+        Entry.vote{Vote{i, k, v, r}}
+      ),
       Where{c, e, h},
       [n]
     ): State(Q)
@@ -3138,7 +3375,7 @@ def Cast.puts(
     +rhs = State.settle(
       ~Q,
       ~same,
-      State.put(~Q, ~same, s, sk, Entry.vote{Vote{i, k, v, r}}),
+      State.put(~Q, ~same, State.put_datas(~Q, ~same, ds, s), sk, Entry.vote{Vote{i, k, v, r}}),
       w,
       [n]
     )
@@ -3223,7 +3460,7 @@ def Cast.puts(
     %Equal.sym(
       Maybe<&2, Verdict>,
       Vote.verdict(~Q, ~view, ~judge, s, q, v, Line.head(~Q, ~view, s, c, e, [n], last)),
-      Some{Verdict{k, r}},
+      Some{Verdict{k, r, ds}},
       hv
     ):
       {
@@ -3386,6 +3623,7 @@ law State.ask_decides:
   for +last: Maybe<&2, Where>
   for +k: Bool
   for +r: Maybe<&2, Hashes.Hash>
+  for +ds: List<&2, List<&2, U32>>
   {State.get(~Q, s, Slot.ask(i)) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>}
     -> {view(q) == View.on{c, o, mk}: View}
     -> {
@@ -3441,7 +3679,7 @@ law State.ask_decides:
           last
         )
       )
-        == Some{Verdict{k, r}}: Maybe<&2, Verdict>
+        == Some{Verdict{k, r, ds}}: Maybe<&2, Verdict>
     }
     -> {
       State.status(
@@ -3453,24 +3691,49 @@ law State.ask_decides:
         == Status.done{k}: Status
     }
 
-def State.ask_decides(ty, same, laws, view, judge, n, s, i, t, q, c, o, mk, e, h, last, k, r):
+def State.ask_decides(ty, same, laws, view, judge, n, s, i, t, q, c, o, mk, e, h, last, k, r, ds):
   +h1 => +h2 => ht => ho => +hg => +hw => hv =>
     +v = {View.on{c, o, mk}: View}
     +w = {Where{c, e, h}: Where}
     +x = {Vote{i, k, v, r}: Vote}
     +a = {Entry.ask{i, t, q}: Entry<ty>}
     +s1 = State.put(~ty, ~same, s, Slot.ask(i), a)
-    +s2 = State.put(~ty, ~same, s1, Slot.vote(w, n), Entry.vote{x})
+    +sd = State.put_datas(~ty, ~same, ds, s1)
+    +s2 = State.put(~ty, ~same, sd, Slot.vote(w, n), Entry.vote{x})
+    +hgd = Equal.trans(
+      Maybe<&2, Cells.Cell<Entry<ty>>>,
+      State.get(~ty, sd, Slot.vote(w, n)),
+      State.get(~ty, s1, Slot.vote(w, n)),
+      None{},
+      State.put_datas_keeps(~ty, ~same, ds, s1, Slot.vote(w, n))({==}),
+      hg
+    )
     +hw2 = Equal.trans(
       Maybe<&2, Cells.Cell<Entry<ty>>>,
       State.get(~ty, s2, Slot.where(i)),
       State.get(~ty, s1, Slot.where(i)),
       None{},
-      State.put_apart(~ty, ~same, s1, Slot.vote(w, n), Entry.vote{x}, Slot.where(i))({==}),
+      Equal.trans(
+        Maybe<&2, Cells.Cell<Entry<ty>>>,
+        State.get(~ty, s2, Slot.where(i)),
+        State.get(~ty, sd, Slot.where(i)),
+        State.get(~ty, s1, Slot.where(i)),
+        State.put_apart(~ty, ~same, sd, Slot.vote(w, n), Entry.vote{x}, Slot.where(i))({==}),
+        State.put_datas_keeps(~ty, ~same, ds, s1, Slot.where(i))({==})
+      ),
       hw
     )
     +s3 = State.put(~ty, ~same, s2, Slot.where(i), Entry.at{w})
-    +gr12 = State.grows_put(~ty, ~same, ~laws, s1, Slot.vote(w, n), Entry.vote{x})(hg)
+    +gr12 = State.grows_trans(
+      ~ty,
+      ~same,
+      ~laws,
+      s1,
+      sd,
+      s2
+    )(
+      State.put_datas_grows(~ty, ~same, ~laws, ds, s1)
+    )(State.grows_put(~ty, ~same, ~laws, sd, Slot.vote(w, n), Entry.vote{x})(hgd))
     +gr13 = State.grows_trans(
       ~ty,
       ~same,
@@ -3513,13 +3776,13 @@ def State.ask_decides(ty, same, laws, view, judge, n, s, i, t, q, c, o, mk, e, h
       State(ty),
       Vote.cast(~ty, ~same, ~view, ~judge, n, s1, c, i, q, v, Some{Tip{e, [n], h, last}}),
       State.settle(~ty, ~same, s2, w, [n]),
-      Cast.puts(~ty, ~same, ~view, ~judge, n, s1, c, i, q, v, e, h, last, k, r)(hg)(hw)(hv)
+      Cast.puts(~ty, ~same, ~view, ~judge, n, s1, c, i, q, v, e, h, last, k, r, ds)(hg)(hw)(hv)
     ): {State.status(~ty, ~view, _, i) == Status.done{k}: Status}
     %Equal.sym(
       Maybe<&2, Vote>,
       State.decide(~ty, s2, w, [n]),
       Some{x},
-      Decide.one_put(~ty, ~same, s1, w, n, x)(hg)
+      Decide.one_put(~ty, ~same, sd, w, n, x)(hgd)
     ):
       {State.status(~ty, ~view, Settle.of(~ty, ~same, s2, w, _), i) == Status.done{k}: Status}
     %Equal.sym(Maybe<&2, Cells.Cell<Entry<ty>>>, State.get(~ty, s2, Slot.where(i)), None{}, hw2):
@@ -3547,7 +3810,7 @@ def State.ask_decides(ty, same, laws, view, judge, n, s, i, t, q, c, o, mk, e, h
           {Cells.Cell.keeps(~Entry<ty>, ~Entry.is_eq(~ty, ~same), _, State.get(~ty, s3, Slot.ask(i))) == True{}: Bool}
         Cells.Cell.grows_get(~Entry<ty>, ~Entry.is_eq(~ty, ~same), s1, s3, Slot.ask(i))(gr13))): {Status.of(~ty, ~view, s3, i, _) == Status.done{k}: Status}
       %Equal.sym(View, view(q), v, h2): {Status.of.view(_, State.decided(~ty, ~view, s3, i)) == Status.done{k}: Status}
-      %Equal.sym(Maybe<&2, Vote>, State.decided(~ty, ~view, s3, i), Some{x}, Decided.after(~ty, ~same, ~laws, ~view, s2, c, e, h, n, i, k, v, r)(hw2)(Line.owners.kept(~ty, ~same, ~laws, ~view, s1, s2, c, e, gr12, [n])(ho))(Decide.one_put(~ty, ~same, s1, w, n, x)(hg))): {Status.of.view(v, _) == Status.done{k}: Status}
+      %Equal.sym(Maybe<&2, Vote>, State.decided(~ty, ~view, s3, i), Some{x}, Decided.after(~ty, ~same, ~laws, ~view, s2, c, e, h, n, i, k, v, r)(hw2)(Line.owners.kept(~ty, ~same, ~laws, ~view, s1, s2, c, e, gr12, [n])(ho))(Decide.one_put(~ty, ~same, sd, w, n, x)(hgd))): {Status.of.view(v, _) == Status.done{k}: Status}
       {==})
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
@@ -3708,33 +3971,3 @@ def State.put_data_get(ty, same, s, ws):
     ):
       {Shared.Maybe.when(List<&2, U32>, _, u => Some{ws}) == Some{ws}: Maybe<&2, List<&2, U32>>}
     {==}
-
-# putting data grows the state
-law State.put_data_grows:
-  for ~Q: Data
-  for ~same: Q -> Q -> Bool
-  for ~laws: Shared.Eq.Laws(Q, same)
-  for +s: State(Q)
-  for +ws: List<&2, U32>
-  {State.grows(~Q, ~same, s, State.put_data(~Q, ~same, s, ws)) == True{}: Bool}
-
-# State.put_data_grows once the cell m under the key is known
-def Data.put.grows(
-  ~Q: Data,
-  ~same: Q -> Q -> Bool,
-  ~laws: Shared.Eq.Laws(Q, same),
-  s: State(Q),
-  k: List<&2, Bool>,
-  ws: List<&2, U32>,
-  m: Maybe<&2, Cells.Cell<Entry<Q>>>,
-  em: {State.get(~Q, s, k) == m: Maybe<&2, Cells.Cell<Entry<Q>>>}
-) -> {State.grows(~Q, ~same, s, Data.put.of(~Q, ~same, s, k, ws, m)) == True{}: Bool}:
-  match m:
-    case None{}:
-      State.grows_put(~Q, ~same, ~laws, s, k, Entry.data{ws})(em)
-    case Some{x}:
-      State.grows_refl(~Q, ~same, ~laws, s)
-
-def State.put_data_grows(ty, same, laws, s, ws):
-  +k = Slot.data(Hashes.Sha.hash(ws))
-  Data.put.grows(~ty, ~same, ~laws, s, k, ws, State.get(~ty, s, k), {==})
