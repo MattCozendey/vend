@@ -1790,7 +1790,9 @@ law Reach.in_through:
   for ~succ: V -> A -> List<&2, A>
   for ~nodes: V -> List<&2, A>
   for ~laws: Shared.Eq.Laws(A, same)
-  for ~live: @g: V -> @p: A -> @q: A -> { List.contains(~A, ~same, succ(g)(p), q) == True{}: Bool } -> {List.contains(~A, ~same, nodes(g), p) == True{}: Bool}
+  for ~live: @g: V -> @p: A -> @q: A -> {
+    List.contains(~A, ~same, succ(g)(p), q) == True{}: Bool
+  } -> {List.contains(~A, ~same, nodes(g), p) == True{}: Bool}
   for +g: V
   for +x: A
   for +h: A
@@ -1801,10 +1803,10 @@ law Reach.in_through:
     Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, h, m) == True{}: Bool
   } -> {Reach.in(~A, ~V, ~same, ~succ, ~nodes, g, x, m) == True{}: Bool}
 
-def Reach.in_through(A, V, same, succ, nodes, laws, live, g, x, h, m):
+def Reach.in_through(ty, gt, same, succ, nodes, laws, live, g, x, h, m):
   +a => +b => Reach.in_through.one(
-    ~A,
-    ~V,
+    ~ty,
+    ~gt,
     ~same,
     ~succ,
     ~nodes,
@@ -1814,8 +1816,18 @@ def Reach.in_through(A, V, same, succ, nodes, laws, live, g, x, h, m):
     x,
     h,
     m,
-    Reach.go_path(~A, ~V, ~same, ~succ, ~laws, List.length(&2, A, nodes(g)), succ(g)(x), g, h)(a),
-    Reach.go_path(~A, ~V, ~same, ~succ, ~laws, List.length(&2, A, nodes(g)), succ(g)(h), g, m)(b)
+    Reach.go_path(
+      ~ty,
+      ~gt,
+      ~same,
+      ~succ,
+      ~laws,
+      List.length(&2, ty, nodes(g)),
+      succ(g)(x),
+      g,
+      h
+    )(a),
+    Reach.go_path(~ty, ~gt, ~same, ~succ, ~laws, List.length(&2, ty, nodes(g)), succ(g)(h), g, m)(b)
   )
 
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information

@@ -1011,3 +1011,33 @@ def Trie.under_one(
       Trie.under_one(V, q, r, v)
     case Con{True{}, q}:
       Trie.under_one(V, q, r, v)
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# the trie of one key holds only its value
+def Trie.get_one_value(
+  -V: Data,
+  k: List<&2, Bool>,
+  p: List<&2, Bool>,
+  v: V,
+  -w: V
+) -> {Trie.get(V, Trie.one(V, k, v), p) == Some{w}: Maybe<&2, V>} -> {w == v: V}:
+  match k p:
+    case Nil{} Nil{}:
+      h => Equal.sym(V, v, w, Shared.Maybe.some_inj(V, v, w, h))
+    case Nil{} Con{False{}, q}:
+      h => Empty.absurd({w == v: V}, Shared.Maybe.none_ne_some(V, w, h))
+    case Nil{} Con{True{}, q}:
+      h => Empty.absurd({w == v: V}, Shared.Maybe.none_ne_some(V, w, h))
+    case Con{False{}, r} Nil{}:
+      h => Empty.absurd({w == v: V}, Shared.Maybe.none_ne_some(V, w, h))
+    case Con{True{}, r} Nil{}:
+      h => Empty.absurd({w == v: V}, Shared.Maybe.none_ne_some(V, w, h))
+    case Con{False{}, r} Con{False{}, q}:
+      Trie.get_one_value(V, r, q, v, w)
+    case Con{True{}, r} Con{True{}, q}:
+      Trie.get_one_value(V, r, q, v, w)
+    case Con{False{}, r} Con{True{}, q}:
+      h => Empty.absurd({w == v: V}, Shared.Maybe.none_ne_some(V, w, h))
+    case Con{True{}, r} Con{False{}, q}:
+      h => Empty.absurd({w == v: V}, Shared.Maybe.none_ne_some(V, w, h))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning

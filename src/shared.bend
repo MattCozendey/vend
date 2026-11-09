@@ -447,9 +447,6 @@ def List.contains_flat(
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
 # Comparisons
 # -----------
 # String.eq and Word.cmp compare by Cmp; their laws need EQ to mean equal.
@@ -656,6 +653,10 @@ def Bool.is_eq_sound(a: Bool, b: Bool) -> {Bool.is_eq(a, b) == True{}: Bool} -> 
       h => Empty.absurd({True{} == False{}: Bool}, Bool.false_ne_true(h))
     case False{} True{}:
       h => Empty.absurd({False{} == True{}: Bool}, Bool.false_ne_true(h))
+
+# the laws of Bool.is_eq
+def Bool.laws() -> Eq.Laws(Bool, Bool.is_eq):
+  (Bool.is_eq_refl, Bool.is_eq_sound)
 
 # a "not" that is True is of False
 def Bool.not_true(a: Bool) -> {Bool.not(a) == True{}: Bool} -> {a == False{}: Bool}:
@@ -911,9 +912,6 @@ def Nat.add_le(
     Nat.add(a2, b2)
   )(Nat.add_le_right(a2, a, b)(h))(Nat.add_le_left(a2, b, b2)(k))
 
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
-
 # what holds when m is None
 def Maybe.IsNone(-A: Data, m: Maybe<&2, A>) -> Type:
   match m:
@@ -1039,6 +1037,26 @@ def List.take_drop(
       }
       {==}
 
+# Maybe.is_eq is True only for equal values, when eq is True only for equal ones
+def Maybe.is_eq_sound(
+  ~A: Data,
+  ~eq: A -> A -> Bool,
+  eqs: @x: A -> @y: A -> {eq(x, y) == True{}: Bool} -> {x == y: A},
+  a: Maybe<&2, A>,
+  b: Maybe<&2, A>
+) -> {Maybe.is_eq(~A, ~eq, a, b) == True{}: Bool} -> {a == b: Maybe<&2, A>}:
+  match a b:
+    case None{} None{}:
+      h => {==}
+    case None{} Some{y}:
+      h => Empty.absurd({None{} == Some{y}: Maybe<&2, A>}, Bool.false_ne_true(h))
+    case Some{x} None{}:
+      h => Empty.absurd({Some{x} == None{}: Maybe<&2, A>}, Bool.false_ne_true(h))
+    case Some{+x} Some{y}:
+      h =>
+        %eqs(x)(y)(h): {Some{x} == Some{_}: Maybe<&2, A>}
+        {==}
+
 # List equality
 # -------------
 # xs and ys hold the same elements in the same order, as same calls them: the
@@ -1131,3 +1149,129 @@ def List.union(~A: Data, ~same: A -> A -> Bool, ns: List<&2, A>, +ks: List<&2, A
       ks
     case Con{+n, r}:
       List.union(~A, ~same, r, List.filter.put(A, n, ks, Bool.not(List.contains(~A, ~same, ks, n))))
+
+# a list starts with itself
+def List.take_length(
+  -A: Data,
+  xs: List<&2, A>
+) -> {List.take(&2, A, xs, List.length(&2, A, xs)) == xs: List<&2, A>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      %List.take_length(
+        A,
+        r
+      ): {x <> List.take(&2, A, r, List.length(&2, A, r)) == x <> _: List<&2, A>}
+      {==}
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# what starts what starts zs starts zs
+def List.prefix_trans(
+  -A: Data,
+  xs: List<&2, A>,
+  ys: List<&2, A>,
+  zs: List<&2, A>
+) -> {
+  List.take(&2, A, ys, List.length(&2, A, xs)) == xs: List<&2, A>
+} -> {
+  List.take(&2, A, zs, List.length(&2, A, ys)) == ys: List<&2, A>
+} -> {List.take(&2, A, zs, List.length(&2, A, xs)) == xs: List<&2, A>}:
+  match xs ys zs:
+    case Nil{} b c:
+      hxy => hyz => List.take_zero(A, c)
+    case Con{x, r} Nil{} c:
+      hxy => hyz => Empty.absurd(
+        {List.take(&2, A, c, List.length(&2, A, x <> r)) == x <> r: List<&2, A>},
+        Bool.false_ne_true(
+          Equal.sym(
+            Bool,
+            True{},
+            False{},
+            Equal.cong(List<&2, A>, Bool, l => List.is_empty(&2, A, l), [], x <> r, hxy)
+          )
+        )
+      )
+    case Con{x, r} Con{y, r2} Nil{}:
+      hxy => hyz => Empty.absurd(
+        {List.take(&2, A, [], List.length(&2, A, x <> r)) == x <> r: List<&2, A>},
+        Bool.false_ne_true(
+          Equal.sym(
+            Bool,
+            True{},
+            False{},
+            Equal.cong(List<&2, A>, Bool, l => List.is_empty(&2, A, l), [], y <> r2, hyz)
+          )
+        )
+      )
+    case Con{+x, +r} Con{+y, +r2} Con{z, r3}:
+      +hxy => +hyz =>
+        %Equal.sym(
+          A,
+          z,
+          y,
+          Equal.cong(
+            List<&2, A>,
+            A,
+            l => Maybe.default(&2, A, List.head(&2, A, l), y),
+            z <> List.take(&2, A, r3, List.length(&2, A, r2)),
+            y <> r2,
+            hyz
+          )
+        ): {_ <> List.take(&2, A, r3, List.length(&2, A, r)) == x <> r: List<&2, A>}
+        %Equal.sym(
+          A,
+          y,
+          x,
+          Equal.cong(
+            List<&2, A>,
+            A,
+            l => Maybe.default(&2, A, List.head(&2, A, l), x),
+            y <> List.take(&2, A, r2, List.length(&2, A, r)),
+            x <> r,
+            hxy
+          )
+        ): {_ <> List.take(&2, A, r3, List.length(&2, A, r)) == x <> r: List<&2, A>}
+        %Equal.sym(
+          List<&2, A>,
+          List.take(&2, A, r3, List.length(&2, A, r)),
+          r,
+          List.prefix_trans(
+            A,
+            r,
+            r2,
+            r3
+          )(
+            Equal.cong(
+              List<&2, A>,
+              List<&2, A>,
+              l => List.tail(&2, A, l),
+              y <> List.take(&2, A, r2, List.length(&2, A, r)),
+              x <> r,
+              hxy
+            )
+          )(
+            Equal.cong(
+              List<&2, A>,
+              List<&2, A>,
+              l => List.tail(&2, A, l),
+              z <> List.take(&2, A, r3, List.length(&2, A, r2)),
+              y <> r2,
+              hyz
+            )
+          )
+        ):
+          {x <> _ == x <> r: List<&2, A>}
+        {==}
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# a Maybe that is none is None
+def Maybe.is_none_eq(
+  -A: Data,
+  m: Maybe<&2, A>
+) -> {Maybe.is_none(&2, A, m) == True{}: Bool} -> {m == None{}: Maybe<&2, A>}:
+  match m:
+    case None{}:
+      h => {==}
+    case Some{x}:
+      h => Empty.absurd({Some{x} == None{}: Maybe<&2, A>}, Bool.false_ne_true(h))
