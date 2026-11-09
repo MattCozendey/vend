@@ -102,7 +102,12 @@ def Trie.bits(n: Nat, +x: U32) -> List<&2, Bool>:
 # the key of the character x: an ASCII one as False and its 7 bits, any other
 # as True and its 32 bits
 def Trie.char(+x: U32) -> List<&2, Bool>:
-  Shared.Bool.when(List<&2, Bool>, U32.is_lt(x, 128), u => False{} <> Trie.bits(7n, x), u => True{} <> Trie.bits(32n, x))
+  Shared.Bool.when(
+    List<&2, Bool>,
+    U32.is_lt(x, 128),
+    u => False{} <> Trie.bits(7n, x),
+    u => True{} <> Trie.bits(32n, x)
+  )
 
 # the key of the text t: each character as True and its key, then False; so
 # the key of one text never starts the key of another, and keys of texts put

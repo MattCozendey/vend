@@ -2,758 +2,862 @@ import Base
 import ../../shared.bend as Shared
 import ../shared/ledger.bend as Ledgers
 import ../shared/resources.bend as Resources
+import ../shared/shared/shared/code.bend as Codes
 import ../shared/shared/text.bend as Texts
 import ../shared/shared/trie.bend as Tries
 import ./spec.bend as Spec
 
 # The proofs of the core's laws.
 
-# Equality
-# --------
+# Codes
+# -----
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality proof keeps each and as one value to split on
-# Line.is_eq is True for a value and itself
-def Line.is_eq_refl(a: Spec.Line) -> {Spec.Line.is_eq(a, a) == True{}: Bool}:
-  match a:
-    case Spec.Line.branch{x0}:
-      Texts.String.eq_refl(x0)
-    case Spec.Line.group{x0}:
-      Texts.String.eq_refl(x0)
+# a request ID reads back
+def Id.code_read(
+  i: Ledgers.Id,
+  r: List<&2, U32>
+) -> {
+  Spec.Id.code.read(Spec.Id.code(i, r)) == Some{Codes.Read{i, r}}: Maybe<&2, Codes.Read<Ledgers.Id>>
+}:
+  match i:
+    case Ledgers.Id{writer, +request}:
+      +r = r
+      %Equal.sym(
+        Maybe<&2, Codes.Read<String>>,
+        Codes.Code.text.read(
+          Codes.Code.text(
+            writer,
+            Codes.Code.count(Codes.Code.length(request), Codes.Code.chars(request, r))
+          )
+        ),
+        Some{
+          Codes.Read{
+            writer,
+            Codes.Code.count(Codes.Code.length(request), Codes.Code.chars(request, r))
+          }
+        },
+        Codes.Code.text_read(
+          writer,
+          Codes.Code.count(Codes.Code.length(request), Codes.Code.chars(request, r))
+        )
+      ):
+        {
+          Codes.Read.then(
+            String,
+            Ledgers.Id,
+            _,
+            w => r => Codes.Read.then(
+              String,
+              Ledgers.Id,
+              Codes.Code.text.read(r),
+              q => r2 => Some{Codes.Read{Ledgers.Id{w, q}, r2}}
+            )
+          )
+            == Some{Codes.Read{Ledgers.Id{writer, request}, r}}: Maybe<&2, Codes.Read<Ledgers.Id>>
+        }
+      %Equal.sym(
+        Maybe<&2, Codes.Read<String>>,
+        Codes.Code.text.read(Codes.Code.text(request, r)),
+        Some{Codes.Read{request, r}},
+        Codes.Code.text_read(request, r)
+      ):
+        {
+          Codes.Read.then(
+            String,
+            Ledgers.Id,
+            _,
+            q => r2 => Some{Codes.Read{Ledgers.Id{writer, q}, r2}}
+          )
+            == Some{Codes.Read{Ledgers.Id{writer, request}, r}}: Maybe<&2, Codes.Read<Ledgers.Id>>
+        }
+      {==}
 
-# Line.is_eq is True only for equal values
-def Line.is_eq_sound(
-  a: Spec.Line,
-  b: Spec.Line
-) -> {Spec.Line.is_eq(a, b) == True{}: Bool} -> {a == b: Spec.Line}:
-  match a b:
-    case Spec.Line.branch{x0} Spec.Line.branch{y0}:
-      +h0 =>
-        %Texts.String.eq_sound(x0, y0)(h0): {Spec.Line.branch{x0} == Spec.Line.branch{_}: Spec.Line}
-        {==}
-    case Spec.Line.group{x0} Spec.Line.group{y0}:
-      +h0 =>
-        %Texts.String.eq_sound(x0, y0)(h0): {Spec.Line.group{x0} == Spec.Line.group{_}: Spec.Line}
-        {==}
-    case Spec.Line.branch{a0} Spec.Line.group{b0}:
-      h => Empty.absurd(
-        {Spec.Line.branch{a0} == Spec.Line.group{b0}: Spec.Line},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Line.group{a0} Spec.Line.branch{b0}:
-      h => Empty.absurd(
-        {Spec.Line.group{a0} == Spec.Line.branch{b0}: Spec.Line},
-        Shared.Bool.false_ne_true(h)
-      )
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a resource name reads back
+def Name.code_read(
+  n: Resources.Name,
+  r: List<&2, U32>
+) -> {
+  Spec.Name.code.read(
+    Spec.Name.code(n, r)
+  )
+    == Some{Codes.Read{n, r}}: Maybe<&2, Codes.Read<Resources.Name>>
+}:
+  match n:
+    case Resources.Name{text}:
+      %Equal.sym(
+        Maybe<&2, Codes.Read<String>>,
+        Codes.Code.text.read(Codes.Code.text(text, r)),
+        Some{Codes.Read{text, r}},
+        Codes.Code.text_read(text, r)
+      ):
+        {
+          Codes.Read.then(
+            String,
+            Resources.Name,
+            _,
+            t => r => Some{Codes.Read{Resources.Name{t}, r}}
+          )
+            == Some{Codes.Read{Resources.Name{text}, r}}: Maybe<&2, Codes.Read<Resources.Name>>
+        }
+      {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
-# the laws of Spec.Line.is_eq
-def Line.laws() -> Shared.Eq.Laws(Spec.Line, Spec.Line.is_eq):
-  (Line.is_eq_refl, a => b => Line.is_eq_sound(a, b))
+# a token reads back
+def U32.code_read(
+  x: U32,
+  r: List<&2, U32>
+) -> {
+  Spec.U32.code.read(Spec.U32.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<U32>>
+}:
+  {==}
 
-# Member.is_eq is True for a value and itself
-def Member.is_eq_refl(a: Spec.Member) -> {Spec.Member.is_eq(a, a) == True{}: Bool}:
-  match a:
-    case Spec.Member.node{x0}:
-      Texts.String.eq_refl(x0)
-    case Spec.Member.group{x0}:
-      Texts.String.eq_refl(x0)
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a line reads back
+def Line.code_read(
+  l: Spec.Line,
+  r: List<&2, U32>
+) -> {
+  Spec.Line.code.read(
+    Spec.Line.code(l, r)
+  )
+    == Some{Codes.Read{l, r}}: Maybe<&2, Codes.Read<Spec.Line>>
+}:
+  match l:
+    case Spec.Line.branch{name}:
+      %Equal.sym(
+        Maybe<&2, Codes.Read<String>>,
+        Codes.Code.text.read(Codes.Code.text(name, r)),
+        Some{Codes.Read{name, r}},
+        Codes.Code.text_read(name, r)
+      ):
+        {
+          Codes.Read.then(
+            String,
+            Spec.Line,
+            _,
+            n => r2 => Some{
+              Codes.Read{
+                Shared.Bool.when(
+                  Spec.Line,
+                  U32.is_eq(0, 0),
+                  u => Spec.Line.branch{n},
+                  u => Spec.Line.group{n}
+                ),
+                r2
+              }
+            }
+          )
+            == Some{Codes.Read{Spec.Line.branch{name}, r}}: Maybe<&2, Codes.Read<Spec.Line>>
+        }
+      {==}
+    case Spec.Line.group{name1}:
+      %Equal.sym(
+        Maybe<&2, Codes.Read<String>>,
+        Codes.Code.text.read(Codes.Code.text(name1, r)),
+        Some{Codes.Read{name1, r}},
+        Codes.Code.text_read(name1, r)
+      ):
+        {
+          Codes.Read.then(
+            String,
+            Spec.Line,
+            _,
+            n => r2 => Some{
+              Codes.Read{
+                Shared.Bool.when(
+                  Spec.Line,
+                  U32.is_eq(1, 0),
+                  u => Spec.Line.branch{n},
+                  u => Spec.Line.group{n}
+                ),
+                r2
+              }
+            }
+          )
+            == Some{Codes.Read{Spec.Line.group{name1}, r}}: Maybe<&2, Codes.Read<Spec.Line>>
+        }
+      {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
-# Member.is_eq is True only for equal values
-def Member.is_eq_sound(
-  a: Spec.Member,
-  b: Spec.Member
-) -> {Spec.Member.is_eq(a, b) == True{}: Bool} -> {a == b: Spec.Member}:
-  match a b:
-    case Spec.Member.node{x0} Spec.Member.node{y0}:
-      +h0 =>
-        %Texts.String.eq_sound(
-          x0,
-          y0
-        )(h0): {Spec.Member.node{x0} == Spec.Member.node{_}: Spec.Member}
-        {==}
-    case Spec.Member.group{x0} Spec.Member.group{y0}:
-      +h0 =>
-        %Texts.String.eq_sound(
-          x0,
-          y0
-        )(h0): {Spec.Member.group{x0} == Spec.Member.group{_}: Spec.Member}
-        {==}
-    case Spec.Member.node{a0} Spec.Member.group{b0}:
-      h => Empty.absurd(
-        {Spec.Member.node{a0} == Spec.Member.group{b0}: Spec.Member},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Member.group{a0} Spec.Member.node{b0}:
-      h => Empty.absurd(
-        {Spec.Member.group{a0} == Spec.Member.node{b0}: Spec.Member},
-        Shared.Bool.false_ne_true(h)
-      )
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a member reads back
+def Member.code_read(
+  m: Spec.Member,
+  r: List<&2, U32>
+) -> {
+  Spec.Member.code.read(
+    Spec.Member.code(m, r)
+  )
+    == Some{Codes.Read{m, r}}: Maybe<&2, Codes.Read<Spec.Member>>
+}:
+  match m:
+    case Spec.Member.node{name}:
+      %Equal.sym(
+        Maybe<&2, Codes.Read<String>>,
+        Codes.Code.text.read(Codes.Code.text(name, r)),
+        Some{Codes.Read{name, r}},
+        Codes.Code.text_read(name, r)
+      ):
+        {
+          Codes.Read.then(
+            String,
+            Spec.Member,
+            _,
+            n => r2 => Some{
+              Codes.Read{
+                Shared.Bool.when(
+                  Spec.Member,
+                  U32.is_eq(0, 0),
+                  u => Spec.Member.node{n},
+                  u => Spec.Member.group{n}
+                ),
+                r2
+              }
+            }
+          )
+            == Some{Codes.Read{Spec.Member.node{name}, r}}: Maybe<&2, Codes.Read<Spec.Member>>
+        }
+      {==}
+    case Spec.Member.group{name1}:
+      %Equal.sym(
+        Maybe<&2, Codes.Read<String>>,
+        Codes.Code.text.read(Codes.Code.text(name1, r)),
+        Some{Codes.Read{name1, r}},
+        Codes.Code.text_read(name1, r)
+      ):
+        {
+          Codes.Read.then(
+            String,
+            Spec.Member,
+            _,
+            n => r2 => Some{
+              Codes.Read{
+                Shared.Bool.when(
+                  Spec.Member,
+                  U32.is_eq(1, 0),
+                  u => Spec.Member.node{n},
+                  u => Spec.Member.group{n}
+                ),
+                r2
+              }
+            }
+          )
+            == Some{Codes.Read{Spec.Member.group{name1}, r}}: Maybe<&2, Codes.Read<Spec.Member>>
+        }
+      {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
-# the laws of Spec.Member.is_eq
-def Member.laws() -> Shared.Eq.Laws(Spec.Member, Spec.Member.is_eq):
-  (Member.is_eq_refl, a => b => Member.is_eq_sound(a, b))
+# the laws of the token code
+def U32.code_laws() -> Codes.Code.Laws(U32, Spec.U32.code, Spec.U32.code.read):
+  x => r => U32.code_read(x, r)
 
-# Content.is_eq is True for a value and itself
-def Content.is_eq_refl(a: Spec.Content) -> {Spec.Content.is_eq(a, a) == True{}: Bool}:
-  match a:
-    case Spec.Content.bytes{x0}:
-      Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), x0)
-    case Spec.Content.of{x0}:
-      Ledgers.Id.is_eq_refl(x0)
+# the laws of the request ID code
+def Id.code_laws() -> Codes.Code.Laws(Ledgers.Id, Spec.Id.code, Spec.Id.code.read):
+  x => r => Id.code_read(x, r)
 
-# Content.is_eq is True only for equal values
-def Content.is_eq_sound(
-  a: Spec.Content,
-  b: Spec.Content
-) -> {Spec.Content.is_eq(a, b) == True{}: Bool} -> {a == b: Spec.Content}:
-  match a b:
-    case Spec.Content.bytes{x0} Spec.Content.bytes{y0}:
-      +h0 =>
-        %Shared.List.is_eq_sound(
+# the laws of the member code
+def Member.code_laws() -> Codes.Code.Laws(Spec.Member, Spec.Member.code, Spec.Member.code.read):
+  x => r => Member.code_read(x, r)
+
+# the laws of the line code
+def Line.code_laws() -> Codes.Code.Laws(Spec.Line, Spec.Line.code, Spec.Line.code.read):
+  x => r => Line.code_read(x, r)
+
+# the laws of the text code
+def Text.code_laws() -> Codes.Code.Laws(String, Codes.Code.text, Codes.Code.text.read):
+  x => r => Codes.Code.text_read(x, r)
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a content reads back
+def Content.code_read(
+  c: Spec.Content,
+  r: List<&2, U32>
+) -> {
+  Spec.Content.code.read(
+    Spec.Content.code(c, r)
+  )
+    == Some{Codes.Read{c, r}}: Maybe<&2, Codes.Read<Spec.Content>>
+}:
+  match c:
+    case Spec.Content.bytes{v0}:
+      %Equal.sym(
+        Maybe<&2, Codes.Read<List<&2, U32>>>,
+        Codes.Code.list.read(
           ~U32,
-          ~U32.is_eq,
-          ~Shared.U32.laws(),
-          x0,
-          y0
-        )(h0): {Spec.Content.bytes{x0} == Spec.Content.bytes{_}: Spec.Content}
-        {==}
-    case Spec.Content.of{x0} Spec.Content.of{y0}:
-      +h0 =>
-        %Ledgers.Id.is_eq_sound(
-          x0,
-          y0
-        )(h0): {Spec.Content.of{x0} == Spec.Content.of{_}: Spec.Content}
-        {==}
-    case Spec.Content.bytes{a0} Spec.Content.of{b0}:
-      h => Empty.absurd(
-        {Spec.Content.bytes{a0} == Spec.Content.of{b0}: Spec.Content},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Content.of{a0} Spec.Content.bytes{b0}:
-      h => Empty.absurd(
-        {Spec.Content.of{a0} == Spec.Content.bytes{b0}: Spec.Content},
-        Shared.Bool.false_ne_true(h)
-      )
-
-# the laws of Spec.Content.is_eq
-def Content.laws() -> Shared.Eq.Laws(Spec.Content, Spec.Content.is_eq):
-  (Content.is_eq_refl, a => b => Content.is_eq_sound(a, b))
-
-# Change.is_eq is True for a value and itself
-def Change.is_eq_refl(a: Spec.Change) -> {Spec.Change.is_eq(a, a) == True{}: Bool}:
-  match a:
-    case Spec.Change.make{+x0, +x1, +x2}:
-      Shared.Bool.and_both(
-        Spec.Line.is_eq(x0, x0),
-        Bool.and(
-          Shared.Maybe.is_eq(~Ledgers.Id, ~Ledgers.Id.is_eq, x1, x1),
-          Shared.List.is_eq(~Spec.Member, ~Spec.Member.is_eq, x2, x2)
-        )
-      )(
-        Line.is_eq_refl(x0)
-      )(
-        Shared.Bool.and_both(
-          Shared.Maybe.is_eq(~Ledgers.Id, ~Ledgers.Id.is_eq, x1, x1),
-          Shared.List.is_eq(~Spec.Member, ~Spec.Member.is_eq, x2, x2)
-        )(
-          Shared.Maybe.is_eq_refl(~Ledgers.Id, ~Ledgers.Id.is_eq, ~Ledgers.Id.laws(), x1)
-        )(Shared.List.is_eq_refl(~Spec.Member, ~Spec.Member.is_eq, ~Member.laws(), x2))
-      )
-    case Spec.Change.own{x0}:
-      Shared.List.is_eq_refl(~String, ~String.eq, ~Texts.String.laws(), x0)
-    case Spec.Change.write{+x0, +x1, +x2}:
-      Shared.Bool.and_both(
-        Resources.Name.is_eq(x0, x0),
-        Bool.and(
-          Shared.Maybe.is_eq(~Ledgers.Id, ~Ledgers.Id.is_eq, x1, x1),
-          Spec.Content.is_eq(x2, x2)
-        )
-      )(
-        Resources.Name.is_eq_refl(x0)
-      )(
-        Shared.Bool.and_both(
-          Shared.Maybe.is_eq(~Ledgers.Id, ~Ledgers.Id.is_eq, x1, x1),
-          Spec.Content.is_eq(x2, x2)
-        )(
-          Shared.Maybe.is_eq_refl(~Ledgers.Id, ~Ledgers.Id.is_eq, ~Ledgers.Id.laws(), x1)
-        )(Content.is_eq_refl(x2))
-      )
-    case Spec.Change.resolve{+x0, +x1, +x2}:
-      Shared.Bool.and_both(
-        Ledgers.Id.is_eq(x0, x0),
-        Bool.and(Resources.Name.is_eq(x1, x1), Spec.Content.is_eq(x2, x2))
-      )(
-        Ledgers.Id.is_eq_refl(x0)
-      )(
-        Shared.Bool.and_both(
-          Resources.Name.is_eq(x1, x1),
-          Spec.Content.is_eq(x2, x2)
-        )(Resources.Name.is_eq_refl(x1))(Content.is_eq_refl(x2))
-      )
-    case Spec.Change.merge{x0}:
-      Ledgers.Id.is_eq_refl(x0)
-    case Spec.Change.move{x0}:
-      Ledgers.Id.is_eq_refl(x0)
-    case Spec.Change.mark{+x0, +x1}:
-      Shared.Bool.and_both(
-        String.eq(x0, x0),
-        String.eq(x1, x1)
-      )(Texts.String.eq_refl(x0))(Texts.String.eq_refl(x1))
-    case Spec.Change.members{x0}:
-      Shared.List.is_eq_refl(~Spec.Member, ~Spec.Member.is_eq, ~Member.laws(), x0)
-
-# Change.is_eq is True only for equal values
-def Change.is_eq_sound(
-  a: Spec.Change,
-  b: Spec.Change
-) -> {Spec.Change.is_eq(a, b) == True{}: Bool} -> {a == b: Spec.Change}:
-  match a b:
-    case Spec.Change.make{+x0, +x1, +x2} Spec.Change.make{+y0, +y1, +y2}:
-      +h0 =>
-        +h1 = Shared.Bool.and_true_right(
-          Spec.Line.is_eq(x0, y0),
-          Bool.and(
-            Shared.Maybe.is_eq(~Ledgers.Id, ~Ledgers.Id.is_eq, x1, y1),
-            Shared.List.is_eq(~Spec.Member, ~Spec.Member.is_eq, x2, y2)
+          ~Spec.U32.code.read,
+          Codes.Code.list(~U32, ~Spec.U32.code, v0, r)
+        ),
+        Some{Codes.Read{v0, r}},
+        Codes.Code.list_read(~U32, ~Spec.U32.code, ~Spec.U32.code.read, ~U32.code_laws(), v0, r)
+      ):
+        {
+          Codes.Read.then(
+            List<&2, U32>,
+            Spec.Content,
+            _,
+            x0 => q1 => Some{Codes.Read{Spec.Content.bytes{x0}, q1}}
           )
-        )(h0)
-        +h2 = Shared.Bool.and_true_right(
-          Shared.Maybe.is_eq(~Ledgers.Id, ~Ledgers.Id.is_eq, x1, y1),
-          Shared.List.is_eq(~Spec.Member, ~Spec.Member.is_eq, x2, y2)
-        )(h1)
-        %Line.is_eq_sound(
-          x0,
-          y0
-        )(
-          Shared.Bool.and_true_left(
-            Spec.Line.is_eq(x0, y0),
-            Bool.and(
-              Shared.Maybe.is_eq(~Ledgers.Id, ~Ledgers.Id.is_eq, x1, y1),
-              Shared.List.is_eq(~Spec.Member, ~Spec.Member.is_eq, x2, y2)
+            == Some{Codes.Read{Spec.Content.bytes{v0}, r}}: Maybe<&2, Codes.Read<Spec.Content>>
+        }
+      {==}
+    case Spec.Content.of{v0}:
+      %Equal.sym(
+        Maybe<&2, Codes.Read<Ledgers.Id>>,
+        Spec.Id.code.read(Spec.Id.code(v0, r)),
+        Some{Codes.Read{v0, r}},
+        Id.code_read(v0, r)
+      ):
+        {
+          Codes.Read.then(
+            Ledgers.Id,
+            Spec.Content,
+            _,
+            x0 => q1 => Some{Codes.Read{Spec.Content.of{x0}, q1}}
+          )
+            == Some{Codes.Read{Spec.Content.of{v0}, r}}: Maybe<&2, Codes.Read<Spec.Content>>
+        }
+      {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# a change reads back
+def Change.code_read(
+  c: Spec.Change,
+  +r: List<&2, U32>
+) -> {
+  Spec.Change.code.read(
+    Spec.Change.code(c, r)
+  )
+    == Some{Codes.Read{c, r}}: Maybe<&2, Codes.Read<Spec.Change>>
+}:
+  match c:
+    case Spec.Change.make{v0, +v1, +v2}:
+      %Equal.sym(
+        Maybe<&2, Codes.Read<Spec.Line>>,
+        Spec.Line.code.read(
+          Spec.Line.code(
+            v0,
+            Codes.Code.maybe(
+              ~Ledgers.Id,
+              ~Spec.Id.code,
+              v1,
+              Codes.Code.list(~Spec.Member, ~Spec.Member.code, v2, r)
             )
-          )(h0)
-        ): {Spec.Change.make{x0, x1, x2} == Spec.Change.make{_, y1, y2}: Spec.Change}
-        %Shared.Maybe.is_eq_sound(
+          )
+        ),
+        Some{
+          Codes.Read{
+            v0,
+            Codes.Code.maybe(
+              ~Ledgers.Id,
+              ~Spec.Id.code,
+              v1,
+              Codes.Code.list(~Spec.Member, ~Spec.Member.code, v2, r)
+            )
+          }
+        },
+        Line.code_read(
+          v0,
+          Codes.Code.maybe(
+            ~Ledgers.Id,
+            ~Spec.Id.code,
+            v1,
+            Codes.Code.list(~Spec.Member, ~Spec.Member.code, v2, r)
+          )
+        )
+      ):
+        {
+          Codes.Read.then(
+            Spec.Line,
+            Spec.Change,
+            _,
+            x0 => q1 => Codes.Read.then(
+              Maybe<&2, Ledgers.Id>,
+              Spec.Change,
+              Codes.Code.maybe.read(~Ledgers.Id, ~Spec.Id.code.read, q1),
+              x1 => q2 => Codes.Read.then(
+                List<&2, Spec.Member>,
+                Spec.Change,
+                Codes.Code.list.read(~Spec.Member, ~Spec.Member.code.read, q2),
+                x2 => q3 => Some{Codes.Read{Spec.Change.make{x0, x1, x2}, q3}}
+              )
+            )
+          )
+            == Some{Codes.Read{Spec.Change.make{v0, v1, v2}, r}}: Maybe<&2, Codes.Read<Spec.Change>>
+        }
+      %Equal.sym(
+        Maybe<&2, Codes.Read<Maybe<&2, Ledgers.Id>>>,
+        Codes.Code.maybe.read(
           ~Ledgers.Id,
-          ~Ledgers.Id.is_eq,
-          Ledgers.Id.is_eq_sound,
-          x1,
-          y1
-        )(
-          Shared.Bool.and_true_left(
-            Shared.Maybe.is_eq(~Ledgers.Id, ~Ledgers.Id.is_eq, x1, y1),
-            Shared.List.is_eq(~Spec.Member, ~Spec.Member.is_eq, x2, y2)
-          )(h1)
-        ): {Spec.Change.make{x0, x1, x2} == Spec.Change.make{x0, _, y2}: Spec.Change}
-        %Shared.List.is_eq_sound(
-          ~Spec.Member,
-          ~Spec.Member.is_eq,
-          ~Member.laws(),
-          x2,
-          y2
-        )(h2): {Spec.Change.make{x0, x1, x2} == Spec.Change.make{x0, x1, _}: Spec.Change}
-        {==}
-    case Spec.Change.own{x0} Spec.Change.own{y0}:
-      +h0 =>
-        %Shared.List.is_eq_sound(
-          ~String,
-          ~String.eq,
-          ~Texts.String.laws(),
-          x0,
-          y0
-        )(h0): {Spec.Change.own{x0} == Spec.Change.own{_}: Spec.Change}
-        {==}
-    case Spec.Change.write{+x0, +x1, +x2} Spec.Change.write{+y0, +y1, +y2}:
-      +h0 =>
-        +h1 = Shared.Bool.and_true_right(
-          Resources.Name.is_eq(x0, y0),
-          Bool.and(
-            Shared.Maybe.is_eq(~Ledgers.Id, ~Ledgers.Id.is_eq, x1, y1),
-            Spec.Content.is_eq(x2, y2)
+          ~Spec.Id.code.read,
+          Codes.Code.maybe(
+            ~Ledgers.Id,
+            ~Spec.Id.code,
+            v1,
+            Codes.Code.list(~Spec.Member, ~Spec.Member.code, v2, r)
           )
-        )(h0)
-        +h2 = Shared.Bool.and_true_right(
-          Shared.Maybe.is_eq(~Ledgers.Id, ~Ledgers.Id.is_eq, x1, y1),
-          Spec.Content.is_eq(x2, y2)
-        )(h1)
-        %Resources.Name.is_eq_sound(
-          x0,
-          y0
-        )(
-          Shared.Bool.and_true_left(
-            Resources.Name.is_eq(x0, y0),
-            Bool.and(
-              Shared.Maybe.is_eq(~Ledgers.Id, ~Ledgers.Id.is_eq, x1, y1),
-              Spec.Content.is_eq(x2, y2)
-            )
-          )(h0)
-        ): {Spec.Change.write{x0, x1, x2} == Spec.Change.write{_, y1, y2}: Spec.Change}
-        %Shared.Maybe.is_eq_sound(
+        ),
+        Some{Codes.Read{v1, Codes.Code.list(~Spec.Member, ~Spec.Member.code, v2, r)}},
+        Codes.Code.maybe_read(
           ~Ledgers.Id,
-          ~Ledgers.Id.is_eq,
-          Ledgers.Id.is_eq_sound,
-          x1,
-          y1
-        )(
-          Shared.Bool.and_true_left(
-            Shared.Maybe.is_eq(~Ledgers.Id, ~Ledgers.Id.is_eq, x1, y1),
-            Spec.Content.is_eq(x2, y2)
-          )(h1)
-        ): {Spec.Change.write{x0, x1, x2} == Spec.Change.write{x0, _, y2}: Spec.Change}
-        %Content.is_eq_sound(
-          x2,
-          y2
-        )(h2): {Spec.Change.write{x0, x1, x2} == Spec.Change.write{x0, x1, _}: Spec.Change}
-        {==}
-    case Spec.Change.resolve{+x0, +x1, +x2} Spec.Change.resolve{+y0, +y1, +y2}:
-      +h0 =>
-        +h1 = Shared.Bool.and_true_right(
-          Ledgers.Id.is_eq(x0, y0),
-          Bool.and(Resources.Name.is_eq(x1, y1), Spec.Content.is_eq(x2, y2))
-        )(h0)
-        +h2 = Shared.Bool.and_true_right(
-          Resources.Name.is_eq(x1, y1),
-          Spec.Content.is_eq(x2, y2)
-        )(h1)
-        %Ledgers.Id.is_eq_sound(
-          x0,
-          y0
-        )(
-          Shared.Bool.and_true_left(
-            Ledgers.Id.is_eq(x0, y0),
-            Bool.and(Resources.Name.is_eq(x1, y1), Spec.Content.is_eq(x2, y2))
-          )(h0)
-        ): {Spec.Change.resolve{x0, x1, x2} == Spec.Change.resolve{_, y1, y2}: Spec.Change}
-        %Resources.Name.is_eq_sound(
-          x1,
-          y1
-        )(
-          Shared.Bool.and_true_left(Resources.Name.is_eq(x1, y1), Spec.Content.is_eq(x2, y2))(h1)
-        ): {Spec.Change.resolve{x0, x1, x2} == Spec.Change.resolve{x0, _, y2}: Spec.Change}
-        %Content.is_eq_sound(
-          x2,
-          y2
-        )(h2): {Spec.Change.resolve{x0, x1, x2} == Spec.Change.resolve{x0, x1, _}: Spec.Change}
-        {==}
-    case Spec.Change.merge{x0} Spec.Change.merge{y0}:
-      +h0 =>
-        %Ledgers.Id.is_eq_sound(
-          x0,
-          y0
-        )(h0): {Spec.Change.merge{x0} == Spec.Change.merge{_}: Spec.Change}
-        {==}
-    case Spec.Change.move{x0} Spec.Change.move{y0}:
-      +h0 =>
-        %Ledgers.Id.is_eq_sound(
-          x0,
-          y0
-        )(h0): {Spec.Change.move{x0} == Spec.Change.move{_}: Spec.Change}
-        {==}
-    case Spec.Change.mark{+x0, +x1} Spec.Change.mark{+y0, +y1}:
-      +h0 =>
-        +h1 = Shared.Bool.and_true_right(String.eq(x0, y0), String.eq(x1, y1))(h0)
-        %Texts.String.eq_sound(
-          x0,
-          y0
-        )(
-          Shared.Bool.and_true_left(String.eq(x0, y0), String.eq(x1, y1))(h0)
-        ): {Spec.Change.mark{x0, x1} == Spec.Change.mark{_, y1}: Spec.Change}
-        %Texts.String.eq_sound(
-          x1,
-          y1
-        )(h1): {Spec.Change.mark{x0, x1} == Spec.Change.mark{x0, _}: Spec.Change}
-        {==}
-    case Spec.Change.members{x0} Spec.Change.members{y0}:
-      +h0 =>
-        %Shared.List.is_eq_sound(
-          ~Spec.Member,
-          ~Spec.Member.is_eq,
-          ~Member.laws(),
-          x0,
-          y0
-        )(h0): {Spec.Change.members{x0} == Spec.Change.members{_}: Spec.Change}
-        {==}
-    case Spec.Change.make{a0, a1, a2} Spec.Change.own{b0}:
-      h => Empty.absurd(
-        {Spec.Change.make{a0, a1, a2} == Spec.Change.own{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.make{a0, a1, a2} Spec.Change.write{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.make{a0, a1, a2} == Spec.Change.write{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.make{a0, a1, a2} Spec.Change.resolve{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.make{a0, a1, a2} == Spec.Change.resolve{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.make{a0, a1, a2} Spec.Change.merge{b0}:
-      h => Empty.absurd(
-        {Spec.Change.make{a0, a1, a2} == Spec.Change.merge{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.make{a0, a1, a2} Spec.Change.move{b0}:
-      h => Empty.absurd(
-        {Spec.Change.make{a0, a1, a2} == Spec.Change.move{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.make{a0, a1, a2} Spec.Change.mark{b0, b1}:
-      h => Empty.absurd(
-        {Spec.Change.make{a0, a1, a2} == Spec.Change.mark{b0, b1}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.make{a0, a1, a2} Spec.Change.members{b0}:
-      h => Empty.absurd(
-        {Spec.Change.make{a0, a1, a2} == Spec.Change.members{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.own{a0} Spec.Change.make{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.own{a0} == Spec.Change.make{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.own{a0} Spec.Change.write{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.own{a0} == Spec.Change.write{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.own{a0} Spec.Change.resolve{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.own{a0} == Spec.Change.resolve{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.own{a0} Spec.Change.merge{b0}:
-      h => Empty.absurd(
-        {Spec.Change.own{a0} == Spec.Change.merge{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.own{a0} Spec.Change.move{b0}:
-      h => Empty.absurd(
-        {Spec.Change.own{a0} == Spec.Change.move{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.own{a0} Spec.Change.mark{b0, b1}:
-      h => Empty.absurd(
-        {Spec.Change.own{a0} == Spec.Change.mark{b0, b1}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.own{a0} Spec.Change.members{b0}:
-      h => Empty.absurd(
-        {Spec.Change.own{a0} == Spec.Change.members{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.write{a0, a1, a2} Spec.Change.make{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.write{a0, a1, a2} == Spec.Change.make{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.write{a0, a1, a2} Spec.Change.own{b0}:
-      h => Empty.absurd(
-        {Spec.Change.write{a0, a1, a2} == Spec.Change.own{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.write{a0, a1, a2} Spec.Change.resolve{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.write{a0, a1, a2} == Spec.Change.resolve{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.write{a0, a1, a2} Spec.Change.merge{b0}:
-      h => Empty.absurd(
-        {Spec.Change.write{a0, a1, a2} == Spec.Change.merge{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.write{a0, a1, a2} Spec.Change.move{b0}:
-      h => Empty.absurd(
-        {Spec.Change.write{a0, a1, a2} == Spec.Change.move{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.write{a0, a1, a2} Spec.Change.mark{b0, b1}:
-      h => Empty.absurd(
-        {Spec.Change.write{a0, a1, a2} == Spec.Change.mark{b0, b1}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.write{a0, a1, a2} Spec.Change.members{b0}:
-      h => Empty.absurd(
-        {Spec.Change.write{a0, a1, a2} == Spec.Change.members{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.resolve{a0, a1, a2} Spec.Change.make{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.resolve{a0, a1, a2} == Spec.Change.make{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.resolve{a0, a1, a2} Spec.Change.own{b0}:
-      h => Empty.absurd(
-        {Spec.Change.resolve{a0, a1, a2} == Spec.Change.own{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.resolve{a0, a1, a2} Spec.Change.write{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.resolve{a0, a1, a2} == Spec.Change.write{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.resolve{a0, a1, a2} Spec.Change.merge{b0}:
-      h => Empty.absurd(
-        {Spec.Change.resolve{a0, a1, a2} == Spec.Change.merge{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.resolve{a0, a1, a2} Spec.Change.move{b0}:
-      h => Empty.absurd(
-        {Spec.Change.resolve{a0, a1, a2} == Spec.Change.move{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.resolve{a0, a1, a2} Spec.Change.mark{b0, b1}:
-      h => Empty.absurd(
-        {Spec.Change.resolve{a0, a1, a2} == Spec.Change.mark{b0, b1}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.resolve{a0, a1, a2} Spec.Change.members{b0}:
-      h => Empty.absurd(
-        {Spec.Change.resolve{a0, a1, a2} == Spec.Change.members{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.merge{a0} Spec.Change.make{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.merge{a0} == Spec.Change.make{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.merge{a0} Spec.Change.own{b0}:
-      h => Empty.absurd(
-        {Spec.Change.merge{a0} == Spec.Change.own{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.merge{a0} Spec.Change.write{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.merge{a0} == Spec.Change.write{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.merge{a0} Spec.Change.resolve{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.merge{a0} == Spec.Change.resolve{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.merge{a0} Spec.Change.move{b0}:
-      h => Empty.absurd(
-        {Spec.Change.merge{a0} == Spec.Change.move{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.merge{a0} Spec.Change.mark{b0, b1}:
-      h => Empty.absurd(
-        {Spec.Change.merge{a0} == Spec.Change.mark{b0, b1}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.merge{a0} Spec.Change.members{b0}:
-      h => Empty.absurd(
-        {Spec.Change.merge{a0} == Spec.Change.members{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.move{a0} Spec.Change.make{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.move{a0} == Spec.Change.make{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.move{a0} Spec.Change.own{b0}:
-      h => Empty.absurd(
-        {Spec.Change.move{a0} == Spec.Change.own{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.move{a0} Spec.Change.write{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.move{a0} == Spec.Change.write{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.move{a0} Spec.Change.resolve{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.move{a0} == Spec.Change.resolve{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.move{a0} Spec.Change.merge{b0}:
-      h => Empty.absurd(
-        {Spec.Change.move{a0} == Spec.Change.merge{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.move{a0} Spec.Change.mark{b0, b1}:
-      h => Empty.absurd(
-        {Spec.Change.move{a0} == Spec.Change.mark{b0, b1}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.move{a0} Spec.Change.members{b0}:
-      h => Empty.absurd(
-        {Spec.Change.move{a0} == Spec.Change.members{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.mark{a0, a1} Spec.Change.make{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.mark{a0, a1} == Spec.Change.make{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.mark{a0, a1} Spec.Change.own{b0}:
-      h => Empty.absurd(
-        {Spec.Change.mark{a0, a1} == Spec.Change.own{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.mark{a0, a1} Spec.Change.write{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.mark{a0, a1} == Spec.Change.write{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.mark{a0, a1} Spec.Change.resolve{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.mark{a0, a1} == Spec.Change.resolve{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.mark{a0, a1} Spec.Change.merge{b0}:
-      h => Empty.absurd(
-        {Spec.Change.mark{a0, a1} == Spec.Change.merge{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.mark{a0, a1} Spec.Change.move{b0}:
-      h => Empty.absurd(
-        {Spec.Change.mark{a0, a1} == Spec.Change.move{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.mark{a0, a1} Spec.Change.members{b0}:
-      h => Empty.absurd(
-        {Spec.Change.mark{a0, a1} == Spec.Change.members{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.members{a0} Spec.Change.make{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.members{a0} == Spec.Change.make{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.members{a0} Spec.Change.own{b0}:
-      h => Empty.absurd(
-        {Spec.Change.members{a0} == Spec.Change.own{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.members{a0} Spec.Change.write{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.members{a0} == Spec.Change.write{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.members{a0} Spec.Change.resolve{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Change.members{a0} == Spec.Change.resolve{b0, b1, b2}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.members{a0} Spec.Change.merge{b0}:
-      h => Empty.absurd(
-        {Spec.Change.members{a0} == Spec.Change.merge{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.members{a0} Spec.Change.move{b0}:
-      h => Empty.absurd(
-        {Spec.Change.members{a0} == Spec.Change.move{b0}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Change.members{a0} Spec.Change.mark{b0, b1}:
-      h => Empty.absurd(
-        {Spec.Change.members{a0} == Spec.Change.mark{b0, b1}: Spec.Change},
-        Shared.Bool.false_ne_true(h)
-      )
-
-# the laws of Spec.Change.is_eq
-def Change.laws() -> Shared.Eq.Laws(Spec.Change, Spec.Change.is_eq):
-  (Change.is_eq_refl, a => b => Change.is_eq_sound(a, b))
-
-# Ask.is_eq is True for a value and itself
-def Ask.is_eq_refl(a: Spec.Ask) -> {Spec.Ask.is_eq(a, a) == True{}: Bool}:
-  match a:
-    case Spec.Ask.start{x0}:
-      Shared.List.is_eq_refl(~String, ~String.eq, ~Texts.String.laws(), x0)
-    case Spec.Ask.on{+x0, +x1, +x2}:
-      Shared.Bool.and_both(
-        Ledgers.Id.is_eq(x0, x0),
-        Bool.and(
-          Shared.Maybe.is_eq(~Spec.Line, ~Spec.Line.is_eq, x1, x1),
-          Spec.Change.is_eq(x2, x2)
+          ~Spec.Id.code,
+          ~Spec.Id.code.read,
+          Id.code_laws(),
+          v1,
+          Codes.Code.list(~Spec.Member, ~Spec.Member.code, v2, r)
         )
-      )(
-        Ledgers.Id.is_eq_refl(x0)
-      )(
-        Shared.Bool.and_both(
-          Shared.Maybe.is_eq(~Spec.Line, ~Spec.Line.is_eq, x1, x1),
-          Spec.Change.is_eq(x2, x2)
-        )(
-          Shared.Maybe.is_eq_refl(~Spec.Line, ~Spec.Line.is_eq, ~Line.laws(), x1)
-        )(Change.is_eq_refl(x2))
-      )
-
-# Ask.is_eq is True only for equal values
-def Ask.is_eq_sound(
-  a: Spec.Ask,
-  b: Spec.Ask
-) -> {Spec.Ask.is_eq(a, b) == True{}: Bool} -> {a == b: Spec.Ask}:
-  match a b:
-    case Spec.Ask.start{x0} Spec.Ask.start{y0}:
-      +h0 =>
-        %Shared.List.is_eq_sound(
-          ~String,
-          ~String.eq,
-          ~Texts.String.laws(),
-          x0,
-          y0
-        )(h0): {Spec.Ask.start{x0} == Spec.Ask.start{_}: Spec.Ask}
-        {==}
-    case Spec.Ask.on{+x0, +x1, +x2} Spec.Ask.on{+y0, +y1, +y2}:
-      +h0 =>
-        +h1 = Shared.Bool.and_true_right(
-          Ledgers.Id.is_eq(x0, y0),
-          Bool.and(
-            Shared.Maybe.is_eq(~Spec.Line, ~Spec.Line.is_eq, x1, y1),
-            Spec.Change.is_eq(x2, y2)
-          )
-        )(h0)
-        +h2 = Shared.Bool.and_true_right(
-          Shared.Maybe.is_eq(~Spec.Line, ~Spec.Line.is_eq, x1, y1),
-          Spec.Change.is_eq(x2, y2)
-        )(h1)
-        %Ledgers.Id.is_eq_sound(
-          x0,
-          y0
-        )(
-          Shared.Bool.and_true_left(
-            Ledgers.Id.is_eq(x0, y0),
-            Bool.and(
-              Shared.Maybe.is_eq(~Spec.Line, ~Spec.Line.is_eq, x1, y1),
-              Spec.Change.is_eq(x2, y2)
+      ):
+        {
+          Codes.Read.then(
+            Maybe<&2, Ledgers.Id>,
+            Spec.Change,
+            _,
+            x1 => q2 => Codes.Read.then(
+              List<&2, Spec.Member>,
+              Spec.Change,
+              Codes.Code.list.read(~Spec.Member, ~Spec.Member.code.read, q2),
+              x2 => q3 => Some{Codes.Read{Spec.Change.make{v0, x1, x2}, q3}}
             )
-          )(h0)
-        ): {Spec.Ask.on{x0, x1, x2} == Spec.Ask.on{_, y1, y2}: Spec.Ask}
-        %Shared.Maybe.is_eq_sound(
+          )
+            == Some{Codes.Read{Spec.Change.make{v0, v1, v2}, r}}: Maybe<&2, Codes.Read<Spec.Change>>
+        }
+      %Equal.sym(
+        Maybe<&2, Codes.Read<List<&2, Spec.Member>>>,
+        Codes.Code.list.read(
+          ~Spec.Member,
+          ~Spec.Member.code.read,
+          Codes.Code.list(~Spec.Member, ~Spec.Member.code, v2, r)
+        ),
+        Some{Codes.Read{v2, r}},
+        Codes.Code.list_read(
+          ~Spec.Member,
+          ~Spec.Member.code,
+          ~Spec.Member.code.read,
+          ~Member.code_laws(),
+          v2,
+          r
+        )
+      ):
+        {
+          Codes.Read.then(
+            List<&2, Spec.Member>,
+            Spec.Change,
+            _,
+            x2 => q3 => Some{Codes.Read{Spec.Change.make{v0, v1, x2}, q3}}
+          )
+            == Some{Codes.Read{Spec.Change.make{v0, v1, v2}, r}}: Maybe<&2, Codes.Read<Spec.Change>>
+        }
+      {==}
+    case Spec.Change.own{v0}:
+      %Equal.sym(
+        Maybe<&2, Codes.Read<List<&2, String>>>,
+        Codes.Code.list.read(
+          ~String,
+          ~Codes.Code.text.read,
+          Codes.Code.list(~String, ~Codes.Code.text, v0, r)
+        ),
+        Some{Codes.Read{v0, r}},
+        Codes.Code.list_read(
+          ~String,
+          ~Codes.Code.text,
+          ~Codes.Code.text.read,
+          ~Text.code_laws(),
+          v0,
+          r
+        )
+      ):
+        {
+          Codes.Read.then(
+            List<&2, String>,
+            Spec.Change,
+            _,
+            x0 => q1 => Some{Codes.Read{Spec.Change.own{x0}, q1}}
+          )
+            == Some{Codes.Read{Spec.Change.own{v0}, r}}: Maybe<&2, Codes.Read<Spec.Change>>
+        }
+      {==}
+    case Spec.Change.write{v0, +v1, +v2}:
+      %Equal.sym(
+        Maybe<&2, Codes.Read<Resources.Name>>,
+        Spec.Name.code.read(
+          Spec.Name.code(
+            v0,
+            Codes.Code.maybe(~Ledgers.Id, ~Spec.Id.code, v1, Spec.Content.code(v2, r))
+          )
+        ),
+        Some{
+          Codes.Read{v0, Codes.Code.maybe(~Ledgers.Id, ~Spec.Id.code, v1, Spec.Content.code(v2, r))}
+        },
+        Name.code_read(
+          v0,
+          Codes.Code.maybe(~Ledgers.Id, ~Spec.Id.code, v1, Spec.Content.code(v2, r))
+        )
+      ):
+        {
+          Codes.Read.then(
+            Resources.Name,
+            Spec.Change,
+            _,
+            x0 => q1 => Codes.Read.then(
+              Maybe<&2, Ledgers.Id>,
+              Spec.Change,
+              Codes.Code.maybe.read(~Ledgers.Id, ~Spec.Id.code.read, q1),
+              x1 => q2 => Codes.Read.then(
+                Spec.Content,
+                Spec.Change,
+                Spec.Content.code.read(q2),
+                x2 => q3 => Some{Codes.Read{Spec.Change.write{x0, x1, x2}, q3}}
+              )
+            )
+          )
+            == Some{
+              Codes.Read{Spec.Change.write{v0, v1, v2}, r}
+            }: Maybe<&2, Codes.Read<Spec.Change>>
+        }
+      %Equal.sym(
+        Maybe<&2, Codes.Read<Maybe<&2, Ledgers.Id>>>,
+        Codes.Code.maybe.read(
+          ~Ledgers.Id,
+          ~Spec.Id.code.read,
+          Codes.Code.maybe(~Ledgers.Id, ~Spec.Id.code, v1, Spec.Content.code(v2, r))
+        ),
+        Some{Codes.Read{v1, Spec.Content.code(v2, r)}},
+        Codes.Code.maybe_read(
+          ~Ledgers.Id,
+          ~Spec.Id.code,
+          ~Spec.Id.code.read,
+          Id.code_laws(),
+          v1,
+          Spec.Content.code(v2, r)
+        )
+      ):
+        {
+          Codes.Read.then(
+            Maybe<&2, Ledgers.Id>,
+            Spec.Change,
+            _,
+            x1 => q2 => Codes.Read.then(
+              Spec.Content,
+              Spec.Change,
+              Spec.Content.code.read(q2),
+              x2 => q3 => Some{Codes.Read{Spec.Change.write{v0, x1, x2}, q3}}
+            )
+          )
+            == Some{
+              Codes.Read{Spec.Change.write{v0, v1, v2}, r}
+            }: Maybe<&2, Codes.Read<Spec.Change>>
+        }
+      %Equal.sym(
+        Maybe<&2, Codes.Read<Spec.Content>>,
+        Spec.Content.code.read(Spec.Content.code(v2, r)),
+        Some{Codes.Read{v2, r}},
+        Content.code_read(v2, r)
+      ):
+        {
+          Codes.Read.then(
+            Spec.Content,
+            Spec.Change,
+            _,
+            x2 => q3 => Some{Codes.Read{Spec.Change.write{v0, v1, x2}, q3}}
+          )
+            == Some{
+              Codes.Read{Spec.Change.write{v0, v1, v2}, r}
+            }: Maybe<&2, Codes.Read<Spec.Change>>
+        }
+      {==}
+    case Spec.Change.resolve{v0, +v1, +v2}:
+      %Equal.sym(
+        Maybe<&2, Codes.Read<Ledgers.Id>>,
+        Spec.Id.code.read(Spec.Id.code(v0, Spec.Name.code(v1, Spec.Content.code(v2, r)))),
+        Some{Codes.Read{v0, Spec.Name.code(v1, Spec.Content.code(v2, r))}},
+        Id.code_read(v0, Spec.Name.code(v1, Spec.Content.code(v2, r)))
+      ):
+        {
+          Codes.Read.then(
+            Ledgers.Id,
+            Spec.Change,
+            _,
+            x0 => q1 => Codes.Read.then(
+              Resources.Name,
+              Spec.Change,
+              Spec.Name.code.read(q1),
+              x1 => q2 => Codes.Read.then(
+                Spec.Content,
+                Spec.Change,
+                Spec.Content.code.read(q2),
+                x2 => q3 => Some{Codes.Read{Spec.Change.resolve{x0, x1, x2}, q3}}
+              )
+            )
+          )
+            == Some{
+              Codes.Read{Spec.Change.resolve{v0, v1, v2}, r}
+            }: Maybe<&2, Codes.Read<Spec.Change>>
+        }
+      %Equal.sym(
+        Maybe<&2, Codes.Read<Resources.Name>>,
+        Spec.Name.code.read(Spec.Name.code(v1, Spec.Content.code(v2, r))),
+        Some{Codes.Read{v1, Spec.Content.code(v2, r)}},
+        Name.code_read(v1, Spec.Content.code(v2, r))
+      ):
+        {
+          Codes.Read.then(
+            Resources.Name,
+            Spec.Change,
+            _,
+            x1 => q2 => Codes.Read.then(
+              Spec.Content,
+              Spec.Change,
+              Spec.Content.code.read(q2),
+              x2 => q3 => Some{Codes.Read{Spec.Change.resolve{v0, x1, x2}, q3}}
+            )
+          )
+            == Some{
+              Codes.Read{Spec.Change.resolve{v0, v1, v2}, r}
+            }: Maybe<&2, Codes.Read<Spec.Change>>
+        }
+      %Equal.sym(
+        Maybe<&2, Codes.Read<Spec.Content>>,
+        Spec.Content.code.read(Spec.Content.code(v2, r)),
+        Some{Codes.Read{v2, r}},
+        Content.code_read(v2, r)
+      ):
+        {
+          Codes.Read.then(
+            Spec.Content,
+            Spec.Change,
+            _,
+            x2 => q3 => Some{Codes.Read{Spec.Change.resolve{v0, v1, x2}, q3}}
+          )
+            == Some{
+              Codes.Read{Spec.Change.resolve{v0, v1, v2}, r}
+            }: Maybe<&2, Codes.Read<Spec.Change>>
+        }
+      {==}
+    case Spec.Change.merge{v0}:
+      %Equal.sym(
+        Maybe<&2, Codes.Read<Ledgers.Id>>,
+        Spec.Id.code.read(Spec.Id.code(v0, r)),
+        Some{Codes.Read{v0, r}},
+        Id.code_read(v0, r)
+      ):
+        {
+          Codes.Read.then(
+            Ledgers.Id,
+            Spec.Change,
+            _,
+            x0 => q1 => Some{Codes.Read{Spec.Change.merge{x0}, q1}}
+          )
+            == Some{Codes.Read{Spec.Change.merge{v0}, r}}: Maybe<&2, Codes.Read<Spec.Change>>
+        }
+      {==}
+    case Spec.Change.move{v0}:
+      %Equal.sym(
+        Maybe<&2, Codes.Read<Ledgers.Id>>,
+        Spec.Id.code.read(Spec.Id.code(v0, r)),
+        Some{Codes.Read{v0, r}},
+        Id.code_read(v0, r)
+      ):
+        {
+          Codes.Read.then(
+            Ledgers.Id,
+            Spec.Change,
+            _,
+            x0 => q1 => Some{Codes.Read{Spec.Change.move{x0}, q1}}
+          )
+            == Some{Codes.Read{Spec.Change.move{v0}, r}}: Maybe<&2, Codes.Read<Spec.Change>>
+        }
+      {==}
+    case Spec.Change.mark{v0, +v1}:
+      %Equal.sym(
+        Maybe<&2, Codes.Read<String>>,
+        Codes.Code.text.read(Codes.Code.text(v0, Codes.Code.text(v1, r))),
+        Some{Codes.Read{v0, Codes.Code.text(v1, r)}},
+        Codes.Code.text_read(v0, Codes.Code.text(v1, r))
+      ):
+        {
+          Codes.Read.then(
+            String,
+            Spec.Change,
+            _,
+            x0 => q1 => Codes.Read.then(
+              String,
+              Spec.Change,
+              Codes.Code.text.read(q1),
+              x1 => q2 => Some{Codes.Read{Spec.Change.mark{x0, x1}, q2}}
+            )
+          )
+            == Some{Codes.Read{Spec.Change.mark{v0, v1}, r}}: Maybe<&2, Codes.Read<Spec.Change>>
+        }
+      %Equal.sym(
+        Maybe<&2, Codes.Read<String>>,
+        Codes.Code.text.read(Codes.Code.text(v1, r)),
+        Some{Codes.Read{v1, r}},
+        Codes.Code.text_read(v1, r)
+      ):
+        {
+          Codes.Read.then(
+            String,
+            Spec.Change,
+            _,
+            x1 => q2 => Some{Codes.Read{Spec.Change.mark{v0, x1}, q2}}
+          )
+            == Some{Codes.Read{Spec.Change.mark{v0, v1}, r}}: Maybe<&2, Codes.Read<Spec.Change>>
+        }
+      {==}
+    case Spec.Change.members{v0}:
+      %Equal.sym(
+        Maybe<&2, Codes.Read<List<&2, Spec.Member>>>,
+        Codes.Code.list.read(
+          ~Spec.Member,
+          ~Spec.Member.code.read,
+          Codes.Code.list(~Spec.Member, ~Spec.Member.code, v0, r)
+        ),
+        Some{Codes.Read{v0, r}},
+        Codes.Code.list_read(
+          ~Spec.Member,
+          ~Spec.Member.code,
+          ~Spec.Member.code.read,
+          ~Member.code_laws(),
+          v0,
+          r
+        )
+      ):
+        {
+          Codes.Read.then(
+            List<&2, Spec.Member>,
+            Spec.Change,
+            _,
+            x0 => q1 => Some{Codes.Read{Spec.Change.members{x0}, q1}}
+          )
+            == Some{Codes.Read{Spec.Change.members{v0}, r}}: Maybe<&2, Codes.Read<Spec.Change>>
+        }
+      {==}
+
+# a request reads back
+def Ask.code_read(
+  q: Spec.Ask,
+  +r: List<&2, U32>
+) -> {
+  Spec.Ask.code.read(Spec.Ask.code(q, r)) == Some{Codes.Read{q, r}}: Maybe<&2, Codes.Read<Spec.Ask>>
+}:
+  match q:
+    case Spec.Ask.start{v0}:
+      %Equal.sym(
+        Maybe<&2, Codes.Read<List<&2, String>>>,
+        Codes.Code.list.read(
+          ~String,
+          ~Codes.Code.text.read,
+          Codes.Code.list(~String, ~Codes.Code.text, v0, r)
+        ),
+        Some{Codes.Read{v0, r}},
+        Codes.Code.list_read(
+          ~String,
+          ~Codes.Code.text,
+          ~Codes.Code.text.read,
+          ~Text.code_laws(),
+          v0,
+          r
+        )
+      ):
+        {
+          Codes.Read.then(
+            List<&2, String>,
+            Spec.Ask,
+            _,
+            x0 => q1 => Some{Codes.Read{Spec.Ask.start{x0}, q1}}
+          )
+            == Some{Codes.Read{Spec.Ask.start{v0}, r}}: Maybe<&2, Codes.Read<Spec.Ask>>
+        }
+      {==}
+    case Spec.Ask.on{v0, +v1, +v2}:
+      %Equal.sym(
+        Maybe<&2, Codes.Read<Ledgers.Id>>,
+        Spec.Id.code.read(
+          Spec.Id.code(
+            v0,
+            Codes.Code.maybe(~Spec.Line, ~Spec.Line.code, v1, Spec.Change.code(v2, r))
+          )
+        ),
+        Some{
+          Codes.Read{v0, Codes.Code.maybe(~Spec.Line, ~Spec.Line.code, v1, Spec.Change.code(v2, r))}
+        },
+        Id.code_read(v0, Codes.Code.maybe(~Spec.Line, ~Spec.Line.code, v1, Spec.Change.code(v2, r)))
+      ):
+        {
+          Codes.Read.then(
+            Ledgers.Id,
+            Spec.Ask,
+            _,
+            x0 => q1 => Codes.Read.then(
+              Maybe<&2, Spec.Line>,
+              Spec.Ask,
+              Codes.Code.maybe.read(~Spec.Line, ~Spec.Line.code.read, q1),
+              x1 => q2 => Codes.Read.then(
+                Spec.Change,
+                Spec.Ask,
+                Spec.Change.code.read(q2),
+                x2 => q3 => Some{Codes.Read{Spec.Ask.on{x0, x1, x2}, q3}}
+              )
+            )
+          )
+            == Some{Codes.Read{Spec.Ask.on{v0, v1, v2}, r}}: Maybe<&2, Codes.Read<Spec.Ask>>
+        }
+      %Equal.sym(
+        Maybe<&2, Codes.Read<Maybe<&2, Spec.Line>>>,
+        Codes.Code.maybe.read(
           ~Spec.Line,
-          ~Spec.Line.is_eq,
-          Line.is_eq_sound,
-          x1,
-          y1
-        )(
-          Shared.Bool.and_true_left(
-            Shared.Maybe.is_eq(~Spec.Line, ~Spec.Line.is_eq, x1, y1),
-            Spec.Change.is_eq(x2, y2)
-          )(h1)
-        ): {Spec.Ask.on{x0, x1, x2} == Spec.Ask.on{x0, _, y2}: Spec.Ask}
-        %Change.is_eq_sound(
-          x2,
-          y2
-        )(h2): {Spec.Ask.on{x0, x1, x2} == Spec.Ask.on{x0, x1, _}: Spec.Ask}
-        {==}
-    case Spec.Ask.start{a0} Spec.Ask.on{b0, b1, b2}:
-      h => Empty.absurd(
-        {Spec.Ask.start{a0} == Spec.Ask.on{b0, b1, b2}: Spec.Ask},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Ask.on{a0, a1, a2} Spec.Ask.start{b0}:
-      h => Empty.absurd(
-        {Spec.Ask.on{a0, a1, a2} == Spec.Ask.start{b0}: Spec.Ask},
-        Shared.Bool.false_ne_true(h)
-      )
+          ~Spec.Line.code.read,
+          Codes.Code.maybe(~Spec.Line, ~Spec.Line.code, v1, Spec.Change.code(v2, r))
+        ),
+        Some{Codes.Read{v1, Spec.Change.code(v2, r)}},
+        Codes.Code.maybe_read(
+          ~Spec.Line,
+          ~Spec.Line.code,
+          ~Spec.Line.code.read,
+          Line.code_laws(),
+          v1,
+          Spec.Change.code(v2, r)
+        )
+      ):
+        {
+          Codes.Read.then(
+            Maybe<&2, Spec.Line>,
+            Spec.Ask,
+            _,
+            x1 => q2 => Codes.Read.then(
+              Spec.Change,
+              Spec.Ask,
+              Spec.Change.code.read(q2),
+              x2 => q3 => Some{Codes.Read{Spec.Ask.on{v0, x1, x2}, q3}}
+            )
+          )
+            == Some{Codes.Read{Spec.Ask.on{v0, v1, v2}, r}}: Maybe<&2, Codes.Read<Spec.Ask>>
+        }
+      %Equal.sym(
+        Maybe<&2, Codes.Read<Spec.Change>>,
+        Spec.Change.code.read(Spec.Change.code(v2, r)),
+        Some{Codes.Read{v2, r}},
+        Change.code_read(v2, r)
+      ):
+        {
+          Codes.Read.then(
+            Spec.Change,
+            Spec.Ask,
+            _,
+            x2 => q3 => Some{Codes.Read{Spec.Ask.on{v0, v1, x2}, q3}}
+          )
+            == Some{Codes.Read{Spec.Ask.on{v0, v1, v2}, r}}: Maybe<&2, Codes.Read<Spec.Ask>>
+        }
+      {==}
 
-# the laws of Spec.Ask.is_eq
+# the laws of the request code
+def Ask.code_laws() -> Codes.Code.Laws(Spec.Ask, Spec.Ask.code, Spec.Ask.code.read):
+  x => r => Ask.code_read(x, r)
+
+# the laws of Spec.Ask.is_eq: two requests are the same exactly when their codes
+# are
 def Ask.laws() -> Shared.Eq.Laws(Spec.Ask, Spec.Ask.is_eq):
-  (Ask.is_eq_refl, a => b => Ask.is_eq_sound(a, b))
-
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+  Codes.Code.eq_laws(~Spec.Ask, ~Spec.Ask.code, ~Spec.Ask.code.read, ~Ask.code_laws())
 
 # Laws
 # ----

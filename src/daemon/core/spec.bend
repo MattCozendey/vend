@@ -4,6 +4,7 @@ import ../shared/formats.bend as Formats
 import ../shared/ledger.bend as Ledgers
 import ../shared/resources.bend as Resources
 import ../shared/shared/reach.bend as Reaches
+import ../shared/shared/shared/code.bend as Codes
 import ../shared/shared/text.bend as Texts
 import ../shared/shared/trie.bend as Tries
 
@@ -85,16 +86,6 @@ def Envelope.time(e: Envelope) -> String:
 # Equality
 # --------
 
-# a and b are the same line
-def Line.is_eq(a: Line, b: Line) -> Bool:
-  match a b:
-    case Line.branch{x} Line.branch{y}:
-      String.eq(x, y)
-    case Line.group{x} Line.group{y}:
-      String.eq(x, y)
-    case _ _:
-      False{}
-
 # a and b are the same member
 def Member.is_eq(a: Member, b: Member) -> Bool:
   match a b:
@@ -105,64 +96,339 @@ def Member.is_eq(a: Member, b: Member) -> Bool:
     case _ _:
       False{}
 
-# a and b are the same content
-def Content.is_eq(a: Content, b: Content) -> Bool:
-  match a b:
-    case Content.bytes{x} Content.bytes{y}:
-      Shared.List.is_eq(~U32, ~U32.is_eq, x, y)
-    case Content.of{x} Content.of{y}:
-      Ledgers.Id.is_eq(x, y)
-    case _ _:
-      False{}
+# Codes
+# -----
+# A request is sent and stored as its code (Codes); two requests are the same
+# exactly when their codes are.
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality keeps each and as one value for the proofs to split on
-# a and b are the same change
-def Change.is_eq(a: Change, b: Change) -> Bool:
-  match a b:
-    case Change.make{l1, v1, m1} Change.make{l2, v2, m2}:
-      Bool.and(
-        Line.is_eq(l1, l2),
-        Bool.and(
-          Shared.Maybe.is_eq(~Ledgers.Id, ~Ledgers.Id.is_eq, v1, v2),
-          Shared.List.is_eq(~Member, ~Member.is_eq, m1, m2)
+# the request i, then r
+def Id.code(i: Ledgers.Id, r: List<&2, U32>) -> List<&2, U32>:
+  match i:
+    case Ledgers.Id{w, q}:
+      Codes.Code.text(w, Codes.Code.text(q, r))
+
+# a request ID
+def Id.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ledgers.Id>>:
+  Codes.Read.then(
+    String,
+    Ledgers.Id,
+    Codes.Code.text.read(ts),
+    w => r => Codes.Read.then(
+      String,
+      Ledgers.Id,
+      Codes.Code.text.read(r),
+      q => r2 => Some{Codes.Read{Ledgers.Id{w, q}, r2}}
+    )
+  )
+
+# the resource n, then r
+def Name.code(n: Resources.Name, r: List<&2, U32>) -> List<&2, U32>:
+  match n:
+    case Resources.Name{t}:
+      Codes.Code.text(t, r)
+
+# a resource name
+def Name.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Resources.Name>>:
+  Codes.Read.then(
+    String,
+    Resources.Name,
+    Codes.Code.text.read(ts),
+    t => r => Some{Codes.Read{Resources.Name{t}, r}}
+  )
+
+# the token x, then r
+def U32.code(x: U32, r: List<&2, U32>) -> List<&2, U32>:
+  x <> r
+
+# a token
+def U32.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<U32>>:
+  match ts:
+    case Nil{}:
+      None{}
+    case Con{x, r}:
+      Some{Codes.Read{x, r}}
+
+# the tag k and the text t, then r
+def Tag.text(k: U32, t: String, r: List<&2, U32>) -> List<&2, U32>:
+  k <> Codes.Code.text(t, r)
+
+# the line l, then r
+def Line.code(l: Line, r: List<&2, U32>) -> List<&2, U32>:
+  match l:
+    case Line.branch{n}:
+      Tag.text(0, n, r)
+    case Line.group{n}:
+      Tag.text(1, n, r)
+
+# a line
+def Line.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Line>>:
+  match ts:
+    case Nil{}:
+      None{}
+    case Con{x, r}:
+      Codes.Read.then(
+        String,
+        Line,
+        Codes.Code.text.read(r),
+        +n => r2 => Some{
+          Codes.Read{
+            Shared.Bool.when(Line, U32.is_eq(x, 0), u => Line.branch{n}, u => Line.group{n}),
+            r2
+          }
+        }
+      )
+
+# the member m, then r
+def Member.code(m: Member, r: List<&2, U32>) -> List<&2, U32>:
+  match m:
+    case Member.node{n}:
+      Tag.text(0, n, r)
+    case Member.group{n}:
+      Tag.text(1, n, r)
+
+# a member
+def Member.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Member>>:
+  match ts:
+    case Nil{}:
+      None{}
+    case Con{x, r}:
+      Codes.Read.then(
+        String,
+        Member,
+        Codes.Code.text.read(r),
+        +n => r2 => Some{
+          Codes.Read{
+            Shared.Bool.when(Member, U32.is_eq(x, 0), u => Member.node{n}, u => Member.group{n}),
+            r2
+          }
+        }
+      )
+
+# the content c, then r
+def Content.code(c: Content, r: List<&2, U32>) -> List<&2, U32>:
+  match c:
+    case Content.bytes{b}:
+      0 <> Codes.Code.list(~U32, ~U32.code, b, r)
+    case Content.of{v}:
+      1 <> Id.code(v, r)
+
+# a content
+def Content.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Content>>:
+  match ts:
+    case Nil{}:
+      None{}
+    case Con{x, +r}:
+      Shared.Bool.when(
+        Maybe<&2, Codes.Read<Content>>,
+        U32.is_eq(x, 0),
+        u => Codes.Read.then(
+          List<&2, U32>,
+          Content,
+          Codes.Code.list.read(~U32, ~U32.code.read, r),
+          b => r2 => Some{Codes.Read{Content.bytes{b}, r2}}
+        ),
+        u => Codes.Read.then(
+          Ledgers.Id,
+          Content,
+          Id.code.read(r),
+          v => r2 => Some{Codes.Read{Content.of{v}, r2}}
         )
       )
-    case Change.own{o1} Change.own{o2}:
-      Shared.List.is_eq(~String, ~String.eq, o1, o2)
-    case Change.write{n1, v1, c1} Change.write{n2, v2, c2}:
-      Bool.and(
-        Resources.Name.is_eq(n1, n2),
-        Bool.and(Shared.Maybe.is_eq(~Ledgers.Id, ~Ledgers.Id.is_eq, v1, v2), Content.is_eq(c1, c2))
-      )
-    case Change.resolve{k1, n1, c1} Change.resolve{k2, n2, c2}:
-      Bool.and(
-        Ledgers.Id.is_eq(k1, k2),
-        Bool.and(Resources.Name.is_eq(n1, n2), Content.is_eq(c1, c2))
-      )
-    case Change.merge{v1} Change.merge{v2}:
-      Ledgers.Id.is_eq(v1, v2)
-    case Change.move{v1} Change.move{v2}:
-      Ledgers.Id.is_eq(v1, v2)
-    case Change.mark{m1, t1} Change.mark{m2, t2}:
-      Bool.and(String.eq(m1, m2), String.eq(t1, t2))
-    case Change.members{m1} Change.members{m2}:
-      Shared.List.is_eq(~Member, ~Member.is_eq, m1, m2)
-    case _ _:
-      False{}
 
-# a and b are the same request
-def Ask.is_eq(a: Ask, b: Ask) -> Bool:
-  match a b:
-    case Ask.start{o1} Ask.start{o2}:
-      Shared.List.is_eq(~String, ~String.eq, o1, o2)
-    case Ask.on{s1, l1, c1} Ask.on{s2, l2, c2}:
-      Bool.and(
-        Ledgers.Id.is_eq(s1, s2),
-        Bool.and(Shared.Maybe.is_eq(~Line, ~Line.is_eq, l1, l2), Change.is_eq(c1, c2))
+# the change c, then r
+def Change.code(c: Change, r: List<&2, U32>) -> List<&2, U32>:
+  match c:
+    case Change.make{l, at, ms}:
+      0
+        <> Line.code(
+          l,
+          Codes.Code.maybe(~Ledgers.Id, ~Id.code, at, Codes.Code.list(~Member, ~Member.code, ms, r))
+        )
+    case Change.own{os}:
+      1 <> Codes.Code.list(~String, ~Codes.Code.text, os, r)
+    case Change.write{n, base, x}:
+      2 <> Name.code(n, Codes.Code.maybe(~Ledgers.Id, ~Id.code, base, Content.code(x, r)))
+    case Change.resolve{k, n, x}:
+      3 <> Id.code(k, Name.code(n, Content.code(x, r)))
+    case Change.merge{v}:
+      4 <> Id.code(v, r)
+    case Change.move{v}:
+      5 <> Id.code(v, r)
+    case Change.mark{m, t}:
+      6 <> Codes.Code.text(m, Codes.Code.text(t, r))
+    case Change.members{ms}:
+      7 <> Codes.Code.list(~Member, ~Member.code, ms, r)
+
+# a change whose tag x is not 0, 1 or 2, from the tokens r after it
+def Change.code.read.rest(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Change>>:
+  Shared.Bool.when(
+    Maybe<&2, Codes.Read<Change>>,
+    U32.is_eq(x, 3),
+    u => Codes.Read.then(
+      Ledgers.Id,
+      Change,
+      Id.code.read(r),
+      k => r1 => Codes.Read.then(
+        Resources.Name,
+        Change,
+        Name.code.read(r1),
+        n => r2 => Codes.Read.then(
+          Content,
+          Change,
+          Content.code.read(r2),
+          c => r3 => Some{Codes.Read{Change.resolve{k, n, c}, r3}}
+        )
       )
-    case _ _:
-      False{}
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+    ),
+    u => Shared.Bool.when(
+      Maybe<&2, Codes.Read<Change>>,
+      U32.is_eq(x, 4),
+      w => Codes.Read.then(
+        Ledgers.Id,
+        Change,
+        Id.code.read(r),
+        v => r1 => Some{Codes.Read{Change.merge{v}, r1}}
+      ),
+      w => Shared.Bool.when(
+        Maybe<&2, Codes.Read<Change>>,
+        U32.is_eq(x, 5),
+        w2 => Codes.Read.then(
+          Ledgers.Id,
+          Change,
+          Id.code.read(r),
+          v => r1 => Some{Codes.Read{Change.move{v}, r1}}
+        ),
+        w2 => Shared.Bool.when(
+          Maybe<&2, Codes.Read<Change>>,
+          U32.is_eq(x, 6),
+          w3 => Codes.Read.then(
+            String,
+            Change,
+            Codes.Code.text.read(r),
+            m => r1 => Codes.Read.then(
+              String,
+              Change,
+              Codes.Code.text.read(r1),
+              t => r2 => Some{Codes.Read{Change.mark{m, t}, r2}}
+            )
+          ),
+          w3 => Codes.Read.then(
+            List<&2, Member>,
+            Change,
+            Codes.Code.list.read(~Member, ~Member.code.read, r),
+            ms => r1 => Some{Codes.Read{Change.members{ms}, r1}}
+          )
+        )
+      )
+    )
+  )
+
+# a change whose tag is x, from the tokens r after it
+def Change.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Change>>:
+  Shared.Bool.when(
+    Maybe<&2, Codes.Read<Change>>,
+    U32.is_eq(x, 0),
+    u => Codes.Read.then(
+      Line,
+      Change,
+      Line.code.read(r),
+      l => r1 => Codes.Read.then(
+        Maybe<&2, Ledgers.Id>,
+        Change,
+        Codes.Code.maybe.read(~Ledgers.Id, ~Id.code.read, r1),
+        at => r2 => Codes.Read.then(
+          List<&2, Member>,
+          Change,
+          Codes.Code.list.read(~Member, ~Member.code.read, r2),
+          ms => r3 => Some{Codes.Read{Change.make{l, at, ms}, r3}}
+        )
+      )
+    ),
+    u => Shared.Bool.when(
+      Maybe<&2, Codes.Read<Change>>,
+      U32.is_eq(x, 1),
+      w => Codes.Read.then(
+        List<&2, String>,
+        Change,
+        Codes.Code.list.read(~String, ~Codes.Code.text.read, r),
+        os => r1 => Some{Codes.Read{Change.own{os}, r1}}
+      ),
+      w => Shared.Bool.when(
+        Maybe<&2, Codes.Read<Change>>,
+        U32.is_eq(x, 2),
+        w2 => Codes.Read.then(
+          Resources.Name,
+          Change,
+          Name.code.read(r),
+          n => r1 => Codes.Read.then(
+            Maybe<&2, Ledgers.Id>,
+            Change,
+            Codes.Code.maybe.read(~Ledgers.Id, ~Id.code.read, r1),
+            base => r2 => Codes.Read.then(
+              Content,
+              Change,
+              Content.code.read(r2),
+              c => r3 => Some{Codes.Read{Change.write{n, base, c}, r3}}
+            )
+          )
+        ),
+        w2 => Change.code.read.rest(x, r)
+      )
+    )
+  )
+
+# a change
+def Change.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Change>>:
+  match ts:
+    case Nil{}:
+      None{}
+    case Con{x, r}:
+      Change.code.read.of(x, r)
+
+# the request q, then r
+def Ask.code(q: Ask, r: List<&2, U32>) -> List<&2, U32>:
+  match q:
+    case Ask.start{os}:
+      0 <> Codes.Code.list(~String, ~Codes.Code.text, os, r)
+    case Ask.on{st, l, c}:
+      1 <> Id.code(st, Codes.Code.maybe(~Line, ~Line.code, l, Change.code(c, r)))
+
+# a request
+def Ask.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ask>>:
+  match ts:
+    case Nil{}:
+      None{}
+    case Con{x, +r}:
+      Shared.Bool.when(
+        Maybe<&2, Codes.Read<Ask>>,
+        U32.is_eq(x, 0),
+        u => Codes.Read.then(
+          List<&2, String>,
+          Ask,
+          Codes.Code.list.read(~String, ~Codes.Code.text.read, r),
+          os => r1 => Some{Codes.Read{Ask.start{os}, r1}}
+        ),
+        u => Codes.Read.then(
+          Ledgers.Id,
+          Ask,
+          Id.code.read(r),
+          st => r1 => Codes.Read.then(
+            Maybe<&2, Line>,
+            Ask,
+            Codes.Code.maybe.read(~Line, ~Line.code.read, r1),
+            l => r2 => Codes.Read.then(
+              Change,
+              Ask,
+              Change.code.read(r2),
+              c => r3 => Some{Codes.Read{Ask.on{st, l, c}, r3}}
+            )
+          )
+        )
+      )
+
+# a and b are the same request: they have the same code
+def Ask.is_eq(a: Ask, b: Ask) -> Bool:
+  Codes.Code.is_eq(~Ask, ~Ask.code, a, b)
 
 # Lines
 # -----
@@ -601,7 +867,11 @@ def Src.of(s: State(), v: Maybe<&2, Ledgers.Id>) -> Src:
       Src.at(i, Ledgers.State.asked(~Ask, s, i))
 
 # the steps of xs that took a request before v, newest first, after acc
-def Steps.before(xs: List<&2, Ledgers.Step<Ask>>, +v: Ledgers.Id, +acc: List<&2, Ledgers.Step<Ask>>) -> List<&2, Ledgers.Step<Ask>>:
+def Steps.before(
+  xs: List<&2, Ledgers.Step<Ask>>,
+  +v: Ledgers.Id,
+  +acc: List<&2, Ledgers.Step<Ask>>
+) -> List<&2, Ledgers.Step<Ask>>:
   match xs:
     case Nil{}:
       []
@@ -610,7 +880,16 @@ def Steps.before(xs: List<&2, Ledgers.Step<Ask>>, +v: Ledgers.Id, +acc: List<&2,
         List<&2, Ledgers.Step<Ask>>,
         Ledgers.Id.is_eq(i, v),
         u => acc,
-        u => Steps.before(r, v, Shared.Bool.when(List<&2, Ledgers.Step<Ask>>, k, w => Ledgers.Step{i, k, t, q, ms} <> acc, w => acc))
+        u => Steps.before(
+          r,
+          v,
+          Shared.Bool.when(
+            List<&2, Ledgers.Step<Ask>>,
+            k,
+            w => Ledgers.Step{i, k, t, q, ms} <> acc,
+            w => acc
+          )
+        )
       )
 
 # the steps of the line whose versions hold a version of q: the line that q
@@ -624,6 +903,7 @@ def Ask.steps(s: State(), q: Ask) -> List<&2, Ledgers.Step<Ask>>:
     case _:
       []
 
+# bend-lint: expect-begin bend-lint-rules/performance/deep_call_in_fork@information -- a merge reads its line once; the walks are linear
 # the bytes of the resource n from src; f steps at most
 def Res.go(+f: Nat, +s: State(), src: Src, +n: Resources.Name) -> Maybe<&2, Texts.Bytes()>:
   match f src:
@@ -635,18 +915,40 @@ def Res.go(+f: Nat, +s: State(), src: Src, +n: Resources.Name) -> Maybe<&2, Text
       Res.go(e, s, Src.cons{st, Src.steps{r}}, n)
     case 1n+e Src.before{v, q}:
       Res.go(e, s, Src.steps{Steps.before(Ask.steps(s, q), v, [])}, n)
-    case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.write{m, base, Content.bytes{x}}}, ms}, rest}:
-      Shared.Bool.when(Maybe<&2, Texts.Bytes()>, Resources.Name.is_eq(m, n), u => Some{x}, u => Res.go(e, s, rest, n))
-    case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.write{m, base, Content.of{+w}}}, ms}, rest}:
+    case 1n+e Src.cons{
+      Ledgers.Step{i, k, t, Ask.on{st, l, Change.write{m, base, Content.bytes{x}}}, ms},
+      rest
+    }:
+      Shared.Bool.when(
+        Maybe<&2, Texts.Bytes()>,
+        Resources.Name.is_eq(m, n),
+        u => Some{x},
+        u => Res.go(e, s, rest, n)
+      )
+    case 1n+e Src.cons{
+      Ledgers.Step{i, k, t, Ask.on{st, l, Change.write{m, base, Content.of{+w}}}, ms},
+      rest
+    }:
       Shared.Bool.when(
         Maybe<&2, Texts.Bytes()>,
         Resources.Name.is_eq(m, n),
         u => Res.go(e, s, Src.at(w, Ledgers.State.asked(~Ask, s, w)), n),
         u => Res.go(e, s, rest, n)
       )
-    case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.resolve{c, m, Content.bytes{x}}}, ms}, rest}:
-      Shared.Bool.when(Maybe<&2, Texts.Bytes()>, Resources.Name.is_eq(m, n), u => Some{x}, u => Res.go(e, s, rest, n))
-    case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.resolve{c, m, Content.of{+w}}}, ms}, rest}:
+    case 1n+e Src.cons{
+      Ledgers.Step{i, k, t, Ask.on{st, l, Change.resolve{c, m, Content.bytes{x}}}, ms},
+      rest
+    }:
+      Shared.Bool.when(
+        Maybe<&2, Texts.Bytes()>,
+        Resources.Name.is_eq(m, n),
+        u => Some{x},
+        u => Res.go(e, s, rest, n)
+      )
+    case 1n+e Src.cons{
+      Ledgers.Step{i, k, t, Ask.on{st, l, Change.resolve{c, m, Content.of{+w}}}, ms},
+      rest
+    }:
       Shared.Bool.when(
         Maybe<&2, Texts.Bytes()>,
         Resources.Name.is_eq(m, n),
@@ -655,7 +957,10 @@ def Res.go(+f: Nat, +s: State(), src: Src, +n: Resources.Name) -> Maybe<&2, Text
       )
     case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.move{+to}}, ms}, rest}:
       Res.go(e, s, Src.at(to, Ledgers.State.asked(~Ask, s, to)), n)
-    case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.make{ml, Some{+to}, mm}}, ms}, rest}:
+    case 1n+e Src.cons{
+      Ledgers.Step{i, k, t, Ask.on{st, l, Change.make{ml, Some{+to}, mm}}, ms},
+      rest
+    }:
       Res.go(e, s, Src.at(to, Ledgers.State.asked(~Ask, s, to)), n)
     case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.make{ml, None{}, mm}}, ms}, rest}:
       None{}
@@ -664,18 +969,16 @@ def Res.go(+f: Nat, +s: State(), src: Src, +n: Resources.Name) -> Maybe<&2, Text
       ours = Ids.before(xs, None{}, i)
       base = Version.base(s, xs, ours, from)
       +o = Res.go(e, s, rest, n)
-      Pick.kept(
-        Pick.merge(
-          Formats.Format.of(Resources.Name.path(n)),
-          s,
-          Res.go(e, s, Src.of(s, base), n),
-          o,
-          Res.go(e, s, Src.at(from, Ledgers.State.asked(~Ask, s, from)), n)
-        ),
-        o
-      )
+      bs fs = Res.go(
+        e,
+        s,
+        Src.of(s, base),
+        n
+      ) Res.go(e, s, Src.at(from, Ledgers.State.asked(~Ask, s, from)), n)
+      Pick.kept(Pick.merge(Formats.Format.of(Resources.Name.path(n)), s, bs, o, fs), o)
     case 1n+e Src.cons{st, rest}:
       Res.go(e, s, rest, n)
+# bend-lint: expect-end bend-lint-rules/performance/deep_call_in_fork@information
 
 # enough steps for any walk back through the versions of s: two for each entry
 def State.fuel(s: State()) -> Nat:
@@ -797,12 +1100,19 @@ def Res.names(+f: Nat, +s: State(), src: Src) -> List<&2, String>:
       Res.names(e, s, Src.steps{Steps.before(Ask.steps(s, q), v, [])})
     case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.move{+to}}, ms}, rest}:
       Res.names(e, s, Src.at(to, Ledgers.State.asked(~Ask, s, to)))
-    case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.make{ml, Some{+to}, mm}}, ms}, rest}:
+    case 1n+e Src.cons{
+      Ledgers.Step{i, k, t, Ask.on{st, l, Change.make{ml, Some{+to}, mm}}, ms},
+      rest
+    }:
       Res.names(e, s, Src.at(to, Ledgers.State.asked(~Ask, s, to)))
     case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.make{ml, None{}, mm}}, ms}, rest}:
       []
     case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.merge{+from}}, ms}, rest}:
-      fs os = Res.names(e, s, Src.at(from, Ledgers.State.asked(~Ask, s, from))) Res.names(e, s, rest)
+      fs os = Res.names(
+        e,
+        s,
+        Src.at(from, Ledgers.State.asked(~Ask, s, from))
+      ) Res.names(e, s, rest)
       Shared.List.union(~String, ~String.eq, fs, os)
     case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.write{m, base, c}}, ms}, rest}:
       Shared.List.union(~String, ~String.eq, [Resources.Name.show(m)], Res.names(e, s, rest))
