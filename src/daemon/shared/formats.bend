@@ -163,10 +163,15 @@ def List.fork_right(ty, same, laws, a, b):
 def List.reverse_append(
   -A: Data,
   xs: List<&2, A>,
-  ys: List<&2, A>,
-  acc: List<&2, A>
+  -ys: List<&2, A>,
+  -acc: List<&2, A>
 ) -> {
-  List.reverse.go(&2, A, ys, List.reverse.go(&2, A, xs, acc))
+  List.reverse.go(
+    &2,
+    A,
+    ys,
+    List.reverse.go(&2, A, xs, acc)
+  )
     == List.reverse.go(&2, A, List.append(&2, A, xs, ys), acc): List<&2, A>
 }:
   match xs:
@@ -179,10 +184,15 @@ def List.reverse_append(
 def List.reverse_onto(
   -A: Data,
   xs: List<&2, A>,
-  a: List<&2, A>,
+  -a: List<&2, A>,
   acc: List<&2, A>
 ) -> {
-  List.reverse.go(&2, A, xs, List.append(&2, A, a, acc))
+  List.reverse.go(
+    &2,
+    A,
+    xs,
+    List.append(&2, A, a, acc)
+  )
     == List.append(&2, A, List.reverse.go(&2, A, xs, a), acc): List<&2, A>
 }:
   match xs:
@@ -195,9 +205,14 @@ def List.reverse_onto(
 def List.reverse_twice(
   -A: Data,
   xs: List<&2, A>,
-  acc: List<&2, A>
+  -acc: List<&2, A>
 ) -> {
-  List.reverse.go(&2, A, acc, xs)
+  List.reverse.go(
+    &2,
+    A,
+    acc,
+    xs
+  )
     == List.reverse.go(&2, A, List.reverse.go(&2, A, xs, acc), []): List<&2, A>
 }:
   match xs:
@@ -368,19 +383,34 @@ def Lines.cut.back_left(
   s: List<&2, Texts.Bytes()>,
   f: Fork<Texts.Bytes()>
 ) -> {
-  List.append(&2, Texts.Bytes(), s, List.reverse(&2, Texts.Bytes(), Fork.left(Texts.Bytes(), f)))
+  List.append(
+    &2,
+    Texts.Bytes(),
+    s,
+    List.reverse(&2, Texts.Bytes(), Fork.left(Texts.Bytes(), f))
+  )
     == Cut.left(Lines.cut.back(s, f)): List<&2, Texts.Bytes()>
 }:
   match f:
-    case Fork{+e, +a, b}:
+    case Fork{+e, a, b}:
       %List.reverse_append(Texts.Bytes(), e, a, []):
         {
-          List.append(&2, Texts.Bytes(), s, _)
+          List.append(
+            &2,
+            Texts.Bytes(),
+            s,
+            _
+          )
             == Cut.left(Lines.cut.back(s, Fork{e, a, b})): List<&2, Texts.Bytes()>
         }
       %List.reverse_onto(Texts.Bytes(), a, [], List.reverse(&2, Texts.Bytes(), e)):
         {
-          List.append(&2, Texts.Bytes(), s, List.reverse.go(&2, Texts.Bytes(), a, List.reverse(&2, Texts.Bytes(), e)))
+          List.append(
+            &2,
+            Texts.Bytes(),
+            s,
+            List.reverse.go(&2, Texts.Bytes(), a, List.reverse(&2, Texts.Bytes(), e))
+          )
             == List.append(&2, Texts.Bytes(), s, _): List<&2, Texts.Bytes()>
         }
       {==}
@@ -391,36 +421,55 @@ def Lines.cut.back_right(
   s: List<&2, Texts.Bytes()>,
   f: Fork<Texts.Bytes()>
 ) -> {
-  List.append(&2, Texts.Bytes(), s, List.reverse(&2, Texts.Bytes(), Fork.right(Texts.Bytes(), f)))
+  List.append(
+    &2,
+    Texts.Bytes(),
+    s,
+    List.reverse(&2, Texts.Bytes(), Fork.right(Texts.Bytes(), f))
+  )
     == Cut.right(Lines.cut.back(s, f)): List<&2, Texts.Bytes()>
 }:
   match f:
-    case Fork{+e, a, +b}:
+    case Fork{+e, a, b}:
       %List.reverse_append(Texts.Bytes(), e, b, []):
         {
-          List.append(&2, Texts.Bytes(), s, _)
+          List.append(
+            &2,
+            Texts.Bytes(),
+            s,
+            _
+          )
             == Cut.right(Lines.cut.back(s, Fork{e, a, b})): List<&2, Texts.Bytes()>
         }
       %List.reverse_onto(Texts.Bytes(), b, [], List.reverse(&2, Texts.Bytes(), e)):
         {
-          List.append(&2, Texts.Bytes(), s, List.reverse.go(&2, Texts.Bytes(), b, List.reverse(&2, Texts.Bytes(), e)))
+          List.append(
+            &2,
+            Texts.Bytes(),
+            s,
+            List.reverse.go(&2, Texts.Bytes(), b, List.reverse(&2, Texts.Bytes(), e))
+          )
             == List.append(&2, Texts.Bytes(), s, _): List<&2, Texts.Bytes()>
         }
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # the old lines of the cut of a fork are its first list
 def Lines.cut.of_left(
   f: Fork<Texts.Bytes()>
 ) -> {Cut.left(Lines.cut.of(f)) == Fork.left(Texts.Bytes(), f): List<&2, Texts.Bytes()>}:
   match f:
-    case Fork{+s, +ra, +rb}:
-      +g = List.fork(
+    case Fork{s, +ra, +rb}:
+      g = List.fork(
         ~Texts.Bytes(),
         ~Shared.List.is_eq(~U32, ~U32.is_eq),
         List.reverse(&2, Texts.Bytes(), ra),
         List.reverse(&2, Texts.Bytes(), rb)
       )
-      %Lines.cut.back_left(s, g): {_ == List.append(&2, Texts.Bytes(), s, ra): List<&2, Texts.Bytes()>}
+      %Lines.cut.back_left(
+        s,
+        g
+      ): {_ == List.append(&2, Texts.Bytes(), s, ra): List<&2, Texts.Bytes()>}
       %Equal.sym(
         List<&2, Texts.Bytes()>,
         Fork.left(Texts.Bytes(), g),
@@ -433,11 +482,24 @@ def Lines.cut.of_left(
         )
       ):
         {
-          List.append(&2, Texts.Bytes(), s, List.reverse(&2, Texts.Bytes(), _))
+          List.append(
+            &2,
+            Texts.Bytes(),
+            s,
+            List.reverse(&2, Texts.Bytes(), _)
+          )
             == List.append(&2, Texts.Bytes(), s, ra): List<&2, Texts.Bytes()>
         }
       %List.reverse_twice(Texts.Bytes(), ra, []):
-        {List.append(&2, Texts.Bytes(), s, _) == List.append(&2, Texts.Bytes(), s, ra): List<&2, Texts.Bytes()>}
+        {
+          List.append(
+            &2,
+            Texts.Bytes(),
+            s,
+            _
+          )
+            == List.append(&2, Texts.Bytes(), s, ra): List<&2, Texts.Bytes()>
+        }
       {==}
 
 # the new lines of the cut of a fork are its second list
@@ -445,14 +507,17 @@ def Lines.cut.of_right(
   f: Fork<Texts.Bytes()>
 ) -> {Cut.right(Lines.cut.of(f)) == Fork.right(Texts.Bytes(), f): List<&2, Texts.Bytes()>}:
   match f:
-    case Fork{+s, +ra, +rb}:
-      +g = List.fork(
+    case Fork{s, +ra, +rb}:
+      g = List.fork(
         ~Texts.Bytes(),
         ~Shared.List.is_eq(~U32, ~U32.is_eq),
         List.reverse(&2, Texts.Bytes(), ra),
         List.reverse(&2, Texts.Bytes(), rb)
       )
-      %Lines.cut.back_right(s, g): {_ == List.append(&2, Texts.Bytes(), s, rb): List<&2, Texts.Bytes()>}
+      %Lines.cut.back_right(
+        s,
+        g
+      ): {_ == List.append(&2, Texts.Bytes(), s, rb): List<&2, Texts.Bytes()>}
       %Equal.sym(
         List<&2, Texts.Bytes()>,
         Fork.right(Texts.Bytes(), g),
@@ -466,12 +531,27 @@ def Lines.cut.of_right(
         )
       ):
         {
-          List.append(&2, Texts.Bytes(), s, List.reverse(&2, Texts.Bytes(), _))
+          List.append(
+            &2,
+            Texts.Bytes(),
+            s,
+            List.reverse(&2, Texts.Bytes(), _)
+          )
             == List.append(&2, Texts.Bytes(), s, rb): List<&2, Texts.Bytes()>
         }
       %List.reverse_twice(Texts.Bytes(), rb, []):
-        {List.append(&2, Texts.Bytes(), s, _) == List.append(&2, Texts.Bytes(), s, rb): List<&2, Texts.Bytes()>}
+        {
+          List.append(
+            &2,
+            Texts.Bytes(),
+            s,
+            _
+          )
+            == List.append(&2, Texts.Bytes(), s, rb): List<&2, Texts.Bytes()>
+        }
       {==}
+
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a cut gives back the old lines
 law Lines.cut_left:

@@ -35,8 +35,47 @@ def Read.then(
     case Some{Read{a, r}}:
       k(a)(r)
 
+# how a value written by enc is read, and that it reads back
+def Codec.Read(-A: Data, enc: A -> List<&2, U32> -> List<&2, U32>) -> Type:
+  Sigma<&1, &1, List<&2, U32> -> Maybe<&2, Read<A>>, dec => Code.Laws(A, enc, dec)>
+
+# a code of A: how a value is written, how one is read, and that reading what
+# was written gives it back
+def Codec(-A: Data) -> Type:
+  Sigma<&1, &1, A -> List<&2, U32> -> List<&2, U32>, enc => Codec.Read(A, enc)>
+
+# how c writes a value
+def Codec.enc(-A: Data, c: Codec(A)) -> A -> List<&2, U32> -> List<&2, U32>:
+  match c:
+    case Tuple{e, d}:
+      e
+
+# how c reads a value
+def Codec.dec(-A: Data, c: Codec(A)) -> List<&2, U32> -> Maybe<&2, Read<A>>:
+  match c:
+    case Tuple{e, Tuple{d, l}}:
+      d
+
+# that c reads back what it writes
+def Codec.laws(-A: Data, c: Codec(A)) -> Code.Laws(A, Codec.enc(A, c), Codec.dec(A, c)):
+  match c:
+    case Tuple{e, Tuple{d, l}}:
+      l
+
 # Basic codes
 # -----------
+
+# the token x, then r
+def Code.token(x: U32, r: List<&2, U32>) -> List<&2, U32>:
+  x <> r
+
+# a token
+def Code.token.read(ts: List<&2, U32>) -> Maybe<&2, Read<U32>>:
+  match ts:
+    case Nil{}:
+      None{}
+    case Con{x, r}:
+      Some{Read{x, r}}
 
 # the count n, in unary, then r
 def Code.count(n: Nat, r: List<&2, U32>) -> List<&2, U32>:
@@ -176,6 +215,47 @@ def Code.list.read(
   ts: List<&2, U32>
 ) -> Maybe<&2, Read<List<&2, A>>>:
   Read.then(Nat, List<&2, A>, Code.count.read(ts), n => r => Code.items.read(~A, ~dec, n, r))
+
+# Fields
+# ------
+# A value of a type T is the values of its fields, made into a T: it is read
+# as the reads of its fields, one after the other.
+
+# a value of A, made into a T by mk
+def Code.one.read(
+  ~A: Data,
+  ~T: Data,
+  ~da: List<&2, U32> -> Maybe<&2, Read<A>>,
+  mk: A -> T,
+  ts: List<&2, U32>
+) -> Maybe<&2, Read<T>>:
+  Read.then(A, T, da(ts), a => r => Some{Read{mk(a), r}})
+
+# values of A and B, made into a T by mk
+def Code.two.read(
+  ~A: Data,
+  ~B: Data,
+  ~T: Data,
+  ~da: List<&2, U32> -> Maybe<&2, Read<A>>,
+  ~db: List<&2, U32> -> Maybe<&2, Read<B>>,
+  mk: A -> B -> T,
+  ts: List<&2, U32>
+) -> Maybe<&2, Read<T>>:
+  Read.then(A, T, da(ts), a => r => Code.one.read(~B, ~T, ~db, mk(a), r))
+
+# values of A, B and C, made into a T by mk
+def Code.three.read(
+  ~A: Data,
+  ~B: Data,
+  ~C: Data,
+  ~T: Data,
+  ~da: List<&2, U32> -> Maybe<&2, Read<A>>,
+  ~db: List<&2, U32> -> Maybe<&2, Read<B>>,
+  ~dc: List<&2, U32> -> Maybe<&2, Read<C>>,
+  mk: A -> B -> C -> T,
+  ts: List<&2, U32>
+) -> Maybe<&2, Read<T>>:
+  Read.then(A, T, da(ts), a => r => Code.two.read(~B, ~C, ~T, ~db, ~dc, mk(a), r))
 
 # Laws
 # ----
@@ -391,6 +471,162 @@ def Code.list_read(
   }
   Code.items_read(~A, ~enc, ~dec, ~laws, xs, r)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a read m that gives a and r, then k, is k on a and r
+def Read.then_some(
+  -A: Data,
+  -B: Data,
+  -m: Maybe<&2, Read<A>>,
+  -k: A -> List<&2, U32> -> Maybe<&2, Read<B>>,
+  -a: A,
+  -r: List<&2, U32>,
+  e: {m == Some{Read{a, r}}: Maybe<&2, Read<A>>}
+) -> {k(a)(r) == Read.then(A, B, m, k): Maybe<&2, Read<B>>}:
+  %Equal.sym(
+    Maybe<&2, Read<A>>,
+    m,
+    Some{Read{a, r}},
+    e
+  ): {k(a)(r) == Read.then(A, B, _, k): Maybe<&2, Read<B>>}
+  {==}
+
+# a value of one field reads back
+def Code.one_read(
+  ~A: Data,
+  ~T: Data,
+  ~ca: Codec(A),
+  mk: A -> T,
+  a: A,
+  r: List<&2, U32>
+) -> {
+  Code.one.read(
+    ~A,
+    ~T,
+    ~Codec.dec(A, ca),
+    mk,
+    Codec.enc(A, ca)(a)(r)
+  )
+    == Some{Read{mk(a), r}}: Maybe<&2, Read<T>>
+}:
+  Equal.sym(
+    Maybe<&2, Read<T>>,
+    Some{Read{mk(a), r}},
+    Code.one.read(~A, ~T, ~Codec.dec(A, ca), mk, Codec.enc(A, ca)(a)(r)),
+    Read.then_some(
+      A,
+      T,
+      Codec.dec(A, ca)(Codec.enc(A, ca)(a)(r)),
+      x => r2 => Some{Read{mk(x), r2}},
+      a,
+      r,
+      Codec.laws(A, ca)(a)(r)
+    )
+  )
+
+# a value of two fields reads back
+def Code.two_read(
+  ~A: Data,
+  ~B: Data,
+  ~T: Data,
+  ~ca: Codec(A),
+  ~cb: Codec(B),
+  mk: A -> B -> T,
+  +a: A,
+  +b: B,
+  +r: List<&2, U32>
+) -> {
+  Code.two.read(
+    ~A,
+    ~B,
+    ~T,
+    ~Codec.dec(A, ca),
+    ~Codec.dec(B, cb),
+    mk,
+    Codec.enc(A, ca)(a)(Codec.enc(B, cb)(b)(r))
+  )
+    == Some{Read{mk(a)(b), r}}: Maybe<&2, Read<T>>
+}:
+  rb = Codec.enc(B, cb)(b)(r)
+  %Read.then_some(
+    A,
+    T,
+    Codec.dec(A, ca)(Codec.enc(A, ca)(a)(rb)),
+    x => r1 => Code.one.read(~B, ~T, ~Codec.dec(B, cb), mk(x), r1),
+    a,
+    rb,
+    Codec.laws(A, ca)(a)(rb)
+  ): {_ == Some{Read{mk(a)(b), r}}: Maybe<&2, Read<T>>}
+  Code.one_read(~B, ~T, ~cb, mk(a), b, r)
+
+# a value of three fields reads back
+def Code.three_read(
+  ~A: Data,
+  ~B: Data,
+  ~C: Data,
+  ~T: Data,
+  ~ca: Codec(A),
+  ~cb: Codec(B),
+  ~cc: Codec(C),
+  mk: A -> B -> C -> T,
+  +a: A,
+  +b: B,
+  +c: C,
+  +r: List<&2, U32>
+) -> {
+  Code.three.read(
+    ~A,
+    ~B,
+    ~C,
+    ~T,
+    ~Codec.dec(A, ca),
+    ~Codec.dec(B, cb),
+    ~Codec.dec(C, cc),
+    mk,
+    Codec.enc(A, ca)(a)(Codec.enc(B, cb)(b)(Codec.enc(C, cc)(c)(r)))
+  )
+    == Some{Read{mk(a)(b)(c), r}}: Maybe<&2, Read<T>>
+}:
+  rb = Codec.enc(B, cb)(b)(Codec.enc(C, cc)(c)(r))
+  %Read.then_some(
+    A,
+    T,
+    Codec.dec(A, ca)(Codec.enc(A, ca)(a)(rb)),
+    x => r1 => Code.two.read(~B, ~C, ~T, ~Codec.dec(B, cb), ~Codec.dec(C, cc), mk(x), r1),
+    a,
+    rb,
+    Codec.laws(A, ca)(a)(rb)
+  ): {_ == Some{Read{mk(a)(b)(c), r}}: Maybe<&2, Read<T>>}
+  Code.two_read(~B, ~C, ~T, ~cb, ~cc, mk(a), b, c, r)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# the code of tokens
+def Code.token.codec() -> Codec(U32):
+  (Code.token, (Code.token.read, x => r => {==}))
+
+# the code of texts
+def Code.text.codec() -> Codec(String):
+  (Code.text, (Code.text.read, x => r => Code.text_read(x, r)))
+
+# the code of values of c, if any
+def Code.maybe.codec(~A: Data, ~c: Codec(A)) -> Codec(Maybe<&2, A>):
+  (
+    m => r => Code.maybe(~A, ~Codec.enc(A, c), m, r),
+    (
+      ts => Code.maybe.read(~A, ~Codec.dec(A, c), ts),
+      m => r => Code.maybe_read(~A, ~Codec.enc(A, c), ~Codec.dec(A, c), Codec.laws(A, c), m, r)
+    )
+  )
+
+# the code of lists of values of c
+def Code.list.codec(~A: Data, ~c: Codec(A)) -> Codec(List<&2, A>):
+  (
+    xs => r => Code.list(~A, ~Codec.enc(A, c), xs, r),
+    (
+      ts => Code.list.read(~A, ~Codec.dec(A, c), ts),
+      xs => r => Code.list_read(~A, ~Codec.enc(A, c), ~Codec.dec(A, c), ~Codec.laws(A, c), xs, r)
+    )
+  )
+
 # a and b have the same code
 def Code.is_eq(~A: Data, ~enc: A -> List<&2, U32> -> List<&2, U32>, a: A, b: A) -> Bool:
   Shared.List.is_eq(~U32, ~U32.is_eq, enc(a)([]), enc(b)([]))
@@ -419,14 +655,9 @@ def Code.is_eq_sound(
       %Equal.sym(Maybe<&2, Read<A>>, dec(enc(b)([])), Some{Read{b, []}}, laws(b)([])): {Code.read_value(A, _, a) == b: A}
       {==}))
 
-# equality of codes is an equality, when the code reads back
-def Code.eq_laws(
-  ~A: Data,
-  ~enc: A -> List<&2, U32> -> List<&2, U32>,
-  ~dec: List<&2, U32> -> Maybe<&2, Read<A>>,
-  ~laws: Code.Laws(A, enc, dec)
-) -> Shared.Eq.Laws(A, Code.is_eq(~A, ~enc)):
+# equality of codes is an equality
+def Code.eq_laws(~A: Data, ~c: Codec(A)) -> Shared.Eq.Laws(A, Code.is_eq(~A, ~Codec.enc(A, c))):
   (
-    a => Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), enc(a)([])),
-    a => b => Code.is_eq_sound(~A, ~enc, ~dec, ~laws, a, b)
+    a => Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), Codec.enc(A, c)(a)([])),
+    a => b => Code.is_eq_sound(~A, ~Codec.enc(A, c), ~Codec.dec(A, c), ~Codec.laws(A, c), a, b)
   )

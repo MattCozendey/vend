@@ -109,17 +109,23 @@ def Id.code(i: Ledgers.Id, r: List<&2, U32>) -> List<&2, U32>:
 
 # a request ID
 def Id.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ledgers.Id>>:
-  Codes.Read.then(
-    String,
-    Ledgers.Id,
-    Codes.Code.text.read(ts),
-    w => r => Codes.Read.then(
-      String,
-      Ledgers.Id,
-      Codes.Code.text.read(r),
-      q => r2 => Some{Codes.Read{Ledgers.Id{w, q}, r2}}
-    )
+  Codes.Code.two.read(
+    ~String,
+    ~String,
+    ~Ledgers.Id,
+    ~Codes.Code.text.read,
+    ~Codes.Code.text.read,
+    w => q => Ledgers.Id{w, q},
+    ts
   )
+
+# the version m, if any (where a line starts, or the base of a write), then r
+def Base.code(m: Maybe<&2, Ledgers.Id>, r: List<&2, U32>) -> List<&2, U32>:
+  Codes.Code.maybe(~Ledgers.Id, ~Id.code, m, r)
+
+# a version, if any
+def Base.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Maybe<&2, Ledgers.Id>>>:
+  Codes.Code.maybe.read(~Ledgers.Id, ~Id.code.read, ts)
 
 # the resource n, then r
 def Name.code(n: Resources.Name, r: List<&2, U32>) -> List<&2, U32>:
@@ -129,26 +135,25 @@ def Name.code(n: Resources.Name, r: List<&2, U32>) -> List<&2, U32>:
 
 # a resource name
 def Name.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Resources.Name>>:
-  Codes.Read.then(
-    String,
-    Resources.Name,
-    Codes.Code.text.read(ts),
-    t => r => Some{Codes.Read{Resources.Name{t}, r}}
-  )
+  Codes.Code.one.read(~String, ~Resources.Name, ~Codes.Code.text.read, n => Resources.Name{n}, ts)
 
-# the token x, then r
-def U32.code(x: U32, r: List<&2, U32>) -> List<&2, U32>:
-  x <> r
+# the bytes b, then r
+def Bytes.code(b: Texts.Bytes(), r: List<&2, U32>) -> List<&2, U32>:
+  Codes.Code.list(~U32, ~Codes.Code.token, b, r)
 
-# a token
-def U32.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<U32>>:
-  match ts:
-    case Nil{}:
-      None{}
-    case Con{x, r}:
-      Some{Codes.Read{x, r}}
+# bytes
+def Bytes.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Texts.Bytes()>>:
+  Codes.Code.list.read(~U32, ~Codes.Code.token.read, ts)
 
-# the tag k and the text t, then r
+# the nodes os, then r
+def Owners.code(os: List<&2, String>, r: List<&2, U32>) -> List<&2, U32>:
+  Codes.Code.list(~String, ~Codes.Code.text, os, r)
+
+# nodes
+def Owners.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<List<&2, String>>>:
+  Codes.Code.list.read(~String, ~Codes.Code.text.read, ts)
+
+# the text t with the tag k, then r
 def Tag.text(k: U32, t: String, r: List<&2, U32>) -> List<&2, U32>:
   k <> Codes.Code.text(t, r)
 
@@ -165,22 +170,25 @@ def Line.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Line>>:
   match ts:
     case Nil{}:
       None{}
-    case Con{x, r}:
-      Codes.Read.then(
-        String,
-        Line,
-        Codes.Code.text.read(r),
-        +n => r2 => Some{
-          Codes.Read{
-            Shared.Bool.when(Line, U32.is_eq(x, 0), u => Line.branch{n}, u => Line.group{n}),
-            r2
-          }
-        }
+    case Con{x, +r}:
+      Shared.Bool.when(
+        Maybe<&2, Codes.Read<Line>>,
+        U32.is_eq(x, 0),
+        u => Codes.Code.one.read(~String, ~Line, ~Codes.Code.text.read, n => Line.branch{n}, r),
+        u => Codes.Code.one.read(~String, ~Line, ~Codes.Code.text.read, n => Line.group{n}, r)
       )
 
-# the member m, then r
-def Member.code(m: Member, r: List<&2, U32>) -> List<&2, U32>:
-  match m:
+# the line m, if any (none: the store), then r
+def Target.code(m: Maybe<&2, Line>, r: List<&2, U32>) -> List<&2, U32>:
+  Codes.Code.maybe(~Line, ~Line.code, m, r)
+
+# a line, if any
+def Target.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Maybe<&2, Line>>>:
+  Codes.Code.maybe.read(~Line, ~Line.code.read, ts)
+
+# the member l, then r
+def Member.code(l: Member, r: List<&2, U32>) -> List<&2, U32>:
+  match l:
     case Member.node{n}:
       Tag.text(0, n, r)
     case Member.group{n}:
@@ -191,24 +199,27 @@ def Member.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Member>>:
   match ts:
     case Nil{}:
       None{}
-    case Con{x, r}:
-      Codes.Read.then(
-        String,
-        Member,
-        Codes.Code.text.read(r),
-        +n => r2 => Some{
-          Codes.Read{
-            Shared.Bool.when(Member, U32.is_eq(x, 0), u => Member.node{n}, u => Member.group{n}),
-            r2
-          }
-        }
+    case Con{x, +r}:
+      Shared.Bool.when(
+        Maybe<&2, Codes.Read<Member>>,
+        U32.is_eq(x, 0),
+        u => Codes.Code.one.read(~String, ~Member, ~Codes.Code.text.read, n => Member.node{n}, r),
+        u => Codes.Code.one.read(~String, ~Member, ~Codes.Code.text.read, n => Member.group{n}, r)
       )
+
+# the members ms, then r
+def Members.code(ms: List<&2, Member>, r: List<&2, U32>) -> List<&2, U32>:
+  Codes.Code.list(~Member, ~Member.code, ms, r)
+
+# members
+def Members.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<List<&2, Member>>>:
+  Codes.Code.list.read(~Member, ~Member.code.read, ts)
 
 # the content c, then r
 def Content.code(c: Content, r: List<&2, U32>) -> List<&2, U32>:
   match c:
     case Content.bytes{b}:
-      0 <> Codes.Code.list(~U32, ~U32.code, b, r)
+      0 <> Bytes.code(b, r)
     case Content.of{v}:
       1 <> Id.code(v, r)
 
@@ -221,33 +232,25 @@ def Content.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Content>>:
       Shared.Bool.when(
         Maybe<&2, Codes.Read<Content>>,
         U32.is_eq(x, 0),
-        u => Codes.Read.then(
-          List<&2, U32>,
-          Content,
-          Codes.Code.list.read(~U32, ~U32.code.read, r),
-          b => r2 => Some{Codes.Read{Content.bytes{b}, r2}}
+        u => Codes.Code.one.read(
+          ~Texts.Bytes(),
+          ~Content,
+          ~Bytes.code.read,
+          b => Content.bytes{b},
+          r
         ),
-        u => Codes.Read.then(
-          Ledgers.Id,
-          Content,
-          Id.code.read(r),
-          v => r2 => Some{Codes.Read{Content.of{v}, r2}}
-        )
+        u => Codes.Code.one.read(~Ledgers.Id, ~Content, ~Id.code.read, v => Content.of{v}, r)
       )
 
 # the change c, then r
 def Change.code(c: Change, r: List<&2, U32>) -> List<&2, U32>:
   match c:
     case Change.make{l, at, ms}:
-      0
-        <> Line.code(
-          l,
-          Codes.Code.maybe(~Ledgers.Id, ~Id.code, at, Codes.Code.list(~Member, ~Member.code, ms, r))
-        )
+      0 <> Line.code(l, Base.code(at, Members.code(ms, r)))
     case Change.own{os}:
-      1 <> Codes.Code.list(~String, ~Codes.Code.text, os, r)
+      1 <> Owners.code(os, r)
     case Change.write{n, base, x}:
-      2 <> Name.code(n, Codes.Code.maybe(~Ledgers.Id, ~Id.code, base, Content.code(x, r)))
+      2 <> Name.code(n, Base.code(base, Content.code(x, r)))
     case Change.resolve{k, n, x}:
       3 <> Id.code(k, Name.code(n, Content.code(x, r)))
     case Change.merge{v}:
@@ -257,122 +260,93 @@ def Change.code(c: Change, r: List<&2, U32>) -> List<&2, U32>:
     case Change.mark{m, t}:
       6 <> Codes.Code.text(m, Codes.Code.text(t, r))
     case Change.members{ms}:
-      7 <> Codes.Code.list(~Member, ~Member.code, ms, r)
-
-# a change whose tag x is not 0, 1 or 2, from the tokens r after it
-def Change.code.read.rest(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Change>>:
-  Shared.Bool.when(
-    Maybe<&2, Codes.Read<Change>>,
-    U32.is_eq(x, 3),
-    u => Codes.Read.then(
-      Ledgers.Id,
-      Change,
-      Id.code.read(r),
-      k => r1 => Codes.Read.then(
-        Resources.Name,
-        Change,
-        Name.code.read(r1),
-        n => r2 => Codes.Read.then(
-          Content,
-          Change,
-          Content.code.read(r2),
-          c => r3 => Some{Codes.Read{Change.resolve{k, n, c}, r3}}
-        )
-      )
-    ),
-    u => Shared.Bool.when(
-      Maybe<&2, Codes.Read<Change>>,
-      U32.is_eq(x, 4),
-      w => Codes.Read.then(
-        Ledgers.Id,
-        Change,
-        Id.code.read(r),
-        v => r1 => Some{Codes.Read{Change.merge{v}, r1}}
-      ),
-      w => Shared.Bool.when(
-        Maybe<&2, Codes.Read<Change>>,
-        U32.is_eq(x, 5),
-        w2 => Codes.Read.then(
-          Ledgers.Id,
-          Change,
-          Id.code.read(r),
-          v => r1 => Some{Codes.Read{Change.move{v}, r1}}
-        ),
-        w2 => Shared.Bool.when(
-          Maybe<&2, Codes.Read<Change>>,
-          U32.is_eq(x, 6),
-          w3 => Codes.Read.then(
-            String,
-            Change,
-            Codes.Code.text.read(r),
-            m => r1 => Codes.Read.then(
-              String,
-              Change,
-              Codes.Code.text.read(r1),
-              t => r2 => Some{Codes.Read{Change.mark{m, t}, r2}}
-            )
-          ),
-          w3 => Codes.Read.then(
-            List<&2, Member>,
-            Change,
-            Codes.Code.list.read(~Member, ~Member.code.read, r),
-            ms => r1 => Some{Codes.Read{Change.members{ms}, r1}}
-          )
-        )
-      )
-    )
-  )
+      7 <> Members.code(ms, r)
 
 # a change whose tag is x, from the tokens r after it
 def Change.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Change>>:
   Shared.Bool.when(
     Maybe<&2, Codes.Read<Change>>,
     U32.is_eq(x, 0),
-    u => Codes.Read.then(
-      Line,
-      Change,
-      Line.code.read(r),
-      l => r1 => Codes.Read.then(
-        Maybe<&2, Ledgers.Id>,
-        Change,
-        Codes.Code.maybe.read(~Ledgers.Id, ~Id.code.read, r1),
-        at => r2 => Codes.Read.then(
-          List<&2, Member>,
-          Change,
-          Codes.Code.list.read(~Member, ~Member.code.read, r2),
-          ms => r3 => Some{Codes.Read{Change.make{l, at, ms}, r3}}
-        )
-      )
+    u => Codes.Code.three.read(
+      ~Line,
+      ~Maybe<&2, Ledgers.Id>,
+      ~List<&2, Member>,
+      ~Change,
+      ~Line.code.read,
+      ~Base.code.read,
+      ~Members.code.read,
+      l => a => ms => Change.make{l, a, ms},
+      r
     ),
     u => Shared.Bool.when(
       Maybe<&2, Codes.Read<Change>>,
       U32.is_eq(x, 1),
-      w => Codes.Read.then(
-        List<&2, String>,
-        Change,
-        Codes.Code.list.read(~String, ~Codes.Code.text.read, r),
-        os => r1 => Some{Codes.Read{Change.own{os}, r1}}
+      u => Codes.Code.one.read(
+        ~List<&2, String>,
+        ~Change,
+        ~Owners.code.read,
+        os => Change.own{os},
+        r
       ),
-      w => Shared.Bool.when(
+      u => Shared.Bool.when(
         Maybe<&2, Codes.Read<Change>>,
         U32.is_eq(x, 2),
-        w2 => Codes.Read.then(
-          Resources.Name,
-          Change,
-          Name.code.read(r),
-          n => r1 => Codes.Read.then(
-            Maybe<&2, Ledgers.Id>,
-            Change,
-            Codes.Code.maybe.read(~Ledgers.Id, ~Id.code.read, r1),
-            base => r2 => Codes.Read.then(
-              Content,
-              Change,
-              Content.code.read(r2),
-              c => r3 => Some{Codes.Read{Change.write{n, base, c}, r3}}
+        u => Codes.Code.three.read(
+          ~Resources.Name,
+          ~Maybe<&2, Ledgers.Id>,
+          ~Content,
+          ~Change,
+          ~Name.code.read,
+          ~Base.code.read,
+          ~Content.code.read,
+          n => b => c => Change.write{n, b, c},
+          r
+        ),
+        u => Shared.Bool.when(
+          Maybe<&2, Codes.Read<Change>>,
+          U32.is_eq(x, 3),
+          u => Codes.Code.three.read(
+            ~Ledgers.Id,
+            ~Resources.Name,
+            ~Content,
+            ~Change,
+            ~Id.code.read,
+            ~Name.code.read,
+            ~Content.code.read,
+            k => n => c => Change.resolve{k, n, c},
+            r
+          ),
+          u => Shared.Bool.when(
+            Maybe<&2, Codes.Read<Change>>,
+            U32.is_eq(x, 4),
+            u => Codes.Code.one.read(~Ledgers.Id, ~Change, ~Id.code.read, v => Change.merge{v}, r),
+            u => Shared.Bool.when(
+              Maybe<&2, Codes.Read<Change>>,
+              U32.is_eq(x, 5),
+              u => Codes.Code.one.read(~Ledgers.Id, ~Change, ~Id.code.read, v => Change.move{v}, r),
+              u => Shared.Bool.when(
+                Maybe<&2, Codes.Read<Change>>,
+                U32.is_eq(x, 6),
+                u => Codes.Code.two.read(
+                  ~String,
+                  ~String,
+                  ~Change,
+                  ~Codes.Code.text.read,
+                  ~Codes.Code.text.read,
+                  m => n => Change.mark{m, n},
+                  r
+                ),
+                u => Codes.Code.one.read(
+                  ~List<&2, Member>,
+                  ~Change,
+                  ~Members.code.read,
+                  ms => Change.members{ms},
+                  r
+                )
+              )
             )
           )
-        ),
-        w2 => Change.code.read.rest(x, r)
+        )
       )
     )
   )
@@ -389,9 +363,9 @@ def Change.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Change>>:
 def Ask.code(q: Ask, r: List<&2, U32>) -> List<&2, U32>:
   match q:
     case Ask.start{os}:
-      0 <> Codes.Code.list(~String, ~Codes.Code.text, os, r)
+      0 <> Owners.code(os, r)
     case Ask.on{st, l, c}:
-      1 <> Id.code(st, Codes.Code.maybe(~Line, ~Line.code, l, Change.code(c, r)))
+      1 <> Id.code(st, Target.code(l, Change.code(c, r)))
 
 # a request
 def Ask.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ask>>:
@@ -402,27 +376,23 @@ def Ask.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ask>>:
       Shared.Bool.when(
         Maybe<&2, Codes.Read<Ask>>,
         U32.is_eq(x, 0),
-        u => Codes.Read.then(
-          List<&2, String>,
-          Ask,
-          Codes.Code.list.read(~String, ~Codes.Code.text.read, r),
-          os => r1 => Some{Codes.Read{Ask.start{os}, r1}}
+        u => Codes.Code.one.read(
+          ~List<&2, String>,
+          ~Ask,
+          ~Owners.code.read,
+          os => Ask.start{os},
+          r
         ),
-        u => Codes.Read.then(
-          Ledgers.Id,
-          Ask,
-          Id.code.read(r),
-          st => r1 => Codes.Read.then(
-            Maybe<&2, Line>,
-            Ask,
-            Codes.Code.maybe.read(~Line, ~Line.code.read, r1),
-            l => r2 => Codes.Read.then(
-              Change,
-              Ask,
-              Change.code.read(r2),
-              c => r3 => Some{Codes.Read{Ask.on{st, l, c}, r3}}
-            )
-          )
+        u => Codes.Code.three.read(
+          ~Ledgers.Id,
+          ~Maybe<&2, Line>,
+          ~Change,
+          ~Ask,
+          ~Id.code.read,
+          ~Target.code.read,
+          ~Change.code.read,
+          s => l => c => Ask.on{s, l, c},
+          r
         )
       )
 

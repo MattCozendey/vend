@@ -4304,7 +4304,13 @@ def Vote.lands.zero(
           o,
           s1,
           st2
-        )(Tip.after_zero(Step.owners(Q, st), Steps.tip(Q, Chain.walk(~Q, ~view, o, s1, Some{st2})), [n])(ht))
+        )(
+          Tip.after_zero(
+            Step.owners(Q, st),
+            Steps.tip(Q, Chain.walk(~Q, ~view, o, s1, Some{st2})),
+            [n]
+          )(ht)
+        )
       )
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
@@ -4428,7 +4434,12 @@ def Vote.lands.up(
               None{},
               Chain.tip_none(~Q, ~view, o, s1)
             ),
-            Tip.after_up(Step.owners(Q, st), Steps.tip(Q, Chain.walk(~Q, ~view, o, s1, None{})), e, [n])(ht)
+            Tip.after_up(
+              Step.owners(Q, st),
+              Steps.tip(Q, Chain.walk(~Q, ~view, o, s1, None{})),
+              e,
+              [n]
+            )(ht)
           )
         )
       )
@@ -4554,7 +4565,12 @@ def Vote.lands.up(
         rec(
           st2
         )(
-          Tip.after_up(Step.owners(Q, st), Steps.tip(Q, Chain.walk(~Q, ~view, o, s1, Some{st2})), e, [n])(ht)
+          Tip.after_up(
+            Step.owners(Q, st),
+            Steps.tip(Q, Chain.walk(~Q, ~view, o, s1, Some{st2})),
+            e,
+            [n]
+          )(ht)
         )(
           Maybe.else_none_rest(
             Bool,
@@ -4963,13 +4979,10 @@ def Ask.decided.at(
   )
     == Some{Asked{t, q}}: Maybe<&2, Asked<Q>>
 } -> {
-  Steps.tip(Q, Chain.walk(
-    ~Q,
-    ~view,
-    State.under(~Q, s1, Slot.votes(c)),
-    s1,
-    m
-  ))
+  Steps.tip(
+    Q,
+    Chain.walk(~Q, ~view, State.under(~Q, s1, Slot.votes(c)), s1, m)
+  )
     == Some{Tip{h, [n]}}: Maybe<&2, Tip>
 } -> {
   State.get(~Q, s1, Slot.vote(c, h, n)) == None{}: Maybe<&2, Cell<Entry<Q>>>
@@ -5310,9 +5323,7 @@ def Ask.decided(
           Some{one{Entry.ask{i, t, q}}},
           hask2
         )
-      )(
-        ht
-      )(hg)(hv)
+      )(ht)(hg)(hv)
     ): {Status.of.verdict(_) == Status.done{k}: Status}
     {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning

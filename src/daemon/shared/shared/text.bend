@@ -857,13 +857,110 @@ def Char.of_bits(
   b1: Bool,
   b0: Bool
 ) -> Char:
-  Chr{U32{WCon{b0, WCon{b1, WCon{b2, WCon{b3, WCon{b4, WCon{b5, WCon{b6, WCon{b7, WCon{b8, WCon{b9, WCon{b10, WCon{b11, WCon{b12, WCon{b13, WCon{b14, WCon{b15, WCon{b16, WCon{b17, WCon{b18, WCon{b19, WCon{b20, WCon{b21, WCon{b22, WCon{b23, WCon{b24, WCon{b25, WCon{b26, WCon{b27, WCon{b28, WCon{b29, WCon{b30, WCon{b31, WNil{}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}
+  Chr{
+    U32{
+      WCon{
+        b0,
+        WCon{
+          b1,
+          WCon{
+            b2,
+            WCon{
+              b3,
+              WCon{
+                b4,
+                WCon{
+                  b5,
+                  WCon{
+                    b6,
+                    WCon{
+                      b7,
+                      WCon{
+                        b8,
+                        WCon{
+                          b9,
+                          WCon{
+                            b10,
+                            WCon{
+                              b11,
+                              WCon{
+                                b12,
+                                WCon{
+                                  b13,
+                                  WCon{
+                                    b14,
+                                    WCon{
+                                      b15,
+                                      WCon{
+                                        b16,
+                                        WCon{
+                                          b17,
+                                          WCon{
+                                            b18,
+                                            WCon{
+                                              b19,
+                                              WCon{
+                                                b20,
+                                                WCon{
+                                                  b21,
+                                                  WCon{
+                                                    b22,
+                                                    WCon{
+                                                      b23,
+                                                      WCon{
+                                                        b24,
+                                                        WCon{
+                                                          b25,
+                                                          WCon{
+                                                            b26,
+                                                            WCon{
+                                                              b27,
+                                                              WCon{
+                                                                b28,
+                                                                WCon{
+                                                                  b29,
+                                                                  WCon{b30, WCon{b31, WNil{}}}
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 
 # the bytes of c, then the bytes b: they read back as c, then b read, when c
 # holds no bit above the 21st; and they are bytes when b is
 def Utf8.Char.Laws(c: Char, b: List<&2, U32>) -> Type:
   {
-    Bytes.to_text(List.append(&2, U32, Utf8.char(c), b)) == Utf8.back(Char.fits_utf8(c), c, b): String
+    Bytes.to_text(
+      List.append(&2, U32, Utf8.char(c), b)
+    )
+      == Utf8.back(Char.fits_utf8(c), c, b): String
   }
     & {Bytes.is_bytes(List.append(&2, U32, Utf8.char(c), b)) == Bytes.is_bytes(b): Bool}
 
@@ -902,7 +999,43 @@ def Utf8.char_laws.bits(
   b1: Bool,
   b0: Bool,
   b: List<&2, U32>
-) -> Utf8.Char.Laws(Char.of_bits(b31, b30, b29, b28, b27, b26, b25, b24, b23, b22, b21, b20, b19, b18, b17, b16, b15, b14, b13, b12, b11, b10, b9, b8, b7, b6, b5, b4, b3, b2, b1, b0), b):
+) -> Utf8.Char.Laws(
+  Char.of_bits(
+    b31,
+    b30,
+    b29,
+    b28,
+    b27,
+    b26,
+    b25,
+    b24,
+    b23,
+    b22,
+    b21,
+    b20,
+    b19,
+    b18,
+    b17,
+    b16,
+    b15,
+    b14,
+    b13,
+    b12,
+    b11,
+    b10,
+    b9,
+    b8,
+    b7,
+    b6,
+    b5,
+    b4,
+    b3,
+    b2,
+    b1,
+    b0
+  ),
+  b
+):
   match b31:
     case True{}:
       ({==}, {==})
@@ -991,21 +1124,50 @@ def Utf8.char_laws.bits(
                                                                                         case True{}:
                                                                                           match b9:
                                                                                             case True{}:
-                                                                                              ({==}, {==})
+                                                                                              (
+                                                                                                {
+                                                                                                  ==
+                                                                                                },
+                                                                                                {==}
+                                                                                              )
                                                                                             case False{}:
-                                                                                              ({==}, {==})
+                                                                                              (
+                                                                                                {
+                                                                                                  ==
+                                                                                                },
+                                                                                                {==}
+                                                                                              )
                                                                                         case False{}:
                                                                                           match b9:
                                                                                             case True{}:
-                                                                                              ({==}, {==})
+                                                                                              (
+                                                                                                {
+                                                                                                  ==
+                                                                                                },
+                                                                                                {==}
+                                                                                              )
                                                                                             case False{}:
                                                                                               match b8:
                                                                                                 case True{}:
-                                                                                                  ({==}, {==})
+                                                                                                  (
+                                                                                                    {
+                                                                                                      ==
+                                                                                                    },
+                                                                                                    {
+                                                                                                      ==
+                                                                                                    }
+                                                                                                  )
                                                                                                 case False{}:
                                                                                                   match b7:
                                                                                                     case True{}:
-                                                                                                      ({==}, {==})
+                                                                                                      (
+                                                                                                        {
+                                                                                                          ==
+                                                                                                        },
+                                                                                                        {
+                                                                                                          ==
+                                                                                                        }
+                                                                                                      )
                                                                                                     case False{}:
                                                                                                       match b6:
                                                                                                         case True{}:
@@ -1015,29 +1177,85 @@ def Utf8.char_laws.bits(
                                                                                                                 case True{}:
                                                                                                                   match b3:
                                                                                                                     case True{}:
-                                                                                                                      ({==}, {==})
+                                                                                                                      (
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        }
+                                                                                                                      )
                                                                                                                     case False{}:
-                                                                                                                      ({==}, {==})
+                                                                                                                      (
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        }
+                                                                                                                      )
                                                                                                                 case False{}:
                                                                                                                   match b3:
                                                                                                                     case True{}:
-                                                                                                                      ({==}, {==})
+                                                                                                                      (
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        }
+                                                                                                                      )
                                                                                                                     case False{}:
-                                                                                                                      ({==}, {==})
+                                                                                                                      (
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        }
+                                                                                                                      )
                                                                                                             case False{}:
                                                                                                               match b4:
                                                                                                                 case True{}:
                                                                                                                   match b3:
                                                                                                                     case True{}:
-                                                                                                                      ({==}, {==})
+                                                                                                                      (
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        }
+                                                                                                                      )
                                                                                                                     case False{}:
-                                                                                                                      ({==}, {==})
+                                                                                                                      (
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        }
+                                                                                                                      )
                                                                                                                 case False{}:
                                                                                                                   match b3:
                                                                                                                     case True{}:
-                                                                                                                      ({==}, {==})
+                                                                                                                      (
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        }
+                                                                                                                      )
                                                                                                                     case False{}:
-                                                                                                                      ({==}, {==})
+                                                                                                                      (
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        }
+                                                                                                                      )
                                                                                                         case False{}:
                                                                                                           match b5:
                                                                                                             case True{}:
@@ -1045,29 +1263,85 @@ def Utf8.char_laws.bits(
                                                                                                                 case True{}:
                                                                                                                   match b3:
                                                                                                                     case True{}:
-                                                                                                                      ({==}, {==})
+                                                                                                                      (
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        }
+                                                                                                                      )
                                                                                                                     case False{}:
-                                                                                                                      ({==}, {==})
+                                                                                                                      (
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        }
+                                                                                                                      )
                                                                                                                 case False{}:
                                                                                                                   match b3:
                                                                                                                     case True{}:
-                                                                                                                      ({==}, {==})
+                                                                                                                      (
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        }
+                                                                                                                      )
                                                                                                                     case False{}:
-                                                                                                                      ({==}, {==})
+                                                                                                                      (
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        }
+                                                                                                                      )
                                                                                                             case False{}:
                                                                                                               match b4:
                                                                                                                 case True{}:
                                                                                                                   match b3:
                                                                                                                     case True{}:
-                                                                                                                      ({==}, {==})
+                                                                                                                      (
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        }
+                                                                                                                      )
                                                                                                                     case False{}:
-                                                                                                                      ({==}, {==})
+                                                                                                                      (
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        }
+                                                                                                                      )
                                                                                                                 case False{}:
                                                                                                                   match b3:
                                                                                                                     case True{}:
-                                                                                                                      ({==}, {==})
+                                                                                                                      (
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        }
+                                                                                                                      )
                                                                                                                     case False{}:
-                                                                                                                      ({==}, {==})
+                                                                                                                      (
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                          ==
+                                                                                                                        }
+                                                                                                                      )
 
 # the bytes of a character, then the bytes b, read back as the character,
 # then b read, when it fits; and they are bytes when b is
@@ -1168,7 +1442,41 @@ def Utf8.char_laws(c: Char, b: List<&2, U32>) -> Utf8.Char.Laws(c, b):
         }
       }
     }:
-      Utf8.char_laws.bits(b31, b30, b29, b28, b27, b26, b25, b24, b23, b22, b21, b20, b19, b18, b17, b16, b15, b14, b13, b12, b11, b10, b9, b8, b7, b6, b5, b4, b3, b2, b1, b0, b)
+      Utf8.char_laws.bits(
+        b31,
+        b30,
+        b29,
+        b28,
+        b27,
+        b26,
+        b25,
+        b24,
+        b23,
+        b22,
+        b21,
+        b20,
+        b19,
+        b18,
+        b17,
+        b16,
+        b15,
+        b14,
+        b13,
+        b12,
+        b11,
+        b10,
+        b9,
+        b8,
+        b7,
+        b6,
+        b5,
+        b4,
+        b3,
+        b2,
+        b1,
+        b0,
+        b
+      )
 
 # the bytes of a character, then the bytes b, read back as the character, then
 # b read, when the character holds no bit above the 21st
@@ -1180,7 +1488,10 @@ def Utf8.char_back(
 }:
   Pair.fst(
     {
-      Bytes.to_text(List.append(&2, U32, Utf8.char(c), b)) == Utf8.back(Char.fits_utf8(c), c, b): String
+      Bytes.to_text(
+        List.append(&2, U32, Utf8.char(c), b)
+      )
+        == Utf8.back(Char.fits_utf8(c), c, b): String
     },
     {Bytes.is_bytes(List.append(&2, U32, Utf8.char(c), b)) == Bytes.is_bytes(b): Bool},
     Utf8.char_laws(c, b)
@@ -1219,7 +1530,6 @@ def Bytes.text_back(s):
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-
 # the bytes of a character, then the bytes b, are bytes when b is
 def Utf8.char_bytes(
   c: Char,
@@ -1227,7 +1537,10 @@ def Utf8.char_bytes(
 ) -> {Bytes.is_bytes(List.append(&2, U32, Utf8.char(c), b)) == Bytes.is_bytes(b): Bool}:
   Pair.snd(
     {
-      Bytes.to_text(List.append(&2, U32, Utf8.char(c), b)) == Utf8.back(Char.fits_utf8(c), c, b): String
+      Bytes.to_text(
+        List.append(&2, U32, Utf8.char(c), b)
+      )
+        == Utf8.back(Char.fits_utf8(c), c, b): String
     },
     {Bytes.is_bytes(List.append(&2, U32, Utf8.char(c), b)) == Bytes.is_bytes(b): Bool},
     Utf8.char_laws(c, b)
