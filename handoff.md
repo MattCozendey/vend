@@ -6,12 +6,19 @@
 - `bun run lint`: 0 findings. `git diff --check`: clean.
 - Check without WSL: the `bend` on PATH can be `bun ~/.cache/bend-lint/bendlang/bend/v2.0.39/bend2/main.ts` (the Bend that lint and gen3 pin).
 
+## Compression pass (this branch)
+
+- Shared plus core: 180.6k tokens to 167.3k (proofs 120.2k to 106.0k), with no law weakened.
+- Generalized: the common end of two line lists is `List.fork` of the reversed lists (three reversal lemmas in formats); one UTF-8 case split proves both facts of a character; codes read a constructor's fields with `Code.one/two/three.read`, each with one law over `Codec(A)` bundles (encoder, decoder, round trip), so each core type's round trip is one law use per constructor; `Trie.get_set` (a read after a set, at every key) replaces `get_after_set` and makes the seen-chain record a set; `State.tip` is the tip of the chain's steps.
+- Repeated proof terms are named once with lets (lets unfold in rewrite types). Tool: scratch `gen/lets.py FILE` checks each def and keeps only changes that check.
+- Not done, small: merge `Quorum.yes_more`/`no_less` (one induction for both counts); `Cell.agrees_zero`/`agrees_one_side`. Not possible: merging `Fast.ask_state`/`ask_seen`, because `Seens.Inv` is a function type and cannot be used twice.
+
 ## Layout
 
 - `src/shared.bend`: what glob and the daemon share (Eq, Bool, Maybe, List).
 - `src/daemon/shared/`: the daemon's helpers: `ledger` (the replicated ledger), `formats`, `resources`, `uris`.
 - `src/daemon/shared/shared/`: what those share: `text`, `trie`, `reach`.
-- `src/daemon/shared/shared/shared/code.bend`: codes (values as U32 tokens with proven round trips); equality from codes.
+- `src/daemon/shared/shared/shared/code.bend`: codes (values as U32 tokens with proven round trips): codecs, field readers, list/maybe/text/token codecs; equality from codes.
 - Import rule: `.agents/skills/experimental-bend-spec/SKILL.md`, Folder structure.
 
 ## Design (ledger + core)
