@@ -341,6 +341,102 @@ def Tree.get(
 ) -> Maybe<&2, List<&2, U32>>:
   Tree.get.go(~S, ~fetch, s, Tree.path(k), k, Tree.part(~S, ~fetch, s, h))
 
+# Listings
+# --------
+# A listing walks every node of a tree, and lists a leaf only where its key's
+# path leads, so that a key is listed exactly when it reads.
+
+# a key and its value, as a tree lists them
+type Binding is Data:
+  Binding{key: List<&2, U32>, value: List<&2, U32>}
+
+# the path of the key k starts with the nibbles pre
+def Tree.leads(k: List<&2, U32>, +pre: List<&2, Nat>) -> Bool:
+  Shared.List.is_eq(
+    ~Nat,
+    ~Nat.is_eq,
+    List.take(&2, Nat, Tree.path(k), List.length(&2, Nat, pre)),
+    pre
+  )
+
+# the node of the first part of ps, in the store s (none: no part)
+def Tree.first(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  ps: List<&2, Maybe<&2, Hashes.Hash>>
+) -> Maybe<&2, Node>:
+  match ps:
+    case Nil{}:
+      None{}
+    case Con{x, r}:
+      Tree.part(~S, ~fetch, s, x)
+
+# bend-lint: expect-begin bend-lint-rules/language/decreasing_call@warning -- g is f itself, bound by the match; the checker accepts these calls
+# the bindings under the parts ps of a branch whose path is pre, from its part
+# x, whose node is m; f levels deep at most
+def Tree.list.go(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  ps: List<&2, Maybe<&2, Hashes.Hash>>,
+  +pre: List<&2, Nat>,
+  +x: Nat,
+  m: Maybe<&2, Node>
+) -> List<&2, Binding>:
+  match f ps m:
+    case g Nil{} w:
+      []
+    case g Con{y, +r} Some{Node.leaf{+k, v}}:
+      +rest = Tree.list.go(~S, ~fetch, g, s, r, pre, 1n+x, Tree.first(~S, ~fetch, s, r))
+      Shared.Bool.when(
+        List<&2, Binding>,
+        Tree.leads(k, List.append(&2, Nat, pre, [x])),
+        u => Binding{k, v} <> rest,
+        u => rest
+      )
+    case 1n+(+p) Con{y, r} Some{Node.branch{+qs}}:
+      here = List.append(&2, Nat, pre, [x])
+      below rest = Tree.list.go(
+        ~S,
+        ~fetch,
+        p,
+        s,
+        qs,
+        here,
+        0n,
+        Tree.first(~S, ~fetch, s, qs)
+      ) Tree.list.go(~S, ~fetch, 1n+p, s, r, pre, 1n+x, Tree.first(~S, ~fetch, s, r))
+      List.append(&2, Binding, below, rest)
+    case g Con{y, r} w:
+      Tree.list.go(~S, ~fetch, g, s, r, pre, 1n+x, Tree.first(~S, ~fetch, s, r))
+# bend-lint: expect-end bend-lint-rules/language/decreasing_call@warning
+
+# the bindings of a tree whose root node is m
+def Tree.list.root(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  m: Maybe<&2, Node>
+) -> List<&2, Binding>:
+  match m:
+    case Some{Node.leaf{k, v}}:
+      [Binding{k, v}]
+    case Some{Node.branch{+qs}}:
+      Tree.list.go(~S, ~fetch, 63n, s, qs, [], 0n, Tree.first(~S, ~fetch, s, qs))
+    case w:
+      []
+
+# the bindings of the tree whose root is h, in the store s
+def Tree.list(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  h: Maybe<&2, Hashes.Hash>
+) -> List<&2, Binding>:
+  Tree.list.root(~S, ~fetch, s, Tree.part(~S, ~fetch, s, h))
+
 # Writes
 # ------
 # A write fails (none) when the store does not hold a node on its path, or
