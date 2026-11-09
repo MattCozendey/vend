@@ -1065,6 +1065,131 @@ def Line.head(
         )
       )
 
+# Listings
+# --------
+# The steps of a line, in order: in each epoch, the decided heights from 0 up
+# to the first one that is not decided, or up to the step where the next epoch
+# began. A step that is decided past a gap waits until the gap is decided.
+
+# the height h is at most lim (none: no bound)
+def Height.within(h: U32, lim: Maybe<&2, U32>) -> Bool:
+  match lim:
+    case None{}:
+      True{}
+    case Some{l}:
+      U32.is_le(h, l)
+
+# what the owners ms decide at the height h of the epoch e of c, when h is at
+# most lim
+def Height.decide(
+  ~Q: Data,
+  s: State(Q),
+  c: Chain,
+  e: U32,
+  ms: List<&2, String>,
+  +h: U32,
+  lim: Maybe<&2, U32>
+) -> Maybe<&2, Vote>:
+  Shared.Maybe.when(Vote, Height.within(h, lim), u => State.decide(~Q, s, Where{c, e, h}, ms))
+
+# the steps of the epoch e of c, whose owners are ms, from the height h, whose
+# decision is m, up to lim; f steps at most
+def Epoch.steps(
+  ~Q: Data,
+  f: Nat,
+  +s: State(Q),
+  +c: Chain,
+  +e: U32,
+  +ms: List<&2, String>,
+  h: U32,
+  +lim: Maybe<&2, U32>,
+  m: Maybe<&2, Vote>
+) -> List<&2, Vote>:
+  match f m:
+    case 1n+p Some{v}:
+      +up = U32.inc(h)
+      v <> Epoch.steps(~Q, p, s, c, e, ms, up, lim, Height.decide(~Q, s, c, e, ms, up, lim))
+    case g w:
+      []
+
+# the steps of the epoch e of c, whose owners are ms, up to lim
+def Epoch.list(
+  ~Q: Data,
+  +s: State(Q),
+  +c: Chain,
+  +e: U32,
+  +ms: List<&2, String>,
+  +lim: Maybe<&2, U32>
+) -> List<&2, Vote>:
+  Epoch.steps(
+    ~Q,
+    Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s, Slot.votes(c, e))),
+    s,
+    c,
+    e,
+    ms,
+    0,
+    lim,
+    Height.decide(~Q, s, c, e, ms, 0, lim)
+  )
+
+# the height of the place w
+def Where.height(w: Where) -> U32:
+  match w:
+    case Where{c, e, h}:
+      h
+
+# the height where the epoch after e of c began, when s holds where
+def Epoch.end(~Q: Data, s: State(Q), c: Chain, e: U32) -> Maybe<&2, U32>:
+  Shared.Maybe.then(
+    Where,
+    U32,
+    Where.of(~Q, State.entry(~Q, s, Slot.epoch(c, U32.inc(e)))),
+    w => Some{Where.height(w)}
+  )
+
+# the steps of the line c from the epoch cur, whose owners are ms, when the
+# owners of the epoch after it are m; f epochs at most
+def Line.steps.go(
+  ~Q: Data,
+  f: Nat,
+  +s: State(Q),
+  +c: Chain,
+  +cur: U32,
+  ms: List<&2, String>,
+  m: Maybe<&2, List<&2, String>>
+) -> List<&2, Vote>:
+  match f m:
+    case 1n+p Some{+os}:
+      +up = U32.inc(cur)
+      List.append(
+        &2,
+        Vote,
+        Epoch.list(~Q, s, c, cur, ms, Epoch.end(~Q, s, c, cur)),
+        Line.steps.go(~Q, p, s, c, up, os, Epoch.next(~Q, s, c, up, os))
+      )
+    case g w:
+      Epoch.list(~Q, s, c, cur, ms, None{})
+
+# the steps of the line c, in order (none: the line does not exist)
+def Line.steps(~Q: Data, ~view: Q -> View, +s: State(Q), +c: Chain) -> Maybe<&2, List<&2, Vote>>:
+  Shared.Maybe.then(
+    List<&2, String>,
+    List<&2, Vote>,
+    Line.first(~Q, ~view, s, c),
+    +ms => Some{
+      Line.steps.go(
+        ~Q,
+        Tries.Trie.size(Cells.Cell<Entry<Q>>, State.under(~Q, s, Slot.epochs(c))),
+        s,
+        c,
+        0,
+        ms,
+        Epoch.next(~Q, s, c, 0, ms)
+      )
+    }
+  )
+
 # Status
 # ------
 
