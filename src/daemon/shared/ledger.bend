@@ -1579,16 +1579,16 @@ def State.settle(
   Settle.of(~Q, ~same, s, w, State.decide(~Q, s, w, ms))
 
 # s with the facts of the last step before the tip m, if any
-def Land.of(~Q: Data, ~same: Q -> Q -> Bool, +s: State(Q), m: Maybe<&2, Tip>) -> State(Q):
+def Land.of(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), m: Maybe<&2, Tip>) -> State(Q):
   match m:
-    case Some{Tip{e, ms, h, Some{+w}}}:
+    case Some{Tip{e, ms, h, Some{w}}}:
       State.settle(~Q, ~same, s, w, ms)
     case _:
       s
 
 # s with the facts of the last step of the line c: what a holder writes before
 # it votes on c, so that it never votes again for a request that a sync decided
-def State.land(~Q: Data, ~same: Q -> Q -> Bool, ~view: Q -> View, +s: State(Q), +c: Chain) -> State(Q):
+def State.land(~Q: Data, ~same: Q -> Q -> Bool, ~view: Q -> View, +s: State(Q), c: Chain) -> State(Q):
   Land.of(~Q, ~same, s, Line.tip(~Q, ~view, s, c))
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement, or code that the laws split on, keeps each and/or as one value
@@ -1728,7 +1728,7 @@ def Vote.landed(
   ~view: Q -> View,
   ~judge: State(Q) -> Q -> Maybe<&2, Vote> -> Maybe<&2, Verdict>,
   n: String,
-  +s: State(Q),
+  s: State(Q),
   i: Id,
   q: Q,
   v: View
@@ -3804,7 +3804,7 @@ def Land.of.grows(
   m: Maybe<&2, Tip>
 ) -> {State.grows(~Q, ~same, s, Land.of(~Q, ~same, s, m)) == True{}: Bool}:
   match m:
-    case Some{Tip{e, +ms, h, Some{+w}}}:
+    case Some{Tip{e, ms, h, Some{+w}}}:
       Settle.of.grows(~Q, ~same, ~laws, s, w, State.decide(~Q, s, w, ms))
     case Some{Tip{e, ms, h, None{}}}:
       State.grows_refl(~Q, ~same, ~laws, s)

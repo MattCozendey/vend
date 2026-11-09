@@ -545,7 +545,6 @@ def Cell.keeps_join(
 # -----
 # A holder that takes a slot in keeps its own cell where it holds one.
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a slot's take of a slot that agrees with it is their join
 def Cell.take_join(
   ~V: Data,
@@ -568,7 +567,7 @@ def Cell.take_join(
       h => {==}
     case Some{c} None{}:
       h => {==}
-    case Some{One{+x}} Some{One{y}}:
+    case Some{One{x}} Some{One{y}}:
       h =>
         %Equal.sym(Bool, same(x, y), True{}, h):
           {Some{One{x}} == Some{Bool.pick(Cell<V>, _, One{x}, Many{})}: Maybe<&2, Cell<V>>}
@@ -614,4 +613,3 @@ def Cell.take_keeps(
       )
     case Some{Many{}} Some{Many{}}:
       h => {==}
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning

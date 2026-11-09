@@ -646,7 +646,7 @@ def Node.owners(s: State(), r: Ledgers.Id, l: Maybe<&2, String>) -> List<&2, Str
   Tip.owners(Ledgers.Line.tip(~Ask, ~Ask.view, s, Line.chain(r, l)))
 
 # the vote of the last step before the tip m of the line c
-def Chain.head.of(+s: State(), +c: Ledgers.Chain, m: Maybe<&2, Ledgers.Tip>) -> Maybe<&2, Ledgers.Vote>:
+def Chain.head.of(s: State(), c: Ledgers.Chain, m: Maybe<&2, Ledgers.Tip>) -> Maybe<&2, Ledgers.Vote>:
   match m:
     case Some{Ledgers.Tip{e, ms, h, last}}:
       Ledgers.Line.head(~Ask, ~Ask.view, s, c, e, ms, last)
@@ -1217,7 +1217,7 @@ def Group.named.all(+g: Groups, gs: List<&2, Member>) -> List<&2, String>:
       List.append(&2, String, Group.nodes.of(Group.succ(g, m)), Group.named.all(g, r))
 
 # the nodes that some group of gs names
-def Group.named(+g: Groups, gs: List<&2, Member>) -> List<&2, String>:
+def Group.named(g: Groups, gs: List<&2, Member>) -> List<&2, String>:
   Tries.Trie.unique(~String, ~Tries.Trie.text, Group.named.all(g, gs), Tries.Trie.new(Unit))
 
 # the nodes of ns that are inside the group g of the store tree h
@@ -1439,7 +1439,7 @@ def Judge.resolve(
 # content of a side; new bytes, with their rope; or ours (o), and its clash
 # open
 def Merge.put(
-  +f: Ledgers.Id,
+  f: Ledgers.Id,
   +n: Resources.Name,
   o: Maybe<&2, Ropes.Root>,
   p: Pick,
@@ -1468,7 +1468,7 @@ def Merge.put(
 # t (of the version f) keeps (none: wait for a node)
 def Merge.one(
   s: State(),
-  +f: Ledgers.Id,
+  f: Ledgers.Id,
   +n: Resources.Name,
   b: Maybe<&2, Ropes.Root>,
   +o: Maybe<&2, Ropes.Root>,
@@ -1815,7 +1815,7 @@ def Node.land(s: State(), q: Ask) -> State():
 # Node.ask once the cell m of the request's ID is known
 def Node.ask.at(
   n: String,
-  +s: State(),
+  s: State(),
   +e: Envelope,
   +q: Ask,
   m: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
@@ -2449,7 +2449,7 @@ def Branch.all(+s: State(), rs: List<&2, Ledgers.Id>) -> List<&2, BranchEntry>:
 # the stores of s that made a line: a store's branches and groups are its
 # lines, and each line's start is a fact under one prefix, so this costs the
 # lines, not the whole state
-def Node.stores(+s: State()) -> List<&2, Ledgers.Id>:
+def Node.stores(s: State()) -> List<&2, Ledgers.Id>:
   Tries.Trie.unique(
     ~Ledgers.Id,
     ~Ledgers.Id.key,

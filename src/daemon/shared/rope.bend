@@ -439,7 +439,7 @@ def Rope.read.go(
 def Rope.read(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  +s: S,
+  s: S,
   r: Root
 ) -> Maybe<&2, List<&2, U32>>:
   match r:
@@ -604,7 +604,7 @@ def Rope.holds_acc(
   match gs:
     case Nil{}:
       e => e
-    case Con{+g, +r}:
+    case Con{g, +r}:
       e => Rope.holds_acc(~S, ~fetch, ~A, ~mk, s, r, acc)(
         Shared.List.all.if_rest(
           Rope.has(~S, ~fetch, s, Node.words(mk(g))),
@@ -735,7 +735,7 @@ def Rope.concat_append(
   match xs:
     case Nil{}:
       {==}
-    case Con{+x, +r}:
+    case Con{x, +r}:
       %Equal.sym(
         List<&2, A>,
         List.concat(&2, A, List.append(&2, List<&2, A>, r, ys)),
@@ -763,7 +763,7 @@ def Rope.joins_flat(
   match gs:
     case Nil{}:
       {==}
-    case Con{+g, +r}:
+    case Con{g, +r}:
       %Equal.sym(
         List<&2, U32>,
         List.concat(&2, U32, List.append(&2, List<&2, U32>, g, List.concat(&2, List<&2, U32>, r))),
@@ -808,10 +808,10 @@ def Rope.up_reads(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   -d: Nat,
-  +gs: List<&2, List<&2, Hashes.Hash>>,
+  gs: List<&2, List<&2, Hashes.Hash>>,
   -hs: List<&2, Hashes.Hash>,
-  +acc: List<&2, List<&2, U32>>,
-  +s: S,
+  acc: List<&2, List<&2, U32>>,
+  s: S,
   -x: List<&2, U32>,
   flat: {List.concat(&2, Hashes.Hash, gs) == hs: List<&2, Hashes.Hash>},
   pre: {Rope.read.go(~S, ~fetch, d, s, hs) == Some{x}: Maybe<&2, List<&2, U32>>},
@@ -876,9 +876,9 @@ def Rope.put.top_holds(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   -d: Nat,
-  +hs: List<&2, Hashes.Hash>,
-  +acc: List<&2, List<&2, U32>>,
-  +s: S
+  hs: List<&2, Hashes.Hash>,
+  acc: List<&2, List<&2, U32>>,
+  s: S
 ) -> {
   Rope.holds(~S, ~fetch, s, Put.nodes(Rope.put.top(d, hs, acc))) == True{}: Bool
 } -> {Rope.holds(~S, ~fetch, s, acc) == True{}: Bool}:
@@ -891,8 +891,8 @@ def Rope.put.top_reads(
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   -d: Nat,
   +hs: List<&2, Hashes.Hash>,
-  +acc: List<&2, List<&2, U32>>,
-  +s: S,
+  acc: List<&2, List<&2, U32>>,
+  s: S,
   -x: List<&2, U32>,
   pre: {Rope.read.go(~S, ~fetch, d, s, hs) == Some{x}: Maybe<&2, List<&2, U32>>}
 ) -> {
@@ -1371,7 +1371,7 @@ def Rope.node_kept(
   ~grows: S -> S -> Bool,
   ~kept: Rope.Keeps(S, fetch, grows),
   +a: S,
-  +b: S,
+  b: S,
   +h: Hashes.Hash,
   -n: Node,
   gr: {grows(a, b) == True{}: Bool}

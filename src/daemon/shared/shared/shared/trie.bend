@@ -2383,7 +2383,6 @@ def Trie.keeps_size(ty, r, rs, s, s2):
 def Trie.take(~V: Data, a: Trie<V>, b: Trie<V>) -> Trie<V>:
   Trie.union(~V, ~(x => y => x), a, b)
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # Trie.take_keeps at one key
 def Trie.take_keeps.here(
@@ -2636,7 +2635,7 @@ def Trie.take_minus(
       {==}
     case Bin{h, z, o} Tip{}:
       {==}
-    case Bin{+h1, +z1, +o1} Bin{+h2, +z2, +o2}:
+    case Bin{+h1, +z1, +o1} Bin{h2, z2, o2}:
       %Trie.take_minus(~V, ~same, z1, z2): {
         Bin{
           Shared.Maybe.join(~V, ~(x => y => x), h1, Trie.minus.here(~V, ~same, h2, h1)),
@@ -2671,7 +2670,6 @@ def Trie.take_minus(
       }
       {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Orders
 # ------
@@ -2706,7 +2704,6 @@ def Trie.after(-V: Data, t: Trie<V>, k: List<&2, Bool>) -> List<&2, V>:
     case Bin{h, z, o} Con{True{}, r}:
       Trie.after(V, o, r)
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # lists put one after the other group either way
 def Trie.append_assoc(
   -V: Data,
@@ -2853,4 +2850,3 @@ def Trie.values_around(
             <> List.append(&2, V, Trie.values(V, z), _): List<&2, V>
         }
         {==}
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
