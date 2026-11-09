@@ -216,6 +216,14 @@ def Kids.none() -> List<&2, Maybe<&2, Hashes.Hash>>:
     None{}
   ]
 
+# the hash of the part x of a branch (none: the empty tree)
+def Kid.hash(x: Maybe<&2, Hashes.Hash>) -> Hashes.Hash:
+  match x:
+    case None{}:
+      Tree.none()
+    case Some{h}:
+      h
+
 # Reads
 # -----
 
@@ -227,6 +235,19 @@ def Tree.node(
   h: Hashes.Hash
 ) -> Maybe<&2, Node>:
   Shared.Maybe.then(List<&2, U32>, Node, fetch(s)(h), Node.of)
+
+# the node of the part x of a branch (none: empty), in the store s
+def Tree.kid(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  x: Maybe<&2, Hashes.Hash>
+) -> Maybe<&2, Node>:
+  match x:
+    case None{}:
+      Some{Node.empty{}}
+    case Some{h}:
+      Tree.node(~S, ~fetch, s, h)
 
 # the value of the key k in the node m (none: not in the store), whose path
 # below it is p
@@ -248,19 +269,7 @@ def Tree.go(
     case Nil{} Some{Node.branch{ks}}:
       None{}
     case Con{x, r} Some{Node.branch{ks}}:
-      Tree.go(
-        ~S,
-        ~fetch,
-        s,
-        r,
-        k,
-        Shared.Maybe.then(
-          Hashes.Hash,
-          Node,
-          Kids.at(ks, U32.to_nat(x)),
-          h => Tree.node(~S, ~fetch, s, h)
-        )
-      )
+      Tree.go(~S, ~fetch, s, r, k, Tree.kid(~S, ~fetch, s, Kids.at(ks, U32.to_nat(x))))
 
 # the value of the key k in the tree whose root is h, in the store s
 def Tree.get(
@@ -274,6 +283,8 @@ def Tree.get(
 
 # Writes
 # ------
+# A write fails (none) when the store does not hold a node on its path, or
+# when the key's path is the whole path of another key in the tree.
 
 # a new part of a tree: its root, and the words of the nodes that it adds
 type Put is Data:
@@ -300,43 +311,40 @@ def Put.node(n: Node, ns: List<&2, List<&2, U32>>) -> Put:
 def Put.into(ks: List<&2, Maybe<&2, Hashes.Hash>>, n: Nat, +p: Put) -> Put:
   Put.node(Node.branch{Kids.set(ks, n, Some{Put.root(p)})}, Put.nodes(p))
 
-# the part that holds two leaves, of hashes h1 and h2, whose paths below here
-# are p1 and p2: branches down to where the paths part
-def Tree.split(p1: List<&2, U32>, p2: List<&2, U32>, +h1: Hashes.Hash, +h2: Hashes.Hash) -> Put:
+# the part that holds the new leaf of words ws, whose path below here is p1,
+# and the part of hash h2 already there, whose path below here is p2:
+# branches down to where the paths part
+def Tree.split(
+  p1: List<&2, U32>,
+  p2: List<&2, U32>,
+  +ws: List<&2, U32>,
+  +h2: Hashes.Hash
+) -> Maybe<&2, Put>:
   match p1 p2:
     case Con{a, r1} Con{b, r2}:
       +x = U32.to_nat(a)
       +y = U32.to_nat(b)
       Shared.Bool.when(
-        Put,
+        Maybe<&2, Put>,
         Nat.is_eq(x, y),
-        u => Put.into(Kids.none(), x, Tree.split(r1, r2, h1, h2)),
-        u => Put.node(Node.branch{Kids.set(Kids.set(Kids.none(), x, Some{h1}), y, Some{h2})}, [])
+        u => Shared.Maybe.then(
+          Put,
+          Put,
+          Tree.split(r1, r2, ws, h2),
+          p => Some{Put.into(Kids.none(), x, p)}
+        ),
+        u => Some{
+          Put.node(
+            Node.branch{Kids.set(Kids.set(Kids.none(), x, Some{Hashes.Sha.hash(ws)}), y, Some{h2})},
+            [ws]
+          )
+        }
       )
     case q w:
-      Put{h1, []}
+      None{}
 
-# the part that holds the leaf of k and v, whose path below here is p, and the
-# leaf of k2 and v2 already there, at depth d
-def Tree.put.split(
-  p: List<&2, U32>,
-  d: Nat,
-  k: List<&2, U32>,
-  v: List<&2, U32>,
-  +k2: List<&2, U32>,
-  v2: List<&2, U32>
-) -> Put:
-  +ws = Node.words(Node.leaf{k, v})
-  +sp = Tree.split(
-    p,
-    List.drop(&2, U32, Tree.path(k2), d),
-    Hashes.Sha.hash(ws),
-    Node.hash(Node.leaf{k2, v2})
-  )
-  Put{Put.root(sp), ws <> Put.nodes(sp)}
-
-# the part m (none: empty) at depth d, whose path below is p, with the key k
-# set to the value v
+# the part m of hash h (none: not in the store), at depth d, whose path below
+# is p, with the key k set to the value v
 def Tree.put(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -345,38 +353,32 @@ def Tree.put(
   d: Nat,
   +k: List<&2, U32>,
   +v: List<&2, U32>,
+  h: Hashes.Hash,
   m: Maybe<&2, Node>
-) -> Put:
+) -> Maybe<&2, Put>:
   match p m:
     case q None{}:
-      Put.node(Node.leaf{k, v}, [])
+      None{}
     case q Some{Node.empty{}}:
-      Put.node(Node.leaf{k, v}, [])
+      Some{Put.node(Node.leaf{k, v}, [])}
     case q Some{Node.leaf{+k2, v2}}:
       Shared.Bool.when(
-        Put,
+        Maybe<&2, Put>,
         Shared.List.is_eq(~U32, ~U32.is_eq, k2, k),
-        u => Put.node(Node.leaf{k, v}, []),
-        w => Tree.put.split(q, d, k, v, k2, v2)
+        u => Some{Put.node(Node.leaf{k, v}, [])},
+        w => Tree.split(q, List.drop(&2, U32, Tree.path(k2), d), Node.words(Node.leaf{k, v}), h)
       )
     case Con{x, r} Some{Node.branch{+ks}}:
       +n = U32.to_nat(x)
-      Put.into(
-        ks,
-        n,
-        Tree.put(
-          ~S,
-          ~fetch,
-          s,
-          r,
-          1n+d,
-          k,
-          v,
-          Shared.Maybe.then(Hashes.Hash, Node, Kids.at(ks, n), h => Tree.node(~S, ~fetch, s, h))
-        )
+      +kid = Kids.at(ks, n)
+      Shared.Maybe.then(
+        Put,
+        Put,
+        Tree.put(~S, ~fetch, s, r, 1n+d, k, v, Kid.hash(kid), Tree.kid(~S, ~fetch, s, kid)),
+        p2 => Some{Put.into(ks, n, p2)}
       )
     case Nil{} Some{Node.branch{ks}}:
-      Put.node(Node.leaf{k, v}, [])
+      None{}
 
 # the tree whose root is h, in the store s, with the key k set to the value
 # v: its new root, and the nodes that it adds
@@ -384,11 +386,11 @@ def Tree.set(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   +s: S,
-  h: Hashes.Hash,
+  +h: Hashes.Hash,
   +k: List<&2, U32>,
   v: List<&2, U32>
-) -> Put:
-  Tree.put(~S, ~fetch, s, Tree.path(k), 0n, k, v, Tree.node(~S, ~fetch, s, h))
+) -> Maybe<&2, Put>:
+  Tree.put(~S, ~fetch, s, Tree.path(k), 0n, k, v, h, Tree.node(~S, ~fetch, s, h))
 
 # Laws
 # ----
@@ -588,219 +590,217 @@ def Tree.read_leaf(
       ): {Shared.Maybe.when(List<&2, U32>, _, u => Some{v}) == Some{v}: Maybe<&2, List<&2, U32>>}
       {==}
 
-# a read of the key k at the new leaf of k and v gives v, when the store
-# holds it
+# what a read of the key k along p gives at the root of the new part r
+# (none: a write that failed), in any store s2 that holds its nodes: w
+def Tree.Reads(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s2: S,
+  p: List<&2, U32>,
+  k: List<&2, U32>,
+  w: Maybe<&2, List<&2, U32>>,
+  r: Maybe<&2, Put>
+) -> Type:
+  match r:
+    case None{}:
+      Unit
+    case Some{q}:
+      {
+        Tree.holds(~S, ~fetch, s2, Put.nodes(q)) == True{}: Bool
+      } -> {
+        Tree.go(
+          ~S,
+          ~fetch,
+          s2,
+          p,
+          k,
+          Tree.node(~S, ~fetch, s2, Put.root(q))
+        )
+          == w: Maybe<&2, List<&2, U32>>
+      }
+
+# a part m that reads as wi along pi, then f, reads as wo along po, when each
+# part q that reads as wi along pi gives a part f(q) that reads as wo along po
+def Tree.reads_then(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  -s2: S,
+  -pi: List<&2, U32>,
+  -po: List<&2, U32>,
+  -k: List<&2, U32>,
+  -wi: Maybe<&2, List<&2, U32>>,
+  -wo: Maybe<&2, List<&2, U32>>,
+  m: Maybe<&2, Put>,
+  -f: Put -> Maybe<&2, Put>,
+  g: @q: Put -> Tree.Reads(
+    ~S,
+    ~fetch,
+    s2,
+    pi,
+    k,
+    wi,
+    Some{q}
+  ) -> Tree.Reads(~S, ~fetch, s2, po, k, wo, f(q)),
+  i: Tree.Reads(~S, ~fetch, s2, pi, k, wi, m)
+) -> Tree.Reads(~S, ~fetch, s2, po, k, wo, Shared.Maybe.then(Put, Put, m, f)):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{q}:
+      g(q)(i)
+
+# the new leaf of k and v reads as v along any path
 def Tree.read_new_leaf(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  +s: S,
+  +s2: S,
   p: List<&2, U32>,
   +k: List<&2, U32>,
-  +v: List<&2, U32>,
-  e: {Tree.holds(~S, ~fetch, s, Put.nodes(Put.node(Node.leaf{k, v}, []))) == True{}: Bool}
-) -> {
-  Tree.go(
-    ~S,
-    ~fetch,
-    s,
-    p,
-    k,
-    Tree.node(~S, ~fetch, s, Put.root(Put.node(Node.leaf{k, v}, [])))
-  )
-    == Some{v}: Maybe<&2, List<&2, U32>>
-}:
-  %Equal.sym(
-    Maybe<&2, Node>,
-    Tree.node(~S, ~fetch, s, Node.hash(Node.leaf{k, v})),
-    Some{Node.leaf{k, v}},
-    Tree.has_node(
-      ~S,
-      ~fetch,
-      s,
-      Node.leaf{k, v},
-      Shared.List.all.if_hit(Tree.has(~S, ~fetch, s, Node.words(Node.leaf{k, v})), u => True{})(e)
-    )
-  ): {Tree.go(~S, ~fetch, s, p, k, _) == Some{v}: Maybe<&2, List<&2, U32>>}
-  Tree.read_leaf(~S, ~fetch, s, p, k, v)
+  +v: List<&2, U32>
+) -> Tree.Reads(~S, ~fetch, s2, p, k, Some{v}, Some{Put.node(Node.leaf{k, v}, [])}):
+  e =>
+    %Equal.sym(
+      Maybe<&2, Node>,
+      Tree.node(~S, ~fetch, s2, Node.hash(Node.leaf{k, v})),
+      Some{Node.leaf{k, v}},
+      Tree.has_node(
+        ~S,
+        ~fetch,
+        s2,
+        Node.leaf{k, v},
+        Shared.List.all.if_hit(
+          Tree.has(~S, ~fetch, s2, Node.words(Node.leaf{k, v})),
+          u => True{}
+        )(e)
+      )
+    ): {Tree.go(~S, ~fetch, s2, p, k, _) == Some{v}: Maybe<&2, List<&2, U32>>}
+    Tree.read_leaf(~S, ~fetch, s2, p, k, v)
 
-# a read of the key k along x then r, at a new branch of parts ks whose part
-# x is the new part p, is a read along r at p, when the store holds them
+# a new branch of parts ks whose part x is the new part q reads along x then
+# r as q reads along r
 def Tree.read_into(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  +s: S,
+  +s2: S,
   +ks: List<&2, Maybe<&2, Hashes.Hash>>,
   +x: U32,
   r: List<&2, U32>,
   k: List<&2, U32>,
-  -v: List<&2, U32>,
-  +p: Put,
-  ih: {
-    Tree.holds(~S, ~fetch, s, Put.nodes(p)) == True{}: Bool
-  } -> {
-    Tree.go(
-      ~S,
-      ~fetch,
-      s,
-      r,
-      k,
-      Tree.node(~S, ~fetch, s, Put.root(p))
-    )
-      == Some{v}: Maybe<&2, List<&2, U32>>
-  },
-  +e: {Tree.holds(~S, ~fetch, s, Put.nodes(Put.into(ks, U32.to_nat(x), p))) == True{}: Bool}
-) -> {
-  Tree.go(
-    ~S,
-    ~fetch,
-    s,
-    Con{x, r},
-    k,
-    Tree.node(~S, ~fetch, s, Put.root(Put.into(ks, U32.to_nat(x), p)))
-  )
-    == Some{v}: Maybe<&2, List<&2, U32>>
-}:
-  +b = {Node.branch{Kids.set(ks, U32.to_nat(x), Some{Put.root(p)})}: Node}
-  +rest = Tree.holds(~S, ~fetch, s, Put.nodes(p))
-  %Equal.sym(
-    Maybe<&2, Node>,
-    Tree.node(~S, ~fetch, s, Node.hash(b)),
-    Some{b},
-    Tree.has_node(
-      ~S,
-      ~fetch,
-      s,
-      b,
-      Shared.List.all.if_hit(Tree.has(~S, ~fetch, s, Node.words(b)), u => rest)(e)
-    )
-  ): {Tree.go(~S, ~fetch, s, Con{x, r}, k, _) == Some{v}: Maybe<&2, List<&2, U32>>}
-  %Equal.sym(
-    Maybe<&2, Hashes.Hash>,
-    Kids.at(Kids.set(ks, U32.to_nat(x), Some{Put.root(p)}), U32.to_nat(x)),
-    Some{Put.root(p)},
-    Kids.at_set(ks, U32.to_nat(x), Some{Put.root(p)})
-  ): {
-    Tree.go(
-      ~S,
-      ~fetch,
-      s,
-      r,
-      k,
-      Shared.Maybe.then(Hashes.Hash, Node, _, h => Tree.node(~S, ~fetch, s, h))
-    )
-      == Some{v}: Maybe<&2, List<&2, U32>>
-  }
-  ih(Shared.List.all.if_rest(Tree.has(~S, ~fetch, s, Node.words(b)), u => rest)(e))
+  -w: Maybe<&2, List<&2, U32>>,
+  +q: Put,
+  ih: Tree.Reads(~S, ~fetch, s2, r, k, w, Some{q})
+) -> Tree.Reads(~S, ~fetch, s2, Con{x, r}, k, w, Some{Put.into(ks, U32.to_nat(x), q)}):
+  +e =>
+    +b = {Node.branch{Kids.set(ks, U32.to_nat(x), Some{Put.root(q)})}: Node}
+    +rest = Tree.holds(~S, ~fetch, s2, Put.nodes(q))
+    %Equal.sym(
+      Maybe<&2, Node>,
+      Tree.node(~S, ~fetch, s2, Node.hash(b)),
+      Some{b},
+      Tree.has_node(
+        ~S,
+        ~fetch,
+        s2,
+        b,
+        Shared.List.all.if_hit(Tree.has(~S, ~fetch, s2, Node.words(b)), u => rest)(e)
+      )
+    ): {Tree.go(~S, ~fetch, s2, Con{x, r}, k, _) == w: Maybe<&2, List<&2, U32>>}
+    %Equal.sym(
+      Maybe<&2, Hashes.Hash>,
+      Kids.at(Kids.set(ks, U32.to_nat(x), Some{Put.root(q)}), U32.to_nat(x)),
+      Some{Put.root(q)},
+      Kids.at_set(ks, U32.to_nat(x), Some{Put.root(q)})
+    ): {Tree.go(~S, ~fetch, s2, r, k, Tree.kid(~S, ~fetch, s2, _)) == w: Maybe<&2, List<&2, U32>>}
+    ih(Shared.List.all.if_rest(Tree.has(~S, ~fetch, s2, Node.words(b)), u => rest)(e))
 
-# a read along a then r1 at the part c of Tree.split that holds the new leaf
-# of k and v, of hash h1, gives v, when the store holds them
+# the part c of Tree.split, with the new leaf of k and v, reads as v along a
+# then r1
 def Tree.read_split.when(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  +s: S,
+  +s2: S,
   +a: U32,
   +r1: List<&2, U32>,
   +b: U32,
   r2: List<&2, U32>,
-  +h1: Hashes.Hash,
   +h2: Hashes.Hash,
-  k: List<&2, U32>,
-  v: List<&2, U32>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
   c: Bool,
   ec: {Nat.is_eq(U32.to_nat(a), U32.to_nat(b)) == c: Bool},
-  ih: {
-    Tree.holds(~S, ~fetch, s, Put.nodes(Tree.split(r1, r2, h1, h2))) == True{}: Bool
-  } -> {
-    Tree.go(
-      ~S,
-      ~fetch,
-      s,
-      r1,
-      k,
-      Tree.node(~S, ~fetch, s, Put.root(Tree.split(r1, r2, h1, h2)))
-    )
-      == Some{v}: Maybe<&2, List<&2, U32>>
-  },
-  e1: {Tree.node(~S, ~fetch, s, h1) == Some{Node.leaf{k, v}}: Maybe<&2, Node>}
-) -> {
-  Tree.holds(
+  ih: Tree.Reads(
     ~S,
     ~fetch,
-    s,
-    Put.nodes(
-      Shared.Bool.when(
-        Put,
-        c,
-        u => Put.into(Kids.none(), U32.to_nat(a), Tree.split(r1, r2, h1, h2)),
-        u => Put.node(
-          Node.branch{
-            Kids.set(Kids.set(Kids.none(), U32.to_nat(a), Some{h1}), U32.to_nat(b), Some{h2})
-          },
-          []
-        )
-      )
-    )
-  )
-    == True{}: Bool
-} -> {
-  Tree.go(
-    ~S,
-    ~fetch,
-    s,
-    Con{a, r1},
+    s2,
+    r1,
     k,
-    Tree.node(
-      ~S,
-      ~fetch,
-      s,
-      Put.root(
-        Shared.Bool.when(
-          Put,
-          c,
-          u => Put.into(Kids.none(), U32.to_nat(a), Tree.split(r1, r2, h1, h2)),
-          u => Put.node(
-            Node.branch{
-              Kids.set(Kids.set(Kids.none(), U32.to_nat(a), Some{h1}), U32.to_nat(b), Some{h2})
-            },
-            []
-          )
-        )
-      )
-    )
+    Some{v},
+    Tree.split(r1, r2, Node.words(Node.leaf{k, v}), h2)
   )
-    == Some{v}: Maybe<&2, List<&2, U32>>
-}:
+) -> Tree.Reads(
+  ~S,
+  ~fetch,
+  s2,
+  Con{a, r1},
+  k,
+  Some{v},
+  Shared.Bool.when(
+    Maybe<&2, Put>,
+    c,
+    u => Shared.Maybe.then(
+      Put,
+      Put,
+      Tree.split(r1, r2, Node.words(Node.leaf{k, v}), h2),
+      p => Some{Put.into(Kids.none(), U32.to_nat(a), p)}
+    ),
+    u => Some{
+      Put.node(
+        Node.branch{
+          Kids.set(
+            Kids.set(Kids.none(), U32.to_nat(a), Some{Node.hash(Node.leaf{k, v})}),
+            U32.to_nat(b),
+            Some{h2}
+          )
+        },
+        [Node.words(Node.leaf{k, v})]
+      )
+    }
+  )
+):
   match c:
     case True{}:
-      e => Tree.read_into(
+      Tree.reads_then(
         ~S,
         ~fetch,
-        s,
-        Kids.none(),
-        a,
+        s2,
         r1,
+        Con{a, r1},
         k,
-        v,
-        Tree.split(r1, r2, h1, h2),
-        ih,
-        e
+        Some{v},
+        Some{v},
+        Tree.split(r1, r2, Node.words(Node.leaf{k, v}), h2),
+        p => Some{Put.into(Kids.none(), U32.to_nat(a), p)},
+        q => iq => Tree.read_into(~S, ~fetch, s2, Kids.none(), a, r1, k, Some{v}, q, iq),
+        ih
       )
     case False{}:
-      e =>
-        +ka = Kids.set(Kids.none(), U32.to_nat(a), Some{h1})
+      +e =>
+        +l = {Node.leaf{k, v}: Node}
+        +ka = Kids.set(Kids.none(), U32.to_nat(a), Some{Node.hash(l)})
         +n = {Node.branch{Kids.set(ka, U32.to_nat(b), Some{h2})}: Node}
+        +rest = Tree.holds(~S, ~fetch, s2, [Node.words(l)])
         %Equal.sym(
           Maybe<&2, Node>,
-          Tree.node(~S, ~fetch, s, Node.hash(n)),
+          Tree.node(~S, ~fetch, s2, Node.hash(n)),
           Some{n},
           Tree.has_node(
             ~S,
             ~fetch,
-            s,
+            s2,
             n,
-            Shared.List.all.if_hit(Tree.has(~S, ~fetch, s, Node.words(n)), u => True{})(e)
+            Shared.List.all.if_hit(Tree.has(~S, ~fetch, s2, Node.words(n)), u => rest)(e)
           )
-        ): {Tree.go(~S, ~fetch, s, Con{a, r1}, k, _) == Some{v}: Maybe<&2, List<&2, U32>>}
+        ): {Tree.go(~S, ~fetch, s2, Con{a, r1}, k, _) == Some{v}: Maybe<&2, List<&2, U32>>}
         %Equal.sym(
           Maybe<&2, Hashes.Hash>,
           Kids.at(Kids.set(ka, U32.to_nat(b), Some{h2}), U32.to_nat(a)),
@@ -810,181 +810,122 @@ def Tree.read_split.when(
           Tree.go(
             ~S,
             ~fetch,
-            s,
+            s2,
             r1,
             k,
-            Shared.Maybe.then(Hashes.Hash, Node, _, h => Tree.node(~S, ~fetch, s, h))
+            Tree.kid(~S, ~fetch, s2, _)
           )
             == Some{v}: Maybe<&2, List<&2, U32>>
         }
         %Equal.sym(
           Maybe<&2, Hashes.Hash>,
           Kids.at(ka, U32.to_nat(a)),
-          Some{h1},
-          Kids.at_set(Kids.none(), U32.to_nat(a), Some{h1})
+          Some{Node.hash(l)},
+          Kids.at_set(Kids.none(), U32.to_nat(a), Some{Node.hash(l)})
         ): {
           Tree.go(
             ~S,
             ~fetch,
-            s,
+            s2,
             r1,
             k,
-            Shared.Maybe.then(Hashes.Hash, Node, _, h => Tree.node(~S, ~fetch, s, h))
+            Tree.kid(~S, ~fetch, s2, _)
           )
             == Some{v}: Maybe<&2, List<&2, U32>>
         }
         %Equal.sym(
           Maybe<&2, Node>,
-          Tree.node(~S, ~fetch, s, h1),
-          Some{Node.leaf{k, v}},
-          e1
-        ): {Tree.go(~S, ~fetch, s, r1, k, _) == Some{v}: Maybe<&2, List<&2, U32>>}
-        Tree.read_leaf(~S, ~fetch, s, r1, k, v)
+          Tree.node(~S, ~fetch, s2, Node.hash(l)),
+          Some{l},
+          Tree.has_node(
+            ~S,
+            ~fetch,
+            s2,
+            l,
+            Shared.List.all.if_hit(
+              Tree.has(~S, ~fetch, s2, Node.words(l)),
+              u => True{}
+            )(Shared.List.all.if_rest(Tree.has(~S, ~fetch, s2, Node.words(n)), u => rest)(e))
+          )
+        ): {Tree.go(~S, ~fetch, s2, r1, k, _) == Some{v}: Maybe<&2, List<&2, U32>>}
+        Tree.read_leaf(~S, ~fetch, s2, r1, k, v)
 
-# a read along p1 at Tree.split that holds the new leaf of k and v, of hash
-# h1, gives v, when the store holds them
+# Tree.split, with the new leaf of k and v, reads as v along p1
 def Tree.read_split(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  +s: S,
+  +s2: S,
   p1: List<&2, U32>,
   p2: List<&2, U32>,
-  +h1: Hashes.Hash,
   +h2: Hashes.Hash,
   +k: List<&2, U32>,
-  +v: List<&2, U32>,
-  +e1: {Tree.node(~S, ~fetch, s, h1) == Some{Node.leaf{k, v}}: Maybe<&2, Node>},
-  e: {Tree.holds(~S, ~fetch, s, Put.nodes(Tree.split(p1, p2, h1, h2))) == True{}: Bool}
-) -> {
-  Tree.go(
-    ~S,
-    ~fetch,
-    s,
-    p1,
-    k,
-    Tree.node(~S, ~fetch, s, Put.root(Tree.split(p1, p2, h1, h2)))
-  )
-    == Some{v}: Maybe<&2, List<&2, U32>>
-}:
+  +v: List<&2, U32>
+) -> Tree.Reads(
+  ~S,
+  ~fetch,
+  s2,
+  p1,
+  k,
+  Some{v},
+  Tree.split(p1, p2, Node.words(Node.leaf{k, v}), h2)
+):
   match p1 p2:
     case Con{+a, +r1} Con{+b, +r2}:
       Tree.read_split.when(
         ~S,
         ~fetch,
-        s,
+        s2,
         a,
         r1,
         b,
         r2,
-        h1,
         h2,
         k,
         v,
         Nat.is_eq(U32.to_nat(a), U32.to_nat(b)),
         {==},
-        h => Tree.read_split(~S, ~fetch, s, r1, r2, h1, h2, k, v, e1, h),
-        e1
-      )(e)
+        Tree.read_split(~S, ~fetch, s2, r1, r2, h2, k, v)
+      )
     case Con{a, r1} Nil{}:
-      %Equal.sym(
-        Maybe<&2, Node>,
-        Tree.node(~S, ~fetch, s, h1),
-        Some{Node.leaf{k, v}},
-        e1
-      ): {Tree.go(~S, ~fetch, s, Con{a, r1}, k, _) == Some{v}: Maybe<&2, List<&2, U32>>}
-      Tree.read_leaf(~S, ~fetch, s, Con{a, r1}, k, v)
+      Unit{}
     case Nil{} w:
-      %Equal.sym(
-        Maybe<&2, Node>,
-        Tree.node(~S, ~fetch, s, h1),
-        Some{Node.leaf{k, v}},
-        e1
-      ): {Tree.go(~S, ~fetch, s, [], k, _) == Some{v}: Maybe<&2, List<&2, U32>>}
-      Tree.read_leaf(~S, ~fetch, s, [], k, v)
+      Unit{}
 
-# a read of the key k along q at the part c of Tree.put, at a leaf of k2 and
-# v2, gives v, when the store s2 holds the new nodes
+# the part c of Tree.put, at a leaf of k2, reads as v along q
 def Tree.read_put.when(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  +s2: S,
-  +q: List<&2, U32>,
+  s2: S,
+  q: List<&2, U32>,
   d: Nat,
-  +k: List<&2, U32>,
-  +v: List<&2, U32>,
-  +k2: List<&2, U32>,
-  v2: List<&2, U32>,
-  c: Bool,
-  +e: {
-    Tree.holds(
-      ~S,
-      ~fetch,
-      s2,
-      Put.nodes(
-        Shared.Bool.when(
-          Put,
-          c,
-          u => Put.node(Node.leaf{k, v}, []),
-          w => Tree.put.split(q, d, k, v, k2, v2)
-        )
-      )
-    )
-      == True{}: Bool
-  }
-) -> {
-  Tree.go(
-    ~S,
-    ~fetch,
-    s2,
-    q,
-    k,
-    Tree.node(
-      ~S,
-      ~fetch,
-      s2,
-      Put.root(
-        Shared.Bool.when(
-          Put,
-          c,
-          u => Put.node(Node.leaf{k, v}, []),
-          w => Tree.put.split(q, d, k, v, k2, v2)
-        )
-      )
-    )
+  k: List<&2, U32>,
+  v: List<&2, U32>,
+  k2: List<&2, U32>,
+  h: Hashes.Hash,
+  c: Bool
+) -> Tree.Reads(
+  ~S,
+  ~fetch,
+  s2,
+  q,
+  k,
+  Some{v},
+  Shared.Bool.when(
+    Maybe<&2, Put>,
+    c,
+    u => Some{Put.node(Node.leaf{k, v}, [])},
+    w => Tree.split(q, List.drop(&2, U32, Tree.path(k2), d), Node.words(Node.leaf{k, v}), h)
   )
-    == Some{v}: Maybe<&2, List<&2, U32>>
-}:
+):
   match c:
     case True{}:
-      Tree.read_new_leaf(~S, ~fetch, s2, q, k, v, e)
+      Tree.read_new_leaf(~S, ~fetch, s2, q, k, v)
     case False{}:
-      +l = {Node.leaf{k, v}: Node}
-      +p2 = List.drop(&2, U32, Tree.path(k2), d)
-      +h2 = Node.hash(Node.leaf{k2, v2})
-      +ns = Tree.holds(~S, ~fetch, s2, Put.nodes(Tree.split(q, p2, Node.hash(l), h2)))
-      Tree.read_split(
-        ~S,
-        ~fetch,
-        s2,
-        q,
-        p2,
-        Node.hash(l),
-        h2,
-        k,
-        v,
-        Tree.has_node(
-          ~S,
-          ~fetch,
-          s2,
-          l,
-          Shared.List.all.if_hit(Tree.has(~S, ~fetch, s2, Node.words(l)), u => ns)(e)
-        ),
-        Shared.List.all.if_rest(Tree.has(~S, ~fetch, s2, Node.words(l)), u => ns)(e)
-      )
+      Tree.read_split(~S, ~fetch, s2, q, List.drop(&2, U32, Tree.path(k2), d), h, k, v)
 
-# a read of the key k along p at the part that Tree.put makes from the part m
-# of the store s, with k set to v, gives v, when the store s2 holds the new
-# nodes
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a binder of an erased argument of a proof; a proof does not run
+# Tree.put from the part m of the store s, with k set to v, reads as v along
+# p, in any store s2 that holds its nodes
 def Tree.read_put(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -994,24 +935,14 @@ def Tree.read_put(
   +d: Nat,
   +k: List<&2, U32>,
   +v: List<&2, U32>,
-  m: Maybe<&2, Node>,
-  e: {Tree.holds(~S, ~fetch, s2, Put.nodes(Tree.put(~S, ~fetch, s, p, d, k, v, m))) == True{}: Bool}
-) -> {
-  Tree.go(
-    ~S,
-    ~fetch,
-    s2,
-    p,
-    k,
-    Tree.node(~S, ~fetch, s2, Put.root(Tree.put(~S, ~fetch, s, p, d, k, v, m)))
-  )
-    == Some{v}: Maybe<&2, List<&2, U32>>
-}:
+  h: Hashes.Hash,
+  m: Maybe<&2, Node>
+) -> Tree.Reads(~S, ~fetch, s2, p, k, Some{v}, Tree.put(~S, ~fetch, s, p, d, k, v, h, m)):
   match p m:
     case q None{}:
-      Tree.read_new_leaf(~S, ~fetch, s2, q, k, v, e)
+      Unit{}
     case q Some{Node.empty{}}:
-      Tree.read_new_leaf(~S, ~fetch, s2, q, k, v, e)
+      Tree.read_new_leaf(~S, ~fetch, s2, q, k, v)
     case q Some{Node.leaf{+k2, v2}}:
       Tree.read_put.when(
         ~S,
@@ -1022,56 +953,29 @@ def Tree.read_put(
         k,
         v,
         k2,
-        v2,
-        Shared.List.is_eq(~U32, ~U32.is_eq, k2, k),
-        e
+        h,
+        Shared.List.is_eq(~U32, ~U32.is_eq, k2, k)
       )
     case Con{+x, +r} Some{Node.branch{+ks}}:
-      Tree.read_into(
+      +kid = Kids.at(ks, U32.to_nat(x))
+      Tree.reads_then(
         ~S,
         ~fetch,
         s2,
-        ks,
-        x,
         r,
+        Con{x, r},
         k,
-        v,
-        Tree.put(
-          ~S,
-          ~fetch,
-          s,
-          r,
-          1n+d,
-          k,
-          v,
-          Shared.Maybe.then(
-            Hashes.Hash,
-            Node,
-            Kids.at(ks, U32.to_nat(x)),
-            h => Tree.node(~S, ~fetch, s, h)
-          )
-        ),
-        h => Tree.read_put(
-          ~S,
-          ~fetch,
-          s,
-          s2,
-          r,
-          1n+d,
-          k,
-          v,
-          Shared.Maybe.then(
-            Hashes.Hash,
-            Node,
-            Kids.at(ks, U32.to_nat(x)),
-            h => Tree.node(~S, ~fetch, s, h)
-          ),
-          h
-        ),
-        e
+        Some{v},
+        Some{v},
+        Tree.put(~S, ~fetch, s, r, 1n+d, k, v, Kid.hash(kid), Tree.kid(~S, ~fetch, s, kid)),
+        p2 => Some{Put.into(ks, U32.to_nat(x), p2)},
+        q => iq => Tree.read_into(~S, ~fetch, s2, ks, x, r, k, Some{v}, q, iq),
+        Tree.read_put(~S, ~fetch, s, s2, r, 1n+d, k, v, Kid.hash(kid), Tree.kid(~S, ~fetch, s, kid))
       )
     case Nil{} Some{Node.branch{ks}}:
-      Tree.read_new_leaf(~S, ~fetch, s2, [], k, v, e)
+      Unit{}
+
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # after the key k is set to v in the tree whose root is h in the store s, a
 # read of k at the new root gives v, in any store s2 that holds the new nodes
@@ -1080,21 +984,16 @@ law Tree.get_set:
   for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
   for +s: S
   for s2: S
-  for h: Hashes.Hash
+  for +h: Hashes.Hash
   for +k: List<&2, U32>
   for v: List<&2, U32>
-  for e: {Tree.holds(~S, ~fetch, s2, Put.nodes(Tree.set(~S, ~fetch, s, h, k, v))) == True{}: Bool}
-  {
-    Tree.get(
-      ~S,
-      ~fetch,
-      s2,
-      Put.root(Tree.set(~S, ~fetch, s, h, k, v)),
-      k
-    )
-      == Some{v}: Maybe<&2, List<&2, U32>>
-  }
+  for t: Put
+  {Tree.set(~S, ~fetch, s, h, k, v) == Some{t}: Maybe<&2, Put>}
+    -> {Tree.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool}
+    -> {Tree.get(~S, ~fetch, s2, Put.root(t), k) == Some{v}: Maybe<&2, List<&2, U32>>}
 
-def Tree.get_set(ty, fetch, s, s2, h, k, v, e):
-  Tree.read_put(~ty, ~fetch, s, s2, Tree.path(k), 0n, k, v, Tree.node(~ty, ~fetch, s, h), e)
+def Tree.get_set(ty, fetch, s, s2, h, k, v, t):
+  e =>
+    %e: Tree.Reads(~ty, ~fetch, s2, Tree.path(k), k, Some{v}, _)
+    Tree.read_put(~ty, ~fetch, s, s2, Tree.path(k), 0n, k, v, h, Tree.node(~ty, ~fetch, s, h))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
