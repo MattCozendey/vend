@@ -77,6 +77,19 @@ def List.all.if_rest(
     case False{}:
       h => Empty.absurd({rest(Unit{}) == True{}: Bool}, Bool.false_ne_true(h))
 
+# a true hit and a true rest make a true "all"
+def List.all.if_both(
+  hit: Bool,
+  rest: Unit -> Bool
+) -> {
+  hit == True{}: Bool
+} -> {rest(Unit{}) == True{}: Bool} -> {List.all.if(rest, hit) == True{}: Bool}:
+  match hit:
+    case True{}:
+      h1 => h2 => h2
+    case False{}:
+      h1 => h2 => Empty.absurd({False{} == True{}: Bool}, Bool.false_ne_true(h1))
+
 # ks without the values that same calls p
 def List.remove(~A: Data, ~same: A -> A -> Bool, ks: List<&2, A>, +p: A) -> List<&2, A>:
   match ks:
