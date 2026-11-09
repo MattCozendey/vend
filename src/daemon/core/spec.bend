@@ -11,16 +11,17 @@ import ../shared/shared/shared/trie.bend as Tries
 import ../shared/shared/text.bend as Texts
 import ../shared/tree.bend as Trees
 
-# The pure core of a Vend Node: what it holds, what it answers, and the laws
-# about both. transport/spec.bend carries it over IO as the public API
-# (README, Public API).
+# The pure core of a Vend Node (README): what it holds, what it answers, and
+# the laws about both. transport/spec.bend carries it over IO.
 #
 # A node is a ledger of Vend's changes (Ledgers): it holds requests, votes and
-# data, nodes sync by joining what they hold, and each line (a branch or an
-# owner group) is a chain of steps that its owners decided. Each version of a
-# line is a tree (Trees) held as data: its root is the result of the vote that
-# decided it. A store is the root chain that makes its lines, so two nodes
-# never make one line twice. Every answer is read from the state alone.
+# data, and each line (a branch or an owner group) is a chain of steps that
+# its owners decided. Each version of a line is a tree (Trees) held as data:
+# its root is the result of the vote that decided it. A store is the root
+# chain that makes its lines, so two nodes never make one line twice. Every
+# answer is read from the state alone, and every change of a node's state
+# (Node.ask, Node.vote, Node.take) only grows it (Ledgers.State.grows), so
+# what a law says stays as a state grows, stays for good.
 
 # Names
 # -----
@@ -443,6 +444,13 @@ def Node.missing(s: State(), r: State()) -> State():
 # no entry of t contradicts one of s
 def Node.agrees(s: State(), t: State()) -> Bool:
   Ledgers.State.agrees(~Ask, ~Ask.is_eq, s, t)
+
+# what a holder of s keeps of t, which another node sent: the entries of t in
+# the slots where s holds nothing. A node checks what it receives against what
+# it holds, so nothing that it holds is lost or changed; of states that agree,
+# it is the sync (Ledgers.State.take_join)
+def Node.take(s: State(), t: State()) -> State():
+  Ledgers.State.take(~Ask, s, t)
 
 # Versions
 # --------
@@ -1296,22 +1304,38 @@ def Judge.write(
     )
   )
 
-# the clash of the resource n is open in the tree h
-def Clash.open(s: State(), h: Maybe<&2, Hashes.Hash>, n: Resources.Name) -> Bool:
+# the value of the clash that the merge of the version f opened (a settled
+# clash holds no words)
+def Clash.code(f: Ledgers.Id) -> List<&2, U32>:
+  Ledgers.Id.code(f, [])
+
+# the clash that the merge of the version f opened in the resource n is open
+# in the tree h
+def Clash.open(s: State(), h: Maybe<&2, Hashes.Hash>, n: Resources.Name, f: Ledgers.Id) -> Bool:
   Shared.Maybe.is_eq(
     ~List<&2, U32>,
     ~Shared.List.is_eq(~U32, ~U32.is_eq),
     Node.get(s, h, Key.clash(n)),
-    Some{[1]}
+    Some{Clash.code(f)}
   )
 
-# the request m is a merge on the branch b of the store r
-def Merge.is_on(m: Maybe<&2, Ledgers.Asked<Ask>>, r: Ledgers.Id, b: String) -> Bool:
+# the version that the request m merged, when m is a merge on the branch b of
+# the store r
+def Merge.from_on(m: Maybe<&2, Ledgers.Asked<Ask>>, r: Ledgers.Id, b: String) -> Maybe<&2, Ledgers.Id>:
   match m:
     case Some{Ledgers.Asked{t, Ask.On{st, Some{Line.Branch{x}}, Change.Merge{f}}}}:
-      Bool.and(Ledgers.Id.is_eq(st, r), String.eq(x, b))
+      Shared.Maybe.when(Ledgers.Id, Bool.and(Ledgers.Id.is_eq(st, r), String.eq(x, b)), u => Some{f})
     case _:
+      None{}
+
+# the clash of the resource n is open in the tree h, by the merge of the
+# version m, if any
+def Clash.open_by(s: State(), h: Maybe<&2, Hashes.Hash>, n: Resources.Name, m: Maybe<&2, Ledgers.Id>) -> Bool:
+  match m:
+    case None{}:
       False{}
+    case Some{f}:
+      Clash.open(s, h, n, f)
 
 # the verdict on a resolve of the resource n, which the merge k left in clash
 # on the branch b of the store r, with the content c, at the tree h
@@ -1331,10 +1355,7 @@ def Judge.resolve(
       Judge.content(s, c),
       h,
       w => Judge.when(
-        List.all.if(
-          v => List.all.if(v => Clash.open(s, h, n), Clash.open(s, Node.root_of(s, Some{k}), n)),
-          Merge.is_on(Ledgers.State.asked(~Ask, s, k), r, b)
-        ),
+        Clash.open_by(s, h, n, Merge.from_on(Ledgers.State.asked(~Ask, s, k), r, b)),
         h,
         x => Work.take(
           Maybe.bind(
@@ -1342,7 +1363,7 @@ def Judge.resolve(
             Work,
             Work,
             Work.set(Work{s, h, []}, Key.res(n), Res.code(Content.bytes(s, n, c))),
-            y => Work.set(y, Key.clash(n), [0])
+            y => Work.set(y, Key.clash(n), [])
           )
         )
       )
@@ -1350,9 +1371,10 @@ def Judge.resolve(
   )
 
 # m with the resource n merged: the bytes that the merge of the base b, ours o
-# and theirs t keeps, and its clash open when it clashes
+# and theirs t (of the version f) keeps, and its clash open when it clashes
 def Merge.one(
   s: State(),
+  +f: Ledgers.Id,
   +n: Resources.Name,
   b: Maybe<&2, Texts.Bytes()>,
   +o: Maybe<&2, Texts.Bytes()>,
@@ -1368,14 +1390,16 @@ def Merge.one(
     +y => Shared.Bool.when(
       Maybe<&2, Work>,
       Pick.is_clash(p),
-      u => Work.set(y, Key.clash(n), [1]),
+      u => Work.set(y, Key.clash(n), Clash.code(f)),
       u => Some{y}
     )
   )
 
 # m with each resource of ns merged, over the base hb, ours ho and theirs ht
+# (of the version f)
 def Merge.all(
   +s: State(),
+  +f: Ledgers.Id,
   ns: List<&2, Resources.Name>,
   +hb: Maybe<&2, Hashes.Hash>,
   +ho: Maybe<&2, Hashes.Hash>,
@@ -1388,6 +1412,7 @@ def Merge.all(
     case Con{+n, r}:
       Merge.all(
         s,
+        f,
         r,
         hb,
         ho,
@@ -1397,7 +1422,7 @@ def Merge.all(
           Work,
           Work,
           m,
-          w => Merge.one(s, n, Res.get(s, hb, n), Res.get(s, ho, n), Res.get(s, ht, n), w)
+          w => Merge.one(s, f, n, Res.get(s, hb, n), Res.get(s, ho, n), Res.get(s, ht, n), w)
         )
       )
 
@@ -1477,6 +1502,7 @@ def Merge.work(
     from,
     Merge.all(
       s,
+      from,
       Merge.names(s, h, ht),
       Node.root_of(s, Merge.base(s, c, from)),
       h,
@@ -1645,20 +1671,43 @@ def Node.judge(s: State(), q: Ask, head: Maybe<&2, Ledgers.Vote>) -> Maybe<&2, L
 # Changes
 # -------
 
+# s with the facts of the last step of the line that q changes
+def Node.land(s: State(), q: Ask) -> State():
+  match q:
+    case Ask.Start{os}:
+      s
+    case Ask.On{r, l, c}:
+      Ledgers.State.land(~Ask, ~Ask.is_eq, ~Ask.view, s, Line.chain(r, l))
+
+# Node.ask once the cell m of the request's ID is known
+def Node.ask.at(
+  n: String,
+  +s: State(),
+  +e: Envelope,
+  +q: Ask,
+  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
+) -> State():
+  match m:
+    case Some{x}:
+      s
+    case None{}:
+      Ledgers.State.ask(
+        ~Ask,
+        ~Ask.is_eq,
+        ~Ask.view,
+        ~Node.judge,
+        n,
+        Node.land(s, q),
+        Envelope.of(e),
+        Envelope.time(e),
+        q
+      )
+
 # s, after the node n took in the request q of e, and voted on it when it owns
-# its line
-def Node.ask(n: String, s: State(), +e: Envelope, q: Ask) -> State():
-  Ledgers.State.ask(
-    ~Ask,
-    ~Ask.is_eq,
-    ~Ask.view,
-    ~Node.judge,
-    n,
-    s,
-    Envelope.of(e),
-    Envelope.time(e),
-    q
-  )
+# its line. A request ID that s holds counts once: asked again, it changes
+# nothing
+def Node.ask(n: String, +s: State(), +e: Envelope, q: Ask) -> State():
+  Node.ask.at(n, s, e, q, Ledgers.State.get(~Ask, s, Ledgers.Slot.ask(Envelope.of(e))))
 
 # s, after the node n voted, at the tip of each line that it owns, for each
 # request that s holds
@@ -1727,6 +1776,116 @@ def Res.at(+s: State(), n: Resources.Name, m: Maybe<&2, Ledgers.Id>) -> Maybe<&2
 def Node.content(+s: State(), n: Resources.Name, p: Point) -> Maybe<&2, Texts.Bytes()>:
   Res.at(s, n, Node.version(s, p))
 
+# Views
+# -----
+# What a writer reads shows its own changes before their owners decide them:
+# at the head of a branch, a resource reads as the writer's pending write of
+# it with the highest request ID, if it has one.
+
+# the content that the request q gives the resource n on the branch b of the
+# store r, when it writes it there
+def Draft.content(r: Ledgers.Id, b: String, n: Resources.Name, q: Ask) -> Maybe<&2, Content>:
+  match q:
+    case Ask.On{st, Some{Line.Branch{x}}, Change.Write{m, base, c}}:
+      Shared.Maybe.when(
+        Content,
+        List.all.if(
+          u => List.all.if(v => Resources.Name.is_eq(m, n), String.eq(x, b)),
+          Ledgers.Id.is_eq(st, r)
+        ),
+        u => Some{c}
+      )
+    case Ask.On{st, Some{Line.Branch{x}}, Change.Resolve{k, m, c}}:
+      Shared.Maybe.when(
+        Content,
+        List.all.if(
+          u => List.all.if(v => Resources.Name.is_eq(m, n), String.eq(x, b)),
+          Ledgers.Id.is_eq(st, r)
+        ),
+        u => Some{c}
+      )
+    case _:
+      None{}
+
+# st is pending
+def Status.is_pending(st: Ledgers.Status) -> Bool:
+  match st:
+    case Ledgers.Status.Pending{}:
+      True{}
+    case _:
+      False{}
+
+# the content m of the request i, when it is a pending write, else found
+def Draft.put(
+  s: State(),
+  i: Ledgers.Id,
+  m: Maybe<&2, Content>,
+  found: Maybe<&2, Content>
+) -> Maybe<&2, Content>:
+  match m:
+    case None{}:
+      found
+    case Some{c}:
+      Shared.Bool.when(
+        Maybe<&2, Content>,
+        Status.is_pending(Ledgers.State.status(~Ask, ~Ask.view, s, i)),
+        u => Some{c},
+        u => found
+      )
+
+# the content of the last pending write of the resource n on the branch b of
+# the store r among the cells cs, else found
+def Draft.last(
+  +s: State(),
+  +r: Ledgers.Id,
+  +b: String,
+  +n: Resources.Name,
+  cs: List<&2, Cells.Cell<Ledgers.Entry<Ask>>>,
+  found: Maybe<&2, Content>
+) -> Maybe<&2, Content>:
+  match cs:
+    case Nil{}:
+      found
+    case Con{Cells.One{Ledgers.Entry.Ask{i, t, q}}, rest}:
+      Draft.last(s, r, b, n, rest, Draft.put(s, i, Draft.content(r, b, n, q), found))
+    case Con{c, rest}:
+      Draft.last(s, r, b, n, rest, found)
+
+# the requests of the writer w that s holds, in the order of their IDs
+def Writer.asks(s: State(), w: String) -> List<&2, Cells.Cell<Ledgers.Entry<Ask>>>:
+  Tries.Trie.values(
+    Cells.Cell<Ledgers.Entry<Ask>>,
+    Ledgers.State.under(~Ask, s, Ledgers.Slot.writer(w))
+  )
+
+# the content of the writer w's pending write of the resource n on the branch
+# b of the store r with the highest request ID, if it has one
+def Node.draft(
+  +s: State(),
+  w: String,
+  r: Ledgers.Id,
+  b: String,
+  n: Resources.Name
+) -> Maybe<&2, Content>:
+  Draft.last(s, r, b, n, Writer.asks(s, w), None{})
+
+# the bytes of the draft m of the resource n, else what the point p holds
+def Read.of(+s: State(), n: Resources.Name, m: Maybe<&2, Content>, p: Point) -> Maybe<&2, Texts.Bytes()>:
+  match m:
+    case Some{c}:
+      Content.bytes(s, n, c)
+    case None{}:
+      Node.content(s, n, p)
+
+# what the writer w reads of the resource n at the point p: at the head of a
+# branch, its own pending write; else what the point holds
+def Node.read(+s: State(), w: String, +n: Resources.Name, p: Point) -> Maybe<&2, Texts.Bytes()>:
+  match p:
+    case Point.Head{+r, +b}:
+      Read.of(s, n, Node.draft(s, w, r, b, n), Point.Head{r, b})
+    case x:
+      Node.content(s, n, x)
+
 # a version that changed a resource, as Node.log lists it
 type LogEntry is Data:
   LogEntry{version: Ledgers.Id, time: String}
@@ -1766,63 +1925,89 @@ def Log.of(
 def Node.log(+s: State(), n: Resources.Name, r: Ledgers.Id, b: String) -> List<&2, LogEntry>:
   Log.of(s, n, Node.versions(s, r, b), None{})
 
-# what changed in the resource n from the point a to the point b
-def Node.diff(+s: State(), +n: Resources.Name, a: Point, b: Point) -> List<&2, Formats.Change>:
+# what changed in the resource n from the point a to the point b, as the
+# writer w reads them
+def Node.diff(
+  +s: State(),
+  +w: String,
+  +n: Resources.Name,
+  a: Point,
+  b: Point
+) -> List<&2, Formats.Change>:
   Formats.Format.changes(
     Formats.Format.of(Resources.Name.path(n)),
-    Maybe.default(&2, Texts.Bytes(), Node.content(s, n, a), []),
-    Maybe.default(&2, Texts.Bytes(), Node.content(s, n, b), [])
+    Maybe.default(&2, Texts.Bytes(), Node.read(s, w, n, a), []),
+    Maybe.default(&2, Texts.Bytes(), Node.read(s, w, n, b), [])
   )
 
 # Conflicts
 # ---------
 
-# the resource of a binding of a tree, when it is an open clash
-def Clash.binding(b: Trees.Binding) -> Maybe<&2, Resources.Name>:
+# the resource of a binding of a tree, when it is a clash that the merge of
+# the version f opened
+def Clash.binding(b: Trees.Binding, f: Ledgers.Id) -> Maybe<&2, Resources.Name>:
   match b:
-    case Trees.Binding{Con{3, k}, Con{1, Nil{}}}:
-      Read.whole(Resources.Name, Resources.Name.code.read(k))
+    case Trees.Binding{Con{3, k}, ws}:
+      Shared.Maybe.when(
+        Resources.Name,
+        Shared.List.is_eq(~U32, ~U32.is_eq, ws, Clash.code(f)),
+        u => Read.whole(Resources.Name, Resources.Name.code.read(k))
+      )
     case _:
       None{}
 
-# the open clashes among the bindings bs
-def Clash.of.bindings(bs: List<&2, Trees.Binding>) -> List<&2, Resources.Name>:
+# the clashes that the merge of the version f opened, among the bindings bs
+def Clash.of.bindings(bs: List<&2, Trees.Binding>, +f: Ledgers.Id) -> List<&2, Resources.Name>:
   match bs:
     case Nil{}:
       []
     case Con{b, r}:
-      Names.put(Clash.binding(b), Clash.of.bindings(r))
+      Names.put(Clash.binding(b, f), Clash.of.bindings(r, f))
 
-# the resources that clash in the tree whose root is h
-def Clash.names(s: State(), h: Maybe<&2, Hashes.Hash>) -> List<&2, Resources.Name>:
-  Clash.of.bindings(Trees.Tree.list(~State(), ~Store.fetch, s, h))
+# the resources whose clash the merge of the version f left open in the tree
+# whose root is h
+def Clash.names(s: State(), h: Maybe<&2, Hashes.Hash>, f: Ledgers.Id) -> List<&2, Resources.Name>:
+  Clash.of.bindings(Trees.Tree.list(~State(), ~Store.fetch, s, h), f)
 
-# the resources of ns whose clash is still open in the tree h
+# the resources of ns whose clash, which the merge of the version f opened, is
+# still open in the tree h
 def Clash.left(
   +s: State(),
   ns: List<&2, Resources.Name>,
-  +h: Maybe<&2, Hashes.Hash>
+  +h: Maybe<&2, Hashes.Hash>,
+  +f: Ledgers.Id
 ) -> List<&2, Resources.Name>:
   match ns:
     case Nil{}:
       []
     case Con{+n, r}:
-      List.filter.put(Resources.Name, n, Clash.left(s, r, h), Clash.open(s, h, n))
+      List.filter.put(Resources.Name, n, Clash.left(s, r, h, f), Clash.open(s, h, n, f))
 
-# the resources that clash at the merge k, whose request is a
-def Merge.clashes(+s: State(), k: Ledgers.Id) -> List<&2, Resources.Name>:
-  Clash.names(s, Node.root_of(s, Some{k}))
+# the resources that clashed at the request k, whose request is a, when it is a
+# merge
+def Merge.clashes(+s: State(), k: Ledgers.Id, a: Maybe<&2, Ledgers.Asked<Ask>>) -> List<&2, Resources.Name>:
+  match a:
+    case Some{Ledgers.Asked{t, Ask.On{r, l, Change.Merge{f}}}}:
+      Clash.names(s, Node.root_of(s, Some{k}), f)
+    case _:
+      []
 
 # the resources that still clash after the merge k, whose request is a: those
-# that clashed in its tree and are still open at the head of its line
+# whose clash it opened, and that no resolve or newer merge settled since, at
+# the head of its line
 def Merge.left(
   +s: State(),
   k: Ledgers.Id,
   a: Maybe<&2, Ledgers.Asked<Ask>>
 ) -> List<&2, Resources.Name>:
   match a:
-    case Some{Ledgers.Asked{t, Ask.On{r, Some{l}, Change.Merge{f}}}}:
-      Clash.left(s, Merge.clashes(s, k), Chain.root(s, Line.chain(r, Some{l})))
+    case Some{Ledgers.Asked{t, Ask.On{r, Some{l}, Change.Merge{+f}}}}:
+      Clash.left(
+        s,
+        Clash.names(s, Node.root_of(s, Some{k}), f),
+        Chain.root(s, Line.chain(r, Some{l})),
+        f
+      )
     case _:
       []
 
@@ -1833,16 +2018,16 @@ def Node.conflict(+s: State(), +k: Ledgers.Id) -> List<&2, Resources.Name>:
 # Answers
 # -------
 
-# where a request is (README, Public API). Written: its version. Conflicted: a
-# merge or a resolve after which resources still clash (the merge). Stale: its
-# owners refused it at their tip. Refused: it is contradicted.
+# what a node answers to a change (README, Vend Writer). Written: its version.
+# Conflicted: a merge, or a resolve of one, after which resources still clash
+# (the merge). Pending: its owners did not decide it yet. Stale: its owners
+# refused it at their newest version. Refused: its ID names another change.
 type Answer is Data:
   Answer.Written{version: Ledgers.Id}
   Answer.Conflicted{merge: Ledgers.Id}
   Answer.Pending{}
   Answer.Stale{}
   Answer.Refused{}
-  Answer.NotSeen{}
 
 # Written i, or Conflicted k while the merge k still clashes
 def Answer.left(s: State(), i: Ledgers.Id, +k: Ledgers.Id) -> Answer:
@@ -1853,33 +2038,81 @@ def Answer.left(s: State(), i: Ledgers.Id, +k: Ledgers.Id) -> Answer:
     u => Answer.Conflicted{k}
   )
 
-# the answer to the request i, which a step took, whose request is r
-def Answer.taken(s: State(), +i: Ledgers.Id, r: Maybe<&2, Ledgers.Asked<Ask>>) -> Answer:
-  match r:
-    case Some{Ledgers.Asked{t, Ask.On{st, l, Change.Merge{f}}}}:
+# the answer to the change q of the request i, which a step took
+def Answer.taken(s: State(), +i: Ledgers.Id, q: Ask) -> Answer:
+  match q:
+    case Ask.On{st, l, Change.Merge{f}}:
       Answer.left(s, i, i)
-    case Some{Ledgers.Asked{t, Ask.On{st, l, Change.Resolve{k, n, c}}}}:
+    case Ask.On{st, l, Change.Resolve{k, n, c}}:
       Answer.left(s, i, k)
     case _:
       Answer.Written{i}
 
-# the answer to the request i, whose status is st
-def Answer.of(+s: State(), +i: Ledgers.Id, st: Ledgers.Status) -> Answer:
+# the answer to the change q of the request i, whose status is st
+def Answer.of(s: State(), i: Ledgers.Id, q: Ask, st: Ledgers.Status) -> Answer:
   match st:
     case Ledgers.Status.Done{True{}}:
-      Answer.taken(s, i, Ledgers.State.asked(~Ask, s, i))
+      Answer.taken(s, i, q)
     case Ledgers.Status.Done{False{}}:
       Answer.Stale{}
     case Ledgers.Status.Pending{}:
       Answer.Pending{}
-    case Ledgers.Status.Refused{}:
+    case _:
       Answer.Refused{}
-    case Ledgers.Status.NotSeen{}:
-      Answer.NotSeen{}
 
-# where the request i is
-def Node.answer(+s: State(), +i: Ledgers.Id) -> Answer:
-  Answer.of(s, i, Ledgers.State.status(~Ask, ~Ask.view, s, i))
+# the answer to the change q of the request i, whose slot holds m: none when it
+# is empty, Refused when it holds another change
+def Answer.held(
+  +s: State(),
+  +i: Ledgers.Id,
+  q: Ask,
+  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
+) -> Maybe<&2, Answer>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Cells.One{Ledgers.Entry.Ask{j, t, +q2}}}:
+      Some{
+        Shared.Bool.when(
+          Answer,
+          Ask.is_eq(q2, q),
+          u => Answer.of(
+            s,
+            i,
+            q2,
+            Ledgers.Status.of.view(Ask.view(q2), Ledgers.State.decided(~Ask, ~Ask.view, s, i))
+          ),
+          u => Answer.Refused{}
+        )
+      }
+    case Some{c}:
+      Some{Answer.Refused{}}
+
+# what the node answers to the change q of e (none: it did not take it in)
+def Node.answer(+s: State(), e: Envelope, q: Ask) -> Maybe<&2, Answer>:
+  +i = Envelope.of(e)
+  Answer.held(s, i, q, Ledgers.State.get(~Ask, s, Ledgers.Slot.ask(i)))
+
+# b may come after the answer a as the state grows: a request that a node took
+# in stays; Stale and Refused are final; a taken change stays taken
+def Answer.follows(a: Answer, m: Maybe<&2, Answer>) -> Bool:
+  match a m:
+    case Answer.Pending{} Some{b}:
+      True{}
+    case Answer.Written{v} Some{Answer.Written{w}}:
+      True{}
+    case Answer.Written{v} Some{Answer.Conflicted{w}}:
+      True{}
+    case Answer.Conflicted{v} Some{Answer.Written{w}}:
+      True{}
+    case Answer.Conflicted{v} Some{Answer.Conflicted{w}}:
+      True{}
+    case Answer.Stale{} Some{Answer.Stale{}}:
+      True{}
+    case Answer.Refused{} Some{Answer.Refused{}}:
+      True{}
+    case x y:
+      False{}
 
 # Listings
 # --------
@@ -2327,7 +2560,7 @@ def Notice.conflicts(+s: State(), +b: Branch, xs: List<&2, Ledgers.Id>) -> List<
         Notice,
         Notice.Conflicted{b, x},
         Notice.conflicts(s, b, r),
-        Bool.not(List.is_empty(&2, Resources.Name, Merge.clashes(s, x)))
+        Bool.not(List.is_empty(&2, Resources.Name, Merge.clashes(s, x, Ledgers.State.asked(~Ask, s, x))))
       )
 
 # the touches ts, as notices
@@ -2387,22 +2620,140 @@ def Node.notices(s: State(), +t: Topic, since: State()) -> List<&2, Notice>:
 
 # Laws
 # ----
+# What README says of a Vend Node's core, as laws. A law of the ledger that
+# asks for the laws of a change's equality holds of a node's state by
+# Ask.same.
+
+# two requests are the same exactly when they are equal
+law Ask.same:
+  Shared.Eq.Laws(Ask, Ask.is_eq)
+
+# a node that takes in a request only grows its state: nothing that it held is
+# lost or changed. So do its votes (Ledgers.State.vote_grows) and whatever it
+# takes from another node (Ledgers.State.take_grows)
+law Node.ask_grows:
+  for +n: String
+  for +s: State()
+  for +e: Envelope
+  for +q: Ask
+  {Ledgers.State.grows(~Ask, ~Ask.is_eq, s, Node.ask(n, s, e, q)) == True{}: Bool}
+
+# a change counts once, however often and wherever it is sent: a node that
+# took a request in changes nothing when any node sends its ID again
+law Node.ask_once:
+  for +n: String
+  for +m: String
+  for +s: State()
+  for +e: Envelope
+  for +q: Ask
+  for +e2: Envelope
+  for +q2: Ask
+  {Envelope.of(e2) == Envelope.of(e): Ledgers.Id}
+    -> {Node.ask(m, Node.ask(n, s, e, q), e2, q2) == Node.ask(n, s, e, q): State()}
+
+# a node answers every change that it took in
+law Node.ask_seen:
+  for +n: String
+  for +s: State()
+  for +e: Envelope
+  for +q: Ask
+  {Maybe.is_some(&2, Answer, Node.answer(Node.ask(n, s, e, q), e, q)) == True{}: Bool}
+
+# an answer only moves forward as the state grows: a change that the node took
+# in stays; Stale and Refused are final; a taken change stays taken
+law Node.answer_kept:
+  for +s: State()
+  for +s2: State()
+  for +e: Envelope
+  for +q: Ask
+  for +a: Answer
+  {Ledgers.State.grows(~Ask, ~Ask.is_eq, s, s2) == True{}: Bool}
+    -> {Node.answer(s, e, q) == Some{a}: Maybe<&2, Answer>}
+    -> {Answer.follows(a, Node.answer(s2, e, q)) == True{}: Bool}
 
 # s with the request q of e, before any vote: what a node holds once it takes
 # q in
-def Node.taken(s: State(), +e: Envelope, q: Ask) -> State():
+def Node.taken(s: State(), +e: Envelope, +q: Ask) -> State():
   Ledgers.State.put(
     ~Ask,
     ~Ask.is_eq,
-    s,
+    Node.land(s, q),
     Ledgers.Slot.ask(Envelope.of(e)),
     Ledgers.Entry.Ask{Envelope.of(e), Envelope.time(e), q}
   )
 
-# the sole owner n of the tip of a branch takes in a fresh write of a resource
-# that did not change since its base: the write is Written, and its version
-# holds the bytes. The node holds the tree of the branch's head (the write's
-# new subtree is p) and no other words under the hashes of the new nodes.
+# the premises of Node.write_written, then C. t is what the node n holds once
+# it took in the write i of the resource name, with the bytes x since base, on
+# the line c. n is the sole owner of the tip of c, has not voted there, and no
+# fact says where i was decided; the base is a version, and the resource did
+# not change since it; t holds the tree of the head of c (the write's new
+# subtree is p) and no other words under the hashes of the new nodes
+def Write.Sole(
+  n: String,
+  t: State(),
+  i: Ledgers.Id,
+  c: Ledgers.Chain,
+  name: Resources.Name,
+  base: Maybe<&2, Ledgers.Id>,
+  x: Texts.Bytes(),
+  ep: U32,
+  h: U32,
+  last: Maybe<&2, Ledgers.Where>,
+  p: Trees.Put,
+  C: Type
+) -> Type:
+  {
+    Ledgers.Line.tip(~Ask, ~Ask.view, t, c) == Some{Ledgers.Tip{ep, [n], h, last}}: Maybe<&2, Ledgers.Tip>
+  }
+  -> {Ledgers.Line.owners(~Ask, ~Ask.view, t, c, ep) == Some{[n]}: Maybe<&2, List<&2, String>>}
+  -> {
+    Ledgers.State.get(
+      ~Ask,
+      t,
+      Ledgers.Slot.vote(Ledgers.Where{c, ep, h}, n)
+    )
+      == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
+  }
+  -> {
+    Ledgers.State.get(~Ask, t, Ledgers.Slot.where(i)) == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
+  }
+  -> {Judge.ready_maybe(t, base) == Some{True{}}: Maybe<&2, Bool>}
+  -> {
+    Bytes.same(
+      Res.get(
+        t,
+        Judge.root(t, c, Ledgers.Line.head(~Ask, ~Ask.view, t, c, ep, [n], last)),
+        name
+      ),
+      Res.get(t, Node.root_of(t, base), name)
+    )
+      == True{}: Bool
+  }
+  -> {
+    Trees.Tree.set(
+      ~State(),
+      ~Store.fetch,
+      t,
+      Judge.root(t, c, Ledgers.Line.head(~Ask, ~Ask.view, t, c, ep, [n], last)),
+      Key.res(name),
+      Res.code(Some{x})
+    )
+      == Some{p}: Maybe<&2, Trees.Put>
+  }
+  -> {
+    Ledgers.Data.fresh(
+      ~Ask,
+      ~Ask.is_eq,
+      List.append(&2, List<&2, U32>, Trees.Put.nodes(p), []),
+      t
+    )
+      == True{}: Bool
+  }
+  -> C
+
+# the sole owner of the tip of a branch takes in a new write of a resource
+# that did not change since its base (Write.Sole): the write is Written, and
+# its version holds the bytes
 law Node.write_written:
   for +n: String
   for +s: State()
@@ -2419,196 +2770,50 @@ law Node.write_written:
   {
     Ledgers.State.get(
       ~Ask,
-      s,
+      Node.land(s, Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}),
       Ledgers.Slot.ask(Envelope.of(e))
     )
       == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
   }
-    -> {
-      Ledgers.Line.tip(
-        ~Ask,
-        ~Ask.view,
-        Node.taken(
-          s,
-          e,
-          Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
-        ),
-        Line.chain(r, Some{Line.Branch{b}})
-      )
-        == Some{Ledgers.Tip{ep, [n], h, last}}: Maybe<&2, Ledgers.Tip>
-    }
-    -> {
-      Ledgers.Line.owners(
-        ~Ask,
-        ~Ask.view,
-        Node.taken(
-          s,
-          e,
-          Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
-        ),
-        Line.chain(r, Some{Line.Branch{b}}),
-        ep
-      )
-        == Some{[n]}: Maybe<&2, List<&2, String>>
-    }
-    -> {
-      Ledgers.State.get(
-        ~Ask,
-        Node.taken(
-          s,
-          e,
-          Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
-        ),
-        Ledgers.Slot.vote(Ledgers.Where{Line.chain(r, Some{Line.Branch{b}}), ep, h}, n)
-      )
-        == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
-    }
-    -> {
-      Ledgers.State.get(
-        ~Ask,
-        Node.taken(
-          s,
-          e,
-          Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
-        ),
-        Ledgers.Slot.where(Envelope.of(e))
-      )
-        == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
-    }
-    -> {
-      Judge.ready_maybe(
-        Node.taken(
-          s,
-          e,
-          Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
-        ),
-        base
-      )
-        == Some{True{}}: Maybe<&2, Bool>
-    }
-    -> {
-      Bytes.same(
-        Res.get(
-          Node.taken(
-            s,
-            e,
-            Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
-          ),
-          Judge.root(
-            Node.taken(
-              s,
-              e,
-              Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
-            ),
-            Line.chain(r, Some{Line.Branch{b}}),
-            Ledgers.Line.head(
-              ~Ask,
-              ~Ask.view,
-              Node.taken(
-                s,
-                e,
-                Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
-              ),
-              Line.chain(r, Some{Line.Branch{b}}),
-              ep,
-              [n],
-              last
-            )
-          ),
-          name
-        ),
-        Res.get(
-          Node.taken(
-            s,
-            e,
-            Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
-          ),
-          Node.root_of(
-            Node.taken(
-              s,
-              e,
-              Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
-            ),
-            base
-          ),
-          name
-        )
-      )
-        == True{}: Bool
-    }
-    -> {
-      Trees.Tree.set(
-        ~State(),
-        ~Store.fetch,
-        Node.taken(
-          s,
-          e,
-          Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
-        ),
-        Judge.root(
-          Node.taken(
-            s,
-            e,
-            Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
-          ),
-          Line.chain(r, Some{Line.Branch{b}}),
-          Ledgers.Line.head(
-            ~Ask,
-            ~Ask.view,
-            Node.taken(
-              s,
-              e,
-              Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
-            ),
-            Line.chain(r, Some{Line.Branch{b}}),
-            ep,
-            [n],
-            last
-          )
-        ),
-        Key.res(name),
-        Res.code(Some{x})
-      )
-        == Some{p}: Maybe<&2, Trees.Put>
-    }
-    -> {
-      Ledgers.Data.fresh(
-        ~Ask,
-        ~Ask.is_eq,
-        List.append(&2, List<&2, U32>, Trees.Put.nodes(p), []),
-        Node.taken(
-          s,
-          e,
-          Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
-        )
-      )
-        == True{}: Bool
-    }
-    -> {
-      Node.answer(
-        Node.ask(
-          n,
-          s,
-          e,
-          Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
-        ),
-        Envelope.of(e)
-      )
-        == Answer.Written{Envelope.of(e)}: Answer
-    }
-      & {
-        Node.content(
+    -> Write.Sole(
+      n,
+      Node.taken(s, e, Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}),
+      Envelope.of(e),
+      Line.chain(r, Some{Line.Branch{b}}),
+      name,
+      base,
+      x,
+      ep,
+      h,
+      last,
+      p,
+      {
+        Node.answer(
           Node.ask(
             n,
             s,
             e,
             Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
           ),
-          name,
-          Point.At{Envelope.of(e)}
+          e,
+          Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
         )
-          == Some{x}: Maybe<&2, Texts.Bytes()>
+          == Some{Answer.Written{Envelope.of(e)}}: Maybe<&2, Answer>
       }
+        & {
+          Node.content(
+            Node.ask(
+              n,
+              s,
+              e,
+              Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
+            ),
+            name,
+            Point.At{Envelope.of(e)}
+          )
+            == Some{x}: Maybe<&2, Texts.Bytes()>
+        }
+    )
 
 # the content of a resource at a version stays as the node's state grows (by
 # a sync that agrees, or by its own writes): a version never changes
@@ -2631,24 +2836,6 @@ law Node.version_kept:
   {Ledgers.State.grows(~Ask, ~Ask.is_eq, s, s2) == True{}: Bool}
     -> {Node.is_version(s, v) == True{}: Bool}
     -> {Node.is_version(s2, v) == True{}: Bool}
-
-# a request answered Stale stays Stale as the state grows: its owners refused
-# it at their newest version, once
-law Node.stale_kept:
-  for +s: State()
-  for +s2: State()
-  for +i: Ledgers.Id
-  {Ledgers.State.grows(~Ask, ~Ask.is_eq, s, s2) == True{}: Bool}
-    -> {Node.answer(s, i) == Answer.Stale{}: Answer}
-    -> {Node.answer(s2, i) == Answer.Stale{}: Answer}
-
-# a request answered Refused stays Refused after any sync
-law Node.refused_kept:
-  for +s: State()
-  for +t: State()
-  for +i: Ledgers.Id
-  {Node.answer(s, i) == Answer.Refused{}: Answer}
-    -> {Node.answer(Node.join(s, t), i) == Answer.Refused{}: Answer}
 
 # the versions of a branch only grow at their end as the state grows: its
 # history is never rewritten

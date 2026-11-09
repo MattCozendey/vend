@@ -205,6 +205,10 @@ def Word.of_key(k: List<&2, Bool>, acc: U32) -> U32:
 def Slot.ask(i: Id) -> List<&2, Bool>:
   False{} <> False{} <> Id.key(i)
 
+# the start of the slots of the requests of the writer w
+def Slot.writer(w: String) -> List<&2, Bool>:
+  False{} <> False{} <> Tries.Trie.text(w)
+
 # the start of the slots of the votes of the epoch e of the line c
 def Slot.votes(c: Chain, e: U32) -> List<&2, Bool>:
   False{} <> True{} <> List.append(&2, Bool, Chain.key(c), Word.key(e))

@@ -6,10 +6,12 @@ import ../shared/resources.bend as Resources
 import ../shared/shared/text.bend as Texts
 import ../shared/uris.bend as Uris
 
-# The public API of a Vend Node (README, Public API): the core, carried over
-# IO. Every front offers exactly these operations. A change is a request, sent
-# again unchanged until it is answered: the core keeps it once (Core.Node.ask),
-# so any front may retry it, to any node.
+# A Vend Node over IO (README): the core, carried to writers and to other
+# nodes. Every front offers exactly these operations. A change is a request,
+# sent again unchanged until it is answered: the core counts it once
+# (Core.Node.ask_once), so any front may retry it, to any node. A connection is
+# one writer's, so each read shows that writer's own pending changes
+# (Core.Node.read).
 
 # Values that callers make
 # ------------------------
@@ -129,14 +131,16 @@ law Client.try_get_log:
   for b: Core.Branch
   IO(Client & Reply<&2, List<&2, Core.LogEntry>>)
 
-# the bytes of the resource n at the point p, if it is there
+# the bytes of the resource n at the point p, if it is there, as the writer
+# reads it (Core.Node.read)
 law Client.try_get_content:
   for c: Client
   for n: Resources.Name
   for p: Core.Point
   IO(Client & Reply<&2, Maybe<&2, Texts.Bytes()>>)
 
-# what changed in the resource n from the point a to the point b
+# what changed in the resource n from the point a to the point b, as the
+# writer reads them (Core.Node.diff)
 law Client.try_get_diff:
   for c: Client
   for n: Resources.Name
@@ -155,12 +159,6 @@ law Client.try_get_impact:
   for c: Client
   for p: Core.Point
   IO(Client & Reply<&2, List<&2, Core.Touch>>)
-
-# where the request r of this writer is: an answer to a change that timed out
-law Client.try_get_answer:
-  for c: Client
-  for r: String
-  IO(Client & Reply<&2, Core.Answer>)
 
 # the resources that still clash after the merge k
 law Client.try_get_conflict:
@@ -262,7 +260,7 @@ law Client.try_set_group:
   IO(Client & Reply<&2, Core.Answer>)
 
 # swaps entries with the node at n: each sends what the other lacks
-# (Core.Node.missing)
+# (Core.Node.missing) and keeps what it checks (Core.Node.take)
 law Client.try_sync:
   for c: Client
   for n: Uris.Uri

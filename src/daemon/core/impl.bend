@@ -2,8 +2,10 @@ import Base
 import ../../shared.bend as Shared
 import ../shared/ledger.bend as Ledgers
 import ../shared/resources.bend as Resources
+import ../shared/shared/shared/cell.bend as Cells
 import ../shared/shared/shared/code.bend as Codes
 import ../shared/shared/shared/hash.bend as Hashes
+import ../shared/shared/shared/trie.bend as Tries
 import ../shared/shared/text.bend as Texts
 import ../shared/tree.bend as Trees
 import ./spec.bend as Spec
@@ -266,6 +268,168 @@ def Ask.codec() -> Codes.Codec(Spec.Ask):
 def Ask.laws() -> Shared.Eq.Laws(Spec.Ask, Spec.Ask.is_eq):
   Codes.Code.eq_laws(~Spec.Ask, ~Ask.codec())
 
+def Spec.Ask.same():
+  Ask.laws()
+
+# Slots
+# -----
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a slot that keeps a and holds nothing: a holds nothing
+def Cell.keeps_none(
+  a: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
+) -> {
+  Cells.Cell.keeps(
+    ~Ledgers.Entry<Spec.Ask>,
+    ~Ledgers.Entry.is_eq(~Spec.Ask, ~Spec.Ask.is_eq),
+    a,
+    None{}
+  )
+    == True{}: Bool
+} -> {a == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>}:
+  match a:
+    case None{}:
+      h => {==}
+    case Some{Cells.One{x}}:
+      h => Empty.absurd(
+        {Some{Cells.One{x}} == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Some{Cells.Many{}}:
+      h => Empty.absurd(
+        {Some{Cells.Many{}} == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>},
+        Shared.Bool.false_ne_true(h)
+      )
+
+# a slot that keeps a contradiction holds it
+def Cell.keeps_many(
+  b: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
+) -> {
+  Cells.Cell.keeps(
+    ~Ledgers.Entry<Spec.Ask>,
+    ~Ledgers.Entry.is_eq(~Spec.Ask, ~Spec.Ask.is_eq),
+    Some{Cells.Many{}},
+    b
+  )
+    == True{}: Bool
+} -> {b == Some{Cells.Many{}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>}:
+  match b:
+    case None{}:
+      h => Empty.absurd(
+        {None{} == Some{Cells.Many{}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Some{Cells.One{x}}:
+      h => Empty.absurd(
+        {Some{Cells.One{x}} == Some{Cells.Many{}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Some{Cells.Many{}}:
+      h => {==}
+
+# what a state that grows from s holds at the slot k keeps what s holds there
+def Slot.kept(
+  +s: Spec.State(),
+  +s2: Spec.State(),
+  +k: List<&2, Bool>,
+  +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool}
+) -> {
+  Cells.Cell.keeps(
+    ~Ledgers.Entry<Spec.Ask>,
+    ~Ledgers.Entry.is_eq(~Spec.Ask, ~Spec.Ask.is_eq),
+    Ledgers.State.get(~Spec.Ask, s, k),
+    Ledgers.State.get(~Spec.Ask, s2, k)
+  )
+    == True{}: Bool
+}:
+  Tries.Trie.keeps_get(
+    ~Cells.Cell<Ledgers.Entry<Spec.Ask>>,
+    ~Cells.Cell.keeps(~Ledgers.Entry<Spec.Ask>, ~Ledgers.Entry.is_eq(~Spec.Ask, ~Spec.Ask.is_eq)),
+    ~Cells.Cell.none_kept(~Ledgers.Entry<Spec.Ask>, ~Ledgers.Entry.is_eq(~Spec.Ask, ~Spec.Ask.is_eq)),
+    s,
+    s2,
+    k
+  )(gr)
+
+# the entry x of the slot k stays as the state grows
+def Slot.one_kept(
+  +s: Spec.State(),
+  +s2: Spec.State(),
+  +k: List<&2, Bool>,
+  +x: Ledgers.Entry<Spec.Ask>,
+  +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
+  e: {
+    Ledgers.State.get(~Spec.Ask, s, k) == Some{Cells.One{x}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
+  }
+) -> {
+  Ledgers.State.get(~Spec.Ask, s2, k) == Some{Cells.One{x}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
+}:
+  Cells.Cell.keeps_value(
+    ~Ledgers.Entry<Spec.Ask>,
+    ~Ledgers.Entry.is_eq(~Spec.Ask, ~Spec.Ask.is_eq),
+    ~Ledgers.Entry.laws(~Spec.Ask, ~Spec.Ask.is_eq, ~Ask.laws()),
+    x,
+    Ledgers.State.get(~Spec.Ask, s2, k)
+  )(
+    %e: {
+      Cells.Cell.keeps(
+        ~Ledgers.Entry<Spec.Ask>,
+        ~Ledgers.Entry.is_eq(~Spec.Ask, ~Spec.Ask.is_eq),
+        _,
+        Ledgers.State.get(~Spec.Ask, s2, k)
+      )
+        == True{}: Bool
+    }
+    Slot.kept(s, s2, k, gr)
+  )
+
+# a contradiction in the slot k stays as the state grows
+def Slot.many_kept(
+  +s: Spec.State(),
+  +s2: Spec.State(),
+  +k: List<&2, Bool>,
+  +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
+  e: {
+    Ledgers.State.get(~Spec.Ask, s, k) == Some{Cells.Many{}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
+  }
+) -> {
+  Ledgers.State.get(~Spec.Ask, s2, k) == Some{Cells.Many{}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
+}:
+  Cell.keeps_many(Ledgers.State.get(~Spec.Ask, s2, k))(
+    %e: {
+      Cells.Cell.keeps(
+        ~Ledgers.Entry<Spec.Ask>,
+        ~Ledgers.Entry.is_eq(~Spec.Ask, ~Spec.Ask.is_eq),
+        _,
+        Ledgers.State.get(~Spec.Ask, s2, k)
+      )
+        == True{}: Bool
+    }
+    Slot.kept(s, s2, k, gr)
+  )
+
+# a slot that is empty once the state grew was empty
+def Slot.none_before(
+  +s: Spec.State(),
+  +s2: Spec.State(),
+  +k: List<&2, Bool>,
+  +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
+  e: {Ledgers.State.get(~Spec.Ask, s2, k) == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>}
+) -> {Ledgers.State.get(~Spec.Ask, s, k) == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>}:
+  Cell.keeps_none(Ledgers.State.get(~Spec.Ask, s, k))(
+    %e: {
+      Cells.Cell.keeps(
+        ~Ledgers.Entry<Spec.Ask>,
+        ~Ledgers.Entry.is_eq(~Spec.Ask, ~Spec.Ask.is_eq),
+        Ledgers.State.get(~Spec.Ask, s, k),
+        _
+      )
+        == True{}: Bool
+    }
+    Slot.kept(s, s2, k, gr)
+  )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
 # Writes
 # ------
 
@@ -449,6 +613,83 @@ def Write.verdict(
         ): {Spec.Work.take(Spec.Work.of(s, [], _)) == v: Maybe<&2, Ledgers.Verdict>}
         {==}
 
+# the facts of the last step of the line that q changes grow the state
+def Land.grows(
+  +s: Spec.State(),
+  q: Spec.Ask
+) -> {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, Spec.Node.land(s, q)) == True{}: Bool}:
+  match q:
+    case Spec.Ask.Start{os}:
+      Ledgers.State.grows_refl(~Spec.Ask, ~Spec.Ask.is_eq, ~Ask.laws(), s)
+    case Spec.Ask.On{r, l, c}:
+      Ledgers.Land.of.grows(
+        ~Spec.Ask,
+        ~Spec.Ask.is_eq,
+        ~Ask.laws(),
+        s,
+        Ledgers.Line.tip(~Spec.Ask, ~Spec.Ask.view, s, Spec.Line.chain(r, l))
+      )
+
+# a node that does not hold a request's ID takes the request in
+def Ask.fresh(
+  n: String,
+  s: Spec.State(),
+  e: Spec.Envelope,
+  q: Spec.Ask
+) -> {
+  Ledgers.State.get(
+    ~Spec.Ask,
+    s,
+    Ledgers.Slot.ask(Spec.Envelope.of(e))
+  )
+    == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
+} -> {
+  Spec.Node.ask(
+    n,
+    s,
+    e,
+    q
+  )
+    == Ledgers.State.ask(
+      ~Spec.Ask,
+      ~Spec.Ask.is_eq,
+      ~Spec.Ask.view,
+      ~Spec.Node.judge,
+      n,
+      Spec.Node.land(s, q),
+      Spec.Envelope.of(e),
+      Spec.Envelope.time(e),
+      q
+    ): Spec.State()
+}:
+  h =>
+    %Equal.sym(
+      Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+      Ledgers.State.get(~Spec.Ask, s, Ledgers.Slot.ask(Spec.Envelope.of(e))),
+      None{},
+      h
+    ): {
+      Spec.Node.ask.at(
+        n,
+        s,
+        e,
+        q,
+        _
+      )
+        == Ledgers.State.ask(
+          ~Spec.Ask,
+          ~Spec.Ask.is_eq,
+          ~Spec.Ask.view,
+          ~Spec.Node.judge,
+          n,
+          Spec.Node.land(s, q),
+          Spec.Envelope.of(e),
+          Spec.Envelope.time(e),
+          q
+        ): Spec.State()
+    }
+    {==}
+
 def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
   +h1 => +ht => +ho => +hg => +hw => hb => hs => +hp => +hf =>
     +q = {
@@ -460,6 +701,7 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
     }
     +i = Spec.Envelope.of(e)
     +t = Spec.Envelope.time(e)
+    +s0 = Spec.Node.land(s, q)
     +s1 = Spec.Node.taken(s, e, q)
     +c = Spec.Line.chain(r, Some{Spec.Line.Branch{b}})
     +root = Spec.Judge.root(
@@ -467,7 +709,13 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
       c,
       Ledgers.Line.head(~Spec.Ask, ~Spec.Ask.view, s1, c, ep, [n], last)
     )
-    +ask1 = Spec.Node.ask(n, s, e, q)
+    +ask1 = Ledgers.State.ask(~Spec.Ask, ~Spec.Ask.is_eq, ~Spec.Ask.view, ~Spec.Node.judge, n, s0, i, t, q)
+    +hfr = Equal.sym(
+      Spec.State(),
+      Spec.Node.ask(n, s, e, q),
+      ask1,
+      Ask.fresh(n, s, e, q)(Slot.none_before(s, s0, Ledgers.Slot.ask(i), Land.grows(s, q), h1))
+    )
     +ds = List.append(&2, List<&2, U32>, Trees.Put.nodes(p), [])
     +hv = Write.verdict(p, s1, name, base, x, root)(hb)(hs)(hp)
     +hst = Pair.fst(
@@ -499,7 +747,7 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
         ~Spec.Ask.view,
         ~Spec.Node.judge,
         n,
-        s,
+        s0,
         i,
         t,
         q,
@@ -556,7 +804,7 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
           ~Spec.Ask.view,
           ~Spec.Node.judge,
           n,
-          s,
+          s0,
           i,
           t,
           q,
@@ -614,7 +862,7 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
           ~Spec.Ask.view,
           ~Spec.Node.judge,
           n,
-          s,
+          s0,
           i,
           t,
           q,
@@ -637,11 +885,23 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
       ~Spec.Ask.view,
       ~Spec.Node.judge,
       n,
-      s,
+      s0,
       i,
       t,
       q
     )(h1)
+    +hcell = Slot.one_kept(
+      s1,
+      ask1,
+      Ledgers.Slot.ask(i),
+      Ledgers.Entry.Ask{i, t, q},
+      (
+        %Equal.sym(Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>, Ledgers.State.get(~Spec.Ask, s0, Ledgers.Slot.ask(i)), None{}, h1):
+          {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s1, Ledgers.State.ask.fresh(~Spec.Ask, ~Spec.Ask.is_eq, ~Spec.Ask.view, ~Spec.Node.judge, n, s0, i, t, q, _)) == True{}: Bool}
+        Ledgers.Vote.ask.grows(~Spec.Ask, ~Spec.Ask.is_eq, ~Ask.laws(), ~Spec.Ask.view, ~Spec.Node.judge, n, s1, i, q, Spec.Ask.view(q))
+      ),
+      Ledgers.State.put_get(~Spec.Ask, ~Spec.Ask.is_eq, s0, Ledgers.Slot.ask(i), Ledgers.Entry.Ask{i, t, q})(h1)
+    )
     +hgs = Trees.Tree.get_set(
       ~Spec.State(),
       ~Spec.Store.fetch,
@@ -653,17 +913,274 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
       p
     )(hp)(Holds.of(Trees.Put.nodes(p), ask1)(hd))
     ((
-        %Equal.sym(Ledgers.Status, Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, ask1, i), Ledgers.Status.Done{True{}}, hst):
-          {Spec.Answer.of(ask1, i, _) == Spec.Answer.Written{i}: Spec.Answer}
-        %Equal.sym(Maybe<&2, Ledgers.Asked<Spec.Ask>>, Ledgers.State.asked(~Spec.Ask, ask1, i), Some{Ledgers.Asked{t, q}}, ha):
-          {Spec.Answer.taken(ask1, i, _) == Spec.Answer.Written{i}: Spec.Answer}
+        %hfr: {Spec.Node.answer(_, e, q) == Some{Spec.Answer.Written{i}}: Maybe<&2, Spec.Answer>}
+        %Equal.sym(Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>, Ledgers.State.get(~Spec.Ask, ask1, Ledgers.Slot.ask(i)), Some{Cells.One{Ledgers.Entry.Ask{i, t, q}}}, hcell):
+          {Spec.Answer.held(ask1, i, q, _) == Some{Spec.Answer.Written{i}}: Maybe<&2, Spec.Answer>}
+        %Equal.sym(Bool, Spec.Ask.is_eq(q, q), True{}, Shared.Eq.refl(~Spec.Ask, ~Spec.Ask.is_eq, Ask.laws(), q)):
+          {Some{Shared.Bool.when(Spec.Answer, _, u => Spec.Answer.of(ask1, i, q, Ledgers.Status.of.view(Spec.Ask.view(q), Ledgers.State.decided(~Spec.Ask, ~Spec.Ask.view, ask1, i))), u => Spec.Answer.Refused{})} == Some{Spec.Answer.Written{i}}: Maybe<&2, Spec.Answer>}
+        %Equal.sym(Maybe<&2, Ledgers.Vote>, Ledgers.State.decided(~Spec.Ask, ~Spec.Ask.view, ask1, i), Some{Ledgers.Vote{i, True{}, Ledgers.View.On{c, None{}, None{}}, Some{Trees.Put.root(p)}}}, hdc):
+          {Some{Spec.Answer.of(ask1, i, q, Ledgers.Status.of.view(Spec.Ask.view(q), _))} == Some{Spec.Answer.Written{i}}: Maybe<&2, Spec.Answer>}
         {==}), (
+        %hfr: {Spec.Node.content(_, name, Spec.Point.At{i}) == Some{x}: Maybe<&2, Texts.Bytes()>}
         %Equal.sym(Ledgers.Status, Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, ask1, i), Ledgers.Status.Done{True{}}, hst):
           {Spec.Res.at(ask1, name, Shared.Bool.when(Maybe<&2, Ledgers.Id>, Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Ledgers.Status.verdict(_), Some{True{}}), u => Some{i}, u => None{})) == Some{x}: Maybe<&2, Texts.Bytes()>}
         %Equal.sym(Maybe<&2, Ledgers.Vote>, Ledgers.State.decided(~Spec.Ask, ~Spec.Ask.view, ask1, i), Some{Ledgers.Vote{i, True{}, Ledgers.View.On{c, None{}, None{}}, Some{Trees.Put.root(p)}}}, hdc):
           {Spec.Res.get(ask1, Maybe.bind(&2, Maybe<&2, Hashes.Hash>, Hashes.Hash, Maybe.bind(&2, Ledgers.Vote, Maybe<&2, Hashes.Hash>, Maybe.bind(&2, Ledgers.Vote, Ledgers.Vote, _, y => Spec.Vote.taken(y)), y => Some{Ledgers.Vote.result_of(Some{y})}), g => g), name) == Some{x}: Maybe<&2, Texts.Bytes()>}
         %Equal.sym(Maybe<&2, List<&2, U32>>, Trees.Tree.get(~Spec.State(), ~Spec.Store.fetch, ask1, Some{Trees.Put.root(p)}, Spec.Key.res(name)), Some{Spec.Res.code(Some{x})}, hgs): {Maybe.bind(&2, List<&2, U32>, Texts.Bytes(), _, ws => Spec.Res.read(ws)) == Some{x}: Maybe<&2, Texts.Bytes()>}
         Res.read_code(x)))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# Asks
+# ----
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# Node.ask_grows once the cell m of the request's ID is known
+def Ask.grows.at(
+  +n: String,
+  +s: Spec.State(),
+  +e: Spec.Envelope,
+  +q: Spec.Ask,
+  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
+) -> {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, Spec.Node.ask.at(n, s, e, q, m)) == True{}: Bool}:
+  match m:
+    case Some{x}:
+      Ledgers.State.grows_refl(~Spec.Ask, ~Spec.Ask.is_eq, ~Ask.laws(), s)
+    case None{}:
+      +s0 = Spec.Node.land(s, q)
+      Ledgers.State.grows_trans(
+        ~Spec.Ask,
+        ~Spec.Ask.is_eq,
+        ~Ask.laws(),
+        s,
+        s0,
+        Ledgers.State.ask(
+          ~Spec.Ask,
+          ~Spec.Ask.is_eq,
+          ~Spec.Ask.view,
+          ~Spec.Node.judge,
+          n,
+          s0,
+          Spec.Envelope.of(e),
+          Spec.Envelope.time(e),
+          q
+        )
+      )(
+        Land.grows(s, q)
+      )(
+        Ledgers.State.ask_grows(
+          ~Spec.Ask,
+          ~Spec.Ask.is_eq,
+          ~Ask.laws(),
+          ~Spec.Ask.view,
+          ~Spec.Node.judge,
+          n,
+          s0,
+          Spec.Envelope.of(e),
+          Spec.Envelope.time(e),
+          q
+        )
+      )
+
+def Spec.Node.ask_grows(n, s, e, q):
+  Ask.grows.at(n, s, e, q, Ledgers.State.get(~Spec.Ask, s, Ledgers.Slot.ask(Spec.Envelope.of(e))))
+
+# a ledger that took in the request i holds its slot, once the cell m of the
+# slot before is known
+def Ask.held.fresh(
+  +n: String,
+  +s: Spec.State(),
+  +i: Ledgers.Id,
+  +t: String,
+  +q: Spec.Ask,
+  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+  +em: {
+    Ledgers.State.get(~Spec.Ask, s, Ledgers.Slot.ask(i)) == m: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
+  }
+) -> {
+  Maybe.is_some(
+    &2,
+    Cells.Cell<Ledgers.Entry<Spec.Ask>>,
+    Ledgers.State.get(
+      ~Spec.Ask,
+      Ledgers.State.ask.fresh(~Spec.Ask, ~Spec.Ask.is_eq, ~Spec.Ask.view, ~Spec.Node.judge, n, s, i, t, q, m),
+      Ledgers.Slot.ask(i)
+    )
+  )
+    == True{}: Bool
+}:
+  match m:
+    case Some{x}:
+      %Equal.sym(
+        Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+        Ledgers.State.get(~Spec.Ask, s, Ledgers.Slot.ask(i)),
+        Some{x},
+        em
+      ): {Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>, _) == True{}: Bool}
+      {==}
+    case None{}:
+      +s1 = Ledgers.State.put(~Spec.Ask, ~Spec.Ask.is_eq, s, Ledgers.Slot.ask(i), Ledgers.Entry.Ask{i, t, q})
+      %Equal.sym(
+        Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+        Ledgers.State.get(
+          ~Spec.Ask,
+          Ledgers.Vote.ask(~Spec.Ask, ~Spec.Ask.is_eq, ~Spec.Ask.view, ~Spec.Node.judge, n, s1, i, q, Spec.Ask.view(q)),
+          Ledgers.Slot.ask(i)
+        ),
+        Some{Cells.One{Ledgers.Entry.Ask{i, t, q}}},
+        Slot.one_kept(
+          s1,
+          Ledgers.Vote.ask(~Spec.Ask, ~Spec.Ask.is_eq, ~Spec.Ask.view, ~Spec.Node.judge, n, s1, i, q, Spec.Ask.view(q)),
+          Ledgers.Slot.ask(i),
+          Ledgers.Entry.Ask{i, t, q},
+          Ledgers.Vote.ask.grows(
+            ~Spec.Ask,
+            ~Spec.Ask.is_eq,
+            ~Ask.laws(),
+            ~Spec.Ask.view,
+            ~Spec.Node.judge,
+            n,
+            s1,
+            i,
+            q,
+            Spec.Ask.view(q)
+          ),
+          Ledgers.State.put_get(~Spec.Ask, ~Spec.Ask.is_eq, s, Ledgers.Slot.ask(i), Ledgers.Entry.Ask{i, t, q})(em)
+        )
+      ): {Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>, _) == True{}: Bool}
+      {==}
+
+# a node that took in the request of e holds its slot, once the cell m of the
+# slot before is known
+def Ask.held.at(
+  +n: String,
+  +s: Spec.State(),
+  +e: Spec.Envelope,
+  +q: Spec.Ask,
+  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+  em: {
+    Ledgers.State.get(
+      ~Spec.Ask,
+      s,
+      Ledgers.Slot.ask(Spec.Envelope.of(e))
+    )
+      == m: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
+  }
+) -> {
+  Maybe.is_some(
+    &2,
+    Cells.Cell<Ledgers.Entry<Spec.Ask>>,
+    Ledgers.State.get(~Spec.Ask, Spec.Node.ask.at(n, s, e, q, m), Ledgers.Slot.ask(Spec.Envelope.of(e)))
+  )
+    == True{}: Bool
+}:
+  match m:
+    case Some{x}:
+      %Equal.sym(
+        Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+        Ledgers.State.get(~Spec.Ask, s, Ledgers.Slot.ask(Spec.Envelope.of(e))),
+        Some{x},
+        em
+      ): {Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>, _) == True{}: Bool}
+      {==}
+    case None{}:
+      +s0 = Spec.Node.land(s, q)
+      Ask.held.fresh(
+        n,
+        s0,
+        Spec.Envelope.of(e),
+        Spec.Envelope.time(e),
+        q,
+        Ledgers.State.get(~Spec.Ask, s0, Ledgers.Slot.ask(Spec.Envelope.of(e))),
+        {==}
+      )
+
+# a node that took in the request of e holds its slot
+def Ask.held(
+  +n: String,
+  +s: Spec.State(),
+  +e: Spec.Envelope,
+  +q: Spec.Ask
+) -> {
+  Maybe.is_some(
+    &2,
+    Cells.Cell<Ledgers.Entry<Spec.Ask>>,
+    Ledgers.State.get(~Spec.Ask, Spec.Node.ask(n, s, e, q), Ledgers.Slot.ask(Spec.Envelope.of(e)))
+  )
+    == True{}: Bool
+}:
+  Ask.held.at(n, s, e, q, Ledgers.State.get(~Spec.Ask, s, Ledgers.Slot.ask(Spec.Envelope.of(e))), {==})
+
+# a request whose slot holds a cell changes nothing
+def Ask.once.at(
+  m: String,
+  s: Spec.State(),
+  e: Spec.Envelope,
+  q: Spec.Ask,
+  c: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
+) -> {
+  Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>, c) == True{}: Bool
+} -> {Spec.Node.ask.at(m, s, e, q, c) == s: Spec.State()}:
+  match c:
+    case Some{x}:
+      h => {==}
+    case None{}:
+      h => Empty.absurd(
+        {Spec.Node.ask.at(m, s, e, q, None{}) == s: Spec.State()},
+        Shared.Bool.false_ne_true(h)
+      )
+
+def Spec.Node.ask_once(n, m, s, e, q, e2, q2):
+  +h =>
+    +a = Spec.Node.ask(n, s, e, q)
+    Ask.once.at(
+      m,
+      a,
+      e2,
+      q2,
+      Ledgers.State.get(~Spec.Ask, a, Ledgers.Slot.ask(Spec.Envelope.of(e2)))
+    )(
+      %Equal.sym(Ledgers.Id, Spec.Envelope.of(e2), Spec.Envelope.of(e), h): {
+        Maybe.is_some(
+          &2,
+          Cells.Cell<Ledgers.Entry<Spec.Ask>>,
+          Ledgers.State.get(~Spec.Ask, a, Ledgers.Slot.ask(_))
+        )
+          == True{}: Bool
+      }
+      Ask.held(n, s, e, q)
+    )
+
+# a slot that holds a cell has an answer
+def Held.some(
+  s: Spec.State(),
+  i: Ledgers.Id,
+  q: Spec.Ask,
+  c: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
+) -> {
+  Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>, c) == True{}: Bool
+} -> {Maybe.is_some(&2, Spec.Answer, Spec.Answer.held(s, i, q, c)) == True{}: Bool}:
+  match c:
+    case None{}:
+      h => h
+    case Some{Cells.One{Ledgers.Entry.Ask{j, t, q2}}}:
+      h => {==}
+    case Some{Cells.One{Ledgers.Entry.Vote{v}}}:
+      h => {==}
+    case Some{Cells.One{Ledgers.Entry.At{w}}}:
+      h => {==}
+    case Some{Cells.One{Ledgers.Entry.Data{ws}}}:
+      h => {==}
+    case Some{Cells.Many{}}:
+      h => {==}
+
+def Spec.Node.ask_seen(n, s, e, q):
+  +a = Spec.Node.ask(n, s, e, q)
+  Held.some(
+    a,
+    Spec.Envelope.of(e),
+    q,
+    Ledgers.State.get(~Spec.Ask, a, Ledgers.Slot.ask(Spec.Envelope.of(e)))
+  )(Ask.held(n, s, e, q))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Kept reads
@@ -929,248 +1446,348 @@ def Content.kept.at(
 def Spec.Node.content_kept(s, s2, n, v, x):
   +gr => Content.kept.at(s, s2, n, v, x, gr, Spec.Node.is_version(s, v), {==})
 
+def Spec.Node.version_kept(s, s2, v):
+  +gr => Version.kept.at(s, s2, v, gr, Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s, v), {==})
+
+
 # Answers
 # -------
 
-# the answer a is Written or Conflicted: a step took its request
-def Answer.is_taken(a: Spec.Answer) -> Bool:
-  match a:
-    case Spec.Answer.Written{v}:
-      True{}
-    case Spec.Answer.Conflicted{k}:
-      True{}
-    case _:
-      False{}
-
-# the answer a is Stale
-def Answer.is_stale(a: Spec.Answer) -> Bool:
-  match a:
-    case Spec.Answer.Stale{}:
-      True{}
-    case _:
-      False{}
-
-# the answer a is Refused
-def Answer.is_refused(a: Spec.Answer) -> Bool:
-  match a:
-    case Spec.Answer.Refused{}:
-      True{}
-    case _:
-      False{}
-
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# answers that f tells apart are not the same
-def Answer.differ(
-  ~f: Spec.Answer -> Bool,
-  a: Spec.Answer,
-  b: Spec.Answer,
-  ha: {f(a) == False{}: Bool},
-  hb: {f(b) == True{}: Bool},
-  e: {a == b: Spec.Answer}
-) -> Empty:
-  Shared.Bool.false_ne_true(
-    Equal.trans(
-      Bool,
-      False{},
-      f(a),
-      True{},
-      Equal.sym(Bool, f(a), False{}, ha),
-      Equal.trans(Bool, f(a), f(b), True{}, Equal.cong(Spec.Answer, Bool, x => f(x), a, b, e), hb)
-    )
-  )
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# Written or Conflicted, by whether the merge still clashes (b)
-def Answer.left_taken.at(
-  b: Bool,
+# Written or Conflicted comes after Written or Conflicted, by whether the merge
+# still clashes before (b1) and after (b2)
+def Left.follows(
+  b1: Bool,
+  b2: Bool,
   i: Ledgers.Id,
   k: Ledgers.Id
 ) -> {
-  Answer.is_taken(
-    Shared.Bool.when(Spec.Answer, b, u => Spec.Answer.Written{i}, u => Spec.Answer.Conflicted{k})
+  Spec.Answer.follows(
+    Shared.Bool.when(Spec.Answer, b1, u => Spec.Answer.Written{i}, u => Spec.Answer.Conflicted{k}),
+    Some{
+      Shared.Bool.when(Spec.Answer, b2, u => Spec.Answer.Written{i}, u => Spec.Answer.Conflicted{k})
+    }
+  )
+    == True{}: Bool
+}:
+  match b1 b2:
+    case True{} True{}:
+      {==}
+    case True{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case False{} False{}:
+      {==}
+
+# the answer to a taken change comes after the answer to a taken change
+def Taken.follows(
+  s: Spec.State(),
+  s2: Spec.State(),
+  +i: Ledgers.Id,
+  q: Spec.Ask
+) -> {
+  Spec.Answer.follows(Spec.Answer.taken(s, i, q), Some{Spec.Answer.taken(s2, i, q)}) == True{}: Bool
+}:
+  match q:
+    case Spec.Ask.On{st, l, Spec.Change.Merge{f}}:
+      Left.follows(
+        List.is_empty(&2, Resources.Name, Spec.Node.conflict(s, i)),
+        List.is_empty(&2, Resources.Name, Spec.Node.conflict(s2, i)),
+        i,
+        i
+      )
+    case Spec.Ask.On{st, l, Spec.Change.Resolve{+k, n, c}}:
+      Left.follows(
+        List.is_empty(&2, Resources.Name, Spec.Node.conflict(s, k)),
+        List.is_empty(&2, Resources.Name, Spec.Node.conflict(s2, k)),
+        i,
+        k
+      )
+    case Spec.Ask.On{st, l, Spec.Change.Make{a, b, c}}:
+      {==}
+    case Spec.Ask.On{st, l, Spec.Change.Own{a}}:
+      {==}
+    case Spec.Ask.On{st, l, Spec.Change.Write{a, b, c}}:
+      {==}
+    case Spec.Ask.On{st, l, Spec.Change.Move{a}}:
+      {==}
+    case Spec.Ask.On{st, l, Spec.Change.Mark{a, b}}:
+      {==}
+    case Spec.Ask.On{st, l, Spec.Change.Members{a}}:
+      {==}
+    case Spec.Ask.Start{a}:
+      {==}
+
+# the answer to a request that s holds comes before its answer in a state that
+# grows from s, once its view v and the vote d that decided it in s are known
+def Of.follows.at(
+  +s: Spec.State(),
+  +s2: Spec.State(),
+  +i: Ledgers.Id,
+  +q: Spec.Ask,
+  v: Ledgers.View,
+  d: Maybe<&2, Ledgers.Vote>,
+  gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
+  ed: {Ledgers.State.decided(~Spec.Ask, ~Spec.Ask.view, s, i) == d: Maybe<&2, Ledgers.Vote>}
+) -> {
+  Spec.Answer.follows(
+    Spec.Answer.of(s, i, q, Ledgers.Status.of.view(v, d)),
+    Some{
+      Spec.Answer.of(
+        s2,
+        i,
+        q,
+        Ledgers.Status.of.view(v, Ledgers.State.decided(~Spec.Ask, ~Spec.Ask.view, s2, i))
+      )
+    }
+  )
+    == True{}: Bool
+}:
+  match v d:
+    case Ledgers.View.Root{ms} w:
+      Taken.follows(s, s2, i, q)
+    case Ledgers.View.On{c, o, mk} None{}:
+      {==}
+    case Ledgers.View.On{c, o, mk} Some{Ledgers.Vote{j, True{}, u, r}}:
+      %Equal.sym(
+        Maybe<&2, Ledgers.Vote>,
+        Ledgers.State.decided(~Spec.Ask, ~Spec.Ask.view, s2, i),
+        Some{Ledgers.Vote{j, True{}, u, r}},
+        Ledgers.State.decided_grows(
+          ~Spec.Ask,
+          ~Spec.Ask.is_eq,
+          ~Ask.laws(),
+          ~Spec.Ask.view,
+          s,
+          s2,
+          i,
+          Ledgers.Vote{j, True{}, u, r}
+        )(gr)(ed)
+      ): {
+        Spec.Answer.follows(
+          Spec.Answer.taken(s, i, q),
+          Some{Spec.Answer.of(s2, i, q, Ledgers.Status.of.view(Ledgers.View.On{c, o, mk}, _))}
+        )
+          == True{}: Bool
+      }
+      Taken.follows(s, s2, i, q)
+    case Ledgers.View.On{c, o, mk} Some{Ledgers.Vote{j, False{}, u, r}}:
+      %Equal.sym(
+        Maybe<&2, Ledgers.Vote>,
+        Ledgers.State.decided(~Spec.Ask, ~Spec.Ask.view, s2, i),
+        Some{Ledgers.Vote{j, False{}, u, r}},
+        Ledgers.State.decided_grows(
+          ~Spec.Ask,
+          ~Spec.Ask.is_eq,
+          ~Ask.laws(),
+          ~Spec.Ask.view,
+          s,
+          s2,
+          i,
+          Ledgers.Vote{j, False{}, u, r}
+        )(gr)(ed)
+      ): {
+        Spec.Answer.follows(
+          Spec.Answer.Stale{},
+          Some{Spec.Answer.of(s2, i, q, Ledgers.Status.of.view(Ledgers.View.On{c, o, mk}, _))}
+        )
+          == True{}: Bool
+      }
+      {==}
+
+# Node.answer_kept for a slot that holds the request q2, by whether q2 is the
+# change asked for (b)
+def Kept.same(
+  +s: Spec.State(),
+  +s2: Spec.State(),
+  +i: Ledgers.Id,
+  +q2: Spec.Ask,
+  -a: Spec.Answer,
+  gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
+  b: Bool
+) -> {
+  Some{
+    Shared.Bool.when(
+      Spec.Answer,
+      b,
+      u => Spec.Answer.of(
+        s,
+        i,
+        q2,
+        Ledgers.Status.of.view(Spec.Ask.view(q2), Ledgers.State.decided(~Spec.Ask, ~Spec.Ask.view, s, i))
+      ),
+      u => Spec.Answer.Refused{}
+    )
+  }
+    == Some{a}: Maybe<&2, Spec.Answer>
+} -> {
+  Spec.Answer.follows(
+    a,
+    Some{
+      Shared.Bool.when(
+        Spec.Answer,
+        b,
+        u => Spec.Answer.of(
+          s2,
+          i,
+          q2,
+          Ledgers.Status.of.view(
+            Spec.Ask.view(q2),
+            Ledgers.State.decided(~Spec.Ask, ~Spec.Ask.view, s2, i)
+          )
+        ),
+        u => Spec.Answer.Refused{}
+      )
+    }
   )
     == True{}: Bool
 }:
   match b:
     case True{}:
-      {==}
-    case False{}:
-      {==}
-
-# the answer to a taken request is Written or Conflicted
-def Answer.taken_taken(
-  s: Spec.State(),
-  +i: Ledgers.Id,
-  r: Maybe<&2, Ledgers.Asked<Spec.Ask>>
-) -> {Answer.is_taken(Spec.Answer.taken(s, i, r)) == True{}: Bool}:
-  match r:
-    case Some{Ledgers.Asked{t, Spec.Ask.On{st, l, Spec.Change.Merge{f}}}}:
-      Answer.left_taken.at(List.is_empty(&2, Resources.Name, Spec.Node.conflict(s, i)), i, i)
-    case Some{Ledgers.Asked{t, Spec.Ask.On{st, l, Spec.Change.Resolve{+k, n, c}}}}:
-      Answer.left_taken.at(List.is_empty(&2, Resources.Name, Spec.Node.conflict(s, k)), i, k)
-    case Some{Ledgers.Asked{t, Spec.Ask.On{st, l, Spec.Change.Make{a, b, c}}}}:
-      {==}
-    case Some{Ledgers.Asked{t, Spec.Ask.On{st, l, Spec.Change.Own{a}}}}:
-      {==}
-    case Some{Ledgers.Asked{t, Spec.Ask.On{st, l, Spec.Change.Write{a, b, c}}}}:
-      {==}
-    case Some{Ledgers.Asked{t, Spec.Ask.On{st, l, Spec.Change.Move{a}}}}:
-      {==}
-    case Some{Ledgers.Asked{t, Spec.Ask.On{st, l, Spec.Change.Mark{a, b}}}}:
-      {==}
-    case Some{Ledgers.Asked{t, Spec.Ask.On{st, l, Spec.Change.Members{a}}}}:
-      {==}
-    case Some{Ledgers.Asked{t, Spec.Ask.Start{a}}}:
-      {==}
-    case None{}:
-      {==}
-
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# a Stale answer stays, once the status is known (st)
-def Answer.stale_kept.at(
-  +s: Spec.State(),
-  s2: Spec.State(),
-  +i: Ledgers.Id,
-  gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
-  st: Ledgers.Status,
-  e: {Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s, i) == st: Ledgers.Status}
-) -> {
-  Spec.Answer.of(s, i, st) == Spec.Answer.Stale{}: Spec.Answer
-} -> {Spec.Node.answer(s2, i) == Spec.Answer.Stale{}: Spec.Answer}:
-  match st:
-    case Ledgers.Status.Done{False{}}:
       h =>
-        %Equal.sym(
-          Ledgers.Status,
-          Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s2, i),
-          Ledgers.Status.Done{False{}},
-          Ledgers.State.status_grows(
-            ~Spec.Ask,
-            ~Spec.Ask.is_eq,
-            ~Ask.laws(),
-            ~Spec.Ask.view,
+        %Shared.Maybe.some_inj(
+          Spec.Answer,
+          Spec.Answer.of(
             s,
-            s2,
             i,
-            False{}
-          )(gr)(e)
-        ): {Spec.Answer.of(s2, i, _) == Spec.Answer.Stale{}: Spec.Answer}
-        {==}
-    case Ledgers.Status.Done{True{}}:
-      h => Empty.absurd(
-        {Spec.Node.answer(s2, i) == Spec.Answer.Stale{}: Spec.Answer},
-        Answer.differ(
-          ~Answer.is_taken,
-          Spec.Answer.Stale{},
-          Spec.Answer.taken(s, i, Ledgers.State.asked(~Spec.Ask, s, i)),
-          {==},
-          Answer.taken_taken(s, i, Ledgers.State.asked(~Spec.Ask, s, i)),
-          Equal.sym(
-            Spec.Answer,
-            Spec.Answer.taken(s, i, Ledgers.State.asked(~Spec.Ask, s, i)),
-            Spec.Answer.Stale{},
-            h
+            q2,
+            Ledgers.Status.of.view(Spec.Ask.view(q2), Ledgers.State.decided(~Spec.Ask, ~Spec.Ask.view, s, i))
+          ),
+          a,
+          h
+        ): {
+          Spec.Answer.follows(
+            _,
+            Some{
+              Spec.Answer.of(
+                s2,
+                i,
+                q2,
+                Ledgers.Status.of.view(
+                  Spec.Ask.view(q2),
+                  Ledgers.State.decided(~Spec.Ask, ~Spec.Ask.view, s2, i)
+                )
+              )
+            }
           )
+            == True{}: Bool
+        }
+        Of.follows.at(
+          s,
+          s2,
+          i,
+          q2,
+          Spec.Ask.view(q2),
+          Ledgers.State.decided(~Spec.Ask, ~Spec.Ask.view, s, i),
+          gr,
+          {==}
         )
-      )
-    case Ledgers.Status.Pending{}:
-      h => Empty.absurd(
-        {Spec.Node.answer(s2, i) == Spec.Answer.Stale{}: Spec.Answer},
-        Answer.differ(~Answer.is_stale, Spec.Answer.Pending{}, Spec.Answer.Stale{}, {==}, {==}, h)
-      )
-    case Ledgers.Status.Refused{}:
-      h => Empty.absurd(
-        {Spec.Node.answer(s2, i) == Spec.Answer.Stale{}: Spec.Answer},
-        Answer.differ(~Answer.is_stale, Spec.Answer.Refused{}, Spec.Answer.Stale{}, {==}, {==}, h)
-      )
-    case Ledgers.Status.NotSeen{}:
-      h => Empty.absurd(
-        {Spec.Node.answer(s2, i) == Spec.Answer.Stale{}: Spec.Answer},
-        Answer.differ(~Answer.is_stale, Spec.Answer.NotSeen{}, Spec.Answer.Stale{}, {==}, {==}, h)
-      )
+    case False{}:
+      h =>
+        %Shared.Maybe.some_inj(Spec.Answer, Spec.Answer.Refused{}, a, h):
+          {Spec.Answer.follows(_, Some{Spec.Answer.Refused{}}) == True{}: Bool}
+        {==}
 
-# a Refused answer stays after any sync, once the status is known (st)
-def Answer.refused_kept.at(
+# Node.answer_kept once the cell c of the request's slot in s is known
+def Kept.at(
   +s: Spec.State(),
-  t: Spec.State(),
+  +s2: Spec.State(),
   +i: Ledgers.Id,
-  st: Ledgers.Status,
-  e: {Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s, i) == st: Ledgers.Status}
+  +q: Spec.Ask,
+  -a: Spec.Answer,
+  +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
+  c: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+  ec: {
+    Ledgers.State.get(~Spec.Ask, s, Ledgers.Slot.ask(i)) == c: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
+  }
 ) -> {
-  Spec.Answer.of(s, i, st) == Spec.Answer.Refused{}: Spec.Answer
-} -> {Spec.Node.answer(Spec.Node.join(s, t), i) == Spec.Answer.Refused{}: Spec.Answer}:
-  match st:
-    case Ledgers.Status.Refused{}:
+  Spec.Answer.held(s, i, q, c) == Some{a}: Maybe<&2, Spec.Answer>
+} -> {
+  Spec.Answer.follows(
+    a,
+    Spec.Answer.held(s2, i, q, Ledgers.State.get(~Spec.Ask, s2, Ledgers.Slot.ask(i)))
+  )
+    == True{}: Bool
+}:
+  match c:
+    case None{}:
+      h => Empty.absurd(
+        {
+          Spec.Answer.follows(
+            a,
+            Spec.Answer.held(s2, i, q, Ledgers.State.get(~Spec.Ask, s2, Ledgers.Slot.ask(i)))
+          )
+            == True{}: Bool
+        },
+        Shared.Maybe.none_ne_some(Spec.Answer, a, h)
+      )
+    case Some{Cells.Many{}}:
       h =>
         %Equal.sym(
-          Ledgers.Status,
-          Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, Spec.Node.join(s, t), i),
-          Ledgers.Status.Refused{},
-          Ledgers.State.refused_kept(~Spec.Ask, ~Spec.Ask.is_eq, ~Spec.Ask.view, s, t, i)(e)
-        ): {Spec.Answer.of(Spec.Node.join(s, t), i, _) == Spec.Answer.Refused{}: Spec.Answer}
+          Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+          Ledgers.State.get(~Spec.Ask, s2, Ledgers.Slot.ask(i)),
+          Some{Cells.Many{}},
+          Slot.many_kept(s, s2, Ledgers.Slot.ask(i), gr, ec)
+        ): {Spec.Answer.follows(a, Spec.Answer.held(s2, i, q, _)) == True{}: Bool}
+        %Shared.Maybe.some_inj(Spec.Answer, Spec.Answer.Refused{}, a, h):
+          {Spec.Answer.follows(_, Some{Spec.Answer.Refused{}}) == True{}: Bool}
         {==}
-    case Ledgers.Status.Done{True{}}:
-      h => Empty.absurd(
-        {Spec.Node.answer(Spec.Node.join(s, t), i) == Spec.Answer.Refused{}: Spec.Answer},
-        Answer.differ(
-          ~Answer.is_taken,
-          Spec.Answer.Refused{},
-          Spec.Answer.taken(s, i, Ledgers.State.asked(~Spec.Ask, s, i)),
-          {==},
-          Answer.taken_taken(s, i, Ledgers.State.asked(~Spec.Ask, s, i)),
-          Equal.sym(
-            Spec.Answer,
-            Spec.Answer.taken(s, i, Ledgers.State.asked(~Spec.Ask, s, i)),
-            Spec.Answer.Refused{},
-            h
-          )
-        )
-      )
-    case Ledgers.Status.Done{False{}}:
-      h => Empty.absurd(
-        {Spec.Node.answer(Spec.Node.join(s, t), i) == Spec.Answer.Refused{}: Spec.Answer},
-        Answer.differ(~Answer.is_refused, Spec.Answer.Stale{}, Spec.Answer.Refused{}, {==}, {==}, h)
-      )
-    case Ledgers.Status.Pending{}:
-      h => Empty.absurd(
-        {Spec.Node.answer(Spec.Node.join(s, t), i) == Spec.Answer.Refused{}: Spec.Answer},
-        Answer.differ(
-          ~Answer.is_refused,
-          Spec.Answer.Pending{},
-          Spec.Answer.Refused{},
-          {==},
-          {==},
-          h
-        )
-      )
-    case Ledgers.Status.NotSeen{}:
-      h => Empty.absurd(
-        {Spec.Node.answer(Spec.Node.join(s, t), i) == Spec.Answer.Refused{}: Spec.Answer},
-        Answer.differ(
-          ~Answer.is_refused,
-          Spec.Answer.NotSeen{},
-          Spec.Answer.Refused{},
-          {==},
-          {==},
-          h
-        )
-      )
+    case Some{Cells.One{Ledgers.Entry.Vote{v}}}:
+      h =>
+        %Equal.sym(
+          Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+          Ledgers.State.get(~Spec.Ask, s2, Ledgers.Slot.ask(i)),
+          Some{Cells.One{Ledgers.Entry.Vote{v}}},
+          Slot.one_kept(s, s2, Ledgers.Slot.ask(i), Ledgers.Entry.Vote{v}, gr, ec)
+        ): {Spec.Answer.follows(a, Spec.Answer.held(s2, i, q, _)) == True{}: Bool}
+        %Shared.Maybe.some_inj(Spec.Answer, Spec.Answer.Refused{}, a, h):
+          {Spec.Answer.follows(_, Some{Spec.Answer.Refused{}}) == True{}: Bool}
+        {==}
+    case Some{Cells.One{Ledgers.Entry.At{w}}}:
+      h =>
+        %Equal.sym(
+          Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+          Ledgers.State.get(~Spec.Ask, s2, Ledgers.Slot.ask(i)),
+          Some{Cells.One{Ledgers.Entry.At{w}}},
+          Slot.one_kept(s, s2, Ledgers.Slot.ask(i), Ledgers.Entry.At{w}, gr, ec)
+        ): {Spec.Answer.follows(a, Spec.Answer.held(s2, i, q, _)) == True{}: Bool}
+        %Shared.Maybe.some_inj(Spec.Answer, Spec.Answer.Refused{}, a, h):
+          {Spec.Answer.follows(_, Some{Spec.Answer.Refused{}}) == True{}: Bool}
+        {==}
+    case Some{Cells.One{Ledgers.Entry.Data{ws}}}:
+      h =>
+        %Equal.sym(
+          Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+          Ledgers.State.get(~Spec.Ask, s2, Ledgers.Slot.ask(i)),
+          Some{Cells.One{Ledgers.Entry.Data{ws}}},
+          Slot.one_kept(s, s2, Ledgers.Slot.ask(i), Ledgers.Entry.Data{ws}, gr, ec)
+        ): {Spec.Answer.follows(a, Spec.Answer.held(s2, i, q, _)) == True{}: Bool}
+        %Shared.Maybe.some_inj(Spec.Answer, Spec.Answer.Refused{}, a, h):
+          {Spec.Answer.follows(_, Some{Spec.Answer.Refused{}}) == True{}: Bool}
+        {==}
+    case Some{Cells.One{Ledgers.Entry.Ask{j, t, +q2}}}:
+      h =>
+        %Equal.sym(
+          Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+          Ledgers.State.get(~Spec.Ask, s2, Ledgers.Slot.ask(i)),
+          Some{Cells.One{Ledgers.Entry.Ask{j, t, q2}}},
+          Slot.one_kept(s, s2, Ledgers.Slot.ask(i), Ledgers.Entry.Ask{j, t, q2}, gr, ec)
+        ): {Spec.Answer.follows(a, Spec.Answer.held(s2, i, q, _)) == True{}: Bool}
+        Kept.same(s, s2, i, q2, a, gr, Spec.Ask.is_eq(q2, q))(h)
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-def Spec.Node.version_kept(s, s2, v):
-  +gr => Version.kept.at(s, s2, v, gr, Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s, v), {==})
 
-def Spec.Node.stale_kept(s, s2, i):
-  +gr => Answer.stale_kept.at(
+def Spec.Node.answer_kept(s, s2, e, q, a):
+  +gr => h => Kept.at(
     s,
     s2,
-    i,
+    Spec.Envelope.of(e),
+    q,
+    a,
     gr,
-    Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s, i),
+    Ledgers.State.get(~Spec.Ask, s, Ledgers.Slot.ask(Spec.Envelope.of(e))),
     {==}
-  )
-
-def Spec.Node.refused_kept(s, t, i):
-  Answer.refused_kept.at(s, t, i, Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s, i), {==})
+  )(h)
 
 # Histories
 # ---------
