@@ -247,7 +247,6 @@ def Spec.Ask.same():
 # Slots
 # -----
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a slot that keeps a and holds nothing: a holds nothing
 def Cell.keeps_none(
   a: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
@@ -302,10 +301,10 @@ def Cell.keeps_many(
 
 # what a state that grows from s holds at the slot k keeps what s holds there
 def Slot.kept(
-  +s: Spec.State(),
-  +s2: Spec.State(),
-  +k: List<&2, Bool>,
-  +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool}
+  s: Spec.State(),
+  s2: Spec.State(),
+  k: List<&2, Bool>,
+  gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool}
 ) -> {
   Cells.Cell.keeps(
     ~Ledgers.Entry<Spec.Ask>,
@@ -326,11 +325,11 @@ def Slot.kept(
 
 # the entry x of the slot k stays as the state grows
 def Slot.one_kept(
-  +s: Spec.State(),
+  s: Spec.State(),
   +s2: Spec.State(),
   +k: List<&2, Bool>,
-  +x: Ledgers.Entry<Spec.Ask>,
-  +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
+  x: Ledgers.Entry<Spec.Ask>,
+  gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
   e: {
     Ledgers.State.get(~Spec.Ask, s, k) == Some{Cells.One{x}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
   }
@@ -358,10 +357,10 @@ def Slot.one_kept(
 
 # a contradiction in the slot k stays as the state grows
 def Slot.many_kept(
-  +s: Spec.State(),
+  s: Spec.State(),
   +s2: Spec.State(),
   +k: List<&2, Bool>,
-  +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
+  gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
   e: {
     Ledgers.State.get(~Spec.Ask, s, k) == Some{Cells.Many{}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
   }
@@ -384,9 +383,9 @@ def Slot.many_kept(
 # a slot that is empty once the state grew was empty
 def Slot.none_before(
   +s: Spec.State(),
-  +s2: Spec.State(),
+  s2: Spec.State(),
   +k: List<&2, Bool>,
-  +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
+  gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
   e: {Ledgers.State.get(~Spec.Ask, s2, k) == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>}
 ) -> {Ledgers.State.get(~Spec.Ask, s, k) == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>}:
   Cell.keeps_none(Ledgers.State.get(~Spec.Ask, s, k))(
@@ -401,7 +400,6 @@ def Slot.none_before(
     }
     Slot.kept(s, s2, k, gr)
   )
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Writes
 # ------
@@ -484,8 +482,8 @@ def Holds.of(
 
 # the bytes under a root stay as the state grows
 def Rope.kept(
-  +s: Spec.State(),
-  +s2: Spec.State(),
+  s: Spec.State(),
+  s2: Spec.State(),
   r: Ropes.Root,
   x: Texts.Bytes(),
   gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool}
@@ -941,7 +939,6 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, rt, x, ep, h, last, p):
 # Asks
 # ----
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Node.ask_grows once the cell m of the request's ID is known
 def Ask.grows.at(
   +n: String,
@@ -1014,7 +1011,7 @@ def Ask.held.fresh(
   +t: String,
   +q: Spec.Ask,
   m: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
-  +em: {
+  em: {
     Ledgers.State.get(~Spec.Ask, s, Ledgers.Slot.ask(i)) == m: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
   }
 ) -> {
@@ -1073,8 +1070,8 @@ def Ask.held.fresh(
 # a node that took in the request of e holds its slot, once the cell m of the
 # slot before is known
 def Ask.held.at(
-  +n: String,
-  +s: Spec.State(),
+  n: String,
+  s: Spec.State(),
   +e: Spec.Envelope,
   +q: Spec.Ask,
   m: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
@@ -1117,10 +1114,10 @@ def Ask.held.at(
 
 # a node that took in the request of e holds its slot
 def Ask.held(
-  +n: String,
+  n: String,
   +s: Spec.State(),
   +e: Spec.Envelope,
-  +q: Spec.Ask
+  q: Spec.Ask
 ) -> {
   Maybe.is_some(
     &2,
@@ -1202,7 +1199,6 @@ def Spec.Node.ask_seen(n, s, e, q):
     q,
     Ledgers.State.get(~Spec.Ask, a, Ledgers.Slot.ask(Spec.Envelope.of(e)))
   )(Ask.held(n, s, e, q))
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Kept reads
 # ----------
@@ -1299,7 +1295,7 @@ def Res.kept(
   +s2: Spec.State(),
   +h: Maybe<&2, Hashes.Hash>,
   +n: Resources.Name,
-  +x: Texts.Bytes(),
+  x: Texts.Bytes(),
   +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool}
 ) -> {
   Spec.Res.get(s, h, n) == Some{x}: Maybe<&2, Texts.Bytes()>
@@ -1375,7 +1371,7 @@ def Content.kept.root(
   +s2: Spec.State(),
   v: Ledgers.Id,
   +n: Resources.Name,
-  +x: Texts.Bytes(),
+  x: Texts.Bytes(),
   +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
   m: Maybe<&2, Maybe<&2, Hashes.Hash>>,
   e: {Spec.Node.root(s, v) == m: Maybe<&2, Maybe<&2, Hashes.Hash>>}
@@ -1445,7 +1441,7 @@ def Content.kept.at(
   +s2: Spec.State(),
   n: Resources.Name,
   +v: Ledgers.Id,
-  +x: Texts.Bytes(),
+  x: Texts.Bytes(),
   +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
   b: Bool,
   e: {Spec.Node.is_version(s, v) == b: Bool}
@@ -1497,7 +1493,6 @@ def Spec.Node.version_kept(s, s2, v):
 # Answers
 # -------
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Written or Conflicted comes after Written or Conflicted, by whether the merge
 # still clashes before (b1) and after (b2)
 def Left.follows(
@@ -1569,7 +1564,7 @@ def Of.follows.at(
   +s: Spec.State(),
   +s2: Spec.State(),
   +i: Ledgers.Id,
-  +q: Spec.Ask,
+  q: Spec.Ask,
   v: Ledgers.View,
   d: Maybe<&2, Ledgers.Vote>,
   gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
@@ -1644,7 +1639,7 @@ def Of.follows.at(
 # change asked for (b)
 def Kept.same(
   +s: Spec.State(),
-  +s2: Spec.State(),
+  s2: Spec.State(),
   +i: Ledgers.Id,
   +q2: Spec.Ask,
   -a: Spec.Answer,
@@ -1738,7 +1733,7 @@ def Kept.at(
   +s: Spec.State(),
   +s2: Spec.State(),
   +i: Ledgers.Id,
-  +q: Spec.Ask,
+  q: Spec.Ask,
   -a: Spec.Answer,
   +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
   c: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
@@ -1819,7 +1814,6 @@ def Kept.at(
           Slot.one_kept(s, s2, Ledgers.Slot.ask(i), Ledgers.Entry.Ask{j, t, q2}, gr, ec)
         ): {Spec.Answer.follows(a, Spec.Answer.held(s2, i, q, _)) == True{}: Bool}
         Kept.same(s, s2, i, q2, a, gr, Spec.Ask.is_eq(q2, q))(h)
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 def Spec.Node.answer_kept(s, s2, e, q, a):
   +gr => h => Kept.at(
@@ -2006,7 +2000,6 @@ def Steps.of_bind(
       )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # the steps of a line start its steps in a state that grows, once the listing m
 # of the line is known
 def Steps.grow.at(
@@ -2071,9 +2064,9 @@ def Spec.Node.versions_grow(s, s2, r, b):
 
 # what a step says of a mark stays, once its request a in s is known
 def At.kept.at(
-  +s: Spec.State(),
-  +s2: Spec.State(),
-  +i: Ledgers.Id,
+  s: Spec.State(),
+  s2: Spec.State(),
+  i: Ledgers.Id,
   k: Bool,
   m: String,
   -b: Bool,
@@ -2116,15 +2109,15 @@ def At.kept.at(
 # (t0); ih is Mark.kept.go of the steps after it
 def Mark.kept.at(
   +s: Spec.State(),
-  +s2: Spec.State(),
+  s2: Spec.State(),
   +i: Ledgers.Id,
-  +k: Bool,
-  +m: String,
+  k: Bool,
+  m: String,
   -v: Ledgers.Id,
   gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
-  +prev: Maybe<&2, Ledgers.Id>,
-  +xr: List<&2, Ledgers.Vote>,
-  +yr: List<&2, Ledgers.Vote>,
+  prev: Maybe<&2, Ledgers.Id>,
+  xr: List<&2, Ledgers.Vote>,
+  yr: List<&2, Ledgers.Vote>,
   t0: Maybe<&2, Bool>,
   et: {Spec.Mark.at(k, Ledgers.State.asked(~Spec.Ask, s, i), m) == t0: Maybe<&2, Bool>},
   ih: {
@@ -2267,7 +2260,7 @@ def Mark.kept.go(
           )
         )
       )
-    case Con{Ledgers.Vote{+i, +k, +w, +hh}, +xr} Con{y, +yr}:
+    case Con{Ledgers.Vote{+i, +k, w, hh}, +xr} Con{y, +yr}:
       +e => h =>
         %Equal.sym(
           Ledgers.Vote,
@@ -2316,7 +2309,6 @@ def Mark.kept.go(
           )
         )(h)
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 def Spec.Node.mark_kept(s, s2, r, b, m, v):
   +gr =>
@@ -2335,7 +2327,6 @@ def Spec.Node.mark_kept(s, s2, r, b, m, v):
 # Owners
 # ------
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # owners that fit the nodes ns are ns
 def Fits.same(
   +os: List<&2, String>,
@@ -2390,12 +2381,10 @@ def Takes.at(
 
 def Spec.Own.takes_inside(s, r, l, g, at, os, h):
   Takes.at(os, Spec.Group.nodes(s, Spec.Own.tree(s, l, at, h), g), Spec.Own.ok(s, r, l, at))
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Views
 # -----
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # the last draft of cells one after the other is the last draft of the second
 # cells, after that of the first
 def Last.append(
@@ -2404,7 +2393,7 @@ def Last.append(
   +b: String,
   +n: Resources.Name,
   xs: List<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
-  +ys: List<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+  ys: List<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
   f: Maybe<&2, Spec.Content>
 ) -> {
   Spec.Draft.last(
@@ -2505,13 +2494,13 @@ def Last.some(
 
 # Last.none at a request with the content c2, by whether it is pending (p)
 def Last.none.if(
-  +s: Spec.State(),
-  +r: Ledgers.Id,
-  +b: String,
-  +n: Resources.Name,
-  +rest: List<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+  s: Spec.State(),
+  r: Ledgers.Id,
+  b: String,
+  n: Resources.Name,
+  rest: List<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
   f: Maybe<&2, Spec.Content>,
-  +c2: Spec.Content,
+  c2: Spec.Content,
   p: Bool,
   ih: {
     Spec.Draft.last(s, r, b, n, rest, None{}) == None{}: Maybe<&2, Spec.Content>
@@ -2570,11 +2559,11 @@ def Last.none.if(
 # Last.none at a request whose content for the resource is m
 def Last.none.at(
   +s: Spec.State(),
-  +r: Ledgers.Id,
-  +b: String,
-  +n: Resources.Name,
-  +i: Ledgers.Id,
-  +rest: List<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+  r: Ledgers.Id,
+  b: String,
+  n: Resources.Name,
+  i: Ledgers.Id,
+  rest: List<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
   f: Maybe<&2, Spec.Content>,
   m: Maybe<&2, Spec.Content>,
   ih: {
@@ -2612,8 +2601,8 @@ def Last.none(
 } -> {Spec.Draft.last(s, r, b, n, ys, f) == f: Maybe<&2, Spec.Content>}:
   match ys:
     case Nil{}:
-      h => {==}
-    case Con{Cells.One{Ledgers.Entry.Ask{+i, t, +q}}, +rest}:
+      _ => {==}
+    case Con{Cells.One{Ledgers.Entry.Ask{i, t, q}}, +rest}:
       Last.none.at(
         s,
         r,
@@ -2695,7 +2684,6 @@ def Spec.Node.draft_own(s, w, q, t, a, r, b, n, c):
         == Some{c}: Maybe<&2, Spec.Content>
     }
     Last.none(s, r, b, n, as, Some{c})(hn)
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Contents
 # --------
