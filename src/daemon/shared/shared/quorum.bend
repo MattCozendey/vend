@@ -967,3 +967,614 @@ def Quorum.decide_one(ty, same, laws, x):
         == Some{x}: Maybe<&2, ty>
     }
   {==}
+
+# One pass
+# --------
+# Quorum.winner tries each ballot against all: n^2 for n owners. A pass in the
+# manner of Boyer and Moore keeps one candidate and a count: a ballot for it
+# raises the count, any other ballot lowers it, and a ballot for another vote
+# takes over a count of zero. A choice with a majority is the candidate at the
+# end, so one more count tells whether it won (Quorum.winner_fast_eq).
+
+# a candidate and its count
+type Pass<-B: Data> is Data:
+  Pass{cand: Maybe<&2, B>, count: Nat}
+
+# the candidate of the pass p
+def Pass.cand(-B: Data, p: Pass<B>) -> Maybe<&2, B>:
+  match p:
+    case Pass{c, k}:
+      c
+
+# the pass after the vote b, from the candidate c and the count 1 + j
+def Quorum.step.vote(~B: Data, ~same: B -> B -> Bool, +b: B, c: Maybe<&2, B>, +j: Nat) -> Pass<B>:
+  match c:
+    case Some{+a}:
+      Bool.pick(Pass<B>, same(a, b), Pass{Some{a}, 2n+j}, Pass{Some{a}, j})
+    case None{}:
+      Pass{None{}, j}
+
+# the pass after the ballot v, from the candidate c and the count k
+def Quorum.step.of(~B: Data, ~same: B -> B -> Bool, v: Maybe<&2, Cells.Cell<B>>, c: Maybe<&2, B>, k: Nat) -> Pass<B>:
+  match v k:
+    case Some{Cells.One{+b}} 0n:
+      Pass{Some{b}, 1n}
+    case Some{Cells.One{+b}} 1n+j:
+      Quorum.step.vote(~B, ~same, b, c, j)
+    case Some{Cells.Many{}} 0n:
+      Pass{c, 0n}
+    case Some{Cells.Many{}} 1n+j:
+      Pass{c, j}
+    case None{} 0n:
+      Pass{c, 0n}
+    case None{} 1n+j:
+      Pass{c, j}
+
+# the pass after the ballot v
+def Quorum.step(~B: Data, ~same: B -> B -> Bool, v: Maybe<&2, Cells.Cell<B>>, p: Pass<B>) -> Pass<B>:
+  match p:
+    case Pass{c, k}:
+      Quorum.step.of(~B, ~same, v, c, k)
+
+# the pass over the ballots bs, the last first
+def Quorum.pass(~B: Data, ~same: B -> B -> Bool, bs: List<&2, Maybe<&2, Cells.Cell<B>>>) -> Pass<B>:
+  match bs:
+    case Nil{}:
+      Pass{None{}, 0n}
+    case Con{v, r}:
+      Quorum.step(~B, ~same, v, Quorum.pass(~B, ~same, r))
+
+# the candidate of p, when it has a majority of bs
+def Quorum.winner_fast.of(~B: Data, ~same: B -> B -> Bool, +bs: List<&2, Maybe<&2, Cells.Cell<B>>>, p: Pass<B>) -> Maybe<&2, B>:
+  match p:
+    case Pass{Some{+y}, k}:
+      Bool.pick(Maybe<&2, B>, Quorum.has(~B, ~same, bs, y), Some{y}, None{})
+    case Pass{None{}, k}:
+      None{}
+
+# the vote with a majority of bs, if any, in one pass and one count
+def Quorum.winner_fast(~B: Data, ~same: B -> B -> Bool, +bs: List<&2, Maybe<&2, Cells.Cell<B>>>) -> Maybe<&2, B>:
+  Quorum.winner_fast.of(~B, ~same, bs, Quorum.pass(~B, ~same, bs))
+
+# what the ballots bs decide, as Quorum.decide does (Quorum.decide_fast_eq)
+def Quorum.decide_fast(~B: Data, ~same: B -> B -> Bool, +bs: List<&2, Maybe<&2, Cells.Cell<B>>>) -> Maybe<&2, B>:
+  Quorum.decide.of(~B, ~same, Quorum.winner_fast(~B, ~same, bs), bs)
+
+# The pass's bound
+# ----------------
+# Of a choice x, a pass with q ballots for it and r against keeps a bound: q
+# is at most r plus the count when the candidate is x, and q plus the count is
+# at most r when not.
+
+# the candidate c is x
+def Quorum.is_cand(~B: Data, ~same: B -> B -> Bool, c: Maybe<&2, B>, x: B) -> Bool:
+  match c:
+    case Some{a}:
+      same(a, x)
+    case None{}:
+      False{}
+
+# the bound for a count k, q ballots for x and r against, when the candidate
+# is x (h) or not
+def Quorum.bound(h: Bool, k: Nat, q: Nat, r: Nat) -> Bool:
+  match h:
+    case True{}:
+      Nat.is_le(q, Nat.add(k, r))
+    case False{}:
+      Nat.is_le(Nat.add(k, q), r)
+
+# the bound of the pass p
+def Quorum.inv(~B: Data, ~same: B -> B -> Bool, x: B, p: Pass<B>, q: Nat, r: Nat) -> Bool:
+  match p:
+    case Pass{c, k}:
+      Quorum.bound(Quorum.is_cand(~B, ~same, c, x), k, q, r)
+
+# a bound with no count: q is at most r
+def Quorum.bound_zero(h: Bool, q: Nat, r: Nat) -> {Quorum.bound(h, 0n, q, r) == True{}: Bool} -> {Nat.is_le(q, r) == True{}: Bool}:
+  match h:
+    case True{}:
+      e => e
+    case False{}:
+      e => e
+
+# one more than a is at most r: a is at most one more than r
+def Quorum.le_down(+a: Nat, +r: Nat) -> {Nat.is_le(1n+a, r) == True{}: Bool} -> {Nat.is_le(a, 1n+r) == True{}: Bool}:
+  e => Shared.Nat.le_succ(a, r)(Shared.Nat.le_trans(a, 1n+a, r)(Shared.Nat.le_succ(a, a)(Shared.Nat.le_refl(a)))(e))
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a bound kept when the count falls by one and the ballot is against x
+def Quorum.bound_fall(h: Bool, +j: Nat, +q: Nat, +r: Nat) -> {
+  Quorum.bound(h, 1n+j, q, r) == True{}: Bool
+} -> {Quorum.bound(h, j, q, 1n+r) == True{}: Bool}:
+  match h:
+    case True{}:
+      e =>
+        %Equal.sym(Nat, Nat.add(j, 1n+r), 1n+Nat.add(j, r), Shared.Nat.add_succ(j, r)): {Nat.is_le(q, _) == True{}: Bool}
+        e
+    case False{}:
+      e => Quorum.le_down(Nat.add(j, q), r)(e)
+
+# a bound kept when the count falls by one and the ballot is for x, whose
+# candidate is not x
+def Quorum.bound_fall_for(+j: Nat, +q: Nat, +r: Nat) -> {
+  Quorum.bound(False{}, 1n+j, q, r) == True{}: Bool
+} -> {Quorum.bound(False{}, j, 1n+q, r) == True{}: Bool}:
+  e =>
+    %Equal.sym(Nat, Nat.add(j, 1n+q), 1n+Nat.add(j, q), Shared.Nat.add_succ(j, q)): {Nat.is_le(_, r) == True{}: Bool}
+    e
+
+# the bound after the first vote b, of a count of zero, once same(b, x) is
+# known (hb)
+def Quorum.step_inv.first.at(hb: Bool, +q: Nat, +r: Nat) -> {
+  Nat.is_le(q, r) == True{}: Bool
+} -> {Quorum.bound(hb, 1n, Shared.Nat.add_if(hb, q), Shared.Nat.add_if(Bool.not(hb), r)) == True{}: Bool}:
+  match hb:
+    case True{}:
+      e => e
+    case False{}:
+      e => e
+
+# the bound after the first vote b, of a count of zero
+def Quorum.step_inv.first(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  +x: B,
+  +b: B,
+  +q: Nat,
+  +r: Nat,
+  hb: Bool,
+  ehb: {same(b, x) == hb: Bool}
+) -> {
+  Nat.is_le(q, r) == True{}: Bool
+} -> {
+  Quorum.inv(~B, ~same, x, Pass{Some{b}, 1n}, Shared.Nat.add_if(same(b, x), q), Shared.Nat.add_if(Bool.not(same(b, x)), r))
+    == True{}: Bool
+}:
+  %Equal.sym(Bool, same(b, x), hb, ehb):
+    {Nat.is_le(q, r) == True{}: Bool}
+      -> {Quorum.bound(_, 1n, Shared.Nat.add_if(_, q), Shared.Nat.add_if(Bool.not(_), r)) == True{}: Bool}
+  Quorum.step_inv.first.at(hb, q, r)
+
+# the bound after a vote b against no candidate, from a count 1 + j, once
+# same(b, x) is known (hb)
+def Quorum.step_inv.none.at(hb: Bool, +j: Nat, +q: Nat, +r: Nat) -> {
+  Quorum.bound(False{}, 1n+j, q, r) == True{}: Bool
+} -> {Quorum.bound(False{}, j, Shared.Nat.add_if(hb, q), Shared.Nat.add_if(Bool.not(hb), r)) == True{}: Bool}:
+  match hb:
+    case True{}:
+      Quorum.bound_fall_for(j, q, r)
+    case False{}:
+      Quorum.bound_fall(False{}, j, q, r)
+
+# the bound after a vote b against no candidate, from a count 1 + j
+def Quorum.step_inv.none(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  +x: B,
+  +b: B,
+  +j: Nat,
+  +q: Nat,
+  +r: Nat,
+  hb: Bool,
+  ehb: {same(b, x) == hb: Bool}
+) -> {
+  Quorum.bound(False{}, 1n+j, q, r) == True{}: Bool
+} -> {
+  Quorum.inv(~B, ~same, x, Pass{None{}, j}, Shared.Nat.add_if(same(b, x), q), Shared.Nat.add_if(Bool.not(same(b, x)), r))
+    == True{}: Bool
+}:
+  %Equal.sym(Bool, same(b, x), hb, ehb):
+    {Quorum.bound(False{}, 1n+j, q, r) == True{}: Bool}
+      -> {Quorum.bound(False{}, j, Shared.Nat.add_if(_, q), Shared.Nat.add_if(Bool.not(_), r)) == True{}: Bool}
+  Quorum.step_inv.none.at(hb, j, q, r)
+
+# the bound after a ballot that is not a vote, of a count of zero
+def Quorum.step_inv.idle(h: Bool, +q: Nat, +r: Nat) -> {
+  Nat.is_le(q, r) == True{}: Bool
+} -> {Quorum.bound(h, 0n, q, 1n+r) == True{}: Bool}:
+  match h:
+    case True{}:
+      e => Shared.Nat.le_succ(q, r)(e)
+    case False{}:
+      e => Shared.Nat.le_succ(q, r)(e)
+
+# the bound after a vote b, from a count 1 + j, once same(a, b) (sab), same(a,
+# x) (hax) and same(b, x) (hb) are known
+def Quorum.step_inv.vote(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~laws: Shared.Eq.Laws(B, same),
+  +x: B,
+  +a: B,
+  +b: B,
+  +j: Nat,
+  +q: Nat,
+  +r: Nat,
+  sab: Bool,
+  hax: Bool,
+  hb: Bool,
+  esab: {same(a, b) == sab: Bool},
+  ehax: {same(a, x) == hax: Bool},
+  ehb: {same(b, x) == hb: Bool}
+) -> {
+  Quorum.bound(hax, 1n+j, q, r) == True{}: Bool
+} -> {
+  Quorum.inv(
+    ~B,
+    ~same,
+    x,
+    Bool.pick(Pass<B>, sab, Pass{Some{a}, 2n+j}, Pass{Some{a}, j}),
+    Shared.Nat.add_if(hb, q),
+    Shared.Nat.add_if(Bool.not(hb), r)
+  )
+    == True{}: Bool
+}:
+  match sab hax hb:
+    case True{} True{} True{}:
+      e =>
+        %Equal.sym(Bool, same(a, x), True{}, ehax): {Quorum.bound(_, 2n+j, 1n+q, r) == True{}: Bool}
+        e
+    case True{} False{} False{}:
+      e =>
+        %Equal.sym(Bool, same(a, x), False{}, ehax): {Quorum.bound(_, 2n+j, q, 1n+r) == True{}: Bool}
+        e
+    case True{} True{} False{}:
+      e => Empty.absurd(
+        {Quorum.inv(~B, ~same, x, Pass{Some{a}, 2n+j}, q, 1n+r) == True{}: Bool},
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            same(b, x),
+            True{},
+            Equal.sym(Bool, same(b, x), False{}, ehb),
+            Equal.trans(
+              Bool,
+              same(b, x),
+              same(a, x),
+              True{},
+              Equal.sym(Bool, same(a, x), same(b, x), Equal.cong(B, Bool, z => same(z, x), a, b, Shared.Eq.sound(~B, ~same, laws, a, b)(esab))),
+              ehax
+            )
+          )
+        )
+      )
+    case True{} False{} True{}:
+      e => Empty.absurd(
+        {Quorum.inv(~B, ~same, x, Pass{Some{a}, 2n+j}, 1n+q, r) == True{}: Bool},
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            same(a, x),
+            True{},
+            Equal.sym(Bool, same(a, x), False{}, ehax),
+            Equal.trans(
+              Bool,
+              same(a, x),
+              same(b, x),
+              True{},
+              Equal.cong(B, Bool, z => same(z, x), a, b, Shared.Eq.sound(~B, ~same, laws, a, b)(esab)),
+              ehb
+            )
+          )
+        )
+      )
+    case False{} True{} True{}:
+      e => Empty.absurd(
+        {Quorum.inv(~B, ~same, x, Pass{Some{a}, j}, 1n+q, r) == True{}: Bool},
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            same(a, b),
+            True{},
+            Equal.sym(Bool, same(a, b), False{}, esab),
+            Equal.trans(
+              Bool,
+              same(a, b),
+              same(x, b),
+              True{},
+              Equal.cong(B, Bool, z => same(z, b), a, x, Shared.Eq.sound(~B, ~same, laws, a, x)(ehax)),
+              Equal.trans(
+                Bool,
+                same(x, b),
+                same(x, x),
+                True{},
+                Equal.cong(B, Bool, z => same(x, z), b, x, Shared.Eq.sound(~B, ~same, laws, b, x)(ehb)),
+                Shared.Eq.refl(~B, ~same, laws, x)
+              )
+            )
+          )
+        )
+      )
+    case False{} True{} False{}:
+      e =>
+        %Equal.sym(Bool, same(a, x), True{}, ehax): {Quorum.bound(_, j, q, 1n+r) == True{}: Bool}
+        Quorum.bound_fall(True{}, j, q, r)(e)
+    case False{} False{} True{}:
+      e =>
+        %Equal.sym(Bool, same(a, x), False{}, ehax): {Quorum.bound(_, j, 1n+q, r) == True{}: Bool}
+        Quorum.bound_fall_for(j, q, r)(e)
+    case False{} False{} False{}:
+      e =>
+        %Equal.sym(Bool, same(a, x), False{}, ehax): {Quorum.bound(_, j, q, 1n+r) == True{}: Bool}
+        Quorum.bound_fall(False{}, j, q, r)(e)
+
+# the bound after a ballot v, from the candidate c and the count k
+def Quorum.step_inv(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~laws: Shared.Eq.Laws(B, same),
+  +x: B,
+  v: Maybe<&2, Cells.Cell<B>>,
+  +c: Maybe<&2, B>,
+  k: Nat,
+  +q: Nat,
+  +r: Nat
+) -> {
+  Quorum.inv(~B, ~same, x, Pass{c, k}, q, r) == True{}: Bool
+} -> {
+  Quorum.inv(
+    ~B,
+    ~same,
+    x,
+    Quorum.step(~B, ~same, v, Pass{c, k}),
+    Shared.Nat.add_if(Quorum.hit(~B, ~same, v, x), q),
+    Shared.Nat.add_if(Bool.not(Quorum.hit(~B, ~same, v, x)), r)
+  )
+    == True{}: Bool
+}:
+  match v c k:
+    case Some{Cells.One{+b}} w 0n:
+      e => Quorum.step_inv.first(~B, ~same, x, b, q, r, same(b, x), {==})(Quorum.bound_zero(Quorum.is_cand(~B, ~same, w, x), q, r)(e))
+    case Some{Cells.One{+b}} Some{+a} 1n+j:
+      Quorum.step_inv.vote(~B, ~same, ~laws, x, a, b, j, q, r, same(a, b), same(a, x), same(b, x), {==}, {==}, {==})
+    case Some{Cells.One{+b}} None{} 1n+j:
+      Quorum.step_inv.none(~B, ~same, x, b, j, q, r, same(b, x), {==})
+    case Some{Cells.Many{}} w 0n:
+      e => Quorum.step_inv.idle(Quorum.is_cand(~B, ~same, w, x), q, r)(Quorum.bound_zero(Quorum.is_cand(~B, ~same, w, x), q, r)(e))
+    case Some{Cells.Many{}} w 1n+j:
+      Quorum.bound_fall(Quorum.is_cand(~B, ~same, w, x), j, q, r)
+    case None{} w 0n:
+      e => Quorum.step_inv.idle(Quorum.is_cand(~B, ~same, w, x), q, r)(Quorum.bound_zero(Quorum.is_cand(~B, ~same, w, x), q, r)(e))
+    case None{} w 1n+j:
+      Quorum.bound_fall(Quorum.is_cand(~B, ~same, w, x), j, q, r)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# the bound after the ballot v, from the pass p
+def Quorum.pass_inv.at(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~laws: Shared.Eq.Laws(B, same),
+  +x: B,
+  v: Maybe<&2, Cells.Cell<B>>,
+  p: Pass<B>,
+  +q: Nat,
+  +r: Nat
+) -> {
+  Quorum.inv(~B, ~same, x, p, q, r) == True{}: Bool
+} -> {
+  Quorum.inv(
+    ~B,
+    ~same,
+    x,
+    Quorum.step(~B, ~same, v, p),
+    Shared.Nat.add_if(Quorum.hit(~B, ~same, v, x), q),
+    Shared.Nat.add_if(Bool.not(Quorum.hit(~B, ~same, v, x)), r)
+  )
+    == True{}: Bool
+}:
+  match p:
+    case Pass{c, k}:
+      Quorum.step_inv(~B, ~same, ~laws, x, v, c, k, q, r)
+
+# the bound holds after the pass over bs, with the ballots of bs for x and
+# against it
+def Quorum.pass_inv(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~laws: Shared.Eq.Laws(B, same),
+  +x: B,
+  bs: List<&2, Maybe<&2, Cells.Cell<B>>>
+) -> {
+  Quorum.inv(~B, ~same, x, Quorum.pass(~B, ~same, bs), Quorum.yes(~B, ~same, bs, x), Quorum.no(~B, ~same, bs, x))
+    == True{}: Bool
+}:
+  match bs:
+    case Nil{}:
+      {==}
+    case Con{v, +r}:
+      Quorum.pass_inv.at(
+        ~B,
+        ~same,
+        ~laws,
+        x,
+        v,
+        Quorum.pass(~B, ~same, r),
+        Quorum.yes(~B, ~same, r, x),
+        Quorum.no(~B, ~same, r, x)
+      )(Quorum.pass_inv(~B, ~same, ~laws, x, r))
+
+# a bound for a choice that is not the candidate leaves it no majority
+def Quorum.bound_no_has(+k: Nat, +q: Nat, +r: Nat) -> {
+  Quorum.bound(False{}, k, q, r) == True{}: Bool
+} -> {Nat.is_lt(r, q) == True{}: Bool} -> Empty:
+  e => h => Shared.Bool.false_ne_true(
+    Equal.trans(
+      Bool,
+      False{},
+      Nat.is_lt(q, q),
+      True{},
+      Equal.sym(Bool, Nat.is_lt(q, q), False{}, Shared.Nat.lt_irrefl(q)),
+      Shared.Nat.le_lt(
+        q,
+        r,
+        q
+      )(
+        Shared.Nat.le_trans(
+          q,
+          Nat.add(k, q),
+          r
+        )(Shared.Nat.add_le_right(k, 0n, q)(Shared.Nat.le_zero(k)))(e)
+      )(h)
+    )
+  )
+
+# the candidate c of a pass, of a choice x with a majority, once whether it
+# is x is known (h)
+def Quorum.cand_of.at(
+  h: Bool,
+  +k: Nat,
+  +q: Nat,
+  +r: Nat
+) -> {Quorum.bound(h, k, q, r) == True{}: Bool} -> {Nat.is_lt(r, q) == True{}: Bool} -> {h == True{}: Bool}:
+  match h:
+    case True{}:
+      e => g => {==}
+    case False{}:
+      e => g => Empty.absurd({False{} == True{}: Bool}, Quorum.bound_no_has(k, q, r)(e)(g))
+
+# a choice with a majority is the candidate of the pass p, whose bound holds
+def Quorum.cand_of(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  +x: B,
+  p: Pass<B>,
+  +q: Nat,
+  +r: Nat
+) -> {
+  Quorum.inv(~B, ~same, x, p, q, r) == True{}: Bool
+} -> {Nat.is_lt(r, q) == True{}: Bool} -> {Quorum.is_cand(~B, ~same, Pass.cand(B, p), x) == True{}: Bool}:
+  match p:
+    case Pass{+c, k}:
+      Quorum.cand_of.at(Quorum.is_cand(~B, ~same, c, x), k, q, r)
+
+# a choice x with a majority of bs is the candidate of their pass, p
+def Quorum.cand_is(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~laws: Shared.Eq.Laws(B, same),
+  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  +x: B,
+  +p: Pass<B>,
+  ep: {Quorum.pass(~B, ~same, bs) == p: Pass<B>}
+) -> {Quorum.has(~B, ~same, bs, x) == True{}: Bool} -> {Quorum.is_cand(~B, ~same, Pass.cand(B, p), x) == True{}: Bool}:
+  hx => Equal.trans(
+    Bool,
+    Quorum.is_cand(~B, ~same, Pass.cand(B, p), x),
+    Quorum.is_cand(~B, ~same, Pass.cand(B, Quorum.pass(~B, ~same, bs)), x),
+    True{},
+    Equal.cong(
+      Pass<B>,
+      Bool,
+      z => Quorum.is_cand(~B, ~same, Pass.cand(B, z), x),
+      p,
+      Quorum.pass(~B, ~same, bs),
+      Equal.sym(Pass<B>, Quorum.pass(~B, ~same, bs), p, ep)
+    ),
+    Quorum.cand_of(~B, ~same, x, Quorum.pass(~B, ~same, bs), Quorum.yes(~B, ~same, bs, x), Quorum.no(~B, ~same, bs, x))(
+      Quorum.pass_inv(~B, ~same, ~laws, x, bs)
+    )(hx)
+  )
+
+# no winner, and the candidate y of the pass: no majority for y, once
+# whether it has one is known (h)
+def Quorum.winner_fast_eq.none(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~laws: Shared.Eq.Laws(B, same),
+  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  +y: B,
+  ew: {Quorum.winner(~B, ~same, bs, bs) == None{}: Maybe<&2, B>},
+  h: Bool,
+  eh: {Quorum.has(~B, ~same, bs, y) == h: Bool}
+) -> {Bool.pick(Maybe<&2, B>, Quorum.has(~B, ~same, bs, y), Some{y}, None{}) == None{}: Maybe<&2, B>}:
+  match h:
+    case True{}:
+      Empty.absurd(
+        {Bool.pick(Maybe<&2, B>, Quorum.has(~B, ~same, bs, y), Some{y}, None{}) == None{}: Maybe<&2, B>},
+        Shared.Maybe.none_ne_some(
+          B,
+          y,
+          Equal.trans(
+            Maybe<&2, B>,
+            None{},
+            Quorum.winner(~B, ~same, bs, bs),
+            Some{y},
+            Equal.sym(Maybe<&2, B>, Quorum.winner(~B, ~same, bs, bs), None{}, ew),
+            Quorum.winner_of(~B, ~same, ~laws, bs, y)(eh)
+          )
+        )
+      )
+    case False{}:
+      %Equal.sym(Bool, Quorum.has(~B, ~same, bs, y), False{}, eh):
+        {Bool.pick(Maybe<&2, B>, _, Some{y}, None{}) == None{}: Maybe<&2, B>}
+      {==}
+
+# the fast winner of bs is the winner, once the winner w and the pass p are
+# known
+def Quorum.winner_fast_eq.at(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~laws: Shared.Eq.Laws(B, same),
+  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  w: Maybe<&2, B>,
+  ew: {Quorum.winner(~B, ~same, bs, bs) == w: Maybe<&2, B>},
+  p: Pass<B>,
+  ep: {Quorum.pass(~B, ~same, bs) == p: Pass<B>}
+) -> {Quorum.winner_fast.of(~B, ~same, bs, p) == w: Maybe<&2, B>}:
+  match w p:
+    case Some{+x} Pass{Some{+y}, +k}:
+      +hx = Quorum.has_winner(~B, ~same, bs, bs, x)(ew)
+      %Equal.sym(B, y, x, Shared.Eq.sound(~B, ~same, laws, y, x)(Quorum.cand_is(~B, ~same, ~laws, bs, x, Pass{Some{y}, k}, ep)(hx))):
+        {Bool.pick(Maybe<&2, B>, Quorum.has(~B, ~same, bs, _), Some{_}, None{}) == Some{x}: Maybe<&2, B>}
+      %Equal.sym(Bool, Quorum.has(~B, ~same, bs, x), True{}, hx):
+        {Bool.pick(Maybe<&2, B>, _, Some{x}, None{}) == Some{x}: Maybe<&2, B>}
+      {==}
+    case Some{+x} Pass{None{}, +k}:
+      Empty.absurd(
+        {None{} == Some{x}: Maybe<&2, B>},
+        Shared.Bool.false_ne_true(
+          Quorum.cand_is(~B, ~same, ~laws, bs, x, Pass{None{}, k}, ep)(Quorum.has_winner(~B, ~same, bs, bs, x)(ew))
+        )
+      )
+    case None{} Pass{Some{+y}, k}:
+      Quorum.winner_fast_eq.none(~B, ~same, ~laws, bs, y, ew, Quorum.has(~B, ~same, bs, y), {==})
+    case None{} Pass{None{}, k}:
+      {==}
+
+# the fast winner of bs is the winner
+def Quorum.winner_fast_eq(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~laws: Shared.Eq.Laws(B, same),
+  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>
+) -> {Quorum.winner_fast(~B, ~same, bs) == Quorum.winner(~B, ~same, bs, bs): Maybe<&2, B>}:
+  Quorum.winner_fast_eq.at(
+    ~B,
+    ~same,
+    ~laws,
+    bs,
+    Quorum.winner(~B, ~same, bs, bs),
+    {==},
+    Quorum.pass(~B, ~same, bs),
+    {==}
+  )
+
+# what the ballots decide in one pass is what they decide
+law Quorum.decide_fast_eq:
+  for ~B: Data
+  for ~same: B -> B -> Bool
+  for ~laws: Shared.Eq.Laws(B, same)
+  for +bs: List<&2, Maybe<&2, Cells.Cell<B>>>
+  {Quorum.decide_fast(~B, ~same, bs) == Quorum.decide(~B, ~same, bs): Maybe<&2, B>}
+
+def Quorum.decide_fast_eq(ty, same, laws, bs):
+  %Equal.sym(
+    Maybe<&2, ty>,
+    Quorum.winner_fast(~ty, ~same, bs),
+    Quorum.winner(~ty, ~same, bs, bs),
+    Quorum.winner_fast_eq(~ty, ~same, ~laws, bs)
+  ): {Quorum.decide.of(~ty, ~same, _, bs) == Quorum.decide(~ty, ~same, bs): Maybe<&2, ty>}
+  {==}

@@ -764,7 +764,7 @@ def Bucket.ballots(
 
 # what the ballots of ms in the bucket b decide
 def Bucket.decide(~Q: Data, b: State(Q), ms: List<&2, String>) -> Maybe<&2, Vote>:
-  Quorums.Quorum.decide(~Vote, ~Vote.is_eq, Bucket.ballots(~Q, b, ms))
+  Quorums.Quorum.decide_fast(~Vote, ~Vote.is_eq, Bucket.ballots(~Q, b, ms))
 
 # the bucket b of owners ms is decided
 def Bucket.decided(~Q: Data, ms: List<&2, String>, b: State(Q)) -> Bool:
@@ -2099,14 +2099,30 @@ def State.decide_grows(ty, same, laws, s, s2, w, ms, v):
   match w:
     case Where{c, e, h}:
       +p = Slot.bucket(c, e, h)
-      +gr => Quorums.Quorum.decide_kept(
-        ~Vote,
-        ~Vote.is_eq,
-        ~Vote.laws(),
-        Bucket.ballots(~ty, State.under(~ty, s, p), ms),
-        Bucket.ballots(~ty, State.under(~ty, s2, p), ms),
-        v
-      )(Ballots.grows(~ty, ~same, ~laws, s, s2, p, ms, gr))
+      +b1 = Bucket.ballots(~ty, State.under(~ty, s, p), ms)
+      +b2 = Bucket.ballots(~ty, State.under(~ty, s2, p), ms)
+      +gr => hd =>
+        %Equal.sym(
+          Maybe<&2, Vote>,
+          Quorums.Quorum.decide_fast(~Vote, ~Vote.is_eq, b2),
+          Quorums.Quorum.decide(~Vote, ~Vote.is_eq, b2),
+          Quorums.Quorum.decide_fast_eq(~Vote, ~Vote.is_eq, ~Vote.laws(), b2)
+        ): {_ == Some{v}: Maybe<&2, Vote>}
+        Quorums.Quorum.decide_kept(~Vote, ~Vote.is_eq, ~Vote.laws(), b1, b2, v)(Ballots.grows(~ty, ~same, ~laws, s, s2, p, ms, gr))(
+          Equal.trans(
+            Maybe<&2, Vote>,
+            Quorums.Quorum.decide(~Vote, ~Vote.is_eq, b1),
+            Quorums.Quorum.decide_fast(~Vote, ~Vote.is_eq, b1),
+            Some{v},
+            Equal.sym(
+              Maybe<&2, Vote>,
+              Quorums.Quorum.decide_fast(~Vote, ~Vote.is_eq, b1),
+              Quorums.Quorum.decide(~Vote, ~Vote.is_eq, b1),
+              Quorums.Quorum.decide_fast_eq(~Vote, ~Vote.is_eq, ~Vote.laws(), b1)
+            ),
+            hd
+          )
+        )
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # the owners of a root line stay
@@ -3855,7 +3871,7 @@ def Decide.one_put(
           State.get(~Q, s1, List.append(&2, Bool, p, Slot.ballot(n))),
           Tries.Trie.get_under(Cells.Cell<Entry<Q>>, s1, p, Slot.ballot(n))
         ): {
-          Quorums.Quorum.decide(
+          Quorums.Quorum.decide_fast(
             ~Vote,
             ~Vote.is_eq,
             [Entry.ballot(~Q, _)]
@@ -3868,14 +3884,21 @@ def Decide.one_put(
           Some{Cells.One{Entry.Vote{x}}},
           State.put_get(~Q, ~same, s, Slot.vote(Where{c, e, h}, n), Entry.Vote{x})(hg)
         ): {
-          Quorums.Quorum.decide(
+          Quorums.Quorum.decide_fast(
             ~Vote,
             ~Vote.is_eq,
             [Entry.ballot(~Q, _)]
           )
             == Some{x}: Maybe<&2, Vote>
         }
-        Quorums.Quorum.decide_one(~Vote, ~Vote.is_eq, ~Vote.laws(), x)
+        Equal.trans(
+          Maybe<&2, Vote>,
+          Quorums.Quorum.decide_fast(~Vote, ~Vote.is_eq, [Some{Cells.One{x}}]),
+          Quorums.Quorum.decide(~Vote, ~Vote.is_eq, [Some{Cells.One{x}}]),
+          Some{x},
+          Quorums.Quorum.decide_fast_eq(~Vote, ~Vote.is_eq, ~Vote.laws(), [Some{Cells.One{x}}]),
+          Quorums.Quorum.decide_one(~Vote, ~Vote.is_eq, ~Vote.laws(), x)
+        )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the fact where i was decided, put after the step at w decides it, gives it
