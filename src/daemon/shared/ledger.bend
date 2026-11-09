@@ -235,9 +235,13 @@ def Slot.epochs(c: Chain) -> List<&2, Bool>:
 def Slot.epoch(c: Chain, e: U32) -> List<&2, Bool>:
   List.append(&2, Bool, Slot.epochs(c), Word.key(e))
 
+# the start of the slots of the facts where lines were made
+def Slot.lines() -> List<&2, Bool>:
+  [True{}, True{}, True{}, False{}]
+
 # the slot of the fact where the line c was made
 def Slot.made(c: Chain) -> List<&2, Bool>:
-  True{} <> True{} <> True{} <> False{} <> Chain.key(c)
+  List.append(&2, Bool, Slot.lines(), Chain.key(c))
 
 # the slot of the data whose hash is h
 def Slot.data(h: Hashes.Hash) -> List<&2, Bool>:

@@ -1892,15 +1892,16 @@ type Branch is Data:
 type BranchEntry is Data:
   BranchEntry{branch: Branch, owners: List<&2, String>, head: Ledgers.Id}
 
-# the stores among the cells cs
-def Store.ids(cs: List<&2, Cells.Cell<Ledgers.Entry<Ask>>>) -> List<&2, Ledgers.Id>:
+# the stores among the facts cs of where lines were made: the root line of
+# the step that made each
+def Store.roots(cs: List<&2, Cells.Cell<Ledgers.Entry<Ask>>>) -> List<&2, Ledgers.Id>:
   match cs:
     case Nil{}:
       []
-    case Con{Cells.One{Ledgers.Entry.Ask{i, t, Ask.Start{os}}}, r}:
-      i <> Store.ids(r)
-    case Con{c, r}:
-      Store.ids(r)
+    case Con{Cells.One{Ledgers.Entry.At{Ledgers.Where{Ledgers.Chain{r, None{}}, e, h}}}, rest}:
+      r <> Store.roots(rest)
+    case Con{c, rest}:
+      Store.roots(rest)
 
 # the branch that the request m makes, when it makes one, then rest
 def Branch.made.of(m: Maybe<&2, Ledgers.Asked<Ask>>, rest: List<&2, String>) -> List<&2, String>:
@@ -1955,9 +1956,20 @@ def Branch.all(+s: State(), rs: List<&2, Ledgers.Id>) -> List<&2, BranchEntry>:
         Branch.all(s, rest)
       )
 
+# the stores of s that made a line: a store's branches and groups are its
+# lines, and each line's start is a fact under one prefix, so this costs the
+# lines, not the whole state
+def Node.stores(+s: State()) -> List<&2, Ledgers.Id>:
+  Tries.Trie.unique(
+    ~Ledgers.Id,
+    ~Ledgers.Id.key,
+    Store.roots(Tries.Trie.values(Cells.Cell<Ledgers.Entry<Ask>>, Ledgers.State.under(~Ask, s, Ledgers.Slot.lines()))),
+    Tries.Trie.new(Unit)
+  )
+
 # every branch
 def Node.branches(+s: State()) -> List<&2, BranchEntry>:
-  Branch.all(s, Store.ids(Tries.Trie.values(Cells.Cell<Ledgers.Entry<Ask>>, s)))
+  Branch.all(s, Node.stores(s))
 
 # the branches es
 def Branch.names(es: List<&2, BranchEntry>) -> List<&2, Branch>:
