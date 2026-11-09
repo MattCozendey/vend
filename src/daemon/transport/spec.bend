@@ -184,9 +184,9 @@ law Client.try_write:
   for x: Source
   IO(Client & Reply<&2, Core.Answer>)
 
-# the request r: makes the branch b at the point p (Core.Change.make) or, when
-# b exists, records a new version of b that equals p, with its submodules
-# (Core.Change.move)
+# the request r: makes the branch b at the point p (Core.Change.Branch) or,
+# when b exists, records a new version of b that equals p, with its submodules
+# (Core.Change.Move)
 law Client.try_set_branch:
   for c: Client
   for r: String
@@ -239,18 +239,19 @@ law Client.try_unmount:
   for u: Uris.Uri
   IO(Client & Reply<&2, Unmount>)
 
-# the request r: makes the nodes inside the group g of the store the owners of
-# its line l (none: of the store itself)
+# the request r: makes the group g of the store the owner group of its branch
+# l (none: of the store itself), with the nodes inside it now (Core.Node.own).
+# When g changes later, the node asks for its nodes again (Core.Node.adopt)
 law Client.try_set_owner:
   for c: Client
   for r: String
   for store: Ledgers.Id
-  for l: Maybe<&2, Core.Line>
+  for l: Maybe<&2, String>
   for g: String
   IO(Client & Reply<&2, Core.Answer>)
 
 # the request r: makes the group g of the store with the members ms or, when g
-# exists, replaces its members
+# exists, replaces its members (Core.Change.Group)
 law Client.try_set_group:
   for c: Client
   for r: String

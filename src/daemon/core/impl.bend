@@ -15,40 +15,6 @@ import ./spec.bend as Spec
 # Codes
 # -----
 
-# a line reads back
-def Line.code_read(
-  x: Spec.Line,
-  r: List<&2, U32>
-) -> {
-  Spec.Line.code.read(
-    Spec.Line.code(x, r)
-  )
-    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Spec.Line>>
-}:
-  match x:
-    case Spec.Line.Branch{n}:
-      Codes.Code.one_read(
-        ~String,
-        ~Spec.Line,
-        ~Codes.Code.text.codec(),
-        a => Spec.Line.Branch{a},
-        n,
-        r
-      )
-    case Spec.Line.Group{n}:
-      Codes.Code.one_read(
-        ~String,
-        ~Spec.Line,
-        ~Codes.Code.text.codec(),
-        a => Spec.Line.Group{a},
-        n,
-        r
-      )
-
-# the code of lines
-def Line.codec() -> Codes.Codec(Spec.Line):
-  (Spec.Line.code, (Spec.Line.code.read, x => r => Line.code_read(x, r)))
-
 # a member reads back
 def Member.code_read(
   x: Spec.Member,
@@ -128,27 +94,42 @@ def Change.code_read(
     == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Spec.Change>>
 }:
   match x:
-    case Spec.Change.Make{l, at, ms}:
-      Codes.Code.three_read(
-        ~Spec.Line,
+    case Spec.Change.Branch{n, at}:
+      Codes.Code.two_read(
+        ~String,
         ~Maybe<&2, Ledgers.Id>,
+        ~Spec.Change,
+        ~Codes.Code.text.codec(),
+        ~Codes.Code.maybe.codec(~Ledgers.Id, ~Ledgers.Id.codec()),
+        a => b => Spec.Change.Branch{a, b},
+        n,
+        at,
+        r
+      )
+    case Spec.Change.Group{g, ms}:
+      Codes.Code.two_read(
+        ~String,
         ~List<&2, Spec.Member>,
         ~Spec.Change,
-        ~Line.codec(),
-        ~Codes.Code.maybe.codec(~Ledgers.Id, ~Ledgers.Id.codec()),
+        ~Codes.Code.text.codec(),
         ~Codes.Code.list.codec(~Spec.Member, ~Member.codec()),
-        a => b => c => Spec.Change.Make{a, b, c},
-        l,
-        at,
+        a => b => Spec.Change.Group{a, b},
+        g,
         ms,
         r
       )
-    case Spec.Change.Own{os}:
-      Codes.Code.one_read(
+    case Spec.Change.Own{g, at, os}:
+      Codes.Code.three_read(
+        ~String,
+        ~Maybe<&2, Ledgers.Id>,
         ~List<&2, String>,
         ~Spec.Change,
+        ~Codes.Code.text.codec(),
+        ~Codes.Code.maybe.codec(~Ledgers.Id, ~Ledgers.Id.codec()),
         ~Codes.Code.list.codec(~String, ~Codes.Code.text.codec()),
-        a => Spec.Change.Own{a},
+        a => b => c => Spec.Change.Own{a, b, c},
+        g,
+        at,
         os,
         r
       )
@@ -212,15 +193,6 @@ def Change.code_read(
         n,
         r
       )
-    case Spec.Change.Members{ms}:
-      Codes.Code.one_read(
-        ~List<&2, Spec.Member>,
-        ~Spec.Change,
-        ~Codes.Code.list.codec(~Spec.Member, ~Member.codec()),
-        a => Spec.Change.Members{a},
-        ms,
-        r
-      )
 
 # the code of changes
 def Change.codec() -> Codes.Codec(Spec.Change):
@@ -246,11 +218,11 @@ def Ask.code_read(
     case Spec.Ask.On{st, l, c}:
       Codes.Code.three_read(
         ~Ledgers.Id,
-        ~Maybe<&2, Spec.Line>,
+        ~Maybe<&2, String>,
         ~Spec.Change,
         ~Spec.Ask,
         ~Ledgers.Id.codec(),
-        ~Codes.Code.maybe.codec(~Spec.Line, ~Line.codec()),
+        ~Codes.Code.maybe.codec(~String, ~Codes.Code.text.codec()),
         ~Change.codec(),
         a => b => c => Spec.Ask.On{a, b, c},
         st,
@@ -695,7 +667,7 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
     +q = {
       Spec.Ask.On{
         r,
-        Some{Spec.Line.Branch{b}},
+        Some{b},
         Spec.Change.Write{name, base, Spec.Content.Bytes{x}}
       }: Spec.Ask
     }
@@ -703,7 +675,7 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
     +t = Spec.Envelope.time(e)
     +s0 = Spec.Node.land(s, q)
     +s1 = Spec.Node.taken(s, e, q)
-    +c = Spec.Line.chain(r, Some{Spec.Line.Branch{b}})
+    +c = Spec.Line.chain(r, Some{b})
     +root = Spec.Judge.root(
       s1,
       c,
@@ -1504,17 +1476,17 @@ def Taken.follows(
         i,
         k
       )
-    case Spec.Ask.On{st, l, Spec.Change.Make{a, b, c}}:
+    case Spec.Ask.On{st, l, Spec.Change.Branch{a, b}}:
       {==}
-    case Spec.Ask.On{st, l, Spec.Change.Own{a}}:
+    case Spec.Ask.On{st, l, Spec.Change.Group{a, b}}:
+      {==}
+    case Spec.Ask.On{st, l, Spec.Change.Own{a, b, c}}:
       {==}
     case Spec.Ask.On{st, l, Spec.Change.Write{a, b, c}}:
       {==}
     case Spec.Ask.On{st, l, Spec.Change.Move{a}}:
       {==}
     case Spec.Ask.On{st, l, Spec.Change.Mark{a, b}}:
-      {==}
-    case Spec.Ask.On{st, l, Spec.Change.Members{a}}:
       {==}
     case Spec.Ask.Start{a}:
       {==}
@@ -2016,10 +1988,10 @@ def Steps.grow.at(
 
 def Spec.Node.versions_grow(s, s2, r, b):
   +gr =>
-    +c = Spec.Line.chain(r, Some{Spec.Line.Branch{b}})
+    +c = Spec.Line.chain(r, Some{b})
     Steps.taken_prefix(
-      Spec.Node.steps(s, r, Some{Spec.Line.Branch{b}}),
-      Spec.Node.steps(s2, r, Some{Spec.Line.Branch{b}})
+      Spec.Node.steps(s, r, Some{b}),
+      Spec.Node.steps(s2, r, Some{b})
     )(Steps.grow.at(s, s2, c, gr, Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s, c), {==}))
 
 # Marks
@@ -2276,14 +2248,146 @@ def Mark.kept.go(
 
 def Spec.Node.mark_kept(s, s2, r, b, m, v):
   +gr =>
-    +c = Spec.Line.chain(r, Some{Spec.Line.Branch{b}})
+    +c = Spec.Line.chain(r, Some{b})
     Mark.kept.go(
       s,
       s2,
       m,
       v,
       gr,
-      Spec.Node.steps(s, r, Some{Spec.Line.Branch{b}}),
-      Spec.Node.steps(s2, r, Some{Spec.Line.Branch{b}}),
+      Spec.Node.steps(s, r, Some{b}),
+      Spec.Node.steps(s2, r, Some{b}),
       None{}
     )(Steps.grow.at(s, s2, c, gr, Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s, c), {==}))
+
+# Owners
+# ------
+
+# the verdict v takes
+def Verdict.takes(v: Maybe<&2, Ledgers.Verdict>) -> Bool:
+  match v:
+    case Some{Ledgers.Verdict{k, x, ds}}:
+      k
+    case None{}:
+      False{}
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a refusal does not take
+def Refuse.no(
+  h: Maybe<&2, Hashes.Hash>,
+  -x: Maybe<&2, Hashes.Hash>,
+  -ds: List<&2, List<&2, U32>>,
+  e: {Spec.Judge.refuse(h) == Some{Ledgers.Verdict{True{}, x, ds}}: Maybe<&2, Ledgers.Verdict>}
+) -> Empty:
+  Shared.Bool.false_ne_true(
+    Equal.cong(
+      Maybe<&2, Ledgers.Verdict>,
+      Bool,
+      v => Verdict.takes(v),
+      Spec.Judge.refuse(h),
+      Some{Ledgers.Verdict{True{}, x, ds}},
+      e
+    )
+  )
+
+# a verdict that takes when b holds: b holds
+def When.takes(
+  b: Bool,
+  h: Maybe<&2, Hashes.Hash>,
+  k: Unit -> Maybe<&2, Ledgers.Verdict>,
+  -x: Maybe<&2, Hashes.Hash>,
+  -ds: List<&2, List<&2, U32>>
+) -> {
+  Spec.Judge.when(b, h, k) == Some{Ledgers.Verdict{True{}, x, ds}}: Maybe<&2, Ledgers.Verdict>
+} -> {b == True{}: Bool}:
+  match b:
+    case True{}:
+      e => {==}
+    case False{}:
+      e => Empty.absurd({False{} == True{}: Bool}, Refuse.no(h, x, ds, e))
+
+# a verdict that takes after the verdict m: what comes after it takes
+def Then.takes(
+  m: Maybe<&2, Bool>,
+  h: Maybe<&2, Hashes.Hash>,
+  k: Unit -> Maybe<&2, Ledgers.Verdict>,
+  -x: Maybe<&2, Hashes.Hash>,
+  -ds: List<&2, List<&2, U32>>
+) -> {
+  Spec.Judge.then(m, h, k) == Some{Ledgers.Verdict{True{}, x, ds}}: Maybe<&2, Ledgers.Verdict>
+} -> {k(Unit{}) == Some{Ledgers.Verdict{True{}, x, ds}}: Maybe<&2, Ledgers.Verdict>}:
+  match m:
+    case Some{True{}}:
+      e => e
+    case Some{False{}}:
+      e => Empty.absurd(
+        {k(Unit{}) == Some{Ledgers.Verdict{True{}, x, ds}}: Maybe<&2, Ledgers.Verdict>},
+        Refuse.no(h, x, ds, e)
+      )
+    case None{}:
+      e => Empty.absurd(
+        {k(Unit{}) == Some{Ledgers.Verdict{True{}, x, ds}}: Maybe<&2, Ledgers.Verdict>},
+        Shared.Maybe.none_ne_some(Ledgers.Verdict, Ledgers.Verdict{True{}, x, ds}, e)
+      )
+
+# an Own that the owners take fits: its owners are the nodes inside its group
+def Take.inside(
+  +s: Spec.State(),
+  +g: String,
+  +os: List<&2, String>,
+  +t: Maybe<&2, Hashes.Hash>,
+  +h: Maybe<&2, Hashes.Hash>,
+  -x: Maybe<&2, Hashes.Hash>,
+  -ds: List<&2, List<&2, U32>>
+) -> {
+  Spec.Own.take(
+    s,
+    g,
+    Spec.Own.fits(s, t, g, os),
+    h
+  )
+    == Some{Ledgers.Verdict{True{}, x, ds}}: Maybe<&2, Ledgers.Verdict>
+} -> {os == Spec.Group.nodes(s, t, g): List<&2, String>}:
+  e => Shared.Eq.sound(
+    ~List<&2, String>,
+    ~Ledgers.Owners.is_eq,
+    Ledgers.Owners.laws(),
+    os,
+    Spec.Group.nodes(s, t, g)
+  )(
+    Shared.List.all.if_rest(
+      Bool.not(List.is_empty(&2, String, os)),
+      u => Ledgers.Owners.is_eq(os, Spec.Group.nodes(s, t, g))
+    )(
+      When.takes(
+        Spec.Own.fits(s, t, g, os),
+        h,
+        u => Spec.Work.take(
+          Spec.Work.set(Spec.Work{s, h, []}, Spec.Key.owner(), Codes.Code.text(g, []))
+        ),
+        x,
+        ds
+      )(e)
+    )
+  )
+
+def Spec.Judge.own_inside(s, r, l, g, at, os, h, x, ds):
+  match l at:
+    case None{} y:
+      e => Take.inside(s, g, os, h, h, x, ds)(e)
+    case Some{b} None{}:
+      e => Empty.absurd(
+        {os == Spec.Group.nodes(s, h, g): List<&2, String>},
+        Refuse.no(h, x, ds, e)
+      )
+    case Some{b} Some{+v}:
+      e => Take.inside(s, g, os, Spec.Step.root(s, v), h, x, ds)(
+        Then.takes(
+          Spec.Own.at(r, Spec.Node.place(s, v)),
+          h,
+          u => Spec.Own.take(s, g, Spec.Own.fits(s, Spec.Step.root(s, v), g, os), h),
+          x,
+          ds
+        )(e)
+      )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning

@@ -27,12 +27,8 @@ import ../shared/tree.bend as Trees
 # -----
 # A node, writer, branch, group, mark, request ID and time are texts. A
 # request, and the version that it made, is a Ledgers.Id. A store is named by
-# the request that started it.
-
-# a line of a store: a branch, or an owner group
-type Line is Data:
-  Line.Branch{name: String}
-  Line.Group{name: String}
+# the request that started it. A line is a store itself (no branch) or one of
+# its branches.
 
 # a member of an owner group: a node, or another group of its store
 type Member is Data:
@@ -55,22 +51,25 @@ type Point is Data:
 # A request is data alone: a point becomes a version before it is asked for,
 # so that a request sent again, to any node, is the same request.
 
-# a change of a line, or of its store (Ask.on)
+# a change of a branch, or of its store (Ask.on). Branch: the store makes the
+# branch, at a version if any. Group: the store makes the group, or replaces
+# its members. Own: the line's owner group is group, whose nodes, in the tree
+# of the step at of the store (a store reads its own tree), are owners
 type Change is Data:
-  Change.Make{line: Line, at: Maybe<&2, Ledgers.Id>, members: List<&2, Member>}
-  Change.Own{owners: List<&2, String>}
+  Change.Branch{name: String, at: Maybe<&2, Ledgers.Id>}
+  Change.Group{name: String, members: List<&2, Member>}
+  Change.Own{group: String, at: Maybe<&2, Ledgers.Id>, owners: List<&2, String>}
   Change.Write{name: Resources.Name, base: Maybe<&2, Ledgers.Id>, content: Content}
   Change.Resolve{conflict: Ledgers.Id, name: Resources.Name, content: Content}
   Change.Merge{from: Ledgers.Id}
   Change.Move{to: Ledgers.Id}
   Change.Mark{mark: String, message: String}
-  Change.Members{members: List<&2, Member>}
 
 # a change that a writer asks for: a store that starts with its first owners,
-# or a change of a line of a store (none: of the store itself)
+# or a change of a branch of a store (none: of the store itself)
 type Ask is Data:
   Ask.Start{owners: List<&2, String>}
-  Ask.On{store: Ledgers.Id, line: Maybe<&2, Line>, change: Change}
+  Ask.On{store: Ledgers.Id, branch: Maybe<&2, String>, change: Change}
 
 # who asks for a change, and when
 type Envelope is Data:
@@ -118,34 +117,13 @@ def Base.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Maybe<&2, Ledgers.
 def Tag.text(k: U32, t: String, r: List<&2, U32>) -> List<&2, U32>:
   k <> Codes.Code.text(t, r)
 
-# the line l, then r
-def Line.code(l: Line, r: List<&2, U32>) -> List<&2, U32>:
-  match l:
-    case Line.Branch{n}:
-      Tag.text(0, n, r)
-    case Line.Group{n}:
-      Tag.text(1, n, r)
+# the branch m, if any (none: the store), then r
+def Target.code(m: Maybe<&2, String>, r: List<&2, U32>) -> List<&2, U32>:
+  Codes.Code.maybe(~String, ~Codes.Code.text, m, r)
 
-# a line
-def Line.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Line>>:
-  match ts:
-    case Nil{}:
-      None{}
-    case Con{x, +r}:
-      Shared.Bool.when(
-        Maybe<&2, Codes.Read<Line>>,
-        U32.is_eq(x, 0),
-        u => Codes.Code.one.read(~String, ~Line, ~Codes.Code.text.read, n => Line.Branch{n}, r),
-        u => Codes.Code.one.read(~String, ~Line, ~Codes.Code.text.read, n => Line.Group{n}, r)
-      )
-
-# the line m, if any (none: the store), then r
-def Target.code(m: Maybe<&2, Line>, r: List<&2, U32>) -> List<&2, U32>:
-  Codes.Code.maybe(~Line, ~Line.code, m, r)
-
-# a line, if any
-def Target.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Maybe<&2, Line>>>:
-  Codes.Code.maybe.read(~Line, ~Line.code.read, ts)
+# a branch, if any
+def Target.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Maybe<&2, String>>>:
+  Codes.Code.maybe.read(~String, ~Codes.Code.text.read, ts)
 
 # the member l, then r
 def Member.code(l: Member, r: List<&2, U32>) -> List<&2, U32>:
@@ -212,10 +190,10 @@ def Content.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Content>>:
 # the change c, then r
 def Change.code(c: Change, r: List<&2, U32>) -> List<&2, U32>:
   match c:
-    case Change.Make{l, at, ms}:
-      0 <> Line.code(l, Base.code(at, Members.code(ms, r)))
-    case Change.Own{os}:
-      1 <> Ledgers.Owners.code(os, r)
+    case Change.Branch{n, at}:
+      0 <> Codes.Code.text(n, Base.code(at, r))
+    case Change.Own{g, at, os}:
+      1 <> Codes.Code.text(g, Base.code(at, Ledgers.Owners.code(os, r)))
     case Change.Write{n, base, x}:
       2 <> Resources.Name.code(n, Base.code(base, Content.code(x, r)))
     case Change.Resolve{k, n, x}:
@@ -226,33 +204,35 @@ def Change.code(c: Change, r: List<&2, U32>) -> List<&2, U32>:
       5 <> Ledgers.Id.code(v, r)
     case Change.Mark{m, t}:
       6 <> Codes.Code.text(m, Codes.Code.text(t, r))
-    case Change.Members{ms}:
-      7 <> Members.code(ms, r)
+    case Change.Group{g, ms}:
+      7 <> Codes.Code.text(g, Members.code(ms, r))
 
 # a change whose tag is x, from the tokens r after it
 def Change.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Change>>:
   Shared.Bool.when(
     Maybe<&2, Codes.Read<Change>>,
     U32.is_eq(x, 0),
-    u => Codes.Code.three.read(
-      ~Line,
+    u => Codes.Code.two.read(
+      ~String,
       ~Maybe<&2, Ledgers.Id>,
-      ~List<&2, Member>,
       ~Change,
-      ~Line.code.read,
+      ~Codes.Code.text.read,
       ~Base.code.read,
-      ~Members.code.read,
-      l => a => ms => Change.Make{l, a, ms},
+      n => a => Change.Branch{n, a},
       r
     ),
     u => Shared.Bool.when(
       Maybe<&2, Codes.Read<Change>>,
       U32.is_eq(x, 1),
-      u => Codes.Code.one.read(
+      u => Codes.Code.three.read(
+        ~String,
+        ~Maybe<&2, Ledgers.Id>,
         ~List<&2, String>,
         ~Change,
+        ~Codes.Code.text.read,
+        ~Base.code.read,
         ~Ledgers.Owners.code.read,
-        os => Change.Own{os},
+        g => a => os => Change.Own{g, a, os},
         r
       ),
       u => Shared.Bool.when(
@@ -315,11 +295,13 @@ def Change.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Chan
                   m => n => Change.Mark{m, n},
                   r
                 ),
-                u => Codes.Code.one.read(
+                u => Codes.Code.two.read(
+                  ~String,
                   ~List<&2, Member>,
                   ~Change,
+                  ~Codes.Code.text.read,
                   ~Members.code.read,
-                  ms => Change.Members{ms},
+                  g => ms => Change.Group{g, ms},
                   r
                 )
               )
@@ -364,7 +346,7 @@ def Ask.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ask>>:
         ),
         u => Codes.Code.three.read(
           ~Ledgers.Id,
-          ~Maybe<&2, Line>,
+          ~Maybe<&2, String>,
           ~Change,
           ~Ask,
           ~Ledgers.Id.code.read,
@@ -382,16 +364,12 @@ def Ask.is_eq(a: Ask, b: Ask) -> Bool:
 # Lines
 # -----
 
-# the key of the line l below its store: prefix-free
-def Line.key(l: Line) -> List<&2, Bool>:
-  match l:
-    case Line.Branch{n}:
-      False{} <> Tries.Trie.text(n)
-    case Line.Group{n}:
-      True{} <> Tries.Trie.text(n)
+# the key of the branch n below its store: prefix-free
+def Line.key(n: String) -> List<&2, Bool>:
+  Tries.Trie.text(n)
 
-# the chain of the line l of the store r (none: the store's own chain)
-def Line.chain(r: Ledgers.Id, l: Maybe<&2, Line>) -> Ledgers.Chain:
+# the chain of the branch l of the store r (none: the store's own chain)
+def Line.chain(r: Ledgers.Id, l: Maybe<&2, String>) -> Ledgers.Chain:
   match l:
     case None{}:
       Ledgers.Chain{r, None{}}
@@ -401,7 +379,7 @@ def Line.chain(r: Ledgers.Id, l: Maybe<&2, Line>) -> Ledgers.Chain:
 # the owners that the change c gives its chain, when it sets them
 def Change.owners(c: Change) -> Maybe<&2, List<&2, String>>:
   match c:
-    case Change.Own{os}:
+    case Change.Own{g, at, os}:
       Some{os}
     case _:
       None{}
@@ -409,8 +387,8 @@ def Change.owners(c: Change) -> Maybe<&2, List<&2, String>>:
 # the line that the change c makes, when it makes one
 def Change.makes(c: Change) -> Maybe<&2, List<&2, Bool>>:
   match c:
-    case Change.Make{l, at, ms}:
-      Some{Line.key(l)}
+    case Change.Branch{n, at}:
+      Some{Line.key(n)}
     case _:
       None{}
 
@@ -456,9 +434,11 @@ def Node.take(s: State(), t: State()) -> State():
 # --------
 # A version of a line is a tree that holds what the line holds after it, in
 # key spaces: the first word of a key says which. 0: a resource's bytes (none:
-# removed). 1: a mark. 2: a group's members. 3: a merge's clash, open or
-# settled. 4: the version vector, the newest place of each other line that the
-# version came from. 5 (in a store's tree): where each of its lines starts.
+# removed). 1: a mark. 2 (in a store's tree): a group's members. 3: a merge's
+# clash, open or settled. 4: the version vector, the newest place of each
+# other line that the version came from. 5 (in a store's tree): where each of
+# its branches starts. 6: the line's owner group. 7 (in a store's tree): the
+# names of its groups.
 
 # the words that the store s holds under the hash h
 def Store.fetch(s: State(), h: Hashes.Hash) -> Maybe<&2, List<&2, U32>>:
@@ -472,9 +452,17 @@ def Key.res(n: Resources.Name) -> List<&2, U32>:
 def Key.mark(m: String) -> List<&2, U32>:
   1 <> Codes.Code.text(m, [])
 
-# the key of a group's members
-def Key.members() -> List<&2, U32>:
-  [2]
+# the key of the members of the group g
+def Key.group(g: String) -> List<&2, U32>:
+  2 <> Codes.Code.text(g, [])
+
+# the key of a line's owner group
+def Key.owner() -> List<&2, U32>:
+  [6]
+
+# the key of the names of a store's groups
+def Key.groups() -> List<&2, U32>:
+  [7]
 
 # the key of the clash of the resource n
 def Key.clash(n: Resources.Name) -> List<&2, U32>:
@@ -579,7 +567,7 @@ def Node.root_of(s: State(), m: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Hashes.Hash>
 # -----
 
 # the steps of the line l of the store r (none: the store's own steps)
-def Node.steps(s: State(), r: Ledgers.Id, l: Maybe<&2, Line>) -> List<&2, Ledgers.Vote>:
+def Node.steps(s: State(), r: Ledgers.Id, l: Maybe<&2, String>) -> List<&2, Ledgers.Vote>:
   Maybe.default(
     &2,
     List<&2, Ledgers.Vote>,
@@ -599,7 +587,7 @@ def Steps.taken(xs: List<&2, Ledgers.Vote>) -> List<&2, Ledgers.Id>:
 
 # the versions of the branch b of the store r, in order
 def Node.versions(s: State(), r: Ledgers.Id, b: String) -> List<&2, Ledgers.Id>:
-  Steps.taken(Node.steps(s, r, Some{Line.Branch{b}}))
+  Steps.taken(Node.steps(s, r, Some{b}))
 
 # the last of xs, if any
 def Ids.last(xs: List<&2, Ledgers.Id>) -> Maybe<&2, Ledgers.Id>:
@@ -618,22 +606,25 @@ def Tip.owners(m: Maybe<&2, Ledgers.Tip>) -> List<&2, String>:
       []
 
 # the owners at the tip of the line l of the store r
-def Node.owners(s: State(), r: Ledgers.Id, l: Maybe<&2, Line>) -> List<&2, String>:
+def Node.owners(s: State(), r: Ledgers.Id, l: Maybe<&2, String>) -> List<&2, String>:
   Tip.owners(Ledgers.Line.tip(~Ask, ~Ask.view, s, Line.chain(r, l)))
 
-# the root of the tree of the last of the steps xs, if any, else d
-def Steps.root(xs: List<&2, Ledgers.Vote>, d: Maybe<&2, Hashes.Hash>) -> Maybe<&2, Hashes.Hash>:
-  match xs:
-    case Nil{}:
-      d
-    case Con{x, Nil{}}:
-      Ledgers.Vote.result_of(Some{x})
-    case Con{x, Con{y, r}}:
-      Steps.root(Con{y, r}, d)
+# the vote of the last step before the tip m of the line c
+def Chain.head.of(+s: State(), +c: Ledgers.Chain, m: Maybe<&2, Ledgers.Tip>) -> Maybe<&2, Ledgers.Vote>:
+  match m:
+    case Some{Ledgers.Tip{e, ms, h, last}}:
+      Ledgers.Line.head(~Ask, ~Ask.view, s, c, e, ms, last)
+    case None{}:
+      None{}
 
-# the steps of the line c
-def Chain.steps(s: State(), c: Ledgers.Chain) -> List<&2, Ledgers.Vote>:
-  Maybe.default(&2, List<&2, Ledgers.Vote>, Ledgers.Line.steps(~Ask, ~Ask.view, s, c), [])
+# the head of the line c: the vote of its last step, which a judge of its next
+# step reads (none: it has no step yet). It is one key away, not a walk
+def Chain.head(+s: State(), +c: Ledgers.Chain) -> Maybe<&2, Ledgers.Vote>:
+  Chain.head.of(s, c, Ledgers.Line.tip(~Ask, ~Ask.view, s, c))
+
+# the root of the tree of the store r now
+def Store.root(s: State(), r: Ledgers.Id) -> Maybe<&2, Hashes.Hash>:
+  Ledgers.Vote.result_of(Chain.head(s, Ledgers.Chain{r, None{}}))
 
 # the value of a read that is the whole of some words
 def Read.whole(-A: Data, m: Maybe<&2, Codes.Read<A>>) -> Maybe<&2, A>:
@@ -650,7 +641,7 @@ def Line.start(+s: State(), r: Ledgers.Id, k: List<&2, Bool>) -> Maybe<&2, Hashe
     &2,
     List<&2, U32>,
     Hashes.Hash,
-    Node.get(s, Steps.root(Chain.steps(s, Ledgers.Chain{r, None{}}), None{}), Key.start(k)),
+    Node.get(s, Store.root(s, r), Key.start(k)),
     ws => Start.of.read(Codes.Code.maybe.read(~Hashes.Hash, ~Trees.Hash.code.read, ws))
   )
 
@@ -663,17 +654,26 @@ def Chain.start(s: State(), c: Ledgers.Chain) -> Maybe<&2, Hashes.Hash>:
     case Ledgers.Chain{r, Some{k}}:
       Line.start(s, r, k)
 
-# the root of the tree of the line c now: its last step's, else its start's
-def Chain.root(+s: State(), +c: Ledgers.Chain) -> Maybe<&2, Hashes.Hash>:
-  Steps.root(Chain.steps(s, c), Chain.start(s, c))
+# the tree of the line c before a step whose head is m: the head's result,
+# else where the line starts
+def Judge.root(s: State(), c: Ledgers.Chain, m: Maybe<&2, Ledgers.Vote>) -> Maybe<&2, Hashes.Hash>:
+  match m:
+    case Some{x}:
+      Ledgers.Vote.result_of(Some{x})
+    case None{}:
+      Chain.start(s, c)
 
-# the members in the tree whose root is h, if it holds them
-def Members.in(s: State(), h: Maybe<&2, Hashes.Hash>) -> Maybe<&2, List<&2, Member>>:
+# the root of the tree of the line c now: what a judge of its next step reads
+def Chain.root(+s: State(), +c: Ledgers.Chain) -> Maybe<&2, Hashes.Hash>:
+  Judge.root(s, c, Chain.head(s, c))
+
+# the members of the group g in the store tree whose root is h, if g is there
+def Members.in(s: State(), h: Maybe<&2, Hashes.Hash>, g: String) -> Maybe<&2, List<&2, Member>>:
   Maybe.bind(
     &2,
     List<&2, U32>,
     List<&2, Member>,
-    Node.get(s, h, Key.members()),
+    Node.get(s, h, Key.group(g)),
     ws => Read.whole(List<&2, Member>, Members.code.read(ws))
   )
 
@@ -1090,64 +1090,59 @@ def Merge.names(
 
 # Groups
 # ------
+# The owner groups of a store are in its own tree, so its own owner group
+# decides them, one after the other: a group never comes to contain itself.
 
-# the members of the group g of the store r, if g exists
-def Node.members(+s: State(), r: Ledgers.Id, g: String) -> Maybe<&2, List<&2, Member>>:
-  Members.in(s, Chain.root(s, Line.chain(r, Some{Line.Group{g}})))
-
-# the groups of a store, as a graph
+# the groups of a store tree, as a graph
 type Groups is Data:
-  Groups{state: State(), store: Ledgers.Id}
+  Groups{state: State(), root: Maybe<&2, Hashes.Hash>}
 
 # the members of m in the groups g, when it is a group
 def Group.succ(g: Groups, m: Member) -> List<&2, Member>:
   match g m:
-    case Groups{s, r} Member.Node{n}:
+    case Groups{s, h} Member.Node{n}:
       []
-    case Groups{+s, +r} Member.Group{h}:
-      Maybe.default(&2, List<&2, Member>, Node.members(s, r, h), [])
+    case Groups{s, h} Member.Group{x}:
+      Maybe.default(&2, List<&2, Member>, Members.in(s, h, x), [])
 
-# the group that the request m makes, as a member, when it makes one
-def Group.made.of(m: Maybe<&2, Ledgers.Asked<Ask>>) -> Maybe<&2, Member>:
-  match m:
-    case Some{Ledgers.Asked{t, Ask.On{st, None{}, Change.Make{Line.Group{h}, at, ms}}}}:
-      Some{Member.Group{h}}
-    case _:
-      None{}
+# the names of the groups in the store tree whose root is h
+def Group.names(s: State(), h: Maybe<&2, Hashes.Hash>) -> List<&2, String>:
+  Maybe.default(
+    &2,
+    List<&2, String>,
+    Maybe.bind(
+      &2,
+      List<&2, U32>,
+      List<&2, String>,
+      Node.get(s, h, Key.groups()),
+      ws => Read.whole(List<&2, String>, Ledgers.Owners.code.read(ws))
+    ),
+    []
+  )
 
-# the member m, when it is there, then rest
-def Members.put(m: Maybe<&2, Member>, rest: List<&2, Member>) -> List<&2, Member>:
-  match m:
-    case Some{x}:
-      x <> rest
-    case None{}:
-      rest
-
-# the groups that the steps xs of a store make, as members
-def Group.made(+s: State(), xs: List<&2, Ledgers.Vote>) -> List<&2, Member>:
-  match xs:
+# the groups of the names ns, as members
+def Group.of.names(ns: List<&2, String>) -> List<&2, Member>:
+  match ns:
     case Nil{}:
       []
-    case Con{Ledgers.Vote{i, True{}, w, h}, r}:
-      Members.put(Group.made.of(Ledgers.State.asked(~Ask, s, i)), Group.made(s, r))
-    case Con{x, r}:
-      Group.made(s, r)
+    case Con{n, r}:
+      Member.Group{n} <> Group.of.names(r)
 
 # every group of the groups g, as a member
 def Group.all(g: Groups) -> List<&2, Member>:
   match g:
-    case Groups{+s, r}:
-      Group.made(s, Node.steps(s, r, None{}))
+    case Groups{s, h}:
+      Group.of.names(Group.names(s, h))
 
-# m is a member of the group g of the store r, or of a group inside g
-def Node.is_inside(s: State(), r: Ledgers.Id, m: Member, g: String) -> Bool:
+# m is a member of the group g of the store tree h, or of a group inside g
+def Group.is_inside(s: State(), h: Maybe<&2, Hashes.Hash>, m: Member, g: String) -> Bool:
   Reaches.Reach.in(
     ~Member,
     ~Groups,
     ~Member.is_eq,
     ~Group.succ,
     ~Group.all,
-    Groups{s, r},
+    Groups{s, h},
     Member.Group{g},
     m
   )
@@ -1174,8 +1169,13 @@ def Group.named.all(+g: Groups, gs: List<&2, Member>) -> List<&2, String>:
 def Group.named(+g: Groups, gs: List<&2, Member>) -> List<&2, String>:
   Tries.Trie.unique(~String, ~Tries.Trie.text, Group.named.all(g, gs), Tries.Trie.new(Unit))
 
-# the nodes of ns that are inside the group h of the store r
-def Group.inside(+s: State(), +r: Ledgers.Id, ns: List<&2, String>, +h: String) -> List<&2, String>:
+# the nodes of ns that are inside the group g of the store tree h
+def Group.inside(
+  +s: State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  ns: List<&2, String>,
+  +g: String
+) -> List<&2, String>:
   match ns:
     case Nil{}:
       []
@@ -1183,30 +1183,44 @@ def Group.inside(+s: State(), +r: Ledgers.Id, ns: List<&2, String>, +h: String) 
       List.filter.put(
         String,
         n,
-        Group.inside(s, r, rest, h),
-        Node.is_inside(s, r, Member.Node{n}, h)
+        Group.inside(s, h, rest, g),
+        Group.is_inside(s, h, Member.Node{n}, g)
       )
 
-# the nodes inside the group g of the store r: what a set-owner to g asks for
-def Node.nodes(+s: State(), +r: Ledgers.Id, g: String) -> List<&2, String>:
-  +gs = {Groups{s, r}: Groups}
-  Group.inside(s, r, Group.named(gs, Group.all(gs)), g)
+# the nodes inside the group g of the store tree h, each once: the nodes that
+# own what g owns
+def Group.nodes(+s: State(), +h: Maybe<&2, Hashes.Hash>, g: String) -> List<&2, String>:
+  +gs = {Groups{s, h}: Groups}
+  Group.inside(s, h, Group.named(gs, Group.all(gs)), g)
 
 # the member m of a new set of the group g makes g contain itself
-def Group.loops(s: State(), r: Ledgers.Id, +g: String, m: Member) -> Bool:
+def Group.loops(s: State(), h: Maybe<&2, Hashes.Hash>, +g: String, m: Member) -> Bool:
   match m:
     case Member.Node{n}:
       False{}
-    case Member.Group{+h}:
-      List.any.if(u => Node.is_inside(s, r, Member.Group{g}, h), String.eq(h, g))
+    case Member.Group{+x}:
+      List.any.if(u => Group.is_inside(s, h, Member.Group{g}, x), String.eq(x, g))
 
-# some member of ms makes the group g of the store r contain itself
-def Group.loops.any(+s: State(), +r: Ledgers.Id, +g: String, ms: List<&2, Member>) -> Bool:
+# some member of ms makes the group g of the store tree h contain itself
+def Group.loops.any(
+  +s: State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  +g: String,
+  ms: List<&2, Member>
+) -> Bool:
   match ms:
     case Nil{}:
       False{}
     case Con{m, rest}:
-      List.any.if(u => Group.loops.any(s, r, g, rest), Group.loops(s, r, g, m))
+      List.any.if(u => Group.loops.any(s, h, g, rest), Group.loops(s, h, g, m))
+
+# the members of the group g of the store r, if g exists
+def Node.members(+s: State(), r: Ledgers.Id, g: String) -> Maybe<&2, List<&2, Member>>:
+  Members.in(s, Store.root(s, r), g)
+
+# the nodes inside the group g of the store r
+def Node.nodes(+s: State(), r: Ledgers.Id, g: String) -> List<&2, String>:
+  Group.nodes(s, Store.root(s, r), g)
 
 # Judging
 # -------
@@ -1323,7 +1337,7 @@ def Clash.open(s: State(), h: Maybe<&2, Hashes.Hash>, n: Resources.Name, f: Ledg
 # the store r
 def Merge.from_on(m: Maybe<&2, Ledgers.Asked<Ask>>, r: Ledgers.Id, b: String) -> Maybe<&2, Ledgers.Id>:
   match m:
-    case Some{Ledgers.Asked{t, Ask.On{st, Some{Line.Branch{x}}, Change.Merge{f}}}}:
+    case Some{Ledgers.Asked{t, Ask.On{st, Some{x}, Change.Merge{f}}}}:
       Shared.Maybe.when(Ledgers.Id, Bool.and(Ledgers.Id.is_eq(st, r), String.eq(x, b)), u => Some{f})
     case _:
       None{}
@@ -1554,107 +1568,140 @@ def Make.branch(+s: State(), c: Ledgers.Chain, m: Maybe<&2, Ledgers.Id>) -> Mayb
     case Some{+v}:
       Vector.joined(s, c, v, Some{Work{s, Node.root_of(s, Some{v}), []}})
 
-# the verdict on a make of the line l of the store r, at the version at (if
-# any), with the members ms, at the store's tree h
-def Make.change(
+# the store tree h with the group g, of the members ms, and its name among the
+# names of its groups
+def Group.work(+s: State(), +h: Maybe<&2, Hashes.Hash>, +g: String, ms: List<&2, Member>) -> Maybe<&2, Work>:
+  +ns = Group.names(s, h)
+  Maybe.bind(
+    &2,
+    Work,
+    Work,
+    Work.set(Work{s, h, []}, Key.group(g), Members.code(ms, [])),
+    +w => Shared.Bool.when(
+      Maybe<&2, Work>,
+      List.contains(~String, ~String.eq, ns, g),
+      u => Some{w},
+      u => Work.set(w, Key.groups(), Ledgers.Owners.code(g <> ns, []))
+    )
+  )
+
+# the root of the tree of the step v, taken or not (none: the empty tree, or v
+# is not decided here)
+def Step.root(s: State(), v: Ledgers.Id) -> Maybe<&2, Hashes.Hash>:
+  Ledgers.Vote.result_of(Ledgers.State.decided(~Ask, ~Ask.view, s, v))
+
+# the store tree in which an Own of the line l, at the tree h, reads its group:
+# a store reads its own tree; a branch, the tree of the step at of its store
+def Own.tree(
+  s: State(),
+  l: Maybe<&2, String>,
+  at: Maybe<&2, Ledgers.Id>,
+  h: Maybe<&2, Hashes.Hash>
+) -> Maybe<&2, Hashes.Hash>:
+  match l at:
+    case Some{b} Some{v}:
+      Step.root(s, v)
+    case x y:
+      h
+
+# the owners os are the nodes inside the group g of the store tree t, and there
+# is one
+def Own.fits(s: State(), t: Maybe<&2, Hashes.Hash>, g: String, +os: List<&2, String>) -> Bool:
+  List.all.if(
+    u => Ledgers.Owners.is_eq(os, Group.nodes(s, t, g)),
+    Bool.not(List.is_empty(&2, String, os))
+  )
+
+# the verdict on an Own of the group g, with the owners os, at the tree h, when
+# it fits: the line's owner group is g
+def Own.take(+s: State(), +g: String, fits: Bool, +h: Maybe<&2, Hashes.Hash>) -> Maybe<&2, Ledgers.Verdict>:
+  Judge.when(
+    fits,
+    h,
+    u => Work.take(Work.set(Work{s, h, []}, Key.owner(), Codes.Code.text(g, [])))
+  )
+
+# the step at is a step of the store r: decided at the place m
+def Own.at(r: Ledgers.Id, m: Maybe<&2, Ledgers.Where>) -> Maybe<&2, Bool>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Ledgers.Where{c, e, h}}:
+      Some{Ledgers.Chain.is_eq(c, Ledgers.Chain{r, None{}})}
+
+# the verdict on an Own of the line l of the store r: its owner group is g,
+# whose nodes in the tree that it names (Own.tree) are os
+def Own.change(
   +s: State(),
   r: Ledgers.Id,
-  l: Line,
-  +at: Maybe<&2, Ledgers.Id>,
-  +ms: List<&2, Member>,
+  l: Maybe<&2, String>,
+  +g: String,
+  at: Maybe<&2, Ledgers.Id>,
+  +os: List<&2, String>,
   +h: Maybe<&2, Hashes.Hash>
 ) -> Maybe<&2, Ledgers.Verdict>:
-  match l:
-    case Line.Branch{+b}:
+  match l at:
+    case None{} y:
+      Own.take(s, g, Own.fits(s, h, g, os), h)
+    case Some{b} None{}:
+      Judge.refuse(h)
+    case Some{b} Some{+v}:
       Judge.then(
-        Judge.ready_maybe(s, at),
+        Own.at(r, Node.place(s, v)),
         h,
-        u => Work.take(
-          Make.work(
-            Make.branch(s, Line.chain(r, Some{Line.Branch{b}}), at),
-            Line.key(Line.Branch{b}),
-            h
-          )
-        )
-      )
-    case Line.Group{+g}:
-      Judge.when(
-        Bool.not(Group.loops.any(s, r, g, ms)),
-        h,
-        u => Work.take(
-          Make.work(
-            Work.set(Work{s, None{}, []}, Key.members(), Members.code(ms, [])),
-            Line.key(Line.Group{g}),
-            h
-          )
-        )
+        u => Own.take(s, g, Own.fits(s, Step.root(s, v), g, os), h)
       )
 
 # the verdict on the change c of the line l of the store r, at the tree h
 def Judge.change(
   +s: State(),
   r: Ledgers.Id,
-  l: Maybe<&2, Line>,
+  l: Maybe<&2, String>,
   c: Change,
   +h: Maybe<&2, Hashes.Hash>
 ) -> Maybe<&2, Ledgers.Verdict>:
   match l c:
-    case None{} Change.Make{ml, at, ms}:
-      Make.change(s, r, ml, at, ms, h)
-    case w Change.Own{+os}:
-      Some{
-        Ledgers.Verdict{
-          List.all.if(u => Tries.Trie.distinct(~String, ~Tries.Trie.text, os, Tries.Trie.new(Unit)), Bool.not(List.is_empty(&2, String, os))),
-          h,
-          []
-        }
-      }
-    case Some{Line.Branch{b}} Change.Write{n, base, c2}:
+    case None{} Change.Branch{+b, +at}:
+      Judge.then(
+        Judge.ready_maybe(s, at),
+        h,
+        u => Work.take(Make.work(Make.branch(s, Line.chain(r, Some{b}), at), Line.key(b), h))
+      )
+    case None{} Change.Group{+g, +ms}:
+      Judge.when(Bool.not(Group.loops.any(s, h, g, ms)), h, u => Work.take(Group.work(s, h, g, ms)))
+    case w Change.Own{g, at, os}:
+      Own.change(s, r, w, g, at, os, h)
+    case Some{b} Change.Write{n, base, c2}:
       Judge.write(s, n, base, c2, h)
-    case Some{Line.Branch{+b}} Change.Resolve{k, n, c2}:
+    case Some{+b} Change.Resolve{k, n, c2}:
       Judge.resolve(s, r, b, k, n, c2, h)
-    case Some{Line.Branch{+b}} Change.Merge{+from}:
+    case Some{+b} Change.Merge{+from}:
       Judge.then(
         Judge.ready(s, from),
         h,
-        u => Work.take(Merge.work(s, Line.chain(r, Some{Line.Branch{b}}), from, h))
+        u => Work.take(Merge.work(s, Line.chain(r, Some{b}), from, h))
       )
-    case Some{Line.Branch{+b}} Change.Move{+to}:
+    case Some{+b} Change.Move{+to}:
       Judge.then(
         Judge.ready(s, to),
         h,
-        u => Work.take(Move.work(s, Line.chain(r, Some{Line.Branch{b}}), to, h))
+        u => Work.take(Move.work(s, Line.chain(r, Some{b}), to, h))
       )
-    case Some{Line.Branch{b}} Change.Mark{+m, t}:
+    case Some{b} Change.Mark{+m, t}:
       Judge.when(
         Maybe.is_none(&2, List<&2, U32>, Node.get(s, h, Key.mark(m))),
         h,
         u => Work.take(Work.set(Work{s, h, []}, Key.mark(m), []))
       )
-    case Some{Line.Group{g}} Change.Members{+ms}:
-      Judge.when(
-        Bool.not(Group.loops.any(s, r, g, ms)),
-        h,
-        u => Work.take(Work.set(Work{s, h, []}, Key.members(), Members.code(ms, [])))
-      )
     case w c3:
       Judge.refuse(h)
-
-# the tree of the line c before a step whose head is m: the head's result,
-# else where the line starts
-def Judge.root(s: State(), c: Ledgers.Chain, m: Maybe<&2, Ledgers.Vote>) -> Maybe<&2, Hashes.Hash>:
-  match m:
-    case Some{x}:
-      Ledgers.Vote.result_of(Some{x})
-    case None{}:
-      Chain.start(s, c)
 
 # the verdict of the owners on a change c of the line l of the store r, after
 # the step head of the line
 def Node.judge.on(
   +s: State(),
   +r: Ledgers.Id,
-  +l: Maybe<&2, Line>,
+  +l: Maybe<&2, String>,
   c: Change,
   head: Maybe<&2, Ledgers.Vote>
 ) -> Maybe<&2, Ledgers.Verdict>:
@@ -1713,6 +1760,93 @@ def Node.ask(n: String, +s: State(), +e: Envelope, q: Ask) -> State():
 # request that s holds
 def Node.vote(n: String, s: State()) -> State():
   Ledgers.State.vote(~Ask, ~Ask.is_eq, ~Ask.view, ~Node.judge, n, s)
+
+# Owners
+# ------
+# A line names its owner group, and its owners are the nodes inside it. When
+# the group changes, an owner asks for the line's owners to be the group's
+# nodes again (Node.adopt), and the owners that the line has decide it: so a
+# change of a group changes the owners of everything that it owns.
+
+# the owner group of the line l of the store r, if it has one (none: its
+# owners are the nodes that it started with)
+def Node.group(+s: State(), r: Ledgers.Id, l: Maybe<&2, String>) -> Maybe<&2, String>:
+  Maybe.bind(
+    &2,
+    List<&2, U32>,
+    String,
+    Node.get(s, Chain.root(s, Line.chain(r, l)), Key.owner()),
+    ws => Read.whole(String, Codes.Code.text.read(ws))
+  )
+
+# the last step of the store r
+def Store.head(s: State(), r: Ledgers.Id) -> Maybe<&2, Ledgers.Id>:
+  Maybe.bind(&2, Ledgers.Vote, Ledgers.Id, Chain.head(s, Ledgers.Chain{r, None{}}), x => Vote.id(x))
+
+# the request that makes the group g, with the nodes inside it now, the owner
+# group of the line l of the store r
+def Node.own(+s: State(), +r: Ledgers.Id, l: Maybe<&2, String>, +g: String) -> Ask:
+  Ask.On{r, l, Change.Own{g, Store.head(s, r), Node.nodes(s, r, g)}}
+
+# a request, and who asks for it
+type Request is Data:
+  Request{envelope: Envelope, ask: Ask}
+
+# the text t, after its length
+def Adopt.part(+t: String) -> String:
+  Nat.show(String.length(t)) ++ ":" ++ t
+
+# the ID of the adoption of the line l after the step at of its store: it
+# names both, so every owner asks for the same request
+def Adopt.id(l: Maybe<&2, String>, at: Maybe<&2, Ledgers.Id>) -> String:
+  match l at:
+    case None{} Some{Ledgers.Id{w, q}}:
+      "-" ++ Adopt.part(w) ++ q
+    case Some{b} Some{Ledgers.Id{w, q}}:
+      "+" ++ Adopt.part(b) ++ Adopt.part(w) ++ q
+    case x y:
+      ""
+
+# the adoption of the line l of the store r, whose owner group is m: the
+# request that makes the nodes inside the group now its owners, when they are
+# not (none: they are, or the line has no owner group). No writer asks for it
+def Adopt.of(
+  +s: State(),
+  +r: Ledgers.Id,
+  +l: Maybe<&2, String>,
+  m: Maybe<&2, String>
+) -> Maybe<&2, Request>:
+  match m:
+    case None{}:
+      None{}
+    case Some{+g}:
+      +os = Node.nodes(s, r, g)
+      +at = Store.head(s, r)
+      Shared.Maybe.when(
+        Request,
+        Bool.not(Ledgers.Owners.is_eq(os, Node.owners(s, r, l))),
+        u => Some{
+          Request{Envelope{Adopt.id(l, at), "", ""}, Ask.On{r, l, Change.Own{g, at, os}}}
+        }
+      )
+
+# the adoption of the line l of the store r, if its owners are not the nodes
+# inside its owner group
+def Node.adoption(+s: State(), +r: Ledgers.Id, +l: Maybe<&2, String>) -> Maybe<&2, Request>:
+  Adopt.of(s, r, l, Node.group(s, r, l))
+
+# s, after the node n took in the request m, if any
+def Adopt.ask(n: String, s: State(), m: Maybe<&2, Request>) -> State():
+  match m:
+    case None{}:
+      s
+    case Some{Request{e, q}}:
+      Node.ask(n, s, e, q)
+
+# s, after the node n asked for the adoption of the line l of the store r, if
+# its owners are not the nodes inside its owner group
+def Node.adopt(n: String, +s: State(), r: Ledgers.Id, l: Maybe<&2, String>) -> State():
+  Adopt.ask(n, s, Node.adoption(s, r, l))
 
 # Reads
 # -----
@@ -1785,7 +1919,7 @@ def Node.version(+s: State(), p: Point) -> Maybe<&2, Ledgers.Id>:
     case Point.Head{r, b}:
       Node.head(s, r, b)
     case Point.Mark{r, b, m}:
-      Mark.first(s, Node.steps(s, r, Some{Line.Branch{b}}), None{}, m)
+      Mark.first(s, Node.steps(s, r, Some{b}), None{}, m)
 
 # the bytes of the resource n at the version m, if it holds them
 def Res.at(+s: State(), n: Resources.Name, m: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Texts.Bytes()>:
@@ -1805,7 +1939,7 @@ def Node.content(+s: State(), n: Resources.Name, p: Point) -> Maybe<&2, Texts.By
 # store r, when it writes it there
 def Draft.content(r: Ledgers.Id, b: String, n: Resources.Name, q: Ask) -> Maybe<&2, Content>:
   match q:
-    case Ask.On{st, Some{Line.Branch{x}}, Change.Write{m, base, c}}:
+    case Ask.On{st, Some{x}, Change.Write{m, base, c}}:
       Shared.Maybe.when(
         Content,
         List.all.if(
@@ -1814,7 +1948,7 @@ def Draft.content(r: Ledgers.Id, b: String, n: Resources.Name, q: Ask) -> Maybe<
         ),
         u => Some{c}
       )
-    case Ask.On{st, Some{Line.Branch{x}}, Change.Resolve{k, m, c}}:
+    case Ask.On{st, Some{x}, Change.Resolve{k, m, c}}:
       Shared.Maybe.when(
         Content,
         List.all.if(
@@ -2158,7 +2292,7 @@ def Store.roots(cs: List<&2, Cells.Cell<Ledgers.Entry<Ask>>>) -> List<&2, Ledger
 # the branch that the request m makes, when it makes one, then rest
 def Branch.made.of(m: Maybe<&2, Ledgers.Asked<Ask>>, rest: List<&2, String>) -> List<&2, String>:
   match m:
-    case Some{Ledgers.Asked{t, Ask.On{st, None{}, Change.Make{Line.Branch{b}, at, ms}}}}:
+    case Some{Ledgers.Asked{t, Ask.On{st, None{}, Change.Branch{b, at}}}}:
       b <> rest
     case _:
       rest
@@ -2185,7 +2319,7 @@ def Branch.at(
     case None{}:
       rest
     case Some{h}:
-      BranchEntry{Branch{r, b}, Node.owners(s, r, Some{Line.Branch{b}}), h} <> rest
+      BranchEntry{Branch{r, b}, Node.owners(s, r, Some{b}), h} <> rest
 
 # the branches of the names bs of the store r
 def Branch.of(+s: State(), +r: Ledgers.Id, bs: List<&2, String>) -> List<&2, BranchEntry>:
@@ -2527,20 +2661,17 @@ def Node.impact(+s: State(), p: Point) -> List<&2, Touch>:
 # -------
 
 # what a subscription or a poll follows: the versions or the conflicts of a
-# branch, the changes elsewhere that touch it, or the groups of a store
+# branch, or the changes elsewhere that touch it
 type Topic is Data:
   Topic.Versions{branch: Branch}
   Topic.Conflicts{branch: Branch}
   Topic.Affects{branch: Branch}
-  Topic.Groups{store: Ledgers.Id}
 
-# an event of a topic. GroupCycle: the group is inside itself, as syncs can
-# leave groups; a set-group settles it
+# an event of a topic
 type Notice is Data:
   Notice.Versioned{branch: Branch, version: Ledgers.Id}
   Notice.Conflicted{branch: Branch, version: Ledgers.Id}
   Notice.Touched{touch: Touch}
-  Notice.GroupCycle{store: Ledgers.Id, group: String}
 
 # the key of the notice n: its kind, then its parts
 def Notice.key(n: Notice) -> List<&2, Bool>:
@@ -2551,15 +2682,12 @@ def Notice.key(n: Notice) -> List<&2, Bool>:
       False{} <> True{} <> List.append(&2, Bool, Branch.key(b), Ledgers.Id.key(v))
     case Notice.Touched{Touch{v, c, b, u}}:
       True{}
-        <> False{}
         <> List.append(
           &2,
           Bool,
           Ledgers.Id.key(v),
           List.append(&2, Bool, Name.key(c), List.append(&2, Bool, Branch.key(b), Name.key(u)))
         )
-    case Notice.GroupCycle{r, g}:
-      True{} <> True{} <> List.append(&2, Bool, Ledgers.Id.key(r), Tries.Trie.text(g))
 
 # the versions xs of the branch b, as notices
 def Notice.versions(+b: Branch, xs: List<&2, Ledgers.Id>) -> List<&2, Notice>:
@@ -2590,21 +2718,6 @@ def Notice.touches(ts: List<&2, Touch>) -> List<&2, Notice>:
     case Con{t, r}:
       Notice.Touched{t} <> Notice.touches(r)
 
-# the groups of gs of the store r inside themselves, as notices
-def Notice.cycles(+s: State(), +r: Ledgers.Id, gs: List<&2, Member>) -> List<&2, Notice>:
-  match gs:
-    case Nil{}:
-      []
-    case Con{Member.Group{+g}, rest}:
-      List.filter.put(
-        Notice,
-        Notice.GroupCycle{r, g},
-        Notice.cycles(s, r, rest),
-        Node.is_inside(s, r, Member.Group{g}, g)
-      )
-    case Con{m, rest}:
-      Notice.cycles(s, r, rest)
-
 # the notices of the topic t in s
 def Notice.all(+s: State(), t: Topic) -> List<&2, Notice>:
   match t:
@@ -2614,8 +2727,6 @@ def Notice.all(+s: State(), t: Topic) -> List<&2, Notice>:
       Notice.conflicts(s, b, Branch.versions(s, b))
     case Topic.Affects{b}:
       Notice.touches(Node.affects(s, b))
-    case Topic.Groups{+r}:
-      Notice.cycles(s, r, Group.all(Groups{s, r}))
 
 # the notices of ns whose keys old does not hold
 def Notice.new(ns: List<&2, Notice>, +old: Tries.Trie<Unit>) -> List<&2, Notice>:
@@ -2689,6 +2800,31 @@ law Node.answer_kept:
   {Ledgers.State.grows(~Ask, ~Ask.is_eq, s, s2) == True{}: Bool}
     -> {Node.answer(s, e, q) == Some{a}: Maybe<&2, Answer>}
     -> {Answer.follows(a, Node.answer(s2, e, q)) == True{}: Bool}
+
+# the owners of a line are the nodes inside its owner group: its owners take
+# an Own only when its owners are the nodes inside its group, in the store
+# tree that it names (Own.tree)
+law Judge.own_inside:
+  for +s: State()
+  for +r: Ledgers.Id
+  for +l: Maybe<&2, String>
+  for +g: String
+  for +at: Maybe<&2, Ledgers.Id>
+  for +os: List<&2, String>
+  for +h: Maybe<&2, Hashes.Hash>
+  for +x: Maybe<&2, Hashes.Hash>
+  for +ds: List<&2, List<&2, U32>>
+  {
+    Judge.change(
+      s,
+      r,
+      l,
+      Change.Own{g, at, os},
+      h
+    )
+      == Some{Ledgers.Verdict{True{}, x, ds}}: Maybe<&2, Ledgers.Verdict>
+  }
+    -> {os == Group.nodes(s, Own.tree(s, l, at, h), g): List<&2, String>}
 
 # s with the request q of e, before any vote: what a node holds once it takes
 # q in
@@ -2789,16 +2925,16 @@ law Node.write_written:
   {
     Ledgers.State.get(
       ~Ask,
-      Node.land(s, Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}),
+      Node.land(s, Ask.On{r, Some{b}, Change.Write{name, base, Content.Bytes{x}}}),
       Ledgers.Slot.ask(Envelope.of(e))
     )
       == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
   }
     -> Write.Sole(
       n,
-      Node.taken(s, e, Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}),
+      Node.taken(s, e, Ask.On{r, Some{b}, Change.Write{name, base, Content.Bytes{x}}}),
       Envelope.of(e),
-      Line.chain(r, Some{Line.Branch{b}}),
+      Line.chain(r, Some{b}),
       name,
       base,
       x,
@@ -2812,10 +2948,10 @@ law Node.write_written:
             n,
             s,
             e,
-            Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
+            Ask.On{r, Some{b}, Change.Write{name, base, Content.Bytes{x}}}
           ),
           e,
-          Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
+          Ask.On{r, Some{b}, Change.Write{name, base, Content.Bytes{x}}}
         )
           == Some{Answer.Written{Envelope.of(e)}}: Maybe<&2, Answer>
       }
@@ -2825,7 +2961,7 @@ law Node.write_written:
               n,
               s,
               e,
-              Ask.On{r, Some{Line.Branch{b}}, Change.Write{name, base, Content.Bytes{x}}}
+              Ask.On{r, Some{b}, Change.Write{name, base, Content.Bytes{x}}}
             ),
             name,
             Point.At{Envelope.of(e)}
