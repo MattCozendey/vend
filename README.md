@@ -12,11 +12,15 @@ A Vend Node is a P2P decentralized versioning program that runs anywhere and syn
 3 - The Vend Writers connected to it (any number)
 4 - The resources mounted to it, like folders (any number)
 
-All Vend Nodes are "equal" (a classic server is just one that owns the shared branches and keeps every part); outdated ones catch up by themselves without ever creating conflicts, take in nothing unchecked (content by hash, decisions by signature), agree once they saw the same changes, and show their connected writers their own changes at once. A Vend Node starts or resumes on a store address under its name (refused as Busy if another Vend Node runs there) and, unless forced, stops only with no resources mounted or writers connected.
+All Vend Nodes are "equal" (a classic server is just one that owns the shared branches and keeps every part); outdated ones catch up by themselves without ever creating conflicts, take in nothing unchecked (content by hash, decisions by signature), and agree once they saw the same changes. A Vend Node starts or resumes on a store address under its name (refused as Busy if another Vend Node runs there) and, unless forced, stops only with no resources mounted or writers connected.
 
 ## Vend Store
 
 A Vend Store is a permanently named (writer name + writer-chosen request id) set of branches and their Owner Groups sharing one history. A store can be held by many Vend Nodes, each keeping the part it uses and fetching the rest on demand, while every part is kept by enough Vend Nodes to never be lost. Content is stored once by hash and versions share every unchanged part, so an edit costs about its own size, even in huge files; its own Owner Group decides which branch and group names exist.
+
+## Vend Writer
+
+A Vend Writer is anyone (people, agents, tools) connected to a Vend Node under a name, reading and changing resources with or without files on disk. Each change carries a writer-chosen request id, kept on retries, so sending it again to any Vend Node changes nothing more; it is answered Written, Conflicted, Pending (owners not reached yet, still delivered later), Stale or Refused (both final). Writers are told only about changes to what their work uses, imports included at any depth, and always see their own changes at once, even after switching Vend Nodes.
 
 ## Owner Group
 
