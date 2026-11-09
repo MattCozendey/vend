@@ -1,8 +1,8 @@
 import Base
 import ../../shared.bend as Shared
 import ./shared/quorum.bend as Quorums
-import ./shared/shared/code.bend as Codes
 import ./shared/shared/cell.bend as Cells
+import ./shared/shared/code.bend as Codes
 import ./shared/shared/hash.bend as Hashes
 import ./shared/shared/trie.bend as Tries
 import ./shared/text.bend as Texts
@@ -150,9 +150,7 @@ def Chain.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Chain>>:
 def Id.code_read(
   x: Id,
   r: List<&2, U32>
-) -> {
-  Id.code.read(Id.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Id>>
-}:
+) -> {Id.code.read(Id.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Id>>}:
   match x:
     case Id{w, q}:
       Codes.Code.two_read(
@@ -170,7 +168,6 @@ def Id.code_read(
 # the code of request IDs
 def Id.codec() -> Codes.Codec(Id):
   (Id.code, (Id.code.read, x => r => Id.code_read(x, r)))
-
 
 # Keys
 # ----
@@ -2187,7 +2184,16 @@ def State.decide_grows(ty, same, laws, s, s2, w, ms, v):
           Quorums.Quorum.decide(~Vote, ~Vote.is_eq, b2),
           Quorums.Quorum.decide_fast_eq(~Vote, ~Vote.is_eq, ~Vote.laws(), b2)
         ): {_ == Some{v}: Maybe<&2, Vote>}
-        Quorums.Quorum.decide_kept(~Vote, ~Vote.is_eq, ~Vote.laws(), b1, b2, v)(Ballots.grows(~ty, ~same, ~laws, s, s2, p, ms, gr))(
+        Quorums.Quorum.decide_kept(
+          ~Vote,
+          ~Vote.is_eq,
+          ~Vote.laws(),
+          b1,
+          b2,
+          v
+        )(
+          Ballots.grows(~ty, ~same, ~laws, s, s2, p, ms, gr)
+        )(
           Equal.trans(
             Maybe<&2, Vote>,
             Quorums.Quorum.decide(~Vote, ~Vote.is_eq, b1),

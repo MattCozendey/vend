@@ -102,7 +102,14 @@ def Content.code_read(
         r
       )
     case Spec.Content.Of{v}:
-      Codes.Code.one_read(~Ledgers.Id, ~Spec.Content, ~Ledgers.Id.codec(), a => Spec.Content.Of{a}, v, r)
+      Codes.Code.one_read(
+        ~Ledgers.Id,
+        ~Spec.Content,
+        ~Ledgers.Id.codec(),
+        a => Spec.Content.Of{a},
+        v,
+        r
+      )
 
 # the code of contents
 def Content.codec() -> Codes.Codec(Spec.Content):
@@ -174,9 +181,23 @@ def Change.code_read(
         r
       )
     case Spec.Change.Merge{v}:
-      Codes.Code.one_read(~Ledgers.Id, ~Spec.Change, ~Ledgers.Id.codec(), a => Spec.Change.Merge{a}, v, r)
+      Codes.Code.one_read(
+        ~Ledgers.Id,
+        ~Spec.Change,
+        ~Ledgers.Id.codec(),
+        a => Spec.Change.Merge{a},
+        v,
+        r
+      )
     case Spec.Change.Move{v}:
-      Codes.Code.one_read(~Ledgers.Id, ~Spec.Change, ~Ledgers.Id.codec(), a => Spec.Change.Move{a}, v, r)
+      Codes.Code.one_read(
+        ~Ledgers.Id,
+        ~Spec.Change,
+        ~Ledgers.Id.codec(),
+        a => Spec.Change.Move{a},
+        v,
+        r
+      )
     case Spec.Change.Mark{m, n}:
       Codes.Code.two_read(
         ~String,
@@ -653,10 +674,10 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, ep, h, last, p):
 # the root of the version v stays
 def Root.kept(
   +s: Spec.State(),
-  +s2: Spec.State(),
+  s2: Spec.State(),
   +v: Ledgers.Id,
   -r: Maybe<&2, Hashes.Hash>,
-  +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool}
+  gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool}
 ) -> {
   Spec.Node.root(s, v) == Some{r}: Maybe<&2, Maybe<&2, Hashes.Hash>>
 } -> {Spec.Node.root(s2, v) == Some{r}: Maybe<&2, Maybe<&2, Hashes.Hash>>}:
@@ -676,7 +697,16 @@ def Root.kept(
       x => Spec.Vote.taken(x),
       x => Spec.Vote.taken(x),
       a,
-      b => Ledgers.State.decided_grows(~Spec.Ask, ~Spec.Ask.is_eq, ~Ask.laws(), ~Spec.Ask.view, s, s2, v, b)(gr),
+      b => Ledgers.State.decided_grows(
+        ~Spec.Ask,
+        ~Spec.Ask.is_eq,
+        ~Ask.laws(),
+        ~Spec.Ask.view,
+        s,
+        s2,
+        v,
+        b
+      )(gr),
       b => h => h
     ),
     a => h => h
@@ -685,12 +715,14 @@ def Root.kept(
 # the resource n of the tree h stays
 def Res.kept(
   +s: Spec.State(),
-  +s2: Spec.State(),
+  s2: Spec.State(),
   +h: Maybe<&2, Hashes.Hash>,
   +n: Resources.Name,
   -x: Texts.Bytes(),
-  +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool}
-) -> {Spec.Res.get(s, h, n) == Some{x}: Maybe<&2, Texts.Bytes()>} -> {Spec.Res.get(s2, h, n) == Some{x}: Maybe<&2, Texts.Bytes()>}:
+  gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool}
+) -> {
+  Spec.Res.get(s, h, n) == Some{x}: Maybe<&2, Texts.Bytes()>
+} -> {Spec.Res.get(s2, h, n) == Some{x}: Maybe<&2, Texts.Bytes()>}:
   Shared.Maybe.bind_kept(
     List<&2, U32>,
     Texts.Bytes(),
@@ -703,7 +735,17 @@ def Res.kept(
       ~Spec.State(),
       ~Spec.Store.fetch,
       ~Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq),
-      ~(a => b => k => y => Ledgers.State.data_grows(~Spec.Ask, ~Spec.Ask.is_eq, ~Ask.laws(), a, b, k, y)),
+      ~(
+        a => b => k => y => Ledgers.State.data_grows(
+          ~Spec.Ask,
+          ~Spec.Ask.is_eq,
+          ~Ask.laws(),
+          a,
+          b,
+          k,
+          y
+        )
+      ),
       s,
       s2,
       h,
@@ -715,14 +757,20 @@ def Res.kept(
 
 # a version stays a version, once its status is known (st)
 def Version.kept.at(
-  +s: Spec.State(),
-  +s2: Spec.State(),
-  +v: Ledgers.Id,
-  +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
+  s: Spec.State(),
+  s2: Spec.State(),
+  v: Ledgers.Id,
+  gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
   st: Ledgers.Status,
   e: {Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s, v) == st: Ledgers.Status}
 ) -> {
-  Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Ledgers.Status.verdict(st), Some{True{}}) == True{}: Bool
+  Shared.Maybe.is_eq(
+    ~Bool,
+    ~Shared.Bool.is_eq,
+    Ledgers.Status.verdict(st),
+    Some{True{}}
+  )
+    == True{}: Bool
 } -> {Spec.Node.is_version(s2, v) == True{}: Bool}:
   match st:
     case Ledgers.Status.Done{True{}}:
@@ -731,9 +779,24 @@ def Version.kept.at(
           Ledgers.Status,
           Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s2, v),
           Ledgers.Status.Done{True{}},
-          Ledgers.State.status_grows(~Spec.Ask, ~Spec.Ask.is_eq, ~Ask.laws(), ~Spec.Ask.view, s, s2, v, True{})(gr)(e)
+          Ledgers.State.status_grows(
+            ~Spec.Ask,
+            ~Spec.Ask.is_eq,
+            ~Ask.laws(),
+            ~Spec.Ask.view,
+            s,
+            s2,
+            v,
+            True{}
+          )(gr)(e)
         ): {
-          Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Ledgers.Status.verdict(_), Some{True{}}) == True{}: Bool
+          Shared.Maybe.is_eq(
+            ~Bool,
+            ~Shared.Bool.is_eq,
+            Ledgers.Status.verdict(_),
+            Some{True{}}
+          )
+            == True{}: Bool
         }
         {==}
     case Ledgers.Status.Done{False{}}:
@@ -749,14 +812,19 @@ def Version.kept.at(
 def Content.kept.root(
   +s: Spec.State(),
   +s2: Spec.State(),
-  +v: Ledgers.Id,
+  v: Ledgers.Id,
   +n: Resources.Name,
   -x: Texts.Bytes(),
   +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
   m: Maybe<&2, Maybe<&2, Hashes.Hash>>,
   e: {Spec.Node.root(s, v) == m: Maybe<&2, Maybe<&2, Hashes.Hash>>}
 ) -> {
-  Spec.Res.get(s, Maybe.bind(&2, Maybe<&2, Hashes.Hash>, Hashes.Hash, m, g => g), n) == Some{x}: Maybe<&2, Texts.Bytes()>
+  Spec.Res.get(
+    s,
+    Maybe.bind(&2, Maybe<&2, Hashes.Hash>, Hashes.Hash, m, g => g),
+    n
+  )
+    == Some{x}: Maybe<&2, Texts.Bytes()>
 } -> {Spec.Res.get(s2, Spec.Node.root_of(s2, Some{v}), n) == Some{x}: Maybe<&2, Texts.Bytes()>}:
   match m:
     case None{}:
@@ -780,7 +848,13 @@ def Content.kept.root(
                 Maybe<&2, List<&2, U32>>,
                 Spec.Node.get(s, None{}, Spec.Key.res(n)),
                 None{},
-                Trees.Tree.get.go_empty(~Spec.State(), ~Spec.Store.fetch, s, Trees.Tree.path(Spec.Key.res(n)), Spec.Key.res(n))
+                Trees.Tree.get.go_empty(
+                  ~Spec.State(),
+                  ~Spec.Store.fetch,
+                  s,
+                  Trees.Tree.path(Spec.Key.res(n)),
+                  Spec.Key.res(n)
+                )
               )
             ),
             h
@@ -795,7 +869,12 @@ def Content.kept.root(
           Some{r},
           Root.kept(s, s2, v, r, gr)(e)
         ): {
-          Spec.Res.get(s2, Maybe.bind(&2, Maybe<&2, Hashes.Hash>, Hashes.Hash, _, g => g), n) == Some{x}: Maybe<&2, Texts.Bytes()>
+          Spec.Res.get(
+            s2,
+            Maybe.bind(&2, Maybe<&2, Hashes.Hash>, Hashes.Hash, _, g => g),
+            n
+          )
+            == Some{x}: Maybe<&2, Texts.Bytes()>
         }
         Res.kept(s, s2, r, n, x, gr)(h)
 
@@ -803,14 +882,19 @@ def Content.kept.root(
 def Content.kept.at(
   +s: Spec.State(),
   +s2: Spec.State(),
-  +n: Resources.Name,
+  n: Resources.Name,
   +v: Ledgers.Id,
   -x: Texts.Bytes(),
   +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
   b: Bool,
   e: {Spec.Node.is_version(s, v) == b: Bool}
 ) -> {
-  Spec.Res.at(s, n, Shared.Bool.when(Maybe<&2, Ledgers.Id>, b, u => Some{v}, u => None{})) == Some{x}: Maybe<&2, Texts.Bytes()>
+  Spec.Res.at(
+    s,
+    n,
+    Shared.Bool.when(Maybe<&2, Ledgers.Id>, b, u => Some{v}, u => None{})
+  )
+    == Some{x}: Maybe<&2, Texts.Bytes()>
 } -> {Spec.Node.content(s2, n, Spec.Point.At{v}) == Some{x}: Maybe<&2, Texts.Bytes()>}:
   match b:
     case False{}:
@@ -824,13 +908,24 @@ def Content.kept.at(
           Bool,
           Spec.Node.is_version(s2, v),
           True{},
-          Version.kept.at(s, s2, v, gr, Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s, v), {==})(e)
+          Version.kept.at(
+            s,
+            s2,
+            v,
+            gr,
+            Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s, v),
+            {==}
+          )(e)
         ): {
-          Spec.Res.at(s2, n, Shared.Bool.when(Maybe<&2, Ledgers.Id>, _, u => Some{v}, u => None{})) == Some{x}: Maybe<&2, Texts.Bytes()>
+          Spec.Res.at(
+            s2,
+            n,
+            Shared.Bool.when(Maybe<&2, Ledgers.Id>, _, u => Some{v}, u => None{})
+          )
+            == Some{x}: Maybe<&2, Texts.Bytes()>
         }
         Content.kept.root(s, s2, v, n, x, gr, Spec.Node.root(s, v), {==})(h)
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
 def Spec.Node.content_kept(s, s2, n, v, x):
   +gr => Content.kept.at(s, s2, n, v, x, gr, Spec.Node.is_version(s, v), {==})
 
@@ -863,11 +958,12 @@ def Answer.is_refused(a: Spec.Answer) -> Bool:
     case _:
       False{}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # answers that f tells apart are not the same
 def Answer.differ(
   ~f: Spec.Answer -> Bool,
-  +a: Spec.Answer,
-  +b: Spec.Answer,
+  a: Spec.Answer,
+  b: Spec.Answer,
   ha: {f(a) == False{}: Bool},
   hb: {f(b) == True{}: Bool},
   e: {a == b: Spec.Answer}
@@ -882,14 +978,18 @@ def Answer.differ(
       Equal.trans(Bool, f(a), f(b), True{}, Equal.cong(Spec.Answer, Bool, x => f(x), a, b, e), hb)
     )
   )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Written or Conflicted, by whether the merge still clashes (b)
 def Answer.left_taken.at(
   b: Bool,
-  +i: Ledgers.Id,
-  +k: Ledgers.Id
+  i: Ledgers.Id,
+  k: Ledgers.Id
 ) -> {
-  Answer.is_taken(Shared.Bool.when(Spec.Answer, b, u => Spec.Answer.Written{i}, u => Spec.Answer.Conflicted{k})) == True{}: Bool
+  Answer.is_taken(
+    Shared.Bool.when(Spec.Answer, b, u => Spec.Answer.Written{i}, u => Spec.Answer.Conflicted{k})
+  )
+    == True{}: Bool
 }:
   match b:
     case True{}:
@@ -899,7 +999,7 @@ def Answer.left_taken.at(
 
 # the answer to a taken request is Written or Conflicted
 def Answer.taken_taken(
-  +s: Spec.State(),
+  s: Spec.State(),
   +i: Ledgers.Id,
   r: Maybe<&2, Ledgers.Asked<Spec.Ask>>
 ) -> {Answer.is_taken(Spec.Answer.taken(s, i, r)) == True{}: Bool}:
@@ -929,12 +1029,14 @@ def Answer.taken_taken(
 # a Stale answer stays, once the status is known (st)
 def Answer.stale_kept.at(
   +s: Spec.State(),
-  +s2: Spec.State(),
+  s2: Spec.State(),
   +i: Ledgers.Id,
-  +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
+  gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
   st: Ledgers.Status,
   e: {Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s, i) == st: Ledgers.Status}
-) -> {Spec.Answer.of(s, i, st) == Spec.Answer.Stale{}: Spec.Answer} -> {Spec.Node.answer(s2, i) == Spec.Answer.Stale{}: Spec.Answer}:
+) -> {
+  Spec.Answer.of(s, i, st) == Spec.Answer.Stale{}: Spec.Answer
+} -> {Spec.Node.answer(s2, i) == Spec.Answer.Stale{}: Spec.Answer}:
   match st:
     case Ledgers.Status.Done{False{}}:
       h =>
@@ -942,7 +1044,16 @@ def Answer.stale_kept.at(
           Ledgers.Status,
           Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s2, i),
           Ledgers.Status.Done{False{}},
-          Ledgers.State.status_grows(~Spec.Ask, ~Spec.Ask.is_eq, ~Ask.laws(), ~Spec.Ask.view, s, s2, i, False{})(gr)(e)
+          Ledgers.State.status_grows(
+            ~Spec.Ask,
+            ~Spec.Ask.is_eq,
+            ~Ask.laws(),
+            ~Spec.Ask.view,
+            s,
+            s2,
+            i,
+            False{}
+          )(gr)(e)
         ): {Spec.Answer.of(s2, i, _) == Spec.Answer.Stale{}: Spec.Answer}
         {==}
     case Ledgers.Status.Done{True{}}:
@@ -954,7 +1065,12 @@ def Answer.stale_kept.at(
           Spec.Answer.taken(s, i, Ledgers.State.asked(~Spec.Ask, s, i)),
           {==},
           Answer.taken_taken(s, i, Ledgers.State.asked(~Spec.Ask, s, i)),
-          Equal.sym(Spec.Answer, Spec.Answer.taken(s, i, Ledgers.State.asked(~Spec.Ask, s, i)), Spec.Answer.Stale{}, h)
+          Equal.sym(
+            Spec.Answer,
+            Spec.Answer.taken(s, i, Ledgers.State.asked(~Spec.Ask, s, i)),
+            Spec.Answer.Stale{},
+            h
+          )
         )
       )
     case Ledgers.Status.Pending{}:
@@ -976,7 +1092,7 @@ def Answer.stale_kept.at(
 # a Refused answer stays after any sync, once the status is known (st)
 def Answer.refused_kept.at(
   +s: Spec.State(),
-  +t: Spec.State(),
+  t: Spec.State(),
   +i: Ledgers.Id,
   st: Ledgers.Status,
   e: {Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s, i) == st: Ledgers.Status}
@@ -1002,7 +1118,12 @@ def Answer.refused_kept.at(
           Spec.Answer.taken(s, i, Ledgers.State.asked(~Spec.Ask, s, i)),
           {==},
           Answer.taken_taken(s, i, Ledgers.State.asked(~Spec.Ask, s, i)),
-          Equal.sym(Spec.Answer, Spec.Answer.taken(s, i, Ledgers.State.asked(~Spec.Ask, s, i)), Spec.Answer.Refused{}, h)
+          Equal.sym(
+            Spec.Answer,
+            Spec.Answer.taken(s, i, Ledgers.State.asked(~Spec.Ask, s, i)),
+            Spec.Answer.Refused{},
+            h
+          )
         )
       )
     case Ledgers.Status.Done{False{}}:
@@ -1013,20 +1134,40 @@ def Answer.refused_kept.at(
     case Ledgers.Status.Pending{}:
       h => Empty.absurd(
         {Spec.Node.answer(Spec.Node.join(s, t), i) == Spec.Answer.Refused{}: Spec.Answer},
-        Answer.differ(~Answer.is_refused, Spec.Answer.Pending{}, Spec.Answer.Refused{}, {==}, {==}, h)
+        Answer.differ(
+          ~Answer.is_refused,
+          Spec.Answer.Pending{},
+          Spec.Answer.Refused{},
+          {==},
+          {==},
+          h
+        )
       )
     case Ledgers.Status.NotSeen{}:
       h => Empty.absurd(
         {Spec.Node.answer(Spec.Node.join(s, t), i) == Spec.Answer.Refused{}: Spec.Answer},
-        Answer.differ(~Answer.is_refused, Spec.Answer.NotSeen{}, Spec.Answer.Refused{}, {==}, {==}, h)
+        Answer.differ(
+          ~Answer.is_refused,
+          Spec.Answer.NotSeen{},
+          Spec.Answer.Refused{},
+          {==},
+          {==},
+          h
+        )
       )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
 def Spec.Node.version_kept(s, s2, v):
   +gr => Version.kept.at(s, s2, v, gr, Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s, v), {==})
 
 def Spec.Node.stale_kept(s, s2, i):
-  +gr => Answer.stale_kept.at(s, s2, i, gr, Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s, i), {==})
+  +gr => Answer.stale_kept.at(
+    s,
+    s2,
+    i,
+    gr,
+    Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s, i),
+    {==}
+  )
 
 def Spec.Node.refused_kept(s, t, i):
   Answer.refused_kept.at(s, t, i, Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, s, i), {==})
@@ -1037,26 +1178,44 @@ def Spec.Node.refused_kept(s, t, i):
 # Steps.taken_prefix after the first step x of both
 def Steps.taken_prefix.at(
   x: Ledgers.Vote,
-  +xr: List<&2, Ledgers.Vote>,
-  +yr: List<&2, Ledgers.Vote>,
+  xr: List<&2, Ledgers.Vote>,
+  yr: List<&2, Ledgers.Vote>,
   ih: {
-    List.take(&2, Ledgers.Id, Spec.Steps.taken(yr), List.length(&2, Ledgers.Id, Spec.Steps.taken(xr)))
+    List.take(
+      &2,
+      Ledgers.Id,
+      Spec.Steps.taken(yr),
+      List.length(&2, Ledgers.Id, Spec.Steps.taken(xr))
+    )
       == Spec.Steps.taken(xr): List<&2, Ledgers.Id>
   }
 ) -> {
-  List.take(&2, Ledgers.Id, Spec.Steps.taken(x <> yr), List.length(&2, Ledgers.Id, Spec.Steps.taken(x <> xr)))
+  List.take(
+    &2,
+    Ledgers.Id,
+    Spec.Steps.taken(x <> yr),
+    List.length(&2, Ledgers.Id, Spec.Steps.taken(x <> xr))
+  )
     == Spec.Steps.taken(x <> xr): List<&2, Ledgers.Id>
 }:
   match x:
-    case Ledgers.Vote{+i, True{}, w, h}:
+    case Ledgers.Vote{i, True{}, w, h}:
       %ih: {
-        i <> List.take(&2, Ledgers.Id, Spec.Steps.taken(yr), List.length(&2, Ledgers.Id, Spec.Steps.taken(xr)))
-          == i <> _: List<&2, Ledgers.Id>
+        i
+          <> List.take(
+            &2,
+            Ledgers.Id,
+            Spec.Steps.taken(yr),
+            List.length(&2, Ledgers.Id, Spec.Steps.taken(xr))
+          )
+          == i
+          <> _: List<&2, Ledgers.Id>
       }
       {==}
     case Ledgers.Vote{i, False{}, w, h}:
       ih
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # the versions of steps that start longer steps start the versions of those
 def Steps.taken_prefix(
   xs: List<&2, Ledgers.Vote>,
@@ -1064,7 +1223,12 @@ def Steps.taken_prefix(
 ) -> {
   List.take(&2, Ledgers.Vote, ys, List.length(&2, Ledgers.Vote, xs)) == xs: List<&2, Ledgers.Vote>
 } -> {
-  List.take(&2, Ledgers.Id, Spec.Steps.taken(ys), List.length(&2, Ledgers.Id, Spec.Steps.taken(xs)))
+  List.take(
+    &2,
+    Ledgers.Id,
+    Spec.Steps.taken(ys),
+    List.length(&2, Ledgers.Id, Spec.Steps.taken(xs))
+  )
     == Spec.Steps.taken(xs): List<&2, Ledgers.Id>
 }:
   match xs ys:
@@ -1073,11 +1237,23 @@ def Steps.taken_prefix(
     case Con{x, xr} Nil{}:
       e => Empty.absurd(
         {
-          List.take(&2, Ledgers.Id, [], List.length(&2, Ledgers.Id, Spec.Steps.taken(x <> xr)))
+          List.take(
+            &2,
+            Ledgers.Id,
+            [],
+            List.length(&2, Ledgers.Id, Spec.Steps.taken(x <> xr))
+          )
             == Spec.Steps.taken(x <> xr): List<&2, Ledgers.Id>
         },
         Shared.Bool.false_ne_true(
-          Equal.cong(List<&2, Ledgers.Vote>, Bool, l => List.is_empty(&2, Ledgers.Vote, l), x <> xr, [], Equal.sym(List<&2, Ledgers.Vote>, [], x <> xr, e))
+          Equal.cong(
+            List<&2, Ledgers.Vote>,
+            Bool,
+            l => List.is_empty(&2, Ledgers.Vote, l),
+            x <> xr,
+            [],
+            Equal.sym(List<&2, Ledgers.Vote>, [], x <> xr, e)
+          )
         )
       )
     case Con{+x, +xr} Con{y, +yr}:
@@ -1086,9 +1262,21 @@ def Steps.taken_prefix(
           Ledgers.Vote,
           y,
           x,
-          Shared.List.head_eq(Ledgers.Vote, y, x, List.take(&2, Ledgers.Vote, yr, List.length(&2, Ledgers.Vote, xr)), xr, e)
+          Shared.List.head_eq(
+            Ledgers.Vote,
+            y,
+            x,
+            List.take(&2, Ledgers.Vote, yr, List.length(&2, Ledgers.Vote, xr)),
+            xr,
+            e
+          )
         ): {
-          List.take(&2, Ledgers.Id, Spec.Steps.taken(_ <> yr), List.length(&2, Ledgers.Id, Spec.Steps.taken(x <> xr)))
+          List.take(
+            &2,
+            Ledgers.Id,
+            Spec.Steps.taken(_ <> yr),
+            List.length(&2, Ledgers.Id, Spec.Steps.taken(x <> xr))
+          )
             == Spec.Steps.taken(x <> xr): List<&2, Ledgers.Id>
         }
         Steps.taken_prefix.at(
@@ -1098,24 +1286,54 @@ def Steps.taken_prefix(
           Steps.taken_prefix(
             xr,
             yr
-          )(Shared.List.tail_eq(Ledgers.Vote, y, x, List.take(&2, Ledgers.Vote, yr, List.length(&2, Ledgers.Vote, xr)), xr, e))
+          )(
+            Shared.List.tail_eq(
+              Ledgers.Vote,
+              y,
+              x,
+              List.take(&2, Ledgers.Vote, yr, List.length(&2, Ledgers.Vote, xr)),
+              xr,
+              e
+            )
+          )
         )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a listing that starts with xs, once the listing m of the grown state is known
 def Steps.of_bind(
-  +xs: List<&2, Ledgers.Vote>,
+  xs: List<&2, Ledgers.Vote>,
   m: Maybe<&2, List<&2, Ledgers.Vote>>
 ) -> {
-  Maybe.bind(&2, List<&2, Ledgers.Vote>, List<&2, Ledgers.Vote>, m, ys => Some{List.take(&2, Ledgers.Vote, ys, List.length(&2, Ledgers.Vote, xs))})
+  Maybe.bind(
+    &2,
+    List<&2, Ledgers.Vote>,
+    List<&2, Ledgers.Vote>,
+    m,
+    ys => Some{List.take(&2, Ledgers.Vote, ys, List.length(&2, Ledgers.Vote, xs))}
+  )
     == Some{xs}: Maybe<&2, List<&2, Ledgers.Vote>>
 } -> {
-  List.take(&2, Ledgers.Vote, Maybe.default(&2, List<&2, Ledgers.Vote>, m, []), List.length(&2, Ledgers.Vote, xs))
+  List.take(
+    &2,
+    Ledgers.Vote,
+    Maybe.default(&2, List<&2, Ledgers.Vote>, m, []),
+    List.length(&2, Ledgers.Vote, xs)
+  )
     == xs: List<&2, Ledgers.Vote>
 }:
   match m:
     case None{}:
       h => Empty.absurd(
-        {List.take(&2, Ledgers.Vote, [], List.length(&2, Ledgers.Vote, xs)) == xs: List<&2, Ledgers.Vote>},
+        {
+          List.take(
+            &2,
+            Ledgers.Vote,
+            [],
+            List.length(&2, Ledgers.Vote, xs)
+          )
+            == xs: List<&2, Ledgers.Vote>
+        },
         Shared.Maybe.none_ne_some(List<&2, Ledgers.Vote>, xs, h)
       )
     case Some{ys}:
@@ -1125,20 +1343,28 @@ def Steps.of_bind(
         xs,
         h
       )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the versions grow at their end, once the listing m of the line is known
 def Versions.grow.at(
-  +s: Spec.State(),
+  s: Spec.State(),
   +s2: Spec.State(),
   +c: Ledgers.Chain,
-  +gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
+  gr: {Ledgers.State.grows(~Spec.Ask, ~Spec.Ask.is_eq, s, s2) == True{}: Bool},
   m: Maybe<&2, List<&2, Ledgers.Vote>>,
   e: {Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s, c) == m: Maybe<&2, List<&2, Ledgers.Vote>>}
 ) -> {
   List.take(
     &2,
     Ledgers.Id,
-    Spec.Steps.taken(Maybe.default(&2, List<&2, Ledgers.Vote>, Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s2, c), [])),
+    Spec.Steps.taken(
+      Maybe.default(
+        &2,
+        List<&2, Ledgers.Vote>,
+        Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s2, c),
+        []
+      )
+    ),
     List.length(&2, Ledgers.Id, Spec.Steps.taken(Maybe.default(&2, List<&2, Ledgers.Vote>, m, [])))
   )
     == Spec.Steps.taken(Maybe.default(&2, List<&2, Ledgers.Vote>, m, [])): List<&2, Ledgers.Id>
@@ -1147,17 +1373,40 @@ def Versions.grow.at(
     case None{}:
       Shared.List.take_zero(
         Ledgers.Id,
-        Spec.Steps.taken(Maybe.default(&2, List<&2, Ledgers.Vote>, Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s2, c), []))
+        Spec.Steps.taken(
+          Maybe.default(
+            &2,
+            List<&2, Ledgers.Vote>,
+            Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s2, c),
+            []
+          )
+        )
       )
     case Some{+xs}:
       Steps.taken_prefix(
         xs,
-        Maybe.default(&2, List<&2, Ledgers.Vote>, Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s2, c), [])
+        Maybe.default(
+          &2,
+          List<&2, Ledgers.Vote>,
+          Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s2, c),
+          []
+        )
       )(
         Steps.of_bind(
           xs,
           Ledgers.Line.steps(~Spec.Ask, ~Spec.Ask.view, s2, c)
-        )(Ledgers.Line.steps_grow(~Spec.Ask, ~Spec.Ask.is_eq, ~Ask.laws(), ~Spec.Ask.view, s, s2, c, xs)(gr)(e))
+        )(
+          Ledgers.Line.steps_grow(
+            ~Spec.Ask,
+            ~Spec.Ask.is_eq,
+            ~Ask.laws(),
+            ~Spec.Ask.view,
+            s,
+            s2,
+            c,
+            xs
+          )(gr)(e)
+        )
       )
 
 def Spec.Node.versions_grow(s, s2, r, b):

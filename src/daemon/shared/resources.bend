@@ -72,22 +72,10 @@ def Name.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Name>>:
 def Name.code_read(
   x: Name,
   r: List<&2, U32>
-) -> {
-  Name.code.read(
-    Name.code(x, r)
-  )
-    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Name>>
-}:
+) -> {Name.code.read(Name.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Name>>}:
   match x:
     case Name{n}:
-      Codes.Code.one_read(
-        ~String,
-        ~Name,
-        ~Codes.Code.text.codec(),
-        a => Name{a},
-        n,
-        r
-      )
+      Codes.Code.one_read(~String, ~Name, ~Codes.Code.text.codec(), a => Name{a}, n, r)
 
 # the code of resource names
 def Name.codec() -> Codes.Codec(Name):

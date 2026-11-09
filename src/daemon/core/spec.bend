@@ -199,7 +199,13 @@ def Content.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Content>>:
           b => Content.Bytes{b},
           r
         ),
-        u => Codes.Code.one.read(~Ledgers.Id, ~Content, ~Ledgers.Id.code.read, v => Content.Of{v}, r)
+        u => Codes.Code.one.read(
+          ~Ledgers.Id,
+          ~Content,
+          ~Ledgers.Id.code.read,
+          v => Content.Of{v},
+          r
+        )
       )
 
 # the change c, then r
@@ -279,11 +285,23 @@ def Change.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Chan
           u => Shared.Bool.when(
             Maybe<&2, Codes.Read<Change>>,
             U32.is_eq(x, 4),
-            u => Codes.Code.one.read(~Ledgers.Id, ~Change, ~Ledgers.Id.code.read, v => Change.Merge{v}, r),
+            u => Codes.Code.one.read(
+              ~Ledgers.Id,
+              ~Change,
+              ~Ledgers.Id.code.read,
+              v => Change.Merge{v},
+              r
+            ),
             u => Shared.Bool.when(
               Maybe<&2, Codes.Read<Change>>,
               U32.is_eq(x, 5),
-              u => Codes.Code.one.read(~Ledgers.Id, ~Change, ~Ledgers.Id.code.read, v => Change.Move{v}, r),
+              u => Codes.Code.one.read(
+                ~Ledgers.Id,
+                ~Change,
+                ~Ledgers.Id.code.read,
+                v => Change.Move{v},
+                r
+              ),
               u => Shared.Bool.when(
                 Maybe<&2, Codes.Read<Change>>,
                 U32.is_eq(x, 6),
@@ -1066,8 +1084,15 @@ def Names.unique(ns: List<&2, Resources.Name>, +seen: Tries.Trie<Unit>) -> List<
 # the resources that ours (the tree h) and theirs (ht) may hold differently,
 # once each: a walk of both trees skips what they share, and where both hold
 # the same bytes a merge keeps them (Format.merge_same)
-def Merge.names(+s: State(), +h: Maybe<&2, Hashes.Hash>, +ht: Maybe<&2, Hashes.Hash>) -> List<&2, Resources.Name>:
-  Names.unique(Res.of.bindings(Trees.Tree.diff(~State(), ~Store.fetch, s, h, ht)), Tries.Trie.new(Unit))
+def Merge.names(
+  s: State(),
+  h: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>
+) -> List<&2, Resources.Name>:
+  Names.unique(
+    Res.of.bindings(Trees.Tree.diff(~State(), ~Store.fetch, s, h, ht)),
+    Tries.Trie.new(Unit)
+  )
 
 # Groups
 # ------
@@ -2649,6 +2674,11 @@ law Node.versions_grow:
   for +b: String
   {Ledgers.State.grows(~Ask, ~Ask.is_eq, s, s2) == True{}: Bool}
     -> {
-      List.take(&2, Ledgers.Id, Node.versions(s2, r, b), List.length(&2, Ledgers.Id, Node.versions(s, r, b)))
+      List.take(
+        &2,
+        Ledgers.Id,
+        Node.versions(s2, r, b),
+        List.length(&2, Ledgers.Id, Node.versions(s, r, b))
+      )
         == Node.versions(s, r, b): List<&2, Ledgers.Id>
     }

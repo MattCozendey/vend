@@ -1841,7 +1841,7 @@ def Trie.keeps_under(
   ~r: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
   a: Trie<V>,
   b: Trie<V>,
-  +k: List<&2, Bool>
+  k: List<&2, Bool>
 ) -> {
   Trie.keeps(~V, ~r, a, b) == True{}: Bool
 } -> {Trie.keeps(~V, ~r, Trie.under(V, a, k), Trie.under(V, b, k)) == True{}: Bool}:
