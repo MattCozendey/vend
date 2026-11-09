@@ -1,5 +1,6 @@
 import Base
 import ./shared.bend as Shared
+import ./text.bend as Texts
 
 # Names
 # -----
@@ -20,54 +21,57 @@ def Name.show(n: Name) -> String:
     case Name{t}:
       t
 # a and b are the same resource
-def Name.same(a: Name, b: Name) -> Bool:
+def Name.is_eq(a: Name, b: Name) -> Bool:
   String.eq(Name.show(a), Name.show(b))
 
-# Name.same is True for a name and itself
-def Name.same_refl(a: Name) -> {Name.same(a, a) == True{}: Bool}:
+# Name.is_eq is True for a name and itself
+def Name.is_eq_refl(a: Name) -> {Name.is_eq(a, a) == True{}: Bool}:
   match a:
     case Name{t}:
-      Shared.String.eq_refl(t)
+      Texts.String.eq_refl(t)
 
-# Name.same is True only for equal names
-def Name.same_sound(a: Name, b: Name) -> {Name.same(a, b) == True{}: Bool} -> {a == b: Name}:
+# Name.is_eq is True only for equal names
+def Name.is_eq_sound(a: Name, b: Name) -> {Name.is_eq(a, b) == True{}: Bool} -> {a == b: Name}:
   match a b:
     case Name{x} Name{y}:
       h =>
-        %Shared.String.eq_sound(x, y)(h): {Name{x} == Name{_}: Name}
+        %Texts.String.eq_sound(x, y)(h): {Name{x} == Name{_}: Name}
         {==}
 
+# the laws of Name.is_eq
+def Name.laws() -> Shared.Eq.Laws(Name, Name.is_eq):
+  (Name.is_eq_refl, Name.is_eq_sound)
 # the space in the cut c of the text t: t itself when it has no ':'
-def Name.space.cut(c: Maybe<&2, Shared.Cut>, t: String) -> String:
+def Name.space.cut(c: Maybe<&2, Texts.Cut<String>>, t: String) -> String:
   match c:
     case None{}:
       t
-    case Some{Shared.Cut{sp, p}}:
+    case Some{Texts.Cut{sp, p}}:
       sp
 # the space of n
 def Name.space(n: Name) -> String:
   match n:
     case Name{+t}:
-      Name.space.cut(Shared.Text.cut(t, 58), t)
+      Name.space.cut(Texts.Text.cut(t, 58), t)
 # the path in the cut c: none when the text has no ':'
-def Name.path.cut(c: Maybe<&2, Shared.Cut>) -> String:
+def Name.path.cut(c: Maybe<&2, Texts.Cut<String>>) -> String:
   match c:
     case None{}:
       ""
-    case Some{Shared.Cut{sp, p}}:
+    case Some{Texts.Cut{sp, p}}:
       p
 # the path of n
 def Name.path(n: Name) -> String:
   match n:
     case Name{t}:
-      Name.path.cut(Shared.Text.cut(t, 58))
+      Name.path.cut(Texts.Text.cut(t, 58))
 # the name of the text t; None when t has no ':'
 def Name.read(+t: String) -> Maybe<&2, Name>:
-  Shared.Bool.when(Maybe<&2, Name>, Shared.Text.has(t, 58), u => Some{Name{t}}, u => None{})
+  Shared.Bool.when(Maybe<&2, Name>, Texts.Text.has(t, 58), u => Some{Name{t}}, u => None{})
 # a name whose text holds a ':' reads back from its text
 law name_read_after_show:
   for n: Name
-  for v: {Shared.Text.has(Name.show(n), 58) == True{}: Bool}
+  for v: {Texts.Text.has(Name.show(n), 58) == True{}: Bool}
   {Name.read(Name.show(n)) == Some{n}: Maybe<&2, Name>}
 
 def name_read_after_show(n, v):
@@ -75,7 +79,7 @@ def name_read_after_show(n, v):
     case Name{t}:
       %Equal.sym(
         Bool,
-        Shared.Text.has(t, 58),
+        Texts.Text.has(t, 58),
         True{},
         v
       ): {
@@ -95,7 +99,7 @@ law name_show_after_read.at:
   for t: String
   for n: Name
   {
-    Shared.Text.has(t, 58) == hit: Bool
+    Texts.Text.has(t, 58) == hit: Bool
   } -> {
     Shared.Bool.when(
       Maybe<&2, Name>,
@@ -142,7 +146,7 @@ law name_show_after_read:
 
 def name_show_after_read(t, n, h):
   +t = t
-  name_show_after_read.at(Shared.Text.has(t, 58), t, n)({==})(h)
+  name_show_after_read.at(Texts.Text.has(t, 58), t, n)({==})(h)
 
 # Paths
 # -----

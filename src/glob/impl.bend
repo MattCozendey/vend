@@ -1,4 +1,5 @@
 import Base
+import ../shared/shared.bend as Shared
 import ./spec.bend as Spec
 
 # Equality
@@ -6,142 +7,11 @@ import ./spec.bend as Spec
 # Each is_eq answers True only for equal values (its is_eq_sound), so a
 # membership test can stand for the member itself.
 
-# Unit when c is not EQ
-def Cmp.Ne(c: Cmp) -> Type:
-  match c:
-    case LT{}:
-      Unit
-    case EQ{}:
-      Empty
-    case GT{}:
-      Unit
-
-# no c that is not EQ equals EQ
-def Cmp.ne_eq(-c: Cmp, n: Cmp.Ne(c), e: {c == EQ{}: Cmp}) -> Empty:
-  %e: Cmp.Ne(_)
-  n
-
-# Bool.cmp is EQ only for equal Bools
-def Bool.cmp_eq(a: Bool, b: Bool) -> {Bool.cmp(a, b) == EQ{}: Cmp} -> {a == b: Bool}:
-  match a b:
-    case False{} False{}:
-      h => {==}
-    case False{} True{}:
-      h => Empty.absurd({False{} == True{}: Bool}, Cmp.ne_eq(LT{}, Unit{}, h))
-    case True{} False{}:
-      h => Empty.absurd({True{} == False{}: Bool}, Cmp.ne_eq(GT{}, Unit{}, h))
-    case True{} True{}:
-      h => {==}
-
-# the last step of Word.cmp_eq, with t the comparison of the tails
-def Word.cmp_eq.fin(
-  -p: Nat,
-  ab: Bool,
-  bb: Bool,
-  -at: Word(p),
-  -bt: Word(p),
-  t: Cmp,
-  ih: {Word.cmp(p, at, bt) == EQ{}: Cmp} -> {at == bt: Word(p)}
-) -> {
-  Word.cmp(p, at, bt) == t: Cmp
-} -> {Word.cmp.fin(ab, bb, t) == EQ{}: Cmp} -> {WCon{ab, at} == WCon{bb, bt}: Word(1n+p)}:
-  match t:
-    case LT{}:
-      e => h => Empty.absurd({WCon{ab, at} == WCon{bb, bt}: Word(1n+p)}, Cmp.ne_eq(LT{}, Unit{}, h))
-    case EQ{}:
-      e => h =>
-        %Bool.cmp_eq(ab, bb)(h): {WCon{ab, at} == WCon{_, bt}: Word(1n+p)}
-        %ih(e): {WCon{ab, at} == WCon{ab, _}: Word(1n+p)}
-        {==}
-    case GT{}:
-      e => h => Empty.absurd({WCon{ab, at} == WCon{bb, bt}: Word(1n+p)}, Cmp.ne_eq(GT{}, Unit{}, h))
-
-# Word.cmp is EQ only for equal words
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- only proofs use it; no program runs it
-def Word.cmp_eq(
-  +n: Nat,
-  a: Word(n),
-  b: Word(n)
-) -> {Word.cmp(n, a, b) == EQ{}: Cmp} -> {a == b: Word(n)}:
-  match n:
-    case 0n:
-      match a b:
-        case WNil{} WNil{}:
-          _ => {==}
-    case 1n+p:
-      match a b:
-        case WCon{ab, +at} WCon{bb, +bt}:
-          h => Word.cmp_eq.fin(
-            p,
-            ab,
-            bb,
-            at,
-            bt,
-            Word.cmp(p, at, bt),
-            Word.cmp_eq(p, at, bt)
-          )({==}, h)
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
-
-# no False equals True
-def Bool.false_ne_true(e: {False{} == True{}: Bool}) -> Empty:
-  %e: Bool.pick(Type, _, Empty, Unit)
-  Unit{}
-
-# Cmp.is_eq is True only for EQ
-def Cmp.is_eq_sound(c: Cmp) -> {Cmp.is_eq(c) == True{}: Bool} -> {c == EQ{}: Cmp}:
-  match c:
-    case LT{}:
-      h => Empty.absurd({LT{} == EQ{}: Cmp}, Bool.false_ne_true(h))
-    case EQ{}:
-      h => {==}
-    case GT{}:
-      h => Empty.absurd({GT{} == EQ{}: Cmp}, Bool.false_ne_true(h))
-
-# U32.is_eq is True only for equal numbers
-def U32.is_eq_sound(a: U32, b: U32) -> {U32.is_eq(a, b) == True{}: Bool} -> {a == b: U32}:
-  match a b:
-    case U32{+x} U32{+y}:
-      h =>
-        e = Word.cmp_eq(32n, x, y)(Cmp.is_eq_sound(Word.cmp(32n, x, y))(h))
-        Equal.cong(Word(32n), U32, w => U32{w}, x, y, e)
-
 # Char.is_eq is True only for equal characters
 def Char.is_eq_sound(a: Char, b: Char) -> {Char.is_eq(a, b) == True{}: Bool} -> {a == b: Char}:
   match a b:
     case Chr{x} Chr{y}:
-      h => Equal.cong(U32, Char, u => Chr{u}, x, y, U32.is_eq_sound(x, y)(h))
-
-# a and b are the same Bool
-def Bool.is_eq(a: Bool, b: Bool) -> Bool:
-  Bool.not(Bool.xor(a, b))
-
-# Bool.is_eq is True only for the same Bool
-def Bool.is_eq_sound(a: Bool, b: Bool) -> {Bool.is_eq(a, b) == True{}: Bool} -> {a == b: Bool}:
-  match a b:
-    case False{} False{}:
-      h => {==}
-    case False{} True{}:
-      h => Empty.absurd({False{} == True{}: Bool}, Bool.false_ne_true(h))
-    case True{} False{}:
-      h => Empty.absurd({True{} == False{}: Bool}, Bool.false_ne_true(h))
-    case True{} True{}:
-      h => {==}
-
-# the left side of a True conjunction is True
-def Bool.and_left(a: Bool, -b: Bool) -> {Bool.and(a, b) == True{}: Bool} -> {a == True{}: Bool}:
-  match a:
-    case False{}:
-      h => h
-    case True{}:
-      h => {==}
-
-# the right side of a True conjunction is True
-def Bool.and_right(a: Bool, b: Bool) -> {Bool.and(a, b) == True{}: Bool} -> {b == True{}: Bool}:
-  match a:
-    case False{}:
-      h => Empty.absurd({b == True{}: Bool}, Bool.false_ne_true(h))
-    case True{}:
-      h => h
+      h => Equal.cong(U32, Char, u => Chr{u}, x, y, Shared.U32.is_eq_sound(x, y)(h))
 
 # xs and ys are the same characters
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
@@ -165,22 +35,22 @@ def Chars.is_eq_sound(
     case Nil{} Nil{}:
       _ => {==}
     case Nil{} Con{y, yt}:
-      h => Empty.absurd({Nil{} == Con{y, yt}: List<&2, Char>}, Bool.false_ne_true(h))
+      h => Empty.absurd({Nil{} == Con{y, yt}: List<&2, Char>}, Shared.Bool.false_ne_true(h))
     case Con{x, xt} Nil{}:
-      h => Empty.absurd({Con{x, xt} == Nil{}: List<&2, Char>}, Bool.false_ne_true(h))
+      h => Empty.absurd({Con{x, xt} == Nil{}: List<&2, Char>}, Shared.Bool.false_ne_true(h))
     case Con{+x, +xt} Con{+y, +yt}:
       +h =>
         %Char.is_eq_sound(
           x,
           y
         )(
-          Bool.and_left(Char.is_eq(x, y), Chars.is_eq(xt, yt))(h)
+          Shared.Bool.and_true_left(Char.is_eq(x, y), Chars.is_eq(xt, yt))(h)
         ): {Con{x, xt} == Con{_, yt}: List<&2, Char>}
         %Chars.is_eq_sound(
           xt,
           yt
         )(
-          Bool.and_right(Char.is_eq(x, y), Chars.is_eq(xt, yt))(h)
+          Shared.Bool.and_true_right(Char.is_eq(x, y), Chars.is_eq(xt, yt))(h)
         ): {Con{x, xt} == Con{x, _}: List<&2, Char>}
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
@@ -200,7 +70,7 @@ def Glob.is_eq(a: Spec.Glob, b: Spec.Glob) -> Bool:
     case Spec.star{} Spec.star{}:
       True{}
     case Spec.class{n1, cs1} Spec.class{n2, cs2}:
-      Bool.and(Bool.is_eq(n1, n2), Chars.is_eq(cs1, cs2))
+      Bool.and(Shared.Bool.is_eq(n1, n2), Chars.is_eq(cs1, cs2))
     case Spec.deep{} Spec.deep{}:
       True{}
     case Spec.cat{a1, b1} Spec.cat{a2, b2}:
@@ -221,214 +91,262 @@ def Glob.is_eq_sound(
     case Spec.void{} Spec.void{}:
       _ => {==}
     case Spec.void{} Spec.eps{}:
-      h => Empty.absurd({Spec.void{} == Spec.eps{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.void{} == Spec.eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.void{} Spec.lit{x2}:
-      h => Empty.absurd({Spec.void{} == Spec.lit{x2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.void{} == Spec.lit{x2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.void{} Spec.any{}:
-      h => Empty.absurd({Spec.void{} == Spec.any{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.void{} == Spec.any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.void{} Spec.star{}:
-      h => Empty.absurd({Spec.void{} == Spec.star{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.void{} == Spec.star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.void{} Spec.class{n2, cs2}:
-      h => Empty.absurd({Spec.void{} == Spec.class{n2, cs2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.void{} == Spec.class{n2, cs2}: Spec.Glob},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.void{} Spec.deep{}:
-      h => Empty.absurd({Spec.void{} == Spec.deep{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.void{} == Spec.deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.void{} Spec.cat{a2, b2}:
-      h => Empty.absurd({Spec.void{} == Spec.cat{a2, b2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.void{} == Spec.cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.void{} Spec.alt{a2, b2}:
-      h => Empty.absurd({Spec.void{} == Spec.alt{a2, b2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.void{} == Spec.alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.eps{} Spec.void{}:
-      h => Empty.absurd({Spec.eps{} == Spec.void{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.eps{} == Spec.void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.eps{} Spec.eps{}:
       _ => {==}
     case Spec.eps{} Spec.lit{x2}:
-      h => Empty.absurd({Spec.eps{} == Spec.lit{x2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.eps{} == Spec.lit{x2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.eps{} Spec.any{}:
-      h => Empty.absurd({Spec.eps{} == Spec.any{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.eps{} == Spec.any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.eps{} Spec.star{}:
-      h => Empty.absurd({Spec.eps{} == Spec.star{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.eps{} == Spec.star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.eps{} Spec.class{n2, cs2}:
-      h => Empty.absurd({Spec.eps{} == Spec.class{n2, cs2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.eps{} == Spec.class{n2, cs2}: Spec.Glob},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.eps{} Spec.deep{}:
-      h => Empty.absurd({Spec.eps{} == Spec.deep{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.eps{} == Spec.deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.eps{} Spec.cat{a2, b2}:
-      h => Empty.absurd({Spec.eps{} == Spec.cat{a2, b2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.eps{} == Spec.cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.eps{} Spec.alt{a2, b2}:
-      h => Empty.absurd({Spec.eps{} == Spec.alt{a2, b2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.eps{} == Spec.alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.lit{x1} Spec.void{}:
-      h => Empty.absurd({Spec.lit{x1} == Spec.void{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.lit{x1} == Spec.void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.lit{+x1} Spec.eps{}:
-      h => Empty.absurd({Spec.lit{x1} == Spec.eps{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.lit{x1} == Spec.eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.lit{+x1} Spec.lit{x2}:
       h => Equal.cong(Char, Spec.Glob, c => Spec.lit{c}, x1, x2, Char.is_eq_sound(x1, x2)(h))
     case Spec.lit{+x1} Spec.any{}:
-      h => Empty.absurd({Spec.lit{x1} == Spec.any{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.lit{x1} == Spec.any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.lit{+x1} Spec.star{}:
-      h => Empty.absurd({Spec.lit{x1} == Spec.star{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.lit{x1} == Spec.star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.lit{+x1} Spec.class{n2, cs2}:
-      h => Empty.absurd({Spec.lit{x1} == Spec.class{n2, cs2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.lit{x1} == Spec.class{n2, cs2}: Spec.Glob},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.lit{+x1} Spec.deep{}:
-      h => Empty.absurd({Spec.lit{x1} == Spec.deep{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.lit{x1} == Spec.deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.lit{+x1} Spec.cat{a2, b2}:
-      h => Empty.absurd({Spec.lit{x1} == Spec.cat{a2, b2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.lit{x1} == Spec.cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.lit{+x1} Spec.alt{a2, b2}:
-      h => Empty.absurd({Spec.lit{x1} == Spec.alt{a2, b2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.lit{x1} == Spec.alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.any{} Spec.void{}:
-      h => Empty.absurd({Spec.any{} == Spec.void{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.any{} == Spec.void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.any{} Spec.eps{}:
-      h => Empty.absurd({Spec.any{} == Spec.eps{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.any{} == Spec.eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.any{} Spec.lit{x2}:
-      h => Empty.absurd({Spec.any{} == Spec.lit{x2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.any{} == Spec.lit{x2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.any{} Spec.any{}:
       _ => {==}
     case Spec.any{} Spec.star{}:
-      h => Empty.absurd({Spec.any{} == Spec.star{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.any{} == Spec.star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.any{} Spec.class{n2, cs2}:
-      h => Empty.absurd({Spec.any{} == Spec.class{n2, cs2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.any{} == Spec.class{n2, cs2}: Spec.Glob},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.any{} Spec.deep{}:
-      h => Empty.absurd({Spec.any{} == Spec.deep{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.any{} == Spec.deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.any{} Spec.cat{a2, b2}:
-      h => Empty.absurd({Spec.any{} == Spec.cat{a2, b2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.any{} == Spec.cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.any{} Spec.alt{a2, b2}:
-      h => Empty.absurd({Spec.any{} == Spec.alt{a2, b2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.any{} == Spec.alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.star{} Spec.void{}:
-      h => Empty.absurd({Spec.star{} == Spec.void{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.star{} == Spec.void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.star{} Spec.eps{}:
-      h => Empty.absurd({Spec.star{} == Spec.eps{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.star{} == Spec.eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.star{} Spec.lit{x2}:
-      h => Empty.absurd({Spec.star{} == Spec.lit{x2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.star{} == Spec.lit{x2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.star{} Spec.any{}:
-      h => Empty.absurd({Spec.star{} == Spec.any{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.star{} == Spec.any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.star{} Spec.star{}:
       _ => {==}
     case Spec.star{} Spec.class{n2, cs2}:
-      h => Empty.absurd({Spec.star{} == Spec.class{n2, cs2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.star{} == Spec.class{n2, cs2}: Spec.Glob},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.star{} Spec.deep{}:
-      h => Empty.absurd({Spec.star{} == Spec.deep{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.star{} == Spec.deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.star{} Spec.cat{a2, b2}:
-      h => Empty.absurd({Spec.star{} == Spec.cat{a2, b2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.star{} == Spec.cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.star{} Spec.alt{a2, b2}:
-      h => Empty.absurd({Spec.star{} == Spec.alt{a2, b2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.star{} == Spec.alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.class{+n1, +cs1} Spec.void{}:
-      +h => Empty.absurd({Spec.class{n1, cs1} == Spec.void{}: Spec.Glob}, Bool.false_ne_true(h))
+      +h => Empty.absurd(
+        {Spec.class{n1, cs1} == Spec.void{}: Spec.Glob},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.class{+n1, +cs1} Spec.eps{}:
-      +h => Empty.absurd({Spec.class{n1, cs1} == Spec.eps{}: Spec.Glob}, Bool.false_ne_true(h))
+      +h => Empty.absurd(
+        {Spec.class{n1, cs1} == Spec.eps{}: Spec.Glob},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.class{+n1, +cs1} Spec.lit{x2}:
-      +h => Empty.absurd({Spec.class{n1, cs1} == Spec.lit{x2}: Spec.Glob}, Bool.false_ne_true(h))
+      +h => Empty.absurd(
+        {Spec.class{n1, cs1} == Spec.lit{x2}: Spec.Glob},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.class{+n1, +cs1} Spec.any{}:
-      +h => Empty.absurd({Spec.class{n1, cs1} == Spec.any{}: Spec.Glob}, Bool.false_ne_true(h))
+      +h => Empty.absurd(
+        {Spec.class{n1, cs1} == Spec.any{}: Spec.Glob},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.class{+n1, +cs1} Spec.star{}:
-      +h => Empty.absurd({Spec.class{n1, cs1} == Spec.star{}: Spec.Glob}, Bool.false_ne_true(h))
+      +h => Empty.absurd(
+        {Spec.class{n1, cs1} == Spec.star{}: Spec.Glob},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.class{+n1, +cs1} Spec.class{+n2, +cs2}:
       +h =>
-        %Bool.is_eq_sound(
+        %Shared.Bool.is_eq_sound(
           n1,
           n2
         )(
-          Bool.and_left(Bool.is_eq(n1, n2), Chars.is_eq(cs1, cs2))(h)
+          Shared.Bool.and_true_left(Shared.Bool.is_eq(n1, n2), Chars.is_eq(cs1, cs2))(h)
         ): {Spec.class{n1, cs1} == Spec.class{_, cs2}: Spec.Glob}
         %Chars.is_eq_sound(
           cs1,
           cs2
         )(
-          Bool.and_right(Bool.is_eq(n1, n2), Chars.is_eq(cs1, cs2))(h)
+          Shared.Bool.and_true_right(Shared.Bool.is_eq(n1, n2), Chars.is_eq(cs1, cs2))(h)
         ): {Spec.class{n1, cs1} == Spec.class{n1, _}: Spec.Glob}
         {==}
     case Spec.class{+n1, +cs1} Spec.deep{}:
-      +h => Empty.absurd({Spec.class{n1, cs1} == Spec.deep{}: Spec.Glob}, Bool.false_ne_true(h))
+      +h => Empty.absurd(
+        {Spec.class{n1, cs1} == Spec.deep{}: Spec.Glob},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.class{+n1, +cs1} Spec.cat{a2, b2}:
       +h => Empty.absurd(
         {Spec.class{n1, cs1} == Spec.cat{a2, b2}: Spec.Glob},
-        Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case Spec.class{+n1, +cs1} Spec.alt{a2, b2}:
       +h => Empty.absurd(
         {Spec.class{n1, cs1} == Spec.alt{a2, b2}: Spec.Glob},
-        Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case Spec.deep{} Spec.void{}:
-      h => Empty.absurd({Spec.deep{} == Spec.void{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.deep{} == Spec.void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.deep{} Spec.eps{}:
-      h => Empty.absurd({Spec.deep{} == Spec.eps{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.deep{} == Spec.eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.deep{} Spec.lit{x2}:
-      h => Empty.absurd({Spec.deep{} == Spec.lit{x2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.deep{} == Spec.lit{x2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.deep{} Spec.any{}:
-      h => Empty.absurd({Spec.deep{} == Spec.any{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.deep{} == Spec.any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.deep{} Spec.star{}:
-      h => Empty.absurd({Spec.deep{} == Spec.star{}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.deep{} == Spec.star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.deep{} Spec.class{n2, cs2}:
-      h => Empty.absurd({Spec.deep{} == Spec.class{n2, cs2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Spec.deep{} == Spec.class{n2, cs2}: Spec.Glob},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.deep{} Spec.deep{}:
       _ => {==}
     case Spec.deep{} Spec.cat{a2, b2}:
-      h => Empty.absurd({Spec.deep{} == Spec.cat{a2, b2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.deep{} == Spec.cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.deep{} Spec.alt{a2, b2}:
-      h => Empty.absurd({Spec.deep{} == Spec.alt{a2, b2}: Spec.Glob}, Bool.false_ne_true(h))
+      h => Empty.absurd({Spec.deep{} == Spec.alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.cat{+a1, +b1} Spec.void{}:
-      +h => Empty.absurd({Spec.cat{a1, b1} == Spec.void{}: Spec.Glob}, Bool.false_ne_true(h))
+      +h => Empty.absurd({Spec.cat{a1, b1} == Spec.void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.cat{+a1, +b1} Spec.eps{}:
-      +h => Empty.absurd({Spec.cat{a1, b1} == Spec.eps{}: Spec.Glob}, Bool.false_ne_true(h))
+      +h => Empty.absurd({Spec.cat{a1, b1} == Spec.eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.cat{+a1, +b1} Spec.lit{x2}:
-      +h => Empty.absurd({Spec.cat{a1, b1} == Spec.lit{x2}: Spec.Glob}, Bool.false_ne_true(h))
+      +h => Empty.absurd(
+        {Spec.cat{a1, b1} == Spec.lit{x2}: Spec.Glob},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.cat{+a1, +b1} Spec.any{}:
-      +h => Empty.absurd({Spec.cat{a1, b1} == Spec.any{}: Spec.Glob}, Bool.false_ne_true(h))
+      +h => Empty.absurd({Spec.cat{a1, b1} == Spec.any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.cat{+a1, +b1} Spec.star{}:
-      +h => Empty.absurd({Spec.cat{a1, b1} == Spec.star{}: Spec.Glob}, Bool.false_ne_true(h))
+      +h => Empty.absurd({Spec.cat{a1, b1} == Spec.star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.cat{+a1, +b1} Spec.class{n2, cs2}:
       +h => Empty.absurd(
         {Spec.cat{a1, b1} == Spec.class{n2, cs2}: Spec.Glob},
-        Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case Spec.cat{+a1, +b1} Spec.deep{}:
-      +h => Empty.absurd({Spec.cat{a1, b1} == Spec.deep{}: Spec.Glob}, Bool.false_ne_true(h))
+      +h => Empty.absurd({Spec.cat{a1, b1} == Spec.deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.cat{+a1, +b1} Spec.cat{+a2, +b2}:
       +h =>
         %Glob.is_eq_sound(
           a1,
           a2
         )(
-          Bool.and_left(Glob.is_eq(a1, a2), Glob.is_eq(b1, b2))(h)
+          Shared.Bool.and_true_left(Glob.is_eq(a1, a2), Glob.is_eq(b1, b2))(h)
         ): {Spec.cat{a1, b1} == Spec.cat{_, b2}: Spec.Glob}
         %Glob.is_eq_sound(
           b1,
           b2
         )(
-          Bool.and_right(Glob.is_eq(a1, a2), Glob.is_eq(b1, b2))(h)
+          Shared.Bool.and_true_right(Glob.is_eq(a1, a2), Glob.is_eq(b1, b2))(h)
         ): {Spec.cat{a1, b1} == Spec.cat{a1, _}: Spec.Glob}
         {==}
     case Spec.cat{+a1, +b1} Spec.alt{a2, b2}:
-      +h => Empty.absurd({Spec.cat{a1, b1} == Spec.alt{a2, b2}: Spec.Glob}, Bool.false_ne_true(h))
+      +h => Empty.absurd(
+        {Spec.cat{a1, b1} == Spec.alt{a2, b2}: Spec.Glob},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.alt{+a1, +b1} Spec.void{}:
-      +h => Empty.absurd({Spec.alt{a1, b1} == Spec.void{}: Spec.Glob}, Bool.false_ne_true(h))
+      +h => Empty.absurd({Spec.alt{a1, b1} == Spec.void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.alt{+a1, +b1} Spec.eps{}:
-      +h => Empty.absurd({Spec.alt{a1, b1} == Spec.eps{}: Spec.Glob}, Bool.false_ne_true(h))
+      +h => Empty.absurd({Spec.alt{a1, b1} == Spec.eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.alt{+a1, +b1} Spec.lit{x2}:
-      +h => Empty.absurd({Spec.alt{a1, b1} == Spec.lit{x2}: Spec.Glob}, Bool.false_ne_true(h))
+      +h => Empty.absurd(
+        {Spec.alt{a1, b1} == Spec.lit{x2}: Spec.Glob},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.alt{+a1, +b1} Spec.any{}:
-      +h => Empty.absurd({Spec.alt{a1, b1} == Spec.any{}: Spec.Glob}, Bool.false_ne_true(h))
+      +h => Empty.absurd({Spec.alt{a1, b1} == Spec.any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.alt{+a1, +b1} Spec.star{}:
-      +h => Empty.absurd({Spec.alt{a1, b1} == Spec.star{}: Spec.Glob}, Bool.false_ne_true(h))
+      +h => Empty.absurd({Spec.alt{a1, b1} == Spec.star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.alt{+a1, +b1} Spec.class{n2, cs2}:
       +h => Empty.absurd(
         {Spec.alt{a1, b1} == Spec.class{n2, cs2}: Spec.Glob},
-        Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case Spec.alt{+a1, +b1} Spec.deep{}:
-      +h => Empty.absurd({Spec.alt{a1, b1} == Spec.deep{}: Spec.Glob}, Bool.false_ne_true(h))
+      +h => Empty.absurd({Spec.alt{a1, b1} == Spec.deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
     case Spec.alt{+a1, +b1} Spec.cat{a2, b2}:
-      +h => Empty.absurd({Spec.alt{a1, b1} == Spec.cat{a2, b2}: Spec.Glob}, Bool.false_ne_true(h))
+      +h => Empty.absurd(
+        {Spec.alt{a1, b1} == Spec.cat{a2, b2}: Spec.Glob},
+        Shared.Bool.false_ne_true(h)
+      )
     case Spec.alt{+a1, +b1} Spec.alt{+a2, +b2}:
       +h =>
         %Glob.is_eq_sound(
           a1,
           a2
         )(
-          Bool.and_left(Glob.is_eq(a1, a2), Glob.is_eq(b1, b2))(h)
+          Shared.Bool.and_true_left(Glob.is_eq(a1, a2), Glob.is_eq(b1, b2))(h)
         ): {Spec.alt{a1, b1} == Spec.alt{_, b2}: Spec.Glob}
         %Glob.is_eq_sound(
           b1,
           b2
         )(
-          Bool.and_right(Glob.is_eq(a1, a2), Glob.is_eq(b1, b2))(h)
+          Shared.Bool.and_true_right(Glob.is_eq(a1, a2), Glob.is_eq(b1, b2))(h)
         ): {Spec.alt{a1, b1} == Spec.alt{a1, _}: Spec.Glob}
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
@@ -1275,14 +1193,17 @@ def Seq.is_eq_sound(
     case Nil{} Nil{}:
       _ => {==}
     case Nil{} Con{y, yt}:
-      h => Empty.absurd({Nil{} == Con{y, yt}: List<&2, Spec.Glob>}, Bool.false_ne_true(h))
+      h => Empty.absurd({Nil{} == Con{y, yt}: List<&2, Spec.Glob>}, Shared.Bool.false_ne_true(h))
     case Con{x, xt} Nil{}:
-      h => Empty.absurd({Con{x, xt} == Nil{}: List<&2, Spec.Glob>}, Bool.false_ne_true(h))
+      h => Empty.absurd({Con{x, xt} == Nil{}: List<&2, Spec.Glob>}, Shared.Bool.false_ne_true(h))
     case Con{+x, +xt} Con{+y, +yt}:
       +h =>
-        %Glob.is_eq_sound(x, y)(Bool.and_left(Glob.is_eq(x, y), Seq.is_eq(xt, yt))(h)):
+        %Glob.is_eq_sound(x, y)(Shared.Bool.and_true_left(Glob.is_eq(x, y), Seq.is_eq(xt, yt))(h)):
           {Con{x, xt} == Con{_, yt}: List<&2, Spec.Glob>}
-        %Seq.is_eq_sound(xt, yt)(Bool.and_right(Glob.is_eq(x, y), Seq.is_eq(xt, yt))(h)):
+        %Seq.is_eq_sound(
+          xt,
+          yt
+        )(Shared.Bool.and_true_right(Glob.is_eq(x, y), Seq.is_eq(xt, yt))(h)):
           {Con{x, xt} == Con{x, _}: List<&2, Spec.Glob>}
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
@@ -1351,7 +1272,7 @@ def Seqs.has_absorb(
     case Nil{}:
       h => Empty.absurd(
         {False{} == Bool.or(Spec.Glob.matches(t, Seq.glob(x)), False{}): Bool},
-        Bool.false_ne_true(h)
+        Shared.Bool.false_ne_true(h)
       )
     case Con{+hd, +r}:
       h => Seqs.has_absorb.at(hd, r, x, t, Seq.is_eq(hd, x), Seqs.has_absorb(r, x, t))({==}, h)
@@ -1645,14 +1566,23 @@ def Seqs.is_eq_sound(
     case Nil{} Nil{}:
       _ => {==}
     case Nil{} Con{y, yt}:
-      h => Empty.absurd({Nil{} == Con{y, yt}: List<&2, List<&2, Spec.Glob>>}, Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Nil{} == Con{y, yt}: List<&2, List<&2, Spec.Glob>>},
+        Shared.Bool.false_ne_true(h)
+      )
     case Con{x, xt} Nil{}:
-      h => Empty.absurd({Con{x, xt} == Nil{}: List<&2, List<&2, Spec.Glob>>}, Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Con{x, xt} == Nil{}: List<&2, List<&2, Spec.Glob>>},
+        Shared.Bool.false_ne_true(h)
+      )
     case Con{+x, +xt} Con{+y, +yt}:
       +h =>
-        %Seq.is_eq_sound(x, y)(Bool.and_left(Seq.is_eq(x, y), Seqs.is_eq(xt, yt))(h)):
+        %Seq.is_eq_sound(x, y)(Shared.Bool.and_true_left(Seq.is_eq(x, y), Seqs.is_eq(xt, yt))(h)):
           {Con{x, xt} == Con{_, yt}: List<&2, List<&2, Spec.Glob>>}
-        %Seqs.is_eq_sound(xt, yt)(Bool.and_right(Seq.is_eq(x, y), Seqs.is_eq(xt, yt))(h)):
+        %Seqs.is_eq_sound(
+          xt,
+          yt
+        )(Shared.Bool.and_true_right(Seq.is_eq(x, y), Seqs.is_eq(xt, yt))(h)):
           {Con{x, xt} == Con{x, _}: List<&2, List<&2, Spec.Glob>>}
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
@@ -1681,25 +1611,43 @@ def Slots.is_eq_sound(
     case Nil{} Nil{}:
       _ => {==}
     case Nil{} Con{y, bt}:
-      h => Empty.absurd({Nil{} == Con{y, bt}: List<&2, Slot>}, Bool.false_ne_true(h))
+      h => Empty.absurd({Nil{} == Con{y, bt}: List<&2, Slot>}, Shared.Bool.false_ne_true(h))
     case Con{x, at} Nil{}:
-      h => Empty.absurd({Con{x, at} == Nil{}: List<&2, Slot>}, Bool.false_ne_true(h))
+      h => Empty.absurd({Con{x, at} == Nil{}: List<&2, Slot>}, Shared.Bool.false_ne_true(h))
     case Con{inc{x}, at} Con{exc{y}, bt}:
-      h => Empty.absurd({Con{inc{x}, at} == Con{exc{y}, bt}: List<&2, Slot>}, Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Con{inc{x}, at} == Con{exc{y}, bt}: List<&2, Slot>},
+        Shared.Bool.false_ne_true(h)
+      )
     case Con{exc{x}, at} Con{inc{y}, bt}:
-      h => Empty.absurd({Con{exc{x}, at} == Con{inc{y}, bt}: List<&2, Slot>}, Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Con{exc{x}, at} == Con{inc{y}, bt}: List<&2, Slot>},
+        Shared.Bool.false_ne_true(h)
+      )
     case Con{inc{+x}, +at} Con{inc{+y}, +bt}:
       +h =>
-        %Seqs.is_eq_sound(x, y)(Bool.and_left(Seqs.is_eq(x, y), Slots.is_eq(at, bt))(h)):
+        %Seqs.is_eq_sound(
+          x,
+          y
+        )(Shared.Bool.and_true_left(Seqs.is_eq(x, y), Slots.is_eq(at, bt))(h)):
           {Con{inc{x}, at} == Con{inc{_}, bt}: List<&2, Slot>}
-        %Slots.is_eq_sound(at, bt)(Bool.and_right(Seqs.is_eq(x, y), Slots.is_eq(at, bt))(h)):
+        %Slots.is_eq_sound(
+          at,
+          bt
+        )(Shared.Bool.and_true_right(Seqs.is_eq(x, y), Slots.is_eq(at, bt))(h)):
           {Con{inc{x}, at} == Con{inc{x}, _}: List<&2, Slot>}
         {==}
     case Con{exc{+x}, +at} Con{exc{+y}, +bt}:
       +h =>
-        %Seqs.is_eq_sound(x, y)(Bool.and_left(Seqs.is_eq(x, y), Slots.is_eq(at, bt))(h)):
+        %Seqs.is_eq_sound(
+          x,
+          y
+        )(Shared.Bool.and_true_left(Seqs.is_eq(x, y), Slots.is_eq(at, bt))(h)):
           {Con{exc{x}, at} == Con{exc{_}, bt}: List<&2, Slot>}
-        %Slots.is_eq_sound(at, bt)(Bool.and_right(Seqs.is_eq(x, y), Slots.is_eq(at, bt))(h)):
+        %Slots.is_eq_sound(
+          at,
+          bt
+        )(Shared.Bool.and_true_right(Seqs.is_eq(x, y), Slots.is_eq(at, bt))(h)):
           {Con{exc{x}, at} == Con{exc{x}, _}: List<&2, Slot>}
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
@@ -1744,7 +1692,7 @@ def St.step(x: St, +c: Char) -> St:
 def St.is_eq(x: St, y: St) -> Bool:
   match x y:
     case St{n, a, b} St{m, c, d}:
-      Bool.and(Bool.is_eq(n, m), Bool.and(Slots.is_eq(a, c), Slots.is_eq(b, d)))
+      Bool.and(Shared.Bool.is_eq(n, m), Bool.and(Slots.is_eq(a, c), Slots.is_eq(b, d)))
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # St.is_eq is True only for the same state
@@ -1754,13 +1702,21 @@ def St.is_eq_sound(x: St, y: St) -> {St.is_eq(x, y) == True{}: Bool} -> {x == y:
       +h =>
         +sa = Slots.is_eq(a, c)
         +sb = Slots.is_eq(b, d)
-        +rest = Bool.and_right(Bool.is_eq(n, m), Bool.and(sa, sb))(h)
-        %Bool.is_eq_sound(
+        +rest = Shared.Bool.and_true_right(Shared.Bool.is_eq(n, m), Bool.and(sa, sb))(h)
+        %Shared.Bool.is_eq_sound(
           n,
           m
-        )(Bool.and_left(Bool.is_eq(n, m), Bool.and(sa, sb))(h)): {St{n, a, b} == St{_, c, d}: St}
-        %Slots.is_eq_sound(a, c)(Bool.and_left(sa, sb)(rest)): {St{n, a, b} == St{n, _, d}: St}
-        %Slots.is_eq_sound(b, d)(Bool.and_right(sa, sb)(rest)): {St{n, a, b} == St{n, a, _}: St}
+        )(
+          Shared.Bool.and_true_left(Shared.Bool.is_eq(n, m), Bool.and(sa, sb))(h)
+        ): {St{n, a, b} == St{_, c, d}: St}
+        %Slots.is_eq_sound(
+          a,
+          c
+        )(Shared.Bool.and_true_left(sa, sb)(rest)): {St{n, a, b} == St{n, _, d}: St}
+        %Slots.is_eq_sound(
+          b,
+          d
+        )(Shared.Bool.and_true_right(sa, sb)(rest)): {St{n, a, b} == St{n, a, _}: St}
         {==}
 
 # xs holds x
@@ -1962,7 +1918,7 @@ def Char.ne_in.at(
           : {Chars.has(cs, c) == True{}: Bool}}
         Empty.absurd(
           {False{} == True{}: Bool},
-          Bool.false_ne_true(
+          Shared.Bool.false_ne_true(
             Equal.trans(
               Bool,
               False{},
@@ -2006,7 +1962,7 @@ def Char.ne_in_r.at(
           : {Chars.has(cs, c) == True{}: Bool}}
         Empty.absurd(
           {False{} == True{}: Bool},
-          Bool.false_ne_true(
+          Shared.Bool.false_ne_true(
             Equal.trans(
               Bool,
               False{},
@@ -2044,9 +2000,20 @@ def Chars.contains_out(
       _ => {==}
     case Con{+x, +t}:
       +h =>
-        %Char.ne_in(cs, x, c, Bool.and_left(Chars.has(cs, x), Chars.all_in(t, cs))(h), hc):
+        %Char.ne_in(
+          cs,
+          x,
+          c,
+          Shared.Bool.and_true_left(Chars.has(cs, x), Chars.all_in(t, cs))(h),
+          hc
+        ):
           {False{} == List.any.if(u => List.contains(~Char, ~Char.is_eq, t, c), _): Bool}
-        Chars.contains_out(t, cs, c, hc)(Bool.and_right(Chars.has(cs, x), Chars.all_in(t, cs))(h))
+        Chars.contains_out(
+          t,
+          cs,
+          c,
+          hc
+        )(Shared.Bool.and_true_right(Chars.has(cs, x), Chars.all_in(t, cs))(h))
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # Seq.step.head moves h the same under c and f, two characters that h does
@@ -2238,7 +2205,19 @@ def Seq.step.head_rep(
       +hw =>
         +wa = Glob.within(a, cs)
         +wb = Glob.within(b, cs)
-        eb = Seq.step.head_rep(b, r, c, f, kc, kf, cs, hc, hf, hs, ek)(Bool.and_right(wa, wb)(hw))
+        eb = Seq.step.head_rep(
+          b,
+          r,
+          c,
+          f,
+          kc,
+          kf,
+          cs,
+          hc,
+          hf,
+          hs,
+          ek
+        )(Shared.Bool.and_true_right(wa, wb)(hw))
         Seq.step.head_rep(
           a,
           Con{b, r},
@@ -2251,14 +2230,26 @@ def Seq.step.head_rep(
           hf,
           hs,
           eb
-        )(Bool.and_left(wa, wb)(hw))
+        )(Shared.Bool.and_true_left(wa, wb)(hw))
     case Spec.alt{+a, +b}:
       +hw =>
         +wa = Glob.within(a, cs)
         +wb = Glob.within(b, cs)
         +ac = Seq.step.head(a, r, c, kc)
         +bc = Seq.step.head(b, r, c, kc)
-        %Seq.step.head_rep(a, r, c, f, kc, kf, cs, hc, hf, hs, ek)(Bool.and_left(wa, wb)(hw)):
+        %Seq.step.head_rep(
+          a,
+          r,
+          c,
+          f,
+          kc,
+          kf,
+          cs,
+          hc,
+          hf,
+          hs,
+          ek
+        )(Shared.Bool.and_true_left(wa, wb)(hw)):
           {
             List.append(
               &2,
@@ -2273,7 +2264,19 @@ def Seq.step.head_rep(
                 Seq.step.head(b, r, f, kf)
               ): List<&2, List<&2, Spec.Glob>>
           }
-        %Seq.step.head_rep(b, r, c, f, kc, kf, cs, hc, hf, hs, ek)(Bool.and_right(wa, wb)(hw)):
+        %Seq.step.head_rep(
+          b,
+          r,
+          c,
+          f,
+          kc,
+          kf,
+          cs,
+          hc,
+          hf,
+          hs,
+          ek
+        )(Shared.Bool.and_true_right(wa, wb)(hw)):
           {
             List.append(
               &2,
@@ -2306,7 +2309,7 @@ def Seq.step_rep(
       +hw =>
         +wh = Glob.within(h, cs)
         +wt = Seq.within(t, cs)
-        et = Seq.step_rep(t, c, f, cs, hc, hf, hs)(Bool.and_right(wh, wt)(hw))
+        et = Seq.step_rep(t, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_right(wh, wt)(hw))
         Seq.step.head_rep(
           h,
           t,
@@ -2319,7 +2322,7 @@ def Seq.step_rep(
           hf,
           hs,
           et
-        )(Bool.and_left(wh, wt)(hw))
+        )(Shared.Bool.and_true_left(wh, wt)(hw))
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # Seqs.step moves xs the same under c and f
@@ -2344,9 +2347,9 @@ def Seqs.step_rep(
         +wr = Seqs.within(r, cs)
         +sc = Seq.step(x, c)
         +rc = Seqs.step(r, c)
-        %Seq.step_rep(x, c, f, cs, hc, hf, hs)(Bool.and_left(wx, wr)(hw)):
+        %Seq.step_rep(x, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_left(wx, wr)(hw)):
           {Seqs.add_all(sc, rc) == Seqs.add_all(_, Seqs.step(r, f)): List<&2, List<&2, Spec.Glob>>}
-        %Seqs.step_rep(r, c, f, cs, hc, hf, hs)(Bool.and_right(wx, wr)(hw)):
+        %Seqs.step_rep(r, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_right(wx, wr)(hw)):
           {Seqs.add_all(sc, rc) == Seqs.add_all(sc, _): List<&2, List<&2, Spec.Glob>>}
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
@@ -2373,9 +2376,9 @@ def Slot.step_rep(
         +wt = Slots.within(t, cs)
         +xc = Seqs.step(xs, c)
         +tc = Slot.step(t, c)
-        %Seqs.step_rep(xs, c, f, cs, hc, hf, hs)(Bool.and_left(wx, wt)(hw)):
+        %Seqs.step_rep(xs, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_left(wx, wt)(hw)):
           {Con{inc{xc}, tc} == Con{inc{_}, Slot.step(t, f)}: List<&2, Slot>}
-        %Slot.step_rep(t, c, f, cs, hc, hf, hs)(Bool.and_right(wx, wt)(hw)):
+        %Slot.step_rep(t, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_right(wx, wt)(hw)):
           {Con{inc{xc}, tc} == Con{inc{xc}, _}: List<&2, Slot>}
         {==}
     case Con{exc{+xs}, +t}:
@@ -2384,9 +2387,9 @@ def Slot.step_rep(
         +wt = Slots.within(t, cs)
         +xc = Seqs.step(xs, c)
         +tc = Slot.step(t, c)
-        %Seqs.step_rep(xs, c, f, cs, hc, hf, hs)(Bool.and_left(wx, wt)(hw)):
+        %Seqs.step_rep(xs, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_left(wx, wt)(hw)):
           {Con{exc{xc}, tc} == Con{exc{_}, Slot.step(t, f)}: List<&2, Slot>}
-        %Slot.step_rep(t, c, f, cs, hc, hf, hs)(Bool.and_right(wx, wt)(hw)):
+        %Slot.step_rep(t, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_right(wx, wt)(hw)):
           {Con{exc{xc}, tc} == Con{exc{xc}, _}: List<&2, Slot>}
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
@@ -2408,9 +2411,9 @@ def St.step_rep(
         +wb = Slots.within(b, cs)
         +ac = Slot.step(a, c)
         +bc = Slot.step(b, c)
-        %Slot.step_rep(a, c, f, cs, hc, hf, hs)(Bool.and_left(wa, wb)(hw)):
+        %Slot.step_rep(a, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_left(wa, wb)(hw)):
           {St{both, ac, bc} == St{both, _, Slot.step(b, f)}: St}
-        %Slot.step_rep(b, c, f, cs, hc, hf, hs)(Bool.and_right(wa, wb)(hw)):
+        %Slot.step_rep(b, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_right(wa, wb)(hw)):
           {St{both, ac, bc} == St{both, ac, _}: St}
         {==}
 
@@ -2425,14 +2428,6 @@ def St.step_rep(
 def Bool.true_ne_false(e: {True{} == False{}: Bool}) -> Empty:
   %e: Bool.pick(Type, _, Unit, Empty)
   Unit{}
-
-# b is False when not b is True
-def Bool.not_true(b: Bool) -> {Bool.not(b) == True{}: Bool} -> {b == False{}: Bool}:
-  match b:
-    case False{}:
-      h => {==}
-    case True{}:
-      h => Empty.absurd({True{} == False{}: Bool}, Bool.false_ne_true(h))
 
 # the right side of a False disjunction is False
 def Bool.or_false_r(a: Bool, -b: Bool) -> {Bool.or(a, b) == False{}: Bool} -> {b == False{}: Bool}:
@@ -2492,11 +2487,13 @@ def St.all_ok_has.at(
 } -> {Bool.or(b, St.has(t, x)) == True{}: Bool} -> {St.ok(x, cs, f, xs) == True{}: Bool}:
   match b:
     case False{}:
-      e => hh => ih(Bool.and_right(St.ok(y, cs, f, xs), St.all_ok(t, cs, f, xs))(ha))(hh)
+      e => hh => ih(
+        Shared.Bool.and_true_right(St.ok(y, cs, f, xs), St.all_ok(t, cs, f, xs))(ha)
+      )(hh)
     case True{}:
       e => hh =>
         %St.is_eq_sound(y, x)(e): {St.ok(_, cs, f, xs) == True{}: Bool}
-        Bool.and_left(St.ok(y, cs, f, xs), St.all_ok(t, cs, f, xs))(ha)
+        Shared.Bool.and_true_left(St.ok(y, cs, f, xs), St.all_ok(t, cs, f, xs))(ha)
 
 # a state that ys holds is ok when all of ys are
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- only proofs use it; no program runs it
@@ -2511,7 +2508,7 @@ def St.all_ok_has(
 } -> {St.has(ys, x) == True{}: Bool} -> {St.ok(x, cs, f, xs) == True{}: Bool}:
   match ys:
     case Nil{}:
-      _ => hh => Empty.absurd({St.ok(x, cs, f, xs) == True{}: Bool}, Bool.false_ne_true(hh))
+      _ => hh => Empty.absurd({St.ok(x, cs, f, xs) == True{}: Bool}, Shared.Bool.false_ne_true(hh))
     case Con{+y, +t}:
       ha => St.all_ok_has.at(
         y,
@@ -2543,11 +2540,13 @@ def St.closed_has.at(
 } -> {Bool.or(b, Chars.has(t, c)) == True{}: Bool} -> {St.has(xs, St.step(x, c)) == True{}: Bool}:
   match b:
     case False{}:
-      e => hh => ih(Bool.and_right(St.has(xs, St.step(x, d)), St.closed(x, t, xs))(hcl))(hh)
+      e => hh => ih(
+        Shared.Bool.and_true_right(St.has(xs, St.step(x, d)), St.closed(x, t, xs))(hcl)
+      )(hh)
     case True{}:
       e => hh =>
         %Char.is_eq_sound(d, c)(e): {St.has(xs, St.step(x, _)) == True{}: Bool}
-        Bool.and_left(St.has(xs, St.step(x, d)), St.closed(x, t, xs))(hcl)
+        Shared.Bool.and_true_left(St.has(xs, St.step(x, d)), St.closed(x, t, xs))(hcl)
 
 # x steps into xs under each character of ds when it is closed for ds
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- only proofs use it; no program runs it
@@ -2561,7 +2560,10 @@ def St.closed_has(
 } -> {Chars.has(ds, c) == True{}: Bool} -> {St.has(xs, St.step(x, c)) == True{}: Bool}:
   match ds:
     case Nil{}:
-      _ => hh => Empty.absurd({St.has(xs, St.step(x, c)) == True{}: Bool}, Bool.false_ne_true(hh))
+      _ => hh => Empty.absurd(
+        {St.has(xs, St.step(x, c)) == True{}: Bool},
+        Shared.Bool.false_ne_true(hh)
+      )
     case Con{+d, +t}:
       hcl => St.closed_has.at(
         x,
@@ -2597,7 +2599,7 @@ def St.next_in.at(
         hc = Bool.or_false_r(Char.is_eq(f, c), Chars.has(cs, c))(e)
         rep = St.step_rep(x, c, f, cs, hc, hf, hs)(hw)
         %Equal.sym(St, St.step(x, c), St.step(x, f), rep): {St.has(xs, _) == True{}: Bool}
-        Bool.and_left(St.has(xs, St.step(x, f)), St.closed(x, cs, xs))(hcl)
+        Shared.Bool.and_true_left(St.has(xs, St.step(x, f)), St.closed(x, cs, xs))(hcl)
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # an ok state of a certificate steps into it under any character
@@ -2614,9 +2616,9 @@ def St.next_in(
   nh = Bool.not(St.holds(x, SNil{}))
   +wi = St.within(x, cs)
   +cl = St.closed(x, Con{f, cs}, xs)
-  +rest = Bool.and_right(nh, Bool.and(wi, cl))(hok)
-  hw = Bool.and_left(wi, cl)(rest)
-  hcl = Bool.and_right(wi, cl)(rest)
+  +rest = Shared.Bool.and_true_right(nh, Bool.and(wi, cl))(hok)
+  hw = Shared.Bool.and_true_left(wi, cl)(rest)
+  hcl = Shared.Bool.and_true_right(wi, cl)(rest)
   St.next_in.at(x, c, cs, f, xs, Chars.has(Con{f, cs}, c), hs, hf, hw, hcl)({==})
 
 # a valid certificate names '/'
@@ -2628,7 +2630,7 @@ def Cert.slash(
   xs: List<&2, St>,
   hcert: {Cert.check(xs, cs, f) == True{}: Bool}
 ) -> {Chars.has(cs, '/') == True{}: Bool}:
-  Bool.and_left(
+  Shared.Bool.and_true_left(
     Chars.has(cs, '/'),
     Bool.and(Bool.not(Chars.has(cs, f)), St.all_ok(xs, cs, f, xs))
   )(hcert)
@@ -2645,8 +2647,8 @@ def Cert.fresh(
 ) -> {Chars.has(cs, f) == False{}: Bool}:
   +nf = Bool.not(Chars.has(cs, f))
   al = St.all_ok(xs, cs, f, xs)
-  rest = Bool.and_right(Chars.has(cs, '/'), Bool.and(nf, al))(hcert)
-  Bool.not_true(Chars.has(cs, f))(Bool.and_left(nf, al)(rest))
+  rest = Shared.Bool.and_true_right(Chars.has(cs, '/'), Bool.and(nf, al))(hcert)
+  Shared.Bool.not_true(Chars.has(cs, f))(Shared.Bool.and_true_left(nf, al)(rest))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # every state of a valid certificate is ok
@@ -2660,8 +2662,8 @@ def Cert.ok_of(
 ) -> {St.ok(x, cs, f, xs) == True{}: Bool}:
   +nf = Bool.not(Chars.has(cs, f))
   +al = St.all_ok(xs, cs, f, xs)
-  rest = Bool.and_right(Chars.has(cs, '/'), Bool.and(nf, al))(hcert)
-  St.all_ok_has(xs, x, cs, f, xs)(Bool.and_right(nf, al)(rest))(hx)
+  rest = Shared.Bool.and_true_right(Chars.has(cs, '/'), Bool.and(nf, al))(hcert)
+  St.all_ok_has(xs, x, cs, f, xs)(Shared.Bool.and_true_right(nf, al)(rest))(hx)
 
 # no state of a certificate holds for any string
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
@@ -2678,9 +2680,9 @@ def Cert.sound(
     case SNil{}:
       nh = Bool.not(St.holds(x, SNil{}))
       rest = Bool.and(St.within(x, cs), St.closed(x, Con{f, cs}, xs))
-      Bool.not_true(
+      Shared.Bool.not_true(
         St.holds(x, SNil{})
-      )(Bool.and_left(nh, rest)(Cert.ok_of(x, cs, f, xs, hcert, hx)))
+      )(Shared.Bool.and_true_left(nh, rest)(Cert.ok_of(x, cs, f, xs, hcert, hx)))
     case SCon{+c, +t}:
       hs = Cert.slash(cs, f, xs, hcert)
       hf = Cert.fresh(cs, f, xs, hcert)
@@ -3181,8 +3183,8 @@ def Search.absent_if_absent(
           cs,
           f,
           xs,
-          Bool.and_left(ck, hs)(e),
-          Bool.and_right(ck, hs)(e)
+          Shared.Bool.and_true_left(ck, hs)(e),
+          Shared.Bool.and_true_right(ck, hs)(e)
         )
         %St.of_ok(q, p): {_ == False{}: Bool}
         %Equal.sym(
@@ -5628,14 +5630,6 @@ def Glob.cat_agree(
   %Glob.cat_split(p, SNil{}, x2, y2): {Glob.split(p, SNil{}, x, y) == _: Bool}
   Glob.split_agree(p, SNil{}, x, x2, y, y2, ea, eb)
 
-# anything or True is True
-def Bool.or_true_r(a: Bool) -> {True{} == Bool.or(a, True{}): Bool}:
-  match a:
-    case False{}:
-      {==}
-    case True{}:
-      {==}
-
 # the Bool shape of one step of Chars.contains_rev
 def Bool.contains_rev_step(
   e: Bool,
@@ -6009,10 +6003,18 @@ def Show.star_k.at(
           True{}
             == Bool.or(Spec.Glob.matches(t, st), Bool.or(Spec.Glob.matches(p, Spec.eps{}), _)): Bool
         }
-        %Bool.or_true_r(
-          Spec.Glob.matches(p, Spec.eps{})
+        %Equal.sym(
+          Bool,
+          Bool.or(Spec.Glob.matches(p, Spec.eps{}), True{}),
+          True{},
+          Shared.Bool.or_true_right(Spec.Glob.matches(p, Spec.eps{}))
         ): {True{} == Bool.or(Spec.Glob.matches(t, st), _): Bool}
-        Bool.or_true_r(Spec.Glob.matches(t, st))
+        Equal.sym(
+          Bool,
+          Bool.or(Spec.Glob.matches(t, st), True{}),
+          True{},
+          Shared.Bool.or_true_right(Spec.Glob.matches(t, st))
+        )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # `*` then optionally `/` and anything matches everything
@@ -6904,7 +6906,7 @@ def Esc.no_root(
   ec: {Chr{47} == c: Char},
   v: {Spec.is_path(SCon{c, t}) == True{}: Bool}
 ) -> Empty:
-  Bool.false_ne_true(
+  Shared.Bool.false_ne_true(
     Equal.trans(Bool, False{}, Spec.is_path(SCon{c, t}), True{}, Esc.no_root.path(c, t, ec), v)
   )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
@@ -6966,7 +6968,7 @@ def Esc.no_slash(
 ) -> {Sym.starts_slash(Spec.Sym.list(Spec.Glob.escape(p))) == False{}: Bool}:
   match p:
     case SNil{}:
-      Empty.absurd({False{} == False{}: Bool}, Bool.false_ne_true(v))
+      Empty.absurd({False{} == False{}: Bool}, Shared.Bool.false_ne_true(v))
     case SCon{+c, t}:
       Esc.no_slash_at(c, t, Spec.Sym.of(c), v)({==})
 
@@ -6978,28 +6980,6 @@ def Esc.read(
   syms = Spec.Sym.list(Spec.Glob.escape(p))
   %Read.syms_go(syms)(Esc.no_slash(p, v)): {Some{Glob.lits(p)} == _: Maybe<&2, Spec.Glob>}
   Esc.parse(p, [], True{})
-
-# Word.cmp of a word with itself is EQ
-def Word.cmp_refl(+n: Nat, a: Word(n)) -> {EQ{} == Word.cmp(n, a, a): Cmp}:
-  match n:
-    case 0n:
-      match a:
-        case WNil{}:
-          {==}
-    case 1n+p:
-      match a:
-        case WCon{False{}, at}:
-          %Word.cmp_refl(p, at): {EQ{} == Word.cmp.fin(False{}, False{}, _): Cmp}
-          {==}
-        case WCon{True{}, +at}:
-          %Word.cmp_refl(p, at): {EQ{} == Word.cmp.fin(True{}, True{}, _): Cmp}
-          {==}
-
-# U32.cmp of a number with itself is EQ
-def U32.cmp_refl(x: U32) -> {EQ{} == U32.cmp(x, x): Cmp}:
-  match x:
-    case U32{w}:
-      Word.cmp_refl(32n, w)
 
 # an EQ comparison answers True to Cmp.is_eq
 def Cmp.is_eq_of(-c: Cmp, e: {EQ{} == c: Cmp}) -> {Cmp.is_eq(c) == True{}: Bool}:
@@ -7013,8 +6993,8 @@ def U32.cmp_swap_eq(
   y: U32,
   e: {EQ{} == U32.cmp(x, y): Cmp}
 ) -> {EQ{} == U32.cmp(y, x): Cmp}:
-  %U32.is_eq_sound(x, y)(Cmp.is_eq_of(U32.cmp(x, y), e)): {EQ{} == U32.cmp(_, x): Cmp}
-  U32.cmp_refl(x)
+  %Shared.U32.is_eq_sound(x, y)(Cmp.is_eq_of(U32.cmp(x, y), e)): {EQ{} == U32.cmp(_, x): Cmp}
+  Equal.sym(Cmp, U32.cmp(x, x), EQ{}, Shared.U32.cmp_refl(x))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a decided comparison stays decided: it is never EQ
@@ -7084,7 +7064,7 @@ def Lits.cmp_case(
         String.order_ne_lt(qt, pt)
     case LT{} EQ{}:
       e1 => e2 =>
-        z = Cmp.ne_eq(
+        z = Shared.Cmp.ne_eq(
           LT{},
           Unit{},
           Equal.trans(
@@ -7122,7 +7102,7 @@ def Lits.cmp_case(
         String.order_ne_gt(qt, pt)
     case EQ{} LT{}:
       e1 => e2 =>
-        z = Cmp.ne_eq(
+        z = Shared.Cmp.ne_eq(
           LT{},
           Unit{},
           Equal.trans(
@@ -7160,7 +7140,7 @@ def Lits.cmp_case(
         {==}
     case EQ{} GT{}:
       e1 => e2 =>
-        z = Cmp.ne_eq(
+        z = Shared.Cmp.ne_eq(
           GT{},
           Unit{},
           Equal.trans(
@@ -7198,7 +7178,7 @@ def Lits.cmp_case(
         String.order_ne_lt(qt, pt)
     case GT{} EQ{}:
       e1 => e2 =>
-        z = Cmp.ne_eq(
+        z = Shared.Cmp.ne_eq(
           GT{},
           Unit{},
           Equal.trans(

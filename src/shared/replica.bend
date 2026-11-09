@@ -1,5 +1,7 @@
 import Base
 import ./shared.bend as Shared
+import ./text.bend as Texts
+import ./trie.bend as Tries
 
 # Cells
 # -----
@@ -26,25 +28,24 @@ def Cell.join(~V: Data, ~same: V -> V -> Bool, a: Cell<V>, b: Cell<V>) -> Cell<V
 
 # Laws
 # ----
-# Each law asks of same only that it is True for a value and itself (refl),
-# and only for equal values (sound).
+# Each law asks of same only its laws (Shared.Eq.Laws).
 
 # a cell joined with itself is itself
 law Cell.join_idem:
   for ~V: Data
   for ~same: V -> V -> Bool
-  for ~refl: @x: V -> {same(x, x) == True{}: Bool}
+  for ~laws: Shared.Eq.Laws(V, same)
   for a: Cell<V>
   {Cell.join(~V, ~same, a, a) == a: Cell<V>}
 
-def Cell.join_idem(ty, same, refl, a):
+def Cell.join_idem(ty, same, laws, a):
   match a:
     case one{x}:
       %Equal.sym(
         Bool,
         same(x, x),
         True{},
-        refl(x)
+        Shared.Eq.refl(~ty, ~same, laws, x)
       ): {Bool.pick(Cell<ty>, _, one{x}, many{}) == one{x}: Cell<ty>}
       {==}
     case many{}:
@@ -55,8 +56,7 @@ def Cell.join_idem(ty, same, refl, a):
 def Cell.join_comm.back(
   ~V: Data,
   ~same: V -> V -> Bool,
-  ~refl: @x: V -> {same(x, x) == True{}: Bool},
-  ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V},
+  ~laws: Shared.Eq.Laws(V, same),
   back: Bool,
   +x: V,
   y: V,
@@ -81,8 +81,8 @@ def Cell.join_comm.back(
               same(x, y),
               same(x, x),
               True{},
-              Equal.cong(V, Bool, z => same(x, z), y, x, sound(y)(x)(e)),
-              refl(x)
+              Equal.cong(V, Bool, z => same(x, z), y, x, Shared.Eq.sound(~V, ~same, laws, y)(x)(e)),
+              Shared.Eq.refl(~V, ~same, laws, x)
             )
           )
         )
@@ -93,8 +93,7 @@ def Cell.join_comm.back(
 def Cell.join_comm.at(
   ~V: Data,
   ~same: V -> V -> Bool,
-  ~refl: @x: V -> {same(x, x) == True{}: Bool},
-  ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V},
+  ~laws: Shared.Eq.Laws(V, same),
   held: Bool,
   +x: V,
   +y: V,
@@ -110,31 +109,35 @@ def Cell.join_comm.at(
 }:
   match held:
     case True{}:
-      %sound(x)(y)(e): {one{x} == Bool.pick(Cell<V>, same(_, x), one{_}, many{}): Cell<V>}
+      %Shared.Eq.sound(
+        ~V,
+        ~same,
+        laws,
+        x
+      )(y)(e): {one{x} == Bool.pick(Cell<V>, same(_, x), one{_}, many{}): Cell<V>}
       %Equal.sym(
         Bool,
         same(x, x),
         True{},
-        refl(x)
+        Shared.Eq.refl(~V, ~same, laws, x)
       ): {one{x} == Bool.pick(Cell<V>, _, one{x}, many{}): Cell<V>}
       {==}
     case False{}:
-      Cell.join_comm.back(~V, ~same, ~refl, ~sound, same(y, x), x, y, e, {==})
+      Cell.join_comm.back(~V, ~same, ~laws, same(y, x), x, y, e, {==})
 
 # a join is the same either way round
 law Cell.join_comm:
   for ~V: Data
   for ~same: V -> V -> Bool
-  for ~refl: @x: V -> {same(x, x) == True{}: Bool}
-  for ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V}
+  for ~laws: Shared.Eq.Laws(V, same)
   for a: Cell<V>
   for b: Cell<V>
   {Cell.join(~V, ~same, a, b) == Cell.join(~V, ~same, b, a): Cell<V>}
 
-def Cell.join_comm(ty, same, refl, sound, a, b):
+def Cell.join_comm(ty, same, laws, a, b):
   match a b:
     case one{+x} one{+y}:
-      Cell.join_comm.at(~ty, ~same, ~refl, ~sound, same(x, y), x, y, {==})
+      Cell.join_comm.at(~ty, ~same, ~laws, same(x, y), x, y, {==})
     case one{x} many{}:
       {==}
     case many{} one{y}:
@@ -161,7 +164,7 @@ def Cell.join_assoc.many(
 def Cell.join_assoc.at(
   ~V: Data,
   ~same: V -> V -> Bool,
-  ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V},
+  ~laws: Shared.Eq.Laws(V, same),
   xy: Bool,
   yz: Bool,
   x: V,
@@ -180,7 +183,7 @@ def Cell.join_assoc.at(
 }:
   match xy yz:
     case True{} True{}:
-      %sound(y)(z)(e2):
+      %Shared.Eq.sound(~V, ~same, laws, y)(z)(e2):
         {
           Cell.join(
             ~V,
@@ -192,7 +195,7 @@ def Cell.join_assoc.at(
         }
       {==}
     case True{} False{}:
-      %Equal.sym(V, x, y, sound(x)(y)(e1)):
+      %Equal.sym(V, x, y, Shared.Eq.sound(~V, ~same, laws, x)(y)(e1)):
         {
           Cell.join(
             ~V,
@@ -225,8 +228,7 @@ def Cell.join_assoc.at(
 law Cell.join_assoc:
   for ~V: Data
   for ~same: V -> V -> Bool
-  for ~refl: @x: V -> {same(x, x) == True{}: Bool}
-  for ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V}
+  for ~laws: Shared.Eq.Laws(V, same)
   for a: Cell<V>
   for b: Cell<V>
   for c: Cell<V>
@@ -240,7 +242,7 @@ law Cell.join_assoc:
       == Cell.join(~V, ~same, a, Cell.join(~V, ~same, b, c)): Cell<V>
   }
 
-def Cell.join_assoc(ty, same, refl, sound, a, b, c):
+def Cell.join_assoc(ty, same, laws, a, b, c):
   match a b c:
     case many{} y w:
       {==}
@@ -249,10 +251,10 @@ def Cell.join_assoc(ty, same, refl, sound, a, b, c):
     case one{+x} one{+y} many{}:
       Cell.join_assoc.many(~ty, ~same, same(x, y), x)
     case one{+x} one{+y} one{+z}:
-      Cell.join_assoc.at(~ty, ~same, ~sound, same(x, y), same(y, z), x, y, z, {==}, {==})
+      Cell.join_assoc.at(~ty, ~same, ~laws, same(x, y), same(y, z), x, y, z, {==}, {==})
 
 # a and b hold the same, as same calls values the same
-def Cell.same(~V: Data, ~same: V -> V -> Bool, a: Cell<V>, b: Cell<V>) -> Bool:
+def Cell.is_eq(~V: Data, ~same: V -> V -> Bool, a: Cell<V>, b: Cell<V>) -> Bool:
   match a b:
     case one{x} one{y}:
       same(x, y)
@@ -261,20 +263,20 @@ def Cell.same(~V: Data, ~same: V -> V -> Bool, a: Cell<V>, b: Cell<V>) -> Bool:
     case _ _:
       False{}
 
-# Cell.same is True only for equal cells
-law Cell.same_sound:
+# Cell.is_eq is True only for equal cells
+law Cell.is_eq_sound:
   for ~V: Data
   for ~same: V -> V -> Bool
-  for ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V}
+  for ~laws: Shared.Eq.Laws(V, same)
   for a: Cell<V>
   for b: Cell<V>
-  {Cell.same(~V, ~same, a, b) == True{}: Bool} -> {a == b: Cell<V>}
+  {Cell.is_eq(~V, ~same, a, b) == True{}: Bool} -> {a == b: Cell<V>}
 
-def Cell.same_sound(ty, same, sound, a, b):
+def Cell.is_eq_sound(ty, same, laws, a, b):
   match a b:
     case one{x} one{y}:
       h =>
-        %sound(x)(y)(h): {one{x} == one{_}: Cell<ty>}
+        %Shared.Eq.sound(~ty, ~same, laws, x)(y)(h): {one{x} == one{_}: Cell<ty>}
         {==}
     case one{x} many{}:
       h => Empty.absurd({one{x} == many{}: Cell<ty>}, Shared.Bool.false_ne_true(h))
@@ -308,15 +310,15 @@ def Cell.agrees.here(
 def Cell.agrees(
   ~V: Data,
   ~same: V -> V -> Bool,
-  s: Shared.Trie<Cell<V>>,
-  t: Shared.Trie<Cell<V>>
+  s: Tries.Trie<Cell<V>>,
+  t: Tries.Trie<Cell<V>>
 ) -> Bool:
   match s t:
-    case Shared.tip{} y:
+    case Tries.tip{} y:
       True{}
-    case Shared.bin{h, z, o} Shared.tip{}:
+    case Tries.bin{h, z, o} Tries.tip{}:
       True{}
-    case Shared.bin{h1, z1, o1} Shared.bin{h2, z2, o2}:
+    case Tries.bin{h1, z1, o1} Tries.bin{h2, z2, o2}:
       Bool.and(
         Cell.agrees.here(~V, ~same, h1, h2),
         Bool.and(Cell.agrees(~V, ~same, z1, z2), Cell.agrees(~V, ~same, o1, o2))
@@ -335,7 +337,7 @@ def Cell.is_one(-V: Data, m: Maybe<&2, Cell<V>>) -> Bool:
 def Cell.kept.here(
   ~V: Data,
   ~same: V -> V -> Bool,
-  ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V},
+  ~laws: Shared.Eq.Laws(V, same),
   a: Maybe<&2, Cell<V>>,
   b: Maybe<&2, Cell<V>>,
   -v: V
@@ -343,12 +345,12 @@ def Cell.kept.here(
   Cell.agrees.here(~V, ~same, a, b) == True{}: Bool
 } -> {
   a == Some{one{v}}: Maybe<&2, Cell<V>>
-} -> {Shared.Trie.pick(~Cell<V>, ~Cell.join(~V, ~same), a, b) == Some{one{v}}: Maybe<&2, Cell<V>>}:
+} -> {Tries.Trie.pick(~Cell<V>, ~Cell.join(~V, ~same), a, b) == Some{one{v}}: Maybe<&2, Cell<V>>}:
   match a b:
     case None{} y:
       h => g => Empty.absurd(
         {
-          Shared.Trie.pick(
+          Tries.Trie.pick(
             ~Cell<V>,
             ~Cell.join(~V, ~same),
             None{},
@@ -363,7 +365,7 @@ def Cell.kept.here(
     case Some{many{}} y:
       h => g => Empty.absurd(
         {
-          Shared.Trie.pick(
+          Tries.Trie.pick(
             ~Cell<V>,
             ~Cell.join(~V, ~same),
             Some{many{}},
@@ -403,17 +405,17 @@ def Cell.kept.here(
 law Cell.agrees_kept:
   for ~V: Data
   for ~same: V -> V -> Bool
-  for ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V}
-  for s: Shared.Trie<Cell<V>>
-  for t: Shared.Trie<Cell<V>>
+  for ~laws: Shared.Eq.Laws(V, same)
+  for s: Tries.Trie<Cell<V>>
+  for t: Tries.Trie<Cell<V>>
   for k: List<&2, Bool>
   for -v: V
   {Cell.agrees(~V, ~same, s, t) == True{}: Bool}
-    -> {Shared.Trie.get(Cell<V>, s, k) == Some{one{v}}: Maybe<&2, Cell<V>>}
+    -> {Tries.Trie.get(Cell<V>, s, k) == Some{one{v}}: Maybe<&2, Cell<V>>}
     -> {
-      Shared.Trie.get(
+      Tries.Trie.get(
         Cell<V>,
-        Shared.Trie.union(~Cell<V>, ~Cell.join(~V, ~same), s, t),
+        Tries.Trie.union(~Cell<V>, ~Cell.join(~V, ~same), s, t),
         k
       )
         == Some{one{v}}: Maybe<&2, Cell<V>>
@@ -421,22 +423,22 @@ law Cell.agrees_kept:
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality, or a proof, keeps each and/or as one value for the proofs to split on
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-def Cell.agrees_kept(ty, same, sound, s, t, k, v):
+def Cell.agrees_kept(ty, same, laws, s, t, k, v):
   match s t k:
-    case Shared.tip{} y q:
+    case Tries.tip{} y q:
       a => g => Empty.absurd(
-        {Shared.Trie.get(Cell<ty>, y, q) == Some{one{v}}: Maybe<&2, Cell<ty>>},
+        {Tries.Trie.get(Cell<ty>, y, q) == Some{one{v}}: Maybe<&2, Cell<ty>>},
         Shared.Bool.false_ne_true(
           Equal.cong(Maybe<&2, Cell<ty>>, Bool, m => Cell.is_one(ty, m), None{}, Some{one{v}}, g)
         )
       )
-    case Shared.bin{h, z, o} Shared.tip{} q:
+    case Tries.bin{h, z, o} Tries.tip{} q:
       a => g => g
-    case Shared.bin{+h1, +z1, +o1} Shared.bin{+h2, +z2, +o2} Nil{}:
+    case Tries.bin{+h1, +z1, +o1} Tries.bin{+h2, +z2, +o2} Nil{}:
       +a => g => Cell.kept.here(
         ~ty,
         ~same,
-        ~sound,
+        ~laws,
         h1,
         h2,
         v
@@ -446,11 +448,11 @@ def Cell.agrees_kept(ty, same, sound, s, t, k, v):
           Bool.and(Cell.agrees(~ty, ~same, z1, z2), Cell.agrees(~ty, ~same, o1, o2))
         )(a)
       )(g)
-    case Shared.bin{+h1, +z1, +o1} Shared.bin{+h2, +z2, +o2} Con{False{}, r}:
+    case Tries.bin{+h1, +z1, +o1} Tries.bin{+h2, +z2, +o2} Con{False{}, r}:
       +a => g => Cell.agrees_kept(
         ~ty,
         ~same,
-        ~sound,
+        ~laws,
         z1,
         z2,
         r,
@@ -466,11 +468,11 @@ def Cell.agrees_kept(ty, same, sound, s, t, k, v):
           )(a)
         )
       )(g)
-    case Shared.bin{+h1, +z1, +o1} Shared.bin{+h2, +z2, +o2} Con{True{}, r}:
+    case Tries.bin{+h1, +z1, +o1} Tries.bin{+h2, +z2, +o2} Con{True{}, r}:
       +a => g => Cell.agrees_kept(
         ~ty,
         ~same,
-        ~sound,
+        ~laws,
         o1,
         o2,
         r,
@@ -493,12 +495,12 @@ def Cell.agrees_kept(ty, same, sound, s, t, k, v):
 def Cell.agrees_tip(
   ~V: Data,
   ~same: V -> V -> Bool,
-  s: Shared.Trie<Cell<V>>
-) -> {Cell.agrees(~V, ~same, s, Shared.tip{}) == True{}: Bool}:
+  s: Tries.Trie<Cell<V>>
+) -> {Cell.agrees(~V, ~same, s, Tries.tip{}) == True{}: Bool}:
   match s:
-    case Shared.tip{}:
+    case Tries.tip{}:
       {==}
-    case Shared.bin{h, z, o}:
+    case Tries.bin{h, z, o}:
       {==}
 
 # nothing at a key does not contradict what a holds there
@@ -519,19 +521,19 @@ def Cell.agrees_none(
 law Cell.agrees_one:
   for ~V: Data
   for ~same: V -> V -> Bool
-  for s: Shared.Trie<Cell<V>>
+  for s: Tries.Trie<Cell<V>>
   for k: List<&2, Bool>
   for +x: Cell<V>
-  {Shared.Trie.get(Cell<V>, s, k) == None{}: Maybe<&2, Cell<V>>}
-    -> {Cell.agrees(~V, ~same, s, Shared.Trie.one(Cell<V>, k, x)) == True{}: Bool}
+  {Tries.Trie.get(Cell<V>, s, k) == None{}: Maybe<&2, Cell<V>>}
+    -> {Cell.agrees(~V, ~same, s, Tries.Trie.one(Cell<V>, k, x)) == True{}: Bool}
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality, or a proof, keeps each and/or as one value for the proofs to split on
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 def Cell.agrees_one(ty, same, s, k, x):
   match s k:
-    case Shared.tip{} q:
+    case Tries.tip{} q:
       g => {==}
-    case Shared.bin{+h, +z, +o} Nil{}:
+    case Tries.bin{+h, +z, +o} Nil{}:
       g =>
         %Equal.sym(
           Maybe<&2, Cell<ty>>,
@@ -542,48 +544,48 @@ def Cell.agrees_one(ty, same, s, k, x):
           Bool.and(
             Cell.agrees.here(~ty, ~same, _, Some{x}),
             Bool.and(
-              Cell.agrees(~ty, ~same, z, Shared.tip{}),
-              Cell.agrees(~ty, ~same, o, Shared.tip{})
+              Cell.agrees(~ty, ~same, z, Tries.tip{}),
+              Cell.agrees(~ty, ~same, o, Tries.tip{})
             )
           )
             == True{}: Bool
         }
         %Equal.sym(
           Bool,
-          Cell.agrees(~ty, ~same, z, Shared.tip{}),
+          Cell.agrees(~ty, ~same, z, Tries.tip{}),
           True{},
           Cell.agrees_tip(~ty, ~same, z)
         ):
-          {Bool.and(_, Cell.agrees(~ty, ~same, o, Shared.tip{})) == True{}: Bool}
+          {Bool.and(_, Cell.agrees(~ty, ~same, o, Tries.tip{})) == True{}: Bool}
         Cell.agrees_tip(~ty, ~same, o)
-    case Shared.bin{+h, +z, +o} Con{False{}, +r}:
+    case Tries.bin{+h, +z, +o} Con{False{}, +r}:
       g => Shared.Bool.and_both(
         Cell.agrees.here(~ty, ~same, h, None{}),
         Bool.and(
-          Cell.agrees(~ty, ~same, z, Shared.Trie.one(Cell<ty>, r, x)),
-          Cell.agrees(~ty, ~same, o, Shared.tip{})
+          Cell.agrees(~ty, ~same, z, Tries.Trie.one(Cell<ty>, r, x)),
+          Cell.agrees(~ty, ~same, o, Tries.tip{})
         )
       )(
         Cell.agrees_none(~ty, ~same, h)
       )(
         Shared.Bool.and_both(
-          Cell.agrees(~ty, ~same, z, Shared.Trie.one(Cell<ty>, r, x)),
-          Cell.agrees(~ty, ~same, o, Shared.tip{})
+          Cell.agrees(~ty, ~same, z, Tries.Trie.one(Cell<ty>, r, x)),
+          Cell.agrees(~ty, ~same, o, Tries.tip{})
         )(Cell.agrees_one(~ty, ~same, z, r, x)(g))(Cell.agrees_tip(~ty, ~same, o))
       )
-    case Shared.bin{+h, +z, +o} Con{True{}, +r}:
+    case Tries.bin{+h, +z, +o} Con{True{}, +r}:
       g => Shared.Bool.and_both(
         Cell.agrees.here(~ty, ~same, h, None{}),
         Bool.and(
-          Cell.agrees(~ty, ~same, z, Shared.tip{}),
-          Cell.agrees(~ty, ~same, o, Shared.Trie.one(Cell<ty>, r, x))
+          Cell.agrees(~ty, ~same, z, Tries.tip{}),
+          Cell.agrees(~ty, ~same, o, Tries.Trie.one(Cell<ty>, r, x))
         )
       )(
         Cell.agrees_none(~ty, ~same, h)
       )(
         Shared.Bool.and_both(
-          Cell.agrees(~ty, ~same, z, Shared.tip{}),
-          Cell.agrees(~ty, ~same, o, Shared.Trie.one(Cell<ty>, r, x))
+          Cell.agrees(~ty, ~same, z, Tries.tip{}),
+          Cell.agrees(~ty, ~same, o, Tries.Trie.one(Cell<ty>, r, x))
         )(Cell.agrees_tip(~ty, ~same, z))(Cell.agrees_one(~ty, ~same, o, r, x)(g))
       )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
@@ -740,16 +742,14 @@ def Quorum.keeps(
 
 # Laws
 # ----
-# Each law asks of same only that it is True for a value and itself (refl),
-# and only for equal values (sound).
+# Each law asks of same only its laws (Shared.Eq.Laws).
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # x is not y, so y is not x
 def Quorum.ne_flip.at(
   ~B: Data,
   ~same: B -> B -> Bool,
-  ~refl: @x: B -> {same(x, x) == True{}: Bool},
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   back: Bool,
   +x: B,
   y: B,
@@ -774,8 +774,8 @@ def Quorum.ne_flip.at(
               same(x, y),
               same(x, x),
               True{},
-              Equal.cong(B, Bool, z => same(x, z), y, x, sound(y)(x)(e)),
-              refl(x)
+              Equal.cong(B, Bool, z => same(x, z), y, x, Shared.Eq.sound(~B, ~same, laws, y)(x)(e)),
+              Shared.Eq.refl(~B, ~same, laws, x)
             )
           )
         )
@@ -786,20 +786,18 @@ def Quorum.ne_flip.at(
 def Quorum.ne_flip(
   ~B: Data,
   ~same: B -> B -> Bool,
-  ~refl: @x: B -> {same(x, x) == True{}: Bool},
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   +x: B,
   +y: B,
   no: {same(x, y) == False{}: Bool}
 ) -> {same(y, x) == False{}: Bool}:
-  Quorum.ne_flip.at(~B, ~same, ~refl, ~sound, same(y, x), x, y, no, {==})
+  Quorum.ne_flip.at(~B, ~same, ~laws, same(y, x), x, y, no, {==})
 
 # a vote for y is not a vote for x, when x is not y
 def Quorum.hit_excl(
   ~B: Data,
   ~same: B -> B -> Bool,
-  ~refl: @x: B -> {same(x, x) == True{}: Bool},
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   v: Maybe<&2, B>,
   x: B,
   +y: B,
@@ -812,8 +810,13 @@ def Quorum.hit_excl(
       h => {==}
     case Some{b}:
       h =>
-        %Equal.sym(B, b, y, sound(b)(y)(h)): {same(_, x) == False{}: Bool}
-        Quorum.ne_flip(~B, ~same, ~refl, ~sound, x, y, no)
+        %Equal.sym(
+          B,
+          b,
+          y,
+          Shared.Eq.sound(~B, ~same, laws, b)(y)(h)
+        ): {same(_, x) == False{}: Bool}
+        Quorum.ne_flip(~B, ~same, ~laws, x, y, no)
 
 # Quorum.yes_le_no for one member, by whether it votes for y (hy) and x (hx)
 def Quorum.yes_le_no.at(
@@ -844,8 +847,7 @@ def Quorum.yes_le_no(
   ~V: Data,
   ~vote: V -> A -> Maybe<&2, B>,
   ~same: B -> B -> Bool,
-  ~refl: @x: B -> {same(x, x) == True{}: Bool},
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   ms: List<&2, A>,
   +g: V,
   +x: B,
@@ -865,10 +867,10 @@ def Quorum.yes_le_no(
       Quorum.yes_le_no.at(
         Quorum.hit(~B, ~same, vote(g)(m), y),
         Quorum.hit(~B, ~same, vote(g)(m), x),
-        Quorum.hit_excl(~B, ~same, ~refl, ~sound, vote(g)(m), x, y, no),
+        Quorum.hit_excl(~B, ~same, ~laws, vote(g)(m), x, y, no),
         Quorum.yes(~A, ~B, ~V, ~vote, ~same, r, g, y),
         Quorum.no(~A, ~B, ~V, ~vote, ~same, r, g, x),
-        Quorum.yes_le_no(~A, ~B, ~V, ~vote, ~same, ~refl, ~sound, r, g, x, y, no)
+        Quorum.yes_le_no(~A, ~B, ~V, ~vote, ~same, ~laws, r, g, x, y, no)
       )
 
 # Quorum.unique once same(x, y) is known (held)
@@ -878,8 +880,7 @@ def Quorum.unique.at(
   ~V: Data,
   ~vote: V -> A -> Maybe<&2, B>,
   ~same: B -> B -> Bool,
-  ~refl: @x: B -> {same(x, x) == True{}: Bool},
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   held: Bool,
   +ms: List<&2, A>,
   +g: V,
@@ -891,7 +892,7 @@ def Quorum.unique.at(
 ) -> {x == y: B}:
   match held:
     case True{}:
-      sound(x)(y)(e)
+      Shared.Eq.sound(~B, ~same, laws, x)(y)(e)
     case False{}:
       +yx = Quorum.yes(~A, ~B, ~V, ~vote, ~same, ms, g, x)
       +yy = Quorum.yes(~A, ~B, ~V, ~vote, ~same, ms, g, y)
@@ -908,20 +909,19 @@ def Quorum.unique.at(
           ~V,
           ~vote,
           ~same,
-          ~refl,
-          ~sound,
+          ~laws,
           ms,
           g,
           y,
           x,
-          Quorum.ne_flip(~B, ~same, ~refl, ~sound, x, y, e)
+          Quorum.ne_flip(~B, ~same, ~laws, x, y, e)
         )
       )(hy)
       b = Shared.Nat.lt_le(
         yx,
         yy,
         nx
-      )(a)(Quorum.yes_le_no(~A, ~B, ~V, ~vote, ~same, ~refl, ~sound, ms, g, x, y, e))
+      )(a)(Quorum.yes_le_no(~A, ~B, ~V, ~vote, ~same, ~laws, ms, g, x, y, e))
       c = Shared.Nat.lt_le(yx, nx, yx)(b)(Shared.Nat.lt_weak(nx, yx)(hx))
       Empty.absurd(
         {x == y: B},
@@ -944,8 +944,7 @@ law Quorum.unique:
   for ~V: Data
   for ~vote: V -> A -> Maybe<&2, B>
   for ~same: B -> B -> Bool
-  for ~refl: @x: B -> {same(x, x) == True{}: Bool}
-  for ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B}
+  for ~laws: Shared.Eq.Laws(B, same)
   for ms: List<&2, A>
   for g: V
   for x: B
@@ -954,7 +953,7 @@ law Quorum.unique:
     -> {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, y) == True{}: Bool}
     -> {x == y: B}
 
-def Quorum.unique(member, choice, state, vote, same, refl, sound, ms, g, x, y):
+def Quorum.unique(member, choice, state, vote, same, laws, ms, g, x, y):
   ms = ms
   g = g
   +x = x
@@ -965,8 +964,7 @@ def Quorum.unique(member, choice, state, vote, same, refl, sound, ms, g, x, y):
     ~state,
     ~vote,
     ~same,
-    ~refl,
-    ~sound,
+    ~laws,
     same(x, y),
     ms,
     g,
@@ -981,7 +979,7 @@ def Quorum.unique(member, choice, state, vote, same, refl, sound, ms, g, x, y):
 def Quorum.yes_more.at(
   ~B: Data,
   ~same: B -> B -> Bool,
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   v: Maybe<&2, B>,
   w: Maybe<&2, B>,
   x: B,
@@ -1005,7 +1003,7 @@ def Quorum.yes_more.at(
         Shared.Bool.false_ne_true(k)
       )
     case Some{+b} Some{c}:
-      %Equal.sym(B, c, b, sound(c)(b)(k)):
+      %Equal.sym(B, c, b, Shared.Eq.sound(~B, ~same, laws, c)(b)(k)):
         {
           Nat.is_le(
             Shared.Nat.add_if(same(b, x), y),
@@ -1019,7 +1017,7 @@ def Quorum.yes_more.at(
 def Quorum.no_less.at(
   ~B: Data,
   ~same: B -> B -> Bool,
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   v: Maybe<&2, B>,
   w: Maybe<&2, B>,
   x: B,
@@ -1043,7 +1041,7 @@ def Quorum.no_less.at(
         Shared.Bool.false_ne_true(k)
       )
     case Some{+b} Some{c}:
-      %Equal.sym(B, c, b, sound(c)(b)(k)):
+      %Equal.sym(B, c, b, Shared.Eq.sound(~B, ~same, laws, c)(b)(k)):
         {
           Nat.is_le(
             Shared.Nat.add_if(Bool.not(same(_, x)), n2),
@@ -1053,6 +1051,7 @@ def Quorum.no_less.at(
         }
       Shared.Nat.add_if_le(Bool.not(same(b, x)), n2, n)(ih)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # kept votes keep the members that vote for x
 def Quorum.yes_more(
   ~A: Data,
@@ -1060,7 +1059,7 @@ def Quorum.yes_more(
   ~V: Data,
   ~vote: V -> A -> Maybe<&2, B>,
   ~same: B -> B -> Bool,
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   ms: List<&2, A>,
   +g: V,
   +g2: V,
@@ -1078,11 +1077,11 @@ def Quorum.yes_more(
       {==}
     case Con{+m, +r}:
       +kh = Quorum.kept(~B, ~same, vote(g)(m), vote(g2)(m))
-      +kr = Quorum.keeps(~A, ~B, ~V, ~vote, ~same, r, g, g2)
+      kr = Quorum.keeps(~A, ~B, ~V, ~vote, ~same, r, g, g2)
       Quorum.yes_more.at(
         ~B,
         ~same,
-        ~sound,
+        ~laws,
         vote(g)(m),
         vote(g2)(m),
         x,
@@ -1095,7 +1094,7 @@ def Quorum.yes_more(
           ~V,
           ~vote,
           ~same,
-          ~sound,
+          ~laws,
           r,
           g,
           g2,
@@ -1103,7 +1102,9 @@ def Quorum.yes_more(
           Shared.Bool.and_true_right(kh, kr)(k)
         )
       )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # kept votes keep the members that do not vote for x from growing
 def Quorum.no_less(
   ~A: Data,
@@ -1111,7 +1112,7 @@ def Quorum.no_less(
   ~V: Data,
   ~vote: V -> A -> Maybe<&2, B>,
   ~same: B -> B -> Bool,
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   ms: List<&2, A>,
   +g: V,
   +g2: V,
@@ -1129,11 +1130,11 @@ def Quorum.no_less(
       {==}
     case Con{+m, +r}:
       +kh = Quorum.kept(~B, ~same, vote(g)(m), vote(g2)(m))
-      +kr = Quorum.keeps(~A, ~B, ~V, ~vote, ~same, r, g, g2)
+      kr = Quorum.keeps(~A, ~B, ~V, ~vote, ~same, r, g, g2)
       Quorum.no_less.at(
         ~B,
         ~same,
-        ~sound,
+        ~laws,
         vote(g)(m),
         vote(g2)(m),
         x,
@@ -1146,7 +1147,7 @@ def Quorum.no_less(
           ~V,
           ~vote,
           ~same,
-          ~sound,
+          ~laws,
           r,
           g,
           g2,
@@ -1154,6 +1155,7 @@ def Quorum.no_less(
           Shared.Bool.and_true_right(kh, kr)(k)
         )
       )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a majority stays a majority when every vote is kept
 law Quorum.has_more:
@@ -1162,7 +1164,7 @@ law Quorum.has_more:
   for ~V: Data
   for ~vote: V -> A -> Maybe<&2, B>
   for ~same: B -> B -> Bool
-  for ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B}
+  for ~laws: Shared.Eq.Laws(B, same)
   for ms: List<&2, A>
   for g: V
   for g2: V
@@ -1171,7 +1173,7 @@ law Quorum.has_more:
     -> {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool}
     -> {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g2, x) == True{}: Bool}
 
-def Quorum.has_more(member, choice, state, vote, same, sound, ms, g, g2, x):
+def Quorum.has_more(member, choice, state, vote, same, laws, ms, g, g2, x):
   +ms = ms
   +g = g
   +g2 = g2
@@ -1186,8 +1188,8 @@ def Quorum.has_more(member, choice, state, vote, same, sound, ms, g, g2, x):
         Quorum.no(~member, ~choice, ~state, ~vote, ~same, ms, g2, x),
         Quorum.no(~member, ~choice, ~state, ~vote, ~same, ms, g, x),
         Quorum.yes(~member, ~choice, ~state, ~vote, ~same, ms, g, x)
-      )(Quorum.no_less(~member, ~choice, ~state, ~vote, ~same, ~sound, ms, g, g2, x, k))(h)
-    )(Quorum.yes_more(~member, ~choice, ~state, ~vote, ~same, ~sound, ms, g, g2, x, k))
+      )(Quorum.no_less(~member, ~choice, ~state, ~vote, ~same, ~laws, ms, g, g2, x, k))(h)
+    )(Quorum.yes_more(~member, ~choice, ~state, ~vote, ~same, ~laws, ms, g, g2, x, k))
 
 # Quorum.has_winner when the vote b was picked or not (held)
 def Quorum.has_winner.if(
@@ -1304,7 +1306,7 @@ def Quorum.scan.past(
   ~V: Data,
   ~vote: V -> A -> Maybe<&2, B>,
   ~same: B -> B -> Bool,
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   c: Bool,
   b: B,
   ms: List<&2, A>,
@@ -1324,7 +1326,7 @@ def Quorum.scan.past(
             Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, b),
             True{},
             Equal.sym(Bool, Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, b), False{}, eb),
-            %Equal.sym(B, b, x, sound(b)(x)(ec)): {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, _) == True{}: Bool}
+            %Equal.sym(B, b, x, Shared.Eq.sound(~B, ~same, laws, b)(x)(ec)): {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, _) == True{}: Bool}
             hx)))
     case False{}:
       pos
@@ -1337,8 +1339,7 @@ def Quorum.scan.if(
   ~V: Data,
   ~vote: V -> A -> Maybe<&2, B>,
   ~same: B -> B -> Bool,
-  ~refl: @x: B -> {same(x, x) == True{}: Bool},
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   held: Bool,
   +b: B,
   rest: Maybe<&2, B>,
@@ -1359,8 +1360,7 @@ def Quorum.scan.if(
         ~V,
         ~vote,
         ~same,
-        ~refl,
-        ~sound,
+        ~laws,
         ms,
         g,
         b,
@@ -1375,7 +1375,7 @@ def Quorum.scan.if(
           ~V,
           ~vote,
           ~same,
-          ~sound,
+          ~laws,
           same(b, x),
           b,
           ms,
@@ -1396,8 +1396,7 @@ def Quorum.scan.at(
   ~V: Data,
   ~vote: V -> A -> Maybe<&2, B>,
   ~same: B -> B -> Bool,
-  ~refl: @x: B -> {same(x, x) == True{}: Bool},
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   v: Maybe<&2, B>,
   rest: Maybe<&2, B>,
   +ms: List<&2, A>,
@@ -1418,8 +1417,7 @@ def Quorum.scan.at(
         ~V,
         ~vote,
         ~same,
-        ~refl,
-        ~sound,
+        ~laws,
         Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, b),
         b,
         rest,
@@ -1440,8 +1438,7 @@ def Quorum.scan(
   ~V: Data,
   ~vote: V -> A -> Maybe<&2, B>,
   ~same: B -> B -> Bool,
-  ~refl: @x: B -> {same(x, x) == True{}: Bool},
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   ks: List<&2, A>,
   +ms: List<&2, A>,
   +g: V,
@@ -1460,8 +1457,7 @@ def Quorum.scan(
         ~V,
         ~vote,
         ~same,
-        ~refl,
-        ~sound,
+        ~laws,
         vote(g)(k),
         Quorum.winner(~A, ~B, ~V, ~vote, ~same, r, ms, g),
         ms,
@@ -1470,7 +1466,7 @@ def Quorum.scan(
         Quorum.yes(~A, ~B, ~V, ~vote, ~same, r, g, x),
         hx,
         pos,
-        Quorum.scan(~A, ~B, ~V, ~vote, ~same, ~refl, ~sound, r, ms, g, x, hx)
+        Quorum.scan(~A, ~B, ~V, ~vote, ~same, ~laws, r, ms, g, x, hx)
       )
 
 # a choice with a majority is the winner
@@ -1480,15 +1476,14 @@ law Quorum.winner_of:
   for ~V: Data
   for ~vote: V -> A -> Maybe<&2, B>
   for ~same: B -> B -> Bool
-  for ~refl: @x: B -> {same(x, x) == True{}: Bool}
-  for ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B}
+  for ~laws: Shared.Eq.Laws(B, same)
   for ms: List<&2, A>
   for g: V
   for x: B
   {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool}
     -> {Quorum.winner(~A, ~B, ~V, ~vote, ~same, ms, ms, g) == Some{x}: Maybe<&2, B>}
 
-def Quorum.winner_of(member, choice, state, vote, same, refl, sound, ms, g, x):
+def Quorum.winner_of(member, choice, state, vote, same, laws, ms, g, x):
   +ms = ms
   +g = g
   +x = x
@@ -1499,8 +1494,7 @@ def Quorum.winner_of(member, choice, state, vote, same, refl, sound, ms, g, x):
       ~state,
       ~vote,
       ~same,
-      ~refl,
-      ~sound,
+      ~laws,
       ms,
       ms,
       g,
@@ -1523,14 +1517,14 @@ law Quorum.winner_one:
   for ~V: Data
   for ~vote: V -> A -> Maybe<&2, B>
   for ~same: B -> B -> Bool
-  for ~refl: @x: B -> {same(x, x) == True{}: Bool}
+  for ~laws: Shared.Eq.Laws(B, same)
   for +m: A
   for +g: V
   for +x: B
   {vote(g)(m) == Some{x}: Maybe<&2, B>}
     -> {Quorum.winner(~A, ~B, ~V, ~vote, ~same, [m], [m], g) == Some{x}: Maybe<&2, B>}
 
-def Quorum.winner_one(member, choice, state, vote, same, refl, m, g, x):
+def Quorum.winner_one(member, choice, state, vote, same, laws, m, g, x):
   +h =>
     %Equal.sym(Maybe<&2, choice>, vote(g)(m), Some{x}, h):
       {
@@ -1560,7 +1554,7 @@ def Quorum.winner_one(member, choice, state, vote, same, refl, m, g, x):
         )
           == Some{x}: Maybe<&2, choice>
       }
-    %Equal.sym(Bool, same(x, x), True{}, refl(x)):
+    %Equal.sym(Bool, same(x, x), True{}, Shared.Eq.refl(~choice, ~same, laws, x)):
       {
         Bool.pick(
           Maybe<&2, choice>,
@@ -1609,7 +1603,7 @@ def Quorum.winner_none(member, choice, state, vote, same, m, g):
 # of nodes, and the claims of nodes to the first version of a chain. Replicas
 # sync by joining what they hold, so every replica that took in the same
 # entries holds the same state, in any order and any number of times
-# (Shared.Trie.union_comm, union_assoc, union_idem, with the laws of
+# (Tries.Trie.union_comm, union_assoc, union_idem, with the laws of
 # Cell.join).
 #
 # A chain is named by a key. It is a list of versions: its first version is
@@ -1674,7 +1668,7 @@ type Slot is Data:
 def Id.key(i: Id) -> List<&2, Bool>:
   match i:
     case Id{w, r}:
-      List.append(&2, Bool, Shared.Trie.text(w), Shared.Trie.text(r))
+      List.append(&2, Bool, Tries.Trie.text(w), Tries.Trie.text(r))
 
 # the start of the keys of the roots of the chain c
 def Root.key(c: List<&2, Bool>) -> List<&2, Bool>:
@@ -1688,123 +1682,126 @@ def Slot.key(k: Slot) -> List<&2, Bool>:
     case Slot.vote{n, c, i}:
       True{}
         <> False{}
-        <> List.append(&2, Bool, Shared.Trie.text(n), List.append(&2, Bool, c, Id.key(i)))
+        <> List.append(&2, Bool, Tries.Trie.text(n), List.append(&2, Bool, c, Id.key(i)))
     case Slot.root{c, n}:
-      List.append(&2, Bool, Root.key(c), Shared.Trie.text(n))
+      List.append(&2, Bool, Root.key(c), Tries.Trie.text(n))
 
 # Entry equality
 # --------------
 
 # a and b are the same request
-def Id.same(a: Id, b: Id) -> Bool:
+def Id.is_eq(a: Id, b: Id) -> Bool:
   match a b:
     case Id{w1, r1} Id{w2, r2}:
       Bool.and(String.eq(w1, w2), String.eq(r1, r2))
 
 # a and b are the same key
-def Key.same(a: List<&2, Bool>, b: List<&2, Bool>) -> Bool:
-  Shared.List.same(~Bool, ~Shared.Bool.same, a, b)
+def Key.is_eq(a: List<&2, Bool>, b: List<&2, Bool>) -> Bool:
+  Shared.List.is_eq(~Bool, ~Shared.Bool.is_eq, a, b)
 
 # a and b are the same entry, when same compares changes
-def Entry.same(~Q: Data, ~same: Q -> Q -> Bool, a: Entry<Q>, b: Entry<Q>) -> Bool:
+def Entry.is_eq(~Q: Data, ~same: Q -> Q -> Bool, a: Entry<Q>, b: Entry<Q>) -> Bool:
   match a b:
     case Entry.ask{i1, t1, q1} Entry.ask{i2, t2, q2}:
-      Bool.and(Id.same(i1, i2), Bool.and(String.eq(t1, t2), same(q1, q2)))
+      Bool.and(Id.is_eq(i1, i2), Bool.and(String.eq(t1, t2), same(q1, q2)))
     case Entry.vote{i1} Entry.vote{i2}:
-      Id.same(i1, i2)
+      Id.is_eq(i1, i2)
     case Entry.root{c1, i1, n1} Entry.root{c2, i2, n2}:
-      Bool.and(Key.same(c1, c2), Bool.and(Id.same(i1, i2), String.eq(n1, n2)))
+      Bool.and(Key.is_eq(c1, c2), Bool.and(Id.is_eq(i1, i2), String.eq(n1, n2)))
     case _ _:
       False{}
 
-# Id.same is True for a request and itself
-def Id.same_refl(a: Id) -> {Id.same(a, a) == True{}: Bool}:
+# Id.is_eq is True for a request and itself
+def Id.is_eq_refl(a: Id) -> {Id.is_eq(a, a) == True{}: Bool}:
   match a:
     case Id{+w, +r}:
       Shared.Bool.and_both(
         String.eq(w, w),
         String.eq(r, r)
-      )(Shared.String.eq_refl(w))(Shared.String.eq_refl(r))
+      )(Texts.String.eq_refl(w))(Texts.String.eq_refl(r))
 
-# Id.same is True only for equal requests
-def Id.same_sound(a: Id, b: Id) -> {Id.same(a, b) == True{}: Bool} -> {a == b: Id}:
+# Id.is_eq is True only for equal requests
+def Id.is_eq_sound(a: Id, b: Id) -> {Id.is_eq(a, b) == True{}: Bool} -> {a == b: Id}:
   match a b:
     case Id{+w1, +r1} Id{+w2, +r2}:
       +h =>
-        %Shared.String.eq_sound(
+        %Texts.String.eq_sound(
           w1,
           w2
         )(Shared.Bool.and_true_left(String.eq(w1, w2), String.eq(r1, r2))(h)):
           {Id{w1, r1} == Id{_, r2}: Id}
-        %Shared.String.eq_sound(
+        %Texts.String.eq_sound(
           r1,
           r2
         )(Shared.Bool.and_true_right(String.eq(w1, w2), String.eq(r1, r2))(h)):
           {Id{w1, r1} == Id{w1, _}: Id}
         {==}
 
-# Key.same is True for a key and itself
-def Key.same_refl(a: List<&2, Bool>) -> {Key.same(a, a) == True{}: Bool}:
-  Shared.List.same_refl(~Bool, ~Shared.Bool.same, ~Shared.Bool.same_refl, a)
+# the laws of Id.is_eq
+def Id.laws() -> Shared.Eq.Laws(Id, Id.is_eq):
+  (Id.is_eq_refl, Id.is_eq_sound)
+# Key.is_eq is True for a key and itself
+def Key.is_eq_refl(a: List<&2, Bool>) -> {Key.is_eq(a, a) == True{}: Bool}:
+  Shared.List.is_eq_refl(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws(), a)
 
-# Key.same is True only for equal keys
-def Key.same_sound(
+# Key.is_eq is True only for equal keys
+def Key.is_eq_sound(
   a: List<&2, Bool>,
   b: List<&2, Bool>
-) -> {Key.same(a, b) == True{}: Bool} -> {a == b: List<&2, Bool>}:
-  Shared.List.same_sound(~Bool, ~Shared.Bool.same, ~Shared.Bool.same_sound, a, b)
+) -> {Key.is_eq(a, b) == True{}: Bool} -> {a == b: List<&2, Bool>}:
+  Shared.List.is_eq_sound(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws(), a, b)
 
-# Entry.same is True for an entry and itself
-def Entry.same_refl(
+# Entry.is_eq is True for an entry and itself
+def Entry.is_eq_refl(
   ~Q: Data,
   ~same: Q -> Q -> Bool,
   ~laws: Shared.Eq.Laws(Q, same),
   a: Entry<Q>
-) -> {Entry.same(~Q, ~same, a, a) == True{}: Bool}:
+) -> {Entry.is_eq(~Q, ~same, a, a) == True{}: Bool}:
   match a:
     case Entry.ask{+i, +t, +q}:
       Shared.Bool.and_both(
-        Id.same(i, i),
+        Id.is_eq(i, i),
         Bool.and(String.eq(t, t), same(q, q))
       )(
-        Id.same_refl(i)
+        Id.is_eq_refl(i)
       )(
         Shared.Bool.and_both(
           String.eq(t, t),
           same(q, q)
-        )(Shared.String.eq_refl(t))(Shared.Eq.refl(~Q, ~same, laws, q))
+        )(Texts.String.eq_refl(t))(Shared.Eq.refl(~Q, ~same, laws, q))
       )
     case Entry.vote{i}:
-      Id.same_refl(i)
+      Id.is_eq_refl(i)
     case Entry.root{+c, +i, +n}:
       Shared.Bool.and_both(
-        Key.same(c, c),
-        Bool.and(Id.same(i, i), String.eq(n, n))
+        Key.is_eq(c, c),
+        Bool.and(Id.is_eq(i, i), String.eq(n, n))
       )(
-        Key.same_refl(c)
+        Key.is_eq_refl(c)
       )(
         Shared.Bool.and_both(
-          Id.same(i, i),
+          Id.is_eq(i, i),
           String.eq(n, n)
-        )(Id.same_refl(i))(Shared.String.eq_refl(n))
+        )(Id.is_eq_refl(i))(Texts.String.eq_refl(n))
       )
 
-# Entry.same is True only for equal entries
-def Entry.same_sound(
+# Entry.is_eq is True only for equal entries
+def Entry.is_eq_sound(
   ~Q: Data,
   ~same: Q -> Q -> Bool,
   ~laws: Shared.Eq.Laws(Q, same),
   a: Entry<Q>,
   b: Entry<Q>
-) -> {Entry.same(~Q, ~same, a, b) == True{}: Bool} -> {a == b: Entry<Q>}:
+) -> {Entry.is_eq(~Q, ~same, a, b) == True{}: Bool} -> {a == b: Entry<Q>}:
   match a b:
     case Entry.ask{+i1, +t1, +q1} Entry.ask{+i2, +t2, +q2}:
       +h =>
         +r1 = Bool.and(String.eq(t1, t2), same(q1, q2))
-        +h1 = Shared.Bool.and_true_right(Id.same(i1, i2), r1)(h)
-        %Id.same_sound(i1, i2)(Shared.Bool.and_true_left(Id.same(i1, i2), r1)(h)):
+        +h1 = Shared.Bool.and_true_right(Id.is_eq(i1, i2), r1)(h)
+        %Id.is_eq_sound(i1, i2)(Shared.Bool.and_true_left(Id.is_eq(i1, i2), r1)(h)):
           {Entry.ask{i1, t1, q1} == Entry.ask{_, t2, q2}: Entry<Q>}
-        %Shared.String.eq_sound(
+        %Texts.String.eq_sound(
           t1,
           t2
         )(Shared.Bool.and_true_left(String.eq(t1, t2), same(q1, q2))(h1)):
@@ -1820,20 +1817,20 @@ def Entry.same_sound(
         {==}
     case Entry.vote{i1} Entry.vote{i2}:
       h =>
-        %Id.same_sound(i1, i2)(h): {Entry.vote{i1} == Entry.vote{_}: Entry<Q>}
+        %Id.is_eq_sound(i1, i2)(h): {Entry.vote{i1} == Entry.vote{_}: Entry<Q>}
         {==}
     case Entry.root{+c1, +i1, +n1} Entry.root{+c2, +i2, +n2}:
       +h =>
-        +r1 = Bool.and(Id.same(i1, i2), String.eq(n1, n2))
-        +h1 = Shared.Bool.and_true_right(Key.same(c1, c2), r1)(h)
-        %Key.same_sound(c1, c2)(Shared.Bool.and_true_left(Key.same(c1, c2), r1)(h)):
+        +r1 = Bool.and(Id.is_eq(i1, i2), String.eq(n1, n2))
+        +h1 = Shared.Bool.and_true_right(Key.is_eq(c1, c2), r1)(h)
+        %Key.is_eq_sound(c1, c2)(Shared.Bool.and_true_left(Key.is_eq(c1, c2), r1)(h)):
           {Entry.root{c1, i1, n1} == Entry.root{_, i2, n2}: Entry<Q>}
-        %Id.same_sound(i1, i2)(Shared.Bool.and_true_left(Id.same(i1, i2), String.eq(n1, n2))(h1)):
+        %Id.is_eq_sound(i1, i2)(Shared.Bool.and_true_left(Id.is_eq(i1, i2), String.eq(n1, n2))(h1)):
           {Entry.root{c1, i1, n1} == Entry.root{c1, _, n2}: Entry<Q>}
-        %Shared.String.eq_sound(
+        %Texts.String.eq_sound(
           n1,
           n2
-        )(Shared.Bool.and_true_right(Id.same(i1, i2), String.eq(n1, n2))(h1)):
+        )(Shared.Bool.and_true_right(Id.is_eq(i1, i2), String.eq(n1, n2))(h1)):
           {Entry.root{c1, i1, n1} == Entry.root{c1, i1, _}: Entry<Q>}
         {==}
     case Entry.ask{p0, p1, p2} Entry.vote{q0}:
@@ -1866,29 +1863,37 @@ def Entry.same_sound(
         {Entry.root{p0, p1, p2} == Entry.vote{q0}: Entry<Q>},
         Shared.Bool.false_ne_true(h)
       )
+# the laws of Entry.is_eq, by the laws of same
+def Entry.laws(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same)
+) -> Shared.Eq.Laws(Entry<Q>, Entry.is_eq(~Q, ~same)):
+  (a => Entry.is_eq_refl(~Q, ~same, ~laws, a), a => b => Entry.is_eq_sound(~Q, ~same, ~laws, a, b))
+
 # The state
 # ---------
 
 # what a replica of changes Q holds: the cell of each slot, by the slot's key
 def State(-Q: Data) -> Data:
-  Shared.Trie<Cell<Entry<Q>>>
+  Tries.Trie<Cell<Entry<Q>>>
 
 # a replica that holds nothing yet
 def State.empty(~Q: Data) -> State(Q):
-  Shared.Trie.new(Cell<Entry<Q>>)
+  Tries.Trie.new(Cell<Entry<Q>>)
 
 # what a holder of a and of b holds: a sync
 def State.join(~Q: Data, ~same: Q -> Q -> Bool, a: State(Q), b: State(Q)) -> State(Q):
-  Shared.Trie.union(~Cell<Entry<Q>>, ~Cell.join(~Entry<Q>, ~Entry.same(~Q, ~same)), a, b)
+  Tries.Trie.union(~Cell<Entry<Q>>, ~Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), a, b)
 
 # what a holder of r lacks of s: what a sync from s to r sends
-# (Shared.Trie.union_minus)
+# (Tries.Trie.union_minus)
 def State.missing(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), r: State(Q)) -> State(Q):
-  Shared.Trie.minus(~Cell<Entry<Q>>, ~Cell.same(~Entry<Q>, ~Entry.same(~Q, ~same)), s, r)
+  Tries.Trie.minus(~Cell<Entry<Q>>, ~Cell.is_eq(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), s, r)
 
 # no entry of t contradicts one of s
 def State.agrees(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), t: State(Q)) -> Bool:
-  Cell.agrees(~Entry<Q>, ~Entry.same(~Q, ~same), s, t)
+  Cell.agrees(~Entry<Q>, ~Entry.is_eq(~Q, ~same), s, t)
 
 # the first claim among the cells cs that every holder agrees on
 def Root.first(~Q: Data, cs: List<&2, Cell<Entry<Q>>>) -> Maybe<&2, Entry<Q>>:
@@ -1905,7 +1910,7 @@ def Root.first(~Q: Data, cs: List<&2, Cell<Entry<Q>>>) -> Maybe<&2, Entry<Q>>:
 def State.claim(~Q: Data, s: State(Q), c: List<&2, Bool>) -> Maybe<&2, Entry<Q>>:
   Root.first(
     ~Q,
-    Shared.Trie.values(Cell<Entry<Q>>, Shared.Trie.under(Cell<Entry<Q>>, s, Root.key(c)))
+    Tries.Trie.values(Cell<Entry<Q>>, Tries.Trie.under(Cell<Entry<Q>>, s, Root.key(c)))
   )
 
 # Lookups
@@ -1921,7 +1926,7 @@ def Cell.entry(~Q: Data, m: Maybe<&2, Cell<Entry<Q>>>) -> Maybe<&2, Entry<Q>>:
 
 # the cell of the slot k in s
 def State.cell(~Q: Data, s: State(Q), k: Slot) -> Maybe<&2, Cell<Entry<Q>>>:
-  Shared.Trie.get(Cell<Entry<Q>>, s, Slot.key(k))
+  Tries.Trie.get(Cell<Entry<Q>>, s, Slot.key(k))
 
 # a request that s holds: its time and change
 type Asked<-Q: Data> is Data:
@@ -1992,7 +1997,7 @@ def Step.ask(
     case None{}:
       None{}
     case Some{Asked{t, +q}}:
-      Step.if(~Q, ~view, Key.same(View.chain(view(q)), c), i, q, ms)
+      Step.if(~Q, ~view, Key.is_eq(View.chain(view(q)), c), i, q, ms)
 
 # the step to the winner w of a vote, on the chain c of s
 def Step.won(
@@ -2025,7 +2030,7 @@ def Chain.next(
         s,
         c,
         ms,
-        Quorum.winner(~String, ~Id, ~Spot<Q>, ~Spot.vote(~Q), ~Id.same, ms, ms, Spot{s, c, v})
+        Quorum.winner(~String, ~Id, ~Spot<Q>, ~Spot.vote(~Q), ~Id.is_eq, ms, ms, Spot{s, c, v})
       )
 
 # the versions of the chain c of s from the step nx on, f steps at most
@@ -2066,7 +2071,7 @@ def Chain.last(
 
 # enough steps for any chain of s: one more than it has entries
 def State.fuel(~Q: Data, s: State(Q)) -> Nat:
-  1n+Shared.Trie.size(Cell<Entry<Q>>, s)
+  1n+Tries.Trie.size(Cell<Entry<Q>>, s)
 
 # the first step of a chain, from its root entry m
 def Root.of(~Q: Data, m: Maybe<&2, Entry<Q>>) -> Maybe<&2, Step>:
@@ -2163,7 +2168,7 @@ def State.head(~Q: Data, ~view: Q -> View, s: State(Q), c: List<&2, Bool>) -> Ma
 
 # s with the entry e in the slot k
 def State.put(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), k: Slot, e: Entry<Q>) -> State(Q):
-  State.join(~Q, ~same, s, Shared.Trie.one(Cell<Entry<Q>>, Slot.key(k), one{e}))
+  State.join(~Q, ~same, s, Tries.Trie.one(Cell<Entry<Q>>, Slot.key(k), one{e}))
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the laws of State.ask split on this and; a request is taken in once
 # the node n may vote at the step h of the chain c, whose owners are ms
@@ -2176,7 +2181,7 @@ def State.may_vote(
   ms: List<&2, String>
 ) -> Bool:
   Bool.and(
-    Shared.List.has(~String, ~String.eq, ms, n),
+    List.contains(~String, ~String.eq, ms, n),
     Maybe.is_none(&2, Cell<Entry<Q>>, State.cell(~Q, s, Slot.vote{n, c, h}))
   )
 
@@ -2325,7 +2330,7 @@ def Vote.open(
 ) -> Bool:
   match held:
     case True{}:
-      Vote.open.on(~Q, ~fits, Bool.not(Shared.List.has(~Id, ~Id.same, xs, i)), s, q, h)
+      Vote.open.on(~Q, ~fits, Bool.not(List.contains(~Id, ~Id.is_eq, xs, i)), s, q, h)
     case False{}:
       False{}
 
@@ -2346,7 +2351,7 @@ def Vote.held(
     case None{}:
       False{}
     case Some{Asked{t, +q}}:
-      Vote.open(~Q, ~fits, Key.same(View.chain(view(q)), c), s, q, xs, i, h)
+      Vote.open(~Q, ~fits, Key.is_eq(View.chain(view(q)), c), s, q, xs, i, h)
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the rest is one walk of the list; it costs the same with or without the pick
 # the first request among the cells cs that s holds in its own slot, changes
@@ -2379,9 +2384,9 @@ def Vote.pick(
 def Vote.cast(~Q: Data, held: Bool, k: Slot, m: Maybe<&2, Id>) -> State(Q):
   match held m:
     case True{} Some{i}:
-      Shared.Trie.one(Cell<Entry<Q>>, Slot.key(k), one{Entry.vote{i}})
+      Tries.Trie.one(Cell<Entry<Q>>, Slot.key(k), one{Entry.vote{i}})
     case h w:
-      Shared.tip{}
+      Tries.tip{}
 
 # the vote of the node n on the chain c of s, at its last step m
 def Vote.at(
@@ -2395,7 +2400,7 @@ def Vote.at(
 ) -> State(Q):
   match m:
     case None{}:
-      Shared.tip{}
+      Tries.tip{}
     case Some{Step{+h, ms}}:
       Vote.cast(
         ~Q,
@@ -2406,7 +2411,7 @@ def Vote.at(
           ~view,
           ~fits,
           s,
-          Shared.Trie.values(Cell<Entry<Q>>, s),
+          Tries.Trie.values(Cell<Entry<Q>>, s),
           c,
           State.chain(~Q, ~view, s, c),
           h
@@ -2424,7 +2429,7 @@ def Vote.chains(~Q: Data, cs: List<&2, Cell<Entry<Q>>>) -> List<&2, List<&2, Boo
         List<&2, Bool>,
         c,
         rest,
-        Bool.not(Shared.List.has(~List<&2, Bool>, ~Key.same, rest, c))
+        Bool.not(List.contains(~List<&2, Bool>, ~Key.is_eq, rest, c))
       )
     case Con{x, r}:
       Vote.chains(~Q, r)
@@ -2441,7 +2446,7 @@ def Vote.all(
 ) -> State(Q):
   match cs:
     case Nil{}:
-      Shared.tip{}
+      Tries.tip{}
     case Con{+c, r}:
       State.join(
         ~Q,
@@ -2464,7 +2469,7 @@ def State.vote(
     ~Q,
     ~same,
     s,
-    Vote.all(~Q, ~same, ~view, ~fits, n, s, Vote.chains(~Q, Shared.Trie.values(Cell<Entry<Q>>, s)))
+    Vote.all(~Q, ~same, ~view, ~fits, n, s, Vote.chains(~Q, Tries.Trie.values(Cell<Entry<Q>>, s)))
   )
 
 # Status
@@ -2545,7 +2550,7 @@ def Status.of(
         ~fits,
         s,
         q,
-        Shared.List.has(~Id, ~Id.same, State.chain(~Q, ~view, s, View.chain(view(q))), i)
+        List.contains(~Id, ~Id.is_eq, State.chain(~Q, ~view, s, View.chain(view(q))), i)
       )
     case Some{one{e}}:
       Status.not_seen{}
@@ -2579,8 +2584,8 @@ def Kept.cell(
 } -> {State.cell(~Q, State.join(~Q, ~same, s, t), k) == Some{one{e}}: Maybe<&2, Cell<Entry<Q>>>}:
   Cell.agrees_kept(
     ~Entry<Q>,
-    ~Entry.same(~Q, ~same),
-    ~Entry.same_sound(~Q, ~same, ~laws),
+    ~Entry.is_eq(~Q, ~same),
+    ~Entry.laws(~Q, ~same, ~laws),
     s,
     t,
     Slot.key(k),
@@ -2721,14 +2726,14 @@ def Kept.one.at(
   x: Maybe<&2, Id>,
   y: Maybe<&2, Id>,
   keep: @j: Id -> {x == Some{j}: Maybe<&2, Id>} -> {y == Some{j}: Maybe<&2, Id>}
-) -> {Quorum.kept(~Id, ~Id.same, x, y) == True{}: Bool}:
+) -> {Quorum.kept(~Id, ~Id.is_eq, x, y) == True{}: Bool}:
   match x:
     case None{}:
       {==}
     case Some{+j}:
       %Equal.sym(Maybe<&2, Id>, y, Some{j}, keep(j)({==})):
-        {Quorum.hit(~Id, ~Id.same, _, j) == True{}: Bool}
-      Id.same_refl(j)
+        {Quorum.hit(~Id, ~Id.is_eq, _, j) == True{}: Bool}
+      Id.is_eq_refl(j)
 
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # every vote at the spot of s is kept by an agreeing join
@@ -2748,7 +2753,7 @@ def Kept.keeps(
     ~Id,
     ~Spot<Q>,
     ~Spot.vote(~Q),
-    ~Id.same,
+    ~Id.is_eq,
     ms,
     Spot{s, c, v},
     Spot{State.join(~Q, ~same, s, t), c, v}
@@ -2762,7 +2767,7 @@ def Kept.keeps(
       Shared.Bool.and_both(
         Quorum.kept(
           ~Id,
-          ~Id.same,
+          ~Id.is_eq,
           Spot.vote(~Q, Spot{s, c, v}, m),
           Spot.vote(~Q, Spot{State.join(~Q, ~same, s, t), c, v}, m)
         ),
@@ -2771,7 +2776,7 @@ def Kept.keeps(
           ~Id,
           ~Spot<Q>,
           ~Spot.vote(~Q),
-          ~Id.same,
+          ~Id.is_eq,
           r,
           Spot{s, c, v},
           Spot{State.join(~Q, ~same, s, t), c, v}
@@ -2868,7 +2873,7 @@ def Kept.next.won(
       ~Id,
       ~Spot<Q>,
       ~Spot.vote(~Q),
-      ~Id.same,
+      ~Id.is_eq,
       ms,
       ms,
       Spot{s, c, v}
@@ -2889,7 +2894,7 @@ def Kept.next.won(
       ~Id,
       ~Spot<Q>,
       ~Spot.vote(~Q),
-      ~Id.same,
+      ~Id.is_eq,
       ms,
       ms,
       Spot{State.join(~Q, ~same, s, t), c, v}
@@ -2912,7 +2917,7 @@ def Kept.next.won(
               ~Id,
               ~Spot<Q>,
               ~Spot.vote(~Q),
-              ~Id.same,
+              ~Id.is_eq,
               ms,
               ms,
               Spot{State.join(~Q, ~same, s, t), c, v}
@@ -2931,9 +2936,8 @@ def Kept.next.won(
           ~Id,
           ~Spot<Q>,
           ~Spot.vote(~Q),
-          ~Id.same,
-          ~Id.same_refl,
-          ~Id.same_sound,
+          ~Id.is_eq,
+          ~Id.laws(),
           ms,
           g2,
           i
@@ -2943,19 +2947,19 @@ def Kept.next.won(
             ~Id,
             ~Spot<Q>,
             ~Spot.vote(~Q),
-            ~Id.same,
-            ~Id.same_sound,
+            ~Id.is_eq,
+            ~Id.laws(),
             ms,
             g,
             g2,
             i
           )(
             Kept.keeps(~Q, ~same, ~laws, s, t, c, v, ms, a)
-          )(Quorum.has_winner(~String, ~Id, ~Spot<Q>, ~Spot.vote(~Q), ~Id.same, ms, ms, g, i)(ew))
+          )(Quorum.has_winner(~String, ~Id, ~Spot<Q>, ~Spot.vote(~Q), ~Id.is_eq, ms, ms, g, i)(ew))
         )
         %Equal.sym(
           Maybe<&2, Id>,
-          Quorum.winner(~String, ~Id, ~Spot<Q>, ~Spot.vote(~Q), ~Id.same, ms, ms, g2),
+          Quorum.winner(~String, ~Id, ~Spot<Q>, ~Spot.vote(~Q), ~Id.is_eq, ms, ms, g2),
           Some{i},
           won
         ):
@@ -3005,7 +3009,7 @@ def Kept.next(
         ms,
         st,
         a,
-        Quorum.winner(~String, ~Id, ~Spot<Q>, ~Spot.vote(~Q), ~Id.same, ms, ms, Spot{s, c, v}),
+        Quorum.winner(~String, ~Id, ~Spot<Q>, ~Spot.vote(~Q), ~Id.is_eq, ms, ms, Spot{s, c, v}),
         {==}
       )
 
@@ -3637,7 +3641,7 @@ def State.fuel_le(
   s: State(Q),
   t: State(Q)
 ) -> {Nat.is_le(State.fuel(~Q, s), State.fuel(~Q, State.join(~Q, ~same, s, t))) == True{}: Bool}:
-  Shared.Trie.size_union(~Cell<Entry<Q>>, ~Cell.join(~Entry<Q>, ~Entry.same(~Q, ~same)), s, t)
+  Tries.Trie.size_union(~Cell<Entry<Q>>, ~Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), s, t)
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # State.chain_kept from the first step m
@@ -4430,14 +4434,14 @@ def Next.none(
   h =>
     %Equal.sym(
       Maybe<&2, Id>,
-      Quorum.winner(~String, ~Id, ~Spot<Q>, ~Spot.vote(~Q), ~Id.same, [n], [n], Spot{s, c, v}),
+      Quorum.winner(~String, ~Id, ~Spot<Q>, ~Spot.vote(~Q), ~Id.is_eq, [n], [n], Spot{s, c, v}),
       None{},
       Quorum.winner_none(
         ~String,
         ~Id,
         ~Spot<Q>,
         ~Spot.vote(~Q),
-        ~Id.same,
+        ~Id.is_eq,
         n,
         Spot{s, c, v}
       )(Spot.vote_of(~Q, s, c, v, n, None{})(h))
@@ -4463,7 +4467,7 @@ def Next.one(
 } -> {
   State.asked(~Q, s, i) == Some{Asked{t, q}}: Maybe<&2, Asked<Q>>
 } -> {
-  Key.same(View.chain(view(q)), c) == True{}: Bool
+  Key.is_eq(View.chain(view(q)), c) == True{}: Bool
 } -> {
   Chain.next(
     ~Q,
@@ -4477,15 +4481,15 @@ def Next.one(
   hv => ha => hq =>
     %Equal.sym(
       Maybe<&2, Id>,
-      Quorum.winner(~String, ~Id, ~Spot<Q>, ~Spot.vote(~Q), ~Id.same, [n], [n], Spot{s, c, v}),
+      Quorum.winner(~String, ~Id, ~Spot<Q>, ~Spot.vote(~Q), ~Id.is_eq, [n], [n], Spot{s, c, v}),
       Some{i},
       Quorum.winner_one(
         ~String,
         ~Id,
         ~Spot<Q>,
         ~Spot.vote(~Q),
-        ~Id.same,
-        ~Id.same_refl,
+        ~Id.is_eq,
+        ~Id.laws(),
         n,
         Spot{s, c, v},
         i
@@ -4514,7 +4518,7 @@ def Next.one(
         )
           == Some{Step{i, View.owners_of(view(q), [n])}}: Maybe<&2, Step>
       }
-    %Equal.sym(Bool, Key.same(View.chain(view(q)), c), True{}, hq):
+    %Equal.sym(Bool, Key.is_eq(View.chain(view(q)), c), True{}, hq):
       {
         Step.if(
           ~Q,
@@ -4688,57 +4692,57 @@ def Fresh.cell(
   +p: List<&2, Bool>,
   +x: Cell<Entry<Q>>
 ) -> {
-  Shared.Trie.apart(k, p) == True{}: Bool
+  Tries.Trie.apart(k, p) == True{}: Bool
 } -> {
-  Shared.Trie.get(
+  Tries.Trie.get(
     Cell<Entry<Q>>,
-    State.join(~Q, ~same, s, Shared.Trie.one(Cell<Entry<Q>>, k, x)),
+    State.join(~Q, ~same, s, Tries.Trie.one(Cell<Entry<Q>>, k, x)),
     p
   )
-    == Shared.Trie.get(Cell<Entry<Q>>, s, p): Maybe<&2, Cell<Entry<Q>>>
+    == Tries.Trie.get(Cell<Entry<Q>>, s, p): Maybe<&2, Cell<Entry<Q>>>
 }:
   ap =>
     %Equal.sym(
       Maybe<&2, Cell<Entry<Q>>>,
-      Shared.Trie.get(
+      Tries.Trie.get(
         Cell<Entry<Q>>,
-        State.join(~Q, ~same, s, Shared.Trie.one(Cell<Entry<Q>>, k, x)),
+        State.join(~Q, ~same, s, Tries.Trie.one(Cell<Entry<Q>>, k, x)),
         p
       ),
-      Shared.Trie.pick(
+      Tries.Trie.pick(
         ~Cell<Entry<Q>>,
-        ~Cell.join(~Entry<Q>, ~Entry.same(~Q, ~same)),
-        Shared.Trie.get(Cell<Entry<Q>>, s, p),
-        Shared.Trie.get(Cell<Entry<Q>>, Shared.Trie.one(Cell<Entry<Q>>, k, x), p)
+        ~Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+        Tries.Trie.get(Cell<Entry<Q>>, s, p),
+        Tries.Trie.get(Cell<Entry<Q>>, Tries.Trie.one(Cell<Entry<Q>>, k, x), p)
       ),
-      Shared.Trie.get_union(
+      Tries.Trie.get_union(
         ~Cell<Entry<Q>>,
-        ~Cell.join(~Entry<Q>, ~Entry.same(~Q, ~same)),
+        ~Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
         s,
-        Shared.Trie.one(Cell<Entry<Q>>, k, x),
+        Tries.Trie.one(Cell<Entry<Q>>, k, x),
         p
       )
     ):
-      {_ == Shared.Trie.get(Cell<Entry<Q>>, s, p): Maybe<&2, Cell<Entry<Q>>>}
+      {_ == Tries.Trie.get(Cell<Entry<Q>>, s, p): Maybe<&2, Cell<Entry<Q>>>}
     %Equal.sym(
       Maybe<&2, Cell<Entry<Q>>>,
-      Shared.Trie.get(Cell<Entry<Q>>, Shared.Trie.one(Cell<Entry<Q>>, k, x), p),
+      Tries.Trie.get(Cell<Entry<Q>>, Tries.Trie.one(Cell<Entry<Q>>, k, x), p),
       None{},
-      Shared.Trie.get_one_apart(Cell<Entry<Q>>, k, p, x)(ap)
+      Tries.Trie.get_one_apart(Cell<Entry<Q>>, k, p, x)(ap)
     ):
       {
-        Shared.Trie.pick(
+        Tries.Trie.pick(
           ~Cell<Entry<Q>>,
-          ~Cell.join(~Entry<Q>, ~Entry.same(~Q, ~same)),
-          Shared.Trie.get(Cell<Entry<Q>>, s, p),
+          ~Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+          Tries.Trie.get(Cell<Entry<Q>>, s, p),
           _
         )
-          == Shared.Trie.get(Cell<Entry<Q>>, s, p): Maybe<&2, Cell<Entry<Q>>>
+          == Tries.Trie.get(Cell<Entry<Q>>, s, p): Maybe<&2, Cell<Entry<Q>>>
       }
-    Shared.Trie.pick_none(
+    Tries.Trie.pick_none(
       ~Cell<Entry<Q>>,
-      ~Cell.join(~Entry<Q>, ~Entry.same(~Q, ~same)),
-      Shared.Trie.get(Cell<Entry<Q>>, s, p)
+      ~Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+      Tries.Trie.get(Cell<Entry<Q>>, s, p)
     )
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
@@ -4751,28 +4755,28 @@ def Fresh.claim(
   c: List<&2, Bool>,
   x: Cell<Entry<Q>>
 ) -> {
-  Shared.Trie.apart(k, Root.key(c)) == True{}: Bool
+  Tries.Trie.apart(k, Root.key(c)) == True{}: Bool
 } -> {
   State.claim(
     ~Q,
-    State.join(~Q, ~same, s, Shared.Trie.one(Cell<Entry<Q>>, k, x)),
+    State.join(~Q, ~same, s, Tries.Trie.one(Cell<Entry<Q>>, k, x)),
     c
   )
     == State.claim(~Q, s, c): Maybe<&2, Entry<Q>>
 }:
   ap => Equal.cong(
-    Shared.Trie<Cell<Entry<Q>>>,
+    Tries.Trie<Cell<Entry<Q>>>,
     Maybe<&2, Entry<Q>>,
-    z => Root.first(~Q, Shared.Trie.values(Cell<Entry<Q>>, z)),
-    Shared.Trie.under(
+    z => Root.first(~Q, Tries.Trie.values(Cell<Entry<Q>>, z)),
+    Tries.Trie.under(
       Cell<Entry<Q>>,
-      State.join(~Q, ~same, s, Shared.Trie.one(Cell<Entry<Q>>, k, x)),
+      State.join(~Q, ~same, s, Tries.Trie.one(Cell<Entry<Q>>, k, x)),
       Root.key(c)
     ),
-    Shared.Trie.under(Cell<Entry<Q>>, s, Root.key(c)),
-    Shared.Trie.under_union_apart(
+    Tries.Trie.under(Cell<Entry<Q>>, s, Root.key(c)),
+    Tries.Trie.under_union_apart(
       ~Cell<Entry<Q>>,
-      ~Cell.join(~Entry<Q>, ~Entry.same(~Q, ~same)),
+      ~Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
       s,
       k,
       Root.key(c),
@@ -4824,16 +4828,16 @@ def State.chain_after_unfit_ask(Q, same, laws, view, fits, n, s, i, t, q, v):
   +ka = Slot.key(Slot.ask{i})
   kv = Slot.key(Slot.vote{n, c, v})
   +ea = {one{Entry.ask{i, t, q}}: Cell<Entry<Q>>}
-  +ta = Shared.Trie.one(Cell<Entry<Q>>, ka, ea)
+  +ta = Tries.Trie.one(Cell<Entry<Q>>, ka, ea)
   s1 = State.join(~Q, ~same, s, ta)
   +h1 => +h2 => +h3 => +h4 => hf =>
     +ecur = Owner.cursor(Chain.cursor(~Q, ~view, s, c), n, v)(h1)(h2)
-    +a = Cell.agrees_one(~Entry<Q>, ~Entry.same(~Q, ~same), s, ka, ea)(h3)
+    +a = Cell.agrees_one(~Entry<Q>, ~Entry.is_eq(~Q, ~same), s, ka, ea)(h3)
     +hc = Fresh.claim(~Q, ~same, s, ka, c, ea)({==})
     +f4 = Equal.trans(
       Maybe<&2, Cell<Entry<Q>>>,
-      Shared.Trie.get(Cell<Entry<Q>>, s1, kv),
-      Shared.Trie.get(Cell<Entry<Q>>, s, kv),
+      Tries.Trie.get(Cell<Entry<Q>>, s1, kv),
+      Tries.Trie.get(Cell<Entry<Q>>, s, kv),
       None{},
       Fresh.cell(~Q, ~same, s, ka, kv, ea)({==}),
       h4
@@ -4938,9 +4942,9 @@ def State.chain_after_unfit_ask(Q, same, laws, view, fits, n, s, i, t, q, v):
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # a list that holds a node holds it
-def Owners.has(n: String) -> {Shared.List.has(~String, ~String.eq, [n], n) == True{}: Bool}:
-  %Equal.sym(Bool, String.eq(n, n), True{}, Shared.String.eq_refl(n)):
-    {List.any.if(u => Shared.List.has(~String, ~String.eq, [], n), _) == True{}: Bool}
+def Owners.has(n: String) -> {List.contains(~String, ~String.eq, [n], n) == True{}: Bool}:
+  %Equal.sym(Bool, String.eq(n, n), True{}, Texts.String.eq_refl(n)):
+    {List.any.if(u => List.contains(~String, ~String.eq, [], n), _) == True{}: Bool}
   {==}
 
 # one entry at a free key walks one step further
@@ -4951,32 +4955,32 @@ def Grow.fuel(
   k: List<&2, Bool>,
   x: Cell<Entry<Q>>
 ) -> {
-  Shared.Trie.get(Cell<Entry<Q>>, s, k) == None{}: Maybe<&2, Cell<Entry<Q>>>
+  Tries.Trie.get(Cell<Entry<Q>>, s, k) == None{}: Maybe<&2, Cell<Entry<Q>>>
 } -> {
   Nat.is_lt(
     State.fuel(~Q, s),
-    State.fuel(~Q, State.join(~Q, ~same, s, Shared.Trie.one(Cell<Entry<Q>>, k, x)))
+    State.fuel(~Q, State.join(~Q, ~same, s, Tries.Trie.one(Cell<Entry<Q>>, k, x)))
   )
     == True{}: Bool
 }:
   h =>
     %Equal.sym(
       Nat,
-      Shared.Trie.size(
+      Tries.Trie.size(
         Cell<Entry<Q>>,
-        State.join(~Q, ~same, s, Shared.Trie.one(Cell<Entry<Q>>, k, x))
+        State.join(~Q, ~same, s, Tries.Trie.one(Cell<Entry<Q>>, k, x))
       ),
-      1n+Shared.Trie.size(Cell<Entry<Q>>, s),
-      Shared.Trie.size_union_one(
+      1n+Tries.Trie.size(Cell<Entry<Q>>, s),
+      Tries.Trie.size_union_one(
         ~Cell<Entry<Q>>,
-        ~Cell.join(~Entry<Q>, ~Entry.same(~Q, ~same)),
+        ~Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
         s,
         k,
         x
       )(h)
     ):
       {Nat.is_lt(State.fuel(~Q, s), 1n+_) == True{}: Bool}
-    Shared.Nat.lt_succ(Shared.Trie.size(Cell<Entry<Q>>, s))
+    Shared.Nat.lt_succ(Tries.Trie.size(Cell<Entry<Q>>, s))
 
 # the request i is in the chain of s2, s1 and the sole owner's vote for it
 # after v, once the first step of the chain of s1 is known
@@ -5024,9 +5028,9 @@ def Owner.puts(
         == Step{v, [n]}: Step
     }
 ) -> {
-  Shared.List.has(
+  List.contains(
     ~Id,
-    ~Id.same,
+    ~Id.is_eq,
     State.chain(~Q, ~view, State.join(~Q, ~same, s1, tv), c),
     i
   )
@@ -5081,6 +5085,6 @@ def Owner.puts(
         List.append(&2, Id, x1, i <> rest),
         shape
       ):
-        {Shared.List.has(~Id, ~Id.same, _, i) == True{}: Bool}
-      Shared.List.has_middle(~Id, ~Id.same, ~Id.same_refl, x1, i, rest)
+        {List.contains(~Id, ~Id.is_eq, _, i) == True{}: Bool}
+      Shared.List.contains_middle(~Id, ~Id.is_eq, ~Id.laws(), x1, i, rest)
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
