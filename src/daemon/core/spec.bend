@@ -414,22 +414,17 @@ def State() -> Data:
 def Node.empty() -> State():
   Ledgers.State.empty(~Ask)
 
-# what a holder of a and of b holds: a sync
-def Node.join(a: State(), b: State()) -> State():
-  Ledgers.State.join(~Ask, ~Ask.is_eq, a, b)
-
 # what a holder of r lacks of s: what a sync from s to r sends
 def Node.missing(s: State(), r: State()) -> State():
   Ledgers.State.missing(~Ask, ~Ask.is_eq, s, r)
 
-# no entry of t contradicts one of s
-def Node.agrees(s: State(), t: State()) -> Bool:
-  Ledgers.State.agrees(~Ask, ~Ask.is_eq, s, t)
-
 # what a holder of s keeps of t, which another node sent: the entries of t in
 # the slots where s holds nothing. A node checks what it receives against what
-# it holds, so nothing that it holds is lost or changed; of states that agree,
-# it is the sync (Ledgers.State.take_join)
+# it holds, so nothing that it holds is lost or changed. Of states that agree
+# it is their join (Ledgers.State.take_join), which is the same in any order
+# and any number of times (Ledgers.State.join_comm, join_assoc, join_idem); a
+# node that is behind holds all of t after it (Ledgers.State.take_all), and
+# what it lacks of t is enough (Ledgers.State.take_missing)
 def Node.take(s: State(), t: State()) -> State():
   Ledgers.State.take(~Ask, s, t)
 
@@ -2023,28 +2018,29 @@ def Node.content(+s: State(), n: Resources.Name, p: Point) -> Maybe<&2, Texts.By
 # at the head of a branch, a resource reads as the writer's pending write of
 # it with the highest request ID, if it has one.
 
+# the resource m of the branch x of the store st is the resource n of the
+# branch b of the store r
+def Draft.is_on(
+  r: Ledgers.Id,
+  b: String,
+  n: Resources.Name,
+  st: Ledgers.Id,
+  x: String,
+  m: Resources.Name
+) -> Bool:
+  List.all.if(
+    u => List.all.if(v => Resources.Name.is_eq(m, n), String.eq(x, b)),
+    Ledgers.Id.is_eq(st, r)
+  )
+
 # the content that the request q gives the resource n on the branch b of the
 # store r, when it writes it there
 def Draft.content(r: Ledgers.Id, b: String, n: Resources.Name, q: Ask) -> Maybe<&2, Content>:
   match q:
     case Ask.On{st, Some{x}, Change.Write{m, base, c}}:
-      Shared.Maybe.when(
-        Content,
-        List.all.if(
-          u => List.all.if(v => Resources.Name.is_eq(m, n), String.eq(x, b)),
-          Ledgers.Id.is_eq(st, r)
-        ),
-        u => Some{c}
-      )
+      Shared.Maybe.when(Content, Draft.is_on(r, b, n, st, x, m), u => Some{c})
     case Ask.On{st, Some{x}, Change.Resolve{k, m, c}}:
-      Shared.Maybe.when(
-        Content,
-        List.all.if(
-          u => List.all.if(v => Resources.Name.is_eq(m, n), String.eq(x, b)),
-          Ledgers.Id.is_eq(st, r)
-        ),
-        u => Some{c}
-      )
+      Shared.Maybe.when(Content, Draft.is_on(r, b, n, st, x, m), u => Some{c})
     case _:
       None{}
 
@@ -2871,6 +2867,23 @@ def Vend.may_stop(v: Vend, force: Bool) -> Bool:
 # What README says of a Vend Node's core, as laws. A law of the ledger that
 # asks for the laws of a change's equality holds of a node's state by
 # Ask.same.
+#
+# Node. Syncs, catching up, the same answers in any order: Node.take and the
+# ledger laws that it names, Node.sync_grows. Checks before it keeps: Node.take
+# keeps no entry that contradicts one it holds, and data is read only when it
+# hashes to its key (Ledgers.State.data_hash).
+# Store. Content once by hash, versions share what did not change: Bytes.rope,
+# Node.keep_reads, Trees. Its owner group decides its names: Change.Branch and
+# Change.Group are steps of the store's own line.
+# Writer. Counts once: Node.ask_once. Five answers, Stale and Refused final:
+# Answer, Node.ask_seen, Node.answer_kept. Reads show its own pending changes:
+# Node.draft_own.
+# Owner group. A majority decides, in sequence: Ledgers (Quorum). Its nodes
+# are those reachable through it, and own what it owns: Judge.own_inside,
+# Node.adopt.
+# Branch, version. History only grows at its end: Node.versions_grow. A
+# version never changes: Node.version_kept, Node.content_kept. Marks for good:
+# Node.mark_kept. A write that its owner takes: Node.write_written.
 
 # two requests are the same exactly when they are equal
 law Ask.same:
