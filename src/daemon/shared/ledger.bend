@@ -769,6 +769,12 @@ def State.missing(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), r: State(Q)) -> 
     r
   )
 
+# what a holder of s keeps of t: the entries of t in the slots where s holds
+# nothing. A holder checks what it receives against what it holds, so it never
+# loses or changes an entry.
+def State.take(~Q: Data, s: State(Q), t: State(Q)) -> State(Q):
+  Tries.Trie.take(~Cells.Cell<Entry<Q>>, s, t)
+
 # no entry of t contradicts one of s
 def State.agrees(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), t: State(Q)) -> Bool:
   Tries.Trie.all2(
@@ -1568,6 +1574,19 @@ def State.settle(
 ) -> State(Q):
   Settle.of(~Q, ~same, s, w, State.decide(~Q, s, w, ms))
 
+# s with the facts of the last step before the tip m, if any
+def Land.of(~Q: Data, ~same: Q -> Q -> Bool, +s: State(Q), m: Maybe<&2, Tip>) -> State(Q):
+  match m:
+    case Some{Tip{e, ms, h, Some{+w}}}:
+      State.settle(~Q, ~same, s, w, ms)
+    case _:
+      s
+
+# s with the facts of the last step of the line c: what a holder writes before
+# it votes on c, so that it never votes again for a request that a sync decided
+def State.land(~Q: Data, ~same: Q -> Q -> Bool, ~view: Q -> View, +s: State(Q), +c: Chain) -> State(Q):
+  Land.of(~Q, ~same, s, Line.tip(~Q, ~view, s, c))
+
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof's statement, or code that the laws split on, keeps each and/or as one value
 # the node n may vote at w, whose owners are ms: it is one, and has not voted
 def Vote.may(~Q: Data, +n: String, s: State(Q), w: Where, ms: List<&2, String>) -> Bool:
@@ -1697,6 +1716,25 @@ def Vote.ask(
         Line.tip(~Q, ~view, s, c)
       )
 
+# s after the node n lands the line of the view v, then votes for the request
+# i of q
+def Vote.landed(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~view: Q -> View,
+  ~judge: State(Q) -> Q -> Maybe<&2, Vote> -> Maybe<&2, Verdict>,
+  n: String,
+  +s: State(Q),
+  i: Id,
+  q: Q,
+  v: View
+) -> State(Q):
+  match v:
+    case View.Root{ms}:
+      s
+    case View.On{+c, o, mk}:
+      Vote.ask(~Q, ~same, ~view, ~judge, n, State.land(~Q, ~same, ~view, s, c), i, q, View.On{c, o, mk})
+
 # s after the node n took in the request i of q at the time t, whose cell in s
 # is m: a request that s holds already changes nothing
 def State.ask.fresh(
@@ -1763,7 +1801,7 @@ def Vote.all(
         ~judge,
         r,
         n,
-        Vote.ask(~Q, ~same, ~view, ~judge, n, s, i, q, view(q))
+        Vote.landed(~Q, ~same, ~view, ~judge, n, s, i, q, view(q))
       )
     case Con{c, r}:
       Vote.all(~Q, ~same, ~view, ~judge, r, n, s)
@@ -1972,6 +2010,112 @@ def State.grows_join(
         ~Entry<Q>,
         ~Entry.is_eq(~Q, ~same),
         ~Entry.laws(~Q, ~same, ~laws),
+        m
+      )
+    ),
+    s,
+    t
+  )
+
+# a holder that takes anything in only grows its state: it keeps every cell
+# that it holds, whatever it receives
+law State.take_grows:
+  for ~Q: Data
+  for ~same: Q -> Q -> Bool
+  for ~laws: Shared.Eq.Laws(Q, same)
+  for s: State(Q)
+  for t: State(Q)
+  {State.grows(~Q, ~same, s, State.take(~Q, s, t)) == True{}: Bool}
+
+def State.take_grows(ty, same, laws, s, t):
+  Tries.Trie.take_keeps(
+    ~Cells.Cell<Entry<ty>>,
+    ~Cells.Cell.keeps(~Entry<ty>, ~Entry.is_eq(~ty, ~same)),
+    ~(
+      x => Tries.Trie.all(
+        ~Cells.Cell<Entry<ty>>,
+        ~(m => Cells.Cell.keeps(~Entry<ty>, ~Entry.is_eq(~ty, ~same), m, None{})),
+        x
+      )
+    ),
+    ~Cells.Cell.none_kept(~Entry<ty>, ~Entry.is_eq(~ty, ~same)),
+    ~(
+      m => Cells.Cell.keeps_refl(
+        ~Entry<ty>,
+        ~Entry.is_eq(~ty, ~same),
+        ~Entry.laws(~ty, ~same, ~laws),
+        m
+      )
+    ),
+    s,
+    t
+  )
+
+# what a holder takes of a state that agrees with its own is their sync: the
+# holders of states that agree end with the same state, in any order
+law State.take_join:
+  for ~Q: Data
+  for ~same: Q -> Q -> Bool
+  for s: State(Q)
+  for t: State(Q)
+  {State.agrees(~Q, ~same, s, t) == True{}: Bool}
+    -> {State.take(~Q, s, t) == State.join(~Q, ~same, s, t): State(Q)}
+
+def State.take_join(ty, same, s, t):
+  Tries.Trie.take_union(
+    ~Cells.Cell<Entry<ty>>,
+    ~Cells.Cell.join(~Entry<ty>, ~Entry.is_eq(~ty, ~same)),
+    ~Cells.Cell.agrees(~Entry<ty>, ~Entry.is_eq(~ty, ~same)),
+    ~(x => True{}),
+    ~(a => b => Cells.Cell.take_join(~Entry<ty>, ~Entry.is_eq(~ty, ~same), a, b)),
+    s,
+    t
+  )
+
+# a holder that is behind (t keeps all that s holds) holds, after it takes t
+# in, all that t holds: catching up loses nothing and contradicts nothing
+law State.take_all:
+  for ~Q: Data
+  for ~same: Q -> Q -> Bool
+  for ~laws: Shared.Eq.Laws(Q, same)
+  for s: State(Q)
+  for t: State(Q)
+  {State.grows(~Q, ~same, s, t) == True{}: Bool}
+    -> {State.grows(~Q, ~same, t, State.take(~Q, s, t)) == True{}: Bool}
+
+def State.take_all(ty, same, laws, s, t):
+  Tries.Trie.take_keeps_right(
+    ~Cells.Cell<Entry<ty>>,
+    ~Cells.Cell.keeps(~Entry<ty>, ~Entry.is_eq(~ty, ~same)),
+    ~(
+      x => Tries.Trie.all(
+        ~Cells.Cell<Entry<ty>>,
+        ~(m => Cells.Cell.keeps(~Entry<ty>, ~Entry.is_eq(~ty, ~same), m, None{})),
+        x
+      )
+    ),
+    ~Cells.Cell.keeps(~Entry<ty>, ~Entry.is_eq(~ty, ~same)),
+    ~(
+      x => Tries.Trie.all(
+        ~Cells.Cell<Entry<ty>>,
+        ~(m => Cells.Cell.keeps(~Entry<ty>, ~Entry.is_eq(~ty, ~same), m, None{})),
+        x
+      )
+    ),
+    ~(
+      a => b => Cells.Cell.take_keeps(
+        ~Entry<ty>,
+        ~Entry.is_eq(~ty, ~same),
+        ~Entry.laws(~ty, ~same, ~laws),
+        a,
+        b
+      )
+    ),
+    ~(
+      m => Cells.Cell.keeps_refl(
+        ~Entry<ty>,
+        ~Entry.is_eq(~ty, ~same),
+        ~Entry.laws(~ty, ~same, ~laws),
         m
       )
     ),
@@ -3629,6 +3773,51 @@ def Vote.ask.grows(
         View.On{c, o, mk},
         Line.tip(~Q, ~view, s, c)
       )
+
+# the facts of the last step before a tip grow the state
+def Land.of.grows(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  +s: State(Q),
+  m: Maybe<&2, Tip>
+) -> {State.grows(~Q, ~same, s, Land.of(~Q, ~same, s, m)) == True{}: Bool}:
+  match m:
+    case Some{Tip{e, +ms, h, Some{+w}}}:
+      Settle.of.grows(~Q, ~same, ~laws, s, w, State.decide(~Q, s, w, ms))
+    case Some{Tip{e, ms, h, None{}}}:
+      State.grows_refl(~Q, ~same, ~laws, s)
+    case None{}:
+      State.grows_refl(~Q, ~same, ~laws, s)
+
+# landing a line, then a node's vote on a request, grow the state
+def Vote.landed.grows(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~view: Q -> View,
+  ~judge: State(Q) -> Q -> Maybe<&2, Vote> -> Maybe<&2, Verdict>,
+  +n: String,
+  +s: State(Q),
+  +i: Id,
+  +q: Q,
+  v: View
+) -> {State.grows(~Q, ~same, s, Vote.landed(~Q, ~same, ~view, ~judge, n, s, i, q, v)) == True{}: Bool}:
+  match v:
+    case View.Root{ms}:
+      State.grows_refl(~Q, ~same, ~laws, s)
+    case View.On{+c, +o, +mk}:
+      +s1 = State.land(~Q, ~same, ~view, s, c)
+      State.grows_trans(
+        ~Q,
+        ~same,
+        ~laws,
+        s,
+        s1,
+        Vote.ask(~Q, ~same, ~view, ~judge, n, s1, i, q, View.On{c, o, mk})
+      )(
+        Land.of.grows(~Q, ~same, ~laws, s, Line.tip(~Q, ~view, s, c))
+      )(Vote.ask.grows(~Q, ~same, ~laws, ~view, ~judge, n, s1, i, q, View.On{c, o, mk}))
 
 # State.ask grows the state, once the cell m of the request is known
 def State.ask.grows.at(
@@ -5672,7 +5861,7 @@ def Vote.all.grows(
     case Nil{}:
       State.grows_refl(~Q, ~same, ~laws, s)
     case Con{Cells.One{Entry.Ask{+i, t, +q}}, +r}:
-      +s1 = Vote.ask(~Q, ~same, ~view, ~judge, n, s, i, q, view(q))
+      +s1 = Vote.landed(~Q, ~same, ~view, ~judge, n, s, i, q, view(q))
       State.grows_trans(
         ~Q,
         ~same,
@@ -5681,7 +5870,7 @@ def Vote.all.grows(
         s1,
         Vote.all(~Q, ~same, ~view, ~judge, r, n, s1)
       )(
-        Vote.ask.grows(~Q, ~same, ~laws, ~view, ~judge, n, s, i, q, view(q))
+        Vote.landed.grows(~Q, ~same, ~laws, ~view, ~judge, n, s, i, q, view(q))
       )(Vote.all.grows(~Q, ~same, ~laws, ~view, ~judge, r, n, s1))
     case Con{Cells.One{Entry.Vote{x}}, r}:
       Vote.all.grows(~Q, ~same, ~laws, ~view, ~judge, r, n, s)

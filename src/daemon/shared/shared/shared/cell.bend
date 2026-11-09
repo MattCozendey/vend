@@ -540,3 +540,78 @@ def Cell.keeps_join(
     case Some{Many{}} Some{y}:
       h => {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# Takes
+# -----
+# A holder that takes a slot in keeps its own cell where it holds one.
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a slot's take of a slot that agrees with it is their join
+def Cell.take_join(
+  ~V: Data,
+  ~same: V -> V -> Bool,
+  a: Maybe<&2, Cell<V>>,
+  b: Maybe<&2, Cell<V>>
+) -> {
+  Cell.agrees(~V, ~same, a, b) == True{}: Bool
+} -> {
+  Shared.Maybe.join(
+    ~Cell<V>,
+    ~(c => d => c),
+    a,
+    b
+  )
+    == Shared.Maybe.join(~Cell<V>, ~Cell.join(~V, ~same), a, b): Maybe<&2, Cell<V>>
+}:
+  match a b:
+    case None{} y:
+      h => {==}
+    case Some{c} None{}:
+      h => {==}
+    case Some{One{+x}} Some{One{y}}:
+      h =>
+        %Equal.sym(Bool, same(x, y), True{}, h):
+          {Some{One{x}} == Some{Bool.pick(Cell<V>, _, One{x}, Many{})}: Maybe<&2, Cell<V>>}
+        {==}
+    case Some{One{x}} Some{Many{}}:
+      h => Empty.absurd(
+        {Some{One{x}} == Some{Many{}}: Maybe<&2, Cell<V>>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Some{Many{}} Some{y}:
+      h => {==}
+
+# a slot that keeps a is kept by a's take of it
+def Cell.take_keeps(
+  ~V: Data,
+  ~same: V -> V -> Bool,
+  ~laws: Shared.Eq.Laws(V, same),
+  a: Maybe<&2, Cell<V>>,
+  b: Maybe<&2, Cell<V>>
+) -> {
+  Cell.keeps(~V, ~same, a, b) == True{}: Bool
+} -> {Cell.keeps(~V, ~same, b, Shared.Maybe.join(~Cell<V>, ~(c => d => c), a, b)) == True{}: Bool}:
+  match a b:
+    case None{} y:
+      h => Cell.keeps_refl(~V, ~same, ~laws, y)
+    case Some{One{x}} None{}:
+      h => {==}
+    case Some{One{+x}} Some{One{y}}:
+      h =>
+        %Shared.Eq.sound(~V, ~same, laws, x, y)(h): {same(_, x) == True{}: Bool}
+        Shared.Eq.refl(~V, ~same, laws, x)
+    case Some{One{x}} Some{Many{}}:
+      h => Empty.absurd(
+        {Cell.keeps(~V, ~same, Some{Many{}}, Some{One{x}}) == True{}: Bool},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Some{Many{}} None{}:
+      h => {==}
+    case Some{Many{}} Some{One{y}}:
+      h => Empty.absurd(
+        {Cell.keeps(~V, ~same, Some{One{y}}, Some{Many{}}) == True{}: Bool},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Some{Many{}} Some{Many{}}:
+      h => {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning

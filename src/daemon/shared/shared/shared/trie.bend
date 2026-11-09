@@ -2372,3 +2372,208 @@ def Trie.keeps_size(ty, r, rs, s, s2):
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 # bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# Takes
+# -----
+# A take keeps a's value where both tries hold a key: it adds b's entries only
+# at the keys that a does not hold, so a holder never loses or changes what it
+# holds.
+
+# the entries of a, and those of b at the keys that a does not hold
+def Trie.take(~V: Data, a: Trie<V>, b: Trie<V>) -> Trie<V>:
+  Trie.union(~V, ~(x => y => x), a, b)
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# Trie.take_keeps at one key
+def Trie.take_keeps.here(
+  ~V: Data,
+  ~r: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
+  ~rn: @y: Maybe<&2, V> -> {r(None{}, y) == True{}: Bool},
+  ~rrefl: @m: Maybe<&2, V> -> {r(m, m) == True{}: Bool},
+  a: Maybe<&2, V>,
+  b: Maybe<&2, V>
+) -> {r(a, Shared.Maybe.join(~V, ~(x => y => x), a, b)) == True{}: Bool}:
+  match a b:
+    case None{} y:
+      rn(y)
+    case Some{x} None{}:
+      rrefl(Some{x})
+    case Some{x} Some{y}:
+      rrefl(Some{x})
+
+# r holds of a and its take of b, when r holds of no entry and any, and of
+# each entry and itself: a take keeps what a holds
+def Trie.take_keeps(
+  ~V: Data,
+  ~r: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
+  ~left: Trie<V> -> Bool,
+  ~rn: @y: Maybe<&2, V> -> {r(None{}, y) == True{}: Bool},
+  ~rrefl: @m: Maybe<&2, V> -> {r(m, m) == True{}: Bool},
+  a: Trie<V>,
+  b: Trie<V>
+) -> {Trie.all2(~V, ~V, ~r, ~left, a, Trie.take(~V, a, b)) == True{}: Bool}:
+  match a b:
+    case Tip{} y:
+      {==}
+    case Bin{h, z, o} Tip{}:
+      Trie.all2_refl(~V, ~r, ~left, ~rrefl, Bin{h, z, o})
+    case Bin{+h1, +z1, +o1} Bin{+h2, +z2, +o2}:
+      Shared.Bool.and_both(
+        r(h1, Shared.Maybe.join(~V, ~(x => y => x), h1, h2)),
+        Bool.and(
+          Trie.all2(~V, ~V, ~r, ~left, z1, Trie.take(~V, z1, z2)),
+          Trie.all2(~V, ~V, ~r, ~left, o1, Trie.take(~V, o1, o2))
+        )
+      )(
+        Trie.take_keeps.here(~V, ~r, ~rn, ~rrefl, h1, h2)
+      )(
+        Shared.Bool.and_both(
+          Trie.all2(~V, ~V, ~r, ~left, z1, Trie.take(~V, z1, z2)),
+          Trie.all2(~V, ~V, ~r, ~left, o1, Trie.take(~V, o1, o2))
+        )(
+          Trie.take_keeps(~V, ~r, ~left, ~rn, ~rrefl, z1, z2)
+        )(Trie.take_keeps(~V, ~r, ~left, ~rn, ~rrefl, o1, o2))
+      )
+
+# a take of b is the union with b, when q holds of a and b and the join of
+# two entries that q holds of is the first
+def Trie.take_union(
+  ~V: Data,
+  ~join: V -> V -> V,
+  ~q: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
+  ~lq: Trie<V> -> Bool,
+  ~step: @x: Maybe<
+    &2,
+    V> -> @y: Maybe<
+    &2,
+    V> -> {
+    q(x, y) == True{}: Bool
+  } -> {
+    Shared.Maybe.join(~V, ~(c => d => c), x, y) == Shared.Maybe.join(~V, ~join, x, y): Maybe<&2, V>
+  },
+  a: Trie<V>,
+  b: Trie<V>
+) -> {
+  Trie.all2(~V, ~V, ~q, ~lq, a, b) == True{}: Bool
+} -> {Trie.take(~V, a, b) == Trie.union(~V, ~join, a, b): Trie<V>}:
+  match a b:
+    case Tip{} y:
+      e => {==}
+    case Bin{h, z, o} Tip{}:
+      e => {==}
+    case Bin{+h1, +z1, +o1} Bin{+h2, +z2, +o2}:
+      +e =>
+        +rest = Shared.Bool.and_true_right(
+          q(h1, h2),
+          Bool.and(Trie.all2(~V, ~V, ~q, ~lq, z1, z2), Trie.all2(~V, ~V, ~q, ~lq, o1, o2))
+        )(e)
+        %Trie.take_union(~V, ~join, ~q, ~lq, ~step, z1, z2)(
+          Shared.Bool.and_true_left(
+            Trie.all2(~V, ~V, ~q, ~lq, z1, z2),
+            Trie.all2(~V, ~V, ~q, ~lq, o1, o2)
+          )(rest)
+        ): {
+          Bin{
+            Shared.Maybe.join(~V, ~(c => d => c), h1, h2),
+            Trie.take(~V, z1, z2),
+            Trie.take(~V, o1, o2)
+          }
+            == Bin{Shared.Maybe.join(~V, ~join, h1, h2), _, Trie.union(~V, ~join, o1, o2)}: Trie<V>
+        }
+        %Trie.take_union(~V, ~join, ~q, ~lq, ~step, o1, o2)(
+          Shared.Bool.and_true_right(
+            Trie.all2(~V, ~V, ~q, ~lq, z1, z2),
+            Trie.all2(~V, ~V, ~q, ~lq, o1, o2)
+          )(rest)
+        ): {
+          Bin{
+            Shared.Maybe.join(~V, ~(c => d => c), h1, h2),
+            Trie.take(~V, z1, z2),
+            Trie.take(~V, o1, o2)
+          }
+            == Bin{Shared.Maybe.join(~V, ~join, h1, h2), Trie.take(~V, z1, z2), _}: Trie<V>
+        }
+        %step(h1)(h2)(
+          Shared.Bool.and_true_left(
+            q(h1, h2),
+            Bool.and(Trie.all2(~V, ~V, ~q, ~lq, z1, z2), Trie.all2(~V, ~V, ~q, ~lq, o1, o2))
+          )(e)
+        ): {
+          Bin{
+            Shared.Maybe.join(~V, ~(c => d => c), h1, h2),
+            Trie.take(~V, z1, z2),
+            Trie.take(~V, o1, o2)
+          }
+            == Bin{_, Trie.take(~V, z1, z2), Trie.take(~V, o1, o2)}: Trie<V>
+        }
+        {==}
+
+# r holds of b and a's take of b, when q holds of a and b and r holds of the
+# second of two entries that q holds of and the one a take keeps: a take
+# holds all that b holds
+def Trie.take_keeps_right(
+  ~V: Data,
+  ~q: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
+  ~lq: Trie<V> -> Bool,
+  ~r: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
+  ~lr: Trie<V> -> Bool,
+  ~step: @x: Maybe<
+    &2,
+    V> -> @y: Maybe<
+    &2,
+    V> -> {
+    q(x, y) == True{}: Bool
+  } -> {r(y, Shared.Maybe.join(~V, ~(c => d => c), x, y)) == True{}: Bool},
+  ~rrefl: @m: Maybe<&2, V> -> {r(m, m) == True{}: Bool},
+  a: Trie<V>,
+  b: Trie<V>
+) -> {
+  Trie.all2(~V, ~V, ~q, ~lq, a, b) == True{}: Bool
+} -> {Trie.all2(~V, ~V, ~r, ~lr, b, Trie.take(~V, a, b)) == True{}: Bool}:
+  match a b:
+    case Tip{} y:
+      e => Trie.all2_refl(~V, ~r, ~lr, ~rrefl, y)
+    case Bin{h, z, o} Tip{}:
+      e => {==}
+    case Bin{+h1, +z1, +o1} Bin{+h2, +z2, +o2}:
+      +e =>
+        +rest = Shared.Bool.and_true_right(
+          q(h1, h2),
+          Bool.and(Trie.all2(~V, ~V, ~q, ~lq, z1, z2), Trie.all2(~V, ~V, ~q, ~lq, o1, o2))
+        )(e)
+        Shared.Bool.and_both(
+          r(h2, Shared.Maybe.join(~V, ~(c => d => c), h1, h2)),
+          Bool.and(
+            Trie.all2(~V, ~V, ~r, ~lr, z2, Trie.take(~V, z1, z2)),
+            Trie.all2(~V, ~V, ~r, ~lr, o2, Trie.take(~V, o1, o2))
+          )
+        )(
+          step(h1)(h2)(
+            Shared.Bool.and_true_left(
+              q(h1, h2),
+              Bool.and(Trie.all2(~V, ~V, ~q, ~lq, z1, z2), Trie.all2(~V, ~V, ~q, ~lq, o1, o2))
+            )(e)
+          )
+        )(
+          Shared.Bool.and_both(
+            Trie.all2(~V, ~V, ~r, ~lr, z2, Trie.take(~V, z1, z2)),
+            Trie.all2(~V, ~V, ~r, ~lr, o2, Trie.take(~V, o1, o2))
+          )(
+            Trie.take_keeps_right(~V, ~q, ~lq, ~r, ~lr, ~step, ~rrefl, z1, z2)(
+              Shared.Bool.and_true_left(
+                Trie.all2(~V, ~V, ~q, ~lq, z1, z2),
+                Trie.all2(~V, ~V, ~q, ~lq, o1, o2)
+              )(rest)
+            )
+          )(
+            Trie.take_keeps_right(~V, ~q, ~lq, ~r, ~lr, ~step, ~rrefl, o1, o2)(
+              Shared.Bool.and_true_right(
+                Trie.all2(~V, ~V, ~q, ~lq, z1, z2),
+                Trie.all2(~V, ~V, ~q, ~lq, o1, o2)
+              )(rest)
+            )
+          )
+        )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
