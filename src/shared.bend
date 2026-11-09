@@ -821,6 +821,20 @@ def Nat.lt_pos(
     case 1n+p:
       Nat.le_lt(0n, 1n+p, b)({==})
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# Nat.is_eq is True only for equal numbers
+def Nat.is_eq_sound(a: Nat, b: Nat) -> {Nat.is_eq(a, b) == True{}: Bool} -> {a == b: Nat}:
+  match a b:
+    case 0n 0n:
+      e => {==}
+    case 0n 1n+q:
+      e => Empty.absurd({0n == 1n+q: Nat}, Bool.false_ne_true(e))
+    case 1n+p 0n:
+      e => Empty.absurd({1n+p == 0n: Nat}, Bool.false_ne_true(e))
+    case 1n+p 1n+q:
+      e => Equal.cong(Nat, Nat, z => 1n+z, p, q, Nat.is_eq_sound(p, q)(e))
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
 # a number is at most itself
 def Nat.le_refl(a: Nat) -> {Nat.is_le(a, a) == True{}: Bool}:
   match a:
@@ -946,6 +960,42 @@ def List.drop_zero(a, -A: Kind(a), xs: List<a, A>) -> {List.drop(a, A, xs, 0n) =
       {==}
     case Con{h, t}:
       {==}
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# after the first n of xs come x and then r, after its first n+1 comes r
+def List.drop_step(
+  -A: Data,
+  xs: List<&2, A>,
+  n: Nat,
+  -x: A,
+  r: List<&2, A>
+) -> {
+  List.drop(&2, A, xs, n) == x <> r: List<&2, A>
+} -> {List.drop(&2, A, xs, 1n+n) == r: List<&2, A>}:
+  match xs n:
+    case Nil{} m:
+      e => Empty.absurd(
+        {List.drop(&2, A, [], 1n+m) == r: List<&2, A>},
+        Bool.false_ne_true(
+          Equal.cong(
+            List<&2, A>,
+            Bool,
+            l => List.is_empty(&2, A, l),
+            x <> r,
+            [],
+            Equal.sym(List<&2, A>, [], x <> r, e)
+          )
+        )
+      )
+    case Con{h, t} 0n:
+      e =>
+        %List.drop_zero(&2, A, r): {List.drop(&2, A, t, 0n) == _: List<&2, A>}
+        Equal.cong(List<&2, A>, List<&2, A>, l => List.drop(&2, A, l, 1n), h <> t, x <> r, e)
+    case Con{h, t} 1n+m:
+      e => List.drop_step(A, t, m, x, r)(e)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # appending nothing keeps a list
 def List.append_nil(-A: Data, xs: List<&2, A>) -> {List.append(&2, A, xs, []) == xs: List<&2, A>}:
