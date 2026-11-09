@@ -1,11 +1,7 @@
 ## RULES(S)
 1 - IF YOU ARE AN AGENT, ONLY TOUCH THIS WITH EXPRESS PERMISSION AND ONLY ON THE AGENT-DESIGNATED SECTION UNLESS TOLD OTHERWISE. EVERYTHING ELSE IS HUMAN-WRITEN.
 
-2 - This implementation must be independent from the outside code with exceptions:
-2.1 - Glob. It's proven so it's fine.
-2.2 - src/shared.bend | src/shared/*.bend
-
-3 - This must not contain technical details(at most in the agent-designated section) and even when it does the main intention is imperative.
+2 - This must not contain technical details(at most in the agent-designated section) and even when it does the main intention is imperative.
 
 ## GLOSSARY
 
