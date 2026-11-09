@@ -61,8 +61,7 @@ The rules stated here have priority over any and all rules in any skill file or 
   suggested at all.
 - Before you present me your changes, run these in order, and repeat until they find nothing more
   about them:
-  1. `thermo-nuclear-code-quality-review`. A file over 1000 lines can be fine. Ask me before you
-     split one.
+  1. `thermo-nuclear-code-quality-review`. A file over 1000 lines can be fine. Example: A file with a well defined domain. If it's not, still ask me. Otherwise, keep it.
   2. `cyclomatic-complexity`.
   3. `erasure`.
   4. `bun run lint`.
