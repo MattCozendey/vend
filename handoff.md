@@ -21,6 +21,15 @@ A walk over history is replaced by fixed-key reads of replicated facts, so the c
 - Scope is not reduced: item-level formats for Bend and C are in scope, with everything else in README.md.
 - First: experiments E1-E6 in scratch (32-bit descent and range scan; quorum over a list read once; tree get_set; flat write benchmark at 1k and 10k; visited-set reach transitivity; delta sync law), then the migration in order, each step checking.
 
+### Ledger v2, concrete (shared)
+
+- Slots (bit keys, prefix-free): `ask(i)`; `vote(c, e, h, n)` = votes ++ chain key ++ 32-bit epoch ++ 32-bit height (high bit first) ++ node text; `genesis(c, e)`; `where(i)`.
+- A vote carries the request's View, so a decided step needs no lookup of its request.
+- Decide rule per bucket (c, e, h): the majority of the epoch's owners; else, once every owner voted (an owner that voted twice counts as voted, with no value), the most voted, ties by the smallest code. A pure function of the bucket: it only gains information as votes arrive, so a decision never changes, and a split no longer stalls a line whose owners all vote.
+- Strict prefix: the listing of a line is the longest run of decided heights from 0 (spec). The fast tip is the highest decided height, found by descending the height bits; law: when every decided height above 0 has its height before decided (true for every state that honest owners make, since an owner votes at h only after h-1 is decided), the fast tip is the spec tip. Sync then only appends to a listing.
+- `where(i)` and `genesis(c, e)` are facts any node may write; a read checks each against the bucket it names (O(owners)), so a wrong fact is never believed, only ignored.
+- Measured (100k entries, native): building a ~390-bit key from text 7.8us; one trie op at ~390 bits deep ~15us; with 64-bit keys ~7us per op including the key. Plan: fixed-width fields now; later a path-compressed trie proven equal to the binary trie (fast/slow law pair), about log2(entries) hops.
+
 ## Compression pass (this branch)
 
 - Shared plus core: 180.6k tokens to 167.3k (proofs 120.2k to 106.0k), with no law weakened.
