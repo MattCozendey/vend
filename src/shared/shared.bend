@@ -1,5 +1,39 @@
 import Base
 
+# Equality
+# --------
+# A check same of A is an equality when Eq.Laws(A, same) holds. A def that
+# needs it takes same as a template, and its laws as one more: the code then
+# runs same inlined, and the laws cost nothing at run time.
+
+# same is True for a value and itself, and only for equal values
+def Eq.Laws(-A: Data, same: A -> A -> Bool) -> Type:
+  (
+    @x: A -> {same(x, x) == True{}: Bool}
+  )
+    & (@x: A -> @y: A -> {same(x, y) == True{}: Bool} -> {x == y: A})
+
+# same is True for x and itself, by its laws l
+def Eq.refl(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  l: Eq.Laws(A, same),
+  x: A
+) -> {same(x, x) == True{}: Bool}:
+  (r, d) = l
+  r(x)
+
+# same is True only for equal x and y, by its laws l
+def Eq.sound(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  l: Eq.Laws(A, same),
+  x: A,
+  y: A
+) -> {same(x, y) == True{}: Bool} -> {x == y: A}:
+  (r, d) = l
+  d(x, y)
+
 # no False equals True
 def Bool.false_ne_true(e: {False{} == True{}: Bool}) -> Empty:
   %e: Bool.pick(Type, _, Empty, Unit)
@@ -172,7 +206,7 @@ def List.has_cons(
 def List.has_middle(
   ~A: Data,
   ~same: A -> A -> Bool,
-  ~refl: @a: A -> {same(a, a) == True{}: Bool},
+  ~laws: Eq.Laws(A, same),
   ys: List<&2, A>,
   +m: A,
   +zs: List<&2, A>
@@ -183,7 +217,7 @@ def List.has_middle(
         Bool,
         same(m, m),
         True{},
-        refl(m)
+        Eq.refl(~A, ~same, laws, m)
       ): {List.any.if(u => List.has(~A, ~same, zs, m), _) == True{}: Bool}
       {==}
     case Con{x, +r}:
@@ -193,7 +227,7 @@ def List.has_middle(
         x,
         List.append(&2, A, r, m <> zs),
         m
-      )(List.has_middle(~A, ~same, ~refl, r, m, zs))
+      )(List.has_middle(~A, ~same, ~laws, r, m, zs))
 
 # the elements of xs that p keeps, given g
 def List.keep(~A: Data, ~V: Data, ~p: V -> A -> Bool, xs: List<&2, A>, +g: V) -> List<&2, A>:
@@ -212,7 +246,7 @@ def List.has_keep.at(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~p: V -> A -> Bool,
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
+  ~laws: Eq.Laws(A, same),
   k: Bool,
   hit: Bool,
   x: A,
@@ -236,7 +270,7 @@ def List.has_keep.at(
     case True{} True{}:
       %Equal.sym(Bool, same(x, m), True{}, eh):
         {List.any.if(u => List.has(~A, ~same, ks, m), _) == Bool.and(p(g)(m), True{}): Bool}
-      %sound(x, m)(eh): {True{} == Bool.and(p(g)(_), True{}): Bool}
+      %Eq.sound(~A, ~same, laws, x, m)(eh): {True{} == Bool.and(p(g)(_), True{}): Bool}
       %Equal.sym(Bool, p(g)(x), True{}, ek): {True{} == Bool.and(_, True{}): Bool}
       {==}
     case True{} False{}:
@@ -257,7 +291,10 @@ def List.has_keep.at(
         ih
       ):
         {_ == Bool.and(p(g)(m), True{}): Bool}
-      %sound(
+      %Eq.sound(
+        ~A,
+        ~same,
+        laws,
         x,
         m
       )(eh): {Bool.and(p(g)(_), List.has(~A, ~same, r, _)) == Bool.and(p(g)(_), True{}): Bool}
@@ -279,7 +316,7 @@ def List.has_keep(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~p: V -> A -> Bool,
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
+  ~laws: Eq.Laws(A, same),
   xs: List<&2, A>,
   +g: V,
   +m: A
@@ -301,7 +338,7 @@ def List.has_keep(
         ~V,
         ~same,
         ~p,
-        ~sound,
+        ~laws,
         p(g)(x),
         same(x, m),
         x,
@@ -311,7 +348,7 @@ def List.has_keep(
         m,
         {==},
         {==},
-        List.has_keep(~A, ~V, ~same, ~p, ~sound, r, g, m)
+        List.has_keep(~A, ~V, ~same, ~p, ~laws, r, g, m)
       )
 
 # the lists that f gives for each element of xs, given g, one after another
@@ -338,7 +375,7 @@ def List.has_flat.at(
   ~sa: A -> A -> Bool,
   ~sb: B -> B -> Bool,
   ~f: V -> A -> List<&2, B>,
-  ~sound: @a: A -> @b: A -> {sa(a, b) == True{}: Bool} -> {a == b: A},
+  ~laws: Eq.Laws(A, sa),
   hit: Bool,
   h: A,
   r: List<&2, A>,
@@ -360,7 +397,7 @@ def List.has_flat.at(
 }:
   match hit:
     case True{}:
-      %Equal.sym(A, h, x, sound(h, x)(eh)):
+      %Equal.sym(A, h, x, Eq.sound(~A, ~sa, laws, h, x)(eh)):
         {
           Bool.or(
             List.has(~B, ~sb, f(g)(_), y),
@@ -387,7 +424,7 @@ def List.has_flat(
   ~sa: A -> A -> Bool,
   ~sb: B -> B -> Bool,
   ~f: V -> A -> List<&2, B>,
-  ~sound: @a: A -> @b: A -> {sa(a, b) == True{}: Bool} -> {a == b: A},
+  ~laws: Eq.Laws(A, sa),
   xs: List<&2, A>,
   +g: V,
   +x: A,
@@ -421,7 +458,7 @@ def List.has_flat(
           ~sa,
           ~sb,
           ~f,
-          ~sound,
+          ~laws,
           sa(h, x),
           h,
           r,
@@ -431,7 +468,7 @@ def List.has_flat(
           {==},
           hx,
           hy,
-          hr => List.has_flat(~A, ~B, ~V, ~sa, ~sb, ~f, ~sound, r, g, x, y)(hr)(hy)
+          hr => List.has_flat(~A, ~B, ~V, ~sa, ~sb, ~f, ~laws, r, g, x, y)(hr)(hy)
         )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
@@ -456,7 +493,7 @@ def List.keep_exactly(
   ~V: Data,
   ~same: A -> A -> Bool,
   ~p: V -> A -> Bool,
-  ~sound: @a: A -> @b: A -> {same(a, b) == True{}: Bool} -> {a == b: A},
+  ~laws: Eq.Laws(A, same),
   xs: List<&2, A>,
   +g: V,
   +m: A,
@@ -467,7 +504,7 @@ def List.keep_exactly(
     List.has(~A, ~same, List.keep(~A, ~V, ~p, xs, g), m),
     Bool.and(p(g)(m), List.has(~A, ~same, xs, m)),
     p(g)(m),
-    List.has_keep(~A, ~V, ~same, ~p, ~sound, xs, g, m),
+    List.has_keep(~A, ~V, ~same, ~p, ~laws, xs, g, m),
     Bool.and_implied(p(g)(m), List.has(~A, ~same, xs, m), c)
   )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
@@ -689,6 +726,9 @@ def Bool.same_sound(a: Bool, b: Bool) -> {Bool.same(a, b) == True{}: Bool} -> {a
     case False{} True{}:
       h => Empty.absurd({False{} == True{}: Bool}, Bool.false_ne_true(h))
 
+# the laws of Bool.same
+def Bool.laws() -> Eq.Laws(Bool, Bool.same):
+  (Bool.same_refl, Bool.same_sound)
 # a "not" that is True is of False
 def Bool.not_true(a: Bool) -> {Bool.not(a) == True{}: Bool} -> {a == False{}: Bool}:
   match a:
@@ -1029,14 +1069,14 @@ def Maybe.same_sound(
 def Maybe.same_refl(
   ~A: Data,
   ~eq: A -> A -> Bool,
-  ~refl: @x: A -> {eq(x, x) == True{}: Bool},
+  ~laws: Eq.Laws(A, eq),
   m: Maybe<&2, A>
 ) -> {Maybe.same(~A, ~eq, m, m) == True{}: Bool}:
   match m:
     case None{}:
       {==}
     case Some{y}:
-      refl(y)
+      Eq.refl(~A, ~eq, laws, y)
 
 # nothing taken of a list is nothing
 def List.take_zero(-A: Data, xs: List<&2, A>) -> {List.take(&2, A, xs, 0n) == []: List<&2, A>}:
@@ -1289,7 +1329,7 @@ def List.fork_left(ty, same, a, b):
 def List.fork_right.on(
   ~A: Data,
   ~same: A -> A -> Bool,
-  ~sound: @x: A -> @y: A -> {same(x, y) == True{}: Bool} -> {x == y: A},
+  ~laws: Eq.Laws(A, same),
   held: Bool,
   x: A,
   y: A,
@@ -1302,7 +1342,10 @@ def List.fork_right.on(
   match held f:
     case True{} Fork{s, fa, fb}:
       %ih: {x <> List.append(&2, A, s, fb) == y <> _: List<&2, A>}
-      %sound(
+      %Eq.sound(
+        ~A,
+        ~same,
+        laws,
         x
       )(y)(e): {x <> List.append(&2, A, s, fb) == _ <> List.append(&2, A, s, fb): List<&2, A>}
       {==}
@@ -1313,18 +1356,18 @@ def List.fork_right.on(
 law List.fork_right:
   for ~A: Data
   for ~same: A -> A -> Bool
-  for ~sound: @x: A -> @y: A -> {same(x, y) == True{}: Bool} -> {x == y: A}
+  for ~laws: Eq.Laws(A, same)
   for a: List<&2, A>
   for b: List<&2, A>
   {Fork.right(A, List.fork(~A, ~same, a, b)) == b: List<&2, A>}
 
-def List.fork_right(ty, same, sound, a, b):
+def List.fork_right(ty, same, laws, a, b):
   match a b:
     case Con{+x, +ra} Con{+y, +rb}:
       List.fork_right.on(
         ~ty,
         ~same,
-        ~sound,
+        ~laws,
         same(x, y),
         x,
         y,
@@ -1332,7 +1375,7 @@ def List.fork_right(ty, same, sound, a, b):
         rb,
         List.fork(~ty, ~same, ra, rb),
         {==},
-        List.fork_right(~ty, ~same, ~sound, ra, rb)
+        List.fork_right(~ty, ~same, ~laws, ra, rb)
       )
     case Nil{} y:
       {==}
@@ -1392,7 +1435,7 @@ def List.tails_left(ty, same, a, b):
 def List.tails_right.on(
   ~A: Data,
   ~same: A -> A -> Bool,
-  ~sound: @x: A -> @y: A -> {same(x, y) == True{}: Bool} -> {x == y: A},
+  ~laws: Eq.Laws(A, same),
   held: Bool,
   x: A,
   y: A,
@@ -1404,7 +1447,7 @@ def List.tails_right.on(
   match held e:
     case True{} Ends{Nil{}, Nil{}, s}:
       %ih: {x <> s == y <> _: List<&2, A>}
-      %sound(x)(y)(h): {x <> s == _ <> s: List<&2, A>}
+      %Eq.sound(~A, ~same, laws, x, y)(h): {x <> s == _ <> s: List<&2, A>}
       {==}
     case True{} Ends{Nil{}, Con{q, qs}, s}:
       %ih: {y <> List.append(&2, A, q <> qs, s) == y <> _: List<&2, A>}
@@ -1420,25 +1463,25 @@ def List.tails_right.on(
 law List.tails_right:
   for ~A: Data
   for ~same: A -> A -> Bool
-  for ~sound: @x: A -> @y: A -> {same(x, y) == True{}: Bool} -> {x == y: A}
+  for ~laws: Eq.Laws(A, same)
   for a: List<&2, A>
   for b: List<&2, A>
   {Ends.right(A, List.tails(~A, ~same, a, b)) == b: List<&2, A>}
 
-def List.tails_right(ty, same, sound, a, b):
+def List.tails_right(ty, same, laws, a, b):
   match a b:
     case Con{+x, +ra} Con{+y, +rb}:
       List.tails_right.on(
         ~ty,
         ~same,
-        ~sound,
+        ~laws,
         same(x, y),
         x,
         y,
         rb,
         List.tails(~ty, ~same, ra, rb),
         {==},
-        List.tails_right(~ty, ~same, ~sound, ra, rb)
+        List.tails_right(~ty, ~same, ~laws, ra, rb)
       )
     case Nil{} y:
       List.append_nil(ty, y)
@@ -1513,13 +1556,13 @@ def List.ends_left(ty, same, a, b):
 law List.ends_right:
   for ~A: Data
   for ~same: A -> A -> Bool
-  for ~sound: @x: A -> @y: A -> {same(x, y) == True{}: Bool} -> {x == y: A}
+  for ~laws: Eq.Laws(A, same)
   for +a: List<&2, A>
   for +b: List<&2, A>
   {Ends.right(A, List.ends(~A, ~same, a, b)) == b: List<&2, A>}
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-def List.ends_right(ty, same, sound, a, b):
+def List.ends_right(ty, same, laws, a, b):
   +da = Nat.sub(List.length(&2, ty, a), List.length(&2, ty, b))
   +db = Nat.sub(List.length(&2, ty, b), List.length(&2, ty, a))
   pb = List.take(&2, ty, b, db)
@@ -1543,47 +1586,15 @@ def List.ends_right(ty, same, sound, a, b):
         z => List.append(&2, ty, pb, z),
         Ends.right(ty, t),
         rb,
-        List.tails_right(~ty, ~same, ~sound, ra, rb)
+        List.tails_right(~ty, ~same, ~laws, ra, rb)
       ),
       List.take_drop(ty, b, db)
     )
   )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
-# Equality
-# --------
-# A check same of A is an equality when Eq.Laws(A, same) holds. A def that
-# needs it takes same as a template, and its laws as one more: the code then
-# runs same inlined, and the laws cost nothing at run time.
-
-# same is True for a value and itself, and only for equal values
-def Eq.Laws(-A: Data, same: A -> A -> Bool) -> Type:
-  (
-    @x: A -> {same(x, x) == True{}: Bool}
-  )
-    & (@x: A -> @y: A -> {same(x, y) == True{}: Bool} -> {x == y: A})
-
-# same is True for x and itself, by its laws l
-def Eq.refl(
-  ~A: Data,
-  ~same: A -> A -> Bool,
-  l: Eq.Laws(A, same),
-  x: A
-) -> {same(x, x) == True{}: Bool}:
-  (r, d) = l
-  r(x)
-
-# same is True only for equal x and y, by its laws l
-def Eq.sound(
-  ~A: Data,
-  ~same: A -> A -> Bool,
-  l: Eq.Laws(A, same),
-  x: A,
-  y: A
-) -> {same(x, y) == True{}: Bool} -> {x == y: A}:
-  (r, d) = l
-  d(x, y)
-
+# List equality
+# -------------
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality, or a proof, keeps each and/or as one value for the proofs to split on
 # xs and ys hold the same elements in the same order, as same calls them
 def List.same(~A: Data, ~same: A -> A -> Bool, xs: List<&2, A>, ys: List<&2, A>) -> Bool:
@@ -1600,11 +1611,11 @@ def List.same(~A: Data, ~same: A -> A -> Bool, xs: List<&2, A>, ys: List<&2, A>)
 law List.same_refl:
   for ~A: Data
   for ~same: A -> A -> Bool
-  for ~refl: @x: A -> {same(x, x) == True{}: Bool}
+  for ~laws: Eq.Laws(A, same)
   for xs: List<&2, A>
   {List.same(~A, ~same, xs, xs) == True{}: Bool}
 
-def List.same_refl(ty, same, refl, xs):
+def List.same_refl(ty, same, laws, xs):
   match xs:
     case Nil{}:
       {==}
@@ -1613,21 +1624,21 @@ def List.same_refl(ty, same, refl, xs):
         Bool,
         same(x, x),
         True{},
-        refl(x)
+        Eq.refl(~ty, ~same, laws, x)
       ): {Bool.and(_, List.same(~ty, ~same, r, r)) == True{}: Bool}
-      List.same_refl(~ty, ~same, ~refl, r)
+      List.same_refl(~ty, ~same, ~laws, r)
 
 # List.same is True only for equal lists
 law List.same_sound:
   for ~A: Data
   for ~same: A -> A -> Bool
-  for ~sound: @x: A -> @y: A -> {same(x, y) == True{}: Bool} -> {x == y: A}
+  for ~laws: Eq.Laws(A, same)
   for xs: List<&2, A>
   for ys: List<&2, A>
   {List.same(~A, ~same, xs, ys) == True{}: Bool} -> {xs == ys: List<&2, A>}
 
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-def List.same_sound(ty, same, sound, xs, ys):
+def List.same_sound(ty, same, laws, xs, ys):
   match xs ys:
     case Nil{} Nil{}:
       h => {==}
@@ -1637,7 +1648,10 @@ def List.same_sound(ty, same, sound, xs, ys):
       h => Empty.absurd({Con{x, xr} == Nil{}: List<&2, ty>}, Bool.false_ne_true(h))
     case Con{+x, +xr} Con{+y, +yr}:
       +h =>
-        %sound(
+        %Eq.sound(
+          ~ty,
+          ~same,
+          laws,
           x
         )(
           y
@@ -1647,7 +1661,7 @@ def List.same_sound(ty, same, sound, xs, ys):
         %List.same_sound(
           ~ty,
           ~same,
-          ~sound,
+          ~laws,
           xr,
           yr
         )(Bool.and_true_right(same(x, y), List.same(~ty, ~same, xr, yr))(h)):
@@ -3669,6 +3683,9 @@ def Bytes.is_eq_refl(a: Bytes()) -> {Bytes.is_eq(a, a) == True{}: Bool}:
       ): {List.all.if(u => Bytes.is_eq(t, t), _) == True{}: Bool}
       Bytes.is_eq_refl(t)
 
+# the laws of Bytes.is_eq
+def Bytes.laws() -> Eq.Laws(Bytes(), Bytes.is_eq):
+  (Bytes.is_eq_refl, Bytes.is_eq_sound)
 # Text
 # ----
 
@@ -4287,6 +4304,9 @@ def String.eq_sound(
 ) -> {String.eq(a, b) == True{}: Bool} -> {a == b: String}:
   h => String.order_sound(a, b)(Cmp.is_eq_sound(String.order.go(a, b, EQ{}))(h))
 
+# the laws of String.eq
+def String.laws() -> Eq.Laws(String, String.eq):
+  (String.eq_refl, a => b => String.eq_sound(a, b))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
@@ -4765,7 +4785,7 @@ def Trie.pick_minus.if(
   ~join: V -> V -> V,
   ~same: V -> V -> Bool,
   ~idem: @x: V -> {join(x, x) == x: V},
-  ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V},
+  ~laws: Eq.Laws(V, same),
   held: Bool,
   x: V,
   +y: V,
@@ -4781,7 +4801,12 @@ def Trie.pick_minus.if(
 }:
   match held:
     case True{}:
-      %Equal.sym(V, x, y, sound(x)(y)(e)): {Some{y} == Some{join(y, _)}: Maybe<&2, V>}
+      %Equal.sym(
+        V,
+        x,
+        y,
+        Eq.sound(~V, ~same, laws, x)(y)(e)
+      ): {Some{y} == Some{join(y, _)}: Maybe<&2, V>}
       %Equal.sym(V, join(y, y), y, idem(y)): {Some{y} == Some{_}: Maybe<&2, V>}
       {==}
     case False{}:
@@ -4795,7 +4820,7 @@ def Trie.pick_minus(
   ~join: V -> V -> V,
   ~same: V -> V -> Bool,
   ~idem: @x: V -> {join(x, x) == x: V},
-  ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V},
+  ~laws: Eq.Laws(V, same),
   s: Maybe<&2, V>,
   r: Maybe<&2, V>
 ) -> {
@@ -4813,7 +4838,7 @@ def Trie.pick_minus(
     case Some{x} None{}:
       {==}
     case Some{+x} Some{+y}:
-      Trie.pick_minus.if(~V, ~join, ~same, ~idem, ~sound, same(x, y), x, y, {==})
+      Trie.pick_minus.if(~V, ~join, ~same, ~idem, ~laws, same(x, y), x, y, {==})
 
 # taking in what r lacks of s is taking in s: a sync may send only that
 law Trie.union_minus:
@@ -4821,19 +4846,19 @@ law Trie.union_minus:
   for ~join: V -> V -> V
   for ~same: V -> V -> Bool
   for ~idem: @x: V -> {join(x, x) == x: V}
-  for ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V}
+  for ~laws: Eq.Laws(V, same)
   for s: Trie<V>
   for r: Trie<V>
   {Trie.union(~V, ~join, r, Trie.minus(~V, ~same, s, r)) == Trie.union(~V, ~join, r, s): Trie<V>}
 
-def Trie.union_minus(ty, join, same, idem, sound, s, r):
+def Trie.union_minus(ty, join, same, idem, laws, s, r):
   match s r:
     case tip{} y:
       {==}
     case bin{h, z, o} tip{}:
       {==}
     case bin{h1, z1, o1} bin{h2, z2, o2}:
-      %Trie.pick_minus(~ty, ~join, ~same, ~idem, ~sound, h1, h2):
+      %Trie.pick_minus(~ty, ~join, ~same, ~idem, ~laws, h1, h2):
         {
           bin{
             Trie.pick(~ty, ~join, h2, Trie.minus.here(~ty, ~same, h1, h2)),
@@ -4842,7 +4867,7 @@ def Trie.union_minus(ty, join, same, idem, sound, s, r):
           }
             == bin{_, Trie.union(~ty, ~join, z2, z1), Trie.union(~ty, ~join, o2, o1)}: Trie<ty>
         }
-      %Trie.union_minus(~ty, ~join, ~same, ~idem, ~sound, z1, z2):
+      %Trie.union_minus(~ty, ~join, ~same, ~idem, ~laws, z1, z2):
         {
           bin{
             Trie.pick(~ty, ~join, h2, Trie.minus.here(~ty, ~same, h1, h2)),
@@ -4855,7 +4880,7 @@ def Trie.union_minus(ty, join, same, idem, sound, s, r):
               Trie.union(~ty, ~join, o2, o1)
             }: Trie<ty>
         }
-      %Trie.union_minus(~ty, ~join, ~same, ~idem, ~sound, o1, o2):
+      %Trie.union_minus(~ty, ~join, ~same, ~idem, ~laws, o1, o2):
         {
           bin{
             Trie.pick(~ty, ~join, h2, Trie.minus.here(~ty, ~same, h1, h2)),

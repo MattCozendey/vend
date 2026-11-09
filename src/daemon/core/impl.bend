@@ -11,11 +11,6 @@ import ./spec.bend as Spec
 # Equality
 # --------
 
-# String.eq is True only for equal texts. String.eq_sound takes its texts as
-# +a and +b; a template that wants a sound check takes plain ones
-def Text.sound(a: String, b: String) -> {String.eq(a, b) == True{}: Bool} -> {a == b: String}:
-  Shared.String.eq_sound(a, b)
-
 # Chain.same is True for a chain and itself
 def Chain.same_refl(a: Spec.Chain) -> {Spec.Chain.same(a, a) == True{}: Bool}:
   match a:
@@ -85,6 +80,10 @@ def Member.same_sound(
         Shared.Bool.false_ne_true(h)
       )
 
+# the laws of Spec.Member.same
+def Member.laws() -> Shared.Eq.Laws(Spec.Member, Spec.Member.same):
+  (Member.same_refl, Member.same_sound)
+
 # Content.same is True for a content and itself
 def Content.same_refl(a: Spec.Content) -> {Spec.Content.same(a, a) == True{}: Bool}:
   match a:
@@ -145,7 +144,7 @@ def Ask.same_refl(a: Spec.Ask) -> {Spec.Ask.same(a, a) == True{}: Bool}:
             Shared.Maybe.same(~Replica.Id, ~Replica.Id.same, v, v),
             Spec.Content.same(c, c)
           )(
-            Shared.Maybe.same_refl(~Replica.Id, ~Replica.Id.same, ~Replica.Id.same_refl, v)
+            Shared.Maybe.same_refl(~Replica.Id, ~Replica.Id.same, ~Replica.Id.laws(), v)
           )(Content.same_refl(c))
         )
       )
@@ -197,14 +196,14 @@ def Ask.same_refl(a: Spec.Ask) -> {Spec.Ask.same(a, a) == True{}: Bool}:
       Shared.Bool.and_both(
         Spec.Chain.same(c, c),
         Shared.List.same(~String, ~String.eq, ms, ms)
-      )(Chain.same_refl(c))(Shared.List.same_refl(~String, ~String.eq, ~Shared.String.eq_refl, ms))
+      )(Chain.same_refl(c))(Shared.List.same_refl(~String, ~String.eq, ~Shared.String.laws(), ms))
     case Spec.Ask.set_group{+g, +ms}:
       Shared.Bool.and_both(
         String.eq(g, g),
         Shared.List.same(~Spec.Member, ~Spec.Member.same, ms, ms)
       )(
         Shared.String.eq_refl(g)
-      )(Shared.List.same_refl(~Spec.Member, ~Spec.Member.same, ~Member.same_refl, ms))
+      )(Shared.List.same_refl(~Spec.Member, ~Spec.Member.same, ~Member.laws(), ms))
 
 # Ask.same is True only for equal changes
 def Ask.same_sound(
@@ -340,7 +339,7 @@ def Ask.same_sound(
         %Shared.List.same_sound(
           ~String,
           ~String.eq,
-          ~Text.sound,
+          ~Shared.String.laws(),
           ms1,
           ms2
         )(
@@ -366,7 +365,7 @@ def Ask.same_sound(
         %Shared.List.same_sound(
           ~Spec.Member,
           ~Spec.Member.same,
-          ~Member.same_sound,
+          ~Member.laws(),
           ms1,
           ms2
         )(
@@ -2181,7 +2180,7 @@ def Spec.Node.write_written(n, s, e, b, name, base, x, v):
           Shared.Maybe.same_refl(
             ~Shared.Bytes(),
             ~Shared.Bytes.is_eq,
-            ~Shared.Bytes.is_eq_refl,
+            ~Shared.Bytes.laws(),
             base_bytes
           )
         )
@@ -2640,6 +2639,33 @@ def Touch.same_sound(
         {==}
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# Touch.same is True for a touch and itself
+def Touch.same_refl(a: Spec.Touch) -> {Spec.Touch.same(a, a) == True{}: Bool}:
+  match a:
+    case Spec.Touch{+v, +c, +b, +u}:
+      Shared.Bool.and_both(
+        Replica.Id.same(v, v),
+        Bool.and(Resources.Name.same(c, c), Bool.and(String.eq(b, b), Resources.Name.same(u, u)))
+      )(
+        Replica.Id.same_refl(v)
+      )(
+        Shared.Bool.and_both(
+          Resources.Name.same(c, c),
+          Bool.and(String.eq(b, b), Resources.Name.same(u, u))
+        )(
+          Resources.Name.same_refl(c)
+        )(
+          Shared.Bool.and_both(
+            String.eq(b, b),
+            Resources.Name.same(u, u)
+          )(Shared.String.eq_refl(b))(Resources.Name.same_refl(u))
+        )
+      )
+
+# the laws of Spec.Touch.same
+def Touch.laws() -> Shared.Eq.Laws(Spec.Touch, Spec.Touch.same):
+  (Touch.same_refl, Touch.same_sound)
+
 # two touches that differ at most in the resource used are the same as those
 # resources are
 def Touch.same_at(
@@ -2858,7 +2884,7 @@ def Touch.complete(
       ~Replica.Id.same,
       ~Spec.Touch.same,
       ~Affects.at,
-      ~Replica.Id.same_sound,
+      ~Replica.Id.laws(),
       Touch.versions(s),
       Affects.of(s, d),
       v,
@@ -2922,7 +2948,7 @@ def Spec.Node.affects_exactly(s, b, t):
     ~Affects,
     ~Spec.Touch.same,
     ~Affects.keeps,
-    ~Touch.same_sound,
+    ~Touch.laws(),
     Affects.cands(s, b),
     Affects.of(s, b),
     t,
@@ -2961,7 +2987,7 @@ def Impact.complete(
           ~String.eq,
           ~Spec.Touch.same,
           ~Affects.cands,
-          ~Text.sound,
+          ~Shared.String.laws(),
           Spec.Branch.names(Spec.Node.branches(s)),
           s,
           d,
@@ -3018,7 +3044,7 @@ def Spec.Node.impact_exactly(s, p, t):
     ~Impact,
     ~Spec.Touch.same,
     ~Impact.keeps,
-    ~Touch.same_sound,
+    ~Touch.laws(),
     Impact.cands(s),
     Impact{s, m},
     t,

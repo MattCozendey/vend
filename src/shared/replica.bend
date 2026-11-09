@@ -26,25 +26,24 @@ def Cell.join(~V: Data, ~same: V -> V -> Bool, a: Cell<V>, b: Cell<V>) -> Cell<V
 
 # Laws
 # ----
-# Each law asks of same only that it is True for a value and itself (refl),
-# and only for equal values (sound).
+# Each law asks of same only its laws (Shared.Eq.Laws).
 
 # a cell joined with itself is itself
 law Cell.join_idem:
   for ~V: Data
   for ~same: V -> V -> Bool
-  for ~refl: @x: V -> {same(x, x) == True{}: Bool}
+  for ~laws: Shared.Eq.Laws(V, same)
   for a: Cell<V>
   {Cell.join(~V, ~same, a, a) == a: Cell<V>}
 
-def Cell.join_idem(ty, same, refl, a):
+def Cell.join_idem(ty, same, laws, a):
   match a:
     case one{x}:
       %Equal.sym(
         Bool,
         same(x, x),
         True{},
-        refl(x)
+        Shared.Eq.refl(~ty, ~same, laws, x)
       ): {Bool.pick(Cell<ty>, _, one{x}, many{}) == one{x}: Cell<ty>}
       {==}
     case many{}:
@@ -55,8 +54,7 @@ def Cell.join_idem(ty, same, refl, a):
 def Cell.join_comm.back(
   ~V: Data,
   ~same: V -> V -> Bool,
-  ~refl: @x: V -> {same(x, x) == True{}: Bool},
-  ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V},
+  ~laws: Shared.Eq.Laws(V, same),
   back: Bool,
   +x: V,
   y: V,
@@ -81,8 +79,8 @@ def Cell.join_comm.back(
               same(x, y),
               same(x, x),
               True{},
-              Equal.cong(V, Bool, z => same(x, z), y, x, sound(y)(x)(e)),
-              refl(x)
+              Equal.cong(V, Bool, z => same(x, z), y, x, Shared.Eq.sound(~V, ~same, laws, y)(x)(e)),
+              Shared.Eq.refl(~V, ~same, laws, x)
             )
           )
         )
@@ -93,8 +91,7 @@ def Cell.join_comm.back(
 def Cell.join_comm.at(
   ~V: Data,
   ~same: V -> V -> Bool,
-  ~refl: @x: V -> {same(x, x) == True{}: Bool},
-  ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V},
+  ~laws: Shared.Eq.Laws(V, same),
   held: Bool,
   +x: V,
   +y: V,
@@ -110,31 +107,35 @@ def Cell.join_comm.at(
 }:
   match held:
     case True{}:
-      %sound(x)(y)(e): {one{x} == Bool.pick(Cell<V>, same(_, x), one{_}, many{}): Cell<V>}
+      %Shared.Eq.sound(
+        ~V,
+        ~same,
+        laws,
+        x
+      )(y)(e): {one{x} == Bool.pick(Cell<V>, same(_, x), one{_}, many{}): Cell<V>}
       %Equal.sym(
         Bool,
         same(x, x),
         True{},
-        refl(x)
+        Shared.Eq.refl(~V, ~same, laws, x)
       ): {one{x} == Bool.pick(Cell<V>, _, one{x}, many{}): Cell<V>}
       {==}
     case False{}:
-      Cell.join_comm.back(~V, ~same, ~refl, ~sound, same(y, x), x, y, e, {==})
+      Cell.join_comm.back(~V, ~same, ~laws, same(y, x), x, y, e, {==})
 
 # a join is the same either way round
 law Cell.join_comm:
   for ~V: Data
   for ~same: V -> V -> Bool
-  for ~refl: @x: V -> {same(x, x) == True{}: Bool}
-  for ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V}
+  for ~laws: Shared.Eq.Laws(V, same)
   for a: Cell<V>
   for b: Cell<V>
   {Cell.join(~V, ~same, a, b) == Cell.join(~V, ~same, b, a): Cell<V>}
 
-def Cell.join_comm(ty, same, refl, sound, a, b):
+def Cell.join_comm(ty, same, laws, a, b):
   match a b:
     case one{+x} one{+y}:
-      Cell.join_comm.at(~ty, ~same, ~refl, ~sound, same(x, y), x, y, {==})
+      Cell.join_comm.at(~ty, ~same, ~laws, same(x, y), x, y, {==})
     case one{x} many{}:
       {==}
     case many{} one{y}:
@@ -161,7 +162,7 @@ def Cell.join_assoc.many(
 def Cell.join_assoc.at(
   ~V: Data,
   ~same: V -> V -> Bool,
-  ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V},
+  ~laws: Shared.Eq.Laws(V, same),
   xy: Bool,
   yz: Bool,
   x: V,
@@ -180,7 +181,7 @@ def Cell.join_assoc.at(
 }:
   match xy yz:
     case True{} True{}:
-      %sound(y)(z)(e2):
+      %Shared.Eq.sound(~V, ~same, laws, y)(z)(e2):
         {
           Cell.join(
             ~V,
@@ -192,7 +193,7 @@ def Cell.join_assoc.at(
         }
       {==}
     case True{} False{}:
-      %Equal.sym(V, x, y, sound(x)(y)(e1)):
+      %Equal.sym(V, x, y, Shared.Eq.sound(~V, ~same, laws, x)(y)(e1)):
         {
           Cell.join(
             ~V,
@@ -225,8 +226,7 @@ def Cell.join_assoc.at(
 law Cell.join_assoc:
   for ~V: Data
   for ~same: V -> V -> Bool
-  for ~refl: @x: V -> {same(x, x) == True{}: Bool}
-  for ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V}
+  for ~laws: Shared.Eq.Laws(V, same)
   for a: Cell<V>
   for b: Cell<V>
   for c: Cell<V>
@@ -240,7 +240,7 @@ law Cell.join_assoc:
       == Cell.join(~V, ~same, a, Cell.join(~V, ~same, b, c)): Cell<V>
   }
 
-def Cell.join_assoc(ty, same, refl, sound, a, b, c):
+def Cell.join_assoc(ty, same, laws, a, b, c):
   match a b c:
     case many{} y w:
       {==}
@@ -249,7 +249,7 @@ def Cell.join_assoc(ty, same, refl, sound, a, b, c):
     case one{+x} one{+y} many{}:
       Cell.join_assoc.many(~ty, ~same, same(x, y), x)
     case one{+x} one{+y} one{+z}:
-      Cell.join_assoc.at(~ty, ~same, ~sound, same(x, y), same(y, z), x, y, z, {==}, {==})
+      Cell.join_assoc.at(~ty, ~same, ~laws, same(x, y), same(y, z), x, y, z, {==}, {==})
 
 # a and b hold the same, as same calls values the same
 def Cell.same(~V: Data, ~same: V -> V -> Bool, a: Cell<V>, b: Cell<V>) -> Bool:
@@ -265,16 +265,16 @@ def Cell.same(~V: Data, ~same: V -> V -> Bool, a: Cell<V>, b: Cell<V>) -> Bool:
 law Cell.same_sound:
   for ~V: Data
   for ~same: V -> V -> Bool
-  for ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V}
+  for ~laws: Shared.Eq.Laws(V, same)
   for a: Cell<V>
   for b: Cell<V>
   {Cell.same(~V, ~same, a, b) == True{}: Bool} -> {a == b: Cell<V>}
 
-def Cell.same_sound(ty, same, sound, a, b):
+def Cell.same_sound(ty, same, laws, a, b):
   match a b:
     case one{x} one{y}:
       h =>
-        %sound(x)(y)(h): {one{x} == one{_}: Cell<ty>}
+        %Shared.Eq.sound(~ty, ~same, laws, x)(y)(h): {one{x} == one{_}: Cell<ty>}
         {==}
     case one{x} many{}:
       h => Empty.absurd({one{x} == many{}: Cell<ty>}, Shared.Bool.false_ne_true(h))
@@ -335,7 +335,7 @@ def Cell.is_one(-V: Data, m: Maybe<&2, Cell<V>>) -> Bool:
 def Cell.kept.here(
   ~V: Data,
   ~same: V -> V -> Bool,
-  ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V},
+  ~laws: Shared.Eq.Laws(V, same),
   a: Maybe<&2, Cell<V>>,
   b: Maybe<&2, Cell<V>>,
   -v: V
@@ -403,7 +403,7 @@ def Cell.kept.here(
 law Cell.agrees_kept:
   for ~V: Data
   for ~same: V -> V -> Bool
-  for ~sound: @x: V -> @y: V -> {same(x, y) == True{}: Bool} -> {x == y: V}
+  for ~laws: Shared.Eq.Laws(V, same)
   for s: Shared.Trie<Cell<V>>
   for t: Shared.Trie<Cell<V>>
   for k: List<&2, Bool>
@@ -421,7 +421,7 @@ law Cell.agrees_kept:
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- an equality, or a proof, keeps each and/or as one value for the proofs to split on
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-def Cell.agrees_kept(ty, same, sound, s, t, k, v):
+def Cell.agrees_kept(ty, same, laws, s, t, k, v):
   match s t k:
     case Shared.tip{} y q:
       a => g => Empty.absurd(
@@ -436,7 +436,7 @@ def Cell.agrees_kept(ty, same, sound, s, t, k, v):
       +a => g => Cell.kept.here(
         ~ty,
         ~same,
-        ~sound,
+        ~laws,
         h1,
         h2,
         v
@@ -450,7 +450,7 @@ def Cell.agrees_kept(ty, same, sound, s, t, k, v):
       +a => g => Cell.agrees_kept(
         ~ty,
         ~same,
-        ~sound,
+        ~laws,
         z1,
         z2,
         r,
@@ -470,7 +470,7 @@ def Cell.agrees_kept(ty, same, sound, s, t, k, v):
       +a => g => Cell.agrees_kept(
         ~ty,
         ~same,
-        ~sound,
+        ~laws,
         o1,
         o2,
         r,
@@ -740,16 +740,14 @@ def Quorum.keeps(
 
 # Laws
 # ----
-# Each law asks of same only that it is True for a value and itself (refl),
-# and only for equal values (sound).
+# Each law asks of same only its laws (Shared.Eq.Laws).
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # x is not y, so y is not x
 def Quorum.ne_flip.at(
   ~B: Data,
   ~same: B -> B -> Bool,
-  ~refl: @x: B -> {same(x, x) == True{}: Bool},
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   back: Bool,
   +x: B,
   y: B,
@@ -774,8 +772,8 @@ def Quorum.ne_flip.at(
               same(x, y),
               same(x, x),
               True{},
-              Equal.cong(B, Bool, z => same(x, z), y, x, sound(y)(x)(e)),
-              refl(x)
+              Equal.cong(B, Bool, z => same(x, z), y, x, Shared.Eq.sound(~B, ~same, laws, y)(x)(e)),
+              Shared.Eq.refl(~B, ~same, laws, x)
             )
           )
         )
@@ -786,20 +784,18 @@ def Quorum.ne_flip.at(
 def Quorum.ne_flip(
   ~B: Data,
   ~same: B -> B -> Bool,
-  ~refl: @x: B -> {same(x, x) == True{}: Bool},
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   +x: B,
   +y: B,
   no: {same(x, y) == False{}: Bool}
 ) -> {same(y, x) == False{}: Bool}:
-  Quorum.ne_flip.at(~B, ~same, ~refl, ~sound, same(y, x), x, y, no, {==})
+  Quorum.ne_flip.at(~B, ~same, ~laws, same(y, x), x, y, no, {==})
 
 # a vote for y is not a vote for x, when x is not y
 def Quorum.hit_excl(
   ~B: Data,
   ~same: B -> B -> Bool,
-  ~refl: @x: B -> {same(x, x) == True{}: Bool},
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   v: Maybe<&2, B>,
   x: B,
   +y: B,
@@ -812,8 +808,13 @@ def Quorum.hit_excl(
       h => {==}
     case Some{b}:
       h =>
-        %Equal.sym(B, b, y, sound(b)(y)(h)): {same(_, x) == False{}: Bool}
-        Quorum.ne_flip(~B, ~same, ~refl, ~sound, x, y, no)
+        %Equal.sym(
+          B,
+          b,
+          y,
+          Shared.Eq.sound(~B, ~same, laws, b)(y)(h)
+        ): {same(_, x) == False{}: Bool}
+        Quorum.ne_flip(~B, ~same, ~laws, x, y, no)
 
 # Quorum.yes_le_no for one member, by whether it votes for y (hy) and x (hx)
 def Quorum.yes_le_no.at(
@@ -844,8 +845,7 @@ def Quorum.yes_le_no(
   ~V: Data,
   ~vote: V -> A -> Maybe<&2, B>,
   ~same: B -> B -> Bool,
-  ~refl: @x: B -> {same(x, x) == True{}: Bool},
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   ms: List<&2, A>,
   +g: V,
   +x: B,
@@ -865,10 +865,10 @@ def Quorum.yes_le_no(
       Quorum.yes_le_no.at(
         Quorum.hit(~B, ~same, vote(g)(m), y),
         Quorum.hit(~B, ~same, vote(g)(m), x),
-        Quorum.hit_excl(~B, ~same, ~refl, ~sound, vote(g)(m), x, y, no),
+        Quorum.hit_excl(~B, ~same, ~laws, vote(g)(m), x, y, no),
         Quorum.yes(~A, ~B, ~V, ~vote, ~same, r, g, y),
         Quorum.no(~A, ~B, ~V, ~vote, ~same, r, g, x),
-        Quorum.yes_le_no(~A, ~B, ~V, ~vote, ~same, ~refl, ~sound, r, g, x, y, no)
+        Quorum.yes_le_no(~A, ~B, ~V, ~vote, ~same, ~laws, r, g, x, y, no)
       )
 
 # Quorum.unique once same(x, y) is known (held)
@@ -878,8 +878,7 @@ def Quorum.unique.at(
   ~V: Data,
   ~vote: V -> A -> Maybe<&2, B>,
   ~same: B -> B -> Bool,
-  ~refl: @x: B -> {same(x, x) == True{}: Bool},
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   held: Bool,
   +ms: List<&2, A>,
   +g: V,
@@ -891,7 +890,7 @@ def Quorum.unique.at(
 ) -> {x == y: B}:
   match held:
     case True{}:
-      sound(x)(y)(e)
+      Shared.Eq.sound(~B, ~same, laws, x)(y)(e)
     case False{}:
       +yx = Quorum.yes(~A, ~B, ~V, ~vote, ~same, ms, g, x)
       +yy = Quorum.yes(~A, ~B, ~V, ~vote, ~same, ms, g, y)
@@ -908,20 +907,19 @@ def Quorum.unique.at(
           ~V,
           ~vote,
           ~same,
-          ~refl,
-          ~sound,
+          ~laws,
           ms,
           g,
           y,
           x,
-          Quorum.ne_flip(~B, ~same, ~refl, ~sound, x, y, e)
+          Quorum.ne_flip(~B, ~same, ~laws, x, y, e)
         )
       )(hy)
       b = Shared.Nat.lt_le(
         yx,
         yy,
         nx
-      )(a)(Quorum.yes_le_no(~A, ~B, ~V, ~vote, ~same, ~refl, ~sound, ms, g, x, y, e))
+      )(a)(Quorum.yes_le_no(~A, ~B, ~V, ~vote, ~same, ~laws, ms, g, x, y, e))
       c = Shared.Nat.lt_le(yx, nx, yx)(b)(Shared.Nat.lt_weak(nx, yx)(hx))
       Empty.absurd(
         {x == y: B},
@@ -944,8 +942,7 @@ law Quorum.unique:
   for ~V: Data
   for ~vote: V -> A -> Maybe<&2, B>
   for ~same: B -> B -> Bool
-  for ~refl: @x: B -> {same(x, x) == True{}: Bool}
-  for ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B}
+  for ~laws: Shared.Eq.Laws(B, same)
   for ms: List<&2, A>
   for g: V
   for x: B
@@ -954,7 +951,7 @@ law Quorum.unique:
     -> {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, y) == True{}: Bool}
     -> {x == y: B}
 
-def Quorum.unique(member, choice, state, vote, same, refl, sound, ms, g, x, y):
+def Quorum.unique(member, choice, state, vote, same, laws, ms, g, x, y):
   ms = ms
   g = g
   +x = x
@@ -965,8 +962,7 @@ def Quorum.unique(member, choice, state, vote, same, refl, sound, ms, g, x, y):
     ~state,
     ~vote,
     ~same,
-    ~refl,
-    ~sound,
+    ~laws,
     same(x, y),
     ms,
     g,
@@ -981,7 +977,7 @@ def Quorum.unique(member, choice, state, vote, same, refl, sound, ms, g, x, y):
 def Quorum.yes_more.at(
   ~B: Data,
   ~same: B -> B -> Bool,
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   v: Maybe<&2, B>,
   w: Maybe<&2, B>,
   x: B,
@@ -1005,7 +1001,7 @@ def Quorum.yes_more.at(
         Shared.Bool.false_ne_true(k)
       )
     case Some{+b} Some{c}:
-      %Equal.sym(B, c, b, sound(c)(b)(k)):
+      %Equal.sym(B, c, b, Shared.Eq.sound(~B, ~same, laws, c)(b)(k)):
         {
           Nat.is_le(
             Shared.Nat.add_if(same(b, x), y),
@@ -1019,7 +1015,7 @@ def Quorum.yes_more.at(
 def Quorum.no_less.at(
   ~B: Data,
   ~same: B -> B -> Bool,
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   v: Maybe<&2, B>,
   w: Maybe<&2, B>,
   x: B,
@@ -1043,7 +1039,7 @@ def Quorum.no_less.at(
         Shared.Bool.false_ne_true(k)
       )
     case Some{+b} Some{c}:
-      %Equal.sym(B, c, b, sound(c)(b)(k)):
+      %Equal.sym(B, c, b, Shared.Eq.sound(~B, ~same, laws, c)(b)(k)):
         {
           Nat.is_le(
             Shared.Nat.add_if(Bool.not(same(_, x)), n2),
@@ -1060,7 +1056,7 @@ def Quorum.yes_more(
   ~V: Data,
   ~vote: V -> A -> Maybe<&2, B>,
   ~same: B -> B -> Bool,
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   ms: List<&2, A>,
   +g: V,
   +g2: V,
@@ -1082,7 +1078,7 @@ def Quorum.yes_more(
       Quorum.yes_more.at(
         ~B,
         ~same,
-        ~sound,
+        ~laws,
         vote(g)(m),
         vote(g2)(m),
         x,
@@ -1095,7 +1091,7 @@ def Quorum.yes_more(
           ~V,
           ~vote,
           ~same,
-          ~sound,
+          ~laws,
           r,
           g,
           g2,
@@ -1111,7 +1107,7 @@ def Quorum.no_less(
   ~V: Data,
   ~vote: V -> A -> Maybe<&2, B>,
   ~same: B -> B -> Bool,
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   ms: List<&2, A>,
   +g: V,
   +g2: V,
@@ -1133,7 +1129,7 @@ def Quorum.no_less(
       Quorum.no_less.at(
         ~B,
         ~same,
-        ~sound,
+        ~laws,
         vote(g)(m),
         vote(g2)(m),
         x,
@@ -1146,7 +1142,7 @@ def Quorum.no_less(
           ~V,
           ~vote,
           ~same,
-          ~sound,
+          ~laws,
           r,
           g,
           g2,
@@ -1162,7 +1158,7 @@ law Quorum.has_more:
   for ~V: Data
   for ~vote: V -> A -> Maybe<&2, B>
   for ~same: B -> B -> Bool
-  for ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B}
+  for ~laws: Shared.Eq.Laws(B, same)
   for ms: List<&2, A>
   for g: V
   for g2: V
@@ -1171,7 +1167,7 @@ law Quorum.has_more:
     -> {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool}
     -> {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g2, x) == True{}: Bool}
 
-def Quorum.has_more(member, choice, state, vote, same, sound, ms, g, g2, x):
+def Quorum.has_more(member, choice, state, vote, same, laws, ms, g, g2, x):
   +ms = ms
   +g = g
   +g2 = g2
@@ -1186,8 +1182,8 @@ def Quorum.has_more(member, choice, state, vote, same, sound, ms, g, g2, x):
         Quorum.no(~member, ~choice, ~state, ~vote, ~same, ms, g2, x),
         Quorum.no(~member, ~choice, ~state, ~vote, ~same, ms, g, x),
         Quorum.yes(~member, ~choice, ~state, ~vote, ~same, ms, g, x)
-      )(Quorum.no_less(~member, ~choice, ~state, ~vote, ~same, ~sound, ms, g, g2, x, k))(h)
-    )(Quorum.yes_more(~member, ~choice, ~state, ~vote, ~same, ~sound, ms, g, g2, x, k))
+      )(Quorum.no_less(~member, ~choice, ~state, ~vote, ~same, ~laws, ms, g, g2, x, k))(h)
+    )(Quorum.yes_more(~member, ~choice, ~state, ~vote, ~same, ~laws, ms, g, g2, x, k))
 
 # Quorum.has_winner when the vote b was picked or not (held)
 def Quorum.has_winner.if(
@@ -1304,7 +1300,7 @@ def Quorum.scan.past(
   ~V: Data,
   ~vote: V -> A -> Maybe<&2, B>,
   ~same: B -> B -> Bool,
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   c: Bool,
   b: B,
   ms: List<&2, A>,
@@ -1324,7 +1320,7 @@ def Quorum.scan.past(
             Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, b),
             True{},
             Equal.sym(Bool, Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, b), False{}, eb),
-            %Equal.sym(B, b, x, sound(b)(x)(ec)): {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, _) == True{}: Bool}
+            %Equal.sym(B, b, x, Shared.Eq.sound(~B, ~same, laws, b)(x)(ec)): {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, _) == True{}: Bool}
             hx)))
     case False{}:
       pos
@@ -1337,8 +1333,7 @@ def Quorum.scan.if(
   ~V: Data,
   ~vote: V -> A -> Maybe<&2, B>,
   ~same: B -> B -> Bool,
-  ~refl: @x: B -> {same(x, x) == True{}: Bool},
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   held: Bool,
   +b: B,
   rest: Maybe<&2, B>,
@@ -1359,8 +1354,7 @@ def Quorum.scan.if(
         ~V,
         ~vote,
         ~same,
-        ~refl,
-        ~sound,
+        ~laws,
         ms,
         g,
         b,
@@ -1375,7 +1369,7 @@ def Quorum.scan.if(
           ~V,
           ~vote,
           ~same,
-          ~sound,
+          ~laws,
           same(b, x),
           b,
           ms,
@@ -1396,8 +1390,7 @@ def Quorum.scan.at(
   ~V: Data,
   ~vote: V -> A -> Maybe<&2, B>,
   ~same: B -> B -> Bool,
-  ~refl: @x: B -> {same(x, x) == True{}: Bool},
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   v: Maybe<&2, B>,
   rest: Maybe<&2, B>,
   +ms: List<&2, A>,
@@ -1418,8 +1411,7 @@ def Quorum.scan.at(
         ~V,
         ~vote,
         ~same,
-        ~refl,
-        ~sound,
+        ~laws,
         Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, b),
         b,
         rest,
@@ -1440,8 +1432,7 @@ def Quorum.scan(
   ~V: Data,
   ~vote: V -> A -> Maybe<&2, B>,
   ~same: B -> B -> Bool,
-  ~refl: @x: B -> {same(x, x) == True{}: Bool},
-  ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B},
+  ~laws: Shared.Eq.Laws(B, same),
   ks: List<&2, A>,
   +ms: List<&2, A>,
   +g: V,
@@ -1460,8 +1451,7 @@ def Quorum.scan(
         ~V,
         ~vote,
         ~same,
-        ~refl,
-        ~sound,
+        ~laws,
         vote(g)(k),
         Quorum.winner(~A, ~B, ~V, ~vote, ~same, r, ms, g),
         ms,
@@ -1470,7 +1460,7 @@ def Quorum.scan(
         Quorum.yes(~A, ~B, ~V, ~vote, ~same, r, g, x),
         hx,
         pos,
-        Quorum.scan(~A, ~B, ~V, ~vote, ~same, ~refl, ~sound, r, ms, g, x, hx)
+        Quorum.scan(~A, ~B, ~V, ~vote, ~same, ~laws, r, ms, g, x, hx)
       )
 
 # a choice with a majority is the winner
@@ -1480,15 +1470,14 @@ law Quorum.winner_of:
   for ~V: Data
   for ~vote: V -> A -> Maybe<&2, B>
   for ~same: B -> B -> Bool
-  for ~refl: @x: B -> {same(x, x) == True{}: Bool}
-  for ~sound: @x: B -> @y: B -> {same(x, y) == True{}: Bool} -> {x == y: B}
+  for ~laws: Shared.Eq.Laws(B, same)
   for ms: List<&2, A>
   for g: V
   for x: B
   {Quorum.has(~A, ~B, ~V, ~vote, ~same, ms, g, x) == True{}: Bool}
     -> {Quorum.winner(~A, ~B, ~V, ~vote, ~same, ms, ms, g) == Some{x}: Maybe<&2, B>}
 
-def Quorum.winner_of(member, choice, state, vote, same, refl, sound, ms, g, x):
+def Quorum.winner_of(member, choice, state, vote, same, laws, ms, g, x):
   +ms = ms
   +g = g
   +x = x
@@ -1499,8 +1488,7 @@ def Quorum.winner_of(member, choice, state, vote, same, refl, sound, ms, g, x):
       ~state,
       ~vote,
       ~same,
-      ~refl,
-      ~sound,
+      ~laws,
       ms,
       ms,
       g,
@@ -1523,14 +1511,14 @@ law Quorum.winner_one:
   for ~V: Data
   for ~vote: V -> A -> Maybe<&2, B>
   for ~same: B -> B -> Bool
-  for ~refl: @x: B -> {same(x, x) == True{}: Bool}
+  for ~laws: Shared.Eq.Laws(B, same)
   for +m: A
   for +g: V
   for +x: B
   {vote(g)(m) == Some{x}: Maybe<&2, B>}
     -> {Quorum.winner(~A, ~B, ~V, ~vote, ~same, [m], [m], g) == Some{x}: Maybe<&2, B>}
 
-def Quorum.winner_one(member, choice, state, vote, same, refl, m, g, x):
+def Quorum.winner_one(member, choice, state, vote, same, laws, m, g, x):
   +h =>
     %Equal.sym(Maybe<&2, choice>, vote(g)(m), Some{x}, h):
       {
@@ -1560,7 +1548,7 @@ def Quorum.winner_one(member, choice, state, vote, same, refl, m, g, x):
         )
           == Some{x}: Maybe<&2, choice>
       }
-    %Equal.sym(Bool, same(x, x), True{}, refl(x)):
+    %Equal.sym(Bool, same(x, x), True{}, Shared.Eq.refl(~choice, ~same, laws, x)):
       {
         Bool.pick(
           Maybe<&2, choice>,
@@ -1743,16 +1731,19 @@ def Id.same_sound(a: Id, b: Id) -> {Id.same(a, b) == True{}: Bool} -> {a == b: I
           {Id{w1, r1} == Id{w1, _}: Id}
         {==}
 
+# the laws of Id.same
+def Id.laws() -> Shared.Eq.Laws(Id, Id.same):
+  (Id.same_refl, Id.same_sound)
 # Key.same is True for a key and itself
 def Key.same_refl(a: List<&2, Bool>) -> {Key.same(a, a) == True{}: Bool}:
-  Shared.List.same_refl(~Bool, ~Shared.Bool.same, ~Shared.Bool.same_refl, a)
+  Shared.List.same_refl(~Bool, ~Shared.Bool.same, ~Shared.Bool.laws(), a)
 
 # Key.same is True only for equal keys
 def Key.same_sound(
   a: List<&2, Bool>,
   b: List<&2, Bool>
 ) -> {Key.same(a, b) == True{}: Bool} -> {a == b: List<&2, Bool>}:
-  Shared.List.same_sound(~Bool, ~Shared.Bool.same, ~Shared.Bool.same_sound, a, b)
+  Shared.List.same_sound(~Bool, ~Shared.Bool.same, ~Shared.Bool.laws(), a, b)
 
 # Entry.same is True for an entry and itself
 def Entry.same_refl(
@@ -1866,6 +1857,14 @@ def Entry.same_sound(
         {Entry.root{p0, p1, p2} == Entry.vote{q0}: Entry<Q>},
         Shared.Bool.false_ne_true(h)
       )
+# the laws of Entry.same, by the laws of same
+def Entry.laws(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same)
+) -> Shared.Eq.Laws(Entry<Q>, Entry.same(~Q, ~same)):
+  (a => Entry.same_refl(~Q, ~same, ~laws, a), a => b => Entry.same_sound(~Q, ~same, ~laws, a, b))
+
 # The state
 # ---------
 
@@ -2580,7 +2579,7 @@ def Kept.cell(
   Cell.agrees_kept(
     ~Entry<Q>,
     ~Entry.same(~Q, ~same),
-    ~Entry.same_sound(~Q, ~same, ~laws),
+    ~Entry.laws(~Q, ~same, ~laws),
     s,
     t,
     Slot.key(k),
@@ -2932,8 +2931,7 @@ def Kept.next.won(
           ~Spot<Q>,
           ~Spot.vote(~Q),
           ~Id.same,
-          ~Id.same_refl,
-          ~Id.same_sound,
+          ~Id.laws(),
           ms,
           g2,
           i
@@ -2944,7 +2942,7 @@ def Kept.next.won(
             ~Spot<Q>,
             ~Spot.vote(~Q),
             ~Id.same,
-            ~Id.same_sound,
+            ~Id.laws(),
             ms,
             g,
             g2,
@@ -4485,7 +4483,7 @@ def Next.one(
         ~Spot<Q>,
         ~Spot.vote(~Q),
         ~Id.same,
-        ~Id.same_refl,
+        ~Id.laws(),
         n,
         Spot{s, c, v},
         i
@@ -5082,5 +5080,5 @@ def Owner.puts(
         shape
       ):
         {Shared.List.has(~Id, ~Id.same, _, i) == True{}: Bool}
-      Shared.List.has_middle(~Id, ~Id.same, ~Id.same_refl, x1, i, rest)
+      Shared.List.has_middle(~Id, ~Id.same, ~Id.laws(), x1, i, rest)
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning

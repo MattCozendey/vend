@@ -37,6 +37,9 @@ def Name.same_sound(a: Name, b: Name) -> {Name.same(a, b) == True{}: Bool} -> {a
         %Shared.String.eq_sound(x, y)(h): {Name{x} == Name{_}: Name}
         {==}
 
+# the laws of Name.same
+def Name.laws() -> Shared.Eq.Laws(Name, Name.same):
+  (Name.same_refl, Name.same_sound)
 # the space in the cut c of the text t: t itself when it has no ':'
 def Name.space.cut(c: Maybe<&2, Shared.Cut>, t: String) -> String:
   match c:

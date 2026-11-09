@@ -224,13 +224,7 @@ def Lines.cut.of_right(
           z => List.append(&2, Shared.Bytes(), s, z),
           Shared.Ends.right(Shared.Bytes(), e),
           rb,
-          Shared.List.ends_right(
-            ~Shared.Bytes(),
-            ~Shared.Bytes.is_eq,
-            ~Shared.Bytes.is_eq_sound,
-            ra,
-            rb
-          )
+          Shared.List.ends_right(~Shared.Bytes(), ~Shared.Bytes.is_eq, ~Shared.Bytes.laws(), ra, rb)
         )
       )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
@@ -269,7 +263,7 @@ def Lines.cut_right(a, b):
     Shared.Fork.right(Shared.Bytes(), f),
     b,
     Lines.cut.of_right(f),
-    Shared.List.fork_right(~Shared.Bytes(), ~Shared.Bytes.is_eq, ~Shared.Bytes.is_eq_sound, a, b)
+    Shared.List.fork_right(~Shared.Bytes(), ~Shared.Bytes.is_eq, ~Shared.Bytes.laws(), a, b)
   )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
