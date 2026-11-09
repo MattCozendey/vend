@@ -6,6 +6,21 @@
 - `bun run lint`: 0 findings. `git diff --check`: clean.
 - Check without WSL: the `bend` on PATH can be `bun ~/.cache/bend-lint/bendlang/bend/v2.0.39/bend2/main.ts` (the Bend that lint and gen3 pin).
 
+## Redesign (decided, not built)
+
+A walk over history is replaced by fixed-key reads of replicated facts, so the cost of a write, read and sync does not grow with history (sync costs what differs). Every choice is judged only by the goal: strong, proven, fast, anywhere, eventually consistent, high throughput, graph based with groups, nested semantic data. Proof work is not a cost.
+
+- Heights are 32-bit, high bit first. A line is a list of owner epochs (genesis cells); a step is the majority of the epoch's owners in its bucket; `where(i)` says where a request was decided.
+- Strict finality: a sync only appends to a listing (prefix-closed, as `chain_kept` today), not per-step only.
+- Versions are persistent trees in the ledger. Each vote names the tree root it makes, and the next tree is a proven function of the tip tree and the request: a decided step fixes its tree, and any node can recheck it.
+- Split votes: vote rounds, so a line with many owners does not stall on a split.
+- Owner epochs: each read checks the whole epoch chain back (no weaker one-level check).
+- Effects (file watching, sockets, files) live in transport/IO; the core stays pure.
+- Contents stored once by a hash; a collision shows as a conflict (many), never as wrong content.
+- The ledger stays generic in the change type; equality is a structural is_eq per type, proven equal to code equality.
+- Scope is not reduced: item-level formats for Bend and C are in scope, with everything else in README.md.
+- First: experiments E1-E6 in scratch (32-bit descent and range scan; quorum over a list read once; tree get_set; flat write benchmark at 1k and 10k; visited-set reach transitivity; delta sync law), then the migration in order, each step checking.
+
 ## Compression pass (this branch)
 
 - Shared plus core: 180.6k tokens to 167.3k (proofs 120.2k to 106.0k), with no law weakened.
