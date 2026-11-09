@@ -1493,3 +1493,622 @@ def State.decide_kept(ty, same, laws, s, t, w, ms, v):
           )
         )(h0)
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# the owners of a root line stay
+def Root.owners.kept(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~view: Q -> View,
+  +s: State(Q),
+  +t: State(Q),
+  +r: Id,
+  +ag: {State.agrees(~Q, ~same, s, t) == True{}: Bool},
+  +a: List<&2, String>
+) -> {Root.owners(~Q, ~view, s, r) == Some{a}: Maybe<&2, List<&2, String>>} -> {Root.owners(~Q, ~view, State.join(~Q, ~same, s, t), r) == Some{a}: Maybe<&2, List<&2, String>>}:
+  Shared.Maybe.then_kept(
+    Asked<Q>,
+    List<&2, String>,
+    State.asked(~Q, s, r),
+    State.asked(~Q, State.join(~Q, ~same, s, t), r),
+    x => Root.owners.ask(~Q, ~view, x),
+    x => Root.owners.ask(~Q, ~view, x),
+    a,
+    x => State.read_kept(~Q, ~same, ~laws, ~Asked<Q>, m => Asked.of(~Q, m), {==}, s, t, Slot.ask(r), x)(ag),
+    x => h => h
+  )
+
+# the owners of the epoch after e, from the fact w, stay
+def Epoch.at.kept(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  +s: State(Q),
+  +t: State(Q),
+  +c: Chain,
+  +e: U32,
+  +ms: List<&2, String>,
+  w: Where,
+  +ag: {State.agrees(~Q, ~same, s, t) == True{}: Bool},
+  +a: List<&2, String>
+) -> {Epoch.at(~Q, s, c, e, ms, w) == Some{a}: Maybe<&2, List<&2, String>>} -> {Epoch.at(~Q, State.join(~Q, ~same, s, t), c, e, ms, w) == Some{a}: Maybe<&2, List<&2, String>>}:
+  match w:
+    case Where{c2, e2, +h}:
+      +p = {Where{c, e, h}: Where}
+      Shared.Maybe.when_kept(
+        List<&2, String>,
+        Bool.and(Chain.is_eq(c2, c), U32.is_eq(e2, e)),
+        u => Shared.Maybe.then(Vote, List<&2, String>, State.decide(~Q, s, p, ms), v => Owners.of(c, v)),
+        u => Shared.Maybe.then(Vote, List<&2, String>, State.decide(~Q, State.join(~Q, ~same, s, t), p, ms), v => Owners.of(c, v)),
+        a,
+        Shared.Maybe.then_kept(
+          Vote,
+          List<&2, String>,
+          State.decide(~Q, s, p, ms),
+          State.decide(~Q, State.join(~Q, ~same, s, t), p, ms),
+          v => Owners.of(c, v),
+          v => Owners.of(c, v),
+          a,
+          x => State.decide_kept(~Q, ~same, ~laws, s, t, p, ms, x)(ag),
+          x => h => h
+        )
+      )
+
+# the owners of the epoch after e stay
+def Epoch.next.kept(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  +s: State(Q),
+  +t: State(Q),
+  +c: Chain,
+  +e: U32,
+  +ms: List<&2, String>,
+  +ag: {State.agrees(~Q, ~same, s, t) == True{}: Bool},
+  +a: List<&2, String>
+) -> {Epoch.next(~Q, s, c, e, ms) == Some{a}: Maybe<&2, List<&2, String>>} -> {Epoch.next(~Q, State.join(~Q, ~same, s, t), c, e, ms) == Some{a}: Maybe<&2, List<&2, String>>}:
+  +k = Slot.epoch(c, U32.inc(e))
+  Shared.Maybe.then_kept(
+    Where,
+    List<&2, String>,
+    Where.of(~Q, State.entry(~Q, s, k)),
+    Where.of(~Q, State.entry(~Q, State.join(~Q, ~same, s, t), k)),
+    w => Epoch.at(~Q, s, c, e, ms, w),
+    w => Epoch.at(~Q, State.join(~Q, ~same, s, t), c, e, ms, w),
+    a,
+    x => State.read_kept(~Q, ~same, ~laws, ~Where, m => Where.of(~Q, m), {==}, s, t, k, x)(ag),
+    w => Epoch.at.kept(~Q, ~same, ~laws, s, t, c, e, ms, w, ag, a)
+  )
+
+# the owners of the epoch n after cur stay, when those of cur do (hm)
+def Epoch.up.kept(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  n: Nat,
+  +s: State(Q),
+  +t: State(Q),
+  +c: Chain,
+  +cur: U32,
+  m: Maybe<&2, List<&2, String>>,
+  -m2: Maybe<&2, List<&2, String>>,
+  +ag: {State.agrees(~Q, ~same, s, t) == True{}: Bool},
+  hm: @x: List<&2, String> -> {m == Some{x}: Maybe<&2, List<&2, String>>} -> {m2 == Some{x}: Maybe<&2, List<&2, String>>},
+  +a: List<&2, String>
+) -> {Epoch.up(~Q, n, s, c, cur, m) == Some{a}: Maybe<&2, List<&2, String>>} -> {Epoch.up(~Q, n, State.join(~Q, ~same, s, t), c, cur, m2) == Some{a}: Maybe<&2, List<&2, String>>}:
+  match n:
+    case 0n:
+      hm(a)
+    case 1n+p:
+      +up = U32.inc(cur)
+      Shared.Maybe.then_kept(
+        List<&2, String>,
+        List<&2, String>,
+        m,
+        m2,
+        ms => Epoch.up(~Q, p, s, c, up, Epoch.next(~Q, s, c, cur, ms)),
+        ms => Epoch.up(~Q, p, State.join(~Q, ~same, s, t), c, up, Epoch.next(~Q, State.join(~Q, ~same, s, t), c, cur, ms)),
+        a,
+        hm,
+        +ms => Epoch.up.kept(
+          ~Q, ~same, ~laws,
+          p,
+          s,
+          t,
+          c,
+          up,
+          Epoch.next(~Q, s, c, cur, ms),
+          Epoch.next(~Q, State.join(~Q, ~same, s, t), c, cur, ms),
+          ag,
+          x => Epoch.next.kept(~Q, ~same, ~laws, s, t, c, cur, ms, ag, x),
+          a
+        )
+      )
+
+# the owners of an epoch of a root line stay
+def Root.at.kept(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~view: Q -> View,
+  +s: State(Q),
+  +t: State(Q),
+  +r: Id,
+  e: U32,
+  +ag: {State.agrees(~Q, ~same, s, t) == True{}: Bool},
+  +a: List<&2, String>
+) -> {Root.at(~Q, ~view, s, r, e) == Some{a}: Maybe<&2, List<&2, String>>} -> {Root.at(~Q, ~view, State.join(~Q, ~same, s, t), r, e) == Some{a}: Maybe<&2, List<&2, String>>}:
+  Epoch.up.kept(
+    ~Q, ~same, ~laws,
+    U32.to_nat(e),
+    s,
+    t,
+    Chain{r, None{}},
+    0,
+    Root.owners(~Q, ~view, s, r),
+    Root.owners(~Q, ~view, State.join(~Q, ~same, s, t), r),
+    ag,
+    x => Root.owners.kept(~Q, ~same, ~laws, ~view, s, t, r, ag, x),
+    a
+  )
+
+# the first owners of a line, from the fact w where it was made, stay
+def Made.at.kept(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~view: Q -> View,
+  +s: State(Q),
+  +t: State(Q),
+  +r: Id,
+  +k: List<&2, Bool>,
+  w: Where,
+  +ag: {State.agrees(~Q, ~same, s, t) == True{}: Bool},
+  +a: List<&2, String>
+) -> {Made.at(~Q, ~view, s, r, k, w) == Some{a}: Maybe<&2, List<&2, String>>} -> {Made.at(~Q, ~view, State.join(~Q, ~same, s, t), r, k, w) == Some{a}: Maybe<&2, List<&2, String>>}:
+  match w:
+    case Where{+c2, +e, +h}:
+      +p = {Where{c2, e, h}: Where}
+      Shared.Maybe.when_kept(
+        List<&2, String>,
+        Chain.is_eq(c2, Chain{r, None{}}),
+        u => Shared.Maybe.then(
+          List<&2, String>,
+          List<&2, String>,
+          Root.at(~Q, ~view, s, r, e),
+          ms => Shared.Maybe.then(Vote, List<&2, String>, State.decide(~Q, s, p, ms), v => Made.vote(k, ms, v))
+        ),
+        u => Shared.Maybe.then(
+          List<&2, String>,
+          List<&2, String>,
+          Root.at(~Q, ~view, State.join(~Q, ~same, s, t), r, e),
+          ms => Shared.Maybe.then(Vote, List<&2, String>, State.decide(~Q, State.join(~Q, ~same, s, t), p, ms), v => Made.vote(k, ms, v))
+        ),
+        a,
+        Shared.Maybe.then_kept(
+          List<&2, String>,
+          List<&2, String>,
+          Root.at(~Q, ~view, s, r, e),
+          Root.at(~Q, ~view, State.join(~Q, ~same, s, t), r, e),
+          ms => Shared.Maybe.then(Vote, List<&2, String>, State.decide(~Q, s, p, ms), v => Made.vote(k, ms, v)),
+          ms => Shared.Maybe.then(Vote, List<&2, String>, State.decide(~Q, State.join(~Q, ~same, s, t), p, ms), v => Made.vote(k, ms, v)),
+          a,
+          x => Root.at.kept(~Q, ~same, ~laws, ~view, s, t, r, e, ag, x),
+          +ms => Shared.Maybe.then_kept(
+            Vote,
+            List<&2, String>,
+            State.decide(~Q, s, p, ms),
+            State.decide(~Q, State.join(~Q, ~same, s, t), p, ms),
+            v => Made.vote(k, ms, v),
+            v => Made.vote(k, ms, v),
+            a,
+            x => State.decide_kept(~Q, ~same, ~laws, s, t, p, ms, x)(ag),
+            x => h0 => h0
+          )
+        )
+      )
+
+# the owners of the first epoch of a line stay
+def Line.first.kept(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~view: Q -> View,
+  +s: State(Q),
+  +t: State(Q),
+  c: Chain,
+  +ag: {State.agrees(~Q, ~same, s, t) == True{}: Bool},
+  +a: List<&2, String>
+) -> {Line.first(~Q, ~view, s, c) == Some{a}: Maybe<&2, List<&2, String>>} -> {Line.first(~Q, ~view, State.join(~Q, ~same, s, t), c) == Some{a}: Maybe<&2, List<&2, String>>}:
+  match c:
+    case Chain{r, None{}}:
+      Root.owners.kept(~Q, ~same, ~laws, ~view, s, t, r, ag, a)
+    case Chain{+r, Some{+k}}:
+      +slot = Slot.made(Chain{r, Some{k}})
+      Shared.Maybe.then_kept(
+        Where,
+        List<&2, String>,
+        Where.of(~Q, State.entry(~Q, s, slot)),
+        Where.of(~Q, State.entry(~Q, State.join(~Q, ~same, s, t), slot)),
+        w => Made.at(~Q, ~view, s, r, k, w),
+        w => Made.at(~Q, ~view, State.join(~Q, ~same, s, t), r, k, w),
+        a,
+        x => State.read_kept(~Q, ~same, ~laws, ~Where, m => Where.of(~Q, m), {==}, s, t, slot, x)(ag),
+        w => Made.at.kept(~Q, ~same, ~laws, ~view, s, t, r, k, w, ag, a)
+      )
+
+# the owners of an epoch of a line stay
+def Line.owners.kept(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~view: Q -> View,
+  +s: State(Q),
+  +t: State(Q),
+  +c: Chain,
+  e: U32,
+  +ag: {State.agrees(~Q, ~same, s, t) == True{}: Bool},
+  +a: List<&2, String>
+) -> {Line.owners(~Q, ~view, s, c, e) == Some{a}: Maybe<&2, List<&2, String>>} -> {Line.owners(~Q, ~view, State.join(~Q, ~same, s, t), c, e) == Some{a}: Maybe<&2, List<&2, String>>}:
+  Epoch.up.kept(
+    ~Q, ~same, ~laws,
+    U32.to_nat(e),
+    s,
+    t,
+    c,
+    0,
+    Line.first(~Q, ~view, s, c),
+    Line.first(~Q, ~view, State.join(~Q, ~same, s, t), c),
+    ag,
+    x => Line.first.kept(~Q, ~same, ~laws, ~view, s, t, c, ag, x),
+    a
+  )
+
+# the vote that decided i at the place w stays
+def Where.at.kept(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~view: Q -> View,
+  +s: State(Q),
+  +t: State(Q),
+  +i: Id,
+  w: Where,
+  +ag: {State.agrees(~Q, ~same, s, t) == True{}: Bool},
+  +a: Vote
+) -> {Where.at(~Q, ~view, s, i, w) == Some{a}: Maybe<&2, Vote>} -> {Where.at(~Q, ~view, State.join(~Q, ~same, s, t), i, w) == Some{a}: Maybe<&2, Vote>}:
+  match w:
+    case Where{+c, +e, +h}:
+      +p = {Where{c, e, h}: Where}
+      Shared.Maybe.then_kept(
+        List<&2, String>,
+        Vote,
+        Line.owners(~Q, ~view, s, c, e),
+        Line.owners(~Q, ~view, State.join(~Q, ~same, s, t), c, e),
+        ms => Shared.Maybe.then(Vote, Vote, State.decide(~Q, s, p, ms), v => Vote.for(i, v)),
+        ms => Shared.Maybe.then(Vote, Vote, State.decide(~Q, State.join(~Q, ~same, s, t), p, ms), v => Vote.for(i, v)),
+        a,
+        x => Line.owners.kept(~Q, ~same, ~laws, ~view, s, t, c, e, ag, x),
+        +ms => Shared.Maybe.then_kept(
+          Vote,
+          Vote,
+          State.decide(~Q, s, p, ms),
+          State.decide(~Q, State.join(~Q, ~same, s, t), p, ms),
+          v => Vote.for(i, v),
+          v => Vote.for(i, v),
+          a,
+          x => State.decide_kept(~Q, ~same, ~laws, s, t, p, ms, x)(ag),
+          x => h0 => h0
+        )
+      )
+
+# the vote that decided a request stays after a sync that agrees
+law State.decided_kept:
+  for ~Q: Data
+  for ~same: Q -> Q -> Bool
+  for ~laws: Shared.Eq.Laws(Q, same)
+  for ~view: Q -> View
+  for +s: State(Q)
+  for +t: State(Q)
+  for +i: Id
+  for +a: Vote
+  {State.agrees(~Q, ~same, s, t) == True{}: Bool}
+    -> {State.decided(~Q, ~view, s, i) == Some{a}: Maybe<&2, Vote>}
+    -> {State.decided(~Q, ~view, State.join(~Q, ~same, s, t), i) == Some{a}: Maybe<&2, Vote>}
+
+def State.decided_kept(ty, same, laws, view, s, t, i, a):
+  +ag =>
+    +k = Slot.where(i)
+    Shared.Maybe.then_kept(
+      Where,
+      Vote,
+      Where.of(~ty, State.entry(~ty, s, k)),
+      Where.of(~ty, State.entry(~ty, State.join(~ty, ~same, s, t), k)),
+      w => Where.at(~ty, ~view, s, i, w),
+      w => Where.at(~ty, ~view, State.join(~ty, ~same, s, t), i, w),
+      a,
+      x => State.read_kept(~ty, ~same, ~laws, ~Where, m => Where.of(~ty, m), {==}, s, t, k, x)(ag),
+      w => Where.at.kept(~ty, ~same, ~laws, ~view, s, t, i, w, ag, a)
+    )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# the verdict of a status, if it is done
+def Status.verdict(st: Status) -> Maybe<&2, Bool>:
+  match st:
+    case Status.done{k}:
+      Some{k}
+    case _:
+      None{}
+
+# st is refused
+def Status.is_refused(st: Status) -> Bool:
+  match st:
+    case Status.refused{}:
+      True{}
+    case _:
+      False{}
+
+# a status that is not done is not done with k
+def Status.not_done(
+  st: Status,
+  -k: Bool,
+  h: {Status.verdict(st) == None{}: Maybe<&2, Bool>}
+) -> {st == Status.done{k}: Status} -> Empty:
+  d => Shared.Maybe.none_ne_some(
+    Bool,
+    k,
+    Equal.trans(
+      Maybe<&2, Bool>,
+      None{},
+      Status.verdict(st),
+      Some{k},
+      Equal.sym(Maybe<&2, Bool>, Status.verdict(st), None{}, h),
+      Equal.cong(Status, Maybe<&2, Bool>, x => Status.verdict(x), st, Status.done{k}, d)
+    )
+  )
+
+# a status that is not refused is not refused
+def Status.not_refused(st: Status, h: {Status.is_refused(st) == False{}: Bool}) -> {st == Status.refused{}: Status} -> Empty:
+  d => Shared.Bool.false_ne_true(
+    Equal.trans(
+      Bool,
+      False{},
+      Status.is_refused(st),
+      True{},
+      Equal.sym(Bool, Status.is_refused(st), False{}, h),
+      Equal.cong(Status, Bool, x => Status.is_refused(x), st, Status.refused{}, d)
+    )
+  )
+
+# Status.kept once the view v of the request and the vote dm that decided it are known
+def Status.kept.view(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~view: Q -> View,
+  +s: State(Q),
+  +t: State(Q),
+  +i: Id,
+  -k: Bool,
+  v: View,
+  dm: Maybe<&2, Vote>,
+  +edm: {State.decided(~Q, ~view, s, i) == dm: Maybe<&2, Vote>},
+  +ag: {State.agrees(~Q, ~same, s, t) == True{}: Bool}
+) -> {
+  Status.of.view(v, dm) == Status.done{k}: Status
+} -> {Status.of.view(v, State.decided(~Q, ~view, State.join(~Q, ~same, s, t), i)) == Status.done{k}: Status}:
+  match v dm:
+    case View.root{ms} w:
+      h => h
+    case View.on{c, o, mk} Some{+x}:
+      h =>
+        %Equal.sym(
+          Maybe<&2, Vote>,
+          State.decided(~Q, ~view, State.join(~Q, ~same, s, t), i),
+          Some{x},
+          State.decided_kept(~Q, ~same, ~laws, ~view, s, t, i, x)(ag)(edm)
+        ): {Status.of.view(View.on{c, o, mk}, _) == Status.done{k}: Status}
+        h
+    case View.on{c, o, mk} None{}:
+      h => Empty.absurd(
+        {Status.of.view(View.on{c, o, mk}, State.decided(~Q, ~view, State.join(~Q, ~same, s, t), i)) == Status.done{k}: Status},
+        Status.not_done(Status.pending{}, k, {==})(h)
+      )
+
+# Status.kept once the cell m of the request is known
+def Status.kept.at(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~view: Q -> View,
+  +s: State(Q),
+  +t: State(Q),
+  +i: Id,
+  -k: Bool,
+  m: Maybe<&2, Cells.Cell<Entry<Q>>>,
+  +em: {State.get(~Q, s, Slot.ask(i)) == m: Maybe<&2, Cells.Cell<Entry<Q>>>},
+  +ag: {State.agrees(~Q, ~same, s, t) == True{}: Bool}
+) -> {
+  Status.of(~Q, ~view, s, i, m) == Status.done{k}: Status
+} -> {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.done{k}: Status}:
+  match m:
+    case None{}:
+      h => Empty.absurd(
+        {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.done{k}: Status},
+        Status.not_done(Status.not_seen{}, k, {==})(h)
+      )
+    case Some{Cells.many{}}:
+      h => Empty.absurd(
+        {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.done{k}: Status},
+        Status.not_done(Status.refused{}, k, {==})(h)
+      )
+    case Some{Cells.one{Entry.ask{j, t0, q}}}:
+      h =>
+        %Equal.sym(
+          Maybe<&2, Cells.Cell<Entry<Q>>>,
+          State.get(~Q, State.join(~Q, ~same, s, t), Slot.ask(i)),
+          Some{Cells.one{Entry.ask{j, t0, q}}},
+          Cells.Cell.agrees_kept(
+            ~Entry<Q>,
+            ~Entry.is_eq(~Q, ~same),
+            ~Entry.laws(~Q, ~same, ~laws),
+            s,
+            t,
+            Slot.ask(i),
+            Entry.ask{j, t0, q}
+          )(ag)(em)
+        ): {Status.of(~Q, ~view, State.join(~Q, ~same, s, t), i, _) == Status.done{k}: Status}
+        Status.kept.view(~Q, ~same, ~laws, ~view, s, t, i, k, view(q), State.decided(~Q, ~view, s, i), {==}, ag)(h)
+    case Some{Cells.one{Entry.vote{v}}}:
+      h => Empty.absurd(
+        {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.done{k}: Status},
+        Status.not_done(Status.not_seen{}, k, {==})(h)
+      )
+    case Some{Cells.one{Entry.at{w}}}:
+      h => Empty.absurd(
+        {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.done{k}: Status},
+        Status.not_done(Status.not_seen{}, k, {==})(h)
+      )
+
+# a request that is done stays done, with the same verdict, after a sync that
+# agrees
+law State.status_kept:
+  for ~Q: Data
+  for ~same: Q -> Q -> Bool
+  for ~laws: Shared.Eq.Laws(Q, same)
+  for ~view: Q -> View
+  for +s: State(Q)
+  for +t: State(Q)
+  for +i: Id
+  for -k: Bool
+  {State.agrees(~Q, ~same, s, t) == True{}: Bool}
+    -> {State.status(~Q, ~view, s, i) == Status.done{k}: Status}
+    -> {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.done{k}: Status}
+
+def State.status_kept(ty, same, laws, view, s, t, i, k):
+  ag => Status.kept.at(~ty, ~same, ~laws, ~view, s, t, i, k, State.get(~ty, s, Slot.ask(i)), {==}, ag)
+
+# the status of a request of the view v is never refused
+def Status.view_not_refused(v: View, dm: Maybe<&2, Vote>) -> {Status.is_refused(Status.of.view(v, dm)) == False{}: Bool}:
+  match v dm:
+    case View.root{ms} w:
+      {==}
+    case View.on{c, o, mk} Some{Vote{j, k, u}}:
+      {==}
+    case View.on{c, o, mk} None{}:
+      {==}
+
+# a request that is many stays refused, whatever else a sync brings (m2)
+def Refused.many(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~view: Q -> View,
+  s: State(Q),
+  i: Id,
+  m2: Maybe<&2, Cells.Cell<Entry<Q>>>
+) -> {
+  Status.of(
+    ~Q,
+    ~view,
+    s,
+    i,
+    Tries.Trie.pick(~Cells.Cell<Entry<Q>>, ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), Some{Cells.many{}}, m2)
+  )
+    == Status.refused{}: Status
+}:
+  match m2:
+    case None{}:
+      {==}
+    case Some{x}:
+      {==}
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# State.refused_kept once the cell m of the request is known
+def Refused.kept.at(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~view: Q -> View,
+  +s: State(Q),
+  +t: State(Q),
+  +i: Id,
+  m: Maybe<&2, Cells.Cell<Entry<Q>>>,
+  em: {State.get(~Q, s, Slot.ask(i)) == m: Maybe<&2, Cells.Cell<Entry<Q>>>}
+) -> {
+  Status.of(~Q, ~view, s, i, m) == Status.refused{}: Status
+} -> {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.refused{}: Status}:
+  match m:
+    case Some{Cells.many{}}:
+      h =>
+        %Equal.sym(
+          Maybe<&2, Cells.Cell<Entry<Q>>>,
+          State.get(~Q, State.join(~Q, ~same, s, t), Slot.ask(i)),
+          Tries.Trie.pick(
+            ~Cells.Cell<Entry<Q>>,
+            ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+            State.get(~Q, s, Slot.ask(i)),
+            State.get(~Q, t, Slot.ask(i))
+          ),
+          Tries.Trie.get_union(
+            ~Cells.Cell<Entry<Q>>,
+            ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+            s,
+            t,
+            Slot.ask(i)
+          )
+        ): {Status.of(~Q, ~view, State.join(~Q, ~same, s, t), i, _) == Status.refused{}: Status}
+        %Equal.sym(Maybe<&2, Cells.Cell<Entry<Q>>>, State.get(~Q, s, Slot.ask(i)), Some{Cells.many{}}, em):
+          {
+            Status.of(
+              ~Q,
+              ~view,
+              State.join(~Q, ~same, s, t),
+              i,
+              Tries.Trie.pick(
+                ~Cells.Cell<Entry<Q>>,
+                ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+                _,
+                State.get(~Q, t, Slot.ask(i))
+              )
+            )
+              == Status.refused{}: Status
+          }
+        Refused.many(~Q, ~same, ~view, State.join(~Q, ~same, s, t), i, State.get(~Q, t, Slot.ask(i)))
+    case None{}:
+      h => Empty.absurd(
+        {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.refused{}: Status},
+        Status.not_refused(Status.not_seen{}, {==})(h)
+      )
+    case Some{Cells.one{Entry.ask{j, t0, +q}}}:
+      h => Empty.absurd(
+        {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.refused{}: Status},
+        Status.not_refused(
+          Status.of.view(view(q), State.decided(~Q, ~view, s, i)),
+          Status.view_not_refused(view(q), State.decided(~Q, ~view, s, i))
+        )(h)
+      )
+    case Some{Cells.one{Entry.vote{v}}}:
+      h => Empty.absurd(
+        {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.refused{}: Status},
+        Status.not_refused(Status.not_seen{}, {==})(h)
+      )
+    case Some{Cells.one{Entry.at{w}}}:
+      h => Empty.absurd(
+        {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.refused{}: Status},
+        Status.not_refused(Status.not_seen{}, {==})(h)
+      )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# a refused request stays refused after any sync: a contradiction is final
+law State.refused_kept:
+  for ~Q: Data
+  for ~same: Q -> Q -> Bool
+  for ~view: Q -> View
+  for +s: State(Q)
+  for +t: State(Q)
+  for +i: Id
+  {State.status(~Q, ~view, s, i) == Status.refused{}: Status}
+    -> {State.status(~Q, ~view, State.join(~Q, ~same, s, t), i) == Status.refused{}: Status}
+
+def State.refused_kept(ty, same, view, s, t, i):
+  Refused.kept.at(~ty, ~same, ~view, s, t, i, State.get(~ty, s, Slot.ask(i)), {==})
