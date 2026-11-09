@@ -927,6 +927,47 @@ def Line.first(~Q: Data, ~view: Q -> View, +s: State(Q), +c: Chain) -> Maybe<&2,
         w => Made.at(~Q, ~view, s, r, k, w)
       )
 
+# the vote that made the line of the key k below the root of r, from the fact
+# w where it was made
+def Made.vote_at(
+  ~Q: Data,
+  ~view: Q -> View,
+  +s: State(Q),
+  +r: Id,
+  k: List<&2, Bool>,
+  w: Where
+) -> Maybe<&2, Vote>:
+  match w:
+    case Where{+c2, +e, h}:
+      Shared.Maybe.when(
+        Vote,
+        Chain.is_eq(c2, Chain{r, None{}}),
+        u => Shared.Maybe.then(
+          List<&2, String>,
+          Vote,
+          Root.at(~Q, ~view, s, r, e),
+          +ms => Shared.Maybe.then(
+            Vote,
+            Vote,
+            State.decide(~Q, s, Where{c2, e, h}, ms),
+            +v => Shared.Maybe.then(List<&2, String>, Vote, Made.vote(k, ms, v), u => Some{v})
+          )
+        )
+      )
+
+# the vote that made the line c, when it is a line below a root
+def Line.made(~Q: Data, ~view: Q -> View, +s: State(Q), c: Chain) -> Maybe<&2, Vote>:
+  match c:
+    case Chain{r, None{}}:
+      None{}
+    case Chain{+r, Some{+k}}:
+      Shared.Maybe.then(
+        Where,
+        Vote,
+        Where.of(~Q, State.entry(~Q, s, Slot.made(Chain{r, Some{k}}))),
+        w => Made.vote_at(~Q, ~view, s, r, k, w)
+      )
+
 # the owners of the epoch e of the line c
 def Line.owners(
   ~Q: Data,
@@ -1197,6 +1238,15 @@ def State.decided(~Q: Data, ~view: Q -> View, +s: State(Q), +i: Id) -> Maybe<&2,
     Vote,
     Where.of(~Q, State.entry(~Q, s, Slot.where(i))),
     w => Where.at(~Q, ~view, s, i, w)
+  )
+
+# the place where the request i was decided, when s holds it and it checks
+def State.place(~Q: Data, ~view: Q -> View, +s: State(Q), +i: Id) -> Maybe<&2, Where>:
+  Shared.Maybe.then(
+    Where,
+    Where,
+    Where.of(~Q, State.entry(~Q, s, Slot.where(i))),
+    +w => Shared.Maybe.then(Vote, Where, Where.at(~Q, ~view, s, i, w), u => Some{w})
   )
 
 # where a request is. Done: a step decided it, and took it or refused it as
@@ -1550,6 +1600,45 @@ def State.ask(
   q: Q
 ) -> State(Q):
   State.ask.fresh(~Q, ~same, ~view, ~judge, n, s, i, t, q, State.get(~Q, s, Slot.ask(i)))
+
+# s, after the node n votes for each request of the cells cs
+def Vote.all(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~view: Q -> View,
+  ~judge: State(Q) -> Q -> Maybe<&2, Vote> -> Maybe<&2, Verdict>,
+  cs: List<&2, Cells.Cell<Entry<Q>>>,
+  +n: String,
+  s: State(Q)
+) -> State(Q):
+  match cs:
+    case Nil{}:
+      s
+    case Con{Cells.one{Entry.ask{i, t, +q}}, r}:
+      Vote.all(
+        ~Q,
+        ~same,
+        ~view,
+        ~judge,
+        r,
+        n,
+        Vote.ask(~Q, ~same, ~view, ~judge, n, s, i, q, view(q))
+      )
+    case Con{c, r}:
+      Vote.all(~Q, ~same, ~view, ~judge, r, n, s)
+
+# s, after the node n votes, at the tip of each line that it owns, for each
+# request that s holds: what a node does when a sync brings what a request
+# waited for
+def State.vote(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~view: Q -> View,
+  ~judge: State(Q) -> Q -> Maybe<&2, Vote> -> Maybe<&2, Verdict>,
+  n: String,
+  +s: State(Q)
+) -> State(Q):
+  Vote.all(~Q, ~same, ~view, ~judge, Tries.Trie.values(Cells.Cell<Entry<Q>>, s), n, s)
 
 # Syncs
 # -----
@@ -5034,6 +5123,64 @@ def Line.steps_grow(ty, same, laws, view, s, s2, c, xs):
     Line.first(~ty, ~view, s2, c),
     ms => Line.first.kept(~ty, ~same, ~laws, ~view, s, s2, c, gr, ms),
     gr
+  )
+
+# votes for the requests of the cells cs grow the state
+def Vote.all.grows(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  ~view: Q -> View,
+  ~judge: State(Q) -> Q -> Maybe<&2, Vote> -> Maybe<&2, Verdict>,
+  cs: List<&2, Cells.Cell<Entry<Q>>>,
+  +n: String,
+  +s: State(Q)
+) -> {State.grows(~Q, ~same, s, Vote.all(~Q, ~same, ~view, ~judge, cs, n, s)) == True{}: Bool}:
+  match cs:
+    case Nil{}:
+      State.grows_refl(~Q, ~same, ~laws, s)
+    case Con{Cells.one{Entry.ask{+i, t, +q}}, +r}:
+      +s1 = Vote.ask(~Q, ~same, ~view, ~judge, n, s, i, q, view(q))
+      State.grows_trans(
+        ~Q,
+        ~same,
+        ~laws,
+        s,
+        s1,
+        Vote.all(~Q, ~same, ~view, ~judge, r, n, s1)
+      )(
+        Vote.ask.grows(~Q, ~same, ~laws, ~view, ~judge, n, s, i, q, view(q))
+      )(Vote.all.grows(~Q, ~same, ~laws, ~view, ~judge, r, n, s1))
+    case Con{Cells.one{Entry.vote{x}}, r}:
+      Vote.all.grows(~Q, ~same, ~laws, ~view, ~judge, r, n, s)
+    case Con{Cells.one{Entry.at{w}}, r}:
+      Vote.all.grows(~Q, ~same, ~laws, ~view, ~judge, r, n, s)
+    case Con{Cells.one{Entry.data{ws}}, r}:
+      Vote.all.grows(~Q, ~same, ~laws, ~view, ~judge, r, n, s)
+    case Con{Cells.many{}, r}:
+      Vote.all.grows(~Q, ~same, ~laws, ~view, ~judge, r, n, s)
+
+# a node's votes only grow its state
+law State.vote_grows:
+  for ~Q: Data
+  for ~same: Q -> Q -> Bool
+  for ~laws: Shared.Eq.Laws(Q, same)
+  for ~view: Q -> View
+  for ~judge: State(Q) -> Q -> Maybe<&2, Vote> -> Maybe<&2, Verdict>
+  for +n: String
+  for +s: State(Q)
+  {State.grows(~Q, ~same, s, State.vote(~Q, ~same, ~view, ~judge, n, s)) == True{}: Bool}
+
+def State.vote_grows(ty, same, laws, view, judge, n, s):
+  Vote.all.grows(
+    ~ty,
+    ~same,
+    ~laws,
+    ~view,
+    ~judge,
+    Tries.Trie.values(Cells.Cell<Entry<ty>>, s),
+    n,
+    s
   )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
