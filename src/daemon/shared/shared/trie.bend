@@ -938,7 +938,11 @@ def Trie.under_union(
   b: Trie<V>,
   p: List<&2, Bool>
 ) -> {
-  Trie.under(V, Trie.union(~V, ~join, a, b), p)
+  Trie.under(
+    V,
+    Trie.union(~V, ~join, a, b),
+    p
+  )
     == Trie.union(~V, ~join, Trie.under(V, a, p), Trie.under(V, b, p)): Trie<V>
 }:
   match a b p:
@@ -959,7 +963,12 @@ def Trie.under_union(
       Trie.under_union(~V, ~join, o1, o2, r)
 
 # a key under p is the key after p
-def Trie.get_under(-V: Data, t: Trie<V>, p: List<&2, Bool>, r: List<&2, Bool>) -> {
+def Trie.get_under(
+  -V: Data,
+  t: Trie<V>,
+  p: List<&2, Bool>,
+  r: List<&2, Bool>
+) -> {
   Trie.get(V, Trie.under(V, t, p), r) == Trie.get(V, t, List.append(&2, Bool, p, r)): Maybe<&2, V>
 }:
   match t p:
@@ -981,9 +990,12 @@ def Trie.under_all(-V: Data, t: Trie<V>) -> {Trie.under(V, t, []) == t: Trie<V>}
       {==}
 
 # the entries under p of the trie of one key after p are the trie of the rest
-def Trie.under_one(-V: Data, p: List<&2, Bool>, r: List<&2, Bool>, v: V) -> {
-  Trie.under(V, Trie.one(V, List.append(&2, Bool, p, r), v), p) == Trie.one(V, r, v): Trie<V>
-}:
+def Trie.under_one(
+  -V: Data,
+  p: List<&2, Bool>,
+  r: List<&2, Bool>,
+  v: V
+) -> {Trie.under(V, Trie.one(V, List.append(&2, Bool, p, r), v), p) == Trie.one(V, r, v): Trie<V>}:
   match p:
     case Nil{}:
       Trie.under_all(V, Trie.one(V, r, v))

@@ -1,7 +1,7 @@
 import Base
 import ../core/spec.bend as Core
 import ../shared/formats.bend as Formats
-import ../shared/replica.bend as Replicas
+import ../shared/ledger.bend as Ledgers
 import ../shared/resources.bend as Resources
 import ../shared/shared/text.bend as Texts
 import ../shared/uris.bend as Uris
@@ -50,7 +50,7 @@ law Status.writers:
 # the branches whose owners this node is among
 law Status.owned:
   for s: Status
-  List<&2, String>
+  List<&2, Core.Branch>
 
 # Partial: the submodules in missing could not be fetched. Unsupported: the
 # kind of the resource does not support a setting
@@ -94,7 +94,8 @@ law Client:
 law Subscription:
   Type
 
-# runs the node named n on the store at store, until a stop
+# runs the node named n on the store at store, until a stop; a node that
+# starts a new store asks for Core.Ask.start with itself as the owner
 law VendNode.try_start_or_resume:
   for n: String
   for store: Uris.Uri
@@ -125,7 +126,7 @@ law Client.try_get_branches:
 law Client.try_get_log:
   for c: Client
   for n: Resources.Name
-  for b: String
+  for b: Core.Branch
   IO(Client & Reply<&2, List<&2, Core.LogEntry>>)
 
 # the bytes of the resource n at the point p, if it is there
@@ -146,7 +147,7 @@ law Client.try_get_diff:
 # the changes elsewhere that touch what the branch b uses (Core.Node.affects)
 law Client.try_get_affects:
   for c: Client
-  for b: String
+  for b: Core.Branch
   IO(Client & Reply<&2, List<&2, Core.Touch>>)
 
 # what the changes up to the point p touch elsewhere (Core.Node.impact)
@@ -159,12 +160,12 @@ law Client.try_get_impact:
 law Client.try_get_answer:
   for c: Client
   for r: String
-  IO(Client & Reply<&2, Replicas.Status<Core.Done>>)
+  IO(Client & Reply<&2, Core.Answer>)
 
 # the resources that still clash after the merge k
 law Client.try_get_conflict:
   for c: Client
-  for k: Replicas.Id
+  for k: Ledgers.Id
   IO(Client & Reply<&2, List<&2, Resources.Name>>)
 
 # the notices of the topic t that since does not have (all without it)
@@ -180,46 +181,49 @@ law Client.try_write:
   for c: Client
   for r: String
   for n: Resources.Name
-  for b: String
-  for base: Maybe<&2, Replicas.Id>
+  for b: Core.Branch
+  for base: Maybe<&2, Ledgers.Id>
   for x: Source
-  IO(Client & Reply<&2, Replicas.Status<Core.Done>>)
+  IO(Client & Reply<&2, Core.Answer>)
 
-# the request r: makes the branch b at the point p or, when b exists, records
-# a new version of b that equals p, with its submodules
+# the request r: makes the branch b at the point p (Core.Change.make) or, when
+# b exists, records a new version of b that equals p, with its submodules
+# (Core.Change.move)
 law Client.try_set_branch:
   for c: Client
   for r: String
-  for b: String
+  for b: Core.Branch
   for p: Core.Point
-  IO(Client & Reply<&2, Replicas.Status<Core.Done>>)
+  IO(Client & Reply<&2, Core.Answer>)
 
 # the request r: names the newest version of the branch b as the mark m, with
 # the message t
 law Client.try_create_mark:
   for c: Client
   for r: String
-  for b: String
+  for b: Core.Branch
   for m: String
   for t: String
-  IO(Client & Reply<&2, Replicas.Status<Core.Done>>)
+  IO(Client & Reply<&2, Core.Answer>)
 
 # the request r: merges the point p into the branch b, item by item
 law Client.try_merge:
   for c: Client
   for r: String
   for p: Core.Point
-  for b: String
-  IO(Client & Reply<&2, Replicas.Status<Core.Done>>)
+  for b: Core.Branch
+  IO(Client & Reply<&2, Core.Answer>)
 
-# the request r: settles the resource n of the merge k with the content x
+# the request r: settles the resource n of the merge k on the branch b with the
+# content x
 law Client.try_resolve:
   for c: Client
   for r: String
-  for k: Replicas.Id
+  for b: Core.Branch
+  for k: Ledgers.Id
   for n: Resources.Name
   for x: Source
-  IO(Client & Reply<&2, Replicas.Status<Core.Done>>)
+  IO(Client & Reply<&2, Core.Answer>)
 
 # ties the resource u to the branch b, with the settings ss that the kind of
 # u reads, and fills u when it is empty; when u is mounted, sets its settings
@@ -228,7 +232,7 @@ law Client.try_mount:
   for c: Client
   for u: Uris.Uri
   for ss: List<&2, String>
-  for b: String
+  for b: Core.Branch
   IO(Client & Reply<&2, Mount>)
 
 # stops versioning u
@@ -237,22 +241,25 @@ law Client.try_unmount:
   for u: Uris.Uri
   IO(Client & Reply<&2, Unmount>)
 
-# the request r: makes the nodes inside the group g the owners of the branch b
+# the request r: makes the nodes inside the group g of the store the owners of
+# its line l (none: of the store itself)
 law Client.try_set_owner:
   for c: Client
   for r: String
-  for b: String
+  for store: Ledgers.Id
+  for l: Maybe<&2, Core.Line>
   for g: String
-  IO(Client & Reply<&2, Replicas.Status<Core.Done>>)
+  IO(Client & Reply<&2, Core.Answer>)
 
-# the request r: makes the group g with the members ms or, when g exists,
-# replaces its members
+# the request r: makes the group g of the store with the members ms or, when g
+# exists, replaces its members
 law Client.try_set_group:
   for c: Client
   for r: String
+  for store: Ledgers.Id
   for g: String
   for ms: List<&2, Core.Member>
-  IO(Client & Reply<&2, Replicas.Status<Core.Done>>)
+  IO(Client & Reply<&2, Core.Answer>)
 
 # swaps entries with the node at n: each sends what the other lacks
 # (Core.Node.missing)
