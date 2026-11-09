@@ -478,16 +478,6 @@ def Pointer.read(b: Texts.Bytes()) -> Maybe<&2, Pointer>:
 # its target, a merge merges its base, the version before it and the one merged
 # in, and every other change keeps the version before it.
 
-# the request r names the resource n
-def Asked.hits(r: Maybe<&2, Ledgers.Asked<Ask>>, n: Resources.Name) -> Bool:
-  match r:
-    case Some{Ledgers.Asked{t, Ask.on{st, l, Change.write{m, base, c}}}}:
-      Resources.Name.is_eq(m, n)
-    case Some{Ledgers.Asked{t, Ask.on{st, l, Change.resolve{k, m, c}}}}:
-      Resources.Name.is_eq(m, n)
-    case _:
-      False{}
-
 # what a merge keeps of a resource: its bytes or none, or a clash
 type Pick is Data:
   Pick.take{bytes: Maybe<&2, Texts.Bytes()>}
@@ -586,105 +576,114 @@ def Pick.kept(p: Pick, o: Maybe<&2, Texts.Bytes()>) -> Maybe<&2, Texts.Bytes()>:
     case Pick.clash{}:
       o
 
-# bend-lint: expect-begin bend-lint-rules/performance/deep_call_in_fork@information -- a merge reads the versions before it once per resource; the walk is linear
-# the bytes of the resource n at the version v, whose request is r and names n
-# or not (hit); f steps at most
-def Res.at(
-  +f: Nat,
-  +s: State(),
-  v: Maybe<&2, Ledgers.Id>,
-  +n: Resources.Name,
-  r: Maybe<&2, Ledgers.Asked<Ask>>,
-  hit: Bool
-) -> Maybe<&2, Texts.Bytes()>:
-  match f v r hit:
-    case 0n w m h:
-      None{}
-    case 1n+e None{} m h:
-      None{}
-    case 1n+e Some{i} None{} h:
-      None{}
-    case 1n+e Some{
-      i
-    } Some{Ledgers.Asked{t, Ask.on{st, l, Change.write{m, base, Content.bytes{x}}}}} True{}:
-      Some{x}
-    case 1n+e Some{
-      i
-    } Some{Ledgers.Asked{t, Ask.on{st, l, Change.write{m, base, Content.of{+w}}}}} True{}:
-      Res.at(
-        e,
-        s,
-        Some{w},
-        n,
-        Ledgers.State.asked(~Ask, s, w),
-        Asked.hits(Ledgers.State.asked(~Ask, s, w), n)
-      )
-    case 1n+e Some{
-      i
-    } Some{Ledgers.Asked{t, Ask.on{st, l, Change.resolve{k, m, Content.bytes{x}}}}} True{}:
-      Some{x}
-    case 1n+e Some{
-      i
-    } Some{Ledgers.Asked{t, Ask.on{st, l, Change.resolve{k, m, Content.of{+w}}}}} True{}:
-      Res.at(
-        e,
-        s,
-        Some{w},
-        n,
-        Ledgers.State.asked(~Ask, s, w),
-        Asked.hits(Ledgers.State.asked(~Ask, s, w), n)
-      )
-    case 1n+e Some{i} Some{Ledgers.Asked{t, Ask.on{st, l, Change.move{+to}}}} h:
-      Res.at(
-        e,
-        s,
-        Some{to},
-        n,
-        Ledgers.State.asked(~Ask, s, to),
-        Asked.hits(Ledgers.State.asked(~Ask, s, to), n)
-      )
-    case 1n+e Some{i} Some{Ledgers.Asked{t, Ask.on{st, l, Change.make{ml, Some{+to}, ms}}}} h:
-      Res.at(
-        e,
-        s,
-        Some{to},
-        n,
-        Ledgers.State.asked(~Ask, s, to),
-        Asked.hits(Ledgers.State.asked(~Ask, s, to), n)
-      )
-    case 1n+e Some{+i} Some{Ledgers.Asked{t, Ask.on{+st, +l, Change.merge{+from}}}} h:
-      +xs = Ask.line(s, Ask.on{st, l, Change.merge{from}})
-      +ours = Ids.before(xs, None{}, i)
-      +base = Version.base(s, xs, ours, from)
-      +o = Res.at(e, s, ours, n, State.asked.of(s, ours), Asked.hits(State.asked.of(s, ours), n))
-      bs fs = Res.at(
-        e,
-        s,
-        base,
-        n,
-        State.asked.of(s, base),
-        Asked.hits(State.asked.of(s, base), n)
-      ) Res.at(
-        e,
-        s,
-        Some{from},
-        n,
-        Ledgers.State.asked(~Ask, s, from),
-        Asked.hits(Ledgers.State.asked(~Ask, s, from), n)
-      )
-      Pick.kept(Pick.merge(Formats.Format.of(Resources.Name.path(n)), s, bs, o, fs), o)
-    case 1n+e Some{+i} Some{Ledgers.Asked{t, +q}} h:
-      +before = Version.before.of(s, i, q)
-      Res.at(e, s, before, n, State.asked.of(s, before), Asked.hits(State.asked.of(s, before), n))
-# bend-lint: expect-end bend-lint-rules/performance/deep_call_in_fork@information
+# where the bytes of a resource come from: a step and what comes before it,
+# the steps of a list (newest first), or the steps before the version v,
+# whose change is q, on its line (walked only when a read reaches them)
+type Src is Data:
+  Src.cons{step: Ledgers.Step<Ask>, rest: Src}
+  Src.steps{steps: List<&2, Ledgers.Step<Ask>>}
+  Src.before{version: Ledgers.Id, ask: Ask}
 
-# enough steps for any walk back through the versions of s
+# the version v, whose request is r, and what comes before it
+def Src.at(+v: Ledgers.Id, r: Maybe<&2, Ledgers.Asked<Ask>>) -> Src:
+  match r:
+    case None{}:
+      Src.steps{[]}
+    case Some{Ledgers.Asked{t, +q}}:
+      Src.cons{Ledgers.Step{v, True{}, t, q, []}, Src.before{v, q}}
+
+# the version v of s (if any) and what comes before it
+def Src.of(s: State(), v: Maybe<&2, Ledgers.Id>) -> Src:
+  match v:
+    case None{}:
+      Src.steps{[]}
+    case Some{+i}:
+      Src.at(i, Ledgers.State.asked(~Ask, s, i))
+
+# the steps of xs that took a request before v, newest first, after acc
+def Steps.before(xs: List<&2, Ledgers.Step<Ask>>, +v: Ledgers.Id, +acc: List<&2, Ledgers.Step<Ask>>) -> List<&2, Ledgers.Step<Ask>>:
+  match xs:
+    case Nil{}:
+      []
+    case Con{Ledgers.Step{+i, +k, t, q, ms}, r}:
+      Shared.Bool.when(
+        List<&2, Ledgers.Step<Ask>>,
+        Ledgers.Id.is_eq(i, v),
+        u => acc,
+        u => Steps.before(r, v, Shared.Bool.when(List<&2, Ledgers.Step<Ask>>, k, w => Ledgers.Step{i, k, t, q, ms} <> acc, w => acc))
+      )
+
+# the steps of the line whose versions hold a version of q: the line that q
+# changes, or the line that it makes
+def Ask.steps(s: State(), q: Ask) -> List<&2, Ledgers.Step<Ask>>:
+  match q:
+    case Ask.on{r, Some{l}, c}:
+      Node.steps(s, r, Some{l})
+    case Ask.on{r, None{}, Change.make{l, at, ms}}:
+      Node.steps(s, r, Some{l})
+    case _:
+      []
+
+# the bytes of the resource n from src; f steps at most
+def Res.go(+f: Nat, +s: State(), src: Src, +n: Resources.Name) -> Maybe<&2, Texts.Bytes()>:
+  match f src:
+    case 0n w:
+      None{}
+    case 1n+e Src.steps{Nil{}}:
+      None{}
+    case 1n+e Src.steps{Con{st, r}}:
+      Res.go(e, s, Src.cons{st, Src.steps{r}}, n)
+    case 1n+e Src.before{v, q}:
+      Res.go(e, s, Src.steps{Steps.before(Ask.steps(s, q), v, [])}, n)
+    case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.write{m, base, Content.bytes{x}}}, ms}, rest}:
+      Shared.Bool.when(Maybe<&2, Texts.Bytes()>, Resources.Name.is_eq(m, n), u => Some{x}, u => Res.go(e, s, rest, n))
+    case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.write{m, base, Content.of{+w}}}, ms}, rest}:
+      Shared.Bool.when(
+        Maybe<&2, Texts.Bytes()>,
+        Resources.Name.is_eq(m, n),
+        u => Res.go(e, s, Src.at(w, Ledgers.State.asked(~Ask, s, w)), n),
+        u => Res.go(e, s, rest, n)
+      )
+    case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.resolve{c, m, Content.bytes{x}}}, ms}, rest}:
+      Shared.Bool.when(Maybe<&2, Texts.Bytes()>, Resources.Name.is_eq(m, n), u => Some{x}, u => Res.go(e, s, rest, n))
+    case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.resolve{c, m, Content.of{+w}}}, ms}, rest}:
+      Shared.Bool.when(
+        Maybe<&2, Texts.Bytes()>,
+        Resources.Name.is_eq(m, n),
+        u => Res.go(e, s, Src.at(w, Ledgers.State.asked(~Ask, s, w)), n),
+        u => Res.go(e, s, rest, n)
+      )
+    case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.move{+to}}, ms}, rest}:
+      Res.go(e, s, Src.at(to, Ledgers.State.asked(~Ask, s, to)), n)
+    case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.make{ml, Some{+to}, mm}}, ms}, rest}:
+      Res.go(e, s, Src.at(to, Ledgers.State.asked(~Ask, s, to)), n)
+    case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.make{ml, None{}, mm}}, ms}, rest}:
+      None{}
+    case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.merge{+from}}, ms}, rest}:
+      +xs = Steps.taken(Ask.steps(s, Ask.on{st, l, Change.merge{from}}))
+      ours = Ids.before(xs, None{}, i)
+      base = Version.base(s, xs, ours, from)
+      +o = Res.go(e, s, rest, n)
+      Pick.kept(
+        Pick.merge(
+          Formats.Format.of(Resources.Name.path(n)),
+          s,
+          Res.go(e, s, Src.of(s, base), n),
+          o,
+          Res.go(e, s, Src.at(from, Ledgers.State.asked(~Ask, s, from)), n)
+        ),
+        o
+      )
+    case 1n+e Src.cons{st, rest}:
+      Res.go(e, s, rest, n)
+
+# enough steps for any walk back through the versions of s: two for each entry
 def State.fuel(s: State()) -> Nat:
-  1n+Tries.Trie.size(Ledgers.Cell<Ledgers.Entry<Ask>>, s)
+  1n+Nat.double(Tries.Trie.size(Ledgers.Cell<Ledgers.Entry<Ask>>, s))
 
 # the bytes of the resource n at the version v of s
-def Res.of(+s: State(), +n: Resources.Name, +v: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Texts.Bytes()>:
-  Res.at(State.fuel(s), s, v, n, State.asked.of(s, v), Asked.hits(State.asked.of(s, v), n))
+def Res.of(+s: State(), n: Resources.Name, v: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Texts.Bytes()>:
+  Res.go(State.fuel(s), s, Src.of(s, v), n)
 
 # the step k (taken or not, whose change is q) names the mark m
 def Mark.names(k: Bool, q: Ask, m: String) -> Bool:
@@ -785,51 +784,34 @@ def Node.diff(+s: State(), +n: Resources.Name, a: Point, b: Point) -> List<&2, F
 # Names
 # -----
 
-# bend-lint: expect-begin bend-lint-rules/performance/deep_call_in_fork@information -- a merge reads the versions before it once per resource; the walk is linear
-# the texts of the resources at the version v, whose request is r; f steps at
-# most
-def Res.names(
-  +f: Nat,
-  +s: State(),
-  v: Maybe<&2, Ledgers.Id>,
-  r: Maybe<&2, Ledgers.Asked<Ask>>
-) -> List<&2, String>:
-  match f v r:
-    case 0n w m:
+# the texts of the resources from src; f steps at most
+def Res.names(+f: Nat, +s: State(), src: Src) -> List<&2, String>:
+  match f src:
+    case 0n w:
       []
-    case 1n+e None{} m:
+    case 1n+e Src.steps{Nil{}}:
       []
-    case 1n+e Some{i} None{}:
+    case 1n+e Src.steps{Con{st, r}}:
+      Res.names(e, s, Src.cons{st, Src.steps{r}})
+    case 1n+e Src.before{v, q}:
+      Res.names(e, s, Src.steps{Steps.before(Ask.steps(s, q), v, [])})
+    case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.move{+to}}, ms}, rest}:
+      Res.names(e, s, Src.at(to, Ledgers.State.asked(~Ask, s, to)))
+    case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.make{ml, Some{+to}, mm}}, ms}, rest}:
+      Res.names(e, s, Src.at(to, Ledgers.State.asked(~Ask, s, to)))
+    case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.make{ml, None{}, mm}}, ms}, rest}:
       []
-    case 1n+e Some{i} Some{Ledgers.Asked{t, Ask.on{st, l, Change.move{+to}}}}:
-      Res.names(e, s, Some{to}, Ledgers.State.asked(~Ask, s, to))
-    case 1n+e Some{i} Some{Ledgers.Asked{t, Ask.on{st, l, Change.make{ml, Some{+to}, ms}}}}:
-      Res.names(e, s, Some{to}, Ledgers.State.asked(~Ask, s, to))
-    case 1n+e Some{+i} Some{Ledgers.Asked{t, Ask.on{+st, +l, Change.merge{+from}}}}:
-      +ours = Ids.before(Ask.line(s, Ask.on{st, l, Change.merge{from}}), None{}, i)
-      fs os = Res.names(
-        e,
-        s,
-        Some{from},
-        Ledgers.State.asked(~Ask, s, from)
-      ) Res.names(e, s, ours, State.asked.of(s, ours))
+    case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.merge{+from}}, ms}, rest}:
+      fs os = Res.names(e, s, Src.at(from, Ledgers.State.asked(~Ask, s, from))) Res.names(e, s, rest)
       Shared.List.union(~String, ~String.eq, fs, os)
-    case 1n+e Some{+i} Some{Ledgers.Asked{t, Ask.on{+st, +l, Change.write{+m, base, c}}}}:
-      +before = Version.before.of(s, i, Ask.on{st, l, Change.write{m, base, c}})
-      Shared.List.union(
-        ~String,
-        ~String.eq,
-        [Resources.Name.show(m)],
-        Res.names(e, s, before, State.asked.of(s, before))
-      )
-    case 1n+e Some{+i} Some{Ledgers.Asked{t, +q}}:
-      +before = Version.before.of(s, i, q)
-      Res.names(e, s, before, State.asked.of(s, before))
-# bend-lint: expect-end bend-lint-rules/performance/deep_call_in_fork@information
+    case 1n+e Src.cons{Ledgers.Step{i, k, t, Ask.on{st, l, Change.write{m, base, c}}, ms}, rest}:
+      Shared.List.union(~String, ~String.eq, [Resources.Name.show(m)], Res.names(e, s, rest))
+    case 1n+e Src.cons{st, rest}:
+      Res.names(e, s, rest)
 
 # the texts of the resources at the version v of s
-def Res.of.names(+s: State(), +v: Maybe<&2, Ledgers.Id>) -> List<&2, String>:
-  Res.names(State.fuel(s), s, v, State.asked.of(s, v))
+def Res.of.names(+s: State(), v: Maybe<&2, Ledgers.Id>) -> List<&2, String>:
+  Res.names(State.fuel(s), s, Src.of(s, v))
 
 # p is a clash
 def Pick.is_clash(p: Pick) -> Bool:

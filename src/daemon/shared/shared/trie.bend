@@ -91,25 +91,28 @@ def Trie.under(-V: Data, t: Trie<V>, k: List<&2, Bool>) -> Trie<V>:
 # Keys of text
 # ------------
 
-# the bits of the word w, from its first
-def Trie.word(n: Nat, w: Word(n)) -> List<&2, Bool>:
+# the n low bits of x, the lowest first
+def Trie.bits(n: Nat, +x: U32) -> List<&2, Bool>:
   match n:
     case 0n:
       []
     case 1n+p:
-      match w:
-        case WCon{b, t}:
-          b <> Trie.word(p, t)
+      U32.is_eq(U32.and(x, 1), 1) <> Trie.bits(p, U32.shr(x))
 
-# the key of the text t: each character as True and its 32 bits, then False;
-# so the key of one text never starts the key of another, and keys of texts
-# put one after the other never meet
+# the key of the character x: an ASCII one as False and its 7 bits, any other
+# as True and its 32 bits
+def Trie.char(+x: U32) -> List<&2, Bool>:
+  Shared.Bool.when(List<&2, Bool>, U32.is_lt(x, 128), u => False{} <> Trie.bits(7n, x), u => True{} <> Trie.bits(32n, x))
+
+# the key of the text t: each character as True and its key, then False; so
+# the key of one text never starts the key of another, and keys of texts put
+# one after the other never meet
 def Trie.text(t: String) -> List<&2, Bool>:
   match t:
     case SNil{}:
       [False{}]
-    case SCon{Chr{U32{w}}, r}:
-      True{} <> List.append(&2, Bool, Trie.word(32n, w), Trie.text(r))
+    case SCon{Chr{x}, r}:
+      True{} <> List.append(&2, Bool, Trie.char(x), Trie.text(r))
 
 # Unions
 # ------

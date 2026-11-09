@@ -3,6 +3,7 @@ import ../../shared.bend as Shared
 import ../shared/ledger.bend as Ledgers
 import ../shared/resources.bend as Resources
 import ../shared/shared/text.bend as Texts
+import ../shared/shared/trie.bend as Tries
 import ./spec.bend as Spec
 
 # The proofs of the core's laws.
@@ -899,7 +900,7 @@ def Spec.Node.write_written(n, s, e, r, b, name, base, x, h):
         %Equal.sym(Ledgers.Status, Ledgers.State.status(~Spec.Ask, ~Spec.Ask.view, Spec.Node.ask(n, s, e, Spec.Ask.on{r, Some{Spec.Line.branch{b}}, Spec.Change.write{name, base, Spec.Content.bytes{x}}}), Spec.Envelope.of(e)), Ledgers.Status.done{True{}}, hs):
           {Spec.Res.of(Spec.Node.ask(n, s, e, Spec.Ask.on{r, Some{Spec.Line.branch{b}}, Spec.Change.write{name, base, Spec.Content.bytes{x}}}), name, Shared.Bool.when(Maybe<&2, Ledgers.Id>, Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Ledgers.Status.verdict(_), Some{True{}}), u => Some{Spec.Envelope.of(e)}, u => None{})) == Some{x}: Maybe<&2, Texts.Bytes()>}
         %Equal.sym(Maybe<&2, Ledgers.Asked<Spec.Ask>>, Ledgers.State.asked(~Spec.Ask, Spec.Node.ask(n, s, e, Spec.Ask.on{r, Some{Spec.Line.branch{b}}, Spec.Change.write{name, base, Spec.Content.bytes{x}}}), Spec.Envelope.of(e)), Some{Ledgers.Asked{Spec.Envelope.time(e), Spec.Ask.on{r, Some{Spec.Line.branch{b}}, Spec.Change.write{name, base, Spec.Content.bytes{x}}}}}, ha):
-          {Spec.Res.at(Spec.State.fuel(Spec.Node.ask(n, s, e, Spec.Ask.on{r, Some{Spec.Line.branch{b}}, Spec.Change.write{name, base, Spec.Content.bytes{x}}})), Spec.Node.ask(n, s, e, Spec.Ask.on{r, Some{Spec.Line.branch{b}}, Spec.Change.write{name, base, Spec.Content.bytes{x}}}), Some{Spec.Envelope.of(e)}, name, _, Spec.Asked.hits(_, name)) == Some{x}: Maybe<&2, Texts.Bytes()>}
+          {Spec.Res.go(Spec.State.fuel(Spec.Node.ask(n, s, e, Spec.Ask.on{r, Some{Spec.Line.branch{b}}, Spec.Change.write{name, base, Spec.Content.bytes{x}}})), Spec.Node.ask(n, s, e, Spec.Ask.on{r, Some{Spec.Line.branch{b}}, Spec.Change.write{name, base, Spec.Content.bytes{x}}}), Spec.Src.at(Spec.Envelope.of(e), _), name) == Some{x}: Maybe<&2, Texts.Bytes()>}
         %Equal.sym(Bool, Resources.Name.is_eq(name, name), True{}, Resources.Name.is_eq_refl(name)):
-          {Spec.Res.at(Spec.State.fuel(Spec.Node.ask(n, s, e, Spec.Ask.on{r, Some{Spec.Line.branch{b}}, Spec.Change.write{name, base, Spec.Content.bytes{x}}})), Spec.Node.ask(n, s, e, Spec.Ask.on{r, Some{Spec.Line.branch{b}}, Spec.Change.write{name, base, Spec.Content.bytes{x}}}), Some{Spec.Envelope.of(e)}, name, Some{Ledgers.Asked{Spec.Envelope.time(e), Spec.Ask.on{r, Some{Spec.Line.branch{b}}, Spec.Change.write{name, base, Spec.Content.bytes{x}}}}}, _) == Some{x}: Maybe<&2, Texts.Bytes()>}
+          {Shared.Bool.when(Maybe<&2, Texts.Bytes()>, _, u => Some{x}, u => Spec.Res.go(Nat.double(Tries.Trie.size(Ledgers.Cell<Ledgers.Entry<Spec.Ask>>, Spec.Node.ask(n, s, e, Spec.Ask.on{r, Some{Spec.Line.branch{b}}, Spec.Change.write{name, base, Spec.Content.bytes{x}}}))), Spec.Node.ask(n, s, e, Spec.Ask.on{r, Some{Spec.Line.branch{b}}, Spec.Change.write{name, base, Spec.Content.bytes{x}}}), Spec.Src.before{Spec.Envelope.of(e), Spec.Ask.on{r, Some{Spec.Line.branch{b}}, Spec.Change.write{name, base, Spec.Content.bytes{x}}}}, name)) == Some{x}: Maybe<&2, Texts.Bytes()>}
         {==}))
