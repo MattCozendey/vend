@@ -32,7 +32,7 @@ A Vend Branch is a sequence of versions in a Vend Store, decided by one Vend Own
 
 ## Vend Version
 
-A Vend Version is the whole content of a Vend Branch after one decided change, named by that change's writer and request id, and never changed afterwards.
+A Vend Version is the whole content of a Vend Branch after one decided change (even when decided with others), named by that change's writer and request id, and never changed afterwards.
 
 ## Vend Resource
 
