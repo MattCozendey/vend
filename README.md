@@ -12,7 +12,7 @@ A Vend Node is a P2P decentralized versioning program that runs anywhere and syn
 3 - The Vend Writers connected to it (any number)
 4 - The resources mounted to it, like folders (any number)
 
-All Vend Nodes are "equal" (a classic server is just one that owns the shared branches and keeps every part); outdated ones catch up by themselves without ever creating conflicts, take in nothing unchecked (content by hash, decisions by signature), and agree once they saw the same changes. A Vend Node starts or resumes on a store address under its name (refused as Busy if another Vend Node runs there) and, unless forced, stops only with no resources mounted or writers connected.
+All Vend Nodes are "equal", so a classic server can be defined as a Vend Node that owns the shared branches and keeps every part. A Vend Node that is behind catches up by itself. Catching up never creates conflicts, and a Vend Node checks everything it receives before it keeps it. Two Vend Nodes that hold the same changes give the same answers, whatever order they got them in. A Vend Node starts or resumes on a store address under its name, but only one Vend Node can run on an address at a time. Unless forced, a Vend Node only stops when no resources are mounted and no writers are connected.
 
 ## Vend Store
 
