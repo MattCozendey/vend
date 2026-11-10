@@ -106,101 +106,6 @@ def Atom.key(t: Spec.Atom) -> List<&2, Bool>:
     case Spec.AClass{neg, cs}:
       True{} <> True{} <> neg <> Tries.Trie.text(String.from_list(cs))
 
-# Fast matching
-# -------------
-# Spec.Rule.selects asks each glob through Spec.Glob.matches, whose
-# derivatives are not normalized, so a '*' makes its cost grow fast with the
-# path. Glob.accepts steps the deduplicated derivative lists of regex.bend,
-# for the same answer.
-
-# g matches the characters w
-def Glob.accepts(w: List<&2, Char>, g: Spec.Glob) -> Bool:
-  Regex.Re.accepts(~Char, ~Spec.Atom, ~Spec.Atom.hit, ~Atom.is_eq, ~Atom.key, w, Spec.Glob.re(g))
-
-# Glob.accepts gives the answer of Spec.Glob.matches
-def Glob.accepts_ok(
-  p: String,
-  g: Spec.Glob
-) -> {Glob.accepts(String.to_list(p), g) == Spec.Glob.matches(p, g): Bool}:
-  Regex.Re.accepts_matches(
-    ~Char,
-    ~Spec.Atom,
-    ~Spec.Atom.hit,
-    ~Atom.is_eq,
-    ~Atom.key,
-    ~Atom.laws(),
-    String.to_list(p),
-    Spec.Glob.re(g)
-  )
-
-# the answer for the characters w after rules, given the answer acc before
-# them
-def Rule.selects.fast.go(rules: List<&2, Spec.Rule>, +w: List<&2, Char>, acc: Bool) -> Bool:
-  match rules acc:
-    case Nil{} _:
-      acc
-    case Con{Spec.Include{g}, t} False{}:
-      Rule.selects.fast.go(t, w, Glob.accepts(w, g))
-    case Con{Spec.Include{g}, t} True{}:
-      Rule.selects.fast.go(t, w, True{})
-    case Con{Spec.Exclude{g}, t} False{}:
-      Rule.selects.fast.go(t, w, False{})
-    case Con{Spec.Exclude{g}, t} True{}:
-      Rule.selects.fast.go(t, w, Bool.not(Glob.accepts(w, g)))
-
-# Rule.selects.fast.go gives the answer of Spec.Rule.selects.go
-def Rule.selects_fast_ok.go(
-  rules: List<&2, Spec.Rule>,
-  +p: String,
-  acc: Bool
-) -> {
-  Rule.selects.fast.go(rules, String.to_list(p), acc) == Spec.Rule.selects.go(rules, p, acc): Bool
-}:
-  match rules acc:
-    case Nil{} _:
-      {==}
-    case Con{Spec.Include{+g}, t} False{}:
-      %Glob.accepts_ok(
-        p,
-        g
-      ): {
-        Rule.selects.fast.go(
-          t,
-          String.to_list(p),
-          Glob.accepts(String.to_list(p), g)
-        )
-          == Spec.Rule.selects.go(t, p, _): Bool
-      }
-      Rule.selects_fast_ok.go(t, p, Glob.accepts(String.to_list(p), g))
-    case Con{Spec.Include{g}, t} True{}:
-      Rule.selects_fast_ok.go(t, p, True{})
-    case Con{Spec.Exclude{g}, t} False{}:
-      Rule.selects_fast_ok.go(t, p, False{})
-    case Con{Spec.Exclude{+g}, +t} True{}:
-      %Glob.accepts_ok(
-        p,
-        g
-      ): {
-        Rule.selects.fast.go(
-          t,
-          String.to_list(p),
-          Bool.not(Glob.accepts(String.to_list(p), g))
-        )
-          == Spec.Rule.selects.go(t, p, Bool.not(_)): Bool
-      }
-      Rule.selects_fast_ok.go(t, p, Bool.not(Glob.accepts(String.to_list(p), g)))
-
-# rules select p: Spec.Rule.selects, by Glob.accepts
-def Rule.selects.fast(rules: List<&2, Spec.Rule>, p: String) -> Bool:
-  Rule.selects.fast.go(rules, String.to_list(p), False{})
-
-# the fast selection gives the answer of Spec.Rule.selects
-def Rule.selects_fast_ok(
-  rules: List<&2, Spec.Rule>,
-  p: String
-) -> {Rule.selects.fast(rules, p) == Spec.Rule.selects(rules, p): Bool}:
-  Rule.selects_fast_ok.go(rules, p, False{})
-
 # Search states
 # -------------
 # A rule as the derivative lists (Seqs) of its glob, and a state of the
@@ -503,6 +408,677 @@ def St.of_ok(
       {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# Valid paths
+# -----------
+# An automaton that reads a path one character at a time. It accepts exactly
+# the valid paths (Path.walk_ok).
+
+# What a character is to a path: '/', '.', a banned character, or another.
+type Role is Data:
+  KSlash{}
+  KDot{}
+  KBad{}
+  KOther{}
+
+# what c is to a path
+def Role.of(+c: Char) -> Role:
+  Bool.pick(
+    Role,
+    Char.is_eq(c, '/'),
+    KSlash{},
+    Bool.pick(
+      Role,
+      Char.is_eq(c, '.'),
+      KDot{},
+      Bool.pick(Role, Spec.is_banned(c), KBad{}, KOther{})
+    )
+  )
+
+# Where a path is: at a segment start, after "." or "..", inside a valid
+# segment, or past a mistake.
+type Path is Data:
+  PStart{}
+  PDot{}
+  PDots{}
+  PSeg{}
+  PDead{}
+
+# where a path is after a character of role k
+def Path.step(s: Path, k: Role) -> Path:
+  match s k:
+    case PSeg{} KSlash{}:
+      PStart{}
+    case _ KSlash{}:
+      PDead{}
+    case _ KBad{}:
+      PDead{}
+    case PDead{} _:
+      PDead{}
+    case PStart{} KDot{}:
+      PDot{}
+    case PDot{} KDot{}:
+      PDots{}
+    case _ _:
+      PSeg{}
+
+# a valid path can end here
+def Path.is_end(s: Path) -> Bool:
+  match s:
+    case PSeg{}:
+      True{}
+    case _:
+      False{}
+
+# where a path is after the characters w, from s
+def Path.walk(w: List<&2, Char>, s: Path) -> Path:
+  match w:
+    case Nil{}:
+      s
+    case Con{c, t}:
+      Path.walk(t, Path.step(s, Role.of(c)))
+
+# a path that is past a mistake stays there after a character
+def Path.step_dead(k: Role) -> {PDead{} == Path.step(PDead{}, k): Path}:
+  match k:
+    case KSlash{}:
+      {==}
+    case KDot{}:
+      {==}
+    case KBad{}:
+      {==}
+    case KOther{}:
+      {==}
+
+# no valid path can end after a mistake
+def Path.dead_never(w: List<&2, Char>) -> {False{} == Path.is_end(Path.walk(w, PDead{})): Bool}:
+  match w:
+    case Nil{}:
+      {==}
+    case Con{c, t}:
+      %Path.step_dead(Role.of(c)): {False{} == Path.is_end(Path.walk(t, _)): Bool}
+      Path.dead_never(t)
+
+# the text h ends a valid segment that was read up to s
+def Path.seg_ok(s: Path, h: String) -> Bool:
+  match s:
+    case PStart{}:
+      Spec.is_segment(h)
+    case PDot{}:
+      Spec.is_segment(SCon{'.', h})
+    case PDots{}:
+      Spec.is_segment(SCon{'.', SCon{'.', h}})
+    case PSeg{}:
+      Bool.not(List.any(~&2, ~Char, ~Spec.is_banned, String.to_list(h)))
+    case PDead{}:
+      False{}
+
+# the parts segs are valid segments, when a segment was read up to s before
+# the first of them
+def Path.fits(s: Path, segs: List<&2, String>) -> Bool:
+  match segs:
+    case Nil{}:
+      True{}
+    case Con{h, r}:
+      List.all.if(u => List.all(~&2, ~String, ~Spec.is_segment, r), Path.seg_ok(s, h))
+
+# a text that holds a banned character is no segment
+def Segment.banned_never(
+  +s: String,
+  e: {List.any(~&2, ~Char, ~Spec.is_banned, String.to_list(s)) == True{}: Bool}
+) -> {Spec.is_segment(s) == False{}: Bool}:
+  -dots = Bool.or(String.eq(s, "."), String.eq(s, ".."))
+  %Equal.sym(
+    Bool,
+    List.any(~&2, ~Char, ~Spec.is_banned, String.to_list(s)),
+    True{},
+    e
+  ): {
+    Bool.and(Bool.not(String.is_empty(s)), Bool.and(Bool.not(dots), Bool.not(_))) == False{}: Bool
+  }
+  %Equal.sym(
+    Bool,
+    Bool.and(Bool.not(dots), False{}),
+    False{},
+    Shared.Bool.and_false_right(Bool.not(Bool.or(String.eq(s, "."), String.eq(s, ".."))))
+  ): {Bool.and(Bool.not(String.is_empty(s)), _) == False{}: Bool}
+  Shared.Bool.and_false_right(Bool.not(String.is_empty(s)))
+
+# a '.' moves the automaton as it extends the segment
+def Path.seg_ok_dot(
+  s: Path,
+  h: String
+) -> {Path.seg_ok(s, SCon{'.', h}) == Path.seg_ok(Path.step(s, KDot{}), h): Bool}:
+  match s:
+    case PStart{}:
+      {==}
+    case PDot{}:
+      {==}
+    case PDots{}:
+      {==}
+    case PSeg{}:
+      {==}
+    case PDead{}:
+      {==}
+
+# a banned character moves the automaton as it extends the segment
+def Path.seg_ok_bad(
+  s: Path,
+  c: Char,
+  h: String,
+  e: {List.any(~&2, ~Char, ~Spec.is_banned, c <> String.to_list(h)) == True{}: Bool}
+) -> {Path.seg_ok(s, SCon{c, h}) == Path.seg_ok(Path.step(s, KBad{}), h): Bool}:
+  match s:
+    case PStart{}:
+      Segment.banned_never(SCon{c, h}, e)
+    case PDot{}:
+      Segment.banned_never(SCon{'.', SCon{c, h}}, e)
+    case PDots{}:
+      Segment.banned_never(SCon{'.', SCon{'.', SCon{c, h}}}, e)
+    case PSeg{}:
+      Equal.cong(
+        Bool,
+        Bool,
+        v => Bool.not(v),
+        List.any(~&2, ~Char, ~Spec.is_banned, c <> String.to_list(h)),
+        True{},
+        e
+      )
+    case PDead{}:
+      {==}
+
+# a character that is not '.' and not banned moves the automaton as it
+# extends the segment
+def Path.seg_ok_other(
+  s: Path,
+  c: Char,
+  +h: String,
+  +ed: {Char.is_eq(c, '.') == False{}: Bool},
+  eb: {Spec.is_banned(c) == False{}: Bool}
+) -> {Path.seg_ok(s, SCon{c, h}) == Path.seg_ok(Path.step(s, KOther{}), h): Bool}:
+  match s c:
+    case PStart{} Chr{+x}:
+      -rest = Bool.not(
+        List.any.if(
+          u => List.any(~&2, ~Char, ~Spec.is_banned, String.to_list(h)),
+          Spec.is_banned(Chr{x})
+        )
+      )
+      %eb: {
+        Spec.is_segment(
+          SCon{Chr{x}, h}
+        )
+          == Bool.not(
+            List.any.if(u => List.any(~&2, ~Char, ~Spec.is_banned, String.to_list(h)), _)
+          ): Bool
+      }
+      %Texts.String.eq_head_ne(
+        Chr{x},
+        '.',
+        h,
+        "",
+        ed
+      ): {Bool.and(Bool.not(Bool.or(_, String.eq(SCon{Chr{x}, h}, ".."))), rest) == rest: Bool}
+      %Texts.String.eq_head_ne(Chr{x}, '.', h, ".", ed): {Bool.and(Bool.not(_), rest) == rest: Bool}
+      {==}
+    case PDot{} Chr{x}:
+      -rest = Bool.not(
+        List.any.if(
+          u => List.any(~&2, ~Char, ~Spec.is_banned, String.to_list(h)),
+          Spec.is_banned(Chr{x})
+        )
+      )
+      %eb: {
+        Spec.is_segment(
+          SCon{'.', SCon{Chr{x}, h}}
+        )
+          == Bool.not(
+            List.any.if(u => List.any(~&2, ~Char, ~Spec.is_banned, String.to_list(h)), _)
+          ): Bool
+      }
+      %Texts.String.eq_head_ne(Chr{x}, '.', h, "", ed): {Bool.and(Bool.not(_), rest) == rest: Bool}
+      {==}
+    case PDots{} Chr{x}:
+      %eb: {
+        Spec.is_segment(
+          SCon{'.', SCon{'.', SCon{Chr{x}, h}}}
+        )
+          == Bool.not(
+            List.any.if(u => List.any(~&2, ~Char, ~Spec.is_banned, String.to_list(h)), _)
+          ): Bool
+      }
+      {==}
+    case PSeg{} Chr{x}:
+      %eb: {
+        Bool.not(
+          List.any.if(
+            u => List.any(~&2, ~Char, ~Spec.is_banned, String.to_list(h)),
+            Spec.is_banned(Chr{x})
+          )
+        )
+          == Bool.not(
+            List.any.if(u => List.any(~&2, ~Char, ~Spec.is_banned, String.to_list(h)), _)
+          ): Bool
+      }
+      {==}
+    case PDead{} Chr{x}:
+      {==}
+
+# Path.seg_ok_step, once it is known if c is '.' (dot) and if it is banned
+# (bad)
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
+def Path.seg_ok_step.at(
+  s: Path,
+  c: Char,
+  h: String,
+  dot: Bool,
+  bad: Bool
+) -> {
+  Char.is_eq(c, '.') == dot: Bool
+} -> {
+  Spec.is_banned(c) == bad: Bool
+} -> {
+  Path.seg_ok(
+    s,
+    SCon{c, h}
+  )
+    == Path.seg_ok(
+      Path.step(s, Bool.pick(Role, dot, KDot{}, Bool.pick(Role, bad, KBad{}, KOther{}))),
+      h
+    ): Bool
+}:
+  match dot bad:
+    case True{} _:
+      ed => eb =>
+        %Equal.sym(
+          Char,
+          c,
+          '.',
+          Shared.Char.is_eq_sound(c, '.')(ed)
+        ): {Path.seg_ok(s, SCon{_, h}) == Path.seg_ok(Path.step(s, KDot{}), h): Bool}
+        Path.seg_ok_dot(s, h)
+    case False{} True{}:
+      ed => eb => Path.seg_ok_bad(
+        s,
+        c,
+        h,
+        Equal.cong(
+          Bool,
+          Bool,
+          v => List.any.if(u => List.any(~&2, ~Char, ~Spec.is_banned, String.to_list(h)), v),
+          Spec.is_banned(c),
+          True{},
+          eb
+        )
+      )
+    case False{} False{}:
+      ed => eb => Path.seg_ok_other(s, c, h, ed, eb)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# a '/' moves the automaton as it starts a new part
+def Path.fits_slash(
+  s: Path,
+  h: String,
+  r: List<&2, String>
+) -> {Path.fits(Path.step(s, KSlash{}), h <> r) == Path.fits(s, SNil{} <> h <> r): Bool}:
+  match s:
+    case PStart{}:
+      {==}
+    case PDot{}:
+      {==}
+    case PDots{}:
+      {==}
+    case PSeg{}:
+      {==}
+    case PDead{}:
+      {==}
+
+# Path.fits_step at the parts h <> r, once it is known if c is '/' (cut)
+def Path.fits_step.at(
+  s: Path,
+  +c: Char,
+  h: String,
+  r: List<&2, String>,
+  cut: Bool
+) -> {
+  Path.fits(
+    Path.step(
+      s,
+      Bool.pick(
+        Role,
+        cut,
+        KSlash{},
+        Bool.pick(
+          Role,
+          Char.is_eq(c, '.'),
+          KDot{},
+          Bool.pick(Role, Spec.is_banned(c), KBad{}, KOther{})
+        )
+      )
+    ),
+    h <> r
+  )
+    == Path.fits(s, String.split.fin(c, h <> r, cut)): Bool
+}:
+  match cut:
+    case True{}:
+      Path.fits_slash(s, h, r)
+    case False{}:
+      %Path.seg_ok_step.at(
+        s,
+        c,
+        h,
+        Char.is_eq(c, '.'),
+        Spec.is_banned(c)
+      )(
+        {==},
+        {==}
+      ): {
+        List.all.if(
+          u => List.all(~&2, ~String, ~Spec.is_segment, r),
+          _
+        )
+          == List.all.if(
+            u => List.all(~&2, ~String, ~Spec.is_segment, r),
+            Path.seg_ok(s, SCon{c, h})
+          ): Bool
+      }
+      {==}
+
+# a character moves the automaton as it changes the parts of a split
+def Path.fits_step(
+  s: Path,
+  +c: Char,
+  segs: List<&2, String>,
+  some: {List.is_empty(&2, String, segs) == False{}: Bool}
+) -> {
+  Path.fits(
+    Path.step(s, Role.of(c)),
+    segs
+  )
+    == Path.fits(s, String.split.fin(c, segs, Char.is_eq(c, '/'))): Bool
+}:
+  match segs:
+    case Nil{}:
+      Empty.absurd(
+        {
+          Path.fits(
+            Path.step(s, Role.of(c)),
+            []
+          )
+            == Path.fits(s, String.split.fin(c, [], Char.is_eq(c, '/'))): Bool
+        },
+        Shared.Bool.true_ne_false(some)
+      )
+    case Con{h, r}:
+      Path.fits_step.at(s, c, h, r, Char.is_eq(c, '/'))
+
+# a valid path can end at s exactly when the one part "" fits s
+def Path.fits_end(s: Path) -> {Path.is_end(s) == Path.fits(s, [SNil{}]): Bool}:
+  match s:
+    case PStart{}:
+      {==}
+    case PDot{}:
+      {==}
+    case PDots{}:
+      {==}
+    case PSeg{}:
+      {==}
+    case PDead{}:
+      {==}
+
+# parts fit a segment start exactly when each is a valid segment
+def Path.fits_start(
+  segs: List<&2, String>
+) -> {Path.fits(PStart{}, segs) == List.all(~&2, ~String, ~Spec.is_segment, segs): Bool}:
+  match segs:
+    case Nil{}:
+      {==}
+    case Con{head, tail}:
+      {==}
+
+# a valid path can end after the text t, from s, exactly when the parts of t
+# fit s
+def Path.walk_fits(
+  t: String,
+  +s: Path
+) -> {Path.is_end(Path.walk(String.to_list(t), s)) == Path.fits(s, String.split(t, '/')): Bool}:
+  match t:
+    case SNil{}:
+      Path.fits_end(s)
+    case SCon{+c, +r}:
+      Equal.trans(
+        Bool,
+        Path.is_end(Path.walk(String.to_list(r), Path.step(s, Role.of(c)))),
+        Path.fits(Path.step(s, Role.of(c)), String.split(r, '/')),
+        Path.fits(s, String.split.fin(c, String.split(r, '/'), Char.is_eq(c, '/'))),
+        Path.walk_fits(r, Path.step(s, Role.of(c))),
+        Path.fits_step(s, c, String.split(r, '/'), Texts.String.split_some(r, '/'))
+      )
+
+# the automaton accepts exactly the valid paths
+law Path.walk_ok:
+  for p: String
+  {Path.is_end(Path.walk(String.to_list(p), PStart{})) == Spec.is_path(p): Bool}
+
+def Path.walk_ok(p):
+  +p = p
+  Equal.trans(
+    Bool,
+    Path.is_end(Path.walk(String.to_list(p), PStart{})),
+    Path.fits(PStart{}, String.split(p, '/')),
+    Spec.is_path(p),
+    Path.walk_fits(p, PStart{}),
+    Path.fits_start(String.split(p, '/'))
+  )
+
+# The machine
+# -----------
+# The search runs one machine: the automaton of valid paths, with a state of
+# the rules. It accepts the characters of p from the place of a query exactly
+# when p answers the query (Query.holds_fast_ok).
+
+# What the machine knows: the characters cs that the search moves it under,
+# and one more, f (see "Representative characters").
+type Abc is Data:
+  Abc{cs: List<&2, Char>, f: Char}
+
+# A place of the machine: where the path is, with the state; or past a
+# mistake of the path (Dead), where the state does not matter.
+type Walk is Data:
+  Dead{}
+  At{at: Path, x: St}
+
+# the place of a path at a with the state x(); Dead past a mistake
+def Walk.at(a: Path, x: Unit -> St) -> Walk:
+  match a:
+    case PDead{}:
+      Dead{}
+    case other:
+      At{other, x(Unit{})}
+
+# the place after c
+def Walk.step(g: Abc, w: Walk, c: Char) -> Walk:
+  match w:
+    case Dead{}:
+      Dead{}
+    case At{a, x}:
+      +c = c
+      Walk.at(Path.step(a, Role.of(c)), u => St.step(x, c))
+
+# a valid path that the state holds for can end here
+def Walk.ends(g: Abc, w: Walk) -> Bool:
+  match w:
+    case Dead{}:
+      False{}
+    case At{a, x}:
+      List.all.if(u => St.holds(x, []), Path.is_end(a))
+
+# the place that a query starts in
+def Walk.of(q: Spec.Query) -> Walk:
+  At{PStart{}, St.of(q)}
+
+# the machine accepts no word from Dead
+def Walk.dead_never(
+  w: List<&2, Char>,
+  g: Abc
+) -> {
+  Searches.Machine.accepts(
+    ~Walk,
+    ~Char,
+    ~Abc,
+    ~Walk.step,
+    ~Walk.ends,
+    w,
+    Dead{},
+    g
+  )
+    == False{}: Bool
+}:
+  match w:
+    case Nil{}:
+      {==}
+    case Con{c, t}:
+      Walk.dead_never(t, g)
+
+# Walk.accepts_ok for the place of a path at a with the state x, given it
+# for the place At{a, x}
+def Walk.accepts_ok.at(
+  +t: List<&2, Char>,
+  a: Path,
+  x: St,
+  g: Abc,
+  ih: {
+    Searches.Machine.accepts(
+      ~Walk,
+      ~Char,
+      ~Abc,
+      ~Walk.step,
+      ~Walk.ends,
+      t,
+      At{a, x},
+      g
+    )
+      == List.all.if(u => St.holds(x, t), Path.is_end(Path.walk(t, a))): Bool
+  }
+) -> {
+  Searches.Machine.accepts(
+    ~Walk,
+    ~Char,
+    ~Abc,
+    ~Walk.step,
+    ~Walk.ends,
+    t,
+    Walk.at(a, u => x),
+    g
+  )
+    == List.all.if(u => St.holds(x, t), Path.is_end(Path.walk(t, a))): Bool
+}:
+  match a:
+    case PStart{}:
+      ih
+    case PDot{}:
+      ih
+    case PDots{}:
+      ih
+    case PSeg{}:
+      ih
+    case PDead{}:
+      %Path.dead_never(
+        t
+      ): {
+        Searches.Machine.accepts(
+          ~Walk,
+          ~Char,
+          ~Abc,
+          ~Walk.step,
+          ~Walk.ends,
+          t,
+          Dead{},
+          g
+        )
+          == List.all.if(u => St.holds(x, t), _): Bool
+      }
+      Walk.dead_never(t, g)
+
+# the machine accepts w from the place At{a, x} exactly when a valid path can
+# end after w, from a, and x holds for w
+def Walk.accepts_ok(
+  w: List<&2, Char>,
+  +a: Path,
+  +x: St,
+  +g: Abc
+) -> {
+  Searches.Machine.accepts(
+    ~Walk,
+    ~Char,
+    ~Abc,
+    ~Walk.step,
+    ~Walk.ends,
+    w,
+    At{a, x},
+    g
+  )
+    == List.all.if(u => St.holds(x, w), Path.is_end(Path.walk(w, a))): Bool
+}:
+  match w:
+    case Nil{}:
+      {==}
+    case Con{+c, +t}:
+      %St.step_ok(
+        x,
+        c,
+        t
+      ): {
+        Searches.Machine.accepts(
+          ~Walk,
+          ~Char,
+          ~Abc,
+          ~Walk.step,
+          ~Walk.ends,
+          t,
+          Walk.at(Path.step(a, Role.of(c)), u => St.step(x, c)),
+          g
+        )
+          == List.all.if(u => _, Path.is_end(Path.walk(t, Path.step(a, Role.of(c))))): Bool
+      }
+      Walk.accepts_ok.at(
+        t,
+        Path.step(a, Role.of(c)),
+        St.step(x, c),
+        g,
+        Walk.accepts_ok(t, Path.step(a, Role.of(c)), St.step(x, c), g)
+      )
+
+# p is a valid path that answers q: Spec.Query.holds, by the machine of the
+# search, whose cost does not grow with each character
+def Query.holds.fast(q: Spec.Query, p: String, g: Abc) -> Bool:
+  Searches.Machine.accepts(
+    ~Walk,
+    ~Char,
+    ~Abc,
+    ~Walk.step,
+    ~Walk.ends,
+    String.to_list(p),
+    Walk.of(q),
+    g
+  )
+
+# Query.holds.fast gives the answer of Spec.Query.holds
+def Query.holds_fast_ok(
+  +q: Spec.Query,
+  +p: String,
+  g: Abc
+) -> {Query.holds.fast(q, p, g) == Spec.Query.holds(q, p): Bool}:
+  +w = String.to_list(p)
+  +x = St.of(q)
+  %St.of_ok(q, p): {Query.holds.fast(q, p, g) == _: Bool}
+  %Path.walk_ok(p): {Query.holds.fast(q, p, g) == Bool.and(_, St.holds(x, w)): Bool}
+  %Shared.List.all.if_and(
+    Path.is_end(Path.walk(w, PStart{})),
+    u => St.holds(x, w)
+  ): {Query.holds.fast(q, p, g) == _: Bool}
+  Walk.accepts_ok(w, PStart{}, x, g)
+
 # State equality and keys
 # -----------------------
 
@@ -646,10 +1222,6 @@ def St.is_eq_sound(x: St, y: St) -> {St.is_eq(x, y) == True{}: Bool} -> {x == y:
         )(Shared.List.all.if_rest(sa, u2 => sb)(rest)): {St{n, a, b} == St{n, a, _}: St}
         {==}
 
-# the laws of St.is_eq
-def St.laws() -> Shared.Eq.Laws(St, St.is_eq):
-  (St.is_eq_refl, St.is_eq_sound)
-
 # the key of xs, then rest: True before each Seq, False after the last
 def Seqs.key(xs: List<&2, List<&2, Regex.Re<Spec.Atom>>>, rest: List<&2, Bool>) -> List<&2, Bool>:
   match xs:
@@ -675,29 +1247,155 @@ def St.key(x: St) -> List<&2, Bool>:
     case St{both, a, b}:
       both <> Slots.key(a, Slots.key(b, []))
 
+# the key of a place of a path
+def Path.key(s: Path) -> List<&2, Bool>:
+  match s:
+    case PStart{}:
+      [False{}, False{}, False{}]
+    case PDot{}:
+      [False{}, False{}, True{}]
+    case PDots{}:
+      [False{}, True{}, False{}]
+    case PSeg{}:
+      [False{}, True{}, True{}]
+    case PDead{}:
+      [True{}, False{}, False{}]
+
+# the place of a path whose key is k
+def Path.of_key(k: List<&2, Bool>) -> Path:
+  match k:
+    case Con{False{}, Con{False{}, Con{False{}, Nil{}}}}:
+      PStart{}
+    case Con{False{}, Con{False{}, Con{True{}, Nil{}}}}:
+      PDot{}
+    case Con{False{}, Con{True{}, Con{False{}, Nil{}}}}:
+      PDots{}
+    case Con{False{}, Con{True{}, Con{True{}, Nil{}}}}:
+      PSeg{}
+    case _:
+      PDead{}
+
+# the key of a place of a path gives the place back
+def Path.key_back(s: Path) -> {Path.of_key(Path.key(s)) == s: Path}:
+  match s:
+    case PStart{}:
+      {==}
+    case PDot{}:
+      {==}
+    case PDots{}:
+      {==}
+    case PSeg{}:
+      {==}
+    case PDead{}:
+      {==}
+
+# a and b are the same place of a path
+def Path.is_eq(a: Path, b: Path) -> Bool:
+  Tries.Trie.same_key(Path.key(a), Path.key(b))
+
+# Path.is_eq is True for a place and itself
+def Path.is_eq_refl(a: Path) -> {Path.is_eq(a, a) == True{}: Bool}:
+  Shared.List.is_eq_refl(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws(), Path.key(a))
+
+# Path.is_eq is True only for the same place
+def Path.is_eq_sound(+a: Path, +b: Path) -> {Path.is_eq(a, b) == True{}: Bool} -> {a == b: Path}:
+  h => Equal.trans(
+    Path,
+    a,
+    Path.of_key(Path.key(b)),
+    b,
+    Equal.trans(
+      Path,
+      a,
+      Path.of_key(Path.key(a)),
+      Path.of_key(Path.key(b)),
+      Equal.sym(Path, Path.of_key(Path.key(a)), a, Path.key_back(a)),
+      Equal.cong(
+        List<&2, Bool>,
+        Path,
+        k => Path.of_key(k),
+        Path.key(a),
+        Path.key(b),
+        Tries.Trie.same_key_sound(Path.key(a), Path.key(b))(h)
+      )
+    ),
+    Path.key_back(b)
+  )
+
+# v and w are the same place
+def Walk.is_eq(v: Walk, w: Walk) -> Bool:
+  match v w:
+    case Dead{} Dead{}:
+      True{}
+    case At{a, x} At{b, y}:
+      List.all.if(u => St.is_eq(x, y), Path.is_eq(a, b))
+    case _ _:
+      False{}
+
+# Walk.is_eq is True for a place and itself
+def Walk.is_eq_refl(w: Walk) -> {Walk.is_eq(w, w) == True{}: Bool}:
+  match w:
+    case Dead{}:
+      {==}
+    case At{+a, +x}:
+      Shared.List.all.if_both(
+        Path.is_eq(a, a),
+        u => St.is_eq(x, x)
+      )(Path.is_eq_refl(a))(St.is_eq_refl(x))
+
+# Walk.is_eq is True only for the same place
+def Walk.is_eq_sound(v: Walk, w: Walk) -> {Walk.is_eq(v, w) == True{}: Bool} -> {v == w: Walk}:
+  match v w:
+    case Dead{} Dead{}:
+      h => {==}
+    case Dead{} At{b, y}:
+      h => Empty.absurd({Dead{} == At{b, y}: Walk}, Shared.Bool.false_ne_true(h))
+    case At{a, x} Dead{}:
+      h => Empty.absurd({At{a, x} == Dead{}: Walk}, Shared.Bool.false_ne_true(h))
+    case At{+a, +x} At{+b, +y}:
+      +h =>
+        %Path.is_eq_sound(
+          a,
+          b
+        )(
+          Shared.List.all.if_hit(Path.is_eq(a, b), u => St.is_eq(x, y))(h)
+        ): {At{a, x} == At{_, y}: Walk}
+        %St.is_eq_sound(
+          x,
+          y
+        )(
+          Shared.List.all.if_rest(Path.is_eq(a, b), u => St.is_eq(x, y))(h)
+        ): {At{a, x} == At{a, _}: Walk}
+        {==}
+
+# the laws of Walk.is_eq
+def Walk.laws() -> Shared.Eq.Laws(Walk, Walk.is_eq):
+  (Walk.is_eq_refl, Walk.is_eq_sound)
+
+# the key of a place
+def Walk.key(w: Walk) -> List<&2, Bool>:
+  match w:
+    case Dead{}:
+      [False{}]
+    case At{a, x}:
+      True{} <> List.append(&2, Bool, Path.key(a), St.key(x))
+
 # Representative characters
 # -------------------------
-# The search moves a state only under the characters that the globs of the
-# query name, '/', and one more character f that they do not name. A
-# character that is not named moves a state as f does.
+# The search moves the machine only under the characters cs, and one more
+# character f. cs holds the characters that the globs of the query name, and
+# those with a role of their own for a path. A character that cs lacks moves
+# the machine as f does.
 
-# The named characters cs, and the character f.
-type Abc is Data:
-  Abc{cs: List<&2, Char>, f: Char}
-
-# the characters that the search moves a state under
+# the characters that the search moves the machine under
 def Abc.syms(g: Abc) -> List<&2, Char>:
   match g:
     case Abc{cs, f}:
       f <> cs
 
-# The machine that the search runs: a state reads one character.
-def Abc.step(g: Abc, x: St, c: Char) -> St:
-  St.step(x, c)
-
-# the machine accepts at x when x holds for ""
-def Abc.ends(g: Abc, x: St) -> Bool:
-  St.holds(x, [])
+# the characters with a role of their own
+def Role.chars() -> List<&2, Char>:
+  ['/', '.', Chr{0}, Chr{92}]
 
 # cs holds c
 def Chars.has(cs: List<&2, Char>, c: Char) -> Bool:
@@ -791,27 +1489,95 @@ def Chars.near_right(
     )
   )
 
-# a character that cs lacks is not '/', when cs holds '/'
-def Char.inner_out(
+# a character c that cs lacks is not a character r that cs holds
+def Chars.out_ne(
   cs: List<&2, Char>,
+  +r: Char,
   +c: Char,
-  hs: {Chars.has(cs, '/') == True{}: Bool},
+  hr: {Chars.has(cs, r) == True{}: Bool},
   hc: {Chars.has(cs, c) == False{}: Bool}
-) -> {Spec.is_inner(c) == True{}: Bool}:
-  %Equal.sym(
+) -> {False{} == Char.is_eq(c, r): Bool}:
+  Equal.sym(
     Bool,
-    Char.is_eq(c, '/'),
+    Char.is_eq(c, r),
     False{},
     Shared.Eq.ne_flip(
       ~Char,
       ~Char.is_eq,
       ~Shared.Char.laws(),
-      '/',
+      r,
       c,
-      Shared.List.contains_ne(~Char, ~Char.is_eq, ~Shared.Char.laws(), cs, '/', c, hs, hc)
+      Shared.List.contains_ne(~Char, ~Char.is_eq, ~Shared.Char.laws(), cs, r, c, hr, hc)
     )
-  ): {Bool.not(_) == True{}: Bool}
+  )
+
+# a character that cs lacks is not '/', when cs holds '/'
+def Char.inner_out(
+  cs: List<&2, Char>,
+  c: Char,
+  hs: {Chars.has(cs, '/') == True{}: Bool},
+  hc: {Chars.has(cs, c) == False{}: Bool}
+) -> {Spec.is_inner(c) == True{}: Bool}:
+  %Chars.out_ne(cs, '/', c, hs, hc): {Bool.not(_) == True{}: Bool}
   {==}
+
+# a character that is none of Role.chars has no role of its own
+def Role.of_other(
+  c: Char,
+  +h: {Chars.has(Role.chars(), c) == False{}: Bool}
+) -> {KOther{} == Role.of(c): Role}:
+  match c:
+    case Chr{+x}:
+      %Chars.out_ne(
+        Role.chars(),
+        '/',
+        Chr{x},
+        {==},
+        h
+      ): {
+        KOther{}
+          == Bool.pick(
+            Role,
+            _,
+            KSlash{},
+            Bool.pick(
+              Role,
+              U32.is_eq(x, 46),
+              KDot{},
+              Bool.pick(Role, Spec.is_banned(Chr{x}), KBad{}, KOther{})
+            )
+          ): Role
+      }
+      %Chars.out_ne(
+        Role.chars(),
+        '.',
+        Chr{x},
+        {==},
+        h
+      ): {
+        KOther{}
+          == Bool.pick(
+            Role,
+            _,
+            KDot{},
+            Bool.pick(Role, Spec.is_banned(Chr{x}), KBad{}, KOther{})
+          ): Role
+      }
+      %Chars.out_ne(
+        Role.chars(),
+        Chr{0},
+        Chr{x},
+        {==},
+        h
+      ): {KOther{} == Bool.pick(Role, Bool.or(_, U32.is_eq(x, 92)), KBad{}, KOther{}): Role}
+      %Chars.out_ne(
+        Role.chars(),
+        Chr{92},
+        Chr{x},
+        {==},
+        h
+      ): {KOther{} == Bool.pick(Role, _, KBad{}, KOther{}): Role}
+      {==}
 
 # an atom whose characters are in cs accepts c exactly when it accepts f,
 # two characters that cs lacks, when cs holds '/'
@@ -1022,38 +1788,65 @@ def Slot.step_alike(
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# cs holds '/' and not f
+# f <> cs holds f
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
+def Chars.has_head(f: Char, cs: List<&2, Char>) -> {Chars.has(f <> cs, f) == True{}: Bool}:
+  %Equal.sym(
+    Bool,
+    Char.is_eq(f, f),
+    True{},
+    Shared.Char.is_eq_refl(f)
+  ): {List.any.if(u => Chars.has(cs, f), _) == True{}: Bool}
+  {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# cs holds each character with a role of its own, and not f
 def Abc.fits(g: Abc) -> Bool:
   match g:
     case Abc{+cs, f}:
-      List.all.if(u => Bool.not(Chars.has(cs, f)), Chars.has(cs, '/'))
+      List.all.if(
+        u => Bool.not(Chars.has(cs, f)),
+        Reaches.Reach.within(~Char, ~Char.is_eq, Role.chars(), cs)
+      )
 
-# g fits, and every character that x names is in its cs
-def St.covers(g: Abc, x: St) -> Bool:
-  match g x:
-    case Abc{+cs, f} St{both, a, b}:
+# w is Dead; or g fits, and every character that the state of w names is in
+# its cs
+def Walk.covers(g: Abc, w: Walk) -> Bool:
+  match g w:
+    case _ Dead{}:
+      True{}
+    case Abc{+cs, f} At{p, St{both, a, b}}:
       List.all.if(
         u => List.all.if(u2 => Slots.within(b, cs), Slots.within(a, cs)),
         Abc.fits(Abc{cs, f})
       )
 
-# St.rep, once it is known if f <> cs holds c (known)
-def St.rep.at(
+# Walk.rep at a place that is not Dead, once it is known if f <> cs holds c
+# (known)
+def Walk.rep.at(
   +cs: List<&2, Char>,
   +f: Char,
+  p: Path,
   both: Bool,
   +a: List<&2, Slot>,
   +b: List<&2, Slot>,
   +c: Char,
   known: Bool,
-  +h: {St.covers(Abc{cs, f}, St{both, a, b}) == True{}: Bool}
+  +h: {Walk.covers(Abc{cs, f}, At{p, St{both, a, b}}) == True{}: Bool}
 ) -> {
   Chars.has(f <> cs, c) == known: Bool
 } -> (
   &d: Char -> {
     List.contains(~Char, ~Char.is_eq, f <> cs, d) == True{}: Bool
   }
-    & {St.step(St{both, a, b}, c) == St.step(St{both, a, b}, d): St}
+    & {
+      Walk.step(
+        Abc{cs, f},
+        At{p, St{both, a, b}},
+        c
+      )
+        == Walk.step(Abc{cs, f}, At{p, St{both, a, b}}, d): Walk
+    }
 ):
   match known:
     case True{}:
@@ -1062,99 +1855,73 @@ def St.rep.at(
       e =>
         +wa = Slots.within(a, cs)
         +wb = Slots.within(b, cs)
-        +has_s = Chars.has(cs, '/')
+        +roles = Reaches.Reach.within(~Char, ~Char.is_eq, Role.chars(), cs)
         +no_f = Bool.not(Chars.has(cs, f))
         +no_c = Bool.not(Chars.has(cs, c))
         +fits = Shared.List.all.if_hit(
-          List.all.if(u => no_f, has_s),
+          List.all.if(u => no_f, roles),
           u => List.all.if(u2 => wb, wa)
         )(h)
         +within = Shared.List.all.if_rest(
-          List.all.if(u => no_f, has_s),
+          List.all.if(u => no_f, roles),
           u => List.all.if(u2 => wb, wa)
         )(h)
-        hc = Shared.List.any.if_false_rest(Char.is_eq(f, c), u => Chars.has(cs, c))(e)
+        +hr = Shared.List.all.if_hit(roles, u => no_f)(fits)
+        +hf = Shared.List.all.if_rest(roles, u => no_f)(fits)
+        +hc = Shared.List.any.if_false_rest(Char.is_eq(f, c), u => Chars.has(cs, c))(e)
         +hn = {
           Shared.List.all.if_both(
-            has_s,
+            Chars.has(cs, '/'),
             u => List.all.if(u2 => no_f, no_c)
           )(
-            Shared.List.all.if_hit(has_s, u => no_f)(fits)
+            Shared.Bool.and_true_left(
+              Chars.has(cs, '/'),
+              Reaches.Reach.within(~Char, ~Char.is_eq, ['.', Chr{0}, Chr{92}], cs)
+            )(hr)
           )(
             Shared.List.all.if_both(
               no_c,
               u2 => no_f
-            )(
-              Equal.cong(Bool, Bool, v => Bool.not(v), Chars.has(cs, c), False{}, hc)
-            )(Shared.List.all.if_rest(has_s, u => no_f)(fits))
+            )(Equal.cong(Bool, Bool, v => Bool.not(v), Chars.has(cs, c), False{}, hc))(hf)
           ): {Chars.near(cs, c, f) == True{}: Bool}
         }
-        +ac = Slot.step(a, c)
-        +bc = Slot.step(b, c)
-        (f, ({
-              %Equal.sym(Bool, Char.is_eq(f, f), True{}, Shared.Char.is_eq_refl(f)): {List.any.if(u => List.contains(~Char, ~Char.is_eq, cs, f), _) == True{}: Bool}
+        -ac = Slot.step(a, c)
+        -bc = Slot.step(b, c)
+        -to = Path.step(p, KOther{})
+        (f, (Chars.has_head(f, cs), {
+              %Role.of_other(c, Reaches.Reach.within_out(~Char, ~Char.is_eq, ~Shared.Char.laws(), Role.chars(), cs, c, hr, hc)): {Walk.at(Path.step(p, _), u => St{both, ac, bc}) == Walk.at(Path.step(p, Role.of(f)), u => St{both, Slot.step(a, f), Slot.step(b, f)}): Walk}
+              %Role.of_other(f, Reaches.Reach.within_out(~Char, ~Char.is_eq, ~Shared.Char.laws(), Role.chars(), cs, f, hr, Shared.Bool.not_true(Chars.has(cs, f))(hf))): {Walk.at(to, u => St{both, ac, bc}) == Walk.at(Path.step(p, _), u => St{both, Slot.step(a, f), Slot.step(b, f)}): Walk}
+              %Slot.step_alike(a, cs, c, f, hn)(Shared.List.all.if_hit(wa, u2 => wb)(within)): {Walk.at(to, u => St{both, ac, bc}) == Walk.at(to, u => St{both, _, Slot.step(b, f)}): Walk}
+              %Slot.step_alike(b, cs, c, f, hn)(Shared.List.all.if_rest(wa, u2 => wb)(within)): {Walk.at(to, u => St{both, ac, bc}) == Walk.at(to, u => St{both, ac, _}): Walk}
               {==}
-              : {List.contains(~Char, ~Char.is_eq, f <> cs, f) == True{}: Bool}}, {
-              %Slot.step_alike(a, cs, c, f, hn)(Shared.List.all.if_hit(wa, u2 => wb)(within)): {St{both, ac, bc} == St{both, _, Slot.step(b, f)}: St}
-              %Slot.step_alike(b, cs, c, f, hn)(Shared.List.all.if_rest(wa, u2 => wb)(within)): {St{both, ac, bc} == St{both, ac, _}: St}
-              {==}
-              : {St{both, ac, bc} == St{both, Slot.step(a, f), Slot.step(b, f)}: St}}))
+              : {Walk.step(Abc{cs, f}, At{p, St{both, a, b}}, c) == Walk.step(Abc{cs, f}, At{p, St{both, a, b}}, f): Walk}}))
 
-# under a state that g covers, each character moves the machine as some
+# under a place that g covers, each character moves the machine as some
 # character of Abc.syms(g) does
-def St.rep(
+def Walk.rep(
   g: Abc,
-  x: St,
+  w: Walk,
   c: Char,
-  h: {St.covers(g, x) == True{}: Bool}
+  h: {Walk.covers(g, w) == True{}: Bool}
 ) -> (
   &d: Char -> {
     List.contains(~Char, ~Char.is_eq, Abc.syms(g), d) == True{}: Bool
   }
-    & {Abc.step(g, x, c) == Abc.step(g, x, d): St}
+    & {Walk.step(g, w, c) == Walk.step(g, w, d): Walk}
 ):
-  match g x:
-    case Abc{+cs, +f} St{both, a, b}:
+  match g w:
+    case Abc{cs, +f} Dead{}:
+      (f, (Chars.has_head(f, cs), {==}))
+    case Abc{+cs, +f} At{p, St{both, a, b}}:
       +c = c
-      St.rep.at(cs, f, both, a, b, c, Chars.has(f <> cs, c), h)({==})
-
-# the machine accepts w from x exactly when x holds for w
-def St.accepts_ok(
-  w: List<&2, Char>,
-  +x: St,
-  g: Abc
-) -> {
-  Searches.Machine.accepts(~St, ~Char, ~Abc, ~Abc.step, ~Abc.ends, w, x, g) == St.holds(x, w): Bool
-}:
-  match w:
-    case Nil{}:
-      {==}
-    case Con{+c, +t}:
-      %St.step_ok(
-        x,
-        c,
-        t
-      ): {
-        Searches.Machine.accepts(
-          ~St,
-          ~Char,
-          ~Abc,
-          ~Abc.step,
-          ~Abc.ends,
-          t,
-          St.step(x, c),
-          g
-        )
-          == _: Bool
-      }
-      St.accepts_ok(t, St.step(x, c), g)
+      Walk.rep.at(cs, f, p, both, a, b, c, Chars.has(f <> cs, c), h)({==})
 
 # Search
 # ------
-# The search needs no proof: `decide` checks what it returns. Phase one
-# visits the states that the start state can reach; when none holds for "",
-# they are a certificate. Else phase two looks for a valid path that holds,
-# guided by an automaton of valid paths.
+# The search needs no proof: `decide` checks what it returns. It visits the
+# places that the machine can reach from the place of the query. A word that
+# the machine accepts is a path to check; when no place accepts, the places
+# are a certificate to check.
 
 # the characters that g names, in front of acc
 def Glob.chars(g: Spec.Glob, acc: List<&2, Char>) -> List<&2, Char>:
@@ -1194,17 +1961,18 @@ def Char.key(c: Char) -> List<&2, Bool>:
     case Chr{x}:
       Tries.Trie.char(x)
 
-# '/' and the characters that the globs of a and b name, each once
+# the characters of Role.chars and those that the globs of a and b name,
+# each once
 def Rules.abc_chars(a: List<&2, Spec.Rule>, b: List<&2, Spec.Rule>) -> List<&2, Char>:
   KeySets.KeySet.unique(
     ~Char,
     ~Char.is_eq,
     ~Char.key,
-    '/' <> Rules.chars(a, Rules.chars(b, [])),
+    List.append(&2, Char, Role.chars(), Rules.chars(a, Rules.chars(b, []))),
     Tries.Trie.new(Char)
   )
 
-# '/' and the characters that the globs of q name, each once
+# the characters of Role.chars and those that the globs of q name, each once
 def Query.chars(q: Spec.Query) -> List<&2, Char>:
   match q:
     case Spec.Both{a, b}:
@@ -1227,238 +1995,24 @@ def Query.abc(q: Spec.Query) -> Abc:
   +cs = Query.chars(q)
   Abc{cs, Chars.fresh(cs)}
 
-# Where a valid path is: at a segment start, after "." or "..", inside a
-# valid segment, or past a mistake.
-type Path is Data:
-  PStart{}
-  PDot{}
-  PDots{}
-  PSeg{}
-  PDead{}
-# What a character is to a path: '/', '.', a banned character, or another.
-type Role is Data:
-  KSlash{}
-  KDot{}
-  KBad{}
-  KOther{}
-# what c is to a path
-def Role.of(c: Char) -> Role:
-  match c:
-    case Chr{+x}:
-      Bool.pick(
-        Role,
-        U32.is_eq(x, 47),
-        KSlash{},
-        Bool.pick(
-          Role,
-          U32.is_eq(x, 46),
-          KDot{},
-          Bool.pick(Role, Bool.or(U32.is_eq(x, 0), U32.is_eq(x, 92)), KBad{}, KOther{})
-        )
-      )
-# where a path is after a character of kind k
-def Path.step(s: Path, k: Role) -> Path:
-  match s k:
-    case PSeg{} KSlash{}:
-      PStart{}
-    case _ KSlash{}:
-      PDead{}
-    case _ KBad{}:
-      PDead{}
-    case PDead{} _:
-      PDead{}
-    case PStart{} KDot{}:
-      PDot{}
-    case PDot{} KDot{}:
-      PDots{}
-    case _ _:
-      PSeg{}
-# a and b are the same place
-def Path.is_eq(a: Path, b: Path) -> Bool:
-  match a b:
-    case PStart{} PStart{}:
-      True{}
-    case PDot{} PDot{}:
-      True{}
-    case PDots{} PDots{}:
-      True{}
-    case PSeg{} PSeg{}:
-      True{}
-    case PDead{} PDead{}:
-      True{}
-    case _ _:
-      False{}
-# a valid path can end here
-def Path.is_end(s: Path) -> Bool:
-  match s:
-    case PSeg{}:
-      True{}
-    case _:
-      False{}
-# the key of a place
-def Path.key(s: Path) -> List<&2, Bool>:
-  match s:
-    case PStart{}:
-      [False{}, False{}, False{}]
-    case PDot{}:
-      [False{}, False{}, True{}]
-    case PDots{}:
-      [False{}, True{}, False{}]
-    case PSeg{}:
-      [False{}, True{}, True{}]
-    case PDead{}:
-      [True{}, False{}, False{}]
-
-# A place of phase two: where the path is, with the state; or past a
-# mistake of the path (Dead), where the state does not matter.
-type Walk is Data:
-  Dead{}
-  At{at: Path, x: St}
-
-# the place after c, once the path is at a
-def Walk.at(a: Path, x: St, c: Char) -> Walk:
-  match a:
-    case PDead{}:
-      Dead{}
-    case other:
-      At{other, St.step(x, c)}
-
-# The machine of phase two: the place after c.
-def Walk.step(g: Abc, w: Walk, c: Char) -> Walk:
-  match w:
-    case Dead{}:
-      Dead{}
-    case At{a, x}:
-      +c = c
-      Walk.at(Path.step(a, Role.of(c)), x, c)
-
-# a valid path that the state holds for can end here
-def Walk.ends(g: Abc, w: Walk) -> Bool:
-  match w:
-    case Dead{}:
-      False{}
-    case At{a, x}:
-      List.all.if(u => St.holds(x, []), Path.is_end(a))
-
-# v and w are the same place
-def Walk.is_eq(v: Walk, w: Walk) -> Bool:
-  match v w:
-    case Dead{} Dead{}:
-      True{}
-    case At{a, x} At{b, y}:
-      List.all.if(u => St.is_eq(x, y), Path.is_eq(a, b))
-    case _ _:
-      False{}
-
-# the key of a place
-def Walk.key(w: Walk) -> List<&2, Bool>:
-  match w:
-    case Dead{}:
-      [False{}]
-    case At{a, x}:
-      True{} <> List.append(&2, Bool, Path.key(a), St.key(x))
-
-# the characters that phase two moves under: those of phase one, and a
-# letter, as f may be a character that a path may not hold
-def Abc.path_syms(g: Abc) -> List<&2, Char>:
-  'x' <> Abc.syms(g)
-
-# p is a valid path that answers q: Spec.Query.holds, by the machine of the
-# search, whose cost does not grow with each character
-def Query.holds.fast(q: Spec.Query, +p: String, g: Abc) -> Bool:
-  List.all.if(
-    u => Searches.Machine.accepts(
-      ~St,
-      ~Char,
-      ~Abc,
-      ~Abc.step,
-      ~Abc.ends,
-      String.to_list(p),
-      St.of(q),
-      g
-    ),
-    Spec.is_path(p)
-  )
-
-# Query.holds.fast gives the answer of Spec.Query.holds
-def Query.holds_fast_ok(
-  +q: Spec.Query,
-  +p: String,
-  +g: Abc
-) -> {Query.holds.fast(q, p, g) == Spec.Query.holds(q, p): Bool}:
-  v = Spec.is_path(p)
-  +w = String.to_list(p)
-  acc = Searches.Machine.accepts(~St, ~Char, ~Abc, ~Abc.step, ~Abc.ends, w, St.of(q), g)
-  %St.of_ok(q, p): {List.all.if(u => acc, v) == _: Bool}
-  %St.accepts_ok(w, St.of(q), g): {List.all.if(u => acc, v) == Bool.and(v, _): Bool}
-  Shared.List.all.if_and(v, u => acc)
-
-# What the search found: a path to check, a certificate to check, or neither.
-type Outcome is Data:
-  Witness{path: String}
-  Proof{xs: List<&2, St>}
-  NoAnswer{}
-
-# the states a search may visit before it gives up
+# the places a search may visit before it gives up
 def Search.fuel() -> Nat:
   4096n
-# what phase two found
-def Search.run.walked(found: Searches.Found<Walk, Char>) -> Outcome:
-  match found:
-    case Searches.Hit{w}:
-      Witness{String.from_list(w)}
-    case Searches.Closed{xs}:
-      NoAnswer{}
-    case Searches.Out{}:
-      NoAnswer{}
-
-# phase two, from the state x0
-def Search.run.paths(x0: St, g: Abc) -> Outcome:
-  Search.run.walked(
-    Searches.Search.run(
-      ~Walk,
-      ~Char,
-      ~Abc,
-      ~Walk.is_eq,
-      ~Walk.key,
-      ~Walk.step,
-      ~Walk.ends,
-      ~Abc.path_syms,
-      Search.fuel(),
-      At{PStart{}, x0},
-      g
-    )
-  )
-
-# the certificate of phase one, or phase two when there is none
-def Search.run.closed(x0: St, g: Abc, found: Searches.Found<St, Char>) -> Outcome:
-  match found:
-    case Searches.Closed{xs}:
-      Proof{xs}
-    case Searches.Hit{w}:
-      Search.run.paths(x0, g)
-    case Searches.Out{}:
-      Search.run.paths(x0, g)
 
 # what the search finds for q, under the characters of g
-def Search.run(q: Spec.Query, +g: Abc) -> Outcome:
-  +x0 = St.of(q)
-  Search.run.closed(
-    x0,
-    g,
-    Searches.Search.run(
-      ~St,
-      ~Char,
-      ~Abc,
-      ~St.is_eq,
-      ~St.key,
-      ~Abc.step,
-      ~Abc.ends,
-      ~Abc.syms,
-      Search.fuel(),
-      x0,
-      g
-    )
+def Search.run(q: Spec.Query, g: Abc) -> Searches.Found<Walk, Char>:
+  Searches.Search.run(
+    ~Walk,
+    ~Char,
+    ~Abc,
+    ~Walk.is_eq,
+    ~Walk.key,
+    ~Walk.step,
+    ~Walk.ends,
+    ~Abc.syms,
+    Search.fuel(),
+    Walk.of(q),
+    g
   )
 
 # Found{p} when ok, else Unknown
@@ -1468,6 +2022,7 @@ def Search.found_if(p: String, ok: Bool) -> Spec.Search:
       Spec.Unknown{}
     case True{}:
       Spec.Found{p}
+
 # Absent when ok, else Unknown
 def Search.absent_if(ok: Bool) -> Spec.Search:
   match ok:
@@ -1475,31 +2030,33 @@ def Search.absent_if(ok: Bool) -> Spec.Search:
       Spec.Unknown{}
     case True{}:
       Spec.Absent{}
+
 # xs is a certificate for q
-def Search.proves(q: Spec.Query, xs: List<&2, St>, g: Abc) -> Bool:
+def Search.proves(q: Spec.Query, xs: List<&2, Walk>, g: Abc) -> Bool:
   Searches.Cert.proves(
-    ~St,
+    ~Walk,
     ~Char,
     ~Abc,
-    ~St.is_eq,
-    ~St.key,
-    ~Abc.step,
-    ~Abc.ends,
-    ~St.covers,
+    ~Walk.is_eq,
+    ~Walk.key,
+    ~Walk.step,
+    ~Walk.ends,
+    ~Walk.covers,
     ~Abc.syms,
     xs,
-    St.of(q),
+    Walk.of(q),
     g
   )
 
 # the answer to q, from what the search found, once checked
-def Search.decide(q: Spec.Query, g: Abc, r: Outcome) -> Spec.Search:
+def Search.decide(q: Spec.Query, g: Abc, r: Searches.Found<Walk, Char>) -> Spec.Search:
   match r:
-    case Witness{+p}:
+    case Searches.Hit{w}:
+      +p = String.from_list(w)
       Search.found_if(p, Query.holds.fast(q, p, g))
-    case Proof{xs}:
+    case Searches.Closed{xs}:
       Search.absent_if(Search.proves(q, xs, g))
-    case NoAnswer{}:
+    case Searches.Out{}:
       Spec.Unknown{}
 
 def Spec.Query.search(q):
@@ -1621,20 +2178,21 @@ def Search.found_if_absent(
 def Search.decide_found(
   +q: Spec.Query,
   +g: Abc,
-  r: Outcome,
+  r: Searches.Found<Walk, Char>,
   p: String
 ) -> {
   Search.decide(q, g, r) == Spec.Found{p}: Spec.Search
 } -> {Spec.Query.holds(q, p) == True{}: Bool}:
   match r:
-    case Witness{+p0}:
+    case Searches.Hit{w}:
+      +p0 = String.from_list(w)
       h => Search.found_if_found(q, p0, p, g, Query.holds.fast(q, p0, g))({==}, h)
-    case Proof{xs}:
+    case Searches.Closed{xs}:
       h => Empty.absurd(
         {Spec.Query.holds(q, p) == True{}: Bool},
         Search.absent_if_found(Search.proves(q, xs, g), p)(h)
       )
-    case NoAnswer{}:
+    case Searches.Out{}:
       h => Empty.absurd(
         {Spec.Query.holds(q, p) == True{}: Bool},
         Search.ne_found(Spec.Unknown{}, p, Unit{}, h)
@@ -1643,7 +2201,7 @@ def Search.decide_found(
 # absent_if answers Absent only for a certificate for q, given b: its check
 def Search.absent_if_absent(
   +q: Spec.Query,
-  xs: List<&2, St>,
+  xs: List<&2, Walk>,
   +g: Abc,
   +p: String,
   b: Bool
@@ -1660,65 +2218,46 @@ def Search.absent_if_absent(
       )
     case True{}:
       e => h =>
-        +w = String.to_list(p)
-        none = Equal.trans(
-          Bool,
-          St.holds(St.of(q), w),
-          Searches.Machine.accepts(~St, ~Char, ~Abc, ~Abc.step, ~Abc.ends, w, St.of(q), g),
-          False{},
-          Equal.sym(
-            Bool,
-            Searches.Machine.accepts(~St, ~Char, ~Abc, ~Abc.step, ~Abc.ends, w, St.of(q), g),
-            St.holds(St.of(q), w),
-            St.accepts_ok(w, St.of(q), g)
-          ),
-          Searches.Cert.sound(
-            ~St,
-            ~Char,
-            ~Abc,
-            ~St.is_eq,
-            ~St.key,
-            ~Char.is_eq,
-            ~Abc.step,
-            ~Abc.ends,
-            ~St.covers,
-            ~Abc.syms,
-            ~St.laws(),
-            ~Shared.Char.laws(),
-            ~St.rep,
-            xs,
-            St.of(q),
-            g,
-            w
-          )(e)
-        )
-        %St.of_ok(q, p): {_ == False{}: Bool}
-        %Equal.sym(
-          Bool,
-          St.holds(St.of(q), w),
-          False{},
-          none
-        ): {Bool.and(Spec.is_path(p), _) == False{}: Bool}
-        Shared.Bool.and_false_right(Spec.is_path(p))
+        %Query.holds_fast_ok(q, p, g): {_ == False{}: Bool}
+        Searches.Cert.sound(
+          ~Walk,
+          ~Char,
+          ~Abc,
+          ~Walk.is_eq,
+          ~Walk.key,
+          ~Char.is_eq,
+          ~Walk.step,
+          ~Walk.ends,
+          ~Walk.covers,
+          ~Abc.syms,
+          ~Walk.laws(),
+          ~Shared.Char.laws(),
+          ~Walk.rep,
+          xs,
+          Walk.of(q),
+          g,
+          String.to_list(p)
+        )(e)
 
 # an Absent answer of decide means no path holds
 def Search.decide_absent(
   +q: Spec.Query,
   +g: Abc,
-  r: Outcome,
+  r: Searches.Found<Walk, Char>,
   p: String
 ) -> {
   Search.decide(q, g, r) == Spec.Absent{}: Spec.Search
 } -> {Spec.Query.holds(q, p) == False{}: Bool}:
   match r:
-    case Witness{p0}:
+    case Searches.Hit{w}:
+      p0 = String.from_list(w)
       h => Empty.absurd(
         {Spec.Query.holds(q, p) == False{}: Bool},
         Search.found_if_absent(p0, Query.holds.fast(q, p0, g))(h)
       )
-    case Proof{+xs}:
+    case Searches.Closed{+xs}:
       h => Search.absent_if_absent(q, xs, g, p, Search.proves(q, xs, g))({==}, h)
-    case NoAnswer{}:
+    case Searches.Out{}:
       h => Empty.absurd(
         {Spec.Query.holds(q, p) == False{}: Bool},
         Search.ne_absent(Spec.Unknown{}, Unit{}, h)

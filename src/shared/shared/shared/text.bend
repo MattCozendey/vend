@@ -2434,3 +2434,56 @@ def String.to_list_append(
         b
       ): {c <> String.to_list(String.append(t, b)) == c <> _: List<&2, Char>}
       {==}
+
+# two strings whose first characters differ are not equal
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+def String.eq_head_ne(
+  c: Char,
+  d: Char,
+  a: String,
+  b: String,
+  e: {Char.is_eq(c, d) == False{}: Bool}
+) -> {False{} == String.eq(SCon{c, a}, SCon{d, b}): Bool}:
+  match c d:
+    case Chr{+x} Chr{+y}:
+      %Equal.sym(
+        Bool,
+        String.eq(SCon{Chr{x}, a}, SCon{Chr{y}, b}),
+        Bool.and(U32.is_eq(y, x), String.eq(a, b)),
+        String.eq_cons(y, x, a, b)
+      ): {False{} == _: Bool}
+      %Equal.sym(
+        Bool,
+        U32.is_eq(y, x),
+        False{},
+        Shared.Eq.ne_flip(~U32, ~U32.is_eq, ~Shared.U32.laws(), x, y, e)
+      ): {False{} == Bool.and(_, String.eq(a, b)): Bool}
+      {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# a split step gives a part
+def String.split_some.fin(
+  c: Char,
+  r: List<&2, String>,
+  cut: Bool
+) -> {List.is_empty(&2, String, String.split.fin(c, r, cut)) == False{}: Bool}:
+  match r cut:
+    case Nil{} False{}:
+      {==}
+    case Con{h, t} False{}:
+      {==}
+    case _ True{}:
+      {==}
+
+# a split has a part
+def String.split_some(
+  s: String,
+  sep: Char
+) -> {List.is_empty(&2, String, String.split(s, sep)) == False{}: Bool}:
+  match s:
+    case SNil{}:
+      {==}
+    case SCon{c, t}:
+      +c = c
+      +sep = sep
+      String.split_some.fin(c, String.split(t, sep), Char.is_eq(c, sep))

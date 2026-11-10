@@ -2591,14 +2591,6 @@ def Reach.has_put(
       )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
-# anything or False is itself
-def Reach.or_false(a: Bool) -> {Bool.or(a, False{}) == a: Bool}:
-  match a:
-    case True{}:
-      {==}
-    case False{}:
-      {==}
-
 # the trie of the keys ks holds a exactly when ks does
 def Reach.has_keys(
   +ks: List<&2, List<&2, Bool>>,
@@ -2621,7 +2613,12 @@ def Reach.has_keys(
     Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, a), False{}),
     List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, a),
     Reach.has_put(ks, Tries.Trie.new(Unit), a),
-    Reach.or_false(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, a))
+    Equal.sym(
+      Bool,
+      List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, a),
+      Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, a), False{}),
+      Shared.Bool.or_false(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, a))
+    )
   )
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
@@ -3098,18 +3095,6 @@ def Reach.fill_step(
     case d Con{w, r}:
       {==}
 
-# an "or" groups either way
-def Reach.or_assoc(
-  a: Bool,
-  b: Bool,
-  c: Bool
-) -> {Bool.or(Bool.or(a, b), c) == Bool.or(a, Bool.or(b, c)): Bool}:
-  match a:
-    case True{}:
-      {==}
-    case False{}:
-      {==}
-
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # the fast search finds what the nodes seen, ks, hold, and what the search
 # finds from zs: the level ws is within zs, and zs and the next level of ks
@@ -3388,7 +3373,7 @@ def Reach.fill_go(
           )(j3),
           (
             %Equal.sym(Bool, List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, append1, m), Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m), List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m)), Reach.or_within(~List<&2, Bool>, ~Tries.Trie.same_key, ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()), ks, unique1, zs, m)(yz)(b)): {Bool.or(_, go1) == Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m), Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m), go1)): Bool}
-            Reach.or_assoc(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m), List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m), go1))
+            Equal.sym(Bool, Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m), Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m), go1)), Bool.or(Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m), List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m)), go1), Shared.Bool.or_assoc(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m), List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m), go1)))
         )
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
