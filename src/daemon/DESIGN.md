@@ -9,8 +9,9 @@ Delete each open item when the code makes it true.
 
 - **Ledger** (`shared/ledger.bend`): what nodes replicate. Requests, ballots and data, each in the
   slot that its own content names. A node takes in what it lacks and never changes what it holds
-  (`State.take`), so a ledger only grows. A step is what a majority of a line's owners cast at a
-  height (`State.decide`). The ledger does not read a line's state.
+  (`State.take`), so a ledger only grows. A step is what a majority of a line's owners cast in
+  one round of a height (`State.decide`), and nothing else. The ledger does not read a line's
+  state.
 - **Tip** (`core/spec.bend`): what a line holds, as two trees named by one hash.
   - Content: resources (each a root of a rope), clashes, version vector, owner group; for a store
     also its groups, the first tip of each branch, and the first key of each node.
@@ -25,6 +26,14 @@ Delete each open item when the code makes it true.
   of the owners in its tip cast and that the node ran itself with the same result. A run gives a
   node only its ledger: heads and waiting requests are the node's own, by construction. A head
   that has a tip moves only by a step (`State.first`).
+- **Rounds**: a ballot has a place (line, height, round) and is a vote or a pass. The proposer of
+  the round r at the height h is the owner (h + r) in turn (`Owners.turn`). In round 0 it
+  proposes what waits. A node passes to the next round when transport tells it that the round
+  took too long (`Deed.Pass`), and names its last vote below (`Last.below`). The proposer of a
+  later round needs the passes of a majority of the owners, and proposes the last vote of the
+  highest round among them, if any (`Plan.lead`). The others copy a vote that these rules allow
+  (`Allowed`, `Plan.follow`). An owner casts for a change of who decides only when it was asked
+  at it (`Node.consent`). All of this reads the ledger; a head holds no round.
 - **Reads**: `Line.get` reads the log of a line at the node's head. An answer, a version, a mark
   and a writer's pending write are each a few reads of a tree, or of the requests that wait on one
   line.
@@ -86,6 +95,13 @@ README claim, then the law.
   steps of a line stay as a node grows), `Node.advance_at` (a move adds one decided step),
   `Line.at_agrees` (the same number of decided steps from the same first head give the same
   head on any two nodes whose ledgers do not clash).
+- A majority is enough, also when the proposer is away: `Rounds.one` (two rounds of one height
+  decide the same step, so "the rounds of a height decide one step", the premise of the laws
+  above, holds). Its premises are the rules of rounds, for the ballots that the node holds:
+  `Rounds.Allow` (the passes that a vote names allow it), `Rounds.Last` (a pass names the last
+  vote of its node below its round), `Rounds.Same` (the votes of one round are for one step).
+  They say that the owners' nodes follow the protocol; a node that stops is fine, a node that
+  lies is not. Below it: two majorities share a node (`Major.meets`).
 - A writer's read shows its own pending write: `Node.draft_some` (a write that waits gives a
   draft), `Node.read_draft` (the read at the head of the branch is the bytes of the draft). On
   one node; after a switch of nodes it rests on sync, with no law.
@@ -100,23 +116,11 @@ README claim, then the law.
 
 Design (each needs a decision or new work; none is a proof detail):
 
-- **Rounds (in work).** Done: one owner proposes each step, in turn by the height
-  (`Owners.turn`), and the others cast for the same step (`Plan.copy`); an owner casts for a
-  change of who decides only when it was asked at it (`Ask.governs`, `Node.consent`). Not done:
-  when the proposer is away, the height waits for it. Plan:
-  1. Ledger: a place gets a round; a ballot is a vote (a step, and the passes that allow it) or
-     a pass (the node leaves the rounds below, and names its last vote at the height).
-  2. Core: the proposer of the round r at the height h is the owner (h + r) in turn. In round 0
-     it proposes freely. In a later round it needs passes of a majority, and proposes the last
-     vote of the highest round among them, if any. Others copy a vote that these rules allow. A
-     node passes to the next round when transport tells it that the round took too long
-     (`Deed.Pass`), and joins the highest round that it sees. All of this reads the ledger; a
-     head holds no round.
-  3. Law: two rounds of one height decide the same step, for a ledger that follows the rules
-     (each vote of a later round is allowed by its passes; each pass names the node's true last
-     vote; the votes of one round are the same). Then `Node.advance_agrees` and the history laws
-     hold across rounds.
-- **Every head is on the decided chain.** `Line.at_grows`, `Node.advance_at` and
+- **The rules of rounds are premises.** A node's own ballots follow them by construction
+  (`Plan.lead`, `Plan.follow`, `Pass.to`, `Cast.round`), with no law yet. A node keeps a vote of
+  another node without a check of `Allowed`; it only copies a vote that is allowed.
+- **Every head is on the decided chain.** `Line.at_grows`, `Node.advance_at` (a move is
+  one decided step, in a round up to any bound from the highest round that the node saw) and
   `Line.at_agrees` give one history for nodes that start a line from the same first head. Not a
   law yet: that every head of a node is some number of decided steps from the first head of its
   line (an invariant kept by each operation), and that two nodes give a branch the same first

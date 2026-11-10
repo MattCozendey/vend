@@ -5366,6 +5366,19 @@ law Seal.fits_own:
       == True{}: Bool
   }
 
+# a move of a head is one decided step of its line, in a round up to any n
+# from the highest round that the node saw at the height
+law Node.advance_at:
+  for +s: State()
+  for +c: Ledgers.Chain
+  for +h: Head
+  for +n: Nat
+  Line.One(s, c)
+    -> {Node.head_of(s, c) == Some{h}: Maybe<&2, Head>}
+    -> {Heads.level(Some{h}, Node.head_of(Node.advance(s, c), c)) == False{}: Bool}
+    -> {Nat.is_le(Round.seen(s, c, Head.next(h)), n) == True{}: Bool}
+    -> {Line.at(1n, s, c, h, n) == Node.head_of(Node.advance(s, c), c): Maybe<&2, Head>}
+
 # the decided steps of a line stay as a node grows: a head that is k decided
 # steps from a head h, each in a round up to n, is so in any node that keeps
 # every cell and whose rounds decide one step at each height

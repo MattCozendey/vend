@@ -7667,6 +7667,210 @@ def Spec.Node.read_draft(s, w, r, b, n, c):
     }
     {==}
 
+# Scan.wide once it is known whether k is the round 1 + p (b)
+def Scan.wide.at(
+  +u: Spec.State(),
+  +c: Ledgers.Chain,
+  +n: U32,
+  +os: List<&2, String>,
+  +k: Nat,
+  +p: Nat,
+  b: Bool
+) -> {Nat.is_eq(k, 1n+p) == b: Bool}
+  -> {Maybe.is_some(&2, Ledgers.Vote, Spec.Height.decide(u, c, n, os, k)) == True{}: Bool}
+  -> {Nat.is_le(k, 1n+p) == True{}: Bool}
+  -> ({Nat.is_le(k, p) == True{}: Bool} -> {
+    Maybe.is_some(&2, Ledgers.Vote, Spec.Height.decide(u, c, n, os, p)) == True{}: Bool
+  })
+  -> {Maybe.is_some(&2, Ledgers.Vote, Spec.Height.decide(u, c, n, os, 1n+p)) == True{}: Bool}:
+  match b:
+    case True{}:
+      eb => hs => le => ih =>
+        %Shared.Nat.is_eq_sound(k, 1n+p)(eb): {
+          Maybe.is_some(&2, Ledgers.Vote, Spec.Height.decide(u, c, n, os, _)) == True{}: Bool
+        }
+        hs
+    case False{}:
+      eb => hs => le => ih =>
+        First.some(
+          Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(u), Ledgers.Where{c, n, 1n+p}, os),
+          w => Spec.Height.decide(u, c, n, os, p),
+          ih(Shared.Nat.le_step(k, p)(le)(eb))
+        )
+
+# a height that decides a step in a round up to k decides one in a round up
+# to any k2 from k on
+def Scan.wide(
+  +u: Spec.State(),
+  +c: Ledgers.Chain,
+  +n: U32,
+  +os: List<&2, String>,
+  +k: Nat,
+  k2: Nat
+) -> {Maybe.is_some(&2, Ledgers.Vote, Spec.Height.decide(u, c, n, os, k)) == True{}: Bool} -> {
+  Nat.is_le(k, k2) == True{}: Bool
+} -> {Maybe.is_some(&2, Ledgers.Vote, Spec.Height.decide(u, c, n, os, k2)) == True{}: Bool}:
+  match k2:
+    case 0n:
+      hs => le =>
+        %Shared.Nat.le_zero_eq(k)(le): {
+          Maybe.is_some(&2, Ledgers.Vote, Spec.Height.decide(u, c, n, os, _)) == True{}: Bool
+        }
+        hs
+    case 1n+(+p):
+      +hs => le =>
+        Scan.wide.at(u, c, n, os, k, p, Nat.is_eq(k, 1n+p))({==})(hs)(le)(
+          le2 => Scan.wide(u, c, n, os, k, p)(hs)(le2)
+        )
+
+# a step that a height decides in a, in a round up to k, it decides in a
+# node that grew, in a round up to any k2 from k on, when the rounds of the
+# height decide one step there
+def Scan.wider(
+  +a: Spec.State(),
+  +u: Spec.State(),
+  +c: Ledgers.Chain,
+  +n: U32,
+  +os: List<&2, String>,
+  +k: Nat,
+  +k2: Nat,
+  +v: Ledgers.Vote,
+  +g: {Spec.Node.grows(a, u) == True{}: Bool},
+  one: Spec.Height.One(u, c, n, os)
+) -> {Nat.is_le(k, k2) == True{}: Bool} -> {
+  Spec.Height.decide(a, c, n, os, k) == Some{v}: Maybe<&2, Ledgers.Vote>
+} -> {Spec.Height.decide(u, c, n, os, k2) == Some{v}: Maybe<&2, Ledgers.Vote>}:
+  le => +e => Scan.elim({Spec.Height.decide(u, c, n, os, k2) == Some{v}: Maybe<&2, Ledgers.Vote>}, a, c, n, os, k, v)(e)(
+    +q0 => d0 => Scan.up.at(u, c, n, os, k2, v, Spec.Height.decide(u, c, n, os, k2))({==})(
+      Scan.wide(u, c, n, os, k, k2)(Scan.some(a, u, c, n, os, k, v, g)(e))(le)
+    )(
+      q => w => d => one(q)(q0)(w)(v)(d)(
+        Ledgers.State.decide_grows(
+          ~Spec.Ask,
+          ~Spec.Ask.is_eq,
+          ~Ask.laws(),
+          Spec.State.ledger(a),
+          Spec.State.ledger(u),
+          Ledgers.Where{c, n, q0},
+          os,
+          v
+        )(g)(d0)
+      )
+    )
+  )
+
+# Found.wide once the tip m of the head is known
+def Found.wide.at(
+  +s: Spec.State(),
+  +c: Ledgers.Chain,
+  +h: Spec.Head,
+  +k: Nat,
+  +k2: Nat,
+  +v: Ledgers.Vote,
+  m: Maybe<&2, Spec.Tip>,
+  one: Spec.Line.One(s, c)
+) -> {Spec.Head.tip(s, h) == m: Maybe<&2, Spec.Tip>}
+  -> {Nat.is_le(k, k2) == True{}: Bool}
+  -> {
+    Maybe.bind(&2, Spec.Tip, Ledgers.Vote, m, t => Spec.Height.decide(s, c, Spec.Head.next(h), Spec.Line.owners(s, t), k))
+      == Some{v}: Maybe<&2, Ledgers.Vote>
+  }
+  -> {
+    Maybe.bind(&2, Spec.Tip, Ledgers.Vote, m, t => Spec.Height.decide(s, c, Spec.Head.next(h), Spec.Line.owners(s, t), k2))
+      == Some{v}: Maybe<&2, Ledgers.Vote>
+  }:
+  match m:
+    case None{}:
+      em => le => e => Empty.absurd(
+        {None{} == Some{v}: Maybe<&2, Ledgers.Vote>},
+        Shared.Maybe.none_ne_some(Ledgers.Vote, v, e)
+      )
+    case Some{+t}:
+      em => le => e =>
+        Scan.wider(
+          s,
+          s,
+          c,
+          Spec.Head.next(h),
+          Spec.Line.owners(s, t),
+          k,
+          k2,
+          v,
+          Grows.refl(s),
+          one(h)(t)(em)
+        )(le)(e)
+
+# a step that a node found at a head, in a round up to k, it finds in a round
+# up to any k2 from k on
+def Found.wide(
+  +s: Spec.State(),
+  +c: Ledgers.Chain,
+  +h: Spec.Head,
+  +k: Nat,
+  +k2: Nat,
+  +v: Ledgers.Vote,
+  one: Spec.Line.One(s, c)
+) -> {Nat.is_le(k, k2) == True{}: Bool} -> {
+  Spec.Advance.found(s, c, h, k) == Some{v}: Maybe<&2, Ledgers.Vote>
+} -> {Spec.Advance.found(s, c, h, k2) == Some{v}: Maybe<&2, Ledgers.Vote>}:
+  le => e => Found.wide.at(s, c, h, k, k2, v, Spec.Head.tip(s, h), one)({==})(le)(e)
+
+# Node.advance_at once the step m that the node found at the head is known
+def Advance.at.one(
+  +s: Spec.State(),
+  +c: Ledgers.Chain,
+  +h: Spec.Head,
+  +n: Nat,
+  m: Maybe<&2, Ledgers.Vote>,
+  one: Spec.Line.One(s, c)
+) -> {Spec.Advance.vote(s, c, h) == m: Maybe<&2, Ledgers.Vote>}
+  -> {Spec.Heads.level(Some{h}, Some{Spec.Head.step(h, m)}) == False{}: Bool}
+  -> {Nat.is_le(Spec.Round.seen(s, c, Spec.Head.next(h)), n) == True{}: Bool}
+  -> {Spec.Head.moved(h, Spec.Advance.found(s, c, h, n)) == Some{Spec.Head.step(h, m)}: Maybe<&2, Spec.Head>}:
+  match m:
+    case None{}:
+      em => hl => le => Empty.absurd(
+        {Spec.Head.moved(h, Spec.Advance.found(s, c, h, n)) == Some{Spec.Head.step(h, None{})}: Maybe<&2, Spec.Head>},
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            Spec.Heads.level(Some{h}, Some{Spec.Head.step(h, None{})}),
+            True{},
+            Equal.sym(Bool, Spec.Heads.level(Some{h}, Some{Spec.Head.step(h, None{})}), False{}, hl),
+            Level.none(h)
+          )
+        )
+      )
+    case Some{+v}:
+      em => hl => le =>
+        %Equal.sym(
+          Maybe<&2, Ledgers.Vote>,
+          Spec.Advance.found(s, c, h, n),
+          Some{v},
+          Found.wide(s, c, h, Spec.Round.seen(s, c, Spec.Head.next(h)), n, v, one)(le)(em)
+        ): {Spec.Head.moved(h, _) == Some{Spec.Head.step(h, Some{v})}: Maybe<&2, Spec.Head>}
+        %Equal.sym(Bool, Spec.Heads.level(Some{h}, Some{Spec.Head.step(h, Some{v})}), False{}, hl): {
+          Shared.Maybe.when(Spec.Head, Bool.not(_), u => Some{Spec.Head.step(h, Some{v})})
+            == Some{Spec.Head.step(h, Some{v})}: Maybe<&2, Spec.Head>
+        }
+        {==}
+
+def Spec.Node.advance_at(s, c, h, n):
+  one => +eh => +hl => le =>
+    %Equal.sym(
+      Maybe<&2, Spec.Head>,
+      Spec.Node.head_of(Spec.Node.advance(s, c), c),
+      Some{Spec.Head.step(h, Spec.Advance.vote(s, c, h))},
+      Spec.Node.advance_decided(s, c, h)(eh)(hl)
+    ): {
+      Spec.Head.moved(h, Spec.Advance.found(s, c, h, n)) == _: Maybe<&2, Spec.Head>
+    }
+    Advance.at.one(s, c, h, n, Spec.Advance.vote(s, c, h), one)({==})(
+      %Spec.Node.advance_decided(s, c, h)(eh)(hl): {Spec.Heads.level(Some{h}, _) == False{}: Bool}
+      hl
+    )(le)
+
 # Rounds
 # ------
 # Two rounds of one height decide the same step (Spec.Rounds.one). A majority
