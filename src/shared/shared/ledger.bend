@@ -3796,6 +3796,12 @@ def State.holds_data_with(
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 
+# the slot of a lie is not the slot of a ballot
+def Slot.lie_other(x: Lie) -> {Tries.Trie.leads(Slot.ballots(), Slot.lie(x)) == False{}: Bool}:
+  match x:
+    case Lie{k, Ballot{Signed{Where{Chain{r, c}, h, z}, n, a}, l}, b}:
+      {==}
+
 # a ledger holds the same ballots as itself
 def State.same_ballots_refl(
   ~Q: Data,

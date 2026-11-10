@@ -21329,6 +21329,1528 @@ def Honest.frame(
       )
     )
 
+# Frames
+# ------
+# A change that accepts no ballot keeps the ballots of a node: it writes data,
+# a request or the proof of a lie, or a run with only its data (Run.data). The
+# lemmas follow those of growth, with Node.same_ballots for Node.grows.
+
+
+# a node holds the same ballots as itself
+def Frames.refl(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>
+) -> {Node.same_ballots(~mach, s, s) == True{}: Bool}:
+  Ledgers.State.same_ballots_refl(
+    ~Machine.Q(mach),
+    ~Machine.same(mach),
+    ~Machine.laws(mach),
+    State.ledger(~mach, s)
+  )
+
+# the same ballots compose
+def Frames.trans(
+  ~mach: Machine(),
+  a: Node<Machine.Q(mach)>,
+  b: Node<Machine.Q(mach)>,
+  c: Node<Machine.Q(mach)>
+) -> {
+  Node.same_ballots(~mach, a, b) == True{}: Bool
+} -> {Node.same_ballots(~mach, b, c) == True{}: Bool} -> {Node.same_ballots(~mach, a, c) == True{}: Bool}:
+  Ledgers.State.same_ballots_trans(
+    ~Machine.Q(mach),
+    ~Machine.same(mach),
+    ~Machine.laws(mach),
+    State.ledger(~mach, a),
+    State.ledger(~mach, b),
+    State.ledger(~mach, c)
+  )
+
+# a node with a new ledger keeps its ballots when the ledger does
+def Frames.led(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  l: Ledgers.State(Machine.Q(mach)),
+  e: {
+    Ledgers.State.same_ballots(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      State.ledger(~mach, s),
+      l
+    )
+      == True{}: Bool
+  }
+) -> {Node.same_ballots(~mach, s, State.led(~mach, s, l)) == True{}: Bool}:
+  %Equal.sym(
+    Ledgers.State(Machine.Q(mach)),
+    State.ledger(~mach, State.led(~mach, s, l)),
+    l,
+    Led.led(~mach, s, l)
+  ): {
+    Ledgers.State.same_ballots(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      State.ledger(~mach, s),
+      _
+    )
+      == True{}: Bool
+  }
+  e
+
+# data keeps the ballots of a node
+def Frames.keep(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  +ds: List<&2, List<&2, U32>>
+) -> {Node.same_ballots(~mach, s, State.keep(~mach, s, ds)) == True{}: Bool}:
+  +l = Ledgers.State.put_datas(~Machine.Q(mach), ~Machine.same(mach), ds, State.ledger(~mach, s))
+  Frames.led(
+    ~mach,
+    s,
+    l,
+    Ledgers.State.same_ballots_of(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      ~Machine.laws(mach),
+      State.ledger(~mach, s),
+      l,
+      +r => Ledgers.State.put_datas_ballots_at(~Machine.Q(mach), ~Machine.same(mach), ds, State.ledger(~mach, s), r),
+      +r => Ledgers.State.put_datas_ballots_at(~Machine.Q(mach), ~Machine.same(mach), ds, State.ledger(~mach, s), r)
+    )
+  )
+
+# the work m, if any, is on a node that grew from s
+def Work.framed(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Work<Machine.Q(mach)>>
+) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{Work{s2, h}}:
+      Node.same_ballots(~mach, s, s2)
+
+# the node m, if any, grew from s
+def State.framed(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Node<Machine.Q(mach)>>
+) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{s2}:
+      Node.same_ballots(~mach, s, s2)
+
+# Put.frames once the ledger m that the data gives is known
+def Put.frames.at(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  +ds: List<&2, List<&2, U32>>,
+  m: Maybe<&2, Ledgers.State(Machine.Q(mach))>,
+  +em: {
+    Ledgers.State.add_datas(~Machine.Q(mach), ~Machine.same(mach), ds, State.ledger(~mach, s))
+      == m: Maybe<&2, Ledgers.State(Machine.Q(mach))>
+  }
+) -> {
+  State.framed(
+    ~mach,
+    s,
+    Maybe.map(
+      &2,
+      Ledgers.State(Machine.Q(mach)),
+      Node<Machine.Q(mach)>,
+      l => State.led(~mach, s, l),
+      m
+    )
+  )
+    == True{}: Bool
+}:
+  match m:
+    case None{}:
+      {==}
+    case Some{+l}:
+      Frames.led(
+        ~mach,
+        s,
+        l,
+        Ledgers.State.same_ballots_of(
+          ~Machine.Q(mach),
+          ~Machine.same(mach),
+          ~Machine.laws(mach),
+          State.ledger(~mach, s),
+          l,
+          +r => Ledgers.State.add_datas_ballots_at(~Machine.Q(mach), ~Machine.same(mach), ds, State.ledger(~mach, s), r, l)(em),
+          +r => Ledgers.State.add_datas_ballots_at(~Machine.Q(mach), ~Machine.same(mach), ds, State.ledger(~mach, s), r, l)(em)
+        )
+      )
+
+# a put of data keeps the ballots of a node
+def Put.frames(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  +ds: List<&2, List<&2, U32>>
+) -> {State.framed(~mach, s, State.put(~mach, s, ds)) == True{}: Bool}:
+  Put.frames.at(
+    ~mach,
+    s,
+    ds,
+    Ledgers.State.add_datas(~Machine.Q(mach), ~Machine.same(mach), ds, State.ledger(~mach, s)),
+    {==}
+  )
+
+# a work on a node that grew
+def Work.on.frames(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Node<Machine.Q(mach)>>,
+  h: Maybe<&2, Hashes.Hash>
+) -> {
+  State.framed(~mach, s, m) == True{}: Bool
+} -> {Work.framed(~mach, s, Work.on(~mach, m, h)) == True{}: Bool}:
+  match m:
+    case None{}:
+      e => {==}
+    case Some{s2}:
+      e => e
+
+# a new subtree only keeps its ballots a node
+def Work.of.frames(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Trees.Put>
+) -> {Work.framed(~mach, s, Work.of(~mach, s, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      {==}
+    case Some{Trees.Put{h, +ws}}:
+      Work.on.frames(~mach, s, State.put(~mach, s, ws), Some{h})(Put.frames(~mach, s, ws))
+
+# a key set in a tree only keeps its ballots a node
+def Set.frames(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  h: Maybe<&2, Hashes.Hash>,
+  k: List<&2, U32>,
+  x: List<&2, U32>
+) -> {Work.framed(~mach, s, Work.set(~mach, Work{s, h}, k, x)) == True{}: Bool}:
+  Work.of.frames(~mach, s, Node.set(~mach, s, h, k, x))
+
+# the run m, if any, is on a node that grew from s
+def Run.framed(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Run<Machine.Q(mach)>>
+) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{Run{s2, t}}:
+      Node.same_ballots(~mach, s, s2)
+
+# a run is on its own node
+def Framed.self(
+  ~mach: Machine(),
+  r: Run<Machine.Q(mach)>
+) -> {Run.framed(~mach, Run.state(~mach, r), Some{r}) == True{}: Bool}:
+  match r:
+    case Run{s, t}:
+      Frames.refl(~mach, s)
+
+# a run on a node that grew from b is on one that grew from a, when b grew
+# from a
+def Framed.trans(
+  ~mach: Machine(),
+  a: Node<Machine.Q(mach)>,
+  b: Node<Machine.Q(mach)>,
+  +m: Maybe<&2, Run<Machine.Q(mach)>>,
+  e1: {Node.same_ballots(~mach, a, b) == True{}: Bool},
+  e2: {Run.framed(~mach, b, m) == True{}: Bool}
+) -> {Run.framed(~mach, a, m) == True{}: Bool}:
+  match m:
+    case None{}:
+      {==}
+    case Some{Run{s2, t}}:
+      Frames.trans(~mach, a, b, s2)(e1)(e2)
+
+# a run, then a run from it, is on a node that grew
+def Framed.bind(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  +m: Maybe<&2, Run<Machine.Q(mach)>>,
+  f: Run<Machine.Q(mach)> -> Maybe<&2, Run<Machine.Q(mach)>>,
+  hm: {Run.framed(~mach, s, m) == True{}: Bool},
+  hf: @r: Run<Machine.Q(mach)> -> {Run.framed(~mach, Run.state(~mach, r), f(r)) == True{}: Bool}
+) -> {
+  Run.framed(
+    ~mach,
+    s,
+    Maybe.bind(&2, Run<Machine.Q(mach)>, Run<Machine.Q(mach)>, m, f)
+  )
+    == True{}: Bool
+}:
+  match m:
+    case None{}:
+      {==}
+    case Some{Run{+s2, +t}}:
+      Framed.trans(~mach, s, s2, f(Run{s2, t}), hm, hf(Run{s2, t}))
+
+# a work on a node that grew from b is on one that grew from a, when b grew
+# from a
+def Work.frames.trans(
+  ~mach: Machine(),
+  a: Node<Machine.Q(mach)>,
+  b: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Work<Machine.Q(mach)>>,
+  e1: {Node.same_ballots(~mach, a, b) == True{}: Bool},
+  e2: {Work.framed(~mach, b, m) == True{}: Bool}
+) -> {Work.framed(~mach, a, m) == True{}: Bool}:
+  match m:
+    case None{}:
+      {==}
+    case Some{Work{s3, h}}:
+      Frames.trans(~mach, a, b, s3)(e1)(e2)
+
+# a key set in a work on a node that grew from s is on a node that grew from s
+def Work.set.frames(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Work<Machine.Q(mach)>>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>
+) -> {
+  Work.framed(~mach, s, m) == True{}: Bool
+} -> {
+  Work.framed(
+    ~mach,
+    s,
+    Maybe.bind(&2, Work<Machine.Q(mach)>, Work<Machine.Q(mach)>, m, w => Work.set(~mach, w, k, x))
+  )
+    == True{}: Bool
+}:
+  match m:
+    case None{}:
+      e => {==}
+    case Some{Work{+s2, +h}}:
+      e => Work.frames.trans(
+        ~mach,
+        s,
+        s2,
+        Work.set(~mach, Work{s2, h}, k, x),
+        e,
+        Set.frames(~mach, s2, h, k, x)
+      )
+
+# the run m, if any, else r, is on a node that grew from that of r
+def Default.run.frames(
+  ~mach: Machine(),
+  r: Run<Machine.Q(mach)>,
+  m: Maybe<&2, Run<Machine.Q(mach)>>
+) -> {
+  Run.framed(~mach, Run.state(~mach, r), m) == True{}: Bool
+} -> {
+  Node.same_ballots(
+    ~mach,
+    Run.state(~mach, r),
+    Run.state(~mach, Maybe.default(&2, Run<Machine.Q(mach)>, m, r))
+  )
+    == True{}: Bool
+}:
+  match m:
+    case None{}:
+      e => Frames.refl(~mach, Run.state(~mach, r))
+    case Some{Run{s2, t}}:
+      e => e
+
+# a run that is kept when b holds is on a node that grew, when it is
+def Fit.when.frames(
+  ~mach: Machine(),
+  -s: Node<Machine.Q(mach)>,
+  b: Bool,
+  -r: Run<Machine.Q(mach)>,
+  e: {Run.framed(~mach, s, Some{r}) == True{}: Bool}
+) -> {
+  Run.framed(~mach, s, Shared.Maybe.when(Run<Machine.Q(mach)>, b, u => Some{r})) == True{}: Bool
+}:
+  match b:
+    case True{}:
+      e
+    case False{}:
+      {==}
+
+# a run that fits a tip is on a node that grew, when the run is
+def Plan.fit.frames(
+  ~mach: Machine(),
+  -s: Node<Machine.Q(mach)>,
+  after: Maybe<&2, Hashes.Hash>,
+  m: Maybe<&2, Run<Machine.Q(mach)>>
+) -> {
+  Run.framed(~mach, s, m) == True{}: Bool
+} -> {Run.framed(~mach, s, Plan.fit(~mach, after, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      e => {==}
+    case Some{Run{s2, t2}}:
+      e => Fit.when.frames(~mach, s, Root.same(after, Some{Tip.hash(t2)}), Run{s2, t2}, e)
+
+# the run of one of two plans, each on a node that grew
+def Plan.when.frames(
+  ~mach: Machine(),
+  -s: Node<Machine.Q(mach)>,
+  b: Bool,
+  -x: Plan<Machine.Q(mach)>,
+  -y: Plan<Machine.Q(mach)>,
+  hx: {Run.framed(~mach, s, Plan.run(~mach, x)) == True{}: Bool},
+  hy: {Run.framed(~mach, s, Plan.run(~mach, y)) == True{}: Bool}
+) -> {
+  Run.framed(
+    ~mach,
+    s,
+    Plan.run(~mach, Shared.Bool.when(Plan<Machine.Q(mach)>, b, u => x, u => y))
+  )
+    == True{}: Bool
+}:
+  match b:
+    case True{}:
+      hx
+    case False{}:
+      hy
+
+# a node with the ledger of a node that grew from a grew from a
+def Frames.to(
+  ~mach: Machine(),
+  a: Node<Machine.Q(mach)>,
+  b: Node<Machine.Q(mach)>,
+  x: Node<Machine.Q(mach)>,
+  e: {State.ledger(~mach, x) == State.ledger(~mach, b): Ledgers.State(Machine.Q(mach))},
+  g: {Node.same_ballots(~mach, a, b) == True{}: Bool}
+) -> {Node.same_ballots(~mach, a, x) == True{}: Bool}:
+  %Equal.sym(
+    Ledgers.State(Machine.Q(mach)),
+    State.ledger(~mach, x),
+    State.ledger(~mach, b),
+    e
+  ): {
+    Ledgers.State.same_ballots(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      State.ledger(~mach, a),
+      _
+    )
+      == True{}: Bool
+  }
+  g
+
+# one of two nodes, each grown from s
+def Frames.when(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  b: Bool,
+  -x: Node<Machine.Q(mach)>,
+  -y: Node<Machine.Q(mach)>,
+  hx: {Node.same_ballots(~mach, s, x) == True{}: Bool},
+  hy: {Node.same_ballots(~mach, s, y) == True{}: Bool}
+) -> {
+  Node.same_ballots(~mach, s, Shared.Bool.when(Node<Machine.Q(mach)>, b, u => x, u => y)) == True{}: Bool
+}:
+  match b:
+    case True{}:
+      hx
+    case False{}:
+      hy
+
+# a node with the ledger of a node that grew from it grew
+def Frames.back(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  s3: Node<Machine.Q(mach)>,
+  g: {Node.same_ballots(~mach, s, s3) == True{}: Bool}
+) -> {Node.same_ballots(~mach, s, State.led(~mach, s, State.ledger(~mach, s3))) == True{}: Bool}:
+  Frames.led(~mach, s, State.ledger(~mach, s3), g)
+
+# a head moved on a node that grew from a, which grew from s, only keeps its ballots s
+def Advance.moved.frames(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  a: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Node<Machine.Q(mach)>>,
+  +c: Ledgers.Chain,
+  +h: Head,
+  +qs: List<&2, Ledgers.Id>,
+  g: {Node.same_ballots(~mach, s, a) == True{}: Bool}
+) -> {
+  State.framed(~mach, a, m) == True{}: Bool
+} -> {Node.same_ballots(~mach, s, Advance.moved(~mach, s, m, c, h, qs)) == True{}: Bool}:
+  match m:
+    case None{}:
+      e => Frames.refl(~mach, s)
+    case Some{+s3}:
+      e =>
+        +x = State.led(~mach, s, State.ledger(~mach, s3))
+        Frames.to(
+          ~mach,
+          s,
+          x,
+          State.moved(~mach, x, c, h, qs),
+          Led.moved(~mach, x, c, h, qs),
+          Frames.back(~mach, s, s3, Frames.trans(~mach, s, a, s3)(g)(e))
+        )
+
+# a checked step only keeps its ballots a node
+def Advance.ran.frames(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  c: Ledgers.Chain,
+  r: Ledgers.Id,
+  b: Maybe<&2, String>,
+  next: U32,
+  after: Maybe<&2, Hashes.Hash>,
+  qs: List<&2, Ledgers.Id>,
+  m: Maybe<&2, Run<Machine.Q(mach)>>
+) -> {
+  Run.framed(~mach, s, m) == True{}: Bool
+} -> {Node.same_ballots(~mach, s, Advance.ran(~mach, s, c, r, b, next, after, qs, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      e => Frames.refl(~mach, s)
+    case Some{Run{+s2, +t2}}:
+      e =>
+        +hd = {Head{r, b, U32.inc(next), Some{Tip.hash(t2)}}: Head}
+        Frames.when(
+          ~mach,
+          s,
+          Root.same(after, Some{Tip.hash(t2)}),
+          Advance.moved(~mach, s, State.put(~mach, s2, [Tip.words(t2)]), c, hd, qs),
+          s,
+          Advance.moved.frames(
+            ~mach,
+            s,
+            s2,
+            State.put(~mach, s2, [Tip.words(t2)]),
+            c,
+            hd,
+            qs,
+            e
+          )(Put.frames(~mach, s2, [Tip.words(t2)])),
+          Frames.refl(~mach, s)
+        )
+
+# a first head only keeps its ballots a node, once the head m of its line is known
+def First.at.frames(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  +h: Head,
+  m: Maybe<&2, Head>
+) -> {Node.same_ballots(~mach, s, First.at(~mach, s, c, h, m)) == True{}: Bool}:
+  match m:
+    case Some{Head{r, b, n, Some{t}}}:
+      Frames.refl(~mach, s)
+    case Some{Head{r, b, n, None{}}}:
+      Frames.to(
+        ~mach,
+        s,
+        s,
+        State.head(~mach, s, c, h),
+        Led.head(~mach, s, c, h),
+        Frames.refl(~mach, s)
+      )
+    case None{}:
+      Frames.to(
+        ~mach,
+        s,
+        s,
+        State.head(~mach, s, c, h),
+        Led.head(~mach, s, c, h),
+        Frames.refl(~mach, s)
+      )
+
+# a first head on a node that grew from a, which grew from s, only keeps its ballots s
+def Start.head.frames(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  a: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Node<Machine.Q(mach)>>,
+  +c: Ledgers.Chain,
+  +h: Head,
+  g: {Node.same_ballots(~mach, s, a) == True{}: Bool}
+) -> {
+  State.framed(~mach, a, m) == True{}: Bool
+} -> {Node.same_ballots(~mach, s, Start.head(~mach, s, m, c, h)) == True{}: Bool}:
+  match m:
+    case None{}:
+      e => Frames.refl(~mach, s)
+    case Some{+s3}:
+      e =>
+        +x = State.led(~mach, s, State.ledger(~mach, s3))
+        Frames.trans(
+          ~mach,
+          s,
+          x,
+          State.first(~mach, x, c, h)
+        )(
+          Frames.back(~mach, s, s3, Frames.trans(~mach, s, a, s3)(g)(e))
+        )(First.at.frames(~mach, x, c, h, Node.head_of(~mach, x, c)))
+
+# Start.keeps its ballots once the content m of the store is known
+def Start.with.frames(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  +i: Ledgers.Id,
+  os: List<&2, String>,
+  m: Maybe<&2, Work<Machine.Q(mach)>>
+) -> {
+  Work.framed(~mach, s, m) == True{}: Bool
+} -> {Node.same_ballots(~mach, s, Start.with(~mach, s, i, os, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      e => Frames.refl(~mach, s)
+    case Some{Work{+s2, c}}:
+      e =>
+        +t = {Tip{c, None{}, 0, os}: Tip}
+        Start.head.frames(
+          ~mach,
+          s,
+          s2,
+          State.put(~mach, s2, [Tip.words(t)]),
+          Ledgers.Chain{i, None{}},
+          Head{i, None{}, 0, Some{Tip.hash(t)}},
+          e
+        )(Put.frames(~mach, s2, [Tip.words(t)]))
+
+# a line that a node follows only keeps its ballots it, once its head m is known
+def Follow.new.frames(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  +r: Ledgers.Id,
+  +l: Maybe<&2, String>,
+  m: Maybe<&2, Head>
+) -> {Node.same_ballots(~mach, s, Follow.new(~mach, s, r, l, m)) == True{}: Bool}:
+  match m:
+    case Some{h}:
+      Frames.refl(~mach, s)
+    case None{}:
+      Frames.to(
+        ~mach,
+        s,
+        s,
+        State.head(~mach, s, Line.chain(r, l), Head{r, l, 0, None{}}),
+        Led.head(~mach, s, Line.chain(r, l), Head{r, l, 0, None{}}),
+        Frames.refl(~mach, s)
+      )
+
+# the first keys of a store are on a node that grew
+def Firsts.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  os: List<&2, Owner>,
+  +m: Maybe<&2, Work<Machine.Q(mach)>>
+) -> {
+  Work.framed(~mach, s, m) == True{}: Bool
+} -> {Work.framed(~mach, s, Seal.firsts(~mach, ~kern, os, m)) == True{}: Bool}:
+  match os:
+    case Nil{}:
+      e => e
+    case Con{Owner{+n, +k}, r}:
+      e => Firsts.frames(
+        ~mach,
+        ~kern,
+        s,
+        r,
+        Maybe.bind(
+          &2,
+          Work<Machine.Q(mach)>,
+          Work<Machine.Q(mach)>,
+          m,
+          w => Work.set(~mach, w, Machine.seal(mach)(n), Hashes.Hash.code(k, []))
+        )
+      )(Work.set.frames(~mach, s, m, Machine.seal(mach)(n), Hashes.Hash.code(k, []))(e))
+
+# a store that starts only keeps its ballots a node
+def Start.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  i: Ledgers.Id,
+  +os: List<&2, Owner>
+) -> {Node.same_ballots(~mach, s, Node.start(~mach, ~kern, s, i, os)) == True{}: Bool}:
+  Start.with.frames(
+    ~mach,
+    s,
+    i,
+    Owner.names(os),
+    Seal.firsts(~mach, ~kern, os, Some{Work{s, None{}}})
+  )(Firsts.frames(~mach, ~kern, s, os, Some{Work{s, None{}}})(Frames.refl(~mach, s)))
+
+# a new request only keeps its ballots a node
+def Arrive.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  +i: Ledgers.Id,
+  a: Arrival
+) -> {Node.same_ballots(~mach, s, Arrive.at(~mach, ~kern, s, i, a)) == True{}: Bool}:
+  match a:
+    case Arrival.Starts{os}:
+      Start.frames(~mach, ~kern, s, i, os)
+    case Arrival.Waits{+r, +l}:
+      +s1 = Node.follow(~mach, s, r, l)
+      Frames.to(
+        ~mach,
+        s,
+        s1,
+        State.wait(~mach, s1, Line.chain(r, l), i),
+        Led.waits(~mach, s1, Line.chain(r, l), i),
+        Follow.new.frames(~mach, s, r, l, Node.head_of(~mach, s, Line.chain(r, l)))
+      )
+
+# the new requests among cells only grow a node
+def Take.asks.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  cs: List<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
+  +old: Ledgers.State(Machine.Q(mach)),
+  +s: Node<Machine.Q(mach)>
+) -> {Node.same_ballots(~mach, s, Take.asks(~mach, ~kern, cs, old, s)) == True{}: Bool}:
+  match cs:
+    case Nil{}:
+      Frames.refl(~mach, s)
+    case Con{Cells.One{Ledgers.Entry.Ask{+i, t, +q}}, +rest}:
+      +s1 = Shared.Bool.when(
+        Node<Machine.Q(mach)>,
+        Maybe.is_none(
+          &2,
+          Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+          Ledgers.State.get(~Machine.Q(mach), old, Ledgers.Slot.ask(i))
+        ),
+        u => Node.arrive(~mach, ~kern, s, i, q),
+        u => s
+      )
+      Frames.trans(
+        ~mach,
+        s,
+        s1,
+        Take.asks(~mach, ~kern, rest, old, s1)
+      )(
+        Frames.when(
+          ~mach,
+          s,
+          Maybe.is_none(
+            &2,
+            Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+            Ledgers.State.get(~Machine.Q(mach), old, Ledgers.Slot.ask(i))
+          ),
+          Node.arrive(~mach, ~kern, s, i, q),
+          s,
+          Arrive.frames(~mach, ~kern, s, i, Machine.arrival(mach)(q)),
+          Frames.refl(~mach, s)
+        )
+      )(Take.asks.frames(~mach, ~kern, rest, old, s1))
+    case Con{Cells.One{Ledgers.Entry.Vote{v}}, rest}:
+      Take.asks.frames(~mach, ~kern, rest, old, s)
+    case Con{Cells.One{Ledgers.Entry.Data{d}}, rest}:
+      Take.asks.frames(~mach, ~kern, rest, old, s)
+    case Con{Cells.One{Ledgers.Entry.Lie{x}}, rest}:
+      Take.asks.frames(~mach, ~kern, rest, old, s)
+    case Con{Cells.Many{}, rest}:
+      Take.asks.frames(~mach, ~kern, rest, old, s)
+
+# the ledger l2 when b holds, else l, grew from l, when l2 did where b holds
+def Ledger.frames.if(
+  ~mach: Machine(),
+  l: Ledgers.State(Machine.Q(mach)),
+  -l2: Ledgers.State(Machine.Q(mach)),
+  b: Bool,
+  g: {
+    b == True{}: Bool
+  } -> {Ledgers.State.same_ballots(~Machine.Q(mach), ~Machine.same(mach), l, l2) == True{}: Bool}
+) -> {
+  Ledgers.State.same_ballots(
+    ~Machine.Q(mach),
+    ~Machine.same(mach),
+    l,
+    Maybe.default(
+      &2,
+      Ledgers.State(Machine.Q(mach)),
+      Shared.Maybe.when(Ledgers.State(Machine.Q(mach)), b, u => Some{l2}),
+      l
+    )
+  )
+    == True{}: Bool
+}:
+  match b:
+    case True{}:
+      g({==})
+    case False{}:
+      Ledgers.State.same_ballots_refl(~Machine.Q(mach), ~Machine.same(mach), ~Machine.laws(mach), l)
+
+# one of two ledgers, each grown from l
+def Ledger.frames.when(
+  ~mach: Machine(),
+  -l: Ledgers.State(Machine.Q(mach)),
+  b: Bool,
+  -x: Ledgers.State(Machine.Q(mach)),
+  -y: Ledgers.State(Machine.Q(mach)),
+  hx: {Ledgers.State.same_ballots(~Machine.Q(mach), ~Machine.same(mach), l, x) == True{}: Bool},
+  hy: {Ledgers.State.same_ballots(~Machine.Q(mach), ~Machine.same(mach), l, y) == True{}: Bool}
+) -> {
+  Ledgers.State.same_ballots(
+    ~Machine.Q(mach),
+    ~Machine.same(mach),
+    l,
+    Shared.Bool.when(Ledgers.State(Machine.Q(mach)), b, u => x, u => y)
+  )
+    == True{}: Bool
+}:
+  match b:
+    case True{}:
+      hx
+    case False{}:
+      hy
+
+# the proof of a lie keeps the ballots of a ledger
+def Lie.keep.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  +x: Ledgers.Lie,
+  +l: Ledgers.State(Machine.Q(mach))
+) -> {
+  Ledgers.State.same_ballots(
+    ~Machine.Q(mach),
+    ~Machine.same(mach),
+    l,
+    Maybe.default(&2, Ledgers.State(Machine.Q(mach)), Lie.keep(~mach, ~kern, s, x, l), l)
+  )
+    == True{}: Bool
+}:
+  +l2 = Ledgers.State.put(~Machine.Q(mach), ~Machine.same(mach), l, Ledgers.Slot.lie(x), Ledgers.Entry.Lie{x})
+  Ledger.frames.if(
+    ~mach,
+    l,
+    l2,
+    Lie.keeps(~mach, ~kern, s, x, l),
+    h => Ledgers.State.same_ballots_of(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      ~Machine.laws(mach),
+      l,
+      l2,
+      +r => Ledgers.State.put_ballots_at(~Machine.Q(mach), ~Machine.same(mach), l, Ledgers.Slot.lie(x), Ledgers.Entry.Lie{x}, r)(Ledgers.Slot.lie_other(x)),
+      +r => Ledgers.State.put_ballots_at(~Machine.Q(mach), ~Machine.same(mach), l, Ledgers.Slot.lie(x), Ledgers.Entry.Lie{x}, r)(Ledgers.Slot.lie_other(x))
+    )
+  )
+
+# the lie that a ballot makes with one of some signings only keeps its ballots a ledger
+def Lie.against.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  xs: List<&2, Signing>,
+  +b: Ledgers.Ballot,
+  +l: Ledgers.State(Machine.Q(mach))
+) -> {
+  Ledgers.State.same_ballots(
+    ~Machine.Q(mach),
+    ~Machine.same(mach),
+    l,
+    Lie.against(~mach, ~kern, s, xs, b, l)
+  )
+    == True{}: Bool
+}:
+  match xs:
+    case Nil{}:
+      Ledgers.State.same_ballots_refl(~Machine.Q(mach), ~Machine.same(mach), ~Machine.laws(mach), l)
+    case Con{Signing{k, a}, +r}:
+      +x = {Ledgers.Lie{k, b, a}: Ledgers.Lie}
+      +l1 = Maybe.default(&2, Ledgers.State(Machine.Q(mach)), Lie.keep(~mach, ~kern, s, x, l), l)
+      Ledgers.State.same_ballots_trans(
+        ~Machine.Q(mach),
+        ~Machine.same(mach),
+        ~Machine.laws(mach),
+        l,
+        l1,
+        Lie.against(~mach, ~kern, s, r, b, l1)
+      )(Lie.keep.frames(~mach, ~kern, s, x, l))(Lie.against.frames(~mach, ~kern, s, r, b, l1))
+
+# the lie that a ballot shows only keeps its ballots a ledger
+def Lie.detect.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  +b: Ledgers.Ballot,
+  +l: Ledgers.State(Machine.Q(mach))
+) -> {
+  Ledgers.State.same_ballots(
+    ~Machine.Q(mach),
+    ~Machine.same(mach),
+    l,
+    Lie.detect(~mach, ~kern, s, b, l)
+  )
+    == True{}: Bool
+}:
+  +xs = Signings.at(
+    Keys.signed(State.keys(~mach, s)),
+    Seal.link(Ballot.store(b), Ballot.node(b), Ballot.prev(b))
+  )
+  Ledger.frames.when(
+    ~mach,
+    l,
+    Signings.has(xs, b),
+    l,
+    Lie.against(~mach, ~kern, s, xs, b, l),
+    Ledgers.State.same_ballots_refl(~Machine.Q(mach), ~Machine.same(mach), ~Machine.laws(mach), l),
+    Lie.against.frames(~mach, ~kern, s, xs, b, l)
+  )
+
+# the lies that cells bring or show only grow a ledger
+def Lies.into.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  cs: List<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
+  +l: Ledgers.State(Machine.Q(mach))
+) -> {
+  Ledgers.State.same_ballots(
+    ~Machine.Q(mach),
+    ~Machine.same(mach),
+    l,
+    Lies.into(~mach, ~kern, s, cs, l)
+  )
+    == True{}: Bool
+}:
+  match cs:
+    case Nil{}:
+      Ledgers.State.same_ballots_refl(~Machine.Q(mach), ~Machine.same(mach), ~Machine.laws(mach), l)
+    case Con{Cells.One{Ledgers.Entry.Lie{+x}}, +rest}:
+      +l1 = Maybe.default(&2, Ledgers.State(Machine.Q(mach)), Lie.keep(~mach, ~kern, s, x, l), l)
+      Ledgers.State.same_ballots_trans(
+        ~Machine.Q(mach),
+        ~Machine.same(mach),
+        ~Machine.laws(mach),
+        l,
+        l1,
+        Lies.into(~mach, ~kern, s, rest, l1)
+      )(Lie.keep.frames(~mach, ~kern, s, x, l))(Lies.into.frames(~mach, ~kern, s, rest, l1))
+    case Con{Cells.One{Ledgers.Entry.Vote{+b}}, +rest}:
+      +l1 = Lie.detect(~mach, ~kern, s, b, l)
+      Ledgers.State.same_ballots_trans(
+        ~Machine.Q(mach),
+        ~Machine.same(mach),
+        ~Machine.laws(mach),
+        l,
+        l1,
+        Lies.into(~mach, ~kern, s, rest, l1)
+      )(Lie.detect.frames(~mach, ~kern, s, b, l))(Lies.into.frames(~mach, ~kern, s, rest, l1))
+    case Con{Cells.One{Ledgers.Entry.Ask{i, t, q}}, rest}:
+      Lies.into.frames(~mach, ~kern, s, rest, l)
+    case Con{Cells.One{Ledgers.Entry.Data{d}}, rest}:
+      Lies.into.frames(~mach, ~kern, s, rest, l)
+    case Con{Cells.Many{}, rest}:
+      Lies.into.frames(~mach, ~kern, s, rest, l)
+
+# the lies that cells bring or show only grow a node
+def Lies.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  +cs: List<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+) -> {Node.same_ballots(~mach, s, Lies.take(~mach, ~kern, s, cs)) == True{}: Bool}:
+  Frames.led(
+    ~mach,
+    s,
+    Lies.into(~mach, ~kern, s, cs, State.ledger(~mach, s)),
+    Lies.into.frames(~mach, ~kern, s, cs, State.ledger(~mach, s))
+  )
+
+# a run with only its data keeps the ballots of the node before
+def Data.frames(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Run<Machine.Q(mach)>>
+) -> {Run.framed(~mach, s, Run.data(~mach, s, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      {==}
+    case Some{Run{+s2, t}}:
+      +l = Ledgers.State.with_data(~Machine.Q(mach), State.ledger(~mach, s), State.ledger(~mach, s2))
+      Frames.led(
+        ~mach,
+        s,
+        l,
+        Ledgers.State.same_ballots_of(
+          ~Machine.Q(mach),
+          ~Machine.same(mach),
+          ~Machine.laws(mach),
+          State.ledger(~mach, s),
+          l,
+          +r => Ledgers.State.with_data_ballots_at(~Machine.Q(mach), State.ledger(~mach, s), State.ledger(~mach, s2), r),
+          +r => Ledgers.State.with_data_ballots_at(~Machine.Q(mach), State.ledger(~mach, s), State.ledger(~mach, s2), r)
+        )
+      )
+
+# a request keeps the ballots of a run's node, whatever the kernel: it keeps
+# only data of what the kernel gives (Run.data)
+def Asked.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +r: Run<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  +i: Ledgers.Id,
+  +a: Maybe<&2, Ledgers.Asked<Machine.Q(mach)>>
+) -> {
+  Run.framed(~mach, Run.state(~mach, r), Step.asked(~mach, ~kern, r, c, i, a)) == True{}: Bool
+}:
+  match a:
+    case None{}:
+      {==}
+    case Some{Ledgers.Asked{t, +q}}:
+      Data.frames(~mach, Run.state(~mach, r), Kernel.change(mach, kern)(r)(c)(i)(q))
+
+# a request that the log holds or not only keeps its ballots a run's node
+def Fresh.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +r: Run<Machine.Q(mach)>,
+  c: Ledgers.Chain,
+  +i: Ledgers.Id,
+  +o: Maybe<&2, Out>
+) -> {
+  Run.framed(
+    ~mach,
+    Run.state(~mach, r),
+    Step.fresh(~mach, ~kern, r, c, i, o)
+  )
+    == True{}: Bool
+}:
+  match o:
+    case Some{x}:
+      Framed.self(~mach, r)
+    case None{}:
+      Asked.frames(~mach, ~kern, r, c, i, Node.asked(~mach, Run.state(~mach, r), i))
+
+# one request of a step only keeps its ballots a run's node
+def One.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +r: Run<Machine.Q(mach)>,
+  c: Ledgers.Chain,
+  +i: Ledgers.Id
+) -> {
+  Run.framed(
+    ~mach,
+    Run.state(~mach, r),
+    Step.one(~mach, ~kern, r, c, i)
+  )
+    == True{}: Bool
+}:
+  Fresh.frames(~mach, ~kern, r, c, i, Line.out(~mach, Run.state(~mach, r), Run.tip(~mach, r), i))
+
+# the requests of a step only grow a run's node
+def All.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  +qs: List<&2, Ledgers.Id>,
+  +m: Maybe<&2, Run<Machine.Q(mach)>>
+) -> {
+  Run.framed(~mach, s, m) == True{}: Bool
+} -> {Run.framed(~mach, s, Step.all(~mach, ~kern, c, qs, m)) == True{}: Bool}:
+  match qs:
+    case Nil{}:
+      h => h
+    case Con{+i, rest}:
+      h => All.frames(
+        ~mach,
+        ~kern,
+        s,
+        c,
+        rest,
+        Maybe.bind(
+          &2,
+          Run<Machine.Q(mach)>,
+          Run<Machine.Q(mach)>,
+          m,
+          r => Step.one(~mach, ~kern, r, c, i)
+        )
+      )(
+        Framed.bind(
+          ~mach,
+          s,
+          m,
+          r => Step.one(~mach, ~kern, r, c, i),
+          h,
+          r => One.frames(~mach, ~kern, r, c, i)
+        )
+      )
+
+# a step only keeps its ballots a node: its run is on a node that keeps every entry
+def Run.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  c: Ledgers.Chain,
+  t: Tip,
+  qs: List<&2, Ledgers.Id>
+) -> {
+  Run.framed(~mach, s, Step.run(~mach, ~kern, s, c, t, qs)) == True{}: Bool
+}:
+  All.frames(~mach, ~kern, s, c, qs, Some{Run{s, t}})(Frames.refl(~mach, s))
+
+# the run of the requests that can run is on a node that grew
+def Some.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +c: Ledgers.Chain,
+  qs: List<&2, Ledgers.Id>,
+  +r: Run<Machine.Q(mach)>
+) -> {
+  Run.framed(
+    ~mach,
+    Run.state(~mach, r),
+    Some{Picked.run(~mach, Step.some(~mach, ~kern, c, qs, r))}
+  )
+    == True{}: Bool
+}:
+  match qs:
+    case Nil{}:
+      Framed.self(~mach, r)
+    case Con{+i, +rest}:
+      +m = Step.one(~mach, ~kern, r, c, i)
+      +r2 = Maybe.default(&2, Run<Machine.Q(mach)>, m, r)
+      %Equal.sym(
+        Run<Machine.Q(mach)>,
+        Picked.run(
+          ~mach,
+          Picked.add(
+            ~mach,
+            Maybe.is_some(&2, Run<Machine.Q(mach)>, m),
+            i,
+            Step.some(~mach, ~kern, c, rest, r2)
+          )
+        ),
+        Picked.run(~mach, Step.some(~mach, ~kern, c, rest, r2)),
+        Add.run(
+          ~mach,
+          Maybe.is_some(&2, Run<Machine.Q(mach)>, m),
+          i,
+          Step.some(~mach, ~kern, c, rest, r2)
+        )
+      ): {Run.framed(~mach, Run.state(~mach, r), Some{_}) == True{}: Bool}
+      Framed.trans(
+        ~mach,
+        Run.state(~mach, r),
+        Run.state(~mach, r2),
+        Some{Picked.run(~mach, Step.some(~mach, ~kern, c, rest, r2))},
+        Default.run.frames(~mach, r, m)(One.frames(~mach, ~kern, r, c, i)),
+        Some.frames(~mach, ~kern, c, rest, r2)
+      )
+
+# the run of the plan of an owner that proposes freely is on a node that grew
+def Plan.own.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  t: Tip,
+  -from: List<&2, String>
+) -> {
+  Run.framed(
+    ~mach,
+    s,
+    Plan.run(~mach, Plan.own(~mach, ~kern, s, c, t, from))
+  )
+    == True{}: Bool
+}:
+  Some.frames(
+    ~mach,
+    ~kern,
+    c,
+    Cast.mine(~mach, ~kern, s, Wait.order(~mach, s, c)),
+    Run{s, t}
+  )
+
+# the run of the plan for a step that another ballot names is on a node that
+# grew
+def Plan.copy.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  +t: Tip,
+  th: Maybe<&2, Hashes.Hash>,
+  m: Maybe<&2, Ledgers.Vote>,
+  -from: List<&2, String>
+) -> {
+  Run.framed(
+    ~mach,
+    s,
+    Plan.run(~mach, Plan.copy(~mach, ~kern, s, c, t, th, m, from))
+  )
+    == True{}: Bool
+}:
+  match m:
+    case None{}:
+      {==}
+    case Some{Ledgers.Vote{before, +qs, after}}:
+      Plan.when.frames(
+        ~mach,
+        s,
+        List.all.if(
+          u => Cast.all_mine(~mach, ~kern, s, qs),
+          Root.same(before, th)
+        ),
+        Plan{
+          qs,
+          Plan.fit(~mach, after, Step.run(~mach, ~kern, s, c, t, qs)),
+          from
+        },
+        Plan{[], None{}, []},
+        Plan.fit.frames(
+          ~mach,
+          s,
+          after,
+          Step.run(~mach, ~kern, s, c, t, qs)
+        )(Run.frames(~mach, ~kern, s, c, t, qs)),
+        {==}
+      )
+
+# the run of the plan of the proposer of a later round is on a node that grew
+def Plan.later.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  c: Ledgers.Chain,
+  w: Ledgers.Where,
+  t: Tip,
+  th: Maybe<&2, Hashes.Hash>,
+  os: List<&2, String>,
+  from: List<&2, String>,
+  m: Maybe<&2, Ledgers.Last>
+) -> {
+  Run.framed(
+    ~mach,
+    s,
+    Plan.run(~mach, Plan.later(~mach, ~kern, s, c, w, t, th, os, from, m))
+  )
+    == True{}: Bool
+}:
+  match m:
+    case None{}:
+      Plan.when.frames(
+        ~mach,
+        s,
+        Owners.major(os, from),
+        Plan.own(~mach, ~kern, s, c, t, from),
+        Plan{[], None{}, []},
+        Plan.own.frames(~mach, ~kern, s, c, t, from),
+        {==}
+      )
+    case Some{Ledgers.Last{r, +v}}:
+      ok = Passes.for(~mach, s, w, from, r, v)
+      Plan.when.frames(
+        ~mach,
+        s,
+        Owners.major(os, ok),
+        Plan.copy(~mach, ~kern, s, c, t, th, Some{v}, ok),
+        Plan{[], None{}, []},
+        Plan.copy.frames(~mach, ~kern, s, c, t, th, Some{v}, ok),
+        {==}
+      )
+
+# a plan that its passes allow is the plan, or no plan
+def Plan.allowed.frames(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  w: Ledgers.Where,
+  th: Maybe<&2, Hashes.Hash>,
+  os: List<&2, String>,
+  p: Plan<Machine.Q(mach)>
+) -> {
+  Run.framed(~mach, s, Plan.run(~mach, p)) == True{}: Bool
+} -> {Run.framed(~mach, s, Plan.run(~mach, Plan.allowed(~mach, s, w, th, os, p))) == True{}: Bool}:
+  match p:
+    case Plan{qs, None{}, from}:
+      e => e
+    case Plan{+qs, Some{Run{s2, t2}}, +from}:
+      e => Plan.when.frames(
+        ~mach,
+        s,
+        Vote.allowed(~mach, s, w, os, Ledgers.Vote{th, qs, Some{Tip.hash(t2)}}, from),
+        Plan{qs, Some{Run{s2, t2}}, from},
+        Plan{[], None{}, []},
+        e,
+        {==}
+      )
+
+# the run of the plan of the proposer is on a node that grew
+def Plan.lead.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  +w: Ledgers.Where,
+  +t: Tip,
+  +th: Maybe<&2, Hashes.Hash>,
+  +os: List<&2, String>
+) -> {
+  Run.framed(
+    ~mach,
+    s,
+    Plan.run(~mach, Plan.lead(~mach, ~kern, s, c, w, t, th, os))
+  )
+    == True{}: Bool
+}:
+  +from = Passes.of(~mach, s, w, os)
+  later = Plan.later(
+    ~mach,
+    ~kern,
+    s,
+    c,
+    w,
+    t,
+    th,
+    os,
+    from,
+    Passes.last(~mach, s, w, from)
+  )
+  Plan.allowed.frames(
+    ~mach,
+    s,
+    w,
+    th,
+    os,
+    Shared.Bool.when(
+      Plan<Machine.Q(mach)>,
+      Nat.is_eq(Where.round(w), 0n),
+      u => Plan.own(~mach, ~kern, s, c, t, []),
+      u => later
+    )
+  )(
+    Plan.when.frames(
+      ~mach,
+      s,
+      Nat.is_eq(Where.round(w), 0n),
+      Plan.own(~mach, ~kern, s, c, t, []),
+      later,
+      Plan.own.frames(~mach, ~kern, s, c, t, []),
+      Plan.later.frames(~mach, ~kern, s, c, w, t, th, os, from, Passes.last(~mach, s, w, from))
+    )
+  )
+
+# the run of the plan of another owner is on a node that grew
+def Plan.follow.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  c: Ledgers.Chain,
+  w: Ledgers.Where,
+  t: Tip,
+  th: Maybe<&2, Hashes.Hash>,
+  os: List<&2, String>,
+  m: Maybe<&2, Ledgers.Act>
+) -> {
+  Run.framed(
+    ~mach,
+    s,
+    Plan.run(~mach, Plan.follow(~mach, ~kern, s, c, w, t, th, os, m))
+  )
+    == True{}: Bool
+}:
+  match m:
+    case Some{Ledgers.Act.Vote{+v, from}}:
+      Plan.when.frames(
+        ~mach,
+        s,
+        Vote.allowed(~mach, s, w, os, v, from),
+        Plan.copy(~mach, ~kern, s, c, t, th, Some{v}, from),
+        Plan{[], None{}, []},
+        Plan.copy.frames(~mach, ~kern, s, c, t, th, Some{v}, from),
+        {==}
+      )
+    case Some{Ledgers.Act.Pass{l}}:
+      {==}
+    case None{}:
+      {==}
+
+# the run of what a node casts for is on a node that grew
+def Plan.of.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  n: String,
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  +w: Ledgers.Where,
+  +t: Tip,
+  +th: Maybe<&2, Hashes.Hash>,
+  +os: List<&2, String>,
+  turn: Maybe<&2, String>
+) -> {
+  Run.framed(
+    ~mach,
+    s,
+    Plan.run(~mach, Plan.of(~mach, ~kern, n, s, c, w, t, th, os, turn))
+  )
+    == True{}: Bool
+}:
+  match turn:
+    case None{}:
+      {==}
+    case Some{+p}:
+      Plan.when.frames(
+        ~mach,
+        s,
+        String.eq(p, n),
+        Plan.lead(~mach, ~kern, s, c, w, t, th, os),
+        Plan.follow(
+          ~mach,
+          ~kern,
+          s,
+          c,
+          w,
+          t,
+          th,
+          os,
+          Cast.act(~mach, s, w, p)
+        ),
+        Plan.lead.frames(~mach, ~kern, s, c, w, t, th, os),
+        Plan.follow.frames(~mach, ~kern, s, c, w, t, th, os, Cast.act(~mach, s, w, p))
+      )
+
+# Node.advance only keeps its ballots a node, once the decided step m is known
+def Advance.step.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  h: Head,
+  +t: Tip,
+  m: Maybe<&2, Ledgers.Vote>
+) -> {
+  Node.same_ballots(
+    ~mach,
+    s,
+    Advance.step(~mach, ~kern, s, c, h, t, m)
+  )
+    == True{}: Bool
+}:
+  match h m:
+    case Head{r, b, next, th} Some{Ledgers.Vote{before, +qs, after}}:
+      Frames.when(
+        ~mach,
+        s,
+        Root.same(before, th),
+        Advance.ran(
+          ~mach,
+          s,
+          c,
+          r,
+          b,
+          next,
+          after,
+          qs,
+          Step.run(~mach, ~kern, s, c, t, qs)
+        ),
+        s,
+        Advance.ran.frames(
+          ~mach,
+          s,
+          c,
+          r,
+          b,
+          next,
+          after,
+          qs,
+          Step.run(~mach, ~kern, s, c, t, qs)
+        )(Run.frames(~mach, ~kern, s, c, t, qs)),
+        Frames.refl(~mach, s)
+      )
+    case Head{r, b, next, th} None{}:
+      Frames.refl(~mach, s)
+
+# Node.advance only keeps its ballots a node, at the head h whose tip is m
+def Advance.at.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  +h: Head,
+  m: Maybe<&2, Tip>
+) -> {
+  Node.same_ballots(~mach, s, Advance.at(~mach, ~kern, s, c, h, m)) == True{}: Bool
+}:
+  match m:
+    case None{}:
+      Frames.refl(~mach, s)
+    case Some{+t}:
+      Advance.step.frames(
+        ~mach,
+        ~kern,
+        s,
+        c,
+        h,
+        t,
+        Height.decide(
+          ~mach,
+          s,
+          c,
+          Head.next(h),
+          Tip.owners(t),
+          Round.seen(~mach, s, c, Head.next(h))
+        )
+      )
+
+# Advances.keeps its ballots once the head m is known
+def Advances.at.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  f: Nat,
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  m: Maybe<&2, Head>
+) -> {
+  Node.same_ballots(~mach, s, Advances.at(~mach, ~kern, f, s, c, m)) == True{}: Bool
+}:
+  match f m:
+    case 0n x:
+      Frames.refl(~mach, s)
+    case 1n+p None{}:
+      Frames.refl(~mach, s)
+    case 1n+(+p) Some{+h}:
+      +s1 = Advance.at(~mach, ~kern, s, c, h, Head.tip(~mach, s, h))
+      +m1 = Node.head_of(~mach, s1, c)
+      Frames.when(
+        ~mach,
+        s,
+        Heads.level(Some{h}, m1),
+        s1,
+        Advances.at(~mach, ~kern, p, s1, c, m1),
+        Advance.at.frames(~mach, ~kern, s, c, h, Head.tip(~mach, s, h)),
+        Frames.trans(
+          ~mach,
+          s,
+          s1,
+          Advances.at(~mach, ~kern, p, s1, c, m1)
+        )(
+          Advance.at.frames(~mach, ~kern, s, c, h, Head.tip(~mach, s, h))
+        )(Advances.at.frames(~mach, ~kern, p, s1, c, m1))
+      )
+
+# a head that moves over each decided step only keeps its ballots a node
+def Advances.frames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  f: Nat,
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain
+) -> {
+  Node.same_ballots(~mach, s, Node.advances(~mach, ~kern, f, s, c)) == True{}: Bool
+}:
+  Advances.at.frames(~mach, ~kern, f, s, c, Node.head_of(~mach, s, c))
+
 # Seals
 # -----
 # a node keeps only ballots that it checked: a ballot that it accepts is the
