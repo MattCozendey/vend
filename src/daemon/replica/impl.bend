@@ -12738,3 +12738,1914 @@ def Lawful.outs(l: Lawful()) -> Lawful.Outs(Lawful.kernel(l)):
   match l:
     case Tuple{k, Tuple{g, Tuple{kp, o}}}:
       o
+
+# a request that the node holds or not only grows a run's node
+def Asked.grows(
+  ~L: Lawful(),
+  r: Run<Machine.Q(Lawful.machine(L))>,
+  c: Ledgers.Chain,
+  i: Ledgers.Id,
+  +a: Maybe<&2, Ledgers.Asked<Machine.Q(Lawful.machine(L))>>
+) -> {Run.after(~Lawful.machine(L), Run.state(~Lawful.machine(L), r), Step.asked(~Lawful.kernel(L), r, c, i, a)) == True{}: Bool}:
+  match a:
+    case None{}:
+      {==}
+    case Some{Ledgers.Asked{t, q}}:
+      Lawful.grows(L)(r)(c)(i)(q)
+
+# a request that the log holds or not only grows a run's node
+def Fresh.grows(
+  ~L: Lawful(),
+  +r: Run<Machine.Q(Lawful.machine(L))>,
+  c: Ledgers.Chain,
+  +i: Ledgers.Id,
+  +o: Maybe<&2, Out>
+) -> {Run.after(~Lawful.machine(L), Run.state(~Lawful.machine(L), r), Step.fresh(~Lawful.kernel(L), r, c, i, o)) == True{}: Bool}:
+  match o:
+    case Some{x}:
+      After.self(~Lawful.machine(L), r)
+    case None{}:
+      Asked.grows(~L, r, c, i, Node.asked(~Lawful.machine(L), Run.state(~Lawful.machine(L), r), i))
+
+# one request of a step only grows a run's node
+def One.grows(
+  ~L: Lawful(),
+  +r: Run<Machine.Q(Lawful.machine(L))>,
+  c: Ledgers.Chain,
+  +i: Ledgers.Id
+) -> {Run.after(~Lawful.machine(L), Run.state(~Lawful.machine(L), r), Step.one(~Lawful.kernel(L), r, c, i)) == True{}: Bool}:
+  Fresh.grows(~L, r, c, i, Line.out(~Lawful.machine(L), Run.state(~Lawful.machine(L), r), Run.tip(~Lawful.machine(L), r), i))
+
+# the requests of a step only grow a run's node
+def All.grows(
+  ~L: Lawful(),
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain,
+  +qs: List<&2, Ledgers.Id>,
+  +m: Maybe<&2, Run<Machine.Q(Lawful.machine(L))>>
+) -> {
+  Run.after(~Lawful.machine(L), s, m) == True{}: Bool
+} -> {Run.after(~Lawful.machine(L), s, Step.all(~Lawful.kernel(L), c, qs, m)) == True{}: Bool}:
+  match qs:
+    case Nil{}:
+      h => h
+    case Con{+i, rest}:
+      h => All.grows(~L, 
+        s,
+        c,
+        rest,
+        Maybe.bind(&2, Run<Machine.Q(Lawful.machine(L))>, Run<Machine.Q(Lawful.machine(L))>, m, r => Step.one(~Lawful.kernel(L), r, c, i))
+      )(After.bind(~Lawful.machine(L), s, m, r => Step.one(~Lawful.kernel(L), r, c, i), h, r => One.grows(~L, r, c, i)))
+
+# a step only grows a node: its run is on a node that keeps every entry
+def Run.grows(
+  ~L: Lawful(),
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  c: Ledgers.Chain,
+  t: Tip,
+  qs: List<&2, Ledgers.Id>
+) -> {Run.after(~Lawful.machine(L), s, Step.run(~Lawful.kernel(L), s, c, t, qs)) == True{}: Bool}:
+  All.grows(~L, s, c, qs, Some{Run{s, t}})(Grows.refl(~Lawful.machine(L), s))
+
+# the run of the requests that can run is on a node that grew
+def Some.grows(
+  ~L: Lawful(),
+  +c: Ledgers.Chain,
+  qs: List<&2, Ledgers.Id>,
+  +r: Run<Machine.Q(Lawful.machine(L))>
+) -> {
+  Run.after(~Lawful.machine(L), 
+    Run.state(~Lawful.machine(L), r),
+    Some{Picked.run(~Lawful.machine(L), Step.some(~Lawful.kernel(L), c, qs, r))}
+  )
+    == True{}: Bool
+}:
+  match qs:
+    case Nil{}:
+      After.self(~Lawful.machine(L), r)
+    case Con{+i, +rest}:
+      +m = Step.one(~Lawful.kernel(L), r, c, i)
+      +r2 = Maybe.default(&2, Run<Machine.Q(Lawful.machine(L))>, m, r)
+      %Equal.sym(
+        Run<Machine.Q(Lawful.machine(L))>,
+        Picked.run(~Lawful.machine(L), 
+          Picked.add(~Lawful.machine(L), 
+            Maybe.is_some(&2, Run<Machine.Q(Lawful.machine(L))>, m),
+            i,
+            Step.some(~Lawful.kernel(L), c, rest, r2)
+          )
+        ),
+        Picked.run(~Lawful.machine(L), Step.some(~Lawful.kernel(L), c, rest, r2)),
+        Add.run(~Lawful.machine(L), Maybe.is_some(&2, Run<Machine.Q(Lawful.machine(L))>, m), i, Step.some(~Lawful.kernel(L), c, rest, r2))
+      ): {Run.after(~Lawful.machine(L), Run.state(~Lawful.machine(L), r), Some{_}) == True{}: Bool}
+      After.trans(~Lawful.machine(L), 
+        Run.state(~Lawful.machine(L), r),
+        Run.state(~Lawful.machine(L), r2),
+        Some{Picked.run(~Lawful.machine(L), Step.some(~Lawful.kernel(L), c, rest, r2))},
+        Default.run.grows(~Lawful.machine(L), r, m)(One.grows(~L, r, c, i)),
+        Some.grows(~L, c, rest, r2)
+      )
+
+# the run of the plan of an owner that proposes freely is on a node that grew
+def Plan.own.grows(
+  ~L: Lawful(),
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain,
+  t: Tip,
+  -from: List<&2, String>
+) -> {Run.after(~Lawful.machine(L), s, Plan.run(~Lawful.machine(L), Plan.own(~Lawful.kernel(L), s, c, t, from))) == True{}: Bool}:
+  Some.grows(~L, c, Cast.mine(~Lawful.kernel(L), s, Wait.of(~Lawful.machine(L), s, c)), Run{s, t})
+
+# the run of the plan for a step that another ballot names is on a node that
+# grew
+def Plan.copy.grows(
+  ~L: Lawful(),
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain,
+  +t: Tip,
+  th: Maybe<&2, Hashes.Hash>,
+  m: Maybe<&2, Ledgers.Vote>,
+  -from: List<&2, String>
+) -> {Run.after(~Lawful.machine(L), s, Plan.run(~Lawful.machine(L), Plan.copy(~Lawful.kernel(L), s, c, t, th, m, from))) == True{}: Bool}:
+  match m:
+    case None{}:
+      {==}
+    case Some{Ledgers.Vote{before, +qs, after}}:
+      Plan.when.grows(~Lawful.machine(L), 
+        s,
+        List.all.if(u => Cast.all_mine(~Lawful.kernel(L), s, qs), Root.same(before, th)),
+        Plan{qs, Plan.fit(~Lawful.machine(L), after, Step.run(~Lawful.kernel(L), s, c, t, qs)), from},
+        Plan{[], None{}, []},
+        Plan.fit.grows(~Lawful.machine(L), s, after, Step.run(~Lawful.kernel(L), s, c, t, qs))(Run.grows(~L, s, c, t, qs)),
+        {==}
+      )
+
+# the run of the plan of the proposer of a later round is on a node that grew
+def Plan.later.grows(
+  ~L: Lawful(),
+  s: Node<Machine.Q(Lawful.machine(L))>,
+  c: Ledgers.Chain,
+  w: Ledgers.Where,
+  t: Tip,
+  th: Maybe<&2, Hashes.Hash>,
+  os: List<&2, String>,
+  from: List<&2, String>,
+  m: Maybe<&2, Ledgers.Last>
+) -> {
+  Run.after(~Lawful.machine(L), s, Plan.run(~Lawful.machine(L), Plan.later(~Lawful.kernel(L), s, c, w, t, th, os, from, m))) == True{}: Bool
+}:
+  match m:
+    case None{}:
+      Plan.when.grows(~Lawful.machine(L), 
+        s,
+        Owners.major(os, from),
+        Plan.own(~Lawful.kernel(L), s, c, t, from),
+        Plan{[], None{}, []},
+        Plan.own.grows(~L, s, c, t, from),
+        {==}
+      )
+    case Some{Ledgers.Last{r, v}}:
+      Plan.when.grows(~Lawful.machine(L), 
+        s,
+        Owners.major(os, from),
+        Plan.copy(~Lawful.kernel(L), s, c, t, th, Some{v}, from),
+        Plan{[], None{}, []},
+        Plan.copy.grows(~L, s, c, t, th, Some{v}, from),
+        {==}
+      )
+
+# the run of the plan of the proposer is on a node that grew
+def Plan.lead.grows(
+  ~L: Lawful(),
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain,
+  +w: Ledgers.Where,
+  +t: Tip,
+  th: Maybe<&2, Hashes.Hash>,
+  +os: List<&2, String>
+) -> {Run.after(~Lawful.machine(L), s, Plan.run(~Lawful.machine(L), Plan.lead(~Lawful.kernel(L), s, c, w, t, th, os))) == True{}: Bool}:
+  Plan.when.grows(~Lawful.machine(L), 
+    s,
+    Nat.is_eq(Where.round(w), 0n),
+    Plan.own(~Lawful.kernel(L), s, c, t, []),
+    Plan.later(~Lawful.kernel(L), 
+      s,
+      c,
+      w,
+      t,
+      th,
+      os,
+      Passes.of(~Lawful.machine(L), s, w, os),
+      Passes.last(~Lawful.machine(L), s, w, Passes.of(~Lawful.machine(L), s, w, os))
+    ),
+    Plan.own.grows(~L, s, c, t, []),
+    Plan.later.grows(~L, 
+      s,
+      c,
+      w,
+      t,
+      th,
+      os,
+      Passes.of(~Lawful.machine(L), s, w, os),
+      Passes.last(~Lawful.machine(L), s, w, Passes.of(~Lawful.machine(L), s, w, os))
+    )
+  )
+
+# the run of the plan of another owner is on a node that grew
+def Plan.follow.grows(
+  ~L: Lawful(),
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  c: Ledgers.Chain,
+  w: Ledgers.Where,
+  t: Tip,
+  th: Maybe<&2, Hashes.Hash>,
+  os: List<&2, String>,
+  m: Maybe<&2, Ledgers.Act>
+) -> {Run.after(~Lawful.machine(L), s, Plan.run(~Lawful.machine(L), Plan.follow(~Lawful.kernel(L), s, c, w, t, th, os, m))) == True{}: Bool}:
+  match m:
+    case Some{Ledgers.Act.Vote{+v, from}}:
+      Plan.when.grows(~Lawful.machine(L), 
+        s,
+        Vote.allowed(~Lawful.machine(L), s, w, os, v, from),
+        Plan.copy(~Lawful.kernel(L), s, c, t, th, Some{v}, from),
+        Plan{[], None{}, []},
+        Plan.copy.grows(~L, s, c, t, th, Some{v}, from),
+        {==}
+      )
+    case Some{Ledgers.Act.Pass{l}}:
+      {==}
+    case None{}:
+      {==}
+
+# the run of what a node casts for is on a node that grew
+def Plan.of.grows(
+  ~L: Lawful(),
+  n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain,
+  +w: Ledgers.Where,
+  +t: Tip,
+  +th: Maybe<&2, Hashes.Hash>,
+  +os: List<&2, String>,
+  turn: Maybe<&2, String>
+) -> {Run.after(~Lawful.machine(L), s, Plan.run(~Lawful.machine(L), Plan.of(~Lawful.kernel(L), n, s, c, w, t, th, os, turn))) == True{}: Bool}:
+  match turn:
+    case None{}:
+      {==}
+    case Some{+p}:
+      Plan.when.grows(~Lawful.machine(L), 
+        s,
+        String.eq(p, n),
+        Plan.lead(~Lawful.kernel(L), s, c, w, t, th, os),
+        Plan.follow(~Lawful.kernel(L), s, c, w, t, th, os, Cast.act(~Lawful.machine(L), s, w, p)),
+        Plan.lead.grows(~L, s, c, w, t, th, os),
+        Plan.follow.grows(~L, s, c, w, t, th, os, Cast.act(~Lawful.machine(L), s, w, p))
+      )
+
+# a ballot in the node's round only grows a node
+def Cast.round.grows(
+  ~L: Lawful(),
+  +n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain,
+  +next: U32,
+  +th: Maybe<&2, Hashes.Hash>,
+  +t: Tip
+) -> {Node.grows(~Lawful.machine(L), s, Cast.round(~Lawful.kernel(L), n, s, c, next, th, t)) == True{}: Bool}:
+  +os = Tip.owners(t)
+  +r = Round.mine(~Lawful.machine(L), n, s, c, next, Round.seen(~Lawful.machine(L), s, c, next))
+  +w = {Ledgers.Where{c, next, r}: Ledgers.Where}
+  +p = Plan.of(~Lawful.kernel(L), 
+    n,
+    s,
+    c,
+    w,
+    t,
+    th,
+    os,
+    Owners.turn(os, U32.add(next, U32.from_nat(r)))
+  )
+  Grows.when(~Lawful.machine(L), 
+    s,
+    Cast.may(~Lawful.machine(L), n, s, w, t, Plan.asks(~Lawful.machine(L), p)),
+    Cast.put(~Lawful.kernel(L), n, w, th, Plan.asks(~Lawful.machine(L), p), Plan.from(~Lawful.machine(L), p), Plan.run(~Lawful.machine(L), p), s),
+    s,
+    Cast.put.grows(~Lawful.kernel(L), 
+      n,
+      w,
+      th,
+      Plan.asks(~Lawful.machine(L), p),
+      Plan.from(~Lawful.machine(L), p),
+      Plan.run(~Lawful.machine(L), p),
+      s
+    )(
+      Plan.of.grows(~L, n, s, c, w, t, th, os, Owners.turn(os, U32.add(next, U32.from_nat(r))))
+    ),
+    Grows.refl(~Lawful.machine(L), s)
+  )
+
+# Node.cast only grows a node, at the head h whose tip is m
+def Cast.at.grows(
+  ~L: Lawful(),
+  +n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain,
+  h: Head,
+  m: Maybe<&2, Tip>
+) -> {Node.grows(~Lawful.machine(L), s, Cast.at(~Lawful.kernel(L), n, s, c, h, m)) == True{}: Bool}:
+  match h m:
+    case Head{r, b, +next, +th} Some{+t}:
+      +s1 = Round.join(~Lawful.kernel(L), n, s, c, next, Tip.owners(t))
+      Grows.trans(~Lawful.machine(L), 
+        s,
+        s1,
+        Cast.round(~Lawful.kernel(L), n, s1, c, next, th, t)
+      )(
+        Round.join.grows(~Lawful.kernel(L), n, s, c, next, Tip.owners(t))
+      )(Cast.round.grows(~L, n, s1, c, next, th, t))
+    case Head{r, b, next, th} None{}:
+      Grows.refl(~Lawful.machine(L), s)
+
+# Node.cast only grows a node, once the head m is known
+def Cast.head.grows(
+  ~L: Lawful(),
+  n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  c: Ledgers.Chain,
+  m: Maybe<&2, Head>
+) -> {Node.grows(~Lawful.machine(L), s, Cast.head(~Lawful.kernel(L), n, s, c, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      Grows.refl(~Lawful.machine(L), s)
+    case Some{+h}:
+      Cast.at.grows(~L, n, s, c, h, Head.tip(~Lawful.machine(L), s, h))
+
+# a node's ballot only grows it
+def Cast.grows(
+  ~L: Lawful(),
+  n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain
+) -> {Node.grows(~Lawful.machine(L), s, Node.cast(~Lawful.kernel(L), n, s, c)) == True{}: Bool}:
+  Cast.head.grows(~L, n, s, c, Node.head_of(~Lawful.machine(L), s, c))
+
+# Node.advance only grows a node, once the decided step m is known
+def Advance.step.grows(
+  ~L: Lawful(),
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain,
+  h: Head,
+  +t: Tip,
+  m: Maybe<&2, Ledgers.Vote>
+) -> {Node.grows(~Lawful.machine(L), s, Advance.step(~Lawful.kernel(L), s, c, h, t, m)) == True{}: Bool}:
+  match h m:
+    case Head{r, b, next, th} Some{Ledgers.Vote{before, +qs, after}}:
+      Grows.when(~Lawful.machine(L), 
+        s,
+        Root.same(before, th),
+        Advance.ran(~Lawful.machine(L), s, c, r, b, next, after, qs, Step.run(~Lawful.kernel(L), s, c, t, qs)),
+        s,
+        Advance.ran.grows(~Lawful.machine(L), 
+          s,
+          c,
+          r,
+          b,
+          next,
+          after,
+          qs,
+          Step.run(~Lawful.kernel(L), s, c, t, qs)
+        )(Run.grows(~L, s, c, t, qs)),
+        Grows.refl(~Lawful.machine(L), s)
+      )
+    case Head{r, b, next, th} None{}:
+      Grows.refl(~Lawful.machine(L), s)
+
+# Node.advance only grows a node, at the head h whose tip is m
+def Advance.at.grows(
+  ~L: Lawful(),
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain,
+  +h: Head,
+  m: Maybe<&2, Tip>
+) -> {Node.grows(~Lawful.machine(L), s, Advance.at(~Lawful.kernel(L), s, c, h, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      Grows.refl(~Lawful.machine(L), s)
+    case Some{+t}:
+      Advance.step.grows(~L, 
+        s,
+        c,
+        h,
+        t,
+        Height.decide(~Lawful.machine(L), 
+          s,
+          c,
+          Head.next(h),
+          Tip.owners(t),
+          Round.seen(~Lawful.machine(L), s, c, Head.next(h))
+        )
+      )
+
+# Node.advance only grows a node, once the head m is known
+def Advance.head.grows(
+  ~L: Lawful(),
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  c: Ledgers.Chain,
+  m: Maybe<&2, Head>
+) -> {Node.grows(~Lawful.machine(L), s, Advance.head(~Lawful.kernel(L), s, c, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      Grows.refl(~Lawful.machine(L), s)
+    case Some{+h}:
+      Advance.at.grows(~L, s, c, h, Head.tip(~Lawful.machine(L), s, h))
+
+# Advances.grows once the head m is known
+def Advances.at.grows(
+  ~L: Lawful(),
+  f: Nat,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain,
+  m: Maybe<&2, Head>
+) -> {Node.grows(~Lawful.machine(L), s, Advances.at(~Lawful.kernel(L), f, s, c, m)) == True{}: Bool}:
+  match f m:
+    case 0n x:
+      Grows.refl(~Lawful.machine(L), s)
+    case 1n+p None{}:
+      Grows.refl(~Lawful.machine(L), s)
+    case 1n+(+p) Some{+h}:
+      +s1 = Advance.at(~Lawful.kernel(L), s, c, h, Head.tip(~Lawful.machine(L), s, h))
+      +m1 = Node.head_of(~Lawful.machine(L), s1, c)
+      Grows.when(~Lawful.machine(L), 
+        s,
+        Heads.level(Some{h}, m1),
+        s1,
+        Advances.at(~Lawful.kernel(L), p, s1, c, m1),
+        Advance.at.grows(~L, s, c, h, Head.tip(~Lawful.machine(L), s, h)),
+        Grows.trans(~Lawful.machine(L), 
+          s,
+          s1,
+          Advances.at(~Lawful.kernel(L), p, s1, c, m1)
+        )(Advance.at.grows(~L, s, c, h, Head.tip(~Lawful.machine(L), s, h)))(Advances.at.grows(~L, p, s1, c, m1))
+      )
+
+# a head that moves over each decided step only grows a node
+def Advances.grows(
+  ~L: Lawful(),
+  f: Nat,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain
+) -> {Node.grows(~Lawful.machine(L), s, Node.advances(~Lawful.kernel(L), f, s, c)) == True{}: Bool}:
+  Advances.at.grows(~L, f, s, c, Node.head_of(~Lawful.machine(L), s, c))
+
+# what a node does at a head only grows it
+def Step.head.grows(
+  ~L: Lawful(),
+  +n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain
+) -> {Node.grows(~Lawful.machine(L), s, Step.head(~Lawful.kernel(L), n, s, c)) == True{}: Bool}:
+  +s1 = Node.advances(~Lawful.kernel(L), 4294967295n, s, c)
+  +s2 = Node.cast(~Lawful.kernel(L), n, s1, c)
+  +s3 = Node.advances(~Lawful.kernel(L), 4294967295n, s2, c)
+  Grows.trans(~Lawful.machine(L), 
+    s,
+    s1,
+    s3
+  )(
+    Advances.grows(~L, 4294967295n, s, c)
+  )(Grows.trans(~Lawful.machine(L), s1, s2, s3)(Cast.grows(~L, n, s1, c))(Advances.grows(~L, 4294967295n, s2, c)))
+
+# what a node does on a line only grows it
+def Step.grows(
+  ~L: Lawful(),
+  +n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain
+) -> {Node.grows(~Lawful.machine(L), s, Node.step(~Lawful.kernel(L), n, s, c)) == True{}: Bool}:
+  +s1 = Node.open(~Lawful.machine(L), s, c)
+  Grows.trans(~Lawful.machine(L), 
+    s,
+    s1,
+    Step.head(~Lawful.kernel(L), n, s1, c)
+  )(Open.at.grows(~Lawful.machine(L), s, c, Node.head_of(~Lawful.machine(L), s, c)))(Step.head.grows(~L, n, s1, c))
+
+# a pass to the next round only grows a node
+def Pass.grows(
+  ~L: Lawful(),
+  +n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain
+) -> {Node.grows(~Lawful.machine(L), s, Node.pass(~Lawful.kernel(L), n, s, c)) == True{}: Bool}:
+  +s1 = Pass.head(~Lawful.kernel(L), n, s, c, Node.head_of(~Lawful.machine(L), s, c))
+  Grows.trans(~Lawful.machine(L), 
+    s,
+    s1,
+    Node.step(~Lawful.kernel(L), n, s1, c)
+  )(Pass.head.grows(~Lawful.kernel(L), n, s, c, Node.head_of(~Lawful.machine(L), s, c)))(Step.grows(~L, n, s1, c))
+
+# a new request only grows a node
+def Ask.new.grows(
+  ~L: Lawful(),
+  +n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +e: Envelope,
+  +q: Machine.Q(Lawful.machine(L))
+) -> {Node.grows(~Lawful.machine(L), s, Node.ask.new(~Lawful.kernel(L), n, s, e, q)) == True{}: Bool}:
+  +i = Envelope.of(e)
+  +c = Arrival.chain(i, Machine.arrival(Lawful.machine(L))(q))
+  +l0 = Ledgers.State.ask(
+    ~Machine.Q(Lawful.machine(L)),
+    ~Machine.same(Lawful.machine(L)),
+    State.ledger(~Lawful.machine(L), s),
+    i,
+    Envelope.time(e),
+    q
+  )
+  +s0 = State.led(~Lawful.machine(L), s, l0)
+  +s1 = Node.arrive(~Lawful.kernel(L), s0, i, q)
+  Grows.trans(~Lawful.machine(L), 
+    s,
+    s0,
+    Node.step(~Lawful.kernel(L), n, s1, c)
+  )(
+    Grows.led(~Lawful.machine(L), 
+      s,
+      l0,
+      Ledgers.State.add_grows(
+        ~Machine.Q(Lawful.machine(L)),
+        ~Machine.same(Lawful.machine(L)),
+        ~Machine.laws(Lawful.machine(L)),
+        State.ledger(~Lawful.machine(L), s),
+        Ledgers.Slot.ask(i),
+        Ledgers.Entry.Ask{i, Envelope.time(e), q}
+      )
+    )
+  )(Grows.trans(~Lawful.machine(L), s0, s1, Node.step(~Lawful.kernel(L), n, s1, c))(Arrive.grows(~Lawful.kernel(L), s0, i, Machine.arrival(Lawful.machine(L))(q)))(Step.grows(~L, n, s1, c)))
+
+# Node.ask_grows once the cell m of the request's ID is known
+def Ask.at.grows(
+  ~L: Lawful(),
+  +n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +e: Envelope,
+  +q: Machine.Q(Lawful.machine(L)),
+  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(Lawful.machine(L))>>>
+) -> {Node.grows(~Lawful.machine(L), s, Node.ask.at(~Lawful.kernel(L), n, s, e, q, m)) == True{}: Bool}:
+  match m:
+    case Some{x}:
+      Grows.refl(~Lawful.machine(L), s)
+    case None{}:
+      Grows.trans(~Lawful.machine(L), 
+        s,
+        State.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), Envelope.of(e))),
+        Node.ask.new(~Lawful.kernel(L), 
+          n,
+          State.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), Envelope.of(e))),
+          e,
+          q
+        )
+      )(
+        Grows.to(~Lawful.machine(L), 
+          s,
+          s,
+          State.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), Envelope.of(e))),
+          Led.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), Envelope.of(e))),
+          Grows.refl(~Lawful.machine(L), s)
+        )
+      )(
+        Ask.new.grows(~L, 
+          n,
+          State.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), Envelope.of(e))),
+          e,
+          q
+        )
+      )
+
+# a node that takes in a request only grows
+def Ask.grows(
+  ~L: Lawful(),
+  n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +e: Envelope,
+  q: Machine.Q(Lawful.machine(L))
+) -> {Node.grows(~Lawful.machine(L), s, Node.ask(~Lawful.kernel(L), n, s, e, q)) == True{}: Bool}:
+  Ask.at.grows(~L, 
+    n,
+    s,
+    e,
+    q,
+    Ledgers.State.get(~Machine.Q(Lawful.machine(L)), State.ledger(~Lawful.machine(L), s), Ledgers.Slot.ask(Envelope.of(e)))
+  )
+
+# what a node does on each of some lines only grows it
+def Steps.grows(
+  ~L: Lawful(),
+  +n: String,
+  cs: List<&2, Ledgers.Chain>,
+  +s: Node<Machine.Q(Lawful.machine(L))>
+) -> {Node.grows(~Lawful.machine(L), s, Node.steps(~Lawful.kernel(L), n, cs, s)) == True{}: Bool}:
+  match cs:
+    case Nil{}:
+      Grows.refl(~Lawful.machine(L), s)
+    case Con{+c, +rest}:
+      +s1 = Node.step(~Lawful.kernel(L), n, s, c)
+      Grows.trans(~Lawful.machine(L), 
+        s,
+        s1,
+        Node.steps(~Lawful.kernel(L), n, rest, s1)
+      )(Step.grows(~L, n, s, c))(Steps.grows(~L, n, rest, s1))
+
+# an adoption only grows a node, once the request m is known
+def Adopt.ask.grows(
+  ~L: Lawful(),
+  n: String,
+  s: Node<Machine.Q(Lawful.machine(L))>,
+  m: Maybe<&2, Request<Machine.Q(Lawful.machine(L))>>
+) -> {Node.grows(~Lawful.machine(L), s, Adopt.ask(~Lawful.kernel(L), n, s, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      Grows.refl(~Lawful.machine(L), s)
+    case Some{Request{e, q}}:
+      Ask.grows(~L, n, s, e, q)
+
+# an adoption only grows a node, once the head m of the line is known
+def Adopt.head.grows(
+  ~L: Lawful(),
+  n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  m: Maybe<&2, Head>
+) -> {Node.grows(~Lawful.machine(L), s, Adopt.head(~Lawful.kernel(L), n, s, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      Grows.refl(~Lawful.machine(L), s)
+    case Some{Head{r, b, next, t}}:
+      Adopt.ask.grows(~L, n, s, Kernel.follow(Lawful.kernel(L))(s)(r)(b))
+
+# the adoption of a line only grows a node
+def Adopt.at.grows(
+  ~L: Lawful(),
+  n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  c: Ledgers.Chain
+) -> {Node.grows(~Lawful.machine(L), s, Adopt.at(~Lawful.kernel(L), n, s, c)) == True{}: Bool}:
+  Adopt.head.grows(~L, n, s, Node.head_of(~Lawful.machine(L), s, c))
+
+# the adoption of a line, if any, only grows a node
+def Adopt.maybe.grows(
+  ~L: Lawful(),
+  n: String,
+  s: Node<Machine.Q(Lawful.machine(L))>,
+  m: Maybe<&2, Ledgers.Chain>
+) -> {Node.grows(~Lawful.machine(L), s, Adopt.maybe(~Lawful.kernel(L), n, s, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      Grows.refl(~Lawful.machine(L), s)
+    case Some{c}:
+      Adopt.at.grows(~L, n, s, c)
+
+# the adoption of each of some lines only grows a node
+def Adopts.grows(
+  ~L: Lawful(),
+  +n: String,
+  cs: List<&2, Ledgers.Chain>,
+  +s: Node<Machine.Q(Lawful.machine(L))>
+) -> {Node.grows(~Lawful.machine(L), s, Node.adopts(~Lawful.kernel(L), n, cs, s)) == True{}: Bool}:
+  match cs:
+    case Nil{}:
+      Grows.refl(~Lawful.machine(L), s)
+    case Con{+c, +rest}:
+      Grows.trans(~Lawful.machine(L), 
+        s,
+        Adopt.at(~Lawful.kernel(L), n, s, c),
+        Node.adopts(~Lawful.kernel(L), n, rest, Adopt.at(~Lawful.kernel(L), n, s, c))
+      )(Adopt.at.grows(~L, n, s, c))(Adopts.grows(~L, n, rest, Adopt.at(~Lawful.kernel(L), n, s, c)))
+
+# more rounds of a sync, grows
+def More.grows(
+  ~L: Lawful(),
+  f: Nat,
+  +n: String,
+  +cs: List<&2, Ledgers.Chain>,
+  +k: Nat,
+  +bs: List<&2, Ledgers.Ballot>,
+  +pd: Tries.Trie<Ledgers.Ballot>,
+  +s: Node<Machine.Q(Lawful.machine(L))>
+) -> {Node.grows(~Lawful.machine(L), s, Sync.more(~Lawful.kernel(L), f, n, cs, k, bs, pd, s)) == True{}: Bool}:
+  match f:
+    case 0n:
+      Grows.refl(~Lawful.machine(L), s)
+    case 1n+(+p):
+      Grows.when(~Lawful.machine(L), 
+        s,
+        Lines.level(~Lawful.machine(L), cs, s, Node.steps(~Lawful.kernel(L), n, cs, Sealed.each(~Lawful.kernel(L), k, bs, pd, s))),
+        Node.steps(~Lawful.kernel(L), n, cs, Sealed.each(~Lawful.kernel(L), k, bs, pd, s)),
+        Sync.more(~Lawful.kernel(L), 
+          p,
+          n,
+          cs,
+          k,
+          bs,
+          pd,
+          Node.steps(~Lawful.kernel(L), n, cs, Sealed.each(~Lawful.kernel(L), k, bs, pd, s))
+        ),
+        Grows.trans(~Lawful.machine(L), 
+          s,
+          Sealed.each(~Lawful.kernel(L), k, bs, pd, s),
+          Node.steps(~Lawful.kernel(L), n, cs, Sealed.each(~Lawful.kernel(L), k, bs, pd, s))
+        )(Each.grows(~Lawful.kernel(L), k, bs, pd, s))(Steps.grows(~L, n, cs, Sealed.each(~Lawful.kernel(L), k, bs, pd, s))),
+        Grows.trans(~Lawful.machine(L), 
+          s,
+          Node.steps(~Lawful.kernel(L), n, cs, Sealed.each(~Lawful.kernel(L), k, bs, pd, s)),
+          Sync.more(~Lawful.kernel(L), 
+            p,
+            n,
+            cs,
+            k,
+            bs,
+            pd,
+            Node.steps(~Lawful.kernel(L), n, cs, Sealed.each(~Lawful.kernel(L), k, bs, pd, s))
+          )
+        )(
+          Grows.trans(~Lawful.machine(L), 
+            s,
+            Sealed.each(~Lawful.kernel(L), k, bs, pd, s),
+            Node.steps(~Lawful.kernel(L), n, cs, Sealed.each(~Lawful.kernel(L), k, bs, pd, s))
+          )(Each.grows(~Lawful.kernel(L), k, bs, pd, s))(Steps.grows(~L, n, cs, Sealed.each(~Lawful.kernel(L), k, bs, pd, s)))
+        )(
+          More.grows(~L, 
+            p,
+            n,
+            cs,
+            k,
+            bs,
+            pd,
+            Node.steps(~Lawful.kernel(L), n, cs, Sealed.each(~Lawful.kernel(L), k, bs, pd, s))
+          )
+        )
+      )
+
+# a sync only grows a node
+def Sync.grows(
+  ~L: Lawful(),
+  +n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +t: Ledgers.State(Machine.Q(Lawful.machine(L)))
+) -> {Node.grows(~Lawful.machine(L), s, Node.sync(~Lawful.kernel(L), n, s, t)) == True{}: Bool}:
+  +s1 = Node.take(~Lawful.kernel(L), s, t)
+  +cs = Sync.lines(~Lawful.machine(L), s, s1, t)
+  +bs = Ballots.of(~Lawful.machine(L), 
+    Tries.Trie.values(
+      Cells.Cell<Ledgers.Entry<Machine.Q(Lawful.machine(L))>>,
+      Ledgers.State.missing(~Machine.Q(Lawful.machine(L)), ~Machine.same(Lawful.machine(L)), t, State.ledger(~Lawful.machine(L), s))
+    )
+  )
+  +s2 = Node.steps(~Lawful.kernel(L), n, cs, s1)
+  +s3 = Sync.more(~Lawful.kernel(L), 
+    List.length(&2, Ledgers.Ballot, bs),
+    n,
+    cs,
+    List.length(&2, Ledgers.Ballot, bs),
+    bs,
+    Pending.of(bs),
+    s2
+  )
+  Grows.trans(~Lawful.machine(L), 
+    s,
+    s1,
+    Node.adopts(~Lawful.kernel(L), n, cs, s3)
+  )(
+    Take.grows(~Lawful.kernel(L), s, t)
+  )(
+    Grows.trans(~Lawful.machine(L), 
+      s1,
+      s2,
+      Node.adopts(~Lawful.kernel(L), n, cs, s3)
+    )(
+      Steps.grows(~L, n, cs, s1)
+    )(
+      Grows.trans(~Lawful.machine(L), 
+        s2,
+        s3,
+        Node.adopts(~Lawful.kernel(L), n, cs, s3)
+      )(
+        More.grows(~L, 
+          List.length(&2, Ledgers.Ballot, bs),
+          n,
+          cs,
+          List.length(&2, Ledgers.Ballot, bs),
+          bs,
+          Pending.of(bs),
+          s2
+        )
+      )(Adopts.grows(~L, n, cs, s3))
+    )
+  )
+
+# a node that took in a new request of e holds its slot
+def Ask.held.new(
+  ~L: Lawful(),
+  +n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +e: Envelope,
+  +q: Machine.Q(Lawful.machine(L)),
+  +em: {
+    Ledgers.State.get(
+      ~Machine.Q(Lawful.machine(L)),
+      State.ledger(~Lawful.machine(L), s),
+      Ledgers.Slot.ask(Envelope.of(e))
+    )
+      == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(Lawful.machine(L))>>>
+  }
+) -> {
+  Maybe.is_some(
+    &2,
+    Cells.Cell<Ledgers.Entry<Machine.Q(Lawful.machine(L))>>,
+    Ledgers.State.get(
+      ~Machine.Q(Lawful.machine(L)),
+      State.ledger(~Lawful.machine(L), Node.ask.new(~Lawful.kernel(L), n, s, e, q)),
+      Ledgers.Slot.ask(Envelope.of(e))
+    )
+  )
+    == True{}: Bool
+}:
+  +i = Envelope.of(e)
+  +c = Arrival.chain(i, Machine.arrival(Lawful.machine(L))(q))
+  +k = Ledgers.Slot.ask(i)
+  +en = {Ledgers.Entry.Ask{i, Envelope.time(e), q}: Ledgers.Entry<Machine.Q(Lawful.machine(L))>}
+  +l0 = Ledgers.State.put(~Machine.Q(Lawful.machine(L)), ~Machine.same(Lawful.machine(L)), State.ledger(~Lawful.machine(L), s), k, en)
+  +s0 = State.led(~Lawful.machine(L), s, l0)
+  +s1 = Node.arrive(~Lawful.kernel(L), s0, i, q)
+  %Equal.sym(
+    Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(Lawful.machine(L))>>>,
+    Ledgers.State.get(~Machine.Q(Lawful.machine(L)), State.ledger(~Lawful.machine(L), s), k),
+    None{},
+    em
+  ): {
+    Maybe.is_some(
+      &2,
+      Cells.Cell<Ledgers.Entry<Machine.Q(Lawful.machine(L))>>,
+      Ledgers.State.get(
+        ~Machine.Q(Lawful.machine(L)),
+        State.ledger(~Lawful.machine(L), 
+          Node.step(~Lawful.kernel(L), 
+            n,
+            Node.arrive(~Lawful.kernel(L), 
+              State.led(~Lawful.machine(L), 
+                s,
+                Ledgers.State.add.of(
+                  ~Machine.Q(Lawful.machine(L)),
+                  ~Machine.same(Lawful.machine(L)),
+                  State.ledger(~Lawful.machine(L), s),
+                  k,
+                  en,
+                  _
+                )
+              ),
+              i,
+              q
+            ),
+            c
+          )
+        ),
+        k
+      )
+    )
+      == True{}: Bool
+  }
+  Slot.held_kept(~Lawful.machine(L), 
+    s0,
+    Node.step(~Lawful.kernel(L), n, s1, c),
+    k,
+    Grows.trans(~Lawful.machine(L), 
+      s0,
+      s1,
+      Node.step(~Lawful.kernel(L), n, s1, c)
+    )(Arrive.grows(~Lawful.kernel(L), s0, i, Machine.arrival(Lawful.machine(L))(q)))(Step.grows(~L, n, s1, c))
+  )(
+    %Equal.sym(Ledgers.State(Machine.Q(Lawful.machine(L))), State.ledger(~Lawful.machine(L), s0), l0, Led.led(~Lawful.machine(L), s, l0)): {Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Machine.Q(Lawful.machine(L))>>, Ledgers.State.get(~Machine.Q(Lawful.machine(L)), _, k)) == True{}: Bool}
+    %Equal.sym(Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(Lawful.machine(L))>>>, Ledgers.State.get(~Machine.Q(Lawful.machine(L)), l0, k), Some{Cells.One{en}}, Ledgers.State.put_get(~Machine.Q(Lawful.machine(L)), ~Machine.same(Lawful.machine(L)), State.ledger(~Lawful.machine(L), s), k, en)(em)): {Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Machine.Q(Lawful.machine(L))>>, _) == True{}: Bool}
+    {==})
+
+# a node that took in the request of e holds its slot, once the cell m of the
+# slot before is known
+def Ask.held.at(
+  ~L: Lawful(),
+  n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +e: Envelope,
+  q: Machine.Q(Lawful.machine(L)),
+  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(Lawful.machine(L))>>>,
+  em: {
+    Ledgers.State.get(
+      ~Machine.Q(Lawful.machine(L)),
+      State.ledger(~Lawful.machine(L), s),
+      Ledgers.Slot.ask(Envelope.of(e))
+    )
+      == m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(Lawful.machine(L))>>>
+  }
+) -> {
+  Maybe.is_some(
+    &2,
+    Cells.Cell<Ledgers.Entry<Machine.Q(Lawful.machine(L))>>,
+    Ledgers.State.get(
+      ~Machine.Q(Lawful.machine(L)),
+      State.ledger(~Lawful.machine(L), Node.ask.at(~Lawful.kernel(L), n, s, e, q, m)),
+      Ledgers.Slot.ask(Envelope.of(e))
+    )
+  )
+    == True{}: Bool
+}:
+  match m:
+    case Some{x}:
+      %Equal.sym(
+        Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(Lawful.machine(L))>>>,
+        Ledgers.State.get(
+          ~Machine.Q(Lawful.machine(L)),
+          State.ledger(~Lawful.machine(L), s),
+          Ledgers.Slot.ask(Envelope.of(e))
+        ),
+        Some{x},
+        em
+      ): {Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Machine.Q(Lawful.machine(L))>>, _) == True{}: Bool}
+      {==}
+    case None{}:
+      Ask.held.new(~L, 
+        n,
+        State.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), Envelope.of(e))),
+        e,
+        q,
+        (
+          %Equal.sym(Ledgers.State(Machine.Q(Lawful.machine(L))), State.ledger(~Lawful.machine(L), State.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), Envelope.of(e)))), State.ledger(~Lawful.machine(L), s), Led.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), Envelope.of(e)))): {Ledgers.State.get(~Machine.Q(Lawful.machine(L)), _, Ledgers.Slot.ask(Envelope.of(e))) == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(Lawful.machine(L))>>>}
+          em)
+      )
+
+# a request that the node holds or not keeps each key of a run's log
+def Asked.kept(
+  ~L: Lawful(),
+  r: Run<Machine.Q(Lawful.machine(L))>,
+  c: Ledgers.Chain,
+  i: Ledgers.Id,
+  a: Maybe<&2, Ledgers.Asked<Machine.Q(Lawful.machine(L))>>,
+  k2: List<&2, U32>,
+  v: List<&2, U32>
+) -> Run.Keeps(~Lawful.machine(L), k2, v, Some{r}) -> Run.Keeps(~Lawful.machine(L), k2, v, Step.asked(~Lawful.kernel(L), r, c, i, a)):
+  match a:
+    case None{}:
+      hr => Unit{}
+    case Some{Ledgers.Asked{t, q}}:
+      Lawful.kept(L)(r)(c)(i)(q)(k2)(v)
+
+# a request that the log holds or not keeps each key of a run's log
+def Fresh.kept(
+  ~L: Lawful(),
+  +r: Run<Machine.Q(Lawful.machine(L))>,
+  c: Ledgers.Chain,
+  +i: Ledgers.Id,
+  o: Maybe<&2, Out>,
+  k2: List<&2, U32>,
+  v: List<&2, U32>
+) -> Run.Keeps(~Lawful.machine(L), k2, v, Some{r}) -> Run.Keeps(~Lawful.machine(L), k2, v, Step.fresh(~Lawful.kernel(L), r, c, i, o)):
+  match o:
+    case Some{x}:
+      hr => hr
+    case None{}:
+      Asked.kept(~L, r, c, i, Node.asked(~Lawful.machine(L), Run.state(~Lawful.machine(L), r), i), k2, v)
+
+# the requests of a step keep each key of a run's log, other than the owners
+# and the count
+def All.kept(
+  ~L: Lawful(),
+  +c: Ledgers.Chain,
+  qs: List<&2, Ledgers.Id>,
+  +m: Maybe<&2, Run<Machine.Q(Lawful.machine(L))>>,
+  +k2: List<&2, U32>,
+  +v: List<&2, U32>
+) -> Run.Keeps(~Lawful.machine(L), k2, v, m) -> Run.Keeps(~Lawful.machine(L), k2, v, Step.all(~Lawful.kernel(L), c, qs, m)):
+  match qs:
+    case Nil{}:
+      h => h
+    case Con{+i, rest}:
+      h => All.kept(~L, 
+        c,
+        rest,
+        Maybe.bind(&2, Run<Machine.Q(Lawful.machine(L))>, Run<Machine.Q(Lawful.machine(L))>, m, r => Step.one(~Lawful.kernel(L), r, c, i)),
+        k2,
+        v
+      )(
+        Keeps.bind(~Lawful.machine(L), 
+          k2,
+          v,
+          m,
+          r => Step.one(~Lawful.kernel(L), r, c, i)
+        )(
+          h
+        )(
+          +r => hr => Fresh.kept(~L, 
+            r,
+            c,
+            i,
+            Line.out(~Lawful.machine(L), Run.state(~Lawful.machine(L), r), Run.tip(~Lawful.machine(L), r), i),
+            k2,
+            v
+          )(hr)
+        )
+      )
+
+# a log only gains keys: a key that the log of a tip holds, other than the
+# owners and the count, holds the same value after a step
+def Run.kept(
+  ~L: Lawful(),
+  s: Node<Machine.Q(Lawful.machine(L))>,
+  c: Ledgers.Chain,
+  t: Tip,
+  qs: List<&2, Ledgers.Id>,
+  k2: List<&2, U32>,
+  v: List<&2, U32>
+) -> {
+  Node.get(~Lawful.machine(L), s, Tip.log(t), k2) == Some{v}: Maybe<&2, List<&2, U32>>
+} -> Run.Keeps(~Lawful.machine(L), k2, v, Step.run(~Lawful.kernel(L), s, c, t, qs)):
+  match t:
+    case Tip{c0, l, n, os}:
+      h => All.kept(~L, c, qs, Some{Run{s, Tip{c0, l, n, os}}}, k2, v)(h)
+
+# a node's ballot keeps its logs
+def Cast.kept(
+  ~L: Lawful(),
+  +n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain
+) -> Node.Keeps(~Lawful.machine(L), s, Node.cast(~Lawful.kernel(L), n, s, c)):
+  Kept.same(~Lawful.machine(L), 
+    s,
+    Node.cast(~Lawful.kernel(L), n, s, c),
+    Cast.grows(~L, n, s, c),
+    Cast.head.heads(~Lawful.kernel(L), n, s, c, Node.head_of(~Lawful.machine(L), s, c))
+  )
+
+# Node.advance keeps the logs, once the decided step m is known
+def Advance.step.kept(
+  ~L: Lawful(),
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain,
+  h: Head,
+  +t: Tip,
+  m: Maybe<&2, Ledgers.Vote>
+) -> {
+  Node.head_of(~Lawful.machine(L), s, c) == Some{h}: Maybe<&2, Head>
+} -> {
+  Head.tip(~Lawful.machine(L), s, h) == Some{t}: Maybe<&2, Tip>
+} -> Node.Keeps(~Lawful.machine(L), s, Advance.step(~Lawful.kernel(L), s, c, h, t, m)):
+  match h m:
+    case Head{+r, +br, +next, +th} Some{Ledgers.Vote{before, +qs, after}}:
+      +em => +et => Kept.when(~Lawful.machine(L), 
+        Root.same(before, th),
+        s,
+        Advance.ran(~Lawful.machine(L), s, c, r, br, next, after, qs, Step.run(~Lawful.kernel(L), s, c, t, qs)),
+        s,
+        Advance.ran.kept(~Lawful.machine(L), 
+          s,
+          c,
+          r,
+          br,
+          next,
+          after,
+          qs,
+          Step.run(~Lawful.kernel(L), s, c, t, qs),
+          Head{r, br, next, th},
+          t,
+          em,
+          et
+        )(
+          Run.grows(~L, s, c, t, qs)
+        )(+k => +v => Run.kept(~L, s, c, t, qs, k, v)),
+        Kept.refl(~Lawful.machine(L), s)
+      )
+    case Head{r, br, next, th} None{}:
+      em => et => Kept.refl(~Lawful.machine(L), s)
+
+# Node.advance keeps the logs, at the head h whose tip is m
+def Advance.at.kept(
+  ~L: Lawful(),
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain,
+  +h: Head,
+  m: Maybe<&2, Tip>
+) -> {
+  Node.head_of(~Lawful.machine(L), s, c) == Some{h}: Maybe<&2, Head>
+} -> {
+  Head.tip(~Lawful.machine(L), s, h) == m: Maybe<&2, Tip>
+} -> Node.Keeps(~Lawful.machine(L), s, Advance.at(~Lawful.kernel(L), s, c, h, m)):
+  match m:
+    case None{}:
+      em => et => Kept.refl(~Lawful.machine(L), s)
+    case Some{+t}:
+      em => et => Advance.step.kept(~L, 
+        s,
+        c,
+        h,
+        t,
+        Height.decide(~Lawful.machine(L), 
+          s,
+          c,
+          Head.next(h),
+          Tip.owners(t),
+          Round.seen(~Lawful.machine(L), s, c, Head.next(h))
+        )
+      )(em)(et)
+
+# Advances.kept once the head m is known
+def Advances.at.kept(
+  ~L: Lawful(),
+  f: Nat,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain,
+  m: Maybe<&2, Head>
+) -> {
+  Node.head_of(~Lawful.machine(L), s, c) == m: Maybe<&2, Head>
+} -> Node.Keeps(~Lawful.machine(L), s, Advances.at(~Lawful.kernel(L), f, s, c, m)):
+  match f m:
+    case 0n x:
+      em => Kept.refl(~Lawful.machine(L), s)
+    case 1n+p None{}:
+      em => Kept.refl(~Lawful.machine(L), s)
+    case 1n+(+p) Some{+h}:
+      +em =>
+        +s1 = Advance.at(~Lawful.kernel(L), s, c, h, Head.tip(~Lawful.machine(L), s, h))
+        +m1 = Node.head_of(~Lawful.machine(L), s1, c)
+        Kept.when(~Lawful.machine(L), 
+          Heads.level(Some{h}, m1),
+          s,
+          s1,
+          Advances.at(~Lawful.kernel(L), p, s1, c, m1),
+          Advance.at.kept(~L, s, c, h, Head.tip(~Lawful.machine(L), s, h))(em)({==}),
+          Kept.trans(~Lawful.machine(L), 
+            s,
+            s1,
+            Advances.at(~Lawful.kernel(L), p, s1, c, m1),
+            Advance.at.kept(~L, s, c, h, Head.tip(~Lawful.machine(L), s, h))(em)({==}),
+            Advances.at.kept(~L, p, s1, c, m1)({==})
+          )
+        )
+
+# a head that moves over each decided step keeps the logs
+def Advances.kept(
+  ~L: Lawful(),
+  f: Nat,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain
+) -> Node.Keeps(~Lawful.machine(L), s, Node.advances(~Lawful.kernel(L), f, s, c)):
+  Advances.at.kept(~L, f, s, c, Node.head_of(~Lawful.machine(L), s, c))({==})
+
+# what a node does at a head keeps the logs
+def Step.head.kept(
+  ~L: Lawful(),
+  +n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain
+) -> Node.Keeps(~Lawful.machine(L), s, Step.head(~Lawful.kernel(L), n, s, c)):
+  +s1 = Node.advances(~Lawful.kernel(L), 4294967295n, s, c)
+  +s2 = Node.cast(~Lawful.kernel(L), n, s1, c)
+  s3 = Node.advances(~Lawful.kernel(L), 4294967295n, s2, c)
+  Kept.trans(~Lawful.machine(L), 
+    s,
+    s1,
+    s3,
+    Advances.kept(~L, 4294967295n, s, c),
+    Kept.trans(~Lawful.machine(L), s1, s2, s3, Cast.kept(~L, n, s1, c), Advances.kept(~L, 4294967295n, s2, c))
+  )
+
+# what a node does on a line keeps the logs
+def Step.kept(
+  ~L: Lawful(),
+  n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain
+) -> Node.Keeps(~Lawful.machine(L), s, Node.step(~Lawful.kernel(L), n, s, c)):
+  s1 = Node.open(~Lawful.machine(L), s, c)
+  Kept.trans(~Lawful.machine(L), 
+    s,
+    s1,
+    Step.head(~Lawful.kernel(L), n, s1, c),
+    Open.at.kept(~Lawful.machine(L), s, c, Node.head_of(~Lawful.machine(L), s, c))({==}),
+    Step.head.kept(~L, n, s1, c)
+  )
+
+# a pass to the next round keeps the logs
+def Pass.kept(
+  ~L: Lawful(),
+  +n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +c: Ledgers.Chain
+) -> Node.Keeps(~Lawful.machine(L), s, Node.pass(~Lawful.kernel(L), n, s, c)):
+  +s1 = Pass.head(~Lawful.kernel(L), n, s, c, Node.head_of(~Lawful.machine(L), s, c))
+  Kept.trans(~Lawful.machine(L), 
+    s,
+    s1,
+    Node.step(~Lawful.kernel(L), n, s1, c),
+    Kept.same(~Lawful.machine(L), 
+      s,
+      s1,
+      Pass.head.grows(~Lawful.kernel(L), n, s, c, Node.head_of(~Lawful.machine(L), s, c)),
+      Pass.head.heads(~Lawful.kernel(L), n, s, c, Node.head_of(~Lawful.machine(L), s, c))
+    ),
+    Step.kept(~L, n, s1, c)
+  )
+
+# a new request keeps the logs
+def Ask.new.kept(
+  ~L: Lawful(),
+  n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +e: Envelope,
+  +q: Machine.Q(Lawful.machine(L))
+) -> Node.Keeps(~Lawful.machine(L), s, Node.ask.new(~Lawful.kernel(L), n, s, e, q)):
+  +i = Envelope.of(e)
+  c = Arrival.chain(i, Machine.arrival(Lawful.machine(L))(q))
+  +l0 = Ledgers.State.ask(
+    ~Machine.Q(Lawful.machine(L)),
+    ~Machine.same(Lawful.machine(L)),
+    State.ledger(~Lawful.machine(L), s),
+    i,
+    Envelope.time(e),
+    q
+  )
+  +s0 = State.led(~Lawful.machine(L), s, l0)
+  s1 = Node.arrive(~Lawful.kernel(L), s0, i, q)
+  Kept.trans(~Lawful.machine(L), 
+    s,
+    s0,
+    Node.step(~Lawful.kernel(L), n, s1, c),
+    Kept.same(~Lawful.machine(L), 
+      s,
+      s0,
+      Grows.led(~Lawful.machine(L), 
+        s,
+        l0,
+        Ledgers.State.add_grows(
+          ~Machine.Q(Lawful.machine(L)),
+          ~Machine.same(Lawful.machine(L)),
+          ~Machine.laws(Lawful.machine(L)),
+          State.ledger(~Lawful.machine(L), s),
+          Ledgers.Slot.ask(i),
+          Ledgers.Entry.Ask{i, Envelope.time(e), q}
+        )
+      ),
+      Heads.led(~Lawful.machine(L), s, l0)
+    ),
+    Kept.trans(~Lawful.machine(L), s0, s1, Node.step(~Lawful.kernel(L), n, s1, c), Arrive.kept(~Lawful.kernel(L), s0, i, Machine.arrival(Lawful.machine(L))(q)), Step.kept(~L, n, s1, c))
+  )
+
+# Node.ask_keeps once the cell m of the request's ID is known
+def Ask.at.kept(
+  ~L: Lawful(),
+  n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +e: Envelope,
+  q: Machine.Q(Lawful.machine(L)),
+  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(Lawful.machine(L))>>>
+) -> Node.Keeps(~Lawful.machine(L), s, Node.ask.at(~Lawful.kernel(L), n, s, e, q, m)):
+  match m:
+    case Some{x}:
+      Kept.refl(~Lawful.machine(L), s)
+    case None{}:
+      Kept.trans(~Lawful.machine(L), 
+        s,
+        State.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), Envelope.of(e))),
+        Node.ask.new(~Lawful.kernel(L), 
+          n,
+          State.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), Envelope.of(e))),
+          e,
+          q
+        ),
+        Kept.same(~Lawful.machine(L), 
+          s,
+          State.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), Envelope.of(e))),
+          Grows.to(~Lawful.machine(L), 
+            s,
+            s,
+            State.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), Envelope.of(e))),
+            Led.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), Envelope.of(e))),
+            Grows.refl(~Lawful.machine(L), s)
+          ),
+          Heads.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), Envelope.of(e)))
+        ),
+        Ask.new.kept(~L, 
+          n,
+          State.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), Envelope.of(e))),
+          e,
+          q
+        )
+      )
+
+# Node.ask keeps the logs
+def Ask.kept(
+  ~L: Lawful(),
+  n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +e: Envelope,
+  q: Machine.Q(Lawful.machine(L))
+) -> Node.Keeps(~Lawful.machine(L), s, Node.ask(~Lawful.kernel(L), n, s, e, q)):
+  Ask.at.kept(~L, 
+    n,
+    s,
+    e,
+    q,
+    Ledgers.State.get(~Machine.Q(Lawful.machine(L)), State.ledger(~Lawful.machine(L), s), Ledgers.Slot.ask(Envelope.of(e)))
+  )
+
+# what a node does on each of some lines keeps the logs
+def Steps.kept(
+  ~L: Lawful(),
+  +n: String,
+  cs: List<&2, Ledgers.Chain>,
+  +s: Node<Machine.Q(Lawful.machine(L))>
+) -> Node.Keeps(~Lawful.machine(L), s, Node.steps(~Lawful.kernel(L), n, cs, s)):
+  match cs:
+    case Nil{}:
+      Kept.refl(~Lawful.machine(L), s)
+    case Con{+c, rest}:
+      s1 = Node.step(~Lawful.kernel(L), n, s, c)
+      Kept.trans(~Lawful.machine(L), s, s1, Node.steps(~Lawful.kernel(L), n, rest, s1), Step.kept(~L, n, s, c), Steps.kept(~L, n, rest, s1))
+
+# an adoption keeps the logs, once the request m is known
+def Adopt.ask.kept(
+  ~L: Lawful(),
+  n: String,
+  s: Node<Machine.Q(Lawful.machine(L))>,
+  m: Maybe<&2, Request<Machine.Q(Lawful.machine(L))>>
+) -> Node.Keeps(~Lawful.machine(L), s, Adopt.ask(~Lawful.kernel(L), n, s, m)):
+  match m:
+    case None{}:
+      Kept.refl(~Lawful.machine(L), s)
+    case Some{Request{e, q}}:
+      Ask.kept(~L, n, s, e, q)
+
+# an adoption keeps the logs, once the head m of the line is known
+def Adopt.head.kept(
+  ~L: Lawful(),
+  n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  m: Maybe<&2, Head>
+) -> Node.Keeps(~Lawful.machine(L), s, Adopt.head(~Lawful.kernel(L), n, s, m)):
+  match m:
+    case None{}:
+      Kept.refl(~Lawful.machine(L), s)
+    case Some{Head{r, b, next, t}}:
+      Adopt.ask.kept(~L, n, s, Kernel.follow(Lawful.kernel(L))(s)(r)(b))
+
+# the adoption of a line keeps the logs
+def Adopt.at.kept(
+  ~L: Lawful(),
+  n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  c: Ledgers.Chain
+) -> Node.Keeps(~Lawful.machine(L), s, Adopt.at(~Lawful.kernel(L), n, s, c)):
+  Adopt.head.kept(~L, n, s, Node.head_of(~Lawful.machine(L), s, c))
+
+# the adoption of a line, if any, keeps the logs
+def Adopt.maybe.kept(
+  ~L: Lawful(),
+  n: String,
+  s: Node<Machine.Q(Lawful.machine(L))>,
+  m: Maybe<&2, Ledgers.Chain>
+) -> Node.Keeps(~Lawful.machine(L), s, Adopt.maybe(~Lawful.kernel(L), n, s, m)):
+  match m:
+    case None{}:
+      Kept.refl(~Lawful.machine(L), s)
+    case Some{c}:
+      Adopt.at.kept(~L, n, s, c)
+
+# the adoption of each of some lines keeps the logs
+def Adopts.kept(
+  ~L: Lawful(),
+  +n: String,
+  cs: List<&2, Ledgers.Chain>,
+  +s: Node<Machine.Q(Lawful.machine(L))>
+) -> Node.Keeps(~Lawful.machine(L), s, Node.adopts(~Lawful.kernel(L), n, cs, s)):
+  match cs:
+    case Nil{}:
+      Kept.refl(~Lawful.machine(L), s)
+    case Con{+c, rest}:
+      Kept.trans(~Lawful.machine(L), 
+        s,
+        Adopt.at(~Lawful.kernel(L), n, s, c),
+        Node.adopts(~Lawful.kernel(L), n, rest, Adopt.at(~Lawful.kernel(L), n, s, c)),
+        Adopt.at.kept(~L, n, s, c),
+        Adopts.kept(~L, n, rest, Adopt.at(~Lawful.kernel(L), n, s, c))
+      )
+
+# more rounds of a sync, kept
+def More.kept(
+  ~L: Lawful(),
+  f: Nat,
+  +n: String,
+  +cs: List<&2, Ledgers.Chain>,
+  +k: Nat,
+  +bs: List<&2, Ledgers.Ballot>,
+  +pd: Tries.Trie<Ledgers.Ballot>,
+  +s: Node<Machine.Q(Lawful.machine(L))>
+) -> Node.Keeps(~Lawful.machine(L), s, Sync.more(~Lawful.kernel(L), f, n, cs, k, bs, pd, s)):
+  match f:
+    case 0n:
+      Kept.refl(~Lawful.machine(L), s)
+    case 1n+(p):
+      Kept.when(~Lawful.machine(L), 
+        Lines.level(~Lawful.machine(L), cs, s, Node.steps(~Lawful.kernel(L), n, cs, Sealed.each(~Lawful.kernel(L), k, bs, pd, s))),
+        s,
+        Node.steps(~Lawful.kernel(L), n, cs, Sealed.each(~Lawful.kernel(L), k, bs, pd, s)),
+        Sync.more(~Lawful.kernel(L), 
+          p,
+          n,
+          cs,
+          k,
+          bs,
+          pd,
+          Node.steps(~Lawful.kernel(L), n, cs, Sealed.each(~Lawful.kernel(L), k, bs, pd, s))
+        ),
+        Kept.trans(~Lawful.machine(L), 
+          s,
+          Sealed.each(~Lawful.kernel(L), k, bs, pd, s),
+          Node.steps(~Lawful.kernel(L), n, cs, Sealed.each(~Lawful.kernel(L), k, bs, pd, s)),
+          Kept.same(~Lawful.machine(L), 
+            s,
+            Sealed.each(~Lawful.kernel(L), k, bs, pd, s),
+            Each.grows(~Lawful.kernel(L), k, bs, pd, s),
+            Each.heads(~Lawful.kernel(L), k, bs, pd, s)
+          ),
+          Steps.kept(~L, n, cs, Sealed.each(~Lawful.kernel(L), k, bs, pd, s))
+        ),
+        Kept.trans(~Lawful.machine(L), 
+          s,
+          Node.steps(~Lawful.kernel(L), n, cs, Sealed.each(~Lawful.kernel(L), k, bs, pd, s)),
+          Sync.more(~Lawful.kernel(L), 
+            p,
+            n,
+            cs,
+            k,
+            bs,
+            pd,
+            Node.steps(~Lawful.kernel(L), n, cs, Sealed.each(~Lawful.kernel(L), k, bs, pd, s))
+          ),
+          Kept.trans(~Lawful.machine(L), 
+            s,
+            Sealed.each(~Lawful.kernel(L), k, bs, pd, s),
+            Node.steps(~Lawful.kernel(L), n, cs, Sealed.each(~Lawful.kernel(L), k, bs, pd, s)),
+            Kept.same(~Lawful.machine(L), 
+              s,
+              Sealed.each(~Lawful.kernel(L), k, bs, pd, s),
+              Each.grows(~Lawful.kernel(L), k, bs, pd, s),
+              Each.heads(~Lawful.kernel(L), k, bs, pd, s)
+            ),
+            Steps.kept(~L, n, cs, Sealed.each(~Lawful.kernel(L), k, bs, pd, s))
+          ),
+          More.kept(~L, 
+            p,
+            n,
+            cs,
+            k,
+            bs,
+            pd,
+            Node.steps(~Lawful.kernel(L), n, cs, Sealed.each(~Lawful.kernel(L), k, bs, pd, s))
+          )
+        )
+      )
+
+# a sync keeps the logs
+def Sync.kept(
+  ~L: Lawful(),
+  +n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +t: Ledgers.State(Machine.Q(Lawful.machine(L)))
+) -> Node.Keeps(~Lawful.machine(L), s, Node.sync(~Lawful.kernel(L), n, s, t)):
+  +s1 = Node.take(~Lawful.kernel(L), s, t)
+  +cs = Sync.lines(~Lawful.machine(L), s, s1, t)
+  +bs = Ballots.of(~Lawful.machine(L), 
+    Tries.Trie.values(
+      Cells.Cell<Ledgers.Entry<Machine.Q(Lawful.machine(L))>>,
+      Ledgers.State.missing(~Machine.Q(Lawful.machine(L)), ~Machine.same(Lawful.machine(L)), t, State.ledger(~Lawful.machine(L), s))
+    )
+  )
+  +s2 = Node.steps(~Lawful.kernel(L), n, cs, s1)
+  s3 = Sync.more(~Lawful.kernel(L), 
+    List.length(&2, Ledgers.Ballot, bs),
+    n,
+    cs,
+    List.length(&2, Ledgers.Ballot, bs),
+    bs,
+    Pending.of(bs),
+    s2
+  )
+  Kept.trans(~Lawful.machine(L), 
+    s,
+    s1,
+    Node.adopts(~Lawful.kernel(L), n, cs, s3),
+    Take.kept(~Lawful.kernel(L), s, t),
+    Kept.trans(~Lawful.machine(L), 
+      s1,
+      s2,
+      Node.adopts(~Lawful.kernel(L), n, cs, s3),
+      Steps.kept(~L, n, cs, s1),
+      Kept.trans(~Lawful.machine(L), 
+        s2,
+        s3,
+        Node.adopts(~Lawful.kernel(L), n, cs, s3),
+        More.kept(~L, 
+          List.length(&2, Ledgers.Ballot, bs),
+          n,
+          cs,
+          List.length(&2, Ledgers.Ballot, bs),
+          bs,
+          Pending.of(bs),
+          s2
+        ),
+        Adopts.kept(~L, n, cs, s3)
+      )
+    )
+  )
+
+# a request that a writer asks again at a node only grows it
+def Consent.grows(
+  ~L: Lawful(),
+  +n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +i: Ledgers.Id,
+  m: Maybe<&2, Ledgers.Chain>
+) -> {Node.grows(~Lawful.machine(L), s, Consent.at(~Lawful.kernel(L), n, s, i, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      Grows.refl(~Lawful.machine(L), s)
+    case Some{+c}:
+      Grows.trans(~Lawful.machine(L), 
+        s,
+        State.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), i)),
+        Node.step(~Lawful.kernel(L), n, State.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), i)), c)
+      )(
+        Grows.to(~Lawful.machine(L), 
+          s,
+          s,
+          State.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), i)),
+          Led.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), i)),
+          Grows.refl(~Lawful.machine(L), s)
+        )
+      )(
+        Step.grows(~L, 
+          n,
+          State.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), i)),
+          c
+        )
+      )
+
+# a request that a writer asks again at a node keeps the logs
+def Consent.kept(
+  ~L: Lawful(),
+  n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  +i: Ledgers.Id,
+  m: Maybe<&2, Ledgers.Chain>
+) -> Node.Keeps(~Lawful.machine(L), s, Consent.at(~Lawful.kernel(L), n, s, i, m)):
+  match m:
+    case None{}:
+      Kept.refl(~Lawful.machine(L), s)
+    case Some{c}:
+      Kept.trans(~Lawful.machine(L), 
+        s,
+        State.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), i)),
+        Node.step(~Lawful.kernel(L), n, State.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), i)), c),
+        Kept.same(~Lawful.machine(L), 
+          s,
+          State.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), i)),
+          Grows.to(~Lawful.machine(L), 
+            s,
+            s,
+            State.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), i)),
+            Led.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), i)),
+            Grows.refl(~Lawful.machine(L), s)
+          ),
+          Heads.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), i))
+        ),
+        Step.kept(~L, n, State.keyed(~Lawful.machine(L), s, Keys.mark(State.keys(~Lawful.machine(L), s), i)), c)
+      )
+
+# what a node does only grows it
+def Does.grows(
+  ~L: Lawful(),
+  +n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  ev: Deed<Machine.Q(Lawful.machine(L))>
+) -> {Node.grows(~Lawful.machine(L), s, Node.does(~Lawful.kernel(L), n, s, ev)) == True{}: Bool}:
+  match ev:
+    case Deed.Ask{+e, +q}:
+      Grows.trans(~Lawful.machine(L), 
+        s,
+        Node.ask(~Lawful.kernel(L), n, s, e, q),
+        Adopt.at(~Lawful.kernel(L), n, Node.ask(~Lawful.kernel(L), n, s, e, q), Arrival.chain(Envelope.of(e), Machine.arrival(Lawful.machine(L))(q)))
+      )(
+        Ask.grows(~L, n, s, e, q)
+      )(
+        Adopt.at.grows(~L, 
+          n,
+          Node.ask(~Lawful.kernel(L), n, s, e, q),
+          Arrival.chain(Envelope.of(e), Machine.arrival(Lawful.machine(L))(q))
+        )
+      )
+    case Deed.Take{t}:
+      Take.grows(~Lawful.kernel(L), s, t)
+    case Deed.Sync{t}:
+      Sync.grows(~L, n, s, t)
+    case Deed.Keep{b}:
+      Grows.keep(~Lawful.machine(L), s, Ropes.Put.nodes(Bytes.rope(b)))
+    case Deed.Consent{+i}:
+      Grows.trans(~Lawful.machine(L), 
+        s,
+        Node.consent(~Lawful.kernel(L), n, s, i),
+        Adopt.maybe(~Lawful.kernel(L), n, Node.consent(~Lawful.kernel(L), n, s, i), Node.chain_of(~Lawful.machine(L), s, i))
+      )(
+        Consent.grows(~L, n, s, i, Node.chain_of(~Lawful.machine(L), s, i))
+      )(Adopt.maybe.grows(~L, n, Node.consent(~Lawful.kernel(L), n, s, i), Node.chain_of(~Lawful.machine(L), s, i)))
+    case Deed.Pass{+c}:
+      Grows.trans(~Lawful.machine(L), 
+        s,
+        Node.pass(~Lawful.kernel(L), n, s, c),
+        Adopt.at(~Lawful.kernel(L), n, Node.pass(~Lawful.kernel(L), n, s, c), c)
+      )(Pass.grows(~L, n, s, c))(Adopt.at.grows(~L, n, Node.pass(~Lawful.kernel(L), n, s, c), c))
+
+# what a node does keeps the logs
+def Does.kept(
+  ~L: Lawful(),
+  +n: String,
+  +s: Node<Machine.Q(Lawful.machine(L))>,
+  ev: Deed<Machine.Q(Lawful.machine(L))>
+) -> Node.Keeps(~Lawful.machine(L), s, Node.does(~Lawful.kernel(L), n, s, ev)):
+  match ev:
+    case Deed.Ask{+e, +q}:
+      Kept.trans(~Lawful.machine(L), 
+        s,
+        Node.ask(~Lawful.kernel(L), n, s, e, q),
+        Adopt.at(~Lawful.kernel(L), 
+          n,
+          Node.ask(~Lawful.kernel(L), n, s, e, q),
+          Arrival.chain(Envelope.of(e), Machine.arrival(Lawful.machine(L))(q))
+        ),
+        Ask.kept(~L, n, s, e, q),
+        Adopt.at.kept(~L, n, Node.ask(~Lawful.kernel(L), n, s, e, q), Arrival.chain(Envelope.of(e), Machine.arrival(Lawful.machine(L))(q)))
+      )
+    case Deed.Take{t}:
+      Take.kept(~Lawful.kernel(L), s, t)
+    case Deed.Sync{t}:
+      Sync.kept(~L, n, s, t)
+    case Deed.Keep{+b}:
+      Kept.same(~Lawful.machine(L), 
+        s,
+        Node.keep(~Lawful.machine(L), s, b),
+        Grows.keep(~Lawful.machine(L), s, Ropes.Put.nodes(Bytes.rope(b))),
+        Heads.led(~Lawful.machine(L), 
+          s,
+          Ledgers.State.put_datas(
+            ~Machine.Q(Lawful.machine(L)),
+            ~Machine.same(Lawful.machine(L)),
+            Ropes.Put.nodes(Bytes.rope(b)),
+            State.ledger(~Lawful.machine(L), s)
+          )
+        )
+      )
+    case Deed.Consent{+i}:
+      Kept.trans(~Lawful.machine(L), 
+        s,
+        Node.consent(~Lawful.kernel(L), n, s, i),
+        Adopt.maybe(~Lawful.kernel(L), n, Node.consent(~Lawful.kernel(L), n, s, i), Node.chain_of(~Lawful.machine(L), s, i)),
+        Consent.kept(~L, n, s, i, Node.chain_of(~Lawful.machine(L), s, i)),
+        Adopt.maybe.kept(~L, n, Node.consent(~Lawful.kernel(L), n, s, i), Node.chain_of(~Lawful.machine(L), s, i))
+      )
+    case Deed.Pass{+c}:
+      Kept.trans(~Lawful.machine(L), 
+        s,
+        Node.pass(~Lawful.kernel(L), n, s, c),
+        Adopt.at(~Lawful.kernel(L), n, Node.pass(~Lawful.kernel(L), n, s, c), c),
+        Pass.kept(~L, n, s, c),
+        Adopt.at.kept(~L, n, Node.pass(~Lawful.kernel(L), n, s, c), c)
+      )
+    case Deed.Pass{c}:
+      Pass.kept(~L, n, s, c)
+
+# a request that the node holds or not, of a run, has an outcome
+def Asked.outs(
+  ~L: Lawful(),
+  r: Run<Machine.Q(Lawful.machine(L))>,
+  c: Ledgers.Chain,
+  i: Ledgers.Id,
+  +a: Maybe<&2, Ledgers.Asked<Machine.Q(Lawful.machine(L))>>
+) -> Run.Outs(~Lawful.machine(L), Step.asked(~Lawful.kernel(L), r, c, i, a), i):
+  match a:
+    case None{}:
+      Unit{}
+    case Some{Ledgers.Asked{t, q}}:
+      Lawful.outs(L)(r)(c)(i)(q)
+
+# One.outs once the outcome o that the words ws read as is known
+def One.outs.read(
+  ~L: Lawful(),
+  +r: Run<Machine.Q(Lawful.machine(L))>,
+  c: Ledgers.Chain,
+  +i: Ledgers.Id,
+  ws: List<&2, U32>,
+  +o: Maybe<&2, Out>,
+  eg: {
+    Node.get(~Lawful.machine(L), 
+      Run.state(~Lawful.machine(L), r),
+      Tip.log(Run.tip(~Lawful.machine(L), r)),
+      Log.out(i)
+    )
+      == Some{ws}: Maybe<&2, List<&2, U32>>
+  }
+) -> Run.Outs(~Lawful.machine(L), Step.fresh(~Lawful.kernel(L), r, c, i, o), i):
+  match o:
+    case Some{x}:
+      Outs.self(~Lawful.machine(L), r, i, ws)(eg)
+    case None{}:
+      Asked.outs(~L, r, c, i, Node.asked(~Lawful.machine(L), Run.state(~Lawful.machine(L), r), i))
+
+# One.outs once what the log holds for the request is known (g)
+def One.outs.at(
+  ~L: Lawful(),
+  +r: Run<Machine.Q(Lawful.machine(L))>,
+  c: Ledgers.Chain,
+  +i: Ledgers.Id,
+  g: Maybe<&2, List<&2, U32>>,
+  eg: {
+    Node.get(~Lawful.machine(L), 
+      Run.state(~Lawful.machine(L), r),
+      Tip.log(Run.tip(~Lawful.machine(L), r)),
+      Log.out(i)
+    )
+      == g: Maybe<&2, List<&2, U32>>
+  }
+) -> Run.Outs(~Lawful.machine(L), 
+  Step.fresh(~Lawful.kernel(L), 
+    r,
+    c,
+    i,
+    Maybe.bind(&2, List<&2, U32>, Out, g, ws => Out.read(ws))
+  ),
+  i
+):
+  match g:
+    case None{}:
+      Asked.outs(~L, r, c, i, Node.asked(~Lawful.machine(L), Run.state(~Lawful.machine(L), r), i))
+    case Some{+ws}:
+      One.outs.read(~L, r, c, i, ws, Out.read(ws), eg)
+
+# a request has an outcome after its step
+def One.outs(
+  ~L: Lawful(),
+  +r: Run<Machine.Q(Lawful.machine(L))>,
+  c: Ledgers.Chain,
+  +i: Ledgers.Id
+) -> Run.Outs(~Lawful.machine(L), Step.one(~Lawful.kernel(L), r, c, i), i):
+  One.outs.at(~L, 
+    r,
+    c,
+    i,
+    Node.get(~Lawful.machine(L), Run.state(~Lawful.machine(L), r), Tip.log(Run.tip(~Lawful.machine(L), r)), Log.out(i)),
+    {==}
+  )
+
+# Outs.kept once what the log of the run holds for the request is known (g)
+def Outs.kept.at(
+  ~L: Lawful(),
+  +c: Ledgers.Chain,
+  +qs: List<&2, Ledgers.Id>,
+  +r: Run<Machine.Q(Lawful.machine(L))>,
+  +i: Ledgers.Id,
+  g: Maybe<&2, List<&2, U32>>,
+  eg: {
+    Node.get(~Lawful.machine(L), 
+      Run.state(~Lawful.machine(L), r),
+      Tip.log(Run.tip(~Lawful.machine(L), r)),
+      Log.out(i)
+    )
+      == g: Maybe<&2, List<&2, U32>>
+  }
+) -> {
+  Maybe.is_some(&2, List<&2, U32>, g) == True{}: Bool
+} -> Run.Outs(~Lawful.machine(L), Step.all(~Lawful.kernel(L), c, qs, Some{r}), i):
+  match g:
+    case None{}:
+      h => Empty.absurd(
+        Run.Outs(~Lawful.machine(L), Step.all(~Lawful.kernel(L), c, qs, Some{r}), i),
+        Shared.Bool.false_ne_true(h)
+      )
+    case Some{+v}:
+      h => Outs.of(~Lawful.machine(L), 
+        i,
+        v,
+        Step.all(~Lawful.kernel(L), c, qs, Some{r})
+      )(
+        All.kept(~L, 
+          c,
+          qs,
+          Some{r},
+          Log.out(i),
+          v
+        )(Keeps.self(~Lawful.machine(L), r, Log.out(i), v)(eg))
+      )
+
+# an outcome that a run has, it has after more requests
+def Outs.kept(
+  ~L: Lawful(),
+  c: Ledgers.Chain,
+  qs: List<&2, Ledgers.Id>,
+  +m: Maybe<&2, Run<Machine.Q(Lawful.machine(L))>>,
+  +i: Ledgers.Id
+) -> Run.Outs(~Lawful.machine(L), m, i) -> Run.Outs(~Lawful.machine(L), Step.all(~Lawful.kernel(L), c, qs, m), i):
+  match m:
+    case None{}:
+      h =>
+        %Equal.sym(
+          Maybe<&2, Run<Machine.Q(Lawful.machine(L))>>,
+          Step.all(~Lawful.kernel(L), c, qs, None{}),
+          None{},
+          All.none(~Lawful.kernel(L), c, qs)
+        ): Run.Outs(~Lawful.machine(L), _, i)
+        Unit{}
+    case Some{Run{s, t}}:
+      h => Outs.kept.at(~L, 
+        c,
+        qs,
+        Run{s, t},
+        i,
+        Node.get(~Lawful.machine(L), s, Tip.log(t), Log.out(i)),
+        {==}
+      )(h)
+
+# All.outs at the first request j, once it is known whether it is i
+def All.outs.at(
+  ~L: Lawful(),
+  +c: Ledgers.Chain,
+  +j: Ledgers.Id,
+  rest: List<&2, Ledgers.Id>,
+  +m: Maybe<&2, Run<Machine.Q(Lawful.machine(L))>>,
+  +i: Ledgers.Id,
+  +same: Bool,
+  es: {Ledgers.Id.is_eq(j, i) == same: Bool},
+  ih: {
+    List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, rest, i) == True{}: Bool
+  } -> Run.Outs(~Lawful.machine(L), 
+    Step.all(~Lawful.kernel(L), 
+      c,
+      rest,
+      Maybe.bind(&2, Run<Machine.Q(Lawful.machine(L))>, Run<Machine.Q(Lawful.machine(L))>, m, r => Step.one(~Lawful.kernel(L), r, c, j))
+    ),
+    i
+  )
+) -> {
+  List.any.if(u => List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, rest, i), same) == True{}: Bool
+} -> Run.Outs(~Lawful.machine(L), 
+  Step.all(~Lawful.kernel(L), 
+    c,
+    rest,
+    Maybe.bind(&2, Run<Machine.Q(Lawful.machine(L))>, Run<Machine.Q(Lawful.machine(L))>, m, r => Step.one(~Lawful.kernel(L), r, c, j))
+  ),
+  i
+):
+  match same:
+    case True{}:
+      e => Outs.kept(~L, 
+        c,
+        rest,
+        Maybe.bind(&2, Run<Machine.Q(Lawful.machine(L))>, Run<Machine.Q(Lawful.machine(L))>, m, r => Step.one(~Lawful.kernel(L), r, c, j)),
+        i
+      )(
+        %Equal.sym(Ledgers.Id, j, i, Ledgers.Id.is_eq_sound(j, i)(es)): Run.Outs(~Lawful.machine(L), Maybe.bind(&2, Run<Machine.Q(Lawful.machine(L))>, Run<Machine.Q(Lawful.machine(L))>, m, r => Step.one(~Lawful.kernel(L), r, c, _)), i)
+        Outs.all(~Lawful.machine(L), m, r => Step.one(~Lawful.kernel(L), r, c, i), i, r => One.outs(~L, r, c, i)))
+    case False{}:
+      e => ih(e)
+
+# each request of a step has an outcome after it
+def All.outs(
+  ~L: Lawful(),
+  +c: Ledgers.Chain,
+  +qs: List<&2, Ledgers.Id>,
+  +m: Maybe<&2, Run<Machine.Q(Lawful.machine(L))>>,
+  +i: Ledgers.Id
+) -> {
+  List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, qs, i) == True{}: Bool
+} -> Run.Outs(~Lawful.machine(L), Step.all(~Lawful.kernel(L), c, qs, m), i):
+  match qs:
+    case Nil{}:
+      e => Empty.absurd(Run.Outs(~Lawful.machine(L), m, i), Shared.Bool.false_ne_true(e))
+    case Con{j, rest}:
+      All.outs.at(~L, 
+        c,
+        j,
+        rest,
+        m,
+        i,
+        Ledgers.Id.is_eq(j, i),
+        {==},
+        All.outs(~L, 
+          c,
+          rest,
+          Maybe.bind(&2, Run<Machine.Q(Lawful.machine(L))>, Run<Machine.Q(Lawful.machine(L))>, m, r => Step.one(~Lawful.kernel(L), r, c, j)),
+          i
+        )
+      )
