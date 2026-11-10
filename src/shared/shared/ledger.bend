@@ -11,11 +11,11 @@ import ./shared/text.bend as Texts
 
 # Ledgers
 # =======
-# A ledger is what nodes replicate: requests, ballots and data, each in the
-# slot that its own content names. A holder takes in what it lacks and never
-# changes what it holds (State.take), so every ledger only grows, and holders
-# of the same entries hold the same state, in any order and any number of
-# times.
+# A ledger is what nodes replicate: requests, ballots, data and proofs of
+# lies, each in the slot that its own content names. A holder takes in what
+# it lacks and never changes what it holds (State.take), so every ledger only
+# grows, and holders of the same entries hold the same state, in any order
+# and any number of times.
 #
 # A line is a store, or a line below it. Its owners cast one ballot each for
 # the step at each round of each height; a step is what a majority of them
@@ -69,11 +69,18 @@ type Link is Data:
 type Ballot is Data:
   Ballot{signed: Signed, link: Link}
 
-# a request of a change, with its time; a ballot of a node; or data
+# the proof that a node lied: a key, and two ballots that the key signs. A key
+# signs one ballot only, so only the owner of the key can make one
+type Lie is Data:
+  Lie{key: Hashes.Hash, one: Ballot, two: Ballot}
+
+# a request of a change, with its time; a ballot of a node; data; or the proof
+# that a node lied
 type Entry<-Q: Data> is Data:
   Entry.Ask{id: Id, time: String, ask: Q}
   Entry.Vote{ballot: Ballot}
   Entry.Data{words: List<&2, U32>}
+  Entry.Lie{lie: Lie}
 
 # Codes
 # -----
@@ -241,6 +248,15 @@ def Slot.pass(w: Where, n: String) -> List<&2, Bool>:
   match w:
     case Where{c, h, r}:
       List.append(&2, Bool, Slot.passes(c, h, r), Slot.ballot(n))
+
+# the start of the slots of the lies of the nodes in the store r
+def Slot.lies(r: Id) -> List<&2, Bool>:
+  True{} <> False{} <> Id.key(r)
+
+# the slot of the proof that the node n lied in the store r: one for each node
+# in each store
+def Slot.lie(r: Id, n: String) -> List<&2, Bool>:
+  List.append(&2, Bool, Slot.lies(r), Tries.Trie.text(n))
 
 # the slot of the data whose hash is h
 def Slot.data(h: Hashes.Hash) -> List<&2, Bool>:
@@ -799,6 +815,60 @@ def Ballot.is_eq_sound(
 ) -> {Ballot.is_eq(a, b) == True{}: Bool} -> {a == b: Ballot}:
   Shared.Eq.sound(~Ballot, ~Ballot.is_eq, Ballot.laws(), a, b)
 
+# the lie l, then r
+def Lie.code(l: Lie, r: List<&2, U32>) -> List<&2, U32>:
+  match l:
+    case Lie{k, a, b}:
+      Hashes.Hash.code(k, Ballot.code(a, Ballot.code(b, r)))
+
+# a lie
+def Lie.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Lie>>:
+  Codes.Code.three.read(
+    ~Hashes.Hash,
+    ~Ballot,
+    ~Ballot,
+    ~Lie,
+    ~Hashes.Hash.code.read,
+    ~Ballot.code.read,
+    ~Ballot.code.read,
+    k => a => b => Lie{k, a, b},
+    ts
+  )
+
+# a lie reads back
+def Lie.code_read(
+  l: Lie,
+  r: List<&2, U32>
+) -> {Lie.code.read(Lie.code(l, r)) == Some{Codes.Read{l, r}}: Maybe<&2, Codes.Read<Lie>>}:
+  match l:
+    case Lie{k, a, b}:
+      Codes.Code.three_read(
+        ~Hashes.Hash,
+        ~Ballot,
+        ~Ballot,
+        ~Lie,
+        ~Hashes.Hash.codec(),
+        ~Ballot.codec(),
+        ~Ballot.codec(),
+        x => y => z => Lie{x, y, z},
+        k,
+        a,
+        b,
+        r
+      )
+
+# the code of lies
+def Lie.codec() -> Codes.Codec(Lie):
+  (Lie.code, (Lie.code.read, l => r => Lie.code_read(l, r)))
+
+# a and b are the same lie: they have the same code
+def Lie.is_eq(a: Lie, b: Lie) -> Bool:
+  Codes.Code.is_eq(~Lie, ~Lie.code, a, b)
+
+# the laws of Lie.is_eq
+def Lie.laws() -> Shared.Eq.Laws(Lie, Lie.is_eq):
+  Codes.Code.eq_laws(~Lie, ~Lie.codec())
+
 # the step that the ballot b is for
 def Ballot.vote(b: Ballot) -> Maybe<&2, Vote>:
   match b:
@@ -857,6 +927,8 @@ def Entry.is_eq(~Q: Data, ~same: Q -> Q -> Bool, a: Entry<Q>, b: Entry<Q>) -> Bo
       Ballot.is_eq(v1, v2)
     case Entry.Data{d1} Entry.Data{d2}:
       Shared.List.is_eq(~U32, ~U32.is_eq, d1, d2)
+    case Entry.Lie{l1} Entry.Lie{l2}:
+      Lie.is_eq(l1, l2)
     case _ _:
       False{}
 
@@ -885,6 +957,8 @@ def Entry.is_eq_refl(
       Ballot.is_eq_refl(v)
     case Entry.Data{d}:
       Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), d)
+    case Entry.Lie{l}:
+      Shared.Eq.refl(~Lie, ~Lie.is_eq, Lie.laws(), l)
 
 # Entry.is_eq is True only for equal entries
 def Entry.is_eq_sound(
@@ -931,6 +1005,16 @@ def Entry.is_eq_sound(
           d2
         )(h): {Entry.Data{d1} == Entry.Data{_}: Entry<Q>}
         {==}
+    case Entry.Lie{l1} Entry.Lie{l2}:
+      h =>
+        %Shared.Eq.sound(
+          ~Lie,
+          ~Lie.is_eq,
+          Lie.laws(),
+          l1,
+          l2
+        )(h): {Entry.Lie{l1} == Entry.Lie{_}: Entry<Q>}
+        {==}
     case Entry.Ask{i, t, q} Entry.Vote{v}:
       h => Empty.absurd(
         {Entry.Ask{i, t, q} == Entry.Vote{v}: Entry<Q>},
@@ -955,6 +1039,24 @@ def Entry.is_eq_sound(
       )
     case Entry.Data{d} Entry.Vote{v}:
       h => Empty.absurd({Entry.Data{d} == Entry.Vote{v}: Entry<Q>}, Shared.Bool.false_ne_true(h))
+    case Entry.Ask{i, t, q} Entry.Lie{l}:
+      h => Empty.absurd(
+        {Entry.Ask{i, t, q} == Entry.Lie{l}: Entry<Q>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Entry.Vote{v} Entry.Lie{l}:
+      h => Empty.absurd({Entry.Vote{v} == Entry.Lie{l}: Entry<Q>}, Shared.Bool.false_ne_true(h))
+    case Entry.Data{d} Entry.Lie{l}:
+      h => Empty.absurd({Entry.Data{d} == Entry.Lie{l}: Entry<Q>}, Shared.Bool.false_ne_true(h))
+    case Entry.Lie{l} Entry.Ask{i, t, q}:
+      h => Empty.absurd(
+        {Entry.Lie{l} == Entry.Ask{i, t, q}: Entry<Q>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Entry.Lie{l} Entry.Vote{v}:
+      h => Empty.absurd({Entry.Lie{l} == Entry.Vote{v}: Entry<Q>}, Shared.Bool.false_ne_true(h))
+    case Entry.Lie{l} Entry.Data{d}:
+      h => Empty.absurd({Entry.Lie{l} == Entry.Data{d}: Entry<Q>}, Shared.Bool.false_ne_true(h))
 
 # the laws of Entry.is_eq, by the laws of same
 def Entry.laws(
@@ -1661,6 +1763,8 @@ def Ballot.refl(
     case Entry.Ask{i, t, q}:
       {==}
     case Entry.Data{d}:
+      {==}
+    case Entry.Lie{l}:
       {==}
 
 # a cell kept from many gives a void ballot
@@ -2817,6 +2921,8 @@ def State.add_datas_plain.at(
       )
     case Some{Cells.One{Entry.Vote{b}}}:
       State.add_datas_plain.other(~Q, ~same, ~laws, s, ws, r, Cells.One{Entry.Vote{b}}, em, {==})
+    case Some{Cells.One{Entry.Lie{l}}}:
+      State.add_datas_plain.other(~Q, ~same, ~laws, s, ws, r, Cells.One{Entry.Lie{l}}, em, {==})
     case Some{Cells.Many{}}:
       State.add_datas_plain.other(~Q, ~same, ~laws, s, ws, r, Cells.Many{}, em, {==})
 

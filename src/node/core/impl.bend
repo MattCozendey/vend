@@ -6195,6 +6195,8 @@ def Held.follows(
       {==}
     case Some{Cells.One{Ledgers.Entry.Data{d}}}:
       {==}
+    case Some{Cells.One{Ledgers.Entry.Lie{x}}}:
+      {==}
     case Some{Cells.Many{}}:
       {==}
 

@@ -1385,6 +1385,19 @@ def Maybe.when(-B: Data, b: Bool, k: Unit -> Maybe<&2, B>) -> Maybe<&2, B>:
     case False{}:
       None{}
 
+# a "when" that gives a value has a condition that holds
+def Maybe.when_holds(
+  -B: Data,
+  b: Bool,
+  -k: Unit -> Maybe<&2, B>,
+  -x: B
+) -> {Maybe.when(B, b, k) == Some{x}: Maybe<&2, B>} -> {b == True{}: Bool}:
+  match b:
+    case True{}:
+      e => {==}
+    case False{}:
+      e => Empty.absurd({False{} == True{}: Bool}, Maybe.none_ne_some(B, x, e))
+
 # List equality
 # -------------
 # xs and ys hold the same elements in the same order, as same calls them: the
