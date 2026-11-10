@@ -18,9 +18,10 @@ import ./shared/text.bend as Texts
 # and any number of times.
 #
 # A line is a store, or a line below it. Its owners cast one ballot each for
-# the step at each round of each height; a step is what a majority of them
-# cast in one round; it stays as the ledger grows (State.decide_grows). What
-# a step means is the caller's: the ledger does not read a line's state.
+# the step at each round of each height; what a majority of them cast in one
+# round stays as the ledger grows (State.decide_grows). When that is a step,
+# and what a step means, is the caller's: the ledger does not read a line's
+# state.
 
 # Names
 # -----
@@ -1199,7 +1200,8 @@ def State.bucket(~Q: Data, s: State(Q), w: Where) -> State(Q):
     case Where{c, h, r}:
       State.under(~Q, s, Slot.bucket(c, h, r))
 
-# the step that the owners ms decide at the place w of s, if they did
+# the step that a majority of the owners ms cast at the place w of s, if one
+# did
 def State.decide(~Q: Data, s: State(Q), w: Where, ms: List<&2, String>) -> Maybe<&2, Vote>:
   Bucket.decide(~Q, State.bucket(~Q, s, w), ms)
 
@@ -2004,7 +2006,7 @@ def Ballots.grows(
         Ballots.grows(~Q, ~same, ~laws, s, s2, p, r, gr)
       )
 
-# what the owners decide at a place stays decided as the state grows: a step
+# what a majority of the owners cast at a place stays as the state grows: it
 # is final
 law State.decide_grows:
   for ~Q: Data
