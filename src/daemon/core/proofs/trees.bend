@@ -21,279 +21,8 @@ import ../stepping.bend as Stepping
 import ../voting.bend as Voting
 import ../../shared/shared/store.bend as Stores
 
-# Codes
-# -----
-
-# a member reads back
-def Member.code_read(
-  x: Basics.Member,
-  r: List<&2, U32>
-) -> {
-  Basics.Member.code.read(
-    Basics.Member.code(x, r)
-  )
-    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Basics.Member>>
-}:
-  match x:
-    case Basics.Member.Node{n}:
-      Codes.Code.one_read(
-        ~String,
-        ~Basics.Member,
-        ~Codes.Code.text.codec(),
-        a => Basics.Member.Node{a},
-        n,
-        r
-      )
-    case Basics.Member.Group{n}:
-      Codes.Code.one_read(
-        ~String,
-        ~Basics.Member,
-        ~Codes.Code.text.codec(),
-        a => Basics.Member.Group{a},
-        n,
-        r
-      )
-
-# the code of members
-def Member.codec() -> Codes.Codec(Basics.Member):
-  (Basics.Member.code, (Basics.Member.code.read, x => r => Member.code_read(x, r)))
-
-# a content reads back
-def Content.code_read(
-  x: Basics.Content,
-  r: List<&2, U32>
-) -> {
-  Basics.Content.code.read(
-    Basics.Content.code(x, r)
-  )
-    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Basics.Content>>
-}:
-  match x:
-    case Basics.Content.Root{b}:
-      Codes.Code.one_read(
-        ~Ropes.Root,
-        ~Basics.Content,
-        ~Ropes.Root.codec(),
-        a => Basics.Content.Root{a},
-        b,
-        r
-      )
-    case Basics.Content.Of{v}:
-      Codes.Code.one_read(
-        ~Ledgers.Id,
-        ~Basics.Content,
-        ~Ledgers.Id.codec(),
-        a => Basics.Content.Of{a},
-        v,
-        r
-      )
-
-# the code of contents
-def Content.codec() -> Codes.Codec(Basics.Content):
-  (Basics.Content.code, (Basics.Content.code.read, x => r => Content.code_read(x, r)))
-
-# a change reads back
-def Change.code_read(
-  x: Basics.Change,
-  r: List<&2, U32>
-) -> {
-  Basics.Change.code.read(
-    Basics.Change.code(x, r)
-  )
-    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Basics.Change>>
-}:
-  match x:
-    case Basics.Change.Branch{n, at}:
-      Codes.Code.two_read(
-        ~String,
-        ~Maybe<&2, Ledgers.Id>,
-        ~Basics.Change,
-        ~Codes.Code.text.codec(),
-        ~Codes.Code.maybe.codec(~Ledgers.Id, ~Ledgers.Id.codec()),
-        a => b => Basics.Change.Branch{a, b},
-        n,
-        at,
-        r
-      )
-    case Basics.Change.Group{g, ms}:
-      Codes.Code.two_read(
-        ~String,
-        ~List<&2, Basics.Member>,
-        ~Basics.Change,
-        ~Codes.Code.text.codec(),
-        ~Codes.Code.list.codec(~Basics.Member, ~Member.codec()),
-        a => b => Basics.Change.Group{a, b},
-        g,
-        ms,
-        r
-      )
-    case Basics.Change.Own{g, at, os}:
-      Codes.Code.three_read(
-        ~String,
-        ~Maybe<&2, Ledgers.Id>,
-        ~List<&2, String>,
-        ~Basics.Change,
-        ~Codes.Code.text.codec(),
-        ~Codes.Code.maybe.codec(~Ledgers.Id, ~Ledgers.Id.codec()),
-        ~Codes.Code.list.codec(~String, ~Codes.Code.text.codec()),
-        a => b => c => Basics.Change.Own{a, b, c},
-        g,
-        at,
-        os,
-        r
-      )
-    case Basics.Change.Write{n, base, c}:
-      Codes.Code.three_read(
-        ~Resources.Name,
-        ~Maybe<&2, Ledgers.Id>,
-        ~Basics.Content,
-        ~Basics.Change,
-        ~Resources.Name.codec(),
-        ~Codes.Code.maybe.codec(~Ledgers.Id, ~Ledgers.Id.codec()),
-        ~Content.codec(),
-        a => b => c => Basics.Change.Write{a, b, c},
-        n,
-        base,
-        c,
-        r
-      )
-    case Basics.Change.Resolve{k, n, c}:
-      Codes.Code.three_read(
-        ~Ledgers.Id,
-        ~Resources.Name,
-        ~Basics.Content,
-        ~Basics.Change,
-        ~Ledgers.Id.codec(),
-        ~Resources.Name.codec(),
-        ~Content.codec(),
-        a => b => c => Basics.Change.Resolve{a, b, c},
-        k,
-        n,
-        c,
-        r
-      )
-    case Basics.Change.Merge{v}:
-      Codes.Code.one_read(
-        ~Ledgers.Id,
-        ~Basics.Change,
-        ~Ledgers.Id.codec(),
-        a => Basics.Change.Merge{a},
-        v,
-        r
-      )
-    case Basics.Change.Move{v}:
-      Codes.Code.one_read(
-        ~Ledgers.Id,
-        ~Basics.Change,
-        ~Ledgers.Id.codec(),
-        a => Basics.Change.Move{a},
-        v,
-        r
-      )
-    case Basics.Change.Mark{m, n}:
-      Codes.Code.two_read(
-        ~String,
-        ~String,
-        ~Basics.Change,
-        ~Codes.Code.text.codec(),
-        ~Codes.Code.text.codec(),
-        a => b => Basics.Change.Mark{a, b},
-        m,
-        n,
-        r
-      )
-    case Basics.Change.Key{n, k}:
-      Codes.Code.two_read(
-        ~String,
-        ~Hashes.Hash,
-        ~Basics.Change,
-        ~Codes.Code.text.codec(),
-        ~Hashes.Hash.codec(),
-        a => b => Basics.Change.Key{a, b},
-        n,
-        k,
-        r
-      )
-
-# the code of changes
-def Change.codec() -> Codes.Codec(Basics.Change):
-  (Basics.Change.code, (Basics.Change.code.read, x => r => Change.code_read(x, r)))
-
-# a first owner reads back
-def Owner.code_read(
-  x: Basics.Owner,
-  r: List<&2, U32>
-) -> {
-  Basics.Owner.code.read(
-    Basics.Owner.code(x, r)
-  )
-    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Basics.Owner>>
-}:
-  match x:
-    case Basics.Owner{n, k}:
-      Codes.Code.two_read(
-        ~String,
-        ~Hashes.Hash,
-        ~Basics.Owner,
-        ~Codes.Code.text.codec(),
-        ~Hashes.Hash.codec(),
-        a => b => Basics.Owner{a, b},
-        n,
-        k,
-        r
-      )
-
-# the code of first owners
-def Owner.codec() -> Codes.Codec(Basics.Owner):
-  (Basics.Owner.code, (Basics.Owner.code.read, x => r => Owner.code_read(x, r)))
-
-# a request reads back
-def Ask.code_read(
-  x: Basics.Ask,
-  r: List<&2, U32>
-) -> {
-  Basics.Ask.code.read(
-    Basics.Ask.code(x, r)
-  )
-    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Basics.Ask>>
-}:
-  match x:
-    case Basics.Ask.Start{os}:
-      Codes.Code.one_read(
-        ~List<&2, Basics.Owner>,
-        ~Basics.Ask,
-        ~Codes.Code.list.codec(~Basics.Owner, ~Owner.codec()),
-        a => Basics.Ask.Start{a},
-        os,
-        r
-      )
-    case Basics.Ask.On{st, l, c}:
-      Codes.Code.three_read(
-        ~Ledgers.Id,
-        ~Maybe<&2, String>,
-        ~Basics.Change,
-        ~Basics.Ask,
-        ~Ledgers.Id.codec(),
-        ~Codes.Code.maybe.codec(~String, ~Codes.Code.text.codec()),
-        ~Change.codec(),
-        a => b => c => Basics.Ask.On{a, b, c},
-        st,
-        l,
-        c,
-        r
-      )
-
-# the code of requests
-def Ask.codec() -> Codes.Codec(Basics.Ask):
-  (Basics.Ask.code, (Basics.Ask.code.read, x => r => Ask.code_read(x, r)))
-
-# the laws of Spec.Ask.is_eq: two requests are the same exactly when their codes
-# are
-def Ask.laws() -> Shared.Eq.Laws(Basics.Ask, Basics.Ask.is_eq):
-  Codes.Code.eq_laws(~Basics.Ask, ~Ask.codec())
-
 def Spec.Ask.same():
-  Ask.laws()
+  Basics.Ask.laws()
 
 # Owners
 # ------
@@ -409,7 +138,7 @@ def Led.wait(
 
 # a node grows to itself
 def Grows.refl(s: Basics.Node) -> {Reading.Node.grows(s, s) == True{}: Bool}:
-  Ledgers.State.grows_refl(~Basics.Ask, ~Basics.Ask.is_eq, ~Ask.laws(), Basics.State.ledger(s))
+  Ledgers.State.grows_refl(~Basics.Ask, ~Basics.Ask.is_eq, ~Basics.Ask.laws(), Basics.State.ledger(s))
 
 # growth composes
 def Grows.trans(
@@ -422,7 +151,7 @@ def Grows.trans(
   Ledgers.State.grows_trans(
     ~Basics.Ask,
     ~Basics.Ask.is_eq,
-    ~Ask.laws(),
+    ~Basics.Ask.laws(),
     Basics.State.ledger(a),
     Basics.State.ledger(b),
     Basics.State.ledger(c)
@@ -457,7 +186,7 @@ def Grows.keep(
     Ledgers.State.put_datas_grows(
       ~Basics.Ask,
       ~Basics.Ask.is_eq,
-      ~Ask.laws(),
+      ~Basics.Ask.laws(),
       ds,
       Basics.State.ledger(s)
     )
@@ -2367,7 +2096,7 @@ def Accept.at.grows(
             Ledgers.State.add_grows(
               ~Basics.Ask,
               ~Basics.Ask.is_eq,
-              ~Ask.laws(),
+              ~Basics.Ask.laws(),
               Basics.State.ledger(s),
               Ledgers.Slot.of(b),
               Ledgers.Entry.Vote{b}
@@ -3048,7 +2777,7 @@ def Ask.new.grows(
       Ledgers.State.add_grows(
         ~Basics.Ask,
         ~Basics.Ask.is_eq,
-        ~Ask.laws(),
+        ~Basics.Ask.laws(),
         Basics.State.ledger(s),
         Ledgers.Slot.ask(i),
         Ledgers.Entry.Ask{i, Basics.Envelope.time(e), q}
@@ -3272,7 +3001,7 @@ def Take.grows(
       Ledgers.State.take_grows(
         ~Basics.Ask,
         ~Basics.Ask.is_eq,
-        ~Ask.laws(),
+        ~Basics.Ask.laws(),
         Basics.State.ledger(s),
         sent
       )
@@ -3361,7 +3090,7 @@ def Fetch.take(
     Ledgers.State.data_grows(
       ~Basics.Ask,
       ~Basics.Ask.is_eq,
-      ~Ask.laws(),
+      ~Basics.Ask.laws(),
       Basics.State.ledger(Basics.State.led(b, l1)),
       Basics.State.ledger(Voting.Node.take(b, t)),
       Hashes.Sha.hash(ws),

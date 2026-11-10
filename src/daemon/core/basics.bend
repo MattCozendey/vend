@@ -421,6 +421,279 @@ def Ask.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ask>>:
 def Ask.is_eq(a: Ask, b: Ask) -> Bool:
   Codes.Code.is_eq(~Ask, ~Ask.code, a, b)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument
+# Codes
+# -----
+
+# a member reads back
+def Member.code_read(
+  x: Member,
+  r: List<&2, U32>
+) -> {
+  Member.code.read(
+    Member.code(x, r)
+  )
+    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Member>>
+}:
+  match x:
+    case Member.Node{n}:
+      Codes.Code.one_read(
+        ~String,
+        ~Member,
+        ~Codes.Code.text.codec(),
+        a => Member.Node{a},
+        n,
+        r
+      )
+    case Member.Group{n}:
+      Codes.Code.one_read(
+        ~String,
+        ~Member,
+        ~Codes.Code.text.codec(),
+        a => Member.Group{a},
+        n,
+        r
+      )
+
+# the code of members
+def Member.codec() -> Codes.Codec(Member):
+  (Member.code, (Member.code.read, x => r => Member.code_read(x, r)))
+
+# a content reads back
+def Content.code_read(
+  x: Content,
+  r: List<&2, U32>
+) -> {
+  Content.code.read(
+    Content.code(x, r)
+  )
+    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Content>>
+}:
+  match x:
+    case Content.Root{b}:
+      Codes.Code.one_read(
+        ~Ropes.Root,
+        ~Content,
+        ~Ropes.Root.codec(),
+        a => Content.Root{a},
+        b,
+        r
+      )
+    case Content.Of{v}:
+      Codes.Code.one_read(
+        ~Ledgers.Id,
+        ~Content,
+        ~Ledgers.Id.codec(),
+        a => Content.Of{a},
+        v,
+        r
+      )
+
+# the code of contents
+def Content.codec() -> Codes.Codec(Content):
+  (Content.code, (Content.code.read, x => r => Content.code_read(x, r)))
+
+# a change reads back
+def Change.code_read(
+  x: Change,
+  r: List<&2, U32>
+) -> {
+  Change.code.read(
+    Change.code(x, r)
+  )
+    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Change>>
+}:
+  match x:
+    case Change.Branch{n, at}:
+      Codes.Code.two_read(
+        ~String,
+        ~Maybe<&2, Ledgers.Id>,
+        ~Change,
+        ~Codes.Code.text.codec(),
+        ~Codes.Code.maybe.codec(~Ledgers.Id, ~Ledgers.Id.codec()),
+        a => b => Change.Branch{a, b},
+        n,
+        at,
+        r
+      )
+    case Change.Group{g, ms}:
+      Codes.Code.two_read(
+        ~String,
+        ~List<&2, Member>,
+        ~Change,
+        ~Codes.Code.text.codec(),
+        ~Codes.Code.list.codec(~Member, ~Member.codec()),
+        a => b => Change.Group{a, b},
+        g,
+        ms,
+        r
+      )
+    case Change.Own{g, at, os}:
+      Codes.Code.three_read(
+        ~String,
+        ~Maybe<&2, Ledgers.Id>,
+        ~List<&2, String>,
+        ~Change,
+        ~Codes.Code.text.codec(),
+        ~Codes.Code.maybe.codec(~Ledgers.Id, ~Ledgers.Id.codec()),
+        ~Codes.Code.list.codec(~String, ~Codes.Code.text.codec()),
+        a => b => c => Change.Own{a, b, c},
+        g,
+        at,
+        os,
+        r
+      )
+    case Change.Write{n, base, c}:
+      Codes.Code.three_read(
+        ~Resources.Name,
+        ~Maybe<&2, Ledgers.Id>,
+        ~Content,
+        ~Change,
+        ~Resources.Name.codec(),
+        ~Codes.Code.maybe.codec(~Ledgers.Id, ~Ledgers.Id.codec()),
+        ~Content.codec(),
+        a => b => c => Change.Write{a, b, c},
+        n,
+        base,
+        c,
+        r
+      )
+    case Change.Resolve{k, n, c}:
+      Codes.Code.three_read(
+        ~Ledgers.Id,
+        ~Resources.Name,
+        ~Content,
+        ~Change,
+        ~Ledgers.Id.codec(),
+        ~Resources.Name.codec(),
+        ~Content.codec(),
+        a => b => c => Change.Resolve{a, b, c},
+        k,
+        n,
+        c,
+        r
+      )
+    case Change.Merge{v}:
+      Codes.Code.one_read(
+        ~Ledgers.Id,
+        ~Change,
+        ~Ledgers.Id.codec(),
+        a => Change.Merge{a},
+        v,
+        r
+      )
+    case Change.Move{v}:
+      Codes.Code.one_read(
+        ~Ledgers.Id,
+        ~Change,
+        ~Ledgers.Id.codec(),
+        a => Change.Move{a},
+        v,
+        r
+      )
+    case Change.Mark{m, n}:
+      Codes.Code.two_read(
+        ~String,
+        ~String,
+        ~Change,
+        ~Codes.Code.text.codec(),
+        ~Codes.Code.text.codec(),
+        a => b => Change.Mark{a, b},
+        m,
+        n,
+        r
+      )
+    case Change.Key{n, k}:
+      Codes.Code.two_read(
+        ~String,
+        ~Hashes.Hash,
+        ~Change,
+        ~Codes.Code.text.codec(),
+        ~Hashes.Hash.codec(),
+        a => b => Change.Key{a, b},
+        n,
+        k,
+        r
+      )
+
+# the code of changes
+def Change.codec() -> Codes.Codec(Change):
+  (Change.code, (Change.code.read, x => r => Change.code_read(x, r)))
+
+# a first owner reads back
+def Owner.code_read(
+  x: Owner,
+  r: List<&2, U32>
+) -> {
+  Owner.code.read(
+    Owner.code(x, r)
+  )
+    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Owner>>
+}:
+  match x:
+    case Owner{n, k}:
+      Codes.Code.two_read(
+        ~String,
+        ~Hashes.Hash,
+        ~Owner,
+        ~Codes.Code.text.codec(),
+        ~Hashes.Hash.codec(),
+        a => b => Owner{a, b},
+        n,
+        k,
+        r
+      )
+
+# the code of first owners
+def Owner.codec() -> Codes.Codec(Owner):
+  (Owner.code, (Owner.code.read, x => r => Owner.code_read(x, r)))
+
+# a request reads back
+def Ask.code_read(
+  x: Ask,
+  r: List<&2, U32>
+) -> {
+  Ask.code.read(
+    Ask.code(x, r)
+  )
+    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Ask>>
+}:
+  match x:
+    case Ask.Start{os}:
+      Codes.Code.one_read(
+        ~List<&2, Owner>,
+        ~Ask,
+        ~Codes.Code.list.codec(~Owner, ~Owner.codec()),
+        a => Ask.Start{a},
+        os,
+        r
+      )
+    case Ask.On{st, l, c}:
+      Codes.Code.three_read(
+        ~Ledgers.Id,
+        ~Maybe<&2, String>,
+        ~Change,
+        ~Ask,
+        ~Ledgers.Id.codec(),
+        ~Codes.Code.maybe.codec(~String, ~Codes.Code.text.codec()),
+        ~Change.codec(),
+        a => b => c => Ask.On{a, b, c},
+        st,
+        l,
+        c,
+        r
+      )
+
+# the code of requests
+def Ask.codec() -> Codes.Codec(Ask):
+  (Ask.code, (Ask.code.read, x => r => Ask.code_read(x, r)))
+
+# the laws of Spec.Ask.is_eq: two requests are the same exactly when their codes
+# are
+def Ask.laws() -> Shared.Eq.Laws(Ask, Ask.is_eq):
+  Codes.Code.eq_laws(~Ask, ~Ask.codec())
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
 # the key of the branch n below its store: prefix-free
 def Line.key(n: String) -> List<&2, Bool>:
   Tries.Trie.text(n)

@@ -109,7 +109,7 @@ def Chain.of.kept(
     x => Ledgers.State.read_grows(
       ~Basics.Ask,
       ~Basics.Ask.is_eq,
-      ~ProofTrees.Ask.laws(),
+      ~Basics.Ask.laws(),
       ~Ledgers.Asked<Basics.Ask>,
       m => Ledgers.Asked.of(~Basics.Ask, m),
       {==},
@@ -507,7 +507,7 @@ def Cell.kept.eq(
       Cells.Cell.keeps_value(
         ~Ledgers.Entry<Basics.Ask>,
         ~Ledgers.Entry.is_eq(~Basics.Ask, ~Basics.Ask.is_eq),
-        ~Ledgers.Entry.laws(~Basics.Ask, ~Basics.Ask.is_eq, ~ProofTrees.Ask.laws()),
+        ~Ledgers.Entry.laws(~Basics.Ask, ~Basics.Ask.is_eq, ~Basics.Ask.laws()),
         x,
         y
       )

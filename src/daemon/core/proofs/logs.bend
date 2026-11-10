@@ -264,7 +264,7 @@ def Get.grows(
         x => y => hh => w => Ledgers.State.data_grows(
           ~Basics.Ask,
           ~Basics.Ask.is_eq,
-          ~ProofTrees.Ask.laws(),
+          ~Basics.Ask.laws(),
           Basics.State.ledger(x),
           Basics.State.ledger(y),
           hh,
@@ -346,7 +346,7 @@ def Set.kept.if(
                 p => q => g => w => Ledgers.State.data_grows(
                   ~Basics.Ask,
                   ~Basics.Ask.is_eq,
-                  ~ProofTrees.Ask.laws(),
+                  ~Basics.Ask.laws(),
                   Basics.State.ledger(p),
                   Basics.State.ledger(q),
                   g,

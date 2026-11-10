@@ -49,7 +49,7 @@ def Tip.at.grows(
     w => Ledgers.State.data_grows(
       ~Basics.Ask,
       ~Basics.Ask.is_eq,
-      ~ProofTrees.Ask.laws(),
+      ~Basics.Ask.laws(),
       Basics.State.ledger(a),
       Basics.State.ledger(b),
       x,
@@ -1870,7 +1870,7 @@ def Ask.new.kept(
         Ledgers.State.add_grows(
           ~Basics.Ask,
           ~Basics.Ask.is_eq,
-          ~ProofTrees.Ask.laws(),
+          ~Basics.Ask.laws(),
           Basics.State.ledger(s),
           Ledgers.Slot.ask(i),
           Ledgers.Entry.Ask{i, Basics.Envelope.time(e), q}
@@ -2014,7 +2014,7 @@ def Take.kept(
         Ledgers.State.take_grows(
           ~Basics.Ask,
           ~Basics.Ask.is_eq,
-          ~ProofTrees.Ask.laws(),
+          ~Basics.Ask.laws(),
           Basics.State.ledger(s),
           sent
         )

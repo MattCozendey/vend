@@ -900,7 +900,7 @@ def Spec.Node.take_holds(s, t, k, e):
     Ledgers.State.one_grows(
       ~Basics.Ask,
       ~Basics.Ask.is_eq,
-      ~ProofTrees.Ask.laws(),
+      ~Basics.Ask.laws(),
       Basics.State.ledger(Basics.State.led(s, l1)),
       Basics.State.ledger(Voting.Node.take(s, t)),
       k,

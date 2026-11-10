@@ -1272,7 +1272,7 @@ def Ask.new.path(
         Ledgers.State.add_grows(
           ~Basics.Ask,
           ~Basics.Ask.is_eq,
-          ~ProofTrees.Ask.laws(),
+          ~Basics.Ask.laws(),
           Basics.State.ledger(s),
           Ledgers.Slot.ask(i),
           Ledgers.Entry.Ask{i, Basics.Envelope.time(e), q}
@@ -1416,7 +1416,7 @@ def Take.path(
         Ledgers.State.take_grows(
           ~Basics.Ask,
           ~Basics.Ask.is_eq,
-          ~ProofTrees.Ask.laws(),
+          ~Basics.Ask.laws(),
           Basics.State.ledger(s),
           sent
         )

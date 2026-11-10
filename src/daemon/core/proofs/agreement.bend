@@ -54,7 +54,7 @@ def Decide.up(
     Ledgers.State.decide_grows(
       ~Basics.Ask,
       ~Basics.Ask.is_eq,
-      ~ProofTrees.Ask.laws(),
+      ~Basics.Ask.laws(),
       Basics.State.ledger(a),
       Basics.State.ledger(u),
       w,
