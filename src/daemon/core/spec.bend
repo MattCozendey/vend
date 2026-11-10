@@ -2025,24 +2025,58 @@ def Own.ok(s: State(), r: Ledgers.Id, l: Maybe<&2, String>, at: Maybe<&2, Ledger
     case Some{b} Some{v}:
       Own.at(r, Node.place(s, v))
 
+# the node holds the members of each group of ns of the store tree h
+def Groups.held.all(+s: State(), +h: Maybe<&2, Hashes.Hash>, ns: List<&2, String>) -> Bool:
+  match ns:
+    case Nil{}:
+      True{}
+    case Con{n, r}:
+      List.all.if(
+        u => Groups.held.all(s, h, r),
+        Maybe.is_some(&2, Maybe<&2, List<&2, U32>>, Node.find(s, h, Key.group(n)))
+      )
+
+# the node holds the groups of the store tree h: their names, and the members
+# of each. Only then does it know which nodes are inside a group
+def Groups.held(+s: State(), +h: Maybe<&2, Hashes.Hash>) -> Bool:
+  List.all.if(
+    u => Groups.held.all(s, h, Group.names(s, h)),
+    Maybe.is_some(&2, Maybe<&2, List<&2, U32>>, Node.find(s, h, Key.groups()))
+  )
+
+# Own.takes once whether the Own may name its version is known (k), in the
+# store tree h (none: wait for the groups)
+def Own.takes.at(
+  +s: State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  g: String,
+  os: List<&2, String>,
+  k: Bool
+) -> Maybe<&2, Bool>:
+  match k:
+    case False{}:
+      Some{False{}}
+    case True{}:
+      Shared.Maybe.when(Bool, Groups.held(s, h), u => Some{Own.fits(os, Group.nodes(s, h, g))})
+
 # whether the owners of the line l of the store r take an Own of the group g
 # with the owners os, at the tree h: os are the nodes inside g in the store
-# tree that it names (Own.tree; none: wait for its step)
+# tree that it names (Own.tree; none: wait for its step, or for the groups)
 def Own.takes(
   +s: State(),
   r: Ledgers.Id,
   +l: Maybe<&2, String>,
-  g: String,
+  +g: String,
   +at: Maybe<&2, Ledgers.Id>,
-  os: List<&2, String>,
-  h: Maybe<&2, Hashes.Hash>
+  +os: List<&2, String>,
+  +h: Maybe<&2, Hashes.Hash>
 ) -> Maybe<&2, Bool>:
   Maybe.bind(
     &2,
     Bool,
     Bool,
     Own.ok(s, r, l, at),
-    k => Some{List.all.if(u => Own.fits(os, Group.nodes(s, Own.tree(s, l, at, h), g)), k)}
+    k => Own.takes.at(s, Own.tree(s, l, at, h), g, os, k)
   )
 
 # the verdict on an Own of the line l of the store r: when its owners take it

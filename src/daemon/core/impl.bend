@@ -265,42 +265,47 @@ def Fits.same(
     )(e)
   )
 
-# Own.takes_inside for a branch, once whether its step is the store's is known
-# (m)
-def Takes.at(
+# Takes.at once whether the node holds the groups is known (b)
+def Takes.held(
   +os: List<&2, String>,
   +ns: List<&2, String>,
+  b: Bool
+) -> {
+  Shared.Maybe.when(Bool, b, u => Some{Spec.Own.fits(os, ns)}) == Some{True{}}: Maybe<&2, Bool>
+} -> {os == ns: List<&2, String>}:
+  match b:
+    case False{}:
+      e => Empty.absurd({os == ns: List<&2, String>}, Shared.Maybe.none_ne_some(Bool, True{}, e))
+    case True{}:
+      e => Fits.same(os, ns)(Shared.Maybe.some_inj(Bool, Spec.Own.fits(os, ns), True{}, e))
+
+# Own.takes_inside once whether the Own may name its version is known (m)
+def Takes.at(
+  +s: Spec.State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  +g: String,
+  +os: List<&2, String>,
   m: Maybe<&2, Bool>
 ) -> {
-  Maybe.bind(
-    &2,
-    Bool,
-    Bool,
-    m,
-    k => Some{List.all.if(u => Spec.Own.fits(os, ns), k)}
-  )
-    == Some{True{}}: Maybe<&2, Bool>
-} -> {os == ns: List<&2, String>}:
+  Maybe.bind(&2, Bool, Bool, m, k => Spec.Own.takes.at(s, h, g, os, k)) == Some{True{}}: Maybe<&2, Bool>
+} -> {os == Spec.Group.nodes(s, h, g): List<&2, String>}:
   match m:
     case None{}:
-      e => Empty.absurd({os == ns: List<&2, String>}, Shared.Maybe.none_ne_some(Bool, True{}, e))
-    case Some{k}:
-      e => Fits.same(os, ns)(
-        Shared.List.all.if_rest(
-          k,
-          u => Spec.Own.fits(os, ns)
-        )(
-          Shared.Maybe.some_inj(
-            Bool,
-            List.all.if(u => Spec.Own.fits(os, ns), k),
-            True{},
-            e
-          )
-        )
+      e => Empty.absurd(
+        {os == Spec.Group.nodes(s, h, g): List<&2, String>},
+        Shared.Maybe.none_ne_some(Bool, True{}, e)
       )
+    case Some{False{}}:
+      e => Empty.absurd(
+        {os == Spec.Group.nodes(s, h, g): List<&2, String>},
+        Shared.Bool.false_ne_true(Shared.Maybe.some_inj(Bool, False{}, True{}, e))
+      )
+    case Some{True{}}:
+      Takes.held(os, Spec.Group.nodes(s, h, g), Spec.Groups.held(s, h))
 
 def Spec.Own.takes_inside(s, r, l, g, at, os, h):
-  Takes.at(os, Spec.Group.nodes(s, Spec.Own.tree(s, l, at, h), g), Spec.Own.ok(s, r, l, at))
+  Takes.at(s, Spec.Own.tree(s, l, at, h), g, os, Spec.Own.ok(s, r, l, at))
+
 # Growth
 # ------
 # A node's ledger only grows: each operation keeps every entry that it held.
