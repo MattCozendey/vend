@@ -45,7 +45,8 @@ def KeySet.put_all(
     case Con{x, r}:
       KeySet.put_all(~A, ~key, r, KeySet.put(~A, ~key, t, x))
 
-# xs without the values that seen holds, and each of the others once
+# xs without the values that seen holds, and each of the others once; the
+# key of each value is made once, for both the lookup and the put
 def KeySet.unique(
   ~A: Data,
   ~same: A -> A -> Bool,
@@ -57,11 +58,12 @@ def KeySet.unique(
     case Nil{}:
       []
     case Con{+x, +r}:
+      +k = key(x)
       Shared.Bool.when(
         List<&2, A>,
-        KeySet.has(~A, ~same, ~key, seen, x),
+        KeySet.has.at(~A, ~same, Tries.Trie.get(A, seen, k), x),
         u => KeySet.unique(~A, ~same, ~key, r, seen),
-        u => x <> KeySet.unique(~A, ~same, ~key, r, KeySet.put(~A, ~key, seen, x))
+        u => x <> KeySet.unique(~A, ~same, ~key, r, Tries.Trie.set(A, seen, k, x))
       )
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it

@@ -62,13 +62,13 @@ type Found<-S: Data, -A: Data> is Data:
 type Front<-S: Data, -A: Data> is Data:
   Front{back: List<&2, Visit<S, A>>, seen: Tries.Trie<S>}
 
-# front, with y to visit after rev and d, unless known
+# front, with y to visit after rev and d, unless known; k is the key of y
 def Search.push.new(
-  ~S: Data,
-  ~A: Data,
-  ~key: S -> List<&2, Bool>,
+  -S: Data,
+  -A: Data,
   known: Bool,
   y: S,
+  k: List<&2, Bool>,
   d: A,
   rev: List<&2, A>,
   front: Front<S, A>
@@ -78,9 +78,10 @@ def Search.push.new(
       f
     case False{} Front{back, seen}:
       +y = y
-      Front{Visit{y, d <> rev} <> back, KeySets.KeySet.put(~S, ~key, seen, y)}
+      Front{Visit{y, d <> rev} <> back, Tries.Trie.set(S, seen, k, y)}
 
-# front, with each state not seen that x steps to under a symbol of ds
+# front, with each state not seen that x steps to under a symbol of ds; the
+# key of each state is made once, for both the lookup and the put
 def Search.push(
   ~S: Data,
   ~A: Data,
@@ -99,6 +100,7 @@ def Search.push(
       f
     case Con{+d, r} Front{back, +seen}:
       +y = step(g)(x)(d)
+      +k = key(y)
       Search.push(
         ~S,
         ~A,
@@ -110,11 +112,11 @@ def Search.push(
         x,
         rev,
         Search.push.new(
-          ~S,
-          ~A,
-          ~key,
-          KeySets.KeySet.has(~S, ~same, ~key, seen, y),
+          S,
+          A,
+          KeySets.KeySet.has.at(~S, ~same, Tries.Trie.get(S, seen, k), y),
           y,
+          k,
           d,
           rev,
           Front{back, seen}
