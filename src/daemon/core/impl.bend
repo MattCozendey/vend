@@ -1500,7 +1500,7 @@ def Accept.at.grows(
         Spec.State.keyed(
         Spec.State.led(
           s,
-          Ledgers.State.cast(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), Spec.Ballot.at(b), Spec.Ballot.node(b), b)
+          Ledgers.State.keep(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), b)
         ),
         Spec.Keys.set(
           Spec.State.keys(s),
@@ -1511,11 +1511,11 @@ def Accept.at.grows(
         Spec.Seal.fits(c, b),
         Grows.to(
           s,
-          Spec.State.led(s, Ledgers.State.cast(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), Spec.Ballot.at(b), Spec.Ballot.node(b), b)),
+          Spec.State.led(s, Ledgers.State.keep(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), b)),
           Spec.State.keyed(
         Spec.State.led(
           s,
-          Ledgers.State.cast(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), Spec.Ballot.at(b), Spec.Ballot.node(b), b)
+          Ledgers.State.keep(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), b)
         ),
         Spec.Keys.set(
           Spec.State.keys(s),
@@ -1523,20 +1523,20 @@ def Accept.at.grows(
           Spec.Chained.next(c, b)
         )
       ),
-          Led.keyed(Spec.State.led(s, Ledgers.State.cast(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), Spec.Ballot.at(b), Spec.Ballot.node(b), b)), Spec.Keys.set(
+          Led.keyed(Spec.State.led(s, Ledgers.State.keep(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), b)), Spec.Keys.set(
           Spec.State.keys(s),
           Spec.Seal.slot(Spec.Ballot.store(b), Spec.Ballot.node(b)),
           Spec.Chained.next(c, b)
         )),
           Grows.led(
             s,
-            Ledgers.State.cast(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), Spec.Ballot.at(b), Spec.Ballot.node(b), b),
+            Ledgers.State.keep(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), b),
             Ledgers.State.add_grows(
               ~Spec.Ask,
               ~Spec.Ask.is_eq,
               ~Ask.laws(),
               Spec.State.ledger(s),
-              Ledgers.Slot.vote(Spec.Ballot.at(b), Spec.Ballot.node(b)),
+              Ledgers.Slot.of(b),
               Ledgers.Entry.Vote{b}
             )
           )
@@ -1568,7 +1568,7 @@ def Cast.seal.grows(
     case Some{Spec.Chained{+j, last, key, f}}:
       +b = Ledgers.Ballot.make(
         Spec.Seal.secret(Spec.Keys.seed(Spec.State.keys(s)), Spec.Where.store(w), j),
-        Ledgers.Signed{w, n, v},
+        Ledgers.Signed{w, n, Ledgers.Act.Vote{v, []}},
         last,
         Seals.Seal.public(
           Spec.Seal.secret(Spec.Keys.seed(Spec.State.keys(s)), Spec.Where.store(w), U32.inc(j))
@@ -1631,16 +1631,16 @@ def Cast.at.grows(
 ) -> {Spec.Node.grows(s, Spec.Cast.at(n, s, c, h, m)) == True{}: Bool}:
   match h m:
     case Spec.Head{r, b, +next, +th} Some{+t}:
-      +p = Spec.Plan.of(n, s, c, Ledgers.Where{c, next}, t, th, Spec.Owners.turn(Spec.Line.owners(s, t), next))
+      +p = Spec.Plan.of(n, s, c, Ledgers.Where{c, next, 0}, t, th, Spec.Owners.turn(Spec.Line.owners(s, t), next))
       +qs = Spec.Plan.asks(p)
       Grows.when(
         s,
-        Spec.Cast.may(n, s, Ledgers.Where{c, next}, t, qs),
-        Spec.Cast.put(n, Ledgers.Where{c, next}, th, qs, Spec.Plan.run(p), s),
+        Spec.Cast.may(n, s, Ledgers.Where{c, next, 0}, t, qs),
+        Spec.Cast.put(n, Ledgers.Where{c, next, 0}, th, qs, Spec.Plan.run(p), s),
         s,
         Cast.put.grows(
           n,
-          Ledgers.Where{c, next},
+          Ledgers.Where{c, next, 0},
           th,
           qs,
           Spec.Plan.run(p),
@@ -1650,7 +1650,7 @@ def Cast.at.grows(
             n,
             s,
             c,
-            Ledgers.Where{c, next},
+            Ledgers.Where{c, next, 0},
             t,
             th,
             Spec.Owners.turn(Spec.Line.owners(s, t), next)
@@ -1793,7 +1793,7 @@ def Advance.at.grows(
         Ledgers.State.decide(
           ~Spec.Ask,
           Spec.State.ledger(s),
-          Ledgers.Where{c, Spec.Head.next(h)},
+          Ledgers.Where{c, Spec.Head.next(h), 0},
           Spec.Line.owners(s, t)
         )
       )
@@ -3989,7 +3989,7 @@ def Accept.at.heads(
         Spec.State.keyed(
         Spec.State.led(
           s,
-          Ledgers.State.cast(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), Spec.Ballot.at(b), Spec.Ballot.node(b), b)
+          Ledgers.State.keep(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), b)
         ),
         Spec.Keys.set(
           Spec.State.keys(s),
@@ -4000,11 +4000,11 @@ def Accept.at.heads(
         Equal.trans(
           Tries.Trie<Spec.Head>,
           Spec.State.heads(s),
-          Spec.State.heads(Spec.State.led(s, Ledgers.State.cast(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), Spec.Ballot.at(b), Spec.Ballot.node(b), b))),
+          Spec.State.heads(Spec.State.led(s, Ledgers.State.keep(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), b))),
           Spec.State.heads(Spec.State.keyed(
         Spec.State.led(
           s,
-          Ledgers.State.cast(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), Spec.Ballot.at(b), Spec.Ballot.node(b), b)
+          Ledgers.State.keep(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), b)
         ),
         Spec.Keys.set(
           Spec.State.keys(s),
@@ -4012,8 +4012,8 @@ def Accept.at.heads(
           Spec.Chained.next(c, b)
         )
       )),
-          Heads.led(s, Ledgers.State.cast(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), Spec.Ballot.at(b), Spec.Ballot.node(b), b)),
-          Heads.keyed(Spec.State.led(s, Ledgers.State.cast(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), Spec.Ballot.at(b), Spec.Ballot.node(b), b)), Spec.Keys.set(
+          Heads.led(s, Ledgers.State.keep(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), b)),
+          Heads.keyed(Spec.State.led(s, Ledgers.State.keep(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), b)), Spec.Keys.set(
           Spec.State.keys(s),
           Spec.Seal.slot(Spec.Ballot.store(b), Spec.Ballot.node(b)),
           Spec.Chained.next(c, b)
@@ -4046,7 +4046,7 @@ def Cast.seal.heads(
     case Some{Spec.Chained{+j, last, key, f}}:
       +b = Ledgers.Ballot.make(
         Spec.Seal.secret(Spec.Keys.seed(Spec.State.keys(s)), Spec.Where.store(w), j),
-        Ledgers.Signed{w, n, v},
+        Ledgers.Signed{w, n, Ledgers.Act.Vote{v, []}},
         last,
         Seals.Seal.public(
           Spec.Seal.secret(Spec.Keys.seed(Spec.State.keys(s)), Spec.Where.store(w), U32.inc(j))
@@ -4179,14 +4179,14 @@ def Cast.at.heads(
 ) -> {Spec.State.heads(s) == Spec.State.heads(Spec.Cast.at(n, s, c, h, m)): Tries.Trie<Spec.Head>}:
   match h m:
     case Spec.Head{r, b, +next, +th} Some{+t}:
-      +p = Spec.Plan.of(n, s, c, Ledgers.Where{c, next}, t, th, Spec.Owners.turn(Spec.Line.owners(s, t), next))
+      +p = Spec.Plan.of(n, s, c, Ledgers.Where{c, next, 0}, t, th, Spec.Owners.turn(Spec.Line.owners(s, t), next))
       +qs = Spec.Plan.asks(p)
       Heads.when(
-        Spec.Cast.may(n, s, Ledgers.Where{c, next}, t, qs),
+        Spec.Cast.may(n, s, Ledgers.Where{c, next, 0}, t, qs),
         s,
-        Spec.Cast.put(n, Ledgers.Where{c, next}, th, qs, Spec.Plan.run(p), s),
+        Spec.Cast.put(n, Ledgers.Where{c, next, 0}, th, qs, Spec.Plan.run(p), s),
         s,
-        Cast.put.heads(n, Ledgers.Where{c, next}, th, qs, Spec.Plan.run(p), s),
+        Cast.put.heads(n, Ledgers.Where{c, next, 0}, th, qs, Spec.Plan.run(p), s),
         {==}
       )
     case Spec.Head{r, b, next, th} None{}:
@@ -4593,7 +4593,7 @@ def Advance.at.kept(
         Ledgers.State.decide(
           ~Spec.Ask,
           Spec.State.ledger(s),
-          Ledgers.Where{c, Spec.Head.next(h)},
+          Ledgers.Where{c, Spec.Head.next(h), 0},
           Spec.Line.owners(s, t)
         )
       )(em)(et)
@@ -5952,7 +5952,7 @@ def Decide.none(
   w: Ledgers.Where
 ) -> {Ledgers.State.decide(~Spec.Ask, l, w, []) == None{}: Maybe<&2, Ledgers.Vote>}:
   match w:
-    case Ledgers.Where{c, h}:
+    case Ledgers.Where{c, h, z}:
       {==}
 
 # Owners.up once what the log holds under the owners' key is known (m)
@@ -6021,13 +6021,13 @@ def Vote.up(
     Ledgers.Vote,
     Spec.Head.tip(a, h),
     Spec.Head.tip(u, h),
-    t => Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(a), Ledgers.Where{c, Spec.Head.next(h)}, Spec.Line.owners(a, t)),
-    t => Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(u), Ledgers.Where{c, Spec.Head.next(h)}, Spec.Line.owners(u, t)),
+    t => Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(a), Ledgers.Where{c, Spec.Head.next(h), 0}, Spec.Line.owners(a, t)),
+    t => Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(u), Ledgers.Where{c, Spec.Head.next(h), 0}, Spec.Line.owners(u, t)),
     v,
 t => Head.tip.grows(a, u, h, t, g),
 +t => +e =>
-      %Owners.up(a, u, t, Ledgers.Where{c, Spec.Head.next(h)}, v, g)(e): {
-        Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(u), Ledgers.Where{c, Spec.Head.next(h)}, _) == Some{v}: Maybe<&2, Ledgers.Vote>
+      %Owners.up(a, u, t, Ledgers.Where{c, Spec.Head.next(h), 0}, v, g)(e): {
+        Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(u), Ledgers.Where{c, Spec.Head.next(h), 0}, _) == Some{v}: Maybe<&2, Ledgers.Vote>
       }
       Ledgers.State.decide_grows(
         ~Spec.Ask,
@@ -6035,7 +6035,7 @@ t => Head.tip.grows(a, u, h, t, g),
         ~Ask.laws(),
         Spec.State.ledger(a),
         Spec.State.ledger(u),
-        Ledgers.Where{c, Spec.Head.next(h)},
+        Ledgers.Where{c, Spec.Head.next(h), 0},
         Spec.Line.owners(a, t),
         v
       )(g)(e)
@@ -6340,7 +6340,7 @@ def Advance.at.moves(
         %Equal.sym(
           Maybe<&2, Ledgers.Vote>,
           Spec.Advance.vote(s, c, h),
-          Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, Spec.Head.next(h)}, Spec.Line.owners(s, t)),
+          Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, Spec.Head.next(h), 0}, Spec.Line.owners(s, t)),
           Equal.cong(
             Maybe<&2, Spec.Tip>,
             Maybe<&2, Ledgers.Vote>,
@@ -6349,7 +6349,7 @@ def Advance.at.moves(
               Spec.Tip,
               Ledgers.Vote,
               mt,
-              t1 => Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, Spec.Head.next(h)}, Spec.Line.owners(s, t1))
+              t1 => Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, Spec.Head.next(h), 0}, Spec.Line.owners(s, t1))
             ),
             Spec.Head.tip(s, h),
             Some{t},
@@ -6361,7 +6361,7 @@ def Advance.at.moves(
             c,
             h,
             t,
-            Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, Spec.Head.next(h)}, Spec.Line.owners(s, t))
+            Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, Spec.Head.next(h), 0}, Spec.Line.owners(s, t))
           ),
           c,
           h,
@@ -6372,7 +6372,7 @@ def Advance.at.moves(
           c,
           h,
           t,
-          Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, Spec.Head.next(h)}, Spec.Line.owners(s, t))
+          Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, Spec.Head.next(h), 0}, Spec.Line.owners(s, t))
         )(em)
 
 def Spec.Node.advance_decided(s, c, h):
@@ -6855,7 +6855,7 @@ def Spec.Seal.accept_fits(s, b, c, s2):
     Spec.State.keyed(
       Spec.State.led(
         s,
-        Ledgers.State.cast(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), Spec.Ballot.at(b), Spec.Ballot.node(b), b)
+        Ledgers.State.keep(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), b)
       ),
       Spec.Keys.set(
         Spec.State.keys(s),

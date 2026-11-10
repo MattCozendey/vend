@@ -2516,13 +2516,13 @@ def Step.run(s: State(), c: Ledgers.Chain, t: Tip, qs: List<&2, Ledgers.Id>) -> 
 # the place of the ballot b
 def Ballot.at(b: Ledgers.Ballot) -> Ledgers.Where:
   match b:
-    case Ledgers.Ballot{Ledgers.Signed{w, n, v}, l}:
+    case Ledgers.Ballot{Ledgers.Signed{w, n, a}, l}:
       w
 
 # the node of the ballot b
 def Ballot.node(b: Ledgers.Ballot) -> String:
   match b:
-    case Ledgers.Ballot{Ledgers.Signed{w, n, v}, l}:
+    case Ledgers.Ballot{Ledgers.Signed{w, n, a}, l}:
       n
 
 # the place of the ballot before b in its chain
@@ -2540,13 +2540,13 @@ def Ballot.next(b: Ledgers.Ballot) -> Hashes.Hash:
 # the store of the place w
 def Where.store(w: Ledgers.Where) -> Ledgers.Id:
   match w:
-    case Ledgers.Where{Ledgers.Chain{r, k}, h}:
+    case Ledgers.Where{Ledgers.Chain{r, k}, h, z}:
       r
 
 # the line of the place w
 def Where.line(w: Ledgers.Where) -> Ledgers.Chain:
   match w:
-    case Ledgers.Where{c, h}:
+    case Ledgers.Where{c, h, z}:
       c
 
 # the store of the ballot b
@@ -2667,7 +2667,7 @@ def Seal.accept.at(+s: State(), +b: Ledgers.Ballot, m: Maybe<&2, Chained>) -> Ma
           State.keyed(
             State.led(
               s,
-              Ledgers.State.cast(~Ask, ~Ask.is_eq, State.ledger(s), Ballot.at(b), Ballot.node(b), b)
+              Ledgers.State.keep(~Ask, ~Ask.is_eq, State.ledger(s), b)
             ),
             Keys.set(State.keys(s), Seal.slot(Ballot.store(b), Ballot.node(b)), Chained.next(c, b))
           )
@@ -3014,7 +3014,7 @@ def Cast.seal(+s: State(), +w: Ledgers.Where, n: String, v: Ledgers.Vote, m: May
           s,
           Ledgers.Ballot.make(
             Seal.secret(seed, r, j),
-            Ledgers.Signed{w, n, v},
+            Ledgers.Signed{w, n, Ledgers.Act.Vote{v, []}},
             last,
             Seals.Seal.public(Seal.secret(seed, r, U32.inc(j)))
           )
@@ -3105,7 +3105,7 @@ def Turn.is(m: Maybe<&2, String>, n: String) -> Bool:
 def Cast.step(m: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>) -> Maybe<&2, Ledgers.Vote>:
   match m:
     case Some{Cells.One{Ledgers.Entry.Vote{b}}}:
-      Some{Ledgers.Ballot.vote(b)}
+      Ledgers.Ballot.vote(b)
     case x:
       None{}
 
@@ -3200,11 +3200,11 @@ def Plan.of(
 def Cast.at(+n: String, +s: State(), +c: Ledgers.Chain, h: Head, m: Maybe<&2, Tip>) -> State():
   match h m:
     case Head{r, b, +next, +th} Some{+t}:
-      +p = Plan.of(n, s, c, Ledgers.Where{c, next}, t, th, Owners.turn(Line.owners(s, t), next))
+      +p = Plan.of(n, s, c, Ledgers.Where{c, next, 0}, t, th, Owners.turn(Line.owners(s, t), next))
       Shared.Bool.when(
         State(),
-        Cast.may(n, s, Ledgers.Where{c, next}, t, Plan.asks(p)),
-        u => Cast.put(n, Ledgers.Where{c, next}, th, Plan.asks(p), Plan.run(p), s),
+        Cast.may(n, s, Ledgers.Where{c, next, 0}, t, Plan.asks(p)),
+        u => Cast.put(n, Ledgers.Where{c, next, 0}, th, Plan.asks(p), Plan.run(p), s),
         u => s
       )
     case x y:
@@ -3296,7 +3296,7 @@ def Advance.at(+s: State(), +c: Ledgers.Chain, +h: Head, m: Maybe<&2, Tip>) -> S
         Ledgers.State.decide(
           ~Ask,
           State.ledger(s),
-          Ledgers.Where{c, Head.next(h)},
+          Ledgers.Where{c, Head.next(h), 0},
           Line.owners(s, t)
         )
       )
@@ -3312,7 +3312,7 @@ def Advance.vote(+s: State(), c: Ledgers.Chain, +h: Head) -> Maybe<&2, Ledgers.V
     t => Ledgers.State.decide(
       ~Ask,
       State.ledger(s),
-      Ledgers.Where{c, Head.next(h)},
+      Ledgers.Where{c, Head.next(h), 0},
       Line.owners(s, t)
     )
   )
