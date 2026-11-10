@@ -749,23 +749,33 @@ def Members.in(s: Replicas.Node<Ask>, h: Maybe<&2, Hashes.Hash>, g: String) -> M
 def Node.keep(s: Replicas.Node<Ask>, b: Texts.Bytes()) -> Replicas.Node<Ask>:
   Replicas.State.keep(~Ask.machine(), s, Ropes.Put.nodes(Bytes.rope(b)))
 
-# Tips and logs
-# -------------
-# A log is a tree in key spaces. 2: the outcome of a request. 3: a version, by
-# its number. 4: a mark. 5: the first tip of a branch (a store). A key is
-# written once (Run.add is the one def that writes a log).
-
-# Heads
-# -----
-
-# the line that the request i of the change q changes: a request that starts a
-# store changes the store of its own name
-def Ask.chain(i: Ledgers.Id, q: Ask) -> Ledgers.Chain:
+# how the request q arrives at a node
+def Ask.arrival(q: Ask) -> Replicas.Arrival:
   match q:
     case Ask.Start{os}:
-      Ledgers.Chain{i, None{}}
+      Replicas.Arrival.Starts{os}
     case Ask.On{r, l, c}:
-      Replicas.Line.chain(r, l)
+      Replicas.Arrival.Waits{r, l}
+
+# the line of the request i of the change q
+def Ask.chain(i: Ledgers.Id, q: Ask) -> Ledgers.Chain:
+  Replicas.Arrival.chain(i, Ask.arrival(q))
+
+# the change q is one of who decides: a first key of a node, a group, the
+# owners of a line, or a new branch. The owners of a store decide these, so an
+# owner casts for one only when a writer connected to it asked for it
+def Ask.governs(q: Ask) -> Bool:
+  match q:
+    case Ask.On{r, l, Change.Key{n, k}}:
+      True{}
+    case Ask.On{r, l, Change.Group{g, ms}}:
+      True{}
+    case Ask.On{r, l, Change.Own{g, at, os}}:
+      True{}
+    case Ask.On{r, l, Change.Branch{b, at}}:
+      True{}
+    case x:
+      False{}
 
 # the line of the request i, when s holds it
 def Node.chain_of(s: Replicas.Node<Ask>, +i: Ledgers.Id) -> Maybe<&2, Ledgers.Chain>:

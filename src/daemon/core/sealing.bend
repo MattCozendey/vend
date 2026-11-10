@@ -102,7 +102,7 @@ def Seal.first(+s: Replicas.Node<Basics.Ask>, r: Ledgers.Id, n: String) -> Maybe
         Replicas.Node.tip(~Basics.Ask.machine(), s, Ledgers.Chain{r, None{}}),
         t => Replicas.Tip.content(t)
       ),
-      Basics.Key.seal(n)
+      Replicas.Kernel.seal(Stepping.Ask.kernel())(n)
     )
   )
 
@@ -475,7 +475,7 @@ def Seal.firsts(os: List<&2, Replicas.Owner>, m: Maybe<&2, Replicas.Work<Basics.
           Replicas.Work<Basics.Ask>,
           Replicas.Work<Basics.Ask>,
           m,
-          w => Replicas.Work.set(~Basics.Ask.machine(), w, Basics.Key.seal(n), Hashes.Hash.code(k, []))
+          w => Replicas.Work.set(~Basics.Ask.machine(), w, Replicas.Kernel.seal(Stepping.Ask.kernel())(n), Hashes.Hash.code(k, []))
         )
       )
 
@@ -555,14 +555,18 @@ def Follow.new(
 def Node.follow(+s: Replicas.Node<Basics.Ask>, +r: Ledgers.Id, +l: Maybe<&2, String>) -> Replicas.Node<Basics.Ask>:
   Follow.new(s, r, l, Replicas.Node.head_of(~Basics.Ask.machine(), s, Replicas.Line.chain(r, l)))
 
-# s, once it holds the new request i of the change q: a store starts, or the
-# request waits on its line
-def Node.arrive(s: Replicas.Node<Basics.Ask>, i: Ledgers.Id, q: Basics.Ask) -> Replicas.Node<Basics.Ask>:
-  match q:
-    case Basics.Ask.Start{os}:
+# s, once it holds the new request i, which arrives as a: a store starts, or
+# the request waits on its line
+def Arrive.at(s: Replicas.Node<Basics.Ask>, i: Ledgers.Id, a: Replicas.Arrival) -> Replicas.Node<Basics.Ask>:
+  match a:
+    case Replicas.Arrival.Starts{os}:
       Node.start(s, i, os)
-    case Basics.Ask.On{+r, +l, c}:
+    case Replicas.Arrival.Waits{+r, +l}:
       State.wait(Node.follow(s, r, l), Replicas.Line.chain(r, l), i)
+
+# s, once it holds the new request i of the change q
+def Node.arrive(s: Replicas.Node<Basics.Ask>, i: Ledgers.Id, q: Basics.Ask) -> Replicas.Node<Basics.Ask>:
+  Arrive.at(s, i, Replicas.Kernel.arrival(Stepping.Ask.kernel())(q))
 
 # a and b are the same root
 def Root.same(a: Maybe<&2, Hashes.Hash>, b: Maybe<&2, Hashes.Hash>) -> Bool:
@@ -658,22 +662,6 @@ def Cast.put(
         Ledgers.Act.Vote{Ledgers.Vote{th, qs, Some{Replicas.Tip.hash(t2)}}, from}
       )
 
-# the change q is one of who decides: a first key of a node, a group, the
-# owners of a line, or a new branch. The owners of a store decide these, so an
-# owner casts for one only when a writer connected to it asked for it
-def Ask.governs(q: Basics.Ask) -> Bool:
-  match q:
-    case Basics.Ask.On{r, l, Basics.Change.Key{n, k}}:
-      True{}
-    case Basics.Ask.On{r, l, Basics.Change.Group{g, ms}}:
-      True{}
-    case Basics.Ask.On{r, l, Basics.Change.Own{g, at, os}}:
-      True{}
-    case Basics.Ask.On{r, l, Basics.Change.Branch{b, at}}:
-      True{}
-    case x:
-      False{}
-
 # the node s may cast for the request i, which it holds as m: any request,
 # but one of who decides only when it was asked at s
 def Cast.mine.of(s: Replicas.Node<Basics.Ask>, i: Ledgers.Id, m: Maybe<&2, Ledgers.Asked<Basics.Ask>>) -> Bool:
@@ -681,7 +669,7 @@ def Cast.mine.of(s: Replicas.Node<Basics.Ask>, i: Ledgers.Id, m: Maybe<&2, Ledge
     case None{}:
       True{}
     case Some{Ledgers.Asked{t, q}}:
-      List.any.if(u => Keys.asked(Replicas.State.keys(~Basics.Ask.machine(), s), i), Bool.not(Ask.governs(q)))
+      List.any.if(u => Keys.asked(Replicas.State.keys(~Basics.Ask.machine(), s), i), Bool.not(Replicas.Kernel.governs(Stepping.Ask.kernel())(q)))
 
 # the requests of qs that the node s may cast for
 def Cast.mine(+s: Replicas.Node<Basics.Ask>, qs: List<&2, Ledgers.Id>) -> List<&2, Ledgers.Id>:

@@ -155,6 +155,16 @@ def Step.change(+r: Replicas.Run<Basics.Ask>, c: Ledgers.Chain, +i: Ledgers.Id, 
         u => Replicas.Step.stale(~Basics.Ask.machine(), r, i)
       )
 
+# the kernel of Vend
+def Ask.kernel() -> Replicas.Kernel():
+  (
+    Basics.Ask.machine(),
+    (
+      Basics.Ask.arrival,
+      (Basics.Ask.governs, (Basics.Key.seal, +r => c => +i => q => Step.change(r, c, i, q)))
+    )
+  )
+
 # the run r of the line c, after the request i, which the node holds as a
 # (none: wait for the request)
 def Step.asked(
@@ -167,7 +177,7 @@ def Step.asked(
     case None{}:
       None{}
     case Some{Ledgers.Asked{t, q}}:
-      Step.change(r, c, i, q)
+      Replicas.Kernel.change(Ask.kernel())(r)(c)(i)(q)
 
 # the run r of the line c, after the request i, whose outcome in the log is o:
 # a request that has one is skipped

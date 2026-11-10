@@ -760,3 +760,76 @@ def Owner.code_read(
 # the code of first owners
 def Owner.codec() -> Codes.Codec(Owner):
   (Owner.code, (Owner.code.read, x => r => Owner.code_read(x, r)))
+
+# Kernels
+# -------
+# A kernel is a machine and what a replica asks of its requests.
+
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
+# how a request arrives at a node: it starts a store, with its first owners,
+# or it waits on a line of a store
+type Arrival is Data:
+  Arrival.Starts{owners: List<&2, Owner>}
+  Arrival.Waits{store: Ledgers.Id, line: Maybe<&2, String>}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
+
+# the line of the request i, which arrives as a: a store that starts is its
+# own line
+def Arrival.chain(i: Ledgers.Id, a: Arrival) -> Ledgers.Chain:
+  match a:
+    case Arrival.Starts{os}:
+      Ledgers.Chain{i, None{}}
+    case Arrival.Waits{r, l}:
+      Line.chain(r, l)
+
+# what a kernel says of the requests of the machine M: how one arrives,
+# whether it changes who decides, the key of the first key of a node in the
+# content of a store, and what one does to the run of a line
+def Kernel.Hooks(M: Machine()) -> Type:
+  (Machine.Q(M) -> Arrival) & (
+    (Machine.Q(M) -> Bool) & (
+      (String -> List<&2, U32>) & (
+        Run<Machine.Q(M)> -> Ledgers.Chain -> Ledgers.Id -> Machine.Q(M) -> Maybe<&2, Run<Machine.Q(M)>>
+      )
+    )
+  )
+
+# a kernel: a machine, and its hooks
+def Kernel() -> Type:
+  &M: Machine() -> Kernel.Hooks(M)
+
+# the machine of the kernel k
+def Kernel.machine(k: Kernel()) -> Machine():
+  match k:
+    case Tuple{m, h}:
+      m
+
+# how a request of the kernel k arrives
+def Kernel.arrival(k: Kernel()) -> Machine.Q(Kernel.machine(k)) -> Arrival:
+  match k:
+    case Tuple{m, Tuple{a, h}}:
+      a
+
+# a request of the kernel k changes who decides
+def Kernel.governs(k: Kernel()) -> Machine.Q(Kernel.machine(k)) -> Bool:
+  match k:
+    case Tuple{m, Tuple{a, Tuple{g, h}}}:
+      g
+
+# the key of the first key of a node, in the content of a store of the kernel
+# k
+def Kernel.seal(k: Kernel()) -> String -> List<&2, U32>:
+  match k:
+    case Tuple{m, Tuple{a, Tuple{g, Tuple{s, c}}}}:
+      s
+
+# what a request of the kernel k does to the run of a line
+def Kernel.change(
+  k: Kernel()
+) -> Run<
+  Machine.Q(Kernel.machine(k))> -> Ledgers.Chain -> Ledgers.Id -> Machine.Q(Kernel.machine(k)) -> Maybe<
+  &2,
+  Run<Machine.Q(Kernel.machine(k))>>:
+  match k:
+    case Tuple{m, Tuple{a, Tuple{g, Tuple{s, c}}}}:
+      c
