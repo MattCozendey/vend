@@ -35,19 +35,13 @@ def Run.nodes(r: Run) -> List<&2, List<&2, U32>>:
     case Run{s, t, ns}:
       ns
 
-# the run of the content c and the new log m
-def Run.of(c: Maybe<&2, Hashes.Hash>, m: Maybe<&2, Judging.Work>) -> Maybe<&2, Run>:
-  match m:
-    case None{}:
+# the run of the state, the log and the new nodes of the work m, at the tip t
+def Run.logged(t: Basics.Tip, m: Maybe<&2, Judging.Work>) -> Maybe<&2, Run>:
+  match t m:
+    case x None{}:
       None{}
-    case Some{Judging.Work{s, l, ns}}:
-      Some{Run{s, Basics.Tip{c, l}, ns}}
-
-# the run r with the key k of its log set to x (none: the node lacks a node)
-def Run.log(r: Run, k: List<&2, U32>, x: List<&2, U32>) -> Maybe<&2, Run>:
-  match r:
-    case Run{s, Basics.Tip{c, l}, ns}:
-      Run.of(c, Judging.Work.set(Judging.Work{s, l, ns}, k, x))
+    case Basics.Tip{c, old, n, os} Some{Judging.Work{s, l, ns}}:
+      Some{Run{s, Basics.Tip{c, l, n, os}, ns}}
 
 # Run.add once the value m of the key in the log is known
 def Run.add.at(
@@ -56,17 +50,22 @@ def Run.add.at(
   x: List<&2, U32>,
   m: Maybe<&2, List<&2, U32>>
 ) -> Maybe<&2, Run>:
-  match m:
-    case None{}:
-      Run.log(r, k, x)
-    case Some{old}:
+  match r m:
+    case Run{s, +t, ns} None{}:
+      Run.logged(t, Judging.Work.set(Judging.Work{s, Basics.Tip.log(t), ns}, k, x))
+    case y Some{old}:
       None{}
 
 # the run r with the new key k of its log set to x (none: the log holds k, or
-# the node lacks a node). A log only gains keys: an outcome, a version and a
-# mark are written once
+# the node lacks a node). A log only gains keys: no other def writes a log
 def Run.add(+r: Run, +k: List<&2, U32>, x: List<&2, U32>) -> Maybe<&2, Run>:
   Run.add.at(r, k, x, Basics.Node.get(Run.state(r), Basics.Tip.log(Run.tip(r)), k))
+
+# the tip t with the content h
+def Tip.over(t: Basics.Tip, h: Maybe<&2, Hashes.Hash>) -> Basics.Tip:
+  match t:
+    case Basics.Tip{c, l, n, os}:
+      Basics.Tip{h, l, n, os}
 
 # the run r on the node s2, which a judge grew from the node of r, with the
 # content h, and the new nodes ds: a judge puts each new node once
@@ -76,19 +75,20 @@ def Run.over(
   h: Maybe<&2, Hashes.Hash>,
   ds: List<&2, List<&2, U32>>
 ) -> Run:
-  Run{
-    s2,
-    Basics.Tip{h, Basics.Tip.log(Run.tip(r))},
-    List.append(&2, List<&2, U32>, ds, Run.nodes(r))
-  }
+  Run{s2, Tip.over(Run.tip(r), h), List.append(&2, List<&2, U32>, ds, Run.nodes(r))}
 
-# the run r with the owners os of the next step, if the change gives any
-def Run.owners(r: Run, m: Maybe<&2, List<&2, String>>) -> Maybe<&2, Run>:
-  match m:
-    case None{}:
-      Some{r}
-    case Some{os}:
-      Run.log(r, Basics.Log.owners(), Ledgers.Owners.code(os, []))
+# the tip t one version on, with the owners of the next step that the change
+# gives, if it gives any
+def Tip.next(t: Basics.Tip, own: Maybe<&2, List<&2, String>>) -> Basics.Tip:
+  match t:
+    case Basics.Tip{c, l, n, os}:
+      Basics.Tip{c, l, U32.inc(n), Maybe.default(&2, List<&2, String>, own, os)}
+
+# the run r one version on (Tip.next)
+def Run.next(r: Run, own: Maybe<&2, List<&2, String>>) -> Run:
+  match r:
+    case Run{s, t, ns}:
+      Run{s, Tip.next(t, own), ns}
 
 # the run r, after it refused the request i as stale
 def Step.stale(r: Run, i: Ledgers.Id) -> Maybe<&2, Run>:
@@ -117,19 +117,13 @@ def Step.taken.at(
         Basics.Log.version(n),
         Basics.Version.words(Basics.Version{i, Basics.Tip.content(Run.tip(r1))})
       ),
-      r2 => Maybe.bind(
-        &2,
-        Run,
-        Run,
-        Run.log(r2, Basics.Log.count(), [U32.inc(n)]),
-        r3 => Run.owners(r3, own)
-      )
+      r2 => Some{Run.next(r2, own)}
     )
   )
 
 # the run r, after it took the request i as its next version
 def Step.taken(+r: Run, i: Ledgers.Id, own: Maybe<&2, List<&2, String>>) -> Maybe<&2, Run>:
-  Step.taken.at(r, i, Basics.Line.count(Run.state(r), Run.tip(r)), own)
+  Step.taken.at(r, i, Basics.Tip.count(Run.tip(r)), own)
 
 # the run r, after the verdict m on the request i (none: wait)
 def Step.judged(
@@ -165,7 +159,7 @@ def Step.marked(r: Run, i: Ledgers.Id, m: String, v: Maybe<&2, Basics.Version>) 
 def Step.mark(+r: Run, +i: Ledgers.Id, +m: String) -> Maybe<&2, Run>:
   +s = Run.state(r)
   +t = Run.tip(r)
-  +n = Basics.Line.count(s, t)
+  +n = Basics.Tip.count(t)
   Shared.Bool.when(
     Maybe<&2, Run>,
     List.all.if(
@@ -225,7 +219,7 @@ def Branch.ready(
           b,
           Judging.Make.first(
             Judging.Make.branch(Run.state(r), Basics.Line.chain(st, Some{b}), at),
-            Basics.Line.owners(Run.state(r), Run.tip(r))
+            Basics.Tip.owners(Run.tip(r))
           )
         ),
         u => None{}
@@ -308,7 +302,7 @@ def Step.on.of(
         r,
         i,
         Basics.Change.owners(ch),
-        Judging.Judge.change(s, st, l, ch, Basics.Tip.content(t), Basics.Line.owners(s, t))
+        Judging.Judge.change(s, st, l, ch, Basics.Tip.content(t), Basics.Tip.owners(t))
       )
 
 # the run r, after the request i of the change ch of the line l of the store

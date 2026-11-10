@@ -444,9 +444,16 @@ def Change.owners(c: Change) -> Maybe<&2, List<&2, String>>:
 # The state
 # ---------
 
-# what a line holds: the root of its content and the root of its log
+# what a line holds: the root of its content, the root of its log, the count
+# of its versions, and the owners of its next step. A read of the count or of
+# the owners costs no node of a tree
 type Tip is Data:
-  Tip{content: Maybe<&2, Hashes.Hash>, log: Maybe<&2, Hashes.Hash>}
+  Tip{
+    content: Maybe<&2, Hashes.Hash>,
+    log: Maybe<&2, Hashes.Hash>,
+    count: U32,
+    owners: List<&2, String>
+  }
 
 # a node's head of a line: the line, the height of its next step, and the hash
 # of its tip (none: the node waits for the store's step that makes the line)
@@ -755,32 +762,41 @@ def Node.keep(s: Node, b: Texts.Bytes()) -> Node:
 
 # Tips and logs
 # -------------
-# A log is a tree in key spaces. 0: the owners of the next step. 1: the count
-# of versions. 2: the outcome of a request. 3: a version, by its number. 4: a
-# mark.
+# A log is a tree in key spaces. 2: the outcome of a request. 3: a version, by
+# its number. 4: a mark. 5: the first tip of a branch (a store). A key is
+# written once (Run.add is the one def that writes a log).
 
 # the words of the tip t
 def Tip.words(t: Tip) -> List<&2, U32>:
   match t:
-    case Tip{c, l}:
+    case Tip{c, l, n, os}:
       Codes.Code.maybe(
         ~Hashes.Hash,
         ~Hashes.Hash.code,
         c,
-        Codes.Code.maybe(~Hashes.Hash, ~Hashes.Hash.code, l, [])
+        Codes.Code.maybe(
+          ~Hashes.Hash,
+          ~Hashes.Hash.code,
+          l,
+          Codes.Code.token(n, Ledgers.Owners.code(os, []))
+        )
       )
 
 # the tip that some words are, when they are one
 def Tip.read(ws: List<&2, U32>) -> Maybe<&2, Tip>:
   Read.whole(
     Tip,
-    Codes.Code.two.read(
+    Codes.Code.four.read(
       ~Maybe<&2, Hashes.Hash>,
       ~Maybe<&2, Hashes.Hash>,
+      ~U32,
+      ~List<&2, String>,
       ~Tip,
       ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Hashes.Hash.code.read, m)),
       ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Hashes.Hash.code.read, m)),
-      c => l => Tip{c, l},
+      ~Codes.Code.token.read,
+      ~Ledgers.Owners.code.read,
+      c => l => n => os => Tip{c, l, n, os},
       ws
     )
   )
@@ -796,22 +812,26 @@ def Tip.at(s: Node, h: Hashes.Hash) -> Maybe<&2, Tip>:
 # the content of the tip t
 def Tip.content(t: Tip) -> Maybe<&2, Hashes.Hash>:
   match t:
-    case Tip{c, l}:
+    case Tip{c, l, n, os}:
       c
 
 # the log of the tip t
 def Tip.log(t: Tip) -> Maybe<&2, Hashes.Hash>:
   match t:
-    case Tip{c, l}:
+    case Tip{c, l, n, os}:
       l
 
-# the key of the owners of the next step
-def Log.owners() -> List<&2, U32>:
-  [0]
+# the count of versions of a line at the tip t
+def Tip.count(t: Tip) -> U32:
+  match t:
+    case Tip{c, l, n, os}:
+      n
 
-# the key of the count of versions
-def Log.count() -> List<&2, U32>:
-  [1]
+# the owners of the next step of a line at the tip t
+def Tip.owners(t: Tip) -> List<&2, String>:
+  match t:
+    case Tip{c, l, n, os}:
+      os
 
 # the key of the outcome of the request i
 def Log.out(i: Ledgers.Id) -> List<&2, U32>:
@@ -891,38 +911,6 @@ def Version.root(v: Version) -> Maybe<&2, Hashes.Hash>:
   match v:
     case Version{i, r}:
       r
-
-# the owners of the next step of a line at the tip t
-def Line.owners(s: Node, t: Tip) -> List<&2, String>:
-  Maybe.default(
-    &2,
-    List<&2, String>,
-    Maybe.bind(
-      &2,
-      List<&2, U32>,
-      List<&2, String>,
-      Node.get(s, Tip.log(t), Log.owners()),
-      ws => Read.whole(List<&2, String>, Ledgers.Owners.code.read(ws))
-    ),
-    []
-  )
-
-# the count in the value ws
-def Count.read(ws: List<&2, U32>) -> Maybe<&2, U32>:
-  match ws:
-    case Con{n, Nil{}}:
-      Some{n}
-    case _:
-      None{}
-
-# the count of versions of a line at the tip t
-def Line.count(s: Node, t: Tip) -> U32:
-  Maybe.default(
-    &2,
-    U32,
-    Maybe.bind(&2, List<&2, U32>, U32, Node.get(s, Tip.log(t), Log.count()), ws => Count.read(ws)),
-    0
-  )
 
 # the outcome of the request i on a line at the tip t (none: no step decided
 # it yet)

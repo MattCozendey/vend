@@ -1003,9 +1003,9 @@ def Rules.allow(
   hd: Basics.Head,
   tp: Basics.Tip,
   ok: {Basics.Head.tip(s, hd) == Some{tp}: Maybe<&2, Basics.Tip>}
-) -> Voting.Rounds.Allow(s, c, Sealing.Head.next(hd), Basics.Line.owners(s, tp)):
+) -> Voting.Rounds.Allow(s, c, Sealing.Head.next(hd), Basics.Tip.owners(tp)):
   Shared.Pair.first(
-    Voting.Rounds.Allow(s, c, Sealing.Head.next(hd), Basics.Line.owners(s, tp)),
+    Voting.Rounds.Allow(s, c, Sealing.Head.next(hd), Basics.Tip.owners(tp)),
     Voting.Rounds.Last(
       s,
       c,
@@ -1028,7 +1028,7 @@ def Rules.last(
     Voting.Rounds.Last(s, c, Sealing.Head.next(hd)),
     Voting.Rounds.Same(s, c, Sealing.Head.next(hd)),
     Shared.Pair.second(
-      Voting.Rounds.Allow(s, c, Sealing.Head.next(hd), Basics.Line.owners(s, tp)),
+      Voting.Rounds.Allow(s, c, Sealing.Head.next(hd), Basics.Tip.owners(tp)),
       Voting.Rounds.Last(
         s,
         c,
@@ -1052,7 +1052,7 @@ def Rules.same(
     Voting.Rounds.Last(s, c, Sealing.Head.next(hd)),
     Voting.Rounds.Same(s, c, Sealing.Head.next(hd)),
     Shared.Pair.second(
-      Voting.Rounds.Allow(s, c, Sealing.Head.next(hd), Basics.Line.owners(s, tp)),
+      Voting.Rounds.Allow(s, c, Sealing.Head.next(hd), Basics.Tip.owners(tp)),
       Voting.Rounds.Last(
         s,
         c,
@@ -1568,7 +1568,7 @@ def Rounds.pick(
     Quorums.Quorum.has(
       ~Ledgers.Vote,
       ~Ledgers.Vote.is_eq,
-      Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Line.owners(s, tp)),
+      Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Tip.owners(tp)),
       v1
     )
       == True{}: Bool
@@ -1579,8 +1579,8 @@ def Rounds.pick(
   -> {
     Later.all(
       Voting.Passed.all(s, Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, from),
-      Voting.Owners.sub(Basics.Line.owners(s, tp), from),
-      Voting.Owners.major(Basics.Line.owners(s, tp), from),
+      Voting.Owners.sub(Basics.Tip.owners(tp), from),
+      Voting.Owners.major(Basics.Tip.owners(tp), from),
       Voting.Last.is(Voting.Passes.last(s, Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, from), x)
     )
       == True{}: Bool
@@ -1596,7 +1596,7 @@ def Rounds.pick(
             c,
             Sealing.Head.next(hd),
             r1,
-            Basics.Line.owners(s, tp),
+            Basics.Tip.owners(tp),
             from,
             v1
           )(
@@ -1604,8 +1604,8 @@ def Rounds.pick(
           )(
             Later.all.b(
               Voting.Passed.all(s, Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, from),
-              Voting.Owners.sub(Basics.Line.owners(s, tp), from),
-              Voting.Owners.major(Basics.Line.owners(s, tp), from),
+              Voting.Owners.sub(Basics.Tip.owners(tp), from),
+              Voting.Owners.major(Basics.Tip.owners(tp), from),
               Voting.Last.is(
                 Voting.Passes.last(s, Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, from),
                 x
@@ -1614,8 +1614,8 @@ def Rounds.pick(
           )(
             Later.all.c(
               Voting.Passed.all(s, Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, from),
-              Voting.Owners.sub(Basics.Line.owners(s, tp), from),
-              Voting.Owners.major(Basics.Line.owners(s, tp), from),
+              Voting.Owners.sub(Basics.Tip.owners(tp), from),
+              Voting.Owners.major(Basics.Tip.owners(tp), from),
               Voting.Last.is(
                 Voting.Passes.last(s, Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, from),
                 x
@@ -1638,8 +1638,8 @@ def Rounds.pick(
             )(
               Later.all.a(
                 Voting.Passed.all(s, Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, from),
-                Voting.Owners.sub(Basics.Line.owners(s, tp), from),
-                Voting.Owners.major(Basics.Line.owners(s, tp), from),
+                Voting.Owners.sub(Basics.Tip.owners(tp), from),
+                Voting.Owners.major(Basics.Tip.owners(tp), from),
                 Voting.Last.is(
                   Voting.Passes.last(s, Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, from),
                   x
@@ -1671,8 +1671,8 @@ def Rounds.pick(
         )(
           Later.all.d(
             Voting.Passed.all(s, Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, from),
-            Voting.Owners.sub(Basics.Line.owners(s, tp), from),
-            Voting.Owners.major(Basics.Line.owners(s, tp), from),
+            Voting.Owners.sub(Basics.Tip.owners(tp), from),
+            Voting.Owners.major(Basics.Tip.owners(tp), from),
             Voting.Last.is(
               Voting.Passes.last(s, Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, from),
               x
@@ -1699,7 +1699,7 @@ def Rounds.base(
     c,
     Sealing.Head.next(hd),
     r1,
-    Basics.Line.owners(s, tp),
+    Basics.Tip.owners(tp),
     v1
   )
     == m: Maybe<&2, String>
@@ -1708,7 +1708,7 @@ def Rounds.base(
     Quorums.Quorum.has(
       ~Ledgers.Vote,
       ~Ledgers.Vote.is_eq,
-      Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Line.owners(s, tp)),
+      Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Tip.owners(tp)),
       v1
     )
       == True{}: Bool
@@ -1726,7 +1726,7 @@ def Rounds.base(
     case None{}:
       em => hh => e => Empty.absurd(
         {x == v1: Ledgers.Vote},
-        Has.voter(s, c, Sealing.Head.next(hd), r1, Basics.Line.owners(s, tp), v1)(hh)(em)
+        Has.voter(s, c, Sealing.Head.next(hd), r1, Basics.Tip.owners(tp), v1)(hh)(em)
       )
     case Some{+o}:
       em => hh => e => Rules.same(
@@ -1742,7 +1742,7 @@ def Rounds.base(
         q
       )(
         o
-      )(x)(v1)(e)(Voter.cast(s, c, Sealing.Head.next(hd), r1, Basics.Line.owners(s, tp), v1, o)(em))
+      )(x)(v1)(e)(Voter.cast(s, c, Sealing.Head.next(hd), r1, Basics.Tip.owners(tp), v1, o)(em))
 
 # Rounds.same in a round after r1
 def Rounds.step(
@@ -1763,7 +1763,7 @@ def Rounds.step(
     Quorums.Quorum.has(
       ~Ledgers.Vote,
       ~Ledgers.Vote.is_eq,
-      Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Line.owners(s, tp)),
+      Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Tip.owners(tp)),
       v1
     )
       == True{}: Bool
@@ -1848,7 +1848,7 @@ def Rounds.same.at(
     Quorums.Quorum.has(
       ~Ledgers.Vote,
       ~Ledgers.Vote.is_eq,
-      Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Line.owners(s, tp)),
+      Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Tip.owners(tp)),
       v1
     )
       == True{}: Bool
@@ -1879,7 +1879,7 @@ def Rounds.same.at(
           v1,
           q,
           x,
-          Round.voter(s, c, Sealing.Head.next(hd), r1, Basics.Line.owners(s, tp), v1)
+          Round.voter(s, c, Sealing.Head.next(hd), r1, Basics.Tip.owners(tp), v1)
         )(
           {==}
         )(
@@ -1916,7 +1916,7 @@ def Rounds.same(
   Quorums.Quorum.has(
     ~Ledgers.Vote,
     ~Ledgers.Vote.is_eq,
-    Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Line.owners(s, tp)),
+    Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Tip.owners(tp)),
     v1
   )
     == True{}: Bool
@@ -1964,7 +1964,7 @@ def Rounds.later.at(
     c,
     Sealing.Head.next(hd),
     r2,
-    Basics.Line.owners(s, tp),
+    Basics.Tip.owners(tp),
     v2
   )
     == m: Maybe<&2, String>
@@ -1974,7 +1974,7 @@ def Rounds.later.at(
     Quorums.Quorum.has(
       ~Ledgers.Vote,
       ~Ledgers.Vote.is_eq,
-      Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Line.owners(s, tp)),
+      Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Tip.owners(tp)),
       v1
     )
       == True{}: Bool
@@ -1983,7 +1983,7 @@ def Rounds.later.at(
     Quorums.Quorum.has(
       ~Ledgers.Vote,
       ~Ledgers.Vote.is_eq,
-      Round.ballots(s, c, Sealing.Head.next(hd), r2, Basics.Line.owners(s, tp)),
+      Round.ballots(s, c, Sealing.Head.next(hd), r2, Basics.Tip.owners(tp)),
       v2
     )
       == True{}: Bool
@@ -1993,7 +1993,7 @@ def Rounds.later.at(
     case None{}:
       em => le => h1 => h2 => Empty.absurd(
         {v2 == v1: Ledgers.Vote},
-        Has.voter(s, c, Sealing.Head.next(hd), r2, Basics.Line.owners(s, tp), v2)(h2)(em)
+        Has.voter(s, c, Sealing.Head.next(hd), r2, Basics.Tip.owners(tp), v2)(h2)(em)
       )
     case Some{+o}:
       em => le => h1 => h2 =>
@@ -2017,7 +2017,7 @@ def Rounds.later.at(
           v2
         )(
           Shared.Nat.lt_succ(r2)
-        )(le)(Voter.cast(s, c, Sealing.Head.next(hd), r2, Basics.Line.owners(s, tp), v2, o)(em))
+        )(le)(Voter.cast(s, c, Sealing.Head.next(hd), r2, Basics.Tip.owners(tp), v2, o)(em))
 
 # a round decides what an earlier round of its height decided
 def Rounds.later(
@@ -2037,7 +2037,7 @@ def Rounds.later(
       ~Basics.Ask,
       Basics.State.ledger(s),
       Ledgers.Where{c, Sealing.Head.next(hd), r1},
-      Basics.Line.owners(s, tp)
+      Basics.Tip.owners(tp)
     )
       == Some{v1}: Maybe<&2, Ledgers.Vote>
   }
@@ -2046,7 +2046,7 @@ def Rounds.later(
       ~Basics.Ask,
       Basics.State.ledger(s),
       Ledgers.Where{c, Sealing.Head.next(hd), r2},
-      Basics.Line.owners(s, tp)
+      Basics.Tip.owners(tp)
     )
       == Some{v2}: Maybe<&2, Ledgers.Vote>
   }
@@ -2063,7 +2063,7 @@ def Rounds.later(
       r2,
       v1,
       v2,
-      Round.voter(s, c, Sealing.Head.next(hd), r2, Basics.Line.owners(s, tp), v2)
+      Round.voter(s, c, Sealing.Head.next(hd), r2, Basics.Tip.owners(tp), v2)
     )(
       {==}
     )(
@@ -2073,7 +2073,7 @@ def Rounds.later(
         ~Ledgers.Vote,
         ~Ledgers.Vote.is_eq,
         ~Ledgers.Vote.laws(),
-        Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Line.owners(s, tp)),
+        Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Tip.owners(tp)),
         v1
       )(d1)
     )(
@@ -2081,7 +2081,7 @@ def Rounds.later(
         ~Ledgers.Vote,
         ~Ledgers.Vote.is_eq,
         ~Ledgers.Vote.laws(),
-        Round.ballots(s, c, Sealing.Head.next(hd), r2, Basics.Line.owners(s, tp)),
+        Round.ballots(s, c, Sealing.Head.next(hd), r2, Basics.Tip.owners(tp)),
         v2
       )(d2)
     )
@@ -2105,7 +2105,7 @@ def Rounds.one.at(
       ~Basics.Ask,
       Basics.State.ledger(s),
       Ledgers.Where{c, Sealing.Head.next(hd), r1},
-      Basics.Line.owners(s, tp)
+      Basics.Tip.owners(tp)
     )
       == Some{v1}: Maybe<&2, Ledgers.Vote>
   }
@@ -2114,7 +2114,7 @@ def Rounds.one.at(
       ~Basics.Ask,
       Basics.State.ledger(s),
       Ledgers.Where{c, Sealing.Head.next(hd), r2},
-      Basics.Line.owners(s, tp)
+      Basics.Tip.owners(tp)
     )
       == Some{v2}: Maybe<&2, Ledgers.Vote>
   }

@@ -453,35 +453,17 @@ def Run.Keeps(k2: List<&2, U32>, v: List<&2, U32>, m: Maybe<&2, Stepping.Run>) -
       {Basics.Node.get(s2, Basics.Tip.log(t2), k2) == Some{v}: Maybe<&2, List<&2, U32>>}
 
 # the run of a new log that keeps a key keeps it
-def Run.of.keeps(
+def Run.logged.keeps(
   -k2: List<&2, U32>,
   -v: List<&2, U32>,
-  c: Maybe<&2, Hashes.Hash>,
+  t: Basics.Tip,
   m: Maybe<&2, Judging.Work>
-) -> Spec.Work.Reads(k2, v, m) -> Run.Keeps(k2, v, Stepping.Run.of(c, m)):
-  match m:
-    case None{}:
+) -> Spec.Work.Reads(k2, v, m) -> Run.Keeps(k2, v, Stepping.Run.logged(t, m)):
+  match t m:
+    case x None{}:
       w => Unit{}
-    case Some{Judging.Work{s2, l, ns}}:
+    case Basics.Tip{c, old, n, os} Some{Judging.Work{s2, l, ns}}:
       w => w
-
-# a key set in a run's log keeps the value of each other key
-def Log.kept(
-  r: Stepping.Run,
-  +k: List<&2, U32>,
-  +x: List<&2, U32>,
-  k2: List<&2, U32>,
-  v: List<&2, U32>,
-  hne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool}
-) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Run.log(r, k, x)):
-  match r:
-    case Stepping.Run{+s, Basics.Tip{c, +l}, +ns}:
-      hr => Run.of.keeps(
-        k2,
-        v,
-        c,
-        Judging.Work.set(Judging.Work{s, l, ns}, k, x)
-      )(Set.kept(s, l, ns, k, x, k2, v, hne, hr))
 
 # a key that a tree does not hold is not a key that it holds, once whether
 # they are the same is known (b)
@@ -521,32 +503,55 @@ def Keys.differ.if(
 # Add.kept when the log does not hold the new key
 def Add.new.kept(
   +s: Basics.Node,
-  c: Maybe<&2, Hashes.Hash>,
-  +l: Maybe<&2, Hashes.Hash>,
-  ns: List<&2, List<&2, U32>>,
+  +t: Basics.Tip,
+  +ns: List<&2, List<&2, U32>>,
   +k: List<&2, U32>,
-  x: List<&2, U32>,
+  +x: List<&2, U32>,
   +k2: List<&2, U32>,
   +v: List<&2, U32>,
-  em: {Basics.Node.get(s, l, k) == None{}: Maybe<&2, List<&2, U32>>},
-  +hr: {Basics.Node.get(s, l, k2) == Some{v}: Maybe<&2, List<&2, U32>>}
-) -> Run.Keeps(k2, v, Stepping.Run.log(Stepping.Run{s, Basics.Tip{c, l}, ns}, k, x)):
-  Log.kept(
-    Stepping.Run{s, Basics.Tip{c, l}, ns},
-    k,
-    x,
+  em: {Basics.Node.get(s, Basics.Tip.log(t), k) == None{}: Maybe<&2, List<&2, U32>>},
+  +hr: {Basics.Node.get(s, Basics.Tip.log(t), k2) == Some{v}: Maybe<&2, List<&2, U32>>}
+) -> Run.Keeps(
+  k2,
+  v,
+  Stepping.Run.logged(t, Judging.Work.set(Judging.Work{s, Basics.Tip.log(t), ns}, k, x))
+):
+  Run.logged.keeps(
     k2,
     v,
-    Keys.differ.if(s, l, k, k2, v, Shared.List.is_eq(~U32, ~U32.is_eq, k, k2), {==}, em, hr)
-  )(hr)
+    t,
+    Judging.Work.set(Judging.Work{s, Basics.Tip.log(t), ns}, k, x)
+  )(
+    Set.kept(
+      s,
+      Basics.Tip.log(t),
+      ns,
+      k,
+      x,
+      k2,
+      v,
+      Keys.differ.if(
+        s,
+        Basics.Tip.log(t),
+        k,
+        k2,
+        v,
+        Shared.List.is_eq(~U32, ~U32.is_eq, k, k2),
+        {==},
+        em,
+        hr
+      ),
+      hr
+    )
+  )
 
 # Add.kept once the value m of the new key is known
 def Add.at.kept(
   r: Stepping.Run,
-  k: List<&2, U32>,
-  x: List<&2, U32>,
-  k2: List<&2, U32>,
-  v: List<&2, U32>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  +k2: List<&2, U32>,
+  +v: List<&2, U32>,
   m: Maybe<&2, List<&2, U32>>
 ) -> {
   Basics.Node.get(
@@ -557,10 +562,10 @@ def Add.at.kept(
     == m: Maybe<&2, List<&2, U32>>
 } -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Run.add.at(r, k, x, m)):
   match r m:
-    case Stepping.Run{s, Basics.Tip{c, l}, ns} Some{old}:
+    case Stepping.Run{+s, +t, +ns} None{}:
+      em => hr => Add.new.kept(s, t, ns, k, x, k2, v, em, hr)
+    case y Some{old}:
       em => hr => Unit{}
-    case Stepping.Run{+s, Basics.Tip{+c, +l}, +ns} None{}:
-      em => hr => Add.new.kept(s, c, l, ns, k, x, k2, v, em, hr)
 
 # a new key in a run's log keeps the value of each key that the log holds
 def Add.kept(
@@ -619,32 +624,26 @@ def Keeps.when(
     case False{}:
       hy
 
-# new owners keep each other key of a run's log
-def Owners.kept(
+# a run one version on keeps each key of its log
+def Next.kept(
   r: Stepping.Run,
-  m: Maybe<&2, List<&2, String>>,
-  k2: List<&2, U32>,
-  v: List<&2, U32>,
-  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k2) == False{}: Bool}
-) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Run.owners(r, m)):
-  match m:
-    case None{}:
+  -own: Maybe<&2, List<&2, String>>,
+  -k2: List<&2, U32>,
+  -v: List<&2, U32>
+) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Some{Stepping.Run.next(r, own)}):
+  match r:
+    case Stepping.Run{s, Basics.Tip{c, l, n, os}, ns}:
       hr => hr
-    case Some{os}:
-      hr => Log.kept(r, Basics.Log.owners(), Ledgers.Owners.code(os, []), k2, v, n0)(hr)
 
-# a taken request keeps each key of a run's log, other than the owners and
-# the count
+# a taken request keeps each key of a run's log
 def Taken.kept(
   +r: Stepping.Run,
   +i: Ledgers.Id,
   own: Maybe<&2, List<&2, String>>,
   +k2: List<&2, U32>,
-  +v: List<&2, U32>,
-  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k2) == False{}: Bool},
-  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k2) == False{}: Bool}
+  +v: List<&2, U32>
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Step.taken(r, i, own)):
-  +n = Basics.Line.count(Stepping.Run.state(r), Stepping.Run.tip(r))
+  +n = Basics.Tip.count(Stepping.Run.tip(r))
   hr => Keeps.bind(
     k2,
     v,
@@ -658,13 +657,7 @@ def Taken.kept(
         Basics.Log.version(n),
         Basics.Version.words(Basics.Version{i, Basics.Tip.content(Stepping.Run.tip(r1))})
       ),
-      r2 => Maybe.bind(
-        &2,
-        Stepping.Run,
-        Stepping.Run,
-        Stepping.Run.log(r2, Basics.Log.count(), [U32.inc(n)]),
-        r3 => Stepping.Run.owners(r3, own)
-      )
+      r2 => Some{Stepping.Run.next(r2, own)}
     )
   )(
     Add.kept(r, Basics.Log.out(i), Basics.Out.words(Basics.Out.Taken{n}), k2, v)(hr)
@@ -677,13 +670,7 @@ def Taken.kept(
         Basics.Log.version(n),
         Basics.Version.words(Basics.Version{i, Basics.Tip.content(Stepping.Run.tip(r1))})
       ),
-      r2 => Maybe.bind(
-        &2,
-        Stepping.Run,
-        Stepping.Run,
-        Stepping.Run.log(r2, Basics.Log.count(), [U32.inc(n)]),
-        r3 => Stepping.Run.owners(r3, own)
-      )
+      r2 => Some{Stepping.Run.next(r2, own)}
     )(
       Add.kept(
         r1,
@@ -692,16 +679,7 @@ def Taken.kept(
         k2,
         v
       )(h1)
-    )(
-      +r2 => h2 => Keeps.bind(
-        k2,
-        v,
-        Stepping.Run.log(r2, Basics.Log.count(), [U32.inc(n)]),
-        r3 => Stepping.Run.owners(r3, own)
-      )(
-        Log.kept(r2, Basics.Log.count(), [U32.inc(n)], k2, v, n1)(h2)
-      )(r3 => h3 => Owners.kept(r3, own, k2, v, n0)(h3))
-    )
+    )(r2 => h2 => Next.kept(r2, own, k2, v)(h2))
   )
 
 # a run over a node that grew keeps each key of its log
@@ -715,8 +693,8 @@ def Over.kept(
   g: {Reading.Node.grows(Stepping.Run.state(r), s2) == True{}: Bool}
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Some{Stepping.Run.over(r, s2, h, ds)}):
   match r:
-    case Stepping.Run{s, t, ns}:
-      hr => Get.grows(s, s2, Basics.Tip.log(t), k2, v, g)(hr)
+    case Stepping.Run{s, Basics.Tip{c, l, n, os}, ns}:
+      hr => Get.grows(s, s2, l, k2, v, g)(hr)
 
 # a judged request keeps each key of a run's log, other than the owners and
 # the count
@@ -726,9 +704,7 @@ def Judged.kept(
   own: Maybe<&2, List<&2, String>>,
   m: Maybe<&2, Basics.Verdict>,
   +k2: List<&2, U32>,
-  +v: List<&2, U32>,
-  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k2) == False{}: Bool},
-  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k2) == False{}: Bool}
+  +v: List<&2, U32>
 ) -> {
   ProofTrees.Verdict.after(Stepping.Run.state(r), m) == True{}: Bool
 } -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Step.judged(r, i, own, m)):
@@ -743,9 +719,7 @@ def Judged.kept(
         i,
         own,
         k2,
-        v,
-        n0,
-        n1
+        v
       )(Over.kept(r, s2, h, ds, k2, v, g)(hr))
 
 # a mark on a version keeps each key of a run's log, other than the owners
@@ -756,9 +730,7 @@ def Marked.kept(
   +m: String,
   x: Maybe<&2, Basics.Version>,
   +k2: List<&2, U32>,
-  +v: List<&2, U32>,
-  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k2) == False{}: Bool},
-  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k2) == False{}: Bool}
+  +v: List<&2, U32>
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Step.marked(r, i, m, x)):
   match x:
     case None{}:
@@ -771,7 +743,7 @@ def Marked.kept(
         r2 => Stepping.Step.taken(r2, i, None{})
       )(
         Add.kept(r, Basics.Log.mark(m), Ledgers.Id.code(Basics.Version.id(y), []), k2, v)(hr)
-      )(r2 => h2 => Taken.kept(r2, i, None{}, k2, v, n0, n1)(h2))
+      )(r2 => h2 => Taken.kept(r2, i, None{}, k2, v)(h2))
 
 # a request for a mark keeps each key of a run's log, other than the owners
 # and the count
@@ -780,13 +752,11 @@ def Mark.kept(
   +i: Ledgers.Id,
   +m: String,
   +k2: List<&2, U32>,
-  +v: List<&2, U32>,
-  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k2) == False{}: Bool},
-  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k2) == False{}: Bool}
+  +v: List<&2, U32>
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Step.mark(r, i, m)):
   +s = Stepping.Run.state(r)
   +t = Stepping.Run.tip(r)
-  +n = Basics.Line.count(s, t)
+  +n = Basics.Tip.count(t)
   Keeps.when(
     k2,
     v,
@@ -797,7 +767,7 @@ def Mark.kept(
     ),
     Stepping.Step.marked(r, i, m, Basics.Line.version(s, t, U32.sub(n, 1))),
     Stepping.Step.stale(r, i),
-    Marked.kept(r, i, m, Basics.Line.version(s, t, U32.sub(n, 1)), k2, v, n0, n1),
+    Marked.kept(r, i, m, Basics.Line.version(s, t, U32.sub(n, 1)), k2, v),
     Add.kept(r, Basics.Log.out(i), Basics.Out.words(Basics.Out.Stale{}), k2, v)
   )
 
@@ -809,9 +779,7 @@ def Branch.made.kept(
   +b: String,
   m: Maybe<&2, Judging.Made>,
   +k2: List<&2, U32>,
-  +v: List<&2, U32>,
-  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k2) == False{}: Bool},
-  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k2) == False{}: Bool}
+  +v: List<&2, U32>
 ) -> {
   ProofTrees.Made.after(Stepping.Run.state(r), m) == True{}: Bool
 } -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Branch.made(r, i, b, m)):
@@ -834,7 +802,7 @@ def Branch.made.kept(
             k2,
             v
           )(Over.kept(r, s2, Basics.Tip.content(Stepping.Run.tip(r)), ds, k2, v, g)(hr))
-        )(r2 => h2 => Taken.kept(r2, i, None{}, k2, v, n0, n1)(h2))
+        )(r2 => h2 => Taken.kept(r2, i, None{}, k2, v)(h2))
 
 # a request for a branch keeps each key of a run's log, other than the owners
 # and the count, once it is known whether its version is one
@@ -846,9 +814,7 @@ def Branch.ready.kept(
   +at: Maybe<&2, Ledgers.Id>,
   m: Maybe<&2, Bool>,
   k2: List<&2, U32>,
-  v: List<&2, U32>,
-  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k2) == False{}: Bool},
-  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k2) == False{}: Bool}
+  v: List<&2, U32>
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Branch.ready(r, i, st, b, at, m)):
   match m:
     case None{}:
@@ -872,7 +838,7 @@ def Branch.ready.kept(
           b,
           Judging.Make.first(
             Judging.Make.branch(Stepping.Run.state(r), Basics.Line.chain(st, Some{b}), at),
-            Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+            Basics.Tip.owners(Stepping.Run.tip(r))
           )
         ),
         None{},
@@ -882,17 +848,15 @@ def Branch.ready.kept(
           b,
           Judging.Make.first(
             Judging.Make.branch(Stepping.Run.state(r), Basics.Line.chain(st, Some{b}), at),
-            Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+            Basics.Tip.owners(Stepping.Run.tip(r))
           ),
           k2,
-          v,
-          n0,
-          n1
+          v
         )(
           ProofTrees.Grown.make.first(
             Stepping.Run.state(r),
             Judging.Make.branch(Stepping.Run.state(r), Basics.Line.chain(st, Some{b}), at),
-            Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+            Basics.Tip.owners(Stepping.Run.tip(r))
           )(ProofTrees.Grown.make.branch(Stepping.Run.state(r), Basics.Line.chain(st, Some{b}), at))
         ),
         hr => Unit{}
@@ -908,9 +872,7 @@ def Branch.new.kept(
   +at: Maybe<&2, Ledgers.Id>,
   m: Maybe<&2, Maybe<&2, List<&2, U32>>>,
   k2: List<&2, U32>,
-  v: List<&2, U32>,
-  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k2) == False{}: Bool},
-  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k2) == False{}: Bool}
+  v: List<&2, U32>
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Branch.new(r, i, st, b, at, m)):
   match m:
     case None{}:
@@ -926,9 +888,7 @@ def Branch.new.kept(
         at,
         Judging.Judge.ready_maybe(Stepping.Run.state(r), at),
         k2,
-        v,
-        n0,
-        n1
+        v
       )
 
 # On.kept once it is known how the line takes the change (w)
@@ -940,13 +900,11 @@ def On.of.kept(
   +ch: Basics.Change,
   w: Stepping.Route,
   k2: List<&2, U32>,
-  v: List<&2, U32>,
-  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k2) == False{}: Bool},
-  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k2) == False{}: Bool}
+  v: List<&2, U32>
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Step.on.of(r, i, st, l, ch, w)):
   match w:
     case Stepping.Route.Mark{a}:
-      hr => Mark.kept(r, i, a, k2, v, n0, n1)(hr)
+      hr => Mark.kept(r, i, a, k2, v)(hr)
     case Stepping.Route.Branch{+a, b}:
       Branch.new.kept(
         r,
@@ -960,9 +918,7 @@ def On.of.kept(
           Basics.Log.start(a)
         ),
         k2,
-        v,
-        n0,
-        n1
+        v
       )
     case Stepping.Route.Judge{}:
       hr => Judged.kept(
@@ -975,12 +931,10 @@ def On.of.kept(
           l,
           ch,
           Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+          Basics.Tip.owners(Stepping.Run.tip(r))
         ),
         k2,
-        v,
-        n0,
-        n1
+        v
       )(
         ProofTrees.Verdict.change(
           Stepping.Run.state(r),
@@ -988,7 +942,7 @@ def On.of.kept(
           l,
           ch,
           Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+          Basics.Tip.owners(Stepping.Run.tip(r))
         )
       )(hr)
 
@@ -1001,11 +955,9 @@ def On.kept(
   +l: Maybe<&2, String>,
   +ch: Basics.Change,
   k2: List<&2, U32>,
-  v: List<&2, U32>,
-  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k2) == False{}: Bool},
-  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k2) == False{}: Bool}
+  v: List<&2, U32>
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Step.on(r, i, st, l, ch)):
-  On.of.kept(r, i, st, l, ch, Stepping.Route.of(l, ch), k2, v, n0, n1)
+  On.of.kept(r, i, st, l, ch, Stepping.Route.of(l, ch), k2, v)
 
 # a request keeps each key of a run's log, other than the owners and the count
 def Change.kept(
@@ -1014,9 +966,7 @@ def Change.kept(
   +i: Ledgers.Id,
   q: Basics.Ask,
   +k2: List<&2, U32>,
-  +v: List<&2, U32>,
-  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k2) == False{}: Bool},
-  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k2) == False{}: Bool}
+  +v: List<&2, U32>
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Step.change(r, c, i, q)):
   match q:
     case Basics.Ask.Start{os}:
@@ -1029,7 +979,7 @@ def Change.kept(
         Ledgers.Chain.is_eq(Basics.Line.chain(st, l), c),
         Stepping.Step.on(r, i, st, l, ch),
         Stepping.Step.stale(r, i),
-        On.kept(r, i, st, l, ch, k2, v, n0, n1),
+        On.kept(r, i, st, l, ch, k2, v),
         Add.kept(r, Basics.Log.out(i), Basics.Out.words(Basics.Out.Stale{}), k2, v)
       )
 
@@ -1040,15 +990,13 @@ def Asked.kept(
   i: Ledgers.Id,
   a: Maybe<&2, Ledgers.Asked<Basics.Ask>>,
   k2: List<&2, U32>,
-  v: List<&2, U32>,
-  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k2) == False{}: Bool},
-  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k2) == False{}: Bool}
+  v: List<&2, U32>
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Step.asked(r, c, i, a)):
   match a:
     case None{}:
       hr => Unit{}
     case Some{Ledgers.Asked{t, q}}:
-      Change.kept(r, c, i, q, k2, v, n0, n1)
+      Change.kept(r, c, i, q, k2, v)
 
 # a request that the log holds or not keeps each key of a run's log
 def Fresh.kept(
@@ -1057,15 +1005,13 @@ def Fresh.kept(
   +i: Ledgers.Id,
   o: Maybe<&2, Basics.Out>,
   k2: List<&2, U32>,
-  v: List<&2, U32>,
-  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k2) == False{}: Bool},
-  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k2) == False{}: Bool}
+  v: List<&2, U32>
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Step.fresh(r, c, i, o)):
   match o:
     case Some{x}:
       hr => hr
     case None{}:
-      Asked.kept(r, c, i, Basics.Node.asked(Stepping.Run.state(r), i), k2, v, n0, n1)
+      Asked.kept(r, c, i, Basics.Node.asked(Stepping.Run.state(r), i), k2, v)
 
 # the requests of a step keep each key of a run's log, other than the owners
 # and the count
@@ -1074,9 +1020,7 @@ def All.kept(
   qs: List<&2, Ledgers.Id>,
   +m: Maybe<&2, Stepping.Run>,
   +k2: List<&2, U32>,
-  +v: List<&2, U32>,
-  +n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k2) == False{}: Bool},
-  +n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k2) == False{}: Bool}
+  +v: List<&2, U32>
 ) -> Run.Keeps(k2, v, m) -> Run.Keeps(k2, v, Stepping.Step.all(c, qs, m)):
   match qs:
     case Nil{}:
@@ -1087,9 +1031,7 @@ def All.kept(
         rest,
         Maybe.bind(&2, Stepping.Run, Stepping.Run, m, r => Stepping.Step.one(r, c, i)),
         k2,
-        v,
-        n0,
-        n1
+        v
       )(
         Keeps.bind(
           k2,
@@ -1105,9 +1047,7 @@ def All.kept(
             i,
             Basics.Line.out(Stepping.Run.state(r), Stepping.Run.tip(r), i),
             k2,
-            v,
-            n0,
-            n1
+            v
           )(hr)
         )
       )
@@ -1120,12 +1060,10 @@ def Run.kept(
   t: Basics.Tip,
   qs: List<&2, Ledgers.Id>,
   k2: List<&2, U32>,
-  v: List<&2, U32>,
-  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k2) == False{}: Bool},
-  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k2) == False{}: Bool}
+  v: List<&2, U32>
 ) -> {
   Basics.Node.get(s, Basics.Tip.log(t), k2) == Some{v}: Maybe<&2, List<&2, U32>>
 } -> Run.Keeps(k2, v, Stepping.Step.run(s, c, t, qs)):
   match t:
-    case Basics.Tip{c0, l}:
-      h => All.kept(c, qs, Some{Stepping.Run{s, Basics.Tip{c0, l}, []}}, k2, v, n0, n1)(h)
+    case Basics.Tip{c0, l, n, os}:
+      h => All.kept(c, qs, Some{Stepping.Run{s, Basics.Tip{c0, l, n, os}, []}}, k2, v)(h)

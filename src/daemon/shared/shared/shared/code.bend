@@ -288,6 +288,22 @@ def Code.three.read(
 ) -> Maybe<&2, Read<T>>:
   Read.then(A, T, da(ts), a => r => Code.two.read(~B, ~C, ~T, ~db, ~dc, mk(a), r))
 
+# values of A, B, C and D, made into a T by mk
+def Code.four.read(
+  ~A: Data,
+  ~B: Data,
+  ~C: Data,
+  ~D: Data,
+  ~T: Data,
+  ~da: List<&2, U32> -> Maybe<&2, Read<A>>,
+  ~db: List<&2, U32> -> Maybe<&2, Read<B>>,
+  ~dc: List<&2, U32> -> Maybe<&2, Read<C>>,
+  ~dd: List<&2, U32> -> Maybe<&2, Read<D>>,
+  mk: A -> B -> C -> D -> T,
+  ts: List<&2, U32>
+) -> Maybe<&2, Read<T>>:
+  Read.then(A, T, da(ts), a => r => Code.three.read(~B, ~C, ~D, ~T, ~db, ~dc, ~dd, mk(a), r))
+
 # Laws
 # ----
 
@@ -636,6 +652,44 @@ def Code.three_read(
     Codec.laws(A, ca)(a)(rb)
   ): {_ == Some{Read{mk(a)(b)(c), r}}: Maybe<&2, Read<T>>}
   Code.two_read(~B, ~C, ~T, ~cb, ~cc, mk(a), b, c, r)
+
+# reading four values that their codes wrote, one after the other, gives the
+# value that mk makes of them
+def Code.four_read(
+  ~A: Data,
+  ~B: Data,
+  ~C: Data,
+  ~D: Data,
+  ~T: Data,
+  ~ca: Codec(A),
+  ~cb: Codec(B),
+  ~cc: Codec(C),
+  ~cd: Codec(D),
+  mk: A -> B -> C -> D -> T,
+  +a: A,
+  +b: B,
+  +c: C,
+  +d: D,
+  +r: List<&2, U32>
+) -> {
+  Code.four.read(
+    ~A,
+    ~B,
+    ~C,
+    ~D,
+    ~T,
+    ~Codec.dec(A, ca),
+    ~Codec.dec(B, cb),
+    ~Codec.dec(C, cc),
+    ~Codec.dec(D, cd),
+    mk,
+    Codec.enc(A, ca)(a)(Codec.enc(B, cb)(b)(Codec.enc(C, cc)(c)(Codec.enc(D, cd)(d)(r))))
+  )
+    == Some{Read{mk(a)(b)(c)(d), r}}: Maybe<&2, Read<T>>
+}:
+  %Equal.sym(Maybe<&2, Read<A>>, Codec.dec(A, ca, Codec.enc(A, ca, a, Codec.enc(B, cb, b, Codec.enc(C, cc, c, Codec.enc(D, cd, d, r))))), Some{Read{a, Codec.enc(B, cb, b, Codec.enc(C, cc, c, Codec.enc(D, cd, d, r)))}}, Codec.laws(A, ca)(a)(Codec.enc(B, cb, b, Codec.enc(C, cc, c, Codec.enc(D, cd, d, r))))) :
+    {Read.then(A, T, _, a => r => Code.three.read(B, C, D, T, Codec.dec(B, cb), Codec.dec(C, cc), Codec.dec(D, cd), mk(a), r)) == Some{Read{mk(a, b, c, d), r}} : Maybe<&2, Read<T>>}
+  Code.three_read(B, C, D, T, cb, cc, cd, mk(a), b, c, d, r)
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the code of tokens

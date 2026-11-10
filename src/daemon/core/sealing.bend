@@ -478,38 +478,25 @@ def Seal.firsts(os: List<&2, Basics.Owner>, m: Maybe<&2, Judging.Work>) -> Maybe
         )
       )
 
-# s with the first tip of the store i, whose content is c and whose log is on
-# the trees of m: its owners are the store's first owners
-def Start.put(
-  s: Basics.Node,
-  +i: Ledgers.Id,
-  c: Maybe<&2, Hashes.Hash>,
-  m: Maybe<&2, Judging.Work>
-) -> Basics.Node:
-  match m:
-    case None{}:
-      s
-    case Some{Judging.Work{s2, l, ns}}:
-      +t = {Basics.Tip{c, l}: Basics.Tip}
-      Start.head(
-        s,
-        Judging.State.put(s2, [Basics.Tip.words(t)]),
-        Ledgers.Chain{i, None{}},
-        Basics.Head{i, None{}, 0, Some{Basics.Tip.hash(t)}}
-      )
-
-# Node.start once the content m of the store is known
+# Node.start once the content m of the store is known: its first tip has no
+# log and no version, and its owners are the first owners os
 def Start.with(
   s: Basics.Node,
-  i: Ledgers.Id,
+  +i: Ledgers.Id,
   os: List<&2, String>,
   m: Maybe<&2, Judging.Work>
 ) -> Basics.Node:
   match m:
     case None{}:
       s
-    case Some{+w}:
-      Start.put(s, i, Judging.Work.root(w), Judging.Log.first(w, os))
+    case Some{Judging.Work{s2, c, ns}}:
+      +t = {Basics.Tip{c, None{}, 0, os}: Basics.Tip}
+      Start.head(
+        s,
+        Judging.State.put(s2, [Basics.Tip.words(t)]),
+        Ledgers.Chain{i, None{}},
+        Basics.Head{i, None{}, 0, Some{Basics.Tip.hash(t)}}
+      )
 
 # s, which follows the store that the request i starts with the first owners
 # os: its content holds their first keys
@@ -596,7 +583,7 @@ def Cast.may(
         Cells.Cell<Ledgers.Entry<Basics.Ask>>,
         Ledgers.State.get(~Basics.Ask, Basics.State.ledger(s), Ledgers.Slot.vote(w, n))
       ),
-      List.contains(~String, ~String.eq, Basics.Line.owners(s, t), n)
+      List.contains(~String, ~String.eq, Basics.Tip.owners(t), n)
     ),
     Bool.not(List.is_empty(&2, Ledgers.Id, qs))
   )

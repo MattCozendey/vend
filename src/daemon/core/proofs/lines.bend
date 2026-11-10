@@ -137,7 +137,7 @@ def Line.same(
 
 # a node keeps its own logs
 def Kept.refl(-s: Basics.Node) -> Spec.Node.Keeps(s, s):
-  c => k => v => n0 => n1 => e => e
+  c => k => v => e => e
 
 # keeping composes
 def Kept.trans(
@@ -147,7 +147,7 @@ def Kept.trans(
   h1: Spec.Node.Keeps(a, b),
   h2: Spec.Node.Keeps(b, d)
 ) -> Spec.Node.Keeps(a, d):
-  +c => +k => +v => +n0 => +n1 => e => h2(c)(k)(v)(n0)(n1)(h1(c)(k)(v)(n0)(n1)(e))
+  +c => +k => +v => e => h2(c)(k)(v)(h1(c)(k)(v)(e))
 
 # one of two nodes, each of which keeps the logs of s
 def Kept.when(
@@ -171,7 +171,7 @@ def Kept.same(
   g: {Reading.Node.grows(a, b) == True{}: Bool},
   eh: {Basics.State.heads(a) == Basics.State.heads(b): Tries.Trie<Basics.Head>}
 ) -> Spec.Node.Keeps(a, b):
-  +c => k => v => n0 => n1 => Line.same(
+  +c => k => v => Line.same(
     a,
     b,
     c,
@@ -435,14 +435,10 @@ def Head.put.kept(
     U32> -> @v: List<
     &2,
     U32> -> {
-    Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k) == False{}: Bool
-  } -> {
-    Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k) == False{}: Bool
-  } -> {
     Basics.Line.get(a, c, k) == Some{v}: Maybe<&2, List<&2, U32>>
   } -> {Basics.Head.get(Sealing.State.head(b0, c, hd), hd, k) == Some{v}: Maybe<&2, List<&2, U32>>}
 ) -> Spec.Node.Keeps(a, Sealing.State.head(b0, c, hd)):
-  +c2 => +k => +v => n0 => n1 => Head.put.kept.if(
+  +c2 => +k => +v => Head.put.kept.if(
     a,
     b0,
     c,
@@ -454,7 +450,7 @@ def Head.put.kept(
     {==},
     g,
     eh,
-    cover(k)(v)(n0)(n1)
+    cover(k)(v)
   )
 
 # one of two nodes, each with the heads of s
@@ -889,7 +885,7 @@ def Cast.round.heads(
   )
     == Basics.State.heads(Voting.Cast.round(n, s, c, next, th, t)): Tries.Trie<Basics.Head>
 }:
-  +os = Basics.Line.owners(s, t)
+  +os = Basics.Tip.owners(t)
   +r = Voting.Round.mine(n, s, c, next, Sealing.Round.seen(s, c, next))
   +w = {Ledgers.Where{c, next, r}: Ledgers.Where}
   +p = Voting.Plan.of(
@@ -926,13 +922,13 @@ def Cast.at.heads(
 }:
   match h m:
     case Basics.Head{r, b, +next, th} Some{+t}:
-      s1 = Voting.Round.join(n, s, c, next, Basics.Line.owners(s, t))
+      s1 = Voting.Round.join(n, s, c, next, Basics.Tip.owners(t))
       Equal.trans(
         Tries.Trie<Basics.Head>,
         Basics.State.heads(s),
         Basics.State.heads(s1),
         Basics.State.heads(Voting.Cast.round(n, s1, c, next, th, t)),
-        Round.join.heads(n, s, c, next, Basics.Line.owners(s, t)),
+        Round.join.heads(n, s, c, next, Basics.Tip.owners(t)),
         Cast.round.heads(n, s1, c, next, th, t)
       )
     case Basics.Head{r, b, next, th} None{}:
@@ -957,7 +953,7 @@ def Pass.at.heads(
         n,
         s,
         Ledgers.Where{c, next, 1n+Voting.Round.mine(n, s, c, next, Sealing.Round.seen(s, c, next))},
-        Basics.Line.owners(s, t)
+        Basics.Tip.owners(t)
       )
     case Basics.Head{r, b, next, th} None{}:
       {==}
@@ -1010,47 +1006,45 @@ def Tip.round(
   t: Basics.Tip
 ) -> {Basics.Tip.read(Basics.Tip.words(t)) == Some{t}: Maybe<&2, Basics.Tip>}:
   match t:
-    case Basics.Tip{c, l}:
+    case Basics.Tip{+c, +l, +n, +os}:
       %Equal.sym(
         Maybe<&2, Codes.Read<Basics.Tip>>,
-        Codes.Code.two.read(
+        Codes.Code.four.read(
           ~Maybe<&2, Hashes.Hash>,
           ~Maybe<&2, Hashes.Hash>,
+          ~U32,
+          ~List<&2, String>,
           ~Basics.Tip,
-          ~Codes.Codec.dec(
-            Maybe<&2, Hashes.Hash>,
-            Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec())
-          ),
-          ~Codes.Codec.dec(
-            Maybe<&2, Hashes.Hash>,
-            Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec())
-          ),
-          x => y => Basics.Tip{x, y},
-          Codes.Codec.enc(
-            Maybe<&2, Hashes.Hash>,
-            Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec())
-          )(
-            c
-          )(
-            Codes.Codec.enc(
-              Maybe<&2, Hashes.Hash>,
-              Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec())
-            )(l)([])
+          ~Codes.Codec.dec(Maybe<&2, Hashes.Hash>, Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec())),
+          ~Codes.Codec.dec(Maybe<&2, Hashes.Hash>, Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec())),
+          ~Codes.Codec.dec(U32, Codes.Code.token.codec()),
+          ~Codes.Codec.dec(List<&2, String>, Codes.Code.list.codec(~String, ~Codes.Code.text.codec())),
+          x => y => z => w => Basics.Tip{x, y, z, w},
+          Codes.Codec.enc(Maybe<&2, Hashes.Hash>, Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec()))(c)(
+            Codes.Codec.enc(Maybe<&2, Hashes.Hash>, Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec()))(l)(
+              Codes.Codec.enc(U32, Codes.Code.token.codec())(n)(Codes.Codec.enc(List<&2, String>, Codes.Code.list.codec(~String, ~Codes.Code.text.codec()))(os)([]))
+            )
           )
         ),
-        Some{Codes.Read{Basics.Tip{c, l}, []}},
-        Codes.Code.two_read(
+        Some{Codes.Read{Basics.Tip{c, l, n, os}, []}},
+        Codes.Code.four_read(
           ~Maybe<&2, Hashes.Hash>,
           ~Maybe<&2, Hashes.Hash>,
+          ~U32,
+          ~List<&2, String>,
           ~Basics.Tip,
           ~Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec()),
           ~Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec()),
-          x => y => Basics.Tip{x, y},
+          ~Codes.Code.token.codec(),
+          ~Codes.Code.list.codec(~String, ~Codes.Code.text.codec()),
+          x => y => z => w => Basics.Tip{x, y, z, w},
           c,
           l,
+          n,
+          os,
           []
         )
-      ): {Basics.Read.whole(Basics.Tip, _) == Some{Basics.Tip{c, l}}: Maybe<&2, Basics.Tip>}
+      ): {Basics.Read.whole(Basics.Tip, _) == Some{Basics.Tip{c, l, n, os}}: Maybe<&2, Basics.Tip>}
       {==}
 
 # Put.holds once whether the node holds the data is known (b)
@@ -1236,10 +1230,6 @@ def Moved.kept(
     U32> -> @v: List<
     &2,
     U32> -> {
-    Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k) == False{}: Bool
-  } -> {
-    Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k) == False{}: Bool
-  } -> {
     Basics.Node.get(s, Basics.Tip.log(t), k) == Some{v}: Maybe<&2, List<&2, U32>>
   } -> {Basics.Node.get(s3, Basics.Tip.log(t2), k) == Some{v}: Maybe<&2, List<&2, U32>>}
 ) -> Spec.Node.Keeps(
@@ -1272,7 +1262,7 @@ def Moved.kept(
       Heads.led(s, Basics.State.ledger(s3)),
       Heads.wait(x, c, ws)
     ),
-    +k => +v => n0 => n1 => e => Moved.cover(
+    +k => +v => e => Moved.cover(
       s3,
       Sealing.State.head(b0, c, hd),
       t2,
@@ -1303,7 +1293,7 @@ def Moved.kept(
         ProofTrees.Grows.refl(s3)
       ),
       e3,
-      kk(k)(v)(n0)(n1)(Line.read.at(s, c, k, v, h, t, em, et)(e))
+      kk(k)(v)(Line.read.at(s, c, k, v, h, t, em, et)(e))
     )
   )
 
@@ -1328,10 +1318,6 @@ def Advance.moved.kept(
     U32> -> @v: List<
     &2,
     U32> -> {
-    Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k) == False{}: Bool
-  } -> {
-    Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k) == False{}: Bool
-  } -> {
     Basics.Node.get(s, Basics.Tip.log(t), k) == Some{v}: Maybe<&2, List<&2, U32>>
   } -> {Basics.Node.get(s2, Basics.Tip.log(t2), k) == Some{v}: Maybe<&2, List<&2, U32>>}
 ) -> {
@@ -1359,14 +1345,14 @@ def Advance.moved.kept(
         em,
         et,
         Tip.put.at(s2, t2, s3)(e2),
-        +k => +v => n0 => n1 => e => ProofLogs.Get.grows(
+        +k => +v => e => ProofLogs.Get.grows(
           s2,
           s3,
           Basics.Tip.log(t2),
           k,
           v,
           Put.grew(s2, [Basics.Tip.words(t2)], s3, e2)
-        )(kk(k)(v)(n0)(n1)(e))
+        )(kk(k)(v)(e))
       )
 
 # a checked step keeps the logs
@@ -1391,10 +1377,6 @@ def Advance.ran.kept(
     U32> -> @v: List<
     &2,
     U32> -> {
-    Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k) == False{}: Bool
-  } -> {
-    Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k) == False{}: Bool
-  } -> {
     Basics.Node.get(s, Basics.Tip.log(t), k) == Some{v}: Maybe<&2, List<&2, U32>>
   } -> ProofLogs.Run.Keeps(k, v, m)
 ) -> Spec.Node.Keeps(s, Voting.Advance.ran(s, c, r, br, next, after, qs, m)):
@@ -1467,7 +1449,7 @@ def Advance.step.kept(
           et
         )(
           ProofTrees.Run.grows(s, c, t, qs)
-        )(+k => +v => +n0 => +n1 => ProofLogs.Run.kept(s, c, t, qs, k, v, n0, n1)),
+        )(+k => +v => ProofLogs.Run.kept(s, c, t, qs, k, v)),
         Kept.refl(s)
       )
     case Basics.Head{r, br, next, th} None{}:
@@ -1497,7 +1479,7 @@ def Advance.at.kept(
           s,
           c,
           Sealing.Head.next(h),
-          Basics.Line.owners(s, t),
+          Basics.Tip.owners(t),
           Sealing.Round.seen(s, c, Sealing.Head.next(h))
         )
       )(em)(et)
@@ -1627,7 +1609,7 @@ def Open.at.kept(
           hd,
           ProofTrees.Grows.refl(s),
           {==},
-          k => v => n0 => n1 => Cover.wait(
+          k => v => Cover.wait(
             s,
             c,
             Sealing.State.head(s, c, hd),
@@ -1702,7 +1684,7 @@ def First.at.kept(
         h,
         ProofTrees.Grows.refl(s),
         {==},
-        k => v => n0 => n1 => Cover.wait(s, c, Sealing.State.head(s, c, h), h, k, v, r, b, n, em)
+        k => v => Cover.wait(s, c, Sealing.State.head(s, c, h), h, k, v, r, b, n, em)
       )
     case None{}:
       +em => Head.put.kept(
@@ -1712,7 +1694,7 @@ def First.at.kept(
         h,
         ProofTrees.Grows.refl(s),
         {==},
-        k => v => n0 => n1 => Cover.none(s, c, Sealing.State.head(s, c, h), h, k, v, em)
+        k => v => Cover.none(s, c, Sealing.State.head(s, c, h), h, k, v, em)
       )
 
 # a first head on a node that grew from a, which grew from s, keeps the logs
@@ -1745,34 +1727,10 @@ def Start.head.kept(
           First.at.kept(x, c, h, Basics.Node.head_of(x, c))({==})
         )
 
-# the first tip of a store keeps the logs
-def Start.put.kept(
-  s: Basics.Node,
-  +i: Ledgers.Id,
-  c: Maybe<&2, Hashes.Hash>,
-  m: Maybe<&2, Judging.Work>
-) -> {
-  ProofTrees.Work.after(s, m) == True{}: Bool
-} -> Spec.Node.Keeps(s, Sealing.Start.put(s, i, c, m)):
-  match m:
-    case None{}:
-      e => Kept.refl(s)
-    case Some{Judging.Work{+s2, l, ns}}:
-      e =>
-        +t = {Basics.Tip{c, l}: Basics.Tip}
-        Start.head.kept(
-          s,
-          s2,
-          Judging.State.put(s2, [Basics.Tip.words(t)]),
-          Ledgers.Chain{i, None{}},
-          Basics.Head{i, None{}, 0, Some{Basics.Tip.hash(t)}},
-          e
-        )(ProofTrees.Put.grows(s2, [Basics.Tip.words(t)]))
-
 # Start.kept once the content m of the store is known
 def Start.with.kept(
   +s: Basics.Node,
-  i: Ledgers.Id,
+  +i: Ledgers.Id,
   +os: List<&2, String>,
   m: Maybe<&2, Judging.Work>
 ) -> {
@@ -1781,13 +1739,17 @@ def Start.with.kept(
   match m:
     case None{}:
       e => Kept.refl(s)
-    case Some{+w}:
-      e => Start.put.kept(
-        s,
-        i,
-        Judging.Work.root(w),
-        Judging.Log.first(w, os)
-      )(ProofTrees.Log.first.after(s, w, os)(e))
+    case Some{Judging.Work{+s2, +c, ns}}:
+      e =>
+        +t = {Basics.Tip{c, None{}, 0, os}: Basics.Tip}
+        Start.head.kept(
+          s,
+          s2,
+          Judging.State.put(s2, [Basics.Tip.words(t)]),
+          Ledgers.Chain{i, None{}},
+          Basics.Head{i, None{}, 0, Some{Basics.Tip.hash(t)}},
+          e
+        )(ProofTrees.Put.grows(s2, [Basics.Tip.words(t)]))
 
 # a store that starts keeps the logs
 def Start.kept(
@@ -1822,7 +1784,7 @@ def Follow.new.kept(
         Basics.Head{r, l, 0, None{}},
         ProofTrees.Grows.refl(s),
         {==},
-        k => v => n0 => n1 => Cover.none(
+        k => v => Cover.none(
           s,
           Basics.Line.chain(r, l),
           Sealing.State.head(s, Basics.Line.chain(r, l), Basics.Head{r, l, 0, None{}}),

@@ -375,7 +375,7 @@ def Cast.round(
   +th: Maybe<&2, Hashes.Hash>,
   +t: Basics.Tip
 ) -> Basics.Node:
-  +os = Basics.Line.owners(s, t)
+  +os = Basics.Tip.owners(t)
   +r = Round.mine(n, s, c, next, Sealing.Round.seen(s, c, next))
   +w = {Ledgers.Where{c, next, r}: Ledgers.Where}
   +p = Plan.of(n, s, c, w, t, th, os, Sealing.Owners.turn(os, U32.add(next, U32.from_nat(r))))
@@ -404,7 +404,7 @@ def Cast.at(
 ) -> Basics.Node:
   match h m:
     case Basics.Head{r, b, +next, th} Some{+t}:
-      Cast.round(n, Round.join(n, s, c, next, Basics.Line.owners(s, t)), c, next, th, t)
+      Cast.round(n, Round.join(n, s, c, next, Basics.Tip.owners(t)), c, next, th, t)
     case x y:
       s
 
@@ -423,7 +423,7 @@ def Pass.at(
         n,
         s,
         Ledgers.Where{c, next, 1n+Round.mine(n, s, c, next, k)},
-        Basics.Line.owners(s, t)
+        Basics.Tip.owners(t)
       )
     case x y:
       s
@@ -627,7 +627,7 @@ def Rounds.Rules(s: Basics.Node, c: Ledgers.Chain) -> Type:
     s,
     c,
     Sealing.Head.next(x),
-    Basics.Line.owners(s, t)
+    Basics.Tip.owners(t)
   )
     & (Rounds.Last(s, c, Sealing.Head.next(x)) & Rounds.Same(s, c, Sealing.Head.next(x)))
 
@@ -651,7 +651,7 @@ def Advance.at(
           s,
           c,
           Sealing.Head.next(h),
-          Basics.Line.owners(s, t),
+          Basics.Tip.owners(t),
           Sealing.Round.seen(s, c, Sealing.Head.next(h))
         )
       )

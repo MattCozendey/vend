@@ -332,34 +332,11 @@ def Start.head.waiting(
         )
       )
 
-# the first tip of a store keeps the waiting requests
-def Start.put.waiting(
-  s: Basics.Node,
-  +i: Ledgers.Id,
-  +c: Maybe<&2, Hashes.Hash>,
-  +m: Maybe<&2, Judging.Work>
-) -> {
-  Basics.State.waiting(
-    s
-  )
-    == Basics.State.waiting(Sealing.Start.put(s, i, c, m)): Tries.Trie<List<&2, Ledgers.Id>>
-}:
-  match m:
-    case None{}:
-      {==}
-    case Some{Judging.Work{s2, +l, ns}}:
-      Start.head.waiting(
-        s,
-        Judging.State.put(s2, [Basics.Tip.words(Basics.Tip{c, l})]),
-        Ledgers.Chain{i, None{}},
-        Basics.Head{i, None{}, 0, Some{Basics.Tip.hash(Basics.Tip{c, l})}}
-      )
-
-# a store that starts keeps the waiting requests
+# a store that starts keeps the waiting requests, once its content m is known
 def Start.with.waiting(
   s: Basics.Node,
-  i: Ledgers.Id,
-  os: List<&2, String>,
+  +i: Ledgers.Id,
+  +os: List<&2, String>,
   +m: Maybe<&2, Judging.Work>
 ) -> {
   Basics.State.waiting(
@@ -370,8 +347,13 @@ def Start.with.waiting(
   match m:
     case None{}:
       {==}
-    case Some{+w}:
-      Start.put.waiting(s, i, Judging.Work.root(w), Judging.Log.first(w, os))
+    case Some{Judging.Work{s2, +c, ns}}:
+      Start.head.waiting(
+        s,
+        Judging.State.put(s2, [Basics.Tip.words(Basics.Tip{c, None{}, 0, os})]),
+        Ledgers.Chain{i, None{}},
+        Basics.Head{i, None{}, 0, Some{Basics.Tip.hash(Basics.Tip{c, None{}, 0, os})}}
+      )
 
 # a line that a node starts to follow keeps the waiting requests
 def Follow.new.waiting(

@@ -20,11 +20,12 @@ import ./voting.bend as Voting
 # the laws about both. transport/spec.bend carries it over IO.
 #
 # A line is a store, or one of its branches. What a line holds is a tip: its
-# content, a tree of what it holds now, and its log, a tree that only gains
-# keys (the outcome of each request, each version by its number, the count of
-# versions, the marks, and the owners of the next step). So the answer to a
-# request, the newest version, a version by number, a mark and the owners are
-# each one read of a tree: about log(size) nodes, each checked by its hash.
+# content, a tree of what it holds now; its log, a tree that only gains keys
+# (the outcome of each request, each version by its number, the marks); the
+# count of its versions; and the owners of its next step. So the count and the
+# owners are a read of the tip, and the answer to a request, a version by
+# number and a mark are each one read of a tree: about log(size) nodes, each
+# checked by its hash.
 #
 # A step takes a tip to the next one: it runs a batch of requests, in order
 # (Step.run), and any node can run it again. The owners of a line cast ballots
@@ -92,7 +93,7 @@ def Advance.in(
       ~Basics.Ask,
       Basics.State.ledger(s),
       Ledgers.Where{c, Sealing.Head.next(x), r},
-      Basics.Line.owners(s, t)
+      Basics.Tip.owners(t)
     )
   )
 
@@ -154,18 +155,13 @@ def Node.after(+n: String, evs: List<&2, Deed>, s: Basics.Node) -> Basics.Node:
     case Con{ev, rest}:
       Node.after(n, rest, Node.does(n, s, ev))
 
-# that b holds, in the log of each line, each key that a holds there, other
-# than the owners of the next step and the count of versions
+# that b holds, in the log of each line, each key that a holds there
 def Node.Keeps(a: Basics.Node, b: Basics.Node) -> Type:
   @c: Ledgers.Chain -> @k: List<
     &2,
     U32> -> @v: List<
     &2,
     U32> -> {
-    Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k) == False{}: Bool
-  } -> {
-    Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k) == False{}: Bool
-  } -> {
     Basics.Line.get(a, c, k) == Some{v}: Maybe<&2, List<&2, U32>>
   } -> {Basics.Line.get(b, c, k) == Some{v}: Maybe<&2, List<&2, U32>>}
 

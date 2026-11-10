@@ -959,28 +959,6 @@ def Work.set.after(
         Set.grows(s2, h, ns, k, x)
       )
 
-# the first log of a line is on a node that grew
-def Log.first.after(
-  s: Basics.Node,
-  w: Judging.Work,
-  +os: List<&2, String>
-) -> {
-  Work.after(s, Some{w}) == True{}: Bool
-} -> {Work.after(s, Judging.Log.first(w, os)) == True{}: Bool}:
-  match w:
-    case Judging.Work{+s2, h, +ns}:
-      e => Work.after.trans(
-        s,
-        s2,
-        Judging.Work.set(
-          Judging.Work{s2, None{}, ns},
-          Basics.Log.owners(),
-          Ledgers.Owners.code(os, [])
-        ),
-        e,
-        Set.grows(s2, None{}, ns, Basics.Log.owners(), Ledgers.Owners.code(os, []))
-      )
-
 # the node of the work w
 def Work.state(w: Judging.Work) -> Basics.Node:
   match w:
@@ -1470,30 +1448,6 @@ def Grown.made.put(
     case Some{Judging.Work{s2, l, ns}}:
       e => e
 
-# the first tip of a branch is on a node that grew
-def Grown.made.of(
-  +s: Basics.Node,
-  +c: Maybe<&2, Hashes.Hash>,
-  m: Maybe<&2, Judging.Work>
-) -> {Work.after(s, m) == True{}: Bool} -> {Made.after(s, Judging.Made.of(c, m)) == True{}: Bool}:
-  match m:
-    case None{}:
-      e => {==}
-    case Some{Judging.Work{+s2, +l, +ns}}:
-      e => Grown.made.put(
-        s,
-        Basics.Tip{c, l},
-        Judging.Work.keep(Judging.Work{s2, l, ns}, [Basics.Tip.words(Basics.Tip{c, l})])
-      )(
-        Work.after.trans(
-          s,
-          s2,
-          Judging.Work.keep(Judging.Work{s2, l, ns}, [Basics.Tip.words(Basics.Tip{c, l})]),
-          e,
-          Grown.keep(Judging.Work{s2, l, ns}, [Basics.Tip.words(Basics.Tip{c, l})])
-        )
-      )
-
 # the first tip of a new branch is on a node that grew
 def Grown.make.first(
   +s: Basics.Node,
@@ -1505,12 +1459,22 @@ def Grown.make.first(
   match start:
     case None{}:
       e => {==}
-    case Some{+w}:
-      e => Grown.made.of(
-        s,
-        Judging.Work.root(w),
-        Judging.Log.first(w, os)
-      )(Log.first.after(s, w, os)(e))
+    case Some{Judging.Work{+s2, +h, +ns}}:
+      e =>
+        +t = {Basics.Tip{h, None{}, 0, os}: Basics.Tip}
+        Grown.made.put(
+          s,
+          t,
+          Judging.Work.keep(Judging.Work{s2, h, ns}, [Basics.Tip.words(t)])
+        )(
+          Work.after.trans(
+            s,
+            s2,
+            Judging.Work.keep(Judging.Work{s2, h, ns}, [Basics.Tip.words(t)]),
+            e,
+            Grown.keep(Judging.Work{s2, h, ns}, [Basics.Tip.words(t)])
+          )
+        )
 
 # the verdict m, if any, holds a node that grew from s
 def Verdict.after(s: Basics.Node, m: Maybe<&2, Basics.Verdict>) -> Bool:
@@ -1898,39 +1862,34 @@ def Verdict.change(
       {==}
 
 # the run of a new log is on a node that grew
-def Run.of.grows(
+def Run.logged.grows(
   s: Basics.Node,
-  c: Maybe<&2, Hashes.Hash>,
+  t: Basics.Tip,
   +m: Maybe<&2, Judging.Work>,
   e: {Work.after(s, m) == True{}: Bool}
-) -> {Run.after(s, Stepping.Run.of(c, m)) == True{}: Bool}:
-  match m:
-    case None{}:
+) -> {Run.after(s, Stepping.Run.logged(t, m)) == True{}: Bool}:
+  match t m:
+    case x None{}:
       {==}
-    case Some{Judging.Work{s2, l, ns}}:
+    case Basics.Tip{c, old, n, os} Some{Judging.Work{s2, l, ns}}:
       e
-
-# a key set in a run's log only grows its node
-def Log.grows(
-  +r: Stepping.Run,
-  +k: List<&2, U32>,
-  +x: List<&2, U32>
-) -> {Run.after(Stepping.Run.state(r), Stepping.Run.log(r, k, x)) == True{}: Bool}:
-  match r:
-    case Stepping.Run{+s, Basics.Tip{c, +l}, +ns}:
-      Run.of.grows(s, c, Judging.Work.set(Judging.Work{s, l, ns}, k, x), Set.grows(s, l, ns, k, x))
 
 # Add.grows once the value m of the key is known
 def Add.at.grows(
   r: Stepping.Run,
-  k: List<&2, U32>,
-  x: List<&2, U32>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
   m: Maybe<&2, List<&2, U32>>
 ) -> {Run.after(Stepping.Run.state(r), Stepping.Run.add.at(r, k, x, m)) == True{}: Bool}:
-  match m:
-    case None{}:
-      Log.grows(r, k, x)
-    case Some{old}:
+  match r m:
+    case Stepping.Run{+s, +t, +ns} None{}:
+      Run.logged.grows(
+        s,
+        t,
+        Judging.Work.set(Judging.Work{s, Basics.Tip.log(t), ns}, k, x),
+        Set.grows(s, Basics.Tip.log(t), ns, k, x)
+      )
+    case y Some{old}:
       {==}
 
 # a new key in a run's log only grows its node
@@ -1946,16 +1905,14 @@ def Add.grows(
     Basics.Node.get(Stepping.Run.state(r), Basics.Tip.log(Stepping.Run.tip(r)), k)
   )
 
-# new owners only grow a run's node
-def Owners.grows(
+# a run one version on is on its own node
+def Next.grows(
   r: Stepping.Run,
-  +m: Maybe<&2, List<&2, String>>
-) -> {Run.after(Stepping.Run.state(r), Stepping.Run.owners(r, m)) == True{}: Bool}:
-  match m:
-    case None{}:
-      After.self(r)
-    case Some{os}:
-      Log.grows(r, Basics.Log.owners(), Ledgers.Owners.code(os, []))
+  own: Maybe<&2, List<&2, String>>
+) -> {Run.after(Stepping.Run.state(r), Some{Stepping.Run.next(r, own)}) == True{}: Bool}:
+  match r:
+    case Stepping.Run{s, t, ns}:
+      Grows.refl(s)
 
 # a refused request only grows a run's node
 def Stale.grows(
@@ -1970,7 +1927,7 @@ def Taken.grows(
   +i: Ledgers.Id,
   +own: Maybe<&2, List<&2, String>>
 ) -> {Run.after(Stepping.Run.state(r), Stepping.Step.taken(r, i, own)) == True{}: Bool}:
-  +n = Basics.Line.count(Stepping.Run.state(r), Stepping.Run.tip(r))
+  +n = Basics.Tip.count(Stepping.Run.tip(r))
   After.bind(
     Stepping.Run.state(r),
     Stepping.Run.add(r, Basics.Log.out(i), Basics.Out.words(Basics.Out.Taken{n})),
@@ -1983,13 +1940,7 @@ def Taken.grows(
         Basics.Log.version(n),
         Basics.Version.words(Basics.Version{i, Basics.Tip.content(Stepping.Run.tip(r1))})
       ),
-      +r2 => Maybe.bind(
-        &2,
-        Stepping.Run,
-        Stepping.Run,
-        Stepping.Run.log(r2, Basics.Log.count(), [U32.inc(n)]),
-        r3 => Stepping.Run.owners(r3, own)
-      )
+      r2 => Some{Stepping.Run.next(r2, own)}
     ),
     Add.grows(r, Basics.Log.out(i), Basics.Out.words(Basics.Out.Taken{n})),
     +r1 => After.bind(
@@ -1999,25 +1950,13 @@ def Taken.grows(
         Basics.Log.version(n),
         Basics.Version.words(Basics.Version{i, Basics.Tip.content(Stepping.Run.tip(r1))})
       ),
-      +r2 => Maybe.bind(
-        &2,
-        Stepping.Run,
-        Stepping.Run,
-        Stepping.Run.log(r2, Basics.Log.count(), [U32.inc(n)]),
-        r3 => Stepping.Run.owners(r3, own)
-      ),
+      r2 => Some{Stepping.Run.next(r2, own)},
       Add.grows(
         r1,
         Basics.Log.version(n),
         Basics.Version.words(Basics.Version{i, Basics.Tip.content(Stepping.Run.tip(r1))})
       ),
-      +r2 => After.bind(
-        Stepping.Run.state(r2),
-        Stepping.Run.log(r2, Basics.Log.count(), [U32.inc(n)]),
-        r3 => Stepping.Run.owners(r3, own),
-        Log.grows(r2, Basics.Log.count(), [U32.inc(n)]),
-        r3 => Owners.grows(r3, own)
-      )
+      r2 => Next.grows(r2, own)
     )
   )
 
@@ -2071,7 +2010,7 @@ def Mark.grows(
 ) -> {Run.after(Stepping.Run.state(r), Stepping.Step.mark(r, i, m)) == True{}: Bool}:
   +s = Stepping.Run.state(r)
   +t = Stepping.Run.tip(r)
-  +n = Basics.Line.count(s, t)
+  +n = Basics.Tip.count(t)
   After.when(
     s,
     List.all.if(
@@ -2149,7 +2088,7 @@ def Branch.ready.grows(
           b,
           Judging.Make.first(
             Judging.Make.branch(Stepping.Run.state(r), Basics.Line.chain(st, Some{b}), at),
-            Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+            Basics.Tip.owners(Stepping.Run.tip(r))
           )
         ),
         None{},
@@ -2159,13 +2098,13 @@ def Branch.ready.grows(
           b,
           Judging.Make.first(
             Judging.Make.branch(Stepping.Run.state(r), Basics.Line.chain(st, Some{b}), at),
-            Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+            Basics.Tip.owners(Stepping.Run.tip(r))
           )
         )(
           Grown.make.first(
             Stepping.Run.state(r),
             Judging.Make.branch(Stepping.Run.state(r), Basics.Line.chain(st, Some{b}), at),
-            Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+            Basics.Tip.owners(Stepping.Run.tip(r))
           )(Grown.make.branch(Stepping.Run.state(r), Basics.Line.chain(st, Some{b}), at))
         ),
         {==}
@@ -2224,7 +2163,7 @@ def On.of.grows(
           l,
           ch,
           Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+          Basics.Tip.owners(Stepping.Run.tip(r))
         )
       )(
         Verdict.change(
@@ -2233,7 +2172,7 @@ def On.of.grows(
           l,
           ch,
           Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+          Basics.Tip.owners(Stepping.Run.tip(r))
         )
       )
 
@@ -2923,7 +2862,7 @@ def Cast.round.grows(
   +th: Maybe<&2, Hashes.Hash>,
   +t: Basics.Tip
 ) -> {Reading.Node.grows(s, Voting.Cast.round(n, s, c, next, th, t)) == True{}: Bool}:
-  +os = Basics.Line.owners(s, t)
+  +os = Basics.Tip.owners(t)
   +r = Voting.Round.mine(n, s, c, next, Sealing.Round.seen(s, c, next))
   +w = {Ledgers.Where{c, next, r}: Ledgers.Where}
   +p = Voting.Plan.of(
@@ -2965,13 +2904,13 @@ def Cast.at.grows(
 ) -> {Reading.Node.grows(s, Voting.Cast.at(n, s, c, h, m)) == True{}: Bool}:
   match h m:
     case Basics.Head{r, b, +next, +th} Some{+t}:
-      +s1 = Voting.Round.join(n, s, c, next, Basics.Line.owners(s, t))
+      +s1 = Voting.Round.join(n, s, c, next, Basics.Tip.owners(t))
       Grows.trans(
         s,
         s1,
         Voting.Cast.round(n, s1, c, next, th, t)
       )(
-        Round.join.grows(n, s, c, next, Basics.Line.owners(s, t))
+        Round.join.grows(n, s, c, next, Basics.Tip.owners(t))
       )(Cast.round.grows(n, s1, c, next, th, t))
     case Basics.Head{r, b, next, th} None{}:
       Grows.refl(s)
@@ -2990,7 +2929,7 @@ def Pass.at.grows(
         n,
         s,
         Ledgers.Where{c, next, 1n+Voting.Round.mine(n, s, c, next, Sealing.Round.seen(s, c, next))},
-        Basics.Line.owners(s, t)
+        Basics.Tip.owners(t)
       )
     case Basics.Head{r, b, next, th} None{}:
       Grows.refl(s)
@@ -3141,7 +3080,7 @@ def Advance.at.grows(
           s,
           c,
           Sealing.Head.next(h),
-          Basics.Line.owners(s, t),
+          Basics.Tip.owners(t),
           Sealing.Round.seen(s, c, Sealing.Head.next(h))
         )
       )
@@ -3325,34 +3264,10 @@ def Firsts.after(
         )
       )(Work.set.after(s, m, Basics.Key.seal(n), Hashes.Hash.code(k, []))(e))
 
-# the first tip of a store only grows a node
-def Start.put.grows(
-  s: Basics.Node,
-  +i: Ledgers.Id,
-  c: Maybe<&2, Hashes.Hash>,
-  m: Maybe<&2, Judging.Work>
-) -> {
-  Work.after(s, m) == True{}: Bool
-} -> {Reading.Node.grows(s, Sealing.Start.put(s, i, c, m)) == True{}: Bool}:
-  match m:
-    case None{}:
-      e => Grows.refl(s)
-    case Some{Judging.Work{+s2, l, ns}}:
-      e =>
-        +t = {Basics.Tip{c, l}: Basics.Tip}
-        Start.head.grows(
-          s,
-          s2,
-          Judging.State.put(s2, [Basics.Tip.words(t)]),
-          Ledgers.Chain{i, None{}},
-          Basics.Head{i, None{}, 0, Some{Basics.Tip.hash(t)}},
-          e
-        )(Put.grows(s2, [Basics.Tip.words(t)]))
-
 # Start.grows once the content m of the store is known
 def Start.with.grows(
   +s: Basics.Node,
-  i: Ledgers.Id,
+  +i: Ledgers.Id,
   +os: List<&2, String>,
   m: Maybe<&2, Judging.Work>
 ) -> {
@@ -3361,13 +3276,17 @@ def Start.with.grows(
   match m:
     case None{}:
       e => Grows.refl(s)
-    case Some{+w}:
-      e => Start.put.grows(
-        s,
-        i,
-        Judging.Work.root(w),
-        Judging.Log.first(w, os)
-      )(Log.first.after(s, w, os)(e))
+    case Some{Judging.Work{+s2, +c, ns}}:
+      e =>
+        +t = {Basics.Tip{c, None{}, 0, os}: Basics.Tip}
+        Start.head.grows(
+          s,
+          s2,
+          Judging.State.put(s2, [Basics.Tip.words(t)]),
+          Ledgers.Chain{i, None{}},
+          Basics.Head{i, None{}, 0, Some{Basics.Tip.hash(t)}},
+          e
+        )(Put.grows(s2, [Basics.Tip.words(t)]))
 
 # a store that starts only grows a node
 def Start.grows(

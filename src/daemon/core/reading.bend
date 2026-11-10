@@ -31,7 +31,7 @@ def Store.root(s: Basics.Node, r: Ledgers.Id) -> Maybe<&2, Hashes.Hash>:
 
 # the newest version of a line at the tip t, if it has one
 def Line.newest(+s: Basics.Node, +t: Basics.Tip) -> Maybe<&2, Ledgers.Id>:
-  +n = Basics.Line.count(s, t)
+  +n = Basics.Tip.count(t)
   Shared.Maybe.when(
     Ledgers.Id,
     Bool.not(U32.is_eq(n, 0)),
@@ -107,7 +107,7 @@ def Node.owners(+s: Basics.Node, r: Ledgers.Id, l: Maybe<&2, String>) -> List<&2
       Basics.Tip,
       List<&2, String>,
       Basics.Node.tip(s, Basics.Line.chain(r, l)),
-      t => Some{Basics.Line.owners(s, t)}
+      t => Some{Basics.Tip.owners(t)}
     ),
     []
   )
@@ -921,7 +921,7 @@ def Line.since(+s: Basics.Node, m: Maybe<&2, Basics.Tip>, +n: U32) -> List<&2, L
     case None{}:
       []
     case Some{+t}:
-      Line.versions(Count.span(n, Basics.Line.count(s, t)), s, t, n)
+      Line.versions(Count.span(n, Basics.Tip.count(t)), s, t, n)
 
 # the number after the place m of a version vector, 0 without one
 def Place.after(m: Maybe<&2, Basics.Place>) -> U32:
@@ -1188,7 +1188,7 @@ def Chain.count(+s: Basics.Node, c: Ledgers.Chain) -> U32:
   Maybe.default(
     &2,
     U32,
-    Maybe.bind(&2, Basics.Tip, U32, Basics.Node.tip(s, c), t => Some{Basics.Line.count(s, t)}),
+    Maybe.bind(&2, Basics.Tip, U32, Basics.Node.tip(s, c), t => Some{Basics.Tip.count(t)}),
     0
   )
 

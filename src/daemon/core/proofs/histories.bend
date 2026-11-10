@@ -17,7 +17,7 @@ import ./lines.bend as ProofLines
 def Line.One(s: Basics.Node, c: Ledgers.Chain) -> Type:
   @x: Basics.Head -> @t: Basics.Tip -> {
     Basics.Head.tip(s, x) == Some{t}: Maybe<&2, Basics.Tip>
-  } -> Voting.Height.One(s, c, Sealing.Head.next(x), Basics.Line.owners(s, t))
+  } -> Voting.Height.One(s, c, Sealing.Head.next(x), Basics.Tip.owners(t))
 
 # that the rounds of each of k heights of the line c decide one step in s (one
 # witness for each step of a history: a proof uses each once)
@@ -53,7 +53,7 @@ def In.grows.at(
       ~Basics.Ask,
       Basics.State.ledger(a),
       Ledgers.Where{c, Sealing.Head.next(x), r},
-      Basics.Line.owners(a, t)
+      Basics.Tip.owners(t)
     )
   )
     == Some{v}: Maybe<&2, Ledgers.Vote>
@@ -81,7 +81,7 @@ def In.grows.at(
               ~Basics.Ask,
               Basics.State.ledger(u),
               Ledgers.Where{c, Sealing.Head.next(x), r},
-              Basics.Line.owners(u, t1)
+              Basics.Tip.owners(t1)
             )
           )
             == Some{v}: Maybe<&2, Ledgers.Vote>
@@ -177,13 +177,13 @@ def Step.same.at(
   -y: Basics.Head,
   w1: Maybe<&2, Ledgers.Vote>,
   w2: Maybe<&2, Ledgers.Vote>,
-  one: Voting.Height.One(u, c, Sealing.Head.next(z), Basics.Line.owners(u, t))
+  one: Voting.Height.One(u, c, Sealing.Head.next(z), Basics.Tip.owners(t))
 ) -> {
   Ledgers.State.decide(
     ~Basics.Ask,
     Basics.State.ledger(u),
     Ledgers.Where{c, Sealing.Head.next(z), r1},
-    Basics.Line.owners(u, t)
+    Basics.Tip.owners(t)
   )
     == w1: Maybe<&2, Ledgers.Vote>
 } -> {
@@ -191,7 +191,7 @@ def Step.same.at(
     ~Basics.Ask,
     Basics.State.ledger(u),
     Ledgers.Where{c, Sealing.Head.next(z), r2},
-    Basics.Line.owners(u, t)
+    Basics.Tip.owners(t)
   )
     == w2: Maybe<&2, Ledgers.Vote>
 } -> {
@@ -263,7 +263,7 @@ def Step.same(
         ~Basics.Ask,
         Basics.State.ledger(u),
         Ledgers.Where{c, Sealing.Head.next(z), r1},
-        Basics.Line.owners(u, t)
+        Basics.Tip.owners(t)
       )
     )
   )
@@ -280,7 +280,7 @@ def Step.same(
         ~Basics.Ask,
         Basics.State.ledger(u),
         Ledgers.Where{c, Sealing.Head.next(z), r2},
-        Basics.Line.owners(u, t)
+        Basics.Tip.owners(t)
       )
     )
   )
@@ -307,13 +307,13 @@ def Step.same(
             ~Basics.Ask,
             Basics.State.ledger(u),
             Ledgers.Where{c, Sealing.Head.next(z), r1},
-            Basics.Line.owners(u, t)
+            Basics.Tip.owners(t)
           ),
           Ledgers.State.decide(
             ~Basics.Ask,
             Basics.State.ledger(u),
             Ledgers.Where{c, Sealing.Head.next(z), r2},
-            Basics.Line.owners(u, t)
+            Basics.Tip.owners(t)
           ),
           one(z)(t)(em)
         )({==})({==})(k1)(k2)
@@ -592,8 +592,8 @@ def Advance.at.one(
           Sealing.Round.seen(s, c, Sealing.Head.next(h)),
           v
         )(em)(t => q => et => d => Tuple{q, (
-              %Equal.sym(Maybe<&2, Basics.Tip>, Basics.Head.tip(s, h), Some{t}, et): {Spec.Head.moved(h, Maybe.bind(&2, Basics.Tip, Ledgers.Vote, _, t1 => Ledgers.State.decide(~Basics.Ask, Basics.State.ledger(s), Ledgers.Where{c, Sealing.Head.next(h), q}, Basics.Line.owners(s, t1)))) == Some{ProofAgreement.Head.step(h, Some{v})}: Maybe<&2, Basics.Head>}
-              %Equal.sym(Maybe<&2, Ledgers.Vote>, Ledgers.State.decide(~Basics.Ask, Basics.State.ledger(s), Ledgers.Where{c, Sealing.Head.next(h), q}, Basics.Line.owners(s, t)), Some{v}, d): {Spec.Head.moved(h, _) == Some{ProofAgreement.Head.step(h, Some{v})}: Maybe<&2, Basics.Head>}
+              %Equal.sym(Maybe<&2, Basics.Tip>, Basics.Head.tip(s, h), Some{t}, et): {Spec.Head.moved(h, Maybe.bind(&2, Basics.Tip, Ledgers.Vote, _, t1 => Ledgers.State.decide(~Basics.Ask, Basics.State.ledger(s), Ledgers.Where{c, Sealing.Head.next(h), q}, Basics.Tip.owners(t1)))) == Some{ProofAgreement.Head.step(h, Some{v})}: Maybe<&2, Basics.Head>}
+              %Equal.sym(Maybe<&2, Ledgers.Vote>, Ledgers.State.decide(~Basics.Ask, Basics.State.ledger(s), Ledgers.Where{c, Sealing.Head.next(h), q}, Basics.Tip.owners(t)), Some{v}, d): {Spec.Head.moved(h, _) == Some{ProofAgreement.Head.step(h, Some{v})}: Maybe<&2, Basics.Head>}
               Moved.step(h, v)(hl))})
 
 def Spec.Node.advance_at(s, c, h):

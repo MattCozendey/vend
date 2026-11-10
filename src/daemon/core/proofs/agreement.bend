@@ -23,136 +23,6 @@ import ./trees.bend as ProofTrees
 # Agreement
 # ---------
 
-# no owners decide nothing
-def Decide.none(
-  l: Ledgers.State(Basics.Ask),
-  w: Ledgers.Where
-) -> {Ledgers.State.decide(~Basics.Ask, l, w, []) == None{}: Maybe<&2, Ledgers.Vote>}:
-  match w:
-    case Ledgers.Where{c, h, z}:
-      {==}
-
-# Owners.up once what the log holds under the owners' key is known (m)
-def Owners.up.at(
-  a: Basics.Node,
-  u: Basics.Node,
-  t: Basics.Tip,
-  w: Ledgers.Where,
-  -v: Ledgers.Vote,
-  m: Maybe<&2, List<&2, U32>>,
-  g: {Reading.Node.grows(a, u) == True{}: Bool}
-) -> {
-  Basics.Node.get(a, Basics.Tip.log(t), Basics.Log.owners()) == m: Maybe<&2, List<&2, U32>>
-} -> {
-  Ledgers.State.decide(
-    ~Basics.Ask,
-    Basics.State.ledger(a),
-    w,
-    Maybe.default(
-      &2,
-      List<&2, String>,
-      Maybe.bind(
-        &2,
-        List<&2, U32>,
-        List<&2, String>,
-        m,
-        ws => Basics.Read.whole(List<&2, String>, Ledgers.Owners.code.read(ws))
-      ),
-      []
-    )
-  )
-    == Some{v}: Maybe<&2, Ledgers.Vote>
-} -> {
-  Maybe.default(
-    &2,
-    List<&2, String>,
-    Maybe.bind(
-      &2,
-      List<&2, U32>,
-      List<&2, String>,
-      m,
-      ws => Basics.Read.whole(List<&2, String>, Ledgers.Owners.code.read(ws))
-    ),
-    []
-  )
-    == Basics.Line.owners(u, t): List<&2, String>
-}:
-  match m:
-    case None{}:
-      em => e => Empty.absurd(
-        {[] == Basics.Line.owners(u, t): List<&2, String>},
-        Shared.Maybe.none_ne_some(
-          Ledgers.Vote,
-          v,
-          Equal.trans(
-            Maybe<&2, Ledgers.Vote>,
-            None{},
-            Ledgers.State.decide(~Basics.Ask, Basics.State.ledger(a), w, []),
-            Some{v},
-            Equal.sym(
-              Maybe<&2, Ledgers.Vote>,
-              Ledgers.State.decide(~Basics.Ask, Basics.State.ledger(a), w, []),
-              None{},
-              Decide.none(Basics.State.ledger(a), w)
-            ),
-            e
-          )
-        )
-      )
-    case Some{ws}:
-      em => e =>
-        %Equal.sym(
-          Maybe<&2, List<&2, U32>>,
-          Basics.Node.get(u, Basics.Tip.log(t), Basics.Log.owners()),
-          Some{ws},
-          ProofLogs.Get.grows(a, u, Basics.Tip.log(t), Basics.Log.owners(), ws, g)(em)
-        ): {
-          Maybe.default(
-            &2,
-            List<&2, String>,
-            Maybe.bind(
-              &2,
-              List<&2, U32>,
-              List<&2, String>,
-              Some{ws},
-              ws => Basics.Read.whole(List<&2, String>, Ledgers.Owners.code.read(ws))
-            ),
-            []
-          )
-            == Maybe.default(
-              &2,
-              List<&2, String>,
-              Maybe.bind(
-                &2,
-                List<&2, U32>,
-                List<&2, String>,
-                _,
-                ws => Basics.Read.whole(List<&2, String>, Ledgers.Owners.code.read(ws))
-              ),
-              []
-            ): List<&2, String>
-        }
-        {==}
-
-# owners that decide a step are the owners in any node that grew
-def Owners.up(
-  +a: Basics.Node,
-  u: Basics.Node,
-  +t: Basics.Tip,
-  w: Ledgers.Where,
-  -v: Ledgers.Vote,
-  g: {Reading.Node.grows(a, u) == True{}: Bool}
-) -> {
-  Ledgers.State.decide(
-    ~Basics.Ask,
-    Basics.State.ledger(a),
-    w,
-    Basics.Line.owners(a, t)
-  )
-    == Some{v}: Maybe<&2, Ledgers.Vote>
-} -> {Basics.Line.owners(a, t) == Basics.Line.owners(u, t): List<&2, String>}:
-  Owners.up.at(a, u, t, w, v, Basics.Node.get(a, Basics.Tip.log(t), Basics.Log.owners()), g)({==})
-
 # a step that the owners decided at a place in a, they decided in a node that
 # grew, with the owners that it reads
 def Decide.up(
@@ -167,7 +37,7 @@ def Decide.up(
     ~Basics.Ask,
     Basics.State.ledger(a),
     w,
-    Basics.Line.owners(a, t)
+    Basics.Tip.owners(t)
   )
     == Some{v}: Maybe<&2, Ledgers.Vote>
 } -> {
@@ -175,29 +45,11 @@ def Decide.up(
     ~Basics.Ask,
     Basics.State.ledger(u),
     w,
-    Basics.Line.owners(u, t)
+    Basics.Tip.owners(t)
   )
     == Some{v}: Maybe<&2, Ledgers.Vote>
 }:
-  +e =>
-    %Owners.up(
-      a,
-      u,
-      t,
-      w,
-      v,
-      g
-    )(
-      e
-    ): {
-      Ledgers.State.decide(
-        ~Basics.Ask,
-        Basics.State.ledger(u),
-        w,
-        _
-      )
-        == Some{v}: Maybe<&2, Ledgers.Vote>
-    }
+  e =>
     Ledgers.State.decide_grows(
       ~Basics.Ask,
       ~Basics.Ask.is_eq,
@@ -205,7 +57,7 @@ def Decide.up(
       Basics.State.ledger(a),
       Basics.State.ledger(u),
       w,
-      Basics.Line.owners(a, t),
+      Basics.Tip.owners(t),
       v
     )(g)(e)
 
@@ -333,7 +185,7 @@ def Advance.found(
     Basics.Tip,
     Ledgers.Vote,
     Basics.Head.tip(s, h),
-    t => Voting.Height.decide(s, c, Sealing.Head.next(h), Basics.Line.owners(s, t), k)
+    t => Voting.Height.decide(s, c, Sealing.Head.next(h), Basics.Tip.owners(t), k)
   )
 
 # the step that the owners in the tip of the head h decided next on the line
@@ -635,7 +487,7 @@ def Advance.at.moves(
             s,
             c,
             Sealing.Head.next(h),
-            Basics.Line.owners(s, t),
+            Basics.Tip.owners(t),
             Sealing.Round.seen(s, c, Sealing.Head.next(h))
           ),
           Equal.cong(
@@ -650,7 +502,7 @@ def Advance.at.moves(
                 s,
                 c,
                 Sealing.Head.next(h),
-                Basics.Line.owners(s, t1),
+                Basics.Tip.owners(t1),
                 Sealing.Round.seen(s, c, Sealing.Head.next(h))
               )
             ),
@@ -668,7 +520,7 @@ def Advance.at.moves(
               s,
               c,
               Sealing.Head.next(h),
-              Basics.Line.owners(s, t),
+              Basics.Tip.owners(t),
               Sealing.Round.seen(s, c, Sealing.Head.next(h))
             )
           ),
@@ -685,7 +537,7 @@ def Advance.at.moves(
             s,
             c,
             Sealing.Head.next(h),
-            Basics.Line.owners(s, t),
+            Basics.Tip.owners(t),
             Sealing.Round.seen(s, c, Sealing.Head.next(h))
           )
         )(em)
@@ -732,7 +584,7 @@ def Found.elim.at(
     Basics.Tip,
     Ledgers.Vote,
     m,
-    t => Voting.Height.decide(s, c, Sealing.Head.next(h), Basics.Line.owners(s, t), k)
+    t => Voting.Height.decide(s, c, Sealing.Head.next(h), Basics.Tip.owners(t), k)
   )
     == Some{v}: Maybe<&2, Ledgers.Vote>
 } -> (
@@ -743,7 +595,7 @@ def Found.elim.at(
       ~Basics.Ask,
       Basics.State.ledger(s),
       Ledgers.Where{c, Sealing.Head.next(h), q},
-      Basics.Line.owners(s, t)
+      Basics.Tip.owners(t)
     )
       == Some{v}: Maybe<&2, Ledgers.Vote>
   } -> R
@@ -757,7 +609,7 @@ def Found.elim.at(
         s,
         c,
         Sealing.Head.next(h),
-        Basics.Line.owners(s, t),
+        Basics.Tip.owners(t),
         k,
         v
       )(e)(q => d => f(t)(q)(em)(d))
@@ -781,7 +633,7 @@ def Found.elim(
       ~Basics.Ask,
       Basics.State.ledger(s),
       Ledgers.Where{c, Sealing.Head.next(h), q},
-      Basics.Line.owners(s, t)
+      Basics.Tip.owners(t)
     )
       == Some{v}: Maybe<&2, Ledgers.Vote>
   } -> R

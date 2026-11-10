@@ -74,12 +74,6 @@ def Work.root(w: Work) -> Maybe<&2, Hashes.Hash>:
     case Work{s, h, ns}:
       h
 
-# w with its root put back to h, keeping its state and nodes
-def Work.at(w: Work, h: Maybe<&2, Hashes.Hash>) -> Work:
-  match w:
-    case Work{s, g, ns}:
-      Work{s, h, ns}
-
 # a verdict that takes the trees of m (none: wait)
 def Work.take(m: Maybe<&2, Work>) -> Maybe<&2, Basics.Verdict>:
   match m:
@@ -952,10 +946,6 @@ def Group.work(
 def Own.fits(+os: List<&2, String>, ns: List<&2, String>) -> Bool:
   List.all.if(u => Ledgers.Owners.is_eq(os, ns), Bool.not(List.is_empty(&2, String, os)))
 
-# the first log of a line whose owners are os, on the trees of w
-def Log.first(w: Work, os: List<&2, String>) -> Maybe<&2, Work>:
-  Work.set(Work.at(w, None{}), Basics.Log.owners(), Ledgers.Owners.code(os, []))
-
 # the first tip of a new branch, with the new nodes of its trees, and the node
 # that holds them
 type Made is Data:
@@ -969,20 +959,15 @@ def Made.put(t: Basics.Tip, m: Maybe<&2, Work>) -> Maybe<&2, Made>:
     case Some{Work{s, l, ns}}:
       Some{Made{t, ns, s}}
 
-# the first tip of a branch whose content is c, once its first log is on the
-# trees of m
-def Made.of(c: Maybe<&2, Hashes.Hash>, m: Maybe<&2, Work>) -> Maybe<&2, Made>:
-  match m:
+# the first tip of a new branch, from its first content (the root of start):
+# no log, no version, and the owners os of its store now
+def Make.first(start: Maybe<&2, Work>, os: List<&2, String>) -> Maybe<&2, Made>:
+  match start:
     case None{}:
       None{}
-    case Some{Work{s, +l, ns}}:
-      +t = {Basics.Tip{c, l}: Basics.Tip}
-      Made.put(t, Work.keep(Work{s, l, ns}, [Basics.Tip.words(t)]))
-
-# the first tip of a new branch, from its first content (the root of start),
-# with a log whose owners are the store's owners os now
-def Make.first(start: Maybe<&2, Work>, os: List<&2, String>) -> Maybe<&2, Made>:
-  Maybe.bind(&2, Work, Made, start, +w => Made.of(Work.root(w), Log.first(w, os)))
+    case Some{+w}:
+      +t = {Basics.Tip{Work.root(w), None{}, 0, os}: Basics.Tip}
+      Made.put(t, Work.keep(w, [Basics.Tip.words(t)]))
 
 # the store tree in which an Own of the line l, at the content h, reads its
 # group: a store reads its own content; a branch, the content of the version

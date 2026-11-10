@@ -1340,33 +1340,23 @@ def Spec.Clash.shut(s, h, n, f):
 # A step gives each of its requests an outcome (Spec.Step.run_outs), and only
 # the requests of a step leave the requests that wait (Spec.Wait.left_keeps).
 
-# a key that a run sets in its log, it reads
-def Add.reads.log(
-  r: Stepping.Run,
-  +k: List<&2, U32>,
-  +x: List<&2, U32>
-) -> ProofLogs.Run.Keeps(k, x, Stepping.Run.log(r, k, x)):
-  match r:
-    case Stepping.Run{+s, Basics.Tip{c, +l}, +ns}:
-      ProofLogs.Run.of.keeps(
-        k,
-        x,
-        c,
-        Judging.Work.set(Judging.Work{s, l, ns}, k, x)
-      )(Set.read(Judging.Work{s, l, ns}, k, x))
-
 # Add.reads once the value m of the key in the log is known
 def Add.reads.at(
   r: Stepping.Run,
-  k: List<&2, U32>,
-  x: List<&2, U32>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
   m: Maybe<&2, List<&2, U32>>
 ) -> ProofLogs.Run.Keeps(k, x, Stepping.Run.add.at(r, k, x, m)):
-  match m:
-    case Some{old}:
+  match r m:
+    case Stepping.Run{+s, +t, +ns} None{}:
+      ProofLogs.Run.logged.keeps(
+        k,
+        x,
+        t,
+        Judging.Work.set(Judging.Work{s, Basics.Tip.log(t), ns}, k, x)
+      )(Set.read(Judging.Work{s, Basics.Tip.log(t), ns}, k, x))
+    case y Some{old}:
       Unit{}
-    case None{}:
-      Add.reads.log(r, k, x)
 
 # a new key of the log of a run reads back
 def Add.reads(
@@ -1442,7 +1432,7 @@ def Taken.outs(
   +i: Ledgers.Id,
   +own: Maybe<&2, List<&2, String>>
 ) -> Spec.Run.Outs(Stepping.Step.taken(r, i, own), i):
-  +n = Basics.Line.count(Stepping.Run.state(r), Stepping.Run.tip(r))
+  +n = Basics.Tip.count(Stepping.Run.tip(r))
   Outs.of(
     i,
     Basics.Out.words(Basics.Out.Taken{n}),
@@ -1461,13 +1451,7 @@ def Taken.outs(
           Basics.Log.version(n),
           Basics.Version.words(Basics.Version{i, Basics.Tip.content(Stepping.Run.tip(r1))})
         ),
-        r2 => Maybe.bind(
-          &2,
-          Stepping.Run,
-          Stepping.Run,
-          Stepping.Run.log(r2, Basics.Log.count(), [U32.inc(n)]),
-          r3 => Stepping.Run.owners(r3, own)
-        )
+        r2 => Some{Stepping.Run.next(r2, own)}
       )
     )(
       Add.reads(r, Basics.Log.out(i), Basics.Out.words(Basics.Out.Taken{n}))
@@ -1480,13 +1464,7 @@ def Taken.outs(
           Basics.Log.version(n),
           Basics.Version.words(Basics.Version{i, Basics.Tip.content(Stepping.Run.tip(r1))})
         ),
-        r2 => Maybe.bind(
-          &2,
-          Stepping.Run,
-          Stepping.Run,
-          Stepping.Run.log(r2, Basics.Log.count(), [U32.inc(n)]),
-          r3 => Stepping.Run.owners(r3, own)
-        )
+        r2 => Some{Stepping.Run.next(r2, own)}
       )(
         ProofLogs.Add.kept(
           r1,
@@ -1496,29 +1474,12 @@ def Taken.outs(
           Basics.Out.words(Basics.Out.Taken{n})
         )(h1)
       )(
-        +r2 => h2 => ProofLogs.Keeps.bind(
+        r2 => h2 => ProofLogs.Next.kept(
+          r2,
+          own,
           Basics.Log.out(i),
-          Basics.Out.words(Basics.Out.Taken{n}),
-          Stepping.Run.log(r2, Basics.Log.count(), [U32.inc(n)]),
-          r3 => Stepping.Run.owners(r3, own)
-        )(
-          ProofLogs.Log.kept(
-            r2,
-            Basics.Log.count(),
-            [U32.inc(n)],
-            Basics.Log.out(i),
-            Basics.Out.words(Basics.Out.Taken{n}),
-            {==}
-          )(h2)
-        )(
-          r3 => h3 => ProofLogs.Owners.kept(
-            r3,
-            own,
-            Basics.Log.out(i),
-            Basics.Out.words(Basics.Out.Taken{n}),
-            {==}
-          )(h3)
-        )
+          Basics.Out.words(Basics.Out.Taken{n})
+        )(h2)
       )
     )
   )
@@ -1564,7 +1525,7 @@ def Mark.outs(
 ) -> Spec.Run.Outs(Stepping.Step.mark(r, i, m), i):
   +s = Stepping.Run.state(r)
   +t = Stepping.Run.tip(r)
-  +n = Basics.Line.count(s, t)
+  +n = Basics.Tip.count(t)
   Outs.when(
     List.all.if(
       u => Maybe.is_none(&2, Ledgers.Id, Basics.Line.mark(s, t, m)),
@@ -1628,7 +1589,7 @@ def Branch.ready.outs(
           b,
           Judging.Make.first(
             Judging.Make.branch(Stepping.Run.state(r), Basics.Line.chain(st, Some{b}), at),
-            Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+            Basics.Tip.owners(Stepping.Run.tip(r))
           )
         ),
         None{},
@@ -1639,7 +1600,7 @@ def Branch.ready.outs(
           b,
           Judging.Make.first(
             Judging.Make.branch(Stepping.Run.state(r), Basics.Line.chain(st, Some{b}), at),
-            Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+            Basics.Tip.owners(Stepping.Run.tip(r))
           )
         ),
         Unit{}
@@ -1698,7 +1659,7 @@ def On.of.outs(
           l,
           ch,
           Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+          Basics.Tip.owners(Stepping.Run.tip(r))
         )
       )
 
@@ -1897,9 +1858,7 @@ def Outs.kept.at(
           qs,
           Some{r},
           Basics.Log.out(i),
-          v,
-          {==},
-          {==}
+          v
         )(Keeps.self(r, Basics.Log.out(i), v)(eg))
       )
 

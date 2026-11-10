@@ -338,7 +338,7 @@ def In.key(
             Ledgers.Round.key(r, [False{}])
           )
         ),
-        Basics.Line.owners(s, t)
+        Basics.Tip.owners(t)
       )
     ),
     Ledgers.Chain.key(c2),
@@ -870,7 +870,7 @@ def Advance.step.path(
       s,
       c,
       Sealing.Head.next(h),
-      Basics.Line.owners(s, t),
+      Basics.Tip.owners(t),
       Sealing.Round.seen(s, c, Sealing.Head.next(h))
     )
       == m: Maybe<&2, Ledgers.Vote>
@@ -891,7 +891,7 @@ def Advance.step.path(
           s,
           c,
           next,
-          Basics.Line.owners(s, t),
+          Basics.Tip.owners(t),
           Sealing.Round.seen(s, c, next),
           Ledgers.Vote{before, qs, after}
         )(
@@ -911,7 +911,7 @@ def Advance.step.path(
             q,
             em,
             (
-              %Equal.sym(Maybe<&2, Basics.Tip>, Basics.Head.tip(s, Basics.Head{r, br, next, th}), Some{t}, et): {Maybe.bind(&2, Basics.Tip, Ledgers.Vote, _, t1 => Ledgers.State.decide(~Basics.Ask, Basics.State.ledger(s), Ledgers.Where{c, next, q}, Basics.Line.owners(s, t1))) == Some{Ledgers.Vote{before, qs, after}}: Maybe<&2, Ledgers.Vote>}
+              %Equal.sym(Maybe<&2, Basics.Tip>, Basics.Head.tip(s, Basics.Head{r, br, next, th}), Some{t}, et): {Maybe.bind(&2, Basics.Tip, Ledgers.Vote, _, t1 => Ledgers.State.decide(~Basics.Ask, Basics.State.ledger(s), Ledgers.Where{c, next, q}, Basics.Tip.owners(t1))) == Some{Ledgers.Vote{before, qs, after}}: Maybe<&2, Ledgers.Vote>}
               d)
           )(ProofTrees.Run.grows(s, c, t, qs))
         ),
@@ -944,7 +944,7 @@ def Advance.at.path(
           s,
           c,
           Sealing.Head.next(h),
-          Basics.Line.owners(s, t),
+          Basics.Tip.owners(t),
           Sealing.Round.seen(s, c, Sealing.Head.next(h))
         )
       )(em)(et)({==})
@@ -1150,34 +1150,10 @@ def Start.head.path(
           First.at.path(x, c, h, Basics.Node.head_of(x, c))({==})
         )
 
-# the first tip of a store is on the paths
-def Start.put.path(
-  s: Basics.Node,
-  +i: Ledgers.Id,
-  c: Maybe<&2, Hashes.Hash>,
-  m: Maybe<&2, Judging.Work>
-) -> {
-  ProofTrees.Work.after(s, m) == True{}: Bool
-} -> Spec.Node.On(s, Sealing.Start.put(s, i, c, m)):
-  match m:
-    case None{}:
-      e => Path.refl(s)
-    case Some{Judging.Work{+s2, l, ns}}:
-      e =>
-        +t = {Basics.Tip{c, l}: Basics.Tip}
-        Start.head.path(
-          s,
-          s2,
-          Judging.State.put(s2, [Basics.Tip.words(t)]),
-          Ledgers.Chain{i, None{}},
-          Basics.Head{i, None{}, 0, Some{Basics.Tip.hash(t)}},
-          e
-        )(ProofTrees.Put.grows(s2, [Basics.Tip.words(t)]))
-
-# Start.kept once the content m of the store is known
+# Start.path once the content m of the store is known
 def Start.with.path(
   +s: Basics.Node,
-  i: Ledgers.Id,
+  +i: Ledgers.Id,
   +os: List<&2, String>,
   m: Maybe<&2, Judging.Work>
 ) -> {
@@ -1186,13 +1162,17 @@ def Start.with.path(
   match m:
     case None{}:
       e => Path.refl(s)
-    case Some{+w}:
-      e => Start.put.path(
-        s,
-        i,
-        Judging.Work.root(w),
-        Judging.Log.first(w, os)
-      )(ProofTrees.Log.first.after(s, w, os)(e))
+    case Some{Judging.Work{+s2, +c, ns}}:
+      e =>
+        +t = {Basics.Tip{c, None{}, 0, os}: Basics.Tip}
+        Start.head.path(
+          s,
+          s2,
+          Judging.State.put(s2, [Basics.Tip.words(t)]),
+          Ledgers.Chain{i, None{}},
+          Basics.Head{i, None{}, 0, Some{Basics.Tip.hash(t)}},
+          e
+        )(ProofTrees.Put.grows(s2, [Basics.Tip.words(t)]))
 
 # a store that starts is on the paths
 def Start.path(

@@ -25,13 +25,15 @@ Files of the core (`core/`), each one domain, in the order in which they build o
   (`State.take`), so a ledger only grows. A step is what a majority of a line's owners cast in
   one round of a height (`State.decide`), and nothing else. The ledger does not read a line's
   state.
-- **Tip** (`core/basics.bend`): what a line holds, as two trees named by one hash.
+- **Tip** (`core/basics.bend`): what a line holds, named by one hash: two trees, the count of
+  versions and the owners of the next step. A read of the count or of the owners costs no node
+  of a tree.
   - Content: resources (each a root of a rope), clashes, version vector, owner group; for a store
     also its groups and the first key of each node.
-  - Log: a tree that only gains keys. Owners of the next step, count of versions, outcome of each
-    request, each version by number, each mark; for a store also the first tip of each branch.
-    An outcome, a version, a mark and a first tip are written once (`Run.add`). A store makes a
-    branch once (`Step.branch`).
+  - Log: a tree that only gains keys. Outcome of each request, each version by number, each
+    mark; for a store also the first tip of each branch. Each key is written once: `Run.add` is
+    the one def that writes a log, and it writes only a key that the log does not hold. A store
+    makes a branch once (`Step.branch`).
 - **Step**: a batch of requests, run in order from a tip (`Step.run`). A request that the log holds
   is skipped: a change counts once.
 - **Node**: its ledger, its head of each line (height and tip), and the requests that wait on each

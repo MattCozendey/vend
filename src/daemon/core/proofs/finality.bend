@@ -37,7 +37,7 @@ def Chain.out.kept(
     ws => Basics.Out.read(ws),
     ws => Basics.Out.read(ws),
     o,
-    w => hk(c)(Basics.Log.out(i))(w)({==})({==}),
+    w => hk(c)(Basics.Log.out(i))(w),
     w => e => e
   )
 
@@ -61,7 +61,7 @@ def Chain.version.kept(
     ws => Basics.Version.read(ws),
     ws => Basics.Version.read(ws),
     x,
-    w => hk(c)(Basics.Log.version(n))(w)({==})({==}),
+    w => hk(c)(Basics.Log.version(n))(w),
     w => e => e
   )
 
@@ -84,7 +84,7 @@ def Chain.mark.kept(
     ws => Basics.Read.whole(Ledgers.Id, Ledgers.Id.code.read(ws)),
     ws => Basics.Read.whole(Ledgers.Id, Ledgers.Id.code.read(ws)),
     v,
-    w => hk(c)(Basics.Log.mark(m))(w)({==})({==}),
+    w => hk(c)(Basics.Log.mark(m))(w),
     w => e => e
   )
 
@@ -237,7 +237,7 @@ def Spec.Chain.mark_final(n, evs, s, c, m, v):
   Chain.mark.kept(s, Spec.Node.after(n, evs, s), c, m, v, Spec.Node.after_keeps(n, evs, s))
 
 def Spec.Chain.start_final(n, evs, s, r, b, v):
-  Spec.Node.after_keeps(n, evs, s)(Ledgers.Chain{r, None{}})(Basics.Log.start(b))(v)({==})({==})
+  Spec.Node.after_keeps(n, evs, s)(Ledgers.Chain{r, None{}})(Basics.Log.start(b))(v)
 
 # the answer b may come after the answer a, if there is an a
 def Follows.opt(ma: Maybe<&2, Reading.Answer>, mb: Maybe<&2, Reading.Answer>) -> Bool:
