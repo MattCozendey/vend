@@ -2661,3 +2661,136 @@ def Sync.lines(
     ),
     Tries.Trie.new(Unit)
   )
+
+# the node b holds every entry that the node a holds: its ledger only grew
+def Node.grows(~M: Machine(), a: Node<Machine.Q(M)>, b: Node<Machine.Q(M)>) -> Bool:
+  Ledgers.State.grows(
+    ~Machine.Q(M),
+    ~Machine.same(M),
+    State.ledger(~M, a),
+    State.ledger(~M, b)
+  )
+
+# the tip that the step m names, if any
+def Vote.tip(m: Maybe<&2, Ledgers.Vote>) -> Maybe<&2, Hashes.Hash>:
+  match m:
+    case Some{Ledgers.Vote{before, qs, after}}:
+      after
+    case None{}:
+      None{}
+
+# the head x one height up, at the tip y
+def Head.up(x: Head, y: Hashes.Hash) -> Head:
+  match x:
+    case Head{r, b, n, th}:
+      Head{r, b, U32.inc(n), Some{y}}
+
+# the head x after the step m (none: no step, or one that names no tip)
+def Head.moved(x: Head, m: Maybe<&2, Ledgers.Vote>) -> Maybe<&2, Head>:
+  Maybe.bind(&2, Hashes.Hash, Head, Vote.tip(m), y => Some{Head.up(x, y)})
+
+# the step that the owners in the tip of the head x decided next on the line
+# c, in the round r, if they did
+def Advance.in(
+  ~M: Machine(),
+  +s: Node<Machine.Q(M)>,
+  c: Ledgers.Chain,
+  +x: Head,
+  r: Nat
+) -> Maybe<&2, Ledgers.Vote>:
+  Maybe.bind(
+    &2,
+    Tip,
+    Ledgers.Vote,
+    Head.tip(~M, s, x),
+    t => Ledgers.State.decide(
+      ~Machine.Q(M),
+      State.ledger(~M, s),
+      Ledgers.Where{c, Head.next(x), r},
+      Tip.owners(t)
+    )
+  )
+
+# the head of the line c after one decided step for each round of rs, the
+# last first, from the head h, by the ledger of s alone (none: a step is not
+# decided in its round). A law's measure: no node runs it
+def Line.at(
+  ~M: Machine(),
+  rs: List<&2, Nat>,
+  +s: Node<Machine.Q(M)>,
+  +c: Ledgers.Chain,
+  h: Head
+) -> Maybe<&2, Head>:
+  match rs:
+    case Nil{}:
+      Some{h}
+    case Con{r, rest}:
+      Maybe.bind(
+        &2,
+        Head,
+        Head,
+        Line.at(~M, rest, s, c, h),
+        +x => Head.moved(x, Advance.in(~M, s, c, x, r))
+      )
+
+# that b holds, in the log of each line, each key that a holds there
+def Node.Keeps(~M: Machine(), a: Node<Machine.Q(M)>, b: Node<Machine.Q(M)>) -> Type:
+  @c: Ledgers.Chain -> @k: List<
+    &2,
+    U32> -> @v: List<
+    &2,
+    U32> -> {
+    Line.get(~M, a, c, k) == Some{v}: Maybe<&2, List<&2, U32>>
+  } -> {Line.get(~M, b, c, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+
+# the head m has a tip
+def Head.held(m: Maybe<&2, Head>) -> Bool:
+  match m:
+    case Some{Head{r, b, n, Some{t}}}:
+      True{}
+    case x:
+      False{}
+
+# that the head of the line c in s is some decided steps from the head h0, by
+# the ledger of s
+def Line.Reach(~M: Machine(), s: Node<Machine.Q(M)>, c: Ledgers.Chain, h0: Head) -> Type:
+  Exists(
+    List<&2, Nat>,
+    rs => Exists(
+      Head,
+      h => {
+        Node.head_of(~M, s, c) == Some{h}: Maybe<&2, Head>
+      }
+        & {Line.at(~M, rs, s, c, h0) == Some{h}: Maybe<&2, Head>}
+    )
+  )
+
+# that each head of a that is some decided steps from a head with a tip is,
+# in b, some decided steps from it
+def Node.On(~M: Machine(), a: Node<Machine.Q(M)>, b: Node<Machine.Q(M)>) -> Type:
+  @c: Ledgers.Chain -> @h0: Head -> {
+    Head.held(Some{h0}) == True{}: Bool
+  } -> Line.Reach(~M, a, c, h0) -> Line.Reach(~M, b, c, h0)
+
+# the work m, if any, reads the key k as v
+def Work.Reads(~M: Machine(), k: List<&2, U32>, v: List<&2, U32>, m: Maybe<&2, Work<Machine.Q(M)>>) -> Type:
+  match m:
+    case None{}:
+      Unit
+    case Some{Work{s2, h2}}:
+      {Node.get(~M, s2, h2, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+
+# the log of the run m, if any, holds an outcome of the request i
+def Run.Outs(~M: Machine(), m: Maybe<&2, Run<Machine.Q(M)>>, i: Ledgers.Id) -> Type:
+  match m:
+    case None{}:
+      Unit
+    case Some{Run{s, t}}:
+      {
+        Maybe.is_some(
+          &2,
+          List<&2, U32>,
+          Node.get(~M, s, Tip.log(t), Log.out(i))
+        )
+          == True{}: Bool
+      }

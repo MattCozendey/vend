@@ -1237,12 +1237,3 @@ def Vend.may_stop(v: Vend, force: Bool) -> Bool:
         u => List.all.if(w => List.is_empty(&2, Mount, ms), List.is_empty(&2, String, ws)),
         force
       )
-
-# the node b holds every entry that the node a holds: its ledger only grew
-def Node.grows(a: Replicas.Node<Basics.Ask>, b: Replicas.Node<Basics.Ask>) -> Bool:
-  Ledgers.State.grows(
-    ~Basics.Ask,
-    ~Basics.Ask.is_eq,
-    Replicas.State.ledger(~Basics.Ask.machine(), a),
-    Replicas.State.ledger(~Basics.Ask.machine(), b)
-  )
