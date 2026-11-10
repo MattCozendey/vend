@@ -34,18 +34,30 @@ type Id is Data:
 type Chain is Data:
   Chain{root: Id, sub: Maybe<&2, List<&2, Bool>>}
 
-# a place on a line: a height
+# a place on a line: a height, and a round of the decision at that height
 type Where is Data:
-  Where{chain: Chain, height: U32}
+  Where{chain: Chain, height: U32, round: U32}
 
 # a ballot for a step: the requests that it decides, in order, and the hash of
 # what the line holds before and after it
 type Vote is Data:
   Vote{before: Maybe<&2, Hashes.Hash>, asks: List<&2, Id>, after: Maybe<&2, Hashes.Hash>}
 
-# what a node signs with a ballot: the place, its own name, and the step
+# the last vote of a node at a height: its round, and the step
+type Last is Data:
+  Last{round: U32, vote: Vote}
+
+# what a node does at a place. Vote: it casts for a step; in a round after
+# the first, with the nodes whose passes allow that step. Pass: it leaves the
+# rounds below this one (it casts no vote there any more), and names its last
+# vote at the height, if any
+type Act is Data:
+  Act.Vote{vote: Vote, from: List<&2, String>}
+  Act.Pass{last: Maybe<&2, Last>}
+
+# what a node signs with a ballot: the place, its own name, and what it does
 type Signed is Data:
-  Signed{at: Where, node: String, vote: Vote}
+  Signed{at: Where, node: String, act: Act}
 
 # how a ballot is sealed. A node's ballots in one store are a chain: each
 # names the place of the one before it (none: the first), and the key of the
@@ -195,9 +207,20 @@ def Slot.writer(w: String) -> List<&2, Bool>:
 def Slot.votes(c: Chain) -> List<&2, Bool>:
   False{} <> True{} <> Chain.key(c)
 
-# the start of the slots of the bucket of the height h of the line c
-def Slot.bucket(c: Chain, h: U32) -> List<&2, Bool>:
+# the start of the slots of the ballots of the height h of the line c, of
+# every round
+def Slot.height(c: Chain, h: U32) -> List<&2, Bool>:
   List.append(&2, Bool, Slot.votes(c), Word.key(h))
+
+# the start of the slots of the bucket of the votes of the round r of the
+# height h of the line c
+def Slot.bucket(c: Chain, h: U32, r: U32) -> List<&2, Bool>:
+  List.append(&2, Bool, Slot.height(c, h), List.append(&2, Bool, Word.key(r), [False{}]))
+
+# the start of the slots of the passes to the round r of the height h of the
+# line c
+def Slot.passes(c: Chain, h: U32, r: U32) -> List<&2, Bool>:
+  List.append(&2, Bool, Slot.height(c, h), List.append(&2, Bool, Word.key(r), [True{}]))
 
 # the slot of the node n's ballot in a bucket, below the bucket
 def Slot.ballot(n: String) -> List<&2, Bool>:
@@ -206,8 +229,14 @@ def Slot.ballot(n: String) -> List<&2, Bool>:
 # the slot of the node n's ballot at the place w
 def Slot.vote(w: Where, n: String) -> List<&2, Bool>:
   match w:
-    case Where{c, h}:
-      List.append(&2, Bool, Slot.bucket(c, h), Slot.ballot(n))
+    case Where{c, h, r}:
+      List.append(&2, Bool, Slot.bucket(c, h, r), Slot.ballot(n))
+
+# the slot of the node n's pass to the place w
+def Slot.pass(w: Where, n: String) -> List<&2, Bool>:
+  match w:
+    case Where{c, h, r}:
+      List.append(&2, Bool, Slot.passes(c, h, r), Slot.ballot(n))
 
 # the slot of the data whose hash is h
 def Slot.data(h: Hashes.Hash) -> List<&2, Bool>:
@@ -490,18 +519,20 @@ def Chain.codec() -> Codes.Codec(Chain):
 # the place w, then r
 def Where.code(w: Where, r: List<&2, U32>) -> List<&2, U32>:
   match w:
-    case Where{c, h}:
-      Chain.code(c, Codes.Code.token(h, r))
+    case Where{c, h, k}:
+      Chain.code(c, Codes.Code.token(h, Codes.Code.token(k, r)))
 
 # a place
 def Where.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Where>>:
-  Codes.Code.two.read(
+  Codes.Code.three.read(
     ~Chain,
+    ~U32,
     ~U32,
     ~Where,
     ~Chain.code.read,
     ~Codes.Code.token.read,
-    c => h => Where{c, h},
+    ~Codes.Code.token.read,
+    c => h => k => Where{c, h, k},
     ts
   )
 
@@ -511,16 +542,19 @@ def Where.code_read(
   r: List<&2, U32>
 ) -> {Where.code.read(Where.code(w, r)) == Some{Codes.Read{w, r}}: Maybe<&2, Codes.Read<Where>>}:
   match w:
-    case Where{c, h}:
-      Codes.Code.two_read(
+    case Where{c, h, k}:
+      Codes.Code.three_read(
         ~Chain,
+        ~U32,
         ~U32,
         ~Where,
         ~Chain.codec(),
         ~Codes.Code.token.codec(),
-        a => b => Where{a, b},
+        ~Codes.Code.token.codec(),
+        a => b => d => Where{a, b, d},
         c,
         h,
+        k,
         r
       )
 
@@ -528,23 +562,136 @@ def Where.code_read(
 def Where.codec() -> Codes.Codec(Where):
   (Where.code, (Where.code.read, w => r => Where.code_read(w, r)))
 
+# the last vote l, then r
+def Last.code(l: Last, r: List<&2, U32>) -> List<&2, U32>:
+  match l:
+    case Last{k, v}:
+      Codes.Code.token(k, Vote.code(v, r))
+
+# a last vote
+def Last.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Last>>:
+  Codes.Code.two.read(
+    ~U32,
+    ~Vote,
+    ~Last,
+    ~Codes.Code.token.read,
+    ~Vote.code.read,
+    k => v => Last{k, v},
+    ts
+  )
+
+# a last vote reads back
+def Last.code_read(
+  l: Last,
+  r: List<&2, U32>
+) -> {Last.code.read(Last.code(l, r)) == Some{Codes.Read{l, r}}: Maybe<&2, Codes.Read<Last>>}:
+  match l:
+    case Last{k, v}:
+      Codes.Code.two_read(
+        ~U32,
+        ~Vote,
+        ~Last,
+        ~Codes.Code.token.codec(),
+        ~Vote.codec(),
+        a => b => Last{a, b},
+        k,
+        v,
+        r
+      )
+
+# the code of last votes
+def Last.codec() -> Codes.Codec(Last):
+  (Last.code, (Last.code.read, l => r => Last.code_read(l, r)))
+
+# what a node does, then r
+def Act.code(a: Act, r: List<&2, U32>) -> List<&2, U32>:
+  match a:
+    case Act.Vote{v, from}:
+      0 <> Vote.code(v, Owners.code(from, r))
+    case Act.Pass{l}:
+      1 <> Codes.Code.maybe(~Last, ~Last.code, l, r)
+
+# what a node does
+def Act.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Act>>:
+  match ts:
+    case Nil{}:
+      None{}
+    case Con{+x, +r}:
+      Shared.Bool.when(
+        Maybe<&2, Codes.Read<Act>>,
+        U32.is_eq(x, 0),
+        u => Codes.Code.two.read(
+          ~Vote,
+          ~List<&2, String>,
+          ~Act,
+          ~Vote.code.read,
+          ~Owners.code.read,
+          v => from => Act.Vote{v, from},
+          r
+        ),
+        u => Shared.Bool.when(
+          Maybe<&2, Codes.Read<Act>>,
+          U32.is_eq(x, 1),
+          u => Codes.Code.one.read(
+            ~Maybe<&2, Last>,
+            ~Act,
+            ~(m => Codes.Code.maybe.read(~Last, ~Last.code.read, m)),
+            l => Act.Pass{l},
+            r
+          ),
+          u => None{}
+        )
+      )
+
+# what a node does reads back
+def Act.code_read(
+  a: Act,
+  r: List<&2, U32>
+) -> {Act.code.read(Act.code(a, r)) == Some{Codes.Read{a, r}}: Maybe<&2, Codes.Read<Act>>}:
+  match a:
+    case Act.Vote{v, from}:
+      Codes.Code.two_read(
+        ~Vote,
+        ~List<&2, String>,
+        ~Act,
+        ~Vote.codec(),
+        ~Codes.Code.list.codec(~String, ~Codes.Code.text.codec()),
+        x => y => Act.Vote{x, y},
+        v,
+        from,
+        r
+      )
+    case Act.Pass{l}:
+      Codes.Code.one_read(
+        ~Maybe<&2, Last>,
+        ~Act,
+        ~Codes.Code.maybe.codec(~Last, ~Last.codec()),
+        x => Act.Pass{x},
+        l,
+        r
+      )
+
+# the code of what a node does
+def Act.codec() -> Codes.Codec(Act):
+  (Act.code, (Act.code.read, a => r => Act.code_read(a, r)))
+
 # what a node signs, then r
 def Signed.code(x: Signed, r: List<&2, U32>) -> List<&2, U32>:
   match x:
-    case Signed{w, n, v}:
-      Where.code(w, Codes.Code.text(n, Vote.code(v, r)))
+    case Signed{w, n, a}:
+      Where.code(w, Codes.Code.text(n, Act.code(a, r)))
 
 # what a node signs
 def Signed.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Signed>>:
   Codes.Code.three.read(
     ~Where,
     ~String,
-    ~Vote,
+    ~Act,
     ~Signed,
     ~Where.code.read,
     ~Codes.Code.text.read,
-    ~Vote.code.read,
-    w => n => v => Signed{w, n, v},
+    ~Act.code.read,
+    w => n => a => Signed{w, n, a},
     ts
   )
 
@@ -554,19 +701,19 @@ def Signed.code_read(
   r: List<&2, U32>
 ) -> {Signed.code.read(Signed.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Signed>>}:
   match x:
-    case Signed{w, n, v}:
+    case Signed{w, n, a}:
       Codes.Code.three_read(
         ~Where,
         ~String,
-        ~Vote,
+        ~Act,
         ~Signed,
         ~Where.codec(),
         ~Codes.Code.text.codec(),
-        ~Vote.codec(),
-        a => b => c => Signed{a, b, c},
+        ~Act.codec(),
+        b => c => d => Signed{b, c, d},
         w,
         n,
-        v,
+        a,
         r
       )
 
@@ -678,10 +825,28 @@ def Ballot.is_eq_sound(a: Ballot, b: Ballot) -> {Ballot.is_eq(a, b) == True{}: B
   Shared.Eq.sound(~Ballot, ~Ballot.is_eq, Ballot.laws(), a, b)
 
 # the step that the ballot b is for
-def Ballot.vote(b: Ballot) -> Vote:
+def Ballot.vote(b: Ballot) -> Maybe<&2, Vote>:
   match b:
-    case Ballot{Signed{w, n, v}, l}:
-      v
+    case Ballot{Signed{w, n, Act.Vote{v, from}}, l}:
+      Some{v}
+    case Ballot{Signed{w, n, Act.Pass{p}}, l}:
+      None{}
+
+# the last vote that the ballot b names, when it is a pass
+def Ballot.pass(b: Ballot) -> Maybe<&2, Maybe<&2, Last>>:
+  match b:
+    case Ballot{Signed{w, n, Act.Pass{p}}, l}:
+      Some{p}
+    case Ballot{Signed{w, n, Act.Vote{v, from}}, l}:
+      None{}
+
+# the cell of the vote m of a ballot: void when the ballot is not a vote
+def Ballot.cell(m: Maybe<&2, Vote>) -> Cells.Cell<Vote>:
+  match m:
+    case Some{v}:
+      Cells.One{v}
+    case None{}:
+      Cells.Many{}
 
 # what a seal of a ballot signs: the hash of what the node signs, the place of
 # its ballot before, and the key of its next one
@@ -907,7 +1072,7 @@ def Entry.ballot(~Q: Data, m: Maybe<&2, Cells.Cell<Entry<Q>>>) -> Maybe<&2, Cell
     case None{}:
       None{}
     case Some{Cells.One{Entry.Vote{b}}}:
-      Some{Cells.One{Ballot.vote(b)}}
+      Some{Ballot.cell(Ballot.vote(b))}
     case Some{c}:
       Some{Cells.Many{}}
 
@@ -930,8 +1095,8 @@ def Bucket.decide(~Q: Data, b: State(Q), ms: List<&2, String>) -> Maybe<&2, Vote
 # the bucket of the place w in s
 def State.bucket(~Q: Data, s: State(Q), w: Where) -> State(Q):
   match w:
-    case Where{c, h}:
-      State.under(~Q, s, Slot.bucket(c, h))
+    case Where{c, h, r}:
+      State.under(~Q, s, Slot.bucket(c, h, r))
 
 # the step that the owners ms decide at the place w of s, if they did
 def State.decide(~Q: Data, s: State(Q), w: Where, ms: List<&2, String>) -> Maybe<&2, Vote>:
@@ -1062,6 +1227,33 @@ def State.ask(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), +i: Id, t: String, q
 # place
 def State.cast(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), w: Where, n: String, b: Ballot) -> State(Q):
   State.add(~Q, ~same, s, Slot.vote(w, n), Entry.Vote{b})
+
+# the slot of the ballot b: a vote in the bucket of its place, a pass among
+# the passes to its place
+def Slot.of(b: Ballot) -> List<&2, Bool>:
+  match b:
+    case Ballot{Signed{w, n, Act.Vote{v, from}}, l}:
+      Slot.vote(w, n)
+    case Ballot{Signed{w, n, Act.Pass{p}}, l}:
+      Slot.pass(w, n)
+
+# s with the ballot b in its slot: a node casts one vote at a place, and one
+# pass to a place
+def State.keep(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), +b: Ballot) -> State(Q):
+  State.add(~Q, ~same, s, Slot.of(b), Entry.Vote{b})
+
+# the last vote in the cell m of a pass, if it holds a pass
+def Passed.of(~Q: Data, m: Maybe<&2, Cells.Cell<Entry<Q>>>) -> Maybe<&2, Maybe<&2, Last>>:
+  match m:
+    case Some{Cells.One{Entry.Vote{b}}}:
+      Ballot.pass(b)
+    case x:
+      None{}
+
+# the last vote that the node n named when it passed to the place w, if s
+# holds its pass
+def State.passed(~Q: Data, s: State(Q), w: Where, n: String) -> Maybe<&2, Maybe<&2, Last>>:
+  Passed.of(~Q, State.get(~Q, s, Slot.pass(w, n)))
 
 # Laws
 # ----
@@ -1417,6 +1609,18 @@ def State.read_grows(
     )(gr)
   )
 
+# the cell of a vote is kept as itself
+def Ballot.cell_refl(
+  m: Maybe<&2, Vote>
+) -> {
+  Cells.Cell.keeps(~Vote, ~Vote.is_eq, Some{Ballot.cell(m)}, Some{Ballot.cell(m)}) == True{}: Bool
+}:
+  match m:
+    case Some{v}:
+      Vote.is_eq_refl(v)
+    case None{}:
+      {==}
+
 # the ballot of one entry is kept as itself
 def Ballot.refl(
   ~Q: Data,
@@ -1432,7 +1636,7 @@ def Ballot.refl(
 }:
   match e:
     case Entry.Vote{v}:
-      Vote.is_eq_refl(Ballot.vote(v))
+      Ballot.cell_refl(Ballot.vote(v))
     case Entry.Ask{i, t, q}:
       {==}
     case Entry.Data{d}:
@@ -1573,8 +1777,8 @@ law State.decide_grows:
 
 def State.decide_grows(ty, same, laws, s, s2, w, ms, v):
   match w:
-    case Where{c, h}:
-      +p = Slot.bucket(c, h)
+    case Where{c, h, r}:
+      +p = Slot.bucket(c, h, r)
       +b1 = Bucket.ballots(~ty, State.under(~ty, s, p), ms)
       +b2 = Bucket.ballots(~ty, State.under(~ty, s2, p), ms)
       +gr => hd =>
