@@ -2978,10 +2978,69 @@ def Steps.grows(
         Spec.Node.steps(n, rest, s1)
       )(Step.grows(n, s, c))(Steps.grows(n, rest, s1))
 
+# an adoption only grows a node, once the request m is known
+def Adopt.ask.grows(
+  +n: String,
+  +s: Spec.State(),
+  m: Maybe<&2, Spec.Request>
+) -> {Spec.Node.grows(s, Spec.Adopt.ask(n, s, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      Grows.refl(s)
+    case Some{Spec.Request{+e, +q}}:
+      Spec.Node.ask_grows(n, s, e, q)
+
+# an adoption only grows a node, once the head m of the line is known
+def Adopt.head.grows(
+  +n: String,
+  +s: Spec.State(),
+  m: Maybe<&2, Spec.Head>
+) -> {Spec.Node.grows(s, Spec.Adopt.head(n, s, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      Grows.refl(s)
+    case Some{Spec.Head{+r, +b, next, t}}:
+      Adopt.ask.grows(n, s, Spec.Node.adoption(s, r, b))
+
+# the adoption of a line only grows a node
+def Adopt.at.grows(
+  +n: String,
+  +s: Spec.State(),
+  +c: Ledgers.Chain
+) -> {Spec.Node.grows(s, Spec.Adopt.at(n, s, c)) == True{}: Bool}:
+  Adopt.head.grows(n, s, Spec.Node.head_of(s, c))
+
+# the adoption of a line, if any, only grows a node
+def Adopt.maybe.grows(
+  +n: String,
+  +s: Spec.State(),
+  m: Maybe<&2, Ledgers.Chain>
+) -> {Spec.Node.grows(s, Spec.Adopt.maybe(n, s, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      Grows.refl(s)
+    case Some{+c}:
+      Adopt.at.grows(n, s, c)
+
+# the adoption of each of some lines only grows a node
+def Adopts.grows(
+  +n: String,
+  cs: List<&2, Ledgers.Chain>,
+  +s: Spec.State()
+) -> {Spec.Node.grows(s, Spec.Node.adopts(n, cs, s)) == True{}: Bool}:
+  match cs:
+    case Nil{}:
+      Grows.refl(s)
+    case Con{+c, +rest}:
+      Grows.trans(s, Spec.Adopt.at(n, s, c), Spec.Node.adopts(n, rest, Spec.Adopt.at(n, s, c)))(Adopt.at.grows(n, s, c))(Adopts.grows(n, rest, Spec.Adopt.at(n, s, c)))
+
 def Spec.Node.sync_grows(n, s, t):
   +s1 = Spec.Node.take(s, t)
   +cs = Spec.Sync.lines(s, s1, t)
-  Grows.trans(s, s1, Spec.Node.steps(n, cs, s1))(Spec.Node.take_grows(s, t))(Steps.grows(n, cs, s1))
+  +s2 = Spec.Node.steps(n, cs, s1)
+  Grows.trans(s, s1, Spec.Node.adopts(n, cs, s2))(Spec.Node.take_grows(s, t))(
+    Grows.trans(s1, s2, Spec.Node.adopts(n, cs, s2))(Steps.grows(n, cs, s1))(Adopts.grows(n, cs, s2))
+  )
 
 # Asks
 # ----
@@ -6304,15 +6363,78 @@ def Steps.kept(
       s1 = Spec.Node.step(n, s, c)
       Kept.trans(s, s1, Spec.Node.steps(n, rest, s1), Step.kept(n, s, c), Steps.kept(n, rest, s1))
 
-# Node.sync keeps the logs
+# an adoption keeps the logs, once the request m is known
+def Adopt.ask.kept(
+  +n: String,
+  +s: Spec.State(),
+  m: Maybe<&2, Spec.Request>
+) -> Spec.Node.Keeps(s, Spec.Adopt.ask(n, s, m)):
+  match m:
+    case None{}:
+      Kept.refl(s)
+    case Some{Spec.Request{+e, +q}}:
+      Ask.kept(n, s, e, q)
+
+# an adoption keeps the logs, once the head m of the line is known
+def Adopt.head.kept(
+  +n: String,
+  +s: Spec.State(),
+  m: Maybe<&2, Spec.Head>
+) -> Spec.Node.Keeps(s, Spec.Adopt.head(n, s, m)):
+  match m:
+    case None{}:
+      Kept.refl(s)
+    case Some{Spec.Head{+r, +b, next, t}}:
+      Adopt.ask.kept(n, s, Spec.Node.adoption(s, r, b))
+
+# the adoption of a line keeps the logs
+def Adopt.at.kept(
+  +n: String,
+  +s: Spec.State(),
+  +c: Ledgers.Chain
+) -> Spec.Node.Keeps(s, Spec.Adopt.at(n, s, c)):
+  Adopt.head.kept(n, s, Spec.Node.head_of(s, c))
+
+# the adoption of a line, if any, keeps the logs
+def Adopt.maybe.kept(
+  +n: String,
+  +s: Spec.State(),
+  m: Maybe<&2, Ledgers.Chain>
+) -> Spec.Node.Keeps(s, Spec.Adopt.maybe(n, s, m)):
+  match m:
+    case None{}:
+      Kept.refl(s)
+    case Some{+c}:
+      Adopt.at.kept(n, s, c)
+
+# the adoption of each of some lines keeps the logs
+def Adopts.kept(
+  +n: String,
+  cs: List<&2, Ledgers.Chain>,
+  +s: Spec.State()
+) -> Spec.Node.Keeps(s, Spec.Node.adopts(n, cs, s)):
+  match cs:
+    case Nil{}:
+      Kept.refl(s)
+    case Con{+c, +rest}:
+      Kept.trans(s, Spec.Adopt.at(n, s, c), Spec.Node.adopts(n, rest, Spec.Adopt.at(n, s, c)), Adopt.at.kept(n, s, c), Adopts.kept(n, rest, Spec.Adopt.at(n, s, c)))
+
+# a sync keeps the logs
 def Sync.kept(
-  n: String,
+  +n: String,
   +s: Spec.State(),
   +t: Ledgers.State(Spec.Ask)
 ) -> Spec.Node.Keeps(s, Spec.Node.sync(n, s, t)):
   +s1 = Spec.Node.take(s, t)
-  cs = Spec.Sync.lines(s, s1, t)
-  Kept.trans(s, s1, Spec.Node.steps(n, cs, s1), Take.kept(s, t), Steps.kept(n, cs, s1))
+  +cs = Spec.Sync.lines(s, s1, t)
+  +s2 = Spec.Node.steps(n, cs, s1)
+  Kept.trans(
+    s,
+    s1,
+    Spec.Node.adopts(n, cs, s2),
+    Take.kept(s, t),
+    Kept.trans(s1, s2, Spec.Node.adopts(n, cs, s2), Steps.kept(n, cs, s1), Adopts.kept(n, cs, s2))
+  )
 
 # a request that a writer asks again at a node only grows it
 def Consent.grows(
@@ -6371,13 +6493,19 @@ def Consent.kept(
 
 # what a node does only grows it
 def Does.grows(
-  n: String,
+  +n: String,
   +s: Spec.State(),
   ev: Spec.Deed
 ) -> {Spec.Node.grows(s, Spec.Node.does(n, s, ev)) == True{}: Bool}:
   match ev:
-    case Spec.Deed.Ask{e, q}:
-      Spec.Node.ask_grows(n, s, e, q)
+    case Spec.Deed.Ask{+e, +q}:
+      Grows.trans(
+        s,
+        Spec.Node.ask(n, s, e, q),
+        Spec.Adopt.at(n, Spec.Node.ask(n, s, e, q), Spec.Ask.chain(Spec.Envelope.of(e), q))
+      )(Spec.Node.ask_grows(n, s, e, q))(
+        Adopt.at.grows(n, Spec.Node.ask(n, s, e, q), Spec.Ask.chain(Spec.Envelope.of(e), q))
+      )
     case Spec.Deed.Take{t}:
       Spec.Node.take_grows(s, t)
     case Spec.Deed.Sync{t}:
@@ -6385,9 +6513,17 @@ def Does.grows(
     case Spec.Deed.Keep{b}:
       Grows.keep(s, Ropes.Put.nodes(Spec.Bytes.rope(b)))
     case Spec.Deed.Consent{+i}:
-      Consent.grows(n, s, i, Spec.Node.chain_of(s, i))
-    case Spec.Deed.Pass{c}:
-      Pass.grows(n, s, c)
+      Grows.trans(
+        s,
+        Spec.Node.consent(n, s, i),
+        Spec.Adopt.maybe(n, Spec.Node.consent(n, s, i), Spec.Node.chain_of(s, i))
+      )(Consent.grows(n, s, i, Spec.Node.chain_of(s, i)))(
+        Adopt.maybe.grows(n, Spec.Node.consent(n, s, i), Spec.Node.chain_of(s, i))
+      )
+    case Spec.Deed.Pass{+c}:
+      Grows.trans(s, Spec.Node.pass(n, s, c), Spec.Adopt.at(n, Spec.Node.pass(n, s, c), c))(
+        Pass.grows(n, s, c)
+      )(Adopt.at.grows(n, Spec.Node.pass(n, s, c), c))
 
 def Spec.Node.after_grows(n, evs, s):
   match evs:
@@ -6403,13 +6539,19 @@ def Spec.Node.after_grows(n, evs, s):
 
 # what a node does keeps the logs
 def Does.kept(
-  n: String,
+  +n: String,
   +s: Spec.State(),
   ev: Spec.Deed
 ) -> Spec.Node.Keeps(s, Spec.Node.does(n, s, ev)):
   match ev:
-    case Spec.Deed.Ask{e, q}:
-      Ask.kept(n, s, e, q)
+    case Spec.Deed.Ask{+e, +q}:
+      Kept.trans(
+        s,
+        Spec.Node.ask(n, s, e, q),
+        Spec.Adopt.at(n, Spec.Node.ask(n, s, e, q), Spec.Ask.chain(Spec.Envelope.of(e), q)),
+        Ask.kept(n, s, e, q),
+        Adopt.at.kept(n, Spec.Node.ask(n, s, e, q), Spec.Ask.chain(Spec.Envelope.of(e), q))
+      )
     case Spec.Deed.Take{t}:
       Take.kept(s, t)
     case Spec.Deed.Sync{t}:
@@ -6430,9 +6572,21 @@ def Does.kept(
         )
       )
     case Spec.Deed.Consent{+i}:
-      Consent.kept(n, s, i, Spec.Node.chain_of(s, i))
-    case Spec.Deed.Pass{c}:
-      Pass.kept(n, s, c)
+      Kept.trans(
+        s,
+        Spec.Node.consent(n, s, i),
+        Spec.Adopt.maybe(n, Spec.Node.consent(n, s, i), Spec.Node.chain_of(s, i)),
+        Consent.kept(n, s, i, Spec.Node.chain_of(s, i)),
+        Adopt.maybe.kept(n, Spec.Node.consent(n, s, i), Spec.Node.chain_of(s, i))
+      )
+    case Spec.Deed.Pass{+c}:
+      Kept.trans(
+        s,
+        Spec.Node.pass(n, s, c),
+        Spec.Adopt.at(n, Spec.Node.pass(n, s, c), c),
+        Pass.kept(n, s, c),
+        Adopt.at.kept(n, Spec.Node.pass(n, s, c), c)
+      )
     case Spec.Deed.Pass{c}:
       Pass.kept(n, s, c)
 
@@ -13572,15 +13726,78 @@ def Steps.path(
       s1 = Spec.Node.step(n, s, c)
       Path.trans(s, s1, Spec.Node.steps(n, rest, s1), Step.path(n, s, c), Steps.path(n, rest, s1))
 
-# Node.sync is on the paths
+# an adoption is on the paths, once the request m is known
+def Adopt.ask.path(
+  +n: String,
+  +s: Spec.State(),
+  m: Maybe<&2, Spec.Request>
+) -> Spec.Node.On(s, Spec.Adopt.ask(n, s, m)):
+  match m:
+    case None{}:
+      Path.refl(s)
+    case Some{Spec.Request{+e, +q}}:
+      Ask.path(n, s, e, q)
+
+# an adoption is on the paths, once the head m of the line is known
+def Adopt.head.path(
+  +n: String,
+  +s: Spec.State(),
+  m: Maybe<&2, Spec.Head>
+) -> Spec.Node.On(s, Spec.Adopt.head(n, s, m)):
+  match m:
+    case None{}:
+      Path.refl(s)
+    case Some{Spec.Head{+r, +b, next, t}}:
+      Adopt.ask.path(n, s, Spec.Node.adoption(s, r, b))
+
+# the adoption of a line is on the paths
+def Adopt.at.path(
+  +n: String,
+  +s: Spec.State(),
+  +c: Ledgers.Chain
+) -> Spec.Node.On(s, Spec.Adopt.at(n, s, c)):
+  Adopt.head.path(n, s, Spec.Node.head_of(s, c))
+
+# the adoption of a line, if any, is on the paths
+def Adopt.maybe.path(
+  +n: String,
+  +s: Spec.State(),
+  m: Maybe<&2, Ledgers.Chain>
+) -> Spec.Node.On(s, Spec.Adopt.maybe(n, s, m)):
+  match m:
+    case None{}:
+      Path.refl(s)
+    case Some{+c}:
+      Adopt.at.path(n, s, c)
+
+# the adoption of each of some lines is on the paths
+def Adopts.path(
+  +n: String,
+  cs: List<&2, Ledgers.Chain>,
+  +s: Spec.State()
+) -> Spec.Node.On(s, Spec.Node.adopts(n, cs, s)):
+  match cs:
+    case Nil{}:
+      Path.refl(s)
+    case Con{+c, +rest}:
+      Path.trans(s, Spec.Adopt.at(n, s, c), Spec.Node.adopts(n, rest, Spec.Adopt.at(n, s, c)), Adopt.at.path(n, s, c), Adopts.path(n, rest, Spec.Adopt.at(n, s, c)))
+
+# a sync is on the paths
 def Sync.path(
-  n: String,
+  +n: String,
   +s: Spec.State(),
   +t: Ledgers.State(Spec.Ask)
 ) -> Spec.Node.On(s, Spec.Node.sync(n, s, t)):
   +s1 = Spec.Node.take(s, t)
-  cs = Spec.Sync.lines(s, s1, t)
-  Path.trans(s, s1, Spec.Node.steps(n, cs, s1), Take.path(s, t), Steps.path(n, cs, s1))
+  +cs = Spec.Sync.lines(s, s1, t)
+  +s2 = Spec.Node.steps(n, cs, s1)
+  Path.trans(
+    s,
+    s1,
+    Spec.Node.adopts(n, cs, s2),
+    Take.path(s, t),
+    Path.trans(s1, s2, Spec.Node.adopts(n, cs, s2), Steps.path(n, cs, s1), Adopts.path(n, cs, s2))
+  )
 
 # a request that a writer asks again at a node is on the paths
 def Consent.path(
@@ -13614,13 +13831,19 @@ def Consent.path(
 
 # what a node does is on the paths
 def Does.path(
-  n: String,
+  +n: String,
   +s: Spec.State(),
   ev: Spec.Deed
 ) -> Spec.Node.On(s, Spec.Node.does(n, s, ev)):
   match ev:
-    case Spec.Deed.Ask{e, q}:
-      Ask.path(n, s, e, q)
+    case Spec.Deed.Ask{+e, +q}:
+      Path.trans(
+        s,
+        Spec.Node.ask(n, s, e, q),
+        Spec.Adopt.at(n, Spec.Node.ask(n, s, e, q), Spec.Ask.chain(Spec.Envelope.of(e), q)),
+        Ask.path(n, s, e, q),
+        Adopt.at.path(n, Spec.Node.ask(n, s, e, q), Spec.Ask.chain(Spec.Envelope.of(e), q))
+      )
     case Spec.Deed.Take{t}:
       Take.path(s, t)
     case Spec.Deed.Sync{t}:
@@ -13641,9 +13864,21 @@ def Does.path(
         )
       )
     case Spec.Deed.Consent{+i}:
-      Consent.path(n, s, i, Spec.Node.chain_of(s, i))
-    case Spec.Deed.Pass{c}:
-      Pass.path(n, s, c)
+      Path.trans(
+        s,
+        Spec.Node.consent(n, s, i),
+        Spec.Adopt.maybe(n, Spec.Node.consent(n, s, i), Spec.Node.chain_of(s, i)),
+        Consent.path(n, s, i, Spec.Node.chain_of(s, i)),
+        Adopt.maybe.path(n, Spec.Node.consent(n, s, i), Spec.Node.chain_of(s, i))
+      )
+    case Spec.Deed.Pass{+c}:
+      Path.trans(
+        s,
+        Spec.Node.pass(n, s, c),
+        Spec.Adopt.at(n, Spec.Node.pass(n, s, c), c),
+        Pass.path(n, s, c),
+        Adopt.at.path(n, Spec.Node.pass(n, s, c), c)
+      )
     case Spec.Deed.Pass{c}:
       Pass.path(n, s, c)
 

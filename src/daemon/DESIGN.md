@@ -126,7 +126,11 @@ README claim, then the law.
   branch is, or uses through its imports, at any depth).
 - A taken write reads back: `Judge.write_reads`.
 - A merge never loses a change made on only one side: `Pick.merge_theirs`, `Pick.merge_ours`.
-- The owners of a line are the nodes inside its owner group: `Own.takes_inside`.
+- The owners of a line are the nodes inside its owner group: `Own.takes_inside`. A change of a
+  group reaches each line that the group owns by the line's next decided step: a node that works
+  on a line asks for that step by itself (`Adopt.at`, in `Node.does` and `Node.sync`), and the
+  line's present owners decide it. This is by construction, with no law. A change at once,
+  without the present owners, cannot be safe: two majorities could decide one height.
 - Requests are the same exactly when equal: `Ask.same`.
 - Below the core: quorum, trie, cell, tree (`get_set`, `get_other`, `get_grows`, ...), rope
   (`read_put`, `read_grows`), codes, formats, seal (`Seal.check_sign`).
@@ -143,9 +147,6 @@ Design (each needs a decision or new work; none is a proof detail):
   they lack), so a merge or a move can still act on a part of a tree. Then the laws: a merge
   keeps a one-sided change as a whole (`Merge.work`, not only one pick), and a move records a
   version with the resources of its target.
-- **Owners through a group.** After a group changes, each line that it owns gets its new owners
-  by an Own request that any owner's node asks, once (`Node.adopt`). Target: a line reads its
-  owners through its group at the store version that it names.
 - **Walks that are left:** `Node.versions` lists every version (use a range); `Node.log`,
   `Touch.versions`, `Version.keys`, `Node.affects`, `Node.impact`, `Node.notices` read every
   version of every branch. Target: notices are made when a head moves, from the diff of the two

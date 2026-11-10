@@ -4222,12 +4222,6 @@ def Sync.lines(s: State(), +s1: State(), t: Ledgers.State(Ask)) -> List<&2, Ledg
     Tries.Trie.new(Unit)
   )
 
-# s, after the node n took in t, which another node sent, and did what it can
-# on each line that this may move: how a node that is behind catches up
-def Node.sync(n: String, +s: State(), +t: Ledgers.State(Ask)) -> State():
-  +s1 = Node.take(s, t)
-  Node.steps(n, Sync.lines(s, s1, t), s1)
-
 # Reads
 # -----
 # Each read is of the node's own state: its ledger, and its heads.
@@ -4408,6 +4402,44 @@ def Adopt.ask(n: String, s: State(), m: Maybe<&2, Request>) -> State():
 # its owners are not the nodes inside its owner group
 def Node.adopt(n: String, +s: State(), r: Ledgers.Id, l: Maybe<&2, String>) -> State():
   Adopt.ask(n, s, Node.adoption(s, r, l))
+
+# Adopt.at once the head m of the line is known
+def Adopt.head(n: String, +s: State(), m: Maybe<&2, Head>) -> State():
+  match m:
+    case None{}:
+      s
+    case Some{Head{r, b, next, t}}:
+      Node.adopt(n, s, r, b)
+
+# s, after the node n asked for the adoption of the line c, if s follows c:
+# a change of a group reaches each line that the group owns by a step of the
+# line, which a node asks for by itself when it works on the line
+def Adopt.at(n: String, +s: State(), c: Ledgers.Chain) -> State():
+  Adopt.head(n, s, Node.head_of(s, c))
+
+# Adopt.at for the line m, if any
+def Adopt.maybe(n: String, s: State(), m: Maybe<&2, Ledgers.Chain>) -> State():
+  match m:
+    case None{}:
+      s
+    case Some{c}:
+      Adopt.at(n, s, c)
+
+# s, after the node n asked for the adoption of each of the lines cs
+def Node.adopts(+n: String, cs: List<&2, Ledgers.Chain>, s: State()) -> State():
+  match cs:
+    case Nil{}:
+      s
+    case Con{c, rest}:
+      Node.adopts(n, rest, Adopt.at(n, s, c))
+
+# s, after the node n took in t, which another node sent, did what it can on
+# each line that this may move, and asked for the adoption of each: how a
+# node that is behind catches up
+def Node.sync(+n: String, +s: State(), +t: Ledgers.State(Ask)) -> State():
+  +s1 = Node.take(s, t)
+  +cs = Sync.lines(s, s1, t)
+  Node.adopts(n, cs, Node.steps(n, cs, s1))
 
 # the resource m of the branch x of the store st is the resource n of the
 # branch b of the store r
@@ -5368,20 +5400,20 @@ type Deed is Data:
   Deed.Pass{line: Ledgers.Chain}
 
 # s, after the node n did ev
-def Node.does(n: String, s: State(), ev: Deed) -> State():
+def Node.does(+n: String, +s: State(), ev: Deed) -> State():
   match ev:
-    case Deed.Ask{e, q}:
-      Node.ask(n, s, e, q)
+    case Deed.Ask{+e, +q}:
+      Adopt.at(n, Node.ask(n, s, e, q), Ask.chain(Envelope.of(e), q))
     case Deed.Take{t}:
       Node.take(s, t)
     case Deed.Sync{t}:
       Node.sync(n, s, t)
     case Deed.Keep{b}:
       Node.keep(s, b)
-    case Deed.Consent{i}:
-      Node.consent(n, s, i)
-    case Deed.Pass{c}:
-      Node.pass(n, s, c)
+    case Deed.Consent{+i}:
+      Adopt.maybe(n, Node.consent(n, s, i), Node.chain_of(s, i))
+    case Deed.Pass{+c}:
+      Adopt.at(n, Node.pass(n, s, c), c)
 
 # s, after the node n did each of evs, in order: any later state of the node
 def Node.after(+n: String, evs: List<&2, Deed>, s: State()) -> State():
