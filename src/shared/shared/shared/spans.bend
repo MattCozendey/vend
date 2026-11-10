@@ -127,6 +127,10 @@ def Spans.rep(ms: List<&2, Char>, +c: Char) -> Char:
 
 # Equality of spans
 # -----------------
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/performance/loop_invariant_call@information -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 
 # Span.is_eq is True for a span and itself
 def Span.is_eq_refl(a: Span) -> {Span.is_eq(a, a) == True{}: Bool}:
@@ -139,7 +143,22 @@ def Span.is_eq_refl(a: Span) -> {Span.is_eq(a, a) == True{}: Bool}:
 
 # Span.is_eq is True only for equal spans
 def Span.is_eq_sound(a: Span, b: Span) -> {Span.is_eq(a, b) == True{}: Bool} -> {a == b: Span}:
-  ?TODO
+  match a b:
+    case Span{+al, +ah} Span{+bl, +bh}:
+      +e =>
+        %Shared.Char.is_eq_sound(
+          al,
+          bl
+        )(
+          Shared.List.all.if_hit(Char.is_eq(al, bl), u => Char.is_eq(ah, bh))(e)
+        ): {Span{al, ah} == Span{_, bh}: Span}
+        %Shared.Char.is_eq_sound(
+          ah,
+          bh
+        )(
+          Shared.List.all.if_rest(Char.is_eq(al, bl), u => Char.is_eq(ah, bh))(e)
+        ): {Span{al, ah} == Span{al, _}: Span}
+        {==}
 
 # the laws of Span.is_eq
 def Span.laws() -> Shared.Eq.Laws(Span, Span.is_eq):
@@ -164,7 +183,59 @@ def Span.has_codes(
       Nat.is_le(Char.code(c), Char.code(hi))
     ): Bool
 }:
-  ?TODO
+  match lo:
+    case Chr{+code}:
+      match hi:
+        case Chr{+code1}:
+          match c:
+            case Chr{+code2}:
+              %Equal.sym(
+                Bool,
+                U32.is_le(code, code2),
+                Nat.is_le(U32.to_nat(code), U32.to_nat(code2)),
+                Shared.U32.is_le_to_nat(code, code2)
+              ):
+                {
+                  List.all.if(
+                    u => U32.is_le(code2, code1),
+                    _
+                  )
+                    == Bool.and(
+                      Cmp.is_le(Nat.cmp(U32.to_nat(code), U32.to_nat(code2))),
+                      Cmp.is_le(Nat.cmp(U32.to_nat(code2), U32.to_nat(code1)))
+                    ): Bool
+                }
+              %Shared.U32.cmp_to_nat(code2, code1):
+                {
+                  List.all.if(
+                    u => U32.is_le(code2, code1),
+                    Cmp.is_le(Nat.cmp(U32.to_nat(code), U32.to_nat(code2)))
+                  )
+                    == Bool.and(
+                      Cmp.is_le(Nat.cmp(U32.to_nat(code), U32.to_nat(code2))),
+                      Cmp.is_le(_)
+                    ): Bool
+                }
+              %Equal.sym(
+                Bool,
+                List.all.if(
+                  u => U32.is_le(code2, code1),
+                  Nat.is_le(U32.to_nat(code), U32.to_nat(code2))
+                ),
+                Bool.and(Nat.is_le(U32.to_nat(code), U32.to_nat(code2)), U32.is_le(code2, code1)),
+                Shared.List.all.if_and(
+                  Nat.is_le(U32.to_nat(code), U32.to_nat(code2)),
+                  u => U32.is_le(code2, code1)
+                )
+              ):
+                {
+                  _
+                    == Bool.and(
+                      Nat.is_le(U32.to_nat(code), U32.to_nat(code2)),
+                      U32.is_le(code2, code1)
+                    ): Bool
+                }
+              {==}
 
 # two characters are the same when their codes are
 def Char.is_eq_codes(
@@ -238,7 +309,24 @@ def Char.le_last(
   hi: Char,
   c: Char
 ) -> {Char.is_last(hi) == True{}: Bool} -> {Nat.is_le(Char.code(c), Char.code(hi)) == True{}: Bool}:
-  ?TODO
+  match hi c:
+    case Chr{+x} Chr{+y}:
+      e =>
+        Equal.trans(
+          Bool,
+          Nat.is_le(U32.to_nat(y), U32.to_nat(x)),
+          U32.is_le(y, x),
+          True{},
+          Equal.sym(
+            Bool,
+            U32.is_le(y, x),
+            Nat.is_le(U32.to_nat(y), U32.to_nat(x)),
+            Shared.U32.is_le_to_nat(y, x)
+          ),
+          (
+            %Equal.sym(U32, x, 4294967295, Shared.U32.is_eq_sound(x, 4294967295)(e)): {U32.is_le(y, _) == True{}: Bool}
+            Shared.U32.le_last(y))
+        )
 
 # the code of the character after c is one more than the code of c, when c is
 # not the last character
@@ -261,10 +349,10 @@ def Char.after_code(
 def Spans.alike_has.at(
   hit: Bool,
   +t: Span,
-  +r: List<&2, Span>,
+  r: List<&2, Span>,
   +c: Char,
   +d: Char,
-  +s: Span,
+  s: Span,
   et: {Span.is_eq(t, s) == hit: Bool},
   ha: {
     List.all.if(
@@ -280,7 +368,25 @@ def Spans.alike_has.at(
     List.contains(~Span, ~Span.is_eq, r, s) == True{}: Bool
   } -> {Span.has(s, c) == Span.has(s, d): Bool}
 ) -> {Span.has(s, c) == Span.has(s, d): Bool}:
-  ?TODO
+  match hit:
+    case True{}:
+      %Span.is_eq_sound(t, s)(et): {Span.has(_, c) == Span.has(_, d): Bool}
+      Shared.Bool.is_eq_sound(
+        Span.has(t, c),
+        Span.has(t, d)
+      )(
+        Shared.List.all.if_hit(
+          Shared.Bool.is_eq(Span.has(t, c), Span.has(t, d)),
+          u => Spans.alike(r, c, d)
+        )(ha)
+      )
+    case False{}:
+      ih(
+        Shared.List.all.if_rest(
+          Shared.Bool.is_eq(Span.has(t, c), Span.has(t, d)),
+          u => Spans.alike(r, c, d)
+        )(ha)
+      )(hc)
 
 # alike characters are on the same side of each span of the list
 law Spans.alike_has:
@@ -295,7 +401,28 @@ law Spans.alike_has:
   } -> {Span.has(s, c) == Span.has(s, d): Bool}
 
 def Spans.alike_has(ss, c, d, s):
-  ?TODO
+  match ss:
+    case Nil{}:
+      ha => hc => Empty.absurd(
+        {Span.has(s, c) == Span.has(s, d): Bool},
+        Shared.Bool.false_ne_true(hc)
+      )
+    case Con{+t, +r}:
+      +c = c
+      +d = d
+      +s = s
+      ha => hc => Spans.alike_has.at(
+        Span.is_eq(t, s),
+        t,
+        r,
+        c,
+        d,
+        s,
+        {==},
+        ha,
+        hc,
+        Spans.alike_has(r, c, d, s)
+      )
 
 # The mark of a character
 # -----------------------
@@ -401,7 +528,7 @@ def Spans.rep_max.at(
   +r: List<&2, Char>,
   +c: Char,
   +n: Nat,
-  eh: {Nat.is_eq(Char.code(m), n) == hit: Bool},
+  +eh: {Nat.is_eq(Char.code(m), n) == hit: Bool},
   hm: {List.any.if(u => Spans.marked(r, n), hit) == True{}: Bool},
   hn: {Nat.is_le(n, Char.code(c)) == True{}: Bool},
   ih: {
@@ -410,7 +537,33 @@ def Spans.rep_max.at(
     Nat.is_le(n, Char.code(c)) == True{}: Bool
   } -> {Nat.is_le(n, Char.code(Spans.rep(r, c))) == True{}: Bool}
 ) -> {Nat.is_le(n, Char.code(Spans.rep.pick(m, Spans.rep(r, c), c))) == True{}: Bool}:
-  ?TODO
+  match hit:
+    case True{}:
+      k1 = Nat.is_le(Char.code(m), Char.code(c))
+      k2 = Nat.is_le(Char.code(Spans.rep(r, c)), Char.code(m))
+      %Shared.Nat.is_eq_sound(
+        Char.code(m),
+        n
+      )(eh): {Nat.is_le(_, Char.code(Spans.rep.pick(m, Spans.rep(r, c), c))) == True{}: Bool}
+      Spans.rep.pick_takes(k1, k2, m, Spans.rep(r, c), {==})(
+        %Equal.sym(Nat, Char.code(m), n, Shared.Nat.is_eq_sound(Char.code(m), n)(eh)): {Nat.is_le(_, Char.code(c)) == True{}: Bool}
+        hn)
+    case False{}:
+      Shared.Nat.le_trans(
+        n,
+        Char.code(Spans.rep(r, c)),
+        Char.code(Spans.rep.pick(m, Spans.rep(r, c), c))
+      )(
+        ih(hm)(hn)
+      )(
+        Spans.rep.pick_ge(
+          Nat.is_le(Char.code(m), Char.code(c)),
+          Nat.is_le(Char.code(Spans.rep(r, c)), Char.code(m)),
+          m,
+          Spans.rep(r, c),
+          {==}
+        )
+      )
 
 # the code n of a mark that is not above c is not above the mark for c
 def Spans.rep_max(
@@ -422,7 +575,24 @@ def Spans.rep_max(
 } -> {
   Nat.is_le(n, Char.code(c)) == True{}: Bool
 } -> {Nat.is_le(n, Char.code(Spans.rep(ms, c))) == True{}: Bool}:
-  ?TODO
+  match ms:
+    case Nil{}:
+      hm => hn => Empty.absurd(
+        {Nat.is_le(n, Char.code(Chr{0})) == True{}: Bool},
+        Shared.Bool.false_ne_true(hm)
+      )
+    case Con{+m, +r}:
+      hm => hn => Spans.rep_max.at(
+        Nat.is_eq(Char.code(m), n),
+        m,
+        r,
+        c,
+        n,
+        {==},
+        hm,
+        hn,
+        Spans.rep_max(r, c, n)
+      )
 
 # Spans.rep_hi with a mark after hi, by whether c is above hi (x False): then
 # the mark after hi is not above c, so it is not above the mark for c
@@ -435,32 +605,197 @@ def Spans.rep_hi.above(
   hm: {Spans.marked(ms, 1n+Char.code(hi)) == True{}: Bool},
   hr: {Nat.is_le(Char.code(Spans.rep(ms, c)), Char.code(hi)) == True{}: Bool}
 ) -> {x == True{}: Bool}:
-  ?TODO
+  match x:
+    case True{}:
+      {==}
+    case False{}:
+      Empty.absurd(
+        {False{} == True{}: Bool},
+        Shared.Bool.true_ne_false(
+          Equal.trans(
+            Bool,
+            True{},
+            Nat.is_le(1n+Char.code(hi), Char.code(hi)),
+            False{},
+            Equal.sym(
+              Bool,
+              Nat.is_le(1n+Char.code(hi), Char.code(hi)),
+              True{},
+              Shared.Nat.le_trans(
+                1n+Char.code(hi),
+                Char.code(Spans.rep(ms, c)),
+                Char.code(hi)
+              )(
+                Spans.rep_max(
+                  ms,
+                  c,
+                  1n+Char.code(hi)
+                )(hm)(Shared.Nat.nle_succ_le(Char.code(c), Char.code(hi))(ex))
+              )(hr)
+            ),
+            Shared.Nat.succ_nle(Char.code(hi))
+          )
+        )
+      )
 
 # c is not above hi when the mark for c is not, by whether hi is the last
 # character (last)
 def Spans.rep_hi(
   last: Bool,
-  +ms: List<&2, Char>,
+  ms: List<&2, Char>,
   +hi: Char,
   +c: Char,
   el: {Char.is_last(hi) == last: Bool},
   he: {List.any.if(u => Spans.marked(ms, 1n+Char.code(hi)), last) == True{}: Bool},
   hr: {Nat.is_le(Char.code(Spans.rep(ms, c)), Char.code(hi)) == True{}: Bool}
 ) -> {Nat.is_le(Char.code(c), Char.code(hi)) == True{}: Bool}:
-  ?TODO
+  match last:
+    case True{}:
+      Char.le_last(hi, c)(el)
+    case False{}:
+      Spans.rep_hi.above(Nat.is_le(Char.code(c), Char.code(hi)), ms, hi, c, {==}, he, hr)
 
 # a span holds both c and d, or neither, when each of its ends is on the same
 # side of both
 def Span.has_ends(
   +lo: Char,
   +hi: Char,
-  +c: Char,
-  +d: Char,
+  c: Char,
+  d: Char,
   e1: {Nat.is_le(Char.code(lo), Char.code(c)) == Nat.is_le(Char.code(lo), Char.code(d)): Bool},
   e2: {Nat.is_le(Char.code(c), Char.code(hi)) == Nat.is_le(Char.code(d), Char.code(hi)): Bool}
 ) -> {Span.has(Span{lo, hi}, c) == Span.has(Span{lo, hi}, d): Bool}:
-  ?TODO
+  Equal.trans(
+    Bool,
+    Span.has(Span{lo, hi}, c),
+    Bool.and(Nat.is_le(Char.code(lo), Char.code(c)), Nat.is_le(Char.code(c), Char.code(hi))),
+    Span.has(Span{lo, hi}, d),
+    Span.has_codes(lo, hi, c),
+    (
+      %Equal.sym(Bool, Nat.is_le(Char.code(lo), Char.code(c)), Nat.is_le(Char.code(lo), Char.code(d)), e1): {Bool.and(_, Nat.is_le(Char.code(c), Char.code(hi))) == Span.has(Span{lo, hi}, d): Bool}
+      %Equal.sym(Bool, Nat.is_le(Char.code(c), Char.code(hi)), Nat.is_le(Char.code(d), Char.code(hi)), e2): {Bool.and(Nat.is_le(Char.code(lo), Char.code(d)), _) == Span.has(Span{lo, hi}, d): Bool}
+      Equal.sym(Bool, Span.has(Span{lo, hi}, d), Bool.and(Nat.is_le(Char.code(lo), Char.code(d)), Nat.is_le(Char.code(d), Char.code(hi))), Span.has_codes(lo, hi, d)))
+  )
+
+# Span.has_rep at lo: lo is not above c (a) when it is not above the mark for
+# c (b): a mark of lo that is not above c is not above the mark for c, which
+# is not above c
+def Span.has_rep.lo(
+  +ms: List<&2, Char>,
+  lo: Char,
+  +c: Char,
+  a: Bool,
+  ea: {Nat.is_le(Char.code(lo), Char.code(c)) == a: Bool},
+  b: Bool,
+  eb: {Nat.is_le(Char.code(lo), Char.code(Spans.rep(ms, c))) == b: Bool},
+  hm: {Spans.marked(ms, Char.code(lo)) == True{}: Bool}
+) -> {a == b: Bool}:
+  match a b:
+    case True{} True{}:
+      {==}
+    case False{} False{}:
+      {==}
+    case True{} False{}:
+      Empty.absurd(
+        {True{} == False{}: Bool},
+        Shared.Bool.true_ne_false(
+          Equal.trans(
+            Bool,
+            True{},
+            Nat.is_le(Char.code(lo), Char.code(Spans.rep(ms, c))),
+            False{},
+            Equal.sym(
+              Bool,
+              Nat.is_le(Char.code(lo), Char.code(Spans.rep(ms, c))),
+              True{},
+              Spans.rep_max(ms, c, Char.code(lo))(hm)(ea)
+            ),
+            eb
+          )
+        )
+      )
+    case False{} True{}:
+      Empty.absurd(
+        {False{} == True{}: Bool},
+        Shared.Bool.true_ne_false(
+          Equal.trans(
+            Bool,
+            True{},
+            Nat.is_le(Char.code(lo), Char.code(c)),
+            False{},
+            Equal.sym(
+              Bool,
+              Nat.is_le(Char.code(lo), Char.code(c)),
+              True{},
+              Shared.Nat.le_trans(
+                Char.code(lo),
+                Char.code(Spans.rep(ms, c)),
+                Char.code(c)
+              )(eb)(Spans.rep_le(ms, c))
+            ),
+            ea
+          )
+        )
+      )
+
+# Span.has_rep at hi: c is not above hi (a) when the mark for c is not (b)
+def Span.has_rep.hi(
+  +ms: List<&2, Char>,
+  +hi: Char,
+  +c: Char,
+  a: Bool,
+  ea: {Nat.is_le(Char.code(c), Char.code(hi)) == a: Bool},
+  b: Bool,
+  eb: {Nat.is_le(Char.code(Spans.rep(ms, c)), Char.code(hi)) == b: Bool},
+  he: {List.any.if(u => Spans.marked(ms, 1n+Char.code(hi)), Char.is_last(hi)) == True{}: Bool}
+) -> {a == b: Bool}:
+  match a b:
+    case True{} True{}:
+      {==}
+    case False{} False{}:
+      {==}
+    case True{} False{}:
+      Empty.absurd(
+        {True{} == False{}: Bool},
+        Shared.Bool.true_ne_false(
+          Equal.trans(
+            Bool,
+            True{},
+            Nat.is_le(Char.code(Spans.rep(ms, c)), Char.code(hi)),
+            False{},
+            Equal.sym(
+              Bool,
+              Nat.is_le(Char.code(Spans.rep(ms, c)), Char.code(hi)),
+              True{},
+              Shared.Nat.le_trans(
+                Char.code(Spans.rep(ms, c)),
+                Char.code(c),
+                Char.code(hi)
+              )(Spans.rep_le(ms, c))(ea)
+            ),
+            eb
+          )
+        )
+      )
+    case False{} True{}:
+      Empty.absurd(
+        {False{} == True{}: Bool},
+        Shared.Bool.true_ne_false(
+          Equal.trans(
+            Bool,
+            True{},
+            Nat.is_le(Char.code(c), Char.code(hi)),
+            False{},
+            Equal.sym(
+              Bool,
+              Nat.is_le(Char.code(c), Char.code(hi)),
+              True{},
+              Spans.rep_hi(Char.is_last(hi), ms, hi, c, {==}, he, eb)
+            ),
+            ea
+          )
+        )
+      )
 
 # a span with a mark for each end holds both c and the mark for c, or neither
 def Span.has_rep(
@@ -470,7 +805,37 @@ def Span.has_rep(
 ) -> {
   Span.covered(ms, s) == True{}: Bool
 } -> {Span.has(s, c) == Span.has(s, Spans.rep(ms, c)): Bool}:
-  ?TODO
+  match s:
+    case Span{+lo, +hi}:
+      +e =>
+        +r = Spans.rep(ms, c)
+        +he = List.any.if(u => Spans.marked(ms, 1n+Char.code(hi)), Char.is_last(hi))
+        Span.has_ends(
+          lo,
+          hi,
+          c,
+          r,
+          Span.has_rep.lo(
+            ms,
+            lo,
+            c,
+            Nat.is_le(Char.code(lo), Char.code(c)),
+            {==},
+            Nat.is_le(Char.code(lo), Char.code(r)),
+            {==},
+            Shared.List.all.if_hit(Spans.marked(ms, Char.code(lo)), u => he)(e)
+          ),
+          Span.has_rep.hi(
+            ms,
+            hi,
+            c,
+            Nat.is_le(Char.code(c), Char.code(hi)),
+            {==},
+            Nat.is_le(Char.code(r), Char.code(hi)),
+            {==},
+            Shared.List.all.if_rest(Spans.marked(ms, Char.code(lo)), u => he)(e)
+          )
+        )
 
 # Spans.rep_alike from the marks for the ends of the spans alone
 def Spans.rep_alike.go(
@@ -480,7 +845,23 @@ def Spans.rep_alike.go(
 ) -> {
   Spans.covered.go(ss, ms) == True{}: Bool
 } -> {Spans.alike(ss, c, Spans.rep(ms, c)) == True{}: Bool}:
-  ?TODO
+  match ss:
+    case Nil{}:
+      e => {==}
+    case Con{+s, +r}:
+      +e =>
+        Shared.List.all.if_both(
+          Shared.Bool.is_eq(Span.has(s, c), Span.has(s, Spans.rep(ms, c))),
+          u => Spans.alike(r, c, Spans.rep(ms, c))
+        )(
+          %Span.has_rep(ms, s, c)(Shared.List.all.if_hit(Span.covered(ms, s), u => Spans.covered.go(r, ms))(e)): {Shared.Bool.is_eq(Span.has(s, c), _) == True{}: Bool}
+          Shared.Bool.is_eq_refl(Span.has(s, c)))(
+          Spans.rep_alike.go(
+            r,
+            ms,
+            c
+          )(Shared.List.all.if_rest(Span.covered(ms, s), u => Spans.covered.go(r, ms))(e))
+        )
 
 # a character and its mark are in the same spans
 law Spans.rep_alike:
@@ -490,27 +871,112 @@ law Spans.rep_alike:
   {Spans.covered(ss, ms) == True{}: Bool} -> {Spans.alike(ss, c, Spans.rep(ms, c)) == True{}: Bool}
 
 def Spans.rep_alike(ss, ms, c):
-  ?TODO
+  +ss = ss
+  e => Spans.rep_alike.go(
+    ss,
+    ms,
+    c
+  )(
+    Shared.List.all.if_rest(
+      List.contains(~Char, ~Char.is_eq, ms, Chr{0}),
+      u => Spans.covered.go(ss, ms)
+    )(e)
+  )
+
+# Spans.rep_in.pick when the mark kept is best, by whether best is the
+# character of code 0 (z)
+def Spans.rep_in.pick.best(
+  z: Bool,
+  m: Char,
+  r: List<&2, Char>,
+  best: Char,
+  +ez: {Char.is_eq(Chr{0}, best) == z: Bool}
+) -> {
+  List.contains(~Char, ~Char.is_eq, Chr{0} <> r, best) == True{}: Bool
+} -> {List.contains(~Char, ~Char.is_eq, Chr{0} <> m <> r, best) == True{}: Bool}:
+  match z:
+    case True{}:
+      e =>
+        %Equal.sym(
+          Bool,
+          Char.is_eq(Chr{0}, best),
+          True{},
+          ez
+        ): {
+          List.any.if(
+            u => List.any.if(u => List.contains(~Char, ~Char.is_eq, r, best), Char.is_eq(m, best)),
+            _
+          )
+            == True{}: Bool
+        }
+        {==}
+    case False{}:
+      e =>
+        %Equal.sym(
+          Bool,
+          Char.is_eq(Chr{0}, best),
+          False{},
+          ez
+        ): {
+          List.any.if(
+            u => List.any.if(u => List.contains(~Char, ~Char.is_eq, r, best), Char.is_eq(m, best)),
+            _
+          )
+            == True{}: Bool
+        }
+        %Equal.sym(Bool, List.contains(~Char, ~Char.is_eq, r, best), True{}, (
+            %ez: {List.any.if(u => List.contains(~Char, ~Char.is_eq, r, best), _) == True{}: Bool}
+            e)): {List.any.if(u => List.any.if(u => _, Char.is_eq(m, best)), False{}) == True{}: Bool}
+        Shared.List.any.if_true(Char.is_eq(m, best))
 
 # Spans.rep_in.go at the first mark m, by whether it is picked (k)
 def Spans.rep_in.pick(
   k: Bool,
-  m: Char,
-  -r: List<&2, Char>,
-  -best: Char
+  +m: Char,
+  r: List<&2, Char>,
+  +best: Char
 ) -> {
   List.contains(~Char, ~Char.is_eq, Chr{0} <> r, best) == True{}: Bool
 } -> {
   List.contains(~Char, ~Char.is_eq, Chr{0} <> m <> r, Bool.pick(Char, k, m, best)) == True{}: Bool
 }:
-  ?TODO
+  match k:
+    case True{}:
+      e =>
+        %Equal.sym(
+          Bool,
+          Char.is_eq(m, m),
+          True{},
+          Shared.Char.is_eq_refl(m)
+        ): {
+          List.any.if(
+            u => List.any.if(u => List.contains(~Char, ~Char.is_eq, r, m), _),
+            Char.is_eq(Chr{0}, m)
+          )
+            == True{}: Bool
+        }
+        Shared.List.any.if_true(Char.is_eq(Chr{0}, m))
+    case False{}:
+      Spans.rep_in.pick.best(Char.is_eq(Chr{0}, best), m, r, best, {==})
 
 # the mark for c is a mark of ms or the character of code 0
 def Spans.rep_in.go(
   ms: List<&2, Char>,
   +c: Char
 ) -> {List.contains(~Char, ~Char.is_eq, Chr{0} <> ms, Spans.rep(ms, c)) == True{}: Bool}:
-  ?TODO
+  match ms:
+    case Nil{}:
+      {==}
+    case Con{+m, +r}:
+      Spans.rep_in.pick(
+        Bool.and(
+          Nat.is_le(Char.code(m), Char.code(c)),
+          Nat.is_le(Char.code(Spans.rep(r, c)), Char.code(m))
+        ),
+        m,
+        r,
+        Spans.rep(r, c)
+      )(Spans.rep_in.go(r, c))
 
 # Spans.rep_in for a character x that is in ms or is the character of code 0,
 # by whether it is that character (z)
@@ -539,7 +1005,15 @@ law Spans.rep_in:
   } -> {List.contains(~Char, ~Char.is_eq, ms, Spans.rep(ms, c)) == True{}: Bool}
 
 def Spans.rep_in(ms, c):
-  ?TODO
+  +ms = ms
+  h0 => Spans.rep_in.at(
+    Char.is_eq(Chr{0}, Spans.rep(ms, c)),
+    ms,
+    Spans.rep(ms, c),
+    {==},
+    Spans.rep_in.go(ms, c),
+    h0
+  )
 
 # The marks stand for every character
 # -----------------------------------
@@ -581,7 +1055,14 @@ def Spans.marked_more(
   -ms: List<&2, Char>,
   n: Nat
 ) -> {Spans.marked(ms, n) == True{}: Bool} -> {Spans.marked(m <> ms, n) == True{}: Bool}:
-  ?TODO
+  e =>
+    %Equal.sym(
+      Bool,
+      Spans.marked(ms, n),
+      True{},
+      e
+    ): {List.any.if(u => _, Nat.is_eq(Char.code(m), n)) == True{}: Bool}
+    Shared.List.any.if_true(Nat.is_eq(Char.code(m), n))
 
 # Span.covered_more for the mark after hi, by whether hi is the last character
 # (last)
@@ -593,7 +1074,11 @@ def Span.covered_more.end(
 ) -> {
   List.any.if(u => Spans.marked(ms, n), last) == True{}: Bool
 } -> {List.any.if(u => Spans.marked(m <> ms, n), last) == True{}: Bool}:
-  ?TODO
+  match last:
+    case True{}:
+      e => {==}
+    case False{}:
+      e => Spans.marked_more(m, ms, n)(e)
 
 # one more mark keeps a mark for each end of s
 def Span.covered_more(
@@ -601,7 +1086,27 @@ def Span.covered_more(
   +ms: List<&2, Char>,
   s: Span
 ) -> {Span.covered(ms, s) == True{}: Bool} -> {Span.covered(m <> ms, s) == True{}: Bool}:
-  ?TODO
+  match s:
+    case Span{+lo, +hi}:
+      +e =>
+        +he = List.any.if(u => Spans.marked(ms, 1n+Char.code(hi)), Char.is_last(hi))
+        Shared.List.all.if_both(
+          Spans.marked(m <> ms, Char.code(lo)),
+          u => List.any.if(u => Spans.marked(m <> ms, 1n+Char.code(hi)), Char.is_last(hi))
+        )(
+          Spans.marked_more(
+            m,
+            ms,
+            Char.code(lo)
+          )(Shared.List.all.if_hit(Spans.marked(ms, Char.code(lo)), u => he)(e))
+        )(
+          Span.covered_more.end(
+            Char.is_last(hi),
+            m,
+            ms,
+            1n+Char.code(hi)
+          )(Shared.List.all.if_rest(Spans.marked(ms, Char.code(lo)), u => he)(e))
+        )
 
 # one more mark keeps a mark for each end of each span of ss
 def Spans.covered_more(
@@ -609,15 +1114,34 @@ def Spans.covered_more(
   +m: Char,
   +ms: List<&2, Char>
 ) -> {Spans.covered.go(ss, ms) == True{}: Bool} -> {Spans.covered.go(ss, m <> ms) == True{}: Bool}:
-  ?TODO
+  match ss:
+    case Nil{}:
+      e => {==}
+    case Con{+s, +r}:
+      +e => Shared.List.all.if_both(
+        Span.covered(m <> ms, s),
+        u => Spans.covered.go(r, m <> ms)
+      )(
+        Span.covered_more(
+          m,
+          ms,
+          s
+        )(Shared.List.all.if_hit(Span.covered(ms, s), u => Spans.covered.go(r, ms))(e))
+      )(
+        Spans.covered_more(
+          r,
+          m,
+          ms
+        )(Shared.List.all.if_rest(Span.covered(ms, s), u => Spans.covered.go(r, ms))(e))
+      )
 
 # Span.marks_covered for the mark after hi, by whether hi is the last
 # character (last)
 def Span.marks_covered.end(
   last: Bool,
-  +lo: Char,
+  lo: Char,
   +hi: Char,
-  +rest: List<&2, Char>,
+  rest: List<&2, Char>,
   el: {Char.is_last(hi) == last: Bool}
 ) -> {
   List.any.if(
@@ -626,20 +1150,50 @@ def Span.marks_covered.end(
   )
     == True{}: Bool
 }:
-  ?TODO
+  match last:
+    case True{}:
+      {==}
+    case False{}:
+      Spans.marked_more(lo, Char.after(hi) <> rest, 1n+Char.code(hi))(
+        %Char.after_code(hi)(el): {Spans.marked(Char.after(hi) <> rest, _) == True{}: Bool}
+        Spans.marked_head(Char.after(hi), rest))
 
 # the marks of s hold a mark for each end of s
 def Span.marks_covered(
   s: Span,
   +rest: List<&2, Char>
 ) -> {Span.covered(Span.marks(s, rest), s) == True{}: Bool}:
-  ?TODO
+  match s:
+    case Span{+lo, +hi}:
+      +l = {lo <> Char.after(hi) <> rest: List<&2, Char>}
+      Shared.List.all.if_both(
+        Spans.marked(l, Char.code(lo)),
+        u => List.any.if(u => Spans.marked(l, 1n+Char.code(hi)), Char.is_last(hi))
+      )(
+        Spans.marked_head(lo, Char.after(hi) <> rest)
+      )(Span.marks_covered.end(Char.is_last(hi), lo, hi, rest, {==}))
 
 # the marks of each span of ss hold a mark for each end of each span of ss
 def Spans.marks_covered.go(
   ss: List<&2, Span>
 ) -> {Spans.covered.go(ss, Spans.marks.go(ss)) == True{}: Bool}:
-  ?TODO
+  match ss:
+    case Nil{}:
+      {==}
+    case Con{Span{+lo, +hi}, +r}:
+      +l = {lo <> Char.after(hi) <> Spans.marks.go(r): List<&2, Char>}
+      Shared.List.all.if_both(
+        Span.covered(l, Span{lo, hi}),
+        u => Spans.covered.go(r, l)
+      )(
+        Span.marks_covered(Span{lo, hi}, Spans.marks.go(r))
+      )(
+        Spans.covered_more(
+          r,
+          lo,
+          Char.after(hi) <> Spans.marks.go(r)
+        )(Spans.covered_more(r, Char.after(hi), Spans.marks.go(r))(Spans.marks_covered.go(r)))
+      )
 
 # the marks of ss can stand for every character under ss
 law Spans.marks_covered:
@@ -647,4 +1201,12 @@ law Spans.marks_covered:
   {Spans.covered(ss, Spans.marks(ss)) == True{}: Bool}
 
 def Spans.marks_covered(ss):
-  ?TODO
+  +ss = ss
+  Shared.List.all.if_both(
+    List.contains(~Char, ~Char.is_eq, Chr{0} <> Spans.marks.go(ss), Chr{0}),
+    u => Spans.covered.go(ss, Chr{0} <> Spans.marks.go(ss))
+  )({==})(Spans.covered_more(ss, Chr{0}, Spans.marks.go(ss))(Spans.marks_covered.go(ss)))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# bend-lint: expect-end bend-lint-rules/performance/loop_invariant_call@information
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
