@@ -1719,6 +1719,21 @@ def Nat.nlt_le(
       h => {==}
     case 1n+p 1n+q:
       h => Nat.nlt_le(p, q)(h)
+
+# a number at most b is not above b
+def Nat.le_nlt(
+  a: Nat,
+  b: Nat
+) -> {Nat.is_le(a, b) == True{}: Bool} -> {Nat.is_lt(b, a) == False{}: Bool}:
+  match a b:
+    case 0n 0n:
+      h => {==}
+    case 0n 1n+q:
+      h => {==}
+    case 1n+p 0n:
+      h => Empty.absurd({Nat.is_lt(0n, 1n+p) == False{}: Bool}, Bool.false_ne_true(h))
+    case 1n+p 1n+q:
+      h => Nat.le_nlt(p, q)(h)
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # a number is at most its sum with another

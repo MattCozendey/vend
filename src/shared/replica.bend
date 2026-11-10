@@ -17283,22 +17283,6 @@ def Take.asks.waits(
     case Con{Cells.Many{}, rest}:
       Take.asks.waits(~mach, ~kern, rest, old, s, c2, i)
 
-# Node.advance only grows a node, once the head m is known
-def Advance.head.grows(
-  ~mach: Machine(),
-  ~lawf: Lawful(mach),
-  +s: Node<Machine.Q(mach)>,
-  c: Ledgers.Chain,
-  m: Maybe<&2, Head>
-) -> {
-  Node.grows(~mach, s, Advance.head(~mach, ~Lawful.kernel(mach, lawf), s, c, m)) == True{}: Bool
-}:
-  match m:
-    case None{}:
-      Grows.refl(~mach, s)
-    case Some{+h}:
-      Advance.at.grows(~mach, ~lawf, s, c, h, Head.tip(~mach, s, h))
-
 # a pass to the next round only grows a node
 def Pass.grows(
   ~mach: Machine(),
@@ -24179,6 +24163,170 @@ def Does.honest(
         Pass.honest(~mach, ~kern, n, s, c)
       )(Adopt.at.honest(~mach, ~kern, n, Node.pass(~mach, ~kern, n, s, c), c))
 
+# no pass of q is above r among the rounds up to k, when r is at least k
+def Passed.above_low(
+  ~mach: Machine(),
+  k: Nat,
+  s: Node<Machine.Q(mach)>,
+  c: Ledgers.Chain,
+  h: U32,
+  +r: Nat,
+  q: String
+) -> {Nat.is_le(k, r) == True{}: Bool} -> {Passed.above(~mach, k, s, c, h, r, q) == False{}: Bool}:
+  match k:
+    case 0n:
+      e => {==}
+    case 1n+(+p):
+      +e =>
+        %Equal.sym(
+          Bool,
+          Nat.is_lt(r, 1n+p),
+          False{},
+          Shared.Nat.le_nlt(1n+p, r)(e)
+        ): {
+          List.any.if(
+            u => Passed.above(~mach, p, s, c, h, r, q),
+            List.all.if(
+              v => Maybe.is_some(
+                &2,
+                Maybe<&2, Ledgers.Last>,
+                Ledgers.State.passed(
+                  ~Machine.Q(mach),
+                  State.ledger(~mach, s),
+                  Ledgers.Where{c, h, 1n+p},
+                  q
+                )
+              ),
+              _
+            )
+          )
+            == False{}: Bool
+        }
+        Passed.above_low(
+          ~mach,
+          p,
+          s,
+          c,
+          h,
+          r,
+          q
+        )(Shared.Nat.le_trans(p, 1n+p, r)(Shared.Nat.le_succ(p, p)(Shared.Nat.le_refl(p)))(e))
+
+# an "all" whose rest is False is False
+def Passed.above_none(x: Bool) -> {List.all.if(v => False{}, x) == False{}: Bool}:
+  match x:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# Round.mine_free.at once the test b is in place
+def Round.mine_free.of(
+  ~mach: Machine(),
+  n: String,
+  s: Node<Machine.Q(mach)>,
+  c: Ledgers.Chain,
+  h: U32,
+  +p: Nat,
+  b: Bool,
+  ih: {Passed.above(~mach, p, s, c, h, Round.mine(~mach, n, s, c, h, p), n) == False{}: Bool}
+) -> {
+  List.any.if(
+    u => Passed.above(
+      ~mach,
+      p,
+      s,
+      c,
+      h,
+      Shared.Bool.when(Nat, b, u => 1n+p, u => Round.mine(~mach, n, s, c, h, p)),
+      n
+    ),
+    List.all.if(
+      v => b,
+      Nat.is_lt(Shared.Bool.when(Nat, b, u => 1n+p, u => Round.mine(~mach, n, s, c, h, p)), 1n+p)
+    )
+  )
+    == False{}: Bool
+}:
+  match b:
+    case True{}:
+      %Equal.sym(
+        Bool,
+        Nat.is_lt(1n+p, 1n+p),
+        False{},
+        Shared.Nat.lt_irrefl(1n+p)
+      ): {
+        List.any.if(
+          u => Passed.above(~mach, p, s, c, h, 1n+p, n),
+          List.all.if(v => True{}, _)
+        )
+          == False{}: Bool
+      }
+      Passed.above_low(~mach, p, s, c, h, 1n+p, n)(Shared.Nat.le_succ(p, p)(Shared.Nat.le_refl(p)))
+    case False{}:
+      %Equal.sym(
+        Bool,
+        List.all.if(v => False{}, Nat.is_lt(Round.mine(~mach, n, s, c, h, p), 1n+p)),
+        False{},
+        Passed.above_none(Nat.is_lt(Round.mine(~mach, n, s, c, h, p), 1n+p))
+      ): {
+        List.any.if(
+          u => Passed.above(~mach, p, s, c, h, Round.mine(~mach, n, s, c, h, p), n),
+          _
+        )
+          == False{}: Bool
+      }
+      ih
+
+# Round.mine_free in a round 1 + p, once it is known whether the node passed
+# to it (b)
+def Round.mine_free.at(
+  ~mach: Machine(),
+  n: String,
+  s: Node<Machine.Q(mach)>,
+  c: Ledgers.Chain,
+  h: U32,
+  p: Nat,
+  b: Bool,
+  eb: {
+    Maybe.is_some(
+      &2,
+      Maybe<&2, Ledgers.Last>,
+      Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Where{c, h, 1n+p}, n)
+    )
+      == b: Bool
+  },
+  ih: {Passed.above(~mach, p, s, c, h, Round.mine(~mach, n, s, c, h, p), n) == False{}: Bool}
+) -> {Passed.above(~mach, 1n+p, s, c, h, Round.mine(~mach, n, s, c, h, 1n+p), n) == False{}: Bool}:
+  %Equal.sym(
+    Bool,
+    Maybe.is_some(
+      &2,
+      Maybe<&2, Ledgers.Last>,
+      Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Where{c, h, 1n+p}, n)
+    ),
+    b,
+    eb
+  ): {
+    List.any.if(
+      u => Passed.above(
+        ~mach,
+        p,
+        s,
+        c,
+        h,
+        Shared.Bool.when(Nat, _, u => 1n+p, u => Round.mine(~mach, n, s, c, h, p)),
+        n
+      ),
+      List.all.if(
+        v => _,
+        Nat.is_lt(Shared.Bool.when(Nat, _, u => 1n+p, u => Round.mine(~mach, n, s, c, h, p)), 1n+p)
+      )
+    )
+      == False{}: Bool
+  }
+  Round.mine_free.of(~mach, n, s, c, h, p, b, ih)
+
 # Seals
 # -----
 # a node keeps only ballots that it checked: a ballot that it accepts is the
@@ -25139,6 +25287,44 @@ def Node.after_honest(mach, kern, n, evs, s):
         s1,
         Node.after(~mach, ~kern, n, rest, s1)
       )(Does.honest(~mach, ~kern, n, s, ev))(Node.after_honest(~mach, ~kern, n, rest, s1))
+
+# a node votes only in a round above which it passed to no round: its round
+# (Round.mine) up to any bound is the highest one that it passed to, so its
+# own intake (Ballot.honest) never refuses its vote for being below a pass
+law Round.mine_free:
+  for ~mach: Machine()
+  for +n: String
+  for +s: Node<Machine.Q(mach)>
+  for +c: Ledgers.Chain
+  for +h: U32
+  for k: Nat
+  {Passed.above(~mach, k, s, c, h, Round.mine(~mach, n, s, c, h, k), n) == False{}: Bool}
+
+def Round.mine_free(mach, n, s, c, h, k):
+  match k:
+    case 0n:
+      {==}
+    case 1n+(+p):
+      Round.mine_free.at(
+        ~mach,
+        n,
+        s,
+        c,
+        h,
+        p,
+        Maybe.is_some(
+          &2,
+          Maybe<&2, Ledgers.Last>,
+          Ledgers.State.passed(
+            ~Machine.Q(mach),
+            State.ledger(~mach, s),
+            Ledgers.Where{c, h, 1n+p},
+            n
+          )
+        ),
+        {==},
+        Round.mine_free(~mach, n, s, c, h, p)
+      )
 
 # every part is kept by enough nodes: a node that casts for a step keeps each
 # new part of the step (what its own run of the step put: the node of the run
