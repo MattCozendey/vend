@@ -2323,3 +2323,293 @@ def Nat.lt_before(
       h => Nat.le_zero(p)
     case 1n+b 1n+p:
       h => Nat.lt_succ_le(1n+b, p)(h)
+
+# Codes of numbers
+# ----------------
+# U32.to_nat gives the code of a U32: its place in the order, as a Nat. These
+# lemmas carry a question about the order of U32 to the Nat order lemmas above.
+
+# a <= b and b <= a together say that a is b
+def Nat.le_both(
+  a: Nat,
+  b: Nat
+) -> {Bool.and(Nat.is_le(a, b), Nat.is_le(b, a)) == Nat.is_eq(a, b): Bool}:
+  match a b:
+    case 0n 0n:
+      {==}
+    case 0n 1n+q:
+      {==}
+    case 1n+p 0n:
+      {==}
+    case 1n+p 1n+q:
+      Nat.le_both(p, q)
+
+# a number plus one is not at most the number
+def Nat.succ_nle(a: Nat) -> {Nat.is_le(1n+a, a) == False{}: Bool}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+p:
+      Nat.succ_nle(p)
+
+# a number not at most b is at least b plus one
+def Nat.nle_succ_le(
+  a: Nat,
+  b: Nat
+) -> {Nat.is_le(a, b) == False{}: Bool} -> {Nat.is_le(1n+b, a) == True{}: Bool}:
+  match a b:
+    case 0n 0n:
+      h => Equal.sym(Bool, True{}, False{}, h)
+    case 0n 1n+q:
+      h => Equal.sym(Bool, True{}, False{}, h)
+    case 1n+p 0n:
+      h => Nat.le_zero(p)
+    case 1n+p 1n+q:
+      Nat.nle_succ_le(p, q)
+
+# the doubles of two numbers compare as the numbers do; a bit added to each
+# double decides only a tie
+def Nat.cmp_double(
+  a: Nat,
+  b: Nat,
+  ab: Bool,
+  bb: Bool
+) -> {
+  Word.cmp.fin(
+    ab,
+    bb,
+    Nat.cmp(a, b)
+  )
+    == Nat.cmp(Nat.add_if(ab, Nat.double(a)), Nat.add_if(bb, Nat.double(b))): Cmp
+}:
+  match a b ab bb:
+    case 0n 0n False{} False{}:
+      {==}
+    case 0n 0n False{} True{}:
+      {==}
+    case 0n 0n True{} False{}:
+      {==}
+    case 0n 0n True{} True{}:
+      {==}
+    case 0n 1n+q False{} False{}:
+      {==}
+    case 0n 1n+q False{} True{}:
+      {==}
+    case 0n 1n+q True{} False{}:
+      {==}
+    case 0n 1n+q True{} True{}:
+      {==}
+    case 1n+p 0n False{} False{}:
+      {==}
+    case 1n+p 0n False{} True{}:
+      {==}
+    case 1n+p 0n True{} False{}:
+      {==}
+    case 1n+p 0n True{} True{}:
+      {==}
+    case 1n+p 1n+q False{} False{}:
+      Nat.cmp_double(p, q, False{}, False{})
+    case 1n+p 1n+q False{} True{}:
+      Nat.cmp_double(p, q, False{}, True{})
+    case 1n+p 1n+q True{} False{}:
+      Nat.cmp_double(p, q, True{}, False{})
+    case 1n+p 1n+q True{} True{}:
+      Nat.cmp_double(p, q, True{}, True{})
+
+# Word.cmp_to_nat at the low bits ab and bb, from the same fact of the rests
+def Word.cmp_to_nat.con(
+  +p: Nat,
+  ab: Bool,
+  bb: Bool,
+  +at: Word(p),
+  +bt: Word(p),
+  ih: {Word.cmp(p, at, bt) == Nat.cmp(Word.to_nat(p, at), Word.to_nat(p, bt)): Cmp}
+) -> {
+  Word.cmp(
+    1n+p,
+    WCon{ab, at},
+    WCon{bb, bt}
+  )
+    == Nat.cmp(Word.to_nat(1n+p, WCon{ab, at}), Word.to_nat(1n+p, WCon{bb, bt})): Cmp
+}:
+  match ab bb:
+    case False{} False{}:
+      %Equal.sym(Cmp, Word.cmp(p, at, bt), Nat.cmp(Word.to_nat(p, at), Word.to_nat(p, bt)), ih):
+        {Word.cmp.fin(False{}, False{}, _) == Nat.cmp(Nat.double(Word.to_nat(p, at)), Nat.double(Word.to_nat(p, bt))): Cmp}
+      Nat.cmp_double(Word.to_nat(p, at), Word.to_nat(p, bt), False{}, False{})
+    case False{} True{}:
+      %Equal.sym(Cmp, Word.cmp(p, at, bt), Nat.cmp(Word.to_nat(p, at), Word.to_nat(p, bt)), ih):
+        {Word.cmp.fin(False{}, True{}, _) == Nat.cmp(Nat.double(Word.to_nat(p, at)), 1n+Nat.double(Word.to_nat(p, bt))): Cmp}
+      Nat.cmp_double(Word.to_nat(p, at), Word.to_nat(p, bt), False{}, True{})
+    case True{} False{}:
+      %Equal.sym(Cmp, Word.cmp(p, at, bt), Nat.cmp(Word.to_nat(p, at), Word.to_nat(p, bt)), ih):
+        {Word.cmp.fin(True{}, False{}, _) == Nat.cmp(1n+Nat.double(Word.to_nat(p, at)), Nat.double(Word.to_nat(p, bt))): Cmp}
+      Nat.cmp_double(Word.to_nat(p, at), Word.to_nat(p, bt), True{}, False{})
+    case True{} True{}:
+      %Equal.sym(Cmp, Word.cmp(p, at, bt), Nat.cmp(Word.to_nat(p, at), Word.to_nat(p, bt)), ih):
+        {Word.cmp.fin(True{}, True{}, _) == Nat.cmp(Nat.double(Word.to_nat(p, at)), Nat.double(Word.to_nat(p, bt))): Cmp}
+      Nat.cmp_double(Word.to_nat(p, at), Word.to_nat(p, bt), True{}, True{})
+
+# two words compare as their codes do
+def Word.cmp_to_nat(
+  +n: Nat,
+  a: Word(n),
+  b: Word(n)
+) -> {Word.cmp(n, a, b) == Nat.cmp(Word.to_nat(n, a), Word.to_nat(n, b)): Cmp}:
+  match n:
+    case 0n:
+      {==}
+    case 1n+p:
+      match a b:
+        case WCon{ab, +at} WCon{bb, +bt}:
+          Word.cmp_to_nat.con(p, ab, bb, at, bt, Word.cmp_to_nat(p, at, bt))
+
+# two numbers compare as their codes do
+def U32.cmp_to_nat(
+  a: U32,
+  b: U32
+) -> {U32.cmp(a, b) == Nat.cmp(U32.to_nat(a), U32.to_nat(b)): Cmp}:
+  match a b:
+    case U32{x} U32{y}:
+      Word.cmp_to_nat(32n, x, y)
+
+# the order of U32 is the order of the codes
+def U32.is_le_to_nat(
+  a: U32,
+  b: U32
+) -> {U32.is_le(a, b) == Nat.is_le(U32.to_nat(a), U32.to_nat(b)): Bool}:
+  Equal.cong(
+    Cmp,
+    Bool,
+    Cmp.is_le,
+    U32.cmp(a, b),
+    Nat.cmp(U32.to_nat(a), U32.to_nat(b)),
+    U32.cmp_to_nat(a, b)
+  )
+
+# two numbers are the same when their codes are
+def U32.is_eq_to_nat(
+  a: U32,
+  b: U32
+) -> {U32.is_eq(a, b) == Nat.is_eq(U32.to_nat(a), U32.to_nat(b)): Bool}:
+  Equal.cong(
+    Cmp,
+    Bool,
+    Cmp.is_eq,
+    U32.cmp(a, b),
+    Nat.cmp(U32.to_nat(a), U32.to_nat(b)),
+    U32.cmp_to_nat(a, b)
+  )
+
+# numbers with the same code are the same number
+def U32.to_nat_inj(+a: U32, +b: U32) -> {U32.to_nat(a) == U32.to_nat(b): Nat} -> {a == b: U32}:
+  e => U32.is_eq_sound(a, b)((
+      %Equal.sym(
+        Bool,
+        U32.is_eq(a, b),
+        Nat.is_eq(U32.to_nat(a), U32.to_nat(b)),
+        U32.is_eq_to_nat(a, b)
+      ): {_ == True{}: Bool}
+      %e:{Nat.is_eq(U32.to_nat(a), _) == True{}: Bool}
+      Nat.is_eq_refl(U32.to_nat(a))))
+
+# Word.le_ones at the low bit b, with t the comparison of the rests
+def Word.le_ones.fin(
+  b: Bool,
+  t: Cmp
+) -> {Cmp.is_le(t) == True{}: Bool} -> {Cmp.is_le(Word.cmp.fin(b, True{}, t)) == True{}: Bool}:
+  match b t:
+    case x LT{}:
+      h => {==}
+    case False{} EQ{}:
+      h => {==}
+    case True{} EQ{}:
+      h => {==}
+    case x GT{}:
+      h => h
+
+# no word is above the word of all True bits
+def Word.le_ones(
+  +n: Nat,
+  w: Word(n)
+) -> {Cmp.is_le(Word.cmp(n, w, Word.not(n, Word.zero(n)))) == True{}: Bool}:
+  match n:
+    case 0n:
+      {==}
+    case 1n+p:
+      match w:
+        case WCon{b, +t}:
+          Word.le_ones.fin(b, Word.cmp(p, t, Word.not(p, Word.zero(p))))(Word.le_ones(p, t))
+
+# no number is above the last U32
+def U32.le_last(x: U32) -> {U32.is_le(x, 4294967295) == True{}: Bool}:
+  match x:
+    case U32{w}:
+      Word.le_ones(32n, w)
+
+# Word.inc_to_nat for the rest of a word, with t its comparison: a word with a
+# True low bit is the word of all True bits only when its rest is
+def Word.inc_to_nat.rest(
+  t: Cmp
+) -> {Cmp.is_eq(Word.cmp.fin(True{}, True{}, t)) == False{}: Bool} -> {Cmp.is_eq(t) == False{}: Bool}:
+  match t:
+    case LT{}:
+      h => h
+    case EQ{}:
+      h => h
+    case GT{}:
+      h => h
+
+# the code of the word after w is one more than the code of w, when w is not
+# the word of all True bits
+def Word.inc_to_nat(
+  +n: Nat,
+  w: Word(n)
+) -> {
+  Cmp.is_eq(Word.cmp(n, w, Word.not(n, Word.zero(n)))) == False{}: Bool
+} -> {Word.to_nat(n, Word.inc(n, w)) == 1n+Word.to_nat(n, w): Nat}:
+  match n:
+    case 0n:
+      h => Empty.absurd({0n == 1n: Nat}, Bool.true_ne_false(h))
+    case 1n+p:
+      match w:
+        case WCon{False{}, t}:
+          h => {==}
+        case WCon{True{}, +t}:
+          h => Equal.cong(
+            Nat,
+            Nat,
+            Nat.double,
+            Word.to_nat(p, Word.inc(p, t)),
+            1n+Word.to_nat(p, t),
+            Word.inc_to_nat(p, t)(Word.inc_to_nat.rest(Word.cmp(p, t, Word.not(p, Word.zero(p))))(h))
+          )
+
+# the code of the number after x is one more than the code of x, when x is not
+# the last U32
+def U32.inc_to_nat(
+  x: U32
+) -> {U32.is_eq(x, 4294967295) == False{}: Bool} -> {U32.to_nat(U32.inc(x)) == 1n+U32.to_nat(x): Nat}:
+  match x:
+    case U32{w}:
+      Word.inc_to_nat(32n, w)
+
+# Two-way facts
+# -------------
+
+# two Bools are the same when each one that is True makes the other True
+def Bool.iff(
+  a: Bool,
+  b: Bool,
+  f: {a == True{}: Bool} -> {b == True{}: Bool},
+  g: {b == True{}: Bool} -> {a == True{}: Bool}
+) -> {a == b: Bool}:
+  match a b:
+    case True{} True{}:
+      {==}
+    case True{} False{}:
+      Equal.sym(Bool, False{}, True{}, f({==}))
+    case False{} True{}:
+      g({==})
+    case False{} False{}:
+      {==}
