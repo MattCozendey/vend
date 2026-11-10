@@ -3614,6 +3614,47 @@ law Node.sync_grows:
   for +t: Ledgers.State(Ask)
   {Node.grows(s, Node.sync(n, s, t)) == True{}: Bool}
 
+# a log only gains keys. What the log of a line holds under a key, other than
+# the owners of the next step and the count of versions, it holds for good:
+# after the node takes in a request
+law Node.ask_keeps:
+  for +n: String
+  for +s: State()
+  for +e: Envelope
+  for +q: Ask
+  for +c: Ledgers.Chain
+  for +k: List<&2, U32>
+  for +v: List<&2, U32>
+  {Shared.List.is_eq(~U32, ~U32.is_eq, Log.owners(), k) == False{}: Bool}
+    -> {Shared.List.is_eq(~U32, ~U32.is_eq, Log.count(), k) == False{}: Bool}
+    -> {Line.get(s, c, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+    -> {Line.get(Node.ask(n, s, e, q), c, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+
+# after the node takes in what another node sent, whatever was sent
+law Node.take_keeps:
+  for +s: State()
+  for +t: Ledgers.State(Ask)
+  for +c: Ledgers.Chain
+  for +k: List<&2, U32>
+  for +v: List<&2, U32>
+  {Shared.List.is_eq(~U32, ~U32.is_eq, Log.owners(), k) == False{}: Bool}
+    -> {Shared.List.is_eq(~U32, ~U32.is_eq, Log.count(), k) == False{}: Bool}
+    -> {Line.get(s, c, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+    -> {Line.get(Node.take(s, t), c, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+
+# and after a sync
+law Node.sync_keeps:
+  for +n: String
+  for +s: State()
+  for +t: Ledgers.State(Ask)
+  for +c: Ledgers.Chain
+  for +k: List<&2, U32>
+  for +v: List<&2, U32>
+  {Shared.List.is_eq(~U32, ~U32.is_eq, Log.owners(), k) == False{}: Bool}
+    -> {Shared.List.is_eq(~U32, ~U32.is_eq, Log.count(), k) == False{}: Bool}
+    -> {Line.get(s, c, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+    -> {Line.get(Node.sync(n, s, t), c, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+
 # a change counts once, however often and wherever it is sent: a node that
 # took a request in changes nothing when any node sends its ID again
 law Node.ask_once:
