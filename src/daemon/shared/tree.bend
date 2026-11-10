@@ -11858,13 +11858,14 @@ def Canon.swap.leaf(
   cb: Bool,
   a: Binding,
   b: Binding,
-  y: List<&2, Binding>
+  y: List<&2, Binding>,
+  ps: List<&2, Maybe<&2, Hashes.Hash>>
 ) -> {
   Canon.node(
     Binds.keep(ca, a, Binds.keep(cb, b, y)),
-    []
+    ps
   )
-    == Canon.node(Binds.keep(cb, b, Binds.keep(ca, a, y)), []): Maybe<&2, Hashes.Hash>
+    == Canon.node(Binds.keep(cb, b, Binds.keep(ca, a, y)), ps): Maybe<&2, Hashes.Hash>
 }:
   match ca cb:
     case True{} True{}:
@@ -11972,7 +11973,8 @@ def Canon.swap.go(
           Nat.is_eq(z, Key.nibble(Binding.key(b), d)),
           a,
           b,
-          y
+          y,
+          []
         )
       ): {
         Parts.put(

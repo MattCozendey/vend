@@ -998,6 +998,15 @@ def Rope.put.step_holds(
     Rope.put.top_holds(~S, ~fetch, d, hs, acc, s)
   )
 
+# the rope above no node, while f lasts, is the top branch of no node. Its
+# proof is the one place where the checker makes the hash of that branch
+def Rope.put.go_nil(
+  -p: Nat,
+  -d: Nat,
+  -acc: List<&2, List<&2, U32>>
+) -> {Rope.put.top(d, [], acc) == Rope.put.go(1n+p, d, [], acc): Put}:
+  {==}
+
 # a store that holds the nodes of a rope holds the nodes it was given
 def Rope.put.go_holds(
   ~S: Data,
@@ -1016,24 +1025,10 @@ def Rope.put.go_holds(
     case 1n+p Con{h, Nil{}}:
       e => e
     case 1n+p Nil{}:
-      Rope.put.step_holds(
-        ~S,
-        ~fetch,
-        p,
-        d,
-        [],
-        acc,
-        s,
-        Rope.put.go_holds(
-          ~S,
-          ~fetch,
-          p,
-          1n+d,
-          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, [])),
-          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, []), acc),
-          s
-        )
-      )
+      %Rope.put.go_nil(p, d, acc): {
+        Rope.holds(~S, ~fetch, s, Put.nodes(_)) == True{}: Bool
+      } -> {Rope.holds(~S, ~fetch, s, acc) == True{}: Bool}
+      Rope.put.top_holds(~S, ~fetch, d, [], acc, s)
     case 1n+p Con{h, Con{h2, t}}:
       Rope.put.step_holds(
         ~S,
@@ -1236,37 +1231,10 @@ def Rope.put.go_reads(
     case 1n+p Con{h, Nil{}}:
       e => pre
     case 1n+p Nil{}:
-      Rope.put.step_reads(
-        ~S,
-        ~fetch,
-        p,
-        d,
-        [],
-        acc,
-        s,
-        x,
-        pre,
-        Rope.put.go_holds(
-          ~S,
-          ~fetch,
-          p,
-          1n+d,
-          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, [])),
-          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, []), acc),
-          s
-        ),
-        pre2 => Rope.put.go_reads(
-          ~S,
-          ~fetch,
-          p,
-          1n+d,
-          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, [])),
-          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, []), acc),
-          s,
-          x,
-          pre2
-        )
-      )
+      %Rope.put.go_nil(p, d, acc): {
+        Rope.holds(~S, ~fetch, s, Put.nodes(_)) == True{}: Bool
+      } -> {Rope.read(~S, ~fetch, s, Put.root(_)) == Some{x}: Maybe<&2, List<&2, U32>>}
+      Rope.put.top_reads(~S, ~fetch, d, [], acc, s, x, pre)
     case 1n+p Con{h, Con{h2, t}}:
       Rope.put.step_reads(
         ~S,
