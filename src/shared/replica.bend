@@ -3530,27 +3530,6 @@ def Node.consent(
 ) -> Node<Machine.Q(mach)>:
   Consent.at(~mach, ~kern, n, s, i, Node.chain_of(~mach, s, i))
 
-# the hash of the node that the look l lacks, if it lacks one
-def Look.lack(l: Trees.Look) -> Maybe<&2, Hashes.Hash>:
-  match l:
-    case Trees.Look.Missing{x}:
-      Some{x}
-    case Trees.Look.Found{v}:
-      None{}
-    case Trees.Look.Absent{}:
-      None{}
-
-# the hash of the node that a read of the key k of the tree whose root is h
-# lacks in s, if it lacks one: what the node asks another node for. A node
-# keeps the part of a store that it uses, and fetches the rest on demand
-def Node.lacks(
-  ~mach: Machine(),
-  s: Node<Machine.Q(mach)>,
-  h: Maybe<&2, Hashes.Hash>,
-  k: List<&2, U32>
-) -> Maybe<&2, Hashes.Hash>:
-  Look.lack(Node.look(~mach, s, h, k))
-
 # l with the data m, if any
 def Serve.put(
   ~mach: Machine(),

@@ -413,18 +413,6 @@ def Sym.list(s: String) -> List<&2, Sym>:
 def Glob.read(s: String) -> Maybe<&2, Glob>:
   Glob.read.syms(Sym.list(s))
 
-# the rule that syms spell: a leading `!` excludes
-def Rule.read.syms(+syms: List<&2, Sym>) -> Maybe<&2, Rule>:
-  match syms:
-    case Con{SBang{}, t}:
-      Maybe.map(&2, Glob, Rule, g => Exclude{g}, Glob.read.syms(t))
-    case _:
-      Maybe.map(&2, Glob, Rule, g => Include{g}, Glob.read.syms(syms))
-
-# the rule that line s spells, or None for bad text
-def Rule.read(s: String) -> Maybe<&2, Rule>:
-  Rule.read.syms(Sym.list(s))
-
 # text that spells g
 law Glob.show:
   for g: Glob
