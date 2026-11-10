@@ -3392,3 +3392,68 @@ def Reach.all_in(gt, succ, nodes, g, x, m):
   )({==})
 
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# Graphs by key
+# -------------
+# A graph whose nodes are trie keys: the successors of each node that has
+# some, and those nodes. A search of it is the fast one (Reach.all).
+
+# a graph: the successors of each node, and the nodes that have some
+type Graph is Data:
+  Graph{edges: Tries.Trie<List<&2, List<&2, Bool>>>, nodes: List<&2, List<&2, Bool>>}
+
+# a graph with no node
+def Graph.new() -> Graph:
+  Graph{Tries.Trie.new(List<&2, List<&2, Bool>>), []}
+
+# the successors of the node k in g
+def Graph.succ(g: Graph, k: List<&2, Bool>) -> List<&2, List<&2, Bool>>:
+  match g:
+    case Graph{e, ns}:
+      Maybe.default(&2, List<&2, List<&2, Bool>>, Tries.Trie.get(List<&2, List<&2, Bool>>, e, k), [])
+
+# the nodes of g that have successors
+def Graph.nodes(g: Graph) -> List<&2, List<&2, Bool>>:
+  match g:
+    case Graph{e, ns}:
+      ns
+
+# Graph.link once the successors m of the node k are known
+def Graph.link.at(
+  e: Tries.Trie<List<&2, List<&2, Bool>>>,
+  ns: List<&2, List<&2, Bool>>,
+  +k: List<&2, Bool>,
+  t: List<&2, Bool>,
+  m: Maybe<&2, List<&2, List<&2, Bool>>>
+) -> Graph:
+  match m:
+    case None{}:
+      Graph{Tries.Trie.set(List<&2, List<&2, Bool>>, e, k, [t]), k <> ns}
+    case Some{ts}:
+      Graph{Tries.Trie.set(List<&2, List<&2, Bool>>, e, k, t <> ts), ns}
+
+# g with the node t as one more successor of the node k
+def Graph.link(g: Graph, +k: List<&2, Bool>, t: List<&2, Bool>) -> Graph:
+  match g:
+    case Graph{+e, ns}:
+      Graph.link.at(e, ns, k, t, Tries.Trie.get(List<&2, List<&2, Bool>>, e, k))
+
+# g with each node of ts as one more successor of the node k
+def Graph.links(ts: List<&2, List<&2, Bool>>, +k: List<&2, Bool>, g: Graph) -> Graph:
+  match ts:
+    case Nil{}:
+      g
+    case Con{t, r}:
+      Graph.links(r, k, Graph.link(g, k, t))
+
+# g with the node t as one more successor of each node of ks
+def Graph.back(ks: List<&2, List<&2, Bool>>, +t: List<&2, Bool>, g: Graph) -> Graph:
+  match ks:
+    case Nil{}:
+      g
+    case Con{k, r}:
+      Graph.back(r, t, Graph.link(g, k, t))
+
+# every node that a search of g finds from the node x, at any depth
+def Graph.reach(+g: Graph, x: List<&2, Bool>) -> Tries.Trie<Unit>:
+  Reach.all(~Graph, ~Graph.succ, ~Graph.nodes, g, x)

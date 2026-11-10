@@ -10,6 +10,7 @@ import ../../shared/shared/shared/shared/trie.bend as Tries
 import ../../shared/shared/shared/text.bend as Texts
 import ../shared/requests.bend as Requests
 import ../shared/shared/resources.bend as Resources
+import ../../shared/shared/shared/reach.bend as Reaches
 
 # The pure core of a Vend Node (README): what it holds, what it answers, and
 # the laws about both. transport/spec.bend carries it over IO.
@@ -283,9 +284,13 @@ type BranchEntry is Data:
   BranchEntry{branch: Branch, owners: List<&2, String>, head: Ledgers.Id}
 
 # the resources of a branch, each with what it imports, read once: the graph
-# of its imports
+# of its imports, and the same graph turned round (who imports each)
 type Uses is Data:
-  Uses{imports: Tries.Trie<List<&2, Resources.Name>>, names: List<&2, Resources.Name>}
+  Uses{
+    imports: Tries.Trie<List<&2, Resources.Name>>,
+    names: List<&2, Resources.Name>,
+    users: Reaches.Graph
+  }
 
 # a change elsewhere that touches what a branch uses: the version wrote the
 # resource changed, and the resource used of the branch is that resource or
@@ -293,10 +298,17 @@ type Uses is Data:
 type Touch is Data:
   Touch{version: Ledgers.Id, changed: Resources.Name, branch: Branch, used: Resources.Name}
 
-# what the checks of touches on one branch read of s once: the branch, and
-# its imports
+# what the checks of touches on one branch read of s once: the branch, its
+# imports, the versions of other branches that it lacks, and, for each
+# resource that one of them wrote, the resources that use it at any depth
 type Seen is Data:
-  Seen{state: Replicas.Node<Requests.Ask>, branch: Branch, uses: Uses}
+  Seen{
+    state: Replicas.Node<Requests.Ask>,
+    branch: Branch,
+    uses: Uses,
+    lacked: List<&2, Ledgers.Id>,
+    used: Tries.Trie<Tries.Trie<Unit>>
+  }
 
 # what the checks on the branch b read of s
 law Seen.of:

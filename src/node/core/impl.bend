@@ -530,23 +530,48 @@ def Group.all(g: Groups) -> List<&2, Requests.Member>:
     case Groups{s, h}:
       Group.of.names(Group.names(s, h))
 
-# m is a member of the group g of the store tree h, or of a group inside g
-def Group.is_inside(
-  s: Replicas.Node<Requests.Ask>,
-  h: Maybe<&2, Hashes.Hash>,
-  m: Requests.Member,
-  g: String
-) -> Bool:
-  Reaches.Reach.in(
-    ~Requests.Member,
-    ~Groups,
-    ~Member.is_eq,
-    ~Group.succ,
-    ~Group.all,
-    Groups{s, h},
-    Requests.Member.Group{g},
-    m
-  )
+# the key of the member m: a node and a group of one name have two keys
+def Member.key(m: Requests.Member) -> List<&2, Bool>:
+  match m:
+    case Requests.Member.Node{n}:
+      False{} <> Tries.Trie.text(n)
+    case Requests.Member.Group{g}:
+      True{} <> Tries.Trie.text(g)
+
+# the keys of the members ms
+def Member.keys(ms: List<&2, Requests.Member>) -> List<&2, List<&2, Bool>>:
+  match ms:
+    case Nil{}:
+      []
+    case Con{m, r}:
+      Member.key(m) <> Member.keys(r)
+
+# gr with the members of each group of ns, in the store tree whose root is h
+def Group.graph.go(
+  +s: Replicas.Node<Requests.Ask>,
+  +h: Maybe<&2, Hashes.Hash>,
+  ns: List<&2, String>,
+  gr: Reaches.Graph
+) -> Reaches.Graph:
+  match ns:
+    case Nil{}:
+      gr
+    case Con{+x, r}:
+      Group.graph.go(
+        s,
+        h,
+        r,
+        Reaches.Graph.links(
+          Member.keys(Maybe.default(&2, List<&2, Requests.Member>, Members.in(s, h, x), [])),
+          Member.key(Requests.Member.Group{x}),
+          gr
+        )
+      )
+
+# the groups of the store tree whose root is h, as a graph: each group, with
+# its members
+def Group.graph(+s: Replicas.Node<Requests.Ask>, +h: Maybe<&2, Hashes.Hash>) -> Reaches.Graph:
+  Group.graph.go(s, h, Group.names(s, h), Reaches.Graph.new())
 
 # the nodes among the members ms
 def Group.nodes.of(ms: List<&2, Requests.Member>) -> List<&2, String>:
@@ -570,13 +595,8 @@ def Group.named.all(+g: Groups, gs: List<&2, Requests.Member>) -> List<&2, Strin
 def Group.named(g: Groups, gs: List<&2, Requests.Member>) -> List<&2, String>:
   Tries.Trie.unique(~String, ~Tries.Trie.text, Group.named.all(g, gs), Tries.Trie.new(Unit))
 
-# the nodes of ns that are inside the group g of the store tree h
-def Group.inside(
-  +s: Replicas.Node<Requests.Ask>,
-  +h: Maybe<&2, Hashes.Hash>,
-  ns: List<&2, String>,
-  +g: String
-) -> List<&2, String>:
+# the nodes of ns whose keys in holds
+def Group.inside(ns: List<&2, String>, +in: Tries.Trie<Unit>) -> List<&2, String>:
   match ns:
     case Nil{}:
       []
@@ -584,39 +604,31 @@ def Group.inside(
       List.filter.put(
         String,
         n,
-        Group.inside(s, h, rest, g),
-        Group.is_inside(s, h, Requests.Member.Node{n}, g)
+        Group.inside(rest, in),
+        Tries.Trie.has(Unit, in, Member.key(Requests.Member.Node{n}))
       )
 
 def Spec.Group.nodes(s, h, g):
   +gs = {Groups{s, h}: Groups}
-  Group.inside(s, h, Group.named(gs, Group.all(gs)), g)
+  Group.inside(
+    Group.named(gs, Group.all(gs)),
+    Reaches.Graph.reach(Group.graph(s, h), Member.key(Requests.Member.Group{g}))
+  )
 
-# the member m of a new set of the group g makes g contain itself
-def Group.loops(
-  s: Replicas.Node<Requests.Ask>,
-  h: Maybe<&2, Hashes.Hash>,
-  +g: String,
-  m: Requests.Member
-) -> Bool:
-  match m:
-    case Requests.Member.Node{n}:
-      False{}
-    case Requests.Member.Group{+x}:
-      List.any.if(u => Group.is_inside(s, h, Requests.Member.Group{g}, x), String.eq(x, g))
-
-# some member of ms makes the group g of the store tree h contain itself
+# some member of ms makes the group g of the store tree h contain itself: g
+# is one of them, or is inside one. One search finds it, from a node whose
+# successors are the members (the empty key: no member has it)
 def Group.loops.any(
   +s: Replicas.Node<Requests.Ask>,
   +h: Maybe<&2, Hashes.Hash>,
-  +g: String,
+  g: String,
   ms: List<&2, Requests.Member>
 ) -> Bool:
-  match ms:
-    case Nil{}:
-      False{}
-    case Con{m, rest}:
-      List.any.if(u => Group.loops.any(s, h, g, rest), Group.loops(s, h, g, m))
+  Tries.Trie.has(
+    Unit,
+    Reaches.Graph.reach(Reaches.Graph.links(Member.keys(ms), [], Group.graph(s, h)), []),
+    Member.key(Requests.Member.Group{g})
+  )
 
 # Judging
 # -------
@@ -2295,65 +2307,61 @@ def Uses.targets(
     n
   )
 
-# t with what each resource of ns imports at the version h of s
+# the keys of the resources ns
+def Name.keys(ns: List<&2, Resources.Name>) -> List<&2, List<&2, Bool>>:
+  match ns:
+    case Nil{}:
+      []
+    case Con{n, r}:
+      Name.key(n) <> Name.keys(r)
+
+# the graph of the resources all: t and gr, with what each resource of ns
+# imports at the version h of s, and with it as a user of each
 def Uses.read(
   +s: Replicas.Node<Requests.Ask>,
   +h: Maybe<&2, Ledgers.Id>,
   ns: List<&2, Resources.Name>,
-  t: Tries.Trie<List<&2, Resources.Name>>
-) -> Tries.Trie<List<&2, Resources.Name>>:
+  all: List<&2, Resources.Name>,
+  t: Tries.Trie<List<&2, Resources.Name>>,
+  gr: Reaches.Graph
+) -> Spec.Uses:
   match ns:
     case Nil{}:
-      t
+      Spec.Uses{t, all, gr}
     case Con{+n, r}:
+      +ts = Uses.targets(s, h, n)
       Uses.read(
         s,
         h,
         r,
-        Tries.Trie.set(List<&2, Resources.Name>, t, Name.key(n), Uses.targets(s, h, n))
+        all,
+        Tries.Trie.set(List<&2, Resources.Name>, t, Name.key(n), ts),
+        Reaches.Graph.back(Name.keys(ts), Name.key(n), gr)
       )
 
 # the graph of the imports of the branch b, at its head
 def Uses.of(+s: Replicas.Node<Requests.Ask>, b: Spec.Branch) -> Spec.Uses:
   +h = Branch.head(s, b)
   +ns = Res.names(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, h))
-  Spec.Uses{Uses.read(s, h, ns, Tries.Trie.new(List<&2, Resources.Name>)), ns}
+  Uses.read(s, h, ns, ns, Tries.Trie.new(List<&2, Resources.Name>), Reaches.Graph.new())
 
 # what the resources of g import
 def Uses.imports(g: Spec.Uses) -> Tries.Trie<List<&2, Resources.Name>>:
   match g:
-    case Spec.Uses{t, ns}:
+    case Spec.Uses{t, ns, gr}:
       t
 
 # the resources of g
 def Uses.nodes(g: Spec.Uses) -> List<&2, Resources.Name>:
   match g:
-    case Spec.Uses{t, ns}:
+    case Spec.Uses{t, ns, gr}:
       ns
 
-# what n imports in g, when it is a resource of g
-def Uses.succ(g: Spec.Uses, n: Resources.Name) -> List<&2, Resources.Name>:
+# who imports each resource of g
+def Uses.users(g: Spec.Uses) -> Reaches.Graph:
   match g:
-    case Spec.Uses{t, ns}:
-      Maybe.default(
-        &2,
-        List<&2, Resources.Name>,
-        Tries.Trie.get(List<&2, Resources.Name>, t, Name.key(n)),
-        []
-      )
-
-# u uses c in g: c is reached from u through the imports, at any depth
-def Uses.reach(g: Spec.Uses, u: Resources.Name, c: Resources.Name) -> Bool:
-  Reaches.Reach.in(
-    ~Resources.Name,
-    ~Spec.Uses,
-    ~Resources.Name.is_eq,
-    ~Uses.succ,
-    ~Uses.nodes,
-    g,
-    u,
-    c
-  )
+    case Spec.Uses{t, ns, gr}:
+      gr
 
 # the resource that the request r wrote: of a write or a resolve
 def Wrote.of(r: Maybe<&2, Ledgers.Asked<Requests.Ask>>) -> Maybe<&2, Resources.Name>:
@@ -2463,17 +2471,70 @@ def Branch.key(b: Spec.Branch) -> List<&2, Bool>:
     case Spec.Branch{r, n}:
       List.append(&2, Bool, Ledgers.Id.key(r), Tries.Trie.text(n))
 
+# used, with the resources that use the resource m, if any, at any depth: one
+# search, once for each resource
+def Used.put(
+  +us: Spec.Uses,
+  m: Maybe<&2, Resources.Name>,
+  +used: Tries.Trie<Tries.Trie<Unit>>
+) -> Tries.Trie<Tries.Trie<Unit>>:
+  match m:
+    case None{}:
+      used
+    case Some{+c}:
+      Shared.Bool.when(
+        Tries.Trie<Tries.Trie<Unit>>,
+        Tries.Trie.has(Tries.Trie<Unit>, used, Name.key(c)),
+        w => used,
+        w => Tries.Trie.set(
+          Tries.Trie<Unit>,
+          used,
+          Name.key(c),
+          Reaches.Graph.reach(Uses.users(us), Name.key(c))
+        )
+      )
+
+# used, with the users of each resource that a version of vs wrote
+def Used.of(
+  +s: Replicas.Node<Requests.Ask>,
+  +us: Spec.Uses,
+  vs: List<&2, Ledgers.Id>,
+  used: Tries.Trie<Tries.Trie<Unit>>
+) -> Tries.Trie<Tries.Trie<Unit>>:
+  match vs:
+    case Nil{}:
+      used
+    case Con{v, r}:
+      Used.of(s, us, r, Used.put(us, Node.wrote(s, v), used))
+
+# the resource u uses the resource c, by used
+def Used.has(used: Tries.Trie<Tries.Trie<Unit>>, c: Resources.Name, u: Resources.Name) -> Bool:
+  Maybe.default(
+    &2,
+    Bool,
+    Maybe.bind(
+      &2,
+      Tries.Trie<Unit>,
+      Bool,
+      Tries.Trie.get(Tries.Trie<Unit>, used, Name.key(c)),
+      r => Some{Tries.Trie.has(Unit, r, Name.key(u))}
+    ),
+    False{}
+  )
+
 def Spec.Seen.of(s, b):
-  Spec.Seen{s, b, Uses.of(s, b)}
+  +us = Uses.of(s, b)
+  +ls = Branch.lacked(s, b)
+  Spec.Seen{s, b, us, ls, Used.of(s, us, ls, Tries.Trie.new(Tries.Trie<Unit>))}
 
 def Spec.Touch.holds(g, t):
   match g t:
-    case Spec.Seen{+s, gb, +us} Spec.Touch{+v, +c, b, +u}:
+    case Spec.Seen{+s, gb, +us, ls, used} Spec.Touch{+v, +c, b, +u}:
       List.all.if(
         w => List.all.if(
           w => List.all.if(
             w => List.all.if(
-              w => List.any.if(w => Uses.reach(us, u, c), Resources.Name.is_eq(u, c)),
+              w => List.any.if(w => Used.has(used, c, u), Resources.Name.is_eq(u, c)),
               Tries.Trie.has(List<&2, Resources.Name>, Uses.imports(us), Name.key(u))
             ),
             Shared.Maybe.is_eq(~Resources.Name, ~Resources.Name.is_eq, Node.wrote(s, v), Some{c})
@@ -2520,22 +2581,24 @@ def Touch.of(
 # the touches of the version v on the branch of g
 def Affects.at(g: Spec.Seen, v: Ledgers.Id) -> List<&2, Spec.Touch>:
   match g:
-    case Spec.Seen{s, b, us}:
+    case Spec.Seen{s, b, us, ls, used}:
       +v = v
       Touch.of(Node.wrote(s, v), v, b, Uses.nodes(us))
 
-# the touches that may hold of the branch b, of g: those of the versions of
-# the other branches that b did not take in
-def Affects.cands(
-  s: Replicas.Node<Requests.Ask>,
-  b: Spec.Branch,
-  g: Spec.Seen
-) -> List<&2, Spec.Touch>:
-  Shared.List.flat(~Ledgers.Id, ~Spec.Touch, ~Spec.Seen, ~Affects.at, Branch.lacked(s, b), g)
+# the versions of other branches that the branch of g lacks
+def Seen.lacked(g: Spec.Seen) -> List<&2, Ledgers.Id>:
+  match g:
+    case Spec.Seen{s, b, us, ls, used}:
+      ls
+
+# the touches that may hold of the branch of g: those of the versions of the
+# other branches that it did not take in
+def Affects.cands(+g: Spec.Seen) -> List<&2, Spec.Touch>:
+  Shared.List.flat(~Ledgers.Id, ~Spec.Touch, ~Spec.Seen, ~Affects.at, Seen.lacked(g), g)
 
 def Spec.Node.affects(s, b):
   +g = Spec.Seen.of(s, b)
-  Shared.List.keep(~Spec.Touch, ~Spec.Seen, ~Spec.Touch.holds, Affects.cands(s, b, g), g)
+  Shared.List.keep(~Spec.Touch, ~Spec.Seen, ~Spec.Touch.holds, Affects.cands(g), g)
 
 # the checks of one branch, and the version of a point
 type Impact is Data:
@@ -2545,9 +2608,9 @@ type Impact is Data:
 # holds
 def Impact.keeps(g: Impact, t: Spec.Touch) -> Bool:
   match g t:
-    case Impact{Spec.Seen{+s, gb, us}, +m} Spec.Touch{+v, c, b, u}:
+    case Impact{Spec.Seen{+s, gb, us, ls, used}, +m} Spec.Touch{+v, c, b, u}:
       List.all.if(
-        w => Spec.Touch.holds(Spec.Seen{s, gb, us}, Spec.Touch{v, c, b, u}),
+        w => Spec.Touch.holds(Spec.Seen{s, gb, us, ls, used}, Spec.Touch{v, c, b, u}),
         List.all.if(
           w => Node.has(s, Maybe.default(&2, Ledgers.Id, m, v), v),
           Maybe.is_some(&2, Ledgers.Id, m)
@@ -2568,7 +2631,7 @@ def Impact.of(
       List.append(
         &2,
         Spec.Touch,
-        Shared.List.keep(~Spec.Touch, ~Impact, ~Impact.keeps, Affects.cands(s, b, g), Impact{g, m}),
+        Shared.List.keep(~Spec.Touch, ~Impact, ~Impact.keeps, Affects.cands(g), Impact{g, m}),
         Impact.of(s, m, r)
       )
 
@@ -6105,7 +6168,7 @@ def Spec.Node.read_draft(s, w, r, b, n, c):
 
 def Spec.Node.affects_used(s, b):
   +g = Spec.Seen.of(s, b)
-  Shared.List.keep_holds(~Spec.Touch, ~Spec.Seen, ~Spec.Touch.holds, Affects.cands(s, b, g), g)
+  Shared.List.keep_holds(~Spec.Touch, ~Spec.Seen, ~Spec.Touch.holds, Affects.cands(g), g)
 
 # the answer b may come after the answer a, if there is an a
 def Follows.opt(ma: Maybe<&2, Spec.Answer>, mb: Maybe<&2, Spec.Answer>) -> Bool:
