@@ -4378,6 +4378,20 @@ law Node.sync_grows:
   for +t: Ledgers.State(Ask)
   {Node.grows(s, Node.sync(n, s, t)) == True{}: Bool}
 
+# the head x after the step m, when the step moves it (none: no step)
+def Head.moved(+x: Head, m: Maybe<&2, Ledgers.Vote>) -> Maybe<&2, Head>:
+  +y = Head.step(x, m)
+  Shared.Maybe.when(Head, Bool.not(Heads.level(Some{x}, Some{y})), u => Some{y})
+
+# the head of the line c after k decided steps from the head h, by the ledger
+# of s alone (none: fewer steps are decided). A law's measure: no node runs it
+def Line.at(k: Nat, +s: State(), +c: Ledgers.Chain, h: Head) -> Maybe<&2, Head>:
+  match k:
+    case 0n:
+      Some{h}
+    case 1n+p:
+      Maybe.bind(&2, Head, Head, Line.at(p, s, c, h), +x => Head.moved(x, Advance.vote(s, c, x)))
+
 # what a node does next: it takes in a request, or what another node sent,
 # or it does a sync
 type Deed is Data:
@@ -4602,6 +4616,49 @@ law Seal.fits_own:
     Seal.fits(Chained{n, last, Seals.Seal.public(seed), f}, Ledgers.Ballot.make(seed, x, last, k))
       == True{}: Bool
   }
+
+# the decided steps of a line stay as a node grows: a head that is k decided
+# steps from a head h is so in any node that keeps every cell
+law Line.at_grows:
+  for +k: Nat
+  for +a: State()
+  for +u: State()
+  for +c: Ledgers.Chain
+  for +h: Head
+  for +x: Head
+  {Node.grows(a, u) == True{}: Bool}
+    -> {Line.at(k, a, c, h) == Some{x}: Maybe<&2, Head>}
+    -> {Line.at(k, u, c, h) == Some{x}: Maybe<&2, Head>}
+
+# a head moves along the decided steps: when the head of a line is k decided
+# steps from h and the node moves it, it is one more decided step from h
+law Node.advance_at:
+  for +k: Nat
+  for +s: State()
+  for +c: Ledgers.Chain
+  for +h: Head
+  for +x: Head
+  {Node.head_of(s, c) == Some{x}: Maybe<&2, Head>}
+    -> {Line.at(k, s, c, h) == Some{x}: Maybe<&2, Head>}
+    -> {Heads.level(Some{x}, Node.head_of(Node.advance(s, c), c)) == False{}: Bool}
+    -> {Line.at(1n+k, Node.advance(s, c), c, h) == Node.head_of(Node.advance(s, c), c): Maybe<&2, Head>}
+
+# so two nodes whose ledgers do not clash, the same number of decided steps
+# from the same first head of a line, are at the same head: one history
+law Line.at_agrees:
+  for +k: Nat
+  for +a: State()
+  for +b: State()
+  for +u: State()
+  for +c: Ledgers.Chain
+  for +h: Head
+  for +x: Head
+  for +y: Head
+  {Node.grows(a, u) == True{}: Bool}
+    -> {Node.grows(b, u) == True{}: Bool}
+    -> {Line.at(k, a, c, h) == Some{x}: Maybe<&2, Head>}
+    -> {Line.at(k, b, c, h) == Some{y}: Maybe<&2, Head>}
+    -> {x == y: Head}
 
 # a change counts once, however often and wherever it is sent: a node that
 # took a request in changes nothing when any node sends its ID again

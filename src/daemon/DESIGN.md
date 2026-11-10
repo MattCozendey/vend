@@ -79,7 +79,10 @@ README claim, then the law.
   hash-based signatures; it is not a law.
 - A majority decides, in sequence: `Node.advance_decided` (a head moves only to the tip that the
   owners in its tip decided next), `Node.advance_agrees` (two nodes at the same head, whose
-  ledgers do not clash, move to the same head).
+  ledgers do not clash, move to the same head); over a history: `Line.at_grows` (the decided
+  steps of a line stay as a node grows), `Node.advance_at` (a move adds one decided step),
+  `Line.at_agrees` (the same number of decided steps from the same first head give the same
+  head on any two nodes whose ledgers do not clash).
 - A writer's read shows its own pending write: `Node.draft_some`.
 - A taken write reads back: `Judge.write_reads`.
 - A merge never loses a change made on only one side: `Pick.merge_theirs`, `Pick.merge_ours`.
@@ -90,9 +93,11 @@ README claim, then the law.
 
 ## 4. Open
 
-- **Agreement over a whole history.** `Node.advance_agrees` is one step. The induction over
-  heights (same first tip, then step by step) is not a law yet. It needs an invariant of a node:
-  each head is the end of the chain of decided steps of its ledger.
+- **Every head is on the decided chain.** `Line.at_grows`, `Node.advance_at` and
+  `Line.at_agrees` give one history for nodes that start a line from the same first head. Not a
+  law yet: that every head of a node is some number of decided steps from the first head of its
+  line (an invariant kept by each operation), and that two nodes give a branch the same first
+  head.
 - **Missing is not absent, the rest.** The write, resolve, merge and Own judges wait. Still to
   do: the version vector, `Tree.list` and `Tree.diff` (they walk and give no sign of a node that
   they lack), so a merge or a move can still act on a part of a tree. Then: a move records a
