@@ -1,4 +1,5 @@
 import Base
+import ../shared/shared/regex.bend as Regex
 
 # A path is a String: segments joined by '/'. It has no leading or trailing
 # '/', and no empty, "." or ".." segment. A segment has no NUL and no '\'.
@@ -21,8 +22,7 @@ def is_segment(s: String) -> Bool:
 def is_path(s: String) -> Bool:
   List.all(~&2, ~String, ~is_segment, String.split(s, '/'))
 
-# A glob, as a tree. A parser turns glob text into one; Void and Eps let
-# matching state what is left of a glob after some characters.
+# A glob, as a tree. A parser turns glob text into one.
 type Glob is Data:
   Void{}
   Eps{}
@@ -39,75 +39,59 @@ type Glob is Data:
 # in cs, or not in cs. None of these five matches '/'. Deep (`**`): any
 # text, '/' included. Cat: a, then b. Alt (`{a,b}`): a or b.
 
-# Eps for True, Void for False
-def Glob.of_bool(b: Bool) -> Glob:
-  match b:
-    case False{}:
-      Void{}
-    case True{}:
-      Eps{}
-
-# g matches ""
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a glob tree is a few nodes, and a short-circuit match would need mutual recursion, which Bend refuses
-def Glob.is_nullable(g: Glob) -> Bool:
-  match g:
-    case Void{}:
-      False{}
-    case Eps{}:
-      True{}
-    case Lit{c}:
-      False{}
-    case Any{}:
-      False{}
-    case Star{}:
-      True{}
-    case Class{neg, cs}:
-      False{}
-    case Deep{}:
-      True{}
-    case Cat{a, b}:
-      Bool.and(Glob.is_nullable(a), Glob.is_nullable(b))
-    case Alt{a, b}:
-      Bool.or(Glob.is_nullable(a), Glob.is_nullable(b))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
 # c is not '/'
 def is_inner(c: Char) -> Bool:
   Bool.not(Char.is_eq(c, '/'))
 
-# what g must still match after it reads c
-def Glob.step(g: Glob, +c: Char) -> Glob:
+# Matching is that of regular expressions (regex.bend): a glob is an
+# expression over characters, whose atoms are the three forms that read one
+# character.
+
+# What reads one character: the character c, any character but '/', or a
+# class (a character in cs, or one not in cs when neg; never '/').
+type Atom is Data:
+  ALit{c: Char}
+  AAny{}
+  AClass{neg: Bool, cs: List<&2, Char>}
+
+# t accepts c
+def Atom.hit(t: Atom, c: Char) -> Bool:
+  match t:
+    case ALit{x}:
+      Char.is_eq(x, c)
+    case AAny{}:
+      is_inner(c)
+    case AClass{neg, cs}:
+      +c = c
+      List.all.if(u => Bool.xor(neg, List.contains(~Char, ~Char.is_eq, cs, c)), is_inner(c))
+
+# the regular expression of g
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a glob tree is a few nodes, where a fork costs more than it saves
+def Glob.re(g: Glob) -> Regex.Re<Atom>:
   match g:
     case Void{}:
-      Void{}
+      Regex.Void{}
     case Eps{}:
-      Void{}
-    case Lit{x}:
-      Glob.of_bool(Char.is_eq(x, c))
+      Regex.Eps{}
+    case Lit{c}:
+      Regex.One{ALit{c}}
     case Any{}:
-      Glob.of_bool(is_inner(c))
+      Regex.One{AAny{}}
     case Star{}:
-      Cat{Glob.of_bool(is_inner(c)), Star{}}
+      Regex.Star{Regex.One{AAny{}}}
     case Class{neg, cs}:
-      hit = Bool.xor(neg, List.contains(~Char, ~Char.is_eq, cs, c))
-      Glob.of_bool(Bool.and(is_inner(c), hit))
+      Regex.One{AClass{neg, cs}}
     case Deep{}:
-      Deep{}
-    # bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a glob tree is a few nodes, where a fork costs more than it saves
-    case Cat{+a, +b}:
-      n = Glob.is_nullable(a)
-      Alt{Cat{Glob.step(a, c), b}, Cat{Glob.of_bool(n), Glob.step(b, c)}}
+      Regex.All{}
+    case Cat{a, b}:
+      Regex.Cat{Glob.re(a), Glob.re(b)}
     case Alt{a, b}:
-      Alt{Glob.step(a, c), Glob.step(b, c)}
-    # bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
+      Regex.Alt{Glob.re(a), Glob.re(b)}
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
 # g matches all of s
 def Glob.matches(s: String, g: Glob) -> Bool:
-  match s:
-    case SNil{}:
-      Glob.is_nullable(g)
-    case SCon{c, t}:
-      Glob.matches(t, Glob.step(g, c))
+  Regex.Re.matches(~Char, ~Atom, ~Atom.hit, String.to_list(s), Glob.re(g))
 
 # One line of a selector: `g` includes, `!g` excludes.
 type Rule is Data:
