@@ -830,7 +830,6 @@ def Kernel.change(
     case Tuple{m, c}:
       c
 
-
 # the run r of the line c, after the request i, which the node holds as a
 # (none: wait for the request)
 def Step.asked(
@@ -1651,3 +1650,1014 @@ def Plan.copy(
         u => Plan{qs, Plan.fit(~Kernel.machine(K), after, Step.run(~K, s, c, t, qs)), from},
         u => Plan{[], None{}, []}
       )
+
+# the line of the request i, when s holds it
+def Node.chain_of(~M: Machine(), s: Node<Machine.Q(M)>, +i: Ledgers.Id) -> Maybe<&2, Ledgers.Chain>:
+  Maybe.bind(
+    &2,
+    Ledgers.Asked<Machine.Q(M)>,
+    Ledgers.Chain,
+    Node.asked(~M, s, i),
+    a => Some{Arrival.chain(i, Machine.arrival(M)(Asked.ask(~M, a)))}
+  )
+
+# the round of the place w
+def Where.round(w: Ledgers.Where) -> Nat:
+  match w:
+    case Ledgers.Where{c, h, r}:
+      r
+
+# what the node p did at the place w, in the cell m of its vote
+def Cast.act.of(~M: Machine(), m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(M)>>>) -> Maybe<&2, Ledgers.Act>:
+  match m:
+    case Some{Cells.One{Ledgers.Entry.Vote{Ledgers.Ballot{Ledgers.Signed{w, n, a}, l}}}}:
+      Some{a}
+    case x:
+      None{}
+
+# the vote of the node p at the place w, with the nodes whose passes allow
+# it, if s holds it
+def Cast.act(~M: Machine(), s: Node<Machine.Q(M)>, w: Ledgers.Where, p: String) -> Maybe<&2, Ledgers.Act>:
+  Cast.act.of(~M, Ledgers.State.get(~Machine.Q(M), State.ledger(~M, s), Ledgers.Slot.vote(w, p)))
+
+# the nodes that the vote m names, if m is a vote
+def Act.from(m: Maybe<&2, Ledgers.Act>) -> List<&2, String>:
+  match m:
+    case Some{Ledgers.Act.Vote{v, from}}:
+      from
+    case x:
+      []
+
+# the nodes whose passes allow the vote of the node p at the place w, as the
+# vote names them
+def Cast.from(~M: Machine(), s: Node<Machine.Q(M)>, w: Ledgers.Where, p: String) -> List<&2, String>:
+  Act.from(Cast.act(~M, s, w, p))
+
+# the highest round, up to k, to which the node n passed at the height h of
+# the line c (0: it passed to none)
+def Round.mine(~M: Machine(), +n: String, +s: Node<Machine.Q(M)>, +c: Ledgers.Chain, +h: U32, k: Nat) -> Nat:
+  match k:
+    case 0n:
+      0n
+    case 1n+(+p):
+      Shared.Bool.when(
+        Nat,
+        Maybe.is_some(
+          &2,
+          Maybe<&2, Ledgers.Last>,
+          Ledgers.State.passed(~Machine.Q(M), State.ledger(~M, s), Ledgers.Where{c, h, 1n+p}, n)
+        ),
+        u => 1n+p,
+        u => Round.mine(~M, n, s, c, h, p)
+      )
+
+# the vote m of the round r, as a last vote, else what rest gives
+def Last.or(
+  r: Nat,
+  m: Maybe<&2, Ledgers.Vote>,
+  rest: Unit -> Maybe<&2, Ledgers.Last>
+) -> Maybe<&2, Ledgers.Last>:
+  match m:
+    case Some{v}:
+      Some{Ledgers.Last{r, v}}
+    case None{}:
+      rest(Unit{})
+
+# the last vote of the node n at the height h of the line c, in a round up to
+# k, if it cast one
+def Last.mine(
+  ~M: Machine(),
+  +n: String,
+  +s: Node<Machine.Q(M)>,
+  +c: Ledgers.Chain,
+  +h: U32,
+  k: Nat
+) -> Maybe<&2, Ledgers.Last>:
+  match k:
+    case 0n:
+      Last.or(0n, Cast.of(~M, s, Ledgers.Where{c, h, 0n}, n), u => None{})
+    case 1n+(+p):
+      Last.or(1n+p, Cast.of(~M, s, Ledgers.Where{c, h, 1n+p}, n), u => Last.mine(~M, n, s, c, h, p))
+
+# the last vote of the node n at the height h of the line c, in a round below
+# r, if it cast one
+def Last.below(
+  ~M: Machine(),
+  n: String,
+  s: Node<Machine.Q(M)>,
+  c: Ledgers.Chain,
+  h: U32,
+  r: Nat
+) -> Maybe<&2, Ledgers.Last>:
+  match r:
+    case 0n:
+      None{}
+    case 1n+p:
+      Last.mine(~M, n, s, c, h, p)
+
+# the nodes of os whose pass to the place w the node s holds
+def Passes.of(~M: Machine(), +s: Node<Machine.Q(M)>, +w: Ledgers.Where, os: List<&2, String>) -> List<&2, String>:
+  match os:
+    case Nil{}:
+      []
+    case Con{+o, r}:
+      List.filter.put(
+        String,
+        o,
+        Passes.of(~M, s, w, r),
+        Maybe.is_some(
+          &2,
+          Maybe<&2, Ledgers.Last>,
+          Ledgers.State.passed(~Machine.Q(M), State.ledger(~M, s), w, o)
+        )
+      )
+
+# the last vote of the higher round of a and b
+def Last.newer(a: Maybe<&2, Ledgers.Last>, b: Maybe<&2, Ledgers.Last>) -> Maybe<&2, Ledgers.Last>:
+  match a b:
+    case None{} y:
+      y
+    case Some{x} None{}:
+      Some{x}
+    case Some{Ledgers.Last{+r1, v1}} Some{Ledgers.Last{+r2, v2}}:
+      Shared.Bool.when(
+        Maybe<&2, Ledgers.Last>,
+        Nat.is_lt(r1, r2),
+        u => Some{Ledgers.Last{r2, v2}},
+        u => Some{Ledgers.Last{r1, v1}}
+      )
+
+# the last vote that a pass names, flattened
+def Passed.last(m: Maybe<&2, Maybe<&2, Ledgers.Last>>) -> Maybe<&2, Ledgers.Last>:
+  match m:
+    case Some{x}:
+      x
+    case None{}:
+      None{}
+
+# the last vote of the highest round that the passes of the nodes from to the
+# place w name, if any names one
+def Passes.last(
+  ~M: Machine(),
+  +s: Node<Machine.Q(M)>,
+  +w: Ledgers.Where,
+  from: List<&2, String>
+) -> Maybe<&2, Ledgers.Last>:
+  match from:
+    case Nil{}:
+      None{}
+    case Con{o, r}:
+      Last.newer(
+        Passed.last(Ledgers.State.passed(~Machine.Q(M), State.ledger(~M, s), w, o)),
+        Passes.last(~M, s, w, r)
+      )
+
+# the nodes from are a majority of the owners os
+def Owners.major(os: List<&2, String>, +from: List<&2, String>) -> Bool:
+  Nat.is_lt(
+    List.length(&2, String, os),
+    Nat.add(List.length(&2, String, from), List.length(&2, String, from))
+  )
+
+# the last vote m, if any, is for the step v
+def Last.is(m: Maybe<&2, Ledgers.Last>, v: Ledgers.Vote) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{Ledgers.Last{r, x}}:
+      Ledgers.Vote.is_eq(x, v)
+
+# the node s holds the pass to the place w of each of the nodes from
+def Passed.all(~M: Machine(), +s: Node<Machine.Q(M)>, +w: Ledgers.Where, from: List<&2, String>) -> Bool:
+  match from:
+    case Nil{}:
+      True{}
+    case Con{o, r}:
+      List.all.if(
+        u => Passed.all(~M, s, w, r),
+        Maybe.is_some(
+          &2,
+          Maybe<&2, Ledgers.Last>,
+          Ledgers.State.passed(~Machine.Q(M), State.ledger(~M, s), w, o)
+        )
+      )
+
+# the nodes from are some of the owners os, each once, in their order
+def Owners.sub(os: List<&2, String>, from: List<&2, String>) -> Bool:
+  match os from:
+    case Nil{} Nil{}:
+      True{}
+    case Nil{} Con{f, fs}:
+      False{}
+    case Con{o, r} Nil{}:
+      True{}
+    case Con{o, +r} Con{+f, +fs}:
+      Shared.Bool.when(Bool, String.eq(f, o), u => Owners.sub(r, fs), u => Owners.sub(r, f <> fs))
+
+# the passes of the nodes from allow a vote for the step v at the place w of
+# the owners os: in the first round, any step; later, the node holds the pass
+# to w of each of them, they are owners and a majority, and v is the last vote
+# of the highest round among them, if any
+def Vote.allowed(
+  ~M: Machine(),
+  +s: Node<Machine.Q(M)>,
+  +w: Ledgers.Where,
+  +os: List<&2, String>,
+  v: Ledgers.Vote,
+  +from: List<&2, String>
+) -> Bool:
+  List.any.if(
+    u => List.all.if(
+      u2 => List.all.if(
+        u3 => List.all.if(u4 => Last.is(Passes.last(~M, s, w, from), v), Owners.major(os, from)),
+        Owners.sub(os, from)
+      ),
+      Passed.all(~M, s, w, from)
+    ),
+    Nat.is_eq(Where.round(w), 0n)
+  )
+
+# the plan of the proposer of a later round at the place w, once the nodes
+# from that passed to it are known: none until they are a majority; then the
+# last vote of the highest round among them, else what waits at the proposer
+def Plan.later(
+  ~K: Kernel(),
+  s: Node<Machine.Q(Kernel.machine(K))>,
+  c: Ledgers.Chain,
+  w: Ledgers.Where,
+  t: Tip,
+  th: Maybe<&2, Hashes.Hash>,
+  os: List<&2, String>,
+  +from: List<&2, String>,
+  m: Maybe<&2, Ledgers.Last>
+) -> Plan<Machine.Q(Kernel.machine(K))>:
+  match m:
+    case None{}:
+      Shared.Bool.when(
+        Plan<Machine.Q(Kernel.machine(K))>,
+        Owners.major(os, from),
+        u => Plan.own(~K, s, c, t, from),
+        u => Plan{[], None{}, []}
+      )
+    case Some{Ledgers.Last{r, v}}:
+      Shared.Bool.when(
+        Plan<Machine.Q(Kernel.machine(K))>,
+        Owners.major(os, from),
+        u => Plan.copy(~K, s, c, t, th, Some{v}, from),
+        u => Plan{[], None{}, []}
+      )
+
+# the plan of the proposer at the place w
+def Plan.lead(
+  ~K: Kernel(),
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  +c: Ledgers.Chain,
+  +w: Ledgers.Where,
+  +t: Tip,
+  th: Maybe<&2, Hashes.Hash>,
+  +os: List<&2, String>
+) -> Plan<Machine.Q(Kernel.machine(K))>:
+  +from = Passes.of(~Kernel.machine(K), s, w, os)
+  Shared.Bool.when(
+    Plan<Machine.Q(Kernel.machine(K))>,
+    Nat.is_eq(Where.round(w), 0n),
+    u => Plan.own(~K, s, c, t, []),
+    u => Plan.later(~K, s, c, w, t, th, os, from, Passes.last(~Kernel.machine(K), s, w, from))
+  )
+
+# the plan of another owner at the place w, once what the proposer did there
+# is known (m): the proposer's step, when its passes allow it
+def Plan.follow(
+  ~K: Kernel(),
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  c: Ledgers.Chain,
+  w: Ledgers.Where,
+  t: Tip,
+  th: Maybe<&2, Hashes.Hash>,
+  os: List<&2, String>,
+  m: Maybe<&2, Ledgers.Act>
+) -> Plan<Machine.Q(Kernel.machine(K))>:
+  match m:
+    case Some{Ledgers.Act.Vote{+v, +from}}:
+      Shared.Bool.when(
+        Plan<Machine.Q(Kernel.machine(K))>,
+        Vote.allowed(~Kernel.machine(K), s, w, os, v, from),
+        u => Plan.copy(~K, s, c, t, th, Some{v}, from),
+        u => Plan{[], None{}, []}
+      )
+    case x:
+      Plan{[], None{}, []}
+
+# what the node n casts for at the place w of the line c, at the tip t of the
+# hash th, with the owners os, when it is turn's turn to propose
+def Plan.of(
+  ~K: Kernel(),
+  n: String,
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  +c: Ledgers.Chain,
+  +w: Ledgers.Where,
+  +t: Tip,
+  +th: Maybe<&2, Hashes.Hash>,
+  +os: List<&2, String>,
+  turn: Maybe<&2, String>
+) -> Plan<Machine.Q(Kernel.machine(K))>:
+  match turn:
+    case None{}:
+      Plan{[], None{}, []}
+    case Some{+p}:
+      Shared.Bool.when(
+        Plan<Machine.Q(Kernel.machine(K))>,
+        String.eq(p, n),
+        u => Plan.lead(~K, s, c, w, t, th, os),
+        u => Plan.follow(~K, s, c, w, t, th, os, Cast.act(~Kernel.machine(K), s, w, p))
+      )
+
+# s with the node n's pass to the place w, when n is one of the owners os and
+# did not pass to w: it names its last vote at the height, in a round below
+def Pass.to(~K: Kernel(), +n: String, +s: Node<Machine.Q(Kernel.machine(K))>, +w: Ledgers.Where, os: List<&2, String>) -> Node<Machine.Q(Kernel.machine(K))>:
+  match w:
+    case Ledgers.Where{+c, +h, +r}:
+      Shared.Bool.when(
+        Node<Machine.Q(Kernel.machine(K))>,
+        List.all.if(
+          u => Maybe.is_none(
+            &2,
+            Maybe<&2, Ledgers.Last>,
+            Ledgers.State.passed(~Machine.Q(Kernel.machine(K)), State.ledger(~Kernel.machine(K), s), Ledgers.Where{c, h, r}, n)
+          ),
+          List.contains(~String, ~String.eq, os, n)
+        ),
+        u => Cast.seal(~K, 
+          s,
+          Ledgers.Where{c, h, r},
+          n,
+          Ledgers.Act.Pass{Last.below(~Kernel.machine(K), n, s, c, h, r)},
+          Seal.chain(~K, s, Where.store(Ledgers.Where{c, h, r}), n)
+        ),
+        u => s
+      )
+
+# s, after the owner n joined the highest round of which it holds a ballot at
+# the height h of the line c: a node casts in the round that the others reached
+def Round.join(
+  ~K: Kernel(),
+  +n: String,
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  +c: Ledgers.Chain,
+  +h: U32,
+  os: List<&2, String>
+) -> Node<Machine.Q(Kernel.machine(K))>:
+  +top = Round.seen(~Kernel.machine(K), s, c, h)
+  Shared.Bool.when(
+    Node<Machine.Q(Kernel.machine(K))>,
+    Nat.is_lt(Round.mine(~Kernel.machine(K), n, s, c, h, top), top),
+    u => Pass.to(~K, n, s, Ledgers.Where{c, h, top}, os),
+    u => s
+  )
+
+# Node.cast in the round of the node n at the height next of the line c, at
+# the tip t of the hash th
+def Cast.round(
+  ~K: Kernel(),
+  +n: String,
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  +c: Ledgers.Chain,
+  +next: U32,
+  +th: Maybe<&2, Hashes.Hash>,
+  +t: Tip
+) -> Node<Machine.Q(Kernel.machine(K))>:
+  +os = Tip.owners(t)
+  +r = Round.mine(~Kernel.machine(K), n, s, c, next, Round.seen(~Kernel.machine(K), s, c, next))
+  +w = {Ledgers.Where{c, next, r}: Ledgers.Where}
+  +p = Plan.of(~K, n, s, c, w, t, th, os, Owners.turn(os, U32.add(next, U32.from_nat(r))))
+  Shared.Bool.when(
+    Node<Machine.Q(Kernel.machine(K))>,
+    Cast.may(~Kernel.machine(K), n, s, w, t, Plan.asks(~Kernel.machine(K), p)),
+    u => Cast.put(~K, 
+      n,
+      w,
+      th,
+      Plan.asks(~Kernel.machine(K), p),
+      Plan.from(~Kernel.machine(K), p),
+      Plan.run(~Kernel.machine(K), p),
+      s
+    ),
+    u => s
+  )
+
+# Node.cast at the head h of the line c, whose tip is m
+def Cast.at(
+  ~K: Kernel(),
+  +n: String,
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  +c: Ledgers.Chain,
+  h: Head,
+  m: Maybe<&2, Tip>
+) -> Node<Machine.Q(Kernel.machine(K))>:
+  match h m:
+    case Head{r, b, +next, th} Some{+t}:
+      Cast.round(~K, n, Round.join(~K, n, s, c, next, Tip.owners(t)), c, next, th, t)
+    case x y:
+      s
+
+# Node.pass at the head h of the line c, whose tip is m
+def Pass.at(
+  ~K: Kernel(),
+  +n: String,
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  +c: Ledgers.Chain,
+  h: Head,
+  m: Maybe<&2, Tip>
+) -> Node<Machine.Q(Kernel.machine(K))>:
+  match h m:
+    case Head{r, b, +next, th} Some{t}:
+      k = Round.seen(~Kernel.machine(K), s, c, next)
+      Pass.to(~K, 
+        n,
+        s,
+        Ledgers.Where{c, next, 1n+Round.mine(~Kernel.machine(K), n, s, c, next, k)},
+        Tip.owners(t)
+      )
+    case x y:
+      s
+
+# Node.pass once the head m of the line c is known
+def Pass.head(
+  ~K: Kernel(),
+  n: String,
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  c: Ledgers.Chain,
+  m: Maybe<&2, Head>
+) -> Node<Machine.Q(Kernel.machine(K))>:
+  match m:
+    case None{}:
+      s
+    case Some{+h}:
+      Pass.at(~K, n, s, c, h, Head.tip(~Kernel.machine(K), s, h))
+
+# Node.cast once the head m of the line c is known
+def Cast.head(
+  ~K: Kernel(),
+  n: String,
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  c: Ledgers.Chain,
+  m: Maybe<&2, Head>
+) -> Node<Machine.Q(Kernel.machine(K))>:
+  match m:
+    case None{}:
+      s
+    case Some{+h}:
+      Cast.at(~K, n, s, c, h, Head.tip(~Kernel.machine(K), s, h))
+
+# s, after the node n cast its ballot for the next step of the line c, in its
+# round (Rounds): when it is its turn, the step that the rules of the round
+# give it; else the step that the owner whose turn it is cast, when the rules
+# allow it and the node's own run of it gives the same tip
+def Node.cast(~K: Kernel(), n: String, +s: Node<Machine.Q(Kernel.machine(K))>, +c: Ledgers.Chain) -> Node<Machine.Q(Kernel.machine(K))>:
+  Cast.head(~K, n, s, c, Node.head_of(~Kernel.machine(K), s, c))
+
+# the state m at the head h of the line c, after a step that ran qs, else s
+def Advance.moved(
+  ~M: Machine(),
+  s: Node<Machine.Q(M)>,
+  m: Maybe<&2, Node<Machine.Q(M)>>,
+  c: Ledgers.Chain,
+  h: Head,
+  qs: List<&2, Ledgers.Id>
+) -> Node<Machine.Q(M)>:
+  match m:
+    case None{}:
+      s
+    case Some{s3}:
+      State.moved(~M, State.led(~M, s, State.ledger(~M, s3)), c, h, qs)
+
+# s at the head of the next height of the line c, when the run m of the
+# decided requests qs gives the tip that the ballots name (after): a node
+# checks a step before it keeps it
+def Advance.ran(
+  ~M: Machine(),
+  +s: Node<Machine.Q(M)>,
+  c: Ledgers.Chain,
+  r: Ledgers.Id,
+  b: Maybe<&2, String>,
+  next: U32,
+  after: Maybe<&2, Hashes.Hash>,
+  qs: List<&2, Ledgers.Id>,
+  m: Maybe<&2, Run<Machine.Q(M)>>
+) -> Node<Machine.Q(M)>:
+  match m:
+    case None{}:
+      s
+    case Some{Run{s2, +t2}}:
+      Shared.Bool.when(
+        Node<Machine.Q(M)>,
+        Root.same(after, Some{Tip.hash(t2)}),
+        u => Advance.moved(~M, 
+          s,
+          State.put(~M, s2, [Tip.words(t2)]),
+          c,
+          Head{r, b, U32.inc(next), Some{Tip.hash(t2)}},
+          qs
+        ),
+        u => s
+      )
+
+# Node.advance once the step m that the owners decided at the head is known
+def Advance.step(
+  ~K: Kernel(),
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  +c: Ledgers.Chain,
+  h: Head,
+  t: Tip,
+  m: Maybe<&2, Ledgers.Vote>
+) -> Node<Machine.Q(Kernel.machine(K))>:
+  match h m:
+    case Head{r, b, next, th} Some{Ledgers.Vote{before, +qs, after}}:
+      Shared.Bool.when(
+        Node<Machine.Q(Kernel.machine(K))>,
+        Root.same(before, th),
+        u => Advance.ran(~Kernel.machine(K), s, c, r, b, next, after, qs, Step.run(~K, s, c, t, qs)),
+        u => s
+      )
+    case x y:
+      s
+
+# the step m, if any, else the step that rest gives
+def Vote.first(
+  m: Maybe<&2, Ledgers.Vote>,
+  rest: Unit -> Maybe<&2, Ledgers.Vote>
+) -> Maybe<&2, Ledgers.Vote>:
+  match m:
+    case Some{v}:
+      Some{v}
+    case None{}:
+      rest(Unit{})
+
+# the step that the owners os decided at the height h of the line c, in a
+# round up to k, the highest first, if they did. The rounds of a height decide
+# one step (Height.One), so the order does not matter
+def Height.decide(
+  ~M: Machine(),
+  +s: Node<Machine.Q(M)>,
+  +c: Ledgers.Chain,
+  +h: U32,
+  +os: List<&2, String>,
+  k: Nat
+) -> Maybe<&2, Ledgers.Vote>:
+  match k:
+    case 0n:
+      Ledgers.State.decide(~Machine.Q(M), State.ledger(~M, s), Ledgers.Where{c, h, 0n}, os)
+    case 1n+(+p):
+      Vote.first(
+        Ledgers.State.decide(~Machine.Q(M), State.ledger(~M, s), Ledgers.Where{c, h, 1n+p}, os),
+        u => Height.decide(~M, s, c, h, os, p)
+      )
+
+# that the rounds of the height h of the line c decide one step in s, for the
+# owners os: a law of rounds, and a premise of the laws of agreement
+def Height.One(~M: Machine(), s: Node<Machine.Q(M)>, c: Ledgers.Chain, h: U32, os: List<&2, String>) -> Type:
+  @r1: Nat -> @r2: Nat -> @v1: Ledgers.Vote -> @v2: Ledgers.Vote -> {
+    Ledgers.State.decide(
+      ~Machine.Q(M),
+      State.ledger(~M, s),
+      Ledgers.Where{c, h, r1},
+      os
+    )
+      == Some{v1}: Maybe<&2, Ledgers.Vote>
+  } -> {
+    Ledgers.State.decide(
+      ~Machine.Q(M),
+      State.ledger(~M, s),
+      Ledgers.Where{c, h, r2},
+      os
+    )
+      == Some{v2}: Maybe<&2, Ledgers.Vote>
+  } -> {v1 == v2: Ledgers.Vote}
+
+# that the passes that a vote names allow it (Vote.allowed), for the owners os
+def Rounds.Allow(~M: Machine(), s: Node<Machine.Q(M)>, c: Ledgers.Chain, h: U32, os: List<&2, String>) -> Type:
+  @r: Nat -> @q: String -> @v: Ledgers.Vote -> {
+    Cast.of(~M, s, Ledgers.Where{c, h, r}, q) == Some{v}: Maybe<&2, Ledgers.Vote>
+  } -> {
+    Vote.allowed(~M, 
+      s,
+      Ledgers.Where{c, h, r},
+      os,
+      v,
+      Cast.from(~M, s, Ledgers.Where{c, h, r}, q)
+    )
+      == True{}: Bool
+  }
+
+# that a pass names the last vote of its node below its round: a node that
+# passed to a round casts no vote below it
+def Rounds.Last(~M: Machine(), s: Node<Machine.Q(M)>, c: Ledgers.Chain, h: U32) -> Type:
+  @r: Nat -> @q: String -> @l: Maybe<
+    &2,
+    Ledgers.Last> -> {
+    Ledgers.State.passed(
+      ~Machine.Q(M),
+      State.ledger(~M, s),
+      Ledgers.Where{c, h, r},
+      q
+    )
+      == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+  } -> {l == Last.below(~M, q, s, c, h, r): Maybe<&2, Ledgers.Last>}
+
+# that the votes of one round are for one step: one owner proposes, and the
+# others copy
+def Rounds.Same(~M: Machine(), s: Node<Machine.Q(M)>, c: Ledgers.Chain, h: U32) -> Type:
+  @r: Nat -> @q1: String -> @q2: String -> @a: Ledgers.Vote -> @b: Ledgers.Vote -> {
+    Cast.of(~M, s, Ledgers.Where{c, h, r}, q1) == Some{a}: Maybe<&2, Ledgers.Vote>
+  } -> {
+    Cast.of(~M, s, Ledgers.Where{c, h, r}, q2) == Some{b}: Maybe<&2, Ledgers.Vote>
+  } -> {a == b: Ledgers.Vote}
+
+# that the ballots that s holds on the line c follow the rules of rounds, at
+# the next height of each head whose tip s holds, for the owners in that tip
+def Rounds.Rules(~M: Machine(), s: Node<Machine.Q(M)>, c: Ledgers.Chain) -> Type:
+  @x: Head -> @t: Tip -> {
+    Head.tip(~M, s, x) == Some{t}: Maybe<&2, Tip>
+  } -> Rounds.Allow(~M, 
+    s,
+    c,
+    Head.next(x),
+    Tip.owners(t)
+  )
+    & (Rounds.Last(~M, s, c, Head.next(x)) & Rounds.Same(~M, s, c, Head.next(x)))
+
+# Node.advance at the head h of the line c, whose tip is m
+def Advance.at(
+  ~K: Kernel(),
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  +c: Ledgers.Chain,
+  +h: Head,
+  m: Maybe<&2, Tip>
+) -> Node<Machine.Q(Kernel.machine(K))>:
+  match m:
+    case None{}:
+      s
+    case Some{+t}:
+      Advance.step(~K, 
+        s,
+        c,
+        h,
+        t,
+        Height.decide(~Kernel.machine(K), 
+          s,
+          c,
+          Head.next(h),
+          Tip.owners(t),
+          Round.seen(~Kernel.machine(K), s, c, Head.next(h))
+        )
+      )
+
+# Node.advance once the head m of the line c is known
+def Advance.head(~K: Kernel(), +s: Node<Machine.Q(Kernel.machine(K))>, c: Ledgers.Chain, m: Maybe<&2, Head>) -> Node<Machine.Q(Kernel.machine(K))>:
+  match m:
+    case None{}:
+      s
+    case Some{+h}:
+      Advance.at(~K, s, c, h, Head.tip(~Kernel.machine(K), s, h))
+
+# s, with its head of the line c moved over the next step, when a majority of
+# the owners in its tip cast it and the node's own run of it gives the same
+# tip
+def Node.advance(~K: Kernel(), +s: Node<Machine.Q(Kernel.machine(K))>, +c: Ledgers.Chain) -> Node<Machine.Q(Kernel.machine(K))>:
+  Advance.head(~K, s, c, Node.head_of(~Kernel.machine(K), s, c))
+
+# the heads a and b are at the same height, or one is none
+def Heads.level(a: Maybe<&2, Head>, b: Maybe<&2, Head>) -> Bool:
+  match a b:
+    case Some{x} Some{y}:
+      U32.is_eq(Head.next(x), Head.next(y))
+    case x y:
+      True{}
+
+# Node.advances once the head m of the line c is known
+def Advances.at(
+  ~K: Kernel(),
+  f: Nat,
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  +c: Ledgers.Chain,
+  m: Maybe<&2, Head>
+) -> Node<Machine.Q(Kernel.machine(K))>:
+  match f m:
+    case 1n+p Some{+h}:
+      +s1 = Advance.at(~K, s, c, h, Head.tip(~Kernel.machine(K), s, h))
+      +m1 = Node.head_of(~Kernel.machine(K), s1, c)
+      Shared.Bool.when(
+        Node<Machine.Q(Kernel.machine(K))>,
+        Heads.level(Some{h}, m1),
+        u => s1,
+        u => Advances.at(~K, p, s1, c, m1)
+      )
+    case g x:
+      s
+
+# s, with its head of the line c moved over each step that is decided, f
+# steps at most
+def Node.advances(~K: Kernel(), f: Nat, +s: Node<Machine.Q(Kernel.machine(K))>, +c: Ledgers.Chain) -> Node<Machine.Q(Kernel.machine(K))>:
+  Advances.at(~K, f, s, c, Node.head_of(~Kernel.machine(K), s, c))
+
+# s, after the node n moved its head of the line c over each step that is
+# decided, cast its ballot for the next step, and moved its head again
+def Step.head(~K: Kernel(), n: String, s: Node<Machine.Q(Kernel.machine(K))>, +c: Ledgers.Chain) -> Node<Machine.Q(Kernel.machine(K))>:
+  s1 = Node.advances(~K, 4294967295n, s, c)
+  Node.advances(~K, 4294967295n, Node.cast(~K, n, s1, c), c)
+
+# s, after the node n did what it can on the line c
+def Node.step(~K: Kernel(), n: String, s: Node<Machine.Q(Kernel.machine(K))>, +c: Ledgers.Chain) -> Node<Machine.Q(Kernel.machine(K))>:
+  Step.head(~K, n, Node.open(~Kernel.machine(K), s, c), c)
+
+# s, after the owner n passed to the next round of the next step of the line
+# c, and did what it can there: the round took too long (the proposer may be
+# away). Transport asks for this; the core has no clock
+def Node.pass(~K: Kernel(), +n: String, +s: Node<Machine.Q(Kernel.machine(K))>, +c: Ledgers.Chain) -> Node<Machine.Q(Kernel.machine(K))>:
+  Node.step(~K, n, Pass.head(~K, n, s, c, Node.head_of(~Kernel.machine(K), s, c)), c)
+
+# s, after the node n took in the new request q of e
+def Node.ask.new(~K: Kernel(), n: String, +s: Node<Machine.Q(Kernel.machine(K))>, +e: Envelope, +q: Machine.Q(Kernel.machine(K))) -> Node<Machine.Q(Kernel.machine(K))>:
+  +i = Envelope.of(e)
+  c = Arrival.chain(i, Machine.arrival(Kernel.machine(K))(q))
+  s1 = Node.arrive(~K, 
+    State.led(~Kernel.machine(K), 
+      s,
+      Ledgers.State.ask(
+        ~Machine.Q(Kernel.machine(K)),
+        ~Machine.same(Kernel.machine(K)),
+        State.ledger(~Kernel.machine(K), s),
+        i,
+        Envelope.time(e),
+        q
+      )
+    ),
+    i,
+    q
+  )
+  Node.step(~K, n, s1, c)
+
+# Node.ask once the cell m of the request's ID is known
+def Node.ask.at(
+  ~K: Kernel(),
+  n: String,
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  +e: Envelope,
+  q: Machine.Q(Kernel.machine(K)),
+  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>>
+) -> Node<Machine.Q(Kernel.machine(K))>:
+  match m:
+    case Some{x}:
+      s
+    case None{}:
+      Node.ask.new(~K, 
+        n,
+        State.keyed(~Kernel.machine(K), s, Keys.mark(State.keys(~Kernel.machine(K), s), Envelope.of(e))),
+        e,
+        q
+      )
+
+# s, after the node n took in the request q of e, cast its ballot when it owns
+# its line, and moved its head when that decides the step. A request ID that s
+# holds counts once: asked again, it changes nothing
+def Node.ask(~K: Kernel(), n: String, +s: Node<Machine.Q(Kernel.machine(K))>, +e: Envelope, q: Machine.Q(Kernel.machine(K))) -> Node<Machine.Q(Kernel.machine(K))>:
+  Node.ask.at(~K, 
+    n,
+    s,
+    e,
+    q,
+    Ledgers.State.get(~Machine.Q(Kernel.machine(K)), State.ledger(~Kernel.machine(K), s), Ledgers.Slot.ask(Envelope.of(e)))
+  )
+
+# s, once it holds each request among the cells cs whose slot was empty in the
+# ledger old: a request that the node held does not arrive again
+def Take.asks(
+  ~K: Kernel(),
+  cs: List<&2, Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>>,
+  +old: Ledgers.State(Machine.Q(Kernel.machine(K))),
+  +s: Node<Machine.Q(Kernel.machine(K))>
+) -> Node<Machine.Q(Kernel.machine(K))>:
+  match cs:
+    case Nil{}:
+      s
+    case Con{Cells.One{Ledgers.Entry.Ask{+i, t, q}}, rest}:
+      Take.asks(~K, 
+        rest,
+        old,
+        Shared.Bool.when(
+          Node<Machine.Q(Kernel.machine(K))>,
+          Maybe.is_none(
+            &2,
+            Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>,
+            Ledgers.State.get(~Machine.Q(Kernel.machine(K)), old, Ledgers.Slot.ask(i))
+          ),
+          u => Node.arrive(~K, s, i, q),
+          u => s
+        )
+      )
+    case Con{c, rest}:
+      Take.asks(~K, rest, old, s)
+
+# l with the requests and the data among the cells cs, each in the slot that
+# its own content names (a request by its ID, data by its hash). A ballot, a
+# cell that is not one entry, and the slot that the sender gave are not kept:
+# what another node sent is read, not believed
+def Take.clean(
+  ~M: Machine(),
+  cs: List<&2, Cells.Cell<Ledgers.Entry<Machine.Q(M)>>>,
+  l: Ledgers.State(Machine.Q(M))
+) -> Ledgers.State(Machine.Q(M)):
+  match cs:
+    case Nil{}:
+      l
+    case Con{Cells.One{Ledgers.Entry.Ask{i, t, q}}, rest}:
+      Take.clean(~M, rest, Ledgers.State.ask(~Machine.Q(M), ~Machine.same(M), l, i, t, q))
+    case Con{Cells.One{Ledgers.Entry.Data{ws}}, rest}:
+      Take.clean(~M, rest, Ledgers.State.put_data(~Machine.Q(M), ~Machine.same(M), l, ws))
+    case Con{c, rest}:
+      Take.clean(~M, rest, l)
+
+# Node.consent once the line m of the request is known
+def Consent.at(
+  ~K: Kernel(),
+  n: String,
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  i: Ledgers.Id,
+  m: Maybe<&2, Ledgers.Chain>
+) -> Node<Machine.Q(Kernel.machine(K))>:
+  match m:
+    case None{}:
+      s
+    case Some{c}:
+      Node.step(~K, n, State.keyed(~Kernel.machine(K), s, Keys.mark(State.keys(~Kernel.machine(K), s), i)), c)
+
+# s, after a writer connected to the node n asked for the request i, which s
+# holds already (it came from another node): the request counts once, and the
+# node now casts for it as one that was asked at it
+def Node.consent(~K: Kernel(), n: String, +s: Node<Machine.Q(Kernel.machine(K))>, +i: Ledgers.Id) -> Node<Machine.Q(Kernel.machine(K))>:
+  Consent.at(~K, n, s, i, Node.chain_of(~Kernel.machine(K), s, i))
+
+# the hash of the node that the look l lacks, if it lacks one
+def Look.lack(l: Trees.Look) -> Maybe<&2, Hashes.Hash>:
+  match l:
+    case Trees.Look.Missing{x}:
+      Some{x}
+    case Trees.Look.Found{v}:
+      None{}
+    case Trees.Look.Absent{}:
+      None{}
+
+# the hash of the node that a read of the key k of the tree whose root is h
+# lacks in s, if it lacks one: what the node asks another node for. A node
+# keeps the part of a store that it uses, and fetches the rest on demand
+def Node.lacks(
+  ~M: Machine(),
+  s: Node<Machine.Q(M)>,
+  h: Maybe<&2, Hashes.Hash>,
+  k: List<&2, U32>
+) -> Maybe<&2, Hashes.Hash>:
+  Look.lack(Node.look(~M, s, h, k))
+
+# l with the data m, if any
+def Serve.put(
+  ~M: Machine(),
+  m: Maybe<&2, List<&2, U32>>,
+  l: Ledgers.State(Machine.Q(M))
+) -> Ledgers.State(Machine.Q(M)):
+  match m:
+    case None{}:
+      l
+    case Some{ws}:
+      Ledgers.State.put_data(~Machine.Q(M), ~Machine.same(M), l, ws)
+
+# the data that s holds under the hashes hs, as a ledger: what a node sends
+# to a node that asks for them (Node.fetch)
+def Node.serve(~M: Machine(), +s: Node<Machine.Q(M)>, hs: List<&2, Hashes.Hash>) -> Ledgers.State(Machine.Q(M)):
+  match hs:
+    case Nil{}:
+      Ledgers.State.empty(~Machine.Q(M))
+    case Con{h, r}:
+      Serve.put(~M, Ledgers.State.data(~Machine.Q(M), State.ledger(~M, s), h), Node.serve(~M, s, r))
+
+# what the ledger r lacks of s: what a sync from s to a holder of r sends
+def Node.missing(~M: Machine(), s: Node<Machine.Q(M)>, r: Ledgers.State(Machine.Q(M))) -> Ledgers.State(Machine.Q(M)):
+  Ledgers.State.missing(~Machine.Q(M), ~Machine.same(M), State.ledger(~M, s), r)
+
+# what a node reads of the ledger t that another node sent: each request and
+# each data, in the slot that its own content names (Take.clean)
+def Node.reads(~M: Machine(), t: Ledgers.State(Machine.Q(M))) -> Ledgers.State(Machine.Q(M)):
+  Take.clean(~M, 
+    Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(M)>>, t),
+    Ledgers.State.empty(~Machine.Q(M))
+  )
+
+# the ballots among the cells cs
+def Ballots.of(~M: Machine(), cs: List<&2, Cells.Cell<Ledgers.Entry<Machine.Q(M)>>>) -> List<&2, Ledgers.Ballot>:
+  match cs:
+    case Nil{}:
+      []
+    case Con{Cells.One{Ledgers.Entry.Vote{b}}, rest}:
+      b <> Ballots.of(~M, rest)
+    case Con{c, rest}:
+      Ballots.of(~M, rest)
+
+# what a holder of s keeps of t, which another node sent. It checks everything
+# before it keeps it: a request and data go to the slot that their own content
+# names (Take.clean; data is read only under its hash), in the slots where s
+# holds nothing; a ballot is kept when its node's chain leads to it and its
+# key signs it (a ballot that it cannot check yet comes again with the next
+# sync). Nothing that s holds is lost or changed. Each new request waits on
+# its line: the cost is what t brings, not what s holds
+def Node.take(~K: Kernel(), +s: Node<Machine.Q(Kernel.machine(K))>, +t: Ledgers.State(Machine.Q(Kernel.machine(K)))) -> Node<Machine.Q(Kernel.machine(K))>:
+  +sent = Node.reads(~Kernel.machine(K), t)
+  Sealed.take(~K, 
+    Ballots.of(~Kernel.machine(K), 
+      Tries.Trie.values(
+        Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>,
+        Ledgers.State.missing(~Machine.Q(Kernel.machine(K)), ~Machine.same(Kernel.machine(K)), t, State.ledger(~Kernel.machine(K), s))
+      )
+    ),
+    Take.asks(~K, 
+      Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>, sent),
+      State.ledger(~Kernel.machine(K), s),
+      State.led(~Kernel.machine(K), s, Ledgers.State.take(~Machine.Q(Kernel.machine(K)), State.ledger(~Kernel.machine(K), s), sent))
+    )
+  )
+
+# s, after the node n did what it can on each line of cs
+def Node.steps(~K: Kernel(), +n: String, cs: List<&2, Ledgers.Chain>, s: Node<Machine.Q(Kernel.machine(K))>) -> Node<Machine.Q(Kernel.machine(K))>:
+  match cs:
+    case Nil{}:
+      s
+    case Con{c, rest}:
+      Node.steps(~K, n, rest, Node.step(~K, n, s, c))
+
+# the line of the first of the waiting requests qs, then rest
+def Lines.waiting(
+  ~M: Machine(),
+  s: Node<Machine.Q(M)>,
+  qs: List<&2, Ledgers.Id>,
+  +rest: List<&2, Ledgers.Chain>
+) -> List<&2, Ledgers.Chain>:
+  match qs:
+    case Nil{}:
+      rest
+    case Con{i, r}:
+      Maybe.default(
+        &2,
+        List<&2, Ledgers.Chain>,
+        Maybe.bind(
+          &2,
+          Ledgers.Chain,
+          List<&2, Ledgers.Chain>,
+          Node.chain_of(~M, s, i),
+          c => Some{c <> rest}
+        ),
+        rest
+      )
+
+# the lines of the lists of waiting requests qss
+def Lines.waits(~M: Machine(), +s: Node<Machine.Q(M)>, qss: List<&2, List<&2, Ledgers.Id>>) -> List<&2, Ledgers.Chain>:
+  match qss:
+    case Nil{}:
+      []
+    case Con{qs, r}:
+      Lines.waiting(~M, s, qs, Lines.waits(~M, s, r))
+
+# the lines of the requests and the ballots among the cells cs, then rest
+def Lines.new(
+  ~M: Machine(),
+  cs: List<&2, Cells.Cell<Ledgers.Entry<Machine.Q(M)>>>,
+  rest: List<&2, Ledgers.Chain>
+) -> List<&2, Ledgers.Chain>:
+  match cs:
+    case Nil{}:
+      rest
+    case Con{Cells.One{Ledgers.Entry.Ask{i, t, q}}, r}:
+      Arrival.chain(i, Machine.arrival(M)(q)) <> Lines.new(~M, r, rest)
+    case Con{Cells.One{Ledgers.Entry.Vote{b}}, r}:
+      Where.line(Ballot.at(b)) <> Lines.new(~M, r, rest)
+    case Con{c, r}:
+      Lines.new(~M, r, rest)
+
+# the lines that a sync of t into s may move, each once: those of the new
+# requests and ballots of t, and those with waiting requests (new data can let
+# them run). So a sync costs about what it brings, not every line of the node
+def Sync.lines(
+  ~M: Machine(),
+  s: Node<Machine.Q(M)>,
+  +s1: Node<Machine.Q(M)>,
+  t: Ledgers.State(Machine.Q(M))
+) -> List<&2, Ledgers.Chain>:
+  Tries.Trie.unique(
+    ~Ledgers.Chain,
+    ~Ledgers.Chain.key,
+    Lines.new(~M, 
+      Tries.Trie.values(
+        Cells.Cell<Ledgers.Entry<Machine.Q(M)>>,
+        Ledgers.State.missing(~Machine.Q(M), ~Machine.same(M), t, State.ledger(~M, s))
+      ),
+      Lines.waits(~M, s1, Tries.Trie.values(List<&2, Ledgers.Id>, State.waiting(~M, s1)))
+    ),
+    Tries.Trie.new(Unit)
+  )

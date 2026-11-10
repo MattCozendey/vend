@@ -13,7 +13,6 @@ import ./basics.bend as Basics
 import ./judging.bend as Judging
 import ./reading.bend as Reading
 import ./stepping.bend as Stepping
-import ./voting.bend as Voting
 import ../replica/impl.bend as Replicas
 
 # The pure core of a Vend Node (README): what it holds, what it answers, and
@@ -135,17 +134,17 @@ type Deed is Data:
 def Node.does(+n: String, +s: Replicas.Node<Basics.Ask>, ev: Deed) -> Replicas.Node<Basics.Ask>:
   match ev:
     case Deed.Ask{+e, +q}:
-      Reading.Adopt.at(n, Voting.Node.ask(n, s, e, q), Basics.Ask.chain(Replicas.Envelope.of(e), q))
+      Reading.Adopt.at(n, Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q), Basics.Ask.chain(Replicas.Envelope.of(e), q))
     case Deed.Take{t}:
-      Voting.Node.take(s, t)
+      Replicas.Node.take(~Stepping.Ask.kernel(), s, t)
     case Deed.Sync{t}:
       Reading.Node.sync(n, s, t)
     case Deed.Keep{b}:
       Basics.Node.keep(s, b)
     case Deed.Consent{+i}:
-      Reading.Adopt.maybe(n, Voting.Node.consent(n, s, i), Basics.Node.chain_of(s, i))
+      Reading.Adopt.maybe(n, Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i), Replicas.Node.chain_of(~Basics.Ask.machine(), s, i))
     case Deed.Pass{+c}:
-      Reading.Adopt.at(n, Voting.Node.pass(n, s, c), c)
+      Reading.Adopt.at(n, Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c), c)
 
 # s, after the node n did each of evs, in order: any later state of the node
 def Node.after(+n: String, evs: List<&2, Deed>, s: Replicas.Node<Basics.Ask>) -> Replicas.Node<Basics.Ask>:
@@ -398,11 +397,11 @@ law Plan.follow_allowed:
     Maybe.is_some(
       &2,
       Replicas.Run<Basics.Ask>,
-      Replicas.Plan.run(~Basics.Ask.machine(), Voting.Plan.follow(s, c, w, t, th, os, Some{Ledgers.Act.Vote{v, from}}))
+      Replicas.Plan.run(~Basics.Ask.machine(), Replicas.Plan.follow(~Stepping.Ask.kernel(), s, c, w, t, th, os, Some{Ledgers.Act.Vote{v, from}}))
     )
       == True{}: Bool
   }
-    -> {Voting.Vote.allowed(s, w, os, v, from) == True{}: Bool}
+    -> {Replicas.Vote.allowed(~Basics.Ask.machine(), s, w, os, v, from) == True{}: Bool}
 
 # the log of the run m, if any, holds an outcome of the request i
 def Run.Outs(m: Maybe<&2, Replicas.Run<Basics.Ask>>, i: Ledgers.Id) -> Type:
@@ -585,9 +584,9 @@ law Node.advance_at:
   for +h: Replicas.Head
   {Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == Some{h}: Maybe<&2, Replicas.Head>}
     -> {
-      Voting.Heads.level(
+      Replicas.Heads.level(
         Some{h},
-        Replicas.Node.head_of(~Basics.Ask.machine(), Voting.Node.advance(s, c), c)
+        Replicas.Node.head_of(~Basics.Ask.machine(), Replicas.Node.advance(~Stepping.Ask.kernel(), s, c), c)
       )
         == False{}: Bool
     }
@@ -600,7 +599,7 @@ law Node.advance_at:
           c,
           h
         )
-          == Replicas.Node.head_of(~Basics.Ask.machine(), Voting.Node.advance(s, c), c): Maybe<&2, Replicas.Head>
+          == Replicas.Node.head_of(~Basics.Ask.machine(), Replicas.Node.advance(~Stepping.Ask.kernel(), s, c), c): Maybe<&2, Replicas.Head>
       }
     )
 
@@ -624,7 +623,7 @@ law Line.at_grows:
 law Line.at_agrees:
   for ~u: Replicas.Node<Basics.Ask>
   for ~c: Ledgers.Chain
-  for ~rules: Voting.Rounds.Rules(u, c)
+  for ~rules: Replicas.Rounds.Rules(~Basics.Ask.machine(), u, c)
   for +rs1: List<&2, Nat>
   for +rs2: List<&2, Nat>
   for +a: Replicas.Node<Basics.Ask>
@@ -658,7 +657,7 @@ law Node.fetch:
     -> {
       Ledgers.State.data(
         ~Basics.Ask,
-        Replicas.State.ledger(~Basics.Ask.machine(), Voting.Node.take(b, Voting.Node.serve(a, [h]))),
+        Replicas.State.ledger(~Basics.Ask.machine(), Replicas.Node.take(~Stepping.Ask.kernel(), b, Replicas.Node.serve(~Basics.Ask.machine(), a, [h]))),
         h
       )
         == Some{ws}: Maybe<&2, List<&2, U32>>
@@ -717,7 +716,7 @@ law Node.take_holds:
   {
     Ledgers.State.get(
       ~Basics.Ask,
-      Voting.Node.reads(t),
+      Replicas.Node.reads(~Basics.Ask.machine(), t),
       k
     )
       == Some{Cells.One{e}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>
@@ -733,7 +732,7 @@ law Node.take_holds:
     -> {
       Ledgers.State.get(
         ~Basics.Ask,
-        Replicas.State.ledger(~Basics.Ask.machine(), Voting.Node.take(s, t)),
+        Replicas.State.ledger(~Basics.Ask.machine(), Replicas.Node.take(~Stepping.Ask.kernel(), s, t)),
         k
       )
         == Some{Cells.One{e}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>
@@ -753,7 +752,7 @@ law Node.take_waits:
   {
     Ledgers.State.get(
       ~Basics.Ask,
-      Voting.Node.reads(t),
+      Replicas.Node.reads(~Basics.Ask.machine(), t),
       Ledgers.Slot.ask(i)
     )
       == Some{
@@ -772,7 +771,7 @@ law Node.take_waits:
       List.contains(
         ~Ledgers.Id,
         ~Ledgers.Id.is_eq,
-        Replicas.Wait.of(~Basics.Ask.machine(), Voting.Node.take(s, t), Replicas.Line.chain(r, l)),
+        Replicas.Wait.of(~Basics.Ask.machine(), Replicas.Node.take(~Stepping.Ask.kernel(), s, t), Replicas.Line.chain(r, l)),
         i
       )
         == True{}: Bool
@@ -830,11 +829,11 @@ law Node.ask_once:
   for +q2: Basics.Ask
   {Replicas.Envelope.of(e2) == Replicas.Envelope.of(e): Ledgers.Id}
     -> {
-      Voting.Node.ask(
+      Replicas.Node.ask(~Stepping.Ask.kernel(), 
         m,
-        Voting.Node.ask(n, s, e, q),
+        Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q),
         e2,
         q2
       )
-        == Voting.Node.ask(n, s, e, q): Replicas.Node<Basics.Ask>
+        == Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q): Replicas.Node<Basics.Ask>
     }

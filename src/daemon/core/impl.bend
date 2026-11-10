@@ -23,7 +23,6 @@ import ./judging.bend as Judging
 import ./reading.bend as Reading
 import ./spec.bend as Spec
 import ./stepping.bend as Stepping
-import ./voting.bend as Voting
 
 # The proofs of the core's laws.
 
@@ -1842,13 +1841,13 @@ def Plan.later.grows(
   from: List<&2, String>,
   m: Maybe<&2, Ledgers.Last>
 ) -> {
-  Run.after(s, Replicas.Plan.run(~Basics.Ask.machine(), Voting.Plan.later(s, c, w, t, th, os, from, m))) == True{}: Bool
+  Run.after(s, Replicas.Plan.run(~Basics.Ask.machine(), Replicas.Plan.later(~Stepping.Ask.kernel(), s, c, w, t, th, os, from, m))) == True{}: Bool
 }:
   match m:
     case None{}:
       Plan.when.grows(
         s,
-        Voting.Owners.major(os, from),
+        Replicas.Owners.major(os, from),
         Replicas.Plan.own(~Stepping.Ask.kernel(), s, c, t, from),
         Replicas.Plan{[], None{}, []},
         Plan.own.grows(s, c, t, from),
@@ -1857,7 +1856,7 @@ def Plan.later.grows(
     case Some{Ledgers.Last{r, v}}:
       Plan.when.grows(
         s,
-        Voting.Owners.major(os, from),
+        Replicas.Owners.major(os, from),
         Replicas.Plan.copy(~Stepping.Ask.kernel(), s, c, t, th, Some{v}, from),
         Replicas.Plan{[], None{}, []},
         Plan.copy.grows(s, c, t, th, Some{v}, from),
@@ -1872,20 +1871,20 @@ def Plan.lead.grows(
   +t: Replicas.Tip,
   th: Maybe<&2, Hashes.Hash>,
   +os: List<&2, String>
-) -> {Run.after(s, Replicas.Plan.run(~Basics.Ask.machine(), Voting.Plan.lead(s, c, w, t, th, os))) == True{}: Bool}:
+) -> {Run.after(s, Replicas.Plan.run(~Basics.Ask.machine(), Replicas.Plan.lead(~Stepping.Ask.kernel(), s, c, w, t, th, os))) == True{}: Bool}:
   Plan.when.grows(
     s,
-    Nat.is_eq(Voting.Where.round(w), 0n),
+    Nat.is_eq(Replicas.Where.round(w), 0n),
     Replicas.Plan.own(~Stepping.Ask.kernel(), s, c, t, []),
-    Voting.Plan.later(
+    Replicas.Plan.later(~Stepping.Ask.kernel(), 
       s,
       c,
       w,
       t,
       th,
       os,
-      Voting.Passes.of(s, w, os),
-      Voting.Passes.last(s, w, Voting.Passes.of(s, w, os))
+      Replicas.Passes.of(~Basics.Ask.machine(), s, w, os),
+      Replicas.Passes.last(~Basics.Ask.machine(), s, w, Replicas.Passes.of(~Basics.Ask.machine(), s, w, os))
     ),
     Plan.own.grows(s, c, t, []),
     Plan.later.grows(
@@ -1895,8 +1894,8 @@ def Plan.lead.grows(
       t,
       th,
       os,
-      Voting.Passes.of(s, w, os),
-      Voting.Passes.last(s, w, Voting.Passes.of(s, w, os))
+      Replicas.Passes.of(~Basics.Ask.machine(), s, w, os),
+      Replicas.Passes.last(~Basics.Ask.machine(), s, w, Replicas.Passes.of(~Basics.Ask.machine(), s, w, os))
     )
   )
 
@@ -1909,12 +1908,12 @@ def Plan.follow.grows(
   th: Maybe<&2, Hashes.Hash>,
   os: List<&2, String>,
   m: Maybe<&2, Ledgers.Act>
-) -> {Run.after(s, Replicas.Plan.run(~Basics.Ask.machine(), Voting.Plan.follow(s, c, w, t, th, os, m))) == True{}: Bool}:
+) -> {Run.after(s, Replicas.Plan.run(~Basics.Ask.machine(), Replicas.Plan.follow(~Stepping.Ask.kernel(), s, c, w, t, th, os, m))) == True{}: Bool}:
   match m:
     case Some{Ledgers.Act.Vote{+v, from}}:
       Plan.when.grows(
         s,
-        Voting.Vote.allowed(s, w, os, v, from),
+        Replicas.Vote.allowed(~Basics.Ask.machine(), s, w, os, v, from),
         Replicas.Plan.copy(~Stepping.Ask.kernel(), s, c, t, th, Some{v}, from),
         Replicas.Plan{[], None{}, []},
         Plan.copy.grows(s, c, t, th, Some{v}, from),
@@ -1935,7 +1934,7 @@ def Plan.of.grows(
   +th: Maybe<&2, Hashes.Hash>,
   +os: List<&2, String>,
   turn: Maybe<&2, String>
-) -> {Run.after(s, Replicas.Plan.run(~Basics.Ask.machine(), Voting.Plan.of(n, s, c, w, t, th, os, turn))) == True{}: Bool}:
+) -> {Run.after(s, Replicas.Plan.run(~Basics.Ask.machine(), Replicas.Plan.of(~Stepping.Ask.kernel(), n, s, c, w, t, th, os, turn))) == True{}: Bool}:
   match turn:
     case None{}:
       {==}
@@ -1943,10 +1942,10 @@ def Plan.of.grows(
       Plan.when.grows(
         s,
         String.eq(p, n),
-        Voting.Plan.lead(s, c, w, t, th, os),
-        Voting.Plan.follow(s, c, w, t, th, os, Voting.Cast.act(s, w, p)),
+        Replicas.Plan.lead(~Stepping.Ask.kernel(), s, c, w, t, th, os),
+        Replicas.Plan.follow(~Stepping.Ask.kernel(), s, c, w, t, th, os, Replicas.Cast.act(~Basics.Ask.machine(), s, w, p)),
         Plan.lead.grows(s, c, w, t, th, os),
-        Plan.follow.grows(s, c, w, t, th, os, Voting.Cast.act(s, w, p))
+        Plan.follow.grows(s, c, w, t, th, os, Replicas.Cast.act(~Basics.Ask.machine(), s, w, p))
       )
 
 # a node with the ledger of a node that grew from a grew from a
@@ -2217,7 +2216,7 @@ def Pass.to.grows(
   +s: Replicas.Node<Basics.Ask>,
   w: Ledgers.Where,
   os: List<&2, String>
-) -> {Reading.Node.grows(s, Voting.Pass.to(n, s, w, os)) == True{}: Bool}:
+) -> {Reading.Node.grows(s, Replicas.Pass.to(~Stepping.Ask.kernel(), n, s, w, os)) == True{}: Bool}:
   match w:
     case Ledgers.Where{+c, +h, +r}:
       Grows.when(
@@ -2234,7 +2233,7 @@ def Pass.to.grows(
           s,
           Ledgers.Where{c, h, r},
           n,
-          Ledgers.Act.Pass{Voting.Last.below(n, s, c, h, r)},
+          Ledgers.Act.Pass{Replicas.Last.below(~Basics.Ask.machine(), n, s, c, h, r)},
           Replicas.Seal.chain(~Stepping.Ask.kernel(), s, Replicas.Where.store(Ledgers.Where{c, h, r}), n)
         ),
         s,
@@ -2242,7 +2241,7 @@ def Pass.to.grows(
           s,
           Ledgers.Where{c, h, r},
           n,
-          Ledgers.Act.Pass{Voting.Last.below(n, s, c, h, r)},
+          Ledgers.Act.Pass{Replicas.Last.below(~Basics.Ask.machine(), n, s, c, h, r)},
           Replicas.Seal.chain(~Stepping.Ask.kernel(), s, Replicas.Where.store(Ledgers.Where{c, h, r}), n)
         ),
         Grows.refl(s)
@@ -2255,13 +2254,13 @@ def Round.join.grows(
   +c: Ledgers.Chain,
   +h: U32,
   os: List<&2, String>
-) -> {Reading.Node.grows(s, Voting.Round.join(n, s, c, h, os)) == True{}: Bool}:
+) -> {Reading.Node.grows(s, Replicas.Round.join(~Stepping.Ask.kernel(), n, s, c, h, os)) == True{}: Bool}:
   +top = Replicas.Round.seen(~Basics.Ask.machine(), s, c, h)
   k = top
   Grows.when(
     s,
-    Nat.is_lt(Voting.Round.mine(n, s, c, h, k), top),
-    Voting.Pass.to(n, s, Ledgers.Where{c, h, top}, os),
+    Nat.is_lt(Replicas.Round.mine(~Basics.Ask.machine(), n, s, c, h, k), top),
+    Replicas.Pass.to(~Stepping.Ask.kernel(), n, s, Ledgers.Where{c, h, top}, os),
     s,
     Pass.to.grows(n, s, Ledgers.Where{c, h, top}, os),
     Grows.refl(s)
@@ -2275,11 +2274,11 @@ def Cast.round.grows(
   +next: U32,
   +th: Maybe<&2, Hashes.Hash>,
   +t: Replicas.Tip
-) -> {Reading.Node.grows(s, Voting.Cast.round(n, s, c, next, th, t)) == True{}: Bool}:
+) -> {Reading.Node.grows(s, Replicas.Cast.round(~Stepping.Ask.kernel(), n, s, c, next, th, t)) == True{}: Bool}:
   +os = Replicas.Tip.owners(t)
-  +r = Voting.Round.mine(n, s, c, next, Replicas.Round.seen(~Basics.Ask.machine(), s, c, next))
+  +r = Replicas.Round.mine(~Basics.Ask.machine(), n, s, c, next, Replicas.Round.seen(~Basics.Ask.machine(), s, c, next))
   +w = {Ledgers.Where{c, next, r}: Ledgers.Where}
-  +p = Voting.Plan.of(
+  +p = Replicas.Plan.of(~Stepping.Ask.kernel(), 
     n,
     s,
     c,
@@ -2315,14 +2314,14 @@ def Cast.at.grows(
   +c: Ledgers.Chain,
   h: Replicas.Head,
   m: Maybe<&2, Replicas.Tip>
-) -> {Reading.Node.grows(s, Voting.Cast.at(n, s, c, h, m)) == True{}: Bool}:
+) -> {Reading.Node.grows(s, Replicas.Cast.at(~Stepping.Ask.kernel(), n, s, c, h, m)) == True{}: Bool}:
   match h m:
     case Replicas.Head{r, b, +next, +th} Some{+t}:
-      +s1 = Voting.Round.join(n, s, c, next, Replicas.Tip.owners(t))
+      +s1 = Replicas.Round.join(~Stepping.Ask.kernel(), n, s, c, next, Replicas.Tip.owners(t))
       Grows.trans(
         s,
         s1,
-        Voting.Cast.round(n, s1, c, next, th, t)
+        Replicas.Cast.round(~Stepping.Ask.kernel(), n, s1, c, next, th, t)
       )(
         Round.join.grows(n, s, c, next, Replicas.Tip.owners(t))
       )(Cast.round.grows(n, s1, c, next, th, t))
@@ -2336,13 +2335,13 @@ def Pass.at.grows(
   +c: Ledgers.Chain,
   h: Replicas.Head,
   m: Maybe<&2, Replicas.Tip>
-) -> {Reading.Node.grows(s, Voting.Pass.at(n, s, c, h, m)) == True{}: Bool}:
+) -> {Reading.Node.grows(s, Replicas.Pass.at(~Stepping.Ask.kernel(), n, s, c, h, m)) == True{}: Bool}:
   match h m:
     case Replicas.Head{r, b, +next, th} Some{t}:
       Pass.to.grows(
         n,
         s,
-        Ledgers.Where{c, next, 1n+Voting.Round.mine(n, s, c, next, Replicas.Round.seen(~Basics.Ask.machine(), s, c, next))},
+        Ledgers.Where{c, next, 1n+Replicas.Round.mine(~Basics.Ask.machine(), n, s, c, next, Replicas.Round.seen(~Basics.Ask.machine(), s, c, next))},
         Replicas.Tip.owners(t)
       )
     case Replicas.Head{r, b, next, th} None{}:
@@ -2354,7 +2353,7 @@ def Pass.head.grows(
   +s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
   m: Maybe<&2, Replicas.Head>
-) -> {Reading.Node.grows(s, Voting.Pass.head(n, s, c, m)) == True{}: Bool}:
+) -> {Reading.Node.grows(s, Replicas.Pass.head(~Stepping.Ask.kernel(), n, s, c, m)) == True{}: Bool}:
   match m:
     case None{}:
       Grows.refl(s)
@@ -2367,7 +2366,7 @@ def Cast.head.grows(
   +s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
   m: Maybe<&2, Replicas.Head>
-) -> {Reading.Node.grows(s, Voting.Cast.head(n, s, c, m)) == True{}: Bool}:
+) -> {Reading.Node.grows(s, Replicas.Cast.head(~Stepping.Ask.kernel(), n, s, c, m)) == True{}: Bool}:
   match m:
     case None{}:
       Grows.refl(s)
@@ -2379,7 +2378,7 @@ def Cast.grows(
   n: String,
   +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain
-) -> {Reading.Node.grows(s, Voting.Node.cast(n, s, c)) == True{}: Bool}:
+) -> {Reading.Node.grows(s, Replicas.Node.cast(~Stepping.Ask.kernel(), n, s, c)) == True{}: Bool}:
   Cast.head.grows(n, s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))
 
 # a head moved on a node that grew from a, which grew from s, only grows s
@@ -2393,7 +2392,7 @@ def Advance.moved.grows(
   g: {Reading.Node.grows(s, a) == True{}: Bool}
 ) -> {
   State.after(a, m) == True{}: Bool
-} -> {Reading.Node.grows(s, Voting.Advance.moved(s, m, c, h, qs)) == True{}: Bool}:
+} -> {Reading.Node.grows(s, Replicas.Advance.moved(~Basics.Ask.machine(), s, m, c, h, qs)) == True{}: Bool}:
   match m:
     case None{}:
       e => Grows.refl(s)
@@ -2420,7 +2419,7 @@ def Advance.ran.grows(
   m: Maybe<&2, Replicas.Run<Basics.Ask>>
 ) -> {
   Run.after(s, m) == True{}: Bool
-} -> {Reading.Node.grows(s, Voting.Advance.ran(s, c, r, b, next, after, qs, m)) == True{}: Bool}:
+} -> {Reading.Node.grows(s, Replicas.Advance.ran(~Basics.Ask.machine(), s, c, r, b, next, after, qs, m)) == True{}: Bool}:
   match m:
     case None{}:
       e => Grows.refl(s)
@@ -2430,7 +2429,7 @@ def Advance.ran.grows(
         Grows.when(
           s,
           Replicas.Root.same(after, Some{Replicas.Tip.hash(t2)}),
-          Voting.Advance.moved(s, Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]), c, hd, qs),
+          Replicas.Advance.moved(~Basics.Ask.machine(), s, Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]), c, hd, qs),
           s,
           Advance.moved.grows(
             s,
@@ -2451,13 +2450,13 @@ def Advance.step.grows(
   h: Replicas.Head,
   +t: Replicas.Tip,
   m: Maybe<&2, Ledgers.Vote>
-) -> {Reading.Node.grows(s, Voting.Advance.step(s, c, h, t, m)) == True{}: Bool}:
+) -> {Reading.Node.grows(s, Replicas.Advance.step(~Stepping.Ask.kernel(), s, c, h, t, m)) == True{}: Bool}:
   match h m:
     case Replicas.Head{r, b, next, th} Some{Ledgers.Vote{before, +qs, after}}:
       Grows.when(
         s,
         Replicas.Root.same(before, th),
-        Voting.Advance.ran(s, c, r, b, next, after, qs, Replicas.Step.run(~Stepping.Ask.kernel(), s, c, t, qs)),
+        Replicas.Advance.ran(~Basics.Ask.machine(), s, c, r, b, next, after, qs, Replicas.Step.run(~Stepping.Ask.kernel(), s, c, t, qs)),
         s,
         Advance.ran.grows(
           s,
@@ -2480,7 +2479,7 @@ def Advance.at.grows(
   +c: Ledgers.Chain,
   +h: Replicas.Head,
   m: Maybe<&2, Replicas.Tip>
-) -> {Reading.Node.grows(s, Voting.Advance.at(s, c, h, m)) == True{}: Bool}:
+) -> {Reading.Node.grows(s, Replicas.Advance.at(~Stepping.Ask.kernel(), s, c, h, m)) == True{}: Bool}:
   match m:
     case None{}:
       Grows.refl(s)
@@ -2490,7 +2489,7 @@ def Advance.at.grows(
         c,
         h,
         t,
-        Voting.Height.decide(
+        Replicas.Height.decide(~Basics.Ask.machine(), 
           s,
           c,
           Replicas.Head.next(h),
@@ -2504,7 +2503,7 @@ def Advance.head.grows(
   +s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
   m: Maybe<&2, Replicas.Head>
-) -> {Reading.Node.grows(s, Voting.Advance.head(s, c, m)) == True{}: Bool}:
+) -> {Reading.Node.grows(s, Replicas.Advance.head(~Stepping.Ask.kernel(), s, c, m)) == True{}: Bool}:
   match m:
     case None{}:
       Grows.refl(s)
@@ -2517,25 +2516,25 @@ def Advances.at.grows(
   +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   m: Maybe<&2, Replicas.Head>
-) -> {Reading.Node.grows(s, Voting.Advances.at(f, s, c, m)) == True{}: Bool}:
+) -> {Reading.Node.grows(s, Replicas.Advances.at(~Stepping.Ask.kernel(), f, s, c, m)) == True{}: Bool}:
   match f m:
     case 0n x:
       Grows.refl(s)
     case 1n+p None{}:
       Grows.refl(s)
     case 1n+(+p) Some{+h}:
-      +s1 = Voting.Advance.at(s, c, h, Replicas.Head.tip(~Basics.Ask.machine(), s, h))
+      +s1 = Replicas.Advance.at(~Stepping.Ask.kernel(), s, c, h, Replicas.Head.tip(~Basics.Ask.machine(), s, h))
       +m1 = Replicas.Node.head_of(~Basics.Ask.machine(), s1, c)
       Grows.when(
         s,
-        Voting.Heads.level(Some{h}, m1),
+        Replicas.Heads.level(Some{h}, m1),
         s1,
-        Voting.Advances.at(p, s1, c, m1),
+        Replicas.Advances.at(~Stepping.Ask.kernel(), p, s1, c, m1),
         Advance.at.grows(s, c, h, Replicas.Head.tip(~Basics.Ask.machine(), s, h)),
         Grows.trans(
           s,
           s1,
-          Voting.Advances.at(p, s1, c, m1)
+          Replicas.Advances.at(~Stepping.Ask.kernel(), p, s1, c, m1)
         )(Advance.at.grows(s, c, h, Replicas.Head.tip(~Basics.Ask.machine(), s, h)))(Advances.at.grows(p, s1, c, m1))
       )
 
@@ -2544,7 +2543,7 @@ def Advances.grows(
   f: Nat,
   +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain
-) -> {Reading.Node.grows(s, Voting.Node.advances(f, s, c)) == True{}: Bool}:
+) -> {Reading.Node.grows(s, Replicas.Node.advances(~Stepping.Ask.kernel(), f, s, c)) == True{}: Bool}:
   Advances.at.grows(f, s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))
 
 # what a node does at a head only grows it
@@ -2552,10 +2551,10 @@ def Step.head.grows(
   +n: String,
   +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain
-) -> {Reading.Node.grows(s, Voting.Step.head(n, s, c)) == True{}: Bool}:
-  +s1 = Voting.Node.advances(4294967295n, s, c)
-  +s2 = Voting.Node.cast(n, s1, c)
-  +s3 = Voting.Node.advances(4294967295n, s2, c)
+) -> {Reading.Node.grows(s, Replicas.Step.head(~Stepping.Ask.kernel(), n, s, c)) == True{}: Bool}:
+  +s1 = Replicas.Node.advances(~Stepping.Ask.kernel(), 4294967295n, s, c)
+  +s2 = Replicas.Node.cast(~Stepping.Ask.kernel(), n, s1, c)
+  +s3 = Replicas.Node.advances(~Stepping.Ask.kernel(), 4294967295n, s2, c)
   Grows.trans(
     s,
     s1,
@@ -2593,12 +2592,12 @@ def Step.grows(
   +n: String,
   +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain
-) -> {Reading.Node.grows(s, Voting.Node.step(n, s, c)) == True{}: Bool}:
+) -> {Reading.Node.grows(s, Replicas.Node.step(~Stepping.Ask.kernel(), n, s, c)) == True{}: Bool}:
   +s1 = Replicas.Node.open(~Basics.Ask.machine(), s, c)
   Grows.trans(
     s,
     s1,
-    Voting.Step.head(n, s1, c)
+    Replicas.Step.head(~Stepping.Ask.kernel(), n, s1, c)
   )(Open.at.grows(s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c)))(Step.head.grows(n, s1, c))
 
 # a pass to the next round only grows a node
@@ -2606,12 +2605,12 @@ def Pass.grows(
   +n: String,
   +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain
-) -> {Reading.Node.grows(s, Voting.Node.pass(n, s, c)) == True{}: Bool}:
-  +s1 = Voting.Pass.head(n, s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))
+) -> {Reading.Node.grows(s, Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c)) == True{}: Bool}:
+  +s1 = Replicas.Pass.head(~Stepping.Ask.kernel(), n, s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))
   Grows.trans(
     s,
     s1,
-    Voting.Node.step(n, s1, c)
+    Replicas.Node.step(~Stepping.Ask.kernel(), n, s1, c)
   )(Pass.head.grows(n, s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c)))(Step.grows(n, s1, c))
 
 # a first head only grows a node, once the head m of its line is known
@@ -2759,7 +2758,7 @@ def Ask.new.grows(
   +s: Replicas.Node<Basics.Ask>,
   +e: Replicas.Envelope,
   +q: Basics.Ask
-) -> {Reading.Node.grows(s, Voting.Node.ask.new(n, s, e, q)) == True{}: Bool}:
+) -> {Reading.Node.grows(s, Replicas.Node.ask.new(~Stepping.Ask.kernel(), n, s, e, q)) == True{}: Bool}:
   +i = Replicas.Envelope.of(e)
   +c = Basics.Ask.chain(i, q)
   +l0 = Ledgers.State.ask(
@@ -2775,7 +2774,7 @@ def Ask.new.grows(
   Grows.trans(
     s,
     s0,
-    Voting.Node.step(n, s1, c)
+    Replicas.Node.step(~Stepping.Ask.kernel(), n, s1, c)
   )(
     Grows.led(
       s,
@@ -2789,7 +2788,7 @@ def Ask.new.grows(
         Ledgers.Entry.Ask{i, Replicas.Envelope.time(e), q}
       )
     )
-  )(Grows.trans(s0, s1, Voting.Node.step(n, s1, c))(Arrive.grows(s0, i, q))(Step.grows(n, s1, c)))
+  )(Grows.trans(s0, s1, Replicas.Node.step(~Stepping.Ask.kernel(), n, s1, c))(Arrive.grows(s0, i, q))(Step.grows(n, s1, c)))
 
 # Node.ask_grows once the cell m of the request's ID is known
 def Ask.at.grows(
@@ -2798,7 +2797,7 @@ def Ask.at.grows(
   +e: Replicas.Envelope,
   +q: Basics.Ask,
   m: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>
-) -> {Reading.Node.grows(s, Voting.Node.ask.at(n, s, e, q, m)) == True{}: Bool}:
+) -> {Reading.Node.grows(s, Replicas.Node.ask.at(~Stepping.Ask.kernel(), n, s, e, q, m)) == True{}: Bool}:
   match m:
     case Some{x}:
       Grows.refl(s)
@@ -2806,7 +2805,7 @@ def Ask.at.grows(
       Grows.trans(
         s,
         Replicas.State.keyed(~Basics.Ask.machine(), s, Replicas.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), Replicas.Envelope.of(e))),
-        Voting.Node.ask.new(
+        Replicas.Node.ask.new(~Stepping.Ask.kernel(), 
           n,
           Replicas.State.keyed(~Basics.Ask.machine(), s, Replicas.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), Replicas.Envelope.of(e))),
           e,
@@ -2835,7 +2834,7 @@ def Ask.grows(
   +s: Replicas.Node<Basics.Ask>,
   +e: Replicas.Envelope,
   q: Basics.Ask
-) -> {Reading.Node.grows(s, Voting.Node.ask(n, s, e, q)) == True{}: Bool}:
+) -> {Reading.Node.grows(s, Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q)) == True{}: Bool}:
   Ask.at.grows(
     n,
     s,
@@ -2849,7 +2848,7 @@ def Take.asks.grows(
   cs: List<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>,
   +old: Ledgers.State(Basics.Ask),
   +s: Replicas.Node<Basics.Ask>
-) -> {Reading.Node.grows(s, Voting.Take.asks(cs, old, s)) == True{}: Bool}:
+) -> {Reading.Node.grows(s, Replicas.Take.asks(~Stepping.Ask.kernel(), cs, old, s)) == True{}: Bool}:
   match cs:
     case Nil{}:
       Grows.refl(s)
@@ -2867,7 +2866,7 @@ def Take.asks.grows(
       Grows.trans(
         s,
         s1,
-        Voting.Take.asks(rest, old, s1)
+        Replicas.Take.asks(~Stepping.Ask.kernel(), rest, old, s1)
       )(
         Grows.when(
           s,
@@ -2981,16 +2980,16 @@ def Each.grows(
 def Take.grows(
   +s: Replicas.Node<Basics.Ask>,
   +t: Ledgers.State(Basics.Ask)
-) -> {Reading.Node.grows(s, Voting.Node.take(s, t)) == True{}: Bool}:
-  +sent = Voting.Take.clean(
+) -> {Reading.Node.grows(s, Replicas.Node.take(~Stepping.Ask.kernel(), s, t)) == True{}: Bool}:
+  +sent = Replicas.Take.clean(~Basics.Ask.machine(), 
     Tries.Trie.values(Cells.Cell<Ledgers.Entry<Basics.Ask>>, t),
     Ledgers.State.empty(~Basics.Ask)
   )
   +l1 = Ledgers.State.take(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), sent)
   +s1 = Replicas.State.led(~Basics.Ask.machine(), s, l1)
   +cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Basics.Ask>>, sent)
-  +s2 = Voting.Take.asks(cs, Replicas.State.ledger(~Basics.Ask.machine(), s), s1)
-  +bs = Voting.Ballots.of(
+  +s2 = Replicas.Take.asks(~Stepping.Ask.kernel(), cs, Replicas.State.ledger(~Basics.Ask.machine(), s), s1)
+  +bs = Replicas.Ballots.of(~Basics.Ask.machine(), 
     Tries.Trie.values(
       Cells.Cell<Ledgers.Entry<Basics.Ask>>,
       Ledgers.State.missing(~Basics.Ask, ~Basics.Ask.is_eq, t, Replicas.State.ledger(~Basics.Ask.machine(), s))
@@ -3034,25 +3033,25 @@ def Take.tail(
       Ledgers.State.take(
         ~Basics.Ask,
         Replicas.State.ledger(~Basics.Ask.machine(), s),
-        Voting.Take.clean(
+        Replicas.Take.clean(~Basics.Ask.machine(), 
           Tries.Trie.values(Cells.Cell<Ledgers.Entry<Basics.Ask>>, t),
           Ledgers.State.empty(~Basics.Ask)
         )
       )
     ),
-    Voting.Node.take(s, t)
+    Replicas.Node.take(~Stepping.Ask.kernel(), s, t)
   )
     == True{}: Bool
 }:
-  +sent = Voting.Take.clean(
+  +sent = Replicas.Take.clean(~Basics.Ask.machine(), 
     Tries.Trie.values(Cells.Cell<Ledgers.Entry<Basics.Ask>>, t),
     Ledgers.State.empty(~Basics.Ask)
   )
   l1 = Ledgers.State.take(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), sent)
   +s1 = Replicas.State.led(~Basics.Ask.machine(), s, l1)
   +cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Basics.Ask>>, sent)
-  +s2 = Voting.Take.asks(cs, Replicas.State.ledger(~Basics.Ask.machine(), s), s1)
-  +bs = Voting.Ballots.of(
+  +s2 = Replicas.Take.asks(~Stepping.Ask.kernel(), cs, Replicas.State.ledger(~Basics.Ask.machine(), s), s1)
+  +bs = Replicas.Ballots.of(~Basics.Ask.machine(), 
     Tries.Trie.values(
       Cells.Cell<Ledgers.Entry<Basics.Ask>>,
       Ledgers.State.missing(~Basics.Ask, ~Basics.Ask.is_eq, t, Replicas.State.ledger(~Basics.Ask.machine(), s))
@@ -3081,7 +3080,7 @@ def Fetch.take(
   Ledgers.State.data(
     ~Basics.Ask,
     Replicas.State.ledger(~Basics.Ask.machine(), 
-      Voting.Node.take(
+      Replicas.Node.take(~Stepping.Ask.kernel(), 
         b,
         Ledgers.State.put_data(~Basics.Ask, ~Basics.Ask.is_eq, Ledgers.State.empty(~Basics.Ask), ws)
       )
@@ -3098,7 +3097,7 @@ def Fetch.take(
       ~Basics.Ask.is_eq,
       ~Basics.Ask.laws(),
       Replicas.State.ledger(~Basics.Ask.machine(), Replicas.State.led(~Basics.Ask.machine(), b, l1)),
-      Replicas.State.ledger(~Basics.Ask.machine(), Voting.Node.take(b, t)),
+      Replicas.State.ledger(~Basics.Ask.machine(), Replicas.Node.take(~Stepping.Ask.kernel(), b, t)),
       Hashes.Sha.hash(ws),
       ws
     )(Take.tail(b, t))(
@@ -3116,7 +3115,7 @@ def Spec.Node.fetch(a, b, h, ws):
       Ledgers.State.data(
         ~Basics.Ask,
         Replicas.State.ledger(~Basics.Ask.machine(), 
-          Voting.Node.take(b, Voting.Serve.put(_, Ledgers.State.empty(~Basics.Ask)))
+          Replicas.Node.take(~Stepping.Ask.kernel(), b, Replicas.Serve.put(~Basics.Ask.machine(), _, Ledgers.State.empty(~Basics.Ask)))
         ),
         h
       )
@@ -3133,7 +3132,7 @@ def Spec.Node.fetch(a, b, h, ws):
       Ledgers.State.data(
         ~Basics.Ask,
         Replicas.State.ledger(~Basics.Ask.machine(), 
-          Voting.Node.take(
+          Replicas.Node.take(~Stepping.Ask.kernel(), 
             b,
             Ledgers.State.put_data(
               ~Basics.Ask,
@@ -3156,16 +3155,16 @@ def Steps.grows(
   +n: String,
   cs: List<&2, Ledgers.Chain>,
   +s: Replicas.Node<Basics.Ask>
-) -> {Reading.Node.grows(s, Voting.Node.steps(n, cs, s)) == True{}: Bool}:
+) -> {Reading.Node.grows(s, Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, s)) == True{}: Bool}:
   match cs:
     case Nil{}:
       Grows.refl(s)
     case Con{+c, +rest}:
-      +s1 = Voting.Node.step(n, s, c)
+      +s1 = Replicas.Node.step(~Stepping.Ask.kernel(), n, s, c)
       Grows.trans(
         s,
         s1,
-        Voting.Node.steps(n, rest, s1)
+        Replicas.Node.steps(~Stepping.Ask.kernel(), n, rest, s1)
       )(Step.grows(n, s, c))(Steps.grows(n, rest, s1))
 
 # an adoption only grows a node, once the request m is known
@@ -3244,8 +3243,8 @@ def More.grows(
     case 1n+(+p):
       Grows.when(
         s,
-        Reading.Lines.level(cs, s, Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))),
-        Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
+        Reading.Lines.level(cs, s, Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))),
+        Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
         Reading.Sync.more(
           p,
           n,
@@ -3253,16 +3252,16 @@ def More.grows(
           k,
           bs,
           pd,
-          Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
+          Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
         ),
         Grows.trans(
           s,
           Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s),
-          Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
+          Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
         )(Each.grows(k, bs, pd, s))(Steps.grows(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))),
         Grows.trans(
           s,
-          Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
+          Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
           Reading.Sync.more(
             p,
             n,
@@ -3270,13 +3269,13 @@ def More.grows(
             k,
             bs,
             pd,
-            Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
+            Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
           )
         )(
           Grows.trans(
             s,
             Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s),
-            Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
+            Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
           )(Each.grows(k, bs, pd, s))(Steps.grows(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)))
         )(
           More.grows(
@@ -3286,7 +3285,7 @@ def More.grows(
             k,
             bs,
             pd,
-            Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
+            Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
           )
         )
       )
@@ -3297,15 +3296,15 @@ def Sync.grows(
   +s: Replicas.Node<Basics.Ask>,
   +t: Ledgers.State(Basics.Ask)
 ) -> {Reading.Node.grows(s, Reading.Node.sync(n, s, t)) == True{}: Bool}:
-  +s1 = Voting.Node.take(s, t)
-  +cs = Voting.Sync.lines(s, s1, t)
-  +bs = Voting.Ballots.of(
+  +s1 = Replicas.Node.take(~Stepping.Ask.kernel(), s, t)
+  +cs = Replicas.Sync.lines(~Basics.Ask.machine(), s, s1, t)
+  +bs = Replicas.Ballots.of(~Basics.Ask.machine(), 
     Tries.Trie.values(
       Cells.Cell<Ledgers.Entry<Basics.Ask>>,
       Ledgers.State.missing(~Basics.Ask, ~Basics.Ask.is_eq, t, Replicas.State.ledger(~Basics.Ask.machine(), s))
     )
   )
-  +s2 = Voting.Node.steps(n, cs, s1)
+  +s2 = Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, s1)
   +s3 = Reading.Sync.more(
     List.length(&2, Ledgers.Ballot, bs),
     n,
@@ -3413,7 +3412,7 @@ def Ask.held.new(
     Cells.Cell<Ledgers.Entry<Basics.Ask>>,
     Ledgers.State.get(
       ~Basics.Ask,
-      Replicas.State.ledger(~Basics.Ask.machine(), Voting.Node.ask.new(n, s, e, q)),
+      Replicas.State.ledger(~Basics.Ask.machine(), Replicas.Node.ask.new(~Stepping.Ask.kernel(), n, s, e, q)),
       Ledgers.Slot.ask(Replicas.Envelope.of(e))
     )
   )
@@ -3438,7 +3437,7 @@ def Ask.held.new(
       Ledgers.State.get(
         ~Basics.Ask,
         Replicas.State.ledger(~Basics.Ask.machine(), 
-          Voting.Node.step(
+          Replicas.Node.step(~Stepping.Ask.kernel(), 
             n,
             Replicas.Node.arrive(~Stepping.Ask.kernel(), 
               Replicas.State.led(~Basics.Ask.machine(), 
@@ -3465,12 +3464,12 @@ def Ask.held.new(
   }
   Slot.held_kept(
     s0,
-    Voting.Node.step(n, s1, c),
+    Replicas.Node.step(~Stepping.Ask.kernel(), n, s1, c),
     k,
     Grows.trans(
       s0,
       s1,
-      Voting.Node.step(n, s1, c)
+      Replicas.Node.step(~Stepping.Ask.kernel(), n, s1, c)
     )(Arrive.grows(s0, i, q))(Step.grows(n, s1, c))
   )(
     %Equal.sym(Ledgers.State(Basics.Ask), Replicas.State.ledger(~Basics.Ask.machine(), s0), l0, Led.led(s, l0)): {Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>, Ledgers.State.get(~Basics.Ask, _, k)) == True{}: Bool}
@@ -3499,7 +3498,7 @@ def Ask.held.at(
     Cells.Cell<Ledgers.Entry<Basics.Ask>>,
     Ledgers.State.get(
       ~Basics.Ask,
-      Replicas.State.ledger(~Basics.Ask.machine(), Voting.Node.ask.at(n, s, e, q, m)),
+      Replicas.State.ledger(~Basics.Ask.machine(), Replicas.Node.ask.at(~Stepping.Ask.kernel(), n, s, e, q, m)),
       Ledgers.Slot.ask(Replicas.Envelope.of(e))
     )
   )
@@ -3538,19 +3537,19 @@ def Ask.once.at(
   c: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>
 ) -> {
   Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>, c) == True{}: Bool
-} -> {Voting.Node.ask.at(m, s, e, q, c) == s: Replicas.Node<Basics.Ask>}:
+} -> {Replicas.Node.ask.at(~Stepping.Ask.kernel(), m, s, e, q, c) == s: Replicas.Node<Basics.Ask>}:
   match c:
     case Some{x}:
       h => {==}
     case None{}:
       h => Empty.absurd(
-        {Voting.Node.ask.at(m, s, e, q, None{}) == s: Replicas.Node<Basics.Ask>},
+        {Replicas.Node.ask.at(~Stepping.Ask.kernel(), m, s, e, q, None{}) == s: Replicas.Node<Basics.Ask>},
         Shared.Bool.false_ne_true(h)
       )
 
 def Spec.Node.ask_once(n, m, s, e, q, e2, q2):
   h =>
-    +a = Voting.Node.ask(n, s, e, q)
+    +a = Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q)
     Ask.once.at(
       m,
       a,
@@ -5182,7 +5181,7 @@ def Pass.to.heads(
   w: Ledgers.Where,
   os: List<&2, String>
 ) -> {
-  Replicas.State.heads(~Basics.Ask.machine(), s) == Replicas.State.heads(~Basics.Ask.machine(), Voting.Pass.to(n, s, w, os)): Tries.Trie<Replicas.Head>
+  Replicas.State.heads(~Basics.Ask.machine(), s) == Replicas.State.heads(~Basics.Ask.machine(), Replicas.Pass.to(~Stepping.Ask.kernel(), n, s, w, os)): Tries.Trie<Replicas.Head>
 }:
   match w:
     case Ledgers.Where{+c, +h, +r}:
@@ -5200,7 +5199,7 @@ def Pass.to.heads(
           s,
           Ledgers.Where{c, h, r},
           n,
-          Ledgers.Act.Pass{Voting.Last.below(n, s, c, h, r)},
+          Ledgers.Act.Pass{Replicas.Last.below(~Basics.Ask.machine(), n, s, c, h, r)},
           Replicas.Seal.chain(~Stepping.Ask.kernel(), s, Replicas.Where.store(Ledgers.Where{c, h, r}), n)
         ),
         s,
@@ -5208,7 +5207,7 @@ def Pass.to.heads(
           s,
           Ledgers.Where{c, h, r},
           n,
-          Ledgers.Act.Pass{Voting.Last.below(n, s, c, h, r)},
+          Ledgers.Act.Pass{Replicas.Last.below(~Basics.Ask.machine(), n, s, c, h, r)},
           Replicas.Seal.chain(~Stepping.Ask.kernel(), s, Replicas.Where.store(Ledgers.Where{c, h, r}), n)
         ),
         {==}
@@ -5225,14 +5224,14 @@ def Round.join.heads(
   Replicas.State.heads(~Basics.Ask.machine(), 
     s
   )
-    == Replicas.State.heads(~Basics.Ask.machine(), Voting.Round.join(n, s, c, h, os)): Tries.Trie<Replicas.Head>
+    == Replicas.State.heads(~Basics.Ask.machine(), Replicas.Round.join(~Stepping.Ask.kernel(), n, s, c, h, os)): Tries.Trie<Replicas.Head>
 }:
   +top = Replicas.Round.seen(~Basics.Ask.machine(), s, c, h)
   k = top
   Heads.when(
-    Nat.is_lt(Voting.Round.mine(n, s, c, h, k), top),
+    Nat.is_lt(Replicas.Round.mine(~Basics.Ask.machine(), n, s, c, h, k), top),
     s,
-    Voting.Pass.to(n, s, Ledgers.Where{c, h, top}, os),
+    Replicas.Pass.to(~Stepping.Ask.kernel(), n, s, Ledgers.Where{c, h, top}, os),
     s,
     Pass.to.heads(n, s, Ledgers.Where{c, h, top}, os),
     {==}
@@ -5250,12 +5249,12 @@ def Cast.round.heads(
   Replicas.State.heads(~Basics.Ask.machine(), 
     s
   )
-    == Replicas.State.heads(~Basics.Ask.machine(), Voting.Cast.round(n, s, c, next, th, t)): Tries.Trie<Replicas.Head>
+    == Replicas.State.heads(~Basics.Ask.machine(), Replicas.Cast.round(~Stepping.Ask.kernel(), n, s, c, next, th, t)): Tries.Trie<Replicas.Head>
 }:
   +os = Replicas.Tip.owners(t)
-  +r = Voting.Round.mine(n, s, c, next, Replicas.Round.seen(~Basics.Ask.machine(), s, c, next))
+  +r = Replicas.Round.mine(~Basics.Ask.machine(), n, s, c, next, Replicas.Round.seen(~Basics.Ask.machine(), s, c, next))
   +w = {Ledgers.Where{c, next, r}: Ledgers.Where}
-  +p = Voting.Plan.of(
+  +p = Replicas.Plan.of(~Stepping.Ask.kernel(), 
     n,
     s,
     c,
@@ -5285,16 +5284,16 @@ def Cast.at.heads(
   Replicas.State.heads(~Basics.Ask.machine(), 
     s
   )
-    == Replicas.State.heads(~Basics.Ask.machine(), Voting.Cast.at(n, s, c, h, m)): Tries.Trie<Replicas.Head>
+    == Replicas.State.heads(~Basics.Ask.machine(), Replicas.Cast.at(~Stepping.Ask.kernel(), n, s, c, h, m)): Tries.Trie<Replicas.Head>
 }:
   match h m:
     case Replicas.Head{r, b, +next, th} Some{+t}:
-      s1 = Voting.Round.join(n, s, c, next, Replicas.Tip.owners(t))
+      s1 = Replicas.Round.join(~Stepping.Ask.kernel(), n, s, c, next, Replicas.Tip.owners(t))
       Equal.trans(
         Tries.Trie<Replicas.Head>,
         Replicas.State.heads(~Basics.Ask.machine(), s),
         Replicas.State.heads(~Basics.Ask.machine(), s1),
-        Replicas.State.heads(~Basics.Ask.machine(), Voting.Cast.round(n, s1, c, next, th, t)),
+        Replicas.State.heads(~Basics.Ask.machine(), Replicas.Cast.round(~Stepping.Ask.kernel(), n, s1, c, next, th, t)),
         Round.join.heads(n, s, c, next, Replicas.Tip.owners(t)),
         Cast.round.heads(n, s1, c, next, th, t)
       )
@@ -5312,14 +5311,14 @@ def Pass.at.heads(
   Replicas.State.heads(~Basics.Ask.machine(), 
     s
   )
-    == Replicas.State.heads(~Basics.Ask.machine(), Voting.Pass.at(n, s, c, h, m)): Tries.Trie<Replicas.Head>
+    == Replicas.State.heads(~Basics.Ask.machine(), Replicas.Pass.at(~Stepping.Ask.kernel(), n, s, c, h, m)): Tries.Trie<Replicas.Head>
 }:
   match h m:
     case Replicas.Head{r, b, +next, th} Some{t}:
       Pass.to.heads(
         n,
         s,
-        Ledgers.Where{c, next, 1n+Voting.Round.mine(n, s, c, next, Replicas.Round.seen(~Basics.Ask.machine(), s, c, next))},
+        Ledgers.Where{c, next, 1n+Replicas.Round.mine(~Basics.Ask.machine(), n, s, c, next, Replicas.Round.seen(~Basics.Ask.machine(), s, c, next))},
         Replicas.Tip.owners(t)
       )
     case Replicas.Head{r, b, next, th} None{}:
@@ -5332,7 +5331,7 @@ def Pass.head.heads(
   c: Ledgers.Chain,
   m: Maybe<&2, Replicas.Head>
 ) -> {
-  Replicas.State.heads(~Basics.Ask.machine(), s) == Replicas.State.heads(~Basics.Ask.machine(), Voting.Pass.head(n, s, c, m)): Tries.Trie<Replicas.Head>
+  Replicas.State.heads(~Basics.Ask.machine(), s) == Replicas.State.heads(~Basics.Ask.machine(), Replicas.Pass.head(~Stepping.Ask.kernel(), n, s, c, m)): Tries.Trie<Replicas.Head>
 }:
   match m:
     case None{}:
@@ -5347,7 +5346,7 @@ def Cast.head.heads(
   c: Ledgers.Chain,
   m: Maybe<&2, Replicas.Head>
 ) -> {
-  Replicas.State.heads(~Basics.Ask.machine(), s) == Replicas.State.heads(~Basics.Ask.machine(), Voting.Cast.head(n, s, c, m)): Tries.Trie<Replicas.Head>
+  Replicas.State.heads(~Basics.Ask.machine(), s) == Replicas.State.heads(~Basics.Ask.machine(), Replicas.Cast.head(~Stepping.Ask.kernel(), n, s, c, m)): Tries.Trie<Replicas.Head>
 }:
   match m:
     case None{}:
@@ -5360,10 +5359,10 @@ def Cast.kept(
   +n: String,
   +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain
-) -> Spec.Node.Keeps(s, Voting.Node.cast(n, s, c)):
+) -> Spec.Node.Keeps(s, Replicas.Node.cast(~Stepping.Ask.kernel(), n, s, c)):
   Kept.same(
     s,
-    Voting.Node.cast(n, s, c),
+    Replicas.Node.cast(~Stepping.Ask.kernel(), n, s, c),
     Cast.grows(n, s, c),
     Cast.head.heads(n, s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))
   )
@@ -5691,7 +5690,7 @@ def Advance.moved.kept(
   Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]) == m: Maybe<&2, Replicas.Node<Basics.Ask>>
 } -> Spec.Node.Keeps(
   s,
-  Voting.Advance.moved(s, m, c, Replicas.Head{r, br, nx, Some{Replicas.Tip.hash(t2)}}, qs)
+  Replicas.Advance.moved(~Basics.Ask.machine(), s, m, c, Replicas.Head{r, br, nx, Some{Replicas.Tip.hash(t2)}}, qs)
 ):
   match m:
     case None{}:
@@ -5746,7 +5745,7 @@ def Advance.ran.kept(
     U32> -> {
     Replicas.Node.get(~Basics.Ask.machine(), s, Replicas.Tip.log(t), k) == Some{v}: Maybe<&2, List<&2, U32>>
   } -> Run.Keeps(k, v, m)
-) -> Spec.Node.Keeps(s, Voting.Advance.ran(s, c, r, br, next, after, qs, m)):
+) -> Spec.Node.Keeps(s, Replicas.Advance.ran(~Basics.Ask.machine(), s, c, r, br, next, after, qs, m)):
   match m:
     case None{}:
       ga => rk => Kept.refl(s)
@@ -5754,7 +5753,7 @@ def Advance.ran.kept(
       ga => rk => Kept.when(
         Replicas.Root.same(after, Some{Replicas.Tip.hash(t2)}),
         s,
-        Voting.Advance.moved(
+        Replicas.Advance.moved(~Basics.Ask.machine(), 
           s,
           Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]),
           c,
@@ -5793,13 +5792,13 @@ def Advance.step.kept(
   Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == Some{h}: Maybe<&2, Replicas.Head>
 } -> {
   Replicas.Head.tip(~Basics.Ask.machine(), s, h) == Some{t}: Maybe<&2, Replicas.Tip>
-} -> Spec.Node.Keeps(s, Voting.Advance.step(s, c, h, t, m)):
+} -> Spec.Node.Keeps(s, Replicas.Advance.step(~Stepping.Ask.kernel(), s, c, h, t, m)):
   match h m:
     case Replicas.Head{+r, +br, +next, +th} Some{Ledgers.Vote{before, +qs, after}}:
       +em => +et => Kept.when(
         Replicas.Root.same(before, th),
         s,
-        Voting.Advance.ran(s, c, r, br, next, after, qs, Replicas.Step.run(~Stepping.Ask.kernel(), s, c, t, qs)),
+        Replicas.Advance.ran(~Basics.Ask.machine(), s, c, r, br, next, after, qs, Replicas.Step.run(~Stepping.Ask.kernel(), s, c, t, qs)),
         s,
         Advance.ran.kept(
           s,
@@ -5832,7 +5831,7 @@ def Advance.at.kept(
   Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == Some{h}: Maybe<&2, Replicas.Head>
 } -> {
   Replicas.Head.tip(~Basics.Ask.machine(), s, h) == m: Maybe<&2, Replicas.Tip>
-} -> Spec.Node.Keeps(s, Voting.Advance.at(s, c, h, m)):
+} -> Spec.Node.Keeps(s, Replicas.Advance.at(~Stepping.Ask.kernel(), s, c, h, m)):
   match m:
     case None{}:
       em => et => Kept.refl(s)
@@ -5842,7 +5841,7 @@ def Advance.at.kept(
         c,
         h,
         t,
-        Voting.Height.decide(
+        Replicas.Height.decide(~Basics.Ask.machine(), 
           s,
           c,
           Replicas.Head.next(h),
@@ -5859,7 +5858,7 @@ def Advances.at.kept(
   m: Maybe<&2, Replicas.Head>
 ) -> {
   Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == m: Maybe<&2, Replicas.Head>
-} -> Spec.Node.Keeps(s, Voting.Advances.at(f, s, c, m)):
+} -> Spec.Node.Keeps(s, Replicas.Advances.at(~Stepping.Ask.kernel(), f, s, c, m)):
   match f m:
     case 0n x:
       em => Kept.refl(s)
@@ -5867,18 +5866,18 @@ def Advances.at.kept(
       em => Kept.refl(s)
     case 1n+(+p) Some{+h}:
       +em =>
-        +s1 = Voting.Advance.at(s, c, h, Replicas.Head.tip(~Basics.Ask.machine(), s, h))
+        +s1 = Replicas.Advance.at(~Stepping.Ask.kernel(), s, c, h, Replicas.Head.tip(~Basics.Ask.machine(), s, h))
         +m1 = Replicas.Node.head_of(~Basics.Ask.machine(), s1, c)
         Kept.when(
-          Voting.Heads.level(Some{h}, m1),
+          Replicas.Heads.level(Some{h}, m1),
           s,
           s1,
-          Voting.Advances.at(p, s1, c, m1),
+          Replicas.Advances.at(~Stepping.Ask.kernel(), p, s1, c, m1),
           Advance.at.kept(s, c, h, Replicas.Head.tip(~Basics.Ask.machine(), s, h))(em)({==}),
           Kept.trans(
             s,
             s1,
-            Voting.Advances.at(p, s1, c, m1),
+            Replicas.Advances.at(~Stepping.Ask.kernel(), p, s1, c, m1),
             Advance.at.kept(s, c, h, Replicas.Head.tip(~Basics.Ask.machine(), s, h))(em)({==}),
             Advances.at.kept(p, s1, c, m1)({==})
           )
@@ -5889,7 +5888,7 @@ def Advances.kept(
   f: Nat,
   +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain
-) -> Spec.Node.Keeps(s, Voting.Node.advances(f, s, c)):
+) -> Spec.Node.Keeps(s, Replicas.Node.advances(~Stepping.Ask.kernel(), f, s, c)):
   Advances.at.kept(f, s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))({==})
 
 # what a node does at a head keeps the logs
@@ -5897,10 +5896,10 @@ def Step.head.kept(
   +n: String,
   +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain
-) -> Spec.Node.Keeps(s, Voting.Step.head(n, s, c)):
-  +s1 = Voting.Node.advances(4294967295n, s, c)
-  +s2 = Voting.Node.cast(n, s1, c)
-  s3 = Voting.Node.advances(4294967295n, s2, c)
+) -> Spec.Node.Keeps(s, Replicas.Step.head(~Stepping.Ask.kernel(), n, s, c)):
+  +s1 = Replicas.Node.advances(~Stepping.Ask.kernel(), 4294967295n, s, c)
+  +s2 = Replicas.Node.cast(~Stepping.Ask.kernel(), n, s1, c)
+  s3 = Replicas.Node.advances(~Stepping.Ask.kernel(), 4294967295n, s2, c)
   Kept.trans(
     s,
     s1,
@@ -6001,12 +6000,12 @@ def Step.kept(
   n: String,
   +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain
-) -> Spec.Node.Keeps(s, Voting.Node.step(n, s, c)):
+) -> Spec.Node.Keeps(s, Replicas.Node.step(~Stepping.Ask.kernel(), n, s, c)):
   s1 = Replicas.Node.open(~Basics.Ask.machine(), s, c)
   Kept.trans(
     s,
     s1,
-    Voting.Step.head(n, s1, c),
+    Replicas.Step.head(~Stepping.Ask.kernel(), n, s1, c),
     Open.at.kept(s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))({==}),
     Step.head.kept(n, s1, c)
   )
@@ -6016,12 +6015,12 @@ def Pass.kept(
   +n: String,
   +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain
-) -> Spec.Node.Keeps(s, Voting.Node.pass(n, s, c)):
-  +s1 = Voting.Pass.head(n, s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))
+) -> Spec.Node.Keeps(s, Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c)):
+  +s1 = Replicas.Pass.head(~Stepping.Ask.kernel(), n, s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))
   Kept.trans(
     s,
     s1,
-    Voting.Node.step(n, s1, c),
+    Replicas.Node.step(~Stepping.Ask.kernel(), n, s1, c),
     Kept.same(
       s,
       s1,
@@ -6210,7 +6209,7 @@ def Ask.new.kept(
   +s: Replicas.Node<Basics.Ask>,
   +e: Replicas.Envelope,
   +q: Basics.Ask
-) -> Spec.Node.Keeps(s, Voting.Node.ask.new(n, s, e, q)):
+) -> Spec.Node.Keeps(s, Replicas.Node.ask.new(~Stepping.Ask.kernel(), n, s, e, q)):
   +i = Replicas.Envelope.of(e)
   c = Basics.Ask.chain(i, q)
   +l0 = Ledgers.State.ask(
@@ -6226,7 +6225,7 @@ def Ask.new.kept(
   Kept.trans(
     s,
     s0,
-    Voting.Node.step(n, s1, c),
+    Replicas.Node.step(~Stepping.Ask.kernel(), n, s1, c),
     Kept.same(
       s,
       s0,
@@ -6244,7 +6243,7 @@ def Ask.new.kept(
       ),
       Heads.led(s, l0)
     ),
-    Kept.trans(s0, s1, Voting.Node.step(n, s1, c), Arrive.kept(s0, i, q), Step.kept(n, s1, c))
+    Kept.trans(s0, s1, Replicas.Node.step(~Stepping.Ask.kernel(), n, s1, c), Arrive.kept(s0, i, q), Step.kept(n, s1, c))
   )
 
 # Node.ask_keeps once the cell m of the request's ID is known
@@ -6254,7 +6253,7 @@ def Ask.at.kept(
   +e: Replicas.Envelope,
   q: Basics.Ask,
   m: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>
-) -> Spec.Node.Keeps(s, Voting.Node.ask.at(n, s, e, q, m)):
+) -> Spec.Node.Keeps(s, Replicas.Node.ask.at(~Stepping.Ask.kernel(), n, s, e, q, m)):
   match m:
     case Some{x}:
       Kept.refl(s)
@@ -6262,7 +6261,7 @@ def Ask.at.kept(
       Kept.trans(
         s,
         Replicas.State.keyed(~Basics.Ask.machine(), s, Replicas.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), Replicas.Envelope.of(e))),
-        Voting.Node.ask.new(
+        Replicas.Node.ask.new(~Stepping.Ask.kernel(), 
           n,
           Replicas.State.keyed(~Basics.Ask.machine(), s, Replicas.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), Replicas.Envelope.of(e))),
           e,
@@ -6294,7 +6293,7 @@ def Ask.kept(
   +s: Replicas.Node<Basics.Ask>,
   +e: Replicas.Envelope,
   q: Basics.Ask
-) -> Spec.Node.Keeps(s, Voting.Node.ask(n, s, e, q)):
+) -> Spec.Node.Keeps(s, Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q)):
   Ask.at.kept(
     n,
     s,
@@ -6308,7 +6307,7 @@ def Take.asks.kept(
   cs: List<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>,
   +old: Ledgers.State(Basics.Ask),
   +s: Replicas.Node<Basics.Ask>
-) -> Spec.Node.Keeps(s, Voting.Take.asks(cs, old, s)):
+) -> Spec.Node.Keeps(s, Replicas.Take.asks(~Stepping.Ask.kernel(), cs, old, s)):
   match cs:
     case Nil{}:
       Kept.refl(s)
@@ -6326,7 +6325,7 @@ def Take.asks.kept(
       Kept.trans(
         s,
         s1,
-        Voting.Take.asks(rest, old, s1),
+        Replicas.Take.asks(~Stepping.Ask.kernel(), rest, old, s1),
         Kept.when(
           Maybe.is_none(
             &2,
@@ -6352,16 +6351,16 @@ def Take.asks.kept(
 def Take.kept(
   +s: Replicas.Node<Basics.Ask>,
   +t: Ledgers.State(Basics.Ask)
-) -> Spec.Node.Keeps(s, Voting.Node.take(s, t)):
-  +sent = Voting.Take.clean(
+) -> Spec.Node.Keeps(s, Replicas.Node.take(~Stepping.Ask.kernel(), s, t)):
+  +sent = Replicas.Take.clean(~Basics.Ask.machine(), 
     Tries.Trie.values(Cells.Cell<Ledgers.Entry<Basics.Ask>>, t),
     Ledgers.State.empty(~Basics.Ask)
   )
   +l1 = Ledgers.State.take(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), sent)
   +s1 = Replicas.State.led(~Basics.Ask.machine(), s, l1)
   +cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Basics.Ask>>, sent)
-  +s2 = Voting.Take.asks(cs, Replicas.State.ledger(~Basics.Ask.machine(), s), s1)
-  +bs = Voting.Ballots.of(
+  +s2 = Replicas.Take.asks(~Stepping.Ask.kernel(), cs, Replicas.State.ledger(~Basics.Ask.machine(), s), s1)
+  +bs = Replicas.Ballots.of(~Basics.Ask.machine(), 
     Tries.Trie.values(
       Cells.Cell<Ledgers.Entry<Basics.Ask>>,
       Ledgers.State.missing(~Basics.Ask, ~Basics.Ask.is_eq, t, Replicas.State.ledger(~Basics.Ask.machine(), s))
@@ -6406,13 +6405,13 @@ def Steps.kept(
   +n: String,
   cs: List<&2, Ledgers.Chain>,
   +s: Replicas.Node<Basics.Ask>
-) -> Spec.Node.Keeps(s, Voting.Node.steps(n, cs, s)):
+) -> Spec.Node.Keeps(s, Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, s)):
   match cs:
     case Nil{}:
       Kept.refl(s)
     case Con{+c, rest}:
-      s1 = Voting.Node.step(n, s, c)
-      Kept.trans(s, s1, Voting.Node.steps(n, rest, s1), Step.kept(n, s, c), Steps.kept(n, rest, s1))
+      s1 = Replicas.Node.step(~Stepping.Ask.kernel(), n, s, c)
+      Kept.trans(s, s1, Replicas.Node.steps(~Stepping.Ask.kernel(), n, rest, s1), Step.kept(n, s, c), Steps.kept(n, rest, s1))
 
 # an adoption keeps the logs, once the request m is known
 def Adopt.ask.kept(
@@ -6491,9 +6490,9 @@ def More.kept(
       Kept.refl(s)
     case 1n+(p):
       Kept.when(
-        Reading.Lines.level(cs, s, Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))),
+        Reading.Lines.level(cs, s, Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))),
         s,
-        Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
+        Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
         Reading.Sync.more(
           p,
           n,
@@ -6501,12 +6500,12 @@ def More.kept(
           k,
           bs,
           pd,
-          Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
+          Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
         ),
         Kept.trans(
           s,
           Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s),
-          Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
+          Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
           Kept.same(
             s,
             Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s),
@@ -6517,7 +6516,7 @@ def More.kept(
         ),
         Kept.trans(
           s,
-          Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
+          Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
           Reading.Sync.more(
             p,
             n,
@@ -6525,12 +6524,12 @@ def More.kept(
             k,
             bs,
             pd,
-            Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
+            Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
           ),
           Kept.trans(
             s,
             Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s),
-            Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
+            Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
             Kept.same(
               s,
               Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s),
@@ -6546,7 +6545,7 @@ def More.kept(
             k,
             bs,
             pd,
-            Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
+            Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
           )
         )
       )
@@ -6557,15 +6556,15 @@ def Sync.kept(
   +s: Replicas.Node<Basics.Ask>,
   +t: Ledgers.State(Basics.Ask)
 ) -> Spec.Node.Keeps(s, Reading.Node.sync(n, s, t)):
-  +s1 = Voting.Node.take(s, t)
-  +cs = Voting.Sync.lines(s, s1, t)
-  +bs = Voting.Ballots.of(
+  +s1 = Replicas.Node.take(~Stepping.Ask.kernel(), s, t)
+  +cs = Replicas.Sync.lines(~Basics.Ask.machine(), s, s1, t)
+  +bs = Replicas.Ballots.of(~Basics.Ask.machine(), 
     Tries.Trie.values(
       Cells.Cell<Ledgers.Entry<Basics.Ask>>,
       Ledgers.State.missing(~Basics.Ask, ~Basics.Ask.is_eq, t, Replicas.State.ledger(~Basics.Ask.machine(), s))
     )
   )
-  +s2 = Voting.Node.steps(n, cs, s1)
+  +s2 = Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, s1)
   s3 = Reading.Sync.more(
     List.length(&2, Ledgers.Ballot, bs),
     n,
@@ -6609,7 +6608,7 @@ def Consent.grows(
   +s: Replicas.Node<Basics.Ask>,
   +i: Ledgers.Id,
   m: Maybe<&2, Ledgers.Chain>
-) -> {Reading.Node.grows(s, Voting.Consent.at(n, s, i, m)) == True{}: Bool}:
+) -> {Reading.Node.grows(s, Replicas.Consent.at(~Stepping.Ask.kernel(), n, s, i, m)) == True{}: Bool}:
   match m:
     case None{}:
       Grows.refl(s)
@@ -6617,7 +6616,7 @@ def Consent.grows(
       Grows.trans(
         s,
         Replicas.State.keyed(~Basics.Ask.machine(), s, Replicas.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), i)),
-        Voting.Node.step(n, Replicas.State.keyed(~Basics.Ask.machine(), s, Replicas.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), i)), c)
+        Replicas.Node.step(~Stepping.Ask.kernel(), n, Replicas.State.keyed(~Basics.Ask.machine(), s, Replicas.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), i)), c)
       )(
         Grows.to(
           s,
@@ -6640,7 +6639,7 @@ def Consent.kept(
   +s: Replicas.Node<Basics.Ask>,
   +i: Ledgers.Id,
   m: Maybe<&2, Ledgers.Chain>
-) -> Spec.Node.Keeps(s, Voting.Consent.at(n, s, i, m)):
+) -> Spec.Node.Keeps(s, Replicas.Consent.at(~Stepping.Ask.kernel(), n, s, i, m)):
   match m:
     case None{}:
       Kept.refl(s)
@@ -6648,7 +6647,7 @@ def Consent.kept(
       Kept.trans(
         s,
         Replicas.State.keyed(~Basics.Ask.machine(), s, Replicas.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), i)),
-        Voting.Node.step(n, Replicas.State.keyed(~Basics.Ask.machine(), s, Replicas.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), i)), c),
+        Replicas.Node.step(~Stepping.Ask.kernel(), n, Replicas.State.keyed(~Basics.Ask.machine(), s, Replicas.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), i)), c),
         Kept.same(
           s,
           Replicas.State.keyed(~Basics.Ask.machine(), s, Replicas.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), i)),
@@ -6674,14 +6673,14 @@ def Does.grows(
     case Spec.Deed.Ask{+e, +q}:
       Grows.trans(
         s,
-        Voting.Node.ask(n, s, e, q),
-        Reading.Adopt.at(n, Voting.Node.ask(n, s, e, q), Basics.Ask.chain(Replicas.Envelope.of(e), q))
+        Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q),
+        Reading.Adopt.at(n, Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q), Basics.Ask.chain(Replicas.Envelope.of(e), q))
       )(
         Ask.grows(n, s, e, q)
       )(
         Adopt.at.grows(
           n,
-          Voting.Node.ask(n, s, e, q),
+          Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q),
           Basics.Ask.chain(Replicas.Envelope.of(e), q)
         )
       )
@@ -6694,17 +6693,17 @@ def Does.grows(
     case Spec.Deed.Consent{+i}:
       Grows.trans(
         s,
-        Voting.Node.consent(n, s, i),
-        Reading.Adopt.maybe(n, Voting.Node.consent(n, s, i), Basics.Node.chain_of(s, i))
+        Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i),
+        Reading.Adopt.maybe(n, Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i), Replicas.Node.chain_of(~Basics.Ask.machine(), s, i))
       )(
-        Consent.grows(n, s, i, Basics.Node.chain_of(s, i))
-      )(Adopt.maybe.grows(n, Voting.Node.consent(n, s, i), Basics.Node.chain_of(s, i)))
+        Consent.grows(n, s, i, Replicas.Node.chain_of(~Basics.Ask.machine(), s, i))
+      )(Adopt.maybe.grows(n, Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i), Replicas.Node.chain_of(~Basics.Ask.machine(), s, i)))
     case Spec.Deed.Pass{+c}:
       Grows.trans(
         s,
-        Voting.Node.pass(n, s, c),
-        Reading.Adopt.at(n, Voting.Node.pass(n, s, c), c)
-      )(Pass.grows(n, s, c))(Adopt.at.grows(n, Voting.Node.pass(n, s, c), c))
+        Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c),
+        Reading.Adopt.at(n, Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c), c)
+      )(Pass.grows(n, s, c))(Adopt.at.grows(n, Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c), c))
 
 def Spec.Node.after_grows(n, evs, s):
   match evs:
@@ -6728,14 +6727,14 @@ def Does.kept(
     case Spec.Deed.Ask{+e, +q}:
       Kept.trans(
         s,
-        Voting.Node.ask(n, s, e, q),
+        Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q),
         Reading.Adopt.at(
           n,
-          Voting.Node.ask(n, s, e, q),
+          Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q),
           Basics.Ask.chain(Replicas.Envelope.of(e), q)
         ),
         Ask.kept(n, s, e, q),
-        Adopt.at.kept(n, Voting.Node.ask(n, s, e, q), Basics.Ask.chain(Replicas.Envelope.of(e), q))
+        Adopt.at.kept(n, Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q), Basics.Ask.chain(Replicas.Envelope.of(e), q))
       )
     case Spec.Deed.Take{t}:
       Take.kept(s, t)
@@ -6759,18 +6758,18 @@ def Does.kept(
     case Spec.Deed.Consent{+i}:
       Kept.trans(
         s,
-        Voting.Node.consent(n, s, i),
-        Reading.Adopt.maybe(n, Voting.Node.consent(n, s, i), Basics.Node.chain_of(s, i)),
-        Consent.kept(n, s, i, Basics.Node.chain_of(s, i)),
-        Adopt.maybe.kept(n, Voting.Node.consent(n, s, i), Basics.Node.chain_of(s, i))
+        Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i),
+        Reading.Adopt.maybe(n, Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i), Replicas.Node.chain_of(~Basics.Ask.machine(), s, i)),
+        Consent.kept(n, s, i, Replicas.Node.chain_of(~Basics.Ask.machine(), s, i)),
+        Adopt.maybe.kept(n, Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i), Replicas.Node.chain_of(~Basics.Ask.machine(), s, i))
       )
     case Spec.Deed.Pass{+c}:
       Kept.trans(
         s,
-        Voting.Node.pass(n, s, c),
-        Reading.Adopt.at(n, Voting.Node.pass(n, s, c), c),
+        Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c),
+        Reading.Adopt.at(n, Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c), c),
         Pass.kept(n, s, c),
-        Adopt.at.kept(n, Voting.Node.pass(n, s, c), c)
+        Adopt.at.kept(n, Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c), c)
       )
     case Spec.Deed.Pass{c}:
       Pass.kept(n, s, c)
@@ -8816,7 +8815,7 @@ def Follow.allowed.at(
       e => e
 
 def Spec.Plan.follow_allowed(s, c, w, t, th, os, v, from):
-  Follow.allowed.at(s, c, t, th, v, from, Voting.Vote.allowed(s, w, os, v, from))
+  Follow.allowed.at(s, c, t, th, v, from, Replicas.Vote.allowed(~Basics.Ask.machine(), s, w, os, v, from))
 
 # Agreement
 # ---------
@@ -8871,7 +8870,7 @@ def Scan.elim.at(
   r: Nat,
   m: Maybe<&2, Ledgers.Vote>,
   rec: {
-    Voting.Height.decide(s, c, n, os, p) == Some{v}: Maybe<&2, Ledgers.Vote>
+    Replicas.Height.decide(~Basics.Ask.machine(), s, c, n, os, p) == Some{v}: Maybe<&2, Ledgers.Vote>
   } -> (
     @q: Nat -> {
       Ledgers.State.decide(
@@ -8892,9 +8891,9 @@ def Scan.elim.at(
   )
     == m: Maybe<&2, Ledgers.Vote>
 } -> {
-  Voting.Vote.first(
+  Replicas.Vote.first(
     m,
-    u => Voting.Height.decide(s, c, n, os, p)
+    u => Replicas.Height.decide(~Basics.Ask.machine(), s, c, n, os, p)
   )
     == Some{v}: Maybe<&2, Ledgers.Vote>
 } -> (
@@ -8935,7 +8934,7 @@ def Scan.elim(
   k: Nat,
   -v: Ledgers.Vote
 ) -> {
-  Voting.Height.decide(s, c, n, os, k) == Some{v}: Maybe<&2, Ledgers.Vote>
+  Replicas.Height.decide(~Basics.Ask.machine(), s, c, n, os, k) == Some{v}: Maybe<&2, Ledgers.Vote>
 } -> (
   @q: Nat -> {
     Ledgers.State.decide(
@@ -8965,7 +8964,7 @@ def Scan.elim(
       )({==})
 
 # a head is at its own height
-def Level.refl(h: Replicas.Head) -> {Voting.Heads.level(Some{h}, Some{h}) == True{}: Bool}:
+def Level.refl(h: Replicas.Head) -> {Replicas.Heads.level(Some{h}, Some{h}) == True{}: Bool}:
   match h:
     case Replicas.Head{r, b, n, t}:
       Shared.Eq.refl(~U32, ~U32.is_eq, Shared.U32.laws(), n)
@@ -8983,7 +8982,7 @@ def Advance.found(
     Replicas.Tip,
     Ledgers.Vote,
     Replicas.Head.tip(~Basics.Ask.machine(), s, h),
-    t => Voting.Height.decide(s, c, Replicas.Head.next(h), Replicas.Tip.owners(t), k)
+    t => Replicas.Height.decide(~Basics.Ask.machine(), s, c, Replicas.Head.next(h), Replicas.Tip.owners(t), k)
   )
 
 # the step that the owners in the tip of the head h decided next on the line
@@ -9004,7 +9003,7 @@ def Head.step(h: Replicas.Head, m: Maybe<&2, Ledgers.Vote>) -> Replicas.Head:
 # h, is x
 def Moves(s2: Replicas.Node<Basics.Ask>, c: Ledgers.Chain, h: Replicas.Head, x: Replicas.Head) -> Type:
   {
-    Voting.Heads.level(Some{h}, Replicas.Node.head_of(~Basics.Ask.machine(), s2, c)) == False{}: Bool
+    Replicas.Heads.level(Some{h}, Replicas.Node.head_of(~Basics.Ask.machine(), s2, c)) == False{}: Bool
   } -> {Replicas.Node.head_of(~Basics.Ask.machine(), s2, c) == Some{x}: Maybe<&2, Replicas.Head>}
 
 # a node whose head is h did not move it
@@ -9021,18 +9020,18 @@ def Moves.stay(
       Equal.trans(
         Bool,
         False{},
-        Voting.Heads.level(Some{h}, Some{h}),
+        Replicas.Heads.level(Some{h}, Some{h}),
         True{},
         Equal.trans(
           Bool,
           False{},
-          Voting.Heads.level(Some{h}, Replicas.Node.head_of(~Basics.Ask.machine(), s, c)),
-          Voting.Heads.level(Some{h}, Some{h}),
-          Equal.sym(Bool, Voting.Heads.level(Some{h}, Replicas.Node.head_of(~Basics.Ask.machine(), s, c)), False{}, hl),
+          Replicas.Heads.level(Some{h}, Replicas.Node.head_of(~Basics.Ask.machine(), s, c)),
+          Replicas.Heads.level(Some{h}, Some{h}),
+          Equal.sym(Bool, Replicas.Heads.level(Some{h}, Replicas.Node.head_of(~Basics.Ask.machine(), s, c)), False{}, hl),
           Equal.cong(
             Maybe<&2, Replicas.Head>,
             Bool,
-            m => Voting.Heads.level(Some{h}, m),
+            m => Replicas.Heads.level(Some{h}, m),
             Replicas.Node.head_of(~Basics.Ask.machine(), s, c),
             Some{h},
             em
@@ -9098,7 +9097,7 @@ def Advance.moved.moves(
   -x: Replicas.Head,
   em: {Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == Some{h}: Maybe<&2, Replicas.Head>},
   ex: {hd == x: Replicas.Head}
-) -> Moves(Voting.Advance.moved(s, m, c, hd, qs), c, h, x):
+) -> Moves(Replicas.Advance.moved(~Basics.Ask.machine(), s, m, c, hd, qs), c, h, x):
   match m:
     case None{}:
       Moves.stay(s, c, h, x, em)
@@ -9148,7 +9147,7 @@ def Advance.ran.moves.if(
   Shared.Bool.when(
     Replicas.Node<Basics.Ask>,
     bq,
-    u => Voting.Advance.moved(
+    u => Replicas.Advance.moved(~Basics.Ask.machine(), 
       s,
       Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]),
       c,
@@ -9193,7 +9192,7 @@ def Advance.ran.moves(
   ex: @t2: Replicas.Tip -> {
     Replicas.Root.same(after, Some{Replicas.Tip.hash(t2)}) == True{}: Bool
   } -> {Replicas.Head{r, br, U32.inc(next), Some{Replicas.Tip.hash(t2)}} == x: Replicas.Head}
-) -> Moves(Voting.Advance.ran(s, c, r, br, next, after, qs, m), c, h, x):
+) -> Moves(Replicas.Advance.ran(~Basics.Ask.machine(), s, c, r, br, next, after, qs, m), c, h, x):
   match m:
     case None{}:
       Moves.stay(s, c, h, x, em)
@@ -9225,12 +9224,12 @@ def Advance.step.moves(
   m: Maybe<&2, Ledgers.Vote>
 ) -> {
   Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == Some{h}: Maybe<&2, Replicas.Head>
-} -> Moves(Voting.Advance.step(s, c, h, t, m), c, h, Head.step(h, m)):
+} -> Moves(Replicas.Advance.step(~Stepping.Ask.kernel(), s, c, h, t, m), c, h, Head.step(h, m)):
   match h m:
     case Replicas.Head{+r, +br, +next, +th} Some{Ledgers.Vote{before, +qs, +after}}:
       +em => Moves.when(
         Replicas.Root.same(before, th),
-        Voting.Advance.ran(s, c, r, br, next, after, qs, Replicas.Step.run(~Stepping.Ask.kernel(), s, c, t, qs)),
+        Replicas.Advance.ran(~Basics.Ask.machine(), s, c, r, br, next, after, qs, Replicas.Step.run(~Stepping.Ask.kernel(), s, c, t, qs)),
         s,
         c,
         Replicas.Head{r, br, next, th},
@@ -9272,7 +9271,7 @@ def Advance.at.moves(
   Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == Some{h}: Maybe<&2, Replicas.Head>
 } -> {
   Replicas.Head.tip(~Basics.Ask.machine(), s, h) == m: Maybe<&2, Replicas.Tip>
-} -> Moves(Voting.Advance.at(s, c, h, m), c, h, Head.step(h, Advance.vote(s, c, h))):
+} -> Moves(Replicas.Advance.at(~Stepping.Ask.kernel(), s, c, h, m), c, h, Head.step(h, Advance.vote(s, c, h))):
   match m:
     case None{}:
       em => et => Moves.stay(s, c, h, Head.step(h, Advance.vote(s, c, h)), em)
@@ -9281,7 +9280,7 @@ def Advance.at.moves(
         %Equal.sym(
           Maybe<&2, Ledgers.Vote>,
           Advance.vote(s, c, h),
-          Voting.Height.decide(
+          Replicas.Height.decide(~Basics.Ask.machine(), 
             s,
             c,
             Replicas.Head.next(h),
@@ -9296,7 +9295,7 @@ def Advance.at.moves(
               Replicas.Tip,
               Ledgers.Vote,
               mt,
-              t1 => Voting.Height.decide(
+              t1 => Replicas.Height.decide(~Basics.Ask.machine(), 
                 s,
                 c,
                 Replicas.Head.next(h),
@@ -9309,12 +9308,12 @@ def Advance.at.moves(
             et
           )
         ): Moves(
-          Voting.Advance.step(
+          Replicas.Advance.step(~Stepping.Ask.kernel(), 
             s,
             c,
             h,
             t,
-            Voting.Height.decide(
+            Replicas.Height.decide(~Basics.Ask.machine(), 
               s,
               c,
               Replicas.Head.next(h),
@@ -9331,7 +9330,7 @@ def Advance.at.moves(
           c,
           h,
           t,
-          Voting.Height.decide(
+          Replicas.Height.decide(~Basics.Ask.machine(), 
             s,
             c,
             Replicas.Head.next(h),
@@ -9348,10 +9347,10 @@ def Advance.decided(
 ) -> {
   Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == Some{h}: Maybe<&2, Replicas.Head>
 } -> {
-  Voting.Heads.level(Some{h}, Replicas.Node.head_of(~Basics.Ask.machine(), Voting.Node.advance(s, c), c)) == False{}: Bool
+  Replicas.Heads.level(Some{h}, Replicas.Node.head_of(~Basics.Ask.machine(), Replicas.Node.advance(~Stepping.Ask.kernel(), s, c), c)) == False{}: Bool
 } -> {
   Replicas.Node.head_of(~Basics.Ask.machine(), 
-    Voting.Node.advance(s, c),
+    Replicas.Node.advance(~Stepping.Ask.kernel(), s, c),
     c
   )
     == Some{Head.step(h, Advance.vote(s, c, h))}: Maybe<&2, Replicas.Head>
@@ -9362,7 +9361,7 @@ def Advance.decided(
       Replicas.Node.head_of(~Basics.Ask.machine(), s, c),
       Some{h},
       em
-    ): Moves(Voting.Advance.head(s, c, _), c, h, Head.step(h, Advance.vote(s, c, h)))
+    ): Moves(Replicas.Advance.head(~Stepping.Ask.kernel(), s, c, _), c, h, Head.step(h, Advance.vote(s, c, h)))
     Advance.at.moves(s, c, h, Replicas.Head.tip(~Basics.Ask.machine(), s, h))(em)({==})
 
 # Found.elim once the tip m of the head is known
@@ -9382,7 +9381,7 @@ def Found.elim.at(
     Replicas.Tip,
     Ledgers.Vote,
     m,
-    t => Voting.Height.decide(s, c, Replicas.Head.next(h), Replicas.Tip.owners(t), k)
+    t => Replicas.Height.decide(~Basics.Ask.machine(), s, c, Replicas.Head.next(h), Replicas.Tip.owners(t), k)
   )
     == Some{v}: Maybe<&2, Ledgers.Vote>
 } -> (
@@ -9955,7 +9954,7 @@ def Spec.Seal.fits_own(seed, x, last, k, n, f):
 # a head that no step moves is at its own height
 def Level.none(
   x: Replicas.Head
-) -> {Voting.Heads.level(Some{x}, Some{Head.step(x, None{})}) == True{}: Bool}:
+) -> {Replicas.Heads.level(Some{x}, Some{Head.step(x, None{})}) == True{}: Bool}:
   match x:
     case Replicas.Head{r, b, n, t}:
       Shared.Eq.refl(~U32, ~U32.is_eq, Shared.U32.laws(), n)
@@ -9964,7 +9963,7 @@ def Level.none(
 def Line.One(s: Replicas.Node<Basics.Ask>, c: Ledgers.Chain) -> Type:
   @x: Replicas.Head -> @t: Replicas.Tip -> {
     Replicas.Head.tip(~Basics.Ask.machine(), s, x) == Some{t}: Maybe<&2, Replicas.Tip>
-  } -> Voting.Height.One(s, c, Replicas.Head.next(x), Replicas.Tip.owners(t))
+  } -> Replicas.Height.One(~Basics.Ask.machine(), s, c, Replicas.Head.next(x), Replicas.Tip.owners(t))
 
 # that the rounds of each of k heights of the line c decide one step in s (one
 # witness for each step of a history: a proof uses each once)
@@ -10124,7 +10123,7 @@ def Step.same.at(
   -y: Replicas.Head,
   w1: Maybe<&2, Ledgers.Vote>,
   w2: Maybe<&2, Ledgers.Vote>,
-  one: Voting.Height.One(u, c, Replicas.Head.next(z), Replicas.Tip.owners(t))
+  one: Replicas.Height.One(~Basics.Ask.machine(), u, c, Replicas.Head.next(z), Replicas.Tip.owners(t))
 ) -> {
   Ledgers.State.decide(
     ~Basics.Ask,
@@ -10446,7 +10445,7 @@ def Moved.step(
   h: Replicas.Head,
   v: Ledgers.Vote
 ) -> {
-  Voting.Heads.level(Some{h}, Some{Head.step(h, Some{v})}) == False{}: Bool
+  Replicas.Heads.level(Some{h}, Some{Head.step(h, Some{v})}) == False{}: Bool
 } -> {
   Spec.Head.moved(h, Some{v}) == Some{Head.step(h, Some{v})}: Maybe<&2, Replicas.Head>
 }:
@@ -10460,11 +10459,11 @@ def Moved.step(
           Equal.trans(
             Bool,
             False{},
-            Voting.Heads.level(Some{Replicas.Head{r, b, n, th}}, Some{Replicas.Head{r, b, n, th}}),
+            Replicas.Heads.level(Some{Replicas.Head{r, b, n, th}}, Some{Replicas.Head{r, b, n, th}}),
             True{},
             Equal.sym(
               Bool,
-              Voting.Heads.level(Some{Replicas.Head{r, b, n, th}}, Some{Replicas.Head{r, b, n, th}}),
+              Replicas.Heads.level(Some{Replicas.Head{r, b, n, th}}, Some{Replicas.Head{r, b, n, th}}),
               False{},
               e
             ),
@@ -10482,7 +10481,7 @@ def Advance.at.one(
 ) -> {
   Advance.vote(s, c, h) == m: Maybe<&2, Ledgers.Vote>
 } -> {
-  Voting.Heads.level(Some{h}, Some{Head.step(h, m)}) == False{}: Bool
+  Replicas.Heads.level(Some{h}, Some{Head.step(h, m)}) == False{}: Bool
 } -> Exists(
   Nat,
   q => {Spec.Line.at([q], s, c, h) == Some{Head.step(h, m)}: Maybe<&2, Replicas.Head>}
@@ -10506,11 +10505,11 @@ def Advance.at.one(
           Equal.trans(
             Bool,
             False{},
-            Voting.Heads.level(Some{h}, Some{Head.step(h, None{})}),
+            Replicas.Heads.level(Some{h}, Some{Head.step(h, None{})}),
             True{},
             Equal.sym(
               Bool,
-              Voting.Heads.level(Some{h}, Some{Head.step(h, None{})}),
+              Replicas.Heads.level(Some{h}, Some{Head.step(h, None{})}),
               False{},
               hl
             ),
@@ -10547,12 +10546,12 @@ def Spec.Node.advance_at(s, c, h):
   +eh => +hl =>
     %Equal.sym(
       Maybe<&2, Replicas.Head>,
-      Replicas.Node.head_of(~Basics.Ask.machine(), Voting.Node.advance(s, c), c),
+      Replicas.Node.head_of(~Basics.Ask.machine(), Replicas.Node.advance(~Stepping.Ask.kernel(), s, c), c),
       Some{Head.step(h, Advance.vote(s, c, h))},
       Advance.decided(s, c, h)(eh)(hl)
     ): Exists(Nat, q => {Spec.Line.at([q], s, c, h) == _: Maybe<&2, Replicas.Head>})
     Advance.at.one(s, c, h, Advance.vote(s, c, h))({==})(
-      %Advance.decided(s, c, h)(eh)(hl): {Voting.Heads.level(Some{h}, _) == False{}: Bool}
+      %Advance.decided(s, c, h)(eh)(hl): {Replicas.Heads.level(Some{h}, _) == False{}: Bool}
       hl)
 
 def Spec.Node.read_draft(s, w, r, b, n, c):
@@ -10908,7 +10907,7 @@ def Sub.count.at(
   b: Bool,
   eb: {String.eq(f, o) == b: Bool},
   ih1: {
-    Voting.Owners.sub(rest, fs) == True{}: Bool
+    Replicas.Owners.sub(rest, fs) == True{}: Bool
   } -> {
     Round.voter(s, c, h, r, fs, v) == None{}: Maybe<&2, String>
   } -> {
@@ -10919,7 +10918,7 @@ def Sub.count.at(
       == True{}: Bool
   },
   ih2: {
-    Voting.Owners.sub(rest, f <> fs) == True{}: Bool
+    Replicas.Owners.sub(rest, f <> fs) == True{}: Bool
   } -> {
     Round.voter(s, c, h, r, f <> fs, v) == None{}: Maybe<&2, String>
   } -> {
@@ -10933,8 +10932,8 @@ def Sub.count.at(
   Shared.Bool.when(
     Bool,
     b,
-    u => Voting.Owners.sub(rest, fs),
-    u => Voting.Owners.sub(rest, f <> fs)
+    u => Replicas.Owners.sub(rest, fs),
+    u => Replicas.Owners.sub(rest, f <> fs)
   )
     == True{}: Bool
 } -> {
@@ -11012,7 +11011,7 @@ def Sub.count(
   from: List<&2, String>,
   +v: Ledgers.Vote
 ) -> {
-  Voting.Owners.sub(os, from) == True{}: Bool
+  Replicas.Owners.sub(os, from) == True{}: Bool
 } -> {
   Round.voter(s, c, h, r, from, v) == None{}: Maybe<&2, String>
 } -> {
@@ -11124,8 +11123,8 @@ def Major.meets(
     v
   )
     == True{}: Bool
-} -> {Voting.Owners.sub(os, from) == True{}: Bool}
-  -> {Voting.Owners.major(os, from) == True{}: Bool}
+} -> {Replicas.Owners.sub(os, from) == True{}: Bool}
+  -> {Replicas.Owners.major(os, from) == True{}: Bool}
   -> {Round.voter(s, c, h, r, from, v) == None{}: Maybe<&2, String>}
   -> Empty:
   hh => es => em => ev =>
@@ -11184,7 +11183,7 @@ def Mine.le.or(
     rest == Some{Ledgers.Last{r, x}}: Maybe<&2, Ledgers.Last>
   } -> {Nat.is_le(r, k) == True{}: Bool}
 ) -> {
-  Voting.Last.or(k, m, u => rest) == Some{Ledgers.Last{r, x}}: Maybe<&2, Ledgers.Last>
+  Replicas.Last.or(k, m, u => rest) == Some{Ledgers.Last{r, x}}: Maybe<&2, Ledgers.Last>
 } -> {Nat.is_le(r, k) == True{}: Bool}:
   match m:
     case Some{y}:
@@ -11211,7 +11210,7 @@ def Mine.le(
   +r: Nat,
   +x: Ledgers.Vote
 ) -> {
-  Voting.Last.mine(q, s, c, h, p) == Some{Ledgers.Last{r, x}}: Maybe<&2, Ledgers.Last>
+  Replicas.Last.mine(~Basics.Ask.machine(), q, s, c, h, p) == Some{Ledgers.Last{r, x}}: Maybe<&2, Ledgers.Last>
 } -> {Nat.is_le(r, p) == True{}: Bool}:
   match p:
     case 0n:
@@ -11230,7 +11229,7 @@ def Mine.le(
       Mine.le.or(
         1n+j,
         Replicas.Cast.of(~Basics.Ask.machine(), s, Ledgers.Where{c, h, 1n+j}, q),
-        Voting.Last.mine(q, s, c, h, j),
+        Replicas.Last.mine(~Basics.Ask.machine(), q, s, c, h, j),
         r,
         x,
         e => Shared.Nat.le_succ(r, j)(Mine.le(s, c, h, q, j, r, x)(e))
@@ -11252,7 +11251,7 @@ def Mine.cast.or(
     rest == Some{Ledgers.Last{r, x}}: Maybe<&2, Ledgers.Last>
   } -> {Replicas.Cast.of(~Basics.Ask.machine(), s, Ledgers.Where{c, h, r}, q) == Some{x}: Maybe<&2, Ledgers.Vote>}
 ) -> {
-  Voting.Last.or(k, m, u => rest) == Some{Ledgers.Last{r, x}}: Maybe<&2, Ledgers.Last>
+  Replicas.Last.or(k, m, u => rest) == Some{Ledgers.Last{r, x}}: Maybe<&2, Ledgers.Last>
 } -> {Replicas.Cast.of(~Basics.Ask.machine(), s, Ledgers.Where{c, h, r}, q) == Some{x}: Maybe<&2, Ledgers.Vote>}:
   match m:
     case Some{y}:
@@ -11287,7 +11286,7 @@ def Mine.cast(
   +r: Nat,
   +x: Ledgers.Vote
 ) -> {
-  Voting.Last.mine(q, s, c, h, p) == Some{Ledgers.Last{r, x}}: Maybe<&2, Ledgers.Last>
+  Replicas.Last.mine(~Basics.Ask.machine(), q, s, c, h, p) == Some{Ledgers.Last{r, x}}: Maybe<&2, Ledgers.Last>
 } -> {Replicas.Cast.of(~Basics.Ask.machine(), s, Ledgers.Where{c, h, r}, q) == Some{x}: Maybe<&2, Ledgers.Vote>}:
   match p:
     case 0n:
@@ -11316,7 +11315,7 @@ def Mine.cast(
         1n+j,
         Replicas.Cast.of(~Basics.Ask.machine(), s, Ledgers.Where{c, h, 1n+j}, q),
         {==},
-        Voting.Last.mine(q, s, c, h, j),
+        Replicas.Last.mine(~Basics.Ask.machine(), q, s, c, h, j),
         r,
         x,
         Mine.cast(s, c, h, q, j, r, x)
@@ -11389,7 +11388,7 @@ def Mine.from.or(
   Nat.is_le(r1, k) == True{}: Bool
 } -> (
   {m == None{}: Maybe<&2, Ledgers.Vote>} -> {Last.from(rest, r1) == True{}: Bool}
-) -> {Last.from(Voting.Last.or(k, m, u => rest), r1) == True{}: Bool}:
+) -> {Last.from(Replicas.Last.or(k, m, u => rest), r1) == True{}: Bool}:
   match m:
     case Some{y}:
       hk => ih => hk
@@ -11410,7 +11409,7 @@ def Mine.from(
   Replicas.Cast.of(~Basics.Ask.machine(), s, Ledgers.Where{c, h, r1}, q) == Some{v1}: Maybe<&2, Ledgers.Vote>
 } -> {
   Nat.is_le(r1, p) == True{}: Bool
-} -> {Last.from(Voting.Last.mine(q, s, c, h, p), r1) == True{}: Bool}:
+} -> {Last.from(Replicas.Last.mine(~Basics.Ask.machine(), q, s, c, h, p), r1) == True{}: Bool}:
   match p:
     case 0n:
       +e1 => +le =>
@@ -11448,7 +11447,7 @@ def Mine.from(
         Mine.from.or(
           1n+j,
           Replicas.Cast.of(~Basics.Ask.machine(), s, Ledgers.Where{c, h, 1n+j}, q),
-          Voting.Last.mine(q, s, c, h, j),
+          Replicas.Last.mine(~Basics.Ask.machine(), q, s, c, h, j),
           r1
         )(
           le
@@ -11497,7 +11496,7 @@ def Newer.left(
   b: Maybe<&2, Ledgers.Last>,
   r1: Nat
 ) -> {
-  Last.from(Voting.Last.newer(a, b), r1) == False{}: Bool
+  Last.from(Replicas.Last.newer(a, b), r1) == False{}: Bool
 } -> {Last.from(a, r1) == False{}: Bool}:
   match a b:
     case None{} y:
@@ -11540,7 +11539,7 @@ def Newer.right(
   b: Maybe<&2, Ledgers.Last>,
   r1: Nat
 ) -> {
-  Last.from(Voting.Last.newer(a, b), r1) == False{}: Bool
+  Last.from(Replicas.Last.newer(a, b), r1) == False{}: Bool
 } -> {Last.from(b, r1) == False{}: Bool}:
   match a b:
     case None{} y:
@@ -11554,19 +11553,19 @@ def Newer.right(
 def Rules.allow(
   ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
-  ~rules: Voting.Rounds.Rules(s, c),
+  ~rules: Replicas.Rounds.Rules(~Basics.Ask.machine(), s, c),
   hd: Replicas.Head,
   tp: Replicas.Tip,
   ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>}
-) -> Voting.Rounds.Allow(s, c, Replicas.Head.next(hd), Replicas.Tip.owners(tp)):
+) -> Replicas.Rounds.Allow(~Basics.Ask.machine(), s, c, Replicas.Head.next(hd), Replicas.Tip.owners(tp)):
   Shared.Pair.first(
-    Voting.Rounds.Allow(s, c, Replicas.Head.next(hd), Replicas.Tip.owners(tp)),
-    Voting.Rounds.Last(
+    Replicas.Rounds.Allow(~Basics.Ask.machine(), s, c, Replicas.Head.next(hd), Replicas.Tip.owners(tp)),
+    Replicas.Rounds.Last(~Basics.Ask.machine(), 
       s,
       c,
       Replicas.Head.next(hd)
     )
-      & Voting.Rounds.Same(s, c, Replicas.Head.next(hd)),
+      & Replicas.Rounds.Same(~Basics.Ask.machine(), s, c, Replicas.Head.next(hd)),
     rules(hd)(tp)(ok)
   )
 
@@ -11574,22 +11573,22 @@ def Rules.allow(
 def Rules.last(
   ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
-  ~rules: Voting.Rounds.Rules(s, c),
+  ~rules: Replicas.Rounds.Rules(~Basics.Ask.machine(), s, c),
   hd: Replicas.Head,
   tp: Replicas.Tip,
   ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>}
-) -> Voting.Rounds.Last(s, c, Replicas.Head.next(hd)):
+) -> Replicas.Rounds.Last(~Basics.Ask.machine(), s, c, Replicas.Head.next(hd)):
   Shared.Pair.first(
-    Voting.Rounds.Last(s, c, Replicas.Head.next(hd)),
-    Voting.Rounds.Same(s, c, Replicas.Head.next(hd)),
+    Replicas.Rounds.Last(~Basics.Ask.machine(), s, c, Replicas.Head.next(hd)),
+    Replicas.Rounds.Same(~Basics.Ask.machine(), s, c, Replicas.Head.next(hd)),
     Shared.Pair.second(
-      Voting.Rounds.Allow(s, c, Replicas.Head.next(hd), Replicas.Tip.owners(tp)),
-      Voting.Rounds.Last(
+      Replicas.Rounds.Allow(~Basics.Ask.machine(), s, c, Replicas.Head.next(hd), Replicas.Tip.owners(tp)),
+      Replicas.Rounds.Last(~Basics.Ask.machine(), 
         s,
         c,
         Replicas.Head.next(hd)
       )
-        & Voting.Rounds.Same(s, c, Replicas.Head.next(hd)),
+        & Replicas.Rounds.Same(~Basics.Ask.machine(), s, c, Replicas.Head.next(hd)),
       rules(hd)(tp)(ok)
     )
   )
@@ -11598,22 +11597,22 @@ def Rules.last(
 def Rules.same(
   ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
-  ~rules: Voting.Rounds.Rules(s, c),
+  ~rules: Replicas.Rounds.Rules(~Basics.Ask.machine(), s, c),
   hd: Replicas.Head,
   tp: Replicas.Tip,
   ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>}
-) -> Voting.Rounds.Same(s, c, Replicas.Head.next(hd)):
+) -> Replicas.Rounds.Same(~Basics.Ask.machine(), s, c, Replicas.Head.next(hd)):
   Shared.Pair.second(
-    Voting.Rounds.Last(s, c, Replicas.Head.next(hd)),
-    Voting.Rounds.Same(s, c, Replicas.Head.next(hd)),
+    Replicas.Rounds.Last(~Basics.Ask.machine(), s, c, Replicas.Head.next(hd)),
+    Replicas.Rounds.Same(~Basics.Ask.machine(), s, c, Replicas.Head.next(hd)),
     Shared.Pair.second(
-      Voting.Rounds.Allow(s, c, Replicas.Head.next(hd), Replicas.Tip.owners(tp)),
-      Voting.Rounds.Last(
+      Replicas.Rounds.Allow(~Basics.Ask.machine(), s, c, Replicas.Head.next(hd), Replicas.Tip.owners(tp)),
+      Replicas.Rounds.Last(~Basics.Ask.machine(), 
         s,
         c,
         Replicas.Head.next(hd)
       )
-        & Voting.Rounds.Same(s, c, Replicas.Head.next(hd)),
+        & Replicas.Rounds.Same(~Basics.Ask.machine(), s, c, Replicas.Head.next(hd)),
       rules(hd)(tp)(ok)
     )
   )
@@ -11623,7 +11622,7 @@ def Rules.same(
 def Pass.miss.at(
   ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
-  ~rules: Voting.Rounds.Rules(s, c),
+  ~rules: Replicas.Rounds.Rules(~Basics.Ask.machine(), s, c),
   +hd: Replicas.Head,
   tp: Replicas.Tip,
   ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
@@ -11646,7 +11645,7 @@ def Pass.miss.at(
   }
   -> {Nat.is_le(r1, p) == True{}: Bool}
   -> {Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, m) == True{}: Bool}
-  -> {Last.from(Voting.Passed.last(m), r1) == False{}: Bool}
+  -> {Last.from(Replicas.Passed.last(m), r1) == False{}: Bool}
   -> {rest == None{}: Maybe<&2, String>}
   -> {Voter.if(hit, o, rest) == None{}: Maybe<&2, String>}:
   match hit m:
@@ -11666,7 +11665,7 @@ def Pass.miss.at(
             Last.from(l, r1),
             True{},
             Equal.sym(Bool, Last.from(l, r1), False{}, ef),
-            %Equal.sym(Maybe<&2, Ledgers.Last>, l, Voting.Last.mine(o, s, c, Replicas.Head.next(hd), p), Rules.last(~s, ~c, ~rules, hd, tp, ok)(1n+p)(o)(l)(em)): {Last.from(_, r1) == True{}: Bool}
+            %Equal.sym(Maybe<&2, Ledgers.Last>, l, Replicas.Last.mine(~Basics.Ask.machine(), o, s, c, Replicas.Head.next(hd), p), Rules.last(~s, ~c, ~rules, hd, tp, ok)(1n+p)(o)(l)(em)): {Last.from(_, r1) == True{}: Bool}
             Mine.from(s, c, Replicas.Head.next(hd), o, p, r1, v1)(Hit.cast(s, c, Replicas.Head.next(hd), r1, o, v1)(eh))(le)))
       )
 
@@ -11675,7 +11674,7 @@ def Pass.miss.at(
 def Pass.miss(
   ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
-  ~rules: Voting.Rounds.Rules(s, c),
+  ~rules: Replicas.Rounds.Rules(~Basics.Ask.machine(), s, c),
   +hd: Replicas.Head,
   +tp: Replicas.Tip,
   +ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
@@ -11684,10 +11683,10 @@ def Pass.miss(
   +v1: Ledgers.Vote,
   from: List<&2, String>
 ) -> {Nat.is_le(r1, p) == True{}: Bool}
-  -> {Voting.Passed.all(s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from) == True{}: Bool}
+  -> {Replicas.Passed.all(~Basics.Ask.machine(), s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from) == True{}: Bool}
   -> {
     Last.from(
-      Voting.Passes.last(s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
+      Replicas.Passes.last(~Basics.Ask.machine(), s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
       r1
     )
       == False{}: Bool
@@ -11735,11 +11734,11 @@ def Pass.miss(
                 o
               )
             ),
-            u => Voting.Passed.all(s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, rest)
+            u => Replicas.Passed.all(~Basics.Ask.machine(), s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, rest)
           )(ea)
         )(
           Newer.left(
-            Voting.Passed.last(
+            Replicas.Passed.last(
               Ledgers.State.passed(
                 ~Basics.Ask,
                 Replicas.State.ledger(~Basics.Ask.machine(), s),
@@ -11747,7 +11746,7 @@ def Pass.miss(
                 o
               )
             ),
-            Voting.Passes.last(s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, rest),
+            Replicas.Passes.last(~Basics.Ask.machine(), s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, rest),
             r1
           )(ef)
         )(
@@ -11776,11 +11775,11 @@ def Pass.miss(
                   o
                 )
               ),
-              u => Voting.Passed.all(s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, rest)
+              u => Replicas.Passed.all(~Basics.Ask.machine(), s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, rest)
             )(ea)
           )(
             Newer.right(
-              Voting.Passed.last(
+              Replicas.Passed.last(
                 Ledgers.State.passed(
                   ~Basics.Ask,
                   Replicas.State.ledger(~Basics.Ask.machine(), s),
@@ -11788,7 +11787,7 @@ def Pass.miss(
                   o
                 )
               ),
-              Voting.Passes.last(s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, rest),
+              Replicas.Passes.last(~Basics.Ask.machine(), s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, rest),
               r1
             )(ef)
           )
@@ -11816,7 +11815,7 @@ def When.elim(
 def Named(-R: Type, s: Replicas.Node<Basics.Ask>, w: Ledgers.Where, l: Ledgers.Last) -> Type:
   (
     @q: String -> {
-      Voting.Passed.last(
+      Replicas.Passed.last(
         Ledgers.State.passed(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), w, q)
       )
         == Some{l}: Maybe<&2, Ledgers.Last>
@@ -11834,13 +11833,13 @@ def Last.elim.at(
   a: Maybe<&2, Ledgers.Last>,
   b: Maybe<&2, Ledgers.Last>
 ) -> {
-  Voting.Passed.last(
+  Replicas.Passed.last(
     Ledgers.State.passed(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), w, o)
   )
     == a: Maybe<&2, Ledgers.Last>
 } -> (
   {b == Some{l}: Maybe<&2, Ledgers.Last>} -> Named(R, s, w, l)
-) -> {Voting.Last.newer(a, b) == Some{l}: Maybe<&2, Ledgers.Last>} -> Named(R, s, w, l):
+) -> {Replicas.Last.newer(a, b) == Some{l}: Maybe<&2, Ledgers.Last>} -> Named(R, s, w, l):
   match a b:
     case None{} y:
       ea => ih => e => ih(e)
@@ -11850,7 +11849,7 @@ def Last.elim.at(
       )(
         Equal.trans(
           Maybe<&2, Ledgers.Last>,
-          Voting.Passed.last(Ledgers.State.passed(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), w, o)),
+          Replicas.Passed.last(Ledgers.State.passed(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), w, o)),
           Some{x},
           Some{l},
           ea,
@@ -11875,7 +11874,7 @@ def Last.elim.at(
           )(
             Equal.trans(
               Maybe<&2, Ledgers.Last>,
-              Voting.Passed.last(Ledgers.State.passed(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), w, o)),
+              Replicas.Passed.last(Ledgers.State.passed(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), w, o)),
               Some{Ledgers.Last{ra, va}},
               Some{l},
               ea,
@@ -11891,7 +11890,7 @@ def Last.elim(
   +w: Ledgers.Where,
   from: List<&2, String>,
   +l: Ledgers.Last
-) -> {Voting.Passes.last(s, w, from) == Some{l}: Maybe<&2, Ledgers.Last>} -> Named(R, s, w, l):
+) -> {Replicas.Passes.last(~Basics.Ask.machine(), s, w, from) == Some{l}: Maybe<&2, Ledgers.Last>} -> Named(R, s, w, l):
   match from:
     case Nil{}:
       e => k => Empty.absurd(R, Shared.Maybe.none_ne_some(Ledgers.Last, l, e))
@@ -11902,8 +11901,8 @@ def Last.elim(
         w,
         o,
         l,
-        Voting.Passed.last(Ledgers.State.passed(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), w, o)),
-        Voting.Passes.last(s, w, rest)
+        Replicas.Passed.last(Ledgers.State.passed(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), w, o)),
+        Replicas.Passes.last(~Basics.Ask.machine(), s, w, rest)
       )({==})(Last.elim(R, s, w, rest, l))
 
 # a pass that names a last vote is held
@@ -11911,7 +11910,7 @@ def Passed.some(
   m: Maybe<&2, Maybe<&2, Ledgers.Last>>,
   l: Ledgers.Last
 ) -> {
-  Voting.Passed.last(m) == Some{l}: Maybe<&2, Ledgers.Last>
+  Replicas.Passed.last(m) == Some{l}: Maybe<&2, Ledgers.Last>
 } -> {m == Some{Some{l}}: Maybe<&2, Maybe<&2, Ledgers.Last>>}:
   match m:
     case None{}:
@@ -12013,7 +12012,7 @@ def Rounds.Below(
 def Rounds.named(
   ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
-  ~rules: Voting.Rounds.Rules(s, c),
+  ~rules: Replicas.Rounds.Rules(~Basics.Ask.machine(), s, c),
   +hd: Replicas.Head,
   tp: Replicas.Tip,
   ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
@@ -12025,7 +12024,7 @@ def Rounds.named(
   +vm: Ledgers.Vote,
   +qw: String,
   +em: {
-    Voting.Last.mine(
+    Replicas.Last.mine(~Basics.Ask.machine(), 
       qw,
       s,
       c,
@@ -12053,7 +12052,7 @@ def Rounds.named(
 def Rounds.last(
   ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
-  ~rules: Voting.Rounds.Rules(s, c),
+  ~rules: Replicas.Rounds.Rules(~Basics.Ask.machine(), s, c),
   +hd: Replicas.Head,
   +tp: Replicas.Tip,
   +ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
@@ -12065,7 +12064,7 @@ def Rounds.last(
   from: List<&2, String>,
   m: Maybe<&2, Ledgers.Last>
 ) -> {
-  Voting.Passes.last(
+  Replicas.Passes.last(~Basics.Ask.machine(), 
     s,
     Ledgers.Where{c, Replicas.Head.next(hd), 1n+p},
     from
@@ -12073,7 +12072,7 @@ def Rounds.last(
     == m: Maybe<&2, Ledgers.Last>
 }
   -> {Last.from(m, r1) == True{}: Bool}
-  -> {Voting.Last.is(m, x) == True{}: Bool}
+  -> {Replicas.Last.is(m, x) == True{}: Bool}
   -> {Nat.is_lt(p, j) == True{}: Bool}
   -> Rounds.Below(s, c, Replicas.Head.next(hd), r1, v1, j)
   -> {x == v1: Ledgers.Vote}:
@@ -12094,14 +12093,14 @@ def Rounds.last(
         )(em)(
           +qw => ew =>
             %Ledgers.Vote.is_eq_sound(vm, x)(ei): {_ == v1: Ledgers.Vote}
-            Rounds.named(~s, ~c, ~rules, hd, tp, ok, r1, v1, p, j, rm, vm, qw, Equal.sym(Maybe<&2, Ledgers.Last>, Some{Ledgers.Last{rm, vm}}, Voting.Last.mine(qw, s, c, Replicas.Head.next(hd), p), Rules.last(~s, ~c, ~rules, hd, tp, ok)(1n+p)(qw)(Some{Ledgers.Last{rm, vm}})(Passed.some(Ledgers.State.passed(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, qw), Ledgers.Last{rm, vm})(ew))), lt, ef, ih))
+            Rounds.named(~s, ~c, ~rules, hd, tp, ok, r1, v1, p, j, rm, vm, qw, Equal.sym(Maybe<&2, Ledgers.Last>, Some{Ledgers.Last{rm, vm}}, Replicas.Last.mine(~Basics.Ask.machine(), qw, s, c, Replicas.Head.next(hd), p), Rules.last(~s, ~c, ~rules, hd, tp, ok)(1n+p)(qw)(Some{Ledgers.Last{rm, vm}})(Passed.some(Ledgers.State.passed(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, qw), Ledgers.Last{rm, vm})(ew))), lt, ef, ih))
 
 # Rounds.round once it is known whether the passes name a vote of the round
 # r1 or later (f)
 def Rounds.pick(
   ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
-  ~rules: Voting.Rounds.Rules(s, c),
+  ~rules: Replicas.Rounds.Rules(~Basics.Ask.machine(), s, c),
   +hd: Replicas.Head,
   +tp: Replicas.Tip,
   ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
@@ -12114,7 +12113,7 @@ def Rounds.pick(
   f: Bool
 ) -> {
   Last.from(
-    Voting.Passes.last(s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
+    Replicas.Passes.last(~Basics.Ask.machine(), s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
     r1
   )
     == f: Bool
@@ -12133,10 +12132,10 @@ def Rounds.pick(
   -> Rounds.Below(s, c, Replicas.Head.next(hd), r1, v1, j)
   -> {
     Later.all(
-      Voting.Passed.all(s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
-      Voting.Owners.sub(Replicas.Tip.owners(tp), from),
-      Voting.Owners.major(Replicas.Tip.owners(tp), from),
-      Voting.Last.is(Voting.Passes.last(s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from), x)
+      Replicas.Passed.all(~Basics.Ask.machine(), s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
+      Replicas.Owners.sub(Replicas.Tip.owners(tp), from),
+      Replicas.Owners.major(Replicas.Tip.owners(tp), from),
+      Replicas.Last.is(Replicas.Passes.last(~Basics.Ask.machine(), s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from), x)
     )
       == True{}: Bool
   }
@@ -12158,21 +12157,21 @@ def Rounds.pick(
             hh
           )(
             Later.all.b(
-              Voting.Passed.all(s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
-              Voting.Owners.sub(Replicas.Tip.owners(tp), from),
-              Voting.Owners.major(Replicas.Tip.owners(tp), from),
-              Voting.Last.is(
-                Voting.Passes.last(s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
+              Replicas.Passed.all(~Basics.Ask.machine(), s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
+              Replicas.Owners.sub(Replicas.Tip.owners(tp), from),
+              Replicas.Owners.major(Replicas.Tip.owners(tp), from),
+              Replicas.Last.is(
+                Replicas.Passes.last(~Basics.Ask.machine(), s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
                 x
               )
             )(al)
           )(
             Later.all.c(
-              Voting.Passed.all(s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
-              Voting.Owners.sub(Replicas.Tip.owners(tp), from),
-              Voting.Owners.major(Replicas.Tip.owners(tp), from),
-              Voting.Last.is(
-                Voting.Passes.last(s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
+              Replicas.Passed.all(~Basics.Ask.machine(), s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
+              Replicas.Owners.sub(Replicas.Tip.owners(tp), from),
+              Replicas.Owners.major(Replicas.Tip.owners(tp), from),
+              Replicas.Last.is(
+                Replicas.Passes.last(~Basics.Ask.machine(), s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
                 x
               )
             )(al)
@@ -12192,11 +12191,11 @@ def Rounds.pick(
               le
             )(
               Later.all.a(
-                Voting.Passed.all(s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
-                Voting.Owners.sub(Replicas.Tip.owners(tp), from),
-                Voting.Owners.major(Replicas.Tip.owners(tp), from),
-                Voting.Last.is(
-                  Voting.Passes.last(s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
+                Replicas.Passed.all(~Basics.Ask.machine(), s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
+                Replicas.Owners.sub(Replicas.Tip.owners(tp), from),
+                Replicas.Owners.major(Replicas.Tip.owners(tp), from),
+                Replicas.Last.is(
+                  Replicas.Passes.last(~Basics.Ask.machine(), s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
                   x
                 )
               )(al)
@@ -12218,18 +12217,18 @@ def Rounds.pick(
           x,
           j,
           from,
-          Voting.Passes.last(s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from)
+          Replicas.Passes.last(~Basics.Ask.machine(), s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from)
         )(
           {==}
         )(
           ef
         )(
           Later.all.d(
-            Voting.Passed.all(s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
-            Voting.Owners.sub(Replicas.Tip.owners(tp), from),
-            Voting.Owners.major(Replicas.Tip.owners(tp), from),
-            Voting.Last.is(
-              Voting.Passes.last(s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
+            Replicas.Passed.all(~Basics.Ask.machine(), s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
+            Replicas.Owners.sub(Replicas.Tip.owners(tp), from),
+            Replicas.Owners.major(Replicas.Tip.owners(tp), from),
+            Replicas.Last.is(
+              Replicas.Passes.last(~Basics.Ask.machine(), s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, from),
               x
             )
           )(al)
@@ -12239,7 +12238,7 @@ def Rounds.pick(
 def Rounds.base(
   ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
-  ~rules: Voting.Rounds.Rules(s, c),
+  ~rules: Replicas.Rounds.Rules(~Basics.Ask.machine(), s, c),
   +hd: Replicas.Head,
   +tp: Replicas.Tip,
   ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
@@ -12303,7 +12302,7 @@ def Rounds.base(
 def Rounds.step(
   ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
-  ~rules: Voting.Rounds.Rules(s, c),
+  ~rules: Replicas.Rounds.Rules(~Basics.Ask.machine(), s, c),
   +hd: Replicas.Head,
   +tp: Replicas.Tip,
   +ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
@@ -12364,12 +12363,12 @@ def Rounds.step(
           p,
           x,
           j,
-          Voting.Cast.from(s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, q),
+          Replicas.Cast.from(~Basics.Ask.machine(), s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, q),
           Last.from(
-            Voting.Passes.last(
+            Replicas.Passes.last(~Basics.Ask.machine(), 
               s,
               Ledgers.Where{c, Replicas.Head.next(hd), 1n+p},
-              Voting.Cast.from(s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, q)
+              Replicas.Cast.from(~Basics.Ask.machine(), s, Ledgers.Where{c, Replicas.Head.next(hd), 1n+p}, q)
             ),
             r1
           )
@@ -12387,7 +12386,7 @@ def Rounds.step(
 def Rounds.same.at(
   ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
-  ~rules: Voting.Rounds.Rules(s, c),
+  ~rules: Replicas.Rounds.Rules(~Basics.Ask.machine(), s, c),
   +hd: Replicas.Head,
   +tp: Replicas.Tip,
   ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
@@ -12460,7 +12459,7 @@ def Rounds.same.at(
 def Rounds.same(
   ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
-  ~rules: Voting.Rounds.Rules(s, c),
+  ~rules: Replicas.Rounds.Rules(~Basics.Ask.machine(), s, c),
   +hd: Replicas.Head,
   +tp: Replicas.Tip,
   +ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
@@ -12504,7 +12503,7 @@ def Rounds.same(
 def Rounds.later.at(
   ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
-  ~rules: Voting.Rounds.Rules(s, c),
+  ~rules: Replicas.Rounds.Rules(~Basics.Ask.machine(), s, c),
   +hd: Replicas.Head,
   +tp: Replicas.Tip,
   ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
@@ -12578,7 +12577,7 @@ def Rounds.later.at(
 def Rounds.later(
   ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
-  ~rules: Voting.Rounds.Rules(s, c),
+  ~rules: Replicas.Rounds.Rules(~Basics.Ask.machine(), s, c),
   +hd: Replicas.Head,
   +tp: Replicas.Tip,
   ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
@@ -12645,7 +12644,7 @@ def Rounds.later(
 def Rounds.one.at(
   ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
-  ~rules: Voting.Rounds.Rules(s, c),
+  ~rules: Replicas.Rounds.Rules(~Basics.Ask.machine(), s, c),
   hd: Replicas.Head,
   tp: Replicas.Tip,
   ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
@@ -12702,7 +12701,7 @@ def Rounds.one.at(
 def Rounds.one(
   ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
-  ~rules: Voting.Rounds.Rules(s, c)
+  ~rules: Replicas.Rounds.Rules(~Basics.Ask.machine(), s, c)
 ) -> Line.One(s, c):
   +hd => +tp => +ok => +r1 => +r2 => v1 => v2 => d1 => d2 =>
     Rounds.one.at(~s, ~c, ~rules, hd, tp, ok, r1, r2, v1, v2, Nat.is_le(r1, r2))({==})(d1)(d2)
@@ -12712,7 +12711,7 @@ def Rounds.one(
 def Rounds.ones(
   ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
-  ~rules: Voting.Rounds.Rules(s, c),
+  ~rules: Replicas.Rounds.Rules(~Basics.Ask.machine(), s, c),
   k: Nat
 ) -> Line.Ones(k, s, c):
   match k:
@@ -12906,8 +12905,8 @@ def Chain.of.kept(
   -c: Ledgers.Chain,
   g: {Reading.Node.grows(a, b) == True{}: Bool}
 ) -> {
-  Basics.Node.chain_of(a, i) == Some{c}: Maybe<&2, Ledgers.Chain>
-} -> {Basics.Node.chain_of(b, i) == Some{c}: Maybe<&2, Ledgers.Chain>}:
+  Replicas.Node.chain_of(~Basics.Ask.machine(), a, i) == Some{c}: Maybe<&2, Ledgers.Chain>
+} -> {Replicas.Node.chain_of(~Basics.Ask.machine(), b, i) == Some{c}: Maybe<&2, Ledgers.Chain>}:
   Shared.Maybe.bind_kept(
     Ledgers.Asked<Basics.Ask>,
     Ledgers.Chain,
@@ -12945,8 +12944,8 @@ def Out.kept(
   Shared.Maybe.bind_kept(
     Ledgers.Chain,
     Replicas.Out,
-    Basics.Node.chain_of(a, i),
-    Basics.Node.chain_of(b, i),
+    Replicas.Node.chain_of(~Basics.Ask.machine(), a, i),
+    Replicas.Node.chain_of(~Basics.Ask.machine(), b, i),
     c => Replicas.Chain.out(~Basics.Ask.machine(), a, c, i),
     c => Replicas.Chain.out(~Basics.Ask.machine(), b, c, i),
     o,
@@ -13010,8 +13009,8 @@ def Made.kept(
   Shared.Maybe.bind_kept(
     Ledgers.Chain,
     Replicas.Version,
-    Basics.Node.chain_of(a, v),
-    Basics.Node.chain_of(b, v),
+    Replicas.Node.chain_of(~Basics.Ask.machine(), a, v),
+    Replicas.Node.chain_of(~Basics.Ask.machine(), b, v),
     +c => Basics.Chain.made(a, c, v),
     +c => Basics.Chain.made(b, c, v),
     x,
@@ -14428,7 +14427,7 @@ def Advance.moved.path(
   emv: {Spec.Head.moved(h, Some{v}) == Some{hd}: Maybe<&2, Replicas.Head>}
 ) -> {
   Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]) == m: Maybe<&2, Replicas.Node<Basics.Ask>>
-} -> Spec.Node.On(s, Voting.Advance.moved(s, m, c, hd, qs)):
+} -> Spec.Node.On(s, Replicas.Advance.moved(~Basics.Ask.machine(), s, m, c, hd, qs)):
   match m:
     case None{}:
       e2 => Path.refl(s)
@@ -14485,7 +14484,7 @@ def Advance.ran.path.if(
   Shared.Bool.when(
     Replicas.Node<Basics.Ask>,
     bq,
-    u => Voting.Advance.moved(
+    u => Replicas.Advance.moved(~Basics.Ask.machine(), 
       s,
       Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]),
       c,
@@ -14560,7 +14559,7 @@ def Advance.ran.path(
   }
 ) -> {
   Run.after(s, m) == True{}: Bool
-} -> Spec.Node.On(s, Voting.Advance.ran(s, c, r, br, next, after, qs, m)):
+} -> Spec.Node.On(s, Replicas.Advance.ran(~Basics.Ask.machine(), s, c, r, br, next, after, qs, m)):
   match m:
     case None{}:
       ga => Path.refl(s)
@@ -14595,7 +14594,7 @@ def Advance.step.path(
 ) -> {Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == Some{h}: Maybe<&2, Replicas.Head>}
   -> {Replicas.Head.tip(~Basics.Ask.machine(), s, h) == Some{t}: Maybe<&2, Replicas.Tip>}
   -> {
-    Voting.Height.decide(
+    Replicas.Height.decide(~Basics.Ask.machine(), 
       s,
       c,
       Replicas.Head.next(h),
@@ -14604,18 +14603,18 @@ def Advance.step.path(
     )
       == m: Maybe<&2, Ledgers.Vote>
   }
-  -> Spec.Node.On(s, Voting.Advance.step(s, c, h, t, m)):
+  -> Spec.Node.On(s, Replicas.Advance.step(~Stepping.Ask.kernel(), s, c, h, t, m)):
   match h m:
     case Replicas.Head{r, br, +next, +th} Some{Ledgers.Vote{+before, +qs, after}}:
       em => et => ed => Path.when(
         Replicas.Root.same(before, th),
         s,
-        Voting.Advance.ran(s, c, r, br, next, after, qs, Replicas.Step.run(~Stepping.Ask.kernel(), s, c, t, qs)),
+        Replicas.Advance.ran(~Basics.Ask.machine(), s, c, r, br, next, after, qs, Replicas.Step.run(~Stepping.Ask.kernel(), s, c, t, qs)),
         s,
         Scan.elim(
           Spec.Node.On(
             s,
-            Voting.Advance.ran(s, c, r, br, next, after, qs, Replicas.Step.run(~Stepping.Ask.kernel(), s, c, t, qs))
+            Replicas.Advance.ran(~Basics.Ask.machine(), s, c, r, br, next, after, qs, Replicas.Step.run(~Stepping.Ask.kernel(), s, c, t, qs))
           ),
           s,
           c,
@@ -14659,7 +14658,7 @@ def Advance.at.path(
   Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == Some{h}: Maybe<&2, Replicas.Head>
 } -> {
   Replicas.Head.tip(~Basics.Ask.machine(), s, h) == m: Maybe<&2, Replicas.Tip>
-} -> Spec.Node.On(s, Voting.Advance.at(s, c, h, m)):
+} -> Spec.Node.On(s, Replicas.Advance.at(~Stepping.Ask.kernel(), s, c, h, m)):
   match m:
     case None{}:
       em => et => Path.refl(s)
@@ -14669,7 +14668,7 @@ def Advance.at.path(
         c,
         h,
         t,
-        Voting.Height.decide(
+        Replicas.Height.decide(~Basics.Ask.machine(), 
           s,
           c,
           Replicas.Head.next(h),
@@ -14683,10 +14682,10 @@ def Cast.path(
   +n: String,
   +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain
-) -> Spec.Node.On(s, Voting.Node.cast(n, s, c)):
+) -> Spec.Node.On(s, Replicas.Node.cast(~Stepping.Ask.kernel(), n, s, c)):
   Path.same(
     s,
-    Voting.Node.cast(n, s, c),
+    Replicas.Node.cast(~Stepping.Ask.kernel(), n, s, c),
     Cast.grows(n, s, c),
     Cast.head.heads(n, s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))
   )
@@ -14699,7 +14698,7 @@ def Advances.at.path(
   m: Maybe<&2, Replicas.Head>
 ) -> {
   Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == m: Maybe<&2, Replicas.Head>
-} -> Spec.Node.On(s, Voting.Advances.at(f, s, c, m)):
+} -> Spec.Node.On(s, Replicas.Advances.at(~Stepping.Ask.kernel(), f, s, c, m)):
   match f m:
     case 0n x:
       em => Path.refl(s)
@@ -14707,18 +14706,18 @@ def Advances.at.path(
       em => Path.refl(s)
     case 1n+(+p) Some{+h}:
       +em =>
-        +s1 = Voting.Advance.at(s, c, h, Replicas.Head.tip(~Basics.Ask.machine(), s, h))
+        +s1 = Replicas.Advance.at(~Stepping.Ask.kernel(), s, c, h, Replicas.Head.tip(~Basics.Ask.machine(), s, h))
         +m1 = Replicas.Node.head_of(~Basics.Ask.machine(), s1, c)
         Path.when(
-          Voting.Heads.level(Some{h}, m1),
+          Replicas.Heads.level(Some{h}, m1),
           s,
           s1,
-          Voting.Advances.at(p, s1, c, m1),
+          Replicas.Advances.at(~Stepping.Ask.kernel(), p, s1, c, m1),
           Advance.at.path(s, c, h, Replicas.Head.tip(~Basics.Ask.machine(), s, h))(em)({==}),
           Path.trans(
             s,
             s1,
-            Voting.Advances.at(p, s1, c, m1),
+            Replicas.Advances.at(~Stepping.Ask.kernel(), p, s1, c, m1),
             Advance.at.path(s, c, h, Replicas.Head.tip(~Basics.Ask.machine(), s, h))(em)({==}),
             Advances.at.path(p, s1, c, m1)({==})
           )
@@ -14729,7 +14728,7 @@ def Advances.path(
   f: Nat,
   +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain
-) -> Spec.Node.On(s, Voting.Node.advances(f, s, c)):
+) -> Spec.Node.On(s, Replicas.Node.advances(~Stepping.Ask.kernel(), f, s, c)):
   Advances.at.path(f, s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))({==})
 
 # what a node does at a head is on the paths
@@ -14737,10 +14736,10 @@ def Step.head.path(
   +n: String,
   +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain
-) -> Spec.Node.On(s, Voting.Step.head(n, s, c)):
-  +s1 = Voting.Node.advances(4294967295n, s, c)
-  +s2 = Voting.Node.cast(n, s1, c)
-  s3 = Voting.Node.advances(4294967295n, s2, c)
+) -> Spec.Node.On(s, Replicas.Step.head(~Stepping.Ask.kernel(), n, s, c)):
+  +s1 = Replicas.Node.advances(~Stepping.Ask.kernel(), 4294967295n, s, c)
+  +s2 = Replicas.Node.cast(~Stepping.Ask.kernel(), n, s1, c)
+  s3 = Replicas.Node.advances(~Stepping.Ask.kernel(), 4294967295n, s2, c)
   Path.trans(
     s,
     s1,
@@ -14794,12 +14793,12 @@ def Step.path(
   n: String,
   +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain
-) -> Spec.Node.On(s, Voting.Node.step(n, s, c)):
+) -> Spec.Node.On(s, Replicas.Node.step(~Stepping.Ask.kernel(), n, s, c)):
   s1 = Replicas.Node.open(~Basics.Ask.machine(), s, c)
   Path.trans(
     s,
     s1,
-    Voting.Step.head(n, s1, c),
+    Replicas.Step.head(~Stepping.Ask.kernel(), n, s1, c),
     Open.at.path(s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))({==}),
     Step.head.path(n, s1, c)
   )
@@ -14809,12 +14808,12 @@ def Pass.path(
   +n: String,
   +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain
-) -> Spec.Node.On(s, Voting.Node.pass(n, s, c)):
-  +s1 = Voting.Pass.head(n, s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))
+) -> Spec.Node.On(s, Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c)):
+  +s1 = Replicas.Pass.head(~Stepping.Ask.kernel(), n, s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))
   Path.trans(
     s,
     s1,
-    Voting.Node.step(n, s1, c),
+    Replicas.Node.step(~Stepping.Ask.kernel(), n, s1, c),
     Path.same(
       s,
       s1,
@@ -14975,7 +14974,7 @@ def Ask.new.path(
   +s: Replicas.Node<Basics.Ask>,
   +e: Replicas.Envelope,
   +q: Basics.Ask
-) -> Spec.Node.On(s, Voting.Node.ask.new(n, s, e, q)):
+) -> Spec.Node.On(s, Replicas.Node.ask.new(~Stepping.Ask.kernel(), n, s, e, q)):
   +i = Replicas.Envelope.of(e)
   c = Basics.Ask.chain(i, q)
   +l0 = Ledgers.State.ask(
@@ -14991,7 +14990,7 @@ def Ask.new.path(
   Path.trans(
     s,
     s0,
-    Voting.Node.step(n, s1, c),
+    Replicas.Node.step(~Stepping.Ask.kernel(), n, s1, c),
     Path.same(
       s,
       s0,
@@ -15009,7 +15008,7 @@ def Ask.new.path(
       ),
       Heads.led(s, l0)
     ),
-    Path.trans(s0, s1, Voting.Node.step(n, s1, c), Arrive.path(s0, i, q), Step.path(n, s1, c))
+    Path.trans(s0, s1, Replicas.Node.step(~Stepping.Ask.kernel(), n, s1, c), Arrive.path(s0, i, q), Step.path(n, s1, c))
   )
 
 # Node.ask_keeps once the cell m of the request's ID is known
@@ -15019,7 +15018,7 @@ def Ask.at.path(
   +e: Replicas.Envelope,
   q: Basics.Ask,
   m: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>
-) -> Spec.Node.On(s, Voting.Node.ask.at(n, s, e, q, m)):
+) -> Spec.Node.On(s, Replicas.Node.ask.at(~Stepping.Ask.kernel(), n, s, e, q, m)):
   match m:
     case Some{x}:
       Path.refl(s)
@@ -15027,7 +15026,7 @@ def Ask.at.path(
       Path.trans(
         s,
         Replicas.State.keyed(~Basics.Ask.machine(), s, Replicas.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), Replicas.Envelope.of(e))),
-        Voting.Node.ask.new(
+        Replicas.Node.ask.new(~Stepping.Ask.kernel(), 
           n,
           Replicas.State.keyed(~Basics.Ask.machine(), s, Replicas.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), Replicas.Envelope.of(e))),
           e,
@@ -15059,7 +15058,7 @@ def Ask.path(
   +s: Replicas.Node<Basics.Ask>,
   +e: Replicas.Envelope,
   q: Basics.Ask
-) -> Spec.Node.On(s, Voting.Node.ask(n, s, e, q)):
+) -> Spec.Node.On(s, Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q)):
   Ask.at.path(
     n,
     s,
@@ -15073,7 +15072,7 @@ def Take.asks.path(
   cs: List<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>,
   +old: Ledgers.State(Basics.Ask),
   +s: Replicas.Node<Basics.Ask>
-) -> Spec.Node.On(s, Voting.Take.asks(cs, old, s)):
+) -> Spec.Node.On(s, Replicas.Take.asks(~Stepping.Ask.kernel(), cs, old, s)):
   match cs:
     case Nil{}:
       Path.refl(s)
@@ -15091,7 +15090,7 @@ def Take.asks.path(
       Path.trans(
         s,
         s1,
-        Voting.Take.asks(rest, old, s1),
+        Replicas.Take.asks(~Stepping.Ask.kernel(), rest, old, s1),
         Path.when(
           Maybe.is_none(
             &2,
@@ -15117,16 +15116,16 @@ def Take.asks.path(
 def Take.path(
   +s: Replicas.Node<Basics.Ask>,
   +t: Ledgers.State(Basics.Ask)
-) -> Spec.Node.On(s, Voting.Node.take(s, t)):
-  +sent = Voting.Take.clean(
+) -> Spec.Node.On(s, Replicas.Node.take(~Stepping.Ask.kernel(), s, t)):
+  +sent = Replicas.Take.clean(~Basics.Ask.machine(), 
     Tries.Trie.values(Cells.Cell<Ledgers.Entry<Basics.Ask>>, t),
     Ledgers.State.empty(~Basics.Ask)
   )
   +l1 = Ledgers.State.take(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), sent)
   +s1 = Replicas.State.led(~Basics.Ask.machine(), s, l1)
   +cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Basics.Ask>>, sent)
-  +s2 = Voting.Take.asks(cs, Replicas.State.ledger(~Basics.Ask.machine(), s), s1)
-  +bs = Voting.Ballots.of(
+  +s2 = Replicas.Take.asks(~Stepping.Ask.kernel(), cs, Replicas.State.ledger(~Basics.Ask.machine(), s), s1)
+  +bs = Replicas.Ballots.of(~Basics.Ask.machine(), 
     Tries.Trie.values(
       Cells.Cell<Ledgers.Entry<Basics.Ask>>,
       Ledgers.State.missing(~Basics.Ask, ~Basics.Ask.is_eq, t, Replicas.State.ledger(~Basics.Ask.machine(), s))
@@ -15171,13 +15170,13 @@ def Steps.path(
   +n: String,
   cs: List<&2, Ledgers.Chain>,
   +s: Replicas.Node<Basics.Ask>
-) -> Spec.Node.On(s, Voting.Node.steps(n, cs, s)):
+) -> Spec.Node.On(s, Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, s)):
   match cs:
     case Nil{}:
       Path.refl(s)
     case Con{+c, rest}:
-      s1 = Voting.Node.step(n, s, c)
-      Path.trans(s, s1, Voting.Node.steps(n, rest, s1), Step.path(n, s, c), Steps.path(n, rest, s1))
+      s1 = Replicas.Node.step(~Stepping.Ask.kernel(), n, s, c)
+      Path.trans(s, s1, Replicas.Node.steps(~Stepping.Ask.kernel(), n, rest, s1), Step.path(n, s, c), Steps.path(n, rest, s1))
 
 # an adoption is on the paths, once the request m is known
 def Adopt.ask.path(
@@ -15256,9 +15255,9 @@ def More.path(
       Path.refl(s)
     case 1n+(p):
       Path.when(
-        Reading.Lines.level(cs, s, Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))),
+        Reading.Lines.level(cs, s, Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))),
         s,
-        Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
+        Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
         Reading.Sync.more(
           p,
           n,
@@ -15266,12 +15265,12 @@ def More.path(
           k,
           bs,
           pd,
-          Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
+          Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
         ),
         Path.trans(
           s,
           Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s),
-          Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
+          Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
           Path.same(
             s,
             Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s),
@@ -15282,7 +15281,7 @@ def More.path(
         ),
         Path.trans(
           s,
-          Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
+          Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
           Reading.Sync.more(
             p,
             n,
@@ -15290,12 +15289,12 @@ def More.path(
             k,
             bs,
             pd,
-            Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
+            Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
           ),
           Path.trans(
             s,
             Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s),
-            Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
+            Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
             Path.same(
               s,
               Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s),
@@ -15311,7 +15310,7 @@ def More.path(
             k,
             bs,
             pd,
-            Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
+            Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
           )
         )
       )
@@ -15322,15 +15321,15 @@ def Sync.path(
   +s: Replicas.Node<Basics.Ask>,
   +t: Ledgers.State(Basics.Ask)
 ) -> Spec.Node.On(s, Reading.Node.sync(n, s, t)):
-  +s1 = Voting.Node.take(s, t)
-  +cs = Voting.Sync.lines(s, s1, t)
-  +bs = Voting.Ballots.of(
+  +s1 = Replicas.Node.take(~Stepping.Ask.kernel(), s, t)
+  +cs = Replicas.Sync.lines(~Basics.Ask.machine(), s, s1, t)
+  +bs = Replicas.Ballots.of(~Basics.Ask.machine(), 
     Tries.Trie.values(
       Cells.Cell<Ledgers.Entry<Basics.Ask>>,
       Ledgers.State.missing(~Basics.Ask, ~Basics.Ask.is_eq, t, Replicas.State.ledger(~Basics.Ask.machine(), s))
     )
   )
-  +s2 = Voting.Node.steps(n, cs, s1)
+  +s2 = Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, s1)
   s3 = Reading.Sync.more(
     List.length(&2, Ledgers.Ballot, bs),
     n,
@@ -15374,7 +15373,7 @@ def Consent.path(
   +s: Replicas.Node<Basics.Ask>,
   +i: Ledgers.Id,
   m: Maybe<&2, Ledgers.Chain>
-) -> Spec.Node.On(s, Voting.Consent.at(n, s, i, m)):
+) -> Spec.Node.On(s, Replicas.Consent.at(~Stepping.Ask.kernel(), n, s, i, m)):
   match m:
     case None{}:
       Path.refl(s)
@@ -15382,7 +15381,7 @@ def Consent.path(
       Path.trans(
         s,
         Replicas.State.keyed(~Basics.Ask.machine(), s, Replicas.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), i)),
-        Voting.Node.step(n, Replicas.State.keyed(~Basics.Ask.machine(), s, Replicas.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), i)), c),
+        Replicas.Node.step(~Stepping.Ask.kernel(), n, Replicas.State.keyed(~Basics.Ask.machine(), s, Replicas.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), i)), c),
         Path.same(
           s,
           Replicas.State.keyed(~Basics.Ask.machine(), s, Replicas.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), i)),
@@ -15408,14 +15407,14 @@ def Does.path(
     case Spec.Deed.Ask{+e, +q}:
       Path.trans(
         s,
-        Voting.Node.ask(n, s, e, q),
+        Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q),
         Reading.Adopt.at(
           n,
-          Voting.Node.ask(n, s, e, q),
+          Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q),
           Basics.Ask.chain(Replicas.Envelope.of(e), q)
         ),
         Ask.path(n, s, e, q),
-        Adopt.at.path(n, Voting.Node.ask(n, s, e, q), Basics.Ask.chain(Replicas.Envelope.of(e), q))
+        Adopt.at.path(n, Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q), Basics.Ask.chain(Replicas.Envelope.of(e), q))
       )
     case Spec.Deed.Take{t}:
       Take.path(s, t)
@@ -15439,18 +15438,18 @@ def Does.path(
     case Spec.Deed.Consent{+i}:
       Path.trans(
         s,
-        Voting.Node.consent(n, s, i),
-        Reading.Adopt.maybe(n, Voting.Node.consent(n, s, i), Basics.Node.chain_of(s, i)),
-        Consent.path(n, s, i, Basics.Node.chain_of(s, i)),
-        Adopt.maybe.path(n, Voting.Node.consent(n, s, i), Basics.Node.chain_of(s, i))
+        Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i),
+        Reading.Adopt.maybe(n, Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i), Replicas.Node.chain_of(~Basics.Ask.machine(), s, i)),
+        Consent.path(n, s, i, Replicas.Node.chain_of(~Basics.Ask.machine(), s, i)),
+        Adopt.maybe.path(n, Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i), Replicas.Node.chain_of(~Basics.Ask.machine(), s, i))
       )
     case Spec.Deed.Pass{+c}:
       Path.trans(
         s,
-        Voting.Node.pass(n, s, c),
-        Reading.Adopt.at(n, Voting.Node.pass(n, s, c), c),
+        Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c),
+        Reading.Adopt.at(n, Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c), c),
         Pass.path(n, s, c),
-        Adopt.at.path(n, Voting.Node.pass(n, s, c), c)
+        Adopt.at.path(n, Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c), c)
       )
     case Spec.Deed.Pass{c}:
       Pass.path(n, s, c)
@@ -16215,7 +16214,7 @@ def Take.asks.waits(
   List.contains(
     ~Ledgers.Id,
     ~Ledgers.Id.is_eq,
-    Replicas.Wait.of(~Basics.Ask.machine(), Voting.Take.asks(cs, old, s), c2),
+    Replicas.Wait.of(~Basics.Ask.machine(), Replicas.Take.asks(~Stepping.Ask.kernel(), cs, old, s), c2),
     i
   )
     == True{}: Bool
@@ -16284,7 +16283,7 @@ def Take.asks.adds(
     ~Ledgers.Id,
     ~Ledgers.Id.is_eq,
     Replicas.Wait.of(~Basics.Ask.machine(), 
-      Voting.Take.asks(
+      Replicas.Take.asks(~Stepping.Ask.kernel(), 
         List.append(
           &2,
           Cells.Cell<Ledgers.Entry<Basics.Ask>>,
@@ -16349,7 +16348,7 @@ def Take.asks.adds(
       Take.asks.adds(rest, post, old, s, i, time, r, l, ch)
 
 def Spec.Node.take_holds(s, t, k, e):
-  +sent = Voting.Node.reads(t)
+  +sent = Replicas.Node.reads(~Basics.Ask.machine(), t)
   +l1 = Ledgers.State.take(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), sent)
   es => eb =>
     Ledgers.State.one_grows(
@@ -16357,7 +16356,7 @@ def Spec.Node.take_holds(s, t, k, e):
       ~Basics.Ask.is_eq,
       ~Basics.Ask.laws(),
       Replicas.State.ledger(~Basics.Ask.machine(), Replicas.State.led(~Basics.Ask.machine(), s, l1)),
-      Replicas.State.ledger(~Basics.Ask.machine(), Voting.Node.take(s, t)),
+      Replicas.State.ledger(~Basics.Ask.machine(), Replicas.Node.take(~Stepping.Ask.kernel(), s, t)),
       k,
       e
     )(Take.tail(s, t))(
@@ -16365,12 +16364,12 @@ def Spec.Node.take_holds(s, t, k, e):
       Equal.trans(Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>, Ledgers.State.get(~Basics.Ask, l1, k), Ledgers.State.get(~Basics.Ask, sent, k), Some{Cells.One{e}}, Ledgers.State.take_get(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), sent, k)(eb), es))
 
 def Spec.Node.take_waits(s, t, i, time, r, l, ch):
-  +sent = Voting.Node.reads(t)
+  +sent = Replicas.Node.reads(~Basics.Ask.machine(), t)
   l1 = Ledgers.State.take(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), sent)
   +s1 = Replicas.State.led(~Basics.Ask.machine(), s, l1)
   cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Basics.Ask>>, sent)
-  +s2 = Voting.Take.asks(cs, Replicas.State.ledger(~Basics.Ask.machine(), s), s1)
-  +bs = Voting.Ballots.of(
+  +s2 = Replicas.Take.asks(~Stepping.Ask.kernel(), cs, Replicas.State.ledger(~Basics.Ask.machine(), s), s1)
+  +bs = Replicas.Ballots.of(~Basics.Ask.machine(), 
     Tries.Trie.values(
       Cells.Cell<Ledgers.Entry<Basics.Ask>>,
       Ledgers.State.missing(~Basics.Ask, ~Basics.Ask.is_eq, t, Replicas.State.ledger(~Basics.Ask.machine(), s))
@@ -16407,7 +16406,7 @@ def Spec.Node.take_waits(s, t, i, time, r, l, ch):
       List.contains(
         ~Ledgers.Id,
         ~Ledgers.Id.is_eq,
-        Replicas.Wait.of(~Basics.Ask.machine(), Voting.Take.asks(_, Replicas.State.ledger(~Basics.Ask.machine(), s), s1), Replicas.Line.chain(r, l)),
+        Replicas.Wait.of(~Basics.Ask.machine(), Replicas.Take.asks(~Stepping.Ask.kernel(), _, Replicas.State.ledger(~Basics.Ask.machine(), s), s1), Replicas.Line.chain(r, l)),
         i
       )
         == True{}: Bool

@@ -778,19 +778,9 @@ def Node.keep(s: Replicas.Node<Ask>, b: Texts.Bytes()) -> Replicas.Node<Ask>:
 def Ask.chain(i: Ledgers.Id, q: Ask) -> Ledgers.Chain:
   Replicas.Arrival.chain(i, Ask.arrival(q))
 
-# the line of the request i, when s holds it
-def Node.chain_of(s: Replicas.Node<Ask>, +i: Ledgers.Id) -> Maybe<&2, Ledgers.Chain>:
-  Maybe.bind(
-    &2,
-    Ledgers.Asked<Ask>,
-    Ledgers.Chain,
-    Replicas.Node.asked(~Ask.machine(), s, i),
-    a => Some{Replicas.Arrival.chain(i, Replicas.Machine.arrival(Ask.machine())(Replicas.Asked.ask(~Ask.machine(), a)))}
-  )
-
 # the outcome of the request i (none: no step that the node knows decided it)
 def Node.out(+s: Replicas.Node<Ask>, +i: Ledgers.Id) -> Maybe<&2, Replicas.Out>:
-  Maybe.bind(&2, Ledgers.Chain, Replicas.Out, Node.chain_of(s, i), c => Replicas.Chain.out(~Ask.machine(), s, c, i))
+  Maybe.bind(&2, Ledgers.Chain, Replicas.Out, Replicas.Node.chain_of(~Ask.machine(), s, i), c => Replicas.Chain.out(~Ask.machine(), s, c, i))
 
 # the version of the outcome o on the line c, when it took one
 def Out.on(s: Replicas.Node<Ask>, c: Ledgers.Chain, o: Replicas.Out) -> Maybe<&2, Replicas.Version>:
@@ -807,7 +797,7 @@ def Chain.made(+s: Replicas.Node<Ask>, +c: Ledgers.Chain, v: Ledgers.Id) -> Mayb
 # the version that the request v made (none: v is not a version that the node
 # knows)
 def Node.made(+s: Replicas.Node<Ask>, +v: Ledgers.Id) -> Maybe<&2, Replicas.Version>:
-  Maybe.bind(&2, Ledgers.Chain, Replicas.Version, Node.chain_of(s, v), +c => Chain.made(s, c, v))
+  Maybe.bind(&2, Ledgers.Chain, Replicas.Version, Replicas.Node.chain_of(~Ask.machine(), s, v), +c => Chain.made(s, c, v))
 
 # the root of the content of the version v (none: v is not a version)
 def Node.root(s: Replicas.Node<Ask>, v: Ledgers.Id) -> Maybe<&2, Maybe<&2, Hashes.Hash>>:
@@ -849,7 +839,7 @@ def Place.on(+s: Replicas.Node<Ask>, +c: Ledgers.Chain, v: Ledgers.Id) -> Maybe<
 
 # the place of the version v
 def Node.place(+s: Replicas.Node<Ask>, +v: Ledgers.Id) -> Maybe<&2, Place>:
-  Maybe.bind(&2, Ledgers.Chain, Place, Node.chain_of(s, v), +c => Place.on(s, c, v))
+  Maybe.bind(&2, Ledgers.Chain, Place, Replicas.Node.chain_of(~Ask.machine(), s, v), +c => Place.on(s, c, v))
 
 # the place a is at or after the place b, of the same line
 def Place.covers(a: Place, b: Place) -> Bool:

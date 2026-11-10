@@ -13,7 +13,6 @@ import ../shared/shared/text.bend as Texts
 import ../shared/tree.bend as Trees
 import ./basics.bend as Basics
 import ./judging.bend as Judging
-import ./voting.bend as Voting
 import ../replica/impl.bend as Replicas
 import ./stepping.bend as Stepping
 
@@ -233,7 +232,7 @@ def Adopt.ask(n: String, s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Request>) ->
     case None{}:
       s
     case Some{Request{e, q}}:
-      Voting.Node.ask(n, s, e, q)
+      Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q)
 
 # s, after the node n asked for the adoption of the line l of the store r, if
 # its owners are not the nodes inside its owner group
@@ -278,7 +277,7 @@ def Lines.level(cs: List<&2, Ledgers.Chain>, +a: Replicas.Node<Basics.Ask>, +b: 
     case Con{+c, r}:
       List.all.if(
         u => Lines.level(r, a, b),
-        Voting.Heads.level(Replicas.Node.head_of(~Basics.Ask.machine(), a, c), Replicas.Node.head_of(~Basics.Ask.machine(), b, c))
+        Replicas.Heads.level(Replicas.Node.head_of(~Basics.Ask.machine(), a, c), Replicas.Node.head_of(~Basics.Ask.machine(), b, c))
       )
 
 # s, after it took the ballots bs (k of them, pd by where each waits) in again
@@ -298,7 +297,7 @@ def Sync.more(
     case 0n:
       s
     case 1n+p:
-      +s2 = Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
+      +s2 = Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
       Shared.Bool.when(
         Replicas.Node<Basics.Ask>,
         Lines.level(cs, s, s2),
@@ -310,9 +309,9 @@ def Sync.more(
 # each line that this may move, and asked for the adoption of each: how a
 # node that is behind catches up
 def Node.sync(+n: String, +s: Replicas.Node<Basics.Ask>, +t: Ledgers.State(Basics.Ask)) -> Replicas.Node<Basics.Ask>:
-  +s1 = Voting.Node.take(s, t)
-  +cs = Voting.Sync.lines(s, s1, t)
-  +bs = Voting.Ballots.of(
+  +s1 = Replicas.Node.take(~Stepping.Ask.kernel(), s, t)
+  +cs = Replicas.Sync.lines(~Basics.Ask.machine(), s, s1, t)
+  +bs = Replicas.Ballots.of(~Basics.Ask.machine(), 
     Tries.Trie.values(
       Cells.Cell<Ledgers.Entry<Basics.Ask>>,
       Ledgers.State.missing(~Basics.Ask, ~Basics.Ask.is_eq, t, Replicas.State.ledger(~Basics.Ask.machine(), s))
@@ -322,7 +321,7 @@ def Node.sync(+n: String, +s: Replicas.Node<Basics.Ask>, +t: Ledgers.State(Basic
   Node.adopts(
     n,
     cs,
-    Sync.more(k, n, cs, k, bs, Replicas.Pending.of(bs), Voting.Node.steps(n, cs, s1))
+    Sync.more(k, n, cs, k, bs, Replicas.Pending.of(bs), Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, s1))
   )
 
 # the resource m of the branch x of the store st is the resource n of the
