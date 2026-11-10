@@ -25,6 +25,12 @@ def Name.show(n: Name) -> String:
 def Name.is_eq(a: Name, b: Name) -> Bool:
   String.eq(Name.show(a), Name.show(b))
 
+# resources that are the same are equal
+def Name.is_eq_sound(+m: Name, +n: Name) -> {Name.is_eq(m, n) == True{}: Bool} -> {m == n: Name}:
+  match m n:
+    case Name{t1} Name{t2}:
+      e => Equal.cong(String, Name, z => Name{z}, t1, t2, Texts.String.eq_sound(t1, t2)(e))
+
 # the space in the cut c of the text t: t itself when it has no ':'
 def Name.space.cut(c: Maybe<&2, Texts.Cut<String>>, t: String) -> String:
   match c:

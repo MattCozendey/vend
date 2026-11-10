@@ -5101,7 +5101,7 @@ def Merge.step.keeps(
           Resources.Name,
           m1,
           n,
-          Replicas.Name.sound(m1, n)(es)
+          Resources.Name.is_eq_sound(m1, n)(es)
         ): Replicas.Work.Reads(
           ~Requests.Ask.machine(),
           Spec.Key.res(n),
@@ -5331,7 +5331,7 @@ def Merge.all.takes.at(
         et,
         ep
       )(
-        %Equal.sym(Resources.Name, m1, n, Replicas.Name.sound(m1, n)(es)): Replicas.Work.Reads(~Requests.Ask.machine(), Spec.Key.res(n), Spec.Res.code(x), Maybe.bind(&2, Replicas.Work<Requests.Ask>, Replicas.Work<Requests.Ask>, m, w => Merge.step(s, f, hb, ho, ht, _, w)))
+        %Equal.sym(Resources.Name, m1, n, Resources.Name.is_eq_sound(m1, n)(es)): Replicas.Work.Reads(~Requests.Ask.machine(), Spec.Key.res(n), Spec.Res.code(x), Maybe.bind(&2, Replicas.Work<Requests.Ask>, Replicas.Work<Requests.Ask>, m, w => Merge.step(s, f, hb, ho, ht, _, w)))
         Merge.step.takes(s, f, hb, ho, ht, m, n, b, o, t, x, eb, eo, et, ep))
     case False{}:
       e => ih(e)

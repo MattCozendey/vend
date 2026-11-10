@@ -1,5 +1,4 @@
 import Base
-import ../node/shared/shared/resources.bend as Resources
 import ./shared/ledger.bend as Ledgers
 import ./shared/rope.bend as Ropes
 import ./shared/shared/quorum.bend as Quorums
@@ -1265,6 +1264,142 @@ def Keychain.next(c: Keychain, +b: Ledgers.Ballot) -> Keychain:
     case Keychain{n, last, key, f}:
       Keychain{U32.inc(n), Some{Ballot.at(b)}, Ballot.next(b), f}
 
+# the step in the cell m of a ballot, if it holds one
+def Cast.step(
+  ~mach: Machine(),
+  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+) -> Maybe<&2, Ledgers.Vote>:
+  match m:
+    case Some{Cells.One{Ledgers.Entry.Vote{b}}}:
+      Ledgers.Ballot.vote(b)
+    case x:
+      None{}
+
+# the step that the node p cast at the place w, if s holds its ballot
+def Cast.of(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  w: Ledgers.Where,
+  p: String
+) -> Maybe<&2, Ledgers.Vote>:
+  Cast.step(
+    ~mach,
+    Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.vote(w, p))
+  )
+
+# the vote m of the round r, as a last vote, else what rest gives
+def Last.or(
+  r: Nat,
+  m: Maybe<&2, Ledgers.Vote>,
+  rest: Unit -> Maybe<&2, Ledgers.Last>
+) -> Maybe<&2, Ledgers.Last>:
+  match m:
+    case Some{v}:
+      Some{Ledgers.Last{r, v}}
+    case None{}:
+      rest(Unit{})
+
+# the last vote of the node n at the height h of the line c, in a round up to
+# k, if it cast one
+def Last.mine(
+  ~mach: Machine(),
+  +n: String,
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  +h: U32,
+  k: Nat
+) -> Maybe<&2, Ledgers.Last>:
+  match k:
+    case 0n:
+      Last.or(0n, Cast.of(~mach, s, Ledgers.Where{c, h, 0n}, n), u => None{})
+    case 1n+(+p):
+      Last.or(
+        1n+p,
+        Cast.of(~mach, s, Ledgers.Where{c, h, 1n+p}, n),
+        u => Last.mine(~mach, n, s, c, h, p)
+      )
+
+# the last vote of the node n at the height h of the line c, in a round below
+# r, if it cast one
+def Last.below(
+  ~mach: Machine(),
+  n: String,
+  s: Node<Machine.Q(mach)>,
+  c: Ledgers.Chain,
+  h: U32,
+  r: Nat
+) -> Maybe<&2, Ledgers.Last>:
+  match r:
+    case 0n:
+      None{}
+    case 1n+p:
+      Last.mine(~mach, n, s, c, h, p)
+
+# the last votes a and b are the same
+def Last.same(a: Maybe<&2, Ledgers.Last>, b: Maybe<&2, Ledgers.Last>) -> Bool:
+  Shared.Maybe.is_eq(
+    ~Ledgers.Last,
+    ~(x => y => Codes.Code.is_eq(~Ledgers.Last, ~Ledgers.Last.code, x, y)),
+    a,
+    b
+  )
+
+# s holds a pass of the node q to a round above r, at the height h of the
+# line c, among the rounds up to k
+def Passed.above(
+  ~mach: Machine(),
+  k: Nat,
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  +h: U32,
+  +r: Nat,
+  +q: String
+) -> Bool:
+  match k:
+    case 0n:
+      False{}
+    case 1n+(+p):
+      List.any.if(
+        u => Passed.above(~mach, p, s, c, h, r, q),
+        List.all.if(
+          v => Maybe.is_some(
+            &2,
+            Maybe<&2, Ledgers.Last>,
+            Ledgers.State.passed(
+              ~Machine.Q(mach),
+              State.ledger(~mach, s),
+              Ledgers.Where{c, h, 1n+p},
+              q
+            )
+          ),
+          Nat.is_lt(r, 1n+p)
+        )
+      )
+
+# the ballot b is honest against the ballots of its node that s holds: a pass
+# names the last vote of its node below its round, and a vote is not below a
+# round that its node passed to. A node holds every earlier ballot of the
+# node of b (its chain), so it can tell
+def Ballot.honest(~mach: Machine(), +s: Node<Machine.Q(mach)>, b: Ledgers.Ballot) -> Bool:
+  match b:
+    case Ledgers.Ballot{Ledgers.Signed{Ledgers.Where{+c, +h, r}, q, Ledgers.Act.Pass{l}}, k}:
+      Last.same(l, Last.below(~mach, q, s, c, h, r))
+    case Ledgers.Ballot{
+      Ledgers.Signed{Ledgers.Where{+c, +h, +r}, +q, Ledgers.Act.Vote{v, from}},
+      k
+    }:
+      Bool.not(Passed.above(~mach, Round.seen(~mach, s, c, h), s, c, h, r, q))
+
+# the ballot b may be kept: it is the next of the chain c, the key of c signs
+# it, and it is honest
+def Ballot.keeps(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  c: Keychain,
+  +b: Ledgers.Ballot
+) -> Bool:
+  List.all.if(u => Ballot.honest(~mach, s, b), Seal.fits(c, b))
+
 # Seal.accept once the chain m of the ballot's node is known
 def Seal.accept.at(
   ~mach: Machine(),
@@ -1278,7 +1413,7 @@ def Seal.accept.at(
     case Some{+c}:
       Shared.Maybe.when(
         Node<Machine.Q(mach)>,
-        Seal.fits(c, b),
+        Ballot.keeps(~mach, s, c, b),
         u => Some{
           State.keyed(
             ~mach,
@@ -1299,8 +1434,8 @@ def Seal.accept.at(
         }
       )
 
-# s with the ballot b, when it is the next of its node's chain in its store
-# and the key of the chain signs it (none: not now)
+# s with the ballot b, when it is the next of its node's chain in its store,
+# the key of the chain signs it, and it is honest (none: not now)
 def Seal.accept(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -1875,29 +2010,6 @@ def Cast.mine(
 def Owners.turn(+os: List<&2, String>, h: U32) -> Maybe<&2, String>:
   List.get(&2, String, os, U32.to_nat(U32.mod(h, U32.from_nat(List.length(&2, String, os)))))
 
-# the step in the cell m of a ballot, if it holds one
-def Cast.step(
-  ~mach: Machine(),
-  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
-) -> Maybe<&2, Ledgers.Vote>:
-  match m:
-    case Some{Cells.One{Ledgers.Entry.Vote{b}}}:
-      Ledgers.Ballot.vote(b)
-    case x:
-      None{}
-
-# the step that the node p cast at the place w, if s holds its ballot
-def Cast.of(
-  ~mach: Machine(),
-  s: Node<Machine.Q(mach)>,
-  w: Ledgers.Where,
-  p: String
-) -> Maybe<&2, Ledgers.Vote>:
-  Cast.step(
-    ~mach,
-    Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.vote(w, p))
-  )
-
 # what a node casts for: the requests of a step, its own run of them (none:
 # it cannot run them now), and the nodes whose passes allow the step
 type Plan<-Q: Data> is Data:
@@ -2081,54 +2193,6 @@ def Round.mine(
         u => 1n+p,
         u => Round.mine(~mach, n, s, c, h, p)
       )
-
-# the vote m of the round r, as a last vote, else what rest gives
-def Last.or(
-  r: Nat,
-  m: Maybe<&2, Ledgers.Vote>,
-  rest: Unit -> Maybe<&2, Ledgers.Last>
-) -> Maybe<&2, Ledgers.Last>:
-  match m:
-    case Some{v}:
-      Some{Ledgers.Last{r, v}}
-    case None{}:
-      rest(Unit{})
-
-# the last vote of the node n at the height h of the line c, in a round up to
-# k, if it cast one
-def Last.mine(
-  ~mach: Machine(),
-  +n: String,
-  +s: Node<Machine.Q(mach)>,
-  +c: Ledgers.Chain,
-  +h: U32,
-  k: Nat
-) -> Maybe<&2, Ledgers.Last>:
-  match k:
-    case 0n:
-      Last.or(0n, Cast.of(~mach, s, Ledgers.Where{c, h, 0n}, n), u => None{})
-    case 1n+(+p):
-      Last.or(
-        1n+p,
-        Cast.of(~mach, s, Ledgers.Where{c, h, 1n+p}, n),
-        u => Last.mine(~mach, n, s, c, h, p)
-      )
-
-# the last vote of the node n at the height h of the line c, in a round below
-# r, if it cast one
-def Last.below(
-  ~mach: Machine(),
-  n: String,
-  s: Node<Machine.Q(mach)>,
-  c: Ledgers.Chain,
-  h: U32,
-  r: Nat
-) -> Maybe<&2, Ledgers.Last>:
-  match r:
-    case 0n:
-      None{}
-    case 1n+p:
-      Last.mine(~mach, n, s, c, h, p)
 
 # the nodes of os whose pass to the place w the node s holds
 def Passes.of(
@@ -4136,7 +4200,7 @@ def Accept.at.grows(
             Ballot.at(b)
           )
         ),
-        Seal.fits(c, b),
+        Ballot.keeps(~mach, s, c, b),
         Grows.to(
           ~mach,
           s,
@@ -8123,7 +8187,7 @@ def Accept.at.heads(
     case Some{+c}:
       Heads.some.if(
         ~mach,
-        Seal.fits(c, b),
+        Ballot.keeps(~mach, s, c, b),
         s,
         State.keyed(
           ~mach,
@@ -9433,22 +9497,6 @@ def Text.same(
       )
     )
   )
-
-# resources that are the same are equal
-def Name.sound(
-  +m: Resources.Name,
-  +n: Resources.Name
-) -> {Resources.Name.is_eq(m, n) == True{}: Bool} -> {m == n: Resources.Name}:
-  match m n:
-    case Resources.Name{t1} Resources.Name{t2}:
-      e => Equal.cong(
-        String,
-        Resources.Name,
-        z => Resources.Name{z},
-        t1,
-        t2,
-        Texts.String.eq_sound(t1, t2)(e)
-      )
 
 # a work that reads a key, after a read that gives the next step
 def Reads.with(
@@ -14252,7 +14300,7 @@ def Accept.at.waiting(
     case Some{+c}:
       Waiting.some.if(
         ~mach,
-        Seal.fits(c, b),
+        Ballot.keeps(~mach, s, c, b),
         s,
         State.keyed(
           ~mach,
@@ -17136,25 +17184,22 @@ law Plan.follow_allowed:
 def Plan.follow_allowed(mach, kern, s, c, w, t, th, os, v, from):
   Follow.allowed.at(~mach, ~kern, s, c, t, th, v, from, Vote.allowed(~mach, s, w, os, v, from))
 
-# Seals
-# -----
-# a node keeps only ballots that it checked: a ballot that it accepts is the
-# next of its node's chain in its store, and the key of that chain signs it
-law Seal.accept_fits:
-  for ~mach: Machine()
-  for ~kern: Kernel(mach)
-  for s: Node<Machine.Q(mach)>
-  for b: Ledgers.Ballot
-  for c: Keychain
-  for s2: Node<Machine.Q(mach)>
-  {Seal.chain(~mach, ~kern, s, Ballot.store(b), Ballot.node(b)) == Some{c}: Maybe<&2, Keychain>}
-    -> {Seal.accept(~mach, ~kern, s, b) == Some{s2}: Maybe<&2, Node<Machine.Q(mach)>>}
-    -> {Seal.fits(c, b) == True{}: Bool}
-
-def Seal.accept_fits(mach, kern, s, b, c, s2):
-  ec => ea => Accept.fits.if(
+# a ballot that a node keeps passes the check of what may be kept
+def Accept.keeps(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  s: Node<Machine.Q(mach)>,
+  b: Ledgers.Ballot,
+  c: Keychain,
+  -s2: Node<Machine.Q(mach)>,
+  ec: {
+    Seal.chain(~mach, ~kern, s, Ballot.store(b), Ballot.node(b)) == Some{c}: Maybe<&2, Keychain>
+  },
+  ea: {Seal.accept(~mach, ~kern, s, b) == Some{s2}: Maybe<&2, Node<Machine.Q(mach)>>}
+) -> {Ballot.keeps(~mach, s, c, b) == True{}: Bool}:
+  Accept.fits.if(
     ~mach,
-    Seal.fits(c, b),
+    Ballot.keeps(~mach, s, c, b),
     State.keyed(
       ~mach,
       State.led(
@@ -17175,6 +17220,46 @@ def Seal.accept_fits(mach, kern, s, b, c, s2):
   )(
     %ec: {Seal.accept.at(~mach, s, b, _) == Some{s2}: Maybe<&2, Node<Machine.Q(mach)>>}
     ea)
+
+# Seals
+# -----
+# a node keeps only ballots that it checked: a ballot that it accepts is the
+# next of its node's chain in its store, and the key of that chain signs it
+law Seal.accept_fits:
+  for ~mach: Machine()
+  for ~kern: Kernel(mach)
+  for +s: Node<Machine.Q(mach)>
+  for +b: Ledgers.Ballot
+  for +c: Keychain
+  for s2: Node<Machine.Q(mach)>
+  {Seal.chain(~mach, ~kern, s, Ballot.store(b), Ballot.node(b)) == Some{c}: Maybe<&2, Keychain>}
+    -> {Seal.accept(~mach, ~kern, s, b) == Some{s2}: Maybe<&2, Node<Machine.Q(mach)>>}
+    -> {Seal.fits(c, b) == True{}: Bool}
+
+def Seal.accept_fits(mach, kern, s, b, c, s2):
+  ec => ea => Shared.List.all.if_hit(
+    Seal.fits(c, b),
+    u => Ballot.honest(~mach, s, b)
+  )(Accept.keeps(~mach, ~kern, s, b, c, s2, ec, ea))
+
+# a node checks a ballot against the ballots of its node before it keeps it:
+# a ballot that it keeps is honest (Ballot.honest)
+law Seal.accept_honest:
+  for ~mach: Machine()
+  for ~kern: Kernel(mach)
+  for +s: Node<Machine.Q(mach)>
+  for +b: Ledgers.Ballot
+  for +c: Keychain
+  for s2: Node<Machine.Q(mach)>
+  {Seal.chain(~mach, ~kern, s, Ballot.store(b), Ballot.node(b)) == Some{c}: Maybe<&2, Keychain>}
+    -> {Seal.accept(~mach, ~kern, s, b) == Some{s2}: Maybe<&2, Node<Machine.Q(mach)>>}
+    -> {Ballot.honest(~mach, s, b) == True{}: Bool}
+
+def Seal.accept_honest(mach, kern, s, b, c, s2):
+  ec => ea => Shared.List.all.if_rest(
+    Seal.fits(c, b),
+    u => Ballot.honest(~mach, s, b)
+  )(Accept.keeps(~mach, ~kern, s, b, c, s2, ec, ea))
 
 # a ballot that a node seals with the secret of its chain's key fits the chain.
 # (That no other node can make one is the assumption of Seals: a hash has no
