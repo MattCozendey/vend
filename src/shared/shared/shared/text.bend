@@ -2414,3 +2414,23 @@ def String.eq_cons(
     == Bool.and(Cmp.is_eq(U32.cmp(cx, dx)), String.eq(qt, pt)): Bool
 }:
   String.eq_cons.at(cx, dx, U32.cmp(cx, dx), U32.cmp(dx, cx), qt, pt)({==}, {==})
+
+# the characters of a, then b, are the characters of a, then those of b
+def String.to_list_append(
+  a: String,
+  b: String
+) -> {
+  String.to_list(
+    String.append(a, b)
+  )
+    == List.append(&2, Char, String.to_list(a), String.to_list(b)): List<&2, Char>
+}:
+  match a:
+    case SNil{}:
+      {==}
+    case SCon{c, t}:
+      %String.to_list_append(
+        t,
+        b
+      ): {c <> String.to_list(String.append(t, b)) == c <> _: List<&2, Char>}
+      {==}

@@ -4303,116 +4303,9 @@ def Show.parse(
 
 # Cat congruence
 # --------------
-# A proof that two globs match the same strings is a function, which Bend
-# may use only once. So Cat congruence takes the finitely many equalities it
-# needs for one string as data: the left sides agree on each prefix, the
-# right sides on each suffix.
-
-# what x must still match after it reads w
-def Glob.walk(w: String, x: Spec.Glob) -> Spec.Glob:
-  match w:
-    case SNil{}:
-      x
-    case SCon{c, t}:
-      Glob.walk(t, Spec.Glob.step(x, c))
-
-# x matches w when what x must match after w matches ""
-def Glob.walk_null(
-  w: String,
-  x: Spec.Glob
-) -> {Spec.Glob.matches(w, x) == Spec.Glob.is_nullable(Glob.walk(w, x)): Bool}:
-  match w:
-    case SNil{}:
-      {==}
-    case SCon{c, t}:
-      Glob.walk_null(t, Spec.Glob.step(x, c))
-
-# walking pre then c is stepping by c after walking pre
-def Glob.walk_snoc(
-  pre: String,
-  c: Char,
-  x: Spec.Glob
-) -> {
-  Glob.walk(
-    String.append(pre, SCon{c, SNil{}}),
-    x
-  )
-    == Spec.Glob.step(Glob.walk(pre, x), c): Spec.Glob
-}:
-  match pre:
-    case SNil{}:
-      {==}
-    case SCon{d, t}:
-      Glob.walk_snoc(t, c, Spec.Glob.step(x, d))
-
-# x matches pre and y matches what follows, at some cut of suf after pre
-# bend-lint: expect-begin bend-lint-rules/performance/append_in_loop@warning -- only proofs use it; no program runs it
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
-def Glob.split(suf: String, +pre: String, +x: Spec.Glob, +y: Spec.Glob) -> Bool:
-  match suf:
-    case SNil{}:
-      Bool.or(Bool.and(Spec.Glob.matches(pre, x), Spec.Glob.matches(SNil{}, y)), False{})
-    case SCon{+c, +t}:
-      here = Bool.and(Spec.Glob.matches(pre, x), Spec.Glob.matches(SCon{c, t}, y))
-      Bool.or(here, Glob.split(t, String.append(pre, SCon{c, SNil{}}), x, y))
-# bend-lint: expect-end bend-lint-rules/performance/append_in_loop@warning
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# Cat{x after pre, y} matches suf exactly when some cut does
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
-def Glob.cat_split(
-  suf: String,
-  +pre: String,
-  +x: Spec.Glob,
-  +y: Spec.Glob
-) -> {Glob.split(suf, pre, x, y) == Spec.Glob.matches(suf, Spec.Cat{Glob.walk(pre, x), y}): Bool}:
-  match suf:
-    case SNil{}:
-      l = Glob.split(SNil{}, pre, x, y)
-      %Glob.walk_null(pre, x): {l == Bool.and(_, Spec.Glob.is_nullable(y)): Bool}
-      +m = Bool.and(Spec.Glob.matches(pre, x), Spec.Glob.is_nullable(y))
-      Equal.sym(Bool, m, Bool.or(m, False{}), Shared.Bool.or_false(m))
-    case SCon{+c, +t}:
-      +wx = Glob.walk(pre, x)
-      +pc = String.append(pre, SCon{c, SNil{}})
-      +ny = Spec.Glob.step(y, c)
-      l = Glob.split(SCon{c, t}, pre, x, y)
-      %Glob.alt_or(
-        t,
-        Spec.Cat{Spec.Glob.step(wx, c), y},
-        Spec.Cat{Spec.Glob.of_bool(Spec.Glob.is_nullable(wx)), ny}
-      ): {l == _: Bool}
-      %Glob.cat_of_bool(
-        t,
-        Spec.Glob.is_nullable(wx),
-        ny
-      ): {l == Bool.or(Spec.Glob.matches(t, Spec.Cat{Spec.Glob.step(wx, c), y}), _): Bool}
-      %Glob.walk_snoc(
-        pre,
-        c,
-        x
-      ): {
-        l
-          == Bool.or(
-            Spec.Glob.matches(t, Spec.Cat{_, y}),
-            Bool.and(Spec.Glob.is_nullable(wx), Spec.Glob.matches(t, ny))
-          ): Bool
-      }
-      %Glob.cat_split(
-        t,
-        pc,
-        x,
-        y
-      ): {l == Bool.or(_, Bool.and(Spec.Glob.is_nullable(wx), Spec.Glob.matches(t, ny))): Bool}
-      %Glob.walk_null(
-        pre,
-        x
-      ): {l == Bool.or(Glob.split(t, pc, x, y), Bool.and(_, Spec.Glob.matches(t, ny))): Bool}
-      Shared.Bool.or_comm(
-        Bool.and(Spec.Glob.matches(pre, x), Spec.Glob.matches(SCon{c, t}, y)),
-        Glob.split(t, pc, x, y)
-      )
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# Regex.Re.cat_agree, for globs. The text proofs give its premises over
+# strings and globs; Glob.agree_pre and Glob.agree_suf turn them into premises
+# over characters and expressions.
 
 # x and x2 agree on pre, and on pre followed by each prefix of suf
 # bend-lint: expect-begin bend-lint-rules/performance/append_in_loop@warning -- only proofs use it; no program runs it
@@ -4442,55 +4335,99 @@ def Glob.AgreeSuf(y: Spec.Glob, y2: Spec.Glob, suf: String) -> Type:
           & Glob.AgreeSuf(y, y2, t)
       )
 
-# the cuts agree when the parts agree
-def Glob.split_agree(
+# the expressions of globs that agree on p agree on its characters
+def Glob.re_agree(
+  +p: String,
+  +x: Spec.Glob,
+  +x2: Spec.Glob,
+  e: {Spec.Glob.matches(p, x) == Spec.Glob.matches(p, x2): Bool}
+) -> {
+  Regex.Re.matches(
+    ~Char,
+    ~Atom,
+    ~Atom.hit,
+    String.to_list(p),
+    Glob.re(x)
+  )
+    == Regex.Re.matches(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(x2)): Bool
+}:
+  rx = Regex.Re.matches(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(x))
+  rx2 = Regex.Re.matches(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(x2))
+  %Equal.sym(Bool, rx2, Spec.Glob.matches(p, x2), Glob.re_matches(p, x2)): {rx == _: Bool}
+  %e: {rx == _: Bool}
+  Glob.re_matches(p, x)
+
+# the expressions of globs that agree on the prefixes agree on them
+# bend-lint: expect-begin bend-lint-rules/performance/append_in_loop@warning -- only proofs use it; no program runs it
+def Glob.agree_pre(
   suf: String,
   +pre: String,
   +x: Spec.Glob,
-  x2: Spec.Glob,
-  +y: Spec.Glob,
-  y2: Spec.Glob,
-  ea: Glob.AgreePre(x, x2, pre, suf),
-  eb: Glob.AgreeSuf(y, y2, suf)
-) -> {Glob.split(suf, pre, x, y) == Glob.split(suf, pre, x2, y2): Bool}:
+  +x2: Spec.Glob,
+  ea: Glob.AgreePre(x, x2, pre, suf)
+) -> Regex.Re.AgreePre(
+  ~Char,
+  ~Atom,
+  ~Atom.hit,
+  Glob.re(x),
+  Glob.re(x2),
+  String.to_list(pre),
+  String.to_list(suf)
+):
   match suf:
     case SNil{}:
-      (e1, u1) = ea
-      (e2, u2) = eb
-      l = Glob.split(SNil{}, pre, x, y)
-      %e1: {l == Bool.or(Bool.and(_, Spec.Glob.matches(SNil{}, y2)), False{}): Bool}
-      %e2: {l == Bool.or(Bool.and(Spec.Glob.matches(pre, x), _), False{}): Bool}
-      {==}
-    case SCon{+c, +t}:
-      (e1, ra) = ea
-      (e2, rb) = eb
-      pc = String.append(pre, SCon{c, SNil{}})
-      l = Glob.split(SCon{c, t}, pre, x, y)
-      %e1: {
-        l
-          == Bool.or(
-            Bool.and(_, Spec.Glob.matches(SCon{c, t}, y2)),
-            Glob.split(t, pc, x2, y2)
-          ): Bool
-      }
-      %e2: {l == Bool.or(Bool.and(Spec.Glob.matches(pre, x), _), Glob.split(t, pc, x2, y2)): Bool}
-      %Glob.split_agree(
-        t,
-        pc,
-        x,
-        x2,
-        y,
-        y2,
-        ra,
-        rb
-      ): {
-        l == Bool.or(Bool.and(Spec.Glob.matches(pre, x), Spec.Glob.matches(SCon{c, t}, y)), _): Bool
-      }
-      {==}
+      (e, u) = ea
+      Glob.re_agree(pre, x, x2, e)
+    case SCon{+c, t}:
+      (e, ra) = ea
+      %Texts.String.to_list_append(
+        pre,
+        SCon{c, SNil{}}
+      ): (
+        {
+          Regex.Re.matches(
+            ~Char,
+            ~Atom,
+            ~Atom.hit,
+            String.to_list(pre),
+            Glob.re(x)
+          )
+            == Regex.Re.matches(~Char, ~Atom, ~Atom.hit, String.to_list(pre), Glob.re(x2)): Bool
+        }
+          & Regex.Re.AgreePre(
+            ~Char,
+            ~Atom,
+            ~Atom.hit,
+            Glob.re(x),
+            Glob.re(x2),
+            _,
+            String.to_list(t)
+          )
+      )
+      (
+        Glob.re_agree(pre, x, x2, e),
+        Glob.agree_pre(t, String.append(pre, SCon{c, SNil{}}), x, x2, ra)
+      )
+# bend-lint: expect-end bend-lint-rules/performance/append_in_loop@warning
+
+# the expressions of globs that agree on the suffixes agree on them
+def Glob.agree_suf(
+  suf: String,
+  +y: Spec.Glob,
+  +y2: Spec.Glob,
+  eb: Glob.AgreeSuf(y, y2, suf)
+) -> Regex.Re.AgreeSuf(~Char, ~Atom, ~Atom.hit, Glob.re(y), Glob.re(y2), String.to_list(suf)):
+  match suf:
+    case SNil{}:
+      (e, u) = eb
+      Glob.re_agree(SNil{}, y, y2, e)
+    case SCon{c, +t}:
+      (e, rb) = eb
+      (Glob.re_agree(SCon{c, t}, y, y2, e), Glob.agree_suf(t, y, y2, rb))
 
 # Cat of agreeing parts matches p the same way
 def Glob.cat_agree(
-  p: String,
+  +p: String,
   +x: Spec.Glob,
   +x2: Spec.Glob,
   +y: Spec.Glob,
@@ -4498,10 +4435,24 @@ def Glob.cat_agree(
   ea: Glob.AgreePre(x, x2, SNil{}, p),
   eb: Glob.AgreeSuf(y, y2, p)
 ) -> {Spec.Glob.matches(p, Spec.Cat{x, y}) == Spec.Glob.matches(p, Spec.Cat{x2, y2}): Bool}:
-  +p = p
-  %Glob.cat_split(p, SNil{}, x, y): {_ == Spec.Glob.matches(p, Spec.Cat{x2, y2}): Bool}
-  %Glob.cat_split(p, SNil{}, x2, y2): {Glob.split(p, SNil{}, x, y) == _: Bool}
-  Glob.split_agree(p, SNil{}, x, x2, y, y2, ea, eb)
+  w = String.to_list(p)
+  %Glob.re_matches(p, Spec.Cat{x, y}): {_ == Spec.Glob.matches(p, Spec.Cat{x2, y2}): Bool}
+  %Glob.re_matches(
+    p,
+    Spec.Cat{x2, y2}
+  ): {Regex.Re.matches(~Char, ~Atom, ~Atom.hit, w, Glob.re(Spec.Cat{x, y})) == _: Bool}
+  Regex.Re.cat_agree(
+    ~Char,
+    ~Atom,
+    ~Atom.hit,
+    w,
+    Glob.re(x),
+    Glob.re(x2),
+    Glob.re(y),
+    Glob.re(y2),
+    Glob.agree_pre(p, SNil{}, x, x2, ea),
+    Glob.agree_suf(p, y, y2, eb)
+  )
 
 # Alt with Void matches what its left side matches
 def Glob.alt_void(

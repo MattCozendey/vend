@@ -856,6 +856,263 @@ def Re.cat_assoc(
       ): {l == Bool.or(Bool.or(x, Bool.and(na, y)), _): Bool}
       Re.cat_assoc.bools(x, y, na, nb, z)
 
+# Cat congruence
+# --------------
+# A proof that two expressions match the same words is a function, which Bend
+# may use only once. So Cat congruence takes the equalities that it needs for
+# one word as data: the left sides agree on each prefix of the word, the right
+# sides on each suffix.
+
+# what x must still match after it reads w
+def Re.walk(~A: Data, ~T: Data, ~hit: T -> A -> Bool, w: List<&2, A>, x: Re<T>) -> Re<T>:
+  match w:
+    case Nil{}:
+      x
+    case Con{c, t}:
+      Re.walk(~A, ~T, ~hit, t, Re.step(~A, ~T, ~hit, x, c))
+
+# x matches w exactly when what x must match after w matches the empty word
+def Re.walk_null(
+  ~A: Data,
+  ~T: Data,
+  ~hit: T -> A -> Bool,
+  w: List<&2, A>,
+  x: Re<T>
+) -> {Re.matches(~A, ~T, ~hit, w, x) == Re.is_nullable(T, Re.walk(~A, ~T, ~hit, w, x)): Bool}:
+  match w:
+    case Nil{}:
+      {==}
+    case Con{c, t}:
+      Re.walk_null(~A, ~T, ~hit, t, Re.step(~A, ~T, ~hit, x, c))
+
+# a walk of pre, then c, is a step by c after a walk of pre
+def Re.walk_snoc(
+  ~A: Data,
+  ~T: Data,
+  ~hit: T -> A -> Bool,
+  pre: List<&2, A>,
+  c: A,
+  x: Re<T>
+) -> {
+  Re.walk(
+    ~A,
+    ~T,
+    ~hit,
+    List.append(&2, A, pre, [c]),
+    x
+  )
+    == Re.step(~A, ~T, ~hit, Re.walk(~A, ~T, ~hit, pre, x), c): Re<T>
+}:
+  match pre:
+    case Nil{}:
+      {==}
+    case Con{d, t}:
+      Re.walk_snoc(~A, ~T, ~hit, t, c, Re.step(~A, ~T, ~hit, x, d))
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof: it does not run
+# Cat{x after pre, y} matches c, then t, when Cat{x after pre and c, y}
+# matches t, or x matches pre and y matches c, then t
+def Re.cat_walk(
+  ~A: Data,
+  ~T: Data,
+  ~hit: T -> A -> Bool,
+  +t: List<&2, A>,
+  +c: A,
+  +pre: List<&2, A>,
+  +x: Re<T>,
+  +y: Re<T>
+) -> {
+  Bool.or(
+    Re.matches(~A, ~T, ~hit, t, Cat{Re.walk(~A, ~T, ~hit, List.append(&2, A, pre, [c]), x), y}),
+    Bool.and(Re.matches(~A, ~T, ~hit, pre, x), Re.matches(~A, ~T, ~hit, c <> t, y))
+  )
+    == Re.matches(~A, ~T, ~hit, c <> t, Cat{Re.walk(~A, ~T, ~hit, pre, x), y}): Bool
+}:
+  +wx = Re.walk(~A, ~T, ~hit, pre, x)
+  +ny = Re.step(~A, ~T, ~hit, y, c)
+  wc = Re.walk(~A, ~T, ~hit, List.append(&2, A, pre, [c]), x)
+  my = Re.matches(~A, ~T, ~hit, t, ny)
+  l = Bool.or(
+    Re.matches(~A, ~T, ~hit, t, Cat{wc, y}),
+    Bool.and(Re.matches(~A, ~T, ~hit, pre, x), my)
+  )
+  %Re.alt_or(
+    ~A,
+    ~T,
+    ~hit,
+    t,
+    Cat{Re.step(~A, ~T, ~hit, wx, c), y},
+    Cat{Re.of_bool(T, Re.is_nullable(T, wx)), ny}
+  ): {l == _: Bool}
+  %Re.cat_of_bool(
+    ~A,
+    ~T,
+    ~hit,
+    t,
+    Re.is_nullable(T, wx),
+    ny
+  ): {l == Bool.or(Re.matches(~A, ~T, ~hit, t, Cat{Re.step(~A, ~T, ~hit, wx, c), y}), _): Bool}
+  %Re.walk_snoc(
+    ~A,
+    ~T,
+    ~hit,
+    pre,
+    c,
+    x
+  ): {
+    l == Bool.or(Re.matches(~A, ~T, ~hit, t, Cat{_, y}), Bool.and(Re.is_nullable(T, wx), my)): Bool
+  }
+  %Re.walk_null(
+    ~A,
+    ~T,
+    ~hit,
+    pre,
+    x
+  ): {l == Bool.or(Re.matches(~A, ~T, ~hit, t, Cat{wc, y}), Bool.and(_, my)): Bool}
+  {==}
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# bend-lint: expect-begin bend-lint-rules/performance/append_in_loop@warning -- a proof's statement; a proof does not run
+# x and x2 agree on pre, and on pre followed by each prefix of suf
+def Re.AgreePre(
+  ~A: Data,
+  ~T: Data,
+  ~hit: T -> A -> Bool,
+  x: Re<T>,
+  x2: Re<T>,
+  pre: List<&2, A>,
+  suf: List<&2, A>
+) -> Type:
+  match suf:
+    case Nil{}:
+      {Re.matches(~A, ~T, ~hit, pre, x) == Re.matches(~A, ~T, ~hit, pre, x2): Bool}
+    case Con{c, t}:
+      (
+        {
+          Re.matches(~A, ~T, ~hit, pre, x) == Re.matches(~A, ~T, ~hit, pre, x2): Bool
+        }
+          & Re.AgreePre(~A, ~T, ~hit, x, x2, List.append(&2, A, pre, [c]), t)
+      )
+# bend-lint: expect-end bend-lint-rules/performance/append_in_loop@warning
+
+# y and y2 agree on each suffix of suf
+def Re.AgreeSuf(
+  ~A: Data,
+  ~T: Data,
+  ~hit: T -> A -> Bool,
+  y: Re<T>,
+  y2: Re<T>,
+  suf: List<&2, A>
+) -> Type:
+  match suf:
+    case Nil{}:
+      {Re.matches(~A, ~T, ~hit, [], y) == Re.matches(~A, ~T, ~hit, [], y2): Bool}
+    case Con{c, t}:
+      (
+        {
+          Re.matches(~A, ~T, ~hit, c <> t, y) == Re.matches(~A, ~T, ~hit, c <> t, y2): Bool
+        }
+          & Re.AgreeSuf(~A, ~T, ~hit, y, y2, t)
+      )
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof: it does not run
+# Re.cat_agree after pre: Cat of the parts, the left ones after pre, matches
+# suf the same way
+def Re.cat_agree.go(
+  ~A: Data,
+  ~T: Data,
+  ~hit: T -> A -> Bool,
+  suf: List<&2, A>,
+  +pre: List<&2, A>,
+  +x: Re<T>,
+  +x2: Re<T>,
+  +y: Re<T>,
+  +y2: Re<T>,
+  ea: Re.AgreePre(~A, ~T, ~hit, x, x2, pre, suf),
+  eb: Re.AgreeSuf(~A, ~T, ~hit, y, y2, suf)
+) -> {
+  Re.matches(
+    ~A,
+    ~T,
+    ~hit,
+    suf,
+    Cat{Re.walk(~A, ~T, ~hit, pre, x), y}
+  )
+    == Re.matches(~A, ~T, ~hit, suf, Cat{Re.walk(~A, ~T, ~hit, pre, x2), y2}): Bool
+}:
+  match suf:
+    case Nil{}:
+      l = Re.is_nullable(T, Cat{Re.walk(~A, ~T, ~hit, pre, x), y})
+      mx = Re.matches(~A, ~T, ~hit, pre, x)
+      ny = Re.is_nullable(T, y)
+      %Re.walk_null(~A, ~T, ~hit, pre, x2): {l == List.all.if(u => Re.is_nullable(T, y2), _): Bool}
+      %ea: {l == List.all.if(u => Re.is_nullable(T, y2), _): Bool}
+      %eb: {l == List.all.if(u => _, mx): Bool}
+      %Re.walk_null(
+        ~A,
+        ~T,
+        ~hit,
+        pre,
+        x
+      ): {List.all.if(u => ny, _) == List.all.if(u => ny, mx): Bool}
+      {==}
+    case Con{+c, +t}:
+      (e1, ra) = ea
+      (e2, rb) = eb
+      +pc = List.append(&2, A, pre, [c])
+      mx = Re.matches(~A, ~T, ~hit, pre, x)
+      r2 = Re.matches(~A, ~T, ~hit, t, Cat{Re.walk(~A, ~T, ~hit, pc, x2), y2})
+      l = Bool.or(
+        Re.matches(~A, ~T, ~hit, t, Cat{Re.walk(~A, ~T, ~hit, pc, x), y}),
+        Bool.and(mx, Re.matches(~A, ~T, ~hit, c <> t, y))
+      )
+      %Re.cat_walk(
+        ~A,
+        ~T,
+        ~hit,
+        t,
+        c,
+        pre,
+        x,
+        y
+      ): {_ == Re.matches(~A, ~T, ~hit, c <> t, Cat{Re.walk(~A, ~T, ~hit, pre, x2), y2}): Bool}
+      %Re.cat_walk(~A, ~T, ~hit, t, c, pre, x2, y2): {l == _: Bool}
+      %e1: {l == Bool.or(r2, Bool.and(_, Re.matches(~A, ~T, ~hit, c <> t, y2))): Bool}
+      %e2: {l == Bool.or(r2, Bool.and(mx, _)): Bool}
+      %Re.cat_agree.go(
+        ~A,
+        ~T,
+        ~hit,
+        t,
+        pc,
+        x,
+        x2,
+        y,
+        y2,
+        ra,
+        rb
+      ): {l == Bool.or(_, Bool.and(mx, Re.matches(~A, ~T, ~hit, c <> t, y))): Bool}
+      {==}
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# Cat of parts that agree matches w the same way: x and x2 agree on each
+# prefix of w (ea), and y and y2 on each suffix (eb)
+law Re.cat_agree:
+  for ~A: Data
+  for ~T: Data
+  for ~hit: T -> A -> Bool
+  for w: List<&2, A>
+  for x: Re<T>
+  for x2: Re<T>
+  for y: Re<T>
+  for y2: Re<T>
+  for ea: Re.AgreePre(~A, ~T, ~hit, x, x2, [], w)
+  for eb: Re.AgreeSuf(~A, ~T, ~hit, y, y2, w)
+  {Re.matches(~A, ~T, ~hit, w, Cat{x, y}) == Re.matches(~A, ~T, ~hit, w, Cat{x2, y2}): Bool}
+
+def Re.cat_agree(aty, tty, hit, w, x, x2, y, y2, ea, eb):
+  Re.cat_agree.go(~aty, ~tty, ~hit, w, [], x, x2, y, y2, ea, eb)
+
 # Laws of equality
 # ----------------
 
