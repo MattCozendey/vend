@@ -2102,25 +2102,23 @@ def Spec.Node.take_grows(s, t):
     )
   )
 
-# what a node does on each of its lines only grows it
+# what a node does on each of some lines only grows it
 def Steps.grows(
   +n: String,
-  hs: List<&2, Spec.Head>,
+  cs: List<&2, Ledgers.Chain>,
   +s: Spec.State()
-) -> {Spec.Node.grows(s, Spec.Node.steps(n, hs, s)) == True{}: Bool}:
-  match hs:
+) -> {Spec.Node.grows(s, Spec.Node.steps(n, cs, s)) == True{}: Bool}:
+  match cs:
     case Nil{}:
       Grows.refl(s)
-    case Con{+h, +rest}:
-      +s1 = Spec.Node.step(n, s, Spec.Head.chain(h))
-      Grows.trans(s, s1, Spec.Node.steps(n, rest, s1))(
-        Step.grows(n, s, Spec.Head.chain(h))
-      )(Steps.grows(n, rest, s1))
+    case Con{+c, +rest}:
+      +s1 = Spec.Node.step(n, s, c)
+      Grows.trans(s, s1, Spec.Node.steps(n, rest, s1))(Step.grows(n, s, c))(Steps.grows(n, rest, s1))
 
 def Spec.Node.sync_grows(n, s, t):
   +s1 = Spec.Node.take(s, t)
-  +hs = Tries.Trie.values(Spec.Head, Spec.State.heads(s1))
-  Grows.trans(s, s1, Spec.Node.steps(n, hs, s1))(Spec.Node.take_grows(s, t))(Steps.grows(n, hs, s1))
+  +cs = Spec.Sync.lines(s, s1, t)
+  Grows.trans(s, s1, Spec.Node.steps(n, cs, s1))(Spec.Node.take_grows(s, t))(Steps.grows(n, cs, s1))
 
 # Asks
 # ----
@@ -4892,20 +4890,17 @@ def Take.kept(+s: Spec.State(), +t: Ledgers.State(Spec.Ask)) -> Spec.Node.Keeps(
     )
   )
 
-# what a node does on each of its lines keeps the logs
-def Steps.kept(+n: String, hs: List<&2, Spec.Head>, +s: Spec.State()) -> Spec.Node.Keeps(s, Spec.Node.steps(n, hs, s)):
-  match hs:
+# what a node does on each of some lines keeps the logs
+def Steps.kept(+n: String, cs: List<&2, Ledgers.Chain>, +s: Spec.State()) -> Spec.Node.Keeps(
+  s,
+  Spec.Node.steps(n, cs, s)
+):
+  match cs:
     case Nil{}:
       Kept.refl(s)
-    case Con{+h, +rest}:
-      +s1 = Spec.Node.step(n, s, Spec.Head.chain(h))
-      Kept.trans(
-        s,
-        s1,
-        Spec.Node.steps(n, rest, s1),
-        Step.kept(n, s, Spec.Head.chain(h)),
-        Steps.kept(n, rest, s1)
-      )
+    case Con{+c, +rest}:
+      +s1 = Spec.Node.step(n, s, c)
+      Kept.trans(s, s1, Spec.Node.steps(n, rest, s1), Step.kept(n, s, c), Steps.kept(n, rest, s1))
 
 # Node.sync keeps the logs
 def Sync.kept(+n: String, +s: Spec.State(), +t: Ledgers.State(Spec.Ask)) -> Spec.Node.Keeps(
@@ -4913,8 +4908,8 @@ def Sync.kept(+n: String, +s: Spec.State(), +t: Ledgers.State(Spec.Ask)) -> Spec
   Spec.Node.sync(n, s, t)
 ):
   +s1 = Spec.Node.take(s, t)
-  +hs = Tries.Trie.values(Spec.Head, Spec.State.heads(s1))
-  Kept.trans(s, s1, Spec.Node.steps(n, hs, s1), Take.kept(s, t), Steps.kept(n, hs, s1))
+  +cs = Spec.Sync.lines(s, s1, t)
+  Kept.trans(s, s1, Spec.Node.steps(n, cs, s1), Take.kept(s, t), Steps.kept(n, cs, s1))
 
 # what a node does only grows it
 def Does.grows(
@@ -6604,3 +6599,49 @@ def Spec.Pick.merge_ours(f, s, b, o, t):
         == Some{Spec.Pick.Take{o}}: Maybe<&2, Spec.Pick>
     }
     {==}
+
+# Seals
+# -----
+
+# Seal.accept_fits once whether the ballot fits is known (f)
+def Accept.fits.if(
+  f: Bool,
+  -x: Spec.State(),
+  -s2: Spec.State()
+) -> {Shared.Maybe.when(Spec.State(), f, u => Some{x}) == Some{s2}: Maybe<&2, Spec.State()>} -> {f == True{}: Bool}:
+  match f:
+    case True{}:
+      e => {==}
+    case False{}:
+      e => Empty.absurd({False{} == True{}: Bool}, Shared.Maybe.none_ne_some(Spec.State(), s2, e))
+
+def Spec.Seal.accept_fits(s, b, c, s2):
+  Accept.fits.if(
+    Spec.Seal.fits(c, b),
+    Spec.State.keyed(
+      Spec.State.led(
+        s,
+        Ledgers.State.cast(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), Spec.Ballot.at(b), Spec.Ballot.node(b), b)
+      ),
+      Spec.Keys.set(
+        Spec.State.keys(s),
+        Spec.Seal.slot(Spec.Ballot.store(b), Spec.Ballot.node(b)),
+        Spec.Chained.next(c, b)
+      )
+    ),
+    s2
+  )
+
+# a place is the same as itself
+def Prev.refl(m: Maybe<&2, Ledgers.Where>) -> {Spec.Prev.same(m, m) == True{}: Bool}:
+  match m:
+    case None{}:
+      {==}
+    case Some{w}:
+      Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), Ledgers.Where.code(w, []))
+
+def Spec.Seal.fits_own(seed, x, last, k, n, f):
+  Shared.List.all.if_both(
+    Spec.Prev.same(last, last),
+    u => Ledgers.Ballot.sealed(Seals.Seal.public(seed), Ledgers.Ballot.make(seed, x, last, k))
+  )(Prev.refl(last))(Ledgers.Ballot.sealed_make(seed, x, last, k))

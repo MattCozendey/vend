@@ -2486,6 +2486,12 @@ def Where.store(w: Ledgers.Where) -> Ledgers.Id:
     case Ledgers.Where{Ledgers.Chain{r, k}, h}:
       r
 
+# the line of the place w
+def Where.line(w: Ledgers.Where) -> Ledgers.Chain:
+  match w:
+    case Ledgers.Where{c, h}:
+      c
+
 # the store of the ballot b
 def Ballot.store(b: Ledgers.Ballot) -> Ledgers.Id:
   Where.store(Ballot.at(b))
@@ -2741,11 +2747,24 @@ def Wait.of(s: State(), c: Ledgers.Chain) -> List<&2, Ledgers.Id>:
     []
   )
 
+# ws with the requests qs waiting at the key k: a line with no waiting request
+# has no entry, so the lines that wait are read without a walk of every line
+def Wait.put(
+  ws: Tries.Trie<List<&2, Ledgers.Id>>,
+  k: List<&2, Bool>,
+  qs: List<&2, Ledgers.Id>
+) -> Tries.Trie<List<&2, Ledgers.Id>>:
+  match qs:
+    case Nil{}:
+      Tries.Trie.drop(List<&2, Ledgers.Id>, ws, k)
+    case Con{i, r}:
+      Tries.Trie.set(List<&2, Ledgers.Id>, ws, k, Con{i, r})
+
 # s with the requests qs waiting on the line c
 def Wait.set(s: State(), c: Ledgers.Chain, qs: List<&2, Ledgers.Id>) -> State():
   match s:
     case Node{l, hs, ws, ks}:
-      Node{l, hs, Tries.Trie.set(List<&2, Ledgers.Id>, ws, Ledgers.Chain.key(c), qs), ks}
+      Node{l, hs, Wait.put(ws, Ledgers.Chain.key(c), qs), ks}
 
 # s with the request i waiting on the line c, after those that wait
 def State.wait(+s: State(), +c: Ledgers.Chain, i: Ledgers.Id) -> State():
@@ -3241,19 +3260,76 @@ def Node.take(+s: State(), +t: Ledgers.State(Ask)) -> State():
     )
   )
 
-# s, after the node n did what it can on the line of each head of hs
-def Node.steps(+n: String, hs: List<&2, Head>, s: State()) -> State():
-  match hs:
+# s, after the node n did what it can on each line of cs
+def Node.steps(+n: String, cs: List<&2, Ledgers.Chain>, s: State()) -> State():
+  match cs:
     case Nil{}:
       s
-    case Con{+h, rest}:
-      Node.steps(n, rest, Node.step(n, s, Head.chain(h)))
+    case Con{+c, rest}:
+      Node.steps(n, rest, Node.step(n, s, c))
+
+# the line of the first of the waiting requests qs, then rest
+def Lines.waiting(
+  +s: State(),
+  qs: List<&2, Ledgers.Id>,
+  +rest: List<&2, Ledgers.Chain>
+) -> List<&2, Ledgers.Chain>:
+  match qs:
+    case Nil{}:
+      rest
+    case Con{i, r}:
+      Maybe.default(
+        &2,
+        List<&2, Ledgers.Chain>,
+        Maybe.bind(&2, Ledgers.Chain, List<&2, Ledgers.Chain>, Node.chain_of(s, i), c => Some{c <> rest}),
+        rest
+      )
+
+# the lines of the lists of waiting requests qss
+def Lines.waits(+s: State(), qss: List<&2, List<&2, Ledgers.Id>>) -> List<&2, Ledgers.Chain>:
+  match qss:
+    case Nil{}:
+      []
+    case Con{qs, r}:
+      Lines.waiting(s, qs, Lines.waits(s, r))
+
+# the lines of the requests and the ballots among the cells cs, then rest
+def Lines.new(
+  cs: List<&2, Cells.Cell<Ledgers.Entry<Ask>>>,
+  rest: List<&2, Ledgers.Chain>
+) -> List<&2, Ledgers.Chain>:
+  match cs:
+    case Nil{}:
+      rest
+    case Con{Cells.One{Ledgers.Entry.Ask{+i, t, q}}, r}:
+      Ask.chain(i, q) <> Lines.new(r, rest)
+    case Con{Cells.One{Ledgers.Entry.Vote{b}}, r}:
+      Where.line(Ballot.at(b)) <> Lines.new(r, rest)
+    case Con{c, r}:
+      Lines.new(r, rest)
+
+# the lines that a sync of t into s may move, each once: those of the new
+# requests and ballots of t, and those with waiting requests (new data can let
+# them run). So a sync costs about what it brings, not every line of the node
+def Sync.lines(+s: State(), +s1: State(), t: Ledgers.State(Ask)) -> List<&2, Ledgers.Chain>:
+  Tries.Trie.unique(
+    ~Ledgers.Chain,
+    ~Ledgers.Chain.key,
+    Lines.new(
+      Tries.Trie.values(
+        Cells.Cell<Ledgers.Entry<Ask>>,
+        Ledgers.State.missing(~Ask, ~Ask.is_eq, t, State.ledger(s))
+      ),
+      Lines.waits(s1, Tries.Trie.values(List<&2, Ledgers.Id>, State.waiting(s1)))
+    ),
+    Tries.Trie.new(Unit)
+  )
 
 # s, after the node n took in t, which another node sent, and did what it can
-# on each line that it follows: how a node that is behind catches up
-def Node.sync(+n: String, s: State(), t: Ledgers.State(Ask)) -> State():
+# on each line that this may move: how a node that is behind catches up
+def Node.sync(+n: String, +s: State(), +t: Ledgers.State(Ask)) -> State():
   +s1 = Node.take(s, t)
-  Node.steps(n, Tries.Trie.values(Head, State.heads(s1)), s1)
+  Node.steps(n, Sync.lines(s, s1, t), s1)
 
 # Reads
 # -----
@@ -4501,6 +4577,31 @@ law Pick.merge_ours:
   {Roots.same(o, b) == False{}: Bool}
     -> {Roots.same(t, b) == True{}: Bool}
     -> {Pick.merge(f, s, b, o, t) == Some{Pick.Take{o}}: Maybe<&2, Pick>}
+
+# a node keeps only ballots that it checked: a ballot that it accepts is the
+# next of its node's chain, and the key of the chain signs it
+law Seal.accept_fits:
+  for +s: State()
+  for +b: Ledgers.Ballot
+  for +c: Chained
+  for +s2: State()
+  {Seal.accept.at(s, b, Some{c}) == Some{s2}: Maybe<&2, State()>}
+    -> {Seal.fits(c, b) == True{}: Bool}
+
+# a ballot that a node seals with the secret of its chain's key fits the chain.
+# (That no other node can make one is the assumption of Seals: a hash has no
+# known second input.)
+law Seal.fits_own:
+  for +seed: Hashes.Hash
+  for +x: Ledgers.Signed
+  for +last: Maybe<&2, Ledgers.Where>
+  for +k: Hashes.Hash
+  for +n: U32
+  for +f: Hashes.Hash
+  {
+    Seal.fits(Chained{n, last, Seals.Seal.public(seed), f}, Ledgers.Ballot.make(seed, x, last, k))
+      == True{}: Bool
+  }
 
 # a change counts once, however often and wherever it is sent: a node that
 # took a request in changes nothing when any node sends its ID again
