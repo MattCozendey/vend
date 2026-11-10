@@ -3447,3 +3447,26 @@ law Own.takes_inside:
   for +h: Maybe<&2, Hashes.Hash>
   {Own.takes(s, r, l, g, at, os, h) == Some{True{}}: Maybe<&2, Bool>}
     -> {os == Group.nodes(s, Own.tree(s, l, at, h), g): List<&2, String>}
+
+# a node that takes in a request only grows: it keeps every entry that it
+# holds
+law Node.ask_grows:
+  for +n: String
+  for +s: State()
+  for +e: Envelope
+  for +q: Ask
+  {Node.grows(s, Node.ask(n, s, e, q)) == True{}: Bool}
+
+# a node that takes in what another node sent only grows, whatever was sent
+law Node.take_grows:
+  for +s: State()
+  for +t: Ledgers.State(Ask)
+  {Node.grows(s, Node.take(s, t)) == True{}: Bool}
+
+# a sync only grows a node: catching up loses and changes nothing that the
+# node holds
+law Node.sync_grows:
+  for +n: String
+  for +s: State()
+  for +t: Ledgers.State(Ask)
+  {Node.grows(s, Node.sync(n, s, t)) == True{}: Bool}
