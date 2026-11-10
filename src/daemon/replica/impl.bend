@@ -12078,3 +12078,607 @@ def Place.covered(m: Maybe<&2, Place>, p: Place) -> Bool:
       False{}
     case Some{q}:
       Place.covers(q, p)
+
+# the first keys of a store are on a node that grew
+def Firsts.after(
+  ~K: Kernel(),
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  os: List<&2, Owner>,
+  +m: Maybe<&2, Work<Machine.Q(Kernel.machine(K))>>
+) -> {
+  Work.after(~Kernel.machine(K), s, m) == True{}: Bool
+} -> {Work.after(~Kernel.machine(K), s, Seal.firsts(~K, os, m)) == True{}: Bool}:
+  match os:
+    case Nil{}:
+      e => e
+    case Con{Owner{+n, +k}, r}:
+      e => Firsts.after(~K, 
+        s,
+        r,
+        Maybe.bind(
+          &2,
+          Work<Machine.Q(Kernel.machine(K))>,
+          Work<Machine.Q(Kernel.machine(K))>,
+          m,
+          w => Work.set(~Kernel.machine(K), w, Machine.seal(Kernel.machine(K))(n), Hashes.Hash.code(k, []))
+        )
+      )(Work.set.after(~Kernel.machine(K), s, m, Machine.seal(Kernel.machine(K))(n), Hashes.Hash.code(k, []))(e))
+
+# a store that starts only grows a node
+def Start.grows(
+  ~K: Kernel(),
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  i: Ledgers.Id,
+  +os: List<&2, Owner>
+) -> {Node.grows(~Kernel.machine(K), s, Node.start(~K, s, i, os)) == True{}: Bool}:
+  Start.with.grows(~Kernel.machine(K), 
+    s,
+    i,
+    Owner.names(os),
+    Seal.firsts(~K, os, Some{Work{s, None{}}})
+  )(Firsts.after(~K, s, os, Some{Work{s, None{}}})(Grows.refl(~Kernel.machine(K), s)))
+
+# a new request only grows a node
+def Arrive.grows(
+  ~K: Kernel(),
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  +i: Ledgers.Id,
+  a: Arrival,
+) -> {Node.grows(~Kernel.machine(K), s, Arrive.at(~K, s, i, a)) == True{}: Bool}:
+  match a:
+    case Arrival.Starts{os}:
+      Start.grows(~K, s, i, os)
+    case Arrival.Waits{+r, +l}:
+      +s1 = Node.follow(~Kernel.machine(K), s, r, l)
+      Grows.to(~Kernel.machine(K), 
+        s,
+        s1,
+        State.wait(~Kernel.machine(K), s1, Line.chain(r, l), i),
+        Led.waits(~Kernel.machine(K), s1, Line.chain(r, l), i),
+        Follow.new.grows(~Kernel.machine(K), s, r, l, Node.head_of(~Kernel.machine(K), s, Line.chain(r, l)))
+      )
+
+# the new requests among cells only grow a node
+def Take.asks.grows(
+  ~K: Kernel(),
+  cs: List<&2, Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>>,
+  +old: Ledgers.State(Machine.Q(Kernel.machine(K))),
+  +s: Node<Machine.Q(Kernel.machine(K))>
+) -> {Node.grows(~Kernel.machine(K), s, Take.asks(~K, cs, old, s)) == True{}: Bool}:
+  match cs:
+    case Nil{}:
+      Grows.refl(~Kernel.machine(K), s)
+    case Con{Cells.One{Ledgers.Entry.Ask{+i, t, +q}}, +rest}:
+      +s1 = Shared.Bool.when(
+        Node<Machine.Q(Kernel.machine(K))>,
+        Maybe.is_none(
+          &2,
+          Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>,
+          Ledgers.State.get(~Machine.Q(Kernel.machine(K)), old, Ledgers.Slot.ask(i))
+        ),
+        u => Node.arrive(~K, s, i, q),
+        u => s
+      )
+      Grows.trans(~Kernel.machine(K), 
+        s,
+        s1,
+        Take.asks(~K, rest, old, s1)
+      )(
+        Grows.when(~Kernel.machine(K), 
+          s,
+          Maybe.is_none(
+            &2,
+            Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>,
+            Ledgers.State.get(~Machine.Q(Kernel.machine(K)), old, Ledgers.Slot.ask(i))
+          ),
+          Node.arrive(~K, s, i, q),
+          s,
+          Arrive.grows(~K, s, i, Machine.arrival(Kernel.machine(K))(q)),
+          Grows.refl(~Kernel.machine(K), s)
+        )
+      )(Take.asks.grows(~K, rest, old, s1))
+    case Con{Cells.One{Ledgers.Entry.Vote{v}}, rest}:
+      Take.asks.grows(~K, rest, old, s)
+    case Con{Cells.One{Ledgers.Entry.Data{d}}, rest}:
+      Take.asks.grows(~K, rest, old, s)
+    case Con{Cells.Many{}, rest}:
+      Take.asks.grows(~K, rest, old, s)
+
+# a node that takes in what another node sent only grows
+def Take.grows(
+  ~K: Kernel(),
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  +t: Ledgers.State(Machine.Q(Kernel.machine(K)))
+) -> {Node.grows(~Kernel.machine(K), s, Node.take(~K, s, t)) == True{}: Bool}:
+  +sent = Take.clean(~Kernel.machine(K), 
+    Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>, t),
+    Ledgers.State.empty(~Machine.Q(Kernel.machine(K)))
+  )
+  +l1 = Ledgers.State.take(~Machine.Q(Kernel.machine(K)), State.ledger(~Kernel.machine(K), s), sent)
+  +s1 = State.led(~Kernel.machine(K), s, l1)
+  +cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>, sent)
+  +s2 = Take.asks(~K, cs, State.ledger(~Kernel.machine(K), s), s1)
+  +bs = Ballots.of(~Kernel.machine(K), 
+    Tries.Trie.values(
+      Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>,
+      Ledgers.State.missing(~Machine.Q(Kernel.machine(K)), ~Machine.same(Kernel.machine(K)), t, State.ledger(~Kernel.machine(K), s))
+    )
+  )
+  Grows.trans(~Kernel.machine(K), 
+    s,
+    s1,
+    Sealed.take(~K, bs, s2)
+  )(
+    Grows.led(~Kernel.machine(K), 
+      s,
+      l1,
+      Ledgers.State.take_grows(
+        ~Machine.Q(Kernel.machine(K)),
+        ~Machine.same(Kernel.machine(K)),
+        ~Machine.laws(Kernel.machine(K)),
+        State.ledger(~Kernel.machine(K), s),
+        sent
+      )
+    )
+  )(
+    Grows.trans(~Kernel.machine(K), 
+      s1,
+      s2,
+      Sealed.take(~K, bs, s2)
+    )(
+      Take.asks.grows(~K, cs, State.ledger(~Kernel.machine(K), s), s1)
+    )(Each.grows(~K, List.length(&2, Ledgers.Ballot, bs), bs, Pending.of(bs), s2))
+  )
+
+# after its ledger took in what was sent, a node only grows as it takes the
+# rest in
+def Take.tail(
+  ~K: Kernel(),
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  +t: Ledgers.State(Machine.Q(Kernel.machine(K)))
+) -> {
+  Node.grows(~Kernel.machine(K), 
+    State.led(~Kernel.machine(K), 
+      s,
+      Ledgers.State.take(
+        ~Machine.Q(Kernel.machine(K)),
+        State.ledger(~Kernel.machine(K), s),
+        Take.clean(~Kernel.machine(K), 
+          Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>, t),
+          Ledgers.State.empty(~Machine.Q(Kernel.machine(K)))
+        )
+      )
+    ),
+    Node.take(~K, s, t)
+  )
+    == True{}: Bool
+}:
+  +sent = Take.clean(~Kernel.machine(K), 
+    Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>, t),
+    Ledgers.State.empty(~Machine.Q(Kernel.machine(K)))
+  )
+  l1 = Ledgers.State.take(~Machine.Q(Kernel.machine(K)), State.ledger(~Kernel.machine(K), s), sent)
+  +s1 = State.led(~Kernel.machine(K), s, l1)
+  +cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>, sent)
+  +s2 = Take.asks(~K, cs, State.ledger(~Kernel.machine(K), s), s1)
+  +bs = Ballots.of(~Kernel.machine(K), 
+    Tries.Trie.values(
+      Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>,
+      Ledgers.State.missing(~Machine.Q(Kernel.machine(K)), ~Machine.same(Kernel.machine(K)), t, State.ledger(~Kernel.machine(K), s))
+    )
+  )
+  Grows.trans(~Kernel.machine(K), 
+    s1,
+    s2,
+    Sealed.take(~K, bs, s2)
+  )(
+    Take.asks.grows(~K, cs, State.ledger(~Kernel.machine(K), s), s1)
+  )(Each.grows(~K, List.length(&2, Ledgers.Ballot, bs), bs, Pending.of(bs), s2))
+
+# Node.fetch for the data ws itself
+def Fetch.take(
+  ~K: Kernel(),
+  +b: Node<Machine.Q(Kernel.machine(K))>,
+  +ws: List<&2, U32>
+) -> {
+  Ledgers.State.get(
+    ~Machine.Q(Kernel.machine(K)),
+    State.ledger(~Kernel.machine(K), b),
+    Ledgers.Slot.data(Hashes.Sha.hash(ws))
+  )
+    == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>>
+} -> {
+  Ledgers.State.data(
+    ~Machine.Q(Kernel.machine(K)),
+    State.ledger(~Kernel.machine(K), 
+      Node.take(~K, 
+        b,
+        Ledgers.State.put_data(~Machine.Q(Kernel.machine(K)), ~Machine.same(Kernel.machine(K)), Ledgers.State.empty(~Machine.Q(Kernel.machine(K))), ws)
+      )
+    ),
+    Hashes.Sha.hash(ws)
+  )
+    == Some{ws}: Maybe<&2, List<&2, U32>>
+}:
+  +t = Ledgers.State.put_data(~Machine.Q(Kernel.machine(K)), ~Machine.same(Kernel.machine(K)), Ledgers.State.empty(~Machine.Q(Kernel.machine(K))), ws)
+  +l1 = Ledgers.State.take(~Machine.Q(Kernel.machine(K)), State.ledger(~Kernel.machine(K), b), t)
+  e =>
+    Ledgers.State.data_grows(
+      ~Machine.Q(Kernel.machine(K)),
+      ~Machine.same(Kernel.machine(K)),
+      ~Machine.laws(Kernel.machine(K)),
+      State.ledger(~Kernel.machine(K), State.led(~Kernel.machine(K), b, l1)),
+      State.ledger(~Kernel.machine(K), Node.take(~K, b, t)),
+      Hashes.Sha.hash(ws),
+      ws
+    )(Take.tail(~K, b, t))(
+      %Equal.sym(Ledgers.State(Machine.Q(Kernel.machine(K))), State.ledger(~Kernel.machine(K), State.led(~Kernel.machine(K), b, l1)), l1, Led.led(~Kernel.machine(K), b, l1)): {Ledgers.State.data(~Machine.Q(Kernel.machine(K)), _, Hashes.Sha.hash(ws)) == Some{ws}: Maybe<&2, List<&2, U32>>}
+      Ledgers.State.take_data(~Machine.Q(Kernel.machine(K)), ~Machine.same(Kernel.machine(K)), State.ledger(~Kernel.machine(K), b), ws)(e))
+
+# a store that starts keeps the logs
+def Start.kept(
+  ~K: Kernel(),
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  i: Ledgers.Id,
+  +os: List<&2, Owner>
+) -> Node.Keeps(~Kernel.machine(K), s, Node.start(~K, s, i, os)):
+  Start.with.kept(~Kernel.machine(K), 
+    s,
+    i,
+    Owner.names(os),
+    Seal.firsts(~K, os, Some{Work{s, None{}}})
+  )(Firsts.after(~K, s, os, Some{Work{s, None{}}})(Grows.refl(~Kernel.machine(K), s)))
+
+# a new request keeps the logs
+def Arrive.kept(
+  ~K: Kernel(),
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  +i: Ledgers.Id,
+  a: Arrival,
+) -> Node.Keeps(~Kernel.machine(K), s, Arrive.at(~K, s, i, a)):
+  match a:
+    case Arrival.Starts{os}:
+      Start.kept(~K, s, i, os)
+    case Arrival.Waits{+r, +l}:
+      +s1 = Node.follow(~Kernel.machine(K), s, r, l)
+      Kept.trans(~Kernel.machine(K), 
+        s,
+        s1,
+        State.wait(~Kernel.machine(K), s1, Line.chain(r, l), i),
+        Follow.new.kept(~Kernel.machine(K), s, r, l, Node.head_of(~Kernel.machine(K), s, Line.chain(r, l)))({==}),
+        Kept.same(~Kernel.machine(K), 
+          s1,
+          State.wait(~Kernel.machine(K), s1, Line.chain(r, l), i),
+          Grows.to(~Kernel.machine(K), 
+            s1,
+            s1,
+            State.wait(~Kernel.machine(K), s1, Line.chain(r, l), i),
+            Led.waits(~Kernel.machine(K), s1, Line.chain(r, l), i),
+            Grows.refl(~Kernel.machine(K), s1)
+          ),
+          Heads.waits(~Kernel.machine(K), s1, Line.chain(r, l), i)
+        )
+      )
+
+# the new requests among cells keep the logs
+def Take.asks.kept(
+  ~K: Kernel(),
+  cs: List<&2, Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>>,
+  +old: Ledgers.State(Machine.Q(Kernel.machine(K))),
+  +s: Node<Machine.Q(Kernel.machine(K))>
+) -> Node.Keeps(~Kernel.machine(K), s, Take.asks(~K, cs, old, s)):
+  match cs:
+    case Nil{}:
+      Kept.refl(~Kernel.machine(K), s)
+    case Con{Cells.One{Ledgers.Entry.Ask{+i, t, +q}}, rest}:
+      s1 = Shared.Bool.when(
+        Node<Machine.Q(Kernel.machine(K))>,
+        Maybe.is_none(
+          &2,
+          Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>,
+          Ledgers.State.get(~Machine.Q(Kernel.machine(K)), old, Ledgers.Slot.ask(i))
+        ),
+        u => Node.arrive(~K, s, i, q),
+        u => s
+      )
+      Kept.trans(~Kernel.machine(K), 
+        s,
+        s1,
+        Take.asks(~K, rest, old, s1),
+        Kept.when(~Kernel.machine(K), 
+          Maybe.is_none(
+            &2,
+            Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>,
+            Ledgers.State.get(~Machine.Q(Kernel.machine(K)), old, Ledgers.Slot.ask(i))
+          ),
+          s,
+          Node.arrive(~K, s, i, q),
+          s,
+          Arrive.kept(~K, s, i, Machine.arrival(Kernel.machine(K))(q)),
+          Kept.refl(~Kernel.machine(K), s)
+        ),
+        Take.asks.kept(~K, rest, old, s1)
+      )
+    case Con{Cells.One{Ledgers.Entry.Vote{v}}, rest}:
+      Take.asks.kept(~K, rest, old, s)
+    case Con{Cells.One{Ledgers.Entry.Data{d}}, rest}:
+      Take.asks.kept(~K, rest, old, s)
+    case Con{Cells.Many{}, rest}:
+      Take.asks.kept(~K, rest, old, s)
+
+# Node.take keeps the logs
+def Take.kept(
+  ~K: Kernel(),
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  +t: Ledgers.State(Machine.Q(Kernel.machine(K)))
+) -> Node.Keeps(~Kernel.machine(K), s, Node.take(~K, s, t)):
+  +sent = Take.clean(~Kernel.machine(K), 
+    Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>, t),
+    Ledgers.State.empty(~Machine.Q(Kernel.machine(K)))
+  )
+  +l1 = Ledgers.State.take(~Machine.Q(Kernel.machine(K)), State.ledger(~Kernel.machine(K), s), sent)
+  +s1 = State.led(~Kernel.machine(K), s, l1)
+  +cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>, sent)
+  +s2 = Take.asks(~K, cs, State.ledger(~Kernel.machine(K), s), s1)
+  +bs = Ballots.of(~Kernel.machine(K), 
+    Tries.Trie.values(
+      Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>,
+      Ledgers.State.missing(~Machine.Q(Kernel.machine(K)), ~Machine.same(Kernel.machine(K)), t, State.ledger(~Kernel.machine(K), s))
+    )
+  )
+  Kept.trans(~Kernel.machine(K), 
+    s,
+    s1,
+    Sealed.take(~K, bs, s2),
+    Kept.same(~Kernel.machine(K), 
+      s,
+      s1,
+      Grows.led(~Kernel.machine(K), 
+        s,
+        l1,
+        Ledgers.State.take_grows(
+          ~Machine.Q(Kernel.machine(K)),
+          ~Machine.same(Kernel.machine(K)),
+          ~Machine.laws(Kernel.machine(K)),
+          State.ledger(~Kernel.machine(K), s),
+          sent
+        )
+      ),
+      Heads.led(~Kernel.machine(K), s, l1)
+    ),
+    Kept.trans(~Kernel.machine(K), 
+      s1,
+      s2,
+      Sealed.take(~K, bs, s2),
+      Take.asks.kept(~K, cs, State.ledger(~Kernel.machine(K), s), s1),
+      Kept.same(~Kernel.machine(K), 
+        s2,
+        Sealed.take(~K, bs, s2),
+        Each.grows(~K, List.length(&2, Ledgers.Ballot, bs), bs, Pending.of(bs), s2),
+        Each.heads(~K, List.length(&2, Ledgers.Ballot, bs), bs, Pending.of(bs), s2)
+      )
+    )
+  )
+
+# the line of a request that a node holds, a node that grew holds
+def Chain.of.kept(
+  ~M: Machine(),
+  +a: Node<Machine.Q(M)>,
+  b: Node<Machine.Q(M)>,
+  +i: Ledgers.Id,
+  -c: Ledgers.Chain,
+  g: {Node.grows(~M, a, b) == True{}: Bool}
+) -> {
+  Node.chain_of(~M, a, i) == Some{c}: Maybe<&2, Ledgers.Chain>
+} -> {Node.chain_of(~M, b, i) == Some{c}: Maybe<&2, Ledgers.Chain>}:
+  Shared.Maybe.bind_kept(
+    Ledgers.Asked<Machine.Q(M)>,
+    Ledgers.Chain,
+    Node.asked(~M, a, i),
+    Node.asked(~M, b, i),
+    x => Some{Arrival.chain(i, Machine.arrival(M)(Asked.ask(~M, x)))},
+    x => Some{Arrival.chain(i, Machine.arrival(M)(Asked.ask(~M, x)))},
+    c,
+    x => Ledgers.State.read_grows(
+      ~Machine.Q(M),
+      ~Machine.same(M),
+      ~Machine.laws(M),
+      ~Ledgers.Asked<Machine.Q(M)>,
+      m => Ledgers.Asked.of(~Machine.Q(M), m),
+      {==},
+      State.ledger(~M, a),
+      State.ledger(~M, b),
+      Ledgers.Slot.ask(i),
+      x
+    )(g),
+    x => e => e
+  )
+
+# an outcome that a node knows, a node that grew and keeps its logs knows
+def Out.kept(
+  ~M: Machine(),
+  +a: Node<Machine.Q(M)>,
+  +b: Node<Machine.Q(M)>,
+  +i: Ledgers.Id,
+  -o: Out,
+  g: {Node.grows(~M, a, b) == True{}: Bool},
+  hk: Node.Keeps(~M, a, b)
+) -> {
+  Node.out(~M, a, i) == Some{o}: Maybe<&2, Out>
+} -> {Node.out(~M, b, i) == Some{o}: Maybe<&2, Out>}:
+  Shared.Maybe.bind_kept(
+    Ledgers.Chain,
+    Out,
+    Node.chain_of(~M, a, i),
+    Node.chain_of(~M, b, i),
+    c => Chain.out(~M, a, c, i),
+    c => Chain.out(~M, b, c, i),
+    o,
+    c => Chain.of.kept(~M, a, b, i, c, g),
+    +c => Chain.out.kept(~M, a, b, c, i, o, hk)
+  )
+
+# the version of an outcome, in a node that keeps the logs
+def Out.on.kept(
+  ~M: Machine(),
+  a: Node<Machine.Q(M)>,
+  b: Node<Machine.Q(M)>,
+  c: Ledgers.Chain,
+  o: Out,
+  -x: Version,
+  hk: Node.Keeps(~M, a, b)
+) -> {
+  Out.on(~M, a, c, o) == Some{x}: Maybe<&2, Version>
+} -> {Out.on(~M, b, c, o) == Some{x}: Maybe<&2, Version>}:
+  match o:
+    case Out.Stale{}:
+      e => e
+    case Out.Taken{n}:
+      Chain.version.kept(~M, a, b, c, n, x, hk)
+
+# the version that a request made on a line, in a node that keeps the logs
+def Chain.made.kept(
+  ~M: Machine(),
+  +a: Node<Machine.Q(M)>,
+  +b: Node<Machine.Q(M)>,
+  +c: Ledgers.Chain,
+  +v: Ledgers.Id,
+  -x: Version,
+  hk1: Node.Keeps(~M, a, b),
+  hk2: Node.Keeps(~M, a, b)
+) -> {
+  Chain.made(~M, a, c, v) == Some{x}: Maybe<&2, Version>
+} -> {Chain.made(~M, b, c, v) == Some{x}: Maybe<&2, Version>}:
+  Shared.Maybe.bind_kept(
+    Out,
+    Version,
+    Chain.out(~M, a, c, v),
+    Chain.out(~M, b, c, v),
+    o => Out.on(~M, a, c, o),
+    o => Out.on(~M, b, c, o),
+    x,
+    o => Chain.out.kept(~M, a, b, c, v, o, hk1),
+    o => Out.on.kept(~M, a, b, c, o, x, hk2)
+  )
+
+# the version that a request made, in a node that grew and keeps the logs
+def Made.kept(
+  ~M: Machine(),
+  +a: Node<Machine.Q(M)>,
+  +b: Node<Machine.Q(M)>,
+  +v: Ledgers.Id,
+  -x: Version,
+  g: {Node.grows(~M, a, b) == True{}: Bool},
+  hk1: Node.Keeps(~M, a, b),
+  hk2: Node.Keeps(~M, a, b)
+) -> {
+  Node.made(~M, a, v) == Some{x}: Maybe<&2, Version>
+} -> {Node.made(~M, b, v) == Some{x}: Maybe<&2, Version>}:
+  Shared.Maybe.bind_kept(
+    Ledgers.Chain,
+    Version,
+    Node.chain_of(~M, a, v),
+    Node.chain_of(~M, b, v),
+    +c => Chain.made(~M, a, c, v),
+    +c => Chain.made(~M, b, c, v),
+    x,
+    c => Chain.of.kept(~M, a, b, v, c, g),
+    +c => Chain.made.kept(~M, a, b, c, v, x, hk1, hk2)
+  )
+
+# a request that waits on a line waits there after a request arrives
+def Arrive.waits(
+  ~K: Kernel(),
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  +j: Ledgers.Id,
+  +a: Arrival,
+  +c2: Ledgers.Chain,
+  i: Ledgers.Id,
+  h: {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Wait.of(~Kernel.machine(K), s, c2), i) == True{}: Bool}
+) -> {
+  List.contains(
+    ~Ledgers.Id,
+    ~Ledgers.Id.is_eq,
+    Wait.of(~Kernel.machine(K), Arrive.at(~K, s, j, a), c2),
+    i
+  )
+    == True{}: Bool
+}:
+  match a:
+    case Arrival.Starts{os}:
+      %Wait.same(~Kernel.machine(K), 
+        s,
+        Node.start(~K, s, j, os),
+        c2,
+        Start.with.waiting(~Kernel.machine(K), 
+          s,
+          j,
+          Owner.names(os),
+          Seal.firsts(~K, os, Some{Work{s, None{}}})
+        )
+      ): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, _, i) == True{}: Bool}
+      h
+    case Arrival.Waits{r, l}:
+      Wait.keeps(~Kernel.machine(K), Node.follow(~Kernel.machine(K), s, r, l), Line.chain(r, l), j, c2, i, (
+          %Wait.same(~Kernel.machine(K), s, Node.follow(~Kernel.machine(K), s, r, l), c2, Follow.new.waiting(~Kernel.machine(K), s, r, l, Node.head_of(~Kernel.machine(K), s, Line.chain(r, l)))): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, _, i) == True{}: Bool}
+          h))
+
+# a request that waits on a line waits there after more requests arrive
+def Take.asks.waits(
+  ~K: Kernel(),
+  +cs: List<&2, Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>>,
+  +old: Ledgers.State(Machine.Q(Kernel.machine(K))),
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  +c2: Ledgers.Chain,
+  +i: Ledgers.Id
+) -> {
+  List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Wait.of(~Kernel.machine(K), s, c2), i) == True{}: Bool
+} -> {
+  List.contains(
+    ~Ledgers.Id,
+    ~Ledgers.Id.is_eq,
+    Wait.of(~Kernel.machine(K), Take.asks(~K, cs, old, s), c2),
+    i
+  )
+    == True{}: Bool
+}:
+  match cs:
+    case Nil{}:
+      h => h
+    case Con{Cells.One{Ledgers.Entry.Ask{j, t, q}}, rest}:
+      +h => Take.asks.waits(~K, 
+        rest,
+        old,
+        Shared.Bool.when(
+          Node<Machine.Q(Kernel.machine(K))>,
+          Maybe.is_none(
+            &2,
+            Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>,
+            Ledgers.State.get(~Machine.Q(Kernel.machine(K)), old, Ledgers.Slot.ask(j))
+          ),
+          u => Node.arrive(~K, s, j, q),
+          u => s
+        ),
+        c2,
+        i
+      )(
+        Contains.when(~Kernel.machine(K), 
+          Maybe.is_none(
+            &2,
+            Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>,
+            Ledgers.State.get(~Machine.Q(Kernel.machine(K)), old, Ledgers.Slot.ask(j))
+          ),
+          Node.arrive(~K, s, j, q),
+          s,
+          c2,
+          i,
+          Arrive.waits(~K, s, j, Machine.arrival(Kernel.machine(K))(q), c2, i, h),
+          h
+        )
+      )
+    case Con{Cells.One{Ledgers.Entry.Vote{v}}, rest}:
+      Take.asks.waits(~K, rest, old, s, c2, i)
+    case Con{Cells.One{Ledgers.Entry.Data{d}}, rest}:
+      Take.asks.waits(~K, rest, old, s, c2, i)
+    case Con{Cells.Many{}, rest}:
+      Take.asks.waits(~K, rest, old, s, c2, i)
