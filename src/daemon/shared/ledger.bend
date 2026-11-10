@@ -212,7 +212,36 @@ def Slot.vote(w: Where, n: String) -> List<&2, Bool>:
 def Slot.data(h: Hashes.Hash) -> List<&2, Bool>:
   match h:
     case Hashes.Hash{a, b, c, d, e, f, g, i}:
-      True{} <> True{} <> True{} <> True{} <> List.append(&2, Bool, Word.key(a), Word.key(b))
+      True{}
+        <> True{}
+        <> True{}
+        <> True{}
+        <> List.append(
+          &2,
+          Bool,
+          Word.key(a),
+          List.append(
+            &2,
+            Bool,
+            Word.key(b),
+            List.append(
+              &2,
+              Bool,
+              Word.key(c),
+              List.append(
+                &2,
+                Bool,
+                Word.key(d),
+                List.append(
+                  &2,
+                  Bool,
+                  Word.key(e),
+                  List.append(&2, Bool, Word.key(f), List.append(&2, Bool, Word.key(g), Word.key(i)))
+                )
+              )
+            )
+          )
+        )
 
 # a and b are the same request
 def Id.is_eq(a: Id, b: Id) -> Bool:

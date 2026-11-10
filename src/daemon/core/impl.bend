@@ -1989,22 +1989,23 @@ def Spec.Node.ask_grows(n, s, e, q):
 # the new requests among cells only grow a node
 def Take.asks.grows(
   cs: List<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+  +old: Ledgers.State(Spec.Ask),
   +s: Spec.State()
-) -> {Spec.Node.grows(s, Spec.Take.asks(cs, s)) == True{}: Bool}:
+) -> {Spec.Node.grows(s, Spec.Take.asks(cs, old, s)) == True{}: Bool}:
   match cs:
     case Nil{}:
       Grows.refl(s)
     case Con{Cells.One{Ledgers.Entry.Ask{+i, t, +q}}, +rest}:
-      +s1 = Spec.Node.arrive(s, i, q)
-      Grows.trans(s, s1, Spec.Take.asks(rest, s1))(Arrive.grows(s, i, q))(
-        Take.asks.grows(rest, s1)
-      )
+      +s1 = Shared.Bool.when(Spec.State(), Maybe.is_none(&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>, Ledgers.State.get(~Spec.Ask, old, Ledgers.Slot.ask(i))), u => Spec.Node.arrive(s, i, q), u => s)
+      Grows.trans(s, s1, Spec.Take.asks(rest, old, s1))(
+        Grows.when(s, Maybe.is_none(&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>, Ledgers.State.get(~Spec.Ask, old, Ledgers.Slot.ask(i))), Spec.Node.arrive(s, i, q), s, Arrive.grows(s, i, q), Grows.refl(s))
+      )(Take.asks.grows(rest, old, s1))
     case Con{Cells.One{Ledgers.Entry.Vote{v}}, rest}:
-      Take.asks.grows(rest, s)
+      Take.asks.grows(rest, old, s)
     case Con{Cells.One{Ledgers.Entry.Data{d}}, rest}:
-      Take.asks.grows(rest, s)
+      Take.asks.grows(rest, old, s)
     case Con{Cells.Many{}, rest}:
-      Take.asks.grows(rest, s)
+      Take.asks.grows(rest, old, s)
 
 # the ballots that a chain leads to only grow a node, when each one more does
 def Follow.step.grows(
@@ -2072,32 +2073,22 @@ def Each.grows(
       )(Each.grows(f, rest, p, s1))
 
 def Spec.Node.take_grows(s, t):
-  +l1 = Ledgers.State.take(
-    ~Spec.Ask,
-    Spec.State.ledger(s),
-    Tries.Trie.keep(~Cells.Cell<Ledgers.Entry<Spec.Ask>>, ~Spec.Cell.no_ballot, t)
-  )
+  +sent = Spec.Take.clean(Tries.Trie.values(Cells.Cell<Ledgers.Entry<Spec.Ask>>, t), Ledgers.State.empty(~Spec.Ask))
+  +l1 = Ledgers.State.take(~Spec.Ask, Spec.State.ledger(s), sent)
   +s1 = Spec.State.led(s, l1)
-  +cs = Tries.Trie.values(
-    Cells.Cell<Ledgers.Entry<Spec.Ask>>,
-    Ledgers.State.missing(~Spec.Ask, ~Spec.Ask.is_eq, t, Spec.State.ledger(s))
+  +cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Spec.Ask>>, sent)
+  +s2 = Spec.Take.asks(cs, Spec.State.ledger(s), s1)
+  +bs = Spec.Ballots.of(
+    Tries.Trie.values(Cells.Cell<Ledgers.Entry<Spec.Ask>>, Ledgers.State.missing(~Spec.Ask, ~Spec.Ask.is_eq, t, Spec.State.ledger(s)))
   )
-  +s2 = Spec.Take.asks(cs, s1)
-  +bs = Spec.Ballots.of(cs)
   Grows.trans(s, s1, Spec.Sealed.take(bs, s2))(
     Grows.led(
       s,
       l1,
-      Ledgers.State.take_grows(
-        ~Spec.Ask,
-        ~Spec.Ask.is_eq,
-        ~Ask.laws(),
-        Spec.State.ledger(s),
-        Tries.Trie.keep(~Cells.Cell<Ledgers.Entry<Spec.Ask>>, ~Spec.Cell.no_ballot, t)
-      )
+      Ledgers.State.take_grows(~Spec.Ask, ~Spec.Ask.is_eq, ~Ask.laws(), Spec.State.ledger(s), sent)
     )
   )(
-    Grows.trans(s1, s2, Spec.Sealed.take(bs, s2))(Take.asks.grows(cs, s1))(
+    Grows.trans(s1, s2, Spec.Sealed.take(bs, s2))(Take.asks.grows(cs, Spec.State.ledger(s), s1))(
       Each.grows(List.length(&2, Ledgers.Ballot, bs), bs, Spec.Pending.of(bs), s2)
     )
   )
@@ -4804,35 +4795,38 @@ def Ask.kept(+n: String, +s: Spec.State(), +e: Spec.Envelope, +q: Spec.Ask) -> S
 # the new requests among cells keep the logs
 def Take.asks.kept(
   cs: List<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+  +old: Ledgers.State(Spec.Ask),
   +s: Spec.State()
-) -> Spec.Node.Keeps(s, Spec.Take.asks(cs, s)):
+) -> Spec.Node.Keeps(s, Spec.Take.asks(cs, old, s)):
   match cs:
     case Nil{}:
       Kept.refl(s)
     case Con{Cells.One{Ledgers.Entry.Ask{+i, t, +q}}, +rest}:
-      +s1 = Spec.Node.arrive(s, i, q)
-      Kept.trans(s, s1, Spec.Take.asks(rest, s1), Arrive.kept(s, i, q), Take.asks.kept(rest, s1))
+      +s1 = Shared.Bool.when(Spec.State(), Maybe.is_none(&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>, Ledgers.State.get(~Spec.Ask, old, Ledgers.Slot.ask(i))), u => Spec.Node.arrive(s, i, q), u => s)
+      Kept.trans(
+        s,
+        s1,
+        Spec.Take.asks(rest, old, s1),
+        Kept.when(Maybe.is_none(&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>, Ledgers.State.get(~Spec.Ask, old, Ledgers.Slot.ask(i))), s, Spec.Node.arrive(s, i, q), s, Arrive.kept(s, i, q), Kept.refl(s)),
+        Take.asks.kept(rest, old, s1)
+      )
     case Con{Cells.One{Ledgers.Entry.Vote{v}}, rest}:
-      Take.asks.kept(rest, s)
+      Take.asks.kept(rest, old, s)
     case Con{Cells.One{Ledgers.Entry.Data{d}}, rest}:
-      Take.asks.kept(rest, s)
+      Take.asks.kept(rest, old, s)
     case Con{Cells.Many{}, rest}:
-      Take.asks.kept(rest, s)
+      Take.asks.kept(rest, old, s)
 
 # Node.take keeps the logs
 def Take.kept(+s: Spec.State(), +t: Ledgers.State(Spec.Ask)) -> Spec.Node.Keeps(s, Spec.Node.take(s, t)):
-  +l1 = Ledgers.State.take(
-    ~Spec.Ask,
-    Spec.State.ledger(s),
-    Tries.Trie.keep(~Cells.Cell<Ledgers.Entry<Spec.Ask>>, ~Spec.Cell.no_ballot, t)
-  )
+  +sent = Spec.Take.clean(Tries.Trie.values(Cells.Cell<Ledgers.Entry<Spec.Ask>>, t), Ledgers.State.empty(~Spec.Ask))
+  +l1 = Ledgers.State.take(~Spec.Ask, Spec.State.ledger(s), sent)
   +s1 = Spec.State.led(s, l1)
-  +cs = Tries.Trie.values(
-    Cells.Cell<Ledgers.Entry<Spec.Ask>>,
-    Ledgers.State.missing(~Spec.Ask, ~Spec.Ask.is_eq, t, Spec.State.ledger(s))
+  +cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Spec.Ask>>, sent)
+  +s2 = Spec.Take.asks(cs, Spec.State.ledger(s), s1)
+  +bs = Spec.Ballots.of(
+    Tries.Trie.values(Cells.Cell<Ledgers.Entry<Spec.Ask>>, Ledgers.State.missing(~Spec.Ask, ~Spec.Ask.is_eq, t, Spec.State.ledger(s)))
   )
-  +s2 = Spec.Take.asks(cs, s1)
-  +bs = Spec.Ballots.of(cs)
   Kept.trans(
     s,
     s1,
@@ -4843,13 +4837,7 @@ def Take.kept(+s: Spec.State(), +t: Ledgers.State(Spec.Ask)) -> Spec.Node.Keeps(
       Grows.led(
         s,
         l1,
-        Ledgers.State.take_grows(
-          ~Spec.Ask,
-          ~Spec.Ask.is_eq,
-          ~Ask.laws(),
-          Spec.State.ledger(s),
-          Tries.Trie.keep(~Cells.Cell<Ledgers.Entry<Spec.Ask>>, ~Spec.Cell.no_ballot, t)
-        )
+        Ledgers.State.take_grows(~Spec.Ask, ~Spec.Ask.is_eq, ~Ask.laws(), Spec.State.ledger(s), sent)
       ),
       Heads.led(s, l1)
     ),
@@ -4857,7 +4845,7 @@ def Take.kept(+s: Spec.State(), +t: Ledgers.State(Spec.Ask)) -> Spec.Node.Keeps(
       s1,
       s2,
       Spec.Sealed.take(bs, s2),
-      Take.asks.kept(cs, s1),
+      Take.asks.kept(cs, Spec.State.ledger(s), s1),
       Kept.same(
         s2,
         Spec.Sealed.take(bs, s2),

@@ -3175,27 +3175,52 @@ def Node.ask(n: String, +s: State(), +e: Envelope, q: Ask) -> State():
     Ledgers.State.get(~Ask, State.ledger(s), Ledgers.Slot.ask(Envelope.of(e)))
   )
 
-# s, once it holds each new request among the cells cs
-def Take.asks(cs: List<&2, Cells.Cell<Ledgers.Entry<Ask>>>, s: State()) -> State():
+# s, once it holds each request among the cells cs whose slot was empty in the
+# ledger old: a request that the node held does not arrive again
+def Take.asks(
+  cs: List<&2, Cells.Cell<Ledgers.Entry<Ask>>>,
+  +old: Ledgers.State(Ask),
+  +s: State()
+) -> State():
   match cs:
     case Nil{}:
       s
-    case Con{Cells.One{Ledgers.Entry.Ask{i, t, q}}, rest}:
-      Take.asks(rest, Node.arrive(s, i, q))
+    case Con{Cells.One{Ledgers.Entry.Ask{+i, t, +q}}, rest}:
+      Take.asks(
+        rest,
+        old,
+        Shared.Bool.when(
+          State(),
+          Maybe.is_none(
+            &2,
+            Cells.Cell<Ledgers.Entry<Ask>>,
+            Ledgers.State.get(~Ask, old, Ledgers.Slot.ask(i))
+          ),
+          u => Node.arrive(s, i, q),
+          u => s
+        )
+      )
     case Con{c, rest}:
-      Take.asks(rest, s)
+      Take.asks(rest, old, s)
+
+# l with the requests and the data among the cells cs, each in the slot that
+# its own content names (a request by its ID, data by its hash). A ballot, a
+# cell that is not one entry, and the slot that the sender gave are not kept:
+# what another node sent is read, not believed
+def Take.clean(cs: List<&2, Cells.Cell<Ledgers.Entry<Ask>>>, l: Ledgers.State(Ask)) -> Ledgers.State(Ask):
+  match cs:
+    case Nil{}:
+      l
+    case Con{Cells.One{Ledgers.Entry.Ask{i, t, q}}, rest}:
+      Take.clean(rest, Ledgers.State.ask(~Ask, ~Ask.is_eq, l, i, t, q))
+    case Con{Cells.One{Ledgers.Entry.Data{ws}}, rest}:
+      Take.clean(rest, Ledgers.State.put_data(~Ask, ~Ask.is_eq, l, ws))
+    case Con{c, rest}:
+      Take.clean(rest, l)
 
 # what the ledger r lacks of s: what a sync from s to a holder of r sends
 def Node.missing(s: State(), r: Ledgers.State(Ask)) -> Ledgers.State(Ask):
   Ledgers.State.missing(~Ask, ~Ask.is_eq, State.ledger(s), r)
-
-# the cell c is not a ballot
-def Cell.no_ballot(c: Cells.Cell<Ledgers.Entry<Ask>>) -> Bool:
-  match c:
-    case Cells.One{Ledgers.Entry.Vote{b}}:
-      False{}
-    case x:
-      True{}
 
 # the ballots among the cells cs
 def Ballots.of(cs: List<&2, Cells.Cell<Ledgers.Entry<Ask>>>) -> List<&2, Ledgers.Ballot>:
@@ -3207,30 +3232,26 @@ def Ballots.of(cs: List<&2, Cells.Cell<Ledgers.Entry<Ask>>>) -> List<&2, Ledgers
     case Con{c, rest}:
       Ballots.of(rest)
 
-# what a holder of s keeps of t, which another node sent: the requests and the
-# data of t in the slots where s holds nothing, and each ballot of t that its
-# node's chain leads to and its key signs. A node checks what it receives
-# against what it holds, so nothing that it holds is lost or changed, and it
-# keeps no ballot that it did not check; a ballot that it cannot check yet
-# comes again with the next sync. Each new request waits on its line: the
-# cost is what t adds, not what s holds
+# what a holder of s keeps of t, which another node sent. It checks everything
+# before it keeps it: a request and data go to the slot that their own content
+# names (Take.clean; data is read only under its hash), in the slots where s
+# holds nothing; a ballot is kept when its node's chain leads to it and its
+# key signs it (a ballot that it cannot check yet comes again with the next
+# sync). Nothing that s holds is lost or changed. Each new request waits on
+# its line: the cost is what t brings, not what s holds
 def Node.take(+s: State(), +t: Ledgers.State(Ask)) -> State():
-  +new = Tries.Trie.values(
-    Cells.Cell<Ledgers.Entry<Ask>>,
-    Ledgers.State.missing(~Ask, ~Ask.is_eq, t, State.ledger(s))
-  )
+  +sent = Take.clean(Tries.Trie.values(Cells.Cell<Ledgers.Entry<Ask>>, t), Ledgers.State.empty(~Ask))
   Sealed.take(
-    Ballots.of(new),
-    Take.asks(
-      new,
-      State.led(
-        s,
-        Ledgers.State.take(
-          ~Ask,
-          State.ledger(s),
-          Tries.Trie.keep(~Cells.Cell<Ledgers.Entry<Ask>>, ~Cell.no_ballot, t)
-        )
+    Ballots.of(
+      Tries.Trie.values(
+        Cells.Cell<Ledgers.Entry<Ask>>,
+        Ledgers.State.missing(~Ask, ~Ask.is_eq, t, State.ledger(s))
       )
+    ),
+    Take.asks(
+      Tries.Trie.values(Cells.Cell<Ledgers.Entry<Ask>>, sent),
+      State.ledger(s),
+      State.led(s, Ledgers.State.take(~Ask, State.ledger(s), sent))
     )
   )
 
