@@ -11986,3 +11986,95 @@ def Node.after(~K: Kernel(), +n: String, evs: List<&2, Deed<Machine.Q(Kernel.mac
       s
     case Con{ev, rest}:
       Node.after(~K, n, rest, Node.does(~K, n, s, ev))
+
+# the outcome of the request i (none: no step that the node knows decided it)
+def Node.out(~M: Machine(), +s: Node<Machine.Q(M)>, +i: Ledgers.Id) -> Maybe<&2, Out>:
+  Maybe.bind(&2, Ledgers.Chain, Out, Node.chain_of(~M, s, i), c => Chain.out(~M, s, c, i))
+
+# the version of the outcome o on the line c, when it took one
+def Out.on(~M: Machine(), s: Node<Machine.Q(M)>, c: Ledgers.Chain, o: Out) -> Maybe<&2, Version>:
+  match o:
+    case Out.Stale{}:
+      None{}
+    case Out.Taken{n}:
+      Chain.version(~M, s, c, n)
+
+# the version that the request v made on the line c
+def Chain.made(~M: Machine(), +s: Node<Machine.Q(M)>, +c: Ledgers.Chain, v: Ledgers.Id) -> Maybe<&2, Version>:
+  Maybe.bind(&2, Out, Version, Chain.out(~M, s, c, v), o => Out.on(~M, s, c, o))
+
+# the version that the request v made (none: v is not a version that the node
+# knows)
+def Node.made(~M: Machine(), +s: Node<Machine.Q(M)>, +v: Ledgers.Id) -> Maybe<&2, Version>:
+  Maybe.bind(&2, Ledgers.Chain, Version, Node.chain_of(~M, s, v), +c => Chain.made(~M, s, c, v))
+
+# the root of the content of the version v (none: v is not a version)
+def Node.root(~M: Machine(), s: Node<Machine.Q(M)>, v: Ledgers.Id) -> Maybe<&2, Maybe<&2, Hashes.Hash>>:
+  Maybe.bind(&2, Version, Maybe<&2, Hashes.Hash>, Node.made(~M, s, v), x => Some{Version.root(x)})
+
+# the root of the content of the version m, if any (none, or not a version:
+# the empty tree)
+def Node.root_of(~M: Machine(), s: Node<Machine.Q(M)>, m: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Hashes.Hash>:
+  match m:
+    case None{}:
+      None{}
+    case Some{v}:
+      Maybe.bind(&2, Maybe<&2, Hashes.Hash>, Hashes.Hash, Node.root(~M, s, v), h => h)
+
+# a version's place: its line and its number
+type Place is Data:
+  Place{chain: Ledgers.Chain, number: U32}
+
+# the place on the line c of the outcome o, when it took a version
+def Out.place(c: Ledgers.Chain, o: Out) -> Maybe<&2, Place>:
+  match o:
+    case Out.Stale{}:
+      None{}
+    case Out.Taken{n}:
+      Some{Place{c, n}}
+
+# the place of the version v on the line c, at the tip t
+def Place.at(~M: Machine(), s: Node<Machine.Q(M)>, c: Ledgers.Chain, v: Ledgers.Id, t: Tip) -> Maybe<&2, Place>:
+  Maybe.bind(&2, Out, Place, Line.out(~M, s, t, v), o => Out.place(c, o))
+
+# the place of the version v on the line c
+def Place.on(~M: Machine(), +s: Node<Machine.Q(M)>, +c: Ledgers.Chain, v: Ledgers.Id) -> Maybe<&2, Place>:
+  Maybe.bind(&2, Tip, Place, Node.tip(~M, s, c), t => Place.at(~M, s, c, v, t))
+
+# the place of the version v
+def Node.place(~M: Machine(), +s: Node<Machine.Q(M)>, +v: Ledgers.Id) -> Maybe<&2, Place>:
+  Maybe.bind(&2, Ledgers.Chain, Place, Node.chain_of(~M, s, v), +c => Place.on(~M, s, c, v))
+
+# the place a is at or after the place b, of the same line
+def Place.covers(a: Place, b: Place) -> Bool:
+  match a b:
+    case Place{c1, n1} Place{c2, n2}:
+      U32.is_le(n2, n1)
+
+# the line of the place p
+def Place.chain(p: Place) -> Ledgers.Chain:
+  match p:
+    case Place{c, n}:
+      c
+
+# the place of the line c in the value of a version vector's entry
+def Place.read(c: Ledgers.Chain, ws: List<&2, U32>) -> Maybe<&2, Place>:
+  match ws:
+    case Con{n, Nil{}}:
+      Some{Place{c, n}}
+    case _:
+      None{}
+
+# the value of a version vector's entry at the place p
+def Place.code(p: Place) -> List<&2, U32>:
+  match p:
+    case Place{c, n}:
+      [n]
+
+# the place q, if any, covers the place p
+def Place.covered(m: Maybe<&2, Place>, p: Place) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{q}:
+      Place.covers(q, p)

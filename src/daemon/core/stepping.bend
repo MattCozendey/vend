@@ -37,7 +37,7 @@ def Branch.ready(
           ~Replicas.Node<Basics.Ask>,
           ~Replicas.Store.fetch(~Basics.Ask.machine()),
           Replicas.Run.state(~Basics.Ask.machine(), r),
-          Basics.Node.root_of(Replicas.Run.state(~Basics.Ask.machine(), r), at)
+          Replicas.Node.root_of(~Basics.Ask.machine(), Replicas.Run.state(~Basics.Ask.machine(), r), at)
         ),
         u => Replicas.Branch.made(~Basics.Ask.machine(), 
           r,

@@ -19,41 +19,41 @@ import ../replica/impl.bend as Replicas
 
 # w with the line c at the place p in its version vector, unless it holds that
 # place or a newer one
-def Vector.add(w: Replicas.Work<Basics.Ask>, +c: Ledgers.Chain, +p: Basics.Place) -> Maybe<&2, Replicas.Work<Basics.Ask>>:
+def Vector.add(w: Replicas.Work<Basics.Ask>, +c: Ledgers.Chain, +p: Replicas.Place) -> Maybe<&2, Replicas.Work<Basics.Ask>>:
   match w:
     case Replicas.Work{+s, +h}:
       Shared.Bool.when(
         Maybe<&2, Replicas.Work<Basics.Ask>>,
-        Basics.Place.covered(Basics.Node.vector(s, h, c), p),
+        Replicas.Place.covered(Basics.Node.vector(s, h, c), p),
         u => Some{Replicas.Work{s, h}},
-        u => Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, h}, Basics.Key.vector(c), Basics.Place.code(p))
+        u => Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, h}, Basics.Key.vector(c), Replicas.Place.code(p))
       )
 
 # the line and place of a version vector's entry, from its binding
-def Vector.entry(b: Trees.Binding) -> Maybe<&2, Basics.Place>:
+def Vector.entry(b: Trees.Binding) -> Maybe<&2, Replicas.Place>:
   match b:
     case Trees.Binding{Con{4, k}, ws}:
       Maybe.bind(
         &2,
         Ledgers.Chain,
-        Basics.Place,
+        Replicas.Place,
         Replicas.Read.whole(Ledgers.Chain, Ledgers.Chain.code.read(k)),
-        c => Basics.Place.read(c, ws)
+        c => Replicas.Place.read(c, ws)
       )
     case _:
       None{}
 
 # w with the entry p in its version vector, when it is of a line other than c
-def Vector.add.if(+w: Replicas.Work<Basics.Ask>, c: Ledgers.Chain, m: Maybe<&2, Basics.Place>) -> Maybe<&2, Replicas.Work<Basics.Ask>>:
+def Vector.add.if(+w: Replicas.Work<Basics.Ask>, c: Ledgers.Chain, m: Maybe<&2, Replicas.Place>) -> Maybe<&2, Replicas.Work<Basics.Ask>>:
   match m:
     case None{}:
       Some{w}
     case Some{+p}:
       Shared.Bool.when(
         Maybe<&2, Replicas.Work<Basics.Ask>>,
-        Ledgers.Chain.is_eq(Basics.Place.chain(p), c),
+        Ledgers.Chain.is_eq(Replicas.Place.chain(p), c),
         u => Some{w},
-        u => Vector.add(w, Basics.Place.chain(p), p)
+        u => Vector.add(w, Replicas.Place.chain(p), p)
       )
 
 # m with the entries of the bindings bs, other than of the line c, in its
@@ -406,7 +406,7 @@ def Judge.ready.of(m: Maybe<&2, Replicas.Out>) -> Maybe<&2, Bool>:
 
 # the verdict of the version v, for a request that names it
 def Judge.ready(s: Replicas.Node<Basics.Ask>, v: Ledgers.Id) -> Maybe<&2, Bool>:
-  Judge.ready.of(Basics.Node.out(s, v))
+  Judge.ready.of(Replicas.Node.out(~Basics.Ask.machine(), s, v))
 
 # the verdict of the version m, if any
 def Judge.ready_maybe(s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Bool>:
@@ -452,7 +452,7 @@ def Content.root(+s: Replicas.Node<Basics.Ask>, n: Resources.Name, c: Basics.Con
     case Basics.Content.Root{x}:
       Some{x}
     case Basics.Content.Of{w}:
-      Basics.Res.root(s, Basics.Node.root_of(s, Some{w}), n)
+      Basics.Res.root(s, Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{w}), n)
 
 # the root that the content c gives the resource n, or that it gives none
 # (none: the node lacks a node of the version's tree)
@@ -465,7 +465,7 @@ def Content.find(
     case Basics.Content.Root{x}:
       Some{Some{x}}
     case Basics.Content.Of{w}:
-      Basics.Res.find(s, Basics.Node.root_of(s, Some{w}), n)
+      Basics.Res.find(s, Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{w}), n)
 
 # the verdict on a write of the resource n since base, with the content c, at
 # the tree h: take it when n holds at h what it held at base. It waits for a
@@ -490,7 +490,7 @@ def Judge.write(
           &2,
           Maybe<&2, Ropes.Root>,
           Replicas.Verdict<Basics.Ask>,
-          Basics.Res.find(s, Basics.Node.root_of(s, base), n),
+          Basics.Res.find(s, Replicas.Node.root_of(~Basics.Ask.machine(), s, base), n),
           b => Maybe.bind(
             &2,
             Maybe<&2, Ropes.Root>,
@@ -720,9 +720,9 @@ def Version.in(s: Replicas.Node<Basics.Ask>, n: U32, t: Replicas.Tip) -> Maybe<&
   Maybe.bind(&2, Replicas.Version, Ledgers.Id, Replicas.Line.version(~Basics.Ask.machine(), s, t, n), v => Version.some(v))
 
 # the version at the place p
-def Version.at(+s: Replicas.Node<Basics.Ask>, p: Basics.Place) -> Maybe<&2, Ledgers.Id>:
+def Version.at(+s: Replicas.Node<Basics.Ask>, p: Replicas.Place) -> Maybe<&2, Ledgers.Id>:
   match p:
-    case Basics.Place{c, n}:
+    case Replicas.Place{c, n}:
       Maybe.bind(&2, Replicas.Tip, Ledgers.Id, Replicas.Node.tip(~Basics.Ask.machine(), s, c), t => Version.in(s, n, t))
 
 # the newer of two versions that both sides of a merge came from: a, a
@@ -733,7 +733,7 @@ def Base.pick(
   +s: Replicas.Node<Basics.Ask>,
   cf: Ledgers.Chain,
   ma: Maybe<&2, Ledgers.Id>,
-  mp: Maybe<&2, Basics.Place>
+  mp: Maybe<&2, Replicas.Place>
 ) -> Maybe<&2, Ledgers.Id>:
   match ma mp:
     case None{} None{}:
@@ -745,7 +745,7 @@ def Base.pick(
     case Some{+a} Some{+p}:
       Shared.Bool.when(
         Maybe<&2, Ledgers.Id>,
-        Basics.Place.covered(Basics.Node.vector(s, Basics.Node.root_of(s, Some{a}), cf), p),
+        Replicas.Place.covered(Basics.Node.vector(s, Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{a}), cf), p),
         u => Some{a},
         u => Version.at(s, p)
       )
@@ -762,24 +762,24 @@ def Merge.base(
 ) -> Maybe<&2, Ledgers.Id>:
   Maybe.bind(
     &2,
-    Basics.Place,
+    Replicas.Place,
     Ledgers.Id,
-    Basics.Node.place(s, from),
+    Replicas.Node.place(~Basics.Ask.machine(), s, from),
     +pf => Shared.Bool.when(
       Maybe<&2, Ledgers.Id>,
-      Ledgers.Chain.is_eq(Basics.Place.chain(pf), c),
+      Ledgers.Chain.is_eq(Replicas.Place.chain(pf), c),
       u => Some{from},
       u => Base.pick(
         s,
-        Basics.Place.chain(pf),
+        Replicas.Place.chain(pf),
         Maybe.bind(
           &2,
-          Basics.Place,
+          Replicas.Place,
           Ledgers.Id,
-          Basics.Node.vector(s, Basics.Node.root_of(s, Some{from}), c),
+          Basics.Node.vector(s, Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{from}), c),
           w => Version.at(s, w)
         ),
-        Basics.Node.vector(s, h, Basics.Place.chain(pf))
+        Basics.Node.vector(s, h, Replicas.Place.chain(pf))
       )
     )
   )
@@ -797,11 +797,11 @@ def Vector.joined(
     Replicas.Work<Basics.Ask>,
     Replicas.Work<Basics.Ask>,
     Vector.adds(
-      Trees.Tree.list(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s, Basics.Node.root_of(s, Some{v})),
+      Trees.Tree.list(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s, Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{v})),
       c,
       m
     ),
-    w => Vector.add.if(w, c, Basics.Node.place(s, v))
+    w => Vector.add.if(w, c, Replicas.Node.place(~Basics.Ask.machine(), s, v))
   )
 
 # the trees of a merge of from into the line c, whose tree is h
@@ -811,7 +811,7 @@ def Merge.work(
   +from: Ledgers.Id,
   +h: Maybe<&2, Hashes.Hash>
 ) -> Maybe<&2, Replicas.Work<Basics.Ask>>:
-  +ht = Basics.Node.root_of(s, Some{from})
+  +ht = Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{from})
   Vector.joined(
     s,
     c,
@@ -820,7 +820,7 @@ def Merge.work(
       s,
       from,
       Merge.names(s, h, ht),
-      Basics.Node.root_of(s, Merge.base(s, c, from, h)),
+      Replicas.Node.root_of(~Basics.Ask.machine(), s, Merge.base(s, c, from, h)),
       h,
       ht,
       Some{Replicas.Work{s, h}}
@@ -842,7 +842,7 @@ def Move.work(
     Vector.adds(
       Trees.Tree.list(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s, h),
       c,
-      Some{Replicas.Work{s, Basics.Node.root_of(s, Some{to})}}
+      Some{Replicas.Work{s, Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{to})}}
     )
   )
 
@@ -853,7 +853,7 @@ def Make.branch(+s: Replicas.Node<Basics.Ask>, c: Ledgers.Chain, m: Maybe<&2, Le
     case None{}:
       Some{Replicas.Work{s, None{}}}
     case Some{+v}:
-      Vector.joined(s, c, v, Some{Replicas.Work{s, Basics.Node.root_of(s, Some{v})}})
+      Vector.joined(s, c, v, Some{Replicas.Work{s, Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{v})}})
 
 # the store tree h with the group g, of the members ms, and its name among the
 # names of its groups
@@ -902,16 +902,16 @@ def Own.tree(
 ) -> Maybe<&2, Hashes.Hash>:
   match l at:
     case Some{b} Some{v}:
-      Basics.Node.root_of(s, Some{v})
+      Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{v})
     case x y:
       h
 
 # the version at is a version of the store r: at the place m
-def Own.at(r: Ledgers.Id, m: Maybe<&2, Basics.Place>) -> Maybe<&2, Bool>:
+def Own.at(r: Ledgers.Id, m: Maybe<&2, Replicas.Place>) -> Maybe<&2, Bool>:
   match m:
     case None{}:
       None{}
-    case Some{Basics.Place{c, n}}:
+    case Some{Replicas.Place{c, n}}:
       Some{Ledgers.Chain.is_eq(c, Ledgers.Chain{r, None{}})}
 
 # an Own of the line l of the store r may name the version at: a store reads
@@ -928,7 +928,7 @@ def Own.ok(
     case Some{b} None{}:
       Some{False{}}
     case Some{b} Some{v}:
-      Own.at(r, Basics.Node.place(s, v))
+      Own.at(r, Replicas.Node.place(~Basics.Ask.machine(), s, v))
 
 # the node holds the members of each group of ns of the store tree h
 def Groups.held.all(+s: Replicas.Node<Basics.Ask>, +h: Maybe<&2, Hashes.Hash>, ns: List<&2, String>) -> Bool:
@@ -1042,7 +1042,7 @@ def Judge.change(
       Judge.then(
         Judge.ready(s, from),
         u => Judge.whole(
-          Whole.both(s, h, Basics.Node.root_of(s, Some{from})),
+          Whole.both(s, h, Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{from})),
           v => Replicas.Work.take(~Basics.Ask.machine(), Merge.work(s, Replicas.Line.chain(r, Some{b}), from, h))
         )
       )
@@ -1050,7 +1050,7 @@ def Judge.change(
       Judge.then(
         Judge.ready(s, to),
         u => Judge.whole(
-          Whole.both(s, h, Basics.Node.root_of(s, Some{to})),
+          Whole.both(s, h, Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{to})),
           v => Replicas.Work.take(~Basics.Ask.machine(), Move.work(s, Replicas.Line.chain(r, Some{b}), to, h))
         )
       )

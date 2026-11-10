@@ -73,7 +73,7 @@ def Version.before(s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Replicas.Tip>, +n:
 
 # the request i is a version: a step took it
 def Node.is_version(s: Replicas.Node<Basics.Ask>, i: Ledgers.Id) -> Bool:
-  Maybe.is_some(&2, Replicas.Version, Basics.Node.made(s, i))
+  Maybe.is_some(&2, Replicas.Version, Replicas.Node.made(~Basics.Ask.machine(), s, i))
 
 # the version at the point p, if there is one
 def Node.version(s: Replicas.Node<Basics.Ask>, p: Basics.Point) -> Maybe<&2, Ledgers.Id>:
@@ -96,7 +96,7 @@ def Res.root_at(
     Ledgers.Id,
     Ropes.Root,
     m,
-    v => Basics.Res.root(s, Basics.Node.root_of(s, Some{v}), n)
+    v => Basics.Res.root(s, Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{v}), n)
   )
 
 # the bytes of the resource n at the version m, if it holds them
@@ -404,7 +404,7 @@ def Merge.clashes(
 ) -> List<&2, Resources.Name>:
   match a:
     case Some{Ledgers.Asked{t, Basics.Ask.On{r, l, Basics.Change.Merge{f}}}}:
-      Clash.names(s, Basics.Node.root_of(s, Some{k}), f)
+      Clash.names(s, Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{k}), f)
     case _:
       []
 
@@ -420,7 +420,7 @@ def Merge.left(
     case Some{Ledgers.Asked{t, Basics.Ask.On{r, Some{l}, Basics.Change.Merge{+f}}}}:
       Clash.left(
         s,
-        Clash.names(s, Basics.Node.root_of(s, Some{k}), f),
+        Clash.names(s, Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{k}), f),
         Stepping.Chain.root(s, Replicas.Line.chain(r, Some{l})),
         f
       )
@@ -481,7 +481,7 @@ def Answer.asked(+s: Replicas.Node<Basics.Ask>, +i: Ledgers.Id, q: Basics.Ask) -
     case Basics.Ask.Start{os}:
       Answer.Written{i}
     case x:
-      Answer.of(s, i, x, Basics.Node.out(s, i))
+      Answer.of(s, i, x, Replicas.Node.out(~Basics.Ask.machine(), s, i))
 
 # the answer to the change q of the request i, whose slot holds m: none when it
 # is empty, Refused when it holds another change
@@ -601,7 +601,7 @@ def Branch.head(s: Replicas.Node<Basics.Ask>, b: Branch) -> Maybe<&2, Ledgers.Id
 
 # the resources of the branch b at its head
 def Node.resources(+s: Replicas.Node<Basics.Ask>, b: Branch) -> List<&2, Resources.Name>:
-  Judging.Res.names(s, Basics.Node.root_of(s, Branch.head(s, b)))
+  Judging.Res.names(s, Replicas.Node.root_of(~Basics.Ask.machine(), s, Branch.head(s, b)))
 
 # the bytes m, as a list of one item or none
 def Uses.items(m: Maybe<&2, Texts.Bytes()>) -> List<&2, Texts.Bytes()>:
@@ -656,7 +656,7 @@ def Uses.read(
 # the graph of the imports of the branch b, at its head
 def Uses.of(+s: Replicas.Node<Basics.Ask>, b: Branch) -> Uses:
   +h = Branch.head(s, b)
-  +ns = Judging.Res.names(s, Basics.Node.root_of(s, h))
+  +ns = Judging.Res.names(s, Replicas.Node.root_of(~Basics.Ask.machine(), s, h))
   Uses{Uses.read(s, h, ns, Tries.Trie.new(List<&2, Resources.Name>)), ns}
 
 # what the resources of g import
@@ -720,11 +720,11 @@ def Line.since(+s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Replicas.Tip>, +n: U3
       Line.versions(Count.span(n, Replicas.Tip.count(t)), s, t, n)
 
 # the number after the place m of a version vector, 0 without one
-def Place.after(m: Maybe<&2, Basics.Place>) -> U32:
+def Place.after(m: Maybe<&2, Replicas.Place>) -> U32:
   match m:
     case None{}:
       0
-    case Some{Basics.Place{c, n}}:
+    case Some{Replicas.Place{c, n}}:
       U32.inc(n)
 
 # a and b are the same branch
@@ -768,7 +768,7 @@ def Lacked.of(
 # the versions of the other branches that the branch b did not take in: what
 # its version vector does not cover
 def Branch.lacked(+s: Replicas.Node<Basics.Ask>, +b: Branch) -> List<&2, Ledgers.Id>:
-  Lacked.of(s, Basics.Node.root_of(s, Branch.head(s, b)), b, Branch.names(Node.branches(s)))
+  Lacked.of(s, Replicas.Node.root_of(~Basics.Ask.machine(), s, Branch.head(s, b)), b, Branch.names(Node.branches(s)))
 
 # the branch b lacks the version v
 def Touch.lacks(+s: Replicas.Node<Basics.Ask>, +b: Branch, +v: Ledgers.Id) -> Bool:

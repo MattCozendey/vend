@@ -88,8 +88,8 @@ law Node.out_final:
   for +s: Replicas.Node<Basics.Ask>
   for +i: Ledgers.Id
   for +o: Replicas.Out
-  {Basics.Node.out(s, i) == Some{o}: Maybe<&2, Replicas.Out>}
-    -> {Basics.Node.out(Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s), i) == Some{o}: Maybe<&2, Replicas.Out>}
+  {Replicas.Node.out(~Basics.Ask.machine(), s, i) == Some{o}: Maybe<&2, Replicas.Out>}
+    -> {Replicas.Node.out(~Basics.Ask.machine(), Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s), i) == Some{o}: Maybe<&2, Replicas.Out>}
 
 # a version never changes: the request that made it and the root of its
 # content stay
@@ -99,8 +99,8 @@ law Node.made_final:
   for +s: Replicas.Node<Basics.Ask>
   for +v: Ledgers.Id
   for +x: Replicas.Version
-  {Basics.Node.made(s, v) == Some{x}: Maybe<&2, Replicas.Version>}
-    -> {Basics.Node.made(Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s), v) == Some{x}: Maybe<&2, Replicas.Version>}
+  {Replicas.Node.made(~Basics.Ask.machine(), s, v) == Some{x}: Maybe<&2, Replicas.Version>}
+    -> {Replicas.Node.made(~Basics.Ask.machine(), Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s), v) == Some{x}: Maybe<&2, Replicas.Version>}
 
 # the history of a line only grows at its end: the version of a number stays
 law Chain.version_final:
@@ -231,7 +231,7 @@ law Move.reads:
   {
     Replicas.Node.get(~Basics.Ask.machine(), 
       s,
-      Basics.Node.root_of(s, Some{to}),
+      Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{to}),
       Basics.Key.res(n)
     )
       == Some{v}: Maybe<&2, List<&2, U32>>
@@ -325,7 +325,7 @@ law Merge.keeps:
     List.contains(
       ~Resources.Name,
       ~Resources.Name.is_eq,
-      Judging.Merge.names(s, h, Basics.Node.root_of(s, Some{from})),
+      Judging.Merge.names(s, h, Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{from})),
       n
     )
       == True{}: Bool
@@ -333,7 +333,7 @@ law Merge.keeps:
     -> {
       Basics.Res.find(
         s,
-        Basics.Node.root_of(s, Judging.Merge.base(s, c, from, h)),
+        Replicas.Node.root_of(~Basics.Ask.machine(), s, Judging.Merge.base(s, c, from, h)),
         n
       )
         == Some{b}: Maybe<&2, Maybe<&2, Ropes.Root>>
@@ -342,7 +342,7 @@ law Merge.keeps:
     -> {
       Basics.Res.find(
         s,
-        Basics.Node.root_of(s, Some{from}),
+        Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{from}),
         n
       )
         == Some{t}: Maybe<&2, Maybe<&2, Ropes.Root>>

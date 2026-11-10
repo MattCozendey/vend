@@ -760,123 +760,31 @@ def Members.in(s: Replicas.Node<Ask>, h: Maybe<&2, Hashes.Hash>, g: String) -> M
 def Ask.chain(i: Ledgers.Id, q: Ask) -> Ledgers.Chain:
   Replicas.Arrival.chain(i, Ask.arrival(q))
 
-# the outcome of the request i (none: no step that the node knows decided it)
-def Node.out(+s: Replicas.Node<Ask>, +i: Ledgers.Id) -> Maybe<&2, Replicas.Out>:
-  Maybe.bind(&2, Ledgers.Chain, Replicas.Out, Replicas.Node.chain_of(~Ask.machine(), s, i), c => Replicas.Chain.out(~Ask.machine(), s, c, i))
-
-# the version of the outcome o on the line c, when it took one
-def Out.on(s: Replicas.Node<Ask>, c: Ledgers.Chain, o: Replicas.Out) -> Maybe<&2, Replicas.Version>:
-  match o:
-    case Replicas.Out.Stale{}:
-      None{}
-    case Replicas.Out.Taken{n}:
-      Replicas.Chain.version(~Ask.machine(), s, c, n)
-
-# the version that the request v made on the line c
-def Chain.made(+s: Replicas.Node<Ask>, +c: Ledgers.Chain, v: Ledgers.Id) -> Maybe<&2, Replicas.Version>:
-  Maybe.bind(&2, Replicas.Out, Replicas.Version, Replicas.Chain.out(~Ask.machine(), s, c, v), o => Out.on(s, c, o))
-
-# the version that the request v made (none: v is not a version that the node
-# knows)
-def Node.made(+s: Replicas.Node<Ask>, +v: Ledgers.Id) -> Maybe<&2, Replicas.Version>:
-  Maybe.bind(&2, Ledgers.Chain, Replicas.Version, Replicas.Node.chain_of(~Ask.machine(), s, v), +c => Chain.made(s, c, v))
-
-# the root of the content of the version v (none: v is not a version)
-def Node.root(s: Replicas.Node<Ask>, v: Ledgers.Id) -> Maybe<&2, Maybe<&2, Hashes.Hash>>:
-  Maybe.bind(&2, Replicas.Version, Maybe<&2, Hashes.Hash>, Node.made(s, v), x => Some{Replicas.Version.root(x)})
-
-# the root of the content of the version m, if any (none, or not a version:
-# the empty tree)
-def Node.root_of(s: Replicas.Node<Ask>, m: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Hashes.Hash>:
-  match m:
-    case None{}:
-      None{}
-    case Some{v}:
-      Maybe.bind(&2, Maybe<&2, Hashes.Hash>, Hashes.Hash, Node.root(s, v), h => h)
-
 # Ancestry
 # --------
 # A version came from the versions before it on its line, by number, and from
 # those that its version vector names, at their numbers or before.
 
-# a version's place: its line and its number
-type Place is Data:
-  Place{chain: Ledgers.Chain, number: U32}
-
-# the place on the line c of the outcome o, when it took a version
-def Out.place(c: Ledgers.Chain, o: Replicas.Out) -> Maybe<&2, Place>:
-  match o:
-    case Replicas.Out.Stale{}:
-      None{}
-    case Replicas.Out.Taken{n}:
-      Some{Place{c, n}}
-
-# the place of the version v on the line c, at the tip t
-def Place.at(s: Replicas.Node<Ask>, c: Ledgers.Chain, v: Ledgers.Id, t: Replicas.Tip) -> Maybe<&2, Place>:
-  Maybe.bind(&2, Replicas.Out, Place, Replicas.Line.out(~Ask.machine(), s, t, v), o => Out.place(c, o))
-
-# the place of the version v on the line c
-def Place.on(+s: Replicas.Node<Ask>, +c: Ledgers.Chain, v: Ledgers.Id) -> Maybe<&2, Place>:
-  Maybe.bind(&2, Replicas.Tip, Place, Replicas.Node.tip(~Ask.machine(), s, c), t => Place.at(s, c, v, t))
-
-# the place of the version v
-def Node.place(+s: Replicas.Node<Ask>, +v: Ledgers.Id) -> Maybe<&2, Place>:
-  Maybe.bind(&2, Ledgers.Chain, Place, Replicas.Node.chain_of(~Ask.machine(), s, v), +c => Place.on(s, c, v))
-
-# the place a is at or after the place b, of the same line
-def Place.covers(a: Place, b: Place) -> Bool:
-  match a b:
-    case Place{c1, n1} Place{c2, n2}:
-      U32.is_le(n2, n1)
-
-# the line of the place p
-def Place.chain(p: Place) -> Ledgers.Chain:
-  match p:
-    case Place{c, n}:
-      c
-
-# the place of the line c in the value of a version vector's entry
-def Place.read(c: Ledgers.Chain, ws: List<&2, U32>) -> Maybe<&2, Place>:
-  match ws:
-    case Con{n, Nil{}}:
-      Some{Place{c, n}}
-    case _:
-      None{}
-
-# the value of a version vector's entry at the place p
-def Place.code(p: Place) -> List<&2, U32>:
-  match p:
-    case Place{c, n}:
-      [n]
-
 # the newest place of the line c that the content whose root is h came from
-def Node.vector(s: Replicas.Node<Ask>, h: Maybe<&2, Hashes.Hash>, +c: Ledgers.Chain) -> Maybe<&2, Place>:
-  Maybe.bind(&2, List<&2, U32>, Place, Replicas.Node.get(~Ask.machine(), s, h, Key.vector(c)), ws => Place.read(c, ws))
-
-# the place q, if any, covers the place p
-def Place.covered(m: Maybe<&2, Place>, p: Place) -> Bool:
-  match m:
-    case None{}:
-      False{}
-    case Some{q}:
-      Place.covers(q, p)
+def Node.vector(s: Replicas.Node<Ask>, h: Maybe<&2, Hashes.Hash>, +c: Ledgers.Chain) -> Maybe<&2, Replicas.Place>:
+  Maybe.bind(&2, List<&2, U32>, Replicas.Place, Replicas.Node.get(~Ask.machine(), s, h, Key.vector(c)), ws => Replicas.Place.read(c, ws))
 
 # the version at the place px, whose content has the root hx, came from the
 # one at the place pv
-def Place.from(s: Replicas.Node<Ask>, +px: Place, hx: Maybe<&2, Hashes.Hash>, +pv: Place) -> Bool:
+def Place.from(s: Replicas.Node<Ask>, +px: Replicas.Place, hx: Maybe<&2, Hashes.Hash>, +pv: Replicas.Place) -> Bool:
   Shared.Bool.when(
     Bool,
-    Ledgers.Chain.is_eq(Place.chain(px), Place.chain(pv)),
-    u => Place.covers(px, pv),
-    u => Place.covered(Node.vector(s, hx, Place.chain(pv)), pv)
+    Ledgers.Chain.is_eq(Replicas.Place.chain(px), Replicas.Place.chain(pv)),
+    u => Replicas.Place.covers(px, pv),
+    u => Replicas.Place.covered(Node.vector(s, hx, Replicas.Place.chain(pv)), pv)
   )
 
 # Node.has once the places of x (mx) and of v (mv) and the root of x (mr) are
 # known
 def Has.of(
   s: Replicas.Node<Ask>,
-  mx: Maybe<&2, Place>,
-  mv: Maybe<&2, Place>,
+  mx: Maybe<&2, Replicas.Place>,
+  mv: Maybe<&2, Replicas.Place>,
   mr: Maybe<&2, Maybe<&2, Hashes.Hash>>
 ) -> Bool:
   match mx mv mr:
@@ -888,7 +796,7 @@ def Has.of(
 # x is v, or a version that v came from
 def Node.has(+s: Replicas.Node<Ask>, +v: Ledgers.Id, +x: Ledgers.Id) -> Bool:
   List.any.if(
-    u => Has.of(s, Node.place(s, x), Node.place(s, v), Node.root(s, x)),
+    u => Has.of(s, Replicas.Node.place(~Ask.machine(), s, x), Replicas.Node.place(~Ask.machine(), s, v), Replicas.Node.root(~Ask.machine(), s, x)),
     Ledgers.Id.is_eq(x, v)
   )
 
