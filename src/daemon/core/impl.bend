@@ -1273,6 +1273,55 @@ def Run.grows(
 ) -> {Run.after(s, Spec.Step.run(s, c, t, qs)) == True{}: Bool}:
   All.grows(s, c, qs, Some{Spec.Run{s, t, []}})(Grows.refl(s))
 
+# the run of picked requests, with one more request or not
+def Add.run(
+  b: Bool,
+  i: Ledgers.Id,
+  p: Spec.Picked
+) -> {Spec.Picked.run(Spec.Picked.add(b, i, p)) == Spec.Picked.run(p): Spec.Run}:
+  match p:
+    case Spec.Picked{r, qs}:
+      {==}
+
+# the run m, if any, else r, is on a node that grew from that of r
+def Default.run.grows(
+  r: Spec.Run,
+  m: Maybe<&2, Spec.Run>
+) -> {Run.after(Spec.Run.state(r), m) == True{}: Bool} -> {
+  Spec.Node.grows(Spec.Run.state(r), Spec.Run.state(Maybe.default(&2, Spec.Run, m, r))) == True{}: Bool
+}:
+  match m:
+    case None{}:
+      e => Grows.refl(Spec.Run.state(r))
+    case Some{Spec.Run{s2, t, ns}}:
+      e => e
+
+# the run of the requests that can run is on a node that grew
+def Some.grows(
+  +c: Ledgers.Chain,
+  qs: List<&2, Ledgers.Id>,
+  +r: Spec.Run
+) -> {Run.after(Spec.Run.state(r), Some{Spec.Picked.run(Spec.Step.some(c, qs, r))}) == True{}: Bool}:
+  match qs:
+    case Nil{}:
+      After.self(r)
+    case Con{+i, +rest}:
+      +m = Spec.Step.one(r, c, i)
+      +r2 = Maybe.default(&2, Spec.Run, m, r)
+      %Equal.sym(
+        Spec.Run,
+        Spec.Picked.run(Spec.Picked.add(Maybe.is_some(&2, Spec.Run, m), i, Spec.Step.some(c, rest, r2))),
+        Spec.Picked.run(Spec.Step.some(c, rest, r2)),
+        Add.run(Maybe.is_some(&2, Spec.Run, m), i, Spec.Step.some(c, rest, r2))
+      ): {Run.after(Spec.Run.state(r), Some{_}) == True{}: Bool}
+      After.trans(
+        Spec.Run.state(r),
+        Spec.Run.state(r2),
+        Some{Spec.Picked.run(Spec.Step.some(c, rest, r2))},
+        Default.run.grows(r, m)(One.grows(r, c, i)),
+        Some.grows(c, rest, r2)
+      )
+
 # a node with the ledger of a node that grew from a grew from a
 def Grows.to(
   +a: Spec.State(),
@@ -1485,20 +1534,21 @@ def Cast.at.grows(
 ) -> {Spec.Node.grows(s, Spec.Cast.at(n, s, c, h, m)) == True{}: Bool}:
   match h m:
     case Spec.Head{r, b, +next, +th} Some{+t}:
-      +qs = Spec.Wait.of(s, c)
+      +p = Spec.Step.some(c, Spec.Wait.of(s, c), Spec.Run{s, t, []})
+      +qs = Spec.Picked.asks(p)
       Grows.when(
         s,
         Spec.Cast.may(n, s, Ledgers.Where{c, next}, t, qs),
-        Spec.Cast.put(n, Ledgers.Where{c, next}, th, qs, Spec.Step.run(s, c, t, qs), s),
+        Spec.Cast.put(n, Ledgers.Where{c, next}, th, qs, Some{Spec.Picked.run(p)}, s),
         s,
         Cast.put.grows(
           n,
           Ledgers.Where{c, next},
           th,
           qs,
-          Spec.Step.run(s, c, t, qs),
+          Some{Spec.Picked.run(p)},
           s
-        )(Run.grows(s, c, t, qs)),
+        )(Some.grows(c, Spec.Wait.of(s, c), Spec.Run{s, t, []})),
         Grows.refl(s)
       )
     case Spec.Head{r, b, next, th} None{}:
@@ -4001,13 +4051,14 @@ def Cast.at.heads(
 ) -> {Spec.State.heads(s) == Spec.State.heads(Spec.Cast.at(n, s, c, h, m)): Tries.Trie<Spec.Head>}:
   match h m:
     case Spec.Head{r, b, +next, +th} Some{+t}:
-      +qs = Spec.Wait.of(s, c)
+      +p = Spec.Step.some(c, Spec.Wait.of(s, c), Spec.Run{s, t, []})
+      +qs = Spec.Picked.asks(p)
       Heads.when(
         Spec.Cast.may(n, s, Ledgers.Where{c, next}, t, qs),
         s,
-        Spec.Cast.put(n, Ledgers.Where{c, next}, th, qs, Spec.Step.run(s, c, t, qs), s),
+        Spec.Cast.put(n, Ledgers.Where{c, next}, th, qs, Some{Spec.Picked.run(p)}, s),
         s,
-        Cast.put.heads(n, Ledgers.Where{c, next}, th, qs, Spec.Step.run(s, c, t, qs), s),
+        Cast.put.heads(n, Ledgers.Where{c, next}, th, qs, Some{Spec.Picked.run(p)}, s),
         {==}
       )
     case Spec.Head{r, b, next, th} None{}:

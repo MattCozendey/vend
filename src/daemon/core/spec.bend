@@ -2416,6 +2416,44 @@ def Step.all(+c: Ledgers.Chain, qs: List<&2, Ledgers.Id>, m: Maybe<&2, Run>) -> 
     case Con{i, rest}:
       Step.all(c, rest, Maybe.bind(&2, Run, Run, m, r => Step.one(r, c, i)))
 
+# the requests of a step that a node can run now, in order, and the run after
+# them
+type Picked is Data:
+  Picked{run: Run, asks: List<&2, Ledgers.Id>}
+
+# the run of p
+def Picked.run(p: Picked) -> Run:
+  match p:
+    case Picked{r, qs}:
+      r
+
+# the requests of p
+def Picked.asks(p: Picked) -> List<&2, Ledgers.Id>:
+  match p:
+    case Picked{r, qs}:
+      qs
+
+# p, with the request i before its requests when b holds
+def Picked.add(b: Bool, i: Ledgers.Id, p: Picked) -> Picked:
+  match p:
+    case Picked{r, qs}:
+      Picked{r, List.filter.put(Ledgers.Id, i, qs, b)}
+
+# the requests of qs that can run now on the line c, from the run r, and the
+# run after them. A request that must wait (for a version, a request or a
+# node) is left out: it waits, and does not stop the others
+def Step.some(+c: Ledgers.Chain, qs: List<&2, Ledgers.Id>, +r: Run) -> Picked:
+  match qs:
+    case Nil{}:
+      Picked{r, []}
+    case Con{+i, rest}:
+      +m = Step.one(r, c, i)
+      Picked.add(
+        Maybe.is_some(&2, Run, m),
+        i,
+        Step.some(c, rest, Maybe.default(&2, Run, m, r))
+      )
+
 # the step of the line c that runs the requests qs from the tip t (none: wait
 # for a request, a version or a node)
 def Step.run(s: State(), +c: Ledgers.Chain, t: Tip, qs: List<&2, Ledgers.Id>) -> Maybe<&2, Run>:
@@ -2963,11 +3001,11 @@ def Cast.put(
 def Cast.at(+n: String, +s: State(), +c: Ledgers.Chain, h: Head, m: Maybe<&2, Tip>) -> State():
   match h m:
     case Head{r, b, +next, +th} Some{+t}:
-      +qs = Wait.of(s, c)
+      +p = Step.some(c, Wait.of(s, c), Run{s, t, []})
       Shared.Bool.when(
         State(),
-        Cast.may(n, s, Ledgers.Where{c, next}, t, qs),
-        u => Cast.put(n, Ledgers.Where{c, next}, th, qs, Step.run(s, c, t, qs), s),
+        Cast.may(n, s, Ledgers.Where{c, next}, t, Picked.asks(p)),
+        u => Cast.put(n, Ledgers.Where{c, next}, th, Picked.asks(p), Some{Picked.run(p)}, s),
         u => s
       )
     case x y:
@@ -2982,7 +3020,8 @@ def Cast.head(+n: String, +s: State(), +c: Ledgers.Chain, m: Maybe<&2, Head>) ->
       Cast.at(n, s, c, h, Head.tip(s, h))
 
 # s, after the node n cast its ballot for the next step of the line c: the
-# step that runs, from the tip, the requests that wait on the line
+# step that runs, from the tip, the requests that wait on the line and can
+# run now
 def Node.cast(+n: String, +s: State(), +c: Ledgers.Chain) -> State():
   Cast.head(n, s, c, Node.head_of(s, c))
 
