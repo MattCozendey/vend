@@ -1437,8 +1437,7 @@ def State.head(
     case Node{l, hs, ws, ks}:
       Node{l, Tries.Trie.set(Head, hs, Ledgers.Chain.key(c), h), ws, ks}
 
-# the requests of the line c that wait for a step, in the order that the node
-# took them in
+# the requests of the line c that wait for a step, the newest first
 def Wait.of(~mach: Machine(), s: Node<Machine.Q(mach)>, c: Ledgers.Chain) -> List<&2, Ledgers.Id>:
   Maybe.default(
     &2,
@@ -1446,6 +1445,10 @@ def Wait.of(~mach: Machine(), s: Node<Machine.Q(mach)>, c: Ledgers.Chain) -> Lis
     Tries.Trie.get(List<&2, Ledgers.Id>, State.waiting(~mach, s), Ledgers.Chain.key(c)),
     []
   )
+
+# the requests of the line c that wait for a step, as they came
+def Wait.order(~mach: Machine(), s: Node<Machine.Q(mach)>, c: Ledgers.Chain) -> List<&2, Ledgers.Id>:
+  List.reverse(&2, Ledgers.Id, Wait.of(~mach, s, c))
 
 # ws with the requests qs waiting at the key k: a line with no waiting request
 # has no entry, so the lines that wait are read without a walk of every line
@@ -1471,14 +1474,16 @@ def Wait.set(
     case Node{l, hs, ws, ks}:
       Node{l, hs, Wait.put(ws, Ledgers.Chain.key(c), qs), ks}
 
-# s with the request i waiting on the line c, after those that wait
+# s with the request i waiting on the line c: the newest comes first, so a
+# request waits in one step, however many wait (Wait.order gives them as
+# they came)
 def State.wait(
   ~mach: Machine(),
   +s: Node<Machine.Q(mach)>,
   +c: Ledgers.Chain,
   i: Ledgers.Id
 ) -> Node<Machine.Q(mach)>:
-  Wait.set(~mach, s, c, List.append(&2, Ledgers.Id, Wait.of(~mach, s, c), [i]))
+  Wait.set(~mach, s, c, i <> Wait.of(~mach, s, c))
 
 # the requests of qs whose keys done does not hold
 def Wait.left(qs: List<&2, Ledgers.Id>, +done: Tries.Trie<Unit>) -> List<&2, Ledgers.Id>:
@@ -1910,7 +1915,7 @@ def Plan.own(
   t: Tip,
   from: List<&2, String>
 ) -> Plan<Machine.Q(mach)>:
-  +p = Step.some(~mach, ~kern, c, Cast.mine(~mach, ~kern, s, Wait.of(~mach, s, c)), Run{s, t})
+  +p = Step.some(~mach, ~kern, c, Cast.mine(~mach, ~kern, s, Wait.order(~mach, s, c)), Run{s, t})
   Plan{Picked.asks(~mach, p), Some{Picked.run(~mach, p)}, from}
 
 # the node s may cast for each request of qs
@@ -5200,7 +5205,7 @@ def Plan.own.grows(
     ~mach,
     ~lawf,
     c,
-    Cast.mine(~mach, ~Lawful.kernel(mach, lawf), s, Wait.of(~mach, s, c)),
+    Cast.mine(~mach, ~Lawful.kernel(mach, lawf), s, Wait.order(~mach, s, c)),
     Run{s, t}
   )
 
@@ -14392,33 +14397,6 @@ def Wait.set.of(
         Tries.Trie.get(List<&2, Ledgers.Id>, ws, Ledgers.Chain.key(c2))
       )
 
-# Wait.wait for any requests ys that waited on the line c
-def Wait.wait.at(
-  ~mach: Machine(),
-  s: Node<Machine.Q(mach)>,
-  c: Ledgers.Chain,
-  j: Ledgers.Id,
-  c2: Ledgers.Chain,
-  +ys: List<&2, Ledgers.Id>
-) -> {
-  Wait.of(
-    ~mach,
-    Wait.set(~mach, s, c, List.append(&2, Ledgers.Id, ys, [j])),
-    c2
-  )
-    == Bool.pick(
-      List<&2, Ledgers.Id>,
-      Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)),
-      List.append(&2, Ledgers.Id, ys, [j]),
-      Wait.of(~mach, s, c2)
-    ): List<&2, Ledgers.Id>
-}:
-  match ys:
-    case Nil{}:
-      Wait.set.of(~mach, s, c, j, [], c2)
-    case Con{x, r}:
-      Wait.set.of(~mach, s, c, x, List.append(&2, Ledgers.Id, r, [j]), c2)
-
 # the requests that wait on a line, after one more waits on the line c
 def Wait.wait(
   ~mach: Machine(),
@@ -14435,11 +14413,11 @@ def Wait.wait(
     == Bool.pick(
       List<&2, Ledgers.Id>,
       Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)),
-      List.append(&2, Ledgers.Id, Wait.of(~mach, s, c), [j]),
+      j <> Wait.of(~mach, s, c),
       Wait.of(~mach, s, c2)
     ): List<&2, Ledgers.Id>
 }:
-  Wait.wait.at(~mach, s, c, j, c2, Wait.of(~mach, s, c))
+  Wait.set.of(~mach, s, c, j, Wait.of(~mach, s, c), c2)
 
 # Wait.keeps once it is known whether the line has the key of c (b)
 def Wait.keeps.if(
@@ -14459,7 +14437,7 @@ def Wait.keeps.if(
     Bool.pick(
       List<&2, Ledgers.Id>,
       b,
-      List.append(&2, Ledgers.Id, Wait.of(~mach, s, c), [j]),
+      j <> Wait.of(~mach, s, c),
       Wait.of(~mach, s, c2)
     ),
     i
@@ -14468,7 +14446,7 @@ def Wait.keeps.if(
 }:
   match b:
     case True{}:
-      Shared.List.contains_left(~Ledgers.Id, ~Ledgers.Id.is_eq, Wait.of(~mach, s, c), [j], i, (
+      Shared.List.contains_cons(~Ledgers.Id, ~Ledgers.Id.is_eq, j, Wait.of(~mach, s, c), i)((
           %Wait.keyed(~mach, s, c2, c, Key.same(c2, c)(eb)): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, _, i) == True{}: Bool}
           h))
     case False{}:
@@ -14498,7 +14476,7 @@ def Wait.keeps(
     Bool.pick(
       List<&2, Ledgers.Id>,
       Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)),
-      List.append(&2, Ledgers.Id, Wait.of(~mach, s, c), [j]),
+      j <> Wait.of(~mach, s, c),
       Wait.of(~mach, s, c2)
     ),
     Wait.wait(~mach, s, c, j, c2)
@@ -14514,18 +14492,6 @@ def Wait.keeps(
     {==},
     h
   )
-
-# a list of one is a member of itself
-def Contains.one(
-  j: Ledgers.Id
-) -> {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, [j], j) == True{}: Bool}:
-  %Equal.sym(
-    Bool,
-    Ledgers.Id.is_eq(j, j),
-    True{},
-    Ledgers.Id.is_eq_refl(j)
-  ): {List.any.if(u => List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, [], j), _) == True{}: Bool}
-  {==}
 
 # a request waits on its line once it waits there
 def Wait.adds(
@@ -14548,7 +14514,7 @@ def Wait.adds(
     Bool.pick(
       List<&2, Ledgers.Id>,
       Tries.Trie.same_key(Ledgers.Chain.key(c), Ledgers.Chain.key(c)),
-      List.append(&2, Ledgers.Id, Wait.of(~mach, s, c), [j]),
+      j <> Wait.of(~mach, s, c),
       Wait.of(~mach, s, c)
     ),
     Wait.wait(~mach, s, c, j, c)
@@ -14565,21 +14531,26 @@ def Wait.adds(
       Bool.pick(
         List<&2, Ledgers.Id>,
         _,
-        List.append(&2, Ledgers.Id, Wait.of(~mach, s, c), [j]),
+        j <> Wait.of(~mach, s, c),
         Wait.of(~mach, s, c)
       ),
       j
     )
       == True{}: Bool
   }
-  Shared.List.contains_right(
-    ~Ledgers.Id,
-    ~Ledgers.Id.is_eq,
-    Wait.of(~mach, s, c),
-    [j],
-    j,
-    Contains.one(j)
-  )
+  %Equal.sym(
+    Bool,
+    Ledgers.Id.is_eq(j, j),
+    True{},
+    Ledgers.Id.is_eq_refl(j)
+  ): {
+    List.any.if(
+      u => List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Wait.of(~mach, s, c), j),
+      _
+    )
+      == True{}: Bool
+  }
+  {==}
 
 # one of two nodes, on each of which the request i waits on the line c2
 def Contains.when(
