@@ -2658,7 +2658,7 @@ def Start.head.grows(
 # the first keys of a store are on a node that grew
 def Firsts.after(
   +s: Replicas.Node<Basics.Ask>,
-  os: List<&2, Basics.Owner>,
+  os: List<&2, Replicas.Owner>,
   +m: Maybe<&2, Replicas.Work<Basics.Ask>>
 ) -> {
   Work.after(s, m) == True{}: Bool
@@ -2666,7 +2666,7 @@ def Firsts.after(
   match os:
     case Nil{}:
       e => e
-    case Con{Basics.Owner{+n, +k}, r}:
+    case Con{Replicas.Owner{+n, +k}, r}:
       e => Firsts.after(
         s,
         r,
@@ -2707,12 +2707,12 @@ def Start.with.grows(
 def Start.grows(
   +s: Replicas.Node<Basics.Ask>,
   i: Ledgers.Id,
-  +os: List<&2, Basics.Owner>
+  +os: List<&2, Replicas.Owner>
 ) -> {Reading.Node.grows(s, Sealing.Node.start(s, i, os)) == True{}: Bool}:
   Start.with.grows(
     s,
     i,
-    Basics.Owner.names(os),
+    Replicas.Owner.names(os),
     Sealing.Seal.firsts(os, Some{Replicas.Work{s, None{}}})
   )(Firsts.after(s, os, Some{Replicas.Work{s, None{}}})(Grows.refl(s)))
 
@@ -6123,12 +6123,12 @@ def Start.with.kept(
 def Start.kept(
   +s: Replicas.Node<Basics.Ask>,
   i: Ledgers.Id,
-  +os: List<&2, Basics.Owner>
+  +os: List<&2, Replicas.Owner>
 ) -> Spec.Node.Keeps(s, Sealing.Node.start(s, i, os)):
   Start.with.kept(
     s,
     i,
-    Basics.Owner.names(os),
+    Replicas.Owner.names(os),
     Sealing.Seal.firsts(os, Some{Replicas.Work{s, None{}}})
   )(Firsts.after(s, os, Some{Replicas.Work{s, None{}}})(Grows.refl(s)))
 
@@ -14908,12 +14908,12 @@ def Start.with.path(
 def Start.path(
   +s: Replicas.Node<Basics.Ask>,
   i: Ledgers.Id,
-  +os: List<&2, Basics.Owner>
+  +os: List<&2, Replicas.Owner>
 ) -> Spec.Node.On(s, Sealing.Node.start(s, i, os)):
   Start.with.path(
     s,
     i,
-    Basics.Owner.names(os),
+    Replicas.Owner.names(os),
     Sealing.Seal.firsts(os, Some{Replicas.Work{s, None{}}})
   )(Firsts.after(s, os, Some{Replicas.Work{s, None{}}})(Grows.refl(s)))
 
@@ -16169,7 +16169,7 @@ def Arrive.waits(
         Start.with.waiting(
           s,
           j,
-          Basics.Owner.names(os),
+          Replicas.Owner.names(os),
           Sealing.Seal.firsts(os, Some{Replicas.Work{s, None{}}})
         )
       ): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, _, i) == True{}: Bool}

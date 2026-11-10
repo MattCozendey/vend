@@ -463,11 +463,11 @@ def Start.head(
       State.first(Replicas.State.led(~Basics.Ask.machine(), s, Replicas.State.ledger(~Basics.Ask.machine(), s2)), c, h)
 
 # w with the first key of each first owner of os
-def Seal.firsts(os: List<&2, Basics.Owner>, m: Maybe<&2, Replicas.Work<Basics.Ask>>) -> Maybe<&2, Replicas.Work<Basics.Ask>>:
+def Seal.firsts(os: List<&2, Replicas.Owner>, m: Maybe<&2, Replicas.Work<Basics.Ask>>) -> Maybe<&2, Replicas.Work<Basics.Ask>>:
   match os:
     case Nil{}:
       m
-    case Con{Basics.Owner{n, k}, r}:
+    case Con{Replicas.Owner{n, k}, r}:
       Seal.firsts(
         r,
         Maybe.bind(
@@ -501,8 +501,8 @@ def Start.with(
 
 # s, which follows the store that the request i starts with the first owners
 # os: its content holds their first keys
-def Node.start(+s: Replicas.Node<Basics.Ask>, i: Ledgers.Id, +os: List<&2, Basics.Owner>) -> Replicas.Node<Basics.Ask>:
-  Start.with(s, i, Basics.Owner.names(os), Seal.firsts(os, Some{Replicas.Work{s, None{}}}))
+def Node.start(+s: Replicas.Node<Basics.Ask>, i: Ledgers.Id, +os: List<&2, Replicas.Owner>) -> Replicas.Node<Basics.Ask>:
+  Start.with(s, i, Replicas.Owner.names(os), Seal.firsts(os, Some{Replicas.Work{s, None{}}}))
 
 # the first tip of the branch b of a store whose tip is m, if the store made
 # b: the log of the store holds it, written once, so every node opens the

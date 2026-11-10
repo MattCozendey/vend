@@ -701,3 +701,62 @@ def Picked.add(~M: Machine(), b: Bool, i: Ledgers.Id, p: Picked<Machine.Q(M)>) -
   match p:
     case Picked{r, qs}:
       Picked{r, List.filter.put(Ledgers.Id, i, qs, b)}
+
+# a first owner of a store: a node, and the key that signs its first ballot in
+# the store
+type Owner is Data:
+  Owner{name: String, key: Hashes.Hash}
+
+# the first owner o, then r
+def Owner.code(o: Owner, r: List<&2, U32>) -> List<&2, U32>:
+  match o:
+    case Owner{n, k}:
+      Codes.Code.text(n, Hashes.Hash.code(k, r))
+
+# a first owner
+def Owner.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Owner>>:
+  Codes.Code.two.read(
+    ~String,
+    ~Hashes.Hash,
+    ~Owner,
+    ~Codes.Code.text.read,
+    ~Hashes.Hash.code.read,
+    n => k => Owner{n, k},
+    ts
+  )
+
+# the names of the first owners os
+def Owner.names(os: List<&2, Owner>) -> List<&2, String>:
+  match os:
+    case Nil{}:
+      []
+    case Con{Owner{n, k}, r}:
+      n <> Owner.names(r)
+
+# a first owner reads back
+def Owner.code_read(
+  x: Owner,
+  r: List<&2, U32>
+) -> {
+  Owner.code.read(
+    Owner.code(x, r)
+  )
+    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Owner>>
+}:
+  match x:
+    case Owner{n, k}:
+      Codes.Code.two_read(
+        ~String,
+        ~Hashes.Hash,
+        ~Owner,
+        ~Codes.Code.text.codec(),
+        ~Hashes.Hash.codec(),
+        a => b => Owner{a, b},
+        n,
+        k,
+        r
+      )
+
+# the code of first owners
+def Owner.codec() -> Codes.Codec(Owner):
+  (Owner.code, (Owner.code.read, x => r => Owner.code_read(x, r)))

@@ -60,16 +60,11 @@ type Change is Data:
   Change.Key{node: String, key: Hashes.Hash}
 # bend-lint: expect-end bend-lint-rules/layout/case@warning
 
-# a first owner of a store: a node, and the key that signs its first ballot in
-# the store
-type Owner is Data:
-  Owner{name: String, key: Hashes.Hash}
-
 # bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a change that a writer asks for: a store that starts with its first owners,
 # or a change of a branch of a store (none: of the store itself)
 type Ask is Data:
-  Ask.Start{owners: List<&2, Owner>}
+  Ask.Start{owners: List<&2, Replicas.Owner>}
   Ask.On{store: Ledgers.Id, branch: Maybe<&2, String>, change: Change}
 # bend-lint: expect-end bend-lint-rules/layout/case@warning
 
@@ -334,37 +329,11 @@ def Change.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Change>>:
     case Con{x, r}:
       Change.code.read.of(x, r)
 
-# the first owner o, then r
-def Owner.code(o: Owner, r: List<&2, U32>) -> List<&2, U32>:
-  match o:
-    case Owner{n, k}:
-      Codes.Code.text(n, Hashes.Hash.code(k, r))
-
-# a first owner
-def Owner.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Owner>>:
-  Codes.Code.two.read(
-    ~String,
-    ~Hashes.Hash,
-    ~Owner,
-    ~Codes.Code.text.read,
-    ~Hashes.Hash.code.read,
-    n => k => Owner{n, k},
-    ts
-  )
-
-# the names of the first owners os
-def Owner.names(os: List<&2, Owner>) -> List<&2, String>:
-  match os:
-    case Nil{}:
-      []
-    case Con{Owner{n, k}, r}:
-      n <> Owner.names(r)
-
 # the request q, then r
 def Ask.code(q: Ask, r: List<&2, U32>) -> List<&2, U32>:
   match q:
     case Ask.Start{os}:
-      0 <> Codes.Code.list(~Owner, ~Owner.code, os, r)
+      0 <> Codes.Code.list(~Replicas.Owner, ~Replicas.Owner.code, os, r)
     case Ask.On{st, l, c}:
       1 <> Ledgers.Id.code(st, Target.code(l, Change.code(c, r)))
 
@@ -378,9 +347,9 @@ def Ask.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ask>>:
         Maybe<&2, Codes.Read<Ask>>,
         U32.is_eq(x, 0),
         u => Codes.Code.one.read(
-          ~List<&2, Owner>,
+          ~List<&2, Replicas.Owner>,
           ~Ask,
-          ~(m => Codes.Code.list.read(~Owner, ~Owner.code.read, m)),
+          ~(m => Codes.Code.list.read(~Replicas.Owner, ~Replicas.Owner.code.read, m)),
           os => Ask.Start{os},
           r
         ),
@@ -605,34 +574,6 @@ def Change.code_read(
 def Change.codec() -> Codes.Codec(Change):
   (Change.code, (Change.code.read, x => r => Change.code_read(x, r)))
 
-# a first owner reads back
-def Owner.code_read(
-  x: Owner,
-  r: List<&2, U32>
-) -> {
-  Owner.code.read(
-    Owner.code(x, r)
-  )
-    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Owner>>
-}:
-  match x:
-    case Owner{n, k}:
-      Codes.Code.two_read(
-        ~String,
-        ~Hashes.Hash,
-        ~Owner,
-        ~Codes.Code.text.codec(),
-        ~Hashes.Hash.codec(),
-        a => b => Owner{a, b},
-        n,
-        k,
-        r
-      )
-
-# the code of first owners
-def Owner.codec() -> Codes.Codec(Owner):
-  (Owner.code, (Owner.code.read, x => r => Owner.code_read(x, r)))
-
 # a request reads back
 def Ask.code_read(
   x: Ask,
@@ -646,9 +587,9 @@ def Ask.code_read(
   match x:
     case Ask.Start{os}:
       Codes.Code.one_read(
-        ~List<&2, Owner>,
+        ~List<&2, Replicas.Owner>,
         ~Ask,
-        ~Codes.Code.list.codec(~Owner, ~Owner.codec()),
+        ~Codes.Code.list.codec(~Replicas.Owner, ~Replicas.Owner.codec()),
         a => Ask.Start{a},
         os,
         r
