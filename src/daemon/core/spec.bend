@@ -5663,6 +5663,23 @@ law Move.reads:
   {Node.get(s, Node.root_of(s, Some{to}), Key.res(n)) == Some{v}: Maybe<&2, List<&2, U32>>}
     -> Work.Reads(Key.res(n), v, Move.work(s, c, to, h))
 
+# a node copies only a vote that the rules of rounds allow: when it plans to
+# cast for the vote of the proposer, the passes that the vote names allow it
+law Plan.follow_allowed:
+  for +s: State()
+  for +c: Ledgers.Chain
+  for +w: Ledgers.Where
+  for +t: Tip
+  for +th: Maybe<&2, Hashes.Hash>
+  for +os: List<&2, String>
+  for +v: Ledgers.Vote
+  for +from: List<&2, String>
+  {
+    Maybe.is_some(&2, Run, Plan.run(Plan.follow(s, c, w, t, th, os, Some{Ledgers.Act.Vote{v, from}})))
+      == True{}: Bool
+  }
+    -> {Allowed(s, w, os, v, from) == True{}: Bool}
+
 # the log of the run m, if any, holds an outcome of the request i
 def Run.Outs(m: Maybe<&2, Run>, i: Ledgers.Id) -> Type:
   match m:

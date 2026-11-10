@@ -13365,6 +13365,39 @@ def Spec.Wait.left_keeps(ws, done, i):
         e2 => Spec.Wait.left_keeps(rs, done, i)(e2)(hd)
       )(e)
 
+# Plan.follow_allowed once it is known whether the rules allow the vote (b)
+def Follow.allowed.at(
+  s: Spec.State(),
+  c: Ledgers.Chain,
+  t: Spec.Tip,
+  th: Maybe<&2, Hashes.Hash>,
+  v: Ledgers.Vote,
+  from: List<&2, String>,
+  b: Bool
+) -> {
+  Maybe.is_some(
+    &2,
+    Spec.Run,
+    Spec.Plan.run(
+      Shared.Bool.when(
+        Spec.Plan,
+        b,
+        u => Spec.Plan.copy(s, c, t, th, Some{v}, from),
+        u => Spec.Plan{[], None{}, []}
+      )
+    )
+  )
+    == True{}: Bool
+} -> {b == True{}: Bool}:
+  match b:
+    case True{}:
+      e => {==}
+    case False{}:
+      e => e
+
+def Spec.Plan.follow_allowed(s, c, w, t, th, os, v, from):
+  Follow.allowed.at(s, c, t, th, v, from, Spec.Allowed(s, w, os, v, from))
+
 # Waits
 # -----
 # A request that a node takes in waits on its line: a pending write goes with

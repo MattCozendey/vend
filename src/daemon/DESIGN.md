@@ -149,7 +149,8 @@ README claim, then the law.
 Design (each needs a decision or new work; none is a proof detail):
 
 - **The rules of rounds are premises.** A node's own ballots follow them by construction
-  (`Plan.lead`, `Plan.follow`, `Pass.to`, `Cast.round`), with no law yet. A node keeps a vote of
+  (`Plan.lead`, `Pass.to`, `Cast.round`), with one law: `Plan.follow_allowed` (a node copies only
+  a vote that the rules allow). A node keeps a vote of
   another node without a check of `Allowed`; it only copies a vote that is allowed.
 - **Walks that are left:** `Node.versions` lists every version (use a range); `Node.log`,
   `Touch.versions`, `Version.keys`, `Node.affects`, `Node.impact`, `Node.notices` read every
