@@ -379,36 +379,9 @@ def Eq.three(
   %ez: {mk(x1)(y1)(z1) == mk(x1)(y1)(_): T}
   {==}
 
-# the hash h, then r
-def Hash.code(h: Hashes.Hash, r: List<&2, U32>) -> List<&2, U32>:
-  match h:
-    case Hashes.Hash{a, b, c, d, e, f, g, i}:
-      a <> b <> c <> d <> e <> f <> g <> i <> r
-
-# a hash
-def Hash.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Hashes.Hash>>:
-  match ts:
-    case Con{a, Con{b, Con{c, Con{d, Con{e, Con{f, Con{g, Con{i, r}}}}}}}}:
-      Some{Codes.Read{Hashes.Hash{a, b, c, d, e, f, g, i}, r}}
-    case _:
-      None{}
-
-# a hash reads back
-def Hash.code_read(
-  h: Hashes.Hash,
-  r: List<&2, U32>
-) -> {Hash.code.read(Hash.code(h, r)) == Some{Codes.Read{h, r}}: Maybe<&2, Codes.Read<Hashes.Hash>>}:
-  match h:
-    case Hashes.Hash{a, b, c, d, e, f, g, i}:
-      {==}
-
-# the code of hashes
-def Hash.codec() -> Codes.Codec(Hashes.Hash):
-  (Hash.code, (Hash.code.read, h => r => Hash.code_read(h, r)))
-
 # the code of a root: a hash, if any
 def Root.codec() -> Codes.Codec(Maybe<&2, Hashes.Hash>):
-  Codes.Code.maybe.codec(~Hashes.Hash, ~Hash.codec())
+  Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec())
 
 # the ballot v, then r
 def Vote.code(v: Vote, r: List<&2, U32>) -> List<&2, U32>:
@@ -605,7 +578,7 @@ def Signed.codec() -> Codes.Codec(Signed):
 def Link.code(l: Link, r: List<&2, U32>) -> List<&2, U32>:
   match l:
     case Link{p, k, z}:
-      Codes.Code.maybe(~Where, ~Where.code, p, Hash.code(k, Seals.Seal.code(z, r)))
+      Codes.Code.maybe(~Where, ~Where.code, p, Hashes.Hash.code(k, Seals.Seal.code(z, r)))
 
 # a link
 def Link.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Link>>:
@@ -615,7 +588,7 @@ def Link.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Link>>:
     ~Seals.Seal,
     ~Link,
     ~(m => Codes.Code.maybe.read(~Where, ~Where.code.read, m)),
-    ~Hash.code.read,
+    ~Hashes.Hash.code.read,
     ~Seals.Seal.code.read,
     p => k => z => Link{p, k, z},
     ts
@@ -634,7 +607,7 @@ def Link.code_read(
         ~Seals.Seal,
         ~Link,
         ~Codes.Code.maybe.codec(~Where, ~Where.codec()),
-        ~Hash.codec(),
+        ~Hashes.Hash.codec(),
         ~Seals.Seal.codec(),
         a => b => c => Link{a, b, c},
         p,
@@ -713,7 +686,7 @@ def Ballot.vote(b: Ballot) -> Vote:
 # what a seal of a ballot signs: the hash of what the node signs, the place of
 # its ballot before, and the key of its next one
 def Ballot.digest(x: Signed, p: Maybe<&2, Where>, k: Hashes.Hash) -> Hashes.Hash:
-  Hashes.Sha.hash(Signed.code(x, Codes.Code.maybe(~Where, ~Where.code, p, Hash.code(k, []))))
+  Hashes.Sha.hash(Signed.code(x, Codes.Code.maybe(~Where, ~Where.code, p, Hashes.Hash.code(k, []))))
 
 # the ballot of x that the secret seed seals, after the ballot at p, with k as
 # the key of the next one

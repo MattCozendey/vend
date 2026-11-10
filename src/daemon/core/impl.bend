@@ -201,7 +201,7 @@ def Change.code_read(
         ~Hashes.Hash,
         ~Spec.Change,
         ~Codes.Code.text.codec(),
-        ~Trees.Hash.codec(),
+        ~Hashes.Hash.codec(),
         a => b => Spec.Change.Key{a, b},
         n,
         k,
@@ -226,7 +226,7 @@ def Owner.code_read(
         ~Hashes.Hash,
         ~Spec.Owner,
         ~Codes.Code.text.codec(),
-        ~Trees.Hash.codec(),
+        ~Hashes.Hash.codec(),
         a => b => Spec.Owner{a, b},
         n,
         k,
@@ -1880,9 +1880,9 @@ def Firsts.after(
           Spec.Work,
           Spec.Work,
           m,
-          w => Spec.Work.set(w, Spec.Key.seal(n), Trees.Hash.code(k, []))
+          w => Spec.Work.set(w, Spec.Key.seal(n), Hashes.Hash.code(k, []))
         )
-      )(Work.set.after(s, m, Spec.Key.seal(n), Trees.Hash.code(k, []))(e))
+      )(Work.set.after(s, m, Spec.Key.seal(n), Hashes.Hash.code(k, []))(e))
 
 # the first log of a line is on a node that grew
 def Log.first.after(
@@ -4096,11 +4096,11 @@ def Tip.round(t: Spec.Tip) -> {Spec.Tip.read(Spec.Tip.words(t)) == Some{t}: Mayb
           ~Maybe<&2, Hashes.Hash>,
           ~Maybe<&2, Hashes.Hash>,
           ~Spec.Tip,
-          ~Codes.Codec.dec(Maybe<&2, Hashes.Hash>, Codes.Code.maybe.codec(~Hashes.Hash, ~Trees.Hash.codec())),
-          ~Codes.Codec.dec(Maybe<&2, Hashes.Hash>, Codes.Code.maybe.codec(~Hashes.Hash, ~Trees.Hash.codec())),
+          ~Codes.Codec.dec(Maybe<&2, Hashes.Hash>, Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec())),
+          ~Codes.Codec.dec(Maybe<&2, Hashes.Hash>, Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec())),
           x => y => Spec.Tip{x, y},
-          Codes.Codec.enc(Maybe<&2, Hashes.Hash>, Codes.Code.maybe.codec(~Hashes.Hash, ~Trees.Hash.codec()))(c)(
-            Codes.Codec.enc(Maybe<&2, Hashes.Hash>, Codes.Code.maybe.codec(~Hashes.Hash, ~Trees.Hash.codec()))(l)([])
+          Codes.Codec.enc(Maybe<&2, Hashes.Hash>, Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec()))(c)(
+            Codes.Codec.enc(Maybe<&2, Hashes.Hash>, Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec()))(l)([])
           )
         ),
         Some{Codes.Read{Spec.Tip{c, l}, []}},
@@ -4108,8 +4108,8 @@ def Tip.round(t: Spec.Tip) -> {Spec.Tip.read(Spec.Tip.words(t)) == Some{t}: Mayb
           ~Maybe<&2, Hashes.Hash>,
           ~Maybe<&2, Hashes.Hash>,
           ~Spec.Tip,
-          ~Codes.Code.maybe.codec(~Hashes.Hash, ~Trees.Hash.codec()),
-          ~Codes.Code.maybe.codec(~Hashes.Hash, ~Trees.Hash.codec()),
+          ~Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec()),
+          ~Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec()),
           x => y => Spec.Tip{x, y},
           c,
           l,

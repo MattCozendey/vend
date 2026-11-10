@@ -1,5 +1,6 @@
 import Base
 import ../../../../shared.bend as Shared
+import ./code.bend as Codes
 
 # Hashes
 # ------
@@ -556,3 +557,35 @@ def Hash.is_eq_sound(a: Hash, b: Hash) -> {Hash.is_eq(a, b) == True{}: Bool} -> 
 # the laws of Hash.is_eq
 def Hash.laws() -> Shared.Eq.Laws(Hash, Hash.is_eq):
   (a => Hash.is_eq_refl(a), a => b => Hash.is_eq_sound(a, b))
+
+# Codes
+# -----
+
+# the hash h, then r
+def Hash.code(h: Hash, r: List<&2, U32>) -> List<&2, U32>:
+  match h:
+    case Hash{a, b, c, d, e, f, g, i}:
+      a <> b <> c <> d <> e <> f <> g <> i <> r
+
+# a hash
+def Hash.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Hash>>:
+  match ts:
+    case Con{a, Con{b, Con{c, Con{d, Con{e, Con{f, Con{g, Con{i, r}}}}}}}}:
+      Some{Codes.Read{Hash{a, b, c, d, e, f, g, i}, r}}
+    case _:
+      None{}
+
+# a hash reads back
+def Hash.code_read(
+  h: Hash,
+  r: List<&2, U32>
+) -> {
+  Hash.code.read(Hash.code(h, r)) == Some{Codes.Read{h, r}}: Maybe<&2, Codes.Read<Hash>>
+}:
+  match h:
+    case Hash{a, b, c, d, e, f, g, i}:
+      {==}
+
+# the code of hashes
+def Hash.codec() -> Codes.Codec(Hash):
+  (Hash.code, (Hash.code.read, h => r => Hash.code_read(h, r)))

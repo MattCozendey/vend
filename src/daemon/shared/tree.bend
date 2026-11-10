@@ -24,25 +24,11 @@ type Node is Data:
 # Codes
 # -----
 
-# the hash h, then r
-def Hash.code(h: Hashes.Hash, r: List<&2, U32>) -> List<&2, U32>:
-  match h:
-    case Hashes.Hash{a, b, c, d, e, f, g, i}:
-      a <> b <> c <> d <> e <> f <> g <> i <> r
-
-# a hash
-def Hash.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Hashes.Hash>>:
-  match ts:
-    case Con{a, Con{b, Con{c, Con{d, Con{e, Con{f, Con{g, Con{i, r}}}}}}}}:
-      Some{Codes.Read{Hashes.Hash{a, b, c, d, e, f, g, i}, r}}
-    case _:
-      None{}
-
 # the parts ks of a branch, then r
 def Parts.code(ks: List<&2, Maybe<&2, Hashes.Hash>>, r: List<&2, U32>) -> List<&2, U32>:
   Codes.Code.list(
     ~Maybe<&2, Hashes.Hash>,
-    ~(m => r2 => Codes.Code.maybe(~Hashes.Hash, ~Hash.code, m, r2)),
+    ~(m => r2 => Codes.Code.maybe(~Hashes.Hash, ~Hashes.Hash.code, m, r2)),
     ks,
     r
   )
@@ -51,7 +37,7 @@ def Parts.code(ks: List<&2, Maybe<&2, Hashes.Hash>>, r: List<&2, U32>) -> List<&
 def Parts.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<List<&2, Maybe<&2, Hashes.Hash>>>>:
   Codes.Code.list.read(
     ~Maybe<&2, Hashes.Hash>,
-    ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Hash.code.read, m)),
+    ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Hashes.Hash.code.read, m)),
     ts
   )
 
@@ -1104,26 +1090,11 @@ def Tree.set_some(ty, fetch, s, h, k, v):
 
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# a hash reads back
-def Hash.code_read(
-  h: Hashes.Hash,
-  r: List<&2, U32>
-) -> {
-  Hash.code.read(Hash.code(h, r)) == Some{Codes.Read{h, r}}: Maybe<&2, Codes.Read<Hashes.Hash>>
-}:
-  match h:
-    case Hashes.Hash{a, b, c, d, e, f, g, i}:
-      {==}
-
-# the code of hashes
-def Hash.codec() -> Codes.Codec(Hashes.Hash):
-  (Hash.code, (Hash.code.read, h => r => Hash.code_read(h, r)))
-
 # the code of the parts of a branch
 def Parts.codec() -> Codes.Codec(List<&2, Maybe<&2, Hashes.Hash>>):
   Codes.Code.list.codec(
     ~Maybe<&2, Hashes.Hash>,
-    ~Codes.Code.maybe.codec(~Hashes.Hash, ~Hash.codec())
+    ~Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec())
   )
 
 # a node reads back
@@ -1198,8 +1169,8 @@ def Hash.code_back(
   -h: Hashes.Hash,
   -r: List<&2, U32>
 ) -> {
-  Hash.code.read(ts) == Some{Codes.Read{h, r}}: Maybe<&2, Codes.Read<Hashes.Hash>>
-} -> {Hash.code(h, r) == ts: List<&2, U32>}:
+  Hashes.Hash.code.read(ts) == Some{Codes.Read{h, r}}: Maybe<&2, Codes.Read<Hashes.Hash>>
+} -> {Hashes.Hash.code(h, r) == ts: List<&2, U32>}:
   match ts:
     case Con{a, Con{b, Con{c, Con{d, Con{e, Con{f, Con{g, Con{i, q}}}}}}}}:
       +k =>
@@ -1210,7 +1181,7 @@ def Hash.code_back(
           q,
           r,
           k
-        ): {Hash.code(_, r) == a <> b <> c <> d <> e <> f <> g <> i <> q: List<&2, U32>}
+        ): {Hashes.Hash.code(_, r) == a <> b <> c <> d <> e <> f <> g <> i <> q: List<&2, U32>}
         %Codes.Read.rest_eq(
           Hashes.Hash,
           Hashes.Hash{a, b, c, d, e, f, g, i},
@@ -1219,7 +1190,7 @@ def Hash.code_back(
           r,
           k
         ): {
-          Hash.code(
+          Hashes.Hash.code(
             Hashes.Hash{a, b, c, d, e, f, g, i},
             _
           )
@@ -1236,42 +1207,42 @@ def Hash.code_back(
         {==}
     case Nil{}:
       k => Empty.absurd(
-        {Hash.code(h, r) == []: List<&2, U32>},
+        {Hashes.Hash.code(h, r) == []: List<&2, U32>},
         Shared.Maybe.none_ne_some(Codes.Read<Hashes.Hash>, Codes.Read{h, r}, k)
       )
     case Con{a, Nil{}}:
       k => Empty.absurd(
-        {Hash.code(h, r) == a <> []: List<&2, U32>},
+        {Hashes.Hash.code(h, r) == a <> []: List<&2, U32>},
         Shared.Maybe.none_ne_some(Codes.Read<Hashes.Hash>, Codes.Read{h, r}, k)
       )
     case Con{a, Con{b, Nil{}}}:
       k => Empty.absurd(
-        {Hash.code(h, r) == a <> b <> []: List<&2, U32>},
+        {Hashes.Hash.code(h, r) == a <> b <> []: List<&2, U32>},
         Shared.Maybe.none_ne_some(Codes.Read<Hashes.Hash>, Codes.Read{h, r}, k)
       )
     case Con{a, Con{b, Con{c, Nil{}}}}:
       k => Empty.absurd(
-        {Hash.code(h, r) == a <> b <> c <> []: List<&2, U32>},
+        {Hashes.Hash.code(h, r) == a <> b <> c <> []: List<&2, U32>},
         Shared.Maybe.none_ne_some(Codes.Read<Hashes.Hash>, Codes.Read{h, r}, k)
       )
     case Con{a, Con{b, Con{c, Con{d, Nil{}}}}}:
       k => Empty.absurd(
-        {Hash.code(h, r) == a <> b <> c <> d <> []: List<&2, U32>},
+        {Hashes.Hash.code(h, r) == a <> b <> c <> d <> []: List<&2, U32>},
         Shared.Maybe.none_ne_some(Codes.Read<Hashes.Hash>, Codes.Read{h, r}, k)
       )
     case Con{a, Con{b, Con{c, Con{d, Con{e, Nil{}}}}}}:
       k => Empty.absurd(
-        {Hash.code(h, r) == a <> b <> c <> d <> e <> []: List<&2, U32>},
+        {Hashes.Hash.code(h, r) == a <> b <> c <> d <> e <> []: List<&2, U32>},
         Shared.Maybe.none_ne_some(Codes.Read<Hashes.Hash>, Codes.Read{h, r}, k)
       )
     case Con{a, Con{b, Con{c, Con{d, Con{e, Con{f, Nil{}}}}}}}:
       k => Empty.absurd(
-        {Hash.code(h, r) == a <> b <> c <> d <> e <> f <> []: List<&2, U32>},
+        {Hashes.Hash.code(h, r) == a <> b <> c <> d <> e <> f <> []: List<&2, U32>},
         Shared.Maybe.none_ne_some(Codes.Read<Hashes.Hash>, Codes.Read{h, r}, k)
       )
     case Con{a, Con{b, Con{c, Con{d, Con{e, Con{f, Con{g, Nil{}}}}}}}}:
       k => Empty.absurd(
-        {Hash.code(h, r) == a <> b <> c <> d <> e <> f <> g <> []: List<&2, U32>},
+        {Hashes.Hash.code(h, r) == a <> b <> c <> d <> e <> f <> g <> []: List<&2, U32>},
         Shared.Maybe.none_ne_some(Codes.Read<Hashes.Hash>, Codes.Read{h, r}, k)
       )
 
@@ -1283,12 +1254,12 @@ def Parts.code_back() -> Codes.Code.Back(
 ):
   Codes.Code.list_back(
     ~Maybe<&2, Hashes.Hash>,
-    ~(m => r2 => Codes.Code.maybe(~Hashes.Hash, ~Hash.code, m, r2)),
-    ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Hash.code.read, m)),
+    ~(m => r2 => Codes.Code.maybe(~Hashes.Hash, ~Hashes.Hash.code, m, r2)),
+    ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Hashes.Hash.code.read, m)),
     ~Codes.Code.maybe_back(
       ~Hashes.Hash,
-      ~Hash.code,
-      ~Hash.code.read,
+      ~Hashes.Hash.code,
+      ~Hashes.Hash.code.read,
       ~(ts => h => r => Hash.code_back(ts, h, r))
     )
   )

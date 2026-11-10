@@ -26,32 +26,18 @@ type Nibble is Data:
 # Codes
 # -----
 
-# the hash h, then r
-def Hash.code(h: Hashes.Hash, r: List<&2, U32>) -> List<&2, U32>:
-  match h:
-    case Hashes.Hash{a, b, c, d, e, f, g, i}:
-      a <> b <> c <> d <> e <> f <> g <> i <> r
-
-# a hash
-def Hash.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Hashes.Hash>>:
-  match ts:
-    case Con{a, Con{b, Con{c, Con{d, Con{e, Con{f, Con{g, Con{i, r}}}}}}}}:
-      Some{Codes.Read{Hashes.Hash{a, b, c, d, e, f, g, i}, r}}
-    case _:
-      None{}
-
 # the seal s, then r
 def Seal.code(s: Seal, r: List<&2, U32>) -> List<&2, U32>:
   match s:
     case Seal{vs}:
-      Codes.Code.list(~Hashes.Hash, ~Hash.code, vs, r)
+      Codes.Code.list(~Hashes.Hash, ~Hashes.Hash.code, vs, r)
 
 # a seal
 def Seal.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Seal>>:
   Codes.Code.one.read(
     ~List<&2, Hashes.Hash>,
     ~Seal,
-    ~(q => Codes.Code.list.read(~Hashes.Hash, ~Hash.code.read, q)),
+    ~(q => Codes.Code.list.read(~Hashes.Hash, ~Hashes.Hash.code.read, q)),
     vs => Seal{vs},
     ts
   )
@@ -142,7 +128,7 @@ def Seal.digits(m: Hashes.Hash) -> List<&2, Nibble>:
 
 # the value after h in a chain
 def Seal.step(h: Hashes.Hash) -> Hashes.Hash:
-  Hashes.Sha.hash(Hash.code(h, []))
+  Hashes.Sha.hash(Hashes.Hash.code(h, []))
 
 # the value n steps after h in a chain
 def Seal.steps(n: Nat, h: Hashes.Hash) -> Hashes.Hash:
@@ -154,7 +140,7 @@ def Seal.steps(n: Nat, h: Hashes.Hash) -> Hashes.Hash:
 
 # the start of the chain j of the seed: secret
 def Seal.start(seed: Hashes.Hash, j: U32) -> Hashes.Hash:
-  Hashes.Sha.hash(Hash.code(seed, [j]))
+  Hashes.Sha.hash(Hashes.Hash.code(seed, [j]))
 
 # the ends of the n chains of the seed from the chain j
 def Seal.tops(n: Nat, +seed: Hashes.Hash, +j: U32) -> List<&2, Hashes.Hash>:
@@ -196,7 +182,7 @@ def Seal.ends(ds: List<&2, Nibble>, vs: List<&2, Hashes.Hash>) -> Maybe<&2, List
 
 # the key of the chain ends es: the hash of all of them
 def Seal.key(es: List<&2, Hashes.Hash>) -> Hashes.Hash:
-  Hashes.Sha.hash(Codes.Code.items(~Hashes.Hash, ~Hash.code, es, []))
+  Hashes.Sha.hash(Codes.Code.items(~Hashes.Hash, ~Hashes.Hash.code, es, []))
 
 # Seals
 # -----
@@ -226,21 +212,6 @@ def Seal.check(pub: Hashes.Hash, m: Hashes.Hash, s: Seal) -> Bool:
 # Laws
 # ----
 
-# a hash reads back
-def Hash.code_read(
-  h: Hashes.Hash,
-  r: List<&2, U32>
-) -> {
-  Hash.code.read(Hash.code(h, r)) == Some{Codes.Read{h, r}}: Maybe<&2, Codes.Read<Hashes.Hash>>
-}:
-  match h:
-    case Hashes.Hash{a, b, c, d, e, f, g, i}:
-      {==}
-
-# the code of hashes
-def Hash.codec() -> Codes.Codec(Hashes.Hash):
-  (Hash.code, (Hash.code.read, h => r => Hash.code_read(h, r)))
-
 # a seal reads back
 def Seal.code_read(
   s: Seal,
@@ -251,7 +222,7 @@ def Seal.code_read(
       Codes.Code.one_read(
         ~List<&2, Hashes.Hash>,
         ~Seal,
-        ~Codes.Code.list.codec(~Hashes.Hash, ~Hash.codec()),
+        ~Codes.Code.list.codec(~Hashes.Hash, ~Hashes.Hash.codec()),
         ws => Seal{ws},
         vs,
         r

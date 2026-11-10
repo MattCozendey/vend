@@ -41,38 +41,9 @@ def Put.nodes(p: Put) -> List<&2, List<&2, U32>>:
 # Codes
 # -----
 
-# the hash h, then r
-def Hash.code(h: Hashes.Hash, r: List<&2, U32>) -> List<&2, U32>:
-  match h:
-    case Hashes.Hash{a, b, c, d, e, f, g, i}:
-      a <> b <> c <> d <> e <> f <> g <> i <> r
-
-# a hash
-def Hash.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Hashes.Hash>>:
-  match ts:
-    case Con{a, Con{b, Con{c, Con{d, Con{e, Con{f, Con{g, Con{i, r}}}}}}}}:
-      Some{Codes.Read{Hashes.Hash{a, b, c, d, e, f, g, i}, r}}
-    case _:
-      None{}
-
-# a hash reads back
-def Hash.code_read(
-  h: Hashes.Hash,
-  r: List<&2, U32>
-) -> {
-  Hash.code.read(Hash.code(h, r)) == Some{Codes.Read{h, r}}: Maybe<&2, Codes.Read<Hashes.Hash>>
-}:
-  match h:
-    case Hashes.Hash{a, b, c, d, e, f, g, i}:
-      {==}
-
-# the code of hashes
-def Hash.codec() -> Codes.Codec(Hashes.Hash):
-  (Hash.code, (Hash.code.read, h => r => Hash.code_read(h, r)))
-
 # the code of the kids of a branch
 def Kids.codec() -> Codes.Codec(List<&2, Hashes.Hash>):
-  Codes.Code.list.codec(~Hashes.Hash, ~Hash.codec())
+  Codes.Code.list.codec(~Hashes.Hash, ~Hashes.Hash.codec())
 
 # the node n, then r: its tag (1: a leaf, 2: a branch), then what it holds
 def Node.code(n: Node, r: List<&2, U32>) -> List<&2, U32>:
@@ -183,7 +154,7 @@ def Count.codec() -> Codes.Codec(Nat):
 def Root.code(r: Root, rest: List<&2, U32>) -> List<&2, U32>:
   match r:
     case Root{d, h}:
-      Codes.Code.count(d, Hash.code(h, rest))
+      Codes.Code.count(d, Hashes.Hash.code(h, rest))
 
 # a root
 def Root.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Root>>:
@@ -192,7 +163,7 @@ def Root.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Root>>:
     ~Hashes.Hash,
     ~Root,
     ~Codes.Code.count.read,
-    ~Hash.code.read,
+    ~Hashes.Hash.code.read,
     d => h => Root{d, h},
     ts
   )
@@ -209,7 +180,7 @@ def Root.code_read(
         ~Hashes.Hash,
         ~Root,
         ~Count.codec(),
-        ~Hash.codec(),
+        ~Hashes.Hash.codec(),
         a => b => Root{a, b},
         d,
         h,

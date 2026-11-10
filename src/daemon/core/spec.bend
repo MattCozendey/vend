@@ -211,7 +211,7 @@ def Change.code(c: Change, r: List<&2, U32>) -> List<&2, U32>:
     case Change.Group{g, ms}:
       7 <> Codes.Code.text(g, Members.code(ms, r))
     case Change.Key{n, k}:
-      8 <> Codes.Code.text(n, Trees.Hash.code(k, r))
+      8 <> Codes.Code.text(n, Hashes.Hash.code(k, r))
 
 # a change whose tag is x, from the tokens r after it
 def Change.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Change>>:
@@ -309,7 +309,7 @@ def Change.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Chan
                     ~Hashes.Hash,
                     ~Change,
                     ~Codes.Code.text.read,
-                    ~Trees.Hash.code.read,
+                    ~Hashes.Hash.code.read,
                     n => k => Change.Key{n, k},
                     r
                   ),
@@ -343,7 +343,7 @@ def Change.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Change>>:
 def Owner.code(o: Owner, r: List<&2, U32>) -> List<&2, U32>:
   match o:
     case Owner{n, k}:
-      Codes.Code.text(n, Trees.Hash.code(k, r))
+      Codes.Code.text(n, Hashes.Hash.code(k, r))
 
 # a first owner
 def Owner.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Owner>>:
@@ -352,7 +352,7 @@ def Owner.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Owner>>:
     ~Hashes.Hash,
     ~Owner,
     ~Codes.Code.text.read,
-    ~Trees.Hash.code.read,
+    ~Hashes.Hash.code.read,
     n => k => Owner{n, k},
     ts
   )
@@ -587,7 +587,7 @@ def Res.read(ws: List<&2, U32>) -> Maybe<&2, Ropes.Root>:
 
 # the value of where a line starts: the root of its first tree
 def Start.code(h: Maybe<&2, Hashes.Hash>) -> List<&2, U32>:
-  Codes.Code.maybe(~Hashes.Hash, ~Trees.Hash.code, h, [])
+  Codes.Code.maybe(~Hashes.Hash, ~Hashes.Hash.code, h, [])
 
 # the root in the value of where a line starts, flattened
 def Start.of.read(m: Maybe<&2, Codes.Read<Maybe<&2, Hashes.Hash>>>) -> Maybe<&2, Hashes.Hash>:
@@ -764,9 +764,9 @@ def Tip.words(t: Tip) -> List<&2, U32>:
     case Tip{c, l}:
       Codes.Code.maybe(
         ~Hashes.Hash,
-        ~Trees.Hash.code,
+        ~Hashes.Hash.code,
         c,
-        Codes.Code.maybe(~Hashes.Hash, ~Trees.Hash.code, l, [])
+        Codes.Code.maybe(~Hashes.Hash, ~Hashes.Hash.code, l, [])
       )
 
 # the tip that some words are, when they are one
@@ -777,8 +777,8 @@ def Tip.read(ws: List<&2, U32>) -> Maybe<&2, Tip>:
       ~Maybe<&2, Hashes.Hash>,
       ~Maybe<&2, Hashes.Hash>,
       ~Tip,
-      ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Trees.Hash.code.read, m)),
-      ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Trees.Hash.code.read, m)),
+      ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Hashes.Hash.code.read, m)),
+      ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Hashes.Hash.code.read, m)),
       c => l => Tip{c, l},
       ws
     )
@@ -856,7 +856,7 @@ type Version is Data:
 def Version.words(v: Version) -> List<&2, U32>:
   match v:
     case Version{i, r}:
-      Ledgers.Id.code(i, Codes.Code.maybe(~Hashes.Hash, ~Trees.Hash.code, r, []))
+      Ledgers.Id.code(i, Codes.Code.maybe(~Hashes.Hash, ~Hashes.Hash.code, r, []))
 
 # the version that some words are
 def Version.read(ws: List<&2, U32>) -> Maybe<&2, Version>:
@@ -867,7 +867,7 @@ def Version.read(ws: List<&2, U32>) -> Maybe<&2, Version>:
       ~Maybe<&2, Hashes.Hash>,
       ~Version,
       ~Ledgers.Id.code.read,
-      ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Trees.Hash.code.read, m)),
+      ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Hashes.Hash.code.read, m)),
       i => r => Version{i, r},
       ws
     )
@@ -2180,7 +2180,7 @@ def Judge.change(
     case None{} Change.Group{+g, +ms}:
       Judge.when(Bool.not(Group.loops.any(s, h, g, ms)), h, u => Work.take(Group.work(s, h, g, ms)))
     case None{} Change.Key{n, k}:
-      Work.take(Work.set(Work{s, h, []}, Key.seal(n), Trees.Hash.code(k, [])))
+      Work.take(Work.set(Work{s, h, []}, Key.seal(n), Hashes.Hash.code(k, [])))
     case w Change.Own{g, at, os2}:
       Own.change(s, r, w, g, at, os2, h)
     case Some{b} Change.Write{n, base, c2}:
@@ -2535,7 +2535,7 @@ def Seal.read(m: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Hashes.Hash>:
     List<&2, U32>,
     Hashes.Hash,
     m,
-    ws => Read.whole(Hashes.Hash, Trees.Hash.code.read(ws))
+    ws => Read.whole(Hashes.Hash, Hashes.Hash.code.read(ws))
   )
 
 # the first key that the store r gave the node n, as s knows the store
@@ -2631,7 +2631,7 @@ def Seal.accept(+s: State(), +b: Ledgers.Ballot) -> Maybe<&2, State()>:
 # the secret of the ballot of the number j of a node in the store r, from the
 # node's seed
 def Seal.secret(seed: Hashes.Hash, r: Ledgers.Id, j: U32) -> Hashes.Hash:
-  Hashes.Sha.hash(Trees.Hash.code(seed, Ledgers.Id.code(r, [j])))
+  Hashes.Sha.hash(Hashes.Hash.code(seed, Ledgers.Id.code(r, [j])))
 
 # the key of the place m, if any
 def Prev.key(m: Maybe<&2, Ledgers.Where>) -> List<&2, Bool>:
@@ -2840,7 +2840,7 @@ def Seal.firsts(os: List<&2, Owner>, m: Maybe<&2, Work>) -> Maybe<&2, Work>:
     case Con{Owner{n, k}, r}:
       Seal.firsts(
         r,
-        Maybe.bind(&2, Work, Work, m, w => Work.set(w, Key.seal(n), Trees.Hash.code(k, [])))
+        Maybe.bind(&2, Work, Work, m, w => Work.set(w, Key.seal(n), Hashes.Hash.code(k, [])))
       )
 
 # s with the first tip of the store i, whose content is c and whose log is on
@@ -2878,7 +2878,7 @@ def Branch.start(s: State(), h: Maybe<&2, Hashes.Hash>, b: String) -> Maybe<&2, 
     List<&2, U32>,
     Hashes.Hash,
     Node.get(s, h, Key.start(Line.key(b))),
-    ws => Start.of.read(Codes.Code.maybe.read(~Hashes.Hash, ~Trees.Hash.code.read, ws))
+    ws => Start.of.read(Codes.Code.maybe.read(~Hashes.Hash, ~Hashes.Hash.code.read, ws))
   )
 
 # the first tip of the branch b of a store whose tip is m
