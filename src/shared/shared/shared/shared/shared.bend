@@ -2141,18 +2141,6 @@ def Bool.and_true(a: Bool) -> {a == Bool.and(a, True{}): Bool}:
     case True{}:
       {==}
 
-# or is commutative
-def Bool.or_comm(a: Bool, b: Bool) -> {Bool.or(a, b) == Bool.or(b, a): Bool}:
-  match a b:
-    case False{} False{}:
-      {==}
-    case False{} True{}:
-      {==}
-    case True{} False{}:
-      {==}
-    case True{} True{}:
-      {==}
-
 # or is associative
 def Bool.or_assoc(
   a: Bool,
@@ -2277,6 +2265,20 @@ def List.any.if_or(
   rest: Unit -> Bool
 ) -> {List.any.if(rest, hit) == Bool.or(hit, rest(Unit{})): Bool}:
   match hit:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# a lazy or of two ands with the same first part h
+def List.any.if_and(
+  h: Bool,
+  x: Bool,
+  t: Bool
+) -> {
+  List.any.if(u => Bool.and(h, t), Bool.and(h, x)) == Bool.and(h, List.any.if(u => t, x)): Bool
+}:
+  match h:
     case False{}:
       {==}
     case True{}:
@@ -2738,6 +2740,20 @@ def U32.is_le_to_nat(
     U32.cmp_to_nat(a, b)
   )
 
+# the order of U32 as the order of codes, for is_lt
+def U32.is_lt_to_nat(
+  a: U32,
+  b: U32
+) -> {U32.is_lt(a, b) == Nat.is_lt(U32.to_nat(a), U32.to_nat(b)): Bool}:
+  Equal.cong(
+    Cmp,
+    Bool,
+    Cmp.is_lt,
+    U32.cmp(a, b),
+    Nat.cmp(U32.to_nat(a), U32.to_nat(b)),
+    U32.cmp_to_nat(a, b)
+  )
+
 # two numbers are the same when their codes are
 def U32.is_eq_to_nat(
   a: U32,
@@ -2752,13 +2768,6 @@ def U32.is_eq_to_nat(
     U32.cmp_to_nat(a, b)
   )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# numbers with the same code are the same number
-def U32.to_nat_inj(+a: U32, +b: U32) -> {U32.to_nat(a) == U32.to_nat(b): Nat} -> {a == b: U32}:
-  e => U32.is_eq_sound(a, b)((
-      %Equal.sym(Bool, U32.is_eq(a, b), Nat.is_eq(U32.to_nat(a), U32.to_nat(b)), U32.is_eq_to_nat(a, b)): {_ == True{}: Bool}
-      %e: {Nat.is_eq(U32.to_nat(a), _) == True{}: Bool}
-      Nat.is_eq_refl(U32.to_nat(a))))
 
 # Word.le_ones at the low bit b, with t the comparison of the rests
 def Word.le_ones.fin(
@@ -2852,20 +2861,3 @@ def U32.inc_to_nat(
 
 # Two-way facts
 # -------------
-
-# two Bools are the same when each one that is True makes the other True
-def Bool.iff(
-  a: Bool,
-  b: Bool,
-  f: {a == True{}: Bool} -> {b == True{}: Bool},
-  g: {b == True{}: Bool} -> {a == True{}: Bool}
-) -> {a == b: Bool}:
-  match a b:
-    case True{} True{}:
-      {==}
-    case True{} False{}:
-      Equal.sym(Bool, False{}, True{}, f({==}))
-    case False{} True{}:
-      g({==})
-    case False{} False{}:
-      {==}

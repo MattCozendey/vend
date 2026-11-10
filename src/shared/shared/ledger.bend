@@ -3481,31 +3481,6 @@ def State.passed_key(
     }
     {==}
 
-# the round of a height reads the key of the height only
-def State.round_key(
-  ~Q: Data,
-  s: State(Q),
-  c: Chain,
-  h: U32,
-  c2: Chain,
-  h2: U32
-) -> {
-  Slot.height(c, h) == Slot.height(c2, h2): List<&2, Bool>
-} -> {State.round(~Q, s, c, h) == State.round(~Q, s, c2, h2): Nat}:
-  e =>
-    %Equal.sym(
-      List<&2, Bool>,
-      Slot.height(c, h),
-      Slot.height(c2, h2),
-      e
-    ): {
-      Shared.Nat.before(
-        Spine.depth(Cells.Cell<Entry<Q>>, State.under(~Q, s, _))
-      )
-        == State.round(~Q, s, c2, h2): Nat
-    }
-    {==}
-
 # State.passed_round once the cell m of the pass is known
 def State.passed_round.at(
   ~Q: Data,

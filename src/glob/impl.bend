@@ -2120,8 +2120,8 @@ def Glob.spans(g: Spec.Glob, acc: List<&2, Spans.Span>) -> List<&2, Spans.Span>:
       acc
     case Spec.Star{}:
       acc
-    case Spec.Class{n, xs}:
-      List.append(&2, Spans.Span, xs, acc)
+    case Spec.Class{n, ss}:
+      List.append(&2, Spans.Span, ss, acc)
     case Spec.Deep{}:
       acc
     case Spec.Cat{a, b}:
@@ -2494,23 +2494,6 @@ def Glob.show.char(c: Char, k: Spec.Sym, rest: String) -> String:
     case _:
       SCon{Chr{92}, SCon{c, rest}}
 
-# the characters of both s and r, as a span (empty when none)
-def Span.meet(s: Spans.Span, r: Spans.Span) -> Spans.Span:
-  match s r:
-    case Spans.Span{Chr{+lo}, Chr{+hi}} Spans.Span{Chr{+a}, Chr{+b}}:
-      Spans.Span{
-        Chr{Bool.pick(U32, U32.is_le(lo, a), a, lo)},
-        Chr{Bool.pick(U32, U32.is_le(hi, b), hi, b)}
-      }
-
-# the meets of s with each span of rs, in order
-def Span.meets(+s: Spans.Span, rs: List<&2, Spans.Span>) -> List<&2, Spans.Span>:
-  match rs:
-    case Nil{}:
-      []
-    case Con{r, t}:
-      Con{Span.meet(s, r), Span.meets(s, t)}
-
 # the bounds of the parts of a span: the characters before '!', '!', those
 # between '!' and '\', '\', ']', and those after ']'
 def Span.bounds() -> List<&2, Spans.Span>:
@@ -2527,7 +2510,7 @@ def Span.bounds() -> List<&2, Spans.Span>:
 # parts of more than one character have no end that the text of a class gives
 # a role ('!' at its start, '\' and ']'), so each part reads back as itself
 def Span.parts(s: Spans.Span) -> List<&2, Spans.Span>:
-  Span.meets(s, Span.bounds())
+  Spans.Span.meets(s, Span.bounds())
 
 # Span.show once it is known whether the span is empty (gap) and whether it is
 # one character (one)
@@ -3488,111 +3471,6 @@ def Step.left(
         },
         Shared.Bool.true_ne_false(e)
       )
-
-# `[` before an escape opens a class
-def Step.left_esc(
-  l: List<&2, Spec.Sym>,
-  st: List<&2, Spec.Frame>,
-  seg: Bool
-) -> {
-  Spec.Glob.read.go(
-    Con{Spec.SEsc{}, l},
-    Spec.In{False{}, []},
-    st,
-    seg
-  )
-    == Spec.Glob.read.go(
-      Con{Spec.SLeft{}, Con{Spec.SEsc{}, l}},
-      Spec.Out{},
-      st,
-      seg
-    ): Maybe<&2, Spec.Glob>
-}:
-  match l:
-    case Nil{}:
-      {==}
-    case Con{y1, l2}:
-      match y1:
-        case Spec.SEsc{}:
-          {==}
-        case Spec.SAny{}:
-          {==}
-        case Spec.SStar{}:
-          match l2:
-            case Nil{}:
-              {==}
-            case Con{y6, l7}:
-              match y6:
-                case Spec.SEsc{}:
-                  {==}
-                case Spec.SAny{}:
-                  {==}
-                case Spec.SStar{}:
-                  {==}
-                case Spec.SSlash{}:
-                  {==}
-                case Spec.SOpen{}:
-                  {==}
-                case Spec.SComma{}:
-                  {==}
-                case Spec.SClose{}:
-                  {==}
-                case Spec.SLeft{}:
-                  {==}
-                case Spec.SRight{}:
-                  {==}
-                case Spec.SBang{}:
-                  {==}
-                case Spec.SDash{}:
-                  {==}
-                case Spec.SChar{ch19}:
-                  {==}
-        case Spec.SSlash{}:
-          {==}
-        case Spec.SOpen{}:
-          {==}
-        case Spec.SComma{}:
-          {==}
-        case Spec.SClose{}:
-          {==}
-        case Spec.SLeft{}:
-          {==}
-        case Spec.SRight{}:
-          {==}
-        case Spec.SBang{}:
-          {==}
-        case Spec.SDash{}:
-          match l2:
-            case Nil{}:
-              {==}
-            case Con{y28, l29}:
-              match y28:
-                case Spec.SEsc{}:
-                  {==}
-                case Spec.SAny{}:
-                  {==}
-                case Spec.SStar{}:
-                  {==}
-                case Spec.SSlash{}:
-                  {==}
-                case Spec.SOpen{}:
-                  {==}
-                case Spec.SComma{}:
-                  {==}
-                case Spec.SClose{}:
-                  {==}
-                case Spec.SLeft{}:
-                  {==}
-                case Spec.SRight{}:
-                  {==}
-                case Spec.SBang{}:
-                  {==}
-                case Spec.SDash{}:
-                  {==}
-                case Spec.SChar{ch41}:
-                  {==}
-        case Spec.SChar{ch42}:
-          {==}
 
 # `[` before `]` opens a class
 def Step.left_right(
@@ -4995,305 +4873,6 @@ def Span.parse(
     case Spans.Span{Chr{+lo}, Chr{+hi}}:
       Span.parse.at(lo, hi, U32.is_lt(hi, lo), {==}, U32.is_eq(lo, hi), {==}, rest, n, acc, st, seg)
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
-# the order of U32 as the order of codes, for is_lt
-def U32.is_lt_codes(
-  a: U32,
-  b: U32
-) -> {U32.is_lt(a, b) == Nat.is_lt(U32.to_nat(a), U32.to_nat(b)): Bool}:
-  Equal.cong(
-    Cmp,
-    Bool,
-    Cmp.is_lt,
-    U32.cmp(a, b),
-    Nat.cmp(U32.to_nat(a), U32.to_nat(b)),
-    Shared.U32.cmp_to_nat(a, b)
-  )
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# Cut.lo once the order k of lo and a is known
-def Cut.lo.at(
-  +lo: U32,
-  +a: U32,
-  x: Nat,
-  k: Bool,
-  ek: {U32.is_le(lo, a) == k: Bool}
-) -> {
-  Nat.is_le(
-    U32.to_nat(Bool.pick(U32, k, a, lo)),
-    x
-  )
-    == Bool.and(Nat.is_le(U32.to_nat(lo), x), Nat.is_le(U32.to_nat(a), x)): Bool
-}:
-  match k:
-    case True{}:
-      Shared.Nat.le_above(
-        U32.to_nat(lo),
-        U32.to_nat(a),
-        x
-      )(
-        Equal.trans(
-          Bool,
-          Nat.is_le(U32.to_nat(lo), U32.to_nat(a)),
-          U32.is_le(lo, a),
-          True{},
-          Equal.sym(
-            Bool,
-            U32.is_le(lo, a),
-            Nat.is_le(U32.to_nat(lo), U32.to_nat(a)),
-            Shared.U32.is_le_to_nat(lo, a)
-          ),
-          ek
-        )
-      )
-    case False{}:
-      Shared.Nat.le_above_not(
-        U32.to_nat(lo),
-        U32.to_nat(a),
-        x
-      )(
-        Equal.trans(
-          Bool,
-          Nat.is_le(U32.to_nat(lo), U32.to_nat(a)),
-          U32.is_le(lo, a),
-          False{},
-          Equal.sym(
-            Bool,
-            U32.is_le(lo, a),
-            Nat.is_le(U32.to_nat(lo), U32.to_nat(a)),
-            Shared.U32.is_le_to_nat(lo, a)
-          ),
-          ek
-        )
-      )
-
-# Cut.hi once the order k of hi and b is known
-def Cut.hi.at(
-  +hi: U32,
-  +b: U32,
-  x: Nat,
-  k: Bool,
-  ek: {U32.is_le(hi, b) == k: Bool}
-) -> {
-  Nat.is_le(
-    x,
-    U32.to_nat(Bool.pick(U32, k, hi, b))
-  )
-    == Bool.and(Nat.is_le(x, U32.to_nat(hi)), Nat.is_le(x, U32.to_nat(b))): Bool
-}:
-  match k:
-    case True{}:
-      Shared.Nat.le_upto(
-        U32.to_nat(hi),
-        U32.to_nat(b),
-        x
-      )(
-        Equal.trans(
-          Bool,
-          Nat.is_le(U32.to_nat(hi), U32.to_nat(b)),
-          U32.is_le(hi, b),
-          True{},
-          Equal.sym(
-            Bool,
-            U32.is_le(hi, b),
-            Nat.is_le(U32.to_nat(hi), U32.to_nat(b)),
-            Shared.U32.is_le_to_nat(hi, b)
-          ),
-          ek
-        )
-      )
-    case False{}:
-      Shared.Nat.le_upto_not(
-        U32.to_nat(hi),
-        U32.to_nat(b),
-        x
-      )(
-        Equal.trans(
-          Bool,
-          Nat.is_le(U32.to_nat(hi), U32.to_nat(b)),
-          U32.is_le(hi, b),
-          False{},
-          Equal.sym(
-            Bool,
-            U32.is_le(hi, b),
-            Nat.is_le(U32.to_nat(hi), U32.to_nat(b)),
-            Shared.U32.is_le_to_nat(hi, b)
-          ),
-          ek
-        )
-      )
-
-# the code of the first character of a cut is at most x exactly when the
-# codes of lo and a are
-def Cut.lo(
-  +lo: U32,
-  +a: U32,
-  x: Nat
-) -> {
-  Nat.is_le(
-    U32.to_nat(Bool.pick(U32, U32.is_le(lo, a), a, lo)),
-    x
-  )
-    == Bool.and(Nat.is_le(U32.to_nat(lo), x), Nat.is_le(U32.to_nat(a), x)): Bool
-}:
-  Cut.lo.at(lo, a, x, U32.is_le(lo, a), {==})
-
-# the code of the last character of a cut is at least x exactly when the
-# codes of hi and b are
-def Cut.hi(
-  +hi: U32,
-  +b: U32,
-  x: Nat
-) -> {
-  Nat.is_le(
-    x,
-    U32.to_nat(Bool.pick(U32, U32.is_le(hi, b), hi, b))
-  )
-    == Bool.and(Nat.is_le(x, U32.to_nat(hi)), Nat.is_le(x, U32.to_nat(b))): Bool
-}:
-  Cut.hi.at(hi, b, x, U32.is_le(hi, b), {==})
-
-# a character is in the meet of two spans exactly when it is in both
-def Meet.has(
-  s: Spans.Span,
-  r: Spans.Span,
-  +c: Char
-) -> {
-  Spans.Span.has(Span.meet(s, r), c) == Bool.and(Spans.Span.has(s, c), Spans.Span.has(r, c)): Bool
-}:
-  match s r:
-    case Spans.Span{Chr{+lo}, Chr{+hi}} Spans.Span{Chr{+a}, Chr{+b}}:
-      Equal.trans(
-        Bool,
-        Spans.Span.has(
-          Spans.Span{
-            Chr{Bool.pick(U32, U32.is_le(lo, a), a, lo)},
-            Chr{Bool.pick(U32, U32.is_le(hi, b), hi, b)}
-          },
-          c
-        ),
-        Bool.and(
-          Nat.is_le(U32.to_nat(Bool.pick(U32, U32.is_le(lo, a), a, lo)), Spans.Char.code(c)),
-          Nat.is_le(Spans.Char.code(c), U32.to_nat(Bool.pick(U32, U32.is_le(hi, b), hi, b)))
-        ),
-        Bool.and(
-          Spans.Span.has(Spans.Span{Chr{lo}, Chr{hi}}, c),
-          Spans.Span.has(Spans.Span{Chr{a}, Chr{b}}, c)
-        ),
-        Spans.Span.has_codes(
-          Chr{Bool.pick(U32, U32.is_le(lo, a), a, lo)},
-          Chr{Bool.pick(U32, U32.is_le(hi, b), hi, b)},
-          c
-        ),
-        (
-          %Equal.sym(Bool, Nat.is_le(U32.to_nat(Bool.pick(U32, U32.is_le(lo, a), a, lo)), Spans.Char.code(c)), Bool.and(Nat.is_le(U32.to_nat(lo), Spans.Char.code(c)), Nat.is_le(U32.to_nat(a), Spans.Char.code(c))), Cut.lo(lo, a, Spans.Char.code(c))): {Bool.and(_, Nat.is_le(Spans.Char.code(c), U32.to_nat(Bool.pick(U32, U32.is_le(hi, b), hi, b)))) == Bool.and(Spans.Span.has(Spans.Span{Chr{lo}, Chr{hi}}, c), Spans.Span.has(Spans.Span{Chr{a}, Chr{b}}, c)): Bool}
-          %Equal.sym(Bool, Nat.is_le(Spans.Char.code(c), U32.to_nat(Bool.pick(U32, U32.is_le(hi, b), hi, b))), Bool.and(Nat.is_le(Spans.Char.code(c), U32.to_nat(hi)), Nat.is_le(Spans.Char.code(c), U32.to_nat(b))), Cut.hi(hi, b, Spans.Char.code(c))): {Bool.and(Bool.and(Nat.is_le(U32.to_nat(lo), Spans.Char.code(c)), Nat.is_le(U32.to_nat(a), Spans.Char.code(c))), _) == Bool.and(Spans.Span.has(Spans.Span{Chr{lo}, Chr{hi}}, c), Spans.Span.has(Spans.Span{Chr{a}, Chr{b}}, c)): Bool}
-          %Equal.sym(Bool, Bool.and(Bool.and(Nat.is_le(U32.to_nat(lo), Spans.Char.code(c)), Nat.is_le(U32.to_nat(a), Spans.Char.code(c))), Bool.and(Nat.is_le(Spans.Char.code(c), U32.to_nat(hi)), Nat.is_le(Spans.Char.code(c), U32.to_nat(b)))), Bool.and(Bool.and(Nat.is_le(U32.to_nat(lo), Spans.Char.code(c)), Nat.is_le(Spans.Char.code(c), U32.to_nat(hi))), Bool.and(Nat.is_le(U32.to_nat(a), Spans.Char.code(c)), Nat.is_le(Spans.Char.code(c), U32.to_nat(b)))), Shared.Bool.and_swap(Nat.is_le(U32.to_nat(lo), Spans.Char.code(c)), Nat.is_le(U32.to_nat(a), Spans.Char.code(c)), Nat.is_le(Spans.Char.code(c), U32.to_nat(hi)), Nat.is_le(Spans.Char.code(c), U32.to_nat(b)))): {_ == Bool.and(Spans.Span.has(Spans.Span{Chr{lo}, Chr{hi}}, c), Spans.Span.has(Spans.Span{Chr{a}, Chr{b}}, c)): Bool}
-          %Spans.Span.has_codes(Chr{lo}, Chr{hi}, c): {Bool.and(_, Bool.and(Nat.is_le(U32.to_nat(a), Spans.Char.code(c)), Nat.is_le(Spans.Char.code(c), U32.to_nat(b)))) == Bool.and(Spans.Span.has(Spans.Span{Chr{lo}, Chr{hi}}, c), Spans.Span.has(Spans.Span{Chr{a}, Chr{b}}, c)): Bool}
-          %Spans.Span.has_codes(Chr{a}, Chr{b}, c): {Bool.and(Spans.Span.has(Spans.Span{Chr{lo}, Chr{hi}}, c), _) == Bool.and(Spans.Span.has(Spans.Span{Chr{lo}, Chr{hi}}, c), Spans.Span.has(Spans.Span{Chr{a}, Chr{b}}, c)): Bool}
-          {==})
-      )
-
-# a span that is not empty holds its first character
-def Span.has_low(
-  +p: U32,
-  +q: U32
-) -> {
-  U32.is_lt(q, p) == False{}: Bool
-} -> {Spans.Span.has(Spans.Span{Chr{p}, Chr{q}}, Chr{p}) == True{}: Bool}:
-  e =>
-    Equal.trans(
-      Bool,
-      Spans.Span.has(Spans.Span{Chr{p}, Chr{q}}, Chr{p}),
-      Bool.and(Nat.is_le(U32.to_nat(p), U32.to_nat(p)), Nat.is_le(U32.to_nat(p), U32.to_nat(q))),
-      True{},
-      Spans.Span.has_codes(Chr{p}, Chr{q}, Chr{p}),
-      (
-        %Equal.sym(Bool, Nat.is_le(U32.to_nat(p), U32.to_nat(p)), True{}, Shared.Nat.le_refl(U32.to_nat(p))): {Bool.and(_, Nat.is_le(U32.to_nat(p), U32.to_nat(q))) == True{}: Bool}
-        %Equal.sym(Bool, Nat.is_le(U32.to_nat(p), U32.to_nat(q)), True{}, Shared.Nat.nlt_le(U32.to_nat(q), U32.to_nat(p))(Equal.trans(Bool, Nat.is_lt(U32.to_nat(q), U32.to_nat(p)), U32.is_lt(q, p), False{}, Equal.sym(Bool, U32.is_lt(q, p), Nat.is_lt(U32.to_nat(q), U32.to_nat(p)), U32.is_lt_codes(q, p)), e))): {Bool.and(True{}, _) == True{}: Bool}
-        {==})
-    )
-
-# a span that is not empty holds its last character
-def Span.has_high(
-  +p: U32,
-  +q: U32
-) -> {
-  U32.is_lt(q, p) == False{}: Bool
-} -> {Spans.Span.has(Spans.Span{Chr{p}, Chr{q}}, Chr{q}) == True{}: Bool}:
-  e =>
-    Equal.trans(
-      Bool,
-      Spans.Span.has(Spans.Span{Chr{p}, Chr{q}}, Chr{q}),
-      Bool.and(Nat.is_le(U32.to_nat(p), U32.to_nat(q)), Nat.is_le(U32.to_nat(q), U32.to_nat(q))),
-      True{},
-      Spans.Span.has_codes(Chr{p}, Chr{q}, Chr{q}),
-      (
-        %Equal.sym(Bool, Nat.is_le(U32.to_nat(q), U32.to_nat(q)), True{}, Shared.Nat.le_refl(U32.to_nat(q))): {Bool.and(Nat.is_le(U32.to_nat(p), U32.to_nat(q)), _) == True{}: Bool}
-        %Equal.sym(Bool, Nat.is_le(U32.to_nat(p), U32.to_nat(q)), True{}, Shared.Nat.nlt_le(U32.to_nat(q), U32.to_nat(p))(Equal.trans(Bool, Nat.is_lt(U32.to_nat(q), U32.to_nat(p)), U32.is_lt(q, p), False{}, Equal.sym(Bool, U32.is_lt(q, p), Nat.is_lt(U32.to_nat(q), U32.to_nat(p)), U32.is_lt_codes(q, p)), e))): {Bool.and(_, True{}) == True{}: Bool}
-        {==})
-    )
-
-# a character in the meet of s and r is in r
-def Meet.right(
-  +s: Spans.Span,
-  +r: Spans.Span,
-  +x: Char
-) -> {Spans.Span.has(Span.meet(s, r), x) == True{}: Bool} -> {Spans.Span.has(r, x) == True{}: Bool}:
-  e =>
-    Shared.Bool.and_true_right(
-      Spans.Span.has(s, x),
-      Spans.Span.has(r, x)
-    )(
-      Equal.trans(
-        Bool,
-        Bool.and(Spans.Span.has(s, x), Spans.Span.has(r, x)),
-        Spans.Span.has(Span.meet(s, r), x),
-        True{},
-        Equal.sym(
-          Bool,
-          Spans.Span.has(Span.meet(s, r), x),
-          Bool.and(Spans.Span.has(s, x), Spans.Span.has(r, x)),
-          Meet.has(s, r, x)
-        ),
-        e
-      )
-    )
-
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
-# x and y are not the same character when a span holds x and not y, once it
-# is known whether they are the same (o)
-def Has.apart(
-  r: Spans.Span,
-  x: Char,
-  y: Char,
-  o: Bool,
-  eo: {Char.is_eq(x, y) == o: Bool}
-) -> {
-  Spans.Span.has(r, x) == True{}: Bool
-} -> {Spans.Span.has(r, y) == False{}: Bool} -> {o == False{}: Bool}:
-  match o:
-    case False{}:
-      hx => hy => {==}
-    case True{}:
-      hx => hy =>
-        Empty.absurd(
-          {True{} == False{}: Bool},
-          Shared.Bool.false_ne_true(
-            Equal.trans(
-              Bool,
-              False{},
-              Spans.Span.has(r, y),
-              True{},
-              Equal.sym(Bool, Spans.Span.has(r, y), False{}, hy),
-              (
-                %Shared.Char.is_eq_sound(x, y)(eo): {Spans.Span.has(r, _) == True{}: Bool}
-                hx)
-            )
-          )
-        )
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
 # a symbol whose character is none of '!', '\' and ']' is plain
 def Sym.plain_char(
   s: Spec.Sym
@@ -5388,7 +4967,7 @@ def Clear.plain(
     Sym.plain_of(
       x
     )(
-      Has.apart(
+      Spans.Span.has_apart(
         r,
         x,
         Chr{33},
@@ -5410,7 +4989,7 @@ def Clear.plain(
         )
       )
     )(
-      Has.apart(
+      Spans.Span.has_apart(
         r,
         x,
         Chr{92},
@@ -5429,7 +5008,7 @@ def Clear.plain(
         )
       )
     )(
-      Has.apart(
+      Spans.Span.has_apart(
         r,
         x,
         Chr{93},
@@ -5652,10 +5231,10 @@ def Fine.in.at(
       )
 
 # the meet of s with a safe span reads back as itself
-def Meet.fine(
+def Span.meet_fine(
   s: Spans.Span,
   r: Spans.Span
-) -> {Span.safe(r) == True{}: Bool} -> {Span.fine(Span.meet(s, r)) == True{}: Bool}:
+) -> {Span.safe(r) == True{}: Bool} -> {Span.fine(Spans.Span.meet(s, r)) == True{}: Bool}:
   match s r:
     case Spans.Span{Chr{+lo}, Chr{+hi}} Spans.Span{Chr{+a}, Chr{+b}}:
       sr =>
@@ -5674,22 +5253,22 @@ def Meet.fine(
           ),
           {==},
           sr,
-          g => Meet.right(
+          g => Spans.Span.meet_right(
             Spans.Span{Chr{lo}, Chr{hi}},
             Spans.Span{Chr{a}, Chr{b}},
             Chr{Bool.pick(U32, U32.is_le(lo, a), a, lo)}
           )(
-            Span.has_low(
+            Spans.Span.has_low(
               Bool.pick(U32, U32.is_le(lo, a), a, lo),
               Bool.pick(U32, U32.is_le(hi, b), hi, b)
             )(g)
           ),
-          g => Meet.right(
+          g => Spans.Span.meet_right(
             Spans.Span{Chr{lo}, Chr{hi}},
             Spans.Span{Chr{a}, Chr{b}},
             Chr{Bool.pick(U32, U32.is_le(hi, b), hi, b)}
           )(
-            Span.has_high(
+            Spans.Span.has_high(
               Bool.pick(U32, U32.is_le(lo, a), a, lo),
               Bool.pick(U32, U32.is_le(hi, b), hi, b)
             )(g)
@@ -5698,12 +5277,12 @@ def Meet.fine(
 
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- only proofs use it; no program runs it
 # the meets of s with safe spans read back as themselves
-def Meets.fine(
+def Span.meets_fine(
   +s: Spans.Span,
   rs: List<&2, Spans.Span>
 ) -> {
   List.all(~&2, ~Spans.Span, ~Span.safe, rs) == True{}: Bool
-} -> {List.all(~&2, ~Spans.Span, ~Span.fine, Span.meets(s, rs)) == True{}: Bool}:
+} -> {List.all(~&2, ~Spans.Span, ~Span.fine, Spans.Span.meets(s, rs)) == True{}: Bool}:
   match rs:
     case Nil{}:
       e => {==}
@@ -5711,20 +5290,20 @@ def Meets.fine(
       +e =>
         %Equal.sym(
           Bool,
-          Span.fine(Span.meet(s, r)),
+          Span.fine(Spans.Span.meet(s, r)),
           True{},
-          Meet.fine(
+          Span.meet_fine(
             s,
             r
           )(Shared.List.all.if_hit(Span.safe(r), u => List.all(~&2, ~Spans.Span, ~Span.safe, t))(e))
         ): {
           List.all.if(
-            u => List.all(~&2, ~Spans.Span, ~Span.fine, Span.meets(s, t)),
+            u => List.all(~&2, ~Spans.Span, ~Span.fine, Spans.Span.meets(s, t)),
             _
           )
             == True{}: Bool
         }
-        Meets.fine(
+        Span.meets_fine(
           s,
           t
         )(Shared.List.all.if_rest(Span.safe(r), u => List.all(~&2, ~Spans.Span, ~Span.safe, t))(e))
@@ -5734,7 +5313,7 @@ def Meets.fine(
 def Span.parts_fine(
   s: Spans.Span
 ) -> {List.all(~&2, ~Spans.Span, ~Span.fine, Span.parts(s)) == True{}: Bool}:
-  Meets.fine(s, Span.bounds())({==})
+  Span.meets_fine(s, Span.bounds())({==})
 
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- only proofs use it; no program runs it
 # spans whose texts read back as themselves are kept by the reader, in turn
@@ -6695,7 +6274,7 @@ def Span.gap_has(
       Nat.is_le(Spans.Char.code(c), U32.to_nat(hi)),
       {==}
     )(
-      %U32.is_lt_codes(hi, lo): {_ == True{}: Bool}
+      %Shared.U32.is_lt_to_nat(hi, lo): {_ == True{}: Bool}
       e)
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
@@ -6800,223 +6379,9 @@ def Span.keep_all_has(
       )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
-# a lazy or of two ands with the same first part h
-def Any.and(
-  h: Bool,
-  x: Bool,
-  t: Bool
-) -> {
-  List.any.if(u => Bool.and(h, t), Bool.and(h, x)) == Bool.and(h, List.any.if(u => t, x)): Bool
-}:
-  match h:
-    case False{}:
-      {==}
-    case True{}:
-      {==}
-
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
-# a character is in the meets of s with rs exactly when it is in s and in rs
-def Meets.has(
-  +s: Spans.Span,
-  rs: List<&2, Spans.Span>,
-  +c: Char
-) -> {
-  Spans.Spans.has(
-    Span.meets(s, rs),
-    c
-  )
-    == Bool.and(Spans.Span.has(s, c), Spans.Spans.has(rs, c)): Bool
-}:
-  match rs:
-    case Nil{}:
-      Equal.sym(
-        Bool,
-        Bool.and(Spans.Span.has(s, c), False{}),
-        False{},
-        Shared.Bool.and_false_right(Spans.Span.has(s, c))
-      )
-    case Con{+r, +t}:
-      %Equal.sym(
-        Bool,
-        Spans.Spans.has(Span.meets(s, t), c),
-        Bool.and(Spans.Span.has(s, c), Spans.Spans.has(t, c)),
-        Meets.has(s, t, c)
-      ): {
-        List.any.if(
-          u => _,
-          Spans.Span.has(Span.meet(s, r), c)
-        )
-          == Bool.and(
-            Spans.Span.has(s, c),
-            List.any.if(u => Spans.Spans.has(t, c), Spans.Span.has(r, c))
-          ): Bool
-      }
-      %Equal.sym(
-        Bool,
-        Spans.Span.has(Span.meet(s, r), c),
-        Bool.and(Spans.Span.has(s, c), Spans.Span.has(r, c)),
-        Meet.has(s, r, c)
-      ): {
-        List.any.if(
-          u => Bool.and(Spans.Span.has(s, c), Spans.Spans.has(t, c)),
-          _
-        )
-          == Bool.and(
-            Spans.Span.has(s, c),
-            List.any.if(u => Spans.Spans.has(t, c), Spans.Span.has(r, c))
-          ): Bool
-      }
-      Any.and(Spans.Span.has(s, c), Spans.Span.has(r, c), Spans.Spans.has(t, c))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# the spans of rs follow each other with no gap from the character a, and the
-# last of them ends at the last character
-def Span.chain(rs: List<&2, Spans.Span>, a: Char) -> Bool:
-  match rs:
-    case Nil{}:
-      False{}
-    case Con{Spans.Span{lo, +hi}, t}:
-      List.all.if(
-        u => List.any.if(u2 => Span.chain(t, Spans.Char.after(hi)), Spans.Char.is_last(hi)),
-        Char.is_eq(lo, a)
-      )
-
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
-# a span that ends below c is not the last: no code is above the last
-def Chain.not_last(
-  hi: Char,
-  c: Char,
-  l: Bool,
-  el: {Spans.Char.is_last(hi) == l: Bool},
-  ek: {Nat.is_le(Spans.Char.code(c), Spans.Char.code(hi)) == False{}: Bool}
-) -> {l == False{}: Bool}:
-  match l:
-    case False{}:
-      {==}
-    case True{}:
-      Empty.absurd(
-        {True{} == False{}: Bool},
-        Shared.Bool.false_ne_true(
-          Equal.trans(
-            Bool,
-            False{},
-            Nat.is_le(Spans.Char.code(c), Spans.Char.code(hi)),
-            True{},
-            Equal.sym(Bool, Nat.is_le(Spans.Char.code(c), Spans.Char.code(hi)), False{}, ek),
-            Spans.Char.le_last(hi, c)(el)
-          )
-        )
-      )
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
-# Chain.covers at the first span lo..hi of a chain, once it is known whether
-# c is not above hi (k); ih is Chain.covers for the rest t
-def Chain.covers.at(
-  +lo: Char,
-  +hi: Char,
-  t: List<&2, Spans.Span>,
-  a: Char,
-  +c: Char,
-  k: Bool,
-  +ek: {Nat.is_le(Spans.Char.code(c), Spans.Char.code(hi)) == k: Bool},
-  el: {lo == a: Char},
-  er: {
-    List.any.if(u2 => Span.chain(t, Spans.Char.after(hi)), Spans.Char.is_last(hi)) == True{}: Bool
-  },
-  ea: {Nat.is_le(Spans.Char.code(a), Spans.Char.code(c)) == True{}: Bool},
-  ih: {
-    Span.chain(t, Spans.Char.after(hi)) == True{}: Bool
-  } -> {
-    Nat.is_le(Spans.Char.code(Spans.Char.after(hi)), Spans.Char.code(c)) == True{}: Bool
-  } -> {Spans.Spans.has(t, c) == True{}: Bool}
-) -> {Spans.Spans.has(Con{Spans.Span{lo, hi}, t}, c) == True{}: Bool}:
-  match k:
-    case True{}:
-      %Equal.sym(
-        Bool,
-        Spans.Span.has(Spans.Span{lo, hi}, c),
-        True{},
-        Equal.trans(
-          Bool,
-          Spans.Span.has(Spans.Span{lo, hi}, c),
-          Bool.and(
-            Nat.is_le(Spans.Char.code(lo), Spans.Char.code(c)),
-            Nat.is_le(Spans.Char.code(c), Spans.Char.code(hi))
-          ),
-          True{},
-          Spans.Span.has_codes(lo, hi, c),
-          (
-            %Equal.sym(Bool, Nat.is_le(Spans.Char.code(c), Spans.Char.code(hi)), True{}, ek): {Bool.and(Nat.is_le(Spans.Char.code(lo), Spans.Char.code(c)), _) == True{}: Bool}
-            %Equal.sym(Char, lo, a, el): {Bool.and(Nat.is_le(Spans.Char.code(_), Spans.Char.code(c)), True{}) == True{}: Bool}
-            %Equal.sym(Bool, Nat.is_le(Spans.Char.code(a), Spans.Char.code(c)), True{}, ea): {Bool.and(_, True{}) == True{}: Bool}
-            {==})
-        )
-      ): {List.any.if(u => Spans.Spans.has(t, c), _) == True{}: Bool}
-      {==}
-    case False{}:
-      +nl = Chain.not_last(hi, c, Spans.Char.is_last(hi), {==}, ek)
-      %Equal.sym(
-        Bool,
-        List.any.if(u => Spans.Spans.has(t, c), Spans.Span.has(Spans.Span{lo, hi}, c)),
-        Bool.or(Spans.Span.has(Spans.Span{lo, hi}, c), Spans.Spans.has(t, c)),
-        Shared.List.any.if_or(Spans.Span.has(Spans.Span{lo, hi}, c), u => Spans.Spans.has(t, c))
-      ): {_ == True{}: Bool}
-      %Equal.sym(Bool, Spans.Spans.has(t, c), True{}, ih(
-          %nl: {List.any.if(u2 => Span.chain(t, Spans.Char.after(hi)), _) == True{}: Bool}
-          er)(
-          %Equal.sym(Nat, Spans.Char.code(Spans.Char.after(hi)), 1n+Spans.Char.code(hi), Spans.Char.after_code(hi)(nl)): {Nat.is_le(_, Spans.Char.code(c)) == True{}: Bool}
-          Shared.Nat.nle_succ_le(Spans.Char.code(c), Spans.Char.code(hi))(ek))): {Bool.or(Spans.Span.has(Spans.Span{lo, hi}, c), _) == True{}: Bool}
-      Shared.Bool.or_true_right(Spans.Span.has(Spans.Span{lo, hi}, c))
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- only proofs use it; no program runs it
-# the spans of a chain from a hold each character from a on
-def Chain.covers(
-  rs: List<&2, Spans.Span>,
-  +a: Char,
-  +c: Char
-) -> {
-  Span.chain(rs, a) == True{}: Bool
-} -> {
-  Nat.is_le(Spans.Char.code(a), Spans.Char.code(c)) == True{}: Bool
-} -> {Spans.Spans.has(rs, c) == True{}: Bool}:
-  match rs:
-    case Nil{}:
-      e => ea => Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(e))
-    case Con{Spans.Span{+lo, +hi}, +t}:
-      +e => ea =>
-        Chain.covers.at(
-          lo,
-          hi,
-          t,
-          a,
-          c,
-          Nat.is_le(Spans.Char.code(c), Spans.Char.code(hi)),
-          {==},
-          Shared.Char.is_eq_sound(
-            lo,
-            a
-          )(
-            Shared.List.all.if_hit(
-              Char.is_eq(lo, a),
-              u => List.any.if(u2 => Span.chain(t, Spans.Char.after(hi)), Spans.Char.is_last(hi))
-            )(e)
-          ),
-          Shared.List.all.if_rest(
-            Char.is_eq(lo, a),
-            u => List.any.if(u2 => Span.chain(t, Spans.Char.after(hi)), Spans.Char.is_last(hi))
-          )(e),
-          ea,
-          Chain.covers(t, Spans.Char.after(hi), c)
-        )
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
-
 # the bounds hold each character
 def Bounds.has(+c: Char) -> {Spans.Spans.has(Span.bounds(), c) == True{}: Bool}:
-  Chain.covers(Span.bounds(), Chr{0}, c)({==})(Shared.Nat.le_zero(Spans.Char.code(c)))
+  Spans.Spans.chain_covers(Span.bounds(), Chr{0}, c)({==})(Shared.Nat.le_zero(Spans.Char.code(c)))
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
 # the parts of s hold what s holds
@@ -7029,7 +6394,7 @@ def Span.parts_has(
     Spans.Spans.has(Span.parts(s), c),
     Bool.and(Spans.Span.has(s, c), Spans.Spans.has(Span.bounds(), c)),
     Spans.Span.has(s, c),
-    Meets.has(s, Span.bounds(), c),
+    Spans.Span.meets_has(s, Span.bounds(), c),
     (
       %Equal.sym(Bool, Spans.Spans.has(Span.bounds(), c), True{}, Bounds.has(c)): {Bool.and(Spans.Span.has(s, c), _) == Spans.Span.has(s, c): Bool}
       Equal.sym(Bool, Spans.Span.has(s, c), Bool.and(Spans.Span.has(s, c), True{}), Shared.Bool.and_true(Spans.Span.has(s, c))))
