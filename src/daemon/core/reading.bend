@@ -15,13 +15,14 @@ import ./basics.bend as Basics
 import ./judging.bend as Judging
 import ../replica/impl.bend as Replicas
 import ./stepping.bend as Stepping
+import ../shared/requests.bend as Requests
 
 # Reads
 # -----
 # Each read is of the node's own state: its ledger, and its heads.
 
 # the newest version of the branch b of the store r, if b has one
-def Node.head(s: Replicas.Node<Basics.Ask>, r: Ledgers.Id, b: String) -> Maybe<&2, Ledgers.Id>:
+def Node.head(s: Replicas.Node<Requests.Ask>, r: Ledgers.Id, b: String) -> Maybe<&2, Ledgers.Id>:
   Stepping.Chain.newest(s, Replicas.Line.chain(r, Some{b}))
 
 # the version m, when it is there, then rest
@@ -33,7 +34,7 @@ def Ids.put(m: Maybe<&2, Ledgers.Id>, rest: List<&2, Ledgers.Id>) -> List<&2, Le
       rest
 
 # the k versions of a line at the tip t from the number n, in order
-def Line.versions(k: Nat, +s: Replicas.Node<Basics.Ask>, +t: Replicas.Tip, +n: U32) -> List<&2, Ledgers.Id>:
+def Line.versions(k: Nat, +s: Replicas.Node<Requests.Ask>, +t: Replicas.Tip, +n: U32) -> List<&2, Ledgers.Id>:
   match k:
     case 0n:
       []
@@ -41,7 +42,7 @@ def Line.versions(k: Nat, +s: Replicas.Node<Basics.Ask>, +t: Replicas.Tip, +n: U
       Ids.put(Judging.Version.in(s, n, t), Line.versions(p, s, t, U32.inc(n)))
 
 # k versions of the line whose tip is m, from the number n, in order
-def Versions.of(s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Replicas.Tip>, n: U32, k: Nat) -> List<&2, Ledgers.Id>:
+def Versions.of(s: Replicas.Node<Requests.Ask>, m: Maybe<&2, Replicas.Tip>, n: U32, k: Nat) -> List<&2, Ledgers.Id>:
   match m:
     case None{}:
       []
@@ -51,16 +52,16 @@ def Versions.of(s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Replicas.Tip>, n: U32
 # k versions of the branch b of the store r, from the number n, in order: a
 # reader asks for a part of a history, and pays for that part
 def Node.versions(
-  +s: Replicas.Node<Basics.Ask>,
+  +s: Replicas.Node<Requests.Ask>,
   r: Ledgers.Id,
   b: String,
   n: U32,
   k: Nat
 ) -> List<&2, Ledgers.Id>:
-  Versions.of(s, Replicas.Node.tip(~Basics.Ask.machine(), s, Replicas.Line.chain(r, Some{b})), n, k)
+  Versions.of(s, Replicas.Node.tip(~Requests.Ask.machine(), s, Replicas.Line.chain(r, Some{b})), n, k)
 
 # the version before the number n of the line whose tip is m, if any
-def Version.before(s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Replicas.Tip>, +n: U32) -> Maybe<&2, Ledgers.Id>:
+def Version.before(s: Replicas.Node<Requests.Ask>, m: Maybe<&2, Replicas.Tip>, +n: U32) -> Maybe<&2, Ledgers.Id>:
   match m:
     case None{}:
       None{}
@@ -72,22 +73,22 @@ def Version.before(s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Replicas.Tip>, +n:
       )
 
 # the request i is a version: a step took it
-def Node.is_version(s: Replicas.Node<Basics.Ask>, i: Ledgers.Id) -> Bool:
-  Maybe.is_some(&2, Replicas.Version, Replicas.Node.made(~Basics.Ask.machine(), s, i))
+def Node.is_version(s: Replicas.Node<Requests.Ask>, i: Ledgers.Id) -> Bool:
+  Maybe.is_some(&2, Replicas.Version, Replicas.Node.made(~Requests.Ask.machine(), s, i))
 
 # the version at the point p, if there is one
-def Node.version(s: Replicas.Node<Basics.Ask>, p: Basics.Point) -> Maybe<&2, Ledgers.Id>:
+def Node.version(s: Replicas.Node<Requests.Ask>, p: Basics.Point) -> Maybe<&2, Ledgers.Id>:
   match p:
     case Basics.Point.At{+v}:
       Shared.Bool.when(Maybe<&2, Ledgers.Id>, Node.is_version(s, v), u => Some{v}, u => None{})
     case Basics.Point.Head{r, b}:
       Node.head(s, r, b)
     case Basics.Point.Mark{r, b, m}:
-      Replicas.Chain.mark(~Basics.Ask.machine(), s, Replicas.Line.chain(r, Some{b}), m)
+      Replicas.Chain.mark(~Requests.Ask.machine(), s, Replicas.Line.chain(r, Some{b}), m)
 
 # the root of the content of the resource n at the version m, if it holds it
 def Res.root_at(
-  +s: Replicas.Node<Basics.Ask>,
+  +s: Replicas.Node<Requests.Ask>,
   n: Resources.Name,
   m: Maybe<&2, Ledgers.Id>
 ) -> Maybe<&2, Ropes.Root>:
@@ -96,29 +97,29 @@ def Res.root_at(
     Ledgers.Id,
     Ropes.Root,
     m,
-    v => Basics.Res.root(s, Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{v}), n)
+    v => Basics.Res.root(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, Some{v}), n)
   )
 
 # the bytes of the resource n at the version m, if it holds them
 def Res.at(
-  +s: Replicas.Node<Basics.Ask>,
+  +s: Replicas.Node<Requests.Ask>,
   n: Resources.Name,
   m: Maybe<&2, Ledgers.Id>
 ) -> Maybe<&2, Texts.Bytes()>:
-  Replicas.Root.bytes(~Basics.Ask.machine(), s, Res.root_at(s, n, m))
+  Replicas.Root.bytes(~Requests.Ask.machine(), s, Res.root_at(s, n, m))
 
 # the bytes of the resource n at the point p, if it is there
-def Node.content(+s: Replicas.Node<Basics.Ask>, n: Resources.Name, p: Basics.Point) -> Maybe<&2, Texts.Bytes()>:
+def Node.content(+s: Replicas.Node<Requests.Ask>, n: Resources.Name, p: Basics.Point) -> Maybe<&2, Texts.Bytes()>:
   Res.at(s, n, Node.version(s, p))
 
 # the members of the group g of the store r, if g exists
-def Node.members(+s: Replicas.Node<Basics.Ask>, r: Ledgers.Id, g: String) -> Maybe<&2, List<&2, Basics.Member>>:
+def Node.members(+s: Replicas.Node<Requests.Ask>, r: Ledgers.Id, g: String) -> Maybe<&2, List<&2, Requests.Member>>:
   Basics.Members.in(s, Stepping.Store.root(s, r), g)
 
 # the request that makes the group g, with the nodes inside it now, the owner
 # group of the line l of the store r
-def Node.own(+s: Replicas.Node<Basics.Ask>, +r: Ledgers.Id, l: Maybe<&2, String>, +g: String) -> Basics.Ask:
-  Basics.Ask.On{r, l, Basics.Change.Own{g, Stepping.Store.head(s, r), Stepping.Node.nodes(s, r, g)}}
+def Node.own(+s: Replicas.Node<Requests.Ask>, +r: Ledgers.Id, l: Maybe<&2, String>, +g: String) -> Requests.Ask:
+  Requests.Ask.On{r, l, Requests.Change.Own{g, Stepping.Store.head(s, r), Stepping.Node.nodes(s, r, g)}}
 
 # the resource m of the branch x of the store st is the resource n of the
 # branch b of the store r
@@ -141,20 +142,20 @@ def Draft.content(
   r: Ledgers.Id,
   b: String,
   n: Resources.Name,
-  q: Basics.Ask
-) -> Maybe<&2, Basics.Content>:
+  q: Requests.Ask
+) -> Maybe<&2, Requests.Content>:
   match q:
-    case Basics.Ask.On{st, Some{x}, Basics.Change.Write{m, base, c}}:
-      Shared.Maybe.when(Basics.Content, Draft.is_on(r, b, n, st, x, m), u => Some{c})
-    case Basics.Ask.On{st, Some{x}, Basics.Change.Resolve{k, m, c}}:
-      Shared.Maybe.when(Basics.Content, Draft.is_on(r, b, n, st, x, m), u => Some{c})
+    case Requests.Ask.On{st, Some{x}, Requests.Change.Write{m, base, c}}:
+      Shared.Maybe.when(Requests.Content, Draft.is_on(r, b, n, st, x, m), u => Some{c})
+    case Requests.Ask.On{st, Some{x}, Requests.Change.Resolve{k, m, c}}:
+      Shared.Maybe.when(Requests.Content, Draft.is_on(r, b, n, st, x, m), u => Some{c})
     case _:
       None{}
 
 # a pending write: when its writer asked for it (the time, then the request
 # ID, as a key), and the content that it gives
 type Draft is Data:
-  Draft{key: List<&2, Bool>, content: Basics.Content}
+  Draft{key: List<&2, Bool>, content: Requests.Content}
 
 # the key a comes before the key b, or is b
 def Bits.before(a: List<&2, Bool>, b: List<&2, Bool>) -> Bool:
@@ -184,7 +185,7 @@ def Draft.newer(found: Maybe<&2, Draft>, +d: Draft) -> Draft:
 def Draft.with(
   found: Maybe<&2, Draft>,
   k: List<&2, Bool>,
-  m: Maybe<&2, Basics.Content>
+  m: Maybe<&2, Requests.Content>
 ) -> Maybe<&2, Draft>:
   match m:
     case None{}:
@@ -201,7 +202,7 @@ def Draft.of(
   b: String,
   n: Resources.Name,
   i: Ledgers.Id,
-  a: Maybe<&2, Ledgers.Asked<Basics.Ask>>,
+  a: Maybe<&2, Ledgers.Asked<Requests.Ask>>,
   +found: Maybe<&2, Draft>
 ) -> Maybe<&2, Draft>:
   match i a:
@@ -222,7 +223,7 @@ def Draft.of(
 # the newest write of the resource n on the branch b of the store r that the
 # writer w asked for, among the requests qs, else found
 def Draft.last(
-  +s: Replicas.Node<Basics.Ask>,
+  +s: Replicas.Node<Requests.Ask>,
   +w: String,
   +r: Ledgers.Id,
   +b: String,
@@ -234,10 +235,10 @@ def Draft.last(
     case Nil{}:
       found
     case Con{+i, rest}:
-      Draft.last(s, w, r, b, n, rest, Draft.of(w, r, b, n, i, Replicas.Node.asked(~Basics.Ask.machine(), s, i), found))
+      Draft.last(s, w, r, b, n, rest, Draft.of(w, r, b, n, i, Replicas.Node.asked(~Requests.Ask.machine(), s, i), found))
 
 # the content of the draft m, if any
-def Draft.what(m: Maybe<&2, Draft>) -> Maybe<&2, Basics.Content>:
+def Draft.what(m: Maybe<&2, Draft>) -> Maybe<&2, Requests.Content>:
   match m:
     case None{}:
       None{}
@@ -249,31 +250,31 @@ def Draft.what(m: Maybe<&2, Draft>) -> Maybe<&2, Basics.Content>:
 # that wait on the line are the pending ones: the cost is theirs, not that of
 # every request of the writer
 def Node.draft(
-  +s: Replicas.Node<Basics.Ask>,
+  +s: Replicas.Node<Requests.Ask>,
   w: String,
   +r: Ledgers.Id,
   +b: String,
   n: Resources.Name
-) -> Maybe<&2, Basics.Content>:
-  Draft.what(Draft.last(s, w, r, b, n, Replicas.Wait.of(~Basics.Ask.machine(), s, Replicas.Line.chain(r, Some{b})), None{}))
+) -> Maybe<&2, Requests.Content>:
+  Draft.what(Draft.last(s, w, r, b, n, Replicas.Wait.of(~Requests.Ask.machine(), s, Replicas.Line.chain(r, Some{b})), None{}))
 
 # the bytes of the draft m of the resource n, else what the point p holds
 def Read.of(
-  +s: Replicas.Node<Basics.Ask>,
+  +s: Replicas.Node<Requests.Ask>,
   n: Resources.Name,
-  m: Maybe<&2, Basics.Content>,
+  m: Maybe<&2, Requests.Content>,
   p: Basics.Point
 ) -> Maybe<&2, Texts.Bytes()>:
   match m:
     case Some{c}:
-      Replicas.Root.bytes(~Basics.Ask.machine(), s, Judging.Content.root(s, n, c))
+      Replicas.Root.bytes(~Requests.Ask.machine(), s, Judging.Content.root(s, n, c))
     case None{}:
       Node.content(s, n, p)
 
 # what the writer w reads of the resource n at the point p: at the head of a
 # branch, its own pending write; else what the point holds
 def Node.read(
-  +s: Replicas.Node<Basics.Ask>,
+  +s: Replicas.Node<Requests.Ask>,
   w: String,
   +n: Resources.Name,
   p: Basics.Point
@@ -292,7 +293,7 @@ type LogEntry is Data:
 def Log.at(
   held: Bool,
   x: Ledgers.Id,
-  r: Maybe<&2, Ledgers.Asked<Basics.Ask>>,
+  r: Maybe<&2, Ledgers.Asked<Requests.Ask>>,
   rest: List<&2, LogEntry>
 ) -> List<&2, LogEntry>:
   match held r:
@@ -303,7 +304,7 @@ def Log.at(
 
 # the versions of xs, after prev, that changed the resource n
 def Log.of(
-  +s: Replicas.Node<Basics.Ask>,
+  +s: Replicas.Node<Requests.Ask>,
   +n: Resources.Name,
   xs: List<&2, Ledgers.Id>,
   prev: Maybe<&2, Ledgers.Id>
@@ -315,14 +316,14 @@ def Log.of(
       Log.at(
         Bool.not(Basics.Roots.same(Res.root_at(s, n, Some{x}), Res.root_at(s, n, prev))),
         x,
-        Replicas.Node.asked(~Basics.Ask.machine(), s, x),
+        Replicas.Node.asked(~Requests.Ask.machine(), s, x),
         Log.of(s, n, r, Some{x})
       )
 
 # the versions of the branch b of the store r that changed the resource n,
 # among k versions from the number from
 def Node.log(
-  +s: Replicas.Node<Basics.Ask>,
+  +s: Replicas.Node<Requests.Ask>,
   n: Resources.Name,
   +r: Ledgers.Id,
   +b: String,
@@ -333,13 +334,13 @@ def Node.log(
     s,
     n,
     Node.versions(s, r, b, from, k),
-    Version.before(s, Replicas.Node.tip(~Basics.Ask.machine(), s, Replicas.Line.chain(r, Some{b})), from)
+    Version.before(s, Replicas.Node.tip(~Requests.Ask.machine(), s, Replicas.Line.chain(r, Some{b})), from)
   )
 
 # what changed in the resource n from the point a to the point b, as the
 # writer w reads them
 def Node.diff(
-  +s: Replicas.Node<Basics.Ask>,
+  +s: Replicas.Node<Requests.Ask>,
   +w: String,
   +n: Resources.Name,
   a: Basics.Point,
@@ -375,16 +376,16 @@ def Clash.of.bindings(bs: List<&2, Trees.Binding>, +f: Ledgers.Id) -> List<&2, R
 # the resources whose clash the merge of the version f left open in the tree
 # whose root is h
 def Clash.names(
-  s: Replicas.Node<Basics.Ask>,
+  s: Replicas.Node<Requests.Ask>,
   h: Maybe<&2, Hashes.Hash>,
   f: Ledgers.Id
 ) -> List<&2, Resources.Name>:
-  Clash.of.bindings(Trees.Tree.list(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s, h), f)
+  Clash.of.bindings(Trees.Tree.list(~Replicas.Node<Requests.Ask>, ~Replicas.Store.fetch(~Requests.Ask.machine()), s, h), f)
 
 # the resources of ns whose clash, which the merge of the version f opened, is
 # still open in the tree h
 def Clash.left(
-  +s: Replicas.Node<Basics.Ask>,
+  +s: Replicas.Node<Requests.Ask>,
   ns: List<&2, Resources.Name>,
   +h: Maybe<&2, Hashes.Hash>,
   +f: Ledgers.Id
@@ -398,13 +399,13 @@ def Clash.left(
 # the resources that clashed at the request k, whose request is a, when it is a
 # merge
 def Merge.clashes(
-  +s: Replicas.Node<Basics.Ask>,
+  +s: Replicas.Node<Requests.Ask>,
   k: Ledgers.Id,
-  a: Maybe<&2, Ledgers.Asked<Basics.Ask>>
+  a: Maybe<&2, Ledgers.Asked<Requests.Ask>>
 ) -> List<&2, Resources.Name>:
   match a:
-    case Some{Ledgers.Asked{t, Basics.Ask.On{r, l, Basics.Change.Merge{f}}}}:
-      Clash.names(s, Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{k}), f)
+    case Some{Ledgers.Asked{t, Requests.Ask.On{r, l, Requests.Change.Merge{f}}}}:
+      Clash.names(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, Some{k}), f)
     case _:
       []
 
@@ -412,15 +413,15 @@ def Merge.clashes(
 # whose clash it opened, and that no resolve or newer merge settled since, at
 # the head of its line
 def Merge.left(
-  +s: Replicas.Node<Basics.Ask>,
+  +s: Replicas.Node<Requests.Ask>,
   k: Ledgers.Id,
-  a: Maybe<&2, Ledgers.Asked<Basics.Ask>>
+  a: Maybe<&2, Ledgers.Asked<Requests.Ask>>
 ) -> List<&2, Resources.Name>:
   match a:
-    case Some{Ledgers.Asked{t, Basics.Ask.On{r, Some{l}, Basics.Change.Merge{+f}}}}:
+    case Some{Ledgers.Asked{t, Requests.Ask.On{r, Some{l}, Requests.Change.Merge{+f}}}}:
       Clash.left(
         s,
-        Clash.names(s, Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{k}), f),
+        Clash.names(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, Some{k}), f),
         Stepping.Chain.root(s, Replicas.Line.chain(r, Some{l})),
         f
       )
@@ -428,8 +429,8 @@ def Merge.left(
       []
 
 # the resources that still clash after the merge k
-def Node.conflict(+s: Replicas.Node<Basics.Ask>, +k: Ledgers.Id) -> List<&2, Resources.Name>:
-  Merge.left(s, k, Replicas.Node.asked(~Basics.Ask.machine(), s, k))
+def Node.conflict(+s: Replicas.Node<Requests.Ask>, +k: Ledgers.Id) -> List<&2, Resources.Name>:
+  Merge.left(s, k, Replicas.Node.asked(~Requests.Ask.machine(), s, k))
 
 # bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # what a node answers to a change (README, Vend Writer). Written: its version.
@@ -445,7 +446,7 @@ type Answer is Data:
 # bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # Written i, or Conflicted k while the merge k still clashes
-def Answer.left(s: Replicas.Node<Basics.Ask>, i: Ledgers.Id, +k: Ledgers.Id) -> Answer:
+def Answer.left(s: Replicas.Node<Requests.Ask>, i: Ledgers.Id, +k: Ledgers.Id) -> Answer:
   Shared.Bool.when(
     Answer,
     List.is_empty(&2, Resources.Name, Node.conflict(s, k)),
@@ -454,18 +455,18 @@ def Answer.left(s: Replicas.Node<Basics.Ask>, i: Ledgers.Id, +k: Ledgers.Id) -> 
   )
 
 # the answer to the change q of the request i, which a step took
-def Answer.taken(s: Replicas.Node<Basics.Ask>, +i: Ledgers.Id, q: Basics.Ask) -> Answer:
+def Answer.taken(s: Replicas.Node<Requests.Ask>, +i: Ledgers.Id, q: Requests.Ask) -> Answer:
   match q:
-    case Basics.Ask.On{st, l, Basics.Change.Merge{f}}:
+    case Requests.Ask.On{st, l, Requests.Change.Merge{f}}:
       Answer.left(s, i, i)
-    case Basics.Ask.On{st, l, Basics.Change.Resolve{k, n, c}}:
+    case Requests.Ask.On{st, l, Requests.Change.Resolve{k, n, c}}:
       Answer.left(s, i, k)
     case _:
       Answer.Written{i}
 
 # the answer to the request i of the change q, whose outcome is o: Pending
 # while no step that the node knows decided it
-def Answer.of(s: Replicas.Node<Basics.Ask>, i: Ledgers.Id, q: Basics.Ask, o: Maybe<&2, Replicas.Out>) -> Answer:
+def Answer.of(s: Replicas.Node<Requests.Ask>, i: Ledgers.Id, q: Requests.Ask, o: Maybe<&2, Replicas.Out>) -> Answer:
   match o:
     case Some{Replicas.Out.Taken{n}}:
       Answer.taken(s, i, q)
@@ -476,20 +477,20 @@ def Answer.of(s: Replicas.Node<Basics.Ask>, i: Ledgers.Id, q: Basics.Ask, o: May
 
 # the answer to the request i that the node holds as the change q: a store
 # that starts is Written at once
-def Answer.asked(+s: Replicas.Node<Basics.Ask>, +i: Ledgers.Id, q: Basics.Ask) -> Answer:
+def Answer.asked(+s: Replicas.Node<Requests.Ask>, +i: Ledgers.Id, q: Requests.Ask) -> Answer:
   match q:
-    case Basics.Ask.Start{os}:
+    case Requests.Ask.Start{os}:
       Answer.Written{i}
     case x:
-      Answer.of(s, i, x, Replicas.Node.out(~Basics.Ask.machine(), s, i))
+      Answer.of(s, i, x, Replicas.Node.out(~Requests.Ask.machine(), s, i))
 
 # the answer to the change q of the request i, whose slot holds m: none when it
 # is empty, Refused when it holds another change
 def Answer.held(
-  s: Replicas.Node<Basics.Ask>,
+  s: Replicas.Node<Requests.Ask>,
   i: Ledgers.Id,
-  q: Basics.Ask,
-  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>
+  q: Requests.Ask,
+  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Requests.Ask>>>
 ) -> Maybe<&2, Answer>:
   match m:
     case None{}:
@@ -498,7 +499,7 @@ def Answer.held(
       Some{
         Shared.Bool.when(
           Answer,
-          Basics.Ask.is_eq(q2, q),
+          Requests.Ask.is_eq(q2, q),
           u => Answer.asked(s, i, q2),
           u => Answer.Refused{}
         )
@@ -507,9 +508,9 @@ def Answer.held(
       Some{Answer.Refused{}}
 
 # what the node answers to the change q of e (none: it did not take it in)
-def Node.answer(+s: Replicas.Node<Basics.Ask>, e: Replicas.Envelope, q: Basics.Ask) -> Maybe<&2, Answer>:
+def Node.answer(+s: Replicas.Node<Requests.Ask>, e: Replicas.Envelope, q: Requests.Ask) -> Maybe<&2, Answer>:
   +i = Replicas.Envelope.of(e)
-  Answer.held(s, i, q, Ledgers.State.get(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), Ledgers.Slot.ask(i)))
+  Answer.held(s, i, q, Ledgers.State.get(~Requests.Ask, Replicas.State.ledger(~Requests.Ask.machine(), s), Ledgers.Slot.ask(i)))
 
 # the answer m may come after the answer a as the node goes on: a request
 # that a node answers stays answered; Pending may become any answer; Stale
@@ -563,7 +564,7 @@ def Branch.put(
 
 # the branch of the head h, when it is one that has a version, then rest
 def Branch.at(
-  +s: Replicas.Node<Basics.Ask>,
+  +s: Replicas.Node<Requests.Ask>,
   h: Replicas.Head,
   rest: List<&2, BranchEntry>
 ) -> List<&2, BranchEntry>:
@@ -574,7 +575,7 @@ def Branch.at(
       rest
 
 # the branches of the heads hs
-def Branch.all(+s: Replicas.Node<Basics.Ask>, hs: List<&2, Replicas.Head>) -> List<&2, BranchEntry>:
+def Branch.all(+s: Replicas.Node<Requests.Ask>, hs: List<&2, Replicas.Head>) -> List<&2, BranchEntry>:
   match hs:
     case Nil{}:
       []
@@ -582,8 +583,8 @@ def Branch.all(+s: Replicas.Node<Basics.Ask>, hs: List<&2, Replicas.Head>) -> Li
       Branch.at(s, h, Branch.all(s, rest))
 
 # every branch that the node follows
-def Node.branches(+s: Replicas.Node<Basics.Ask>) -> List<&2, BranchEntry>:
-  Branch.all(s, Tries.Trie.values(Replicas.Head, Replicas.State.heads(~Basics.Ask.machine(), s)))
+def Node.branches(+s: Replicas.Node<Requests.Ask>) -> List<&2, BranchEntry>:
+  Branch.all(s, Tries.Trie.values(Replicas.Head, Replicas.State.heads(~Requests.Ask.machine(), s)))
 
 # the branches es
 def Branch.names(es: List<&2, BranchEntry>) -> List<&2, Branch>:
@@ -594,14 +595,14 @@ def Branch.names(es: List<&2, BranchEntry>) -> List<&2, Branch>:
       b <> Branch.names(r)
 
 # the head of the branch b, if b exists
-def Branch.head(s: Replicas.Node<Basics.Ask>, b: Branch) -> Maybe<&2, Ledgers.Id>:
+def Branch.head(s: Replicas.Node<Requests.Ask>, b: Branch) -> Maybe<&2, Ledgers.Id>:
   match b:
     case Branch{r, n}:
       Node.head(s, r, n)
 
 # the resources of the branch b at its head
-def Node.resources(+s: Replicas.Node<Basics.Ask>, b: Branch) -> List<&2, Resources.Name>:
-  Judging.Res.names(s, Replicas.Node.root_of(~Basics.Ask.machine(), s, Branch.head(s, b)))
+def Node.resources(+s: Replicas.Node<Requests.Ask>, b: Branch) -> List<&2, Resources.Name>:
+  Judging.Res.names(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, Branch.head(s, b)))
 
 # the bytes m, as a list of one item or none
 def Uses.items(m: Maybe<&2, Texts.Bytes()>) -> List<&2, Texts.Bytes()>:
@@ -621,7 +622,7 @@ def Uses.named(es: List<&2, Formats.Edge>, +n: Resources.Name) -> List<&2, Resou
 
 # what the resource n imports at the version h of s, as its format reads it
 def Uses.targets(
-  s: Replicas.Node<Basics.Ask>,
+  s: Replicas.Node<Requests.Ask>,
   h: Maybe<&2, Ledgers.Id>,
   +n: Resources.Name
 ) -> List<&2, Resources.Name>:
@@ -637,7 +638,7 @@ type Uses is Data:
 
 # t with what each resource of ns imports at the version h of s
 def Uses.read(
-  +s: Replicas.Node<Basics.Ask>,
+  +s: Replicas.Node<Requests.Ask>,
   +h: Maybe<&2, Ledgers.Id>,
   ns: List<&2, Resources.Name>,
   t: Tries.Trie<List<&2, Resources.Name>>
@@ -654,9 +655,9 @@ def Uses.read(
       )
 
 # the graph of the imports of the branch b, at its head
-def Uses.of(+s: Replicas.Node<Basics.Ask>, b: Branch) -> Uses:
+def Uses.of(+s: Replicas.Node<Requests.Ask>, b: Branch) -> Uses:
   +h = Branch.head(s, b)
-  +ns = Judging.Res.names(s, Replicas.Node.root_of(~Basics.Ask.machine(), s, h))
+  +ns = Judging.Res.names(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, h))
   Uses{Uses.read(s, h, ns, Tries.Trie.new(List<&2, Resources.Name>)), ns}
 
 # what the resources of g import
@@ -693,18 +694,18 @@ type Touch is Data:
   Touch{version: Ledgers.Id, changed: Resources.Name, branch: Branch, used: Resources.Name}
 
 # the resource that the request r wrote: of a write or a resolve
-def Wrote.of(r: Maybe<&2, Ledgers.Asked<Basics.Ask>>) -> Maybe<&2, Resources.Name>:
+def Wrote.of(r: Maybe<&2, Ledgers.Asked<Requests.Ask>>) -> Maybe<&2, Resources.Name>:
   match r:
-    case Some{Ledgers.Asked{t, Basics.Ask.On{st, l, Basics.Change.Write{m, base, c}}}}:
+    case Some{Ledgers.Asked{t, Requests.Ask.On{st, l, Requests.Change.Write{m, base, c}}}}:
       Some{m}
-    case Some{Ledgers.Asked{t, Basics.Ask.On{st, l, Basics.Change.Resolve{k, m, c}}}}:
+    case Some{Ledgers.Asked{t, Requests.Ask.On{st, l, Requests.Change.Resolve{k, m, c}}}}:
       Some{m}
     case _:
       None{}
 
 # the resource that the version v wrote, when it is a write or a resolve
-def Node.wrote(s: Replicas.Node<Basics.Ask>, v: Ledgers.Id) -> Maybe<&2, Resources.Name>:
-  Wrote.of(Replicas.Node.asked(~Basics.Ask.machine(), s, v))
+def Node.wrote(s: Replicas.Node<Requests.Ask>, v: Ledgers.Id) -> Maybe<&2, Resources.Name>:
+  Wrote.of(Replicas.Node.asked(~Requests.Ask.machine(), s, v))
 
 # how many numbers are from a up to b, b not counted
 def Count.span(+a: U32, +b: U32) -> Nat:
@@ -712,7 +713,7 @@ def Count.span(+a: U32, +b: U32) -> Nat:
 
 # the versions of the line whose tip is m from the number n on, in order: the
 # cost is theirs, not that of the line's history
-def Line.since(+s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Replicas.Tip>, +n: U32) -> List<&2, Ledgers.Id>:
+def Line.since(+s: Replicas.Node<Requests.Ask>, m: Maybe<&2, Replicas.Tip>, +n: U32) -> List<&2, Ledgers.Id>:
   match m:
     case None{}:
       []
@@ -735,16 +736,16 @@ def Branch.same(a: Branch, b: Branch) -> Bool:
 
 # the versions of the branch x that the tree h did not take in: those after
 # the place that its version vector holds for x
-def Branch.news(+s: Replicas.Node<Basics.Ask>, h: Maybe<&2, Hashes.Hash>, x: Branch) -> List<&2, Ledgers.Id>:
+def Branch.news(+s: Replicas.Node<Requests.Ask>, h: Maybe<&2, Hashes.Hash>, x: Branch) -> List<&2, Ledgers.Id>:
   match x:
     case Branch{r, n}:
       +c = Replicas.Line.chain(r, Some{n})
-      Line.since(s, Replicas.Node.tip(~Basics.Ask.machine(), s, c), Place.after(Basics.Node.vector(s, h, c)))
+      Line.since(s, Replicas.Node.tip(~Requests.Ask.machine(), s, c), Place.after(Basics.Node.vector(s, h, c)))
 
 # the versions of the branches es, other than b, that the tree h did not take
 # in
 def Lacked.of(
-  +s: Replicas.Node<Basics.Ask>,
+  +s: Replicas.Node<Requests.Ask>,
   +h: Maybe<&2, Hashes.Hash>,
   +b: Branch,
   es: List<&2, Branch>
@@ -767,11 +768,11 @@ def Lacked.of(
 
 # the versions of the other branches that the branch b did not take in: what
 # its version vector does not cover
-def Branch.lacked(+s: Replicas.Node<Basics.Ask>, +b: Branch) -> List<&2, Ledgers.Id>:
-  Lacked.of(s, Replicas.Node.root_of(~Basics.Ask.machine(), s, Branch.head(s, b)), b, Branch.names(Node.branches(s)))
+def Branch.lacked(+s: Replicas.Node<Requests.Ask>, +b: Branch) -> List<&2, Ledgers.Id>:
+  Lacked.of(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, Branch.head(s, b)), b, Branch.names(Node.branches(s)))
 
 # the branch b lacks the version v
-def Touch.lacks(+s: Replicas.Node<Basics.Ask>, +b: Branch, +v: Ledgers.Id) -> Bool:
+def Touch.lacks(+s: Replicas.Node<Requests.Ask>, +b: Branch, +v: Ledgers.Id) -> Bool:
   List.all.if(
     u => Bool.not(Basics.Node.has(s, Maybe.default(&2, Ledgers.Id, Branch.head(s, b), v), v)),
     Maybe.is_some(&2, Ledgers.Id, Branch.head(s, b))
@@ -786,10 +787,10 @@ def Branch.key(b: Branch) -> List<&2, Bool>:
 # what the checks of touches on one branch read of s once: the branch, and
 # its imports
 type Seen is Data:
-  Seen{state: Replicas.Node<Basics.Ask>, branch: Branch, uses: Uses}
+  Seen{state: Replicas.Node<Requests.Ask>, branch: Branch, uses: Uses}
 
 # what the checks on the branch b read of s
-def Seen.of(+s: Replicas.Node<Basics.Ask>, +b: Branch) -> Seen:
+def Seen.of(+s: Replicas.Node<Requests.Ask>, +b: Branch) -> Seen:
   Seen{s, b, Uses.of(s, b)}
 
 # the touch t, of the branch of g, holds: its branch is a branch and lacks
@@ -814,7 +815,7 @@ def Touch.holds(g: Seen, t: Touch) -> Bool:
       )
 
 # the touch t holds
-def Node.touches(s: Replicas.Node<Basics.Ask>, t: Touch) -> Bool:
+def Node.touches(s: Replicas.Node<Requests.Ask>, t: Touch) -> Bool:
   match t:
     case Touch{v, c, +b, u}:
       Touch.holds(Seen.of(s, b), Touch{v, c, b, u})
@@ -856,11 +857,11 @@ def Affects.at(g: Seen, v: Ledgers.Id) -> List<&2, Touch>:
 
 # the touches that may hold of the branch b, of g: those of the versions of
 # the other branches that b did not take in
-def Affects.cands(s: Replicas.Node<Basics.Ask>, b: Branch, g: Seen) -> List<&2, Touch>:
+def Affects.cands(s: Replicas.Node<Requests.Ask>, b: Branch, g: Seen) -> List<&2, Touch>:
   Shared.List.flat(~Ledgers.Id, ~Touch, ~Seen, ~Affects.at, Branch.lacked(s, b), g)
 
 # the changes elsewhere that touch what the branch b uses, at any depth
-def Node.affects(+s: Replicas.Node<Basics.Ask>, +b: Branch) -> List<&2, Touch>:
+def Node.affects(+s: Replicas.Node<Requests.Ask>, +b: Branch) -> List<&2, Touch>:
   +g = Seen.of(s, b)
   Shared.List.keep(~Touch, ~Seen, ~Touch.holds, Affects.cands(s, b, g), g)
 
@@ -882,7 +883,7 @@ def Impact.keeps(g: Impact, t: Touch) -> Bool:
       )
 
 # what the changes up to the version m touch on the branches es
-def Impact.of(+s: Replicas.Node<Basics.Ask>, +m: Maybe<&2, Ledgers.Id>, es: List<&2, Branch>) -> List<&2, Touch>:
+def Impact.of(+s: Replicas.Node<Requests.Ask>, +m: Maybe<&2, Ledgers.Id>, es: List<&2, Branch>) -> List<&2, Touch>:
   match es:
     case Nil{}:
       []
@@ -896,7 +897,7 @@ def Impact.of(+s: Replicas.Node<Basics.Ask>, +m: Maybe<&2, Ledgers.Id>, es: List
       )
 
 # what the changes up to the point p touch elsewhere
-def Node.impact(+s: Replicas.Node<Basics.Ask>, p: Basics.Point) -> List<&2, Touch>:
+def Node.impact(+s: Replicas.Node<Requests.Ask>, p: Basics.Point) -> List<&2, Touch>:
   Impact.of(s, Node.version(s, p), Branch.names(Node.branches(s)))
 
 # bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
@@ -946,7 +947,7 @@ def Notice.versions(+b: Branch, xs: List<&2, Ledgers.Id>) -> List<&2, Notice>:
       Notice.Versioned{b, x} <> Notice.versions(b, r)
 
 # the merges of the branch b among xs that clashed, as notices
-def Notice.conflicts(+s: Replicas.Node<Basics.Ask>, +b: Branch, xs: List<&2, Ledgers.Id>) -> List<&2, Notice>:
+def Notice.conflicts(+s: Replicas.Node<Requests.Ask>, +b: Branch, xs: List<&2, Ledgers.Id>) -> List<&2, Notice>:
   match xs:
     case Nil{}:
       []
@@ -955,7 +956,7 @@ def Notice.conflicts(+s: Replicas.Node<Basics.Ask>, +b: Branch, xs: List<&2, Led
         Notice,
         Notice.Conflicted{b, x},
         Notice.conflicts(s, b, r),
-        Bool.not(List.is_empty(&2, Resources.Name, Merge.clashes(s, x, Replicas.Node.asked(~Basics.Ask.machine(), s, x))))
+        Bool.not(List.is_empty(&2, Resources.Name, Merge.clashes(s, x, Replicas.Node.asked(~Requests.Ask.machine(), s, x))))
       )
 
 # the touches ts, as notices
@@ -980,25 +981,25 @@ def Notice.new(ns: List<&2, Notice>, +old: Tries.Trie<Unit>) -> List<&2, Notice>
       )
 
 # the number of versions of the line c in s
-def Chain.count(+s: Replicas.Node<Basics.Ask>, c: Ledgers.Chain) -> U32:
+def Chain.count(+s: Replicas.Node<Requests.Ask>, c: Ledgers.Chain) -> U32:
   Maybe.default(
     &2,
     U32,
-    Maybe.bind(&2, Replicas.Tip, U32, Replicas.Node.tip(~Basics.Ask.machine(), s, c), t => Some{Replicas.Tip.count(t)}),
+    Maybe.bind(&2, Replicas.Tip, U32, Replicas.Node.tip(~Requests.Ask.machine(), s, c), t => Some{Replicas.Tip.count(t)}),
     0
   )
 
 # the versions of the branch b that s has and since has not: those from the
 # number of versions of b in since on
-def Branch.since(+s: Replicas.Node<Basics.Ask>, since: Replicas.Node<Basics.Ask>, b: Branch) -> List<&2, Ledgers.Id>:
+def Branch.since(+s: Replicas.Node<Requests.Ask>, since: Replicas.Node<Requests.Ask>, b: Branch) -> List<&2, Ledgers.Id>:
   match b:
     case Branch{r, n}:
       +c = Replicas.Line.chain(r, Some{n})
-      Line.since(s, Replicas.Node.tip(~Basics.Ask.machine(), s, c), Chain.count(since, c))
+      Line.since(s, Replicas.Node.tip(~Requests.Ask.machine(), s, c), Chain.count(since, c))
 
 # the notices of the topic t in s that since, an earlier state of the node,
 # does not have: the cost is that of what is new, not of the history
-def Node.notices(+s: Replicas.Node<Basics.Ask>, t: Topic, since: Replicas.Node<Basics.Ask>) -> List<&2, Notice>:
+def Node.notices(+s: Replicas.Node<Requests.Ask>, t: Topic, since: Replicas.Node<Requests.Ask>) -> List<&2, Notice>:
   match t:
     case Topic.Versions{+b}:
       Notice.versions(b, Branch.since(s, since, b))
@@ -1022,7 +1023,7 @@ type Mount is Data:
 # what a Vend Node holds: its name, the parts of the stores that it uses, the
 # writers connected to it, and the resources mounted to it
 type Vend is Data:
-  Vend{name: String, state: Replicas.Node<Basics.Ask>, writers: List<&2, String>, mounts: List<&2, Mount>}
+  Vend{name: String, state: Replicas.Node<Requests.Ask>, writers: List<&2, String>, mounts: List<&2, Mount>}
 
 # the node v may stop: it is forced to, or no resource is mounted and no
 # writer is connected

@@ -14,6 +14,7 @@ import ./judging.bend as Judging
 import ./reading.bend as Reading
 import ./stepping.bend as Stepping
 import ../replica/impl.bend as Replicas
+import ../shared/requests.bend as Requests
 
 # The pure core of a Vend Node (README): what it holds, what it answers, and
 # the laws about both. transport/spec.bend carries it over IO.
@@ -41,13 +42,13 @@ import ../replica/impl.bend as Replicas
 
 # two requests are the same exactly when they are equal
 law Ask.same:
-  Shared.Eq.Laws(Basics.Ask, Basics.Ask.is_eq)
+  Shared.Eq.Laws(Requests.Ask, Requests.Ask.is_eq)
 
 # the owners of a line are the nodes inside its owner group: its owners take
 # an Own only when its owners are the nodes inside its group, in the store
 # tree that it names (Own.tree)
 law Own.takes_inside:
-  for +s: Replicas.Node<Basics.Ask>
+  for +s: Replicas.Node<Requests.Ask>
   for +r: Ledgers.Id
   for +l: Maybe<&2, String>
   for +g: String
@@ -61,56 +62,56 @@ law Own.takes_inside:
 # Stale and Refused are final; a taken change stays taken (Answer.follows)
 law Node.answer_follows:
   for +n: String
-  for +evs: List<&2, Replicas.Deed<Basics.Ask>>
-  for +s: Replicas.Node<Basics.Ask>
+  for +evs: List<&2, Replicas.Deed<Requests.Ask>>
+  for +s: Replicas.Node<Requests.Ask>
   for +e: Replicas.Envelope
-  for +q: Basics.Ask
+  for +q: Requests.Ask
   for +x: Reading.Answer
   {Reading.Node.answer(s, e, q) == Some{x}: Maybe<&2, Reading.Answer>}
-    -> {Reading.Answer.follows(x, Reading.Node.answer(Replicas.Node.after(~Basics.Ask.machine(), ~Stepping.Ask.kernel(), n, evs, s), e, q)) == True{}: Bool}
+    -> {Reading.Answer.follows(x, Reading.Node.answer(Replicas.Node.after(~Requests.Ask.machine(), ~Stepping.Ask.kernel(), n, evs, s), e, q)) == True{}: Bool}
 
 # while a write that the writer w asked for waits on its line, the node has a
 # draft of the resource for w (the newest of its pending writes, by
 # Draft.newer)
 law Node.draft_some:
-  for +s: Replicas.Node<Basics.Ask>
+  for +s: Replicas.Node<Requests.Ask>
   for +w: String
   for +r: Ledgers.Id
   for +b: String
   for +n: Resources.Name
   for +q2: String
   for +t: String
-  for +q: Basics.Ask
-  for +c: Basics.Content
+  for +q: Requests.Ask
+  for +c: Requests.Content
   {
     List.contains(
       ~Ledgers.Id,
       ~Ledgers.Id.is_eq,
-      Replicas.Wait.of(~Basics.Ask.machine(), s, Replicas.Line.chain(r, Some{b})),
+      Replicas.Wait.of(~Requests.Ask.machine(), s, Replicas.Line.chain(r, Some{b})),
       Ledgers.Id{w, q2}
     )
       == True{}: Bool
   }
     -> {
-      Replicas.Node.asked(~Basics.Ask.machine(), 
+      Replicas.Node.asked(~Requests.Ask.machine(), 
         s,
         Ledgers.Id{w, q2}
       )
-        == Some{Ledgers.Asked{t, q}}: Maybe<&2, Ledgers.Asked<Basics.Ask>>
+        == Some{Ledgers.Asked{t, q}}: Maybe<&2, Ledgers.Asked<Requests.Ask>>
     }
-    -> {Reading.Draft.content(r, b, n, q) == Some{c}: Maybe<&2, Basics.Content>}
-    -> {Maybe.is_some(&2, Basics.Content, Reading.Node.draft(s, w, r, b, n)) == True{}: Bool}
+    -> {Reading.Draft.content(r, b, n, q) == Some{c}: Maybe<&2, Requests.Content>}
+    -> {Maybe.is_some(&2, Requests.Content, Reading.Node.draft(s, w, r, b, n)) == True{}: Bool}
 
 # a write that the owners take: in the node that the verdict holds, the
 # resource reads as the content of the write
 law Judge.write_reads:
-  for +s: Replicas.Node<Basics.Ask>
+  for +s: Replicas.Node<Requests.Ask>
   for +n: Resources.Name
   for +base: Maybe<&2, Ledgers.Id>
-  for +c: Basics.Content
+  for +c: Requests.Content
   for +h: Maybe<&2, Hashes.Hash>
   for +h2: Maybe<&2, Hashes.Hash>
-  for +s3: Replicas.Node<Basics.Ask>
+  for +s3: Replicas.Node<Requests.Ask>
   for +m: Maybe<&2, Ropes.Root>
   {
     Judging.Judge.write(
@@ -120,7 +121,7 @@ law Judge.write_reads:
       c,
       h
     )
-      == Some{Replicas.Verdict.Taken{Replicas.Work{s3, h2}}}: Maybe<&2, Replicas.Verdict<Basics.Ask>>
+      == Some{Replicas.Verdict.Taken{Replicas.Work{s3, h2}}}: Maybe<&2, Replicas.Verdict<Requests.Ask>>
   }
     -> {Judging.Content.find(s, n, c) == Some{m}: Maybe<&2, Maybe<&2, Ropes.Root>>}
     -> {Basics.Res.root(s3, h2, n) == m: Maybe<&2, Ropes.Root>}
@@ -128,45 +129,45 @@ law Judge.write_reads:
 # a move records a version equal to its target: each resource of the version
 # to is, with the same content, in the tree that a move to it gives
 law Move.reads:
-  for +s: Replicas.Node<Basics.Ask>
+  for +s: Replicas.Node<Requests.Ask>
   for +c: Ledgers.Chain
   for +to: Ledgers.Id
   for +h: Maybe<&2, Hashes.Hash>
   for +n: Resources.Name
   for +v: List<&2, U32>
   {
-    Replicas.Node.get(~Basics.Ask.machine(), 
+    Replicas.Node.get(~Requests.Ask.machine(), 
       s,
-      Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{to}),
+      Replicas.Node.root_of(~Requests.Ask.machine(), s, Some{to}),
       Basics.Key.res(n)
     )
       == Some{v}: Maybe<&2, List<&2, U32>>
   }
-    -> Replicas.Work.Reads(~Basics.Ask.machine(), Basics.Key.res(n), v, Judging.Move.work(s, c, to, h))
+    -> Replicas.Work.Reads(~Requests.Ask.machine(), Basics.Key.res(n), v, Judging.Move.work(s, c, to, h))
 
 # a merge turns Written once each clashing resource is resolved: a resolve
 # gives the resource its content, and shuts its clash (a clash whose key holds
 # no request is not open: Clash.shut)
 law Resolve.reads:
-  for +s: Replicas.Node<Basics.Ask>
+  for +s: Replicas.Node<Requests.Ask>
   for +h: Maybe<&2, Hashes.Hash>
   for +n: Resources.Name
   for +m: Maybe<&2, Ropes.Root>
-  Replicas.Work.Reads(~Basics.Ask.machine(), Basics.Key.res(n), Basics.Res.code(m), Judging.Resolve.work(s, h, n, m))
+  Replicas.Work.Reads(~Requests.Ask.machine(), Basics.Key.res(n), Basics.Res.code(m), Judging.Resolve.work(s, h, n, m))
 
 law Resolve.shuts:
-  for +s: Replicas.Node<Basics.Ask>
+  for +s: Replicas.Node<Requests.Ask>
   for +h: Maybe<&2, Hashes.Hash>
   for +n: Resources.Name
   for +m: Maybe<&2, Ropes.Root>
-  Replicas.Work.Reads(~Basics.Ask.machine(), Basics.Key.clash(n), [], Judging.Resolve.work(s, h, n, m))
+  Replicas.Work.Reads(~Requests.Ask.machine(), Basics.Key.clash(n), [], Judging.Resolve.work(s, h, n, m))
 
 law Clash.shut:
-  for +s: Replicas.Node<Basics.Ask>
+  for +s: Replicas.Node<Requests.Ask>
   for +h: Maybe<&2, Hashes.Hash>
   for +n: Resources.Name
   for +f: Ledgers.Id
-  {Replicas.Node.get(~Basics.Ask.machine(), s, h, Basics.Key.clash(n)) == Some{[]}: Maybe<&2, List<&2, U32>>}
+  {Replicas.Node.get(~Requests.Ask.machine(), s, h, Basics.Key.clash(n)) == Some{[]}: Maybe<&2, List<&2, U32>>}
     -> {Judging.Clash.open(s, h, n, f) == False{}: Bool}
 
 # a merge of whole trees keeps what the merge of each resource takes: when the
@@ -174,7 +175,7 @@ law Clash.shut:
 # a change that only one side made), the tree that the merge gives holds n
 # with x
 law Merge.keeps:
-  for +s: Replicas.Node<Basics.Ask>
+  for +s: Replicas.Node<Requests.Ask>
   for +c: Ledgers.Chain
   for +from: Ledgers.Id
   for +h: Maybe<&2, Hashes.Hash>
@@ -187,7 +188,7 @@ law Merge.keeps:
     List.contains(
       ~Resources.Name,
       ~Resources.Name.is_eq,
-      Judging.Merge.names(s, h, Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{from})),
+      Judging.Merge.names(s, h, Replicas.Node.root_of(~Requests.Ask.machine(), s, Some{from})),
       n
     )
       == True{}: Bool
@@ -195,7 +196,7 @@ law Merge.keeps:
     -> {
       Basics.Res.find(
         s,
-        Replicas.Node.root_of(~Basics.Ask.machine(), s, Judging.Merge.base(s, c, from, h)),
+        Replicas.Node.root_of(~Requests.Ask.machine(), s, Judging.Merge.base(s, c, from, h)),
         n
       )
         == Some{b}: Maybe<&2, Maybe<&2, Ropes.Root>>
@@ -204,7 +205,7 @@ law Merge.keeps:
     -> {
       Basics.Res.find(
         s,
-        Replicas.Node.root_of(~Basics.Ask.machine(), s, Some{from}),
+        Replicas.Node.root_of(~Requests.Ask.machine(), s, Some{from}),
         n
       )
         == Some{t}: Maybe<&2, Maybe<&2, Ropes.Root>>
@@ -219,13 +220,13 @@ law Merge.keeps:
       )
         == Some{Judging.Pick.Take{x}}: Maybe<&2, Judging.Pick>
     }
-    -> Replicas.Work.Reads(~Basics.Ask.machine(), Basics.Key.res(n), Basics.Res.code(x), Judging.Merge.work(s, c, from, h))
+    -> Replicas.Work.Reads(~Requests.Ask.machine(), Basics.Key.res(n), Basics.Res.code(x), Judging.Merge.work(s, c, from, h))
 
 # a merge keeps, for each resource, a change that only one side made: when
 # ours is the base, it keeps theirs
 law Pick.merge_theirs:
   for f: Formats.Format
-  for s: Replicas.Node<Basics.Ask>
+  for s: Replicas.Node<Requests.Ask>
   for +b: Maybe<&2, Ropes.Root>
   for +o: Maybe<&2, Ropes.Root>
   for +t: Maybe<&2, Ropes.Root>
@@ -235,7 +236,7 @@ law Pick.merge_theirs:
 # and when theirs is the base, it keeps ours
 law Pick.merge_ours:
   for f: Formats.Format
-  for s: Replicas.Node<Basics.Ask>
+  for s: Replicas.Node<Requests.Ask>
   for +b: Maybe<&2, Ropes.Root>
   for +o: Maybe<&2, Ropes.Root>
   for +t: Maybe<&2, Ropes.Root>
@@ -248,7 +249,7 @@ law Pick.merge_ours:
 # it, the branch lacks it, and it wrote a resource that a resource of the
 # branch is, or uses through its imports, at any depth
 law Node.affects_used:
-  for +s: Replicas.Node<Basics.Ask>
+  for +s: Replicas.Node<Requests.Ask>
   for +b: Reading.Branch
   {
     Shared.List.holds(
@@ -264,13 +265,13 @@ law Node.affects_used:
 # a writer reads its own pending write: at the head of a branch, its read is
 # the bytes of its draft, not what the branch holds
 law Node.read_draft:
-  for +s: Replicas.Node<Basics.Ask>
+  for +s: Replicas.Node<Requests.Ask>
   for +w: String
   for +r: Ledgers.Id
   for +b: String
   for +n: Resources.Name
-  for +c: Basics.Content
-  {Reading.Node.draft(s, w, r, b, n) == Some{c}: Maybe<&2, Basics.Content>}
+  for +c: Requests.Content
+  {Reading.Node.draft(s, w, r, b, n) == Some{c}: Maybe<&2, Requests.Content>}
     -> {
       Reading.Node.read(
         s,
@@ -278,43 +279,43 @@ law Node.read_draft:
         n,
         Basics.Point.Head{r, b}
       )
-        == Replicas.Root.bytes(~Basics.Ask.machine(), s, Judging.Content.root(s, n, c)): Maybe<&2, Texts.Bytes()>
+        == Replicas.Root.bytes(~Requests.Ask.machine(), s, Judging.Content.root(s, n, c)): Maybe<&2, Texts.Bytes()>
     }
 
 # a pending write goes with its writer to another node: a request that a node
 # takes in waits on its line there, so the node has a draft for its writer
 # (Node.draft_some) and the writer's read shows it (Node.read_draft)
 law Node.take_waits:
-  for +s: Replicas.Node<Basics.Ask>
-  for +t: Ledgers.State(Basics.Ask)
+  for +s: Replicas.Node<Requests.Ask>
+  for +t: Ledgers.State(Requests.Ask)
   for +i: Ledgers.Id
   for +time: String
   for +r: Ledgers.Id
   for +l: Maybe<&2, String>
-  for +ch: Basics.Change
+  for +ch: Requests.Change
   {
     Ledgers.State.get(
-      ~Basics.Ask,
-      Replicas.Node.reads(~Basics.Ask.machine(), t),
+      ~Requests.Ask,
+      Replicas.Node.reads(~Requests.Ask.machine(), t),
       Ledgers.Slot.ask(i)
     )
       == Some{
-        Cells.One{Ledgers.Entry.Ask{i, time, Basics.Ask.On{r, l, ch}}}
-      }: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>
+        Cells.One{Ledgers.Entry.Ask{i, time, Requests.Ask.On{r, l, ch}}}
+      }: Maybe<&2, Cells.Cell<Ledgers.Entry<Requests.Ask>>>
   }
     -> {
       Ledgers.State.get(
-        ~Basics.Ask,
-        Replicas.State.ledger(~Basics.Ask.machine(), s),
+        ~Requests.Ask,
+        Replicas.State.ledger(~Requests.Ask.machine(), s),
         Ledgers.Slot.ask(i)
       )
-        == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>
+        == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Requests.Ask>>>
     }
     -> {
       List.contains(
         ~Ledgers.Id,
         ~Ledgers.Id.is_eq,
-        Replicas.Wait.of(~Basics.Ask.machine(), Replicas.Node.take(~Basics.Ask.machine(), ~Stepping.Ask.kernel(), s, t), Replicas.Line.chain(r, l)),
+        Replicas.Wait.of(~Requests.Ask.machine(), Replicas.Node.take(~Requests.Ask.machine(), ~Stepping.Ask.kernel(), s, t), Replicas.Line.chain(r, l)),
         i
       )
         == True{}: Bool
