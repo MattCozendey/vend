@@ -1,5 +1,6 @@
 import Base
 import ../../../shared.bend as Shared
+import ./shared/trie.bend as Tries
 
 # Reachability
 # ------------
@@ -1743,9 +1744,1651 @@ def Reach.in_through(ty, gt, same, succ, nodes, laws, live, g, x, h, m):
     Reach.go_path(~ty, ~gt, ~same, ~succ, ~laws, length1, succ(g)(h), g, m)(b)
   )
 
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# Same graphs
+# Fast search
 # -----------
-# A search of the graph g, and of a graph to(g) whose nodes have the same
-# successors, finds the same: a graph can keep what its successors compute.
+# Reach.go visits a node once for each path to it, so a level can double at
+# each step. Reach.fill keeps the nodes that it saw in a trie, and visits each
+# node once. Its nodes are trie keys: two of them are the same exactly when
+# they are equal.
+
+# the key of a node: the node itself
+def Reach.key(k: List<&2, Bool>) -> List<&2, Bool>:
+  k
+
+# seen, with each node that a search f levels deep finds from the level ws
+def Reach.fill(
+  ~V: Data,
+  ~succ: V -> List<&2, Bool> -> List<&2, List<&2, Bool>>,
+  f: Nat,
+  ws: List<&2, List<&2, Bool>>,
+  +g: V,
+  +seen: Tries.Trie<Unit>
+) -> Tries.Trie<Unit>:
+  match f ws:
+    case 0n xs:
+      Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, xs, seen)
+    case 1n+e Nil{}:
+      seen
+    case 1n+e Con{w, r}:
+      +ys = Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, w <> r, seen)
+      Reach.fill(
+        ~V,
+        ~succ,
+        e,
+        Reach.next(~List<&2, Bool>, ~V, ~succ, ys, g),
+        g,
+        Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, ys, seen)
+      )
+
+# each successor of x, and each successor of one, at any depth: one search
+# answers Reach.in for every m
+def Reach.all(
+  ~V: Data,
+  ~succ: V -> List<&2, Bool> -> List<&2, List<&2, Bool>>,
+  ~nodes: V -> List<&2, List<&2, Bool>>,
+  +g: V,
+  x: List<&2, Bool>
+) -> Tries.Trie<Unit>:
+  Reach.fill(
+    ~V,
+    ~succ,
+    List.length(&2, List<&2, Bool>, nodes(g)),
+    succ(g)(x),
+    g,
+    Tries.Trie.new(Unit)
+  )
+
+# Reach.within_in at the first node q of ps, by whether it is p (hit)
+def Reach.within_in.at(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  ~laws: Shared.Eq.Laws(A, same),
+  +hit: Bool,
+  q: A,
+  r: List<&2, A>,
+  ks: List<&2, A>,
+  p: A,
+  hq: {List.contains(~A, ~same, ks, q) == True{}: Bool},
+  ih: {
+    List.contains(~A, ~same, r, p) == True{}: Bool
+  } -> {List.contains(~A, ~same, ks, p) == True{}: Bool}
+) -> {
+  same(q, p) == hit: Bool
+} -> {
+  List.any.if(u => List.contains(~A, ~same, r, p), hit) == True{}: Bool
+} -> {List.contains(~A, ~same, ks, p) == True{}: Bool}:
+  match hit:
+    case True{}:
+      +he => +h =>
+        %Shared.Eq.sound(
+          ~A,
+          ~same,
+          laws,
+          q
+        )(p)(he): {List.contains(~A, ~same, ks, _) == True{}: Bool}
+        hq
+    case False{}:
+      +he => +h => ih(h)
+
+# a node of ps is in ks, when every node of ps is
+def Reach.within_in(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  ~laws: Shared.Eq.Laws(A, same),
+  +ps: List<&2, A>,
+  +ks: List<&2, A>,
+  +p: A
+) -> {
+  Reach.within(~A, ~same, ps, ks) == True{}: Bool
+} -> {
+  List.contains(~A, ~same, ps, p) == True{}: Bool
+} -> {List.contains(~A, ~same, ks, p) == True{}: Bool}:
+  match ps:
+    case Nil{}:
+      +hw => +hp => Empty.absurd(
+        {List.contains(~A, ~same, ks, p) == True{}: Bool},
+        Shared.Bool.false_ne_true(hp)
+      )
+    case Con{+q, +r}:
+      +hw => Reach.within_in.at(
+        ~A,
+        ~same,
+        ~laws,
+        same(q, p),
+        q,
+        r,
+        ks,
+        p,
+        Shared.Bool.and_true_left(
+          List.contains(~A, ~same, ks, q),
+          Reach.within(~A, ~same, r, ks)
+        )(hw),
+        Reach.within_in(
+          ~A,
+          ~same,
+          ~laws,
+          r,
+          ks,
+          p
+        )(
+          Shared.Bool.and_true_right(
+            List.contains(~A, ~same, ks, q),
+            Reach.within(~A, ~same, r, ks)
+          )(hw)
+        )
+      )({==})
+
+# ps is within js, when it is within ks and ks is within js
+def Reach.within_trans(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  ~laws: Shared.Eq.Laws(A, same),
+  +ps: List<&2, A>,
+  +ks: List<&2, A>,
+  +js: List<&2, A>
+) -> {
+  Reach.within(~A, ~same, ps, ks) == True{}: Bool
+} -> {
+  Reach.within(~A, ~same, ks, js) == True{}: Bool
+} -> {Reach.within(~A, ~same, ps, js) == True{}: Bool}:
+  match ps:
+    case Nil{}:
+      +h1 => +h2 => {==}
+    case Con{+p, +r}:
+      +h1 => +h2 =>
+        +contains1 = List.contains(~A, ~same, ks, p)
+        +within1 = Reach.within(~A, ~same, r, ks)
+        Shared.Bool.and_both(
+          List.contains(~A, ~same, js, p),
+          Reach.within(~A, ~same, r, js)
+        )(
+          Reach.within_in(
+            ~A,
+            ~same,
+            ~laws,
+            ks,
+            js,
+            p
+          )(h2)(Shared.Bool.and_true_left(contains1, within1)(h1))
+        )(
+          Reach.within_trans(
+            ~A,
+            ~same,
+            ~laws,
+            r,
+            ks,
+            js
+          )(Shared.Bool.and_true_right(contains1, within1)(h1))(h2)
+        )
+
+# ps and then qs is within ks, when each is
+def Reach.within_both(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  +ps: List<&2, A>,
+  +qs: List<&2, A>,
+  +ks: List<&2, A>
+) -> {
+  Reach.within(~A, ~same, ps, ks) == True{}: Bool
+} -> {
+  Reach.within(~A, ~same, qs, ks) == True{}: Bool
+} -> {Reach.within(~A, ~same, List.append(&2, A, ps, qs), ks) == True{}: Bool}:
+  match ps:
+    case Nil{}:
+      +h1 => +h2 => h2
+    case Con{p, +r}:
+      +h1 => +h2 =>
+        +contains1 = List.contains(~A, ~same, ks, p)
+        +within1 = Reach.within(~A, ~same, r, ks)
+        Shared.Bool.and_both(
+          contains1,
+          Reach.within(~A, ~same, List.append(&2, A, r, qs), ks)
+        )(
+          Shared.Bool.and_true_left(contains1, within1)(h1)
+        )(
+          Reach.within_both(
+            ~A,
+            ~same,
+            r,
+            qs,
+            ks
+          )(Shared.Bool.and_true_right(contains1, within1)(h1))(h2)
+        )
+
+# what is within ks is within ks and then js
+def Reach.within_left(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  +ps: List<&2, A>,
+  +ks: List<&2, A>,
+  +js: List<&2, A>
+) -> {
+  Reach.within(~A, ~same, ps, ks) == True{}: Bool
+} -> {Reach.within(~A, ~same, ps, List.append(&2, A, ks, js)) == True{}: Bool}:
+  match ps:
+    case Nil{}:
+      +h => {==}
+    case Con{+p, +r}:
+      +h =>
+        +contains1 = List.contains(~A, ~same, ks, p)
+        +within1 = Reach.within(~A, ~same, r, ks)
+        Shared.Bool.and_both(
+          List.contains(~A, ~same, List.append(&2, A, ks, js), p),
+          Reach.within(~A, ~same, r, List.append(&2, A, ks, js))
+        )(
+          Shared.List.contains_left(
+            ~A,
+            ~same,
+            ks,
+            js,
+            p,
+            Shared.Bool.and_true_left(contains1, within1)(h)
+          )
+        )(
+          Reach.within_left(~A, ~same, r, ks, js)(Shared.Bool.and_true_right(contains1, within1)(h))
+        )
+
+# what is within js is within ks and then js
+def Reach.within_right(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  +ps: List<&2, A>,
+  +ks: List<&2, A>,
+  +js: List<&2, A>
+) -> {
+  Reach.within(~A, ~same, ps, js) == True{}: Bool
+} -> {Reach.within(~A, ~same, ps, List.append(&2, A, ks, js)) == True{}: Bool}:
+  match ps:
+    case Nil{}:
+      +h => {==}
+    case Con{+p, +r}:
+      +h =>
+        +contains1 = List.contains(~A, ~same, js, p)
+        +within1 = Reach.within(~A, ~same, r, js)
+        Shared.Bool.and_both(
+          List.contains(~A, ~same, List.append(&2, A, ks, js), p),
+          Reach.within(~A, ~same, r, List.append(&2, A, ks, js))
+        )(
+          Shared.List.contains_right(
+            ~A,
+            ~same,
+            ks,
+            js,
+            p,
+            Shared.Bool.and_true_left(contains1, within1)(h)
+          )
+        )(
+          Reach.within_right(
+            ~A,
+            ~same,
+            r,
+            ks,
+            js
+          )(Shared.Bool.and_true_right(contains1, within1)(h))
+        )
+
+# a list is within itself
+def Reach.within_self(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  ~laws: Shared.Eq.Laws(A, same),
+  +ps: List<&2, A>
+) -> {Reach.within(~A, ~same, ps, ps) == True{}: Bool}:
+  match ps:
+    case Nil{}:
+      {==}
+    case Con{+p, +r}:
+      %Equal.sym(
+        Bool,
+        same(p, p),
+        True{},
+        Shared.Eq.refl(~A, ~same, laws, p)
+      ): {
+        Bool.and(
+          List.any.if(u => List.contains(~A, ~same, r, p), _),
+          Reach.within(~A, ~same, r, p <> r)
+        )
+          == True{}: Bool
+      }
+      Reach.within_right(~A, ~same, r, [p], r)(Reach.within_self(~A, ~same, ~laws, r))
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# the next level of xs and then ys is the next of xs, and then the next of ys
+def Reach.next_append(
+  ~A: Data,
+  ~V: Data,
+  ~succ: V -> A -> List<&2, A>,
+  +xs: List<&2, A>,
+  +ys: List<&2, A>,
+  +g: V
+) -> {
+  Reach.next(
+    ~A,
+    ~V,
+    ~succ,
+    List.append(&2, A, xs, ys),
+    g
+  )
+    == List.append(
+      &2,
+      A,
+      Reach.next(~A, ~V, ~succ, xs, g),
+      Reach.next(~A, ~V, ~succ, ys, g)
+    ): List<&2, A>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{x, +r}:
+      next1 = Reach.next(~A, ~V, ~succ, r, g)
+      next2 = Reach.next(~A, ~V, ~succ, ys, g)
+      %Equal.sym(
+        List<&2, A>,
+        Reach.next(~A, ~V, ~succ, List.append(&2, A, r, ys), g),
+        List.append(&2, A, next1, next2),
+        Reach.next_append(~A, ~V, ~succ, r, ys, g)
+      ): {
+        List.append(
+          &2,
+          A,
+          succ(g)(x),
+          _
+        )
+          == List.append(&2, A, List.append(&2, A, succ(g)(x), next1), next2): List<&2, A>
+      }
+      Equal.sym(
+        List<&2, A>,
+        List.append(&2, A, List.append(&2, A, succ(g)(x), next1), next2),
+        List.append(&2, A, succ(g)(x), List.append(&2, A, next1, next2)),
+        Tries.Trie.append_assoc(A, succ(g)(x), next1, next2)
+      )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# Reach.succ_within at the first node z of zs, by whether it is x (hit)
+def Reach.succ_within.at(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  ~laws: Shared.Eq.Laws(A, same),
+  +hit: Bool,
+  z: A,
+  r: List<&2, A>,
+  +x: A,
+  +g: V,
+  ih: {
+    List.contains(~A, ~same, r, x) == True{}: Bool
+  } -> {Reach.within(~A, ~same, succ(g)(x), Reach.next(~A, ~V, ~succ, r, g)) == True{}: Bool}
+) -> {
+  same(z, x) == hit: Bool
+} -> {
+  List.any.if(u => List.contains(~A, ~same, r, x), hit) == True{}: Bool
+} -> {
+  Reach.within(
+    ~A,
+    ~same,
+    succ(g)(x),
+    List.append(&2, A, succ(g)(z), Reach.next(~A, ~V, ~succ, r, g))
+  )
+    == True{}: Bool
+}:
+  match hit:
+    case True{}:
+      +he => +h =>
+        %Equal.sym(
+          A,
+          z,
+          x,
+          Shared.Eq.sound(~A, ~same, laws, z)(x)(he)
+        ): {
+          Reach.within(
+            ~A,
+            ~same,
+            succ(g)(x),
+            List.append(&2, A, succ(g)(_), Reach.next(~A, ~V, ~succ, r, g))
+          )
+            == True{}: Bool
+        }
+        Reach.within_left(
+          ~A,
+          ~same,
+          succ(g)(x),
+          succ(g)(x),
+          Reach.next(~A, ~V, ~succ, r, g)
+        )(Reach.within_self(~A, ~same, ~laws, succ(g)(x)))
+    case False{}:
+      +he => +h => Reach.within_right(
+        ~A,
+        ~same,
+        succ(g)(x),
+        succ(g)(z),
+        Reach.next(~A, ~V, ~succ, r, g)
+      )(ih(h))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# the successors of a node x of zs are within the next level
+def Reach.succ_within(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  ~laws: Shared.Eq.Laws(A, same),
+  +zs: List<&2, A>,
+  +x: A,
+  +g: V
+) -> {
+  List.contains(~A, ~same, zs, x) == True{}: Bool
+} -> {Reach.within(~A, ~same, succ(g)(x), Reach.next(~A, ~V, ~succ, zs, g)) == True{}: Bool}:
+  match zs:
+    case Nil{}:
+      +h => Empty.absurd(
+        {Reach.within(~A, ~same, succ(g)(x), Reach.next(~A, ~V, ~succ, [], g)) == True{}: Bool},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Con{+z, +r}:
+      Reach.succ_within.at(
+        ~A,
+        ~V,
+        ~same,
+        ~succ,
+        ~laws,
+        same(z, x),
+        z,
+        r,
+        x,
+        g,
+        Reach.succ_within(~A, ~V, ~same, ~succ, ~laws, r, x, g)
+      )({==})
+
+# bend-lint: expect-begin bend-lint-rules/performance/loop_invariant_call@information -- a proof: it does not run
+# the next level of xs is within the next level of zs, when xs is within zs
+def Reach.next_within(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  ~laws: Shared.Eq.Laws(A, same),
+  +xs: List<&2, A>,
+  +zs: List<&2, A>,
+  +g: V
+) -> {
+  Reach.within(~A, ~same, xs, zs) == True{}: Bool
+} -> {
+  Reach.within(
+    ~A,
+    ~same,
+    Reach.next(~A, ~V, ~succ, xs, g),
+    Reach.next(~A, ~V, ~succ, zs, g)
+  )
+    == True{}: Bool
+}:
+  match xs:
+    case Nil{}:
+      +h => {==}
+    case Con{+x, +r}:
+      +h =>
+        +contains1 = List.contains(~A, ~same, zs, x)
+        +within1 = Reach.within(~A, ~same, r, zs)
+        Reach.within_both(
+          ~A,
+          ~same,
+          succ(g)(x),
+          Reach.next(~A, ~V, ~succ, r, g),
+          Reach.next(~A, ~V, ~succ, zs, g)
+        )(
+          Reach.succ_within(
+            ~A,
+            ~V,
+            ~same,
+            ~succ,
+            ~laws,
+            zs,
+            x,
+            g
+          )(Shared.Bool.and_true_left(contains1, within1)(h))
+        )(
+          Reach.next_within(
+            ~A,
+            ~V,
+            ~same,
+            ~succ,
+            ~laws,
+            r,
+            zs,
+            g
+          )(Shared.Bool.and_true_right(contains1, within1)(h))
+        )
+# bend-lint: expect-end bend-lint-rules/performance/loop_invariant_call@information
+
+# Reach.or_within once each side is known: a or y is a or z, when y gives z
+# and z gives a or y
+def Reach.or_within.at(
+  a: Bool,
+  y: Bool,
+  z: Bool
+) -> (
+  {y == True{}: Bool} -> {z == True{}: Bool}
+) -> (
+  {z == True{}: Bool} -> {Bool.or(a, y) == True{}: Bool}
+) -> {Bool.or(a, y) == Bool.or(a, z): Bool}:
+  match a y z:
+    case True{} y z:
+      f => g => {==}
+    case False{} True{} True{}:
+      f => g => {==}
+    case False{} True{} False{}:
+      f => g => Empty.absurd({True{} == False{}: Bool}, Shared.Bool.false_ne_true(f({==})))
+    case False{} False{} True{}:
+      f => g => g({==})
+    case False{} False{} False{}:
+      f => g => {==}
+
+# ks and then ys holds what ks or zs holds, when ys is within zs and zs is
+# within ks and then ys
+def Reach.or_within(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  ~laws: Shared.Eq.Laws(A, same),
+  +ks: List<&2, A>,
+  +ys: List<&2, A>,
+  +zs: List<&2, A>,
+  +m: A
+) -> {
+  Reach.within(~A, ~same, ys, zs) == True{}: Bool
+} -> {
+  Reach.within(~A, ~same, zs, List.append(&2, A, ks, ys)) == True{}: Bool
+} -> {
+  List.contains(
+    ~A,
+    ~same,
+    List.append(&2, A, ks, ys),
+    m
+  )
+    == Bool.or(List.contains(~A, ~same, ks, m), List.contains(~A, ~same, zs, m)): Bool
+}:
+  +h1 => +h2 =>
+    +contains1 = List.contains(~A, ~same, ks, m)
+    +contains2 = List.contains(~A, ~same, ys, m)
+    +contains3 = List.contains(~A, ~same, List.append(&2, A, ks, ys), m)
+    Equal.trans(
+      Bool,
+      contains3,
+      Bool.or(contains1, contains2),
+      Bool.or(contains1, List.contains(~A, ~same, zs, m)),
+      Shared.List.contains_append(~A, ~same, ks, ys, m),
+      Reach.or_within.at(
+        contains1,
+        contains2,
+        List.contains(~A, ~same, zs, m)
+      )(
+        Reach.within_in(~A, ~same, ~laws, ys, zs, m)(h1)
+      )(
+        hz => Equal.trans(
+          Bool,
+          Bool.or(contains1, contains2),
+          contains3,
+          True{},
+          Equal.sym(
+            Bool,
+            contains3,
+            Bool.or(contains1, contains2),
+            Shared.List.contains_append(~A, ~same, ks, ys, m)
+          ),
+          Reach.within_in(~A, ~same, ~laws, zs, List.append(&2, A, ks, ys), m)(h2)(hz)
+        )
+      )
+    )
+
+# the next level of ks and then ys is within ks, ys and the next level of ys,
+# when the next level of ks is within ks and then ys
+def Reach.next_grown(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~succ: V -> A -> List<&2, A>,
+  ~laws: Shared.Eq.Laws(A, same),
+  +ks: List<&2, A>,
+  +ys: List<&2, A>,
+  +g: V
+) -> {
+  Reach.within(
+    ~A,
+    ~same,
+    Reach.next(~A, ~V, ~succ, ks, g),
+    List.append(&2, A, ks, ys)
+  )
+    == True{}: Bool
+} -> {
+  Reach.within(
+    ~A,
+    ~same,
+    Reach.next(~A, ~V, ~succ, List.append(&2, A, ks, ys), g),
+    List.append(&2, A, List.append(&2, A, ks, ys), Reach.next(~A, ~V, ~succ, ys, g))
+  )
+    == True{}: Bool
+}:
+  +h =>
+    +next1 = Reach.next(~A, ~V, ~succ, ks, g)
+    +next2 = Reach.next(~A, ~V, ~succ, ys, g)
+    +append1 = List.append(&2, A, ks, ys)
+    %Equal.sym(
+      List<&2, A>,
+      Reach.next(~A, ~V, ~succ, append1, g),
+      List.append(&2, A, next1, next2),
+      Reach.next_append(~A, ~V, ~succ, ks, ys, g)
+    ): {Reach.within(~A, ~same, _, List.append(&2, A, append1, next2)) == True{}: Bool}
+    Reach.within_both(
+      ~A,
+      ~same,
+      next1,
+      next2,
+      List.append(&2, A, append1, next2)
+    )(
+      Reach.within_left(~A, ~same, next1, append1, next2)(h)
+    )(
+      Reach.within_right(
+        ~A,
+        ~same,
+        next2,
+        append1,
+        next2
+      )(Reach.within_self(~A, ~same, ~laws, next2))
+    )
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# Reach.has_set, by whether y is a (hit)
+def Reach.has_set.at(
+  +hit: Bool,
+  t: Tries.Trie<Unit>,
+  +y: List<&2, Bool>,
+  +a: List<&2, Bool>
+) -> {
+  Tries.Trie.same_key(y, a) == hit: Bool
+} -> {
+  Tries.Trie.has(
+    Unit,
+    Tries.Trie.set(Unit, t, y, Unit{}),
+    a
+  )
+    == List.any.if(u => Tries.Trie.has(Unit, t, a), hit): Bool
+}:
+  match hit:
+    case True{}:
+      +he =>
+        %Tries.Trie.same_key_sound(
+          y,
+          a
+        )(he): {Tries.Trie.has(Unit, Tries.Trie.set(Unit, t, y, Unit{}), _) == True{}: Bool}
+        %Equal.sym(
+          Maybe<&2, Unit>,
+          Tries.Trie.get(Unit, Tries.Trie.set(Unit, t, y, Unit{}), y),
+          Bool.pick(
+            Maybe<&2, Unit>,
+            Tries.Trie.same_key(y, y),
+            Some{Unit{}},
+            Tries.Trie.get(Unit, t, y)
+          ),
+          Tries.Trie.get_set(Unit, t, y, Unit{}, y)
+        ): {Maybe.is_some(&2, Unit, _) == True{}: Bool}
+        %Equal.sym(
+          Bool,
+          Tries.Trie.same_key(y, y),
+          True{},
+          Shared.List.is_eq_refl(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws(), y)
+        ): {
+          Maybe.is_some(
+            &2,
+            Unit,
+            Bool.pick(Maybe<&2, Unit>, _, Some{Unit{}}, Tries.Trie.get(Unit, t, y))
+          )
+            == True{}: Bool
+        }
+        {==}
+    case False{}:
+      +he =>
+        %Equal.sym(
+          Maybe<&2, Unit>,
+          Tries.Trie.get(Unit, Tries.Trie.set(Unit, t, y, Unit{}), a),
+          Bool.pick(
+            Maybe<&2, Unit>,
+            Tries.Trie.same_key(a, y),
+            Some{Unit{}},
+            Tries.Trie.get(Unit, t, a)
+          ),
+          Tries.Trie.get_set(Unit, t, y, Unit{}, a)
+        ): {Maybe.is_some(&2, Unit, _) == Tries.Trie.has(Unit, t, a): Bool}
+        %Equal.sym(
+          Bool,
+          Tries.Trie.same_key(a, y),
+          False{},
+          Shared.Eq.ne_flip(
+            ~List<&2, Bool>,
+            ~Tries.Trie.same_key,
+            ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+            y,
+            a,
+            he
+          )
+        ): {
+          Maybe.is_some(
+            &2,
+            Unit,
+            Bool.pick(Maybe<&2, Unit>, _, Some{Unit{}}, Tries.Trie.get(Unit, t, a))
+          )
+            == Tries.Trie.has(Unit, t, a): Bool
+        }
+        {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# t with the key y holds a exactly when y is a, or t holds a
+def Reach.has_set(
+  t: Tries.Trie<Unit>,
+  +y: List<&2, Bool>,
+  +a: List<&2, Bool>
+) -> {
+  Tries.Trie.has(
+    Unit,
+    Tries.Trie.set(Unit, t, y, Unit{}),
+    a
+  )
+    == List.any.if(u => Tries.Trie.has(Unit, t, a), Tries.Trie.same_key(y, a)): Bool
+}:
+  Reach.has_set.at(Tries.Trie.same_key(y, a), t, y, a)({==})
+
+# Reach.has_put at the first key, by whether it is a (s) and the rest holds a
+# (c)
+def Reach.has_put.at(
+  s: Bool,
+  c: Bool,
+  h: Bool
+) -> {Bool.or(c, List.any.if(u => h, s)) == Bool.or(List.any.if(u => c, s), h): Bool}:
+  match s c:
+    case True{} True{}:
+      {==}
+    case True{} False{}:
+      {==}
+    case False{} b:
+      {==}
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# t with the keys ys holds a exactly when ys holds a, or t does
+def Reach.has_put(
+  +ys: List<&2, List<&2, Bool>>,
+  +t: Tries.Trie<Unit>,
+  +a: List<&2, Bool>
+) -> {
+  Tries.Trie.has(
+    Unit,
+    Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, ys, t),
+    a
+  )
+    == Bool.or(
+      List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ys, a),
+      Tries.Trie.has(Unit, t, a)
+    ): Bool
+}:
+  match ys:
+    case Nil{}:
+      {==}
+    case Con{+y, +r}:
+      contains1 = List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, r, a)
+      set1 = Tries.Trie.set(Unit, t, y, Unit{})
+      Equal.trans(
+        Bool,
+        Tries.Trie.has(Unit, Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, r, set1), a),
+        Bool.or(contains1, Tries.Trie.has(Unit, set1, a)),
+        Bool.or(List.any.if(u => contains1, Tries.Trie.same_key(y, a)), Tries.Trie.has(Unit, t, a)),
+        Reach.has_put(r, set1, a),
+        (
+          %Equal.sym(Bool, Tries.Trie.has(Unit, set1, a), List.any.if(u => Tries.Trie.has(Unit, t, a), Tries.Trie.same_key(y, a)), Reach.has_set(t, y, a)): {Bool.or(contains1, _) == Bool.or(List.any.if(u => contains1, Tries.Trie.same_key(y, a)), Tries.Trie.has(Unit, t, a)): Bool}
+          Reach.has_put.at(Tries.Trie.same_key(y, a), contains1, Tries.Trie.has(Unit, t, a)))
+      )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# anything or False is itself
+def Reach.or_false(a: Bool) -> {Bool.or(a, False{}) == a: Bool}:
+  match a:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# the trie of the keys ks holds a exactly when ks does
+def Reach.has_keys(
+  +ks: List<&2, List<&2, Bool>>,
+  +a: List<&2, Bool>
+) -> {
+  Tries.Trie.has(
+    Unit,
+    Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, ks, Tries.Trie.new(Unit)),
+    a
+  )
+    == List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, a): Bool
+}:
+  Equal.trans(
+    Bool,
+    Tries.Trie.has(
+      Unit,
+      Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, ks, Tries.Trie.new(Unit)),
+      a
+    ),
+    Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, a), False{}),
+    List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, a),
+    Reach.has_put(ks, Tries.Trie.new(Unit), a),
+    Reach.or_false(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, a))
+  )
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# Reach.unique_in at the first node x, by whether t holds it (seen) and it is
+# a (hit)
+def Reach.unique_in.at(
+  +seen: Bool,
+  +hit: Bool,
+  +x: List<&2, Bool>,
+  r: List<&2, List<&2, Bool>>,
+  +t: Tries.Trie<Unit>,
+  +a: List<&2, Bool>,
+  ih1: {
+    List.contains(
+      ~List<&2, Bool>,
+      ~Tries.Trie.same_key,
+      Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, t),
+      a
+    )
+      == Bool.and(
+        List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, r, a),
+        Bool.not(Tries.Trie.has(Unit, t, a))
+      ): Bool
+  },
+  ih2: {
+    List.contains(
+      ~List<&2, Bool>,
+      ~Tries.Trie.same_key,
+      Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, Tries.Trie.set(Unit, t, x, Unit{})),
+      a
+    )
+      == Bool.and(
+        List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, r, a),
+        Bool.not(Tries.Trie.has(Unit, Tries.Trie.set(Unit, t, x, Unit{}), a))
+      ): Bool
+  }
+) -> {
+  Tries.Trie.has(Unit, t, x) == seen: Bool
+} -> {
+  Tries.Trie.same_key(x, a) == hit: Bool
+} -> {
+  List.contains(
+    ~List<&2, Bool>,
+    ~Tries.Trie.same_key,
+    Shared.Bool.when(
+      List<&2, List<&2, Bool>>,
+      seen,
+      u => Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, t),
+      u => x
+        <> Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, Tries.Trie.set(Unit, t, x, Unit{}))
+    ),
+    a
+  )
+    == Bool.and(
+      List.any.if(u => List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, r, a), hit),
+      Bool.not(Tries.Trie.has(Unit, t, a))
+    ): Bool
+}:
+  match seen hit:
+    case True{} True{}:
+      +es => +eh =>
+        +contains1 = List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, r, a)
+        %Equal.sym(Bool, Tries.Trie.has(Unit, t, a), True{}, (
+            %Tries.Trie.same_key_sound(x, a)(eh): {Tries.Trie.has(Unit, t, _) == True{}: Bool}
+            es)): {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, t), a) == Bool.not(_): Bool}
+        Equal.trans(
+          Bool,
+          List.contains(
+            ~List<&2, Bool>,
+            ~Tries.Trie.same_key,
+            Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, t),
+            a
+          ),
+          Bool.and(contains1, Bool.not(Tries.Trie.has(Unit, t, a))),
+          False{},
+          ih1,
+          (
+            %Equal.sym(Bool, Tries.Trie.has(Unit, t, a), True{}, (
+              %Tries.Trie.same_key_sound(x, a)(eh): {Tries.Trie.has(Unit, t, _) == True{}: Bool}
+              es)): {Bool.and(contains1, Bool.not(_)) == False{}: Bool}
+            Shared.Bool.and_false_right(contains1))
+        )
+    case True{} False{}:
+      +es => +eh => ih1
+    case False{} True{}:
+      +es => +eh =>
+        %Equal.sym(
+          Bool,
+          Tries.Trie.same_key(x, a),
+          True{},
+          eh
+        ): {
+          List.any.if(
+            u => List.contains(
+              ~List<&2, Bool>,
+              ~Tries.Trie.same_key,
+              Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, Tries.Trie.set(Unit, t, x, Unit{})),
+              a
+            ),
+            _
+          )
+            == Bool.not(Tries.Trie.has(Unit, t, a)): Bool
+        }
+        %Equal.sym(Bool, Tries.Trie.has(Unit, t, a), False{}, (
+            %Tries.Trie.same_key_sound(x, a)(eh): {Tries.Trie.has(Unit, t, _) == False{}: Bool}
+            es)): {True{} == Bool.not(_): Bool}
+        {==}
+    case False{} False{}:
+      +es => +eh =>
+        +contains1 = List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, r, a)
+        +set1 = Tries.Trie.set(Unit, t, x, Unit{})
+        %Equal.sym(
+          Bool,
+          Tries.Trie.same_key(x, a),
+          False{},
+          eh
+        ): {
+          List.any.if(
+            u => List.contains(
+              ~List<&2, Bool>,
+              ~Tries.Trie.same_key,
+              Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, set1),
+              a
+            ),
+            _
+          )
+            == Bool.and(contains1, Bool.not(Tries.Trie.has(Unit, t, a))): Bool
+        }
+        Equal.trans(
+          Bool,
+          List.contains(
+            ~List<&2, Bool>,
+            ~Tries.Trie.same_key,
+            Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, set1),
+            a
+          ),
+          Bool.and(contains1, Bool.not(Tries.Trie.has(Unit, set1, a))),
+          Bool.and(contains1, Bool.not(Tries.Trie.has(Unit, t, a))),
+          ih2,
+          (
+            %Equal.sym(Bool, Tries.Trie.has(Unit, set1, a), List.any.if(u => Tries.Trie.has(Unit, t, a), Tries.Trie.same_key(x, a)), Reach.has_set(t, x, a)): {Bool.and(contains1, Bool.not(_)) == Bool.and(contains1, Bool.not(Tries.Trie.has(Unit, t, a))): Bool}
+            %Equal.sym(Bool, Tries.Trie.same_key(x, a), False{}, eh): {Bool.and(contains1, Bool.not(List.any.if(u => Tries.Trie.has(Unit, t, a), _))) == Bool.and(contains1, Bool.not(Tries.Trie.has(Unit, t, a))): Bool}
+            {==})
+        )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof: it does not run
+# a is one of the new nodes of xs exactly when it is in xs and t lacks it
+def Reach.unique_in(
+  +xs: List<&2, List<&2, Bool>>,
+  +t: Tries.Trie<Unit>,
+  +a: List<&2, Bool>
+) -> {
+  List.contains(
+    ~List<&2, Bool>,
+    ~Tries.Trie.same_key,
+    Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, xs, t),
+    a
+  )
+    == Bool.and(
+      List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, xs, a),
+      Bool.not(Tries.Trie.has(Unit, t, a))
+    ): Bool
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+x, +r}:
+      Reach.unique_in.at(
+        Tries.Trie.has(Unit, t, x),
+        Tries.Trie.same_key(x, a),
+        x,
+        r,
+        t,
+        a,
+        Reach.unique_in(r, t, a),
+        Reach.unique_in(r, Tries.Trie.set(Unit, t, x, Unit{}), a)
+      )({==})({==})
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
+
+# the keys of a and then b, put in t, are those of a put first, then of b
+def Reach.put_append(
+  +a: List<&2, List<&2, Bool>>,
+  b: List<&2, List<&2, Bool>>,
+  t: Tries.Trie<Unit>
+) -> {
+  Tries.Trie.put_keys(
+    ~List<&2, Bool>,
+    ~Reach.key,
+    List.append(&2, List<&2, Bool>, a, b),
+    t
+  )
+    == Tries.Trie.put_keys(
+      ~List<&2, Bool>,
+      ~Reach.key,
+      b,
+      Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, a, t)
+    ): Tries.Trie<Unit>
+}:
+  match a:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      Reach.put_append(r, b, Tries.Trie.set(Unit, t, x, Unit{}))
+
+# Reach.unique_within at the first node x, by whether t holds it (seen)
+def Reach.unique_within.at(
+  +seen: Bool,
+  +x: List<&2, Bool>,
+  +r: List<&2, List<&2, Bool>>,
+  t: Tries.Trie<Unit>,
+  ih1: {
+    Reach.within(
+      ~List<&2, Bool>,
+      ~Tries.Trie.same_key,
+      Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, t),
+      r
+    )
+      == True{}: Bool
+  },
+  ih2: {
+    Reach.within(
+      ~List<&2, Bool>,
+      ~Tries.Trie.same_key,
+      Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, Tries.Trie.set(Unit, t, x, Unit{})),
+      r
+    )
+      == True{}: Bool
+  }
+) -> {
+  Reach.within(
+    ~List<&2, Bool>,
+    ~Tries.Trie.same_key,
+    Shared.Bool.when(
+      List<&2, List<&2, Bool>>,
+      seen,
+      u => Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, t),
+      u => x
+        <> Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, Tries.Trie.set(Unit, t, x, Unit{}))
+    ),
+    x <> r
+  )
+    == True{}: Bool
+}:
+  match seen:
+    case True{}:
+      Reach.within_right(
+        ~List<&2, Bool>,
+        ~Tries.Trie.same_key,
+        Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, t),
+        [x],
+        r
+      )(ih1)
+    case False{}:
+      unique1 = Tries.Trie.unique(
+        ~List<&2, Bool>,
+        ~Reach.key,
+        r,
+        Tries.Trie.set(Unit, t, x, Unit{})
+      )
+      %Equal.sym(
+        Bool,
+        Tries.Trie.same_key(x, x),
+        True{},
+        Shared.List.is_eq_refl(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws(), x)
+      ): {
+        Bool.and(
+          List.any.if(u => List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, r, x), _),
+          Reach.within(~List<&2, Bool>, ~Tries.Trie.same_key, unique1, x <> r)
+        )
+          == True{}: Bool
+      }
+      Reach.within_right(~List<&2, Bool>, ~Tries.Trie.same_key, unique1, [x], r)(ih2)
+
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof: it does not run
+# the new nodes of ws are within ws
+def Reach.unique_within(
+  +ws: List<&2, List<&2, Bool>>,
+  +t: Tries.Trie<Unit>
+) -> {
+  Reach.within(
+    ~List<&2, Bool>,
+    ~Tries.Trie.same_key,
+    Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, ws, t),
+    ws
+  )
+    == True{}: Bool
+}:
+  match ws:
+    case Nil{}:
+      {==}
+    case Con{+x, +r}:
+      Reach.unique_within.at(
+        Tries.Trie.has(Unit, t, x),
+        x,
+        r,
+        t,
+        Reach.unique_within(r, t),
+        Reach.unique_within(r, Tries.Trie.set(Unit, t, x, Unit{}))
+      )
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
+
+# a node is seen, or it is new when it is not
+def Reach.unique_has.at(seen: Bool) -> {Bool.or(seen, Bool.not(seen)) == True{}: Bool}:
+  match seen:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# a node u of ws is one of the nodes seen, ks, or one of the new nodes
+def Reach.unique_has(
+  +ws: List<&2, List<&2, Bool>>,
+  +ks: List<&2, List<&2, Bool>>,
+  +u: List<&2, Bool>
+) -> {
+  List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ws, u) == True{}: Bool
+} -> {
+  List.contains(
+    ~List<&2, Bool>,
+    ~Tries.Trie.same_key,
+    List.append(
+      &2,
+      List<&2, Bool>,
+      ks,
+      Tries.Trie.unique(
+        ~List<&2, Bool>,
+        ~Reach.key,
+        ws,
+        Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, ks, Tries.Trie.new(Unit))
+      )
+    ),
+    u
+  )
+    == True{}: Bool
+}:
+  +h =>
+    +seen1 = Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, ks, Tries.Trie.new(Unit))
+    +unique1 = Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, ws, seen1)
+    +contains1 = List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, u)
+    %Equal.sym(
+      Bool,
+      List.contains(
+        ~List<&2, Bool>,
+        ~Tries.Trie.same_key,
+        List.append(&2, List<&2, Bool>, ks, unique1),
+        u
+      ),
+      Bool.or(contains1, List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, unique1, u)),
+      Shared.List.contains_append(~List<&2, Bool>, ~Tries.Trie.same_key, ks, unique1, u)
+    ): {_ == True{}: Bool}
+    %Equal.sym(
+      Bool,
+      List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, unique1, u),
+      Bool.and(
+        List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ws, u),
+        Bool.not(Tries.Trie.has(Unit, seen1, u))
+      ),
+      Reach.unique_in(ws, seen1, u)
+    ): {Bool.or(contains1, _) == True{}: Bool}
+    %Equal.sym(
+      Bool,
+      Tries.Trie.has(Unit, seen1, u),
+      contains1,
+      Reach.has_keys(ks, u)
+    ): {
+      Bool.or(
+        contains1,
+        Bool.and(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ws, u), Bool.not(_))
+      )
+        == True{}: Bool
+    }
+    %Equal.sym(
+      Bool,
+      List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ws, u),
+      True{},
+      h
+    ): {Bool.or(contains1, Bool.and(_, Bool.not(contains1))) == True{}: Bool}
+    Reach.unique_has.at(contains1)
+
+# the nodes us of ws are within the nodes seen, ks, and then the new nodes
+def Reach.unique_covers(
+  +us: List<&2, List<&2, Bool>>,
+  +ws: List<&2, List<&2, Bool>>,
+  +ks: List<&2, List<&2, Bool>>
+) -> {
+  Reach.within(~List<&2, Bool>, ~Tries.Trie.same_key, us, ws) == True{}: Bool
+} -> {
+  Reach.within(
+    ~List<&2, Bool>,
+    ~Tries.Trie.same_key,
+    us,
+    List.append(
+      &2,
+      List<&2, Bool>,
+      ks,
+      Tries.Trie.unique(
+        ~List<&2, Bool>,
+        ~Reach.key,
+        ws,
+        Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, ks, Tries.Trie.new(Unit))
+      )
+    )
+  )
+    == True{}: Bool
+}:
+  match us:
+    case Nil{}:
+      +h => {==}
+    case Con{+u, +r}:
+      +h =>
+        +contains1 = List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ws, u)
+        +within1 = Reach.within(~List<&2, Bool>, ~Tries.Trie.same_key, r, ws)
+        +append1 = List.append(
+          &2,
+          List<&2, Bool>,
+          ks,
+          Tries.Trie.unique(
+            ~List<&2, Bool>,
+            ~Reach.key,
+            ws,
+            Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, ks, Tries.Trie.new(Unit))
+          )
+        )
+        Shared.Bool.and_both(
+          List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, append1, u),
+          Reach.within(~List<&2, Bool>, ~Tries.Trie.same_key, r, append1)
+        )(
+          Reach.unique_has(ws, ks, u)(Shared.Bool.and_true_left(contains1, within1)(h))
+        )(Reach.unique_covers(r, ws, ks)(Shared.Bool.and_true_right(contains1, within1)(h)))
+
+# a search one level deeper is a search from the next level of the new nodes
+def Reach.fill_step(
+  ~V: Data,
+  ~succ: V -> List<&2, Bool> -> List<&2, List<&2, Bool>>,
+  e: Nat,
+  ws: List<&2, List<&2, Bool>>,
+  g: V,
+  seen: Tries.Trie<Unit>
+) -> {
+  Reach.fill(
+    ~V,
+    ~succ,
+    1n+e,
+    ws,
+    g,
+    seen
+  )
+    == Reach.fill(
+      ~V,
+      ~succ,
+      e,
+      Reach.next(
+        ~List<&2, Bool>,
+        ~V,
+        ~succ,
+        Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, ws, seen),
+        g
+      ),
+      g,
+      Tries.Trie.put_keys(
+        ~List<&2, Bool>,
+        ~Reach.key,
+        Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, ws, seen),
+        seen
+      )
+    ): Tries.Trie<Unit>
+}:
+  match e ws:
+    case 0n Nil{}:
+      {==}
+    case 1n+p Nil{}:
+      {==}
+    case d Con{w, r}:
+      {==}
+
+# an "or" groups either way
+def Reach.or_assoc(
+  a: Bool,
+  b: Bool,
+  c: Bool
+) -> {Bool.or(Bool.or(a, b), c) == Bool.or(a, Bool.or(b, c)): Bool}:
+  match a:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# the fast search finds what the nodes seen, ks, hold, and what the search
+# finds from zs: the level ws is within zs, and zs and the next level of ks
+# are within ks and then ws
+def Reach.fill_go(
+  ~V: Data,
+  ~succ: V -> List<&2, Bool> -> List<&2, List<&2, Bool>>,
+  +f: Nat,
+  +ws: List<&2, List<&2, Bool>>,
+  +zs: List<&2, List<&2, Bool>>,
+  +ks: List<&2, List<&2, Bool>>,
+  +g: V,
+  +m: List<&2, Bool>
+) -> {
+  Reach.within(~List<&2, Bool>, ~Tries.Trie.same_key, ws, zs) == True{}: Bool
+} -> {
+  Reach.within(
+    ~List<&2, Bool>,
+    ~Tries.Trie.same_key,
+    zs,
+    List.append(&2, List<&2, Bool>, ks, ws)
+  )
+    == True{}: Bool
+} -> {
+  Reach.within(
+    ~List<&2, Bool>,
+    ~Tries.Trie.same_key,
+    Reach.next(~List<&2, Bool>, ~V, ~succ, ks, g),
+    List.append(&2, List<&2, Bool>, ks, ws)
+  )
+    == True{}: Bool
+} -> {
+  Tries.Trie.has(
+    Unit,
+    Reach.fill(
+      ~V,
+      ~succ,
+      f,
+      ws,
+      g,
+      Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, ks, Tries.Trie.new(Unit))
+    ),
+    m
+  )
+    == Bool.or(
+      List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m),
+      Reach.go(~List<&2, Bool>, ~V, ~Tries.Trie.same_key, ~succ, f, zs, g, m)
+    ): Bool
+}:
+  match f:
+    case 0n:
+      +h1 => +h2 => h3 =>
+        %Reach.put_append(
+          ks,
+          ws,
+          Tries.Trie.new(Unit)
+        ): {
+          Tries.Trie.has(
+            Unit,
+            _,
+            m
+          )
+            == Bool.or(
+              List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m),
+              List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m)
+            ): Bool
+        }
+        Equal.trans(
+          Bool,
+          Tries.Trie.has(
+            Unit,
+            Tries.Trie.put_keys(
+              ~List<&2, Bool>,
+              ~Reach.key,
+              List.append(&2, List<&2, Bool>, ks, ws),
+              Tries.Trie.new(Unit)
+            ),
+            m
+          ),
+          List.contains(
+            ~List<&2, Bool>,
+            ~Tries.Trie.same_key,
+            List.append(&2, List<&2, Bool>, ks, ws),
+            m
+          ),
+          Bool.or(
+            List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m),
+            List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m)
+          ),
+          Reach.has_keys(List.append(&2, List<&2, Bool>, ks, ws), m),
+          Reach.or_within(
+            ~List<&2, Bool>,
+            ~Tries.Trie.same_key,
+            ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+            ks,
+            ws,
+            zs,
+            m
+          )(h1)(h2)
+        )
+    case 1n+e:
+      +h1 => +h2 => h3 =>
+        +seen1 = Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, ks, Tries.Trie.new(Unit))
+        +unique1 = Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, ws, seen1)
+        +append1 = List.append(&2, List<&2, Bool>, ks, unique1)
+        +next1 = Reach.next(~List<&2, Bool>, ~V, ~succ, unique1, g)
+        +next2 = Reach.next(~List<&2, Bool>, ~V, ~succ, zs, g)
+        +go1 = Reach.go(~List<&2, Bool>, ~V, ~Tries.Trie.same_key, ~succ, e, next2, g, m)
+        +a = Reach.within_both(
+          ~List<&2, Bool>,
+          ~Tries.Trie.same_key,
+          ks,
+          ws,
+          append1
+        )(
+          Reach.within_left(
+            ~List<&2, Bool>,
+            ~Tries.Trie.same_key,
+            ks,
+            ks,
+            unique1
+          )(
+            Reach.within_self(
+              ~List<&2, Bool>,
+              ~Tries.Trie.same_key,
+              ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+              ks
+            )
+          )
+        )(
+          Reach.unique_covers(
+            ws,
+            ws,
+            ks
+          )(
+            Reach.within_self(
+              ~List<&2, Bool>,
+              ~Tries.Trie.same_key,
+              ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+              ws
+            )
+          )
+        )
+        +yz = Reach.within_trans(
+          ~List<&2, Bool>,
+          ~Tries.Trie.same_key,
+          ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+          unique1,
+          ws,
+          zs
+        )(Reach.unique_within(ws, seen1))(h1)
+        +b = Reach.within_trans(
+          ~List<&2, Bool>,
+          ~Tries.Trie.same_key,
+          ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+          zs,
+          List.append(&2, List<&2, Bool>, ks, ws),
+          append1
+        )(h2)(a)
+        +j3 = Reach.next_grown(
+          ~List<&2, Bool>,
+          ~V,
+          ~Tries.Trie.same_key,
+          ~succ,
+          ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+          ks,
+          unique1,
+          g
+        )(
+          Reach.within_trans(
+            ~List<&2, Bool>,
+            ~Tries.Trie.same_key,
+            ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+            Reach.next(~List<&2, Bool>, ~V, ~succ, ks, g),
+            List.append(&2, List<&2, Bool>, ks, ws),
+            append1
+          )(h3)(a)
+        )
+        %Equal.sym(
+          Tries.Trie<Unit>,
+          Reach.fill(~V, ~succ, 1n+e, ws, g, seen1),
+          Reach.fill(
+            ~V,
+            ~succ,
+            e,
+            next1,
+            g,
+            Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, unique1, seen1)
+          ),
+          Reach.fill_step(~V, ~succ, e, ws, g, seen1)
+        ): {
+          Tries.Trie.has(
+            Unit,
+            _,
+            m
+          )
+            == Bool.or(
+              List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m),
+              Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m), go1)
+            ): Bool
+        }
+        %Reach.put_append(
+          ks,
+          unique1,
+          Tries.Trie.new(Unit)
+        ): {
+          Tries.Trie.has(
+            Unit,
+            Reach.fill(~V, ~succ, e, next1, g, _),
+            m
+          )
+            == Bool.or(
+              List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m),
+              Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m), go1)
+            ): Bool
+        }
+        Equal.trans(
+          Bool,
+          Tries.Trie.has(
+            Unit,
+            Reach.fill(
+              ~V,
+              ~succ,
+              e,
+              next1,
+              g,
+              Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, append1, Tries.Trie.new(Unit))
+            ),
+            m
+          ),
+          Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, append1, m), go1),
+          Bool.or(
+            List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m),
+            Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m), go1)
+          ),
+          Reach.fill_go(
+            ~V,
+            ~succ,
+            e,
+            next1,
+            next2,
+            append1,
+            g,
+            m
+          )(
+            Reach.next_within(
+              ~List<&2, Bool>,
+              ~V,
+              ~Tries.Trie.same_key,
+              ~succ,
+              ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+              unique1,
+              zs,
+              g
+            )(yz)
+          )(
+            Reach.within_trans(
+              ~List<&2, Bool>,
+              ~Tries.Trie.same_key,
+              ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+              next2,
+              Reach.next(~List<&2, Bool>, ~V, ~succ, append1, g),
+              List.append(&2, List<&2, Bool>, append1, next1)
+            )(
+              Reach.next_within(
+                ~List<&2, Bool>,
+                ~V,
+                ~Tries.Trie.same_key,
+                ~succ,
+                ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+                zs,
+                append1,
+                g
+              )(b)
+            )(j3)
+          )(j3),
+          (
+            %Equal.sym(Bool, List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, append1, m), Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m), List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m)), Reach.or_within(~List<&2, Bool>, ~Tries.Trie.same_key, ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()), ks, unique1, zs, m)(yz)(b)): {Bool.or(_, go1) == Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m), Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m), go1)): Bool}
+            Reach.or_assoc(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m), List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m), go1))
+        )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# the fast search finds exactly what the search finds
+law Reach.all_in:
+  for ~V: Data
+  for ~succ: V -> List<&2, Bool> -> List<&2, List<&2, Bool>>
+  for ~nodes: V -> List<&2, List<&2, Bool>>
+  for +g: V
+  for +x: List<&2, Bool>
+  for +m: List<&2, Bool>
+  {
+    Tries.Trie.has(
+      Unit,
+      Reach.all(~V, ~succ, ~nodes, g, x),
+      m
+    )
+      == Reach.in(~List<&2, Bool>, ~V, ~Tries.Trie.same_key, ~succ, ~nodes, g, x, m): Bool
+  }
+
+def Reach.all_in(gt, succ, nodes, g, x, m):
+  +level1 = succ(g)(x)
+  Reach.fill_go(
+    ~gt,
+    ~succ,
+    List.length(&2, List<&2, Bool>, nodes(g)),
+    level1,
+    level1,
+    [],
+    g,
+    m
+  )(
+    Reach.within_self(
+      ~List<&2, Bool>,
+      ~Tries.Trie.same_key,
+      ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+      level1
+    )
+  )(
+    Reach.within_self(
+      ~List<&2, Bool>,
+      ~Tries.Trie.same_key,
+      ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+      level1
+    )
+  )({==})
+
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
