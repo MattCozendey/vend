@@ -3470,3 +3470,16 @@ law Node.sync_grows:
   for +s: State()
   for +t: Ledgers.State(Ask)
   {Node.grows(s, Node.sync(n, s, t)) == True{}: Bool}
+
+# a change counts once, however often and wherever it is sent: a node that
+# took a request in changes nothing when any node sends its ID again
+law Node.ask_once:
+  for +n: String
+  for +m: String
+  for +s: State()
+  for +e: Envelope
+  for +q: Ask
+  for +e2: Envelope
+  for +q2: Ask
+  {Envelope.of(e2) == Envelope.of(e): Ledgers.Id}
+    -> {Node.ask(m, Node.ask(n, s, e, q), e2, q2) == Node.ask(n, s, e, q): State()}

@@ -43,7 +43,9 @@ before. Its laws were all proven on that design; they are restated on this one i
 - Quorum, trie, cell, tree, rope, codes, formats: as before (`Tree.get_set`, `get_other`,
   `get_grows`, `Rope.read_put`, `read_grows`, ...).
 - Core: `Ask.same` (requests are the same exactly when equal), `Own.takes_inside` (the owners of a
-  line are the nodes inside its owner group).
+  line are the nodes inside its owner group), `Node.ask_grows`, `Node.take_grows`,
+  `Node.sync_grows` (a node's ledger only grows, whatever it receives), `Node.ask_once` (a change
+  counts once).
 
 A run of the new core (not a law): one node starts a store, makes a branch, writes, refuses a
 write with no base as Stale, writes on a base, marks, and a second node catches up by sync, writes
@@ -51,11 +53,10 @@ write with no base as Stale, writes on a base, marks, and a second node catches 
 
 ## 3. Open: laws to state and prove on this design, in order
 
-1. **A node's ledger only grows** through `ask`, `cast`, `advance`, `take`, `sync`.
 2. **A log only gains keys** through `Step.run` (from `Tree.get_other`): then answers move forward
    only (Stale and Refused final, taken stays taken), versions only grow at the end, a version
    never changes, a mark is for good.
-3. **A change counts once** (`ask` of a held ID changes nothing; a request in the log is skipped).
+3. **A request in the log is skipped** by a step (the other half of "counts once").
 4. **A writer reads its own pending write** (the proof of the old `draft_own` carries over).
 5. **A sole owner's write is Written and reads back**, with no premise about slots.
 6. **A head is the end of a chain of decided, checked steps** (the invariant), kept by each
@@ -63,6 +64,12 @@ write with no base as Stale, writes on a base, marks, and a second node catches 
 7. A merge keeps a change that only one side made; a move records a version equal to its target.
 
 ## 4. Open: design
+
+- **Check data after it is put.** `Tree.get_set` and `Tree.get_other` ask that the store holds the
+  new nodes. A put into a slot that holds other words (a clash of hashes, or a bad entry) does not.
+  The old design carried this as a premise (`Data.fresh`). Fix: `Work.of`, `Run.content`,
+  `Cast.put` and `Advance.ran` read the new nodes back, and wait when the store does not hold
+  them. Then laws 2 and 5 need no premise about the store. Do this before law 2.
 
 - **Missing is not absent.** A tree read gives none for both. An owner that lacks data can refuse
   where it must wait. Fix: `Found`, `Absent`, `Missing{hash}` in `tree.bend` and `rope.bend`.
