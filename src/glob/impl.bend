@@ -2250,10 +2250,9 @@ def Search.decide_absent(
 } -> {Spec.Query.holds(q, p) == False{}: Bool}:
   match r:
     case Searches.Hit{w}:
-      p0 = String.from_list(w)
       h => Empty.absurd(
         {Spec.Query.holds(q, p) == False{}: Bool},
-        Search.found_if_absent(p0, Query.holds.fast(q, p0, g))(h)
+        Search.found_if_absent(String.from_list(w), Query.holds.fast(q, String.from_list(w), g))(h)
       )
     case Searches.Closed{+xs}:
       h => Search.absent_if_absent(q, xs, g, p, Search.proves(q, xs, g))({==}, h)
