@@ -17746,6 +17746,150 @@ def Seal.accept_honest(mach, kern, s, b, c, s2):
     u => Ballot.honest(~mach, s, b)
   )(Accept.keeps(~mach, ~kern, s, b, c, s2, ec, ea))
 
+# the keys of a node with new keys are those keys
+def Keys.keyed(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  ks: Keys
+) -> {State.keys(~mach, State.keyed(~mach, s, ks)) == ks: Keys}:
+  match s:
+    case Node{l, hs, ws, old}:
+      {==}
+
+# the signings of keys after a kept ballot: the ballot is the first after its
+# link, with the key of its chain
+def Keys.kept.signed(
+  ks: Keys,
+  c: Keychain,
+  b: Ledgers.Ballot
+) -> {
+  Keys.signed(
+    Keys.kept(ks, c, b)
+  )
+    == Tries.Trie.set(
+      List<&2, Signing>,
+      Keys.signed(ks),
+      Seal.link(Ballot.store(b), Ballot.node(b), Ballot.prev(b)),
+      Signing{
+        Keychain.key(c),
+        b
+      }
+        <> Signings.at(Keys.signed(ks), Seal.link(Ballot.store(b), Ballot.node(b), Ballot.prev(b)))
+    ): Tries.Trie<List<&2, Signing>>
+}:
+  match ks b:
+    case Keys{seed, cs, as, rs, ss} Ledgers.Ballot{Ledgers.Signed{Ledgers.Where{l, h, r}, n, a}, x}:
+      {==}
+
+# the signings after a link are those that were set there
+def Signings.at_set(
+  ss: Tries.Trie<List<&2, Signing>>,
+  +k: List<&2, Bool>,
+  v: List<&2, Signing>
+) -> {Signings.at(Tries.Trie.set(List<&2, Signing>, ss, k, v), k) == v: List<&2, Signing>}:
+  %Equal.sym(
+    Maybe<&2, List<&2, Signing>>,
+    Tries.Trie.get(List<&2, Signing>, Tries.Trie.set(List<&2, Signing>, ss, k, v), k),
+    Bool.pick(
+      Maybe<&2, List<&2, Signing>>,
+      Tries.Trie.same_key(k, k),
+      Some{v},
+      Tries.Trie.get(List<&2, Signing>, ss, k)
+    ),
+    Tries.Trie.get_set(List<&2, Signing>, ss, k, v, k)
+  ): {Maybe.default(&2, List<&2, Signing>, _, []) == v: List<&2, Signing>}
+  %Equal.sym(
+    Bool,
+    Tries.Trie.same_key(k, k),
+    True{},
+    Shared.List.is_eq_refl(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws(), k)
+  ): {
+    Maybe.default(
+      &2,
+      List<&2, Signing>,
+      Bool.pick(Maybe<&2, List<&2, Signing>>, _, Some{v}, Tries.Trie.get(List<&2, Signing>, ss, k)),
+      []
+    )
+      == v: List<&2, Signing>
+  }
+  {==}
+
+# a node knows what it kept: a ballot that it accepts is then the first of
+# the signings after its link, with the key of its chain. So a fork of the
+# chain there shows against it (Lie.detect_holds)
+law Seal.accept_signs:
+  for ~mach: Machine()
+  for ~kern: Kernel(mach)
+  for +s: Node<Machine.Q(mach)>
+  for +b: Ledgers.Ballot
+  for +c: Keychain
+  for +s2: Node<Machine.Q(mach)>
+  {Seal.chain(~mach, ~kern, s, Ballot.store(b), Ballot.node(b)) == Some{c}: Maybe<&2, Keychain>}
+    -> {Seal.accept(~mach, ~kern, s, b) == Some{s2}: Maybe<&2, Node<Machine.Q(mach)>>}
+    -> {
+      Signings.at(
+        Keys.signed(State.keys(~mach, s2)),
+        Seal.link(Ballot.store(b), Ballot.node(b), Ballot.prev(b))
+      )
+        == Signing{Keychain.key(c), b}
+        <> Signings.at(
+          Keys.signed(State.keys(~mach, s)),
+          Seal.link(Ballot.store(b), Ballot.node(b), Ballot.prev(b))
+        ): List<&2, Signing>
+    }
+
+def Seal.accept_signs(mach, kern, s, b, c, s2):
+  +ec => +ea =>
+    +k = Seal.link(Ballot.store(b), Ballot.node(b), Ballot.prev(b))
+    +ks = State.keys(~mach, s)
+    +s1 = State.led(
+      ~mach,
+      s,
+      Ledgers.State.keep(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, s), b)
+    )
+    +x = State.keyed(~mach, s1, Keys.kept(ks, c, b))
+    %Shared.Maybe.some_inj(Node<Machine.Q(mach)>, x, s2, (
+        %Accept.keeps(~mach, ~kern, s, b, c, s2, ec, ea): {Shared.Maybe.when(Node<Machine.Q(mach)>, _, u => Some{x}) == Some{s2}: Maybe<&2, Node<Machine.Q(mach)>>}
+        %ec: {Seal.accept.at(~mach, s, b, _) == Some{s2}: Maybe<&2, Node<Machine.Q(mach)>>}
+        ea)): {Signings.at(Keys.signed(State.keys(~mach, _)), k) == Signing{Keychain.key(c), b} <> Signings.at(Keys.signed(ks), k): List<&2, Signing>}
+    %Equal.sym(
+      Keys,
+      State.keys(~mach, x),
+      Keys.kept(ks, c, b),
+      Keys.keyed(~mach, s1, Keys.kept(ks, c, b))
+    ):
+      {
+        Signings.at(
+          Keys.signed(_),
+          k
+        )
+          == Signing{Keychain.key(c), b}
+          <> Signings.at(Keys.signed(ks), k): List<&2, Signing>
+      }
+    %Equal.sym(
+      Tries.Trie<List<&2, Signing>>,
+      Keys.signed(Keys.kept(ks, c, b)),
+      Tries.Trie.set(
+        List<&2, Signing>,
+        Keys.signed(ks),
+        k,
+        Signing{Keychain.key(c), b} <> Signings.at(Keys.signed(ks), k)
+      ),
+      Keys.kept.signed(ks, c, b)
+    ): {
+      Signings.at(
+        _,
+        k
+      )
+        == Signing{Keychain.key(c), b}
+        <> Signings.at(Keys.signed(ks), k): List<&2, Signing>
+    }
+    Signings.at_set(
+      Keys.signed(ks),
+      k,
+      Signing{Keychain.key(c), b} <> Signings.at(Keys.signed(ks), k)
+    )
+
 # a ballot that a node seals with the secret of its chain's key fits the chain.
 # (That no other node can make one is the assumption of Seals: a hash has no
 # known second input.)
@@ -17923,6 +18067,324 @@ def Lie.checks_sealed(mach, kern, s, key, one, two):
         )
       )
     )
+
+# a slot that holds a cell holds one as the ledger grows
+def Held.grows(
+  ~mach: Machine(),
+  l: Ledgers.State(Machine.Q(mach)),
+  l2: Ledgers.State(Machine.Q(mach)),
+  k: List<&2, Bool>,
+  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
+  em: {
+    Ledgers.State.get(
+      ~Machine.Q(mach),
+      l,
+      k
+    )
+      == m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+  }
+) -> {
+  Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, m) == True{}: Bool
+} -> {
+  Ledgers.State.grows(~Machine.Q(mach), ~Machine.same(mach), l, l2) == True{}: Bool
+} -> {
+  Maybe.is_some(
+    &2,
+    Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+    Ledgers.State.get(~Machine.Q(mach), l2, k)
+  )
+    == True{}: Bool
+}:
+  match m:
+    case None{}:
+      e => g => Empty.absurd(
+        {
+          Maybe.is_some(
+            &2,
+            Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+            Ledgers.State.get(~Machine.Q(mach), l2, k)
+          )
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(e)
+      )
+    case Some{c}:
+      e => g =>
+        %Equal.sym(
+          Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
+          Ledgers.State.get(~Machine.Q(mach), l2, k),
+          Some{c},
+          Ledgers.State.held_grows(
+            ~Machine.Q(mach),
+            ~Machine.same(mach),
+            ~Machine.laws(mach),
+            l,
+            l2,
+            k,
+            c
+          )(g)(em)
+        ): {Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, _) == True{}: Bool}
+        {==}
+
+# after a lie that checks is kept, or not, its slot holds a cell
+def Lie.keep.at.holds(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  s: Node<Machine.Q(mach)>,
+  +x: Ledgers.Lie,
+  l: Ledgers.State(Machine.Q(mach)),
+  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
+  em: {
+    Ledgers.State.get(
+      ~Machine.Q(mach),
+      l,
+      Lie.slot(x)
+    )
+      == m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+  }
+) -> {
+  Lie.checks(~mach, ~kern, s, x) == True{}: Bool
+} -> {
+  Maybe.is_some(
+    &2,
+    Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+    Ledgers.State.get(
+      ~Machine.Q(mach),
+      Maybe.default(&2, Ledgers.State(Machine.Q(mach)), Lie.keep.at(~mach, ~kern, s, x, l, m), l),
+      Lie.slot(x)
+    )
+  )
+    == True{}: Bool
+}:
+  match m:
+    case Some{c}:
+      ec =>
+        %Equal.sym(
+          Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
+          Ledgers.State.get(~Machine.Q(mach), l, Lie.slot(x)),
+          Some{c},
+          em
+        ): {Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, _) == True{}: Bool}
+        {==}
+    case None{}:
+      ec =>
+        %Equal.sym(
+          Bool,
+          Lie.checks(~mach, ~kern, s, x),
+          True{},
+          ec
+        ): {
+          Maybe.is_some(
+            &2,
+            Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+            Ledgers.State.get(
+              ~Machine.Q(mach),
+              Maybe.default(
+                &2,
+                Ledgers.State(Machine.Q(mach)),
+                Shared.Maybe.when(
+                  Ledgers.State(Machine.Q(mach)),
+                  _,
+                  u => Some{
+                    Ledgers.State.put(
+                      ~Machine.Q(mach),
+                      ~Machine.same(mach),
+                      l,
+                      Lie.slot(x),
+                      Ledgers.Entry.Lie{x}
+                    )
+                  }
+                ),
+                l
+              ),
+              Lie.slot(x)
+            )
+          )
+            == True{}: Bool
+        }
+        %Equal.sym(
+          Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
+          Ledgers.State.get(
+            ~Machine.Q(mach),
+            Ledgers.State.put(
+              ~Machine.Q(mach),
+              ~Machine.same(mach),
+              l,
+              Lie.slot(x),
+              Ledgers.Entry.Lie{x}
+            ),
+            Lie.slot(x)
+          ),
+          Some{Cells.One{Ledgers.Entry.Lie{x}}},
+          Ledgers.State.put_get(
+            ~Machine.Q(mach),
+            ~Machine.same(mach),
+            l,
+            Lie.slot(x),
+            Ledgers.Entry.Lie{x}
+          )(em)
+        ): {Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, _) == True{}: Bool}
+        {==}
+
+# when a ballot makes a lie that checks with one of some signings, the slot
+# of the lie then holds a cell
+def Lie.against.holds(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  pre: List<&2, Signing>,
+  +post: List<&2, Signing>,
+  key: Hashes.Hash,
+  a: Ledgers.Ballot,
+  +b: Ledgers.Ballot,
+  +l: Ledgers.State(Machine.Q(mach))
+) -> {
+  Lie.checks(~mach, ~kern, s, Ledgers.Lie{key, a, b}) == True{}: Bool
+} -> {
+  Maybe.is_some(
+    &2,
+    Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+    Ledgers.State.get(
+      ~Machine.Q(mach),
+      Lie.against(~mach, ~kern, s, List.append(&2, Signing, pre, Signing{key, a} <> post), b, l),
+      Ledgers.Slot.lie(Ballot.store(a), Ballot.node(a))
+    )
+  )
+    == True{}: Bool
+}:
+  match pre:
+    case Nil{}:
+      +x = {Ledgers.Lie{key, a, b}: Ledgers.Lie}
+      +l1 = Maybe.default(&2, Ledgers.State(Machine.Q(mach)), Lie.keep(~mach, ~kern, s, x, l), l)
+      ec => Held.grows(
+        ~mach,
+        l1,
+        Lie.against(~mach, ~kern, s, post, b, l1),
+        Lie.slot(x),
+        Ledgers.State.get(~Machine.Q(mach), l1, Lie.slot(x)),
+        {==}
+      )(
+        Lie.keep.at.holds(
+          ~mach,
+          ~kern,
+          s,
+          x,
+          l,
+          Ledgers.State.get(~Machine.Q(mach), l, Lie.slot(x)),
+          {==}
+        )(ec)
+      )(Lie.against.grows(~mach, ~kern, s, post, b, l1))
+    case Con{Signing{k2, a2}, r}:
+      Lie.against.holds(
+        ~mach,
+        ~kern,
+        s,
+        r,
+        post,
+        key,
+        a,
+        b,
+        Maybe.default(
+          &2,
+          Ledgers.State(Machine.Q(mach)),
+          Lie.keep(~mach, ~kern, s, Ledgers.Lie{k2, a2, b}, l),
+          l
+        )
+      )
+
+# a node sees a lie: when s kept the ballot a after the link of the ballot b
+# as the one that the key signs, s did not keep b there, and the lie that
+# they make checks, the ledger then holds a proof against their node in their
+# store (that lie, or one that it held)
+law Lie.detect_holds:
+  for ~mach: Machine()
+  for ~kern: Kernel(mach)
+  for +s: Node<Machine.Q(mach)>
+  for +key: Hashes.Hash
+  for +a: Ledgers.Ballot
+  for +b: Ledgers.Ballot
+  for +pre: List<&2, Signing>
+  for +post: List<&2, Signing>
+  for +l: Ledgers.State(Machine.Q(mach))
+  {
+    Signings.at(
+      Keys.signed(State.keys(~mach, s)),
+      Seal.link(Ballot.store(b), Ballot.node(b), Ballot.prev(b))
+    )
+      == List.append(&2, Signing, pre, Signing{key, a} <> post): List<&2, Signing>
+  }
+    -> {Signings.has(List.append(&2, Signing, pre, Signing{key, a} <> post), b) == False{}: Bool}
+    -> {Lie.checks(~mach, ~kern, s, Ledgers.Lie{key, a, b}) == True{}: Bool}
+    -> {
+      Maybe.is_some(
+        &2,
+        Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+        Ledgers.State.get(
+          ~Machine.Q(mach),
+          Lie.detect(~mach, ~kern, s, b, l),
+          Ledgers.Slot.lie(Ballot.store(a), Ballot.node(a))
+        )
+      )
+        == True{}: Bool
+    }
+
+def Lie.detect_holds(mach, kern, s, key, a, b, pre, post, l):
+  ex => eh => ec =>
+    %Equal.sym(
+      List<&2, Signing>,
+      Signings.at(
+        Keys.signed(State.keys(~mach, s)),
+        Seal.link(Ballot.store(b), Ballot.node(b), Ballot.prev(b))
+      ),
+      List.append(&2, Signing, pre, Signing{key, a} <> post),
+      ex
+    ): {
+      Maybe.is_some(
+        &2,
+        Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+        Ledgers.State.get(
+          ~Machine.Q(mach),
+          Shared.Bool.when(
+            Ledgers.State(Machine.Q(mach)),
+            Signings.has(_, b),
+            u => l,
+            u => Lie.against(~mach, ~kern, s, _, b, l)
+          ),
+          Ledgers.Slot.lie(Ballot.store(a), Ballot.node(a))
+        )
+      )
+        == True{}: Bool
+    }
+    %Equal.sym(
+      Bool,
+      Signings.has(List.append(&2, Signing, pre, Signing{key, a} <> post), b),
+      False{},
+      eh
+    ): {
+      Maybe.is_some(
+        &2,
+        Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+        Ledgers.State.get(
+          ~Machine.Q(mach),
+          Shared.Bool.when(
+            Ledgers.State(Machine.Q(mach)),
+            _,
+            u => l,
+            u => Lie.against(
+              ~mach,
+              ~kern,
+              s,
+              List.append(&2, Signing, pre, Signing{key, a} <> post),
+              b,
+              l
+            )
+          ),
+          Ledgers.Slot.lie(Ballot.store(a), Ballot.node(a))
+        )
+      )
+        == True{}: Bool
+    }
+    Lie.against.holds(~mach, ~kern, s, pre, post, key, a, b, l)(ec)
 
 # Histories
 # ---------
