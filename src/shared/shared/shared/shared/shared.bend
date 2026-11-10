@@ -2754,19 +2754,6 @@ def U32.is_lt_to_nat(
     U32.cmp_to_nat(a, b)
   )
 
-# two numbers are the same when their codes are
-def U32.is_eq_to_nat(
-  a: U32,
-  b: U32
-) -> {U32.is_eq(a, b) == Nat.is_eq(U32.to_nat(a), U32.to_nat(b)): Bool}:
-  Equal.cong(
-    Cmp,
-    Bool,
-    Cmp.is_eq,
-    U32.cmp(a, b),
-    Nat.cmp(U32.to_nat(a), U32.to_nat(b)),
-    U32.cmp_to_nat(a, b)
-  )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Word.le_ones at the low bit b, with t the comparison of the rests
