@@ -5616,3 +5616,251 @@ def Spec.Node.advance_agrees(a, b, u, c, h):
       )
     )
   )
+
+# Writes
+# ------
+
+# the value of a resource reads back
+def Res.round(m: Maybe<&2, Ropes.Root>) -> {Spec.Res.read(Spec.Res.code(m)) == m: Maybe<&2, Ropes.Root>}:
+  %Equal.sym(
+    Maybe<&2, Codes.Read<Maybe<&2, Ropes.Root>>>,
+    Codes.Code.maybe.read(
+      ~Ropes.Root,
+      ~Ropes.Root.code.read,
+      Codes.Code.maybe(~Ropes.Root, ~Ropes.Root.code, m, [])
+    ),
+    Some{Codes.Read{m, []}},
+    Codes.Code.maybe_read(
+      ~Ropes.Root,
+      ~Ropes.Root.code,
+      ~Ropes.Root.code.read,
+      x => r => Ropes.Root.code_read(x, r),
+      m,
+      []
+    )
+  ): {Spec.Res.of.read(_) == m: Maybe<&2, Ropes.Root>}
+  {==}
+
+# the verdict m takes
+def Took(m: Maybe<&2, Spec.Verdict>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{Spec.Verdict{t, h, ds}}:
+      t
+
+# the tree of the verdict m
+def Took.root(m: Maybe<&2, Spec.Verdict>) -> Maybe<&2, Hashes.Hash>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Spec.Verdict{t, h, ds}}:
+      h
+
+# the new nodes of the verdict m
+def Took.nodes(m: Maybe<&2, Spec.Verdict>) -> List<&2, List<&2, U32>>:
+  match m:
+    case None{}:
+      []
+    case Some{Spec.Verdict{t, h, ds}}:
+      ds
+
+# a verdict that takes, after a verdict, is the verdict of what comes next
+def Then.took(
+  m: Maybe<&2, Bool>,
+  -h: Maybe<&2, Hashes.Hash>,
+  -k: Unit -> Maybe<&2, Spec.Verdict>,
+  -h2: Maybe<&2, Hashes.Hash>,
+  -ds: List<&2, List<&2, U32>>
+) -> {Spec.Judge.then(m, h, k) == Some{Spec.Verdict{True{}, h2, ds}}: Maybe<&2, Spec.Verdict>} -> {k(Unit{}) == Some{Spec.Verdict{True{}, h2, ds}}: Maybe<&2, Spec.Verdict>}:
+  match m:
+    case Some{True{}}:
+      e => e
+    case Some{False{}}:
+      e => Empty.absurd(
+        {k(Unit{}) == Some{Spec.Verdict{True{}, h2, ds}}: Maybe<&2, Spec.Verdict>},
+        Shared.Bool.false_ne_true(
+          Equal.cong(Maybe<&2, Spec.Verdict>, Bool, v => Took(v), Spec.Judge.refuse(h), Some{Spec.Verdict{True{}, h2, ds}}, e)
+        )
+      )
+    case None{}:
+      e => Empty.absurd(
+        {k(Unit{}) == Some{Spec.Verdict{True{}, h2, ds}}: Maybe<&2, Spec.Verdict>},
+        Shared.Maybe.none_ne_some(Spec.Verdict, Spec.Verdict{True{}, h2, ds}, e)
+      )
+
+# a verdict that takes, under a condition, is the verdict of what comes next
+def When.took(
+  b: Bool,
+  -h: Maybe<&2, Hashes.Hash>,
+  -k: Unit -> Maybe<&2, Spec.Verdict>,
+  -h2: Maybe<&2, Hashes.Hash>,
+  -ds: List<&2, List<&2, U32>>
+) -> {Spec.Judge.when(b, h, k) == Some{Spec.Verdict{True{}, h2, ds}}: Maybe<&2, Spec.Verdict>} -> {k(Unit{}) == Some{Spec.Verdict{True{}, h2, ds}}: Maybe<&2, Spec.Verdict>}:
+  match b:
+    case True{}:
+      e => e
+    case False{}:
+      e => Empty.absurd(
+        {k(Unit{}) == Some{Spec.Verdict{True{}, h2, ds}}: Maybe<&2, Spec.Verdict>},
+        Shared.Bool.false_ne_true(
+          Equal.cong(Maybe<&2, Spec.Verdict>, Bool, v => Took(v), Spec.Judge.refuse(h), Some{Spec.Verdict{True{}, h2, ds}}, e)
+        )
+      )
+
+# Set.reads once the node m2 that the put of the new subtree gives is known
+def Set.reads.put(
+  +s: Spec.State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  +hh: Hashes.Hash,
+  +ws: List<&2, List<&2, U32>>,
+  m2: Maybe<&2, Spec.State()>,
+  -h2: Maybe<&2, Hashes.Hash>,
+  -ds: List<&2, List<&2, U32>>,
+  +s3: Spec.State()
+) -> {Spec.Node.set(s, h, k, x) == Some{Trees.Put{hh, ws}}: Maybe<&2, Trees.Put>} -> {
+  Spec.Work.take(Spec.Work.put(m2, Some{hh}, ws, [])) == Some{Spec.Verdict{True{}, h2, ds}}: Maybe<&2, Spec.Verdict>
+} -> {Trees.Tree.holds(~Spec.State(), ~Spec.Store.fetch, s3, ds) == True{}: Bool} -> {Spec.Node.get(s3, h2, k) == Some{x}: Maybe<&2, List<&2, U32>>}:
+  match m2:
+    case None{}:
+      es => e => hd => Empty.absurd(
+        {Spec.Node.get(s3, h2, k) == Some{x}: Maybe<&2, List<&2, U32>>},
+        Shared.Maybe.none_ne_some(Spec.Verdict, Spec.Verdict{True{}, h2, ds}, e)
+      )
+    case Some{sk}:
+      es => +e => hd =>
+        %Equal.cong(
+          Maybe<&2, Spec.Verdict>,
+          Maybe<&2, Hashes.Hash>,
+          v => Took.root(v),
+          Some{Spec.Verdict{True{}, Some{hh}, List.append(&2, List<&2, U32>, ws, [])}},
+          Some{Spec.Verdict{True{}, h2, ds}},
+          e
+        ): {Spec.Node.get(s3, _, k) == Some{x}: Maybe<&2, List<&2, U32>>}
+        Equal.trans(
+          Maybe<&2, List<&2, U32>>,
+          Spec.Node.get(s3, Some{hh}, k),
+          Trees.Tree.get(~Spec.State(), ~Spec.Store.fetch, s3, Some{hh}, k),
+          Some{x},
+          Get.is(s3, Some{hh}, k),
+          Trees.Tree.get_set(
+            ~Spec.State(),
+            ~Spec.Store.fetch,
+            s,
+            s3,
+            h,
+            k,
+            x,
+            Trees.Put{hh, ws}
+          )(
+            Equal.trans(
+              Maybe<&2, Trees.Put>,
+              Trees.Tree.set(~Spec.State(), ~Spec.Store.fetch, s, h, k, x),
+              Spec.Node.set(s, h, k, x),
+              Some{Trees.Put{hh, ws}},
+              Equal.sym(
+                Maybe<&2, Trees.Put>,
+                Spec.Node.set(s, h, k, x),
+                Trees.Tree.set(~Spec.State(), ~Spec.Store.fetch, s, h, k, x),
+                Set.is(s, h, k, x)
+              ),
+              es
+            )
+          )(
+            %Shared.List.append_nil(List<&2, U32>, ws): {Trees.Tree.holds(~Spec.State(), ~Spec.Store.fetch, s3, _) == True{}: Bool}
+            %Equal.sym(
+              List<&2, List<&2, U32>>,
+              List.append(&2, List<&2, U32>, ws, []),
+              ds,
+              Equal.cong(
+                Maybe<&2, Spec.Verdict>,
+                List<&2, List<&2, U32>>,
+                v => Took.nodes(v),
+                Some{Spec.Verdict{True{}, Some{hh}, List.append(&2, List<&2, U32>, ws, [])}},
+                Some{Spec.Verdict{True{}, h2, ds}},
+                e
+              )
+            ): {Trees.Tree.holds(~Spec.State(), ~Spec.Store.fetch, s3, _) == True{}: Bool}
+            hd
+          )
+        )
+
+# a key set in a tree, when the verdict takes the new tree, reads back in a
+# node that holds the new nodes
+def Set.reads(
+  +s: Spec.State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  m: Maybe<&2, Trees.Put>,
+  -h2: Maybe<&2, Hashes.Hash>,
+  -ds: List<&2, List<&2, U32>>,
+  +s3: Spec.State()
+) -> {Spec.Node.set(s, h, k, x) == m: Maybe<&2, Trees.Put>} -> {
+  Spec.Work.take(Spec.Work.of(s, [], m)) == Some{Spec.Verdict{True{}, h2, ds}}: Maybe<&2, Spec.Verdict>
+} -> {Trees.Tree.holds(~Spec.State(), ~Spec.Store.fetch, s3, ds) == True{}: Bool} -> {Spec.Node.get(s3, h2, k) == Some{x}: Maybe<&2, List<&2, U32>>}:
+  match m:
+    case None{}:
+      es => e => hd => Empty.absurd(
+        {Spec.Node.get(s3, h2, k) == Some{x}: Maybe<&2, List<&2, U32>>},
+        Shared.Maybe.none_ne_some(Spec.Verdict, Spec.Verdict{True{}, h2, ds}, e)
+      )
+    case Some{Trees.Put{+hh, +ws}}:
+      Set.reads.put(s, h, k, x, hh, ws, Spec.State.put(s, ws), h2, ds, s3)
+
+def Spec.Judge.write_reads(s, n, base, c, h, h2, ds, s3):
+  e => ep =>
+    %Equal.sym(
+      Maybe<&2, List<&2, U32>>,
+      Spec.Node.get(s3, h2, Spec.Key.res(n)),
+      Some{Spec.Res.code(Spec.Content.root(s, n, c))},
+      Set.reads(
+        s,
+        h,
+        Spec.Key.res(n),
+        Spec.Res.code(Spec.Content.root(s, n, c)),
+        Spec.Node.set(s, h, Spec.Key.res(n), Spec.Res.code(Spec.Content.root(s, n, c))),
+        h2,
+        ds,
+        s3
+      )({==})(
+        When.took(
+          Spec.Roots.same(Spec.Res.root(s, h, n), Spec.Res.root(s, Spec.Node.root_of(s, base), n)),
+          h,
+          x => Spec.Work.take(Spec.Work.set(Spec.Work{s, h, []}, Spec.Key.res(n), Spec.Res.code(Spec.Content.root(s, n, c)))),
+          h2,
+          ds
+        )(
+          Then.took(
+            Spec.Judge.content(s, c),
+            h,
+            w => Spec.Judge.when(
+        Spec.Roots.same(Spec.Res.root(s, h, n), Spec.Res.root(s, Spec.Node.root_of(s, base), n)),
+        h,
+        x => Spec.Work.take(Spec.Work.set(Spec.Work{s, h, []}, Spec.Key.res(n), Spec.Res.code(Spec.Content.root(s, n, c))))
+      ),
+            h2,
+            ds
+          )(
+            Then.took(
+              Spec.Judge.ready_maybe(s, base),
+              h,
+              u => Spec.Judge.then(
+      Spec.Judge.content(s, c),
+      h,
+      w => Spec.Judge.when(
+        Spec.Roots.same(Spec.Res.root(s, h, n), Spec.Res.root(s, Spec.Node.root_of(s, base), n)),
+        h,
+        x => Spec.Work.take(Spec.Work.set(Spec.Work{s, h, []}, Spec.Key.res(n), Spec.Res.code(Spec.Content.root(s, n, c))))
+      )
+    ),
+              h2,
+              ds
+            )(e)
+          )
+        )
+      )(Put.holds(s, ds, s3)(ep))
+    ): {Maybe.bind(&2, List<&2, U32>, Ropes.Root, _, ws => Spec.Res.read(ws)) == Spec.Content.root(s, n, c): Maybe<&2, Ropes.Root>}
+    Res.round(Spec.Content.root(s, n, c))

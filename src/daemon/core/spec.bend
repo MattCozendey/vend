@@ -3869,6 +3869,21 @@ law Node.advance_agrees:
       Node.head_of(Node.advance(a, c), c) == Node.head_of(Node.advance(b, c), c): Maybe<&2, Head>
     }
 
+# a write that its owners take is what the resource holds after it: in a node
+# that holds the new nodes, the resource reads as the content of the write
+law Judge.write_reads:
+  for +s: State()
+  for +n: Resources.Name
+  for +base: Maybe<&2, Ledgers.Id>
+  for +c: Content
+  for +h: Maybe<&2, Hashes.Hash>
+  for +h2: Maybe<&2, Hashes.Hash>
+  for +ds: List<&2, List<&2, U32>>
+  for +s3: State()
+  {Judge.write(s, n, base, c, h) == Some{Verdict{True{}, h2, ds}}: Maybe<&2, Verdict>}
+    -> {State.put(s, ds) == Some{s3}: Maybe<&2, State()>}
+    -> {Res.root(s3, h2, n) == Content.root(s, n, c): Maybe<&2, Ropes.Root>}
+
 # a change counts once, however often and wherever it is sent: a node that
 # took a request in changes nothing when any node sends its ID again
 law Node.ask_once:
