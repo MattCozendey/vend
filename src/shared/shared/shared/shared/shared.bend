@@ -2214,3 +2214,52 @@ def List.some_member(
         hp,
         List.some_member(~A, ~V, ~same, ~p, ~laws, r, x, g)
       )
+
+# reversing xs onto acc holds m exactly when xs or acc holds m
+def List.contains_reverse(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  xs: List<&2, A>,
+  +acc: List<&2, A>,
+  +m: A
+) -> {
+  Bool.or(
+    List.contains(~A, ~same, xs, m),
+    List.contains(~A, ~same, acc, m)
+  )
+    == List.contains(~A, ~same, List.reverse.go(&2, A, xs, acc), m): Bool
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+h, +t}:
+      +e = same(h, m)
+      +ct = List.contains(~A, ~same, t, m)
+      +ca = List.contains(~A, ~same, acc, m)
+      l = Bool.or(List.contains(~A, ~same, h <> t, m), ca)
+      %List.contains_reverse(~A, ~same, t, h <> acc, m): {l == _: Bool}
+      %Equal.sym(
+        Bool,
+        List.any.if(u => ca, e),
+        Bool.or(e, ca),
+        List.any.if_or(e, u => ca)
+      ): {l == Bool.or(ct, _): Bool}
+      %Equal.sym(
+        Bool,
+        List.any.if(u => ct, e),
+        Bool.or(e, ct),
+        List.any.if_or(e, u => ct)
+      ): {Bool.or(_, ca) == Bool.or(ct, Bool.or(e, ca)): Bool}
+      Equal.trans(
+        Bool,
+        Bool.or(Bool.or(e, ct), ca),
+        Bool.or(e, Bool.or(ct, ca)),
+        Bool.or(ct, Bool.or(e, ca)),
+        Equal.sym(
+          Bool,
+          Bool.or(e, Bool.or(ct, ca)),
+          Bool.or(Bool.or(e, ct), ca),
+          Bool.or_assoc(e, ct, ca)
+        ),
+        Bool.or_swap(e, ct, ca)
+      )

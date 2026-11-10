@@ -4503,30 +4503,6 @@ def Glob.cat_agree(
   %Glob.cat_split(p, SNil{}, x2, y2): {Glob.split(p, SNil{}, x, y) == _: Bool}
   Glob.split_agree(p, SNil{}, x, x2, y, y2, ea, eb)
 
-# the Bool shape of one step of Chars.contains_rev
-def Bool.contains_rev_step(
-  e: Bool,
-  t: Bool,
-  a: Bool
-) -> {Bool.or(Bool.or(e, t), a) == Bool.or(t, Bool.or(e, a)): Bool}:
-  match e t a:
-    case False{} False{} False{}:
-      {==}
-    case False{} False{} True{}:
-      {==}
-    case False{} True{} False{}:
-      {==}
-    case False{} True{} True{}:
-      {==}
-    case True{} False{} False{}:
-      {==}
-    case True{} False{} True{}:
-      {==}
-    case True{} True{} False{}:
-      {==}
-    case True{} True{} True{}:
-      {==}
-
 # Alt with Void matches what its left side matches
 def Glob.alt_void(
   +p: String,
@@ -4587,82 +4563,6 @@ def Show.star_point(
   %Glob.cat_eps_r(p, Spec.Star{}): {_ == Spec.Glob.matches(p, Spec.Star{}): Bool}
   {==}
 
-# a list holds c when its head is c or its tail holds c, given b, the first
-def Chars.contains_con.at(
-  h: Char,
-  t: List<&2, Char>,
-  c: Char,
-  b: Bool
-) -> {
-  b == Char.is_eq(h, c): Bool
-} -> {
-  Bool.or(
-    Char.is_eq(h, c),
-    List.contains(~Char, ~Char.is_eq, t, c)
-  )
-    == List.contains(~Char, ~Char.is_eq, Con{h, t}, c): Bool
-}:
-  match b:
-    case False{}:
-      e =>
-        %e: {
-          Bool.or(
-            _,
-            List.contains(~Char, ~Char.is_eq, t, c)
-          )
-            == List.any.if(u => List.contains(~Char, ~Char.is_eq, t, c), _): Bool
-        }
-        {==}
-    case True{}:
-      e =>
-        %e: {
-          Bool.or(
-            _,
-            List.contains(~Char, ~Char.is_eq, t, c)
-          )
-            == List.any.if(u => List.contains(~Char, ~Char.is_eq, t, c), _): Bool
-        }
-        {==}
-
-# a list holds c when its head is c or its tail holds c
-def Chars.contains_con(
-  +h: Char,
-  t: List<&2, Char>,
-  +c: Char
-) -> {
-  Bool.or(
-    Char.is_eq(h, c),
-    List.contains(~Char, ~Char.is_eq, t, c)
-  )
-    == List.contains(~Char, ~Char.is_eq, Con{h, t}, c): Bool
-}:
-  Chars.contains_con.at(h, t, c, Char.is_eq(h, c))({==})
-
-# reversing xs onto acc holds c when xs or acc holds c
-def Chars.contains_rev(
-  xs: List<&2, Char>,
-  +acc: List<&2, Char>,
-  +c: Char
-) -> {
-  Bool.or(
-    List.contains(~Char, ~Char.is_eq, xs, c),
-    List.contains(~Char, ~Char.is_eq, acc, c)
-  )
-    == List.contains(~Char, ~Char.is_eq, List.reverse.go(&2, Char, xs, acc), c): Bool
-}:
-  match xs:
-    case Nil{}:
-      {==}
-    case Con{+h, +t}:
-      e = Char.is_eq(h, c)
-      ct = List.contains(~Char, ~Char.is_eq, t, c)
-      +ca = List.contains(~Char, ~Char.is_eq, acc, c)
-      l = Bool.or(List.contains(~Char, ~Char.is_eq, Con{h, t}, c), ca)
-      %Chars.contains_rev(t, Con{h, acc}, c): {l == _: Bool}
-      %Chars.contains_con(h, acc, c): {l == Bool.or(ct, _): Bool}
-      %Chars.contains_con(h, t, c): {Bool.or(_, ca) == Bool.or(ct, Bool.or(e, ca)): Bool}
-      Bool.contains_rev_step(e, ct, ca)
-
 # a class with its characters reversed matches the same strings
 def Show.class_point(
   p: String,
@@ -4682,7 +4582,9 @@ def Show.class_point(
       i = Spec.is_inner(c)
       +k = List.contains(~Char, ~Char.is_eq, cs, c)
       r = Spec.Glob.matches(t, Spec.Glob.of_bool(Bool.and(i, Bool.xor(n, k))))
-      %Chars.contains_rev(
+      %Shared.List.contains_reverse(
+        ~Char,
+        ~Char.is_eq,
         cs,
         [],
         c
@@ -5863,195 +5765,6 @@ def Esc.read(
   %Read.syms_go(syms)(Esc.no_slash(p, v)): {Some{Glob.lits(p)} == _: Maybe<&2, Spec.Glob>}
   Esc.parse(p, [], True{})
 
-# Lits.cons, given o1 and o2, the comparisons of the two characters
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
-def Lits.cmp_case(
-  cx: U32,
-  dx: U32,
-  o1: Cmp,
-  o2: Cmp,
-  qt: String,
-  pt: String
-) -> {
-  o1 == U32.cmp(cx, dx): Cmp
-} -> {
-  o2 == U32.cmp(dx, cx): Cmp
-} -> {
-  Cmp.is_eq(
-    String.order.go(qt, pt, U32.cmp(dx, cx))
-  )
-    == Bool.and(Cmp.is_eq(U32.cmp(cx, dx)), String.eq(qt, pt)): Bool
-}:
-  match o1 o2:
-    case LT{} LT{}:
-      e1 => e2 =>
-        %e1: {
-          Cmp.is_eq(
-            String.order.go(qt, pt, U32.cmp(dx, cx))
-          )
-            == Bool.and(Cmp.is_eq(_), String.eq(qt, pt)): Bool
-        }
-        %e2: {
-          Cmp.is_eq(
-            String.order.go(qt, pt, _)
-          )
-            == Bool.and(Cmp.is_eq(LT{}), String.eq(qt, pt)): Bool
-        }
-        Texts.String.order_ne_lt(qt, pt)
-    case LT{} EQ{}:
-      e1 => e2 =>
-        z = Shared.Cmp.ne_eq(
-          LT{},
-          Unit{},
-          Equal.trans(
-            Cmp,
-            LT{},
-            U32.cmp(cx, dx),
-            EQ{},
-            e1,
-            Equal.sym(Cmp, EQ{}, U32.cmp(cx, dx), Shared.U32.cmp_swap_eq(dx, cx, e2))
-          )
-        )
-        Empty.absurd(
-          {
-            Cmp.is_eq(
-              String.order.go(qt, pt, U32.cmp(dx, cx))
-            )
-              == Bool.and(Cmp.is_eq(U32.cmp(cx, dx)), String.eq(qt, pt)): Bool
-          },
-          z
-        )
-    case LT{} GT{}:
-      e1 => e2 =>
-        %e1: {
-          Cmp.is_eq(
-            String.order.go(qt, pt, U32.cmp(dx, cx))
-          )
-            == Bool.and(Cmp.is_eq(_), String.eq(qt, pt)): Bool
-        }
-        %e2: {
-          Cmp.is_eq(
-            String.order.go(qt, pt, _)
-          )
-            == Bool.and(Cmp.is_eq(LT{}), String.eq(qt, pt)): Bool
-        }
-        Texts.String.order_ne_gt(qt, pt)
-    case EQ{} LT{}:
-      e1 => e2 =>
-        z = Shared.Cmp.ne_eq(
-          LT{},
-          Unit{},
-          Equal.trans(
-            Cmp,
-            LT{},
-            U32.cmp(dx, cx),
-            EQ{},
-            e2,
-            Equal.sym(Cmp, EQ{}, U32.cmp(dx, cx), Shared.U32.cmp_swap_eq(cx, dx, e1))
-          )
-        )
-        Empty.absurd(
-          {
-            Cmp.is_eq(
-              String.order.go(qt, pt, U32.cmp(dx, cx))
-            )
-              == Bool.and(Cmp.is_eq(U32.cmp(cx, dx)), String.eq(qt, pt)): Bool
-          },
-          z
-        )
-    case EQ{} EQ{}:
-      e1 => e2 =>
-        %e1: {
-          Cmp.is_eq(
-            String.order.go(qt, pt, U32.cmp(dx, cx))
-          )
-            == Bool.and(Cmp.is_eq(_), String.eq(qt, pt)): Bool
-        }
-        %e2: {
-          Cmp.is_eq(
-            String.order.go(qt, pt, _)
-          )
-            == Bool.and(Cmp.is_eq(EQ{}), String.eq(qt, pt)): Bool
-        }
-        {==}
-    case EQ{} GT{}:
-      e1 => e2 =>
-        z = Shared.Cmp.ne_eq(
-          GT{},
-          Unit{},
-          Equal.trans(
-            Cmp,
-            GT{},
-            U32.cmp(dx, cx),
-            EQ{},
-            e2,
-            Equal.sym(Cmp, EQ{}, U32.cmp(dx, cx), Shared.U32.cmp_swap_eq(cx, dx, e1))
-          )
-        )
-        Empty.absurd(
-          {
-            Cmp.is_eq(
-              String.order.go(qt, pt, U32.cmp(dx, cx))
-            )
-              == Bool.and(Cmp.is_eq(U32.cmp(cx, dx)), String.eq(qt, pt)): Bool
-          },
-          z
-        )
-    case GT{} LT{}:
-      e1 => e2 =>
-        %e1: {
-          Cmp.is_eq(
-            String.order.go(qt, pt, U32.cmp(dx, cx))
-          )
-            == Bool.and(Cmp.is_eq(_), String.eq(qt, pt)): Bool
-        }
-        %e2: {
-          Cmp.is_eq(
-            String.order.go(qt, pt, _)
-          )
-            == Bool.and(Cmp.is_eq(GT{}), String.eq(qt, pt)): Bool
-        }
-        Texts.String.order_ne_lt(qt, pt)
-    case GT{} EQ{}:
-      e1 => e2 =>
-        z = Shared.Cmp.ne_eq(
-          GT{},
-          Unit{},
-          Equal.trans(
-            Cmp,
-            GT{},
-            U32.cmp(cx, dx),
-            EQ{},
-            e1,
-            Equal.sym(Cmp, EQ{}, U32.cmp(cx, dx), Shared.U32.cmp_swap_eq(dx, cx, e2))
-          )
-        )
-        Empty.absurd(
-          {
-            Cmp.is_eq(
-              String.order.go(qt, pt, U32.cmp(dx, cx))
-            )
-              == Bool.and(Cmp.is_eq(U32.cmp(cx, dx)), String.eq(qt, pt)): Bool
-          },
-          z
-        )
-    case GT{} GT{}:
-      e1 => e2 =>
-        %e1: {
-          Cmp.is_eq(
-            String.order.go(qt, pt, U32.cmp(dx, cx))
-          )
-            == Bool.and(Cmp.is_eq(_), String.eq(qt, pt)): Bool
-        }
-        %e2: {
-          Cmp.is_eq(
-            String.order.go(qt, pt, _)
-          )
-            == Bool.and(Cmp.is_eq(GT{}), String.eq(qt, pt)): Bool
-        }
-        Texts.String.order_ne_gt(qt, pt)
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
 # one character of Lits.match
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
 def Lits.cons(
@@ -6080,7 +5793,7 @@ def Lits.cons(
   %Glob.cat_void_l(qt, x): {s == Bool.or(Bool.and(e1, Spec.Glob.matches(qt, l)), _): Bool}
   %Shared.Bool.or_false(Bool.and(e1, Spec.Glob.matches(qt, l))): {s == _: Bool}
   %ih: {s == Bool.and(e1, _): Bool}
-  Lits.cmp_case(cx, dx, U32.cmp(cx, dx), U32.cmp(dx, cx), qt, pt)({==}, {==})
+  Texts.String.eq_cons(cx, dx, qt, pt)
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the Lits of p match exactly p
@@ -6110,6 +5823,3 @@ def Spec.read_after_escape(p, v):
   )
   (h, (read, q => Equal.sym(Bool, String.eq(q, p), Spec.Glob.matches(q, h), Lits.match(q, p))))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# Fast selection
-# --------------

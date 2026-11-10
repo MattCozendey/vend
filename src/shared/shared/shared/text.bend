@@ -2209,3 +2209,208 @@ def String.order_ne_gt(
       {==}
     case SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
       {==}
+
+# String.eq_cons, given o1 and o2, the comparisons of the two characters
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+def String.eq_cons.at(
+  cx: U32,
+  dx: U32,
+  o1: Cmp,
+  o2: Cmp,
+  qt: String,
+  pt: String
+) -> {
+  o1 == U32.cmp(cx, dx): Cmp
+} -> {
+  o2 == U32.cmp(dx, cx): Cmp
+} -> {
+  Cmp.is_eq(
+    String.order.go(qt, pt, U32.cmp(dx, cx))
+  )
+    == Bool.and(Cmp.is_eq(U32.cmp(cx, dx)), String.eq(qt, pt)): Bool
+}:
+  match o1 o2:
+    case LT{} LT{}:
+      e1 => e2 =>
+        %e1: {
+          Cmp.is_eq(
+            String.order.go(qt, pt, U32.cmp(dx, cx))
+          )
+            == Bool.and(Cmp.is_eq(_), String.eq(qt, pt)): Bool
+        }
+        %e2: {
+          Cmp.is_eq(
+            String.order.go(qt, pt, _)
+          )
+            == Bool.and(Cmp.is_eq(LT{}), String.eq(qt, pt)): Bool
+        }
+        String.order_ne_lt(qt, pt)
+    case LT{} EQ{}:
+      e1 => e2 =>
+        z = Shared.Cmp.ne_eq(
+          LT{},
+          Unit{},
+          Equal.trans(
+            Cmp,
+            LT{},
+            U32.cmp(cx, dx),
+            EQ{},
+            e1,
+            Equal.sym(Cmp, EQ{}, U32.cmp(cx, dx), Shared.U32.cmp_swap_eq(dx, cx, e2))
+          )
+        )
+        Empty.absurd(
+          {
+            Cmp.is_eq(
+              String.order.go(qt, pt, U32.cmp(dx, cx))
+            )
+              == Bool.and(Cmp.is_eq(U32.cmp(cx, dx)), String.eq(qt, pt)): Bool
+          },
+          z
+        )
+    case LT{} GT{}:
+      e1 => e2 =>
+        %e1: {
+          Cmp.is_eq(
+            String.order.go(qt, pt, U32.cmp(dx, cx))
+          )
+            == Bool.and(Cmp.is_eq(_), String.eq(qt, pt)): Bool
+        }
+        %e2: {
+          Cmp.is_eq(
+            String.order.go(qt, pt, _)
+          )
+            == Bool.and(Cmp.is_eq(LT{}), String.eq(qt, pt)): Bool
+        }
+        String.order_ne_gt(qt, pt)
+    case EQ{} LT{}:
+      e1 => e2 =>
+        z = Shared.Cmp.ne_eq(
+          LT{},
+          Unit{},
+          Equal.trans(
+            Cmp,
+            LT{},
+            U32.cmp(dx, cx),
+            EQ{},
+            e2,
+            Equal.sym(Cmp, EQ{}, U32.cmp(dx, cx), Shared.U32.cmp_swap_eq(cx, dx, e1))
+          )
+        )
+        Empty.absurd(
+          {
+            Cmp.is_eq(
+              String.order.go(qt, pt, U32.cmp(dx, cx))
+            )
+              == Bool.and(Cmp.is_eq(U32.cmp(cx, dx)), String.eq(qt, pt)): Bool
+          },
+          z
+        )
+    case EQ{} EQ{}:
+      e1 => e2 =>
+        %e1: {
+          Cmp.is_eq(
+            String.order.go(qt, pt, U32.cmp(dx, cx))
+          )
+            == Bool.and(Cmp.is_eq(_), String.eq(qt, pt)): Bool
+        }
+        %e2: {
+          Cmp.is_eq(
+            String.order.go(qt, pt, _)
+          )
+            == Bool.and(Cmp.is_eq(EQ{}), String.eq(qt, pt)): Bool
+        }
+        {==}
+    case EQ{} GT{}:
+      e1 => e2 =>
+        z = Shared.Cmp.ne_eq(
+          GT{},
+          Unit{},
+          Equal.trans(
+            Cmp,
+            GT{},
+            U32.cmp(dx, cx),
+            EQ{},
+            e2,
+            Equal.sym(Cmp, EQ{}, U32.cmp(dx, cx), Shared.U32.cmp_swap_eq(cx, dx, e1))
+          )
+        )
+        Empty.absurd(
+          {
+            Cmp.is_eq(
+              String.order.go(qt, pt, U32.cmp(dx, cx))
+            )
+              == Bool.and(Cmp.is_eq(U32.cmp(cx, dx)), String.eq(qt, pt)): Bool
+          },
+          z
+        )
+    case GT{} LT{}:
+      e1 => e2 =>
+        %e1: {
+          Cmp.is_eq(
+            String.order.go(qt, pt, U32.cmp(dx, cx))
+          )
+            == Bool.and(Cmp.is_eq(_), String.eq(qt, pt)): Bool
+        }
+        %e2: {
+          Cmp.is_eq(
+            String.order.go(qt, pt, _)
+          )
+            == Bool.and(Cmp.is_eq(GT{}), String.eq(qt, pt)): Bool
+        }
+        String.order_ne_lt(qt, pt)
+    case GT{} EQ{}:
+      e1 => e2 =>
+        z = Shared.Cmp.ne_eq(
+          GT{},
+          Unit{},
+          Equal.trans(
+            Cmp,
+            GT{},
+            U32.cmp(cx, dx),
+            EQ{},
+            e1,
+            Equal.sym(Cmp, EQ{}, U32.cmp(cx, dx), Shared.U32.cmp_swap_eq(dx, cx, e2))
+          )
+        )
+        Empty.absurd(
+          {
+            Cmp.is_eq(
+              String.order.go(qt, pt, U32.cmp(dx, cx))
+            )
+              == Bool.and(Cmp.is_eq(U32.cmp(cx, dx)), String.eq(qt, pt)): Bool
+          },
+          z
+        )
+    case GT{} GT{}:
+      e1 => e2 =>
+        %e1: {
+          Cmp.is_eq(
+            String.order.go(qt, pt, U32.cmp(dx, cx))
+          )
+            == Bool.and(Cmp.is_eq(_), String.eq(qt, pt)): Bool
+        }
+        %e2: {
+          Cmp.is_eq(
+            String.order.go(qt, pt, _)
+          )
+            == Bool.and(Cmp.is_eq(GT{}), String.eq(qt, pt)): Bool
+        }
+        String.order_ne_gt(qt, pt)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# two strings with a first character are equal exactly when the characters
+# are, compared the other way round, and the rests are
+def String.eq_cons(
+  +cx: U32,
+  +dx: U32,
+  qt: String,
+  pt: String
+) -> {
+  String.eq(
+    SCon{Chr{dx}, qt},
+    SCon{Chr{cx}, pt}
+  )
+    == Bool.and(Cmp.is_eq(U32.cmp(cx, dx)), String.eq(qt, pt)): Bool
+}:
+  String.eq_cons.at(cx, dx, U32.cmp(cx, dx), U32.cmp(dx, cx), qt, pt)({==}, {==})
