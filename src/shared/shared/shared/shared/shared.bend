@@ -2294,6 +2294,7 @@ def List.contains_reverse(
         Bool.or_swap(e, ct, ca)
       )
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a number below 1 + p is at most p
 def Nat.lt_succ_le(
   a: Nat,
@@ -2308,6 +2309,7 @@ def Nat.lt_succ_le(
       h => h
     case 1n+b 1n+q:
       h => Nat.lt_succ_le(b, q)(h)
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # a number below d is at most the number before d
 def Nat.lt_before(
@@ -2352,6 +2354,7 @@ def Nat.succ_nle(a: Nat) -> {Nat.is_le(1n+a, a) == False{}: Bool}:
     case 1n+p:
       Nat.succ_nle(p)
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a number not at most b is at least b plus one
 def Nat.nle_succ_le(
   a: Nat,
@@ -2366,6 +2369,7 @@ def Nat.nle_succ_le(
       h => Nat.le_zero(p)
     case 1n+p 1n+q:
       Nat.nle_succ_le(p, q)
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # the doubles of two numbers compare as the numbers do; a bit added to each
 # double decides only a tie
@@ -2416,13 +2420,14 @@ def Nat.cmp_double(
     case 1n+p 1n+q True{} True{}:
       Nat.cmp_double(p, q, True{}, True{})
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Word.cmp_to_nat at the low bits ab and bb, from the same fact of the rests
 def Word.cmp_to_nat.con(
   +p: Nat,
   ab: Bool,
   bb: Bool,
-  +at: Word(p),
-  +bt: Word(p),
+  at: Word(p),
+  bt: Word(p),
   ih: {Word.cmp(p, at, bt) == Nat.cmp(Word.to_nat(p, at), Word.to_nat(p, bt)): Cmp}
 ) -> {
   Word.cmp(
@@ -2435,20 +2440,49 @@ def Word.cmp_to_nat.con(
   match ab bb:
     case False{} False{}:
       %Equal.sym(Cmp, Word.cmp(p, at, bt), Nat.cmp(Word.to_nat(p, at), Word.to_nat(p, bt)), ih):
-        {Word.cmp.fin(False{}, False{}, _) == Nat.cmp(Nat.double(Word.to_nat(p, at)), Nat.double(Word.to_nat(p, bt))): Cmp}
+        {
+          Word.cmp.fin(
+            False{},
+            False{},
+            _
+          )
+            == Nat.cmp(Nat.double(Word.to_nat(p, at)), Nat.double(Word.to_nat(p, bt))): Cmp
+        }
       Nat.cmp_double(Word.to_nat(p, at), Word.to_nat(p, bt), False{}, False{})
     case False{} True{}:
       %Equal.sym(Cmp, Word.cmp(p, at, bt), Nat.cmp(Word.to_nat(p, at), Word.to_nat(p, bt)), ih):
-        {Word.cmp.fin(False{}, True{}, _) == Nat.cmp(Nat.double(Word.to_nat(p, at)), 1n+Nat.double(Word.to_nat(p, bt))): Cmp}
+        {
+          Word.cmp.fin(
+            False{},
+            True{},
+            _
+          )
+            == Nat.cmp(Nat.double(Word.to_nat(p, at)), 1n+Nat.double(Word.to_nat(p, bt))): Cmp
+        }
       Nat.cmp_double(Word.to_nat(p, at), Word.to_nat(p, bt), False{}, True{})
     case True{} False{}:
       %Equal.sym(Cmp, Word.cmp(p, at, bt), Nat.cmp(Word.to_nat(p, at), Word.to_nat(p, bt)), ih):
-        {Word.cmp.fin(True{}, False{}, _) == Nat.cmp(1n+Nat.double(Word.to_nat(p, at)), Nat.double(Word.to_nat(p, bt))): Cmp}
+        {
+          Word.cmp.fin(
+            True{},
+            False{},
+            _
+          )
+            == Nat.cmp(1n+Nat.double(Word.to_nat(p, at)), Nat.double(Word.to_nat(p, bt))): Cmp
+        }
       Nat.cmp_double(Word.to_nat(p, at), Word.to_nat(p, bt), True{}, False{})
     case True{} True{}:
       %Equal.sym(Cmp, Word.cmp(p, at, bt), Nat.cmp(Word.to_nat(p, at), Word.to_nat(p, bt)), ih):
-        {Word.cmp.fin(True{}, True{}, _) == Nat.cmp(Nat.double(Word.to_nat(p, at)), Nat.double(Word.to_nat(p, bt))): Cmp}
+        {
+          Word.cmp.fin(
+            True{},
+            True{},
+            _
+          )
+            == Nat.cmp(Nat.double(Word.to_nat(p, at)), Nat.double(Word.to_nat(p, bt))): Cmp
+        }
       Nat.cmp_double(Word.to_nat(p, at), Word.to_nat(p, bt), True{}, True{})
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # two words compare as their codes do
 def Word.cmp_to_nat(
@@ -2465,14 +2499,12 @@ def Word.cmp_to_nat(
           Word.cmp_to_nat.con(p, ab, bb, at, bt, Word.cmp_to_nat(p, at, bt))
 
 # two numbers compare as their codes do
-def U32.cmp_to_nat(
-  a: U32,
-  b: U32
-) -> {U32.cmp(a, b) == Nat.cmp(U32.to_nat(a), U32.to_nat(b)): Cmp}:
+def U32.cmp_to_nat(a: U32, b: U32) -> {U32.cmp(a, b) == Nat.cmp(U32.to_nat(a), U32.to_nat(b)): Cmp}:
   match a b:
     case U32{x} U32{y}:
       Word.cmp_to_nat(32n, x, y)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # the order of U32 is the order of the codes
 def U32.is_le_to_nat(
   a: U32,
@@ -2500,17 +2532,13 @@ def U32.is_eq_to_nat(
     Nat.cmp(U32.to_nat(a), U32.to_nat(b)),
     U32.cmp_to_nat(a, b)
   )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # numbers with the same code are the same number
 def U32.to_nat_inj(+a: U32, +b: U32) -> {U32.to_nat(a) == U32.to_nat(b): Nat} -> {a == b: U32}:
   e => U32.is_eq_sound(a, b)((
-      %Equal.sym(
-        Bool,
-        U32.is_eq(a, b),
-        Nat.is_eq(U32.to_nat(a), U32.to_nat(b)),
-        U32.is_eq_to_nat(a, b)
-      ): {_ == True{}: Bool}
-      %e:{Nat.is_eq(U32.to_nat(a), _) == True{}: Bool}
+      %Equal.sym(Bool, U32.is_eq(a, b), Nat.is_eq(U32.to_nat(a), U32.to_nat(b)), U32.is_eq_to_nat(a, b)): {_ == True{}: Bool}
+      %e: {Nat.is_eq(U32.to_nat(a), _) == True{}: Bool}
       Nat.is_eq_refl(U32.to_nat(a))))
 
 # Word.le_ones at the low bit b, with t the comparison of the rests
@@ -2551,7 +2579,9 @@ def U32.le_last(x: U32) -> {U32.is_le(x, 4294967295) == True{}: Bool}:
 # True low bit is the word of all True bits only when its rest is
 def Word.inc_to_nat.rest(
   t: Cmp
-) -> {Cmp.is_eq(Word.cmp.fin(True{}, True{}, t)) == False{}: Bool} -> {Cmp.is_eq(t) == False{}: Bool}:
+) -> {
+  Cmp.is_eq(Word.cmp.fin(True{}, True{}, t)) == False{}: Bool
+} -> {Cmp.is_eq(t) == False{}: Bool}:
   match t:
     case LT{}:
       h => h
@@ -2560,6 +2590,7 @@ def Word.inc_to_nat.rest(
     case GT{}:
       h => h
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # the code of the word after w is one more than the code of w, when w is not
 # the word of all True bits
 def Word.inc_to_nat(
@@ -2582,14 +2613,20 @@ def Word.inc_to_nat(
             Nat.double,
             Word.to_nat(p, Word.inc(p, t)),
             1n+Word.to_nat(p, t),
-            Word.inc_to_nat(p, t)(Word.inc_to_nat.rest(Word.cmp(p, t, Word.not(p, Word.zero(p))))(h))
+            Word.inc_to_nat(
+              p,
+              t
+            )(Word.inc_to_nat.rest(Word.cmp(p, t, Word.not(p, Word.zero(p))))(h))
           )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # the code of the number after x is one more than the code of x, when x is not
 # the last U32
 def U32.inc_to_nat(
   x: U32
-) -> {U32.is_eq(x, 4294967295) == False{}: Bool} -> {U32.to_nat(U32.inc(x)) == 1n+U32.to_nat(x): Nat}:
+) -> {
+  U32.is_eq(x, 4294967295) == False{}: Bool
+} -> {U32.to_nat(U32.inc(x)) == 1n+U32.to_nat(x): Nat}:
   match x:
     case U32{w}:
       Word.inc_to_nat(32n, w)

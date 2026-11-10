@@ -110,10 +110,7 @@ def Spans.covered(ss: List<&2, Span>, +ms: List<&2, Char>) -> Bool:
 def Spans.rep.pick(+m: Char, +best: Char, c: Char) -> Char:
   Bool.pick(
     Char,
-    Bool.and(
-      Nat.is_le(Char.code(m), Char.code(c)),
-      Nat.is_le(Char.code(best), Char.code(m))
-    ),
+    Bool.and(Nat.is_le(Char.code(m), Char.code(c)), Nat.is_le(Char.code(best), Char.code(m))),
     m,
     best
   )
@@ -135,7 +132,10 @@ def Spans.rep(ms: List<&2, Char>, +c: Char) -> Char:
 def Span.is_eq_refl(a: Span) -> {Span.is_eq(a, a) == True{}: Bool}:
   match a:
     case Span{+lo, +hi}:
-      Shared.List.all.if_both(Char.is_eq(lo, lo), u => Char.is_eq(hi, hi))(Shared.Char.is_eq_refl(lo))(Shared.Char.is_eq_refl(hi))
+      Shared.List.all.if_both(
+        Char.is_eq(lo, lo),
+        u => Char.is_eq(hi, hi)
+      )(Shared.Char.is_eq_refl(lo))(Shared.Char.is_eq_refl(hi))
 
 # Span.is_eq is True only for equal spans
 def Span.is_eq_sound(a: Span, b: Span) -> {Span.is_eq(a, b) == True{}: Bool} -> {a == b: Span}:
@@ -175,8 +175,13 @@ def Char.is_eq_codes(
     case Chr{code}:
       match b:
         case Chr{code1}:
-          %Equal.sym(Cmp, U32.cmp(code, code1), Nat.cmp(U32.to_nat(code), U32.to_nat(code1)), Shared.U32.cmp_to_nat(code, code1)) :
-            {Cmp.is_eq(_) == Cmp.is_eq(Nat.cmp(U32.to_nat(code), U32.to_nat(code1))) : Bool}
+          %Equal.sym(
+            Cmp,
+            U32.cmp(code, code1),
+            Nat.cmp(U32.to_nat(code), U32.to_nat(code1)),
+            Shared.U32.cmp_to_nat(code, code1)
+          ):
+            {Cmp.is_eq(_) == Cmp.is_eq(Nat.cmp(U32.to_nat(code), U32.to_nat(code1))): Bool}
           {==}
 
 # a single character is a span
@@ -190,12 +195,42 @@ def Span.has_one(x, c):
     case Chr{+code}:
       match c:
         case Chr{+code1}:
-          %Equal.sym(Cmp, U32.cmp(code, code1), Nat.cmp(U32.to_nat(code), U32.to_nat(code1)), Shared.U32.cmp_to_nat(code, code1)) :
-            {List.all.if(u => U32.is_le(code1, code), Cmp.is_le(_)) == Cmp.is_eq(_) : Bool}
-          %Equal.sym(Bool, List.all.if(u => U32.is_le(code1, code), Cmp.is_le(Nat.cmp(U32.to_nat(code), U32.to_nat(code1)))), Bool.and(Cmp.is_le(Nat.cmp(U32.to_nat(code), U32.to_nat(code1))), U32.is_le(code1, code)), Shared.List.all.if_and(Cmp.is_le(Nat.cmp(U32.to_nat(code), U32.to_nat(code1))), u => U32.is_le(code1, code))) :
-            {_ == Cmp.is_eq(Nat.cmp(U32.to_nat(code), U32.to_nat(code1))) : Bool}
-          %Equal.sym(Cmp, U32.cmp(code1, code), Nat.cmp(U32.to_nat(code1), U32.to_nat(code)), Shared.U32.cmp_to_nat(code1, code)) :
-            {Bool.and(Cmp.is_le(Nat.cmp(U32.to_nat(code), U32.to_nat(code1))), Cmp.is_le(_)) == Cmp.is_eq(Nat.cmp(U32.to_nat(code), U32.to_nat(code1))) : Bool}
+          %Equal.sym(
+            Cmp,
+            U32.cmp(code, code1),
+            Nat.cmp(U32.to_nat(code), U32.to_nat(code1)),
+            Shared.U32.cmp_to_nat(code, code1)
+          ):
+            {List.all.if(u => U32.is_le(code1, code), Cmp.is_le(_)) == Cmp.is_eq(_): Bool}
+          %Equal.sym(
+            Bool,
+            List.all.if(
+              u => U32.is_le(code1, code),
+              Cmp.is_le(Nat.cmp(U32.to_nat(code), U32.to_nat(code1)))
+            ),
+            Bool.and(
+              Cmp.is_le(Nat.cmp(U32.to_nat(code), U32.to_nat(code1))),
+              U32.is_le(code1, code)
+            ),
+            Shared.List.all.if_and(
+              Cmp.is_le(Nat.cmp(U32.to_nat(code), U32.to_nat(code1))),
+              u => U32.is_le(code1, code)
+            )
+          ):
+            {_ == Cmp.is_eq(Nat.cmp(U32.to_nat(code), U32.to_nat(code1))): Bool}
+          %Equal.sym(
+            Cmp,
+            U32.cmp(code1, code),
+            Nat.cmp(U32.to_nat(code1), U32.to_nat(code)),
+            Shared.U32.cmp_to_nat(code1, code)
+          ):
+            {
+              Bool.and(
+                Cmp.is_le(Nat.cmp(U32.to_nat(code), U32.to_nat(code1))),
+                Cmp.is_le(_)
+              )
+                == Cmp.is_eq(Nat.cmp(U32.to_nat(code), U32.to_nat(code1))): Bool
+            }
           Shared.Nat.le_both(U32.to_nat(code), U32.to_nat(code1))
 
 # no code is above the code of the last character
@@ -212,7 +247,12 @@ def Char.after_code(
 ) -> {Char.is_last(c) == False{}: Bool} -> {Char.code(Char.after(c)) == 1n+Char.code(c): Nat}:
   match c:
     case Chr{code}:
-      x => (%Equal.sym(Nat, U32.to_nat(U32.inc(code)), 1n+U32.to_nat(code), Shared.U32.inc_to_nat(code)(x)) : {_ == 1n+U32.to_nat(code) : Nat}; {==})
+      x => (%Equal.sym(
+        Nat,
+        U32.to_nat(U32.inc(code)),
+        1n+U32.to_nat(code),
+        Shared.U32.inc_to_nat(code)(x)
+      ): {_ == 1n+U32.to_nat(code): Nat}; {==})
 
 # Alike characters
 # ----------------
@@ -230,12 +270,15 @@ def Spans.alike_has.at(
     List.all.if(
       u => Spans.alike(r, c, d),
       Shared.Bool.is_eq(Span.has(t, c), Span.has(t, d))
-    ) == True{}: Bool
+    )
+      == True{}: Bool
   },
   hc: {List.any.if(u => List.contains(~Span, ~Span.is_eq, r, s), hit) == True{}: Bool},
   ih: {
     Spans.alike(r, c, d) == True{}: Bool
-  } -> {List.contains(~Span, ~Span.is_eq, r, s) == True{}: Bool} -> {Span.has(s, c) == Span.has(s, d): Bool}
+  } -> {
+    List.contains(~Span, ~Span.is_eq, r, s) == True{}: Bool
+  } -> {Span.has(s, c) == Span.has(s, d): Bool}
 ) -> {Span.has(s, c) == Span.has(s, d): Bool}:
   ?TODO
 
@@ -247,7 +290,9 @@ law Spans.alike_has:
   for s: Span
   {
     Spans.alike(ss, c, d) == True{}: Bool
-  } -> {List.contains(~Span, ~Span.is_eq, ss, s) == True{}: Bool} -> {Span.has(s, c) == Span.has(s, d): Bool}
+  } -> {
+    List.contains(~Span, ~Span.is_eq, ss, s) == True{}: Bool
+  } -> {Span.has(s, c) == Span.has(s, d): Bool}
 
 def Spans.alike_has(ss, c, d, s):
   ?TODO
@@ -308,10 +353,21 @@ def Spans.rep.pick_takes(
   e2: {Nat.is_le(Char.code(best), Char.code(m)) == k2: Bool}
 ) -> {
   k1 == True{}: Bool
-} -> {Nat.is_le(Char.code(m), Char.code(Bool.pick(Char, Bool.and(k1, k2), m, best))) == True{}: Bool}:
+} -> {
+  Nat.is_le(Char.code(m), Char.code(Bool.pick(Char, Bool.and(k1, k2), m, best))) == True{}: Bool
+}:
   match k1:
     case False{}:
-      x => Empty.absurd({Nat.is_le(Char.code(m), Char.code(Bool.pick(Char, Bool.and(False{}, k2), m, best))) == True{} : Bool}, {(%x : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+      x => Empty.absurd(
+        {
+          Nat.is_le(
+            Char.code(m),
+            Char.code(Bool.pick(Char, Bool.and(False{}, k2), m, best))
+          )
+            == True{}: Bool
+        },
+        {(%x: {\{False: Unit; \{True: Empty; \{}}}: Bool -> Type}(_); Unit{}): Empty}
+      )
     case True{}:
       match k2:
         case False{}:
@@ -328,7 +384,15 @@ def Spans.rep_le(
     case Nil{}:
       Shared.Nat.le_zero(Char.code(c))
     case Con{+head, +tail}:
-      Spans.rep.pick_le(Nat.is_le(Char.code(head), Char.code(c)), Nat.is_le(Char.code(Spans.rep(tail, c)), Char.code(head)), head, Spans.rep(tail, c), c, {==}, Spans.rep_le(tail, c))
+      Spans.rep.pick_le(
+        Nat.is_le(Char.code(head), Char.code(c)),
+        Nat.is_le(Char.code(Spans.rep(tail, c)), Char.code(head)),
+        head,
+        Spans.rep(tail, c),
+        c,
+        {==},
+        Spans.rep_le(tail, c)
+      )
 
 # Spans.rep_max at the first mark m, by whether its code is n (hit)
 def Spans.rep_max.at(
@@ -393,12 +457,8 @@ def Span.has_ends(
   +hi: Char,
   +c: Char,
   +d: Char,
-  e1: {
-    Nat.is_le(Char.code(lo), Char.code(c)) == Nat.is_le(Char.code(lo), Char.code(d)): Bool
-  },
-  e2: {
-    Nat.is_le(Char.code(c), Char.code(hi)) == Nat.is_le(Char.code(d), Char.code(hi)): Bool
-  }
+  e1: {Nat.is_le(Char.code(lo), Char.code(c)) == Nat.is_le(Char.code(lo), Char.code(d)): Bool},
+  e2: {Nat.is_le(Char.code(c), Char.code(hi)) == Nat.is_le(Char.code(d), Char.code(hi)): Bool}
 ) -> {Span.has(Span{lo, hi}, c) == Span.has(Span{lo, hi}, d): Bool}:
   ?TODO
 
@@ -407,7 +467,9 @@ def Span.has_rep(
   +ms: List<&2, Char>,
   s: Span,
   +c: Char
-) -> {Span.covered(ms, s) == True{}: Bool} -> {Span.has(s, c) == Span.has(s, Spans.rep(ms, c)): Bool}:
+) -> {
+  Span.covered(ms, s) == True{}: Bool
+} -> {Span.has(s, c) == Span.has(s, Spans.rep(ms, c)): Bool}:
   ?TODO
 
 # Spans.rep_alike from the marks for the ends of the spans alone
@@ -438,7 +500,9 @@ def Spans.rep_in.pick(
   -best: Char
 ) -> {
   List.contains(~Char, ~Char.is_eq, Chr{0} <> r, best) == True{}: Bool
-} -> {List.contains(~Char, ~Char.is_eq, Chr{0} <> m <> r, Bool.pick(Char, k, m, best)) == True{}: Bool}:
+} -> {
+  List.contains(~Char, ~Char.is_eq, Chr{0} <> m <> r, Bool.pick(Char, k, m, best)) == True{}: Bool
+}:
   ?TODO
 
 # the mark for c is a mark of ms or the character of code 0
@@ -462,8 +526,8 @@ def Spans.rep_in.at(
     case False{}:
       hx
     case True{}:
-      %Shared.Char.is_eq_sound('\0', x)(ez) :
-        {List.contains(Char, Char.is_eq, ms, _) == True{} : Bool}
+      %Shared.Char.is_eq_sound('\0', x)(ez):
+        {List.contains(Char, Char.is_eq, ms, _) == True{}: Bool}
       h0
 
 # the mark for c is a mark of ms, when ms holds the character of code 0
@@ -486,8 +550,29 @@ def Spans.marked_head(
   -ms: List<&2, Char>
 ) -> {Spans.marked(m <> ms, Char.code(m)) == True{}: Bool}:
   +m = m
-  %Equal.sym(Bool, Cmp.is_eq(Nat.cmp(Char.code(m), Char.code(m))), True{}, Shared.Cmp.is_eq_of(Nat.cmp(Char.code(m), Char.code(m)), Equal.sym(Cmp, Nat.cmp(Char.code(m), Char.code(m)), EQ{}, Shared.Cmp.is_eq_sound(Nat.cmp(Char.code(m), Char.code(m)))(Shared.Nat.is_eq_refl(Char.code(m)))))) :
-    {List.any.if(u => Shared.List.some(Char, Nat, n => m => Nat.is_eq(Char.code(m), n), ms, Char.code(m)), _) == True{} : Bool}
+  %Equal.sym(
+    Bool,
+    Cmp.is_eq(Nat.cmp(Char.code(m), Char.code(m))),
+    True{},
+    Shared.Cmp.is_eq_of(
+      Nat.cmp(Char.code(m), Char.code(m)),
+      Equal.sym(
+        Cmp,
+        Nat.cmp(Char.code(m), Char.code(m)),
+        EQ{},
+        Shared.Cmp.is_eq_sound(
+          Nat.cmp(Char.code(m), Char.code(m))
+        )(Shared.Nat.is_eq_refl(Char.code(m)))
+      )
+    )
+  ):
+    {
+      List.any.if(
+        u => Shared.List.some(Char, Nat, n => m => Nat.is_eq(Char.code(m), n), ms, Char.code(m)),
+        _
+      )
+        == True{}: Bool
+    }
   {==}
 
 # a list of marks holds a code that the marks after its first hold
@@ -523,9 +608,7 @@ def Spans.covered_more(
   ss: List<&2, Span>,
   +m: Char,
   +ms: List<&2, Char>
-) -> {
-  Spans.covered.go(ss, ms) == True{}: Bool
-} -> {Spans.covered.go(ss, m <> ms) == True{}: Bool}:
+) -> {Spans.covered.go(ss, ms) == True{}: Bool} -> {Spans.covered.go(ss, m <> ms) == True{}: Bool}:
   ?TODO
 
 # Span.marks_covered for the mark after hi, by whether hi is the last
@@ -537,7 +620,11 @@ def Span.marks_covered.end(
   +rest: List<&2, Char>,
   el: {Char.is_last(hi) == last: Bool}
 ) -> {
-  List.any.if(u => Spans.marked(lo <> Char.after(hi) <> rest, 1n+Char.code(hi)), last) == True{}: Bool
+  List.any.if(
+    u => Spans.marked(lo <> Char.after(hi) <> rest, 1n+Char.code(hi)),
+    last
+  )
+    == True{}: Bool
 }:
   ?TODO
 
@@ -551,9 +638,7 @@ def Span.marks_covered(
 # the marks of each span of ss hold a mark for each end of each span of ss
 def Spans.marks_covered.go(
   ss: List<&2, Span>
-) -> {
-  Spans.covered.go(ss, Spans.marks.go(ss)) == True{}: Bool
-}:
+) -> {Spans.covered.go(ss, Spans.marks.go(ss)) == True{}: Bool}:
   ?TODO
 
 # the marks of ss can stand for every character under ss

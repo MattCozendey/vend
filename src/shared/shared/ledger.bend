@@ -3126,6 +3126,7 @@ def State.add_datas_plain(ty, same, laws, ds, s):
         State.add_datas_plain(~ty, ~same, ~laws, r, State.put_data(~ty, ~same, s, ws))
       )
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a trie that holds a key that starts with the key of the round r goes down
 # more than r steps of True
 def Spine.above(
@@ -3155,6 +3156,7 @@ def Spine.above(
       e => Spine.above(V, p, Tries.Leaf{k, v}, tail, y, x)(e)
     case 1n+p Tries.Bin{h, z, o}:
       e => Spine.above(V, p, o, tail, y, x)(e)
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # no ballot that a ledger holds at a height is in a round above the round
 # that it reads there: a slot below the key of the round r, with a cell
