@@ -1,8 +1,10 @@
 import Base
 import ../../shared.bend as Shared
 import ../shared/ledger.bend as Ledgers
+import ../shared/shared/shared/cell.bend as Cells
 import ../shared/shared/shared/code.bend as Codes
 import ../shared/shared/shared/hash.bend as Hashes
+import ../shared/shared/shared/seal.bend as Seals
 import ../shared/shared/shared/trie.bend as Tries
 import ../shared/shared/store.bend as Stores
 import ../shared/tree.bend as Trees
@@ -897,3 +899,760 @@ def Step.run(
   qs: List<&2, Ledgers.Id>
 ) -> Maybe<&2, Run<Machine.Q(Kernel.machine(K))>>:
   Step.all(~K, c, qs, Some{Run{s, t}})
+
+# the place of the ballot b
+def Ballot.at(b: Ledgers.Ballot) -> Ledgers.Where:
+  match b:
+    case Ledgers.Ballot{Ledgers.Signed{w, n, a}, l}:
+      w
+
+# the node of the ballot b
+def Ballot.node(b: Ledgers.Ballot) -> String:
+  match b:
+    case Ledgers.Ballot{Ledgers.Signed{w, n, a}, l}:
+      n
+
+# the place of the ballot before b in its chain
+def Ballot.prev(b: Ledgers.Ballot) -> Maybe<&2, Ledgers.Where>:
+  match b:
+    case Ledgers.Ballot{x, Ledgers.Link{p, k, z}}:
+      p
+
+# the key of the ballot after b in its chain
+def Ballot.next(b: Ledgers.Ballot) -> Hashes.Hash:
+  match b:
+    case Ledgers.Ballot{x, Ledgers.Link{p, k, z}}:
+      k
+
+# the store of the place w
+def Where.store(w: Ledgers.Where) -> Ledgers.Id:
+  match w:
+    case Ledgers.Where{Ledgers.Chain{r, k}, h, z}:
+      r
+
+# the line of the place w
+def Where.line(w: Ledgers.Where) -> Ledgers.Chain:
+  match w:
+    case Ledgers.Where{c, h, z}:
+      c
+
+# the store of the ballot b
+def Ballot.store(b: Ledgers.Ballot) -> Ledgers.Id:
+  Where.store(Ballot.at(b))
+
+# the key of the chain of the node n in the store r
+def Seal.slot(r: Ledgers.Id, n: String) -> List<&2, Bool>:
+  List.append(&2, Bool, Ledgers.Id.key(r), Tries.Trie.text(n))
+
+# a and b are the same place, or both none
+def Prev.same(a: Maybe<&2, Ledgers.Where>, b: Maybe<&2, Ledgers.Where>) -> Bool:
+  match a b:
+    case None{} None{}:
+      True{}
+    case Some{x} Some{y}:
+      Codes.Code.is_eq(~Ledgers.Where, ~Ledgers.Where.code, x, y)
+    case x y:
+      False{}
+
+# the key in the value m, if any
+def Seal.read(m: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Hashes.Hash>:
+  Maybe.bind(
+    &2,
+    List<&2, U32>,
+    Hashes.Hash,
+    m,
+    ws => Read.whole(Hashes.Hash, Hashes.Hash.code.read(ws))
+  )
+
+# the first key that the store r gave the node n, as s knows the store
+def Seal.first(~K: Kernel(), +s: Node<Machine.Q(Kernel.machine(K))>, r: Ledgers.Id, n: String) -> Maybe<&2, Hashes.Hash>:
+  Seal.read(
+    Node.get(~Kernel.machine(K), 
+      s,
+      Maybe.bind(
+        &2,
+        Tip,
+        Hashes.Hash,
+        Node.tip(~Kernel.machine(K), s, Ledgers.Chain{r, None{}}),
+        t => Tip.content(t)
+      ),
+      Kernel.seal(K)(n)
+    )
+  )
+
+# the chain c, when it starts from the first key m; else a new chain from m
+# (none: the store gave the node no key)
+def Keychain.from(
+  m: Maybe<&2, Hashes.Hash>,
+  c: Maybe<&2, Keychain>
+) -> Maybe<&2, Keychain>:
+  match m c:
+    case None{} y:
+      None{}
+    case Some{k} None{}:
+      Some{Keychain{0, None{}, k, k}}
+    case Some{+k} Some{Keychain{n, l, x, +f}}:
+      Some{
+        Shared.Bool.when(
+          Keychain,
+          Hashes.Hash.is_eq(f, k),
+          u => Keychain{n, l, x, f},
+          u => Keychain{0, None{}, k, k}
+        )
+      }
+
+# the chains of the keys ks
+def Keys.chains(ks: Keys) -> Tries.Trie<Keychain>:
+  match ks:
+    case Keys{seed, cs, as, rs}:
+      cs
+
+# the secret seed of the keys ks
+def Keys.seed(ks: Keys) -> Hashes.Hash:
+  match ks:
+    case Keys{seed, cs, as, rs}:
+      seed
+
+# ks, with the request i asked at this node
+def Keys.mark(ks: Keys, i: Ledgers.Id) -> Keys:
+  match ks:
+    case Keys{seed, cs, as, rs}:
+      Keys{seed, cs, Tries.Trie.set(Unit, as, Ledgers.Id.key(i), Unit{}), rs}
+
+# the request i was asked at this node
+def Keys.asked(ks: Keys, i: Ledgers.Id) -> Bool:
+  match ks:
+    case Keys{seed, cs, as, rs}:
+      Tries.Trie.has(Unit, as, Ledgers.Id.key(i))
+
+# ks with the chain c at the key k
+def Keys.set(ks: Keys, k: List<&2, Bool>, c: Keychain) -> Keys:
+  match ks:
+    case Keys{seed, cs, as, rs}:
+      Keys{seed, Tries.Trie.set(Keychain, cs, k, c), as, rs}
+
+# the highest round, in the rounds rs, of the height h of the line c (0: the
+# first round)
+def Rounds.at(rs: Tries.Trie<Nat>, c: Ledgers.Chain, h: U32) -> Nat:
+  Maybe.default(&2, Nat, Tries.Trie.get(Nat, rs, Ledgers.Slot.height(c, h)), 0n)
+
+# the rounds of the keys ks
+def Keys.rounds(ks: Keys) -> Tries.Trie<Nat>:
+  match ks:
+    case Keys{seed, cs, as, rs}:
+      rs
+
+# ks, which saw a ballot at the place w: the highest round of its height
+def Keys.saw(ks: Keys, w: Ledgers.Where) -> Keys:
+  match ks w:
+    case Keys{seed, cs, as, +rs} Ledgers.Where{+c, +h, +r}:
+      Keys{
+        seed,
+        cs,
+        as,
+        Shared.Bool.when(
+          Tries.Trie<Nat>,
+          Nat.is_lt(Rounds.at(rs, c, h), r),
+          u => Tries.Trie.set(Nat, rs, Ledgers.Slot.height(c, h), r),
+          u => rs
+        )
+      }
+
+# the highest round of the height h of the line c of which s holds a ballot
+def Round.seen(~M: Machine(), s: Node<Machine.Q(M)>, c: Ledgers.Chain, h: U32) -> Nat:
+  Rounds.at(Keys.rounds(State.keys(~M, s)), c, h)
+
+# the chain of the node n in the store r, as s knows it
+def Seal.chain(~K: Kernel(), +s: Node<Machine.Q(Kernel.machine(K))>, +r: Ledgers.Id, +n: String) -> Maybe<&2, Keychain>:
+  Keychain.from(
+    Seal.first(~K, s, r, n),
+    Tries.Trie.get(Keychain, Keys.chains(State.keys(~Kernel.machine(K), s)), Seal.slot(r, n))
+  )
+
+# the ballot b is the next of the chain c, and the key of c signs it
+def Seal.fits(c: Keychain, +b: Ledgers.Ballot) -> Bool:
+  match c:
+    case Keychain{n, last, key, f}:
+      List.all.if(u => Ledgers.Ballot.sealed(key, b), Prev.same(Ballot.prev(b), last))
+
+# the chain c after its next ballot b
+def Keychain.next(c: Keychain, +b: Ledgers.Ballot) -> Keychain:
+  match c:
+    case Keychain{n, last, key, f}:
+      Keychain{U32.inc(n), Some{Ballot.at(b)}, Ballot.next(b), f}
+
+# Seal.accept once the chain m of the ballot's node is known
+def Seal.accept.at(
+  ~M: Machine(),
+  +s: Node<Machine.Q(M)>,
+  +b: Ledgers.Ballot,
+  m: Maybe<&2, Keychain>
+) -> Maybe<&2, Node<Machine.Q(M)>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{+c}:
+      Shared.Maybe.when(
+        Node<Machine.Q(M)>,
+        Seal.fits(c, b),
+        u => Some{
+          State.keyed(~M, 
+            State.led(~M, 
+              s,
+              Ledgers.State.keep(~Machine.Q(M), ~Machine.same(M), State.ledger(~M, s), b)
+            ),
+            Keys.saw(
+              Keys.set(
+                State.keys(~M, s),
+                Seal.slot(Ballot.store(b), Ballot.node(b)),
+                Keychain.next(c, b)
+              ),
+              Ballot.at(b)
+            )
+          )
+        }
+      )
+
+# s with the ballot b, when it is the next of its node's chain in its store
+# and the key of the chain signs it (none: not now)
+def Seal.accept(~K: Kernel(), +s: Node<Machine.Q(Kernel.machine(K))>, +b: Ledgers.Ballot) -> Maybe<&2, Node<Machine.Q(Kernel.machine(K))>>:
+  Seal.accept.at(~Kernel.machine(K), s, b, Seal.chain(~K, s, Ballot.store(b), Ballot.node(b)))
+
+# the secret of the ballot of the number j of a node in the store r, from the
+# node's seed
+def Seal.secret(seed: Hashes.Hash, r: Ledgers.Id, j: U32) -> Hashes.Hash:
+  Hashes.Sha.hash(Hashes.Hash.code(seed, Ledgers.Id.code(r, [j])))
+
+# the key of the place m, if any
+def Prev.key(m: Maybe<&2, Ledgers.Where>) -> List<&2, Bool>:
+  match m:
+    case None{}:
+      [False{}]
+    case Some{w}:
+      True{} <> Ledgers.Slot.vote(w, "")
+
+# the key of where the ballot after the one at last waits, for the node n in
+# the store r
+def Seal.link(r: Ledgers.Id, n: String, last: Maybe<&2, Ledgers.Where>) -> List<&2, Bool>:
+  List.append(&2, Bool, Seal.slot(r, n), Prev.key(last))
+
+# the ballots bs, each at the key of where it waits in its chain
+def Pending.of(bs: List<&2, Ledgers.Ballot>) -> Tries.Trie<Ledgers.Ballot>:
+  match bs:
+    case Nil{}:
+      Tries.Trie.new(Ledgers.Ballot)
+    case Con{+b, r}:
+      Tries.Trie.set(
+        Ledgers.Ballot,
+        Pending.of(r),
+        Seal.link(Ballot.store(b), Ballot.node(b), Ballot.prev(b)),
+        b
+      )
+
+# the last place of the chain c
+def Keychain.last(c: Keychain) -> Maybe<&2, Ledgers.Where>:
+  match c:
+    case Keychain{n, last, key, f}:
+      last
+
+# the ballot of p that is the next of the chain of the node n in the store r
+def Pending.next(
+  ~K: Kernel(),
+  s: Node<Machine.Q(Kernel.machine(K))>,
+  p: Tries.Trie<Ledgers.Ballot>,
+  +r: Ledgers.Id,
+  +n: String
+) -> Maybe<&2, Ledgers.Ballot>:
+  Maybe.bind(
+    &2,
+    Keychain,
+    Ledgers.Ballot,
+    Seal.chain(~K, s, r, n),
+    c => Tries.Trie.get(Ledgers.Ballot, p, Seal.link(r, n, Keychain.last(c)))
+  )
+
+# s with each ballot of p that the chain of the node n in the store r leads
+# to, from the ballot mb, f ballots at most
+def Sealed.follow(
+  ~K: Kernel(),
+  f: Nat,
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  +p: Tries.Trie<Ledgers.Ballot>,
+  +r: Ledgers.Id,
+  +n: String,
+  mb: Maybe<&2, Ledgers.Ballot>
+) -> Node<Machine.Q(Kernel.machine(K))>:
+  match f mb:
+    case 1n+g Some{b}:
+      Maybe.default(
+        &2,
+        Node<Machine.Q(Kernel.machine(K))>,
+        Maybe.bind(
+          &2,
+          Node<Machine.Q(Kernel.machine(K))>,
+          Node<Machine.Q(Kernel.machine(K))>,
+          Seal.accept(~K, s, b),
+          +s2 => Some{Sealed.follow(~K, g, s2, p, r, n, Pending.next(~K, s2, p, r, n))}
+        ),
+        s
+      )
+    case x y:
+      s
+
+# s with the ballots of p that the chains of the ballots bs lead to
+def Sealed.each(
+  ~K: Kernel(),
+  +f: Nat,
+  bs: List<&2, Ledgers.Ballot>,
+  +p: Tries.Trie<Ledgers.Ballot>,
+  +s: Node<Machine.Q(Kernel.machine(K))>
+) -> Node<Machine.Q(Kernel.machine(K))>:
+  match bs:
+    case Nil{}:
+      s
+    case Con{+b, rest}:
+      Sealed.each(~K, 
+        f,
+        rest,
+        p,
+        Sealed.follow(~K, 
+          f,
+          s,
+          p,
+          Ballot.store(b),
+          Ballot.node(b),
+          Pending.next(~K, s, p, Ballot.store(b), Ballot.node(b))
+        )
+      )
+
+# s with each ballot of bs that its node's chain leads to and its key signs:
+# the cost is about that of the ballots, in any order
+def Sealed.take(~K: Kernel(), +bs: List<&2, Ledgers.Ballot>, s: Node<Machine.Q(Kernel.machine(K))>) -> Node<Machine.Q(Kernel.machine(K))>:
+  Sealed.each(~K, List.length(&2, Ledgers.Ballot, bs), bs, Pending.of(bs), s)
+
+# the height of the next step of the head h
+def Head.next(h: Head) -> U32:
+  match h:
+    case Head{r, b, n, t}:
+      n
+
+# s with the head h of the line c
+def State.head(~M: Machine(), s: Node<Machine.Q(M)>, c: Ledgers.Chain, h: Head) -> Node<Machine.Q(M)>:
+  match s:
+    case Node{l, hs, ws, ks}:
+      Node{l, Tries.Trie.set(Head, hs, Ledgers.Chain.key(c), h), ws, ks}
+
+# the requests of the line c that wait for a step, in the order that the node
+# took them in
+def Wait.of(~M: Machine(), s: Node<Machine.Q(M)>, c: Ledgers.Chain) -> List<&2, Ledgers.Id>:
+  Maybe.default(
+    &2,
+    List<&2, Ledgers.Id>,
+    Tries.Trie.get(List<&2, Ledgers.Id>, State.waiting(~M, s), Ledgers.Chain.key(c)),
+    []
+  )
+
+# ws with the requests qs waiting at the key k: a line with no waiting request
+# has no entry, so the lines that wait are read without a walk of every line
+def Wait.put(
+  ws: Tries.Trie<List<&2, Ledgers.Id>>,
+  k: List<&2, Bool>,
+  qs: List<&2, Ledgers.Id>
+) -> Tries.Trie<List<&2, Ledgers.Id>>:
+  match qs:
+    case Nil{}:
+      Tries.Trie.drop(List<&2, Ledgers.Id>, ws, k)
+    case Con{i, r}:
+      Tries.Trie.set(List<&2, Ledgers.Id>, ws, k, Con{i, r})
+
+# s with the requests qs waiting on the line c
+def Wait.set(~M: Machine(), s: Node<Machine.Q(M)>, c: Ledgers.Chain, qs: List<&2, Ledgers.Id>) -> Node<Machine.Q(M)>:
+  match s:
+    case Node{l, hs, ws, ks}:
+      Node{l, hs, Wait.put(ws, Ledgers.Chain.key(c), qs), ks}
+
+# s with the request i waiting on the line c, after those that wait
+def State.wait(~M: Machine(), +s: Node<Machine.Q(M)>, +c: Ledgers.Chain, i: Ledgers.Id) -> Node<Machine.Q(M)>:
+  Wait.set(~M, s, c, List.append(&2, Ledgers.Id, Wait.of(~M, s, c), [i]))
+
+# the requests of qs whose keys done does not hold
+def Wait.left(qs: List<&2, Ledgers.Id>, +done: Tries.Trie<Unit>) -> List<&2, Ledgers.Id>:
+  match qs:
+    case Nil{}:
+      []
+    case Con{+i, r}:
+      List.filter.put(
+        Ledgers.Id,
+        i,
+        Wait.left(r, done),
+        Bool.not(Tries.Trie.has(Unit, done, Ledgers.Id.key(i)))
+      )
+
+# s at the head h of the line c, after a step that ran the requests qs: they
+# wait no more
+def State.moved(
+  ~M: Machine(),
+  +s: Node<Machine.Q(M)>,
+  +c: Ledgers.Chain,
+  h: Head,
+  qs: List<&2, Ledgers.Id>
+) -> Node<Machine.Q(M)>:
+  State.head(~M, 
+    Wait.set(~M, 
+      s,
+      c,
+      Wait.left(
+        Wait.of(~M, s, c),
+        Tries.Trie.put_keys(~Ledgers.Id, ~Ledgers.Id.key, qs, Tries.Trie.new(Unit))
+      )
+    ),
+    c,
+    h
+  )
+
+# State.first once the head m of the line is known
+def First.at(
+  ~M: Machine(),
+  s: Node<Machine.Q(M)>,
+  c: Ledgers.Chain,
+  h: Head,
+  m: Maybe<&2, Head>
+) -> Node<Machine.Q(M)>:
+  match m:
+    case Some{Head{r, b, n, Some{t}}}:
+      s
+    case x:
+      State.head(~M, s, c, h)
+
+# s with the first head h of the line c, when the line has no tip: a line
+# that has a tip moves only by a step
+def State.first(~M: Machine(), +s: Node<Machine.Q(M)>, +c: Ledgers.Chain, h: Head) -> Node<Machine.Q(M)>:
+  First.at(~M, s, c, h, Node.head_of(~M, s, c))
+
+# the state m with the first head h of the line c, else s
+def Start.head(
+  ~M: Machine(),
+  s: Node<Machine.Q(M)>,
+  m: Maybe<&2, Node<Machine.Q(M)>>,
+  c: Ledgers.Chain,
+  h: Head
+) -> Node<Machine.Q(M)>:
+  match m:
+    case None{}:
+      s
+    case Some{s2}:
+      State.first(~M, State.led(~M, s, State.ledger(~M, s2)), c, h)
+
+# w with the first key of each first owner of os
+def Seal.firsts(~K: Kernel(), os: List<&2, Owner>, m: Maybe<&2, Work<Machine.Q(Kernel.machine(K))>>) -> Maybe<&2, Work<Machine.Q(Kernel.machine(K))>>:
+  match os:
+    case Nil{}:
+      m
+    case Con{Owner{n, k}, r}:
+      Seal.firsts(~K, 
+        r,
+        Maybe.bind(
+          &2,
+          Work<Machine.Q(Kernel.machine(K))>,
+          Work<Machine.Q(Kernel.machine(K))>,
+          m,
+          w => Work.set(~Kernel.machine(K), w, Kernel.seal(K)(n), Hashes.Hash.code(k, []))
+        )
+      )
+
+# Node.start once the content m of the store is known: its first tip has no
+# log and no version, and its owners are the first owners os
+def Start.with(
+  ~M: Machine(),
+  s: Node<Machine.Q(M)>,
+  +i: Ledgers.Id,
+  os: List<&2, String>,
+  m: Maybe<&2, Work<Machine.Q(M)>>
+) -> Node<Machine.Q(M)>:
+  match m:
+    case None{}:
+      s
+    case Some{Work{s2, c}}:
+      +t = {Tip{c, None{}, 0, os}: Tip}
+      Start.head(~M, 
+        s,
+        State.put(~M, s2, [Tip.words(t)]),
+        Ledgers.Chain{i, None{}},
+        Head{i, None{}, 0, Some{Tip.hash(t)}}
+      )
+
+# s, which follows the store that the request i starts with the first owners
+# os: its content holds their first keys
+def Node.start(~K: Kernel(), +s: Node<Machine.Q(Kernel.machine(K))>, i: Ledgers.Id, +os: List<&2, Owner>) -> Node<Machine.Q(Kernel.machine(K))>:
+  Start.with(~Kernel.machine(K), s, i, Owner.names(os), Seal.firsts(~K, os, Some{Work{s, None{}}}))
+
+# the first tip of the branch b of a store whose tip is m, if the store made
+# b: the log of the store holds it, written once, so every node opens the
+# branch at the same tip (Chain.start_final)
+def Branch.first(~M: Machine(), s: Node<Machine.Q(M)>, b: String, m: Maybe<&2, Tip>) -> Maybe<&2, Hashes.Hash>:
+  match m:
+    case None{}:
+      None{}
+    case Some{t}:
+      Maybe.bind(
+        &2,
+        List<&2, U32>,
+        Hashes.Hash,
+        Node.get(~M, s, Tip.log(t), Log.start(b)),
+        ws => Read.whole(Hashes.Hash, Hashes.Hash.code.read(ws))
+      )
+
+# Node.open once the head m of the line is known
+def Open.at(~M: Machine(), +s: Node<Machine.Q(M)>, c: Ledgers.Chain, m: Maybe<&2, Head>) -> Node<Machine.Q(M)>:
+  match m:
+    case Some{Head{+r, Some{+b}, n, None{}}}:
+      State.head(~M, 
+        s,
+        c,
+        Head{r, Some{b}, 0, Branch.first(~M, s, b, Node.tip(~M, s, Ledgers.Chain{r, None{}}))}
+      )
+    case x:
+      s
+
+# s, which follows the line c: a branch that the node waits for opens at its
+# first tip, once the store that the node follows made it
+def Node.open(~M: Machine(), +s: Node<Machine.Q(M)>, +c: Ledgers.Chain) -> Node<Machine.Q(M)>:
+  Open.at(~M, s, c, Node.head_of(~M, s, c))
+
+# s, which follows the line l of the store r, when the head m says that it
+# does not yet
+def Follow.new(
+  ~M: Machine(),
+  s: Node<Machine.Q(M)>,
+  +r: Ledgers.Id,
+  +l: Maybe<&2, String>,
+  m: Maybe<&2, Head>
+) -> Node<Machine.Q(M)>:
+  match m:
+    case Some{h}:
+      s
+    case None{}:
+      State.head(~M, s, Line.chain(r, l), Head{r, l, 0, None{}})
+
+# s, which follows the line l of the store r
+def Node.follow(~M: Machine(), +s: Node<Machine.Q(M)>, +r: Ledgers.Id, +l: Maybe<&2, String>) -> Node<Machine.Q(M)>:
+  Follow.new(~M, s, r, l, Node.head_of(~M, s, Line.chain(r, l)))
+
+# s, once it holds the new request i, which arrives as a: a store starts, or
+# the request waits on its line
+def Arrive.at(~K: Kernel(), s: Node<Machine.Q(Kernel.machine(K))>, i: Ledgers.Id, a: Arrival) -> Node<Machine.Q(Kernel.machine(K))>:
+  match a:
+    case Arrival.Starts{os}:
+      Node.start(~K, s, i, os)
+    case Arrival.Waits{+r, +l}:
+      State.wait(~Kernel.machine(K), Node.follow(~Kernel.machine(K), s, r, l), Line.chain(r, l), i)
+
+# s, once it holds the new request i of the change q
+def Node.arrive(~K: Kernel(), s: Node<Machine.Q(Kernel.machine(K))>, i: Ledgers.Id, q: Machine.Q(Kernel.machine(K))) -> Node<Machine.Q(Kernel.machine(K))>:
+  Arrive.at(~K, s, i, Kernel.arrival(K)(q))
+
+# a and b are the same root
+def Root.same(a: Maybe<&2, Hashes.Hash>, b: Maybe<&2, Hashes.Hash>) -> Bool:
+  Shared.Maybe.is_eq(~Hashes.Hash, ~Hashes.Hash.is_eq, a, b)
+
+# the node n may cast a ballot at the place w of a line at the tip t, for the
+# requests qs: there is a request, n is an owner, and n cast none there
+def Cast.may(
+  ~M: Machine(),
+  +n: String,
+  +s: Node<Machine.Q(M)>,
+  w: Ledgers.Where,
+  t: Tip,
+  qs: List<&2, Ledgers.Id>
+) -> Bool:
+  List.all.if(
+    u => List.all.if(
+      v => Maybe.is_none(
+        &2,
+        Cells.Cell<Ledgers.Entry<Machine.Q(M)>>,
+        Ledgers.State.get(~Machine.Q(M), State.ledger(~M, s), Ledgers.Slot.vote(w, n))
+      ),
+      List.contains(~String, ~String.eq, Tip.owners(t), n)
+    ),
+    Bool.not(List.is_empty(&2, Ledgers.Id, qs))
+  )
+
+# s with the node n's ballot for the act a at the place w, sealed as the next
+# of the node's chain m (none: the store gave the node no key)
+def Cast.seal(
+  ~K: Kernel(),
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  +w: Ledgers.Where,
+  n: String,
+  a: Ledgers.Act,
+  m: Maybe<&2, Keychain>
+) -> Node<Machine.Q(Kernel.machine(K))>:
+  match m:
+    case None{}:
+      s
+    case Some{Keychain{+j, last, key, f}}:
+      +seed = Keys.seed(State.keys(~Kernel.machine(K), s))
+      +r = Where.store(w)
+      Maybe.default(
+        &2,
+        Node<Machine.Q(Kernel.machine(K))>,
+        Seal.accept(~K, 
+          s,
+          Ledgers.Ballot.make(
+            Seal.secret(seed, r, j),
+            Ledgers.Signed{w, n, a},
+            last,
+            Seals.Seal.public(Seal.secret(seed, r, U32.inc(j)))
+          )
+        ),
+        s
+      )
+
+# the state m with the node n's ballot for the act a at the place w, else s
+def Cast.vote(
+  ~K: Kernel(),
+  s: Node<Machine.Q(Kernel.machine(K))>,
+  m: Maybe<&2, Node<Machine.Q(Kernel.machine(K))>>,
+  +w: Ledgers.Where,
+  +n: String,
+  a: Ledgers.Act
+) -> Node<Machine.Q(Kernel.machine(K))>:
+  match m:
+    case None{}:
+      s
+    case Some{s3}:
+      +s4 = State.led(~Kernel.machine(K), s, State.ledger(~Kernel.machine(K), s3))
+      Cast.seal(~K, s4, w, n, a, Seal.chain(~K, s4, Where.store(w), n))
+
+# s with the node n's vote at the place w for the step that ran qs from the
+# tip of the hash th, which the passes of the nodes from allow, when the run m
+# is there: the run's nodes, its tip, and the ballot
+def Cast.put(
+  ~K: Kernel(),
+  n: String,
+  w: Ledgers.Where,
+  th: Maybe<&2, Hashes.Hash>,
+  qs: List<&2, Ledgers.Id>,
+  from: List<&2, String>,
+  m: Maybe<&2, Run<Machine.Q(Kernel.machine(K))>>,
+  s: Node<Machine.Q(Kernel.machine(K))>
+) -> Node<Machine.Q(Kernel.machine(K))>:
+  match m:
+    case None{}:
+      s
+    case Some{Run{s2, +t2}}:
+      Cast.vote(~K, 
+        s,
+        State.put(~Kernel.machine(K), s2, [Tip.words(t2)]),
+        w,
+        n,
+        Ledgers.Act.Vote{Ledgers.Vote{th, qs, Some{Tip.hash(t2)}}, from}
+      )
+
+# the node s may cast for the request i, which it holds as m: any request,
+# but one of who decides only when it was asked at s
+def Cast.mine.of(~K: Kernel(), s: Node<Machine.Q(Kernel.machine(K))>, i: Ledgers.Id, m: Maybe<&2, Ledgers.Asked<Machine.Q(Kernel.machine(K))>>) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{Ledgers.Asked{t, q}}:
+      List.any.if(u => Keys.asked(State.keys(~Kernel.machine(K), s), i), Bool.not(Kernel.governs(K)(q)))
+
+# the requests of qs that the node s may cast for
+def Cast.mine(~K: Kernel(), +s: Node<Machine.Q(Kernel.machine(K))>, qs: List<&2, Ledgers.Id>) -> List<&2, Ledgers.Id>:
+  match qs:
+    case Nil{}:
+      []
+    case Con{+i, r}:
+      List.filter.put(Ledgers.Id, i, Cast.mine(~K, s, r), Cast.mine.of(~K, s, i, Node.asked(~Kernel.machine(K), s, i)))
+
+# the owner whose turn it is to propose the step at the height h, among the
+# owners os: each in turn, by the height. One owner proposes a step and the
+# others cast for the same step, so the owners do not split over what waits
+# at each of them
+def Owners.turn(+os: List<&2, String>, h: U32) -> Maybe<&2, String>:
+  List.get(&2, String, os, U32.to_nat(U32.mod(h, U32.from_nat(List.length(&2, String, os)))))
+
+# the step in the cell m of a ballot, if it holds one
+def Cast.step(~M: Machine(), m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(M)>>>) -> Maybe<&2, Ledgers.Vote>:
+  match m:
+    case Some{Cells.One{Ledgers.Entry.Vote{b}}}:
+      Ledgers.Ballot.vote(b)
+    case x:
+      None{}
+
+# the step that the node p cast at the place w, if s holds its ballot
+def Cast.of(~M: Machine(), s: Node<Machine.Q(M)>, w: Ledgers.Where, p: String) -> Maybe<&2, Ledgers.Vote>:
+  Cast.step(~M, Ledgers.State.get(~Machine.Q(M), State.ledger(~M, s), Ledgers.Slot.vote(w, p)))
+
+# what a node casts for: the requests of a step, its own run of them (none:
+# it cannot run them now), and the nodes whose passes allow the step
+type Plan<-Q: Data> is Data:
+  Plan{asks: List<&2, Ledgers.Id>, run: Maybe<&2, Run<Q>>, from: List<&2, String>}
+
+# the requests of the plan p
+def Plan.asks(~M: Machine(), p: Plan<Machine.Q(M)>) -> List<&2, Ledgers.Id>:
+  match p:
+    case Plan{qs, m, from}:
+      qs
+
+# the run of the plan p
+def Plan.run(~M: Machine(), p: Plan<Machine.Q(M)>) -> Maybe<&2, Run<Machine.Q(M)>>:
+  match p:
+    case Plan{qs, m, from}:
+      m
+
+# the nodes whose passes allow the step of the plan p
+def Plan.from(~M: Machine(), p: Plan<Machine.Q(M)>) -> List<&2, String>:
+  match p:
+    case Plan{qs, m, from}:
+      from
+
+# the plan of an owner that proposes freely, on the line c at the tip t: the
+# requests that wait at it, that it may cast for and that can run now
+def Plan.own(~K: Kernel(), +s: Node<Machine.Q(Kernel.machine(K))>, +c: Ledgers.Chain, t: Tip, from: List<&2, String>) -> Plan<Machine.Q(Kernel.machine(K))>:
+  +p = Step.some(~K, c, Cast.mine(~K, s, Wait.of(~Kernel.machine(K), s, c)), Run{s, t})
+  Plan{Picked.asks(~Kernel.machine(K), p), Some{Picked.run(~Kernel.machine(K), p)}, from}
+
+# the node s may cast for each request of qs
+def Cast.all_mine(~K: Kernel(), +s: Node<Machine.Q(Kernel.machine(K))>, qs: List<&2, Ledgers.Id>) -> Bool:
+  match qs:
+    case Nil{}:
+      True{}
+    case Con{+i, r}:
+      List.all.if(u => Cast.all_mine(~K, s, r), Cast.mine.of(~K, s, i, Node.asked(~Kernel.machine(K), s, i)))
+
+# the run m, when it gives the tip of the hash after
+def Plan.fit(~M: Machine(), after: Maybe<&2, Hashes.Hash>, m: Maybe<&2, Run<Machine.Q(M)>>) -> Maybe<&2, Run<Machine.Q(M)>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Run{s2, +t2}}:
+      Shared.Maybe.when(
+        Run<Machine.Q(M)>,
+        Root.same(after, Some{Tip.hash(t2)}),
+        u => Some{Run{s2, t2}}
+      )
+
+# the plan for a step m that another ballot names, on the line c at the tip t
+# of the hash th: when the step starts from this tip, the node may cast for
+# each of its requests, and the node's own run of them gives the same tip
+def Plan.copy(
+  ~K: Kernel(),
+  +s: Node<Machine.Q(Kernel.machine(K))>,
+  c: Ledgers.Chain,
+  t: Tip,
+  th: Maybe<&2, Hashes.Hash>,
+  m: Maybe<&2, Ledgers.Vote>,
+  from: List<&2, String>
+) -> Plan<Machine.Q(Kernel.machine(K))>:
+  match m:
+    case None{}:
+      Plan{[], None{}, []}
+    case Some{Ledgers.Vote{before, +qs, after}}:
+      Shared.Bool.when(
+        Plan<Machine.Q(Kernel.machine(K))>,
+        List.all.if(u => Cast.all_mine(~K, s, qs), Root.same(before, th)),
+        u => Plan{qs, Plan.fit(~Kernel.machine(K), after, Step.run(~K, s, c, t, qs)), from},
+        u => Plan{[], None{}, []}
+      )

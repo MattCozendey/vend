@@ -12,7 +12,6 @@ import ../shared/shared/text.bend as Texts
 import ./basics.bend as Basics
 import ./judging.bend as Judging
 import ./reading.bend as Reading
-import ./sealing.bend as Sealing
 import ./stepping.bend as Stepping
 import ./voting.bend as Voting
 import ../replica/impl.bend as Replicas
@@ -93,7 +92,7 @@ def Advance.in(
     t => Ledgers.State.decide(
       ~Basics.Ask,
       Replicas.State.ledger(~Basics.Ask.machine(), s),
-      Ledgers.Where{c, Sealing.Head.next(x), r},
+      Ledgers.Where{c, Replicas.Head.next(x), r},
       Replicas.Tip.owners(t)
     )
   )
@@ -318,7 +317,7 @@ law Node.draft_some:
     List.contains(
       ~Ledgers.Id,
       ~Ledgers.Id.is_eq,
-      Sealing.Wait.of(s, Replicas.Line.chain(r, Some{b})),
+      Replicas.Wait.of(~Basics.Ask.machine(), s, Replicas.Line.chain(r, Some{b})),
       Ledgers.Id{w, q2}
     )
       == True{}: Bool
@@ -399,7 +398,7 @@ law Plan.follow_allowed:
     Maybe.is_some(
       &2,
       Replicas.Run<Basics.Ask>,
-      Sealing.Plan.run(Voting.Plan.follow(s, c, w, t, th, os, Some{Ledgers.Act.Vote{v, from}}))
+      Replicas.Plan.run(~Basics.Ask.machine(), Voting.Plan.follow(s, c, w, t, th, os, Some{Ledgers.Act.Vote{v, from}}))
     )
       == True{}: Bool
   }
@@ -440,7 +439,7 @@ law Wait.left_keeps:
   {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, ws, i) == True{}: Bool}
     -> {Tries.Trie.has(Unit, done, Ledgers.Id.key(i)) == False{}: Bool}
     -> {
-      List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Sealing.Wait.left(ws, done), i) == True{}: Bool
+      List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Replicas.Wait.left(ws, done), i) == True{}: Bool
     }
 
 # a merge turns Written once each clashing resource is resolved: a resolve
@@ -550,15 +549,15 @@ law Seal.accept_fits:
   for +c: Replicas.Keychain
   for +s2: Replicas.Node<Basics.Ask>
   {
-    Sealing.Seal.chain(
+    Replicas.Seal.chain(~Stepping.Ask.kernel(), 
       s,
-      Sealing.Ballot.store(b),
-      Sealing.Ballot.node(b)
+      Replicas.Ballot.store(b),
+      Replicas.Ballot.node(b)
     )
       == Some{c}: Maybe<&2, Replicas.Keychain>
   }
-    -> {Sealing.Seal.accept(s, b) == Some{s2}: Maybe<&2, Replicas.Node<Basics.Ask>>}
-    -> {Sealing.Seal.fits(c, b) == True{}: Bool}
+    -> {Replicas.Seal.accept(~Stepping.Ask.kernel(), s, b) == Some{s2}: Maybe<&2, Replicas.Node<Basics.Ask>>}
+    -> {Replicas.Seal.fits(c, b) == True{}: Bool}
 
 # a ballot that a node seals with the secret of its chain's key fits the chain.
 # (That no other node can make one is the assumption of Seals: a hash has no
@@ -571,7 +570,7 @@ law Seal.fits_own:
   for +n: U32
   for +f: Hashes.Hash
   {
-    Sealing.Seal.fits(
+    Replicas.Seal.fits(
       Replicas.Keychain{n, last, Seals.Seal.public(seed), f},
       Ledgers.Ballot.make(seed, x, last, k)
     )
@@ -683,7 +682,7 @@ law Cast.put_keeps:
     -> {
       Reading.Node.grows(
         s2,
-        Sealing.Cast.put(n, w, th, qs, from, Some{Replicas.Run{s2, t2}}, s)
+        Replicas.Cast.put(~Stepping.Ask.kernel(), n, w, th, qs, from, Some{Replicas.Run{s2, t2}}, s)
       )
         == True{}: Bool
     }
@@ -702,7 +701,7 @@ law Cast.put_tip:
   {Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]) == Some{s3}: Maybe<&2, Replicas.Node<Basics.Ask>>}
     -> {
       Replicas.Tip.at(~Basics.Ask.machine(), 
-        Sealing.Cast.put(n, w, th, qs, from, Some{Replicas.Run{s2, t2}}, s),
+        Replicas.Cast.put(~Stepping.Ask.kernel(), n, w, th, qs, from, Some{Replicas.Run{s2, t2}}, s),
         Replicas.Tip.hash(t2)
       )
         == Some{t2}: Maybe<&2, Replicas.Tip>
@@ -773,7 +772,7 @@ law Node.take_waits:
       List.contains(
         ~Ledgers.Id,
         ~Ledgers.Id.is_eq,
-        Sealing.Wait.of(Voting.Node.take(s, t), Replicas.Line.chain(r, l)),
+        Replicas.Wait.of(~Basics.Ask.machine(), Voting.Node.take(s, t), Replicas.Line.chain(r, l)),
         i
       )
         == True{}: Bool

@@ -13,9 +13,9 @@ import ../shared/shared/text.bend as Texts
 import ../shared/tree.bend as Trees
 import ./basics.bend as Basics
 import ./judging.bend as Judging
-import ./sealing.bend as Sealing
 import ./voting.bend as Voting
 import ../replica/impl.bend as Replicas
+import ./stepping.bend as Stepping
 
 # Reads
 # -----
@@ -298,7 +298,7 @@ def Sync.more(
     case 0n:
       s
     case 1n+p:
-      +s2 = Voting.Node.steps(n, cs, Sealing.Sealed.each(k, bs, pd, s))
+      +s2 = Voting.Node.steps(n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
       Shared.Bool.when(
         Replicas.Node<Basics.Ask>,
         Lines.level(cs, s, s2),
@@ -322,7 +322,7 @@ def Node.sync(+n: String, +s: Replicas.Node<Basics.Ask>, +t: Ledgers.State(Basic
   Node.adopts(
     n,
     cs,
-    Sync.more(k, n, cs, k, bs, Sealing.Pending.of(bs), Voting.Node.steps(n, cs, s1))
+    Sync.more(k, n, cs, k, bs, Replicas.Pending.of(bs), Voting.Node.steps(n, cs, s1))
   )
 
 # the resource m of the branch x of the store st is the resource n of the
@@ -460,7 +460,7 @@ def Node.draft(
   +b: String,
   n: Resources.Name
 ) -> Maybe<&2, Basics.Content>:
-  Draft.what(Draft.last(s, w, r, b, n, Sealing.Wait.of(s, Replicas.Line.chain(r, Some{b})), None{}))
+  Draft.what(Draft.last(s, w, r, b, n, Replicas.Wait.of(~Basics.Ask.machine(), s, Replicas.Line.chain(r, Some{b})), None{}))
 
 # the bytes of the draft m of the resource n, else what the point p holds
 def Read.of(

@@ -7,7 +7,6 @@ import ../shared/shared/shared/trie.bend as Tries
 import ../shared/tree.bend as Trees
 import ./basics.bend as Basics
 import ./judging.bend as Judging
-import ./sealing.bend as Sealing
 import ./stepping.bend as Stepping
 import ../replica/impl.bend as Replicas
 
@@ -94,9 +93,9 @@ def Last.mine(
 ) -> Maybe<&2, Ledgers.Last>:
   match k:
     case 0n:
-      Last.or(0n, Sealing.Cast.of(s, Ledgers.Where{c, h, 0n}, n), u => None{})
+      Last.or(0n, Replicas.Cast.of(~Basics.Ask.machine(), s, Ledgers.Where{c, h, 0n}, n), u => None{})
     case 1n+(+p):
-      Last.or(1n+p, Sealing.Cast.of(s, Ledgers.Where{c, h, 1n+p}, n), u => Last.mine(n, s, c, h, p))
+      Last.or(1n+p, Replicas.Cast.of(~Basics.Ask.machine(), s, Ledgers.Where{c, h, 1n+p}, n), u => Last.mine(n, s, c, h, p))
 
 # the last vote of the node n at the height h of the line c, in a round below
 # r, if it cast one
@@ -245,21 +244,21 @@ def Plan.later(
   os: List<&2, String>,
   +from: List<&2, String>,
   m: Maybe<&2, Ledgers.Last>
-) -> Sealing.Plan:
+) -> Replicas.Plan<Basics.Ask>:
   match m:
     case None{}:
       Shared.Bool.when(
-        Sealing.Plan,
+        Replicas.Plan<Basics.Ask>,
         Owners.major(os, from),
-        u => Sealing.Plan.own(s, c, t, from),
-        u => Sealing.Plan{[], None{}, []}
+        u => Replicas.Plan.own(~Stepping.Ask.kernel(), s, c, t, from),
+        u => Replicas.Plan{[], None{}, []}
       )
     case Some{Ledgers.Last{r, v}}:
       Shared.Bool.when(
-        Sealing.Plan,
+        Replicas.Plan<Basics.Ask>,
         Owners.major(os, from),
-        u => Sealing.Plan.copy(s, c, t, th, Some{v}, from),
-        u => Sealing.Plan{[], None{}, []}
+        u => Replicas.Plan.copy(~Stepping.Ask.kernel(), s, c, t, th, Some{v}, from),
+        u => Replicas.Plan{[], None{}, []}
       )
 
 # the plan of the proposer at the place w
@@ -270,12 +269,12 @@ def Plan.lead(
   +t: Replicas.Tip,
   th: Maybe<&2, Hashes.Hash>,
   +os: List<&2, String>
-) -> Sealing.Plan:
+) -> Replicas.Plan<Basics.Ask>:
   +from = Passes.of(s, w, os)
   Shared.Bool.when(
-    Sealing.Plan,
+    Replicas.Plan<Basics.Ask>,
     Nat.is_eq(Where.round(w), 0n),
-    u => Sealing.Plan.own(s, c, t, []),
+    u => Replicas.Plan.own(~Stepping.Ask.kernel(), s, c, t, []),
     u => Plan.later(s, c, w, t, th, os, from, Passes.last(s, w, from))
   )
 
@@ -289,17 +288,17 @@ def Plan.follow(
   th: Maybe<&2, Hashes.Hash>,
   os: List<&2, String>,
   m: Maybe<&2, Ledgers.Act>
-) -> Sealing.Plan:
+) -> Replicas.Plan<Basics.Ask>:
   match m:
     case Some{Ledgers.Act.Vote{+v, +from}}:
       Shared.Bool.when(
-        Sealing.Plan,
+        Replicas.Plan<Basics.Ask>,
         Vote.allowed(s, w, os, v, from),
-        u => Sealing.Plan.copy(s, c, t, th, Some{v}, from),
-        u => Sealing.Plan{[], None{}, []}
+        u => Replicas.Plan.copy(~Stepping.Ask.kernel(), s, c, t, th, Some{v}, from),
+        u => Replicas.Plan{[], None{}, []}
       )
     case x:
-      Sealing.Plan{[], None{}, []}
+      Replicas.Plan{[], None{}, []}
 
 # what the node n casts for at the place w of the line c, at the tip t of the
 # hash th, with the owners os, when it is turn's turn to propose
@@ -312,13 +311,13 @@ def Plan.of(
   +th: Maybe<&2, Hashes.Hash>,
   +os: List<&2, String>,
   turn: Maybe<&2, String>
-) -> Sealing.Plan:
+) -> Replicas.Plan<Basics.Ask>:
   match turn:
     case None{}:
-      Sealing.Plan{[], None{}, []}
+      Replicas.Plan{[], None{}, []}
     case Some{+p}:
       Shared.Bool.when(
-        Sealing.Plan,
+        Replicas.Plan<Basics.Ask>,
         String.eq(p, n),
         u => Plan.lead(s, c, w, t, th, os),
         u => Plan.follow(s, c, w, t, th, os, Cast.act(s, w, p))
@@ -339,12 +338,12 @@ def Pass.to(+n: String, +s: Replicas.Node<Basics.Ask>, +w: Ledgers.Where, os: Li
           ),
           List.contains(~String, ~String.eq, os, n)
         ),
-        u => Sealing.Cast.seal(
+        u => Replicas.Cast.seal(~Stepping.Ask.kernel(), 
           s,
           Ledgers.Where{c, h, r},
           n,
           Ledgers.Act.Pass{Last.below(n, s, c, h, r)},
-          Sealing.Seal.chain(s, Sealing.Where.store(Ledgers.Where{c, h, r}), n)
+          Replicas.Seal.chain(~Stepping.Ask.kernel(), s, Replicas.Where.store(Ledgers.Where{c, h, r}), n)
         ),
         u => s
       )
@@ -358,7 +357,7 @@ def Round.join(
   +h: U32,
   os: List<&2, String>
 ) -> Replicas.Node<Basics.Ask>:
-  +top = Sealing.Round.seen(s, c, h)
+  +top = Replicas.Round.seen(~Basics.Ask.machine(), s, c, h)
   Shared.Bool.when(
     Replicas.Node<Basics.Ask>,
     Nat.is_lt(Round.mine(n, s, c, h, top), top),
@@ -377,19 +376,19 @@ def Cast.round(
   +t: Replicas.Tip
 ) -> Replicas.Node<Basics.Ask>:
   +os = Replicas.Tip.owners(t)
-  +r = Round.mine(n, s, c, next, Sealing.Round.seen(s, c, next))
+  +r = Round.mine(n, s, c, next, Replicas.Round.seen(~Basics.Ask.machine(), s, c, next))
   +w = {Ledgers.Where{c, next, r}: Ledgers.Where}
-  +p = Plan.of(n, s, c, w, t, th, os, Sealing.Owners.turn(os, U32.add(next, U32.from_nat(r))))
+  +p = Plan.of(n, s, c, w, t, th, os, Replicas.Owners.turn(os, U32.add(next, U32.from_nat(r))))
   Shared.Bool.when(
     Replicas.Node<Basics.Ask>,
-    Sealing.Cast.may(n, s, w, t, Sealing.Plan.asks(p)),
-    u => Sealing.Cast.put(
+    Replicas.Cast.may(~Basics.Ask.machine(), n, s, w, t, Replicas.Plan.asks(~Basics.Ask.machine(), p)),
+    u => Replicas.Cast.put(~Stepping.Ask.kernel(), 
       n,
       w,
       th,
-      Sealing.Plan.asks(p),
-      Sealing.Plan.from(p),
-      Sealing.Plan.run(p),
+      Replicas.Plan.asks(~Basics.Ask.machine(), p),
+      Replicas.Plan.from(~Basics.Ask.machine(), p),
+      Replicas.Plan.run(~Basics.Ask.machine(), p),
       s
     ),
     u => s
@@ -419,7 +418,7 @@ def Pass.at(
 ) -> Replicas.Node<Basics.Ask>:
   match h m:
     case Replicas.Head{r, b, +next, th} Some{t}:
-      k = Sealing.Round.seen(s, c, next)
+      k = Replicas.Round.seen(~Basics.Ask.machine(), s, c, next)
       Pass.to(
         n,
         s,
@@ -474,7 +473,7 @@ def Advance.moved(
     case None{}:
       s
     case Some{s3}:
-      Sealing.State.moved(Replicas.State.led(~Basics.Ask.machine(), s, Replicas.State.ledger(~Basics.Ask.machine(), s3)), c, h, qs)
+      Replicas.State.moved(~Basics.Ask.machine(), Replicas.State.led(~Basics.Ask.machine(), s, Replicas.State.ledger(~Basics.Ask.machine(), s3)), c, h, qs)
 
 # s at the head of the next height of the line c, when the run m of the
 # decided requests qs gives the tip that the ballots name (after): a node
@@ -495,7 +494,7 @@ def Advance.ran(
     case Some{Replicas.Run{s2, +t2}}:
       Shared.Bool.when(
         Replicas.Node<Basics.Ask>,
-        Sealing.Root.same(after, Some{Replicas.Tip.hash(t2)}),
+        Replicas.Root.same(after, Some{Replicas.Tip.hash(t2)}),
         u => Advance.moved(
           s,
           Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]),
@@ -518,7 +517,7 @@ def Advance.step(
     case Replicas.Head{r, b, next, th} Some{Ledgers.Vote{before, +qs, after}}:
       Shared.Bool.when(
         Replicas.Node<Basics.Ask>,
-        Sealing.Root.same(before, th),
+        Replicas.Root.same(before, th),
         u => Advance.ran(s, c, r, b, next, after, qs, Replicas.Step.run(~Stepping.Ask.kernel(), s, c, t, qs)),
         u => s
       )
@@ -583,7 +582,7 @@ def Height.One(s: Replicas.Node<Basics.Ask>, c: Ledgers.Chain, h: U32, os: List<
 # that the passes that a vote names allow it (Vote.allowed), for the owners os
 def Rounds.Allow(s: Replicas.Node<Basics.Ask>, c: Ledgers.Chain, h: U32, os: List<&2, String>) -> Type:
   @r: Nat -> @q: String -> @v: Ledgers.Vote -> {
-    Sealing.Cast.of(s, Ledgers.Where{c, h, r}, q) == Some{v}: Maybe<&2, Ledgers.Vote>
+    Replicas.Cast.of(~Basics.Ask.machine(), s, Ledgers.Where{c, h, r}, q) == Some{v}: Maybe<&2, Ledgers.Vote>
   } -> {
     Vote.allowed(
       s,
@@ -614,9 +613,9 @@ def Rounds.Last(s: Replicas.Node<Basics.Ask>, c: Ledgers.Chain, h: U32) -> Type:
 # others copy
 def Rounds.Same(s: Replicas.Node<Basics.Ask>, c: Ledgers.Chain, h: U32) -> Type:
   @r: Nat -> @q1: String -> @q2: String -> @a: Ledgers.Vote -> @b: Ledgers.Vote -> {
-    Sealing.Cast.of(s, Ledgers.Where{c, h, r}, q1) == Some{a}: Maybe<&2, Ledgers.Vote>
+    Replicas.Cast.of(~Basics.Ask.machine(), s, Ledgers.Where{c, h, r}, q1) == Some{a}: Maybe<&2, Ledgers.Vote>
   } -> {
-    Sealing.Cast.of(s, Ledgers.Where{c, h, r}, q2) == Some{b}: Maybe<&2, Ledgers.Vote>
+    Replicas.Cast.of(~Basics.Ask.machine(), s, Ledgers.Where{c, h, r}, q2) == Some{b}: Maybe<&2, Ledgers.Vote>
   } -> {a == b: Ledgers.Vote}
 
 # that the ballots that s holds on the line c follow the rules of rounds, at
@@ -627,10 +626,10 @@ def Rounds.Rules(s: Replicas.Node<Basics.Ask>, c: Ledgers.Chain) -> Type:
   } -> Rounds.Allow(
     s,
     c,
-    Sealing.Head.next(x),
+    Replicas.Head.next(x),
     Replicas.Tip.owners(t)
   )
-    & (Rounds.Last(s, c, Sealing.Head.next(x)) & Rounds.Same(s, c, Sealing.Head.next(x)))
+    & (Rounds.Last(s, c, Replicas.Head.next(x)) & Rounds.Same(s, c, Replicas.Head.next(x)))
 
 # Node.advance at the head h of the line c, whose tip is m
 def Advance.at(
@@ -651,9 +650,9 @@ def Advance.at(
         Height.decide(
           s,
           c,
-          Sealing.Head.next(h),
+          Replicas.Head.next(h),
           Replicas.Tip.owners(t),
-          Sealing.Round.seen(s, c, Sealing.Head.next(h))
+          Replicas.Round.seen(~Basics.Ask.machine(), s, c, Replicas.Head.next(h))
         )
       )
 
@@ -675,7 +674,7 @@ def Node.advance(+s: Replicas.Node<Basics.Ask>, +c: Ledgers.Chain) -> Replicas.N
 def Heads.level(a: Maybe<&2, Replicas.Head>, b: Maybe<&2, Replicas.Head>) -> Bool:
   match a b:
     case Some{x} Some{y}:
-      U32.is_eq(Sealing.Head.next(x), Sealing.Head.next(y))
+      U32.is_eq(Replicas.Head.next(x), Replicas.Head.next(y))
     case x y:
       True{}
 
@@ -712,7 +711,7 @@ def Step.head(n: String, s: Replicas.Node<Basics.Ask>, +c: Ledgers.Chain) -> Rep
 
 # s, after the node n did what it can on the line c
 def Node.step(n: String, s: Replicas.Node<Basics.Ask>, +c: Ledgers.Chain) -> Replicas.Node<Basics.Ask>:
-  Step.head(n, Sealing.Node.open(s, c), c)
+  Step.head(n, Replicas.Node.open(~Basics.Ask.machine(), s, c), c)
 
 # s, after the owner n passed to the next round of the next step of the line
 # c, and did what it can there: the round took too long (the proposer may be
@@ -724,7 +723,7 @@ def Node.pass(+n: String, +s: Replicas.Node<Basics.Ask>, +c: Ledgers.Chain) -> R
 def Node.ask.new(n: String, +s: Replicas.Node<Basics.Ask>, +e: Replicas.Envelope, +q: Basics.Ask) -> Replicas.Node<Basics.Ask>:
   +i = Replicas.Envelope.of(e)
   c = Replicas.Arrival.chain(i, Replicas.Kernel.arrival(Stepping.Ask.kernel())(q))
-  s1 = Sealing.Node.arrive(
+  s1 = Replicas.Node.arrive(~Stepping.Ask.kernel(), 
     Replicas.State.led(~Basics.Ask.machine(), 
       s,
       Ledgers.State.ask(
@@ -755,7 +754,7 @@ def Node.ask.at(
     case None{}:
       Node.ask.new(
         n,
-        Replicas.State.keyed(~Basics.Ask.machine(), s, Sealing.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), Replicas.Envelope.of(e))),
+        Replicas.State.keyed(~Basics.Ask.machine(), s, Replicas.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), Replicas.Envelope.of(e))),
         e,
         q
       )
@@ -793,7 +792,7 @@ def Take.asks(
             Cells.Cell<Ledgers.Entry<Basics.Ask>>,
             Ledgers.State.get(~Basics.Ask, old, Ledgers.Slot.ask(i))
           ),
-          u => Sealing.Node.arrive(s, i, q),
+          u => Replicas.Node.arrive(~Stepping.Ask.kernel(), s, i, q),
           u => s
         )
       )
@@ -829,7 +828,7 @@ def Consent.at(
     case None{}:
       s
     case Some{c}:
-      Node.step(n, Replicas.State.keyed(~Basics.Ask.machine(), s, Sealing.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), i)), c)
+      Node.step(n, Replicas.State.keyed(~Basics.Ask.machine(), s, Replicas.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), i)), c)
 
 # s, after a writer connected to the node n asked for the request i, which s
 # holds already (it came from another node): the request counts once, and the
@@ -908,7 +907,7 @@ def Ballots.of(cs: List<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>) -> List<&2, 
 # its line: the cost is what t brings, not what s holds
 def Node.take(+s: Replicas.Node<Basics.Ask>, +t: Ledgers.State(Basics.Ask)) -> Replicas.Node<Basics.Ask>:
   +sent = Node.reads(t)
-  Sealing.Sealed.take(
+  Replicas.Sealed.take(~Stepping.Ask.kernel(), 
     Ballots.of(
       Tries.Trie.values(
         Cells.Cell<Ledgers.Entry<Basics.Ask>>,
@@ -972,7 +971,7 @@ def Lines.new(
     case Con{Cells.One{Ledgers.Entry.Ask{i, t, q}}, r}:
       Replicas.Arrival.chain(i, Replicas.Kernel.arrival(Stepping.Ask.kernel())(q)) <> Lines.new(r, rest)
     case Con{Cells.One{Ledgers.Entry.Vote{b}}, r}:
-      Sealing.Where.line(Sealing.Ballot.at(b)) <> Lines.new(r, rest)
+      Replicas.Where.line(Replicas.Ballot.at(b)) <> Lines.new(r, rest)
     case Con{c, r}:
       Lines.new(r, rest)
 
