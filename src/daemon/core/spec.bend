@@ -4436,7 +4436,7 @@ def Node.adopt(n: String, +s: State(), r: Ledgers.Id, l: Maybe<&2, String>) -> S
   Adopt.ask(n, s, Node.adoption(s, r, l))
 
 # Adopt.at once the head m of the line is known
-def Adopt.head(n: String, +s: State(), m: Maybe<&2, Head>) -> State():
+def Adopt.head(n: String, s: State(), m: Maybe<&2, Head>) -> State():
   match m:
     case None{}:
       s
