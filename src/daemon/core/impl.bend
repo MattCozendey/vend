@@ -3378,33 +3378,6 @@ def Run.kept(
 # other than the owners and the count, holds the same value after the node
 # takes in a request, or what another node sent, or does a sync.
 
-# a read through a value that is kept, by a function whose result is kept
-def Bind.kept(
-  -A: Data,
-  -B: Data,
-  m: Maybe<&2, A>,
-  -m2: Maybe<&2, A>,
-  -f: A -> Maybe<&2, B>,
-  -f2: A -> Maybe<&2, B>,
-  -o: B
-) -> (@x: A -> {m == Some{x}: Maybe<&2, A>} -> {m2 == Some{x}: Maybe<&2, A>}) -> (@x: A -> {
-  f(x) == Some{o}: Maybe<&2, B>
-} -> {f2(x) == Some{o}: Maybe<&2, B>}) -> {
-  Maybe.bind(&2, A, B, m, f) == Some{o}: Maybe<&2, B>
-} -> {Maybe.bind(&2, A, B, m2, f2) == Some{o}: Maybe<&2, B>}:
-  match m:
-    case None{}:
-      hm => hf => e => Empty.absurd(
-        {Maybe.bind(&2, A, B, m2, f2) == Some{o}: Maybe<&2, B>},
-        Shared.Maybe.none_ne_some(B, o, e)
-      )
-    case Some{+x}:
-      hm => hf => e =>
-        %Equal.sym(Maybe<&2, A>, m2, Some{x}, hm(x)({==})): {
-          Maybe.bind(&2, A, B, _, f2) == Some{o}: Maybe<&2, B>
-        }
-        hf(x)(e)
-
 # a tip that a node holds, a node that grew from it holds
 def Tip.at.grows(
   +a: Spec.State(),
@@ -3413,16 +3386,15 @@ def Tip.at.grows(
   -t: Spec.Tip,
   +g: {Spec.Node.grows(a, b) == True{}: Bool}
 ) -> {Spec.Tip.at(a, x) == Some{t}: Maybe<&2, Spec.Tip>} -> {Spec.Tip.at(b, x) == Some{t}: Maybe<&2, Spec.Tip>}:
-  Bind.kept(
+  Shared.Maybe.bind_kept(
     List<&2, U32>,
     Spec.Tip,
     Spec.Store.fetch(a, x),
     Spec.Store.fetch(b, x),
     ws => Spec.Tip.read(ws),
     ws => Spec.Tip.read(ws),
-    t
-  )(
-    w => Ledgers.State.data_grows(
+    t,
+w => Ledgers.State.data_grows(
       ~Spec.Ask,
       ~Spec.Ask.is_eq,
       ~Ask.laws(),
@@ -3430,8 +3402,9 @@ def Tip.at.grows(
       Spec.State.ledger(b),
       x,
       w
-    )(g)
-  )(w => e => e)
+    )(g),
+w => e => e
+)
 
 # the tip of a head, in a node that grew
 def Head.tip.grows(
@@ -3445,15 +3418,17 @@ def Head.tip.grows(
 }:
   match h:
     case Spec.Head{r, br, n, th}:
-      Bind.kept(
+      Shared.Maybe.bind_kept(
         Hashes.Hash,
         Spec.Tip,
         th,
         th,
         x => Spec.Tip.at(a, x),
         x => Spec.Tip.at(b, x),
-        t
-      )(x => e => e)(+x => Tip.at.grows(a, b, x, t, g))
+        t,
+x => e => e,
++x => Tip.at.grows(a, b, x, t, g)
+)
 
 # what the log of a head holds, in a node that grew
 def Head.get.grows(
@@ -3464,15 +3439,17 @@ def Head.get.grows(
   +v: List<&2, U32>,
   +g: {Spec.Node.grows(a, b) == True{}: Bool}
 ) -> {Spec.Head.get(a, h, k) == Some{v}: Maybe<&2, List<&2, U32>>} -> {Spec.Head.get(b, h, k) == Some{v}: Maybe<&2, List<&2, U32>>}:
-  Bind.kept(
+  Shared.Maybe.bind_kept(
     Spec.Tip,
     List<&2, U32>,
     Spec.Head.tip(a, h),
     Spec.Head.tip(b, h),
     t => Spec.Node.get(a, Spec.Tip.log(t), k),
     t => Spec.Node.get(b, Spec.Tip.log(t), k),
-    v
-  )(t => Head.tip.grows(a, b, h, t, g))(t => Get.grows(a, b, Spec.Tip.log(t), k, v, g))
+    v,
+t => Head.tip.grows(a, b, h, t, g),
+t => Get.grows(a, b, Spec.Tip.log(t), k, v, g)
+)
 
 # a line whose head is the same in a node that grew holds what it held
 def Line.same(
@@ -3484,24 +3461,24 @@ def Line.same(
   +g: {Spec.Node.grows(a, b) == True{}: Bool},
   +eh: {Spec.Node.head_of(a, c) == Spec.Node.head_of(b, c): Maybe<&2, Spec.Head>}
 ) -> {Spec.Line.get(a, c, k) == Some{v}: Maybe<&2, List<&2, U32>>} -> {Spec.Line.get(b, c, k) == Some{v}: Maybe<&2, List<&2, U32>>}:
-  Bind.kept(
+  Shared.Maybe.bind_kept(
     Spec.Head,
     List<&2, U32>,
     Spec.Node.head_of(a, c),
     Spec.Node.head_of(b, c),
     h => Spec.Head.get(a, h, k),
     h => Spec.Head.get(b, h, k),
-    v
-  )(
-    h => e => Equal.trans(
+    v,
+h => e => Equal.trans(
       Maybe<&2, Spec.Head>,
       Spec.Node.head_of(b, c),
       Spec.Node.head_of(a, c),
       Some{h},
       Equal.sym(Maybe<&2, Spec.Head>, Spec.Node.head_of(a, c), Spec.Node.head_of(b, c), eh),
       e
-    )
-  )(+h => Head.get.grows(a, b, h, k, v, g))
+    ),
++h => Head.get.grows(a, b, h, k, v, g)
+)
 
 # a node keeps its own logs
 def Kept.refl(-s: Spec.State()) -> Spec.Node.Keeps(s, s):
@@ -4974,15 +4951,17 @@ def Chain.out.kept(
 ) -> {Spec.Chain.out(a, c, i) == Some{o}: Maybe<&2, Spec.Out>} -> {
   Spec.Chain.out(b, c, i) == Some{o}: Maybe<&2, Spec.Out>
 }:
-  Bind.kept(
+  Shared.Maybe.bind_kept(
     List<&2, U32>,
     Spec.Out,
     Spec.Line.get(a, c, Spec.Log.out(i)),
     Spec.Line.get(b, c, Spec.Log.out(i)),
     ws => Spec.Out.read(ws),
     ws => Spec.Out.read(ws),
-    o
-  )(w => hk(c)(Spec.Log.out(i))(w)({==})({==}))(w => e => e)
+    o,
+w => hk(c)(Spec.Log.out(i))(w)({==})({==}),
+w => e => e
+)
 
 # the version of a number that a line holds, it holds in a node that keeps
 # its logs
@@ -4996,15 +4975,17 @@ def Chain.version.kept(
 ) -> {Spec.Chain.version(a, c, n) == Some{x}: Maybe<&2, Spec.Version>} -> {
   Spec.Chain.version(b, c, n) == Some{x}: Maybe<&2, Spec.Version>
 }:
-  Bind.kept(
+  Shared.Maybe.bind_kept(
     List<&2, U32>,
     Spec.Version,
     Spec.Line.get(a, c, Spec.Log.version(n)),
     Spec.Line.get(b, c, Spec.Log.version(n)),
     ws => Spec.Version.read(ws),
     ws => Spec.Version.read(ws),
-    x
-  )(w => hk(c)(Spec.Log.version(n))(w)({==})({==}))(w => e => e)
+    x,
+w => hk(c)(Spec.Log.version(n))(w)({==})({==}),
+w => e => e
+)
 
 # a mark that a line holds, it holds in a node that keeps its logs
 def Chain.mark.kept(
@@ -5017,15 +4998,17 @@ def Chain.mark.kept(
 ) -> {Spec.Chain.mark(a, c, m) == Some{v}: Maybe<&2, Ledgers.Id>} -> {
   Spec.Chain.mark(b, c, m) == Some{v}: Maybe<&2, Ledgers.Id>
 }:
-  Bind.kept(
+  Shared.Maybe.bind_kept(
     List<&2, U32>,
     Ledgers.Id,
     Spec.Line.get(a, c, Spec.Log.mark(m)),
     Spec.Line.get(b, c, Spec.Log.mark(m)),
     ws => Spec.Read.whole(Ledgers.Id, Ledgers.Id.code.read(ws)),
     ws => Spec.Read.whole(Ledgers.Id, Ledgers.Id.code.read(ws)),
-    v
-  )(w => hk(c)(Spec.Log.mark(m))(w)({==})({==}))(w => e => e)
+    v,
+w => hk(c)(Spec.Log.mark(m))(w)({==})({==}),
+w => e => e
+)
 
 # the line of a request that a node holds, a node that grew holds
 def Chain.of.kept(
@@ -5037,16 +5020,15 @@ def Chain.of.kept(
 ) -> {Spec.Node.chain_of(a, i) == Some{c}: Maybe<&2, Ledgers.Chain>} -> {
   Spec.Node.chain_of(b, i) == Some{c}: Maybe<&2, Ledgers.Chain>
 }:
-  Bind.kept(
+  Shared.Maybe.bind_kept(
     Ledgers.Asked<Spec.Ask>,
     Ledgers.Chain,
     Spec.Node.asked(a, i),
     Spec.Node.asked(b, i),
     x => Some{Spec.Ask.chain(i, Spec.Asked.ask(x))},
     x => Some{Spec.Ask.chain(i, Spec.Asked.ask(x))},
-    c
-  )(
-    x => Ledgers.State.read_grows(
+    c,
+x => Ledgers.State.read_grows(
       ~Spec.Ask,
       ~Spec.Ask.is_eq,
       ~Ask.laws(),
@@ -5057,8 +5039,9 @@ def Chain.of.kept(
       Spec.State.ledger(b),
       Ledgers.Slot.ask(i),
       x
-    )(g)
-  )(x => e => e)
+    )(g),
+x => e => e
+)
 
 # an outcome that a node knows, a node that grew and keeps its logs knows
 def Out.kept(
@@ -5071,15 +5054,17 @@ def Out.kept(
 ) -> {Spec.Node.out(a, i) == Some{o}: Maybe<&2, Spec.Out>} -> {
   Spec.Node.out(b, i) == Some{o}: Maybe<&2, Spec.Out>
 }:
-  Bind.kept(
+  Shared.Maybe.bind_kept(
     Ledgers.Chain,
     Spec.Out,
     Spec.Node.chain_of(a, i),
     Spec.Node.chain_of(b, i),
     c => Spec.Chain.out(a, c, i),
     c => Spec.Chain.out(b, c, i),
-    o
-  )(c => Chain.of.kept(a, b, i, c, g))(+c => Chain.out.kept(a, b, c, i, o, hk))
+    o,
+c => Chain.of.kept(a, b, i, c, g),
++c => Chain.out.kept(a, b, c, i, o, hk)
+)
 
 # the version of an outcome, in a node that keeps the logs
 def Out.on.kept(
@@ -5110,15 +5095,17 @@ def Chain.made.kept(
 ) -> {Spec.Chain.made(a, c, v) == Some{x}: Maybe<&2, Spec.Version>} -> {
   Spec.Chain.made(b, c, v) == Some{x}: Maybe<&2, Spec.Version>
 }:
-  Bind.kept(
+  Shared.Maybe.bind_kept(
     Spec.Out,
     Spec.Version,
     Spec.Chain.out(a, c, v),
     Spec.Chain.out(b, c, v),
     o => Spec.Out.on(a, c, o),
     o => Spec.Out.on(b, c, o),
-    x
-  )(o => Chain.out.kept(a, b, c, v, o, hk1))(o => Out.on.kept(a, b, c, o, x, hk2))
+    x,
+o => Chain.out.kept(a, b, c, v, o, hk1),
+o => Out.on.kept(a, b, c, o, x, hk2)
+)
 
 # the version that a request made, in a node that grew and keeps the logs
 def Made.kept(
@@ -5132,15 +5119,17 @@ def Made.kept(
 ) -> {Spec.Node.made(a, v) == Some{x}: Maybe<&2, Spec.Version>} -> {
   Spec.Node.made(b, v) == Some{x}: Maybe<&2, Spec.Version>
 }:
-  Bind.kept(
+  Shared.Maybe.bind_kept(
     Ledgers.Chain,
     Spec.Version,
     Spec.Node.chain_of(a, v),
     Spec.Node.chain_of(b, v),
     +c => Spec.Chain.made(a, c, v),
     +c => Spec.Chain.made(b, c, v),
-    x
-  )(c => Chain.of.kept(a, b, v, c, g))(+c => Chain.made.kept(a, b, c, v, x, hk1, hk2))
+    x,
+c => Chain.of.kept(a, b, v, c, g),
++c => Chain.made.kept(a, b, c, v, x, hk1, hk2)
+)
 
 def Spec.Node.out_final(n, evs, s, i, o):
   Out.kept(
@@ -5782,16 +5771,16 @@ def Vote.up(
   +v: Ledgers.Vote,
   +g: {Spec.Node.grows(a, u) == True{}: Bool}
 ) -> {Spec.Advance.vote(a, c, h) == Some{v}: Maybe<&2, Ledgers.Vote>} -> {Spec.Advance.vote(u, c, h) == Some{v}: Maybe<&2, Ledgers.Vote>}:
-  Bind.kept(
+  Shared.Maybe.bind_kept(
     Spec.Tip,
     Ledgers.Vote,
     Spec.Head.tip(a, h),
     Spec.Head.tip(u, h),
     t => Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(a), Ledgers.Where{c, Spec.Head.next(h)}, Spec.Line.owners(a, t)),
     t => Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(u), Ledgers.Where{c, Spec.Head.next(h)}, Spec.Line.owners(u, t)),
-    v
-  )(t => Head.tip.grows(a, u, h, t, g))(
-    +t => +e =>
+    v,
+t => Head.tip.grows(a, u, h, t, g),
++t => +e =>
       %Owners.up(a, u, t, Ledgers.Where{c, Spec.Head.next(h)}, v, g)(e): {
         Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(u), Ledgers.Where{c, Spec.Head.next(h)}, _) == Some{v}: Maybe<&2, Ledgers.Vote>
       }
@@ -5805,7 +5794,7 @@ def Vote.up(
         Spec.Line.owners(a, t),
         v
       )(g)(e)
-  )
+)
 
 # a head is at its own height
 def Level.refl(h: Spec.Head) -> {Spec.Heads.level(Some{h}, Some{h}) == True{}: Bool}:

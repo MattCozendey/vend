@@ -30,8 +30,19 @@ Delete each open item when the code makes it true.
   line.
 - **Content** (`shared/rope.bend`): a change names content by the root of a content-defined rope,
   so a change, a tree and a sync cost about the size of an edit.
-- **Seals** (`shared/shared/shared/seal.bend`): one-time signatures on SHA-256 (Winternitz,
-  w = 16). Not yet used by the ledger (section 4).
+- **Seals** (`shared/shared/shared/seal.bend`, `Seal.*` in the core): one-time signatures on
+  SHA-256 (Winternitz, w = 16). A ballot is a sealed record: its place, its node, the step, the
+  place of the node's ballot before it in the store, the key of the next one, and the seal. So a
+  node's ballots in one store are a chain, and each key signs once. The store gives a node the
+  first key of its chain: a first owner's in the request that starts the store, then by a `Key`
+  change that the store's owners decide (again after a node lost its secret). A node seals each
+  ballot that it casts, and keeps a ballot of another node only when it is the next of that
+  node's chain and the key of the chain signs it (`Seal.accept`). A ballot that it cannot check
+  yet is not kept; it comes again with the next sync.
+- **Missing is not absent** (`Tree.look`, `Node.find`): a judge reads with `Node.find`. It refuses
+  only on what it knows, and waits for a node that it lacks.
+- **Sync** steps only the lines that it may move: those of the new requests and ballots, and
+  those with waiting requests (`Sync.lines`).
 - **Formats** stay outside the judge: the judge sees a resource as a root and a format-given merge
   of bytes. A nested format is a new `Formats.Format`; the ledger, the trees and the steps do not
   change.
@@ -46,7 +57,7 @@ known words costs it about a million steps. So:
 - A proof never compares two hashes of known words (`Rope.put.go_nil` is the one place).
 - A loop with a large fuel waits on a value that a proof does not know (`Advances.at`).
 
-All of `core/impl.bend` checks in about 6 s (it was 175 s).
+All of `core/impl.bend` checks in about 10 s (it was 175 s).
 
 ## 3. What is proven (every file prints ALL PROOFS CHECK)
 
@@ -62,6 +73,10 @@ README claim, then the law.
 - A version never changes; history only grows at its end; marks are for good:
   `Node.made_final`, `Chain.version_final`, `Chain.mark_final`, all from `Node.after_keeps` (a log
   only gains keys, whatever the node does next: `Run.kept`, then each step of a node).
+- Owners sign: `Seal.accept_fits` (a node keeps only a ballot that is the next of its node's
+  chain and that the chain's key signs), `Seal.fits_own` (a ballot sealed with the chain's
+  secret fits), `Seal.check_sign`. That no other node can make one is the assumption of
+  hash-based signatures; it is not a law.
 - A majority decides, in sequence: `Node.advance_decided` (a head moves only to the tip that the
   owners in its tip decided next), `Node.advance_agrees` (two nodes at the same head, whose
   ledgers do not clash, move to the same head).
@@ -75,24 +90,26 @@ README claim, then the law.
 
 ## 4. Open
 
-- **Seals in the ledger.** A ballot is an entry in a node's slot; nothing stops another node from
-  writing it. To do: a ballot carries its place and a seal; it names the key of the node's next
-  ballot on the line; `Node.take` drops a ballot whose seal fails; a restarted node starts a new
-  key chain through its owner group.
 - **Agreement over a whole history.** `Node.advance_agrees` is one step. The induction over
   heights (same first tip, then step by step) is not a law yet. It needs an invariant of a node:
   each head is the end of the chain of decided steps of its ledger.
-- **Missing is not absent.** A tree read gives none for both. An owner that lacks data can refuse
-  where it must wait. To do: `Found`, `Absent`, `Missing{hash}` in `tree.bend` and `rope.bend`,
-  and the judge waits on `Missing`. Then also: a move records a version equal to its target (law).
-- **Owners through a group.** `Node.adopt` still asks for a line's owners again after its group
-  changes. Target: a line reads its owners through its group at the store version that it names.
-- **Sync steps every line.** `Node.sync` walks every head. To do: step only the lines of the new
-  requests and ballots (a ballot must carry its place), and the lines that wait for new data.
-- **Walks that are left:** `Node.versions` lists every version (use a range); `Touch.versions`,
-  `Version.keys`, `Node.affects`, `Node.impact`, `Node.notices` read every version of every
-  branch; `Tree.list` walks a tree for names and clashes. Each needs an index in the log or the
-  content.
-- **The ledger's trie** is one node for each bit of a key. A compressed trie is in work.
-- **A put is done twice** for a taken request (`Work.put`, then `Run.content`).
+- **Missing is not absent, the rest.** The write, resolve, merge and Own judges wait. Still to
+  do: the version vector, `Tree.list` and `Tree.diff` (they walk and give no sign of a node that
+  they lack), so a merge or a move can still act on a part of a tree. Then: a move records a
+  version equal to its target (law).
+- **Owners through a group.** After a group changes, each line that it owns gets its new owners
+  by an Own request that any owner's node asks, once (`Node.adopt`). Target: a line reads its
+  owners through its group at the store version that it names.
+- **Walks that are left:** `Node.versions` lists every version (use a range); `Node.log`,
+  `Touch.versions`, `Version.keys`, `Node.affects`, `Node.impact`, `Node.notices` read every
+  version of every branch. Target: notices are made when a head moves, from the diff of the two
+  contents and an index of imports by content root.
+- **A put is done twice** for a taken request (`Work.put`, then `Run.content`): the second one
+  makes growth independent of the judge. Target: prove that each judge only grows its node, and
+  let the run keep the judge's node.
+- **A sealed chain is checked in a few rounds.** A ballot is checked against the store content
+  at the node's head. A key that a store gives at height h is known only after the node moved
+  there, so a node that is far behind needs one more sync for each `Key` change in between.
+- **Lint and layout** of `trie.bend` (generated proof cases) and of the new proofs in
+  `core/impl.bend`.
 - **Transport** (`transport/spec.bend`) is a spec only.
