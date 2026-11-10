@@ -553,6 +553,66 @@ def Node.set(
 ) -> Maybe<&2, Trees.Put>:
   Node.set.at(s, h, k, x, Trees.Tree.part(~State(), ~Store.fetch, s, h))
 
+# Node.look once the root node m of the tree is known (see Node.get.at)
+def Node.look.at(
+  +s: State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  m: Maybe<&2, Trees.Node>
+) -> Trees.Look:
+  match m:
+    case None{}:
+      Trees.Look.missing(h)
+    case Some{Trees.Node.Empty{}}:
+      Trees.Look.Absent{}
+    case Some{+n}:
+      Trees.Tree.look.go(~State(), ~Store.fetch, s, Trees.Tree.path(k), k, h, Some{n})
+
+# what a read of the key k finds in the tree whose root is h: Trees.Tree.look
+# (impl: Look.is)
+def Node.look(+s: State(), +h: Maybe<&2, Hashes.Hash>, +k: List<&2, U32>) -> Trees.Look:
+  Node.look.at(s, h, k, Trees.Tree.part(~State(), ~Store.fetch, s, h))
+
+# what a look knows: the value, or that there is none (none: it lacks a node,
+# and cannot tell)
+def Look.known(l: Trees.Look) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
+  match l:
+    case Trees.Look.Found{v}:
+      Some{Some{v}}
+    case Trees.Look.Absent{}:
+      Some{None{}}
+    case Trees.Look.Missing{x}:
+      None{}
+
+# what the tree whose root is h holds under the key k, or that it holds
+# nothing there (none: the node lacks a node of the tree). A judge reads with
+# this: it refuses only on what it knows, and waits for what it lacks
+def Node.find(
+  +s: State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>
+) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
+  Look.known(Node.look(s, h, k))
+
+# the root in the value m of a resource, if any
+def Res.found(m: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Ropes.Root>:
+  Maybe.bind(&2, List<&2, U32>, Ropes.Root, m, ws => Res.read(ws))
+
+# the root of the content of the resource n in the tree whose root is h, or
+# that it is not there (none: the node lacks a node of the tree)
+def Res.find(
+  +s: State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  n: Resources.Name
+) -> Maybe<&2, Maybe<&2, Ropes.Root>>:
+  Maybe.bind(
+    &2,
+    Maybe<&2, List<&2, U32>>,
+    Maybe<&2, Ropes.Root>,
+    Node.find(s, h, Key.res(n)),
+    m => Some{Res.found(m)}
+  )
+
 # the root of the content of the resource n in the tree whose root is h (none:
 # it is not there)
 def Res.root(s: State(), h: Maybe<&2, Hashes.Hash>, n: Resources.Name) -> Maybe<&2, Ropes.Root>:
@@ -1534,8 +1594,18 @@ def Content.root(+s: State(), n: Resources.Name, c: Content) -> Maybe<&2, Ropes.
     case Content.Of{w}:
       Res.root(s, Node.root_of(s, Some{w}), n)
 
+# the root that the content c gives the resource n, or that it gives none
+# (none: the node lacks a node of the version's tree)
+def Content.find(+s: State(), n: Resources.Name, c: Content) -> Maybe<&2, Maybe<&2, Ropes.Root>>:
+  match c:
+    case Content.Root{x}:
+      Some{Some{x}}
+    case Content.Of{w}:
+      Res.find(s, Node.root_of(s, Some{w}), n)
+
 # the verdict on a write of the resource n since base, with the content c, at
-# the tree h: take it when n holds at h what it held at base
+# the tree h: take it when n holds at h what it held at base. It waits for a
+# node that it lacks: it does not refuse on what it cannot read
 def Judge.write(
   +s: State(),
   +n: Resources.Name,
@@ -1549,10 +1619,28 @@ def Judge.write(
     u => Judge.then(
       Judge.content(s, c),
       h,
-      w => Judge.when(
-        Roots.same(Res.root(s, h, n), Res.root(s, Node.root_of(s, base), n)),
-        h,
-        x => Work.take(Work.set(Work{s, h, []}, Key.res(n), Res.code(Content.root(s, n, c))))
+      w => Maybe.bind(
+        &2,
+        Maybe<&2, Ropes.Root>,
+        Verdict,
+        Res.find(s, h, n),
+        a => Maybe.bind(
+          &2,
+          Maybe<&2, Ropes.Root>,
+          Verdict,
+          Res.find(s, Node.root_of(s, base), n),
+          b => Maybe.bind(
+            &2,
+            Maybe<&2, Ropes.Root>,
+            Verdict,
+            Content.find(s, n, c),
+            m => Judge.when(
+              Roots.same(a, b),
+              h,
+              x => Work.take(Work.set(Work{s, h, []}, Key.res(n), Res.code(m)))
+            )
+          )
+        )
       )
     )
   )
@@ -1582,13 +1670,26 @@ def Merge.from_on(m: Maybe<&2, Ledgers.Asked<Ask>>, r: Ledgers.Id, b: String) ->
       None{}
 
 # the clash of the resource n is open in the tree h, by the merge of the
-# version m, if any
-def Clash.open_by(s: State(), h: Maybe<&2, Hashes.Hash>, n: Resources.Name, m: Maybe<&2, Ledgers.Id>) -> Bool:
+# version m, if any (none: the node lacks a node of the tree)
+def Clash.find(
+  +s: State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  n: Resources.Name,
+  m: Maybe<&2, Ledgers.Id>
+) -> Maybe<&2, Bool>:
   match m:
     case None{}:
-      False{}
+      Some{False{}}
     case Some{f}:
-      Clash.open(s, h, n, f)
+      Maybe.bind(
+        &2,
+        Maybe<&2, List<&2, U32>>,
+        Bool,
+        Node.find(s, h, Key.clash(n)),
+        x => Some{
+          Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), x, Some{Clash.code(f)})
+        }
+      )
 
 # the verdict on a resolve of the resource n, which the merge k left in clash
 # on the branch b of the store r, with the content c, at the tree h
@@ -1607,16 +1708,28 @@ def Judge.resolve(
     u => Judge.then(
       Judge.content(s, c),
       h,
-      w => Judge.when(
-        Clash.open_by(s, h, n, Merge.from_on(Node.asked(s, k), r, b)),
-        h,
-        x => Work.take(
-          Maybe.bind(
-            &2,
-            Work,
-            Work,
-            Work.set(Work{s, h, []}, Key.res(n), Res.code(Content.root(s, n, c))),
-            y => Work.set(y, Key.clash(n), [])
+      w => Maybe.bind(
+        &2,
+        Bool,
+        Verdict,
+        Clash.find(s, h, n, Merge.from_on(Node.asked(s, k), r, b)),
+        open => Maybe.bind(
+          &2,
+          Maybe<&2, Ropes.Root>,
+          Verdict,
+          Content.find(s, n, c),
+          m => Judge.when(
+            open,
+            h,
+            x => Work.take(
+              Maybe.bind(
+                &2,
+                Work,
+                Work,
+                Work.set(Work{s, h, []}, Key.res(n), Res.code(m)),
+                y => Work.set(y, Key.clash(n), [])
+              )
+            )
           )
         )
       )
@@ -1700,7 +1813,25 @@ def Merge.all(
           Work,
           Work,
           m,
-          w => Merge.one(s, f, n, Res.root(s, hb, n), Res.root(s, ho, n), Res.root(s, ht, n), w)
+          w => Maybe.bind(
+            &2,
+            Maybe<&2, Ropes.Root>,
+            Work,
+            Res.find(s, hb, n),
+            b => Maybe.bind(
+              &2,
+              Maybe<&2, Ropes.Root>,
+              Work,
+              Res.find(s, ho, n),
+              o => Maybe.bind(
+                &2,
+                Maybe<&2, Ropes.Root>,
+                Work,
+                Res.find(s, ht, n),
+                x => Merge.one(s, f, n, b, o, x, w)
+              )
+            )
+          )
         )
       )
 
@@ -3880,9 +4011,11 @@ law Judge.write_reads:
   for +h2: Maybe<&2, Hashes.Hash>
   for +ds: List<&2, List<&2, U32>>
   for +s3: State()
+  for +m: Maybe<&2, Ropes.Root>
   {Judge.write(s, n, base, c, h) == Some{Verdict{True{}, h2, ds}}: Maybe<&2, Verdict>}
     -> {State.put(s, ds) == Some{s3}: Maybe<&2, State()>}
-    -> {Res.root(s3, h2, n) == Content.root(s, n, c): Maybe<&2, Ropes.Root>}
+    -> {Content.find(s, n, c) == Some{m}: Maybe<&2, Maybe<&2, Ropes.Root>>}
+    -> {Res.root(s3, h2, n) == m: Maybe<&2, Ropes.Root>}
 
 # a merge never loses a change that only one side made: when ours is the base,
 # it keeps theirs

@@ -373,6 +373,67 @@ def Get.is(
 ) -> {Spec.Node.get(s, h, k) == Trees.Tree.get(~Spec.State(), ~Spec.Store.fetch, s, h, k): Maybe<&2, List<&2, U32>>}:
   Get.at.is(s, k, Trees.Tree.part(~Spec.State(), ~Spec.Store.fetch, s, h))
 
+# a look below no node lacks it
+def Look.go.none(
+  s: Spec.State(),
+  p: List<&2, Nat>,
+  k: List<&2, U32>,
+  h: Maybe<&2, Hashes.Hash>
+) -> {Trees.Tree.look.go(~Spec.State(), ~Spec.Store.fetch, s, p, k, h, None{}) == Trees.Look.missing(h): Trees.Look}:
+  match p:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      {==}
+
+# a look below an empty node finds nothing
+def Look.go.empty(
+  s: Spec.State(),
+  p: List<&2, Nat>,
+  k: List<&2, U32>,
+  h: Maybe<&2, Hashes.Hash>
+) -> {Trees.Tree.look.go(~Spec.State(), ~Spec.Store.fetch, s, p, k, h, Some{Trees.Node.Empty{}}) == Trees.Look.Absent{}: Trees.Look}:
+  match p:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      {==}
+
+# Look.is once the root node m is known
+def Look.at.is(
+  +s: Spec.State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  m: Maybe<&2, Trees.Node>
+) -> {Spec.Node.look.at(s, h, k, m) == Trees.Tree.look.go(~Spec.State(), ~Spec.Store.fetch, s, Trees.Tree.path(k), k, h, m): Trees.Look}:
+  match m:
+    case None{}:
+      Equal.sym(
+        Trees.Look,
+        Trees.Tree.look.go(~Spec.State(), ~Spec.Store.fetch, s, Trees.Tree.path(k), k, h, None{}),
+        Trees.Look.missing(h),
+        Look.go.none(s, Trees.Tree.path(k), k, h)
+      )
+    case Some{Trees.Node.Empty{}}:
+      Equal.sym(
+        Trees.Look,
+        Trees.Tree.look.go(~Spec.State(), ~Spec.Store.fetch, s, Trees.Tree.path(k), k, h, Some{Trees.Node.Empty{}}),
+        Trees.Look.Absent{},
+        Look.go.empty(s, Trees.Tree.path(k), k, h)
+      )
+    case Some{Trees.Node.Leaf{a, b}}:
+      {==}
+    case Some{Trees.Node.Branch{ks}}:
+      {==}
+
+# the node's look at a tree is the tree's look
+def Look.is(
+  +s: Spec.State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>
+) -> {Spec.Node.look(s, h, k) == Trees.Tree.look(~Spec.State(), ~Spec.Store.fetch, s, h, k): Trees.Look}:
+  Look.at.is(s, h, k, Trees.Tree.part(~Spec.State(), ~Spec.Store.fetch, s, h))
+
 # a write below no node gives nothing
 def Set.go.none(
   s: Spec.State(),
@@ -5810,60 +5871,91 @@ def Set.reads(
     case Some{Trees.Put{+hh, +ws}}:
       Set.reads.put(s, h, k, x, hh, ws, Spec.State.put(s, ws), h2, ds, s3)
 
-def Spec.Judge.write_reads(s, n, base, c, h, h2, ds, s3):
-  e => ep =>
+# a verdict that takes, after a read, is the verdict of what comes next
+def With.took(
+  -A: Data,
+  ma: Maybe<&2, A>,
+  -k: A -> Maybe<&2, Spec.Verdict>,
+  -kk: Maybe<&2, Spec.Verdict>,
+  -h2: Maybe<&2, Hashes.Hash>,
+  -ds: List<&2, List<&2, U32>>
+) -> (@a: A -> {k(a) == Some{Spec.Verdict{True{}, h2, ds}}: Maybe<&2, Spec.Verdict>} -> {kk == Some{Spec.Verdict{True{}, h2, ds}}: Maybe<&2, Spec.Verdict>}) -> {
+  Maybe.bind(&2, A, Spec.Verdict, ma, k) == Some{Spec.Verdict{True{}, h2, ds}}: Maybe<&2, Spec.Verdict>
+} -> {kk == Some{Spec.Verdict{True{}, h2, ds}}: Maybe<&2, Spec.Verdict>}:
+  match ma:
+    case None{}:
+      hk => e => Empty.absurd(
+        {kk == Some{Spec.Verdict{True{}, h2, ds}}: Maybe<&2, Spec.Verdict>},
+        Shared.Maybe.none_ne_some(Spec.Verdict, Spec.Verdict{True{}, h2, ds}, e)
+      )
+    case Some{a}:
+      hk => e => hk(a)(e)
+
+def Spec.Judge.write_reads(s, n, base, c, h, h2, ds, s3, m):
+  e => ep => ec =>
     %Equal.sym(
       Maybe<&2, List<&2, U32>>,
       Spec.Node.get(s3, h2, Spec.Key.res(n)),
-      Some{Spec.Res.code(Spec.Content.root(s, n, c))},
+      Some{Spec.Res.code(m)},
       Set.reads(
         s,
         h,
         Spec.Key.res(n),
-        Spec.Res.code(Spec.Content.root(s, n, c)),
-        Spec.Node.set(s, h, Spec.Key.res(n), Spec.Res.code(Spec.Content.root(s, n, c))),
+        Spec.Res.code(m),
+        Spec.Node.set(s, h, Spec.Key.res(n), Spec.Res.code(m)),
         h2,
         ds,
         s3
       )({==})(
-        When.took(
-          Spec.Roots.same(Spec.Res.root(s, h, n), Spec.Res.root(s, Spec.Node.root_of(s, base), n)),
-          h,
-          x => Spec.Work.take(Spec.Work.set(Spec.Work{s, h, []}, Spec.Key.res(n), Spec.Res.code(Spec.Content.root(s, n, c)))),
+        With.took(
+          Maybe<&2, Ropes.Root>,
+          Spec.Res.find(s, h, n),
+          a1 => Maybe.bind(&2, Maybe<&2, Ropes.Root>, Spec.Verdict, Spec.Res.find(s, Spec.Node.root_of(s, base), n), b1 => Maybe.bind(&2, Maybe<&2, Ropes.Root>, Spec.Verdict, Spec.Content.find(s, n, c), m1 => Spec.Judge.when(Spec.Roots.same(a1, b1), h, x => Spec.Work.take(Spec.Work.set(Spec.Work{s, h, []}, Spec.Key.res(n), Spec.Res.code(m1)))))),
+          Spec.Work.take(Spec.Work.set(Spec.Work{s, h, []}, Spec.Key.res(n), Spec.Res.code(m))),
           h2,
           ds
+        )(
+          +a => With.took(
+            Maybe<&2, Ropes.Root>,
+            Spec.Res.find(s, Spec.Node.root_of(s, base), n),
+            b1 => Maybe.bind(&2, Maybe<&2, Ropes.Root>, Spec.Verdict, Spec.Content.find(s, n, c), m1 => Spec.Judge.when(Spec.Roots.same(a, b1), h, x => Spec.Work.take(Spec.Work.set(Spec.Work{s, h, []}, Spec.Key.res(n), Spec.Res.code(m1))))),
+            Spec.Work.take(Spec.Work.set(Spec.Work{s, h, []}, Spec.Key.res(n), Spec.Res.code(m))),
+            h2,
+            ds
+          )(
+            +b => ex => When.took(
+              Spec.Roots.same(a, b),
+              h,
+              x => Spec.Work.take(Spec.Work.set(Spec.Work{s, h, []}, Spec.Key.res(n), Spec.Res.code(m))),
+              h2,
+              ds
+            )(
+              %ec: {
+                Maybe.bind(&2, Maybe<&2, Ropes.Root>, Spec.Verdict, _, m1 => Spec.Judge.when(Spec.Roots.same(a, b), h, x => Spec.Work.take(Spec.Work.set(Spec.Work{s, h, []}, Spec.Key.res(n), Spec.Res.code(m1))))) == Some{Spec.Verdict{True{}, h2, ds}}: Maybe<&2, Spec.Verdict>
+              }
+              ex
+            )
+          )
         )(
           Then.took(
             Spec.Judge.content(s, c),
             h,
-            w => Spec.Judge.when(
-        Spec.Roots.same(Spec.Res.root(s, h, n), Spec.Res.root(s, Spec.Node.root_of(s, base), n)),
-        h,
-        x => Spec.Work.take(Spec.Work.set(Spec.Work{s, h, []}, Spec.Key.res(n), Spec.Res.code(Spec.Content.root(s, n, c))))
-      ),
+            w => Maybe.bind(&2, Maybe<&2, Ropes.Root>, Spec.Verdict, Spec.Res.find(s, h, n), a1 => Maybe.bind(&2, Maybe<&2, Ropes.Root>, Spec.Verdict, Spec.Res.find(s, Spec.Node.root_of(s, base), n), b1 => Maybe.bind(&2, Maybe<&2, Ropes.Root>, Spec.Verdict, Spec.Content.find(s, n, c), m1 => Spec.Judge.when(Spec.Roots.same(a1, b1), h, x => Spec.Work.take(Spec.Work.set(Spec.Work{s, h, []}, Spec.Key.res(n), Spec.Res.code(m1))))))),
             h2,
             ds
           )(
             Then.took(
               Spec.Judge.ready_maybe(s, base),
               h,
-              u => Spec.Judge.then(
-      Spec.Judge.content(s, c),
-      h,
-      w => Spec.Judge.when(
-        Spec.Roots.same(Spec.Res.root(s, h, n), Spec.Res.root(s, Spec.Node.root_of(s, base), n)),
-        h,
-        x => Spec.Work.take(Spec.Work.set(Spec.Work{s, h, []}, Spec.Key.res(n), Spec.Res.code(Spec.Content.root(s, n, c))))
-      )
-    ),
+              u => Spec.Judge.then(Spec.Judge.content(s, c), h, w => Maybe.bind(&2, Maybe<&2, Ropes.Root>, Spec.Verdict, Spec.Res.find(s, h, n), a1 => Maybe.bind(&2, Maybe<&2, Ropes.Root>, Spec.Verdict, Spec.Res.find(s, Spec.Node.root_of(s, base), n), b1 => Maybe.bind(&2, Maybe<&2, Ropes.Root>, Spec.Verdict, Spec.Content.find(s, n, c), m1 => Spec.Judge.when(Spec.Roots.same(a1, b1), h, x => Spec.Work.take(Spec.Work.set(Spec.Work{s, h, []}, Spec.Key.res(n), Spec.Res.code(m1)))))))),
               h2,
               ds
             )(e)
           )
         )
       )(Put.holds(s, ds, s3)(ep))
-    ): {Maybe.bind(&2, List<&2, U32>, Ropes.Root, _, ws => Spec.Res.read(ws)) == Spec.Content.root(s, n, c): Maybe<&2, Ropes.Root>}
-    Res.round(Spec.Content.root(s, n, c))
+    ): {Maybe.bind(&2, List<&2, U32>, Ropes.Root, _, ws => Spec.Res.read(ws)) == m: Maybe<&2, Ropes.Root>}
+    Res.round(m)
 
 # Merges
 # ------
