@@ -5864,3 +5864,56 @@ def Spec.Judge.write_reads(s, n, base, c, h, h2, ds, s3):
       )(Put.holds(s, ds, s3)(ep))
     ): {Maybe.bind(&2, List<&2, U32>, Ropes.Root, _, ws => Spec.Res.read(ws)) == Spec.Content.root(s, n, c): Maybe<&2, Ropes.Root>}
     Res.round(Spec.Content.root(s, n, c))
+
+# Merges
+# ------
+
+def Spec.Pick.merge_theirs(f, s, b, o, t):
+  e =>
+    %Equal.sym(Bool, Spec.Roots.same(o, b), True{}, e): {
+      Shared.Bool.when(
+      Maybe<&2, Spec.Pick>,
+      _,
+      u => Some{Spec.Pick.Take{t}},
+      u => Shared.Bool.when(
+        Maybe<&2, Spec.Pick>,
+        List.any.if(v => Spec.Roots.same(o, t), Spec.Roots.same(t, b)),
+        w => Some{Spec.Pick.Take{o}},
+        w => Spec.Pick.both(f, s, b, o, t)
+      )
+    )
+        == Some{Spec.Pick.Take{t}}: Maybe<&2, Spec.Pick>
+    }
+    {==}
+
+def Spec.Pick.merge_ours(f, s, b, o, t):
+  e1 => e2 =>
+    %Equal.sym(Bool, Spec.Roots.same(o, b), False{}, e1): {
+      Shared.Bool.when(
+      Maybe<&2, Spec.Pick>,
+      _,
+      u => Some{Spec.Pick.Take{t}},
+      u => Shared.Bool.when(
+        Maybe<&2, Spec.Pick>,
+        List.any.if(v => Spec.Roots.same(o, t), Spec.Roots.same(t, b)),
+        w => Some{Spec.Pick.Take{o}},
+        w => Spec.Pick.both(f, s, b, o, t)
+      )
+    )
+        == Some{Spec.Pick.Take{o}}: Maybe<&2, Spec.Pick>
+    }
+    %Equal.sym(Bool, Spec.Roots.same(t, b), True{}, e2): {
+      Shared.Bool.when(
+      Maybe<&2, Spec.Pick>,
+      False{},
+      u => Some{Spec.Pick.Take{t}},
+      u => Shared.Bool.when(
+        Maybe<&2, Spec.Pick>,
+        List.any.if(v => Spec.Roots.same(o, t), _),
+        w => Some{Spec.Pick.Take{o}},
+        w => Spec.Pick.both(f, s, b, o, t)
+      )
+    )
+        == Some{Spec.Pick.Take{o}}: Maybe<&2, Spec.Pick>
+    }
+    {==}

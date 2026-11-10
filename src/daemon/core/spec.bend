@@ -3884,6 +3884,28 @@ law Judge.write_reads:
     -> {State.put(s, ds) == Some{s3}: Maybe<&2, State()>}
     -> {Res.root(s3, h2, n) == Content.root(s, n, c): Maybe<&2, Ropes.Root>}
 
+# a merge never loses a change that only one side made: when ours is the base,
+# it keeps theirs
+law Pick.merge_theirs:
+  for f: Formats.Format
+  for s: State()
+  for +b: Maybe<&2, Ropes.Root>
+  for +o: Maybe<&2, Ropes.Root>
+  for +t: Maybe<&2, Ropes.Root>
+  {Roots.same(o, b) == True{}: Bool}
+    -> {Pick.merge(f, s, b, o, t) == Some{Pick.Take{t}}: Maybe<&2, Pick>}
+
+# and when theirs is the base, it keeps ours
+law Pick.merge_ours:
+  for f: Formats.Format
+  for s: State()
+  for +b: Maybe<&2, Ropes.Root>
+  for +o: Maybe<&2, Ropes.Root>
+  for +t: Maybe<&2, Ropes.Root>
+  {Roots.same(o, b) == False{}: Bool}
+    -> {Roots.same(t, b) == True{}: Bool}
+    -> {Pick.merge(f, s, b, o, t) == Some{Pick.Take{o}}: Maybe<&2, Pick>}
+
 # a change counts once, however often and wherever it is sent: a node that
 # took a request in changes nothing when any node sends its ID again
 law Node.ask_once:
