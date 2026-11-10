@@ -519,7 +519,7 @@ def Advance.step(
       Shared.Bool.when(
         Replicas.Node<Basics.Ask>,
         Sealing.Root.same(before, th),
-        u => Advance.ran(s, c, r, b, next, after, qs, Stepping.Step.run(s, c, t, qs)),
+        u => Advance.ran(s, c, r, b, next, after, qs, Replicas.Step.run(~Stepping.Ask.kernel(), s, c, t, qs)),
         u => s
       )
     case x y:

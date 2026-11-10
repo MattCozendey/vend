@@ -429,7 +429,7 @@ law Step.run_outs:
   for +qs: List<&2, Ledgers.Id>
   for +i: Ledgers.Id
   {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, qs, i) == True{}: Bool}
-    -> Run.Outs(Stepping.Step.run(s, c, t, qs), i)
+    -> Run.Outs(Replicas.Step.run(~Stepping.Ask.kernel(), s, c, t, qs), i)
 
 # and a head that moves over a step takes only the requests of the step off
 # the requests that wait (State.moved, the one place that takes any off)

@@ -724,7 +724,7 @@ def Plan.from(p: Plan) -> List<&2, String>:
 # the plan of an owner that proposes freely, on the line c at the tip t: the
 # requests that wait at it, that it may cast for and that can run now
 def Plan.own(+s: Replicas.Node<Basics.Ask>, +c: Ledgers.Chain, t: Replicas.Tip, from: List<&2, String>) -> Plan:
-  +p = Stepping.Step.some(c, Cast.mine(s, Wait.of(s, c)), Replicas.Run{s, t})
+  +p = Replicas.Step.some(~Stepping.Ask.kernel(), c, Cast.mine(s, Wait.of(s, c)), Replicas.Run{s, t})
   Plan{Replicas.Picked.asks(~Basics.Ask.machine(), p), Some{Replicas.Picked.run(~Basics.Ask.machine(), p)}, from}
 
 # the node s may cast for each request of qs
@@ -765,6 +765,6 @@ def Plan.copy(
       Shared.Bool.when(
         Plan,
         List.all.if(u => Cast.all_mine(s, qs), Root.same(before, th)),
-        u => Plan{qs, Plan.fit(after, Stepping.Step.run(s, c, t, qs)), from},
+        u => Plan{qs, Plan.fit(after, Replicas.Step.run(~Stepping.Ask.kernel(), s, c, t, qs)), from},
         u => Plan{[], None{}, []}
       )

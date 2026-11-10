@@ -833,3 +833,67 @@ def Kernel.change(
   match k:
     case Tuple{m, Tuple{a, Tuple{g, Tuple{s, c}}}}:
       c
+
+# the run r of the line c, after the request i, which the node holds as a
+# (none: wait for the request)
+def Step.asked(
+  ~K: Kernel(),
+  r: Run<Machine.Q(Kernel.machine(K))>,
+  c: Ledgers.Chain,
+  i: Ledgers.Id,
+  a: Maybe<&2, Ledgers.Asked<Machine.Q(Kernel.machine(K))>>
+) -> Maybe<&2, Run<Machine.Q(Kernel.machine(K))>>:
+  match a:
+    case None{}:
+      None{}
+    case Some{Ledgers.Asked{t, q}}:
+      Kernel.change(K)(r)(c)(i)(q)
+
+# the run r of the line c, after the request i, whose outcome in the log is o:
+# a request that has one is skipped
+def Step.fresh(
+  ~K: Kernel(),
+  +r: Run<Machine.Q(Kernel.machine(K))>,
+  c: Ledgers.Chain,
+  +i: Ledgers.Id,
+  o: Maybe<&2, Out>
+) -> Maybe<&2, Run<Machine.Q(Kernel.machine(K))>>:
+  match o:
+    case Some{x}:
+      Some{r}
+    case None{}:
+      Step.asked(~K, r, c, i, Node.asked(~Kernel.machine(K), Run.state(~Kernel.machine(K), r), i))
+
+# the run r of the line c, after the request i
+def Step.one(~K: Kernel(), +r: Run<Machine.Q(Kernel.machine(K))>, c: Ledgers.Chain, +i: Ledgers.Id) -> Maybe<&2, Run<Machine.Q(Kernel.machine(K))>>:
+  Step.fresh(~K, r, c, i, Line.out(~Kernel.machine(K), Run.state(~Kernel.machine(K), r), Run.tip(~Kernel.machine(K), r), i))
+
+# the run m of the line c, after each request of is, in order
+def Step.all(~K: Kernel(), +c: Ledgers.Chain, qs: List<&2, Ledgers.Id>, m: Maybe<&2, Run<Machine.Q(Kernel.machine(K))>>) -> Maybe<&2, Run<Machine.Q(Kernel.machine(K))>>:
+  match qs:
+    case Nil{}:
+      m
+    case Con{i, rest}:
+      Step.all(~K, c, rest, Maybe.bind(&2, Run<Machine.Q(Kernel.machine(K))>, Run<Machine.Q(Kernel.machine(K))>, m, r => Step.one(~K, r, c, i)))
+
+# the requests of qs that can run now on the line c, from the run r, and the
+# run after them. A request that must wait (for a version, a request or a
+# node) is left out: it waits, and does not stop the others
+def Step.some(~K: Kernel(), +c: Ledgers.Chain, qs: List<&2, Ledgers.Id>, +r: Run<Machine.Q(Kernel.machine(K))>) -> Picked<Machine.Q(Kernel.machine(K))>:
+  match qs:
+    case Nil{}:
+      Picked{r, []}
+    case Con{+i, rest}:
+      +m = Step.one(~K, r, c, i)
+      Picked.add(~Kernel.machine(K), Maybe.is_some(&2, Run<Machine.Q(Kernel.machine(K))>, m), i, Step.some(~K, c, rest, Maybe.default(&2, Run<Machine.Q(Kernel.machine(K))>, m, r)))
+
+# the step of the line c that runs the requests qs from the tip t (none: wait
+# for a request, a version or a node)
+def Step.run(
+  ~K: Kernel(),
+  s: Node<Machine.Q(Kernel.machine(K))>,
+  c: Ledgers.Chain,
+  t: Tip,
+  qs: List<&2, Ledgers.Id>
+) -> Maybe<&2, Run<Machine.Q(Kernel.machine(K))>>:
+  Step.all(~K, c, qs, Some{Run{s, t}})
