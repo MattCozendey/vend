@@ -122,17 +122,14 @@ type Signing is Data:
 # what a node keeps to seal its ballots and to check those of other nodes: its
 # secret seed; the key chain of each node in each store (its own too); the
 # requests that a writer connected to it asked for (an owner casts for a
-# change of who decides only when it was asked at the owner itself); the
-# highest round of which it holds a ballot, for each height that has a round
-# after the first; and the ballots that it kept after each link of each chain,
-# each with the key that signs it (another ballot that the key signs is the
-# proof of a lie)
+# change of who decides only when it was asked at the owner itself); and the
+# ballots that it kept after each link of each chain, each with the key that
+# signs it (another ballot that the key signs is the proof of a lie)
 type Keys is Data:
   Keys{
     seed: Hashes.Hash,
     chains: Tries.Trie<Keychain>,
     asked: Tries.Trie<Unit>,
-    rounds: Tries.Trie<Nat>,
     signed: Tries.Trie<List<&2, Signing>>
   }
 
@@ -194,13 +191,7 @@ def Node.empty(~mach: Machine(), seed: Hashes.Hash) -> Node<Machine.Q(mach)>:
     Ledgers.State.empty(~Machine.Q(mach)),
     Tries.Trie.new(Head),
     Tries.Trie.new(List<&2, Ledgers.Id>),
-    Keys{
-      seed,
-      Tries.Trie.new(Keychain),
-      Tries.Trie.new(Unit),
-      Tries.Trie.new(Nat),
-      Tries.Trie.new(List<&2, Signing>)
-    }
+    Keys{seed, Tries.Trie.new(Keychain), Tries.Trie.new(Unit), Tries.Trie.new(List<&2, Signing>)}
   }
 
 # the words that s holds under the hash h
@@ -1207,65 +1198,37 @@ def Keychain.from(m: Maybe<&2, Hashes.Hash>, c: Maybe<&2, Keychain>) -> Maybe<&2
 # the chains of the keys ks
 def Keys.chains(ks: Keys) -> Tries.Trie<Keychain>:
   match ks:
-    case Keys{seed, cs, as, rs, ss}:
+    case Keys{seed, cs, as, ss}:
       cs
 
 # the secret seed of the keys ks
 def Keys.seed(ks: Keys) -> Hashes.Hash:
   match ks:
-    case Keys{seed, cs, as, rs, ss}:
+    case Keys{seed, cs, as, ss}:
       seed
 
 # ks, with the request i asked at this node
 def Keys.mark(ks: Keys, i: Ledgers.Id) -> Keys:
   match ks:
-    case Keys{seed, cs, as, rs, ss}:
-      Keys{seed, cs, Tries.Trie.set(Unit, as, Ledgers.Id.key(i), Unit{}), rs, ss}
+    case Keys{seed, cs, as, ss}:
+      Keys{seed, cs, Tries.Trie.set(Unit, as, Ledgers.Id.key(i), Unit{}), ss}
 
 # the request i was asked at this node
 def Keys.asked(ks: Keys, i: Ledgers.Id) -> Bool:
   match ks:
-    case Keys{seed, cs, as, rs, ss}:
+    case Keys{seed, cs, as, ss}:
       Tries.Trie.has(Unit, as, Ledgers.Id.key(i))
 
 # ks with the chain c at the key k
 def Keys.set(ks: Keys, k: List<&2, Bool>, c: Keychain) -> Keys:
   match ks:
-    case Keys{seed, cs, as, rs, ss}:
-      Keys{seed, Tries.Trie.set(Keychain, cs, k, c), as, rs, ss}
-
-# the highest round, in the rounds rs, of the height h of the line c (0: the
-# first round)
-def Rounds.at(rs: Tries.Trie<Nat>, c: Ledgers.Chain, h: U32) -> Nat:
-  Maybe.default(&2, Nat, Tries.Trie.get(Nat, rs, Ledgers.Slot.height(c, h)), 0n)
-
-# the rounds of the keys ks
-def Keys.rounds(ks: Keys) -> Tries.Trie<Nat>:
-  match ks:
-    case Keys{seed, cs, as, rs, ss}:
-      rs
-
-# ks, which saw a ballot at the place w: the highest round of its height
-def Keys.saw(ks: Keys, w: Ledgers.Where) -> Keys:
-  match ks w:
-    case Keys{seed, cs, as, +rs, ss} Ledgers.Where{+c, +h, +r}:
-      Keys{
-        seed,
-        cs,
-        as,
-        Shared.Bool.when(
-          Tries.Trie<Nat>,
-          Nat.is_lt(Rounds.at(rs, c, h), r),
-          u => Tries.Trie.set(Nat, rs, Ledgers.Slot.height(c, h), r),
-          u => rs
-        ),
-        ss
-      }
+    case Keys{seed, cs, as, ss}:
+      Keys{seed, Tries.Trie.set(Keychain, cs, k, c), as, ss}
 
 # the signings of the keys ks
 def Keys.signed(ks: Keys) -> Tries.Trie<List<&2, Signing>>:
   match ks:
-    case Keys{seed, cs, as, rs, ss}:
+    case Keys{seed, cs, as, ss}:
       ss
 
 # the signings after the link of the key k, in ss
@@ -1275,19 +1238,18 @@ def Signings.at(ss: Tries.Trie<List<&2, Signing>>, k: List<&2, Bool>) -> List<&2
 # ks, with the ballot b after its link, as the one that the key signs
 def Keys.sign(ks: Keys, key: Hashes.Hash, +b: Ledgers.Ballot) -> Keys:
   match ks:
-    case Keys{seed, cs, as, rs, +ss}:
+    case Keys{seed, cs, as, +ss}:
       +k = Seal.link(Ballot.store(b), Ballot.node(b), Ballot.prev(b))
       Keys{
         seed,
         cs,
         as,
-        rs,
         Tries.Trie.set(List<&2, Signing>, ss, k, Signing{key, b} <> Signings.at(ss, k))
       }
 
-# the highest round of the height h of the line c of which s holds a ballot
+# the highest round of the height h of the line c in which s holds a ballot
 def Round.seen(~mach: Machine(), s: Node<Machine.Q(mach)>, c: Ledgers.Chain, h: U32) -> Nat:
-  Rounds.at(Keys.rounds(State.keys(~mach, s)), c, h)
+  Ledgers.State.round(~Machine.Q(mach), State.ledger(~mach, s), c, h)
 
 # the chain of the node n in the store r, as s knows it
 def Seal.chain(
@@ -1321,16 +1283,12 @@ def Keychain.key(c: Keychain) -> Hashes.Hash:
       key
 
 # ks, after the node kept the ballot b as the next of the chain c: the chain
-# moves on, b is after its link as the one that the key of c signs, and its
-# round is seen
+# moves on, and b is after its link as the one that the key of c signs
 def Keys.kept(ks: Keys, +c: Keychain, +b: Ledgers.Ballot) -> Keys:
-  Keys.saw(
-    Keys.sign(
-      Keys.set(ks, Seal.slot(Ballot.store(b), Ballot.node(b)), Keychain.next(c, b)),
-      Keychain.key(c),
-      b
-    ),
-    Ballot.at(b)
+  Keys.sign(
+    Keys.set(ks, Seal.slot(Ballot.store(b), Ballot.node(b)), Keychain.next(c, b)),
+    Keychain.key(c),
+    b
   )
 
 # the step in the cell m of a ballot, if it holds the vote of the node p in
@@ -1474,15 +1432,28 @@ def Ballot.honest(~mach: Machine(), +s: Node<Machine.Q(mach)>, b: Ledgers.Ballot
     }:
       Bool.not(Passed.above(~mach, Round.seen(~mach, s, c, h), s, c, h, r, q))
 
+# the slot of the ballot b is empty in s: its node cast no vote at its place,
+# or no pass to it. A node that signs a second one is not followed: each node
+# that holds the first refuses the second, and the chain stops there
+def Ballot.first(~mach: Machine(), s: Node<Machine.Q(mach)>, b: Ledgers.Ballot) -> Bool:
+  Maybe.is_none(
+    &2,
+    Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+    Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.of(b))
+  )
+
 # the ballot b may be kept: it is the next of the chain c, the key of c signs
-# it, and it is honest
+# it, it is the first in its slot, and it is honest
 def Ballot.keeps(
   ~mach: Machine(),
-  s: Node<Machine.Q(mach)>,
+  +s: Node<Machine.Q(mach)>,
   c: Keychain,
   +b: Ledgers.Ballot
 ) -> Bool:
-  List.all.if(u => Ballot.honest(~mach, s, b), Seal.fits(c, b))
+  List.all.if(
+    u => List.all.if(u2 => Ballot.honest(~mach, s, b), Ballot.first(~mach, s, b)),
+    Seal.fits(c, b)
+  )
 
 # Seal.accept once the chain m of the ballot's node is known
 def Seal.accept.at(
@@ -18616,8 +18587,33 @@ law Seal.accept_fits:
 def Seal.accept_fits(mach, kern, s, b, c, s2):
   ec => ea => Shared.List.all.if_hit(
     Seal.fits(c, b),
-    u => Ballot.honest(~mach, s, b)
+    u => List.all.if(u2 => Ballot.honest(~mach, s, b), Ballot.first(~mach, s, b))
   )(Accept.keeps(~mach, ~kern, s, b, c, s2, ec, ea))
+
+# a node keeps one ballot in a slot: the slot of a ballot that it keeps was
+# empty, so a second vote of a node at a place, or a second pass to it, is
+# refused
+law Seal.accept_first:
+  for ~mach: Machine()
+  for ~kern: Kernel(mach)
+  for +s: Node<Machine.Q(mach)>
+  for +b: Ledgers.Ballot
+  for +c: Keychain
+  for s2: Node<Machine.Q(mach)>
+  {Seal.chain(~mach, ~kern, s, Ballot.store(b), Ballot.node(b)) == Some{c}: Maybe<&2, Keychain>}
+    -> {Seal.accept(~mach, ~kern, s, b) == Some{s2}: Maybe<&2, Node<Machine.Q(mach)>>}
+    -> {Ballot.first(~mach, s, b) == True{}: Bool}
+
+def Seal.accept_first(mach, kern, s, b, c, s2):
+  ec => ea => Shared.List.all.if_hit(
+    Ballot.first(~mach, s, b),
+    u2 => Ballot.honest(~mach, s, b)
+  )(
+    Shared.List.all.if_rest(
+      Seal.fits(c, b),
+      u => List.all.if(u2 => Ballot.honest(~mach, s, b), Ballot.first(~mach, s, b))
+    )(Accept.keeps(~mach, ~kern, s, b, c, s2, ec, ea))
+  )
 
 # a node checks a ballot against the ballots of its node before it keeps it:
 # a ballot that it keeps is honest (Ballot.honest)
@@ -18634,9 +18630,14 @@ law Seal.accept_honest:
 
 def Seal.accept_honest(mach, kern, s, b, c, s2):
   ec => ea => Shared.List.all.if_rest(
-    Seal.fits(c, b),
-    u => Ballot.honest(~mach, s, b)
-  )(Accept.keeps(~mach, ~kern, s, b, c, s2, ec, ea))
+    Ballot.first(~mach, s, b),
+    u2 => Ballot.honest(~mach, s, b)
+  )(
+    Shared.List.all.if_rest(
+      Seal.fits(c, b),
+      u => List.all.if(u2 => Ballot.honest(~mach, s, b), Ballot.first(~mach, s, b))
+    )(Accept.keeps(~mach, ~kern, s, b, c, s2, ec, ea))
+  )
 
 # the keys of a node with new keys are those keys
 def Keys.keyed(
@@ -18670,7 +18671,7 @@ def Keys.kept.signed(
     ): Tries.Trie<List<&2, Signing>>
 }:
   match ks b:
-    case Keys{seed, cs, as, rs, ss} Ledgers.Ballot{Ledgers.Signed{Ledgers.Where{l, h, r}, n, a}, x}:
+    case Keys{seed, cs, as, ss} Ledgers.Ballot{Ledgers.Signed{Ledgers.Where{l, h, r}, n, a}, x}:
       {==}
 
 # the signings after a link are those that were set there

@@ -2293,3 +2293,33 @@ def List.contains_reverse(
         ),
         Bool.or_swap(e, ct, ca)
       )
+
+# a number below 1 + p is at most p
+def Nat.lt_succ_le(
+  a: Nat,
+  p: Nat
+) -> {Nat.is_lt(a, 1n+p) == True{}: Bool} -> {Nat.is_le(a, p) == True{}: Bool}:
+  match a p:
+    case 0n q:
+      h => Nat.le_zero(q)
+    case 1n+0n 0n:
+      h => h
+    case 2n+b 0n:
+      h => h
+    case 1n+b 1n+q:
+      h => Nat.lt_succ_le(b, q)(h)
+
+# a number below d is at most the number before d
+def Nat.lt_before(
+  a: Nat,
+  d: Nat
+) -> {Nat.is_lt(a, d) == True{}: Bool} -> {Nat.is_le(a, Nat.before(d)) == True{}: Bool}:
+  match a d:
+    case 0n 0n:
+      h => {==}
+    case 1n+b 0n:
+      h => h
+    case 0n 1n+p:
+      h => Nat.le_zero(p)
+    case 1n+b 1n+p:
+      h => Nat.lt_succ_le(1n+b, p)(h)

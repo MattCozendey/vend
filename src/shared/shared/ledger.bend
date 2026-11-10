@@ -1451,6 +1451,31 @@ def State.passed(~Q: Data, s: State(Q), w: Where, +n: String) -> Maybe<&2, Maybe
     case Where{+c, +h, +r}:
       Passed.of(~Q, State.get(~Q, s, Slot.pass(Where{c, h, r}, n)), Slot.height(c, h), r, n)
 
+# the count of True at the start of the key k
+def Spine.count(k: List<&2, Bool>) -> Nat:
+  match k:
+    case Con{True{}, r}:
+      1n+Spine.count(r)
+    case x:
+      0n
+
+# one more than the count of True at the start of each key of t, at least (0:
+# t holds nothing). It walks only the keys that start with True
+def Spine.depth(-V: Data, t: Tries.Trie<V>) -> Nat:
+  match t:
+    case Tries.Tip{}:
+      0n
+    case Tries.Leaf{k, v}:
+      1n+Spine.count(k)
+    case Tries.Bin{h, z, o}:
+      1n+Spine.depth(V, o)
+
+# the highest round of the height h of the line c in which s holds a ballot
+# (0: the first round, or none). It reads the ledger, so no ballot that s
+# holds is in a round above it (State.round_top)
+def State.round(~Q: Data, s: State(Q), c: Chain, h: U32) -> Nat:
+  Shared.Nat.before(Spine.depth(Cells.Cell<Entry<Q>>, State.under(~Q, s, Slot.height(c, h))))
+
 # s holds a proof that the node of the ballot b lied in its store: a cell
 # below the lies of that node. It reads one key, whatever s holds
 def State.blames(~Q: Data, s: State(Q), b: Ballot) -> Bool:
@@ -3100,3 +3125,84 @@ def State.add_datas_plain(ty, same, laws, ds, s):
         {==},
         State.add_datas_plain(~ty, ~same, ~laws, r, State.put_data(~ty, ~same, s, ws))
       )
+
+# a trie that holds a key that starts with the key of the round r goes down
+# more than r steps of True
+def Spine.above(
+  -V: Data,
+  r: Nat,
+  t: Tries.Trie<V>,
+  tail: List<&2, Bool>,
+  y: List<&2, Bool>,
+  -x: V
+) -> {
+  Tries.Trie.get(V, t, List.append(&2, Bool, Round.key(r, tail), y)) == Some{x}: Maybe<&2, V>
+} -> {Nat.is_lt(r, Spine.depth(V, t)) == True{}: Bool}:
+  match r t:
+    case 0n Tries.Tip{}:
+      e => Empty.absurd({Nat.is_lt(0n, 0n) == True{}: Bool}, Shared.Maybe.none_ne_some(V, x, e))
+    case 0n Tries.Leaf{k, v}:
+      e => {==}
+    case 0n Tries.Bin{h, z, o}:
+      e => {==}
+    case 1n+p Tries.Tip{}:
+      e => Empty.absurd({Nat.is_lt(1n+p, 0n) == True{}: Bool}, Shared.Maybe.none_ne_some(V, x, e))
+    case 1n+p Tries.Leaf{Nil{}, v}:
+      e => Empty.absurd({Nat.is_lt(1n+p, 1n) == True{}: Bool}, Shared.Maybe.none_ne_some(V, x, e))
+    case 1n+p Tries.Leaf{Con{False{}, k}, v}:
+      e => Empty.absurd({Nat.is_lt(1n+p, 1n) == True{}: Bool}, Shared.Maybe.none_ne_some(V, x, e))
+    case 1n+p Tries.Leaf{Con{True{}, k}, v}:
+      e => Spine.above(V, p, Tries.Leaf{k, v}, tail, y, x)(e)
+    case 1n+p Tries.Bin{h, z, o}:
+      e => Spine.above(V, p, o, tail, y, x)(e)
+
+# no ballot that a ledger holds at a height is in a round above the round
+# that it reads there: a slot below the key of the round r, with a cell
+def State.round_top(
+  ~Q: Data,
+  +s: State(Q),
+  c: Chain,
+  h: U32,
+  +r: Nat,
+  +tail: List<&2, Bool>,
+  +y: List<&2, Bool>,
+  -x: Cells.Cell<Entry<Q>>
+) -> {
+  State.get(
+    ~Q,
+    s,
+    List.append(&2, Bool, List.append(&2, Bool, Slot.height(c, h), Round.key(r, tail)), y)
+  )
+    == Some{x}: Maybe<&2, Cells.Cell<Entry<Q>>>
+} -> {Nat.is_le(r, State.round(~Q, s, c, h)) == True{}: Bool}:
+  e =>
+    +hk = Slot.height(c, h)
+    Shared.Nat.lt_before(
+      r,
+      Spine.depth(Cells.Cell<Entry<Q>>, State.under(~Q, s, hk))
+    )(
+      Spine.above(
+        Cells.Cell<Entry<Q>>,
+        r,
+        State.under(~Q, s, hk),
+        tail,
+        y,
+        x
+      )(
+        Equal.trans(
+          Maybe<&2, Cells.Cell<Entry<Q>>>,
+          State.get(~Q, State.under(~Q, s, hk), List.append(&2, Bool, Round.key(r, tail), y)),
+          State.get(~Q, s, List.append(&2, Bool, hk, List.append(&2, Bool, Round.key(r, tail), y))),
+          Some{x},
+          Tries.Trie.get_under(
+            Cells.Cell<Entry<Q>>,
+            s,
+            hk,
+            List.append(&2, Bool, Round.key(r, tail), y)
+          ),
+          (
+            %Shared.List.append_assoc(Bool, hk, Round.key(r, tail), y): {State.get(~Q, s, _) == Some{x}: Maybe<&2, Cells.Cell<Entry<Q>>>}
+            e)
+        )
+      )
+    )
