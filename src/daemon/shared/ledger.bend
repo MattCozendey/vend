@@ -46,6 +46,7 @@ type Vote is Data:
 type Last is Data:
   Last{round: Nat, vote: Vote}
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # what a node does at a place. Vote: it casts for a step; in a round after
 # the first, with the nodes whose passes allow that step. Pass: it leaves the
 # rounds below this one (it casts no vote there any more), and names its last
@@ -53,6 +54,7 @@ type Last is Data:
 type Act is Data:
   Act.Vote{vote: Vote, from: List<&2, String>}
   Act.Pass{last: Maybe<&2, Last>}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # what a node signs with a ballot: the place, its own name, and what it does
 type Signed is Data:
@@ -68,11 +70,13 @@ type Link is Data:
 type Ballot is Data:
   Ballot{signed: Signed, link: Link}
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a request of a change, with its time; a ballot of a node; or data
 type Entry<-Q: Data> is Data:
   Entry.Ask{id: Id, time: String, ask: Q}
   Entry.Vote{ballot: Ballot}
   Entry.Data{words: List<&2, U32>}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # Codes
 # -----
@@ -295,7 +299,7 @@ def Sub.is_eq(a: Maybe<&2, List<&2, Bool>>, b: Maybe<&2, List<&2, Bool>>) -> Boo
 def Chain.is_eq(a: Chain, b: Chain) -> Bool:
   match a b:
     case Chain{i1, k1} Chain{i2, k2}:
-      Bool.and(Id.is_eq(i1, i2), Sub.is_eq(k1, k2))
+      List.all.if(u => Sub.is_eq(k1, k2), Id.is_eq(i1, i2))
 
 # a and b are the same owners
 def Owners.is_eq(a: List<&2, String>, b: List<&2, String>) -> Bool:
@@ -358,41 +362,6 @@ def Sub.laws() -> Shared.Eq.Laws(Maybe<&2, List<&2, Bool>>, Sub.is_eq):
 # the laws of Owners.is_eq
 def Owners.laws() -> Shared.Eq.Laws(List<&2, String>, Owners.is_eq):
   Shared.List.laws(~String, ~String.eq, ~Texts.String.laws())
-
-# Chain.is_eq is True for a line and itself
-def Chain.is_eq_refl(a: Chain) -> {Chain.is_eq(a, a) == True{}: Bool}:
-  match a:
-    case Chain{+i, +k}:
-      Shared.Bool.and_both(
-        Id.is_eq(i, i),
-        Sub.is_eq(k, k)
-      )(Id.is_eq_refl(i))(Shared.Eq.refl(~Maybe<&2, List<&2, Bool>>, ~Sub.is_eq, Sub.laws(), k))
-
-# Chain.is_eq is True only for equal lines
-def Chain.is_eq_sound(a: Chain, b: Chain) -> {Chain.is_eq(a, b) == True{}: Bool} -> {a == b: Chain}:
-  match a b:
-    case Chain{+i1, +k1} Chain{+i2, +k2}:
-      +h =>
-        +x = Id.is_eq(i1, i2)
-        +y = Sub.is_eq(k1, k2)
-        Eq.both(
-          Id,
-          Maybe<&2, List<&2, Bool>>,
-          Chain,
-          p => q => Chain{p, q},
-          i1,
-          i2,
-          k1,
-          k2,
-          Id.is_eq_sound(i1, i2)(Shared.Bool.and_true_left(x, y)(h)),
-          Shared.Eq.sound(
-            ~Maybe<&2, List<&2, Bool>>,
-            ~Sub.is_eq,
-            Sub.laws(),
-            k1,
-            k2
-          )(Shared.Bool.and_true_right(x, y)(h))
-        )
 
 # a = b, from the three parts of an and that compares them
 def Eq.three(

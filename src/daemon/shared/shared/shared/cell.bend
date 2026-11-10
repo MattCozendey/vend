@@ -10,10 +10,12 @@ import ../../../../shared.bend as Shared
 # settled by an arbitrary winner. A slot holds a cell or nothing (a
 # Maybe<Cell>): a ledger's slot, or an owner's ballot in a quorum.
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # one value, or the mark that two values met
 type Cell<-V: Data> is Data:
   One{value: V}
   Many{}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # what a and b agree on
 def Cell.join(~V: Data, ~same: V -> V -> Bool, a: Cell<V>, b: Cell<V>) -> Cell<V>:

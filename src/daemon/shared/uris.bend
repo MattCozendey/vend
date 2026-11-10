@@ -688,6 +688,8 @@ def uri_show_after_read(t, u, h):
 # Endpoints
 # ---------
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # The kinds of endpoint. A mount's URI scheme picks one.
 type Endpoint is Data:
   FileEndpoint{}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning

@@ -667,6 +667,7 @@ def Lines.bytes_list(b: Texts.Bytes()) -> {Lines.bytes(Lines.list(b)) == b: Text
 # Formats
 # -------
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a change between two versions: Lines keeps the first keep lines, drops the
 # next drop lines and puts the lines put in their place; Whole is the new
 # content; Pieces is the new shape of an embedding, with a patch for each of
@@ -675,6 +676,7 @@ type Patch is Data:
   Patch.Lines{keep: Nat, drop: Nat, put: List<&2, Texts.Bytes()>}
   Patch.Whole{bytes: Texts.Bytes()}
   Patch.Pieces{shape: List<&2, Shape>, texts: List<&2, Patch>, regions: List<&2, Patch>}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # x is not 0
 def Plain.not_nul(x: U32) -> Bool:
@@ -777,10 +779,12 @@ def Plain.apply_diff(
 # merges only what both sides changed, differently. Plain text merges by
 # lines: two hunks merge when one ends before the other starts.
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a merge: its bytes, or a clash
 type Merged is Data:
   Merged.Clean{bytes: Texts.Bytes()}
   Merged.Clash{}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the lines lb after two patches, x's first when it ends before y's starts
 # (x_first), y's first when it ends before x's starts (y_first)
@@ -836,6 +840,7 @@ def Plain.merge.text(text: Bool, b: Texts.Bytes(), x: Texts.Bytes(), y: Texts.By
     case False{}:
       Merged.Clash{}
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # what a merge takes: y when x is b (theirs), x when y is b or x is y (ours),
 # else both changes, piece by piece when they are an embedding of one shape
 # (pieces)
@@ -844,6 +849,7 @@ type Decision is Data:
   Decision.Ours{}
   Decision.Both{}
   Decision.Pieces{}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # ours when x is y (held), else both
 def Merge.decide.same(held: Bool) -> Decision:
@@ -980,16 +986,20 @@ def Merge.same(
 # without its closing marker. The pieces join back into the same bytes, so a
 # format inside another loses nothing.
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a piece of an embedding: text of the outer format, or a region of the inner
 # one, closed by its marker or running to the end
 type Piece is Data:
   Piece.Text{bytes: Texts.Bytes()}
   Piece.Region{bytes: Texts.Bytes(), closed: Bool}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # what kind a piece is, without its bytes
 type Shape is Data:
   Shape.Text{}
   Shape.Region{closed: Bool}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # b starts with p
 def Bytes.starts(p: Texts.Bytes(), b: Texts.Bytes()) -> Bool:
@@ -1513,10 +1523,12 @@ def Pieces.build_of(
 type Item is Data:
   Item{kind: String, place: Nat, bytes: Texts.Bytes()}
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a part that a patch added or removed
 type Change is Data:
   Change.Added{item: Item}
   Change.Removed{item: Item}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the lines ls as the changes that make (c), counted from the line at
 def Lines.changes(~make: Item -> Change, ls: List<&2, Texts.Bytes()>, +at: Nat) -> List<&2, Change>:
@@ -1723,6 +1735,7 @@ def Rule.edges.go(ls: List<&2, Texts.Bytes()>, +r: Rule, +cs: List<&2, Cond>) ->
 def Rule.edges(r: Rule, b: Texts.Bytes()) -> List<&2, Edge>:
   Rule.edges.go(Lines.list(b), r, [])
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # Nested formats
 # --------------
 # A format is a leaf, an embedding of an inner format in an outer one, or a
@@ -1735,13 +1748,16 @@ type Format is Data:
   Format.Leaf{kind: Leaf}
   Format.Embed{outer: Format, open: Texts.Bytes(), close: Texts.Bytes(), inner: Format}
   Format.Code{base: Format, rule: Rule}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a format that holds no other: lines (the default), the content as one whole
 # part, or a submodule, a pointer to a child that the core reads and merges
 type Leaf is Data:
   Leaf.Lines{}
   Leaf.Whole{}
   Leaf.Module{}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the first of the items xs, empty when there is none
 def Items.first(xs: List<&2, Texts.Bytes()>) -> Texts.Bytes():

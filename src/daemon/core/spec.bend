@@ -37,24 +37,31 @@ import ../shared/tree.bend as Trees
 # the request that started it. A line is a store itself (no branch) or one of
 # its branches.
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a member of an owner group: a node, or another group of its store
 type Member is Data:
   Member.Node{name: String}
   Member.Group{name: String}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # new content: what a node holds under a root (the root of the rope of its
 # bytes: Content.of), or what an old version held. A change names its content
 # and does not carry it, so a change of a huge resource is small
 type Content is Data:
   Content.Root{root: Ropes.Root}
   Content.Of{version: Ledgers.Id}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a version, the newest version of a branch, or a mark of a branch
 type Point is Data:
   Point.At{version: Ledgers.Id}
   Point.Head{store: Ledgers.Id, branch: String}
   Point.Mark{store: Ledgers.Id, branch: String, mark: String}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a change of a branch, or of its store (Ask.on). Key: the store gives the
 # node the key that signs its first ballot in the store (again after the node
 # lost its secret: a new chain of keys). Branch: the store makes the
@@ -71,17 +78,20 @@ type Change is Data:
   Change.Move{to: Ledgers.Id}
   Change.Mark{mark: String, message: String}
   Change.Key{node: String, key: Hashes.Hash}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # a first owner of a store: a node, and the key that signs its first ballot in
 # the store
 type Owner is Data:
   Owner{name: String, key: Hashes.Hash}
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a change that a writer asks for: a store that starts with its first owners,
 # or a change of a branch of a store (none: of the store itself)
 type Ask is Data:
   Ask.Start{owners: List<&2, Owner>}
   Ask.On{store: Ledgers.Id, branch: Maybe<&2, String>, change: Change}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # who asks for a change, and when
 type Envelope is Data:
@@ -845,11 +855,13 @@ def Log.mark(m: String) -> List<&2, U32>:
 def Log.start(b: String) -> List<&2, U32>:
   5 <> Codes.Code.text(b, [])
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # the outcome of a request: its owners refused it as stale, or took it as the
 # version of a number
 type Out is Data:
   Out.Stale{}
   Out.Taken{number: U32}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the words of the outcome o
 def Out.words(o: Out) -> List<&2, U32>:
@@ -1321,12 +1333,14 @@ def Pointer.read.of(m: Maybe<&2, Texts.Parts>) -> Maybe<&2, Pointer>:
 def Pointer.read(b: Texts.Bytes()) -> Maybe<&2, Pointer>:
   Pointer.read.of(Texts.Text.cuts(5n, Texts.Bytes.to_text(b), 10))
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # what a merge keeps of a resource: the content of one side (none: removed),
 # new bytes, or a clash
 type Pick is Data:
   Pick.Take{root: Maybe<&2, Ropes.Root>}
   Pick.Make{bytes: Texts.Bytes()}
   Pick.Clash{}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the merge of a resource's bytes, when all three hold it
 def Pick.bytes(m: Formats.Merged) -> Pick:
@@ -4305,11 +4319,11 @@ def Line.versions(k: Nat, +s: State(), +t: Tip, +n: U32) -> List<&2, Ledgers.Id>
       Ids.put(Version.in(s, n, t), Line.versions(p, s, t, U32.inc(n)))
 
 # k versions of the line whose tip is m, from the number n, in order
-def Versions.of(+s: State(), m: Maybe<&2, Tip>, +n: U32, k: Nat) -> List<&2, Ledgers.Id>:
+def Versions.of(s: State(), m: Maybe<&2, Tip>, n: U32, k: Nat) -> List<&2, Ledgers.Id>:
   match m:
     case None{}:
       []
-    case Some{+t}:
+    case Some{t}:
       Line.versions(k, s, t, n)
 
 # k versions of the branch b of the store r, from the number n, in order: a
@@ -4318,7 +4332,7 @@ def Node.versions(+s: State(), r: Ledgers.Id, b: String, n: U32, k: Nat) -> List
   Versions.of(s, Node.tip(s, Line.chain(r, Some{b})), n, k)
 
 # the version before the number n of the line whose tip is m, if any
-def Version.before(+s: State(), m: Maybe<&2, Tip>, +n: U32) -> Maybe<&2, Ledgers.Id>:
+def Version.before(s: State(), m: Maybe<&2, Tip>, +n: U32) -> Maybe<&2, Ledgers.Id>:
   match m:
     case None{}:
       None{}
@@ -4486,23 +4500,25 @@ def Lines.level(cs: List<&2, Ledgers.Chain>, +a: State(), +b: State()) -> Bool:
     case Con{+c, r}:
       List.all.if(u => Lines.level(r, a, b), Heads.level(Node.head_of(a, c), Node.head_of(b, c)))
 
-# s, after it took the ballots bs in again and did what it can on the lines
-# cs, until no head moves, f times at most. A ballot whose key the store gives
+# s, after it took the ballots bs (k of them, pd by where each waits) in again
+# and did what it can on the lines cs, until no head moves, f times at most. A ballot whose key the store gives
 # at a later height is kept once the node is there: one sync catches up over
 # each change of a key
 def Sync.more(
   f: Nat,
   +n: String,
   +cs: List<&2, Ledgers.Chain>,
+  +k: Nat,
   +bs: List<&2, Ledgers.Ballot>,
+  +pd: Tries.Trie<Ledgers.Ballot>,
   +s: State()
 ) -> State():
   match f:
     case 0n:
       s
     case 1n+p:
-      +s2 = Node.steps(n, cs, Sealed.take(bs, s))
-      Shared.Bool.when(State(), Lines.level(cs, s, s2), u => s2, u => Sync.more(p, n, cs, bs, s2))
+      +s2 = Node.steps(n, cs, Sealed.each(k, bs, pd, s))
+      Shared.Bool.when(State(), Lines.level(cs, s, s2), u => s2, u => Sync.more(p, n, cs, k, bs, pd, s2))
 
 # s, after the node n took in t, which another node sent, did what it can on
 # each line that this may move, and asked for the adoption of each: how a
@@ -4516,10 +4532,11 @@ def Node.sync(+n: String, +s: State(), +t: Ledgers.State(Ask)) -> State():
       Ledgers.State.missing(~Ask, ~Ask.is_eq, t, State.ledger(s))
     )
   )
+  +k = List.length(&2, Ledgers.Ballot, bs)
   Node.adopts(
     n,
     cs,
-    Sync.more(List.length(&2, Ledgers.Ballot, bs), n, cs, bs, Node.steps(n, cs, s1))
+    Sync.more(k, n, cs, k, bs, Pending.of(bs), Node.steps(n, cs, s1))
   )
 
 # the resource m of the branch x of the store st is the resource n of the
@@ -4819,6 +4836,7 @@ def Merge.left(
 def Node.conflict(+s: State(), +k: Ledgers.Id) -> List<&2, Resources.Name>:
   Merge.left(s, k, Node.asked(s, k))
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # what a node answers to a change (README, Vend Writer). Written: its version.
 # Conflicted: a merge, or a resolve of one, after which resources still clash
 # (the merge). Pending: its owners did not decide it yet. Stale: its owners
@@ -4829,6 +4847,7 @@ type Answer is Data:
   Answer.Pending{}
   Answer.Stale{}
   Answer.Refused{}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # Written i, or Conflicted k while the merge k still clashes
 def Answer.left(s: State(), i: Ledgers.Id, +k: Ledgers.Id) -> Answer:
@@ -5281,18 +5300,22 @@ def Impact.of(+s: State(), +m: Maybe<&2, Ledgers.Id>, es: List<&2, Branch>) -> L
 def Node.impact(+s: State(), p: Point) -> List<&2, Touch>:
   Impact.of(s, Node.version(s, p), Branch.names(Node.branches(s)))
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # what a subscription or a poll follows: the versions or the conflicts of a
 # branch, or the changes elsewhere that touch it
 type Topic is Data:
   Topic.Versions{branch: Branch}
   Topic.Conflicts{branch: Branch}
   Topic.Affects{branch: Branch}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # an event of a topic
 type Notice is Data:
   Notice.Versioned{branch: Branch, version: Ledgers.Id}
   Notice.Conflicted{branch: Branch, version: Ledgers.Id}
   Notice.Touched{touch: Touch}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the key of the notice n: its kind, then its parts
 def Notice.key(n: Notice) -> List<&2, Bool>:
@@ -5518,6 +5541,7 @@ def Line.Ones(k: Nat, s: State(), c: Ledgers.Chain) -> Type:
     case 1n+p:
       Line.Ones(p, s, c) & Line.One(s, c)
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # what a node does next: it takes in a request, or what another node sent,
 # or it does a sync, or it keeps new bytes, or a writer connected to it asks
 # for a request that it holds, or it passes to the next round on a line
@@ -5528,6 +5552,7 @@ type Deed is Data:
   Deed.Keep{bytes: Texts.Bytes()}
   Deed.Consent{id: Ledgers.Id}
   Deed.Pass{line: Ledgers.Chain}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # s, after the node n did ev
 def Node.does(+n: String, +s: State(), ev: Deed) -> State():

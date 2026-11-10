@@ -21,6 +21,7 @@ def is_segment(s: String) -> Bool:
 def is_path(s: String) -> Bool:
   List.all(~&2, ~String, ~is_segment, String.split(s, '/'))
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # A glob, as a tree. A parser turns glob text into one; Void and Eps let
 # matching state what is left of a glob after some characters.
 type Glob is Data:
@@ -33,6 +34,7 @@ type Glob is Data:
   Deep{}
   Cat{a: Glob, b: Glob}
   Alt{a: Glob, b: Glob}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # Void: no text. Eps: only "". Lit: c. Any (`?`): one character.
 # Star (`*`): any text. Class (`[...]`, `[!...]` when neg): one character
@@ -109,10 +111,12 @@ def Glob.matches(s: String, g: Glob) -> Bool:
     case SCon{c, t}:
       Glob.matches(t, Glob.step(g, c))
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # One line of a selector: `g` includes, `!g` excludes.
 type Rule is Data:
   Include{g: Glob}
   Exclude{g: Glob}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the answer for p after rules, given the answer acc before them
 def Rule.selects.go(rules: List<&2, Rule>, +p: String, acc: Bool) -> Bool:
@@ -132,12 +136,14 @@ def Rule.selects.go(rules: List<&2, Rule>, +p: String, acc: Bool) -> Bool:
 def Rule.selects(rules: List<&2, Rule>, p: String) -> Bool:
   Rule.selects.go(rules, p, False{})
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # A question about two rule lists: is there a valid path that
 # Both: a and b select? Only: a selects and b does not?
 # "No path for Only{a, b}" means: b covers a.
 type Query is Data:
   Both{a: List<&2, Rule>, b: List<&2, Rule>}
   Only{a: List<&2, Rule>, b: List<&2, Rule>}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # p is a valid path that answers q
 def Query.holds(q: Query, +p: String) -> Bool:
@@ -150,12 +156,14 @@ def Query.holds(q: Query, +p: String) -> Bool:
       Bool.and(is_path(p), Bool.and(in_a, Bool.not(Rule.selects(b, p))))
   # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # The answer of a search. Found: a path that answers the query. Absent: no
 # path answers it. Unknown: the search ran out of steps; it claims nothing.
 type Search is Data:
   Found{path: String}
   Absent{}
   Unknown{}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the answer to q
 law Query.search:
@@ -182,6 +190,7 @@ law search_absent:
 # also matches "". A ',' outside braces is itself. Text that starts with '/'
 # is an error. A rule line that starts with `!` is an Exclude.
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # the role of a character in glob text
 type Sym is Data:
   SEsc{}
@@ -196,6 +205,7 @@ type Sym is Data:
   SBang{}
   SDash{}
   SChar{c: Char}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the character of s
 def Sym.char(s: Sym) -> Char:
@@ -289,12 +299,14 @@ def Char.range(lo: Char, hi: Char) -> Maybe<&2, List<&2, Char>>:
 type Frame is Data:
   Frame{alts: List<&2, Glob>, seq: List<&2, Glob>, start: Bool}
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # Out: between atoms. After: just after a `**`, where the segment must end.
 # In: inside a class, with its characters so far.
 type Mode is Data:
   Out{}
   After{}
   In{neg: Bool, cs: List<&2, Char>}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the atoms, last first, before acc
 def Glob.of_seq(atoms: List<&2, Glob>, acc: Glob) -> Glob:

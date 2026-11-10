@@ -13,6 +13,7 @@ import ./shared/shared/hash.bend as Hashes
 # (none: the empty tree), and two versions share every subtree that neither
 # changed.
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a node: empty (what an empty part reads as; never stored), a leaf, which
 # holds one key and its value, or a branch, which holds the root of each of
 # its 16 parts (none: empty)
@@ -20,6 +21,7 @@ type Node is Data:
   Node.Empty{}
   Node.Leaf{key: List<&2, U32>, value: List<&2, U32>}
   Node.Branch{parts: List<&2, Maybe<&2, Hashes.Hash>>}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # Codes
 # -----
@@ -327,6 +329,7 @@ def Tree.get(
 ) -> Maybe<&2, List<&2, U32>>:
   Tree.get.go(~S, ~fetch, s, Tree.path(k), k, Tree.part(~S, ~fetch, s, h))
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # what a read of a key finds: its value; that the tree does not hold the key;
 # or that the store lacks the node of a hash, so the read cannot tell yet.
 # Found and Absent are final (Tree.look_found_kept, Tree.look_absent_kept):
@@ -335,6 +338,7 @@ type Look is Data:
   Look.Found{value: List<&2, U32>}
   Look.Absent{}
   Look.Missing{hash: Hashes.Hash}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the value that a read found, if it found one
 def Look.value(l: Look) -> Maybe<&2, List<&2, U32>>:

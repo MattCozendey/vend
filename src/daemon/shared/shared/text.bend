@@ -496,11 +496,13 @@ def Bytes.of_text(s: String) -> Bytes():
     case SCon{c, r}:
       List.append(&2, U32, Utf8.char(c), Bytes.of_text(r))
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # what a reader of UTF-8 bytes waits for: the start of a character, or need
 # more bytes of a character whose bits so far are acc (the lowest first)
 type Utf8.Wait is Data:
   Utf8.Start{}
   Utf8.More{need: Nat, acc: List<&2, Bool>}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # what a byte gives the reader: what it waits for next, and the characters
 # that the byte ends

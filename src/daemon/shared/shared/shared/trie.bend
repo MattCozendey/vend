@@ -10,6 +10,7 @@ import ../../../../shared.bend as Shared
 # or one for fewer than two entries, so the shape is a function of the keys
 # and values, and a union is commutative, associative and idempotent as terms.
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a trie: no entry (Tip), one entry at the key (Leaf), or the value of the
 # empty key here, then the keys that start with False (zero) and with True
 # (one)
@@ -17,6 +18,7 @@ type Trie<-V: Data> is Data:
   Tip{}
   Leaf{key: List<&2, Bool>, value: V}
   Bin{here: Maybe<&2, V>, zero: Trie<V>, one: Trie<V>}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # a trie with no entries
 def Trie.new(-V: Data) -> Trie<V>:
@@ -832,11 +834,13 @@ def Trie.union(~V: Data, ~join: V -> V -> V, a: Trie<V>, b: Trie<V>) -> Trie<V>:
     case Bin{h, z, o} Tip{}:
       Bin{h, z, o}
     case Bin{h, z, o} Leaf{+k, +w}:
-      Bin{
-        Shared.Maybe.join(~V, ~join, h, Trie.at.here(V, k, w)),
-        Trie.union(~V, ~join, z, Trie.at.zero(V, k, w)),
-        Trie.union(~V, ~join, o, Trie.at.one(V, k, w))
-      }
+      zs os = Trie.union(
+        ~V,
+        ~join,
+        z,
+        Trie.at.zero(V, k, w)
+      ) Trie.union(~V, ~join, o, Trie.at.one(V, k, w))
+      Bin{Shared.Maybe.join(~V, ~join, h, Trie.at.here(V, k, w)), zs, os}
     case Bin{h1, z1, o1} Bin{h2, z2, o2}:
       zs os = Trie.union(~V, ~join, z1, z2) Trie.union(~V, ~join, o1, o2)
       Bin{Shared.Maybe.join(~V, ~join, h1, h2), zs, os}
@@ -1114,6 +1118,7 @@ def Trie.get_keep(
     case Some{y} Bin{h1, z1, o1} o q:
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof: it does not run
 # Trie.get_set for two entries
 def Trie.get_set.leaf(
   -V: Data,
@@ -1204,6 +1209,7 @@ def Trie.get_set.leaf(
         Trie.get_bin(V, None{}, Tip{}, Trie.set.leaf(V, r0, v, rp, w), True{} <> q),
         Trie.get_set.leaf(V, r0, v, rp, w, q)
       )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # t with k0 set to v holds v at k0, and what t holds at any other key
 law Trie.get_set:
@@ -1897,6 +1903,7 @@ law Trie.union_comm:
   for b: Trie<V>
   {Trie.union(~V, ~join, a, b) == Trie.union(~V, ~join, b, a): Trie<V>}
 
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof: it does not run
 def Trie.union_comm(ty, join, comm, a, b):
   match a b:
     case Tip{} Tip{}:
@@ -1930,6 +1937,7 @@ def Trie.union_comm(ty, join, comm, a, b):
         Trie.union_comm(~ty, ~join, ~comm, z1, z2),
         Trie.union_comm(~ty, ~join, ~comm, o1, o2)
       )
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Trie.union_assoc at a node, from its parts
@@ -3027,6 +3035,7 @@ law Trie.union_assoc:
       == Trie.union(~V, ~join, a, Trie.union(~V, ~join, b, c)): Trie<V>
   }
 
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof: it does not run
 def Trie.union_assoc(ty, join, assoc, a, b, c):
   match a b c:
     case Tip{} y w:
@@ -3158,6 +3167,7 @@ def Trie.union_assoc(ty, join, assoc, a, b, c):
         Trie.union_assoc(~ty, ~join, ~assoc, z1, z2, z3),
         Trie.union_assoc(~ty, ~join, ~assoc, o1, o2, o3)
       )
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
@@ -9215,6 +9225,7 @@ def Trie.all2_true.leaf(
         Trie.all2.leaf(~V, ~V, ~(x => y => True{}), ~(t => True{}), o, r, v)
       )({==})(Trie.all2_true.leaf(~V, o, r, v))
 
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof: it does not run
 # Trie.all2_true for two tries
 def Trie.all2_true(
   ~V: Data,
@@ -9238,6 +9249,7 @@ def Trie.all2_true(
         Trie.all2(~V, ~V, ~(x => y => True{}), ~(t => True{}), z1, z2),
         Trie.all2(~V, ~V, ~(x => y => True{}), ~(t => True{}), o1, o2)
       )(Trie.all2_true(~V, z1, z2))(Trie.all2_true(~V, o1, o2))
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
 # Trie.take_keeps, with binders to use again
 def Trie.take_keeps.go(
@@ -9275,6 +9287,7 @@ def Trie.take_keeps(
 ) -> {Trie.all2(~V, ~V, ~r, ~left, a, Trie.take(~V, a, b)) == True{}: Bool}:
   Trie.take_keeps.go(~V, ~r, ~left, ~rn, ~rrefl, a, b)
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof: it does not run
 # Trie.take_union at a node, from its parts
 def Trie.take_union.node(
   ~V: Data,
@@ -9369,7 +9382,9 @@ def Trie.take_union.node(
         == Bin{_, Trie.take(~V, z1, z2), Trie.take(~V, o1, o2)}: Trie<V>
     }
     {==}
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof: it does not run
 # Trie.take_union for two entries
 def Trie.take_union.fork(
   ~V: Data,
@@ -9489,7 +9504,9 @@ def Trie.take_union.fork(
           )
         )
       )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof: it does not run
 # Trie.take_union for an entry and a trie
 def Trie.take_union.leaf(
   ~V: Data,
@@ -9583,7 +9600,9 @@ def Trie.take_union.leaf(
           )
         )
       )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof: it does not run
 # a take of b is the union with b, when q holds of a and b and the join of
 # two entries that q holds of is the first
 def Trie.take_union(
@@ -9644,7 +9663,9 @@ def Trie.take_union(
         Trie.take_union(~V, ~join, ~q, ~lq, ~step, z1, z2),
         Trie.take_union(~V, ~join, ~q, ~lq, ~step, o1, o2)
       )
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof: it does not run
 # Trie.take_keeps_right at a node, from its parts
 def Trie.take_keeps_right.node(
   ~V: Data,
@@ -9730,6 +9751,7 @@ def Trie.take_keeps_right.node(
         )
       )
     )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # Trie.take_keeps_right for two entries
 def Trie.take_keeps_right.fork(
@@ -10029,6 +10051,7 @@ def Trie.take_keeps_right.leaf(
         Trie.take_keeps_right.leaf(~V, ~q, ~lq, ~r, ~lr, ~step, ~rrefl, o, r1, v)
       )
 
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof: it does not run
 # r holds of b and a's take of b, when q holds of a and b and r holds of the
 # second of two entries that q holds of and the one a take keeps: a take
 # holds all that b holds
@@ -10106,6 +10129,7 @@ def Trie.take_keeps_right(
         Trie.take_keeps_right(~V, ~q, ~lq, ~r, ~lr, ~step, ~rrefl, z1, z2),
         Trie.take_keeps_right(~V, ~q, ~lq, ~r, ~lr, ~step, ~rrefl, o1, o2)
       )
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
 # what a takes of what it lacks of b is what it takes of b: the entries that a
 # sync sends are enough

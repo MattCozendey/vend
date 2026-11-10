@@ -16,6 +16,7 @@ import ../shared/uris.bend as Uris
 # Values that callers make
 # ------------------------
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # where new content comes from: bytes, which the node keeps and names by
 # their root (Core.Node.keep, Core.Content.of); content that it holds; or a
 # resource that the node reads first
@@ -23,15 +24,18 @@ type Source is Data:
   Source.Bytes{bytes: Texts.Bytes()}
   Source.Content{content: Core.Content}
   Source.From{uri: Uris.Uri}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # Answers
 # -------
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # an answer that crossed IO, or why it did not
 type Reply<a, -A: Kind(a)> is Kind(a):
   Reply.Delivered{answer: A}
   Reply.TimedOut{}
   Reply.Unreachable{}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the notices that a poll returns, and what to pass as since next time
 type Changes is Data:
@@ -56,6 +60,7 @@ law Status.owned:
   for s: Status
   List<&2, Core.Branch>
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # Partial: the submodules in missing could not be fetched. Unsupported: the
 # kind of the resource does not support a setting
 type Mount is Data:
@@ -63,29 +68,38 @@ type Mount is Data:
   Mount.Partial{missing: List<&2, String>}
   Mount.Unsupported{why: String}
   Mount.Refused{why: String}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 type Unmount is Data:
   Unmount.Unmounted{}
   Unmount.NotMounted{}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # Partial: some entries of the other node did not arrive; the ones that did
 # are taken in
 type Sync is Data:
   Sync.Synced{}
   Sync.Partial{}
   Sync.Refused{why: String}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # Refused: without force, while mounts are active or other writers are
 # connected
 type Stop is Data:
   Stop.Stopped{}
   Stop.Refused{why: String}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # Busy: another node holds the store
 type Start is Data:
   Start.Ended{}
   Start.Busy{}
   Start.Refused{why: String}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # Operations
 # ----------
