@@ -5663,6 +5663,39 @@ law Move.reads:
   {Node.get(s, Node.root_of(s, Some{to}), Key.res(n)) == Some{v}: Maybe<&2, List<&2, U32>>}
     -> Work.Reads(Key.res(n), v, Move.work(s, c, to, h))
 
+# a merge of whole trees keeps what the merge of each resource takes: when the
+# merge of the resource n takes the root x (Pick.merge_theirs, Pick.merge_ours:
+# a change that only one side made), the tree that the merge gives holds n
+# with x
+law Merge.keeps:
+  for +s: State()
+  for +c: Ledgers.Chain
+  for +from: Ledgers.Id
+  for +h: Maybe<&2, Hashes.Hash>
+  for +n: Resources.Name
+  for +b: Maybe<&2, Ropes.Root>
+  for +o: Maybe<&2, Ropes.Root>
+  for +t: Maybe<&2, Ropes.Root>
+  for +x: Maybe<&2, Ropes.Root>
+  {
+    List.contains(
+      ~Resources.Name,
+      ~Resources.Name.is_eq,
+      Merge.names(s, h, Node.root_of(s, Some{from})),
+      n
+    )
+      == True{}: Bool
+  }
+    -> {
+      Res.find(s, Node.root_of(s, Merge.base(s, c, from, h)), n) == Some{b}: Maybe<&2, Maybe<&2, Ropes.Root>>
+    }
+    -> {Res.find(s, h, n) == Some{o}: Maybe<&2, Maybe<&2, Ropes.Root>>}
+    -> {Res.find(s, Node.root_of(s, Some{from}), n) == Some{t}: Maybe<&2, Maybe<&2, Ropes.Root>>}
+    -> {
+      Pick.merge(Formats.Format.of(Resources.Name.path(n)), s, b, o, t) == Some{Pick.Take{x}}: Maybe<&2, Pick>
+    }
+    -> Work.Reads(Key.res(n), Res.code(x), Merge.work(s, c, from, h))
+
 # a merge keeps, for each resource, a change that only one side made: when
 # ours is the base, it keeps theirs
 law Pick.merge_theirs:

@@ -130,7 +130,9 @@ README claim, then the law.
   the same content, in the tree that the move gives; a move sets only keys of the version
   vector).
 - A taken write reads back: `Judge.write_reads`.
-- A merge never loses a change made on only one side: `Pick.merge_theirs`, `Pick.merge_ours`.
+- A merge never loses a change made on only one side: `Pick.merge_theirs`, `Pick.merge_ours`
+  (for one resource), and `Merge.keeps` (what the merge of a resource takes, the tree that a
+  merge of whole trees gives holds for it).
 - The owners of a line are the nodes inside its owner group: `Own.takes_inside`. A change of a
   group reaches each line that the group owns by the line's next decided step: a node that works
   on a line asks for that step by itself (`Adopt.at`, in `Node.does` and `Node.sync`), and the
@@ -147,8 +149,6 @@ Design (each needs a decision or new work; none is a proof detail):
 - **The rules of rounds are premises.** A node's own ballots follow them by construction
   (`Plan.lead`, `Plan.follow`, `Pass.to`, `Cast.round`), with no law yet. A node keeps a vote of
   another node without a check of `Allowed`; it only copies a vote that is allowed.
-- **A merge as a whole.** `Pick.merge_theirs` and `Pick.merge_ours` are for one resource. Not a
-  law yet: that `Merge.work` keeps each one-sided change of the whole tree.
 - **Walks that are left:** `Node.versions` lists every version (use a range); `Node.log`,
   `Touch.versions`, `Version.keys`, `Node.affects`, `Node.impact`, `Node.notices` read every
   version of every branch. Target: notices are made when a head moves, from the diff of the two

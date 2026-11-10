@@ -4,6 +4,7 @@
 # bend-lint: expect-file bend-lint-rules/performance/unused_result@information -- this file holds only proofs: an unused binder is a premise of a proof's own type, and a proof does not run
 import Base
 import ../../shared.bend as Shared
+import ../shared/formats.bend as Formats
 import ../shared/ledger.bend as Ledgers
 import ../shared/resources.bend as Resources
 import ../shared/rope.bend as Ropes
@@ -11607,6 +11608,913 @@ def Spec.Move.reads(s, c, to, h, n, v):
       n,
       v
     )(hget)
+  )
+
+# Whole merges
+# ------------
+# A merge sets the key of each resource that it merges. A set of another key
+# keeps what a key reads, so what the merge of one resource takes is what the
+# whole merge gives for it (Spec.Merge.keeps).
+
+# the words after the first one
+def Words.rest(ws: List<&2, U32>) -> List<&2, U32>:
+  match ws:
+    case Nil{}:
+      []
+    case Con{w, r}:
+      r
+
+# the text that a read gave, "" without one
+def Read.text(m: Maybe<&2, Codes.Read<String>>) -> String:
+  match m:
+    case Some{Codes.Read{t, r}}:
+      t
+    case None{}:
+      ""
+
+# texts with the same code are the same
+def Text.same(
+  +t1: String,
+  +t2: String,
+  +e: {Codes.Code.text(t1, []) == Codes.Code.text(t2, []): List<&2, U32>}
+) -> {t1 == t2: String}:
+  Equal.trans(
+    String,
+    t1,
+    Read.text(Codes.Code.text.read(Codes.Code.text(t1, []))),
+    t2,
+    Equal.sym(
+      String,
+      Read.text(Codes.Code.text.read(Codes.Code.text(t1, []))),
+      t1,
+      Equal.cong(
+        Maybe<&2, Codes.Read<String>>,
+        String,
+        Read.text,
+        Codes.Code.text.read(Codes.Code.text(t1, [])),
+        Some{Codes.Read{t1, []}},
+        Codes.Code.text_read(t1, [])
+      )
+    ),
+    Equal.trans(
+      String,
+      Read.text(Codes.Code.text.read(Codes.Code.text(t1, []))),
+      Read.text(Codes.Code.text.read(Codes.Code.text(t2, []))),
+      t2,
+      Equal.cong(
+        List<&2, U32>,
+        String,
+        ws => Read.text(Codes.Code.text.read(ws)),
+        Codes.Code.text(t1, []),
+        Codes.Code.text(t2, []),
+        e
+      ),
+      Equal.cong(
+        Maybe<&2, Codes.Read<String>>,
+        String,
+        Read.text,
+        Codes.Code.text.read(Codes.Code.text(t2, [])),
+        Some{Codes.Read{t2, []}},
+        Codes.Code.text_read(t2, [])
+      )
+    )
+  )
+
+# Res.apart once it is known whether the keys are the same (b)
+def Res.apart.at(
+  +t1: String,
+  +t2: String,
+  +b: Bool,
+  eb: {
+    Shared.List.is_eq(
+      ~U32,
+      ~U32.is_eq,
+      Spec.Key.res(Resources.Name{t1}),
+      Spec.Key.res(Resources.Name{t2})
+    )
+      == b: Bool
+  },
+  hf: {String.eq(t1, t2) == False{}: Bool}
+) -> {b == False{}: Bool}:
+  match b:
+    case False{}:
+      {==}
+    case True{}:
+      Empty.absurd(
+        {True{} == False{}: Bool},
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            String.eq(t1, t2),
+            True{},
+            Equal.sym(Bool, String.eq(t1, t2), False{}, hf),
+            Equal.trans(
+              Bool,
+              String.eq(t1, t2),
+              String.eq(t2, t2),
+              True{},
+              Equal.cong(
+                String,
+                Bool,
+                z => String.eq(z, t2),
+                t1,
+                t2,
+                Text.same(
+                  t1,
+                  t2,
+                  Equal.cong(
+                    List<&2, U32>,
+                    List<&2, U32>,
+                    Words.rest,
+                    Spec.Key.res(Resources.Name{t1}),
+                    Spec.Key.res(Resources.Name{t2}),
+                    Shared.List.is_eq_sound(
+                      ~U32,
+                      ~U32.is_eq,
+                      ~Shared.U32.laws(),
+                      Spec.Key.res(Resources.Name{t1}),
+                      Spec.Key.res(Resources.Name{t2})
+                    )(eb)
+                  )
+                )
+              ),
+              Texts.String.eq_refl(t2)
+            )
+          )
+        )
+      )
+
+# resources that are not the same have keys that are not the same
+def Res.apart(
+  +m: Resources.Name,
+  +n: Resources.Name
+) -> {Resources.Name.is_eq(m, n) == False{}: Bool} -> {
+  Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Key.res(m), Spec.Key.res(n)) == False{}: Bool
+}:
+  match m n:
+    case Resources.Name{t1} Resources.Name{t2}:
+      hf => Res.apart.at(
+        t1,
+        t2,
+        Shared.List.is_eq(
+          ~U32,
+          ~U32.is_eq,
+          Spec.Key.res(Resources.Name{t1}),
+          Spec.Key.res(Resources.Name{t2})
+        ),
+        {==},
+        hf
+      )
+
+# resources that are the same are equal
+def Name.sound(
+  +m: Resources.Name,
+  +n: Resources.Name
+) -> {Resources.Name.is_eq(m, n) == True{}: Bool} -> {m == n: Resources.Name}:
+  match m n:
+    case Resources.Name{t1} Resources.Name{t2}:
+      e => Equal.cong(
+        String,
+        Resources.Name,
+        z => Resources.Name{z},
+        t1,
+        t2,
+        Texts.String.eq_sound(t1, t2)(e)
+      )
+
+# the key of a clash is not the key of a resource
+def Clash.apart(
+  +m: Resources.Name,
+  +n: Resources.Name
+) -> {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Key.clash(m), Spec.Key.res(n)) == False{}: Bool}:
+  {==}
+
+# a work that reads a key, after a read that gives the next step
+def Reads.with(
+  -A: Data,
+  -k: List<&2, U32>,
+  -v: List<&2, U32>,
+  +ma: Maybe<&2, A>,
+  -f: A -> Maybe<&2, Spec.Work>
+) -> (@a: A -> Spec.Work.Reads(k, v, f(a))) -> Spec.Work.Reads(k, v, Maybe.bind(&2, A, Spec.Work, ma, f)):
+  match ma:
+    case None{}:
+      hf => Unit{}
+    case Some{a}:
+      hf => hf(a)
+
+# a set of another key keeps what a work reads
+def Set.kept.work(
+  +w: Spec.Work,
+  k: List<&2, U32>,
+  x: List<&2, U32>,
+  k2: List<&2, U32>,
+  v: List<&2, U32>,
+  hne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool}
+) -> Spec.Work.Reads(k2, v, Some{w}) -> Spec.Work.Reads(k2, v, Spec.Work.set(w, k, x)):
+  match w:
+    case Spec.Work{s, h, ns}:
+      hget => Set.kept(s, h, ns, k, x, k2, v, hne, hget)
+
+# Keep.reads once it is known whether the node holds the new data (b)
+def Keep.reads.if(
+  +s: Spec.State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  old: List<&2, List<&2, U32>>,
+  +ns: List<&2, List<&2, U32>>,
+  k: List<&2, U32>,
+  v: List<&2, U32>,
+  +b: Bool,
+  hget: {Spec.Node.get(s, h, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+) -> Spec.Work.Reads(
+  k,
+  v,
+  Spec.Work.put(Shared.Maybe.when(Spec.State(), b, u => Some{Spec.State.keep(s, ns)}), h, ns, old)
+):
+  match b:
+    case False{}:
+      Unit{}
+    case True{}:
+      Get.grows(s, Spec.State.keep(s, ns), h, k, v, Grows.keep(s, ns))(hget)
+
+# new data keeps what a work reads
+def Keep.reads(
+  +w: Spec.Work,
+  +ns: List<&2, List<&2, U32>>,
+  k: List<&2, U32>,
+  v: List<&2, U32>
+) -> Spec.Work.Reads(k, v, Some{w}) -> Spec.Work.Reads(k, v, Spec.Work.keep(w, ns)):
+  match w:
+    case Spec.Work{s, h, old}:
+      hget => Keep.reads.if(
+        s,
+        h,
+        old,
+        ns,
+        k,
+        v,
+        Trees.Tree.holds(~Spec.State(), ~Spec.Store.fetch, Spec.State.keep(s, ns), ns),
+        hget
+      )
+
+# Set.read once it is known whether the node holds the new nodes (b)
+def Set.read.if(
+  +s: Spec.State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  ns: List<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  +hh: Hashes.Hash,
+  +ws: List<&2, List<&2, U32>>,
+  +b: Bool,
+  +eb: {Trees.Tree.holds(~Spec.State(), ~Spec.Store.fetch, Spec.State.keep(s, ws), ws) == b: Bool},
+  em: {Spec.Node.set(s, h, k, x) == Some{Trees.Put{hh, ws}}: Maybe<&2, Trees.Put>}
+) -> Spec.Work.Reads(
+  k,
+  x,
+  Spec.Work.put(Shared.Maybe.when(Spec.State(), b, u => Some{Spec.State.keep(s, ws)}), Some{hh}, ws, ns)
+):
+  match b:
+    case False{}:
+      Unit{}
+    case True{}:
+      Equal.trans(
+        Maybe<&2, List<&2, U32>>,
+        Spec.Node.get(Spec.State.keep(s, ws), Some{hh}, k),
+        Trees.Tree.get(~Spec.State(), ~Spec.Store.fetch, Spec.State.keep(s, ws), Some{hh}, k),
+        Some{x},
+        Get.is(Spec.State.keep(s, ws), Some{hh}, k),
+        Trees.Tree.get_set(
+          ~Spec.State(),
+          ~Spec.Store.fetch,
+          s,
+          Spec.State.keep(s, ws),
+          h,
+          k,
+          x,
+          Trees.Put{hh, ws}
+        )(
+          Equal.trans(
+            Maybe<&2, Trees.Put>,
+            Trees.Tree.set(~Spec.State(), ~Spec.Store.fetch, s, h, k, x),
+            Spec.Node.set(s, h, k, x),
+            Some{Trees.Put{hh, ws}},
+            Equal.sym(
+              Maybe<&2, Trees.Put>,
+              Spec.Node.set(s, h, k, x),
+              Trees.Tree.set(~Spec.State(), ~Spec.Store.fetch, s, h, k, x),
+              Set.is(s, h, k, x)
+            ),
+            em
+          )
+        )(eb)
+      )
+
+# Set.read once the new subtree m is known
+def Set.read.of(
+  +s: Spec.State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  ns: List<&2, List<&2, U32>>,
+  k: List<&2, U32>,
+  x: List<&2, U32>,
+  +m: Maybe<&2, Trees.Put>,
+  +em: {Spec.Node.set(s, h, k, x) == m: Maybe<&2, Trees.Put>}
+) -> Spec.Work.Reads(k, x, Spec.Work.of(s, ns, m)):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{Trees.Put{hh, ws}}:
+      Set.read.if(
+        s,
+        h,
+        ns,
+        k,
+        x,
+        hh,
+        ws,
+        Trees.Tree.holds(~Spec.State(), ~Spec.Store.fetch, Spec.State.keep(s, ws), ws),
+        {==},
+        em
+      )
+
+# a key that a work sets, it reads
+def Set.read(
+  +w: Spec.Work,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>
+) -> Spec.Work.Reads(k, x, Spec.Work.set(w, k, x)):
+  match w:
+    case Spec.Work{s, h, ns}:
+      Set.read.of(s, h, ns, k, x, Spec.Node.set(s, h, k, x), {==})
+
+# the merge of one resource m, of the trees hb (base), ho (ours) and ht
+# (theirs), on the work w: one step of Spec.Merge.all
+def Merge.step(
+  +s: Spec.State(),
+  +f: Ledgers.Id,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +m: Resources.Name,
+  +w: Spec.Work
+) -> Maybe<&2, Spec.Work>:
+  Maybe.bind(
+    &2,
+    Maybe<&2, Ropes.Root>,
+    Spec.Work,
+    Spec.Res.find(s, hb, m),
+    b => Maybe.bind(
+      &2,
+      Maybe<&2, Ropes.Root>,
+      Spec.Work,
+      Spec.Res.find(s, ho, m),
+      o => Maybe.bind(
+        &2,
+        Maybe<&2, Ropes.Root>,
+        Spec.Work,
+        Spec.Res.find(s, ht, m),
+        x => Spec.Merge.one(s, f, m, b, o, x, w)
+      )
+    )
+  )
+
+# what the merge of another resource puts keeps what a work reads for n
+def Merge.put.other(
+  +f: Ledgers.Id,
+  +m: Resources.Name,
+  +n: Resources.Name,
+  +o2: Maybe<&2, Ropes.Root>,
+  +p: Spec.Pick,
+  +w: Spec.Work,
+  +v: List<&2, U32>,
+  hne: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Key.res(m), Spec.Key.res(n)) == False{}: Bool}
+) -> Spec.Work.Reads(Spec.Key.res(n), v, Some{w}) -> Spec.Work.Reads(
+  Spec.Key.res(n),
+  v,
+  Spec.Merge.put(f, m, o2, p, w)
+):
+  match p:
+    case Spec.Pick.Take{mm}:
+      Set.kept.work(w, Spec.Key.res(m), Spec.Res.code(mm), Spec.Key.res(n), v, hne)
+    case Spec.Pick.Make{y}:
+      hget => Reads.bind(
+        Spec.Key.res(n),
+        v,
+        Spec.Work.keep(w, Ropes.Put.nodes(Spec.Bytes.rope(y))),
+        w2 => Spec.Work.set(w2, Spec.Key.res(m), Spec.Res.code(Some{Ropes.Put.root(Spec.Bytes.rope(y))}))
+      )(Keep.reads(w, Ropes.Put.nodes(Spec.Bytes.rope(y)), Spec.Key.res(n), v)(hget))(
+        w2 => hw => Set.kept.work(
+          w2,
+          Spec.Key.res(m),
+          Spec.Res.code(Some{Ropes.Put.root(Spec.Bytes.rope(y))}),
+          Spec.Key.res(n),
+          v,
+          hne
+        )(hw)
+      )
+    case Spec.Pick.Clash{}:
+      hget => Reads.bind(
+        Spec.Key.res(n),
+        v,
+        Spec.Work.set(w, Spec.Key.res(m), Spec.Res.code(o2)),
+        y => Spec.Work.set(y, Spec.Key.clash(m), Spec.Clash.code(f))
+      )(Set.kept.work(w, Spec.Key.res(m), Spec.Res.code(o2), Spec.Key.res(n), v, hne)(hget))(
+        y => hy => Set.kept.work(
+          y,
+          Spec.Key.clash(m),
+          Spec.Clash.code(f),
+          Spec.Key.res(n),
+          v,
+          Clash.apart(m, n)
+        )(hy)
+      )
+
+# the merge of another resource keeps what a work reads for n
+def Merge.step.other(
+  +s: Spec.State(),
+  +f: Ledgers.Id,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +m: Resources.Name,
+  +n: Resources.Name,
+  +w: Spec.Work,
+  v: List<&2, U32>,
+  hne: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Key.res(m), Spec.Key.res(n)) == False{}: Bool}
+) -> Spec.Work.Reads(Spec.Key.res(n), v, Some{w}) -> Spec.Work.Reads(
+  Spec.Key.res(n),
+  v,
+  Merge.step(s, f, hb, ho, ht, m, w)
+):
+  hget => Reads.with(
+    Maybe<&2, Ropes.Root>,
+    Spec.Key.res(n),
+    v,
+    Spec.Res.find(s, hb, m),
+    b => Maybe.bind(
+      &2,
+      Maybe<&2, Ropes.Root>,
+      Spec.Work,
+      Spec.Res.find(s, ho, m),
+      o => Maybe.bind(
+        &2,
+        Maybe<&2, Ropes.Root>,
+        Spec.Work,
+        Spec.Res.find(s, ht, m),
+        x => Spec.Merge.one(s, f, m, b, o, x, w)
+      )
+    )
+  )(
+    b => Reads.with(
+      Maybe<&2, Ropes.Root>,
+      Spec.Key.res(n),
+      v,
+      Spec.Res.find(s, ho, m),
+      o => Maybe.bind(
+        &2,
+        Maybe<&2, Ropes.Root>,
+        Spec.Work,
+        Spec.Res.find(s, ht, m),
+        x => Spec.Merge.one(s, f, m, b, o, x, w)
+      )
+    )(
+      +o => Reads.with(
+        Maybe<&2, Ropes.Root>,
+        Spec.Key.res(n),
+        v,
+        Spec.Res.find(s, ht, m),
+        x => Spec.Merge.one(s, f, m, b, o, x, w)
+      )(
+        x => Reads.with(
+          Spec.Pick,
+          Spec.Key.res(n),
+          v,
+          Spec.Pick.merge(Formats.Format.of(Resources.Name.path(m)), s, b, o, x),
+          p => Spec.Merge.put(f, m, o, p, w)
+        )(p => Merge.put.other(f, m, n, o, p, w, v, hne)(hget))
+      )
+    )
+  )
+
+# the merge of the resource n gives what its pick takes
+def Merge.step.same(
+  +s: Spec.State(),
+  +f: Ledgers.Id,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +n: Resources.Name,
+  +b: Maybe<&2, Ropes.Root>,
+  +o: Maybe<&2, Ropes.Root>,
+  +t: Maybe<&2, Ropes.Root>,
+  +x: Maybe<&2, Ropes.Root>,
+  +w: Spec.Work,
+  eb: {Spec.Res.find(s, hb, n) == Some{b}: Maybe<&2, Maybe<&2, Ropes.Root>>},
+  eo: {Spec.Res.find(s, ho, n) == Some{o}: Maybe<&2, Maybe<&2, Ropes.Root>>},
+  et: {Spec.Res.find(s, ht, n) == Some{t}: Maybe<&2, Maybe<&2, Ropes.Root>>},
+  ep: {
+    Spec.Pick.merge(Formats.Format.of(Resources.Name.path(n)), s, b, o, t)
+      == Some{Spec.Pick.Take{x}}: Maybe<&2, Spec.Pick>
+  }
+) -> Spec.Work.Reads(Spec.Key.res(n), Spec.Res.code(x), Merge.step(s, f, hb, ho, ht, n, w)):
+  %Equal.sym(Maybe<&2, Maybe<&2, Ropes.Root>>, Spec.Res.find(s, hb, n), Some{b}, eb): Spec.Work.Reads(
+    Spec.Key.res(n),
+    Spec.Res.code(x),
+    Maybe.bind(
+      &2,
+      Maybe<&2, Ropes.Root>,
+      Spec.Work,
+      _,
+      b1 => Maybe.bind(
+        &2,
+        Maybe<&2, Ropes.Root>,
+        Spec.Work,
+        Spec.Res.find(s, ho, n),
+        o1 => Maybe.bind(
+          &2,
+          Maybe<&2, Ropes.Root>,
+          Spec.Work,
+          Spec.Res.find(s, ht, n),
+          x1 => Spec.Merge.one(s, f, n, b1, o1, x1, w)
+        )
+      )
+    )
+  )
+  %Equal.sym(Maybe<&2, Maybe<&2, Ropes.Root>>, Spec.Res.find(s, ho, n), Some{o}, eo): Spec.Work.Reads(
+    Spec.Key.res(n),
+    Spec.Res.code(x),
+    Maybe.bind(
+      &2,
+      Maybe<&2, Ropes.Root>,
+      Spec.Work,
+      _,
+      o1 => Maybe.bind(
+        &2,
+        Maybe<&2, Ropes.Root>,
+        Spec.Work,
+        Spec.Res.find(s, ht, n),
+        x1 => Spec.Merge.one(s, f, n, b, o1, x1, w)
+      )
+    )
+  )
+  %Equal.sym(Maybe<&2, Maybe<&2, Ropes.Root>>, Spec.Res.find(s, ht, n), Some{t}, et): Spec.Work.Reads(
+    Spec.Key.res(n),
+    Spec.Res.code(x),
+    Maybe.bind(&2, Maybe<&2, Ropes.Root>, Spec.Work, _, x1 => Spec.Merge.one(s, f, n, b, o, x1, w))
+  )
+  %Equal.sym(
+    Maybe<&2, Spec.Pick>,
+    Spec.Pick.merge(Formats.Format.of(Resources.Name.path(n)), s, b, o, t),
+    Some{Spec.Pick.Take{x}},
+    ep
+  ): Spec.Work.Reads(
+    Spec.Key.res(n),
+    Spec.Res.code(x),
+    Maybe.bind(&2, Spec.Pick, Spec.Work, _, p => Spec.Merge.put(f, n, o, p, w))
+  )
+  Set.read(w, Spec.Key.res(n), Spec.Res.code(x))
+
+# Merge.step.same on the work m, if any
+def Merge.step.takes(
+  +s: Spec.State(),
+  +f: Ledgers.Id,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +m: Maybe<&2, Spec.Work>,
+  +n: Resources.Name,
+  +b: Maybe<&2, Ropes.Root>,
+  +o: Maybe<&2, Ropes.Root>,
+  +t: Maybe<&2, Ropes.Root>,
+  +x: Maybe<&2, Ropes.Root>,
+  eb: {Spec.Res.find(s, hb, n) == Some{b}: Maybe<&2, Maybe<&2, Ropes.Root>>},
+  eo: {Spec.Res.find(s, ho, n) == Some{o}: Maybe<&2, Maybe<&2, Ropes.Root>>},
+  et: {Spec.Res.find(s, ht, n) == Some{t}: Maybe<&2, Maybe<&2, Ropes.Root>>},
+  ep: {
+    Spec.Pick.merge(Formats.Format.of(Resources.Name.path(n)), s, b, o, t)
+      == Some{Spec.Pick.Take{x}}: Maybe<&2, Spec.Pick>
+  }
+) -> Spec.Work.Reads(
+  Spec.Key.res(n),
+  Spec.Res.code(x),
+  Maybe.bind(&2, Spec.Work, Spec.Work, m, w => Merge.step(s, f, hb, ho, ht, n, w))
+):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{w}:
+      Merge.step.same(s, f, hb, ho, ht, n, b, o, t, x, w, eb, eo, et, ep)
+
+# one step of a merge keeps what the work reads for n, once it is known
+# whether the step is of n (same)
+def Merge.step.keeps(
+  +s: Spec.State(),
+  +f: Ledgers.Id,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +m1: Resources.Name,
+  +m: Maybe<&2, Spec.Work>,
+  +n: Resources.Name,
+  +b: Maybe<&2, Ropes.Root>,
+  +o: Maybe<&2, Ropes.Root>,
+  +t: Maybe<&2, Ropes.Root>,
+  +x: Maybe<&2, Ropes.Root>,
+  eb: {Spec.Res.find(s, hb, n) == Some{b}: Maybe<&2, Maybe<&2, Ropes.Root>>},
+  eo: {Spec.Res.find(s, ho, n) == Some{o}: Maybe<&2, Maybe<&2, Ropes.Root>>},
+  et: {Spec.Res.find(s, ht, n) == Some{t}: Maybe<&2, Maybe<&2, Ropes.Root>>},
+  ep: {
+    Spec.Pick.merge(Formats.Format.of(Resources.Name.path(n)), s, b, o, t)
+      == Some{Spec.Pick.Take{x}}: Maybe<&2, Spec.Pick>
+  },
+  +same: Bool,
+  +es: {Resources.Name.is_eq(m1, n) == same: Bool}
+) -> Spec.Work.Reads(Spec.Key.res(n), Spec.Res.code(x), m) -> Spec.Work.Reads(
+  Spec.Key.res(n),
+  Spec.Res.code(x),
+  Maybe.bind(&2, Spec.Work, Spec.Work, m, w => Merge.step(s, f, hb, ho, ht, m1, w))
+):
+  match same:
+    case True{}:
+      hm =>
+        %Equal.sym(Resources.Name, m1, n, Name.sound(m1, n)(es)): Spec.Work.Reads(
+          Spec.Key.res(n),
+          Spec.Res.code(x),
+          Maybe.bind(&2, Spec.Work, Spec.Work, m, w => Merge.step(s, f, hb, ho, ht, _, w))
+        )
+        Merge.step.takes(s, f, hb, ho, ht, m, n, b, o, t, x, eb, eo, et, ep)
+    case False{}:
+      hm => Reads.bind(
+        Spec.Key.res(n),
+        Spec.Res.code(x),
+        m,
+        w => Merge.step(s, f, hb, ho, ht, m1, w)
+      )(hm)(
+        w => hw => Merge.step.other(s, f, hb, ho, ht, m1, n, w, Spec.Res.code(x), Res.apart(m1, n)(es))(hw)
+      )
+
+# the merge of more resources keeps what the work reads for n
+def Merge.all.keeps(
+  +s: Spec.State(),
+  +f: Ledgers.Id,
+  +ns: List<&2, Resources.Name>,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +m: Maybe<&2, Spec.Work>,
+  +n: Resources.Name,
+  +b: Maybe<&2, Ropes.Root>,
+  +o: Maybe<&2, Ropes.Root>,
+  +t: Maybe<&2, Ropes.Root>,
+  +x: Maybe<&2, Ropes.Root>,
+  +eb: {Spec.Res.find(s, hb, n) == Some{b}: Maybe<&2, Maybe<&2, Ropes.Root>>},
+  +eo: {Spec.Res.find(s, ho, n) == Some{o}: Maybe<&2, Maybe<&2, Ropes.Root>>},
+  +et: {Spec.Res.find(s, ht, n) == Some{t}: Maybe<&2, Maybe<&2, Ropes.Root>>},
+  +ep: {
+    Spec.Pick.merge(Formats.Format.of(Resources.Name.path(n)), s, b, o, t)
+      == Some{Spec.Pick.Take{x}}: Maybe<&2, Spec.Pick>
+  }
+) -> Spec.Work.Reads(Spec.Key.res(n), Spec.Res.code(x), m) -> Spec.Work.Reads(
+  Spec.Key.res(n),
+  Spec.Res.code(x),
+  Spec.Merge.all(s, f, ns, hb, ho, ht, m)
+):
+  match ns:
+    case Nil{}:
+      hm => hm
+    case Con{m1, r}:
+      hm => Merge.all.keeps(
+        s,
+        f,
+        r,
+        hb,
+        ho,
+        ht,
+        Maybe.bind(&2, Spec.Work, Spec.Work, m, w => Merge.step(s, f, hb, ho, ht, m1, w)),
+        n,
+        b,
+        o,
+        t,
+        x,
+        eb,
+        eo,
+        et,
+        ep
+      )(
+        Merge.step.keeps(
+          s,
+          f,
+          hb,
+          ho,
+          ht,
+          m1,
+          m,
+          n,
+          b,
+          o,
+          t,
+          x,
+          eb,
+          eo,
+          et,
+          ep,
+          Resources.Name.is_eq(m1, n),
+          {==}
+        )(hm)
+      )
+
+# Merge.all.takes at the first resource m1, once it is known whether it is n
+def Merge.all.takes.at(
+  +s: Spec.State(),
+  +f: Ledgers.Id,
+  +m1: Resources.Name,
+  +r: List<&2, Resources.Name>,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +m: Maybe<&2, Spec.Work>,
+  +n: Resources.Name,
+  +b: Maybe<&2, Ropes.Root>,
+  +o: Maybe<&2, Ropes.Root>,
+  +t: Maybe<&2, Ropes.Root>,
+  +x: Maybe<&2, Ropes.Root>,
+  +eb: {Spec.Res.find(s, hb, n) == Some{b}: Maybe<&2, Maybe<&2, Ropes.Root>>},
+  +eo: {Spec.Res.find(s, ho, n) == Some{o}: Maybe<&2, Maybe<&2, Ropes.Root>>},
+  +et: {Spec.Res.find(s, ht, n) == Some{t}: Maybe<&2, Maybe<&2, Ropes.Root>>},
+  +ep: {
+    Spec.Pick.merge(Formats.Format.of(Resources.Name.path(n)), s, b, o, t)
+      == Some{Spec.Pick.Take{x}}: Maybe<&2, Spec.Pick>
+  },
+  +same: Bool,
+  +es: {Resources.Name.is_eq(m1, n) == same: Bool},
+  ih: {List.contains(~Resources.Name, ~Resources.Name.is_eq, r, n) == True{}: Bool} -> Spec.Work.Reads(
+    Spec.Key.res(n),
+    Spec.Res.code(x),
+    Spec.Merge.all(
+      s,
+      f,
+      r,
+      hb,
+      ho,
+      ht,
+      Maybe.bind(&2, Spec.Work, Spec.Work, m, w => Merge.step(s, f, hb, ho, ht, m1, w))
+    )
+  )
+) -> {
+  List.any.if(u => List.contains(~Resources.Name, ~Resources.Name.is_eq, r, n), same) == True{}: Bool
+} -> Spec.Work.Reads(
+  Spec.Key.res(n),
+  Spec.Res.code(x),
+  Spec.Merge.all(
+    s,
+    f,
+    r,
+    hb,
+    ho,
+    ht,
+    Maybe.bind(&2, Spec.Work, Spec.Work, m, w => Merge.step(s, f, hb, ho, ht, m1, w))
+  )
+):
+  match same:
+    case True{}:
+      e => Merge.all.keeps(
+        s,
+        f,
+        r,
+        hb,
+        ho,
+        ht,
+        Maybe.bind(&2, Spec.Work, Spec.Work, m, w => Merge.step(s, f, hb, ho, ht, m1, w)),
+        n,
+        b,
+        o,
+        t,
+        x,
+        eb,
+        eo,
+        et,
+        ep
+      )(
+        %Equal.sym(Resources.Name, m1, n, Name.sound(m1, n)(es)): Spec.Work.Reads(
+          Spec.Key.res(n),
+          Spec.Res.code(x),
+          Maybe.bind(&2, Spec.Work, Spec.Work, m, w => Merge.step(s, f, hb, ho, ht, _, w))
+        )
+        Merge.step.takes(s, f, hb, ho, ht, m, n, b, o, t, x, eb, eo, et, ep)
+      )
+    case False{}:
+      e => ih(e)
+
+# a merge of the resources ns, with n among them, gives what the pick of n
+# takes
+def Merge.all.takes(
+  +s: Spec.State(),
+  +f: Ledgers.Id,
+  +ns: List<&2, Resources.Name>,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +m: Maybe<&2, Spec.Work>,
+  +n: Resources.Name,
+  +b: Maybe<&2, Ropes.Root>,
+  +o: Maybe<&2, Ropes.Root>,
+  +t: Maybe<&2, Ropes.Root>,
+  +x: Maybe<&2, Ropes.Root>,
+  +eb: {Spec.Res.find(s, hb, n) == Some{b}: Maybe<&2, Maybe<&2, Ropes.Root>>},
+  +eo: {Spec.Res.find(s, ho, n) == Some{o}: Maybe<&2, Maybe<&2, Ropes.Root>>},
+  +et: {Spec.Res.find(s, ht, n) == Some{t}: Maybe<&2, Maybe<&2, Ropes.Root>>},
+  +ep: {
+    Spec.Pick.merge(Formats.Format.of(Resources.Name.path(n)), s, b, o, t)
+      == Some{Spec.Pick.Take{x}}: Maybe<&2, Spec.Pick>
+  }
+) -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, ns, n) == True{}: Bool} -> Spec.Work.Reads(
+  Spec.Key.res(n),
+  Spec.Res.code(x),
+  Spec.Merge.all(s, f, ns, hb, ho, ht, m)
+):
+  match ns:
+    case Nil{}:
+      e => Empty.absurd(
+        Spec.Work.Reads(Spec.Key.res(n), Spec.Res.code(x), m),
+        Shared.Bool.false_ne_true(e)
+      )
+    case Con{m1, r}:
+      Merge.all.takes.at(
+        s,
+        f,
+        m1,
+        r,
+        hb,
+        ho,
+        ht,
+        m,
+        n,
+        b,
+        o,
+        t,
+        x,
+        eb,
+        eo,
+        et,
+        ep,
+        Resources.Name.is_eq(m1, n),
+        {==},
+        Merge.all.takes(
+          s,
+          f,
+          r,
+          hb,
+          ho,
+          ht,
+          Maybe.bind(&2, Spec.Work, Spec.Work, m, w => Merge.step(s, f, hb, ho, ht, m1, w)),
+          n,
+          b,
+          o,
+          t,
+          x,
+          eb,
+          eo,
+          et,
+          ep
+        )
+      )
+
+def Spec.Merge.keeps(s, c, from, h, n, b, o, t, x):
+  ec => eb => eo => et => ep => Vector.joined.reads(
+    s,
+    c,
+    from,
+    Spec.Merge.all(
+      s,
+      from,
+      Spec.Merge.names(s, h, Spec.Node.root_of(s, Some{from})),
+      Spec.Node.root_of(s, Spec.Merge.base(s, c, from, h)),
+      h,
+      Spec.Node.root_of(s, Some{from}),
+      Some{Spec.Work{s, h, []}}
+    ),
+    n,
+    Spec.Res.code(x)
+  )(
+    Merge.all.takes(
+      s,
+      from,
+      Spec.Merge.names(s, h, Spec.Node.root_of(s, Some{from})),
+      Spec.Node.root_of(s, Spec.Merge.base(s, c, from, h)),
+      h,
+      Spec.Node.root_of(s, Some{from}),
+      Some{Spec.Work{s, h, []}},
+      n,
+      b,
+      o,
+      t,
+      x,
+      eb,
+      eo,
+      et,
+      ep
+    )(ec)
   )
 
 # Waits
