@@ -11406,8 +11406,8 @@ def Key.same(
   )
 
 def Spec.Node.affects_used(s, b):
-  +g = Spec.Seen.of(s, Spec.Branch.keys(s), Spec.Version.keys(s), b)
-  Shared.List.keep_holds(~Spec.Touch, ~Spec.Seen, ~Spec.Touch.holds, Spec.Affects.cands(s, g), g)
+  +g = Spec.Seen.of(s, b)
+  Shared.List.keep_holds(~Spec.Touch, ~Spec.Seen, ~Spec.Touch.holds, Spec.Affects.cands(s, b, g), g)
 
 # Moves
 # -----

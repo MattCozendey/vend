@@ -35,6 +35,9 @@ Delete each open item when the code makes it true.
   highest round among them, if any (`Plan.lead`). The others copy a vote that these rules allow
   (`Allowed`, `Plan.follow`). An owner casts for a change of who decides only when it was asked
   at it (`Node.consent`). All of this reads the ledger; a head holds no round.
+- **Notices** cost what is new, not the history: the new versions of a branch are a range of
+  numbers (`Branch.since`), and the changes elsewhere that a branch did not take in are the
+  versions after the places in its version vector (`Branch.lacked`).
 - **Reads**: `Line.get` reads the log of a line at the node's head. An answer, a version, a mark
   and a writer's pending write are each a few reads of a tree, or of the requests that wait on one
   line.
@@ -155,10 +158,9 @@ Design (each needs a decision or new work; none is a proof detail):
   (`Plan.lead`, `Pass.to`, `Cast.round`), with one law: `Plan.follow_allowed` (a node copies only
   a vote that the rules allow). A node keeps a vote of
   another node without a check of `Allowed`; it only copies a vote that is allowed.
-- **Walks that are left:** `Node.versions` lists every version (use a range); `Node.log`,
-  `Touch.versions`, `Version.keys`, `Node.affects`, `Node.impact`, `Node.notices` read every
-  version of every branch. Target: notices are made when a head moves, from the diff of the two
-  contents and an index of imports by content root.
+- **Reads of a whole history:** `Node.versions` and `Node.log` list or scan every version of one
+  branch (a range is the target). `Node.affects` and `Node.impact` read each branch that the
+  node follows once, and of each only the versions that the branch did not take in.
 - **A put is done twice** for a taken request (`Work.put`, then `Run.content`): the second one
   makes growth independent of the judge. Target: prove that each judge only grows its node, and
   let the run keep the judge's node.

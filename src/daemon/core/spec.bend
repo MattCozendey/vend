@@ -4917,12 +4917,6 @@ def Branch.names(es: List<&2, BranchEntry>) -> List<&2, Branch>:
     case Con{BranchEntry{b, os, h}, r}:
       b <> Branch.names(r)
 
-# the versions of the branch b
-def Branch.versions(s: State(), b: Branch) -> List<&2, Ledgers.Id>:
-  match b:
-    case Branch{r, n}:
-      Node.versions(s, r, n)
-
 # the head of the branch b, if b exists
 def Branch.head(s: State(), b: Branch) -> Maybe<&2, Ledgers.Id>:
   match b:
@@ -5036,17 +5030,59 @@ def Wrote.of(r: Maybe<&2, Ledgers.Asked<Ask>>) -> Maybe<&2, Resources.Name>:
 def Node.wrote(s: State(), v: Ledgers.Id) -> Maybe<&2, Resources.Name>:
   Wrote.of(Node.asked(s, v))
 
-# the versions of the branches es
-def Touch.versions.of(+s: State(), es: List<&2, Branch>) -> List<&2, Ledgers.Id>:
+# how many numbers are from a up to b, b not counted
+def Count.span(+a: U32, +b: U32) -> Nat:
+  Shared.Bool.when(Nat, U32.is_lt(a, b), u => U32.to_nat(U32.sub(b, a)), u => 0n)
+
+# the versions of the line whose tip is m from the number n on, in order: the
+# cost is theirs, not that of the line's history
+def Line.since(+s: State(), m: Maybe<&2, Tip>, +n: U32) -> List<&2, Ledgers.Id>:
+  match m:
+    case None{}:
+      []
+    case Some{+t}:
+      Line.versions(Count.span(n, Line.count(s, t)), s, t, n)
+
+# the number after the place m of a version vector, 0 without one
+def Place.after(m: Maybe<&2, Place>) -> U32:
+  match m:
+    case None{}:
+      0
+    case Some{Place{c, n}}:
+      U32.inc(n)
+
+# a and b are the same branch
+def Branch.same(a: Branch, b: Branch) -> Bool:
+  match a b:
+    case Branch{r1, n1} Branch{r2, n2}:
+      List.all.if(u => String.eq(n1, n2), Ledgers.Id.is_eq(r1, r2))
+
+# the versions of the branch x that the tree h did not take in: those after
+# the place that its version vector holds for x
+def Branch.news(+s: State(), h: Maybe<&2, Hashes.Hash>, x: Branch) -> List<&2, Ledgers.Id>:
+  match x:
+    case Branch{r, n}:
+      +c = Line.chain(r, Some{n})
+      Line.since(s, Node.tip(s, c), Place.after(Node.vector(s, h, c)))
+
+# the versions of the branches es, other than b, that the tree h did not take
+# in
+def Lacked.of(+s: State(), +h: Maybe<&2, Hashes.Hash>, +b: Branch, es: List<&2, Branch>) -> List<&2, Ledgers.Id>:
   match es:
     case Nil{}:
       []
-    case Con{b, r}:
-      List.append(&2, Ledgers.Id, Branch.versions(s, b), Touch.versions.of(s, r))
+    case Con{+x, r}:
+      List.append(
+        &2,
+        Ledgers.Id,
+        Shared.Bool.when(List<&2, Ledgers.Id>, Branch.same(x, b), u => [], u => Branch.news(s, h, x)),
+        Lacked.of(s, h, b, r)
+      )
 
-# the versions of every branch
-def Touch.versions(+s: State()) -> List<&2, Ledgers.Id>:
-  Touch.versions.of(s, Branch.names(Node.branches(s)))
+# the versions of the other branches that the branch b did not take in: what
+# its version vector does not cover
+def Branch.lacked(+s: State(), +b: Branch) -> List<&2, Ledgers.Id>:
+  Lacked.of(s, Node.root_of(s, Branch.head(s, b)), b, Branch.names(Node.branches(s)))
 
 # the branch b lacks the version v
 def Touch.lacks(+s: State(), +b: Branch, +v: Ledgers.Id) -> Bool:
@@ -5061,59 +5097,41 @@ def Branch.key(b: Branch) -> List<&2, Bool>:
     case Branch{r, n}:
       List.append(&2, Bool, Ledgers.Id.key(r), Tries.Trie.text(n))
 
-# what the checks of touches on one branch read of s once: a key for each
-# branch and for each version of a branch, the branch, and its imports
+# what the checks of touches on one branch read of s once: the branch, and
+# its imports
 type Seen is Data:
-  Seen{
-    state: State(),
-    branches: Tries.Trie<Unit>,
-    versions: Tries.Trie<Unit>,
-    branch: Branch,
-    uses: Uses
-  }
+  Seen{state: State(), branch: Branch, uses: Uses}
 
-# what the checks on the branch b read of s, with the keys of the branches bs
-# and of the versions vs
-def Seen.of(+s: State(), bs: Tries.Trie<Unit>, vs: Tries.Trie<Unit>, +b: Branch) -> Seen:
-  Seen{s, bs, vs, b, Uses.of(s, b)}
-
-# the keys of the branches of s
-def Branch.keys(s: State()) -> Tries.Trie<Unit>:
-  Tries.Trie.put_keys(~Branch, ~Branch.key, Branch.names(Node.branches(s)), Tries.Trie.new(Unit))
-
-# the keys of the versions of every branch of s
-def Version.keys(s: State()) -> Tries.Trie<Unit>:
-  Tries.Trie.put_keys(~Ledgers.Id, ~Ledgers.Id.key, Touch.versions(s), Tries.Trie.new(Unit))
+# what the checks on the branch b read of s
+def Seen.of(+s: State(), +b: Branch) -> Seen:
+  Seen{s, b, Uses.of(s, b)}
 
 # the touch t, of the branch of g, holds: its branch is a branch and lacks
-# its version, which is a version of a branch and wrote the resource changed,
-# and the resource used is of the branch, and is the one changed or uses it;
-# each part runs only when the ones before it hold, from the cheapest
+# its version, which is a version and wrote the resource changed, and the
+# resource used is of the branch, and is the one changed or uses it; each
+# part runs only when the ones before it hold, from the cheapest
 def Touch.holds(g: Seen, t: Touch) -> Bool:
   match g t:
-    case Seen{+s, bs, vs, gb, +us} Touch{+v, +c, +b, +u}:
+    case Seen{+s, gb, +us} Touch{+v, +c, +b, +u}:
       List.all.if(
         w => List.all.if(
           w => List.all.if(
             w => List.all.if(
-              w => List.all.if(
-                w => List.any.if(w => Uses.reach(us, u, c), Resources.Name.is_eq(u, c)),
-                Tries.Trie.has(List<&2, Resources.Name>, Uses.imports(us), Name.key(u))
-              ),
-              Shared.Maybe.is_eq(~Resources.Name, ~Resources.Name.is_eq, Node.wrote(s, v), Some{c})
+              w => List.any.if(w => Uses.reach(us, u, c), Resources.Name.is_eq(u, c)),
+              Tries.Trie.has(List<&2, Resources.Name>, Uses.imports(us), Name.key(u))
             ),
-            Touch.lacks(s, b, v)
+            Shared.Maybe.is_eq(~Resources.Name, ~Resources.Name.is_eq, Node.wrote(s, v), Some{c})
           ),
-          Tries.Trie.has(Unit, vs, Ledgers.Id.key(v))
+          Touch.lacks(s, b, v)
         ),
-        Tries.Trie.has(Unit, bs, Branch.key(b))
+        Node.is_version(s, v)
       )
 
 # the touch t holds
 def Node.touches(+s: State(), t: Touch) -> Bool:
   match t:
     case Touch{v, c, +b, u}:
-      Touch.holds(Seen.of(s, Branch.keys(s), Version.keys(s), b), Touch{v, c, b, u})
+      Touch.holds(Seen.of(s, b), Touch{v, c, b, u})
 
 # the touches of the version v that wrote c, on the branch b, one for each of
 # its resources us
@@ -5146,18 +5164,19 @@ def Touch.of(
 # the touches of the version v on the branch of g
 def Affects.at(g: Seen, v: Ledgers.Id) -> List<&2, Touch>:
   match g:
-    case Seen{s, bs, vs, b, us}:
+    case Seen{s, b, us}:
       +v = v
       Touch.of(Node.wrote(s, v), v, b, Uses.nodes(us))
 
-# the touches that may hold of the branch of g
-def Affects.cands(s: State(), g: Seen) -> List<&2, Touch>:
-  Shared.List.flat(~Ledgers.Id, ~Touch, ~Seen, ~Affects.at, Touch.versions(s), g)
+# the touches that may hold of the branch b, of g: those of the versions of
+# the other branches that b did not take in
+def Affects.cands(+s: State(), +b: Branch, g: Seen) -> List<&2, Touch>:
+  Shared.List.flat(~Ledgers.Id, ~Touch, ~Seen, ~Affects.at, Branch.lacked(s, b), g)
 
 # the changes elsewhere that touch what the branch b uses, at any depth
-def Node.affects(+s: State(), b: Branch) -> List<&2, Touch>:
-  +g = Seen.of(s, Branch.keys(s), Version.keys(s), b)
-  Shared.List.keep(~Touch, ~Seen, ~Touch.holds, Affects.cands(s, g), g)
+def Node.affects(+s: State(), +b: Branch) -> List<&2, Touch>:
+  +g = Seen.of(s, b)
+  Shared.List.keep(~Touch, ~Seen, ~Touch.holds, Affects.cands(s, b, g), g)
 
 # the checks of one branch, and the version of a point
 type Impact is Data:
@@ -5167,39 +5186,32 @@ type Impact is Data:
 # holds
 def Impact.keeps(g: Impact, t: Touch) -> Bool:
   match g t:
-    case Impact{Seen{+s, bs, vs, gb, us}, +m} Touch{+v, c, b, u}:
+    case Impact{Seen{+s, gb, us}, +m} Touch{+v, c, b, u}:
       List.all.if(
-        w => Touch.holds(Seen{s, bs, vs, gb, us}, Touch{v, c, b, u}),
+        w => Touch.holds(Seen{s, gb, us}, Touch{v, c, b, u}),
         List.all.if(
           w => Node.has(s, Maybe.default(&2, Ledgers.Id, m, v), v),
           Maybe.is_some(&2, Ledgers.Id, m)
         )
       )
 
-# what the changes up to the version m touch on the branches es, with the
-# keys of the branches bs and of the versions vs
-def Impact.of(
-  +s: State(),
-  +bs: Tries.Trie<Unit>,
-  +vs: Tries.Trie<Unit>,
-  +m: Maybe<&2, Ledgers.Id>,
-  es: List<&2, Branch>
-) -> List<&2, Touch>:
+# what the changes up to the version m touch on the branches es
+def Impact.of(+s: State(), +m: Maybe<&2, Ledgers.Id>, es: List<&2, Branch>) -> List<&2, Touch>:
   match es:
     case Nil{}:
       []
-    case Con{b, r}:
-      +g = Seen.of(s, bs, vs, b)
+    case Con{+b, r}:
+      +g = Seen.of(s, b)
       List.append(
         &2,
         Touch,
-        Shared.List.keep(~Touch, ~Impact, ~Impact.keeps, Affects.cands(s, g), Impact{g, m}),
-        Impact.of(s, bs, vs, m, r)
+        Shared.List.keep(~Touch, ~Impact, ~Impact.keeps, Affects.cands(s, b, g), Impact{g, m}),
+        Impact.of(s, m, r)
       )
 
 # what the changes up to the point p touch elsewhere
 def Node.impact(+s: State(), p: Point) -> List<&2, Touch>:
-  Impact.of(s, Branch.keys(s), Version.keys(s), Node.version(s, p), Branch.names(Node.branches(s)))
+  Impact.of(s, Node.version(s, p), Branch.names(Node.branches(s)))
 
 # what a subscription or a poll follows: the versions or the conflicts of a
 # branch, or the changes elsewhere that touch it
@@ -5259,16 +5271,6 @@ def Notice.touches(ts: List<&2, Touch>) -> List<&2, Notice>:
     case Con{t, r}:
       Notice.Touched{t} <> Notice.touches(r)
 
-# the notices of the topic t in s
-def Notice.all(+s: State(), t: Topic) -> List<&2, Notice>:
-  match t:
-    case Topic.Versions{+b}:
-      Notice.versions(b, Branch.versions(s, b))
-    case Topic.Conflicts{+b}:
-      Notice.conflicts(s, b, Branch.versions(s, b))
-    case Topic.Affects{b}:
-      Notice.touches(Node.affects(s, b))
-
 # the notices of ns whose keys old does not hold
 def Notice.new(ns: List<&2, Notice>, +old: Tries.Trie<Unit>) -> List<&2, Notice>:
   match ns:
@@ -5282,12 +5284,36 @@ def Notice.new(ns: List<&2, Notice>, +old: Tries.Trie<Unit>) -> List<&2, Notice>
         Bool.not(Tries.Trie.has(Unit, old, Notice.key(n)))
       )
 
-# the notices of the topic t in s that since does not have
-def Node.notices(s: State(), +t: Topic, since: State()) -> List<&2, Notice>:
-  Notice.new(
-    Notice.all(s, t),
-    Tries.Trie.put_keys(~Notice, ~Notice.key, Notice.all(since, t), Tries.Trie.new(Unit))
-  )
+# the number of versions of the line c in s
+def Chain.count(+s: State(), c: Ledgers.Chain) -> U32:
+  Maybe.default(&2, U32, Maybe.bind(&2, Tip, U32, Node.tip(s, c), t => Some{Line.count(s, t)}), 0)
+
+# the versions of the branch b that s has and since has not: those from the
+# number of versions of b in since on
+def Branch.since(+s: State(), since: State(), b: Branch) -> List<&2, Ledgers.Id>:
+  match b:
+    case Branch{r, n}:
+      +c = Line.chain(r, Some{n})
+      Line.since(s, Node.tip(s, c), Chain.count(since, c))
+
+# the notices of the topic t in s that since, an earlier state of the node,
+# does not have: the cost is that of what is new, not of the history
+def Node.notices(+s: State(), t: Topic, +since: State()) -> List<&2, Notice>:
+  match t:
+    case Topic.Versions{+b}:
+      Notice.versions(b, Branch.since(s, since, b))
+    case Topic.Conflicts{+b}:
+      Notice.conflicts(s, b, Branch.since(s, since, b))
+    case Topic.Affects{+b}:
+      Notice.new(
+        Notice.touches(Node.affects(s, b)),
+        Tries.Trie.put_keys(
+          ~Notice,
+          ~Notice.key,
+          Notice.touches(Node.affects(since, b)),
+          Tries.Trie.new(Unit)
+        )
+      )
 
 # a resource mounted to a branch
 type Mount is Data:
@@ -6034,7 +6060,7 @@ law Node.affects_used:
       ~Seen,
       ~Touch.holds,
       Node.affects(s, b),
-      Seen.of(s, Branch.keys(s), Version.keys(s), b)
+      Seen.of(s, b)
     )
       == True{}: Bool
   }
