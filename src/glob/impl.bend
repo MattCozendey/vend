@@ -8,381 +8,29 @@ import ../shared/shared/shared/shared/trie.bend as Tries
 import ../shared/shared/shared/text.bend as Texts
 import ./spec.bend as Spec
 
-# Globs as regular expressions
-# ----------------------------
-# A glob is a regular expression over characters (regex.bend) whose atoms
-# are the three glob forms that read one character. Glob.re_matches says
-# that the expression matches what Spec.Glob.matches says the glob matches,
-# so the laws of regex.bend hold for globs.
-
-# What reads one character: the character c, any character but '/', or a
-# class (a character in cs, or one not in cs when neg; never '/').
-type Atom is Data:
-  ALit{c: Char}
-  AAny{}
-  AClass{neg: Bool, cs: List<&2, Char>}
-
-# t accepts c
-def Atom.hit(t: Atom, c: Char) -> Bool:
-  match t:
-    case ALit{x}:
-      Char.is_eq(x, c)
-    case AAny{}:
-      Spec.is_inner(c)
-    case AClass{neg, cs}:
-      +c = c
-      List.all.if(u => Bool.xor(neg, List.contains(~Char, ~Char.is_eq, cs, c)), Spec.is_inner(c))
-
-# the regular expression of g
-# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a glob tree is a few nodes, where a fork costs more than it saves
-def Glob.re(g: Spec.Glob) -> Regex.Re<Atom>:
-  match g:
-    case Spec.Void{}:
-      Regex.Void{}
-    case Spec.Eps{}:
-      Regex.Eps{}
-    case Spec.Lit{c}:
-      Regex.One{ALit{c}}
-    case Spec.Any{}:
-      Regex.One{AAny{}}
-    case Spec.Star{}:
-      Regex.Star{Regex.One{AAny{}}}
-    case Spec.Class{neg, cs}:
-      Regex.One{AClass{neg, cs}}
-    case Spec.Deep{}:
-      Regex.All{}
-    case Spec.Cat{a, b}:
-      Regex.Cat{Glob.re(a), Glob.re(b)}
-    case Spec.Alt{a, b}:
-      Regex.Alt{Glob.re(a), Glob.re(b)}
-# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
-
-# the expression of Glob.of_bool(b) is Re.of_bool(b)
-def Glob.re_of_bool(
-  b: Bool
-) -> {Glob.re(Spec.Glob.of_bool(b)) == Regex.Re.of_bool(Atom, b): Regex.Re<Atom>}:
-  match b:
-    case False{}:
-      {==}
-    case True{}:
-      {==}
-
-# a glob matches "" exactly when its expression does
-def Glob.re_nullable(
-  g: Spec.Glob
-) -> {Spec.Glob.is_nullable(g) == Regex.Re.is_nullable(Atom, Glob.re(g)): Bool}:
-  match g:
-    case Spec.Void{}:
-      {==}
-    case Spec.Eps{}:
-      {==}
-    case Spec.Lit{c}:
-      {==}
-    case Spec.Any{}:
-      {==}
-    case Spec.Star{}:
-      {==}
-    case Spec.Class{neg, cs}:
-      {==}
-    case Spec.Deep{}:
-      {==}
-    case Spec.Cat{+a, +b}:
-      na = Spec.Glob.is_nullable(a)
-      nb = Spec.Glob.is_nullable(b)
-      %Glob.re_nullable(
-        a
-      ): {Bool.and(na, nb) == List.all.if(u => Regex.Re.is_nullable(Atom, Glob.re(b)), _): Bool}
-      %Glob.re_nullable(b): {Bool.and(na, nb) == List.all.if(u => _, na): Bool}
-      %Shared.List.all.if_and(na, u => nb): {_ == List.all.if(u => nb, na): Bool}
-      {==}
-    case Spec.Alt{+a, +b}:
-      na = Spec.Glob.is_nullable(a)
-      nb = Spec.Glob.is_nullable(b)
-      %Glob.re_nullable(
-        a
-      ): {Bool.or(na, nb) == List.any.if(u => Regex.Re.is_nullable(Atom, Glob.re(b)), _): Bool}
-      %Glob.re_nullable(b): {Bool.or(na, nb) == List.any.if(u => _, na): Bool}
-      %Shared.List.any.if_or(na, u => nb): {_ == List.any.if(u => nb, na): Bool}
-      {==}
-
-# the expression of a glob after c is its expression, after c
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- only proofs use it; no program runs it
-def Glob.re_step(
-  g: Spec.Glob,
-  +c: Char
-) -> {
-  Glob.re(
-    Spec.Glob.step(g, c)
-  )
-    == Regex.Re.step(~Char, ~Atom, ~Atom.hit, Glob.re(g), c): Regex.Re<Atom>
-}:
-  match g:
-    case Spec.Void{}:
-      {==}
-    case Spec.Eps{}:
-      {==}
-    case Spec.Lit{x}:
-      Glob.re_of_bool(Char.is_eq(x, c))
-    case Spec.Any{}:
-      Glob.re_of_bool(Spec.is_inner(c))
-    case Spec.Star{}:
-      i = Spec.is_inner(c)
-      star = {Regex.Star{Regex.One{AAny{}}}: Regex.Re<Atom>}
-      %Glob.re_of_bool(
-        i
-      ): {Regex.Cat{Glob.re(Spec.Glob.of_bool(i)), star} == Regex.Cat{_, star}: Regex.Re<Atom>}
-      {==}
-    case Spec.Class{neg, cs}:
-      +i = Spec.is_inner(c)
-      +x = Bool.xor(neg, List.contains(~Char, ~Char.is_eq, cs, c))
-      %Shared.List.all.if_and(
-        i,
-        u => x
-      ): {
-        Glob.re(
-          Spec.Glob.of_bool(_)
-        )
-          == Regex.Re.of_bool(Atom, List.all.if(u => x, i)): Regex.Re<Atom>
-      }
-      Glob.re_of_bool(List.all.if(u => x, i))
-    case Spec.Deep{}:
-      {==}
-    case Spec.Cat{+a, +b}:
-      ra = Glob.re(a)
-      rb = Glob.re(b)
-      sa = Glob.re(Spec.Glob.step(a, c))
-      sb = Glob.re(Spec.Glob.step(b, c))
-      +na = Spec.Glob.is_nullable(a)
-      lhs = {
-        Regex.Alt{Regex.Cat{sa, rb}, Regex.Cat{Glob.re(Spec.Glob.of_bool(na)), sb}}: Regex.Re<Atom>
-      }
-      %Glob.re_step(
-        a,
-        c
-      ): {
-        lhs
-          == Regex.Alt{
-            Regex.Cat{_, rb},
-            Regex.Cat{
-              Regex.Re.of_bool(Atom, Regex.Re.is_nullable(Atom, ra)),
-              Regex.Re.step(~Char, ~Atom, ~Atom.hit, rb, c)
-            }
-          }: Regex.Re<Atom>
-      }
-      %Glob.re_step(
-        b,
-        c
-      ): {
-        lhs
-          == Regex.Alt{
-            Regex.Cat{sa, rb},
-            Regex.Cat{Regex.Re.of_bool(Atom, Regex.Re.is_nullable(Atom, ra)), _}
-          }: Regex.Re<Atom>
-      }
-      %Glob.re_nullable(
-        a
-      ): {
-        lhs
-          == Regex.Alt{Regex.Cat{sa, rb}, Regex.Cat{Regex.Re.of_bool(Atom, _), sb}}: Regex.Re<Atom>
-      }
-      %Glob.re_of_bool(na): {lhs == Regex.Alt{Regex.Cat{sa, rb}, Regex.Cat{_, sb}}: Regex.Re<Atom>}
-      {==}
-    case Spec.Alt{+a, +b}:
-      sa = Glob.re(Spec.Glob.step(a, c))
-      sb = Glob.re(Spec.Glob.step(b, c))
-      %Glob.re_step(
-        a,
-        c
-      ): {
-        Regex.Alt{
-          sa,
-          sb
-        }
-          == Regex.Alt{_, Regex.Re.step(~Char, ~Atom, ~Atom.hit, Glob.re(b), c)}: Regex.Re<Atom>
-      }
-      %Glob.re_step(b, c): {Regex.Alt{sa, sb} == Regex.Alt{sa, _}: Regex.Re<Atom>}
-      {==}
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
-
-# a glob matches p exactly when its expression matches the characters of p
-def Glob.re_matches(
-  p: String,
-  +g: Spec.Glob
-) -> {
-  Regex.Re.matches(
-    ~Char,
-    ~Atom,
-    ~Atom.hit,
-    String.to_list(p),
-    Glob.re(g)
-  )
-    == Spec.Glob.matches(p, g): Bool
-}:
-  match p:
-    case SNil{}:
-      Equal.sym(
-        Bool,
-        Spec.Glob.is_nullable(g),
-        Regex.Re.is_nullable(Atom, Glob.re(g)),
-        Glob.re_nullable(g)
-      )
-    case SCon{+c, t}:
-      %Glob.re_step(
-        g,
-        c
-      ): {
-        Regex.Re.matches(
-          ~Char,
-          ~Atom,
-          ~Atom.hit,
-          String.to_list(t),
-          _
-        )
-          == Spec.Glob.matches(t, Spec.Glob.step(g, c)): Bool
-      }
-      Glob.re_matches(t, Spec.Glob.step(g, c))
-
-# Matching algebra
-# ----------------
-# The laws of regex.bend, for globs. Each states the simpler side first, so a
-# rewrite with it turns a glob into its simpler meaning.
-
-# Void matches nothing
-def Glob.void_never(+p: String) -> {False{} == Spec.Glob.matches(p, Spec.Void{}): Bool}:
-  %Glob.re_matches(p, Spec.Void{}): {False{} == _: Bool}
-  Regex.Re.void_never(~Char, ~Atom, ~Atom.hit, String.to_list(p))
-
-# Alt matches what either side matches
-def Glob.alt_or(
-  +p: String,
-  +a: Spec.Glob,
-  +b: Spec.Glob
-) -> {
-  Bool.or(
-    Spec.Glob.matches(p, a),
-    Spec.Glob.matches(p, b)
-  )
-    == Spec.Glob.matches(p, Spec.Alt{a, b}): Bool
-}:
-  +w = String.to_list(p)
-  ma = Regex.Re.matches(~Char, ~Atom, ~Atom.hit, w, Glob.re(a))
-  mb = Regex.Re.matches(~Char, ~Atom, ~Atom.hit, w, Glob.re(b))
-  %Glob.re_matches(
-    p,
-    a
-  ): {Bool.or(_, Spec.Glob.matches(p, b)) == Spec.Glob.matches(p, Spec.Alt{a, b}): Bool}
-  %Glob.re_matches(p, b): {Bool.or(ma, _) == Spec.Glob.matches(p, Spec.Alt{a, b}): Bool}
-  %Glob.re_matches(p, Spec.Alt{a, b}): {Bool.or(ma, mb) == _: Bool}
-  Regex.Re.alt_or(~Char, ~Atom, ~Atom.hit, w, Glob.re(a), Glob.re(b))
-
-# Cat after Void matches nothing
-def Glob.cat_void_l(
-  +p: String,
-  +x: Spec.Glob
-) -> {False{} == Spec.Glob.matches(p, Spec.Cat{Spec.Void{}, x}): Bool}:
-  %Glob.re_matches(p, Spec.Cat{Spec.Void{}, x}): {False{} == _: Bool}
-  Regex.Re.cat_void_l(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(x))
-
-# Cat after Eps matches what its right side matches
-def Glob.cat_eps_l(
-  +p: String,
-  +x: Spec.Glob
-) -> {Spec.Glob.matches(p, x) == Spec.Glob.matches(p, Spec.Cat{Spec.Eps{}, x}): Bool}:
-  %Glob.re_matches(p, x): {_ == Spec.Glob.matches(p, Spec.Cat{Spec.Eps{}, x}): Bool}
-  %Glob.re_matches(
-    p,
-    Spec.Cat{Spec.Eps{}, x}
-  ): {Regex.Re.matches(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(x)) == _: Bool}
-  Regex.Re.cat_eps_l(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(x))
-
-# Cat before Eps matches what its left side matches
-def Glob.cat_eps_r(
-  +p: String,
-  +x: Spec.Glob
-) -> {Spec.Glob.matches(p, x) == Spec.Glob.matches(p, Spec.Cat{x, Spec.Eps{}}): Bool}:
-  %Glob.re_matches(p, x): {_ == Spec.Glob.matches(p, Spec.Cat{x, Spec.Eps{}}): Bool}
-  %Glob.re_matches(
-    p,
-    Spec.Cat{x, Spec.Eps{}}
-  ): {Regex.Re.matches(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(x)) == _: Bool}
-  Regex.Re.cat_eps_r(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(x))
-
-# Cat after of_bool(b) matches what its right side matches, when b holds
-def Glob.cat_of_bool(
-  +p: String,
-  +b: Bool,
-  +r: Spec.Glob
-) -> {
-  Bool.and(
-    b,
-    Spec.Glob.matches(p, r)
-  )
-    == Spec.Glob.matches(p, Spec.Cat{Spec.Glob.of_bool(b), r}): Bool
-}:
-  +w = String.to_list(p)
-  mr = Regex.Re.matches(~Char, ~Atom, ~Atom.hit, w, Glob.re(r))
-  %Glob.re_matches(
-    p,
-    r
-  ): {Bool.and(b, _) == Spec.Glob.matches(p, Spec.Cat{Spec.Glob.of_bool(b), r}): Bool}
-  %Glob.re_matches(p, Spec.Cat{Spec.Glob.of_bool(b), r}): {Bool.and(b, mr) == _: Bool}
-  %Equal.sym(
-    Regex.Re<Atom>,
-    Glob.re(Spec.Glob.of_bool(b)),
-    Regex.Re.of_bool(Atom, b),
-    Glob.re_of_bool(b)
-  ): {
-    Bool.and(b, mr) == Regex.Re.matches(~Char, ~Atom, ~Atom.hit, w, Regex.Cat{_, Glob.re(r)}): Bool
-  }
-  Regex.Re.cat_of_bool(~Char, ~Atom, ~Atom.hit, w, b, Glob.re(r))
-
-# Cat is associative
-def Glob.cat_assoc(
-  +p: String,
-  +a: Spec.Glob,
-  +b: Spec.Glob,
-  +r: Spec.Glob
-) -> {
-  Spec.Glob.matches(
-    p,
-    Spec.Cat{a, Spec.Cat{b, r}}
-  )
-    == Spec.Glob.matches(p, Spec.Cat{Spec.Cat{a, b}, r}): Bool
-}:
-  w = String.to_list(p)
-  %Glob.re_matches(
-    p,
-    Spec.Cat{a, Spec.Cat{b, r}}
-  ): {_ == Spec.Glob.matches(p, Spec.Cat{Spec.Cat{a, b}, r}): Bool}
-  %Glob.re_matches(
-    p,
-    Spec.Cat{Spec.Cat{a, b}, r}
-  ): {Regex.Re.matches(~Char, ~Atom, ~Atom.hit, w, Glob.re(Spec.Cat{a, Spec.Cat{b, r}})) == _: Bool}
-  Regex.Re.cat_assoc(~Char, ~Atom, ~Atom.hit, w, Glob.re(a), Glob.re(b), Glob.re(r))
-
 # Atom equality and keys
 # ----------------------
 
 # a and b are the same atom
-def Atom.is_eq(a: Atom, b: Atom) -> Bool:
+def Atom.is_eq(a: Spec.Atom, b: Spec.Atom) -> Bool:
   match a b:
-    case ALit{x} ALit{y}:
+    case Spec.ALit{x} Spec.ALit{y}:
       Char.is_eq(x, y)
-    case AAny{} AAny{}:
+    case Spec.AAny{} Spec.AAny{}:
       True{}
-    case AClass{n, xs} AClass{m, ys}:
+    case Spec.AClass{n, xs} Spec.AClass{m, ys}:
       List.all.if(u => Shared.List.is_eq(~Char, ~Char.is_eq, xs, ys), Shared.Bool.is_eq(n, m))
     case _ _:
       False{}
 
 # Atom.is_eq is True for an atom and itself
-def Atom.is_eq_refl(a: Atom) -> {Atom.is_eq(a, a) == True{}: Bool}:
+def Atom.is_eq_refl(a: Spec.Atom) -> {Atom.is_eq(a, a) == True{}: Bool}:
   match a:
-    case ALit{x}:
+    case Spec.ALit{x}:
       Shared.Char.is_eq_refl(x)
-    case AAny{}:
+    case Spec.AAny{}:
       {==}
-    case AClass{+n, +xs}:
+    case Spec.AClass{+n, +xs}:
       Shared.List.all.if_both(
         Shared.Bool.is_eq(n, n),
         u => Shared.List.is_eq(~Char, ~Char.is_eq, xs, xs)
@@ -391,25 +39,40 @@ def Atom.is_eq_refl(a: Atom) -> {Atom.is_eq(a, a) == True{}: Bool}:
       )(Shared.List.is_eq_refl(~Char, ~Char.is_eq, ~Shared.Char.laws(), xs))
 
 # Atom.is_eq is True only for the same atom
-def Atom.is_eq_sound(a: Atom, b: Atom) -> {Atom.is_eq(a, b) == True{}: Bool} -> {a == b: Atom}:
+def Atom.is_eq_sound(
+  a: Spec.Atom,
+  b: Spec.Atom
+) -> {Atom.is_eq(a, b) == True{}: Bool} -> {a == b: Spec.Atom}:
   match a b:
-    case ALit{x} ALit{y}:
-      h => Equal.cong(Char, Atom, u => ALit{u}, x, y, Shared.Char.is_eq_sound(x, y)(h))
-    case ALit{x} AAny{}:
-      h => Empty.absurd({ALit{x} == AAny{}: Atom}, Shared.Bool.false_ne_true(h))
-    case ALit{x} AClass{m, ys}:
-      h => Empty.absurd({ALit{x} == AClass{m, ys}: Atom}, Shared.Bool.false_ne_true(h))
-    case AAny{} ALit{y}:
-      h => Empty.absurd({AAny{} == ALit{y}: Atom}, Shared.Bool.false_ne_true(h))
-    case AAny{} AAny{}:
+    case Spec.ALit{x} Spec.ALit{y}:
+      h => Equal.cong(Char, Spec.Atom, u => Spec.ALit{u}, x, y, Shared.Char.is_eq_sound(x, y)(h))
+    case Spec.ALit{x} Spec.AAny{}:
+      h => Empty.absurd({Spec.ALit{x} == Spec.AAny{}: Spec.Atom}, Shared.Bool.false_ne_true(h))
+    case Spec.ALit{x} Spec.AClass{m, ys}:
+      h => Empty.absurd(
+        {Spec.ALit{x} == Spec.AClass{m, ys}: Spec.Atom},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Spec.AAny{} Spec.ALit{y}:
+      h => Empty.absurd({Spec.AAny{} == Spec.ALit{y}: Spec.Atom}, Shared.Bool.false_ne_true(h))
+    case Spec.AAny{} Spec.AAny{}:
       h => {==}
-    case AAny{} AClass{m, ys}:
-      h => Empty.absurd({AAny{} == AClass{m, ys}: Atom}, Shared.Bool.false_ne_true(h))
-    case AClass{n, xs} ALit{y}:
-      h => Empty.absurd({AClass{n, xs} == ALit{y}: Atom}, Shared.Bool.false_ne_true(h))
-    case AClass{n, xs} AAny{}:
-      h => Empty.absurd({AClass{n, xs} == AAny{}: Atom}, Shared.Bool.false_ne_true(h))
-    case AClass{+n, +xs} AClass{+m, +ys}:
+    case Spec.AAny{} Spec.AClass{m, ys}:
+      h => Empty.absurd(
+        {Spec.AAny{} == Spec.AClass{m, ys}: Spec.Atom},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Spec.AClass{n, xs} Spec.ALit{y}:
+      h => Empty.absurd(
+        {Spec.AClass{n, xs} == Spec.ALit{y}: Spec.Atom},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Spec.AClass{n, xs} Spec.AAny{}:
+      h => Empty.absurd(
+        {Spec.AClass{n, xs} == Spec.AAny{}: Spec.Atom},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Spec.AClass{+n, +xs} Spec.AClass{+m, +ys}:
       +h =>
         +same_n = Shared.Bool.is_eq(n, m)
         %Shared.Bool.is_eq_sound(
@@ -417,7 +80,7 @@ def Atom.is_eq_sound(a: Atom, b: Atom) -> {Atom.is_eq(a, b) == True{}: Bool} -> 
           m
         )(
           Shared.List.all.if_hit(same_n, u => Shared.List.is_eq(~Char, ~Char.is_eq, xs, ys))(h)
-        ): {AClass{n, xs} == AClass{_, ys}: Atom}
+        ): {Spec.AClass{n, xs} == Spec.AClass{_, ys}: Spec.Atom}
         %Shared.List.is_eq_sound(
           ~Char,
           ~Char.is_eq,
@@ -426,21 +89,21 @@ def Atom.is_eq_sound(a: Atom, b: Atom) -> {Atom.is_eq(a, b) == True{}: Bool} -> 
           ys
         )(
           Shared.List.all.if_rest(same_n, u => Shared.List.is_eq(~Char, ~Char.is_eq, xs, ys))(h)
-        ): {AClass{n, xs} == AClass{n, _}: Atom}
+        ): {Spec.AClass{n, xs} == Spec.AClass{n, _}: Spec.Atom}
         {==}
 
 # the laws of Atom.is_eq
-def Atom.laws() -> Shared.Eq.Laws(Atom, Atom.is_eq):
+def Atom.laws() -> Shared.Eq.Laws(Spec.Atom, Atom.is_eq):
   (Atom.is_eq_refl, Atom.is_eq_sound)
 
 # the key of t: a bit or two for its form, then its parts
-def Atom.key(t: Atom) -> List<&2, Bool>:
+def Atom.key(t: Spec.Atom) -> List<&2, Bool>:
   match t:
-    case ALit{Chr{x}}:
+    case Spec.ALit{Chr{x}}:
       False{} <> Tries.Trie.char(x)
-    case AAny{}:
+    case Spec.AAny{}:
       [True{}, False{}]
-    case AClass{neg, cs}:
+    case Spec.AClass{neg, cs}:
       True{} <> True{} <> neg <> Tries.Trie.text(String.from_list(cs))
 
 # Fast matching
@@ -452,29 +115,22 @@ def Atom.key(t: Atom) -> List<&2, Bool>:
 
 # g matches the characters w
 def Glob.accepts(w: List<&2, Char>, g: Spec.Glob) -> Bool:
-  Regex.Re.accepts(~Char, ~Atom, ~Atom.hit, ~Atom.is_eq, ~Atom.key, w, Glob.re(g))
+  Regex.Re.accepts(~Char, ~Spec.Atom, ~Spec.Atom.hit, ~Atom.is_eq, ~Atom.key, w, Spec.Glob.re(g))
 
 # Glob.accepts gives the answer of Spec.Glob.matches
 def Glob.accepts_ok(
-  +p: String,
-  +g: Spec.Glob
+  p: String,
+  g: Spec.Glob
 ) -> {Glob.accepts(String.to_list(p), g) == Spec.Glob.matches(p, g): Bool}:
-  Equal.trans(
-    Bool,
-    Glob.accepts(String.to_list(p), g),
-    Regex.Re.matches(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(g)),
-    Spec.Glob.matches(p, g),
-    Regex.Re.accepts_matches(
-      ~Char,
-      ~Atom,
-      ~Atom.hit,
-      ~Atom.is_eq,
-      ~Atom.key,
-      ~Atom.laws(),
-      String.to_list(p),
-      Glob.re(g)
-    ),
-    Glob.re_matches(p, g)
+  Regex.Re.accepts_matches(
+    ~Char,
+    ~Spec.Atom,
+    ~Spec.Atom.hit,
+    ~Atom.is_eq,
+    ~Atom.key,
+    ~Atom.laws(),
+    String.to_list(p),
+    Spec.Glob.re(g)
   )
 
 # the answer for the characters w after rules, given the answer acc before
@@ -553,8 +209,8 @@ def Rule.selects_fast_ok(
 
 # A rule whose glob is a list of Seqs.
 type Slot is Data:
-  Inc{xs: List<&2, List<&2, Regex.Re<Atom>>>}
-  Exc{xs: List<&2, List<&2, Regex.Re<Atom>>>}
+  Inc{xs: List<&2, List<&2, Regex.Re<Spec.Atom>>>}
+  Exc{xs: List<&2, List<&2, Regex.Re<Spec.Atom>>>}
 
 # the answer for the characters w after slots, given the answer acc before
 # them
@@ -563,13 +219,13 @@ def Slot.selects.go(slots: List<&2, Slot>, +w: List<&2, Char>, acc: Bool) -> Boo
     case Nil{} _:
       acc
     case Con{Inc{xs}, t} False{}:
-      Slot.selects.go(t, w, Regex.Seqs.matches(~Char, ~Atom, ~Atom.hit, xs, w))
+      Slot.selects.go(t, w, Regex.Seqs.matches(~Char, ~Spec.Atom, ~Spec.Atom.hit, xs, w))
     case Con{Inc{xs}, t} True{}:
       Slot.selects.go(t, w, True{})
     case Con{Exc{xs}, t} False{}:
       Slot.selects.go(t, w, False{})
     case Con{Exc{xs}, t} True{}:
-      Slot.selects.go(t, w, Bool.not(Regex.Seqs.matches(~Char, ~Atom, ~Atom.hit, xs, w)))
+      Slot.selects.go(t, w, Bool.not(Regex.Seqs.matches(~Char, ~Spec.Atom, ~Spec.Atom.hit, xs, w)))
 
 # the slots of rules
 def Slot.of_rules(rules: List<&2, Spec.Rule>) -> List<&2, Slot>:
@@ -577,9 +233,9 @@ def Slot.of_rules(rules: List<&2, Spec.Rule>) -> List<&2, Slot>:
     case Nil{}:
       Nil{}
     case Con{Spec.Include{g}, t}:
-      Con{Inc{[[Glob.re(g)]]}, Slot.of_rules(t)}
+      Con{Inc{[[Spec.Glob.re(g)]]}, Slot.of_rules(t)}
     case Con{Spec.Exclude{g}, t}:
-      Con{Exc{[[Glob.re(g)]]}, Slot.of_rules(t)}
+      Con{Exc{[[Spec.Glob.re(g)]]}, Slot.of_rules(t)}
 
 # the slots after c
 def Slot.step(slots: List<&2, Slot>, +c: Char) -> List<&2, Slot>:
@@ -588,39 +244,40 @@ def Slot.step(slots: List<&2, Slot>, +c: Char) -> List<&2, Slot>:
       Nil{}
     case Con{Inc{xs}, t}:
       Con{
-        Inc{Regex.Seqs.step(~Char, ~Atom, ~Atom.hit, ~Atom.is_eq, ~Atom.key, xs, c)},
+        Inc{Regex.Seqs.step(~Char, ~Spec.Atom, ~Spec.Atom.hit, ~Atom.is_eq, ~Atom.key, xs, c)},
         Slot.step(t, c)
       }
     case Con{Exc{xs}, t}:
       Con{
-        Exc{Regex.Seqs.step(~Char, ~Atom, ~Atom.hit, ~Atom.is_eq, ~Atom.key, xs, c)},
+        Exc{Regex.Seqs.step(~Char, ~Spec.Atom, ~Spec.Atom.hit, ~Atom.is_eq, ~Atom.key, xs, c)},
         Slot.step(t, c)
       }
 
 # the one-Seq list of g matches what g matches
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
 def Glob.single_ok(
-  +p: String,
-  +g: Spec.Glob
+  p: String,
+  g: Spec.Glob
 ) -> {
   Spec.Glob.matches(
     p,
     g
   )
-    == Regex.Seqs.matches(~Char, ~Atom, ~Atom.hit, [[Glob.re(g)]], String.to_list(p)): Bool
+    == Regex.Seqs.matches(
+      ~Char,
+      ~Spec.Atom,
+      ~Spec.Atom.hit,
+      [[Spec.Glob.re(g)]],
+      String.to_list(p)
+    ): Bool
 }:
   Equal.sym(
     Bool,
-    Regex.Seqs.matches(~Char, ~Atom, ~Atom.hit, [[Glob.re(g)]], String.to_list(p)),
+    Regex.Seqs.matches(~Char, ~Spec.Atom, ~Spec.Atom.hit, [[Spec.Glob.re(g)]], String.to_list(p)),
     Spec.Glob.matches(p, g),
-    Equal.trans(
-      Bool,
-      Regex.Seqs.matches(~Char, ~Atom, ~Atom.hit, [[Glob.re(g)]], String.to_list(p)),
-      Regex.Re.matches(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(g)),
-      Spec.Glob.matches(p, g),
-      Regex.Seqs.matches_one(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(g)),
-      Glob.re_matches(p, g)
-    )
+    Regex.Seqs.matches_one(~Char, ~Spec.Atom, ~Spec.Atom.hit, String.to_list(p), Spec.Glob.re(g))
   )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # rules and their slots select the same paths
 def Slot.of_rules_ok(
@@ -682,15 +339,15 @@ def Slot.step_ok(
     case Con{Inc{+xs}, r} False{}:
       m = Regex.Seqs.matches(
         ~Char,
-        ~Atom,
-        ~Atom.hit,
-        Regex.Seqs.step(~Char, ~Atom, ~Atom.hit, ~Atom.is_eq, ~Atom.key, xs, c),
+        ~Spec.Atom,
+        ~Spec.Atom.hit,
+        Regex.Seqs.step(~Char, ~Spec.Atom, ~Spec.Atom.hit, ~Atom.is_eq, ~Atom.key, xs, c),
         t
       )
       %Regex.Seqs.matches_step(
         ~Char,
-        ~Atom,
-        ~Atom.hit,
+        ~Spec.Atom,
+        ~Spec.Atom.hit,
         ~Atom.is_eq,
         ~Atom.key,
         ~Atom.laws(),
@@ -706,15 +363,15 @@ def Slot.step_ok(
     case Con{Exc{+xs}, +r} True{}:
       m = Regex.Seqs.matches(
         ~Char,
-        ~Atom,
-        ~Atom.hit,
-        Regex.Seqs.step(~Char, ~Atom, ~Atom.hit, ~Atom.is_eq, ~Atom.key, xs, c),
+        ~Spec.Atom,
+        ~Spec.Atom.hit,
+        Regex.Seqs.step(~Char, ~Spec.Atom, ~Spec.Atom.hit, ~Atom.is_eq, ~Atom.key, xs, c),
         t
       )
       %Regex.Seqs.matches_step(
         ~Char,
-        ~Atom,
-        ~Atom.hit,
+        ~Spec.Atom,
+        ~Spec.Atom.hit,
         ~Atom.is_eq,
         ~Atom.key,
         ~Atom.laws(),
@@ -851,24 +508,29 @@ def St.of_ok(
 
 # xs and ys are the same Seqs
 def Seqs.is_eq(
-  xs: List<&2, List<&2, Regex.Re<Atom>>>,
-  ys: List<&2, List<&2, Regex.Re<Atom>>>
+  xs: List<&2, List<&2, Regex.Re<Spec.Atom>>>,
+  ys: List<&2, List<&2, Regex.Re<Spec.Atom>>>
 ) -> Bool:
-  Shared.List.is_eq(~List<&2, Regex.Re<Atom>>, ~Regex.Seq.is_eq(~Atom, ~Atom.is_eq), xs, ys)
+  Shared.List.is_eq(
+    ~List<&2, Regex.Re<Spec.Atom>>,
+    ~Regex.Seq.is_eq(~Spec.Atom, ~Atom.is_eq),
+    xs,
+    ys
+  )
 
 # the laws of Seqs.is_eq
-def Seqs.laws() -> Shared.Eq.Laws(List<&2, List<&2, Regex.Re<Atom>>>, Seqs.is_eq):
+def Seqs.laws() -> Shared.Eq.Laws(List<&2, List<&2, Regex.Re<Spec.Atom>>>, Seqs.is_eq):
   (
     xs => Shared.List.is_eq_refl(
-      ~List<&2, Regex.Re<Atom>>,
-      ~Regex.Seq.is_eq(~Atom, ~Atom.is_eq),
-      ~Regex.Seq.laws(~Atom, ~Atom.is_eq, ~Atom.laws()),
+      ~List<&2, Regex.Re<Spec.Atom>>,
+      ~Regex.Seq.is_eq(~Spec.Atom, ~Atom.is_eq),
+      ~Regex.Seq.laws(~Spec.Atom, ~Atom.is_eq, ~Atom.laws()),
       xs
     ),
     xs => ys => Shared.List.is_eq_sound(
-      ~List<&2, Regex.Re<Atom>>,
-      ~Regex.Seq.is_eq(~Atom, ~Atom.is_eq),
-      ~Regex.Seq.laws(~Atom, ~Atom.is_eq, ~Atom.laws()),
+      ~List<&2, Regex.Re<Spec.Atom>>,
+      ~Regex.Seq.is_eq(~Spec.Atom, ~Atom.is_eq),
+      ~Regex.Seq.laws(~Spec.Atom, ~Atom.is_eq, ~Atom.laws()),
       xs,
       ys
     )
@@ -888,21 +550,21 @@ def Slot.is_eq(a: Slot, b: Slot) -> Bool:
 def Slot.is_eq_refl(a: Slot) -> {Slot.is_eq(a, a) == True{}: Bool}:
   match a:
     case Inc{x}:
-      Shared.Eq.refl(~List<&2, List<&2, Regex.Re<Atom>>>, ~Seqs.is_eq, Seqs.laws(), x)
+      Shared.Eq.refl(~List<&2, List<&2, Regex.Re<Spec.Atom>>>, ~Seqs.is_eq, Seqs.laws(), x)
     case Exc{x}:
-      Shared.Eq.refl(~List<&2, List<&2, Regex.Re<Atom>>>, ~Seqs.is_eq, Seqs.laws(), x)
+      Shared.Eq.refl(~List<&2, List<&2, Regex.Re<Spec.Atom>>>, ~Seqs.is_eq, Seqs.laws(), x)
 
 # Slot.is_eq is True only for the same slot
 def Slot.is_eq_sound(a: Slot, b: Slot) -> {Slot.is_eq(a, b) == True{}: Bool} -> {a == b: Slot}:
   match a b:
     case Inc{x} Inc{y}:
       h => Equal.cong(
-        List<&2, List<&2, Regex.Re<Atom>>>,
+        List<&2, List<&2, Regex.Re<Spec.Atom>>>,
         Slot,
         u => Inc{u},
         x,
         y,
-        Shared.Eq.sound(~List<&2, List<&2, Regex.Re<Atom>>>, ~Seqs.is_eq, Seqs.laws(), x, y)(h)
+        Shared.Eq.sound(~List<&2, List<&2, Regex.Re<Spec.Atom>>>, ~Seqs.is_eq, Seqs.laws(), x, y)(h)
       )
     case Inc{x} Exc{y}:
       h => Empty.absurd({Inc{x} == Exc{y}: Slot}, Shared.Bool.false_ne_true(h))
@@ -910,12 +572,12 @@ def Slot.is_eq_sound(a: Slot, b: Slot) -> {Slot.is_eq(a, b) == True{}: Bool} -> 
       h => Empty.absurd({Exc{x} == Inc{y}: Slot}, Shared.Bool.false_ne_true(h))
     case Exc{x} Exc{y}:
       h => Equal.cong(
-        List<&2, List<&2, Regex.Re<Atom>>>,
+        List<&2, List<&2, Regex.Re<Spec.Atom>>>,
         Slot,
         u => Exc{u},
         x,
         y,
-        Shared.Eq.sound(~List<&2, List<&2, Regex.Re<Atom>>>, ~Seqs.is_eq, Seqs.laws(), x, y)(h)
+        Shared.Eq.sound(~List<&2, List<&2, Regex.Re<Spec.Atom>>>, ~Seqs.is_eq, Seqs.laws(), x, y)(h)
       )
 
 # the laws of Slot.is_eq
@@ -989,12 +651,12 @@ def St.laws() -> Shared.Eq.Laws(St, St.is_eq):
   (St.is_eq_refl, St.is_eq_sound)
 
 # the key of xs, then rest: True before each Seq, False after the last
-def Seqs.key(xs: List<&2, List<&2, Regex.Re<Atom>>>, rest: List<&2, Bool>) -> List<&2, Bool>:
+def Seqs.key(xs: List<&2, List<&2, Regex.Re<Spec.Atom>>>, rest: List<&2, Bool>) -> List<&2, Bool>:
   match xs:
     case Nil{}:
       False{} <> rest
     case Con{s, r}:
-      True{} <> Regex.Seq.key.go(~Atom, ~Atom.key, s, Seqs.key(r, rest))
+      True{} <> Regex.Seq.key.go(~Spec.Atom, ~Atom.key, s, Seqs.key(r, rest))
 
 # the key of slots, then rest: True and the kind before each slot, False
 # after the last
@@ -1042,13 +704,13 @@ def Chars.has(cs: List<&2, Char>, c: Char) -> Bool:
   List.contains(~Char, ~Char.is_eq, cs, c)
 
 # every character that t names is in cs
-def Atom.within(cs: List<&2, Char>, t: Atom) -> Bool:
+def Atom.within(cs: List<&2, Char>, t: Spec.Atom) -> Bool:
   match t:
-    case ALit{x}:
+    case Spec.ALit{x}:
       Chars.has(cs, x)
-    case AAny{}:
+    case Spec.AAny{}:
       True{}
-    case AClass{neg, xs}:
+    case Spec.AClass{neg, xs}:
       Reaches.Reach.within(~Char, ~Char.is_eq, xs, cs)
 
 # every character that slots name is in cs
@@ -1059,12 +721,12 @@ def Slots.within(slots: List<&2, Slot>, +cs: List<&2, Char>) -> Bool:
     case Con{Inc{xs}, t}:
       List.all.if(
         u => Slots.within(t, cs),
-        Regex.Seqs.holds(~Atom, ~List<&2, Char>, ~Atom.within, xs, cs)
+        Regex.Seqs.holds(~Spec.Atom, ~List<&2, Char>, ~Atom.within, xs, cs)
       )
     case Con{Exc{xs}, t}:
       List.all.if(
         u => Slots.within(t, cs),
-        Regex.Seqs.holds(~Atom, ~List<&2, Char>, ~Atom.within, xs, cs)
+        Regex.Seqs.holds(~Spec.Atom, ~List<&2, Char>, ~Atom.within, xs, cs)
       )
 
 # cs holds '/', and not c or f
@@ -1157,12 +819,12 @@ def Atom.alike(
   +cs: List<&2, Char>,
   +c: Char,
   +f: Char,
-  t: Atom,
+  t: Spec.Atom,
   +hn: {Chars.near(cs, c, f) == True{}: Bool},
   hp: {Atom.within(cs, t) == True{}: Bool}
-) -> {Atom.hit(t, c) == Atom.hit(t, f): Bool}:
+) -> {Spec.Atom.hit(t, c) == Spec.Atom.hit(t, f): Bool}:
   match t:
-    case ALit{+x}:
+    case Spec.ALit{+x}:
       +hp = hp
       Equal.trans(
         Bool,
@@ -1195,7 +857,7 @@ def Atom.alike(
           )
         )
       )
-    case AAny{}:
+    case Spec.AAny{}:
       Equal.trans(
         Bool,
         Spec.is_inner(c),
@@ -1209,7 +871,7 @@ def Atom.alike(
           Char.inner_out(cs, f, Chars.near_slash(cs, c, f, hn), Chars.near_right(cs, c, f, hn))
         )
       )
-    case AClass{neg, +xs}:
+    case Spec.AClass{neg, +xs}:
       +hp = hp
       ic = Spec.is_inner(c)
       xf = Bool.xor(neg, List.contains(~Char, ~Char.is_eq, xs, f))
@@ -1292,14 +954,14 @@ def Slot.step_alike(
       _ => {==}
     case Con{Inc{+xs}, +t}:
       +hw =>
-        +wx = Regex.Seqs.holds(~Atom, ~List<&2, Char>, ~Atom.within, xs, cs)
-        +xc = Regex.Seqs.step(~Char, ~Atom, ~Atom.hit, ~Atom.is_eq, ~Atom.key, xs, c)
+        +wx = Regex.Seqs.holds(~Spec.Atom, ~List<&2, Char>, ~Atom.within, xs, cs)
+        +xc = Regex.Seqs.step(~Char, ~Spec.Atom, ~Spec.Atom.hit, ~Atom.is_eq, ~Atom.key, xs, c)
         +tc = Slot.step(t, c)
         %Regex.Seqs.step_alike(
           ~Char,
-          ~Atom,
+          ~Spec.Atom,
           ~List<&2, Char>,
-          ~Atom.hit,
+          ~Spec.Atom.hit,
           ~Atom.is_eq,
           ~Atom.key,
           ~Atom.within,
@@ -1326,14 +988,14 @@ def Slot.step_alike(
         {==}
     case Con{Exc{+xs}, +t}:
       +hw =>
-        +wx = Regex.Seqs.holds(~Atom, ~List<&2, Char>, ~Atom.within, xs, cs)
-        +xc = Regex.Seqs.step(~Char, ~Atom, ~Atom.hit, ~Atom.is_eq, ~Atom.key, xs, c)
+        +wx = Regex.Seqs.holds(~Spec.Atom, ~List<&2, Char>, ~Atom.within, xs, cs)
+        +xc = Regex.Seqs.step(~Char, ~Spec.Atom, ~Spec.Atom.hit, ~Atom.is_eq, ~Atom.key, xs, c)
         +tc = Slot.step(t, c)
         %Regex.Seqs.step_alike(
           ~Char,
-          ~Atom,
+          ~Spec.Atom,
           ~List<&2, Char>,
-          ~Atom.hit,
+          ~Spec.Atom.hit,
           ~Atom.is_eq,
           ~Atom.key,
           ~Atom.within,
@@ -4245,158 +3907,39 @@ def Show.parse(
       {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# Cat congruence
-# --------------
-# Regex.Re.cat_agree, for globs. The text proofs give its premises over
-# strings and globs; Glob.agree_pre and Glob.agree_suf turn them into premises
-# over characters and expressions.
+# Matching shown text
+# -------------------
+# Spec.Glob.matches is Regex.Re.matches of the glob's expression, so the laws
+# of regex.bend hold for globs as they are. Glob.alt_or and Glob.cat_eps_r
+# are the two that these proofs use often.
 
-# x and x2 agree on pre, and on pre followed by each prefix of suf
-# bend-lint: expect-begin bend-lint-rules/performance/append_in_loop@warning -- only proofs use it; no program runs it
-def Glob.AgreePre(x: Spec.Glob, x2: Spec.Glob, pre: String, suf: String) -> Type:
-  match suf:
-    case SNil{}:
-      ({Spec.Glob.matches(pre, x) == Spec.Glob.matches(pre, x2): Bool} & Unit)
-    case SCon{c, t}:
-      (
-        {
-          Spec.Glob.matches(pre, x) == Spec.Glob.matches(pre, x2): Bool
-        }
-          & Glob.AgreePre(x, x2, String.append(pre, SCon{c, SNil{}}), t)
-      )
-# bend-lint: expect-end bend-lint-rules/performance/append_in_loop@warning
-
-# y and y2 agree on each suffix of suf
-def Glob.AgreeSuf(y: Spec.Glob, y2: Spec.Glob, suf: String) -> Type:
-  match suf:
-    case SNil{}:
-      ({Spec.Glob.matches(SNil{}, y) == Spec.Glob.matches(SNil{}, y2): Bool} & Unit)
-    case SCon{c, t}:
-      (
-        {
-          Spec.Glob.matches(SCon{c, t}, y) == Spec.Glob.matches(SCon{c, t}, y2): Bool
-        }
-          & Glob.AgreeSuf(y, y2, t)
-      )
-
-# the expressions of globs that agree on p agree on its characters
-def Glob.re_agree(
-  +p: String,
-  +x: Spec.Glob,
-  +x2: Spec.Glob,
-  e: {Spec.Glob.matches(p, x) == Spec.Glob.matches(p, x2): Bool}
+# Alt matches what either side matches
+def Glob.alt_or(
+  p: String,
+  a: Spec.Glob,
+  b: Spec.Glob
 ) -> {
-  Regex.Re.matches(
-    ~Char,
-    ~Atom,
-    ~Atom.hit,
-    String.to_list(p),
-    Glob.re(x)
+  Bool.or(
+    Spec.Glob.matches(p, a),
+    Spec.Glob.matches(p, b)
   )
-    == Regex.Re.matches(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(x2)): Bool
+    == Spec.Glob.matches(p, Spec.Alt{a, b}): Bool
 }:
-  rx = Regex.Re.matches(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(x))
-  rx2 = Regex.Re.matches(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(x2))
-  %Equal.sym(Bool, rx2, Spec.Glob.matches(p, x2), Glob.re_matches(p, x2)): {rx == _: Bool}
-  %e: {rx == _: Bool}
-  Glob.re_matches(p, x)
-
-# the expressions of globs that agree on the prefixes agree on them
-# bend-lint: expect-begin bend-lint-rules/performance/append_in_loop@warning -- only proofs use it; no program runs it
-def Glob.agree_pre(
-  suf: String,
-  +pre: String,
-  +x: Spec.Glob,
-  +x2: Spec.Glob,
-  ea: Glob.AgreePre(x, x2, pre, suf)
-) -> Regex.Re.AgreePre(
-  ~Char,
-  ~Atom,
-  ~Atom.hit,
-  Glob.re(x),
-  Glob.re(x2),
-  String.to_list(pre),
-  String.to_list(suf)
-):
-  match suf:
-    case SNil{}:
-      (e, u) = ea
-      Glob.re_agree(pre, x, x2, e)
-    case SCon{+c, t}:
-      (e, ra) = ea
-      %Texts.String.to_list_append(
-        pre,
-        SCon{c, SNil{}}
-      ): (
-        {
-          Regex.Re.matches(
-            ~Char,
-            ~Atom,
-            ~Atom.hit,
-            String.to_list(pre),
-            Glob.re(x)
-          )
-            == Regex.Re.matches(~Char, ~Atom, ~Atom.hit, String.to_list(pre), Glob.re(x2)): Bool
-        }
-          & Regex.Re.AgreePre(
-            ~Char,
-            ~Atom,
-            ~Atom.hit,
-            Glob.re(x),
-            Glob.re(x2),
-            _,
-            String.to_list(t)
-          )
-      )
-      (
-        Glob.re_agree(pre, x, x2, e),
-        Glob.agree_pre(t, String.append(pre, SCon{c, SNil{}}), x, x2, ra)
-      )
-# bend-lint: expect-end bend-lint-rules/performance/append_in_loop@warning
-
-# the expressions of globs that agree on the suffixes agree on them
-def Glob.agree_suf(
-  suf: String,
-  +y: Spec.Glob,
-  +y2: Spec.Glob,
-  eb: Glob.AgreeSuf(y, y2, suf)
-) -> Regex.Re.AgreeSuf(~Char, ~Atom, ~Atom.hit, Glob.re(y), Glob.re(y2), String.to_list(suf)):
-  match suf:
-    case SNil{}:
-      (e, u) = eb
-      Glob.re_agree(SNil{}, y, y2, e)
-    case SCon{c, +t}:
-      (e, rb) = eb
-      (Glob.re_agree(SCon{c, t}, y, y2, e), Glob.agree_suf(t, y, y2, rb))
-
-# Cat of agreeing parts matches p the same way
-def Glob.cat_agree(
-  +p: String,
-  +x: Spec.Glob,
-  +x2: Spec.Glob,
-  +y: Spec.Glob,
-  +y2: Spec.Glob,
-  ea: Glob.AgreePre(x, x2, SNil{}, p),
-  eb: Glob.AgreeSuf(y, y2, p)
-) -> {Spec.Glob.matches(p, Spec.Cat{x, y}) == Spec.Glob.matches(p, Spec.Cat{x2, y2}): Bool}:
-  w = String.to_list(p)
-  %Glob.re_matches(p, Spec.Cat{x, y}): {_ == Spec.Glob.matches(p, Spec.Cat{x2, y2}): Bool}
-  %Glob.re_matches(
-    p,
-    Spec.Cat{x2, y2}
-  ): {Regex.Re.matches(~Char, ~Atom, ~Atom.hit, w, Glob.re(Spec.Cat{x, y})) == _: Bool}
-  Regex.Re.cat_agree(
+  Regex.Re.alt_or(
     ~Char,
-    ~Atom,
-    ~Atom.hit,
-    w,
-    Glob.re(x),
-    Glob.re(x2),
-    Glob.re(y),
-    Glob.re(y2),
-    Glob.agree_pre(p, SNil{}, x, x2, ea),
-    Glob.agree_suf(p, y, y2, eb)
+    ~Spec.Atom,
+    ~Spec.Atom.hit,
+    String.to_list(p),
+    Spec.Glob.re(a),
+    Spec.Glob.re(b)
   )
+
+# Cat before Eps matches what its left side matches
+def Glob.cat_eps_r(
+  p: String,
+  x: Spec.Glob
+) -> {Spec.Glob.matches(p, x) == Spec.Glob.matches(p, Spec.Cat{x, Spec.Eps{}}): Bool}:
+  Regex.Re.cat_eps_r(~Char, ~Spec.Atom, ~Spec.Atom.hit, String.to_list(p), Spec.Glob.re(x))
 
 # Alt with Void matches what its left side matches
 def Glob.alt_void(
@@ -4404,11 +3947,15 @@ def Glob.alt_void(
   +x: Spec.Glob
 ) -> {Spec.Glob.matches(p, x) == Spec.Glob.matches(p, Spec.Alt{x, Spec.Void{}}): Bool}:
   %Glob.alt_or(p, x, Spec.Void{}): {Spec.Glob.matches(p, x) == _: Bool}
-  %Glob.void_never(p): {Spec.Glob.matches(p, x) == Bool.or(Spec.Glob.matches(p, x), _): Bool}
+  %Regex.Re.void_never(
+    ~Char,
+    ~Spec.Atom,
+    ~Spec.Atom.hit,
+    String.to_list(p)
+  ): {Spec.Glob.matches(p, x) == Bool.or(Spec.Glob.matches(p, x), _): Bool}
   Shared.Bool.or_false(Spec.Glob.matches(p, x))
 
 # an empty class matches nothing, as Void
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
 def Show.void_point(
   p: String
 ) -> {Spec.Glob.matches(p, Spec.Class{False{}, []}) == Spec.Glob.matches(p, Spec.Void{}): Bool}:
@@ -4416,15 +3963,30 @@ def Show.void_point(
     case SNil{}:
       {==}
     case SCon{c, t}:
-      i = Spec.is_inner(c)
+      +i = Spec.is_inner(c)
       %Equal.sym(
         Bool,
-        Bool.and(i, False{}),
+        List.all.if(u => False{}, i),
         False{},
-        Shared.Bool.and_false_right(i)
-      ): {Spec.Glob.matches(t, Spec.Glob.of_bool(_)) == Spec.Glob.matches(t, Spec.Void{}): Bool}
+        Equal.trans(
+          Bool,
+          List.all.if(u => False{}, i),
+          Bool.and(i, False{}),
+          False{},
+          Shared.List.all.if_and(i, u => False{}),
+          Shared.Bool.and_false_right(i)
+        )
+      ): {
+        Regex.Re.matches(
+          ~Char,
+          ~Spec.Atom,
+          ~Spec.Atom.hit,
+          String.to_list(t),
+          Regex.Re.of_bool(Spec.Atom, _)
+        )
+          == Spec.Glob.matches(t, Spec.Void{}): Bool
+      }
       {==}
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the text of Eps reads back as Eps
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
@@ -4475,18 +4037,32 @@ def Show.class_point(
       {==}
     case SCon{+c, t}:
       i = Spec.is_inner(c)
+      w = String.to_list(t)
       +k = List.contains(~Char, ~Char.is_eq, cs, c)
-      r = Spec.Glob.matches(t, Spec.Glob.of_bool(Bool.and(i, Bool.xor(n, k))))
-      %Shared.List.contains_reverse(
+      r = Regex.Re.matches(
         ~Char,
-        ~Char.is_eq,
-        cs,
-        [],
-        c
-      ): {Spec.Glob.matches(t, Spec.Glob.of_bool(Bool.and(i, Bool.xor(n, _)))) == r: Bool}
-      %Shared.Bool.or_false(
-        k
-      ): {Spec.Glob.matches(t, Spec.Glob.of_bool(Bool.and(i, Bool.xor(n, _)))) == r: Bool}
+        ~Spec.Atom,
+        ~Spec.Atom.hit,
+        w,
+        Regex.Re.of_bool(Spec.Atom, List.all.if(u => Bool.xor(n, k), i))
+      )
+      %Equal.trans(
+        Bool,
+        k,
+        Bool.or(k, False{}),
+        List.contains(~Char, ~Char.is_eq, List.reverse(&2, Char, cs), c),
+        Shared.Bool.or_false(k),
+        Shared.List.contains_reverse(~Char, ~Char.is_eq, cs, [], c)
+      ): {
+        Regex.Re.matches(
+          ~Char,
+          ~Spec.Atom,
+          ~Spec.Atom.hit,
+          w,
+          Regex.Re.of_bool(Spec.Atom, List.all.if(u => Bool.xor(n, _), i))
+        )
+          == r: Bool
+      }
       {==}
 
 # Deep matches everything
@@ -4507,18 +4083,27 @@ def Show.slash_deep(
       Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}}
     ): Bool
 }:
-  +de = {Spec.Cat{Spec.Deep{}, Spec.Eps{}}: Spec.Glob}
-  x = Spec.Glob.step(de, Chr{47})
-  %Glob.alt_or(t, Spec.Cat{Spec.Eps{}, de}, Spec.Cat{Spec.Void{}, x}): {True{} == _: Bool}
-  %Glob.cat_eps_l(
-    t,
-    de
-  ): {True{} == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Void{}, x})): Bool}
-  %Glob.cat_eps_r(
-    t,
-    Spec.Deep{}
-  ): {True{} == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Void{}, x})): Bool}
-  %Glob.deep_true(t): {True{} == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Void{}, x})): Bool}
+  +w = String.to_list(t)
+  +de = {Regex.Cat{Regex.All{}, Regex.Eps{}}: Regex.Re<Spec.Atom>}
+  +x = Regex.Re.step(~Char, ~Spec.Atom, ~Spec.Atom.hit, de, Chr{47})
+  r = Regex.Re.matches(~Char, ~Spec.Atom, ~Spec.Atom.hit, w, Regex.Cat{Regex.Void{}, x})
+  %Regex.Re.alt_or(
+    ~Char,
+    ~Spec.Atom,
+    ~Spec.Atom.hit,
+    w,
+    Regex.Cat{Regex.Eps{}, de},
+    Regex.Cat{Regex.Void{}, x}
+  ): {True{} == _: Bool}
+  %Regex.Re.cat_eps_l(~Char, ~Spec.Atom, ~Spec.Atom.hit, w, de): {True{} == Bool.or(_, r): Bool}
+  %Regex.Re.cat_eps_r(
+    ~Char,
+    ~Spec.Atom,
+    ~Spec.Atom.hit,
+    w,
+    Regex.All{}
+  ): {True{} == Bool.or(_, r): Bool}
+  %Glob.deep_true(t): {True{} == Bool.or(_, r): Bool}
   {==}
 
 # Show.star_k, one step, given b, the answer of c == '/'
@@ -4564,136 +4149,127 @@ def Show.star_k.at(
   match b:
     case False{}:
       e =>
-        +ke = {
+        +w = String.to_list(t)
+        +star = Spec.Glob.re(Spec.Star{})
+        +ke = Spec.Glob.re(
           Spec.Cat{
             Spec.Alt{
               Spec.Eps{},
               Spec.Alt{Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}}, Spec.Void{}}
             },
             Spec.Eps{}
-          }: Spec.Glob
+          }
+        )
+        +x = {
+          Regex.Cat{
+            Regex.Eps{},
+            Regex.Re.step(~Char, ~Spec.Atom, ~Spec.Atom.hit, ke, c)
+          }: Regex.Re<Spec.Atom>
         }
-        +sk = {
-          Spec.Cat{
-            Spec.Star{},
-            Spec.Cat{
-              Spec.Alt{
-                Spec.Eps{},
-                Spec.Alt{
-                  Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}},
-                  Spec.Void{}
-                }
-              },
-              Spec.Eps{}
-            }
-          }: Spec.Glob
-        }
+        r = Regex.Re.matches(~Char, ~Spec.Atom, ~Spec.Atom.hit, w, x)
         %e: {
           True{}
-            == Spec.Glob.matches(
-              t,
-              Spec.Alt{
-                Spec.Cat{Spec.Cat{Spec.Glob.of_bool(Bool.not(_)), Spec.Star{}}, ke},
-                Spec.Cat{Spec.Eps{}, Spec.Glob.step(ke, c)}
-              }
+            == Regex.Re.matches(
+              ~Char,
+              ~Spec.Atom,
+              ~Spec.Atom.hit,
+              w,
+              Regex.Alt{Regex.Cat{Regex.Cat{Regex.Re.of_bool(Spec.Atom, Bool.not(_)), star}, ke}, x}
             ): Bool
         }
-        %Glob.alt_or(
-          t,
-          Spec.Cat{Spec.Cat{Spec.Eps{}, Spec.Star{}}, ke},
-          Spec.Cat{Spec.Eps{}, Spec.Glob.step(ke, c)}
-        ):
-          {True{} == _: Bool}
-        %Glob.cat_assoc(t, Spec.Eps{}, Spec.Star{}, ke):
-          {
-            True{}
-              == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Eps{}, Spec.Glob.step(ke, c)})): Bool
-          }
-        %Glob.cat_eps_l(
-          t,
-          sk
-        ): {
-          True{}
-            == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Eps{}, Spec.Glob.step(ke, c)})): Bool
-        }
-        %ih: {
-          True{}
-            == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Eps{}, Spec.Glob.step(ke, c)})): Bool
-        }
+        %Regex.Re.alt_or(
+          ~Char,
+          ~Spec.Atom,
+          ~Spec.Atom.hit,
+          w,
+          Regex.Cat{Regex.Cat{Regex.Eps{}, star}, ke},
+          x
+        ): {True{} == _: Bool}
+        %Regex.Re.cat_assoc(
+          ~Char,
+          ~Spec.Atom,
+          ~Spec.Atom.hit,
+          w,
+          Regex.Eps{},
+          star,
+          ke
+        ): {True{} == Bool.or(_, r): Bool}
+        %Regex.Re.cat_eps_l(
+          ~Char,
+          ~Spec.Atom,
+          ~Spec.Atom.hit,
+          w,
+          Regex.Cat{star, ke}
+        ): {True{} == Bool.or(_, r): Bool}
+        %ih: {True{} == Bool.or(_, r): Bool}
         {==}
     case True{}:
       e =>
-        +ke = {
-          Spec.Cat{
-            Spec.Alt{
-              Spec.Eps{},
-              Spec.Alt{Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}}, Spec.Void{}}
-            },
-            Spec.Eps{}
-          }: Spec.Glob
-        }
-        +sk = {
-          Spec.Cat{
-            Spec.Star{},
-            Spec.Cat{
-              Spec.Alt{
-                Spec.Eps{},
-                Spec.Alt{
-                  Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}},
-                  Spec.Void{}
-                }
-              },
-              Spec.Eps{}
-            }
+        +dirs = {
+          Spec.Alt{
+            Spec.Eps{},
+            Spec.Alt{Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}}, Spec.Void{}}
           }: Spec.Glob
         }
         +ec = Shared.Char.is_eq_sound(
           c,
           Chr{47}
         )(Equal.sym(Bool, True{}, Char.is_eq(c, Chr{47}), e))
-        %Equal.sym(Char, c, Chr{47}, ec): {True{} == Spec.Glob.matches(SCon{_, t}, sk): Bool}
-        +st = {Spec.Cat{Spec.Cat{Spec.Void{}, Spec.Star{}}, ke}: Spec.Glob}
-        +x = Spec.Glob.step(ke, Chr{47})
+        %Equal.sym(
+          Char,
+          c,
+          Chr{47},
+          ec
+        ): {
+          True{}
+            == Spec.Glob.matches(
+              SCon{_, t},
+              Spec.Cat{Spec.Star{}, Spec.Cat{dirs, Spec.Eps{}}}
+            ): Bool
+        }
+        +w = String.to_list(t)
         +p = {SCon{Chr{47}, t}: String}
-        %Glob.alt_or(t, st, Spec.Cat{Spec.Eps{}, x}): {True{} == _: Bool}
-        %Glob.cat_eps_l(t, x): {True{} == Bool.or(Spec.Glob.matches(t, st), _): Bool}
-        %Glob.cat_eps_r(
-          p,
-          Spec.Alt{
-            Spec.Eps{},
-            Spec.Alt{Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}}, Spec.Void{}}
-          }
-        ): {True{} == Bool.or(Spec.Glob.matches(t, st), _): Bool}
+        +ke = Spec.Glob.re(Spec.Cat{dirs, Spec.Eps{}})
+        +st = {
+          Regex.Cat{Regex.Cat{Regex.Void{}, Spec.Glob.re(Spec.Star{})}, ke}: Regex.Re<Spec.Atom>
+        }
+        +x = Regex.Re.step(~Char, ~Spec.Atom, ~Spec.Atom.hit, ke, Chr{47})
+        +ms = Regex.Re.matches(~Char, ~Spec.Atom, ~Spec.Atom.hit, w, st)
+        %Regex.Re.alt_or(
+          ~Char,
+          ~Spec.Atom,
+          ~Spec.Atom.hit,
+          w,
+          st,
+          Regex.Cat{Regex.Eps{}, x}
+        ): {True{} == _: Bool}
+        %Regex.Re.cat_eps_l(
+          ~Char,
+          ~Spec.Atom,
+          ~Spec.Atom.hit,
+          w,
+          x
+        ): {True{} == Bool.or(ms, _): Bool}
+        %Glob.cat_eps_r(p, dirs): {True{} == Bool.or(ms, _): Bool}
         %Glob.alt_or(
           p,
           Spec.Eps{},
           Spec.Alt{Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}}, Spec.Void{}}
-        ): {True{} == Bool.or(Spec.Glob.matches(t, st), _): Bool}
+        ): {True{} == Bool.or(ms, _): Bool}
         %Glob.alt_void(
           p,
           Spec.Cat{Spec.Lit{Chr{47}}, Spec.Cat{Spec.Deep{}, Spec.Eps{}}}
-        ): {
-          True{}
-            == Bool.or(Spec.Glob.matches(t, st), Bool.or(Spec.Glob.matches(p, Spec.Eps{}), _)): Bool
-        }
+        ): {True{} == Bool.or(ms, Bool.or(Spec.Glob.matches(p, Spec.Eps{}), _)): Bool}
         %Show.slash_deep(
           t
-        ): {
-          True{}
-            == Bool.or(Spec.Glob.matches(t, st), Bool.or(Spec.Glob.matches(p, Spec.Eps{}), _)): Bool
-        }
+        ): {True{} == Bool.or(ms, Bool.or(Spec.Glob.matches(p, Spec.Eps{}), _)): Bool}
         %Equal.sym(
           Bool,
           Bool.or(Spec.Glob.matches(p, Spec.Eps{}), True{}),
           True{},
           Shared.Bool.or_true_right(Spec.Glob.matches(p, Spec.Eps{}))
-        ): {True{} == Bool.or(Spec.Glob.matches(t, st), _): Bool}
-        Equal.sym(
-          Bool,
-          Bool.or(Spec.Glob.matches(t, st), True{}),
-          True{},
-          Shared.Bool.or_true_right(Spec.Glob.matches(t, st))
-        )
+        ): {True{} == Bool.or(ms, _): Bool}
+        Equal.sym(Bool, Bool.or(ms, True{}), True{}, Shared.Bool.or_true_right(ms))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # `*` then optionally `/` and anything matches everything
@@ -4750,11 +4326,26 @@ def Show.Ok(+g: Spec.Glob, rank: Nat, suf: String, pre: String) -> Type:
     case 1n+k:
       match k:
         case 0n:
-          Glob.AgreePre(Show.glob(g), g, pre, suf)
+          Regex.Re.AgreePre(
+            ~Char,
+            ~Spec.Atom,
+            ~Spec.Atom.hit,
+            Spec.Glob.re(Show.glob(g)),
+            Spec.Glob.re(g),
+            String.to_list(pre),
+            String.to_list(suf)
+          )
         case 1n+j:
           match j:
             case 0n:
-              Glob.AgreeSuf(Show.glob(g), g, suf)
+              Regex.Re.AgreeSuf(
+                ~Char,
+                ~Spec.Atom,
+                ~Spec.Atom.hit,
+                Spec.Glob.re(Show.glob(g)),
+                Spec.Glob.re(g),
+                String.to_list(suf)
+              )
             case 1n+i:
               Unit
 
@@ -4763,278 +4354,112 @@ def Show.Ok(+g: Spec.Glob, rank: Nat, suf: String, pre: String) -> Type:
 # bend-lint: expect-begin bend-lint-rules/performance/append_in_loop@warning -- only proofs use it; no program runs it
 # bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- only proofs use it; no program runs it
 def Show.ok(+g: Spec.Glob, +rank: Nat, +suf: String, +pre: String) -> Show.Ok(g, rank, suf, pre):
-  match g:
-    case Spec.Void{}:
-      match rank:
+  match g rank:
+    case Spec.Void{} 0n:
+      Show.void_point(suf)
+    case Spec.Eps{} 0n:
+      Show.eps_point(suf)
+    case Spec.Lit{c} 0n:
+      {==}
+    case Spec.Any{} 0n:
+      {==}
+    case Spec.Star{} 0n:
+      Show.star_point(suf)
+    case Spec.Class{+n, +cs} 0n:
+      Show.class_point(suf, n, cs)
+    case Spec.Deep{} 0n:
+      Show.deep_point(suf)
+    case Spec.Cat{+a, +b} 0n:
+      +ta = Show.glob(a)
+      +tb = Show.glob(b)
+      r = Spec.Glob.matches(suf, Spec.Cat{a, b})
+      %Glob.alt_void(suf, Spec.Cat{ta, Spec.Cat{tb, Spec.Eps{}}}): {_ == r: Bool}
+      %Equal.sym(
+        Bool,
+        Spec.Glob.matches(suf, Spec.Cat{ta, Spec.Cat{tb, Spec.Eps{}}}),
+        Spec.Glob.matches(suf, Spec.Cat{Spec.Cat{ta, tb}, Spec.Eps{}}),
+        Regex.Re.cat_assoc(
+          ~Char,
+          ~Spec.Atom,
+          ~Spec.Atom.hit,
+          String.to_list(suf),
+          Spec.Glob.re(ta),
+          Spec.Glob.re(tb),
+          Regex.Eps{}
+        )
+      ): {_ == r: Bool}
+      %Glob.cat_eps_r(suf, Spec.Cat{ta, tb}): {_ == r: Bool}
+      Regex.Re.cat_agree(
+        ~Char,
+        ~Spec.Atom,
+        ~Spec.Atom.hit,
+        String.to_list(suf),
+        Spec.Glob.re(ta),
+        Spec.Glob.re(a),
+        Spec.Glob.re(tb),
+        Spec.Glob.re(b),
+        Show.ok(a, 1n, suf, SNil{}),
+        Show.ok(b, 2n, suf, SNil{})
+      )
+    case Spec.Alt{+a, +b} 0n:
+      +ta = Show.glob(a)
+      +tb = Show.glob(b)
+      r = Spec.Glob.matches(suf, Spec.Alt{a, b})
+      ma = Spec.Glob.matches(suf, ta)
+      mb = Spec.Glob.matches(suf, tb)
+      %Glob.alt_or(
+        suf,
+        Spec.Cat{ta, Spec.Eps{}},
+        Spec.Alt{Spec.Cat{tb, Spec.Eps{}}, Spec.Void{}}
+      ): {_ == r: Bool}
+      %Glob.alt_void(
+        suf,
+        Spec.Cat{tb, Spec.Eps{}}
+      ): {Bool.or(Spec.Glob.matches(suf, Spec.Cat{ta, Spec.Eps{}}), _) == r: Bool}
+      %Glob.cat_eps_r(
+        suf,
+        ta
+      ): {Bool.or(_, Spec.Glob.matches(suf, Spec.Cat{tb, Spec.Eps{}})) == r: Bool}
+      %Glob.cat_eps_r(suf, tb): {Bool.or(ma, _) == r: Bool}
+      %Glob.alt_or(suf, a, b): {Bool.or(ma, mb) == _: Bool}
+      %Show.ok(a, 0n, suf, SNil{}): {Bool.or(ma, mb) == Bool.or(_, Spec.Glob.matches(suf, b)): Bool}
+      %Show.ok(b, 0n, suf, SNil{}): {Bool.or(ma, mb) == Bool.or(ma, _): Bool}
+      {==}
+    case _ 1n+k:
+      match k:
         case 0n:
-          Show.void_point(suf)
-        case 1n+k:
-          match k:
+          match suf:
+            case SNil{}:
+              Show.ok(g, 0n, pre, SNil{})
+            case SCon{c, t}:
+              %Texts.String.to_list_append(
+                pre,
+                SCon{c, SNil{}}
+              ): (
+                {
+                  Spec.Glob.matches(pre, Show.glob(g)) == Spec.Glob.matches(pre, g): Bool
+                }
+                  & Regex.Re.AgreePre(
+                    ~Char,
+                    ~Spec.Atom,
+                    ~Spec.Atom.hit,
+                    Spec.Glob.re(Show.glob(g)),
+                    Spec.Glob.re(g),
+                    _,
+                    String.to_list(t)
+                  )
+              )
+              (Show.ok(g, 0n, pre, SNil{}), Show.ok(g, 1n, t, String.append(pre, SCon{c, SNil{}})))
+        case 1n+j:
+          match j:
             case 0n:
               match suf:
                 case SNil{}:
-                  (Show.ok(g, 0n, pre, SNil{}), Unit{})
-                case SCon{c2, t}:
-                  (
-                    Show.ok(g, 0n, pre, SNil{}),
-                    Show.ok(g, 1n, t, String.append(pre, SCon{c2, SNil{}}))
-                  )
-            case 1n+j:
-              match j:
-                case 0n:
-                  match suf:
-                    case SNil{}:
-                      (Show.ok(g, 0n, SNil{}, pre), Unit{})
-                    case SCon{c2, +t}:
-                      (Show.ok(g, 0n, SCon{c2, t}, pre), Show.ok(g, 2n, t, pre))
-                case 1n+i:
-                  Unit{}
-    case Spec.Eps{}:
-      match rank:
-        case 0n:
-          Show.eps_point(suf)
-        case 1n+k:
-          match k:
-            case 0n:
-              match suf:
-                case SNil{}:
-                  (Show.ok(g, 0n, pre, SNil{}), Unit{})
-                case SCon{c2, t}:
-                  (
-                    Show.ok(g, 0n, pre, SNil{}),
-                    Show.ok(g, 1n, t, String.append(pre, SCon{c2, SNil{}}))
-                  )
-            case 1n+j:
-              match j:
-                case 0n:
-                  match suf:
-                    case SNil{}:
-                      (Show.ok(g, 0n, SNil{}, pre), Unit{})
-                    case SCon{c2, +t}:
-                      (Show.ok(g, 0n, SCon{c2, t}, pre), Show.ok(g, 2n, t, pre))
-                case 1n+i:
-                  Unit{}
-    case Spec.Lit{c}:
-      match rank:
-        case 0n:
-          {==}
-        case 1n+k:
-          match k:
-            case 0n:
-              match suf:
-                case SNil{}:
-                  (Show.ok(g, 0n, pre, SNil{}), Unit{})
-                case SCon{c2, t}:
-                  (
-                    Show.ok(g, 0n, pre, SNil{}),
-                    Show.ok(g, 1n, t, String.append(pre, SCon{c2, SNil{}}))
-                  )
-            case 1n+j:
-              match j:
-                case 0n:
-                  match suf:
-                    case SNil{}:
-                      (Show.ok(g, 0n, SNil{}, pre), Unit{})
-                    case SCon{c2, +t}:
-                      (Show.ok(g, 0n, SCon{c2, t}, pre), Show.ok(g, 2n, t, pre))
-                case 1n+i:
-                  Unit{}
-    case Spec.Any{}:
-      match rank:
-        case 0n:
-          {==}
-        case 1n+k:
-          match k:
-            case 0n:
-              match suf:
-                case SNil{}:
-                  (Show.ok(g, 0n, pre, SNil{}), Unit{})
-                case SCon{c2, t}:
-                  (
-                    Show.ok(g, 0n, pre, SNil{}),
-                    Show.ok(g, 1n, t, String.append(pre, SCon{c2, SNil{}}))
-                  )
-            case 1n+j:
-              match j:
-                case 0n:
-                  match suf:
-                    case SNil{}:
-                      (Show.ok(g, 0n, SNil{}, pre), Unit{})
-                    case SCon{c2, +t}:
-                      (Show.ok(g, 0n, SCon{c2, t}, pre), Show.ok(g, 2n, t, pre))
-                case 1n+i:
-                  Unit{}
-    case Spec.Star{}:
-      match rank:
-        case 0n:
-          Show.star_point(suf)
-        case 1n+k:
-          match k:
-            case 0n:
-              match suf:
-                case SNil{}:
-                  (Show.ok(g, 0n, pre, SNil{}), Unit{})
-                case SCon{c2, t}:
-                  (
-                    Show.ok(g, 0n, pre, SNil{}),
-                    Show.ok(g, 1n, t, String.append(pre, SCon{c2, SNil{}}))
-                  )
-            case 1n+j:
-              match j:
-                case 0n:
-                  match suf:
-                    case SNil{}:
-                      (Show.ok(g, 0n, SNil{}, pre), Unit{})
-                    case SCon{c2, +t}:
-                      (Show.ok(g, 0n, SCon{c2, t}, pre), Show.ok(g, 2n, t, pre))
-                case 1n+i:
-                  Unit{}
-    case Spec.Class{+n, +cs}:
-      match rank:
-        case 0n:
-          Show.class_point(suf, n, cs)
-        case 1n+k:
-          match k:
-            case 0n:
-              match suf:
-                case SNil{}:
-                  (Show.ok(g, 0n, pre, SNil{}), Unit{})
-                case SCon{c2, t}:
-                  (
-                    Show.ok(g, 0n, pre, SNil{}),
-                    Show.ok(g, 1n, t, String.append(pre, SCon{c2, SNil{}}))
-                  )
-            case 1n+j:
-              match j:
-                case 0n:
-                  match suf:
-                    case SNil{}:
-                      (Show.ok(g, 0n, SNil{}, pre), Unit{})
-                    case SCon{c2, +t}:
-                      (Show.ok(g, 0n, SCon{c2, t}, pre), Show.ok(g, 2n, t, pre))
-                case 1n+i:
-                  Unit{}
-    case Spec.Deep{}:
-      match rank:
-        case 0n:
-          Show.deep_point(suf)
-        case 1n+k:
-          match k:
-            case 0n:
-              match suf:
-                case SNil{}:
-                  (Show.ok(g, 0n, pre, SNil{}), Unit{})
-                case SCon{c2, t}:
-                  (
-                    Show.ok(g, 0n, pre, SNil{}),
-                    Show.ok(g, 1n, t, String.append(pre, SCon{c2, SNil{}}))
-                  )
-            case 1n+j:
-              match j:
-                case 0n:
-                  match suf:
-                    case SNil{}:
-                      (Show.ok(g, 0n, SNil{}, pre), Unit{})
-                    case SCon{c2, +t}:
-                      (Show.ok(g, 0n, SCon{c2, t}, pre), Show.ok(g, 2n, t, pre))
-                case 1n+i:
-                  Unit{}
-    case Spec.Cat{+a, +b}:
-      match rank:
-        case 0n:
-          +ta = Show.glob(a)
-          +tb = Show.glob(b)
-          r = Spec.Glob.matches(suf, Spec.Cat{a, b})
-          %Glob.alt_void(suf, Spec.Cat{ta, Spec.Cat{tb, Spec.Eps{}}}): {_ == r: Bool}
-          %Equal.sym(
-            Bool,
-            Spec.Glob.matches(suf, Spec.Cat{ta, Spec.Cat{tb, Spec.Eps{}}}),
-            Spec.Glob.matches(suf, Spec.Cat{Spec.Cat{ta, tb}, Spec.Eps{}}),
-            Glob.cat_assoc(suf, ta, tb, Spec.Eps{})
-          ): {_ == r: Bool}
-          %Glob.cat_eps_r(suf, Spec.Cat{ta, tb}): {_ == r: Bool}
-          Glob.cat_agree(
-            suf,
-            ta,
-            a,
-            tb,
-            b,
-            Show.ok(a, 1n, suf, SNil{}),
-            Show.ok(b, 2n, suf, SNil{})
-          )
-        case 1n+k:
-          match k:
-            case 0n:
-              match suf:
-                case SNil{}:
-                  (Show.ok(g, 0n, pre, SNil{}), Unit{})
-                case SCon{c2, t}:
-                  (
-                    Show.ok(g, 0n, pre, SNil{}),
-                    Show.ok(g, 1n, t, String.append(pre, SCon{c2, SNil{}}))
-                  )
-            case 1n+j:
-              match j:
-                case 0n:
-                  match suf:
-                    case SNil{}:
-                      (Show.ok(g, 0n, SNil{}, pre), Unit{})
-                    case SCon{c2, +t}:
-                      (Show.ok(g, 0n, SCon{c2, t}, pre), Show.ok(g, 2n, t, pre))
-                case 1n+i:
-                  Unit{}
-    case Spec.Alt{+a, +b}:
-      match rank:
-        case 0n:
-          +ta = Show.glob(a)
-          +tb = Show.glob(b)
-          r = Spec.Glob.matches(suf, Spec.Alt{a, b})
-          ma = Spec.Glob.matches(suf, ta)
-          mb = Spec.Glob.matches(suf, tb)
-          %Glob.alt_or(
-            suf,
-            Spec.Cat{ta, Spec.Eps{}},
-            Spec.Alt{Spec.Cat{tb, Spec.Eps{}}, Spec.Void{}}
-          ): {_ == r: Bool}
-          %Glob.alt_void(
-            suf,
-            Spec.Cat{tb, Spec.Eps{}}
-          ): {Bool.or(Spec.Glob.matches(suf, Spec.Cat{ta, Spec.Eps{}}), _) == r: Bool}
-          %Glob.cat_eps_r(
-            suf,
-            ta
-          ): {Bool.or(_, Spec.Glob.matches(suf, Spec.Cat{tb, Spec.Eps{}})) == r: Bool}
-          %Glob.cat_eps_r(suf, tb): {Bool.or(ma, _) == r: Bool}
-          %Glob.alt_or(suf, a, b): {Bool.or(ma, mb) == _: Bool}
-          %Show.ok(
-            a,
-            0n,
-            suf,
-            SNil{}
-          ): {Bool.or(ma, mb) == Bool.or(_, Spec.Glob.matches(suf, b)): Bool}
-          %Show.ok(b, 0n, suf, SNil{}): {Bool.or(ma, mb) == Bool.or(ma, _): Bool}
-          {==}
-        case 1n+k:
-          match k:
-            case 0n:
-              match suf:
-                case SNil{}:
-                  (Show.ok(g, 0n, pre, SNil{}), Unit{})
-                case SCon{c2, t}:
-                  (
-                    Show.ok(g, 0n, pre, SNil{}),
-                    Show.ok(g, 1n, t, String.append(pre, SCon{c2, SNil{}}))
-                  )
-            case 1n+j:
-              match j:
-                case 0n:
-                  match suf:
-                    case SNil{}:
-                      (Show.ok(g, 0n, SNil{}, pre), Unit{})
-                    case SCon{c2, +t}:
-                      (Show.ok(g, 0n, SCon{c2, t}, pre), Show.ok(g, 2n, t, pre))
-                case 1n+i:
-                  Unit{}
+                  Show.ok(g, 0n, SNil{}, pre)
+                case SCon{c, +t}:
+                  (Show.ok(g, 0n, SCon{c, t}, pre), Show.ok(g, 2n, t, pre))
+            case 1n+i:
+              Unit{}
 # bend-lint: expect-end bend-lint-rules/performance/append_in_loop@warning
 # bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
@@ -5675,18 +5100,41 @@ def Lits.cons(
   )
     == Spec.Glob.matches(SCon{Chr{dx}, qt}, Glob.lits(SCon{Chr{cx}, pt})): Bool
 }:
-  +l = Glob.lits(pt)
+  +w = String.to_list(qt)
+  +l = Spec.Glob.re(Glob.lits(pt))
   +e1 = Cmp.is_eq(U32.cmp(cx, dx))
-  +x = Spec.Glob.step(l, Chr{dx})
+  +x = Regex.Re.step(~Char, ~Spec.Atom, ~Spec.Atom.hit, l, Chr{dx})
   s = String.eq(SCon{Chr{dx}, qt}, SCon{Chr{cx}, pt})
-  %Glob.alt_or(qt, Spec.Cat{Spec.Glob.of_bool(e1), l}, Spec.Cat{Spec.Void{}, x}): {s == _: Bool}
-  %Glob.cat_of_bool(
-    qt,
+  %Regex.Re.alt_or(
+    ~Char,
+    ~Spec.Atom,
+    ~Spec.Atom.hit,
+    w,
+    Regex.Cat{Regex.Re.of_bool(Spec.Atom, e1), l},
+    Regex.Cat{Regex.Void{}, x}
+  ): {s == _: Bool}
+  %Regex.Re.cat_of_bool(
+    ~Char,
+    ~Spec.Atom,
+    ~Spec.Atom.hit,
+    w,
     e1,
     l
-  ): {s == Bool.or(_, Spec.Glob.matches(qt, Spec.Cat{Spec.Void{}, x})): Bool}
-  %Glob.cat_void_l(qt, x): {s == Bool.or(Bool.and(e1, Spec.Glob.matches(qt, l)), _): Bool}
-  %Shared.Bool.or_false(Bool.and(e1, Spec.Glob.matches(qt, l))): {s == _: Bool}
+  ): {
+    s
+      == Bool.or(
+        _,
+        Regex.Re.matches(~Char, ~Spec.Atom, ~Spec.Atom.hit, w, Regex.Cat{Regex.Void{}, x})
+      ): Bool
+  }
+  %Regex.Re.cat_void_l(
+    ~Char,
+    ~Spec.Atom,
+    ~Spec.Atom.hit,
+    w,
+    x
+  ): {s == Bool.or(Bool.and(e1, Spec.Glob.matches(qt, Glob.lits(pt))), _): Bool}
+  %Shared.Bool.or_false(Bool.and(e1, Spec.Glob.matches(qt, Glob.lits(pt)))): {s == _: Bool}
   %ih: {s == Bool.and(e1, _): Bool}
   Texts.String.eq_cons(cx, dx, qt, pt)
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
@@ -5699,8 +5147,8 @@ def Lits.match(
   match q p:
     case SNil{} SNil{}:
       {==}
-    case SCon{d, +qt} SNil{}:
-      Glob.void_never(qt)
+    case SCon{d, qt} SNil{}:
+      Regex.Re.void_never(~Char, ~Spec.Atom, ~Spec.Atom.hit, String.to_list(qt))
     case SNil{} SCon{c, pt}:
       {==}
     case SCon{Chr{dx}, +qt} SCon{Chr{cx}, +pt}:
