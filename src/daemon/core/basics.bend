@@ -742,22 +742,9 @@ def Res.root(s: Replicas.Node<Ask>, h: Maybe<&2, Hashes.Hash>, n: Resources.Name
 def Roots.same(a: Maybe<&2, Ropes.Root>, b: Maybe<&2, Ropes.Root>) -> Bool:
   Shared.Maybe.is_eq(~Ropes.Root, ~Ropes.Root.is_eq, a, b)
 
-# the bytes under the root m, if any, when s holds their rope
-def Root.bytes(s: Replicas.Node<Ask>, m: Maybe<&2, Ropes.Root>) -> Maybe<&2, Texts.Bytes()>:
-  Maybe.bind(&2, Ropes.Root, Texts.Bytes(), m, r => Ropes.Rope.read(~Replicas.Node<Ask>, ~Replicas.Store.fetch(~Ask.machine()), s, r))
-
-# x is the byte that ends a line
-def Byte.is_end(x: U32) -> Bool:
-  U32.is_eq(x, 10)
-
-# the rope of the bytes b, cut after each line: content is stored once by
-# hash, and two contents share every part that an edit did not touch
-def Bytes.rope(b: Texts.Bytes()) -> Ropes.Put:
-  Ropes.Rope.put(Ropes.Rope.cut(~U32, ~Byte.is_end, b))
-
 # the content of the bytes b: the root of their rope
 def Content.of(b: Texts.Bytes()) -> Content:
-  Content.Root{Ropes.Put.root(Bytes.rope(b))}
+  Content.Root{Ropes.Put.root(Replicas.Bytes.rope(b))}
 
 # the members of the group g in the store tree whose root is h, if g is there
 def Members.in(s: Replicas.Node<Ask>, h: Maybe<&2, Hashes.Hash>, g: String) -> Maybe<&2, List<&2, Member>>:
@@ -768,11 +755,6 @@ def Members.in(s: Replicas.Node<Ask>, h: Maybe<&2, Hashes.Hash>, g: String) -> M
     Replicas.Node.get(~Ask.machine(), s, h, Key.group(g)),
     ws => Replicas.Read.whole(List<&2, Member>, Members.code.read(ws))
   )
-
-# s with the bytes b: the nodes of their rope, each under its hash. A node
-# keeps new bytes before it asks for a write of their content
-def Node.keep(s: Replicas.Node<Ask>, b: Texts.Bytes()) -> Replicas.Node<Ask>:
-  Replicas.State.keep(~Ask.machine(), s, Ropes.Put.nodes(Bytes.rope(b)))
 
 # the line of the request i of the change q
 def Ask.chain(i: Ledgers.Id, q: Ask) -> Ledgers.Chain:

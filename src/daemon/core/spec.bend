@@ -57,116 +57,79 @@ law Own.takes_inside:
   {Judging.Own.takes(s, r, l, g, at, os, h) == Some{True{}}: Maybe<&2, Bool>}
     -> {os == Judging.Group.nodes(s, Judging.Own.tree(s, l, at, h), g): List<&2, String>}
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
-# what a node does next: it takes in a request, or what another node sent,
-# or it does a sync, or it keeps new bytes, or a writer connected to it asks
-# for a request that it holds, or it passes to the next round on a line
-type Deed is Data:
-  Deed.Ask{envelope: Replicas.Envelope, ask: Basics.Ask}
-  Deed.Take{sent: Ledgers.State(Basics.Ask)}
-  Deed.Sync{sent: Ledgers.State(Basics.Ask)}
-  Deed.Keep{bytes: Texts.Bytes()}
-  Deed.Consent{id: Ledgers.Id}
-  Deed.Pass{line: Ledgers.Chain}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
-
-# s, after the node n did ev
-def Node.does(+n: String, +s: Replicas.Node<Basics.Ask>, ev: Deed) -> Replicas.Node<Basics.Ask>:
-  match ev:
-    case Deed.Ask{+e, +q}:
-      Reading.Adopt.at(n, Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q), Basics.Ask.chain(Replicas.Envelope.of(e), q))
-    case Deed.Take{t}:
-      Replicas.Node.take(~Stepping.Ask.kernel(), s, t)
-    case Deed.Sync{t}:
-      Reading.Node.sync(n, s, t)
-    case Deed.Keep{b}:
-      Basics.Node.keep(s, b)
-    case Deed.Consent{+i}:
-      Reading.Adopt.maybe(n, Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i), Replicas.Node.chain_of(~Basics.Ask.machine(), s, i))
-    case Deed.Pass{+c}:
-      Reading.Adopt.at(n, Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c), c)
-
-# s, after the node n did each of evs, in order: any later state of the node
-def Node.after(+n: String, evs: List<&2, Deed>, s: Replicas.Node<Basics.Ask>) -> Replicas.Node<Basics.Ask>:
-  match evs:
-    case Nil{}:
-      s
-    case Con{ev, rest}:
-      Node.after(n, rest, Node.does(n, s, ev))
-
 # a node only grows, whatever it does
 law Node.after_grows:
   for +n: String
-  for +evs: List<&2, Deed>
+  for +evs: List<&2, Replicas.Deed<Basics.Ask>>
   for +s: Replicas.Node<Basics.Ask>
-  {Replicas.Node.grows(~Basics.Ask.machine(), s, Node.after(n, evs, s)) == True{}: Bool}
+  {Replicas.Node.grows(~Basics.Ask.machine(), s, Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s)) == True{}: Bool}
 
 # a log only gains keys: what the log of a line holds, it holds for good,
 # whatever the node does next
 law Node.after_keeps:
   for +n: String
-  for +evs: List<&2, Deed>
+  for +evs: List<&2, Replicas.Deed<Basics.Ask>>
   for +s: Replicas.Node<Basics.Ask>
-  Replicas.Node.Keeps(~Basics.Ask.machine(), s, Node.after(n, evs, s))
+  Replicas.Node.Keeps(~Basics.Ask.machine(), s, Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s))
 
 # every head is on the decided chain: a head that has a tip moves only over
 # decided steps, whatever the node does next
 law Node.after_on:
   for +n: String
-  for +evs: List<&2, Deed>
+  for +evs: List<&2, Replicas.Deed<Basics.Ask>>
   for +s: Replicas.Node<Basics.Ask>
-  Replicas.Node.On(~Basics.Ask.machine(), s, Node.after(n, evs, s))
+  Replicas.Node.On(~Basics.Ask.machine(), s, Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s))
 
 # an outcome is final: a request that a step took stays taken, as the same
 # version number, and one that its owners refused stays refused
 law Node.out_final:
   for +n: String
-  for +evs: List<&2, Deed>
+  for +evs: List<&2, Replicas.Deed<Basics.Ask>>
   for +s: Replicas.Node<Basics.Ask>
   for +i: Ledgers.Id
   for +o: Replicas.Out
   {Basics.Node.out(s, i) == Some{o}: Maybe<&2, Replicas.Out>}
-    -> {Basics.Node.out(Node.after(n, evs, s), i) == Some{o}: Maybe<&2, Replicas.Out>}
+    -> {Basics.Node.out(Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s), i) == Some{o}: Maybe<&2, Replicas.Out>}
 
 # a version never changes: the request that made it and the root of its
 # content stay
 law Node.made_final:
   for +n: String
-  for +evs: List<&2, Deed>
+  for +evs: List<&2, Replicas.Deed<Basics.Ask>>
   for +s: Replicas.Node<Basics.Ask>
   for +v: Ledgers.Id
   for +x: Replicas.Version
   {Basics.Node.made(s, v) == Some{x}: Maybe<&2, Replicas.Version>}
-    -> {Basics.Node.made(Node.after(n, evs, s), v) == Some{x}: Maybe<&2, Replicas.Version>}
+    -> {Basics.Node.made(Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s), v) == Some{x}: Maybe<&2, Replicas.Version>}
 
 # the history of a line only grows at its end: the version of a number stays
 law Chain.version_final:
   for +n: String
-  for +evs: List<&2, Deed>
+  for +evs: List<&2, Replicas.Deed<Basics.Ask>>
   for +s: Replicas.Node<Basics.Ask>
   for +c: Ledgers.Chain
   for +k: U32
   for +x: Replicas.Version
   {Replicas.Chain.version(~Basics.Ask.machine(), s, c, k) == Some{x}: Maybe<&2, Replicas.Version>}
-    -> {Replicas.Chain.version(~Basics.Ask.machine(), Node.after(n, evs, s), c, k) == Some{x}: Maybe<&2, Replicas.Version>}
+    -> {Replicas.Chain.version(~Basics.Ask.machine(), Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s), c, k) == Some{x}: Maybe<&2, Replicas.Version>}
 
 # a mark names its version for good
 law Chain.mark_final:
   for +n: String
-  for +evs: List<&2, Deed>
+  for +evs: List<&2, Replicas.Deed<Basics.Ask>>
   for +s: Replicas.Node<Basics.Ask>
   for +c: Ledgers.Chain
   for +m: String
   for +v: Ledgers.Id
   {Replicas.Chain.mark(~Basics.Ask.machine(), s, c, m) == Some{v}: Maybe<&2, Ledgers.Id>}
-    -> {Replicas.Chain.mark(~Basics.Ask.machine(), Node.after(n, evs, s), c, m) == Some{v}: Maybe<&2, Ledgers.Id>}
+    -> {Replicas.Chain.mark(~Basics.Ask.machine(), Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s), c, m) == Some{v}: Maybe<&2, Ledgers.Id>}
 
 # the first tip of a branch is for good: what the log of a store holds for a
 # branch, it holds whatever the node does next, so a node that opens the
 # branch later opens it at the same tip
 law Chain.start_final:
   for +n: String
-  for +evs: List<&2, Deed>
+  for +evs: List<&2, Replicas.Deed<Basics.Ask>>
   for +s: Replicas.Node<Basics.Ask>
   for +r: Ledgers.Id
   for +b: String
@@ -181,7 +144,7 @@ law Chain.start_final:
   }
     -> {
       Replicas.Line.get(~Basics.Ask.machine(), 
-        Node.after(n, evs, s),
+        Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s),
         Ledgers.Chain{r, None{}},
         Replicas.Log.start(b)
       )
@@ -192,13 +155,13 @@ law Chain.start_final:
 # Stale and Refused are final; a taken change stays taken (Answer.follows)
 law Node.answer_follows:
   for +n: String
-  for +evs: List<&2, Deed>
+  for +evs: List<&2, Replicas.Deed<Basics.Ask>>
   for +s: Replicas.Node<Basics.Ask>
   for +e: Replicas.Envelope
   for +q: Basics.Ask
   for +x: Reading.Answer
   {Reading.Node.answer(s, e, q) == Some{x}: Maybe<&2, Reading.Answer>}
-    -> {Reading.Answer.follows(x, Reading.Node.answer(Node.after(n, evs, s), e, q)) == True{}: Bool}
+    -> {Reading.Answer.follows(x, Reading.Node.answer(Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s), e, q)) == True{}: Bool}
 
 # while a write that the writer w asked for waits on its line, the node has a
 # draft of the resource for w (the newest of its pending writes, by
@@ -690,7 +653,7 @@ law Node.read_draft:
         n,
         Basics.Point.Head{r, b}
       )
-        == Basics.Root.bytes(s, Judging.Content.root(s, n, c)): Maybe<&2, Texts.Bytes()>
+        == Replicas.Root.bytes(~Basics.Ask.machine(), s, Judging.Content.root(s, n, c)): Maybe<&2, Texts.Bytes()>
     }
 
 # a change counts once on a node, however often it is asked: a node that took

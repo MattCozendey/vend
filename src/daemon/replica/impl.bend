@@ -2,6 +2,7 @@ import Base
 import ../../shared.bend as Shared
 import ../shared/ledger.bend as Ledgers
 import ../shared/resources.bend as Resources
+import ../shared/rope.bend as Ropes
 import ../shared/shared/quorum.bend as Quorums
 import ../shared/shared/shared/cell.bend as Cells
 import ../shared/shared/shared/code.bend as Codes
@@ -11831,3 +11832,157 @@ def Contains.when(
 # a request, and who asks for it
 type Request<-Q: Data> is Data:
   Request{envelope: Envelope, ask: Q}
+
+# s, after the node n took in the request m, if any
+def Adopt.ask(~K: Kernel(), n: String, s: Node<Machine.Q(Kernel.machine(K))>, m: Maybe<&2, Request<Machine.Q(Kernel.machine(K))>>) -> Node<Machine.Q(Kernel.machine(K))>:
+  match m:
+    case None{}:
+      s
+    case Some{Request{e, q}}:
+      Node.ask(~K, n, s, e, q)
+
+# s, after the node n asked for the adoption of the line l of the store r, if
+# its owners are not the nodes inside its owner group
+def Node.adopt(~K: Kernel(), n: String, +s: Node<Machine.Q(Kernel.machine(K))>, r: Ledgers.Id, l: Maybe<&2, String>) -> Node<Machine.Q(Kernel.machine(K))>:
+  Adopt.ask(~K, n, s, Kernel.follow(K)(s)(r)(l))
+
+# Adopt.at once the head m of the line is known
+def Adopt.head(~K: Kernel(), n: String, s: Node<Machine.Q(Kernel.machine(K))>, m: Maybe<&2, Head>) -> Node<Machine.Q(Kernel.machine(K))>:
+  match m:
+    case None{}:
+      s
+    case Some{Head{r, b, next, t}}:
+      Node.adopt(~K, n, s, r, b)
+
+# s, after the node n asked for the adoption of the line c, if s follows c:
+# a change of a group reaches each line that the group owns by a step of the
+# line, which a node asks for by itself when it works on the line
+def Adopt.at(~K: Kernel(), n: String, +s: Node<Machine.Q(Kernel.machine(K))>, c: Ledgers.Chain) -> Node<Machine.Q(Kernel.machine(K))>:
+  Adopt.head(~K, n, s, Node.head_of(~Kernel.machine(K), s, c))
+
+# Adopt.at for the line m, if any
+def Adopt.maybe(~K: Kernel(), n: String, s: Node<Machine.Q(Kernel.machine(K))>, m: Maybe<&2, Ledgers.Chain>) -> Node<Machine.Q(Kernel.machine(K))>:
+  match m:
+    case None{}:
+      s
+    case Some{c}:
+      Adopt.at(~K, n, s, c)
+
+# s, after the node n asked for the adoption of each of the lines cs
+def Node.adopts(~K: Kernel(), +n: String, cs: List<&2, Ledgers.Chain>, s: Node<Machine.Q(Kernel.machine(K))>) -> Node<Machine.Q(Kernel.machine(K))>:
+  match cs:
+    case Nil{}:
+      s
+    case Con{c, rest}:
+      Node.adopts(~K, n, rest, Adopt.at(~K, n, s, c))
+
+# the heads of each of the lines cs are at the same height in a and in b
+def Lines.level(~M: Machine(), cs: List<&2, Ledgers.Chain>, +a: Node<Machine.Q(M)>, +b: Node<Machine.Q(M)>) -> Bool:
+  match cs:
+    case Nil{}:
+      True{}
+    case Con{+c, r}:
+      List.all.if(
+        u => Lines.level(~M, r, a, b),
+        Heads.level(Node.head_of(~M, a, c), Node.head_of(~M, b, c))
+      )
+
+# s, after it took the ballots bs (k of them, pd by where each waits) in again
+# and did what it can on the lines cs, until no head moves, f times at most. A ballot whose key the store gives
+# at a later height is kept once the node is there: one sync catches up over
+# each change of a key
+def Sync.more(
+  ~K: Kernel(),
+  f: Nat,
+  +n: String,
+  +cs: List<&2, Ledgers.Chain>,
+  +k: Nat,
+  +bs: List<&2, Ledgers.Ballot>,
+  +pd: Tries.Trie<Ledgers.Ballot>,
+  +s: Node<Machine.Q(Kernel.machine(K))>
+) -> Node<Machine.Q(Kernel.machine(K))>:
+  match f:
+    case 0n:
+      s
+    case 1n+p:
+      +s2 = Node.steps(~K, n, cs, Sealed.each(~K, k, bs, pd, s))
+      Shared.Bool.when(
+        Node<Machine.Q(Kernel.machine(K))>,
+        Lines.level(~Kernel.machine(K), cs, s, s2),
+        u => s2,
+        u => Sync.more(~K, p, n, cs, k, bs, pd, s2)
+      )
+
+# s, after the node n took in t, which another node sent, did what it can on
+# each line that this may move, and asked for the adoption of each: how a
+# node that is behind catches up
+def Node.sync(~K: Kernel(), +n: String, +s: Node<Machine.Q(Kernel.machine(K))>, +t: Ledgers.State(Machine.Q(Kernel.machine(K)))) -> Node<Machine.Q(Kernel.machine(K))>:
+  +s1 = Node.take(~K, s, t)
+  +cs = Sync.lines(~Kernel.machine(K), s, s1, t)
+  +bs = Ballots.of(~Kernel.machine(K), 
+    Tries.Trie.values(
+      Cells.Cell<Ledgers.Entry<Machine.Q(Kernel.machine(K))>>,
+      Ledgers.State.missing(~Machine.Q(Kernel.machine(K)), ~Machine.same(Kernel.machine(K)), t, State.ledger(~Kernel.machine(K), s))
+    )
+  )
+  +k = List.length(&2, Ledgers.Ballot, bs)
+  Node.adopts(~K, 
+    n,
+    cs,
+    Sync.more(~K, k, n, cs, k, bs, Pending.of(bs), Node.steps(~K, n, cs, s1))
+  )
+
+# the bytes under the root m, if any, when s holds their rope
+def Root.bytes(~M: Machine(), s: Node<Machine.Q(M)>, m: Maybe<&2, Ropes.Root>) -> Maybe<&2, Texts.Bytes()>:
+  Maybe.bind(&2, Ropes.Root, Texts.Bytes(), m, r => Ropes.Rope.read(~Node<Machine.Q(M)>, ~Store.fetch(~M), s, r))
+
+# x is the byte that ends a line
+def Byte.is_end(x: U32) -> Bool:
+  U32.is_eq(x, 10)
+
+# the rope of the bytes b, cut after each line: content is stored once by
+# hash, and two contents share every part that an edit did not touch
+def Bytes.rope(b: Texts.Bytes()) -> Ropes.Put:
+  Ropes.Rope.put(Ropes.Rope.cut(~U32, ~Byte.is_end, b))
+
+# s with the bytes b: the nodes of their rope, each under its hash. A node
+# keeps new bytes before it asks for a write of their content
+def Node.keep(~M: Machine(), s: Node<Machine.Q(M)>, b: Texts.Bytes()) -> Node<Machine.Q(M)>:
+  State.keep(~M, s, Ropes.Put.nodes(Bytes.rope(b)))
+
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
+# what a node does next: it takes in a request, or what another node sent,
+# or it does a sync, or it keeps new bytes, or a writer connected to it asks
+# for a request that it holds, or it passes to the next round on a line
+type Deed<-Q: Data> is Data:
+  Deed.Ask{envelope: Envelope, ask: Q}
+  Deed.Take{sent: Ledgers.State(Q)}
+  Deed.Sync{sent: Ledgers.State(Q)}
+  Deed.Keep{bytes: Texts.Bytes()}
+  Deed.Consent{id: Ledgers.Id}
+  Deed.Pass{line: Ledgers.Chain}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
+
+# s, after the node n did ev
+def Node.does(~K: Kernel(), +n: String, +s: Node<Machine.Q(Kernel.machine(K))>, ev: Deed<Machine.Q(Kernel.machine(K))>) -> Node<Machine.Q(Kernel.machine(K))>:
+  match ev:
+    case Deed.Ask{+e, +q}:
+      Adopt.at(~K, n, Node.ask(~K, n, s, e, q), Arrival.chain(Envelope.of(e), Machine.arrival(Kernel.machine(K))(q)))
+    case Deed.Take{t}:
+      Node.take(~K, s, t)
+    case Deed.Sync{t}:
+      Node.sync(~K, n, s, t)
+    case Deed.Keep{b}:
+      Node.keep(~Kernel.machine(K), s, b)
+    case Deed.Consent{+i}:
+      Adopt.maybe(~K, n, Node.consent(~K, n, s, i), Node.chain_of(~Kernel.machine(K), s, i))
+    case Deed.Pass{+c}:
+      Adopt.at(~K, n, Node.pass(~K, n, s, c), c)
+
+# s, after the node n did each of evs, in order: any later state of the node
+def Node.after(~K: Kernel(), +n: String, evs: List<&2, Deed<Machine.Q(Kernel.machine(K))>>, s: Node<Machine.Q(Kernel.machine(K))>) -> Node<Machine.Q(Kernel.machine(K))>:
+  match evs:
+    case Nil{}:
+      s
+    case Con{ev, rest}:
+      Node.after(~K, n, rest, Node.does(~K, n, s, ev))

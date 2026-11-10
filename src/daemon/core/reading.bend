@@ -105,7 +105,7 @@ def Res.at(
   n: Resources.Name,
   m: Maybe<&2, Ledgers.Id>
 ) -> Maybe<&2, Texts.Bytes()>:
-  Basics.Root.bytes(s, Res.root_at(s, n, m))
+  Replicas.Root.bytes(~Basics.Ask.machine(), s, Res.root_at(s, n, m))
 
 # the bytes of the resource n at the point p, if it is there
 def Node.content(+s: Replicas.Node<Basics.Ask>, n: Resources.Name, p: Basics.Point) -> Maybe<&2, Texts.Bytes()>:
@@ -119,104 +119,6 @@ def Node.members(+s: Replicas.Node<Basics.Ask>, r: Ledgers.Id, g: String) -> May
 # group of the line l of the store r
 def Node.own(+s: Replicas.Node<Basics.Ask>, +r: Ledgers.Id, l: Maybe<&2, String>, +g: String) -> Basics.Ask:
   Basics.Ask.On{r, l, Basics.Change.Own{g, Stepping.Store.head(s, r), Stepping.Node.nodes(s, r, g)}}
-
-# s, after the node n took in the request m, if any
-def Adopt.ask(n: String, s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Replicas.Request<Basics.Ask>>) -> Replicas.Node<Basics.Ask>:
-  match m:
-    case None{}:
-      s
-    case Some{Replicas.Request{e, q}}:
-      Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q)
-
-# s, after the node n asked for the adoption of the line l of the store r, if
-# its owners are not the nodes inside its owner group
-def Node.adopt(n: String, +s: Replicas.Node<Basics.Ask>, r: Ledgers.Id, l: Maybe<&2, String>) -> Replicas.Node<Basics.Ask>:
-  Adopt.ask(n, s, Replicas.Kernel.follow(Stepping.Ask.kernel())(s)(r)(l))
-
-# Adopt.at once the head m of the line is known
-def Adopt.head(n: String, s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Replicas.Head>) -> Replicas.Node<Basics.Ask>:
-  match m:
-    case None{}:
-      s
-    case Some{Replicas.Head{r, b, next, t}}:
-      Node.adopt(n, s, r, b)
-
-# s, after the node n asked for the adoption of the line c, if s follows c:
-# a change of a group reaches each line that the group owns by a step of the
-# line, which a node asks for by itself when it works on the line
-def Adopt.at(n: String, +s: Replicas.Node<Basics.Ask>, c: Ledgers.Chain) -> Replicas.Node<Basics.Ask>:
-  Adopt.head(n, s, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))
-
-# Adopt.at for the line m, if any
-def Adopt.maybe(n: String, s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Ledgers.Chain>) -> Replicas.Node<Basics.Ask>:
-  match m:
-    case None{}:
-      s
-    case Some{c}:
-      Adopt.at(n, s, c)
-
-# s, after the node n asked for the adoption of each of the lines cs
-def Node.adopts(+n: String, cs: List<&2, Ledgers.Chain>, s: Replicas.Node<Basics.Ask>) -> Replicas.Node<Basics.Ask>:
-  match cs:
-    case Nil{}:
-      s
-    case Con{c, rest}:
-      Node.adopts(n, rest, Adopt.at(n, s, c))
-
-# the heads of each of the lines cs are at the same height in a and in b
-def Lines.level(cs: List<&2, Ledgers.Chain>, +a: Replicas.Node<Basics.Ask>, +b: Replicas.Node<Basics.Ask>) -> Bool:
-  match cs:
-    case Nil{}:
-      True{}
-    case Con{+c, r}:
-      List.all.if(
-        u => Lines.level(r, a, b),
-        Replicas.Heads.level(Replicas.Node.head_of(~Basics.Ask.machine(), a, c), Replicas.Node.head_of(~Basics.Ask.machine(), b, c))
-      )
-
-# s, after it took the ballots bs (k of them, pd by where each waits) in again
-# and did what it can on the lines cs, until no head moves, f times at most. A ballot whose key the store gives
-# at a later height is kept once the node is there: one sync catches up over
-# each change of a key
-def Sync.more(
-  f: Nat,
-  +n: String,
-  +cs: List<&2, Ledgers.Chain>,
-  +k: Nat,
-  +bs: List<&2, Ledgers.Ballot>,
-  +pd: Tries.Trie<Ledgers.Ballot>,
-  +s: Replicas.Node<Basics.Ask>
-) -> Replicas.Node<Basics.Ask>:
-  match f:
-    case 0n:
-      s
-    case 1n+p:
-      +s2 = Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))
-      Shared.Bool.when(
-        Replicas.Node<Basics.Ask>,
-        Lines.level(cs, s, s2),
-        u => s2,
-        u => Sync.more(p, n, cs, k, bs, pd, s2)
-      )
-
-# s, after the node n took in t, which another node sent, did what it can on
-# each line that this may move, and asked for the adoption of each: how a
-# node that is behind catches up
-def Node.sync(+n: String, +s: Replicas.Node<Basics.Ask>, +t: Ledgers.State(Basics.Ask)) -> Replicas.Node<Basics.Ask>:
-  +s1 = Replicas.Node.take(~Stepping.Ask.kernel(), s, t)
-  +cs = Replicas.Sync.lines(~Basics.Ask.machine(), s, s1, t)
-  +bs = Replicas.Ballots.of(~Basics.Ask.machine(), 
-    Tries.Trie.values(
-      Cells.Cell<Ledgers.Entry<Basics.Ask>>,
-      Ledgers.State.missing(~Basics.Ask, ~Basics.Ask.is_eq, t, Replicas.State.ledger(~Basics.Ask.machine(), s))
-    )
-  )
-  +k = List.length(&2, Ledgers.Ballot, bs)
-  Node.adopts(
-    n,
-    cs,
-    Sync.more(k, n, cs, k, bs, Replicas.Pending.of(bs), Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, s1))
-  )
 
 # the resource m of the branch x of the store st is the resource n of the
 # branch b of the store r
@@ -364,7 +266,7 @@ def Read.of(
 ) -> Maybe<&2, Texts.Bytes()>:
   match m:
     case Some{c}:
-      Basics.Root.bytes(s, Judging.Content.root(s, n, c))
+      Replicas.Root.bytes(~Basics.Ask.machine(), s, Judging.Content.root(s, n, c))
     case None{}:
       Node.content(s, n, p)
 

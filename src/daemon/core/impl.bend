@@ -213,17 +213,17 @@ def Grown.merge.put(
     case Judging.Pick.Make{+x}:
       Replicas.Grown.bind(~Basics.Ask.machine(), 
         Replicas.Work.state(~Basics.Ask.machine(), w),
-        Replicas.Work.keep(~Basics.Ask.machine(), w, Ropes.Put.nodes(Basics.Bytes.rope(x))),
+        Replicas.Work.keep(~Basics.Ask.machine(), w, Ropes.Put.nodes(Replicas.Bytes.rope(x))),
         w2 => Replicas.Work.set(~Basics.Ask.machine(), 
           w2,
           Basics.Key.res(n),
-          Basics.Res.code(Some{Ropes.Put.root(Basics.Bytes.rope(x))})
+          Basics.Res.code(Some{Ropes.Put.root(Replicas.Bytes.rope(x))})
         ),
-        Replicas.Grown.keep(~Basics.Ask.machine(), w, Ropes.Put.nodes(Basics.Bytes.rope(x))),
+        Replicas.Grown.keep(~Basics.Ask.machine(), w, Ropes.Put.nodes(Replicas.Bytes.rope(x))),
         w2 => Replicas.Grown.set(~Basics.Ask.machine(), 
           w2,
           Basics.Key.res(n),
-          Basics.Res.code(Some{Ropes.Put.root(Basics.Bytes.rope(x))})
+          Basics.Res.code(Some{Ropes.Put.root(Replicas.Bytes.rope(x))})
         )
       )
     case Judging.Pick.Clash{}:
@@ -1889,7 +1889,7 @@ def Adopt.ask.grows(
   n: String,
   s: Replicas.Node<Basics.Ask>,
   m: Maybe<&2, Replicas.Request<Basics.Ask>>
-) -> {Replicas.Node.grows(~Basics.Ask.machine(), s, Reading.Adopt.ask(n, s, m)) == True{}: Bool}:
+) -> {Replicas.Node.grows(~Basics.Ask.machine(), s, Replicas.Adopt.ask(~Stepping.Ask.kernel(), n, s, m)) == True{}: Bool}:
   match m:
     case None{}:
       Replicas.Grows.refl(~Basics.Ask.machine(), s)
@@ -1901,7 +1901,7 @@ def Adopt.head.grows(
   n: String,
   +s: Replicas.Node<Basics.Ask>,
   m: Maybe<&2, Replicas.Head>
-) -> {Replicas.Node.grows(~Basics.Ask.machine(), s, Reading.Adopt.head(n, s, m)) == True{}: Bool}:
+) -> {Replicas.Node.grows(~Basics.Ask.machine(), s, Replicas.Adopt.head(~Stepping.Ask.kernel(), n, s, m)) == True{}: Bool}:
   match m:
     case None{}:
       Replicas.Grows.refl(~Basics.Ask.machine(), s)
@@ -1913,7 +1913,7 @@ def Adopt.at.grows(
   n: String,
   +s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain
-) -> {Replicas.Node.grows(~Basics.Ask.machine(), s, Reading.Adopt.at(n, s, c)) == True{}: Bool}:
+) -> {Replicas.Node.grows(~Basics.Ask.machine(), s, Replicas.Adopt.at(~Stepping.Ask.kernel(), n, s, c)) == True{}: Bool}:
   Adopt.head.grows(n, s, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))
 
 # the adoption of a line, if any, only grows a node
@@ -1921,7 +1921,7 @@ def Adopt.maybe.grows(
   n: String,
   s: Replicas.Node<Basics.Ask>,
   m: Maybe<&2, Ledgers.Chain>
-) -> {Replicas.Node.grows(~Basics.Ask.machine(), s, Reading.Adopt.maybe(n, s, m)) == True{}: Bool}:
+) -> {Replicas.Node.grows(~Basics.Ask.machine(), s, Replicas.Adopt.maybe(~Stepping.Ask.kernel(), n, s, m)) == True{}: Bool}:
   match m:
     case None{}:
       Replicas.Grows.refl(~Basics.Ask.machine(), s)
@@ -1933,16 +1933,16 @@ def Adopts.grows(
   +n: String,
   cs: List<&2, Ledgers.Chain>,
   +s: Replicas.Node<Basics.Ask>
-) -> {Replicas.Node.grows(~Basics.Ask.machine(), s, Reading.Node.adopts(n, cs, s)) == True{}: Bool}:
+) -> {Replicas.Node.grows(~Basics.Ask.machine(), s, Replicas.Node.adopts(~Stepping.Ask.kernel(), n, cs, s)) == True{}: Bool}:
   match cs:
     case Nil{}:
       Replicas.Grows.refl(~Basics.Ask.machine(), s)
     case Con{+c, +rest}:
       Replicas.Grows.trans(~Basics.Ask.machine(), 
         s,
-        Reading.Adopt.at(n, s, c),
-        Reading.Node.adopts(n, rest, Reading.Adopt.at(n, s, c))
-      )(Adopt.at.grows(n, s, c))(Adopts.grows(n, rest, Reading.Adopt.at(n, s, c)))
+        Replicas.Adopt.at(~Stepping.Ask.kernel(), n, s, c),
+        Replicas.Node.adopts(~Stepping.Ask.kernel(), n, rest, Replicas.Adopt.at(~Stepping.Ask.kernel(), n, s, c))
+      )(Adopt.at.grows(n, s, c))(Adopts.grows(n, rest, Replicas.Adopt.at(~Stepping.Ask.kernel(), n, s, c)))
 
 # more rounds of a sync, grows
 def More.grows(
@@ -1953,16 +1953,16 @@ def More.grows(
   +bs: List<&2, Ledgers.Ballot>,
   +pd: Tries.Trie<Ledgers.Ballot>,
   +s: Replicas.Node<Basics.Ask>
-) -> {Replicas.Node.grows(~Basics.Ask.machine(), s, Reading.Sync.more(f, n, cs, k, bs, pd, s)) == True{}: Bool}:
+) -> {Replicas.Node.grows(~Basics.Ask.machine(), s, Replicas.Sync.more(~Stepping.Ask.kernel(), f, n, cs, k, bs, pd, s)) == True{}: Bool}:
   match f:
     case 0n:
       Replicas.Grows.refl(~Basics.Ask.machine(), s)
     case 1n+(+p):
       Replicas.Grows.when(~Basics.Ask.machine(), 
         s,
-        Reading.Lines.level(cs, s, Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))),
+        Replicas.Lines.level(~Basics.Ask.machine(), cs, s, Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))),
         Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
-        Reading.Sync.more(
+        Replicas.Sync.more(~Stepping.Ask.kernel(), 
           p,
           n,
           cs,
@@ -1979,7 +1979,7 @@ def More.grows(
         Replicas.Grows.trans(~Basics.Ask.machine(), 
           s,
           Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
-          Reading.Sync.more(
+          Replicas.Sync.more(~Stepping.Ask.kernel(), 
             p,
             n,
             cs,
@@ -2012,7 +2012,7 @@ def Sync.grows(
   +n: String,
   +s: Replicas.Node<Basics.Ask>,
   +t: Ledgers.State(Basics.Ask)
-) -> {Replicas.Node.grows(~Basics.Ask.machine(), s, Reading.Node.sync(n, s, t)) == True{}: Bool}:
+) -> {Replicas.Node.grows(~Basics.Ask.machine(), s, Replicas.Node.sync(~Stepping.Ask.kernel(), n, s, t)) == True{}: Bool}:
   +s1 = Replicas.Node.take(~Stepping.Ask.kernel(), s, t)
   +cs = Replicas.Sync.lines(~Basics.Ask.machine(), s, s1, t)
   +bs = Replicas.Ballots.of(~Basics.Ask.machine(), 
@@ -2022,7 +2022,7 @@ def Sync.grows(
     )
   )
   +s2 = Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, s1)
-  +s3 = Reading.Sync.more(
+  +s3 = Replicas.Sync.more(~Stepping.Ask.kernel(), 
     List.length(&2, Ledgers.Ballot, bs),
     n,
     cs,
@@ -2034,21 +2034,21 @@ def Sync.grows(
   Replicas.Grows.trans(~Basics.Ask.machine(), 
     s,
     s1,
-    Reading.Node.adopts(n, cs, s3)
+    Replicas.Node.adopts(~Stepping.Ask.kernel(), n, cs, s3)
   )(
     Take.grows(s, t)
   )(
     Replicas.Grows.trans(~Basics.Ask.machine(), 
       s1,
       s2,
-      Reading.Node.adopts(n, cs, s3)
+      Replicas.Node.adopts(~Stepping.Ask.kernel(), n, cs, s3)
     )(
       Steps.grows(n, cs, s1)
     )(
       Replicas.Grows.trans(~Basics.Ask.machine(), 
         s2,
         s3,
-        Reading.Node.adopts(n, cs, s3)
+        Replicas.Node.adopts(~Stepping.Ask.kernel(), n, cs, s3)
       )(
         More.grows(
           List.length(&2, Ledgers.Ballot, bs),
@@ -2927,7 +2927,7 @@ def Adopt.ask.kept(
   n: String,
   s: Replicas.Node<Basics.Ask>,
   m: Maybe<&2, Replicas.Request<Basics.Ask>>
-) -> Replicas.Node.Keeps(~Basics.Ask.machine(), s, Reading.Adopt.ask(n, s, m)):
+) -> Replicas.Node.Keeps(~Basics.Ask.machine(), s, Replicas.Adopt.ask(~Stepping.Ask.kernel(), n, s, m)):
   match m:
     case None{}:
       Replicas.Kept.refl(~Basics.Ask.machine(), s)
@@ -2939,7 +2939,7 @@ def Adopt.head.kept(
   n: String,
   +s: Replicas.Node<Basics.Ask>,
   m: Maybe<&2, Replicas.Head>
-) -> Replicas.Node.Keeps(~Basics.Ask.machine(), s, Reading.Adopt.head(n, s, m)):
+) -> Replicas.Node.Keeps(~Basics.Ask.machine(), s, Replicas.Adopt.head(~Stepping.Ask.kernel(), n, s, m)):
   match m:
     case None{}:
       Replicas.Kept.refl(~Basics.Ask.machine(), s)
@@ -2951,7 +2951,7 @@ def Adopt.at.kept(
   n: String,
   +s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain
-) -> Replicas.Node.Keeps(~Basics.Ask.machine(), s, Reading.Adopt.at(n, s, c)):
+) -> Replicas.Node.Keeps(~Basics.Ask.machine(), s, Replicas.Adopt.at(~Stepping.Ask.kernel(), n, s, c)):
   Adopt.head.kept(n, s, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))
 
 # the adoption of a line, if any, keeps the logs
@@ -2959,7 +2959,7 @@ def Adopt.maybe.kept(
   n: String,
   s: Replicas.Node<Basics.Ask>,
   m: Maybe<&2, Ledgers.Chain>
-) -> Replicas.Node.Keeps(~Basics.Ask.machine(), s, Reading.Adopt.maybe(n, s, m)):
+) -> Replicas.Node.Keeps(~Basics.Ask.machine(), s, Replicas.Adopt.maybe(~Stepping.Ask.kernel(), n, s, m)):
   match m:
     case None{}:
       Replicas.Kept.refl(~Basics.Ask.machine(), s)
@@ -2971,17 +2971,17 @@ def Adopts.kept(
   +n: String,
   cs: List<&2, Ledgers.Chain>,
   +s: Replicas.Node<Basics.Ask>
-) -> Replicas.Node.Keeps(~Basics.Ask.machine(), s, Reading.Node.adopts(n, cs, s)):
+) -> Replicas.Node.Keeps(~Basics.Ask.machine(), s, Replicas.Node.adopts(~Stepping.Ask.kernel(), n, cs, s)):
   match cs:
     case Nil{}:
       Replicas.Kept.refl(~Basics.Ask.machine(), s)
     case Con{+c, rest}:
       Replicas.Kept.trans(~Basics.Ask.machine(), 
         s,
-        Reading.Adopt.at(n, s, c),
-        Reading.Node.adopts(n, rest, Reading.Adopt.at(n, s, c)),
+        Replicas.Adopt.at(~Stepping.Ask.kernel(), n, s, c),
+        Replicas.Node.adopts(~Stepping.Ask.kernel(), n, rest, Replicas.Adopt.at(~Stepping.Ask.kernel(), n, s, c)),
         Adopt.at.kept(n, s, c),
-        Adopts.kept(n, rest, Reading.Adopt.at(n, s, c))
+        Adopts.kept(n, rest, Replicas.Adopt.at(~Stepping.Ask.kernel(), n, s, c))
       )
 
 # more rounds of a sync, kept
@@ -2993,16 +2993,16 @@ def More.kept(
   +bs: List<&2, Ledgers.Ballot>,
   +pd: Tries.Trie<Ledgers.Ballot>,
   +s: Replicas.Node<Basics.Ask>
-) -> Replicas.Node.Keeps(~Basics.Ask.machine(), s, Reading.Sync.more(f, n, cs, k, bs, pd, s)):
+) -> Replicas.Node.Keeps(~Basics.Ask.machine(), s, Replicas.Sync.more(~Stepping.Ask.kernel(), f, n, cs, k, bs, pd, s)):
   match f:
     case 0n:
       Replicas.Kept.refl(~Basics.Ask.machine(), s)
     case 1n+(p):
       Replicas.Kept.when(~Basics.Ask.machine(), 
-        Reading.Lines.level(cs, s, Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))),
+        Replicas.Lines.level(~Basics.Ask.machine(), cs, s, Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))),
         s,
         Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
-        Reading.Sync.more(
+        Replicas.Sync.more(~Stepping.Ask.kernel(), 
           p,
           n,
           cs,
@@ -3026,7 +3026,7 @@ def More.kept(
         Replicas.Kept.trans(~Basics.Ask.machine(), 
           s,
           Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
-          Reading.Sync.more(
+          Replicas.Sync.more(~Stepping.Ask.kernel(), 
             p,
             n,
             cs,
@@ -3064,7 +3064,7 @@ def Sync.kept(
   +n: String,
   +s: Replicas.Node<Basics.Ask>,
   +t: Ledgers.State(Basics.Ask)
-) -> Replicas.Node.Keeps(~Basics.Ask.machine(), s, Reading.Node.sync(n, s, t)):
+) -> Replicas.Node.Keeps(~Basics.Ask.machine(), s, Replicas.Node.sync(~Stepping.Ask.kernel(), n, s, t)):
   +s1 = Replicas.Node.take(~Stepping.Ask.kernel(), s, t)
   +cs = Replicas.Sync.lines(~Basics.Ask.machine(), s, s1, t)
   +bs = Replicas.Ballots.of(~Basics.Ask.machine(), 
@@ -3074,7 +3074,7 @@ def Sync.kept(
     )
   )
   +s2 = Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, s1)
-  s3 = Reading.Sync.more(
+  s3 = Replicas.Sync.more(~Stepping.Ask.kernel(), 
     List.length(&2, Ledgers.Ballot, bs),
     n,
     cs,
@@ -3086,17 +3086,17 @@ def Sync.kept(
   Replicas.Kept.trans(~Basics.Ask.machine(), 
     s,
     s1,
-    Reading.Node.adopts(n, cs, s3),
+    Replicas.Node.adopts(~Stepping.Ask.kernel(), n, cs, s3),
     Take.kept(s, t),
     Replicas.Kept.trans(~Basics.Ask.machine(), 
       s1,
       s2,
-      Reading.Node.adopts(n, cs, s3),
+      Replicas.Node.adopts(~Stepping.Ask.kernel(), n, cs, s3),
       Steps.kept(n, cs, s1),
       Replicas.Kept.trans(~Basics.Ask.machine(), 
         s2,
         s3,
-        Reading.Node.adopts(n, cs, s3),
+        Replicas.Node.adopts(~Stepping.Ask.kernel(), n, cs, s3),
         More.kept(
           List.length(&2, Ledgers.Ballot, bs),
           n,
@@ -3176,14 +3176,14 @@ def Consent.kept(
 def Does.grows(
   +n: String,
   +s: Replicas.Node<Basics.Ask>,
-  ev: Spec.Deed
-) -> {Replicas.Node.grows(~Basics.Ask.machine(), s, Spec.Node.does(n, s, ev)) == True{}: Bool}:
+  ev: Replicas.Deed<Basics.Ask>
+) -> {Replicas.Node.grows(~Basics.Ask.machine(), s, Replicas.Node.does(~Stepping.Ask.kernel(), n, s, ev)) == True{}: Bool}:
   match ev:
-    case Spec.Deed.Ask{+e, +q}:
+    case Replicas.Deed.Ask{+e, +q}:
       Replicas.Grows.trans(~Basics.Ask.machine(), 
         s,
         Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q),
-        Reading.Adopt.at(n, Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q), Basics.Ask.chain(Replicas.Envelope.of(e), q))
+        Replicas.Adopt.at(~Stepping.Ask.kernel(), n, Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q), Basics.Ask.chain(Replicas.Envelope.of(e), q))
       )(
         Ask.grows(n, s, e, q)
       )(
@@ -3193,25 +3193,25 @@ def Does.grows(
           Basics.Ask.chain(Replicas.Envelope.of(e), q)
         )
       )
-    case Spec.Deed.Take{t}:
+    case Replicas.Deed.Take{t}:
       Take.grows(s, t)
-    case Spec.Deed.Sync{t}:
+    case Replicas.Deed.Sync{t}:
       Sync.grows(n, s, t)
-    case Spec.Deed.Keep{b}:
-      Replicas.Grows.keep(~Basics.Ask.machine(), s, Ropes.Put.nodes(Basics.Bytes.rope(b)))
-    case Spec.Deed.Consent{+i}:
+    case Replicas.Deed.Keep{b}:
+      Replicas.Grows.keep(~Basics.Ask.machine(), s, Ropes.Put.nodes(Replicas.Bytes.rope(b)))
+    case Replicas.Deed.Consent{+i}:
       Replicas.Grows.trans(~Basics.Ask.machine(), 
         s,
         Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i),
-        Reading.Adopt.maybe(n, Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i), Replicas.Node.chain_of(~Basics.Ask.machine(), s, i))
+        Replicas.Adopt.maybe(~Stepping.Ask.kernel(), n, Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i), Replicas.Node.chain_of(~Basics.Ask.machine(), s, i))
       )(
         Consent.grows(n, s, i, Replicas.Node.chain_of(~Basics.Ask.machine(), s, i))
       )(Adopt.maybe.grows(n, Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i), Replicas.Node.chain_of(~Basics.Ask.machine(), s, i)))
-    case Spec.Deed.Pass{+c}:
+    case Replicas.Deed.Pass{+c}:
       Replicas.Grows.trans(~Basics.Ask.machine(), 
         s,
         Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c),
-        Reading.Adopt.at(n, Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c), c)
+        Replicas.Adopt.at(~Stepping.Ask.kernel(), n, Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c), c)
       )(Pass.grows(n, s, c))(Adopt.at.grows(n, Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c), c))
 
 def Spec.Node.after_grows(n, evs, s):
@@ -3219,25 +3219,25 @@ def Spec.Node.after_grows(n, evs, s):
     case Nil{}:
       Replicas.Grows.refl(~Basics.Ask.machine(), s)
     case Con{+ev, +rest}:
-      +s1 = Spec.Node.does(n, s, ev)
+      +s1 = Replicas.Node.does(~Stepping.Ask.kernel(), n, s, ev)
       Replicas.Grows.trans(~Basics.Ask.machine(), 
         s,
         s1,
-        Spec.Node.after(n, rest, s1)
+        Replicas.Node.after(~Stepping.Ask.kernel(), n, rest, s1)
       )(Does.grows(n, s, ev))(Spec.Node.after_grows(n, rest, s1))
 
 # what a node does keeps the logs
 def Does.kept(
   +n: String,
   +s: Replicas.Node<Basics.Ask>,
-  ev: Spec.Deed
-) -> Replicas.Node.Keeps(~Basics.Ask.machine(), s, Spec.Node.does(n, s, ev)):
+  ev: Replicas.Deed<Basics.Ask>
+) -> Replicas.Node.Keeps(~Basics.Ask.machine(), s, Replicas.Node.does(~Stepping.Ask.kernel(), n, s, ev)):
   match ev:
-    case Spec.Deed.Ask{+e, +q}:
+    case Replicas.Deed.Ask{+e, +q}:
       Replicas.Kept.trans(~Basics.Ask.machine(), 
         s,
         Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q),
-        Reading.Adopt.at(
+        Replicas.Adopt.at(~Stepping.Ask.kernel(), 
           n,
           Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q),
           Basics.Ask.chain(Replicas.Envelope.of(e), q)
@@ -3245,42 +3245,42 @@ def Does.kept(
         Ask.kept(n, s, e, q),
         Adopt.at.kept(n, Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q), Basics.Ask.chain(Replicas.Envelope.of(e), q))
       )
-    case Spec.Deed.Take{t}:
+    case Replicas.Deed.Take{t}:
       Take.kept(s, t)
-    case Spec.Deed.Sync{t}:
+    case Replicas.Deed.Sync{t}:
       Sync.kept(n, s, t)
-    case Spec.Deed.Keep{+b}:
+    case Replicas.Deed.Keep{+b}:
       Replicas.Kept.same(~Basics.Ask.machine(), 
         s,
-        Basics.Node.keep(s, b),
-        Replicas.Grows.keep(~Basics.Ask.machine(), s, Ropes.Put.nodes(Basics.Bytes.rope(b))),
+        Replicas.Node.keep(~Basics.Ask.machine(), s, b),
+        Replicas.Grows.keep(~Basics.Ask.machine(), s, Ropes.Put.nodes(Replicas.Bytes.rope(b))),
         Replicas.Heads.led(~Basics.Ask.machine(), 
           s,
           Ledgers.State.put_datas(
             ~Basics.Ask,
             ~Basics.Ask.is_eq,
-            Ropes.Put.nodes(Basics.Bytes.rope(b)),
+            Ropes.Put.nodes(Replicas.Bytes.rope(b)),
             Replicas.State.ledger(~Basics.Ask.machine(), s)
           )
         )
       )
-    case Spec.Deed.Consent{+i}:
+    case Replicas.Deed.Consent{+i}:
       Replicas.Kept.trans(~Basics.Ask.machine(), 
         s,
         Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i),
-        Reading.Adopt.maybe(n, Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i), Replicas.Node.chain_of(~Basics.Ask.machine(), s, i)),
+        Replicas.Adopt.maybe(~Stepping.Ask.kernel(), n, Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i), Replicas.Node.chain_of(~Basics.Ask.machine(), s, i)),
         Consent.kept(n, s, i, Replicas.Node.chain_of(~Basics.Ask.machine(), s, i)),
         Adopt.maybe.kept(n, Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i), Replicas.Node.chain_of(~Basics.Ask.machine(), s, i))
       )
-    case Spec.Deed.Pass{+c}:
+    case Replicas.Deed.Pass{+c}:
       Replicas.Kept.trans(~Basics.Ask.machine(), 
         s,
         Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c),
-        Reading.Adopt.at(n, Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c), c),
+        Replicas.Adopt.at(~Stepping.Ask.kernel(), n, Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c), c),
         Pass.kept(n, s, c),
         Adopt.at.kept(n, Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c), c)
       )
-    case Spec.Deed.Pass{c}:
+    case Replicas.Deed.Pass{c}:
       Pass.kept(n, s, c)
 
 def Spec.Node.after_keeps(n, evs, s):
@@ -3288,11 +3288,11 @@ def Spec.Node.after_keeps(n, evs, s):
     case Nil{}:
       Replicas.Kept.refl(~Basics.Ask.machine(), s)
     case Con{+ev, rest}:
-      s1 = Spec.Node.does(n, s, ev)
+      s1 = Replicas.Node.does(~Stepping.Ask.kernel(), n, s, ev)
       Replicas.Kept.trans(~Basics.Ask.machine(), 
         s,
         s1,
-        Spec.Node.after(n, rest, s1),
+        Replicas.Node.after(~Stepping.Ask.kernel(), n, rest, s1),
         Does.kept(n, s, ev),
         Spec.Node.after_keeps(n, rest, s1)
       )
@@ -3666,19 +3666,19 @@ def Merge.put.other(
       hget => Replicas.Reads.bind(~Basics.Ask.machine(), 
         Basics.Key.res(n),
         v,
-        Replicas.Work.keep(~Basics.Ask.machine(), w, Ropes.Put.nodes(Basics.Bytes.rope(y))),
+        Replicas.Work.keep(~Basics.Ask.machine(), w, Ropes.Put.nodes(Replicas.Bytes.rope(y))),
         w2 => Replicas.Work.set(~Basics.Ask.machine(), 
           w2,
           Basics.Key.res(m),
-          Basics.Res.code(Some{Ropes.Put.root(Basics.Bytes.rope(y))})
+          Basics.Res.code(Some{Ropes.Put.root(Replicas.Bytes.rope(y))})
         )
       )(
-        Replicas.Keep.reads(~Basics.Ask.machine(), w, Ropes.Put.nodes(Basics.Bytes.rope(y)), Basics.Key.res(n), v)(hget)
+        Replicas.Keep.reads(~Basics.Ask.machine(), w, Ropes.Put.nodes(Replicas.Bytes.rope(y)), Basics.Key.res(n), v)(hget)
       )(
         w2 => hw => Replicas.Set.kept.work(~Basics.Ask.machine(), 
           w2,
           Basics.Key.res(m),
-          Basics.Res.code(Some{Ropes.Put.root(Basics.Bytes.rope(y))}),
+          Basics.Res.code(Some{Ropes.Put.root(Replicas.Bytes.rope(y))}),
           Basics.Key.res(n),
           v,
           hne
@@ -5075,7 +5075,7 @@ def Spec.Node.read_draft(s, w, r, b, n, c):
         _,
         Basics.Point.Head{r, b}
       )
-        == Basics.Root.bytes(s, Judging.Content.root(s, n, c)): Maybe<&2, Texts.Bytes()>
+        == Replicas.Root.bytes(~Basics.Ask.machine(), s, Judging.Content.root(s, n, c)): Maybe<&2, Texts.Bytes()>
     }
     {==}
 
@@ -5304,7 +5304,7 @@ def Made.kept(
 def Spec.Node.out_final(n, evs, s, i, o):
   Out.kept(
     s,
-    Spec.Node.after(n, evs, s),
+    Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s),
     i,
     o,
     Spec.Node.after_grows(n, evs, s),
@@ -5314,7 +5314,7 @@ def Spec.Node.out_final(n, evs, s, i, o):
 def Spec.Node.made_final(n, evs, s, v, x):
   Made.kept(
     s,
-    Spec.Node.after(n, evs, s),
+    Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s),
     v,
     x,
     Spec.Node.after_grows(n, evs, s),
@@ -5323,10 +5323,10 @@ def Spec.Node.made_final(n, evs, s, v, x):
   )
 
 def Spec.Chain.version_final(n, evs, s, c, k, x):
-  Replicas.Chain.version.kept(~Basics.Ask.machine(), s, Spec.Node.after(n, evs, s), c, k, x, Spec.Node.after_keeps(n, evs, s))
+  Replicas.Chain.version.kept(~Basics.Ask.machine(), s, Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s), c, k, x, Spec.Node.after_keeps(n, evs, s))
 
 def Spec.Chain.mark_final(n, evs, s, c, m, v):
-  Replicas.Chain.mark.kept(~Basics.Ask.machine(), s, Spec.Node.after(n, evs, s), c, m, v, Spec.Node.after_keeps(n, evs, s))
+  Replicas.Chain.mark.kept(~Basics.Ask.machine(), s, Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s), c, m, v, Spec.Node.after_keeps(n, evs, s))
 
 def Spec.Chain.start_final(n, evs, s, r, b, v):
   Spec.Node.after_keeps(n, evs, s)(Ledgers.Chain{r, None{}})(Replicas.Log.start(b))(v)
@@ -5624,19 +5624,19 @@ def Answer.follows.at(
 def Spec.Node.answer_follows(n, evs, s, e, q, x):
   Answer.follows.at(
     s,
-    Spec.Node.after(n, evs, s),
+    Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s),
     Replicas.Envelope.of(e),
     q,
     x,
     Ledgers.State.get(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), Ledgers.Slot.ask(Replicas.Envelope.of(e))),
     Ledgers.State.get(
       ~Basics.Ask,
-      Replicas.State.ledger(~Basics.Ask.machine(), Spec.Node.after(n, evs, s)),
+      Replicas.State.ledger(~Basics.Ask.machine(), Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s)),
       Ledgers.Slot.ask(Replicas.Envelope.of(e))
     ),
     o => Out.kept(
       s,
-      Spec.Node.after(n, evs, s),
+      Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s),
       Replicas.Envelope.of(e),
       o,
       Spec.Node.after_grows(n, evs, s),
@@ -5654,7 +5654,7 @@ def Spec.Node.answer_follows(n, evs, s, e, q, x):
         ~Ledgers.Entry.is_eq(~Basics.Ask, ~Basics.Ask.is_eq)
       ),
       Replicas.State.ledger(~Basics.Ask.machine(), s),
-      Replicas.State.ledger(~Basics.Ask.machine(), Spec.Node.after(n, evs, s)),
+      Replicas.State.ledger(~Basics.Ask.machine(), Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s)),
       Ledgers.Slot.ask(Replicas.Envelope.of(e))
     )(Spec.Node.after_grows(n, evs, s))
   )
@@ -7111,7 +7111,7 @@ def Adopt.ask.path(
   n: String,
   s: Replicas.Node<Basics.Ask>,
   m: Maybe<&2, Replicas.Request<Basics.Ask>>
-) -> Replicas.Node.On(~Basics.Ask.machine(), s, Reading.Adopt.ask(n, s, m)):
+) -> Replicas.Node.On(~Basics.Ask.machine(), s, Replicas.Adopt.ask(~Stepping.Ask.kernel(), n, s, m)):
   match m:
     case None{}:
       Replicas.Path.refl(~Basics.Ask.machine(), s)
@@ -7123,7 +7123,7 @@ def Adopt.head.path(
   n: String,
   +s: Replicas.Node<Basics.Ask>,
   m: Maybe<&2, Replicas.Head>
-) -> Replicas.Node.On(~Basics.Ask.machine(), s, Reading.Adopt.head(n, s, m)):
+) -> Replicas.Node.On(~Basics.Ask.machine(), s, Replicas.Adopt.head(~Stepping.Ask.kernel(), n, s, m)):
   match m:
     case None{}:
       Replicas.Path.refl(~Basics.Ask.machine(), s)
@@ -7135,7 +7135,7 @@ def Adopt.at.path(
   n: String,
   +s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain
-) -> Replicas.Node.On(~Basics.Ask.machine(), s, Reading.Adopt.at(n, s, c)):
+) -> Replicas.Node.On(~Basics.Ask.machine(), s, Replicas.Adopt.at(~Stepping.Ask.kernel(), n, s, c)):
   Adopt.head.path(n, s, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))
 
 # the adoption of a line, if any, is on the paths
@@ -7143,7 +7143,7 @@ def Adopt.maybe.path(
   n: String,
   s: Replicas.Node<Basics.Ask>,
   m: Maybe<&2, Ledgers.Chain>
-) -> Replicas.Node.On(~Basics.Ask.machine(), s, Reading.Adopt.maybe(n, s, m)):
+) -> Replicas.Node.On(~Basics.Ask.machine(), s, Replicas.Adopt.maybe(~Stepping.Ask.kernel(), n, s, m)):
   match m:
     case None{}:
       Replicas.Path.refl(~Basics.Ask.machine(), s)
@@ -7155,17 +7155,17 @@ def Adopts.path(
   +n: String,
   cs: List<&2, Ledgers.Chain>,
   +s: Replicas.Node<Basics.Ask>
-) -> Replicas.Node.On(~Basics.Ask.machine(), s, Reading.Node.adopts(n, cs, s)):
+) -> Replicas.Node.On(~Basics.Ask.machine(), s, Replicas.Node.adopts(~Stepping.Ask.kernel(), n, cs, s)):
   match cs:
     case Nil{}:
       Replicas.Path.refl(~Basics.Ask.machine(), s)
     case Con{+c, rest}:
       Replicas.Path.trans(~Basics.Ask.machine(), 
         s,
-        Reading.Adopt.at(n, s, c),
-        Reading.Node.adopts(n, rest, Reading.Adopt.at(n, s, c)),
+        Replicas.Adopt.at(~Stepping.Ask.kernel(), n, s, c),
+        Replicas.Node.adopts(~Stepping.Ask.kernel(), n, rest, Replicas.Adopt.at(~Stepping.Ask.kernel(), n, s, c)),
         Adopt.at.path(n, s, c),
-        Adopts.path(n, rest, Reading.Adopt.at(n, s, c))
+        Adopts.path(n, rest, Replicas.Adopt.at(~Stepping.Ask.kernel(), n, s, c))
       )
 
 # more rounds of a sync, path
@@ -7177,16 +7177,16 @@ def More.path(
   +bs: List<&2, Ledgers.Ballot>,
   +pd: Tries.Trie<Ledgers.Ballot>,
   +s: Replicas.Node<Basics.Ask>
-) -> Replicas.Node.On(~Basics.Ask.machine(), s, Reading.Sync.more(f, n, cs, k, bs, pd, s)):
+) -> Replicas.Node.On(~Basics.Ask.machine(), s, Replicas.Sync.more(~Stepping.Ask.kernel(), f, n, cs, k, bs, pd, s)):
   match f:
     case 0n:
       Replicas.Path.refl(~Basics.Ask.machine(), s)
     case 1n+(p):
       Replicas.Path.when(~Basics.Ask.machine(), 
-        Reading.Lines.level(cs, s, Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))),
+        Replicas.Lines.level(~Basics.Ask.machine(), cs, s, Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s))),
         s,
         Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
-        Reading.Sync.more(
+        Replicas.Sync.more(~Stepping.Ask.kernel(), 
           p,
           n,
           cs,
@@ -7210,7 +7210,7 @@ def More.path(
         Replicas.Path.trans(~Basics.Ask.machine(), 
           s,
           Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, Replicas.Sealed.each(~Stepping.Ask.kernel(), k, bs, pd, s)),
-          Reading.Sync.more(
+          Replicas.Sync.more(~Stepping.Ask.kernel(), 
             p,
             n,
             cs,
@@ -7248,7 +7248,7 @@ def Sync.path(
   +n: String,
   +s: Replicas.Node<Basics.Ask>,
   +t: Ledgers.State(Basics.Ask)
-) -> Replicas.Node.On(~Basics.Ask.machine(), s, Reading.Node.sync(n, s, t)):
+) -> Replicas.Node.On(~Basics.Ask.machine(), s, Replicas.Node.sync(~Stepping.Ask.kernel(), n, s, t)):
   +s1 = Replicas.Node.take(~Stepping.Ask.kernel(), s, t)
   +cs = Replicas.Sync.lines(~Basics.Ask.machine(), s, s1, t)
   +bs = Replicas.Ballots.of(~Basics.Ask.machine(), 
@@ -7258,7 +7258,7 @@ def Sync.path(
     )
   )
   +s2 = Replicas.Node.steps(~Stepping.Ask.kernel(), n, cs, s1)
-  s3 = Reading.Sync.more(
+  s3 = Replicas.Sync.more(~Stepping.Ask.kernel(), 
     List.length(&2, Ledgers.Ballot, bs),
     n,
     cs,
@@ -7270,17 +7270,17 @@ def Sync.path(
   Replicas.Path.trans(~Basics.Ask.machine(), 
     s,
     s1,
-    Reading.Node.adopts(n, cs, s3),
+    Replicas.Node.adopts(~Stepping.Ask.kernel(), n, cs, s3),
     Take.path(s, t),
     Replicas.Path.trans(~Basics.Ask.machine(), 
       s1,
       s2,
-      Reading.Node.adopts(n, cs, s3),
+      Replicas.Node.adopts(~Stepping.Ask.kernel(), n, cs, s3),
       Steps.path(n, cs, s1),
       Replicas.Path.trans(~Basics.Ask.machine(), 
         s2,
         s3,
-        Reading.Node.adopts(n, cs, s3),
+        Replicas.Node.adopts(~Stepping.Ask.kernel(), n, cs, s3),
         More.path(
           List.length(&2, Ledgers.Ballot, bs),
           n,
@@ -7329,14 +7329,14 @@ def Consent.path(
 def Does.path(
   +n: String,
   +s: Replicas.Node<Basics.Ask>,
-  ev: Spec.Deed
-) -> Replicas.Node.On(~Basics.Ask.machine(), s, Spec.Node.does(n, s, ev)):
+  ev: Replicas.Deed<Basics.Ask>
+) -> Replicas.Node.On(~Basics.Ask.machine(), s, Replicas.Node.does(~Stepping.Ask.kernel(), n, s, ev)):
   match ev:
-    case Spec.Deed.Ask{+e, +q}:
+    case Replicas.Deed.Ask{+e, +q}:
       Replicas.Path.trans(~Basics.Ask.machine(), 
         s,
         Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q),
-        Reading.Adopt.at(
+        Replicas.Adopt.at(~Stepping.Ask.kernel(), 
           n,
           Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q),
           Basics.Ask.chain(Replicas.Envelope.of(e), q)
@@ -7344,42 +7344,42 @@ def Does.path(
         Ask.path(n, s, e, q),
         Adopt.at.path(n, Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q), Basics.Ask.chain(Replicas.Envelope.of(e), q))
       )
-    case Spec.Deed.Take{t}:
+    case Replicas.Deed.Take{t}:
       Take.path(s, t)
-    case Spec.Deed.Sync{t}:
+    case Replicas.Deed.Sync{t}:
       Sync.path(n, s, t)
-    case Spec.Deed.Keep{+b}:
+    case Replicas.Deed.Keep{+b}:
       Path.same(
         s,
-        Basics.Node.keep(s, b),
-        Replicas.Grows.keep(~Basics.Ask.machine(), s, Ropes.Put.nodes(Basics.Bytes.rope(b))),
+        Replicas.Node.keep(~Basics.Ask.machine(), s, b),
+        Replicas.Grows.keep(~Basics.Ask.machine(), s, Ropes.Put.nodes(Replicas.Bytes.rope(b))),
         Replicas.Heads.led(~Basics.Ask.machine(), 
           s,
           Ledgers.State.put_datas(
             ~Basics.Ask,
             ~Basics.Ask.is_eq,
-            Ropes.Put.nodes(Basics.Bytes.rope(b)),
+            Ropes.Put.nodes(Replicas.Bytes.rope(b)),
             Replicas.State.ledger(~Basics.Ask.machine(), s)
           )
         )
       )
-    case Spec.Deed.Consent{+i}:
+    case Replicas.Deed.Consent{+i}:
       Replicas.Path.trans(~Basics.Ask.machine(), 
         s,
         Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i),
-        Reading.Adopt.maybe(n, Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i), Replicas.Node.chain_of(~Basics.Ask.machine(), s, i)),
+        Replicas.Adopt.maybe(~Stepping.Ask.kernel(), n, Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i), Replicas.Node.chain_of(~Basics.Ask.machine(), s, i)),
         Consent.path(n, s, i, Replicas.Node.chain_of(~Basics.Ask.machine(), s, i)),
         Adopt.maybe.path(n, Replicas.Node.consent(~Stepping.Ask.kernel(), n, s, i), Replicas.Node.chain_of(~Basics.Ask.machine(), s, i))
       )
-    case Spec.Deed.Pass{+c}:
+    case Replicas.Deed.Pass{+c}:
       Replicas.Path.trans(~Basics.Ask.machine(), 
         s,
         Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c),
-        Reading.Adopt.at(n, Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c), c),
+        Replicas.Adopt.at(~Stepping.Ask.kernel(), n, Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c), c),
         Pass.path(n, s, c),
         Adopt.at.path(n, Replicas.Node.pass(~Stepping.Ask.kernel(), n, s, c), c)
       )
-    case Spec.Deed.Pass{c}:
+    case Replicas.Deed.Pass{c}:
       Pass.path(n, s, c)
 
 def Spec.Node.after_on(n, evs, s):
@@ -7387,11 +7387,11 @@ def Spec.Node.after_on(n, evs, s):
     case Nil{}:
       Replicas.Path.refl(~Basics.Ask.machine(), s)
     case Con{+ev, rest}:
-      s1 = Spec.Node.does(n, s, ev)
+      s1 = Replicas.Node.does(~Stepping.Ask.kernel(), n, s, ev)
       Replicas.Path.trans(~Basics.Ask.machine(), 
         s,
         s1,
-        Spec.Node.after(n, rest, s1),
+        Replicas.Node.after(~Stepping.Ask.kernel(), n, rest, s1),
         Does.path(n, s, ev),
         Spec.Node.after_on(n, rest, s1)
       )

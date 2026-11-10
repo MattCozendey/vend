@@ -170,7 +170,7 @@ def Pick.base(s: Replicas.Node<Basics.Ask>, b: Maybe<&2, Ropes.Root>) -> Maybe<&
     case None{}:
       Some{[]}
     case Some{r}:
-      Basics.Root.bytes(s, Some{r})
+      Replicas.Root.bytes(~Basics.Ask.machine(), s, Some{r})
 
 # the merge of a resource that the base, ours and theirs hold or not, when
 # both sides changed it, in the format f (none: wait for its bytes)
@@ -183,7 +183,7 @@ def Pick.both(
 ) -> Maybe<&2, Pick>:
   match o t:
     case Some{x} Some{y}:
-      Pick.read(f, s, Pick.base(s, b), Basics.Root.bytes(s, Some{x}), Basics.Root.bytes(s, Some{y}))
+      Pick.read(f, s, Pick.base(s, b), Replicas.Root.bytes(~Basics.Ask.machine(), s, Some{x}), Replicas.Root.bytes(~Basics.Ask.machine(), s, Some{y}))
     case _ _:
       Some{Pick.Clash{}}
 
@@ -626,7 +626,7 @@ def Merge.put(
     case Pick.Take{m}:
       Replicas.Work.set(~Basics.Ask.machine(), w, Basics.Key.res(n), Basics.Res.code(m))
     case Pick.Make{x}:
-      +rp = Basics.Bytes.rope(x)
+      +rp = Replicas.Bytes.rope(x)
       Maybe.bind(
         &2,
         Replicas.Work<Basics.Ask>,
