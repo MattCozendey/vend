@@ -14,7 +14,7 @@ Files of the core (`core/`), each one domain, in the order in which they build o
 | `voting.bend` | rounds, ballots, moves of a head, what a node does with a request |
 | `reading.bend` | sync, reads, drafts, answers, notices |
 | `spec.bend` | the laws, and the measures that only laws use |
-| `proofs/*.bend` | the proofs, by subject; `impl.bend` gathers them: a check of it checks all |
+| `impl.bend` | the proofs of the laws: a check of it checks all |
 
 ## 1. The design
 
@@ -181,7 +181,7 @@ README claim, then the law.
   A change at once, without the line's present owners, cannot be safe.
 - **A judge puts each new node once.** A verdict holds the node that the judge wrote
   (`Verdict`), and the run goes on from it (`Run.over`). "A node only grows" is a lemma for each
-  judge (`Verdict.change`, `Grown.*` in `proofs/trees.bend`). A new format adds no judge: a
+  judge (`Verdict.change`, `Grown.*` in `impl.bend`). A new format adds no judge: a
   format only merges bytes (`Pick.format`).
 - **Reads of a history are by range**: `Node.versions` and `Node.log` take a first number and a
   count. `Node.affects` and `Node.impact` read each branch that the node follows once, and of
