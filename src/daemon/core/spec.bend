@@ -67,7 +67,7 @@ law Node.answer_follows:
   for +q: Basics.Ask
   for +x: Reading.Answer
   {Reading.Node.answer(s, e, q) == Some{x}: Maybe<&2, Reading.Answer>}
-    -> {Reading.Answer.follows(x, Reading.Node.answer(Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s), e, q)) == True{}: Bool}
+    -> {Reading.Answer.follows(x, Reading.Node.answer(Replicas.Node.after(~Basics.Ask.machine(), ~Stepping.Ask.kernel(), n, evs, s), e, q)) == True{}: Bool}
 
 # while a write that the writer w asked for waits on its line, the node has a
 # draft of the resource for w (the newest of its pending writes, by
@@ -314,7 +314,7 @@ law Node.take_waits:
       List.contains(
         ~Ledgers.Id,
         ~Ledgers.Id.is_eq,
-        Replicas.Wait.of(~Basics.Ask.machine(), Replicas.Node.take(~Stepping.Ask.kernel(), s, t), Replicas.Line.chain(r, l)),
+        Replicas.Wait.of(~Basics.Ask.machine(), Replicas.Node.take(~Basics.Ask.machine(), ~Stepping.Ask.kernel(), s, t), Replicas.Line.chain(r, l)),
         i
       )
         == True{}: Bool

@@ -259,8 +259,5 @@ def Node.adoption(+s: Replicas.Node<Basics.Ask>, +r: Ledgers.Id, +l: Maybe<&2, S
   Adopt.of(s, r, l, Node.group(s, r, l))
 
 # the kernel of Vend
-def Ask.kernel() -> Replicas.Kernel():
-  (
-    Basics.Ask.machine(),
-    (+r => c => +i => q => Step.change(r, c, i, q), +s => +r => +l => Node.adoption(s, r, l))
-  )
+def Ask.kernel() -> Replicas.Kernel(Basics.Ask.machine()):
+  (+r => c => +i => q => Step.change(r, c, i, q), +s => +r => +l => Node.adoption(s, r, l))

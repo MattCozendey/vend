@@ -1334,7 +1334,7 @@ def Change.outs(
 
 # the lawful kernel of Vend: its change only grows the node of a run, keeps
 # each key of its log, and gives its request an outcome
-def Ask.lawful() -> Replicas.Lawful():
+def Ask.lawful() -> Replicas.Lawful(Basics.Ask.machine()):
   (
     Stepping.Ask.kernel(),
     (
@@ -3009,23 +3009,23 @@ def Answer.follows.at(
 def Spec.Node.answer_follows(n, evs, s, e, q, x):
   Answer.follows.at(
     s,
-    Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s),
+    Replicas.Node.after(~Basics.Ask.machine(), ~Stepping.Ask.kernel(), n, evs, s),
     Replicas.Envelope.of(e),
     q,
     x,
     Ledgers.State.get(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), Ledgers.Slot.ask(Replicas.Envelope.of(e))),
     Ledgers.State.get(
       ~Basics.Ask,
-      Replicas.State.ledger(~Basics.Ask.machine(), Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s)),
+      Replicas.State.ledger(~Basics.Ask.machine(), Replicas.Node.after(~Basics.Ask.machine(), ~Stepping.Ask.kernel(), n, evs, s)),
       Ledgers.Slot.ask(Replicas.Envelope.of(e))
     ),
     o => Replicas.Out.kept(~Basics.Ask.machine(), 
       s,
-      Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s),
+      Replicas.Node.after(~Basics.Ask.machine(), ~Stepping.Ask.kernel(), n, evs, s),
       Replicas.Envelope.of(e),
       o,
-      Replicas.Node.after_grows(~Ask.lawful(), n, evs, s),
-      Replicas.Node.after_keeps(~Ask.lawful(), n, evs, s)
+      Replicas.Node.after_grows(~Basics.Ask.machine(), ~Ask.lawful(), n, evs, s),
+      Replicas.Node.after_keeps(~Basics.Ask.machine(), ~Ask.lawful(), n, evs, s)
     )
   )(
     Tries.Trie.keeps_get(
@@ -3039,9 +3039,9 @@ def Spec.Node.answer_follows(n, evs, s, e, q, x):
         ~Ledgers.Entry.is_eq(~Basics.Ask, ~Basics.Ask.is_eq)
       ),
       Replicas.State.ledger(~Basics.Ask.machine(), s),
-      Replicas.State.ledger(~Basics.Ask.machine(), Replicas.Node.after(~Stepping.Ask.kernel(), n, evs, s)),
+      Replicas.State.ledger(~Basics.Ask.machine(), Replicas.Node.after(~Basics.Ask.machine(), ~Stepping.Ask.kernel(), n, evs, s)),
       Ledgers.Slot.ask(Replicas.Envelope.of(e))
-    )(Replicas.Node.after_grows(~Ask.lawful(), n, evs, s))
+    )(Replicas.Node.after_grows(~Basics.Ask.machine(), ~Ask.lawful(), n, evs, s))
   )
 
 # Drafts
@@ -3416,7 +3416,7 @@ def Take.asks.adds(
     ~Ledgers.Id,
     ~Ledgers.Id.is_eq,
     Replicas.Wait.of(~Basics.Ask.machine(), 
-      Replicas.Take.asks(~Stepping.Ask.kernel(), 
+      Replicas.Take.asks(~Basics.Ask.machine(), ~Stepping.Ask.kernel(), 
         List.append(
           &2,
           Cells.Cell<Ledgers.Entry<Basics.Ask>>,
@@ -3434,7 +3434,7 @@ def Take.asks.adds(
 }:
   match pre:
     case Nil{}:
-      e => Replicas.Take.asks.waits(~Stepping.Ask.kernel(), 
+      e => Replicas.Take.asks.waits(~Basics.Ask.machine(), ~Stepping.Ask.kernel(), 
         post,
         old,
         Shared.Bool.when(
@@ -3444,13 +3444,13 @@ def Take.asks.adds(
             Cells.Cell<Ledgers.Entry<Basics.Ask>>,
             Ledgers.State.get(~Basics.Ask, old, Ledgers.Slot.ask(i))
           ),
-          u => Replicas.Node.arrive(~Stepping.Ask.kernel(), s, i, Basics.Ask.On{r, l, ch}),
+          u => Replicas.Node.arrive(~Basics.Ask.machine(), ~Stepping.Ask.kernel(), s, i, Basics.Ask.On{r, l, ch}),
           u => s
         ),
         Replicas.Line.chain(r, l),
         i
       )(
-        %Equal.sym(Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>, Ledgers.State.get(~Basics.Ask, old, Ledgers.Slot.ask(i)), None{}, e): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Replicas.Wait.of(~Basics.Ask.machine(), Shared.Bool.when(Replicas.Node<Basics.Ask>, Maybe.is_none(&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>, _), u => Replicas.Node.arrive(~Stepping.Ask.kernel(), s, i, Basics.Ask.On{r, l, ch}), u => s), Replicas.Line.chain(r, l)), i) == True{}: Bool}
+        %Equal.sym(Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>, Ledgers.State.get(~Basics.Ask, old, Ledgers.Slot.ask(i)), None{}, e): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Replicas.Wait.of(~Basics.Ask.machine(), Shared.Bool.when(Replicas.Node<Basics.Ask>, Maybe.is_none(&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>, _), u => Replicas.Node.arrive(~Basics.Ask.machine(), ~Stepping.Ask.kernel(), s, i, Basics.Ask.On{r, l, ch}), u => s), Replicas.Line.chain(r, l)), i) == True{}: Bool}
         Replicas.Wait.adds(~Basics.Ask.machine(), Replicas.Node.follow(~Basics.Ask.machine(), s, r, l), Replicas.Line.chain(r, l), i))
     case Con{Cells.One{Ledgers.Entry.Ask{j, t, q}}, rest}:
       e => Take.asks.adds(
@@ -3464,7 +3464,7 @@ def Take.asks.adds(
             Cells.Cell<Ledgers.Entry<Basics.Ask>>,
             Ledgers.State.get(~Basics.Ask, old, Ledgers.Slot.ask(j))
           ),
-          u => Replicas.Node.arrive(~Stepping.Ask.kernel(), s, j, q),
+          u => Replicas.Node.arrive(~Basics.Ask.machine(), ~Stepping.Ask.kernel(), s, j, q),
           u => s
         ),
         i,
@@ -3485,7 +3485,7 @@ def Spec.Node.take_waits(s, t, i, time, r, l, ch):
   l1 = Ledgers.State.take(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), sent)
   +s1 = Replicas.State.led(~Basics.Ask.machine(), s, l1)
   cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Basics.Ask>>, sent)
-  +s2 = Replicas.Take.asks(~Stepping.Ask.kernel(), cs, Replicas.State.ledger(~Basics.Ask.machine(), s), s1)
+  +s2 = Replicas.Take.asks(~Basics.Ask.machine(), ~Stepping.Ask.kernel(), cs, Replicas.State.ledger(~Basics.Ask.machine(), s), s1)
   +bs = Replicas.Ballots.of(~Basics.Ask.machine(), 
     Tries.Trie.values(
       Cells.Cell<Ledgers.Entry<Basics.Ask>>,
@@ -3500,9 +3500,9 @@ def Spec.Node.take_waits(s, t, i, time, r, l, ch):
   es => eb =>
     %Replicas.Wait.same(~Basics.Ask.machine(), 
       s2,
-      Replicas.Sealed.take(~Stepping.Ask.kernel(), bs, s2),
+      Replicas.Sealed.take(~Basics.Ask.machine(), ~Stepping.Ask.kernel(), bs, s2),
       Replicas.Line.chain(r, l),
-      Replicas.Each.waiting(~Stepping.Ask.kernel(), List.length(&2, Ledgers.Ballot, bs), bs, Replicas.Pending.of(bs), s2)
+      Replicas.Each.waiting(~Basics.Ask.machine(), ~Stepping.Ask.kernel(), List.length(&2, Ledgers.Ballot, bs), bs, Replicas.Pending.of(bs), s2)
     ): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, _, i) == True{}: Bool}
     %Equal.sym(
       List<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>,
@@ -3523,7 +3523,7 @@ def Spec.Node.take_waits(s, t, i, time, r, l, ch):
       List.contains(
         ~Ledgers.Id,
         ~Ledgers.Id.is_eq,
-        Replicas.Wait.of(~Basics.Ask.machine(), Replicas.Take.asks(~Stepping.Ask.kernel(), _, Replicas.State.ledger(~Basics.Ask.machine(), s), s1), Replicas.Line.chain(r, l)),
+        Replicas.Wait.of(~Basics.Ask.machine(), Replicas.Take.asks(~Basics.Ask.machine(), ~Stepping.Ask.kernel(), _, Replicas.State.ledger(~Basics.Ask.machine(), s), s1), Replicas.Line.chain(r, l)),
         i
       )
         == True{}: Bool
