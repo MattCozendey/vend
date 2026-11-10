@@ -15,6 +15,7 @@ import ./reading.bend as Reading
 import ./sealing.bend as Sealing
 import ./stepping.bend as Stepping
 import ./voting.bend as Voting
+import ../replica/impl.bend as Replicas
 
 # The pure core of a Vend Node (README): what it holds, what it answers, and
 # the laws about both. transport/spec.bend carries it over IO.
@@ -48,7 +49,7 @@ law Ask.same:
 # an Own only when its owners are the nodes inside its group, in the store
 # tree that it names (Own.tree)
 law Own.takes_inside:
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +r: Ledgers.Id
   for +l: Maybe<&2, String>
   for +g: String
@@ -67,33 +68,33 @@ def Vote.tip(m: Maybe<&2, Ledgers.Vote>) -> Maybe<&2, Hashes.Hash>:
       None{}
 
 # the head x one height up, at the tip y
-def Head.up(x: Basics.Head, y: Hashes.Hash) -> Basics.Head:
+def Head.up(x: Replicas.Head, y: Hashes.Hash) -> Replicas.Head:
   match x:
-    case Basics.Head{r, b, n, th}:
-      Basics.Head{r, b, U32.inc(n), Some{y}}
+    case Replicas.Head{r, b, n, th}:
+      Replicas.Head{r, b, U32.inc(n), Some{y}}
 
 # the head x after the step m (none: no step, or one that names no tip)
-def Head.moved(x: Basics.Head, m: Maybe<&2, Ledgers.Vote>) -> Maybe<&2, Basics.Head>:
-  Maybe.bind(&2, Hashes.Hash, Basics.Head, Vote.tip(m), y => Some{Head.up(x, y)})
+def Head.moved(x: Replicas.Head, m: Maybe<&2, Ledgers.Vote>) -> Maybe<&2, Replicas.Head>:
+  Maybe.bind(&2, Hashes.Hash, Replicas.Head, Vote.tip(m), y => Some{Head.up(x, y)})
 
 # the step that the owners in the tip of the head x decided next on the line
 # c, in the round r, if they did
 def Advance.in(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
-  +x: Basics.Head,
+  +x: Replicas.Head,
   r: Nat
 ) -> Maybe<&2, Ledgers.Vote>:
   Maybe.bind(
     &2,
-    Basics.Tip,
+    Replicas.Tip,
     Ledgers.Vote,
-    Basics.Head.tip(s, x),
+    Replicas.Head.tip(~Basics.Ask.machine(), s, x),
     t => Ledgers.State.decide(
       ~Basics.Ask,
-      Basics.State.ledger(s),
+      Replicas.State.ledger(~Basics.Ask.machine(), s),
       Ledgers.Where{c, Sealing.Head.next(x), r},
-      Basics.Tip.owners(t)
+      Replicas.Tip.owners(t)
     )
   )
 
@@ -102,18 +103,18 @@ def Advance.in(
 # decided in its round). A law's measure: no node runs it
 def Line.at(
   rs: List<&2, Nat>,
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
-  h: Basics.Head
-) -> Maybe<&2, Basics.Head>:
+  h: Replicas.Head
+) -> Maybe<&2, Replicas.Head>:
   match rs:
     case Nil{}:
       Some{h}
     case Con{r, rest}:
       Maybe.bind(
         &2,
-        Basics.Head,
-        Basics.Head,
+        Replicas.Head,
+        Replicas.Head,
         Line.at(rest, s, c, h),
         +x => Head.moved(x, Advance.in(s, c, x, r))
       )
@@ -123,7 +124,7 @@ def Line.at(
 # or it does a sync, or it keeps new bytes, or a writer connected to it asks
 # for a request that it holds, or it passes to the next round on a line
 type Deed is Data:
-  Deed.Ask{envelope: Basics.Envelope, ask: Basics.Ask}
+  Deed.Ask{envelope: Replicas.Envelope, ask: Basics.Ask}
   Deed.Take{sent: Ledgers.State(Basics.Ask)}
   Deed.Sync{sent: Ledgers.State(Basics.Ask)}
   Deed.Keep{bytes: Texts.Bytes()}
@@ -132,10 +133,10 @@ type Deed is Data:
 # bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # s, after the node n did ev
-def Node.does(+n: String, +s: Basics.Node, ev: Deed) -> Basics.Node:
+def Node.does(+n: String, +s: Replicas.Node<Basics.Ask>, ev: Deed) -> Replicas.Node<Basics.Ask>:
   match ev:
     case Deed.Ask{+e, +q}:
-      Reading.Adopt.at(n, Voting.Node.ask(n, s, e, q), Basics.Ask.chain(Basics.Envelope.of(e), q))
+      Reading.Adopt.at(n, Voting.Node.ask(n, s, e, q), Basics.Ask.chain(Replicas.Envelope.of(e), q))
     case Deed.Take{t}:
       Voting.Node.take(s, t)
     case Deed.Sync{t}:
@@ -148,7 +149,7 @@ def Node.does(+n: String, +s: Basics.Node, ev: Deed) -> Basics.Node:
       Reading.Adopt.at(n, Voting.Node.pass(n, s, c), c)
 
 # s, after the node n did each of evs, in order: any later state of the node
-def Node.after(+n: String, evs: List<&2, Deed>, s: Basics.Node) -> Basics.Node:
+def Node.after(+n: String, evs: List<&2, Deed>, s: Replicas.Node<Basics.Ask>) -> Replicas.Node<Basics.Ask>:
   match evs:
     case Nil{}:
       s
@@ -156,20 +157,20 @@ def Node.after(+n: String, evs: List<&2, Deed>, s: Basics.Node) -> Basics.Node:
       Node.after(n, rest, Node.does(n, s, ev))
 
 # that b holds, in the log of each line, each key that a holds there
-def Node.Keeps(a: Basics.Node, b: Basics.Node) -> Type:
+def Node.Keeps(a: Replicas.Node<Basics.Ask>, b: Replicas.Node<Basics.Ask>) -> Type:
   @c: Ledgers.Chain -> @k: List<
     &2,
     U32> -> @v: List<
     &2,
     U32> -> {
-    Basics.Line.get(a, c, k) == Some{v}: Maybe<&2, List<&2, U32>>
-  } -> {Basics.Line.get(b, c, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+    Replicas.Line.get(~Basics.Ask.machine(), a, c, k) == Some{v}: Maybe<&2, List<&2, U32>>
+  } -> {Replicas.Line.get(~Basics.Ask.machine(), b, c, k) == Some{v}: Maybe<&2, List<&2, U32>>}
 
 # a node only grows, whatever it does
 law Node.after_grows:
   for +n: String
   for +evs: List<&2, Deed>
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   {Reading.Node.grows(s, Node.after(n, evs, s)) == True{}: Bool}
 
 # a log only gains keys: what the log of a line holds, it holds for good,
@@ -177,35 +178,35 @@ law Node.after_grows:
 law Node.after_keeps:
   for +n: String
   for +evs: List<&2, Deed>
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   Node.Keeps(s, Node.after(n, evs, s))
 
 # the head m has a tip
-def Head.held(m: Maybe<&2, Basics.Head>) -> Bool:
+def Head.held(m: Maybe<&2, Replicas.Head>) -> Bool:
   match m:
-    case Some{Basics.Head{r, b, n, Some{t}}}:
+    case Some{Replicas.Head{r, b, n, Some{t}}}:
       True{}
     case x:
       False{}
 
 # that the head of the line c in s is some decided steps from the head h0, by
 # the ledger of s
-def Line.Reach(s: Basics.Node, c: Ledgers.Chain, h0: Basics.Head) -> Type:
+def Line.Reach(s: Replicas.Node<Basics.Ask>, c: Ledgers.Chain, h0: Replicas.Head) -> Type:
   Exists(
     List<&2, Nat>,
     rs => Exists(
-      Basics.Head,
+      Replicas.Head,
       h => {
-        Basics.Node.head_of(s, c) == Some{h}: Maybe<&2, Basics.Head>
+        Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == Some{h}: Maybe<&2, Replicas.Head>
       }
-        & {Line.at(rs, s, c, h0) == Some{h}: Maybe<&2, Basics.Head>}
+        & {Line.at(rs, s, c, h0) == Some{h}: Maybe<&2, Replicas.Head>}
     )
   )
 
 # that each head of a that is some decided steps from a head with a tip is,
 # in b, some decided steps from it
-def Node.On(a: Basics.Node, b: Basics.Node) -> Type:
-  @c: Ledgers.Chain -> @h0: Basics.Head -> {
+def Node.On(a: Replicas.Node<Basics.Ask>, b: Replicas.Node<Basics.Ask>) -> Type:
+  @c: Ledgers.Chain -> @h0: Replicas.Head -> {
     Head.held(Some{h0}) == True{}: Bool
   } -> Line.Reach(a, c, h0) -> Line.Reach(b, c, h0)
 
@@ -214,7 +215,7 @@ def Node.On(a: Basics.Node, b: Basics.Node) -> Type:
 law Node.after_on:
   for +n: String
   for +evs: List<&2, Deed>
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   Node.On(s, Node.after(n, evs, s))
 
 # an outcome is final: a request that a step took stays taken, as the same
@@ -222,44 +223,44 @@ law Node.after_on:
 law Node.out_final:
   for +n: String
   for +evs: List<&2, Deed>
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +i: Ledgers.Id
-  for +o: Basics.Out
-  {Basics.Node.out(s, i) == Some{o}: Maybe<&2, Basics.Out>}
-    -> {Basics.Node.out(Node.after(n, evs, s), i) == Some{o}: Maybe<&2, Basics.Out>}
+  for +o: Replicas.Out
+  {Basics.Node.out(s, i) == Some{o}: Maybe<&2, Replicas.Out>}
+    -> {Basics.Node.out(Node.after(n, evs, s), i) == Some{o}: Maybe<&2, Replicas.Out>}
 
 # a version never changes: the request that made it and the root of its
 # content stay
 law Node.made_final:
   for +n: String
   for +evs: List<&2, Deed>
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +v: Ledgers.Id
-  for +x: Basics.Version
-  {Basics.Node.made(s, v) == Some{x}: Maybe<&2, Basics.Version>}
-    -> {Basics.Node.made(Node.after(n, evs, s), v) == Some{x}: Maybe<&2, Basics.Version>}
+  for +x: Replicas.Version
+  {Basics.Node.made(s, v) == Some{x}: Maybe<&2, Replicas.Version>}
+    -> {Basics.Node.made(Node.after(n, evs, s), v) == Some{x}: Maybe<&2, Replicas.Version>}
 
 # the history of a line only grows at its end: the version of a number stays
 law Chain.version_final:
   for +n: String
   for +evs: List<&2, Deed>
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +c: Ledgers.Chain
   for +k: U32
-  for +x: Basics.Version
-  {Basics.Chain.version(s, c, k) == Some{x}: Maybe<&2, Basics.Version>}
-    -> {Basics.Chain.version(Node.after(n, evs, s), c, k) == Some{x}: Maybe<&2, Basics.Version>}
+  for +x: Replicas.Version
+  {Replicas.Chain.version(~Basics.Ask.machine(), s, c, k) == Some{x}: Maybe<&2, Replicas.Version>}
+    -> {Replicas.Chain.version(~Basics.Ask.machine(), Node.after(n, evs, s), c, k) == Some{x}: Maybe<&2, Replicas.Version>}
 
 # a mark names its version for good
 law Chain.mark_final:
   for +n: String
   for +evs: List<&2, Deed>
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +c: Ledgers.Chain
   for +m: String
   for +v: Ledgers.Id
-  {Basics.Chain.mark(s, c, m) == Some{v}: Maybe<&2, Ledgers.Id>}
-    -> {Basics.Chain.mark(Node.after(n, evs, s), c, m) == Some{v}: Maybe<&2, Ledgers.Id>}
+  {Replicas.Chain.mark(~Basics.Ask.machine(), s, c, m) == Some{v}: Maybe<&2, Ledgers.Id>}
+    -> {Replicas.Chain.mark(~Basics.Ask.machine(), Node.after(n, evs, s), c, m) == Some{v}: Maybe<&2, Ledgers.Id>}
 
 # the first tip of a branch is for good: what the log of a store holds for a
 # branch, it holds whatever the node does next, so a node that opens the
@@ -267,23 +268,23 @@ law Chain.mark_final:
 law Chain.start_final:
   for +n: String
   for +evs: List<&2, Deed>
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +r: Ledgers.Id
   for +b: String
   for +v: List<&2, U32>
   {
-    Basics.Line.get(
+    Replicas.Line.get(~Basics.Ask.machine(), 
       s,
       Ledgers.Chain{r, None{}},
-      Basics.Log.start(b)
+      Replicas.Log.start(b)
     )
       == Some{v}: Maybe<&2, List<&2, U32>>
   }
     -> {
-      Basics.Line.get(
+      Replicas.Line.get(~Basics.Ask.machine(), 
         Node.after(n, evs, s),
         Ledgers.Chain{r, None{}},
-        Basics.Log.start(b)
+        Replicas.Log.start(b)
       )
         == Some{v}: Maybe<&2, List<&2, U32>>
     }
@@ -293,8 +294,8 @@ law Chain.start_final:
 law Node.answer_follows:
   for +n: String
   for +evs: List<&2, Deed>
-  for +s: Basics.Node
-  for +e: Basics.Envelope
+  for +s: Replicas.Node<Basics.Ask>
+  for +e: Replicas.Envelope
   for +q: Basics.Ask
   for +x: Reading.Answer
   {Reading.Node.answer(s, e, q) == Some{x}: Maybe<&2, Reading.Answer>}
@@ -304,7 +305,7 @@ law Node.answer_follows:
 # draft of the resource for w (the newest of its pending writes, by
 # Draft.newer)
 law Node.draft_some:
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +w: String
   for +r: Ledgers.Id
   for +b: String
@@ -317,13 +318,13 @@ law Node.draft_some:
     List.contains(
       ~Ledgers.Id,
       ~Ledgers.Id.is_eq,
-      Sealing.Wait.of(s, Basics.Line.chain(r, Some{b})),
+      Sealing.Wait.of(s, Replicas.Line.chain(r, Some{b})),
       Ledgers.Id{w, q2}
     )
       == True{}: Bool
   }
     -> {
-      Basics.Node.asked(
+      Replicas.Node.asked(~Basics.Ask.machine(), 
         s,
         Ledgers.Id{w, q2}
       )
@@ -335,13 +336,13 @@ law Node.draft_some:
 # a write that the owners take: in the node that the verdict holds, the
 # resource reads as the content of the write
 law Judge.write_reads:
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +n: Resources.Name
   for +base: Maybe<&2, Ledgers.Id>
   for +c: Basics.Content
   for +h: Maybe<&2, Hashes.Hash>
   for +h2: Maybe<&2, Hashes.Hash>
-  for +s3: Basics.Node
+  for +s3: Replicas.Node<Basics.Ask>
   for +m: Maybe<&2, Ropes.Root>
   {
     Judging.Judge.write(
@@ -362,19 +363,19 @@ def Work.Reads(k: List<&2, U32>, v: List<&2, U32>, m: Maybe<&2, Judging.Work>) -
     case None{}:
       Unit
     case Some{Judging.Work{s2, h2}}:
-      {Basics.Node.get(s2, h2, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+      {Replicas.Node.get(~Basics.Ask.machine(), s2, h2, k) == Some{v}: Maybe<&2, List<&2, U32>>}
 
 # a move records a version equal to its target: each resource of the version
 # to is, with the same content, in the tree that a move to it gives
 law Move.reads:
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +c: Ledgers.Chain
   for +to: Ledgers.Id
   for +h: Maybe<&2, Hashes.Hash>
   for +n: Resources.Name
   for +v: List<&2, U32>
   {
-    Basics.Node.get(
+    Replicas.Node.get(~Basics.Ask.machine(), 
       s,
       Basics.Node.root_of(s, Some{to}),
       Basics.Key.res(n)
@@ -386,10 +387,10 @@ law Move.reads:
 # a node copies only a vote that the rules of rounds allow: when it plans to
 # cast for the vote of the proposer, the passes that the vote names allow it
 law Plan.follow_allowed:
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +c: Ledgers.Chain
   for +w: Ledgers.Where
-  for +t: Basics.Tip
+  for +t: Replicas.Tip
   for +th: Maybe<&2, Hashes.Hash>
   for +os: List<&2, String>
   for +v: Ledgers.Vote
@@ -414,7 +415,7 @@ def Run.Outs(m: Maybe<&2, Stepping.Run>, i: Ledgers.Id) -> Type:
         Maybe.is_some(
           &2,
           List<&2, U32>,
-          Basics.Node.get(s, Basics.Tip.log(t), Basics.Log.out(i))
+          Replicas.Node.get(~Basics.Ask.machine(), s, Replicas.Tip.log(t), Replicas.Log.out(i))
         )
           == True{}: Bool
       }
@@ -422,9 +423,9 @@ def Run.Outs(m: Maybe<&2, Stepping.Run>, i: Ledgers.Id) -> Type:
 # a request waits until its line gives it an outcome. A step gives each of
 # its requests an outcome
 law Step.run_outs:
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +c: Ledgers.Chain
-  for +t: Basics.Tip
+  for +t: Replicas.Tip
   for +qs: List<&2, Ledgers.Id>
   for +i: Ledgers.Id
   {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, qs, i) == True{}: Bool}
@@ -446,25 +447,25 @@ law Wait.left_keeps:
 # gives the resource its content, and shuts its clash (a clash whose key holds
 # no request is not open: Clash.shut)
 law Resolve.reads:
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +h: Maybe<&2, Hashes.Hash>
   for +n: Resources.Name
   for +m: Maybe<&2, Ropes.Root>
   Work.Reads(Basics.Key.res(n), Basics.Res.code(m), Judging.Resolve.work(s, h, n, m))
 
 law Resolve.shuts:
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +h: Maybe<&2, Hashes.Hash>
   for +n: Resources.Name
   for +m: Maybe<&2, Ropes.Root>
   Work.Reads(Basics.Key.clash(n), [], Judging.Resolve.work(s, h, n, m))
 
 law Clash.shut:
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +h: Maybe<&2, Hashes.Hash>
   for +n: Resources.Name
   for +f: Ledgers.Id
-  {Basics.Node.get(s, h, Basics.Key.clash(n)) == Some{[]}: Maybe<&2, List<&2, U32>>}
+  {Replicas.Node.get(~Basics.Ask.machine(), s, h, Basics.Key.clash(n)) == Some{[]}: Maybe<&2, List<&2, U32>>}
     -> {Judging.Clash.open(s, h, n, f) == False{}: Bool}
 
 # a merge of whole trees keeps what the merge of each resource takes: when the
@@ -472,7 +473,7 @@ law Clash.shut:
 # a change that only one side made), the tree that the merge gives holds n
 # with x
 law Merge.keeps:
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +c: Ledgers.Chain
   for +from: Ledgers.Id
   for +h: Maybe<&2, Hashes.Hash>
@@ -523,7 +524,7 @@ law Merge.keeps:
 # ours is the base, it keeps theirs
 law Pick.merge_theirs:
   for f: Formats.Format
-  for s: Basics.Node
+  for s: Replicas.Node<Basics.Ask>
   for +b: Maybe<&2, Ropes.Root>
   for +o: Maybe<&2, Ropes.Root>
   for +t: Maybe<&2, Ropes.Root>
@@ -533,7 +534,7 @@ law Pick.merge_theirs:
 # and when theirs is the base, it keeps ours
 law Pick.merge_ours:
   for f: Formats.Format
-  for s: Basics.Node
+  for s: Replicas.Node<Basics.Ask>
   for +b: Maybe<&2, Ropes.Root>
   for +o: Maybe<&2, Ropes.Root>
   for +t: Maybe<&2, Ropes.Root>
@@ -544,19 +545,19 @@ law Pick.merge_ours:
 # a node keeps only ballots that it checked: a ballot that it accepts is the
 # next of its node's chain in its store, and the key of that chain signs it
 law Seal.accept_fits:
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +b: Ledgers.Ballot
-  for +c: Basics.Keychain
-  for +s2: Basics.Node
+  for +c: Replicas.Keychain
+  for +s2: Replicas.Node<Basics.Ask>
   {
     Sealing.Seal.chain(
       s,
       Sealing.Ballot.store(b),
       Sealing.Ballot.node(b)
     )
-      == Some{c}: Maybe<&2, Basics.Keychain>
+      == Some{c}: Maybe<&2, Replicas.Keychain>
   }
-    -> {Sealing.Seal.accept(s, b) == Some{s2}: Maybe<&2, Basics.Node>}
+    -> {Sealing.Seal.accept(s, b) == Some{s2}: Maybe<&2, Replicas.Node<Basics.Ask>>}
     -> {Sealing.Seal.fits(c, b) == True{}: Bool}
 
 # a ballot that a node seals with the secret of its chain's key fits the chain.
@@ -571,7 +572,7 @@ law Seal.fits_own:
   for +f: Hashes.Hash
   {
     Sealing.Seal.fits(
-      Basics.Keychain{n, last, Seals.Seal.public(seed), f},
+      Replicas.Keychain{n, last, Seals.Seal.public(seed), f},
       Ledgers.Ballot.make(seed, x, last, k)
     )
       == True{}: Bool
@@ -580,14 +581,14 @@ law Seal.fits_own:
 # a majority decides, in sequence: a head moves only over a step that the
 # owners in its tip decided next, in some round
 law Node.advance_at:
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +c: Ledgers.Chain
-  for +h: Basics.Head
-  {Basics.Node.head_of(s, c) == Some{h}: Maybe<&2, Basics.Head>}
+  for +h: Replicas.Head
+  {Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == Some{h}: Maybe<&2, Replicas.Head>}
     -> {
       Voting.Heads.level(
         Some{h},
-        Basics.Node.head_of(Voting.Node.advance(s, c), c)
+        Replicas.Node.head_of(~Basics.Ask.machine(), Voting.Node.advance(s, c), c)
       )
         == False{}: Bool
     }
@@ -600,7 +601,7 @@ law Node.advance_at:
           c,
           h
         )
-          == Basics.Node.head_of(Voting.Node.advance(s, c), c): Maybe<&2, Basics.Head>
+          == Replicas.Node.head_of(~Basics.Ask.machine(), Voting.Node.advance(s, c), c): Maybe<&2, Replicas.Head>
       }
     )
 
@@ -608,49 +609,49 @@ law Node.advance_at:
 # decided steps from a head h is so in any node that keeps every cell
 law Line.at_grows:
   for +rs: List<&2, Nat>
-  for +a: Basics.Node
-  for +u: Basics.Node
+  for +a: Replicas.Node<Basics.Ask>
+  for +u: Replicas.Node<Basics.Ask>
   for +c: Ledgers.Chain
-  for +h: Basics.Head
-  for +x: Basics.Head
+  for +h: Replicas.Head
+  for +x: Replicas.Head
   {Reading.Node.grows(a, u) == True{}: Bool}
-    -> {Line.at(rs, a, c, h) == Some{x}: Maybe<&2, Basics.Head>}
-    -> {Line.at(rs, u, c, h) == Some{x}: Maybe<&2, Basics.Head>}
+    -> {Line.at(rs, a, c, h) == Some{x}: Maybe<&2, Replicas.Head>}
+    -> {Line.at(rs, u, c, h) == Some{x}: Maybe<&2, Replicas.Head>}
 
 # one history: two nodes whose ledgers do not clash (one node u keeps every
 # cell of both, and the ballots that u holds on the line follow the rules of
 # rounds), the same number of decided steps from the same head of a line, are
 # at the same head, whatever the round of each step
 law Line.at_agrees:
-  for ~u: Basics.Node
+  for ~u: Replicas.Node<Basics.Ask>
   for ~c: Ledgers.Chain
   for ~rules: Voting.Rounds.Rules(u, c)
   for +rs1: List<&2, Nat>
   for +rs2: List<&2, Nat>
-  for +a: Basics.Node
-  for +b: Basics.Node
-  for +h: Basics.Head
-  for +x: Basics.Head
-  for +y: Basics.Head
+  for +a: Replicas.Node<Basics.Ask>
+  for +b: Replicas.Node<Basics.Ask>
+  for +h: Replicas.Head
+  for +x: Replicas.Head
+  for +y: Replicas.Head
   {Reading.Node.grows(a, u) == True{}: Bool}
     -> {Reading.Node.grows(b, u) == True{}: Bool}
     -> {List.length(&2, Nat, rs1) == List.length(&2, Nat, rs2): Nat}
-    -> {Line.at(rs1, a, c, h) == Some{x}: Maybe<&2, Basics.Head>}
-    -> {Line.at(rs2, b, c, h) == Some{y}: Maybe<&2, Basics.Head>}
-    -> {x == y: Basics.Head}
+    -> {Line.at(rs1, a, c, h) == Some{x}: Maybe<&2, Replicas.Head>}
+    -> {Line.at(rs2, b, c, h) == Some{y}: Maybe<&2, Replicas.Head>}
+    -> {x == y: Replicas.Head}
 
 # a node fetches on demand: a node b that lacks the data of the hash h holds
 # it after it takes in what a node a that holds it serves
 law Node.fetch:
-  for +a: Basics.Node
-  for +b: Basics.Node
+  for +a: Replicas.Node<Basics.Ask>
+  for +b: Replicas.Node<Basics.Ask>
   for +h: Hashes.Hash
   for +ws: List<&2, U32>
-  {Ledgers.State.data(~Basics.Ask, Basics.State.ledger(a), h) == Some{ws}: Maybe<&2, List<&2, U32>>}
+  {Ledgers.State.data(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), a), h) == Some{ws}: Maybe<&2, List<&2, U32>>}
     -> {
       Ledgers.State.get(
         ~Basics.Ask,
-        Basics.State.ledger(b),
+        Replicas.State.ledger(~Basics.Ask.machine(), b),
         Ledgers.Slot.data(h)
       )
         == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>
@@ -658,7 +659,7 @@ law Node.fetch:
     -> {
       Ledgers.State.data(
         ~Basics.Ask,
-        Basics.State.ledger(Voting.Node.take(b, Voting.Node.serve(a, [h]))),
+        Replicas.State.ledger(~Basics.Ask.machine(), Voting.Node.take(b, Voting.Node.serve(a, [h]))),
         h
       )
         == Some{ws}: Maybe<&2, List<&2, U32>>
@@ -674,11 +675,11 @@ law Cast.put_keeps:
   for +th: Maybe<&2, Hashes.Hash>
   for +qs: List<&2, Ledgers.Id>
   for +from: List<&2, String>
-  for +s2: Basics.Node
-  for +t2: Basics.Tip
-  for +s: Basics.Node
-  for +s3: Basics.Node
-  {Judging.State.put(s2, [Basics.Tip.words(t2)]) == Some{s3}: Maybe<&2, Basics.Node>}
+  for +s2: Replicas.Node<Basics.Ask>
+  for +t2: Replicas.Tip
+  for +s: Replicas.Node<Basics.Ask>
+  for +s3: Replicas.Node<Basics.Ask>
+  {Judging.State.put(s2, [Replicas.Tip.words(t2)]) == Some{s3}: Maybe<&2, Replicas.Node<Basics.Ask>>}
     -> {
       Reading.Node.grows(
         s2,
@@ -694,23 +695,23 @@ law Cast.put_tip:
   for +th: Maybe<&2, Hashes.Hash>
   for +qs: List<&2, Ledgers.Id>
   for +from: List<&2, String>
-  for +s2: Basics.Node
-  for +t2: Basics.Tip
-  for +s: Basics.Node
-  for +s3: Basics.Node
-  {Judging.State.put(s2, [Basics.Tip.words(t2)]) == Some{s3}: Maybe<&2, Basics.Node>}
+  for +s2: Replicas.Node<Basics.Ask>
+  for +t2: Replicas.Tip
+  for +s: Replicas.Node<Basics.Ask>
+  for +s3: Replicas.Node<Basics.Ask>
+  {Judging.State.put(s2, [Replicas.Tip.words(t2)]) == Some{s3}: Maybe<&2, Replicas.Node<Basics.Ask>>}
     -> {
-      Basics.Tip.at(
+      Replicas.Tip.at(~Basics.Ask.machine(), 
         Sealing.Cast.put(n, w, th, qs, from, Some{Stepping.Run{s2, t2}}, s),
-        Basics.Tip.hash(t2)
+        Replicas.Tip.hash(t2)
       )
-        == Some{t2}: Maybe<&2, Basics.Tip>
+        == Some{t2}: Maybe<&2, Replicas.Tip>
     }
 
 # a node holds what it takes in: an entry that it reads of what was sent, in
 # a slot that it lacks, it then holds
 law Node.take_holds:
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +t: Ledgers.State(Basics.Ask)
   for +k: List<&2, Bool>
   for +e: Ledgers.Entry<Basics.Ask>
@@ -725,7 +726,7 @@ law Node.take_holds:
     -> {
       Ledgers.State.get(
         ~Basics.Ask,
-        Basics.State.ledger(s),
+        Replicas.State.ledger(~Basics.Ask.machine(), s),
         k
       )
         == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>
@@ -733,7 +734,7 @@ law Node.take_holds:
     -> {
       Ledgers.State.get(
         ~Basics.Ask,
-        Basics.State.ledger(Voting.Node.take(s, t)),
+        Replicas.State.ledger(~Basics.Ask.machine(), Voting.Node.take(s, t)),
         k
       )
         == Some{Cells.One{e}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>
@@ -743,7 +744,7 @@ law Node.take_holds:
 # takes in waits on its line there, so the node has a draft for its writer
 # (Node.draft_some) and the writer's read shows it (Node.read_draft)
 law Node.take_waits:
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +t: Ledgers.State(Basics.Ask)
   for +i: Ledgers.Id
   for +time: String
@@ -763,7 +764,7 @@ law Node.take_waits:
     -> {
       Ledgers.State.get(
         ~Basics.Ask,
-        Basics.State.ledger(s),
+        Replicas.State.ledger(~Basics.Ask.machine(), s),
         Ledgers.Slot.ask(i)
       )
         == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>
@@ -772,7 +773,7 @@ law Node.take_waits:
       List.contains(
         ~Ledgers.Id,
         ~Ledgers.Id.is_eq,
-        Sealing.Wait.of(Voting.Node.take(s, t), Basics.Line.chain(r, l)),
+        Sealing.Wait.of(Voting.Node.take(s, t), Replicas.Line.chain(r, l)),
         i
       )
         == True{}: Bool
@@ -783,7 +784,7 @@ law Node.take_waits:
 # it, the branch lacks it, and it wrote a resource that a resource of the
 # branch is, or uses through its imports, at any depth
 law Node.affects_used:
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +b: Reading.Branch
   {
     Shared.List.holds(
@@ -799,7 +800,7 @@ law Node.affects_used:
 # a writer reads its own pending write: at the head of a branch, its read is
 # the bytes of its draft, not what the branch holds
 law Node.read_draft:
-  for +s: Basics.Node
+  for +s: Replicas.Node<Basics.Ask>
   for +w: String
   for +r: Ledgers.Id
   for +b: String
@@ -823,12 +824,12 @@ law Node.read_draft:
 law Node.ask_once:
   for +n: String
   for +m: String
-  for +s: Basics.Node
-  for +e: Basics.Envelope
+  for +s: Replicas.Node<Basics.Ask>
+  for +e: Replicas.Envelope
   for +q: Basics.Ask
-  for +e2: Basics.Envelope
+  for +e2: Replicas.Envelope
   for +q2: Basics.Ask
-  {Basics.Envelope.of(e2) == Basics.Envelope.of(e): Ledgers.Id}
+  {Replicas.Envelope.of(e2) == Replicas.Envelope.of(e): Ledgers.Id}
     -> {
       Voting.Node.ask(
         m,
@@ -836,5 +837,5 @@ law Node.ask_once:
         e2,
         q2
       )
-        == Voting.Node.ask(n, s, e, q): Basics.Node
+        == Voting.Node.ask(n, s, e, q): Replicas.Node<Basics.Ask>
     }

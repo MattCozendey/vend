@@ -12,13 +12,14 @@ import ../shared/shared/text.bend as Texts
 import ../shared/tree.bend as Trees
 import ./basics.bend as Basics
 import ../shared/shared/store.bend as Stores
+import ../replica/impl.bend as Replicas
 
 # Writes
 # ------
 
 # trees being written: the root, and the node that holds what was written
 type Work is Data:
-  Work{state: Basics.Node, root: Maybe<&2, Hashes.Hash>}
+  Work{state: Replicas.Node<Basics.Ask>, root: Maybe<&2, Hashes.Hash>}
 
 # bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # what a judge says of one change: refuse it as stale, or take it, with the
@@ -31,16 +32,16 @@ type Verdict is Data:
 # s with the words ds as data, when it then holds each of them under its hash
 # (none: a slot holds other words). A node reads back what it puts, so what a
 # tree or a rope reads after a put never rests on what the store held before
-def State.put(s: Basics.Node, +ds: List<&2, List<&2, U32>>) -> Maybe<&2, Basics.Node>:
-  +s2 = Basics.State.keep(s, ds)
+def State.put(s: Replicas.Node<Basics.Ask>, +ds: List<&2, List<&2, U32>>) -> Maybe<&2, Replicas.Node<Basics.Ask>>:
+  +s2 = Replicas.State.keep(~Basics.Ask.machine(), s, ds)
   Shared.Maybe.when(
-    Basics.Node,
-    Stores.Store.holds(~Basics.Node, ~Basics.Store.fetch, s2, ds),
+    Replicas.Node<Basics.Ask>,
+    Stores.Store.holds(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s2, ds),
     u => Some{s2}
   )
 
 # the work at the root h on the state m
-def Work.on(m: Maybe<&2, Basics.Node>, h: Maybe<&2, Hashes.Hash>) -> Maybe<&2, Work>:
+def Work.on(m: Maybe<&2, Replicas.Node<Basics.Ask>>, h: Maybe<&2, Hashes.Hash>) -> Maybe<&2, Work>:
   match m:
     case None{}:
       None{}
@@ -48,7 +49,7 @@ def Work.on(m: Maybe<&2, Basics.Node>, h: Maybe<&2, Hashes.Hash>) -> Maybe<&2, W
       Some{Work{s2, h}}
 
 # the work that the new subtree m gives on the state s
-def Work.of(s: Basics.Node, m: Maybe<&2, Trees.Put>) -> Maybe<&2, Work>:
+def Work.of(s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Trees.Put>) -> Maybe<&2, Work>:
   match m:
     case None{}:
       None{}
@@ -59,7 +60,7 @@ def Work.of(s: Basics.Node, m: Maybe<&2, Trees.Put>) -> Maybe<&2, Work>:
 def Work.set(w: Work, k: List<&2, U32>, x: List<&2, U32>) -> Maybe<&2, Work>:
   match w:
     case Work{+s, h}:
-      Work.of(s, Basics.Node.set(s, h, k, x))
+      Work.of(s, Replicas.Node.set(~Basics.Ask.machine(), s, h, k, x))
 
 # w with the words ns as data
 def Work.keep(w: Work, ns: List<&2, List<&2, U32>>) -> Maybe<&2, Work>:
@@ -101,7 +102,7 @@ def Vector.entry(b: Trees.Binding) -> Maybe<&2, Basics.Place>:
         &2,
         Ledgers.Chain,
         Basics.Place,
-        Basics.Read.whole(Ledgers.Chain, Ledgers.Chain.code.read(k)),
+        Replicas.Read.whole(Ledgers.Chain, Ledgers.Chain.code.read(k)),
         c => Basics.Place.read(c, ws)
       )
     case _:
@@ -191,7 +192,7 @@ def Pick.module(m: Maybe<&2, Ledgers.Id>, px: Pointer, +py: Pointer) -> Pick:
       }
 
 # the merge of two submodules that point as x and y
-def Pick.pointers(s: Basics.Node, x: Maybe<&2, Pointer>, y: Maybe<&2, Pointer>) -> Pick:
+def Pick.pointers(s: Replicas.Node<Basics.Ask>, x: Maybe<&2, Pointer>, y: Maybe<&2, Pointer>) -> Pick:
   match x y:
     case Some{+px} Some{+py}:
       Pick.module(Basics.Node.forward(s, Pointer.version(px), Pointer.version(py)), px, py)
@@ -201,7 +202,7 @@ def Pick.pointers(s: Basics.Node, x: Maybe<&2, Pointer>, y: Maybe<&2, Pointer>) 
 # the merge of x and y, two changes of b, in the format f
 def Pick.format(
   f: Formats.Format,
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   b: Texts.Bytes(),
   x: Texts.Bytes(),
   y: Texts.Bytes()
@@ -216,7 +217,7 @@ def Pick.format(
 # node does not hold all of them yet)
 def Pick.read(
   f: Formats.Format,
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   mb: Maybe<&2, Texts.Bytes()>,
   mx: Maybe<&2, Texts.Bytes()>,
   my: Maybe<&2, Texts.Bytes()>
@@ -229,7 +230,7 @@ def Pick.read(
 
 # the bytes of the base b of a merge (none: the node does not hold them yet):
 # no base is no bytes
-def Pick.base(s: Basics.Node, b: Maybe<&2, Ropes.Root>) -> Maybe<&2, Texts.Bytes()>:
+def Pick.base(s: Replicas.Node<Basics.Ask>, b: Maybe<&2, Ropes.Root>) -> Maybe<&2, Texts.Bytes()>:
   match b:
     case None{}:
       Some{[]}
@@ -240,7 +241,7 @@ def Pick.base(s: Basics.Node, b: Maybe<&2, Ropes.Root>) -> Maybe<&2, Texts.Bytes
 # both sides changed it, in the format f (none: wait for its bytes)
 def Pick.both(
   f: Formats.Format,
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   b: Maybe<&2, Ropes.Root>,
   o: Maybe<&2, Ropes.Root>,
   t: Maybe<&2, Ropes.Root>
@@ -257,7 +258,7 @@ def Pick.both(
 # a change that only one side made
 def Pick.merge(
   f: Formats.Format,
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   +b: Maybe<&2, Ropes.Root>,
   +o: Maybe<&2, Ropes.Root>,
   +t: Maybe<&2, Ropes.Root>
@@ -292,7 +293,7 @@ def Res.binding(b: Trees.Binding) -> Maybe<&2, Resources.Name>:
       Shared.Bool.when(
         Maybe<&2, Resources.Name>,
         Maybe.is_some(&2, Ropes.Root, Basics.Res.read(ws)),
-        u => Basics.Read.whole(Resources.Name, Resources.Name.code.read(k)),
+        u => Replicas.Read.whole(Resources.Name, Resources.Name.code.read(k)),
         u => None{}
       )
     case _:
@@ -307,8 +308,8 @@ def Res.of.bindings(bs: List<&2, Trees.Binding>) -> List<&2, Resources.Name>:
       Names.put(Res.binding(b), Res.of.bindings(r))
 
 # the resources of the tree whose root is h
-def Res.names(s: Basics.Node, h: Maybe<&2, Hashes.Hash>) -> List<&2, Resources.Name>:
-  Res.of.bindings(Trees.Tree.list(~Basics.Node, ~Basics.Store.fetch, s, h))
+def Res.names(s: Replicas.Node<Basics.Ask>, h: Maybe<&2, Hashes.Hash>) -> List<&2, Resources.Name>:
+  Res.of.bindings(Trees.Tree.list(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s, h))
 
 # the key of the resource n
 def Name.key(n: Resources.Name) -> List<&2, Bool>:
@@ -318,20 +319,20 @@ def Name.key(n: Resources.Name) -> List<&2, Bool>:
 # once each: a walk of both trees skips what they share, and where both hold
 # the same bytes a merge keeps them (Format.merge_same)
 def Merge.names(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   h: Maybe<&2, Hashes.Hash>,
   ht: Maybe<&2, Hashes.Hash>
 ) -> List<&2, Resources.Name>:
   Tries.Trie.unique(
     ~Resources.Name,
     ~Name.key,
-    Res.of.bindings(Trees.Tree.diff(~Basics.Node, ~Basics.Store.fetch, s, h, ht)),
+    Res.of.bindings(Trees.Tree.diff(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s, h, ht)),
     Tries.Trie.new(Unit)
   )
 
 # the groups of a store tree, as a graph
 type Groups is Data:
-  Groups{state: Basics.Node, root: Maybe<&2, Hashes.Hash>}
+  Groups{state: Replicas.Node<Basics.Ask>, root: Maybe<&2, Hashes.Hash>}
 
 # the members of m in the groups g, when it is a group
 def Group.succ(g: Groups, m: Basics.Member) -> List<&2, Basics.Member>:
@@ -342,7 +343,7 @@ def Group.succ(g: Groups, m: Basics.Member) -> List<&2, Basics.Member>:
       Maybe.default(&2, List<&2, Basics.Member>, Basics.Members.in(s, h, x), [])
 
 # the names of the groups in the store tree whose root is h
-def Group.names(s: Basics.Node, h: Maybe<&2, Hashes.Hash>) -> List<&2, String>:
+def Group.names(s: Replicas.Node<Basics.Ask>, h: Maybe<&2, Hashes.Hash>) -> List<&2, String>:
   Maybe.default(
     &2,
     List<&2, String>,
@@ -350,8 +351,8 @@ def Group.names(s: Basics.Node, h: Maybe<&2, Hashes.Hash>) -> List<&2, String>:
       &2,
       List<&2, U32>,
       List<&2, String>,
-      Basics.Node.get(s, h, Basics.Key.groups()),
-      ws => Basics.Read.whole(List<&2, String>, Ledgers.Owners.code.read(ws))
+      Replicas.Node.get(~Basics.Ask.machine(), s, h, Basics.Key.groups()),
+      ws => Replicas.Read.whole(List<&2, String>, Ledgers.Owners.code.read(ws))
     ),
     []
   )
@@ -371,7 +372,7 @@ def Group.all(g: Groups) -> List<&2, Basics.Member>:
       Group.of.names(Group.names(s, h))
 
 # m is a member of the group g of the store tree h, or of a group inside g
-def Group.is_inside(s: Basics.Node, h: Maybe<&2, Hashes.Hash>, m: Basics.Member, g: String) -> Bool:
+def Group.is_inside(s: Replicas.Node<Basics.Ask>, h: Maybe<&2, Hashes.Hash>, m: Basics.Member, g: String) -> Bool:
   Reaches.Reach.in(
     ~Basics.Member,
     ~Groups,
@@ -407,7 +408,7 @@ def Group.named(g: Groups, gs: List<&2, Basics.Member>) -> List<&2, String>:
 
 # the nodes of ns that are inside the group g of the store tree h
 def Group.inside(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +h: Maybe<&2, Hashes.Hash>,
   ns: List<&2, String>,
   +g: String
@@ -425,12 +426,12 @@ def Group.inside(
 
 # the nodes inside the group g of the store tree h, each once: the nodes that
 # own what g owns
-def Group.nodes(+s: Basics.Node, +h: Maybe<&2, Hashes.Hash>, g: String) -> List<&2, String>:
+def Group.nodes(+s: Replicas.Node<Basics.Ask>, +h: Maybe<&2, Hashes.Hash>, g: String) -> List<&2, String>:
   +gs = {Groups{s, h}: Groups}
   Group.inside(s, h, Group.named(gs, Group.all(gs)), g)
 
 # the member m of a new set of the group g makes g contain itself
-def Group.loops(s: Basics.Node, h: Maybe<&2, Hashes.Hash>, +g: String, m: Basics.Member) -> Bool:
+def Group.loops(s: Replicas.Node<Basics.Ask>, h: Maybe<&2, Hashes.Hash>, +g: String, m: Basics.Member) -> Bool:
   match m:
     case Basics.Member.Node{n}:
       False{}
@@ -439,7 +440,7 @@ def Group.loops(s: Basics.Node, h: Maybe<&2, Hashes.Hash>, +g: String, m: Basics
 
 # some member of ms makes the group g of the store tree h contain itself
 def Group.loops.any(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +h: Maybe<&2, Hashes.Hash>,
   +g: String,
   ms: List<&2, Basics.Member>
@@ -459,21 +460,21 @@ def Group.loops.any(
 
 # the verdict that the outcome m of a version gives a request that names it:
 # take it when it is a version, refuse it when it is stale, else wait
-def Judge.ready.of(m: Maybe<&2, Basics.Out>) -> Maybe<&2, Bool>:
+def Judge.ready.of(m: Maybe<&2, Replicas.Out>) -> Maybe<&2, Bool>:
   match m:
-    case Some{Basics.Out.Taken{n}}:
+    case Some{Replicas.Out.Taken{n}}:
       Some{True{}}
-    case Some{Basics.Out.Stale{}}:
+    case Some{Replicas.Out.Stale{}}:
       Some{False{}}
     case None{}:
       None{}
 
 # the verdict of the version v, for a request that names it
-def Judge.ready(s: Basics.Node, v: Ledgers.Id) -> Maybe<&2, Bool>:
+def Judge.ready(s: Replicas.Node<Basics.Ask>, v: Ledgers.Id) -> Maybe<&2, Bool>:
   Judge.ready.of(Basics.Node.out(s, v))
 
 # the verdict of the version m, if any
-def Judge.ready_maybe(s: Basics.Node, m: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Bool>:
+def Judge.ready_maybe(s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Bool>:
   match m:
     case None{}:
       Some{True{}}
@@ -481,7 +482,7 @@ def Judge.ready_maybe(s: Basics.Node, m: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Boo
       Judge.ready(s, v)
 
 # the verdict on the content c: its version must be one
-def Judge.content(s: Basics.Node, c: Basics.Content) -> Maybe<&2, Bool>:
+def Judge.content(s: Replicas.Node<Basics.Ask>, c: Basics.Content) -> Maybe<&2, Bool>:
   match c:
     case Basics.Content.Root{x}:
       Some{True{}}
@@ -511,7 +512,7 @@ def Judge.when(b: Bool, k: Unit -> Maybe<&2, Verdict>) -> Maybe<&2, Verdict>:
 
 # the root that the content c gives the resource n (none: the version holds
 # none)
-def Content.root(+s: Basics.Node, n: Resources.Name, c: Basics.Content) -> Maybe<&2, Ropes.Root>:
+def Content.root(+s: Replicas.Node<Basics.Ask>, n: Resources.Name, c: Basics.Content) -> Maybe<&2, Ropes.Root>:
   match c:
     case Basics.Content.Root{x}:
       Some{x}
@@ -521,7 +522,7 @@ def Content.root(+s: Basics.Node, n: Resources.Name, c: Basics.Content) -> Maybe
 # the root that the content c gives the resource n, or that it gives none
 # (none: the node lacks a node of the version's tree)
 def Content.find(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   n: Resources.Name,
   c: Basics.Content
 ) -> Maybe<&2, Maybe<&2, Ropes.Root>>:
@@ -535,7 +536,7 @@ def Content.find(
 # the tree h: take it when n holds at h what it held at base. It waits for a
 # node that it lacks: it does not refuse on what it cannot read
 def Judge.write(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +n: Resources.Name,
   +base: Maybe<&2, Ledgers.Id>,
   +c: Basics.Content,
@@ -577,11 +578,11 @@ def Clash.code(f: Ledgers.Id) -> List<&2, U32>:
 
 # the clash that the merge of the version f opened in the resource n is open
 # in the tree h
-def Clash.open(s: Basics.Node, h: Maybe<&2, Hashes.Hash>, n: Resources.Name, f: Ledgers.Id) -> Bool:
+def Clash.open(s: Replicas.Node<Basics.Ask>, h: Maybe<&2, Hashes.Hash>, n: Resources.Name, f: Ledgers.Id) -> Bool:
   Shared.Maybe.is_eq(
     ~List<&2, U32>,
     ~Shared.List.is_eq(~U32, ~U32.is_eq),
-    Basics.Node.get(s, h, Basics.Key.clash(n)),
+    Replicas.Node.get(~Basics.Ask.machine(), s, h, Basics.Key.clash(n)),
     Some{Clash.code(f)}
   )
 
@@ -605,7 +606,7 @@ def Merge.from_on(
 # the clash of the resource n is open in the tree h, by the merge of the
 # version m, if any (none: the node lacks a node of the tree)
 def Clash.find(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   h: Maybe<&2, Hashes.Hash>,
   n: Resources.Name,
   m: Maybe<&2, Ledgers.Id>
@@ -618,7 +619,7 @@ def Clash.find(
         &2,
         Maybe<&2, List<&2, U32>>,
         Bool,
-        Basics.Node.find(s, h, Basics.Key.clash(n)),
+        Replicas.Node.find(~Basics.Ask.machine(), s, h, Basics.Key.clash(n)),
         x => Some{
           Shared.Maybe.is_eq(
             ~List<&2, U32>,
@@ -632,7 +633,7 @@ def Clash.find(
 # the trees of a resolve of the resource n with the root m, in the tree h:
 # the resource holds m, and its clash is shut (its key holds no request)
 def Resolve.work(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   h: Maybe<&2, Hashes.Hash>,
   +n: Resources.Name,
   m: Maybe<&2, Ropes.Root>
@@ -648,7 +649,7 @@ def Resolve.work(
 # the verdict on a resolve of the resource n, which the merge k left in clash
 # on the branch b of the store r, with the content c, at the tree h
 def Judge.resolve(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   r: Ledgers.Id,
   b: String,
   +k: Ledgers.Id,
@@ -664,7 +665,7 @@ def Judge.resolve(
         &2,
         Bool,
         Verdict,
-        Clash.find(s, h, n, Merge.from_on(Basics.Node.asked(s, k), r, b)),
+        Clash.find(s, h, n, Merge.from_on(Replicas.Node.asked(~Basics.Ask.machine(), s, k), r, b)),
         open => Maybe.bind(
           &2,
           Maybe<&2, Ropes.Root>,
@@ -710,7 +711,7 @@ def Merge.put(
 # w with the resource n merged: what the merge of the base b, ours o and theirs
 # t (of the version f) keeps (none: wait for a node)
 def Merge.one(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   f: Ledgers.Id,
   +n: Resources.Name,
   b: Maybe<&2, Ropes.Root>,
@@ -729,7 +730,7 @@ def Merge.one(
 # m with each resource of ns merged, over the base hb, ours ho and theirs ht
 # (of the version f)
 def Merge.all(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +f: Ledgers.Id,
   ns: List<&2, Resources.Name>,
   +hb: Maybe<&2, Hashes.Hash>,
@@ -776,25 +777,25 @@ def Merge.all(
       )
 
 # the request of the version v, as a version
-def Version.some(v: Basics.Version) -> Maybe<&2, Ledgers.Id>:
-  Some{Basics.Version.id(v)}
+def Version.some(v: Replicas.Version) -> Maybe<&2, Ledgers.Id>:
+  Some{Replicas.Version.id(v)}
 
 # the version of the number n of the line at the tip t
-def Version.in(s: Basics.Node, n: U32, t: Basics.Tip) -> Maybe<&2, Ledgers.Id>:
-  Maybe.bind(&2, Basics.Version, Ledgers.Id, Basics.Line.version(s, t, n), v => Version.some(v))
+def Version.in(s: Replicas.Node<Basics.Ask>, n: U32, t: Replicas.Tip) -> Maybe<&2, Ledgers.Id>:
+  Maybe.bind(&2, Replicas.Version, Ledgers.Id, Replicas.Line.version(~Basics.Ask.machine(), s, t, n), v => Version.some(v))
 
 # the version at the place p
-def Version.at(+s: Basics.Node, p: Basics.Place) -> Maybe<&2, Ledgers.Id>:
+def Version.at(+s: Replicas.Node<Basics.Ask>, p: Basics.Place) -> Maybe<&2, Ledgers.Id>:
   match p:
     case Basics.Place{c, n}:
-      Maybe.bind(&2, Basics.Tip, Ledgers.Id, Basics.Node.tip(s, c), t => Version.in(s, n, t))
+      Maybe.bind(&2, Replicas.Tip, Ledgers.Id, Replicas.Node.tip(~Basics.Ask.machine(), s, c), t => Version.in(s, n, t))
 
 # the newer of two versions that both sides of a merge came from: a, a
 # version of our line that theirs came from, and the version at the place p of
 # their line cf that ours came from. a is the newer one when it came from the
 # other
 def Base.pick(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   cf: Ledgers.Chain,
   ma: Maybe<&2, Ledgers.Id>,
   mp: Maybe<&2, Basics.Place>
@@ -819,7 +820,7 @@ def Base.pick(
 # vectors of both sides (the version of c that from came from, or the version
 # of from's line that h came from)
 def Merge.base(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +from: Ledgers.Id,
   h: Maybe<&2, Hashes.Hash>
@@ -851,7 +852,7 @@ def Merge.base(
 # m with the version v, of a line other than c, in its version vector: its
 # vector, and its own place
 def Vector.joined(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +v: Ledgers.Id,
   m: Maybe<&2, Work>
@@ -861,7 +862,7 @@ def Vector.joined(
     Work,
     Work,
     Vector.adds(
-      Trees.Tree.list(~Basics.Node, ~Basics.Store.fetch, s, Basics.Node.root_of(s, Some{v})),
+      Trees.Tree.list(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s, Basics.Node.root_of(s, Some{v})),
       c,
       m
     ),
@@ -870,7 +871,7 @@ def Vector.joined(
 
 # the trees of a merge of from into the line c, whose tree is h
 def Merge.work(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +from: Ledgers.Id,
   +h: Maybe<&2, Hashes.Hash>
@@ -894,7 +895,7 @@ def Merge.work(
 # the trees of a move of the line c, whose tree is h, to the version to: to's
 # tree, with what the line came from added to its version vector
 def Move.work(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +to: Ledgers.Id,
   h: Maybe<&2, Hashes.Hash>
@@ -904,7 +905,7 @@ def Move.work(
     c,
     to,
     Vector.adds(
-      Trees.Tree.list(~Basics.Node, ~Basics.Store.fetch, s, h),
+      Trees.Tree.list(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s, h),
       c,
       Some{Work{s, Basics.Node.root_of(s, Some{to})}}
     )
@@ -912,7 +913,7 @@ def Move.work(
 
 # the first tree of a branch made at the version m, if any, of the line c: its
 # tree, with what it came from in its version vector
-def Make.branch(+s: Basics.Node, c: Ledgers.Chain, m: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Work>:
+def Make.branch(+s: Replicas.Node<Basics.Ask>, c: Ledgers.Chain, m: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Work>:
   match m:
     case None{}:
       Some{Work{s, None{}}}
@@ -922,7 +923,7 @@ def Make.branch(+s: Basics.Node, c: Ledgers.Chain, m: Maybe<&2, Ledgers.Id>) -> 
 # the store tree h with the group g, of the members ms, and its name among the
 # names of its groups
 def Group.work(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +h: Maybe<&2, Hashes.Hash>,
   +g: String,
   ms: List<&2, Basics.Member>
@@ -947,10 +948,10 @@ def Own.fits(+os: List<&2, String>, ns: List<&2, String>) -> Bool:
 
 # the first tip of a new branch, and the node that holds it
 type Made is Data:
-  Made{tip: Basics.Tip, node: Basics.Node}
+  Made{tip: Replicas.Tip, node: Replicas.Node<Basics.Ask>}
 
 # the first tip t of a branch, once the trees of m hold it
-def Made.put(t: Basics.Tip, m: Maybe<&2, Work>) -> Maybe<&2, Made>:
+def Made.put(t: Replicas.Tip, m: Maybe<&2, Work>) -> Maybe<&2, Made>:
   match m:
     case None{}:
       None{}
@@ -964,14 +965,14 @@ def Make.first(start: Maybe<&2, Work>, os: List<&2, String>) -> Maybe<&2, Made>:
     case None{}:
       None{}
     case Some{+w}:
-      +t = {Basics.Tip{Work.root(w), None{}, 0, os}: Basics.Tip}
-      Made.put(t, Work.keep(w, [Basics.Tip.words(t)]))
+      +t = {Replicas.Tip{Work.root(w), None{}, 0, os}: Replicas.Tip}
+      Made.put(t, Work.keep(w, [Replicas.Tip.words(t)]))
 
 # the store tree in which an Own of the line l, at the content h, reads its
 # group: a store reads its own content; a branch, the content of the version
 # at of its store
 def Own.tree(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   l: Maybe<&2, String>,
   at: Maybe<&2, Ledgers.Id>,
   h: Maybe<&2, Hashes.Hash>
@@ -993,7 +994,7 @@ def Own.at(r: Ledgers.Id, m: Maybe<&2, Basics.Place>) -> Maybe<&2, Bool>:
 # an Own of the line l of the store r may name the version at: a store reads
 # its own content; a branch names a version of its store (none: wait for it)
 def Own.ok(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   r: Ledgers.Id,
   l: Maybe<&2, String>,
   at: Maybe<&2, Ledgers.Id>
@@ -1007,28 +1008,28 @@ def Own.ok(
       Own.at(r, Basics.Node.place(s, v))
 
 # the node holds the members of each group of ns of the store tree h
-def Groups.held.all(+s: Basics.Node, +h: Maybe<&2, Hashes.Hash>, ns: List<&2, String>) -> Bool:
+def Groups.held.all(+s: Replicas.Node<Basics.Ask>, +h: Maybe<&2, Hashes.Hash>, ns: List<&2, String>) -> Bool:
   match ns:
     case Nil{}:
       True{}
     case Con{n, r}:
       List.all.if(
         u => Groups.held.all(s, h, r),
-        Maybe.is_some(&2, Maybe<&2, List<&2, U32>>, Basics.Node.find(s, h, Basics.Key.group(n)))
+        Maybe.is_some(&2, Maybe<&2, List<&2, U32>>, Replicas.Node.find(~Basics.Ask.machine(), s, h, Basics.Key.group(n)))
       )
 
 # the node holds the groups of the store tree h: their names, and the members
 # of each. Only then does it know which nodes are inside a group
-def Groups.held(+s: Basics.Node, +h: Maybe<&2, Hashes.Hash>) -> Bool:
+def Groups.held(+s: Replicas.Node<Basics.Ask>, +h: Maybe<&2, Hashes.Hash>) -> Bool:
   List.all.if(
     u => Groups.held.all(s, h, Group.names(s, h)),
-    Maybe.is_some(&2, Maybe<&2, List<&2, U32>>, Basics.Node.find(s, h, Basics.Key.groups()))
+    Maybe.is_some(&2, Maybe<&2, List<&2, U32>>, Replicas.Node.find(~Basics.Ask.machine(), s, h, Basics.Key.groups()))
   )
 
 # Own.takes once whether the Own may name its version is known (k), in the
 # store tree h (none: wait for the groups)
 def Own.takes.at(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +h: Maybe<&2, Hashes.Hash>,
   g: String,
   os: List<&2, String>,
@@ -1044,7 +1045,7 @@ def Own.takes.at(
 # with the owners os, at the tree h: os are the nodes inside g in the store
 # tree that it names (Own.tree; none: wait for its step, or for the groups)
 def Own.takes(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   r: Ledgers.Id,
   +l: Maybe<&2, String>,
   g: String,
@@ -1063,7 +1064,7 @@ def Own.takes(
 # the verdict on an Own of the line l of the store r: when its owners take it
 # (Own.takes), its owner group is g
 def Own.change(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   r: Ledgers.Id,
   l: Maybe<&2, String>,
   +g: String,
@@ -1077,10 +1078,10 @@ def Own.change(
   )
 
 # the node s holds each node of the trees whose roots are a and b
-def Whole.both(+s: Basics.Node, a: Maybe<&2, Hashes.Hash>, b: Maybe<&2, Hashes.Hash>) -> Bool:
+def Whole.both(+s: Replicas.Node<Basics.Ask>, a: Maybe<&2, Hashes.Hash>, b: Maybe<&2, Hashes.Hash>) -> Bool:
   List.all.if(
-    u => Trees.Tree.whole(~Basics.Node, ~Basics.Store.fetch, s, b),
-    Trees.Tree.whole(~Basics.Node, ~Basics.Store.fetch, s, a)
+    u => Trees.Tree.whole(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s, b),
+    Trees.Tree.whole(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s, a)
   )
 
 # k when the node holds the whole of the trees that a walk reads (b), else
@@ -1096,7 +1097,7 @@ def Judge.whole(b: Bool, k: Unit -> Maybe<&2, Verdict>) -> Maybe<&2, Verdict>:
 # the verdict on the change c of the line l of the store r, at the content h,
 # when the owners of the line are os
 def Judge.change(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   r: Ledgers.Id,
   l: Maybe<&2, String>,
   c: Basics.Change,
@@ -1119,7 +1120,7 @@ def Judge.change(
         Judge.ready(s, from),
         u => Judge.whole(
           Whole.both(s, h, Basics.Node.root_of(s, Some{from})),
-          v => Work.take(Merge.work(s, Basics.Line.chain(r, Some{b}), from, h))
+          v => Work.take(Merge.work(s, Replicas.Line.chain(r, Some{b}), from, h))
         )
       )
     case Some{+b} Basics.Change.Move{+to}:
@@ -1127,7 +1128,7 @@ def Judge.change(
         Judge.ready(s, to),
         u => Judge.whole(
           Whole.both(s, h, Basics.Node.root_of(s, Some{to})),
-          v => Work.take(Move.work(s, Basics.Line.chain(r, Some{b}), to, h))
+          v => Work.take(Move.work(s, Replicas.Line.chain(r, Some{b}), to, h))
         )
       )
     case w c3:

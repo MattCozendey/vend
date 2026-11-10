@@ -20,6 +20,7 @@ import ../voting.bend as Voting
 import ./logs.bend as ProofLogs
 import ./trees.bend as ProofTrees
 import ../../shared/shared/store.bend as Stores
+import ../../replica/impl.bend as Replicas
 
 # Moves
 # -----
@@ -38,14 +39,14 @@ def Vector.apart(
 # Vector.add keeps a resource, once it is known whether the vector covers the
 # place (b)
 def Vector.add.reads.if(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   h: Maybe<&2, Hashes.Hash>,
   +c: Ledgers.Chain,
   p: Basics.Place,
   +n: Resources.Name,
   v: List<&2, U32>,
   b: Bool,
-  hget: {Basics.Node.get(s, h, Basics.Key.res(n)) == Some{v}: Maybe<&2, List<&2, U32>>}
+  hget: {Replicas.Node.get(~Basics.Ask.machine(), s, h, Basics.Key.res(n)) == Some{v}: Maybe<&2, List<&2, U32>>}
 ) -> Spec.Work.Reads(
   Basics.Key.res(n),
   v,
@@ -204,7 +205,7 @@ def Vector.adds.reads(
 
 # the version vector of a version, joined in, keeps a resource
 def Vector.joined.reads(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +x: Ledgers.Id,
   +m: Maybe<&2, Judging.Work>,
@@ -219,14 +220,14 @@ def Vector.joined.reads(
     Basics.Key.res(n),
     v,
     Judging.Vector.adds(
-      Trees.Tree.list(~Basics.Node, ~Basics.Store.fetch, s, Basics.Node.root_of(s, Some{x})),
+      Trees.Tree.list(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s, Basics.Node.root_of(s, Some{x})),
       c,
       m
     ),
     w => Judging.Vector.add.if(w, c, Basics.Node.place(s, x))
   )(
     Vector.adds.reads(
-      Trees.Tree.list(~Basics.Node, ~Basics.Store.fetch, s, Basics.Node.root_of(s, Some{x})),
+      Trees.Tree.list(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s, Basics.Node.root_of(s, Some{x})),
       c,
       m,
       n,
@@ -240,7 +241,7 @@ def Spec.Move.reads(s, c, to, h, n, v):
     c,
     to,
     Judging.Vector.adds(
-      Trees.Tree.list(~Basics.Node, ~Basics.Store.fetch, s, h),
+      Trees.Tree.list(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s, h),
       c,
       Some{Judging.Work{s, Basics.Node.root_of(s, Some{to})}}
     ),
@@ -248,7 +249,7 @@ def Spec.Move.reads(s, c, to, h, n, v):
     v
   )(
     Vector.adds.reads(
-      Trees.Tree.list(~Basics.Node, ~Basics.Store.fetch, s, h),
+      Trees.Tree.list(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s, h),
       c,
       Some{Judging.Work{s, Basics.Node.root_of(s, Some{to})}},
       n,
@@ -467,23 +468,23 @@ def Set.kept.work(
 
 # Keep.reads once it is known whether the node holds the new data (b)
 def Keep.reads.if(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   h: Maybe<&2, Hashes.Hash>,
   +ns: List<&2, List<&2, U32>>,
   k: List<&2, U32>,
   v: List<&2, U32>,
   +b: Bool,
-  hget: {Basics.Node.get(s, h, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+  hget: {Replicas.Node.get(~Basics.Ask.machine(), s, h, k) == Some{v}: Maybe<&2, List<&2, U32>>}
 ) -> Spec.Work.Reads(
   k,
   v,
-  Judging.Work.on(Shared.Maybe.when(Basics.Node, b, u => Some{Basics.State.keep(s, ns)}), h)
+  Judging.Work.on(Shared.Maybe.when(Replicas.Node<Basics.Ask>, b, u => Some{Replicas.State.keep(~Basics.Ask.machine(), s, ns)}), h)
 ):
   match b:
     case False{}:
       Unit{}
     case True{}:
-      ProofLogs.Get.grows(s, Basics.State.keep(s, ns), h, k, v, ProofTrees.Grows.keep(s, ns))(hget)
+      ProofLogs.Get.grows(s, Replicas.State.keep(~Basics.Ask.machine(), s, ns), h, k, v, ProofTrees.Grows.keep(s, ns))(hget)
 
 # new data keeps what a work reads
 def Keep.reads(
@@ -494,11 +495,11 @@ def Keep.reads(
 ) -> Spec.Work.Reads(k, v, Some{w}) -> Spec.Work.Reads(k, v, Judging.Work.keep(w, ns)):
   match w:
     case Judging.Work{s, h}:
-      hget => Keep.reads.if(s, h, ns, k, v, Stores.Store.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s, ns), ns), hget)
+      hget => Keep.reads.if(s, h, ns, k, v, Stores.Store.holds(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), Replicas.State.keep(~Basics.Ask.machine(), s, ns), ns), hget)
 
 # Set.read once it is known whether the node holds the new nodes (b)
 def Set.read.if(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +h: Maybe<&2, Hashes.Hash>,
   +k: List<&2, U32>,
   +x: List<&2, U32>,
@@ -506,13 +507,13 @@ def Set.read.if(
   +ws: List<&2, List<&2, U32>>,
   +b: Bool,
   eb: {
-    Stores.Store.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s, ws), ws) == b: Bool
+    Stores.Store.holds(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), Replicas.State.keep(~Basics.Ask.machine(), s, ws), ws) == b: Bool
   },
-  em: {Basics.Node.set(s, h, k, x) == Some{Trees.Put{hh, ws}}: Maybe<&2, Trees.Put>}
+  em: {Replicas.Node.set(~Basics.Ask.machine(), s, h, k, x) == Some{Trees.Put{hh, ws}}: Maybe<&2, Trees.Put>}
 ) -> Spec.Work.Reads(
   k,
   x,
-  Judging.Work.on(Shared.Maybe.when(Basics.Node, b, u => Some{Basics.State.keep(s, ws)}), Some{hh})
+  Judging.Work.on(Shared.Maybe.when(Replicas.Node<Basics.Ask>, b, u => Some{Replicas.State.keep(~Basics.Ask.machine(), s, ws)}), Some{hh})
 ):
   match b:
     case False{}:
@@ -520,15 +521,15 @@ def Set.read.if(
     case True{}:
       Equal.trans(
         Maybe<&2, List<&2, U32>>,
-        Basics.Node.get(Basics.State.keep(s, ws), Some{hh}, k),
-        Trees.Tree.get.plain(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s, ws), Some{hh}, k),
+        Replicas.Node.get(~Basics.Ask.machine(), Replicas.State.keep(~Basics.Ask.machine(), s, ws), Some{hh}, k),
+        Trees.Tree.get.plain(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), Replicas.State.keep(~Basics.Ask.machine(), s, ws), Some{hh}, k),
         Some{x},
-        Trees.Tree.get_plain(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s, ws), Some{hh}, k),
+        Trees.Tree.get_plain(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), Replicas.State.keep(~Basics.Ask.machine(), s, ws), Some{hh}, k),
         Trees.Tree.get_set(
-          ~Basics.Node,
-          ~Basics.Store.fetch,
+          ~Replicas.Node<Basics.Ask>,
+          ~Replicas.Store.fetch(~Basics.Ask.machine()),
           s,
-          Basics.State.keep(s, ws),
+          Replicas.State.keep(~Basics.Ask.machine(), s, ws),
           h,
           k,
           x,
@@ -536,14 +537,14 @@ def Set.read.if(
         )(
           Equal.trans(
             Maybe<&2, Trees.Put>,
-            Trees.Tree.set.plain(~Basics.Node, ~Basics.Store.fetch, s, h, k, x),
-            Basics.Node.set(s, h, k, x),
+            Trees.Tree.set.plain(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s, h, k, x),
+            Replicas.Node.set(~Basics.Ask.machine(), s, h, k, x),
             Some{Trees.Put{hh, ws}},
             Equal.sym(
               Maybe<&2, Trees.Put>,
-              Basics.Node.set(s, h, k, x),
-              Trees.Tree.set.plain(~Basics.Node, ~Basics.Store.fetch, s, h, k, x),
-              Trees.Tree.set_plain(~Basics.Node, ~Basics.Store.fetch, s, h, k, x)
+              Replicas.Node.set(~Basics.Ask.machine(), s, h, k, x),
+              Trees.Tree.set.plain(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s, h, k, x),
+              Trees.Tree.set_plain(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s, h, k, x)
             ),
             em
           )
@@ -552,12 +553,12 @@ def Set.read.if(
 
 # Set.read once the new subtree m is known
 def Set.read.of(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   h: Maybe<&2, Hashes.Hash>,
   k: List<&2, U32>,
   x: List<&2, U32>,
   +m: Maybe<&2, Trees.Put>,
-  em: {Basics.Node.set(s, h, k, x) == m: Maybe<&2, Trees.Put>}
+  em: {Replicas.Node.set(~Basics.Ask.machine(), s, h, k, x) == m: Maybe<&2, Trees.Put>}
 ) -> Spec.Work.Reads(k, x, Judging.Work.of(s, m)):
   match m:
     case None{}:
@@ -570,7 +571,7 @@ def Set.read.of(
         x,
         hh,
         ws,
-        Stores.Store.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s, ws), ws),
+        Stores.Store.holds(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), Replicas.State.keep(~Basics.Ask.machine(), s, ws), ws),
         {==},
         em
       )
@@ -583,12 +584,12 @@ def Set.read(
 ) -> Spec.Work.Reads(k, x, Judging.Work.set(w, k, x)):
   match w:
     case Judging.Work{s, h}:
-      Set.read.of(s, h, k, x, Basics.Node.set(s, h, k, x), {==})
+      Set.read.of(s, h, k, x, Replicas.Node.set(~Basics.Ask.machine(), s, h, k, x), {==})
 
 # the merge of one resource m, of the trees hb (base), ho (ours) and ht
 # (theirs), on the work w: one step of Spec.Merge.all
 def Merge.step(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   f: Ledgers.Id,
   hb: Maybe<&2, Hashes.Hash>,
   ho: Maybe<&2, Hashes.Hash>,
@@ -677,7 +678,7 @@ def Merge.put.other(
 
 # the merge of another resource keeps what a work reads for n
 def Merge.step.other(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   f: Ledgers.Id,
   hb: Maybe<&2, Hashes.Hash>,
   ho: Maybe<&2, Hashes.Hash>,
@@ -744,7 +745,7 @@ def Merge.step.other(
 
 # the merge of the resource n gives what its pick takes
 def Merge.step.same(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   f: Ledgers.Id,
   hb: Maybe<&2, Hashes.Hash>,
   ho: Maybe<&2, Hashes.Hash>,
@@ -849,7 +850,7 @@ def Merge.step.same(
 
 # Merge.step.same on the work m, if any
 def Merge.step.takes(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   f: Ledgers.Id,
   hb: Maybe<&2, Hashes.Hash>,
   ho: Maybe<&2, Hashes.Hash>,
@@ -887,7 +888,7 @@ def Merge.step.takes(
 # one step of a merge keeps what the work reads for n, once it is known
 # whether the step is of n (same)
 def Merge.step.keeps(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   f: Ledgers.Id,
   hb: Maybe<&2, Hashes.Hash>,
   ho: Maybe<&2, Hashes.Hash>,
@@ -962,7 +963,7 @@ def Merge.step.keeps(
 
 # the merge of more resources keeps what the work reads for n
 def Merge.all.keeps(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +f: Ledgers.Id,
   +ns: List<&2, Resources.Name>,
   +hb: Maybe<&2, Hashes.Hash>,
@@ -1042,7 +1043,7 @@ def Merge.all.keeps(
 
 # Merge.all.takes at the first resource m1, once it is known whether it is n
 def Merge.all.takes.at(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +f: Ledgers.Id,
   +m1: Resources.Name,
   r: List<&2, Resources.Name>,
@@ -1132,7 +1133,7 @@ def Merge.all.takes.at(
 # a merge of the resources ns, with n among them, gives what the pick of n
 # takes
 def Merge.all.takes(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +f: Ledgers.Id,
   +ns: List<&2, Resources.Name>,
   +hb: Maybe<&2, Hashes.Hash>,
@@ -1293,7 +1294,7 @@ def Spec.Clash.shut(s, h, n, f):
       e =>
         %Equal.sym(
           Maybe<&2, List<&2, U32>>,
-          Basics.Node.get(s, h, Basics.Key.clash(n)),
+          Replicas.Node.get(~Basics.Ask.machine(), s, h, Basics.Key.clash(n)),
           Some{[]},
           e
         ): {
@@ -1328,8 +1329,8 @@ def Add.reads.at(
         k,
         x,
         t,
-        Judging.Work.set(Judging.Work{s, Basics.Tip.log(t)}, k, x)
-      )(Set.read(Judging.Work{s, Basics.Tip.log(t)}, k, x))
+        Judging.Work.set(Judging.Work{s, Replicas.Tip.log(t)}, k, x)
+      )(Set.read(Judging.Work{s, Replicas.Tip.log(t)}, k, x))
     case y Some{old}:
       Unit{}
 
@@ -1343,7 +1344,7 @@ def Add.reads(
     r,
     k,
     x,
-    Basics.Node.get(Stepping.Run.state(r), Basics.Tip.log(Stepping.Run.tip(r)), k)
+    Replicas.Node.get(~Basics.Ask.machine(), Stepping.Run.state(r), Replicas.Tip.log(Stepping.Run.tip(r)), k)
   )
 
 # a log that reads the outcome key of i as v holds an outcome of i
@@ -1351,7 +1352,7 @@ def Outs.of(
   i: Ledgers.Id,
   v: List<&2, U32>,
   +m: Maybe<&2, Stepping.Run>
-) -> ProofLogs.Run.Keeps(Basics.Log.out(i), v, m) -> Spec.Run.Outs(m, i):
+) -> ProofLogs.Run.Keeps(Replicas.Log.out(i), v, m) -> Spec.Run.Outs(m, i):
   match m:
     case None{}:
       h => Unit{}
@@ -1359,7 +1360,7 @@ def Outs.of(
       h =>
         %Equal.sym(
           Maybe<&2, List<&2, U32>>,
-          Basics.Node.get(s, Basics.Tip.log(t), Basics.Log.out(i)),
+          Replicas.Node.get(~Basics.Ask.machine(), s, Replicas.Tip.log(t), Replicas.Log.out(i)),
           Some{v},
           h
         ): {Maybe.is_some(&2, List<&2, U32>, _) == True{}: Bool}
@@ -1397,9 +1398,9 @@ def Outs.when(
 def Stale.outs(+r: Stepping.Run, +i: Ledgers.Id) -> Spec.Run.Outs(Stepping.Step.stale(r, i), i):
   Outs.of(
     i,
-    Basics.Out.words(Basics.Out.Stale{}),
-    Stepping.Run.add(r, Basics.Log.out(i), Basics.Out.words(Basics.Out.Stale{}))
-  )(Add.reads(r, Basics.Log.out(i), Basics.Out.words(Basics.Out.Stale{})))
+    Replicas.Out.words(Replicas.Out.Stale{}),
+    Stepping.Run.add(r, Replicas.Log.out(i), Replicas.Out.words(Replicas.Out.Stale{}))
+  )(Add.reads(r, Replicas.Log.out(i), Replicas.Out.words(Replicas.Out.Stale{})))
 
 # a request that is taken has an outcome
 def Taken.outs(
@@ -1407,53 +1408,53 @@ def Taken.outs(
   +i: Ledgers.Id,
   +own: Maybe<&2, List<&2, String>>
 ) -> Spec.Run.Outs(Stepping.Step.taken(r, i, own), i):
-  +n = Basics.Tip.count(Stepping.Run.tip(r))
+  +n = Replicas.Tip.count(Stepping.Run.tip(r))
   Outs.of(
     i,
-    Basics.Out.words(Basics.Out.Taken{n}),
+    Replicas.Out.words(Replicas.Out.Taken{n}),
     Stepping.Step.taken(r, i, own)
   )(
     ProofLogs.Keeps.bind(
-      Basics.Log.out(i),
-      Basics.Out.words(Basics.Out.Taken{n}),
-      Stepping.Run.add(r, Basics.Log.out(i), Basics.Out.words(Basics.Out.Taken{n})),
+      Replicas.Log.out(i),
+      Replicas.Out.words(Replicas.Out.Taken{n}),
+      Stepping.Run.add(r, Replicas.Log.out(i), Replicas.Out.words(Replicas.Out.Taken{n})),
       +r1 => Maybe.bind(
         &2,
         Stepping.Run,
         Stepping.Run,
         Stepping.Run.add(
           r1,
-          Basics.Log.version(n),
-          Basics.Version.words(Basics.Version{i, Basics.Tip.content(Stepping.Run.tip(r1))})
+          Replicas.Log.version(n),
+          Replicas.Version.words(Replicas.Version{i, Replicas.Tip.content(Stepping.Run.tip(r1))})
         ),
         r2 => Some{Stepping.Run.next(r2, own)}
       )
     )(
-      Add.reads(r, Basics.Log.out(i), Basics.Out.words(Basics.Out.Taken{n}))
+      Add.reads(r, Replicas.Log.out(i), Replicas.Out.words(Replicas.Out.Taken{n}))
     )(
       +r1 => h1 => ProofLogs.Keeps.bind(
-        Basics.Log.out(i),
-        Basics.Out.words(Basics.Out.Taken{n}),
+        Replicas.Log.out(i),
+        Replicas.Out.words(Replicas.Out.Taken{n}),
         Stepping.Run.add(
           r1,
-          Basics.Log.version(n),
-          Basics.Version.words(Basics.Version{i, Basics.Tip.content(Stepping.Run.tip(r1))})
+          Replicas.Log.version(n),
+          Replicas.Version.words(Replicas.Version{i, Replicas.Tip.content(Stepping.Run.tip(r1))})
         ),
         r2 => Some{Stepping.Run.next(r2, own)}
       )(
         ProofLogs.Add.kept(
           r1,
-          Basics.Log.version(n),
-          Basics.Version.words(Basics.Version{i, Basics.Tip.content(Stepping.Run.tip(r1))}),
-          Basics.Log.out(i),
-          Basics.Out.words(Basics.Out.Taken{n})
+          Replicas.Log.version(n),
+          Replicas.Version.words(Replicas.Version{i, Replicas.Tip.content(Stepping.Run.tip(r1))}),
+          Replicas.Log.out(i),
+          Replicas.Out.words(Replicas.Out.Taken{n})
         )(h1)
       )(
         r2 => h2 => ProofLogs.Next.kept(
           r2,
           own,
-          Basics.Log.out(i),
-          Basics.Out.words(Basics.Out.Taken{n})
+          Replicas.Log.out(i),
+          Replicas.Out.words(Replicas.Out.Taken{n})
         )(h2)
       )
     )
@@ -1479,14 +1480,14 @@ def Marked.outs(
   r: Stepping.Run,
   i: Ledgers.Id,
   m: String,
-  +v: Maybe<&2, Basics.Version>
+  +v: Maybe<&2, Replicas.Version>
 ) -> Spec.Run.Outs(Stepping.Step.marked(r, i, m, v), i):
   match v:
     case None{}:
       Unit{}
     case Some{x}:
       Outs.all(
-        Stepping.Run.add(r, Basics.Log.mark(m), Ledgers.Id.code(Basics.Version.id(x), [])),
+        Stepping.Run.add(r, Replicas.Log.mark(m), Ledgers.Id.code(Replicas.Version.id(x), [])),
         r2 => Stepping.Step.taken(r2, i, None{}),
         i,
         r2 => Taken.outs(r2, i, None{})
@@ -1500,16 +1501,16 @@ def Mark.outs(
 ) -> Spec.Run.Outs(Stepping.Step.mark(r, i, m), i):
   +s = Stepping.Run.state(r)
   +t = Stepping.Run.tip(r)
-  +n = Basics.Tip.count(t)
+  +n = Replicas.Tip.count(t)
   Outs.when(
     List.all.if(
-      u => Maybe.is_none(&2, Ledgers.Id, Basics.Line.mark(s, t, m)),
+      u => Maybe.is_none(&2, Ledgers.Id, Replicas.Line.mark(~Basics.Ask.machine(), s, t, m)),
       Bool.not(U32.is_eq(n, 0))
     ),
-    Stepping.Step.marked(r, i, m, Basics.Line.version(s, t, U32.sub(n, 1))),
+    Stepping.Step.marked(r, i, m, Replicas.Line.version(~Basics.Ask.machine(), s, t, U32.sub(n, 1))),
     Stepping.Step.stale(r, i),
     i,
-    Marked.outs(r, i, m, Basics.Line.version(s, t, U32.sub(n, 1))),
+    Marked.outs(r, i, m, Replicas.Line.version(~Basics.Ask.machine(), s, t, U32.sub(n, 1))),
     Stale.outs(r, i)
   )
 
@@ -1526,9 +1527,9 @@ def Branch.made.outs(
     case Some{Judging.Made{t, s2}}:
       Outs.all(
         Stepping.Run.add(
-          Stepping.Run.over(r, s2, Basics.Tip.content(Stepping.Run.tip(r))),
-          Basics.Log.start(b),
-          Hashes.Hash.code(Basics.Tip.hash(t), [])
+          Stepping.Run.over(r, s2, Replicas.Tip.content(Stepping.Run.tip(r))),
+          Replicas.Log.start(b),
+          Hashes.Hash.code(Replicas.Tip.hash(t), [])
         ),
         r2 => Stepping.Step.taken(r2, i, None{}),
         i,
@@ -1553,8 +1554,8 @@ def Branch.ready.outs(
     case Some{True{}}:
       Outs.when(
         Trees.Tree.whole(
-          ~Basics.Node,
-          ~Basics.Store.fetch,
+          ~Replicas.Node<Basics.Ask>,
+          ~Replicas.Store.fetch(~Basics.Ask.machine()),
           Stepping.Run.state(r),
           Basics.Node.root_of(Stepping.Run.state(r), at)
         ),
@@ -1563,8 +1564,8 @@ def Branch.ready.outs(
           i,
           b,
           Judging.Make.first(
-            Judging.Make.branch(Stepping.Run.state(r), Basics.Line.chain(st, Some{b}), at),
-            Basics.Tip.owners(Stepping.Run.tip(r))
+            Judging.Make.branch(Stepping.Run.state(r), Replicas.Line.chain(st, Some{b}), at),
+            Replicas.Tip.owners(Stepping.Run.tip(r))
           )
         ),
         None{},
@@ -1574,8 +1575,8 @@ def Branch.ready.outs(
           i,
           b,
           Judging.Make.first(
-            Judging.Make.branch(Stepping.Run.state(r), Basics.Line.chain(st, Some{b}), at),
-            Basics.Tip.owners(Stepping.Run.tip(r))
+            Judging.Make.branch(Stepping.Run.state(r), Replicas.Line.chain(st, Some{b}), at),
+            Replicas.Tip.owners(Stepping.Run.tip(r))
           )
         ),
         Unit{}
@@ -1617,10 +1618,10 @@ def On.of.outs(
         st,
         a,
         b,
-        Basics.Node.find(
+        Replicas.Node.find(~Basics.Ask.machine(), 
           Stepping.Run.state(r),
-          Basics.Tip.log(Stepping.Run.tip(r)),
-          Basics.Log.start(a)
+          Replicas.Tip.log(Stepping.Run.tip(r)),
+          Replicas.Log.start(a)
         )
       )
     case Stepping.Route.Judge{}:
@@ -1633,8 +1634,8 @@ def On.of.outs(
           st,
           l,
           ch,
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Tip.owners(Stepping.Run.tip(r))
+          Replicas.Tip.content(Stepping.Run.tip(r)),
+          Replicas.Tip.owners(Stepping.Run.tip(r))
         )
       )
 
@@ -1660,7 +1661,7 @@ def Change.outs(
       Stale.outs(r, i)
     case Basics.Ask.On{st, l, ch}:
       Outs.when(
-        Ledgers.Chain.is_eq(Basics.Line.chain(st, l), c),
+        Ledgers.Chain.is_eq(Replicas.Line.chain(st, l), c),
         Stepping.Step.on(r, i, st, l, ch),
         Stepping.Step.stale(r, i),
         i,
@@ -1687,10 +1688,10 @@ def Outs.self(
   i: Ledgers.Id,
   ws: List<&2, U32>
 ) -> {
-  Basics.Node.get(
+  Replicas.Node.get(~Basics.Ask.machine(), 
     Stepping.Run.state(r),
-    Basics.Tip.log(Stepping.Run.tip(r)),
-    Basics.Log.out(i)
+    Replicas.Tip.log(Stepping.Run.tip(r)),
+    Replicas.Log.out(i)
   )
     == Some{ws}: Maybe<&2, List<&2, U32>>
 } -> Spec.Run.Outs(Some{r}, i):
@@ -1699,7 +1700,7 @@ def Outs.self(
       eg =>
         %Equal.sym(
           Maybe<&2, List<&2, U32>>,
-          Basics.Node.get(s, Basics.Tip.log(t), Basics.Log.out(i)),
+          Replicas.Node.get(~Basics.Ask.machine(), s, Replicas.Tip.log(t), Replicas.Log.out(i)),
           Some{ws},
           eg
         ): {Maybe.is_some(&2, List<&2, U32>, _) == True{}: Bool}
@@ -1711,12 +1712,12 @@ def One.outs.read(
   c: Ledgers.Chain,
   +i: Ledgers.Id,
   ws: List<&2, U32>,
-  +o: Maybe<&2, Basics.Out>,
+  +o: Maybe<&2, Replicas.Out>,
   eg: {
-    Basics.Node.get(
+    Replicas.Node.get(~Basics.Ask.machine(), 
       Stepping.Run.state(r),
-      Basics.Tip.log(Stepping.Run.tip(r)),
-      Basics.Log.out(i)
+      Replicas.Tip.log(Stepping.Run.tip(r)),
+      Replicas.Log.out(i)
     )
       == Some{ws}: Maybe<&2, List<&2, U32>>
   }
@@ -1725,7 +1726,7 @@ def One.outs.read(
     case Some{x}:
       Outs.self(r, i, ws)(eg)
     case None{}:
-      Asked.outs(r, c, i, Basics.Node.asked(Stepping.Run.state(r), i))
+      Asked.outs(r, c, i, Replicas.Node.asked(~Basics.Ask.machine(), Stepping.Run.state(r), i))
 
 # One.outs once what the log holds for the request is known (g)
 def One.outs.at(
@@ -1734,10 +1735,10 @@ def One.outs.at(
   +i: Ledgers.Id,
   g: Maybe<&2, List<&2, U32>>,
   eg: {
-    Basics.Node.get(
+    Replicas.Node.get(~Basics.Ask.machine(), 
       Stepping.Run.state(r),
-      Basics.Tip.log(Stepping.Run.tip(r)),
-      Basics.Log.out(i)
+      Replicas.Tip.log(Stepping.Run.tip(r)),
+      Replicas.Log.out(i)
     )
       == g: Maybe<&2, List<&2, U32>>
   }
@@ -1746,15 +1747,15 @@ def One.outs.at(
     r,
     c,
     i,
-    Maybe.bind(&2, List<&2, U32>, Basics.Out, g, ws => Basics.Out.read(ws))
+    Maybe.bind(&2, List<&2, U32>, Replicas.Out, g, ws => Replicas.Out.read(ws))
   ),
   i
 ):
   match g:
     case None{}:
-      Asked.outs(r, c, i, Basics.Node.asked(Stepping.Run.state(r), i))
+      Asked.outs(r, c, i, Replicas.Node.asked(~Basics.Ask.machine(), Stepping.Run.state(r), i))
     case Some{+ws}:
-      One.outs.read(r, c, i, ws, Basics.Out.read(ws), eg)
+      One.outs.read(r, c, i, ws, Replicas.Out.read(ws), eg)
 
 # a request has an outcome after its step
 def One.outs(
@@ -1766,7 +1767,7 @@ def One.outs(
     r,
     c,
     i,
-    Basics.Node.get(Stepping.Run.state(r), Basics.Tip.log(Stepping.Run.tip(r)), Basics.Log.out(i)),
+    Replicas.Node.get(~Basics.Ask.machine(), Stepping.Run.state(r), Replicas.Tip.log(Stepping.Run.tip(r)), Replicas.Log.out(i)),
     {==}
   )
 
@@ -1787,9 +1788,9 @@ def Keeps.self(
   k: List<&2, U32>,
   v: List<&2, U32>
 ) -> {
-  Basics.Node.get(
+  Replicas.Node.get(~Basics.Ask.machine(), 
     Stepping.Run.state(r),
-    Basics.Tip.log(Stepping.Run.tip(r)),
+    Replicas.Tip.log(Stepping.Run.tip(r)),
     k
   )
     == Some{v}: Maybe<&2, List<&2, U32>>
@@ -1806,10 +1807,10 @@ def Outs.kept.at(
   +i: Ledgers.Id,
   g: Maybe<&2, List<&2, U32>>,
   eg: {
-    Basics.Node.get(
+    Replicas.Node.get(~Basics.Ask.machine(), 
       Stepping.Run.state(r),
-      Basics.Tip.log(Stepping.Run.tip(r)),
-      Basics.Log.out(i)
+      Replicas.Tip.log(Stepping.Run.tip(r)),
+      Replicas.Log.out(i)
     )
       == g: Maybe<&2, List<&2, U32>>
   }
@@ -1832,9 +1833,9 @@ def Outs.kept.at(
           c,
           qs,
           Some{r},
-          Basics.Log.out(i),
+          Replicas.Log.out(i),
           v
-        )(Keeps.self(r, Basics.Log.out(i), v)(eg))
+        )(Keeps.self(r, Replicas.Log.out(i), v)(eg))
       )
 
 # an outcome that a run has, it has after more requests
@@ -1860,7 +1861,7 @@ def Outs.kept(
         qs,
         Stepping.Run{s, t},
         i,
-        Basics.Node.get(s, Basics.Tip.log(t), Basics.Log.out(i)),
+        Replicas.Node.get(~Basics.Ask.machine(), s, Replicas.Tip.log(t), Replicas.Log.out(i)),
         {==}
       )(h)
 
@@ -2019,9 +2020,9 @@ def Spec.Wait.left_keeps(ws, done, i):
 
 # Plan.follow_allowed once it is known whether the rules allow the vote (b)
 def Follow.allowed.at(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
-  t: Basics.Tip,
+  t: Replicas.Tip,
   th: Maybe<&2, Hashes.Hash>,
   v: Ledgers.Vote,
   from: List<&2, String>,

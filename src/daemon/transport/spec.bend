@@ -6,6 +6,7 @@ import ../shared/ledger.bend as Ledgers
 import ../shared/resources.bend as Resources
 import ../shared/shared/text.bend as Texts
 import ../shared/uris.bend as Uris
+import ../replica/impl.bend as Replicas
 
 # A Vend Node over IO (README): the core, carried to writers and to other
 # nodes. Every front offers exactly these operations. A change is a request,
@@ -40,7 +41,7 @@ type Reply<a, -A: Kind(a)> is Kind(a):
 
 # the notices that a poll returns, and what to pass as since next time
 type Changes is Data:
-  Changes{notices: List<&2, Reading.Notice>, since: Basics.Node}
+  Changes{notices: List<&2, Reading.Notice>, since: Replicas.Node<Basics.Ask>}
 
 # what a running node reports
 law Status:
@@ -189,7 +190,7 @@ law Client.try_get_conflict:
 law Client.try_get_changes:
   for c: Client
   for t: Reading.Topic
-  for since: Maybe<&2, Basics.Node>
+  for since: Maybe<&2, Replicas.Node<Basics.Ask>>
   IO(Client & Reply<&2, Changes>)
 
 # the request r: writes the content x to the resource n on the branch b, based
@@ -297,7 +298,7 @@ law Client.try_stop:
 law Client.try_subscribe:
   for c: Client
   for t: Reading.Topic
-  for since: Maybe<&2, Basics.Node>
+  for since: Maybe<&2, Replicas.Node<Basics.Ask>>
   IO(Client & Reply<&1, Subscription>)
 
 # the next notice of the stream x

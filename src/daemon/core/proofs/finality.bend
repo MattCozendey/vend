@@ -13,6 +13,7 @@ import ../spec.bend as Spec
 # bend-lint: expect-next bend-lint-rules/no_unused/imports@warning -- its proofs of laws are used here
 import ./lines.bend as ProofLines
 import ./trees.bend as ProofTrees
+import ../../replica/impl.bend as Replicas
 
 # Finality
 # --------
@@ -20,78 +21,78 @@ import ./trees.bend as ProofTrees
 
 # an outcome that a line holds, it holds in a node that keeps its logs
 def Chain.out.kept(
-  a: Basics.Node,
-  b: Basics.Node,
+  a: Replicas.Node<Basics.Ask>,
+  b: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +i: Ledgers.Id,
-  -o: Basics.Out,
+  -o: Replicas.Out,
   hk: Spec.Node.Keeps(a, b)
 ) -> {
-  Basics.Chain.out(a, c, i) == Some{o}: Maybe<&2, Basics.Out>
-} -> {Basics.Chain.out(b, c, i) == Some{o}: Maybe<&2, Basics.Out>}:
+  Replicas.Chain.out(~Basics.Ask.machine(), a, c, i) == Some{o}: Maybe<&2, Replicas.Out>
+} -> {Replicas.Chain.out(~Basics.Ask.machine(), b, c, i) == Some{o}: Maybe<&2, Replicas.Out>}:
   Shared.Maybe.bind_kept(
     List<&2, U32>,
-    Basics.Out,
-    Basics.Line.get(a, c, Basics.Log.out(i)),
-    Basics.Line.get(b, c, Basics.Log.out(i)),
-    ws => Basics.Out.read(ws),
-    ws => Basics.Out.read(ws),
+    Replicas.Out,
+    Replicas.Line.get(~Basics.Ask.machine(), a, c, Replicas.Log.out(i)),
+    Replicas.Line.get(~Basics.Ask.machine(), b, c, Replicas.Log.out(i)),
+    ws => Replicas.Out.read(ws),
+    ws => Replicas.Out.read(ws),
     o,
-    w => hk(c)(Basics.Log.out(i))(w),
+    w => hk(c)(Replicas.Log.out(i))(w),
     w => e => e
   )
 
 # the version of a number that a line holds, it holds in a node that keeps
 # its logs
 def Chain.version.kept(
-  a: Basics.Node,
-  b: Basics.Node,
+  a: Replicas.Node<Basics.Ask>,
+  b: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +n: U32,
-  -x: Basics.Version,
+  -x: Replicas.Version,
   hk: Spec.Node.Keeps(a, b)
 ) -> {
-  Basics.Chain.version(a, c, n) == Some{x}: Maybe<&2, Basics.Version>
-} -> {Basics.Chain.version(b, c, n) == Some{x}: Maybe<&2, Basics.Version>}:
+  Replicas.Chain.version(~Basics.Ask.machine(), a, c, n) == Some{x}: Maybe<&2, Replicas.Version>
+} -> {Replicas.Chain.version(~Basics.Ask.machine(), b, c, n) == Some{x}: Maybe<&2, Replicas.Version>}:
   Shared.Maybe.bind_kept(
     List<&2, U32>,
-    Basics.Version,
-    Basics.Line.get(a, c, Basics.Log.version(n)),
-    Basics.Line.get(b, c, Basics.Log.version(n)),
-    ws => Basics.Version.read(ws),
-    ws => Basics.Version.read(ws),
+    Replicas.Version,
+    Replicas.Line.get(~Basics.Ask.machine(), a, c, Replicas.Log.version(n)),
+    Replicas.Line.get(~Basics.Ask.machine(), b, c, Replicas.Log.version(n)),
+    ws => Replicas.Version.read(ws),
+    ws => Replicas.Version.read(ws),
     x,
-    w => hk(c)(Basics.Log.version(n))(w),
+    w => hk(c)(Replicas.Log.version(n))(w),
     w => e => e
   )
 
 # a mark that a line holds, it holds in a node that keeps its logs
 def Chain.mark.kept(
-  a: Basics.Node,
-  b: Basics.Node,
+  a: Replicas.Node<Basics.Ask>,
+  b: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +m: String,
   -v: Ledgers.Id,
   hk: Spec.Node.Keeps(a, b)
 ) -> {
-  Basics.Chain.mark(a, c, m) == Some{v}: Maybe<&2, Ledgers.Id>
-} -> {Basics.Chain.mark(b, c, m) == Some{v}: Maybe<&2, Ledgers.Id>}:
+  Replicas.Chain.mark(~Basics.Ask.machine(), a, c, m) == Some{v}: Maybe<&2, Ledgers.Id>
+} -> {Replicas.Chain.mark(~Basics.Ask.machine(), b, c, m) == Some{v}: Maybe<&2, Ledgers.Id>}:
   Shared.Maybe.bind_kept(
     List<&2, U32>,
     Ledgers.Id,
-    Basics.Line.get(a, c, Basics.Log.mark(m)),
-    Basics.Line.get(b, c, Basics.Log.mark(m)),
-    ws => Basics.Read.whole(Ledgers.Id, Ledgers.Id.code.read(ws)),
-    ws => Basics.Read.whole(Ledgers.Id, Ledgers.Id.code.read(ws)),
+    Replicas.Line.get(~Basics.Ask.machine(), a, c, Replicas.Log.mark(m)),
+    Replicas.Line.get(~Basics.Ask.machine(), b, c, Replicas.Log.mark(m)),
+    ws => Replicas.Read.whole(Ledgers.Id, Ledgers.Id.code.read(ws)),
+    ws => Replicas.Read.whole(Ledgers.Id, Ledgers.Id.code.read(ws)),
     v,
-    w => hk(c)(Basics.Log.mark(m))(w),
+    w => hk(c)(Replicas.Log.mark(m))(w),
     w => e => e
   )
 
 # the line of a request that a node holds, a node that grew holds
 def Chain.of.kept(
-  +a: Basics.Node,
-  b: Basics.Node,
+  +a: Replicas.Node<Basics.Ask>,
+  b: Replicas.Node<Basics.Ask>,
   +i: Ledgers.Id,
   -c: Ledgers.Chain,
   g: {Reading.Node.grows(a, b) == True{}: Bool}
@@ -101,10 +102,10 @@ def Chain.of.kept(
   Shared.Maybe.bind_kept(
     Ledgers.Asked<Basics.Ask>,
     Ledgers.Chain,
-    Basics.Node.asked(a, i),
-    Basics.Node.asked(b, i),
-    x => Some{Basics.Ask.chain(i, Basics.Asked.ask(x))},
-    x => Some{Basics.Ask.chain(i, Basics.Asked.ask(x))},
+    Replicas.Node.asked(~Basics.Ask.machine(), a, i),
+    Replicas.Node.asked(~Basics.Ask.machine(), b, i),
+    x => Some{Basics.Ask.chain(i, Replicas.Asked.ask(~Basics.Ask.machine(), x))},
+    x => Some{Basics.Ask.chain(i, Replicas.Asked.ask(~Basics.Ask.machine(), x))},
     c,
     x => Ledgers.State.read_grows(
       ~Basics.Ask,
@@ -113,8 +114,8 @@ def Chain.of.kept(
       ~Ledgers.Asked<Basics.Ask>,
       m => Ledgers.Asked.of(~Basics.Ask, m),
       {==},
-      Basics.State.ledger(a),
-      Basics.State.ledger(b),
+      Replicas.State.ledger(~Basics.Ask.machine(), a),
+      Replicas.State.ledger(~Basics.Ask.machine(), b),
       Ledgers.Slot.ask(i),
       x
     )(g),
@@ -123,22 +124,22 @@ def Chain.of.kept(
 
 # an outcome that a node knows, a node that grew and keeps its logs knows
 def Out.kept(
-  +a: Basics.Node,
-  +b: Basics.Node,
+  +a: Replicas.Node<Basics.Ask>,
+  +b: Replicas.Node<Basics.Ask>,
   +i: Ledgers.Id,
-  -o: Basics.Out,
+  -o: Replicas.Out,
   g: {Reading.Node.grows(a, b) == True{}: Bool},
   hk: Spec.Node.Keeps(a, b)
 ) -> {
-  Basics.Node.out(a, i) == Some{o}: Maybe<&2, Basics.Out>
-} -> {Basics.Node.out(b, i) == Some{o}: Maybe<&2, Basics.Out>}:
+  Basics.Node.out(a, i) == Some{o}: Maybe<&2, Replicas.Out>
+} -> {Basics.Node.out(b, i) == Some{o}: Maybe<&2, Replicas.Out>}:
   Shared.Maybe.bind_kept(
     Ledgers.Chain,
-    Basics.Out,
+    Replicas.Out,
     Basics.Node.chain_of(a, i),
     Basics.Node.chain_of(b, i),
-    c => Basics.Chain.out(a, c, i),
-    c => Basics.Chain.out(b, c, i),
+    c => Replicas.Chain.out(~Basics.Ask.machine(), a, c, i),
+    c => Replicas.Chain.out(~Basics.Ask.machine(), b, c, i),
     o,
     c => Chain.of.kept(a, b, i, c, g),
     +c => Chain.out.kept(a, b, c, i, o, hk)
@@ -146,38 +147,38 @@ def Out.kept(
 
 # the version of an outcome, in a node that keeps the logs
 def Out.on.kept(
-  a: Basics.Node,
-  b: Basics.Node,
+  a: Replicas.Node<Basics.Ask>,
+  b: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
-  o: Basics.Out,
-  -x: Basics.Version,
+  o: Replicas.Out,
+  -x: Replicas.Version,
   hk: Spec.Node.Keeps(a, b)
 ) -> {
-  Basics.Out.on(a, c, o) == Some{x}: Maybe<&2, Basics.Version>
-} -> {Basics.Out.on(b, c, o) == Some{x}: Maybe<&2, Basics.Version>}:
+  Basics.Out.on(a, c, o) == Some{x}: Maybe<&2, Replicas.Version>
+} -> {Basics.Out.on(b, c, o) == Some{x}: Maybe<&2, Replicas.Version>}:
   match o:
-    case Basics.Out.Stale{}:
+    case Replicas.Out.Stale{}:
       e => e
-    case Basics.Out.Taken{n}:
+    case Replicas.Out.Taken{n}:
       Chain.version.kept(a, b, c, n, x, hk)
 
 # the version that a request made on a line, in a node that keeps the logs
 def Chain.made.kept(
-  +a: Basics.Node,
-  +b: Basics.Node,
+  +a: Replicas.Node<Basics.Ask>,
+  +b: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +v: Ledgers.Id,
-  -x: Basics.Version,
+  -x: Replicas.Version,
   hk1: Spec.Node.Keeps(a, b),
   hk2: Spec.Node.Keeps(a, b)
 ) -> {
-  Basics.Chain.made(a, c, v) == Some{x}: Maybe<&2, Basics.Version>
-} -> {Basics.Chain.made(b, c, v) == Some{x}: Maybe<&2, Basics.Version>}:
+  Basics.Chain.made(a, c, v) == Some{x}: Maybe<&2, Replicas.Version>
+} -> {Basics.Chain.made(b, c, v) == Some{x}: Maybe<&2, Replicas.Version>}:
   Shared.Maybe.bind_kept(
-    Basics.Out,
-    Basics.Version,
-    Basics.Chain.out(a, c, v),
-    Basics.Chain.out(b, c, v),
+    Replicas.Out,
+    Replicas.Version,
+    Replicas.Chain.out(~Basics.Ask.machine(), a, c, v),
+    Replicas.Chain.out(~Basics.Ask.machine(), b, c, v),
     o => Basics.Out.on(a, c, o),
     o => Basics.Out.on(b, c, o),
     x,
@@ -187,19 +188,19 @@ def Chain.made.kept(
 
 # the version that a request made, in a node that grew and keeps the logs
 def Made.kept(
-  +a: Basics.Node,
-  +b: Basics.Node,
+  +a: Replicas.Node<Basics.Ask>,
+  +b: Replicas.Node<Basics.Ask>,
   +v: Ledgers.Id,
-  -x: Basics.Version,
+  -x: Replicas.Version,
   g: {Reading.Node.grows(a, b) == True{}: Bool},
   hk1: Spec.Node.Keeps(a, b),
   hk2: Spec.Node.Keeps(a, b)
 ) -> {
-  Basics.Node.made(a, v) == Some{x}: Maybe<&2, Basics.Version>
-} -> {Basics.Node.made(b, v) == Some{x}: Maybe<&2, Basics.Version>}:
+  Basics.Node.made(a, v) == Some{x}: Maybe<&2, Replicas.Version>
+} -> {Basics.Node.made(b, v) == Some{x}: Maybe<&2, Replicas.Version>}:
   Shared.Maybe.bind_kept(
     Ledgers.Chain,
-    Basics.Version,
+    Replicas.Version,
     Basics.Node.chain_of(a, v),
     Basics.Node.chain_of(b, v),
     +c => Basics.Chain.made(a, c, v),
@@ -237,7 +238,7 @@ def Spec.Chain.mark_final(n, evs, s, c, m, v):
   Chain.mark.kept(s, Spec.Node.after(n, evs, s), c, m, v, Spec.Node.after_keeps(n, evs, s))
 
 def Spec.Chain.start_final(n, evs, s, r, b, v):
-  Spec.Node.after_keeps(n, evs, s)(Ledgers.Chain{r, None{}})(Basics.Log.start(b))(v)
+  Spec.Node.after_keeps(n, evs, s)(Ledgers.Chain{r, None{}})(Replicas.Log.start(b))(v)
 
 # the answer b may come after the answer a, if there is an a
 def Follows.opt(ma: Maybe<&2, Reading.Answer>, mb: Maybe<&2, Reading.Answer>) -> Bool:
@@ -284,8 +285,8 @@ def Left.follows(
 
 # the answer to a taken change may come after the answer to it
 def Taken.follows(
-  a: Basics.Node,
-  b: Basics.Node,
+  a: Replicas.Node<Basics.Ask>,
+  b: Replicas.Node<Basics.Ask>,
   +i: Ledgers.Id,
   q: Basics.Ask
 ) -> {
@@ -329,17 +330,17 @@ def Taken.follows(
 
 # Asked.follows once the outcome oa of the request is known
 def Of.follows(
-  a: Basics.Node,
-  b: Basics.Node,
+  a: Replicas.Node<Basics.Ask>,
+  b: Replicas.Node<Basics.Ask>,
   i: Ledgers.Id,
   q: Basics.Ask,
-  oa: Maybe<&2, Basics.Out>
+  oa: Maybe<&2, Replicas.Out>
 ) -> {
-  Basics.Node.out(a, i) == oa: Maybe<&2, Basics.Out>
+  Basics.Node.out(a, i) == oa: Maybe<&2, Replicas.Out>
 } -> (
-  @o: Basics.Out -> {
-    Basics.Node.out(a, i) == Some{o}: Maybe<&2, Basics.Out>
-  } -> {Basics.Node.out(b, i) == Some{o}: Maybe<&2, Basics.Out>}
+  @o: Replicas.Out -> {
+    Basics.Node.out(a, i) == Some{o}: Maybe<&2, Replicas.Out>
+  } -> {Basics.Node.out(b, i) == Some{o}: Maybe<&2, Replicas.Out>}
 ) -> {
   Reading.Answer.follows(
     Reading.Answer.of(a, i, q, Basics.Node.out(a, i)),
@@ -351,7 +352,7 @@ def Of.follows(
     case None{}:
       eo => ho =>
         %Equal.sym(
-          Maybe<&2, Basics.Out>,
+          Maybe<&2, Replicas.Out>,
           Basics.Node.out(a, i),
           None{},
           eo
@@ -363,12 +364,12 @@ def Of.follows(
             == True{}: Bool
         }
         {==}
-    case Some{Basics.Out.Stale{}}:
+    case Some{Replicas.Out.Stale{}}:
       +eo => ho =>
         %Equal.sym(
-          Maybe<&2, Basics.Out>,
+          Maybe<&2, Replicas.Out>,
           Basics.Node.out(a, i),
-          Some{Basics.Out.Stale{}},
+          Some{Replicas.Out.Stale{}},
           eo
         ): {
           Reading.Answer.follows(
@@ -378,24 +379,24 @@ def Of.follows(
             == True{}: Bool
         }
         %Equal.sym(
-          Maybe<&2, Basics.Out>,
+          Maybe<&2, Replicas.Out>,
           Basics.Node.out(b, i),
-          Some{Basics.Out.Stale{}},
-          ho(Basics.Out.Stale{})(eo)
+          Some{Replicas.Out.Stale{}},
+          ho(Replicas.Out.Stale{})(eo)
         ): {
           Reading.Answer.follows(
-            Reading.Answer.of(a, i, q, Some{Basics.Out.Stale{}}),
+            Reading.Answer.of(a, i, q, Some{Replicas.Out.Stale{}}),
             Some{Reading.Answer.of(b, i, q, _)}
           )
             == True{}: Bool
         }
         {==}
-    case Some{Basics.Out.Taken{k}}:
+    case Some{Replicas.Out.Taken{k}}:
       +eo => ho =>
         %Equal.sym(
-          Maybe<&2, Basics.Out>,
+          Maybe<&2, Replicas.Out>,
           Basics.Node.out(a, i),
-          Some{Basics.Out.Taken{k}},
+          Some{Replicas.Out.Taken{k}},
           eo
         ): {
           Reading.Answer.follows(
@@ -405,13 +406,13 @@ def Of.follows(
             == True{}: Bool
         }
         %Equal.sym(
-          Maybe<&2, Basics.Out>,
+          Maybe<&2, Replicas.Out>,
           Basics.Node.out(b, i),
-          Some{Basics.Out.Taken{k}},
-          ho(Basics.Out.Taken{k})(eo)
+          Some{Replicas.Out.Taken{k}},
+          ho(Replicas.Out.Taken{k})(eo)
         ): {
           Reading.Answer.follows(
-            Reading.Answer.of(a, i, q, Some{Basics.Out.Taken{k}}),
+            Reading.Answer.of(a, i, q, Some{Replicas.Out.Taken{k}}),
             Some{Reading.Answer.of(b, i, q, _)}
           )
             == True{}: Bool
@@ -420,13 +421,13 @@ def Of.follows(
 
 # the answer to a request that a node holds may come after the answer to it
 def Asked.follows(
-  +a: Basics.Node,
-  b: Basics.Node,
+  +a: Replicas.Node<Basics.Ask>,
+  b: Replicas.Node<Basics.Ask>,
   +i: Ledgers.Id,
   q: Basics.Ask,
-  ho: @o: Basics.Out -> {
-    Basics.Node.out(a, i) == Some{o}: Maybe<&2, Basics.Out>
-  } -> {Basics.Node.out(b, i) == Some{o}: Maybe<&2, Basics.Out>}
+  ho: @o: Replicas.Out -> {
+    Basics.Node.out(a, i) == Some{o}: Maybe<&2, Replicas.Out>
+  } -> {Basics.Node.out(b, i) == Some{o}: Maybe<&2, Replicas.Out>}
 ) -> {
   Reading.Answer.follows(
     Reading.Answer.asked(a, i, q),
@@ -461,14 +462,14 @@ def Held.follows.if(
 
 # the answer of a node that holds the same cell may come after the answer
 def Held.follows(
-  a: Basics.Node,
-  b: Basics.Node,
+  a: Replicas.Node<Basics.Ask>,
+  b: Replicas.Node<Basics.Ask>,
   i: Ledgers.Id,
   q: Basics.Ask,
   m: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>,
-  ho: @o: Basics.Out -> {
-    Basics.Node.out(a, i) == Some{o}: Maybe<&2, Basics.Out>
-  } -> {Basics.Node.out(b, i) == Some{o}: Maybe<&2, Basics.Out>}
+  ho: @o: Replicas.Out -> {
+    Basics.Node.out(a, i) == Some{o}: Maybe<&2, Replicas.Out>
+  } -> {Basics.Node.out(b, i) == Some{o}: Maybe<&2, Replicas.Out>}
 ) -> {
   Follows.opt(Reading.Answer.held(a, i, q, m), Reading.Answer.held(b, i, q, m)) == True{}: Bool
 }:
@@ -528,16 +529,16 @@ def Cell.kept.eq(
 
 # Node.answer_follows once the cell ma of the request's ID is known
 def Answer.follows.at(
-  a: Basics.Node,
-  b: Basics.Node,
+  a: Replicas.Node<Basics.Ask>,
+  b: Replicas.Node<Basics.Ask>,
   i: Ledgers.Id,
   q: Basics.Ask,
   -x: Reading.Answer,
   ma: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>,
   mb: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>,
-  ho: @o: Basics.Out -> {
-    Basics.Node.out(a, i) == Some{o}: Maybe<&2, Basics.Out>
-  } -> {Basics.Node.out(b, i) == Some{o}: Maybe<&2, Basics.Out>}
+  ho: @o: Replicas.Out -> {
+    Basics.Node.out(a, i) == Some{o}: Maybe<&2, Replicas.Out>
+  } -> {Basics.Node.out(b, i) == Some{o}: Maybe<&2, Replicas.Out>}
 ) -> {
   Cells.Cell.keeps(
     ~Ledgers.Entry<Basics.Ask>,
@@ -570,19 +571,19 @@ def Spec.Node.answer_follows(n, evs, s, e, q, x):
   Answer.follows.at(
     s,
     Spec.Node.after(n, evs, s),
-    Basics.Envelope.of(e),
+    Replicas.Envelope.of(e),
     q,
     x,
-    Ledgers.State.get(~Basics.Ask, Basics.State.ledger(s), Ledgers.Slot.ask(Basics.Envelope.of(e))),
+    Ledgers.State.get(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), Ledgers.Slot.ask(Replicas.Envelope.of(e))),
     Ledgers.State.get(
       ~Basics.Ask,
-      Basics.State.ledger(Spec.Node.after(n, evs, s)),
-      Ledgers.Slot.ask(Basics.Envelope.of(e))
+      Replicas.State.ledger(~Basics.Ask.machine(), Spec.Node.after(n, evs, s)),
+      Ledgers.Slot.ask(Replicas.Envelope.of(e))
     ),
     o => Out.kept(
       s,
       Spec.Node.after(n, evs, s),
-      Basics.Envelope.of(e),
+      Replicas.Envelope.of(e),
       o,
       Spec.Node.after_grows(n, evs, s),
       Spec.Node.after_keeps(n, evs, s)
@@ -598,9 +599,9 @@ def Spec.Node.answer_follows(n, evs, s, e, q, x):
         ~Ledgers.Entry<Basics.Ask>,
         ~Ledgers.Entry.is_eq(~Basics.Ask, ~Basics.Ask.is_eq)
       ),
-      Basics.State.ledger(s),
-      Basics.State.ledger(Spec.Node.after(n, evs, s)),
-      Ledgers.Slot.ask(Basics.Envelope.of(e))
+      Replicas.State.ledger(~Basics.Ask.machine(), s),
+      Replicas.State.ledger(~Basics.Ask.machine(), Spec.Node.after(n, evs, s)),
+      Ledgers.Slot.ask(Replicas.Envelope.of(e))
     )(Spec.Node.after_grows(n, evs, s))
   )
 
@@ -676,7 +677,7 @@ def Draft.of.some(
 
 # a draft that is there stays, after more requests
 def Last.some(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +w: String,
   +r: Ledgers.Id,
   +b: String,
@@ -699,8 +700,8 @@ def Last.some(
         b,
         n,
         rest,
-        Reading.Draft.of(w, r, b, n, i, Basics.Node.asked(s, i), found)
-      )(Draft.of.some(w, r, b, n, i, Basics.Node.asked(s, i), found)(h))
+        Reading.Draft.of(w, r, b, n, i, Replicas.Node.asked(~Basics.Ask.machine(), s, i), found)
+      )(Draft.of.some(w, r, b, n, i, Replicas.Node.asked(~Basics.Ask.machine(), s, i), found)(h))
 
 # a write of the writer w to the resource gives a draft
 def Draft.of.hit(
@@ -761,7 +762,7 @@ def Draft.of.hit(
 
 # Last.hit once whether the first request is the one looked for is known (bh)
 def Last.hit.if(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +w: String,
   +r: Ledgers.Id,
   +b: String,
@@ -776,7 +777,7 @@ def Last.hit.if(
   bh: Bool,
   ebh: {Ledgers.Id.is_eq(i, Ledgers.Id{w, q2}) == bh: Bool},
   ea: {
-    Basics.Node.asked(
+    Replicas.Node.asked(~Basics.Ask.machine(), 
       s,
       Ledgers.Id{w, q2}
     )
@@ -796,7 +797,7 @@ def Last.hit.if(
         b,
         n,
         rest,
-        Reading.Draft.of(w, r, b, n, i, Basics.Node.asked(s, i), found)
+        Reading.Draft.of(w, r, b, n, i, Replicas.Node.asked(~Basics.Ask.machine(), s, i), found)
       )
     )
       == True{}: Bool
@@ -818,7 +819,7 @@ def Last.hit.if(
       b,
       n,
       rest,
-      Reading.Draft.of(w, r, b, n, i, Basics.Node.asked(s, i), found)
+      Reading.Draft.of(w, r, b, n, i, Replicas.Node.asked(~Basics.Ask.machine(), s, i), found)
     )
   )
     == True{}: Bool
@@ -834,15 +835,15 @@ def Last.hit.if(
         b,
         n,
         rest,
-        Reading.Draft.of(w, r, b, n, i, Basics.Node.asked(s, i), found)
+        Reading.Draft.of(w, r, b, n, i, Replicas.Node.asked(~Basics.Ask.machine(), s, i), found)
       )(
-        %Equal.sym(Ledgers.Id, i, Ledgers.Id{w, q2}, Ledgers.Id.is_eq_sound(i, Ledgers.Id{w, q2})(ebh)): {Maybe.is_some(&2, Reading.Draft, Reading.Draft.of(w, r, b, n, _, Basics.Node.asked(s, _), found)) == True{}: Bool}
-        %Equal.sym(Maybe<&2, Ledgers.Asked<Basics.Ask>>, Basics.Node.asked(s, Ledgers.Id{w, q2}), Some{Ledgers.Asked{t, q}}, ea): {Maybe.is_some(&2, Reading.Draft, Reading.Draft.of(w, r, b, n, Ledgers.Id{w, q2}, _, found)) == True{}: Bool}
+        %Equal.sym(Ledgers.Id, i, Ledgers.Id{w, q2}, Ledgers.Id.is_eq_sound(i, Ledgers.Id{w, q2})(ebh)): {Maybe.is_some(&2, Reading.Draft, Reading.Draft.of(w, r, b, n, _, Replicas.Node.asked(~Basics.Ask.machine(), s, _), found)) == True{}: Bool}
+        %Equal.sym(Maybe<&2, Ledgers.Asked<Basics.Ask>>, Replicas.Node.asked(~Basics.Ask.machine(), s, Ledgers.Id{w, q2}), Some{Ledgers.Asked{t, q}}, ea): {Maybe.is_some(&2, Reading.Draft, Reading.Draft.of(w, r, b, n, Ledgers.Id{w, q2}, _, found)) == True{}: Bool}
         Draft.of.hit(w, r, b, n, q2, t, q, c, found, ec))
 
 # a write of the writer w among requests gives a draft
 def Last.hit(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +w: String,
   +r: Ledgers.Id,
   +b: String,
@@ -854,7 +855,7 @@ def Last.hit(
   -q: Basics.Ask,
   -c: Basics.Content,
   +ea: {
-    Basics.Node.asked(
+    Replicas.Node.asked(~Basics.Ask.machine(), 
       s,
       Ledgers.Id{w, q2}
     )
@@ -897,7 +898,7 @@ def Last.hit(
           b,
           n,
           rest,
-          Reading.Draft.of(w, r, b, n, i, Basics.Node.asked(s, i), found),
+          Reading.Draft.of(w, r, b, n, i, Replicas.Node.asked(~Basics.Ask.machine(), s, i), found),
           q2,
           t,
           q,
@@ -921,7 +922,7 @@ def What.some(
 
 def Spec.Node.draft_some(s, w, r, b, n, q2, t, q, c):
   hc => ea => ec => What.some(
-    Reading.Draft.last(s, w, r, b, n, Sealing.Wait.of(s, Basics.Line.chain(r, Some{b})), None{})
+    Reading.Draft.last(s, w, r, b, n, Sealing.Wait.of(s, Replicas.Line.chain(r, Some{b})), None{})
   )(
     Last.hit(
       s,
@@ -929,7 +930,7 @@ def Spec.Node.draft_some(s, w, r, b, n, q2, t, q, c):
       r,
       b,
       n,
-      Sealing.Wait.of(s, Basics.Line.chain(r, Some{b})),
+      Sealing.Wait.of(s, Replicas.Line.chain(r, Some{b})),
       None{},
       q2,
       t,

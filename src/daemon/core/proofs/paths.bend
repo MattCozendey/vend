@@ -20,6 +20,7 @@ import ./histories.bend as ProofHistories
 import ./lines.bend as ProofLines
 import ./rounds.bend as ProofRounds
 import ./trees.bend as ProofTrees
+import ../../replica/impl.bend as Replicas
 
 # Paths
 # -----
@@ -31,33 +32,33 @@ import ./trees.bend as ProofTrees
 
 # a head one height up has a tip
 def Up.held(
-  z: Basics.Head,
+  z: Replicas.Head,
   y: Hashes.Hash
 ) -> {Spec.Head.held(Some{Spec.Head.up(z, y)}) == True{}: Bool}:
   match z:
-    case Basics.Head{r, b, n, th}:
+    case Replicas.Head{r, b, n, th}:
       {==}
 
 # Moved.held once the tip m that the step names is known
 def Moved.held.at(
-  z: Basics.Head,
+  z: Replicas.Head,
   m: Maybe<&2, Hashes.Hash>,
-  -h: Basics.Head
+  -h: Replicas.Head
 ) -> {
   Maybe.bind(
     &2,
     Hashes.Hash,
-    Basics.Head,
+    Replicas.Head,
     m,
     y => Some{Spec.Head.up(z, y)}
   )
-    == Some{h}: Maybe<&2, Basics.Head>
+    == Some{h}: Maybe<&2, Replicas.Head>
 } -> {Spec.Head.held(Some{h}) == True{}: Bool}:
   match m:
     case None{}:
       e => Empty.absurd(
         {Spec.Head.held(Some{h}) == True{}: Bool},
-        Shared.Maybe.none_ne_some(Basics.Head, h, e)
+        Shared.Maybe.none_ne_some(Replicas.Head, h, e)
       )
     case Some{y}:
       e =>
@@ -66,36 +67,36 @@ def Moved.held.at(
 
 # a head that a step moved has a tip
 def Moved.held(
-  z: Basics.Head,
+  z: Replicas.Head,
   va: Maybe<&2, Ledgers.Vote>,
-  -h: Basics.Head
+  -h: Replicas.Head
 ) -> {
-  Spec.Head.moved(z, va) == Some{h}: Maybe<&2, Basics.Head>
+  Spec.Head.moved(z, va) == Some{h}: Maybe<&2, Replicas.Head>
 } -> {Spec.Head.held(Some{h}) == True{}: Bool}:
   Moved.held.at(z, Spec.Vote.tip(va), h)
 
 # Held.at for one more step, once the head m before it is known
 def Held.at.step(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
   r: Nat,
-  -h: Basics.Head,
-  m: Maybe<&2, Basics.Head>
+  -h: Replicas.Head,
+  m: Maybe<&2, Replicas.Head>
 ) -> {
   Maybe.bind(
     &2,
-    Basics.Head,
-    Basics.Head,
+    Replicas.Head,
+    Replicas.Head,
     m,
     +x => Spec.Head.moved(x, Spec.Advance.in(s, c, x, r))
   )
-    == Some{h}: Maybe<&2, Basics.Head>
+    == Some{h}: Maybe<&2, Replicas.Head>
 } -> {Spec.Head.held(Some{h}) == True{}: Bool}:
   match m:
     case None{}:
       e => Empty.absurd(
         {Spec.Head.held(Some{h}) == True{}: Bool},
-        Shared.Maybe.none_ne_some(Basics.Head, h, e)
+        Shared.Maybe.none_ne_some(Replicas.Head, h, e)
       )
     case Some{+z}:
       e => Moved.held(z, Spec.Advance.in(s, c, z, r), h)(e)
@@ -103,14 +104,14 @@ def Held.at.step(
 # a head that is some decided steps from a head with a tip has a tip
 def Held.at(
   rs: List<&2, Nat>,
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
-  h0: Basics.Head,
-  -h: Basics.Head
+  h0: Replicas.Head,
+  -h: Replicas.Head
 ) -> {
   Spec.Head.held(Some{h0}) == True{}: Bool
 } -> {
-  Spec.Line.at(rs, s, c, h0) == Some{h}: Maybe<&2, Basics.Head>
+  Spec.Line.at(rs, s, c, h0) == Some{h}: Maybe<&2, Replicas.Head>
 } -> {Spec.Head.held(Some{h}) == True{}: Bool}:
   match rs:
     case Nil{}:
@@ -121,14 +122,14 @@ def Held.at(
       t0 => e => Held.at.step(s, c, r, h, Spec.Line.at(rest, s, c, h0))(e)
 
 # a node is on its own paths
-def Path.refl(-s: Basics.Node) -> Spec.Node.On(s, s):
+def Path.refl(-s: Replicas.Node<Basics.Ask>) -> Spec.Node.On(s, s):
   c => h0 => t0 => ra => ra
 
 # paths compose
 def Path.trans(
-  -a: Basics.Node,
-  -b: Basics.Node,
-  -d: Basics.Node,
+  -a: Replicas.Node<Basics.Ask>,
+  -b: Replicas.Node<Basics.Ask>,
+  -d: Replicas.Node<Basics.Ask>,
   h1: Spec.Node.On(a, b),
   h2: Spec.Node.On(b, d)
 ) -> Spec.Node.On(a, d):
@@ -137,12 +138,12 @@ def Path.trans(
 # one of two nodes, each on the paths of s
 def Path.when(
   b: Bool,
-  -s: Basics.Node,
-  -x: Basics.Node,
-  -y: Basics.Node,
+  -s: Replicas.Node<Basics.Ask>,
+  -x: Replicas.Node<Basics.Ask>,
+  -y: Replicas.Node<Basics.Ask>,
   hx: Spec.Node.On(s, x),
   hy: Spec.Node.On(s, y)
-) -> Spec.Node.On(s, Shared.Bool.when(Basics.Node, b, u => x, u => y)):
+) -> Spec.Node.On(s, Shared.Bool.when(Replicas.Node<Basics.Ask>, b, u => x, u => y)):
   match b:
     case True{}:
       hx
@@ -151,12 +152,12 @@ def Path.when(
 
 # a line whose head is the same in a node that grew is where it was
 def Reach.same(
-  a: Basics.Node,
-  b: Basics.Node,
+  a: Replicas.Node<Basics.Ask>,
+  b: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
-  h0: Basics.Head,
+  h0: Replicas.Head,
   g: {Reading.Node.grows(a, b) == True{}: Bool},
-  eh: {Basics.Node.head_of(a, c) == Basics.Node.head_of(b, c): Maybe<&2, Basics.Head>},
+  eh: {Replicas.Node.head_of(~Basics.Ask.machine(), a, c) == Replicas.Node.head_of(~Basics.Ask.machine(), b, c): Maybe<&2, Replicas.Head>},
   ra: Spec.Line.Reach(a, c, h0)
 ) -> Spec.Line.Reach(b, c, h0):
   match ra:
@@ -167,14 +168,14 @@ def Reach.same(
           h,
           Tuple{
             Equal.trans(
-              Maybe<&2, Basics.Head>,
-              Basics.Node.head_of(b, c),
-              Basics.Node.head_of(a, c),
+              Maybe<&2, Replicas.Head>,
+              Replicas.Node.head_of(~Basics.Ask.machine(), b, c),
+              Replicas.Node.head_of(~Basics.Ask.machine(), a, c),
               Some{h},
               Equal.sym(
-                Maybe<&2, Basics.Head>,
-                Basics.Node.head_of(a, c),
-                Basics.Node.head_of(b, c),
+                Maybe<&2, Replicas.Head>,
+                Replicas.Node.head_of(~Basics.Ask.machine(), a, c),
+                Replicas.Node.head_of(~Basics.Ask.machine(), b, c),
                 eh
               ),
               e1
@@ -186,10 +187,10 @@ def Reach.same(
 
 # a node that grew, with the same heads, is on the paths
 def Path.same(
-  a: Basics.Node,
-  b: Basics.Node,
+  a: Replicas.Node<Basics.Ask>,
+  b: Replicas.Node<Basics.Ask>,
   g: {Reading.Node.grows(a, b) == True{}: Bool},
-  eh: {Basics.State.heads(a) == Basics.State.heads(b): Tries.Trie<Basics.Head>}
+  eh: {Replicas.State.heads(~Basics.Ask.machine(), a) == Replicas.State.heads(~Basics.Ask.machine(), b): Tries.Trie<Replicas.Head>}
 ) -> Spec.Node.On(a, b):
   +c => +h0 => t0 => ra => Reach.same(
     a,
@@ -198,11 +199,11 @@ def Path.same(
     h0,
     g,
     Equal.cong(
-      Tries.Trie<Basics.Head>,
-      Maybe<&2, Basics.Head>,
-      hs => Tries.Trie.get(Basics.Head, hs, Ledgers.Chain.key(c)),
-      Basics.State.heads(a),
-      Basics.State.heads(b),
+      Tries.Trie<Replicas.Head>,
+      Maybe<&2, Replicas.Head>,
+      hs => Tries.Trie.get(Replicas.Head, hs, Ledgers.Chain.key(c)),
+      Replicas.State.heads(~Basics.Ask.machine(), a),
+      Replicas.State.heads(~Basics.Ask.machine(), b),
       eh
     ),
     ra
@@ -210,54 +211,54 @@ def Path.same(
 
 # the head of another line, after the head of the line c is set
 def Head.other(
-  a: Basics.Node,
-  b0: Basics.Node,
+  a: Replicas.Node<Basics.Ask>,
+  b0: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
-  hd: Basics.Head,
+  hd: Replicas.Head,
   c2: Ledgers.Chain,
-  eh: {Basics.State.heads(a) == Basics.State.heads(b0): Tries.Trie<Basics.Head>},
+  eh: {Replicas.State.heads(~Basics.Ask.machine(), a) == Replicas.State.heads(~Basics.Ask.machine(), b0): Tries.Trie<Replicas.Head>},
   ebs: {Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)) == False{}: Bool}
 ) -> {
-  Basics.Node.head_of(
+  Replicas.Node.head_of(~Basics.Ask.machine(), 
     a,
     c2
   )
-    == Basics.Node.head_of(Sealing.State.head(b0, c, hd), c2): Maybe<&2, Basics.Head>
+    == Replicas.Node.head_of(~Basics.Ask.machine(), Sealing.State.head(b0, c, hd), c2): Maybe<&2, Replicas.Head>
 }:
   Equal.trans(
-    Maybe<&2, Basics.Head>,
-    Basics.Node.head_of(a, c2),
-    Basics.Node.head_of(b0, c2),
-    Basics.Node.head_of(Sealing.State.head(b0, c, hd), c2),
+    Maybe<&2, Replicas.Head>,
+    Replicas.Node.head_of(~Basics.Ask.machine(), a, c2),
+    Replicas.Node.head_of(~Basics.Ask.machine(), b0, c2),
+    Replicas.Node.head_of(~Basics.Ask.machine(), Sealing.State.head(b0, c, hd), c2),
     Equal.cong(
-      Tries.Trie<Basics.Head>,
-      Maybe<&2, Basics.Head>,
-      hs => Tries.Trie.get(Basics.Head, hs, Ledgers.Chain.key(c2)),
-      Basics.State.heads(a),
-      Basics.State.heads(b0),
+      Tries.Trie<Replicas.Head>,
+      Maybe<&2, Replicas.Head>,
+      hs => Tries.Trie.get(Replicas.Head, hs, Ledgers.Chain.key(c2)),
+      Replicas.State.heads(~Basics.Ask.machine(), a),
+      Replicas.State.heads(~Basics.Ask.machine(), b0),
       eh
     ),
     Equal.sym(
-      Maybe<&2, Basics.Head>,
-      Basics.Node.head_of(Sealing.State.head(b0, c, hd), c2),
-      Basics.Node.head_of(b0, c2),
+      Maybe<&2, Replicas.Head>,
+      Replicas.Node.head_of(~Basics.Ask.machine(), Sealing.State.head(b0, c, hd), c2),
+      Replicas.Node.head_of(~Basics.Ask.machine(), b0, c2),
       Equal.trans(
-        Maybe<&2, Basics.Head>,
-        Basics.Node.head_of(Sealing.State.head(b0, c, hd), c2),
+        Maybe<&2, Replicas.Head>,
+        Replicas.Node.head_of(~Basics.Ask.machine(), Sealing.State.head(b0, c, hd), c2),
         Bool.pick(
-          Maybe<&2, Basics.Head>,
+          Maybe<&2, Replicas.Head>,
           Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)),
           Some{hd},
-          Basics.Node.head_of(b0, c2)
+          Replicas.Node.head_of(~Basics.Ask.machine(), b0, c2)
         ),
-        Basics.Node.head_of(b0, c2),
+        Replicas.Node.head_of(~Basics.Ask.machine(), b0, c2),
         ProofLines.Head.of_set(b0, c, hd, c2),
         ProofLines.Pick.of(
-          Maybe<&2, Basics.Head>,
+          Maybe<&2, Replicas.Head>,
           False{},
           Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)),
           Some{hd},
-          Basics.Node.head_of(b0, c2),
+          Replicas.Node.head_of(~Basics.Ask.machine(), b0, c2),
           ebs
         )
       )
@@ -266,44 +267,44 @@ def Head.other(
 
 # the head of a line with the key of the line c, after the head of c is set
 def Head.this(
-  b0: Basics.Node,
+  b0: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
-  hd: Basics.Head,
+  hd: Replicas.Head,
   c2: Ledgers.Chain,
   ebs: {Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)) == True{}: Bool}
-) -> {Basics.Node.head_of(Sealing.State.head(b0, c, hd), c2) == Some{hd}: Maybe<&2, Basics.Head>}:
+) -> {Replicas.Node.head_of(~Basics.Ask.machine(), Sealing.State.head(b0, c, hd), c2) == Some{hd}: Maybe<&2, Replicas.Head>}:
   Equal.trans(
-    Maybe<&2, Basics.Head>,
-    Basics.Node.head_of(Sealing.State.head(b0, c, hd), c2),
+    Maybe<&2, Replicas.Head>,
+    Replicas.Node.head_of(~Basics.Ask.machine(), Sealing.State.head(b0, c, hd), c2),
     Bool.pick(
-      Maybe<&2, Basics.Head>,
+      Maybe<&2, Replicas.Head>,
       Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)),
       Some{hd},
-      Basics.Node.head_of(b0, c2)
+      Replicas.Node.head_of(~Basics.Ask.machine(), b0, c2)
     ),
     Some{hd},
     ProofLines.Head.of_set(b0, c, hd, c2),
     ProofLines.Pick.of(
-      Maybe<&2, Basics.Head>,
+      Maybe<&2, Replicas.Head>,
       True{},
       Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)),
       Some{hd},
-      Basics.Node.head_of(b0, c2),
+      Replicas.Node.head_of(~Basics.Ask.machine(), b0, c2),
       ebs
     )
   )
 
 # lines with the same key have the same head
 def Head.keyed(
-  a: Basics.Node,
+  a: Replicas.Node<Basics.Ask>,
   c2: Ledgers.Chain,
   c: Ledgers.Chain,
   ek: {Ledgers.Chain.key(c2) == Ledgers.Chain.key(c): List<&2, Bool>}
-) -> {Basics.Node.head_of(a, c2) == Basics.Node.head_of(a, c): Maybe<&2, Basics.Head>}:
+) -> {Replicas.Node.head_of(~Basics.Ask.machine(), a, c2) == Replicas.Node.head_of(~Basics.Ask.machine(), a, c): Maybe<&2, Replicas.Head>}:
   Equal.cong(
     List<&2, Bool>,
-    Maybe<&2, Basics.Head>,
-    kk => Tries.Trie.get(Basics.Head, Basics.State.heads(a), kk),
+    Maybe<&2, Replicas.Head>,
+    kk => Tries.Trie.get(Replicas.Head, Replicas.State.heads(~Basics.Ask.machine(), a), kk),
     Ledgers.Chain.key(c2),
     Ledgers.Chain.key(c),
     ek
@@ -311,10 +312,10 @@ def Head.keyed(
 
 # lines with the same key have the same decided steps
 def In.key(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   c2: Ledgers.Chain,
   c: Ledgers.Chain,
-  x: Basics.Head,
+  x: Replicas.Head,
   r: Nat,
   ek: {Ledgers.Chain.key(c2) == Ledgers.Chain.key(c): List<&2, Bool>}
 ) -> {Spec.Advance.in(s, c2, x, r) == Spec.Advance.in(s, c, x, r): Maybe<&2, Ledgers.Vote>}:
@@ -323,14 +324,14 @@ def In.key(
     Maybe<&2, Ledgers.Vote>,
     kk => Maybe.bind(
       &2,
-      Basics.Tip,
+      Replicas.Tip,
       Ledgers.Vote,
-      Basics.Head.tip(s, x),
+      Replicas.Head.tip(~Basics.Ask.machine(), s, x),
       t => Ledgers.Bucket.decide(
         ~Basics.Ask,
         Ledgers.State.under(
           ~Basics.Ask,
-          Basics.State.ledger(s),
+          Replicas.State.ledger(~Basics.Ask.machine(), s),
           List.append(
             &2,
             Bool,
@@ -338,7 +339,7 @@ def In.key(
             Ledgers.Round.key(r, [False{}])
           )
         ),
-        Basics.Tip.owners(t)
+        Replicas.Tip.owners(t)
       )
     ),
     Ledgers.Chain.key(c2),
@@ -349,12 +350,12 @@ def In.key(
 # no line with the key of c is some decided steps from a head with a tip, when
 # the head of c has no tip
 def Path.set.no(
-  +a: Basics.Node,
+  +a: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
   +c2: Ledgers.Chain,
-  h0: Basics.Head,
+  h0: Replicas.Head,
   ek: {Ledgers.Chain.key(c2) == Ledgers.Chain.key(c): List<&2, Bool>},
-  nh: {Spec.Head.held(Basics.Node.head_of(a, c)) == False{}: Bool},
+  nh: {Spec.Head.held(Replicas.Node.head_of(~Basics.Ask.machine(), a, c)) == False{}: Bool},
   t0: {Spec.Head.held(Some{h0}) == True{}: Bool},
   ra: Spec.Line.Reach(a, c2, h0)
 ) -> Empty:
@@ -364,29 +365,29 @@ def Path.set.no(
         Equal.trans(
           Bool,
           False{},
-          Spec.Head.held(Basics.Node.head_of(a, c)),
+          Spec.Head.held(Replicas.Node.head_of(~Basics.Ask.machine(), a, c)),
           True{},
-          Equal.sym(Bool, Spec.Head.held(Basics.Node.head_of(a, c)), False{}, nh),
+          Equal.sym(Bool, Spec.Head.held(Replicas.Node.head_of(~Basics.Ask.machine(), a, c)), False{}, nh),
           Equal.trans(
             Bool,
-            Spec.Head.held(Basics.Node.head_of(a, c)),
+            Spec.Head.held(Replicas.Node.head_of(~Basics.Ask.machine(), a, c)),
             Spec.Head.held(Some{h}),
             True{},
             Equal.cong(
-              Maybe<&2, Basics.Head>,
+              Maybe<&2, Replicas.Head>,
               Bool,
               Spec.Head.held,
-              Basics.Node.head_of(a, c),
+              Replicas.Node.head_of(~Basics.Ask.machine(), a, c),
               Some{h},
               Equal.trans(
-                Maybe<&2, Basics.Head>,
-                Basics.Node.head_of(a, c),
-                Basics.Node.head_of(a, c2),
+                Maybe<&2, Replicas.Head>,
+                Replicas.Node.head_of(~Basics.Ask.machine(), a, c),
+                Replicas.Node.head_of(~Basics.Ask.machine(), a, c2),
                 Some{h},
                 Equal.sym(
-                  Maybe<&2, Basics.Head>,
-                  Basics.Node.head_of(a, c2),
-                  Basics.Node.head_of(a, c),
+                  Maybe<&2, Replicas.Head>,
+                  Replicas.Node.head_of(~Basics.Ask.machine(), a, c2),
+                  Replicas.Node.head_of(~Basics.Ask.machine(), a, c),
                   Head.keyed(a, c2, c, ek)
                 ),
                 e1
@@ -399,17 +400,17 @@ def Path.set.no(
 
 # Path.set for the line c2, once it is known whether it has the key of c (bs)
 def Path.set.if(
-  +a: Basics.Node,
-  +b0: Basics.Node,
+  +a: Replicas.Node<Basics.Ask>,
+  +b0: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
-  +hd: Basics.Head,
+  +hd: Replicas.Head,
   +c2: Ledgers.Chain,
-  h0: Basics.Head,
+  h0: Replicas.Head,
   bs: Bool,
   ebs: {Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)) == bs: Bool},
   g: {Reading.Node.grows(a, b0) == True{}: Bool},
-  eh: {Basics.State.heads(a) == Basics.State.heads(b0): Tries.Trie<Basics.Head>},
-  nh: {Spec.Head.held(Basics.Node.head_of(a, c)) == False{}: Bool},
+  eh: {Replicas.State.heads(~Basics.Ask.machine(), a) == Replicas.State.heads(~Basics.Ask.machine(), b0): Tries.Trie<Replicas.Head>},
+  nh: {Spec.Head.held(Replicas.Node.head_of(~Basics.Ask.machine(), a, c)) == False{}: Bool},
   t0: {Spec.Head.held(Some{h0}) == True{}: Bool},
   ra: Spec.Line.Reach(a, c2, h0)
 ) -> Spec.Line.Reach(Sealing.State.head(b0, c, hd), c2, h0):
@@ -439,13 +440,13 @@ def Path.set.if(
 # a node b0 with a new head hd of the line c is on the paths of a, when b0
 # grew from a with the same heads, and the head of c in a has no tip
 def Path.set(
-  a: Basics.Node,
-  b0: Basics.Node,
+  a: Replicas.Node<Basics.Ask>,
+  b0: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
-  hd: Basics.Head,
+  hd: Replicas.Head,
   g: {Reading.Node.grows(a, b0) == True{}: Bool},
-  eh: {Basics.State.heads(a) == Basics.State.heads(b0): Tries.Trie<Basics.Head>},
-  nh: {Spec.Head.held(Basics.Node.head_of(a, c)) == False{}: Bool}
+  eh: {Replicas.State.heads(~Basics.Ask.machine(), a) == Replicas.State.heads(~Basics.Ask.machine(), b0): Tries.Trie<Replicas.Head>},
+  nh: {Spec.Head.held(Replicas.Node.head_of(~Basics.Ask.machine(), a, c)) == False{}: Bool}
 ) -> Spec.Node.On(a, Sealing.State.head(b0, c, hd)):
   +c2 => +h0 => t0 => ra => Path.set.if(
     a,
@@ -465,21 +466,21 @@ def Path.set(
 
 # Path.moved for a line with the key of c: one more decided step
 def Path.moved.yes(
-  +s: Basics.Node,
-  +n: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
+  +n: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
-  +h: Basics.Head,
-  hd: Basics.Head,
+  +h: Replicas.Head,
+  hd: Replicas.Head,
   +q: Nat,
   v: Ledgers.Vote,
   +c2: Ledgers.Chain,
-  h0: Basics.Head,
+  h0: Replicas.Head,
   +ek: {Ledgers.Chain.key(c2) == Ledgers.Chain.key(c): List<&2, Bool>},
   +gn: {Reading.Node.grows(s, n) == True{}: Bool},
-  en: {Basics.Node.head_of(n, c2) == Some{hd}: Maybe<&2, Basics.Head>},
-  em: {Basics.Node.head_of(s, c) == Some{h}: Maybe<&2, Basics.Head>},
+  en: {Replicas.Node.head_of(~Basics.Ask.machine(), n, c2) == Some{hd}: Maybe<&2, Replicas.Head>},
+  em: {Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == Some{h}: Maybe<&2, Replicas.Head>},
   ein: {Spec.Advance.in(s, c, h, q) == Some{v}: Maybe<&2, Ledgers.Vote>},
-  emv: {Spec.Head.moved(h, Some{v}) == Some{hd}: Maybe<&2, Basics.Head>},
+  emv: {Spec.Head.moved(h, Some{v}) == Some{hd}: Maybe<&2, Replicas.Head>},
   ra: Spec.Line.Reach(s, c2, h0)
 ) -> Spec.Line.Reach(n, c2, h0):
   match ra:
@@ -491,17 +492,17 @@ def Path.moved.yes(
           Tuple{
             en,
             Equal.trans(
-              Maybe<&2, Basics.Head>,
+              Maybe<&2, Replicas.Head>,
               Spec.Line.at(q <> rs, n, c2, h0),
               Spec.Head.moved(h2, Spec.Advance.in(n, c2, h2, q)),
               Some{hd},
               Equal.cong(
-                Maybe<&2, Basics.Head>,
-                Maybe<&2, Basics.Head>,
+                Maybe<&2, Replicas.Head>,
+                Maybe<&2, Replicas.Head>,
                 m => Maybe.bind(
                   &2,
-                  Basics.Head,
-                  Basics.Head,
+                  Replicas.Head,
+                  Replicas.Head,
                   m,
                   +z => Spec.Head.moved(z, Spec.Advance.in(n, c2, z, q))
                 ),
@@ -510,30 +511,30 @@ def Path.moved.yes(
                 Spec.Line.at_grows(rs, s, n, c2, h0, h2)(gn)(e2)
               ),
               Equal.trans(
-                Maybe<&2, Basics.Head>,
+                Maybe<&2, Replicas.Head>,
                 Spec.Head.moved(h2, Spec.Advance.in(n, c2, h2, q)),
                 Spec.Head.moved(h, Spec.Advance.in(n, c2, h, q)),
                 Some{hd},
                 Equal.cong(
-                  Basics.Head,
-                  Maybe<&2, Basics.Head>,
+                  Replicas.Head,
+                  Maybe<&2, Replicas.Head>,
                   +z => Spec.Head.moved(z, Spec.Advance.in(n, c2, z, q)),
                   h2,
                   h,
                   Shared.Maybe.some_inj(
-                    Basics.Head,
+                    Replicas.Head,
                     h2,
                     h,
                     Equal.trans(
-                      Maybe<&2, Basics.Head>,
+                      Maybe<&2, Replicas.Head>,
                       Some{h2},
-                      Basics.Node.head_of(s, c2),
+                      Replicas.Node.head_of(~Basics.Ask.machine(), s, c2),
                       Some{h},
-                      Equal.sym(Maybe<&2, Basics.Head>, Basics.Node.head_of(s, c2), Some{h2}, e1),
+                      Equal.sym(Maybe<&2, Replicas.Head>, Replicas.Node.head_of(~Basics.Ask.machine(), s, c2), Some{h2}, e1),
                       Equal.trans(
-                        Maybe<&2, Basics.Head>,
-                        Basics.Node.head_of(s, c2),
-                        Basics.Node.head_of(s, c),
+                        Maybe<&2, Replicas.Head>,
+                        Replicas.Node.head_of(~Basics.Ask.machine(), s, c2),
+                        Replicas.Node.head_of(~Basics.Ask.machine(), s, c),
                         Some{h},
                         Head.keyed(s, c2, c, ek),
                         em
@@ -542,13 +543,13 @@ def Path.moved.yes(
                   )
                 ),
                 Equal.trans(
-                  Maybe<&2, Basics.Head>,
+                  Maybe<&2, Replicas.Head>,
                   Spec.Head.moved(h, Spec.Advance.in(n, c2, h, q)),
                   Spec.Head.moved(h, Some{v}),
                   Some{hd},
                   Equal.cong(
                     Maybe<&2, Ledgers.Vote>,
-                    Maybe<&2, Basics.Head>,
+                    Maybe<&2, Replicas.Head>,
                     w => Spec.Head.moved(h, w),
                     Spec.Advance.in(n, c2, h, q),
                     Some{v},
@@ -571,22 +572,22 @@ def Path.moved.yes(
 
 # Path.moved for the line c2, once it is known whether it has the key of c
 def Path.moved.if(
-  +s: Basics.Node,
-  +b0: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
+  +b0: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
-  h: Basics.Head,
-  +hd: Basics.Head,
+  h: Replicas.Head,
+  +hd: Replicas.Head,
   q: Nat,
   v: Ledgers.Vote,
   +c2: Ledgers.Chain,
-  h0: Basics.Head,
+  h0: Replicas.Head,
   bs: Bool,
   +ebs: {Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)) == bs: Bool},
   g: {Reading.Node.grows(s, b0) == True{}: Bool},
-  eh: {Basics.State.heads(s) == Basics.State.heads(b0): Tries.Trie<Basics.Head>},
-  em: {Basics.Node.head_of(s, c) == Some{h}: Maybe<&2, Basics.Head>},
+  eh: {Replicas.State.heads(~Basics.Ask.machine(), s) == Replicas.State.heads(~Basics.Ask.machine(), b0): Tries.Trie<Replicas.Head>},
+  em: {Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == Some{h}: Maybe<&2, Replicas.Head>},
   ein: {Spec.Advance.in(s, c, h, q) == Some{v}: Maybe<&2, Ledgers.Vote>},
-  emv: {Spec.Head.moved(h, Some{v}) == Some{hd}: Maybe<&2, Basics.Head>},
+  emv: {Spec.Head.moved(h, Some{v}) == Some{hd}: Maybe<&2, Replicas.Head>},
   ra: Spec.Line.Reach(s, c2, h0)
 ) -> Spec.Line.Reach(Sealing.State.head(b0, c, hd), c2, h0):
   match bs:
@@ -635,20 +636,20 @@ def Path.moved.if(
 # a head moved over the step v that the owners decided at it, in the round
 # q, is one more decided step on its path
 def Path.moved(
-  +s: Basics.Node,
-  +s3: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
+  +s3: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
-  h: Basics.Head,
-  hd: Basics.Head,
+  h: Replicas.Head,
+  hd: Replicas.Head,
   qs: List<&2, Ledgers.Id>,
   q: Nat,
   v: Ledgers.Vote,
   g3: {Reading.Node.grows(s, s3) == True{}: Bool},
-  em: {Basics.Node.head_of(s, c) == Some{h}: Maybe<&2, Basics.Head>},
+  em: {Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == Some{h}: Maybe<&2, Replicas.Head>},
   ein: {Spec.Advance.in(s, c, h, q) == Some{v}: Maybe<&2, Ledgers.Vote>},
-  emv: {Spec.Head.moved(h, Some{v}) == Some{hd}: Maybe<&2, Basics.Head>}
-) -> Spec.Node.On(s, Sealing.State.moved(Basics.State.led(s, Basics.State.ledger(s3)), c, hd, qs)):
-  +x = Basics.State.led(s, Basics.State.ledger(s3))
+  emv: {Spec.Head.moved(h, Some{v}) == Some{hd}: Maybe<&2, Replicas.Head>}
+) -> Spec.Node.On(s, Sealing.State.moved(Replicas.State.led(~Basics.Ask.machine(), s, Replicas.State.ledger(~Basics.Ask.machine(), s3)), c, hd, qs)):
+  +x = Replicas.State.led(~Basics.Ask.machine(), s, Replicas.State.ledger(~Basics.Ask.machine(), s3))
   +ws = Sealing.Wait.left(
     Sealing.Wait.of(x, c),
     Tries.Trie.put_keys(~Ledgers.Id, ~Ledgers.Id.key, qs, Tries.Trie.new(Unit))
@@ -668,11 +669,11 @@ def Path.moved(
     {==},
     ProofTrees.Grows.to(s, x, b0, ProofTrees.Led.wait(x, c, ws), ProofTrees.Grows.back(s, s3, g3)),
     Equal.trans(
-      Tries.Trie<Basics.Head>,
-      Basics.State.heads(s),
-      Basics.State.heads(x),
-      Basics.State.heads(b0),
-      ProofLines.Heads.led(s, Basics.State.ledger(s3)),
+      Tries.Trie<Replicas.Head>,
+      Replicas.State.heads(~Basics.Ask.machine(), s),
+      Replicas.State.heads(~Basics.Ask.machine(), x),
+      Replicas.State.heads(~Basics.Ask.machine(), b0),
+      ProofLines.Heads.led(s, Replicas.State.ledger(~Basics.Ask.machine(), s3)),
       ProofLines.Heads.wait(x, c, ws)
     ),
     em,
@@ -683,22 +684,22 @@ def Path.moved(
 
 # Advance.moved is on the paths, once the node m that the put gives is known
 def Advance.moved.path(
-  +s: Basics.Node,
-  +s2: Basics.Node,
-  m: Maybe<&2, Basics.Node>,
+  +s: Replicas.Node<Basics.Ask>,
+  +s2: Replicas.Node<Basics.Ask>,
+  m: Maybe<&2, Replicas.Node<Basics.Ask>>,
   c: Ledgers.Chain,
-  h: Basics.Head,
-  hd: Basics.Head,
-  t2: Basics.Tip,
+  h: Replicas.Head,
+  hd: Replicas.Head,
+  t2: Replicas.Tip,
   qs: List<&2, Ledgers.Id>,
   q: Nat,
   v: Ledgers.Vote,
   g2: {Reading.Node.grows(s, s2) == True{}: Bool},
-  em: {Basics.Node.head_of(s, c) == Some{h}: Maybe<&2, Basics.Head>},
+  em: {Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == Some{h}: Maybe<&2, Replicas.Head>},
   ein: {Spec.Advance.in(s, c, h, q) == Some{v}: Maybe<&2, Ledgers.Vote>},
-  emv: {Spec.Head.moved(h, Some{v}) == Some{hd}: Maybe<&2, Basics.Head>}
+  emv: {Spec.Head.moved(h, Some{v}) == Some{hd}: Maybe<&2, Replicas.Head>}
 ) -> {
-  Judging.State.put(s2, [Basics.Tip.words(t2)]) == m: Maybe<&2, Basics.Node>
+  Judging.State.put(s2, [Replicas.Tip.words(t2)]) == m: Maybe<&2, Replicas.Node<Basics.Ask>>
 } -> Spec.Node.On(s, Voting.Advance.moved(s, m, c, hd, qs)):
   match m:
     case None{}:
@@ -717,7 +718,7 @@ def Advance.moved.path(
           s,
           s2,
           s3
-        )(g2)(ProofLines.Put.grew(s2, [Basics.Tip.words(t2)], s3, e2)),
+        )(g2)(ProofLines.Put.grew(s2, [Replicas.Tip.words(t2)], s3, e2)),
         em,
         ein,
         emv
@@ -726,9 +727,9 @@ def Advance.moved.path(
 # Advance.ran is on the paths, once it is known whether the run gives the tip
 # that the step names (bq)
 def Advance.ran.path.if(
-  s: Basics.Node,
-  +s2: Basics.Node,
-  +t2: Basics.Tip,
+  s: Replicas.Node<Basics.Ask>,
+  +s2: Replicas.Node<Basics.Ask>,
+  +t2: Replicas.Tip,
   c: Ledgers.Chain,
   +r: Ledgers.Id,
   +br: Maybe<&2, String>,
@@ -739,14 +740,14 @@ def Advance.ran.path.if(
   +qs: List<&2, Ledgers.Id>,
   q: Nat,
   bq: Bool,
-  ebq: {Sealing.Root.same(after, Some{Basics.Tip.hash(t2)}) == bq: Bool},
+  ebq: {Sealing.Root.same(after, Some{Replicas.Tip.hash(t2)}) == bq: Bool},
   g2: {Reading.Node.grows(s, s2) == True{}: Bool},
-  em: {Basics.Node.head_of(s, c) == Some{Basics.Head{r, br, next, th}}: Maybe<&2, Basics.Head>},
+  em: {Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == Some{Replicas.Head{r, br, next, th}}: Maybe<&2, Replicas.Head>},
   ein: {
     Spec.Advance.in(
       s,
       c,
-      Basics.Head{r, br, next, th},
+      Replicas.Head{r, br, next, th},
       q
     )
       == Some{Ledgers.Vote{before, qs, after}}: Maybe<&2, Ledgers.Vote>
@@ -754,13 +755,13 @@ def Advance.ran.path.if(
 ) -> Spec.Node.On(
   s,
   Shared.Bool.when(
-    Basics.Node,
+    Replicas.Node<Basics.Ask>,
     bq,
     u => Voting.Advance.moved(
       s,
-      Judging.State.put(s2, [Basics.Tip.words(t2)]),
+      Judging.State.put(s2, [Replicas.Tip.words(t2)]),
       c,
-      Basics.Head{r, br, U32.inc(next), Some{Basics.Tip.hash(t2)}},
+      Replicas.Head{r, br, U32.inc(next), Some{Replicas.Tip.hash(t2)}},
       qs
     ),
     u => s
@@ -771,10 +772,10 @@ def Advance.ran.path.if(
       Advance.moved.path(
         s,
         s2,
-        Judging.State.put(s2, [Basics.Tip.words(t2)]),
+        Judging.State.put(s2, [Replicas.Tip.words(t2)]),
         c,
-        Basics.Head{r, br, next, th},
-        Basics.Head{r, br, U32.inc(next), Some{Basics.Tip.hash(t2)}},
+        Replicas.Head{r, br, next, th},
+        Replicas.Head{r, br, U32.inc(next), Some{Replicas.Tip.hash(t2)}},
         t2,
         qs,
         q,
@@ -784,22 +785,22 @@ def Advance.ran.path.if(
         ein,
         Equal.cong(
           Maybe<&2, Hashes.Hash>,
-          Maybe<&2, Basics.Head>,
+          Maybe<&2, Replicas.Head>,
           a => Maybe.bind(
             &2,
             Hashes.Hash,
-            Basics.Head,
+            Replicas.Head,
             a,
-            y => Some{Spec.Head.up(Basics.Head{r, br, next, th}, y)}
+            y => Some{Spec.Head.up(Replicas.Head{r, br, next, th}, y)}
           ),
           after,
-          Some{Basics.Tip.hash(t2)},
+          Some{Replicas.Tip.hash(t2)},
           Shared.Maybe.is_eq_sound(
             ~Hashes.Hash,
             ~Hashes.Hash.is_eq,
             Hashes.Hash.is_eq_sound,
             after,
-            Some{Basics.Tip.hash(t2)}
+            Some{Replicas.Tip.hash(t2)}
           )(ebq)
         )
       )({==})
@@ -808,7 +809,7 @@ def Advance.ran.path.if(
 
 # a checked step is on the paths
 def Advance.ran.path(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
   r: Ledgers.Id,
   br: Maybe<&2, String>,
@@ -819,12 +820,12 @@ def Advance.ran.path(
   qs: List<&2, Ledgers.Id>,
   m: Maybe<&2, Stepping.Run>,
   q: Nat,
-  em: {Basics.Node.head_of(s, c) == Some{Basics.Head{r, br, next, th}}: Maybe<&2, Basics.Head>},
+  em: {Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == Some{Replicas.Head{r, br, next, th}}: Maybe<&2, Replicas.Head>},
   ein: {
     Spec.Advance.in(
       s,
       c,
-      Basics.Head{r, br, next, th},
+      Replicas.Head{r, br, next, th},
       q
     )
       == Some{Ledgers.Vote{before, qs, after}}: Maybe<&2, Ledgers.Vote>
@@ -849,7 +850,7 @@ def Advance.ran.path(
         after,
         qs,
         q,
-        Sealing.Root.same(after, Some{Basics.Tip.hash(t2)}),
+        Sealing.Root.same(after, Some{Replicas.Tip.hash(t2)}),
         {==},
         ga,
         em,
@@ -858,26 +859,26 @@ def Advance.ran.path(
 
 # Node.advance is on the paths, once the decided step m is known
 def Advance.step.path(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
-  h: Basics.Head,
-  +t: Basics.Tip,
+  h: Replicas.Head,
+  +t: Replicas.Tip,
   m: Maybe<&2, Ledgers.Vote>
-) -> {Basics.Node.head_of(s, c) == Some{h}: Maybe<&2, Basics.Head>}
-  -> {Basics.Head.tip(s, h) == Some{t}: Maybe<&2, Basics.Tip>}
+) -> {Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == Some{h}: Maybe<&2, Replicas.Head>}
+  -> {Replicas.Head.tip(~Basics.Ask.machine(), s, h) == Some{t}: Maybe<&2, Replicas.Tip>}
   -> {
     Voting.Height.decide(
       s,
       c,
       Sealing.Head.next(h),
-      Basics.Tip.owners(t),
+      Replicas.Tip.owners(t),
       Sealing.Round.seen(s, c, Sealing.Head.next(h))
     )
       == m: Maybe<&2, Ledgers.Vote>
   }
   -> Spec.Node.On(s, Voting.Advance.step(s, c, h, t, m)):
   match h m:
-    case Basics.Head{r, br, +next, +th} Some{Ledgers.Vote{+before, +qs, after}}:
+    case Replicas.Head{r, br, +next, +th} Some{Ledgers.Vote{+before, +qs, after}}:
       em => et => ed => Path.when(
         Sealing.Root.same(before, th),
         s,
@@ -891,7 +892,7 @@ def Advance.step.path(
           s,
           c,
           next,
-          Basics.Tip.owners(t),
+          Replicas.Tip.owners(t),
           Sealing.Round.seen(s, c, next),
           Ledgers.Vote{before, qs, after}
         )(
@@ -911,25 +912,25 @@ def Advance.step.path(
             q,
             em,
             (
-              %Equal.sym(Maybe<&2, Basics.Tip>, Basics.Head.tip(s, Basics.Head{r, br, next, th}), Some{t}, et): {Maybe.bind(&2, Basics.Tip, Ledgers.Vote, _, t1 => Ledgers.State.decide(~Basics.Ask, Basics.State.ledger(s), Ledgers.Where{c, next, q}, Basics.Tip.owners(t1))) == Some{Ledgers.Vote{before, qs, after}}: Maybe<&2, Ledgers.Vote>}
+              %Equal.sym(Maybe<&2, Replicas.Tip>, Replicas.Head.tip(~Basics.Ask.machine(), s, Replicas.Head{r, br, next, th}), Some{t}, et): {Maybe.bind(&2, Replicas.Tip, Ledgers.Vote, _, t1 => Ledgers.State.decide(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), Ledgers.Where{c, next, q}, Replicas.Tip.owners(t1))) == Some{Ledgers.Vote{before, qs, after}}: Maybe<&2, Ledgers.Vote>}
               d)
           )(ProofTrees.Run.grows(s, c, t, qs))
         ),
         Path.refl(s)
       )
-    case Basics.Head{r, br, next, th} None{}:
+    case Replicas.Head{r, br, next, th} None{}:
       em => et => ed => Path.refl(s)
 
 # Node.advance is on the paths, at the head h whose tip is m
 def Advance.at.path(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
-  +h: Basics.Head,
-  m: Maybe<&2, Basics.Tip>
+  +h: Replicas.Head,
+  m: Maybe<&2, Replicas.Tip>
 ) -> {
-  Basics.Node.head_of(s, c) == Some{h}: Maybe<&2, Basics.Head>
+  Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == Some{h}: Maybe<&2, Replicas.Head>
 } -> {
-  Basics.Head.tip(s, h) == m: Maybe<&2, Basics.Tip>
+  Replicas.Head.tip(~Basics.Ask.machine(), s, h) == m: Maybe<&2, Replicas.Tip>
 } -> Spec.Node.On(s, Voting.Advance.at(s, c, h, m)):
   match m:
     case None{}:
@@ -944,7 +945,7 @@ def Advance.at.path(
           s,
           c,
           Sealing.Head.next(h),
-          Basics.Tip.owners(t),
+          Replicas.Tip.owners(t),
           Sealing.Round.seen(s, c, Sealing.Head.next(h))
         )
       )(em)(et)({==})
@@ -952,24 +953,24 @@ def Advance.at.path(
 # a node's ballot keeps its logs
 def Cast.path(
   +n: String,
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain
 ) -> Spec.Node.On(s, Voting.Node.cast(n, s, c)):
   Path.same(
     s,
     Voting.Node.cast(n, s, c),
     ProofTrees.Cast.grows(n, s, c),
-    ProofLines.Cast.head.heads(n, s, c, Basics.Node.head_of(s, c))
+    ProofLines.Cast.head.heads(n, s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))
   )
 
 # Advances.kept once the head m is known
 def Advances.at.path(
   f: Nat,
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
-  m: Maybe<&2, Basics.Head>
+  m: Maybe<&2, Replicas.Head>
 ) -> {
-  Basics.Node.head_of(s, c) == m: Maybe<&2, Basics.Head>
+  Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == m: Maybe<&2, Replicas.Head>
 } -> Spec.Node.On(s, Voting.Advances.at(f, s, c, m)):
   match f m:
     case 0n x:
@@ -978,19 +979,19 @@ def Advances.at.path(
       em => Path.refl(s)
     case 1n+(+p) Some{+h}:
       +em =>
-        +s1 = Voting.Advance.at(s, c, h, Basics.Head.tip(s, h))
-        +m1 = Basics.Node.head_of(s1, c)
+        +s1 = Voting.Advance.at(s, c, h, Replicas.Head.tip(~Basics.Ask.machine(), s, h))
+        +m1 = Replicas.Node.head_of(~Basics.Ask.machine(), s1, c)
         Path.when(
           Voting.Heads.level(Some{h}, m1),
           s,
           s1,
           Voting.Advances.at(p, s1, c, m1),
-          Advance.at.path(s, c, h, Basics.Head.tip(s, h))(em)({==}),
+          Advance.at.path(s, c, h, Replicas.Head.tip(~Basics.Ask.machine(), s, h))(em)({==}),
           Path.trans(
             s,
             s1,
             Voting.Advances.at(p, s1, c, m1),
-            Advance.at.path(s, c, h, Basics.Head.tip(s, h))(em)({==}),
+            Advance.at.path(s, c, h, Replicas.Head.tip(~Basics.Ask.machine(), s, h))(em)({==}),
             Advances.at.path(p, s1, c, m1)({==})
           )
         )
@@ -998,15 +999,15 @@ def Advances.at.path(
 # a head that moves over each decided step is on the paths
 def Advances.path(
   f: Nat,
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain
 ) -> Spec.Node.On(s, Voting.Node.advances(f, s, c)):
-  Advances.at.path(f, s, c, Basics.Node.head_of(s, c))({==})
+  Advances.at.path(f, s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))({==})
 
 # what a node does at a head is on the paths
 def Step.head.path(
   +n: String,
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain
 ) -> Spec.Node.On(s, Voting.Step.head(n, s, c)):
   +s1 = Voting.Node.advances(4294967295n, s, c)
@@ -1022,40 +1023,40 @@ def Step.head.path(
 
 # a head with no tip is not held
 def Held.not(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
-  m: Maybe<&2, Basics.Head>,
-  em: {Basics.Node.head_of(s, c) == m: Maybe<&2, Basics.Head>}
-) -> {Spec.Head.held(Basics.Node.head_of(s, c)) == Spec.Head.held(m): Bool}:
-  Equal.cong(Maybe<&2, Basics.Head>, Bool, Spec.Head.held, Basics.Node.head_of(s, c), m, em)
+  m: Maybe<&2, Replicas.Head>,
+  em: {Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == m: Maybe<&2, Replicas.Head>}
+) -> {Spec.Head.held(Replicas.Node.head_of(~Basics.Ask.machine(), s, c)) == Spec.Head.held(m): Bool}:
+  Equal.cong(Maybe<&2, Replicas.Head>, Bool, Spec.Head.held, Replicas.Node.head_of(~Basics.Ask.machine(), s, c), m, em)
 
 # a branch that opens is on the paths, once the head m of the line is known
 def Open.at.path(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
-  m: Maybe<&2, Basics.Head>
+  m: Maybe<&2, Replicas.Head>
 ) -> {
-  Basics.Node.head_of(s, c) == m: Maybe<&2, Basics.Head>
+  Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == m: Maybe<&2, Replicas.Head>
 } -> Spec.Node.On(s, Sealing.Open.at(s, c, m)):
   match m:
-    case Some{Basics.Head{+r, Some{+b}, n, None{}}}:
+    case Some{Replicas.Head{+r, Some{+b}, n, None{}}}:
       em => Path.set(
         s,
         s,
         c,
-        Basics.Head{
+        Replicas.Head{
           r,
           Some{b},
           0,
-          Sealing.Branch.first(s, b, Basics.Node.tip(s, Ledgers.Chain{r, None{}}))
+          Sealing.Branch.first(s, b, Replicas.Node.tip(~Basics.Ask.machine(), s, Ledgers.Chain{r, None{}}))
         },
         ProofTrees.Grows.refl(s),
         {==},
-        Held.not(s, c, Some{Basics.Head{r, Some{b}, n, None{}}}, em)
+        Held.not(s, c, Some{Replicas.Head{r, Some{b}, n, None{}}}, em)
       )
-    case Some{Basics.Head{r, Some{b}, n, Some{t}}}:
+    case Some{Replicas.Head{r, Some{b}, n, Some{t}}}:
       em => Path.refl(s)
-    case Some{Basics.Head{r, None{}, n, t}}:
+    case Some{Replicas.Head{r, None{}, n, t}}:
       em => Path.refl(s)
     case None{}:
       em => Path.refl(s)
@@ -1063,7 +1064,7 @@ def Open.at.path(
 # what a node does on a line is on the paths
 def Step.path(
   n: String,
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain
 ) -> Spec.Node.On(s, Voting.Node.step(n, s, c)):
   s1 = Sealing.Node.open(s, c)
@@ -1071,17 +1072,17 @@ def Step.path(
     s,
     s1,
     Voting.Step.head(n, s1, c),
-    Open.at.path(s, c, Basics.Node.head_of(s, c))({==}),
+    Open.at.path(s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))({==}),
     Step.head.path(n, s1, c)
   )
 
 # a pass to the next round is on the paths
 def Pass.path(
   +n: String,
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain
 ) -> Spec.Node.On(s, Voting.Node.pass(n, s, c)):
-  +s1 = Voting.Pass.head(n, s, c, Basics.Node.head_of(s, c))
+  +s1 = Voting.Pass.head(n, s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))
   Path.trans(
     s,
     s1,
@@ -1089,25 +1090,25 @@ def Pass.path(
     Path.same(
       s,
       s1,
-      ProofTrees.Pass.head.grows(n, s, c, Basics.Node.head_of(s, c)),
-      ProofLines.Pass.head.heads(n, s, c, Basics.Node.head_of(s, c))
+      ProofTrees.Pass.head.grows(n, s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c)),
+      ProofLines.Pass.head.heads(n, s, c, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))
     ),
     Step.path(n, s1, c)
   )
 
 # a first head is on the paths, once the head m of the line is known
 def First.at.path(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
-  h: Basics.Head,
-  m: Maybe<&2, Basics.Head>
+  h: Replicas.Head,
+  m: Maybe<&2, Replicas.Head>
 ) -> {
-  Basics.Node.head_of(s, c) == m: Maybe<&2, Basics.Head>
+  Replicas.Node.head_of(~Basics.Ask.machine(), s, c) == m: Maybe<&2, Replicas.Head>
 } -> Spec.Node.On(s, Sealing.First.at(s, c, h, m)):
   match m:
-    case Some{Basics.Head{r, b, n, Some{t}}}:
+    case Some{Replicas.Head{r, b, n, Some{t}}}:
       em => Path.refl(s)
-    case Some{Basics.Head{+r, +b, +n, None{}}}:
+    case Some{Replicas.Head{+r, +b, +n, None{}}}:
       em => Path.set(
         s,
         s,
@@ -1115,18 +1116,18 @@ def First.at.path(
         h,
         ProofTrees.Grows.refl(s),
         {==},
-        Held.not(s, c, Some{Basics.Head{r, b, n, None{}}}, em)
+        Held.not(s, c, Some{Replicas.Head{r, b, n, None{}}}, em)
       )
     case None{}:
       em => Path.set(s, s, c, h, ProofTrees.Grows.refl(s), {==}, Held.not(s, c, None{}, em))
 
 # a first head on a node that grew from a, which grew from s, is on the paths
 def Start.head.path(
-  +s: Basics.Node,
-  a: Basics.Node,
-  m: Maybe<&2, Basics.Node>,
+  +s: Replicas.Node<Basics.Ask>,
+  a: Replicas.Node<Basics.Ask>,
+  m: Maybe<&2, Replicas.Node<Basics.Ask>>,
   +c: Ledgers.Chain,
-  h: Basics.Head,
+  h: Replicas.Head,
   g: {Reading.Node.grows(s, a) == True{}: Bool}
 ) -> {
   ProofTrees.State.after(a, m) == True{}: Bool
@@ -1136,7 +1137,7 @@ def Start.head.path(
       e => Path.refl(s)
     case Some{+s3}:
       e =>
-        +x = Basics.State.led(s, Basics.State.ledger(s3))
+        +x = Replicas.State.led(~Basics.Ask.machine(), s, Replicas.State.ledger(~Basics.Ask.machine(), s3))
         Path.trans(
           s,
           x,
@@ -1145,14 +1146,14 @@ def Start.head.path(
             s,
             x,
             ProofTrees.Grows.back(s, s3, ProofTrees.Grows.trans(s, a, s3)(g)(e)),
-            ProofLines.Heads.led(s, Basics.State.ledger(s3))
+            ProofLines.Heads.led(s, Replicas.State.ledger(~Basics.Ask.machine(), s3))
           ),
-          First.at.path(x, c, h, Basics.Node.head_of(x, c))({==})
+          First.at.path(x, c, h, Replicas.Node.head_of(~Basics.Ask.machine(), x, c))({==})
         )
 
 # Start.path once the content m of the store is known
 def Start.with.path(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +i: Ledgers.Id,
   +os: List<&2, String>,
   m: Maybe<&2, Judging.Work>
@@ -1164,19 +1165,19 @@ def Start.with.path(
       e => Path.refl(s)
     case Some{Judging.Work{+s2, +c}}:
       e =>
-        +t = {Basics.Tip{c, None{}, 0, os}: Basics.Tip}
+        +t = {Replicas.Tip{c, None{}, 0, os}: Replicas.Tip}
         Start.head.path(
           s,
           s2,
-          Judging.State.put(s2, [Basics.Tip.words(t)]),
+          Judging.State.put(s2, [Replicas.Tip.words(t)]),
           Ledgers.Chain{i, None{}},
-          Basics.Head{i, None{}, 0, Some{Basics.Tip.hash(t)}},
+          Replicas.Head{i, None{}, 0, Some{Replicas.Tip.hash(t)}},
           e
-        )(ProofTrees.Put.grows(s2, [Basics.Tip.words(t)]))
+        )(ProofTrees.Put.grows(s2, [Replicas.Tip.words(t)]))
 
 # a store that starts is on the paths
 def Start.path(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   i: Ledgers.Id,
   +os: List<&2, Basics.Owner>
 ) -> Spec.Node.On(s, Sealing.Node.start(s, i, os)):
@@ -1189,12 +1190,12 @@ def Start.path(
 
 # a line that a node starts to follow is on the paths
 def Follow.new.path(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +r: Ledgers.Id,
   +l: Maybe<&2, String>,
-  m: Maybe<&2, Basics.Head>
+  m: Maybe<&2, Replicas.Head>
 ) -> {
-  Basics.Node.head_of(s, Basics.Line.chain(r, l)) == m: Maybe<&2, Basics.Head>
+  Replicas.Node.head_of(~Basics.Ask.machine(), s, Replicas.Line.chain(r, l)) == m: Maybe<&2, Replicas.Head>
 } -> Spec.Node.On(s, Sealing.Follow.new(s, r, l, m)):
   match m:
     case Some{h}:
@@ -1203,16 +1204,16 @@ def Follow.new.path(
       em => Path.set(
         s,
         s,
-        Basics.Line.chain(r, l),
-        Basics.Head{r, l, 0, None{}},
+        Replicas.Line.chain(r, l),
+        Replicas.Head{r, l, 0, None{}},
         ProofTrees.Grows.refl(s),
         {==},
-        Held.not(s, Basics.Line.chain(r, l), None{}, em)
+        Held.not(s, Replicas.Line.chain(r, l), None{}, em)
       )
 
 # a new request is on the paths
 def Arrive.path(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +i: Ledgers.Id,
   q: Basics.Ask
 ) -> Spec.Node.On(s, Sealing.Node.arrive(s, i, q)):
@@ -1224,40 +1225,40 @@ def Arrive.path(
       Path.trans(
         s,
         s1,
-        Sealing.State.wait(s1, Basics.Line.chain(r, l), i),
-        Follow.new.path(s, r, l, Basics.Node.head_of(s, Basics.Line.chain(r, l)))({==}),
+        Sealing.State.wait(s1, Replicas.Line.chain(r, l), i),
+        Follow.new.path(s, r, l, Replicas.Node.head_of(~Basics.Ask.machine(), s, Replicas.Line.chain(r, l)))({==}),
         Path.same(
           s1,
-          Sealing.State.wait(s1, Basics.Line.chain(r, l), i),
+          Sealing.State.wait(s1, Replicas.Line.chain(r, l), i),
           ProofTrees.Grows.to(
             s1,
             s1,
-            Sealing.State.wait(s1, Basics.Line.chain(r, l), i),
-            ProofTrees.Led.waits(s1, Basics.Line.chain(r, l), i),
+            Sealing.State.wait(s1, Replicas.Line.chain(r, l), i),
+            ProofTrees.Led.waits(s1, Replicas.Line.chain(r, l), i),
             ProofTrees.Grows.refl(s1)
           ),
-          ProofLines.Heads.waits(s1, Basics.Line.chain(r, l), i)
+          ProofLines.Heads.waits(s1, Replicas.Line.chain(r, l), i)
         )
       )
 
 # a new request is on the paths
 def Ask.new.path(
   n: String,
-  +s: Basics.Node,
-  +e: Basics.Envelope,
+  +s: Replicas.Node<Basics.Ask>,
+  +e: Replicas.Envelope,
   +q: Basics.Ask
 ) -> Spec.Node.On(s, Voting.Node.ask.new(n, s, e, q)):
-  +i = Basics.Envelope.of(e)
+  +i = Replicas.Envelope.of(e)
   c = Basics.Ask.chain(i, q)
   +l0 = Ledgers.State.ask(
     ~Basics.Ask,
     ~Basics.Ask.is_eq,
-    Basics.State.ledger(s),
+    Replicas.State.ledger(~Basics.Ask.machine(), s),
     i,
-    Basics.Envelope.time(e),
+    Replicas.Envelope.time(e),
     q
   )
-  +s0 = Basics.State.led(s, l0)
+  +s0 = Replicas.State.led(~Basics.Ask.machine(), s, l0)
   s1 = Sealing.Node.arrive(s0, i, q)
   Path.trans(
     s,
@@ -1273,9 +1274,9 @@ def Ask.new.path(
           ~Basics.Ask,
           ~Basics.Ask.is_eq,
           ~Basics.Ask.laws(),
-          Basics.State.ledger(s),
+          Replicas.State.ledger(~Basics.Ask.machine(), s),
           Ledgers.Slot.ask(i),
-          Ledgers.Entry.Ask{i, Basics.Envelope.time(e), q}
+          Ledgers.Entry.Ask{i, Replicas.Envelope.time(e), q}
         )
       ),
       ProofLines.Heads.led(s, l0)
@@ -1286,8 +1287,8 @@ def Ask.new.path(
 # Node.ask_keeps once the cell m of the request's ID is known
 def Ask.at.path(
   n: String,
-  +s: Basics.Node,
-  +e: Basics.Envelope,
+  +s: Replicas.Node<Basics.Ask>,
+  +e: Replicas.Envelope,
   q: Basics.Ask,
   m: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>
 ) -> Spec.Node.On(s, Voting.Node.ask.at(n, s, e, q, m)):
@@ -1297,28 +1298,28 @@ def Ask.at.path(
     case None{}:
       Path.trans(
         s,
-        Basics.State.keyed(s, Sealing.Keys.mark(Basics.State.keys(s), Basics.Envelope.of(e))),
+        Replicas.State.keyed(~Basics.Ask.machine(), s, Sealing.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), Replicas.Envelope.of(e))),
         Voting.Node.ask.new(
           n,
-          Basics.State.keyed(s, Sealing.Keys.mark(Basics.State.keys(s), Basics.Envelope.of(e))),
+          Replicas.State.keyed(~Basics.Ask.machine(), s, Sealing.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), Replicas.Envelope.of(e))),
           e,
           q
         ),
         Path.same(
           s,
-          Basics.State.keyed(s, Sealing.Keys.mark(Basics.State.keys(s), Basics.Envelope.of(e))),
+          Replicas.State.keyed(~Basics.Ask.machine(), s, Sealing.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), Replicas.Envelope.of(e))),
           ProofTrees.Grows.to(
             s,
             s,
-            Basics.State.keyed(s, Sealing.Keys.mark(Basics.State.keys(s), Basics.Envelope.of(e))),
-            ProofTrees.Led.keyed(s, Sealing.Keys.mark(Basics.State.keys(s), Basics.Envelope.of(e))),
+            Replicas.State.keyed(~Basics.Ask.machine(), s, Sealing.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), Replicas.Envelope.of(e))),
+            ProofTrees.Led.keyed(s, Sealing.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), Replicas.Envelope.of(e))),
             ProofTrees.Grows.refl(s)
           ),
-          ProofLines.Heads.keyed(s, Sealing.Keys.mark(Basics.State.keys(s), Basics.Envelope.of(e)))
+          ProofLines.Heads.keyed(s, Sealing.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), Replicas.Envelope.of(e)))
         ),
         Ask.new.path(
           n,
-          Basics.State.keyed(s, Sealing.Keys.mark(Basics.State.keys(s), Basics.Envelope.of(e))),
+          Replicas.State.keyed(~Basics.Ask.machine(), s, Sealing.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), Replicas.Envelope.of(e))),
           e,
           q
         )
@@ -1327,8 +1328,8 @@ def Ask.at.path(
 # Node.ask is on the paths
 def Ask.path(
   n: String,
-  +s: Basics.Node,
-  +e: Basics.Envelope,
+  +s: Replicas.Node<Basics.Ask>,
+  +e: Replicas.Envelope,
   q: Basics.Ask
 ) -> Spec.Node.On(s, Voting.Node.ask(n, s, e, q)):
   Ask.at.path(
@@ -1336,21 +1337,21 @@ def Ask.path(
     s,
     e,
     q,
-    Ledgers.State.get(~Basics.Ask, Basics.State.ledger(s), Ledgers.Slot.ask(Basics.Envelope.of(e)))
+    Ledgers.State.get(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), Ledgers.Slot.ask(Replicas.Envelope.of(e)))
   )
 
 # the new requests among cells are on the paths
 def Take.asks.path(
   cs: List<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>,
   +old: Ledgers.State(Basics.Ask),
-  +s: Basics.Node
+  +s: Replicas.Node<Basics.Ask>
 ) -> Spec.Node.On(s, Voting.Take.asks(cs, old, s)):
   match cs:
     case Nil{}:
       Path.refl(s)
     case Con{Cells.One{Ledgers.Entry.Ask{+i, t, +q}}, rest}:
       s1 = Shared.Bool.when(
-        Basics.Node,
+        Replicas.Node<Basics.Ask>,
         Maybe.is_none(
           &2,
           Cells.Cell<Ledgers.Entry<Basics.Ask>>,
@@ -1386,21 +1387,21 @@ def Take.asks.path(
 
 # Node.take is on the paths
 def Take.path(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +t: Ledgers.State(Basics.Ask)
 ) -> Spec.Node.On(s, Voting.Node.take(s, t)):
   +sent = Voting.Take.clean(
     Tries.Trie.values(Cells.Cell<Ledgers.Entry<Basics.Ask>>, t),
     Ledgers.State.empty(~Basics.Ask)
   )
-  +l1 = Ledgers.State.take(~Basics.Ask, Basics.State.ledger(s), sent)
-  +s1 = Basics.State.led(s, l1)
+  +l1 = Ledgers.State.take(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), sent)
+  +s1 = Replicas.State.led(~Basics.Ask.machine(), s, l1)
   +cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Basics.Ask>>, sent)
-  +s2 = Voting.Take.asks(cs, Basics.State.ledger(s), s1)
+  +s2 = Voting.Take.asks(cs, Replicas.State.ledger(~Basics.Ask.machine(), s), s1)
   +bs = Voting.Ballots.of(
     Tries.Trie.values(
       Cells.Cell<Ledgers.Entry<Basics.Ask>>,
-      Ledgers.State.missing(~Basics.Ask, ~Basics.Ask.is_eq, t, Basics.State.ledger(s))
+      Ledgers.State.missing(~Basics.Ask, ~Basics.Ask.is_eq, t, Replicas.State.ledger(~Basics.Ask.machine(), s))
     )
   )
   Path.trans(
@@ -1417,7 +1418,7 @@ def Take.path(
           ~Basics.Ask,
           ~Basics.Ask.is_eq,
           ~Basics.Ask.laws(),
-          Basics.State.ledger(s),
+          Replicas.State.ledger(~Basics.Ask.machine(), s),
           sent
         )
       ),
@@ -1427,7 +1428,7 @@ def Take.path(
       s1,
       s2,
       Sealing.Sealed.take(bs, s2),
-      Take.asks.path(cs, Basics.State.ledger(s), s1),
+      Take.asks.path(cs, Replicas.State.ledger(~Basics.Ask.machine(), s), s1),
       Path.same(
         s2,
         Sealing.Sealed.take(bs, s2),
@@ -1441,7 +1442,7 @@ def Take.path(
 def Steps.path(
   +n: String,
   cs: List<&2, Ledgers.Chain>,
-  +s: Basics.Node
+  +s: Replicas.Node<Basics.Ask>
 ) -> Spec.Node.On(s, Voting.Node.steps(n, cs, s)):
   match cs:
     case Nil{}:
@@ -1453,7 +1454,7 @@ def Steps.path(
 # an adoption is on the paths, once the request m is known
 def Adopt.ask.path(
   n: String,
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   m: Maybe<&2, Reading.Request>
 ) -> Spec.Node.On(s, Reading.Adopt.ask(n, s, m)):
   match m:
@@ -1465,27 +1466,27 @@ def Adopt.ask.path(
 # an adoption is on the paths, once the head m of the line is known
 def Adopt.head.path(
   n: String,
-  +s: Basics.Node,
-  m: Maybe<&2, Basics.Head>
+  +s: Replicas.Node<Basics.Ask>,
+  m: Maybe<&2, Replicas.Head>
 ) -> Spec.Node.On(s, Reading.Adopt.head(n, s, m)):
   match m:
     case None{}:
       Path.refl(s)
-    case Some{Basics.Head{r, b, next, t}}:
+    case Some{Replicas.Head{r, b, next, t}}:
       Adopt.ask.path(n, s, Reading.Node.adoption(s, r, b))
 
 # the adoption of a line is on the paths
 def Adopt.at.path(
   n: String,
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain
 ) -> Spec.Node.On(s, Reading.Adopt.at(n, s, c)):
-  Adopt.head.path(n, s, Basics.Node.head_of(s, c))
+  Adopt.head.path(n, s, Replicas.Node.head_of(~Basics.Ask.machine(), s, c))
 
 # the adoption of a line, if any, is on the paths
 def Adopt.maybe.path(
   n: String,
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   m: Maybe<&2, Ledgers.Chain>
 ) -> Spec.Node.On(s, Reading.Adopt.maybe(n, s, m)):
   match m:
@@ -1498,7 +1499,7 @@ def Adopt.maybe.path(
 def Adopts.path(
   +n: String,
   cs: List<&2, Ledgers.Chain>,
-  +s: Basics.Node
+  +s: Replicas.Node<Basics.Ask>
 ) -> Spec.Node.On(s, Reading.Node.adopts(n, cs, s)):
   match cs:
     case Nil{}:
@@ -1520,7 +1521,7 @@ def More.path(
   +k: Nat,
   +bs: List<&2, Ledgers.Ballot>,
   +pd: Tries.Trie<Ledgers.Ballot>,
-  +s: Basics.Node
+  +s: Replicas.Node<Basics.Ask>
 ) -> Spec.Node.On(s, Reading.Sync.more(f, n, cs, k, bs, pd, s)):
   match f:
     case 0n:
@@ -1590,7 +1591,7 @@ def More.path(
 # a sync is on the paths
 def Sync.path(
   +n: String,
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +t: Ledgers.State(Basics.Ask)
 ) -> Spec.Node.On(s, Reading.Node.sync(n, s, t)):
   +s1 = Voting.Node.take(s, t)
@@ -1598,7 +1599,7 @@ def Sync.path(
   +bs = Voting.Ballots.of(
     Tries.Trie.values(
       Cells.Cell<Ledgers.Entry<Basics.Ask>>,
-      Ledgers.State.missing(~Basics.Ask, ~Basics.Ask.is_eq, t, Basics.State.ledger(s))
+      Ledgers.State.missing(~Basics.Ask, ~Basics.Ask.is_eq, t, Replicas.State.ledger(~Basics.Ask.machine(), s))
     )
   )
   +s2 = Voting.Node.steps(n, cs, s1)
@@ -1642,7 +1643,7 @@ def Sync.path(
 # a request that a writer asks again at a node is on the paths
 def Consent.path(
   n: String,
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +i: Ledgers.Id,
   m: Maybe<&2, Ledgers.Chain>
 ) -> Spec.Node.On(s, Voting.Consent.at(n, s, i, m)):
@@ -1652,27 +1653,27 @@ def Consent.path(
     case Some{c}:
       Path.trans(
         s,
-        Basics.State.keyed(s, Sealing.Keys.mark(Basics.State.keys(s), i)),
-        Voting.Node.step(n, Basics.State.keyed(s, Sealing.Keys.mark(Basics.State.keys(s), i)), c),
+        Replicas.State.keyed(~Basics.Ask.machine(), s, Sealing.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), i)),
+        Voting.Node.step(n, Replicas.State.keyed(~Basics.Ask.machine(), s, Sealing.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), i)), c),
         Path.same(
           s,
-          Basics.State.keyed(s, Sealing.Keys.mark(Basics.State.keys(s), i)),
+          Replicas.State.keyed(~Basics.Ask.machine(), s, Sealing.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), i)),
           ProofTrees.Grows.to(
             s,
             s,
-            Basics.State.keyed(s, Sealing.Keys.mark(Basics.State.keys(s), i)),
-            ProofTrees.Led.keyed(s, Sealing.Keys.mark(Basics.State.keys(s), i)),
+            Replicas.State.keyed(~Basics.Ask.machine(), s, Sealing.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), i)),
+            ProofTrees.Led.keyed(s, Sealing.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), i)),
             ProofTrees.Grows.refl(s)
           ),
-          ProofLines.Heads.keyed(s, Sealing.Keys.mark(Basics.State.keys(s), i))
+          ProofLines.Heads.keyed(s, Sealing.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), i))
         ),
-        Step.path(n, Basics.State.keyed(s, Sealing.Keys.mark(Basics.State.keys(s), i)), c)
+        Step.path(n, Replicas.State.keyed(~Basics.Ask.machine(), s, Sealing.Keys.mark(Replicas.State.keys(~Basics.Ask.machine(), s), i)), c)
       )
 
 # what a node does is on the paths
 def Does.path(
   +n: String,
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   ev: Spec.Deed
 ) -> Spec.Node.On(s, Spec.Node.does(n, s, ev)):
   match ev:
@@ -1683,10 +1684,10 @@ def Does.path(
         Reading.Adopt.at(
           n,
           Voting.Node.ask(n, s, e, q),
-          Basics.Ask.chain(Basics.Envelope.of(e), q)
+          Basics.Ask.chain(Replicas.Envelope.of(e), q)
         ),
         Ask.path(n, s, e, q),
-        Adopt.at.path(n, Voting.Node.ask(n, s, e, q), Basics.Ask.chain(Basics.Envelope.of(e), q))
+        Adopt.at.path(n, Voting.Node.ask(n, s, e, q), Basics.Ask.chain(Replicas.Envelope.of(e), q))
       )
     case Spec.Deed.Take{t}:
       Take.path(s, t)
@@ -1703,7 +1704,7 @@ def Does.path(
             ~Basics.Ask,
             ~Basics.Ask.is_eq,
             Ropes.Put.nodes(Basics.Bytes.rope(b)),
-            Basics.State.ledger(s)
+            Replicas.State.ledger(~Basics.Ask.machine(), s)
           )
         )
       )

@@ -13,6 +13,7 @@ import ../spec.bend as Spec
 import ../voting.bend as Voting
 import ./rounds.bend as ProofRounds
 import ./trees.bend as ProofTrees
+import ../../replica/impl.bend as Replicas
 
 # Waits
 # -----
@@ -21,53 +22,53 @@ import ./trees.bend as ProofTrees
 
 # a new ledger keeps the waiting requests
 def Waiting.led(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   l: Ledgers.State(Basics.Ask)
 ) -> {
-  Basics.State.waiting(
+  Replicas.State.waiting(~Basics.Ask.machine(), 
     s
   )
-    == Basics.State.waiting(Basics.State.led(s, l)): Tries.Trie<List<&2, Ledgers.Id>>
+    == Replicas.State.waiting(~Basics.Ask.machine(), Replicas.State.led(~Basics.Ask.machine(), s, l)): Tries.Trie<List<&2, Ledgers.Id>>
 }:
   match s:
-    case Basics.Node{old, hs, ws, ks}:
+    case Replicas.Node{old, hs, ws, ks}:
       {==}
 
 # new keys keep the waiting requests
 def Waiting.keyed(
-  s: Basics.Node,
-  ks: Basics.Keys
+  s: Replicas.Node<Basics.Ask>,
+  ks: Replicas.Keys
 ) -> {
-  Basics.State.waiting(
+  Replicas.State.waiting(~Basics.Ask.machine(), 
     s
   )
-    == Basics.State.waiting(Basics.State.keyed(s, ks)): Tries.Trie<List<&2, Ledgers.Id>>
+    == Replicas.State.waiting(~Basics.Ask.machine(), Replicas.State.keyed(~Basics.Ask.machine(), s, ks)): Tries.Trie<List<&2, Ledgers.Id>>
 }:
   match s:
-    case Basics.Node{l, hs, ws, old}:
+    case Replicas.Node{l, hs, ws, old}:
       {==}
 
 # the waiting requests of the node m, if any, else of s
-def Waiting.of(s: Basics.Node, m: Maybe<&2, Basics.Node>) -> Tries.Trie<List<&2, Ledgers.Id>>:
+def Waiting.of(s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Replicas.Node<Basics.Ask>>) -> Tries.Trie<List<&2, Ledgers.Id>>:
   match m:
     case None{}:
-      Basics.State.waiting(s)
+      Replicas.State.waiting(~Basics.Ask.machine(), s)
     case Some{s2}:
-      Basics.State.waiting(s2)
+      Replicas.State.waiting(~Basics.Ask.machine(), s2)
 
 # a node that is kept when b holds has the waiting requests of s, when it has
 def Waiting.some.if(
   b: Bool,
-  -s: Basics.Node,
-  -x: Basics.Node,
-  hx: {Basics.State.waiting(s) == Basics.State.waiting(x): Tries.Trie<List<&2, Ledgers.Id>>}
+  -s: Replicas.Node<Basics.Ask>,
+  -x: Replicas.Node<Basics.Ask>,
+  hx: {Replicas.State.waiting(~Basics.Ask.machine(), s) == Replicas.State.waiting(~Basics.Ask.machine(), x): Tries.Trie<List<&2, Ledgers.Id>>}
 ) -> {
-  Basics.State.waiting(
+  Replicas.State.waiting(~Basics.Ask.machine(), 
     s
   )
     == Waiting.of(
       s,
-      Shared.Maybe.when(Basics.Node, b, u => Some{x})
+      Shared.Maybe.when(Replicas.Node<Basics.Ask>, b, u => Some{x})
     ): Tries.Trie<List<&2, Ledgers.Id>>
 }:
   match b:
@@ -78,11 +79,11 @@ def Waiting.some.if(
 
 # a ballot that a node accepts keeps the waiting requests
 def Accept.at.waiting(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +b: Ledgers.Ballot,
-  m: Maybe<&2, Basics.Keychain>
+  m: Maybe<&2, Replicas.Keychain>
 ) -> {
-  Basics.State.waiting(
+  Replicas.State.waiting(~Basics.Ask.machine(), 
     s
   )
     == Waiting.of(s, Sealing.Seal.accept.at(s, b, m)): Tries.Trie<List<&2, Ledgers.Id>>
@@ -94,14 +95,14 @@ def Accept.at.waiting(
       Waiting.some.if(
         Sealing.Seal.fits(c, b),
         s,
-        Basics.State.keyed(
-          Basics.State.led(
+        Replicas.State.keyed(~Basics.Ask.machine(), 
+          Replicas.State.led(~Basics.Ask.machine(), 
             s,
-            Ledgers.State.keep(~Basics.Ask, ~Basics.Ask.is_eq, Basics.State.ledger(s), b)
+            Ledgers.State.keep(~Basics.Ask, ~Basics.Ask.is_eq, Replicas.State.ledger(~Basics.Ask.machine(), s), b)
           ),
           Sealing.Keys.saw(
             Sealing.Keys.set(
-              Basics.State.keys(s),
+              Replicas.State.keys(~Basics.Ask.machine(), s),
               Sealing.Seal.slot(Sealing.Ballot.store(b), Sealing.Ballot.node(b)),
               Sealing.Keychain.next(c, b)
             ),
@@ -110,22 +111,22 @@ def Accept.at.waiting(
         ),
         Equal.trans(
           Tries.Trie<List<&2, Ledgers.Id>>,
-          Basics.State.waiting(s),
-          Basics.State.waiting(
-            Basics.State.led(
+          Replicas.State.waiting(~Basics.Ask.machine(), s),
+          Replicas.State.waiting(~Basics.Ask.machine(), 
+            Replicas.State.led(~Basics.Ask.machine(), 
               s,
-              Ledgers.State.keep(~Basics.Ask, ~Basics.Ask.is_eq, Basics.State.ledger(s), b)
+              Ledgers.State.keep(~Basics.Ask, ~Basics.Ask.is_eq, Replicas.State.ledger(~Basics.Ask.machine(), s), b)
             )
           ),
-          Basics.State.waiting(
-            Basics.State.keyed(
-              Basics.State.led(
+          Replicas.State.waiting(~Basics.Ask.machine(), 
+            Replicas.State.keyed(~Basics.Ask.machine(), 
+              Replicas.State.led(~Basics.Ask.machine(), 
                 s,
-                Ledgers.State.keep(~Basics.Ask, ~Basics.Ask.is_eq, Basics.State.ledger(s), b)
+                Ledgers.State.keep(~Basics.Ask, ~Basics.Ask.is_eq, Replicas.State.ledger(~Basics.Ask.machine(), s), b)
               ),
               Sealing.Keys.saw(
                 Sealing.Keys.set(
-                  Basics.State.keys(s),
+                  Replicas.State.keys(~Basics.Ask.machine(), s),
                   Sealing.Seal.slot(Sealing.Ballot.store(b), Sealing.Ballot.node(b)),
                   Sealing.Keychain.next(c, b)
                 ),
@@ -135,16 +136,16 @@ def Accept.at.waiting(
           ),
           Waiting.led(
             s,
-            Ledgers.State.keep(~Basics.Ask, ~Basics.Ask.is_eq, Basics.State.ledger(s), b)
+            Ledgers.State.keep(~Basics.Ask, ~Basics.Ask.is_eq, Replicas.State.ledger(~Basics.Ask.machine(), s), b)
           ),
           Waiting.keyed(
-            Basics.State.led(
+            Replicas.State.led(~Basics.Ask.machine(), 
               s,
-              Ledgers.State.keep(~Basics.Ask, ~Basics.Ask.is_eq, Basics.State.ledger(s), b)
+              Ledgers.State.keep(~Basics.Ask, ~Basics.Ask.is_eq, Replicas.State.ledger(~Basics.Ask.machine(), s), b)
             ),
             Sealing.Keys.saw(
               Sealing.Keys.set(
-                Basics.State.keys(s),
+                Replicas.State.keys(~Basics.Ask.machine(), s),
                 Sealing.Seal.slot(Sealing.Ballot.store(b), Sealing.Ballot.node(b)),
                 Sealing.Keychain.next(c, b)
               ),
@@ -156,23 +157,23 @@ def Accept.at.waiting(
 
 # the ballots that a chain leads to keep the waiting requests, when each one more does
 def Follow.step.waiting(
-  -s: Basics.Node,
-  m: Maybe<&2, Basics.Node>,
-  -k: Basics.Node -> Basics.Node,
-  ih: @s2: Basics.Node -> {
-    Basics.State.waiting(s2) == Basics.State.waiting(k(s2)): Tries.Trie<List<&2, Ledgers.Id>>
+  -s: Replicas.Node<Basics.Ask>,
+  m: Maybe<&2, Replicas.Node<Basics.Ask>>,
+  -k: Replicas.Node<Basics.Ask> -> Replicas.Node<Basics.Ask>,
+  ih: @s2: Replicas.Node<Basics.Ask> -> {
+    Replicas.State.waiting(~Basics.Ask.machine(), s2) == Replicas.State.waiting(~Basics.Ask.machine(), k(s2)): Tries.Trie<List<&2, Ledgers.Id>>
   }
 ) -> {
-  Basics.State.waiting(s) == Waiting.of(s, m): Tries.Trie<List<&2, Ledgers.Id>>
+  Replicas.State.waiting(~Basics.Ask.machine(), s) == Waiting.of(s, m): Tries.Trie<List<&2, Ledgers.Id>>
 } -> {
-  Basics.State.waiting(
+  Replicas.State.waiting(~Basics.Ask.machine(), 
     s
   )
-    == Basics.State.waiting(
+    == Replicas.State.waiting(~Basics.Ask.machine(), 
       Maybe.default(
         &2,
-        Basics.Node,
-        Maybe.bind(&2, Basics.Node, Basics.Node, m, s2 => Some{k(s2)}),
+        Replicas.Node<Basics.Ask>,
+        Maybe.bind(&2, Replicas.Node<Basics.Ask>, Replicas.Node<Basics.Ask>, m, s2 => Some{k(s2)}),
         s
       )
     ): Tries.Trie<List<&2, Ledgers.Id>>
@@ -183,9 +184,9 @@ def Follow.step.waiting(
     case Some{s2}:
       e => Equal.trans(
         Tries.Trie<List<&2, Ledgers.Id>>,
-        Basics.State.waiting(s),
-        Basics.State.waiting(s2),
-        Basics.State.waiting(k(s2)),
+        Replicas.State.waiting(~Basics.Ask.machine(), s),
+        Replicas.State.waiting(~Basics.Ask.machine(), s2),
+        Replicas.State.waiting(~Basics.Ask.machine(), k(s2)),
         e,
         ih(s2)
       )
@@ -193,16 +194,16 @@ def Follow.step.waiting(
 # the ballots that a chain leads to keep the waiting requests
 def Follow.waiting(
   f: Nat,
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +p: Tries.Trie<Ledgers.Ballot>,
   +r: Ledgers.Id,
   +n: String,
   mb: Maybe<&2, Ledgers.Ballot>
 ) -> {
-  Basics.State.waiting(
+  Replicas.State.waiting(~Basics.Ask.machine(), 
     s
   )
-    == Basics.State.waiting(
+    == Replicas.State.waiting(~Basics.Ask.machine(), 
       Sealing.Sealed.follow(f, s, p, r, n, mb)
     ): Tries.Trie<List<&2, Ledgers.Id>>
 }:
@@ -230,12 +231,12 @@ def Each.waiting(
   +f: Nat,
   bs: List<&2, Ledgers.Ballot>,
   +p: Tries.Trie<Ledgers.Ballot>,
-  +s: Basics.Node
+  +s: Replicas.Node<Basics.Ask>
 ) -> {
-  Basics.State.waiting(
+  Replicas.State.waiting(~Basics.Ask.machine(), 
     s
   )
-    == Basics.State.waiting(Sealing.Sealed.each(f, bs, p, s)): Tries.Trie<List<&2, Ledgers.Id>>
+    == Replicas.State.waiting(~Basics.Ask.machine(), Sealing.Sealed.each(f, bs, p, s)): Tries.Trie<List<&2, Ledgers.Id>>
 }:
   match bs:
     case Nil{}:
@@ -251,9 +252,9 @@ def Each.waiting(
       )
       Equal.trans(
         Tries.Trie<List<&2, Ledgers.Id>>,
-        Basics.State.waiting(s),
-        Basics.State.waiting(s1),
-        Basics.State.waiting(Sealing.Sealed.each(f, rest, p, s1)),
+        Replicas.State.waiting(~Basics.Ask.machine(), s),
+        Replicas.State.waiting(~Basics.Ask.machine(), s1),
+        Replicas.State.waiting(~Basics.Ask.machine(), Sealing.Sealed.each(f, rest, p, s1)),
         Follow.waiting(
           f,
           s,
@@ -267,50 +268,50 @@ def Each.waiting(
 
 # a new head keeps the waiting requests
 def Waiting.head(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
-  h: Basics.Head
+  h: Replicas.Head
 ) -> {
-  Basics.State.waiting(
+  Replicas.State.waiting(~Basics.Ask.machine(), 
     s
   )
-    == Basics.State.waiting(Sealing.State.head(s, c, h)): Tries.Trie<List<&2, Ledgers.Id>>
+    == Replicas.State.waiting(~Basics.Ask.machine(), Sealing.State.head(s, c, h)): Tries.Trie<List<&2, Ledgers.Id>>
 }:
   match s:
-    case Basics.Node{l, hs, ws, ks}:
+    case Replicas.Node{l, hs, ws, ks}:
       {==}
 
 # a first head keeps the waiting requests
 def First.at.waiting(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
-  h: Basics.Head,
-  +m: Maybe<&2, Basics.Head>
+  h: Replicas.Head,
+  +m: Maybe<&2, Replicas.Head>
 ) -> {
-  Basics.State.waiting(
+  Replicas.State.waiting(~Basics.Ask.machine(), 
     s
   )
-    == Basics.State.waiting(Sealing.First.at(s, c, h, m)): Tries.Trie<List<&2, Ledgers.Id>>
+    == Replicas.State.waiting(~Basics.Ask.machine(), Sealing.First.at(s, c, h, m)): Tries.Trie<List<&2, Ledgers.Id>>
 }:
   match m:
-    case Some{Basics.Head{r, b, n, Some{t}}}:
+    case Some{Replicas.Head{r, b, n, Some{t}}}:
       {==}
-    case Some{Basics.Head{r, b, n, None{}}}:
+    case Some{Replicas.Head{r, b, n, None{}}}:
       Waiting.head(s, c, h)
     case None{}:
       Waiting.head(s, c, h)
 
 # the first head of a store keeps the waiting requests
 def Start.head.waiting(
-  +s: Basics.Node,
-  m: Maybe<&2, Basics.Node>,
+  +s: Replicas.Node<Basics.Ask>,
+  m: Maybe<&2, Replicas.Node<Basics.Ask>>,
   +c: Ledgers.Chain,
-  h: Basics.Head
+  h: Replicas.Head
 ) -> {
-  Basics.State.waiting(
+  Replicas.State.waiting(~Basics.Ask.machine(), 
     s
   )
-    == Basics.State.waiting(Sealing.Start.head(s, m, c, h)): Tries.Trie<List<&2, Ledgers.Id>>
+    == Replicas.State.waiting(~Basics.Ask.machine(), Sealing.Start.head(s, m, c, h)): Tries.Trie<List<&2, Ledgers.Id>>
 }:
   match m:
     case None{}:
@@ -318,31 +319,31 @@ def Start.head.waiting(
     case Some{+s2}:
       Equal.trans(
         Tries.Trie<List<&2, Ledgers.Id>>,
-        Basics.State.waiting(s),
-        Basics.State.waiting(Basics.State.led(s, Basics.State.ledger(s2))),
-        Basics.State.waiting(
-          Sealing.State.first(Basics.State.led(s, Basics.State.ledger(s2)), c, h)
+        Replicas.State.waiting(~Basics.Ask.machine(), s),
+        Replicas.State.waiting(~Basics.Ask.machine(), Replicas.State.led(~Basics.Ask.machine(), s, Replicas.State.ledger(~Basics.Ask.machine(), s2))),
+        Replicas.State.waiting(~Basics.Ask.machine(), 
+          Sealing.State.first(Replicas.State.led(~Basics.Ask.machine(), s, Replicas.State.ledger(~Basics.Ask.machine(), s2)), c, h)
         ),
-        Waiting.led(s, Basics.State.ledger(s2)),
+        Waiting.led(s, Replicas.State.ledger(~Basics.Ask.machine(), s2)),
         First.at.waiting(
-          Basics.State.led(s, Basics.State.ledger(s2)),
+          Replicas.State.led(~Basics.Ask.machine(), s, Replicas.State.ledger(~Basics.Ask.machine(), s2)),
           c,
           h,
-          Basics.Node.head_of(Basics.State.led(s, Basics.State.ledger(s2)), c)
+          Replicas.Node.head_of(~Basics.Ask.machine(), Replicas.State.led(~Basics.Ask.machine(), s, Replicas.State.ledger(~Basics.Ask.machine(), s2)), c)
         )
       )
 
 # a store that starts keeps the waiting requests, once its content m is known
 def Start.with.waiting(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   +i: Ledgers.Id,
   +os: List<&2, String>,
   +m: Maybe<&2, Judging.Work>
 ) -> {
-  Basics.State.waiting(
+  Replicas.State.waiting(~Basics.Ask.machine(), 
     s
   )
-    == Basics.State.waiting(Sealing.Start.with(s, i, os, m)): Tries.Trie<List<&2, Ledgers.Id>>
+    == Replicas.State.waiting(~Basics.Ask.machine(), Sealing.Start.with(s, i, os, m)): Tries.Trie<List<&2, Ledgers.Id>>
 }:
   match m:
     case None{}:
@@ -350,35 +351,35 @@ def Start.with.waiting(
     case Some{Judging.Work{s2, +c}}:
       Start.head.waiting(
         s,
-        Judging.State.put(s2, [Basics.Tip.words(Basics.Tip{c, None{}, 0, os})]),
+        Judging.State.put(s2, [Replicas.Tip.words(Replicas.Tip{c, None{}, 0, os})]),
         Ledgers.Chain{i, None{}},
-        Basics.Head{i, None{}, 0, Some{Basics.Tip.hash(Basics.Tip{c, None{}, 0, os})}}
+        Replicas.Head{i, None{}, 0, Some{Replicas.Tip.hash(Replicas.Tip{c, None{}, 0, os})}}
       )
 
 # a line that a node starts to follow keeps the waiting requests
 def Follow.new.waiting(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   +r: Ledgers.Id,
   +l: Maybe<&2, String>,
-  +m: Maybe<&2, Basics.Head>
+  +m: Maybe<&2, Replicas.Head>
 ) -> {
-  Basics.State.waiting(
+  Replicas.State.waiting(~Basics.Ask.machine(), 
     s
   )
-    == Basics.State.waiting(Sealing.Follow.new(s, r, l, m)): Tries.Trie<List<&2, Ledgers.Id>>
+    == Replicas.State.waiting(~Basics.Ask.machine(), Sealing.Follow.new(s, r, l, m)): Tries.Trie<List<&2, Ledgers.Id>>
 }:
   match m:
     case Some{h}:
       {==}
     case None{}:
-      Waiting.head(s, Basics.Line.chain(r, l), Basics.Head{r, l, 0, None{}})
+      Waiting.head(s, Replicas.Line.chain(r, l), Replicas.Head{r, l, 0, None{}})
 
 # nodes with the same waiting requests have the same ones on each line
 def Wait.same(
-  a: Basics.Node,
-  b: Basics.Node,
+  a: Replicas.Node<Basics.Ask>,
+  b: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
-  e: {Basics.State.waiting(a) == Basics.State.waiting(b): Tries.Trie<List<&2, Ledgers.Id>>}
+  e: {Replicas.State.waiting(~Basics.Ask.machine(), a) == Replicas.State.waiting(~Basics.Ask.machine(), b): Tries.Trie<List<&2, Ledgers.Id>>}
 ) -> {Sealing.Wait.of(a, c) == Sealing.Wait.of(b, c): List<&2, Ledgers.Id>}:
   Equal.cong(
     Tries.Trie<List<&2, Ledgers.Id>>,
@@ -389,14 +390,14 @@ def Wait.same(
       Tries.Trie.get(List<&2, Ledgers.Id>, ws, Ledgers.Chain.key(c)),
       []
     ),
-    Basics.State.waiting(a),
-    Basics.State.waiting(b),
+    Replicas.State.waiting(~Basics.Ask.machine(), a),
+    Replicas.State.waiting(~Basics.Ask.machine(), b),
     e
   )
 
 # lines with the same key have the same waiting requests
 def Wait.keyed(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   c2: Ledgers.Chain,
   c: Ledgers.Chain,
   ek: {Ledgers.Chain.key(c2) == Ledgers.Chain.key(c): List<&2, Bool>}
@@ -407,7 +408,7 @@ def Wait.keyed(
     kk => Maybe.default(
       &2,
       List<&2, Ledgers.Id>,
-      Tries.Trie.get(List<&2, Ledgers.Id>, Basics.State.waiting(s), kk),
+      Tries.Trie.get(List<&2, Ledgers.Id>, Replicas.State.waiting(~Basics.Ask.machine(), s), kk),
       []
     ),
     Ledgers.Chain.key(c2),
@@ -442,7 +443,7 @@ def Wait.pick(
 
 # the requests that wait on a line, after some requests wait on the line c
 def Wait.set.of(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +x: Ledgers.Id,
   +r: List<&2, Ledgers.Id>,
@@ -460,7 +461,7 @@ def Wait.set.of(
     ): List<&2, Ledgers.Id>
 }:
   match s:
-    case Basics.Node{l, hs, +ws, ks}:
+    case Replicas.Node{l, hs, +ws, ks}:
       %Equal.sym(
         Maybe<&2, List<&2, Ledgers.Id>>,
         Tries.Trie.get(
@@ -508,7 +509,7 @@ def Wait.set.of(
 
 # Wait.wait for any requests ys that waited on the line c
 def Wait.wait.at(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
   j: Ledgers.Id,
   c2: Ledgers.Chain,
@@ -533,7 +534,7 @@ def Wait.wait.at(
 
 # the requests that wait on a line, after one more waits on the line c
 def Wait.wait(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   j: Ledgers.Id,
   c2: Ledgers.Chain
@@ -553,7 +554,7 @@ def Wait.wait(
 
 # Wait.keeps once it is known whether the line has the key of c (b)
 def Wait.keeps.if(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   j: Ledgers.Id,
   +c2: Ledgers.Chain,
@@ -585,7 +586,7 @@ def Wait.keeps.if(
 
 # a request that waits on a line waits there after one more waits on a line
 def Wait.keeps(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +j: Ledgers.Id,
   +c2: Ledgers.Chain,
@@ -636,7 +637,7 @@ def Contains.one(
 
 # a request waits on its line once it waits there
 def Wait.adds(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +j: Ledgers.Id
 ) -> {
@@ -689,7 +690,7 @@ def Wait.adds(
 
 # a request that waits on a line waits there after a request arrives
 def Arrive.waits(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +j: Ledgers.Id,
   +q: Basics.Ask,
   +c2: Ledgers.Chain,
@@ -719,15 +720,15 @@ def Arrive.waits(
       ): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, _, i) == True{}: Bool}
       h
     case Basics.Ask.On{r, l, ch}:
-      Wait.keeps(Sealing.Node.follow(s, r, l), Basics.Line.chain(r, l), j, c2, i, (
-          %Wait.same(s, Sealing.Node.follow(s, r, l), c2, Follow.new.waiting(s, r, l, Basics.Node.head_of(s, Basics.Line.chain(r, l)))): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, _, i) == True{}: Bool}
+      Wait.keeps(Sealing.Node.follow(s, r, l), Replicas.Line.chain(r, l), j, c2, i, (
+          %Wait.same(s, Sealing.Node.follow(s, r, l), c2, Follow.new.waiting(s, r, l, Replicas.Node.head_of(~Basics.Ask.machine(), s, Replicas.Line.chain(r, l)))): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, _, i) == True{}: Bool}
           h))
 
 # one of two nodes, on each of which the request i waits on the line c2
 def Contains.when(
   +b: Bool,
-  -x: Basics.Node,
-  -y: Basics.Node,
+  -x: Replicas.Node<Basics.Ask>,
+  -y: Replicas.Node<Basics.Ask>,
   -c2: Ledgers.Chain,
   -i: Ledgers.Id,
   hx: {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Sealing.Wait.of(x, c2), i) == True{}: Bool},
@@ -736,7 +737,7 @@ def Contains.when(
   List.contains(
     ~Ledgers.Id,
     ~Ledgers.Id.is_eq,
-    Sealing.Wait.of(Shared.Bool.when(Basics.Node, b, u => x, u => y), c2),
+    Sealing.Wait.of(Shared.Bool.when(Replicas.Node<Basics.Ask>, b, u => x, u => y), c2),
     i
   )
     == True{}: Bool
@@ -751,7 +752,7 @@ def Contains.when(
 def Take.asks.waits(
   +cs: List<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>,
   +old: Ledgers.State(Basics.Ask),
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c2: Ledgers.Chain,
   +i: Ledgers.Id
 ) -> {
@@ -773,7 +774,7 @@ def Take.asks.waits(
         rest,
         old,
         Shared.Bool.when(
-          Basics.Node,
+          Replicas.Node<Basics.Ask>,
           Maybe.is_none(
             &2,
             Cells.Cell<Ledgers.Entry<Basics.Ask>>,
@@ -811,7 +812,7 @@ def Take.asks.adds(
   +pre: List<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>,
   post: List<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>,
   +old: Ledgers.State(Basics.Ask),
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +i: Ledgers.Id,
   time: String,
   +r: Ledgers.Id,
@@ -839,7 +840,7 @@ def Take.asks.adds(
         old,
         s
       ),
-      Basics.Line.chain(r, l)
+      Replicas.Line.chain(r, l)
     ),
     i
   )
@@ -851,7 +852,7 @@ def Take.asks.adds(
         post,
         old,
         Shared.Bool.when(
-          Basics.Node,
+          Replicas.Node<Basics.Ask>,
           Maybe.is_none(
             &2,
             Cells.Cell<Ledgers.Entry<Basics.Ask>>,
@@ -860,18 +861,18 @@ def Take.asks.adds(
           u => Sealing.Node.arrive(s, i, Basics.Ask.On{r, l, ch}),
           u => s
         ),
-        Basics.Line.chain(r, l),
+        Replicas.Line.chain(r, l),
         i
       )(
-        %Equal.sym(Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>, Ledgers.State.get(~Basics.Ask, old, Ledgers.Slot.ask(i)), None{}, e): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Sealing.Wait.of(Shared.Bool.when(Basics.Node, Maybe.is_none(&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>, _), u => Sealing.Node.arrive(s, i, Basics.Ask.On{r, l, ch}), u => s), Basics.Line.chain(r, l)), i) == True{}: Bool}
-        Wait.adds(Sealing.Node.follow(s, r, l), Basics.Line.chain(r, l), i))
+        %Equal.sym(Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>, Ledgers.State.get(~Basics.Ask, old, Ledgers.Slot.ask(i)), None{}, e): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Sealing.Wait.of(Shared.Bool.when(Replicas.Node<Basics.Ask>, Maybe.is_none(&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>, _), u => Sealing.Node.arrive(s, i, Basics.Ask.On{r, l, ch}), u => s), Replicas.Line.chain(r, l)), i) == True{}: Bool}
+        Wait.adds(Sealing.Node.follow(s, r, l), Replicas.Line.chain(r, l), i))
     case Con{Cells.One{Ledgers.Entry.Ask{j, t, q}}, rest}:
       e => Take.asks.adds(
         rest,
         post,
         old,
         Shared.Bool.when(
-          Basics.Node,
+          Replicas.Node<Basics.Ask>,
           Maybe.is_none(
             &2,
             Cells.Cell<Ledgers.Entry<Basics.Ask>>,
@@ -895,30 +896,30 @@ def Take.asks.adds(
 
 def Spec.Node.take_holds(s, t, k, e):
   +sent = Voting.Node.reads(t)
-  +l1 = Ledgers.State.take(~Basics.Ask, Basics.State.ledger(s), sent)
+  +l1 = Ledgers.State.take(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), sent)
   es => eb =>
     Ledgers.State.one_grows(
       ~Basics.Ask,
       ~Basics.Ask.is_eq,
       ~Basics.Ask.laws(),
-      Basics.State.ledger(Basics.State.led(s, l1)),
-      Basics.State.ledger(Voting.Node.take(s, t)),
+      Replicas.State.ledger(~Basics.Ask.machine(), Replicas.State.led(~Basics.Ask.machine(), s, l1)),
+      Replicas.State.ledger(~Basics.Ask.machine(), Voting.Node.take(s, t)),
       k,
       e
     )(ProofTrees.Take.tail(s, t))(
-      %Equal.sym(Ledgers.State(Basics.Ask), Basics.State.ledger(Basics.State.led(s, l1)), l1, ProofTrees.Led.led(s, l1)): {Ledgers.State.get(~Basics.Ask, _, k) == Some{Cells.One{e}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>}
-      Equal.trans(Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>, Ledgers.State.get(~Basics.Ask, l1, k), Ledgers.State.get(~Basics.Ask, sent, k), Some{Cells.One{e}}, Ledgers.State.take_get(~Basics.Ask, Basics.State.ledger(s), sent, k)(eb), es))
+      %Equal.sym(Ledgers.State(Basics.Ask), Replicas.State.ledger(~Basics.Ask.machine(), Replicas.State.led(~Basics.Ask.machine(), s, l1)), l1, ProofTrees.Led.led(s, l1)): {Ledgers.State.get(~Basics.Ask, _, k) == Some{Cells.One{e}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>}
+      Equal.trans(Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>, Ledgers.State.get(~Basics.Ask, l1, k), Ledgers.State.get(~Basics.Ask, sent, k), Some{Cells.One{e}}, Ledgers.State.take_get(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), sent, k)(eb), es))
 
 def Spec.Node.take_waits(s, t, i, time, r, l, ch):
   +sent = Voting.Node.reads(t)
-  l1 = Ledgers.State.take(~Basics.Ask, Basics.State.ledger(s), sent)
-  +s1 = Basics.State.led(s, l1)
+  l1 = Ledgers.State.take(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), sent)
+  +s1 = Replicas.State.led(~Basics.Ask.machine(), s, l1)
   cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Basics.Ask>>, sent)
-  +s2 = Voting.Take.asks(cs, Basics.State.ledger(s), s1)
+  +s2 = Voting.Take.asks(cs, Replicas.State.ledger(~Basics.Ask.machine(), s), s1)
   +bs = Voting.Ballots.of(
     Tries.Trie.values(
       Cells.Cell<Ledgers.Entry<Basics.Ask>>,
-      Ledgers.State.missing(~Basics.Ask, ~Basics.Ask.is_eq, t, Basics.State.ledger(s))
+      Ledgers.State.missing(~Basics.Ask, ~Basics.Ask.is_eq, t, Replicas.State.ledger(~Basics.Ask.machine(), s))
     )
   )
   cell = {
@@ -930,7 +931,7 @@ def Spec.Node.take_waits(s, t, i, time, r, l, ch):
     %Wait.same(
       s2,
       Sealing.Sealed.take(bs, s2),
-      Basics.Line.chain(r, l),
+      Replicas.Line.chain(r, l),
       Each.waiting(List.length(&2, Ledgers.Ballot, bs), bs, Sealing.Pending.of(bs), s2)
     ): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, _, i) == True{}: Bool}
     %Equal.sym(
@@ -952,7 +953,7 @@ def Spec.Node.take_waits(s, t, i, time, r, l, ch):
       List.contains(
         ~Ledgers.Id,
         ~Ledgers.Id.is_eq,
-        Sealing.Wait.of(Voting.Take.asks(_, Basics.State.ledger(s), s1), Basics.Line.chain(r, l)),
+        Sealing.Wait.of(Voting.Take.asks(_, Replicas.State.ledger(~Basics.Ask.machine(), s), s1), Replicas.Line.chain(r, l)),
         i
       )
         == True{}: Bool
@@ -960,7 +961,7 @@ def Spec.Node.take_waits(s, t, i, time, r, l, ch):
     Take.asks.adds(
       Tries.Trie.before(Cells.Cell<Ledgers.Entry<Basics.Ask>>, sent, Ledgers.Slot.ask(i)),
       Tries.Trie.after(Cells.Cell<Ledgers.Entry<Basics.Ask>>, sent, Ledgers.Slot.ask(i)),
-      Basics.State.ledger(s),
+      Replicas.State.ledger(~Basics.Ask.machine(), s),
       s1,
       i,
       time,

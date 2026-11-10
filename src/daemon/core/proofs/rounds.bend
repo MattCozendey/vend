@@ -17,6 +17,7 @@ import ../voting.bend as Voting
 import ./histories.bend as ProofHistories
 import ./lines.bend as ProofLines
 import ./trees.bend as ProofTrees
+import ../../replica/impl.bend as Replicas
 
 # Rounds
 # ------
@@ -29,7 +30,7 @@ import ./trees.bend as ProofTrees
 
 # the ballots of the owners os in the round r of the height h of the line c
 def Round.ballots(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
   h: U32,
   r: Nat,
@@ -37,12 +38,12 @@ def Round.ballots(
 ) -> List<&2, Maybe<&2, Cells.Cell<Ledgers.Vote>>>:
   Ledgers.Bucket.ballots(
     ~Basics.Ask,
-    Ledgers.State.under(~Basics.Ask, Basics.State.ledger(s), Ledgers.Slot.bucket(c, h, r)),
+    Ledgers.State.under(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), Ledgers.Slot.bucket(c, h, r)),
     os
   )
 
 # the node o cast for the step v in the round r, as a count of ballots reads it
-def Round.hit(s: Basics.Node, c: Ledgers.Chain, h: U32, r: Nat, o: String, v: Ledgers.Vote) -> Bool:
+def Round.hit(s: Replicas.Node<Basics.Ask>, c: Ledgers.Chain, h: U32, r: Nat, o: String, v: Ledgers.Vote) -> Bool:
   Quorums.Quorum.hit(
     ~Ledgers.Vote,
     ~Ledgers.Vote.is_eq,
@@ -50,7 +51,7 @@ def Round.hit(s: Basics.Node, c: Ledgers.Chain, h: U32, r: Nat, o: String, v: Le
       ~Basics.Ask,
       Ledgers.State.get(
         ~Basics.Ask,
-        Ledgers.State.under(~Basics.Ask, Basics.State.ledger(s), Ledgers.Slot.bucket(c, h, r)),
+        Ledgers.State.under(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), Ledgers.Slot.bucket(c, h, r)),
         Ledgers.Slot.ballot(o)
       )
     ),
@@ -99,7 +100,7 @@ def Hit.step(
 
 # a node that counts for the step v in a round cast v there
 def Hit.cast(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +h: U32,
   +r: Nat,
@@ -111,14 +112,14 @@ def Hit.cast(
   e =>
     %Tries.Trie.get_under(
       Cells.Cell<Ledgers.Entry<Basics.Ask>>,
-      Basics.State.ledger(s),
+      Replicas.State.ledger(~Basics.Ask.machine(), s),
       Ledgers.Slot.bucket(c, h, r),
       Ledgers.Slot.ballot(o)
     ): {Sealing.Cast.step(_) == Some{v}: Maybe<&2, Ledgers.Vote>}
     Hit.step(
       Ledgers.State.get(
         ~Basics.Ask,
-        Ledgers.State.under(~Basics.Ask, Basics.State.ledger(s), Ledgers.Slot.bucket(c, h, r)),
+        Ledgers.State.under(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), Ledgers.Slot.bucket(c, h, r)),
         Ledgers.Slot.ballot(o)
       ),
       v
@@ -126,7 +127,7 @@ def Hit.cast(
 
 # a vote moved to an equal round
 def Cast.moved(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
   h: U32,
   q: String,
@@ -151,7 +152,7 @@ def Voter.if(+hit: Bool, o: String, rest: Maybe<&2, String>) -> Maybe<&2, String
 
 # the first node of os that cast for the step v in the round r, if any did
 def Round.voter(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +h: U32,
   +r: Nat,
@@ -195,7 +196,7 @@ def Voter.if_rest(
 
 # Voter.cast once the hit of the first node is known
 def Voter.cast.at(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
   h: U32,
   r: Nat,
@@ -226,7 +227,7 @@ def Voter.cast.at(
 
 # the voter cast for the step
 def Voter.cast(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +h: U32,
   +r: Nat,
@@ -278,7 +279,7 @@ def Voter.yes.at(
 
 # with no voter, no ballot is for the step
 def Voter.yes(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +h: U32,
   +r: Nat,
@@ -316,7 +317,7 @@ def Lt.none(n: Nat, y: Nat, e: {y == 0n: Nat}) -> {Nat.is_lt(n, y) == True{}: Bo
 
 # a step with a majority has a voter
 def Has.voter(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +h: U32,
   +r: Nat,
@@ -341,7 +342,7 @@ def Has.voter(
 # Sub.count for a first owner o and a first node f, once it is known whether
 # they are the same (b)
 def Sub.count.at(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +h: U32,
   +r: Nat,
@@ -449,7 +450,7 @@ def Sub.count.at(
 # nodes that are some of the owners, none of which cast for the step v, are
 # at most the ballots that are not for v
 def Sub.count(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +h: U32,
   +r: Nat,
@@ -521,7 +522,7 @@ def Count.total.at(
 
 # each owner's ballot is for the step v, or is not
 def Count.total(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +h: U32,
   +r: Nat,
@@ -554,7 +555,7 @@ def Le.same(a: Nat, b: Nat, e: {a == b: Nat}) -> {Nat.is_le(a, b) == True{}: Boo
 # two majorities share a node: nodes that are a majority of the owners, none
 # of which cast for the step v, leave v no majority
 def Major.meets(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +h: U32,
   +r: Nat,
@@ -648,7 +649,7 @@ def Mine.le.or(
 
 # the last vote of a node up to the round p is of a round up to p
 def Mine.le(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +h: U32,
   +q: String,
@@ -683,7 +684,7 @@ def Mine.le(
 
 # Mine.cast for one round
 def Mine.cast.or(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
   h: U32,
   q: String,
@@ -724,7 +725,7 @@ def Mine.cast.or(
 
 # the last vote of a node is a vote that it cast
 def Mine.cast(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +h: U32,
   +q: String,
@@ -769,7 +770,7 @@ def Mine.cast(
 
 # Cast.apart once it is known whether the rounds are the same (b)
 def Cast.apart.at(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
   h: U32,
   q: String,
@@ -810,7 +811,7 @@ def Cast.apart.at(
 
 # a round with a vote of a node is not a round without one
 def Cast.apart(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
   h: U32,
   q: String,
@@ -844,7 +845,7 @@ def Mine.from.or(
 # a node that cast in the round r1 has a last vote of r1 or later, up to any
 # round from r1 on
 def Mine.from(
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +h: U32,
   +q: String,
@@ -997,15 +998,15 @@ def Newer.right(
 
 # the rule that the passes that a vote names allow it, at the head hd whose tip is tp
 def Rules.allow(
-  ~s: Basics.Node,
+  ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
   ~rules: Voting.Rounds.Rules(s, c),
-  hd: Basics.Head,
-  tp: Basics.Tip,
-  ok: {Basics.Head.tip(s, hd) == Some{tp}: Maybe<&2, Basics.Tip>}
-) -> Voting.Rounds.Allow(s, c, Sealing.Head.next(hd), Basics.Tip.owners(tp)):
+  hd: Replicas.Head,
+  tp: Replicas.Tip,
+  ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>}
+) -> Voting.Rounds.Allow(s, c, Sealing.Head.next(hd), Replicas.Tip.owners(tp)):
   Shared.Pair.first(
-    Voting.Rounds.Allow(s, c, Sealing.Head.next(hd), Basics.Tip.owners(tp)),
+    Voting.Rounds.Allow(s, c, Sealing.Head.next(hd), Replicas.Tip.owners(tp)),
     Voting.Rounds.Last(
       s,
       c,
@@ -1017,18 +1018,18 @@ def Rules.allow(
 
 # the rule that a pass names the last vote of its node below its round, at the head hd whose tip is tp
 def Rules.last(
-  ~s: Basics.Node,
+  ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
   ~rules: Voting.Rounds.Rules(s, c),
-  hd: Basics.Head,
-  tp: Basics.Tip,
-  ok: {Basics.Head.tip(s, hd) == Some{tp}: Maybe<&2, Basics.Tip>}
+  hd: Replicas.Head,
+  tp: Replicas.Tip,
+  ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>}
 ) -> Voting.Rounds.Last(s, c, Sealing.Head.next(hd)):
   Shared.Pair.first(
     Voting.Rounds.Last(s, c, Sealing.Head.next(hd)),
     Voting.Rounds.Same(s, c, Sealing.Head.next(hd)),
     Shared.Pair.second(
-      Voting.Rounds.Allow(s, c, Sealing.Head.next(hd), Basics.Tip.owners(tp)),
+      Voting.Rounds.Allow(s, c, Sealing.Head.next(hd), Replicas.Tip.owners(tp)),
       Voting.Rounds.Last(
         s,
         c,
@@ -1041,18 +1042,18 @@ def Rules.last(
 
 # the rule that the votes of one round are for one step, at the head hd whose tip is tp
 def Rules.same(
-  ~s: Basics.Node,
+  ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
   ~rules: Voting.Rounds.Rules(s, c),
-  hd: Basics.Head,
-  tp: Basics.Tip,
-  ok: {Basics.Head.tip(s, hd) == Some{tp}: Maybe<&2, Basics.Tip>}
+  hd: Replicas.Head,
+  tp: Replicas.Tip,
+  ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>}
 ) -> Voting.Rounds.Same(s, c, Sealing.Head.next(hd)):
   Shared.Pair.second(
     Voting.Rounds.Last(s, c, Sealing.Head.next(hd)),
     Voting.Rounds.Same(s, c, Sealing.Head.next(hd)),
     Shared.Pair.second(
-      Voting.Rounds.Allow(s, c, Sealing.Head.next(hd), Basics.Tip.owners(tp)),
+      Voting.Rounds.Allow(s, c, Sealing.Head.next(hd), Replicas.Tip.owners(tp)),
       Voting.Rounds.Last(
         s,
         c,
@@ -1066,12 +1067,12 @@ def Rules.same(
 # Pass.miss for a first node o, once its hit in the round r1 (hit) and its
 # pass (m) are known
 def Pass.miss.at(
-  ~s: Basics.Node,
+  ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
   ~rules: Voting.Rounds.Rules(s, c),
-  +hd: Basics.Head,
-  tp: Basics.Tip,
-  ok: {Basics.Head.tip(s, hd) == Some{tp}: Maybe<&2, Basics.Tip>},
+  +hd: Replicas.Head,
+  tp: Replicas.Tip,
+  ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
   +p: Nat,
   +r1: Nat,
   +v1: Ledgers.Vote,
@@ -1083,7 +1084,7 @@ def Pass.miss.at(
   -> {
     Ledgers.State.passed(
       ~Basics.Ask,
-      Basics.State.ledger(s),
+      Replicas.State.ledger(~Basics.Ask.machine(), s),
       Ledgers.Where{c, Sealing.Head.next(hd), 1n+p},
       o
     )
@@ -1118,12 +1119,12 @@ def Pass.miss.at(
 # when the passes of the nodes from to the round 1 + p name no vote of the
 # round r1 or later, none of them cast in r1
 def Pass.miss(
-  ~s: Basics.Node,
+  ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
   ~rules: Voting.Rounds.Rules(s, c),
-  +hd: Basics.Head,
-  +tp: Basics.Tip,
-  +ok: {Basics.Head.tip(s, hd) == Some{tp}: Maybe<&2, Basics.Tip>},
+  +hd: Replicas.Head,
+  +tp: Replicas.Tip,
+  +ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
   +p: Nat,
   +r1: Nat,
   +v1: Ledgers.Vote,
@@ -1158,7 +1159,7 @@ def Pass.miss(
           Round.hit(s, c, Sealing.Head.next(hd), r1, o, v1),
           Ledgers.State.passed(
             ~Basics.Ask,
-            Basics.State.ledger(s),
+            Replicas.State.ledger(~Basics.Ask.machine(), s),
             Ledgers.Where{c, Sealing.Head.next(hd), 1n+p},
             o
           )
@@ -1175,7 +1176,7 @@ def Pass.miss(
               Maybe<&2, Ledgers.Last>,
               Ledgers.State.passed(
                 ~Basics.Ask,
-                Basics.State.ledger(s),
+                Replicas.State.ledger(~Basics.Ask.machine(), s),
                 Ledgers.Where{c, Sealing.Head.next(hd), 1n+p},
                 o
               )
@@ -1187,7 +1188,7 @@ def Pass.miss(
             Voting.Passed.last(
               Ledgers.State.passed(
                 ~Basics.Ask,
-                Basics.State.ledger(s),
+                Replicas.State.ledger(~Basics.Ask.machine(), s),
                 Ledgers.Where{c, Sealing.Head.next(hd), 1n+p},
                 o
               )
@@ -1216,7 +1217,7 @@ def Pass.miss(
                 Maybe<&2, Ledgers.Last>,
                 Ledgers.State.passed(
                   ~Basics.Ask,
-                  Basics.State.ledger(s),
+                  Replicas.State.ledger(~Basics.Ask.machine(), s),
                   Ledgers.Where{c, Sealing.Head.next(hd), 1n+p},
                   o
                 )
@@ -1228,7 +1229,7 @@ def Pass.miss(
               Voting.Passed.last(
                 Ledgers.State.passed(
                   ~Basics.Ask,
-                  Basics.State.ledger(s),
+                  Replicas.State.ledger(~Basics.Ask.machine(), s),
                   Ledgers.Where{c, Sealing.Head.next(hd), 1n+p},
                   o
                 )
@@ -1258,11 +1259,11 @@ def When.elim(
       e => f => g => g(e)
 
 # that the pass of some node to the place w names the last vote l
-def Named(-R: Type, s: Basics.Node, w: Ledgers.Where, l: Ledgers.Last) -> Type:
+def Named(-R: Type, s: Replicas.Node<Basics.Ask>, w: Ledgers.Where, l: Ledgers.Last) -> Type:
   (
     @q: String -> {
       Voting.Passed.last(
-        Ledgers.State.passed(~Basics.Ask, Basics.State.ledger(s), w, q)
+        Ledgers.State.passed(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), w, q)
       )
         == Some{l}: Maybe<&2, Ledgers.Last>
     } -> R
@@ -1272,7 +1273,7 @@ def Named(-R: Type, s: Basics.Node, w: Ledgers.Where, l: Ledgers.Last) -> Type:
 # named (b) are known
 def Last.elim.at(
   -R: Type,
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   w: Ledgers.Where,
   o: String,
   l: Ledgers.Last,
@@ -1280,7 +1281,7 @@ def Last.elim.at(
   b: Maybe<&2, Ledgers.Last>
 ) -> {
   Voting.Passed.last(
-    Ledgers.State.passed(~Basics.Ask, Basics.State.ledger(s), w, o)
+    Ledgers.State.passed(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), w, o)
   )
     == a: Maybe<&2, Ledgers.Last>
 } -> (
@@ -1295,7 +1296,7 @@ def Last.elim.at(
       )(
         Equal.trans(
           Maybe<&2, Ledgers.Last>,
-          Voting.Passed.last(Ledgers.State.passed(~Basics.Ask, Basics.State.ledger(s), w, o)),
+          Voting.Passed.last(Ledgers.State.passed(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), w, o)),
           Some{x},
           Some{l},
           ea,
@@ -1320,7 +1321,7 @@ def Last.elim.at(
           )(
             Equal.trans(
               Maybe<&2, Ledgers.Last>,
-              Voting.Passed.last(Ledgers.State.passed(~Basics.Ask, Basics.State.ledger(s), w, o)),
+              Voting.Passed.last(Ledgers.State.passed(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), w, o)),
               Some{Ledgers.Last{ra, va}},
               Some{l},
               ea,
@@ -1332,7 +1333,7 @@ def Last.elim.at(
 # the last vote of the highest round that passes name is named by one of them
 def Last.elim(
   -R: Type,
-  +s: Basics.Node,
+  +s: Replicas.Node<Basics.Ask>,
   +w: Ledgers.Where,
   from: List<&2, String>,
   +l: Ledgers.Last
@@ -1347,7 +1348,7 @@ def Last.elim(
         w,
         o,
         l,
-        Voting.Passed.last(Ledgers.State.passed(~Basics.Ask, Basics.State.ledger(s), w, o)),
+        Voting.Passed.last(Ledgers.State.passed(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), w, o)),
         Voting.Passes.last(s, w, rest)
       )({==})(Last.elim(R, s, w, rest, l))
 
@@ -1438,7 +1439,7 @@ def Later.all.d(
 
 # that each vote of a round from r1 on, below the round j, is for the step v1
 def Rounds.Below(
-  s: Basics.Node,
+  s: Replicas.Node<Basics.Ask>,
   c: Ledgers.Chain,
   h: U32,
   r1: Nat,
@@ -1456,12 +1457,12 @@ def Rounds.Below(
 # Rounds.last once the node qw that named the last vote is known, with its
 # last vote
 def Rounds.named(
-  ~s: Basics.Node,
+  ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
   ~rules: Voting.Rounds.Rules(s, c),
-  +hd: Basics.Head,
-  tp: Basics.Tip,
-  ok: {Basics.Head.tip(s, hd) == Some{tp}: Maybe<&2, Basics.Tip>},
+  +hd: Replicas.Head,
+  tp: Replicas.Tip,
+  ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
   r1: Nat,
   v1: Ledgers.Vote,
   +p: Nat,
@@ -1496,12 +1497,12 @@ def Rounds.named(
 # Rounds.round once the last vote m that the passes name is known: it is of
 # the round r1 or later, and the vote x is for its step
 def Rounds.last(
-  ~s: Basics.Node,
+  ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
   ~rules: Voting.Rounds.Rules(s, c),
-  +hd: Basics.Head,
-  +tp: Basics.Tip,
-  +ok: {Basics.Head.tip(s, hd) == Some{tp}: Maybe<&2, Basics.Tip>},
+  +hd: Replicas.Head,
+  +tp: Replicas.Tip,
+  +ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
   r1: Nat,
   v1: Ledgers.Vote,
   +p: Nat,
@@ -1539,17 +1540,17 @@ def Rounds.last(
         )(em)(
           +qw => ew =>
             %Ledgers.Vote.is_eq_sound(vm, x)(ei): {_ == v1: Ledgers.Vote}
-            Rounds.named(~s, ~c, ~rules, hd, tp, ok, r1, v1, p, j, rm, vm, qw, Equal.sym(Maybe<&2, Ledgers.Last>, Some{Ledgers.Last{rm, vm}}, Voting.Last.mine(qw, s, c, Sealing.Head.next(hd), p), Rules.last(~s, ~c, ~rules, hd, tp, ok)(1n+p)(qw)(Some{Ledgers.Last{rm, vm}})(Passed.some(Ledgers.State.passed(~Basics.Ask, Basics.State.ledger(s), Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, qw), Ledgers.Last{rm, vm})(ew))), lt, ef, ih))
+            Rounds.named(~s, ~c, ~rules, hd, tp, ok, r1, v1, p, j, rm, vm, qw, Equal.sym(Maybe<&2, Ledgers.Last>, Some{Ledgers.Last{rm, vm}}, Voting.Last.mine(qw, s, c, Sealing.Head.next(hd), p), Rules.last(~s, ~c, ~rules, hd, tp, ok)(1n+p)(qw)(Some{Ledgers.Last{rm, vm}})(Passed.some(Ledgers.State.passed(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, qw), Ledgers.Last{rm, vm})(ew))), lt, ef, ih))
 
 # Rounds.round once it is known whether the passes name a vote of the round
 # r1 or later (f)
 def Rounds.pick(
-  ~s: Basics.Node,
+  ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
   ~rules: Voting.Rounds.Rules(s, c),
-  +hd: Basics.Head,
-  +tp: Basics.Tip,
-  ok: {Basics.Head.tip(s, hd) == Some{tp}: Maybe<&2, Basics.Tip>},
+  +hd: Replicas.Head,
+  +tp: Replicas.Tip,
+  ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
   +r1: Nat,
   +v1: Ledgers.Vote,
   +p: Nat,
@@ -1568,7 +1569,7 @@ def Rounds.pick(
     Quorums.Quorum.has(
       ~Ledgers.Vote,
       ~Ledgers.Vote.is_eq,
-      Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Tip.owners(tp)),
+      Round.ballots(s, c, Sealing.Head.next(hd), r1, Replicas.Tip.owners(tp)),
       v1
     )
       == True{}: Bool
@@ -1579,8 +1580,8 @@ def Rounds.pick(
   -> {
     Later.all(
       Voting.Passed.all(s, Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, from),
-      Voting.Owners.sub(Basics.Tip.owners(tp), from),
-      Voting.Owners.major(Basics.Tip.owners(tp), from),
+      Voting.Owners.sub(Replicas.Tip.owners(tp), from),
+      Voting.Owners.major(Replicas.Tip.owners(tp), from),
       Voting.Last.is(Voting.Passes.last(s, Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, from), x)
     )
       == True{}: Bool
@@ -1596,7 +1597,7 @@ def Rounds.pick(
             c,
             Sealing.Head.next(hd),
             r1,
-            Basics.Tip.owners(tp),
+            Replicas.Tip.owners(tp),
             from,
             v1
           )(
@@ -1604,8 +1605,8 @@ def Rounds.pick(
           )(
             Later.all.b(
               Voting.Passed.all(s, Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, from),
-              Voting.Owners.sub(Basics.Tip.owners(tp), from),
-              Voting.Owners.major(Basics.Tip.owners(tp), from),
+              Voting.Owners.sub(Replicas.Tip.owners(tp), from),
+              Voting.Owners.major(Replicas.Tip.owners(tp), from),
               Voting.Last.is(
                 Voting.Passes.last(s, Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, from),
                 x
@@ -1614,8 +1615,8 @@ def Rounds.pick(
           )(
             Later.all.c(
               Voting.Passed.all(s, Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, from),
-              Voting.Owners.sub(Basics.Tip.owners(tp), from),
-              Voting.Owners.major(Basics.Tip.owners(tp), from),
+              Voting.Owners.sub(Replicas.Tip.owners(tp), from),
+              Voting.Owners.major(Replicas.Tip.owners(tp), from),
               Voting.Last.is(
                 Voting.Passes.last(s, Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, from),
                 x
@@ -1638,8 +1639,8 @@ def Rounds.pick(
             )(
               Later.all.a(
                 Voting.Passed.all(s, Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, from),
-                Voting.Owners.sub(Basics.Tip.owners(tp), from),
-                Voting.Owners.major(Basics.Tip.owners(tp), from),
+                Voting.Owners.sub(Replicas.Tip.owners(tp), from),
+                Voting.Owners.major(Replicas.Tip.owners(tp), from),
                 Voting.Last.is(
                   Voting.Passes.last(s, Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, from),
                   x
@@ -1671,8 +1672,8 @@ def Rounds.pick(
         )(
           Later.all.d(
             Voting.Passed.all(s, Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, from),
-            Voting.Owners.sub(Basics.Tip.owners(tp), from),
-            Voting.Owners.major(Basics.Tip.owners(tp), from),
+            Voting.Owners.sub(Replicas.Tip.owners(tp), from),
+            Voting.Owners.major(Replicas.Tip.owners(tp), from),
             Voting.Last.is(
               Voting.Passes.last(s, Ledgers.Where{c, Sealing.Head.next(hd), 1n+p}, from),
               x
@@ -1682,12 +1683,12 @@ def Rounds.pick(
 
 # Rounds.same at the round r1 itself, once a voter m of the step v1 is known
 def Rounds.base(
-  ~s: Basics.Node,
+  ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
   ~rules: Voting.Rounds.Rules(s, c),
-  +hd: Basics.Head,
-  +tp: Basics.Tip,
-  ok: {Basics.Head.tip(s, hd) == Some{tp}: Maybe<&2, Basics.Tip>},
+  +hd: Replicas.Head,
+  +tp: Replicas.Tip,
+  ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
   +r1: Nat,
   +v1: Ledgers.Vote,
   q: String,
@@ -1699,7 +1700,7 @@ def Rounds.base(
     c,
     Sealing.Head.next(hd),
     r1,
-    Basics.Tip.owners(tp),
+    Replicas.Tip.owners(tp),
     v1
   )
     == m: Maybe<&2, String>
@@ -1708,7 +1709,7 @@ def Rounds.base(
     Quorums.Quorum.has(
       ~Ledgers.Vote,
       ~Ledgers.Vote.is_eq,
-      Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Tip.owners(tp)),
+      Round.ballots(s, c, Sealing.Head.next(hd), r1, Replicas.Tip.owners(tp)),
       v1
     )
       == True{}: Bool
@@ -1726,7 +1727,7 @@ def Rounds.base(
     case None{}:
       em => hh => e => Empty.absurd(
         {x == v1: Ledgers.Vote},
-        Has.voter(s, c, Sealing.Head.next(hd), r1, Basics.Tip.owners(tp), v1)(hh)(em)
+        Has.voter(s, c, Sealing.Head.next(hd), r1, Replicas.Tip.owners(tp), v1)(hh)(em)
       )
     case Some{+o}:
       em => hh => e => Rules.same(
@@ -1742,16 +1743,16 @@ def Rounds.base(
         q
       )(
         o
-      )(x)(v1)(e)(Voter.cast(s, c, Sealing.Head.next(hd), r1, Basics.Tip.owners(tp), v1, o)(em))
+      )(x)(v1)(e)(Voter.cast(s, c, Sealing.Head.next(hd), r1, Replicas.Tip.owners(tp), v1, o)(em))
 
 # Rounds.same in a round after r1
 def Rounds.step(
-  ~s: Basics.Node,
+  ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
   ~rules: Voting.Rounds.Rules(s, c),
-  +hd: Basics.Head,
-  +tp: Basics.Tip,
-  +ok: {Basics.Head.tip(s, hd) == Some{tp}: Maybe<&2, Basics.Tip>},
+  +hd: Replicas.Head,
+  +tp: Replicas.Tip,
+  +ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
   +r1: Nat,
   v1: Ledgers.Vote,
   r: Nat,
@@ -1763,7 +1764,7 @@ def Rounds.step(
     Quorums.Quorum.has(
       ~Ledgers.Vote,
       ~Ledgers.Vote.is_eq,
-      Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Tip.owners(tp)),
+      Round.ballots(s, c, Sealing.Head.next(hd), r1, Replicas.Tip.owners(tp)),
       v1
     )
       == True{}: Bool
@@ -1830,12 +1831,12 @@ def Rounds.step(
 
 # Rounds.same once it is known whether the round is r1 (b)
 def Rounds.same.at(
-  ~s: Basics.Node,
+  ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
   ~rules: Voting.Rounds.Rules(s, c),
-  +hd: Basics.Head,
-  +tp: Basics.Tip,
-  ok: {Basics.Head.tip(s, hd) == Some{tp}: Maybe<&2, Basics.Tip>},
+  +hd: Replicas.Head,
+  +tp: Replicas.Tip,
+  ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
   +r1: Nat,
   +v1: Ledgers.Vote,
   +r: Nat,
@@ -1848,7 +1849,7 @@ def Rounds.same.at(
     Quorums.Quorum.has(
       ~Ledgers.Vote,
       ~Ledgers.Vote.is_eq,
-      Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Tip.owners(tp)),
+      Round.ballots(s, c, Sealing.Head.next(hd), r1, Replicas.Tip.owners(tp)),
       v1
     )
       == True{}: Bool
@@ -1879,7 +1880,7 @@ def Rounds.same.at(
           v1,
           q,
           x,
-          Round.voter(s, c, Sealing.Head.next(hd), r1, Basics.Tip.owners(tp), v1)
+          Round.voter(s, c, Sealing.Head.next(hd), r1, Replicas.Tip.owners(tp), v1)
         )(
           {==}
         )(
@@ -1903,12 +1904,12 @@ def Rounds.same.at(
 # each vote of a round from r1 on, below the round k, is for the step that a
 # majority cast in r1
 def Rounds.same(
-  ~s: Basics.Node,
+  ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
   ~rules: Voting.Rounds.Rules(s, c),
-  +hd: Basics.Head,
-  +tp: Basics.Tip,
-  +ok: {Basics.Head.tip(s, hd) == Some{tp}: Maybe<&2, Basics.Tip>},
+  +hd: Replicas.Head,
+  +tp: Replicas.Tip,
+  +ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
   k: Nat,
   +r1: Nat,
   +v1: Ledgers.Vote
@@ -1916,7 +1917,7 @@ def Rounds.same(
   Quorums.Quorum.has(
     ~Ledgers.Vote,
     ~Ledgers.Vote.is_eq,
-    Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Tip.owners(tp)),
+    Round.ballots(s, c, Sealing.Head.next(hd), r1, Replicas.Tip.owners(tp)),
     v1
   )
     == True{}: Bool
@@ -1947,12 +1948,12 @@ def Rounds.same(
 
 # Rounds.later once a voter m of the step v2 in the round r2 is known
 def Rounds.later.at(
-  ~s: Basics.Node,
+  ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
   ~rules: Voting.Rounds.Rules(s, c),
-  +hd: Basics.Head,
-  +tp: Basics.Tip,
-  ok: {Basics.Head.tip(s, hd) == Some{tp}: Maybe<&2, Basics.Tip>},
+  +hd: Replicas.Head,
+  +tp: Replicas.Tip,
+  ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
   r1: Nat,
   +r2: Nat,
   v1: Ledgers.Vote,
@@ -1964,7 +1965,7 @@ def Rounds.later.at(
     c,
     Sealing.Head.next(hd),
     r2,
-    Basics.Tip.owners(tp),
+    Replicas.Tip.owners(tp),
     v2
   )
     == m: Maybe<&2, String>
@@ -1974,7 +1975,7 @@ def Rounds.later.at(
     Quorums.Quorum.has(
       ~Ledgers.Vote,
       ~Ledgers.Vote.is_eq,
-      Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Tip.owners(tp)),
+      Round.ballots(s, c, Sealing.Head.next(hd), r1, Replicas.Tip.owners(tp)),
       v1
     )
       == True{}: Bool
@@ -1983,7 +1984,7 @@ def Rounds.later.at(
     Quorums.Quorum.has(
       ~Ledgers.Vote,
       ~Ledgers.Vote.is_eq,
-      Round.ballots(s, c, Sealing.Head.next(hd), r2, Basics.Tip.owners(tp)),
+      Round.ballots(s, c, Sealing.Head.next(hd), r2, Replicas.Tip.owners(tp)),
       v2
     )
       == True{}: Bool
@@ -1993,7 +1994,7 @@ def Rounds.later.at(
     case None{}:
       em => le => h1 => h2 => Empty.absurd(
         {v2 == v1: Ledgers.Vote},
-        Has.voter(s, c, Sealing.Head.next(hd), r2, Basics.Tip.owners(tp), v2)(h2)(em)
+        Has.voter(s, c, Sealing.Head.next(hd), r2, Replicas.Tip.owners(tp), v2)(h2)(em)
       )
     case Some{+o}:
       em => le => h1 => h2 =>
@@ -2017,16 +2018,16 @@ def Rounds.later.at(
           v2
         )(
           Shared.Nat.lt_succ(r2)
-        )(le)(Voter.cast(s, c, Sealing.Head.next(hd), r2, Basics.Tip.owners(tp), v2, o)(em))
+        )(le)(Voter.cast(s, c, Sealing.Head.next(hd), r2, Replicas.Tip.owners(tp), v2, o)(em))
 
 # a round decides what an earlier round of its height decided
 def Rounds.later(
-  ~s: Basics.Node,
+  ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
   ~rules: Voting.Rounds.Rules(s, c),
-  +hd: Basics.Head,
-  +tp: Basics.Tip,
-  ok: {Basics.Head.tip(s, hd) == Some{tp}: Maybe<&2, Basics.Tip>},
+  +hd: Replicas.Head,
+  +tp: Replicas.Tip,
+  ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
   +r1: Nat,
   +r2: Nat,
   +v1: Ledgers.Vote,
@@ -2035,18 +2036,18 @@ def Rounds.later(
   -> {
     Ledgers.State.decide(
       ~Basics.Ask,
-      Basics.State.ledger(s),
+      Replicas.State.ledger(~Basics.Ask.machine(), s),
       Ledgers.Where{c, Sealing.Head.next(hd), r1},
-      Basics.Tip.owners(tp)
+      Replicas.Tip.owners(tp)
     )
       == Some{v1}: Maybe<&2, Ledgers.Vote>
   }
   -> {
     Ledgers.State.decide(
       ~Basics.Ask,
-      Basics.State.ledger(s),
+      Replicas.State.ledger(~Basics.Ask.machine(), s),
       Ledgers.Where{c, Sealing.Head.next(hd), r2},
-      Basics.Tip.owners(tp)
+      Replicas.Tip.owners(tp)
     )
       == Some{v2}: Maybe<&2, Ledgers.Vote>
   }
@@ -2063,7 +2064,7 @@ def Rounds.later(
       r2,
       v1,
       v2,
-      Round.voter(s, c, Sealing.Head.next(hd), r2, Basics.Tip.owners(tp), v2)
+      Round.voter(s, c, Sealing.Head.next(hd), r2, Replicas.Tip.owners(tp), v2)
     )(
       {==}
     )(
@@ -2073,7 +2074,7 @@ def Rounds.later(
         ~Ledgers.Vote,
         ~Ledgers.Vote.is_eq,
         ~Ledgers.Vote.laws(),
-        Round.ballots(s, c, Sealing.Head.next(hd), r1, Basics.Tip.owners(tp)),
+        Round.ballots(s, c, Sealing.Head.next(hd), r1, Replicas.Tip.owners(tp)),
         v1
       )(d1)
     )(
@@ -2081,19 +2082,19 @@ def Rounds.later(
         ~Ledgers.Vote,
         ~Ledgers.Vote.is_eq,
         ~Ledgers.Vote.laws(),
-        Round.ballots(s, c, Sealing.Head.next(hd), r2, Basics.Tip.owners(tp)),
+        Round.ballots(s, c, Sealing.Head.next(hd), r2, Replicas.Tip.owners(tp)),
         v2
       )(d2)
     )
 
 # Rounds.one once it is known whether r1 is at most r2 (b)
 def Rounds.one.at(
-  ~s: Basics.Node,
+  ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
   ~rules: Voting.Rounds.Rules(s, c),
-  hd: Basics.Head,
-  tp: Basics.Tip,
-  ok: {Basics.Head.tip(s, hd) == Some{tp}: Maybe<&2, Basics.Tip>},
+  hd: Replicas.Head,
+  tp: Replicas.Tip,
+  ok: {Replicas.Head.tip(~Basics.Ask.machine(), s, hd) == Some{tp}: Maybe<&2, Replicas.Tip>},
   +r1: Nat,
   +r2: Nat,
   v1: Ledgers.Vote,
@@ -2103,18 +2104,18 @@ def Rounds.one.at(
   -> {
     Ledgers.State.decide(
       ~Basics.Ask,
-      Basics.State.ledger(s),
+      Replicas.State.ledger(~Basics.Ask.machine(), s),
       Ledgers.Where{c, Sealing.Head.next(hd), r1},
-      Basics.Tip.owners(tp)
+      Replicas.Tip.owners(tp)
     )
       == Some{v1}: Maybe<&2, Ledgers.Vote>
   }
   -> {
     Ledgers.State.decide(
       ~Basics.Ask,
-      Basics.State.ledger(s),
+      Replicas.State.ledger(~Basics.Ask.machine(), s),
       Ledgers.Where{c, Sealing.Head.next(hd), r2},
-      Basics.Tip.owners(tp)
+      Replicas.Tip.owners(tp)
     )
       == Some{v2}: Maybe<&2, Ledgers.Vote>
   }
@@ -2145,7 +2146,7 @@ def Rounds.one.at(
 # the rounds of a height decide one step, when the ballots follow the rules
 # of rounds: a later round can only decide what an earlier round decided
 def Rounds.one(
-  ~s: Basics.Node,
+  ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
   ~rules: Voting.Rounds.Rules(s, c)
 ) -> ProofHistories.Line.One(s, c):
@@ -2155,7 +2156,7 @@ def Rounds.one(
 # the rounds of each of k heights decide one step, when the ballots follow the
 # rules of rounds
 def Rounds.ones(
-  ~s: Basics.Node,
+  ~s: Replicas.Node<Basics.Ask>,
   ~c: Ledgers.Chain,
   ~rules: Voting.Rounds.Rules(s, c),
   k: Nat
@@ -2185,12 +2186,12 @@ def Spec.Line.at_agrees(u, c, rules, rs1, rs2, a, b, h, x, y):
     )(Spec.Line.at_grows(rs2, b, u, c, h, y)(gb)(eb))
 
 def Spec.Cast.put_keeps(n, w, th, qs, from, s2, t2, s, s3):
-  +s4 = Basics.State.led(s, Basics.State.ledger(s3))
-  +a0 = {Ledgers.Act.Vote{Ledgers.Vote{th, qs, Some{Basics.Tip.hash(t2)}}, from}: Ledgers.Act}
+  +s4 = Replicas.State.led(~Basics.Ask.machine(), s, Replicas.State.ledger(~Basics.Ask.machine(), s3))
+  +a0 = {Ledgers.Act.Vote{Ledgers.Vote{th, qs, Some{Replicas.Tip.hash(t2)}}, from}: Ledgers.Act}
   +e =>
     %Equal.sym(
-      Maybe<&2, Basics.Node>,
-      Judging.State.put(s2, [Basics.Tip.words(t2)]),
+      Maybe<&2, Replicas.Node<Basics.Ask>>,
+      Judging.State.put(s2, [Replicas.Tip.words(t2)]),
       Some{s3},
       e
     ): {Reading.Node.grows(s2, Sealing.Cast.vote(s, _, w, n, a0)) == True{}: Bool}
@@ -2203,31 +2204,31 @@ def Spec.Cast.put_keeps(n, w, th, qs, from, s2, t2, s, s3):
         s2,
         s3,
         s4,
-        ProofTrees.Led.led(s, Basics.State.ledger(s3)),
-        ProofLines.Put.grew(s2, [Basics.Tip.words(t2)], s3, e)
+        ProofTrees.Led.led(s, Replicas.State.ledger(~Basics.Ask.machine(), s3)),
+        ProofLines.Put.grew(s2, [Replicas.Tip.words(t2)], s3, e)
       )
     )(ProofTrees.Cast.seal.grows(s4, w, n, a0, Sealing.Seal.chain(s4, Sealing.Where.store(w), n)))
 
 def Spec.Cast.put_tip(n, w, th, qs, from, s2, t2, s, s3):
-  +s4 = Basics.State.led(s, Basics.State.ledger(s3))
-  +a0 = {Ledgers.Act.Vote{Ledgers.Vote{th, qs, Some{Basics.Tip.hash(t2)}}, from}: Ledgers.Act}
+  +s4 = Replicas.State.led(~Basics.Ask.machine(), s, Replicas.State.ledger(~Basics.Ask.machine(), s3))
+  +a0 = {Ledgers.Act.Vote{Ledgers.Vote{th, qs, Some{Replicas.Tip.hash(t2)}}, from}: Ledgers.Act}
   +e =>
     %Equal.sym(
-      Maybe<&2, Basics.Node>,
-      Judging.State.put(s2, [Basics.Tip.words(t2)]),
+      Maybe<&2, Replicas.Node<Basics.Ask>>,
+      Judging.State.put(s2, [Replicas.Tip.words(t2)]),
       Some{s3},
       e
     ): {
-      Basics.Tip.at(
+      Replicas.Tip.at(~Basics.Ask.machine(), 
         Sealing.Cast.vote(s, _, w, n, a0),
-        Basics.Tip.hash(t2)
+        Replicas.Tip.hash(t2)
       )
-        == Some{t2}: Maybe<&2, Basics.Tip>
+        == Some{t2}: Maybe<&2, Replicas.Tip>
     }
     ProofLines.Tip.at.grows(
       s3,
       Sealing.Cast.seal(s4, w, n, a0, Sealing.Seal.chain(s4, Sealing.Where.store(w), n)),
-      Basics.Tip.hash(t2),
+      Replicas.Tip.hash(t2),
       t2,
       ProofTrees.Grows.trans(
         s3,
@@ -2238,7 +2239,7 @@ def Spec.Cast.put_tip(n, w, th, qs, from, s2, t2, s, s3):
           s3,
           s3,
           s4,
-          ProofTrees.Led.led(s, Basics.State.ledger(s3)),
+          ProofTrees.Led.led(s, Replicas.State.ledger(~Basics.Ask.machine(), s3)),
           ProofTrees.Grows.refl(s3)
         )
       )(ProofTrees.Cast.seal.grows(s4, w, n, a0, Sealing.Seal.chain(s4, Sealing.Where.store(w), n)))
