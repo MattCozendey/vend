@@ -100,15 +100,22 @@ README claim, then the law.
 
 Design (each needs a decision or new work; none is a proof detail):
 
-- **Who may ask for a Key, Own, Group, Branch or Move change.** The judge does not read who
-  asks, and an owner's node casts for every request that the judge takes. So any writer can
-  give a node a new first key, or change a group. README: owners decide. Needed: a rule for
-  who may ask (and how a node knows it), checked in the judge or before a node casts.
-- **A decision when owners cast different steps.** Each owner casts once at a height, for the
-  requests that wait at it, in its own order. Two owners that got different requests first cast
-  different steps; if a third owner is away, that height is never decided. A majority is enough
-  only when a majority casts the same step. Needed: more than one round at a height, or one
-  owner that proposes each height.
+- **Rounds (in work).** Done: one owner proposes each step, in turn by the height
+  (`Owners.turn`), and the others cast for the same step (`Plan.copy`); an owner casts for a
+  change of who decides only when it was asked at it (`Ask.governs`, `Node.consent`). Not done:
+  when the proposer is away, the height waits for it. Plan:
+  1. Ledger: a place gets a round; a ballot is a vote (a step, and the passes that allow it) or
+     a pass (the node leaves the rounds below, and names its last vote at the height).
+  2. Core: the proposer of the round r at the height h is the owner (h + r) in turn. In round 0
+     it proposes freely. In a later round it needs passes of a majority, and proposes the last
+     vote of the highest round among them, if any. Others copy a vote that these rules allow. A
+     node passes to the next round when transport tells it that the round took too long
+     (`Deed.Pass`), and joins the highest round that it sees. All of this reads the ledger; a
+     head holds no round.
+  3. Law: two rounds of one height decide the same step, for a ledger that follows the rules
+     (each vote of a later round is allowed by its passes; each pass names the node's true last
+     vote; the votes of one round are the same). Then `Node.advance_agrees` and the history laws
+     hold across rounds.
 - **Every head is on the decided chain.** `Line.at_grows`, `Node.advance_at` and
   `Line.at_agrees` give one history for nodes that start a line from the same first head. Not a
   law yet: that every head of a node is some number of decided steps from the first head of its
