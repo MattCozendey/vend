@@ -2196,9 +2196,7 @@ def On.of.grows(
   +l: Maybe<&2, String>,
   +ch: Basics.Change,
   w: Stepping.Route
-) -> {
-  Run.after(Stepping.Run.state(r), Stepping.Step.on.of(r, i, st, l, ch, w)) == True{}: Bool
-}:
+) -> {Run.after(Stepping.Run.state(r), Stepping.Step.on.of(r, i, st, l, ch, w)) == True{}: Bool}:
   match w:
     case Stepping.Route.Mark{a}:
       Mark.grows(r, i, a)
@@ -2241,9 +2239,9 @@ def On.of.grows(
 
 # a change of a line only grows a run's node
 def On.grows(
-  +r: Stepping.Run,
+  r: Stepping.Run,
   i: Ledgers.Id,
-  +st: Ledgers.Id,
+  st: Ledgers.Id,
   +l: Maybe<&2, String>,
   +ch: Basics.Change
 ) -> {Run.after(Stepping.Run.state(r), Stepping.Step.on(r, i, st, l, ch)) == True{}: Bool}:
@@ -3500,10 +3498,10 @@ def Ask.at.grows(
 
 # a node that takes in a request only grows
 def Ask.grows(
-  +n: String,
+  n: String,
   +s: Basics.Node,
   +e: Basics.Envelope,
-  +q: Basics.Ask
+  q: Basics.Ask
 ) -> {Reading.Node.grows(s, Voting.Node.ask(n, s, e, q)) == True{}: Bool}:
   Ask.at.grows(
     n,

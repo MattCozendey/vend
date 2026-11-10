@@ -314,7 +314,7 @@ def Step.on.of(
 # the run r, after the request i of the change ch of the line l of the store
 # st
 def Step.on(
-  +r: Run,
+  r: Run,
   i: Ledgers.Id,
   st: Ledgers.Id,
   +l: Maybe<&2, String>,

@@ -623,7 +623,12 @@ def Rounds.Same(s: Basics.Node, c: Ledgers.Chain, h: U32) -> Type:
 def Rounds.Rules(s: Basics.Node, c: Ledgers.Chain) -> Type:
   @x: Basics.Head -> @t: Basics.Tip -> {
     Basics.Head.tip(s, x) == Some{t}: Maybe<&2, Basics.Tip>
-  } -> Rounds.Allow(s, c, Sealing.Head.next(x), Basics.Line.owners(s, t))
+  } -> Rounds.Allow(
+    s,
+    c,
+    Sealing.Head.next(x),
+    Basics.Line.owners(s, t)
+  )
     & (Rounds.Last(s, c, Sealing.Head.next(x)) & Rounds.Same(s, c, Sealing.Head.next(x)))
 
 # Node.advance at the head h of the line c, whose tip is m

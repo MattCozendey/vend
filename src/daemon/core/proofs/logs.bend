@@ -995,9 +995,9 @@ def On.of.kept(
 # a change of a line keeps each key of a run's log, other than the owners and
 # the count
 def On.kept(
-  +r: Stepping.Run,
+  r: Stepping.Run,
   i: Ledgers.Id,
-  +st: Ledgers.Id,
+  st: Ledgers.Id,
   +l: Maybe<&2, String>,
   +ch: Basics.Change,
   k2: List<&2, U32>,

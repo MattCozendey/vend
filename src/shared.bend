@@ -317,9 +317,6 @@ def List.keep(~A: Data, ~V: Data, ~p: V -> A -> Bool, xs: List<&2, A>, +g: V) ->
     case Con{+x, r}:
       List.filter.put(A, x, List.keep(~A, ~V, ~p, r, g), p(g)(x))
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
 # the lists that f gives for each element of xs, given g, one after another
 def List.flat(
   ~A: Data,
@@ -334,12 +331,6 @@ def List.flat(
       []
     case Con{x, r}:
       List.append(&2, B, f(g)(x), List.flat(~A, ~B, ~V, ~f, r, g))
-
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # Comparisons
 # -----------
@@ -1231,9 +1222,6 @@ def List.drop_at(
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
 # appending nothing keeps a list
 def List.append_nil(-A: Data, xs: List<&2, A>) -> {List.append(&2, A, xs, []) == xs: List<&2, A>}:
   match xs:
@@ -1414,9 +1402,6 @@ def List.laws(
     xs => List.is_eq_refl(~A, ~same, ~laws, xs),
     xs => ys => List.is_eq_sound(~A, ~same, ~laws, xs, ys)
   )
-
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # Joins of Maybes
 # ---------------

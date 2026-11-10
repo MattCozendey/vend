@@ -1667,7 +1667,7 @@ def On.of.outs(
   +r: Stepping.Run,
   i: Ledgers.Id,
   st: Ledgers.Id,
-  +l: Maybe<&2, String>,
+  l: Maybe<&2, String>,
   +ch: Basics.Change,
   w: Stepping.Route
 ) -> Spec.Run.Outs(Stepping.Step.on.of(r, i, st, l, ch, w), i):
@@ -1704,7 +1704,7 @@ def On.of.outs(
 
 # a change of a line has an outcome
 def On.outs(
-  +r: Stepping.Run,
+  r: Stepping.Run,
   i: Ledgers.Id,
   st: Ledgers.Id,
   +l: Maybe<&2, String>,

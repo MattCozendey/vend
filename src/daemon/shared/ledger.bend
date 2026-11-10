@@ -1922,9 +1922,6 @@ def State.put_data_grows(ty, same, laws, s, ws):
   +k = Slot.data(Hashes.Sha.hash(ws))
   Data.put.grows(~ty, ~same, ~laws, s, k, ws, State.get(~ty, s, k), {==})
 
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
-
 # data, one after the other, grow the state
 def State.put_datas_grows(
   ~Q: Data,
@@ -2108,18 +2105,6 @@ def State.put_data_get(ty, same, s, ws):
     ):
       {Shared.Maybe.when(List<&2, U32>, _, u => Some{ws}) == Some{ws}: Maybe<&2, List<&2, U32>>}
     {==}
-
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
-
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # an entry added to a state only grows it
 law State.add_grows:
