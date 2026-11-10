@@ -2580,6 +2580,10 @@ def Passed.major(
     Passed.all(~mach, s, w, from)
   )
 
+# the last vote l names no other step than v in the round r
+def Last.allows(+l: Maybe<&2, Ledgers.Last>, r: Nat, v: Ledgers.Vote) -> Bool:
+  List.any.if(u => Last.is(l, v), Bool.not(Last.in(l, r)))
+
 # each last vote of the round r that the passes of the nodes from to the place
 # w name is for the step v
 def Passes.agree(
@@ -2594,10 +2598,38 @@ def Passes.agree(
     case Nil{}:
       True{}
     case Con{o, rest}:
-      +l = Passed.last(Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), w, o))
       List.all.if(
         u => Passes.agree(~mach, s, w, rest, r, v),
-        List.any.if(u2 => Last.is(l, v), Bool.not(Last.in(l, r)))
+        Last.allows(
+          Passed.last(Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), w, o)),
+          r,
+          v
+        )
+      )
+
+# the nodes of from whose passes to the place w name no other step than v in
+# the round r: the passes that a proposal of v rests on
+def Passes.for(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  +w: Ledgers.Where,
+  from: List<&2, String>,
+  +r: Nat,
+  +v: Ledgers.Vote
+) -> List<&2, String>:
+  match from:
+    case Nil{}:
+      []
+    case Con{+o, rest}:
+      List.filter.put(
+        String,
+        o,
+        Passes.for(~mach, s, w, rest, r, v),
+        Last.allows(
+          Passed.last(Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), w, o)),
+          r,
+          v
+        )
       )
 
 # what the first of the nodes from whose pass to the round r names a vote of
@@ -2693,12 +2725,15 @@ def Vote.allowed(
 
 # the plan of the proposer of a later round at the place w, once the nodes
 # from that passed to it are known: none until they are a majority; then the
-# last vote of the highest round among them, else what waits at the proposer
+# last vote v of the highest round among them, on the passes that name no
+# other step in that round (an owner that cast against the proposer names
+# another one), else what waits at the proposer
 def Plan.later(
   ~mach: Machine(),
   ~kern: Kernel(mach),
-  s: Node<Machine.Q(mach)>,
+  +s: Node<Machine.Q(mach)>,
   c: Ledgers.Chain,
+  w: Ledgers.Where,
   t: Tip,
   th: Maybe<&2, Hashes.Hash>,
   os: List<&2, String>,
@@ -2713,15 +2748,38 @@ def Plan.later(
         u => Plan.own(~mach, ~kern, s, c, t, from),
         u => Plan{[], None{}, []}
       )
-    case Some{Ledgers.Last{r, v}}:
+    case Some{Ledgers.Last{r, +v}}:
+      +ok = Passes.for(~mach, s, w, from, r, v)
       Shared.Bool.when(
         Plan<Machine.Q(mach)>,
-        Owners.major(os, from),
-        u => Plan.copy(~mach, ~kern, s, c, t, th, Some{v}, from),
+        Owners.major(os, ok),
+        u => Plan.copy(~mach, ~kern, s, c, t, th, Some{v}, ok),
         u => Plan{[], None{}, []}
       )
 
-# the plan of the proposer at the place w
+# the plan p, when the passes that it names allow the vote that it casts at
+# the place w for the owners os, from the tip of the hash th; else nothing
+def Plan.allowed(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  w: Ledgers.Where,
+  th: Maybe<&2, Hashes.Hash>,
+  os: List<&2, String>,
+  p: Plan<Machine.Q(mach)>
+) -> Plan<Machine.Q(mach)>:
+  match p:
+    case Plan{qs, None{}, from}:
+      Plan{qs, None{}, from}
+    case Plan{+qs, Some{Run{s2, +t2}}, +from}:
+      Shared.Bool.when(
+        Plan<Machine.Q(mach)>,
+        Vote.allowed(~mach, s, w, os, Ledgers.Vote{th, qs, Some{Tip.hash(t2)}}, from),
+        u => Plan{qs, Some{Run{s2, t2}}, from},
+        u => Plan{[], None{}, []}
+      )
+
+# the plan of the proposer at the place w: it proposes only a step that the
+# passes it names allow (Plan.lead_allowed)
 def Plan.lead(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -2729,15 +2787,22 @@ def Plan.lead(
   +c: Ledgers.Chain,
   +w: Ledgers.Where,
   +t: Tip,
-  th: Maybe<&2, Hashes.Hash>,
+  +th: Maybe<&2, Hashes.Hash>,
   +os: List<&2, String>
 ) -> Plan<Machine.Q(mach)>:
   +from = Passes.of(~mach, s, w, os)
-  Shared.Bool.when(
-    Plan<Machine.Q(mach)>,
-    Nat.is_eq(Where.round(w), 0n),
-    u => Plan.own(~mach, ~kern, s, c, t, []),
-    u => Plan.later(~mach, ~kern, s, c, t, th, os, from, Passes.last(~mach, s, w, from))
+  Plan.allowed(
+    ~mach,
+    s,
+    w,
+    th,
+    os,
+    Shared.Bool.when(
+      Plan<Machine.Q(mach)>,
+      Nat.is_eq(Where.round(w), 0n),
+      u => Plan.own(~mach, ~kern, s, c, t, []),
+      u => Plan.later(~mach, ~kern, s, c, w, t, th, os, from, Passes.last(~mach, s, w, from))
+    )
   )
 
 # the plan of another owner at the place w, once what the proposer did there
@@ -6308,7 +6373,7 @@ def Plan.copy.grows(
 def Plan.later.grows(
   ~mach: Machine(),
   ~lawf: Lawful(mach),
-  s: Node<Machine.Q(mach)>,
+  +s: Node<Machine.Q(mach)>,
   c: Ledgers.Chain,
   w: Ledgers.Where,
   t: Tip,
@@ -6320,7 +6385,7 @@ def Plan.later.grows(
   Run.after(
     ~mach,
     s,
-    Plan.run(~mach, Plan.later(~mach, ~Lawful.kernel(mach, lawf), s, c, t, th, os, from, m))
+    Plan.run(~mach, Plan.later(~mach, ~Lawful.kernel(mach, lawf), s, c, w, t, th, os, from, m))
   )
     == True{}: Bool
 }:
@@ -6335,14 +6400,42 @@ def Plan.later.grows(
         Plan.own.grows(~mach, ~lawf, s, c, t, from),
         {==}
       )
-    case Some{Ledgers.Last{r, v}}:
+    case Some{Ledgers.Last{r, +v}}:
+      ok = Passes.for(~mach, s, w, from, r, v)
       Plan.when.grows(
         ~mach,
         s,
-        Owners.major(os, from),
-        Plan.copy(~mach, ~Lawful.kernel(mach, lawf), s, c, t, th, Some{v}, from),
+        Owners.major(os, ok),
+        Plan.copy(~mach, ~Lawful.kernel(mach, lawf), s, c, t, th, Some{v}, ok),
         Plan{[], None{}, []},
-        Plan.copy.grows(~mach, ~lawf, s, c, t, th, Some{v}, from),
+        Plan.copy.grows(~mach, ~lawf, s, c, t, th, Some{v}, ok),
+        {==}
+      )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in this proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
+# a plan that its passes allow is the plan, or no plan
+def Plan.allowed.grows(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  w: Ledgers.Where,
+  th: Maybe<&2, Hashes.Hash>,
+  os: List<&2, String>,
+  p: Plan<Machine.Q(mach)>
+) -> {
+  Run.after(~mach, s, Plan.run(~mach, p)) == True{}: Bool
+} -> {Run.after(~mach, s, Plan.run(~mach, Plan.allowed(~mach, s, w, th, os, p))) == True{}: Bool}:
+  match p:
+    case Plan{qs, None{}, from}:
+      e => e
+    case Plan{+qs, Some{Run{s2, t2}}, +from}:
+      e => Plan.when.grows(
+        ~mach,
+        s,
+        Vote.allowed(~mach, s, w, os, Ledgers.Vote{th, qs, Some{Tip.hash(t2)}}, from),
+        Plan{qs, Some{Run{s2, t2}}, from},
+        Plan{[], None{}, []},
+        e,
         {==}
       )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
@@ -6356,7 +6449,7 @@ def Plan.lead.grows(
   +c: Ledgers.Chain,
   +w: Ledgers.Where,
   +t: Tip,
-  th: Maybe<&2, Hashes.Hash>,
+  +th: Maybe<&2, Hashes.Hash>,
   +os: List<&2, String>
 ) -> {
   Run.after(
@@ -6366,34 +6459,40 @@ def Plan.lead.grows(
   )
     == True{}: Bool
 }:
-  Plan.when.grows(
+  +from = Passes.of(~mach, s, w, os)
+  later = Plan.later(
+    ~mach,
+    ~Lawful.kernel(mach, lawf),
+    s,
+    c,
+    w,
+    t,
+    th,
+    os,
+    from,
+    Passes.last(~mach, s, w, from)
+  )
+  Plan.allowed.grows(
     ~mach,
     s,
-    Nat.is_eq(Where.round(w), 0n),
-    Plan.own(~mach, ~Lawful.kernel(mach, lawf), s, c, t, []),
-    Plan.later(
+    w,
+    th,
+    os,
+    Shared.Bool.when(
+      Plan<Machine.Q(mach)>,
+      Nat.is_eq(Where.round(w), 0n),
+      u => Plan.own(~mach, ~Lawful.kernel(mach, lawf), s, c, t, []),
+      u => later
+    )
+  )(
+    Plan.when.grows(
       ~mach,
-      ~Lawful.kernel(mach, lawf),
       s,
-      c,
-      t,
-      th,
-      os,
-      Passes.of(~mach, s, w, os),
-      Passes.last(~mach, s, w, Passes.of(~mach, s, w, os))
-    ),
-    Plan.own.grows(~mach, ~lawf, s, c, t, []),
-    Plan.later.grows(
-      ~mach,
-      ~lawf,
-      s,
-      c,
-      w,
-      t,
-      th,
-      os,
-      Passes.of(~mach, s, w, os),
-      Passes.last(~mach, s, w, Passes.of(~mach, s, w, os))
+      Nat.is_eq(Where.round(w), 0n),
+      Plan.own(~mach, ~Lawful.kernel(mach, lawf), s, c, t, []),
+      later,
+      Plan.own.grows(~mach, ~lawf, s, c, t, []),
+      Plan.later.grows(~mach, ~lawf, s, c, w, t, th, os, from, Passes.last(~mach, s, w, from))
     )
   )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
@@ -10991,6 +11090,161 @@ def Follow.allowed.at(
       e => {==}
     case False{}:
       e => e
+
+# Plan.allowed_votes once the verdict b of the passes is known
+def Plan.allowed_votes.at(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  w: Ledgers.Where,
+  th: Maybe<&2, Hashes.Hash>,
+  os: List<&2, String>,
+  qs: List<&2, Ledgers.Id>,
+  from: List<&2, String>,
+  s1: Node<Machine.Q(mach)>,
+  t1: Tip,
+  -s2: Node<Machine.Q(mach)>,
+  -t2: Tip,
+  b: Bool,
+  eb: {Vote.allowed(~mach, s, w, os, Ledgers.Vote{th, qs, Some{Tip.hash(t1)}}, from) == b: Bool}
+) -> {
+  Plan.run(
+    ~mach,
+    Shared.Bool.when(
+      Plan<Machine.Q(mach)>,
+      b,
+      u => Plan{qs, Some{Run{s1, t1}}, from},
+      u => Plan{[], None{}, []}
+    )
+  )
+    == Some{Run{s2, t2}}: Maybe<&2, Run<Machine.Q(mach)>>
+} -> {
+  Vote.allowed(
+    ~mach,
+    s,
+    w,
+    os,
+    Ledgers.Vote{
+      th,
+      Plan.asks(
+        ~mach,
+        Shared.Bool.when(
+          Plan<Machine.Q(mach)>,
+          b,
+          u => Plan{qs, Some{Run{s1, t1}}, from},
+          u => Plan{[], None{}, []}
+        )
+      ),
+      Some{Tip.hash(t2)}
+    },
+    Plan.from(
+      ~mach,
+      Shared.Bool.when(
+        Plan<Machine.Q(mach)>,
+        b,
+        u => Plan{qs, Some{Run{s1, t1}}, from},
+        u => Plan{[], None{}, []}
+      )
+    )
+  )
+    == True{}: Bool
+}:
+  match b:
+    case True{}:
+      e =>
+        %Equal.cong(
+          Run<Machine.Q(mach)>,
+          Tip,
+          x => Run.tip(~mach, x),
+          Run{s1, t1},
+          Run{s2, t2},
+          Shared.Maybe.some_inj(Run<Machine.Q(mach)>, Run{s1, t1}, Run{s2, t2}, e)
+        ): {
+          Vote.allowed(
+            ~mach,
+            s,
+            w,
+            os,
+            Ledgers.Vote{th, qs, Some{Tip.hash(_)}},
+            from
+          )
+            == True{}: Bool
+        }
+        eb
+    case False{}:
+      e => Empty.absurd(
+        {
+          Vote.allowed(
+            ~mach,
+            s,
+            w,
+            os,
+            Ledgers.Vote{th, [], Some{Tip.hash(t2)}},
+            []
+          )
+            == True{}: Bool
+        },
+        Shared.Maybe.none_ne_some(Run<Machine.Q(mach)>, Run{s2, t2}, e)
+      )
+
+# a plan that its passes allow casts only a vote that they allow
+def Plan.allowed_votes(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  +w: Ledgers.Where,
+  +th: Maybe<&2, Hashes.Hash>,
+  +os: List<&2, String>,
+  p: Plan<Machine.Q(mach)>,
+  -s2: Node<Machine.Q(mach)>,
+  -t2: Tip
+) -> {
+  Plan.run(
+    ~mach,
+    Plan.allowed(~mach, s, w, th, os, p)
+  )
+    == Some{Run{s2, t2}}: Maybe<&2, Run<Machine.Q(mach)>>
+} -> {
+  Vote.allowed(
+    ~mach,
+    s,
+    w,
+    os,
+    Ledgers.Vote{th, Plan.asks(~mach, Plan.allowed(~mach, s, w, th, os, p)), Some{Tip.hash(t2)}},
+    Plan.from(~mach, Plan.allowed(~mach, s, w, th, os, p))
+  )
+    == True{}: Bool
+}:
+  match p:
+    case Plan{qs, None{}, from}:
+      e => Empty.absurd(
+        {
+          Vote.allowed(
+            ~mach,
+            s,
+            w,
+            os,
+            Ledgers.Vote{th, qs, Some{Tip.hash(t2)}},
+            from
+          )
+            == True{}: Bool
+        },
+        Shared.Maybe.none_ne_some(Run<Machine.Q(mach)>, Run{s2, t2}, e)
+      )
+    case Plan{+qs, Some{Run{s1, +t1}}, +from}:
+      Plan.allowed_votes.at(
+        ~mach,
+        s,
+        w,
+        th,
+        os,
+        qs,
+        from,
+        s1,
+        t1,
+        s2,
+        t2,
+        Vote.allowed(~mach, s, w, os, Ledgers.Vote{th, qs, Some{Tip.hash(t1)}}, from),
+        {==}
+      )
 
 # an act that casts a vote is some act
 def Casts.some(
@@ -18813,6 +19067,60 @@ law Plan.follow_allowed:
 
 def Plan.follow_allowed(mach, kern, s, c, w, t, th, os, v, from):
   Follow.allowed.at(~mach, ~kern, s, c, t, th, v, from, Vote.allowed(~mach, s, w, os, v, from))
+
+# the proposer proposes only a step that the passes it names allow: the vote
+# that it casts from its plan is allowed (Vote.allowed), as a follower checks
+law Plan.lead_allowed:
+  for ~mach: Machine()
+  for ~kern: Kernel(mach)
+  for +s: Node<Machine.Q(mach)>
+  for +c: Ledgers.Chain
+  for +w: Ledgers.Where
+  for +t: Tip
+  for +th: Maybe<&2, Hashes.Hash>
+  for +os: List<&2, String>
+  for s2: Node<Machine.Q(mach)>
+  for t2: Tip
+  {
+    Plan.run(
+      ~mach,
+      Plan.lead(~mach, ~kern, s, c, w, t, th, os)
+    )
+      == Some{Run{s2, t2}}: Maybe<&2, Run<Machine.Q(mach)>>
+  }
+    -> {
+      Vote.allowed(
+        ~mach,
+        s,
+        w,
+        os,
+        Ledgers.Vote{
+          th,
+          Plan.asks(~mach, Plan.lead(~mach, ~kern, s, c, w, t, th, os)),
+          Some{Tip.hash(t2)}
+        },
+        Plan.from(~mach, Plan.lead(~mach, ~kern, s, c, w, t, th, os))
+      )
+        == True{}: Bool
+    }
+
+def Plan.lead_allowed(mach, kern, s, c, w, t, th, os, s2, t2):
+  +from = Passes.of(~mach, s, w, os)
+  Plan.allowed_votes(
+    ~mach,
+    s,
+    w,
+    th,
+    os,
+    Shared.Bool.when(
+      Plan<Machine.Q(mach)>,
+      Nat.is_eq(Where.round(w), 0n),
+      u => Plan.own(~mach, ~kern, s, c, t, []),
+      u => Plan.later(~mach, ~kern, s, c, w, t, th, os, from, Passes.last(~mach, s, w, from))
+    ),
+    s2,
+    t2
+  )
 
 # a ballot that a node keeps passes the check of what may be kept
 def Accept.keeps(
