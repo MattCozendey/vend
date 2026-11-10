@@ -5067,7 +5067,12 @@ def Branch.news(+s: State(), h: Maybe<&2, Hashes.Hash>, x: Branch) -> List<&2, L
 
 # the versions of the branches es, other than b, that the tree h did not take
 # in
-def Lacked.of(+s: State(), +h: Maybe<&2, Hashes.Hash>, +b: Branch, es: List<&2, Branch>) -> List<&2, Ledgers.Id>:
+def Lacked.of(
+  +s: State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  +b: Branch,
+  es: List<&2, Branch>
+) -> List<&2, Ledgers.Id>:
   match es:
     case Nil{}:
       []
@@ -5075,7 +5080,12 @@ def Lacked.of(+s: State(), +h: Maybe<&2, Hashes.Hash>, +b: Branch, es: List<&2, 
       List.append(
         &2,
         Ledgers.Id,
-        Shared.Bool.when(List<&2, Ledgers.Id>, Branch.same(x, b), u => [], u => Branch.news(s, h, x)),
+        Shared.Bool.when(
+          List<&2, Ledgers.Id>,
+          Branch.same(x, b),
+          u => [],
+          u => Branch.news(s, h, x)
+        ),
         Lacked.of(s, h, b, r)
       )
 
@@ -5112,7 +5122,7 @@ def Seen.of(+s: State(), +b: Branch) -> Seen:
 # part runs only when the ones before it hold, from the cheapest
 def Touch.holds(g: Seen, t: Touch) -> Bool:
   match g t:
-    case Seen{+s, gb, +us} Touch{+v, +c, +b, +u}:
+    case Seen{+s, gb, +us} Touch{+v, +c, b, +u}:
       List.all.if(
         w => List.all.if(
           w => List.all.if(
@@ -5128,7 +5138,7 @@ def Touch.holds(g: Seen, t: Touch) -> Bool:
       )
 
 # the touch t holds
-def Node.touches(+s: State(), t: Touch) -> Bool:
+def Node.touches(s: State(), t: Touch) -> Bool:
   match t:
     case Touch{v, c, +b, u}:
       Touch.holds(Seen.of(s, b), Touch{v, c, b, u})
@@ -5170,7 +5180,7 @@ def Affects.at(g: Seen, v: Ledgers.Id) -> List<&2, Touch>:
 
 # the touches that may hold of the branch b, of g: those of the versions of
 # the other branches that b did not take in
-def Affects.cands(+s: State(), +b: Branch, g: Seen) -> List<&2, Touch>:
+def Affects.cands(s: State(), b: Branch, g: Seen) -> List<&2, Touch>:
   Shared.List.flat(~Ledgers.Id, ~Touch, ~Seen, ~Affects.at, Branch.lacked(s, b), g)
 
 # the changes elsewhere that touch what the branch b uses, at any depth
@@ -5298,7 +5308,7 @@ def Branch.since(+s: State(), since: State(), b: Branch) -> List<&2, Ledgers.Id>
 
 # the notices of the topic t in s that since, an earlier state of the node,
 # does not have: the cost is that of what is new, not of the history
-def Node.notices(+s: State(), t: Topic, +since: State()) -> List<&2, Notice>:
+def Node.notices(+s: State(), t: Topic, since: State()) -> List<&2, Notice>:
   match t:
     case Topic.Versions{+b}:
       Notice.versions(b, Branch.since(s, since, b))
