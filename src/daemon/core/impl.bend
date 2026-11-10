@@ -3480,44 +3480,7 @@ def Take.asks.adds(
     case Con{Cells.Many{}, rest}:
       Take.asks.adds(rest, post, old, s, i, time, r, l, ch)
 
-# a pending write goes with its writer to another node: a request that a node
-# takes in waits on its line there, so the node has a draft for its writer
-# (Node.draft_some) and the writer's read shows it (Node.read_draft)
-def Node.take_waits(
-  +s: Replicas.Node<Basics.Ask>,
-  +t: Ledgers.State(Basics.Ask),
-  +i: Ledgers.Id,
-  +time: String,
-  +r: Ledgers.Id,
-  +l: Maybe<&2, String>,
-  +ch: Basics.Change
-) -> {
-  Ledgers.State.get(
-    ~Basics.Ask,
-    Replicas.Node.reads(~Basics.Ask.machine(), t),
-    Ledgers.Slot.ask(i)
-  )
-    == Some{
-      Cells.One{Ledgers.Entry.Ask{i, time, Basics.Ask.On{r, l, ch}}}
-    }: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>
-}
-  -> {
-    Ledgers.State.get(
-      ~Basics.Ask,
-      Replicas.State.ledger(~Basics.Ask.machine(), s),
-      Ledgers.Slot.ask(i)
-    )
-      == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>
-  }
-  -> {
-    List.contains(
-      ~Ledgers.Id,
-      ~Ledgers.Id.is_eq,
-      Replicas.Wait.of(~Basics.Ask.machine(), Replicas.Node.take(~Stepping.Ask.kernel(), s, t), Replicas.Line.chain(r, l)),
-      i
-    )
-      == True{}: Bool
-  }:
+def Spec.Node.take_waits(s, t, i, time, r, l, ch):
   +sent = Replicas.Node.reads(~Basics.Ask.machine(), t)
   l1 = Ledgers.State.take(~Basics.Ask, Replicas.State.ledger(~Basics.Ask.machine(), s), sent)
   +s1 = Replicas.State.led(~Basics.Ask.machine(), s, l1)

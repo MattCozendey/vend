@@ -281,3 +281,41 @@ law Node.read_draft:
         == Replicas.Root.bytes(~Basics.Ask.machine(), s, Judging.Content.root(s, n, c)): Maybe<&2, Texts.Bytes()>
     }
 
+# a pending write goes with its writer to another node: a request that a node
+# takes in waits on its line there, so the node has a draft for its writer
+# (Node.draft_some) and the writer's read shows it (Node.read_draft)
+law Node.take_waits:
+  for +s: Replicas.Node<Basics.Ask>
+  for +t: Ledgers.State(Basics.Ask)
+  for +i: Ledgers.Id
+  for +time: String
+  for +r: Ledgers.Id
+  for +l: Maybe<&2, String>
+  for +ch: Basics.Change
+  {
+    Ledgers.State.get(
+      ~Basics.Ask,
+      Replicas.Node.reads(~Basics.Ask.machine(), t),
+      Ledgers.Slot.ask(i)
+    )
+      == Some{
+        Cells.One{Ledgers.Entry.Ask{i, time, Basics.Ask.On{r, l, ch}}}
+      }: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>
+  }
+    -> {
+      Ledgers.State.get(
+        ~Basics.Ask,
+        Replicas.State.ledger(~Basics.Ask.machine(), s),
+        Ledgers.Slot.ask(i)
+      )
+        == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>
+    }
+    -> {
+      List.contains(
+        ~Ledgers.Id,
+        ~Ledgers.Id.is_eq,
+        Replicas.Wait.of(~Basics.Ask.machine(), Replicas.Node.take(~Stepping.Ask.kernel(), s, t), Replicas.Line.chain(r, l)),
+        i
+      )
+        == True{}: Bool
+    }
