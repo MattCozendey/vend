@@ -4304,17 +4304,26 @@ def Line.versions(k: Nat, +s: State(), +t: Tip, +n: U32) -> List<&2, Ledgers.Id>
     case 1n+p:
       Ids.put(Version.in(s, n, t), Line.versions(p, s, t, U32.inc(n)))
 
-# the versions of the line whose tip is m, in order
-def Versions.of(+s: State(), m: Maybe<&2, Tip>) -> List<&2, Ledgers.Id>:
+# k versions of the line whose tip is m, from the number n, in order
+def Versions.of(+s: State(), m: Maybe<&2, Tip>, +n: U32, k: Nat) -> List<&2, Ledgers.Id>:
   match m:
     case None{}:
       []
     case Some{+t}:
-      Line.versions(U32.to_nat(Line.count(s, t)), s, t, 0)
+      Line.versions(k, s, t, n)
 
-# the versions of the branch b of the store r, in order
-def Node.versions(+s: State(), r: Ledgers.Id, b: String) -> List<&2, Ledgers.Id>:
-  Versions.of(s, Node.tip(s, Line.chain(r, Some{b})))
+# k versions of the branch b of the store r, from the number n, in order: a
+# reader asks for a part of a history, and pays for that part
+def Node.versions(+s: State(), r: Ledgers.Id, b: String, n: U32, k: Nat) -> List<&2, Ledgers.Id>:
+  Versions.of(s, Node.tip(s, Line.chain(r, Some{b})), n, k)
+
+# the version before the number n of the line whose tip is m, if any
+def Version.before(+s: State(), m: Maybe<&2, Tip>, +n: U32) -> Maybe<&2, Ledgers.Id>:
+  match m:
+    case None{}:
+      None{}
+    case Some{t}:
+      Shared.Maybe.when(Ledgers.Id, Bool.not(U32.is_eq(n, 0)), u => Version.in(s, U32.sub(n, 1), t))
 
 # the owners of the next step of the line l of the store r
 def Node.owners(+s: State(), r: Ledgers.Id, l: Maybe<&2, String>) -> List<&2, String>:
@@ -4469,13 +4478,49 @@ def Node.adopts(+n: String, cs: List<&2, Ledgers.Chain>, s: State()) -> State():
     case Con{c, rest}:
       Node.adopts(n, rest, Adopt.at(n, s, c))
 
+# the heads of each of the lines cs are at the same height in a and in b
+def Lines.level(cs: List<&2, Ledgers.Chain>, +a: State(), +b: State()) -> Bool:
+  match cs:
+    case Nil{}:
+      True{}
+    case Con{+c, r}:
+      List.all.if(u => Lines.level(r, a, b), Heads.level(Node.head_of(a, c), Node.head_of(b, c)))
+
+# s, after it took the ballots bs in again and did what it can on the lines
+# cs, until no head moves, f times at most. A ballot whose key the store gives
+# at a later height is kept once the node is there: one sync catches up over
+# each change of a key
+def Sync.more(
+  f: Nat,
+  +n: String,
+  +cs: List<&2, Ledgers.Chain>,
+  +bs: List<&2, Ledgers.Ballot>,
+  +s: State()
+) -> State():
+  match f:
+    case 0n:
+      s
+    case 1n+p:
+      +s2 = Node.steps(n, cs, Sealed.take(bs, s))
+      Shared.Bool.when(State(), Lines.level(cs, s, s2), u => s2, u => Sync.more(p, n, cs, bs, s2))
+
 # s, after the node n took in t, which another node sent, did what it can on
 # each line that this may move, and asked for the adoption of each: how a
 # node that is behind catches up
 def Node.sync(+n: String, +s: State(), +t: Ledgers.State(Ask)) -> State():
   +s1 = Node.take(s, t)
   +cs = Sync.lines(s, s1, t)
-  Node.adopts(n, cs, Node.steps(n, cs, s1))
+  +bs = Ballots.of(
+    Tries.Trie.values(
+      Cells.Cell<Ledgers.Entry<Ask>>,
+      Ledgers.State.missing(~Ask, ~Ask.is_eq, t, State.ledger(s))
+    )
+  )
+  Node.adopts(
+    n,
+    cs,
+    Sync.more(List.length(&2, Ledgers.Ballot, bs), n, cs, bs, Node.steps(n, cs, s1))
+  )
 
 # the resource m of the branch x of the store st is the resource n of the
 # branch b of the store r
@@ -4666,9 +4711,22 @@ def Log.of(
         Log.of(s, n, r, Some{x})
       )
 
-# the versions of the branch b of the store r that changed the resource n
-def Node.log(+s: State(), n: Resources.Name, r: Ledgers.Id, b: String) -> List<&2, LogEntry>:
-  Log.of(s, n, Node.versions(s, r, b), None{})
+# the versions of the branch b of the store r that changed the resource n,
+# among k versions from the number from
+def Node.log(
+  +s: State(),
+  n: Resources.Name,
+  +r: Ledgers.Id,
+  +b: String,
+  +from: U32,
+  k: Nat
+) -> List<&2, LogEntry>:
+  Log.of(
+    s,
+    n,
+    Node.versions(s, r, b, from, k),
+    Version.before(s, Node.tip(s, Line.chain(r, Some{b})), from)
+  )
 
 # what changed in the resource n from the point a to the point b, as the
 # writer w reads them

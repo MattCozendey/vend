@@ -3059,23 +3059,32 @@ def Adopts.grows(
         Spec.Node.adopts(n, rest, Spec.Adopt.at(n, s, c))
       )(Adopt.at.grows(n, s, c))(Adopts.grows(n, rest, Spec.Adopt.at(n, s, c)))
 
+# more rounds of a sync, grows
+def More.grows(
+  f: Nat,
+  +n: String,
+  +cs: List<&2, Ledgers.Chain>,
+  +bs: List<&2, Ledgers.Ballot>,
+  +s: Spec.State()
+) -> {Spec.Node.grows(s, Spec.Sync.more(f, n, cs, bs, s)) == True{}: Bool}:
+  match f:
+    case 0n:
+      Grows.refl(s)
+    case 1n+(+p):
+      Grows.when(s, Spec.Lines.level(cs, s, Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s))), Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s)), Spec.Sync.more(p, n, cs, bs, Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s))), Grows.trans(s, Spec.Sealed.take(bs, s), Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s)))(Each.grows(List.length(&2, Ledgers.Ballot, bs), bs, Spec.Pending.of(bs), s))(Steps.grows(n, cs, Spec.Sealed.take(bs, s))), Grows.trans(s, Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s)), Spec.Sync.more(p, n, cs, bs, Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s))))(Grows.trans(s, Spec.Sealed.take(bs, s), Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s)))(Each.grows(List.length(&2, Ledgers.Ballot, bs), bs, Spec.Pending.of(bs), s))(Steps.grows(n, cs, Spec.Sealed.take(bs, s))))(More.grows(p, n, cs, bs, Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s)))))
+
 def Spec.Node.sync_grows(n, s, t):
   +s1 = Spec.Node.take(s, t)
   +cs = Spec.Sync.lines(s, s1, t)
-  +s2 = Spec.Node.steps(n, cs, s1)
-  Grows.trans(
-    s,
-    s1,
-    Spec.Node.adopts(n, cs, s2)
-  )(
-    Spec.Node.take_grows(s, t)
-  )(
-    Grows.trans(
-      s1,
-      s2,
-      Spec.Node.adopts(n, cs, s2)
-    )(Steps.grows(n, cs, s1))(Adopts.grows(n, cs, s2))
+  +bs = Spec.Ballots.of(
+    Tries.Trie.values(
+      Cells.Cell<Ledgers.Entry<Spec.Ask>>,
+      Ledgers.State.missing(~Spec.Ask, ~Spec.Ask.is_eq, t, Spec.State.ledger(s))
+    )
   )
+  +s2 = Spec.Node.steps(n, cs, s1)
+  +s3 = Spec.Sync.more(List.length(&2, Ledgers.Ballot, bs), n, cs, bs, s2)
+  Grows.trans(s, s1, Spec.Node.adopts(n, cs, s3))(Spec.Node.take_grows(s, t))(Grows.trans(s1, s2, Spec.Node.adopts(n, cs, s3))(Steps.grows(n, cs, s1))(Grows.trans(s2, s3, Spec.Node.adopts(n, cs, s3))(More.grows(List.length(&2, Ledgers.Ballot, bs), n, cs, bs, s2))(Adopts.grows(n, cs, s3))))
 
 # Asks
 # ----
@@ -6474,6 +6483,20 @@ def Adopts.kept(
         Adopts.kept(n, rest, Spec.Adopt.at(n, s, c))
       )
 
+# more rounds of a sync, kept
+def More.kept(
+  f: Nat,
+  +n: String,
+  +cs: List<&2, Ledgers.Chain>,
+  +bs: List<&2, Ledgers.Ballot>,
+  +s: Spec.State()
+) -> Spec.Node.Keeps(s, Spec.Sync.more(f, n, cs, bs, s)):
+  match f:
+    case 0n:
+      Kept.refl(s)
+    case 1n+(+p):
+      Kept.when(Spec.Lines.level(cs, s, Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s))), s, Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s)), Spec.Sync.more(p, n, cs, bs, Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s))), Kept.trans(s, Spec.Sealed.take(bs, s), Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s)), Kept.same(s, Spec.Sealed.take(bs, s), Each.grows(List.length(&2, Ledgers.Ballot, bs), bs, Spec.Pending.of(bs), s), Each.heads(List.length(&2, Ledgers.Ballot, bs), bs, Spec.Pending.of(bs), s)), Steps.kept(n, cs, Spec.Sealed.take(bs, s))), Kept.trans(s, Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s)), Spec.Sync.more(p, n, cs, bs, Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s))), Kept.trans(s, Spec.Sealed.take(bs, s), Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s)), Kept.same(s, Spec.Sealed.take(bs, s), Each.grows(List.length(&2, Ledgers.Ballot, bs), bs, Spec.Pending.of(bs), s), Each.heads(List.length(&2, Ledgers.Ballot, bs), bs, Spec.Pending.of(bs), s)), Steps.kept(n, cs, Spec.Sealed.take(bs, s))), More.kept(p, n, cs, bs, Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s)))))
+
 # a sync keeps the logs
 def Sync.kept(
   +n: String,
@@ -6482,14 +6505,15 @@ def Sync.kept(
 ) -> Spec.Node.Keeps(s, Spec.Node.sync(n, s, t)):
   +s1 = Spec.Node.take(s, t)
   +cs = Spec.Sync.lines(s, s1, t)
-  s2 = Spec.Node.steps(n, cs, s1)
-  Kept.trans(
-    s,
-    s1,
-    Spec.Node.adopts(n, cs, s2),
-    Take.kept(s, t),
-    Kept.trans(s1, s2, Spec.Node.adopts(n, cs, s2), Steps.kept(n, cs, s1), Adopts.kept(n, cs, s2))
+  +bs = Spec.Ballots.of(
+    Tries.Trie.values(
+      Cells.Cell<Ledgers.Entry<Spec.Ask>>,
+      Ledgers.State.missing(~Spec.Ask, ~Spec.Ask.is_eq, t, Spec.State.ledger(s))
+    )
   )
+  +s2 = Spec.Node.steps(n, cs, s1)
+  +s3 = Spec.Sync.more(List.length(&2, Ledgers.Ballot, bs), n, cs, bs, s2)
+  Kept.trans(s, s1, Spec.Node.adopts(n, cs, s3), Take.kept(s, t), Kept.trans(s1, s2, Spec.Node.adopts(n, cs, s3), Steps.kept(n, cs, s1), Kept.trans(s2, s3, Spec.Node.adopts(n, cs, s3), More.kept(List.length(&2, Ledgers.Ballot, bs), n, cs, bs, s2), Adopts.kept(n, cs, s3))))
 
 # a request that a writer asks again at a node only grows it
 def Consent.grows(
@@ -16095,6 +16119,20 @@ def Adopts.path(
         Adopts.path(n, rest, Spec.Adopt.at(n, s, c))
       )
 
+# more rounds of a sync, path
+def More.path(
+  f: Nat,
+  +n: String,
+  +cs: List<&2, Ledgers.Chain>,
+  +bs: List<&2, Ledgers.Ballot>,
+  +s: Spec.State()
+) -> Spec.Node.On(s, Spec.Sync.more(f, n, cs, bs, s)):
+  match f:
+    case 0n:
+      Path.refl(s)
+    case 1n+(+p):
+      Path.when(Spec.Lines.level(cs, s, Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s))), s, Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s)), Spec.Sync.more(p, n, cs, bs, Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s))), Path.trans(s, Spec.Sealed.take(bs, s), Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s)), Path.same(s, Spec.Sealed.take(bs, s), Each.grows(List.length(&2, Ledgers.Ballot, bs), bs, Spec.Pending.of(bs), s), Each.heads(List.length(&2, Ledgers.Ballot, bs), bs, Spec.Pending.of(bs), s)), Steps.path(n, cs, Spec.Sealed.take(bs, s))), Path.trans(s, Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s)), Spec.Sync.more(p, n, cs, bs, Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s))), Path.trans(s, Spec.Sealed.take(bs, s), Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s)), Path.same(s, Spec.Sealed.take(bs, s), Each.grows(List.length(&2, Ledgers.Ballot, bs), bs, Spec.Pending.of(bs), s), Each.heads(List.length(&2, Ledgers.Ballot, bs), bs, Spec.Pending.of(bs), s)), Steps.path(n, cs, Spec.Sealed.take(bs, s))), More.path(p, n, cs, bs, Spec.Node.steps(n, cs, Spec.Sealed.take(bs, s)))))
+
 # a sync is on the paths
 def Sync.path(
   +n: String,
@@ -16103,14 +16141,15 @@ def Sync.path(
 ) -> Spec.Node.On(s, Spec.Node.sync(n, s, t)):
   +s1 = Spec.Node.take(s, t)
   +cs = Spec.Sync.lines(s, s1, t)
-  s2 = Spec.Node.steps(n, cs, s1)
-  Path.trans(
-    s,
-    s1,
-    Spec.Node.adopts(n, cs, s2),
-    Take.path(s, t),
-    Path.trans(s1, s2, Spec.Node.adopts(n, cs, s2), Steps.path(n, cs, s1), Adopts.path(n, cs, s2))
+  +bs = Spec.Ballots.of(
+    Tries.Trie.values(
+      Cells.Cell<Ledgers.Entry<Spec.Ask>>,
+      Ledgers.State.missing(~Spec.Ask, ~Spec.Ask.is_eq, t, Spec.State.ledger(s))
+    )
   )
+  +s2 = Spec.Node.steps(n, cs, s1)
+  +s3 = Spec.Sync.more(List.length(&2, Ledgers.Ballot, bs), n, cs, bs, s2)
+  Path.trans(s, s1, Spec.Node.adopts(n, cs, s3), Take.path(s, t), Path.trans(s1, s2, Spec.Node.adopts(n, cs, s3), Steps.path(n, cs, s1), Path.trans(s2, s3, Spec.Node.adopts(n, cs, s3), More.path(List.length(&2, Ledgers.Ballot, bs), n, cs, bs, s2), Adopts.path(n, cs, s3))))
 
 # a request that a writer asks again at a node is on the paths
 def Consent.path(
