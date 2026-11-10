@@ -545,97 +545,6 @@ def Rule.selects_fast_ok(
 ) -> {Rule.selects.fast(rules, p) == Spec.Rule.selects(rules, p): Bool}:
   Rule.selects_fast_ok.go(rules, p, False{})
 
-# p is a valid path that answers q: Spec.Query.holds, by the fast selection
-def Query.holds.fast(q: Spec.Query, +p: String) -> Bool:
-  match q:
-    case Spec.Both{a, b}:
-      List.all.if(
-        u => List.all.if(u2 => Rule.selects.fast(b, p), Rule.selects.fast(a, p)),
-        Spec.is_path(p)
-      )
-    case Spec.Only{a, b}:
-      List.all.if(
-        u => List.all.if(u2 => Bool.not(Rule.selects.fast(b, p)), Rule.selects.fast(a, p)),
-        Spec.is_path(p)
-      )
-
-# Query.holds.fast gives the answer of Spec.Query.holds
-def Query.holds_fast_ok(
-  q: Spec.Query,
-  +p: String
-) -> {Query.holds.fast(q, p) == Spec.Query.holds(q, p): Bool}:
-  match q:
-    case Spec.Both{+a, +b}:
-      v = Spec.is_path(p)
-      +sa = Spec.Rule.selects(a, p)
-      +sb = Spec.Rule.selects(b, p)
-      fa = Rule.selects.fast(a, p)
-      fb = Rule.selects.fast(b, p)
-      %Shared.List.all.if_and(
-        sa,
-        u => sb
-      ): {List.all.if(u => List.all.if(u2 => fb, fa), v) == Bool.and(v, _): Bool}
-      %Shared.List.all.if_and(
-        v,
-        u => List.all.if(u2 => sb, sa)
-      ): {List.all.if(u => List.all.if(u2 => fb, fa), v) == _: Bool}
-      %Rule.selects_fast_ok(
-        a,
-        p
-      ): {
-        List.all.if(
-          u => List.all.if(u2 => fb, fa),
-          v
-        )
-          == List.all.if(u => List.all.if(u2 => sb, _), v): Bool
-      }
-      %Rule.selects_fast_ok(
-        b,
-        p
-      ): {
-        List.all.if(
-          u => List.all.if(u2 => fb, fa),
-          v
-        )
-          == List.all.if(u => List.all.if(u2 => _, fa), v): Bool
-      }
-      {==}
-    case Spec.Only{+a, +b}:
-      v = Spec.is_path(p)
-      +sa = Spec.Rule.selects(a, p)
-      +sb = Bool.not(Spec.Rule.selects(b, p))
-      fa = Rule.selects.fast(a, p)
-      fb = Rule.selects.fast(b, p)
-      %Shared.List.all.if_and(
-        sa,
-        u => sb
-      ): {List.all.if(u => List.all.if(u2 => Bool.not(fb), fa), v) == Bool.and(v, _): Bool}
-      %Shared.List.all.if_and(
-        v,
-        u => List.all.if(u2 => sb, sa)
-      ): {List.all.if(u => List.all.if(u2 => Bool.not(fb), fa), v) == _: Bool}
-      %Rule.selects_fast_ok(
-        a,
-        p
-      ): {
-        List.all.if(
-          u => List.all.if(u2 => Bool.not(fb), fa),
-          v
-        )
-          == List.all.if(u => List.all.if(u2 => sb, _), v): Bool
-      }
-      %Rule.selects_fast_ok(
-        b,
-        p
-      ): {
-        List.all.if(
-          u => List.all.if(u2 => Bool.not(fb), fa),
-          v
-        )
-          == List.all.if(u => List.all.if(u2 => Bool.not(_), fa), v): Bool
-      }
-      {==}
-
 # Search states
 # -------------
 # A rule as the derivative lists (Seqs) of its glob, and a state of the
@@ -1792,10 +1701,40 @@ def Walk.key(w: Walk) -> List<&2, Bool>:
 def Abc.path_syms(g: Abc) -> List<&2, Char>:
   'x' <> Abc.syms(g)
 
+# p is a valid path that answers q: Spec.Query.holds, by the machine of the
+# search, whose cost does not grow with each character
+def Query.holds.fast(q: Spec.Query, +p: String, g: Abc) -> Bool:
+  List.all.if(
+    u => Searches.Machine.accepts(
+      ~St,
+      ~Char,
+      ~Abc,
+      ~Abc.step,
+      ~Abc.ends,
+      String.to_list(p),
+      St.of(q),
+      g
+    ),
+    Spec.is_path(p)
+  )
+
+# Query.holds.fast gives the answer of Spec.Query.holds
+def Query.holds_fast_ok(
+  +q: Spec.Query,
+  +p: String,
+  +g: Abc
+) -> {Query.holds.fast(q, p, g) == Spec.Query.holds(q, p): Bool}:
+  v = Spec.is_path(p)
+  +w = String.to_list(p)
+  acc = Searches.Machine.accepts(~St, ~Char, ~Abc, ~Abc.step, ~Abc.ends, w, St.of(q), g)
+  %St.of_ok(q, p): {List.all.if(u => acc, v) == _: Bool}
+  %St.accepts_ok(w, St.of(q), g): {List.all.if(u => acc, v) == Bool.and(v, _): Bool}
+  Shared.List.all.if_and(v, u => acc)
+
 # What the search found: a path to check, a certificate to check, or neither.
 type Outcome is Data:
   Witness{path: String}
-  Proof{xs: List<&2, St>, g: Abc}
+  Proof{xs: List<&2, St>}
   NoAnswer{}
 
 # the states a search may visit before it gives up
@@ -1833,16 +1772,15 @@ def Search.run.paths(x0: St, g: Abc) -> Outcome:
 def Search.run.closed(x0: St, g: Abc, found: Searches.Found<St, Char>) -> Outcome:
   match found:
     case Searches.Closed{xs}:
-      Proof{xs, g}
+      Proof{xs}
     case Searches.Hit{w}:
       Search.run.paths(x0, g)
     case Searches.Out{}:
       Search.run.paths(x0, g)
 
-# what the search finds for q
-def Search.run(+q: Spec.Query) -> Outcome:
+# what the search finds for q, under the characters of g
+def Search.run(q: Spec.Query, +g: Abc) -> Outcome:
   +x0 = St.of(q)
-  +g = Query.abc(q)
   Search.run.closed(
     x0,
     g,
@@ -1893,18 +1831,19 @@ def Search.proves(q: Spec.Query, xs: List<&2, St>, g: Abc) -> Bool:
   )
 
 # the answer to q, from what the search found, once checked
-def Search.decide(q: Spec.Query, r: Outcome) -> Spec.Search:
+def Search.decide(q: Spec.Query, g: Abc, r: Outcome) -> Spec.Search:
   match r:
     case Witness{+p}:
-      Search.found_if(p, Query.holds.fast(q, p))
-    case Proof{xs, g}:
+      Search.found_if(p, Query.holds.fast(q, p, g))
+    case Proof{xs}:
       Search.absent_if(Search.proves(q, xs, g))
     case NoAnswer{}:
       Spec.Unknown{}
 
 def Spec.Query.search(q):
   +q = q
-  Search.decide(q, Search.run(q))
+  +g = Query.abc(q)
+  Search.decide(q, g, Search.run(q, g))
 
 # Empty when s is Found
 def Search.NotFound(s: Spec.Search) -> Type:
@@ -1957,9 +1896,10 @@ def Search.found_if_found(
   q: Spec.Query,
   p0: String,
   p: String,
+  g: Abc,
   b: Bool
 ) -> {
-  Query.holds.fast(q, p0) == b: Bool
+  Query.holds.fast(q, p0, g) == b: Bool
 } -> {
   Search.found_if(p0, b) == Spec.Found{p}: Spec.Search
 } -> {Spec.Query.holds(q, p) == True{}: Bool}:
@@ -1983,13 +1923,13 @@ def Search.found_if_found(
         Equal.trans(
           Bool,
           Spec.Query.holds(q, p0),
-          Query.holds.fast(q, p0),
+          Query.holds.fast(q, p0, g),
           True{},
           Equal.sym(
             Bool,
-            Query.holds.fast(q, p0),
+            Query.holds.fast(q, p0, g),
             Spec.Query.holds(q, p0),
-            Query.holds_fast_ok(q, p0)
+            Query.holds_fast_ok(q, p0, g)
           ),
           e
         )
@@ -2018,15 +1958,16 @@ def Search.found_if_absent(
 # a Found answer of decide names a path that holds
 def Search.decide_found(
   +q: Spec.Query,
+  +g: Abc,
   r: Outcome,
   p: String
 ) -> {
-  Search.decide(q, r) == Spec.Found{p}: Spec.Search
+  Search.decide(q, g, r) == Spec.Found{p}: Spec.Search
 } -> {Spec.Query.holds(q, p) == True{}: Bool}:
   match r:
     case Witness{+p0}:
-      h => Search.found_if_found(q, p0, p, Query.holds.fast(q, p0))({==}, h)
-    case Proof{xs, g}:
+      h => Search.found_if_found(q, p0, p, g, Query.holds.fast(q, p0, g))({==}, h)
+    case Proof{xs}:
       h => Empty.absurd(
         {Spec.Query.holds(q, p) == True{}: Bool},
         Search.absent_if_found(Search.proves(q, xs, g), p)(h)
@@ -2101,18 +2042,19 @@ def Search.absent_if_absent(
 # an Absent answer of decide means no path holds
 def Search.decide_absent(
   +q: Spec.Query,
+  +g: Abc,
   r: Outcome,
   p: String
 ) -> {
-  Search.decide(q, r) == Spec.Absent{}: Spec.Search
+  Search.decide(q, g, r) == Spec.Absent{}: Spec.Search
 } -> {Spec.Query.holds(q, p) == False{}: Bool}:
   match r:
     case Witness{p0}:
       h => Empty.absurd(
         {Spec.Query.holds(q, p) == False{}: Bool},
-        Search.found_if_absent(p0, Query.holds.fast(q, p0))(h)
+        Search.found_if_absent(p0, Query.holds.fast(q, p0, g))(h)
       )
-    case Proof{+xs, +g}:
+    case Proof{+xs}:
       h => Search.absent_if_absent(q, xs, g, p, Search.proves(q, xs, g))({==}, h)
     case NoAnswer{}:
       h => Empty.absurd(
@@ -2122,11 +2064,13 @@ def Search.decide_absent(
 
 def Spec.search_found(q, p, h):
   +q = q
-  Search.decide_found(q, Search.run(q), p)(h)
+  +g = Query.abc(q)
+  Search.decide_found(q, g, Search.run(q, g), p)(h)
 
 def Spec.search_absent(q, p, h):
   +q = q
-  Search.decide_absent(q, Search.run(q), p)(h)
+  +g = Query.abc(q)
+  Search.decide_absent(q, g, Search.run(q, g), p)(h)
 
 # Text
 # ----
