@@ -931,21 +931,23 @@ def Branch.new.kept(
         n1
       )
 
-# a change of a line keeps each key of a run's log, other than the owners and
-# the count
-def On.kept(
+# On.kept once it is known how the line takes the change (w)
+def On.of.kept(
   +r: Stepping.Run,
   i: Ledgers.Id,
   +st: Ledgers.Id,
-  l: Maybe<&2, String>,
-  ch: Basics.Change,
+  +l: Maybe<&2, String>,
+  +ch: Basics.Change,
+  w: Stepping.Route,
   k2: List<&2, U32>,
   v: List<&2, U32>,
   n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k2) == False{}: Bool},
   n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k2) == False{}: Bool}
-) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Step.on(r, i, st, l, ch)):
-  match l ch:
-    case None{} Basics.Change.Branch{+a, b}:
+) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Step.on.of(r, i, st, l, ch, w)):
+  match w:
+    case Stepping.Route.Mark{a}:
+      hr => Mark.kept(r, i, a, k2, v, n0, n1)(hr)
+    case Stepping.Route.Branch{+a, b}:
       Branch.new.kept(
         r,
         i,
@@ -962,16 +964,16 @@ def On.kept(
         n0,
         n1
       )
-    case None{} Basics.Change.Group{+a, +b}:
+    case Stepping.Route.Judge{}:
       hr => Judged.kept(
         r,
         i,
-        Basics.Change.owners(Basics.Change.Group{a, b}),
+        Basics.Change.owners(ch),
         Judging.Judge.change(
           Stepping.Run.state(r),
           st,
-          None{},
-          Basics.Change.Group{a, b},
+          l,
+          ch,
           Basics.Tip.content(Stepping.Run.tip(r)),
           Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
         ),
@@ -983,419 +985,27 @@ def On.kept(
         ProofTrees.Verdict.change(
           Stepping.Run.state(r),
           st,
-          None{},
-          Basics.Change.Group{a, b},
+          l,
+          ch,
           Basics.Tip.content(Stepping.Run.tip(r)),
           Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
         )
       )(hr)
-    case None{} Basics.Change.Own{+a, +b, +c}:
-      hr => Judged.kept(
-        r,
-        i,
-        Basics.Change.owners(Basics.Change.Own{a, b, c}),
-        Judging.Judge.change(
-          Stepping.Run.state(r),
-          st,
-          None{},
-          Basics.Change.Own{a, b, c},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        ),
-        k2,
-        v,
-        n0,
-        n1
-      )(
-        ProofTrees.Verdict.change(
-          Stepping.Run.state(r),
-          st,
-          None{},
-          Basics.Change.Own{a, b, c},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        )
-      )(hr)
-    case None{} Basics.Change.Write{+a, +b, +c}:
-      hr => Judged.kept(
-        r,
-        i,
-        Basics.Change.owners(Basics.Change.Write{a, b, c}),
-        Judging.Judge.change(
-          Stepping.Run.state(r),
-          st,
-          None{},
-          Basics.Change.Write{a, b, c},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        ),
-        k2,
-        v,
-        n0,
-        n1
-      )(
-        ProofTrees.Verdict.change(
-          Stepping.Run.state(r),
-          st,
-          None{},
-          Basics.Change.Write{a, b, c},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        )
-      )(hr)
-    case None{} Basics.Change.Resolve{+a, +b, +c}:
-      hr => Judged.kept(
-        r,
-        i,
-        Basics.Change.owners(Basics.Change.Resolve{a, b, c}),
-        Judging.Judge.change(
-          Stepping.Run.state(r),
-          st,
-          None{},
-          Basics.Change.Resolve{a, b, c},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        ),
-        k2,
-        v,
-        n0,
-        n1
-      )(
-        ProofTrees.Verdict.change(
-          Stepping.Run.state(r),
-          st,
-          None{},
-          Basics.Change.Resolve{a, b, c},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        )
-      )(hr)
-    case None{} Basics.Change.Merge{+a}:
-      hr => Judged.kept(
-        r,
-        i,
-        Basics.Change.owners(Basics.Change.Merge{a}),
-        Judging.Judge.change(
-          Stepping.Run.state(r),
-          st,
-          None{},
-          Basics.Change.Merge{a},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        ),
-        k2,
-        v,
-        n0,
-        n1
-      )(
-        ProofTrees.Verdict.change(
-          Stepping.Run.state(r),
-          st,
-          None{},
-          Basics.Change.Merge{a},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        )
-      )(hr)
-    case None{} Basics.Change.Move{+a}:
-      hr => Judged.kept(
-        r,
-        i,
-        Basics.Change.owners(Basics.Change.Move{a}),
-        Judging.Judge.change(
-          Stepping.Run.state(r),
-          st,
-          None{},
-          Basics.Change.Move{a},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        ),
-        k2,
-        v,
-        n0,
-        n1
-      )(
-        ProofTrees.Verdict.change(
-          Stepping.Run.state(r),
-          st,
-          None{},
-          Basics.Change.Move{a},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        )
-      )(hr)
-    case None{} Basics.Change.Mark{+a, +b}:
-      hr => Judged.kept(
-        r,
-        i,
-        Basics.Change.owners(Basics.Change.Mark{a, b}),
-        Judging.Judge.change(
-          Stepping.Run.state(r),
-          st,
-          None{},
-          Basics.Change.Mark{a, b},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        ),
-        k2,
-        v,
-        n0,
-        n1
-      )(
-        ProofTrees.Verdict.change(
-          Stepping.Run.state(r),
-          st,
-          None{},
-          Basics.Change.Mark{a, b},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        )
-      )(hr)
-    case Some{x} Basics.Change.Branch{+a, +b}:
-      hr => Judged.kept(
-        r,
-        i,
-        Basics.Change.owners(Basics.Change.Branch{a, b}),
-        Judging.Judge.change(
-          Stepping.Run.state(r),
-          st,
-          Some{x},
-          Basics.Change.Branch{a, b},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        ),
-        k2,
-        v,
-        n0,
-        n1
-      )(
-        ProofTrees.Verdict.change(
-          Stepping.Run.state(r),
-          st,
-          Some{x},
-          Basics.Change.Branch{a, b},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        )
-      )(hr)
-    case Some{+x} Basics.Change.Group{+a, +b}:
-      hr => Judged.kept(
-        r,
-        i,
-        Basics.Change.owners(Basics.Change.Group{a, b}),
-        Judging.Judge.change(
-          Stepping.Run.state(r),
-          st,
-          Some{x},
-          Basics.Change.Group{a, b},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        ),
-        k2,
-        v,
-        n0,
-        n1
-      )(
-        ProofTrees.Verdict.change(
-          Stepping.Run.state(r),
-          st,
-          Some{x},
-          Basics.Change.Group{a, b},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        )
-      )(hr)
-    case Some{+x} Basics.Change.Own{+a, +b, +c}:
-      hr => Judged.kept(
-        r,
-        i,
-        Basics.Change.owners(Basics.Change.Own{a, b, c}),
-        Judging.Judge.change(
-          Stepping.Run.state(r),
-          st,
-          Some{x},
-          Basics.Change.Own{a, b, c},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        ),
-        k2,
-        v,
-        n0,
-        n1
-      )(
-        ProofTrees.Verdict.change(
-          Stepping.Run.state(r),
-          st,
-          Some{x},
-          Basics.Change.Own{a, b, c},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        )
-      )(hr)
-    case Some{+x} Basics.Change.Write{+a, +b, +c}:
-      hr => Judged.kept(
-        r,
-        i,
-        Basics.Change.owners(Basics.Change.Write{a, b, c}),
-        Judging.Judge.change(
-          Stepping.Run.state(r),
-          st,
-          Some{x},
-          Basics.Change.Write{a, b, c},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        ),
-        k2,
-        v,
-        n0,
-        n1
-      )(
-        ProofTrees.Verdict.change(
-          Stepping.Run.state(r),
-          st,
-          Some{x},
-          Basics.Change.Write{a, b, c},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        )
-      )(hr)
-    case Some{+x} Basics.Change.Resolve{+a, +b, +c}:
-      hr => Judged.kept(
-        r,
-        i,
-        Basics.Change.owners(Basics.Change.Resolve{a, b, c}),
-        Judging.Judge.change(
-          Stepping.Run.state(r),
-          st,
-          Some{x},
-          Basics.Change.Resolve{a, b, c},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        ),
-        k2,
-        v,
-        n0,
-        n1
-      )(
-        ProofTrees.Verdict.change(
-          Stepping.Run.state(r),
-          st,
-          Some{x},
-          Basics.Change.Resolve{a, b, c},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        )
-      )(hr)
-    case Some{+x} Basics.Change.Merge{+a}:
-      hr => Judged.kept(
-        r,
-        i,
-        Basics.Change.owners(Basics.Change.Merge{a}),
-        Judging.Judge.change(
-          Stepping.Run.state(r),
-          st,
-          Some{x},
-          Basics.Change.Merge{a},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        ),
-        k2,
-        v,
-        n0,
-        n1
-      )(
-        ProofTrees.Verdict.change(
-          Stepping.Run.state(r),
-          st,
-          Some{x},
-          Basics.Change.Merge{a},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        )
-      )(hr)
-    case Some{+x} Basics.Change.Move{+a}:
-      hr => Judged.kept(
-        r,
-        i,
-        Basics.Change.owners(Basics.Change.Move{a}),
-        Judging.Judge.change(
-          Stepping.Run.state(r),
-          st,
-          Some{x},
-          Basics.Change.Move{a},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        ),
-        k2,
-        v,
-        n0,
-        n1
-      )(
-        ProofTrees.Verdict.change(
-          Stepping.Run.state(r),
-          st,
-          Some{x},
-          Basics.Change.Move{a},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        )
-      )(hr)
-    case Some{+x} Basics.Change.Mark{a, b}:
-      hr => Mark.kept(r, i, a, k2, v, n0, n1)(hr)
-    case None{} Basics.Change.Key{+a, +b}:
-      hr => Judged.kept(
-        r,
-        i,
-        Basics.Change.owners(Basics.Change.Key{a, b}),
-        Judging.Judge.change(
-          Stepping.Run.state(r),
-          st,
-          None{},
-          Basics.Change.Key{a, b},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        ),
-        k2,
-        v,
-        n0,
-        n1
-      )(
-        ProofTrees.Verdict.change(
-          Stepping.Run.state(r),
-          st,
-          None{},
-          Basics.Change.Key{a, b},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        )
-      )(hr)
-    case Some{+x} Basics.Change.Key{+a, +b}:
-      hr => Judged.kept(
-        r,
-        i,
-        Basics.Change.owners(Basics.Change.Key{a, b}),
-        Judging.Judge.change(
-          Stepping.Run.state(r),
-          st,
-          Some{x},
-          Basics.Change.Key{a, b},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        ),
-        k2,
-        v,
-        n0,
-        n1
-      )(
-        ProofTrees.Verdict.change(
-          Stepping.Run.state(r),
-          st,
-          Some{x},
-          Basics.Change.Key{a, b},
-          Basics.Tip.content(Stepping.Run.tip(r)),
-          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
-        )
-      )(hr)
+
+# a change of a line keeps each key of a run's log, other than the owners and
+# the count
+def On.kept(
+  +r: Stepping.Run,
+  i: Ledgers.Id,
+  +st: Ledgers.Id,
+  +l: Maybe<&2, String>,
+  +ch: Basics.Change,
+  k2: List<&2, U32>,
+  v: List<&2, U32>,
+  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k2) == False{}: Bool},
+  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k2) == False{}: Bool}
+) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Step.on(r, i, st, l, ch)):
+  On.of.kept(r, i, st, l, ch, Stepping.Route.of(l, ch), k2, v, n0, n1)
 
 # a request keeps each key of a run's log, other than the owners and the count
 def Change.kept(

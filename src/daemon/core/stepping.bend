@@ -268,29 +268,59 @@ def Step.branch(
     Basics.Node.find(Run.state(r), Basics.Tip.log(Run.tip(r)), Basics.Log.start(b))
   )
 
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
+# how a line takes a change: a branch writes a mark to its log, a store
+# writes a new branch to its log, and a judge decides any other change
+type Route is Data:
+  Route.Mark{mark: String}
+  Route.Branch{name: String, at: Maybe<&2, Ledgers.Id>}
+  Route.Judge{}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
+
+# how the line l takes the change ch
+def Route.of(l: Maybe<&2, String>, ch: Basics.Change) -> Route:
+  match l ch:
+    case Some{b} Basics.Change.Mark{m, d}:
+      Route.Mark{m}
+    case None{} Basics.Change.Branch{b, at}:
+      Route.Branch{b, at}
+    case x y:
+      Route.Judge{}
+
+# Step.on once it is known how the line takes the change (w)
+def Step.on.of(
+  +r: Run,
+  i: Ledgers.Id,
+  st: Ledgers.Id,
+  l: Maybe<&2, String>,
+  +ch: Basics.Change,
+  w: Route
+) -> Maybe<&2, Run>:
+  match w:
+    case Route.Mark{m}:
+      Step.mark(r, i, m)
+    case Route.Branch{b, at}:
+      Step.branch(r, i, st, b, at)
+    case Route.Judge{}:
+      +s = Run.state(r)
+      +t = Run.tip(r)
+      Step.judged(
+        r,
+        i,
+        Basics.Change.owners(ch),
+        Judging.Judge.change(s, st, l, ch, Basics.Tip.content(t), Basics.Line.owners(s, t))
+      )
+
 # the run r, after the request i of the change ch of the line l of the store
 # st
 def Step.on(
   +r: Run,
   i: Ledgers.Id,
   st: Ledgers.Id,
-  l: Maybe<&2, String>,
-  ch: Basics.Change
+  +l: Maybe<&2, String>,
+  +ch: Basics.Change
 ) -> Maybe<&2, Run>:
-  match l ch:
-    case Some{b} Basics.Change.Mark{m, d}:
-      Step.mark(r, i, m)
-    case None{} Basics.Change.Branch{b, at}:
-      Step.branch(r, i, st, b, at)
-    case x +y:
-      +s = Run.state(r)
-      +t = Run.tip(r)
-      Step.judged(
-        r,
-        i,
-        Basics.Change.owners(y),
-        Judging.Judge.change(s, st, x, y, Basics.Tip.content(t), Basics.Line.owners(s, t))
-      )
+  Step.on.of(r, i, st, l, ch, Route.of(l, ch))
 
 # the run r of the line c, after the request i of q: a request of another
 # line, or one that starts a store, is stale here
