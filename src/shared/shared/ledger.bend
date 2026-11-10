@@ -289,9 +289,13 @@ def Hash.key(h: Hashes.Hash) -> List<&2, Bool>:
         )
       )
 
+# the start of the slots of data
+def Slot.datas() -> List<&2, Bool>:
+  [True{}, True{}, True{}, True{}]
+
 # the slot of the data whose hash is h
 def Slot.data(h: Hashes.Hash) -> List<&2, Bool>:
-  True{} <> True{} <> True{} <> True{} <> Hash.key(h)
+  List.append(&2, Bool, Slot.datas(), Hash.key(h))
 
 # a and b are the same request
 def Id.is_eq(a: Id, b: Id) -> Bool:
@@ -1151,6 +1155,11 @@ def State.get(~Q: Data, s: State(Q), k: List<&2, Bool>) -> Maybe<&2, Cells.Cell<
 def State.under(~Q: Data, s: State(Q), k: List<&2, Bool>) -> State(Q):
   Tries.Trie.under(Cells.Cell<Entry<Q>>, s, k)
 
+# s with the data of t in place of its own: what a holder of s keeps of a run
+# on t, which may add data only
+def State.with_data(~Q: Data, s: State(Q), t: State(Q)) -> State(Q):
+  Tries.Trie.graft(Cells.Cell<Entry<Q>>, Slot.datas(), s, t)
+
 # a ledger that holds only the entry e, in the slot k
 def State.one(~Q: Data, k: List<&2, Bool>, e: Entry<Q>) -> State(Q):
   Tries.Trie.one(Cells.Cell<Entry<Q>>, k, Cells.One{e})
@@ -1729,6 +1738,10 @@ def State.grows(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), s2: State(Q)) -> B
     s,
     s2
   )
+
+# t holds the data of s
+def State.holds_data(~Q: Data, ~same: Q -> Q -> Bool, +s: State(Q), t: State(Q)) -> Bool:
+  State.grows(~Q, ~same, s, State.with_data(~Q, s, t))
 
 # a sync that agrees grows a state
 def State.grows_join(
@@ -3520,3 +3533,244 @@ def State.passed_round(
   State.passed(~Q, s, Where{c, h, r}, n) == Some{l}: Maybe<&2, Maybe<&2, Last>>
 } -> {Nat.is_le(r, State.round(~Q, s, c, h)) == True{}: Bool}:
   State.passed_round.at(~Q, s, c, h, r, n, l, State.get(~Q, s, Slot.pass(Where{c, h, r}, n)))({==})
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof: it does not run
+# a ledger with the data of t reads the data of t
+def State.with_data_data(
+  ~Q: Data,
+  s: State(Q),
+  t: State(Q),
+  h: Hashes.Hash
+) -> {
+  State.data(~Q, State.with_data(~Q, s, t), h) == State.data(~Q, t, h): Maybe<&2, List<&2, U32>>
+}:
+  %Equal.sym(
+    Maybe<&2, Cells.Cell<Entry<Q>>>,
+    State.get(~Q, State.with_data(~Q, s, t), Slot.data(h)),
+    Bool.pick(
+      Maybe<&2, Cells.Cell<Entry<Q>>>,
+      Tries.Trie.leads(Slot.datas(), Slot.data(h)),
+      State.get(~Q, t, Slot.data(h)),
+      State.get(~Q, s, Slot.data(h))
+    ),
+    Tries.Trie.get_graft(Cells.Cell<Entry<Q>>, Slot.datas(), s, t, Slot.data(h))
+  ): {
+    Maybe.bind(
+      &2,
+      List<&2, U32>,
+      List<&2, U32>,
+      Data.of(~Q, Cells.Cell.value(Entry<Q>, _)),
+      ws => Data.check(h, ws)
+    )
+      == State.data(~Q, t, h): Maybe<&2, List<&2, U32>>
+  }
+  {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof: it does not run
+# a ledger with the data of t reads s at a slot that is not of data
+def State.with_data_other(
+  ~Q: Data,
+  s: State(Q),
+  t: State(Q),
+  k: List<&2, Bool>
+) -> {
+  Tries.Trie.leads(Slot.datas(), k) == False{}: Bool
+} -> {
+  State.get(
+    ~Q,
+    State.with_data(~Q, s, t),
+    k
+  )
+    == State.get(~Q, s, k): Maybe<&2, Cells.Cell<Entry<Q>>>
+}:
+  e =>
+    %Equal.sym(
+      Maybe<&2, Cells.Cell<Entry<Q>>>,
+      State.get(~Q, State.with_data(~Q, s, t), k),
+      Bool.pick(
+        Maybe<&2, Cells.Cell<Entry<Q>>>,
+        Tries.Trie.leads(Slot.datas(), k),
+        State.get(~Q, t, k),
+        State.get(~Q, s, k)
+      ),
+      Tries.Trie.get_graft(Cells.Cell<Entry<Q>>, Slot.datas(), s, t, k)
+    ): {_ == State.get(~Q, s, k): Maybe<&2, Cells.Cell<Entry<Q>>>}
+    %Equal.sym(
+      Bool,
+      Tries.Trie.leads(Slot.datas(), k),
+      False{},
+      e
+    ): {
+      Bool.pick(
+        Maybe<&2, Cells.Cell<Entry<Q>>>,
+        _,
+        State.get(~Q, t, k),
+        State.get(~Q, s, k)
+      )
+        == State.get(~Q, s, k): Maybe<&2, Cells.Cell<Entry<Q>>>
+    }
+    {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# State.with_data_grows at the slot k, once it is known whether it is of data
+# (l)
+def State.with_data_grows.at(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  s: State(Q),
+  t: State(Q),
+  k: List<&2, Bool>,
+  l: Bool
+) -> {
+  State.grows(~Q, ~same, s, t) == True{}: Bool
+} -> {
+  Cells.Cell.keeps(
+    ~Entry<Q>,
+    ~Entry.is_eq(~Q, ~same),
+    State.get(~Q, s, k),
+    Bool.pick(Maybe<&2, Cells.Cell<Entry<Q>>>, l, State.get(~Q, t, k), State.get(~Q, s, k))
+  )
+    == True{}: Bool
+}:
+  match l:
+    case True{}:
+      gr => Tries.Trie.keeps_get(
+        ~Cells.Cell<Entry<Q>>,
+        ~Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+        ~Cells.Cell.none_kept(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+        s,
+        t,
+        k
+      )(gr)
+    case False{}:
+      gr => Cells.Cell.keeps_refl(
+        ~Entry<Q>,
+        ~Entry.is_eq(~Q, ~same),
+        ~Entry.laws(~Q, ~same, ~laws),
+        State.get(~Q, s, k)
+      )
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof: it does not run
+# a ledger with the data of a ledger that grew from it grew
+def State.with_data_grows(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  +s: State(Q),
+  +t: State(Q)
+) -> {
+  State.grows(~Q, ~same, s, t) == True{}: Bool
+} -> {State.grows(~Q, ~same, s, State.with_data(~Q, s, t)) == True{}: Bool}:
+  +gr => Tries.Trie.all2_of_get(
+    ~Cells.Cell<Entry<Q>>,
+    ~Cells.Cell<Entry<Q>>,
+    ~Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+    ~(x => Tries.Trie.all(~Cells.Cell<Entry<Q>>, ~(m => Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), m, None{})), x)),
+    ~(x => f => Tries.Trie.all_of_get(~Cells.Cell<Entry<Q>>, ~(m => Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), m, None{})), x, f)),
+    s,
+    State.with_data(~Q, s, t),
+    +k =>
+      %Equal.sym(Maybe<&2, Cells.Cell<Entry<Q>>>, State.get(~Q, State.with_data(~Q, s, t), k), Bool.pick(Maybe<&2, Cells.Cell<Entry<Q>>>, Tries.Trie.leads(Slot.datas(), k), State.get(~Q, t, k), State.get(~Q, s, k)), Tries.Trie.get_graft(Cells.Cell<Entry<Q>>, Slot.datas(), s, t, k)): {Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), State.get(~Q, s, k), _) == True{}: Bool}
+      State.with_data_grows.at(~Q, ~same, ~laws, s, t, k, Tries.Trie.leads(Slot.datas(), k))(gr))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a ledger that holds the data of s reads each data that s reads
+def State.holds_data_data(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  +s: State(Q),
+  +t: State(Q),
+  +h: Hashes.Hash,
+  w: List<&2, U32>
+) -> {
+  State.holds_data(~Q, ~same, s, t) == True{}: Bool
+} -> {
+  State.data(~Q, s, h) == Some{w}: Maybe<&2, List<&2, U32>>
+} -> {State.data(~Q, t, h) == Some{w}: Maybe<&2, List<&2, U32>>}:
+  g => e =>
+    Equal.trans(
+      Maybe<&2, List<&2, U32>>,
+      State.data(~Q, t, h),
+      State.data(~Q, State.with_data(~Q, s, t), h),
+      Some{w},
+      Equal.sym(
+        Maybe<&2, List<&2, U32>>,
+        State.data(~Q, State.with_data(~Q, s, t), h),
+        State.data(~Q, t, h),
+        State.with_data_data(~Q, s, t, h)
+      ),
+      State.data_grows(~Q, ~same, ~laws, s, State.with_data(~Q, s, t), h, w)(g)(e)
+    )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# State.holds_data_with at the slot k, once it is known whether it is of data
+# (l)
+def State.holds_data_with.at(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  s: State(Q),
+  t: State(Q),
+  k: List<&2, Bool>,
+  l: Bool
+) -> {
+  Cells.Cell.keeps(
+    ~Entry<Q>,
+    ~Entry.is_eq(~Q, ~same),
+    State.get(~Q, t, k),
+    Bool.pick(
+      Maybe<&2, Cells.Cell<Entry<Q>>>,
+      l,
+      Bool.pick(Maybe<&2, Cells.Cell<Entry<Q>>>, l, State.get(~Q, t, k), State.get(~Q, s, k)),
+      State.get(~Q, t, k)
+    )
+  )
+    == True{}: Bool
+}:
+  match l:
+    case True{}:
+      Cells.Cell.keeps_refl(
+        ~Entry<Q>,
+        ~Entry.is_eq(~Q, ~same),
+        ~Entry.laws(~Q, ~same, ~laws),
+        State.get(~Q, t, k)
+      )
+    case False{}:
+      Cells.Cell.keeps_refl(
+        ~Entry<Q>,
+        ~Entry.is_eq(~Q, ~same),
+        ~Entry.laws(~Q, ~same, ~laws),
+        State.get(~Q, t, k)
+      )
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof: it does not run
+# s with the data of t holds the data of t
+def State.holds_data_with(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  +s: State(Q),
+  +t: State(Q)
+) -> {State.holds_data(~Q, ~same, t, State.with_data(~Q, s, t)) == True{}: Bool}:
+  +w = State.with_data(~Q, s, t)
+  Tries.Trie.all2_of_get(
+    ~Cells.Cell<Entry<Q>>,
+    ~Cells.Cell<Entry<Q>>,
+    ~Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+    ~(x => Tries.Trie.all(~Cells.Cell<Entry<Q>>, ~(m => Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), m, None{})), x)),
+    ~(x => f => Tries.Trie.all_of_get(~Cells.Cell<Entry<Q>>, ~(m => Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), m, None{})), x, f)),
+    t,
+    State.with_data(~Q, t, w),
+    +k =>
+      %Equal.sym(Maybe<&2, Cells.Cell<Entry<Q>>>, State.get(~Q, State.with_data(~Q, t, w), k), Bool.pick(Maybe<&2, Cells.Cell<Entry<Q>>>, Tries.Trie.leads(Slot.datas(), k), State.get(~Q, w, k), State.get(~Q, t, k)), Tries.Trie.get_graft(Cells.Cell<Entry<Q>>, Slot.datas(), t, w, k)): {Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), State.get(~Q, t, k), _) == True{}: Bool}
+      %Equal.sym(Maybe<&2, Cells.Cell<Entry<Q>>>, State.get(~Q, w, k), Bool.pick(Maybe<&2, Cells.Cell<Entry<Q>>>, Tries.Trie.leads(Slot.datas(), k), State.get(~Q, t, k), State.get(~Q, s, k)), Tries.Trie.get_graft(Cells.Cell<Entry<Q>>, Slot.datas(), s, t, k)): {Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), State.get(~Q, t, k), Bool.pick(Maybe<&2, Cells.Cell<Entry<Q>>>, Tries.Trie.leads(Slot.datas(), k), _, State.get(~Q, t, k))) == True{}: Bool}
+      State.holds_data_with.at(~Q, ~same, ~laws, s, t, k, Tries.Trie.leads(Slot.datas(), k)))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information

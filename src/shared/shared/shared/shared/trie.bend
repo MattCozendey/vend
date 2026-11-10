@@ -223,6 +223,69 @@ def Trie.under(-V: Data, t: Trie<V>, k: List<&2, Bool>) -> Trie<V>:
     case Bin{h, z, o} Con{True{}, r}:
       Trie.under(V, o, r)
 
+# the key k starts with p
+def Trie.leads(p: List<&2, Bool>, k: List<&2, Bool>) -> Bool:
+  match p k:
+    case Nil{} q:
+      True{}
+    case Con{False{}, r} Con{False{}, q}:
+      Trie.leads(r, q)
+    case Con{True{}, r} Con{True{}, q}:
+      Trie.leads(r, q)
+    case _ _:
+      False{}
+
+# the value of the empty key in t
+def Trie.node.here(-V: Data, t: Trie<V>) -> Maybe<&2, V>:
+  match t:
+    case Tip{}:
+      None{}
+    case Leaf{k, v}:
+      Trie.at.here(V, k, v)
+    case Bin{h, z, o}:
+      h
+
+# the keys of t that start with False, under the rest of their keys
+def Trie.node.zero(-V: Data, t: Trie<V>) -> Trie<V>:
+  match t:
+    case Tip{}:
+      Tip{}
+    case Leaf{k, v}:
+      Trie.at.zero(V, k, v)
+    case Bin{h, z, o}:
+      z
+
+# the keys of t that start with True, under the rest of their keys
+def Trie.node.one(-V: Data, t: Trie<V>) -> Trie<V>:
+  match t:
+    case Tip{}:
+      Tip{}
+    case Leaf{k, v}:
+      Trie.at.one(V, k, v)
+    case Bin{h, z, o}:
+      o
+
+# a with the entries of b whose keys start with p in place of its own. It
+# rebuilds one node for each bit of p, and no more
+def Trie.graft(-V: Data, p: List<&2, Bool>, +a: Trie<V>, b: Trie<V>) -> Trie<V>:
+  match p:
+    case Nil{}:
+      b
+    case Con{False{}, r}:
+      Trie.bin(
+        V,
+        Trie.node.here(V, a),
+        Trie.graft(V, r, Trie.node.zero(V, a), Trie.node.zero(V, b)),
+        Trie.node.one(V, a)
+      )
+    case Con{True{}, r}:
+      Trie.bin(
+        V,
+        Trie.node.here(V, a),
+        Trie.node.zero(V, a),
+        Trie.graft(V, r, Trie.node.one(V, a), Trie.node.one(V, b))
+      )
+
 # Keys of text
 # ------------
 
@@ -3741,6 +3804,164 @@ def Trie.get_under(
       Trie.get_under(V, z, q, r)
     case Bin{h, z, o} Con{True{}, q}:
       Trie.get_under(V, o, q, r)
+
+# the empty key reads the value here
+def Trie.get_here(
+  -V: Data,
+  t: Trie<V>
+) -> {Trie.get(V, t, []) == Trie.node.here(V, t): Maybe<&2, V>}:
+  match t:
+    case Tip{}:
+      {==}
+    case Leaf{key, value}:
+      match key:
+        case Nil{}:
+          {==}
+        case Con{head, tail}:
+          {==}
+    case Bin{here, zero, one}:
+      {==}
+
+# a key that starts with False reads the keys that start with False
+def Trie.get_zero(
+  -V: Data,
+  t: Trie<V>,
+  q: List<&2, Bool>
+) -> {Trie.get(V, t, False{} <> q) == Trie.get(V, Trie.node.zero(V, t), q): Maybe<&2, V>}:
+  match t:
+    case Tip{}:
+      {==}
+    case Leaf{key, value}:
+      %Trie.get_node(V, key, value, False{} <> q):
+        {_ == Trie.get(V, Trie.at.zero(V, key, value), q): Maybe<&2, V>}
+      {==}
+    case Bin{here, zero, one}:
+      {==}
+
+# a key that starts with True reads the keys that start with True
+def Trie.get_ones(
+  -V: Data,
+  t: Trie<V>,
+  q: List<&2, Bool>
+) -> {Trie.get(V, t, True{} <> q) == Trie.get(V, Trie.node.one(V, t), q): Maybe<&2, V>}:
+  match t:
+    case Tip{}:
+      {==}
+    case Leaf{key, value}:
+      %Trie.get_node(V, key, value, True{} <> q):
+        {_ == Trie.get(V, Trie.at.one(V, key, value), q): Maybe<&2, V>}
+      {==}
+    case Bin{here, zero, one}:
+      {==}
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof: it does not run
+# a graft reads b at the keys that start with p, and a at the others
+def Trie.get_graft(
+  -V: Data,
+  p: List<&2, Bool>,
+  +a: Trie<V>,
+  +b: Trie<V>,
+  k: List<&2, Bool>
+) -> {
+  Trie.get(
+    V,
+    Trie.graft(V, p, a, b),
+    k
+  )
+    == Bool.pick(Maybe<&2, V>, Trie.leads(p, k), Trie.get(V, b, k), Trie.get(V, a, k)): Maybe<&2, V>
+}:
+  match p k:
+    case Nil{} q:
+      {==}
+    case Con{False{}, +r} Nil{}:
+      g = Trie.graft(V, r, Trie.node.zero(V, a), Trie.node.zero(V, b))
+      Equal.trans(
+        Maybe<&2, V>,
+        Trie.get(V, Trie.bin(V, Trie.node.here(V, a), g, Trie.node.one(V, a)), []),
+        Trie.get(V, Bin{Trie.node.here(V, a), g, Trie.node.one(V, a)}, []),
+        Trie.get(V, a, []),
+        Trie.get_bin(V, Trie.node.here(V, a), g, Trie.node.one(V, a), []),
+        Equal.sym(Maybe<&2, V>, Trie.get(V, a, []), Trie.node.here(V, a), Trie.get_here(V, a))
+      )
+    case Con{True{}, +r} Nil{}:
+      g = Trie.graft(V, r, Trie.node.one(V, a), Trie.node.one(V, b))
+      Equal.trans(
+        Maybe<&2, V>,
+        Trie.get(V, Trie.bin(V, Trie.node.here(V, a), Trie.node.zero(V, a), g), []),
+        Trie.get(V, Bin{Trie.node.here(V, a), Trie.node.zero(V, a), g}, []),
+        Trie.get(V, a, []),
+        Trie.get_bin(V, Trie.node.here(V, a), Trie.node.zero(V, a), g, []),
+        Equal.sym(Maybe<&2, V>, Trie.get(V, a, []), Trie.node.here(V, a), Trie.get_here(V, a))
+      )
+    case Con{False{}, +r} Con{False{}, +q}:
+      g = Trie.graft(V, r, Trie.node.zero(V, a), Trie.node.zero(V, b))
+      Equal.trans(
+        Maybe<&2, V>,
+        Trie.get(V, Trie.bin(V, Trie.node.here(V, a), g, Trie.node.one(V, a)), False{} <> q),
+        Trie.get(V, g, q),
+        Bool.pick(
+          Maybe<&2, V>,
+          Trie.leads(r, q),
+          Trie.get(V, b, False{} <> q),
+          Trie.get(V, a, False{} <> q)
+        ),
+        Trie.get_bin(V, Trie.node.here(V, a), g, Trie.node.one(V, a), False{} <> q),
+        (
+          %Equal.sym(Maybe<&2, V>, Trie.get(V, b, False{} <> q), Trie.get(V, Trie.node.zero(V, b), q), Trie.get_zero(V, b, q)): {Trie.get(V, g, q) == Bool.pick(Maybe<&2, V>, Trie.leads(r, q), _, Trie.get(V, a, False{} <> q)): Maybe<&2, V>}
+          %Equal.sym(Maybe<&2, V>, Trie.get(V, a, False{} <> q), Trie.get(V, Trie.node.zero(V, a), q), Trie.get_zero(V, a, q)): {Trie.get(V, g, q) == Bool.pick(Maybe<&2, V>, Trie.leads(r, q), Trie.get(V, Trie.node.zero(V, b), q), _): Maybe<&2, V>}
+          Trie.get_graft(V, r, Trie.node.zero(V, a), Trie.node.zero(V, b), q))
+      )
+    case Con{False{}, +r} Con{True{}, +q}:
+      g = Trie.graft(V, r, Trie.node.zero(V, a), Trie.node.zero(V, b))
+      Equal.trans(
+        Maybe<&2, V>,
+        Trie.get(V, Trie.bin(V, Trie.node.here(V, a), g, Trie.node.one(V, a)), True{} <> q),
+        Trie.get(V, Trie.node.one(V, a), q),
+        Trie.get(V, a, True{} <> q),
+        Trie.get_bin(V, Trie.node.here(V, a), g, Trie.node.one(V, a), True{} <> q),
+        Equal.sym(
+          Maybe<&2, V>,
+          Trie.get(V, a, True{} <> q),
+          Trie.get(V, Trie.node.one(V, a), q),
+          Trie.get_ones(V, a, q)
+        )
+      )
+    case Con{True{}, +r} Con{False{}, +q}:
+      g = Trie.graft(V, r, Trie.node.one(V, a), Trie.node.one(V, b))
+      Equal.trans(
+        Maybe<&2, V>,
+        Trie.get(V, Trie.bin(V, Trie.node.here(V, a), Trie.node.zero(V, a), g), False{} <> q),
+        Trie.get(V, Trie.node.zero(V, a), q),
+        Trie.get(V, a, False{} <> q),
+        Trie.get_bin(V, Trie.node.here(V, a), Trie.node.zero(V, a), g, False{} <> q),
+        Equal.sym(
+          Maybe<&2, V>,
+          Trie.get(V, a, False{} <> q),
+          Trie.get(V, Trie.node.zero(V, a), q),
+          Trie.get_zero(V, a, q)
+        )
+      )
+    case Con{True{}, +r} Con{True{}, +q}:
+      g = Trie.graft(V, r, Trie.node.one(V, a), Trie.node.one(V, b))
+      Equal.trans(
+        Maybe<&2, V>,
+        Trie.get(V, Trie.bin(V, Trie.node.here(V, a), Trie.node.zero(V, a), g), True{} <> q),
+        Trie.get(V, g, q),
+        Bool.pick(
+          Maybe<&2, V>,
+          Trie.leads(r, q),
+          Trie.get(V, b, True{} <> q),
+          Trie.get(V, a, True{} <> q)
+        ),
+        Trie.get_bin(V, Trie.node.here(V, a), Trie.node.zero(V, a), g, True{} <> q),
+        (
+          %Equal.sym(Maybe<&2, V>, Trie.get(V, b, True{} <> q), Trie.get(V, Trie.node.one(V, b), q), Trie.get_ones(V, b, q)): {Trie.get(V, g, q) == Bool.pick(Maybe<&2, V>, Trie.leads(r, q), _, Trie.get(V, a, True{} <> q)): Maybe<&2, V>}
+          %Equal.sym(Maybe<&2, V>, Trie.get(V, a, True{} <> q), Trie.get(V, Trie.node.one(V, a), q), Trie.get_ones(V, a, q)): {Trie.get(V, g, q) == Bool.pick(Maybe<&2, V>, Trie.leads(r, q), Trie.get(V, Trie.node.one(V, b), q), _): Maybe<&2, V>}
+          Trie.get_graft(V, r, Trie.node.one(V, a), Trie.node.one(V, b), q))
+      )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # Relations
 # ---------

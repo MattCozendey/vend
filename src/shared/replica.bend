@@ -975,12 +975,38 @@ def Kernel.follow(
     case Tuple{c, f}:
       f
 
+# the run m that a kernel gave, on the node s with the data of m in place of
+# its own: a kernel adds data, and nothing else, whatever it gives
+def Run.data(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Run<Machine.Q(mach)>>
+) -> Maybe<&2, Run<Machine.Q(mach)>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Run{s2, t}}:
+      Some{
+        Run{
+          State.led(
+            ~mach,
+            s,
+            Ledgers.State.with_data(
+              ~Machine.Q(mach),
+              State.ledger(~mach, s),
+              State.ledger(~mach, s2)
+            )
+          ),
+          t
+        }
+      }
+
 # the run r of the line c, after the request i, which the node holds as a
 # (none: wait for the request)
 def Step.asked(
   ~mach: Machine(),
   ~kern: Kernel(mach),
-  r: Run<Machine.Q(mach)>,
+  +r: Run<Machine.Q(mach)>,
   c: Ledgers.Chain,
   i: Ledgers.Id,
   a: Maybe<&2, Ledgers.Asked<Machine.Q(mach)>>
@@ -989,7 +1015,7 @@ def Step.asked(
     case None{}:
       None{}
     case Some{Ledgers.Asked{t, q}}:
-      Kernel.change(mach, kern)(r)(c)(i)(q)
+      Run.data(~mach, Run.state(~mach, r), Kernel.change(mach, kern)(r)(c)(i)(q))
 
 # the run r of the line c, after the request i, whose outcome in the log is o:
 # a request that has one is skipped
@@ -6017,13 +6043,38 @@ def Lawful.outs(-mach: Machine(), l: Lawful(mach)) -> Lawful.Outs(mach, Lawful.k
     case Tuple{k, Tuple{g, Tuple{kp, o}}}:
       o
 
+# a run on a node that grew from s still is one, with only its data
+def Data.after(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Run<Machine.Q(mach)>>
+) -> {
+  Run.after(~mach, s, m) == True{}: Bool
+} -> {Run.after(~mach, s, Run.data(~mach, s, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      e => {==}
+    case Some{Run{+s2, t}}:
+      e => Grows.led(
+        ~mach,
+        s,
+        Ledgers.State.with_data(~Machine.Q(mach), State.ledger(~mach, s), State.ledger(~mach, s2)),
+        Ledgers.State.with_data_grows(
+          ~Machine.Q(mach),
+          ~Machine.same(mach),
+          ~Machine.laws(mach),
+          State.ledger(~mach, s),
+          State.ledger(~mach, s2)
+        )(e)
+      )
+
 # a request that the node holds or not only grows a run's node
 def Asked.grows(
   ~mach: Machine(),
   ~lawf: Lawful(mach),
-  r: Run<Machine.Q(mach)>,
-  c: Ledgers.Chain,
-  i: Ledgers.Id,
+  +r: Run<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  +i: Ledgers.Id,
   +a: Maybe<&2, Ledgers.Asked<Machine.Q(mach)>>
 ) -> {
   Run.after(
@@ -6036,8 +6087,12 @@ def Asked.grows(
   match a:
     case None{}:
       {==}
-    case Some{Ledgers.Asked{t, q}}:
-      Lawful.grows(mach, lawf)(r)(c)(i)(q)
+    case Some{Ledgers.Asked{t, +q}}:
+      Data.after(
+        ~mach,
+        Run.state(~mach, r),
+        Kernel.change(mach, Lawful.kernel(mach, lawf))(r)(c)(i)(q)
+      )(Lawful.grows(mach, lawf)(r)(c)(i)(q))
 
 # a request that the log holds or not only grows a run's node
 def Fresh.grows(
@@ -7765,6 +7820,211 @@ def Get.grows(
       )
     )
   )
+
+# a read of a tree holds in a node that holds the data of the node of the read
+def Get.data(
+  ~mach: Machine(),
+  +a: Node<Machine.Q(mach)>,
+  +b: Node<Machine.Q(mach)>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  v: List<&2, U32>,
+  g: {
+    Ledgers.State.holds_data(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      State.ledger(~mach, a),
+      State.ledger(~mach, b)
+    )
+      == True{}: Bool
+  }
+) -> {
+  Node.get(~mach, a, h, k) == Some{v}: Maybe<&2, List<&2, U32>>
+} -> {Node.get(~mach, b, h, k) == Some{v}: Maybe<&2, List<&2, U32>>}:
+  e => Equal.trans(
+    Maybe<&2, List<&2, U32>>,
+    Node.get(~mach, b, h, k),
+    Trees.Tree.get.plain(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), b, h, k),
+    Some{v},
+    Trees.Tree.get_plain(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), b, h, k),
+    Trees.Tree.get_grows(
+      ~Node<Machine.Q(mach)>,
+      ~Store.fetch(~mach),
+      ~(
+        x => y => Ledgers.State.holds_data(
+          ~Machine.Q(mach),
+          ~Machine.same(mach),
+          State.ledger(~mach, x),
+          State.ledger(~mach, y)
+        )
+      ),
+      ~(
+        x => y => hh => w => Ledgers.State.holds_data_data(
+          ~Machine.Q(mach),
+          ~Machine.same(mach),
+          ~Machine.laws(mach),
+          State.ledger(~mach, x),
+          State.ledger(~mach, y),
+          hh,
+          w
+        )
+      ),
+      a,
+      b,
+      h,
+      k,
+      v
+    )(
+      g
+    )(
+      Equal.trans(
+        Maybe<&2, List<&2, U32>>,
+        Trees.Tree.get.plain(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), a, h, k),
+        Node.get(~mach, a, h, k),
+        Some{v},
+        Equal.sym(
+          Maybe<&2, List<&2, U32>>,
+          Node.get(~mach, a, h, k),
+          Trees.Tree.get.plain(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), a, h, k),
+          Trees.Tree.get_plain(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), a, h, k)
+        ),
+        e
+      )
+    )
+  )
+
+# the node of a run with only its data holds the data of the node of the run
+def Data.holds(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  +s2: Node<Machine.Q(mach)>
+) -> {
+  Ledgers.State.holds_data(
+    ~Machine.Q(mach),
+    ~Machine.same(mach),
+    State.ledger(~mach, s2),
+    State.ledger(
+      ~mach,
+      State.led(
+        ~mach,
+        s,
+        Ledgers.State.with_data(~Machine.Q(mach), State.ledger(~mach, s), State.ledger(~mach, s2))
+      )
+    )
+  )
+    == True{}: Bool
+}:
+  w = Ledgers.State.with_data(~Machine.Q(mach), State.ledger(~mach, s), State.ledger(~mach, s2))
+  %Equal.sym(
+    Ledgers.State(Machine.Q(mach)),
+    State.ledger(~mach, State.led(~mach, s, w)),
+    w,
+    Led.led(~mach, s, w)
+  ): {
+    Ledgers.State.holds_data(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      State.ledger(~mach, s2),
+      _
+    )
+      == True{}: Bool
+  }
+  Ledgers.State.holds_data_with(
+    ~Machine.Q(mach),
+    ~Machine.same(mach),
+    ~Machine.laws(mach),
+    State.ledger(~mach, s),
+    State.ledger(~mach, s2)
+  )
+
+# a run with only its data keeps what its log holds
+def Data.keeps(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Run<Machine.Q(mach)>>,
+  k2: List<&2, U32>,
+  v: List<&2, U32>
+) -> Run.Keeps(~mach, k2, v, m) -> Run.Keeps(~mach, k2, v, Run.data(~mach, s, m)):
+  match m:
+    case None{}:
+      e => e
+    case Some{Run{+s2, t2}}:
+      Get.data(
+        ~mach,
+        s2,
+        State.led(
+          ~mach,
+          s,
+          Ledgers.State.with_data(~Machine.Q(mach), State.ledger(~mach, s), State.ledger(~mach, s2))
+        ),
+        Tip.log(t2),
+        k2,
+        v,
+        Data.holds(~mach, s, s2)
+      )
+
+# Data.outs once the read m of the outcome is known
+def Data.outs.at(
+  ~mach: Machine(),
+  a: Node<Machine.Q(mach)>,
+  b: Node<Machine.Q(mach)>,
+  h: Maybe<&2, Hashes.Hash>,
+  k: List<&2, U32>,
+  g: {
+    Ledgers.State.holds_data(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      State.ledger(~mach, a),
+      State.ledger(~mach, b)
+    )
+      == True{}: Bool
+  },
+  m: Maybe<&2, List<&2, U32>>,
+  em: {Node.get(~mach, a, h, k) == m: Maybe<&2, List<&2, U32>>}
+) -> {
+  Maybe.is_some(&2, List<&2, U32>, m) == True{}: Bool
+} -> {Maybe.is_some(&2, List<&2, U32>, Node.get(~mach, b, h, k)) == True{}: Bool}:
+  match m:
+    case None{}:
+      e => Empty.absurd(
+        {Maybe.is_some(&2, List<&2, U32>, Node.get(~mach, b, h, k)) == True{}: Bool},
+        Shared.Bool.false_ne_true(e)
+      )
+    case Some{w}:
+      e =>
+        %Equal.sym(
+          Maybe<&2, List<&2, U32>>,
+          Node.get(~mach, b, h, k),
+          Some{w},
+          Get.data(~mach, a, b, h, k, w, g)(em)
+        ): {Maybe.is_some(&2, List<&2, U32>, _) == True{}: Bool}
+        {==}
+
+# a run with only its data gives its request the outcome that the run gave
+def Data.outs(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Run<Machine.Q(mach)>>,
+  +i: Ledgers.Id
+) -> Run.Outs(~mach, m, i) -> Run.Outs(~mach, Run.data(~mach, s, m), i):
+  match m:
+    case None{}:
+      e => e
+    case Some{Run{+s2, +t}}:
+      Data.outs.at(
+        ~mach,
+        s2,
+        State.led(
+          ~mach,
+          s,
+          Ledgers.State.with_data(~Machine.Q(mach), State.ledger(~mach, s), State.ledger(~mach, s2))
+        ),
+        Tip.log(t),
+        Log.out(i),
+        Data.holds(~mach, s, s2),
+        Node.get(~mach, s2, Tip.log(t), Log.out(i)),
+        {==}
+      )
 
 # Set.kept once whether the node holds the new nodes is known (b)
 def Set.kept.if(
@@ -16975,12 +17235,12 @@ def Ask.held.at(
 def Asked.kept(
   ~mach: Machine(),
   ~lawf: Lawful(mach),
-  r: Run<Machine.Q(mach)>,
-  c: Ledgers.Chain,
-  i: Ledgers.Id,
+  +r: Run<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  +i: Ledgers.Id,
   a: Maybe<&2, Ledgers.Asked<Machine.Q(mach)>>,
-  k2: List<&2, U32>,
-  v: List<&2, U32>
+  +k2: List<&2, U32>,
+  +v: List<&2, U32>
 ) -> Run.Keeps(
   ~mach,
   k2,
@@ -16990,8 +17250,14 @@ def Asked.kept(
   match a:
     case None{}:
       hr => Unit{}
-    case Some{Ledgers.Asked{t, q}}:
-      Lawful.kept(mach, lawf)(r)(c)(i)(q)(k2)(v)
+    case Some{Ledgers.Asked{t, +q}}:
+      hr => Data.keeps(
+        ~mach,
+        Run.state(~mach, r),
+        Kernel.change(mach, Lawful.kernel(mach, lawf))(r)(c)(i)(q),
+        k2,
+        v
+      )(Lawful.kept(mach, lawf)(r)(c)(i)(q)(k2)(v)(hr))
 
 # a request that the log holds or not keeps each key of a run's log
 def Fresh.kept(
@@ -18016,16 +18282,21 @@ def Does.kept(
 def Asked.outs(
   ~mach: Machine(),
   ~lawf: Lawful(mach),
-  r: Run<Machine.Q(mach)>,
-  c: Ledgers.Chain,
-  i: Ledgers.Id,
+  +r: Run<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  +i: Ledgers.Id,
   +a: Maybe<&2, Ledgers.Asked<Machine.Q(mach)>>
 ) -> Run.Outs(~mach, Step.asked(~mach, ~Lawful.kernel(mach, lawf), r, c, i, a), i):
   match a:
     case None{}:
       Unit{}
-    case Some{Ledgers.Asked{t, q}}:
-      Lawful.outs(mach, lawf)(r)(c)(i)(q)
+    case Some{Ledgers.Asked{t, +q}}:
+      Data.outs(
+        ~mach,
+        Run.state(~mach, r),
+        Kernel.change(mach, Lawful.kernel(mach, lawf))(r)(c)(i)(q),
+        i
+      )(Lawful.outs(mach, lawf)(r)(c)(i)(q))
 
 # One.outs once the outcome o that the words ws read as is known
 def One.outs.read(
