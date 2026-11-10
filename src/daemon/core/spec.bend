@@ -1947,6 +1947,20 @@ def Run.put(
     case Some{s2}:
       Some{Run{s2, t, List.append(&2, List<&2, U32>, ds, ns)}}
 
+# Run.add once the value m of the key in the log is known
+def Run.add.at(r: Run, k: List<&2, U32>, x: List<&2, U32>, m: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Run>:
+  match m:
+    case None{}:
+      Run.log(r, k, x)
+    case Some{old}:
+      None{}
+
+# the run r with the new key k of its log set to x (none: the log holds k, or
+# the node lacks a node). A log only gains keys: an outcome, a version and a
+# mark are written once
+def Run.add(+r: Run, +k: List<&2, U32>, x: List<&2, U32>) -> Maybe<&2, Run>:
+  Run.add.at(r, k, x, Node.get(Run.state(r), Tip.log(Run.tip(r)), k))
+
 # the run r with the content h, and its new nodes ds
 def Run.content(r: Run, h: Maybe<&2, Hashes.Hash>, +ds: List<&2, List<&2, U32>>) -> Maybe<&2, Run>:
   match r:
@@ -1963,7 +1977,7 @@ def Run.owners(r: Run, m: Maybe<&2, List<&2, String>>) -> Maybe<&2, Run>:
 
 # the run r, after it refused the request i as stale
 def Step.stale(r: Run, i: Ledgers.Id) -> Maybe<&2, Run>:
-  Run.log(r, Log.out(i), Out.words(Out.Stale{}))
+  Run.add(r, Log.out(i), Out.words(Out.Stale{}))
 
 # the run r, after it took the request i as the version of the number n: its
 # outcome, its version (the content of r), the count, and the owners that it
@@ -1978,12 +1992,12 @@ def Step.taken.at(
     &2,
     Run,
     Run,
-    Run.log(r, Log.out(i), Out.words(Out.Taken{n})),
+    Run.add(r, Log.out(i), Out.words(Out.Taken{n})),
     +r1 => Maybe.bind(
       &2,
       Run,
       Run,
-      Run.log(r1, Log.version(n), Version.words(Version{i, Tip.content(Run.tip(r1))})),
+      Run.add(r1, Log.version(n), Version.words(Version{i, Tip.content(Run.tip(r1))})),
       r2 => Maybe.bind(&2, Run, Run, Run.log(r2, Log.count(), [U32.inc(n)]), r3 => Run.owners(r3, own))
     )
   )
@@ -2017,7 +2031,7 @@ def Step.marked(+r: Run, +i: Ledgers.Id, m: String, v: Maybe<&2, Version>) -> Ma
         &2,
         Run,
         Run,
-        Run.log(r, Log.mark(m), Ledgers.Id.code(Version.id(x), [])),
+        Run.add(r, Log.mark(m), Ledgers.Id.code(Version.id(x), [])),
         r2 => Step.taken(r2, i, None{})
       )
 

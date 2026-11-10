@@ -566,6 +566,27 @@ def Content.grows(
     case Spec.Run{+s, Spec.Tip{c, +l}, +ns}:
       Run.put.grows(s, Spec.State.put(s, ds), Spec.Tip{h, l}, ds, ns)(Put.grows(s, ds))
 
+# Add.grows once the value m of the key is known
+def Add.at.grows(
+  +r: Spec.Run,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  m: Maybe<&2, List<&2, U32>>
+) -> {Run.after(Spec.Run.state(r), Spec.Run.add.at(r, k, x, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      Log.grows(r, k, x)
+    case Some{old}:
+      {==}
+
+# a new key in a run's log only grows its node
+def Add.grows(
+  +r: Spec.Run,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>
+) -> {Run.after(Spec.Run.state(r), Spec.Run.add(r, k, x)) == True{}: Bool}:
+  Add.at.grows(r, k, x, Spec.Node.get(Spec.Run.state(r), Spec.Tip.log(Spec.Run.tip(r)), k))
+
 # new owners only grow a run's node
 def Owners.grows(
   +r: Spec.Run,
@@ -582,7 +603,7 @@ def Stale.grows(
   +r: Spec.Run,
   +i: Ledgers.Id
 ) -> {Run.after(Spec.Run.state(r), Spec.Step.stale(r, i)) == True{}: Bool}:
-  Log.grows(r, Spec.Log.out(i), Spec.Out.words(Spec.Out.Stale{}))
+  Add.grows(r, Spec.Log.out(i), Spec.Out.words(Spec.Out.Stale{}))
 
 # a taken request only grows a run's node
 def Taken.grows(
@@ -593,12 +614,12 @@ def Taken.grows(
   +n = Spec.Line.count(Spec.Run.state(r), Spec.Run.tip(r))
   After.bind(
     Spec.Run.state(r),
-    Spec.Run.log(r, Spec.Log.out(i), Spec.Out.words(Spec.Out.Taken{n})),
+    Spec.Run.add(r, Spec.Log.out(i), Spec.Out.words(Spec.Out.Taken{n})),
     +r1 => Maybe.bind(
       &2,
       Spec.Run,
       Spec.Run,
-      Spec.Run.log(
+      Spec.Run.add(
         r1,
         Spec.Log.version(n),
         Spec.Version.words(Spec.Version{i, Spec.Tip.content(Spec.Run.tip(r1))})
@@ -611,10 +632,10 @@ def Taken.grows(
         r3 => Spec.Run.owners(r3, own)
       )
     ),
-    Log.grows(r, Spec.Log.out(i), Spec.Out.words(Spec.Out.Taken{n})),
+    Add.grows(r, Spec.Log.out(i), Spec.Out.words(Spec.Out.Taken{n})),
     +r1 => After.bind(
       Spec.Run.state(r1),
-      Spec.Run.log(
+      Spec.Run.add(
         r1,
         Spec.Log.version(n),
         Spec.Version.words(Spec.Version{i, Spec.Tip.content(Spec.Run.tip(r1))})
@@ -626,7 +647,7 @@ def Taken.grows(
         Spec.Run.log(r2, Spec.Log.count(), [U32.inc(n)]),
         r3 => Spec.Run.owners(r3, own)
       ),
-      Log.grows(
+      Add.grows(
         r1,
         Spec.Log.version(n),
         Spec.Version.words(Spec.Version{i, Spec.Tip.content(Spec.Run.tip(r1))})
@@ -675,9 +696,9 @@ def Marked.grows(
     case Some{+x}:
       After.bind(
         Spec.Run.state(r),
-        Spec.Run.log(r, Spec.Log.mark(m), Ledgers.Id.code(Spec.Version.id(x), [])),
+        Spec.Run.add(r, Spec.Log.mark(m), Ledgers.Id.code(Spec.Version.id(x), [])),
         r2 => Spec.Step.taken(r2, i, None{}),
-        Log.grows(r, Spec.Log.mark(m), Ledgers.Id.code(Spec.Version.id(x), [])),
+        Add.grows(r, Spec.Log.mark(m), Ledgers.Id.code(Spec.Version.id(x), [])),
         r2 => Taken.grows(r2, i, None{})
       )
 
