@@ -348,6 +348,101 @@ type Notice is Data:
 type Mount is Data:
   Mount{resource: String, branch: Branch}
 
+# the content of the bytes b: the root of their rope
+law Content.of:
+  for b: Texts.Bytes()
+  Requests.Content
+
+# k versions of the branch b of the store r, from the number n, in order: a
+# reader asks for a part of a history, and pays for that part
+law Node.versions:
+  for +s: Replicas.Node<Requests.Ask>
+  for r: Ledgers.Id
+  for b: String
+  for n: U32
+  for k: Nat
+  List<&2, Ledgers.Id>
+
+# the members of the group g of the store r, if g exists
+law Node.members:
+  for +s: Replicas.Node<Requests.Ask>
+  for r: Ledgers.Id
+  for g: String
+  Maybe<&2, List<&2, Requests.Member>>
+
+# the request that makes the group g, with the nodes inside it now, the owner
+# group of the line l of the store r
+law Node.own:
+  for +s: Replicas.Node<Requests.Ask>
+  for +r: Ledgers.Id
+  for l: Maybe<&2, String>
+  for +g: String
+  Requests.Ask
+
+# the versions of the branch b of the store r that changed the resource n,
+# among k versions from the number from
+law Node.log:
+  for +s: Replicas.Node<Requests.Ask>
+  for n: Resources.Name
+  for +r: Ledgers.Id
+  for +b: String
+  for +from: U32
+  for k: Nat
+  List<&2, LogEntry>
+
+# what changed in the resource n from the point a to the point b, as the
+# writer w reads them
+law Node.diff:
+  for +s: Replicas.Node<Requests.Ask>
+  for +w: String
+  for +n: Resources.Name
+  for a: Point
+  for b: Point
+  List<&2, Formats.Change>
+
+# the resources of the branch b at its head
+law Node.resources:
+  for +s: Replicas.Node<Requests.Ask>
+  for b: Branch
+  List<&2, Resources.Name>
+
+# the touch t holds
+law Node.touches:
+  for s: Replicas.Node<Requests.Ask>
+  for t: Touch
+  Bool
+
+# what the changes up to the point p touch elsewhere
+law Node.impact:
+  for +s: Replicas.Node<Requests.Ask>
+  for p: Point
+  List<&2, Touch>
+
+# the notices of the topic t in s that since, an earlier state of the node,
+# does not have: the cost is that of what is new, not of the history
+law Node.notices:
+  for +s: Replicas.Node<Requests.Ask>
+  for t: Topic
+  for since: Replicas.Node<Requests.Ask>
+  List<&2, Notice>
+
+# what a Vend Node holds: its name, the parts of the stores that it uses, the
+# writers connected to it, and the resources mounted to it
+type Vend is Data:
+  Vend{
+    name: String,
+    state: Replicas.Node<Requests.Ask>,
+    writers: List<&2, String>,
+    mounts: List<&2, Mount>
+  }
+
+# the node v may stop: it is forced to, or no resource is mounted and no
+# writer is connected
+law Vend.may_stop:
+  for v: Vend
+  for force: Bool
+  Bool
+
 # Laws
 # ----
 # What README says of what is Vend's in a Vend Node, as laws. The laws of the

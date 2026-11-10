@@ -15,23 +15,6 @@ import ../shared/requests.bend as Requests
 import ../shared/shared/resources.bend as Resources
 import ./spec.bend as Spec
 
-# Names
-# -----
-# A node, writer, branch, group, mark, request ID and time are texts. A
-# request, and the version that it made, is a Ledgers.Id. A store is named by
-# the request that started it. A line is a store itself (no branch) or one of
-# its branches.
-
-# a and b are the same member
-def Member.is_eq(a: Requests.Member, b: Requests.Member) -> Bool:
-  match a b:
-    case Requests.Member.Node{x} Requests.Member.Node{y}:
-      String.eq(x, y)
-    case Requests.Member.Group{x} Requests.Member.Group{y}:
-      String.eq(x, y)
-    case _ _:
-      False{}
-
 # Codes
 # -----
 
@@ -117,8 +100,7 @@ def Spec.Res.root(s, h, n):
 def Spec.Roots.same(a, b):
   Shared.Maybe.is_eq(~Ropes.Root, ~Ropes.Root.is_eq, a, b)
 
-# the content of the bytes b: the root of their rope
-def Content.of(b: Texts.Bytes()) -> Requests.Content:
+def Spec.Content.of(b):
   Requests.Content.Root{Ropes.Put.root(Replicas.Bytes.rope(b))}
 
 # the members of the group g in the store tree whose root is h, if g is there
@@ -134,10 +116,6 @@ def Members.in(
     Replicas.Node.get(~Requests.Ask.machine(), s, h, Key.group(g)),
     ws => Replicas.Read.whole(List<&2, Requests.Member>, Requests.Members.code.read(ws))
   )
-
-# the line of the request i of the change q
-def Ask.chain(i: Ledgers.Id, q: Requests.Ask) -> Ledgers.Chain:
-  Replicas.Arrival.chain(i, Requests.Ask.arrival(q))
 
 # Ancestry
 # --------
@@ -1320,8 +1298,7 @@ def Judge.change(
   r: Ledgers.Id,
   l: Maybe<&2, String>,
   c: Requests.Change,
-  +h: Maybe<&2, Hashes.Hash>,
-  os: List<&2, String>
+  +h: Maybe<&2, Hashes.Hash>
 ) -> Maybe<&2, Replicas.Verdict<Requests.Ask>>:
   match l c:
     case None{} Requests.Change.Group{+g, +ms}:
@@ -1510,7 +1487,7 @@ def Step.on.of(
         r,
         i,
         Change.owners(ch),
-        Judge.change(s, st, l, ch, Replicas.Tip.content(t), Replicas.Tip.owners(t))
+        Judge.change(s, st, l, ch, Replicas.Tip.content(t))
       )
 
 # the run r, after the request i of the change ch of the line l of the store
@@ -1715,15 +1692,7 @@ def Versions.of(
     case Some{t}:
       Line.versions(k, s, t, n)
 
-# k versions of the branch b of the store r, from the number n, in order: a
-# reader asks for a part of a history, and pays for that part
-def Node.versions(
-  +s: Replicas.Node<Requests.Ask>,
-  r: Ledgers.Id,
-  b: String,
-  n: U32,
-  k: Nat
-) -> List<&2, Ledgers.Id>:
+def Spec.Node.versions(s, r, b, n, k):
   Versions.of(
     s,
     Replicas.Node.tip(~Requests.Ask.machine(), s, Replicas.Line.chain(r, Some{b})),
@@ -1787,22 +1756,10 @@ def Node.content(
 ) -> Maybe<&2, Texts.Bytes()>:
   Res.at(s, n, Node.version(s, p))
 
-# the members of the group g of the store r, if g exists
-def Node.members(
-  +s: Replicas.Node<Requests.Ask>,
-  r: Ledgers.Id,
-  g: String
-) -> Maybe<&2, List<&2, Requests.Member>>:
+def Spec.Node.members(s, r, g):
   Members.in(s, Store.root(s, r), g)
 
-# the request that makes the group g, with the nodes inside it now, the owner
-# group of the line l of the store r
-def Node.own(
-  +s: Replicas.Node<Requests.Ask>,
-  +r: Ledgers.Id,
-  l: Maybe<&2, String>,
-  +g: String
-) -> Requests.Ask:
+def Spec.Node.own(s, r, l, g):
   Requests.Ask.On{r, l, Requests.Change.Own{g, Store.head(s, r), Node.nodes(s, r, g)}}
 
 # the resource m of the branch x of the store st is the resource n of the
@@ -1994,20 +1951,11 @@ def Log.of(
         Log.of(s, n, r, Some{x})
       )
 
-# the versions of the branch b of the store r that changed the resource n,
-# among k versions from the number from
-def Node.log(
-  +s: Replicas.Node<Requests.Ask>,
-  n: Resources.Name,
-  +r: Ledgers.Id,
-  +b: String,
-  +from: U32,
-  k: Nat
-) -> List<&2, Spec.LogEntry>:
+def Spec.Node.log(s, n, r, b, from, k):
   Log.of(
     s,
     n,
-    Node.versions(s, r, b, from, k),
+    Spec.Node.versions(s, r, b, from, k),
     Version.before(
       s,
       Replicas.Node.tip(~Requests.Ask.machine(), s, Replicas.Line.chain(r, Some{b})),
@@ -2015,15 +1963,7 @@ def Node.log(
     )
   )
 
-# what changed in the resource n from the point a to the point b, as the
-# writer w reads them
-def Node.diff(
-  +s: Replicas.Node<Requests.Ask>,
-  +w: String,
-  +n: Resources.Name,
-  a: Spec.Point,
-  b: Spec.Point
-) -> List<&2, Formats.Change>:
+def Spec.Node.diff(s, w, n, a, b):
   Formats.Format.changes(
     Formats.Format.of(Resources.Name.path(n)),
     Maybe.default(&2, Texts.Bytes(), Spec.Node.read(s, w, n, a), []),
@@ -2276,8 +2216,7 @@ def Branch.head(s: Replicas.Node<Requests.Ask>, b: Spec.Branch) -> Maybe<&2, Led
     case Spec.Branch{r, n}:
       Node.head(s, r, n)
 
-# the resources of the branch b at its head
-def Node.resources(+s: Replicas.Node<Requests.Ask>, b: Spec.Branch) -> List<&2, Resources.Name>:
+def Spec.Node.resources(s, b):
   Res.names(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, Branch.head(s, b)))
 
 # the bytes m, as a list of one item or none
@@ -2544,8 +2483,7 @@ def Spec.Touch.holds(g, t):
         Node.is_version(s, v)
       )
 
-# the touch t holds
-def Node.touches(s: Replicas.Node<Requests.Ask>, t: Spec.Touch) -> Bool:
+def Spec.Node.touches(s, t):
   match t:
     case Spec.Touch{v, c, +b, u}:
       Spec.Touch.holds(Spec.Seen.of(s, b), Spec.Touch{v, c, b, u})
@@ -2635,8 +2573,7 @@ def Impact.of(
         Impact.of(s, m, r)
       )
 
-# what the changes up to the point p touch elsewhere
-def Node.impact(+s: Replicas.Node<Requests.Ask>, p: Spec.Point) -> List<&2, Spec.Touch>:
+def Spec.Node.impact(s, p):
   Impact.of(s, Node.version(s, p), Branch.names(Node.branches(s)))
 
 # the key of the notice n: its kind, then its parts
@@ -2734,13 +2671,7 @@ def Branch.since(
       +c = Replicas.Line.chain(r, Some{n})
       Line.since(s, Replicas.Node.tip(~Requests.Ask.machine(), s, c), Chain.count(since, c))
 
-# the notices of the topic t in s that since, an earlier state of the node,
-# does not have: the cost is that of what is new, not of the history
-def Node.notices(
-  +s: Replicas.Node<Requests.Ask>,
-  t: Spec.Topic,
-  since: Replicas.Node<Requests.Ask>
-) -> List<&2, Spec.Notice>:
+def Spec.Node.notices(s, t, since):
   match t:
     case Spec.Topic.Versions{+b}:
       Notice.versions(b, Branch.since(s, since, b))
@@ -2757,21 +2688,9 @@ def Node.notices(
         )
       )
 
-# what a Vend Node holds: its name, the parts of the stores that it uses, the
-# writers connected to it, and the resources mounted to it
-type Vend is Data:
-  Vend{
-    name: String,
-    state: Replicas.Node<Requests.Ask>,
-    writers: List<&2, String>,
-    mounts: List<&2, Spec.Mount>
-  }
-
-# the node v may stop: it is forced to, or no resource is mounted and no
-# writer is connected
-def Vend.may_stop(v: Vend, force: Bool) -> Bool:
+def Spec.Vend.may_stop(v, force):
   match v:
-    case Vend{n, s, ws, ms}:
+    case Spec.Vend{n, s, ws, ms}:
       List.any.if(
         u => List.all.if(w => List.is_empty(&2, Spec.Mount, ms), List.is_empty(&2, String, ws)),
         force
@@ -3767,7 +3686,7 @@ def Verdict.change(
   Replicas.Verdict.after(
     ~Requests.Ask.machine(),
     s,
-    Judge.change(s, r, l, c, h, os)
+    Judge.change(s, r, l, c, h)
   )
     == True{}: Bool
 }:
@@ -4033,14 +3952,7 @@ def On.of.grows(
         r,
         i,
         Change.owners(ch),
-        Judge.change(
-          Replicas.Run.state(~Requests.Ask.machine(), r),
-          st,
-          l,
-          ch,
-          Replicas.Tip.content(Replicas.Run.tip(~Requests.Ask.machine(), r)),
-          Replicas.Tip.owners(Replicas.Run.tip(~Requests.Ask.machine(), r))
-        )
+        Judge.change(Replicas.Run.state(~Requests.Ask.machine(), r), st, l, ch, Replicas.Tip.content(Replicas.Run.tip(~Requests.Ask.machine(), r)))
       )(
         Verdict.change(
           Replicas.Run.state(~Requests.Ask.machine(), r),
@@ -4274,14 +4186,7 @@ def On.of.kept(
         r,
         i,
         Change.owners(ch),
-        Judge.change(
-          Replicas.Run.state(~Requests.Ask.machine(), r),
-          st,
-          l,
-          ch,
-          Replicas.Tip.content(Replicas.Run.tip(~Requests.Ask.machine(), r)),
-          Replicas.Tip.owners(Replicas.Run.tip(~Requests.Ask.machine(), r))
-        ),
+        Judge.change(Replicas.Run.state(~Requests.Ask.machine(), r), st, l, ch, Replicas.Tip.content(Replicas.Run.tip(~Requests.Ask.machine(), r))),
         k2,
         v
       )(
@@ -4474,14 +4379,7 @@ def On.of.outs(
         r,
         i,
         Change.owners(ch),
-        Judge.change(
-          Replicas.Run.state(~Requests.Ask.machine(), r),
-          st,
-          l,
-          ch,
-          Replicas.Tip.content(Replicas.Run.tip(~Requests.Ask.machine(), r)),
-          Replicas.Tip.owners(Replicas.Run.tip(~Requests.Ask.machine(), r))
-        )
+        Judge.change(Replicas.Run.state(~Requests.Ask.machine(), r), st, l, ch, Replicas.Tip.content(Replicas.Run.tip(~Requests.Ask.machine(), r)))
       )
 
 # a change of a line has an outcome
@@ -4515,7 +4413,7 @@ def Change.outs(
         Replicas.Stale.outs(~Requests.Ask.machine(), r, i)
       )
 
-# the lawful kernel of Vend: its change only grows the node of a run, keeps
+# the lawful kernel of Spec.Vend: its change only grows the node of a run, keeps
 # each key of its log, and gives its request an outcome
 def Ask.lawful() -> Replicas.Lawful(Requests.Ask.machine()):
   (

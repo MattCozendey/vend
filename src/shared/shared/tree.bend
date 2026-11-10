@@ -953,7 +953,7 @@ def Tree.get.go_empty(
       {==}
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in this proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
-# Get.is once the root node m is known
+# Tree.get_plain once the root node m is known
 def Tree.get_plain.at(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -991,7 +991,7 @@ def Tree.get_plain.at(
       {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
-# the node's read of a tree is the tree's read
+# the read that looks at the root first is the plain read
 def Tree.get_plain(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -1034,7 +1034,7 @@ def Tree.look.go_empty(
       {==}
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in this proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
-# Look.is once the root node m is known
+# Tree.look_plain once the root node m is known
 def Tree.look_plain.at(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -1066,7 +1066,7 @@ def Tree.look_plain.at(
       {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
-# the node's look at a tree is the tree's look
+# the look that looks at the root first is the plain look
 def Tree.look_plain(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -1094,7 +1094,7 @@ def Tree.set.go_none(
       {==}
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in this proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
-# Set.is once the root node m is known
+# Tree.set_plain once the root node m is known
 def Tree.set_plain.at(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -1127,7 +1127,7 @@ def Tree.set_plain.at(
       {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
-# the node's write of a tree is the tree's write
+# the write that looks at the root first is the plain write
 def Tree.set_plain(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,

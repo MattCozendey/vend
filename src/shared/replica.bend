@@ -2245,7 +2245,6 @@ def Plan.later(
   ~kern: Kernel(mach),
   s: Node<Machine.Q(mach)>,
   c: Ledgers.Chain,
-  w: Ledgers.Where,
   t: Tip,
   th: Maybe<&2, Hashes.Hash>,
   os: List<&2, String>,
@@ -2284,7 +2283,7 @@ def Plan.lead(
     Plan<Machine.Q(mach)>,
     Nat.is_eq(Where.round(w), 0n),
     u => Plan.own(~mach, ~kern, s, c, t, []),
-    u => Plan.later(~mach, ~kern, s, c, w, t, th, os, from, Passes.last(~mach, s, w, from))
+    u => Plan.later(~mach, ~kern, s, c, t, th, os, from, Passes.last(~mach, s, w, from))
   )
 
 # the plan of another owner at the place w, once what the proposer did there
@@ -5303,7 +5302,7 @@ def Plan.later.grows(
   Run.after(
     ~mach,
     s,
-    Plan.run(~mach, Plan.later(~mach, ~Lawful.kernel(mach, lawf), s, c, w, t, th, os, from, m))
+    Plan.run(~mach, Plan.later(~mach, ~Lawful.kernel(mach, lawf), s, c, t, th, os, from, m))
   )
     == True{}: Bool
 }:
@@ -5354,18 +5353,7 @@ def Plan.lead.grows(
     s,
     Nat.is_eq(Where.round(w), 0n),
     Plan.own(~mach, ~Lawful.kernel(mach, lawf), s, c, t, []),
-    Plan.later(
-      ~mach,
-      ~Lawful.kernel(mach, lawf),
-      s,
-      c,
-      w,
-      t,
-      th,
-      os,
-      Passes.of(~mach, s, w, os),
-      Passes.last(~mach, s, w, Passes.of(~mach, s, w, os))
-    ),
+    Plan.later(~mach, ~Lawful.kernel(mach, lawf), s, c, t, th, os, Passes.of(~mach, s, w, os), Passes.last(~mach, s, w, Passes.of(~mach, s, w, os))),
     Plan.own.grows(~mach, ~lawf, s, c, t, []),
     Plan.later.grows(
       ~mach,
@@ -12776,7 +12764,6 @@ def Rounds.named(
   ~rules: Rounds.Rules(~mach, s, c),
   +hd: Head,
   tp: Tip,
-  ok: {Head.tip(~mach, s, hd) == Some{tp}: Maybe<&2, Tip>},
   r1: Nat,
   v1: Ledgers.Vote,
   +p: Nat,
@@ -12852,7 +12839,7 @@ def Rounds.last(
         )(em)(
           +qw => ew =>
             %Ledgers.Vote.is_eq_sound(vm, x)(ei): {_ == v1: Ledgers.Vote}
-            Rounds.named(~mach, ~s, ~c, ~rules, hd, tp, ok, r1, v1, p, j, rm, vm, qw, Equal.sym(Maybe<&2, Ledgers.Last>, Some{Ledgers.Last{rm, vm}}, Last.mine(~mach, qw, s, c, Head.next(hd), p), Rules.last(~mach, ~s, ~c, ~rules, hd, tp, ok)(1n+p)(qw)(Some{Ledgers.Last{rm, vm}})(Passed.some(Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Where{c, Head.next(hd), 1n+p}, qw), Ledgers.Last{rm, vm})(ew))), lt, ef, ih))
+            Rounds.named(~mach, ~s, ~c, ~rules, hd, tp, r1, v1, p, j, rm, vm, qw, Equal.sym(Maybe<&2, Ledgers.Last>, Some{Ledgers.Last{rm, vm}}, Last.mine(~mach, qw, s, c, Head.next(hd), p), Rules.last(~mach, ~s, ~c, ~rules, hd, tp, ok)(1n+p)(qw)(Some{Ledgers.Last{rm, vm}})(Passed.some(Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Where{c, Head.next(hd), 1n+p}, qw), Ledgers.Last{rm, vm})(ew))), lt, ef, ih))
 
 # Rounds.round once it is known whether the passes name a vote of the round
 # r1 or later (f)
@@ -17011,7 +16998,7 @@ def Node.advance_at(mach, kern, s, c, h):
 
 # Rounds
 # ------
-# Two rounds of one height decide the same step (Spec.Rounds.one). A majority
+# Two rounds of one height decide the same step (Rounds.one). A majority
 # cast the step v1 in the round r1. A vote of a later round names a majority
 # that passed to it; one of them cast v1 in r1 (two majorities share a node),
 # and its pass names a vote of r1 or later. So the vote is the last vote of a
