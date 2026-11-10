@@ -305,6 +305,120 @@ def Spec.Own.takes_inside(s, r, l, g, at, os, h):
 # ------
 # A node's ledger only grows: each operation keeps every entry that it held.
 
+# Trees
+# -----
+# The node's read and write of a tree are the tree's own (Trees.Tree.get,
+# Trees.Tree.set); they look at the root node before they make the path.
+
+# a read below no node gives nothing
+def Go.none(
+  s: Spec.State(),
+  p: List<&2, Nat>,
+  k: List<&2, U32>
+) -> {Trees.Tree.get.go(~Spec.State(), ~Spec.Store.fetch, s, p, k, None{}) == None{}: Maybe<&2, List<&2, U32>>}:
+  match p:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      {==}
+
+# a read below an empty node gives nothing
+def Go.empty(
+  s: Spec.State(),
+  p: List<&2, Nat>,
+  k: List<&2, U32>
+) -> {
+  Trees.Tree.get.go(~Spec.State(), ~Spec.Store.fetch, s, p, k, Some{Trees.Node.Empty{}}) == None{}: Maybe<&2, List<&2, U32>>
+}:
+  match p:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      {==}
+
+# Get.is once the root node m is known
+def Get.at.is(
+  +s: Spec.State(),
+  +k: List<&2, U32>,
+  m: Maybe<&2, Trees.Node>
+) -> {
+  Spec.Node.get.at(s, k, m)
+    == Trees.Tree.get.go(~Spec.State(), ~Spec.Store.fetch, s, Trees.Tree.path(k), k, m): Maybe<&2, List<&2, U32>>
+}:
+  match m:
+    case None{}:
+      Equal.sym(
+        Maybe<&2, List<&2, U32>>,
+        Trees.Tree.get.go(~Spec.State(), ~Spec.Store.fetch, s, Trees.Tree.path(k), k, None{}),
+        None{},
+        Go.none(s, Trees.Tree.path(k), k)
+      )
+    case Some{Trees.Node.Empty{}}:
+      Equal.sym(
+        Maybe<&2, List<&2, U32>>,
+        Trees.Tree.get.go(~Spec.State(), ~Spec.Store.fetch, s, Trees.Tree.path(k), k, Some{Trees.Node.Empty{}}),
+        None{},
+        Go.empty(s, Trees.Tree.path(k), k)
+      )
+    case Some{Trees.Node.Leaf{a, b}}:
+      {==}
+    case Some{Trees.Node.Branch{ks}}:
+      {==}
+
+# the node's read of a tree is the tree's read
+def Get.is(
+  +s: Spec.State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>
+) -> {Spec.Node.get(s, h, k) == Trees.Tree.get(~Spec.State(), ~Spec.Store.fetch, s, h, k): Maybe<&2, List<&2, U32>>}:
+  Get.at.is(s, k, Trees.Tree.part(~Spec.State(), ~Spec.Store.fetch, s, h))
+
+# a write below no node gives nothing
+def Set.go.none(
+  s: Spec.State(),
+  p: List<&2, Nat>,
+  d: Nat,
+  k: List<&2, U32>,
+  x: List<&2, U32>,
+  h: Maybe<&2, Hashes.Hash>
+) -> {Trees.Tree.set.go(~Spec.State(), ~Spec.Store.fetch, s, p, d, k, x, h, None{}) == None{}: Maybe<&2, Trees.Put>}:
+  match p:
+    case Nil{}:
+      {==}
+    case Con{y, r}:
+      {==}
+
+# Set.is once the root node m is known
+def Set.at.is(
+  +s: Spec.State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  m: Maybe<&2, Trees.Node>
+) -> {
+  Spec.Node.set.at(s, h, k, x, m)
+    == Trees.Tree.set.go(~Spec.State(), ~Spec.Store.fetch, s, Trees.Tree.path(k), 0n, k, x, h, m): Maybe<&2, Trees.Put>
+}:
+  match m:
+    case None{}:
+      Equal.sym(
+        Maybe<&2, Trees.Put>,
+        Trees.Tree.set.go(~Spec.State(), ~Spec.Store.fetch, s, Trees.Tree.path(k), 0n, k, x, h, None{}),
+        None{},
+        Set.go.none(s, Trees.Tree.path(k), 0n, k, x, h)
+      )
+    case Some{n}:
+      {==}
+
+# the node's write of a tree is the tree's write
+def Set.is(
+  +s: Spec.State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>
+) -> {Spec.Node.set(s, h, k, x) == Trees.Tree.set(~Spec.State(), ~Spec.Store.fetch, s, h, k, x): Maybe<&2, Trees.Put>}:
+  Set.at.is(s, h, k, x, Trees.Tree.part(~Spec.State(), ~Spec.Store.fetch, s, h))
+
 # the ledger of a node with a new ledger is that ledger
 def Led.led(
   s: Spec.State(),
@@ -454,7 +568,7 @@ def Set.grows(
   +k: List<&2, U32>,
   +x: List<&2, U32>
 ) -> {Work.after(s, Spec.Work.set(Spec.Work{s, h, ns}, k, x)) == True{}: Bool}:
-  Work.of.grows(s, ns, Trees.Tree.set(~Spec.State(), ~Spec.Store.fetch, s, h, k, x))
+  Work.of.grows(s, ns, Spec.Node.set(s, h, k, x))
 
 # the run m, if any, is on a node that grew from s
 def Run.after(s: Spec.State(), m: Maybe<&2, Spec.Run>) -> Bool:
@@ -1789,27 +1903,48 @@ def Get.grows(
 ) -> {
   Spec.Node.get(a, h, k) == Some{v}: Maybe<&2, List<&2, U32>>
 } -> {Spec.Node.get(b, h, k) == Some{v}: Maybe<&2, List<&2, U32>>}:
-  Trees.Tree.get_grows(
-    ~Spec.State(),
-    ~Spec.Store.fetch,
-    ~Spec.Node.grows,
-    ~(
-      x => y => hh => w => Ledgers.State.data_grows(
-        ~Spec.Ask,
-        ~Spec.Ask.is_eq,
-        ~Ask.laws(),
-        Spec.State.ledger(x),
-        Spec.State.ledger(y),
-        hh,
-        w
+  e => Equal.trans(
+    Maybe<&2, List<&2, U32>>,
+    Spec.Node.get(b, h, k),
+    Trees.Tree.get(~Spec.State(), ~Spec.Store.fetch, b, h, k),
+    Some{v},
+    Get.is(b, h, k),
+    Trees.Tree.get_grows(
+      ~Spec.State(),
+      ~Spec.Store.fetch,
+      ~Spec.Node.grows,
+      ~(
+        x => y => hh => w => Ledgers.State.data_grows(
+          ~Spec.Ask,
+          ~Spec.Ask.is_eq,
+          ~Ask.laws(),
+          Spec.State.ledger(x),
+          Spec.State.ledger(y),
+          hh,
+          w
+        )
+      ),
+      a,
+      b,
+      h,
+      k,
+      v
+    )(g)(
+      Equal.trans(
+        Maybe<&2, List<&2, U32>>,
+        Trees.Tree.get(~Spec.State(), ~Spec.Store.fetch, a, h, k),
+        Spec.Node.get(a, h, k),
+        Some{v},
+        Equal.sym(
+          Maybe<&2, List<&2, U32>>,
+          Spec.Node.get(a, h, k),
+          Trees.Tree.get(~Spec.State(), ~Spec.Store.fetch, a, h, k),
+          Get.is(a, h, k)
+        ),
+        e
       )
-    ),
-    a,
-    b,
-    h,
-    k,
-    v
-  )(g)
+    )
+  )
 
 # that the work m, if any, reads the key k2 as v
 def Work.Keeps(k2: List<&2, U32>, v: List<&2, U32>, m: Maybe<&2, Spec.Work>) -> Type:
@@ -1834,9 +1969,7 @@ def Set.kept.if(
   eb: {Trees.Tree.holds(~Spec.State(), ~Spec.Store.fetch, Spec.State.keep(s, ws), ws) == b: Bool},
   hne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool},
   hget: {Spec.Node.get(s, h, k2) == Some{v}: Maybe<&2, List<&2, U32>>},
-  em: {
-    Trees.Tree.set(~Spec.State(), ~Spec.Store.fetch, s, h, k, x) == Some{Trees.Put{hh, ws}}: Maybe<&2, Trees.Put>
-  }
+  em: {Spec.Node.set(s, h, k, x) == Some{Trees.Put{hh, ws}}: Maybe<&2, Trees.Put>}
 ) -> Work.Keeps(
   k2,
   v,
@@ -1857,29 +1990,62 @@ def Set.kept.if(
         Spec.Node.get(sk, Some{hh}, k2),
         Spec.Node.get(sk, h, k2),
         Some{v},
-        Trees.Tree.get_other(
-          ~Spec.State(),
-          ~Spec.Store.fetch,
-          ~Spec.Node.grows,
-          ~(
-            p => q => g => w => Ledgers.State.data_grows(
-              ~Spec.Ask,
-              ~Spec.Ask.is_eq,
-              ~Ask.laws(),
-              Spec.State.ledger(p),
-              Spec.State.ledger(q),
-              g,
-              w
+        Equal.trans(
+          Maybe<&2, List<&2, U32>>,
+          Spec.Node.get(sk, Some{hh}, k2),
+          Trees.Tree.get(~Spec.State(), ~Spec.Store.fetch, sk, Some{hh}, k2),
+          Spec.Node.get(sk, h, k2),
+          Get.is(sk, Some{hh}, k2),
+          Equal.trans(
+            Maybe<&2, List<&2, U32>>,
+            Trees.Tree.get(~Spec.State(), ~Spec.Store.fetch, sk, Some{hh}, k2),
+            Trees.Tree.get(~Spec.State(), ~Spec.Store.fetch, sk, h, k2),
+            Spec.Node.get(sk, h, k2),
+            Trees.Tree.get_other(
+              ~Spec.State(),
+              ~Spec.Store.fetch,
+              ~Spec.Node.grows,
+              ~(
+                p => q => g => w => Ledgers.State.data_grows(
+                  ~Spec.Ask,
+                  ~Spec.Ask.is_eq,
+                  ~Ask.laws(),
+                  Spec.State.ledger(p),
+                  Spec.State.ledger(q),
+                  g,
+                  w
+                )
+              ),
+              s,
+              sk,
+              h,
+              k,
+              x,
+              Trees.Put{hh, ws},
+              k2
+            )(Grows.keep(s, ws))(hne)(
+              Equal.trans(
+                Maybe<&2, Trees.Put>,
+                Trees.Tree.set(~Spec.State(), ~Spec.Store.fetch, s, h, k, x),
+                Spec.Node.set(s, h, k, x),
+                Some{Trees.Put{hh, ws}},
+                Equal.sym(
+                  Maybe<&2, Trees.Put>,
+                  Spec.Node.set(s, h, k, x),
+                  Trees.Tree.set(~Spec.State(), ~Spec.Store.fetch, s, h, k, x),
+                  Set.is(s, h, k, x)
+                ),
+                em
+              )
+            )(eb),
+            Equal.sym(
+              Maybe<&2, List<&2, U32>>,
+              Spec.Node.get(sk, h, k2),
+              Trees.Tree.get(~Spec.State(), ~Spec.Store.fetch, sk, h, k2),
+              Get.is(sk, h, k2)
             )
-          ),
-          s,
-          sk,
-          h,
-          k,
-          x,
-          Trees.Put{hh, ws},
-          k2
-        )(Grows.keep(s, ws))(hne)(em)(eb),
+          )
+        ),
         Get.grows(s, sk, h, k2, v, Grows.keep(s, ws))(hget)
       )
 
@@ -1893,7 +2059,7 @@ def Set.kept.of(
   +k2: List<&2, U32>,
   +v: List<&2, U32>,
   m: Maybe<&2, Trees.Put>,
-  em: {Trees.Tree.set(~Spec.State(), ~Spec.Store.fetch, s, h, k, x) == m: Maybe<&2, Trees.Put>},
+  em: {Spec.Node.set(s, h, k, x) == m: Maybe<&2, Trees.Put>},
   hne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool},
   hget: {Spec.Node.get(s, h, k2) == Some{v}: Maybe<&2, List<&2, U32>>}
 ) -> Work.Keeps(k2, v, Spec.Work.of(s, ns, m)):
@@ -1938,7 +2104,7 @@ def Set.kept(
     x,
     k2,
     v,
-    Trees.Tree.set(~Spec.State(), ~Spec.Store.fetch, s, h, k, x),
+    Spec.Node.set(s, h, k, x),
     {==},
     hne,
     hget

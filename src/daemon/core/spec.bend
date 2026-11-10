@@ -513,9 +513,45 @@ def Start.of.read(m: Maybe<&2, Codes.Read<Maybe<&2, Hashes.Hash>>>) -> Maybe<&2,
     case _:
       None{}
 
+# Node.get once the root node m of the tree is known. The node comes before
+# the path of the key (a hash): a tree with no node costs no hash, and a proof
+# about a tree that is not known makes none
+def Node.get.at(+s: State(), +k: List<&2, U32>, m: Maybe<&2, Trees.Node>) -> Maybe<&2, List<&2, U32>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Trees.Node.Empty{}}:
+      None{}
+    case Some{+n}:
+      Trees.Tree.get.go(~State(), ~Store.fetch, s, Trees.Tree.path(k), k, Some{n})
+
 # what the tree whose root is h holds under the key k, in the store s
-def Node.get(s: State(), h: Maybe<&2, Hashes.Hash>, k: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
-  Trees.Tree.get(~State(), ~Store.fetch, s, h, k)
+def Node.get(+s: State(), h: Maybe<&2, Hashes.Hash>, +k: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  Node.get.at(s, k, Trees.Tree.part(~State(), ~Store.fetch, s, h))
+
+# Node.set once the root node m of the tree is known (see Node.get.at)
+def Node.set.at(
+  +s: State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  x: List<&2, U32>,
+  m: Maybe<&2, Trees.Node>
+) -> Maybe<&2, Trees.Put>:
+  match m:
+    case None{}:
+      None{}
+    case Some{+n}:
+      Trees.Tree.set.go(~State(), ~Store.fetch, s, Trees.Tree.path(k), 0n, k, x, h, Some{n})
+
+# the tree whose root is h with the key k set to x: Trees.Tree.set (impl:
+# Set.is)
+def Node.set(
+  +s: State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  x: List<&2, U32>
+) -> Maybe<&2, Trees.Put>:
+  Node.set.at(s, h, k, x, Trees.Tree.part(~State(), ~Store.fetch, s, h))
 
 # the root of the content of the resource n in the tree whose root is h (none:
 # it is not there)
@@ -994,7 +1030,7 @@ def Work.of(+s: State(), ns: List<&2, List<&2, U32>>, m: Maybe<&2, Trees.Put>) -
 def Work.set(w: Work, k: List<&2, U32>, x: List<&2, U32>) -> Maybe<&2, Work>:
   match w:
     case Work{+s, h, ns}:
-      Work.of(s, ns, Trees.Tree.set(~State(), ~Store.fetch, s, h, k, x))
+      Work.of(s, ns, Node.set(s, h, k, x))
 
 # w with the words ns as data, and among its new nodes
 def Work.keep(w: Work, +ns: List<&2, List<&2, U32>>) -> Maybe<&2, Work>:
