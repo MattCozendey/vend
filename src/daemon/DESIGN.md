@@ -114,7 +114,9 @@ README claim, then the law.
   draft), `Node.read_draft` (the read at the head of the branch is the bytes of the draft).
   After a switch of nodes: `Node.take_waits` (a request that a node takes in waits on its line
   there) and `Node.take_holds` (it holds the request), so the same two laws hold on the new
-  node. Not a law yet: that a request waits until its line gives it an outcome.
+  node. A request waits until its line gives it an outcome: `Step.run_outs` (a step gives each
+  of its requests an outcome) and `Wait.left_keeps` (a head that moves takes only the requests
+  of its step off the requests that wait; `State.moved` is the one place that takes any off).
 - A node fetches the rest on demand: `Node.fetch` (a node that lacks the data of a hash holds it
   after it takes in what a node that holds it serves; `Node.lacks` gives the hash, `Node.serve`
   the data). Below it: `State.take_data`.

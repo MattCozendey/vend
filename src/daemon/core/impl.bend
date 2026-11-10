@@ -12517,6 +12517,854 @@ def Spec.Merge.keeps(s, c, from, h, n, b, o, t, x):
     )(ec)
   )
 
+# Outcomes
+# --------
+# A step gives each of its requests an outcome (Spec.Step.run_outs), and only
+# the requests of a step leave the requests that wait (Spec.Wait.left_keeps).
+
+# a key that a run sets in its log, it reads
+def Add.reads.log(r: Spec.Run, +k: List<&2, U32>, +x: List<&2, U32>) -> Run.Keeps(k, x, Spec.Run.log(r, k, x)):
+  match r:
+    case Spec.Run{+s, Spec.Tip{c, +l}, +ns}:
+      Run.of.keeps(k, x, c, Spec.Work.set(Spec.Work{s, l, ns}, k, x))(Set.read(Spec.Work{s, l, ns}, k, x))
+
+# Add.reads once the value m of the key in the log is known
+def Add.reads.at(
+  +r: Spec.Run,
+  k: List<&2, U32>,
+  x: List<&2, U32>,
+  m: Maybe<&2, List<&2, U32>>
+) -> Run.Keeps(k, x, Spec.Run.add.at(r, k, x, m)):
+  match m:
+    case Some{old}:
+      Unit{}
+    case None{}:
+      Add.reads.log(r, k, x)
+
+# a new key of the log of a run reads back
+def Add.reads(+r: Spec.Run, +k: List<&2, U32>, x: List<&2, U32>) -> Run.Keeps(k, x, Spec.Run.add(r, k, x)):
+  Add.reads.at(r, k, x, Spec.Node.get(Spec.Run.state(r), Spec.Tip.log(Spec.Run.tip(r)), k))
+
+# a log that reads the outcome key of i as v holds an outcome of i
+def Outs.of(
+  +i: Ledgers.Id,
+  v: List<&2, U32>,
+  +m: Maybe<&2, Spec.Run>
+) -> Run.Keeps(Spec.Log.out(i), v, m) -> Spec.Run.Outs(m, i):
+  match m:
+    case None{}:
+      h => Unit{}
+    case Some{Spec.Run{s, t, ns}}:
+      h =>
+        %Equal.sym(
+          Maybe<&2, List<&2, U32>>,
+          Spec.Node.get(s, Spec.Tip.log(t), Spec.Log.out(i)),
+          Some{v},
+          h
+        ): {Maybe.is_some(&2, List<&2, U32>, _) == True{}: Bool}
+        {==}
+
+# each run that f gives has an outcome of i: so has the run after a step
+def Outs.all(
+  +m: Maybe<&2, Spec.Run>,
+  -f: Spec.Run -> Maybe<&2, Spec.Run>,
+  -i: Ledgers.Id,
+  hf: @r: Spec.Run -> Spec.Run.Outs(f(r), i)
+) -> Spec.Run.Outs(Maybe.bind(&2, Spec.Run, Spec.Run, m, f), i):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{r}:
+      hf(r)
+
+# one of two runs, each with an outcome of i
+def Outs.when(
+  +b: Bool,
+  -mx: Maybe<&2, Spec.Run>,
+  -my: Maybe<&2, Spec.Run>,
+  -i: Ledgers.Id,
+  hx: Spec.Run.Outs(mx, i),
+  hy: Spec.Run.Outs(my, i)
+) -> Spec.Run.Outs(Shared.Bool.when(Maybe<&2, Spec.Run>, b, u => mx, u => my), i):
+  match b:
+    case True{}:
+      hx
+    case False{}:
+      hy
+
+# a request that is refused as stale has an outcome
+def Stale.outs(+r: Spec.Run, +i: Ledgers.Id) -> Spec.Run.Outs(Spec.Step.stale(r, i), i):
+  Outs.of(
+    i,
+    Spec.Out.words(Spec.Out.Stale{}),
+    Spec.Run.add(r, Spec.Log.out(i), Spec.Out.words(Spec.Out.Stale{}))
+  )(Add.reads(r, Spec.Log.out(i), Spec.Out.words(Spec.Out.Stale{})))
+
+# a request that is taken has an outcome
+def Taken.outs(
+  +r: Spec.Run,
+  +i: Ledgers.Id,
+  +own: Maybe<&2, List<&2, String>>
+) -> Spec.Run.Outs(Spec.Step.taken(r, i, own), i):
+  +n = Spec.Line.count(Spec.Run.state(r), Spec.Run.tip(r))
+  Outs.of(i, Spec.Out.words(Spec.Out.Taken{n}), Spec.Step.taken(r, i, own))(
+    Keeps.bind(
+      Spec.Log.out(i),
+      Spec.Out.words(Spec.Out.Taken{n}),
+      Spec.Run.add(r, Spec.Log.out(i), Spec.Out.words(Spec.Out.Taken{n})),
+      +r1 => Maybe.bind(
+        &2,
+        Spec.Run,
+        Spec.Run,
+        Spec.Run.add(
+          r1,
+          Spec.Log.version(n),
+          Spec.Version.words(Spec.Version{i, Spec.Tip.content(Spec.Run.tip(r1))})
+        ),
+        r2 => Maybe.bind(
+          &2,
+          Spec.Run,
+          Spec.Run,
+          Spec.Run.log(r2, Spec.Log.count(), [U32.inc(n)]),
+          r3 => Spec.Run.owners(r3, own)
+        )
+      )
+    )(Add.reads(r, Spec.Log.out(i), Spec.Out.words(Spec.Out.Taken{n})))(
+      +r1 => h1 => Keeps.bind(
+        Spec.Log.out(i),
+        Spec.Out.words(Spec.Out.Taken{n}),
+        Spec.Run.add(
+          r1,
+          Spec.Log.version(n),
+          Spec.Version.words(Spec.Version{i, Spec.Tip.content(Spec.Run.tip(r1))})
+        ),
+        r2 => Maybe.bind(
+          &2,
+          Spec.Run,
+          Spec.Run,
+          Spec.Run.log(r2, Spec.Log.count(), [U32.inc(n)]),
+          r3 => Spec.Run.owners(r3, own)
+        )
+      )(
+        Add.kept(
+          r1,
+          Spec.Log.version(n),
+          Spec.Version.words(Spec.Version{i, Spec.Tip.content(Spec.Run.tip(r1))}),
+          Spec.Log.out(i),
+          Spec.Out.words(Spec.Out.Taken{n})
+        )(h1)
+      )(
+        +r2 => h2 => Keeps.bind(
+          Spec.Log.out(i),
+          Spec.Out.words(Spec.Out.Taken{n}),
+          Spec.Run.log(r2, Spec.Log.count(), [U32.inc(n)]),
+          r3 => Spec.Run.owners(r3, own)
+        )(
+          Log.kept(
+            r2,
+            Spec.Log.count(),
+            [U32.inc(n)],
+            Spec.Log.out(i),
+            Spec.Out.words(Spec.Out.Taken{n}),
+            {==}
+          )(h2)
+        )(
+          r3 => h3 => Owners.kept(
+            r3,
+            own,
+            Spec.Log.out(i),
+            Spec.Out.words(Spec.Out.Taken{n}),
+            {==}
+          )(h3)
+        )
+      )
+    )
+  )
+
+# a judged request has an outcome
+def Judged.outs(
+  +r: Spec.Run,
+  +i: Ledgers.Id,
+  +own: Maybe<&2, List<&2, String>>,
+  +m: Maybe<&2, Spec.Verdict>
+) -> Spec.Run.Outs(Spec.Step.judged(r, i, own, m), i):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{Spec.Verdict{False{}, h, ds}}:
+      Stale.outs(r, i)
+    case Some{Spec.Verdict{True{}, h, ds}}:
+      Outs.all(Spec.Run.content(r, h, ds), r2 => Spec.Step.taken(r2, i, own), i, r2 => Taken.outs(r2, i, own))
+
+# a mark on a version has an outcome
+def Marked.outs(
+  +r: Spec.Run,
+  +i: Ledgers.Id,
+  +m: String,
+  +v: Maybe<&2, Spec.Version>
+) -> Spec.Run.Outs(Spec.Step.marked(r, i, m, v), i):
+  match v:
+    case None{}:
+      Unit{}
+    case Some{x}:
+      Outs.all(
+        Spec.Run.add(r, Spec.Log.mark(m), Ledgers.Id.code(Spec.Version.id(x), [])),
+        r2 => Spec.Step.taken(r2, i, None{}),
+        i,
+        r2 => Taken.outs(r2, i, None{})
+      )
+
+# a request for a mark has an outcome
+def Mark.outs(+r: Spec.Run, +i: Ledgers.Id, +m: String) -> Spec.Run.Outs(Spec.Step.mark(r, i, m), i):
+  +s = Spec.Run.state(r)
+  +t = Spec.Run.tip(r)
+  +n = Spec.Line.count(s, t)
+  Outs.when(
+    List.all.if(
+      u => Maybe.is_none(&2, Ledgers.Id, Spec.Line.mark(s, t, m)),
+      Bool.not(U32.is_eq(n, 0))
+    ),
+    Spec.Step.marked(r, i, m, Spec.Line.version(s, t, U32.sub(n, 1))),
+    Spec.Step.stale(r, i),
+    i,
+    Marked.outs(r, i, m, Spec.Line.version(s, t, U32.sub(n, 1))),
+    Stale.outs(r, i)
+  )
+
+# the first tip of a new branch has an outcome
+def Branch.made.outs(
+  +r: Spec.Run,
+  +i: Ledgers.Id,
+  +b: String,
+  +m: Maybe<&2, Spec.Made>
+) -> Spec.Run.Outs(Spec.Branch.made(r, i, b, m), i):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{Spec.Made{t, ds}}:
+      Outs.all(
+        Spec.Run.content(r, Spec.Tip.content(Spec.Run.tip(r)), ds),
+        +r1 => Maybe.bind(
+          &2,
+          Spec.Run,
+          Spec.Run,
+          Spec.Run.add(r1, Spec.Log.start(b), Hashes.Hash.code(Spec.Tip.hash(t), [])),
+          r2 => Spec.Step.taken(r2, i, None{})
+        ),
+        i,
+        r1 => Outs.all(
+          Spec.Run.add(r1, Spec.Log.start(b), Hashes.Hash.code(Spec.Tip.hash(t), [])),
+          r2 => Spec.Step.taken(r2, i, None{}),
+          i,
+          r2 => Taken.outs(r2, i, None{})
+        )
+      )
+
+# a request for a branch has an outcome, once it is known whether its version
+# is one
+def Branch.ready.outs(
+  +r: Spec.Run,
+  +i: Ledgers.Id,
+  +st: Ledgers.Id,
+  +b: String,
+  +at: Maybe<&2, Ledgers.Id>,
+  +m: Maybe<&2, Bool>
+) -> Spec.Run.Outs(Spec.Branch.ready(r, i, st, b, at, m), i):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{False{}}:
+      Stale.outs(r, i)
+    case Some{True{}}:
+      Outs.when(
+        Trees.Tree.whole(
+          ~Spec.State(),
+          ~Spec.Store.fetch,
+          Spec.Run.state(r),
+          Spec.Node.root_of(Spec.Run.state(r), at)
+        ),
+        Spec.Branch.made(
+          r,
+          i,
+          b,
+          Spec.Make.first(
+            Spec.Make.branch(Spec.Run.state(r), Spec.Line.chain(st, Some{b}), at),
+            Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+          )
+        ),
+        None{},
+        i,
+        Branch.made.outs(
+          r,
+          i,
+          b,
+          Spec.Make.first(
+            Spec.Make.branch(Spec.Run.state(r), Spec.Line.chain(st, Some{b}), at),
+            Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+          )
+        ),
+        Unit{}
+      )
+
+# a request for a branch has an outcome
+def Branch.new.outs(
+  +r: Spec.Run,
+  +i: Ledgers.Id,
+  +st: Ledgers.Id,
+  +b: String,
+  +at: Maybe<&2, Ledgers.Id>,
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>
+) -> Spec.Run.Outs(Spec.Branch.new(r, i, st, b, at, m), i):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{Some{x}}:
+      Stale.outs(r, i)
+    case Some{None{}}:
+      Branch.ready.outs(r, i, st, b, at, Spec.Judge.ready_maybe(Spec.Run.state(r), at))
+
+# a change of a line has an outcome
+def On.outs(
+  +r: Spec.Run,
+  +i: Ledgers.Id,
+  +st: Ledgers.Id,
+  +l: Maybe<&2, String>,
+  +ch: Spec.Change
+) -> Spec.Run.Outs(Spec.Step.on(r, i, st, l, ch), i):
+  match l ch:
+    case None{} Spec.Change.Branch{+a, +b}:
+      Branch.new.outs(
+        r,
+        i,
+        st,
+        a,
+        b,
+        Spec.Node.find(Spec.Run.state(r), Spec.Tip.log(Spec.Run.tip(r)), Spec.Log.start(a))
+      )
+    case None{} Spec.Change.Group{+a, +b}:
+      Judged.outs(
+        r,
+        i,
+        Spec.Change.owners(Spec.Change.Group{a, b}),
+        Spec.Judge.change(
+          Spec.Run.state(r),
+          st,
+          None{},
+          Spec.Change.Group{a, b},
+          Spec.Tip.content(Spec.Run.tip(r)),
+          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+        )
+      )
+    case None{} Spec.Change.Own{+a, +b, +c}:
+      Judged.outs(
+        r,
+        i,
+        Spec.Change.owners(Spec.Change.Own{a, b, c}),
+        Spec.Judge.change(
+          Spec.Run.state(r),
+          st,
+          None{},
+          Spec.Change.Own{a, b, c},
+          Spec.Tip.content(Spec.Run.tip(r)),
+          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+        )
+      )
+    case None{} Spec.Change.Write{+a, +b, +c}:
+      Judged.outs(
+        r,
+        i,
+        Spec.Change.owners(Spec.Change.Write{a, b, c}),
+        Spec.Judge.change(
+          Spec.Run.state(r),
+          st,
+          None{},
+          Spec.Change.Write{a, b, c},
+          Spec.Tip.content(Spec.Run.tip(r)),
+          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+        )
+      )
+    case None{} Spec.Change.Resolve{+a, +b, +c}:
+      Judged.outs(
+        r,
+        i,
+        Spec.Change.owners(Spec.Change.Resolve{a, b, c}),
+        Spec.Judge.change(
+          Spec.Run.state(r),
+          st,
+          None{},
+          Spec.Change.Resolve{a, b, c},
+          Spec.Tip.content(Spec.Run.tip(r)),
+          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+        )
+      )
+    case None{} Spec.Change.Merge{+a}:
+      Judged.outs(
+        r,
+        i,
+        Spec.Change.owners(Spec.Change.Merge{a}),
+        Spec.Judge.change(
+          Spec.Run.state(r),
+          st,
+          None{},
+          Spec.Change.Merge{a},
+          Spec.Tip.content(Spec.Run.tip(r)),
+          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+        )
+      )
+    case None{} Spec.Change.Move{+a}:
+      Judged.outs(
+        r,
+        i,
+        Spec.Change.owners(Spec.Change.Move{a}),
+        Spec.Judge.change(
+          Spec.Run.state(r),
+          st,
+          None{},
+          Spec.Change.Move{a},
+          Spec.Tip.content(Spec.Run.tip(r)),
+          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+        )
+      )
+    case None{} Spec.Change.Mark{+a, +b}:
+      Judged.outs(
+        r,
+        i,
+        Spec.Change.owners(Spec.Change.Mark{a, b}),
+        Spec.Judge.change(
+          Spec.Run.state(r),
+          st,
+          None{},
+          Spec.Change.Mark{a, b},
+          Spec.Tip.content(Spec.Run.tip(r)),
+          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+        )
+      )
+    case Some{+x} Spec.Change.Branch{+a, +b}:
+      Judged.outs(
+        r,
+        i,
+        Spec.Change.owners(Spec.Change.Branch{a, b}),
+        Spec.Judge.change(
+          Spec.Run.state(r),
+          st,
+          Some{x},
+          Spec.Change.Branch{a, b},
+          Spec.Tip.content(Spec.Run.tip(r)),
+          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+        )
+      )
+    case Some{+x} Spec.Change.Group{+a, +b}:
+      Judged.outs(
+        r,
+        i,
+        Spec.Change.owners(Spec.Change.Group{a, b}),
+        Spec.Judge.change(
+          Spec.Run.state(r),
+          st,
+          Some{x},
+          Spec.Change.Group{a, b},
+          Spec.Tip.content(Spec.Run.tip(r)),
+          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+        )
+      )
+    case Some{+x} Spec.Change.Own{+a, +b, +c}:
+      Judged.outs(
+        r,
+        i,
+        Spec.Change.owners(Spec.Change.Own{a, b, c}),
+        Spec.Judge.change(
+          Spec.Run.state(r),
+          st,
+          Some{x},
+          Spec.Change.Own{a, b, c},
+          Spec.Tip.content(Spec.Run.tip(r)),
+          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+        )
+      )
+    case Some{+x} Spec.Change.Write{+a, +b, +c}:
+      Judged.outs(
+        r,
+        i,
+        Spec.Change.owners(Spec.Change.Write{a, b, c}),
+        Spec.Judge.change(
+          Spec.Run.state(r),
+          st,
+          Some{x},
+          Spec.Change.Write{a, b, c},
+          Spec.Tip.content(Spec.Run.tip(r)),
+          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+        )
+      )
+    case Some{+x} Spec.Change.Resolve{+a, +b, +c}:
+      Judged.outs(
+        r,
+        i,
+        Spec.Change.owners(Spec.Change.Resolve{a, b, c}),
+        Spec.Judge.change(
+          Spec.Run.state(r),
+          st,
+          Some{x},
+          Spec.Change.Resolve{a, b, c},
+          Spec.Tip.content(Spec.Run.tip(r)),
+          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+        )
+      )
+    case Some{+x} Spec.Change.Merge{+a}:
+      Judged.outs(
+        r,
+        i,
+        Spec.Change.owners(Spec.Change.Merge{a}),
+        Spec.Judge.change(
+          Spec.Run.state(r),
+          st,
+          Some{x},
+          Spec.Change.Merge{a},
+          Spec.Tip.content(Spec.Run.tip(r)),
+          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+        )
+      )
+    case Some{+x} Spec.Change.Move{+a}:
+      Judged.outs(
+        r,
+        i,
+        Spec.Change.owners(Spec.Change.Move{a}),
+        Spec.Judge.change(
+          Spec.Run.state(r),
+          st,
+          Some{x},
+          Spec.Change.Move{a},
+          Spec.Tip.content(Spec.Run.tip(r)),
+          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+        )
+      )
+    case Some{+x} Spec.Change.Mark{+a, +b}:
+      Mark.outs(r, i, a)
+    case None{} Spec.Change.Key{+a, +b}:
+      Judged.outs(
+        r,
+        i,
+        Spec.Change.owners(Spec.Change.Key{a, b}),
+        Spec.Judge.change(
+          Spec.Run.state(r),
+          st,
+          None{},
+          Spec.Change.Key{a, b},
+          Spec.Tip.content(Spec.Run.tip(r)),
+          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+        )
+      )
+    case Some{+x} Spec.Change.Key{+a, +b}:
+      Judged.outs(
+        r,
+        i,
+        Spec.Change.owners(Spec.Change.Key{a, b}),
+        Spec.Judge.change(
+          Spec.Run.state(r),
+          st,
+          Some{x},
+          Spec.Change.Key{a, b},
+          Spec.Tip.content(Spec.Run.tip(r)),
+          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+        )
+      )
+
+# a request of a run has an outcome
+def Change.outs(
+  +r: Spec.Run,
+  +c: Ledgers.Chain,
+  +i: Ledgers.Id,
+  +q: Spec.Ask
+) -> Spec.Run.Outs(Spec.Step.change(r, c, i, q), i):
+  match q:
+    case Spec.Ask.Start{os}:
+      Stale.outs(r, i)
+    case Spec.Ask.On{st, l, ch}:
+      Outs.when(
+        Ledgers.Chain.is_eq(Spec.Line.chain(st, l), c),
+        Spec.Step.on(r, i, st, l, ch),
+        Spec.Step.stale(r, i),
+        i,
+        On.outs(r, i, st, l, ch),
+        Stale.outs(r, i)
+      )
+
+# a request that the node holds or not, of a run, has an outcome
+def Asked.outs(
+  +r: Spec.Run,
+  +c: Ledgers.Chain,
+  +i: Ledgers.Id,
+  +a: Maybe<&2, Ledgers.Asked<Spec.Ask>>
+) -> Spec.Run.Outs(Spec.Step.asked(r, c, i, a), i):
+  match a:
+    case None{}:
+      Unit{}
+    case Some{Ledgers.Asked{t, q}}:
+      Change.outs(r, c, i, q)
+
+# a run whose log reads the outcome key of i has an outcome of i
+def Outs.self(
+  +r: Spec.Run,
+  +i: Ledgers.Id,
+  ws: List<&2, U32>
+) -> {
+  Spec.Node.get(Spec.Run.state(r), Spec.Tip.log(Spec.Run.tip(r)), Spec.Log.out(i))
+    == Some{ws}: Maybe<&2, List<&2, U32>>
+} -> Spec.Run.Outs(Some{r}, i):
+  match r:
+    case Spec.Run{s, t, ns}:
+      eg =>
+        %Equal.sym(
+          Maybe<&2, List<&2, U32>>,
+          Spec.Node.get(s, Spec.Tip.log(t), Spec.Log.out(i)),
+          Some{ws},
+          eg
+        ): {Maybe.is_some(&2, List<&2, U32>, _) == True{}: Bool}
+        {==}
+
+# One.outs once the outcome o that the words ws read as is known
+def One.outs.read(
+  +r: Spec.Run,
+  +c: Ledgers.Chain,
+  +i: Ledgers.Id,
+  ws: List<&2, U32>,
+  +o: Maybe<&2, Spec.Out>,
+  eg: {
+    Spec.Node.get(Spec.Run.state(r), Spec.Tip.log(Spec.Run.tip(r)), Spec.Log.out(i))
+      == Some{ws}: Maybe<&2, List<&2, U32>>
+  }
+) -> Spec.Run.Outs(Spec.Step.fresh(r, c, i, o), i):
+  match o:
+    case Some{x}:
+      Outs.self(r, i, ws)(eg)
+    case None{}:
+      Asked.outs(r, c, i, Spec.Node.asked(Spec.Run.state(r), i))
+
+# One.outs once what the log holds for the request is known (g)
+def One.outs.at(
+  +r: Spec.Run,
+  +c: Ledgers.Chain,
+  +i: Ledgers.Id,
+  g: Maybe<&2, List<&2, U32>>,
+  +eg: {
+    Spec.Node.get(Spec.Run.state(r), Spec.Tip.log(Spec.Run.tip(r)), Spec.Log.out(i))
+      == g: Maybe<&2, List<&2, U32>>
+  }
+) -> Spec.Run.Outs(
+  Spec.Step.fresh(r, c, i, Maybe.bind(&2, List<&2, U32>, Spec.Out, g, ws => Spec.Out.read(ws))),
+  i
+):
+  match g:
+    case None{}:
+      Asked.outs(r, c, i, Spec.Node.asked(Spec.Run.state(r), i))
+    case Some{+ws}:
+      One.outs.read(r, c, i, ws, Spec.Out.read(ws), eg)
+
+# a request has an outcome after its step
+def One.outs(+r: Spec.Run, c: Ledgers.Chain, +i: Ledgers.Id) -> Spec.Run.Outs(Spec.Step.one(r, c, i), i):
+  One.outs.at(
+    r,
+    c,
+    i,
+    Spec.Node.get(Spec.Run.state(r), Spec.Tip.log(Spec.Run.tip(r)), Spec.Log.out(i)),
+    {==}
+  )
+
+# no run gives no run
+def All.none(
+  +c: Ledgers.Chain,
+  +qs: List<&2, Ledgers.Id>
+) -> {Spec.Step.all(c, qs, None{}) == None{}: Maybe<&2, Spec.Run>}:
+  match qs:
+    case Nil{}:
+      {==}
+    case Con{i, rest}:
+      All.none(c, rest)
+
+# a run reads what its log holds
+def Keeps.self(
+  +r: Spec.Run,
+  k: List<&2, U32>,
+  v: List<&2, U32>
+) -> {
+  Spec.Node.get(Spec.Run.state(r), Spec.Tip.log(Spec.Run.tip(r)), k) == Some{v}: Maybe<&2, List<&2, U32>>
+} -> Run.Keeps(k, v, Some{r}):
+  match r:
+    case Spec.Run{s, t, ns}:
+      e => e
+
+# Outs.kept once what the log of the run holds for the request is known (g)
+def Outs.kept.at(
+  +c: Ledgers.Chain,
+  +qs: List<&2, Ledgers.Id>,
+  +r: Spec.Run,
+  +i: Ledgers.Id,
+  g: Maybe<&2, List<&2, U32>>,
+  +eg: {
+    Spec.Node.get(Spec.Run.state(r), Spec.Tip.log(Spec.Run.tip(r)), Spec.Log.out(i))
+      == g: Maybe<&2, List<&2, U32>>
+  }
+) -> {Maybe.is_some(&2, List<&2, U32>, g) == True{}: Bool} -> Spec.Run.Outs(Spec.Step.all(c, qs, Some{r}), i):
+  match g:
+    case None{}:
+      h => Empty.absurd(
+        Spec.Run.Outs(Spec.Step.all(c, qs, Some{r}), i),
+        Shared.Bool.false_ne_true(h)
+      )
+    case Some{+v}:
+      h => Outs.of(i, v, Spec.Step.all(c, qs, Some{r}))(
+        All.kept(c, qs, Some{r}, Spec.Log.out(i), v, {==}, {==})(Keeps.self(r, Spec.Log.out(i), v)(eg))
+      )
+
+# an outcome that a run has, it has after more requests
+def Outs.kept(
+  +c: Ledgers.Chain,
+  +qs: List<&2, Ledgers.Id>,
+  +m: Maybe<&2, Spec.Run>,
+  +i: Ledgers.Id
+) -> Spec.Run.Outs(m, i) -> Spec.Run.Outs(Spec.Step.all(c, qs, m), i):
+  match m:
+    case None{}:
+      h =>
+        %Equal.sym(Maybe<&2, Spec.Run>, Spec.Step.all(c, qs, None{}), None{}, All.none(c, qs)): Spec.Run.Outs(_, i)
+        Unit{}
+    case Some{Spec.Run{s, t, ns}}:
+      h => Outs.kept.at(
+        c,
+        qs,
+        Spec.Run{s, t, ns},
+        i,
+        Spec.Node.get(s, Spec.Tip.log(t), Spec.Log.out(i)),
+        {==}
+      )(h)
+
+# All.outs at the first request j, once it is known whether it is i
+def All.outs.at(
+  +c: Ledgers.Chain,
+  +j: Ledgers.Id,
+  +rest: List<&2, Ledgers.Id>,
+  +m: Maybe<&2, Spec.Run>,
+  +i: Ledgers.Id,
+  +same: Bool,
+  +es: {Ledgers.Id.is_eq(j, i) == same: Bool},
+  ih: {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, rest, i) == True{}: Bool} -> Spec.Run.Outs(
+    Spec.Step.all(c, rest, Maybe.bind(&2, Spec.Run, Spec.Run, m, r => Spec.Step.one(r, c, j))),
+    i
+  )
+) -> {
+  List.any.if(u => List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, rest, i), same) == True{}: Bool
+} -> Spec.Run.Outs(
+  Spec.Step.all(c, rest, Maybe.bind(&2, Spec.Run, Spec.Run, m, r => Spec.Step.one(r, c, j))),
+  i
+):
+  match same:
+    case True{}:
+      e => Outs.kept(c, rest, Maybe.bind(&2, Spec.Run, Spec.Run, m, r => Spec.Step.one(r, c, j)), i)(
+        %Equal.sym(Ledgers.Id, j, i, Ledgers.Id.is_eq_sound(j, i)(es)): Spec.Run.Outs(
+          Maybe.bind(&2, Spec.Run, Spec.Run, m, r => Spec.Step.one(r, c, _)),
+          i
+        )
+        Outs.all(m, r => Spec.Step.one(r, c, i), i, r => One.outs(r, c, i))
+      )
+    case False{}:
+      e => ih(e)
+
+# each request of a step has an outcome after it
+def All.outs(
+  +c: Ledgers.Chain,
+  +qs: List<&2, Ledgers.Id>,
+  +m: Maybe<&2, Spec.Run>,
+  +i: Ledgers.Id
+) -> {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, qs, i) == True{}: Bool} -> Spec.Run.Outs(
+  Spec.Step.all(c, qs, m),
+  i
+):
+  match qs:
+    case Nil{}:
+      e => Empty.absurd(Spec.Run.Outs(m, i), Shared.Bool.false_ne_true(e))
+    case Con{j, rest}:
+      All.outs.at(
+        c,
+        j,
+        rest,
+        m,
+        i,
+        Ledgers.Id.is_eq(j, i),
+        {==},
+        All.outs(c, rest, Maybe.bind(&2, Spec.Run, Spec.Run, m, r => Spec.Step.one(r, c, j)), i)
+      )
+
+def Spec.Step.run_outs(s, c, t, qs, i):
+  All.outs(c, qs, Some{Spec.Run{s, t, []}}, i)
+
+# Wait.left_keeps at the first request j, once it is known whether it is i
+# (same) and whether a step ran it (d)
+def Left.keeps.at(
+  +j: Ledgers.Id,
+  +ks: List<&2, Ledgers.Id>,
+  +rs: List<&2, Ledgers.Id>,
+  +done: Tries.Trie<Unit>,
+  +i: Ledgers.Id,
+  +same: Bool,
+  +d: Bool,
+  +es: {Ledgers.Id.is_eq(j, i) == same: Bool},
+  +ed: {Tries.Trie.has(Unit, done, Ledgers.Id.key(j)) == d: Bool},
+  hd: {Tries.Trie.has(Unit, done, Ledgers.Id.key(i)) == False{}: Bool},
+  ih: {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, rs, i) == True{}: Bool} -> {
+    List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, ks, i) == True{}: Bool
+  }
+) -> {List.any.if(u => List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, rs, i), same) == True{}: Bool} -> {
+  List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, List.filter.put(Ledgers.Id, j, ks, Bool.not(d)), i) == True{}: Bool
+}:
+  match same d:
+    case True{} False{}:
+      e =>
+        %Equal.sym(Bool, Ledgers.Id.is_eq(j, i), True{}, es): {
+          List.any.if(u => List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, ks, i), _) == True{}: Bool
+        }
+        {==}
+    case True{} True{}:
+      e => Empty.absurd(
+        {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, ks, i) == True{}: Bool},
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            Tries.Trie.has(Unit, done, Ledgers.Id.key(i)),
+            True{},
+            Equal.sym(Bool, Tries.Trie.has(Unit, done, Ledgers.Id.key(i)), False{}, hd),
+            (
+              %Ledgers.Id.is_eq_sound(j, i)(es): {
+                Tries.Trie.has(Unit, done, Ledgers.Id.key(_)) == True{}: Bool
+              }
+              ed
+            )
+          )
+        )
+      )
+    case False{} False{}:
+      e => Shared.List.contains_cons(~Ledgers.Id, ~Ledgers.Id.is_eq, j, ks, i)(ih(e))
+    case False{} True{}:
+      e => ih(e)
+
+def Spec.Wait.left_keeps(ws, done, i):
+  match ws:
+    case Nil{}:
+      e => hd => e
+    case Con{j, rs}:
+      e => +hd => Left.keeps.at(
+        j,
+        Spec.Wait.left(rs, done),
+        rs,
+        done,
+        i,
+        Ledgers.Id.is_eq(j, i),
+        Tries.Trie.has(Unit, done, Ledgers.Id.key(j)),
+        {==},
+        {==},
+        hd,
+        e2 => Spec.Wait.left_keeps(rs, done, i)(e2)(hd)
+      )(e)
+
 # Waits
 # -----
 # A request that a node takes in waits on its line: a pending write goes with

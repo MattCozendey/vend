@@ -5663,6 +5663,35 @@ law Move.reads:
   {Node.get(s, Node.root_of(s, Some{to}), Key.res(n)) == Some{v}: Maybe<&2, List<&2, U32>>}
     -> Work.Reads(Key.res(n), v, Move.work(s, c, to, h))
 
+# the log of the run m, if any, holds an outcome of the request i
+def Run.Outs(m: Maybe<&2, Run>, i: Ledgers.Id) -> Type:
+  match m:
+    case None{}:
+      Unit
+    case Some{Run{s, t, ns}}:
+      {Maybe.is_some(&2, List<&2, U32>, Node.get(s, Tip.log(t), Log.out(i))) == True{}: Bool}
+
+# a request waits until its line gives it an outcome. A step gives each of
+# its requests an outcome
+law Step.run_outs:
+  for +s: State()
+  for +c: Ledgers.Chain
+  for +t: Tip
+  for +qs: List<&2, Ledgers.Id>
+  for +i: Ledgers.Id
+  {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, qs, i) == True{}: Bool}
+    -> Run.Outs(Step.run(s, c, t, qs), i)
+
+# and a head that moves over a step takes only the requests of the step off
+# the requests that wait (State.moved, the one place that takes any off)
+law Wait.left_keeps:
+  for +ws: List<&2, Ledgers.Id>
+  for +done: Tries.Trie<Unit>
+  for +i: Ledgers.Id
+  {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, ws, i) == True{}: Bool}
+    -> {Tries.Trie.has(Unit, done, Ledgers.Id.key(i)) == False{}: Bool}
+    -> {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Wait.left(ws, done), i) == True{}: Bool}
+
 # a merge of whole trees keeps what the merge of each resource takes: when the
 # merge of the resource n takes the root x (Pick.merge_theirs, Pick.merge_ours:
 # a change that only one side made), the tree that the merge gives holds n
