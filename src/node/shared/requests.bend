@@ -1,11 +1,11 @@
 import Base
-import ../../shared.bend as Shared
-import ../replica/impl.bend as Replicas
-import ./ledger.bend as Ledgers
-import ./resources.bend as Resources
-import ./rope.bend as Ropes
-import ./shared/shared/code.bend as Codes
-import ./shared/shared/hash.bend as Hashes
+import ../../shared/shared/shared/shared/shared.bend as Shared
+import ../../shared/replica.bend as Replicas
+import ../../shared/shared/ledger.bend as Ledgers
+import ./shared/resources.bend as Resources
+import ../../shared/shared/rope.bend as Ropes
+import ../../shared/shared/shared/shared/code.bend as Codes
+import ../../shared/shared/shared/shared/hash.bend as Hashes
 
 # Requests
 # --------

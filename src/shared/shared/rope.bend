@@ -1,5 +1,5 @@
 import Base
-import ../../shared.bend as Shared
+import ./shared/shared/shared.bend as Shared
 import ./shared/shared/code.bend as Codes
 import ./shared/shared/hash.bend as Hashes
 import ./shared/store.bend as Stores

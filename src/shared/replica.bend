@@ -1,17 +1,17 @@
 import Base
-import ../../shared.bend as Shared
-import ../shared/ledger.bend as Ledgers
-import ../shared/resources.bend as Resources
-import ../shared/rope.bend as Ropes
-import ../shared/shared/quorum.bend as Quorums
-import ../shared/shared/shared/cell.bend as Cells
-import ../shared/shared/shared/code.bend as Codes
-import ../shared/shared/shared/hash.bend as Hashes
-import ../shared/shared/shared/seal.bend as Seals
-import ../shared/shared/shared/trie.bend as Tries
-import ../shared/shared/store.bend as Stores
-import ../shared/shared/text.bend as Texts
-import ../shared/tree.bend as Trees
+import ./shared/shared/shared/shared.bend as Shared
+import ./shared/ledger.bend as Ledgers
+import ../node/shared/shared/resources.bend as Resources
+import ./shared/rope.bend as Ropes
+import ./shared/shared/quorum.bend as Quorums
+import ./shared/shared/shared/cell.bend as Cells
+import ./shared/shared/shared/code.bend as Codes
+import ./shared/shared/shared/hash.bend as Hashes
+import ./shared/shared/shared/seal.bend as Seals
+import ./shared/shared/shared/trie.bend as Tries
+import ./shared/shared/store.bend as Stores
+import ./shared/shared/text.bend as Texts
+import ./shared/tree.bend as Trees
 
 # Replicas
 # --------

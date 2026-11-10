@@ -1,10 +1,10 @@
 import Base
-import ../shared/formats.bend as Formats
-import ../shared/ledger.bend as Ledgers
-import ../shared/resources.bend as Resources
-import ../shared/shared/text.bend as Texts
-import ../shared/uris.bend as Uris
-import ../replica/impl.bend as Replicas
+import ../../shared/shared/formats.bend as Formats
+import ../../shared/shared/ledger.bend as Ledgers
+import ../shared/shared/resources.bend as Resources
+import ../../shared/shared/shared/text.bend as Texts
+import ../shared/shared/uris.bend as Uris
+import ../../shared/replica.bend as Replicas
 import ../shared/requests.bend as Requests
 import ../core/spec.bend as Core
 

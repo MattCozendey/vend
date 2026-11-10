@@ -1,7 +1,7 @@
 import Base
-import ../../shared.bend as Shared
-import ./shared/shared/code.bend as Codes
-import ./shared/text.bend as Texts
+import ../../../shared/shared/shared/shared/shared.bend as Shared
+import ../../../shared/shared/shared/shared/code.bend as Codes
+import ../../../shared/shared/shared/text.bend as Texts
 
 # Names
 # -----

@@ -3,20 +3,20 @@
 # bend-lint: expect-file bend-lint-rules/performance/eager_branch@information -- this file holds only proofs: a proof does not run
 # bend-lint: expect-file bend-lint-rules/performance/missed_fork@hint -- this file holds only proofs: a proof does not run
 import Base
-import ../../shared.bend as Shared
-import ../replica/impl.bend as Replicas
-import ../shared/formats.bend as Formats
-import ../shared/ledger.bend as Ledgers
+import ../../shared/shared/shared/shared/shared.bend as Shared
+import ../../shared/replica.bend as Replicas
+import ../../shared/shared/formats.bend as Formats
+import ../../shared/shared/ledger.bend as Ledgers
 import ../shared/requests.bend as Requests
-import ../shared/resources.bend as Resources
-import ../shared/rope.bend as Ropes
-import ../shared/shared/reach.bend as Reaches
-import ../shared/shared/shared/cell.bend as Cells
-import ../shared/shared/shared/code.bend as Codes
-import ../shared/shared/shared/hash.bend as Hashes
-import ../shared/shared/shared/trie.bend as Tries
-import ../shared/shared/text.bend as Texts
-import ../shared/tree.bend as Trees
+import ../shared/shared/resources.bend as Resources
+import ../../shared/shared/rope.bend as Ropes
+import ../../shared/shared/shared/reach.bend as Reaches
+import ../../shared/shared/shared/shared/cell.bend as Cells
+import ../../shared/shared/shared/shared/code.bend as Codes
+import ../../shared/shared/shared/shared/hash.bend as Hashes
+import ../../shared/shared/shared/shared/trie.bend as Tries
+import ../../shared/shared/shared/text.bend as Texts
+import ../../shared/shared/tree.bend as Trees
 import ./spec.bend as Spec
 
 # Names

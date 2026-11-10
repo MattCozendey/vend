@@ -1,5 +1,5 @@
 import Base
-import ../../../../shared.bend as Shared
+import ./shared.bend as Shared
 import ./hash.bend as Hashes
 
 # Test, kind b: our SHA-256 against hashes of the same bytes from a source we

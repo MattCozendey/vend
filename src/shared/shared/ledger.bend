@@ -1,5 +1,5 @@
 import Base
-import ../../shared.bend as Shared
+import ./shared/shared/shared.bend as Shared
 import ./shared/quorum.bend as Quorums
 import ./shared/shared/cell.bend as Cells
 import ./shared/shared/code.bend as Codes
