@@ -1572,15 +1572,10 @@ def Lie.node(x: Ledgers.Lie) -> String:
     case Ledgers.Lie{k, a, b}:
       Ballot.node(a)
 
-# the slot of the lie x: that of the store and the node of its first ballot
-def Lie.slot(x: Ledgers.Lie) -> List<&2, Bool>:
-  match x:
-    case Ledgers.Lie{k, +a, b}:
-      Ledgers.Slot.lie(Ballot.store(a), Ballot.node(a))
-
 # the lie x checks in s: its two ballots are a fork, its key is the key of
 # their place in the chain of their node as s knows it, and the key signs
-# both (each part runs only when the ones before it hold, from the cheapest)
+# both, the first one first (each part runs only when the ones before it
+# hold, from the cheapest)
 def Lie.checks(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -1591,43 +1586,29 @@ def Lie.checks(
     case Ledgers.Lie{+k, +a, +b}:
       List.all.if(
         u => List.all.if(
-          v => List.all.if(w => Ledgers.Ballot.sealed(k, a), Ledgers.Ballot.sealed(k, b)),
+          v => List.all.if(w => Ledgers.Ballot.sealed(k, b), Ledgers.Ballot.sealed(k, a)),
           Seal.knows(~mach, ~kern, s, Ballot.store(a), Ballot.node(a), Ballot.prev(a), k)
         ),
         Ballot.forks(a, b)
       )
 
-# Lie.keep once the cell m of the slot of the lie is known: a slot that holds
-# a cell stays as it is, and its lie is not checked
-def Lie.keep.at(
+# the lie x may be kept in the ledger l: l holds no proof against its node in
+# its store, and x checks in s. So a node keeps one proof against a node in a
+# store, and checks no lie against a node that it blames
+def Lie.keeps(
   ~mach: Machine(),
   ~kern: Kernel(mach),
   s: Node<Machine.Q(mach)>,
   +x: Ledgers.Lie,
-  l: Ledgers.State(Machine.Q(mach)),
-  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
-) -> Maybe<&2, Ledgers.State(Machine.Q(mach))>:
-  match m:
-    case Some{c}:
-      None{}
-    case None{}:
-      Shared.Maybe.when(
-        Ledgers.State(Machine.Q(mach)),
-        Lie.checks(~mach, ~kern, s, x),
-        u => Some{
-          Ledgers.State.put(
-            ~Machine.Q(mach),
-            ~Machine.same(mach),
-            l,
-            Lie.slot(x),
-            Ledgers.Entry.Lie{x}
-          )
-        }
-      )
+  l: Ledgers.State(Machine.Q(mach))
+) -> Bool:
+  List.all.if(
+    u => Lie.checks(~mach, ~kern, s, x),
+    Bool.not(Ledgers.State.blames(~Machine.Q(mach), l, Ledgers.Lie.one(x)))
+  )
 
-# the ledger l with the lie x in its slot, when the slot is empty and x checks
-# in s (none: l holds a proof against the node already, or x does not check
-# now). One proof against a node in a store is enough
+# the ledger l with the lie x in the slot that its content names, when it may
+# be kept (none: l blames its node already, or x does not check now)
 def Lie.keep(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -1635,10 +1616,23 @@ def Lie.keep(
   +x: Ledgers.Lie,
   +l: Ledgers.State(Machine.Q(mach))
 ) -> Maybe<&2, Ledgers.State(Machine.Q(mach))>:
-  Lie.keep.at(~mach, ~kern, s, x, l, Ledgers.State.get(~Machine.Q(mach), l, Lie.slot(x)))
+  Shared.Maybe.when(
+    Ledgers.State(Machine.Q(mach)),
+    Lie.keeps(~mach, ~kern, s, x, l),
+    u => Some{
+      Ledgers.State.put(
+        ~Machine.Q(mach),
+        ~Machine.same(mach),
+        l,
+        Ledgers.Slot.lie(x),
+        Ledgers.Entry.Lie{x}
+      )
+    }
+  )
 
 # the ledger l with the lie that the ballot b makes with the first of the
-# signings xs with which it checks in s, if any
+# signings xs with which it checks in s, if any: b, which s did not keep, is
+# its first ballot
 def Lie.against(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -1660,7 +1654,7 @@ def Lie.against(
         Maybe.default(
           &2,
           Ledgers.State(Machine.Q(mach)),
-          Lie.keep(~mach, ~kern, s, Ledgers.Lie{k, a, b}, l),
+          Lie.keep(~mach, ~kern, s, Ledgers.Lie{k, b, a}, l),
           l
         )
       )
@@ -3468,43 +3462,44 @@ def Liars.of(
     case Con{c, rest}:
       Liars.of(~mach, rest)
 
-# the nodes that s holds a proof against in the store r: each signed two
-# ballots with one key. It reads the slots of the lies of r, not the ledger
+# the nodes that s holds a proof against in the store r, each once: each
+# signed two ballots with one key. It reads the slots of the lies of r, not
+# the ledger
 def Node.liars(~mach: Machine(), s: Node<Machine.Q(mach)>, r: Ledgers.Id) -> List<&2, String>:
-  Liars.of(
-    ~mach,
-    Tries.Trie.values(
-      Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-      Ledgers.State.under(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.lies(r))
-    )
+  Tries.Trie.unique(
+    ~String,
+    ~Tries.Trie.text,
+    Liars.of(
+      ~mach,
+      Tries.Trie.values(
+        Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+        Ledgers.State.under(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.lies(r))
+      )
+    ),
+    Tries.Trie.new(Unit)
   )
 
-# Node.take once the cells new that s lacks of t are known: a sync reads them
-# once
+# what a holder of s keeps of t, but for the lies, once the cells new that s
+# lacks of t are known: a sync reads them once
 def Take.of(
   ~mach: Machine(),
   ~kern: Kernel(mach),
   +s: Node<Machine.Q(mach)>,
   t: Ledgers.State(Machine.Q(mach)),
-  +new: List<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+  new: List<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
 ) -> Node<Machine.Q(mach)>:
   +sent = Node.reads(~mach, t)
-  Lies.take(
+  Sealed.take(
     ~mach,
     ~kern,
-    Sealed.take(
+    Ballots.of(~mach, new),
+    Take.asks(
       ~mach,
       ~kern,
-      Ballots.of(~mach, new),
-      Take.asks(
-        ~mach,
-        ~kern,
-        Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, sent),
-        State.ledger(~mach, s),
-        State.led(~mach, s, Ledgers.State.take(~Machine.Q(mach), State.ledger(~mach, s), sent))
-      )
-    ),
-    new
+      Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, sent),
+      State.ledger(~mach, s),
+      State.led(~mach, s, Ledgers.State.take(~Machine.Q(mach), State.ledger(~mach, s), sent))
+    )
   )
 
 # what a holder of s keeps of t, which another node sent. It checks everything
@@ -3522,16 +3517,11 @@ def Node.take(
   +s: Node<Machine.Q(mach)>,
   +t: Ledgers.State(Machine.Q(mach))
 ) -> Node<Machine.Q(mach)>:
-  Take.of(
-    ~mach,
-    ~kern,
-    s,
-    t,
-    Tries.Trie.values(
-      Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-      Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
-    )
+  +new = Tries.Trie.values(
+    Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+    Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
   )
+  Lies.take(~mach, ~kern, Take.of(~mach, ~kern, s, t, new), new)
 
 # s, after the node n did what it can on each line of cs
 def Node.steps(
@@ -5155,8 +5145,10 @@ def Sync.more(
       )
 
 # s, after the node n took in t, which another node sent, did what it can on
-# each line that this may move, and asked for the adoption of each: how a
-# node that is behind catches up
+# each line that this may move, looked for the lies that t brings or shows,
+# and asked for the adoption of each line: how a node that is behind catches
+# up. It looks for the lies last, so a ballot that it keeps only once a head
+# moved shows a lie in the same sync
 def Node.sync(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -5177,7 +5169,12 @@ def Node.sync(
     ~kern,
     n,
     cs,
-    Sync.more(~mach, ~kern, k, n, cs, k, bs, Pending.of(bs), Node.steps(~mach, ~kern, n, cs, s1))
+    Lies.take(
+      ~mach,
+      ~kern,
+      Sync.more(~mach, ~kern, k, n, cs, k, bs, Pending.of(bs), Node.steps(~mach, ~kern, n, cs, s1)),
+      new
+    )
   )
 
 # the bytes under the root m, if any, when s holds their rope
@@ -5515,13 +5512,15 @@ def Take.asks.grows(
     case Con{Cells.Many{}, rest}:
       Take.asks.grows(~mach, ~kern, rest, old, s)
 
-# a ledger that is kept when b holds, else l, grew from l when it did
+# the ledger l2 when b holds, else l, grew from l, when l2 did where b holds
 def Ledger.grows.if(
   ~mach: Machine(),
   l: Ledgers.State(Machine.Q(mach)),
   -l2: Ledgers.State(Machine.Q(mach)),
   b: Bool,
-  g: {Ledgers.State.grows(~Machine.Q(mach), ~Machine.same(mach), l, l2) == True{}: Bool}
+  g: {
+    b == True{}: Bool
+  } -> {Ledgers.State.grows(~Machine.Q(mach), ~Machine.same(mach), l, l2) == True{}: Bool}
 ) -> {
   Ledgers.State.grows(
     ~Machine.Q(mach),
@@ -5538,59 +5537,79 @@ def Ledger.grows.if(
 }:
   match b:
     case True{}:
-      g
+      g({==})
     case False{}:
       Ledgers.State.grows_refl(~Machine.Q(mach), ~Machine.same(mach), ~Machine.laws(mach), l)
 
-# the ledger of a kept lie, else l, grew from l
-def Lie.keep.at.grows(
+# a ledger that may keep a lie holds nothing in the slot of the lie
+def Lie.keeps.lacks(
   ~mach: Machine(),
   ~kern: Kernel(mach),
   s: Node<Machine.Q(mach)>,
   +x: Ledgers.Lie,
-  +l: Ledgers.State(Machine.Q(mach)),
-  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
-  em: {
-    Ledgers.State.get(
-      ~Machine.Q(mach),
-      l,
-      Lie.slot(x)
+  +l: Ledgers.State(Machine.Q(mach))
+) -> {
+  Lie.keeps(~mach, ~kern, s, x, l) == True{}: Bool
+} -> {
+  Ledgers.State.get(
+    ~Machine.Q(mach),
+    l,
+    Ledgers.Slot.lie(x)
+  )
+    == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+}:
+  h => Ledgers.State.blames_lacks(
+    ~Machine.Q(mach),
+    l,
+    Ledgers.Lie.one(x),
+    Ledgers.Hash.key(Hashes.Sha.hash(Ledgers.Lie.code(x, [])))
+  )(
+    Shared.Bool.not_true(
+      Ledgers.State.blames(~Machine.Q(mach), l, Ledgers.Lie.one(x))
+    )(
+      Shared.List.all.if_hit(
+        Bool.not(Ledgers.State.blames(~Machine.Q(mach), l, Ledgers.Lie.one(x))),
+        u => Lie.checks(~mach, ~kern, s, x)
+      )(h)
     )
-      == m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
-  }
+  )
+
+# the ledger of a kept lie, else l, grew from l
+def Lie.keep.grows(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  +x: Ledgers.Lie,
+  +l: Ledgers.State(Machine.Q(mach))
 ) -> {
   Ledgers.State.grows(
     ~Machine.Q(mach),
     ~Machine.same(mach),
     l,
-    Maybe.default(&2, Ledgers.State(Machine.Q(mach)), Lie.keep.at(~mach, ~kern, s, x, l, m), l)
+    Maybe.default(&2, Ledgers.State(Machine.Q(mach)), Lie.keep(~mach, ~kern, s, x, l), l)
   )
     == True{}: Bool
 }:
-  match m:
-    case Some{c}:
-      Ledgers.State.grows_refl(~Machine.Q(mach), ~Machine.same(mach), ~Machine.laws(mach), l)
-    case None{}:
-      Ledger.grows.if(
-        ~mach,
-        l,
-        Ledgers.State.put(
-          ~Machine.Q(mach),
-          ~Machine.same(mach),
-          l,
-          Lie.slot(x),
-          Ledgers.Entry.Lie{x}
-        ),
-        Lie.checks(~mach, ~kern, s, x),
-        Ledgers.State.grows_put(
-          ~Machine.Q(mach),
-          ~Machine.same(mach),
-          ~Machine.laws(mach),
-          l,
-          Lie.slot(x),
-          Ledgers.Entry.Lie{x}
-        )(em)
-      )
+  Ledger.grows.if(
+    ~mach,
+    l,
+    Ledgers.State.put(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      l,
+      Ledgers.Slot.lie(x),
+      Ledgers.Entry.Lie{x}
+    ),
+    Lie.keeps(~mach, ~kern, s, x, l),
+    h => Ledgers.State.grows_put(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      ~Machine.laws(mach),
+      l,
+      Ledgers.Slot.lie(x),
+      Ledgers.Entry.Lie{x}
+    )(Lie.keeps.lacks(~mach, ~kern, s, x, l)(h))
+  )
 
 # the lie that a ballot makes with one of some signings only grows a ledger
 def Lie.against.grows(
@@ -5613,7 +5632,7 @@ def Lie.against.grows(
     case Nil{}:
       Ledgers.State.grows_refl(~Machine.Q(mach), ~Machine.same(mach), ~Machine.laws(mach), l)
     case Con{Signing{k, a}, +r}:
-      +x = {Ledgers.Lie{k, a, b}: Ledgers.Lie}
+      +x = {Ledgers.Lie{k, b, a}: Ledgers.Lie}
       +l1 = Maybe.default(&2, Ledgers.State(Machine.Q(mach)), Lie.keep(~mach, ~kern, s, x, l), l)
       Ledgers.State.grows_trans(
         ~Machine.Q(mach),
@@ -5622,17 +5641,7 @@ def Lie.against.grows(
         l,
         l1,
         Lie.against(~mach, ~kern, s, r, b, l1)
-      )(
-        Lie.keep.at.grows(
-          ~mach,
-          ~kern,
-          s,
-          x,
-          l,
-          Ledgers.State.get(~Machine.Q(mach), l, Lie.slot(x)),
-          {==}
-        )
-      )(Lie.against.grows(~mach, ~kern, s, r, b, l1))
+      )(Lie.keep.grows(~mach, ~kern, s, x, l))(Lie.against.grows(~mach, ~kern, s, r, b, l1))
 
 # one of two ledgers, each grown from l
 def Ledger.grows.when(
@@ -5716,17 +5725,7 @@ def Lies.into.grows(
         l,
         l1,
         Lies.into(~mach, ~kern, s, rest, l1)
-      )(
-        Lie.keep.at.grows(
-          ~mach,
-          ~kern,
-          s,
-          x,
-          l,
-          Ledgers.State.get(~Machine.Q(mach), l, Lie.slot(x)),
-          {==}
-        )
-      )(Lies.into.grows(~mach, ~kern, s, rest, l1))
+      )(Lie.keep.grows(~mach, ~kern, s, x, l))(Lies.into.grows(~mach, ~kern, s, rest, l1))
     case Con{Cells.One{Ledgers.Entry.Vote{+b}}, +rest}:
       +l1 = Lie.detect(~mach, ~kern, s, b, l)
       Ledgers.State.grows_trans(
@@ -5758,13 +5757,29 @@ def Lies.grows(
     Lies.into.grows(~mach, ~kern, s, cs, State.ledger(~mach, s))
   )
 
-# a node that takes in what another node sent only grows
-def Take.grows(
+# a node that takes in what another node sent, but for the lies, only grows
+def Take.of.grows(
   ~mach: Machine(),
   ~kern: Kernel(mach),
   +s: Node<Machine.Q(mach)>,
   +t: Ledgers.State(Machine.Q(mach))
-) -> {Node.grows(~mach, s, Node.take(~mach, ~kern, s, t)) == True{}: Bool}:
+) -> {
+  Node.grows(
+    ~mach,
+    s,
+    Take.of(
+      ~mach,
+      ~kern,
+      s,
+      t,
+      Tries.Trie.values(
+        Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+        Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
+      )
+    )
+  )
+    == True{}: Bool
+}:
   +sent = Take.clean(
     ~mach,
     Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, t),
@@ -5774,17 +5789,18 @@ def Take.grows(
   +s1 = State.led(~mach, s, l1)
   +cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, sent)
   +s2 = Take.asks(~mach, ~kern, cs, State.ledger(~mach, s), s1)
-  +new = Tries.Trie.values(
-    Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-    Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
+  +bs = Ballots.of(
+    ~mach,
+    Tries.Trie.values(
+      Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+      Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
+    )
   )
-  +bs = Ballots.of(~mach, new)
-  +s3 = Sealed.take(~mach, ~kern, bs, s2)
   Grows.trans(
     ~mach,
     s,
     s1,
-    Lies.take(~mach, ~kern, s3, new)
+    Sealed.take(~mach, ~kern, bs, s2)
   )(
     Grows.led(
       ~mach,
@@ -5803,20 +5819,30 @@ def Take.grows(
       ~mach,
       s1,
       s2,
-      Lies.take(~mach, ~kern, s3, new)
+      Sealed.take(~mach, ~kern, bs, s2)
     )(
       Take.asks.grows(~mach, ~kern, cs, State.ledger(~mach, s), s1)
-    )(
-      Grows.trans(
-        ~mach,
-        s2,
-        s3,
-        Lies.take(~mach, ~kern, s3, new)
-      )(
-        Each.grows(~mach, ~kern, List.length(&2, Ledgers.Ballot, bs), bs, Pending.of(bs), s2)
-      )(Lies.grows(~mach, ~kern, s3, new))
-    )
+    )(Each.grows(~mach, ~kern, List.length(&2, Ledgers.Ballot, bs), bs, Pending.of(bs), s2))
   )
+
+# a node that takes in what another node sent only grows
+def Take.grows(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  +t: Ledgers.State(Machine.Q(mach))
+) -> {Node.grows(~mach, s, Node.take(~mach, ~kern, s, t)) == True{}: Bool}:
+  +new = Tries.Trie.values(
+    Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+    Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
+  )
+  +s3 = Take.of(~mach, ~kern, s, t, new)
+  Grows.trans(
+    ~mach,
+    s,
+    s3,
+    Lies.take(~mach, ~kern, s3, new)
+  )(Take.of.grows(~mach, ~kern, s, t))(Lies.grows(~mach, ~kern, s3, new))
 
 # that the change of the kernel kern only grows the node of a run
 def Lawful.Grows(mach: Machine(), kern: Kernel(mach)) -> Type:
@@ -6985,15 +7011,13 @@ def Sync.grows(
   +s: Node<Machine.Q(mach)>,
   +t: Ledgers.State(Machine.Q(mach))
 ) -> {Node.grows(~mach, s, Node.sync(~mach, ~Lawful.kernel(mach, lawf), n, s, t)) == True{}: Bool}:
-  +s1 = Node.take(~mach, ~Lawful.kernel(mach, lawf), s, t)
-  +cs = Sync.lines(~mach, s, s1, t)
-  +bs = Ballots.of(
-    ~mach,
-    Tries.Trie.values(
-      Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-      Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
-    )
+  +new = Tries.Trie.values(
+    Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+    Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
   )
+  +s1 = Take.of(~mach, ~Lawful.kernel(mach, lawf), s, t, new)
+  +cs = Sync.lines(~mach, s, s1, t)
+  +bs = Ballots.of(~mach, new)
   +s2 = Node.steps(~mach, ~Lawful.kernel(mach, lawf), n, cs, s1)
   +s3 = Sync.more(
     ~mach,
@@ -7006,19 +7030,20 @@ def Sync.grows(
     Pending.of(bs),
     s2
   )
+  +s4 = Lies.take(~mach, ~Lawful.kernel(mach, lawf), s3, new)
   Grows.trans(
     ~mach,
     s,
     s1,
-    Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s3)
+    Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s4)
   )(
-    Take.grows(~mach, ~Lawful.kernel(mach, lawf), s, t)
+    Take.of.grows(~mach, ~Lawful.kernel(mach, lawf), s, t)
   )(
     Grows.trans(
       ~mach,
       s1,
       s2,
-      Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s3)
+      Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s4)
     )(
       Steps.grows(~mach, ~lawf, n, cs, s1)
     )(
@@ -7026,7 +7051,7 @@ def Sync.grows(
         ~mach,
         s2,
         s3,
-        Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s3)
+        Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s4)
       )(
         More.grows(
           ~mach,
@@ -7039,7 +7064,16 @@ def Sync.grows(
           Pending.of(bs),
           s2
         )
-      )(Adopts.grows(~mach, ~lawf, n, cs, s3))
+      )(
+        Grows.trans(
+          ~mach,
+          s3,
+          s4,
+          Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s4)
+        )(
+          Lies.grows(~mach, ~Lawful.kernel(mach, lawf), s3, new)
+        )(Adopts.grows(~mach, ~lawf, n, cs, s4))
+      )
     )
   )
 
@@ -15610,13 +15644,26 @@ def Take.asks.kept(
     case Con{Cells.Many{}, rest}:
       Take.asks.kept(~mach, ~kern, rest, old, s)
 
-# Node.take keeps the logs
-def Take.kept(
+# what a node takes in, but for the lies, keeps the logs
+def Take.of.kept(
   ~mach: Machine(),
   ~kern: Kernel(mach),
   +s: Node<Machine.Q(mach)>,
   +t: Ledgers.State(Machine.Q(mach))
-) -> Node.Keeps(~mach, s, Node.take(~mach, ~kern, s, t)):
+) -> Node.Keeps(
+  ~mach,
+  s,
+  Take.of(
+    ~mach,
+    ~kern,
+    s,
+    t,
+    Tries.Trie.values(
+      Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+      Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
+    )
+  )
+):
   +sent = Take.clean(
     ~mach,
     Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, t),
@@ -15626,17 +15673,18 @@ def Take.kept(
   +s1 = State.led(~mach, s, l1)
   +cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, sent)
   +s2 = Take.asks(~mach, ~kern, cs, State.ledger(~mach, s), s1)
-  +new = Tries.Trie.values(
-    Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-    Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
+  +bs = Ballots.of(
+    ~mach,
+    Tries.Trie.values(
+      Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+      Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
+    )
   )
-  +bs = Ballots.of(~mach, new)
-  +s3 = Sealed.take(~mach, ~kern, bs, s2)
   Kept.trans(
     ~mach,
     s,
     s1,
-    Lies.take(~mach, ~kern, s3, new),
+    Sealed.take(~mach, ~kern, bs, s2),
     Kept.same(
       ~mach,
       s,
@@ -15659,28 +15707,42 @@ def Take.kept(
       ~mach,
       s1,
       s2,
-      Lies.take(~mach, ~kern, s3, new),
+      Sealed.take(~mach, ~kern, bs, s2),
       Take.asks.kept(~mach, ~kern, cs, State.ledger(~mach, s), s1),
-      Kept.trans(
+      Kept.same(
         ~mach,
         s2,
-        s3,
-        Lies.take(~mach, ~kern, s3, new),
-        Kept.same(
-          ~mach,
-          s2,
-          s3,
-          Each.grows(~mach, ~kern, List.length(&2, Ledgers.Ballot, bs), bs, Pending.of(bs), s2),
-          Each.heads(~mach, ~kern, List.length(&2, Ledgers.Ballot, bs), bs, Pending.of(bs), s2)
-        ),
-        Kept.same(
-          ~mach,
-          s3,
-          Lies.take(~mach, ~kern, s3, new),
-          Lies.grows(~mach, ~kern, s3, new),
-          Heads.led(~mach, s3, Lies.into(~mach, ~kern, s3, new, State.ledger(~mach, s3)))
-        )
+        Sealed.take(~mach, ~kern, bs, s2),
+        Each.grows(~mach, ~kern, List.length(&2, Ledgers.Ballot, bs), bs, Pending.of(bs), s2),
+        Each.heads(~mach, ~kern, List.length(&2, Ledgers.Ballot, bs), bs, Pending.of(bs), s2)
       )
+    )
+  )
+
+# Node.take keeps the logs
+def Take.kept(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  +t: Ledgers.State(Machine.Q(mach))
+) -> Node.Keeps(~mach, s, Node.take(~mach, ~kern, s, t)):
+  +new = Tries.Trie.values(
+    Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+    Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
+  )
+  +s3 = Take.of(~mach, ~kern, s, t, new)
+  Kept.trans(
+    ~mach,
+    s,
+    s3,
+    Lies.take(~mach, ~kern, s3, new),
+    Take.of.kept(~mach, ~kern, s, t),
+    Kept.same(
+      ~mach,
+      s3,
+      Lies.take(~mach, ~kern, s3, new),
+      Lies.grows(~mach, ~kern, s3, new),
+      Heads.led(~mach, s3, Lies.into(~mach, ~kern, s3, new, State.ledger(~mach, s3)))
     )
   )
 
@@ -16844,17 +16906,15 @@ def Sync.kept(
   +s: Node<Machine.Q(mach)>,
   +t: Ledgers.State(Machine.Q(mach))
 ) -> Node.Keeps(~mach, s, Node.sync(~mach, ~Lawful.kernel(mach, lawf), n, s, t)):
-  +s1 = Node.take(~mach, ~Lawful.kernel(mach, lawf), s, t)
-  +cs = Sync.lines(~mach, s, s1, t)
-  +bs = Ballots.of(
-    ~mach,
-    Tries.Trie.values(
-      Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-      Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
-    )
+  +new = Tries.Trie.values(
+    Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+    Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
   )
+  +s1 = Take.of(~mach, ~Lawful.kernel(mach, lawf), s, t, new)
+  +cs = Sync.lines(~mach, s, s1, t)
+  +bs = Ballots.of(~mach, new)
   +s2 = Node.steps(~mach, ~Lawful.kernel(mach, lawf), n, cs, s1)
-  s3 = Sync.more(
+  +s3 = Sync.more(
     ~mach,
     ~Lawful.kernel(mach, lawf),
     List.length(&2, Ledgers.Ballot, bs),
@@ -16865,23 +16925,24 @@ def Sync.kept(
     Pending.of(bs),
     s2
   )
+  +s4 = Lies.take(~mach, ~Lawful.kernel(mach, lawf), s3, new)
   Kept.trans(
     ~mach,
     s,
     s1,
-    Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s3),
-    Take.kept(~mach, ~Lawful.kernel(mach, lawf), s, t),
+    Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s4),
+    Take.of.kept(~mach, ~Lawful.kernel(mach, lawf), s, t),
     Kept.trans(
       ~mach,
       s1,
       s2,
-      Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s3),
+      Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s4),
       Steps.kept(~mach, ~lawf, n, cs, s1),
       Kept.trans(
         ~mach,
         s2,
         s3,
-        Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s3),
+        Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s4),
         More.kept(
           ~mach,
           ~lawf,
@@ -16893,7 +16954,24 @@ def Sync.kept(
           Pending.of(bs),
           s2
         ),
-        Adopts.kept(~mach, ~lawf, n, cs, s3)
+        Kept.trans(
+          ~mach,
+          s3,
+          s4,
+          Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s4),
+          Kept.same(
+            ~mach,
+            s3,
+            s4,
+            Lies.grows(~mach, ~Lawful.kernel(mach, lawf), s3, new),
+            Heads.led(
+              ~mach,
+              s3,
+              Lies.into(~mach, ~Lawful.kernel(mach, lawf), s3, new, State.ledger(~mach, s3))
+            )
+          ),
+          Adopts.kept(~mach, ~lawf, n, cs, s4)
+        )
       )
     )
   )
@@ -17914,40 +17992,6 @@ def Seal.fits_own(seed, x, last, k, n, f):
     u => Ledgers.Ballot.sealed(Seals.Seal.public(seed), Ledgers.Ballot.make(seed, x, last, k))
   )(Prev.refl(last))(Ledgers.Ballot.sealed_make(seed, x, last, k))
 
-# Lie.keep_checks once the cell m of the slot of the lie is known
-def Lie.keep.at.checks(
-  ~mach: Machine(),
-  ~kern: Kernel(mach),
-  s: Node<Machine.Q(mach)>,
-  x: Ledgers.Lie,
-  l: Ledgers.State(Machine.Q(mach)),
-  -l2: Ledgers.State(Machine.Q(mach)),
-  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
-) -> {
-  Lie.keep.at(~mach, ~kern, s, x, l, m) == Some{l2}: Maybe<&2, Ledgers.State(Machine.Q(mach))>
-} -> {Lie.checks(~mach, ~kern, s, x) == True{}: Bool}:
-  match m:
-    case Some{c}:
-      e => Empty.absurd(
-        {Lie.checks(~mach, ~kern, s, x) == True{}: Bool},
-        Shared.Maybe.none_ne_some(Ledgers.State(Machine.Q(mach)), l2, e)
-      )
-    case None{}:
-      Shared.Maybe.when_holds(
-        Ledgers.State(Machine.Q(mach)),
-        Lie.checks(~mach, ~kern, s, x),
-        u => Some{
-          Ledgers.State.put(
-            ~Machine.Q(mach),
-            ~Machine.same(mach),
-            l,
-            Lie.slot(x),
-            Ledgers.Entry.Lie{x}
-          )
-        },
-        l2
-      )
-
 # a node keeps only a proof of a lie that it checked: a lie that it keeps
 # checks in it (Lie.checks)
 law Lie.keep_checks:
@@ -17961,7 +18005,96 @@ law Lie.keep_checks:
     -> {Lie.checks(~mach, ~kern, s, x) == True{}: Bool}
 
 def Lie.keep_checks(mach, kern, s, x, l, l2):
-  Lie.keep.at.checks(~mach, ~kern, s, x, l, l2, Ledgers.State.get(~Machine.Q(mach), l, Lie.slot(x)))
+  +s = s
+  e => Shared.List.all.if_rest(
+    Bool.not(Ledgers.State.blames(~Machine.Q(mach), l, Ledgers.Lie.one(x))),
+    u => Lie.checks(~mach, ~kern, s, x)
+  )(
+    Shared.Maybe.when_holds(
+      Ledgers.State(Machine.Q(mach)),
+      Lie.keeps(~mach, ~kern, s, x, l),
+      u => Some{
+        Ledgers.State.put(
+          ~Machine.Q(mach),
+          ~Machine.same(mach),
+          l,
+          Ledgers.Slot.lie(x),
+          Ledgers.Entry.Lie{x}
+        )
+      },
+      l2
+    )(e)
+  )
+
+# a lie that a node keeps is in the slot that its own content names, as one
+# entry. So no lie is kept under the name of another node or store, and two
+# different proofs are never in one slot: honest ledgers do not clash
+law Lie.keep_named:
+  for ~mach: Machine()
+  for ~kern: Kernel(mach)
+  for s: Node<Machine.Q(mach)>
+  for +x: Ledgers.Lie
+  for +l: Ledgers.State(Machine.Q(mach))
+  for l2: Ledgers.State(Machine.Q(mach))
+  {Lie.keep(~mach, ~kern, s, x, l) == Some{l2}: Maybe<&2, Ledgers.State(Machine.Q(mach))>}
+    -> {
+      Ledgers.State.get(
+        ~Machine.Q(mach),
+        l2,
+        Ledgers.Slot.lie(x)
+      )
+        == Some{
+          Cells.One{Ledgers.Entry.Lie{x}}
+        }: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+    }
+
+def Lie.keep_named(mach, kern, s, x, l, l2):
+  +s = s
+  +e =>
+    +h = Shared.Maybe.when_holds(
+      Ledgers.State(Machine.Q(mach)),
+      Lie.keeps(~mach, ~kern, s, x, l),
+      u => Some{
+        Ledgers.State.put(
+          ~Machine.Q(mach),
+          ~Machine.same(mach),
+          l,
+          Ledgers.Slot.lie(x),
+          Ledgers.Entry.Lie{x}
+        )
+      },
+      l2
+    )(e)
+    %Shared.Maybe.some_inj(
+      Ledgers.State(Machine.Q(mach)),
+      Ledgers.State.put(
+        ~Machine.Q(mach),
+        ~Machine.same(mach),
+        l,
+        Ledgers.Slot.lie(x),
+        Ledgers.Entry.Lie{x}
+      ),
+      l2,
+      (
+        %h: {Shared.Maybe.when(Ledgers.State(Machine.Q(mach)), _, u => Some{Ledgers.State.put(~Machine.Q(mach), ~Machine.same(mach), l, Ledgers.Slot.lie(x), Ledgers.Entry.Lie{x})}) == Some{l2}: Maybe<&2, Ledgers.State(Machine.Q(mach))>}
+        e)
+    ): {
+      Ledgers.State.get(
+        ~Machine.Q(mach),
+        _,
+        Ledgers.Slot.lie(x)
+      )
+        == Some{
+          Cells.One{Ledgers.Entry.Lie{x}}
+        }: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+    }
+    Ledgers.State.put_get(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      l,
+      Ledgers.Slot.lie(x),
+      Ledgers.Entry.Lie{x}
+    )(Lie.keeps.lacks(~mach, ~kern, s, x, l)(h))
 
 # the two ballots of a fork are not the same ballot
 def Ballot.forks_differ(
@@ -18052,132 +18185,114 @@ def Lie.checks_sealed(mach, kern, s, key, one, two):
     +kn = Seal.knows(~mach, ~kern, s, Ballot.store(one), Ballot.node(one), Ballot.prev(one), key)
     +s1 = Ledgers.Ballot.sealed(key, one)
     +s2 = Ledgers.Ballot.sealed(key, two)
-    +h1 = Shared.List.all.if_rest(fk, u => List.all.if(v => List.all.if(w => s1, s2), kn))(h)
-    +h2 = Shared.List.all.if_rest(kn, v => List.all.if(w => s1, s2))(h1)
+    +h1 = Shared.List.all.if_rest(fk, u => List.all.if(v => List.all.if(w => s2, s1), kn))(h)
+    +h2 = Shared.List.all.if_rest(kn, v => List.all.if(w => s2, s1))(h1)
     (
-      Shared.List.all.if_hit(kn, v => List.all.if(w => s1, s2))(h1),
+      Shared.List.all.if_hit(kn, v => List.all.if(w => s2, s1))(h1),
       (
-        Shared.List.all.if_rest(s2, w => s1)(h2),
+        Shared.List.all.if_hit(s1, w => s2)(h2),
         (
-          Shared.List.all.if_hit(s2, w => s1)(h2),
+          Shared.List.all.if_rest(s1, w => s2)(h2),
           Ballot.forks_differ(
             one,
             two
-          )(Shared.List.all.if_hit(fk, u => List.all.if(v => List.all.if(w => s1, s2), kn))(h))
+          )(Shared.List.all.if_hit(fk, u => List.all.if(v => List.all.if(w => s2, s1), kn))(h))
         )
       )
     )
 
-# a slot that holds a cell holds one as the ledger grows
-def Held.grows(
+# a ledger that blames the node of a ballot gains no lie that the ballot makes
+def Lie.against.same(
   ~mach: Machine(),
-  l: Ledgers.State(Machine.Q(mach)),
-  l2: Ledgers.State(Machine.Q(mach)),
-  k: List<&2, Bool>,
-  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
-  em: {
-    Ledgers.State.get(
-      ~Machine.Q(mach),
-      l,
-      k
-    )
-      == m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
-  }
+  ~kern: Kernel(mach),
+  s: Node<Machine.Q(mach)>,
+  xs: List<&2, Signing>,
+  b: Ledgers.Ballot,
+  l: Ledgers.State(Machine.Q(mach))
 ) -> {
-  Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, m) == True{}: Bool
-} -> {
-  Ledgers.State.grows(~Machine.Q(mach), ~Machine.same(mach), l, l2) == True{}: Bool
-} -> {
-  Maybe.is_some(
-    &2,
-    Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-    Ledgers.State.get(~Machine.Q(mach), l2, k)
-  )
-    == True{}: Bool
-}:
-  match m:
-    case None{}:
-      e => g => Empty.absurd(
-        {
-          Maybe.is_some(
-            &2,
-            Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-            Ledgers.State.get(~Machine.Q(mach), l2, k)
-          )
-            == True{}: Bool
-        },
-        Shared.Bool.false_ne_true(e)
-      )
-    case Some{c}:
-      e => g =>
-        %Equal.sym(
-          Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
-          Ledgers.State.get(~Machine.Q(mach), l2, k),
-          Some{c},
-          Ledgers.State.held_grows(
-            ~Machine.Q(mach),
-            ~Machine.same(mach),
-            ~Machine.laws(mach),
-            l,
-            l2,
-            k,
-            c
-          )(g)(em)
-        ): {Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, _) == True{}: Bool}
-        {==}
+  Ledgers.State.blames(~Machine.Q(mach), l, b) == True{}: Bool
+} -> {Lie.against(~mach, ~kern, s, xs, b, l) == l: Ledgers.State(Machine.Q(mach))}:
+  match xs:
+    case Nil{}:
+      e => {==}
+    case Con{Signing{k, a}, r}:
+      +e =>
+        %Equal.sym(Bool, Ledgers.State.blames(~Machine.Q(mach), l, b), True{}, e):
+          {
+            Lie.against(
+              ~mach,
+              ~kern,
+              s,
+              r,
+              b,
+              Maybe.default(
+                &2,
+                Ledgers.State(Machine.Q(mach)),
+                Shared.Maybe.when(
+                  Ledgers.State(Machine.Q(mach)),
+                  List.all.if(u => Lie.checks(~mach, ~kern, s, Ledgers.Lie{k, b, a}), Bool.not(_)),
+                  u => Some{
+                    Ledgers.State.put(
+                      ~Machine.Q(mach),
+                      ~Machine.same(mach),
+                      l,
+                      Ledgers.Slot.lie(Ledgers.Lie{k, b, a}),
+                      Ledgers.Entry.Lie{Ledgers.Lie{k, b, a}}
+                    )
+                  }
+                ),
+                l
+              )
+            )
+              == l: Ledgers.State(Machine.Q(mach))
+          }
+        Lie.against.same(~mach, ~kern, s, r, b, l)(e)
 
-# after a lie that checks is kept, or not, its slot holds a cell
-def Lie.keep.at.holds(
+# Lie.keep.blames once whether the ledger blames the node of the lie is
+# known (v)
+def Lie.keep.blames.at(
   ~mach: Machine(),
   ~kern: Kernel(mach),
   s: Node<Machine.Q(mach)>,
   +x: Ledgers.Lie,
-  l: Ledgers.State(Machine.Q(mach)),
-  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
-  em: {
-    Ledgers.State.get(
-      ~Machine.Q(mach),
-      l,
-      Lie.slot(x)
-    )
-      == m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
-  }
+  +l: Ledgers.State(Machine.Q(mach)),
+  v: Bool,
+  ev: {Ledgers.State.blames(~Machine.Q(mach), l, Ledgers.Lie.one(x)) == v: Bool}
 ) -> {
   Lie.checks(~mach, ~kern, s, x) == True{}: Bool
 } -> {
-  Maybe.is_some(
-    &2,
-    Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-    Ledgers.State.get(
-      ~Machine.Q(mach),
-      Maybe.default(&2, Ledgers.State(Machine.Q(mach)), Lie.keep.at(~mach, ~kern, s, x, l, m), l),
-      Lie.slot(x)
-    )
+  Ledgers.State.blames(
+    ~Machine.Q(mach),
+    Maybe.default(
+      &2,
+      Ledgers.State(Machine.Q(mach)),
+      Shared.Maybe.when(
+        Ledgers.State(Machine.Q(mach)),
+        List.all.if(u => Lie.checks(~mach, ~kern, s, x), Bool.not(v)),
+        u => Some{
+          Ledgers.State.put(
+            ~Machine.Q(mach),
+            ~Machine.same(mach),
+            l,
+            Ledgers.Slot.lie(x),
+            Ledgers.Entry.Lie{x}
+          )
+        }
+      ),
+      l
+    ),
+    Ledgers.Lie.one(x)
   )
     == True{}: Bool
 }:
-  match m:
-    case Some{c}:
+  match v:
+    case True{}:
+      ec => ev
+    case False{}:
       ec =>
-        %Equal.sym(
-          Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
-          Ledgers.State.get(~Machine.Q(mach), l, Lie.slot(x)),
-          Some{c},
-          em
-        ): {Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, _) == True{}: Bool}
-        {==}
-    case None{}:
-      ec =>
-        %Equal.sym(
-          Bool,
-          Lie.checks(~mach, ~kern, s, x),
-          True{},
-          ec
-        ): {
-          Maybe.is_some(
-            &2,
-            Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-            Ledgers.State.get(
+        %Equal.sym(Bool, Lie.checks(~mach, ~kern, s, x), True{}, ec):
+          {
+            Ledgers.State.blames(
               ~Machine.Q(mach),
               Maybe.default(
                 &2,
@@ -18190,90 +18305,108 @@ def Lie.keep.at.holds(
                       ~Machine.Q(mach),
                       ~Machine.same(mach),
                       l,
-                      Lie.slot(x),
+                      Ledgers.Slot.lie(x),
                       Ledgers.Entry.Lie{x}
                     )
                   }
                 ),
                 l
               ),
-              Lie.slot(x)
+              Ledgers.Lie.one(x)
             )
-          )
-            == True{}: Bool
-        }
-        %Equal.sym(
-          Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
-          Ledgers.State.get(
+              == True{}: Bool
+          }
+        Ledgers.State.blames_held(
+          ~Machine.Q(mach),
+          Ledgers.State.put(
             ~Machine.Q(mach),
-            Ledgers.State.put(
-              ~Machine.Q(mach),
-              ~Machine.same(mach),
-              l,
-              Lie.slot(x),
-              Ledgers.Entry.Lie{x}
-            ),
-            Lie.slot(x)
+            ~Machine.same(mach),
+            l,
+            Ledgers.Slot.lie(x),
+            Ledgers.Entry.Lie{x}
           ),
-          Some{Cells.One{Ledgers.Entry.Lie{x}}},
+          Ledgers.Lie.one(x),
+          Ledgers.Hash.key(Hashes.Sha.hash(Ledgers.Lie.code(x, []))),
+          Cells.One{Ledgers.Entry.Lie{x}}
+        )(
           Ledgers.State.put_get(
             ~Machine.Q(mach),
             ~Machine.same(mach),
             l,
-            Lie.slot(x),
+            Ledgers.Slot.lie(x),
             Ledgers.Entry.Lie{x}
-          )(em)
-        ): {Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, _) == True{}: Bool}
-        {==}
+          )(
+            Ledgers.State.blames_lacks(
+              ~Machine.Q(mach),
+              l,
+              Ledgers.Lie.one(x),
+              Ledgers.Hash.key(Hashes.Sha.hash(Ledgers.Lie.code(x, [])))
+            )(ev)
+          )
+        )
 
-# when a ballot makes a lie that checks with one of some signings, the slot
-# of the lie then holds a cell
+# after a lie that checks is kept, or not, the ledger blames its node
+def Lie.keep.blames(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  s: Node<Machine.Q(mach)>,
+  +x: Ledgers.Lie,
+  +l: Ledgers.State(Machine.Q(mach))
+) -> {
+  Lie.checks(~mach, ~kern, s, x) == True{}: Bool
+} -> {
+  Ledgers.State.blames(
+    ~Machine.Q(mach),
+    Maybe.default(&2, Ledgers.State(Machine.Q(mach)), Lie.keep(~mach, ~kern, s, x, l), l),
+    Ledgers.Lie.one(x)
+  )
+    == True{}: Bool
+}:
+  Lie.keep.blames.at(
+    ~mach,
+    ~kern,
+    s,
+    x,
+    l,
+    Ledgers.State.blames(~Machine.Q(mach), l, Ledgers.Lie.one(x)),
+    {==}
+  )
+
+# when a ballot makes a lie that checks with one of some signings, the ledger
+# then blames its node
 def Lie.against.holds(
   ~mach: Machine(),
   ~kern: Kernel(mach),
   +s: Node<Machine.Q(mach)>,
   pre: List<&2, Signing>,
-  +post: List<&2, Signing>,
+  post: List<&2, Signing>,
   key: Hashes.Hash,
   a: Ledgers.Ballot,
   +b: Ledgers.Ballot,
   +l: Ledgers.State(Machine.Q(mach))
 ) -> {
-  Lie.checks(~mach, ~kern, s, Ledgers.Lie{key, a, b}) == True{}: Bool
+  Lie.checks(~mach, ~kern, s, Ledgers.Lie{key, b, a}) == True{}: Bool
 } -> {
-  Maybe.is_some(
-    &2,
-    Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-    Ledgers.State.get(
-      ~Machine.Q(mach),
-      Lie.against(~mach, ~kern, s, List.append(&2, Signing, pre, Signing{key, a} <> post), b, l),
-      Ledgers.Slot.lie(Ballot.store(a), Ballot.node(a))
-    )
+  Ledgers.State.blames(
+    ~Machine.Q(mach),
+    Lie.against(~mach, ~kern, s, List.append(&2, Signing, pre, Signing{key, a} <> post), b, l),
+    b
   )
     == True{}: Bool
 }:
   match pre:
     case Nil{}:
-      +x = {Ledgers.Lie{key, a, b}: Ledgers.Lie}
-      +l1 = Maybe.default(&2, Ledgers.State(Machine.Q(mach)), Lie.keep(~mach, ~kern, s, x, l), l)
-      ec => Held.grows(
-        ~mach,
-        l1,
-        Lie.against(~mach, ~kern, s, post, b, l1),
-        Lie.slot(x),
-        Ledgers.State.get(~Machine.Q(mach), l1, Lie.slot(x)),
-        {==}
-      )(
-        Lie.keep.at.holds(
-          ~mach,
-          ~kern,
-          s,
-          x,
-          l,
-          Ledgers.State.get(~Machine.Q(mach), l, Lie.slot(x)),
-          {==}
-        )(ec)
-      )(Lie.against.grows(~mach, ~kern, s, post, b, l1))
+      +x = {Ledgers.Lie{key, b, a}: Ledgers.Lie}
+      l1 = Maybe.default(&2, Ledgers.State(Machine.Q(mach)), Lie.keep(~mach, ~kern, s, x, l), l)
+      ec =>
+        +hb = Lie.keep.blames(~mach, ~kern, s, x, l)(ec)
+        %Equal.sym(
+          Ledgers.State(Machine.Q(mach)),
+          Lie.against(~mach, ~kern, s, post, b, l1),
+          l1,
+          Lie.against.same(~mach, ~kern, s, post, b, l1)(hb)
+        ): {Ledgers.State.blames(~Machine.Q(mach), _, b) == True{}: Bool}
+        hb
     case Con{Signing{k2, a2}, r}:
       Lie.against.holds(
         ~mach,
@@ -18287,7 +18420,7 @@ def Lie.against.holds(
         Maybe.default(
           &2,
           Ledgers.State(Machine.Q(mach)),
-          Lie.keep(~mach, ~kern, s, Ledgers.Lie{k2, a2, b}, l),
+          Lie.keep(~mach, ~kern, s, Ledgers.Lie{k2, b, a2}, l),
           l
         )
       )
@@ -18295,7 +18428,7 @@ def Lie.against.holds(
 # a node sees a lie: when s kept the ballot a after the link of the ballot b
 # as the one that the key signs, s did not keep b there, and the lie that
 # they make checks, the ledger then holds a proof against their node in their
-# store (that lie, or one that it held)
+# store (that lie, or one that it held: State.blames)
 law Lie.detect_holds:
   for ~mach: Machine()
   for ~kern: Kernel(mach)
@@ -18314,18 +18447,9 @@ law Lie.detect_holds:
       == List.append(&2, Signing, pre, Signing{key, a} <> post): List<&2, Signing>
   }
     -> {Signings.has(List.append(&2, Signing, pre, Signing{key, a} <> post), b) == False{}: Bool}
-    -> {Lie.checks(~mach, ~kern, s, Ledgers.Lie{key, a, b}) == True{}: Bool}
+    -> {Lie.checks(~mach, ~kern, s, Ledgers.Lie{key, b, a}) == True{}: Bool}
     -> {
-      Maybe.is_some(
-        &2,
-        Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-        Ledgers.State.get(
-          ~Machine.Q(mach),
-          Lie.detect(~mach, ~kern, s, b, l),
-          Ledgers.Slot.lie(Ballot.store(a), Ballot.node(a))
-        )
-      )
-        == True{}: Bool
+      Ledgers.State.blames(~Machine.Q(mach), Lie.detect(~mach, ~kern, s, b, l), b) == True{}: Bool
     }
 
 def Lie.detect_holds(mach, kern, s, key, a, b, pre, post, l):
@@ -18339,19 +18463,15 @@ def Lie.detect_holds(mach, kern, s, key, a, b, pre, post, l):
       List.append(&2, Signing, pre, Signing{key, a} <> post),
       ex
     ): {
-      Maybe.is_some(
-        &2,
-        Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-        Ledgers.State.get(
-          ~Machine.Q(mach),
-          Shared.Bool.when(
-            Ledgers.State(Machine.Q(mach)),
-            Signings.has(_, b),
-            u => l,
-            u => Lie.against(~mach, ~kern, s, _, b, l)
-          ),
-          Ledgers.Slot.lie(Ballot.store(a), Ballot.node(a))
-        )
+      Ledgers.State.blames(
+        ~Machine.Q(mach),
+        Shared.Bool.when(
+          Ledgers.State(Machine.Q(mach)),
+          Signings.has(_, b),
+          u => l,
+          u => Lie.against(~mach, ~kern, s, _, b, l)
+        ),
+        b
       )
         == True{}: Bool
     }
@@ -18361,26 +18481,22 @@ def Lie.detect_holds(mach, kern, s, key, a, b, pre, post, l):
       False{},
       eh
     ): {
-      Maybe.is_some(
-        &2,
-        Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-        Ledgers.State.get(
-          ~Machine.Q(mach),
-          Shared.Bool.when(
-            Ledgers.State(Machine.Q(mach)),
-            _,
-            u => l,
-            u => Lie.against(
-              ~mach,
-              ~kern,
-              s,
-              List.append(&2, Signing, pre, Signing{key, a} <> post),
-              b,
-              l
-            )
-          ),
-          Ledgers.Slot.lie(Ballot.store(a), Ballot.node(a))
-        )
+      Ledgers.State.blames(
+        ~Machine.Q(mach),
+        Shared.Bool.when(
+          Ledgers.State(Machine.Q(mach)),
+          _,
+          u => l,
+          u => Lie.against(
+            ~mach,
+            ~kern,
+            s,
+            List.append(&2, Signing, pre, Signing{key, a} <> post),
+            b,
+            l
+          )
+        ),
+        b
       )
         == True{}: Bool
     }
@@ -19924,13 +20040,26 @@ def Take.asks.path(
     case Con{Cells.Many{}, rest}:
       Take.asks.path(~mach, ~kern, rest, old, s)
 
-# Node.take is on the paths
-def Take.path(
+# what a node takes in, but for the lies, is on the paths
+def Take.of.path(
   ~mach: Machine(),
   ~kern: Kernel(mach),
   +s: Node<Machine.Q(mach)>,
   +t: Ledgers.State(Machine.Q(mach))
-) -> Node.On(~mach, s, Node.take(~mach, ~kern, s, t)):
+) -> Node.On(
+  ~mach,
+  s,
+  Take.of(
+    ~mach,
+    ~kern,
+    s,
+    t,
+    Tries.Trie.values(
+      Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+      Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
+    )
+  )
+):
   +sent = Take.clean(
     ~mach,
     Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, t),
@@ -19940,17 +20069,18 @@ def Take.path(
   +s1 = State.led(~mach, s, l1)
   +cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, sent)
   +s2 = Take.asks(~mach, ~kern, cs, State.ledger(~mach, s), s1)
-  +new = Tries.Trie.values(
-    Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-    Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
+  +bs = Ballots.of(
+    ~mach,
+    Tries.Trie.values(
+      Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+      Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
+    )
   )
-  +bs = Ballots.of(~mach, new)
-  +s3 = Sealed.take(~mach, ~kern, bs, s2)
   Path.trans(
     ~mach,
     s,
     s1,
-    Lies.take(~mach, ~kern, s3, new),
+    Sealed.take(~mach, ~kern, bs, s2),
     Path.same(
       ~mach,
       s,
@@ -19973,28 +20103,42 @@ def Take.path(
       ~mach,
       s1,
       s2,
-      Lies.take(~mach, ~kern, s3, new),
+      Sealed.take(~mach, ~kern, bs, s2),
       Take.asks.path(~mach, ~kern, cs, State.ledger(~mach, s), s1),
-      Path.trans(
+      Path.same(
         ~mach,
         s2,
-        s3,
-        Lies.take(~mach, ~kern, s3, new),
-        Path.same(
-          ~mach,
-          s2,
-          s3,
-          Each.grows(~mach, ~kern, List.length(&2, Ledgers.Ballot, bs), bs, Pending.of(bs), s2),
-          Each.heads(~mach, ~kern, List.length(&2, Ledgers.Ballot, bs), bs, Pending.of(bs), s2)
-        ),
-        Path.same(
-          ~mach,
-          s3,
-          Lies.take(~mach, ~kern, s3, new),
-          Lies.grows(~mach, ~kern, s3, new),
-          Heads.led(~mach, s3, Lies.into(~mach, ~kern, s3, new, State.ledger(~mach, s3)))
-        )
+        Sealed.take(~mach, ~kern, bs, s2),
+        Each.grows(~mach, ~kern, List.length(&2, Ledgers.Ballot, bs), bs, Pending.of(bs), s2),
+        Each.heads(~mach, ~kern, List.length(&2, Ledgers.Ballot, bs), bs, Pending.of(bs), s2)
       )
+    )
+  )
+
+# Node.take is on the paths
+def Take.path(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  +t: Ledgers.State(Machine.Q(mach))
+) -> Node.On(~mach, s, Node.take(~mach, ~kern, s, t)):
+  +new = Tries.Trie.values(
+    Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+    Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
+  )
+  +s3 = Take.of(~mach, ~kern, s, t, new)
+  Path.trans(
+    ~mach,
+    s,
+    s3,
+    Lies.take(~mach, ~kern, s3, new),
+    Take.of.path(~mach, ~kern, s, t),
+    Path.same(
+      ~mach,
+      s3,
+      Lies.take(~mach, ~kern, s3, new),
+      Lies.grows(~mach, ~kern, s3, new),
+      Heads.led(~mach, s3, Lies.into(~mach, ~kern, s3, new, State.ledger(~mach, s3)))
     )
   )
 
@@ -20261,17 +20405,15 @@ def Sync.path(
   +s: Node<Machine.Q(mach)>,
   +t: Ledgers.State(Machine.Q(mach))
 ) -> Node.On(~mach, s, Node.sync(~mach, ~Lawful.kernel(mach, lawf), n, s, t)):
-  +s1 = Node.take(~mach, ~Lawful.kernel(mach, lawf), s, t)
-  +cs = Sync.lines(~mach, s, s1, t)
-  +bs = Ballots.of(
-    ~mach,
-    Tries.Trie.values(
-      Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-      Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
-    )
+  +new = Tries.Trie.values(
+    Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+    Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
   )
+  +s1 = Take.of(~mach, ~Lawful.kernel(mach, lawf), s, t, new)
+  +cs = Sync.lines(~mach, s, s1, t)
+  +bs = Ballots.of(~mach, new)
   +s2 = Node.steps(~mach, ~Lawful.kernel(mach, lawf), n, cs, s1)
-  s3 = Sync.more(
+  +s3 = Sync.more(
     ~mach,
     ~Lawful.kernel(mach, lawf),
     List.length(&2, Ledgers.Ballot, bs),
@@ -20282,23 +20424,24 @@ def Sync.path(
     Pending.of(bs),
     s2
   )
+  +s4 = Lies.take(~mach, ~Lawful.kernel(mach, lawf), s3, new)
   Path.trans(
     ~mach,
     s,
     s1,
-    Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s3),
-    Take.path(~mach, ~Lawful.kernel(mach, lawf), s, t),
+    Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s4),
+    Take.of.path(~mach, ~Lawful.kernel(mach, lawf), s, t),
     Path.trans(
       ~mach,
       s1,
       s2,
-      Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s3),
+      Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s4),
       Steps.path(~mach, ~lawf, n, cs, s1),
       Path.trans(
         ~mach,
         s2,
         s3,
-        Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s3),
+        Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s4),
         More.path(
           ~mach,
           ~lawf,
@@ -20310,7 +20453,24 @@ def Sync.path(
           Pending.of(bs),
           s2
         ),
-        Adopts.path(~mach, ~lawf, n, cs, s3)
+        Path.trans(
+          ~mach,
+          s3,
+          s4,
+          Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s4),
+          Path.same(
+            ~mach,
+            s3,
+            s4,
+            Lies.grows(~mach, ~Lawful.kernel(mach, lawf), s3, new),
+            Heads.led(
+              ~mach,
+              s3,
+              Lies.into(~mach, ~Lawful.kernel(mach, lawf), s3, new, State.ledger(~mach, s3))
+            )
+          ),
+          Adopts.path(~mach, ~lawf, n, cs, s4)
+        )
       )
     )
   )

@@ -253,50 +253,44 @@ def Slot.pass(w: Where, n: String) -> List<&2, Bool>:
 def Slot.lies(r: Id) -> List<&2, Bool>:
   True{} <> False{} <> Id.key(r)
 
-# the slot of the proof that the node n lied in the store r: one for each node
-# in each store
-def Slot.lie(r: Id, n: String) -> List<&2, Bool>:
+# the start of the slots of the lies of the node n in the store r
+def Slot.liar(r: Id, n: String) -> List<&2, Bool>:
   List.append(&2, Bool, Slot.lies(r), Tries.Trie.text(n))
 
-# the slot of the data whose hash is h
-def Slot.data(h: Hashes.Hash) -> List<&2, Bool>:
+# the key of the hash h: its 256 bits
+def Hash.key(h: Hashes.Hash) -> List<&2, Bool>:
   match h:
     case Hashes.Hash{a, b, c, d, e, f, g, i}:
-      True{}
-        <> True{}
-        <> True{}
-        <> True{}
-        <> List.append(
+      List.append(
+        &2,
+        Bool,
+        Word.key(a),
+        List.append(
           &2,
           Bool,
-          Word.key(a),
+          Word.key(b),
           List.append(
             &2,
             Bool,
-            Word.key(b),
+            Word.key(c),
             List.append(
               &2,
               Bool,
-              Word.key(c),
+              Word.key(d),
               List.append(
                 &2,
                 Bool,
-                Word.key(d),
-                List.append(
-                  &2,
-                  Bool,
-                  Word.key(e),
-                  List.append(
-                    &2,
-                    Bool,
-                    Word.key(f),
-                    List.append(&2, Bool, Word.key(g), Word.key(i))
-                  )
-                )
+                Word.key(e),
+                List.append(&2, Bool, Word.key(f), List.append(&2, Bool, Word.key(g), Word.key(i)))
               )
             )
           )
         )
+      )
+
+# the slot of the data whose hash is h
+def Slot.data(h: Hashes.Hash) -> List<&2, Bool>:
+  True{} <> True{} <> True{} <> True{} <> Hash.key(h)
 
 # a and b are the same request
 def Id.is_eq(a: Id, b: Id) -> Bool:
@@ -869,6 +863,24 @@ def Lie.is_eq(a: Lie, b: Lie) -> Bool:
 def Lie.laws() -> Shared.Eq.Laws(Lie, Lie.is_eq):
   Codes.Code.eq_laws(~Lie, ~Lie.codec())
 
+# the first ballot of the lie l
+def Lie.one(l: Lie) -> Ballot:
+  match l:
+    case Lie{k, a, b}:
+      a
+
+# the start of the slots of the lies of the node of the ballot b in its store
+def Ballot.liar(b: Ballot) -> List<&2, Bool>:
+  match b:
+    case Ballot{Signed{Where{Chain{r, c}, h, z}, n, a}, l}:
+      Slot.liar(r, n)
+
+# the slot of the lie l: below the lies of the node of its first ballot, the
+# hash of its code. Its own content names it, as for data: two proofs against
+# one node are in two slots, and the same proof is one cell
+def Slot.lie(+l: Lie) -> List<&2, Bool>:
+  List.append(&2, Bool, Ballot.liar(Lie.one(l)), Hash.key(Hashes.Sha.hash(Lie.code(l, []))))
+
 # the step that the ballot b is for
 def Ballot.vote(b: Ballot) -> Maybe<&2, Vote>:
   match b:
@@ -1378,8 +1390,113 @@ def Passed.of(~Q: Data, m: Maybe<&2, Cells.Cell<Entry<Q>>>) -> Maybe<&2, Maybe<&
 def State.passed(~Q: Data, s: State(Q), w: Where, n: String) -> Maybe<&2, Maybe<&2, Last>>:
   Passed.of(~Q, State.get(~Q, s, Slot.pass(w, n)))
 
+# s holds a proof that the node of the ballot b lied in its store: a cell
+# below the lies of that node. It reads one key, whatever s holds
+def State.blames(~Q: Data, s: State(Q), b: Ballot) -> Bool:
+  Bool.not(Tries.Trie.is_tip(Cells.Cell<Entry<Q>>, State.under(~Q, s, Ballot.liar(b))))
+
 # Laws
 # ----
+
+# a part of a ledger that is a tip holds no cell
+def Under.lacks(
+  ~Q: Data,
+  u: State(Q),
+  k: List<&2, Bool>
+) -> {
+  Bool.not(Tries.Trie.is_tip(Cells.Cell<Entry<Q>>, u)) == False{}: Bool
+} -> {State.get(~Q, u, k) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>}:
+  match u:
+    case Tries.Tip{}:
+      e => {==}
+    case Tries.Leaf{p, v}:
+      e => Empty.absurd(
+        {State.get(~Q, Tries.Leaf{p, v}, k) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>},
+        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, e))
+      )
+    case Tries.Bin{h, z, o}:
+      e => Empty.absurd(
+        {State.get(~Q, Tries.Bin{h, z, o}, k) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>},
+        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, e))
+      )
+
+# a part of a ledger that holds a cell is not a tip
+def Under.held(
+  ~Q: Data,
+  u: State(Q),
+  k: List<&2, Bool>,
+  -c: Cells.Cell<Entry<Q>>
+) -> {
+  State.get(~Q, u, k) == Some{c}: Maybe<&2, Cells.Cell<Entry<Q>>>
+} -> {Bool.not(Tries.Trie.is_tip(Cells.Cell<Entry<Q>>, u)) == True{}: Bool}:
+  match u:
+    case Tries.Tip{}:
+      e => Empty.absurd(
+        {False{} == True{}: Bool},
+        Shared.Maybe.none_ne_some(Cells.Cell<Entry<Q>>, c, e)
+      )
+    case Tries.Leaf{p, v}:
+      e => {==}
+    case Tries.Bin{h, z, o}:
+      e => {==}
+
+# a ledger that does not blame the node of a ballot holds no cell below the
+# lies of that node
+def State.blames_lacks(
+  ~Q: Data,
+  +s: State(Q),
+  +b: Ballot,
+  +k: List<&2, Bool>
+) -> {
+  State.blames(~Q, s, b) == False{}: Bool
+} -> {
+  State.get(
+    ~Q,
+    s,
+    List.append(&2, Bool, Ballot.liar(b), k)
+  )
+    == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>
+}:
+  e =>
+    %Tries.Trie.get_under(
+      Cells.Cell<Entry<Q>>,
+      s,
+      Ballot.liar(b),
+      k
+    ): {_ == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>}
+    Under.lacks(~Q, State.under(~Q, s, Ballot.liar(b)), k)(e)
+
+# a ledger that holds a cell below the lies of the node of a ballot blames
+# that node
+def State.blames_held(
+  ~Q: Data,
+  +s: State(Q),
+  +b: Ballot,
+  +k: List<&2, Bool>,
+  -c: Cells.Cell<Entry<Q>>
+) -> {
+  State.get(
+    ~Q,
+    s,
+    List.append(&2, Bool, Ballot.liar(b), k)
+  )
+    == Some{c}: Maybe<&2, Cells.Cell<Entry<Q>>>
+} -> {State.blames(~Q, s, b) == True{}: Bool}:
+  e => Under.held(
+    ~Q,
+    State.under(~Q, s, Ballot.liar(b)),
+    k,
+    c
+  )(
+    Equal.trans(
+      Maybe<&2, Cells.Cell<Entry<Q>>>,
+      State.get(~Q, State.under(~Q, s, Ballot.liar(b)), k),
+      State.get(~Q, s, List.append(&2, Bool, Ballot.liar(b), k)),
+      Some{c},
+      Tries.Trie.get_under(Cells.Cell<Entry<Q>>, s, Ballot.liar(b), k),
+      e
+    )
+  )
 
 # a sync is the same either way round
 law State.join_comm:
