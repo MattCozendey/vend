@@ -3967,20 +3967,6 @@ def Merge.all.takes(
         )
       )
 
-# a root, or none, is the same as itself
-def Roots.same_refl(m: Maybe<&2, Ropes.Root>) -> {Spec.Roots.same(m, m) == True{}: Bool}:
-  match m:
-    case None{}:
-      {==}
-    case Some{Ropes.Root{d, hh}}:
-      %Equal.sym(
-        Bool,
-        Nat.is_eq(d, d),
-        True{},
-        Shared.Nat.is_eq_refl(d)
-      ): {Bool.and(_, Hashes.Hash.is_eq(hh, hh)) == True{}: Bool}
-      Hashes.Hash.is_eq_refl(hh)
-
 # a resource that rest holds, Names.put keeps
 def Names.put_keeps(
   m: Maybe<&2, Resources.Name>,
@@ -4448,20 +4434,6 @@ def Names.side_right(
       )
     )
 
-# two values of a key that Some makes the same are the same
-def Words.inj(
-  -a: List<&2, U32>,
-  -b: List<&2, U32>
-) -> {Some{a} == Some{b}: Maybe<&2, List<&2, U32>>} -> {a == b: List<&2, U32>}:
-  e => Equal.cong(
-    Maybe<&2, List<&2, U32>>,
-    List<&2, U32>,
-    v => Maybe.default(&2, List<&2, U32>, v, []),
-    Some{a},
-    Some{b},
-    e
-  )
-
 # Merge.names_complete when both trees read the resource, as wa and wb, once
 # the roots ra and rb that they hold are known
 def Complete.both(
@@ -4515,13 +4487,13 @@ def Complete.both(
     case Some{x} y:
       Names.side(s, h, ht, n, wa)(ega)(
         ep =>
-          +ew = Words.inj(wb, wa)(Equal.trans(Maybe<&2, List<&2, U32>>, Some{wb}, Replicas.Node.get(~Requests.Ask.machine(), s, ht, Spec.Key.res(n)), Some{wa}, Equal.sym(Maybe<&2, List<&2, U32>>, Replicas.Node.get(~Requests.Ask.machine(), s, ht, Spec.Key.res(n)), Some{wb}, egb), ep))
+          +ew = Shared.Maybe.some_inj(List<&2, U32>, wb, wa, Equal.trans(Maybe<&2, List<&2, U32>>, Some{wb}, Replicas.Node.get(~Requests.Ask.machine(), s, ht, Spec.Key.res(n)), Some{wa}, Equal.sym(Maybe<&2, List<&2, U32>>, Replicas.Node.get(~Requests.Ask.machine(), s, ht, Spec.Key.res(n)), Some{wb}, egb), ep))
           +erx = Equal.trans(Maybe<&2, Ropes.Root>, y, Spec.Res.read(wa), Some{x}, (%ew: {y == Spec.Res.read(_): Maybe<&2, Ropes.Root>}; Equal.sym(Maybe<&2, Ropes.Root>, Spec.Res.read(wb), y, erb)), era)
-          Empty.absurd(Empty, Shared.Bool.false_ne_true(Equal.trans(Bool, False{}, Spec.Roots.same(Some{x}, y), True{}, Equal.sym(Bool, Spec.Roots.same(Some{x}, y), False{}, e), (%Equal.sym(Maybe<&2, Ropes.Root>, y, Some{x}, erx): {Spec.Roots.same(Some{x}, _) == True{}: Bool}; Roots.same_refl(Some{x}))))))((%Equal.sym(Maybe<&2, Ropes.Root>, Spec.Res.read(wa), Some{x}, era): {Maybe.is_some(&2, Ropes.Root, _) == True{}: Bool}; {==}))
+          Empty.absurd(Empty, Shared.Bool.false_ne_true(Equal.trans(Bool, False{}, Spec.Roots.same(Some{x}, y), True{}, Equal.sym(Bool, Spec.Roots.same(Some{x}, y), False{}, e), (%Equal.sym(Maybe<&2, Ropes.Root>, y, Some{x}, erx): {Spec.Roots.same(Some{x}, _) == True{}: Bool}; Shared.Maybe.is_eq_refl(~Ropes.Root, ~Ropes.Root.is_eq, ~Ropes.Root.laws(), Some{x}))))))((%Equal.sym(Maybe<&2, Ropes.Root>, Spec.Res.read(wa), Some{x}, era): {Maybe.is_some(&2, Ropes.Root, _) == True{}: Bool}; {==}))
     case None{} Some{y}:
       Names.side_right(s, h, ht, n, wb)(egb)(
         ep =>
-          +ew = Words.inj(wa, wb)(Equal.trans(Maybe<&2, List<&2, U32>>, Some{wa}, Replicas.Node.get(~Requests.Ask.machine(), s, h, Spec.Key.res(n)), Some{wb}, Equal.sym(Maybe<&2, List<&2, U32>>, Replicas.Node.get(~Requests.Ask.machine(), s, h, Spec.Key.res(n)), Some{wa}, ega), ep))
+          +ew = Shared.Maybe.some_inj(List<&2, U32>, wa, wb, Equal.trans(Maybe<&2, List<&2, U32>>, Some{wa}, Replicas.Node.get(~Requests.Ask.machine(), s, h, Spec.Key.res(n)), Some{wb}, Equal.sym(Maybe<&2, List<&2, U32>>, Replicas.Node.get(~Requests.Ask.machine(), s, h, Spec.Key.res(n)), Some{wa}, ega), ep))
           Shared.Maybe.none_ne_some(Ropes.Root, y, Equal.trans(Maybe<&2, Ropes.Root>, None{}, Spec.Res.read(wa), Some{y}, Equal.sym(Maybe<&2, Ropes.Root>, Spec.Res.read(wa), None{}, era), (%Equal.sym(List<&2, U32>, wa, wb, ew): {Spec.Res.read(_) == Some{y}: Maybe<&2, Ropes.Root>}; erb))))((%Equal.sym(Maybe<&2, Ropes.Root>, Spec.Res.read(wb), Some{y}, erb): {Maybe.is_some(&2, Ropes.Root, _) == True{}: Bool}; {==}))
     case None{} None{}:
       Empty.absurd(
@@ -5462,7 +5434,7 @@ def Spec.Judge.write_reads(s, n, base, c, h, h2, s3, m):
   e => ec =>
     Write.took(s, n, base, c, h, h2, s3, {Spec.Res.root(s3, h2, n) == m: Maybe<&2, Ropes.Root>})(e)(
       +m1 => em1 => es =>
-        +same = Equal.cong(Maybe<&2, Maybe<&2, Ropes.Root>>, Maybe<&2, Ropes.Root>, v => Maybe.default(&2, Maybe<&2, Ropes.Root>, v, None{}), Some{m1}, Some{m}, Equal.trans(Maybe<&2, Maybe<&2, Ropes.Root>>, Some{m1}, Spec.Content.find(s, n, c), Some{m}, Equal.sym(Maybe<&2, Maybe<&2, Ropes.Root>>, Spec.Content.find(s, n, c), Some{m1}, em1), ec))
+        +same = Shared.Maybe.some_inj(Maybe<&2, Ropes.Root>, m1, m, Equal.trans(Maybe<&2, Maybe<&2, Ropes.Root>>, Some{m1}, Spec.Content.find(s, n, c), Some{m}, Equal.sym(Maybe<&2, Maybe<&2, Ropes.Root>>, Spec.Content.find(s, n, c), Some{m1}, em1), ec))
         %Equal.sym(Maybe<&2, List<&2, U32>>, Replicas.Node.get(~Requests.Ask.machine(), s3, h2, Spec.Key.res(n)), Some{Spec.Res.code(m1)}, Replicas.Set.reads(~Requests.Ask.machine(), s, h, Spec.Key.res(n), Spec.Res.code(m1), Replicas.Node.set(~Requests.Ask.machine(), s, h, Spec.Key.res(n), Spec.Res.code(m1)), h2, s3)({==})(es)): {Maybe.bind(&2, List<&2, U32>, Ropes.Root, _, ws => Spec.Res.read(ws)) == m: Maybe<&2, Ropes.Root>}
         Equal.trans(Maybe<&2, Ropes.Root>, Spec.Res.read(Spec.Res.code(m1)), m1, m, Res.round(m1), same))
 # Merges
