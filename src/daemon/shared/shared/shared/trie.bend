@@ -132,19 +132,22 @@ def Trie.set(-V: Data, t: Trie<V>, k: List<&2, Bool>, v: V) -> Trie<V>:
     case Bin{h, z, o} Con{True{}, r}:
       Bin{h, z, Trie.set(V, o, r, v)}
 
-# the values of t, in the order of their keys
-def Trie.values(-V: Data, t: Trie<V>) -> List<&2, V>:
+# the values of t, in the order of their keys, then rest: each value is put
+# once, so the walk is linear in the entries
+def Trie.values.go(-V: Data, t: Trie<V>, rest: List<&2, V>) -> List<&2, V>:
   match t:
     case Tip{}:
-      []
+      rest
     case Leaf{k, v}:
-      [v]
+      v <> rest
     case Bin{None{}, z, o}:
-      zs os = Trie.values(V, z) Trie.values(V, o)
-      List.append(&2, V, zs, os)
+      Trie.values.go(V, z, Trie.values.go(V, o, rest))
     case Bin{Some{v}, z, o}:
-      zs os = Trie.values(V, z) Trie.values(V, o)
-      v <> List.append(&2, V, zs, os)
+      v <> Trie.values.go(V, z, Trie.values.go(V, o, rest))
+
+# the values of t, in the order of their keys
+def Trie.values(-V: Data, t: Trie<V>) -> List<&2, V>:
+  Trie.values.go(V, t, [])
 
 # the number of entries of t
 def Trie.size(-V: Data, t: Trie<V>) -> Nat:
@@ -253,17 +256,18 @@ def Trie.text(t: String) -> List<&2, Bool>:
     case SCon{Chr{x}, r}:
       True{} <> List.append(&2, Bool, Trie.char(x), Trie.text(r))
 
-# Keys of numbers
-# ---------------
+# Highest keys
+# ------------
 # Keys of a fixed width, read high bit first, are ordered as numbers: one is
-# after zero.
+# after zero. A descent finds the highest key whose entries a test accepts,
+# in the width's number of steps when the test accepts at the top.
 
 # the n bits of x, highest first
 def Trie.word(n: Nat, x: U32) -> List<&2, Bool>:
   List.reverse(&2, Bool, Trie.bits(n, x))
 
-# Entries under a key of a leaf
-# ------------------------------
+# Laws of highest keys
+# --------------------
 
 # the entries under False <> q of a leaf are those under q of its zero part
 def Trie.under_zero(
@@ -294,6 +298,15 @@ def Trie.under_one_part(
       {==}
     case Con{True{}, r}:
       {==}
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # Unions
 # ------
@@ -3692,6 +3705,24 @@ def Trie.union_minus(ty, join, same, idem, laws, s, r):
 # Sizes and keys apart
 # --------------------
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
 # Trie.get_under for an entry
 def Trie.get_under.leaf(
   -V: Data,
@@ -3748,8 +3779,10 @@ def Trie.get_under(
 # ---------
 # A check that holds at each key of one trie, or between what two tries hold
 # at each key, is a check of the tries: what it says of every key follows
-# (Trie.all_get, Trie.all2_get), and it lasts below a key (Trie.all_under,
-# Trie.all2_under).
+# (Trie.all_get, Trie.all2_get), it follows from what holds at every key
+# (Trie.all_of_get, Trie.all2_of_get), and it lasts below a key
+# (Trie.all_under, Trie.all2_under). So a law about a check needs no walk of
+# its own when its premises say what holds at every key.
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a check, or a proof, keeps each and as one value for the proofs to split on
 # bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run, so it gains nothing from a fork
@@ -3879,7 +3912,7 @@ def Trie.all_get(
       e => pn
     case Leaf{k0, v} q:
       e => Trie.all_get.leaf(~V, ~p, v, pn, e, Trie.same_key(q, k0))
-    case Bin{h, +z, +o} Nil{}:
+    case Bin{h, +z, o} Nil{}:
       e => Shared.Bool.and_true_left(p(h), Bool.and(Trie.all(~V, ~p, z), Trie.all(~V, ~p, o)))(e)
     case Bin{+h, +z, +o} Con{False{}, q}:
       e => Trie.all_get(
@@ -3888,12 +3921,7 @@ def Trie.all_get(
         pn,
         z,
         q
-      )(
-        Shared.Bool.and_true_left(
-          Trie.all(~V, ~p, z),
-          Trie.all(~V, ~p, o)
-        )(Shared.Bool.and_true_right(p(h), Bool.and(Trie.all(~V, ~p, z), Trie.all(~V, ~p, o)))(e))
-      )
+      )(Shared.Bool.and_second(p(h), Trie.all(~V, ~p, z), Trie.all(~V, ~p, o))(e))
     case Bin{+h, +z, +o} Con{True{}, q}:
       e => Trie.all_get(
         ~V,
@@ -3901,11 +3929,35 @@ def Trie.all_get(
         pn,
         o,
         q
-      )(
-        Shared.Bool.and_true_right(
-          Trie.all(~V, ~p, z),
-          Trie.all(~V, ~p, o)
-        )(Shared.Bool.and_true_right(p(h), Bool.and(Trie.all(~V, ~p, z), Trie.all(~V, ~p, o)))(e))
+      )(Shared.Bool.and_third(p(h), Trie.all(~V, ~p, z), Trie.all(~V, ~p, o))(e))
+
+# p holds of what t holds at every key
+def Trie.AllAt(~V: Data, ~p: Maybe<&2, V> -> Bool, t: Trie<V>) -> Type:
+  @k: List<&2, Bool> -> {p(Trie.get(V, t, k)) == True{}: Bool}
+
+# p holds of t when it holds at every key: the converse of Trie.all_get
+def Trie.all_of_get(
+  ~V: Data,
+  ~p: Maybe<&2, V> -> Bool,
+  t: Trie<V>,
+  f: Trie.AllAt(~V, ~p, t)
+) -> {Trie.all(~V, ~p, t) == True{}: Bool}:
+  match t:
+    case Tip{}:
+      {==}
+    case Leaf{+k, v}:
+      %Trie.get_one(V, k, v): {p(_) == True{}: Bool}
+      f(k)
+    case Bin{h, +z, o}:
+      Shared.Bool.and_each(
+        Trie.AllAt(~V, ~p, Bin{h, z, o}),
+        p(h),
+        Trie.all(~V, ~p, z),
+        Trie.all(~V, ~p, o),
+        f,
+        g => g([]),
+        g => Trie.all_of_get(~V, ~p, z, q => g(False{} <> q)),
+        g => Trie.all_of_get(~V, ~p, o, q => g(True{} <> q))
       )
 
 # a trie where p holds only of no entry is empty
@@ -3996,118 +4048,29 @@ def Trie.all2_node.bin(
     case Con{True{}, q}:
       {==}
 
-# the check of two leaves is the check of their nodes
-def Trie.all2_node.leaf(
+# an entry that left holds of: r holds of its value and no entry
+def Trie.all2_get.only(
   ~V: Data,
   ~W: Data,
   ~r: Maybe<&2, V> -> Maybe<&2, W> -> Bool,
   ~left: Trie<V> -> Bool,
-  k: List<&2, Bool>,
-  -v: V,
-  p: List<&2, Bool>,
-  -w: W
-) -> {
-  Bool.and(
-    r(Trie.at.here(V, k, v), Trie.at.here(W, p, w)),
-    Bool.and(
-      Trie.all2(~V, ~W, ~r, ~left, Trie.at.zero(V, k, v), Trie.at.zero(W, p, w)),
-      Trie.all2(~V, ~W, ~r, ~left, Trie.at.one(V, k, v), Trie.at.one(W, p, w))
-    )
-  )
-    == Trie.all2(~V, ~W, ~r, ~left, Leaf{k, v}, Leaf{p, w}): Bool
-}:
-  match k p:
-    case Nil{} Nil{}:
-      {==}
-    case Nil{} Con{False{}, q2}:
-      {==}
-    case Nil{} Con{True{}, q2}:
-      {==}
-    case Con{False{}, q} Nil{}:
-      {==}
-    case Con{False{}, q} Con{False{}, q2}:
-      {==}
-    case Con{False{}, q} Con{True{}, q2}:
-      {==}
-    case Con{True{}, q} Nil{}:
-      {==}
-    case Con{True{}, q} Con{False{}, q2}:
-      {==}
-    case Con{True{}, q} Con{True{}, q2}:
-      {==}
-
-# Trie.all2_get at a node, from its parts
-def Trie.all2_get.node(
-  ~V: Data,
-  ~W: Data,
-  ~r: Maybe<&2, V> -> Maybe<&2, W> -> Bool,
-  ~left: Trie<V> -> Bool,
-  h1: Maybe<&2, V>,
-  +z1: Trie<V>,
-  +o1: Trie<V>,
-  h2: Maybe<&2, W>,
-  +z2: Trie<W>,
-  +o2: Trie<W>,
-  k: List<&2, Bool>,
-  ihz: @q: List<
+  ~lget: @t: Trie<
+    V> -> @k: List<
     &2,
-    Bool> -> {
-    Trie.all2(~V, ~W, ~r, ~left, z1, z2) == True{}: Bool
-  } -> {r(Trie.get(V, z1, q), Trie.get(W, z2, q)) == True{}: Bool},
-  iho: @q: List<
-    &2,
-    Bool> -> {
-    Trie.all2(~V, ~W, ~r, ~left, o1, o2) == True{}: Bool
-  } -> {r(Trie.get(V, o1, q), Trie.get(W, o2, q)) == True{}: Bool}
-) -> {
-  Bool.and(
-    r(h1, h2),
-    Bool.and(Trie.all2(~V, ~W, ~r, ~left, z1, z2), Trie.all2(~V, ~W, ~r, ~left, o1, o2))
-  )
-    == True{}: Bool
-} -> {r(Trie.get(V, Bin{h1, z1, o1}, k), Trie.get(W, Bin{h2, z2, o2}, k)) == True{}: Bool}:
-  match k:
-    case Nil{}:
-      e => Shared.Bool.and_true_left(
-        r(h1, h2),
-        Bool.and(Trie.all2(~V, ~W, ~r, ~left, z1, z2), Trie.all2(~V, ~W, ~r, ~left, o1, o2))
-      )(e)
-    case Con{False{}, q}:
-      e => ihz(
-        q
-      )(
-        Shared.Bool.and_true_left(
-          Trie.all2(~V, ~W, ~r, ~left, z1, z2),
-          Trie.all2(~V, ~W, ~r, ~left, o1, o2)
-        )(
-          Shared.Bool.and_true_right(
-            r(h1, h2),
-            Bool.and(Trie.all2(~V, ~W, ~r, ~left, z1, z2), Trie.all2(~V, ~W, ~r, ~left, o1, o2))
-          )(e)
-        )
-      )
-    case Con{True{}, q}:
-      e => iho(
-        q
-      )(
-        Shared.Bool.and_true_right(
-          Trie.all2(~V, ~W, ~r, ~left, z1, z2),
-          Trie.all2(~V, ~W, ~r, ~left, o1, o2)
-        )(
-          Shared.Bool.and_true_right(
-            r(h1, h2),
-            Bool.and(Trie.all2(~V, ~W, ~r, ~left, z1, z2), Trie.all2(~V, ~W, ~r, ~left, o1, o2))
-          )(e)
-        )
-      )
+    Bool> -> {left(t) == True{}: Bool} -> {r(Trie.get(V, t, k), None{}) == True{}: Bool},
+  +k: List<&2, Bool>,
+  +v: V
+) -> {left(Leaf{k, v}) == True{}: Bool} -> {r(Some{v}, None{}) == True{}: Bool}:
+  e =>
+    %Trie.get_one(V, k, v): {r(_, None{}) == True{}: Bool}
+    lget(Leaf{k, v})(k)(e)
 
-# Trie.all2_get for two entries
+# Trie.all2_get for two entries, at the key of the first
 def Trie.all2_get.fork(
   ~V: Data,
   ~W: Data,
   ~r: Maybe<&2, V> -> Maybe<&2, W> -> Bool,
   ~left: Trie<V> -> Bool,
-  ~rn: @y: Maybe<&2, W> -> {r(None{}, y) == True{}: Bool},
   ~lget: @t: Trie<
     V> -> @k: List<
     &2,
@@ -4115,251 +4078,142 @@ def Trie.all2_get.fork(
   k1: List<&2, Bool>,
   +v: V,
   p: List<&2, Bool>,
-  +w: W,
-  +k: List<&2, Bool>
+  +w: W
 ) -> {
   Trie.all2.fork(~V, ~W, ~r, ~left, k1, v, p, w) == True{}: Bool
-} -> {r(Trie.get(V, Leaf{k1, v}, k), Trie.get(W, Leaf{p, w}, k)) == True{}: Bool}:
+} -> {r(Some{v}, Trie.get(W, Leaf{p, w}, k1)) == True{}: Bool}:
   match k1 p:
     case Nil{} Nil{}:
-      e =>
-        %Trie.get_node(V, [], v, k): {r(_, Trie.get(W, Leaf{[], w}, k)) == True{}: Bool}
-        %Trie.get_node(
-          W,
-          [],
-          w,
-          k
-        ): {r(Trie.get(V, Bin{Some{v}, Tip{}, Tip{}}, k), _) == True{}: Bool}
-        Trie.all2_get.node(
-          ~V,
-          ~W,
-          ~r,
-          ~left,
-          Some{v},
-          Tip{},
-          Tip{},
-          Some{w},
-          Tip{},
-          Tip{},
-          k,
-          q => e2 => rn(Trie.get(W, Tip{}, q)),
-          q => e2 => rn(Trie.get(W, Tip{}, q))
-        )(e)
-    case Nil{} Con{False{}, +rp}:
-      e =>
-        %Trie.get_node(V, [], v, k): {r(_, Trie.get(W, Leaf{False{} <> rp, w}, k)) == True{}: Bool}
-        %Trie.get_node(
-          W,
-          False{} <> rp,
-          w,
-          k
-        ): {r(Trie.get(V, Bin{Some{v}, Tip{}, Tip{}}, k), _) == True{}: Bool}
-        Trie.all2_get.node(
-          ~V,
-          ~W,
-          ~r,
-          ~left,
-          Some{v},
-          Tip{},
-          Tip{},
-          None{},
-          Leaf{rp, w},
-          Tip{},
-          k,
-          q => e2 => rn(Trie.get(W, Leaf{rp, w}, q)),
-          q => e2 => rn(Trie.get(W, Tip{}, q))
-        )(e)
-    case Nil{} Con{True{}, +rp}:
-      e =>
-        %Trie.get_node(V, [], v, k): {r(_, Trie.get(W, Leaf{True{} <> rp, w}, k)) == True{}: Bool}
-        %Trie.get_node(
-          W,
-          True{} <> rp,
-          w,
-          k
-        ): {r(Trie.get(V, Bin{Some{v}, Tip{}, Tip{}}, k), _) == True{}: Bool}
-        Trie.all2_get.node(
-          ~V,
-          ~W,
-          ~r,
-          ~left,
-          Some{v},
-          Tip{},
-          Tip{},
-          None{},
-          Tip{},
-          Leaf{rp, w},
-          k,
-          q => e2 => rn(Trie.get(W, Tip{}, q)),
-          q => e2 => rn(Trie.get(W, Leaf{rp, w}, q))
-        )(e)
+      e => Shared.Bool.and_true_left(r(Some{v}, Some{w}), Bool.and(True{}, True{}))(e)
+    case Nil{} Con{b, q}:
+      e => Shared.Bool.and_true_left(r(Some{v}, None{}), Bool.and(True{}, True{}))(e)
     case Con{False{}, +r1} Nil{}:
-      e =>
-        %Trie.get_node(V, False{} <> r1, v, k): {r(_, Trie.get(W, Leaf{[], w}, k)) == True{}: Bool}
-        %Trie.get_node(
-          W,
-          [],
-          w,
-          k
-        ): {r(Trie.get(V, Bin{None{}, Leaf{r1, v}, Tip{}}, k), _) == True{}: Bool}
-        Trie.all2_get.node(
-          ~V,
-          ~W,
-          ~r,
-          ~left,
-          None{},
-          Leaf{r1, v},
-          Tip{},
-          Some{w},
-          Tip{},
-          Tip{},
-          k,
-          q => e2 => lget(Leaf{r1, v})(q)(e2),
-          q => e2 => rn(Trie.get(W, Tip{}, q))
+      e => Trie.all2_get.only(
+        ~V,
+        ~W,
+        ~r,
+        ~left,
+        ~lget,
+        r1,
+        v
+      )(Shared.Bool.and_second(r(None{}, Some{w}), left(Leaf{r1, v}), True{})(e))
+    case Con{False{}, +r1} Con{False{}, +q}:
+      e => Trie.all2_get.fork(
+        ~V,
+        ~W,
+        ~r,
+        ~left,
+        ~lget,
+        r1,
+        v,
+        q,
+        w
+      )(
+        Shared.Bool.and_second(
+          r(None{}, None{}),
+          Trie.all2.fork(~V, ~W, ~r, ~left, r1, v, q, w),
+          True{}
         )(e)
-    case Con{False{}, +r1} Con{False{}, +rp}:
-      e =>
-        %Trie.get_node(
-          V,
-          False{} <> r1,
-          v,
-          k
-        ): {r(_, Trie.get(W, Leaf{False{} <> rp, w}, k)) == True{}: Bool}
-        %Trie.get_node(
-          W,
-          False{} <> rp,
-          w,
-          k
-        ): {r(Trie.get(V, Bin{None{}, Leaf{r1, v}, Tip{}}, k), _) == True{}: Bool}
-        Trie.all2_get.node(
-          ~V,
-          ~W,
-          ~r,
-          ~left,
-          None{},
-          Leaf{r1, v},
-          Tip{},
-          None{},
-          Leaf{rp, w},
-          Tip{},
-          k,
-          q => e2 => Trie.all2_get.fork(~V, ~W, ~r, ~left, ~rn, ~lget, r1, v, rp, w, q)(e2),
-          q => e2 => rn(Trie.get(W, Tip{}, q))
-        )(e)
-    case Con{False{}, +r1} Con{True{}, +rp}:
-      e =>
-        %Trie.get_node(
-          V,
-          False{} <> r1,
-          v,
-          k
-        ): {r(_, Trie.get(W, Leaf{True{} <> rp, w}, k)) == True{}: Bool}
-        %Trie.get_node(
-          W,
-          True{} <> rp,
-          w,
-          k
-        ): {r(Trie.get(V, Bin{None{}, Leaf{r1, v}, Tip{}}, k), _) == True{}: Bool}
-        Trie.all2_get.node(
-          ~V,
-          ~W,
-          ~r,
-          ~left,
-          None{},
-          Leaf{r1, v},
-          Tip{},
-          None{},
-          Tip{},
-          Leaf{rp, w},
-          k,
-          q => e2 => lget(Leaf{r1, v})(q)(e2),
-          q => e2 => rn(Trie.get(W, Leaf{rp, w}, q))
-        )(e)
+      )
+    case Con{False{}, +r1} Con{True{}, q}:
+      e => Trie.all2_get.only(
+        ~V,
+        ~W,
+        ~r,
+        ~left,
+        ~lget,
+        r1,
+        v
+      )(Shared.Bool.and_second(r(None{}, None{}), left(Leaf{r1, v}), True{})(e))
     case Con{True{}, +r1} Nil{}:
-      e =>
-        %Trie.get_node(V, True{} <> r1, v, k): {r(_, Trie.get(W, Leaf{[], w}, k)) == True{}: Bool}
-        %Trie.get_node(
-          W,
-          [],
-          w,
-          k
-        ): {r(Trie.get(V, Bin{None{}, Tip{}, Leaf{r1, v}}, k), _) == True{}: Bool}
-        Trie.all2_get.node(
-          ~V,
-          ~W,
-          ~r,
-          ~left,
-          None{},
-          Tip{},
-          Leaf{r1, v},
-          Some{w},
-          Tip{},
-          Tip{},
-          k,
-          q => e2 => rn(Trie.get(W, Tip{}, q)),
-          q => e2 => lget(Leaf{r1, v})(q)(e2)
+      e => Trie.all2_get.only(
+        ~V,
+        ~W,
+        ~r,
+        ~left,
+        ~lget,
+        r1,
+        v
+      )(Shared.Bool.and_third(r(None{}, Some{w}), True{}, left(Leaf{r1, v}))(e))
+    case Con{True{}, +r1} Con{False{}, q}:
+      e => Trie.all2_get.only(
+        ~V,
+        ~W,
+        ~r,
+        ~left,
+        ~lget,
+        r1,
+        v
+      )(Shared.Bool.and_third(r(None{}, None{}), True{}, left(Leaf{r1, v}))(e))
+    case Con{True{}, +r1} Con{True{}, +q}:
+      e => Trie.all2_get.fork(
+        ~V,
+        ~W,
+        ~r,
+        ~left,
+        ~lget,
+        r1,
+        v,
+        q,
+        w
+      )(
+        Shared.Bool.and_third(
+          r(None{}, None{}),
+          True{},
+          Trie.all2.fork(~V, ~W, ~r, ~left, r1, v, q, w)
         )(e)
-    case Con{True{}, +r1} Con{False{}, +rp}:
-      e =>
-        %Trie.get_node(
-          V,
-          True{} <> r1,
-          v,
-          k
-        ): {r(_, Trie.get(W, Leaf{False{} <> rp, w}, k)) == True{}: Bool}
-        %Trie.get_node(
-          W,
-          False{} <> rp,
-          w,
-          k
-        ): {r(Trie.get(V, Bin{None{}, Tip{}, Leaf{r1, v}}, k), _) == True{}: Bool}
-        Trie.all2_get.node(
-          ~V,
-          ~W,
-          ~r,
-          ~left,
-          None{},
-          Tip{},
-          Leaf{r1, v},
-          None{},
-          Leaf{rp, w},
-          Tip{},
-          k,
-          q => e2 => rn(Trie.get(W, Leaf{rp, w}, q)),
-          q => e2 => lget(Leaf{r1, v})(q)(e2)
-        )(e)
-    case Con{True{}, +r1} Con{True{}, +rp}:
-      e =>
-        %Trie.get_node(
-          V,
-          True{} <> r1,
-          v,
-          k
-        ): {r(_, Trie.get(W, Leaf{True{} <> rp, w}, k)) == True{}: Bool}
-        %Trie.get_node(
-          W,
-          True{} <> rp,
-          w,
-          k
-        ): {r(Trie.get(V, Bin{None{}, Tip{}, Leaf{r1, v}}, k), _) == True{}: Bool}
-        Trie.all2_get.node(
-          ~V,
-          ~W,
-          ~r,
-          ~left,
-          None{},
-          Tip{},
-          Leaf{r1, v},
-          None{},
-          Tip{},
-          Leaf{rp, w},
-          k,
-          q => e2 => rn(Trie.get(W, Tip{}, q)),
-          q => e2 => Trie.all2_get.fork(~V, ~W, ~r, ~left, ~rn, ~lget, r1, v, rp, w, q)(e2)
-        )(e)
+      )
 
-# Trie.all2_get for an entry and a trie
+# Trie.all2_get for an entry and a trie, at the key of the entry
 def Trie.all2_get.leaf(
+  ~V: Data,
+  ~W: Data,
+  ~r: Maybe<&2, V> -> Maybe<&2, W> -> Bool,
+  ~left: Trie<V> -> Bool,
+  ~lget: @t: Trie<
+    V> -> @k: List<
+    &2,
+    Bool> -> {left(t) == True{}: Bool} -> {r(Trie.get(V, t, k), None{}) == True{}: Bool},
+  y: Trie<W>,
+  k1: List<&2, Bool>,
+  +v: V
+) -> {
+  Trie.all2.leaf(~V, ~W, ~r, ~left, y, k1, v) == True{}: Bool
+} -> {r(Some{v}, Trie.get(W, y, k1)) == True{}: Bool}:
+  match y k1:
+    case Tip{} q:
+      Trie.all2_get.only(~V, ~W, ~r, ~left, ~lget, q, v)
+    case Leaf{p, w} q:
+      Trie.all2_get.fork(~V, ~W, ~r, ~left, ~lget, q, v, p, w)
+    case Bin{h, z, o} Nil{}:
+      e => Shared.Bool.and_true_left(r(Some{v}, h), Bool.and(True{}, True{}))(e)
+    case Bin{h, +z, o} Con{False{}, +q}:
+      e => Trie.all2_get.leaf(
+        ~V,
+        ~W,
+        ~r,
+        ~left,
+        ~lget,
+        z,
+        q,
+        v
+      )(Shared.Bool.and_second(r(None{}, h), Trie.all2.leaf(~V, ~W, ~r, ~left, z, q, v), True{})(e))
+    case Bin{h, z, +o} Con{True{}, +q}:
+      e => Trie.all2_get.leaf(
+        ~V,
+        ~W,
+        ~r,
+        ~left,
+        ~lget,
+        o,
+        q,
+        v
+      )(Shared.Bool.and_third(r(None{}, h), True{}, Trie.all2.leaf(~V, ~W, ~r, ~left, o, q, v))(e))
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in this proof a second use sits in an erased argument; the checker accepts it
+# Trie.all2_get for an entry and a trie, by whether the key is the entry's
+# (held): at any other key, the entry holds nothing
+def Trie.all2_get.at(
   ~V: Data,
   ~W: Data,
   ~r: Maybe<&2, V> -> Maybe<&2, W> -> Bool,
@@ -4370,71 +4224,27 @@ def Trie.all2_get.leaf(
     &2,
     Bool> -> {left(t) == True{}: Bool} -> {r(Trie.get(V, t, k), None{}) == True{}: Bool},
   y: Trie<W>,
-  k1: List<&2, Bool>,
-  +v: V,
-  +k: List<&2, Bool>
+  +p: List<&2, Bool>,
+  v: V,
+  k: List<&2, Bool>,
+  held: Bool,
+  eh: {Trie.same_key(k, p) == held: Bool}
 ) -> {
-  Trie.all2.leaf(~V, ~W, ~r, ~left, y, k1, v) == True{}: Bool
-} -> {r(Trie.get(V, Leaf{k1, v}, k), Trie.get(W, y, k)) == True{}: Bool}:
-  match y k1:
-    case Tip{} r1:
-      e => lget(Leaf{r1, v})(k)(e)
-    case Leaf{p, w} r1:
-      Trie.all2_get.fork(~V, ~W, ~r, ~left, ~rn, ~lget, r1, v, p, w, k)
-    case Bin{h, +z, +o} Nil{}:
+  Trie.all2.leaf(~V, ~W, ~r, ~left, y, p, v) == True{}: Bool
+} -> {r(Bool.pick(Maybe<&2, V>, held, Some{v}, None{}), Trie.get(W, y, k)) == True{}: Bool}:
+  match held:
+    case False{}:
+      e => rn(Trie.get(W, y, k))
+    case True{}:
       e =>
-        %Trie.get_node(V, [], v, k): {r(_, Trie.get(W, Bin{h, z, o}, k)) == True{}: Bool}
-        Trie.all2_get.node(
-          ~V,
-          ~W,
-          ~r,
-          ~left,
-          Some{v},
-          Tip{},
-          Tip{},
-          h,
-          z,
-          o,
+        %Equal.sym(
+          List<&2, Bool>,
           k,
-          q => e2 => rn(Trie.get(W, z, q)),
-          q => e2 => rn(Trie.get(W, o, q))
-        )(e)
-    case Bin{+h, +z, +o} Con{False{}, +r1}:
-      e =>
-        %Trie.get_node(V, False{} <> r1, v, k): {r(_, Trie.get(W, Bin{h, z, o}, k)) == True{}: Bool}
-        Trie.all2_get.node(
-          ~V,
-          ~W,
-          ~r,
-          ~left,
-          None{},
-          Leaf{r1, v},
-          Tip{},
-          h,
-          z,
-          o,
-          k,
-          q => e2 => Trie.all2_get.leaf(~V, ~W, ~r, ~left, ~rn, ~lget, z, r1, v, q)(e2),
-          q => e2 => rn(Trie.get(W, o, q))
-        )(e)
-    case Bin{+h, +z, +o} Con{True{}, +r1}:
-      e =>
-        %Trie.get_node(V, True{} <> r1, v, k): {r(_, Trie.get(W, Bin{h, z, o}, k)) == True{}: Bool}
-        Trie.all2_get.node(
-          ~V,
-          ~W,
-          ~r,
-          ~left,
-          None{},
-          Tip{},
-          Leaf{r1, v},
-          h,
-          z,
-          o,
-          k,
-          q => e2 => rn(Trie.get(W, z, q)),
-          q => e2 => Trie.all2_get.leaf(~V, ~W, ~r, ~left, ~rn, ~lget, o, r1, v, q)(e2)
-        )(e)
+          p,
+          Trie.same_key_sound(k, p)(eh)
+        ): {r(Some{v}, Trie.get(W, y, _)) == True{}: Bool}
+        Trie.all2_get.leaf(~V, ~W, ~r, ~left, ~lget, y, p, v)(e)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # r holds at every key of a and b
 law Trie.all2_get:
@@ -4457,63 +4267,336 @@ def Trie.all2_get(tv, tw, r, left, rn, lget, a, b, k):
   match a b k:
     case Tip{} y q:
       e => rn(Trie.get(tw, y, q))
-    case Leaf{p, v} y q:
-      Trie.all2_get.leaf(~tv, ~tw, ~r, ~left, ~rn, ~lget, y, p, v, q)
+    case Leaf{+p, v} y +q:
+      Trie.all2_get.at(~tv, ~tw, ~r, ~left, ~rn, ~lget, y, p, v, q, Trie.same_key(q, p), {==})
     case Bin{h, z, o} Tip{} q:
       e => lget(Bin{h, z, o})(q)(e)
-    case Bin{+h, +z, +o} Leaf{+p, +w} +q:
+    case Bin{+h, +z, +o} Leaf{+p, +w} Nil{}:
       e =>
-        %Trie.get_node(tw, p, w, q): {r(Trie.get(tv, Bin{h, z, o}, q), _) == True{}: Bool}
-        Trie.all2_get.node(
+        %Trie.get_node(tw, p, w, []): {r(h, _) == True{}: Bool}
+        Shared.Bool.and_true_left(
+          r(h, Trie.at.here(tw, p, w)),
+          Bool.and(
+            Trie.all2(~tv, ~tw, ~r, ~left, z, Trie.at.zero(tw, p, w)),
+            Trie.all2(~tv, ~tw, ~r, ~left, o, Trie.at.one(tw, p, w))
+          )
+        )(e)
+    case Bin{+h, +z, +o} Leaf{+p, +w} Con{False{}, +q}:
+      e =>
+        %Trie.get_node(tw, p, w, False{} <> q): {r(Trie.get(tv, z, q), _) == True{}: Bool}
+        Trie.all2_get(
           ~tv,
           ~tw,
           ~r,
           ~left,
-          h,
+          ~rn,
+          ~lget,
           z,
-          o,
-          Trie.at.here(tw, p, w),
           Trie.at.zero(tw, p, w),
+          q
+        )(
+          Shared.Bool.and_second(
+            r(h, Trie.at.here(tw, p, w)),
+            Trie.all2(~tv, ~tw, ~r, ~left, z, Trie.at.zero(tw, p, w)),
+            Trie.all2(~tv, ~tw, ~r, ~left, o, Trie.at.one(tw, p, w))
+          )(e)
+        )
+    case Bin{+h, +z, +o} Leaf{+p, +w} Con{True{}, +q}:
+      e =>
+        %Trie.get_node(tw, p, w, True{} <> q): {r(Trie.get(tv, o, q), _) == True{}: Bool}
+        Trie.all2_get(
+          ~tv,
+          ~tw,
+          ~r,
+          ~left,
+          ~rn,
+          ~lget,
+          o,
           Trie.at.one(tw, p, w),
-          q,
-          q2 => e2 => Trie.all2_get(
-            ~tv,
-            ~tw,
-            ~r,
-            ~left,
-            ~rn,
-            ~lget,
-            z,
-            Trie.at.zero(tw, p, w),
-            q2
-          )(e2),
-          q2 => e2 => Trie.all2_get(
-            ~tv,
-            ~tw,
-            ~r,
-            ~left,
-            ~rn,
-            ~lget,
-            o,
-            Trie.at.one(tw, p, w),
-            q2
-          )(e2)
-        )(e)
-    case Bin{+h1, +z1, +o1} Bin{h2, +z2, +o2} q:
-      Trie.all2_get.node(
+          q
+        )(
+          Shared.Bool.and_third(
+            r(h, Trie.at.here(tw, p, w)),
+            Trie.all2(~tv, ~tw, ~r, ~left, z, Trie.at.zero(tw, p, w)),
+            Trie.all2(~tv, ~tw, ~r, ~left, o, Trie.at.one(tw, p, w))
+          )(e)
+        )
+    case Bin{+h1, +z1, +o1} Bin{h2, +z2, o2} Nil{}:
+      e => Shared.Bool.and_true_left(
+        r(h1, h2),
+        Bool.and(Trie.all2(~tv, ~tw, ~r, ~left, z1, z2), Trie.all2(~tv, ~tw, ~r, ~left, o1, o2))
+      )(e)
+    case Bin{+h1, +z1, +o1} Bin{+h2, +z2, +o2} Con{False{}, q}:
+      e => Trie.all2_get(
         ~tv,
         ~tw,
         ~r,
         ~left,
-        h1,
+        ~rn,
+        ~lget,
         z1,
-        o1,
-        h2,
         z2,
+        q
+      )(
+        Shared.Bool.and_second(
+          r(h1, h2),
+          Trie.all2(~tv, ~tw, ~r, ~left, z1, z2),
+          Trie.all2(~tv, ~tw, ~r, ~left, o1, o2)
+        )(e)
+      )
+    case Bin{+h1, +z1, +o1} Bin{+h2, +z2, +o2} Con{True{}, q}:
+      e => Trie.all2_get(
+        ~tv,
+        ~tw,
+        ~r,
+        ~left,
+        ~rn,
+        ~lget,
+        o1,
         o2,
-        q,
-        q2 => e2 => Trie.all2_get(~tv, ~tw, ~r, ~left, ~rn, ~lget, z1, z2, q2)(e2),
-        q2 => e2 => Trie.all2_get(~tv, ~tw, ~r, ~left, ~rn, ~lget, o1, o2, q2)(e2)
+        q
+      )(
+        Shared.Bool.and_third(
+          r(h1, h2),
+          Trie.all2(~tv, ~tw, ~r, ~left, z1, z2),
+          Trie.all2(~tv, ~tw, ~r, ~left, o1, o2)
+        )(e)
+      )
+
+# r holds of what a and b hold at every key
+def Trie.All2At(
+  ~V: Data,
+  ~W: Data,
+  ~r: Maybe<&2, V> -> Maybe<&2, W> -> Bool,
+  a: Trie<V>,
+  b: Trie<W>
+) -> Type:
+  @k: List<&2, Bool> -> {r(Trie.get(V, a, k), Trie.get(W, b, k)) == True{}: Bool}
+
+# Trie.all2_of_get for an entry and a trie
+def Trie.all2_of_get.leaf(
+  ~V: Data,
+  ~W: Data,
+  ~r: Maybe<&2, V> -> Maybe<&2, W> -> Bool,
+  ~left: Trie<V> -> Bool,
+  ~lall: @t: Trie<V> -> Trie.All2At(~V, ~W, ~r, t, Tip{}) -> {left(t) == True{}: Bool},
+  k: List<&2, Bool>,
+  y: Trie<W>,
+  +v: V,
+  f: Trie.All2At(~V, ~W, ~r, Leaf{k, v}, y)
+) -> {Trie.all2(~V, ~W, ~r, ~left, Leaf{k, v}, y) == True{}: Bool}:
+  match k y:
+    case Nil{} Tip{}:
+      lall(Leaf{[], v})(f)
+    case Con{b, q} Tip{}:
+      lall(Leaf{b <> q, v})(f)
+    case Nil{} Leaf{Nil{}, w}:
+      Shared.Bool.and_both(r(Some{v}, Some{w}), Bool.and(True{}, True{}))(f([]))({==})
+    case Nil{} Leaf{Con{b, p}, w}:
+      Shared.Bool.and_both(r(Some{v}, None{}), Bool.and(True{}, True{}))(f([]))({==})
+    case Nil{} Bin{h, z, o}:
+      Shared.Bool.and_both(r(Some{v}, h), Bool.and(True{}, True{}))(f([]))({==})
+    case Con{False{}, +q} Leaf{Nil{}, w}:
+      Shared.Bool.and_each(
+        Trie.All2At(~V, ~W, ~r, Leaf{False{} <> q, v}, Leaf{[], w}),
+        r(None{}, Some{w}),
+        left(Leaf{q, v}),
+        True{},
+        f,
+        g => g([]),
+        g => lall(Leaf{q, v})(q2 => g(False{} <> q2)),
+        g => {==}
+      )
+    case Con{False{}, +q} Leaf{Con{False{}, +p}, +w}:
+      Shared.Bool.and_each(
+        Trie.All2At(~V, ~W, ~r, Leaf{False{} <> q, v}, Leaf{False{} <> p, w}),
+        r(None{}, None{}),
+        Trie.all2.fork(~V, ~W, ~r, ~left, q, v, p, w),
+        True{},
+        f,
+        g => g([]),
+        g => Trie.all2_of_get.leaf(
+          ~V,
+          ~W,
+          ~r,
+          ~left,
+          ~lall,
+          q,
+          Leaf{p, w},
+          v,
+          q2 => g(False{} <> q2)
+        ),
+        g => {==}
+      )
+    case Con{False{}, +q} Leaf{Con{True{}, p}, w}:
+      Shared.Bool.and_each(
+        Trie.All2At(~V, ~W, ~r, Leaf{False{} <> q, v}, Leaf{True{} <> p, w}),
+        r(None{}, None{}),
+        left(Leaf{q, v}),
+        True{},
+        f,
+        g => g([]),
+        g => lall(Leaf{q, v})(q2 => g(False{} <> q2)),
+        g => {==}
+      )
+    case Con{False{}, +q} Bin{h, +z, o}:
+      Shared.Bool.and_each(
+        Trie.All2At(~V, ~W, ~r, Leaf{False{} <> q, v}, Bin{h, z, o}),
+        r(None{}, h),
+        Trie.all2.leaf(~V, ~W, ~r, ~left, z, q, v),
+        True{},
+        f,
+        g => g([]),
+        g => Trie.all2_of_get.leaf(~V, ~W, ~r, ~left, ~lall, q, z, v, q2 => g(False{} <> q2)),
+        g => {==}
+      )
+    case Con{True{}, +q} Leaf{Nil{}, w}:
+      Shared.Bool.and_each(
+        Trie.All2At(~V, ~W, ~r, Leaf{True{} <> q, v}, Leaf{[], w}),
+        r(None{}, Some{w}),
+        True{},
+        left(Leaf{q, v}),
+        f,
+        g => g([]),
+        g => {==},
+        g => lall(Leaf{q, v})(q2 => g(True{} <> q2))
+      )
+    case Con{True{}, +q} Leaf{Con{False{}, p}, w}:
+      Shared.Bool.and_each(
+        Trie.All2At(~V, ~W, ~r, Leaf{True{} <> q, v}, Leaf{False{} <> p, w}),
+        r(None{}, None{}),
+        True{},
+        left(Leaf{q, v}),
+        f,
+        g => g([]),
+        g => {==},
+        g => lall(Leaf{q, v})(q2 => g(True{} <> q2))
+      )
+    case Con{True{}, +q} Leaf{Con{True{}, +p}, +w}:
+      Shared.Bool.and_each(
+        Trie.All2At(~V, ~W, ~r, Leaf{True{} <> q, v}, Leaf{True{} <> p, w}),
+        r(None{}, None{}),
+        True{},
+        Trie.all2.fork(~V, ~W, ~r, ~left, q, v, p, w),
+        f,
+        g => g([]),
+        g => {==},
+        g => Trie.all2_of_get.leaf(
+          ~V,
+          ~W,
+          ~r,
+          ~left,
+          ~lall,
+          q,
+          Leaf{p, w},
+          v,
+          q2 => g(True{} <> q2)
+        )
+      )
+    case Con{True{}, +q} Bin{h, z, o}:
+      Shared.Bool.and_each(
+        Trie.All2At(~V, ~W, ~r, Leaf{True{} <> q, v}, Bin{h, z, o}),
+        r(None{}, h),
+        True{},
+        Trie.all2.leaf(~V, ~W, ~r, ~left, o, q, v),
+        f,
+        g => g([]),
+        g => {==},
+        g => Trie.all2_of_get.leaf(~V, ~W, ~r, ~left, ~lall, q, o, v, q2 => g(True{} <> q2))
+      )
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in this proof a second use sits in an erased argument; the checker accepts it
+# what r holds of at every key of a and an entry, it holds of at every key of
+# a and the node of the entry
+def Trie.all2_of_get.node(
+  ~V: Data,
+  ~W: Data,
+  ~r: Maybe<&2, V> -> Maybe<&2, W> -> Bool,
+  a: Trie<V>,
+  p: List<&2, Bool>,
+  w: W,
+  f: Trie.All2At(~V, ~W, ~r, a, Leaf{p, w})
+) -> Trie.All2At(
+  ~V,
+  ~W,
+  ~r,
+  a,
+  Bin{Trie.at.here(W, p, w), Trie.at.zero(W, p, w), Trie.at.one(W, p, w)}
+):
+  +q =>
+    %Equal.sym(
+      Maybe<&2, W>,
+      Trie.get(W, Bin{Trie.at.here(W, p, w), Trie.at.zero(W, p, w), Trie.at.one(W, p, w)}, q),
+      Trie.get(W, Leaf{p, w}, q),
+      Trie.get_node(W, p, w, q)
+    ): {r(Trie.get(V, a, q), _) == True{}: Bool}
+    f(q)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# r holds of a and b when it holds at every key, and left of each trie where
+# r holds of it and no entry at every key: the converse of Trie.all2_get
+def Trie.all2_of_get(
+  ~V: Data,
+  ~W: Data,
+  ~r: Maybe<&2, V> -> Maybe<&2, W> -> Bool,
+  ~left: Trie<V> -> Bool,
+  ~lall: @t: Trie<V> -> Trie.All2At(~V, ~W, ~r, t, Tip{}) -> {left(t) == True{}: Bool},
+  a: Trie<V>,
+  b: Trie<W>,
+  f: Trie.All2At(~V, ~W, ~r, a, b)
+) -> {Trie.all2(~V, ~W, ~r, ~left, a, b) == True{}: Bool}:
+  match a b:
+    case Tip{} y:
+      {==}
+    case Leaf{k, v} y:
+      Trie.all2_of_get.leaf(~V, ~W, ~r, ~left, ~lall, k, y, v, f)
+    case Bin{h, z, o} Tip{}:
+      lall(Bin{h, z, o})(f)
+    case Bin{+h, +z, +o} Leaf{+p, +w}:
+      Shared.Bool.and_each(
+        Trie.All2At(
+          ~V,
+          ~W,
+          ~r,
+          Bin{h, z, o},
+          Bin{Trie.at.here(W, p, w), Trie.at.zero(W, p, w), Trie.at.one(W, p, w)}
+        ),
+        r(h, Trie.at.here(W, p, w)),
+        Trie.all2(~V, ~W, ~r, ~left, z, Trie.at.zero(W, p, w)),
+        Trie.all2(~V, ~W, ~r, ~left, o, Trie.at.one(W, p, w)),
+        Trie.all2_of_get.node(~V, ~W, ~r, Bin{h, z, o}, p, w, f),
+        g => g([]),
+        g => Trie.all2_of_get(
+          ~V,
+          ~W,
+          ~r,
+          ~left,
+          ~lall,
+          z,
+          Trie.at.zero(W, p, w),
+          q => g(False{} <> q)
+        ),
+        g => Trie.all2_of_get(
+          ~V,
+          ~W,
+          ~r,
+          ~left,
+          ~lall,
+          o,
+          Trie.at.one(W, p, w),
+          q => g(True{} <> q)
+        )
+      )
+    case Bin{+h1, +z1, +o1} Bin{h2, +z2, o2}:
+      Shared.Bool.and_each(
+        Trie.All2At(~V, ~W, ~r, Bin{h1, z1, o1}, Bin{h2, z2, o2}),
+        r(h1, h2),
+        Trie.all2(~V, ~W, ~r, ~left, z1, z2),
+        Trie.all2(~V, ~W, ~r, ~left, o1, o2),
+        f,
+        g => g([]),
+        g => Trie.all2_of_get(~V, ~W, ~r, ~left, ~lall, z1, z2, q => g(False{} <> q)),
+        g => Trie.all2_of_get(~V, ~W, ~r, ~left, ~lall, o1, o2, q => g(True{} <> q))
       )
 
 # Trie.all2_under for two entries
@@ -4564,14 +4647,7 @@ def Trie.all2_under.fork(
     case Con{False{}, +r1} Nil{} Con{False{}, q}:
       e => lunder(
         Leaf{r1, v}
-      )(
-        q
-      )(
-        Shared.Bool.and_true_left(
-          left(Leaf{r1, v}),
-          True{}
-        )(Shared.Bool.and_true_right(r(None{}, Some{w}), Bool.and(left(Leaf{r1, v}), True{}))(e))
-      )
+      )(q)(Shared.Bool.and_second(r(None{}, Some{w}), left(Leaf{r1, v}), True{})(e))
     case Con{False{}, +r1} Nil{} Con{True{}, +q}:
       e => {==}
     case Con{False{}, +r1} Con{False{}, +rp} Con{False{}, q}:
@@ -4587,29 +4663,18 @@ def Trie.all2_under.fork(
         w,
         q
       )(
-        Shared.Bool.and_true_left(
+        Shared.Bool.and_second(
+          r(None{}, None{}),
           Trie.all2.fork(~V, ~W, ~r, ~left, r1, v, rp, w),
           True{}
-        )(
-          Shared.Bool.and_true_right(
-            r(None{}, None{}),
-            Bool.and(Trie.all2.fork(~V, ~W, ~r, ~left, r1, v, rp, w), True{})
-          )(e)
-        )
+        )(e)
       )
     case Con{False{}, +r1} Con{False{}, +rp} Con{True{}, +q}:
       e => {==}
     case Con{False{}, +r1} Con{True{}, +rp} Con{False{}, q}:
       e => lunder(
         Leaf{r1, v}
-      )(
-        q
-      )(
-        Shared.Bool.and_true_left(
-          left(Leaf{r1, v}),
-          True{}
-        )(Shared.Bool.and_true_right(r(None{}, None{}), Bool.and(left(Leaf{r1, v}), True{}))(e))
-      )
+      )(q)(Shared.Bool.and_second(r(None{}, None{}), left(Leaf{r1, v}), True{})(e))
     case Con{False{}, +r1} Con{True{}, +rp} Con{True{}, +q}:
       e => {==}
     case Con{True{}, +r1} Nil{} Con{False{}, q}:
@@ -4617,27 +4682,13 @@ def Trie.all2_under.fork(
     case Con{True{}, +r1} Nil{} Con{True{}, +q}:
       e => lunder(
         Leaf{r1, v}
-      )(
-        q
-      )(
-        Shared.Bool.and_true_right(
-          True{},
-          left(Leaf{r1, v})
-        )(Shared.Bool.and_true_right(r(None{}, Some{w}), Bool.and(True{}, left(Leaf{r1, v})))(e))
-      )
-    case Con{True{}, +r1} Con{False{}, +rp} Con{False{}, q}:
+      )(q)(Shared.Bool.and_third(r(None{}, Some{w}), True{}, left(Leaf{r1, v}))(e))
+    case Con{True{}, +r1} Con{False{}, rp} Con{False{}, q}:
       e => {==}
     case Con{True{}, +r1} Con{False{}, +rp} Con{True{}, +q}:
       e => lunder(
         Leaf{r1, v}
-      )(
-        q
-      )(
-        Shared.Bool.and_true_right(
-          True{},
-          left(Leaf{r1, v})
-        )(Shared.Bool.and_true_right(r(None{}, None{}), Bool.and(True{}, left(Leaf{r1, v})))(e))
-      )
+      )(q)(Shared.Bool.and_third(r(None{}, None{}), True{}, left(Leaf{r1, v}))(e))
     case Con{True{}, +r1} Con{True{}, +rp} Con{False{}, q}:
       e => {==}
     case Con{True{}, +r1} Con{True{}, +rp} Con{True{}, +q}:
@@ -4653,15 +4704,11 @@ def Trie.all2_under.fork(
         w,
         q
       )(
-        Shared.Bool.and_true_right(
+        Shared.Bool.and_third(
+          r(None{}, None{}),
           True{},
           Trie.all2.fork(~V, ~W, ~r, ~left, r1, v, rp, w)
-        )(
-          Shared.Bool.and_true_right(
-            r(None{}, None{}),
-            Bool.and(True{}, Trie.all2.fork(~V, ~W, ~r, ~left, r1, v, rp, w))
-          )(e)
-        )
+        )(e)
       )
 
 # Trie.all2_under for an entry and a trie
@@ -4708,15 +4755,7 @@ def Trie.all2_under.leaf(
         v,
         q
       )(
-        Shared.Bool.and_true_left(
-          Trie.all2.leaf(~V, ~W, ~r, ~left, z, r1, v),
-          True{}
-        )(
-          Shared.Bool.and_true_right(
-            r(None{}, h),
-            Bool.and(Trie.all2.leaf(~V, ~W, ~r, ~left, z, r1, v), True{})
-          )(e)
-        )
+        Shared.Bool.and_second(r(None{}, h), Trie.all2.leaf(~V, ~W, ~r, ~left, z, r1, v), True{})(e)
       )
     case Bin{+h, +z, +o} Con{False{}, +r1} Con{True{}, +q}:
       e => {==}
@@ -4733,17 +4772,7 @@ def Trie.all2_under.leaf(
         r1,
         v,
         q
-      )(
-        Shared.Bool.and_true_right(
-          True{},
-          Trie.all2.leaf(~V, ~W, ~r, ~left, o, r1, v)
-        )(
-          Shared.Bool.and_true_right(
-            r(None{}, h),
-            Bool.and(True{}, Trie.all2.leaf(~V, ~W, ~r, ~left, o, r1, v))
-          )(e)
-        )
-      )
+      )(Shared.Bool.and_third(r(None{}, h), True{}, Trie.all2.leaf(~V, ~W, ~r, ~left, o, r1, v))(e))
 
 # r holds below any key of a and b where it holds of a and b
 law Trie.all2_under:
@@ -4791,18 +4820,11 @@ def Trie.all2_under(tv, tw, r, left, lunder, a, b, k):
           Trie.at.zero(tw, p, w),
           q
         )(
-          Shared.Bool.and_true_left(
+          Shared.Bool.and_second(
+            r(h, Trie.at.here(tw, p, w)),
             Trie.all2(~tv, ~tw, ~r, ~left, z, Trie.at.zero(tw, p, w)),
             Trie.all2(~tv, ~tw, ~r, ~left, o, Trie.at.one(tw, p, w))
-          )(
-            Shared.Bool.and_true_right(
-              r(h, Trie.at.here(tw, p, w)),
-              Bool.and(
-                Trie.all2(~tv, ~tw, ~r, ~left, z, Trie.at.zero(tw, p, w)),
-                Trie.all2(~tv, ~tw, ~r, ~left, o, Trie.at.one(tw, p, w))
-              )
-            )(e)
-          )
+          )(e)
         )
     case Bin{+h, +z, +o} Leaf{+p, +w} Con{True{}, +q}:
       e =>
@@ -4822,18 +4844,11 @@ def Trie.all2_under(tv, tw, r, left, lunder, a, b, k):
           Trie.at.one(tw, p, w),
           q
         )(
-          Shared.Bool.and_true_right(
+          Shared.Bool.and_third(
+            r(h, Trie.at.here(tw, p, w)),
             Trie.all2(~tv, ~tw, ~r, ~left, z, Trie.at.zero(tw, p, w)),
             Trie.all2(~tv, ~tw, ~r, ~left, o, Trie.at.one(tw, p, w))
-          )(
-            Shared.Bool.and_true_right(
-              r(h, Trie.at.here(tw, p, w)),
-              Bool.and(
-                Trie.all2(~tv, ~tw, ~r, ~left, z, Trie.at.zero(tw, p, w)),
-                Trie.all2(~tv, ~tw, ~r, ~left, o, Trie.at.one(tw, p, w))
-              )
-            )(e)
-          )
+          )(e)
         )
     case Bin{h1, z1, o1} Bin{h2, z2, o2} Nil{}:
       e => e
@@ -4848,15 +4863,11 @@ def Trie.all2_under(tv, tw, r, left, lunder, a, b, k):
         z2,
         q
       )(
-        Shared.Bool.and_true_left(
+        Shared.Bool.and_second(
+          r(h1, h2),
           Trie.all2(~tv, ~tw, ~r, ~left, z1, z2),
           Trie.all2(~tv, ~tw, ~r, ~left, o1, o2)
-        )(
-          Shared.Bool.and_true_right(
-            r(h1, h2),
-            Bool.and(Trie.all2(~tv, ~tw, ~r, ~left, z1, z2), Trie.all2(~tv, ~tw, ~r, ~left, o1, o2))
-          )(e)
-        )
+        )(e)
       )
     case Bin{+h1, +z1, +o1} Bin{+h2, +z2, +o2} Con{True{}, q}:
       e => Trie.all2_under(
@@ -4869,15 +4880,11 @@ def Trie.all2_under(tv, tw, r, left, lunder, a, b, k):
         o2,
         q
       )(
-        Shared.Bool.and_true_right(
+        Shared.Bool.and_third(
+          r(h1, h2),
           Trie.all2(~tv, ~tw, ~r, ~left, z1, z2),
           Trie.all2(~tv, ~tw, ~r, ~left, o1, o2)
-        )(
-          Shared.Bool.and_true_right(
-            r(h1, h2),
-            Bool.and(Trie.all2(~tv, ~tw, ~r, ~left, z1, z2), Trie.all2(~tv, ~tw, ~r, ~left, o1, o2))
-          )(e)
-        )
+        )(e)
       )
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
@@ -5484,98 +5491,58 @@ def Trie.all2_join(ty, join, q, lq, r, lr, step, rrefl, s, t):
         Trie.all2_join(~ty, ~join, ~q, ~lq, ~r, ~lr, ~step, ~rrefl, o1, o2)
       )
 
-# r holds of a and the empty trie, when left holds of every trie
-def Trie.all2_tip(
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in this proof a second use sits in an erased argument; the checker accepts it
+# Trie.all2_one at the key q, by whether q is the key of the entry (held)
+def Trie.all2_one.at(
   ~V: Data,
-  ~W: Data,
-  ~r: Maybe<&2, V> -> Maybe<&2, W> -> Bool,
-  ~left: Trie<V> -> Bool,
-  ~ltrue: @t: Trie<V> -> {left(t) == True{}: Bool},
-  a: Trie<V>
-) -> {Trie.all2(~V, ~W, ~r, ~left, a, Tip{}) == True{}: Bool}:
-  match a:
-    case Tip{}:
-      {==}
-    case Leaf{k, v}:
-      ltrue(Leaf{k, v})
-    case Bin{h, z, o}:
-      ltrue(Bin{h, z, o})
+  ~r: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
+  ~rn: @y: Maybe<&2, V> -> {r(None{}, y) == True{}: Bool},
+  ~rl: @a: Maybe<&2, V> -> {r(a, None{}) == True{}: Bool},
+  s: Trie<V>,
+  k: List<&2, Bool>,
+  x: V,
+  q: List<&2, Bool>,
+  g: {Trie.get(V, s, k) == None{}: Maybe<&2, V>},
+  held: Bool,
+  e: {Trie.same_key(q, k) == held: Bool}
+) -> {r(Trie.get(V, s, q), Bool.pick(Maybe<&2, V>, held, Some{x}, None{})) == True{}: Bool}:
+  match held:
+    case False{}:
+      rl(Trie.get(V, s, q))
+    case True{}:
+      %Equal.sym(
+        List<&2, Bool>,
+        q,
+        k,
+        Trie.same_key_sound(q, k)(e)
+      ): {r(Trie.get(V, s, _), Some{x}) == True{}: Bool}
+      %Equal.sym(Maybe<&2, V>, Trie.get(V, s, k), None{}, g): {r(_, Some{x}) == True{}: Bool}
+      rn(Some{x})
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
-# Trie.all2_one for two entries
-def Trie.all2_one.fork(
+# Trie.all2_one, with binders to use again: r holds at every key
+def Trie.all2_one.go(
   ~V: Data,
   ~r: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
   ~left: Trie<V> -> Bool,
   ~rn: @y: Maybe<&2, V> -> {r(None{}, y) == True{}: Bool},
   ~rl: @a: Maybe<&2, V> -> {r(a, None{}) == True{}: Bool},
   ~ltrue: @t: Trie<V> -> {left(t) == True{}: Bool},
-  k1: List<&2, Bool>,
-  +v: V,
-  p: List<&2, Bool>,
-  +w: V
-) -> {
-  Trie.get(V, Leaf{k1, v}, p) == None{}: Maybe<&2, V>
-} -> {Trie.all2.fork(~V, ~V, ~r, ~left, k1, v, p, w) == True{}: Bool}:
-  match k1 p:
-    case Nil{} Nil{}:
-      g => Empty.absurd(
-        {Trie.all2.fork(~V, ~V, ~r, ~left, [], v, [], w) == True{}: Bool},
-        Trie.some_ne_none(V, v, g)
-      )
-    case Nil{} Con{False{}, rp}:
-      g => Shared.Bool.and_both(
-        r(Some{v}, None{}),
-        Bool.and(True{}, True{})
-      )(rl(Some{v}))(Shared.Bool.and_both(True{}, True{})({==})({==}))
-    case Nil{} Con{True{}, +rp}:
-      g => Shared.Bool.and_both(
-        r(Some{v}, None{}),
-        Bool.and(True{}, True{})
-      )(rl(Some{v}))(Shared.Bool.and_both(True{}, True{})({==})({==}))
-    case Con{False{}, +r1} Nil{}:
-      g => Shared.Bool.and_both(
-        r(None{}, Some{w}),
-        Bool.and(left(Leaf{r1, v}), True{})
-      )(rn(Some{w}))(Shared.Bool.and_both(left(Leaf{r1, v}), True{})(ltrue(Leaf{r1, v}))({==}))
-    case Con{False{}, +r1} Con{False{}, +rp}:
-      g => Shared.Bool.and_both(
-        r(None{}, None{}),
-        Bool.and(Trie.all2.fork(~V, ~V, ~r, ~left, r1, v, rp, w), True{})
-      )(
-        rn(None{})
-      )(
-        Shared.Bool.and_both(
-          Trie.all2.fork(~V, ~V, ~r, ~left, r1, v, rp, w),
-          True{}
-        )(Trie.all2_one.fork(~V, ~r, ~left, ~rn, ~rl, ~ltrue, r1, v, rp, w)(g))({==})
-      )
-    case Con{False{}, +r1} Con{True{}, +rp}:
-      g => Shared.Bool.and_both(
-        r(None{}, None{}),
-        Bool.and(left(Leaf{r1, v}), True{})
-      )(rn(None{}))(Shared.Bool.and_both(left(Leaf{r1, v}), True{})(ltrue(Leaf{r1, v}))({==}))
-    case Con{True{}, +r1} Nil{}:
-      g => Shared.Bool.and_both(
-        r(None{}, Some{w}),
-        Bool.and(True{}, left(Leaf{r1, v}))
-      )(rn(Some{w}))(Shared.Bool.and_both(True{}, left(Leaf{r1, v}))({==})(ltrue(Leaf{r1, v})))
-    case Con{True{}, +r1} Con{False{}, +rp}:
-      g => Shared.Bool.and_both(
-        r(None{}, None{}),
-        Bool.and(True{}, left(Leaf{r1, v}))
-      )(rn(None{}))(Shared.Bool.and_both(True{}, left(Leaf{r1, v}))({==})(ltrue(Leaf{r1, v})))
-    case Con{True{}, +r1} Con{True{}, +rp}:
-      g => Shared.Bool.and_both(
-        r(None{}, None{}),
-        Bool.and(True{}, Trie.all2.fork(~V, ~V, ~r, ~left, r1, v, rp, w))
-      )(
-        rn(None{})
-      )(
-        Shared.Bool.and_both(
-          True{},
-          Trie.all2.fork(~V, ~V, ~r, ~left, r1, v, rp, w)
-        )({==})(Trie.all2_one.fork(~V, ~r, ~left, ~rn, ~rl, ~ltrue, r1, v, rp, w)(g))
-      )
+  +s: Trie<V>,
+  +k: List<&2, Bool>,
+  +x: V,
+  g: {Trie.get(V, s, k) == None{}: Maybe<&2, V>}
+) -> {Trie.all2(~V, ~V, ~r, ~left, s, Trie.one(V, k, x)) == True{}: Bool}:
+  Trie.all2_of_get(
+    ~V,
+    ~V,
+    ~r,
+    ~left,
+    ~(t => f => ltrue(t)),
+    s,
+    Trie.one(V, k, x),
+    +q => Trie.all2_one.at(~V, ~r, ~rn, ~rl, s, k, x, q, g, Trie.same_key(q, k), {==})
+  )
 
 # one entry at a key that s does not hold: r holds of s and it, when r holds
 # of no entry of either side, and left of every trie
@@ -5593,74 +5560,7 @@ law Trie.all2_one:
     -> {Trie.all2(~V, ~V, ~r, ~left, s, Trie.one(V, k, x)) == True{}: Bool}
 
 def Trie.all2_one(ty, r, left, rn, rl, ltrue, s, k, x):
-  match s k:
-    case Tip{} q:
-      g => {==}
-    case Leaf{p, w} q:
-      Trie.all2_one.fork(~ty, ~r, ~left, ~rn, ~rl, ~ltrue, p, w, q, x)
-    case Bin{+h, +z, +o} Nil{}:
-      g =>
-        %Equal.sym(Maybe<&2, ty>, h, None{}, g):
-          {
-            Bool.and(
-              r(_, Some{x}),
-              Bool.and(
-                Trie.all2(~ty, ~ty, ~r, ~left, z, Tip{}),
-                Trie.all2(~ty, ~ty, ~r, ~left, o, Tip{})
-              )
-            )
-              == True{}: Bool
-          }
-        Shared.Bool.and_both(
-          r(None{}, Some{x}),
-          Bool.and(
-            Trie.all2(~ty, ~ty, ~r, ~left, z, Tip{}),
-            Trie.all2(~ty, ~ty, ~r, ~left, o, Tip{})
-          )
-        )(
-          rn(Some{x})
-        )(
-          Shared.Bool.and_both(
-            Trie.all2(~ty, ~ty, ~r, ~left, z, Tip{}),
-            Trie.all2(~ty, ~ty, ~r, ~left, o, Tip{})
-          )(
-            Trie.all2_tip(~ty, ~ty, ~r, ~left, ~ltrue, z)
-          )(Trie.all2_tip(~ty, ~ty, ~r, ~left, ~ltrue, o))
-        )
-    case Bin{+h, +z, +o} Con{False{}, +q}:
-      g => Shared.Bool.and_both(
-        r(h, None{}),
-        Bool.and(
-          Trie.all2(~ty, ~ty, ~r, ~left, z, Trie.one(ty, q, x)),
-          Trie.all2(~ty, ~ty, ~r, ~left, o, Tip{})
-        )
-      )(
-        rl(h)
-      )(
-        Shared.Bool.and_both(
-          Trie.all2(~ty, ~ty, ~r, ~left, z, Trie.one(ty, q, x)),
-          Trie.all2(~ty, ~ty, ~r, ~left, o, Tip{})
-        )(
-          Trie.all2_one(~ty, ~r, ~left, ~rn, ~rl, ~ltrue, z, q, x)(g)
-        )(Trie.all2_tip(~ty, ~ty, ~r, ~left, ~ltrue, o))
-      )
-    case Bin{+h, +z, +o} Con{True{}, +q}:
-      g => Shared.Bool.and_both(
-        r(h, None{}),
-        Bool.and(
-          Trie.all2(~ty, ~ty, ~r, ~left, z, Tip{}),
-          Trie.all2(~ty, ~ty, ~r, ~left, o, Trie.one(ty, q, x))
-        )
-      )(
-        rl(h)
-      )(
-        Shared.Bool.and_both(
-          Trie.all2(~ty, ~ty, ~r, ~left, z, Tip{}),
-          Trie.all2(~ty, ~ty, ~r, ~left, o, Trie.one(ty, q, x))
-        )(
-          Trie.all2_tip(~ty, ~ty, ~r, ~left, ~ltrue, z)
-        )(Trie.all2_one(~ty, ~r, ~left, ~rn, ~rl, ~ltrue, o, q, x)(g))
-      )
+  g => Trie.all2_one.go(~ty, ~r, ~left, ~rn, ~rl, ~ltrue, s, k, x, g)
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # Keeping
@@ -5698,8 +5598,9 @@ def Trie.keeps_get(
     k
   )
 
-# Trie.keeps_of_all at a node, from its parts
-def Trie.keeps_of_all.node(
+# Trie.keeps_trans, with binders to use again: r holds at every key, by way of
+# what s2 holds there
+def Trie.keeps_trans.go(
   ~V: Data,
   ~r: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
   ~rn: @y: Maybe<&2, V> -> {r(None{}, y) == True{}: Bool},
@@ -5710,1556 +5611,28 @@ def Trie.keeps_of_all.node(
     V> -> @z: Maybe<
     &2,
     V> -> {r(x, y) == True{}: Bool} -> {r(y, z) == True{}: Bool} -> {r(x, z) == True{}: Bool},
-  +h1: Maybe<&2, V>,
-  +z1: Trie<V>,
-  +o1: Trie<V>,
-  +h2: Maybe<&2, V>,
-  +z2: Trie<V>,
-  +o2: Trie<V>,
-  ihz: {
-    Trie.all(~V, ~(m => r(m, None{})), z1) == True{}: Bool
-  } -> {Trie.keeps(~V, ~r, z1, z2) == True{}: Bool},
-  iho: {
-    Trie.all(~V, ~(m => r(m, None{})), o1) == True{}: Bool
-  } -> {Trie.keeps(~V, ~r, o1, o2) == True{}: Bool}
-) -> {
-  Bool.and(
-    r(h1, None{}),
-    Bool.and(Trie.all(~V, ~(m => r(m, None{})), z1), Trie.all(~V, ~(m => r(m, None{})), o1))
-  )
-    == True{}: Bool
-} -> {
-  Bool.and(
-    r(h1, h2),
-    Bool.and(Trie.keeps(~V, ~r, z1, z2), Trie.keeps(~V, ~r, o1, o2))
-  )
-    == True{}: Bool
-}:
-  +e =>
-    +rest = Shared.Bool.and_true_right(
-      r(h1, None{}),
-      Bool.and(Trie.all(~V, ~(m => r(m, None{})), z1), Trie.all(~V, ~(m => r(m, None{})), o1))
-    )(e)
-    Shared.Bool.and_both(
-      r(h1, h2),
-      Bool.and(Trie.keeps(~V, ~r, z1, z2), Trie.keeps(~V, ~r, o1, o2))
+  +s1: Trie<V>,
+  +s2: Trie<V>,
+  +s3: Trie<V>,
+  e1: {Trie.keeps(~V, ~r, s1, s2) == True{}: Bool},
+  e2: {Trie.keeps(~V, ~r, s2, s3) == True{}: Bool}
+) -> {Trie.keeps(~V, ~r, s1, s3) == True{}: Bool}:
+  Trie.all2_of_get(
+    ~V,
+    ~V,
+    ~r,
+    ~(t => Trie.all(~V, ~(m => r(m, None{})), t)),
+    ~(t => f => Trie.all_of_get(~V, ~(m => r(m, None{})), t, f)),
+    s1,
+    s3,
+    +k => rtrans(
+      Trie.get(V, s1, k)
     )(
-      rtrans(
-        h1
-      )(
-        None{}
-      )(
-        h2
-      )(
-        Shared.Bool.and_true_left(
-          r(h1, None{}),
-          Bool.and(Trie.all(~V, ~(m => r(m, None{})), z1), Trie.all(~V, ~(m => r(m, None{})), o1))
-        )(e)
-      )(rn(h2))
+      Trie.get(V, s2, k)
     )(
-      Shared.Bool.and_both(
-        Trie.keeps(~V, ~r, z1, z2),
-        Trie.keeps(~V, ~r, o1, o2)
-      )(
-        ihz(
-          Shared.Bool.and_true_left(
-            Trie.all(~V, ~(m => r(m, None{})), z1),
-            Trie.all(~V, ~(m => r(m, None{})), o1)
-          )(rest)
-        )
-      )(
-        iho(
-          Shared.Bool.and_true_right(
-            Trie.all(~V, ~(m => r(m, None{})), z1),
-            Trie.all(~V, ~(m => r(m, None{})), o1)
-          )(rest)
-        )
-      )
-    )
-
-# Trie.keeps_of_all for two entries
-def Trie.keeps_of_all.fork(
-  ~V: Data,
-  ~r: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
-  ~rn: @y: Maybe<&2, V> -> {r(None{}, y) == True{}: Bool},
-  ~rtrans: @x: Maybe<
-    &2,
-    V> -> @y: Maybe<
-    &2,
-    V> -> @z: Maybe<
-    &2,
-    V> -> {r(x, y) == True{}: Bool} -> {r(y, z) == True{}: Bool} -> {r(x, z) == True{}: Bool},
-  k1: List<&2, Bool>,
-  +v: V,
-  k2: List<&2, Bool>,
-  +w: V
-) -> {
-  r(Some{v}, None{}) == True{}: Bool
-} -> {Trie.keeps(~V, ~r, Leaf{k1, v}, Leaf{k2, w}) == True{}: Bool}:
-  match k1 k2:
-    case Nil{} Nil{}:
-      e => Shared.Bool.and_both(
-        r(Some{v}, Some{w}),
-        Bool.and(True{}, True{})
-      )(
-        rtrans(Some{v})(None{})(Some{w})(e)(rn(Some{w}))
-      )(Shared.Bool.and_both(True{}, True{})({==})({==}))
-    case Nil{} Con{False{}, r2}:
-      e => Shared.Bool.and_both(
-        r(Some{v}, None{}),
-        Bool.and(True{}, True{})
-      )(e)(Shared.Bool.and_both(True{}, True{})({==})({==}))
-    case Nil{} Con{True{}, +r2}:
-      e => Shared.Bool.and_both(
-        r(Some{v}, None{}),
-        Bool.and(True{}, True{})
-      )(e)(Shared.Bool.and_both(True{}, True{})({==})({==}))
-    case Con{False{}, +r1} Nil{}:
-      e => Shared.Bool.and_both(
-        r(None{}, Some{w}),
-        Bool.and(r(Some{v}, None{}), True{})
-      )(rn(Some{w}))(Shared.Bool.and_both(r(Some{v}, None{}), True{})(e)({==}))
-    case Con{False{}, +r1} Con{False{}, +r2}:
-      e => Shared.Bool.and_both(
-        r(None{}, None{}),
-        Bool.and(Trie.keeps(~V, ~r, Leaf{r1, v}, Leaf{r2, w}), True{})
-      )(
-        rn(None{})
-      )(
-        Shared.Bool.and_both(
-          Trie.keeps(~V, ~r, Leaf{r1, v}, Leaf{r2, w}),
-          True{}
-        )(Trie.keeps_of_all.fork(~V, ~r, ~rn, ~rtrans, r1, v, r2, w)(e))({==})
-      )
-    case Con{False{}, +r1} Con{True{}, +r2}:
-      e => Shared.Bool.and_both(
-        r(None{}, None{}),
-        Bool.and(r(Some{v}, None{}), True{})
-      )(rn(None{}))(Shared.Bool.and_both(r(Some{v}, None{}), True{})(e)({==}))
-    case Con{True{}, +r1} Nil{}:
-      e => Shared.Bool.and_both(
-        r(None{}, Some{w}),
-        Bool.and(True{}, r(Some{v}, None{}))
-      )(rn(Some{w}))(Shared.Bool.and_both(True{}, r(Some{v}, None{}))({==})(e))
-    case Con{True{}, +r1} Con{False{}, +r2}:
-      e => Shared.Bool.and_both(
-        r(None{}, None{}),
-        Bool.and(True{}, r(Some{v}, None{}))
-      )(rn(None{}))(Shared.Bool.and_both(True{}, r(Some{v}, None{}))({==})(e))
-    case Con{True{}, +r1} Con{True{}, +r2}:
-      e => Shared.Bool.and_both(
-        r(None{}, None{}),
-        Bool.and(True{}, Trie.keeps(~V, ~r, Leaf{r1, v}, Leaf{r2, w}))
-      )(
-        rn(None{})
-      )(
-        Shared.Bool.and_both(
-          True{},
-          Trie.keeps(~V, ~r, Leaf{r1, v}, Leaf{r2, w})
-        )({==})(Trie.keeps_of_all.fork(~V, ~r, ~rn, ~rtrans, r1, v, r2, w)(e))
-      )
-
-# Trie.keeps_of_all for an entry and a trie
-def Trie.keeps_of_all.leaf(
-  ~V: Data,
-  ~r: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
-  ~rn: @y: Maybe<&2, V> -> {r(None{}, y) == True{}: Bool},
-  ~rtrans: @x: Maybe<
-    &2,
-    V> -> @y: Maybe<
-    &2,
-    V> -> @z: Maybe<
-    &2,
-    V> -> {r(x, y) == True{}: Bool} -> {r(y, z) == True{}: Bool} -> {r(x, z) == True{}: Bool},
-  y: Trie<V>,
-  k1: List<&2, Bool>,
-  +v: V
-) -> {r(Some{v}, None{}) == True{}: Bool} -> {Trie.keeps(~V, ~r, Leaf{k1, v}, y) == True{}: Bool}:
-  match y k1:
-    case Tip{} r1:
-      e => e
-    case Leaf{p, w} r1:
-      Trie.keeps_of_all.fork(~V, ~r, ~rn, ~rtrans, r1, v, p, w)
-    case Bin{+h, z, o} Nil{}:
-      e => Shared.Bool.and_both(
-        r(Some{v}, h),
-        Bool.and(True{}, True{})
-      )(rtrans(Some{v})(None{})(h)(e)(rn(h)))({==})
-    case Bin{+h, +z, o} Con{False{}, +r1}:
-      e => Shared.Bool.and_both(
-        r(None{}, h),
-        Bool.and(Trie.keeps(~V, ~r, Leaf{r1, v}, z), True{})
-      )(
-        rn(h)
-      )(
-        Shared.Bool.and_both(
-          Trie.keeps(~V, ~r, Leaf{r1, v}, z),
-          True{}
-        )(Trie.keeps_of_all.leaf(~V, ~r, ~rn, ~rtrans, z, r1, v)(e))({==})
-      )
-    case Bin{+h, z, +o} Con{True{}, +r1}:
-      e => Shared.Bool.and_both(
-        r(None{}, h),
-        Bool.and(True{}, Trie.keeps(~V, ~r, Leaf{r1, v}, o))
-      )(
-        rn(h)
-      )(
-        Shared.Bool.and_both(
-          True{},
-          Trie.keeps(~V, ~r, Leaf{r1, v}, o)
-        )({==})(Trie.keeps_of_all.leaf(~V, ~r, ~rn, ~rtrans, o, r1, v)(e))
-      )
-
-# any trie keeps a when r holds of each entry of a and no entry, by way of no
-# entry (rtrans)
-def Trie.keeps_of_all(
-  ~V: Data,
-  ~r: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
-  ~rn: @y: Maybe<&2, V> -> {r(None{}, y) == True{}: Bool},
-  ~rtrans: @x: Maybe<
-    &2,
-    V> -> @y: Maybe<
-    &2,
-    V> -> @z: Maybe<
-    &2,
-    V> -> {r(x, y) == True{}: Bool} -> {r(y, z) == True{}: Bool} -> {r(x, z) == True{}: Bool},
-  a: Trie<V>,
-  b: Trie<V>
-) -> {
-  Trie.all(~V, ~(m => r(m, None{})), a) == True{}: Bool
-} -> {Trie.keeps(~V, ~r, a, b) == True{}: Bool}:
-  match a b:
-    case Tip{} y:
-      e => {==}
-    case Leaf{k, v} y:
-      Trie.keeps_of_all.leaf(~V, ~r, ~rn, ~rtrans, y, k, v)
-    case Bin{h, z, o} Tip{}:
-      e => e
-    case Bin{+h, +z, +o} Leaf{+p, +w}:
-      Trie.keeps_of_all.node(
-        ~V,
-        ~r,
-        ~rn,
-        ~rtrans,
-        h,
-        z,
-        o,
-        Trie.at.here(V, p, w),
-        Trie.at.zero(V, p, w),
-        Trie.at.one(V, p, w),
-        Trie.keeps_of_all(~V, ~r, ~rn, ~rtrans, z, Trie.at.zero(V, p, w)),
-        Trie.keeps_of_all(~V, ~r, ~rn, ~rtrans, o, Trie.at.one(V, p, w))
-      )
-    case Bin{+h1, +z1, +o1} Bin{h2, +z2, +o2}:
-      Trie.keeps_of_all.node(
-        ~V,
-        ~r,
-        ~rn,
-        ~rtrans,
-        h1,
-        z1,
-        o1,
-        h2,
-        z2,
-        o2,
-        Trie.keeps_of_all(~V, ~r, ~rn, ~rtrans, z1, z2),
-        Trie.keeps_of_all(~V, ~r, ~rn, ~rtrans, o1, o2)
-      )
-
-# p holds of the parts of the node of an entry, when it holds of the entry
-# and of no entry
-def Trie.all_node(
-  ~V: Data,
-  ~p: Maybe<&2, V> -> Bool,
-  pn: {p(None{}) == True{}: Bool},
-  k: List<&2, Bool>,
-  +v: V
-) -> {
-  p(Some{v}) == True{}: Bool
-} -> {
-  Bool.and(
-    p(Trie.at.here(V, k, v)),
-    Bool.and(Trie.all(~V, ~p, Trie.at.zero(V, k, v)), Trie.all(~V, ~p, Trie.at.one(V, k, v)))
+      Trie.get(V, s3, k)
+    )(Trie.keeps_get(~V, ~r, ~rn, s1, s2, k)(e1))(Trie.keeps_get(~V, ~r, ~rn, s2, s3, k)(e2))
   )
-    == True{}: Bool
-}:
-  match k:
-    case Nil{}:
-      e => Shared.Bool.and_both(p(Some{v}), Bool.and(True{}, True{}))(e)({==})
-    case Con{False{}, q}:
-      e => Shared.Bool.and_both(
-        p(None{}),
-        Bool.and(p(Some{v}), True{})
-      )(pn)(Shared.Bool.and_both(p(Some{v}), True{})(e)({==}))
-    case Con{True{}, q}:
-      e => Shared.Bool.and_both(
-        p(None{}),
-        Bool.and(True{}, p(Some{v}))
-      )(pn)(Shared.Bool.and_both(True{}, p(Some{v}))({==})(e))
-
-# Trie.all_of_keeps at a node, from its parts
-def Trie.all_of_keeps.node(
-  ~V: Data,
-  ~r: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
-  ~rtrans: @x: Maybe<
-    &2,
-    V> -> @y: Maybe<
-    &2,
-    V> -> @z: Maybe<
-    &2,
-    V> -> {r(x, y) == True{}: Bool} -> {r(y, z) == True{}: Bool} -> {r(x, z) == True{}: Bool},
-  +h1: Maybe<&2, V>,
-  +z1: Trie<V>,
-  +o1: Trie<V>,
-  +h2: Maybe<&2, V>,
-  +z2: Trie<V>,
-  +o2: Trie<V>,
-  ihz: {
-    Trie.keeps(~V, ~r, z1, z2) == True{}: Bool
-  } -> {
-    Trie.all(~V, ~(m => r(m, None{})), z2) == True{}: Bool
-  } -> {Trie.all(~V, ~(m => r(m, None{})), z1) == True{}: Bool},
-  iho: {
-    Trie.keeps(~V, ~r, o1, o2) == True{}: Bool
-  } -> {
-    Trie.all(~V, ~(m => r(m, None{})), o2) == True{}: Bool
-  } -> {Trie.all(~V, ~(m => r(m, None{})), o1) == True{}: Bool}
-) -> {
-  Bool.and(
-    r(h1, h2),
-    Bool.and(Trie.keeps(~V, ~r, z1, z2), Trie.keeps(~V, ~r, o1, o2))
-  )
-    == True{}: Bool
-} -> {
-  Bool.and(
-    r(h2, None{}),
-    Bool.and(Trie.all(~V, ~(m => r(m, None{})), z2), Trie.all(~V, ~(m => r(m, None{})), o2))
-  )
-    == True{}: Bool
-} -> {
-  Bool.and(
-    r(h1, None{}),
-    Bool.and(Trie.all(~V, ~(m => r(m, None{})), z1), Trie.all(~V, ~(m => r(m, None{})), o1))
-  )
-    == True{}: Bool
-}:
-  +g => +e =>
-    +gr = Shared.Bool.and_true_right(
-      r(h1, h2),
-      Bool.and(Trie.keeps(~V, ~r, z1, z2), Trie.keeps(~V, ~r, o1, o2))
-    )(g)
-    +er = Shared.Bool.and_true_right(
-      r(h2, None{}),
-      Bool.and(Trie.all(~V, ~(m => r(m, None{})), z2), Trie.all(~V, ~(m => r(m, None{})), o2))
-    )(e)
-    Shared.Bool.and_both(
-      r(h1, None{}),
-      Bool.and(Trie.all(~V, ~(m => r(m, None{})), z1), Trie.all(~V, ~(m => r(m, None{})), o1))
-    )(
-      rtrans(
-        h1
-      )(
-        h2
-      )(
-        None{}
-      )(
-        Shared.Bool.and_true_left(
-          r(h1, h2),
-          Bool.and(Trie.keeps(~V, ~r, z1, z2), Trie.keeps(~V, ~r, o1, o2))
-        )(g)
-      )(
-        Shared.Bool.and_true_left(
-          r(h2, None{}),
-          Bool.and(Trie.all(~V, ~(m => r(m, None{})), z2), Trie.all(~V, ~(m => r(m, None{})), o2))
-        )(e)
-      )
-    )(
-      Shared.Bool.and_both(
-        Trie.all(~V, ~(m => r(m, None{})), z1),
-        Trie.all(~V, ~(m => r(m, None{})), o1)
-      )(
-        ihz(
-          Shared.Bool.and_true_left(Trie.keeps(~V, ~r, z1, z2), Trie.keeps(~V, ~r, o1, o2))(gr)
-        )(
-          Shared.Bool.and_true_left(
-            Trie.all(~V, ~(m => r(m, None{})), z2),
-            Trie.all(~V, ~(m => r(m, None{})), o2)
-          )(er)
-        )
-      )(
-        iho(
-          Shared.Bool.and_true_right(Trie.keeps(~V, ~r, z1, z2), Trie.keeps(~V, ~r, o1, o2))(gr)
-        )(
-          Shared.Bool.and_true_right(
-            Trie.all(~V, ~(m => r(m, None{})), z2),
-            Trie.all(~V, ~(m => r(m, None{})), o2)
-          )(er)
-        )
-      )
-    )
-
-# Trie.all_of_keeps for two entries
-def Trie.all_of_keeps.fork(
-  ~V: Data,
-  ~r: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
-  ~rtrans: @x: Maybe<
-    &2,
-    V> -> @y: Maybe<
-    &2,
-    V> -> @z: Maybe<
-    &2,
-    V> -> {r(x, y) == True{}: Bool} -> {r(y, z) == True{}: Bool} -> {r(x, z) == True{}: Bool},
-  k1: List<&2, Bool>,
-  +v: V,
-  k2: List<&2, Bool>,
-  +w: V
-) -> {
-  Trie.keeps(~V, ~r, Leaf{k1, v}, Leaf{k2, w}) == True{}: Bool
-} -> {r(Some{w}, None{}) == True{}: Bool} -> {r(Some{v}, None{}) == True{}: Bool}:
-  match k1 k2:
-    case Nil{} Nil{}:
-      g => e => rtrans(
-        Some{v}
-      )(
-        Some{w}
-      )(None{})(Shared.Bool.and_true_left(r(Some{v}, Some{w}), Bool.and(True{}, True{}))(g))(e)
-    case Nil{} Con{False{}, r2}:
-      g => e => Shared.Bool.and_true_left(r(Some{v}, None{}), Bool.and(True{}, True{}))(g)
-    case Nil{} Con{True{}, +r2}:
-      g => e => Shared.Bool.and_true_left(r(Some{v}, None{}), Bool.and(True{}, True{}))(g)
-    case Con{False{}, +r1} Nil{}:
-      g => e => Shared.Bool.and_true_left(
-        r(Some{v}, None{}),
-        True{}
-      )(Shared.Bool.and_true_right(r(None{}, Some{w}), Bool.and(r(Some{v}, None{}), True{}))(g))
-    case Con{False{}, +r1} Con{False{}, +r2}:
-      g => e => Trie.all_of_keeps.fork(
-        ~V,
-        ~r,
-        ~rtrans,
-        r1,
-        v,
-        r2,
-        w
-      )(
-        Shared.Bool.and_true_left(
-          Trie.keeps(~V, ~r, Leaf{r1, v}, Leaf{r2, w}),
-          True{}
-        )(
-          Shared.Bool.and_true_right(
-            r(None{}, None{}),
-            Bool.and(Trie.keeps(~V, ~r, Leaf{r1, v}, Leaf{r2, w}), True{})
-          )(g)
-        )
-      )(e)
-    case Con{False{}, +r1} Con{True{}, +r2}:
-      g => e => Shared.Bool.and_true_left(
-        r(Some{v}, None{}),
-        True{}
-      )(Shared.Bool.and_true_right(r(None{}, None{}), Bool.and(r(Some{v}, None{}), True{}))(g))
-    case Con{True{}, +r1} Nil{}:
-      g => e => Shared.Bool.and_true_right(
-        True{},
-        r(Some{v}, None{})
-      )(Shared.Bool.and_true_right(r(None{}, Some{w}), Bool.and(True{}, r(Some{v}, None{})))(g))
-    case Con{True{}, +r1} Con{False{}, +r2}:
-      g => e => Shared.Bool.and_true_right(
-        True{},
-        r(Some{v}, None{})
-      )(Shared.Bool.and_true_right(r(None{}, None{}), Bool.and(True{}, r(Some{v}, None{})))(g))
-    case Con{True{}, +r1} Con{True{}, +r2}:
-      g => e => Trie.all_of_keeps.fork(
-        ~V,
-        ~r,
-        ~rtrans,
-        r1,
-        v,
-        r2,
-        w
-      )(
-        Shared.Bool.and_true_right(
-          True{},
-          Trie.keeps(~V, ~r, Leaf{r1, v}, Leaf{r2, w})
-        )(
-          Shared.Bool.and_true_right(
-            r(None{}, None{}),
-            Bool.and(True{}, Trie.keeps(~V, ~r, Leaf{r1, v}, Leaf{r2, w}))
-          )(g)
-        )
-      )(e)
-
-# Trie.all_of_keeps for an entry and a trie
-def Trie.all_of_keeps.leaf(
-  ~V: Data,
-  ~r: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
-  ~rtrans: @x: Maybe<
-    &2,
-    V> -> @y: Maybe<
-    &2,
-    V> -> @z: Maybe<
-    &2,
-    V> -> {r(x, y) == True{}: Bool} -> {r(y, z) == True{}: Bool} -> {r(x, z) == True{}: Bool},
-  y: Trie<V>,
-  k1: List<&2, Bool>,
-  +v: V
-) -> {
-  Trie.keeps(~V, ~r, Leaf{k1, v}, y) == True{}: Bool
-} -> {
-  Trie.all(~V, ~(m => r(m, None{})), y) == True{}: Bool
-} -> {r(Some{v}, None{}) == True{}: Bool}:
-  match y k1:
-    case Tip{} r1:
-      g => e => g
-    case Leaf{p, w} r1:
-      Trie.all_of_keeps.fork(~V, ~r, ~rtrans, r1, v, p, w)
-    case Bin{+h, +z, +o} Nil{}:
-      g => e => rtrans(
-        Some{v}
-      )(
-        h
-      )(
-        None{}
-      )(
-        Shared.Bool.and_true_left(r(Some{v}, h), Bool.and(True{}, True{}))(g)
-      )(
-        Shared.Bool.and_true_left(
-          r(h, None{}),
-          Bool.and(Trie.all(~V, ~(m => r(m, None{})), z), Trie.all(~V, ~(m => r(m, None{})), o))
-        )(e)
-      )
-    case Bin{+h, +z, +o} Con{False{}, +r1}:
-      g => e => Trie.all_of_keeps.leaf(
-        ~V,
-        ~r,
-        ~rtrans,
-        z,
-        r1,
-        v
-      )(
-        Shared.Bool.and_true_left(
-          Trie.keeps(~V, ~r, Leaf{r1, v}, z),
-          True{}
-        )(
-          Shared.Bool.and_true_right(
-            r(None{}, h),
-            Bool.and(Trie.keeps(~V, ~r, Leaf{r1, v}, z), True{})
-          )(g)
-        )
-      )(
-        Shared.Bool.and_true_left(
-          Trie.all(~V, ~(m => r(m, None{})), z),
-          Trie.all(~V, ~(m => r(m, None{})), o)
-        )(
-          Shared.Bool.and_true_right(
-            r(h, None{}),
-            Bool.and(Trie.all(~V, ~(m => r(m, None{})), z), Trie.all(~V, ~(m => r(m, None{})), o))
-          )(e)
-        )
-      )
-    case Bin{+h, +z, +o} Con{True{}, +r1}:
-      g => e => Trie.all_of_keeps.leaf(
-        ~V,
-        ~r,
-        ~rtrans,
-        o,
-        r1,
-        v
-      )(
-        Shared.Bool.and_true_right(
-          True{},
-          Trie.keeps(~V, ~r, Leaf{r1, v}, o)
-        )(
-          Shared.Bool.and_true_right(
-            r(None{}, h),
-            Bool.and(True{}, Trie.keeps(~V, ~r, Leaf{r1, v}, o))
-          )(g)
-        )
-      )(
-        Shared.Bool.and_true_right(
-          Trie.all(~V, ~(m => r(m, None{})), z),
-          Trie.all(~V, ~(m => r(m, None{})), o)
-        )(
-          Shared.Bool.and_true_right(
-            r(h, None{}),
-            Bool.and(Trie.all(~V, ~(m => r(m, None{})), z), Trie.all(~V, ~(m => r(m, None{})), o))
-          )(e)
-        )
-      )
-
-# r holds of each entry of a and no entry, when it does of b and b keeps a
-def Trie.all_of_keeps(
-  ~V: Data,
-  ~r: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
-  ~rn: @y: Maybe<&2, V> -> {r(None{}, y) == True{}: Bool},
-  ~rtrans: @x: Maybe<
-    &2,
-    V> -> @y: Maybe<
-    &2,
-    V> -> @z: Maybe<
-    &2,
-    V> -> {r(x, y) == True{}: Bool} -> {r(y, z) == True{}: Bool} -> {r(x, z) == True{}: Bool},
-  a: Trie<V>,
-  b: Trie<V>
-) -> {
-  Trie.keeps(~V, ~r, a, b) == True{}: Bool
-} -> {
-  Trie.all(~V, ~(m => r(m, None{})), b) == True{}: Bool
-} -> {Trie.all(~V, ~(m => r(m, None{})), a) == True{}: Bool}:
-  match a b:
-    case Tip{} y:
-      g => e => {==}
-    case Leaf{k, v} y:
-      Trie.all_of_keeps.leaf(~V, ~r, ~rtrans, y, k, v)
-    case Bin{h, z, o} Tip{}:
-      g => e => g
-    case Bin{+h, +z, +o} Leaf{+p, +w}:
-      g => e =>
-        Trie.all_of_keeps.node(
-          ~V,
-          ~r,
-          ~rtrans,
-          h,
-          z,
-          o,
-          Trie.at.here(V, p, w),
-          Trie.at.zero(V, p, w),
-          Trie.at.one(V, p, w),
-          Trie.all_of_keeps(~V, ~r, ~rn, ~rtrans, z, Trie.at.zero(V, p, w)),
-          Trie.all_of_keeps(~V, ~r, ~rn, ~rtrans, o, Trie.at.one(V, p, w))
-        )(g)(Trie.all_node(~V, ~(m => r(m, None{})), rn(None{}), p, w)(e))
-    case Bin{+h1, +z1, +o1} Bin{h2, +z2, +o2}:
-      Trie.all_of_keeps.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        h1,
-        z1,
-        o1,
-        h2,
-        z2,
-        o2,
-        Trie.all_of_keeps(~V, ~r, ~rn, ~rtrans, z1, z2),
-        Trie.all_of_keeps(~V, ~r, ~rn, ~rtrans, o1, o2)
-      )
-
-# Trie.keeps_trans at a node, from its parts
-def Trie.keeps_trans.node(
-  ~V: Data,
-  ~r: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
-  ~rtrans: @x: Maybe<
-    &2,
-    V> -> @y: Maybe<
-    &2,
-    V> -> @z: Maybe<
-    &2,
-    V> -> {r(x, y) == True{}: Bool} -> {r(y, z) == True{}: Bool} -> {r(x, z) == True{}: Bool},
-  +h1: Maybe<&2, V>,
-  +z1: Trie<V>,
-  +o1: Trie<V>,
-  +h2: Maybe<&2, V>,
-  +z2: Trie<V>,
-  +o2: Trie<V>,
-  +h3: Maybe<&2, V>,
-  +z3: Trie<V>,
-  +o3: Trie<V>,
-  ihz: {
-    Trie.keeps(~V, ~r, z1, z2) == True{}: Bool
-  } -> {Trie.keeps(~V, ~r, z2, z3) == True{}: Bool} -> {Trie.keeps(~V, ~r, z1, z3) == True{}: Bool},
-  iho: {
-    Trie.keeps(~V, ~r, o1, o2) == True{}: Bool
-  } -> {Trie.keeps(~V, ~r, o2, o3) == True{}: Bool} -> {Trie.keeps(~V, ~r, o1, o3) == True{}: Bool}
-) -> {
-  Bool.and(
-    r(h1, h2),
-    Bool.and(Trie.keeps(~V, ~r, z1, z2), Trie.keeps(~V, ~r, o1, o2))
-  )
-    == True{}: Bool
-} -> {
-  Bool.and(
-    r(h2, h3),
-    Bool.and(Trie.keeps(~V, ~r, z2, z3), Trie.keeps(~V, ~r, o2, o3))
-  )
-    == True{}: Bool
-} -> {
-  Bool.and(
-    r(h1, h3),
-    Bool.and(Trie.keeps(~V, ~r, z1, z3), Trie.keeps(~V, ~r, o1, o3))
-  )
-    == True{}: Bool
-}:
-  +g1 => +g2 =>
-    +a1 = Shared.Bool.and_true_right(
-      r(h1, h2),
-      Bool.and(Trie.keeps(~V, ~r, z1, z2), Trie.keeps(~V, ~r, o1, o2))
-    )(g1)
-    +a2 = Shared.Bool.and_true_right(
-      r(h2, h3),
-      Bool.and(Trie.keeps(~V, ~r, z2, z3), Trie.keeps(~V, ~r, o2, o3))
-    )(g2)
-    Shared.Bool.and_both(
-      r(h1, h3),
-      Bool.and(Trie.keeps(~V, ~r, z1, z3), Trie.keeps(~V, ~r, o1, o3))
-    )(
-      rtrans(
-        h1
-      )(
-        h2
-      )(
-        h3
-      )(
-        Shared.Bool.and_true_left(
-          r(h1, h2),
-          Bool.and(Trie.keeps(~V, ~r, z1, z2), Trie.keeps(~V, ~r, o1, o2))
-        )(g1)
-      )(
-        Shared.Bool.and_true_left(
-          r(h2, h3),
-          Bool.and(Trie.keeps(~V, ~r, z2, z3), Trie.keeps(~V, ~r, o2, o3))
-        )(g2)
-      )
-    )(
-      Shared.Bool.and_both(
-        Trie.keeps(~V, ~r, z1, z3),
-        Trie.keeps(~V, ~r, o1, o3)
-      )(
-        ihz(
-          Shared.Bool.and_true_left(Trie.keeps(~V, ~r, z1, z2), Trie.keeps(~V, ~r, o1, o2))(a1)
-        )(Shared.Bool.and_true_left(Trie.keeps(~V, ~r, z2, z3), Trie.keeps(~V, ~r, o2, o3))(a2))
-      )(
-        iho(
-          Shared.Bool.and_true_right(Trie.keeps(~V, ~r, z1, z2), Trie.keeps(~V, ~r, o1, o2))(a1)
-        )(Shared.Bool.and_true_right(Trie.keeps(~V, ~r, z2, z3), Trie.keeps(~V, ~r, o2, o3))(a2))
-      )
-    )
-
-# Trie.keeps_trans for three entries
-def Trie.keeps_trans.fork(
-  ~V: Data,
-  ~r: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
-  ~rn: @y: Maybe<&2, V> -> {r(None{}, y) == True{}: Bool},
-  ~rtrans: @x: Maybe<
-    &2,
-    V> -> @y: Maybe<
-    &2,
-    V> -> @z: Maybe<
-    &2,
-    V> -> {r(x, y) == True{}: Bool} -> {r(y, z) == True{}: Bool} -> {r(x, z) == True{}: Bool},
-  k1: List<&2, Bool>,
-  +v: V,
-  k2: List<&2, Bool>,
-  +w: V,
-  k3: List<&2, Bool>,
-  +x: V
-) -> {
-  Trie.keeps(~V, ~r, Leaf{k1, v}, Leaf{k2, w}) == True{}: Bool
-} -> {
-  Trie.keeps(~V, ~r, Leaf{k2, w}, Leaf{k3, x}) == True{}: Bool
-} -> {Trie.keeps(~V, ~r, Leaf{k1, v}, Leaf{k3, x}) == True{}: Bool}:
-  match k1 k2 k3:
-    case Nil{} Nil{} Nil{}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        Some{v},
-        Tip{},
-        Tip{},
-        Some{w},
-        Tip{},
-        Tip{},
-        Some{x},
-        Tip{},
-        Tip{},
-        a1 => a2 => {==},
-        a1 => a2 => {==}
-      )
-    case Nil{} Nil{} Con{False{}, r3}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        Some{v},
-        Tip{},
-        Tip{},
-        Some{w},
-        Tip{},
-        Tip{},
-        None{},
-        Leaf{r3, x},
-        Tip{},
-        a1 => a2 => {==},
-        a1 => a2 => {==}
-      )
-    case Nil{} Nil{} Con{True{}, +r3}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        Some{v},
-        Tip{},
-        Tip{},
-        Some{w},
-        Tip{},
-        Tip{},
-        None{},
-        Tip{},
-        Leaf{r3, x},
-        a1 => a2 => {==},
-        a1 => a2 => {==}
-      )
-    case Nil{} Con{False{}, r2} Nil{}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        Some{v},
-        Tip{},
-        Tip{},
-        None{},
-        Leaf{r2, w},
-        Tip{},
-        Some{x},
-        Tip{},
-        Tip{},
-        a1 => a2 => {==},
-        a1 => a2 => {==}
-      )
-    case Nil{} Con{False{}, +r2} Con{False{}, r3}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        Some{v},
-        Tip{},
-        Tip{},
-        None{},
-        Leaf{r2, w},
-        Tip{},
-        None{},
-        Leaf{r3, x},
-        Tip{},
-        a1 => a2 => {==},
-        a1 => a2 => {==}
-      )
-    case Nil{} Con{False{}, +r2} Con{True{}, +r3}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        Some{v},
-        Tip{},
-        Tip{},
-        None{},
-        Leaf{r2, w},
-        Tip{},
-        None{},
-        Tip{},
-        Leaf{r3, x},
-        a1 => a2 => {==},
-        a1 => a2 => {==}
-      )
-    case Nil{} Con{True{}, +r2} Nil{}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        Some{v},
-        Tip{},
-        Tip{},
-        None{},
-        Tip{},
-        Leaf{r2, w},
-        Some{x},
-        Tip{},
-        Tip{},
-        a1 => a2 => {==},
-        a1 => a2 => {==}
-      )
-    case Nil{} Con{True{}, +r2} Con{False{}, r3}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        Some{v},
-        Tip{},
-        Tip{},
-        None{},
-        Tip{},
-        Leaf{r2, w},
-        None{},
-        Leaf{r3, x},
-        Tip{},
-        a1 => a2 => {==},
-        a1 => a2 => {==}
-      )
-    case Nil{} Con{True{}, +r2} Con{True{}, +r3}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        Some{v},
-        Tip{},
-        Tip{},
-        None{},
-        Tip{},
-        Leaf{r2, w},
-        None{},
-        Tip{},
-        Leaf{r3, x},
-        a1 => a2 => {==},
-        a1 => a2 => {==}
-      )
-    case Con{False{}, +r1} Nil{} Nil{}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Leaf{r1, v},
-        Tip{},
-        Some{w},
-        Tip{},
-        Tip{},
-        Some{x},
-        Tip{},
-        Tip{},
-        a1 => a2 => Trie.keeps_of_all.leaf(~V, ~r, ~rn, ~rtrans, Tip{}, r1, v)(a1),
-        a1 => a2 => {==}
-      )
-    case Con{False{}, +r1} Nil{} Con{False{}, +r3}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Leaf{r1, v},
-        Tip{},
-        Some{w},
-        Tip{},
-        Tip{},
-        None{},
-        Leaf{r3, x},
-        Tip{},
-        a1 => a2 => Trie.keeps_of_all.leaf(~V, ~r, ~rn, ~rtrans, Leaf{r3, x}, r1, v)(a1),
-        a1 => a2 => {==}
-      )
-    case Con{False{}, +r1} Nil{} Con{True{}, +r3}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Leaf{r1, v},
-        Tip{},
-        Some{w},
-        Tip{},
-        Tip{},
-        None{},
-        Tip{},
-        Leaf{r3, x},
-        a1 => a2 => Trie.keeps_of_all.leaf(~V, ~r, ~rn, ~rtrans, Tip{}, r1, v)(a1),
-        a1 => a2 => {==}
-      )
-    case Con{False{}, +r1} Con{False{}, +r2} Nil{}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Leaf{r1, v},
-        Tip{},
-        None{},
-        Leaf{r2, w},
-        Tip{},
-        Some{x},
-        Tip{},
-        Tip{},
-        Trie.all_of_keeps.fork(~V, ~r, ~rtrans, r1, v, r2, w),
-        a1 => a2 => {==}
-      )
-    case Con{False{}, +r1} Con{False{}, +r2} Con{False{}, +r3}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Leaf{r1, v},
-        Tip{},
-        None{},
-        Leaf{r2, w},
-        Tip{},
-        None{},
-        Leaf{r3, x},
-        Tip{},
-        Trie.keeps_trans.fork(~V, ~r, ~rn, ~rtrans, r1, v, r2, w, r3, x),
-        a1 => a2 => {==}
-      )
-    case Con{False{}, +r1} Con{False{}, +r2} Con{True{}, +r3}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Leaf{r1, v},
-        Tip{},
-        None{},
-        Leaf{r2, w},
-        Tip{},
-        None{},
-        Tip{},
-        Leaf{r3, x},
-        Trie.all_of_keeps.fork(~V, ~r, ~rtrans, r1, v, r2, w),
-        a1 => a2 => {==}
-      )
-    case Con{False{}, +r1} Con{True{}, +r2} Nil{}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Leaf{r1, v},
-        Tip{},
-        None{},
-        Tip{},
-        Leaf{r2, w},
-        Some{x},
-        Tip{},
-        Tip{},
-        a1 => a2 => Trie.keeps_of_all.leaf(~V, ~r, ~rn, ~rtrans, Tip{}, r1, v)(a1),
-        a1 => a2 => {==}
-      )
-    case Con{False{}, +r1} Con{True{}, +r2} Con{False{}, +r3}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Leaf{r1, v},
-        Tip{},
-        None{},
-        Tip{},
-        Leaf{r2, w},
-        None{},
-        Leaf{r3, x},
-        Tip{},
-        a1 => a2 => Trie.keeps_of_all.leaf(~V, ~r, ~rn, ~rtrans, Leaf{r3, x}, r1, v)(a1),
-        a1 => a2 => {==}
-      )
-    case Con{False{}, +r1} Con{True{}, +r2} Con{True{}, +r3}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Leaf{r1, v},
-        Tip{},
-        None{},
-        Tip{},
-        Leaf{r2, w},
-        None{},
-        Tip{},
-        Leaf{r3, x},
-        a1 => a2 => Trie.keeps_of_all.leaf(~V, ~r, ~rn, ~rtrans, Tip{}, r1, v)(a1),
-        a1 => a2 => {==}
-      )
-    case Con{True{}, +r1} Nil{} Nil{}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Tip{},
-        Leaf{r1, v},
-        Some{w},
-        Tip{},
-        Tip{},
-        Some{x},
-        Tip{},
-        Tip{},
-        a1 => a2 => {==},
-        a1 => a2 => Trie.keeps_of_all.leaf(~V, ~r, ~rn, ~rtrans, Tip{}, r1, v)(a1)
-      )
-    case Con{True{}, +r1} Nil{} Con{False{}, +r3}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Tip{},
-        Leaf{r1, v},
-        Some{w},
-        Tip{},
-        Tip{},
-        None{},
-        Leaf{r3, x},
-        Tip{},
-        a1 => a2 => {==},
-        a1 => a2 => Trie.keeps_of_all.leaf(~V, ~r, ~rn, ~rtrans, Tip{}, r1, v)(a1)
-      )
-    case Con{True{}, +r1} Nil{} Con{True{}, +r3}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Tip{},
-        Leaf{r1, v},
-        Some{w},
-        Tip{},
-        Tip{},
-        None{},
-        Tip{},
-        Leaf{r3, x},
-        a1 => a2 => {==},
-        a1 => a2 => Trie.keeps_of_all.leaf(~V, ~r, ~rn, ~rtrans, Leaf{r3, x}, r1, v)(a1)
-      )
-    case Con{True{}, +r1} Con{False{}, +r2} Nil{}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Tip{},
-        Leaf{r1, v},
-        None{},
-        Leaf{r2, w},
-        Tip{},
-        Some{x},
-        Tip{},
-        Tip{},
-        a1 => a2 => {==},
-        a1 => a2 => Trie.keeps_of_all.leaf(~V, ~r, ~rn, ~rtrans, Tip{}, r1, v)(a1)
-      )
-    case Con{True{}, +r1} Con{False{}, +r2} Con{False{}, +r3}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Tip{},
-        Leaf{r1, v},
-        None{},
-        Leaf{r2, w},
-        Tip{},
-        None{},
-        Leaf{r3, x},
-        Tip{},
-        a1 => a2 => {==},
-        a1 => a2 => Trie.keeps_of_all.leaf(~V, ~r, ~rn, ~rtrans, Tip{}, r1, v)(a1)
-      )
-    case Con{True{}, +r1} Con{False{}, +r2} Con{True{}, +r3}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Tip{},
-        Leaf{r1, v},
-        None{},
-        Leaf{r2, w},
-        Tip{},
-        None{},
-        Tip{},
-        Leaf{r3, x},
-        a1 => a2 => {==},
-        a1 => a2 => Trie.keeps_of_all.leaf(~V, ~r, ~rn, ~rtrans, Leaf{r3, x}, r1, v)(a1)
-      )
-    case Con{True{}, +r1} Con{True{}, +r2} Nil{}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Tip{},
-        Leaf{r1, v},
-        None{},
-        Tip{},
-        Leaf{r2, w},
-        Some{x},
-        Tip{},
-        Tip{},
-        a1 => a2 => {==},
-        Trie.all_of_keeps.fork(~V, ~r, ~rtrans, r1, v, r2, w)
-      )
-    case Con{True{}, +r1} Con{True{}, +r2} Con{False{}, +r3}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Tip{},
-        Leaf{r1, v},
-        None{},
-        Tip{},
-        Leaf{r2, w},
-        None{},
-        Leaf{r3, x},
-        Tip{},
-        a1 => a2 => {==},
-        Trie.all_of_keeps.fork(~V, ~r, ~rtrans, r1, v, r2, w)
-      )
-    case Con{True{}, +r1} Con{True{}, +r2} Con{True{}, +r3}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Tip{},
-        Leaf{r1, v},
-        None{},
-        Tip{},
-        Leaf{r2, w},
-        None{},
-        Tip{},
-        Leaf{r3, x},
-        a1 => a2 => {==},
-        Trie.keeps_trans.fork(~V, ~r, ~rn, ~rtrans, r1, v, r2, w, r3, x)
-      )
-
-# Trie.keeps_trans for two entries and a trie
-def Trie.keeps_trans.pair(
-  ~V: Data,
-  ~r: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
-  ~rn: @y: Maybe<&2, V> -> {r(None{}, y) == True{}: Bool},
-  ~rtrans: @x: Maybe<
-    &2,
-    V> -> @y: Maybe<
-    &2,
-    V> -> @z: Maybe<
-    &2,
-    V> -> {r(x, y) == True{}: Bool} -> {r(y, z) == True{}: Bool} -> {r(x, z) == True{}: Bool},
-  s3: Trie<V>,
-  k1: List<&2, Bool>,
-  +v: V,
-  k2: List<&2, Bool>,
-  +w: V
-) -> {
-  Trie.keeps(~V, ~r, Leaf{k1, v}, Leaf{k2, w}) == True{}: Bool
-} -> {
-  Trie.keeps(~V, ~r, Leaf{k2, w}, s3) == True{}: Bool
-} -> {Trie.keeps(~V, ~r, Leaf{k1, v}, s3) == True{}: Bool}:
-  match s3 k1 k2:
-    case Tip{} r1 r2:
-      Trie.all_of_keeps.fork(~V, ~r, ~rtrans, r1, v, r2, w)
-    case Leaf{k3, x} r1 r2:
-      Trie.keeps_trans.fork(~V, ~r, ~rn, ~rtrans, r1, v, r2, w, k3, x)
-    case Bin{h3, +z3, +o3} Nil{} Nil{}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        Some{v},
-        Tip{},
-        Tip{},
-        Some{w},
-        Tip{},
-        Tip{},
-        h3,
-        z3,
-        o3,
-        a1 => a2 => {==},
-        a1 => a2 => {==}
-      )
-    case Bin{+h3, +z3, +o3} Nil{} Con{False{}, r2}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        Some{v},
-        Tip{},
-        Tip{},
-        None{},
-        Leaf{r2, w},
-        Tip{},
-        h3,
-        z3,
-        o3,
-        a1 => a2 => {==},
-        a1 => a2 => {==}
-      )
-    case Bin{+h3, +z3, +o3} Nil{} Con{True{}, +r2}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        Some{v},
-        Tip{},
-        Tip{},
-        None{},
-        Tip{},
-        Leaf{r2, w},
-        h3,
-        z3,
-        o3,
-        a1 => a2 => {==},
-        a1 => a2 => {==}
-      )
-    case Bin{+h3, +z3, +o3} Con{False{}, +r1} Nil{}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Leaf{r1, v},
-        Tip{},
-        Some{w},
-        Tip{},
-        Tip{},
-        h3,
-        z3,
-        o3,
-        a1 => a2 => Trie.keeps_of_all.leaf(~V, ~r, ~rn, ~rtrans, z3, r1, v)(a1),
-        a1 => a2 => {==}
-      )
-    case Bin{+h3, +z3, +o3} Con{False{}, +r1} Con{False{}, +r2}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Leaf{r1, v},
-        Tip{},
-        None{},
-        Leaf{r2, w},
-        Tip{},
-        h3,
-        z3,
-        o3,
-        Trie.keeps_trans.pair(~V, ~r, ~rn, ~rtrans, z3, r1, v, r2, w),
-        a1 => a2 => {==}
-      )
-    case Bin{+h3, +z3, +o3} Con{False{}, +r1} Con{True{}, +r2}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Leaf{r1, v},
-        Tip{},
-        None{},
-        Tip{},
-        Leaf{r2, w},
-        h3,
-        z3,
-        o3,
-        a1 => a2 => Trie.keeps_of_all.leaf(~V, ~r, ~rn, ~rtrans, z3, r1, v)(a1),
-        a1 => a2 => {==}
-      )
-    case Bin{+h3, +z3, +o3} Con{True{}, +r1} Nil{}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Tip{},
-        Leaf{r1, v},
-        Some{w},
-        Tip{},
-        Tip{},
-        h3,
-        z3,
-        o3,
-        a1 => a2 => {==},
-        a1 => a2 => Trie.keeps_of_all.leaf(~V, ~r, ~rn, ~rtrans, o3, r1, v)(a1)
-      )
-    case Bin{+h3, +z3, +o3} Con{True{}, +r1} Con{False{}, +r2}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Tip{},
-        Leaf{r1, v},
-        None{},
-        Leaf{r2, w},
-        Tip{},
-        h3,
-        z3,
-        o3,
-        a1 => a2 => {==},
-        a1 => a2 => Trie.keeps_of_all.leaf(~V, ~r, ~rn, ~rtrans, o3, r1, v)(a1)
-      )
-    case Bin{+h3, +z3, +o3} Con{True{}, +r1} Con{True{}, +r2}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Tip{},
-        Leaf{r1, v},
-        None{},
-        Tip{},
-        Leaf{r2, w},
-        h3,
-        z3,
-        o3,
-        a1 => a2 => {==},
-        Trie.keeps_trans.pair(~V, ~r, ~rn, ~rtrans, o3, r1, v, r2, w)
-      )
-
-# Trie.keeps_trans for an entry and two tries
-def Trie.keeps_trans.leaf(
-  ~V: Data,
-  ~r: Maybe<&2, V> -> Maybe<&2, V> -> Bool,
-  ~rn: @y: Maybe<&2, V> -> {r(None{}, y) == True{}: Bool},
-  ~rtrans: @x: Maybe<
-    &2,
-    V> -> @y: Maybe<
-    &2,
-    V> -> @z: Maybe<
-    &2,
-    V> -> {r(x, y) == True{}: Bool} -> {r(y, z) == True{}: Bool} -> {r(x, z) == True{}: Bool},
-  s2: Trie<V>,
-  s3: Trie<V>,
-  k1: List<&2, Bool>,
-  +v: V
-) -> {
-  Trie.keeps(~V, ~r, Leaf{k1, v}, s2) == True{}: Bool
-} -> {
-  Trie.keeps(~V, ~r, s2, s3) == True{}: Bool
-} -> {Trie.keeps(~V, ~r, Leaf{k1, v}, s3) == True{}: Bool}:
-  match s2 s3 k1:
-    case Tip{} y r1:
-      g1 => g2 => Trie.keeps_of_all.leaf(~V, ~r, ~rn, ~rtrans, y, r1, v)(g1)
-    case Leaf{k2, w} y r1:
-      Trie.keeps_trans.pair(~V, ~r, ~rn, ~rtrans, y, r1, v, k2, w)
-    case Bin{h2, z2, o2} Tip{} r1:
-      Trie.all_of_keeps.leaf(~V, ~r, ~rtrans, Bin{h2, z2, o2}, r1, v)
-    case Bin{+h2, +z2, +o2} Leaf{+k3, +x} Nil{}:
-      g1 => g2 =>
-        %Trie.all2_node.leaf(
-          ~V,
-          ~V,
-          ~r,
-          ~(t => Trie.all(~V, ~(m => r(m, None{})), t)),
-          [],
-          v,
-          k3,
-          x
-        ): {_ == True{}: Bool}
-        Trie.keeps_trans.node(
-          ~V,
-          ~r,
-          ~rtrans,
-          Some{v},
-          Tip{},
-          Tip{},
-          h2,
-          z2,
-          o2,
-          Trie.at.here(V, k3, x),
-          Trie.at.zero(V, k3, x),
-          Trie.at.one(V, k3, x),
-          a1 => a2 => {==},
-          a1 => a2 => {==}
-        )(g1)(g2)
-    case Bin{+h2, +z2, +o2} Leaf{+k3, +x} Con{False{}, +r1}:
-      g1 => g2 =>
-        %Trie.all2_node.leaf(
-          ~V,
-          ~V,
-          ~r,
-          ~(t => Trie.all(~V, ~(m => r(m, None{})), t)),
-          False{} <> r1,
-          v,
-          k3,
-          x
-        ): {_ == True{}: Bool}
-        Trie.keeps_trans.node(
-          ~V,
-          ~r,
-          ~rtrans,
-          None{},
-          Leaf{r1, v},
-          Tip{},
-          h2,
-          z2,
-          o2,
-          Trie.at.here(V, k3, x),
-          Trie.at.zero(V, k3, x),
-          Trie.at.one(V, k3, x),
-          Trie.keeps_trans.leaf(~V, ~r, ~rn, ~rtrans, z2, Trie.at.zero(V, k3, x), r1, v),
-          a1 => a2 => {==}
-        )(g1)(g2)
-    case Bin{+h2, +z2, +o2} Leaf{+k3, +x} Con{True{}, +r1}:
-      g1 => g2 =>
-        %Trie.all2_node.leaf(
-          ~V,
-          ~V,
-          ~r,
-          ~(t => Trie.all(~V, ~(m => r(m, None{})), t)),
-          True{} <> r1,
-          v,
-          k3,
-          x
-        ): {_ == True{}: Bool}
-        Trie.keeps_trans.node(
-          ~V,
-          ~r,
-          ~rtrans,
-          None{},
-          Tip{},
-          Leaf{r1, v},
-          h2,
-          z2,
-          o2,
-          Trie.at.here(V, k3, x),
-          Trie.at.zero(V, k3, x),
-          Trie.at.one(V, k3, x),
-          a1 => a2 => {==},
-          Trie.keeps_trans.leaf(~V, ~r, ~rn, ~rtrans, o2, Trie.at.one(V, k3, x), r1, v)
-        )(g1)(g2)
-    case Bin{+h2, +z2, +o2} Bin{h3, +z3, +o3} Nil{}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        Some{v},
-        Tip{},
-        Tip{},
-        h2,
-        z2,
-        o2,
-        h3,
-        z3,
-        o3,
-        a1 => a2 => {==},
-        a1 => a2 => {==}
-      )
-    case Bin{+h2, +z2, +o2} Bin{+h3, +z3, +o3} Con{False{}, +r1}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Leaf{r1, v},
-        Tip{},
-        h2,
-        z2,
-        o2,
-        h3,
-        z3,
-        o3,
-        Trie.keeps_trans.leaf(~V, ~r, ~rn, ~rtrans, z2, z3, r1, v),
-        a1 => a2 => {==}
-      )
-    case Bin{+h2, +z2, +o2} Bin{+h3, +z3, +o3} Con{True{}, +r1}:
-      Trie.keeps_trans.node(
-        ~V,
-        ~r,
-        ~rtrans,
-        None{},
-        Tip{},
-        Leaf{r1, v},
-        h2,
-        z2,
-        o2,
-        h3,
-        z3,
-        o3,
-        a1 => a2 => {==},
-        Trie.keeps_trans.leaf(~V, ~r, ~rn, ~rtrans, o2, o3, r1, v)
-      )
 
 # keeping composes
 law Trie.keeps_trans:
@@ -7281,156 +5654,7 @@ law Trie.keeps_trans:
     -> {Trie.keeps(~V, ~r, s1, s3) == True{}: Bool}
 
 def Trie.keeps_trans(ty, r, rn, rtrans, s1, s2, s3):
-  match s1 s2 s3:
-    case Tip{} y w:
-      g1 => g2 => {==}
-    case Leaf{k, v} y w:
-      Trie.keeps_trans.leaf(~ty, ~r, ~rn, ~rtrans, y, w, k, v)
-    case Bin{h1, z1, o1} Tip{} w:
-      g1 => g2 => Trie.keeps_of_all(~ty, ~r, ~rn, ~rtrans, Bin{h1, z1, o1}, w)(g1)
-    case Bin{h1, z1, o1} Leaf{k2, w} Tip{}:
-      g1 => g2 => Trie.all_of_keeps(~ty, ~r, ~rn, ~rtrans, Bin{h1, z1, o1}, Leaf{k2, w})(g1)(g2)
-    case Bin{h1, z1, o1} Bin{h2, z2, o2} Tip{}:
-      g1 => g2 => Trie.all_of_keeps(~ty, ~r, ~rn, ~rtrans, Bin{h1, z1, o1}, Bin{h2, z2, o2})(g1)(g2)
-    case Bin{+h1, +z1, +o1} Leaf{+k2, +w} Leaf{+k3, +x}:
-      g1 => g2 =>
-        Trie.keeps_trans.node(
-          ~ty,
-          ~r,
-          ~rtrans,
-          h1,
-          z1,
-          o1,
-          Trie.at.here(ty, k2, w),
-          Trie.at.zero(ty, k2, w),
-          Trie.at.one(ty, k2, w),
-          Trie.at.here(ty, k3, x),
-          Trie.at.zero(ty, k3, x),
-          Trie.at.one(ty, k3, x),
-          Trie.keeps_trans(
-            ~ty,
-            ~r,
-            ~rn,
-            ~rtrans,
-            z1,
-            Trie.at.zero(ty, k2, w),
-            Trie.at.zero(ty, k3, x)
-          ),
-          Trie.keeps_trans(
-            ~ty,
-            ~r,
-            ~rn,
-            ~rtrans,
-            o1,
-            Trie.at.one(ty, k2, w),
-            Trie.at.one(ty, k3, x)
-          )
-        )(
-          g1
-        )(
-          Equal.trans(
-            Bool,
-            Bool.and(
-              r(Trie.at.here(ty, k2, w), Trie.at.here(ty, k3, x)),
-              Bool.and(
-                Trie.keeps(~ty, ~r, Trie.at.zero(ty, k2, w), Trie.at.zero(ty, k3, x)),
-                Trie.keeps(~ty, ~r, Trie.at.one(ty, k2, w), Trie.at.one(ty, k3, x))
-              )
-            ),
-            Trie.keeps(~ty, ~r, Leaf{k2, w}, Leaf{k3, x}),
-            True{},
-            Trie.all2_node.leaf(
-              ~ty,
-              ~ty,
-              ~r,
-              ~(t => Trie.all(~ty, ~(m => r(m, None{})), t)),
-              k2,
-              w,
-              k3,
-              x
-            ),
-            g2
-          )
-        )
-    case Bin{+h1, +z1, +o1} Leaf{+k2, +w} Bin{h3, +z3, +o3}:
-      g1 => g2 =>
-        Trie.keeps_trans.node(
-          ~ty,
-          ~r,
-          ~rtrans,
-          h1,
-          z1,
-          o1,
-          Trie.at.here(ty, k2, w),
-          Trie.at.zero(ty, k2, w),
-          Trie.at.one(ty, k2, w),
-          h3,
-          z3,
-          o3,
-          Trie.keeps_trans(~ty, ~r, ~rn, ~rtrans, z1, Trie.at.zero(ty, k2, w), z3),
-          Trie.keeps_trans(~ty, ~r, ~rn, ~rtrans, o1, Trie.at.one(ty, k2, w), o3)
-        )(
-          g1
-        )(
-          Equal.trans(
-            Bool,
-            Bool.and(
-              r(Trie.at.here(ty, k2, w), h3),
-              Bool.and(
-                Trie.keeps(~ty, ~r, Trie.at.zero(ty, k2, w), z3),
-                Trie.keeps(~ty, ~r, Trie.at.one(ty, k2, w), o3)
-              )
-            ),
-            Trie.keeps(~ty, ~r, Leaf{k2, w}, Bin{h3, z3, o3}),
-            True{},
-            Trie.all2_node.bin(
-              ~ty,
-              ~ty,
-              ~r,
-              ~(t => Trie.all(~ty, ~(m => r(m, None{})), t)),
-              k2,
-              w,
-              h3,
-              z3,
-              o3
-            ),
-            g2
-          )
-        )
-    case Bin{+h1, +z1, +o1} Bin{+h2, +z2, +o2} Leaf{+k3, +x}:
-      Trie.keeps_trans.node(
-        ~ty,
-        ~r,
-        ~rtrans,
-        h1,
-        z1,
-        o1,
-        h2,
-        z2,
-        o2,
-        Trie.at.here(ty, k3, x),
-        Trie.at.zero(ty, k3, x),
-        Trie.at.one(ty, k3, x),
-        Trie.keeps_trans(~ty, ~r, ~rn, ~rtrans, z1, z2, Trie.at.zero(ty, k3, x)),
-        Trie.keeps_trans(~ty, ~r, ~rn, ~rtrans, o1, o2, Trie.at.one(ty, k3, x))
-      )
-    case Bin{+h1, +z1, +o1} Bin{+h2, +z2, +o2} Bin{h3, +z3, +o3}:
-      Trie.keeps_trans.node(
-        ~ty,
-        ~r,
-        ~rtrans,
-        h1,
-        z1,
-        o1,
-        h2,
-        z2,
-        o2,
-        h3,
-        z3,
-        o3,
-        Trie.keeps_trans(~ty, ~r, ~rn, ~rtrans, z1, z2, z3),
-        Trie.keeps_trans(~ty, ~r, ~rn, ~rtrans, o1, o2, o3)
-      )
+  e1 => e2 => Trie.keeps_trans.go(~ty, ~r, ~rn, ~rtrans, s1, s2, s3, e1, e2)
 
 # an entry kept as no entry is no entry
 def Trie.none_of_kept(
@@ -7761,91 +5985,6 @@ def Trie.take_keeps.here(
     case Some{x} Some{y}:
       rrefl(Some{x})
 
-# any two tries pass the check that is True of all
-def Trie.all2_true.fork(
-  ~V: Data,
-  k: List<&2, Bool>,
-  +v: V,
-  p: List<&2, Bool>,
-  +w: V
-) -> {Trie.all2.fork(~V, ~V, ~(x => y => True{}), ~(t => True{}), k, v, p, w) == True{}: Bool}:
-  match k p:
-    case Nil{} Nil{}:
-      {==}
-    case Nil{} Con{False{}, q}:
-      {==}
-    case Nil{} Con{True{}, +q}:
-      {==}
-    case Con{False{}, +r} Nil{}:
-      {==}
-    case Con{False{}, +r} Con{False{}, +q}:
-      Shared.Bool.and_both(
-        Trie.all2.fork(~V, ~V, ~(x => y => True{}), ~(t => True{}), r, v, q, w),
-        True{}
-      )(Trie.all2_true.fork(~V, r, v, q, w))({==})
-    case Con{False{}, +r} Con{True{}, +q}:
-      {==}
-    case Con{True{}, +r} Nil{}:
-      {==}
-    case Con{True{}, +r} Con{False{}, +q}:
-      {==}
-    case Con{True{}, +r} Con{True{}, +q}:
-      Shared.Bool.and_both(
-        True{},
-        Trie.all2.fork(~V, ~V, ~(x => y => True{}), ~(t => True{}), r, v, q, w)
-      )({==})(Trie.all2_true.fork(~V, r, v, q, w))
-
-# Trie.all2_true for an entry and a trie
-def Trie.all2_true.leaf(
-  ~V: Data,
-  y: Trie<V>,
-  k: List<&2, Bool>,
-  +v: V
-) -> {Trie.all2.leaf(~V, ~V, ~(x => y => True{}), ~(t => True{}), y, k, v) == True{}: Bool}:
-  match y k:
-    case Tip{} r:
-      {==}
-    case Leaf{p, w} r:
-      Trie.all2_true.fork(~V, r, v, p, w)
-    case Bin{h, z, o} Nil{}:
-      {==}
-    case Bin{h, +z, o} Con{False{}, +r}:
-      Shared.Bool.and_both(
-        Trie.all2.leaf(~V, ~V, ~(x => y => True{}), ~(t => True{}), z, r, v),
-        True{}
-      )(Trie.all2_true.leaf(~V, z, r, v))({==})
-    case Bin{h, z, +o} Con{True{}, +r}:
-      Shared.Bool.and_both(
-        True{},
-        Trie.all2.leaf(~V, ~V, ~(x => y => True{}), ~(t => True{}), o, r, v)
-      )({==})(Trie.all2_true.leaf(~V, o, r, v))
-
-# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof: it does not run
-# Trie.all2_true for two tries
-def Trie.all2_true(
-  ~V: Data,
-  a: Trie<V>,
-  b: Trie<V>
-) -> {Trie.all2(~V, ~V, ~(x => y => True{}), ~(t => True{}), a, b) == True{}: Bool}:
-  match a b:
-    case Tip{} y:
-      {==}
-    case Leaf{k, v} y:
-      Trie.all2_true.leaf(~V, y, k, v)
-    case Bin{h, z, o} Tip{}:
-      {==}
-    case Bin{h, +z, +o} Leaf{+p, +w}:
-      Shared.Bool.and_both(
-        Trie.all2(~V, ~V, ~(x => y => True{}), ~(t => True{}), z, Trie.at.zero(V, p, w)),
-        Trie.all2(~V, ~V, ~(x => y => True{}), ~(t => True{}), o, Trie.at.one(V, p, w))
-      )(Trie.all2_true(~V, z, Trie.at.zero(V, p, w)))(Trie.all2_true(~V, o, Trie.at.one(V, p, w)))
-    case Bin{h1, +z1, +o1} Bin{h2, +z2, +o2}:
-      Shared.Bool.and_both(
-        Trie.all2(~V, ~V, ~(x => y => True{}), ~(t => True{}), z1, z2),
-        Trie.all2(~V, ~V, ~(x => y => True{}), ~(t => True{}), o1, o2)
-      )(Trie.all2_true(~V, z1, z2))(Trie.all2_true(~V, o1, o2))
-# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
-
 # Trie.take_keeps, with binders to use again
 def Trie.take_keeps.go(
   ~V: Data,
@@ -7867,7 +6006,18 @@ def Trie.take_keeps.go(
     ~rrefl,
     a,
     b
-  )(Trie.all2_true(~V, a, b))
+  )(
+    Trie.all2_of_get(
+      ~V,
+      ~V,
+      ~(x => y => True{}),
+      ~(t => True{}),
+      ~(t => f => {==}),
+      a,
+      b,
+      k => {==}
+    )
+  )
 
 # r holds of a and its take of b, when r holds of no entry and any, and of
 # each entry and itself: a take keeps what a holds
@@ -7979,7 +6129,6 @@ def Trie.take_union.node(
     {==}
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof: it does not run
 # Trie.take_union for two entries
 def Trie.take_union.fork(
   ~V: Data,
@@ -8053,22 +6202,18 @@ def Trie.take_union.fork(
           rp,
           w
         )(
-          Shared.Bool.and_true_left(
+          Shared.Bool.and_second(
+            q(None{}, None{}),
             Trie.all2.fork(~V, ~V, ~q, ~lq, r1, v, rp, w),
             True{}
-          )(
-            Shared.Bool.and_true_right(
-              q(None{}, None{}),
-              Bool.and(Trie.all2.fork(~V, ~V, ~q, ~lq, r1, v, rp, w), True{})
-            )(e)
-          )
+          )(e)
         )
       )
     case Con{False{}, +r1} Con{True{}, +rp}:
       e => {==}
     case Con{True{}, +r1} Nil{}:
       e => {==}
-    case Con{True{}, +r1} Con{False{}, +rp}:
+    case Con{True{}, +r1} Con{False{}, rp}:
       e => {==}
     case Con{True{}, +r1} Con{True{}, +rp}:
       e => Equal.cong(
@@ -8088,20 +6233,14 @@ def Trie.take_union.fork(
           rp,
           w
         )(
-          Shared.Bool.and_true_right(
+          Shared.Bool.and_third(
+            q(None{}, None{}),
             True{},
             Trie.all2.fork(~V, ~V, ~q, ~lq, r1, v, rp, w)
-          )(
-            Shared.Bool.and_true_right(
-              q(None{}, None{}),
-              Bool.and(True{}, Trie.all2.fork(~V, ~V, ~q, ~lq, r1, v, rp, w))
-            )(e)
-          )
+          )(e)
         )
       )
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof: it does not run
 # Trie.take_union for an entry and a trie
 def Trie.take_union.leaf(
   ~V: Data,
@@ -8130,7 +6269,7 @@ def Trie.take_union.leaf(
       e => {==}
     case Leaf{p, w} r1:
       Trie.take_union.fork(~V, ~join, ~q, ~lq, ~step, r1, v, p, w)
-    case Bin{+h, +z, +o} Nil{}:
+    case Bin{+h, +z, o} Nil{}:
       e => Equal.cong(
         Maybe<&2, V>,
         Trie<V>,
@@ -8156,15 +6295,7 @@ def Trie.take_union.leaf(
           r1,
           v
         )(
-          Shared.Bool.and_true_left(
-            Trie.all2.leaf(~V, ~V, ~q, ~lq, z, r1, v),
-            True{}
-          )(
-            Shared.Bool.and_true_right(
-              q(None{}, h),
-              Bool.and(Trie.all2.leaf(~V, ~V, ~q, ~lq, z, r1, v), True{})
-            )(e)
-          )
+          Shared.Bool.and_second(q(None{}, h), Trie.all2.leaf(~V, ~V, ~q, ~lq, z, r1, v), True{})(e)
         )
       )
     case Bin{+h, +z, +o} Con{True{}, +r1}:
@@ -8183,19 +6314,8 @@ def Trie.take_union.leaf(
           o,
           r1,
           v
-        )(
-          Shared.Bool.and_true_right(
-            True{},
-            Trie.all2.leaf(~V, ~V, ~q, ~lq, o, r1, v)
-          )(
-            Shared.Bool.and_true_right(
-              q(None{}, h),
-              Bool.and(True{}, Trie.all2.leaf(~V, ~V, ~q, ~lq, o, r1, v))
-            )(e)
-          )
-        )
+        )(Shared.Bool.and_third(q(None{}, h), True{}, Trie.all2.leaf(~V, ~V, ~q, ~lq, o, r1, v))(e))
       )
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof: it does not run
 # a take of b is the union with b, when q holds of a and b and the join of
@@ -8756,63 +6876,76 @@ def Trie.key_lt(a: List<&2, Bool>, b: List<&2, Bool>) -> Bool:
     case _ _:
       False{}
 
-# the values of t whose keys come before k
-def Trie.before(-V: Data, t: Trie<V>, k: List<&2, Bool>) -> List<&2, V>:
+# the values of t whose keys come before k, then rest: each value is put once
+def Trie.before.go(-V: Data, t: Trie<V>, k: List<&2, Bool>, +rest: List<&2, V>) -> List<&2, V>:
   match t k:
     case Tip{} r:
-      []
+      rest
     case Leaf{p, v} r:
-      Bool.pick(List<&2, V>, Trie.key_lt(p, r), [v], [])
+      Bool.pick(List<&2, V>, Trie.key_lt(p, r), v <> rest, rest)
     case Bin{h, z, o} Nil{}:
-      []
+      rest
     case Bin{None{}, z, o} Con{False{}, r}:
-      Trie.before(V, z, r)
+      Trie.before.go(V, z, r, rest)
     case Bin{Some{x}, z, o} Con{False{}, r}:
-      x <> Trie.before(V, z, r)
+      x <> Trie.before.go(V, z, r, rest)
     case Bin{None{}, z, o} Con{True{}, r}:
-      List.append(&2, V, Trie.values(V, z), Trie.before(V, o, r))
+      Trie.values.go(V, z, Trie.before.go(V, o, r, rest))
     case Bin{Some{x}, z, o} Con{True{}, r}:
-      x <> List.append(&2, V, Trie.values(V, z), Trie.before(V, o, r))
+      x <> Trie.values.go(V, z, Trie.before.go(V, o, r, rest))
+
+# the values of t whose keys come before k
+def Trie.before(-V: Data, t: Trie<V>, k: List<&2, Bool>) -> List<&2, V>:
+  Trie.before.go(V, t, k, [])
+
+# the values of t whose keys come after k, then rest: each value is put once
+def Trie.after.go(-V: Data, t: Trie<V>, k: List<&2, Bool>, +rest: List<&2, V>) -> List<&2, V>:
+  match t k:
+    case Tip{} r:
+      rest
+    case Leaf{p, v} r:
+      Bool.pick(List<&2, V>, Trie.key_lt(r, p), v <> rest, rest)
+    case Bin{h, z, o} Nil{}:
+      Trie.values.go(V, z, Trie.values.go(V, o, rest))
+    case Bin{h, z, o} Con{False{}, r}:
+      Trie.after.go(V, z, r, Trie.values.go(V, o, rest))
+    case Bin{h, z, o} Con{True{}, r}:
+      Trie.after.go(V, o, r, rest)
 
 # the values of t whose keys come after k
 def Trie.after(-V: Data, t: Trie<V>, k: List<&2, Bool>) -> List<&2, V>:
-  match t k:
-    case Tip{} r:
-      []
-    case Leaf{p, v} r:
-      Bool.pick(List<&2, V>, Trie.key_lt(r, p), [v], [])
-    case Bin{h, z, o} Nil{}:
-      List.append(&2, V, Trie.values(V, z), Trie.values(V, o))
-    case Bin{h, z, o} Con{False{}, r}:
-      List.append(&2, V, Trie.after(V, z, r), Trie.values(V, o))
-    case Bin{h, z, o} Con{True{}, r}:
-      Trie.after(V, o, r)
+  Trie.after.go(V, t, k, [])
 
-# lists put one after the other group either way
-def Trie.append_assoc(
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders name a part of a proof's own type; a proof does not run
+# the walk of t before xs and rest is the walk of t before xs, then rest
+def Trie.values_go(
   -V: Data,
-  xs: List<&2, V>,
-  ys: List<&2, V>,
-  zs: List<&2, V>
+  t: Trie<V>,
+  -xs: List<&2, V>,
+  -rest: List<&2, V>
 ) -> {
-  List.append(
-    &2,
+  Trie.values.go(
     V,
-    List.append(&2, V, xs, ys),
-    zs
+    t,
+    List.append(&2, V, xs, rest)
   )
-    == List.append(&2, V, xs, List.append(&2, V, ys, zs)): List<&2, V>
+    == List.append(&2, V, Trie.values.go(V, t, xs), rest): List<&2, V>
 }:
-  match xs:
-    case Nil{}:
+  match t:
+    case Tip{}:
       {==}
-    case Con{x, r}:
-      %Trie.append_assoc(
-        V,
-        r,
-        ys,
-        zs
-      ): {x <> List.append(&2, V, List.append(&2, V, r, ys), zs) == x <> _: List<&2, V>}
+    case Leaf{k, v}:
+      {==}
+    case Bin{None{}, z, o}:
+      -walk = Trie.values.go(V, z, Trie.values.go(V, o, List.append(&2, V, xs, rest)))
+      %Trie.values_go(V, z, Trie.values.go(V, o, xs), rest): {walk == _: List<&2, V>}
+      %Trie.values_go(V, o, xs, rest): {walk == Trie.values.go(V, z, _): List<&2, V>}
+      {==}
+    case Bin{Some{v}, z, o}:
+      -walk = Trie.values.go(V, z, Trie.values.go(V, o, List.append(&2, V, xs, rest)))
+      %Trie.values_go(V, z, Trie.values.go(V, o, xs), rest): {v <> walk == v <> _: List<&2, V>}
+      %Trie.values_go(V, o, xs, rest): {v <> walk == v <> Trie.values.go(V, z, _): List<&2, V>}
       {==}
 
 # no key comes before itself
@@ -8825,80 +6958,142 @@ def Trie.key_lt_same(k: List<&2, Bool>) -> {False{} == Trie.key_lt(k, k): Bool}:
     case Con{True{}, r}:
       Trie.key_lt_same(r)
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# Trie.values_around for an entry, by whether the key is its key (held)
+# Trie.values_around.go for an entry, by whether the key is its key (held)
 def Trie.values_around.leaf(
   -V: Data,
-  +p: List<&2, Bool>,
+  p: List<&2, Bool>,
   x: V,
-  k: List<&2, Bool>,
+  +k: List<&2, Bool>,
   v: V,
+  -rest: List<&2, V>,
   held: Bool,
-  e: {held == Trie.same_key(k, p): Bool}
+  e: {Trie.same_key(k, p) == held: Bool}
 ) -> {
   Bool.pick(Maybe<&2, V>, held, Some{x}, None{}) == Some{v}: Maybe<&2, V>
 } -> {
-  [
-    x
-  ]
+  x
+    <> rest
     == List.append(
       &2,
       V,
-      Bool.pick(List<&2, V>, Trie.key_lt(p, k), [x], []),
-      v <> Bool.pick(List<&2, V>, Trie.key_lt(k, p), [x], [])
+      Trie.before(V, Leaf{p, x}, k),
+      v <> Trie.after.go(V, Leaf{p, x}, k, rest)
     ): List<&2, V>
 }:
   match held:
     case False{}:
       g => Empty.absurd(
         {
-          [
-            x
-          ]
+          x
+            <> rest
             == List.append(
               &2,
               V,
-              Bool.pick(List<&2, V>, Trie.key_lt(p, k), [x], []),
-              v <> Bool.pick(List<&2, V>, Trie.key_lt(k, p), [x], [])
+              Trie.before(V, Leaf{p, x}, k),
+              v <> Trie.after.go(V, Leaf{p, x}, k, rest)
             ): List<&2, V>
         },
         Shared.Maybe.none_ne_some(V, v, g)
       )
     case True{}:
       g =>
-        %Equal.sym(
-          List<&2, Bool>,
+        %Trie.same_key_sound(
           k,
-          p,
-          Trie.same_key_sound(k, p)(Equal.sym(Bool, True{}, Trie.same_key(k, p), e))
+          p
+        )(
+          e
         ): {
-          [
-            x
-          ]
+          x
+            <> rest
             == List.append(
               &2,
               V,
-              Bool.pick(List<&2, V>, Trie.key_lt(p, _), [x], []),
-              v <> Bool.pick(List<&2, V>, Trie.key_lt(_, p), [x], [])
+              Trie.before(V, Leaf{_, x}, k),
+              v <> Trie.after.go(V, Leaf{_, x}, k, rest)
             ): List<&2, V>
         }
         %Trie.key_lt_same(
-          p
+          k
         ): {
-          [
-            x
-          ]
+          x
+            <> rest
             == List.append(
               &2,
               V,
               Bool.pick(List<&2, V>, _, [x], []),
-              v <> Bool.pick(List<&2, V>, _, [x], [])
+              v <> Bool.pick(List<&2, V>, _, x <> rest, rest)
             ): List<&2, V>
         }
-        %Shared.Maybe.some_inj(V, x, v, g): {[x] == [_]: List<&2, V>}
+        %Shared.Maybe.some_inj(V, x, v, g): {x <> rest == _ <> rest: List<&2, V>}
         {==}
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# the walk of a trie before rest puts the values before a key that it holds,
+# its value, and those after it
+def Trie.values_around.go(
+  -V: Data,
+  t: Trie<V>,
+  k: List<&2, Bool>,
+  v: V,
+  -rest: List<&2, V>
+) -> {
+  Trie.get(V, t, k) == Some{v}: Maybe<&2, V>
+} -> {
+  Trie.values.go(
+    V,
+    t,
+    rest
+  )
+    == List.append(&2, V, Trie.before(V, t, k), v <> Trie.after.go(V, t, k, rest)): List<&2, V>
+}:
+  match t k:
+    case Tip{} r:
+      e => Empty.absurd({rest == v <> rest: List<&2, V>}, Shared.Maybe.none_ne_some(V, v, e))
+    case Leaf{+p, x} +r:
+      Trie.values_around.leaf(V, p, x, r, v, rest, Trie.same_key(r, p), {==})
+    case Bin{None{}, z, o} Nil{}:
+      e =>
+        -walk = Trie.values.go(V, z, Trie.values.go(V, o, rest))
+        Empty.absurd({walk == v <> walk: List<&2, V>}, Shared.Maybe.none_ne_some(V, v, e))
+    case Bin{Some{x}, z, o} Nil{}:
+      e =>
+        -walk = Trie.values.go(V, z, Trie.values.go(V, o, rest))
+        %Shared.Maybe.some_inj(V, x, v, e): {x <> walk == _ <> walk: List<&2, V>}
+        {==}
+    case Bin{None{}, z, o} Con{False{}, r}:
+      Trie.values_around.go(V, z, r, v, Trie.values.go(V, o, rest))
+    case Bin{Some{x}, z, o} Con{False{}, r}:
+      e =>
+        -os = Trie.values.go(V, o, rest)
+        %Trie.values_around.go(
+          V,
+          z,
+          r,
+          v,
+          os
+        )(e): {x <> Trie.values.go(V, z, os) == x <> _: List<&2, V>}
+        {==}
+    case Bin{None{}, +z, +o} Con{True{}, +r}:
+      e =>
+        -walk = Trie.values.go(V, z, Trie.values.go(V, o, rest))
+        -as = {v <> Trie.after.go(V, o, r, rest): List<&2, V>}
+        %Trie.values_go(V, z, Trie.before(V, o, r), as): {walk == _: List<&2, V>}
+        %Trie.values_around.go(V, o, r, v, rest)(e): {walk == Trie.values.go(V, z, _): List<&2, V>}
+        {==}
+    case Bin{Some{x}, +z, +o} Con{True{}, +r}:
+      e =>
+        -walk = Trie.values.go(V, z, Trie.values.go(V, o, rest))
+        -as = {v <> Trie.after.go(V, o, r, rest): List<&2, V>}
+        %Trie.values_go(V, z, Trie.before(V, o, r), as): {x <> walk == x <> _: List<&2, V>}
+        %Trie.values_around.go(
+          V,
+          o,
+          r,
+          v,
+          rest
+        )(e): {x <> walk == x <> Trie.values.go(V, z, _): List<&2, V>}
+        {==}
+
+# bend-lint: expect-begin bend-lint-rules/language/unneeded_plus@hint -- other files use this statement, so it stays as they know it; the proof needs v once
 # the values of a trie are those before a key that it holds, its value, and
 # those after it
 def Trie.values_around(
@@ -8915,153 +7110,7 @@ def Trie.values_around(
   )
     == List.append(&2, V, Trie.before(V, t, k), v <> Trie.after(V, t, k)): List<&2, V>
 }:
-  match t k:
-    case Tip{} r:
-      e => Empty.absurd(
-        {[] == List.append(&2, V, [], v <> []): List<&2, V>},
-        Shared.Maybe.none_ne_some(V, v, e)
-      )
-    case Leaf{+p, x} +r:
-      Trie.values_around.leaf(V, p, x, r, v, Trie.same_key(r, p), {==})
-    case Bin{None{}, z, o} Nil{}:
-      e => Empty.absurd(
-        {
-          List.append(
-            &2,
-            V,
-            Trie.values(V, z),
-            Trie.values(V, o)
-          )
-            == v
-            <> List.append(&2, V, Trie.values(V, z), Trie.values(V, o)): List<&2, V>
-        },
-        Shared.Maybe.none_ne_some(V, v, e)
-      )
-    case Bin{Some{x}, z, o} Nil{}:
-      e =>
-        %Shared.Maybe.some_inj(
-          V,
-          x,
-          v,
-          e
-        ): {
-          x
-            <> List.append(&2, V, Trie.values(V, z), Trie.values(V, o))
-            == _
-            <> List.append(&2, V, Trie.values(V, z), Trie.values(V, o)): List<&2, V>
-        }
-        {==}
-    case Bin{None{}, +z, +o} Con{False{}, +r}:
-      e =>
-        %Trie.append_assoc(
-          V,
-          Trie.before(V, z, r),
-          v <> Trie.after(V, z, r),
-          Trie.values(V, o)
-        ): {List.append(&2, V, Trie.values(V, z), Trie.values(V, o)) == _: List<&2, V>}
-        %Trie.values_around(
-          V,
-          z,
-          r,
-          v
-        )(
-          e
-        ): {
-          List.append(
-            &2,
-            V,
-            Trie.values(V, z),
-            Trie.values(V, o)
-          )
-            == List.append(&2, V, _, Trie.values(V, o)): List<&2, V>
-        }
-        {==}
-    case Bin{Some{x}, +z, +o} Con{False{}, +r}:
-      e =>
-        %Trie.append_assoc(
-          V,
-          Trie.before(V, z, r),
-          v <> Trie.after(V, z, r),
-          Trie.values(V, o)
-        ): {x <> List.append(&2, V, Trie.values(V, z), Trie.values(V, o)) == x <> _: List<&2, V>}
-        %Trie.values_around(
-          V,
-          z,
-          r,
-          v
-        )(
-          e
-        ): {
-          x
-            <> List.append(&2, V, Trie.values(V, z), Trie.values(V, o))
-            == x
-            <> List.append(&2, V, _, Trie.values(V, o)): List<&2, V>
-        }
-        {==}
-    case Bin{None{}, +z, +o} Con{True{}, +r}:
-      e =>
-        %Equal.sym(
-          List<&2, V>,
-          List.append(
-            &2,
-            V,
-            List.append(&2, V, Trie.values(V, z), Trie.before(V, o, r)),
-            v <> Trie.after(V, o, r)
-          ),
-          List.append(
-            &2,
-            V,
-            Trie.values(V, z),
-            List.append(&2, V, Trie.before(V, o, r), v <> Trie.after(V, o, r))
-          ),
-          Trie.append_assoc(V, Trie.values(V, z), Trie.before(V, o, r), v <> Trie.after(V, o, r))
-        ): {List.append(&2, V, Trie.values(V, z), Trie.values(V, o)) == _: List<&2, V>}
-        %Trie.values_around(
-          V,
-          o,
-          r,
-          v
-        )(
-          e
-        ): {
-          List.append(
-            &2,
-            V,
-            Trie.values(V, z),
-            Trie.values(V, o)
-          )
-            == List.append(&2, V, Trie.values(V, z), _): List<&2, V>
-        }
-        {==}
-    case Bin{Some{x}, +z, +o} Con{True{}, +r}:
-      e =>
-        %Equal.sym(
-          List<&2, V>,
-          List.append(
-            &2,
-            V,
-            List.append(&2, V, Trie.values(V, z), Trie.before(V, o, r)),
-            v <> Trie.after(V, o, r)
-          ),
-          List.append(
-            &2,
-            V,
-            Trie.values(V, z),
-            List.append(&2, V, Trie.before(V, o, r), v <> Trie.after(V, o, r))
-          ),
-          Trie.append_assoc(V, Trie.values(V, z), Trie.before(V, o, r), v <> Trie.after(V, o, r))
-        ): {x <> List.append(&2, V, Trie.values(V, z), Trie.values(V, o)) == x <> _: List<&2, V>}
-        %Trie.values_around(
-          V,
-          o,
-          r,
-          v
-        )(
-          e
-        ): {
-          x
-            <> List.append(&2, V, Trie.values(V, z), Trie.values(V, o))
-            == x
-            <> List.append(&2, V, Trie.values(V, z), _): List<&2, V>
-        }
-        {==}
+  Trie.values_around.go(V, t, k, v, [])
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/language/unneeded_plus@hint
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information

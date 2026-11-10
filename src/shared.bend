@@ -581,6 +581,54 @@ def Bool.and_both(
     case False{}:
       ha => hb => Empty.absurd({False{} == True{}: Bool}, Bool.false_ne_true(ha))
 
+# the second of three true sides is true
+def Bool.and_second(
+  a: Bool,
+  b: Bool,
+  -c: Bool
+) -> {Bool.and(a, Bool.and(b, c)) == True{}: Bool} -> {b == True{}: Bool}:
+  match a b:
+    case False{} y:
+      h => Empty.absurd({y == True{}: Bool}, Bool.false_ne_true(h))
+    case True{} False{}:
+      h => h
+    case True{} True{}:
+      h => {==}
+
+# the third of three true sides is true
+def Bool.and_third(
+  a: Bool,
+  b: Bool,
+  -c: Bool
+) -> {Bool.and(a, Bool.and(b, c)) == True{}: Bool} -> {c == True{}: Bool}:
+  match a b:
+    case False{} y:
+      h => Empty.absurd({c == True{}: Bool}, Bool.false_ne_true(h))
+    case True{} False{}:
+      h => Empty.absurd({c == True{}: Bool}, Bool.false_ne_true(h))
+    case True{} True{}:
+      h => h
+
+# a, b and c are true when each follows from h: the one use of h that a proof
+# has (a "for every" premise is a function) gives all three
+def Bool.and_each(
+  -H: Type,
+  a: Bool,
+  b: Bool,
+  -c: Bool,
+  h: H,
+  fa: H -> {a == True{}: Bool},
+  fb: H -> {b == True{}: Bool},
+  fc: H -> {c == True{}: Bool}
+) -> {Bool.and(a, Bool.and(b, c)) == True{}: Bool}:
+  match a b:
+    case False{} y:
+      fa(h)
+    case True{} False{}:
+      fb(h)
+    case True{} True{}:
+      fc(h)
+
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a plus one more is one more than a plus
 def Nat.add_succ(a: Nat, b: Nat) -> {Nat.add(a, 1n+b) == 1n+Nat.add(a, b): Nat}:
@@ -1754,6 +1802,33 @@ def List.keep_holds(
         {==},
         List.keep_holds(~A, ~V, ~p, r, g)
       )
+
+# lists one after the other can be put together in any order
+def List.append_assoc(
+  -A: Data,
+  xs: List<&2, A>,
+  ys: List<&2, A>,
+  zs: List<&2, A>
+) -> {
+  List.append(
+    &2,
+    A,
+    List.append(&2, A, xs, ys),
+    zs
+  )
+    == List.append(&2, A, xs, List.append(&2, A, ys, zs)): List<&2, A>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      %List.append_assoc(
+        A,
+        r,
+        ys,
+        zs
+      ): {x <> List.append(&2, A, List.append(&2, A, r, ys), zs) == x <> _: List<&2, A>}
+      {==}
 
 # Pairs
 # -----

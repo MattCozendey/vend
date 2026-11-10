@@ -2100,7 +2100,7 @@ def Reach.next_append(
         List<&2, A>,
         List.append(&2, A, List.append(&2, A, succ(g)(x), next1), next2),
         List.append(&2, A, succ(g)(x), List.append(&2, A, next1, next2)),
-        Tries.Trie.append_assoc(A, succ(g)(x), next1, next2)
+        Shared.List.append_assoc(A, succ(g)(x), next1, next2)
       )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 

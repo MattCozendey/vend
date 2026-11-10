@@ -630,33 +630,6 @@ def Rope.level_put(
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# lists one after the other can be put together in any order
-def Rope.append_assoc(
-  -A: Data,
-  xs: List<&2, A>,
-  ys: List<&2, A>,
-  zs: List<&2, A>
-) -> {
-  List.append(
-    &2,
-    A,
-    List.append(&2, A, xs, ys),
-    zs
-  )
-    == List.append(&2, A, xs, List.append(&2, A, ys, zs)): List<&2, A>
-}:
-  match xs:
-    case Nil{}:
-      {==}
-    case Con{x, r}:
-      %Rope.append_assoc(
-        A,
-        r,
-        ys,
-        zs
-      ): {x <> List.append(&2, A, List.append(&2, A, r, ys), zs) == x <> _: List<&2, A>}
-      {==}
-
 # the lists of xs then ys, one after the other, are those of xs, then those
 # of ys
 def Rope.concat_append(
@@ -698,7 +671,7 @@ def Rope.concat_append(
         List<&2, A>,
         List.append(&2, A, List.append(&2, A, x, List.concat(&2, A, r)), List.concat(&2, A, ys)),
         List.append(&2, A, x, List.append(&2, A, List.concat(&2, A, r), List.concat(&2, A, ys))),
-        Rope.append_assoc(A, x, List.concat(&2, A, r), List.concat(&2, A, ys))
+        Shared.List.append_assoc(A, x, List.concat(&2, A, r), List.concat(&2, A, ys))
       )
 
 # the joined pieces gs, one after the other, are the chunks of gs, one after
