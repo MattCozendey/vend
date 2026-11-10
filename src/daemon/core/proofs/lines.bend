@@ -2348,7 +2348,7 @@ def Does.grows(
         Voting.Node.ask(n, s, e, q),
         Reading.Adopt.at(n, Voting.Node.ask(n, s, e, q), Basics.Ask.chain(Basics.Envelope.of(e), q))
       )(
-        Spec.Node.ask_grows(n, s, e, q)
+        ProofTrees.Ask.grows(n, s, e, q)
       )(
         ProofTrees.Adopt.at.grows(
           n,
@@ -2357,9 +2357,9 @@ def Does.grows(
         )
       )
     case Spec.Deed.Take{t}:
-      Spec.Node.take_grows(s, t)
+      ProofTrees.Take.grows(s, t)
     case Spec.Deed.Sync{t}:
-      Spec.Node.sync_grows(n, s, t)
+      ProofTrees.Sync.grows(n, s, t)
     case Spec.Deed.Keep{b}:
       ProofTrees.Grows.keep(s, Ropes.Put.nodes(Basics.Bytes.rope(b)))
     case Spec.Deed.Consent{+i}:

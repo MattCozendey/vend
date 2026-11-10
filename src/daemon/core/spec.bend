@@ -57,29 +57,6 @@ law Own.takes_inside:
   {Judging.Own.takes(s, r, l, g, at, os, h) == Some{True{}}: Maybe<&2, Bool>}
     -> {os == Judging.Group.nodes(s, Judging.Own.tree(s, l, at, h), g): List<&2, String>}
 
-# a node that takes in a request only grows: it keeps every entry that it
-# holds
-law Node.ask_grows:
-  for +n: String
-  for +s: Basics.Node
-  for +e: Basics.Envelope
-  for +q: Basics.Ask
-  {Reading.Node.grows(s, Voting.Node.ask(n, s, e, q)) == True{}: Bool}
-
-# a node that takes in what another node sent only grows, whatever was sent
-law Node.take_grows:
-  for +s: Basics.Node
-  for +t: Ledgers.State(Basics.Ask)
-  {Reading.Node.grows(s, Voting.Node.take(s, t)) == True{}: Bool}
-
-# a sync only grows a node: catching up loses and changes nothing that the
-# node holds
-law Node.sync_grows:
-  for +n: String
-  for +s: Basics.Node
-  for +t: Ledgers.State(Basics.Ask)
-  {Reading.Node.grows(s, Reading.Node.sync(n, s, t)) == True{}: Bool}
-
 # the tip that the step m names, if any
 def Vote.tip(m: Maybe<&2, Ledgers.Vote>) -> Maybe<&2, Hashes.Hash>:
   match m:

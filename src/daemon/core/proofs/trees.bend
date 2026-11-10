@@ -3498,7 +3498,13 @@ def Ask.at.grows(
         )
       )
 
-def Spec.Node.ask_grows(n, s, e, q):
+# a node that takes in a request only grows
+def Ask.grows(
+  +n: String,
+  +s: Basics.Node,
+  +e: Basics.Envelope,
+  +q: Basics.Ask
+) -> {Reading.Node.grows(s, Voting.Node.ask(n, s, e, q)) == True{}: Bool}:
   Ask.at.grows(
     n,
     s,
@@ -3640,7 +3646,11 @@ def Each.grows(
         )
       )(Each.grows(f, rest, p, s1))
 
-def Spec.Node.take_grows(s, t):
+# a node that takes in what another node sent only grows
+def Take.grows(
+  +s: Basics.Node,
+  +t: Ledgers.State(Basics.Ask)
+) -> {Reading.Node.grows(s, Voting.Node.take(s, t)) == True{}: Bool}:
   +sent = Voting.Take.clean(
     Tries.Trie.values(Cells.Cell<Ledgers.Entry<Basics.Ask>>, t),
     Ledgers.State.empty(~Basics.Ask)
@@ -3837,7 +3847,7 @@ def Adopt.ask.grows(
     case None{}:
       Grows.refl(s)
     case Some{Reading.Request{e, q}}:
-      Spec.Node.ask_grows(n, s, e, q)
+      Ask.grows(n, s, e, q)
 
 # an adoption only grows a node, once the head m of the line is known
 def Adopt.head.grows(
@@ -3950,7 +3960,12 @@ def More.grows(
         )
       )
 
-def Spec.Node.sync_grows(n, s, t):
+# a sync only grows a node
+def Sync.grows(
+  +n: String,
+  +s: Basics.Node,
+  +t: Ledgers.State(Basics.Ask)
+) -> {Reading.Node.grows(s, Reading.Node.sync(n, s, t)) == True{}: Bool}:
   +s1 = Voting.Node.take(s, t)
   +cs = Voting.Sync.lines(s, s1, t)
   +bs = Voting.Ballots.of(
@@ -3974,7 +3989,7 @@ def Spec.Node.sync_grows(n, s, t):
     s1,
     Reading.Node.adopts(n, cs, s3)
   )(
-    Spec.Node.take_grows(s, t)
+    Take.grows(s, t)
   )(
     Grows.trans(
       s1,
