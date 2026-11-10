@@ -20,35 +20,9 @@ import ./stepping.bend as Stepping
 # -----
 # Each read is of the node's own state: its ledger, and its heads.
 
-# the root of the content of the line c now (none: the empty tree, or the node
-# does not follow c)
-def Chain.root(s: Replicas.Node<Basics.Ask>, c: Ledgers.Chain) -> Maybe<&2, Hashes.Hash>:
-  Maybe.bind(&2, Replicas.Tip, Hashes.Hash, Replicas.Node.tip(~Basics.Ask.machine(), s, c), t => Replicas.Tip.content(t))
-
-# the root of the content of the store r now
-def Store.root(s: Replicas.Node<Basics.Ask>, r: Ledgers.Id) -> Maybe<&2, Hashes.Hash>:
-  Chain.root(s, Ledgers.Chain{r, None{}})
-
-# the newest version of a line at the tip t, if it has one
-def Line.newest(+s: Replicas.Node<Basics.Ask>, +t: Replicas.Tip) -> Maybe<&2, Ledgers.Id>:
-  +n = Replicas.Tip.count(t)
-  Shared.Maybe.when(
-    Ledgers.Id,
-    Bool.not(U32.is_eq(n, 0)),
-    u => Judging.Version.in(s, U32.sub(n, 1), t)
-  )
-
-# the newest version of the line c, if it has one
-def Chain.newest(+s: Replicas.Node<Basics.Ask>, c: Ledgers.Chain) -> Maybe<&2, Ledgers.Id>:
-  Maybe.bind(&2, Replicas.Tip, Ledgers.Id, Replicas.Node.tip(~Basics.Ask.machine(), s, c), t => Line.newest(s, t))
-
 # the newest version of the branch b of the store r, if b has one
 def Node.head(s: Replicas.Node<Basics.Ask>, r: Ledgers.Id, b: String) -> Maybe<&2, Ledgers.Id>:
-  Chain.newest(s, Replicas.Line.chain(r, Some{b}))
-
-# the newest version of the store r
-def Store.head(s: Replicas.Node<Basics.Ask>, r: Ledgers.Id) -> Maybe<&2, Ledgers.Id>:
-  Chain.newest(s, Ledgers.Chain{r, None{}})
+  Stepping.Chain.newest(s, Replicas.Line.chain(r, Some{b}))
 
 # the version m, when it is there, then rest
 def Ids.put(m: Maybe<&2, Ledgers.Id>, rest: List<&2, Ledgers.Id>) -> List<&2, Ledgers.Id>:
@@ -97,21 +71,6 @@ def Version.before(s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Replicas.Tip>, +n:
         u => Judging.Version.in(s, U32.sub(n, 1), t)
       )
 
-# the owners of the next step of the line l of the store r
-def Node.owners(+s: Replicas.Node<Basics.Ask>, r: Ledgers.Id, l: Maybe<&2, String>) -> List<&2, String>:
-  Maybe.default(
-    &2,
-    List<&2, String>,
-    Maybe.bind(
-      &2,
-      Replicas.Tip,
-      List<&2, String>,
-      Replicas.Node.tip(~Basics.Ask.machine(), s, Replicas.Line.chain(r, l)),
-      t => Some{Replicas.Tip.owners(t)}
-    ),
-    []
-  )
-
 # the request i is a version: a step took it
 def Node.is_version(s: Replicas.Node<Basics.Ask>, i: Ledgers.Id) -> Bool:
   Maybe.is_some(&2, Replicas.Version, Basics.Node.made(s, i))
@@ -154,90 +113,25 @@ def Node.content(+s: Replicas.Node<Basics.Ask>, n: Resources.Name, p: Basics.Poi
 
 # the members of the group g of the store r, if g exists
 def Node.members(+s: Replicas.Node<Basics.Ask>, r: Ledgers.Id, g: String) -> Maybe<&2, List<&2, Basics.Member>>:
-  Basics.Members.in(s, Store.root(s, r), g)
-
-# the nodes inside the group g of the store r
-def Node.nodes(+s: Replicas.Node<Basics.Ask>, r: Ledgers.Id, g: String) -> List<&2, String>:
-  Judging.Group.nodes(s, Store.root(s, r), g)
-
-# the owner group of the line l of the store r, if it has one (none: its
-# owners are the nodes that it started with)
-def Node.group(+s: Replicas.Node<Basics.Ask>, r: Ledgers.Id, l: Maybe<&2, String>) -> Maybe<&2, String>:
-  Maybe.bind(
-    &2,
-    List<&2, U32>,
-    String,
-    Replicas.Node.get(~Basics.Ask.machine(), s, Chain.root(s, Replicas.Line.chain(r, l)), Basics.Key.owner()),
-    ws => Replicas.Read.whole(String, Codes.Code.text.read(ws))
-  )
+  Basics.Members.in(s, Stepping.Store.root(s, r), g)
 
 # the request that makes the group g, with the nodes inside it now, the owner
 # group of the line l of the store r
 def Node.own(+s: Replicas.Node<Basics.Ask>, +r: Ledgers.Id, l: Maybe<&2, String>, +g: String) -> Basics.Ask:
-  Basics.Ask.On{r, l, Basics.Change.Own{g, Store.head(s, r), Node.nodes(s, r, g)}}
-
-# a request, and who asks for it
-type Request is Data:
-  Request{envelope: Replicas.Envelope, ask: Basics.Ask}
-
-# the text t, after its length
-def Adopt.part(+t: String) -> String:
-  Nat.show(String.length(t)) ++ ":" ++ t
-
-# the ID of the adoption of the line l after the step at of its store: it
-# names both, so every owner asks for the same request
-def Adopt.id(l: Maybe<&2, String>, at: Maybe<&2, Ledgers.Id>) -> String:
-  match l at:
-    case None{} Some{Ledgers.Id{w, q}}:
-      "-" ++ Adopt.part(w) ++ q
-    case Some{b} Some{Ledgers.Id{w, q}}:
-      "+" ++ Adopt.part(b) ++ Adopt.part(w) ++ q
-    case x y:
-      ""
-
-# the adoption of the line l of the store r, whose owner group is m: the
-# request that makes the nodes inside the group now its owners, when they are
-# not (none: they are, or the line has no owner group). No writer asks for it
-def Adopt.of(
-  +s: Replicas.Node<Basics.Ask>,
-  +r: Ledgers.Id,
-  +l: Maybe<&2, String>,
-  m: Maybe<&2, String>
-) -> Maybe<&2, Request>:
-  match m:
-    case None{}:
-      None{}
-    case Some{+g}:
-      +os = Node.nodes(s, r, g)
-      +at = Store.head(s, r)
-      Shared.Maybe.when(
-        Request,
-        Bool.not(Ledgers.Owners.is_eq(os, Node.owners(s, r, l))),
-        u => Some{
-          Request{
-            Replicas.Envelope{Adopt.id(l, at), "", ""},
-            Basics.Ask.On{r, l, Basics.Change.Own{g, at, os}}
-          }
-        }
-      )
-
-# the adoption of the line l of the store r, if its owners are not the nodes
-# inside its owner group
-def Node.adoption(+s: Replicas.Node<Basics.Ask>, +r: Ledgers.Id, +l: Maybe<&2, String>) -> Maybe<&2, Request>:
-  Adopt.of(s, r, l, Node.group(s, r, l))
+  Basics.Ask.On{r, l, Basics.Change.Own{g, Stepping.Store.head(s, r), Stepping.Node.nodes(s, r, g)}}
 
 # s, after the node n took in the request m, if any
-def Adopt.ask(n: String, s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Request>) -> Replicas.Node<Basics.Ask>:
+def Adopt.ask(n: String, s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Replicas.Request<Basics.Ask>>) -> Replicas.Node<Basics.Ask>:
   match m:
     case None{}:
       s
-    case Some{Request{e, q}}:
+    case Some{Replicas.Request{e, q}}:
       Replicas.Node.ask(~Stepping.Ask.kernel(), n, s, e, q)
 
 # s, after the node n asked for the adoption of the line l of the store r, if
 # its owners are not the nodes inside its owner group
 def Node.adopt(n: String, +s: Replicas.Node<Basics.Ask>, r: Ledgers.Id, l: Maybe<&2, String>) -> Replicas.Node<Basics.Ask>:
-  Adopt.ask(n, s, Node.adoption(s, r, l))
+  Adopt.ask(n, s, Replicas.Kernel.follow(Stepping.Ask.kernel())(s)(r)(l))
 
 # Adopt.at once the head m of the line is known
 def Adopt.head(n: String, s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Replicas.Head>) -> Replicas.Node<Basics.Ask>:
@@ -625,7 +519,7 @@ def Merge.left(
       Clash.left(
         s,
         Clash.names(s, Basics.Node.root_of(s, Some{k}), f),
-        Chain.root(s, Replicas.Line.chain(r, Some{l})),
+        Stepping.Chain.root(s, Replicas.Line.chain(r, Some{l})),
         f
       )
     case _:
@@ -773,7 +667,7 @@ def Branch.at(
 ) -> List<&2, BranchEntry>:
   match h:
     case Replicas.Head{+r, Some{+b}, n, t}:
-      Branch.put(r, b, Node.owners(s, r, Some{b}), Node.head(s, r, b), rest)
+      Branch.put(r, b, Stepping.Node.owners(s, r, Some{b}), Node.head(s, r, b), rest)
     case x:
       rest
 

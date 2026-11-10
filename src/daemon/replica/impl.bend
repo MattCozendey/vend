@@ -811,27 +811,36 @@ def Arrival.chain(i: Ledgers.Id, a: Arrival) -> Ledgers.Chain:
     case Arrival.Waits{r, l}:
       Line.chain(r, l)
 
-# a kernel: a machine, and what a request does to the run of a line
+# a kernel: a machine; what a request does to the run of a line; and the
+# request, if any, that a node asks by itself after it works on a line of a
+# store
 def Kernel() -> Type:
-  &M: Machine() -> Run<
-    Machine.Q(M)> -> Ledgers.Chain -> Ledgers.Id -> Machine.Q(M) -> Maybe<&2, Run<Machine.Q(M)>>
+  &M: Machine() -> (
+    Run<Machine.Q(M)> -> Ledgers.Chain -> Ledgers.Id -> Machine.Q(M) -> Maybe<&2, Run<Machine.Q(M)>>
+  ) & (Node<Machine.Q(M)> -> Ledgers.Id -> Maybe<&2, String> -> Maybe<&2, Request<Machine.Q(M)>>)
 
 # the machine of the kernel k
 def Kernel.machine(k: Kernel()) -> Machine():
   match k:
-    case Tuple{m, c}:
+    case Tuple{m, h}:
       m
 
 # what a request of the kernel k does to the run of a line
 def Kernel.change(
   k: Kernel()
-) -> Run<
-  Machine.Q(Kernel.machine(k))> -> Ledgers.Chain -> Ledgers.Id -> Machine.Q(Kernel.machine(k)) -> Maybe<
-  &2,
-  Run<Machine.Q(Kernel.machine(k))>>:
+) -> Run<Machine.Q(Kernel.machine(k))> -> Ledgers.Chain -> Ledgers.Id -> Machine.Q(Kernel.machine(k)) -> Maybe<&2, Run<Machine.Q(Kernel.machine(k))>>:
   match k:
-    case Tuple{m, c}:
+    case Tuple{m, Tuple{c, f}}:
       c
+
+# the request that a node of the kernel k asks by itself after it works on a
+# line of a store
+def Kernel.follow(
+  k: Kernel()
+) -> Node<Machine.Q(Kernel.machine(k))> -> Ledgers.Id -> Maybe<&2, String> -> Maybe<&2, Request<Machine.Q(Kernel.machine(k))>>:
+  match k:
+    case Tuple{m, Tuple{c, f}}:
+      f
 
 # the run r of the line c, after the request i, which the node holds as a
 # (none: wait for the request)
@@ -11818,3 +11827,7 @@ def Contains.when(
       hx
     case False{}:
       hy
+
+# a request, and who asks for it
+type Request<-Q: Data> is Data:
+  Request{envelope: Envelope, ask: Q}

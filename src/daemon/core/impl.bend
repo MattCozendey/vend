@@ -1888,12 +1888,12 @@ def Steps.grows(
 def Adopt.ask.grows(
   n: String,
   s: Replicas.Node<Basics.Ask>,
-  m: Maybe<&2, Reading.Request>
+  m: Maybe<&2, Replicas.Request<Basics.Ask>>
 ) -> {Replicas.Node.grows(~Basics.Ask.machine(), s, Reading.Adopt.ask(n, s, m)) == True{}: Bool}:
   match m:
     case None{}:
       Replicas.Grows.refl(~Basics.Ask.machine(), s)
-    case Some{Reading.Request{e, q}}:
+    case Some{Replicas.Request{e, q}}:
       Ask.grows(n, s, e, q)
 
 # an adoption only grows a node, once the head m of the line is known
@@ -1906,7 +1906,7 @@ def Adopt.head.grows(
     case None{}:
       Replicas.Grows.refl(~Basics.Ask.machine(), s)
     case Some{Replicas.Head{r, b, next, t}}:
-      Adopt.ask.grows(n, s, Reading.Node.adoption(s, r, b))
+      Adopt.ask.grows(n, s, Stepping.Node.adoption(s, r, b))
 
 # the adoption of a line only grows a node
 def Adopt.at.grows(
@@ -2926,12 +2926,12 @@ def Steps.kept(
 def Adopt.ask.kept(
   n: String,
   s: Replicas.Node<Basics.Ask>,
-  m: Maybe<&2, Reading.Request>
+  m: Maybe<&2, Replicas.Request<Basics.Ask>>
 ) -> Replicas.Node.Keeps(~Basics.Ask.machine(), s, Reading.Adopt.ask(n, s, m)):
   match m:
     case None{}:
       Replicas.Kept.refl(~Basics.Ask.machine(), s)
-    case Some{Reading.Request{e, q}}:
+    case Some{Replicas.Request{e, q}}:
       Ask.kept(n, s, e, q)
 
 # an adoption keeps the logs, once the head m of the line is known
@@ -2944,7 +2944,7 @@ def Adopt.head.kept(
     case None{}:
       Replicas.Kept.refl(~Basics.Ask.machine(), s)
     case Some{Replicas.Head{r, b, next, t}}:
-      Adopt.ask.kept(n, s, Reading.Node.adoption(s, r, b))
+      Adopt.ask.kept(n, s, Stepping.Node.adoption(s, r, b))
 
 # the adoption of a line keeps the logs
 def Adopt.at.kept(
@@ -7110,12 +7110,12 @@ def Steps.path(
 def Adopt.ask.path(
   n: String,
   s: Replicas.Node<Basics.Ask>,
-  m: Maybe<&2, Reading.Request>
+  m: Maybe<&2, Replicas.Request<Basics.Ask>>
 ) -> Replicas.Node.On(~Basics.Ask.machine(), s, Reading.Adopt.ask(n, s, m)):
   match m:
     case None{}:
       Replicas.Path.refl(~Basics.Ask.machine(), s)
-    case Some{Reading.Request{e, q}}:
+    case Some{Replicas.Request{e, q}}:
       Ask.path(n, s, e, q)
 
 # an adoption is on the paths, once the head m of the line is known
@@ -7128,7 +7128,7 @@ def Adopt.head.path(
     case None{}:
       Replicas.Path.refl(~Basics.Ask.machine(), s)
     case Some{Replicas.Head{r, b, next, t}}:
-      Adopt.ask.path(n, s, Reading.Node.adoption(s, r, b))
+      Adopt.ask.path(n, s, Stepping.Node.adoption(s, r, b))
 
 # the adoption of a line is on the paths
 def Adopt.at.path(
