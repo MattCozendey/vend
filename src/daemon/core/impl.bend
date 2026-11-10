@@ -3299,14 +3299,6 @@ def Get.grows(
     )
   )
 
-# that the work m, if any, reads the key k2 as v
-def Work.Keeps(k2: List<&2, U32>, v: List<&2, U32>, m: Maybe<&2, Spec.Work>) -> Type:
-  match m:
-    case None{}:
-      Unit
-    case Some{Spec.Work{s2, h2, ns2}}:
-      {Spec.Node.get(s2, h2, k2) == Some{v}: Maybe<&2, List<&2, U32>>}
-
 # Set.kept once whether the node holds the new nodes is known (b)
 def Set.kept.if(
   +s: Spec.State(),
@@ -3323,7 +3315,7 @@ def Set.kept.if(
   hne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool},
   hget: {Spec.Node.get(s, h, k2) == Some{v}: Maybe<&2, List<&2, U32>>},
   em: {Spec.Node.set(s, h, k, x) == Some{Trees.Put{hh, ws}}: Maybe<&2, Trees.Put>}
-) -> Work.Keeps(
+) -> Spec.Work.Reads(
   k2,
   v,
   Spec.Work.put(
@@ -3419,7 +3411,7 @@ def Set.kept.of(
   em: {Spec.Node.set(s, h, k, x) == m: Maybe<&2, Trees.Put>},
   hne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool},
   hget: {Spec.Node.get(s, h, k2) == Some{v}: Maybe<&2, List<&2, U32>>}
-) -> Work.Keeps(k2, v, Spec.Work.of(s, ns, m)):
+) -> Spec.Work.Reads(k2, v, Spec.Work.of(s, ns, m)):
   match m:
     case None{}:
       Unit{}
@@ -3452,7 +3444,7 @@ def Set.kept(
   v: List<&2, U32>,
   hne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool},
   hget: {Spec.Node.get(s, h, k2) == Some{v}: Maybe<&2, List<&2, U32>>}
-) -> Work.Keeps(k2, v, Spec.Work.set(Spec.Work{s, h, ns}, k, x)):
+) -> Spec.Work.Reads(k2, v, Spec.Work.set(Spec.Work{s, h, ns}, k, x)):
   Set.kept.of(s, h, ns, k, x, k2, v, Spec.Node.set(s, h, k, x), {==}, hne, hget)
 
 # that the log of the run m, if any, reads the key k2 as v
@@ -3469,7 +3461,7 @@ def Run.of.keeps(
   -v: List<&2, U32>,
   c: Maybe<&2, Hashes.Hash>,
   m: Maybe<&2, Spec.Work>
-) -> Work.Keeps(k2, v, m) -> Run.Keeps(k2, v, Spec.Run.of(c, m)):
+) -> Spec.Work.Reads(k2, v, m) -> Run.Keeps(k2, v, Spec.Run.of(c, m)):
   match m:
     case None{}:
       w => Unit{}
@@ -11351,6 +11343,229 @@ def Key.same(
 def Spec.Node.affects_used(s, b):
   +g = Spec.Seen.of(s, Spec.Branch.keys(s), Spec.Version.keys(s), b)
   Shared.List.keep_holds(~Spec.Touch, ~Spec.Seen, ~Spec.Touch.holds, Spec.Affects.cands(s, g), g)
+
+# Moves
+# -----
+# A move sets only keys of the version vector, so each resource of its target
+# reads the same after it (Spec.Move.reads).
+
+# the key of a resource is not the key of a line in the version vector
+def Vector.apart(
+  c: Ledgers.Chain,
+  n: Resources.Name
+) -> {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Key.vector(c), Spec.Key.res(n)) == False{}: Bool}:
+  {==}
+
+# Vector.add keeps a resource, once it is known whether the vector covers the
+# place (b)
+def Vector.add.reads.if(
+  +s: Spec.State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  +c: Ledgers.Chain,
+  +p: Spec.Place,
+  +n: Resources.Name,
+  +v: List<&2, U32>,
+  b: Bool,
+  hget: {Spec.Node.get(s, h, Spec.Key.res(n)) == Some{v}: Maybe<&2, List<&2, U32>>}
+) -> Spec.Work.Reads(
+  Spec.Key.res(n),
+  v,
+  Shared.Bool.when(
+    Maybe<&2, Spec.Work>,
+    b,
+    u => Some{Spec.Work{s, h, ns}},
+    u => Spec.Work.set(Spec.Work{s, h, ns}, Spec.Key.vector(c), Spec.Place.code(p))
+  )
+):
+  match b:
+    case True{}:
+      hget
+    case False{}:
+      Set.kept(
+        s,
+        h,
+        ns,
+        Spec.Key.vector(c),
+        Spec.Place.code(p),
+        Spec.Key.res(n),
+        v,
+        Vector.apart(c, n),
+        hget
+      )
+
+# a new entry of the version vector keeps a resource
+def Vector.add.reads(
+  w: Spec.Work,
+  +c: Ledgers.Chain,
+  +p: Spec.Place,
+  +n: Resources.Name,
+  +v: List<&2, U32>
+) -> Spec.Work.Reads(Spec.Key.res(n), v, Some{w}) -> Spec.Work.Reads(
+  Spec.Key.res(n),
+  v,
+  Spec.Vector.add(w, c, p)
+):
+  match w:
+    case Spec.Work{+s, +h, +ns}:
+      hget => Vector.add.reads.if(
+        s,
+        h,
+        ns,
+        c,
+        p,
+        n,
+        v,
+        Spec.Place.covered(Spec.Node.vector(s, h, c), p),
+        hget
+      )
+
+# Vector.add.if keeps a resource, once it is known whether the place is of
+# the line (b)
+def Vector.add.if.reads.at(
+  +w: Spec.Work,
+  +p: Spec.Place,
+  +n: Resources.Name,
+  +v: List<&2, U32>,
+  b: Bool,
+  hget: Spec.Work.Reads(Spec.Key.res(n), v, Some{w})
+) -> Spec.Work.Reads(
+  Spec.Key.res(n),
+  v,
+  Shared.Bool.when(Maybe<&2, Spec.Work>, b, u => Some{w}, u => Spec.Vector.add(w, Spec.Place.chain(p), p))
+):
+  match b:
+    case True{}:
+      hget
+    case False{}:
+      Vector.add.reads(w, Spec.Place.chain(p), p, n, v)(hget)
+
+# an entry of the version vector, if any, keeps a resource
+def Vector.add.if.reads(
+  +w: Spec.Work,
+  +c: Ledgers.Chain,
+  m: Maybe<&2, Spec.Place>,
+  +n: Resources.Name,
+  +v: List<&2, U32>
+) -> Spec.Work.Reads(Spec.Key.res(n), v, Some{w}) -> Spec.Work.Reads(
+  Spec.Key.res(n),
+  v,
+  Spec.Vector.add.if(w, c, m)
+):
+  match m:
+    case None{}:
+      hget => hget
+    case Some{+p}:
+      hget => Vector.add.if.reads.at(
+        w,
+        p,
+        n,
+        v,
+        Ledgers.Chain.is_eq(Spec.Place.chain(p), c),
+        hget
+      )
+
+# a work that reads a key, after a step that keeps the read
+def Reads.bind(
+  -k: List<&2, U32>,
+  -v: List<&2, U32>,
+  m: Maybe<&2, Spec.Work>,
+  -f: Spec.Work -> Maybe<&2, Spec.Work>
+) -> Spec.Work.Reads(k, v, m) -> (@w: Spec.Work -> Spec.Work.Reads(k, v, Some{w}) -> Spec.Work.Reads(
+  k,
+  v,
+  f(w)
+)) -> Spec.Work.Reads(k, v, Maybe.bind(&2, Spec.Work, Spec.Work, m, f)):
+  match m:
+    case None{}:
+      hm => hf => Unit{}
+    case Some{w}:
+      hm => hf => hf(w)(hm)
+
+# the entries of some bindings keep a resource
+def Vector.adds.reads(
+  bs: List<&2, Trees.Binding>,
+  +c: Ledgers.Chain,
+  +m: Maybe<&2, Spec.Work>,
+  +n: Resources.Name,
+  +v: List<&2, U32>
+) -> Spec.Work.Reads(Spec.Key.res(n), v, m) -> Spec.Work.Reads(
+  Spec.Key.res(n),
+  v,
+  Spec.Vector.adds(bs, c, m)
+):
+  match bs:
+    case Nil{}:
+      hm => hm
+    case Con{+b, +r}:
+      hm => Vector.adds.reads(
+        r,
+        c,
+        Maybe.bind(&2, Spec.Work, Spec.Work, m, w => Spec.Vector.add.if(w, c, Spec.Vector.entry(b))),
+        n,
+        v
+      )(
+        Reads.bind(
+          Spec.Key.res(n),
+          v,
+          m,
+          w => Spec.Vector.add.if(w, c, Spec.Vector.entry(b))
+        )(hm)(+w => hw => Vector.add.if.reads(w, c, Spec.Vector.entry(b), n, v)(hw))
+      )
+
+# the version vector of a version, joined in, keeps a resource
+def Vector.joined.reads(
+  +s: Spec.State(),
+  +c: Ledgers.Chain,
+  +x: Ledgers.Id,
+  +m: Maybe<&2, Spec.Work>,
+  +n: Resources.Name,
+  +v: List<&2, U32>
+) -> Spec.Work.Reads(Spec.Key.res(n), v, m) -> Spec.Work.Reads(
+  Spec.Key.res(n),
+  v,
+  Spec.Vector.joined(s, c, x, m)
+):
+  hm => Reads.bind(
+    Spec.Key.res(n),
+    v,
+    Spec.Vector.adds(
+      Trees.Tree.list(~Spec.State(), ~Spec.Store.fetch, s, Spec.Node.root_of(s, Some{x})),
+      c,
+      m
+    ),
+    w => Spec.Vector.add.if(w, c, Spec.Node.place(s, x))
+  )(
+    Vector.adds.reads(
+      Trees.Tree.list(~Spec.State(), ~Spec.Store.fetch, s, Spec.Node.root_of(s, Some{x})),
+      c,
+      m,
+      n,
+      v
+    )(hm)
+  )(+w => hw => Vector.add.if.reads(w, c, Spec.Node.place(s, x), n, v)(hw))
+
+def Spec.Move.reads(s, c, to, h, n, v):
+  hget => Vector.joined.reads(
+    s,
+    c,
+    to,
+    Spec.Vector.adds(
+      Trees.Tree.list(~Spec.State(), ~Spec.Store.fetch, s, h),
+      c,
+      Some{Spec.Work{s, Spec.Node.root_of(s, Some{to}), []}}
+    ),
+    n,
+    v
+  )(
+    Vector.adds.reads(
+      Trees.Tree.list(~Spec.State(), ~Spec.Store.fetch, s, h),
+      c,
+      Some{Spec.Work{s, Spec.Node.root_of(s, Some{to}), []}},
+      n,
+      v
+    )(hget)
+  )
 
 # Waits
 # -----

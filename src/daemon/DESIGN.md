@@ -124,6 +124,9 @@ README claim, then the law.
 - Writers are told only about changes to what their work uses: `Node.affects_used` (each change
   that a branch is told of was made on another line, and wrote a resource that a resource of the
   branch is, or uses through its imports, at any depth).
+- A move records a version equal to its target: `Move.reads` (each resource of the target is, with
+  the same content, in the tree that the move gives; a move sets only keys of the version
+  vector).
 - A taken write reads back: `Judge.write_reads`.
 - A merge never loses a change made on only one side: `Pick.merge_theirs`, `Pick.merge_ours`.
 - The owners of a line are the nodes inside its owner group: `Own.takes_inside`. A change of a
@@ -144,9 +147,8 @@ Design (each needs a decision or new work; none is a proof detail):
   another node without a check of `Allowed`; it only copies a vote that is allowed.
 - **Missing is not absent, the rest.** The write, resolve, merge and Own judges wait. Still to
   do: the version vector, `Tree.list` and `Tree.diff` (they walk and give no sign of a node that
-  they lack), so a merge or a move can still act on a part of a tree. Then the laws: a merge
-  keeps a one-sided change as a whole (`Merge.work`, not only one pick), and a move records a
-  version with the resources of its target.
+  they lack), so a merge or a move can still act on a part of a tree. Then the law: a merge
+  keeps a one-sided change as a whole (`Merge.work`, not only one pick).
 - **Walks that are left:** `Node.versions` lists every version (use a range); `Node.log`,
   `Touch.versions`, `Version.keys`, `Node.affects`, `Node.impact`, `Node.notices` read every
   version of every branch. Target: notices are made when a head moves, from the diff of the two

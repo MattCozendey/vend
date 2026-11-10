@@ -5611,6 +5611,26 @@ law Judge.write_reads:
     -> {Content.find(s, n, c) == Some{m}: Maybe<&2, Maybe<&2, Ropes.Root>>}
     -> {Res.root(s3, h2, n) == m: Maybe<&2, Ropes.Root>}
 
+# the work m, if any, reads the key k as v
+def Work.Reads(k: List<&2, U32>, v: List<&2, U32>, m: Maybe<&2, Work>) -> Type:
+  match m:
+    case None{}:
+      Unit
+    case Some{Work{s2, h2, ns2}}:
+      {Node.get(s2, h2, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+
+# a move records a version equal to its target: each resource of the version
+# to is, with the same content, in the tree that a move to it gives
+law Move.reads:
+  for +s: State()
+  for +c: Ledgers.Chain
+  for +to: Ledgers.Id
+  for +h: Maybe<&2, Hashes.Hash>
+  for +n: Resources.Name
+  for +v: List<&2, U32>
+  {Node.get(s, Node.root_of(s, Some{to}), Key.res(n)) == Some{v}: Maybe<&2, List<&2, U32>>}
+    -> Work.Reads(Key.res(n), v, Move.work(s, c, to, h))
+
 # a merge keeps, for each resource, a change that only one side made: when
 # ours is the base, it keeps theirs
 law Pick.merge_theirs:
