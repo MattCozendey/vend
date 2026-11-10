@@ -1490,7 +1490,7 @@ def Quorum.winner_fast_eq(
 def Quorum.major(
   ~B: Data,
   ~same: B -> B -> Bool,
-  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>
+  bs: List<&2, Maybe<&2, Cells.Cell<B>>>
 ) -> Maybe<&2, B>:
   Quorum.winner_fast(~B, ~same, bs)
 
@@ -1500,11 +1500,17 @@ def Quorum.major_has(
   ~same: B -> B -> Bool,
   ~laws: Shared.Eq.Laws(B, same),
   +bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
-  +x: B
+  x: B
 ) -> {Quorum.major(~B, ~same, bs) == Some{x}: Maybe<&2, B>}
   -> {Quorum.has(~B, ~same, bs, x) == True{}: Bool}:
   h =>
-    Quorum.has_winner(~B, ~same, bs, bs, x)(
+    Quorum.has_winner(
+      ~B,
+      ~same,
+      bs,
+      bs,
+      x
+    )(
       Equal.trans(
         Maybe<&2, B>,
         Quorum.winner(~B, ~same, bs, bs),
@@ -1549,9 +1555,20 @@ def Quorum.major_kept(ty, same, laws, bs, bs2, x):
       Quorum.winner(~ty, ~same, bs2, bs2),
       Some{x},
       Quorum.winner_fast_eq(~ty, ~same, ~laws, bs2),
-      Quorum.winner_of(~ty, ~same, ~laws, bs2, x)(
-        Quorum.has_more(~ty, ~same, ~laws, bs, bs2, x)(k)(
-          Quorum.major_has(~ty, ~same, ~laws, bs, x)(h)
-        )
+      Quorum.winner_of(
+        ~ty,
+        ~same,
+        ~laws,
+        bs2,
+        x
+      )(
+        Quorum.has_more(
+          ~ty,
+          ~same,
+          ~laws,
+          bs,
+          bs2,
+          x
+        )(k)(Quorum.major_has(~ty, ~same, ~laws, bs, x)(h))
       )
     )

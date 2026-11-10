@@ -1949,7 +1949,9 @@ def Nat.le_zero_eq(a: Nat) -> {Nat.is_le(a, 0n) == True{}: Bool} -> {a == 0n: Na
 def Nat.le_step(
   a: Nat,
   p: Nat
-) -> {Nat.is_le(a, 1n+p) == True{}: Bool} -> {Nat.is_eq(a, 1n+p) == False{}: Bool} -> {Nat.is_le(a, p) == True{}: Bool}:
+) -> {
+  Nat.is_le(a, 1n+p) == True{}: Bool
+} -> {Nat.is_eq(a, 1n+p) == False{}: Bool} -> {Nat.is_le(a, p) == True{}: Bool}:
   match a p:
     case 0n q:
       h => k => Nat.le_zero(q)
@@ -1961,7 +1963,10 @@ def Nat.le_step(
       h => k => Nat.le_step(b, q)(h)(k)
 
 # of two numbers, one is at most the other
-def Nat.nle_le(a: Nat, b: Nat) -> {Nat.is_le(a, b) == False{}: Bool} -> {Nat.is_le(b, a) == True{}: Bool}:
+def Nat.nle_le(
+  a: Nat,
+  b: Nat
+) -> {Nat.is_le(a, b) == False{}: Bool} -> {Nat.is_le(b, a) == True{}: Bool}:
   match a b:
     case 0n 0n:
       h => {==}
@@ -1973,7 +1978,10 @@ def Nat.nle_le(a: Nat, b: Nat) -> {Nat.is_le(a, b) == False{}: Bool} -> {Nat.is_
       h => Nat.nle_le(p, q)(h)
 
 # a number not less than another is at least it
-def Nat.nlt_le(a: Nat, b: Nat) -> {Nat.is_lt(a, b) == False{}: Bool} -> {Nat.is_le(b, a) == True{}: Bool}:
+def Nat.nlt_le(
+  a: Nat,
+  b: Nat
+) -> {Nat.is_lt(a, b) == False{}: Bool} -> {Nat.is_le(b, a) == True{}: Bool}:
   match a b:
     case 0n 0n:
       h => {==}
@@ -2024,10 +2032,12 @@ def Nat.pigeon.at(
             Nat.is_lt(g, g),
             True{},
             Equal.sym(Bool, Nat.is_lt(g, g), False{}, Nat.lt_irrefl(g)),
-            Nat.le_lt(g, t1, g)(
-              Nat.le_trans(g, m, t1)(hg)(
-                Nat.le_trans(m, Nat.add(y1, m), t1)(Nat.le_add(y1, m))(h3)
-              )
+            Nat.le_lt(
+              g,
+              t1,
+              g
+            )(
+              Nat.le_trans(g, m, t1)(hg)(Nat.le_trans(m, Nat.add(y1, m), t1)(Nat.le_add(y1, m))(h3))
             )(h4)
           )
         )
@@ -2042,12 +2052,7 @@ def Nat.pigeon.at(
 
 # f is at most n, n is less than y, and y + n is at most t: t is not less
 # than f + f
-def Nat.pigeon(
-  +f: Nat,
-  +n: Nat,
-  y: Nat,
-  t: Nat
-) -> {Nat.is_le(f, n) == True{}: Bool}
+def Nat.pigeon(+f: Nat, +n: Nat, y: Nat, t: Nat) -> {Nat.is_le(f, n) == True{}: Bool}
   -> {Nat.is_lt(n, y) == True{}: Bool}
   -> {Nat.is_le(Nat.add(y, n), t) == True{}: Bool}
   -> {Nat.is_lt(t, Nat.add(f, f)) == True{}: Bool}
@@ -2055,12 +2060,7 @@ def Nat.pigeon(
   +h1 => h2 => h3 => h4 => Nat.pigeon.at(f, n, y, t, f, n)(h1)(h2)(h1)(h3)(h4)
 
 # a is not at most c, and b is: a is not at most b
-def Nat.nle_trans.at(
-  a: Nat,
-  b: Nat,
-  c: Nat,
-  x: Bool
-) -> {Nat.is_le(a, b) == x: Bool}
+def Nat.nle_trans.at(+a: Nat, b: Nat, +c: Nat, x: Bool) -> {Nat.is_le(a, b) == x: Bool}
   -> {Nat.is_le(a, c) == False{}: Bool}
   -> {Nat.is_le(b, c) == True{}: Bool}
   -> {x == False{}: Bool}:
@@ -2083,7 +2083,9 @@ def Nat.nle_trans(
   +a: Nat,
   +b: Nat,
   c: Nat
-) -> {Nat.is_le(a, c) == False{}: Bool} -> {Nat.is_le(b, c) == True{}: Bool} -> {Nat.is_le(a, b) == False{}: Bool}:
+) -> {
+  Nat.is_le(a, c) == False{}: Bool
+} -> {Nat.is_le(b, c) == True{}: Bool} -> {Nat.is_le(a, b) == False{}: Bool}:
   h => k => Nat.nle_trans.at(a, b, c, Nat.is_le(a, b))({==})(h)(k)
 
 # a number is zero

@@ -1678,7 +1678,7 @@ def Ballot.grows(
   ~same: Q -> Q -> Bool,
   ~laws: Shared.Eq.Laws(Q, same),
   a: Maybe<&2, Cells.Cell<Entry<Q>>>,
-  b: Maybe<&2, Cells.Cell<Entry<Q>>>
+  +b: Maybe<&2, Cells.Cell<Entry<Q>>>
 ) -> {
   Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), a, b) == True{}: Bool
 } -> {
@@ -1777,8 +1777,8 @@ def State.decide_grows(ty, same, laws, s, s2, w, ms, v):
   match w:
     case Where{c, h, r}:
       +p = Slot.bucket(c, h, r)
-      +b1 = Bucket.ballots(~ty, State.under(~ty, s, p), ms)
-      +b2 = Bucket.ballots(~ty, State.under(~ty, s2, p), ms)
+      b1 = Bucket.ballots(~ty, State.under(~ty, s, p), ms)
+      b2 = Bucket.ballots(~ty, State.under(~ty, s2, p), ms)
       +gr => hd =>
         Quorums.Quorum.major_kept(~Vote, ~Vote.is_eq, ~Vote.laws(), b1, b2, v)(
           Ballots.grows(~ty, ~same, ~laws, s, s2, p, ms, gr)
@@ -2362,7 +2362,7 @@ def Data.has_grows(
   ~same: Q -> Q -> Bool,
   ~laws: Shared.Eq.Laws(Q, same),
   +s: State(Q),
-  s2: State(Q),
+  +s2: State(Q),
   +ws: List<&2, U32>,
   gr: {State.grows(~Q, ~same, s, s2) == True{}: Bool}
 ) -> {Data.has(~Q, s, ws) == True{}: Bool} -> {Data.has(~Q, s2, ws) == True{}: Bool}:

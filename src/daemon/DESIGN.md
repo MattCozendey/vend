@@ -50,7 +50,8 @@ Delete each open item when the code makes it true.
   node's chain and the key of the chain signs it (`Seal.accept`). A ballot that it cannot check
   yet is not kept; it comes again with the next sync.
 - **Missing is not absent** (`Tree.look`, `Node.find`): a judge reads with `Node.find`. It refuses
-  only on what it knows, and waits for a node that it lacks.
+  only on what it knows, and waits for a node that it lacks. A look gives the hash of that node
+  (`Node.lacks`); another node serves the data of a hash (`Node.serve`).
 - **Sync** steps only the lines that it may move: those of the new requests and ballots, and
   those with waiting requests (`Sync.lines`).
 - **Formats** stay outside the judge: the judge sees a resource as a root and a format-given merge
@@ -67,7 +68,7 @@ known words costs it about a million steps. So:
 - A proof never compares two hashes of known words (`Rope.put.go_nil` is the one place).
 - A loop with a large fuel waits on a value that a proof does not know (`Advances.at`).
 
-All of `core/impl.bend` checks in about 10 s (it was 175 s).
+All of `core/impl.bend` checks in about 13 s (it was 175 s).
 
 ## 3. What is proven (`core/impl.bend` and every file below it print ALL PROOFS CHECK)
 

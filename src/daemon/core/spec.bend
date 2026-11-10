@@ -2096,7 +2096,7 @@ def Made.of(+c: Maybe<&2, Hashes.Hash>, m: Maybe<&2, Work>) -> Maybe<&2, Made>:
 
 # the first tip of a new branch, from its first content (the root of start),
 # with a log whose owners are the store's owners os now
-def Make.first(start: Maybe<&2, Work>, +os: List<&2, String>) -> Maybe<&2, Made>:
+def Make.first(start: Maybe<&2, Work>, os: List<&2, String>) -> Maybe<&2, Made>:
   Maybe.bind(&2, Work, Made, start, +w => Made.of(Work.root(w), Log.first(w, os)))
 
 # the store tree in which an Own of the line l, at the content h, reads its
@@ -2396,11 +2396,11 @@ def Step.mark(+r: Run, +i: Ledgers.Id, +m: String) -> Maybe<&2, Run>:
 
 # the run r with the first tip m of the new branch b of its store in its log,
 # then the request i taken (none: the node lacks a node)
-def Branch.made(+r: Run, +i: Ledgers.Id, +b: String, m: Maybe<&2, Made>) -> Maybe<&2, Run>:
+def Branch.made(+r: Run, i: Ledgers.Id, b: String, m: Maybe<&2, Made>) -> Maybe<&2, Run>:
   match m:
     case None{}:
       None{}
-    case Some{Made{+t, +ds}}:
+    case Some{Made{t, ds}}:
       Maybe.bind(
         &2,
         Run,
@@ -2419,10 +2419,10 @@ def Branch.made(+r: Run, +i: Ledgers.Id, +b: String, m: Maybe<&2, Made>) -> Mayb
 # is one (m; none: wait for it)
 def Branch.ready(
   +r: Run,
-  +i: Ledgers.Id,
+  i: Ledgers.Id,
   st: Ledgers.Id,
   +b: String,
-  +at: Maybe<&2, Ledgers.Id>,
+  at: Maybe<&2, Ledgers.Id>,
   m: Maybe<&2, Bool>
 ) -> Maybe<&2, Run>:
   match m:
@@ -2445,9 +2445,9 @@ def Branch.ready(
 # (m; none: the node lacks a part of the log)
 def Branch.new(
   +r: Run,
-  +i: Ledgers.Id,
+  i: Ledgers.Id,
   st: Ledgers.Id,
-  +b: String,
+  b: String,
   +at: Maybe<&2, Ledgers.Id>,
   m: Maybe<&2, Maybe<&2, List<&2, U32>>>
 ) -> Maybe<&2, Run>:
@@ -2462,7 +2462,7 @@ def Branch.new(
 # the run r of a store, after the request i for a new branch b from the
 # version at: the log gets the first tip of b, for good; a store makes a
 # branch once, so a branch that it has refuses the request
-def Step.branch(+r: Run, +i: Ledgers.Id, st: Ledgers.Id, +b: String, +at: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Run>:
+def Step.branch(+r: Run, i: Ledgers.Id, st: Ledgers.Id, +b: String, at: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Run>:
   Branch.new(r, i, st, b, at, Node.find(Run.state(r), Tip.log(Run.tip(r)), Log.start(b)))
 
 # the run r, after the request i of the change ch of the line l of the store
@@ -2471,7 +2471,7 @@ def Step.on(+r: Run, i: Ledgers.Id, st: Ledgers.Id, l: Maybe<&2, String>, ch: Ch
   match l ch:
     case Some{b} Change.Mark{m, d}:
       Step.mark(r, i, m)
-    case None{} Change.Branch{+b, +at}:
+    case None{} Change.Branch{b, at}:
       Step.branch(r, i, st, b, at)
     case x +y:
       +s = Run.state(r)
@@ -3266,7 +3266,7 @@ def Plan.fit(after: Maybe<&2, Hashes.Hash>, m: Maybe<&2, Run>) -> Maybe<&2, Run>
 # each of its requests, and the node's own run of them gives the same tip
 def Plan.copy(
   +s: State(),
-  +c: Ledgers.Chain,
+  c: Ledgers.Chain,
   t: Tip,
   th: Maybe<&2, Hashes.Hash>,
   m: Maybe<&2, Ledgers.Vote>,
@@ -3366,7 +3366,7 @@ def Last.mine(+n: String, +s: State(), +c: Ledgers.Chain, +h: U32, k: Nat) -> Ma
 
 # the last vote of the node n at the height h of the line c, in a round below
 # r, if it cast one
-def Last.below(+n: String, +s: State(), +c: Ledgers.Chain, +h: U32, r: Nat) -> Maybe<&2, Ledgers.Last>:
+def Last.below(n: String, s: State(), c: Ledgers.Chain, h: U32, r: Nat) -> Maybe<&2, Ledgers.Last>:
   match r:
     case 0n:
       None{}
@@ -3482,12 +3482,12 @@ def Allowed(+s: State(), +w: Ledgers.Where, +os: List<&2, String>, v: Ledgers.Vo
 # from that passed to it are known: none until they are a majority; then the
 # last vote of the highest round among them, else what waits at the proposer
 def Plan.later(
-  +s: State(),
-  +c: Ledgers.Chain,
-  +w: Ledgers.Where,
-  +t: Tip,
+  s: State(),
+  c: Ledgers.Chain,
+  w: Ledgers.Where,
+  t: Tip,
   th: Maybe<&2, Hashes.Hash>,
-  +os: List<&2, String>,
+  os: List<&2, String>,
   +from: List<&2, String>,
   m: Maybe<&2, Ledgers.Last>
 ) -> Plan:
@@ -3523,11 +3523,11 @@ def Plan.lead(
 # is known (m): the proposer's step, when its passes allow it
 def Plan.follow(
   +s: State(),
-  +c: Ledgers.Chain,
-  +w: Ledgers.Where,
+  c: Ledgers.Chain,
+  w: Ledgers.Where,
   t: Tip,
   th: Maybe<&2, Hashes.Hash>,
-  +os: List<&2, String>,
+  os: List<&2, String>,
   m: Maybe<&2, Ledgers.Act>
 ) -> Plan:
   match m:
@@ -3617,7 +3617,7 @@ def Cast.round(+n: String, +s: State(), +c: Ledgers.Chain, +next: U32, +th: Mayb
 # Node.cast at the head h of the line c, whose tip is m
 def Cast.at(+n: String, +s: State(), +c: Ledgers.Chain, h: Head, m: Maybe<&2, Tip>) -> State():
   match h m:
-    case Head{r, b, +next, +th} Some{+t}:
+    case Head{r, b, +next, th} Some{+t}:
       Cast.round(n, Round.join(n, s, c, next, Line.owners(s, t)), c, next, th, t)
     case x y:
       s
@@ -3626,7 +3626,7 @@ def Cast.at(+n: String, +s: State(), +c: Ledgers.Chain, h: Head, m: Maybe<&2, Ti
 def Pass.at(+n: String, +s: State(), +c: Ledgers.Chain, h: Head, m: Maybe<&2, Tip>) -> State():
   match h m:
     case Head{r, b, +next, th} Some{t}:
-      +k = Round.seen(s, c, next)
+      k = Round.seen(s, c, next)
       Pass.to(
         n,
         s,
@@ -3637,7 +3637,7 @@ def Pass.at(+n: String, +s: State(), +c: Ledgers.Chain, h: Head, m: Maybe<&2, Ti
       s
 
 # Node.pass once the head m of the line c is known
-def Pass.head(+n: String, +s: State(), +c: Ledgers.Chain, m: Maybe<&2, Head>) -> State():
+def Pass.head(n: String, +s: State(), c: Ledgers.Chain, m: Maybe<&2, Head>) -> State():
   match m:
     case None{}:
       s
@@ -3887,7 +3887,7 @@ def Node.ask.at(
   n: String,
   +s: State(),
   +e: Envelope,
-  +q: Ask,
+  q: Ask,
   m: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
 ) -> State():
   match m:
@@ -3978,15 +3978,15 @@ def Look.lack(l: Trees.Look) -> Maybe<&2, Hashes.Hash>:
 # the hash of the node that a read of the key k of the tree whose root is h
 # lacks in s, if it lacks one: what the node asks another node for. A node
 # keeps the part of a store that it uses, and fetches the rest on demand
-def Node.lacks(+s: State(), +h: Maybe<&2, Hashes.Hash>, k: List<&2, U32>) -> Maybe<&2, Hashes.Hash>:
+def Node.lacks(s: State(), h: Maybe<&2, Hashes.Hash>, k: List<&2, U32>) -> Maybe<&2, Hashes.Hash>:
   Look.lack(Node.look(s, h, k))
 
 # l with the data m, if any
-def Serve.put(m: Maybe<&2, List<&2, U32>>, +l: Ledgers.State(Ask)) -> Ledgers.State(Ask):
+def Serve.put(m: Maybe<&2, List<&2, U32>>, l: Ledgers.State(Ask)) -> Ledgers.State(Ask):
   match m:
     case None{}:
       l
-    case Some{+ws}:
+    case Some{ws}:
       Ledgers.State.put_data(~Ask, ~Ask.is_eq, l, ws)
 
 # the data that s holds under the hashes hs, as a ledger: what a node sends
@@ -3995,7 +3995,7 @@ def Node.serve(+s: State(), hs: List<&2, Hashes.Hash>) -> Ledgers.State(Ask):
   match hs:
     case Nil{}:
       Ledgers.State.empty(~Ask)
-    case Con{+h, r}:
+    case Con{h, r}:
       Serve.put(Ledgers.State.data(~Ask, State.ledger(s), h), Node.serve(s, r))
 
 # what the ledger r lacks of s: what a sync from s to a holder of r sends
@@ -4025,7 +4025,7 @@ def Ballots.of(cs: List<&2, Cells.Cell<Ledgers.Entry<Ask>>>) -> List<&2, Ledgers
 # sync). Nothing that s holds is lost or changed. Each new request waits on
 # its line: the cost is what t brings, not what s holds
 def Node.take(+s: State(), +t: Ledgers.State(Ask)) -> State():
-  +sent = Take.clean(Tries.Trie.values(Cells.Cell<Ledgers.Entry<Ask>>, t), Ledgers.State.empty(~Ask))
+  +sent = Node.reads(t)
   Sealed.take(
     Ballots.of(
       Tries.Trie.values(
@@ -5193,7 +5193,7 @@ def Line.at(rs: List<&2, Nat>, +s: State(), +c: Ledgers.Chain, h: Head) -> Maybe
   match rs:
     case Nil{}:
       Some{h}
-    case Con{+r, rest}:
+    case Con{r, rest}:
       Maybe.bind(
         &2,
         Head,

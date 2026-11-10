@@ -579,9 +579,7 @@ def Hash.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Hash>>:
 def Hash.code_read(
   h: Hash,
   r: List<&2, U32>
-) -> {
-  Hash.code.read(Hash.code(h, r)) == Some{Codes.Read{h, r}}: Maybe<&2, Codes.Read<Hash>>
-}:
+) -> {Hash.code.read(Hash.code(h, r)) == Some{Codes.Read{h, r}}: Maybe<&2, Codes.Read<Hash>>}:
   match h:
     case Hash{a, b, c, d, e, f, g, i}:
       {==}
