@@ -2227,12 +2227,17 @@ def Cast.mine(
         Cast.mine.of(~mach, ~kern, s, i, Node.asked(~mach, s, i))
       )
 
-# the owner whose turn it is to propose the step at the height h, among the
-# owners os: each in turn, by the height. One owner proposes a step and the
-# others cast for the same step, so the owners do not split over what waits
-# at each of them
-def Owners.turn(+os: List<&2, String>, h: U32) -> Maybe<&2, String>:
-  List.get(&2, String, os, U32.to_nat(U32.mod(h, U32.from_nat(List.length(&2, String, os)))))
+# the owner whose turn it is to propose the step in the round r of the height
+# h, among the owners os: each in turn, by the height and the round. One owner
+# proposes a step and the others cast for the same step, so the owners do not
+# split over what waits at each of them
+def Owners.turn(+os: List<&2, String>, h: U32, r: Nat) -> Maybe<&2, String>:
+  List.get(
+    &2,
+    String,
+    os,
+    U32.to_nat(U32.mod(U32.add(h, U32.from_nat(r)), U32.from_nat(List.length(&2, String, os))))
+  )
 
 # what a node casts for: the requests of a step, its own run of them (none:
 # it cannot run them now), and the nodes whose passes allow the step
@@ -2867,7 +2872,7 @@ def Cast.round(
       n,
       w,
       th,
-      Plan.of(~mach, ~kern, n, s, c, w, t, th, os, Owners.turn(os, U32.add(next, U32.from_nat(r)))),
+      Plan.of(~mach, ~kern, n, s, c, w, t, th, os, Owners.turn(os, next, r)),
       s
     ),
     u => s
@@ -3082,7 +3087,7 @@ def Round.decide(
       &2,
       String,
       Ledgers.Vote,
-      Owners.turn(os, U32.add(h, U32.from_nat(r))),
+      Owners.turn(os, h, r),
       p => Round.led(~mach, s, Ledgers.Where{c, h, r}, os, v, p)
     )
   )
@@ -6433,18 +6438,7 @@ def Cast.round.grows(
   +os = Tip.owners(t)
   +r = Round.mine(~mach, n, s, c, next, Round.seen(~mach, s, c, next))
   +w = {Ledgers.Where{c, next, r}: Ledgers.Where}
-  +p = Plan.of(
-    ~mach,
-    ~Lawful.kernel(mach, lawf),
-    n,
-    s,
-    c,
-    w,
-    t,
-    th,
-    os,
-    Owners.turn(os, U32.add(next, U32.from_nat(r)))
-  )
+  +p = Plan.of(~mach, ~Lawful.kernel(mach, lawf), n, s, c, w, t, th, os, Owners.turn(os, next, r))
   Grows.when(
     ~mach,
     s,
@@ -6477,20 +6471,7 @@ def Cast.round.grows(
         Plan.from(~mach, p),
         Plan.run(~mach, p),
         s
-      )(
-        Plan.of.grows(
-          ~mach,
-          ~lawf,
-          n,
-          s,
-          c,
-          w,
-          t,
-          th,
-          os,
-          Owners.turn(os, U32.add(next, U32.from_nat(r)))
-        )
-      ),
+      )(Plan.of.grows(~mach, ~lawf, n, s, c, w, t, th, os, Owners.turn(os, next, r))),
       Grows.refl(~mach, s)
     ),
     Grows.refl(~mach, s)
@@ -9224,7 +9205,7 @@ def Cast.round.heads(
   +os = Tip.owners(t)
   +r = Round.mine(~mach, n, s, c, next, Round.seen(~mach, s, c, next))
   +w = {Ledgers.Where{c, next, r}: Ledgers.Where}
-  +p = Plan.of(~mach, ~kern, n, s, c, w, t, th, os, Owners.turn(os, U32.add(next, U32.from_nat(r))))
+  +p = Plan.of(~mach, ~kern, n, s, c, w, t, th, os, Owners.turn(os, next, r))
   Heads.when(
     ~mach,
     Cast.free(~mach, n, s, w, t),
@@ -11766,14 +11747,14 @@ def Decide.up(
       &2,
       String,
       Ledgers.Vote,
-      Owners.turn(os, U32.add(h, U32.from_nat(r))),
+      Owners.turn(os, h, r),
       p => Round.led(~mach, a, Ledgers.Where{c, h, r}, os, v0, p)
     ),
     +v0 => Maybe.bind(
       &2,
       String,
       Ledgers.Vote,
-      Owners.turn(os, U32.add(h, U32.from_nat(r))),
+      Owners.turn(os, h, r),
       p => Round.led(~mach, u, Ledgers.Where{c2, h, r}, os, v0, p)
     ),
     v,
@@ -11783,8 +11764,8 @@ def Decide.up(
     +v0 => Shared.Maybe.bind_kept(
       String,
       Ledgers.Vote,
-      Owners.turn(os, U32.add(h, U32.from_nat(r))),
-      Owners.turn(os, U32.add(h, U32.from_nat(r))),
+      Owners.turn(os, h, r),
+      Owners.turn(os, h, r),
       p => Round.led(~mach, a, Ledgers.Where{c, h, r}, os, v0, p),
       p => Round.led(~mach, u, Ledgers.Where{c2, h, r}, os, v0, p),
       v,
@@ -14801,7 +14782,7 @@ def Decide.elim(
         &2,
         String,
         Ledgers.Vote,
-        Owners.turn(os, U32.add(h, U32.from_nat(r))),
+        Owners.turn(os, h, r),
         p => Round.led(~mach, s, Ledgers.Where{c, h, r}, os, v0, p)
       ),
       v
@@ -14812,7 +14793,7 @@ def Decide.elim(
         String,
         Ledgers.Vote,
         R,
-        Owners.turn(os, U32.add(h, U32.from_nat(r))),
+        Owners.turn(os, h, r),
         p => Round.led(~mach, s, Ledgers.Where{c, h, r}, os, v0, p),
         v
       )(e1)(+p => ep => e2 => Decide.elim.at(~mach, R, s, c, h, r, os, v0, p, v)(e0)(e2)(f))
