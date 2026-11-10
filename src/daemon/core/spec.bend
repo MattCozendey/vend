@@ -1834,11 +1834,7 @@ def Judge.resolve(
           Maybe<&2, Ropes.Root>,
           Verdict,
           Content.find(s, n, c),
-          m => Judge.when(
-            open,
-            h,
-            x => Work.take(Resolve.work(s, h, n, m))
-          )
+          m => Judge.when(open, h, x => Work.take(Resolve.work(s, h, n, m)))
         )
       )
     )
@@ -5683,7 +5679,11 @@ law Plan.follow_allowed:
   for +v: Ledgers.Vote
   for +from: List<&2, String>
   {
-    Maybe.is_some(&2, Run, Plan.run(Plan.follow(s, c, w, t, th, os, Some{Ledgers.Act.Vote{v, from}})))
+    Maybe.is_some(
+      &2,
+      Run,
+      Plan.run(Plan.follow(s, c, w, t, th, os, Some{Ledgers.Act.Vote{v, from}}))
+    )
       == True{}: Bool
   }
     -> {Allowed(s, w, os, v, from) == True{}: Bool}
@@ -5766,12 +5766,24 @@ law Merge.keeps:
       == True{}: Bool
   }
     -> {
-      Res.find(s, Node.root_of(s, Merge.base(s, c, from, h)), n) == Some{b}: Maybe<&2, Maybe<&2, Ropes.Root>>
+      Res.find(
+        s,
+        Node.root_of(s, Merge.base(s, c, from, h)),
+        n
+      )
+        == Some{b}: Maybe<&2, Maybe<&2, Ropes.Root>>
     }
     -> {Res.find(s, h, n) == Some{o}: Maybe<&2, Maybe<&2, Ropes.Root>>}
     -> {Res.find(s, Node.root_of(s, Some{from}), n) == Some{t}: Maybe<&2, Maybe<&2, Ropes.Root>>}
     -> {
-      Pick.merge(Formats.Format.of(Resources.Name.path(n)), s, b, o, t) == Some{Pick.Take{x}}: Maybe<&2, Pick>
+      Pick.merge(
+        Formats.Format.of(Resources.Name.path(n)),
+        s,
+        b,
+        o,
+        t
+      )
+        == Some{Pick.Take{x}}: Maybe<&2, Pick>
     }
     -> Work.Reads(Key.res(n), Res.code(x), Merge.work(s, c, from, h))
 
