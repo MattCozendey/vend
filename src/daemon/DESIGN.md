@@ -160,6 +160,6 @@ Design (each needs a decision or new work; none is a proof detail):
   does not stop its line, but nothing removes it.
 - **Names:** `State()` is `Node`; `Chain` (a line) and `Chained` (a chain of keys);
   `core/spec.bend` holds about 15 domains in one file.
-- **Lint:** no error. Left: `layout/case` (false: constructors are PascalCase), hints in proof
-  bodies.
+- **Lint:** no error. Left: `layout/case` (false: constructors are PascalCase) and performance
+  hints in the trie (`LINTCONTEXT.md`).
 - **Transport** (`transport/spec.bend`) is a spec only.

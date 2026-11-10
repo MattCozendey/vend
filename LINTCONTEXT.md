@@ -1,65 +1,34 @@
-# Lint: the slow case
+# Lint: state and facts
 
-`bun run lint` takes about 2 minutes on this repo. One file takes most of it.
+`bun run lint` takes about 90 s on this repo (4 cores, 15 GB, Linux, bun 1.4.4), and ends with no
+error. `bend src/daemon/core/impl.bend --check-only` takes about 13 s (it was 175 s: see
+`src/daemon/DESIGN.md`, "Proof speed").
 
-## The case
+## What is left (180 findings)
 
-- File: `src/daemon/core/impl.bend` (about 2,800 lines; it imports `core/spec.bend`, `ledger.bend`,
-  `tree.bend`, `rope.bend`).
-- Commit: `5285de5` on branch `claude/daemon-core-impl-kahuc3` (the numbers below), and each commit
-  after it.
+- `layout/case` (155): it reports each constructor of each type (`Rename Tip to tip`), also in files
+  that this branch did not change (`glob/spec.bend`: 31). The repo's constructors are PascalCase on
+  purpose, so these are false findings.
+- `performance/eager_branch` (13) and `performance/missed_fork` (12): in code that runs
+  (`shared/shared/shared/trie.bend`, one in `shared/ledger.bend`). Not changed: laws state these
+  defs as they are.
 
-| Command | Time |
-| --- | --- |
-| `node_modules/.bin/bend-lint src/daemon/core/impl.bend` | 80 s (122 s at commit `9c1464f`) |
-| `bend src/daemon/core/impl.bend --check-only` (Bend 2.0.40) | 38 s (57 s at `9c1464f`) |
-| `node_modules/.bin/bend-lint src/daemon/shared/rope.bend` | 19 s |
-| `bend src/daemon/shared/rope.bend --check-only` | 9 s |
-| `node_modules/.bin/bend-lint src/daemon/transport/spec.bend` | 16 s |
-| `node_modules/.bin/bend-lint src/daemon/shared/tree.bend` (12,576 lines) | 2 s |
-| `node_modules/.bin/bend-lint src/daemon/shared/ledger.bend` (6,400 lines) | 6 s |
-| each other file | under 2 s |
+## Directives
 
-So the linter takes about 2 times as long as Bend's own check of the same file, and the check is
-the slow part: size is not the cause (`tree.bend` is 4 times larger and takes 2 s).
-
-## What makes the check slow
-
-Measured with prefixes of the file (`head -n N impl.bend > part.bend; bend part.bend --check-only`):
-
-- `import ../shared/rope.bend`: about 9 s in each file that imports it. In `rope.bend`, the time
-  is in `Rope.put.step_holds`, `Rope.put.go_holds`, `Rope.put.step_reads` and `Rope.put.go_reads`
-  (the file up to `# Puts` checks in 0.3 s).
-- `def Spec.Own.takes_inside` (`impl.bend`): about 6 s for a 2-line proof. Its type holds
-  `Spec.Group.nodes(s, Spec.Own.tree(s, l, at, h), g)`, a call with a large normal form
-  (`Reaches.Reach.in`). An earlier form of the same law, with a `match` on two arguments and that
-  call in each case, took 17 s to 32 s (commit `9c1464f`, `def Spec.Judge.own_inside`), and one run
-  of a prefix that ended in it was killed for memory (exit 137 on a 15 GB machine).
-- `def Keep.reads` and `def Spec.Node.keep_reads` (`impl.bend`): about 10 s. Their types hold
-  `Ropes.Rope.put(cs)` three times.
-
-Two checks of one term with itself are fast (a lemma `{Spec.Group.nodes(s, h, g) ==
-Spec.Group.nodes(s, h, g)}` adds under 1 s), so the time goes to terms that are equal only after
-they are reduced.
-
-## To reproduce
-
-```sh
-bun install
-time node_modules/.bin/bend-lint src/daemon/core/impl.bend
-time bend src/daemon/core/impl.bend --check-only
-```
+- `src/daemon/core/impl.bend` holds only proofs. It has four `expect-file` directives, each with its
+  reason: a proof does not run, and a second use of a binder in a proof sits in a rewrite motive or
+  an erased argument.
+- Other files have `expect-begin` / `expect-end` around the proofs that the same two rules report
+  (`language/reused_binder`, `performance/unused_result`).
+- For a proof, `language/reused_binder` and `language/unneeded_plus` can disagree on one binder.
+  The checker decides: a `+` stays only where `bend --check-only` needs it.
 
 ## Other facts
 
-- bend-lint 0.3.0 checks with Bend 2.0.39; the `bend` on PATH here is 2.0.40 (built from
-  `MattCozendey/bend`, branch `claude/daemon-core-impl-kahuc3`, which is `main`). bend-lint prints
-  a warning about it.
-- Machine: 4 cores, 15 GB, Linux, bun 1.4.4.
+- bend-lint 0.3.0 checks with Bend 2.0.39; the `bend` on PATH here is 2.0.40. bend-lint prints a
+  warning about it.
+- `--fix` changes nothing here: it prints `--fix makes no fix until Bend's checker in Bend can prove
+  that a fix keeps the program`. The canonical format was applied with `--fix-dangerously` and a
+  config that names only `layout/format`; each file was checked again after it.
 - A run of `bun run lint` fails with `the checker failed: a check changed since its answer; run
   again` when a file changes while it runs.
-- `--fix` changes nothing here: it prints `--fix makes no fix until Bend's checker in Bend can
-  prove that a fix keeps the program`.
-- The rule `layout/case` reports each constructor of each type (`Rename Tip to tip: a law that does
-  not state a type is snake_case`), also in files that this branch did not change (`glob/spec.bend`:
-  31). The repo's constructors are PascalCase on purpose, so these are false findings.

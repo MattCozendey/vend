@@ -1494,6 +1494,7 @@ def Quorum.major(
 ) -> Maybe<&2, B>:
   Quorum.winner_fast(~B, ~same, bs)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # what a majority cast has a majority
 def Quorum.major_has(
   ~B: Data,
@@ -1525,6 +1526,7 @@ def Quorum.major_has(
         h
       )
     )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # what a majority cast stays so when every ballot is kept
 law Quorum.major_kept:

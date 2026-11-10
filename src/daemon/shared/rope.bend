@@ -533,6 +533,7 @@ def Rope.put(cs: List<&2, List<&2, U32>>) -> Put:
 # Laws
 # ----
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a store that holds the words of the node n gives n for its hash
 def Rope.has_node(
   ~S: Data,
@@ -554,6 +555,7 @@ def Rope.has_node(
     )(e)
   ): {Maybe.bind(&2, List<&2, U32>, Node, _, Node.of) == Some{n}: Maybe<&2, Node>}
   Node.of_words(n)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a store that holds the nodes of gs, then acc, holds acc
 def Rope.holds_acc(
@@ -586,6 +588,7 @@ def Rope.holds_acc(
         )(e)
       )
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a store that holds the nodes that mk makes of each of gs gives, for their
 # hashes, the parts gs one after the other, when the part of a node of mk is
 # what it was made of
@@ -699,6 +702,7 @@ def Rope.level_put(
             == Some{List.append(&2, A, g, List.concat(&2, A, r))}: Maybe<&2, List<&2, A>>
         }
         {==}
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # lists one after the other can be put together in any order
 def Rope.append_assoc(
@@ -853,6 +857,7 @@ def Node.leaf_of(
 ) -> {Node.leaf(Node.leaf.of(ws)) == Some{ws}: Maybe<&2, List<&2, U32>>}:
   {==}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a store that holds the branches of the pieces gs of hs reads, a level up,
 # under their hashes what it reads under hs
 def Rope.up_reads(
@@ -916,6 +921,7 @@ def Rope.up_reads(
     flat
   ): {Rope.read.go(~S, ~fetch, d, s, _) == Some{x}: Maybe<&2, List<&2, U32>>}
   pre
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # p holds of a choice between two ropes when it holds of both
 def Rope.put.when(
@@ -1284,6 +1290,7 @@ def Rope.put.step_reads(
     Rope.put.top_reads(~S, ~fetch, d, hs, acc, s, x, pre)
   )
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a store that holds the nodes of a rope reads, at its root, what it reads
 # under the hashes the rope was put above
 def Rope.put.go_reads(
@@ -1371,6 +1378,7 @@ def Rope.put.go_reads(
           pre2
         )
       )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # a store that holds the nodes of the rope of the leaves ls reads it as the
 # leaves, one after the other
@@ -1446,6 +1454,7 @@ def Rope.read_put(ty, fetch, s, cs):
     ): {Rope.read(~ty, ~fetch, s, Put.root(Rope.put(cs))) == Some{_}: Maybe<&2, List<&2, U32>>}
     Rope.put.of_reads(~ty, ~fetch, s, Rope.leaves(cs))(e)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a node that a store gives, a store that grows from it gives too
 def Rope.node_kept(
   ~S: Data,
@@ -1471,7 +1480,9 @@ def Rope.node_kept(
     w => e => kept(a)(b)(h)(w)(gr)(e),
     w => e => e
   )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # what a store gives for a level, a store that grows from it gives too
 def Rope.level_kept(
   ~S: Data,
@@ -1535,7 +1546,9 @@ def Rope.level_kept(
           y => e => e
         )
       )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # the content that a store gives below some nodes, a store that grows from it
 # gives too
 def Rope.read.go_kept(
@@ -1567,6 +1580,7 @@ def Rope.read.go_kept(
         v => Rope.level_kept(~S, ~fetch, ~grows, ~kept, ~Hashes.Hash, ~Node.kids, a, b, hs, v, gr),
         ks => Rope.read.go_kept(~S, ~fetch, ~grows, ~kept, p, a, b, ks, x, gr)
       )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # a read that a store gives, a store that grows from it gives too
 law Rope.read_grows:

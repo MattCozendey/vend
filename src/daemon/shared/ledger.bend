@@ -1704,13 +1704,14 @@ def Ballot.many_kept(
         Shared.Bool.false_ne_true(k)
       )
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # the ballot of a cell is kept in a cell that keeps it
 def Ballot.grows(
   ~Q: Data,
   ~same: Q -> Q -> Bool,
   ~laws: Shared.Eq.Laws(Q, same),
   a: Maybe<&2, Cells.Cell<Entry<Q>>>,
-  +b: Maybe<&2, Cells.Cell<Entry<Q>>>
+  b: Maybe<&2, Cells.Cell<Entry<Q>>>
 ) -> {
   Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), a, b) == True{}: Bool
 } -> {
@@ -1744,6 +1745,7 @@ def Ballot.grows(
         Ballot.refl(~Q, e)
     case Some{Cells.Many{}}:
       k => Ballot.many_kept(~Q, ~same, b, k)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the ballots of ms in the bucket at p are kept in a state that grows
 def Ballots.grows(
@@ -2147,6 +2149,7 @@ def State.put_data_keeps(
     k
   )(Slot.data_apart(Hashes.Sha.hash(ws), k)(e))
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # data, one after the other, keeps each slot that does not start as the slots
 # of data do
 def State.put_datas_keeps(
@@ -2178,6 +2181,7 @@ def State.put_datas_keeps(
           State.put_datas_keeps(~Q, ~same, r, State.put_data(~Q, ~same, s, ws), k)(e),
           State.put_data_keeps(~Q, ~same, s, ws, k)(e)
         )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # data, one after the other, grow the state
 def State.put_datas_grows(
@@ -2202,6 +2206,7 @@ def State.put_datas_grows(
         State.put_data_grows(~Q, ~same, ~laws, s, ws)
       )(State.put_datas_grows(~Q, ~same, ~laws, r, State.put_data(~Q, ~same, s, ws)))
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Data.check_hash once the hash check (ok) is known
 def Data.check_hash.at(
   h: Hashes.Hash,
@@ -2222,6 +2227,7 @@ def Data.check_hash.at(
         {Hashes.Sha.hash(x) == h: Hashes.Hash},
         Shared.Maybe.none_ne_some(List<&2, U32>, x, d)
       )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # data read under a hash hashes to it
 def Data.check_hash(
@@ -2393,13 +2399,14 @@ def State.size_under_grows(
     )(gr)
   )
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a state that grows keeps what it holds
 def Data.has_grows(
   ~Q: Data,
   ~same: Q -> Q -> Bool,
   ~laws: Shared.Eq.Laws(Q, same),
   +s: State(Q),
-  +s2: State(Q),
+  s2: State(Q),
   +ws: List<&2, U32>,
   gr: {State.grows(~Q, ~same, s, s2) == True{}: Bool}
 ) -> {Data.has(~Q, s, ws) == True{}: Bool} -> {Data.has(~Q, s2, ws) == True{}: Bool}:
@@ -2442,7 +2449,9 @@ def Data.has_grows(
       ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
       Some{ws}
     )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a state that grows keeps all that it holds
 def Data.holds_grows(
   ~Q: Data,
@@ -2481,7 +2490,9 @@ def Data.holds_grows(
           r,
           gr
         )(Shared.List.all.if_rest(Data.has(~Q, s, ws), u => Data.holds(~Q, s, r))(e))
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # words put where their slot (whose cell is m) is empty, or holds them, are held
 def Data.put_has(
   ~Q: Data,
@@ -2532,7 +2543,9 @@ def Data.put_has(
             == True{}: Bool
         }
         f
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # words put one after the other, each finding its slot empty or holding it,
 # are all held
 def State.put_datas_holds(
@@ -2585,6 +2598,7 @@ def State.put_datas_holds(
           r,
           s1
         )(Shared.List.all.if_rest(hit, u => Data.fresh(~Q, ~same, r, s1))(e))
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # an entry added to a state only grows it
 law State.add_grows:

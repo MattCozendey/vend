@@ -12785,6 +12785,7 @@ def Tree.look_found_kept(ty, fetch, grows, kept, a, b, h, k, v):
     )
   )
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a key that a look found absent at a part is absent in any store that grows
 def Tree.look.go_absent(
   ~S: Data,
@@ -12890,6 +12891,7 @@ def Tree.look.go_absent(
           Parts.at(ks, x),
           gr
         )({==})(e)
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # a key that a look found absent is absent in any store that grows: Absent is
 # final

@@ -4982,9 +4982,9 @@ def Touch.versions(+s: State()) -> List<&2, Ledgers.Id>:
 
 # the branch b lacks the version v
 def Touch.lacks(+s: State(), +b: Branch, +v: Ledgers.Id) -> Bool:
-  Bool.and(
-    Maybe.is_some(&2, Ledgers.Id, Branch.head(s, b)),
-    Bool.not(Node.has(s, Maybe.default(&2, Ledgers.Id, Branch.head(s, b), v), v))
+  List.all.if(
+    u => Bool.not(Node.has(s, Maybe.default(&2, Ledgers.Id, Branch.head(s, b), v), v)),
+    Maybe.is_some(&2, Ledgers.Id, Branch.head(s, b))
   )
 
 # the key of the branch b

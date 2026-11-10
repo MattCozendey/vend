@@ -615,6 +615,7 @@ def Trie.top_max.zero(
     case None{}:
       Trie.top_max.lo(lo(Unit{}), r, ih)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # ok accepts no entries: against its premise
 def Trie.top_max.no(
   ~V: Data,
@@ -634,6 +635,7 @@ def Trie.top_max.no(
       hok
     )
   )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # no key after the one that a descent finds is accepted: every key of w bits
 # whose entries ok accepts is at or before it
@@ -1434,6 +1436,7 @@ def Trie.get_union.fork(
         Trie.get_union.fork(~V, ~join, r1, v, rp, w, q)
       )
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Trie.get_union for an entry and a trie
 def Trie.get_union.leaf(
   ~V: Data,
@@ -1478,6 +1481,7 @@ def Trie.get_union.leaf(
       {==}
     case Bin{h, z, o} Con{True{}, +r1} Con{True{}, +q}:
       Trie.get_union.leaf(~V, ~join, o, r1, v, q)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a union holds, for each key, what both sides hold, joined
 law Trie.get_union:
@@ -1631,6 +1635,7 @@ def Trie.fork_part(
         Trie.union.fork(~V, ~join, r, v, q, w)
       )(Trie.fork_part(~V, ~join, r, v, q, w))
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a node joined with a node in the shape of its entries
 def Trie.union_bin(
   ~V: Data,
@@ -1691,6 +1696,7 @@ def Trie.union_bin(
       {==}
     case Some{y} Bin{h1, z1, o1} o0:
       {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a node in the shape of its entries joined with a node
 def Trie.bin_union(
@@ -1736,6 +1742,7 @@ def Trie.bin_union(
     case Some{y} Bin{h1, z1, o1} o0:
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Trie.union_comm at a node, from its parts
 def Trie.union_comm.node(
   ~V: Data,
@@ -1772,7 +1779,10 @@ def Trie.union_comm.node(
   %eo:
     {Bin{pick1, union1, union2} == Bin{pick1, union1, _}: Trie<V>}
   {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # Trie.union_comm for two entries
 def Trie.union_comm.fork(
   ~V: Data,
@@ -1816,7 +1826,10 @@ def Trie.union_comm.fork(
         Trie.union.fork(~V, ~join, q, w, r, v),
         Trie.union_comm.fork(~V, ~join, ~comm, r, v, q, w)
       )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Trie.union_comm for an entry and a trie
 def Trie.union_comm.leaf(
   ~V: Data,
@@ -1873,6 +1886,7 @@ def Trie.union_comm.leaf(
         Equal.sym(Trie<V>, Trie.union(~V, ~join, z, Tip{}), z, Trie.union_tip(~V, ~join, z)),
         Trie.union_comm.leaf(~V, ~join, ~comm, o, r, v)
       )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a union is the same either way round
 law Trie.union_comm:
@@ -1917,6 +1931,7 @@ def Trie.union_comm(ty, join, comm, a, b):
         Trie.union_comm(~ty, ~join, ~comm, o1, o2)
       )
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Trie.union_assoc at a node, from its parts
 def Trie.union_assoc.node(
   ~V: Data,
@@ -1989,6 +2004,7 @@ def Trie.union_assoc.node(
   %eo:
     {Bin{left1, left2, left3} == Bin{left1, left2, _}: Trie<V>}
   {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # an entry joined with a node is the node of their parts
 def Trie.leaf_bin(
@@ -2452,6 +2468,7 @@ def Trie.union_assoc.in_left.t(
     case Bin{h, z, o} Con{True{}, q}:
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # Trie.union_assoc for three entries
 def Trie.union_assoc.fork(
   ~V: Data,
@@ -2646,6 +2663,7 @@ def Trie.union_assoc.fork(
           == Trie.bin(V, None{}, Tip{}, _): Trie<V>
       }
       Trie.union_assoc.in.t(~V, ~join, Trie.union.fork(~V, ~join, r1, v1, rp, w), r3, v3)
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # Trie.union_assoc for two entries and a trie
 def Trie.union_assoc.pair(
@@ -2861,6 +2879,7 @@ def Trie.union_assoc.pair(
         Trie.union_assoc.pair(~V, ~join, ~assoc, o3, r1, v1, rp, w)
       )
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Trie.union_assoc for an entry and two tries
 def Trie.union_assoc.leaf(
   ~V: Data,
@@ -2988,6 +3007,7 @@ def Trie.union_assoc.leaf(
         {==},
         Trie.union_assoc.leaf(~V, ~join, ~assoc, o2, o3, r1, v1)
       )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a union groups either way
 law Trie.union_assoc:
@@ -3139,6 +3159,8 @@ def Trie.union_assoc(ty, join, assoc, a, b, c):
         Trie.union_assoc(~ty, ~join, ~assoc, o1, o2, o3)
       )
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # two entries at one key are one entry
 def Trie.fork_same(
   ~V: Data,
@@ -3168,6 +3190,8 @@ def Trie.fork_same(
         Leaf{r, join(a, b)},
         Trie.fork_same(~V, ~join, r, a, b)
       )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # a trie joined with itself is itself
 law Trie.union_idem:
@@ -3314,6 +3338,7 @@ def Trie.node_bin.t(
     case Bin{h, z, o}:
       e => {==}
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # two entries at keys that differ are a node
 def Trie.fork_bin(
   ~V: Data,
@@ -3353,6 +3378,7 @@ def Trie.fork_bin(
         V,
         Trie.union.fork(~V, ~join, r, v, q, w)
       )(Trie.fork_bin(~V, ~join, r, v, q, w)(e))
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # a trie is itself joined with nothing
 def Trie.tip_union(
@@ -3380,6 +3406,7 @@ def Trie.none_join(
     case Some{x}:
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Trie.union_held for two entries, by whether their keys are the same (held)
 def Trie.union_held.leaf(
   ~V: Data,
@@ -3423,7 +3450,10 @@ def Trie.union_held.leaf(
             Equal.cong(V, Trie<V>, y => Leaf{p, y}, join(w, v), w, ab)
           )
         )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # r takes in nothing from an entry whose value its own value takes in
 def Trie.union_held(
   ~V: Data,
@@ -3550,6 +3580,8 @@ def Trie.union_held(
         ): {Bin{h, z, o} == Bin{h, _, Trie.union(~V, ~join, o, Leaf{q, v})}: Trie<V>}
         %Trie.union_held(~V, ~join, o, q, v, w)(g)(ab): {Bin{h, z, o} == Bin{h, z, _}: Trie<V>}
         {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # an entry at the empty key joined with a kept node with no value here
 def Trie.keep_end(
@@ -3721,6 +3753,7 @@ def Trie.get_drop(
         Trie.get_drop(V, o, r)
       )
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Trie.union_drop for an entry, by whether its key is the dropped one (held)
 def Trie.union_drop.leaf(
   ~V: Data,
@@ -3768,7 +3801,10 @@ def Trie.union_drop.leaf(
             Equal.cong(V, Trie<V>, y => Leaf{k, y}, join(w, v), w, ab)
           )
         )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # an entry joined with s without its key is the entry joined with s, when its
 # value takes in the value of s
 def Trie.union_drop(
@@ -3845,7 +3881,10 @@ def Trie.union_drop(
           Trie.union.leaf(~V, ~join, o, q, w),
           Trie.union_drop(~V, ~join, o, q, v, w)(g)(ab)
         )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Trie.union_lacks.here once same(x, y) is known (held)
 def Trie.union_lacks.here.if(
   ~V: Data,
@@ -3872,6 +3911,7 @@ def Trie.union_lacks.here.if(
       {==}
     case False{}:
       {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # what r holds for a key, joined with what r lacks of s there, is r's joined
 # with s's
@@ -3899,6 +3939,7 @@ def Trie.union_lacks.here(
     case Some{+x} Some{+y}:
       Trie.union_lacks.here.if(~V, ~join, ~same, ~absorb, same(x, y), x, y, {==})
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Trie.union_lacks for an entry of s, once same(v, w) is known (held)
 def Trie.union_lacks.leaf.if(
   ~V: Data,
@@ -3940,7 +3981,9 @@ def Trie.union_lacks.leaf.if(
       )
     case False{}:
       {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Trie.union_lacks for an entry of s, once what r holds at its key is known (m)
 def Trie.union_lacks.leaf(
   ~V: Data,
@@ -3978,6 +4021,7 @@ def Trie.union_lacks.leaf(
         {==},
         Equal.sym(Maybe<&2, V>, Some{w}, Trie.get(V, y, k), e)
       )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Trie.union_lacks for an entry of r, once same(v, w) is known (held)
 def Trie.union_lacks.cut.if(
@@ -4015,6 +4059,7 @@ def Trie.union_lacks.cut.if(
     case False{}:
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Trie.union_lacks for an entry of r, once what s holds at its key is known (m)
 def Trie.union_lacks.cut(
   ~V: Data,
@@ -4053,6 +4098,7 @@ def Trie.union_lacks.cut(
         {==},
         Equal.sym(Maybe<&2, V>, Some{v}, Trie.get(V, s, k), e)
       )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # taking in what r lacks of s is taking in s, when the join keeps a value that
@@ -4110,6 +4156,7 @@ def Trie.union_lacks(
       {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a value takes in a same one, when the join is idempotent
 def Trie.union_minus.absorb(
   ~V: Data,
@@ -4123,6 +4170,7 @@ def Trie.union_minus.absorb(
 ) -> {join(w, v) == w: V}:
   %Equal.sym(V, v, w, Shared.Eq.sound(~V, ~same, laws, v)(w)(e)): {join(w, _) == w: V}
   idem(w)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # taking in what r lacks of s is taking in s: a sync may send only that
 law Trie.union_minus:
@@ -4526,6 +4574,7 @@ def Trie.under_apart(
         Shared.Bool.false_ne_true(h)
       )
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Trie.under_union_apart, with binders to use again
 def Trie.under_union_apart.go(
   ~V: Data,
@@ -4549,6 +4598,7 @@ def Trie.under_union_apart.go(
       %Equal.sym(Trie<V>, Trie.under(V, Leaf{k, v}, p), Tip{}, Trie.under_apart(V, k, p, v)(ap)): {Trie.union(~V, ~join, Trie.under(V, s, p), _) == Trie.under(V, s, p): Trie<V>}
       Trie.union_tip(~V, ~join, Trie.under(V, s, p)))
   )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a key apart from k keeps its entries when one entry at k joins
 law Trie.under_union_apart:
@@ -4767,6 +4817,7 @@ def Trie.size_union(ty, join, a, b):
       )
 # bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # two entries at keys that differ, joined, are two entries
 def Trie.size_fork(
   ~V: Data,
@@ -4818,6 +4869,7 @@ def Trie.size_fork(
         ):
           {Nat.add(0n, _) == 2n: Nat}
         {==}
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # one entry at a key that s does not hold adds one entry
 law Trie.size_union_one:
@@ -10154,6 +10206,7 @@ def Trie.key_lt_same(k: List<&2, Bool>) -> {False{} == Trie.key_lt(k, k): Bool}:
     case Con{True{}, r}:
       Trie.key_lt_same(r)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Trie.values_around for an entry, by whether the key is its key (held)
 def Trie.values_around.leaf(
   -V: Data,
@@ -10225,6 +10278,7 @@ def Trie.values_around.leaf(
         }
         %Shared.Maybe.some_inj(V, x, v, g): {[x] == [_]: List<&2, V>}
         {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the values of a trie are those before a key that it holds, its value, and
 # those after it

@@ -1945,6 +1945,7 @@ def Nat.le_zero_eq(a: Nat) -> {Nat.is_le(a, 0n) == True{}: Bool} -> {a == 0n: Na
     case 1n+p:
       h => Empty.absurd({1n+p == 0n: Nat}, Bool.false_ne_true(h))
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a number at most 1 + p that is not 1 + p is at most p
 def Nat.le_step(
   a: Nat,
@@ -1961,7 +1962,9 @@ def Nat.le_step(
       h => k => h
     case 1n+b 1n+q:
       h => k => Nat.le_step(b, q)(h)(k)
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # of two numbers, one is at most the other
 def Nat.nle_le(
   a: Nat,
@@ -1976,7 +1979,9 @@ def Nat.nle_le(
       h => {==}
     case 1n+p 1n+q:
       h => Nat.nle_le(p, q)(h)
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a number not less than another is at least it
 def Nat.nlt_le(
   a: Nat,
@@ -1991,6 +1996,7 @@ def Nat.nlt_le(
       h => {==}
     case 1n+p 1n+q:
       h => Nat.nlt_le(p, q)(h)
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # a number is less than its successor
 def Nat.lt_succ(a: Nat) -> {Nat.is_lt(a, 1n+a) == True{}: Bool}:
@@ -2008,6 +2014,7 @@ def Nat.le_add(y: Nat, +m: Nat) -> {Nat.is_le(m, Nat.add(y, m)) == True{}: Bool}
     case 1n+(+p):
       Nat.le_succ(m, Nat.add(p, m))(Nat.le_add(p, m))
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # Nat.pigeon, with the second terms of the sums apart (g and m)
 def Nat.pigeon.at(
   f: Nat,
@@ -2049,6 +2056,7 @@ def Nat.pigeon.at(
       h1 => h2 => hg => h3 => h4 => Bool.false_ne_true(h3)
     case 1n+p 1n+q 1n+z 1n+u:
       h1 => h2 => hg => h3 => h4 => Nat.pigeon.at(p, q, z, u, g, m)(h1)(h2)(hg)(h3)(h4)
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # f is at most n, n is less than y, and y + n is at most t: t is not less
 # than f + f
@@ -2059,8 +2067,9 @@ def Nat.pigeon(+f: Nat, +n: Nat, y: Nat, t: Nat) -> {Nat.is_le(f, n) == True{}: 
   -> Empty:
   +h1 => h2 => h3 => h4 => Nat.pigeon.at(f, n, y, t, f, n)(h1)(h2)(h1)(h3)(h4)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a is not at most c, and b is: a is not at most b
-def Nat.nle_trans.at(+a: Nat, b: Nat, +c: Nat, x: Bool) -> {Nat.is_le(a, b) == x: Bool}
+def Nat.nle_trans.at(a: Nat, b: Nat, c: Nat, x: Bool) -> {Nat.is_le(a, b) == x: Bool}
   -> {Nat.is_le(a, c) == False{}: Bool}
   -> {Nat.is_le(b, c) == True{}: Bool}
   -> {x == False{}: Bool}:
@@ -2077,6 +2086,7 @@ def Nat.nle_trans.at(+a: Nat, b: Nat, +c: Nat, x: Bool) -> {Nat.is_le(a, b) == x
         )
     case False{}:
       ex => h => k => {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a is not at most c, and b is: a is not at most b
 def Nat.nle_trans(
