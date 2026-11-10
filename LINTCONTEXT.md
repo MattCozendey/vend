@@ -4,12 +4,12 @@
 error. `bend src/daemon/core/impl.bend --check-only` takes about 13 s (it was 175 s: see
 `src/daemon/DESIGN.md`, "Proof speed").
 
-## What is left (180 findings)
+## What is left (178 findings)
 
 - `layout/case` (155): it reports each constructor of each type (`Rename Tip to tip`), also in files
   that this branch did not change (`glob/spec.bend`: 31). The repo's constructors are PascalCase on
   purpose, so these are false findings.
-- `performance/eager_branch` (13) and `performance/missed_fork` (12): in code that runs
+- `performance/eager_branch` (11) and `performance/missed_fork` (12): in code that runs
   (`shared/shared/shared/trie.bend`, one in `shared/ledger.bend`). Not changed: laws state these
   defs as they are.
 
