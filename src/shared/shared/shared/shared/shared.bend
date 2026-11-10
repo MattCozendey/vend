@@ -2316,56 +2316,6 @@ def List.any.if_and(
 # Members and others
 # ------------------
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# List.contains_ne once same(x, y) is known (b)
-def List.contains_ne.at(
-  ~A: Data,
-  ~same: A -> A -> Bool,
-  ~laws: Eq.Laws(A, same),
-  xs: List<&2, A>,
-  x: A,
-  y: A,
-  b: Bool,
-  hx: {List.contains(~A, ~same, xs, x) == True{}: Bool},
-  hy: {List.contains(~A, ~same, xs, y) == False{}: Bool}
-) -> {same(x, y) == b: Bool} -> {b == False{}: Bool}:
-  match b:
-    case False{}:
-      e => {==}
-    case True{}:
-      e =>
-        in_y = {
-          %Eq.sound(~A, ~same, laws, x, y)(e): {List.contains(~A, ~same, xs, _) == True{}: Bool}
-          hx
-          : {List.contains(~A, ~same, xs, y) == True{}: Bool}}
-        Empty.absurd(
-          {True{} == False{}: Bool},
-          Bool.false_ne_true(
-            Equal.trans(
-              Bool,
-              False{},
-              List.contains(~A, ~same, xs, y),
-              True{},
-              Equal.sym(Bool, List.contains(~A, ~same, xs, y), False{}, hy),
-              in_y
-            )
-          )
-        )
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# a value x of xs is not a value y that xs lacks
-def List.contains_ne(
-  ~A: Data,
-  ~same: A -> A -> Bool,
-  ~laws: Eq.Laws(A, same),
-  xs: List<&2, A>,
-  +x: A,
-  +y: A,
-  hx: {List.contains(~A, ~same, xs, x) == True{}: Bool},
-  hy: {List.contains(~A, ~same, xs, y) == False{}: Bool}
-) -> {same(x, y) == False{}: Bool}:
-  List.contains_ne.at(~A, ~same, ~laws, xs, x, y, same(x, y), hx, hy)({==})
-
 # List.some_append at the first element, by whether p holds of it (hit)
 def List.some_append.at(
   ~A: Data,

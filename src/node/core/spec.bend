@@ -642,8 +642,9 @@ def Draft.content(
 # ----
 # What README says of what is Vend's in a Vend Node, as laws. The laws of the
 # machine (a node only grows, a log only gains keys, one history) are the
-# replica's: src/shared/replica.bend proves them for any lawful kernel, and
-# impl.bend gives the lawful kernel of Vend.
+# replica's: src/shared/replica.bend proves them for any kernel, since the
+# replica does what a kernel asks (Replicas.Act.run); impl.bend gives the
+# kernel of Vend.
 
 # two requests are the same exactly when they are equal
 law Ask.same:

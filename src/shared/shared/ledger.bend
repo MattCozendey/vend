@@ -3678,14 +3678,32 @@ def Union.first_keeps(
   ~laws: Shared.Eq.Laws(Q, same),
   a: Maybe<&2, Cells.Cell<Entry<Q>>>,
   b: Maybe<&2, Cells.Cell<Entry<Q>>>
-) -> {Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), a, Shared.Maybe.join(~Cells.Cell<Entry<Q>>, ~(x => y => x), a, b)) == True{}: Bool}:
+) -> {
+  Cells.Cell.keeps(
+    ~Entry<Q>,
+    ~Entry.is_eq(~Q, ~same),
+    a,
+    Shared.Maybe.join(~Cells.Cell<Entry<Q>>, ~(x => y => x), a, b)
+  )
+    == True{}: Bool
+}:
   match a b:
     case None{} y:
       {==}
-    case Some{+x} None{}:
-      Cells.Cell.keeps_refl(~Entry<Q>, ~Entry.is_eq(~Q, ~same), ~Entry.laws(~Q, ~same, ~laws), Some{x})
+    case Some{x} None{}:
+      Cells.Cell.keeps_refl(
+        ~Entry<Q>,
+        ~Entry.is_eq(~Q, ~same),
+        ~Entry.laws(~Q, ~same, ~laws),
+        Some{x}
+      )
     case Some{+x} Some{y}:
-      Cells.Cell.keeps_refl(~Entry<Q>, ~Entry.is_eq(~Q, ~same), ~Entry.laws(~Q, ~same, ~laws), Some{x})
+      Cells.Cell.keeps_refl(
+        ~Entry<Q>,
+        ~Entry.is_eq(~Q, ~same),
+        ~Entry.laws(~Q, ~same, ~laws),
+        Some{x}
+      )
 
 # a union that keeps the cells of s first grows s
 def Union.first_grows(
@@ -3694,7 +3712,15 @@ def Union.first_grows(
   ~laws: Shared.Eq.Laws(Q, same),
   +s: State(Q),
   +t: State(Q)
-) -> {State.grows(~Q, ~same, s, Tries.Trie.union(~Cells.Cell<Entry<Q>>, ~(x => y => x), s, t)) == True{}: Bool}:
+) -> {
+  State.grows(
+    ~Q,
+    ~same,
+    s,
+    Tries.Trie.union(~Cells.Cell<Entry<Q>>, ~(x => y => x), s, t)
+  )
+    == True{}: Bool
+}:
   Tries.Trie.all2_of_get(
     ~Cells.Cell<Entry<Q>>,
     ~Cells.Cell<Entry<Q>>,
@@ -3704,14 +3730,8 @@ def Union.first_grows(
     s,
     Tries.Trie.union(~Cells.Cell<Entry<Q>>, ~(x => y => x), s, t),
     +k =>
-      %Equal.sym(
-        Maybe<&2, Cells.Cell<Entry<Q>>>,
-        Tries.Trie.get(Cells.Cell<Entry<Q>>, Tries.Trie.union(~Cells.Cell<Entry<Q>>, ~(x => y => x), s, t), k),
-        Shared.Maybe.join(~Cells.Cell<Entry<Q>>, ~(x => y => x), Tries.Trie.get(Cells.Cell<Entry<Q>>, s, k), Tries.Trie.get(Cells.Cell<Entry<Q>>, t, k)),
-        Tries.Trie.get_union(~Cells.Cell<Entry<Q>>, ~(x => y => x), s, t, k)
-      ): {Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), State.get(~Q, s, k), _) == True{}: Bool}
-      Union.first_keeps(~Q, ~same, ~laws, State.get(~Q, s, k), State.get(~Q, t, k))
-  )
+      %Equal.sym(Maybe<&2, Cells.Cell<Entry<Q>>>, Tries.Trie.get(Cells.Cell<Entry<Q>>, Tries.Trie.union(~Cells.Cell<Entry<Q>>, ~(x => y => x), s, t), k), Shared.Maybe.join(~Cells.Cell<Entry<Q>>, ~(x => y => x), Tries.Trie.get(Cells.Cell<Entry<Q>>, s, k), Tries.Trie.get(Cells.Cell<Entry<Q>>, t, k)), Tries.Trie.get_union(~Cells.Cell<Entry<Q>>, ~(x => y => x), s, t, k)): {Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), State.get(~Q, s, k), _) == True{}: Bool}
+      Union.first_keeps(~Q, ~same, ~laws, State.get(~Q, s, k), State.get(~Q, t, k)))
 
 # s with the data of t added grows s, whatever t holds
 def State.add_data_of_grows(
@@ -3721,7 +3741,13 @@ def State.add_data_of_grows(
   +s: State(Q),
   +t: State(Q)
 ) -> {State.grows(~Q, ~same, s, State.add_data_of(~Q, s, t)) == True{}: Bool}:
-  State.with_data_grows(~Q, ~same, ~laws, s, Tries.Trie.union(~Cells.Cell<Entry<Q>>, ~(x => y => x), s, t))(Union.first_grows(~Q, ~same, ~laws, s, t))
+  State.with_data_grows(
+    ~Q,
+    ~same,
+    ~laws,
+    s,
+    Tries.Trie.union(~Cells.Cell<Entry<Q>>, ~(x => y => x), s, t)
+  )(Union.first_grows(~Q, ~same, ~laws, s, t))
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a ledger that holds the data of s reads each data that s reads
