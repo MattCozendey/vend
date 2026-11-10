@@ -1542,12 +1542,12 @@ def Start.grows(
 def Arrive.grows(
   +s: Replicas.Node<Basics.Ask>,
   +i: Ledgers.Id,
-  q: Basics.Ask
-) -> {Replicas.Node.grows(~Basics.Ask.machine(), s, Replicas.Node.arrive(~Stepping.Ask.kernel(), s, i, q)) == True{}: Bool}:
-  match q:
-    case Basics.Ask.Start{os}:
+  a: Replicas.Arrival,
+) -> {Replicas.Node.grows(~Basics.Ask.machine(), s, Replicas.Arrive.at(~Stepping.Ask.kernel(), s, i, a)) == True{}: Bool}:
+  match a:
+    case Replicas.Arrival.Starts{os}:
       Start.grows(s, i, os)
-    case Basics.Ask.On{+r, +l, c}:
+    case Replicas.Arrival.Waits{+r, +l}:
       +s1 = Replicas.Node.follow(~Basics.Ask.machine(), s, r, l)
       Replicas.Grows.to(~Basics.Ask.machine(), 
         s,
@@ -1593,7 +1593,7 @@ def Ask.new.grows(
         Ledgers.Entry.Ask{i, Replicas.Envelope.time(e), q}
       )
     )
-  )(Replicas.Grows.trans(~Basics.Ask.machine(), s0, s1, Replicas.Node.step(~Stepping.Ask.kernel(), n, s1, c))(Arrive.grows(s0, i, q))(Step.grows(n, s1, c)))
+  )(Replicas.Grows.trans(~Basics.Ask.machine(), s0, s1, Replicas.Node.step(~Stepping.Ask.kernel(), n, s1, c))(Arrive.grows(s0, i, Replicas.Machine.arrival(Basics.Ask.machine())(q)))(Step.grows(n, s1, c)))
 
 # Node.ask_grows once the cell m of the request's ID is known
 def Ask.at.grows(
@@ -1682,7 +1682,7 @@ def Take.asks.grows(
           ),
           Replicas.Node.arrive(~Stepping.Ask.kernel(), s, i, q),
           s,
-          Arrive.grows(s, i, q),
+          Arrive.grows(s, i, Replicas.Machine.arrival(Basics.Ask.machine())(q)),
           Replicas.Grows.refl(~Basics.Ask.machine(), s)
         )
       )(Take.asks.grows(rest, old, s1))
@@ -2144,7 +2144,7 @@ def Ask.held.new(
       s0,
       s1,
       Replicas.Node.step(~Stepping.Ask.kernel(), n, s1, c)
-    )(Arrive.grows(s0, i, q))(Step.grows(n, s1, c))
+    )(Arrive.grows(s0, i, Replicas.Machine.arrival(Basics.Ask.machine())(q)))(Step.grows(n, s1, c))
   )(
     %Equal.sym(Ledgers.State(Basics.Ask), Replicas.State.ledger(~Basics.Ask.machine(), s0), l0, Replicas.Led.led(~Basics.Ask.machine(), s, l0)): {Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>, Ledgers.State.get(~Basics.Ask, _, k)) == True{}: Bool}
     %Equal.sym(Maybe<&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>>, Ledgers.State.get(~Basics.Ask, l0, k), Some{Cells.One{en}}, Ledgers.State.put_get(~Basics.Ask, ~Basics.Ask.is_eq, Replicas.State.ledger(~Basics.Ask.machine(), s), k, en)(em)): {Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Basics.Ask>>, _) == True{}: Bool}
@@ -2686,12 +2686,12 @@ def Start.kept(
 def Arrive.kept(
   +s: Replicas.Node<Basics.Ask>,
   +i: Ledgers.Id,
-  q: Basics.Ask
-) -> Replicas.Node.Keeps(~Basics.Ask.machine(), s, Replicas.Node.arrive(~Stepping.Ask.kernel(), s, i, q)):
-  match q:
-    case Basics.Ask.Start{os}:
+  a: Replicas.Arrival,
+) -> Replicas.Node.Keeps(~Basics.Ask.machine(), s, Replicas.Arrive.at(~Stepping.Ask.kernel(), s, i, a)):
+  match a:
+    case Replicas.Arrival.Starts{os}:
       Start.kept(s, i, os)
-    case Basics.Ask.On{+r, +l, c}:
+    case Replicas.Arrival.Waits{+r, +l}:
       +s1 = Replicas.Node.follow(~Basics.Ask.machine(), s, r, l)
       Replicas.Kept.trans(~Basics.Ask.machine(), 
         s,
@@ -2752,7 +2752,7 @@ def Ask.new.kept(
       ),
       Replicas.Heads.led(~Basics.Ask.machine(), s, l0)
     ),
-    Replicas.Kept.trans(~Basics.Ask.machine(), s0, s1, Replicas.Node.step(~Stepping.Ask.kernel(), n, s1, c), Arrive.kept(s0, i, q), Step.kept(n, s1, c))
+    Replicas.Kept.trans(~Basics.Ask.machine(), s0, s1, Replicas.Node.step(~Stepping.Ask.kernel(), n, s1, c), Arrive.kept(s0, i, Replicas.Machine.arrival(Basics.Ask.machine())(q)), Step.kept(n, s1, c))
   )
 
 # Node.ask_keeps once the cell m of the request's ID is known
@@ -2844,7 +2844,7 @@ def Take.asks.kept(
           s,
           Replicas.Node.arrive(~Stepping.Ask.kernel(), s, i, q),
           s,
-          Arrive.kept(s, i, q),
+          Arrive.kept(s, i, Replicas.Machine.arrival(Basics.Ask.machine())(q)),
           Replicas.Kept.refl(~Basics.Ask.machine(), s)
         ),
         Take.asks.kept(rest, old, s1)
@@ -6870,12 +6870,12 @@ def Follow.new.path(
 def Arrive.path(
   +s: Replicas.Node<Basics.Ask>,
   +i: Ledgers.Id,
-  q: Basics.Ask
-) -> Replicas.Node.On(~Basics.Ask.machine(), s, Replicas.Node.arrive(~Stepping.Ask.kernel(), s, i, q)):
-  match q:
-    case Basics.Ask.Start{os}:
+  a: Replicas.Arrival,
+) -> Replicas.Node.On(~Basics.Ask.machine(), s, Replicas.Arrive.at(~Stepping.Ask.kernel(), s, i, a)):
+  match a:
+    case Replicas.Arrival.Starts{os}:
       Start.path(s, i, os)
-    case Basics.Ask.On{+r, +l, c}:
+    case Replicas.Arrival.Waits{+r, +l}:
       +s1 = Replicas.Node.follow(~Basics.Ask.machine(), s, r, l)
       Replicas.Path.trans(~Basics.Ask.machine(), 
         s,
@@ -6936,7 +6936,7 @@ def Ask.new.path(
       ),
       Replicas.Heads.led(~Basics.Ask.machine(), s, l0)
     ),
-    Replicas.Path.trans(~Basics.Ask.machine(), s0, s1, Replicas.Node.step(~Stepping.Ask.kernel(), n, s1, c), Arrive.path(s0, i, q), Step.path(n, s1, c))
+    Replicas.Path.trans(~Basics.Ask.machine(), s0, s1, Replicas.Node.step(~Stepping.Ask.kernel(), n, s1, c), Arrive.path(s0, i, Replicas.Machine.arrival(Basics.Ask.machine())(q)), Step.path(n, s1, c))
   )
 
 # Node.ask_keeps once the cell m of the request's ID is known
@@ -7028,7 +7028,7 @@ def Take.asks.path(
           s,
           Replicas.Node.arrive(~Stepping.Ask.kernel(), s, i, q),
           s,
-          Arrive.path(s, i, q),
+          Arrive.path(s, i, Replicas.Machine.arrival(Basics.Ask.machine())(q)),
           Replicas.Path.refl(~Basics.Ask.machine(), s)
         ),
         Take.asks.path(rest, old, s1)
@@ -7405,7 +7405,7 @@ def Spec.Node.after_on(n, evs, s):
 def Arrive.waits(
   +s: Replicas.Node<Basics.Ask>,
   +j: Ledgers.Id,
-  +q: Basics.Ask,
+  +a: Replicas.Arrival,
   +c2: Ledgers.Chain,
   i: Ledgers.Id,
   h: {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Replicas.Wait.of(~Basics.Ask.machine(), s, c2), i) == True{}: Bool}
@@ -7413,13 +7413,13 @@ def Arrive.waits(
   List.contains(
     ~Ledgers.Id,
     ~Ledgers.Id.is_eq,
-    Replicas.Wait.of(~Basics.Ask.machine(), Replicas.Node.arrive(~Stepping.Ask.kernel(), s, j, q), c2),
+    Replicas.Wait.of(~Basics.Ask.machine(), Replicas.Arrive.at(~Stepping.Ask.kernel(), s, j, a), c2),
     i
   )
     == True{}: Bool
 }:
-  match q:
-    case Basics.Ask.Start{os}:
+  match a:
+    case Replicas.Arrival.Starts{os}:
       %Replicas.Wait.same(~Basics.Ask.machine(), 
         s,
         Replicas.Node.start(~Stepping.Ask.kernel(), s, j, os),
@@ -7432,7 +7432,7 @@ def Arrive.waits(
         )
       ): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, _, i) == True{}: Bool}
       h
-    case Basics.Ask.On{r, l, ch}:
+    case Replicas.Arrival.Waits{r, l}:
       Replicas.Wait.keeps(~Basics.Ask.machine(), Replicas.Node.follow(~Basics.Ask.machine(), s, r, l), Replicas.Line.chain(r, l), j, c2, i, (
           %Replicas.Wait.same(~Basics.Ask.machine(), s, Replicas.Node.follow(~Basics.Ask.machine(), s, r, l), c2, Replicas.Follow.new.waiting(~Basics.Ask.machine(), s, r, l, Replicas.Node.head_of(~Basics.Ask.machine(), s, Replicas.Line.chain(r, l)))): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, _, i) == True{}: Bool}
           h))
@@ -7485,7 +7485,7 @@ def Take.asks.waits(
           s,
           c2,
           i,
-          Arrive.waits(s, j, q, c2, i, h),
+          Arrive.waits(s, j, Replicas.Machine.arrival(Basics.Ask.machine())(q), c2, i, h),
           h
         )
       )
