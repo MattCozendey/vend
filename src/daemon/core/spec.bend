@@ -2843,68 +2843,107 @@ def Draft.content(r: Ledgers.Id, b: String, n: Resources.Name, q: Ask) -> Maybe<
     case _:
       None{}
 
-# the content m of the request i, when it is a write that no step decided yet,
-# else found
-def Draft.put(
-  s: State(),
-  i: Ledgers.Id,
-  m: Maybe<&2, Content>,
-  found: Maybe<&2, Content>
-) -> Maybe<&2, Content>:
+# a pending write: when its writer asked for it (the time, then the request
+# ID, as a key), and the content that it gives
+type Draft is Data:
+  Draft{key: List<&2, Bool>, content: Content}
+
+# the key a comes before the key b, or is b
+def Bits.before(a: List<&2, Bool>, b: List<&2, Bool>) -> Bool:
+  match a b:
+    case Nil{} y:
+      True{}
+    case Con{x, r} Nil{}:
+      False{}
+    case Con{False{}, r} Con{True{}, q}:
+      True{}
+    case Con{True{}, r} Con{False{}, q}:
+      False{}
+    case Con{False{}, r} Con{False{}, q}:
+      Bits.before(r, q)
+    case Con{True{}, r} Con{True{}, q}:
+      Bits.before(r, q)
+
+# the newer of the draft found, if any, and the draft d
+def Draft.newer(found: Maybe<&2, Draft>, +d: Draft) -> Draft:
+  match found d:
+    case None{} x:
+      x
+    case Some{Draft{+k1, c1}} Draft{+k2, c2}:
+      Shared.Bool.when(Draft, Bits.before(k1, k2), u => Draft{k2, c2}, u => Draft{k1, c1})
+
+# the newer of found and the write of the content m at the key k, if any
+def Draft.with(found: Maybe<&2, Draft>, k: List<&2, Bool>, m: Maybe<&2, Content>) -> Maybe<&2, Draft>:
   match m:
     case None{}:
       found
     case Some{c}:
-      Shared.Bool.when(
-        Maybe<&2, Content>,
-        Maybe.is_none(&2, Out, Node.out(s, i)),
-        u => Some{c},
-        u => found
-      )
+      Some{Draft.newer(found, Draft{k, c})}
 
-# the content of the last pending write of the resource n on the branch b of
-# the store r among the cells cs, else found
-def Draft.last(
-  +s: State(),
-  +r: Ledgers.Id,
-  +b: String,
-  +n: Resources.Name,
-  cs: List<&2, Cells.Cell<Ledgers.Entry<Ask>>>,
-  found: Maybe<&2, Content>
-) -> Maybe<&2, Content>:
-  match cs:
-    case Nil{}:
-      found
-    case Con{Cells.One{Ledgers.Entry.Ask{i, t, q}}, rest}:
-      Draft.last(s, r, b, n, rest, Draft.put(s, i, Draft.content(r, b, n, q), found))
-    case Con{c, rest}:
-      Draft.last(s, r, b, n, rest, found)
-
-# the requests of the writer w that s holds, in the order of their IDs
-def Writer.asks(s: State(), w: String) -> List<&2, Cells.Cell<Ledgers.Entry<Ask>>>:
-  Tries.Trie.values(
-    Cells.Cell<Ledgers.Entry<Ask>>,
-    Ledgers.State.under(~Ask, State.ledger(s), Ledgers.Slot.writer(w))
-  )
-
-# the requests of the writer w whose IDs come after q, as s holds them
-def Writer.after(s: State(), w: String, q: String) -> List<&2, Cells.Cell<Ledgers.Entry<Ask>>>:
-  Tries.Trie.after(
-    Cells.Cell<Ledgers.Entry<Ask>>,
-    Ledgers.State.under(~Ask, State.ledger(s), Ledgers.Slot.writer(w)),
-    Tries.Trie.text(q)
-  )
-
-# the content of the writer w's pending write of the resource n on the branch
-# b of the store r with the highest request ID, if it has one
-def Node.draft(
-  +s: State(),
+# the newer of found and the request i, which the node holds as a, when the
+# writer w asked for it and it writes the resource n on the branch b of the
+# store r
+def Draft.of(
   w: String,
   r: Ledgers.Id,
   b: String,
-  n: Resources.Name
+  n: Resources.Name,
+  i: Ledgers.Id,
+  a: Maybe<&2, Ledgers.Asked<Ask>>,
+  +found: Maybe<&2, Draft>
+) -> Maybe<&2, Draft>:
+  match i a:
+    case Ledgers.Id{w2, q2} Some{Ledgers.Asked{t, q}}:
+      Shared.Bool.when(
+        Maybe<&2, Draft>,
+        String.eq(w2, w),
+        u => Draft.with(
+          found,
+          List.append(&2, Bool, Tries.Trie.text(t), Tries.Trie.text(q2)),
+          Draft.content(r, b, n, q)
+        ),
+        u => found
+      )
+    case x y:
+      found
+
+# the newest write of the resource n on the branch b of the store r that the
+# writer w asked for, among the requests qs, else found
+def Draft.last(
+  +s: State(),
+  +w: String,
+  +r: Ledgers.Id,
+  +b: String,
+  +n: Resources.Name,
+  qs: List<&2, Ledgers.Id>,
+  found: Maybe<&2, Draft>
+) -> Maybe<&2, Draft>:
+  match qs:
+    case Nil{}:
+      found
+    case Con{+i, rest}:
+      Draft.last(s, w, r, b, n, rest, Draft.of(w, r, b, n, i, Node.asked(s, i), found))
+
+# the content of the draft m, if any
+def Draft.what(m: Maybe<&2, Draft>) -> Maybe<&2, Content>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Draft{k, c}}:
+      Some{c}
+
+# the content of the newest pending write of the resource n on the branch b
+# of the store r that the writer w asked for, if there is one. The requests
+# that wait on the line are the pending ones: the cost is theirs, not that of
+# every request of the writer
+def Node.draft(
+  +s: State(),
+  +w: String,
+  +r: Ledgers.Id,
+  +b: String,
+  +n: Resources.Name
 ) -> Maybe<&2, Content>:
-  Draft.last(s, r, b, n, Writer.asks(s, w), None{})
+  Draft.what(Draft.last(s, w, r, b, n, Wait.of(s, Line.chain(r, Some{b})), None{}))
 
 # the bytes of the draft m of the resource n, else what the point p holds
 def Read.of(+s: State(), n: Resources.Name, m: Maybe<&2, Content>, p: Point) -> Maybe<&2, Texts.Bytes()>:
@@ -2916,7 +2955,7 @@ def Read.of(+s: State(), n: Resources.Name, m: Maybe<&2, Content>, p: Point) -> 
 
 # what the writer w reads of the resource n at the point p: at the head of a
 # branch, its own pending write; else what the point holds
-def Node.read(+s: State(), w: String, +n: Resources.Name, p: Point) -> Maybe<&2, Texts.Bytes()>:
+def Node.read(+s: State(), +w: String, +n: Resources.Name, p: Point) -> Maybe<&2, Texts.Bytes()>:
   match p:
     case Point.Head{+r, +b}:
       Read.of(s, n, Node.draft(s, w, r, b, n), Point.Head{r, b})
@@ -3748,6 +3787,32 @@ law Node.answer_follows:
   for +x: Answer
   {Node.answer(s, e, q) == Some{x}: Maybe<&2, Answer>}
     -> {Answer.follows(x, Node.answer(Node.after(n, evs, s), e, q)) == True{}: Bool}
+
+# a writer reads its own pending write: while a write that the writer w asked
+# for waits on its line, the writer's read of the resource is a pending write
+# of its own (the newest), not what the branch holds
+law Node.draft_some:
+  for +s: State()
+  for +w: String
+  for +r: Ledgers.Id
+  for +b: String
+  for +n: Resources.Name
+  for +q2: String
+  for +t: String
+  for +q: Ask
+  for +c: Content
+  {
+    List.contains(
+      ~Ledgers.Id,
+      ~Ledgers.Id.is_eq,
+      Wait.of(s, Line.chain(r, Some{b})),
+      Ledgers.Id{w, q2}
+    )
+      == True{}: Bool
+  }
+    -> {Node.asked(s, Ledgers.Id{w, q2}) == Some{Ledgers.Asked{t, q}}: Maybe<&2, Ledgers.Asked<Ask>>}
+    -> {Draft.content(r, b, n, q) == Some{c}: Maybe<&2, Content>}
+    -> {Maybe.is_some(&2, Content, Node.draft(s, w, r, b, n)) == True{}: Bool}
 
 # a change counts once, however often and wherever it is sent: a node that
 # took a request in changes nothing when any node sends its ID again

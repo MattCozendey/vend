@@ -4809,3 +4809,251 @@ def Spec.Node.answer_follows(n, evs, s, e, q, x):
       Ledgers.Slot.ask(Spec.Envelope.of(e))
     )(Spec.Node.after_grows(n, evs, s))
   )
+
+# Drafts
+# ------
+
+# one of two drafts that are there
+def When.some(
+  b: Bool,
+  -x: Maybe<&2, Spec.Draft>,
+  -y: Maybe<&2, Spec.Draft>,
+  hx: {Maybe.is_some(&2, Spec.Draft, x) == True{}: Bool},
+  hy: {Maybe.is_some(&2, Spec.Draft, y) == True{}: Bool}
+) -> {Maybe.is_some(&2, Spec.Draft, Shared.Bool.when(Maybe<&2, Spec.Draft>, b, u => x, u => y)) == True{}: Bool}:
+  match b:
+    case True{}:
+      hx
+    case False{}:
+      hy
+
+# a draft that is there stays, with a write or not
+def Draft.with.some(
+  -found: Maybe<&2, Spec.Draft>,
+  -k: List<&2, Bool>,
+  m: Maybe<&2, Spec.Content>
+) -> {Maybe.is_some(&2, Spec.Draft, found) == True{}: Bool} -> {Maybe.is_some(&2, Spec.Draft, Spec.Draft.with(found, k, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      h => h
+    case Some{c}:
+      h => {==}
+
+# a draft that is there stays, after one more request
+def Draft.of.some(
+  +w: String,
+  +r: Ledgers.Id,
+  +b: String,
+  +n: Resources.Name,
+  i: Ledgers.Id,
+  a: Maybe<&2, Ledgers.Asked<Spec.Ask>>,
+  -found: Maybe<&2, Spec.Draft>
+) -> {Maybe.is_some(&2, Spec.Draft, found) == True{}: Bool} -> {Maybe.is_some(&2, Spec.Draft, Spec.Draft.of(w, r, b, n, i, a, found)) == True{}: Bool}:
+  match i a:
+    case Ledgers.Id{+w2, +q2} Some{Ledgers.Asked{+t, +q}}:
+      +h => When.some(
+        String.eq(w2, w),
+        Spec.Draft.with(found, List.append(&2, Bool, Tries.Trie.text(t), Tries.Trie.text(q2)), Spec.Draft.content(r, b, n, q)),
+        found,
+        Draft.with.some(found, List.append(&2, Bool, Tries.Trie.text(t), Tries.Trie.text(q2)), Spec.Draft.content(r, b, n, q))(h),
+        h
+      )
+    case Ledgers.Id{w2, q2} None{}:
+      h => h
+
+# a draft that is there stays, after more requests
+def Last.some(
+  +s: Spec.State(),
+  +w: String,
+  +r: Ledgers.Id,
+  +b: String,
+  +n: Resources.Name,
+  qs: List<&2, Ledgers.Id>,
+  +found: Maybe<&2, Spec.Draft>
+) -> {Maybe.is_some(&2, Spec.Draft, found) == True{}: Bool} -> {Maybe.is_some(&2, Spec.Draft, Spec.Draft.last(s, w, r, b, n, qs, found)) == True{}: Bool}:
+  match qs:
+    case Nil{}:
+      h => h
+    case Con{+i, rest}:
+      h => Last.some(
+        s,
+        w,
+        r,
+        b,
+        n,
+        rest,
+        Spec.Draft.of(w, r, b, n, i, Spec.Node.asked(s, i), found)
+      )(Draft.of.some(w, r, b, n, i, Spec.Node.asked(s, i), found)(h))
+
+# a write of the writer w to the resource gives a draft
+def Draft.of.hit(
+  +w: String,
+  -r: Ledgers.Id,
+  -b: String,
+  -n: Resources.Name,
+  -q2: String,
+  -t: String,
+  -q: Spec.Ask,
+  -c: Spec.Content,
+  -found: Maybe<&2, Spec.Draft>,
+  ec: {Spec.Draft.content(r, b, n, q) == Some{c}: Maybe<&2, Spec.Content>}
+) -> {Maybe.is_some(&2, Spec.Draft, Spec.Draft.of(w, r, b, n, Ledgers.Id{w, q2}, Some{Ledgers.Asked{t, q}}, found)) == True{}: Bool}:
+  %Equal.sym(Bool, String.eq(w, w), True{}, Texts.String.eq_refl(w)): {
+    Maybe.is_some(
+      &2,
+      Spec.Draft,
+      Shared.Bool.when(
+        Maybe<&2, Spec.Draft>,
+        _,
+        u => Spec.Draft.with(found, List.append(&2, Bool, Tries.Trie.text(t), Tries.Trie.text(q2)), Spec.Draft.content(r, b, n, q)),
+        u => found
+      )
+    )
+      == True{}: Bool
+  }
+  %Equal.sym(Maybe<&2, Spec.Content>, Spec.Draft.content(r, b, n, q), Some{c}, ec): {
+    Maybe.is_some(&2, Spec.Draft, Spec.Draft.with(found, List.append(&2, Bool, Tries.Trie.text(t), Tries.Trie.text(q2)), _)) == True{}: Bool
+  }
+  {==}
+
+# Last.hit once whether the first request is the one looked for is known (bh)
+def Last.hit.if(
+  +s: Spec.State(),
+  +w: String,
+  +r: Ledgers.Id,
+  +b: String,
+  +n: Resources.Name,
+  +i: Ledgers.Id,
+  +rest: List<&2, Ledgers.Id>,
+  +found: Maybe<&2, Spec.Draft>,
+  +q2: String,
+  -t: String,
+  -q: Spec.Ask,
+  -c: Spec.Content,
+  bh: Bool,
+  ebh: {Ledgers.Id.is_eq(i, Ledgers.Id{w, q2}) == bh: Bool},
+  ea: {Spec.Node.asked(s, Ledgers.Id{w, q2}) == Some{Ledgers.Asked{t, q}}: Maybe<&2, Ledgers.Asked<Spec.Ask>>},
+  ec: {Spec.Draft.content(r, b, n, q) == Some{c}: Maybe<&2, Spec.Content>},
+  ih: {
+    List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, rest, Ledgers.Id{w, q2}) == True{}: Bool
+  } -> {Maybe.is_some(&2, Spec.Draft, Spec.Draft.last(s, w, r, b, n, rest, Spec.Draft.of(w, r, b, n, i, Spec.Node.asked(s, i), found))) == True{}: Bool}
+) -> {
+  List.any.if(u => List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, rest, Ledgers.Id{w, q2}), bh) == True{}: Bool
+} -> {Maybe.is_some(&2, Spec.Draft, Spec.Draft.last(s, w, r, b, n, rest, Spec.Draft.of(w, r, b, n, i, Spec.Node.asked(s, i), found))) == True{}: Bool}:
+  match bh:
+    case False{}:
+      h => ih(h)
+    case True{}:
+      h => Last.some(
+        s,
+        w,
+        r,
+        b,
+        n,
+        rest,
+        Spec.Draft.of(w, r, b, n, i, Spec.Node.asked(s, i), found)
+      )(
+        %Equal.sym(
+          Ledgers.Id,
+          i,
+          Ledgers.Id{w, q2},
+          Ledgers.Id.is_eq_sound(i, Ledgers.Id{w, q2})(ebh)
+        ): {Maybe.is_some(&2, Spec.Draft, Spec.Draft.of(w, r, b, n, _, Spec.Node.asked(s, _), found)) == True{}: Bool}
+        %Equal.sym(
+          Maybe<&2, Ledgers.Asked<Spec.Ask>>,
+          Spec.Node.asked(s, Ledgers.Id{w, q2}),
+          Some{Ledgers.Asked{t, q}},
+          ea
+        ): {Maybe.is_some(&2, Spec.Draft, Spec.Draft.of(w, r, b, n, Ledgers.Id{w, q2}, _, found)) == True{}: Bool}
+        Draft.of.hit(w, r, b, n, q2, t, q, c, found, ec)
+      )
+
+# a write of the writer w among requests gives a draft
+def Last.hit(
+  +s: Spec.State(),
+  +w: String,
+  +r: Ledgers.Id,
+  +b: String,
+  +n: Resources.Name,
+  qs: List<&2, Ledgers.Id>,
+  +found: Maybe<&2, Spec.Draft>,
+  +q2: String,
+  -t: String,
+  -q: Spec.Ask,
+  -c: Spec.Content,
+  +ea: {Spec.Node.asked(s, Ledgers.Id{w, q2}) == Some{Ledgers.Asked{t, q}}: Maybe<&2, Ledgers.Asked<Spec.Ask>>},
+  +ec: {Spec.Draft.content(r, b, n, q) == Some{c}: Maybe<&2, Spec.Content>}
+) -> {
+  List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, qs, Ledgers.Id{w, q2}) == True{}: Bool
+} -> {Maybe.is_some(&2, Spec.Draft, Spec.Draft.last(s, w, r, b, n, qs, found)) == True{}: Bool}:
+  match qs:
+    case Nil{}:
+      h => Empty.absurd(
+        {Maybe.is_some(&2, Spec.Draft, found) == True{}: Bool},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Con{+i, +rest}:
+      Last.hit.if(
+        s,
+        w,
+        r,
+        b,
+        n,
+        i,
+        rest,
+        found,
+        q2,
+        t,
+        q,
+        c,
+        Ledgers.Id.is_eq(i, Ledgers.Id{w, q2}),
+        {==},
+        ea,
+        ec,
+        Last.hit(
+          s,
+          w,
+          r,
+          b,
+          n,
+          rest,
+          Spec.Draft.of(w, r, b, n, i, Spec.Node.asked(s, i), found),
+          q2,
+          t,
+          q,
+          c,
+          ea,
+          ec
+        )
+      )
+
+# the content of a draft that is there is there
+def What.some(
+  m: Maybe<&2, Spec.Draft>
+) -> {Maybe.is_some(&2, Spec.Draft, m) == True{}: Bool} -> {Maybe.is_some(&2, Spec.Content, Spec.Draft.what(m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      h => h
+    case Some{Spec.Draft{k, c}}:
+      h => {==}
+
+def Spec.Node.draft_some(s, w, r, b, n, q2, t, q, c):
+  hc => ea => ec => What.some(
+    Spec.Draft.last(s, w, r, b, n, Spec.Wait.of(s, Spec.Line.chain(r, Some{b})), None{})
+  )(
+    Last.hit(
+      s,
+      w,
+      r,
+      b,
+      n,
+      Spec.Wait.of(s, Spec.Line.chain(r, Some{b})),
+      None{},
+      q2,
+      t,
+      q,
+      c,
+      ea,
+      ec
+    )(hc)
+  )
