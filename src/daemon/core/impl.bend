@@ -1666,7 +1666,7 @@ def Plan.later.grows(
     case None{}:
       Plan.when.grows(
         s,
-        Spec.Major(os, from),
+        Spec.Owners.major(os, from),
         Spec.Plan.own(s, c, t, from),
         Spec.Plan{[], None{}, []},
         Plan.own.grows(s, c, t, from),
@@ -1675,7 +1675,7 @@ def Plan.later.grows(
     case Some{Ledgers.Last{r, v}}:
       Plan.when.grows(
         s,
-        Spec.Major(os, from),
+        Spec.Owners.major(os, from),
         Spec.Plan.copy(s, c, t, th, Some{v}, from),
         Spec.Plan{[], None{}, []},
         Plan.copy.grows(s, c, t, th, Some{v}, from),
@@ -1732,7 +1732,7 @@ def Plan.follow.grows(
     case Some{Ledgers.Act.Vote{+v, from}}:
       Plan.when.grows(
         s,
-        Spec.Allowed(s, w, os, v, from),
+        Spec.Vote.allowed(s, w, os, v, from),
         Spec.Plan.copy(s, c, t, th, Some{v}, from),
         Spec.Plan{[], None{}, []},
         Plan.copy.grows(s, c, t, th, Some{v}, from),
@@ -7908,7 +7908,7 @@ def Moves(s2: Spec.State(), c: Ledgers.Chain, h: Spec.Head, x: Spec.Head) -> Typ
   } -> {Spec.Node.head_of(s2, c) == Some{x}: Maybe<&2, Spec.Head>}
 
 # a node whose head is h did not move it
-def Stay(
+def Moves.stay(
   -s: Spec.State(),
   -c: Ledgers.Chain,
   h: Spec.Head,
@@ -8001,7 +8001,7 @@ def Advance.moved.moves(
 ) -> Moves(Spec.Advance.moved(s, m, c, hd, qs), c, h, x):
   match m:
     case None{}:
-      Stay(s, c, h, x, em)
+      Moves.stay(s, c, h, x, em)
     case Some{+s3}:
       hl =>
         %ex: {
@@ -8075,7 +8075,7 @@ def Advance.ran.moves.if(
         ex(ebq)
       )
     case False{}:
-      Stay(s, c, h, x, em)
+      Moves.stay(s, c, h, x, em)
 
 # a checked step moves the head to the tip that the step names, or not at all
 def Advance.ran.moves(
@@ -8096,7 +8096,7 @@ def Advance.ran.moves(
 ) -> Moves(Spec.Advance.ran(s, c, r, br, next, after, qs, m), c, h, x):
   match m:
     case None{}:
-      Stay(s, c, h, x, em)
+      Moves.stay(s, c, h, x, em)
     case Some{Spec.Run{s2, +t2, ns}}:
       Advance.ran.moves.if(
         s,
@@ -8150,7 +8150,7 @@ def Advance.step.moves(
           t2 => er =>
             %Equal.sym(Maybe<&2, Hashes.Hash>, after, Some{Spec.Tip.hash(t2)}, Shared.Maybe.is_eq_sound(~Hashes.Hash, ~Hashes.Hash.is_eq, x => y => Hashes.Hash.is_eq_sound(x, y), after, Some{Spec.Tip.hash(t2)})(er)): {Spec.Head{r, br, U32.inc(next), Some{Spec.Tip.hash(t2)}} == Head.step(Spec.Head{r, br, next, th}, Some{Ledgers.Vote{before, qs, _}}): Spec.Head}
             {==}),
-        Stay(
+        Moves.stay(
           s,
           c,
           Spec.Head{r, br, next, th},
@@ -8159,7 +8159,7 @@ def Advance.step.moves(
         )
       )
     case Spec.Head{+r, +br, +next, +th} None{}:
-      em => Stay(s, c, Spec.Head{r, br, next, th}, Spec.Head{r, br, next, th}, em)
+      em => Moves.stay(s, c, Spec.Head{r, br, next, th}, Spec.Head{r, br, next, th}, em)
 
 # Node.advance moves the head by the step decided at the head h, whose tip is
 # m, or not at all
@@ -8175,7 +8175,7 @@ def Advance.at.moves(
 } -> Moves(Spec.Advance.at(s, c, h, m), c, h, Head.step(h, Advance.vote(s, c, h))):
   match m:
     case None{}:
-      em => et => Stay(s, c, h, Head.step(h, Advance.vote(s, c, h)), em)
+      em => et => Moves.stay(s, c, h, Head.step(h, Advance.vote(s, c, h)), em)
     case Some{+t}:
       em => et =>
         %Equal.sym(
@@ -8365,7 +8365,7 @@ def Res.round(
   {==}
 
 # the verdict m takes
-def Took(m: Maybe<&2, Spec.Verdict>) -> Bool:
+def Verdict.took(m: Maybe<&2, Spec.Verdict>) -> Bool:
   match m:
     case None{}:
       False{}
@@ -8408,7 +8408,7 @@ def Then.took(
           Equal.cong(
             Maybe<&2, Spec.Verdict>,
             Bool,
-            v => Took(v),
+            v => Verdict.took(v),
             Spec.Judge.refuse(h),
             Some{Spec.Verdict{True{}, h2, ds}},
             e
@@ -8441,7 +8441,7 @@ def When.took(
           Equal.cong(
             Maybe<&2, Spec.Verdict>,
             Bool,
-            v => Took(v),
+            v => Verdict.took(v),
             Spec.Judge.refuse(h),
             Some{Spec.Verdict{True{}, h2, ds}},
             e
@@ -9480,7 +9480,7 @@ def Round.ballots(
   )
 
 # the node o cast for the step v in the round r, as a count of ballots reads it
-def Hit(s: Spec.State(), c: Ledgers.Chain, h: U32, r: Nat, o: String, v: Ledgers.Vote) -> Bool:
+def Round.hit(s: Spec.State(), c: Ledgers.Chain, h: U32, r: Nat, o: String, v: Ledgers.Vote) -> Bool:
   Quorums.Quorum.hit(
     ~Ledgers.Vote,
     ~Ledgers.Vote.is_eq,
@@ -9544,7 +9544,7 @@ def Hit.cast(
   +o: String,
   v: Ledgers.Vote
 ) -> {
-  Hit(s, c, h, r, o, v) == True{}: Bool
+  Round.hit(s, c, h, r, o, v) == True{}: Bool
 } -> {Spec.Cast.of(s, Ledgers.Where{c, h, r}, o) == Some{v}: Maybe<&2, Ledgers.Vote>}:
   e =>
     %Tries.Trie.get_under(
@@ -9588,7 +9588,7 @@ def Voter.if(+hit: Bool, o: String, rest: Maybe<&2, String>) -> Maybe<&2, String
       rest
 
 # the first node of os that cast for the step v in the round r, if any did
-def Voter(
+def Round.voter(
   +s: Spec.State(),
   +c: Ledgers.Chain,
   +h: U32,
@@ -9600,7 +9600,7 @@ def Voter(
     case Nil{}:
       None{}
     case Con{+o, rest}:
-      Voter.if(Hit(s, c, h, r, o, v), o, Voter(s, c, h, r, rest, v))
+      Voter.if(Round.hit(s, c, h, r, o, v), o, Round.voter(s, c, h, r, rest, v))
 
 # no hit and no voter in the rest, when there is no voter
 def Voter.if_hit(
@@ -9642,7 +9642,7 @@ def Voter.cast.at(
   v: Ledgers.Vote,
   p: String,
   +hit: Bool,
-  eh: {Hit(s, c, h, r, o, v) == hit: Bool},
+  eh: {Round.hit(s, c, h, r, o, v) == hit: Bool},
   ih: {
     rest == Some{p}: Maybe<&2, String>
   } -> {Spec.Cast.of(s, Ledgers.Where{c, h, r}, p) == Some{v}: Maybe<&2, Ledgers.Vote>}
@@ -9672,7 +9672,7 @@ def Voter.cast(
   +v: Ledgers.Vote,
   +p: String
 ) -> {
-  Voter(s, c, h, r, os, v) == Some{p}: Maybe<&2, String>
+  Round.voter(s, c, h, r, os, v) == Some{p}: Maybe<&2, String>
 } -> {Spec.Cast.of(s, Ledgers.Where{c, h, r}, p) == Some{v}: Maybe<&2, Ledgers.Vote>}:
   match os:
     case Nil{}:
@@ -9687,10 +9687,10 @@ def Voter.cast(
         h,
         r,
         o,
-        Voter(s, c, h, r, rest, v),
+        Round.voter(s, c, h, r, rest, v),
         v,
         p,
-        Hit(s, c, h, r, o, v),
+        Round.hit(s, c, h, r, o, v),
         {==},
         Voter.cast(s, c, h, r, rest, v, p)
       )
@@ -9723,7 +9723,7 @@ def Voter.yes(
   +os: List<&2, String>,
   +v: Ledgers.Vote
 ) -> {
-  Voter(s, c, h, r, os, v) == None{}: Maybe<&2, String>
+  Round.voter(s, c, h, r, os, v) == None{}: Maybe<&2, String>
 } -> {
   Quorums.Quorum.yes(
     ~Ledgers.Vote,
@@ -9738,9 +9738,9 @@ def Voter.yes(
       e => {==}
     case Con{o, rest}:
       Voter.yes.at(
-        Hit(s, c, h, r, o, v),
+        Round.hit(s, c, h, r, o, v),
         o,
-        Voter(s, c, h, r, rest, v),
+        Round.voter(s, c, h, r, rest, v),
         Quorums.Quorum.yes(~Ledgers.Vote, ~Ledgers.Vote.is_eq, Round.ballots(s, c, h, r, rest), v),
         Voter.yes(s, c, h, r, rest, v)
       )
@@ -9768,7 +9768,7 @@ def Has.voter(
     v
   )
     == True{}: Bool
-} -> {Voter(s, c, h, r, os, v) == None{}: Maybe<&2, String>} -> Empty:
+} -> {Round.voter(s, c, h, r, os, v) == None{}: Maybe<&2, String>} -> Empty:
   hh => e =>
     Lt.none(
       Quorums.Quorum.no(~Ledgers.Vote, ~Ledgers.Vote.is_eq, Round.ballots(s, c, h, r, os), v),
@@ -9793,7 +9793,7 @@ def Sub.count.at(
   ih1: {
     Spec.Owners.sub(rest, fs) == True{}: Bool
   } -> {
-    Voter(s, c, h, r, fs, v) == None{}: Maybe<&2, String>
+    Round.voter(s, c, h, r, fs, v) == None{}: Maybe<&2, String>
   } -> {
     Nat.is_le(
       List.length(&2, String, fs),
@@ -9804,7 +9804,7 @@ def Sub.count.at(
   ih2: {
     Spec.Owners.sub(rest, f <> fs) == True{}: Bool
   } -> {
-    Voter(s, c, h, r, f <> fs, v) == None{}: Maybe<&2, String>
+    Round.voter(s, c, h, r, f <> fs, v) == None{}: Maybe<&2, String>
   } -> {
     Nat.is_le(
       1n+List.length(&2, String, fs),
@@ -9821,12 +9821,12 @@ def Sub.count.at(
   )
     == True{}: Bool
 } -> {
-  Voter(s, c, h, r, f <> fs, v) == None{}: Maybe<&2, String>
+  Round.voter(s, c, h, r, f <> fs, v) == None{}: Maybe<&2, String>
 } -> {
   Nat.is_le(
     1n+List.length(&2, String, fs),
     Shared.Nat.add_if(
-      Bool.not(Hit(s, c, h, r, o, v)),
+      Bool.not(Round.hit(s, c, h, r, o, v)),
       Quorums.Quorum.no(~Ledgers.Vote, ~Ledgers.Vote.is_eq, Round.ballots(s, c, h, r, rest), v)
     )
   )
@@ -9844,7 +9844,7 @@ def Sub.count.at(
           Nat.is_le(
             1n+List.length(&2, String, fs),
             Shared.Nat.add_if(
-              Bool.not(Hit(s, c, h, r, _, v)),
+              Bool.not(Round.hit(s, c, h, r, _, v)),
               Quorums.Quorum.no(
                 ~Ledgers.Vote,
                 ~Ledgers.Vote.is_eq,
@@ -9857,9 +9857,9 @@ def Sub.count.at(
         }
         %Equal.sym(
           Bool,
-          Hit(s, c, h, r, f, v),
+          Round.hit(s, c, h, r, f, v),
           False{},
-          Voter.if_hit(Hit(s, c, h, r, f, v), f, Voter(s, c, h, r, fs, v))(ev)
+          Voter.if_hit(Round.hit(s, c, h, r, f, v), f, Round.voter(s, c, h, r, fs, v))(ev)
         ): {
           Nat.is_le(
             1n+List.length(&2, String, fs),
@@ -9875,11 +9875,11 @@ def Sub.count.at(
           )
             == True{}: Bool
         }
-        ih1(es)(Voter.if_rest(Hit(s, c, h, r, f, v), f, Voter(s, c, h, r, fs, v))(ev))
+        ih1(es)(Voter.if_rest(Round.hit(s, c, h, r, f, v), f, Round.voter(s, c, h, r, fs, v))(ev))
     case False{}:
       es => ev =>
         Shared.Nat.le_add_if(
-          Bool.not(Hit(s, c, h, r, o, v)),
+          Bool.not(Round.hit(s, c, h, r, o, v)),
           1n+List.length(&2, String, fs),
           Quorums.Quorum.no(~Ledgers.Vote, ~Ledgers.Vote.is_eq, Round.ballots(s, c, h, r, rest), v)
         )(ih2(es)(ev))
@@ -9897,7 +9897,7 @@ def Sub.count(
 ) -> {
   Spec.Owners.sub(os, from) == True{}: Bool
 } -> {
-  Voter(s, c, h, r, from, v) == None{}: Maybe<&2, String>
+  Round.voter(s, c, h, r, from, v) == None{}: Maybe<&2, String>
 } -> {
   Nat.is_le(
     List.length(&2, String, from),
@@ -9977,7 +9977,7 @@ def Count.total(
       {==}
     case Con{o, +rest}:
       Count.total.at(
-        Hit(s, c, h, r, o, v),
+        Round.hit(s, c, h, r, o, v),
         Quorums.Quorum.yes(~Ledgers.Vote, ~Ledgers.Vote.is_eq, Round.ballots(s, c, h, r, rest), v),
         Quorums.Quorum.no(~Ledgers.Vote, ~Ledgers.Vote.is_eq, Round.ballots(s, c, h, r, rest), v),
         List.length(&2, String, rest),
@@ -10008,8 +10008,8 @@ def Major.meets(
   )
     == True{}: Bool
 } -> {Spec.Owners.sub(os, from) == True{}: Bool}
-  -> {Spec.Major(os, from) == True{}: Bool}
-  -> {Voter(s, c, h, r, from, v) == None{}: Maybe<&2, String>}
+  -> {Spec.Owners.major(os, from) == True{}: Bool}
+  -> {Round.voter(s, c, h, r, from, v) == None{}: Maybe<&2, String>}
   -> Empty:
   hh => es => em => ev =>
     Shared.Nat.pigeon(
@@ -10443,7 +10443,7 @@ def Pass.miss.at(
   rest: Maybe<&2, String>,
   hit: Bool,
   m: Maybe<&2, Maybe<&2, Ledgers.Last>>
-) -> {Hit(s, c, h, r1, o, v1) == hit: Bool}
+) -> {Round.hit(s, c, h, r1, o, v1) == hit: Bool}
   -> {
     Ledgers.State.passed(
       ~Spec.Ask,
@@ -10493,7 +10493,7 @@ def Pass.miss(
 ) -> {Nat.is_le(r1, p) == True{}: Bool}
   -> {Spec.Passed.all(s, Ledgers.Where{c, h, 1n+p}, from) == True{}: Bool}
   -> {Last.from(Spec.Passes.last(s, Ledgers.Where{c, h, 1n+p}, from), r1) == False{}: Bool}
-  -> {Voter(s, c, h, r1, from, v1) == None{}: Maybe<&2, String>}:
+  -> {Round.voter(s, c, h, r1, from, v1) == None{}: Maybe<&2, String>}:
   match from:
     case Nil{}:
       le => ea => ef => {==}
@@ -10508,8 +10508,8 @@ def Pass.miss(
           r1,
           v1,
           o,
-          Voter(s, c, h, r1, rest, v1),
-          Hit(s, c, h, r1, o, v1),
+          Round.voter(s, c, h, r1, rest, v1),
+          Round.hit(s, c, h, r1, o, v1),
           Ledgers.State.passed(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, h, 1n+p}, o)
         )(
           {==}
@@ -10702,27 +10702,27 @@ def Passed.some(
       )
 
 # the parts of the rule of a later round
-def All4(a: Bool, b: Bool, c: Bool, d: Bool) -> Bool:
+def Later.all(a: Bool, b: Bool, c: Bool, d: Bool) -> Bool:
   List.all.if(u2 => List.all.if(u3 => List.all.if(u4 => d, c), b), a)
 
-def All4.a(
+def Later.all.a(
   a: Bool,
   b: Bool,
   c: Bool,
   d: Bool
-) -> {All4(a, b, c, d) == True{}: Bool} -> {a == True{}: Bool}:
+) -> {Later.all(a, b, c, d) == True{}: Bool} -> {a == True{}: Bool}:
   match a:
     case True{}:
       e => {==}
     case False{}:
       e => e
 
-def All4.b(
+def Later.all.b(
   a: Bool,
   b: Bool,
   c: Bool,
   d: Bool
-) -> {All4(a, b, c, d) == True{}: Bool} -> {b == True{}: Bool}:
+) -> {Later.all(a, b, c, d) == True{}: Bool} -> {b == True{}: Bool}:
   match a b:
     case True{} True{}:
       e => {==}
@@ -10731,12 +10731,12 @@ def All4.b(
     case False{} y:
       e => Empty.absurd({y == True{}: Bool}, Shared.Bool.false_ne_true(e))
 
-def All4.c(
+def Later.all.c(
   a: Bool,
   b: Bool,
   c: Bool,
   d: Bool
-) -> {All4(a, b, c, d) == True{}: Bool} -> {c == True{}: Bool}:
+) -> {Later.all(a, b, c, d) == True{}: Bool} -> {c == True{}: Bool}:
   match a b c:
     case True{} True{} True{}:
       e => {==}
@@ -10747,12 +10747,12 @@ def All4.c(
     case False{} y z:
       e => Empty.absurd({z == True{}: Bool}, Shared.Bool.false_ne_true(e))
 
-def All4.d(
+def Later.all.d(
   a: Bool,
   b: Bool,
   c: Bool,
   d: Bool
-) -> {All4(a, b, c, d) == True{}: Bool} -> {d == True{}: Bool}:
+) -> {Later.all(a, b, c, d) == True{}: Bool} -> {d == True{}: Bool}:
   match a b c:
     case True{} True{} True{}:
       e => e
@@ -10876,10 +10876,10 @@ def Rounds.pick(
   -> {Nat.is_le(r1, p) == True{}: Bool}
   -> Rounds.Below(s, c, h, r1, v1, j)
   -> {
-    All4(
+    Later.all(
       Spec.Passed.all(s, Ledgers.Where{c, h, 1n+p}, from),
       Spec.Owners.sub(os, from),
-      Spec.Major(os, from),
+      Spec.Owners.major(os, from),
       Spec.Last.is(Spec.Passes.last(s, Ledgers.Where{c, h, 1n+p}, from), x)
     )
       == True{}: Bool
@@ -10901,17 +10901,17 @@ def Rounds.pick(
           )(
             hh
           )(
-            All4.b(
+            Later.all.b(
               Spec.Passed.all(s, Ledgers.Where{c, h, 1n+p}, from),
               Spec.Owners.sub(os, from),
-              Spec.Major(os, from),
+              Spec.Owners.major(os, from),
               Spec.Last.is(Spec.Passes.last(s, Ledgers.Where{c, h, 1n+p}, from), x)
             )(al)
           )(
-            All4.c(
+            Later.all.c(
               Spec.Passed.all(s, Ledgers.Where{c, h, 1n+p}, from),
               Spec.Owners.sub(os, from),
-              Spec.Major(os, from),
+              Spec.Owners.major(os, from),
               Spec.Last.is(Spec.Passes.last(s, Ledgers.Where{c, h, 1n+p}, from), x)
             )(al)
           )(
@@ -10927,10 +10927,10 @@ def Rounds.pick(
             )(
               le
             )(
-              All4.a(
+              Later.all.a(
                 Spec.Passed.all(s, Ledgers.Where{c, h, 1n+p}, from),
                 Spec.Owners.sub(os, from),
-                Spec.Major(os, from),
+                Spec.Owners.major(os, from),
                 Spec.Last.is(Spec.Passes.last(s, Ledgers.Where{c, h, 1n+p}, from), x)
               )(al)
             )(ef)
@@ -10955,10 +10955,10 @@ def Rounds.pick(
         )(
           ef
         )(
-          All4.d(
+          Later.all.d(
             Spec.Passed.all(s, Ledgers.Where{c, h, 1n+p}, from),
             Spec.Owners.sub(os, from),
-            Spec.Major(os, from),
+            Spec.Owners.major(os, from),
             Spec.Last.is(Spec.Passes.last(s, Ledgers.Where{c, h, 1n+p}, from), x)
           )(al)
         )(lt)(ih)
@@ -10975,7 +10975,7 @@ def Rounds.base(
   q: String,
   x: Ledgers.Vote,
   m: Maybe<&2, String>
-) -> {Voter(s, c, h, r1, os, v1) == m: Maybe<&2, String>}
+) -> {Round.voter(s, c, h, r1, os, v1) == m: Maybe<&2, String>}
   -> {
     Quorums.Quorum.has(
       ~Ledgers.Vote,
@@ -11105,7 +11105,7 @@ def Rounds.same.at(
           v1,
           q,
           x,
-          Voter(s, c, h, r1, os, v1)
+          Round.voter(s, c, h, r1, os, v1)
         )(
           {==}
         )(
@@ -11187,7 +11187,7 @@ def Rounds.later.at(
   v1: Ledgers.Vote,
   +v2: Ledgers.Vote,
   m: Maybe<&2, String>
-) -> {Voter(s, c, h, r2, os, v2) == m: Maybe<&2, String>}
+) -> {Round.voter(s, c, h, r2, os, v2) == m: Maybe<&2, String>}
   -> {Nat.is_le(r1, r2) == True{}: Bool}
   -> {
     Quorums.Quorum.has(
@@ -11275,7 +11275,7 @@ def Rounds.later(
       r2,
       v1,
       v2,
-      Voter(s, c, h, r2, os, v2)
+      Round.voter(s, c, h, r2, os, v2)
     )(
       {==}
     )(
@@ -13681,7 +13681,7 @@ def Follow.allowed.at(
       e => e
 
 def Spec.Plan.follow_allowed(s, c, w, t, th, os, v, from):
-  Follow.allowed.at(s, c, t, th, v, from, Spec.Allowed(s, w, os, v, from))
+  Follow.allowed.at(s, c, t, th, v, from, Spec.Vote.allowed(s, w, os, v, from))
 
 # Waits
 # -----

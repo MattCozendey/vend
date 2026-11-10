@@ -3522,7 +3522,7 @@ def Passes.last(+s: State(), +w: Ledgers.Where, from: List<&2, String>) -> Maybe
       )
 
 # the nodes from are a majority of the owners os
-def Major(os: List<&2, String>, +from: List<&2, String>) -> Bool:
+def Owners.major(os: List<&2, String>, +from: List<&2, String>) -> Bool:
   Nat.is_lt(
     List.length(&2, String, os),
     Nat.add(List.length(&2, String, from), List.length(&2, String, from))
@@ -3567,7 +3567,7 @@ def Owners.sub(os: List<&2, String>, from: List<&2, String>) -> Bool:
 # the owners os: in the first round, any step; later, the node holds the pass
 # to w of each of them, they are owners and a majority, and v is the last vote
 # of the highest round among them, if any
-def Allowed(
+def Vote.allowed(
   +s: State(),
   +w: Ledgers.Where,
   +os: List<&2, String>,
@@ -3577,7 +3577,7 @@ def Allowed(
   List.any.if(
     u => List.all.if(
       u2 => List.all.if(
-        u3 => List.all.if(u4 => Last.is(Passes.last(s, w, from), v), Major(os, from)),
+        u3 => List.all.if(u4 => Last.is(Passes.last(s, w, from), v), Owners.major(os, from)),
         Owners.sub(os, from)
       ),
       Passed.all(s, w, from)
@@ -3602,14 +3602,14 @@ def Plan.later(
     case None{}:
       Shared.Bool.when(
         Plan,
-        Major(os, from),
+        Owners.major(os, from),
         u => Plan.own(s, c, t, from),
         u => Plan{[], None{}, []}
       )
     case Some{Ledgers.Last{r, v}}:
       Shared.Bool.when(
         Plan,
-        Major(os, from),
+        Owners.major(os, from),
         u => Plan.copy(s, c, t, th, Some{v}, from),
         u => Plan{[], None{}, []}
       )
@@ -3646,7 +3646,7 @@ def Plan.follow(
     case Some{Ledgers.Act.Vote{+v, +from}}:
       Shared.Bool.when(
         Plan,
-        Allowed(s, w, os, v, from),
+        Vote.allowed(s, w, os, v, from),
         u => Plan.copy(s, c, t, th, Some{v}, from),
         u => Plan{[], None{}, []}
       )
@@ -3897,12 +3897,12 @@ def Height.One(s: State(), c: Ledgers.Chain, h: U32, os: List<&2, String>) -> Ty
 # c. A node that follows them makes them true of its own ballots; that every
 # node follows them is the premise of Rounds.one.
 
-# that the passes that a vote names allow it (Allowed), for the owners os
+# that the passes that a vote names allow it (Vote.allowed), for the owners os
 def Rounds.Allow(s: State(), c: Ledgers.Chain, h: U32, os: List<&2, String>) -> Type:
   @r: Nat -> @q: String -> @v: Ledgers.Vote -> {
     Cast.of(s, Ledgers.Where{c, h, r}, q) == Some{v}: Maybe<&2, Ledgers.Vote>
   } -> {
-    Allowed(
+    Vote.allowed(
       s,
       Ledgers.Where{c, h, r},
       os,
@@ -5780,7 +5780,7 @@ law Plan.follow_allowed:
     )
       == True{}: Bool
   }
-    -> {Allowed(s, w, os, v, from) == True{}: Bool}
+    -> {Vote.allowed(s, w, os, v, from) == True{}: Bool}
 
 # the log of the run m, if any, holds an outcome of the request i
 def Run.Outs(m: Maybe<&2, Run>, i: Ledgers.Id) -> Type:

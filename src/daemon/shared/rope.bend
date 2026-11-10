@@ -925,13 +925,13 @@ def Rope.up_reads(
 
 # p holds of a choice between two ropes when it holds of both
 def Rope.put.when(
-  -p: Put -> Type,
+  -P: Put -> Type,
   b: Bool,
   -x: Unit -> Put,
   -y: Unit -> Put,
-  px: p(x(Unit{})),
-  py: p(y(Unit{}))
-) -> p(Shared.Bool.when(Put, b, x, y)):
+  px: P(x(Unit{})),
+  py: P(y(Unit{}))
+) -> P(Shared.Bool.when(Put, b, x, y)):
   match b:
     case True{}:
       px

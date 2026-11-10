@@ -33,7 +33,7 @@ Delete each open item when the code makes it true.
   took too long (`Deed.Pass`), and names its last vote below (`Last.below`). The proposer of a
   later round needs the passes of a majority of the owners, and proposes the last vote of the
   highest round among them, if any (`Plan.lead`). The others copy a vote that these rules allow
-  (`Allowed`, `Plan.follow`). An owner casts for a change of who decides only when it was asked
+  (`Vote.allowed`, `Plan.follow`). An owner casts for a change of who decides only when it was asked
   at it (`Node.consent`). All of this reads the ledger; a head holds no round.
 - **Notices** cost what is new, not the history: the new versions of a branch are a range of
   numbers (`Branch.since`), and the changes elsewhere that a branch did not take in are the
@@ -157,7 +157,7 @@ Design (each needs a decision or new work; none is a proof detail):
 - **The rules of rounds are premises.** A node's own ballots follow them by construction
   (`Plan.lead`, `Pass.to`, `Cast.round`), with one law: `Plan.follow_allowed` (a node copies only
   a vote that the rules allow). A node keeps a vote of
-  another node without a check of `Allowed`; it only copies a vote that is allowed.
+  another node without a check of `Vote.allowed`; it only copies a vote that is allowed.
 - **Reads of a whole history:** `Node.versions` and `Node.log` list or scan every version of one
   branch (a range is the target). `Node.affects` and `Node.impact` read each branch that the
   node follows once, and of each only the versions that the branch did not take in.
