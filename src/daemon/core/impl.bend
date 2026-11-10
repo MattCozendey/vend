@@ -1322,6 +1322,103 @@ def Some.grows(
         Some.grows(c, rest, r2)
       )
 
+# a run that is kept when b holds is on a node that grew, when it is
+def Fit.when.grows(
+  -s: Spec.State(),
+  b: Bool,
+  -r: Spec.Run,
+  e: {Run.after(s, Some{r}) == True{}: Bool}
+) -> {Run.after(s, Shared.Maybe.when(Spec.Run, b, u => Some{r})) == True{}: Bool}:
+  match b:
+    case True{}:
+      e
+    case False{}:
+      {==}
+
+# a run that fits a tip is on a node that grew, when the run is
+def Plan.fit.grows(
+  -s: Spec.State(),
+  after: Maybe<&2, Hashes.Hash>,
+  m: Maybe<&2, Spec.Run>
+) -> {Run.after(s, m) == True{}: Bool} -> {Run.after(s, Spec.Plan.fit(after, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      e => {==}
+    case Some{Spec.Run{s2, +t2, ns}}:
+      e => Fit.when.grows(
+        s,
+        Spec.Root.same(after, Some{Spec.Tip.hash(t2)}),
+        Spec.Run{s2, t2, ns},
+        e
+      )
+
+# the run of one of two plans, each on a node that grew
+def Plan.when.grows(
+  -s: Spec.State(),
+  b: Bool,
+  -x: Spec.Plan,
+  -y: Spec.Plan,
+  hx: {Run.after(s, Spec.Plan.run(x)) == True{}: Bool},
+  hy: {Run.after(s, Spec.Plan.run(y)) == True{}: Bool}
+) -> {Run.after(s, Spec.Plan.run(Shared.Bool.when(Spec.Plan, b, u => x, u => y))) == True{}: Bool}:
+  match b:
+    case True{}:
+      hx
+    case False{}:
+      hy
+
+# the run of the plan of the owner whose turn it is is on a node that grew
+def Plan.own.grows(
+  +s: Spec.State(),
+  +c: Ledgers.Chain,
+  t: Spec.Tip
+) -> {Run.after(s, Spec.Plan.run(Spec.Plan.own(s, c, t))) == True{}: Bool}:
+  Some.grows(c, Spec.Cast.mine(s, Spec.Wait.of(s, c)), Spec.Run{s, t, []})
+
+# the run of the plan of another owner is on a node that grew
+def Plan.copy.grows(
+  +s: Spec.State(),
+  +c: Ledgers.Chain,
+  +t: Spec.Tip,
+  th: Maybe<&2, Hashes.Hash>,
+  m: Maybe<&2, Ledgers.Vote>
+) -> {Run.after(s, Spec.Plan.run(Spec.Plan.copy(s, c, t, th, m))) == True{}: Bool}:
+  match m:
+    case None{}:
+      {==}
+    case Some{Ledgers.Vote{before, +qs, +after}}:
+      Plan.when.grows(
+        s,
+        List.all.if(u => Spec.Cast.all_mine(s, qs), Spec.Root.same(before, th)),
+        Spec.Plan{qs, Spec.Plan.fit(after, Spec.Step.run(s, c, t, qs))},
+        Spec.Plan{[], None{}},
+        Plan.fit.grows(s, after, Spec.Step.run(s, c, t, qs))(Run.grows(s, c, t, qs)),
+        {==}
+      )
+
+# the run of what a node casts for is on a node that grew
+def Plan.of.grows(
+  +n: String,
+  +s: Spec.State(),
+  +c: Ledgers.Chain,
+  +w: Ledgers.Where,
+  +t: Spec.Tip,
+  +th: Maybe<&2, Hashes.Hash>,
+  turn: Maybe<&2, String>
+) -> {Run.after(s, Spec.Plan.run(Spec.Plan.of(n, s, c, w, t, th, turn))) == True{}: Bool}:
+  match turn:
+    case None{}:
+      {==}
+    case Some{+p}:
+      Plan.when.grows(
+        s,
+        String.eq(p, n),
+        Spec.Plan.own(s, c, t),
+        Spec.Plan.copy(s, c, t, th, Spec.Cast.of(s, w, p)),
+        Plan.own.grows(s, c, t),
+        Plan.copy.grows(s, c, t, th, Spec.Cast.of(s, w, p))
+      )
+
 # a node with the ledger of a node that grew from a grew from a
 def Grows.to(
   a: Spec.State(),
@@ -1533,22 +1630,32 @@ def Cast.at.grows(
   m: Maybe<&2, Spec.Tip>
 ) -> {Spec.Node.grows(s, Spec.Cast.at(n, s, c, h, m)) == True{}: Bool}:
   match h m:
-    case Spec.Head{r, b, +next, th} Some{+t}:
-      +p = Spec.Step.some(c, Spec.Cast.mine(s, Spec.Wait.of(s, c)), Spec.Run{s, t, []})
-      +qs = Spec.Picked.asks(p)
+    case Spec.Head{r, b, +next, +th} Some{+t}:
+      +p = Spec.Plan.of(n, s, c, Ledgers.Where{c, next}, t, th, Spec.Owners.turn(Spec.Line.owners(s, t), next))
+      +qs = Spec.Plan.asks(p)
       Grows.when(
         s,
         Spec.Cast.may(n, s, Ledgers.Where{c, next}, t, qs),
-        Spec.Cast.put(n, Ledgers.Where{c, next}, th, qs, Some{Spec.Picked.run(p)}, s),
+        Spec.Cast.put(n, Ledgers.Where{c, next}, th, qs, Spec.Plan.run(p), s),
         s,
         Cast.put.grows(
           n,
           Ledgers.Where{c, next},
           th,
           qs,
-          Some{Spec.Picked.run(p)},
+          Spec.Plan.run(p),
           s
-        )(Some.grows(c, Spec.Cast.mine(s, Spec.Wait.of(s, c)), Spec.Run{s, t, []})),
+        )(
+          Plan.of.grows(
+            n,
+            s,
+            c,
+            Ledgers.Where{c, next},
+            t,
+            th,
+            Spec.Owners.turn(Spec.Line.owners(s, t), next)
+          )
+        ),
         Grows.refl(s)
       )
     case Spec.Head{r, b, next, th} None{}:
@@ -4071,15 +4178,15 @@ def Cast.at.heads(
   m: Maybe<&2, Spec.Tip>
 ) -> {Spec.State.heads(s) == Spec.State.heads(Spec.Cast.at(n, s, c, h, m)): Tries.Trie<Spec.Head>}:
   match h m:
-    case Spec.Head{r, b, +next, th} Some{+t}:
-      +p = Spec.Step.some(c, Spec.Cast.mine(s, Spec.Wait.of(s, c)), Spec.Run{s, t, []})
-      +qs = Spec.Picked.asks(p)
+    case Spec.Head{r, b, +next, +th} Some{+t}:
+      +p = Spec.Plan.of(n, s, c, Ledgers.Where{c, next}, t, th, Spec.Owners.turn(Spec.Line.owners(s, t), next))
+      +qs = Spec.Plan.asks(p)
       Heads.when(
         Spec.Cast.may(n, s, Ledgers.Where{c, next}, t, qs),
         s,
-        Spec.Cast.put(n, Ledgers.Where{c, next}, th, qs, Some{Spec.Picked.run(p)}, s),
+        Spec.Cast.put(n, Ledgers.Where{c, next}, th, qs, Spec.Plan.run(p), s),
         s,
-        Cast.put.heads(n, Ledgers.Where{c, next}, th, qs, Some{Spec.Picked.run(p)}, s),
+        Cast.put.heads(n, Ledgers.Where{c, next}, th, qs, Spec.Plan.run(p), s),
         {==}
       )
     case Spec.Head{r, b, next, th} None{}:

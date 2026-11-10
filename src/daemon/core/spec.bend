@@ -3081,15 +3081,130 @@ def Cast.mine(+s: State(), qs: List<&2, Ledgers.Id>) -> List<&2, Ledgers.Id>:
     case Con{+i, r}:
       List.filter.put(Ledgers.Id, i, Cast.mine(s, r), Cast.mine.of(s, i, Node.asked(s, i)))
 
+# the owner whose turn it is to propose the step at the height h, among the
+# owners os: each in turn, by the height. One owner proposes a step and the
+# others cast for the same step, so the owners do not split over what waits
+# at each of them
+def Owners.turn(+os: List<&2, String>, h: U32) -> Maybe<&2, String>:
+  List.get(
+    &2,
+    String,
+    os,
+    U32.to_nat(U32.mod(h, U32.from_nat(List.length(&2, String, os))))
+  )
+
+# the node n is the node m, if any
+def Turn.is(m: Maybe<&2, String>, n: String) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{p}:
+      String.eq(p, n)
+
+# the step in the cell m of a ballot, if it holds one
+def Cast.step(m: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>) -> Maybe<&2, Ledgers.Vote>:
+  match m:
+    case Some{Cells.One{Ledgers.Entry.Vote{b}}}:
+      Some{Ledgers.Ballot.vote(b)}
+    case x:
+      None{}
+
+# the step that the node p cast at the place w, if s holds its ballot
+def Cast.of(s: State(), w: Ledgers.Where, p: String) -> Maybe<&2, Ledgers.Vote>:
+  Cast.step(Ledgers.State.get(~Ask, State.ledger(s), Ledgers.Slot.vote(w, p)))
+
+# what a node casts for: the requests of a step, and its own run of them
+# (none: it cannot run them now)
+type Plan is Data:
+  Plan{asks: List<&2, Ledgers.Id>, run: Maybe<&2, Run>}
+
+# the requests of the plan p
+def Plan.asks(p: Plan) -> List<&2, Ledgers.Id>:
+  match p:
+    case Plan{qs, m}:
+      qs
+
+# the run of the plan p
+def Plan.run(p: Plan) -> Maybe<&2, Run>:
+  match p:
+    case Plan{qs, m}:
+      m
+
+# the plan of the owner whose turn it is, on the line c at the tip t: the
+# requests that wait at it, that it may cast for and that can run now
+def Plan.own(+s: State(), +c: Ledgers.Chain, t: Tip) -> Plan:
+  +p = Step.some(c, Cast.mine(s, Wait.of(s, c)), Run{s, t, []})
+  Plan{Picked.asks(p), Some{Picked.run(p)}}
+
+# the node s may cast for each request of qs
+def Cast.all_mine(+s: State(), qs: List<&2, Ledgers.Id>) -> Bool:
+  match qs:
+    case Nil{}:
+      True{}
+    case Con{+i, r}:
+      List.all.if(u => Cast.all_mine(s, r), Cast.mine.of(s, i, Node.asked(s, i)))
+
+# the run m, when it gives the tip of the hash after
+def Plan.fit(after: Maybe<&2, Hashes.Hash>, m: Maybe<&2, Run>) -> Maybe<&2, Run>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Run{s2, +t2, ns}}:
+      Shared.Maybe.when(Run, Root.same(after, Some{Tip.hash(t2)}), u => Some{Run{s2, t2, ns}})
+
+# the plan of another owner, on the line c at the tip t of the hash th: the
+# step m that the owner whose turn it is cast, when it starts from this tip,
+# the node may cast for each of its requests, and the node's own run of them
+# gives the same tip
+def Plan.copy(
+  +s: State(),
+  +c: Ledgers.Chain,
+  t: Tip,
+  th: Maybe<&2, Hashes.Hash>,
+  m: Maybe<&2, Ledgers.Vote>
+) -> Plan:
+  match m:
+    case None{}:
+      Plan{[], None{}}
+    case Some{Ledgers.Vote{before, +qs, after}}:
+      Shared.Bool.when(
+        Plan,
+        List.all.if(u => Cast.all_mine(s, qs), Root.same(before, th)),
+        u => Plan{qs, Plan.fit(after, Step.run(s, c, t, qs))},
+        u => Plan{[], None{}}
+      )
+
+# what the node n casts for at the place w of the line c, at the tip t of the
+# hash th, when it is turn's turn to propose
+def Plan.of(
+  n: String,
+  +s: State(),
+  +c: Ledgers.Chain,
+  w: Ledgers.Where,
+  +t: Tip,
+  th: Maybe<&2, Hashes.Hash>,
+  turn: Maybe<&2, String>
+) -> Plan:
+  match turn:
+    case None{}:
+      Plan{[], None{}}
+    case Some{+p}:
+      Shared.Bool.when(
+        Plan,
+        String.eq(p, n),
+        u => Plan.own(s, c, t),
+        u => Plan.copy(s, c, t, th, Cast.of(s, w, p))
+      )
+
 # Node.cast at the head h of the line c, whose tip is m
 def Cast.at(+n: String, +s: State(), +c: Ledgers.Chain, h: Head, m: Maybe<&2, Tip>) -> State():
   match h m:
-    case Head{r, b, +next, th} Some{+t}:
-      +p = Step.some(c, Cast.mine(s, Wait.of(s, c)), Run{s, t, []})
+    case Head{r, b, +next, +th} Some{+t}:
+      +p = Plan.of(n, s, c, Ledgers.Where{c, next}, t, th, Owners.turn(Line.owners(s, t), next))
       Shared.Bool.when(
         State(),
-        Cast.may(n, s, Ledgers.Where{c, next}, t, Picked.asks(p)),
-        u => Cast.put(n, Ledgers.Where{c, next}, th, Picked.asks(p), Some{Picked.run(p)}, s),
+        Cast.may(n, s, Ledgers.Where{c, next}, t, Plan.asks(p)),
+        u => Cast.put(n, Ledgers.Where{c, next}, th, Plan.asks(p), Plan.run(p), s),
         u => s
       )
     case x y:
@@ -3103,9 +3218,10 @@ def Cast.head(n: String, +s: State(), c: Ledgers.Chain, m: Maybe<&2, Head>) -> S
     case Some{+h}:
       Cast.at(n, s, c, h, Head.tip(s, h))
 
-# s, after the node n cast its ballot for the next step of the line c: the
-# step that runs, from the tip, the requests that wait on the line and can
-# run now
+# s, after the node n cast its ballot for the next step of the line c: when
+# it is its turn, the step that runs, from the tip, the requests that wait on
+# the line and can run now; else the step that the owner whose turn it is
+# cast, when the node's own run of it gives the same tip
 def Node.cast(n: String, +s: State(), +c: Ledgers.Chain) -> State():
   Cast.head(n, s, c, Node.head_of(s, c))
 
