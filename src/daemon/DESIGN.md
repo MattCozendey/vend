@@ -150,8 +150,6 @@ Design (each needs a decision or new work; none is a proof detail):
   `Key` change in between.
 - **A request that can never run** (it names a version that no line makes) waits for good. It
   does not stop its line, but nothing removes it.
-- **Reads of codes are lenient:** an unknown tag reads as the last case (`Change.code.read.of`,
-  `Member`, `Content`, `Ask`).
 - **Names:** `State()` is `Node`; `Chain` (a line) and `Chained` (a chain of keys);
   `core/spec.bend` holds about 15 domains in one file.
 - **Lint:** no error. Left: `layout/case` (false: constructors are PascalCase), hints in proof

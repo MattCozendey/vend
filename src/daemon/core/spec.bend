@@ -142,12 +142,17 @@ def Member.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Member>>:
   match ts:
     case Nil{}:
       None{}
-    case Con{x, +r}:
+    case Con{+x, +r}:
       Shared.Bool.when(
         Maybe<&2, Codes.Read<Member>>,
         U32.is_eq(x, 0),
         u => Codes.Code.one.read(~String, ~Member, ~Codes.Code.text.read, n => Member.Node{n}, r),
-        u => Codes.Code.one.read(~String, ~Member, ~Codes.Code.text.read, n => Member.Group{n}, r)
+        u => Shared.Bool.when(
+          Maybe<&2, Codes.Read<Member>>,
+          U32.is_eq(x, 1),
+          u => Codes.Code.one.read(~String, ~Member, ~Codes.Code.text.read, n => Member.Group{n}, r),
+          u => None{}
+        )
       )
 
 # the members ms, then r
@@ -171,7 +176,7 @@ def Content.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Content>>:
   match ts:
     case Nil{}:
       None{}
-    case Con{x, +r}:
+    case Con{+x, +r}:
       Shared.Bool.when(
         Maybe<&2, Codes.Read<Content>>,
         U32.is_eq(x, 0),
@@ -182,12 +187,17 @@ def Content.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Content>>:
           x => Content.Root{x},
           r
         ),
-        u => Codes.Code.one.read(
-          ~Ledgers.Id,
-          ~Content,
-          ~Ledgers.Id.code.read,
-          v => Content.Of{v},
-          r
+        u => Shared.Bool.when(
+          Maybe<&2, Codes.Read<Content>>,
+          U32.is_eq(x, 1),
+          u => Codes.Code.one.read(
+            ~Ledgers.Id,
+            ~Content,
+            ~Ledgers.Id.code.read,
+            v => Content.Of{v},
+            r
+          ),
+          u => None{}
         )
       )
 
@@ -313,14 +323,19 @@ def Change.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Chan
                     n => k => Change.Key{n, k},
                     r
                   ),
-                  u => Codes.Code.two.read(
-                    ~String,
-                    ~List<&2, Member>,
-                    ~Change,
-                    ~Codes.Code.text.read,
-                    ~Members.code.read,
-                    g => ms => Change.Group{g, ms},
-                    r
+                  u => Shared.Bool.when(
+                    Maybe<&2, Codes.Read<Change>>,
+                    U32.is_eq(x, 7),
+                    u => Codes.Code.two.read(
+                      ~String,
+                      ~List<&2, Member>,
+                      ~Change,
+                      ~Codes.Code.text.read,
+                      ~Members.code.read,
+                      g => ms => Change.Group{g, ms},
+                      r
+                    ),
+                    u => None{}
                   )
                 )
               )
@@ -378,7 +393,7 @@ def Ask.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ask>>:
   match ts:
     case Nil{}:
       None{}
-    case Con{x, +r}:
+    case Con{+x, +r}:
       Shared.Bool.when(
         Maybe<&2, Codes.Read<Ask>>,
         U32.is_eq(x, 0),
@@ -389,16 +404,21 @@ def Ask.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ask>>:
           os => Ask.Start{os},
           r
         ),
-        u => Codes.Code.three.read(
-          ~Ledgers.Id,
-          ~Maybe<&2, String>,
-          ~Change,
-          ~Ask,
-          ~Ledgers.Id.code.read,
-          ~Target.code.read,
-          ~Change.code.read,
-          s => l => c => Ask.On{s, l, c},
-          r
+        u => Shared.Bool.when(
+          Maybe<&2, Codes.Read<Ask>>,
+          U32.is_eq(x, 1),
+          u => Codes.Code.three.read(
+            ~Ledgers.Id,
+            ~Maybe<&2, String>,
+            ~Change,
+            ~Ask,
+            ~Ledgers.Id.code.read,
+            ~Target.code.read,
+            ~Change.code.read,
+            s => l => c => Ask.On{s, l, c},
+            r
+          ),
+          u => None{}
         )
       )
 
