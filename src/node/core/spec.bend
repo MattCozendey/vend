@@ -241,17 +241,22 @@ law Node.affects:
   List<&2, Touch>
 
 # what a subscription or a poll follows: the versions or the conflicts of a
-# branch, or the changes elsewhere that touch it
+# branch, the changes elsewhere that touch it, or the lies of the nodes in a
+# store
 type Topic is Data:
   Topic.Versions{branch: Branch}
   Topic.Conflicts{branch: Branch}
   Topic.Affects{branch: Branch}
+  Topic.Lies{store: Ledgers.Id}
 
-# an event of a topic
+# an event of a topic. Lied: the node holds the proof that a node signed two
+# ballots with one key in the store (Replicas.Node.liars); its ballots count
+# as before, and the owners decide what to do
 type Notice is Data:
   Notice.Versioned{branch: Branch, version: Ledgers.Id}
   Notice.Conflicted{branch: Branch, version: Ledgers.Id}
   Notice.Touched{touch: Touch}
+  Notice.Lied{store: Ledgers.Id, node: String}
 
 # a resource mounted to a branch
 type Mount is Data:

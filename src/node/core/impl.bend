@@ -2461,12 +2461,15 @@ def Notice.key(n: Spec.Notice) -> List<&2, Bool>:
       False{} <> True{} <> List.append(&2, Bool, Branch.key(b), Ledgers.Id.key(v))
     case Spec.Notice.Touched{Spec.Touch{v, c, b, u}}:
       True{}
+        <> False{}
         <> List.append(
           &2,
           Bool,
           Ledgers.Id.key(v),
           List.append(&2, Bool, Name.key(c), List.append(&2, Bool, Branch.key(b), Name.key(u)))
         )
+    case Spec.Notice.Lied{r, n}:
+      True{} <> True{} <> List.append(&2, Bool, Ledgers.Id.key(r), Tries.Trie.text(n))
 
 # the versions xs of the branch b, as notices
 def Notice.versions(+b: Spec.Branch, xs: List<&2, Ledgers.Id>) -> List<&2, Spec.Notice>:
@@ -2506,6 +2509,14 @@ def Notice.touches(ts: List<&2, Spec.Touch>) -> List<&2, Spec.Notice>:
       []
     case Con{t, r}:
       Spec.Notice.Touched{t} <> Notice.touches(r)
+
+# the nodes ns that lied in the store r, as notices
+def Notice.lies(+r: Ledgers.Id, ns: List<&2, String>) -> List<&2, Spec.Notice>:
+  match ns:
+    case Nil{}:
+      []
+    case Con{n, rest}:
+      Spec.Notice.Lied{r, n} <> Notice.lies(r, rest)
 
 # the notices of ns whose keys old does not hold
 def Notice.new(ns: List<&2, Spec.Notice>, +old: Tries.Trie<Unit>) -> List<&2, Spec.Notice>:
@@ -2560,6 +2571,16 @@ def Spec.Node.notices(s, t, since):
           ~Spec.Notice,
           ~Notice.key,
           Notice.touches(Spec.Node.affects(since, b)),
+          Tries.Trie.new(Unit)
+        )
+      )
+    case Spec.Topic.Lies{+r}:
+      Notice.new(
+        Notice.lies(r, Replicas.Node.liars(~Requests.Ask.machine(), s, r)),
+        Tries.Trie.put_keys(
+          ~Spec.Notice,
+          ~Notice.key,
+          Notice.lies(r, Replicas.Node.liars(~Requests.Ask.machine(), since, r)),
           Tries.Trie.new(Unit)
         )
       )
