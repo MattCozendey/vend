@@ -943,6 +943,80 @@ def Mark.grows(
     Stale.grows(r, i)
   )
 
+# the first tip of a new branch only grows a run's node
+def Branch.made.grows(
+  +r: Spec.Run,
+  +i: Ledgers.Id,
+  +b: String,
+  m: Maybe<&2, Spec.Made>
+) -> {Run.after(Spec.Run.state(r), Spec.Branch.made(r, i, b, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      {==}
+    case Some{Spec.Made{+t, +ds}}:
+      After.bind(
+        Spec.Run.state(r),
+        Spec.Run.content(r, Spec.Tip.content(Spec.Run.tip(r)), ds),
+        +r1 => Maybe.bind(
+          &2,
+          Spec.Run,
+          Spec.Run,
+          Spec.Run.add(r1, Spec.Log.start(b), Hashes.Hash.code(Spec.Tip.hash(t), [])),
+          r2 => Spec.Step.taken(r2, i, None{})
+        ),
+        Content.grows(r, Spec.Tip.content(Spec.Run.tip(r)), ds),
+        +r1 => After.bind(
+          Spec.Run.state(r1),
+          Spec.Run.add(r1, Spec.Log.start(b), Hashes.Hash.code(Spec.Tip.hash(t), [])),
+          r2 => Spec.Step.taken(r2, i, None{}),
+          Add.grows(r1, Spec.Log.start(b), Hashes.Hash.code(Spec.Tip.hash(t), [])),
+          r2 => Taken.grows(r2, i, None{})
+        )
+      )
+
+# a request for a branch only grows a run's node, once it is known whether
+# its version is one
+def Branch.ready.grows(
+  +r: Spec.Run,
+  +i: Ledgers.Id,
+  +st: Ledgers.Id,
+  +b: String,
+  +at: Maybe<&2, Ledgers.Id>,
+  m: Maybe<&2, Bool>
+) -> {Run.after(Spec.Run.state(r), Spec.Branch.ready(r, i, st, b, at, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      {==}
+    case Some{False{}}:
+      Stale.grows(r, i)
+    case Some{True{}}:
+      Branch.made.grows(
+        r,
+        i,
+        b,
+        Spec.Make.first(
+          Spec.Make.branch(Spec.Run.state(r), Spec.Line.chain(st, Some{b}), at),
+          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+        )
+      )
+
+# a request for a branch only grows a run's node
+def Branch.new.grows(
+  +r: Spec.Run,
+  +i: Ledgers.Id,
+  +st: Ledgers.Id,
+  +b: String,
+  +at: Maybe<&2, Ledgers.Id>,
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>
+) -> {Run.after(Spec.Run.state(r), Spec.Branch.new(r, i, st, b, at, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      {==}
+    case Some{Some{x}}:
+      Stale.grows(r, i)
+    case Some{None{}}:
+      Branch.ready.grows(r, i, st, b, at, Spec.Judge.ready_maybe(Spec.Run.state(r), at))
+
 # a change of a line only grows a run's node
 def On.grows(
   +r: Spec.Run,
@@ -952,19 +1026,14 @@ def On.grows(
   +ch: Spec.Change
 ) -> {Run.after(Spec.Run.state(r), Spec.Step.on(r, i, st, l, ch)) == True{}: Bool}:
   match l ch:
-    case None{} Spec.Change.Branch{a, b}:
-      Judged.grows(
+    case None{} Spec.Change.Branch{+a, +b}:
+      Branch.new.grows(
         r,
         i,
-        Spec.Change.owners(Spec.Change.Branch{a, b}),
-        Spec.Judge.change(
-          Spec.Run.state(r),
-          st,
-          None{},
-          Spec.Change.Branch{a, b},
-          Spec.Tip.content(Spec.Run.tip(r)),
-          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
-        )
+        st,
+        a,
+        b,
+        Spec.Node.find(Spec.Run.state(r), Spec.Tip.log(Spec.Run.tip(r)), Spec.Log.start(a))
       )
     case None{} Spec.Change.Group{a, b}:
       Judged.grows(
@@ -3260,6 +3329,100 @@ def Mark.kept(
     Add.kept(r, Spec.Log.out(i), Spec.Out.words(Spec.Out.Stale{}), k2, v)
   )
 
+# the first tip of a new branch keeps each key of a run's log, other than the
+# owners and the count
+def Branch.made.kept(
+  +r: Spec.Run,
+  +i: Ledgers.Id,
+  +b: String,
+  m: Maybe<&2, Spec.Made>,
+  +k2: List<&2, U32>,
+  +v: List<&2, U32>,
+  +n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
+  +n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
+) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Spec.Branch.made(r, i, b, m)):
+  match m:
+    case None{}:
+      hr => Unit{}
+    case Some{Spec.Made{+t, +ds}}:
+      hr => Keeps.bind(
+        k2,
+        v,
+        Spec.Run.content(r, Spec.Tip.content(Spec.Run.tip(r)), ds),
+        +r1 => Maybe.bind(
+          &2,
+          Spec.Run,
+          Spec.Run,
+          Spec.Run.add(r1, Spec.Log.start(b), Hashes.Hash.code(Spec.Tip.hash(t), [])),
+          r2 => Spec.Step.taken(r2, i, None{})
+        )
+      )(Content.kept(r, Spec.Tip.content(Spec.Run.tip(r)), ds, k2, v)(hr))(
+        +r1 => h1 => Keeps.bind(
+          k2,
+          v,
+          Spec.Run.add(r1, Spec.Log.start(b), Hashes.Hash.code(Spec.Tip.hash(t), [])),
+          r2 => Spec.Step.taken(r2, i, None{})
+        )(Add.kept(r1, Spec.Log.start(b), Hashes.Hash.code(Spec.Tip.hash(t), []), k2, v)(h1))(
+          r2 => h2 => Taken.kept(r2, i, None{}, k2, v, n0, n1)(h2)
+        )
+      )
+
+# a request for a branch keeps each key of a run's log, other than the owners
+# and the count, once it is known whether its version is one
+def Branch.ready.kept(
+  +r: Spec.Run,
+  +i: Ledgers.Id,
+  +st: Ledgers.Id,
+  +b: String,
+  +at: Maybe<&2, Ledgers.Id>,
+  m: Maybe<&2, Bool>,
+  +k2: List<&2, U32>,
+  +v: List<&2, U32>,
+  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
+  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
+) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Spec.Branch.ready(r, i, st, b, at, m)):
+  match m:
+    case None{}:
+      hr => Unit{}
+    case Some{False{}}:
+      Add.kept(r, Spec.Log.out(i), Spec.Out.words(Spec.Out.Stale{}), k2, v)
+    case Some{True{}}:
+      Branch.made.kept(
+        r,
+        i,
+        b,
+        Spec.Make.first(
+          Spec.Make.branch(Spec.Run.state(r), Spec.Line.chain(st, Some{b}), at),
+          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+        ),
+        k2,
+        v,
+        n0,
+        n1
+      )
+
+# a request for a branch keeps each key of a run's log, other than the owners
+# and the count
+def Branch.new.kept(
+  +r: Spec.Run,
+  +i: Ledgers.Id,
+  +st: Ledgers.Id,
+  +b: String,
+  +at: Maybe<&2, Ledgers.Id>,
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>,
+  +k2: List<&2, U32>,
+  +v: List<&2, U32>,
+  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
+  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
+) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Spec.Branch.new(r, i, st, b, at, m)):
+  match m:
+    case None{}:
+      hr => Unit{}
+    case Some{Some{x}}:
+      Add.kept(r, Spec.Log.out(i), Spec.Out.words(Spec.Out.Stale{}), k2, v)
+    case Some{None{}}:
+      Branch.ready.kept(r, i, st, b, at, Spec.Judge.ready_maybe(Spec.Run.state(r), at), k2, v, n0, n1)
+
 # a change of a line keeps each key of a run's log, other than the owners and
 # the count
 def On.kept(
@@ -3275,23 +3438,18 @@ def On.kept(
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Spec.Step.on(r, i, st, l, ch)):
   match l ch:
     case None{} Spec.Change.Branch{+a, +b}:
-      hr => Judged.kept(
+      Branch.new.kept(
         r,
         i,
-        Spec.Change.owners(Spec.Change.Branch{a, b}),
-        Spec.Judge.change(
-          Spec.Run.state(r),
-          st,
-          None{},
-          Spec.Change.Branch{a, b},
-          Spec.Tip.content(Spec.Run.tip(r)),
-          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
-        ),
+        st,
+        a,
+        b,
+        Spec.Node.find(Spec.Run.state(r), Spec.Tip.log(Spec.Run.tip(r)), Spec.Log.start(a)),
         k2,
         v,
         n0,
         n1
-      )(hr)
+      )
     case None{} Spec.Change.Group{+a, +b}:
       hr => Judged.kept(
         r,
@@ -5679,6 +5837,9 @@ def Spec.Chain.version_final(n, evs, s, c, k, x):
 
 def Spec.Chain.mark_final(n, evs, s, c, m, v):
   Chain.mark.kept(s, Spec.Node.after(n, evs, s), c, m, v, Spec.Node.after_keeps(n, evs, s))
+
+def Spec.Chain.start_final(n, evs, s, r, b, v):
+  Spec.Node.after_keeps(n, evs, s)(Ledgers.Chain{r, None{}})(Spec.Log.start(b))(v)({==})({==})
 
 # the answer b may come after the answer a, if there is an a
 def Follows.opt(ma: Maybe<&2, Spec.Answer>, mb: Maybe<&2, Spec.Answer>) -> Bool:

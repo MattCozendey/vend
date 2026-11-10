@@ -14,10 +14,11 @@ Delete each open item when the code makes it true.
   state.
 - **Tip** (`core/spec.bend`): what a line holds, as two trees named by one hash.
   - Content: resources (each a root of a rope), clashes, version vector, owner group; for a store
-    also its groups, the first tip of each branch, and the first key of each node.
+    also its groups and the first key of each node.
   - Log: a tree that only gains keys. Owners of the next step, count of versions, outcome of each
-    request, each version by number, each mark. An outcome, a version and a mark are written once
-    (`Run.add`).
+    request, each version by number, each mark; for a store also the first tip of each branch.
+    An outcome, a version, a mark and a first tip are written once (`Run.add`). A store makes a
+    branch once (`Step.branch`).
 - **Step**: a batch of requests, run in order from a tip (`Step.run`). A request that the log holds
   is skipped: a change counts once.
 - **Node**: its ledger, its head of each line (height and tip), and the requests that wait on each
@@ -99,6 +100,8 @@ README claim, then the law.
 - Every head is on the decided chain: `Node.after_on` (a head that is some decided steps from a
   head with a tip stays so, whatever the node does next). A node sets a head in four places: a
   step that it checked, and three that set only a head with no tip (`Path.moved`, `Path.set`).
+- Every node opens a branch at the same first tip: `Chain.start_final` (the log of the store
+  holds the first tip of a branch for good), with the one history of the store's line.
 - A majority is enough, also when the proposer is away: `Rounds.one` (two rounds of one height
   decide the same step, so "the rounds of a height decide one step", the premise of the laws
   above, holds). Its premises are the rules of rounds, for the ballots that the node holds:
@@ -123,9 +126,6 @@ Design (each needs a decision or new work; none is a proof detail):
 - **The rules of rounds are premises.** A node's own ballots follow them by construction
   (`Plan.lead`, `Plan.follow`, `Pass.to`, `Cast.round`), with no law yet. A node keeps a vote of
   another node without a check of `Allowed`; it only copies a vote that is allowed.
-- **The same first head.** `Node.after_on` and `Line.at_agrees` give one history for nodes that
-  start a line from the same first head. Not a law yet: that two nodes give a branch the same
-  first head (`Open.at` reads it from the store's content at the node's head of the store).
 - **Missing is not absent, the rest.** The write, resolve, merge and Own judges wait. Still to
   do: the version vector, `Tree.list` and `Tree.diff` (they walk and give no sign of a node that
   they lack), so a merge or a move can still act on a part of a tree. Then the laws: a merge

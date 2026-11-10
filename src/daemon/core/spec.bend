@@ -573,10 +573,6 @@ def Key.vector(c: Ledgers.Chain) -> List<&2, U32>:
 def Key.seal(n: String) -> List<&2, U32>:
   8 <> Codes.Code.text(n, [])
 
-# the key of where the line of the key k below a store starts
-def Key.start(k: List<&2, Bool>) -> List<&2, U32>:
-  5 <> Ledgers.Bits.code(k, [])
-
 # the value of a resource whose content is under the root m (none: removed)
 def Res.code(m: Maybe<&2, Ropes.Root>) -> List<&2, U32>:
   Codes.Code.maybe(~Ropes.Root, ~Ropes.Root.code, m, [])
@@ -593,18 +589,6 @@ def Res.of.read(m: Maybe<&2, Codes.Read<Maybe<&2, Ropes.Root>>>) -> Maybe<&2, Ro
 # the root of the content in the value ws of a resource, when it is there
 def Res.read(ws: List<&2, U32>) -> Maybe<&2, Ropes.Root>:
   Res.of.read(Codes.Code.maybe.read(~Ropes.Root, ~Ropes.Root.code.read, ws))
-
-# the value of where a line starts: the root of its first tree
-def Start.code(h: Maybe<&2, Hashes.Hash>) -> List<&2, U32>:
-  Codes.Code.maybe(~Hashes.Hash, ~Hashes.Hash.code, h, [])
-
-# the root in the value of where a line starts, flattened
-def Start.of.read(m: Maybe<&2, Codes.Read<Maybe<&2, Hashes.Hash>>>) -> Maybe<&2, Hashes.Hash>:
-  match m:
-    case Some{Codes.Read{x, Nil{}}}:
-      x
-    case _:
-      None{}
 
 # Node.get once the root node m of the tree is known. The node comes before
 # the path of the key (a hash): a tree with no node costs no hash, and a proof
@@ -832,6 +816,10 @@ def Log.version(n: U32) -> List<&2, U32>:
 # the key of the mark m
 def Log.mark(m: String) -> List<&2, U32>:
   4 <> Codes.Code.text(m, [])
+
+# the key of the first tip of the branch b, in the log of its store
+def Log.start(b: String) -> List<&2, U32>:
+  5 <> Codes.Code.text(b, [])
 
 # the outcome of a request: its owners refused it as stale, or took it as the
 # version of a number
@@ -2073,33 +2061,23 @@ def Own.fits(+os: List<&2, String>, ns: List<&2, String>) -> Bool:
 def Log.first(w: Work, os: List<&2, String>) -> Maybe<&2, Work>:
   Work.set(Work.at(w, None{}), Log.owners(), Ledgers.Owners.code(os, []))
 
-# the store's content h with the first tip of its new branch b: the content
-# start (the root of w), and a log whose owners are the store's owners os now
-def Make.put(b: String, start: Maybe<&2, Hashes.Hash>, h: Maybe<&2, Hashes.Hash>, +wl: Work) -> Maybe<&2, Work>:
-  +t = {Tip{start, Work.root(wl)}: Tip}
-  Maybe.bind(
-    &2,
-    Work,
-    Work,
-    Work.keep(Work.at(wl, h), [Tip.words(t)]),
-    w2 => Work.set(w2, Key.start(Line.key(b)), Start.code(Some{Tip.hash(t)}))
-  )
+# the first tip of a new branch, with the new nodes of its trees
+type Made is Data:
+  Made{tip: Tip, nodes: List<&2, List<&2, U32>>}
 
-# the trees of a make of the branch b, from its first content start, in the
-# content h of its store, whose owners are os
-def Make.work(
-  start: Maybe<&2, Work>,
-  b: String,
-  os: List<&2, String>,
-  h: Maybe<&2, Hashes.Hash>
-) -> Maybe<&2, Work>:
-  Maybe.bind(
-    &2,
-    Work,
-    Work,
-    start,
-    +w => Maybe.bind(&2, Work, Work, Log.first(w, os), wl => Make.put(b, Work.root(w), h, wl))
-  )
+# the first tip of a branch whose content is c, once its first log is on the
+# trees of m
+def Made.of(+c: Maybe<&2, Hashes.Hash>, m: Maybe<&2, Work>) -> Maybe<&2, Made>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Work{s, +l, ns}}:
+      Some{Made{Tip{c, l}, Tip.words(Tip{c, l}) <> ns}}
+
+# the first tip of a new branch, from its first content (the root of start),
+# with a log whose owners are the store's owners os now
+def Make.first(start: Maybe<&2, Work>, +os: List<&2, String>) -> Maybe<&2, Made>:
+  Maybe.bind(&2, Work, Made, start, +w => Made.of(Work.root(w), Log.first(w, os)))
 
 # the store tree in which an Own of the line l, at the content h, reads its
 # group: a store reads its own content; a branch, the content of the version
@@ -2217,12 +2195,6 @@ def Judge.change(
   os: List<&2, String>
 ) -> Maybe<&2, Verdict>:
   match l c:
-    case None{} Change.Branch{+b, +at}:
-      Judge.then(
-        Judge.ready_maybe(s, at),
-        h,
-        u => Work.take(Make.work(Make.branch(s, Line.chain(r, Some{b}), at), b, os, h))
-      )
     case None{} Change.Group{+g, +ms}:
       Judge.when(Bool.not(Group.loops.any(s, h, g, ms)), h, u => Work.take(Group.work(s, h, g, ms)))
     case None{} Change.Key{n, k}:
@@ -2402,12 +2374,85 @@ def Step.mark(+r: Run, +i: Ledgers.Id, +m: String) -> Maybe<&2, Run>:
     u => Step.stale(r, i)
   )
 
+# the run r with the first tip m of the new branch b of its store in its log,
+# then the request i taken (none: the node lacks a node)
+def Branch.made(+r: Run, +i: Ledgers.Id, +b: String, m: Maybe<&2, Made>) -> Maybe<&2, Run>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Made{+t, +ds}}:
+      Maybe.bind(
+        &2,
+        Run,
+        Run,
+        Run.content(r, Tip.content(Run.tip(r)), ds),
+        +r1 => Maybe.bind(
+          &2,
+          Run,
+          Run,
+          Run.add(r1, Log.start(b), Hashes.Hash.code(Tip.hash(t), [])),
+          r2 => Step.taken(r2, i, None{})
+        )
+      )
+
+# Step.branch once it is known whether the version that the branch starts at
+# is one (m; none: wait for it)
+def Branch.ready(
+  +r: Run,
+  +i: Ledgers.Id,
+  st: Ledgers.Id,
+  +b: String,
+  +at: Maybe<&2, Ledgers.Id>,
+  m: Maybe<&2, Bool>
+) -> Maybe<&2, Run>:
+  match m:
+    case None{}:
+      None{}
+    case Some{False{}}:
+      Step.stale(r, i)
+    case Some{True{}}:
+      Branch.made(
+        r,
+        i,
+        b,
+        Make.first(
+          Make.branch(Run.state(r), Line.chain(st, Some{b}), at),
+          Line.owners(Run.state(r), Run.tip(r))
+        )
+      )
+
+# Step.branch once what the log of the store holds for the branch is known
+# (m; none: the node lacks a part of the log)
+def Branch.new(
+  +r: Run,
+  +i: Ledgers.Id,
+  st: Ledgers.Id,
+  +b: String,
+  +at: Maybe<&2, Ledgers.Id>,
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>
+) -> Maybe<&2, Run>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Some{x}}:
+      Step.stale(r, i)
+    case Some{None{}}:
+      Branch.ready(r, i, st, b, at, Judge.ready_maybe(Run.state(r), at))
+
+# the run r of a store, after the request i for a new branch b from the
+# version at: the log gets the first tip of b, for good; a store makes a
+# branch once, so a branch that it has refuses the request
+def Step.branch(+r: Run, +i: Ledgers.Id, st: Ledgers.Id, +b: String, +at: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Run>:
+  Branch.new(r, i, st, b, at, Node.find(Run.state(r), Tip.log(Run.tip(r)), Log.start(b)))
+
 # the run r, after the request i of the change ch of the line l of the store
 # st
 def Step.on(+r: Run, i: Ledgers.Id, st: Ledgers.Id, l: Maybe<&2, String>, ch: Change) -> Maybe<&2, Run>:
   match l ch:
     case Some{b} Change.Mark{m, d}:
       Step.mark(r, i, m)
+    case None{} Change.Branch{+b, +at}:
+      Step.branch(r, i, st, b, at)
     case x +y:
       +s = Run.state(r)
       +t = Run.tip(r)
@@ -2963,23 +3008,21 @@ def Start.with(s: State(), i: Ledgers.Id, os: List<&2, String>, m: Maybe<&2, Wor
 def Node.start(+s: State(), i: Ledgers.Id, +os: List<&2, Owner>) -> State():
   Start.with(s, i, Owner.names(os), Seal.firsts(os, Some{Work{s, None{}, []}}))
 
-# the first tip of the branch b in the store content h, if the store made b
-def Branch.start(s: State(), h: Maybe<&2, Hashes.Hash>, b: String) -> Maybe<&2, Hashes.Hash>:
-  Maybe.bind(
-    &2,
-    List<&2, U32>,
-    Hashes.Hash,
-    Node.get(s, h, Key.start(Line.key(b))),
-    ws => Start.of.read(Codes.Code.maybe.read(~Hashes.Hash, ~Hashes.Hash.code.read, ws))
-  )
-
-# the first tip of the branch b of a store whose tip is m
+# the first tip of the branch b of a store whose tip is m, if the store made
+# b: the log of the store holds it, written once, so every node opens the
+# branch at the same tip (Chain.start_final)
 def Branch.first(s: State(), b: String, m: Maybe<&2, Tip>) -> Maybe<&2, Hashes.Hash>:
   match m:
     case None{}:
       None{}
     case Some{t}:
-      Branch.start(s, Tip.content(t), b)
+      Maybe.bind(
+        &2,
+        List<&2, U32>,
+        Hashes.Hash,
+        Node.get(s, Tip.log(t), Log.start(b)),
+        ws => Read.whole(Hashes.Hash, Hashes.Hash.code.read(ws))
+      )
 
 # Node.open once the head m of the line is known
 def Open.at(+s: State(), c: Ledgers.Chain, m: Maybe<&2, Head>) -> State():
@@ -5290,6 +5333,22 @@ law Chain.mark_final:
   for +v: Ledgers.Id
   {Chain.mark(s, c, m) == Some{v}: Maybe<&2, Ledgers.Id>}
     -> {Chain.mark(Node.after(n, evs, s), c, m) == Some{v}: Maybe<&2, Ledgers.Id>}
+
+# the first tip of a branch is for good: what the log of a store holds for a
+# branch, it holds whatever the node does next, so a node that opens the
+# branch later opens it at the same tip
+law Chain.start_final:
+  for +n: String
+  for +evs: List<&2, Deed>
+  for +s: State()
+  for +r: Ledgers.Id
+  for +b: String
+  for +v: List<&2, U32>
+  {Line.get(s, Ledgers.Chain{r, None{}}, Log.start(b)) == Some{v}: Maybe<&2, List<&2, U32>>}
+    -> {
+      Line.get(Node.after(n, evs, s), Ledgers.Chain{r, None{}}, Log.start(b))
+        == Some{v}: Maybe<&2, List<&2, U32>>
+    }
 
 # answers only move forward: a request that a node answers stays answered;
 # Stale and Refused are final; a taken change stays taken (Answer.follows)
