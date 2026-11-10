@@ -3257,6 +3257,19 @@ def Cast.act.of(m: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>) -> Maybe<&2, Ledge
 def Cast.act(s: State(), w: Ledgers.Where, p: String) -> Maybe<&2, Ledgers.Act>:
   Cast.act.of(Ledgers.State.get(~Ask, State.ledger(s), Ledgers.Slot.vote(w, p)))
 
+# the nodes that the vote m names, if m is a vote
+def Act.from(m: Maybe<&2, Ledgers.Act>) -> List<&2, String>:
+  match m:
+    case Some{Ledgers.Act.Vote{v, from}}:
+      from
+    case x:
+      []
+
+# the nodes whose passes allow the vote of the node p at the place w, as the
+# vote names them
+def Cast.from(s: State(), w: Ledgers.Where, p: String) -> List<&2, String>:
+  Act.from(Cast.act(s, w, p))
+
 # the highest round, up to k, to which the node n passed at the height h of
 # the line c (0: it passed to none)
 def Round.mine(+n: String, +s: State(), +c: Ledgers.Chain, +h: U32, k: Nat) -> Nat:
@@ -3295,6 +3308,15 @@ def Last.mine(+n: String, +s: State(), +c: Ledgers.Chain, +h: U32, k: Nat) -> Ma
         Cast.of(s, Ledgers.Where{c, h, 1n+p}, n),
         u => Last.mine(n, s, c, h, p)
       )
+
+# the last vote of the node n at the height h of the line c, in a round below
+# r, if it cast one
+def Last.below(+n: String, +s: State(), +c: Ledgers.Chain, +h: U32, r: Nat) -> Maybe<&2, Ledgers.Last>:
+  match r:
+    case 0n:
+      None{}
+    case 1n+p:
+      Last.mine(n, s, c, h, p)
 
 # the nodes of os whose pass to the place w the node s holds
 def Passes.of(+s: State(), +w: Ledgers.Where, os: List<&2, String>) -> List<&2, String>:
@@ -3359,18 +3381,44 @@ def Last.is(m: Maybe<&2, Ledgers.Last>, v: Ledgers.Vote) -> Bool:
     case Some{Ledgers.Last{r, x}}:
       Ledgers.Vote.is_eq(x, v)
 
+# the node s holds the pass to the place w of each of the nodes from
+def Passed.all(+s: State(), +w: Ledgers.Where, from: List<&2, String>) -> Bool:
+  match from:
+    case Nil{}:
+      True{}
+    case Con{o, r}:
+      List.all.if(
+        u => Passed.all(s, w, r),
+        Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Ledgers.State.passed(~Ask, State.ledger(s), w, o))
+      )
+
+# the nodes from are some of the owners os, each once, in their order
+def Owners.sub(os: List<&2, String>, from: List<&2, String>) -> Bool:
+  match os from:
+    case Nil{} Nil{}:
+      True{}
+    case Nil{} Con{f, fs}:
+      False{}
+    case Con{o, r} Nil{}:
+      True{}
+    case Con{o, +r} Con{+f, +fs}:
+      Shared.Bool.when(Bool, String.eq(f, o), u => Owners.sub(r, fs), u => Owners.sub(r, f <> fs))
+
 # the passes of the nodes from allow a vote for the step v at the place w of
-# the owners os: in the first round, any step; later, the nodes are the owners
-# that passed to w, as the proposer held them, they are a majority, and v is
-# the last vote of the highest round among them, if any
+# the owners os: in the first round, any step; later, the node holds the pass
+# to w of each of them, they are owners and a majority, and v is the last vote
+# of the highest round among them, if any
 def Allowed(+s: State(), +w: Ledgers.Where, +os: List<&2, String>, v: Ledgers.Vote, +from: List<&2, String>) -> Bool:
   List.any.if(
     u => List.all.if(
       u2 => List.all.if(
-        u3 => Last.is(Passes.last(s, w, from), v),
-        Major(os, from)
+        u3 => List.all.if(
+          u4 => Last.is(Passes.last(s, w, from), v),
+          Major(os, from)
+        ),
+        Owners.sub(os, from)
       ),
-      Ledgers.Owners.is_eq(Passes.of(s, w, from), from)
+      Passed.all(s, w, from)
     ),
     Nat.is_eq(Where.round(w), 0n)
   )
@@ -3462,8 +3510,8 @@ def Plan.of(
       )
 
 # s with the node n's pass to the place w, when n is one of the owners os and
-# did not pass to w: it names its last vote at the height, in a round up to k
-def Pass.to(+n: String, +s: State(), +w: Ledgers.Where, os: List<&2, String>, k: Nat) -> State():
+# did not pass to w: it names its last vote at the height, in a round below
+def Pass.to(+n: String, +s: State(), +w: Ledgers.Where, os: List<&2, String>) -> State():
   match w:
     case Ledgers.Where{+c, +h, +r}:
       Shared.Bool.when(
@@ -3480,7 +3528,7 @@ def Pass.to(+n: String, +s: State(), +w: Ledgers.Where, os: List<&2, String>, k:
           s,
           Ledgers.Where{c, h, r},
           n,
-          Ledgers.Act.Pass{Last.mine(n, s, c, h, k)},
+          Ledgers.Act.Pass{Last.below(n, s, c, h, r)},
           Seal.chain(s, Where.store(Ledgers.Where{c, h, r}), n)
         ),
         u => s
@@ -3493,7 +3541,7 @@ def Round.join(+n: String, +s: State(), +c: Ledgers.Chain, +h: U32, os: List<&2,
   Shared.Bool.when(
     State(),
     Nat.is_lt(Round.mine(n, s, c, h, top), top),
-    u => Pass.to(n, s, Ledgers.Where{c, h, top}, os, top),
+    u => Pass.to(n, s, Ledgers.Where{c, h, top}, os),
     u => s
   )
 
@@ -3528,8 +3576,7 @@ def Pass.at(+n: String, +s: State(), +c: Ledgers.Chain, h: Head, m: Maybe<&2, Ti
         n,
         s,
         Ledgers.Where{c, next, 1n+Round.mine(n, s, c, next, k)},
-        Line.owners(s, t),
-        k
+        Line.owners(s, t)
       )
     case x y:
       s
@@ -3649,6 +3696,47 @@ def Height.One(s: State(), c: Ledgers.Chain, h: U32, os: List<&2, String>) -> Ty
   } -> {
     Ledgers.State.decide(~Ask, State.ledger(s), Ledgers.Where{c, h, r2}, os) == Some{v2}: Maybe<&2, Ledgers.Vote>
   } -> {v1 == v2: Ledgers.Vote}
+
+# The rules of rounds, for the ballots that s holds at the height h of the line
+# c. A node that follows them makes them true of its own ballots; that every
+# node follows them is the premise of Rounds.one.
+
+# that the passes that a vote names allow it (Allowed), for the owners os
+def Rounds.Allow(s: State(), c: Ledgers.Chain, h: U32, os: List<&2, String>) -> Type:
+  @r: Nat -> @q: String -> @v: Ledgers.Vote -> {
+    Cast.of(s, Ledgers.Where{c, h, r}, q) == Some{v}: Maybe<&2, Ledgers.Vote>
+  } -> {
+    Allowed(s, Ledgers.Where{c, h, r}, os, v, Cast.from(s, Ledgers.Where{c, h, r}, q)) == True{}: Bool
+  }
+
+# that a pass names the last vote of its node below its round: a node that
+# passed to a round casts no vote below it
+def Rounds.Last(s: State(), c: Ledgers.Chain, h: U32) -> Type:
+  @r: Nat -> @q: String -> @l: Maybe<&2, Ledgers.Last> -> {
+    Ledgers.State.passed(~Ask, State.ledger(s), Ledgers.Where{c, h, r}, q)
+      == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+  } -> {l == Last.below(q, s, c, h, r): Maybe<&2, Ledgers.Last>}
+
+# that the votes of one round are for one step: one owner proposes, and the
+# others copy
+def Rounds.Same(s: State(), c: Ledgers.Chain, h: U32) -> Type:
+  @r: Nat -> @q1: String -> @q2: String -> @a: Ledgers.Vote -> @b: Ledgers.Vote -> {
+    Cast.of(s, Ledgers.Where{c, h, r}, q1) == Some{a}: Maybe<&2, Ledgers.Vote>
+  } -> {
+    Cast.of(s, Ledgers.Where{c, h, r}, q2) == Some{b}: Maybe<&2, Ledgers.Vote>
+  } -> {a == b: Ledgers.Vote}
+
+# the rounds of a height decide one step, when the ballots follow the rules
+# of rounds: a later round can only decide what an earlier round decided
+law Rounds.one:
+  for ~s: State()
+  for ~c: Ledgers.Chain
+  for ~h: U32
+  for ~os: List<&2, String>
+  for ~fa: Rounds.Allow(s, c, h, os)
+  for ~fb: Rounds.Last(s, c, h)
+  for ~fc: Rounds.Same(s, c, h)
+  Height.One(s, c, h, os)
 
 # the step that the owners in the tip of the head h decided next on the line
 # c, in a round up to k, if they did

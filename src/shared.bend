@@ -1932,3 +1932,156 @@ def List.all2(~A: Data, ~B: Data, ~r: A -> B -> Bool, xs: List<&2, A>, ys: List<
     case _ _:
       False{}
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# no number is less than zero
+def Nat.lt_zero(a: Nat) -> {Nat.is_lt(a, 0n) == True{}: Bool} -> Empty:
+  h => Bool.false_ne_true(Nat.lt_pos(a, 0n)(h))
+
+# a number at most zero is zero
+def Nat.le_zero_eq(a: Nat) -> {Nat.is_le(a, 0n) == True{}: Bool} -> {a == 0n: Nat}:
+  match a:
+    case 0n:
+      h => {==}
+    case 1n+p:
+      h => Empty.absurd({1n+p == 0n: Nat}, Bool.false_ne_true(h))
+
+# a number at most 1 + p that is not 1 + p is at most p
+def Nat.le_step(
+  a: Nat,
+  p: Nat
+) -> {Nat.is_le(a, 1n+p) == True{}: Bool} -> {Nat.is_eq(a, 1n+p) == False{}: Bool} -> {Nat.is_le(a, p) == True{}: Bool}:
+  match a p:
+    case 0n q:
+      h => k => Nat.le_zero(q)
+    case 1n+0n 0n:
+      h => k => Equal.sym(Bool, True{}, False{}, k)
+    case 2n+b 0n:
+      h => k => h
+    case 1n+b 1n+q:
+      h => k => Nat.le_step(b, q)(h)(k)
+
+# of two numbers, one is at most the other
+def Nat.nle_le(a: Nat, b: Nat) -> {Nat.is_le(a, b) == False{}: Bool} -> {Nat.is_le(b, a) == True{}: Bool}:
+  match a b:
+    case 0n 0n:
+      h => {==}
+    case 0n 1n+q:
+      h => Equal.sym(Bool, True{}, False{}, h)
+    case 1n+p 0n:
+      h => {==}
+    case 1n+p 1n+q:
+      h => Nat.nle_le(p, q)(h)
+
+# a number not less than another is at least it
+def Nat.nlt_le(a: Nat, b: Nat) -> {Nat.is_lt(a, b) == False{}: Bool} -> {Nat.is_le(b, a) == True{}: Bool}:
+  match a b:
+    case 0n 0n:
+      h => {==}
+    case 0n 1n+q:
+      h => Equal.sym(Bool, True{}, False{}, h)
+    case 1n+p 0n:
+      h => {==}
+    case 1n+p 1n+q:
+      h => Nat.nlt_le(p, q)(h)
+
+# a number is less than its successor
+def Nat.lt_succ(a: Nat) -> {Nat.is_lt(a, 1n+a) == True{}: Bool}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+p:
+      Nat.lt_succ(p)
+
+# a number is at most its sum with another
+def Nat.le_add(y: Nat, +m: Nat) -> {Nat.is_le(m, Nat.add(y, m)) == True{}: Bool}:
+  match y:
+    case 0n:
+      Nat.le_refl(m)
+    case 1n+(+p):
+      Nat.le_succ(m, Nat.add(p, m))(Nat.le_add(p, m))
+
+# Nat.pigeon, with the second terms of the sums apart (g and m)
+def Nat.pigeon.at(
+  f: Nat,
+  n: Nat,
+  +y: Nat,
+  +t: Nat,
+  +g: Nat,
+  +m: Nat
+) -> {Nat.is_le(f, n) == True{}: Bool}
+  -> {Nat.is_lt(n, y) == True{}: Bool}
+  -> {Nat.is_le(g, m) == True{}: Bool}
+  -> {Nat.is_le(Nat.add(y, m), t) == True{}: Bool}
+  -> {Nat.is_lt(t, Nat.add(f, g)) == True{}: Bool}
+  -> Empty:
+  match f n y t:
+    case 0n n1 y1 t1:
+      h1 => h2 => hg => h3 => h4 =>
+        Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            Nat.is_lt(g, g),
+            True{},
+            Equal.sym(Bool, Nat.is_lt(g, g), False{}, Nat.lt_irrefl(g)),
+            Nat.le_lt(g, t1, g)(
+              Nat.le_trans(g, m, t1)(hg)(
+                Nat.le_trans(m, Nat.add(y1, m), t1)(Nat.le_add(y1, m))(h3)
+              )
+            )(h4)
+          )
+        )
+    case 1n+p 0n y1 t1:
+      h1 => h2 => hg => h3 => h4 => Bool.false_ne_true(h1)
+    case 1n+p 1n+q 0n t1:
+      h1 => h2 => hg => h3 => h4 => Bool.false_ne_true(h2)
+    case 1n+p 1n+q 1n+z 0n:
+      h1 => h2 => hg => h3 => h4 => Bool.false_ne_true(h3)
+    case 1n+p 1n+q 1n+z 1n+u:
+      h1 => h2 => hg => h3 => h4 => Nat.pigeon.at(p, q, z, u, g, m)(h1)(h2)(hg)(h3)(h4)
+
+# f is at most n, n is less than y, and y + n is at most t: t is not less
+# than f + f
+def Nat.pigeon(
+  +f: Nat,
+  +n: Nat,
+  y: Nat,
+  t: Nat
+) -> {Nat.is_le(f, n) == True{}: Bool}
+  -> {Nat.is_lt(n, y) == True{}: Bool}
+  -> {Nat.is_le(Nat.add(y, n), t) == True{}: Bool}
+  -> {Nat.is_lt(t, Nat.add(f, f)) == True{}: Bool}
+  -> Empty:
+  +h1 => h2 => h3 => h4 => Nat.pigeon.at(f, n, y, t, f, n)(h1)(h2)(h1)(h3)(h4)
+
+# a is not at most c, and b is: a is not at most b
+def Nat.nle_trans.at(
+  a: Nat,
+  b: Nat,
+  c: Nat,
+  x: Bool
+) -> {Nat.is_le(a, b) == x: Bool}
+  -> {Nat.is_le(a, c) == False{}: Bool}
+  -> {Nat.is_le(b, c) == True{}: Bool}
+  -> {x == False{}: Bool}:
+  match x:
+    case True{}:
+      ex => h => k =>
+        Equal.trans(
+          Bool,
+          True{},
+          Nat.is_le(a, c),
+          False{},
+          Equal.sym(Bool, Nat.is_le(a, c), True{}, Nat.le_trans(a, b, c)(ex)(k)),
+          h
+        )
+    case False{}:
+      ex => h => k => {==}
+
+# a is not at most c, and b is: a is not at most b
+def Nat.nle_trans(
+  +a: Nat,
+  +b: Nat,
+  c: Nat
+) -> {Nat.is_le(a, c) == False{}: Bool} -> {Nat.is_le(b, c) == True{}: Bool} -> {Nat.is_le(a, b) == False{}: Bool}:
+  h => k => Nat.nle_trans.at(a, b, c, Nat.is_le(a, b))({==})(h)(k)

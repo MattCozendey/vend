@@ -6,10 +6,8 @@ import ./shared/cell.bend as Cells
 # -------
 # The owners of a decision each cast at most one ballot. A choice has a
 # majority when more ballots are for it than are not. A bucket is decided by a
-# majority; else, once every owner cast a ballot, by the candidate of one pass
-# over the ballots (Quorum.pass). A decision only gains information as ballots
-# arrive, so it never changes (Quorum.decide_kept), and a split stops no line
-# whose owners all vote.
+# majority only (Quorum.major). A decision only gains information as ballots
+# arrive, so it never changes (Quorum.major_kept).
 
 # the ballot v is for x
 def Quorum.hit(~B: Data, ~same: B -> B -> Bool, v: Maybe<&2, Cells.Cell<B>>, x: B) -> Bool:
@@ -85,16 +83,6 @@ def Quorum.winner(
     case Con{k, r}:
       Quorum.winner.at(~B, ~same, k, Quorum.winner(~B, ~same, r, bs), bs)
 
-# every ballot of bs is cast
-def Quorum.full(-B: Data, bs: List<&2, Maybe<&2, Cells.Cell<B>>>) -> Bool:
-  match bs:
-    case Nil{}:
-      True{}
-    case Con{None{}, r}:
-      False{}
-    case Con{Some{v}, r}:
-      Quorum.full(B, r)
-
 # a candidate and its count
 type Pass<-B: Data> is Data:
   Pass{cand: Maybe<&2, B>, count: Nat}
@@ -153,33 +141,6 @@ def Quorum.pass(~B: Data, ~same: B -> B -> Bool, bs: List<&2, Maybe<&2, Cells.Ce
       Pass{None{}, 0n}
     case Con{v, r}:
       Quorum.step(~B, ~same, v, Quorum.pass(~B, ~same, r))
-
-# the decision of bs once the winner w is known: w; else, when every ballot is
-# cast, the candidate of one pass over them
-def Quorum.decide.of(
-  ~B: Data,
-  ~same: B -> B -> Bool,
-  w: Maybe<&2, B>,
-  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>
-) -> Maybe<&2, B>:
-  match w:
-    case Some{x}:
-      Some{x}
-    case None{}:
-      Shared.Bool.when(
-        Maybe<&2, B>,
-        Quorum.full(B, bs),
-        u => Pass.cand(B, Quorum.pass(~B, ~same, bs)),
-        u => None{}
-      )
-
-# what the ballots bs decide, if anything yet
-def Quorum.decide(
-  ~B: Data,
-  ~same: B -> B -> Bool,
-  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>
-) -> Maybe<&2, B>:
-  Quorum.decide.of(~B, ~same, Quorum.winner(~B, ~same, bs, bs), bs)
 
 # Laws
 # ----
@@ -759,248 +720,6 @@ def Quorum.winner_of(
       hx
     )(Shared.Nat.lt_pos(Quorum.no(~Ty, ~same, bs, x), Quorum.yes(~Ty, ~same, bs, x))(hx))
 
-# a ballot kept from a cast one is the same ballot
-def Quorum.cast_eq(
-  ~B: Data,
-  ~same: B -> B -> Bool,
-  ~laws: Shared.Eq.Laws(B, same),
-  c: Cells.Cell<B>,
-  w: Maybe<&2, Cells.Cell<B>>
-) -> {
-  Cells.Cell.keeps(~B, ~same, Some{c}, w) == True{}: Bool
-} -> {w == Some{c}: Maybe<&2, Cells.Cell<B>>}:
-  match c w:
-    case Cells.One{b} w:
-      Cells.Cell.keeps_value(~B, ~same, ~laws, b, w)
-    case Cells.Many{} Some{Cells.Many{}}:
-      h => {==}
-    case Cells.Many{} Some{Cells.One{x}}:
-      h => Empty.absurd(
-        {Some{Cells.One{x}} == Some{Cells.Many{}}: Maybe<&2, Cells.Cell<B>>},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Cells.Many{} None{}:
-      h => Empty.absurd(
-        {None{} == Some{Cells.Many{}}: Maybe<&2, Cells.Cell<B>>},
-        Shared.Bool.false_ne_true(h)
-      )
-
-# once every ballot is cast, the ballots that keep them are the same ballots
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-def Quorum.full_keeps(
-  ~Ty: Data,
-  ~same: Ty -> Ty -> Bool,
-  ~laws: Shared.Eq.Laws(Ty, same),
-  bs: List<&2, Maybe<&2, Cells.Cell<Ty>>>,
-  bs2: List<&2, Maybe<&2, Cells.Cell<Ty>>>
-) -> {Quorum.full(Ty, bs) == True{}: Bool}
-  -> {
-    Shared.List.all2(
-      ~Maybe<&2, Cells.Cell<Ty>>,
-      ~Maybe<&2, Cells.Cell<Ty>>,
-      ~Cells.Cell.keeps(~Ty, ~same),
-      bs,
-      bs2
-    )
-      == True{}: Bool
-  }
-  -> {bs2 == bs: List<&2, Maybe<&2, Cells.Cell<Ty>>>}:
-  match bs bs2:
-    case Nil{} Nil{}:
-      f => k => {==}
-    case Con{None{}, r} w:
-      f => k => Empty.absurd(
-        {w == None{} <> r: List<&2, Maybe<&2, Cells.Cell<Ty>>>},
-        Shared.Bool.false_ne_true(f)
-      )
-    case Con{Some{+v}, +r} Con{+w, +r2}:
-      f => +k =>
-        +kh = Cells.Cell.keeps(~Ty, ~same, Some{v}, w)
-        kr = Shared.List.all2(
-          ~Maybe<&2, Cells.Cell<Ty>>,
-          ~Maybe<&2, Cells.Cell<Ty>>,
-          ~Cells.Cell.keeps(~Ty, ~same),
-          r,
-          r2
-        )
-        %Quorum.cast_eq(~Ty, ~same, ~laws, v, w)(Shared.Bool.and_true_left(kh, kr)(k)):
-          {w <> r2 == _ <> r: List<&2, Maybe<&2, Cells.Cell<Ty>>>}
-        %Quorum.full_keeps(~Ty, ~same, ~laws, r, r2)(f)(Shared.Bool.and_true_right(kh, kr)(k)):
-          {w <> r2 == w <> _: List<&2, Maybe<&2, Cells.Cell<Ty>>>}
-        {==}
-    case Con{Some{v}, r} Nil{}:
-      f => k => Empty.absurd(
-        {[] == Some{v} <> r: List<&2, Maybe<&2, Cells.Cell<Ty>>>},
-        Shared.Bool.false_ne_true(k)
-      )
-    case Nil{} Con{w, r2}:
-      f => k => Empty.absurd(
-        {w <> r2 == []: List<&2, Maybe<&2, Cells.Cell<Ty>>>},
-        Shared.Bool.false_ne_true(k)
-      )
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
-
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# Quorum.decide_kept when no vote won, by whether every ballot is cast (f)
-def Quorum.decide_kept.full(
-  ~B: Data,
-  ~same: B -> B -> Bool,
-  ~laws: Shared.Eq.Laws(B, same),
-  bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
-  bs2: List<&2, Maybe<&2, Cells.Cell<B>>>,
-  -x: B,
-  f: Bool,
-  +ef: {Quorum.full(B, bs) == f: Bool},
-  ew: {Quorum.winner(~B, ~same, bs, bs) == None{}: Maybe<&2, B>}
-) -> {
-  Shared.List.all2(
-    ~Maybe<&2, Cells.Cell<B>>,
-    ~Maybe<&2, Cells.Cell<B>>,
-    ~Cells.Cell.keeps(~B, ~same),
-    bs,
-    bs2
-  )
-    == True{}: Bool
-} -> {
-  Shared.Bool.when(
-    Maybe<&2, B>,
-    f,
-    u => Pass.cand(B, Quorum.pass(~B, ~same, bs)),
-    u => None{}
-  )
-    == Some{x}: Maybe<&2, B>
-} -> {Quorum.decide(~B, ~same, bs2) == Some{x}: Maybe<&2, B>}:
-  match f:
-    case True{}:
-      k => h =>
-        %Equal.sym(
-          List<&2, Maybe<&2, Cells.Cell<B>>>,
-          bs2,
-          bs,
-          Quorum.full_keeps(~B, ~same, ~laws, bs, bs2)(ef)(k)
-        ): {Quorum.decide(~B, ~same, _) == Some{x}: Maybe<&2, B>}
-        %Equal.sym(Maybe<&2, B>, Quorum.winner(~B, ~same, bs, bs), None{}, ew):
-          {Quorum.decide.of(~B, ~same, _, bs) == Some{x}: Maybe<&2, B>}
-        %Equal.sym(Bool, Quorum.full(B, bs), True{}, ef):
-          {
-            Shared.Bool.when(
-              Maybe<&2, B>,
-              _,
-              u => Pass.cand(B, Quorum.pass(~B, ~same, bs)),
-              u => None{}
-            )
-              == Some{x}: Maybe<&2, B>
-          }
-        h
-    case False{}:
-      k => h => Empty.absurd(
-        {Quorum.decide(~B, ~same, bs2) == Some{x}: Maybe<&2, B>},
-        Shared.Maybe.none_ne_some(B, x, h)
-      )
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# Quorum.decide_kept once the winner w of bs is known
-def Quorum.decide_kept.at(
-  ~B: Data,
-  ~same: B -> B -> Bool,
-  ~laws: Shared.Eq.Laws(B, same),
-  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
-  +bs2: List<&2, Maybe<&2, Cells.Cell<B>>>,
-  +x: B,
-  w: Maybe<&2, B>,
-  ew: {Quorum.winner(~B, ~same, bs, bs) == w: Maybe<&2, B>}
-) -> {
-  Shared.List.all2(
-    ~Maybe<&2, Cells.Cell<B>>,
-    ~Maybe<&2, Cells.Cell<B>>,
-    ~Cells.Cell.keeps(~B, ~same),
-    bs,
-    bs2
-  )
-    == True{}: Bool
-} -> {
-  Quorum.decide.of(~B, ~same, w, bs) == Some{x}: Maybe<&2, B>
-} -> {Quorum.decide(~B, ~same, bs2) == Some{x}: Maybe<&2, B>}:
-  match w:
-    case Some{y}:
-      +k => h =>
-        +hy = Quorum.has_winner(~B, ~same, bs, bs, y)(ew)
-        %Equal.sym(
-          Maybe<&2, B>,
-          Quorum.winner(~B, ~same, bs2, bs2),
-          Some{x},
-          Quorum.winner_of(
-            ~B,
-            ~same,
-            ~laws,
-            bs2,
-            x
-          )(
-            Quorum.has_more(
-              ~B,
-              ~same,
-              ~laws,
-              bs,
-              bs2,
-              x
-            )(k)(%Shared.Maybe.some_inj(B, y, x, h): {Quorum.has(~B, ~same, bs, _) == True{}: Bool}
-              hy)
-          )
-        ): {Quorum.decide.of(~B, ~same, _, bs2) == Some{x}: Maybe<&2, B>}
-        {==}
-    case None{}:
-      Quorum.decide_kept.full(~B, ~same, ~laws, bs, bs2, x, Quorum.full(B, bs), {==}, ew)
-
-# a decision stays when every ballot is kept: it is final
-law Quorum.decide_kept:
-  for ~B: Data
-  for ~same: B -> B -> Bool
-  for ~laws: Shared.Eq.Laws(B, same)
-  for +bs: List<&2, Maybe<&2, Cells.Cell<B>>>
-  for +bs2: List<&2, Maybe<&2, Cells.Cell<B>>>
-  for +x: B
-  {
-    Shared.List.all2(
-      ~Maybe<&2, Cells.Cell<B>>,
-      ~Maybe<&2, Cells.Cell<B>>,
-      ~Cells.Cell.keeps(~B, ~same),
-      bs,
-      bs2
-    )
-      == True{}: Bool
-  }
-    -> {Quorum.decide(~B, ~same, bs) == Some{x}: Maybe<&2, B>}
-    -> {Quorum.decide(~B, ~same, bs2) == Some{x}: Maybe<&2, B>}
-
-def Quorum.decide_kept(ty, same, laws, bs, bs2, x):
-  Quorum.decide_kept.at(~ty, ~same, ~laws, bs, bs2, x, Quorum.winner(~ty, ~same, bs, bs), {==})
-
-# a sole owner's vote decides
-law Quorum.decide_one:
-  for ~B: Data
-  for ~same: B -> B -> Bool
-  for ~laws: Shared.Eq.Laws(B, same)
-  for +x: B
-  {Quorum.decide(~B, ~same, [Some{Cells.One{x}}]) == Some{x}: Maybe<&2, B>}
-
-def Quorum.decide_one(ty, same, laws, x):
-  %Equal.sym(Bool, same(x, x), True{}, Shared.Eq.refl(~ty, ~same, laws, x)):
-    {
-      Quorum.decide.of(
-        ~ty,
-        ~same,
-        Bool.pick(
-          Maybe<&2, ty>,
-          Nat.is_lt(Shared.Nat.add_if(Bool.not(_), 0n), Shared.Nat.add_if(_, 0n)),
-          Some{x},
-          None{}
-        ),
-        [Some{Cells.One{x}}]
-      )
-        == Some{x}: Maybe<&2, ty>
-    }
-  {==}
-
 # One pass
 # --------
 # Quorum.winner tries each ballot against all: n^2 for n owners. A pass in the
@@ -1029,14 +748,6 @@ def Quorum.winner_fast(
   +bs: List<&2, Maybe<&2, Cells.Cell<B>>>
 ) -> Maybe<&2, B>:
   Quorum.winner_fast.of(~B, ~same, bs, Quorum.pass(~B, ~same, bs))
-
-# what the ballots bs decide, as Quorum.decide does (Quorum.decide_fast_eq)
-def Quorum.decide_fast(
-  ~B: Data,
-  ~same: B -> B -> Bool,
-  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>
-) -> Maybe<&2, B>:
-  Quorum.decide.of(~B, ~same, Quorum.winner_fast(~B, ~same, bs), bs)
 
 # The pass's bound
 # ----------------
@@ -1770,19 +1481,77 @@ def Quorum.winner_fast_eq(
     {==}
   )
 
-# what the ballots decide in one pass is what they decide
-law Quorum.decide_fast_eq:
+# Majority
+# --------
+# A step is what a majority of the owners cast. Nothing else decides: a split
+# decides nothing, and a later round does.
+
+# the vote with a majority of bs, if any
+def Quorum.major(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>
+) -> Maybe<&2, B>:
+  Quorum.winner_fast(~B, ~same, bs)
+
+# what a majority cast has a majority
+def Quorum.major_has(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~laws: Shared.Eq.Laws(B, same),
+  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  +x: B
+) -> {Quorum.major(~B, ~same, bs) == Some{x}: Maybe<&2, B>}
+  -> {Quorum.has(~B, ~same, bs, x) == True{}: Bool}:
+  h =>
+    Quorum.has_winner(~B, ~same, bs, bs, x)(
+      Equal.trans(
+        Maybe<&2, B>,
+        Quorum.winner(~B, ~same, bs, bs),
+        Quorum.winner_fast(~B, ~same, bs),
+        Some{x},
+        Equal.sym(
+          Maybe<&2, B>,
+          Quorum.winner_fast(~B, ~same, bs),
+          Quorum.winner(~B, ~same, bs, bs),
+          Quorum.winner_fast_eq(~B, ~same, ~laws, bs)
+        ),
+        h
+      )
+    )
+
+# what a majority cast stays so when every ballot is kept
+law Quorum.major_kept:
   for ~B: Data
   for ~same: B -> B -> Bool
   for ~laws: Shared.Eq.Laws(B, same)
   for +bs: List<&2, Maybe<&2, Cells.Cell<B>>>
-  {Quorum.decide_fast(~B, ~same, bs) == Quorum.decide(~B, ~same, bs): Maybe<&2, B>}
+  for +bs2: List<&2, Maybe<&2, Cells.Cell<B>>>
+  for +x: B
+  {
+    Shared.List.all2(
+      ~Maybe<&2, Cells.Cell<B>>,
+      ~Maybe<&2, Cells.Cell<B>>,
+      ~Cells.Cell.keeps(~B, ~same),
+      bs,
+      bs2
+    )
+      == True{}: Bool
+  }
+    -> {Quorum.major(~B, ~same, bs) == Some{x}: Maybe<&2, B>}
+    -> {Quorum.major(~B, ~same, bs2) == Some{x}: Maybe<&2, B>}
 
-def Quorum.decide_fast_eq(ty, same, laws, bs):
-  %Equal.sym(
-    Maybe<&2, ty>,
-    Quorum.winner_fast(~ty, ~same, bs),
-    Quorum.winner(~ty, ~same, bs, bs),
-    Quorum.winner_fast_eq(~ty, ~same, ~laws, bs)
-  ): {Quorum.decide.of(~ty, ~same, _, bs) == Quorum.decide(~ty, ~same, bs): Maybe<&2, ty>}
-  {==}
+def Quorum.major_kept(ty, same, laws, bs, bs2, x):
+  k => h =>
+    Equal.trans(
+      Maybe<&2, ty>,
+      Quorum.winner_fast(~ty, ~same, bs2),
+      Quorum.winner(~ty, ~same, bs2, bs2),
+      Some{x},
+      Quorum.winner_fast_eq(~ty, ~same, ~laws, bs2),
+      Quorum.winner_of(~ty, ~same, ~laws, bs2, x)(
+        Quorum.has_more(~ty, ~same, ~laws, bs, bs2, x)(k)(
+          Quorum.major_has(~ty, ~same, ~laws, bs, x)(h)
+        )
+      )
+    )

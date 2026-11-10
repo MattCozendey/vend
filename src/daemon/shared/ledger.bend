@@ -17,9 +17,8 @@ import ./shared/text.bend as Texts
 # times.
 #
 # A line is a store, or a line below it. Its owners cast one ballot each for
-# the step at each height; a step is what a majority of them cast, or, once
-# all of them cast, what Quorum.decide picks of their ballots; it stays as the
-# ledger grows (State.decide_grows). What
+# the step at each round of each height; a step is what a majority of them
+# cast in one round; it stays as the ledger grows (State.decide_grows). What
 # a step means is the caller's: the ledger does not read a line's state.
 
 # Names
@@ -1098,7 +1097,7 @@ def Bucket.ballots(
 
 # what the ballots of ms in the bucket b decide
 def Bucket.decide(~Q: Data, b: State(Q), ms: List<&2, String>) -> Maybe<&2, Vote>:
-  Quorums.Quorum.decide_fast(~Vote, ~Vote.is_eq, Bucket.ballots(~Q, b, ms))
+  Quorums.Quorum.major(~Vote, ~Vote.is_eq, Bucket.ballots(~Q, b, ms))
 
 # the bucket of the place w in s
 def State.bucket(~Q: Data, s: State(Q), w: Where) -> State(Q):
@@ -1790,36 +1789,9 @@ def State.decide_grows(ty, same, laws, s, s2, w, ms, v):
       +b1 = Bucket.ballots(~ty, State.under(~ty, s, p), ms)
       +b2 = Bucket.ballots(~ty, State.under(~ty, s2, p), ms)
       +gr => hd =>
-        %Equal.sym(
-          Maybe<&2, Vote>,
-          Quorums.Quorum.decide_fast(~Vote, ~Vote.is_eq, b2),
-          Quorums.Quorum.decide(~Vote, ~Vote.is_eq, b2),
-          Quorums.Quorum.decide_fast_eq(~Vote, ~Vote.is_eq, ~Vote.laws(), b2)
-        ): {_ == Some{v}: Maybe<&2, Vote>}
-        Quorums.Quorum.decide_kept(
-          ~Vote,
-          ~Vote.is_eq,
-          ~Vote.laws(),
-          b1,
-          b2,
-          v
-        )(
+        Quorums.Quorum.major_kept(~Vote, ~Vote.is_eq, ~Vote.laws(), b1, b2, v)(
           Ballots.grows(~ty, ~same, ~laws, s, s2, p, ms, gr)
-        )(
-          Equal.trans(
-            Maybe<&2, Vote>,
-            Quorums.Quorum.decide(~Vote, ~Vote.is_eq, b1),
-            Quorums.Quorum.decide_fast(~Vote, ~Vote.is_eq, b1),
-            Some{v},
-            Equal.sym(
-              Maybe<&2, Vote>,
-              Quorums.Quorum.decide_fast(~Vote, ~Vote.is_eq, b1),
-              Quorums.Quorum.decide(~Vote, ~Vote.is_eq, b1),
-              Quorums.Quorum.decide_fast_eq(~Vote, ~Vote.is_eq, ~Vote.laws(), b1)
-            ),
-            hd
-          )
-        )
+        )(hd)
 
 # a state grows to itself
 def State.grows_refl(
