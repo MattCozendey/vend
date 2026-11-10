@@ -3420,6 +3420,10 @@ def Vend.may_stop(v: Vend, force: Bool) -> Bool:
         force
       )
 
+# the node b holds every entry that the node a holds: its ledger only grew
+def Node.grows(a: State(), b: State()) -> Bool:
+  Ledgers.State.grows(~Ask, ~Ask.is_eq, State.ledger(a), State.ledger(b))
+
 # Laws
 # ----
 # What README says of a Vend Node's core, as laws. src/daemon/DESIGN.md lists
