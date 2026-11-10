@@ -785,7 +785,7 @@ def Work.after(s: Basics.Node, m: Maybe<&2, Judging.Work>) -> Bool:
   match m:
     case None{}:
       True{}
-    case Some{Judging.Work{s2, h, ns}}:
+    case Some{Judging.Work{s2, h}}:
       Reading.Node.grows(s, s2)
 
 # the node m, if any, grew from s
@@ -822,15 +822,13 @@ def Put.grows(
   )
 
 # a work on a node that grew
-def Work.put.grows(
+def Work.on.grows(
   s: Basics.Node,
   m: Maybe<&2, Basics.Node>,
-  h: Maybe<&2, Hashes.Hash>,
-  ws: List<&2, List<&2, U32>>,
-  ns: List<&2, List<&2, U32>>
+  h: Maybe<&2, Hashes.Hash>
 ) -> {
   State.after(s, m) == True{}: Bool
-} -> {Work.after(s, Judging.Work.put(m, h, ws, ns)) == True{}: Bool}:
+} -> {Work.after(s, Judging.Work.on(m, h)) == True{}: Bool}:
   match m:
     case None{}:
       e => {==}
@@ -840,37 +838,35 @@ def Work.put.grows(
 # a new subtree only grows a node
 def Work.of.grows(
   +s: Basics.Node,
-  ns: List<&2, List<&2, U32>>,
   m: Maybe<&2, Trees.Put>
-) -> {Work.after(s, Judging.Work.of(s, ns, m)) == True{}: Bool}:
+) -> {Work.after(s, Judging.Work.of(s, m)) == True{}: Bool}:
   match m:
     case None{}:
       {==}
     case Some{Trees.Put{h, +ws}}:
-      Work.put.grows(s, Judging.State.put(s, ws), Some{h}, ws, ns)(Put.grows(s, ws))
+      Work.on.grows(s, Judging.State.put(s, ws), Some{h})(Put.grows(s, ws))
 
 # a key set in a tree only grows a node
 def Set.grows(
   +s: Basics.Node,
   h: Maybe<&2, Hashes.Hash>,
-  ns: List<&2, List<&2, U32>>,
   k: List<&2, U32>,
   x: List<&2, U32>
-) -> {Work.after(s, Judging.Work.set(Judging.Work{s, h, ns}, k, x)) == True{}: Bool}:
-  Work.of.grows(s, ns, Basics.Node.set(s, h, k, x))
+) -> {Work.after(s, Judging.Work.set(Judging.Work{s, h}, k, x)) == True{}: Bool}:
+  Work.of.grows(s, Basics.Node.set(s, h, k, x))
 
 # the run m, if any, is on a node that grew from s
 def Run.after(s: Basics.Node, m: Maybe<&2, Stepping.Run>) -> Bool:
   match m:
     case None{}:
       True{}
-    case Some{Stepping.Run{s2, t, ns}}:
+    case Some{Stepping.Run{s2, t}}:
       Reading.Node.grows(s, s2)
 
 # a run is on its own node
 def After.self(r: Stepping.Run) -> {Run.after(Stepping.Run.state(r), Some{r}) == True{}: Bool}:
   match r:
-    case Stepping.Run{s, t, ns}:
+    case Stepping.Run{s, t}:
       Grows.refl(s)
 
 # a run on a node that grew from b is on one that grew from a, when b grew
@@ -885,7 +881,7 @@ def After.trans(
   match m:
     case None{}:
       {==}
-    case Some{Stepping.Run{s2, t, ns}}:
+    case Some{Stepping.Run{s2, t}}:
       Grows.trans(a, b, s2)(e1)(e2)
 
 # a run, then a run from it, is on a node that grew
@@ -899,8 +895,8 @@ def After.bind(
   match m:
     case None{}:
       {==}
-    case Some{Stepping.Run{+s2, +t, +ns}}:
-      After.trans(s, s2, f(Stepping.Run{s2, t, ns}), hm, hf(Stepping.Run{s2, t, ns}))
+    case Some{Stepping.Run{+s2, +t}}:
+      After.trans(s, s2, f(Stepping.Run{s2, t}), hm, hf(Stepping.Run{s2, t}))
 
 # one of two runs, each on a node that grew
 def After.when(
@@ -929,7 +925,7 @@ def Work.after.trans(
   match m:
     case None{}:
       {==}
-    case Some{Judging.Work{s3, h, ns}}:
+    case Some{Judging.Work{s3, h}}:
       Grows.trans(a, b, s3)(e1)(e2)
 
 # a key set in a work on a node that grew from s is on a node that grew from s
@@ -950,25 +946,25 @@ def Work.set.after(
   match m:
     case None{}:
       e => {==}
-    case Some{Judging.Work{+s2, +h, +ns}}:
+    case Some{Judging.Work{+s2, +h}}:
       e => Work.after.trans(
         s,
         s2,
-        Judging.Work.set(Judging.Work{s2, h, ns}, k, x),
+        Judging.Work.set(Judging.Work{s2, h}, k, x),
         e,
-        Set.grows(s2, h, ns, k, x)
+        Set.grows(s2, h, k, x)
       )
 
 # the node of the work w
 def Work.state(w: Judging.Work) -> Basics.Node:
   match w:
-    case Judging.Work{s, h, ns}:
+    case Judging.Work{s, h}:
       s
 
 # a work is on its own node
 def Grown.self(w: Judging.Work) -> {Work.after(Work.state(w), Some{w}) == True{}: Bool}:
   match w:
-    case Judging.Work{s, h, ns}:
+    case Judging.Work{s, h}:
       Grows.refl(s)
 
 # a work, then a work from it, is on a node that grew
@@ -982,8 +978,8 @@ def Grown.bind(
   match m:
     case None{}:
       {==}
-    case Some{Judging.Work{+s2, +h, +ns}}:
-      Work.after.trans(s, s2, f(Judging.Work{s2, h, ns}), hm, hf(Judging.Work{s2, h, ns}))
+    case Some{Judging.Work{+s2, +h}}:
+      Work.after.trans(s, s2, f(Judging.Work{s2, h}), hm, hf(Judging.Work{s2, h}))
 
 # a work from a value that the node reads is on a node that grew
 def Grown.with(
@@ -1023,8 +1019,8 @@ def Grown.set(
   x: List<&2, U32>
 ) -> {Work.after(Work.state(w), Judging.Work.set(w, k, x)) == True{}: Bool}:
   match w:
-    case Judging.Work{s, h, ns}:
-      Set.grows(s, h, ns, k, x)
+    case Judging.Work{s, h}:
+      Set.grows(s, h, k, x)
 
 # words kept in a work only grow its node
 def Grown.keep(
@@ -1032,8 +1028,8 @@ def Grown.keep(
   +ns: List<&2, List<&2, U32>>
 ) -> {Work.after(Work.state(w), Judging.Work.keep(w, ns)) == True{}: Bool}:
   match w:
-    case Judging.Work{+s, h, old}:
-      Work.put.grows(s, Judging.State.put(s, ns), h, ns, old)(Put.grows(s, ns))
+    case Judging.Work{+s, h}:
+      Work.on.grows(s, Judging.State.put(s, ns), h)(Put.grows(s, ns))
 
 # a place added to a version vector only grows a node
 def Grown.vector.add(
@@ -1042,14 +1038,14 @@ def Grown.vector.add(
   +p: Basics.Place
 ) -> {Work.after(Work.state(w), Judging.Vector.add(w, c, p)) == True{}: Bool}:
   match w:
-    case Judging.Work{+s, +h, ns}:
+    case Judging.Work{+s, +h}:
       Grown.when(
         s,
         Basics.Place.covered(Basics.Node.vector(s, h, c), p),
-        Some{Judging.Work{s, h, ns}},
-        Judging.Work.set(Judging.Work{s, h, ns}, Basics.Key.vector(c), Basics.Place.code(p)),
+        Some{Judging.Work{s, h}},
+        Judging.Work.set(Judging.Work{s, h}, Basics.Key.vector(c), Basics.Place.code(p)),
         Grows.refl(s),
-        Set.grows(s, h, ns, Basics.Key.vector(c), Basics.Place.code(p))
+        Set.grows(s, h, Basics.Key.vector(c), Basics.Place.code(p))
       )
 
 # an entry added to a version vector only grows a node
@@ -1319,7 +1315,7 @@ def Grown.merge.work(
       Basics.Node.root_of(s, Judging.Merge.base(s, c, from, h)),
       h,
       Basics.Node.root_of(s, Some{from}),
-      Some{Judging.Work{s, h, []}}
+      Some{Judging.Work{s, h}}
     )
   )(
     Grown.merge.all(
@@ -1330,7 +1326,7 @@ def Grown.merge.work(
       Basics.Node.root_of(s, Judging.Merge.base(s, c, from, h)),
       h,
       Basics.Node.root_of(s, Some{from}),
-      Some{Judging.Work{s, h, []}}
+      Some{Judging.Work{s, h}}
     )(Grows.refl(s))
   )
 
@@ -1349,14 +1345,14 @@ def Grown.move.work(
     Judging.Vector.adds(
       Trees.Tree.list(~Basics.Node, ~Basics.Store.fetch, s, h),
       c,
-      Some{Judging.Work{s, Basics.Node.root_of(s, Some{to}), []}}
+      Some{Judging.Work{s, Basics.Node.root_of(s, Some{to})}}
     )
   )(
     Grown.vector.adds(
       s,
       Trees.Tree.list(~Basics.Node, ~Basics.Store.fetch, s, h),
       c,
-      Some{Judging.Work{s, Basics.Node.root_of(s, Some{to}), []}}
+      Some{Judging.Work{s, Basics.Node.root_of(s, Some{to})}}
     )(Grows.refl(s))
   )
 
@@ -1369,9 +1365,9 @@ def Grown.resolve.work(
 ) -> {Work.after(s, Judging.Resolve.work(s, h, n, m)) == True{}: Bool}:
   Grown.bind(
     s,
-    Judging.Work.set(Judging.Work{s, h, []}, Basics.Key.res(n), Basics.Res.code(m)),
+    Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m)),
     y => Judging.Work.set(y, Basics.Key.clash(n), []),
-    Set.grows(s, h, [], Basics.Key.res(n), Basics.Res.code(m)),
+    Set.grows(s, h, Basics.Key.res(n), Basics.Res.code(m)),
     y => Grown.set(y, Basics.Key.clash(n), [])
   )
 
@@ -1384,7 +1380,7 @@ def Grown.group.work(
 ) -> {Work.after(s, Judging.Group.work(s, h, g, ms)) == True{}: Bool}:
   Grown.bind(
     s,
-    Judging.Work.set(Judging.Work{s, h, []}, Basics.Key.group(g), Basics.Members.code(ms, [])),
+    Judging.Work.set(Judging.Work{s, h}, Basics.Key.group(g), Basics.Members.code(ms, [])),
     +w => Shared.Bool.when(
       Maybe<&2, Judging.Work>,
       List.contains(~String, ~String.eq, Judging.Group.names(s, h), g),
@@ -1395,7 +1391,7 @@ def Grown.group.work(
         Ledgers.Owners.code(g <> Judging.Group.names(s, h), [])
       )
     ),
-    Set.grows(s, h, [], Basics.Key.group(g), Basics.Members.code(ms, [])),
+    Set.grows(s, h, Basics.Key.group(g), Basics.Members.code(ms, [])),
     +w => Grown.when(
       Work.state(w),
       List.contains(~String, ~String.eq, Judging.Group.names(s, h), g),
@@ -1425,7 +1421,7 @@ def Grown.make.branch(
         s,
         c,
         v,
-        Some{Judging.Work{s, Basics.Node.root_of(s, Some{v}), []}}
+        Some{Judging.Work{s, Basics.Node.root_of(s, Some{v})}}
       )(Grows.refl(s))
 
 # the first tip m of a branch, if any, is on a node that grew from s
@@ -1433,7 +1429,7 @@ def Made.after(s: Basics.Node, m: Maybe<&2, Judging.Made>) -> Bool:
   match m:
     case None{}:
       True{}
-    case Some{Judging.Made{t, ns, s2}}:
+    case Some{Judging.Made{t, s2}}:
       Reading.Node.grows(s, s2)
 
 # a first tip on a work is on a node that grew
@@ -1445,7 +1441,7 @@ def Grown.made.put(
   match m:
     case None{}:
       e => {==}
-    case Some{Judging.Work{s2, l, ns}}:
+    case Some{Judging.Work{s2, l}}:
       e => e
 
 # the first tip of a new branch is on a node that grew
@@ -1459,31 +1455,31 @@ def Grown.make.first(
   match start:
     case None{}:
       e => {==}
-    case Some{Judging.Work{+s2, +h, +ns}}:
+    case Some{Judging.Work{+s2, +h}}:
       e =>
         +t = {Basics.Tip{h, None{}, 0, os}: Basics.Tip}
         Grown.made.put(
           s,
           t,
-          Judging.Work.keep(Judging.Work{s2, h, ns}, [Basics.Tip.words(t)])
+          Judging.Work.keep(Judging.Work{s2, h}, [Basics.Tip.words(t)])
         )(
           Work.after.trans(
             s,
             s2,
-            Judging.Work.keep(Judging.Work{s2, h, ns}, [Basics.Tip.words(t)]),
+            Judging.Work.keep(Judging.Work{s2, h}, [Basics.Tip.words(t)]),
             e,
-            Grown.keep(Judging.Work{s2, h, ns}, [Basics.Tip.words(t)])
+            Grown.keep(Judging.Work{s2, h}, [Basics.Tip.words(t)])
           )
         )
 
 # the verdict m, if any, holds a node that grew from s
-def Verdict.after(s: Basics.Node, m: Maybe<&2, Basics.Verdict>) -> Bool:
+def Verdict.after(s: Basics.Node, m: Maybe<&2, Judging.Verdict>) -> Bool:
   match m:
     case None{}:
       True{}
-    case Some{Basics.Verdict.Stale{}}:
+    case Some{Judging.Verdict.Stale{}}:
       True{}
-    case Some{Basics.Verdict.Taken{h, ds, s2}}:
+    case Some{Judging.Verdict.Taken{Judging.Work{s2, h}}}:
       Reading.Node.grows(s, s2)
 
 # a verdict that takes a work holds its node
@@ -1494,14 +1490,14 @@ def Verdict.take(
   match m:
     case None{}:
       e => {==}
-    case Some{Judging.Work{s2, h, ns}}:
+    case Some{Judging.Work{s2, h}}:
       e => e
 
 # a verdict after a verdict holds a node that grew
 def Verdict.then(
   s: Basics.Node,
   +m: Maybe<&2, Bool>,
-  -k: Unit -> Maybe<&2, Basics.Verdict>,
+  -k: Unit -> Maybe<&2, Judging.Verdict>,
   hk: {Verdict.after(s, k(Unit{})) == True{}: Bool}
 ) -> {Verdict.after(s, Judging.Judge.then(m, k)) == True{}: Bool}:
   match m:
@@ -1516,7 +1512,7 @@ def Verdict.then(
 def Verdict.when(
   s: Basics.Node,
   +b: Bool,
-  -k: Unit -> Maybe<&2, Basics.Verdict>,
+  -k: Unit -> Maybe<&2, Judging.Verdict>,
   hk: {Verdict.after(s, k(Unit{})) == True{}: Bool}
 ) -> {Verdict.after(s, Judging.Judge.when(b, k)) == True{}: Bool}:
   match b:
@@ -1529,7 +1525,7 @@ def Verdict.when(
 def Verdict.whole(
   s: Basics.Node,
   +b: Bool,
-  -k: Unit -> Maybe<&2, Basics.Verdict>,
+  -k: Unit -> Maybe<&2, Judging.Verdict>,
   hk: {Verdict.after(s, k(Unit{})) == True{}: Bool}
 ) -> {Verdict.after(s, Judging.Judge.whole(b, k)) == True{}: Bool}:
   match b:
@@ -1543,9 +1539,9 @@ def Verdict.with(
   -A: Data,
   s: Basics.Node,
   +ma: Maybe<&2, A>,
-  -k: A -> Maybe<&2, Basics.Verdict>,
+  -k: A -> Maybe<&2, Judging.Verdict>,
   hk: @a: A -> {Verdict.after(s, k(a)) == True{}: Bool}
-) -> {Verdict.after(s, Maybe.bind(&2, A, Basics.Verdict, ma, k)) == True{}: Bool}:
+) -> {Verdict.after(s, Maybe.bind(&2, A, Judging.Verdict, ma, k)) == True{}: Bool}:
   match ma:
     case None{}:
       {==}
@@ -1568,22 +1564,22 @@ def Verdict.write(
       w => Maybe.bind(
         &2,
         Maybe<&2, Ropes.Root>,
-        Basics.Verdict,
+        Judging.Verdict,
         Basics.Res.find(s, h, n),
         a => Maybe.bind(
           &2,
           Maybe<&2, Ropes.Root>,
-          Basics.Verdict,
+          Judging.Verdict,
           Basics.Res.find(s, Basics.Node.root_of(s, base), n),
           b => Maybe.bind(
             &2,
             Maybe<&2, Ropes.Root>,
-            Basics.Verdict,
+            Judging.Verdict,
             Judging.Content.find(s, n, c),
             m => Judging.Judge.when(
               Basics.Roots.same(a, b),
               x => Judging.Work.take(
-                Judging.Work.set(Judging.Work{s, h, []}, Basics.Key.res(n), Basics.Res.code(m))
+                Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
               )
             )
           )
@@ -1596,22 +1592,22 @@ def Verdict.write(
       w => Maybe.bind(
         &2,
         Maybe<&2, Ropes.Root>,
-        Basics.Verdict,
+        Judging.Verdict,
         Basics.Res.find(s, h, n),
         a => Maybe.bind(
           &2,
           Maybe<&2, Ropes.Root>,
-          Basics.Verdict,
+          Judging.Verdict,
           Basics.Res.find(s, Basics.Node.root_of(s, base), n),
           b => Maybe.bind(
             &2,
             Maybe<&2, Ropes.Root>,
-            Basics.Verdict,
+            Judging.Verdict,
             Judging.Content.find(s, n, c),
             m => Judging.Judge.when(
               Basics.Roots.same(a, b),
               x => Judging.Work.take(
-                Judging.Work.set(Judging.Work{s, h, []}, Basics.Key.res(n), Basics.Res.code(m))
+                Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
               )
             )
           )
@@ -1624,17 +1620,17 @@ def Verdict.write(
         a => Maybe.bind(
           &2,
           Maybe<&2, Ropes.Root>,
-          Basics.Verdict,
+          Judging.Verdict,
           Basics.Res.find(s, Basics.Node.root_of(s, base), n),
           b => Maybe.bind(
             &2,
             Maybe<&2, Ropes.Root>,
-            Basics.Verdict,
+            Judging.Verdict,
             Judging.Content.find(s, n, c),
             m => Judging.Judge.when(
               Basics.Roots.same(a, b),
               x => Judging.Work.take(
-                Judging.Work.set(Judging.Work{s, h, []}, Basics.Key.res(n), Basics.Res.code(m))
+                Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
               )
             )
           )
@@ -1646,12 +1642,12 @@ def Verdict.write(
           b => Maybe.bind(
             &2,
             Maybe<&2, Ropes.Root>,
-            Basics.Verdict,
+            Judging.Verdict,
             Judging.Content.find(s, n, c),
             m => Judging.Judge.when(
               Basics.Roots.same(a, b),
               x => Judging.Work.take(
-                Judging.Work.set(Judging.Work{s, h, []}, Basics.Key.res(n), Basics.Res.code(m))
+                Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
               )
             )
           ),
@@ -1662,19 +1658,19 @@ def Verdict.write(
             m => Judging.Judge.when(
               Basics.Roots.same(a, b),
               x => Judging.Work.take(
-                Judging.Work.set(Judging.Work{s, h, []}, Basics.Key.res(n), Basics.Res.code(m))
+                Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
               )
             ),
             +m => Verdict.when(
               s,
               Basics.Roots.same(a, b),
               x => Judging.Work.take(
-                Judging.Work.set(Judging.Work{s, h, []}, Basics.Key.res(n), Basics.Res.code(m))
+                Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
               ),
               Verdict.take(
                 s,
-                Judging.Work.set(Judging.Work{s, h, []}, Basics.Key.res(n), Basics.Res.code(m))
-              )(Set.grows(s, h, [], Basics.Key.res(n), Basics.Res.code(m)))
+                Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
+              )(Set.grows(s, h, Basics.Key.res(n), Basics.Res.code(m)))
             )
           )
         )
@@ -1700,12 +1696,12 @@ def Verdict.resolve(
       w => Maybe.bind(
         &2,
         Bool,
-        Basics.Verdict,
+        Judging.Verdict,
         Judging.Clash.find(s, h, n, Judging.Merge.from_on(Basics.Node.asked(s, k), r, b)),
         open => Maybe.bind(
           &2,
           Maybe<&2, Ropes.Root>,
-          Basics.Verdict,
+          Judging.Verdict,
           Judging.Content.find(s, n, c),
           m => Judging.Judge.when(open, x => Judging.Work.take(Judging.Resolve.work(s, h, n, m)))
         )
@@ -1717,12 +1713,12 @@ def Verdict.resolve(
       w => Maybe.bind(
         &2,
         Bool,
-        Basics.Verdict,
+        Judging.Verdict,
         Judging.Clash.find(s, h, n, Judging.Merge.from_on(Basics.Node.asked(s, k), r, b)),
         open => Maybe.bind(
           &2,
           Maybe<&2, Ropes.Root>,
-          Basics.Verdict,
+          Judging.Verdict,
           Judging.Content.find(s, n, c),
           m => Judging.Judge.when(open, x => Judging.Work.take(Judging.Resolve.work(s, h, n, m)))
         )
@@ -1734,7 +1730,7 @@ def Verdict.resolve(
         open => Maybe.bind(
           &2,
           Maybe<&2, Ropes.Root>,
-          Basics.Verdict,
+          Judging.Verdict,
           Judging.Content.find(s, n, c),
           m => Judging.Judge.when(open, x => Judging.Work.take(Judging.Resolve.work(s, h, n, m)))
         ),
@@ -1768,12 +1764,12 @@ def Verdict.own(
     s,
     Judging.Own.takes(s, r, l, g, at, os, h),
     u => Judging.Work.take(
-      Judging.Work.set(Judging.Work{s, h, []}, Basics.Key.owner(), Codes.Code.text(g, []))
+      Judging.Work.set(Judging.Work{s, h}, Basics.Key.owner(), Codes.Code.text(g, []))
     ),
     Verdict.take(
       s,
-      Judging.Work.set(Judging.Work{s, h, []}, Basics.Key.owner(), Codes.Code.text(g, []))
-    )(Set.grows(s, h, [], Basics.Key.owner(), Codes.Code.text(g, [])))
+      Judging.Work.set(Judging.Work{s, h}, Basics.Key.owner(), Codes.Code.text(g, []))
+    )(Set.grows(s, h, Basics.Key.owner(), Codes.Code.text(g, [])))
   )
 
 # the verdict on a change holds a node that grew from the node that judged it
@@ -1796,8 +1792,8 @@ def Verdict.change(
     case None{} Basics.Change.Key{+n, +k}:
       Verdict.take(
         s,
-        Judging.Work.set(Judging.Work{s, h, []}, Basics.Key.seal(n), Hashes.Hash.code(k, []))
-      )(Set.grows(s, h, [], Basics.Key.seal(n), Hashes.Hash.code(k, [])))
+        Judging.Work.set(Judging.Work{s, h}, Basics.Key.seal(n), Hashes.Hash.code(k, []))
+      )(Set.grows(s, h, Basics.Key.seal(n), Hashes.Hash.code(k, [])))
     case +w Basics.Change.Own{g, at, os2}:
       Verdict.own(s, r, w, g, at, os2, h)
     case Some{b} Basics.Change.Write{n, base, c2}:
@@ -1871,7 +1867,7 @@ def Run.logged.grows(
   match t m:
     case x None{}:
       {==}
-    case Basics.Tip{c, old, n, os} Some{Judging.Work{s2, l, ns}}:
+    case Basics.Tip{c, old, n, os} Some{Judging.Work{s2, l}}:
       e
 
 # Add.grows once the value m of the key is known
@@ -1882,12 +1878,12 @@ def Add.at.grows(
   m: Maybe<&2, List<&2, U32>>
 ) -> {Run.after(Stepping.Run.state(r), Stepping.Run.add.at(r, k, x, m)) == True{}: Bool}:
   match r m:
-    case Stepping.Run{+s, +t, +ns} None{}:
+    case Stepping.Run{+s, +t} None{}:
       Run.logged.grows(
         s,
         t,
-        Judging.Work.set(Judging.Work{s, Basics.Tip.log(t), ns}, k, x),
-        Set.grows(s, Basics.Tip.log(t), ns, k, x)
+        Judging.Work.set(Judging.Work{s, Basics.Tip.log(t)}, k, x),
+        Set.grows(s, Basics.Tip.log(t), k, x)
       )
     case y Some{old}:
       {==}
@@ -1911,7 +1907,7 @@ def Next.grows(
   own: Maybe<&2, List<&2, String>>
 ) -> {Run.after(Stepping.Run.state(r), Some{Stepping.Run.next(r, own)}) == True{}: Bool}:
   match r:
-    case Stepping.Run{s, t, ns}:
+    case Stepping.Run{s, t}:
       Grows.refl(s)
 
 # a refused request only grows a run's node
@@ -1965,22 +1961,22 @@ def Judged.grows(
   +r: Stepping.Run,
   +i: Ledgers.Id,
   +own: Maybe<&2, List<&2, String>>,
-  +m: Maybe<&2, Basics.Verdict>
+  +m: Maybe<&2, Judging.Verdict>
 ) -> {
   Verdict.after(Stepping.Run.state(r), m) == True{}: Bool
 } -> {Run.after(Stepping.Run.state(r), Stepping.Step.judged(r, i, own, m)) == True{}: Bool}:
   match m:
     case None{}:
       g => {==}
-    case Some{Basics.Verdict.Stale{}}:
+    case Some{Judging.Verdict.Stale{}}:
       g => Stale.grows(r, i)
-    case Some{Basics.Verdict.Taken{+h, +ds, +s2}}:
+    case Some{Judging.Verdict.Taken{Judging.Work{+s2, +h}}}:
       g => After.trans(
         Stepping.Run.state(r),
         s2,
-        Stepping.Step.taken(Stepping.Run.over(r, s2, h, ds), i, own),
+        Stepping.Step.taken(Stepping.Run.over(r, s2, h), i, own),
         g,
-        Taken.grows(Stepping.Run.over(r, s2, h, ds), i, own)
+        Taken.grows(Stepping.Run.over(r, s2, h), i, own)
       )
 
 # a mark on a version only grows a run's node
@@ -2035,9 +2031,9 @@ def Branch.made.grows(
   match m:
     case None{}:
       g => {==}
-    case Some{Judging.Made{+t, ds, +s2}}:
+    case Some{Judging.Made{+t, +s2}}:
       g =>
-        +r1 = {Stepping.Run.over(r, s2, Basics.Tip.content(Stepping.Run.tip(r)), ds): Stepping.Run}
+        +r1 = {Stepping.Run.over(r, s2, Basics.Tip.content(Stepping.Run.tip(r))): Stepping.Run}
         After.trans(
           Stepping.Run.state(r),
           s2,
@@ -2267,7 +2263,7 @@ def Run.grows(
   t: Basics.Tip,
   qs: List<&2, Ledgers.Id>
 ) -> {Run.after(s, Stepping.Step.run(s, c, t, qs)) == True{}: Bool}:
-  All.grows(s, c, qs, Some{Stepping.Run{s, t, []}})(Grows.refl(s))
+  All.grows(s, c, qs, Some{Stepping.Run{s, t}})(Grows.refl(s))
 
 # the run of picked requests, with one more request or not
 def Add.run(
@@ -2295,7 +2291,7 @@ def Default.run.grows(
   match m:
     case None{}:
       e => Grows.refl(Stepping.Run.state(r))
-    case Some{Stepping.Run{s2, t, ns}}:
+    case Some{Stepping.Run{s2, t}}:
       e => e
 
 # the run of the requests that can run is on a node that grew
@@ -2360,11 +2356,11 @@ def Plan.fit.grows(
   match m:
     case None{}:
       e => {==}
-    case Some{Stepping.Run{s2, t2, ns}}:
+    case Some{Stepping.Run{s2, t2}}:
       e => Fit.when.grows(
         s,
         Sealing.Root.same(after, Some{Basics.Tip.hash(t2)}),
-        Stepping.Run{s2, t2, ns},
+        Stepping.Run{s2, t2},
         e
       )
 
@@ -2392,7 +2388,7 @@ def Plan.own.grows(
   t: Basics.Tip,
   -from: List<&2, String>
 ) -> {Run.after(s, Sealing.Plan.run(Sealing.Plan.own(s, c, t, from))) == True{}: Bool}:
-  Some.grows(c, Sealing.Cast.mine(s, Sealing.Wait.of(s, c)), Stepping.Run{s, t, []})
+  Some.grows(c, Sealing.Cast.mine(s, Sealing.Wait.of(s, c)), Stepping.Run{s, t})
 
 # the run of the plan for a step that another ballot names is on a node that
 # grew
@@ -2786,7 +2782,7 @@ def Cast.put.grows(
   match m:
     case None{}:
       e => Grows.refl(s)
-    case Some{Stepping.Run{+s2, +t2, ns}}:
+    case Some{Stepping.Run{+s2, +t2}}:
       e => Cast.vote.grows(
         s,
         s2,
@@ -3010,7 +3006,7 @@ def Advance.ran.grows(
   match m:
     case None{}:
       e => Grows.refl(s)
-    case Some{Stepping.Run{+s2, +t2, ns}}:
+    case Some{Stepping.Run{+s2, +t2}}:
       e =>
         +hd = {Basics.Head{r, b, U32.inc(next), Some{Basics.Tip.hash(t2)}}: Basics.Head}
         Grows.when(
@@ -3276,7 +3272,7 @@ def Start.with.grows(
   match m:
     case None{}:
       e => Grows.refl(s)
-    case Some{Judging.Work{+s2, +c, ns}}:
+    case Some{Judging.Work{+s2, +c}}:
       e =>
         +t = {Basics.Tip{c, None{}, 0, os}: Basics.Tip}
         Start.head.grows(
@@ -3298,8 +3294,8 @@ def Start.grows(
     s,
     i,
     Basics.Owner.names(os),
-    Sealing.Seal.firsts(os, Some{Judging.Work{s, None{}, []}})
-  )(Firsts.after(s, os, Some{Judging.Work{s, None{}, []}})(Grows.refl(s)))
+    Sealing.Seal.firsts(os, Some{Judging.Work{s, None{}}})
+  )(Firsts.after(s, os, Some{Judging.Work{s, None{}}})(Grows.refl(s)))
 
 # a line that a node follows only grows it, once its head m is known
 def Follow.new.grows(

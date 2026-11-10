@@ -835,7 +835,7 @@ def Advance.ran.path(
   match m:
     case None{}:
       ga => Path.refl(s)
-    case Some{Stepping.Run{s2, +t2, ns}}:
+    case Some{Stepping.Run{s2, +t2}}:
       ga => Advance.ran.path.if(
         s,
         s2,
@@ -1162,7 +1162,7 @@ def Start.with.path(
   match m:
     case None{}:
       e => Path.refl(s)
-    case Some{Judging.Work{+s2, +c, ns}}:
+    case Some{Judging.Work{+s2, +c}}:
       e =>
         +t = {Basics.Tip{c, None{}, 0, os}: Basics.Tip}
         Start.head.path(
@@ -1184,8 +1184,8 @@ def Start.path(
     s,
     i,
     Basics.Owner.names(os),
-    Sealing.Seal.firsts(os, Some{Judging.Work{s, None{}, []}})
-  )(ProofTrees.Firsts.after(s, os, Some{Judging.Work{s, None{}, []}})(ProofTrees.Grows.refl(s)))
+    Sealing.Seal.firsts(os, Some{Judging.Work{s, None{}}})
+  )(ProofTrees.Firsts.after(s, os, Some{Judging.Work{s, None{}}})(ProofTrees.Grows.refl(s)))
 
 # a line that a node starts to follow is on the paths
 def Follow.new.path(

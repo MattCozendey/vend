@@ -492,14 +492,6 @@ type Node is Data:
     keys: Keys
   }
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
-# what a judge says of one change: refuse it as stale, or take it, with the
-# root of the content after it, the new nodes, and the node that holds them
-type Verdict is Data:
-  Verdict.Stale{}
-  Verdict.Taken{result: Maybe<&2, Hashes.Hash>, data: List<&2, List<&2, U32>>, node: Node}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
-
 # the ledger of s
 def State.ledger(s: Node) -> Ledgers.State(Ask):
   match s:

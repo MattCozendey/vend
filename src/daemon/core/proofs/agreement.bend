@@ -399,7 +399,7 @@ def Advance.ran.moves(
   match m:
     case None{}:
       Moves.stay(s, c, h, x, em)
-    case Some{Stepping.Run{s2, +t2, ns}}:
+    case Some{Stepping.Run{s2, +t2}}:
       Advance.ran.moves.if(
         s,
         s2,
@@ -667,25 +667,25 @@ def Res.round(
   {==}
 
 # the verdict m takes
-def Verdict.took(m: Maybe<&2, Basics.Verdict>) -> Bool:
+def Verdict.took(m: Maybe<&2, Judging.Verdict>) -> Bool:
   match m:
-    case Some{Basics.Verdict.Taken{h, ds, s2}}:
+    case Some{Judging.Verdict.Taken{Judging.Work{s2, h}}}:
       True{}
     case x:
       False{}
 
 # the tree of the verdict m
-def Took.root(m: Maybe<&2, Basics.Verdict>) -> Maybe<&2, Hashes.Hash>:
+def Took.root(m: Maybe<&2, Judging.Verdict>) -> Maybe<&2, Hashes.Hash>:
   match m:
-    case Some{Basics.Verdict.Taken{h, ds, s2}}:
+    case Some{Judging.Verdict.Taken{Judging.Work{s2, h}}}:
       h
     case x:
       None{}
 
 # the node of the verdict m, or d when it takes nothing
-def Took.node(m: Maybe<&2, Basics.Verdict>, d: Basics.Node) -> Basics.Node:
+def Took.node(m: Maybe<&2, Judging.Verdict>, d: Basics.Node) -> Basics.Node:
   match m:
-    case Some{Basics.Verdict.Taken{h, ds, s2}}:
+    case Some{Judging.Verdict.Taken{Judging.Work{s2, h}}}:
       s2
     case x:
       d
@@ -693,59 +693,57 @@ def Took.node(m: Maybe<&2, Basics.Verdict>, d: Basics.Node) -> Basics.Node:
 # a verdict that takes, after a verdict, is the verdict of what comes next
 def Then.took(
   m: Maybe<&2, Bool>,
-  -k: Unit -> Maybe<&2, Basics.Verdict>,
+  -k: Unit -> Maybe<&2, Judging.Verdict>,
   -h2: Maybe<&2, Hashes.Hash>,
-  -ds: List<&2, List<&2, U32>>,
   -s3: Basics.Node
 ) -> {
-  Judging.Judge.then(m, k) == Some{Basics.Verdict.Taken{h2, ds, s3}}: Maybe<&2, Basics.Verdict>
-} -> {k(Unit{}) == Some{Basics.Verdict.Taken{h2, ds, s3}}: Maybe<&2, Basics.Verdict>}:
+  Judging.Judge.then(m, k) == Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}}: Maybe<&2, Judging.Verdict>
+} -> {k(Unit{}) == Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}}: Maybe<&2, Judging.Verdict>}:
   match m:
     case Some{True{}}:
       e => e
     case Some{False{}}:
       e => Empty.absurd(
-        {k(Unit{}) == Some{Basics.Verdict.Taken{h2, ds, s3}}: Maybe<&2, Basics.Verdict>},
+        {k(Unit{}) == Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}}: Maybe<&2, Judging.Verdict>},
         Shared.Bool.false_ne_true(
           Equal.cong(
-            Maybe<&2, Basics.Verdict>,
+            Maybe<&2, Judging.Verdict>,
             Bool,
             v => Verdict.took(v),
             Judging.Judge.refuse(),
-            Some{Basics.Verdict.Taken{h2, ds, s3}},
+            Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}},
             e
           )
         )
       )
     case None{}:
       e => Empty.absurd(
-        {k(Unit{}) == Some{Basics.Verdict.Taken{h2, ds, s3}}: Maybe<&2, Basics.Verdict>},
-        Shared.Maybe.none_ne_some(Basics.Verdict, Basics.Verdict.Taken{h2, ds, s3}, e)
+        {k(Unit{}) == Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}}: Maybe<&2, Judging.Verdict>},
+        Shared.Maybe.none_ne_some(Judging.Verdict, Judging.Verdict.Taken{Judging.Work{s3, h2}}, e)
       )
 
 # a verdict that takes, under a condition, is the verdict of what comes next
 def When.took(
   b: Bool,
-  -k: Unit -> Maybe<&2, Basics.Verdict>,
+  -k: Unit -> Maybe<&2, Judging.Verdict>,
   -h2: Maybe<&2, Hashes.Hash>,
-  -ds: List<&2, List<&2, U32>>,
   -s3: Basics.Node
 ) -> {
-  Judging.Judge.when(b, k) == Some{Basics.Verdict.Taken{h2, ds, s3}}: Maybe<&2, Basics.Verdict>
-} -> {k(Unit{}) == Some{Basics.Verdict.Taken{h2, ds, s3}}: Maybe<&2, Basics.Verdict>}:
+  Judging.Judge.when(b, k) == Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}}: Maybe<&2, Judging.Verdict>
+} -> {k(Unit{}) == Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}}: Maybe<&2, Judging.Verdict>}:
   match b:
     case True{}:
       e => e
     case False{}:
       e => Empty.absurd(
-        {k(Unit{}) == Some{Basics.Verdict.Taken{h2, ds, s3}}: Maybe<&2, Basics.Verdict>},
+        {k(Unit{}) == Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}}: Maybe<&2, Judging.Verdict>},
         Shared.Bool.false_ne_true(
           Equal.cong(
-            Maybe<&2, Basics.Verdict>,
+            Maybe<&2, Judging.Verdict>,
             Bool,
             v => Verdict.took(v),
             Judging.Judge.refuse(),
-            Some{Basics.Verdict.Taken{h2, ds, s3}},
+            Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}},
             e
           )
         )
@@ -761,7 +759,6 @@ def Set.reads.put(
   ws: List<&2, List<&2, U32>>,
   m2: Maybe<&2, Basics.Node>,
   -h2: Maybe<&2, Hashes.Hash>,
-  -ds: List<&2, List<&2, U32>>,
   s3: Basics.Node,
   hp: @y: Basics.Node -> {
     m2 == Some{y}: Maybe<&2, Basics.Node>
@@ -770,32 +767,32 @@ def Set.reads.put(
   Basics.Node.set(s, h, k, x) == Some{Trees.Put{hh, ws}}: Maybe<&2, Trees.Put>
 } -> {
   Judging.Work.take(
-    Judging.Work.put(m2, Some{hh}, ws, [])
+    Judging.Work.on(m2, Some{hh})
   )
-    == Some{Basics.Verdict.Taken{h2, ds, s3}}: Maybe<&2, Basics.Verdict>
+    == Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}}: Maybe<&2, Judging.Verdict>
 } -> {Basics.Node.get(s3, h2, k) == Some{x}: Maybe<&2, List<&2, U32>>}:
   match m2:
     case None{}:
       es => e => Empty.absurd(
         {Basics.Node.get(s3, h2, k) == Some{x}: Maybe<&2, List<&2, U32>>},
-        Shared.Maybe.none_ne_some(Basics.Verdict, Basics.Verdict.Taken{h2, ds, s3}, e)
+        Shared.Maybe.none_ne_some(Judging.Verdict, Judging.Verdict.Taken{Judging.Work{s3, h2}}, e)
       )
     case Some{+sk}:
       es => +e =>
         %Equal.cong(
-          Maybe<&2, Basics.Verdict>,
+          Maybe<&2, Judging.Verdict>,
           Basics.Node,
           v => Took.node(v, s3),
-          Some{Basics.Verdict.Taken{Some{hh}, List.append(&2, List<&2, U32>, ws, []), sk}},
-          Some{Basics.Verdict.Taken{h2, ds, s3}},
+          Some{Judging.Verdict.Taken{Judging.Work{sk, Some{hh}}}},
+          Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}},
           e
         ): {Basics.Node.get(_, h2, k) == Some{x}: Maybe<&2, List<&2, U32>>}
         %Equal.cong(
-          Maybe<&2, Basics.Verdict>,
+          Maybe<&2, Judging.Verdict>,
           Maybe<&2, Hashes.Hash>,
           v => Took.root(v),
-          Some{Basics.Verdict.Taken{Some{hh}, List.append(&2, List<&2, U32>, ws, []), sk}},
-          Some{Basics.Verdict.Taken{h2, ds, s3}},
+          Some{Judging.Verdict.Taken{Judging.Work{sk, Some{hh}}}},
+          Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}},
           e
         ): {Basics.Node.get(sk, _, k) == Some{x}: Maybe<&2, List<&2, U32>>}
         Equal.trans(
@@ -839,21 +836,20 @@ def Set.reads(
   x: List<&2, U32>,
   m: Maybe<&2, Trees.Put>,
   -h2: Maybe<&2, Hashes.Hash>,
-  -ds: List<&2, List<&2, U32>>,
   s3: Basics.Node
 ) -> {
   Basics.Node.set(s, h, k, x) == m: Maybe<&2, Trees.Put>
 } -> {
   Judging.Work.take(
-    Judging.Work.of(s, [], m)
+    Judging.Work.of(s, m)
   )
-    == Some{Basics.Verdict.Taken{h2, ds, s3}}: Maybe<&2, Basics.Verdict>
+    == Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}}: Maybe<&2, Judging.Verdict>
 } -> {Basics.Node.get(s3, h2, k) == Some{x}: Maybe<&2, List<&2, U32>>}:
   match m:
     case None{}:
       es => e => Empty.absurd(
         {Basics.Node.get(s3, h2, k) == Some{x}: Maybe<&2, List<&2, U32>>},
-        Shared.Maybe.none_ne_some(Basics.Verdict, Basics.Verdict.Taken{h2, ds, s3}, e)
+        Shared.Maybe.none_ne_some(Judging.Verdict, Judging.Verdict.Taken{Judging.Work{s3, h2}}, e)
       )
     case Some{Trees.Put{hh, +ws}}:
       Set.reads.put(
@@ -865,7 +861,6 @@ def Set.reads(
         ws,
         Judging.State.put(s, ws),
         h2,
-        ds,
         s3,
         y => ey => ProofLines.Put.holds(s, ws, y)(ey)
       )
@@ -874,50 +869,40 @@ def Set.reads(
 def With.took(
   -A: Data,
   ma: Maybe<&2, A>,
-  -k: A -> Maybe<&2, Basics.Verdict>,
-  -kk: Maybe<&2, Basics.Verdict>,
+  -k: A -> Maybe<&2, Judging.Verdict>,
+  -kk: Maybe<&2, Judging.Verdict>,
   -h2: Maybe<&2, Hashes.Hash>,
-  -ds: List<&2, List<&2, U32>>,
   -s3: Basics.Node
 ) -> (
   @a: A -> {
-    k(a) == Some{Basics.Verdict.Taken{h2, ds, s3}}: Maybe<&2, Basics.Verdict>
-  } -> {kk == Some{Basics.Verdict.Taken{h2, ds, s3}}: Maybe<&2, Basics.Verdict>}
+    k(a) == Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}}: Maybe<&2, Judging.Verdict>
+  } -> {kk == Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}}: Maybe<&2, Judging.Verdict>}
 ) -> {
   Maybe.bind(
     &2,
     A,
-    Basics.Verdict,
+    Judging.Verdict,
     ma,
     k
   )
-    == Some{Basics.Verdict.Taken{h2, ds, s3}}: Maybe<&2, Basics.Verdict>
-} -> {kk == Some{Basics.Verdict.Taken{h2, ds, s3}}: Maybe<&2, Basics.Verdict>}:
+    == Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}}: Maybe<&2, Judging.Verdict>
+} -> {kk == Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}}: Maybe<&2, Judging.Verdict>}:
   match ma:
     case None{}:
       hk => e => Empty.absurd(
-        {kk == Some{Basics.Verdict.Taken{h2, ds, s3}}: Maybe<&2, Basics.Verdict>},
-        Shared.Maybe.none_ne_some(Basics.Verdict, Basics.Verdict.Taken{h2, ds, s3}, e)
+        {kk == Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}}: Maybe<&2, Judging.Verdict>},
+        Shared.Maybe.none_ne_some(Judging.Verdict, Judging.Verdict.Taken{Judging.Work{s3, h2}}, e)
       )
     case Some{a}:
       hk => e => hk(a)(e)
 
-def Spec.Judge.write_reads(s, n, base, c, h, h2, ds, s3, m):
+def Spec.Judge.write_reads(s, n, base, c, h, h2, s3, m):
   e => ec =>
     %Equal.sym(
       Maybe<&2, List<&2, U32>>,
       Basics.Node.get(s3, h2, Basics.Key.res(n)),
       Some{Basics.Res.code(m)},
-      Set.reads(
-        s,
-        h,
-        Basics.Key.res(n),
-        Basics.Res.code(m),
-        Basics.Node.set(s, h, Basics.Key.res(n), Basics.Res.code(m)),
-        h2,
-        ds,
-        s3
-      )(
+      Set.reads(s, h, Basics.Key.res(n), Basics.Res.code(m), Basics.Node.set(s, h, Basics.Key.res(n), Basics.Res.code(m)), h2, s3)(
         {==}
       )(
         With.took(
@@ -926,26 +911,25 @@ def Spec.Judge.write_reads(s, n, base, c, h, h2, ds, s3, m):
           a1 => Maybe.bind(
             &2,
             Maybe<&2, Ropes.Root>,
-            Basics.Verdict,
+            Judging.Verdict,
             Basics.Res.find(s, Basics.Node.root_of(s, base), n),
             b1 => Maybe.bind(
               &2,
               Maybe<&2, Ropes.Root>,
-              Basics.Verdict,
+              Judging.Verdict,
               Judging.Content.find(s, n, c),
               m1 => Judging.Judge.when(
                 Basics.Roots.same(a1, b1),
                 x => Judging.Work.take(
-                  Judging.Work.set(Judging.Work{s, h, []}, Basics.Key.res(n), Basics.Res.code(m1))
+                  Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m1))
                 )
               )
             )
           ),
           Judging.Work.take(
-            Judging.Work.set(Judging.Work{s, h, []}, Basics.Key.res(n), Basics.Res.code(m))
+            Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
           ),
           h2,
-          ds,
           s3
         )(
           +a => With.took(
@@ -954,57 +938,48 @@ def Spec.Judge.write_reads(s, n, base, c, h, h2, ds, s3, m):
             b1 => Maybe.bind(
               &2,
               Maybe<&2, Ropes.Root>,
-              Basics.Verdict,
+              Judging.Verdict,
               Judging.Content.find(s, n, c),
               m1 => Judging.Judge.when(
                 Basics.Roots.same(a, b1),
                 x => Judging.Work.take(
-                  Judging.Work.set(Judging.Work{s, h, []}, Basics.Key.res(n), Basics.Res.code(m1))
+                  Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m1))
                 )
               )
             ),
             Judging.Work.take(
-              Judging.Work.set(Judging.Work{s, h, []}, Basics.Key.res(n), Basics.Res.code(m))
+              Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
             ),
             h2,
-            ds,
             s3
           )(
-            +b => ex => When.took(
-              Basics.Roots.same(a, b),
-              x => Judging.Work.take(
-                Judging.Work.set(Judging.Work{s, h, []}, Basics.Key.res(n), Basics.Res.code(m))
-              ),
-              h2,
-              ds,
-              s3
-            )(
-              %ec: {Maybe.bind(&2, Maybe<&2, Ropes.Root>, Basics.Verdict, _, m1 => Judging.Judge.when(Basics.Roots.same(a, b), x => Judging.Work.take(Judging.Work.set(Judging.Work{s, h, []}, Basics.Key.res(n), Basics.Res.code(m1))))) == Some{Basics.Verdict.Taken{h2, ds, s3}}: Maybe<&2, Basics.Verdict>}
+            +b => ex => When.took(Basics.Roots.same(a, b), x => Judging.Work.take(
+                Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
+              ), h2, s3)(
+              %ec: {Maybe.bind(&2, Maybe<&2, Ropes.Root>, Judging.Verdict, _, m1 => Judging.Judge.when(Basics.Roots.same(a, b), x => Judging.Work.take(Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m1))))) == Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}}: Maybe<&2, Judging.Verdict>}
               ex)
           )
         )(
-          Then.took(
-            Judging.Judge.content(s, c),
-            w => Maybe.bind(
+          Then.took(Judging.Judge.content(s, c), w => Maybe.bind(
               &2,
               Maybe<&2, Ropes.Root>,
-              Basics.Verdict,
+              Judging.Verdict,
               Basics.Res.find(s, h, n),
               a1 => Maybe.bind(
                 &2,
                 Maybe<&2, Ropes.Root>,
-                Basics.Verdict,
+                Judging.Verdict,
                 Basics.Res.find(s, Basics.Node.root_of(s, base), n),
                 b1 => Maybe.bind(
                   &2,
                   Maybe<&2, Ropes.Root>,
-                  Basics.Verdict,
+                  Judging.Verdict,
                   Judging.Content.find(s, n, c),
                   m1 => Judging.Judge.when(
                     Basics.Roots.same(a1, b1),
                     x => Judging.Work.take(
                       Judging.Work.set(
-                        Judging.Work{s, h, []},
+                        Judging.Work{s, h},
                         Basics.Key.res(n),
                         Basics.Res.code(m1)
                       )
@@ -1012,35 +987,29 @@ def Spec.Judge.write_reads(s, n, base, c, h, h2, ds, s3, m):
                   )
                 )
               )
-            ),
-            h2,
-            ds,
-            s3
-          )(
-            Then.took(
-              Judging.Judge.ready_maybe(s, base),
-              u => Judging.Judge.then(
+            ), h2, s3)(
+            Then.took(Judging.Judge.ready_maybe(s, base), u => Judging.Judge.then(
                 Judging.Judge.content(s, c),
                 w => Maybe.bind(
                   &2,
                   Maybe<&2, Ropes.Root>,
-                  Basics.Verdict,
+                  Judging.Verdict,
                   Basics.Res.find(s, h, n),
                   a1 => Maybe.bind(
                     &2,
                     Maybe<&2, Ropes.Root>,
-                    Basics.Verdict,
+                    Judging.Verdict,
                     Basics.Res.find(s, Basics.Node.root_of(s, base), n),
                     b1 => Maybe.bind(
                       &2,
                       Maybe<&2, Ropes.Root>,
-                      Basics.Verdict,
+                      Judging.Verdict,
                       Judging.Content.find(s, n, c),
                       m1 => Judging.Judge.when(
                         Basics.Roots.same(a1, b1),
                         x => Judging.Work.take(
                           Judging.Work.set(
-                            Judging.Work{s, h, []},
+                            Judging.Work{s, h},
                             Basics.Key.res(n),
                             Basics.Res.code(m1)
                           )
@@ -1049,11 +1018,7 @@ def Spec.Judge.write_reads(s, n, base, c, h, h2, ds, s3, m):
                     )
                   )
                 )
-              ),
-              h2,
-              ds,
-              s3
-            )(e)
+              ), h2, s3)(e)
           )
         )
       )

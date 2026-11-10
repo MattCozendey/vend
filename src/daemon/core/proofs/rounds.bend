@@ -2184,7 +2184,7 @@ def Spec.Line.at_agrees(u, c, rules, rs1, rs2, a, b, h, x, y):
       Spec.Line.at_grows(rs1, a, u, c, h, x)(ga)(ea)
     )(Spec.Line.at_grows(rs2, b, u, c, h, y)(gb)(eb))
 
-def Spec.Cast.put_keeps(n, w, th, qs, from, s2, t2, ns, s, s3):
+def Spec.Cast.put_keeps(n, w, th, qs, from, s2, t2, s, s3):
   +s4 = Basics.State.led(s, Basics.State.ledger(s3))
   +a0 = {Ledgers.Act.Vote{Ledgers.Vote{th, qs, Some{Basics.Tip.hash(t2)}}, from}: Ledgers.Act}
   +e =>
@@ -2208,7 +2208,7 @@ def Spec.Cast.put_keeps(n, w, th, qs, from, s2, t2, ns, s, s3):
       )
     )(ProofTrees.Cast.seal.grows(s4, w, n, a0, Sealing.Seal.chain(s4, Sealing.Where.store(w), n)))
 
-def Spec.Cast.put_tip(n, w, th, qs, from, s2, t2, ns, s, s3):
+def Spec.Cast.put_tip(n, w, th, qs, from, s2, t2, s, s3):
   +s4 = Basics.State.led(s, Basics.State.ledger(s3))
   +a0 = {Ledgers.Act.Vote{Ledgers.Vote{th, qs, Some{Basics.Tip.hash(t2)}}, from}: Ledgers.Act}
   +e =>

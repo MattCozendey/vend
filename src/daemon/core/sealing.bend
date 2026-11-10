@@ -489,7 +489,7 @@ def Start.with(
   match m:
     case None{}:
       s
-    case Some{Judging.Work{s2, c, ns}}:
+    case Some{Judging.Work{s2, c}}:
       +t = {Basics.Tip{c, None{}, 0, os}: Basics.Tip}
       Start.head(
         s,
@@ -501,7 +501,7 @@ def Start.with(
 # s, which follows the store that the request i starts with the first owners
 # os: its content holds their first keys
 def Node.start(+s: Basics.Node, i: Ledgers.Id, +os: List<&2, Basics.Owner>) -> Basics.Node:
-  Start.with(s, i, Basics.Owner.names(os), Seal.firsts(os, Some{Judging.Work{s, None{}, []}}))
+  Start.with(s, i, Basics.Owner.names(os), Seal.firsts(os, Some{Judging.Work{s, None{}}}))
 
 # the first tip of the branch b of a store whose tip is m, if the store made
 # b: the log of the store holds it, written once, so every node opens the
@@ -648,7 +648,7 @@ def Cast.put(
   match m:
     case None{}:
       s
-    case Some{Stepping.Run{s2, +t2, ns}}:
+    case Some{Stepping.Run{s2, +t2}}:
       Cast.vote(
         s,
         Judging.State.put(s2, [Basics.Tip.words(t2)]),
@@ -735,7 +735,7 @@ def Plan.from(p: Plan) -> List<&2, String>:
 # the plan of an owner that proposes freely, on the line c at the tip t: the
 # requests that wait at it, that it may cast for and that can run now
 def Plan.own(+s: Basics.Node, +c: Ledgers.Chain, t: Basics.Tip, from: List<&2, String>) -> Plan:
-  +p = Stepping.Step.some(c, Cast.mine(s, Wait.of(s, c)), Stepping.Run{s, t, []})
+  +p = Stepping.Step.some(c, Cast.mine(s, Wait.of(s, c)), Stepping.Run{s, t})
   Plan{Stepping.Picked.asks(p), Some{Stepping.Picked.run(p)}, from}
 
 # the node s may cast for each request of qs
@@ -751,11 +751,11 @@ def Plan.fit(after: Maybe<&2, Hashes.Hash>, m: Maybe<&2, Stepping.Run>) -> Maybe
   match m:
     case None{}:
       None{}
-    case Some{Stepping.Run{s2, +t2, ns}}:
+    case Some{Stepping.Run{s2, +t2}}:
       Shared.Maybe.when(
         Stepping.Run,
         Root.same(after, Some{Basics.Tip.hash(t2)}),
-        u => Some{Stepping.Run{s2, t2, ns}}
+        u => Some{Stepping.Run{s2, t2}}
       )
 
 # the plan for a step m that another ballot names, on the line c at the tip t

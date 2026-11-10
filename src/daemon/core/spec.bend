@@ -341,7 +341,6 @@ law Judge.write_reads:
   for +c: Basics.Content
   for +h: Maybe<&2, Hashes.Hash>
   for +h2: Maybe<&2, Hashes.Hash>
-  for +ds: List<&2, List<&2, U32>>
   for +s3: Basics.Node
   for +m: Maybe<&2, Ropes.Root>
   {
@@ -352,7 +351,7 @@ law Judge.write_reads:
       c,
       h
     )
-      == Some{Basics.Verdict.Taken{h2, ds, s3}}: Maybe<&2, Basics.Verdict>
+      == Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}}: Maybe<&2, Judging.Verdict>
   }
     -> {Judging.Content.find(s, n, c) == Some{m}: Maybe<&2, Maybe<&2, Ropes.Root>>}
     -> {Basics.Res.root(s3, h2, n) == m: Maybe<&2, Ropes.Root>}
@@ -362,7 +361,7 @@ def Work.Reads(k: List<&2, U32>, v: List<&2, U32>, m: Maybe<&2, Judging.Work>) -
   match m:
     case None{}:
       Unit
-    case Some{Judging.Work{s2, h2, ns2}}:
+    case Some{Judging.Work{s2, h2}}:
       {Basics.Node.get(s2, h2, k) == Some{v}: Maybe<&2, List<&2, U32>>}
 
 # a move records a version equal to its target: each resource of the version
@@ -410,7 +409,7 @@ def Run.Outs(m: Maybe<&2, Stepping.Run>, i: Ledgers.Id) -> Type:
   match m:
     case None{}:
       Unit
-    case Some{Stepping.Run{s, t, ns}}:
+    case Some{Stepping.Run{s, t}}:
       {
         Maybe.is_some(
           &2,
@@ -677,14 +676,13 @@ law Cast.put_keeps:
   for +from: List<&2, String>
   for +s2: Basics.Node
   for +t2: Basics.Tip
-  for +ns: List<&2, List<&2, U32>>
   for +s: Basics.Node
   for +s3: Basics.Node
   {Judging.State.put(s2, [Basics.Tip.words(t2)]) == Some{s3}: Maybe<&2, Basics.Node>}
     -> {
       Reading.Node.grows(
         s2,
-        Sealing.Cast.put(n, w, th, qs, from, Some{Stepping.Run{s2, t2, ns}}, s)
+        Sealing.Cast.put(n, w, th, qs, from, Some{Stepping.Run{s2, t2}}, s)
       )
         == True{}: Bool
     }
@@ -698,13 +696,12 @@ law Cast.put_tip:
   for +from: List<&2, String>
   for +s2: Basics.Node
   for +t2: Basics.Tip
-  for +ns: List<&2, List<&2, U32>>
   for +s: Basics.Node
   for +s3: Basics.Node
   {Judging.State.put(s2, [Basics.Tip.words(t2)]) == Some{s3}: Maybe<&2, Basics.Node>}
     -> {
       Basics.Tip.at(
-        Sealing.Cast.put(n, w, th, qs, from, Some{Stepping.Run{s2, t2, ns}}, s),
+        Sealing.Cast.put(n, w, th, qs, from, Some{Stepping.Run{s2, t2}}, s),
         Basics.Tip.hash(t2)
       )
         == Some{t2}: Maybe<&2, Basics.Tip>

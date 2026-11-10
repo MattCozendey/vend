@@ -39,7 +39,6 @@ def Vector.apart(
 def Vector.add.reads.if(
   s: Basics.Node,
   h: Maybe<&2, Hashes.Hash>,
-  ns: List<&2, List<&2, U32>>,
   +c: Ledgers.Chain,
   p: Basics.Place,
   +n: Resources.Name,
@@ -52,8 +51,8 @@ def Vector.add.reads.if(
   Shared.Bool.when(
     Maybe<&2, Judging.Work>,
     b,
-    u => Some{Judging.Work{s, h, ns}},
-    u => Judging.Work.set(Judging.Work{s, h, ns}, Basics.Key.vector(c), Basics.Place.code(p))
+    u => Some{Judging.Work{s, h}},
+    u => Judging.Work.set(Judging.Work{s, h}, Basics.Key.vector(c), Basics.Place.code(p))
   )
 ):
   match b:
@@ -63,7 +62,6 @@ def Vector.add.reads.if(
       ProofLogs.Set.kept(
         s,
         h,
-        ns,
         Basics.Key.vector(c),
         Basics.Place.code(p),
         Basics.Key.res(n),
@@ -85,11 +83,10 @@ def Vector.add.reads(
   Some{w}
 ) -> Spec.Work.Reads(Basics.Key.res(n), v, Judging.Vector.add(w, c, p)):
   match w:
-    case Judging.Work{+s, +h, ns}:
+    case Judging.Work{+s, +h}:
       hget => Vector.add.reads.if(
         s,
         h,
-        ns,
         c,
         p,
         n,
@@ -244,7 +241,7 @@ def Spec.Move.reads(s, c, to, h, n, v):
     Judging.Vector.adds(
       Trees.Tree.list(~Basics.Node, ~Basics.Store.fetch, s, h),
       c,
-      Some{Judging.Work{s, Basics.Node.root_of(s, Some{to}), []}}
+      Some{Judging.Work{s, Basics.Node.root_of(s, Some{to})}}
     ),
     n,
     v
@@ -252,7 +249,7 @@ def Spec.Move.reads(s, c, to, h, n, v):
     Vector.adds.reads(
       Trees.Tree.list(~Basics.Node, ~Basics.Store.fetch, s, h),
       c,
-      Some{Judging.Work{s, Basics.Node.root_of(s, Some{to}), []}},
+      Some{Judging.Work{s, Basics.Node.root_of(s, Some{to})}},
       n,
       v
     )(hget)
@@ -464,14 +461,13 @@ def Set.kept.work(
   hne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool}
 ) -> Spec.Work.Reads(k2, v, Some{w}) -> Spec.Work.Reads(k2, v, Judging.Work.set(w, k, x)):
   match w:
-    case Judging.Work{s, h, ns}:
-      hget => ProofLogs.Set.kept(s, h, ns, k, x, k2, v, hne, hget)
+    case Judging.Work{s, h}:
+      hget => ProofLogs.Set.kept(s, h, k, x, k2, v, hne, hget)
 
 # Keep.reads once it is known whether the node holds the new data (b)
 def Keep.reads.if(
   +s: Basics.Node,
   h: Maybe<&2, Hashes.Hash>,
-  old: List<&2, List<&2, U32>>,
   +ns: List<&2, List<&2, U32>>,
   k: List<&2, U32>,
   v: List<&2, U32>,
@@ -480,12 +476,7 @@ def Keep.reads.if(
 ) -> Spec.Work.Reads(
   k,
   v,
-  Judging.Work.put(
-    Shared.Maybe.when(Basics.Node, b, u => Some{Basics.State.keep(s, ns)}),
-    h,
-    ns,
-    old
-  )
+  Judging.Work.on(Shared.Maybe.when(Basics.Node, b, u => Some{Basics.State.keep(s, ns)}), h)
 ):
   match b:
     case False{}:
@@ -501,23 +492,13 @@ def Keep.reads(
   v: List<&2, U32>
 ) -> Spec.Work.Reads(k, v, Some{w}) -> Spec.Work.Reads(k, v, Judging.Work.keep(w, ns)):
   match w:
-    case Judging.Work{s, h, old}:
-      hget => Keep.reads.if(
-        s,
-        h,
-        old,
-        ns,
-        k,
-        v,
-        Trees.Tree.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s, ns), ns),
-        hget
-      )
+    case Judging.Work{s, h}:
+      hget => Keep.reads.if(s, h, ns, k, v, Trees.Tree.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s, ns), ns), hget)
 
 # Set.read once it is known whether the node holds the new nodes (b)
 def Set.read.if(
   +s: Basics.Node,
   +h: Maybe<&2, Hashes.Hash>,
-  ns: List<&2, List<&2, U32>>,
   +k: List<&2, U32>,
   +x: List<&2, U32>,
   +hh: Hashes.Hash,
@@ -530,12 +511,7 @@ def Set.read.if(
 ) -> Spec.Work.Reads(
   k,
   x,
-  Judging.Work.put(
-    Shared.Maybe.when(Basics.Node, b, u => Some{Basics.State.keep(s, ws)}),
-    Some{hh},
-    ws,
-    ns
-  )
+  Judging.Work.on(Shared.Maybe.when(Basics.Node, b, u => Some{Basics.State.keep(s, ws)}), Some{hh})
 ):
   match b:
     case False{}:
@@ -577,12 +553,11 @@ def Set.read.if(
 def Set.read.of(
   +s: Basics.Node,
   h: Maybe<&2, Hashes.Hash>,
-  ns: List<&2, List<&2, U32>>,
   k: List<&2, U32>,
   x: List<&2, U32>,
   +m: Maybe<&2, Trees.Put>,
   em: {Basics.Node.set(s, h, k, x) == m: Maybe<&2, Trees.Put>}
-) -> Spec.Work.Reads(k, x, Judging.Work.of(s, ns, m)):
+) -> Spec.Work.Reads(k, x, Judging.Work.of(s, m)):
   match m:
     case None{}:
       Unit{}
@@ -590,7 +565,6 @@ def Set.read.of(
       Set.read.if(
         s,
         h,
-        ns,
         k,
         x,
         hh,
@@ -607,8 +581,8 @@ def Set.read(
   +x: List<&2, U32>
 ) -> Spec.Work.Reads(k, x, Judging.Work.set(w, k, x)):
   match w:
-    case Judging.Work{s, h, ns}:
-      Set.read.of(s, h, ns, k, x, Basics.Node.set(s, h, k, x), {==})
+    case Judging.Work{s, h}:
+      Set.read.of(s, h, k, x, Basics.Node.set(s, h, k, x), {==})
 
 # the merge of one resource m, of the trees hb (base), ho (ours) and ht
 # (theirs), on the work w: one step of Spec.Merge.all
@@ -1248,7 +1222,7 @@ def Spec.Merge.keeps(s, c, from, h, n, b, o, t, x):
       Basics.Node.root_of(s, Judging.Merge.base(s, c, from, h)),
       h,
       Basics.Node.root_of(s, Some{from}),
-      Some{Judging.Work{s, h, []}}
+      Some{Judging.Work{s, h}}
     ),
     n,
     Basics.Res.code(x)
@@ -1260,7 +1234,7 @@ def Spec.Merge.keeps(s, c, from, h, n, b, o, t, x):
       Basics.Node.root_of(s, Judging.Merge.base(s, c, from, h)),
       h,
       Basics.Node.root_of(s, Some{from}),
-      Some{Judging.Work{s, h, []}},
+      Some{Judging.Work{s, h}},
       n,
       b,
       o,
@@ -1277,10 +1251,10 @@ def Spec.Resolve.reads(s, h, n, m):
   Reads.bind(
     Basics.Key.res(n),
     Basics.Res.code(m),
-    Judging.Work.set(Judging.Work{s, h, []}, Basics.Key.res(n), Basics.Res.code(m)),
+    Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m)),
     y => Judging.Work.set(y, Basics.Key.clash(n), [])
   )(
-    Set.read(Judging.Work{s, h, []}, Basics.Key.res(n), Basics.Res.code(m))
+    Set.read(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
   )(
     y => hy => Set.kept.work(
       y,
@@ -1297,7 +1271,7 @@ def Spec.Resolve.shuts(s, h, n, m):
     Judging.Work,
     Basics.Key.clash(n),
     [],
-    Judging.Work.set(Judging.Work{s, h, []}, Basics.Key.res(n), Basics.Res.code(m)),
+    Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m)),
     y => Judging.Work.set(y, Basics.Key.clash(n), [])
   )(y => Set.read(y, Basics.Key.clash(n), []))
 
@@ -1348,13 +1322,13 @@ def Add.reads.at(
   m: Maybe<&2, List<&2, U32>>
 ) -> ProofLogs.Run.Keeps(k, x, Stepping.Run.add.at(r, k, x, m)):
   match r m:
-    case Stepping.Run{+s, +t, +ns} None{}:
+    case Stepping.Run{+s, +t} None{}:
       ProofLogs.Run.logged.keeps(
         k,
         x,
         t,
-        Judging.Work.set(Judging.Work{s, Basics.Tip.log(t), ns}, k, x)
-      )(Set.read(Judging.Work{s, Basics.Tip.log(t), ns}, k, x))
+        Judging.Work.set(Judging.Work{s, Basics.Tip.log(t)}, k, x)
+      )(Set.read(Judging.Work{s, Basics.Tip.log(t)}, k, x))
     case y Some{old}:
       Unit{}
 
@@ -1380,7 +1354,7 @@ def Outs.of(
   match m:
     case None{}:
       h => Unit{}
-    case Some{Stepping.Run{s, t, ns}}:
+    case Some{Stepping.Run{s, t}}:
       h =>
         %Equal.sym(
           Maybe<&2, List<&2, U32>>,
@@ -1489,15 +1463,15 @@ def Judged.outs(
   r: Stepping.Run,
   i: Ledgers.Id,
   own: Maybe<&2, List<&2, String>>,
-  +m: Maybe<&2, Basics.Verdict>
+  +m: Maybe<&2, Judging.Verdict>
 ) -> Spec.Run.Outs(Stepping.Step.judged(r, i, own, m), i):
   match m:
     case None{}:
       Unit{}
-    case Some{Basics.Verdict.Stale{}}:
+    case Some{Judging.Verdict.Stale{}}:
       Stale.outs(r, i)
-    case Some{Basics.Verdict.Taken{h, ds, s2}}:
-      Taken.outs(Stepping.Run.over(r, s2, h, ds), i, own)
+    case Some{Judging.Verdict.Taken{Judging.Work{s2, h}}}:
+      Taken.outs(Stepping.Run.over(r, s2, h), i, own)
 
 # a mark on a version has an outcome
 def Marked.outs(
@@ -1548,10 +1522,10 @@ def Branch.made.outs(
   match m:
     case None{}:
       Unit{}
-    case Some{Judging.Made{t, ds, s2}}:
+    case Some{Judging.Made{t, s2}}:
       Outs.all(
         Stepping.Run.add(
-          Stepping.Run.over(r, s2, Basics.Tip.content(Stepping.Run.tip(r)), ds),
+          Stepping.Run.over(r, s2, Basics.Tip.content(Stepping.Run.tip(r))),
           Basics.Log.start(b),
           Hashes.Hash.code(Basics.Tip.hash(t), [])
         ),
@@ -1720,7 +1694,7 @@ def Outs.self(
     == Some{ws}: Maybe<&2, List<&2, U32>>
 } -> Spec.Run.Outs(Some{r}, i):
   match r:
-    case Stepping.Run{s, t, ns}:
+    case Stepping.Run{s, t}:
       eg =>
         %Equal.sym(
           Maybe<&2, List<&2, U32>>,
@@ -1820,7 +1794,7 @@ def Keeps.self(
     == Some{v}: Maybe<&2, List<&2, U32>>
 } -> ProofLogs.Run.Keeps(k, v, Some{r}):
   match r:
-    case Stepping.Run{s, t, ns}:
+    case Stepping.Run{s, t}:
       e => e
 
 # Outs.kept once what the log of the run holds for the request is known (g)
@@ -1879,11 +1853,11 @@ def Outs.kept(
           All.none(c, qs)
         ): Spec.Run.Outs(_, i)
         Unit{}
-    case Some{Stepping.Run{s, t, ns}}:
+    case Some{Stepping.Run{s, t}}:
       h => Outs.kept.at(
         c,
         qs,
-        Stepping.Run{s, t, ns},
+        Stepping.Run{s, t},
         i,
         Basics.Node.get(s, Basics.Tip.log(t), Basics.Log.out(i)),
         {==}
@@ -1961,7 +1935,7 @@ def All.outs(
       )
 
 def Spec.Step.run_outs(s, c, t, qs, i):
-  All.outs(c, qs, Some{Stepping.Run{s, t, []}}, i)
+  All.outs(c, qs, Some{Stepping.Run{s, t}}, i)
 
 # Wait.left_keeps at the first request j, once it is known whether it is i
 # (same) and whether a step ran it (d)

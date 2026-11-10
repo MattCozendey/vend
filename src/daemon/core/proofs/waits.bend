@@ -347,7 +347,7 @@ def Start.with.waiting(
   match m:
     case None{}:
       {==}
-    case Some{Judging.Work{s2, +c, ns}}:
+    case Some{Judging.Work{s2, +c}}:
       Start.head.waiting(
         s,
         Judging.State.put(s2, [Basics.Tip.words(Basics.Tip{c, None{}, 0, os})]),
@@ -714,7 +714,7 @@ def Arrive.waits(
           s,
           j,
           Basics.Owner.names(os),
-          Sealing.Seal.firsts(os, Some{Judging.Work{s, None{}, []}})
+          Sealing.Seal.firsts(os, Some{Judging.Work{s, None{}}})
         )
       ): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, _, i) == True{}: Bool}
       h

@@ -15,10 +15,17 @@ import ./basics.bend as Basics
 # Writes
 # ------
 
-# trees being written: the state with their new nodes, the root, and the new
-# nodes
+# trees being written: the root, and the node that holds what was written
 type Work is Data:
-  Work{state: Basics.Node, root: Maybe<&2, Hashes.Hash>, nodes: List<&2, List<&2, U32>>}
+  Work{state: Basics.Node, root: Maybe<&2, Hashes.Hash>}
+
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
+# what a judge says of one change: refuse it as stale, or take it, with the
+# trees that it wrote
+type Verdict is Data:
+  Verdict.Stale{}
+  Verdict.Taken{work: Work}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # s with the words ds as data, when it then holds each of them under its hash
 # (none: a slot holds other words). A node reads back what it puts, so what a
@@ -31,67 +38,58 @@ def State.put(s: Basics.Node, +ds: List<&2, List<&2, U32>>) -> Maybe<&2, Basics.
     u => Some{s2}
   )
 
-# the work at the root h on the state m, with the new nodes ws before ns
-def Work.put(
-  m: Maybe<&2, Basics.Node>,
-  h: Maybe<&2, Hashes.Hash>,
-  ws: List<&2, List<&2, U32>>,
-  ns: List<&2, List<&2, U32>>
-) -> Maybe<&2, Work>:
+# the work at the root h on the state m
+def Work.on(m: Maybe<&2, Basics.Node>, h: Maybe<&2, Hashes.Hash>) -> Maybe<&2, Work>:
   match m:
     case None{}:
       None{}
     case Some{s2}:
-      Some{Work{s2, h, List.append(&2, List<&2, U32>, ws, ns)}}
+      Some{Work{s2, h}}
 
-# the work that the new subtree m gives, after the state s and the nodes ns
-def Work.of(
-  s: Basics.Node,
-  ns: List<&2, List<&2, U32>>,
-  m: Maybe<&2, Trees.Put>
-) -> Maybe<&2, Work>:
+# the work that the new subtree m gives on the state s
+def Work.of(s: Basics.Node, m: Maybe<&2, Trees.Put>) -> Maybe<&2, Work>:
   match m:
     case None{}:
       None{}
-    case Some{Trees.Put{h, +ws}}:
-      Work.put(State.put(s, ws), Some{h}, ws, ns)
+    case Some{Trees.Put{h, ws}}:
+      Work.on(State.put(s, ws), Some{h})
 
 # w with the key k set to the value x (none: the store lacks a node)
 def Work.set(w: Work, k: List<&2, U32>, x: List<&2, U32>) -> Maybe<&2, Work>:
   match w:
-    case Work{+s, h, ns}:
-      Work.of(s, ns, Basics.Node.set(s, h, k, x))
+    case Work{+s, h}:
+      Work.of(s, Basics.Node.set(s, h, k, x))
 
-# w with the words ns as data, and among its new nodes
-def Work.keep(w: Work, +ns: List<&2, List<&2, U32>>) -> Maybe<&2, Work>:
+# w with the words ns as data
+def Work.keep(w: Work, ns: List<&2, List<&2, U32>>) -> Maybe<&2, Work>:
   match w:
-    case Work{s, h, old}:
-      Work.put(State.put(s, ns), h, ns, old)
+    case Work{s, h}:
+      Work.on(State.put(s, ns), h)
 
 # the root of w
 def Work.root(w: Work) -> Maybe<&2, Hashes.Hash>:
   match w:
-    case Work{s, h, ns}:
+    case Work{s, h}:
       h
 
 # a verdict that takes the trees of m (none: wait)
-def Work.take(m: Maybe<&2, Work>) -> Maybe<&2, Basics.Verdict>:
+def Work.take(m: Maybe<&2, Work>) -> Maybe<&2, Verdict>:
   match m:
     case None{}:
       None{}
-    case Some{Work{s, h, ns}}:
-      Some{Basics.Verdict.Taken{h, ns, s}}
+    case Some{w}:
+      Some{Verdict.Taken{w}}
 
 # w with the line c at the place p in its version vector, unless it holds that
 # place or a newer one
 def Vector.add(w: Work, +c: Ledgers.Chain, +p: Basics.Place) -> Maybe<&2, Work>:
   match w:
-    case Work{+s, +h, +ns}:
+    case Work{+s, +h}:
       Shared.Bool.when(
         Maybe<&2, Work>,
         Basics.Place.covered(Basics.Node.vector(s, h, c), p),
-        u => Some{Work{s, h, ns}},
-        u => Work.set(Work{s, h, ns}, Basics.Key.vector(c), Basics.Place.code(p))
+        u => Some{Work{s, h}},
+        u => Work.set(Work{s, h}, Basics.Key.vector(c), Basics.Place.code(p))
       )
 
 # the line and place of a version vector's entry, from its binding
@@ -490,14 +488,14 @@ def Judge.content(s: Basics.Node, c: Basics.Content) -> Maybe<&2, Bool>:
       Judge.ready(s, w)
 
 # a refusal
-def Judge.refuse() -> Maybe<&2, Basics.Verdict>:
-  Some{Basics.Verdict.Stale{}}
+def Judge.refuse() -> Maybe<&2, Verdict>:
+  Some{Verdict.Stale{}}
 
 # the verdict m, then k when m takes
 def Judge.then(
   m: Maybe<&2, Bool>,
-  k: Unit -> Maybe<&2, Basics.Verdict>
-) -> Maybe<&2, Basics.Verdict>:
+  k: Unit -> Maybe<&2, Verdict>
+) -> Maybe<&2, Verdict>:
   match m:
     case Some{True{}}:
       k(Unit{})
@@ -507,8 +505,8 @@ def Judge.then(
       None{}
 
 # k when b holds, else a refusal
-def Judge.when(b: Bool, k: Unit -> Maybe<&2, Basics.Verdict>) -> Maybe<&2, Basics.Verdict>:
-  Shared.Bool.when(Maybe<&2, Basics.Verdict>, b, k, u => Judge.refuse())
+def Judge.when(b: Bool, k: Unit -> Maybe<&2, Verdict>) -> Maybe<&2, Verdict>:
+  Shared.Bool.when(Maybe<&2, Verdict>, b, k, u => Judge.refuse())
 
 # the root that the content c gives the resource n (none: the version holds
 # none)
@@ -541,7 +539,7 @@ def Judge.write(
   +base: Maybe<&2, Ledgers.Id>,
   +c: Basics.Content,
   +h: Maybe<&2, Hashes.Hash>
-) -> Maybe<&2, Basics.Verdict>:
+) -> Maybe<&2, Verdict>:
   Judge.then(
     Judge.ready_maybe(s, base),
     u => Judge.then(
@@ -549,21 +547,21 @@ def Judge.write(
       w => Maybe.bind(
         &2,
         Maybe<&2, Ropes.Root>,
-        Basics.Verdict,
+        Verdict,
         Basics.Res.find(s, h, n),
         a => Maybe.bind(
           &2,
           Maybe<&2, Ropes.Root>,
-          Basics.Verdict,
+          Verdict,
           Basics.Res.find(s, Basics.Node.root_of(s, base), n),
           b => Maybe.bind(
             &2,
             Maybe<&2, Ropes.Root>,
-            Basics.Verdict,
+            Verdict,
             Content.find(s, n, c),
             m => Judge.when(
               Basics.Roots.same(a, b),
-              x => Work.take(Work.set(Work{s, h, []}, Basics.Key.res(n), Basics.Res.code(m)))
+              x => Work.take(Work.set(Work{s, h}, Basics.Key.res(n), Basics.Res.code(m)))
             )
           )
         )
@@ -642,7 +640,7 @@ def Resolve.work(
     &2,
     Work,
     Work,
-    Work.set(Work{s, h, []}, Basics.Key.res(n), Basics.Res.code(m)),
+    Work.set(Work{s, h}, Basics.Key.res(n), Basics.Res.code(m)),
     y => Work.set(y, Basics.Key.clash(n), [])
   )
 
@@ -656,7 +654,7 @@ def Judge.resolve(
   +n: Resources.Name,
   +c: Basics.Content,
   +h: Maybe<&2, Hashes.Hash>
-) -> Maybe<&2, Basics.Verdict>:
+) -> Maybe<&2, Verdict>:
   Judge.then(
     Judge.ready(s, k),
     u => Judge.then(
@@ -664,12 +662,12 @@ def Judge.resolve(
       w => Maybe.bind(
         &2,
         Bool,
-        Basics.Verdict,
+        Verdict,
         Clash.find(s, h, n, Merge.from_on(Basics.Node.asked(s, k), r, b)),
         open => Maybe.bind(
           &2,
           Maybe<&2, Ropes.Root>,
-          Basics.Verdict,
+          Verdict,
           Content.find(s, n, c),
           m => Judge.when(open, x => Work.take(Resolve.work(s, h, n, m)))
         )
@@ -888,7 +886,7 @@ def Merge.work(
       Basics.Node.root_of(s, Merge.base(s, c, from, h)),
       h,
       ht,
-      Some{Work{s, h, []}}
+      Some{Work{s, h}}
     )
   )
 
@@ -907,7 +905,7 @@ def Move.work(
     Vector.adds(
       Trees.Tree.list(~Basics.Node, ~Basics.Store.fetch, s, h),
       c,
-      Some{Work{s, Basics.Node.root_of(s, Some{to}), []}}
+      Some{Work{s, Basics.Node.root_of(s, Some{to})}}
     )
   )
 
@@ -916,9 +914,9 @@ def Move.work(
 def Make.branch(+s: Basics.Node, c: Ledgers.Chain, m: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Work>:
   match m:
     case None{}:
-      Some{Work{s, None{}, []}}
+      Some{Work{s, None{}}}
     case Some{+v}:
-      Vector.joined(s, c, v, Some{Work{s, Basics.Node.root_of(s, Some{v}), []}})
+      Vector.joined(s, c, v, Some{Work{s, Basics.Node.root_of(s, Some{v})}})
 
 # the store tree h with the group g, of the members ms, and its name among the
 # names of its groups
@@ -933,7 +931,7 @@ def Group.work(
     &2,
     Work,
     Work,
-    Work.set(Work{s, h, []}, Basics.Key.group(g), Basics.Members.code(ms, [])),
+    Work.set(Work{s, h}, Basics.Key.group(g), Basics.Members.code(ms, [])),
     +w => Shared.Bool.when(
       Maybe<&2, Work>,
       List.contains(~String, ~String.eq, ns, g),
@@ -946,18 +944,17 @@ def Group.work(
 def Own.fits(+os: List<&2, String>, ns: List<&2, String>) -> Bool:
   List.all.if(u => Ledgers.Owners.is_eq(os, ns), Bool.not(List.is_empty(&2, String, os)))
 
-# the first tip of a new branch, with the new nodes of its trees, and the node
-# that holds them
+# the first tip of a new branch, and the node that holds it
 type Made is Data:
-  Made{tip: Basics.Tip, nodes: List<&2, List<&2, U32>>, node: Basics.Node}
+  Made{tip: Basics.Tip, node: Basics.Node}
 
 # the first tip t of a branch, once the trees of m hold it
 def Made.put(t: Basics.Tip, m: Maybe<&2, Work>) -> Maybe<&2, Made>:
   match m:
     case None{}:
       None{}
-    case Some{Work{s, l, ns}}:
-      Some{Made{t, ns, s}}
+    case Some{Work{s, l}}:
+      Some{Made{t, s}}
 
 # the first tip of a new branch, from its first content (the root of start):
 # no log, no version, and the owners os of its store now
@@ -1072,10 +1069,10 @@ def Own.change(
   at: Maybe<&2, Ledgers.Id>,
   os: List<&2, String>,
   +h: Maybe<&2, Hashes.Hash>
-) -> Maybe<&2, Basics.Verdict>:
+) -> Maybe<&2, Verdict>:
   Judge.then(
     Own.takes(s, r, l, g, at, os, h),
-    u => Work.take(Work.set(Work{s, h, []}, Basics.Key.owner(), Codes.Code.text(g, [])))
+    u => Work.take(Work.set(Work{s, h}, Basics.Key.owner(), Codes.Code.text(g, [])))
   )
 
 # the node s holds each node of the trees whose roots are a and b
@@ -1088,7 +1085,7 @@ def Whole.both(+s: Basics.Node, a: Maybe<&2, Hashes.Hash>, b: Maybe<&2, Hashes.H
 # k when the node holds the whole of the trees that a walk reads (b), else
 # wait: a merge or a move acts on a whole tree, never on the part that the
 # node holds
-def Judge.whole(b: Bool, k: Unit -> Maybe<&2, Basics.Verdict>) -> Maybe<&2, Basics.Verdict>:
+def Judge.whole(b: Bool, k: Unit -> Maybe<&2, Verdict>) -> Maybe<&2, Verdict>:
   match b:
     case True{}:
       k(Unit{})
@@ -1104,12 +1101,12 @@ def Judge.change(
   c: Basics.Change,
   +h: Maybe<&2, Hashes.Hash>,
   os: List<&2, String>
-) -> Maybe<&2, Basics.Verdict>:
+) -> Maybe<&2, Verdict>:
   match l c:
     case None{} Basics.Change.Group{+g, +ms}:
       Judge.when(Bool.not(Group.loops.any(s, h, g, ms)), u => Work.take(Group.work(s, h, g, ms)))
     case None{} Basics.Change.Key{n, k}:
-      Work.take(Work.set(Work{s, h, []}, Basics.Key.seal(n), Hashes.Hash.code(k, [])))
+      Work.take(Work.set(Work{s, h}, Basics.Key.seal(n), Hashes.Hash.code(k, [])))
     case w Basics.Change.Own{g, at, os2}:
       Own.change(s, r, w, g, at, os2, h)
     case Some{b} Basics.Change.Write{n, base, c2}:

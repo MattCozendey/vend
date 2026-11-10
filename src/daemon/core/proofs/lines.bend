@@ -799,7 +799,7 @@ def Cast.put.heads(
   match m:
     case None{}:
       {==}
-    case Some{Stepping.Run{s2, +t2, ns}}:
+    case Some{Stepping.Run{s2, +t2}}:
       Cast.vote.heads(
         s,
         Judging.State.put(s2, [Basics.Tip.words(t2)]),
@@ -1383,7 +1383,7 @@ def Advance.ran.kept(
   match m:
     case None{}:
       ga => rk => Kept.refl(s)
-    case Some{Stepping.Run{+s2, +t2, ns}}:
+    case Some{Stepping.Run{+s2, +t2}}:
       ga => rk => Kept.when(
         Sealing.Root.same(after, Some{Basics.Tip.hash(t2)}),
         s,
@@ -1739,7 +1739,7 @@ def Start.with.kept(
   match m:
     case None{}:
       e => Kept.refl(s)
-    case Some{Judging.Work{+s2, +c, ns}}:
+    case Some{Judging.Work{+s2, +c}}:
       e =>
         +t = {Basics.Tip{c, None{}, 0, os}: Basics.Tip}
         Start.head.kept(
@@ -1761,8 +1761,8 @@ def Start.kept(
     s,
     i,
     Basics.Owner.names(os),
-    Sealing.Seal.firsts(os, Some{Judging.Work{s, None{}, []}})
-  )(ProofTrees.Firsts.after(s, os, Some{Judging.Work{s, None{}, []}})(ProofTrees.Grows.refl(s)))
+    Sealing.Seal.firsts(os, Some{Judging.Work{s, None{}}})
+  )(ProofTrees.Firsts.after(s, os, Some{Judging.Work{s, None{}}})(ProofTrees.Grows.refl(s)))
 
 # a line that a node follows keeps the logs, once its head m is known
 def Follow.new.kept(

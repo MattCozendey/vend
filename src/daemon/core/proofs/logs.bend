@@ -298,7 +298,6 @@ def Get.grows(
 def Set.kept.if(
   +s: Basics.Node,
   +h: Maybe<&2, Hashes.Hash>,
-  ns: List<&2, List<&2, U32>>,
   +k: List<&2, U32>,
   +x: List<&2, U32>,
   +k2: List<&2, U32>,
@@ -315,12 +314,7 @@ def Set.kept.if(
 ) -> Spec.Work.Reads(
   k2,
   v,
-  Judging.Work.put(
-    Shared.Maybe.when(Basics.Node, b, u => Some{Basics.State.keep(s, ws)}),
-    Some{hh},
-    ws,
-    ns
-  )
+  Judging.Work.on(Shared.Maybe.when(Basics.Node, b, u => Some{Basics.State.keep(s, ws)}), Some{hh})
 ):
   match b:
     case False{}:
@@ -399,7 +393,6 @@ def Set.kept.if(
 def Set.kept.of(
   +s: Basics.Node,
   h: Maybe<&2, Hashes.Hash>,
-  ns: List<&2, List<&2, U32>>,
   k: List<&2, U32>,
   x: List<&2, U32>,
   k2: List<&2, U32>,
@@ -408,7 +401,7 @@ def Set.kept.of(
   em: {Basics.Node.set(s, h, k, x) == m: Maybe<&2, Trees.Put>},
   hne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool},
   hget: {Basics.Node.get(s, h, k2) == Some{v}: Maybe<&2, List<&2, U32>>}
-) -> Spec.Work.Reads(k2, v, Judging.Work.of(s, ns, m)):
+) -> Spec.Work.Reads(k2, v, Judging.Work.of(s, m)):
   match m:
     case None{}:
       Unit{}
@@ -416,7 +409,6 @@ def Set.kept.of(
       Set.kept.if(
         s,
         h,
-        ns,
         k,
         x,
         k2,
@@ -434,22 +426,21 @@ def Set.kept.of(
 def Set.kept(
   +s: Basics.Node,
   +h: Maybe<&2, Hashes.Hash>,
-  ns: List<&2, List<&2, U32>>,
   +k: List<&2, U32>,
   +x: List<&2, U32>,
   k2: List<&2, U32>,
   v: List<&2, U32>,
   hne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool},
   hget: {Basics.Node.get(s, h, k2) == Some{v}: Maybe<&2, List<&2, U32>>}
-) -> Spec.Work.Reads(k2, v, Judging.Work.set(Judging.Work{s, h, ns}, k, x)):
-  Set.kept.of(s, h, ns, k, x, k2, v, Basics.Node.set(s, h, k, x), {==}, hne, hget)
+) -> Spec.Work.Reads(k2, v, Judging.Work.set(Judging.Work{s, h}, k, x)):
+  Set.kept.of(s, h, k, x, k2, v, Basics.Node.set(s, h, k, x), {==}, hne, hget)
 
 # that the log of the run m, if any, reads the key k2 as v
 def Run.Keeps(k2: List<&2, U32>, v: List<&2, U32>, m: Maybe<&2, Stepping.Run>) -> Type:
   match m:
     case None{}:
       Unit
-    case Some{Stepping.Run{s2, t2, ns}}:
+    case Some{Stepping.Run{s2, t2}}:
       {Basics.Node.get(s2, Basics.Tip.log(t2), k2) == Some{v}: Maybe<&2, List<&2, U32>>}
 
 # the run of a new log that keeps a key keeps it
@@ -462,7 +453,7 @@ def Run.logged.keeps(
   match t m:
     case x None{}:
       w => Unit{}
-    case Basics.Tip{c, old, n, os} Some{Judging.Work{s2, l, ns}}:
+    case Basics.Tip{c, old, n, os} Some{Judging.Work{s2, l}}:
       w => w
 
 # a key that a tree does not hold is not a key that it holds, once whether
@@ -504,7 +495,6 @@ def Keys.differ.if(
 def Add.new.kept(
   +s: Basics.Node,
   +t: Basics.Tip,
-  +ns: List<&2, List<&2, U32>>,
   +k: List<&2, U32>,
   +x: List<&2, U32>,
   +k2: List<&2, U32>,
@@ -514,18 +504,17 @@ def Add.new.kept(
 ) -> Run.Keeps(
   k2,
   v,
-  Stepping.Run.logged(t, Judging.Work.set(Judging.Work{s, Basics.Tip.log(t), ns}, k, x))
+  Stepping.Run.logged(t, Judging.Work.set(Judging.Work{s, Basics.Tip.log(t)}, k, x))
 ):
   Run.logged.keeps(
     k2,
     v,
     t,
-    Judging.Work.set(Judging.Work{s, Basics.Tip.log(t), ns}, k, x)
+    Judging.Work.set(Judging.Work{s, Basics.Tip.log(t)}, k, x)
   )(
     Set.kept(
       s,
       Basics.Tip.log(t),
-      ns,
       k,
       x,
       k2,
@@ -562,8 +551,8 @@ def Add.at.kept(
     == m: Maybe<&2, List<&2, U32>>
 } -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Run.add.at(r, k, x, m)):
   match r m:
-    case Stepping.Run{+s, +t, +ns} None{}:
-      em => hr => Add.new.kept(s, t, ns, k, x, k2, v, em, hr)
+    case Stepping.Run{+s, +t} None{}:
+      em => hr => Add.new.kept(s, t, k, x, k2, v, em, hr)
     case y Some{old}:
       em => hr => Unit{}
 
@@ -632,7 +621,7 @@ def Next.kept(
   -v: List<&2, U32>
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Some{Stepping.Run.next(r, own)}):
   match r:
-    case Stepping.Run{s, Basics.Tip{c, l, n, os}, ns}:
+    case Stepping.Run{s, Basics.Tip{c, l, n, os}}:
       hr => hr
 
 # a taken request keeps each key of a run's log
@@ -687,13 +676,12 @@ def Over.kept(
   r: Stepping.Run,
   s2: Basics.Node,
   -h: Maybe<&2, Hashes.Hash>,
-  -ds: List<&2, List<&2, U32>>,
   k2: List<&2, U32>,
   v: List<&2, U32>,
   g: {Reading.Node.grows(Stepping.Run.state(r), s2) == True{}: Bool}
-) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Some{Stepping.Run.over(r, s2, h, ds)}):
+) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Some{Stepping.Run.over(r, s2, h)}):
   match r:
-    case Stepping.Run{s, Basics.Tip{c, l, n, os}, ns}:
+    case Stepping.Run{s, Basics.Tip{c, l, n, os}}:
       hr => Get.grows(s, s2, l, k2, v, g)(hr)
 
 # a judged request keeps each key of a run's log, other than the owners and
@@ -702,7 +690,7 @@ def Judged.kept(
   +r: Stepping.Run,
   i: Ledgers.Id,
   own: Maybe<&2, List<&2, String>>,
-  m: Maybe<&2, Basics.Verdict>,
+  m: Maybe<&2, Judging.Verdict>,
   +k2: List<&2, U32>,
   +v: List<&2, U32>
 ) -> {
@@ -711,16 +699,16 @@ def Judged.kept(
   match m:
     case None{}:
       g => hr => Unit{}
-    case Some{Basics.Verdict.Stale{}}:
+    case Some{Judging.Verdict.Stale{}}:
       g => hr => Add.kept(r, Basics.Log.out(i), Basics.Out.words(Basics.Out.Stale{}), k2, v)(hr)
-    case Some{Basics.Verdict.Taken{h, ds, +s2}}:
+    case Some{Judging.Verdict.Taken{Judging.Work{+s2, h}}}:
       g => hr => Taken.kept(
-        Stepping.Run.over(r, s2, h, ds),
+        Stepping.Run.over(r, s2, h),
         i,
         own,
         k2,
         v
-      )(Over.kept(r, s2, h, ds, k2, v, g)(hr))
+      )(Over.kept(r, s2, h, k2, v, g)(hr))
 
 # a mark on a version keeps each key of a run's log, other than the owners
 # and the count
@@ -786,9 +774,9 @@ def Branch.made.kept(
   match m:
     case None{}:
       g => hr => Unit{}
-    case Some{Judging.Made{+t, ds, +s2}}:
+    case Some{Judging.Made{+t, +s2}}:
       g => hr =>
-        +r1 = {Stepping.Run.over(r, s2, Basics.Tip.content(Stepping.Run.tip(r)), ds): Stepping.Run}
+        +r1 = {Stepping.Run.over(r, s2, Basics.Tip.content(Stepping.Run.tip(r))): Stepping.Run}
         Keeps.bind(
           k2,
           v,
@@ -801,7 +789,7 @@ def Branch.made.kept(
             Hashes.Hash.code(Basics.Tip.hash(t), []),
             k2,
             v
-          )(Over.kept(r, s2, Basics.Tip.content(Stepping.Run.tip(r)), ds, k2, v, g)(hr))
+          )(Over.kept(r, s2, Basics.Tip.content(Stepping.Run.tip(r)), k2, v, g)(hr))
         )(r2 => h2 => Taken.kept(r2, i, None{}, k2, v)(h2))
 
 # a request for a branch keeps each key of a run's log, other than the owners
@@ -1066,4 +1054,4 @@ def Run.kept(
 } -> Run.Keeps(k2, v, Stepping.Step.run(s, c, t, qs)):
   match t:
     case Basics.Tip{c0, l, n, os}:
-      h => All.kept(c, qs, Some{Stepping.Run{s, Basics.Tip{c0, l, n, os}, []}}, k2, v)(h)
+      h => All.kept(c, qs, Some{Stepping.Run{s, Basics.Tip{c0, l, n, os}}}, k2, v)(h)

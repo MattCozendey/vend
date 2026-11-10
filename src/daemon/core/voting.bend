@@ -491,7 +491,7 @@ def Advance.ran(
   match m:
     case None{}:
       s
-    case Some{Stepping.Run{s2, +t2, ns}}:
+    case Some{Stepping.Run{s2, +t2}}:
       Shared.Bool.when(
         Basics.Node,
         Sealing.Root.same(after, Some{Basics.Tip.hash(t2)}),
