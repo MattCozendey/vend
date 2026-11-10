@@ -88,6 +88,14 @@ def Eq.ne_flip(
 ) -> {same(y, x) == False{}: Bool}:
   Eq.ne_flip.at(~A, ~same, ~laws, same(y, x), x, y, no, {==})
 
+# a and False is False
+def Bool.and_false_right(a: Bool) -> {Bool.and(a, False{}) == False{}: Bool}:
+  match a:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
 # anything or True is True
 def Bool.or_true_right(a: Bool) -> {Bool.or(a, True{}) == True{}: Bool}:
   match a:
