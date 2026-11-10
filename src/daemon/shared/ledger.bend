@@ -17,8 +17,9 @@ import ./shared/text.bend as Texts
 # times.
 #
 # A line is a store, or a line below it. Its owners cast one ballot each for
-# the step at each height; a step is what a majority of them cast
-# (Quorum.decide), and it stays as the ledger grows (State.decide_grows). What
+# the step at each height; a step is what a majority of them cast, or, once
+# all of them cast, what Quorum.decide picks of their ballots; it stays as the
+# ledger grows (State.decide_grows). What
 # a step means is the caller's: the ledger does not read a line's state.
 
 # Names
@@ -177,7 +178,7 @@ def Chain.key(c: Chain) -> List<&2, Bool>:
     case Chain{i, Some{k}}:
       List.append(&2, Bool, Id.key(i), True{} <> k)
 
-# the key of an epoch or a height: its 32 bits, highest first, so keys are in
+# the key of a height: its 32 bits, highest first, so keys are in
 # the order of numbers
 def Word.key(x: U32) -> List<&2, Bool>:
   Tries.Trie.word(32n, x)

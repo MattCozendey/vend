@@ -25,9 +25,9 @@ import ../shared/tree.bend as Trees
 #
 # A step takes a tip to the next one: it runs a batch of requests, in order
 # (Step.run), and any node can run it again. The owners of a line cast ballots
-# for steps (Ledgers); a node moves its head of a line only to a step that a
-# majority of the owners in its tip cast, and that it ran itself with the same
-# result (Node.advance). A node's ledger only grows, and its heads only move
+# for steps (Ledgers); a node moves its head of a line only to a step that the
+# owners in its tip decided (a majority of them, or all of them: Quorum.decide),
+# and that it ran itself with the same result (Node.advance). A node's ledger only grows, and its heads only move
 # along steps, so what it answers stays.
 
 # Names
@@ -3891,20 +3891,23 @@ def Node.answer(+s: State(), e: Envelope, q: Ask) -> Maybe<&2, Answer>:
   +i = Envelope.of(e)
   Answer.held(s, i, q, Ledgers.State.get(~Ask, State.ledger(s), Ledgers.Slot.ask(i)))
 
-# b may come after the answer a as the state grows: a request that a node took
-# in stays; Stale and Refused are final; a taken change stays taken
+# the answer m may come after the answer a as the node goes on: a request
+# that a node answers stays answered; Pending may become any answer; Stale
+# and Refused are final; a taken change stays taken, as the same version or
+# the same merge (Written and Conflicted may follow each other: a merge is
+# Conflicted while resources clash)
 def Answer.follows(a: Answer, m: Maybe<&2, Answer>) -> Bool:
   match a m:
     case Answer.Pending{} Some{b}:
       True{}
     case Answer.Written{v} Some{Answer.Written{w}}:
-      True{}
+      Ledgers.Id.is_eq(v, w)
     case Answer.Written{v} Some{Answer.Conflicted{w}}:
       True{}
     case Answer.Conflicted{v} Some{Answer.Written{w}}:
       True{}
     case Answer.Conflicted{v} Some{Answer.Conflicted{w}}:
-      True{}
+      Ledgers.Id.is_eq(v, w)
     case Answer.Stale{} Some{Answer.Stale{}}:
       True{}
     case Answer.Refused{} Some{Answer.Refused{}}:
@@ -4423,11 +4426,12 @@ def Line.at(k: Nat, +s: State(), +c: Ledgers.Chain, h: Head) -> Maybe<&2, Head>:
       Maybe.bind(&2, Head, Head, Line.at(p, s, c, h), +x => Head.moved(x, Advance.vote(s, c, x)))
 
 # what a node does next: it takes in a request, or what another node sent,
-# or it does a sync
+# or it does a sync, or it keeps new bytes
 type Deed is Data:
   Deed.Ask{envelope: Envelope, ask: Ask}
   Deed.Take{sent: Ledgers.State(Ask)}
   Deed.Sync{sent: Ledgers.State(Ask)}
+  Deed.Keep{bytes: Texts.Bytes()}
 
 # s, after the node n did ev
 def Node.does(+n: String, +s: State(), ev: Deed) -> State():
@@ -4438,6 +4442,8 @@ def Node.does(+n: String, +s: State(), ev: Deed) -> State():
       Node.take(s, t)
     case Deed.Sync{t}:
       Node.sync(n, s, t)
+    case Deed.Keep{b}:
+      Node.keep(s, b)
 
 # s, after the node n did each of evs, in order: any later state of the node
 def Node.after(+n: String, evs: List<&2, Deed>, s: State()) -> State():
@@ -4527,9 +4533,9 @@ law Node.answer_follows:
   {Node.answer(s, e, q) == Some{x}: Maybe<&2, Answer>}
     -> {Answer.follows(x, Node.answer(Node.after(n, evs, s), e, q)) == True{}: Bool}
 
-# a writer reads its own pending write: while a write that the writer w asked
-# for waits on its line, the writer's read of the resource is a pending write
-# of its own (the newest), not what the branch holds
+# while a write that the writer w asked for waits on its line, the node has a
+# draft of the resource for w (the newest of its pending writes, by
+# Draft.newer)
 law Node.draft_some:
   for +s: State()
   for +w: String
@@ -4600,8 +4606,8 @@ law Judge.write_reads:
     -> {Content.find(s, n, c) == Some{m}: Maybe<&2, Maybe<&2, Ropes.Root>>}
     -> {Res.root(s3, h2, n) == m: Maybe<&2, Ropes.Root>}
 
-# a merge never loses a change that only one side made: when ours is the base,
-# it keeps theirs
+# a merge keeps, for each resource, a change that only one side made: when
+# ours is the base, it keeps theirs
 law Pick.merge_theirs:
   for f: Formats.Format
   for s: State()
@@ -4623,13 +4629,14 @@ law Pick.merge_ours:
     -> {Pick.merge(f, s, b, o, t) == Some{Pick.Take{o}}: Maybe<&2, Pick>}
 
 # a node keeps only ballots that it checked: a ballot that it accepts is the
-# next of its node's chain, and the key of the chain signs it
+# next of its node's chain in its store, and the key of that chain signs it
 law Seal.accept_fits:
   for +s: State()
   for +b: Ledgers.Ballot
   for +c: Chained
   for +s2: State()
-  {Seal.accept.at(s, b, Some{c}) == Some{s2}: Maybe<&2, State()>}
+  {Seal.chain(s, Ballot.store(b), Ballot.node(b)) == Some{c}: Maybe<&2, Chained>}
+    -> {Seal.accept(s, b) == Some{s2}: Maybe<&2, State()>}
     -> {Seal.fits(c, b) == True{}: Bool}
 
 # a ballot that a node seals with the secret of its chain's key fits the chain.
@@ -4690,8 +4697,24 @@ law Line.at_agrees:
     -> {Line.at(k, b, c, h) == Some{y}: Maybe<&2, Head>}
     -> {x == y: Head}
 
-# a change counts once, however often and wherever it is sent: a node that
-# took a request in changes nothing when any node sends its ID again
+# a writer reads its own pending write: at the head of a branch, its read is
+# the bytes of its draft, not what the branch holds
+law Node.read_draft:
+  for +s: State()
+  for +w: String
+  for +r: Ledgers.Id
+  for +b: String
+  for +n: Resources.Name
+  for +c: Content
+  {Node.draft(s, w, r, b, n) == Some{c}: Maybe<&2, Content>}
+    -> {
+      Node.read(s, w, n, Point.Head{r, b}) == Root.bytes(s, Content.root(s, n, c)): Maybe<&2, Texts.Bytes()>
+    }
+
+# a change counts once on a node, however often it is asked: a node that took
+# a request in changes nothing when its ID is asked again (across nodes: a
+# node takes a request that it holds no second time, Node.take, and a step
+# skips a request that its log holds, Step.fresh)
 law Node.ask_once:
   for +n: String
   for +m: String

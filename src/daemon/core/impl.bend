@@ -4940,6 +4940,8 @@ def Does.grows(
       Spec.Node.take_grows(s, t)
     case Spec.Deed.Sync{+t}:
       Spec.Node.sync_grows(n, s, t)
+    case Spec.Deed.Keep{b}:
+      Grows.keep(s, Ropes.Put.nodes(Spec.Bytes.rope(b)))
 
 def Spec.Node.after_grows(n, evs, s):
   match evs:
@@ -4960,6 +4962,21 @@ def Does.kept(+n: String, +s: Spec.State(), ev: Spec.Deed) -> Spec.Node.Keeps(s,
       Take.kept(s, t)
     case Spec.Deed.Sync{+t}:
       Sync.kept(n, s, t)
+    case Spec.Deed.Keep{+b}:
+      Kept.same(
+        s,
+        Spec.Node.keep(s, b),
+        Grows.keep(s, Ropes.Put.nodes(Spec.Bytes.rope(b))),
+        Heads.led(
+          s,
+          Ledgers.State.put_datas(
+            ~Spec.Ask,
+            ~Spec.Ask.is_eq,
+            Ropes.Put.nodes(Spec.Bytes.rope(b)),
+            Spec.State.ledger(s)
+          )
+        )
+      )
 
 def Spec.Node.after_keeps(n, evs, s):
   match evs:
@@ -5209,8 +5226,8 @@ def Follows.opt(ma: Maybe<&2, Spec.Answer>, mb: Maybe<&2, Spec.Answer>) -> Bool:
 def Left.follows(
   ba: Bool,
   bb: Bool,
-  -i: Ledgers.Id,
-  -k: Ledgers.Id
+  i: Ledgers.Id,
+  k: Ledgers.Id
 ) -> {
   Spec.Answer.follows(
     Shared.Bool.when(Spec.Answer, ba, u => Spec.Answer.Written{i}, u => Spec.Answer.Conflicted{k}),
@@ -5222,13 +5239,13 @@ def Left.follows(
 }:
   match ba bb:
     case True{} True{}:
-      {==}
+      Ledgers.Id.is_eq_refl(i)
     case True{} False{}:
       {==}
     case False{} True{}:
       {==}
     case False{} False{}:
-      {==}
+      Ledgers.Id.is_eq_refl(k)
 
 # the answer to a taken change may come after the answer to it
 def Taken.follows(
@@ -5239,15 +5256,15 @@ def Taken.follows(
 ) -> {Spec.Answer.follows(Spec.Answer.taken(a, i, q), Some{Spec.Answer.taken(b, i, q)}) == True{}: Bool}:
   match q:
     case Spec.Ask.Start{os}:
-      {==}
+      Ledgers.Id.is_eq_refl(i)
     case Spec.Ask.On{st, l, Spec.Change.Branch{x, y}}:
-      {==}
+      Ledgers.Id.is_eq_refl(i)
     case Spec.Ask.On{st, l, Spec.Change.Group{x, y}}:
-      {==}
+      Ledgers.Id.is_eq_refl(i)
     case Spec.Ask.On{st, l, Spec.Change.Own{x, y, z}}:
-      {==}
+      Ledgers.Id.is_eq_refl(i)
     case Spec.Ask.On{st, l, Spec.Change.Write{x, y, z}}:
-      {==}
+      Ledgers.Id.is_eq_refl(i)
     case Spec.Ask.On{st, l, Spec.Change.Resolve{+k, y, z}}:
       Left.follows(
         List.is_empty(&2, Resources.Name, Spec.Node.conflict(a, k)),
@@ -5263,11 +5280,11 @@ def Taken.follows(
         i
       )
     case Spec.Ask.On{st, l, Spec.Change.Move{x}}:
-      {==}
+      Ledgers.Id.is_eq_refl(i)
     case Spec.Ask.On{st, l, Spec.Change.Mark{x, y}}:
-      {==}
+      Ledgers.Id.is_eq_refl(i)
     case Spec.Ask.On{st, l, Spec.Change.Key{x, y}}:
-      {==}
+      Ledgers.Id.is_eq_refl(i)
 
 # Asked.follows once the outcome oa of the request is known
 def Of.follows(
@@ -5353,7 +5370,7 @@ def Asked.follows(
 ) -> {Spec.Answer.follows(Spec.Answer.asked(a, i, q), Some{Spec.Answer.asked(b, i, q)}) == True{}: Bool}:
   match q:
     case Spec.Ask.Start{os}:
-      {==}
+      Ledgers.Id.is_eq_refl(i)
     case Spec.Ask.On{+st, +l, +ch}:
       Of.follows(a, b, i, Spec.Ask.On{st, l, ch}, Spec.Node.out(a, i))({==})(ho)
 
@@ -6644,7 +6661,7 @@ def Accept.fits.if(
       e => Empty.absurd({False{} == True{}: Bool}, Shared.Maybe.none_ne_some(Spec.State(), s2, e))
 
 def Spec.Seal.accept_fits(s, b, c, s2):
-  Accept.fits.if(
+  ec => ea => Accept.fits.if(
     Spec.Seal.fits(c, b),
     Spec.State.keyed(
       Spec.State.led(
@@ -6658,6 +6675,9 @@ def Spec.Seal.accept_fits(s, b, c, s2):
       )
     ),
     s2
+  )(
+    %ec: {Spec.Seal.accept.at(s, b, _) == Some{s2}: Maybe<&2, Spec.State()>}
+    ea
   )
 
 # a place is the same as itself
@@ -6817,3 +6837,11 @@ def Spec.Node.advance_at(k, s, c, h, x):
         )
       )
     )
+
+def Spec.Node.read_draft(s, w, r, b, n, c):
+  e =>
+    %Equal.sym(Maybe<&2, Spec.Content>, Spec.Node.draft(s, w, r, b, n), Some{c}, e): {
+      Spec.Read.of(s, n, _, Spec.Point.Head{r, b})
+        == Spec.Root.bytes(s, Spec.Content.root(s, n, c)): Maybe<&2, Texts.Bytes()>
+    }
+    {==}
