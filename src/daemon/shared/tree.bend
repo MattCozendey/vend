@@ -341,6 +341,79 @@ def Tree.get(
 ) -> Maybe<&2, List<&2, U32>>:
   Tree.get.go(~S, ~fetch, s, Tree.path(k), k, Tree.part(~S, ~fetch, s, h))
 
+# what a read of a key finds: its value; that the tree does not hold the key;
+# or that the store lacks the node of a hash, so the read cannot tell yet.
+# Found and Absent are final (Tree.look_found_kept, Tree.look_absent_kept):
+# only Missing changes when the store gets more nodes
+type Look is Data:
+  Look.Found{value: List<&2, U32>}
+  Look.Absent{}
+  Look.Missing{hash: Hashes.Hash}
+
+# the value that a read found, if it found one
+def Look.value(l: Look) -> Maybe<&2, List<&2, U32>>:
+  match l:
+    case Look.Found{v}:
+      Some{v}
+    case Look.Absent{}:
+      None{}
+    case Look.Missing{h}:
+      None{}
+
+# a read that lacks the node of the part o (an empty part lacks none)
+def Look.missing(o: Maybe<&2, Hashes.Hash>) -> Look:
+  match o:
+    case None{}:
+      Look.Absent{}
+    case Some{h}:
+      Look.Missing{h}
+
+# what a read of the key k finds at the part o, whose node is m (none: not in
+# the store) and whose path below it is p
+def Tree.look.go(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  p: List<&2, Nat>,
+  k: List<&2, U32>,
+  o: Maybe<&2, Hashes.Hash>,
+  m: Maybe<&2, Node>
+) -> Look:
+  match p m:
+    case q None{}:
+      Look.missing(o)
+    case q Some{Node.Empty{}}:
+      Look.Absent{}
+    case q Some{Node.Leaf{k2, v}}:
+      Shared.Bool.when(
+        Look,
+        Shared.List.is_eq(~U32, ~U32.is_eq, k2, k),
+        u => Look.Found{v},
+        u => Look.Absent{}
+      )
+    case Nil{} Some{Node.Branch{ks}}:
+      Look.Absent{}
+    case Con{+x, r} Some{Node.Branch{+ks}}:
+      Tree.look.go(
+        ~S,
+        ~fetch,
+        s,
+        r,
+        k,
+        Parts.at(ks, x),
+        Tree.part(~S, ~fetch, s, Parts.at(ks, x))
+      )
+
+# what a read of the key k finds in the tree whose root is h, in the store s
+def Tree.look(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>
+) -> Look:
+  Tree.look.go(~S, ~fetch, s, Tree.path(k), k, h, Tree.part(~S, ~fetch, s, h))
+
 # Listings
 # --------
 # A listing walks every node of a tree, and lists a leaf only where its key's
@@ -12576,3 +12649,252 @@ def Tree.set_twice(ty, fetch, grows, kept, s, a, bs, k, v1, v2, t1, t12, t2):
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# Looks
+# -----
+
+# Tree.look.go_value at a leaf, once whether its key is k is known (b)
+def Tree.look.leaf_value(
+  b: Bool,
+  -v: List<&2, U32>
+) -> {
+  Look.value(Shared.Bool.when(Look, b, u => Look.Found{v}, u => Look.Absent{}))
+    == Shared.Maybe.when(List<&2, U32>, b, u => Some{v}): Maybe<&2, List<&2, U32>>
+}:
+  match b:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# the value that a look finds at a part is what the read gives there
+def Tree.look.go_value(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  p: List<&2, Nat>,
+  +k: List<&2, U32>,
+  m: Maybe<&2, Node>,
+  o: Maybe<&2, Hashes.Hash>
+) -> {Look.value(Tree.look.go(~S, ~fetch, s, p, k, o, m)) == Tree.get.go(~S, ~fetch, s, p, k, m): Maybe<&2, List<&2, U32>>}:
+  match p m o:
+    case q None{} None{}:
+      {==}
+    case q None{} Some{h}:
+      {==}
+    case q Some{Node.Empty{}} w:
+      {==}
+    case q Some{Node.Leaf{k2, v}} w:
+      Tree.look.leaf_value(Shared.List.is_eq(~U32, ~U32.is_eq, k2, k), v)
+    case Nil{} Some{Node.Branch{ks}} w:
+      {==}
+    case Con{+x, r} Some{Node.Branch{+ks}} w:
+      Tree.look.go_value(
+        ~S,
+        ~fetch,
+        s,
+        r,
+        k,
+        Tree.part(~S, ~fetch, s, Parts.at(ks, x)),
+        Parts.at(ks, x)
+      )
+
+# the value that a look finds is what the read gives
+law Tree.look_value:
+  for ~S: Data
+  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
+  for +s: S
+  for +h: Maybe<&2, Hashes.Hash>
+  for +k: List<&2, U32>
+  {Look.value(Tree.look(~S, ~fetch, s, h, k)) == Tree.get(~S, ~fetch, s, h, k): Maybe<&2, List<&2, U32>>}
+
+def Tree.look_value(ty, fetch, s, h, k):
+  Tree.look.go_value(~ty, ~fetch, s, Tree.path(k), k, Tree.part(~ty, ~fetch, s, h), h)
+
+# a look is Absent
+def Look.is_absent(l: Look) -> Bool:
+  match l:
+    case Look.Absent{}:
+      True{}
+    case Look.Found{v}:
+      False{}
+    case Look.Missing{h}:
+      False{}
+
+# a look that gives the value v is Found v
+def Look.found_of(l: Look, -v: List<&2, U32>) -> {Look.value(l) == Some{v}: Maybe<&2, List<&2, U32>>} -> {l == Look.Found{v}: Look}:
+  match l:
+    case Look.Found{x}:
+      e => Equal.cong(
+        List<&2, U32>,
+        Look,
+        y => Look.Found{y},
+        x,
+        v,
+        Shared.Maybe.some_inj(List<&2, U32>, x, v, e)
+      )
+    case Look.Absent{}:
+      e => Empty.absurd(
+        {Look.Absent{} == Look.Found{v}: Look},
+        Shared.Maybe.none_ne_some(List<&2, U32>, v, e)
+      )
+    case Look.Missing{h}:
+      e => Empty.absurd(
+        {Look.Missing{h} == Look.Found{v}: Look},
+        Shared.Maybe.none_ne_some(List<&2, U32>, v, e)
+      )
+
+# a value that a look found, it finds in any store that grows: Found is final
+law Tree.look_found_kept:
+  for ~S: Data
+  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
+  for ~grows: S -> S -> Bool
+  for ~kept: Tree.Keeps(S, fetch, grows)
+  for +a: S
+  for +b: S
+  for +h: Maybe<&2, Hashes.Hash>
+  for +k: List<&2, U32>
+  for +v: List<&2, U32>
+  {grows(a, b) == True{}: Bool}
+    -> {Tree.look(~S, ~fetch, a, h, k) == Look.Found{v}: Look}
+    -> {Tree.look(~S, ~fetch, b, h, k) == Look.Found{v}: Look}
+
+def Tree.look_found_kept(ty, fetch, grows, kept, a, b, h, k, v):
+  gr => e => Look.found_of(Tree.look(~ty, ~fetch, b, h, k), v)(
+    Equal.trans(
+      Maybe<&2, List<&2, U32>>,
+      Look.value(Tree.look(~ty, ~fetch, b, h, k)),
+      Tree.get(~ty, ~fetch, b, h, k),
+      Some{v},
+      Tree.look_value(~ty, ~fetch, b, h, k),
+      Tree.get_grows(~ty, ~fetch, ~grows, ~kept, a, b, h, k, v)(gr)(
+        Equal.trans(
+          Maybe<&2, List<&2, U32>>,
+          Tree.get(~ty, ~fetch, a, h, k),
+          Look.value(Tree.look(~ty, ~fetch, a, h, k)),
+          Some{v},
+          Equal.sym(
+            Maybe<&2, List<&2, U32>>,
+            Look.value(Tree.look(~ty, ~fetch, a, h, k)),
+            Tree.get(~ty, ~fetch, a, h, k),
+            Tree.look_value(~ty, ~fetch, a, h, k)
+          ),
+          Equal.cong(Look, Maybe<&2, List<&2, U32>>, l => Look.value(l), Tree.look(~ty, ~fetch, a, h, k), Look.Found{v}, e)
+        )
+      )
+    )
+  )
+
+# a key that a look found absent at a part is absent in any store that grows
+def Tree.look.go_absent(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  ~grows: S -> S -> Bool,
+  ~kept: Tree.Keeps(S, fetch, grows),
+  +a: S,
+  +b: S,
+  p: List<&2, Nat>,
+  +k: List<&2, U32>,
+  m: Maybe<&2, Node>,
+  o: Maybe<&2, Hashes.Hash>,
+  +gr: {grows(a, b) == True{}: Bool}
+) -> {Tree.part(~S, ~fetch, a, o) == m: Maybe<&2, Node>} -> {
+  Tree.look.go(~S, ~fetch, a, p, k, o, m) == Look.Absent{}: Look
+} -> {Tree.look.go(~S, ~fetch, b, p, k, o, Tree.part(~S, ~fetch, b, o)) == Look.Absent{}: Look}:
+  match p m o:
+    case q None{} None{}:
+      em => e => Empty.absurd(
+        {Tree.look.go(~S, ~fetch, b, q, k, None{}, Tree.part(~S, ~fetch, b, None{})) == Look.Absent{}: Look},
+        Shared.Maybe.none_ne_some(
+          Node,
+          Node.Empty{},
+          Equal.sym(Maybe<&2, Node>, Some{Node.Empty{}}, None{}, em)
+        )
+      )
+    case q None{} Some{h}:
+      em => e => Empty.absurd(
+        {
+          Tree.look.go(~S, ~fetch, b, q, k, Some{h}, Tree.part(~S, ~fetch, b, Some{h})) == Look.Absent{}: Look
+        },
+        Shared.Bool.false_ne_true(
+          Equal.cong(Look, Bool, l => Look.is_absent(l), Look.Missing{h}, Look.Absent{}, e)
+        )
+      )
+    case q Some{Node.Empty{}} w:
+      em => e =>
+        %Equal.sym(
+          Maybe<&2, Node>,
+          Tree.part(~S, ~fetch, b, w),
+          Some{Node.Empty{}},
+          Tree.part_kept(~S, ~fetch, ~grows, ~kept, a, b, w, Node.Empty{}, gr)(em)
+        ): {Tree.look.go(~S, ~fetch, b, q, k, w, _) == Look.Absent{}: Look}
+        e
+    case q Some{Node.Leaf{k2, v}} w:
+      em => e =>
+        %Equal.sym(
+          Maybe<&2, Node>,
+          Tree.part(~S, ~fetch, b, w),
+          Some{Node.Leaf{k2, v}},
+          Tree.part_kept(~S, ~fetch, ~grows, ~kept, a, b, w, Node.Leaf{k2, v}, gr)(em)
+        ): {Tree.look.go(~S, ~fetch, b, q, k, w, _) == Look.Absent{}: Look}
+        e
+    case Nil{} Some{Node.Branch{ks}} w:
+      em => e =>
+        %Equal.sym(
+          Maybe<&2, Node>,
+          Tree.part(~S, ~fetch, b, w),
+          Some{Node.Branch{ks}},
+          Tree.part_kept(~S, ~fetch, ~grows, ~kept, a, b, w, Node.Branch{ks}, gr)(em)
+        ): {Tree.look.go(~S, ~fetch, b, [], k, w, _) == Look.Absent{}: Look}
+        e
+    case Con{+x, r} Some{Node.Branch{+ks}} w:
+      em => e =>
+        %Equal.sym(
+          Maybe<&2, Node>,
+          Tree.part(~S, ~fetch, b, w),
+          Some{Node.Branch{ks}},
+          Tree.part_kept(~S, ~fetch, ~grows, ~kept, a, b, w, Node.Branch{ks}, gr)(em)
+        ): {Tree.look.go(~S, ~fetch, b, Con{x, r}, k, w, _) == Look.Absent{}: Look}
+        Tree.look.go_absent(
+          ~S,
+          ~fetch,
+          ~grows,
+          ~kept,
+          a,
+          b,
+          r,
+          k,
+          Tree.part(~S, ~fetch, a, Parts.at(ks, x)),
+          Parts.at(ks, x),
+          gr
+        )({==})(e)
+
+# a key that a look found absent is absent in any store that grows: Absent is
+# final
+law Tree.look_absent_kept:
+  for ~S: Data
+  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
+  for ~grows: S -> S -> Bool
+  for ~kept: Tree.Keeps(S, fetch, grows)
+  for +a: S
+  for +b: S
+  for +h: Maybe<&2, Hashes.Hash>
+  for +k: List<&2, U32>
+  {grows(a, b) == True{}: Bool}
+    -> {Tree.look(~S, ~fetch, a, h, k) == Look.Absent{}: Look}
+    -> {Tree.look(~S, ~fetch, b, h, k) == Look.Absent{}: Look}
+
+def Tree.look_absent_kept(ty, fetch, grows, kept, a, b, h, k):
+  gr => Tree.look.go_absent(
+    ~ty,
+    ~fetch,
+    ~grows,
+    ~kept,
+    a,
+    b,
+    Tree.path(k),
+    k,
+    Tree.part(~ty, ~fetch, a, h),
+    h,
+    gr
+  )({==})
