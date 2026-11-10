@@ -5,7 +5,7 @@
     "": {
       "name": "vend",
       "devDependencies": {
-        "bend-lint": "0.3.0",
+        "bend-lint": "0.3.1",
       },
     },
   },
@@ -13,6 +13,6 @@
     "bend-lint",
   ],
   "packages": {
-    "bend-lint": ["bend-lint@0.3.0", "", { "hasInstallScript": true, "bin": { "bend-lint": "src/linter/seam.ts" } }, "sha512-+K7l1xzigfldOJoa1N6hHGRAHCZe99W4yBm6lbO5vDvt1WBfb3qHiOWdtbJf4DkMXsYk5fqqcRw3RkfutRQ7jQ=="],
+    "bend-lint": ["bend-lint@0.3.1", "", { "hasInstallScript": true, "bin": { "bend-lint": "src/linter/seam.ts" } }, "sha512-YuwW+RRcFadq2gKabdt944Ewa0n+qQ3bb4biNONYm2JwBc4T+iUQ0tkCEV+IJ1/izHJJvHzMsz4lo6IWv5UOyQ=="],
   }
 }

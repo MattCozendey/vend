@@ -1,6 +1,6 @@
 {
   "packages": {
-    "bend-lint-rules": "0.3.0.0"
+    "bend-lint-rules": "0.3.1.0"
   },
   "rules": {
     "bend-lint-rules/language/decreasing_call": {},

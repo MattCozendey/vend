@@ -8,7 +8,7 @@
     "gen3": "bun tools/gen3/gen3.ts"
   },
   "devDependencies": {
-    "bend-lint": "0.3.0"
+    "bend-lint": "0.3.1"
   },
   "trustedDependencies": [
     "bend-lint"
