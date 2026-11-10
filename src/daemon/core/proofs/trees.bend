@@ -19,6 +19,7 @@ import ../sealing.bend as Sealing
 import ../spec.bend as Spec
 import ../stepping.bend as Stepping
 import ../voting.bend as Voting
+import ../../shared/shared/store.bend as Stores
 
 # Codes
 # -----
@@ -817,7 +818,7 @@ def Put.grows(
   Put.grows.if(
     s,
     Basics.State.keep(s, ds),
-    Trees.Tree.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s, ds), ds),
+    Stores.Store.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s, ds), ds),
     Grows.keep(s, ds)
   )
 

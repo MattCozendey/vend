@@ -20,6 +20,7 @@ import ../stepping.bend as Stepping
 import ../voting.bend as Voting
 import ./logs.bend as ProofLogs
 import ./trees.bend as ProofTrees
+import ../../shared/shared/store.bend as Stores
 
 # Lines
 # -----
@@ -1054,7 +1055,7 @@ def Put.holds.if(
   -s3: Basics.Node,
   b: Bool,
   eb: {
-    Trees.Tree.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s2, ds), ds) == b: Bool
+    Stores.Store.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s2, ds), ds) == b: Bool
   }
 ) -> {
   Shared.Maybe.when(
@@ -1063,11 +1064,11 @@ def Put.holds.if(
     u => Some{Basics.State.keep(s2, ds)}
   )
     == Some{s3}: Maybe<&2, Basics.Node>
-} -> {Trees.Tree.holds(~Basics.Node, ~Basics.Store.fetch, s3, ds) == True{}: Bool}:
+} -> {Stores.Store.holds(~Basics.Node, ~Basics.Store.fetch, s3, ds) == True{}: Bool}:
   match b:
     case False{}:
       e => Empty.absurd(
-        {Trees.Tree.holds(~Basics.Node, ~Basics.Store.fetch, s3, ds) == True{}: Bool},
+        {Stores.Store.holds(~Basics.Node, ~Basics.Store.fetch, s3, ds) == True{}: Bool},
         Shared.Maybe.none_ne_some(Basics.Node, s3, e)
       )
     case True{}:
@@ -1077,7 +1078,7 @@ def Put.holds.if(
           Basics.State.keep(s2, ds),
           s3,
           e
-        ): {Trees.Tree.holds(~Basics.Node, ~Basics.Store.fetch, _, ds) == True{}: Bool}
+        ): {Stores.Store.holds(~Basics.Node, ~Basics.Store.fetch, _, ds) == True{}: Bool}
         eb
 
 # a node that a put gives holds the data
@@ -1087,12 +1088,12 @@ def Put.holds(
   -s3: Basics.Node
 ) -> {
   Judging.State.put(s2, ds) == Some{s3}: Maybe<&2, Basics.Node>
-} -> {Trees.Tree.holds(~Basics.Node, ~Basics.Store.fetch, s3, ds) == True{}: Bool}:
+} -> {Stores.Store.holds(~Basics.Node, ~Basics.Store.fetch, s3, ds) == True{}: Bool}:
   Put.holds.if(
     s2,
     ds,
     s3,
-    Trees.Tree.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s2, ds), ds),
+    Stores.Store.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s2, ds), ds),
     {==}
   )
 
@@ -1127,8 +1128,8 @@ def Tip.put.at(
         Some{Basics.Tip.words(t2)}
       )(
         Shared.List.all.if_hit(
-          Trees.Tree.has(~Basics.Node, ~Basics.Store.fetch, s3, Basics.Tip.words(t2)),
-          u => Trees.Tree.holds(~Basics.Node, ~Basics.Store.fetch, s3, [])
+          Stores.Store.has(~Basics.Node, ~Basics.Store.fetch, s3, Basics.Tip.words(t2)),
+          u => Stores.Store.holds(~Basics.Node, ~Basics.Store.fetch, s3, [])
         )(Put.holds(s2, [Basics.Tip.words(t2)], s3)(e))
       )
     ): {

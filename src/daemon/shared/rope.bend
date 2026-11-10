@@ -2,6 +2,7 @@ import Base
 import ../../shared.bend as Shared
 import ./shared/shared/code.bend as Codes
 import ./shared/shared/hash.bend as Hashes
+import ./shared/store.bend as Stores
 
 # Ropes
 # =====
@@ -256,51 +257,6 @@ def Rope.cut_flat(ty, edge, xs):
       ): {x <> List.concat(&2, ty, Rope.cut(~ty, ~edge, r)) == x <> _: List<&2, ty>}
       {==}
 
-# Stores
-# ------
-
-# the store s holds the words ws, under their hash
-def Rope.has(
-  ~S: Data,
-  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  s: S,
-  +ws: List<&2, U32>
-) -> Bool:
-  Shared.Maybe.is_eq(
-    ~List<&2, U32>,
-    ~Shared.List.is_eq(~U32, ~U32.is_eq),
-    fetch(s)(Hashes.Sha.hash(ws)),
-    Some{ws}
-  )
-
-# the store s holds each of the words ns, under their hashes
-def Rope.holds(
-  ~S: Data,
-  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  +s: S,
-  ns: List<&2, List<&2, U32>>
-) -> Bool:
-  match ns:
-    case Nil{}:
-      True{}
-    case Con{ws, r}:
-      List.all.if(u => Rope.holds(~S, ~fetch, s, r), Rope.has(~S, ~fetch, s, ws))
-
-# that a store b, which grows from a store a (grows), gives the words that a
-# gives
-def Rope.Keeps(
-  -S: Data,
-  fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  grows: S -> S -> Bool
-) -> Type:
-  @a: S -> @b: S -> @h: Hashes.Hash -> @w: List<
-    &2,
-    U32> -> {
-    grows(a, b) == True{}: Bool
-  } -> {
-    fetch(a)(h) == Some{w}: Maybe<&2, List<&2, U32>>
-  } -> {fetch(b)(h) == Some{w}: Maybe<&2, List<&2, U32>>}
-
 # the node that the store s holds under the hash h
 def Rope.node(
   ~S: Data,
@@ -510,7 +466,7 @@ def Rope.has_node(
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   s: S,
   +n: Node,
-  e: {Rope.has(~S, ~fetch, s, Node.words(n)) == True{}: Bool}
+  e: {Stores.Store.has(~S, ~fetch, s, Node.words(n)) == True{}: Bool}
 ) -> {Rope.node(~S, ~fetch, s, Node.hash(n)) == Some{n}: Maybe<&2, Node>}:
   %Equal.sym(
     Maybe<&2, List<&2, U32>>,
@@ -537,8 +493,8 @@ def Rope.holds_acc(
   gs: List<&2, List<&2, A>>,
   +acc: List<&2, List<&2, U32>>
 ) -> {
-  Rope.holds(~S, ~fetch, s, Rope.codes(~A, ~mk, gs, acc)) == True{}: Bool
-} -> {Rope.holds(~S, ~fetch, s, acc) == True{}: Bool}:
+  Stores.Store.holds(~S, ~fetch, s, Rope.codes(~A, ~mk, gs, acc)) == True{}: Bool
+} -> {Stores.Store.holds(~S, ~fetch, s, acc) == True{}: Bool}:
   match gs:
     case Nil{}:
       e => e
@@ -553,8 +509,8 @@ def Rope.holds_acc(
         acc
       )(
         Shared.List.all.if_rest(
-          Rope.has(~S, ~fetch, s, Node.words(mk(g))),
-          u => Rope.holds(~S, ~fetch, s, Rope.codes(~A, ~mk, r, acc))
+          Stores.Store.has(~S, ~fetch, s, Node.words(mk(g))),
+          u => Stores.Store.holds(~S, ~fetch, s, Rope.codes(~A, ~mk, r, acc))
         )(e)
       )
 
@@ -573,7 +529,7 @@ def Rope.level_put(
   gs: List<&2, List<&2, A>>,
   +acc: List<&2, List<&2, U32>>
 ) -> {
-  Rope.holds(~S, ~fetch, s, Rope.codes(~A, ~mk, gs, acc)) == True{}: Bool
+  Stores.Store.holds(~S, ~fetch, s, Rope.codes(~A, ~mk, gs, acc)) == True{}: Bool
 } -> {
   Rope.level(
     ~S,
@@ -600,8 +556,8 @@ def Rope.level_put(
             s,
             mk(g),
             Shared.List.all.if_hit(
-              Rope.has(~S, ~fetch, s, Node.words(mk(g))),
-              u => Rope.holds(~S, ~fetch, s, Rope.codes(~A, ~mk, r, acc))
+              Stores.Store.has(~S, ~fetch, s, Node.words(mk(g))),
+              u => Stores.Store.holds(~S, ~fetch, s, Rope.codes(~A, ~mk, r, acc))
             )(e)
           )
         ): {
@@ -657,8 +613,8 @@ def Rope.level_put(
             acc
           )(
             Shared.List.all.if_rest(
-              Rope.has(~S, ~fetch, s, Node.words(mk(g))),
-              u => Rope.holds(~S, ~fetch, s, Rope.codes(~A, ~mk, r, acc))
+              Stores.Store.has(~S, ~fetch, s, Node.words(mk(g))),
+              u => Stores.Store.holds(~S, ~fetch, s, Rope.codes(~A, ~mk, r, acc))
             )(e)
           )
         ): {
@@ -841,7 +797,7 @@ def Rope.up_reads(
   -x: List<&2, U32>,
   flat: {List.concat(&2, Hashes.Hash, gs) == hs: List<&2, Hashes.Hash>},
   pre: {Rope.read.go(~S, ~fetch, d, s, hs) == Some{x}: Maybe<&2, List<&2, U32>>},
-  e: {Rope.holds(~S, ~fetch, s, Rope.codes(~Hashes.Hash, ~Node.branch.of, gs, acc)) == True{}: Bool}
+  e: {Stores.Store.holds(~S, ~fetch, s, Rope.codes(~Hashes.Hash, ~Node.branch.of, gs, acc)) == True{}: Bool}
 ) -> {
   Rope.read.go(
     ~S,
@@ -918,8 +874,8 @@ def Rope.put.top_holds(
   acc: List<&2, List<&2, U32>>,
   s: S
 ) -> {
-  Rope.holds(~S, ~fetch, s, Put.nodes(Rope.put.top(d, hs, acc))) == True{}: Bool
-} -> {Rope.holds(~S, ~fetch, s, acc) == True{}: Bool}:
+  Stores.Store.holds(~S, ~fetch, s, Put.nodes(Rope.put.top(d, hs, acc))) == True{}: Bool
+} -> {Stores.Store.holds(~S, ~fetch, s, acc) == True{}: Bool}:
   e => Rope.holds_acc(~S, ~fetch, ~Hashes.Hash, ~Node.branch.of, s, [hs], acc)(e)
 
 # a store that holds the nodes of a rope with a top branch reads, at its
@@ -934,7 +890,7 @@ def Rope.put.top_reads(
   -x: List<&2, U32>,
   pre: {Rope.read.go(~S, ~fetch, d, s, hs) == Some{x}: Maybe<&2, List<&2, U32>>}
 ) -> {
-  Rope.holds(~S, ~fetch, s, Put.nodes(Rope.put.top(d, hs, acc))) == True{}: Bool
+  Stores.Store.holds(~S, ~fetch, s, Put.nodes(Rope.put.top(d, hs, acc))) == True{}: Bool
 } -> {
   Rope.read(~S, ~fetch, s, Put.root(Rope.put.top(d, hs, acc))) == Some{x}: Maybe<&2, List<&2, U32>>
 }:
@@ -964,7 +920,7 @@ def Rope.put.step_holds(
   +acc: List<&2, List<&2, U32>>,
   +s: S,
   ih: {
-    Rope.holds(
+    Stores.Store.holds(
       ~S,
       ~fetch,
       s,
@@ -979,7 +935,7 @@ def Rope.put.step_holds(
     )
       == True{}: Bool
   } -> {
-    Rope.holds(
+    Stores.Store.holds(
       ~S,
       ~fetch,
       s,
@@ -988,7 +944,7 @@ def Rope.put.step_holds(
       == True{}: Bool
   }
 ) -> {
-  Rope.holds(
+  Stores.Store.holds(
     ~S,
     ~fetch,
     s,
@@ -1010,11 +966,11 @@ def Rope.put.step_holds(
     )
   )
     == True{}: Bool
-} -> {Rope.holds(~S, ~fetch, s, acc) == True{}: Bool}:
+} -> {Stores.Store.holds(~S, ~fetch, s, acc) == True{}: Bool}:
   Rope.put.when(
     q => {
-      Rope.holds(~S, ~fetch, s, Put.nodes(q)) == True{}: Bool
-    } -> {Rope.holds(~S, ~fetch, s, acc) == True{}: Bool},
+      Stores.Store.holds(~S, ~fetch, s, Put.nodes(q)) == True{}: Bool
+    } -> {Stores.Store.holds(~S, ~fetch, s, acc) == True{}: Bool},
     Nat.is_lt(
       List.length(&2, List<&2, Hashes.Hash>, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)),
       List.length(&2, Hashes.Hash, hs)
@@ -1057,8 +1013,8 @@ def Rope.put.go_holds(
   +acc: List<&2, List<&2, U32>>,
   +s: S
 ) -> {
-  Rope.holds(~S, ~fetch, s, Put.nodes(Rope.put.go(f, d, hs, acc))) == True{}: Bool
-} -> {Rope.holds(~S, ~fetch, s, acc) == True{}: Bool}:
+  Stores.Store.holds(~S, ~fetch, s, Put.nodes(Rope.put.go(f, d, hs, acc))) == True{}: Bool
+} -> {Stores.Store.holds(~S, ~fetch, s, acc) == True{}: Bool}:
   match f hs:
     case 0n hs:
       Rope.put.top_holds(~S, ~fetch, d, hs, acc, s)
@@ -1070,8 +1026,8 @@ def Rope.put.go_holds(
         d,
         acc
       ): {
-        Rope.holds(~S, ~fetch, s, Put.nodes(_)) == True{}: Bool
-      } -> {Rope.holds(~S, ~fetch, s, acc) == True{}: Bool}
+        Stores.Store.holds(~S, ~fetch, s, Put.nodes(_)) == True{}: Bool
+      } -> {Stores.Store.holds(~S, ~fetch, s, acc) == True{}: Bool}
       Rope.put.top_holds(~S, ~fetch, d, [], acc, s)
     case 1n+p Con{h, Con{h2, t}}:
       Rope.put.step_holds(
@@ -1117,7 +1073,7 @@ def Rope.put.step_reads(
   -x: List<&2, U32>,
   +pre: {Rope.read.go(~S, ~fetch, d, s, hs) == Some{x}: Maybe<&2, List<&2, U32>>},
   hd: {
-    Rope.holds(
+    Stores.Store.holds(
       ~S,
       ~fetch,
       s,
@@ -1132,7 +1088,7 @@ def Rope.put.step_reads(
     )
       == True{}: Bool
   } -> {
-    Rope.holds(
+    Stores.Store.holds(
       ~S,
       ~fetch,
       s,
@@ -1150,7 +1106,7 @@ def Rope.put.step_reads(
     )
       == Some{x}: Maybe<&2, List<&2, U32>>
   } -> {
-    Rope.holds(
+    Stores.Store.holds(
       ~S,
       ~fetch,
       s,
@@ -1181,7 +1137,7 @@ def Rope.put.step_reads(
       == Some{x}: Maybe<&2, List<&2, U32>>
   }
 ) -> {
-  Rope.holds(
+  Stores.Store.holds(
     ~S,
     ~fetch,
     s,
@@ -1229,7 +1185,7 @@ def Rope.put.step_reads(
 }:
   Rope.put.when(
     q => {
-      Rope.holds(~S, ~fetch, s, Put.nodes(q)) == True{}: Bool
+      Stores.Store.holds(~S, ~fetch, s, Put.nodes(q)) == True{}: Bool
     } -> {Rope.read(~S, ~fetch, s, Put.root(q)) == Some{x}: Maybe<&2, List<&2, U32>>},
     Nat.is_lt(
       List.length(&2, List<&2, Hashes.Hash>, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)),
@@ -1274,7 +1230,7 @@ def Rope.put.go_reads(
   -x: List<&2, U32>,
   pre: {Rope.read.go(~S, ~fetch, d, s, hs) == Some{x}: Maybe<&2, List<&2, U32>>}
 ) -> {
-  Rope.holds(~S, ~fetch, s, Put.nodes(Rope.put.go(f, d, hs, acc))) == True{}: Bool
+  Stores.Store.holds(~S, ~fetch, s, Put.nodes(Rope.put.go(f, d, hs, acc))) == True{}: Bool
 } -> {
   Rope.read(
     ~S,
@@ -1295,7 +1251,7 @@ def Rope.put.go_reads(
         d,
         acc
       ): {
-        Rope.holds(~S, ~fetch, s, Put.nodes(_)) == True{}: Bool
+        Stores.Store.holds(~S, ~fetch, s, Put.nodes(_)) == True{}: Bool
       } -> {Rope.read(~S, ~fetch, s, Put.root(_)) == Some{x}: Maybe<&2, List<&2, U32>>}
       Rope.put.top_reads(~S, ~fetch, d, [], acc, s, x, pre)
     case 1n+p Con{h, Con{h2, t}}:
@@ -1358,7 +1314,7 @@ def Rope.put.of_reads(
   +s: S,
   +ls: List<&2, List<&2, U32>>
 ) -> {
-  Rope.holds(~S, ~fetch, s, Put.nodes(Rope.put.of(ls))) == True{}: Bool
+  Stores.Store.holds(~S, ~fetch, s, Put.nodes(Rope.put.of(ls))) == True{}: Bool
 } -> {
   Rope.read(
     ~S,
@@ -1406,7 +1362,7 @@ law Rope.read_put:
   for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
   for +s: S
   for +cs: List<&2, List<&2, U32>>
-  {Rope.holds(~S, ~fetch, s, Put.nodes(Rope.put(cs))) == True{}: Bool}
+  {Stores.Store.holds(~S, ~fetch, s, Put.nodes(Rope.put(cs))) == True{}: Bool}
     -> {
       Rope.read(
         ~S,
@@ -1430,7 +1386,7 @@ def Rope.node_kept(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   ~grows: S -> S -> Bool,
-  ~kept: Rope.Keeps(S, fetch, grows),
+  ~kept: Stores.Store.Keeps(S, fetch, grows),
   +a: S,
   b: S,
   +h: Hashes.Hash,
@@ -1458,7 +1414,7 @@ def Rope.level_kept(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   ~grows: S -> S -> Bool,
-  ~kept: Rope.Keeps(S, fetch, grows),
+  ~kept: Stores.Store.Keeps(S, fetch, grows),
   ~A: Data,
   ~part: Node -> Maybe<&2, List<&2, A>>,
   +a: S,
@@ -1525,7 +1481,7 @@ def Rope.read.go_kept(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   ~grows: S -> S -> Bool,
-  ~kept: Rope.Keeps(S, fetch, grows),
+  ~kept: Stores.Store.Keeps(S, fetch, grows),
   d: Nat,
   +a: S,
   +b: S,
@@ -1557,7 +1513,7 @@ law Rope.read_grows:
   for ~S: Data
   for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
   for ~grows: S -> S -> Bool
-  for ~kept: Rope.Keeps(S, fetch, grows)
+  for ~kept: Stores.Store.Keeps(S, fetch, grows)
   for +a: S
   for +b: S
   for r: Root

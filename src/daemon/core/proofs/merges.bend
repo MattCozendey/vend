@@ -19,6 +19,7 @@ import ../stepping.bend as Stepping
 import ../voting.bend as Voting
 import ./logs.bend as ProofLogs
 import ./trees.bend as ProofTrees
+import ../../shared/shared/store.bend as Stores
 
 # Moves
 # -----
@@ -493,7 +494,7 @@ def Keep.reads(
 ) -> Spec.Work.Reads(k, v, Some{w}) -> Spec.Work.Reads(k, v, Judging.Work.keep(w, ns)):
   match w:
     case Judging.Work{s, h}:
-      hget => Keep.reads.if(s, h, ns, k, v, Trees.Tree.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s, ns), ns), hget)
+      hget => Keep.reads.if(s, h, ns, k, v, Stores.Store.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s, ns), ns), hget)
 
 # Set.read once it is known whether the node holds the new nodes (b)
 def Set.read.if(
@@ -505,7 +506,7 @@ def Set.read.if(
   +ws: List<&2, List<&2, U32>>,
   +b: Bool,
   eb: {
-    Trees.Tree.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s, ws), ws) == b: Bool
+    Stores.Store.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s, ws), ws) == b: Bool
   },
   em: {Basics.Node.set(s, h, k, x) == Some{Trees.Put{hh, ws}}: Maybe<&2, Trees.Put>}
 ) -> Spec.Work.Reads(
@@ -569,7 +570,7 @@ def Set.read.of(
         x,
         hh,
         ws,
-        Trees.Tree.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s, ws), ws),
+        Stores.Store.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s, ws), ws),
         {==},
         em
       )

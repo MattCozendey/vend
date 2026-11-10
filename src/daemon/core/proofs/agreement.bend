@@ -19,6 +19,7 @@ import ../voting.bend as Voting
 import ./lines.bend as ProofLines
 import ./logs.bend as ProofLogs
 import ./trees.bend as ProofTrees
+import ../../shared/shared/store.bend as Stores
 
 # Agreement
 # ---------
@@ -762,7 +763,7 @@ def Set.reads.put(
   s3: Basics.Node,
   hp: @y: Basics.Node -> {
     m2 == Some{y}: Maybe<&2, Basics.Node>
-  } -> {Trees.Tree.holds(~Basics.Node, ~Basics.Store.fetch, y, ws) == True{}: Bool}
+  } -> {Stores.Store.holds(~Basics.Node, ~Basics.Store.fetch, y, ws) == True{}: Bool}
 ) -> {
   Basics.Node.set(s, h, k, x) == Some{Trees.Put{hh, ws}}: Maybe<&2, Trees.Put>
 } -> {

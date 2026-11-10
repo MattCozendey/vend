@@ -11,6 +11,7 @@ import ../shared/shared/shared/trie.bend as Tries
 import ../shared/shared/text.bend as Texts
 import ../shared/tree.bend as Trees
 import ./basics.bend as Basics
+import ../shared/shared/store.bend as Stores
 
 # Writes
 # ------
@@ -34,7 +35,7 @@ def State.put(s: Basics.Node, +ds: List<&2, List<&2, U32>>) -> Maybe<&2, Basics.
   +s2 = Basics.State.keep(s, ds)
   Shared.Maybe.when(
     Basics.Node,
-    Trees.Tree.holds(~Basics.Node, ~Basics.Store.fetch, s2, ds),
+    Stores.Store.holds(~Basics.Node, ~Basics.Store.fetch, s2, ds),
     u => Some{s2}
   )
 

@@ -14,6 +14,7 @@ import ../spec.bend as Spec
 import ../stepping.bend as Stepping
 import ../voting.bend as Voting
 import ./trees.bend as ProofTrees
+import ../../shared/shared/store.bend as Stores
 
 # Asks
 # ----
@@ -306,7 +307,7 @@ def Set.kept.if(
   +ws: List<&2, List<&2, U32>>,
   b: Bool,
   eb: {
-    Trees.Tree.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s, ws), ws) == b: Bool
+    Stores.Store.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s, ws), ws) == b: Bool
   },
   hne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool},
   hget: {Basics.Node.get(s, h, k2) == Some{v}: Maybe<&2, List<&2, U32>>},
@@ -415,7 +416,7 @@ def Set.kept.of(
         v,
         hh,
         ws,
-        Trees.Tree.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s, ws), ws),
+        Stores.Store.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s, ws), ws),
         {==},
         hne,
         hget,
