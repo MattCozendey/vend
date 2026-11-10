@@ -1857,3 +1857,173 @@ def Pair.second(-A: Type, -B: Type, p: A & B) -> B:
   match p:
     case Tuple{a, b}:
       b
+
+# Bool algebra
+# ------------
+# Each lemma states the simpler side first, so a rewrite with it turns a term
+# into its simpler form.
+
+# no True equals False
+def Bool.true_ne_false(e: {True{} == False{}: Bool}) -> Empty:
+  %e: Bool.pick(Type, _, Unit, Empty)
+  Unit{}
+
+# a or False is a
+def Bool.or_false(a: Bool) -> {a == Bool.or(a, False{}): Bool}:
+  match a:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# a and True is a
+def Bool.and_true(a: Bool) -> {a == Bool.and(a, True{}): Bool}:
+  match a:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# or is commutative
+def Bool.or_comm(a: Bool, b: Bool) -> {Bool.or(a, b) == Bool.or(b, a): Bool}:
+  match a b:
+    case False{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case True{} False{}:
+      {==}
+    case True{} True{}:
+      {==}
+
+# or is associative
+def Bool.or_assoc(
+  a: Bool,
+  b: Bool,
+  c: Bool
+) -> {Bool.or(a, Bool.or(b, c)) == Bool.or(Bool.or(a, b), c): Bool}:
+  match a:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# and is associative
+def Bool.and_assoc(
+  a: Bool,
+  b: Bool,
+  c: Bool
+) -> {Bool.and(a, Bool.and(b, c)) == Bool.and(Bool.and(a, b), c): Bool}:
+  match a:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# and distributes over or, from the right
+def Bool.and_or(
+  a: Bool,
+  b: Bool,
+  c: Bool
+) -> {Bool.or(Bool.and(a, c), Bool.and(b, c)) == Bool.and(Bool.or(a, b), c): Bool}:
+  match a b c:
+    case False{} False{} False{}:
+      {==}
+    case False{} False{} True{}:
+      {==}
+    case False{} True{} False{}:
+      {==}
+    case False{} True{} True{}:
+      {==}
+    case True{} False{} False{}:
+      {==}
+    case True{} False{} True{}:
+      {==}
+    case True{} True{} False{}:
+      {==}
+    case True{} True{} True{}:
+      {==}
+
+# a second a changes nothing
+def Bool.or_absorb(a: Bool, b: Bool) -> {Bool.or(a, Bool.or(a, b)) == Bool.or(a, b): Bool}:
+  match a:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# the first two of three or-ed values can swap
+def Bool.or_swap(
+  a: Bool,
+  b: Bool,
+  c: Bool
+) -> {Bool.or(a, Bool.or(b, c)) == Bool.or(b, Bool.or(a, c)): Bool}:
+  match a b:
+    case False{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case True{} False{}:
+      {==}
+    case True{} True{}:
+      {==}
+
+# the left side of a false "or" is false
+def Bool.or_false_left(
+  a: Bool,
+  -b: Bool
+) -> {Bool.or(a, b) == False{}: Bool} -> {a == False{}: Bool}:
+  match a:
+    case False{}:
+      h => {==}
+    case True{}:
+      h => h
+
+# the right side of a false "or" is false
+def Bool.or_false_right(
+  a: Bool,
+  -b: Bool
+) -> {Bool.or(a, b) == False{}: Bool} -> {b == False{}: Bool}:
+  match a:
+    case False{}:
+      h => h
+    case True{}:
+      h => Empty.absurd({b == False{}: Bool}, Bool.true_ne_false(h))
+
+# Char equality
+# -------------
+
+# Char.is_eq is True for a character and itself
+def Char.is_eq_refl(a: Char) -> {Char.is_eq(a, a) == True{}: Bool}:
+  match a:
+    case Chr{x}:
+      U32.is_eq_refl(x)
+
+# Char.is_eq is True only for equal characters
+def Char.is_eq_sound(a: Char, b: Char) -> {Char.is_eq(a, b) == True{}: Bool} -> {a == b: Char}:
+  match a b:
+    case Chr{x} Chr{y}:
+      h => Equal.cong(U32, Char, u => Chr{u}, x, y, U32.is_eq_sound(x, y)(h))
+
+# the laws of Char.is_eq
+def Char.laws() -> Eq.Laws(Char, Char.is_eq):
+  (Char.is_eq_refl, Char.is_eq_sound)
+
+# Comparison lemmas
+# -----------------
+
+# an EQ comparison answers True to Cmp.is_eq
+def Cmp.is_eq_of(-c: Cmp, e: {EQ{} == c: Cmp}) -> {Cmp.is_eq(c) == True{}: Bool}:
+  %e: {Cmp.is_eq(_) == True{}: Bool}
+  {==}
+
+# a U32 comparison is EQ both ways round or neither
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in this proof the second use sits in a rewrite motive or an erased argument; the checker accepts it
+def U32.cmp_swap_eq(
+  +x: U32,
+  y: U32,
+  e: {EQ{} == U32.cmp(x, y): Cmp}
+) -> {EQ{} == U32.cmp(y, x): Cmp}:
+  %U32.is_eq_sound(x, y)(Cmp.is_eq_of(U32.cmp(x, y), e)): {EQ{} == U32.cmp(_, x): Cmp}
+  Equal.sym(Cmp, U32.cmp(x, x), EQ{}, U32.cmp_refl(x))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning

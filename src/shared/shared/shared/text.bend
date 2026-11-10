@@ -2179,3 +2179,33 @@ def String.laws() -> Shared.Eq.Laws(String, String.eq):
   (a => String.eq_refl(a), a => b => String.eq_sound(a, b))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# a comparison decided as LT stays decided: it is never EQ
+def String.order_ne_lt(
+  a: String,
+  b: String
+) -> {Cmp.is_eq(String.order.go(a, b, LT{})) == False{}: Bool}:
+  match a b:
+    case SNil{} SNil{}:
+      {==}
+    case SNil{} SCon{y, t2}:
+      {==}
+    case SCon{x, t1} SNil{}:
+      {==}
+    case SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
+      {==}
+
+# a comparison decided as GT stays decided: it is never EQ
+def String.order_ne_gt(
+  a: String,
+  b: String
+) -> {Cmp.is_eq(String.order.go(a, b, GT{})) == False{}: Bool}:
+  match a b:
+    case SNil{} SNil{}:
+      {==}
+    case SNil{} SCon{y, t2}:
+      {==}
+    case SCon{x, t1} SNil{}:
+      {==}
+    case SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
+      {==}
