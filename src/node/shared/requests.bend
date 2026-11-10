@@ -1,34 +1,29 @@
 import Base
-import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../../shared/replica.bend as Replicas
 import ../../shared/shared/ledger.bend as Ledgers
-import ./shared/resources.bend as Resources
 import ../../shared/shared/rope.bend as Ropes
 import ../../shared/shared/shared/shared/code.bend as Codes
 import ../../shared/shared/shared/shared/hash.bend as Hashes
+import ../../shared/shared/shared/shared/shared.bend as Shared
+import ./shared/resources.bend as Resources
 
 # Requests
 # --------
 # What a writer asks of a Vend Node: the changes, the requests that carry
 # them, their codes, and the machine that a replica runs them on.
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a member of an owner group: a node, or another group of its store
 type Member is Data:
   Member.Node{name: String}
   Member.Group{name: String}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # new content: what a node holds under a root (the root of the rope of its
 # bytes: Content.of), or what an old version held. A change names its content
 # and does not carry it, so a change of a huge resource is small
 type Content is Data:
   Content.Root{root: Ropes.Root}
   Content.Of{version: Ledgers.Id}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a change of a branch, or of its store (Ask.on). Key: the store gives the
 # node the key that signs its first ballot in the store (again after the node
 # lost its secret: a new chain of keys). Branch: the store makes the
@@ -45,15 +40,12 @@ type Change is Data:
   Change.Move{to: Ledgers.Id}
   Change.Mark{mark: String, message: String}
   Change.Key{node: String, key: Hashes.Hash}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a change that a writer asks for: a store that starts with its first owners,
 # or a change of a branch of a store (none: of the store itself)
 type Ask is Data:
   Ask.Start{owners: List<&2, Replicas.Owner>}
   Ask.On{store: Ledgers.Id, branch: Maybe<&2, String>, change: Change}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the version m, if any (where a line starts, or the base of a write), then r
 def Base.code(m: Maybe<&2, Ledgers.Id>, r: List<&2, U32>) -> List<&2, U32>:
@@ -352,7 +344,6 @@ def Ask.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ask>>:
 def Ask.is_eq(a: Ask, b: Ask) -> Bool:
   Codes.Code.is_eq(~Ask, ~Ask.code, a, b)
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument
 # a member reads back
 def Member.code_read(
   x: Member,
@@ -532,7 +523,6 @@ def Ask.codec() -> Codes.Codec(Ask):
 # are
 def Ask.laws() -> Shared.Eq.Laws(Ask, Ask.is_eq):
   Codes.Code.eq_laws(~Ask, ~Ask.codec())
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # how the request q arrives at a node
 def Ask.arrival(q: Ask) -> Replicas.Arrival:

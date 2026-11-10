@@ -1,13 +1,13 @@
 import Base
-import ./shared/shared/shared/shared.bend as Shared
-import ./shared/ledger.bend as Ledgers
 import ../node/shared/shared/resources.bend as Resources
+import ./shared/ledger.bend as Ledgers
 import ./shared/rope.bend as Ropes
 import ./shared/shared/quorum.bend as Quorums
 import ./shared/shared/shared/cell.bend as Cells
 import ./shared/shared/shared/code.bend as Codes
 import ./shared/shared/shared/hash.bend as Hashes
 import ./shared/shared/shared/seal.bend as Seals
+import ./shared/shared/shared/shared.bend as Shared
 import ./shared/shared/shared/trie.bend as Tries
 import ./shared/shared/store.bend as Stores
 import ./shared/shared/text.bend as Texts
@@ -192,7 +192,11 @@ def Node.empty(~mach: Machine(), seed: Hashes.Hash) -> Node<Machine.Q(mach)>:
   }
 
 # the words that s holds under the hash h
-def Store.fetch(~mach: Machine(), s: Node<Machine.Q(mach)>, h: Hashes.Hash) -> Maybe<&2, List<&2, U32>>:
+def Store.fetch(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  h: Hashes.Hash
+) -> Maybe<&2, List<&2, U32>>:
   Ledgers.State.data(~Machine.Q(mach), State.ledger(~mach, s), h)
 
 # s with the words ds as data, each under its hash
@@ -218,7 +222,7 @@ def Node.asked(
 # what the tree whose root is h holds under the key k, in the store s
 def Node.get(
   ~mach: Machine(),
-  +s: Node<Machine.Q(mach)>,
+  s: Node<Machine.Q(mach)>,
   h: Maybe<&2, Hashes.Hash>,
   k: List<&2, U32>
 ) -> Maybe<&2, List<&2, U32>>:
@@ -227,8 +231,8 @@ def Node.get(
 # the tree whose root is h with the key k set to x
 def Node.set(
   ~mach: Machine(),
-  +s: Node<Machine.Q(mach)>,
-  +h: Maybe<&2, Hashes.Hash>,
+  s: Node<Machine.Q(mach)>,
+  h: Maybe<&2, Hashes.Hash>,
   k: List<&2, U32>,
   x: List<&2, U32>
 ) -> Maybe<&2, Trees.Put>:
@@ -237,8 +241,8 @@ def Node.set(
 # what a read of the key k finds in the tree whose root is h
 def Node.look(
   ~mach: Machine(),
-  +s: Node<Machine.Q(mach)>,
-  +h: Maybe<&2, Hashes.Hash>,
+  s: Node<Machine.Q(mach)>,
+  h: Maybe<&2, Hashes.Hash>,
   k: List<&2, U32>
 ) -> Trees.Look:
   Trees.Tree.look(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), s, h, k)
@@ -356,13 +360,11 @@ def Log.mark(m: String) -> List<&2, U32>:
 def Log.start(b: String) -> List<&2, U32>:
   5 <> Codes.Code.text(b, [])
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # the outcome of a request: its owners refused it as stale, or took it as the
 # version of a number
 type Out is Data:
   Out.Stale{}
   Out.Taken{number: U32}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the words of the outcome o
 def Out.words(o: Out) -> List<&2, U32>:
@@ -435,7 +437,12 @@ def Line.version(~mach: Machine(), s: Node<Machine.Q(mach)>, t: Tip, n: U32) -> 
   )
 
 # the version that the mark m names on a line at the tip t
-def Line.mark(~mach: Machine(), s: Node<Machine.Q(mach)>, t: Tip, m: String) -> Maybe<&2, Ledgers.Id>:
+def Line.mark(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  t: Tip,
+  m: String
+) -> Maybe<&2, Ledgers.Id>:
   Maybe.bind(
     &2,
     List<&2, U32>,
@@ -498,7 +505,13 @@ def Chain.version(
   c: Ledgers.Chain,
   n: U32
 ) -> Maybe<&2, Version>:
-  Maybe.bind(&2, List<&2, U32>, Version, Line.get(~mach, s, c, Log.version(n)), ws => Version.read(ws))
+  Maybe.bind(
+    &2,
+    List<&2, U32>,
+    Version,
+    Line.get(~mach, s, c, Log.version(n)),
+    ws => Version.read(ws)
+  )
 
 # the version that the mark m names on the line c, as the node knows it
 def Chain.mark(
@@ -519,13 +532,11 @@ def Chain.mark(
 type Work<-Q: Data> is Data:
   Work{state: Node<Q>, root: Maybe<&2, Hashes.Hash>}
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # what a judge says of one change: refuse it as stale, or take it, with the
 # trees that it wrote
 type Verdict<-Q: Data> is Data:
   Verdict.Stale{}
   Verdict.Taken{work: Work<Q>}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # s with the words ds as data, when it then holds each of them under its hash
 # (none: a slot holds other words). A node reads back what it puts, so what a
@@ -594,7 +605,10 @@ def Work.root(~mach: Machine(), w: Work<Machine.Q(mach)>) -> Maybe<&2, Hashes.Ha
       h
 
 # a verdict that takes the trees of m (none: wait)
-def Work.take(~mach: Machine(), m: Maybe<&2, Work<Machine.Q(mach)>>) -> Maybe<&2, Verdict<Machine.Q(mach)>>:
+def Work.take(
+  ~mach: Machine(),
+  m: Maybe<&2, Work<Machine.Q(mach)>>
+) -> Maybe<&2, Verdict<Machine.Q(mach)>>:
   match m:
     case None{}:
       None{}
@@ -703,7 +717,11 @@ def Run.next(
       Run{s, Tip.next(t, own)}
 
 # the run r, after it refused the request i as stale
-def Step.stale(~mach: Machine(), r: Run<Machine.Q(mach)>, i: Ledgers.Id) -> Maybe<&2, Run<Machine.Q(mach)>>:
+def Step.stale(
+  ~mach: Machine(),
+  r: Run<Machine.Q(mach)>,
+  i: Ledgers.Id
+) -> Maybe<&2, Run<Machine.Q(mach)>>:
   Run.add(~mach, r, Log.out(i), Out.words(Out.Stale{}))
 
 # the run r, after it took the request i as the version of the number n: its
@@ -725,7 +743,12 @@ def Step.taken.at(
       &2,
       Run<Machine.Q(mach)>,
       Run<Machine.Q(mach)>,
-      Run.add(~mach, r1, Log.version(n), Version.words(Version{i, Tip.content(Run.tip(~mach, r1))})),
+      Run.add(
+        ~mach,
+        r1,
+        Log.version(n),
+        Version.words(Version{i, Tip.content(Run.tip(~mach, r1))})
+      ),
       r2 => Some{Run.next(~mach, r2, own)}
     )
   )
@@ -881,13 +904,11 @@ def Owner.names(os: List<&2, Owner>) -> List<&2, String>:
     case Con{Owner{n, k}, r}:
       n <> Owner.names(r)
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # how a request arrives at a node: it starts a store, with its first owners,
 # or it waits on a line of a store
 type Arrival is Data:
   Arrival.Starts{owners: List<&2, Owner>}
   Arrival.Waits{store: Ledgers.Id, line: Maybe<&2, String>}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the line of the request i, which arrives as a: a store that starts is its
 # own line
@@ -903,16 +924,24 @@ def Arrival.chain(i: Ledgers.Id, a: Arrival) -> Ledgers.Chain:
 # a store
 def Kernel(mach: Machine()) -> Type:
   (
-    Run<Machine.Q(mach)> -> Ledgers.Chain -> Ledgers.Id -> Machine.Q(mach) -> Maybe<&2, Run<Machine.Q(mach)>>
+    Run<
+      Machine.Q(
+        mach
+      )> -> Ledgers.Chain -> Ledgers.Id -> Machine.Q(mach) -> Maybe<&2, Run<Machine.Q(mach)>>
   )
-    & (Node<Machine.Q(mach)> -> Ledgers.Id -> Maybe<&2, String> -> Maybe<&2, Request<Machine.Q(mach)>>)
+    & (
+      Node<
+        Machine.Q(mach)> -> Ledgers.Id -> Maybe<&2, String> -> Maybe<&2, Request<Machine.Q(mach)>>
+    )
 
 # what a request does to the run of a line, by the kernel k
 def Kernel.change(
   -mach: Machine(),
   k: Kernel(mach)
 ) -> Run<
-  Machine.Q(mach)> -> Ledgers.Chain -> Ledgers.Id -> Machine.Q(mach) -> Maybe<&2, Run<Machine.Q(mach)>>:
+  Machine.Q(
+    mach
+  )> -> Ledgers.Chain -> Ledgers.Id -> Machine.Q(mach) -> Maybe<&2, Run<Machine.Q(mach)>>:
   match k:
     case Tuple{c, f}:
       c
@@ -922,7 +951,8 @@ def Kernel.change(
 def Kernel.follow(
   -mach: Machine(),
   k: Kernel(mach)
-) -> Node<Machine.Q(mach)> -> Ledgers.Id -> Maybe<&2, String> -> Maybe<&2, Request<Machine.Q(mach)>>:
+) -> Node<
+  Machine.Q(mach)> -> Ledgers.Id -> Maybe<&2, String> -> Maybe<&2, Request<Machine.Q(mach)>>:
   match k:
     case Tuple{c, f}:
       f
@@ -986,7 +1016,13 @@ def Step.all(
         ~kern,
         c,
         rest,
-        Maybe.bind(&2, Run<Machine.Q(mach)>, Run<Machine.Q(mach)>, m, r => Step.one(~mach, ~kern, r, c, i))
+        Maybe.bind(
+          &2,
+          Run<Machine.Q(mach)>,
+          Run<Machine.Q(mach)>,
+          m,
+          r => Step.one(~mach, ~kern, r, c, i)
+        )
       )
 
 # the requests of qs that can run now on the line c, from the run r, and the
@@ -1334,7 +1370,9 @@ def Sealed.follow(
           Node<Machine.Q(mach)>,
           Node<Machine.Q(mach)>,
           Seal.accept(~mach, ~kern, s, b),
-          +s2 => Some{Sealed.follow(~mach, ~kern, g, s2, p, r, n, Pending.next(~mach, ~kern, s2, p, r, n))}
+          +s2 => Some{
+            Sealed.follow(~mach, ~kern, g, s2, p, r, n, Pending.next(~mach, ~kern, s2, p, r, n))
+          }
         ),
         s
       )
@@ -1615,7 +1653,11 @@ def Open.at(
 
 # s, which follows the line c: a branch that the node waits for opens at its
 # first tip, once the store that the node follows made it
-def Node.open(~mach: Machine(), +s: Node<Machine.Q(mach)>, +c: Ledgers.Chain) -> Node<Machine.Q(mach)>:
+def Node.open(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain
+) -> Node<Machine.Q(mach)>:
   Open.at(~mach, s, c, Node.head_of(~mach, s, c))
 
 # s, which follows the line l of the store r, when the head m says that it
@@ -1676,7 +1718,7 @@ def Root.same(a: Maybe<&2, Hashes.Hash>, b: Maybe<&2, Hashes.Hash>) -> Bool:
 def Cast.may(
   ~mach: Machine(),
   +n: String,
-  +s: Node<Machine.Q(mach)>,
+  s: Node<Machine.Q(mach)>,
   w: Ledgers.Where,
   t: Tip,
   qs: List<&2, Ledgers.Id>
@@ -1830,7 +1872,10 @@ def Cast.of(
   w: Ledgers.Where,
   p: String
 ) -> Maybe<&2, Ledgers.Vote>:
-  Cast.step(~mach, Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.vote(w, p)))
+  Cast.step(
+    ~mach,
+    Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.vote(w, p))
+  )
 
 # what a node casts for: the requests of a step, its own run of them (none:
 # it cannot run them now), and the nodes whose passes allow the step
@@ -1925,7 +1970,11 @@ def Plan.copy(
       )
 
 # the line of the request i, when s holds it
-def Node.chain_of(~mach: Machine(), s: Node<Machine.Q(mach)>, +i: Ledgers.Id) -> Maybe<&2, Ledgers.Chain>:
+def Node.chain_of(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  +i: Ledgers.Id
+) -> Maybe<&2, Ledgers.Chain>:
   Maybe.bind(
     &2,
     Ledgers.Asked<Machine.Q(mach)>,
@@ -1959,7 +2008,10 @@ def Cast.act(
   w: Ledgers.Where,
   p: String
 ) -> Maybe<&2, Ledgers.Act>:
-  Cast.act.of(~mach, Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.vote(w, p)))
+  Cast.act.of(
+    ~mach,
+    Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.vote(w, p))
+  )
 
 # the nodes that the vote m names, if m is a vote
 def Act.from(m: Maybe<&2, Ledgers.Act>) -> List<&2, String>:
@@ -1998,7 +2050,12 @@ def Round.mine(
         Maybe.is_some(
           &2,
           Maybe<&2, Ledgers.Last>,
-          Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Where{c, h, 1n+p}, n)
+          Ledgers.State.passed(
+            ~Machine.Q(mach),
+            State.ledger(~mach, s),
+            Ledgers.Where{c, h, 1n+p},
+            n
+          )
         ),
         u => 1n+p,
         u => Round.mine(~mach, n, s, c, h, p)
@@ -2030,7 +2087,11 @@ def Last.mine(
     case 0n:
       Last.or(0n, Cast.of(~mach, s, Ledgers.Where{c, h, 0n}, n), u => None{})
     case 1n+(+p):
-      Last.or(1n+p, Cast.of(~mach, s, Ledgers.Where{c, h, 1n+p}, n), u => Last.mine(~mach, n, s, c, h, p))
+      Last.or(
+        1n+p,
+        Cast.of(~mach, s, Ledgers.Where{c, h, 1n+p}, n),
+        u => Last.mine(~mach, n, s, c, h, p)
+      )
 
 # the last vote of the node n at the height h of the line c, in a round below
 # r, if it cast one
@@ -2297,7 +2358,12 @@ def Pass.to(
           u => Maybe.is_none(
             &2,
             Maybe<&2, Ledgers.Last>,
-            Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Where{c, h, r}, n)
+            Ledgers.State.passed(
+              ~Machine.Q(mach),
+              State.ledger(~mach, s),
+              Ledgers.Where{c, h, r},
+              n
+            )
           ),
           List.contains(~String, ~String.eq, os, n)
         ),
@@ -2351,7 +2417,17 @@ def Cast.round(
   Shared.Bool.when(
     Node<Machine.Q(mach)>,
     Cast.may(~mach, n, s, w, t, Plan.asks(~mach, p)),
-    u => Cast.put(~mach, ~kern, n, w, th, Plan.asks(~mach, p), Plan.from(~mach, p), Plan.run(~mach, p), s),
+    u => Cast.put(
+      ~mach,
+      ~kern,
+      n,
+      w,
+      th,
+      Plan.asks(~mach, p),
+      Plan.from(~mach, p),
+      Plan.run(~mach, p),
+      s
+    ),
     u => s
   )
 
@@ -2360,14 +2436,23 @@ def Cast.at(
   ~mach: Machine(),
   ~kern: Kernel(mach),
   +n: String,
-  +s: Node<Machine.Q(mach)>,
+  s: Node<Machine.Q(mach)>,
   +c: Ledgers.Chain,
   h: Head,
   m: Maybe<&2, Tip>
 ) -> Node<Machine.Q(mach)>:
   match h m:
     case Head{r, b, +next, th} Some{+t}:
-      Cast.round(~mach, ~kern, n, Round.join(~mach, ~kern, n, s, c, next, Tip.owners(t)), c, next, th, t)
+      Cast.round(
+        ~mach,
+        ~kern,
+        n,
+        Round.join(~mach, ~kern, n, s, c, next, Tip.owners(t)),
+        c,
+        next,
+        th,
+        t
+      )
     case x y:
       s
 
@@ -2533,7 +2618,12 @@ def Height.decide(
       Ledgers.State.decide(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Where{c, h, 0n}, os)
     case 1n+(+p):
       Vote.first(
-        Ledgers.State.decide(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Where{c, h, 1n+p}, os),
+        Ledgers.State.decide(
+          ~Machine.Q(mach),
+          State.ledger(~mach, s),
+          Ledgers.Where{c, h, 1n+p},
+          os
+        ),
         u => Height.decide(~mach, s, c, h, os, p)
       )
 
@@ -2644,7 +2734,14 @@ def Advance.at(
         c,
         h,
         t,
-        Height.decide(~mach, s, c, Head.next(h), Tip.owners(t), Round.seen(~mach, s, c, Head.next(h)))
+        Height.decide(
+          ~mach,
+          s,
+          c,
+          Head.next(h),
+          Tip.owners(t),
+          Round.seen(~mach, s, c, Head.next(h))
+        )
       )
 
 # Node.advance once the head m of the line c is known
@@ -2944,7 +3041,11 @@ def Node.serve(
     case Nil{}:
       Ledgers.State.empty(~Machine.Q(mach))
     case Con{h, r}:
-      Serve.put(~mach, Ledgers.State.data(~Machine.Q(mach), State.ledger(~mach, s), h), Node.serve(~mach, s, r))
+      Serve.put(
+        ~mach,
+        Ledgers.State.data(~Machine.Q(mach), State.ledger(~mach, s), h),
+        Node.serve(~mach, s, r)
+      )
 
 # what the ledger r lacks of s: what a sync from s to a holder of r sends
 def Node.missing(
@@ -2956,7 +3057,10 @@ def Node.missing(
 
 # what a node reads of the ledger t that another node sent: each request and
 # each data, in the slot that its own content names (Take.clean)
-def Node.reads(~mach: Machine(), t: Ledgers.State(Machine.Q(mach))) -> Ledgers.State(Machine.Q(mach)):
+def Node.reads(
+  ~mach: Machine(),
+  t: Ledgers.State(Machine.Q(mach))
+) -> Ledgers.State(Machine.Q(mach)):
   Take.clean(
     ~mach,
     Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, t),
@@ -3100,7 +3204,12 @@ def Sync.lines(
 
 # the node b holds every entry that the node a holds: its ledger only grew
 def Node.grows(~mach: Machine(), a: Node<Machine.Q(mach)>, b: Node<Machine.Q(mach)>) -> Bool:
-  Ledgers.State.grows(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, a), State.ledger(~mach, b))
+  Ledgers.State.grows(
+    ~Machine.Q(mach),
+    ~Machine.same(mach),
+    State.ledger(~mach, a),
+    State.ledger(~mach, b)
+  )
 
 # the tip that the step m names, if any
 def Vote.tip(m: Maybe<&2, Ledgers.Vote>) -> Maybe<&2, Hashes.Hash>:
@@ -3241,15 +3350,27 @@ def Led.head(
   c: Ledgers.Chain,
   h: Head
 ) -> {
-  State.ledger(~mach, State.head(~mach, s, c, h)) == State.ledger(~mach, s): Ledgers.State(Machine.Q(mach))
+  State.ledger(
+    ~mach,
+    State.head(~mach, s, c, h)
+  )
+    == State.ledger(~mach, s): Ledgers.State(Machine.Q(mach))
 }:
   match s:
     case Node{l, hs, ws, ks}:
       {==}
 
 # a node grows to itself
-def Grows.refl(~mach: Machine(), s: Node<Machine.Q(mach)>) -> {Node.grows(~mach, s, s) == True{}: Bool}:
-  Ledgers.State.grows_refl(~Machine.Q(mach), ~Machine.same(mach), ~Machine.laws(mach), State.ledger(~mach, s))
+def Grows.refl(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>
+) -> {Node.grows(~mach, s, s) == True{}: Bool}:
+  Ledgers.State.grows_refl(
+    ~Machine.Q(mach),
+    ~Machine.same(mach),
+    ~Machine.laws(mach),
+    State.ledger(~mach, s)
+  )
 
 # growth composes
 def Grows.trans(
@@ -3269,20 +3390,38 @@ def Grows.trans(
     State.ledger(~mach, c)
   )
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in this proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
 # a node with a new ledger grows when the ledger does
 def Grows.led(
   ~mach: Machine(),
   s: Node<Machine.Q(mach)>,
   l: Ledgers.State(Machine.Q(mach)),
-  e: {Ledgers.State.grows(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, s), l) == True{}: Bool}
+  e: {
+    Ledgers.State.grows(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      State.ledger(~mach, s),
+      l
+    )
+      == True{}: Bool
+  }
 ) -> {Node.grows(~mach, s, State.led(~mach, s, l)) == True{}: Bool}:
   %Equal.sym(
     Ledgers.State(Machine.Q(mach)),
     State.ledger(~mach, State.led(~mach, s, l)),
     l,
     Led.led(~mach, s, l)
-  ): {Ledgers.State.grows(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, s), _) == True{}: Bool}
+  ): {
+    Ledgers.State.grows(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      State.ledger(~mach, s),
+      _
+    )
+      == True{}: Bool
+  }
   e
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # data only grows a node
 def Grows.keep(
@@ -3304,7 +3443,11 @@ def Grows.keep(
   )
 
 # the work m, if any, is on a node that grew from s
-def Work.after(~mach: Machine(), s: Node<Machine.Q(mach)>, m: Maybe<&2, Work<Machine.Q(mach)>>) -> Bool:
+def Work.after(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Work<Machine.Q(mach)>>
+) -> Bool:
   match m:
     case None{}:
       True{}
@@ -3312,7 +3455,11 @@ def Work.after(~mach: Machine(), s: Node<Machine.Q(mach)>, m: Maybe<&2, Work<Mac
       Node.grows(~mach, s, s2)
 
 # the node m, if any, grew from s
-def State.after(~mach: Machine(), s: Node<Machine.Q(mach)>, m: Maybe<&2, Node<Machine.Q(mach)>>) -> Bool:
+def State.after(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Node<Machine.Q(mach)>>
+) -> Bool:
   match m:
     case None{}:
       True{}
@@ -3326,7 +3473,9 @@ def Put.grows.if(
   -s2: Node<Machine.Q(mach)>,
   b: Bool,
   g: {Node.grows(~mach, s, s2) == True{}: Bool}
-) -> {State.after(~mach, s, Shared.Maybe.when(Node<Machine.Q(mach)>, b, u => Some{s2})) == True{}: Bool}:
+) -> {
+  State.after(~mach, s, Shared.Maybe.when(Node<Machine.Q(mach)>, b, u => Some{s2})) == True{}: Bool
+}:
   match b:
     case True{}:
       g
@@ -3385,7 +3534,11 @@ def Set.grows(
   Work.of.grows(~mach, s, Node.set(~mach, s, h, k, x))
 
 # the run m, if any, is on a node that grew from s
-def Run.after(~mach: Machine(), s: Node<Machine.Q(mach)>, m: Maybe<&2, Run<Machine.Q(mach)>>) -> Bool:
+def Run.after(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Run<Machine.Q(mach)>>
+) -> Bool:
   match m:
     case None{}:
       True{}
@@ -3425,7 +3578,14 @@ def After.bind(
   f: Run<Machine.Q(mach)> -> Maybe<&2, Run<Machine.Q(mach)>>,
   hm: {Run.after(~mach, s, m) == True{}: Bool},
   hf: @r: Run<Machine.Q(mach)> -> {Run.after(~mach, Run.state(~mach, r), f(r)) == True{}: Bool}
-) -> {Run.after(~mach, s, Maybe.bind(&2, Run<Machine.Q(mach)>, Run<Machine.Q(mach)>, m, f)) == True{}: Bool}:
+) -> {
+  Run.after(
+    ~mach,
+    s,
+    Maybe.bind(&2, Run<Machine.Q(mach)>, Run<Machine.Q(mach)>, m, f)
+  )
+    == True{}: Bool
+}:
   match m:
     case None{}:
       {==}
@@ -3517,7 +3677,9 @@ def Fit.when.grows(
   b: Bool,
   -r: Run<Machine.Q(mach)>,
   e: {Run.after(~mach, s, Some{r}) == True{}: Bool}
-) -> {Run.after(~mach, s, Shared.Maybe.when(Run<Machine.Q(mach)>, b, u => Some{r})) == True{}: Bool}:
+) -> {
+  Run.after(~mach, s, Shared.Maybe.when(Run<Machine.Q(mach)>, b, u => Some{r})) == True{}: Bool
+}:
   match b:
     case True{}:
       e
@@ -3576,7 +3738,15 @@ def Grows.to(
     State.ledger(~mach, x),
     State.ledger(~mach, b),
     e
-  ): {Ledgers.State.grows(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, a), _) == True{}: Bool}
+  ): {
+    Ledgers.State.grows(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      State.ledger(~mach, a),
+      _
+    )
+      == True{}: Bool
+  }
   g
 
 # one of two nodes, each grown from s
@@ -3588,7 +3758,9 @@ def Grows.when(
   -y: Node<Machine.Q(mach)>,
   hx: {Node.grows(~mach, s, x) == True{}: Bool},
   hy: {Node.grows(~mach, s, y) == True{}: Bool}
-) -> {Node.grows(~mach, s, Shared.Bool.when(Node<Machine.Q(mach)>, b, u => x, u => y)) == True{}: Bool}:
+) -> {
+  Node.grows(~mach, s, Shared.Bool.when(Node<Machine.Q(mach)>, b, u => x, u => y)) == True{}: Bool
+}:
   match b:
     case True{}:
       hx
@@ -3603,7 +3775,11 @@ def Led.moved(
   h: Head,
   qs: List<&2, Ledgers.Id>
 ) -> {
-  State.ledger(~mach, State.moved(~mach, s, c, h, qs)) == State.ledger(~mach, s): Ledgers.State(Machine.Q(mach))
+  State.ledger(
+    ~mach,
+    State.moved(~mach, s, c, h, qs)
+  )
+    == State.ledger(~mach, s): Ledgers.State(Machine.Q(mach))
 }:
   match s:
     case Node{l, hs, ws, ks}:
@@ -3616,7 +3792,11 @@ def Led.waits(
   c: Ledgers.Chain,
   i: Ledgers.Id
 ) -> {
-  State.ledger(~mach, State.wait(~mach, s, c, i)) == State.ledger(~mach, s): Ledgers.State(Machine.Q(mach))
+  State.ledger(
+    ~mach,
+    State.wait(~mach, s, c, i)
+  )
+    == State.ledger(~mach, s): Ledgers.State(Machine.Q(mach))
 }:
   match s:
     case Node{l, hs, ws, ks}:
@@ -3636,7 +3816,13 @@ def Led.keyed(
   ~mach: Machine(),
   s: Node<Machine.Q(mach)>,
   ks: Keys
-) -> {State.ledger(~mach, State.keyed(~mach, s, ks)) == State.ledger(~mach, s): Ledgers.State(Machine.Q(mach))}:
+) -> {
+  State.ledger(
+    ~mach,
+    State.keyed(~mach, s, ks)
+  )
+    == State.ledger(~mach, s): Ledgers.State(Machine.Q(mach))
+}:
   match s:
     case Node{l, hs, ws, old}:
       {==}
@@ -3795,7 +3981,17 @@ def Cast.vote.grows(
           Cast.seal(~mach, ~kern, s4, w, n, a0, Seal.chain(~mach, ~kern, s4, Where.store(w), n))
         )(
           Grows.back(~mach, s, s3, Grows.trans(~mach, s, a, s3)(g)(e))
-        )(Cast.seal.grows(~mach, ~kern, s4, w, n, a0, Seal.chain(~mach, ~kern, s4, Where.store(w), n)))
+        )(
+          Cast.seal.grows(
+            ~mach,
+            ~kern,
+            s4,
+            w,
+            n,
+            a0,
+            Seal.chain(~mach, ~kern, s4, Where.store(w), n)
+          )
+        )
 
 # a vote only grows a node
 def Cast.put.grows(
@@ -3845,7 +4041,12 @@ def Pass.to.grows(
           u => Maybe.is_none(
             &2,
             Maybe<&2, Ledgers.Last>,
-            Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Where{c, h, r}, n)
+            Ledgers.State.passed(
+              ~Machine.Q(mach),
+              State.ledger(~mach, s),
+              Ledgers.Where{c, h, r},
+              n
+            )
           ),
           List.contains(~String, ~String.eq, os, n)
         ),
@@ -3871,6 +4072,7 @@ def Pass.to.grows(
         Grows.refl(~mach, s)
       )
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in this proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
 # a node that joins a round only grows a node
 def Round.join.grows(
   ~mach: Machine(),
@@ -3892,6 +4094,7 @@ def Round.join.grows(
     Pass.to.grows(~mach, ~kern, n, s, Ledgers.Where{c, h, top}, os),
     Grows.refl(~mach, s)
   )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a head moved on a node that grew from a, which grew from s, only grows s
 def Advance.moved.grows(
@@ -3921,6 +4124,7 @@ def Advance.moved.grows(
           Grows.back(~mach, s, s3, Grows.trans(~mach, s, a, s3)(g)(e))
         )
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in this proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
 # a checked step only grows a node
 def Advance.ran.grows(
   ~mach: Machine(),
@@ -3959,6 +4163,7 @@ def Advance.ran.grows(
           )(Put.grows(~mach, s2, [Tip.words(t2)])),
           Grows.refl(~mach, s)
         )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a line that opens only grows a node, once its head m is known
 def Open.at.grows(
@@ -3970,9 +4175,21 @@ def Open.at.grows(
   match m:
     case Some{Head{+r, Some{+b}, n, None{}}}:
       +hd = {
-        Head{r, Some{b}, 0, Branch.first(~mach, s, b, Node.tip(~mach, s, Ledgers.Chain{r, None{}}))}: Head
+        Head{
+          r,
+          Some{b},
+          0,
+          Branch.first(~mach, s, b, Node.tip(~mach, s, Ledgers.Chain{r, None{}}))
+        }: Head
       }
-      Grows.to(~mach, s, s, State.head(~mach, s, c, hd), Led.head(~mach, s, c, hd), Grows.refl(~mach, s))
+      Grows.to(
+        ~mach,
+        s,
+        s,
+        State.head(~mach, s, c, hd),
+        Led.head(~mach, s, c, hd),
+        Grows.refl(~mach, s)
+      )
     case Some{Head{r, Some{b}, n, Some{t}}}:
       Grows.refl(~mach, s)
     case Some{Head{r, None{}, n, t}}:
@@ -3992,9 +4209,23 @@ def First.at.grows(
     case Some{Head{r, b, n, Some{t}}}:
       Grows.refl(~mach, s)
     case Some{Head{r, b, n, None{}}}:
-      Grows.to(~mach, s, s, State.head(~mach, s, c, h), Led.head(~mach, s, c, h), Grows.refl(~mach, s))
+      Grows.to(
+        ~mach,
+        s,
+        s,
+        State.head(~mach, s, c, h),
+        Led.head(~mach, s, c, h),
+        Grows.refl(~mach, s)
+      )
     case None{}:
-      Grows.to(~mach, s, s, State.head(~mach, s, c, h), Led.head(~mach, s, c, h), Grows.refl(~mach, s))
+      Grows.to(
+        ~mach,
+        s,
+        s,
+        State.head(~mach, s, c, h),
+        Led.head(~mach, s, c, h),
+        Grows.refl(~mach, s)
+      )
 
 # a first head on a node that grew from a, which grew from s, only grows s
 def Start.head.grows(
@@ -4026,9 +4257,9 @@ def Start.head.grows(
 # Start.grows once the content m of the store is known
 def Start.with.grows(
   ~mach: Machine(),
-  +s: Node<Machine.Q(mach)>,
+  s: Node<Machine.Q(mach)>,
   +i: Ledgers.Id,
-  +os: List<&2, String>,
+  os: List<&2, String>,
   m: Maybe<&2, Work<Machine.Q(mach)>>
 ) -> {
   Work.after(~mach, s, m) == True{}: Bool
@@ -4036,7 +4267,7 @@ def Start.with.grows(
   match m:
     case None{}:
       e => Grows.refl(~mach, s)
-    case Some{Work{+s2, +c}}:
+    case Some{Work{+s2, c}}:
       e =>
         +t = {Tip{c, None{}, 0, os}: Tip}
         Start.head.grows(
@@ -4357,10 +4588,13 @@ def Bytes.rope(b: Texts.Bytes()) -> Ropes.Put:
 
 # s with the bytes b: the nodes of their rope, each under its hash. A node
 # keeps new bytes before it asks for a write of their content
-def Node.keep(~mach: Machine(), s: Node<Machine.Q(mach)>, b: Texts.Bytes()) -> Node<Machine.Q(mach)>:
+def Node.keep(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  b: Texts.Bytes()
+) -> Node<Machine.Q(mach)>:
   State.keep(~mach, s, Ropes.Put.nodes(Bytes.rope(b)))
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # what a node does next: it takes in a request, or what another node sent,
 # or it does a sync, or it keeps new bytes, or a writer connected to it asks
 # for a request that it holds, or it passes to the next round on a line
@@ -4371,7 +4605,6 @@ type Deed<-Q: Data> is Data:
   Deed.Keep{bytes: Texts.Bytes()}
   Deed.Consent{id: Ledgers.Id}
   Deed.Pass{line: Ledgers.Chain}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # s, after the node n did ev
 def Node.does(
@@ -4420,7 +4653,12 @@ def Node.out(~mach: Machine(), +s: Node<Machine.Q(mach)>, +i: Ledgers.Id) -> May
   Maybe.bind(&2, Ledgers.Chain, Out, Node.chain_of(~mach, s, i), c => Chain.out(~mach, s, c, i))
 
 # the version of the outcome o on the line c, when it took one
-def Out.on(~mach: Machine(), s: Node<Machine.Q(mach)>, c: Ledgers.Chain, o: Out) -> Maybe<&2, Version>:
+def Out.on(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  c: Ledgers.Chain,
+  o: Out
+) -> Maybe<&2, Version>:
   match o:
     case Out.Stale{}:
       None{}
@@ -4439,7 +4677,13 @@ def Chain.made(
 # the version that the request v made (none: v is not a version that the node
 # knows)
 def Node.made(~mach: Machine(), +s: Node<Machine.Q(mach)>, +v: Ledgers.Id) -> Maybe<&2, Version>:
-  Maybe.bind(&2, Ledgers.Chain, Version, Node.chain_of(~mach, s, v), +c => Chain.made(~mach, s, c, v))
+  Maybe.bind(
+    &2,
+    Ledgers.Chain,
+    Version,
+    Node.chain_of(~mach, s, v),
+    +c => Chain.made(~mach, s, c, v)
+  )
 
 # the root of the content of the version v (none: v is not a version)
 def Node.root(
@@ -4447,7 +4691,13 @@ def Node.root(
   s: Node<Machine.Q(mach)>,
   v: Ledgers.Id
 ) -> Maybe<&2, Maybe<&2, Hashes.Hash>>:
-  Maybe.bind(&2, Version, Maybe<&2, Hashes.Hash>, Node.made(~mach, s, v), x => Some{Version.root(x)})
+  Maybe.bind(
+    &2,
+    Version,
+    Maybe<&2, Hashes.Hash>,
+    Node.made(~mach, s, v),
+    x => Some{Version.root(x)}
+  )
 
 # the root of the content of the version m, if any (none, or not a version:
 # the empty tree)
@@ -4705,7 +4955,9 @@ def Lawful.Grows(mach: Machine(), kern: Kernel(mach)) -> Type:
       mach
     )> -> @c: Ledgers.Chain -> @i: Ledgers.Id -> @q: Machine.Q(
     mach
-  ) -> {Run.after(~mach, Run.state(~mach, r), Kernel.change(mach, kern)(r)(c)(i)(q)) == True{}: Bool}
+  ) -> {
+    Run.after(~mach, Run.state(~mach, r), Kernel.change(mach, kern)(r)(c)(i)(q)) == True{}: Bool
+  }
 
 # that the change of the kernel kern keeps each key of the log of a run
 def Lawful.Keeps(mach: Machine(), kern: Kernel(mach)) -> Type:
@@ -4718,7 +4970,12 @@ def Lawful.Keeps(mach: Machine(), kern: Kernel(mach)) -> Type:
     &2,
     U32> -> @v: List<
     &2,
-    U32> -> Run.Keeps(~mach, k2, v, Some{r}) -> Run.Keeps(~mach, k2, v, Kernel.change(mach, kern)(r)(c)(i)(q))
+    U32> -> Run.Keeps(
+    ~mach,
+    k2,
+    v,
+    Some{r}
+  ) -> Run.Keeps(~mach, k2, v, Kernel.change(mach, kern)(r)(c)(i)(q))
 
 # that the change of the kernel kern gives its request an outcome
 def Lawful.Outs(mach: Machine(), kern: Kernel(mach)) -> Type:
@@ -4732,7 +4989,10 @@ def Lawful.Outs(mach: Machine(), kern: Kernel(mach)) -> Type:
 # a lawful kernel of the machine mach: a kernel, and the proofs that its change
 # only grows the node, keeps the log, and gives an outcome
 def Lawful(mach: Machine()) -> Type:
-  &kern: Kernel(mach) -> Lawful.Grows(mach, kern) & (Lawful.Keeps(mach, kern) & Lawful.Outs(mach, kern))
+  &kern: Kernel(
+    mach
+  ) -> Lawful.Grows(mach, kern)
+    & (Lawful.Keeps(mach, kern) & Lawful.Outs(mach, kern))
 
 # the kernel of the lawful kernel l
 def Lawful.kernel(-mach: Machine(), l: Lawful(mach)) -> Kernel(mach):
@@ -4767,7 +5027,12 @@ def Asked.grows(
   i: Ledgers.Id,
   +a: Maybe<&2, Ledgers.Asked<Machine.Q(mach)>>
 ) -> {
-  Run.after(~mach, Run.state(~mach, r), Step.asked(~mach, ~Lawful.kernel(mach, lawf), r, c, i, a)) == True{}: Bool
+  Run.after(
+    ~mach,
+    Run.state(~mach, r),
+    Step.asked(~mach, ~Lawful.kernel(mach, lawf), r, c, i, a)
+  )
+    == True{}: Bool
 }:
   match a:
     case None{}:
@@ -4784,7 +5049,12 @@ def Fresh.grows(
   +i: Ledgers.Id,
   +o: Maybe<&2, Out>
 ) -> {
-  Run.after(~mach, Run.state(~mach, r), Step.fresh(~mach, ~Lawful.kernel(mach, lawf), r, c, i, o)) == True{}: Bool
+  Run.after(
+    ~mach,
+    Run.state(~mach, r),
+    Step.fresh(~mach, ~Lawful.kernel(mach, lawf), r, c, i, o)
+  )
+    == True{}: Bool
 }:
   match o:
     case Some{x}:
@@ -4799,7 +5069,14 @@ def One.grows(
   +r: Run<Machine.Q(mach)>,
   c: Ledgers.Chain,
   +i: Ledgers.Id
-) -> {Run.after(~mach, Run.state(~mach, r), Step.one(~mach, ~Lawful.kernel(mach, lawf), r, c, i)) == True{}: Bool}:
+) -> {
+  Run.after(
+    ~mach,
+    Run.state(~mach, r),
+    Step.one(~mach, ~Lawful.kernel(mach, lawf), r, c, i)
+  )
+    == True{}: Bool
+}:
   Fresh.grows(~mach, ~lawf, r, c, i, Line.out(~mach, Run.state(~mach, r), Run.tip(~mach, r), i))
 
 # the requests of a step only grow a run's node
@@ -4849,7 +5126,9 @@ def Run.grows(
   c: Ledgers.Chain,
   t: Tip,
   qs: List<&2, Ledgers.Id>
-) -> {Run.after(~mach, s, Step.run(~mach, ~Lawful.kernel(mach, lawf), s, c, t, qs)) == True{}: Bool}:
+) -> {
+  Run.after(~mach, s, Step.run(~mach, ~Lawful.kernel(mach, lawf), s, c, t, qs)) == True{}: Bool
+}:
   All.grows(~mach, ~lawf, s, c, qs, Some{Run{s, t}})(Grows.refl(~mach, s))
 
 # the run of the requests that can run is on a node that grew
@@ -4910,9 +5189,20 @@ def Plan.own.grows(
   t: Tip,
   -from: List<&2, String>
 ) -> {
-  Run.after(~mach, s, Plan.run(~mach, Plan.own(~mach, ~Lawful.kernel(mach, lawf), s, c, t, from))) == True{}: Bool
+  Run.after(
+    ~mach,
+    s,
+    Plan.run(~mach, Plan.own(~mach, ~Lawful.kernel(mach, lawf), s, c, t, from))
+  )
+    == True{}: Bool
 }:
-  Some.grows(~mach, ~lawf, c, Cast.mine(~mach, ~Lawful.kernel(mach, lawf), s, Wait.of(~mach, s, c)), Run{s, t})
+  Some.grows(
+    ~mach,
+    ~lawf,
+    c,
+    Cast.mine(~mach, ~Lawful.kernel(mach, lawf), s, Wait.of(~mach, s, c)),
+    Run{s, t}
+  )
 
 # the run of the plan for a step that another ballot names is on a node that
 # grew
@@ -4940,8 +5230,15 @@ def Plan.copy.grows(
       Plan.when.grows(
         ~mach,
         s,
-        List.all.if(u => Cast.all_mine(~mach, ~Lawful.kernel(mach, lawf), s, qs), Root.same(before, th)),
-        Plan{qs, Plan.fit(~mach, after, Step.run(~mach, ~Lawful.kernel(mach, lawf), s, c, t, qs)), from},
+        List.all.if(
+          u => Cast.all_mine(~mach, ~Lawful.kernel(mach, lawf), s, qs),
+          Root.same(before, th)
+        ),
+        Plan{
+          qs,
+          Plan.fit(~mach, after, Step.run(~mach, ~Lawful.kernel(mach, lawf), s, c, t, qs)),
+          from
+        },
         Plan{[], None{}, []},
         Plan.fit.grows(
           ~mach,
@@ -4952,6 +5249,7 @@ def Plan.copy.grows(
         {==}
       )
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in this proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
 # the run of the plan of the proposer of a later round is on a node that grew
 def Plan.later.grows(
   ~mach: Machine(),
@@ -4993,7 +5291,9 @@ def Plan.later.grows(
         Plan.copy.grows(~mach, ~lawf, s, c, t, th, Some{v}, from),
         {==}
       )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in this proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
 # the run of the plan of the proposer is on a node that grew
 def Plan.lead.grows(
   ~mach: Machine(),
@@ -5043,7 +5343,9 @@ def Plan.lead.grows(
       Passes.last(~mach, s, w, Passes.of(~mach, s, w, os))
     )
   )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in this proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
 # the run of the plan of another owner is on a node that grew
 def Plan.follow.grows(
   ~mach: Machine(),
@@ -5078,6 +5380,7 @@ def Plan.follow.grows(
       {==}
     case None{}:
       {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the run of what a node casts for is on a node that grew
 def Plan.of.grows(
@@ -5108,7 +5411,17 @@ def Plan.of.grows(
         s,
         String.eq(p, n),
         Plan.lead(~mach, ~Lawful.kernel(mach, lawf), s, c, w, t, th, os),
-        Plan.follow(~mach, ~Lawful.kernel(mach, lawf), s, c, w, t, th, os, Cast.act(~mach, s, w, p)),
+        Plan.follow(
+          ~mach,
+          ~Lawful.kernel(mach, lawf),
+          s,
+          c,
+          w,
+          t,
+          th,
+          os,
+          Cast.act(~mach, s, w, p)
+        ),
         Plan.lead.grows(~mach, ~lawf, s, c, w, t, th, os),
         Plan.follow.grows(~mach, ~lawf, s, c, w, t, th, os, Cast.act(~mach, s, w, p))
       )
@@ -5124,7 +5437,12 @@ def Cast.round.grows(
   +th: Maybe<&2, Hashes.Hash>,
   +t: Tip
 ) -> {
-  Node.grows(~mach, s, Cast.round(~mach, ~Lawful.kernel(mach, lawf), n, s, c, next, th, t)) == True{}: Bool
+  Node.grows(
+    ~mach,
+    s,
+    Cast.round(~mach, ~Lawful.kernel(mach, lawf), n, s, c, next, th, t)
+  )
+    == True{}: Bool
 }:
   +os = Tip.owners(t)
   +r = Round.mine(~mach, n, s, c, next, Round.seen(~mach, s, c, next))
@@ -5168,7 +5486,18 @@ def Cast.round.grows(
       Plan.run(~mach, p),
       s
     )(
-      Plan.of.grows(~mach, ~lawf, n, s, c, w, t, th, os, Owners.turn(os, U32.add(next, U32.from_nat(r))))
+      Plan.of.grows(
+        ~mach,
+        ~lawf,
+        n,
+        s,
+        c,
+        w,
+        t,
+        th,
+        os,
+        Owners.turn(os, U32.add(next, U32.from_nat(r)))
+      )
     ),
     Grows.refl(~mach, s)
   )
@@ -5182,7 +5511,9 @@ def Cast.at.grows(
   +c: Ledgers.Chain,
   h: Head,
   m: Maybe<&2, Tip>
-) -> {Node.grows(~mach, s, Cast.at(~mach, ~Lawful.kernel(mach, lawf), n, s, c, h, m)) == True{}: Bool}:
+) -> {
+  Node.grows(~mach, s, Cast.at(~mach, ~Lawful.kernel(mach, lawf), n, s, c, h, m)) == True{}: Bool
+}:
   match h m:
     case Head{r, b, +next, +th} Some{+t}:
       +s1 = Round.join(~mach, ~Lawful.kernel(mach, lawf), n, s, c, next, Tip.owners(t))
@@ -5205,7 +5536,9 @@ def Cast.head.grows(
   +s: Node<Machine.Q(mach)>,
   c: Ledgers.Chain,
   m: Maybe<&2, Head>
-) -> {Node.grows(~mach, s, Cast.head(~mach, ~Lawful.kernel(mach, lawf), n, s, c, m)) == True{}: Bool}:
+) -> {
+  Node.grows(~mach, s, Cast.head(~mach, ~Lawful.kernel(mach, lawf), n, s, c, m)) == True{}: Bool
+}:
   match m:
     case None{}:
       Grows.refl(~mach, s)
@@ -5231,7 +5564,14 @@ def Advance.step.grows(
   h: Head,
   +t: Tip,
   m: Maybe<&2, Ledgers.Vote>
-) -> {Node.grows(~mach, s, Advance.step(~mach, ~Lawful.kernel(mach, lawf), s, c, h, t, m)) == True{}: Bool}:
+) -> {
+  Node.grows(
+    ~mach,
+    s,
+    Advance.step(~mach, ~Lawful.kernel(mach, lawf), s, c, h, t, m)
+  )
+    == True{}: Bool
+}:
   match h m:
     case Head{r, b, next, th} Some{Ledgers.Vote{before, +qs, after}}:
       Grows.when(
@@ -5274,7 +5614,9 @@ def Advance.at.grows(
   +c: Ledgers.Chain,
   +h: Head,
   m: Maybe<&2, Tip>
-) -> {Node.grows(~mach, s, Advance.at(~mach, ~Lawful.kernel(mach, lawf), s, c, h, m)) == True{}: Bool}:
+) -> {
+  Node.grows(~mach, s, Advance.at(~mach, ~Lawful.kernel(mach, lawf), s, c, h, m)) == True{}: Bool
+}:
   match m:
     case None{}:
       Grows.refl(~mach, s)
@@ -5286,7 +5628,14 @@ def Advance.at.grows(
         c,
         h,
         t,
-        Height.decide(~mach, s, c, Head.next(h), Tip.owners(t), Round.seen(~mach, s, c, Head.next(h)))
+        Height.decide(
+          ~mach,
+          s,
+          c,
+          Head.next(h),
+          Tip.owners(t),
+          Round.seen(~mach, s, c, Head.next(h))
+        )
       )
 
 # Advances.grows once the head m is known
@@ -5297,7 +5646,9 @@ def Advances.at.grows(
   +s: Node<Machine.Q(mach)>,
   +c: Ledgers.Chain,
   m: Maybe<&2, Head>
-) -> {Node.grows(~mach, s, Advances.at(~mach, ~Lawful.kernel(mach, lawf), f, s, c, m)) == True{}: Bool}:
+) -> {
+  Node.grows(~mach, s, Advances.at(~mach, ~Lawful.kernel(mach, lawf), f, s, c, m)) == True{}: Bool
+}:
   match f m:
     case 0n x:
       Grows.refl(~mach, s)
@@ -5330,7 +5681,9 @@ def Advances.grows(
   f: Nat,
   +s: Node<Machine.Q(mach)>,
   +c: Ledgers.Chain
-) -> {Node.grows(~mach, s, Node.advances(~mach, ~Lawful.kernel(mach, lawf), f, s, c)) == True{}: Bool}:
+) -> {
+  Node.grows(~mach, s, Node.advances(~mach, ~Lawful.kernel(mach, lawf), f, s, c)) == True{}: Bool
+}:
   Advances.at.grows(~mach, ~lawf, f, s, c, Node.head_of(~mach, s, c))
 
 # what a node does at a head only grows it
@@ -5384,7 +5737,9 @@ def Ask.new.grows(
   +s: Node<Machine.Q(mach)>,
   +e: Envelope,
   +q: Machine.Q(mach)
-) -> {Node.grows(~mach, s, Node.ask.new(~mach, ~Lawful.kernel(mach, lawf), n, s, e, q)) == True{}: Bool}:
+) -> {
+  Node.grows(~mach, s, Node.ask.new(~mach, ~Lawful.kernel(mach, lawf), n, s, e, q)) == True{}: Bool
+}:
   +i = Envelope.of(e)
   +c = Arrival.chain(i, Machine.arrival(mach)(q))
   +l0 = Ledgers.State.ask(
@@ -5436,7 +5791,14 @@ def Ask.at.grows(
   +e: Envelope,
   +q: Machine.Q(mach),
   m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
-) -> {Node.grows(~mach, s, Node.ask.at(~mach, ~Lawful.kernel(mach, lawf), n, s, e, q, m)) == True{}: Bool}:
+) -> {
+  Node.grows(
+    ~mach,
+    s,
+    Node.ask.at(~mach, ~Lawful.kernel(mach, lawf), n, s, e, q, m)
+  )
+    == True{}: Bool
+}:
   match m:
     case Some{x}:
       Grows.refl(~mach, s)
@@ -5481,7 +5843,9 @@ def Ask.grows(
   +s: Node<Machine.Q(mach)>,
   +e: Envelope,
   q: Machine.Q(mach)
-) -> {Node.grows(~mach, s, Node.ask(~mach, ~Lawful.kernel(mach, lawf), n, s, e, q)) == True{}: Bool}:
+) -> {
+  Node.grows(~mach, s, Node.ask(~mach, ~Lawful.kernel(mach, lawf), n, s, e, q)) == True{}: Bool
+}:
   Ask.at.grows(
     ~mach,
     ~lawf,
@@ -5499,7 +5863,9 @@ def Steps.grows(
   +n: String,
   cs: List<&2, Ledgers.Chain>,
   +s: Node<Machine.Q(mach)>
-) -> {Node.grows(~mach, s, Node.steps(~mach, ~Lawful.kernel(mach, lawf), n, cs, s)) == True{}: Bool}:
+) -> {
+  Node.grows(~mach, s, Node.steps(~mach, ~Lawful.kernel(mach, lawf), n, cs, s)) == True{}: Bool
+}:
   match cs:
     case Nil{}:
       Grows.refl(~mach, s)
@@ -5557,7 +5923,9 @@ def Adopts.grows(
   +n: String,
   cs: List<&2, Ledgers.Chain>,
   +s: Node<Machine.Q(mach)>
-) -> {Node.grows(~mach, s, Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s)) == True{}: Bool}:
+) -> {
+  Node.grows(~mach, s, Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, cs, s)) == True{}: Bool
+}:
   match cs:
     case Nil{}:
       Grows.refl(~mach, s)
@@ -5566,7 +5934,13 @@ def Adopts.grows(
         ~mach,
         s,
         Adopt.at(~mach, ~Lawful.kernel(mach, lawf), n, s, c),
-        Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, rest, Adopt.at(~mach, ~Lawful.kernel(mach, lawf), n, s, c))
+        Node.adopts(
+          ~mach,
+          ~Lawful.kernel(mach, lawf),
+          n,
+          rest,
+          Adopt.at(~mach, ~Lawful.kernel(mach, lawf), n, s, c)
+        )
       )(
         Adopt.at.grows(~mach, ~lawf, n, s, c)
       )(Adopts.grows(~mach, ~lawf, n, rest, Adopt.at(~mach, ~Lawful.kernel(mach, lawf), n, s, c)))
@@ -5583,7 +5957,12 @@ def More.grows(
   +pd: Tries.Trie<Ledgers.Ballot>,
   +s: Node<Machine.Q(mach)>
 ) -> {
-  Node.grows(~mach, s, Sync.more(~mach, ~Lawful.kernel(mach, lawf), f, n, cs, k, bs, pd, s)) == True{}: Bool
+  Node.grows(
+    ~mach,
+    s,
+    Sync.more(~mach, ~Lawful.kernel(mach, lawf), f, n, cs, k, bs, pd, s)
+  )
+    == True{}: Bool
 }:
   match f:
     case 0n:
@@ -5641,7 +6020,15 @@ def More.grows(
           )
         )(
           Each.grows(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s)
-        )(Steps.grows(~mach, ~lawf, n, cs, Sealed.each(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s))),
+        )(
+          Steps.grows(
+            ~mach,
+            ~lawf,
+            n,
+            cs,
+            Sealed.each(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s)
+          )
+        ),
         Grows.trans(
           ~mach,
           s,
@@ -5683,7 +6070,15 @@ def More.grows(
             )
           )(
             Each.grows(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s)
-          )(Steps.grows(~mach, ~lawf, n, cs, Sealed.each(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s)))
+          )(
+            Steps.grows(
+              ~mach,
+              ~lawf,
+              n,
+              cs,
+              Sealed.each(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s)
+            )
+          )
         )(
           More.grows(
             ~mach,
@@ -5776,9 +6171,9 @@ def Sync.grows(
 # The laws of a replica, and the lemmas that prove them.
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in a proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- in a proof an unused binder is a premise of the proof's own type; a proof does not run
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- in a proof an unused binder is a premise of the proof's own type; a proof does not run
 # a first owner reads back
 def Owner.code_read(
   x: Owner,
@@ -5808,7 +6203,13 @@ def Led.wait(
   s: Node<Machine.Q(mach)>,
   c: Ledgers.Chain,
   qs: List<&2, Ledgers.Id>
-) -> {State.ledger(~mach, Wait.set(~mach, s, c, qs)) == State.ledger(~mach, s): Ledgers.State(Machine.Q(mach))}:
+) -> {
+  State.ledger(
+    ~mach,
+    Wait.set(~mach, s, c, qs)
+  )
+    == State.ledger(~mach, s): Ledgers.State(Machine.Q(mach))
+}:
   match s:
     case Node{l, hs, ws, ks}:
       {==}
@@ -5860,7 +6261,12 @@ def Grown.bind(
   hm: {Work.after(~mach, s, m) == True{}: Bool},
   hf: @w: Work<Machine.Q(mach)> -> {Work.after(~mach, Work.state(~mach, w), f(w)) == True{}: Bool}
 ) -> {
-  Work.after(~mach, s, Maybe.bind(&2, Work<Machine.Q(mach)>, Work<Machine.Q(mach)>, m, f)) == True{}: Bool
+  Work.after(
+    ~mach,
+    s,
+    Maybe.bind(&2, Work<Machine.Q(mach)>, Work<Machine.Q(mach)>, m, f)
+  )
+    == True{}: Bool
 }:
   match m:
     case None{}:
@@ -5928,7 +6334,11 @@ def Grown.keep(
       Work.on.grows(~mach, s, State.put(~mach, s, ns), h)(Put.grows(~mach, s, ns))
 
 # the first tip m of a branch, if any, is on a node that grew from s
-def Made.after(~mach: Machine(), s: Node<Machine.Q(mach)>, m: Maybe<&2, Made<Machine.Q(mach)>>) -> Bool:
+def Made.after(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Made<Machine.Q(mach)>>
+) -> Bool:
   match m:
     case None{}:
       True{}
@@ -6070,16 +6480,31 @@ def Taken.grows(
       &2,
       Run<Machine.Q(mach)>,
       Run<Machine.Q(mach)>,
-      Run.add(~mach, r1, Log.version(n), Version.words(Version{i, Tip.content(Run.tip(~mach, r1))})),
+      Run.add(
+        ~mach,
+        r1,
+        Log.version(n),
+        Version.words(Version{i, Tip.content(Run.tip(~mach, r1))})
+      ),
       r2 => Some{Run.next(~mach, r2, own)}
     ),
     Add.grows(~mach, r, Log.out(i), Out.words(Out.Taken{n})),
     +r1 => After.bind(
       ~mach,
       Run.state(~mach, r1),
-      Run.add(~mach, r1, Log.version(n), Version.words(Version{i, Tip.content(Run.tip(~mach, r1))})),
+      Run.add(
+        ~mach,
+        r1,
+        Log.version(n),
+        Version.words(Version{i, Tip.content(Run.tip(~mach, r1))})
+      ),
       r2 => Some{Run.next(~mach, r2, own)},
-      Add.grows(~mach, r1, Log.version(n), Version.words(Version{i, Tip.content(Run.tip(~mach, r1))})),
+      Add.grows(
+        ~mach,
+        r1,
+        Log.version(n),
+        Version.words(Version{i, Tip.content(Run.tip(~mach, r1))})
+      ),
       r2 => Next.grows(~mach, r2, own)
     )
   )
@@ -6364,7 +6789,13 @@ def Set.kept.if(
   +ws: List<&2, List<&2, U32>>,
   b: Bool,
   eb: {
-    Stores.Store.holds(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), State.keep(~mach, s, ws), ws) == b: Bool
+    Stores.Store.holds(
+      ~Node<Machine.Q(mach)>,
+      ~Store.fetch(~mach),
+      State.keep(~mach, s, ws),
+      ws
+    )
+      == b: Bool
   },
   hne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool},
   hget: {Node.get(~mach, s, h, k2) == Some{v}: Maybe<&2, List<&2, U32>>},
@@ -6373,7 +6804,11 @@ def Set.kept.if(
   ~mach,
   k2,
   v,
-  Work.on(~mach, Shared.Maybe.when(Node<Machine.Q(mach)>, b, u => Some{State.keep(~mach, s, ws)}), Some{hh})
+  Work.on(
+    ~mach,
+    Shared.Maybe.when(Node<Machine.Q(mach)>, b, u => Some{State.keep(~mach, s, ws)}),
+    Some{hh}
+  )
 ):
   match b:
     case False{}:
@@ -6476,7 +6911,12 @@ def Set.kept.of(
         v,
         hh,
         ws,
-        Stores.Store.holds(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), State.keep(~mach, s, ws), ws),
+        Stores.Store.holds(
+          ~Node<Machine.Q(mach)>,
+          ~Store.fetch(~mach),
+          State.keep(~mach, s, ws),
+          ws
+        ),
         {==},
         hne,
         hget,
@@ -6594,16 +7034,16 @@ def Add.new.kept(
 def Add.at.kept(
   ~mach: Machine(),
   r: Run<Machine.Q(mach)>,
-  +k: List<&2, U32>,
-  +x: List<&2, U32>,
-  +k2: List<&2, U32>,
-  +v: List<&2, U32>,
+  k: List<&2, U32>,
+  x: List<&2, U32>,
+  k2: List<&2, U32>,
+  v: List<&2, U32>,
   m: Maybe<&2, List<&2, U32>>
 ) -> {
   Node.get(~mach, Run.state(~mach, r), Tip.log(Run.tip(~mach, r)), k) == m: Maybe<&2, List<&2, U32>>
 } -> Run.Keeps(~mach, k2, v, Some{r}) -> Run.Keeps(~mach, k2, v, Run.add.at(~mach, r, k, x, m)):
   match r m:
-    case Run{+s, +t} None{}:
+    case Run{s, t} None{}:
       em => hr => Add.new.kept(~mach, s, t, k, x, k2, v, em, hr)
     case y Some{old}:
       em => hr => Unit{}
@@ -6617,7 +7057,15 @@ def Add.kept(
   k2: List<&2, U32>,
   v: List<&2, U32>
 ) -> Run.Keeps(~mach, k2, v, Some{r}) -> Run.Keeps(~mach, k2, v, Run.add(~mach, r, k, x)):
-  Add.at.kept(~mach, r, k, x, k2, v, Node.get(~mach, Run.state(~mach, r), Tip.log(Run.tip(~mach, r)), k))({==})
+  Add.at.kept(
+    ~mach,
+    r,
+    k,
+    x,
+    k2,
+    v,
+    Node.get(~mach, Run.state(~mach, r), Tip.log(Run.tip(~mach, r)), k)
+  )({==})
 
 # a run, then a run from it that keeps a key, keeps it
 def Keeps.bind(
@@ -6656,7 +7104,12 @@ def Keeps.when(
   k2,
   v,
   Some{r}
-) -> Run.Keeps(~mach, k2, v, Shared.Bool.when(Maybe<&2, Run<Machine.Q(mach)>>, b, u => mx, u => my)):
+) -> Run.Keeps(
+  ~mach,
+  k2,
+  v,
+  Shared.Bool.when(Maybe<&2, Run<Machine.Q(mach)>>, b, u => mx, u => my)
+):
   match b:
     case True{}:
       hx
@@ -6694,7 +7147,12 @@ def Taken.kept(
       &2,
       Run<Machine.Q(mach)>,
       Run<Machine.Q(mach)>,
-      Run.add(~mach, r1, Log.version(n), Version.words(Version{i, Tip.content(Run.tip(~mach, r1))})),
+      Run.add(
+        ~mach,
+        r1,
+        Log.version(n),
+        Version.words(Version{i, Tip.content(Run.tip(~mach, r1))})
+      ),
       r2 => Some{Run.next(~mach, r2, own)}
     )
   )(
@@ -6704,7 +7162,12 @@ def Taken.kept(
       ~mach,
       k2,
       v,
-      Run.add(~mach, r1, Log.version(n), Version.words(Version{i, Tip.content(Run.tip(~mach, r1))})),
+      Run.add(
+        ~mach,
+        r1,
+        Log.version(n),
+        Version.words(Version{i, Tip.content(Run.tip(~mach, r1))})
+      ),
       r2 => Some{Run.next(~mach, r2, own)}
     )(
       Add.kept(
@@ -6857,7 +7320,9 @@ def Tip.at.grows(
   +x: Hashes.Hash,
   -t: Tip,
   g: {Node.grows(~mach, a, b) == True{}: Bool}
-) -> {Tip.at(~mach, a, x) == Some{t}: Maybe<&2, Tip>} -> {Tip.at(~mach, b, x) == Some{t}: Maybe<&2, Tip>}:
+) -> {
+  Tip.at(~mach, a, x) == Some{t}: Maybe<&2, Tip>
+} -> {Tip.at(~mach, b, x) == Some{t}: Maybe<&2, Tip>}:
   Shared.Maybe.bind_kept(
     List<&2, U32>,
     Tip,
@@ -7296,7 +7761,10 @@ def Heads.when(
     ~mach,
     s
   )
-    == State.heads(~mach, Shared.Bool.when(Node<Machine.Q(mach)>, b, u => x, u => y)): Tries.Trie<Head>
+    == State.heads(
+      ~mach,
+      Shared.Bool.when(Node<Machine.Q(mach)>, b, u => x, u => y)
+    ): Tries.Trie<Head>
 }:
   match b:
     case True{}:
@@ -7338,7 +7806,11 @@ def Heads.some.if(
     ~mach,
     s
   )
-    == Heads.of(~mach, s, Shared.Maybe.when(Node<Machine.Q(mach)>, b, u => Some{x})): Tries.Trie<Head>
+    == Heads.of(
+      ~mach,
+      s,
+      Shared.Maybe.when(Node<Machine.Q(mach)>, b, u => Some{x})
+    ): Tries.Trie<Head>
 }:
   match b:
     case True{}:
@@ -7352,7 +7824,9 @@ def Accept.at.heads(
   +s: Node<Machine.Q(mach)>,
   +b: Ledgers.Ballot,
   m: Maybe<&2, Keychain>
-) -> {State.heads(~mach, s) == Heads.of(~mach, s, Seal.accept.at(~mach, s, b, m)): Tries.Trie<Head>}:
+) -> {
+  State.heads(~mach, s) == Heads.of(~mach, s, Seal.accept.at(~mach, s, b, m)): Tries.Trie<Head>
+}:
   match m:
     case None{}:
       {==}
@@ -7460,7 +7934,13 @@ def Cast.seal.heads(
   n: String,
   a0: Ledgers.Act,
   m: Maybe<&2, Keychain>
-) -> {State.heads(~mach, s) == State.heads(~mach, Cast.seal(~mach, ~kern, s, w, n, a0, m)): Tries.Trie<Head>}:
+) -> {
+  State.heads(
+    ~mach,
+    s
+  )
+    == State.heads(~mach, Cast.seal(~mach, ~kern, s, w, n, a0, m)): Tries.Trie<Head>
+}:
   match m:
     case None{}:
       {==}
@@ -7486,7 +7966,13 @@ def Cast.vote.heads(
   +w: Ledgers.Where,
   +n: String,
   a0: Ledgers.Act
-) -> {State.heads(~mach, s) == State.heads(~mach, Cast.vote(~mach, ~kern, s, m, w, n, a0)): Tries.Trie<Head>}:
+) -> {
+  State.heads(
+    ~mach,
+    s
+  )
+    == State.heads(~mach, Cast.vote(~mach, ~kern, s, m, w, n, a0)): Tries.Trie<Head>
+}:
   match m:
     case None{}:
       {==}
@@ -7496,7 +7982,10 @@ def Cast.vote.heads(
         Tries.Trie<Head>,
         State.heads(~mach, s),
         State.heads(~mach, s4),
-        State.heads(~mach, Cast.seal(~mach, ~kern, s4, w, n, a0, Seal.chain(~mach, ~kern, s4, Where.store(w), n))),
+        State.heads(
+          ~mach,
+          Cast.seal(~mach, ~kern, s4, w, n, a0, Seal.chain(~mach, ~kern, s4, Where.store(w), n))
+        ),
         Heads.led(~mach, s, State.ledger(~mach, s3)),
         Cast.seal.heads(~mach, ~kern, s4, w, n, a0, Seal.chain(~mach, ~kern, s4, Where.store(w), n))
       )
@@ -7507,7 +7996,8 @@ def Follow.step.heads(
   -s: Node<Machine.Q(mach)>,
   m: Maybe<&2, Node<Machine.Q(mach)>>,
   -k: Node<Machine.Q(mach)> -> Node<Machine.Q(mach)>,
-  ih: @s2: Node<Machine.Q(mach)> -> {State.heads(~mach, s2) == State.heads(~mach, k(s2)): Tries.Trie<Head>}
+  ih: @s2: Node<
+    Machine.Q(mach)> -> {State.heads(~mach, s2) == State.heads(~mach, k(s2)): Tries.Trie<Head>}
 ) -> {
   State.heads(~mach, s) == Heads.of(~mach, s, m): Tries.Trie<Head>
 } -> {
@@ -7549,7 +8039,11 @@ def Follow.heads(
   +n: String,
   mb: Maybe<&2, Ledgers.Ballot>
 ) -> {
-  State.heads(~mach, s) == State.heads(~mach, Sealed.follow(~mach, ~kern, f, s, p, r, n, mb)): Tries.Trie<Head>
+  State.heads(
+    ~mach,
+    s
+  )
+    == State.heads(~mach, Sealed.follow(~mach, ~kern, f, s, p, r, n, mb)): Tries.Trie<Head>
 }:
   match f mb:
     case 0n x:
@@ -7573,7 +8067,13 @@ def Each.heads(
   bs: List<&2, Ledgers.Ballot>,
   +p: Tries.Trie<Ledgers.Ballot>,
   +s: Node<Machine.Q(mach)>
-) -> {State.heads(~mach, s) == State.heads(~mach, Sealed.each(~mach, ~kern, f, bs, p, s)): Tries.Trie<Head>}:
+) -> {
+  State.heads(
+    ~mach,
+    s
+  )
+    == State.heads(~mach, Sealed.each(~mach, ~kern, f, bs, p, s)): Tries.Trie<Head>
+}:
   match bs:
     case Nil{}:
       {==}
@@ -7646,7 +8146,9 @@ def Pass.to.heads(
   +s: Node<Machine.Q(mach)>,
   w: Ledgers.Where,
   os: List<&2, String>
-) -> {State.heads(~mach, s) == State.heads(~mach, Pass.to(~mach, ~kern, n, s, w, os)): Tries.Trie<Head>}:
+) -> {
+  State.heads(~mach, s) == State.heads(~mach, Pass.to(~mach, ~kern, n, s, w, os)): Tries.Trie<Head>
+}:
   match w:
     case Ledgers.Where{+c, +h, +r}:
       Heads.when(
@@ -7655,7 +8157,12 @@ def Pass.to.heads(
           u => Maybe.is_none(
             &2,
             Maybe<&2, Ledgers.Last>,
-            Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Where{c, h, r}, n)
+            Ledgers.State.passed(
+              ~Machine.Q(mach),
+              State.ledger(~mach, s),
+              Ledgers.Where{c, h, r},
+              n
+            )
           ),
           List.contains(~String, ~String.eq, os, n)
         ),
@@ -7691,7 +8198,13 @@ def Round.join.heads(
   +c: Ledgers.Chain,
   +h: U32,
   os: List<&2, String>
-) -> {State.heads(~mach, s) == State.heads(~mach, Round.join(~mach, ~kern, n, s, c, h, os)): Tries.Trie<Head>}:
+) -> {
+  State.heads(
+    ~mach,
+    s
+  )
+    == State.heads(~mach, Round.join(~mach, ~kern, n, s, c, h, os)): Tries.Trie<Head>
+}:
   +top = Round.seen(~mach, s, c, h)
   k = top
   Heads.when(
@@ -7715,7 +8228,11 @@ def Cast.round.heads(
   +th: Maybe<&2, Hashes.Hash>,
   +t: Tip
 ) -> {
-  State.heads(~mach, s) == State.heads(~mach, Cast.round(~mach, ~kern, n, s, c, next, th, t)): Tries.Trie<Head>
+  State.heads(
+    ~mach,
+    s
+  )
+    == State.heads(~mach, Cast.round(~mach, ~kern, n, s, c, next, th, t)): Tries.Trie<Head>
 }:
   +os = Tip.owners(t)
   +r = Round.mine(~mach, n, s, c, next, Round.seen(~mach, s, c, next))
@@ -7725,9 +8242,29 @@ def Cast.round.heads(
     ~mach,
     Cast.may(~mach, n, s, w, t, Plan.asks(~mach, p)),
     s,
-    Cast.put(~mach, ~kern, n, w, th, Plan.asks(~mach, p), Plan.from(~mach, p), Plan.run(~mach, p), s),
+    Cast.put(
+      ~mach,
+      ~kern,
+      n,
+      w,
+      th,
+      Plan.asks(~mach, p),
+      Plan.from(~mach, p),
+      Plan.run(~mach, p),
+      s
+    ),
     s,
-    Cast.put.heads(~mach, ~kern, n, w, th, Plan.asks(~mach, p), Plan.from(~mach, p), Plan.run(~mach, p), s),
+    Cast.put.heads(
+      ~mach,
+      ~kern,
+      n,
+      w,
+      th,
+      Plan.asks(~mach, p),
+      Plan.from(~mach, p),
+      Plan.run(~mach, p),
+      s
+    ),
     {==}
   )
 
@@ -7740,7 +8277,13 @@ def Cast.at.heads(
   +c: Ledgers.Chain,
   h: Head,
   m: Maybe<&2, Tip>
-) -> {State.heads(~mach, s) == State.heads(~mach, Cast.at(~mach, ~kern, n, s, c, h, m)): Tries.Trie<Head>}:
+) -> {
+  State.heads(
+    ~mach,
+    s
+  )
+    == State.heads(~mach, Cast.at(~mach, ~kern, n, s, c, h, m)): Tries.Trie<Head>
+}:
   match h m:
     case Head{r, b, +next, th} Some{+t}:
       s1 = Round.join(~mach, ~kern, n, s, c, next, Tip.owners(t))
@@ -7764,7 +8307,13 @@ def Pass.at.heads(
   +c: Ledgers.Chain,
   h: Head,
   m: Maybe<&2, Tip>
-) -> {State.heads(~mach, s) == State.heads(~mach, Pass.at(~mach, ~kern, n, s, c, h, m)): Tries.Trie<Head>}:
+) -> {
+  State.heads(
+    ~mach,
+    s
+  )
+    == State.heads(~mach, Pass.at(~mach, ~kern, n, s, c, h, m)): Tries.Trie<Head>
+}:
   match h m:
     case Head{r, b, +next, th} Some{t}:
       Pass.to.heads(
@@ -7786,7 +8335,9 @@ def Pass.head.heads(
   +s: Node<Machine.Q(mach)>,
   c: Ledgers.Chain,
   m: Maybe<&2, Head>
-) -> {State.heads(~mach, s) == State.heads(~mach, Pass.head(~mach, ~kern, n, s, c, m)): Tries.Trie<Head>}:
+) -> {
+  State.heads(~mach, s) == State.heads(~mach, Pass.head(~mach, ~kern, n, s, c, m)): Tries.Trie<Head>
+}:
   match m:
     case None{}:
       {==}
@@ -7801,7 +8352,9 @@ def Cast.head.heads(
   +s: Node<Machine.Q(mach)>,
   c: Ledgers.Chain,
   m: Maybe<&2, Head>
-) -> {State.heads(~mach, s) == State.heads(~mach, Cast.head(~mach, ~kern, n, s, c, m)): Tries.Trie<Head>}:
+) -> {
+  State.heads(~mach, s) == State.heads(~mach, Cast.head(~mach, ~kern, n, s, c, m)): Tries.Trie<Head>
+}:
   match m:
     case None{}:
       {==}
@@ -7811,7 +8364,7 @@ def Cast.head.heads(
 # the words of a tip read as the tip
 def Tip.round(t: Tip) -> {Tip.read(Tip.words(t)) == Some{t}: Maybe<&2, Tip>}:
   match t:
-    case Tip{+c, +l, +n, +os}:
+    case Tip{c, l, n, os}:
       %Equal.sym(
         Maybe<&2, Codes.Read<Tip>>,
         Codes.Code.four.read(
@@ -7889,7 +8442,13 @@ def Put.holds.if(
   -s3: Node<Machine.Q(mach)>,
   b: Bool,
   eb: {
-    Stores.Store.holds(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), State.keep(~mach, s2, ds), ds) == b: Bool
+    Stores.Store.holds(
+      ~Node<Machine.Q(mach)>,
+      ~Store.fetch(~mach),
+      State.keep(~mach, s2, ds),
+      ds
+    )
+      == b: Bool
   }
 ) -> {
   Shared.Maybe.when(
@@ -8015,7 +8574,9 @@ def Moved.cover(
   +g: {Node.grows(~mach, s3, b) == True{}: Bool},
   e3: {Tip.at(~mach, s3, Tip.hash(t2)) == Some{t2}: Maybe<&2, Tip>},
   v3: {Node.get(~mach, s3, Tip.log(t2), k) == Some{v}: Maybe<&2, List<&2, U32>>}
-) -> {Head.get(~mach, b, Head{r, br, nx, Some{Tip.hash(t2)}}, k) == Some{v}: Maybe<&2, List<&2, U32>>}:
+) -> {
+  Head.get(~mach, b, Head{r, br, nx, Some{Tip.hash(t2)}}, k) == Some{v}: Maybe<&2, List<&2, U32>>
+}:
   %Equal.sym(
     Maybe<&2, Tip>,
     Tip.at(~mach, b, Tip.hash(t2)),
@@ -8299,7 +8860,9 @@ def Open.at.kept(
   +s: Node<Machine.Q(mach)>,
   c: Ledgers.Chain,
   m: Maybe<&2, Head>
-) -> {Node.head_of(~mach, s, c) == m: Maybe<&2, Head>} -> Node.Keeps(~mach, s, Open.at(~mach, s, c, m)):
+) -> {
+  Node.head_of(~mach, s, c) == m: Maybe<&2, Head>
+} -> Node.Keeps(~mach, s, Open.at(~mach, s, c, m)):
   match m:
     case Some{Head{+r, Some{+b}, n, None{}}}:
       +em =>
@@ -8319,7 +8882,19 @@ def Open.at.kept(
           hd,
           Grows.refl(~mach, s),
           {==},
-          k => v => Cover.wait(~mach, s, c, State.head(~mach, s, c, hd), hd, k, v, r, Some{b}, n, em)
+          k => v => Cover.wait(
+            ~mach,
+            s,
+            c,
+            State.head(~mach, s, c, hd),
+            hd,
+            k,
+            v,
+            r,
+            Some{b},
+            n,
+            em
+          )
         )
     case Some{Head{r, Some{b}, n, Some{t}}}:
       em => Kept.refl(~mach, s)
@@ -8335,7 +8910,9 @@ def First.at.kept(
   c: Ledgers.Chain,
   h: Head,
   m: Maybe<&2, Head>
-) -> {Node.head_of(~mach, s, c) == m: Maybe<&2, Head>} -> Node.Keeps(~mach, s, First.at(~mach, s, c, h, m)):
+) -> {
+  Node.head_of(~mach, s, c) == m: Maybe<&2, Head>
+} -> Node.Keeps(~mach, s, First.at(~mach, s, c, h, m)):
   match m:
     case Some{Head{r, b, n, Some{t}}}:
       em => Kept.refl(~mach, s)
@@ -8371,7 +8948,9 @@ def Start.head.kept(
   +c: Ledgers.Chain,
   h: Head,
   g: {Node.grows(~mach, s, a) == True{}: Bool}
-) -> {State.after(~mach, a, m) == True{}: Bool} -> Node.Keeps(~mach, s, Start.head(~mach, s, m, c, h)):
+) -> {
+  State.after(~mach, a, m) == True{}: Bool
+} -> Node.Keeps(~mach, s, Start.head(~mach, s, m, c, h)):
   match m:
     case None{}:
       e => Kept.refl(~mach, s)
@@ -8396,15 +8975,17 @@ def Start.head.kept(
 # Start.kept once the content m of the store is known
 def Start.with.kept(
   ~mach: Machine(),
-  +s: Node<Machine.Q(mach)>,
+  s: Node<Machine.Q(mach)>,
   +i: Ledgers.Id,
-  +os: List<&2, String>,
+  os: List<&2, String>,
   m: Maybe<&2, Work<Machine.Q(mach)>>
-) -> {Work.after(~mach, s, m) == True{}: Bool} -> Node.Keeps(~mach, s, Start.with(~mach, s, i, os, m)):
+) -> {
+  Work.after(~mach, s, m) == True{}: Bool
+} -> Node.Keeps(~mach, s, Start.with(~mach, s, i, os, m)):
   match m:
     case None{}:
       e => Kept.refl(~mach, s)
-    case Some{Work{+s2, +c}}:
+    case Some{Work{+s2, c}}:
       e =>
         +t = {Tip{c, None{}, 0, os}: Tip}
         Start.head.kept(
@@ -8608,7 +9189,11 @@ def Keep.reads.if(
   ~mach,
   k,
   v,
-  Work.on(~mach, Shared.Maybe.when(Node<Machine.Q(mach)>, b, u => Some{State.keep(~mach, s, ns)}), h)
+  Work.on(
+    ~mach,
+    Shared.Maybe.when(Node<Machine.Q(mach)>, b, u => Some{State.keep(~mach, s, ns)}),
+    h
+  )
 ):
   match b:
     case False{}:
@@ -8633,7 +9218,12 @@ def Keep.reads(
         ns,
         k,
         v,
-        Stores.Store.holds(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), State.keep(~mach, s, ns), ns),
+        Stores.Store.holds(
+          ~Node<Machine.Q(mach)>,
+          ~Store.fetch(~mach),
+          State.keep(~mach, s, ns),
+          ns
+        ),
         hget
       )
 
@@ -8648,14 +9238,24 @@ def Set.read.if(
   +ws: List<&2, List<&2, U32>>,
   +b: Bool,
   eb: {
-    Stores.Store.holds(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), State.keep(~mach, s, ws), ws) == b: Bool
+    Stores.Store.holds(
+      ~Node<Machine.Q(mach)>,
+      ~Store.fetch(~mach),
+      State.keep(~mach, s, ws),
+      ws
+    )
+      == b: Bool
   },
   em: {Node.set(~mach, s, h, k, x) == Some{Trees.Put{hh, ws}}: Maybe<&2, Trees.Put>}
 ) -> Work.Reads(
   ~mach,
   k,
   x,
-  Work.on(~mach, Shared.Maybe.when(Node<Machine.Q(mach)>, b, u => Some{State.keep(~mach, s, ws)}), Some{hh})
+  Work.on(
+    ~mach,
+    Shared.Maybe.when(Node<Machine.Q(mach)>, b, u => Some{State.keep(~mach, s, ws)}),
+    Some{hh}
+  )
 ):
   match b:
     case False{}:
@@ -8727,7 +9327,12 @@ def Set.read.of(
         x,
         hh,
         ws,
-        Stores.Store.holds(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), State.keep(~mach, s, ws), ws),
+        Stores.Store.holds(
+          ~Node<Machine.Q(mach)>,
+          ~Store.fetch(~mach),
+          State.keep(~mach, s, ws),
+          ws
+        ),
         {==},
         em
       )
@@ -8851,7 +9456,7 @@ def Taken.outs(
   ~mach: Machine(),
   +r: Run<Machine.Q(mach)>,
   +i: Ledgers.Id,
-  +own: Maybe<&2, List<&2, String>>
+  own: Maybe<&2, List<&2, String>>
 ) -> Run.Outs(~mach, Step.taken(~mach, r, i, own), i):
   +n = Tip.count(Run.tip(~mach, r))
   Outs.of(
@@ -8869,7 +9474,12 @@ def Taken.outs(
         &2,
         Run<Machine.Q(mach)>,
         Run<Machine.Q(mach)>,
-        Run.add(~mach, r1, Log.version(n), Version.words(Version{i, Tip.content(Run.tip(~mach, r1))})),
+        Run.add(
+          ~mach,
+          r1,
+          Log.version(n),
+          Version.words(Version{i, Tip.content(Run.tip(~mach, r1))})
+        ),
         r2 => Some{Run.next(~mach, r2, own)}
       )
     )(
@@ -8879,7 +9489,12 @@ def Taken.outs(
         ~mach,
         Log.out(i),
         Out.words(Out.Taken{n}),
-        Run.add(~mach, r1, Log.version(n), Version.words(Version{i, Tip.content(Run.tip(~mach, r1))})),
+        Run.add(
+          ~mach,
+          r1,
+          Log.version(n),
+          Version.words(Version{i, Tip.content(Run.tip(~mach, r1))})
+        ),
         r2 => Some{Run.next(~mach, r2, own)}
       )(
         Add.kept(
@@ -9024,7 +9639,13 @@ def Keeps.self(
   k: List<&2, U32>,
   v: List<&2, U32>
 ) -> {
-  Node.get(~mach, Run.state(~mach, r), Tip.log(Run.tip(~mach, r)), k) == Some{v}: Maybe<&2, List<&2, U32>>
+  Node.get(
+    ~mach,
+    Run.state(~mach, r),
+    Tip.log(Run.tip(~mach, r)),
+    k
+  )
+    == Some{v}: Maybe<&2, List<&2, U32>>
 } -> Run.Keeps(~mach, k, v, Some{r}):
   match r:
     case Run{s, t}:
@@ -9127,12 +9748,12 @@ def Follow.allowed.at(
 # grew, with the owners that it reads
 def Decide.up(
   ~mach: Machine(),
-  +a: Node<Machine.Q(mach)>,
-  +u: Node<Machine.Q(mach)>,
-  +t: Tip,
-  +w: Ledgers.Where,
+  a: Node<Machine.Q(mach)>,
+  u: Node<Machine.Q(mach)>,
+  t: Tip,
+  w: Ledgers.Where,
   v: Ledgers.Vote,
-  +g: {Node.grows(~mach, a, u) == True{}: Bool}
+  g: {Node.grows(~mach, a, u) == True{}: Bool}
 ) -> {
   Ledgers.State.decide(
     ~Machine.Q(mach),
@@ -9217,7 +9838,12 @@ def Scan.elim.at(
       )(
         Equal.trans(
           Maybe<&2, Ledgers.Vote>,
-          Ledgers.State.decide(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Where{c, n, r}, os),
+          Ledgers.State.decide(
+            ~Machine.Q(mach),
+            State.ledger(~mach, s),
+            Ledgers.Where{c, n, r},
+            os
+          ),
           Some{x},
           Some{v},
           em,
@@ -9262,7 +9888,12 @@ def Scan.elim(
         p,
         v,
         1n+p,
-        Ledgers.State.decide(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Where{c, n, 1n+p}, os),
+        Ledgers.State.decide(
+          ~Machine.Q(mach),
+          State.ledger(~mach, s),
+          Ledgers.Where{c, n, 1n+p},
+          os
+        ),
         Scan.elim(~mach, R, s, c, n, os, p, v)
       )({==})
 
@@ -9599,7 +10230,13 @@ def Advance.at.moves(
   Node.head_of(~mach, s, c) == Some{h}: Maybe<&2, Head>
 } -> {
   Head.tip(~mach, s, h) == m: Maybe<&2, Tip>
-} -> Moves(~mach, Advance.at(~mach, ~kern, s, c, h, m), c, h, Head.step(h, Advance.vote(~mach, s, c, h))):
+} -> Moves(
+  ~mach,
+  Advance.at(~mach, ~kern, s, c, h, m),
+  c,
+  h,
+  Head.step(h, Advance.vote(~mach, s, c, h))
+):
   match m:
     case None{}:
       em => et => Moves.stay(~mach, s, c, h, Head.step(h, Advance.vote(~mach, s, c, h)), em)
@@ -9608,7 +10245,14 @@ def Advance.at.moves(
         %Equal.sym(
           Maybe<&2, Ledgers.Vote>,
           Advance.vote(~mach, s, c, h),
-          Height.decide(~mach, s, c, Head.next(h), Tip.owners(t), Round.seen(~mach, s, c, Head.next(h))),
+          Height.decide(
+            ~mach,
+            s,
+            c,
+            Head.next(h),
+            Tip.owners(t),
+            Round.seen(~mach, s, c, Head.next(h))
+          ),
           Equal.cong(
             Maybe<&2, Tip>,
             Maybe<&2, Ledgers.Vote>,
@@ -9639,7 +10283,14 @@ def Advance.at.moves(
             c,
             h,
             t,
-            Height.decide(~mach, s, c, Head.next(h), Tip.owners(t), Round.seen(~mach, s, c, Head.next(h)))
+            Height.decide(
+              ~mach,
+              s,
+              c,
+              Head.next(h),
+              Tip.owners(t),
+              Round.seen(~mach, s, c, Head.next(h))
+            )
           ),
           c,
           h,
@@ -9652,7 +10303,14 @@ def Advance.at.moves(
           c,
           h,
           t,
-          Height.decide(~mach, s, c, Head.next(h), Tip.owners(t), Round.seen(~mach, s, c, Head.next(h)))
+          Height.decide(
+            ~mach,
+            s,
+            c,
+            Head.next(h),
+            Tip.owners(t),
+            Round.seen(~mach, s, c, Head.next(h))
+          )
         )(em)
 
 # a head moves only to the tip that the owners in its tip decided next
@@ -9680,14 +10338,20 @@ def Advance.decided(
       Node.head_of(~mach, s, c),
       Some{h},
       em
-    ): Moves(~mach, Advance.head(~mach, ~kern, s, c, _), c, h, Head.step(h, Advance.vote(~mach, s, c, h)))
+    ): Moves(
+      ~mach,
+      Advance.head(~mach, ~kern, s, c, _),
+      c,
+      h,
+      Head.step(h, Advance.vote(~mach, s, c, h))
+    )
     Advance.at.moves(~mach, ~kern, s, c, h, Head.tip(~mach, s, h))(em)({==})
 
 # Found.elim once the tip m of the head is known
 def Found.elim.at(
   ~mach: Machine(),
   -R: Type,
-  +s: Node<Machine.Q(mach)>,
+  s: Node<Machine.Q(mach)>,
   c: Ledgers.Chain,
   h: Head,
   k: Nat,
@@ -9950,7 +10614,12 @@ def Accept.fits.if(
   -x: Node<Machine.Q(mach)>,
   -s2: Node<Machine.Q(mach)>
 ) -> {
-  Shared.Maybe.when(Node<Machine.Q(mach)>, f, u => Some{x}) == Some{s2}: Maybe<&2, Node<Machine.Q(mach)>>
+  Shared.Maybe.when(
+    Node<Machine.Q(mach)>,
+    f,
+    u => Some{x}
+  )
+    == Some{s2}: Maybe<&2, Node<Machine.Q(mach)>>
 } -> {f == True{}: Bool}:
   match f:
     case True{}:
@@ -10850,8 +11519,18 @@ def Has.voter(
 } -> {Round.voter(~mach, s, c, h, r, os, v) == None{}: Maybe<&2, String>} -> Empty:
   hh => e =>
     Lt.none(
-      Quorums.Quorum.no(~Ledgers.Vote, ~Ledgers.Vote.is_eq, Round.ballots(~mach, s, c, h, r, os), v),
-      Quorums.Quorum.yes(~Ledgers.Vote, ~Ledgers.Vote.is_eq, Round.ballots(~mach, s, c, h, r, os), v),
+      Quorums.Quorum.no(
+        ~Ledgers.Vote,
+        ~Ledgers.Vote.is_eq,
+        Round.ballots(~mach, s, c, h, r, os),
+        v
+      ),
+      Quorums.Quorum.yes(
+        ~Ledgers.Vote,
+        ~Ledgers.Vote.is_eq,
+        Round.ballots(~mach, s, c, h, r, os),
+        v
+      ),
       Voter.yes(~mach, s, c, h, r, os, v)(e)
     )(hh)
 
@@ -10877,7 +11556,12 @@ def Sub.count.at(
   } -> {
     Nat.is_le(
       List.length(&2, String, fs),
-      Quorums.Quorum.no(~Ledgers.Vote, ~Ledgers.Vote.is_eq, Round.ballots(~mach, s, c, h, r, rest), v)
+      Quorums.Quorum.no(
+        ~Ledgers.Vote,
+        ~Ledgers.Vote.is_eq,
+        Round.ballots(~mach, s, c, h, r, rest),
+        v
+      )
     )
       == True{}: Bool
   },
@@ -10888,7 +11572,12 @@ def Sub.count.at(
   } -> {
     Nat.is_le(
       1n+List.length(&2, String, fs),
-      Quorums.Quorum.no(~Ledgers.Vote, ~Ledgers.Vote.is_eq, Round.ballots(~mach, s, c, h, r, rest), v)
+      Quorums.Quorum.no(
+        ~Ledgers.Vote,
+        ~Ledgers.Vote.is_eq,
+        Round.ballots(~mach, s, c, h, r, rest),
+        v
+      )
     )
       == True{}: Bool
   }
@@ -10907,7 +11596,12 @@ def Sub.count.at(
     1n+List.length(&2, String, fs),
     Shared.Nat.add_if(
       Bool.not(Round.hit(~mach, s, c, h, r, o, v)),
-      Quorums.Quorum.no(~Ledgers.Vote, ~Ledgers.Vote.is_eq, Round.ballots(~mach, s, c, h, r, rest), v)
+      Quorums.Quorum.no(
+        ~Ledgers.Vote,
+        ~Ledgers.Vote.is_eq,
+        Round.ballots(~mach, s, c, h, r, rest),
+        v
+      )
     )
   )
     == True{}: Bool
@@ -10939,7 +11633,11 @@ def Sub.count.at(
           Bool,
           Round.hit(~mach, s, c, h, r, f, v),
           False{},
-          Voter.if_hit(Round.hit(~mach, s, c, h, r, f, v), f, Round.voter(~mach, s, c, h, r, fs, v))(ev)
+          Voter.if_hit(
+            Round.hit(~mach, s, c, h, r, f, v),
+            f,
+            Round.voter(~mach, s, c, h, r, fs, v)
+          )(ev)
         ): {
           Nat.is_le(
             1n+List.length(&2, String, fs),
@@ -10957,7 +11655,13 @@ def Sub.count.at(
         }
         ih1(
           es
-        )(Voter.if_rest(Round.hit(~mach, s, c, h, r, f, v), f, Round.voter(~mach, s, c, h, r, fs, v))(ev))
+        )(
+          Voter.if_rest(
+            Round.hit(~mach, s, c, h, r, f, v),
+            f,
+            Round.voter(~mach, s, c, h, r, fs, v)
+          )(ev)
+        )
     case False{}:
       es => ev =>
         Shared.Nat.le_add_if(
@@ -11115,8 +11819,18 @@ def Major.meets(
   hh => es => em => ev =>
     Shared.Nat.pigeon(
       List.length(&2, String, from),
-      Quorums.Quorum.no(~Ledgers.Vote, ~Ledgers.Vote.is_eq, Round.ballots(~mach, s, c, h, r, os), v),
-      Quorums.Quorum.yes(~Ledgers.Vote, ~Ledgers.Vote.is_eq, Round.ballots(~mach, s, c, h, r, os), v),
+      Quorums.Quorum.no(
+        ~Ledgers.Vote,
+        ~Ledgers.Vote.is_eq,
+        Round.ballots(~mach, s, c, h, r, os),
+        v
+      ),
+      Quorums.Quorum.yes(
+        ~Ledgers.Vote,
+        ~Ledgers.Vote.is_eq,
+        Round.ballots(~mach, s, c, h, r, os),
+        v
+      ),
       List.length(&2, String, os)
     )(
       Sub.count(~mach, s, c, h, r, os, from, v)(es)(ev)
@@ -11675,7 +12389,11 @@ def Pass.miss(
 ) -> {Nat.is_le(r1, p) == True{}: Bool}
   -> {Passed.all(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from) == True{}: Bool}
   -> {
-    Last.from(Passes.last(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from), r1) == False{}: Bool
+    Last.from(
+      Passes.last(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from),
+      r1
+    )
+      == False{}: Bool
   }
   -> {Round.voter(~mach, s, c, Head.next(hd), r1, from, v1) == None{}: Maybe<&2, String>}:
   match from:
@@ -11886,7 +12604,9 @@ def Last.elim(
   +w: Ledgers.Where,
   from: List<&2, String>,
   +l: Ledgers.Last
-) -> {Passes.last(~mach, s, w, from) == Some{l}: Maybe<&2, Ledgers.Last>} -> Named(~mach, R, s, w, l):
+) -> {
+  Passes.last(~mach, s, w, from) == Some{l}: Maybe<&2, Ledgers.Last>
+} -> Named(~mach, R, s, w, l):
   match from:
     case Nil{}:
       e => k => Empty.absurd(R, Shared.Maybe.none_ne_some(Ledgers.Last, l, e))
@@ -12023,7 +12743,15 @@ def Rounds.named(
   +vm: Ledgers.Vote,
   +qw: String,
   +em: {
-    Last.mine(~mach, qw, s, c, Head.next(hd), p) == Some{Ledgers.Last{rm, vm}}: Maybe<&2, Ledgers.Last>
+    Last.mine(
+      ~mach,
+      qw,
+      s,
+      c,
+      Head.next(hd),
+      p
+    )
+      == Some{Ledgers.Last{rm, vm}}: Maybe<&2, Ledgers.Last>
   },
   lt: {Nat.is_lt(p, j) == True{}: Bool},
   le: {Nat.is_le(r1, rm) == True{}: Bool},
@@ -12056,7 +12784,9 @@ def Rounds.last(
   j: Nat,
   from: List<&2, String>,
   m: Maybe<&2, Ledgers.Last>
-) -> {Passes.last(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from) == m: Maybe<&2, Ledgers.Last>}
+) -> {
+  Passes.last(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from) == m: Maybe<&2, Ledgers.Last>
+}
   -> {Last.from(m, r1) == True{}: Bool}
   -> {Last.is(m, x) == True{}: Bool}
   -> {Nat.is_lt(p, j) == True{}: Bool}
@@ -12647,7 +13377,20 @@ def Rounds.one(
   ~rules: Rounds.Rules(~mach, s, c)
 ) -> Line.One(~mach, s, c):
   +hd => +tp => +ok => +r1 => +r2 => v1 => v2 => d1 => d2 =>
-    Rounds.one.at(~mach, ~s, ~c, ~rules, hd, tp, ok, r1, r2, v1, v2, Nat.is_le(r1, r2))({==})(d1)(d2)
+    Rounds.one.at(
+      ~mach,
+      ~s,
+      ~c,
+      ~rules,
+      hd,
+      tp,
+      ok,
+      r1,
+      r2,
+      v1,
+      v2,
+      Nat.is_le(r1, r2)
+    )({==})(d1)(d2)
 
 # the rounds of each of k heights decide one step, when the ballots follow the
 # rules of rounds
@@ -12909,7 +13652,14 @@ def Head.other(
   c2: Ledgers.Chain,
   eh: {State.heads(~mach, a) == State.heads(~mach, b0): Tries.Trie<Head>},
   ebs: {Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)) == False{}: Bool}
-) -> {Node.head_of(~mach, a, c2) == Node.head_of(~mach, State.head(~mach, b0, c, hd), c2): Maybe<&2, Head>}:
+) -> {
+  Node.head_of(
+    ~mach,
+    a,
+    c2
+  )
+    == Node.head_of(~mach, State.head(~mach, b0, c, hd), c2): Maybe<&2, Head>
+}:
   Equal.trans(
     Maybe<&2, Head>,
     Node.head_of(~mach, a, c2),
@@ -13103,7 +13853,11 @@ def Waiting.led(
   s: Node<Machine.Q(mach)>,
   l: Ledgers.State(Machine.Q(mach))
 ) -> {
-  State.waiting(~mach, s) == State.waiting(~mach, State.led(~mach, s, l)): Tries.Trie<List<&2, Ledgers.Id>>
+  State.waiting(
+    ~mach,
+    s
+  )
+    == State.waiting(~mach, State.led(~mach, s, l)): Tries.Trie<List<&2, Ledgers.Id>>
 }:
   match s:
     case Node{old, hs, ws, ks}:
@@ -13261,7 +14015,9 @@ def Follow.step.waiting(
   ih: @s2: Node<
     Machine.Q(
       mach
-    )> -> {State.waiting(~mach, s2) == State.waiting(~mach, k(s2)): Tries.Trie<List<&2, Ledgers.Id>>}
+    )> -> {
+    State.waiting(~mach, s2) == State.waiting(~mach, k(s2)): Tries.Trie<List<&2, Ledgers.Id>>
+  }
 ) -> {
   State.waiting(~mach, s) == Waiting.of(~mach, s, m): Tries.Trie<List<&2, Ledgers.Id>>
 } -> {
@@ -13307,7 +14063,10 @@ def Follow.waiting(
     ~mach,
     s
   )
-    == State.waiting(~mach, Sealed.follow(~mach, ~kern, f, s, p, r, n, mb)): Tries.Trie<List<&2, Ledgers.Id>>
+    == State.waiting(
+      ~mach,
+      Sealed.follow(~mach, ~kern, f, s, p, r, n, mb)
+    ): Tries.Trie<List<&2, Ledgers.Id>>
 }:
   match f mb:
     case 0n x:
@@ -13321,7 +14080,9 @@ def Follow.waiting(
         Seal.accept(~mach, ~kern, s, b),
         +s2 => Sealed.follow(~mach, ~kern, g, s2, p, r, n, Pending.next(~mach, ~kern, s2, p, r, n)),
         +s2 => Follow.waiting(~mach, ~kern, g, s2, p, r, n, Pending.next(~mach, ~kern, s2, p, r, n))
-      )(Accept.at.waiting(~mach, s, b, Seal.chain(~mach, ~kern, s, Ballot.store(b), Ballot.node(b))))
+      )(
+        Accept.at.waiting(~mach, s, b, Seal.chain(~mach, ~kern, s, Ballot.store(b), Ballot.node(b)))
+      )
 
 # the ballots that the chains of some ballots lead to keep the waiting requests
 def Each.waiting(
@@ -13336,7 +14097,10 @@ def Each.waiting(
     ~mach,
     s
   )
-    == State.waiting(~mach, Sealed.each(~mach, ~kern, f, bs, p, s)): Tries.Trie<List<&2, Ledgers.Id>>
+    == State.waiting(
+      ~mach,
+      Sealed.each(~mach, ~kern, f, bs, p, s)
+    ): Tries.Trie<List<&2, Ledgers.Id>>
 }:
   match bs:
     case Nil{}:
@@ -13431,7 +14195,10 @@ def Start.head.waiting(
         Tries.Trie<List<&2, Ledgers.Id>>,
         State.waiting(~mach, s),
         State.waiting(~mach, State.led(~mach, s, State.ledger(~mach, s2))),
-        State.waiting(~mach, State.first(~mach, State.led(~mach, s, State.ledger(~mach, s2)), c, h)),
+        State.waiting(
+          ~mach,
+          State.first(~mach, State.led(~mach, s, State.ledger(~mach, s2)), c, h)
+        ),
         Waiting.led(~mach, s, State.ledger(~mach, s2)),
         First.at.waiting(
           ~mach,
@@ -14344,7 +15111,9 @@ def Advance.head.grows(
   +s: Node<Machine.Q(mach)>,
   c: Ledgers.Chain,
   m: Maybe<&2, Head>
-) -> {Node.grows(~mach, s, Advance.head(~mach, ~Lawful.kernel(mach, lawf), s, c, m)) == True{}: Bool}:
+) -> {
+  Node.grows(~mach, s, Advance.head(~mach, ~Lawful.kernel(mach, lawf), s, c, m)) == True{}: Bool
+}:
   match m:
     case None{}:
       Grows.refl(~mach, s)
@@ -14376,7 +15145,9 @@ def Adopt.maybe.grows(
   n: String,
   s: Node<Machine.Q(mach)>,
   m: Maybe<&2, Ledgers.Chain>
-) -> {Node.grows(~mach, s, Adopt.maybe(~mach, ~Lawful.kernel(mach, lawf), n, s, m)) == True{}: Bool}:
+) -> {
+  Node.grows(~mach, s, Adopt.maybe(~mach, ~Lawful.kernel(mach, lawf), n, s, m)) == True{}: Bool
+}:
   match m:
     case None{}:
       Grows.refl(~mach, s)
@@ -14441,7 +15212,14 @@ def Ask.held.new(
               State.led(
                 ~mach,
                 s,
-                Ledgers.State.add.of(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, s), k, en, _)
+                Ledgers.State.add.of(
+                  ~Machine.Q(mach),
+                  ~Machine.same(mach),
+                  State.ledger(~mach, s),
+                  k,
+                  en,
+                  _
+                )
               ),
               i,
               q
@@ -14506,7 +15284,11 @@ def Ask.held.at(
     case Some{x}:
       %Equal.sym(
         Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
-        Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.ask(Envelope.of(e))),
+        Ledgers.State.get(
+          ~Machine.Q(mach),
+          State.ledger(~mach, s),
+          Ledgers.Slot.ask(Envelope.of(e))
+        ),
         Some{x},
         em
       ): {Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, _) == True{}: Bool}
@@ -14578,7 +15360,12 @@ def All.kept(
   +m: Maybe<&2, Run<Machine.Q(mach)>>,
   +k2: List<&2, U32>,
   +v: List<&2, U32>
-) -> Run.Keeps(~mach, k2, v, m) -> Run.Keeps(~mach, k2, v, Step.all(~mach, ~Lawful.kernel(mach, lawf), c, qs, m)):
+) -> Run.Keeps(
+  ~mach,
+  k2,
+  v,
+  m
+) -> Run.Keeps(~mach, k2, v, Step.all(~mach, ~Lawful.kernel(mach, lawf), c, qs, m)):
   match qs:
     case Nil{}:
       h => h
@@ -14700,7 +15487,9 @@ def Advance.step.kept(
           t,
           em,
           et
-        )(Run.grows(~mach, ~lawf, s, c, t, qs))(+k => +v => Run.kept(~mach, ~lawf, s, c, t, qs, k, v)),
+        )(
+          Run.grows(~mach, ~lawf, s, c, t, qs)
+        )(+k => +v => Run.kept(~mach, ~lawf, s, c, t, qs, k, v)),
         Kept.refl(~mach, s)
       )
     case Head{r, br, next, th} None{}:
@@ -14730,7 +15519,14 @@ def Advance.at.kept(
         c,
         h,
         t,
-        Height.decide(~mach, s, c, Head.next(h), Tip.owners(t), Round.seen(~mach, s, c, Head.next(h)))
+        Height.decide(
+          ~mach,
+          s,
+          c,
+          Head.next(h),
+          Tip.owners(t),
+          Round.seen(~mach, s, c, Head.next(h))
+        )
       )(em)(et)
 
 # Advances.kept once the head m is known
@@ -15063,7 +15859,13 @@ def Adopts.kept(
         ~mach,
         s,
         Adopt.at(~mach, ~Lawful.kernel(mach, lawf), n, s, c),
-        Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, rest, Adopt.at(~mach, ~Lawful.kernel(mach, lawf), n, s, c)),
+        Node.adopts(
+          ~mach,
+          ~Lawful.kernel(mach, lawf),
+          n,
+          rest,
+          Adopt.at(~mach, ~Lawful.kernel(mach, lawf), n, s, c)
+        ),
         Adopt.at.kept(~mach, ~lawf, n, s, c),
         Adopts.kept(~mach, ~lawf, n, rest, Adopt.at(~mach, ~Lawful.kernel(mach, lawf), n, s, c))
       )
@@ -15141,7 +15943,13 @@ def More.kept(
             Each.grows(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s),
             Each.heads(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s)
           ),
-          Steps.kept(~mach, ~lawf, n, cs, Sealed.each(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s))
+          Steps.kept(
+            ~mach,
+            ~lawf,
+            n,
+            cs,
+            Sealed.each(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s)
+          )
         ),
         Kept.trans(
           ~mach,
@@ -15188,7 +15996,13 @@ def More.kept(
               Each.grows(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s),
               Each.heads(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s)
             ),
-            Steps.kept(~mach, ~lawf, n, cs, Sealed.each(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s))
+            Steps.kept(
+              ~mach,
+              ~lawf,
+              n,
+              cs,
+              Sealed.each(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s)
+            )
           ),
           More.kept(
             ~mach,
@@ -15280,7 +16094,9 @@ def Consent.grows(
   +s: Node<Machine.Q(mach)>,
   +i: Ledgers.Id,
   m: Maybe<&2, Ledgers.Chain>
-) -> {Node.grows(~mach, s, Consent.at(~mach, ~Lawful.kernel(mach, lawf), n, s, i, m)) == True{}: Bool}:
+) -> {
+  Node.grows(~mach, s, Consent.at(~mach, ~Lawful.kernel(mach, lawf), n, s, i, m)) == True{}: Bool
+}:
   match m:
     case None{}:
       Grows.refl(~mach, s)
@@ -15414,7 +16230,13 @@ def Does.grows(
         ~mach,
         s,
         Node.pass(~mach, ~Lawful.kernel(mach, lawf), n, s, c),
-        Adopt.at(~mach, ~Lawful.kernel(mach, lawf), n, Node.pass(~mach, ~Lawful.kernel(mach, lawf), n, s, c), c)
+        Adopt.at(
+          ~mach,
+          ~Lawful.kernel(mach, lawf),
+          n,
+          Node.pass(~mach, ~Lawful.kernel(mach, lawf), n, s, c),
+          c
+        )
       )(
         Pass.grows(~mach, ~lawf, n, s, c)
       )(Adopt.at.grows(~mach, ~lawf, n, Node.pass(~mach, ~Lawful.kernel(mach, lawf), n, s, c), c))
@@ -15496,7 +16318,13 @@ def Does.kept(
         ~mach,
         s,
         Node.pass(~mach, ~Lawful.kernel(mach, lawf), n, s, c),
-        Adopt.at(~mach, ~Lawful.kernel(mach, lawf), n, Node.pass(~mach, ~Lawful.kernel(mach, lawf), n, s, c), c),
+        Adopt.at(
+          ~mach,
+          ~Lawful.kernel(mach, lawf),
+          n,
+          Node.pass(~mach, ~Lawful.kernel(mach, lawf), n, s, c),
+          c
+        ),
         Pass.kept(~mach, ~lawf, n, s, c),
         Adopt.at.kept(~mach, ~lawf, n, Node.pass(~mach, ~Lawful.kernel(mach, lawf), n, s, c), c)
       )
@@ -15629,7 +16457,17 @@ def Outs.kept.at(
         i,
         v,
         Step.all(~mach, ~Lawful.kernel(mach, lawf), c, qs, Some{r})
-      )(All.kept(~mach, ~lawf, c, qs, Some{r}, Log.out(i), v)(Keeps.self(~mach, r, Log.out(i), v)(eg)))
+      )(
+        All.kept(
+          ~mach,
+          ~lawf,
+          c,
+          qs,
+          Some{r},
+          Log.out(i),
+          v
+        )(Keeps.self(~mach, r, Log.out(i), v)(eg))
+      )
 
 # an outcome that a run has, it has after more requests
 def Outs.kept(
@@ -15639,7 +16477,11 @@ def Outs.kept(
   qs: List<&2, Ledgers.Id>,
   +m: Maybe<&2, Run<Machine.Q(mach)>>,
   +i: Ledgers.Id
-) -> Run.Outs(~mach, m, i) -> Run.Outs(~mach, Step.all(~mach, ~Lawful.kernel(mach, lawf), c, qs, m), i):
+) -> Run.Outs(
+  ~mach,
+  m,
+  i
+) -> Run.Outs(~mach, Step.all(~mach, ~Lawful.kernel(mach, lawf), c, qs, m), i):
   match m:
     case None{}:
       h =>
@@ -15779,11 +16621,16 @@ def Node.fetch(
   ~mach: Machine(),
   ~kern: Kernel(mach),
   +a: Node<Machine.Q(mach)>,
-  +b: Node<Machine.Q(mach)>,
+  b: Node<Machine.Q(mach)>,
   +h: Hashes.Hash,
-  +ws: List<&2, U32>
+  ws: List<&2, U32>
 ) -> {
-  Ledgers.State.data(~Machine.Q(mach), State.ledger(~mach, a), h) == Some{ws}: Maybe<&2, List<&2, U32>>
+  Ledgers.State.data(
+    ~Machine.Q(mach),
+    State.ledger(~mach, a),
+    h
+  )
+    == Some{ws}: Maybe<&2, List<&2, U32>>
 }
   -> {
     Ledgers.State.get(
@@ -15858,12 +16705,12 @@ def Node.ask_once(
   ~mach: Machine(),
   ~lawf: Lawful(mach),
   +n: String,
-  +m: String,
+  m: String,
   +s: Node<Machine.Q(mach)>,
   +e: Envelope,
   +q: Machine.Q(mach),
   +e2: Envelope,
-  +q2: Machine.Q(mach)
+  q2: Machine.Q(mach)
 ) -> {Envelope.of(e2) == Envelope.of(e): Ledgers.Id}
   -> {
     Node.ask(
@@ -15897,7 +16744,9 @@ def Node.after_grows(
   +n: String,
   +evs: List<&2, Deed<Machine.Q(mach)>>,
   +s: Node<Machine.Q(mach)>
-) -> {Node.grows(~mach, s, Node.after(~mach, ~Lawful.kernel(mach, lawf), n, evs, s)) == True{}: Bool}:
+) -> {
+  Node.grows(~mach, s, Node.after(~mach, ~Lawful.kernel(mach, lawf), n, evs, s)) == True{}: Bool
+}:
   match evs:
     case Nil{}:
       Grows.refl(~mach, s)
@@ -15938,11 +16787,11 @@ def Node.after_keeps(
 def Step.run_outs(
   ~mach: Machine(),
   ~lawf: Lawful(mach),
-  +s: Node<Machine.Q(mach)>,
-  +c: Ledgers.Chain,
-  +t: Tip,
-  +qs: List<&2, Ledgers.Id>,
-  +i: Ledgers.Id
+  s: Node<Machine.Q(mach)>,
+  c: Ledgers.Chain,
+  t: Tip,
+  qs: List<&2, Ledgers.Id>,
+  i: Ledgers.Id
 ) -> {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, qs, i) == True{}: Bool}
   -> Run.Outs(~mach, Step.run(~mach, ~Lawful.kernel(mach, lawf), s, c, t, qs), i):
   All.outs(~mach, ~lawf, c, qs, Some{Run{s, t}}, i)
@@ -15980,11 +16829,11 @@ def Plan.follow_allowed(
   ~mach: Machine(),
   ~kern: Kernel(mach),
   +s: Node<Machine.Q(mach)>,
-  +c: Ledgers.Chain,
-  +w: Ledgers.Where,
-  +t: Tip,
-  +th: Maybe<&2, Hashes.Hash>,
-  +os: List<&2, String>,
+  c: Ledgers.Chain,
+  w: Ledgers.Where,
+  t: Tip,
+  th: Maybe<&2, Hashes.Hash>,
+  os: List<&2, String>,
   +v: Ledgers.Vote,
   +from: List<&2, String>
 ) -> {
@@ -16005,10 +16854,10 @@ def Plan.follow_allowed(
 def Seal.accept_fits(
   ~mach: Machine(),
   ~kern: Kernel(mach),
-  +s: Node<Machine.Q(mach)>,
-  +b: Ledgers.Ballot,
-  +c: Keychain,
-  +s2: Node<Machine.Q(mach)>
+  s: Node<Machine.Q(mach)>,
+  b: Ledgers.Ballot,
+  c: Keychain,
+  s2: Node<Machine.Q(mach)>
 ) -> {Seal.chain(~mach, ~kern, s, Ballot.store(b), Ballot.node(b)) == Some{c}: Maybe<&2, Keychain>}
   -> {Seal.accept(~mach, ~kern, s, b) == Some{s2}: Maybe<&2, Node<Machine.Q(mach)>>}
   -> {Seal.fits(c, b) == True{}: Bool}:
@@ -16017,7 +16866,11 @@ def Seal.accept_fits(
     Seal.fits(c, b),
     State.keyed(
       ~mach,
-      State.led(~mach, s, Ledgers.State.keep(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, s), b)),
+      State.led(
+        ~mach,
+        s,
+        Ledgers.State.keep(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, s), b)
+      ),
       Keys.saw(
         Keys.set(
           State.keys(~mach, s),
@@ -16040,8 +16893,8 @@ def Seal.fits_own(
   +x: Ledgers.Signed,
   +last: Maybe<&2, Ledgers.Where>,
   +k: Hashes.Hash,
-  +n: U32,
-  +f: Hashes.Hash
+  n: U32,
+  f: Hashes.Hash
 ) -> {
   Seal.fits(
     Keychain{n, last, Seals.Seal.public(seed), f},
@@ -16065,7 +16918,7 @@ def Line.at_grows(
   +u: Node<Machine.Q(mach)>,
   +c: Ledgers.Chain,
   +h: Head,
-  +x: Head
+  x: Head
 ) -> {Node.grows(~mach, a, u) == True{}: Bool}
   -> {Line.at(~mach, rs, a, c, h) == Some{x}: Maybe<&2, Head>}
   -> {Line.at(~mach, rs, u, c, h) == Some{x}: Maybe<&2, Head>}:
@@ -16094,11 +16947,20 @@ def Node.advance_at(
   +c: Ledgers.Chain,
   +h: Head
 ) -> {Node.head_of(~mach, s, c) == Some{h}: Maybe<&2, Head>}
-  -> {Heads.level(Some{h}, Node.head_of(~mach, Node.advance(~mach, ~kern, s, c), c)) == False{}: Bool}
+  -> {
+    Heads.level(Some{h}, Node.head_of(~mach, Node.advance(~mach, ~kern, s, c), c)) == False{}: Bool
+  }
   -> Exists(
     Nat,
     q => {
-      Line.at(~mach, [q], s, c, h) == Node.head_of(~mach, Node.advance(~mach, ~kern, s, c), c): Maybe<&2, Head>
+      Line.at(
+        ~mach,
+        [q],
+        s,
+        c,
+        h
+      )
+        == Node.head_of(~mach, Node.advance(~mach, ~kern, s, c), c): Maybe<&2, Head>
     }
   ):
   +eh => +hl =>
@@ -16131,8 +16993,8 @@ def Line.at_agrees(
   ~rules: Rounds.Rules(~mach, u, c),
   +rs1: List<&2, Nat>,
   +rs2: List<&2, Nat>,
-  +a: Node<Machine.Q(mach)>,
-  +b: Node<Machine.Q(mach)>,
+  a: Node<Machine.Q(mach)>,
+  b: Node<Machine.Q(mach)>,
   +h: Head,
   +x: Head,
   +y: Head
@@ -16156,7 +17018,9 @@ def Line.at_agrees(
       Rounds.ones(~mach, ~u, ~c, ~rules, List.length(&2, Nat, rs1))
     )(
       el
-    )(Line.at_grows(~mach, rs1, a, u, c, h, x)(ga)(ea))(Line.at_grows(~mach, rs2, b, u, c, h, y)(gb)(eb))
+    )(
+      Line.at_grows(~mach, rs1, a, u, c, h, x)(ga)(ea)
+    )(Line.at_grows(~mach, rs2, b, u, c, h, y)(gb)(eb))
 
 # every part is kept by enough nodes: a node that casts for a step keeps each
 # new part of the step (what its own run of the step put: the node of the run
@@ -16167,16 +17031,21 @@ def Cast.put_keeps(
   ~kern: Kernel(mach),
   +n: String,
   +w: Ledgers.Where,
-  +th: Maybe<&2, Hashes.Hash>,
-  +qs: List<&2, Ledgers.Id>,
-  +from: List<&2, String>,
+  th: Maybe<&2, Hashes.Hash>,
+  qs: List<&2, Ledgers.Id>,
+  from: List<&2, String>,
   +s2: Node<Machine.Q(mach)>,
   +t2: Tip,
   +s: Node<Machine.Q(mach)>,
   +s3: Node<Machine.Q(mach)>
 ) -> {State.put(~mach, s2, [Tip.words(t2)]) == Some{s3}: Maybe<&2, Node<Machine.Q(mach)>>}
   -> {
-    Node.grows(~mach, s2, Cast.put(~mach, ~kern, n, w, th, qs, from, Some{Run{s2, t2}}, s)) == True{}: Bool
+    Node.grows(
+      ~mach,
+      s2,
+      Cast.put(~mach, ~kern, n, w, th, qs, from, Some{Run{s2, t2}}, s)
+    )
+      == True{}: Bool
   }:
   +s4 = State.led(~mach, s, State.ledger(~mach, s3))
   +a0 = {Ledgers.Act.Vote{Ledgers.Vote{th, qs, Some{Tip.hash(t2)}}, from}: Ledgers.Act}
@@ -16209,10 +17078,10 @@ def Cast.put_tip(
   ~kern: Kernel(mach),
   +n: String,
   +w: Ledgers.Where,
-  +th: Maybe<&2, Hashes.Hash>,
-  +qs: List<&2, Ledgers.Id>,
-  +from: List<&2, String>,
-  +s2: Node<Machine.Q(mach)>,
+  th: Maybe<&2, Hashes.Hash>,
+  qs: List<&2, Ledgers.Id>,
+  from: List<&2, String>,
+  s2: Node<Machine.Q(mach)>,
   +t2: Tip,
   +s: Node<Machine.Q(mach)>,
   +s3: Node<Machine.Q(mach)>
@@ -16233,7 +17102,14 @@ def Cast.put_tip(
       State.put(~mach, s2, [Tip.words(t2)]),
       Some{s3},
       e
-    ): {Tip.at(~mach, Cast.vote(~mach, ~kern, s, _, w, n, a0), Tip.hash(t2)) == Some{t2}: Maybe<&2, Tip>}
+    ): {
+      Tip.at(
+        ~mach,
+        Cast.vote(~mach, ~kern, s, _, w, n, a0),
+        Tip.hash(t2)
+      )
+        == Some{t2}: Maybe<&2, Tip>
+    }
     Tip.at.grows(
       ~mach,
       s3,
@@ -16246,8 +17122,17 @@ def Cast.put_tip(
         s4,
         Cast.seal(~mach, ~kern, s4, w, n, a0, Seal.chain(~mach, ~kern, s4, Where.store(w), n))
       )(
-        Grows.to(~mach, s3, s3, s4, Led.led(~mach, s, State.ledger(~mach, s3)), Grows.refl(~mach, s3))
-      )(Cast.seal.grows(~mach, ~kern, s4, w, n, a0, Seal.chain(~mach, ~kern, s4, Where.store(w), n)))
+        Grows.to(
+          ~mach,
+          s3,
+          s3,
+          s4,
+          Led.led(~mach, s, State.ledger(~mach, s3)),
+          Grows.refl(~mach, s3)
+        )
+      )(
+        Cast.seal.grows(~mach, ~kern, s4, w, n, a0, Seal.chain(~mach, ~kern, s4, Where.store(w), n))
+      )
     )(Tip.put.at(~mach, s2, t2, s3)(e))
 
 # Finality
@@ -16261,10 +17146,17 @@ def Node.out_final(
   +n: String,
   +evs: List<&2, Deed<Machine.Q(mach)>>,
   +s: Node<Machine.Q(mach)>,
-  +i: Ledgers.Id,
-  +o: Out
+  i: Ledgers.Id,
+  o: Out
 ) -> {Node.out(~mach, s, i) == Some{o}: Maybe<&2, Out>}
-  -> {Node.out(~mach, Node.after(~mach, ~Lawful.kernel(mach, lawf), n, evs, s), i) == Some{o}: Maybe<&2, Out>}:
+  -> {
+    Node.out(
+      ~mach,
+      Node.after(~mach, ~Lawful.kernel(mach, lawf), n, evs, s),
+      i
+    )
+      == Some{o}: Maybe<&2, Out>
+  }:
   Out.kept(
     ~mach,
     s,
@@ -16283,11 +17175,16 @@ def Node.made_final(
   +n: String,
   +evs: List<&2, Deed<Machine.Q(mach)>>,
   +s: Node<Machine.Q(mach)>,
-  +v: Ledgers.Id,
-  +x: Version
+  v: Ledgers.Id,
+  x: Version
 ) -> {Node.made(~mach, s, v) == Some{x}: Maybe<&2, Version>}
   -> {
-    Node.made(~mach, Node.after(~mach, ~Lawful.kernel(mach, lawf), n, evs, s), v) == Some{x}: Maybe<&2, Version>
+    Node.made(
+      ~mach,
+      Node.after(~mach, ~Lawful.kernel(mach, lawf), n, evs, s),
+      v
+    )
+      == Some{x}: Maybe<&2, Version>
   }:
   Made.kept(
     ~mach,
@@ -16307,9 +17204,9 @@ def Chain.version_final(
   +n: String,
   +evs: List<&2, Deed<Machine.Q(mach)>>,
   +s: Node<Machine.Q(mach)>,
-  +c: Ledgers.Chain,
-  +k: U32,
-  +x: Version
+  c: Ledgers.Chain,
+  k: U32,
+  x: Version
 ) -> {Chain.version(~mach, s, c, k) == Some{x}: Maybe<&2, Version>}
   -> {
     Chain.version(
@@ -16337,9 +17234,9 @@ def Chain.mark_final(
   +n: String,
   +evs: List<&2, Deed<Machine.Q(mach)>>,
   +s: Node<Machine.Q(mach)>,
-  +c: Ledgers.Chain,
-  +m: String,
-  +v: Ledgers.Id
+  c: Ledgers.Chain,
+  m: String,
+  v: Ledgers.Id
 ) -> {Chain.mark(~mach, s, c, m) == Some{v}: Maybe<&2, Ledgers.Id>}
   -> {
     Chain.mark(
@@ -16366,13 +17263,15 @@ def Chain.mark_final(
 def Chain.start_final(
   ~mach: Machine(),
   ~lawf: Lawful(mach),
-  +n: String,
-  +evs: List<&2, Deed<Machine.Q(mach)>>,
-  +s: Node<Machine.Q(mach)>,
-  +r: Ledgers.Id,
-  +b: String,
-  +v: List<&2, U32>
-) -> {Line.get(~mach, s, Ledgers.Chain{r, None{}}, Log.start(b)) == Some{v}: Maybe<&2, List<&2, U32>>}
+  n: String,
+  evs: List<&2, Deed<Machine.Q(mach)>>,
+  s: Node<Machine.Q(mach)>,
+  r: Ledgers.Id,
+  b: String,
+  v: List<&2, U32>
+) -> {
+  Line.get(~mach, s, Ledgers.Chain{r, None{}}, Log.start(b)) == Some{v}: Maybe<&2, List<&2, U32>>
+}
   -> {
     Line.get(
       ~mach,
@@ -17007,7 +17906,14 @@ def Advance.at.path(
         c,
         h,
         t,
-        Height.decide(~mach, s, c, Head.next(h), Tip.owners(t), Round.seen(~mach, s, c, Head.next(h)))
+        Height.decide(
+          ~mach,
+          s,
+          c,
+          Head.next(h),
+          Tip.owners(t),
+          Round.seen(~mach, s, c, Head.next(h))
+        )
       )(em)(et)({==})
 
 # a node's ballot keeps its logs
@@ -17106,7 +18012,9 @@ def Open.at.path(
   +s: Node<Machine.Q(mach)>,
   +c: Ledgers.Chain,
   m: Maybe<&2, Head>
-) -> {Node.head_of(~mach, s, c) == m: Maybe<&2, Head>} -> Node.On(~mach, s, Open.at(~mach, s, c, m)):
+) -> {
+  Node.head_of(~mach, s, c) == m: Maybe<&2, Head>
+} -> Node.On(~mach, s, Open.at(~mach, s, c, m)):
   match m:
     case Some{Head{+r, Some{+b}, n, None{}}}:
       em => Path.set(
@@ -17114,7 +18022,12 @@ def Open.at.path(
         s,
         s,
         c,
-        Head{r, Some{b}, 0, Branch.first(~mach, s, b, Node.tip(~mach, s, Ledgers.Chain{r, None{}}))},
+        Head{
+          r,
+          Some{b},
+          0,
+          Branch.first(~mach, s, b, Node.tip(~mach, s, Ledgers.Chain{r, None{}}))
+        },
         Grows.refl(~mach, s),
         {==},
         Held.not(~mach, s, c, Some{Head{r, Some{b}, n, None{}}}, em)
@@ -17175,7 +18088,9 @@ def First.at.path(
   +c: Ledgers.Chain,
   h: Head,
   m: Maybe<&2, Head>
-) -> {Node.head_of(~mach, s, c) == m: Maybe<&2, Head>} -> Node.On(~mach, s, First.at(~mach, s, c, h, m)):
+) -> {
+  Node.head_of(~mach, s, c) == m: Maybe<&2, Head>
+} -> Node.On(~mach, s, First.at(~mach, s, c, h, m)):
   match m:
     case Some{Head{r, b, n, Some{t}}}:
       em => Path.refl(~mach, s)
@@ -17191,7 +18106,16 @@ def First.at.path(
         Held.not(~mach, s, c, Some{Head{r, b, n, None{}}}, em)
       )
     case None{}:
-      em => Path.set(~mach, s, s, c, h, Grows.refl(~mach, s), {==}, Held.not(~mach, s, c, None{}, em))
+      em => Path.set(
+        ~mach,
+        s,
+        s,
+        c,
+        h,
+        Grows.refl(~mach, s),
+        {==},
+        Held.not(~mach, s, c, None{}, em)
+      )
 
 # a first head on a node that grew from a, which grew from s, is on the paths
 def Start.head.path(
@@ -17227,15 +18151,15 @@ def Start.head.path(
 # Start.path once the content m of the store is known
 def Start.with.path(
   ~mach: Machine(),
-  +s: Node<Machine.Q(mach)>,
+  s: Node<Machine.Q(mach)>,
   +i: Ledgers.Id,
-  +os: List<&2, String>,
+  os: List<&2, String>,
   m: Maybe<&2, Work<Machine.Q(mach)>>
 ) -> {Work.after(~mach, s, m) == True{}: Bool} -> Node.On(~mach, s, Start.with(~mach, s, i, os, m)):
   match m:
     case None{}:
       e => Path.refl(~mach, s)
-    case Some{Work{+s2, +c}}:
+    case Some{Work{+s2, c}}:
       e =>
         +t = {Tip{c, None{}, 0, os}: Tip}
         Start.head.path(
@@ -17649,7 +18573,13 @@ def Adopts.path(
         ~mach,
         s,
         Adopt.at(~mach, ~Lawful.kernel(mach, lawf), n, s, c),
-        Node.adopts(~mach, ~Lawful.kernel(mach, lawf), n, rest, Adopt.at(~mach, ~Lawful.kernel(mach, lawf), n, s, c)),
+        Node.adopts(
+          ~mach,
+          ~Lawful.kernel(mach, lawf),
+          n,
+          rest,
+          Adopt.at(~mach, ~Lawful.kernel(mach, lawf), n, s, c)
+        ),
         Adopt.at.path(~mach, ~lawf, n, s, c),
         Adopts.path(~mach, ~lawf, n, rest, Adopt.at(~mach, ~Lawful.kernel(mach, lawf), n, s, c))
       )
@@ -17727,7 +18657,13 @@ def More.path(
             Each.grows(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s),
             Each.heads(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s)
           ),
-          Steps.path(~mach, ~lawf, n, cs, Sealed.each(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s))
+          Steps.path(
+            ~mach,
+            ~lawf,
+            n,
+            cs,
+            Sealed.each(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s)
+          )
         ),
         Path.trans(
           ~mach,
@@ -17774,7 +18710,13 @@ def More.path(
               Each.grows(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s),
               Each.heads(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s)
             ),
-            Steps.path(~mach, ~lawf, n, cs, Sealed.each(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s))
+            Steps.path(
+              ~mach,
+              ~lawf,
+              n,
+              cs,
+              Sealed.each(~mach, ~Lawful.kernel(mach, lawf), k, bs, pd, s)
+            )
           ),
           More.path(
             ~mach,
@@ -17976,7 +18918,13 @@ def Does.path(
         ~mach,
         s,
         Node.pass(~mach, ~Lawful.kernel(mach, lawf), n, s, c),
-        Adopt.at(~mach, ~Lawful.kernel(mach, lawf), n, Node.pass(~mach, ~Lawful.kernel(mach, lawf), n, s, c), c),
+        Adopt.at(
+          ~mach,
+          ~Lawful.kernel(mach, lawf),
+          n,
+          Node.pass(~mach, ~Lawful.kernel(mach, lawf), n, s, c),
+          c
+        ),
         Pass.path(~mach, ~lawf, n, s, c),
         Adopt.at.path(~mach, ~lawf, n, Node.pass(~mach, ~Lawful.kernel(mach, lawf), n, s, c), c)
       )
@@ -18014,7 +18962,7 @@ def Node.take_holds(
   +s: Node<Machine.Q(mach)>,
   +t: Ledgers.State(Machine.Q(mach)),
   +k: List<&2, Bool>,
-  +e: Ledgers.Entry<Machine.Q(mach)>
+  e: Ledgers.Entry<Machine.Q(mach)>
 ) -> {
   Ledgers.State.get(
     ~Machine.Q(mach),
@@ -18053,7 +19001,7 @@ def Node.take_holds(
     )(Take.tail(~mach, ~kern, s, t))(
       %Equal.sym(Ledgers.State(Machine.Q(mach)), State.ledger(~mach, State.led(~mach, s, l1)), l1, Led.led(~mach, s, l1)): {Ledgers.State.get(~Machine.Q(mach), _, k) == Some{Cells.One{e}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>}
       Equal.trans(Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>, Ledgers.State.get(~Machine.Q(mach), l1, k), Ledgers.State.get(~Machine.Q(mach), sent, k), Some{Cells.One{e}}, Ledgers.State.take_get(~Machine.Q(mach), State.ledger(~mach, s), sent, k)(eb), es))
-# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information

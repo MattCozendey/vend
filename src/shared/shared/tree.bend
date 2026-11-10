@@ -1,7 +1,7 @@
 import Base
-import ./shared/shared/shared.bend as Shared
 import ./shared/shared/code.bend as Codes
 import ./shared/shared/hash.bend as Hashes
+import ./shared/shared/shared.bend as Shared
 import ./shared/store.bend as Stores
 
 # Trees
@@ -14,7 +14,6 @@ import ./shared/store.bend as Stores
 # (none: the empty tree), and two versions share every subtree that neither
 # changed.
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a node: empty (what an empty part reads as; never stored), a leaf, which
 # holds one key and its value, or a branch, which holds the root of each of
 # its 16 parts (none: empty)
@@ -22,7 +21,6 @@ type Node is Data:
   Node.Empty{}
   Node.Leaf{key: List<&2, U32>, value: List<&2, U32>}
   Node.Branch{parts: List<&2, Maybe<&2, Hashes.Hash>>}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # Codes
 # -----
@@ -330,7 +328,6 @@ def Tree.get.plain(
 ) -> Maybe<&2, List<&2, U32>>:
   Tree.get.go(~S, ~fetch, s, Tree.path(k), k, Tree.part(~S, ~fetch, s, h))
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # what a read of a key finds: its value; that the tree does not hold the key;
 # or that the store lacks the node of a hash, so the read cannot tell yet.
 # Found and Absent are final (Tree.look_found_kept, Tree.look_absent_kept):
@@ -339,7 +336,6 @@ type Look is Data:
   Look.Found{value: List<&2, U32>}
   Look.Absent{}
   Look.Missing{hash: Hashes.Hash}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the value that a read found, if it found one
 def Look.value(l: Look) -> Maybe<&2, List<&2, U32>>:
@@ -956,6 +952,7 @@ def Tree.get.go_empty(
     case Con{x, r}:
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in this proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
 # Get.is once the root node m is known
 def Tree.get_plain.at(
   ~S: Data,
@@ -992,6 +989,7 @@ def Tree.get_plain.at(
       {==}
     case Some{Node.Branch{ks}}:
       {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the node's read of a tree is the tree's read
 def Tree.get_plain(
@@ -1035,6 +1033,7 @@ def Tree.look.go_empty(
     case Con{x, r}:
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in this proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
 # Look.is once the root node m is known
 def Tree.look_plain.at(
   ~S: Data,
@@ -1065,6 +1064,7 @@ def Tree.look_plain.at(
       {==}
     case Some{Node.Branch{ks}}:
       {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the node's look at a tree is the tree's look
 def Tree.look_plain(
@@ -1093,6 +1093,7 @@ def Tree.set.go_none(
     case Con{y, r}:
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in this proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
 # Set.is once the root node m is known
 def Tree.set_plain.at(
   ~S: Data,
@@ -1124,6 +1125,7 @@ def Tree.set_plain.at(
       )
     case Some{n}:
       {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the node's write of a tree is the tree's write
 def Tree.set_plain(

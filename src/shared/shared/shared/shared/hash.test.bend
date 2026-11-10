@@ -1,6 +1,6 @@
 import Base
-import ./shared.bend as Shared
 import ./hash.bend as Hashes
+import ./shared.bend as Shared
 
 # Test, kind b: our SHA-256 against hashes of the same bytes from a source we
 # do not own (Python's hashlib, FIPS 180-4). No law can state that our

@@ -1,10 +1,10 @@
 import Base
-import ./shared/shared/shared.bend as Shared
 import ./shared/quorum.bend as Quorums
 import ./shared/shared/cell.bend as Cells
 import ./shared/shared/code.bend as Codes
 import ./shared/shared/hash.bend as Hashes
 import ./shared/shared/seal.bend as Seals
+import ./shared/shared/shared.bend as Shared
 import ./shared/shared/trie.bend as Tries
 import ./shared/text.bend as Texts
 
@@ -46,7 +46,6 @@ type Vote is Data:
 type Last is Data:
   Last{round: Nat, vote: Vote}
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # what a node does at a place. Vote: it casts for a step; in a round after
 # the first, with the nodes whose passes allow that step. Pass: it leaves the
 # rounds below this one (it casts no vote there any more), and names its last
@@ -54,7 +53,6 @@ type Last is Data:
 type Act is Data:
   Act.Vote{vote: Vote, from: List<&2, String>}
   Act.Pass{last: Maybe<&2, Last>}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # what a node signs with a ballot: the place, its own name, and what it does
 type Signed is Data:
@@ -70,13 +68,11 @@ type Link is Data:
 type Ballot is Data:
   Ballot{signed: Signed, link: Link}
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a request of a change, with its time; a ballot of a node; or data
 type Entry<-Q: Data> is Data:
   Entry.Ask{id: Id, time: String, ask: Q}
   Entry.Vote{ballot: Ballot}
   Entry.Data{words: List<&2, U32>}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # Codes
 # -----

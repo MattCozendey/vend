@@ -1,15 +1,15 @@
 import Base
-import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../../shared/replica.bend as Replicas
 import ../../shared/shared/formats.bend as Formats
 import ../../shared/shared/ledger.bend as Ledgers
-import ../shared/requests.bend as Requests
-import ../shared/shared/resources.bend as Resources
 import ../../shared/shared/rope.bend as Ropes
 import ../../shared/shared/shared/shared/cell.bend as Cells
 import ../../shared/shared/shared/shared/hash.bend as Hashes
+import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../../shared/shared/shared/shared/trie.bend as Tries
 import ../../shared/shared/shared/text.bend as Texts
+import ../shared/requests.bend as Requests
+import ../shared/shared/resources.bend as Resources
 
 # The pure core of a Vend Node (README): what it holds, what it answers, and
 # the laws about both. transport/spec.bend carries it over IO.
@@ -33,13 +33,11 @@ import ../../shared/shared/shared/text.bend as Texts
 # -----------------------
 # The types of the core, and its operations: impl.bend gives each its body.
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a version, the newest version of a branch, or a mark of a branch
 type Point is Data:
   Point.At{version: Ledgers.Id}
   Point.Head{store: Ledgers.Id, branch: String}
   Point.Mark{store: Ledgers.Id, branch: String, mark: String}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the key of the resource n
 law Key.res:
@@ -78,14 +76,12 @@ law Roots.same:
   for b: Maybe<&2, Ropes.Root>
   Bool
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # what a merge keeps of a resource: the content of one side (none: removed),
 # new bytes, or a clash
 type Pick is Data:
   Pick.Take{root: Maybe<&2, Ropes.Root>}
   Pick.Make{bytes: Texts.Bytes()}
   Pick.Clash{}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # what a merge of the base b, ours o and theirs t keeps of a resource in the
 # format f: theirs when ours is the base, ours when theirs is the base or both
@@ -250,7 +246,6 @@ law Node.read:
 type LogEntry is Data:
   LogEntry{version: Ledgers.Id, time: String}
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # what a node answers to a change (README, Vend Writer). Written: its version.
 # Conflicted: a merge, or a resolve of one, after which resources still clash
 # (the merge). Pending: its owners did not decide it yet. Stale: its owners
@@ -261,7 +256,6 @@ type Answer is Data:
   Answer.Pending{}
   Answer.Stale{}
   Answer.Refused{}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # what the node answers to the change q of e (none: it did not take it in)
 law Node.answer:
@@ -325,22 +319,18 @@ law Node.affects:
   for +b: Branch
   List<&2, Touch>
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # what a subscription or a poll follows: the versions or the conflicts of a
 # branch, or the changes elsewhere that touch it
 type Topic is Data:
   Topic.Versions{branch: Branch}
   Topic.Conflicts{branch: Branch}
   Topic.Affects{branch: Branch}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # an event of a topic
 type Notice is Data:
   Notice.Versioned{branch: Branch, version: Ledgers.Id}
   Notice.Conflicted{branch: Branch, version: Ledgers.Id}
   Notice.Touched{touch: Touch}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # a resource mounted to a branch
 type Mount is Data:

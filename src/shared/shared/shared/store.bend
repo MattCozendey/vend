@@ -1,6 +1,6 @@
 import Base
-import ./shared/shared.bend as Shared
 import ./shared/hash.bend as Hashes
+import ./shared/shared.bend as Shared
 
 # Stores
 # ------

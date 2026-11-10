@@ -1,6 +1,6 @@
 import Base
-import ./shared/shared.bend as Shared
 import ./shared/cell.bend as Cells
+import ./shared/shared.bend as Shared
 
 # Quorums
 # -------

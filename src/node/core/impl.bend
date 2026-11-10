@@ -1,22 +1,18 @@
-# bend-lint: expect-file bend-lint-rules/language/reused_binder@warning -- this file holds only proofs: a second use sits in a rewrite motive or an erased argument, and the checker accepts it
-# bend-lint: expect-file bend-lint-rules/performance/unused_result@information -- this file holds only proofs: an unused binder is a premise of a proof's own type, and a proof does not run
-# bend-lint: expect-file bend-lint-rules/performance/eager_branch@information -- this file holds only proofs: a proof does not run
-# bend-lint: expect-file bend-lint-rules/performance/missed_fork@hint -- this file holds only proofs: a proof does not run
 import Base
-import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../../shared/replica.bend as Replicas
 import ../../shared/shared/formats.bend as Formats
 import ../../shared/shared/ledger.bend as Ledgers
-import ../shared/requests.bend as Requests
-import ../shared/shared/resources.bend as Resources
 import ../../shared/shared/rope.bend as Ropes
 import ../../shared/shared/shared/reach.bend as Reaches
 import ../../shared/shared/shared/shared/cell.bend as Cells
 import ../../shared/shared/shared/shared/code.bend as Codes
 import ../../shared/shared/shared/shared/hash.bend as Hashes
+import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../../shared/shared/shared/shared/trie.bend as Tries
 import ../../shared/shared/shared/text.bend as Texts
 import ../../shared/shared/tree.bend as Trees
+import ../shared/requests.bend as Requests
+import ../shared/shared/resources.bend as Resources
 import ./spec.bend as Spec
 
 # Names
@@ -36,7 +32,6 @@ def Member.is_eq(a: Requests.Member, b: Requests.Member) -> Bool:
     case _ _:
       False{}
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument
 # Codes
 # -----
 
@@ -1464,14 +1459,12 @@ def Step.branch(
     )
   )
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # how a line takes a change: a branch writes a mark to its log, a store
 # writes a new branch to its log, and a judge decides any other change
 type Route is Data:
   Route.Mark{mark: String}
   Route.Branch{name: String, at: Maybe<&2, Ledgers.Id>}
   Route.Judge{}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # how the line l takes the change ch
 def Route.of(l: Maybe<&2, String>, ch: Requests.Change) -> Route:
@@ -1498,7 +1491,7 @@ def Step.on.of(
     case Route.Branch{b, at}:
       Step.branch(r, i, st, b, at)
     case Route.Judge{}:
-      +s = Replicas.Run.state(~Requests.Ask.machine(), r)
+      s = Replicas.Run.state(~Requests.Ask.machine(), r)
       +t = Replicas.Run.tip(~Requests.Ask.machine(), r)
       Replicas.Step.judged(
         ~Requests.Ask.machine(),
@@ -1554,7 +1547,7 @@ def Store.root(s: Replicas.Node<Requests.Ask>, r: Ledgers.Id) -> Maybe<&2, Hashe
   Chain.root(s, Ledgers.Chain{r, None{}})
 
 # the newest version of a line at the tip t, if it has one
-def Line.newest(+s: Replicas.Node<Requests.Ask>, +t: Replicas.Tip) -> Maybe<&2, Ledgers.Id>:
+def Line.newest(s: Replicas.Node<Requests.Ask>, +t: Replicas.Tip) -> Maybe<&2, Ledgers.Id>:
   +n = Replicas.Tip.count(t)
   Shared.Maybe.when(Ledgers.Id, Bool.not(U32.is_eq(n, 0)), u => Version.in(s, U32.sub(n, 1), t))
 
@@ -1574,7 +1567,7 @@ def Store.head(s: Replicas.Node<Requests.Ask>, r: Ledgers.Id) -> Maybe<&2, Ledge
 
 # the owners of the next step of the line l of the store r
 def Node.owners(
-  +s: Replicas.Node<Requests.Ask>,
+  s: Replicas.Node<Requests.Ask>,
   r: Ledgers.Id,
   l: Maybe<&2, String>
 ) -> List<&2, String>:
@@ -2383,7 +2376,7 @@ def Count.span(+a: U32, +b: U32) -> Nat:
 # the versions of the line whose tip is m from the number n on, in order: the
 # cost is theirs, not that of the line's history
 def Line.since(
-  +s: Replicas.Node<Requests.Ask>,
+  s: Replicas.Node<Requests.Ask>,
   m: Maybe<&2, Replicas.Tip>,
   +n: U32
 ) -> List<&2, Ledgers.Id>:
@@ -2652,7 +2645,7 @@ def Notice.new(ns: List<&2, Spec.Notice>, +old: Tries.Trie<Unit>) -> List<&2, Sp
       )
 
 # the number of versions of the line c in s
-def Chain.count(+s: Replicas.Node<Requests.Ask>, c: Ledgers.Chain) -> U32:
+def Chain.count(s: Replicas.Node<Requests.Ask>, c: Ledgers.Chain) -> U32:
   Maybe.default(
     &2,
     U32,
@@ -2722,6 +2715,8 @@ def Vend.may_stop(v: Vend, force: Bool) -> Bool:
       )
 
 # The proofs of the core's laws.
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in a proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- in a proof an unused binder is a premise of the proof's own type; a proof does not run
 def Spec.Ask.same():
   Requests.Ask.laws()
 
@@ -3285,7 +3280,7 @@ def Grown.make.branch(
 def Grown.make.first(
   +s: Replicas.Node<Requests.Ask>,
   start: Maybe<&2, Replicas.Work<Requests.Ask>>,
-  +os: List<&2, String>
+  os: List<&2, String>
 ) -> {
   Replicas.Work.after(~Requests.Ask.machine(), s, start) == True{}: Bool
 } -> {Replicas.Made.after(~Requests.Ask.machine(), s, Make.first(start, os)) == True{}: Bool}:
@@ -6970,3 +6965,5 @@ def Spec.Node.take_waits(s, t, i, time, r, l, ch):
       l,
       ch
     )(eb)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information

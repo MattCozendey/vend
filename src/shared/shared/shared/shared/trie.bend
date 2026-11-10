@@ -10,7 +10,6 @@ import ./shared.bend as Shared
 # or one for fewer than two entries, so the shape is a function of the keys
 # and values, and a union is commutative, associative and idempotent as terms.
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a trie: no entry (Tip), one entry at the key (Leaf), or the value of the
 # empty key here, then the keys that start with False (zero) and with True
 # (one)
@@ -18,7 +17,6 @@ type Trie<-V: Data> is Data:
   Tip{}
   Leaf{key: List<&2, Bool>, value: V}
   Bin{here: Maybe<&2, V>, zero: Trie<V>, one: Trie<V>}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # a trie with no entries
 def Trie.new(-V: Data) -> Trie<V>:
@@ -298,15 +296,6 @@ def Trie.under_one_part(
       {==}
     case Con{True{}, r}:
       {==}
-
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
-
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # Unions
 # ------
@@ -3704,24 +3693,6 @@ def Trie.union_minus(ty, join, same, idem, laws, s, r):
 
 # Sizes and keys apart
 # --------------------
-
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
-
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
-
-# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run
-# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
-
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
-
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # Trie.get_under for an entry
 def Trie.get_under.leaf(

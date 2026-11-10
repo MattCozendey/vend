@@ -1,7 +1,7 @@
 import Base
-import ./shared/shared/shared.bend as Shared
 import ./shared/shared/code.bend as Codes
 import ./shared/shared/hash.bend as Hashes
+import ./shared/shared/shared.bend as Shared
 import ./shared/store.bend as Stores
 
 # Ropes
@@ -11,13 +11,11 @@ import ./shared/store.bend as Stores
 # of hashes into branches, by a test of the items themselves, so that two
 # versions of a big resource share every node that an edit did not touch.
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # a node: a leaf holds words of the content; a branch holds the hashes of its
 # kids, in order
 type Node is Data:
   Node.Leaf{words: List<&2, U32>}
   Node.Branch{kids: List<&2, Hashes.Hash>}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the root of a rope: how many branch levels are above its leaves, and the
 # hash of its top node

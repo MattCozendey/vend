@@ -1407,12 +1407,10 @@ def Seqs.step_ok(
 # Rules as derivative sets
 # ------------------------
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # A rule whose glob is a set of Seqs.
 type Slot is Data:
   Inc{xs: List<&2, List<&2, Spec.Glob>>}
   Exc{xs: List<&2, List<&2, Spec.Glob>>}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the answer for p after slots, given the answer acc before them
 def Slot.selects.go(slots: List<&2, Slot>, +p: String, acc: Bool) -> Bool:
@@ -2807,7 +2805,6 @@ def Search.close(
         u => Search.close(n, next, List.append(&2, St, new, seen), ds)
       )
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # Where a valid path is: at a segment start, after "." or "..", inside a
 # valid segment, or past a mistake.
 type Path is Data:
@@ -2816,16 +2813,13 @@ type Path is Data:
   PDots{}
   PSeg{}
   PDead{}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # What a character is to a path: '/', '.', a banned character, or another.
 type Role is Data:
   KSlash{}
   KDot{}
   KBad{}
   KOther{}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # what c is to a path
 def Role.of(c: Char) -> Role:
@@ -2964,13 +2958,11 @@ def Search.witness(
       Search.witness.if(hit, m, u => Search.witness(n, next, List.append(&2, Node, new, seen), ds))
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # What the search found: a path to check, a certificate to check, or neither.
 type Outcome is Data:
   Witness{path: String}
   Proof{xs: List<&2, St>, cs: List<&2, Char>, f: Char}
   NoAnswer{}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the states a search may visit before it gives up
 def Search.fuel() -> Nat:
