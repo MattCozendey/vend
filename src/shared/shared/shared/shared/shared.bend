@@ -1952,14 +1952,6 @@ def Bool.and_or(
     case True{} True{} True{}:
       {==}
 
-# a second a changes nothing
-def Bool.or_absorb(a: Bool, b: Bool) -> {Bool.or(a, Bool.or(a, b)) == Bool.or(a, b): Bool}:
-  match a:
-    case False{}:
-      {==}
-    case True{}:
-      {==}
-
 # the first two of three or-ed values can swap
 def Bool.or_swap(
   a: Bool,
@@ -1975,28 +1967,6 @@ def Bool.or_swap(
       {==}
     case True{} True{}:
       {==}
-
-# the left side of a false "or" is false
-def Bool.or_false_left(
-  a: Bool,
-  -b: Bool
-) -> {Bool.or(a, b) == False{}: Bool} -> {a == False{}: Bool}:
-  match a:
-    case False{}:
-      h => {==}
-    case True{}:
-      h => h
-
-# the right side of a false "or" is false
-def Bool.or_false_right(
-  a: Bool,
-  -b: Bool
-) -> {Bool.or(a, b) == False{}: Bool} -> {b == False{}: Bool}:
-  match a:
-    case False{}:
-      h => h
-    case True{}:
-      h => Empty.absurd({b == False{}: Bool}, Bool.true_ne_false(h))
 
 # Char equality
 # -------------

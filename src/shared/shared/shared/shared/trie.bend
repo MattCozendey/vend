@@ -1054,10 +1054,6 @@ def Trie.is_tip(-V: Data, t: Trie<V>) -> Bool:
     case _:
       False{}
 
-# True is not False
-def Trie.true_ne_false(e: {True{} == False{}: Bool}) -> Empty:
-  Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, e))
-
 # a node with a part that is not a tip is not a tip
 def Trie.bin_part.f(
   -V: Data,
@@ -1069,7 +1065,7 @@ def Trie.bin_part.f(
     case Tip{}:
       e => Empty.absurd(
         {Trie.is_tip(V, Trie.bin(V, None{}, Tip{}, Tip{})) == False{}: Bool},
-        Trie.true_ne_false(e)
+        Shared.Bool.true_ne_false(e)
       )
     case Leaf{p, w}:
       e => {==}
@@ -1087,7 +1083,7 @@ def Trie.bin_part.t(
     case Tip{}:
       e => Empty.absurd(
         {Trie.is_tip(V, Trie.bin(V, None{}, Tip{}, Tip{})) == False{}: Bool},
-        Trie.true_ne_false(e)
+        Shared.Bool.true_ne_false(e)
       )
     case Leaf{p, w}:
       e => {==}
@@ -1593,7 +1589,7 @@ def Trie.union_assoc.end.f(
           )
             == Bin{Some{v}, Tip{}, Tip{}}: Trie<V>
         },
-        Trie.true_ne_false(e)
+        Shared.Bool.true_ne_false(e)
       )
     case Leaf{p, w}:
       e => {==}
@@ -1630,7 +1626,7 @@ def Trie.union_assoc.far.f(
           )
             == Bin{None{}, Tip{}, Leaf{r, v}}: Trie<V>
         },
-        Trie.true_ne_false(e)
+        Shared.Bool.true_ne_false(e)
       )
     case Leaf{p, w}:
       e => {==}
@@ -1688,7 +1684,7 @@ def Trie.union_assoc.end_left.f(
           }
             == Trie.union.leaf(~V, ~join, Trie.bin(V, None{}, Tip{}, Tip{}), [], v): Trie<V>
         },
-        Trie.true_ne_false(e)
+        Shared.Bool.true_ne_false(e)
       )
     case Leaf{p, w}:
       e => {==}
@@ -1729,7 +1725,7 @@ def Trie.union_assoc.far_left.f(
               v
             ): Trie<V>
         },
-        Trie.true_ne_false(e)
+        Shared.Bool.true_ne_false(e)
       )
     case Leaf{p, w}:
       e => {==}
@@ -1793,7 +1789,7 @@ def Trie.union_assoc.end.t(
           )
             == Bin{Some{v}, Tip{}, Tip{}}: Trie<V>
         },
-        Trie.true_ne_false(e)
+        Shared.Bool.true_ne_false(e)
       )
     case Leaf{p, w}:
       e => {==}
@@ -1830,7 +1826,7 @@ def Trie.union_assoc.far.t(
           )
             == Bin{None{}, Leaf{r, v}, Tip{}}: Trie<V>
         },
-        Trie.true_ne_false(e)
+        Shared.Bool.true_ne_false(e)
       )
     case Leaf{p, w}:
       e => {==}
@@ -1888,7 +1884,7 @@ def Trie.union_assoc.end_left.t(
           }
             == Trie.union.leaf(~V, ~join, Trie.bin(V, None{}, Tip{}, Tip{}), [], v): Trie<V>
         },
-        Trie.true_ne_false(e)
+        Shared.Bool.true_ne_false(e)
       )
     case Leaf{p, w}:
       e => {==}
@@ -1929,7 +1925,7 @@ def Trie.union_assoc.far_left.t(
               v
             ): Trie<V>
         },
-        Trie.true_ne_false(e)
+        Shared.Bool.true_ne_false(e)
       )
     case Leaf{p, w}:
       e => {==}
@@ -4959,7 +4955,7 @@ def Trie.all2_bin.f(
               v
             ): Bool
         },
-        Trie.true_ne_false(e)
+        Shared.Bool.true_ne_false(e)
       )
     case Leaf{p, w}:
       e => {==}
@@ -5002,7 +4998,7 @@ def Trie.all2_bin.t(
               v
             ): Bool
         },
-        Trie.true_ne_false(e)
+        Shared.Bool.true_ne_false(e)
       )
     case Leaf{p, w}:
       e => {==}
