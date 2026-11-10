@@ -450,9 +450,11 @@ type Chained is Data:
   Chained{count: U32, last: Maybe<&2, Ledgers.Where>, key: Hashes.Hash, first: Hashes.Hash}
 
 # what a node keeps to seal its ballots and to check those of other nodes: its
-# secret seed, and the key chain of each node in each store (its own too)
+# secret seed, the key chain of each node in each store (its own too), and
+# the requests that a writer connected to it asked for (an owner casts for a
+# change of who decides only when it was asked at the owner itself)
 type Keys is Data:
-  Keys{seed: Hashes.Hash, chains: Tries.Trie<Chained>}
+  Keys{seed: Hashes.Hash, chains: Tries.Trie<Chained>, asked: Tries.Trie<Unit>}
 
 # what a node holds: its ledger, which nodes replicate; its head of each line
 # that it follows; the requests of each line that wait for a step; and its
@@ -512,7 +514,7 @@ def Node.empty(seed: Hashes.Hash) -> State():
     Ledgers.State.empty(~Ask),
     Tries.Trie.new(Head),
     Tries.Trie.new(List<&2, Ledgers.Id>),
-    Keys{seed, Tries.Trie.new(Chained)}
+    Keys{seed, Tries.Trie.new(Chained), Tries.Trie.new(Unit)}
   }
 
 # the words that s holds under the hash h
@@ -2606,20 +2608,32 @@ def Chained.from(m: Maybe<&2, Hashes.Hash>, c: Maybe<&2, Chained>) -> Maybe<&2, 
 # the chains of the keys ks
 def Keys.chains(ks: Keys) -> Tries.Trie<Chained>:
   match ks:
-    case Keys{seed, cs}:
+    case Keys{seed, cs, as}:
       cs
 
 # the secret seed of the keys ks
 def Keys.seed(ks: Keys) -> Hashes.Hash:
   match ks:
-    case Keys{seed, cs}:
+    case Keys{seed, cs, as}:
       seed
+
+# ks, with the request i asked at this node
+def Keys.mark(ks: Keys, i: Ledgers.Id) -> Keys:
+  match ks:
+    case Keys{seed, cs, as}:
+      Keys{seed, cs, Tries.Trie.set(Unit, as, Ledgers.Id.key(i), Unit{})}
+
+# the request i was asked at this node
+def Keys.asked(ks: Keys, i: Ledgers.Id) -> Bool:
+  match ks:
+    case Keys{seed, cs, as}:
+      Tries.Trie.has(Unit, as, Ledgers.Id.key(i))
 
 # ks with the chain c at the key k
 def Keys.set(ks: Keys, k: List<&2, Bool>, c: Chained) -> Keys:
   match ks:
-    case Keys{seed, cs}:
-      Keys{seed, Tries.Trie.set(Chained, cs, k, c)}
+    case Keys{seed, cs, as}:
+      Keys{seed, Tries.Trie.set(Chained, cs, k, c), as}
 
 # the chain of the node n in the store r, as s knows it
 def Seal.chain(+s: State(), +r: Ledgers.Id, +n: String) -> Maybe<&2, Chained>:
@@ -3034,11 +3048,44 @@ def Cast.put(
     case Some{Run{s2, +t2, ns}}:
       Cast.vote(s, State.put(s2, [Tip.words(t2)]), w, n, Ledgers.Vote{th, qs, Some{Tip.hash(t2)}})
 
+# the change q is one of who decides: a first key of a node, a group, the
+# owners of a line, or a new branch. The owners of a store decide these, so an
+# owner casts for one only when a writer connected to it asked for it
+def Ask.governs(q: Ask) -> Bool:
+  match q:
+    case Ask.On{r, l, Change.Key{n, k}}:
+      True{}
+    case Ask.On{r, l, Change.Group{g, ms}}:
+      True{}
+    case Ask.On{r, l, Change.Own{g, at, os}}:
+      True{}
+    case Ask.On{r, l, Change.Branch{b, at}}:
+      True{}
+    case x:
+      False{}
+
+# the node s may cast for the request i, which it holds as m: any request,
+# but one of who decides only when it was asked at s
+def Cast.mine.of(s: State(), i: Ledgers.Id, m: Maybe<&2, Ledgers.Asked<Ask>>) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{Ledgers.Asked{t, q}}:
+      List.any.if(u => Keys.asked(State.keys(s), i), Bool.not(Ask.governs(q)))
+
+# the requests of qs that the node s may cast for
+def Cast.mine(+s: State(), qs: List<&2, Ledgers.Id>) -> List<&2, Ledgers.Id>:
+  match qs:
+    case Nil{}:
+      []
+    case Con{+i, r}:
+      List.filter.put(Ledgers.Id, i, Cast.mine(s, r), Cast.mine.of(s, i, Node.asked(s, i)))
+
 # Node.cast at the head h of the line c, whose tip is m
 def Cast.at(+n: String, +s: State(), +c: Ledgers.Chain, h: Head, m: Maybe<&2, Tip>) -> State():
   match h m:
     case Head{r, b, +next, th} Some{+t}:
-      +p = Step.some(c, Wait.of(s, c), Run{s, t, []})
+      +p = Step.some(c, Cast.mine(s, Wait.of(s, c)), Run{s, t, []})
       Shared.Bool.when(
         State(),
         Cast.may(n, s, Ledgers.Where{c, next}, t, Picked.asks(p)),
@@ -3215,6 +3262,17 @@ def Step.head(n: String, s: State(), +c: Ledgers.Chain) -> State():
 def Node.step(n: String, s: State(), +c: Ledgers.Chain) -> State():
   Step.head(n, Node.open(s, c), c)
 
+# s, after the node n took in the new request q of e
+def Node.ask.new(n: String, +s: State(), +e: Envelope, +q: Ask) -> State():
+  +i = Envelope.of(e)
+  c = Ask.chain(i, q)
+  s1 = Node.arrive(
+    State.led(s, Ledgers.State.ask(~Ask, ~Ask.is_eq, State.ledger(s), i, Envelope.time(e), q)),
+    i,
+    q
+  )
+  Node.step(n, s1, c)
+
 # Node.ask once the cell m of the request's ID is known
 def Node.ask.at(
   n: String,
@@ -3227,17 +3285,7 @@ def Node.ask.at(
     case Some{x}:
       s
     case None{}:
-      +i = Envelope.of(e)
-      c = Ask.chain(i, q)
-      s1 = Node.arrive(
-        State.led(
-          s,
-          Ledgers.State.ask(~Ask, ~Ask.is_eq, State.ledger(s), i, Envelope.time(e), q)
-        ),
-        i,
-        q
-      )
-      Node.step(n, s1, c)
+      Node.ask.new(n, State.keyed(s, Keys.mark(State.keys(s), Envelope.of(e))), e, q)
 
 # s, after the node n took in the request q of e, cast its ballot when it owns
 # its line, and moved its head when that decides the step. A request ID that s
@@ -3293,6 +3341,20 @@ def Take.clean(cs: List<&2, Cells.Cell<Ledgers.Entry<Ask>>>, l: Ledgers.State(As
       Take.clean(rest, Ledgers.State.put_data(~Ask, ~Ask.is_eq, l, ws))
     case Con{c, rest}:
       Take.clean(rest, l)
+
+# Node.consent once the line m of the request is known
+def Consent.at(n: String, +s: State(), i: Ledgers.Id, m: Maybe<&2, Ledgers.Chain>) -> State():
+  match m:
+    case None{}:
+      s
+    case Some{c}:
+      Node.step(n, State.keyed(s, Keys.mark(State.keys(s), i)), c)
+
+# s, after a writer connected to the node n asked for the request i, which s
+# holds already (it came from another node): the request counts once, and the
+# node now casts for it as one that was asked at it
+def Node.consent(n: String, +s: State(), +i: Ledgers.Id) -> State():
+  Consent.at(n, s, i, Node.chain_of(s, i))
 
 # what the ledger r lacks of s: what a sync from s to a holder of r sends
 def Node.missing(s: State(), r: Ledgers.State(Ask)) -> Ledgers.State(Ask):
@@ -4463,12 +4525,14 @@ def Line.at(k: Nat, +s: State(), +c: Ledgers.Chain, h: Head) -> Maybe<&2, Head>:
       Maybe.bind(&2, Head, Head, Line.at(p, s, c, h), +x => Head.moved(x, Advance.vote(s, c, x)))
 
 # what a node does next: it takes in a request, or what another node sent,
-# or it does a sync, or it keeps new bytes
+# or it does a sync, or it keeps new bytes, or a writer connected to it asks
+# for a request that it holds
 type Deed is Data:
   Deed.Ask{envelope: Envelope, ask: Ask}
   Deed.Take{sent: Ledgers.State(Ask)}
   Deed.Sync{sent: Ledgers.State(Ask)}
   Deed.Keep{bytes: Texts.Bytes()}
+  Deed.Consent{id: Ledgers.Id}
 
 # s, after the node n did ev
 def Node.does(n: String, s: State(), ev: Deed) -> State():
@@ -4481,6 +4545,8 @@ def Node.does(n: String, s: State(), ev: Deed) -> State():
       Node.sync(n, s, t)
     case Deed.Keep{b}:
       Node.keep(s, b)
+    case Deed.Consent{i}:
+      Node.consent(n, s, i)
 
 # s, after the node n did each of evs, in order: any later state of the node
 def Node.after(+n: String, evs: List<&2, Deed>, s: State()) -> State():

@@ -1534,7 +1534,7 @@ def Cast.at.grows(
 ) -> {Spec.Node.grows(s, Spec.Cast.at(n, s, c, h, m)) == True{}: Bool}:
   match h m:
     case Spec.Head{r, b, +next, th} Some{+t}:
-      +p = Spec.Step.some(c, Spec.Wait.of(s, c), Spec.Run{s, t, []})
+      +p = Spec.Step.some(c, Spec.Cast.mine(s, Spec.Wait.of(s, c)), Spec.Run{s, t, []})
       +qs = Spec.Picked.asks(p)
       Grows.when(
         s,
@@ -1548,7 +1548,7 @@ def Cast.at.grows(
           qs,
           Some{Spec.Picked.run(p)},
           s
-        )(Some.grows(c, Spec.Wait.of(s, c), Spec.Run{s, t, []})),
+        )(Some.grows(c, Spec.Cast.mine(s, Spec.Wait.of(s, c)), Spec.Run{s, t, []})),
         Grows.refl(s)
       )
     case Spec.Head{r, b, next, th} None{}:
@@ -1986,6 +1986,42 @@ def Arrive.grows(
         Follow.new.grows(s, r, l, Spec.Node.head_of(s, Spec.Line.chain(r, l)))
       )
 
+# a new request only grows a node
+def Ask.new.grows(
+  +n: String,
+  +s: Spec.State(),
+  +e: Spec.Envelope,
+  +q: Spec.Ask
+) -> {Spec.Node.grows(s, Spec.Node.ask.new(n, s, e, q)) == True{}: Bool}:
+  +i = Spec.Envelope.of(e)
+  +c = Spec.Ask.chain(i, q)
+  +l0 = Ledgers.State.ask(
+    ~Spec.Ask,
+    ~Spec.Ask.is_eq,
+    Spec.State.ledger(s),
+    i,
+    Spec.Envelope.time(e),
+    q
+  )
+  +s0 = Spec.State.led(s, l0)
+  +s1 = Spec.Node.arrive(s0, i, q)
+  Grows.trans(s, s0, Spec.Node.step(n, s1, c))(
+    Grows.led(
+      s,
+      l0,
+      Ledgers.State.add_grows(
+        ~Spec.Ask,
+        ~Spec.Ask.is_eq,
+        ~Ask.laws(),
+        Spec.State.ledger(s),
+        Ledgers.Slot.ask(i),
+        Ledgers.Entry.Ask{i, Spec.Envelope.time(e), q}
+      )
+    )
+  )(
+    Grows.trans(s0, s1, Spec.Node.step(n, s1, c))(Arrive.grows(s0, i, q))(Step.grows(n, s1, c))
+  )
+
 # Node.ask_grows once the cell m of the request's ID is known
 def Ask.at.grows(
   +n: String,
@@ -1998,34 +2034,9 @@ def Ask.at.grows(
     case Some{x}:
       Grows.refl(s)
     case None{}:
-      +i = Spec.Envelope.of(e)
-      +c = Spec.Ask.chain(i, q)
-      +l0 = Ledgers.State.ask(
-        ~Spec.Ask,
-        ~Spec.Ask.is_eq,
-        Spec.State.ledger(s),
-        i,
-        Spec.Envelope.time(e),
-        q
-      )
-      +s0 = Spec.State.led(s, l0)
-      +s1 = Spec.Node.arrive(s0, i, q)
-      Grows.trans(s, s0, Spec.Node.step(n, s1, c))(
-        Grows.led(
-          s,
-          l0,
-          Ledgers.State.add_grows(
-            ~Spec.Ask,
-            ~Spec.Ask.is_eq,
-            ~Ask.laws(),
-            Spec.State.ledger(s),
-            Ledgers.Slot.ask(i),
-            Ledgers.Entry.Ask{i, Spec.Envelope.time(e), q}
-          )
-        )
-      )(
-        Grows.trans(s0, s1, Spec.Node.step(n, s1, c))(Arrive.grows(s0, i, q))(Step.grows(n, s1, c))
-      )
+      Grows.trans(s, Spec.State.keyed(s, Spec.Keys.mark(Spec.State.keys(s), Spec.Envelope.of(e))), Spec.Node.ask.new(n, Spec.State.keyed(s, Spec.Keys.mark(Spec.State.keys(s), Spec.Envelope.of(e))), e, q))(
+        Grows.to(s, s, Spec.State.keyed(s, Spec.Keys.mark(Spec.State.keys(s), Spec.Envelope.of(e))), Led.keyed(s, Spec.Keys.mark(Spec.State.keys(s), Spec.Envelope.of(e))), Grows.refl(s))
+      )(Ask.new.grows(n, Spec.State.keyed(s, Spec.Keys.mark(Spec.State.keys(s), Spec.Envelope.of(e))), e, q))
 
 def Spec.Node.ask_grows(n, s, e, q):
   Ask.at.grows(
@@ -2201,33 +2212,89 @@ def Slot.held_kept(
     )(g)
   )
 
-# a node that took in the request of e holds its slot, once the cell m of the
-# slot before is known
-def Ask.held.at(
+# a node that took in a new request of e holds its slot
+def Ask.held.new(
   +n: String,
   +s: Spec.State(),
   +e: Spec.Envelope,
   +q: Spec.Ask,
-  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
-  +em: {
-    Ledgers.State.get(
-      ~Spec.Ask,
-      Spec.State.ledger(s),
-      Ledgers.Slot.ask(Spec.Envelope.of(e))
-    )
-      == m: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
-  }
+  +em: {Ledgers.State.get(~Spec.Ask, Spec.State.ledger(s), Ledgers.Slot.ask(Spec.Envelope.of(e))) == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>}
 ) -> {
-  Maybe.is_some(
-    &2,
-    Cells.Cell<Ledgers.Entry<Spec.Ask>>,
-    Ledgers.State.get(
-      ~Spec.Ask,
-      Spec.State.ledger(Spec.Node.ask.at(n, s, e, q, m)),
-      Ledgers.Slot.ask(Spec.Envelope.of(e))
+  Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>, Ledgers.State.get(~Spec.Ask, Spec.State.ledger(Spec.Node.ask.new(n, s, e, q)), Ledgers.Slot.ask(Spec.Envelope.of(e)))) == True{}: Bool
+}:
+  +i = Spec.Envelope.of(e)
+  +c = Spec.Ask.chain(i, q)
+  +k = Ledgers.Slot.ask(i)
+  +en = {Ledgers.Entry.Ask{i, Spec.Envelope.time(e), q}: Ledgers.Entry<Spec.Ask>}
+  +l0 = Ledgers.State.put(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), k, en)
+  +s0 = Spec.State.led(s, l0)
+  +s1 = Spec.Node.arrive(s0, i, q)
+  %Equal.sym(
+    Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+    Ledgers.State.get(~Spec.Ask, Spec.State.ledger(s), k),
+    None{},
+    em
+  ): {
+    Maybe.is_some(
+      &2,
+      Cells.Cell<Ledgers.Entry<Spec.Ask>>,
+      Ledgers.State.get(
+        ~Spec.Ask,
+        Spec.State.ledger(
+          Spec.Node.step(
+            n,
+            Spec.Node.arrive(
+              Spec.State.led(
+                s,
+                Ledgers.State.add.of(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), k, en, _)
+              ),
+              i,
+              q
+            ),
+            c
+          )
+        ),
+        k
+      )
     )
+      == True{}: Bool
+  }
+  Slot.held_kept(
+    s0,
+    Spec.Node.step(n, s1, c),
+    k,
+    Grows.trans(s0, s1, Spec.Node.step(n, s1, c))(
+      Arrive.grows(s0, i, q)
+    )(Step.grows(n, s1, c))
+  )(
+    %Equal.sym(Ledgers.State(Spec.Ask), Spec.State.ledger(s0), l0, Led.led(s, l0)): {
+      Maybe.is_some(
+        &2,
+        Cells.Cell<Ledgers.Entry<Spec.Ask>>,
+        Ledgers.State.get(~Spec.Ask, _, k)
+      )
+        == True{}: Bool
+    }
+    %Equal.sym(
+      Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+      Ledgers.State.get(~Spec.Ask, l0, k),
+      Some{Cells.One{en}},
+      Ledgers.State.put_get(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), k, en)(em)
+    ): {Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>, _) == True{}: Bool}
+    {==}
   )
-    == True{}: Bool
+
+# a node that took in the request of e holds its slot, once the cell m of the
+# slot before is known
+def Ask.held.at(
+  n: String,
+  +s: Spec.State(),
+  +e: Spec.Envelope,
+  +q: Spec.Ask,
+  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+  em: {Ledgers.State.get(~Spec.Ask, Spec.State.ledger(s), Ledgers.Slot.ask(Spec.Envelope.of(e))) == m: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>}
+) -> {
+  Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>, Ledgers.State.get(~Spec.Ask, Spec.State.ledger(Spec.Node.ask.at(n, s, e, q, m)), Ledgers.Slot.ask(Spec.Envelope.of(e)))) == True{}: Bool
 }:
   match m:
     case Some{x}:
@@ -2239,66 +2306,20 @@ def Ask.held.at(
       ): {Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>, _) == True{}: Bool}
       {==}
     case None{}:
-      +i = Spec.Envelope.of(e)
-      +c = Spec.Ask.chain(i, q)
-      +k = Ledgers.Slot.ask(i)
-      +en = {Ledgers.Entry.Ask{i, Spec.Envelope.time(e), q}: Ledgers.Entry<Spec.Ask>}
-      +l0 = Ledgers.State.put(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), k, en)
-      +s0 = Spec.State.led(s, l0)
-      +s1 = Spec.Node.arrive(s0, i, q)
-      %Equal.sym(
-        Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
-        Ledgers.State.get(~Spec.Ask, Spec.State.ledger(s), k),
-        None{},
-        em
-      ): {
-        Maybe.is_some(
-          &2,
-          Cells.Cell<Ledgers.Entry<Spec.Ask>>,
-          Ledgers.State.get(
-            ~Spec.Ask,
-            Spec.State.ledger(
-              Spec.Node.step(
-                n,
-                Spec.Node.arrive(
-                  Spec.State.led(
-                    s,
-                    Ledgers.State.add.of(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), k, en, _)
-                  ),
-                  i,
-                  q
-                ),
-                c
-              )
-            ),
-            k
-          )
+      Ask.held.new(
+        n,
+        Spec.State.keyed(s, Spec.Keys.mark(Spec.State.keys(s), Spec.Envelope.of(e))),
+        e,
+        q,
+        (
+          %Equal.sym(
+            Ledgers.State(Spec.Ask),
+            Spec.State.ledger(Spec.State.keyed(s, Spec.Keys.mark(Spec.State.keys(s), Spec.Envelope.of(e)))),
+            Spec.State.ledger(s),
+            Led.keyed(s, Spec.Keys.mark(Spec.State.keys(s), Spec.Envelope.of(e)))
+          ): {Ledgers.State.get(~Spec.Ask, _, Ledgers.Slot.ask(Spec.Envelope.of(e))) == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>}
+          em
         )
-          == True{}: Bool
-      }
-      Slot.held_kept(
-        s0,
-        Spec.Node.step(n, s1, c),
-        k,
-        Grows.trans(s0, s1, Spec.Node.step(n, s1, c))(
-          Arrive.grows(s0, i, q)
-        )(Step.grows(n, s1, c))
-      )(
-        %Equal.sym(Ledgers.State(Spec.Ask), Spec.State.ledger(s0), l0, Led.led(s, l0)): {
-          Maybe.is_some(
-            &2,
-            Cells.Cell<Ledgers.Entry<Spec.Ask>>,
-            Ledgers.State.get(~Spec.Ask, _, k)
-          )
-            == True{}: Bool
-        }
-        %Equal.sym(
-          Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
-          Ledgers.State.get(~Spec.Ask, l0, k),
-          Some{Cells.One{en}},
-          Ledgers.State.put_get(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), k, en)(em)
-        ): {Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>, _) == True{}: Bool}
-        {==}
       )
 
 # a request whose slot holds a cell changes nothing
@@ -4051,7 +4072,7 @@ def Cast.at.heads(
 ) -> {Spec.State.heads(s) == Spec.State.heads(Spec.Cast.at(n, s, c, h, m)): Tries.Trie<Spec.Head>}:
   match h m:
     case Spec.Head{r, b, +next, th} Some{+t}:
-      +p = Spec.Step.some(c, Spec.Wait.of(s, c), Spec.Run{s, t, []})
+      +p = Spec.Step.some(c, Spec.Cast.mine(s, Spec.Wait.of(s, c)), Spec.Run{s, t, []})
       +qs = Spec.Picked.asks(p)
       Heads.when(
         Spec.Cast.may(n, s, Ledgers.Where{c, next}, t, qs),
@@ -4782,6 +4803,47 @@ def Arrive.kept(+s: Spec.State(), +i: Ledgers.Id, q: Spec.Ask) -> Spec.Node.Keep
         )
       )
 
+# a new request keeps the logs
+def Ask.new.kept(+n: String, +s: Spec.State(), +e: Spec.Envelope, +q: Spec.Ask) -> Spec.Node.Keeps(
+  s,
+  Spec.Node.ask.new(n, s, e, q)
+):
+  +i = Spec.Envelope.of(e)
+  c = Spec.Ask.chain(i, q)
+  +l0 = Ledgers.State.ask(
+    ~Spec.Ask,
+    ~Spec.Ask.is_eq,
+    Spec.State.ledger(s),
+    i,
+    Spec.Envelope.time(e),
+    q
+  )
+  +s0 = Spec.State.led(s, l0)
+  s1 = Spec.Node.arrive(s0, i, q)
+  Kept.trans(
+    s,
+    s0,
+    Spec.Node.step(n, s1, c),
+    Kept.same(
+      s,
+      s0,
+      Grows.led(
+        s,
+        l0,
+        Ledgers.State.add_grows(
+          ~Spec.Ask,
+          ~Spec.Ask.is_eq,
+          ~Ask.laws(),
+          Spec.State.ledger(s),
+          Ledgers.Slot.ask(i),
+          Ledgers.Entry.Ask{i, Spec.Envelope.time(e), q}
+        )
+      ),
+      Heads.led(s, l0)
+    ),
+    Kept.trans(s0, s1, Spec.Node.step(n, s1, c), Arrive.kept(s0, i, q), Step.kept(n, s1, c))
+  )
+
 # Node.ask_keeps once the cell m of the request's ID is known
 def Ask.at.kept(
   n: String,
@@ -4794,40 +4856,17 @@ def Ask.at.kept(
     case Some{x}:
       Kept.refl(s)
     case None{}:
-      +i = Spec.Envelope.of(e)
-      c = Spec.Ask.chain(i, q)
-      +l0 = Ledgers.State.ask(
-        ~Spec.Ask,
-        ~Spec.Ask.is_eq,
-        Spec.State.ledger(s),
-        i,
-        Spec.Envelope.time(e),
-        q
-      )
-      +s0 = Spec.State.led(s, l0)
-      s1 = Spec.Node.arrive(s0, i, q)
       Kept.trans(
         s,
-        s0,
-        Spec.Node.step(n, s1, c),
+        Spec.State.keyed(s, Spec.Keys.mark(Spec.State.keys(s), Spec.Envelope.of(e))),
+        Spec.Node.ask.new(n, Spec.State.keyed(s, Spec.Keys.mark(Spec.State.keys(s), Spec.Envelope.of(e))), e, q),
         Kept.same(
           s,
-          s0,
-          Grows.led(
-            s,
-            l0,
-            Ledgers.State.add_grows(
-              ~Spec.Ask,
-              ~Spec.Ask.is_eq,
-              ~Ask.laws(),
-              Spec.State.ledger(s),
-              Ledgers.Slot.ask(i),
-              Ledgers.Entry.Ask{i, Spec.Envelope.time(e), q}
-            )
-          ),
-          Heads.led(s, l0)
+          Spec.State.keyed(s, Spec.Keys.mark(Spec.State.keys(s), Spec.Envelope.of(e))),
+          Grows.to(s, s, Spec.State.keyed(s, Spec.Keys.mark(Spec.State.keys(s), Spec.Envelope.of(e))), Led.keyed(s, Spec.Keys.mark(Spec.State.keys(s), Spec.Envelope.of(e))), Grows.refl(s)),
+          Heads.keyed(s, Spec.Keys.mark(Spec.State.keys(s), Spec.Envelope.of(e)))
         ),
-        Kept.trans(s0, s1, Spec.Node.step(n, s1, c), Arrive.kept(s0, i, q), Step.kept(n, s1, c))
+        Ask.new.kept(n, Spec.State.keyed(s, Spec.Keys.mark(Spec.State.keys(s), Spec.Envelope.of(e))), e, q)
       )
 
 # Node.ask keeps the logs
@@ -4927,10 +4966,49 @@ def Sync.kept(n: String, +s: Spec.State(), +t: Ledgers.State(Spec.Ask)) -> Spec.
   cs = Spec.Sync.lines(s, s1, t)
   Kept.trans(s, s1, Spec.Node.steps(n, cs, s1), Take.kept(s, t), Steps.kept(n, cs, s1))
 
+# a request that a writer asks again at a node only grows it
+def Consent.grows(
+  +n: String,
+  +s: Spec.State(),
+  +i: Ledgers.Id,
+  m: Maybe<&2, Ledgers.Chain>
+) -> {Spec.Node.grows(s, Spec.Consent.at(n, s, i, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      Grows.refl(s)
+    case Some{+c}:
+      Grows.trans(s, Spec.State.keyed(s, Spec.Keys.mark(Spec.State.keys(s), i)), Spec.Node.step(n, Spec.State.keyed(s, Spec.Keys.mark(Spec.State.keys(s), i)), c))(
+        Grows.to(s, s, Spec.State.keyed(s, Spec.Keys.mark(Spec.State.keys(s), i)), Led.keyed(s, Spec.Keys.mark(Spec.State.keys(s), i)), Grows.refl(s))
+      )(Step.grows(n, Spec.State.keyed(s, Spec.Keys.mark(Spec.State.keys(s), i)), c))
+
+# a request that a writer asks again at a node keeps the logs
+def Consent.kept(
+  +n: String,
+  +s: Spec.State(),
+  +i: Ledgers.Id,
+  m: Maybe<&2, Ledgers.Chain>
+) -> Spec.Node.Keeps(s, Spec.Consent.at(n, s, i, m)):
+  match m:
+    case None{}:
+      Kept.refl(s)
+    case Some{+c}:
+      Kept.trans(
+        s,
+        Spec.State.keyed(s, Spec.Keys.mark(Spec.State.keys(s), i)),
+        Spec.Node.step(n, Spec.State.keyed(s, Spec.Keys.mark(Spec.State.keys(s), i)), c),
+        Kept.same(
+          s,
+          Spec.State.keyed(s, Spec.Keys.mark(Spec.State.keys(s), i)),
+          Grows.to(s, s, Spec.State.keyed(s, Spec.Keys.mark(Spec.State.keys(s), i)), Led.keyed(s, Spec.Keys.mark(Spec.State.keys(s), i)), Grows.refl(s)),
+          Heads.keyed(s, Spec.Keys.mark(Spec.State.keys(s), i))
+        ),
+        Step.kept(n, Spec.State.keyed(s, Spec.Keys.mark(Spec.State.keys(s), i)), c)
+      )
+
 # what a node does only grows it
 def Does.grows(
   n: String,
-  s: Spec.State(),
+  +s: Spec.State(),
   ev: Spec.Deed
 ) -> {Spec.Node.grows(s, Spec.Node.does(n, s, ev)) == True{}: Bool}:
   match ev:
@@ -4942,6 +5020,8 @@ def Does.grows(
       Spec.Node.sync_grows(n, s, t)
     case Spec.Deed.Keep{b}:
       Grows.keep(s, Ropes.Put.nodes(Spec.Bytes.rope(b)))
+    case Spec.Deed.Consent{+i}:
+      Consent.grows(n, s, i, Spec.Node.chain_of(s, i))
 
 def Spec.Node.after_grows(n, evs, s):
   match evs:
@@ -4977,6 +5057,8 @@ def Does.kept(n: String, +s: Spec.State(), ev: Spec.Deed) -> Spec.Node.Keeps(s, 
           )
         )
       )
+    case Spec.Deed.Consent{+i}:
+      Consent.kept(n, s, i, Spec.Node.chain_of(s, i))
 
 def Spec.Node.after_keeps(n, evs, s):
   match evs:
