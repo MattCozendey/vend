@@ -153,7 +153,7 @@ README claim, then the law.
 - A move records a version equal to its target: `Move.reads` (each resource of the target is, with
   the same content, in the tree that the move gives; a move sets only keys of the version
   vector).
-- A taken write reads back: `Judge.write_reads`.
+- A taken write reads back, in the node that the verdict holds: `Judge.write_reads`.
 - A merge never loses a change made on only one side: `Pick.merge_theirs`, `Pick.merge_ours`
   (for one resource), and `Merge.keeps` (what the merge of a resource takes, the tree that a
   merge of whole trees gives holds for it).
@@ -176,9 +176,10 @@ README claim, then the law.
   one-time signatures on SHA-256.
 - **A group change reaches a line by the line's next decided step** (README, Vend Owner Group).
   A change at once, without the line's present owners, cannot be safe.
-- **A run puts the new nodes of a taken request again** (`Run.content`), after the judge put
-  them in its own work. So "a node only grows" holds for each judge by construction, also for a
-  judge that a new format adds; the cost is one more hash of each new node.
+- **A judge puts each new node once.** A verdict holds the node that the judge wrote
+  (`Verdict`), and the run goes on from it (`Run.over`). "A node only grows" is a lemma for each
+  judge (`Verdict.change`, `Grown.*` in `proofs/trees.bend`). A new format adds no judge: a
+  format only merges bytes (`Pick.format`).
 - **Reads of a history are by range**: `Node.versions` and `Node.log` take a first number and a
   count. `Node.affects` and `Node.impact` read each branch that the node follows once, and of
   each only the versions that the branch did not take in.

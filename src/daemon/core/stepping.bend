@@ -29,6 +29,12 @@ def Run.tip(r: Run) -> Basics.Tip:
     case Run{s, t, ns}:
       t
 
+# the new nodes of the run r
+def Run.nodes(r: Run) -> List<&2, List<&2, U32>>:
+  match r:
+    case Run{s, t, ns}:
+      ns
+
 # the run of the content c and the new log m
 def Run.of(c: Maybe<&2, Hashes.Hash>, m: Maybe<&2, Judging.Work>) -> Maybe<&2, Run>:
   match m:
@@ -42,19 +48,6 @@ def Run.log(r: Run, k: List<&2, U32>, x: List<&2, U32>) -> Maybe<&2, Run>:
   match r:
     case Run{s, Basics.Tip{c, l}, ns}:
       Run.of(c, Judging.Work.set(Judging.Work{s, l, ns}, k, x))
-
-# the run on the state m, at the tip t, with the new nodes ds before ns
-def Run.put(
-  m: Maybe<&2, Basics.Node>,
-  t: Basics.Tip,
-  ds: List<&2, List<&2, U32>>,
-  ns: List<&2, List<&2, U32>>
-) -> Maybe<&2, Run>:
-  match m:
-    case None{}:
-      None{}
-    case Some{s2}:
-      Some{Run{s2, t, List.append(&2, List<&2, U32>, ds, ns)}}
 
 # Run.add once the value m of the key in the log is known
 def Run.add.at(
@@ -75,11 +68,19 @@ def Run.add.at(
 def Run.add(+r: Run, +k: List<&2, U32>, x: List<&2, U32>) -> Maybe<&2, Run>:
   Run.add.at(r, k, x, Basics.Node.get(Run.state(r), Basics.Tip.log(Run.tip(r)), k))
 
-# the run r with the content h, and its new nodes ds
-def Run.content(r: Run, h: Maybe<&2, Hashes.Hash>, +ds: List<&2, List<&2, U32>>) -> Maybe<&2, Run>:
-  match r:
-    case Run{s, Basics.Tip{c, l}, ns}:
-      Run.put(Judging.State.put(s, ds), Basics.Tip{h, l}, ds, ns)
+# the run r on the node s2, which a judge grew from the node of r, with the
+# content h, and the new nodes ds: a judge puts each new node once
+def Run.over(
+  +r: Run,
+  s2: Basics.Node,
+  h: Maybe<&2, Hashes.Hash>,
+  ds: List<&2, List<&2, U32>>
+) -> Run:
+  Run{
+    s2,
+    Basics.Tip{h, Basics.Tip.log(Run.tip(r))},
+    List.append(&2, List<&2, U32>, ds, Run.nodes(r))
+  }
 
 # the run r with the owners os of the next step, if the change gives any
 def Run.owners(r: Run, m: Maybe<&2, List<&2, String>>) -> Maybe<&2, Run>:
@@ -140,10 +141,10 @@ def Step.judged(
   match m:
     case None{}:
       None{}
-    case Some{Basics.Verdict{False{}, h, ds}}:
+    case Some{Basics.Verdict.Stale{}}:
       Step.stale(r, i)
-    case Some{Basics.Verdict{True{}, h, ds}}:
-      Maybe.bind(&2, Run, Run, Run.content(r, h, ds), r2 => Step.taken(r2, i, own))
+    case Some{Basics.Verdict.Taken{h, ds, s2}}:
+      Step.taken(Run.over(r, s2, h, ds), i, own)
 
 # the run r with the mark m on the version v, then the request i taken
 def Step.marked(r: Run, i: Ledgers.Id, m: String, v: Maybe<&2, Basics.Version>) -> Maybe<&2, Run>:
@@ -181,19 +182,17 @@ def Branch.made(+r: Run, i: Ledgers.Id, b: String, m: Maybe<&2, Judging.Made>) -
   match m:
     case None{}:
       None{}
-    case Some{Judging.Made{t, ds}}:
+    case Some{Judging.Made{t, ds, s2}}:
       Maybe.bind(
         &2,
         Run,
         Run,
-        Run.content(r, Basics.Tip.content(Run.tip(r)), ds),
-        +r1 => Maybe.bind(
-          &2,
-          Run,
-          Run,
-          Run.add(r1, Basics.Log.start(b), Hashes.Hash.code(Basics.Tip.hash(t), [])),
-          r2 => Step.taken(r2, i, None{})
-        )
+        Run.add(
+          Run.over(r, s2, Basics.Tip.content(Run.tip(r)), ds),
+          Basics.Log.start(b),
+          Hashes.Hash.code(Basics.Tip.hash(t), [])
+        ),
+        r2 => Step.taken(r2, i, None{})
       )
 
 # Step.branch once it is known whether the version that the branch starts at

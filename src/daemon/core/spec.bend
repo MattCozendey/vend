@@ -374,8 +374,8 @@ law Node.draft_some:
     -> {Reading.Draft.content(r, b, n, q) == Some{c}: Maybe<&2, Basics.Content>}
     -> {Maybe.is_some(&2, Basics.Content, Reading.Node.draft(s, w, r, b, n)) == True{}: Bool}
 
-# a write that its owners take is what the resource holds after it: in a node
-# that holds the new nodes, the resource reads as the content of the write
+# a write that the owners take: in the node that the verdict holds, the
+# resource reads as the content of the write
 law Judge.write_reads:
   for +s: Basics.Node
   for +n: Resources.Name
@@ -394,9 +394,8 @@ law Judge.write_reads:
       c,
       h
     )
-      == Some{Basics.Verdict{True{}, h2, ds}}: Maybe<&2, Basics.Verdict>
+      == Some{Basics.Verdict.Taken{h2, ds, s3}}: Maybe<&2, Basics.Verdict>
   }
-    -> {Judging.State.put(s, ds) == Some{s3}: Maybe<&2, Basics.Node>}
     -> {Judging.Content.find(s, n, c) == Some{m}: Maybe<&2, Maybe<&2, Ropes.Root>>}
     -> {Basics.Res.root(s3, h2, n) == m: Maybe<&2, Ropes.Root>}
 

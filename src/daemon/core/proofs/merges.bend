@@ -1533,15 +1533,10 @@ def Judged.outs(
   match m:
     case None{}:
       Unit{}
-    case Some{Basics.Verdict{False{}, h, ds}}:
+    case Some{Basics.Verdict.Stale{}}:
       Stale.outs(r, i)
-    case Some{Basics.Verdict{True{}, h, ds}}:
-      Outs.all(
-        Stepping.Run.content(r, h, ds),
-        r2 => Stepping.Step.taken(r2, i, own),
-        i,
-        r2 => Taken.outs(r2, i, own)
-      )
+    case Some{Basics.Verdict.Taken{h, ds, s2}}:
+      Taken.outs(Stepping.Run.over(r, s2, h, ds), i, own)
 
 # a mark on a version has an outcome
 def Marked.outs(
@@ -1592,23 +1587,16 @@ def Branch.made.outs(
   match m:
     case None{}:
       Unit{}
-    case Some{Judging.Made{t, ds}}:
+    case Some{Judging.Made{t, ds, s2}}:
       Outs.all(
-        Stepping.Run.content(r, Basics.Tip.content(Stepping.Run.tip(r)), ds),
-        +r1 => Maybe.bind(
-          &2,
-          Stepping.Run,
-          Stepping.Run,
-          Stepping.Run.add(r1, Basics.Log.start(b), Hashes.Hash.code(Basics.Tip.hash(t), [])),
-          r2 => Stepping.Step.taken(r2, i, None{})
+        Stepping.Run.add(
+          Stepping.Run.over(r, s2, Basics.Tip.content(Stepping.Run.tip(r)), ds),
+          Basics.Log.start(b),
+          Hashes.Hash.code(Basics.Tip.hash(t), [])
         ),
+        r2 => Stepping.Step.taken(r2, i, None{}),
         i,
-        r1 => Outs.all(
-          Stepping.Run.add(r1, Basics.Log.start(b), Hashes.Hash.code(Basics.Tip.hash(t), [])),
-          r2 => Stepping.Step.taken(r2, i, None{}),
-          i,
-          r2 => Taken.outs(r2, i, None{})
-        )
+        r2 => Taken.outs(r2, i, None{})
       )
 
 # a request for a branch has an outcome, once it is known whether its version

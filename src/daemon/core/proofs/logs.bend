@@ -579,55 +579,6 @@ def Add.kept(
     Basics.Node.get(Stepping.Run.state(r), Basics.Tip.log(Stepping.Run.tip(r)), k)
   )({==})
 
-# Content.kept once whether the node holds the new nodes is known (b)
-def Content.kept.if(
-  +s: Basics.Node,
-  l: Maybe<&2, Hashes.Hash>,
-  h: Maybe<&2, Hashes.Hash>,
-  +ds: List<&2, List<&2, U32>>,
-  ns: List<&2, List<&2, U32>>,
-  k2: List<&2, U32>,
-  v: List<&2, U32>,
-  b: Bool,
-  hr: {Basics.Node.get(s, l, k2) == Some{v}: Maybe<&2, List<&2, U32>>}
-) -> Run.Keeps(
-  k2,
-  v,
-  Stepping.Run.put(
-    Shared.Maybe.when(Basics.Node, b, u => Some{Basics.State.keep(s, ds)}),
-    Basics.Tip{h, l},
-    ds,
-    ns
-  )
-):
-  match b:
-    case False{}:
-      Unit{}
-    case True{}:
-      Get.grows(s, Basics.State.keep(s, ds), l, k2, v, ProofTrees.Grows.keep(s, ds))(hr)
-
-# new content keeps each key of a run's log
-def Content.kept(
-  r: Stepping.Run,
-  h: Maybe<&2, Hashes.Hash>,
-  +ds: List<&2, List<&2, U32>>,
-  k2: List<&2, U32>,
-  v: List<&2, U32>
-) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Run.content(r, h, ds)):
-  match r:
-    case Stepping.Run{+s, Basics.Tip{c, l}, ns}:
-      hr => Content.kept.if(
-        s,
-        l,
-        h,
-        ds,
-        ns,
-        k2,
-        v,
-        Trees.Tree.holds(~Basics.Node, ~Basics.Store.fetch, Basics.State.keep(s, ds), ds),
-        hr
-      )
-
 # a run, then a run from it that keeps a key, keeps it
 def Keeps.bind(
   -k2: List<&2, U32>,
@@ -753,6 +704,20 @@ def Taken.kept(
     )
   )
 
+# a run over a node that grew keeps each key of its log
+def Over.kept(
+  r: Stepping.Run,
+  s2: Basics.Node,
+  -h: Maybe<&2, Hashes.Hash>,
+  -ds: List<&2, List<&2, U32>>,
+  k2: List<&2, U32>,
+  v: List<&2, U32>,
+  g: {Reading.Node.grows(Stepping.Run.state(r), s2) == True{}: Bool}
+) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Some{Stepping.Run.over(r, s2, h, ds)}):
+  match r:
+    case Stepping.Run{s, t, ns}:
+      hr => Get.grows(s, s2, Basics.Tip.log(t), k2, v, g)(hr)
+
 # a judged request keeps each key of a run's log, other than the owners and
 # the count
 def Judged.kept(
@@ -764,19 +729,24 @@ def Judged.kept(
   +v: List<&2, U32>,
   n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k2) == False{}: Bool},
   n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k2) == False{}: Bool}
-) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Step.judged(r, i, own, m)):
+) -> {
+  ProofTrees.Verdict.after(Stepping.Run.state(r), m) == True{}: Bool
+} -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Step.judged(r, i, own, m)):
   match m:
     case None{}:
-      hr => Unit{}
-    case Some{Basics.Verdict{False{}, h, ds}}:
-      hr => Add.kept(r, Basics.Log.out(i), Basics.Out.words(Basics.Out.Stale{}), k2, v)(hr)
-    case Some{Basics.Verdict{True{}, +h, +ds}}:
-      hr => Keeps.bind(
+      g => hr => Unit{}
+    case Some{Basics.Verdict.Stale{}}:
+      g => hr => Add.kept(r, Basics.Log.out(i), Basics.Out.words(Basics.Out.Stale{}), k2, v)(hr)
+    case Some{Basics.Verdict.Taken{h, ds, +s2}}:
+      g => hr => Taken.kept(
+        Stepping.Run.over(r, s2, h, ds),
+        i,
+        own,
         k2,
         v,
-        Stepping.Run.content(r, h, ds),
-        r2 => Stepping.Step.taken(r2, i, own)
-      )(Content.kept(r, h, ds, k2, v)(hr))(r2 => h2 => Taken.kept(r2, i, own, k2, v, n0, n1)(h2))
+        n0,
+        n1
+      )(Over.kept(r, s2, h, ds, k2, v, g)(hr))
 
 # a mark on a version keeps each key of a run's log, other than the owners
 # and the count
@@ -842,41 +812,36 @@ def Branch.made.kept(
   +v: List<&2, U32>,
   n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.owners(), k2) == False{}: Bool},
   n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Basics.Log.count(), k2) == False{}: Bool}
-) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Branch.made(r, i, b, m)):
+) -> {
+  ProofTrees.Made.after(Stepping.Run.state(r), m) == True{}: Bool
+} -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Stepping.Branch.made(r, i, b, m)):
   match m:
     case None{}:
-      hr => Unit{}
-    case Some{Judging.Made{+t, +ds}}:
-      hr => Keeps.bind(
-        k2,
-        v,
-        Stepping.Run.content(r, Basics.Tip.content(Stepping.Run.tip(r)), ds),
-        +r1 => Maybe.bind(
-          &2,
-          Stepping.Run,
-          Stepping.Run,
-          Stepping.Run.add(r1, Basics.Log.start(b), Hashes.Hash.code(Basics.Tip.hash(t), [])),
-          r2 => Stepping.Step.taken(r2, i, None{})
-        )
-      )(
-        Content.kept(r, Basics.Tip.content(Stepping.Run.tip(r)), ds, k2, v)(hr)
-      )(
-        +r1 => h1 => Keeps.bind(
+      g => hr => Unit{}
+    case Some{Judging.Made{+t, ds, +s2}}:
+      g => hr =>
+        +r1 = {Stepping.Run.over(r, s2, Basics.Tip.content(Stepping.Run.tip(r)), ds): Stepping.Run}
+        Keeps.bind(
           k2,
           v,
           Stepping.Run.add(r1, Basics.Log.start(b), Hashes.Hash.code(Basics.Tip.hash(t), [])),
           r2 => Stepping.Step.taken(r2, i, None{})
         )(
-          Add.kept(r1, Basics.Log.start(b), Hashes.Hash.code(Basics.Tip.hash(t), []), k2, v)(h1)
+          Add.kept(
+            r1,
+            Basics.Log.start(b),
+            Hashes.Hash.code(Basics.Tip.hash(t), []),
+            k2,
+            v
+          )(Over.kept(r, s2, Basics.Tip.content(Stepping.Run.tip(r)), ds, k2, v, g)(hr))
         )(r2 => h2 => Taken.kept(r2, i, None{}, k2, v, n0, n1)(h2))
-      )
 
 # a request for a branch keeps each key of a run's log, other than the owners
 # and the count, once it is known whether its version is one
 def Branch.ready.kept(
   +r: Stepping.Run,
   i: Ledgers.Id,
-  st: Ledgers.Id,
+  +st: Ledgers.Id,
   +b: String,
   +at: Maybe<&2, Ledgers.Id>,
   m: Maybe<&2, Bool>,
@@ -923,6 +888,12 @@ def Branch.ready.kept(
           v,
           n0,
           n1
+        )(
+          ProofTrees.Grown.make.first(
+            Stepping.Run.state(r),
+            Judging.Make.branch(Stepping.Run.state(r), Basics.Line.chain(st, Some{b}), at),
+            Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+          )(ProofTrees.Grown.make.branch(Stepping.Run.state(r), Basics.Line.chain(st, Some{b}), at))
         ),
         hr => Unit{}
       )
@@ -965,7 +936,7 @@ def Branch.new.kept(
 def On.kept(
   +r: Stepping.Run,
   i: Ledgers.Id,
-  st: Ledgers.Id,
+  +st: Ledgers.Id,
   l: Maybe<&2, String>,
   ch: Basics.Change,
   k2: List<&2, U32>,
@@ -1008,6 +979,15 @@ def On.kept(
         v,
         n0,
         n1
+      )(
+        ProofTrees.Verdict.change(
+          Stepping.Run.state(r),
+          st,
+          None{},
+          Basics.Change.Group{a, b},
+          Basics.Tip.content(Stepping.Run.tip(r)),
+          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+        )
       )(hr)
     case None{} Basics.Change.Own{+a, +b, +c}:
       hr => Judged.kept(
@@ -1026,6 +1006,15 @@ def On.kept(
         v,
         n0,
         n1
+      )(
+        ProofTrees.Verdict.change(
+          Stepping.Run.state(r),
+          st,
+          None{},
+          Basics.Change.Own{a, b, c},
+          Basics.Tip.content(Stepping.Run.tip(r)),
+          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+        )
       )(hr)
     case None{} Basics.Change.Write{+a, +b, +c}:
       hr => Judged.kept(
@@ -1044,6 +1033,15 @@ def On.kept(
         v,
         n0,
         n1
+      )(
+        ProofTrees.Verdict.change(
+          Stepping.Run.state(r),
+          st,
+          None{},
+          Basics.Change.Write{a, b, c},
+          Basics.Tip.content(Stepping.Run.tip(r)),
+          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+        )
       )(hr)
     case None{} Basics.Change.Resolve{+a, +b, +c}:
       hr => Judged.kept(
@@ -1062,6 +1060,15 @@ def On.kept(
         v,
         n0,
         n1
+      )(
+        ProofTrees.Verdict.change(
+          Stepping.Run.state(r),
+          st,
+          None{},
+          Basics.Change.Resolve{a, b, c},
+          Basics.Tip.content(Stepping.Run.tip(r)),
+          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+        )
       )(hr)
     case None{} Basics.Change.Merge{+a}:
       hr => Judged.kept(
@@ -1080,6 +1087,15 @@ def On.kept(
         v,
         n0,
         n1
+      )(
+        ProofTrees.Verdict.change(
+          Stepping.Run.state(r),
+          st,
+          None{},
+          Basics.Change.Merge{a},
+          Basics.Tip.content(Stepping.Run.tip(r)),
+          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+        )
       )(hr)
     case None{} Basics.Change.Move{+a}:
       hr => Judged.kept(
@@ -1098,6 +1114,15 @@ def On.kept(
         v,
         n0,
         n1
+      )(
+        ProofTrees.Verdict.change(
+          Stepping.Run.state(r),
+          st,
+          None{},
+          Basics.Change.Move{a},
+          Basics.Tip.content(Stepping.Run.tip(r)),
+          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+        )
       )(hr)
     case None{} Basics.Change.Mark{+a, +b}:
       hr => Judged.kept(
@@ -1116,6 +1141,15 @@ def On.kept(
         v,
         n0,
         n1
+      )(
+        ProofTrees.Verdict.change(
+          Stepping.Run.state(r),
+          st,
+          None{},
+          Basics.Change.Mark{a, b},
+          Basics.Tip.content(Stepping.Run.tip(r)),
+          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+        )
       )(hr)
     case Some{x} Basics.Change.Branch{+a, +b}:
       hr => Judged.kept(
@@ -1134,6 +1168,15 @@ def On.kept(
         v,
         n0,
         n1
+      )(
+        ProofTrees.Verdict.change(
+          Stepping.Run.state(r),
+          st,
+          Some{x},
+          Basics.Change.Branch{a, b},
+          Basics.Tip.content(Stepping.Run.tip(r)),
+          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+        )
       )(hr)
     case Some{+x} Basics.Change.Group{+a, +b}:
       hr => Judged.kept(
@@ -1152,6 +1195,15 @@ def On.kept(
         v,
         n0,
         n1
+      )(
+        ProofTrees.Verdict.change(
+          Stepping.Run.state(r),
+          st,
+          Some{x},
+          Basics.Change.Group{a, b},
+          Basics.Tip.content(Stepping.Run.tip(r)),
+          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+        )
       )(hr)
     case Some{+x} Basics.Change.Own{+a, +b, +c}:
       hr => Judged.kept(
@@ -1170,6 +1222,15 @@ def On.kept(
         v,
         n0,
         n1
+      )(
+        ProofTrees.Verdict.change(
+          Stepping.Run.state(r),
+          st,
+          Some{x},
+          Basics.Change.Own{a, b, c},
+          Basics.Tip.content(Stepping.Run.tip(r)),
+          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+        )
       )(hr)
     case Some{+x} Basics.Change.Write{+a, +b, +c}:
       hr => Judged.kept(
@@ -1188,6 +1249,15 @@ def On.kept(
         v,
         n0,
         n1
+      )(
+        ProofTrees.Verdict.change(
+          Stepping.Run.state(r),
+          st,
+          Some{x},
+          Basics.Change.Write{a, b, c},
+          Basics.Tip.content(Stepping.Run.tip(r)),
+          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+        )
       )(hr)
     case Some{+x} Basics.Change.Resolve{+a, +b, +c}:
       hr => Judged.kept(
@@ -1206,6 +1276,15 @@ def On.kept(
         v,
         n0,
         n1
+      )(
+        ProofTrees.Verdict.change(
+          Stepping.Run.state(r),
+          st,
+          Some{x},
+          Basics.Change.Resolve{a, b, c},
+          Basics.Tip.content(Stepping.Run.tip(r)),
+          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+        )
       )(hr)
     case Some{+x} Basics.Change.Merge{+a}:
       hr => Judged.kept(
@@ -1224,6 +1303,15 @@ def On.kept(
         v,
         n0,
         n1
+      )(
+        ProofTrees.Verdict.change(
+          Stepping.Run.state(r),
+          st,
+          Some{x},
+          Basics.Change.Merge{a},
+          Basics.Tip.content(Stepping.Run.tip(r)),
+          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+        )
       )(hr)
     case Some{+x} Basics.Change.Move{+a}:
       hr => Judged.kept(
@@ -1242,6 +1330,15 @@ def On.kept(
         v,
         n0,
         n1
+      )(
+        ProofTrees.Verdict.change(
+          Stepping.Run.state(r),
+          st,
+          Some{x},
+          Basics.Change.Move{a},
+          Basics.Tip.content(Stepping.Run.tip(r)),
+          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+        )
       )(hr)
     case Some{+x} Basics.Change.Mark{a, b}:
       hr => Mark.kept(r, i, a, k2, v, n0, n1)(hr)
@@ -1262,6 +1359,15 @@ def On.kept(
         v,
         n0,
         n1
+      )(
+        ProofTrees.Verdict.change(
+          Stepping.Run.state(r),
+          st,
+          None{},
+          Basics.Change.Key{a, b},
+          Basics.Tip.content(Stepping.Run.tip(r)),
+          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+        )
       )(hr)
     case Some{+x} Basics.Change.Key{+a, +b}:
       hr => Judged.kept(
@@ -1280,6 +1386,15 @@ def On.kept(
         v,
         n0,
         n1
+      )(
+        ProofTrees.Verdict.change(
+          Stepping.Run.state(r),
+          st,
+          Some{x},
+          Basics.Change.Key{a, b},
+          Basics.Tip.content(Stepping.Run.tip(r)),
+          Basics.Line.owners(Stepping.Run.state(r), Stepping.Run.tip(r))
+        )
       )(hr)
 
 # a request keeps each key of a run's log, other than the owners and the count

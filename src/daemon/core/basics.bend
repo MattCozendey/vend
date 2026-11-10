@@ -444,11 +444,6 @@ def Change.owners(c: Change) -> Maybe<&2, List<&2, String>>:
 # The state
 # ---------
 
-# what a judge says of one change: take it or refuse it as stale, the root of
-# the content after it, and the new nodes
-type Verdict is Data:
-  Verdict{takes: Bool, result: Maybe<&2, Hashes.Hash>, data: List<&2, List<&2, U32>>}
-
 # what a line holds: the root of its content and the root of its log
 type Tip is Data:
   Tip{content: Maybe<&2, Hashes.Hash>, log: Maybe<&2, Hashes.Hash>}
@@ -489,6 +484,14 @@ type Node is Data:
     waiting: Tries.Trie<List<&2, Ledgers.Id>>,
     keys: Keys
   }
+
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
+# what a judge says of one change: refuse it as stale, or take it, with the
+# root of the content after it, the new nodes, and the node that holds them
+type Verdict is Data:
+  Verdict.Stale{}
+  Verdict.Taken{result: Maybe<&2, Hashes.Hash>, data: List<&2, List<&2, U32>>, node: Node}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the ledger of s
 def State.ledger(s: Node) -> Ledgers.State(Ask):
