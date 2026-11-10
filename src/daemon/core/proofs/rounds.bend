@@ -2191,7 +2191,7 @@ def Spec.Cast.put_keeps(n, w, th, qs, from, s2, t2, s, s3):
   +e =>
     %Equal.sym(
       Maybe<&2, Replicas.Node<Basics.Ask>>,
-      Judging.State.put(s2, [Replicas.Tip.words(t2)]),
+      Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]),
       Some{s3},
       e
     ): {Reading.Node.grows(s2, Sealing.Cast.vote(s, _, w, n, a0)) == True{}: Bool}
@@ -2215,7 +2215,7 @@ def Spec.Cast.put_tip(n, w, th, qs, from, s2, t2, s, s3):
   +e =>
     %Equal.sym(
       Maybe<&2, Replicas.Node<Basics.Ask>>,
-      Judging.State.put(s2, [Replicas.Tip.words(t2)]),
+      Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]),
       Some{s3},
       e
     ): {

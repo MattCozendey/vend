@@ -699,7 +699,7 @@ def Advance.moved.path(
   ein: {Spec.Advance.in(s, c, h, q) == Some{v}: Maybe<&2, Ledgers.Vote>},
   emv: {Spec.Head.moved(h, Some{v}) == Some{hd}: Maybe<&2, Replicas.Head>}
 ) -> {
-  Judging.State.put(s2, [Replicas.Tip.words(t2)]) == m: Maybe<&2, Replicas.Node<Basics.Ask>>
+  Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]) == m: Maybe<&2, Replicas.Node<Basics.Ask>>
 } -> Spec.Node.On(s, Voting.Advance.moved(s, m, c, hd, qs)):
   match m:
     case None{}:
@@ -759,7 +759,7 @@ def Advance.ran.path.if(
     bq,
     u => Voting.Advance.moved(
       s,
-      Judging.State.put(s2, [Replicas.Tip.words(t2)]),
+      Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]),
       c,
       Replicas.Head{r, br, U32.inc(next), Some{Replicas.Tip.hash(t2)}},
       qs
@@ -772,7 +772,7 @@ def Advance.ran.path.if(
       Advance.moved.path(
         s,
         s2,
-        Judging.State.put(s2, [Replicas.Tip.words(t2)]),
+        Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]),
         c,
         Replicas.Head{r, br, next, th},
         Replicas.Head{r, br, U32.inc(next), Some{Replicas.Tip.hash(t2)}},
@@ -1156,20 +1156,20 @@ def Start.with.path(
   +s: Replicas.Node<Basics.Ask>,
   +i: Ledgers.Id,
   +os: List<&2, String>,
-  m: Maybe<&2, Judging.Work>
+  m: Maybe<&2, Replicas.Work<Basics.Ask>>
 ) -> {
   ProofTrees.Work.after(s, m) == True{}: Bool
 } -> Spec.Node.On(s, Sealing.Start.with(s, i, os, m)):
   match m:
     case None{}:
       e => Path.refl(s)
-    case Some{Judging.Work{+s2, +c}}:
+    case Some{Replicas.Work{+s2, +c}}:
       e =>
         +t = {Replicas.Tip{c, None{}, 0, os}: Replicas.Tip}
         Start.head.path(
           s,
           s2,
-          Judging.State.put(s2, [Replicas.Tip.words(t)]),
+          Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t)]),
           Ledgers.Chain{i, None{}},
           Replicas.Head{i, None{}, 0, Some{Replicas.Tip.hash(t)}},
           e
@@ -1185,8 +1185,8 @@ def Start.path(
     s,
     i,
     Basics.Owner.names(os),
-    Sealing.Seal.firsts(os, Some{Judging.Work{s, None{}}})
-  )(ProofTrees.Firsts.after(s, os, Some{Judging.Work{s, None{}}})(ProofTrees.Grows.refl(s)))
+    Sealing.Seal.firsts(os, Some{Replicas.Work{s, None{}}})
+  )(ProofTrees.Firsts.after(s, os, Some{Replicas.Work{s, None{}}})(ProofTrees.Grows.refl(s)))
 
 # a line that a node starts to follow is on the paths
 def Follow.new.path(

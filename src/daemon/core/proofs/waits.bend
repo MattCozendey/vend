@@ -338,7 +338,7 @@ def Start.with.waiting(
   s: Replicas.Node<Basics.Ask>,
   +i: Ledgers.Id,
   +os: List<&2, String>,
-  +m: Maybe<&2, Judging.Work>
+  +m: Maybe<&2, Replicas.Work<Basics.Ask>>
 ) -> {
   Replicas.State.waiting(~Basics.Ask.machine(), 
     s
@@ -348,10 +348,10 @@ def Start.with.waiting(
   match m:
     case None{}:
       {==}
-    case Some{Judging.Work{s2, +c}}:
+    case Some{Replicas.Work{s2, +c}}:
       Start.head.waiting(
         s,
-        Judging.State.put(s2, [Replicas.Tip.words(Replicas.Tip{c, None{}, 0, os})]),
+        Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(Replicas.Tip{c, None{}, 0, os})]),
         Ledgers.Chain{i, None{}},
         Replicas.Head{i, None{}, 0, Some{Replicas.Tip.hash(Replicas.Tip{c, None{}, 0, os})}}
       )
@@ -715,7 +715,7 @@ def Arrive.waits(
           s,
           j,
           Basics.Owner.names(os),
-          Sealing.Seal.firsts(os, Some{Judging.Work{s, None{}}})
+          Sealing.Seal.firsts(os, Some{Replicas.Work{s, None{}}})
         )
       ): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, _, i) == True{}: Bool}
       h

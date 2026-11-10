@@ -31,11 +31,11 @@ def Run.tip(r: Run) -> Replicas.Tip:
       t
 
 # the run of the state and the log of the work m, at the tip t
-def Run.logged(t: Replicas.Tip, m: Maybe<&2, Judging.Work>) -> Maybe<&2, Run>:
+def Run.logged(t: Replicas.Tip, m: Maybe<&2, Replicas.Work<Basics.Ask>>) -> Maybe<&2, Run>:
   match t m:
     case x None{}:
       None{}
-    case Replicas.Tip{c, old, n, os} Some{Judging.Work{s, l}}:
+    case Replicas.Tip{c, old, n, os} Some{Replicas.Work{s, l}}:
       Some{Run{s, Replicas.Tip{c, l, n, os}}}
 
 # Run.add once the value m of the key in the log is known
@@ -47,7 +47,7 @@ def Run.add.at(
 ) -> Maybe<&2, Run>:
   match r m:
     case Run{s, +t} None{}:
-      Run.logged(t, Judging.Work.set(Judging.Work{s, Replicas.Tip.log(t)}, k, x))
+      Run.logged(t, Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, Replicas.Tip.log(t)}, k, x))
     case y Some{old}:
       None{}
 
@@ -120,14 +120,14 @@ def Step.judged(
   r: Run,
   i: Ledgers.Id,
   own: Maybe<&2, List<&2, String>>,
-  m: Maybe<&2, Judging.Verdict>
+  m: Maybe<&2, Replicas.Verdict<Basics.Ask>>
 ) -> Maybe<&2, Run>:
   match m:
     case None{}:
       None{}
-    case Some{Judging.Verdict.Stale{}}:
+    case Some{Replicas.Verdict.Stale{}}:
       Step.stale(r, i)
-    case Some{Judging.Verdict.Taken{Judging.Work{s2, h}}}:
+    case Some{Replicas.Verdict.Taken{Replicas.Work{s2, h}}}:
       Step.taken(Run.over(r, s2, h), i, own)
 
 # the run r with the mark m on the version v, then the request i taken

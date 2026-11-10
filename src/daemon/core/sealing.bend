@@ -463,7 +463,7 @@ def Start.head(
       State.first(Replicas.State.led(~Basics.Ask.machine(), s, Replicas.State.ledger(~Basics.Ask.machine(), s2)), c, h)
 
 # w with the first key of each first owner of os
-def Seal.firsts(os: List<&2, Basics.Owner>, m: Maybe<&2, Judging.Work>) -> Maybe<&2, Judging.Work>:
+def Seal.firsts(os: List<&2, Basics.Owner>, m: Maybe<&2, Replicas.Work<Basics.Ask>>) -> Maybe<&2, Replicas.Work<Basics.Ask>>:
   match os:
     case Nil{}:
       m
@@ -472,10 +472,10 @@ def Seal.firsts(os: List<&2, Basics.Owner>, m: Maybe<&2, Judging.Work>) -> Maybe
         r,
         Maybe.bind(
           &2,
-          Judging.Work,
-          Judging.Work,
+          Replicas.Work<Basics.Ask>,
+          Replicas.Work<Basics.Ask>,
           m,
-          w => Judging.Work.set(w, Basics.Key.seal(n), Hashes.Hash.code(k, []))
+          w => Replicas.Work.set(~Basics.Ask.machine(), w, Basics.Key.seal(n), Hashes.Hash.code(k, []))
         )
       )
 
@@ -485,16 +485,16 @@ def Start.with(
   s: Replicas.Node<Basics.Ask>,
   +i: Ledgers.Id,
   os: List<&2, String>,
-  m: Maybe<&2, Judging.Work>
+  m: Maybe<&2, Replicas.Work<Basics.Ask>>
 ) -> Replicas.Node<Basics.Ask>:
   match m:
     case None{}:
       s
-    case Some{Judging.Work{s2, c}}:
+    case Some{Replicas.Work{s2, c}}:
       +t = {Replicas.Tip{c, None{}, 0, os}: Replicas.Tip}
       Start.head(
         s,
-        Judging.State.put(s2, [Replicas.Tip.words(t)]),
+        Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t)]),
         Ledgers.Chain{i, None{}},
         Replicas.Head{i, None{}, 0, Some{Replicas.Tip.hash(t)}}
       )
@@ -502,7 +502,7 @@ def Start.with(
 # s, which follows the store that the request i starts with the first owners
 # os: its content holds their first keys
 def Node.start(+s: Replicas.Node<Basics.Ask>, i: Ledgers.Id, +os: List<&2, Basics.Owner>) -> Replicas.Node<Basics.Ask>:
-  Start.with(s, i, Basics.Owner.names(os), Seal.firsts(os, Some{Judging.Work{s, None{}}}))
+  Start.with(s, i, Basics.Owner.names(os), Seal.firsts(os, Some{Replicas.Work{s, None{}}}))
 
 # the first tip of the branch b of a store whose tip is m, if the store made
 # b: the log of the store holds it, written once, so every node opens the
@@ -652,7 +652,7 @@ def Cast.put(
     case Some{Stepping.Run{s2, +t2}}:
       Cast.vote(
         s,
-        Judging.State.put(s2, [Replicas.Tip.words(t2)]),
+        Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]),
         w,
         n,
         Ledgers.Act.Vote{Ledgers.Vote{th, qs, Some{Replicas.Tip.hash(t2)}}, from}

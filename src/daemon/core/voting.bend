@@ -498,7 +498,7 @@ def Advance.ran(
         Sealing.Root.same(after, Some{Replicas.Tip.hash(t2)}),
         u => Advance.moved(
           s,
-          Judging.State.put(s2, [Replicas.Tip.words(t2)]),
+          Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]),
           c,
           Replicas.Head{r, b, U32.inc(next), Some{Replicas.Tip.hash(t2)}},
           qs

@@ -316,7 +316,7 @@ def Set.kept.if(
 ) -> Spec.Work.Reads(
   k2,
   v,
-  Judging.Work.on(Shared.Maybe.when(Replicas.Node<Basics.Ask>, b, u => Some{Replicas.State.keep(~Basics.Ask.machine(), s, ws)}), Some{hh})
+  Replicas.Work.on(~Basics.Ask.machine(), Shared.Maybe.when(Replicas.Node<Basics.Ask>, b, u => Some{Replicas.State.keep(~Basics.Ask.machine(), s, ws)}), Some{hh})
 ):
   match b:
     case False{}:
@@ -403,7 +403,7 @@ def Set.kept.of(
   em: {Replicas.Node.set(~Basics.Ask.machine(), s, h, k, x) == m: Maybe<&2, Trees.Put>},
   hne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool},
   hget: {Replicas.Node.get(~Basics.Ask.machine(), s, h, k2) == Some{v}: Maybe<&2, List<&2, U32>>}
-) -> Spec.Work.Reads(k2, v, Judging.Work.of(s, m)):
+) -> Spec.Work.Reads(k2, v, Replicas.Work.of(~Basics.Ask.machine(), s, m)):
   match m:
     case None{}:
       Unit{}
@@ -434,7 +434,7 @@ def Set.kept(
   v: List<&2, U32>,
   hne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool},
   hget: {Replicas.Node.get(~Basics.Ask.machine(), s, h, k2) == Some{v}: Maybe<&2, List<&2, U32>>}
-) -> Spec.Work.Reads(k2, v, Judging.Work.set(Judging.Work{s, h}, k, x)):
+) -> Spec.Work.Reads(k2, v, Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, h}, k, x)):
   Set.kept.of(s, h, k, x, k2, v, Replicas.Node.set(~Basics.Ask.machine(), s, h, k, x), {==}, hne, hget)
 
 # that the log of the run m, if any, reads the key k2 as v
@@ -450,12 +450,12 @@ def Run.logged.keeps(
   -k2: List<&2, U32>,
   -v: List<&2, U32>,
   t: Replicas.Tip,
-  m: Maybe<&2, Judging.Work>
+  m: Maybe<&2, Replicas.Work<Basics.Ask>>
 ) -> Spec.Work.Reads(k2, v, m) -> Run.Keeps(k2, v, Stepping.Run.logged(t, m)):
   match t m:
     case x None{}:
       w => Unit{}
-    case Replicas.Tip{c, old, n, os} Some{Judging.Work{s2, l}}:
+    case Replicas.Tip{c, old, n, os} Some{Replicas.Work{s2, l}}:
       w => w
 
 # a key that a tree does not hold is not a key that it holds, once whether
@@ -506,13 +506,13 @@ def Add.new.kept(
 ) -> Run.Keeps(
   k2,
   v,
-  Stepping.Run.logged(t, Judging.Work.set(Judging.Work{s, Replicas.Tip.log(t)}, k, x))
+  Stepping.Run.logged(t, Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, Replicas.Tip.log(t)}, k, x))
 ):
   Run.logged.keeps(
     k2,
     v,
     t,
-    Judging.Work.set(Judging.Work{s, Replicas.Tip.log(t)}, k, x)
+    Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, Replicas.Tip.log(t)}, k, x)
   )(
     Set.kept(
       s,
@@ -692,7 +692,7 @@ def Judged.kept(
   +r: Stepping.Run,
   i: Ledgers.Id,
   own: Maybe<&2, List<&2, String>>,
-  m: Maybe<&2, Judging.Verdict>,
+  m: Maybe<&2, Replicas.Verdict<Basics.Ask>>,
   +k2: List<&2, U32>,
   +v: List<&2, U32>
 ) -> {
@@ -701,9 +701,9 @@ def Judged.kept(
   match m:
     case None{}:
       g => hr => Unit{}
-    case Some{Judging.Verdict.Stale{}}:
+    case Some{Replicas.Verdict.Stale{}}:
       g => hr => Add.kept(r, Replicas.Log.out(i), Replicas.Out.words(Replicas.Out.Stale{}), k2, v)(hr)
-    case Some{Judging.Verdict.Taken{Judging.Work{+s2, h}}}:
+    case Some{Replicas.Verdict.Taken{Replicas.Work{+s2, h}}}:
       g => hr => Taken.kept(
         Stepping.Run.over(r, s2, h),
         i,

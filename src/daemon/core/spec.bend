@@ -352,17 +352,17 @@ law Judge.write_reads:
       c,
       h
     )
-      == Some{Judging.Verdict.Taken{Judging.Work{s3, h2}}}: Maybe<&2, Judging.Verdict>
+      == Some{Replicas.Verdict.Taken{Replicas.Work{s3, h2}}}: Maybe<&2, Replicas.Verdict<Basics.Ask>>
   }
     -> {Judging.Content.find(s, n, c) == Some{m}: Maybe<&2, Maybe<&2, Ropes.Root>>}
     -> {Basics.Res.root(s3, h2, n) == m: Maybe<&2, Ropes.Root>}
 
 # the work m, if any, reads the key k as v
-def Work.Reads(k: List<&2, U32>, v: List<&2, U32>, m: Maybe<&2, Judging.Work>) -> Type:
+def Work.Reads(k: List<&2, U32>, v: List<&2, U32>, m: Maybe<&2, Replicas.Work<Basics.Ask>>) -> Type:
   match m:
     case None{}:
       Unit
-    case Some{Judging.Work{s2, h2}}:
+    case Some{Replicas.Work{s2, h2}}:
       {Replicas.Node.get(~Basics.Ask.machine(), s2, h2, k) == Some{v}: Maybe<&2, List<&2, U32>>}
 
 # a move records a version equal to its target: each resource of the version
@@ -679,7 +679,7 @@ law Cast.put_keeps:
   for +t2: Replicas.Tip
   for +s: Replicas.Node<Basics.Ask>
   for +s3: Replicas.Node<Basics.Ask>
-  {Judging.State.put(s2, [Replicas.Tip.words(t2)]) == Some{s3}: Maybe<&2, Replicas.Node<Basics.Ask>>}
+  {Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]) == Some{s3}: Maybe<&2, Replicas.Node<Basics.Ask>>}
     -> {
       Reading.Node.grows(
         s2,
@@ -699,7 +699,7 @@ law Cast.put_tip:
   for +t2: Replicas.Tip
   for +s: Replicas.Node<Basics.Ask>
   for +s3: Replicas.Node<Basics.Ask>
-  {Judging.State.put(s2, [Replicas.Tip.words(t2)]) == Some{s3}: Maybe<&2, Replicas.Node<Basics.Ask>>}
+  {Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]) == Some{s3}: Maybe<&2, Replicas.Node<Basics.Ask>>}
     -> {
       Replicas.Tip.at(~Basics.Ask.machine(), 
         Sealing.Cast.put(n, w, th, qs, from, Some{Stepping.Run{s2, t2}}, s),

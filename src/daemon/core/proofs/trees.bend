@@ -194,11 +194,11 @@ def Grows.keep(
   )
 
 # the work m, if any, is on a node that grew from s
-def Work.after(s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Judging.Work>) -> Bool:
+def Work.after(s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Replicas.Work<Basics.Ask>>) -> Bool:
   match m:
     case None{}:
       True{}
-    case Some{Judging.Work{s2, h}}:
+    case Some{Replicas.Work{s2, h}}:
       Reading.Node.grows(s, s2)
 
 # the node m, if any, grew from s
@@ -226,7 +226,7 @@ def Put.grows.if(
 def Put.grows(
   +s: Replicas.Node<Basics.Ask>,
   +ds: List<&2, List<&2, U32>>
-) -> {State.after(s, Judging.State.put(s, ds)) == True{}: Bool}:
+) -> {State.after(s, Replicas.State.put(~Basics.Ask.machine(), s, ds)) == True{}: Bool}:
   Put.grows.if(
     s,
     Replicas.State.keep(~Basics.Ask.machine(), s, ds),
@@ -241,7 +241,7 @@ def Work.on.grows(
   h: Maybe<&2, Hashes.Hash>
 ) -> {
   State.after(s, m) == True{}: Bool
-} -> {Work.after(s, Judging.Work.on(m, h)) == True{}: Bool}:
+} -> {Work.after(s, Replicas.Work.on(~Basics.Ask.machine(), m, h)) == True{}: Bool}:
   match m:
     case None{}:
       e => {==}
@@ -252,12 +252,12 @@ def Work.on.grows(
 def Work.of.grows(
   +s: Replicas.Node<Basics.Ask>,
   m: Maybe<&2, Trees.Put>
-) -> {Work.after(s, Judging.Work.of(s, m)) == True{}: Bool}:
+) -> {Work.after(s, Replicas.Work.of(~Basics.Ask.machine(), s, m)) == True{}: Bool}:
   match m:
     case None{}:
       {==}
     case Some{Trees.Put{h, +ws}}:
-      Work.on.grows(s, Judging.State.put(s, ws), Some{h})(Put.grows(s, ws))
+      Work.on.grows(s, Replicas.State.put(~Basics.Ask.machine(), s, ws), Some{h})(Put.grows(s, ws))
 
 # a key set in a tree only grows a node
 def Set.grows(
@@ -265,7 +265,7 @@ def Set.grows(
   h: Maybe<&2, Hashes.Hash>,
   k: List<&2, U32>,
   x: List<&2, U32>
-) -> {Work.after(s, Judging.Work.set(Judging.Work{s, h}, k, x)) == True{}: Bool}:
+) -> {Work.after(s, Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, h}, k, x)) == True{}: Bool}:
   Work.of.grows(s, Replicas.Node.set(~Basics.Ask.machine(), s, h, k, x))
 
 # the run m, if any, is on a node that grew from s
@@ -331,20 +331,20 @@ def After.when(
 def Work.after.trans(
   a: Replicas.Node<Basics.Ask>,
   b: Replicas.Node<Basics.Ask>,
-  m: Maybe<&2, Judging.Work>,
+  m: Maybe<&2, Replicas.Work<Basics.Ask>>,
   e1: {Reading.Node.grows(a, b) == True{}: Bool},
   e2: {Work.after(b, m) == True{}: Bool}
 ) -> {Work.after(a, m) == True{}: Bool}:
   match m:
     case None{}:
       {==}
-    case Some{Judging.Work{s3, h}}:
+    case Some{Replicas.Work{s3, h}}:
       Grows.trans(a, b, s3)(e1)(e2)
 
 # a key set in a work on a node that grew from s is on a node that grew from s
 def Work.set.after(
   s: Replicas.Node<Basics.Ask>,
-  m: Maybe<&2, Judging.Work>,
+  m: Maybe<&2, Replicas.Work<Basics.Ask>>,
   +k: List<&2, U32>,
   +x: List<&2, U32>
 ) -> {
@@ -352,56 +352,56 @@ def Work.set.after(
 } -> {
   Work.after(
     s,
-    Maybe.bind(&2, Judging.Work, Judging.Work, m, w => Judging.Work.set(w, k, x))
+    Maybe.bind(&2, Replicas.Work<Basics.Ask>, Replicas.Work<Basics.Ask>, m, w => Replicas.Work.set(~Basics.Ask.machine(), w, k, x))
   )
     == True{}: Bool
 }:
   match m:
     case None{}:
       e => {==}
-    case Some{Judging.Work{+s2, +h}}:
+    case Some{Replicas.Work{+s2, +h}}:
       e => Work.after.trans(
         s,
         s2,
-        Judging.Work.set(Judging.Work{s2, h}, k, x),
+        Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s2, h}, k, x),
         e,
         Set.grows(s2, h, k, x)
       )
 
 # the node of the work w
-def Work.state(w: Judging.Work) -> Replicas.Node<Basics.Ask>:
+def Work.state(w: Replicas.Work<Basics.Ask>) -> Replicas.Node<Basics.Ask>:
   match w:
-    case Judging.Work{s, h}:
+    case Replicas.Work{s, h}:
       s
 
 # a work is on its own node
-def Grown.self(w: Judging.Work) -> {Work.after(Work.state(w), Some{w}) == True{}: Bool}:
+def Grown.self(w: Replicas.Work<Basics.Ask>) -> {Work.after(Work.state(w), Some{w}) == True{}: Bool}:
   match w:
-    case Judging.Work{s, h}:
+    case Replicas.Work{s, h}:
       Grows.refl(s)
 
 # a work, then a work from it, is on a node that grew
 def Grown.bind(
   s: Replicas.Node<Basics.Ask>,
-  +m: Maybe<&2, Judging.Work>,
-  f: Judging.Work -> Maybe<&2, Judging.Work>,
+  +m: Maybe<&2, Replicas.Work<Basics.Ask>>,
+  f: Replicas.Work<Basics.Ask> -> Maybe<&2, Replicas.Work<Basics.Ask>>,
   hm: {Work.after(s, m) == True{}: Bool},
-  hf: @w: Judging.Work -> {Work.after(Work.state(w), f(w)) == True{}: Bool}
-) -> {Work.after(s, Maybe.bind(&2, Judging.Work, Judging.Work, m, f)) == True{}: Bool}:
+  hf: @w: Replicas.Work<Basics.Ask> -> {Work.after(Work.state(w), f(w)) == True{}: Bool}
+) -> {Work.after(s, Maybe.bind(&2, Replicas.Work<Basics.Ask>, Replicas.Work<Basics.Ask>, m, f)) == True{}: Bool}:
   match m:
     case None{}:
       {==}
-    case Some{Judging.Work{+s2, +h}}:
-      Work.after.trans(s, s2, f(Judging.Work{s2, h}), hm, hf(Judging.Work{s2, h}))
+    case Some{Replicas.Work{+s2, +h}}:
+      Work.after.trans(s, s2, f(Replicas.Work{s2, h}), hm, hf(Replicas.Work{s2, h}))
 
 # a work from a value that the node reads is on a node that grew
 def Grown.with(
   -A: Data,
   s: Replicas.Node<Basics.Ask>,
   +ma: Maybe<&2, A>,
-  -k: A -> Maybe<&2, Judging.Work>,
+  -k: A -> Maybe<&2, Replicas.Work<Basics.Ask>>,
   hk: @a: A -> {Work.after(s, k(a)) == True{}: Bool}
-) -> {Work.after(s, Maybe.bind(&2, A, Judging.Work, ma, k)) == True{}: Bool}:
+) -> {Work.after(s, Maybe.bind(&2, A, Replicas.Work<Basics.Ask>, ma, k)) == True{}: Bool}:
   match ma:
     case None{}:
       {==}
@@ -412,12 +412,12 @@ def Grown.with(
 def Grown.when(
   s: Replicas.Node<Basics.Ask>,
   +b: Bool,
-  -mx: Maybe<&2, Judging.Work>,
-  -my: Maybe<&2, Judging.Work>,
+  -mx: Maybe<&2, Replicas.Work<Basics.Ask>>,
+  -my: Maybe<&2, Replicas.Work<Basics.Ask>>,
   hx: {Work.after(s, mx) == True{}: Bool},
   hy: {Work.after(s, my) == True{}: Bool}
 ) -> {
-  Work.after(s, Shared.Bool.when(Maybe<&2, Judging.Work>, b, u => mx, u => my)) == True{}: Bool
+  Work.after(s, Shared.Bool.when(Maybe<&2, Replicas.Work<Basics.Ask>>, b, u => mx, u => my)) == True{}: Bool
 }:
   match b:
     case True{}:
@@ -427,43 +427,43 @@ def Grown.when(
 
 # a key set in a work only grows its node
 def Grown.set(
-  w: Judging.Work,
+  w: Replicas.Work<Basics.Ask>,
   k: List<&2, U32>,
   x: List<&2, U32>
-) -> {Work.after(Work.state(w), Judging.Work.set(w, k, x)) == True{}: Bool}:
+) -> {Work.after(Work.state(w), Replicas.Work.set(~Basics.Ask.machine(), w, k, x)) == True{}: Bool}:
   match w:
-    case Judging.Work{s, h}:
+    case Replicas.Work{s, h}:
       Set.grows(s, h, k, x)
 
 # words kept in a work only grow its node
 def Grown.keep(
-  w: Judging.Work,
+  w: Replicas.Work<Basics.Ask>,
   +ns: List<&2, List<&2, U32>>
-) -> {Work.after(Work.state(w), Judging.Work.keep(w, ns)) == True{}: Bool}:
+) -> {Work.after(Work.state(w), Replicas.Work.keep(~Basics.Ask.machine(), w, ns)) == True{}: Bool}:
   match w:
-    case Judging.Work{+s, h}:
-      Work.on.grows(s, Judging.State.put(s, ns), h)(Put.grows(s, ns))
+    case Replicas.Work{+s, h}:
+      Work.on.grows(s, Replicas.State.put(~Basics.Ask.machine(), s, ns), h)(Put.grows(s, ns))
 
 # a place added to a version vector only grows a node
 def Grown.vector.add(
-  w: Judging.Work,
+  w: Replicas.Work<Basics.Ask>,
   +c: Ledgers.Chain,
   +p: Basics.Place
 ) -> {Work.after(Work.state(w), Judging.Vector.add(w, c, p)) == True{}: Bool}:
   match w:
-    case Judging.Work{+s, +h}:
+    case Replicas.Work{+s, +h}:
       Grown.when(
         s,
         Basics.Place.covered(Basics.Node.vector(s, h, c), p),
-        Some{Judging.Work{s, h}},
-        Judging.Work.set(Judging.Work{s, h}, Basics.Key.vector(c), Basics.Place.code(p)),
+        Some{Replicas.Work{s, h}},
+        Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, h}, Basics.Key.vector(c), Basics.Place.code(p)),
         Grows.refl(s),
         Set.grows(s, h, Basics.Key.vector(c), Basics.Place.code(p))
       )
 
 # an entry added to a version vector only grows a node
 def Grown.vector.add.if(
-  +w: Judging.Work,
+  +w: Replicas.Work<Basics.Ask>,
   c: Ledgers.Chain,
   m: Maybe<&2, Basics.Place>
 ) -> {Work.after(Work.state(w), Judging.Vector.add.if(w, c, m)) == True{}: Bool}:
@@ -485,7 +485,7 @@ def Grown.vector.adds(
   +s: Replicas.Node<Basics.Ask>,
   bs: List<&2, Trees.Binding>,
   +c: Ledgers.Chain,
-  +m: Maybe<&2, Judging.Work>
+  +m: Maybe<&2, Replicas.Work<Basics.Ask>>
 ) -> {
   Work.after(s, m) == True{}: Bool
 } -> {Work.after(s, Judging.Vector.adds(bs, c, m)) == True{}: Bool}:
@@ -499,8 +499,8 @@ def Grown.vector.adds(
         c,
         Maybe.bind(
           &2,
-          Judging.Work,
-          Judging.Work,
+          Replicas.Work<Basics.Ask>,
+          Replicas.Work<Basics.Ask>,
           m,
           w => Judging.Vector.add.if(w, c, Judging.Vector.entry(b))
         )
@@ -520,7 +520,7 @@ def Grown.vector.joined(
   +s0: Replicas.Node<Basics.Ask>,
   +c: Ledgers.Chain,
   +v: Ledgers.Id,
-  +m: Maybe<&2, Judging.Work>
+  +m: Maybe<&2, Replicas.Work<Basics.Ask>>
 ) -> {
   Work.after(s, m) == True{}: Bool
 } -> {Work.after(s, Judging.Vector.joined(s0, c, v, m)) == True{}: Bool}:
@@ -547,7 +547,7 @@ def Grown.merge.put(
   +n: Resources.Name,
   +o: Maybe<&2, Ropes.Root>,
   p: Judging.Pick,
-  +w: Judging.Work
+  +w: Replicas.Work<Basics.Ask>
 ) -> {Work.after(Work.state(w), Judging.Merge.put(f, n, o, p, w)) == True{}: Bool}:
   match p:
     case Judging.Pick.Take{m}:
@@ -555,8 +555,8 @@ def Grown.merge.put(
     case Judging.Pick.Make{+x}:
       Grown.bind(
         Work.state(w),
-        Judging.Work.keep(w, Ropes.Put.nodes(Basics.Bytes.rope(x))),
-        w2 => Judging.Work.set(
+        Replicas.Work.keep(~Basics.Ask.machine(), w, Ropes.Put.nodes(Basics.Bytes.rope(x))),
+        w2 => Replicas.Work.set(~Basics.Ask.machine(), 
           w2,
           Basics.Key.res(n),
           Basics.Res.code(Some{Ropes.Put.root(Basics.Bytes.rope(x))})
@@ -571,8 +571,8 @@ def Grown.merge.put(
     case Judging.Pick.Clash{}:
       Grown.bind(
         Work.state(w),
-        Judging.Work.set(w, Basics.Key.res(n), Basics.Res.code(o)),
-        y => Judging.Work.set(y, Basics.Key.clash(n), Judging.Clash.code(f)),
+        Replicas.Work.set(~Basics.Ask.machine(), w, Basics.Key.res(n), Basics.Res.code(o)),
+        y => Replicas.Work.set(~Basics.Ask.machine(), y, Basics.Key.clash(n), Judging.Clash.code(f)),
         Grown.set(w, Basics.Key.res(n), Basics.Res.code(o)),
         y => Grown.set(y, Basics.Key.clash(n), Judging.Clash.code(f))
       )
@@ -585,7 +585,7 @@ def Grown.merge.one(
   b: Maybe<&2, Ropes.Root>,
   +o: Maybe<&2, Ropes.Root>,
   t: Maybe<&2, Ropes.Root>,
-  +w: Judging.Work
+  +w: Replicas.Work<Basics.Ask>
 ) -> {Work.after(Work.state(w), Judging.Merge.one(s0, f, n, b, o, t, w)) == True{}: Bool}:
   Grown.with(
     Judging.Pick,
@@ -604,7 +604,7 @@ def Grown.merge.all(
   +hb: Maybe<&2, Hashes.Hash>,
   +ho: Maybe<&2, Hashes.Hash>,
   +ht: Maybe<&2, Hashes.Hash>,
-  +m: Maybe<&2, Judging.Work>
+  +m: Maybe<&2, Replicas.Work<Basics.Ask>>
 ) -> {
   Work.after(s, m) == True{}: Bool
 } -> {Work.after(s, Judging.Merge.all(s0, f, ns, hb, ho, ht, m)) == True{}: Bool}:
@@ -622,23 +622,23 @@ def Grown.merge.all(
         ht,
         Maybe.bind(
           &2,
-          Judging.Work,
-          Judging.Work,
+          Replicas.Work<Basics.Ask>,
+          Replicas.Work<Basics.Ask>,
           m,
           w => Maybe.bind(
             &2,
             Maybe<&2, Ropes.Root>,
-            Judging.Work,
+            Replicas.Work<Basics.Ask>,
             Basics.Res.find(s0, hb, n),
             b => Maybe.bind(
               &2,
               Maybe<&2, Ropes.Root>,
-              Judging.Work,
+              Replicas.Work<Basics.Ask>,
               Basics.Res.find(s0, ho, n),
               o => Maybe.bind(
                 &2,
                 Maybe<&2, Ropes.Root>,
-                Judging.Work,
+                Replicas.Work<Basics.Ask>,
                 Basics.Res.find(s0, ht, n),
                 x => Judging.Merge.one(s0, f, n, b, o, x, w)
               )
@@ -652,17 +652,17 @@ def Grown.merge.all(
           w => Maybe.bind(
             &2,
             Maybe<&2, Ropes.Root>,
-            Judging.Work,
+            Replicas.Work<Basics.Ask>,
             Basics.Res.find(s0, hb, n),
             b => Maybe.bind(
               &2,
               Maybe<&2, Ropes.Root>,
-              Judging.Work,
+              Replicas.Work<Basics.Ask>,
               Basics.Res.find(s0, ho, n),
               o => Maybe.bind(
                 &2,
                 Maybe<&2, Ropes.Root>,
-                Judging.Work,
+                Replicas.Work<Basics.Ask>,
                 Basics.Res.find(s0, ht, n),
                 x => Judging.Merge.one(s0, f, n, b, o, x, w)
               )
@@ -676,12 +676,12 @@ def Grown.merge.all(
             b => Maybe.bind(
               &2,
               Maybe<&2, Ropes.Root>,
-              Judging.Work,
+              Replicas.Work<Basics.Ask>,
               Basics.Res.find(s0, ho, n),
               o => Maybe.bind(
                 &2,
                 Maybe<&2, Ropes.Root>,
-                Judging.Work,
+                Replicas.Work<Basics.Ask>,
                 Basics.Res.find(s0, ht, n),
                 x => Judging.Merge.one(s0, f, n, b, o, x, w)
               )
@@ -693,7 +693,7 @@ def Grown.merge.all(
               o => Maybe.bind(
                 &2,
                 Maybe<&2, Ropes.Root>,
-                Judging.Work,
+                Replicas.Work<Basics.Ask>,
                 Basics.Res.find(s0, ht, n),
                 x => Judging.Merge.one(s0, f, n, b, o, x, w)
               ),
@@ -728,7 +728,7 @@ def Grown.merge.work(
       Basics.Node.root_of(s, Judging.Merge.base(s, c, from, h)),
       h,
       Basics.Node.root_of(s, Some{from}),
-      Some{Judging.Work{s, h}}
+      Some{Replicas.Work{s, h}}
     )
   )(
     Grown.merge.all(
@@ -739,7 +739,7 @@ def Grown.merge.work(
       Basics.Node.root_of(s, Judging.Merge.base(s, c, from, h)),
       h,
       Basics.Node.root_of(s, Some{from}),
-      Some{Judging.Work{s, h}}
+      Some{Replicas.Work{s, h}}
     )(Grows.refl(s))
   )
 
@@ -758,14 +758,14 @@ def Grown.move.work(
     Judging.Vector.adds(
       Trees.Tree.list(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s, h),
       c,
-      Some{Judging.Work{s, Basics.Node.root_of(s, Some{to})}}
+      Some{Replicas.Work{s, Basics.Node.root_of(s, Some{to})}}
     )
   )(
     Grown.vector.adds(
       s,
       Trees.Tree.list(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s, h),
       c,
-      Some{Judging.Work{s, Basics.Node.root_of(s, Some{to})}}
+      Some{Replicas.Work{s, Basics.Node.root_of(s, Some{to})}}
     )(Grows.refl(s))
   )
 
@@ -778,8 +778,8 @@ def Grown.resolve.work(
 ) -> {Work.after(s, Judging.Resolve.work(s, h, n, m)) == True{}: Bool}:
   Grown.bind(
     s,
-    Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m)),
-    y => Judging.Work.set(y, Basics.Key.clash(n), []),
+    Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m)),
+    y => Replicas.Work.set(~Basics.Ask.machine(), y, Basics.Key.clash(n), []),
     Set.grows(s, h, Basics.Key.res(n), Basics.Res.code(m)),
     y => Grown.set(y, Basics.Key.clash(n), [])
   )
@@ -793,12 +793,12 @@ def Grown.group.work(
 ) -> {Work.after(s, Judging.Group.work(s, h, g, ms)) == True{}: Bool}:
   Grown.bind(
     s,
-    Judging.Work.set(Judging.Work{s, h}, Basics.Key.group(g), Basics.Members.code(ms, [])),
+    Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, h}, Basics.Key.group(g), Basics.Members.code(ms, [])),
     +w => Shared.Bool.when(
-      Maybe<&2, Judging.Work>,
+      Maybe<&2, Replicas.Work<Basics.Ask>>,
       List.contains(~String, ~String.eq, Judging.Group.names(s, h), g),
       u => Some{w},
-      u => Judging.Work.set(
+      u => Replicas.Work.set(~Basics.Ask.machine(), 
         w,
         Basics.Key.groups(),
         Ledgers.Owners.code(g <> Judging.Group.names(s, h), [])
@@ -809,7 +809,7 @@ def Grown.group.work(
       Work.state(w),
       List.contains(~String, ~String.eq, Judging.Group.names(s, h), g),
       Some{w},
-      Judging.Work.set(
+      Replicas.Work.set(~Basics.Ask.machine(), 
         w,
         Basics.Key.groups(),
         Ledgers.Owners.code(g <> Judging.Group.names(s, h), [])
@@ -834,7 +834,7 @@ def Grown.make.branch(
         s,
         c,
         v,
-        Some{Judging.Work{s, Basics.Node.root_of(s, Some{v})}}
+        Some{Replicas.Work{s, Basics.Node.root_of(s, Some{v})}}
       )(Grows.refl(s))
 
 # the first tip m of a branch, if any, is on a node that grew from s
@@ -849,18 +849,18 @@ def Made.after(s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Judging.Made>) -> Bool
 def Grown.made.put(
   s: Replicas.Node<Basics.Ask>,
   t: Replicas.Tip,
-  m: Maybe<&2, Judging.Work>
+  m: Maybe<&2, Replicas.Work<Basics.Ask>>
 ) -> {Work.after(s, m) == True{}: Bool} -> {Made.after(s, Judging.Made.put(t, m)) == True{}: Bool}:
   match m:
     case None{}:
       e => {==}
-    case Some{Judging.Work{s2, l}}:
+    case Some{Replicas.Work{s2, l}}:
       e => e
 
 # the first tip of a new branch is on a node that grew
 def Grown.make.first(
   +s: Replicas.Node<Basics.Ask>,
-  start: Maybe<&2, Judging.Work>,
+  start: Maybe<&2, Replicas.Work<Basics.Ask>>,
   +os: List<&2, String>
 ) -> {
   Work.after(s, start) == True{}: Bool
@@ -868,49 +868,49 @@ def Grown.make.first(
   match start:
     case None{}:
       e => {==}
-    case Some{Judging.Work{+s2, +h}}:
+    case Some{Replicas.Work{+s2, +h}}:
       e =>
         +t = {Replicas.Tip{h, None{}, 0, os}: Replicas.Tip}
         Grown.made.put(
           s,
           t,
-          Judging.Work.keep(Judging.Work{s2, h}, [Replicas.Tip.words(t)])
+          Replicas.Work.keep(~Basics.Ask.machine(), Replicas.Work{s2, h}, [Replicas.Tip.words(t)])
         )(
           Work.after.trans(
             s,
             s2,
-            Judging.Work.keep(Judging.Work{s2, h}, [Replicas.Tip.words(t)]),
+            Replicas.Work.keep(~Basics.Ask.machine(), Replicas.Work{s2, h}, [Replicas.Tip.words(t)]),
             e,
-            Grown.keep(Judging.Work{s2, h}, [Replicas.Tip.words(t)])
+            Grown.keep(Replicas.Work{s2, h}, [Replicas.Tip.words(t)])
           )
         )
 
 # the verdict m, if any, holds a node that grew from s
-def Verdict.after(s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Judging.Verdict>) -> Bool:
+def Verdict.after(s: Replicas.Node<Basics.Ask>, m: Maybe<&2, Replicas.Verdict<Basics.Ask>>) -> Bool:
   match m:
     case None{}:
       True{}
-    case Some{Judging.Verdict.Stale{}}:
+    case Some{Replicas.Verdict.Stale{}}:
       True{}
-    case Some{Judging.Verdict.Taken{Judging.Work{s2, h}}}:
+    case Some{Replicas.Verdict.Taken{Replicas.Work{s2, h}}}:
       Reading.Node.grows(s, s2)
 
 # a verdict that takes a work holds its node
 def Verdict.take(
   s: Replicas.Node<Basics.Ask>,
-  m: Maybe<&2, Judging.Work>
-) -> {Work.after(s, m) == True{}: Bool} -> {Verdict.after(s, Judging.Work.take(m)) == True{}: Bool}:
+  m: Maybe<&2, Replicas.Work<Basics.Ask>>
+) -> {Work.after(s, m) == True{}: Bool} -> {Verdict.after(s, Replicas.Work.take(~Basics.Ask.machine(), m)) == True{}: Bool}:
   match m:
     case None{}:
       e => {==}
-    case Some{Judging.Work{s2, h}}:
+    case Some{Replicas.Work{s2, h}}:
       e => e
 
 # a verdict after a verdict holds a node that grew
 def Verdict.then(
   s: Replicas.Node<Basics.Ask>,
   +m: Maybe<&2, Bool>,
-  -k: Unit -> Maybe<&2, Judging.Verdict>,
+  -k: Unit -> Maybe<&2, Replicas.Verdict<Basics.Ask>>,
   hk: {Verdict.after(s, k(Unit{})) == True{}: Bool}
 ) -> {Verdict.after(s, Judging.Judge.then(m, k)) == True{}: Bool}:
   match m:
@@ -925,7 +925,7 @@ def Verdict.then(
 def Verdict.when(
   s: Replicas.Node<Basics.Ask>,
   +b: Bool,
-  -k: Unit -> Maybe<&2, Judging.Verdict>,
+  -k: Unit -> Maybe<&2, Replicas.Verdict<Basics.Ask>>,
   hk: {Verdict.after(s, k(Unit{})) == True{}: Bool}
 ) -> {Verdict.after(s, Judging.Judge.when(b, k)) == True{}: Bool}:
   match b:
@@ -938,7 +938,7 @@ def Verdict.when(
 def Verdict.whole(
   s: Replicas.Node<Basics.Ask>,
   +b: Bool,
-  -k: Unit -> Maybe<&2, Judging.Verdict>,
+  -k: Unit -> Maybe<&2, Replicas.Verdict<Basics.Ask>>,
   hk: {Verdict.after(s, k(Unit{})) == True{}: Bool}
 ) -> {Verdict.after(s, Judging.Judge.whole(b, k)) == True{}: Bool}:
   match b:
@@ -952,9 +952,9 @@ def Verdict.with(
   -A: Data,
   s: Replicas.Node<Basics.Ask>,
   +ma: Maybe<&2, A>,
-  -k: A -> Maybe<&2, Judging.Verdict>,
+  -k: A -> Maybe<&2, Replicas.Verdict<Basics.Ask>>,
   hk: @a: A -> {Verdict.after(s, k(a)) == True{}: Bool}
-) -> {Verdict.after(s, Maybe.bind(&2, A, Judging.Verdict, ma, k)) == True{}: Bool}:
+) -> {Verdict.after(s, Maybe.bind(&2, A, Replicas.Verdict<Basics.Ask>, ma, k)) == True{}: Bool}:
   match ma:
     case None{}:
       {==}
@@ -977,22 +977,22 @@ def Verdict.write(
       w => Maybe.bind(
         &2,
         Maybe<&2, Ropes.Root>,
-        Judging.Verdict,
+        Replicas.Verdict<Basics.Ask>,
         Basics.Res.find(s, h, n),
         a => Maybe.bind(
           &2,
           Maybe<&2, Ropes.Root>,
-          Judging.Verdict,
+          Replicas.Verdict<Basics.Ask>,
           Basics.Res.find(s, Basics.Node.root_of(s, base), n),
           b => Maybe.bind(
             &2,
             Maybe<&2, Ropes.Root>,
-            Judging.Verdict,
+            Replicas.Verdict<Basics.Ask>,
             Judging.Content.find(s, n, c),
             m => Judging.Judge.when(
               Basics.Roots.same(a, b),
-              x => Judging.Work.take(
-                Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
+              x => Replicas.Work.take(~Basics.Ask.machine(), 
+                Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
               )
             )
           )
@@ -1005,22 +1005,22 @@ def Verdict.write(
       w => Maybe.bind(
         &2,
         Maybe<&2, Ropes.Root>,
-        Judging.Verdict,
+        Replicas.Verdict<Basics.Ask>,
         Basics.Res.find(s, h, n),
         a => Maybe.bind(
           &2,
           Maybe<&2, Ropes.Root>,
-          Judging.Verdict,
+          Replicas.Verdict<Basics.Ask>,
           Basics.Res.find(s, Basics.Node.root_of(s, base), n),
           b => Maybe.bind(
             &2,
             Maybe<&2, Ropes.Root>,
-            Judging.Verdict,
+            Replicas.Verdict<Basics.Ask>,
             Judging.Content.find(s, n, c),
             m => Judging.Judge.when(
               Basics.Roots.same(a, b),
-              x => Judging.Work.take(
-                Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
+              x => Replicas.Work.take(~Basics.Ask.machine(), 
+                Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
               )
             )
           )
@@ -1033,17 +1033,17 @@ def Verdict.write(
         a => Maybe.bind(
           &2,
           Maybe<&2, Ropes.Root>,
-          Judging.Verdict,
+          Replicas.Verdict<Basics.Ask>,
           Basics.Res.find(s, Basics.Node.root_of(s, base), n),
           b => Maybe.bind(
             &2,
             Maybe<&2, Ropes.Root>,
-            Judging.Verdict,
+            Replicas.Verdict<Basics.Ask>,
             Judging.Content.find(s, n, c),
             m => Judging.Judge.when(
               Basics.Roots.same(a, b),
-              x => Judging.Work.take(
-                Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
+              x => Replicas.Work.take(~Basics.Ask.machine(), 
+                Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
               )
             )
           )
@@ -1055,12 +1055,12 @@ def Verdict.write(
           b => Maybe.bind(
             &2,
             Maybe<&2, Ropes.Root>,
-            Judging.Verdict,
+            Replicas.Verdict<Basics.Ask>,
             Judging.Content.find(s, n, c),
             m => Judging.Judge.when(
               Basics.Roots.same(a, b),
-              x => Judging.Work.take(
-                Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
+              x => Replicas.Work.take(~Basics.Ask.machine(), 
+                Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
               )
             )
           ),
@@ -1070,19 +1070,19 @@ def Verdict.write(
             Judging.Content.find(s, n, c),
             m => Judging.Judge.when(
               Basics.Roots.same(a, b),
-              x => Judging.Work.take(
-                Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
+              x => Replicas.Work.take(~Basics.Ask.machine(), 
+                Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
               )
             ),
             +m => Verdict.when(
               s,
               Basics.Roots.same(a, b),
-              x => Judging.Work.take(
-                Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
+              x => Replicas.Work.take(~Basics.Ask.machine(), 
+                Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
               ),
               Verdict.take(
                 s,
-                Judging.Work.set(Judging.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
+                Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, h}, Basics.Key.res(n), Basics.Res.code(m))
               )(Set.grows(s, h, Basics.Key.res(n), Basics.Res.code(m)))
             )
           )
@@ -1109,14 +1109,14 @@ def Verdict.resolve(
       w => Maybe.bind(
         &2,
         Bool,
-        Judging.Verdict,
+        Replicas.Verdict<Basics.Ask>,
         Judging.Clash.find(s, h, n, Judging.Merge.from_on(Replicas.Node.asked(~Basics.Ask.machine(), s, k), r, b)),
         open => Maybe.bind(
           &2,
           Maybe<&2, Ropes.Root>,
-          Judging.Verdict,
+          Replicas.Verdict<Basics.Ask>,
           Judging.Content.find(s, n, c),
-          m => Judging.Judge.when(open, x => Judging.Work.take(Judging.Resolve.work(s, h, n, m)))
+          m => Judging.Judge.when(open, x => Replicas.Work.take(~Basics.Ask.machine(), Judging.Resolve.work(s, h, n, m)))
         )
       )
     ),
@@ -1126,14 +1126,14 @@ def Verdict.resolve(
       w => Maybe.bind(
         &2,
         Bool,
-        Judging.Verdict,
+        Replicas.Verdict<Basics.Ask>,
         Judging.Clash.find(s, h, n, Judging.Merge.from_on(Replicas.Node.asked(~Basics.Ask.machine(), s, k), r, b)),
         open => Maybe.bind(
           &2,
           Maybe<&2, Ropes.Root>,
-          Judging.Verdict,
+          Replicas.Verdict<Basics.Ask>,
           Judging.Content.find(s, n, c),
-          m => Judging.Judge.when(open, x => Judging.Work.take(Judging.Resolve.work(s, h, n, m)))
+          m => Judging.Judge.when(open, x => Replicas.Work.take(~Basics.Ask.machine(), Judging.Resolve.work(s, h, n, m)))
         )
       ),
       Verdict.with(
@@ -1143,19 +1143,19 @@ def Verdict.resolve(
         open => Maybe.bind(
           &2,
           Maybe<&2, Ropes.Root>,
-          Judging.Verdict,
+          Replicas.Verdict<Basics.Ask>,
           Judging.Content.find(s, n, c),
-          m => Judging.Judge.when(open, x => Judging.Work.take(Judging.Resolve.work(s, h, n, m)))
+          m => Judging.Judge.when(open, x => Replicas.Work.take(~Basics.Ask.machine(), Judging.Resolve.work(s, h, n, m)))
         ),
         +open => Verdict.with(
           Maybe<&2, Ropes.Root>,
           s,
           Judging.Content.find(s, n, c),
-          m => Judging.Judge.when(open, x => Judging.Work.take(Judging.Resolve.work(s, h, n, m))),
+          m => Judging.Judge.when(open, x => Replicas.Work.take(~Basics.Ask.machine(), Judging.Resolve.work(s, h, n, m))),
           +m => Verdict.when(
             s,
             open,
-            x => Judging.Work.take(Judging.Resolve.work(s, h, n, m)),
+            x => Replicas.Work.take(~Basics.Ask.machine(), Judging.Resolve.work(s, h, n, m)),
             Verdict.take(s, Judging.Resolve.work(s, h, n, m))(Grown.resolve.work(s, h, n, m))
           )
         )
@@ -1176,12 +1176,12 @@ def Verdict.own(
   Verdict.then(
     s,
     Judging.Own.takes(s, r, l, g, at, os, h),
-    u => Judging.Work.take(
-      Judging.Work.set(Judging.Work{s, h}, Basics.Key.owner(), Codes.Code.text(g, []))
+    u => Replicas.Work.take(~Basics.Ask.machine(), 
+      Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, h}, Basics.Key.owner(), Codes.Code.text(g, []))
     ),
     Verdict.take(
       s,
-      Judging.Work.set(Judging.Work{s, h}, Basics.Key.owner(), Codes.Code.text(g, []))
+      Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, h}, Basics.Key.owner(), Codes.Code.text(g, []))
     )(Set.grows(s, h, Basics.Key.owner(), Codes.Code.text(g, [])))
   )
 
@@ -1199,13 +1199,13 @@ def Verdict.change(
       Verdict.when(
         s,
         Bool.not(Judging.Group.loops.any(s, h, g, ms)),
-        u => Judging.Work.take(Judging.Group.work(s, h, g, ms)),
+        u => Replicas.Work.take(~Basics.Ask.machine(), Judging.Group.work(s, h, g, ms)),
         Verdict.take(s, Judging.Group.work(s, h, g, ms))(Grown.group.work(s, h, g, ms))
       )
     case None{} Basics.Change.Key{+n, +k}:
       Verdict.take(
         s,
-        Judging.Work.set(Judging.Work{s, h}, Basics.Key.seal(n), Hashes.Hash.code(k, []))
+        Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, h}, Basics.Key.seal(n), Hashes.Hash.code(k, []))
       )(Set.grows(s, h, Basics.Key.seal(n), Hashes.Hash.code(k, [])))
     case +w Basics.Change.Own{g, at, os2}:
       Verdict.own(s, r, w, g, at, os2, h)
@@ -1219,12 +1219,12 @@ def Verdict.change(
         Judging.Judge.ready(s, from),
         u => Judging.Judge.whole(
           Judging.Whole.both(s, h, Basics.Node.root_of(s, Some{from})),
-          v => Judging.Work.take(Judging.Merge.work(s, Replicas.Line.chain(r, Some{b}), from, h))
+          v => Replicas.Work.take(~Basics.Ask.machine(), Judging.Merge.work(s, Replicas.Line.chain(r, Some{b}), from, h))
         ),
         Verdict.whole(
           s,
           Judging.Whole.both(s, h, Basics.Node.root_of(s, Some{from})),
-          v => Judging.Work.take(Judging.Merge.work(s, Replicas.Line.chain(r, Some{b}), from, h)),
+          v => Replicas.Work.take(~Basics.Ask.machine(), Judging.Merge.work(s, Replicas.Line.chain(r, Some{b}), from, h)),
           Verdict.take(
             s,
             Judging.Merge.work(s, Replicas.Line.chain(r, Some{b}), from, h)
@@ -1237,12 +1237,12 @@ def Verdict.change(
         Judging.Judge.ready(s, to),
         u => Judging.Judge.whole(
           Judging.Whole.both(s, h, Basics.Node.root_of(s, Some{to})),
-          v => Judging.Work.take(Judging.Move.work(s, Replicas.Line.chain(r, Some{b}), to, h))
+          v => Replicas.Work.take(~Basics.Ask.machine(), Judging.Move.work(s, Replicas.Line.chain(r, Some{b}), to, h))
         ),
         Verdict.whole(
           s,
           Judging.Whole.both(s, h, Basics.Node.root_of(s, Some{to})),
-          v => Judging.Work.take(Judging.Move.work(s, Replicas.Line.chain(r, Some{b}), to, h)),
+          v => Replicas.Work.take(~Basics.Ask.machine(), Judging.Move.work(s, Replicas.Line.chain(r, Some{b}), to, h)),
           Verdict.take(
             s,
             Judging.Move.work(s, Replicas.Line.chain(r, Some{b}), to, h)
@@ -1274,13 +1274,13 @@ def Verdict.change(
 def Run.logged.grows(
   s: Replicas.Node<Basics.Ask>,
   t: Replicas.Tip,
-  +m: Maybe<&2, Judging.Work>,
+  +m: Maybe<&2, Replicas.Work<Basics.Ask>>,
   e: {Work.after(s, m) == True{}: Bool}
 ) -> {Run.after(s, Stepping.Run.logged(t, m)) == True{}: Bool}:
   match t m:
     case x None{}:
       {==}
-    case Replicas.Tip{c, old, n, os} Some{Judging.Work{s2, l}}:
+    case Replicas.Tip{c, old, n, os} Some{Replicas.Work{s2, l}}:
       e
 
 # Add.grows once the value m of the key is known
@@ -1295,7 +1295,7 @@ def Add.at.grows(
       Run.logged.grows(
         s,
         t,
-        Judging.Work.set(Judging.Work{s, Replicas.Tip.log(t)}, k, x),
+        Replicas.Work.set(~Basics.Ask.machine(), Replicas.Work{s, Replicas.Tip.log(t)}, k, x),
         Set.grows(s, Replicas.Tip.log(t), k, x)
       )
     case y Some{old}:
@@ -1374,16 +1374,16 @@ def Judged.grows(
   +r: Stepping.Run,
   +i: Ledgers.Id,
   +own: Maybe<&2, List<&2, String>>,
-  +m: Maybe<&2, Judging.Verdict>
+  +m: Maybe<&2, Replicas.Verdict<Basics.Ask>>
 ) -> {
   Verdict.after(Stepping.Run.state(r), m) == True{}: Bool
 } -> {Run.after(Stepping.Run.state(r), Stepping.Step.judged(r, i, own, m)) == True{}: Bool}:
   match m:
     case None{}:
       g => {==}
-    case Some{Judging.Verdict.Stale{}}:
+    case Some{Replicas.Verdict.Stale{}}:
       g => Stale.grows(r, i)
-    case Some{Judging.Verdict.Taken{Judging.Work{+s2, +h}}}:
+    case Some{Replicas.Verdict.Taken{Replicas.Work{+s2, +h}}}:
       g => After.trans(
         Stepping.Run.state(r),
         s2,
@@ -2199,7 +2199,7 @@ def Cast.put.grows(
       e => Cast.vote.grows(
         s,
         s2,
-        Judging.State.put(s2, [Replicas.Tip.words(t2)]),
+        Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]),
         w,
         n,
         Ledgers.Act.Vote{Ledgers.Vote{th, qs, Some{Replicas.Tip.hash(t2)}}, from},
@@ -2425,12 +2425,12 @@ def Advance.ran.grows(
         Grows.when(
           s,
           Sealing.Root.same(after, Some{Replicas.Tip.hash(t2)}),
-          Voting.Advance.moved(s, Judging.State.put(s2, [Replicas.Tip.words(t2)]), c, hd, qs),
+          Voting.Advance.moved(s, Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]), c, hd, qs),
           s,
           Advance.moved.grows(
             s,
             s2,
-            Judging.State.put(s2, [Replicas.Tip.words(t2)]),
+            Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]),
             c,
             hd,
             qs,
@@ -2653,7 +2653,7 @@ def Start.head.grows(
 def Firsts.after(
   +s: Replicas.Node<Basics.Ask>,
   os: List<&2, Basics.Owner>,
-  +m: Maybe<&2, Judging.Work>
+  +m: Maybe<&2, Replicas.Work<Basics.Ask>>
 ) -> {
   Work.after(s, m) == True{}: Bool
 } -> {Work.after(s, Sealing.Seal.firsts(os, m)) == True{}: Bool}:
@@ -2666,10 +2666,10 @@ def Firsts.after(
         r,
         Maybe.bind(
           &2,
-          Judging.Work,
-          Judging.Work,
+          Replicas.Work<Basics.Ask>,
+          Replicas.Work<Basics.Ask>,
           m,
-          w => Judging.Work.set(w, Basics.Key.seal(n), Hashes.Hash.code(k, []))
+          w => Replicas.Work.set(~Basics.Ask.machine(), w, Basics.Key.seal(n), Hashes.Hash.code(k, []))
         )
       )(Work.set.after(s, m, Basics.Key.seal(n), Hashes.Hash.code(k, []))(e))
 
@@ -2678,20 +2678,20 @@ def Start.with.grows(
   +s: Replicas.Node<Basics.Ask>,
   +i: Ledgers.Id,
   +os: List<&2, String>,
-  m: Maybe<&2, Judging.Work>
+  m: Maybe<&2, Replicas.Work<Basics.Ask>>
 ) -> {
   Work.after(s, m) == True{}: Bool
 } -> {Reading.Node.grows(s, Sealing.Start.with(s, i, os, m)) == True{}: Bool}:
   match m:
     case None{}:
       e => Grows.refl(s)
-    case Some{Judging.Work{+s2, +c}}:
+    case Some{Replicas.Work{+s2, +c}}:
       e =>
         +t = {Replicas.Tip{c, None{}, 0, os}: Replicas.Tip}
         Start.head.grows(
           s,
           s2,
-          Judging.State.put(s2, [Replicas.Tip.words(t)]),
+          Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t)]),
           Ledgers.Chain{i, None{}},
           Replicas.Head{i, None{}, 0, Some{Replicas.Tip.hash(t)}},
           e
@@ -2707,8 +2707,8 @@ def Start.grows(
     s,
     i,
     Basics.Owner.names(os),
-    Sealing.Seal.firsts(os, Some{Judging.Work{s, None{}}})
-  )(Firsts.after(s, os, Some{Judging.Work{s, None{}}})(Grows.refl(s)))
+    Sealing.Seal.firsts(os, Some{Replicas.Work{s, None{}}})
+  )(Firsts.after(s, os, Some{Replicas.Work{s, None{}}})(Grows.refl(s)))
 
 # a line that a node follows only grows it, once its head m is known
 def Follow.new.grows(

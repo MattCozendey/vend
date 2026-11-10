@@ -4,6 +4,7 @@ import ../shared/ledger.bend as Ledgers
 import ../shared/shared/shared/code.bend as Codes
 import ../shared/shared/shared/hash.bend as Hashes
 import ../shared/shared/shared/trie.bend as Tries
+import ../shared/shared/store.bend as Stores
 import ../shared/tree.bend as Trees
 
 # Replicas
@@ -432,3 +433,68 @@ def Chain.mark(~M: Machine(), s: Node<Machine.Q(M)>, c: Ledgers.Chain, m: String
     Line.get(~M, s, c, Log.mark(m)),
     ws => Read.whole(Ledgers.Id, Ledgers.Id.code.read(ws))
   )
+
+# trees being written: the root, and the node that holds what was written
+type Work<-Q: Data> is Data:
+  Work{state: Node<Q>, root: Maybe<&2, Hashes.Hash>}
+
+# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
+# what a judge says of one change: refuse it as stale, or take it, with the
+# trees that it wrote
+type Verdict<-Q: Data> is Data:
+  Verdict.Stale{}
+  Verdict.Taken{work: Work<Q>}
+# bend-lint: expect-end bend-lint-rules/layout/case@warning
+
+# s with the words ds as data, when it then holds each of them under its hash
+# (none: a slot holds other words). A node reads back what it puts, so what a
+# tree or a rope reads after a put never rests on what the store held before
+def State.put(~M: Machine(), s: Node<Machine.Q(M)>, +ds: List<&2, List<&2, U32>>) -> Maybe<&2, Node<Machine.Q(M)>>:
+  +s2 = State.keep(~M, s, ds)
+  Shared.Maybe.when(
+    Node<Machine.Q(M)>,
+    Stores.Store.holds(~Node<Machine.Q(M)>, ~Store.fetch(~M), s2, ds),
+    u => Some{s2}
+  )
+
+# the work at the root h on the state m
+def Work.on(~M: Machine(), m: Maybe<&2, Node<Machine.Q(M)>>, h: Maybe<&2, Hashes.Hash>) -> Maybe<&2, Work<Machine.Q(M)>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{s2}:
+      Some{Work{s2, h}}
+
+# the work that the new subtree m gives on the state s
+def Work.of(~M: Machine(), s: Node<Machine.Q(M)>, m: Maybe<&2, Trees.Put>) -> Maybe<&2, Work<Machine.Q(M)>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Trees.Put{h, ws}}:
+      Work.on(~M, State.put(~M, s, ws), Some{h})
+
+# w with the key k set to the value x (none: the store lacks a node)
+def Work.set(~M: Machine(), w: Work<Machine.Q(M)>, k: List<&2, U32>, x: List<&2, U32>) -> Maybe<&2, Work<Machine.Q(M)>>:
+  match w:
+    case Work{+s, h}:
+      Work.of(~M, s, Node.set(~M, s, h, k, x))
+
+# w with the words ns as data
+def Work.keep(~M: Machine(), w: Work<Machine.Q(M)>, ns: List<&2, List<&2, U32>>) -> Maybe<&2, Work<Machine.Q(M)>>:
+  match w:
+    case Work{s, h}:
+      Work.on(~M, State.put(~M, s, ns), h)
+
+# the root of w
+def Work.root(~M: Machine(), w: Work<Machine.Q(M)>) -> Maybe<&2, Hashes.Hash>:
+  match w:
+    case Work{s, h}:
+      h
+
+# a verdict that takes the trees of m (none: wait)
+def Work.take(~M: Machine(), m: Maybe<&2, Work<Machine.Q(M)>>) -> Maybe<&2, Verdict<Machine.Q(M)>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{w}:
+      Some{Verdict.Taken{w}}

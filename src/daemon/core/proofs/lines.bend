@@ -804,7 +804,7 @@ def Cast.put.heads(
     case Some{Stepping.Run{s2, +t2}}:
       Cast.vote.heads(
         s,
-        Judging.State.put(s2, [Replicas.Tip.words(t2)]),
+        Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]),
         w,
         n,
         Ledgers.Act.Vote{Ledgers.Vote{th, qs, Some{Replicas.Tip.hash(t2)}}, from}
@@ -1088,7 +1088,7 @@ def Put.holds(
   +ds: List<&2, List<&2, U32>>,
   -s3: Replicas.Node<Basics.Ask>
 ) -> {
-  Judging.State.put(s2, ds) == Some{s3}: Maybe<&2, Replicas.Node<Basics.Ask>>
+  Replicas.State.put(~Basics.Ask.machine(), s2, ds) == Some{s3}: Maybe<&2, Replicas.Node<Basics.Ask>>
 } -> {Stores.Store.holds(~Replicas.Node<Basics.Ask>, ~Replicas.Store.fetch(~Basics.Ask.machine()), s3, ds) == True{}: Bool}:
   Put.holds.if(
     s2,
@@ -1103,7 +1103,7 @@ def Put.grew(
   s2: Replicas.Node<Basics.Ask>,
   ds: List<&2, List<&2, U32>>,
   -s3: Replicas.Node<Basics.Ask>,
-  e: {Judging.State.put(s2, ds) == Some{s3}: Maybe<&2, Replicas.Node<Basics.Ask>>}
+  e: {Replicas.State.put(~Basics.Ask.machine(), s2, ds) == Some{s3}: Maybe<&2, Replicas.Node<Basics.Ask>>}
 ) -> {Reading.Node.grows(s2, s3) == True{}: Bool}:
   %e: {ProofTrees.State.after(s2, _) == True{}: Bool}
   ProofTrees.Put.grows(s2, ds)
@@ -1114,7 +1114,7 @@ def Tip.put.at(
   +t2: Replicas.Tip,
   +s3: Replicas.Node<Basics.Ask>
 ) -> {
-  Judging.State.put(s2, [Replicas.Tip.words(t2)]) == Some{s3}: Maybe<&2, Replicas.Node<Basics.Ask>>
+  Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]) == Some{s3}: Maybe<&2, Replicas.Node<Basics.Ask>>
 } -> {Replicas.Tip.at(~Basics.Ask.machine(), s3, Replicas.Tip.hash(t2)) == Some{t2}: Maybe<&2, Replicas.Tip>}:
   e =>
     %Equal.sym(
@@ -1323,7 +1323,7 @@ def Advance.moved.kept(
     Replicas.Node.get(~Basics.Ask.machine(), s, Replicas.Tip.log(t), k) == Some{v}: Maybe<&2, List<&2, U32>>
   } -> {Replicas.Node.get(~Basics.Ask.machine(), s2, Replicas.Tip.log(t2), k) == Some{v}: Maybe<&2, List<&2, U32>>}
 ) -> {
-  Judging.State.put(s2, [Replicas.Tip.words(t2)]) == m: Maybe<&2, Replicas.Node<Basics.Ask>>
+  Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]) == m: Maybe<&2, Replicas.Node<Basics.Ask>>
 } -> Spec.Node.Keeps(
   s,
   Voting.Advance.moved(s, m, c, Replicas.Head{r, br, nx, Some{Replicas.Tip.hash(t2)}}, qs)
@@ -1391,7 +1391,7 @@ def Advance.ran.kept(
         s,
         Voting.Advance.moved(
           s,
-          Judging.State.put(s2, [Replicas.Tip.words(t2)]),
+          Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]),
           c,
           Replicas.Head{r, br, U32.inc(next), Some{Replicas.Tip.hash(t2)}},
           qs
@@ -1400,7 +1400,7 @@ def Advance.ran.kept(
         Advance.moved.kept(
           s,
           s2,
-          Judging.State.put(s2, [Replicas.Tip.words(t2)]),
+          Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]),
           c,
           r,
           br,
@@ -1734,20 +1734,20 @@ def Start.with.kept(
   +s: Replicas.Node<Basics.Ask>,
   +i: Ledgers.Id,
   +os: List<&2, String>,
-  m: Maybe<&2, Judging.Work>
+  m: Maybe<&2, Replicas.Work<Basics.Ask>>
 ) -> {
   ProofTrees.Work.after(s, m) == True{}: Bool
 } -> Spec.Node.Keeps(s, Sealing.Start.with(s, i, os, m)):
   match m:
     case None{}:
       e => Kept.refl(s)
-    case Some{Judging.Work{+s2, +c}}:
+    case Some{Replicas.Work{+s2, +c}}:
       e =>
         +t = {Replicas.Tip{c, None{}, 0, os}: Replicas.Tip}
         Start.head.kept(
           s,
           s2,
-          Judging.State.put(s2, [Replicas.Tip.words(t)]),
+          Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t)]),
           Ledgers.Chain{i, None{}},
           Replicas.Head{i, None{}, 0, Some{Replicas.Tip.hash(t)}},
           e
@@ -1763,8 +1763,8 @@ def Start.kept(
     s,
     i,
     Basics.Owner.names(os),
-    Sealing.Seal.firsts(os, Some{Judging.Work{s, None{}}})
-  )(ProofTrees.Firsts.after(s, os, Some{Judging.Work{s, None{}}})(ProofTrees.Grows.refl(s)))
+    Sealing.Seal.firsts(os, Some{Replicas.Work{s, None{}}})
+  )(ProofTrees.Firsts.after(s, os, Some{Replicas.Work{s, None{}}})(ProofTrees.Grows.refl(s)))
 
 # a line that a node follows keeps the logs, once its head m is known
 def Follow.new.kept(
