@@ -3093,6 +3093,29 @@ def Ballots.of(
     case Con{c, rest}:
       Ballots.of(~mach, rest)
 
+# Node.take once the cells new that s lacks of t are known: a sync reads them
+# once
+def Take.of(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  t: Ledgers.State(Machine.Q(mach)),
+  new: List<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+) -> Node<Machine.Q(mach)>:
+  +sent = Node.reads(~mach, t)
+  Sealed.take(
+    ~mach,
+    ~kern,
+    Ballots.of(~mach, new),
+    Take.asks(
+      ~mach,
+      ~kern,
+      Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, sent),
+      State.ledger(~mach, s),
+      State.led(~mach, s, Ledgers.State.take(~Machine.Q(mach), State.ledger(~mach, s), sent))
+    )
+  )
+
 # what a holder of s keeps of t, which another node sent. It checks everything
 # before it keeps it: a request and data go to the slot that their own content
 # names (Take.clean; data is read only under its hash), in the slots where s
@@ -3106,23 +3129,14 @@ def Node.take(
   +s: Node<Machine.Q(mach)>,
   +t: Ledgers.State(Machine.Q(mach))
 ) -> Node<Machine.Q(mach)>:
-  +sent = Node.reads(~mach, t)
-  Sealed.take(
+  Take.of(
     ~mach,
     ~kern,
-    Ballots.of(
-      ~mach,
-      Tries.Trie.values(
-        Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-        Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
-      )
-    ),
-    Take.asks(
-      ~mach,
-      ~kern,
-      Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, sent),
-      State.ledger(~mach, s),
-      State.led(~mach, s, Ledgers.State.take(~Machine.Q(mach), State.ledger(~mach, s), sent))
+    s,
+    t,
+    Tries.Trie.values(
+      Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+      Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
     )
   )
 
@@ -3192,27 +3206,39 @@ def Lines.new(
     case Con{c, r}:
       Lines.new(~mach, r, rest)
 
-# the lines that a sync of t into s may move, each once: those of the new
-# requests and ballots of t, and those with waiting requests (new data can let
-# them run). So a sync costs about what it brings, not every line of the node
-def Sync.lines(
+# Sync.lines once the cells new that s lacks of what was sent are known
+def Lines.of(
   ~mach: Machine(),
-  s: Node<Machine.Q(mach)>,
   +s1: Node<Machine.Q(mach)>,
-  t: Ledgers.State(Machine.Q(mach))
+  new: List<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
 ) -> List<&2, Ledgers.Chain>:
   Tries.Trie.unique(
     ~Ledgers.Chain,
     ~Ledgers.Chain.key,
     Lines.new(
       ~mach,
-      Tries.Trie.values(
-        Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-        Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
-      ),
+      new,
       Lines.waits(~mach, s1, Tries.Trie.values(List<&2, Ledgers.Id>, State.waiting(~mach, s1)))
     ),
     Tries.Trie.new(Unit)
+  )
+
+# the lines that a sync of t into s may move, each once: those of the new
+# requests and ballots of t, and those with waiting requests (new data can let
+# them run). So a sync costs about what it brings, not every line of the node
+def Sync.lines(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  s1: Node<Machine.Q(mach)>,
+  t: Ledgers.State(Machine.Q(mach))
+) -> List<&2, Ledgers.Chain>:
+  Lines.of(
+    ~mach,
+    s1,
+    Tries.Trie.values(
+      Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+      Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
+    )
   )
 
 # the node b holds every entry that the node a holds: its ledger only grew
@@ -4558,15 +4584,13 @@ def Node.sync(
   +s: Node<Machine.Q(mach)>,
   +t: Ledgers.State(Machine.Q(mach))
 ) -> Node<Machine.Q(mach)>:
-  +s1 = Node.take(~mach, ~kern, s, t)
-  +cs = Sync.lines(~mach, s, s1, t)
-  +bs = Ballots.of(
-    ~mach,
-    Tries.Trie.values(
-      Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-      Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
-    )
+  +new = Tries.Trie.values(
+    Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+    Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
   )
+  +s1 = Take.of(~mach, ~kern, s, t, new)
+  +cs = Lines.of(~mach, s1, new)
+  +bs = Ballots.of(~mach, new)
   +k = List.length(&2, Ledgers.Ballot, bs)
   Node.adopts(
     ~mach,
