@@ -1132,7 +1132,7 @@ def Branch.ready.grows(
   i: Ledgers.Id,
   st: Ledgers.Id,
   +b: String,
-  at: Maybe<&2, Ledgers.Id>,
+  +at: Maybe<&2, Ledgers.Id>,
   m: Maybe<&2, Bool>
 ) -> {Run.after(Spec.Run.state(r), Spec.Branch.ready(r, i, st, b, at, m)) == True{}: Bool}:
   match m:
@@ -1141,14 +1141,34 @@ def Branch.ready.grows(
     case Some{False{}}:
       Stale.grows(r, i)
     case Some{True{}}:
-      Branch.made.grows(
-        r,
-        i,
-        b,
-        Spec.Make.first(
-          Spec.Make.branch(Spec.Run.state(r), Spec.Line.chain(st, Some{b}), at),
-          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
-        )
+      After.when(
+        Spec.Run.state(r),
+        Trees.Tree.whole(
+          ~Spec.State(),
+          ~Spec.Store.fetch,
+          Spec.Run.state(r),
+          Spec.Node.root_of(Spec.Run.state(r), at)
+        ),
+        Spec.Branch.made(
+          r,
+          i,
+          b,
+          Spec.Make.first(
+            Spec.Make.branch(Spec.Run.state(r), Spec.Line.chain(st, Some{b}), at),
+            Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+          )
+        ),
+        None{},
+        Branch.made.grows(
+          r,
+          i,
+          b,
+          Spec.Make.first(
+            Spec.Make.branch(Spec.Run.state(r), Spec.Line.chain(st, Some{b}), at),
+            Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+          )
+        ),
+        {==}
       )
 
 # a request for a branch only grows a run's node
@@ -3876,7 +3896,7 @@ def Branch.ready.kept(
   i: Ledgers.Id,
   st: Ledgers.Id,
   +b: String,
-  at: Maybe<&2, Ledgers.Id>,
+  +at: Maybe<&2, Ledgers.Id>,
   m: Maybe<&2, Bool>,
   k2: List<&2, U32>,
   v: List<&2, U32>,
@@ -3889,18 +3909,40 @@ def Branch.ready.kept(
     case Some{False{}}:
       Add.kept(r, Spec.Log.out(i), Spec.Out.words(Spec.Out.Stale{}), k2, v)
     case Some{True{}}:
-      Branch.made.kept(
-        r,
-        i,
-        b,
-        Spec.Make.first(
-          Spec.Make.branch(Spec.Run.state(r), Spec.Line.chain(st, Some{b}), at),
-          Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
-        ),
+      Keeps.when(
         k2,
         v,
-        n0,
-        n1
+        r,
+        Trees.Tree.whole(
+          ~Spec.State(),
+          ~Spec.Store.fetch,
+          Spec.Run.state(r),
+          Spec.Node.root_of(Spec.Run.state(r), at)
+        ),
+        Spec.Branch.made(
+          r,
+          i,
+          b,
+          Spec.Make.first(
+            Spec.Make.branch(Spec.Run.state(r), Spec.Line.chain(st, Some{b}), at),
+            Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+          )
+        ),
+        None{},
+        Branch.made.kept(
+          r,
+          i,
+          b,
+          Spec.Make.first(
+            Spec.Make.branch(Spec.Run.state(r), Spec.Line.chain(st, Some{b}), at),
+            Spec.Line.owners(Spec.Run.state(r), Spec.Run.tip(r))
+          ),
+          k2,
+          v,
+          n0,
+          n1
+        ),
+        hr => Unit{}
       )
 
 # a request for a branch keeps each key of a run's log, other than the owners

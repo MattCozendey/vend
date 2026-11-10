@@ -488,6 +488,60 @@ def Tree.list(
 ) -> List<&2, Binding>:
   Tree.list.root(~S, ~fetch, s, Tree.part(~S, ~fetch, s, h))
 
+# bend-lint: expect-begin bend-lint-rules/language/decreasing_call@warning -- g is f itself, bound by the match; the checker accepts these calls
+# the store holds each node under the parts ps of a branch, whose first node
+# is m; f levels deep at most (deeper: it cannot tell, so no)
+def Tree.whole.go(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  ps: List<&2, Maybe<&2, Hashes.Hash>>,
+  m: Maybe<&2, Node>
+) -> Bool:
+  match f ps m:
+    case g Nil{} w:
+      True{}
+    case g Con{y, r} None{}:
+      False{}
+    case g Con{y, +r} Some{Node.Empty{}}:
+      Tree.whole.go(~S, ~fetch, g, s, r, Tree.first(~S, ~fetch, s, r))
+    case g Con{y, +r} Some{Node.Leaf{k, v}}:
+      Tree.whole.go(~S, ~fetch, g, s, r, Tree.first(~S, ~fetch, s, r))
+    case 0n Con{y, r} Some{Node.Branch{qs}}:
+      False{}
+    case 1n+(+p) Con{y, +r} Some{Node.Branch{+qs}}:
+      List.all.if(
+        u => Tree.whole.go(~S, ~fetch, 1n+p, s, r, Tree.first(~S, ~fetch, s, r)),
+        Tree.whole.go(~S, ~fetch, p, s, qs, Tree.first(~S, ~fetch, s, qs))
+      )
+# bend-lint: expect-end bend-lint-rules/language/decreasing_call@warning
+
+# Tree.whole once the root node m is known
+def Tree.whole.root(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  m: Maybe<&2, Node>
+) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{Node.Branch{+qs}}:
+      Tree.whole.go(~S, ~fetch, 63n, s, qs, Tree.first(~S, ~fetch, s, qs))
+    case Some{w}:
+      True{}
+
+# the store s holds each node of the tree whose root is h: a walk of the tree
+# (Tree.list, Tree.diff) then sees all of it, not a part
+def Tree.whole(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  h: Maybe<&2, Hashes.Hash>
+) -> Bool:
+  Tree.whole.root(~S, ~fetch, s, Tree.part(~S, ~fetch, s, h))
+
 # Differences
 # -----------
 # Two trees with the same root hold the same, so a walk of both skips each

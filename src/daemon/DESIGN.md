@@ -50,7 +50,9 @@ Delete each open item when the code makes it true.
   node's chain and the key of the chain signs it (`Seal.accept`). A ballot that it cannot check
   yet is not kept; it comes again with the next sync.
 - **Missing is not absent** (`Tree.look`, `Node.find`): a judge reads with `Node.find`. It refuses
-  only on what it knows, and waits for a node that it lacks. A look gives the hash of that node
+  only on what it knows, and waits for a node that it lacks. A merge, a move and a new branch
+  walk trees (`Tree.list`, `Tree.diff`); they wait until the node holds the whole of each
+  (`Tree.whole`), so they never act on a part of a tree. A look gives the hash of that node
   (`Node.lacks`); another node serves the data of a hash (`Node.serve`).
 - **Sync** steps only the lines that it may move: those of the new requests and ballots, and
   those with waiting requests (`Sync.lines`).
@@ -145,10 +147,8 @@ Design (each needs a decision or new work; none is a proof detail):
 - **The rules of rounds are premises.** A node's own ballots follow them by construction
   (`Plan.lead`, `Plan.follow`, `Pass.to`, `Cast.round`), with no law yet. A node keeps a vote of
   another node without a check of `Allowed`; it only copies a vote that is allowed.
-- **Missing is not absent, the rest.** The write, resolve, merge and Own judges wait. Still to
-  do: the version vector, `Tree.list` and `Tree.diff` (they walk and give no sign of a node that
-  they lack), so a merge or a move can still act on a part of a tree. Then the law: a merge
-  keeps a one-sided change as a whole (`Merge.work`, not only one pick).
+- **A merge as a whole.** `Pick.merge_theirs` and `Pick.merge_ours` are for one resource. Not a
+  law yet: that `Merge.work` keeps each one-sided change of the whole tree.
 - **Walks that are left:** `Node.versions` lists every version (use a range); `Node.log`,
   `Touch.versions`, `Version.keys`, `Node.affects`, `Node.impact`, `Node.notices` read every
   version of every branch. Target: notices are made when a head moves, from the diff of the two

@@ -2233,6 +2233,23 @@ def Own.change(
     u => Work.take(Work.set(Work{s, h, []}, Key.owner(), Codes.Code.text(g, [])))
   )
 
+# the node s holds each node of the trees whose roots are a and b
+def Whole.both(+s: State(), a: Maybe<&2, Hashes.Hash>, b: Maybe<&2, Hashes.Hash>) -> Bool:
+  List.all.if(
+    u => Trees.Tree.whole(~State(), ~Store.fetch, s, b),
+    Trees.Tree.whole(~State(), ~Store.fetch, s, a)
+  )
+
+# k when the node holds the whole of the trees that a walk reads (b), else
+# wait: a merge or a move acts on a whole tree, never on the part that the
+# node holds
+def Judge.whole(b: Bool, k: Unit -> Maybe<&2, Verdict>) -> Maybe<&2, Verdict>:
+  match b:
+    case True{}:
+      k(Unit{})
+    case False{}:
+      None{}
+
 # the verdict on the change c of the line l of the store r, at the content h,
 # when the owners of the line are os
 def Judge.change(
@@ -2258,10 +2275,20 @@ def Judge.change(
       Judge.then(
         Judge.ready(s, from),
         h,
-        u => Work.take(Merge.work(s, Line.chain(r, Some{b}), from, h))
+        u => Judge.whole(
+          Whole.both(s, h, Node.root_of(s, Some{from})),
+          v => Work.take(Merge.work(s, Line.chain(r, Some{b}), from, h))
+        )
       )
     case Some{+b} Change.Move{+to}:
-      Judge.then(Judge.ready(s, to), h, u => Work.take(Move.work(s, Line.chain(r, Some{b}), to, h)))
+      Judge.then(
+        Judge.ready(s, to),
+        h,
+        u => Judge.whole(
+          Whole.both(s, h, Node.root_of(s, Some{to})),
+          v => Work.take(Move.work(s, Line.chain(r, Some{b}), to, h))
+        )
+      )
     case w c3:
       Judge.refuse(h)
 
@@ -2455,7 +2482,7 @@ def Branch.ready(
   i: Ledgers.Id,
   st: Ledgers.Id,
   +b: String,
-  at: Maybe<&2, Ledgers.Id>,
+  +at: Maybe<&2, Ledgers.Id>,
   m: Maybe<&2, Bool>
 ) -> Maybe<&2, Run>:
   match m:
@@ -2464,14 +2491,19 @@ def Branch.ready(
     case Some{False{}}:
       Step.stale(r, i)
     case Some{True{}}:
-      Branch.made(
-        r,
-        i,
-        b,
-        Make.first(
-          Make.branch(Run.state(r), Line.chain(st, Some{b}), at),
-          Line.owners(Run.state(r), Run.tip(r))
-        )
+      Shared.Bool.when(
+        Maybe<&2, Run>,
+        Trees.Tree.whole(~State(), ~Store.fetch, Run.state(r), Node.root_of(Run.state(r), at)),
+        u => Branch.made(
+          r,
+          i,
+          b,
+          Make.first(
+            Make.branch(Run.state(r), Line.chain(st, Some{b}), at),
+            Line.owners(Run.state(r), Run.tip(r))
+          )
+        ),
+        u => None{}
       )
 
 # Step.branch once what the log of the store holds for the branch is known
