@@ -21416,7 +21416,7 @@ def Frames.keep(
     )
   )
 
-# the work m, if any, is on a node that grew from s
+# the work m, if any, is on a node with the ballots of s
 def Work.framed(
   ~mach: Machine(),
   s: Node<Machine.Q(mach)>,
@@ -21428,7 +21428,7 @@ def Work.framed(
     case Some{Work{s2, h}}:
       Node.same_ballots(~mach, s, s2)
 
-# the node m, if any, grew from s
+# the node m, if any, has the ballots of s
 def State.framed(
   ~mach: Machine(),
   s: Node<Machine.Q(mach)>,
@@ -21516,7 +21516,7 @@ def Put.frames(
     {==}
   )
 
-# a work on a node that grew
+# a work on a node with the same ballots
 def Work.on.frames(
   ~mach: Machine(),
   s: Node<Machine.Q(mach)>,
@@ -21531,7 +21531,7 @@ def Work.on.frames(
     case Some{s2}:
       e => e
 
-# a new subtree only keeps its ballots a node
+# a new subtree keeps the ballots of a node
 def Work.of.frames(
   ~mach: Machine(),
   +s: Node<Machine.Q(mach)>,
@@ -21543,7 +21543,7 @@ def Work.of.frames(
     case Some{Trees.Put{h, +ws}}:
       Work.on.frames(~mach, s, State.put(~mach, s, ws), Some{h})(Put.frames(~mach, s, ws))
 
-# a key set in a tree only keeps its ballots a node
+# a key set in a tree keeps the ballots of a node
 def Set.frames(
   ~mach: Machine(),
   +s: Node<Machine.Q(mach)>,
@@ -21553,7 +21553,7 @@ def Set.frames(
 ) -> {Work.framed(~mach, s, Work.set(~mach, Work{s, h}, k, x)) == True{}: Bool}:
   Work.of.frames(~mach, s, Node.set(~mach, s, h, k, x))
 
-# the run m, if any, is on a node that grew from s
+# the run m, if any, is on a node with the ballots of s
 def Run.framed(
   ~mach: Machine(),
   s: Node<Machine.Q(mach)>,
@@ -21574,8 +21574,8 @@ def Framed.self(
     case Run{s, t}:
       Frames.refl(~mach, s)
 
-# a run on a node that grew from b is on one that grew from a, when b grew
-# from a
+# a run on a node with the ballots of b is on one with the ballots of a, when
+# b has the ballots of a
 def Framed.trans(
   ~mach: Machine(),
   a: Node<Machine.Q(mach)>,
@@ -21590,7 +21590,7 @@ def Framed.trans(
     case Some{Run{s2, t}}:
       Frames.trans(~mach, a, b, s2)(e1)(e2)
 
-# a run, then a run from it, is on a node that grew
+# a run, then a run from it, is on a node with the same ballots
 def Framed.bind(
   ~mach: Machine(),
   s: Node<Machine.Q(mach)>,
@@ -21612,8 +21612,8 @@ def Framed.bind(
     case Some{Run{+s2, +t}}:
       Framed.trans(~mach, s, s2, f(Run{s2, t}), hm, hf(Run{s2, t}))
 
-# a work on a node that grew from b is on one that grew from a, when b grew
-# from a
+# a work on a node with the ballots of b is on one with the ballots of a, when
+# b has the ballots of a
 def Work.frames.trans(
   ~mach: Machine(),
   a: Node<Machine.Q(mach)>,
@@ -21628,7 +21628,8 @@ def Work.frames.trans(
     case Some{Work{s3, h}}:
       Frames.trans(~mach, a, b, s3)(e1)(e2)
 
-# a key set in a work on a node that grew from s is on a node that grew from s
+# a key set in a work on a node with the ballots of s is on a node with the
+# ballots of s
 def Work.set.frames(
   ~mach: Machine(),
   s: Node<Machine.Q(mach)>,
@@ -21658,7 +21659,7 @@ def Work.set.frames(
         Set.frames(~mach, s2, h, k, x)
       )
 
-# the run m, if any, else r, is on a node that grew from that of r
+# the run m, if any, else r, is on a node with the ballots of the node of r
 def Default.run.frames(
   ~mach: Machine(),
   r: Run<Machine.Q(mach)>,
@@ -21679,7 +21680,8 @@ def Default.run.frames(
     case Some{Run{s2, t}}:
       e => e
 
-# a run that is kept when b holds is on a node that grew, when it is
+# a run that is kept when b holds is on a node with the same ballots, when it
+# is
 def Fit.when.frames(
   ~mach: Machine(),
   -s: Node<Machine.Q(mach)>,
@@ -21695,7 +21697,7 @@ def Fit.when.frames(
     case False{}:
       {==}
 
-# a run that fits a tip is on a node that grew, when the run is
+# a run that fits a tip is on a node with the same ballots, when the run is
 def Plan.fit.frames(
   ~mach: Machine(),
   -s: Node<Machine.Q(mach)>,
@@ -21710,7 +21712,7 @@ def Plan.fit.frames(
     case Some{Run{s2, t2}}:
       e => Fit.when.frames(~mach, s, Root.same(after, Some{Tip.hash(t2)}), Run{s2, t2}, e)
 
-# the run of one of two plans, each on a node that grew
+# the run of one of two plans, each on a node with the same ballots
 def Plan.when.frames(
   ~mach: Machine(),
   -s: Node<Machine.Q(mach)>,
@@ -21733,7 +21735,7 @@ def Plan.when.frames(
     case False{}:
       hy
 
-# a node with the ledger of a node that grew from a grew from a
+# a node with the ledger of a node with the ballots of a has the ballots of a
 def Frames.to(
   ~mach: Machine(),
   a: Node<Machine.Q(mach)>,
@@ -21758,7 +21760,7 @@ def Frames.to(
   }
   g
 
-# one of two nodes, each grown from s
+# one of two nodes, each with the ballots of s
 def Frames.when(
   ~mach: Machine(),
   s: Node<Machine.Q(mach)>,
@@ -21781,7 +21783,7 @@ def Frames.when(
     case False{}:
       hy
 
-# a node with the ledger of a node that grew from it grew
+# a node with the ledger of a node with its ballots keeps its ballots
 def Frames.back(
   ~mach: Machine(),
   s: Node<Machine.Q(mach)>,
@@ -21790,7 +21792,8 @@ def Frames.back(
 ) -> {Node.same_ballots(~mach, s, State.led(~mach, s, State.ledger(~mach, s3))) == True{}: Bool}:
   Frames.led(~mach, s, State.ledger(~mach, s3), g)
 
-# a head moved on a node that grew from a, which grew from s, only keeps its ballots s
+# a head moved on a node with the ballots of a, which has those of s, keeps
+# the ballots of s
 def Advance.moved.frames(
   ~mach: Machine(),
   +s: Node<Machine.Q(mach)>,
@@ -21818,7 +21821,7 @@ def Advance.moved.frames(
           Frames.back(~mach, s, s3, Frames.trans(~mach, s, a, s3)(g)(e))
         )
 
-# a checked step only keeps its ballots a node
+# a checked step keeps the ballots of a node
 def Advance.ran.frames(
   ~mach: Machine(),
   +s: Node<Machine.Q(mach)>,
@@ -21859,7 +21862,8 @@ def Advance.ran.frames(
           Frames.refl(~mach, s)
         )
 
-# a first head only keeps its ballots a node, once the head m of its line is known
+# a first head keeps the ballots of a node, once the head m of its line is
+# known
 def First.at.frames(
   ~mach: Machine(),
   +s: Node<Machine.Q(mach)>,
@@ -21889,7 +21893,8 @@ def First.at.frames(
         Frames.refl(~mach, s)
       )
 
-# a first head on a node that grew from a, which grew from s, only keeps its ballots s
+# a first head on a node with the ballots of a, which has those of s, keeps
+# the ballots of s
 def Start.head.frames(
   ~mach: Machine(),
   +s: Node<Machine.Q(mach)>,
@@ -21916,7 +21921,7 @@ def Start.head.frames(
           Frames.back(~mach, s, s3, Frames.trans(~mach, s, a, s3)(g)(e))
         )(First.at.frames(~mach, x, c, h, Node.head_of(~mach, x, c)))
 
-# Start.keeps its ballots once the content m of the store is known
+# Start.frames once the content m of the store is known
 def Start.with.frames(
   ~mach: Machine(),
   s: Node<Machine.Q(mach)>,
@@ -21942,7 +21947,7 @@ def Start.with.frames(
           e
         )(Put.frames(~mach, s2, [Tip.words(t)]))
 
-# a line that a node follows only keeps its ballots it, once its head m is known
+# a line that a node follows keeps its ballots, once its head m is known
 def Follow.new.frames(
   ~mach: Machine(),
   +s: Node<Machine.Q(mach)>,
@@ -21963,7 +21968,7 @@ def Follow.new.frames(
         Frames.refl(~mach, s)
       )
 
-# the first keys of a store are on a node that grew
+# the first keys of a store are on a node with the same ballots
 def Firsts.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -21991,7 +21996,7 @@ def Firsts.frames(
         )
       )(Work.set.frames(~mach, s, m, Machine.seal(mach)(n), Hashes.Hash.code(k, []))(e))
 
-# a store that starts only keeps its ballots a node
+# a store that starts keeps the ballots of a node
 def Start.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22007,7 +22012,7 @@ def Start.frames(
     Seal.firsts(~mach, ~kern, os, Some{Work{s, None{}}})
   )(Firsts.frames(~mach, ~kern, s, os, Some{Work{s, None{}}})(Frames.refl(~mach, s)))
 
-# a new request only keeps its ballots a node
+# a new request keeps the ballots of a node
 def Arrive.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22029,7 +22034,7 @@ def Arrive.frames(
         Follow.new.frames(~mach, s, r, l, Node.head_of(~mach, s, Line.chain(r, l)))
       )
 
-# the new requests among cells only grow a node
+# the new requests among cells keep the ballots of a node
 def Take.asks.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22080,7 +22085,8 @@ def Take.asks.frames(
     case Con{Cells.Many{}, rest}:
       Take.asks.frames(~mach, ~kern, rest, old, s)
 
-# the ledger l2 when b holds, else l, grew from l, when l2 did where b holds
+# the ledger l2 when b holds, else l, has the ballots of l, when l2 has them
+# where b holds
 def Ledger.frames.if(
   ~mach: Machine(),
   l: Ledgers.State(Machine.Q(mach)),
@@ -22109,7 +22115,7 @@ def Ledger.frames.if(
     case False{}:
       Ledgers.State.same_ballots_refl(~Machine.Q(mach), ~Machine.same(mach), ~Machine.laws(mach), l)
 
-# one of two ledgers, each grown from l
+# one of two ledgers, each with the ballots of l
 def Ledger.frames.when(
   ~mach: Machine(),
   -l: Ledgers.State(Machine.Q(mach)),
@@ -22186,7 +22192,7 @@ def Lie.keep.frames(
     )
   )
 
-# the lie that a ballot makes with one of some signings only keeps its ballots a ledger
+# the lie that a ballot makes with one of some signings keeps the ballots of a ledger
 def Lie.against.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22218,7 +22224,7 @@ def Lie.against.frames(
         Lie.against(~mach, ~kern, s, r, b, l1)
       )(Lie.keep.frames(~mach, ~kern, s, x, l))(Lie.against.frames(~mach, ~kern, s, r, b, l1))
 
-# the lie that a ballot shows only keeps its ballots a ledger
+# the lie that a ballot shows keeps the ballots of a ledger
 def Lie.detect.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22248,7 +22254,7 @@ def Lie.detect.frames(
     Lie.against.frames(~mach, ~kern, s, xs, b, l)
   )
 
-# the lies that cells bring or show only grow a ledger
+# the lies that cells bring or show keep the ballots of a ledger
 def Lies.into.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22294,7 +22300,7 @@ def Lies.into.frames(
     case Con{Cells.Many{}, rest}:
       Lies.into.frames(~mach, ~kern, s, rest, l)
 
-# the lies that cells bring or show only grow a node
+# the lies that cells bring or show keep the ballots of a node
 def Lies.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22364,7 +22370,7 @@ def Asked.frames(
     case Some{Ledgers.Asked{t, q}}:
       Data.frames(~mach, Run.state(~mach, r), Kernel.change(mach, kern)(r)(c)(i)(q))
 
-# a request that the log holds or not only keeps its ballots a run's node
+# a request that the log holds or not keeps the ballots of a run's node
 def Fresh.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22379,7 +22385,7 @@ def Fresh.frames(
     case None{}:
       Asked.frames(~mach, ~kern, r, c, i, Node.asked(~mach, Run.state(~mach, r), i))
 
-# one request of a step only keeps its ballots a run's node
+# one request of a step keeps the ballots of a run's node
 def One.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22389,7 +22395,7 @@ def One.frames(
 ) -> {Run.framed(~mach, Run.state(~mach, r), Step.one(~mach, ~kern, r, c, i)) == True{}: Bool}:
   Fresh.frames(~mach, ~kern, r, c, i, Line.out(~mach, Run.state(~mach, r), Run.tip(~mach, r), i))
 
-# the requests of a step only grow a run's node
+# the requests of a step keep the ballots of a run's node
 def All.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22428,7 +22434,8 @@ def All.frames(
         )
       )
 
-# a step only keeps its ballots a node: its run is on a node that keeps every entry
+# a step keeps the ballots of a node: its run is on a node with the same
+# ballots
 def Run.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22439,7 +22446,7 @@ def Run.frames(
 ) -> {Run.framed(~mach, s, Step.run(~mach, ~kern, s, c, t, qs)) == True{}: Bool}:
   All.frames(~mach, ~kern, s, c, qs, Some{Run{s, t}})(Frames.refl(~mach, s))
 
-# the run of the requests that can run is on a node that grew
+# the run of the requests that can run is on a node with the same ballots
 def Some.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22488,7 +22495,8 @@ def Some.frames(
         Some.frames(~mach, ~kern, c, rest, r2)
       )
 
-# the run of the plan of an owner that proposes freely is on a node that grew
+# the run of the plan of an owner that proposes freely is on a node with the
+# same ballots
 def Plan.own.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22499,8 +22507,8 @@ def Plan.own.frames(
 ) -> {Run.framed(~mach, s, Plan.run(~mach, Plan.own(~mach, ~kern, s, c, t, from))) == True{}: Bool}:
   Some.frames(~mach, ~kern, c, Cast.mine(~mach, ~kern, s, Wait.order(~mach, s, c)), Run{s, t})
 
-# the run of the plan for a step that another ballot names is on a node that
-# grew
+# the run of the plan for a step that another ballot names is on a node with
+# the same ballots
 def Plan.copy.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22537,7 +22545,8 @@ def Plan.copy.frames(
         {==}
       )
 
-# the run of the plan of the proposer of a later round is on a node that grew
+# the run of the plan of the proposer of a later round is on a node with the
+# same ballots
 def Plan.later.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22605,7 +22614,7 @@ def Plan.allowed.frames(
         {==}
       )
 
-# the run of the plan of the proposer is on a node that grew
+# the run of the plan of the proposer is on a node with the same ballots
 def Plan.lead.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22644,7 +22653,7 @@ def Plan.lead.frames(
     )
   )
 
-# the run of the plan of another owner is on a node that grew
+# the run of the plan of another owner is on a node with the same ballots
 def Plan.follow.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22679,7 +22688,7 @@ def Plan.follow.frames(
     case None{}:
       {==}
 
-# the run of what a node casts for is on a node that grew
+# the run of what a node casts for is on a node with the same ballots
 def Plan.of.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22713,7 +22722,7 @@ def Plan.of.frames(
         Plan.follow.frames(~mach, ~kern, s, c, w, t, th, os, Cast.act(~mach, s, w, p))
       )
 
-# Node.advance only keeps its ballots a node, once the decided step m is known
+# Node.advance keeps the ballots of a node, once the decided step m is known
 def Advance.step.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22747,7 +22756,7 @@ def Advance.step.frames(
     case Head{r, b, next, th} None{}:
       Frames.refl(~mach, s)
 
-# Node.advance only keeps its ballots a node, at the head h whose tip is m
+# Node.advance keeps the ballots of a node, at the head h whose tip is m
 def Advance.at.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22777,7 +22786,7 @@ def Advance.at.frames(
         )
       )
 
-# Advances.keeps its ballots once the head m is known
+# Advances.frames once the head m is known
 def Advances.at.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -22811,7 +22820,7 @@ def Advances.at.frames(
         )(Advances.at.frames(~mach, ~kern, p, s1, c, m1))
       )
 
-# a head that moves over each decided step only keeps its ballots a node
+# a head that moves over each decided step keeps the ballots of a node
 def Advances.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -23321,7 +23330,7 @@ def Follow.step.honest(
     case Some{s2}:
       e => Honest.trans(~mach, s, s2, k(s2))(e)(ih(s2))
 
-# the ballots that a chain leads to only grow a node
+# the ballots that a chain leads to keep a node honest
 def Follow.honest(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -23346,7 +23355,7 @@ def Follow.honest(
         +s2 => Follow.honest(~mach, ~kern, g, s2, p, r, n, Pending.next(~mach, ~kern, s2, p, r, n))
       )(Accept.at.honest(~mach, s, b, Seal.chain(~mach, ~kern, s, Ballot.store(b), Ballot.node(b))))
 
-# the ballots that the chains of some ballots lead to only grow a node
+# the ballots that the chains of some ballots lead to keep a node honest
 def Each.honest(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -23558,7 +23567,7 @@ def Cast.head.honest(
     case Some{+h}:
       Cast.at.honest(~mach, ~kern, n, s, c, h, Head.tip(~mach, s, h))
 
-# a node's ballot keeps honest it
+# a node's ballot keeps it honest
 def Cast.honest(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -23568,7 +23577,7 @@ def Cast.honest(
 ) -> Honest.Keeps(~mach, s, Node.cast(~mach, ~kern, n, s, c)):
   Cast.head.honest(~mach, ~kern, n, s, c, Node.head_of(~mach, s, c))
 
-# what a node does at a head keeps honest it
+# what a node does at a head keeps it honest
 def Step.head.honest(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -23597,7 +23606,7 @@ def Step.head.honest(
     )(Honest.frame(~mach, s2, s3)(Advances.frames(~mach, ~kern, 4294967295n, s2, c)))
   )
 
-# what a node does on a line keeps honest it
+# what a node does on a line keeps it honest
 def Step.honest(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -23752,7 +23761,7 @@ def Ask.honest(
     Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.ask(Envelope.of(e)))
   )
 
-# what a node does on each of some lines keeps honest it
+# what a node does on each of some lines keeps it honest
 def Steps.honest(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -24059,7 +24068,7 @@ def Adopt.maybe.honest(
     case Some{c}:
       Adopt.at.honest(~mach, ~kern, n, s, c)
 
-# a request that a writer asks again at a node keeps honest it
+# a request that a writer asks again at a node keeps it honest
 def Consent.honest(
   ~mach: Machine(),
   ~kern: Kernel(mach),
@@ -24088,7 +24097,7 @@ def Consent.honest(
         )
       )(Step.honest(~mach, ~kern, n, State.keyed(~mach, s, Keys.mark(State.keys(~mach, s), i)), c))
 
-# what a node does keeps honest it
+# what a node does keeps it honest
 def Does.honest(
   ~mach: Machine(),
   ~kern: Kernel(mach),
