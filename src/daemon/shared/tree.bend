@@ -321,7 +321,7 @@ def Tree.get.go(
       Tree.get.go(~S, ~fetch, s, r, k, Tree.part(~S, ~fetch, s, Parts.at(ks, x)))
 
 # the value of the key k in the tree whose root is h, in the store s
-def Tree.get(
+def Tree.get.plain(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   +s: S,
@@ -388,7 +388,7 @@ def Tree.look.go(
       Tree.look.go(~S, ~fetch, s, r, k, Parts.at(ks, x), Tree.part(~S, ~fetch, s, Parts.at(ks, x)))
 
 # what a read of the key k finds in the tree whose root is h, in the store s
-def Tree.look(
+def Tree.look.plain(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   +s: S,
@@ -830,7 +830,7 @@ def Tree.set.go(
 
 # the tree whose root is h, in the store s, with the key k set to the value
 # v: its new root, and the nodes that it adds
-def Tree.set(
+def Tree.set.plain(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   +s: S,
@@ -839,6 +839,429 @@ def Tree.set(
   v: List<&2, U32>
 ) -> Maybe<&2, Put>:
   Tree.set.go(~S, ~fetch, s, Tree.path(k), 0n, k, v, h, Tree.part(~S, ~fetch, s, h))
+
+# Tree.get once the root node m of the tree is known. The node comes before
+# the path of the key (a hash): a tree with no node costs no hash, and a proof
+# about a tree that is not known makes none
+def Tree.get.at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  +k: List<&2, U32>,
+  m: Maybe<&2, Node>
+) -> Maybe<&2, List<&2, U32>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Node.Empty{}}:
+      None{}
+    case Some{+n}:
+      Tree.get.go(~S, ~fetch, s, Tree.path(k), k, Some{n})
+
+# the value of the key k in the tree whose root is h, in the store s
+def Tree.get(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  h: Maybe<&2, Hashes.Hash>,
+  k: List<&2, U32>
+) -> Maybe<&2, List<&2, U32>>:
+  Tree.get.at(~S, ~fetch, s, k, Tree.part(~S, ~fetch, s, h))
+
+# Tree.set once the root node m of the tree is known (see Tree.get.at)
+def Tree.set.at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  x: List<&2, U32>,
+  m: Maybe<&2, Node>
+) -> Maybe<&2, Put>:
+  match m:
+    case None{}:
+      None{}
+    case Some{n}:
+      Tree.set.go(~S, ~fetch, s, Tree.path(k), 0n, k, x, h, Some{n})
+
+# the tree whose root is h, in the store s, with the key k set to the value
+# x: its new root, and the nodes that it adds
+def Tree.set(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Maybe<&2, Hashes.Hash>,
+  k: List<&2, U32>,
+  x: List<&2, U32>
+) -> Maybe<&2, Put>:
+  Tree.set.at(~S, ~fetch, s, h, k, x, Tree.part(~S, ~fetch, s, h))
+
+# Tree.look once the root node m of the tree is known (see Tree.get.at)
+def Tree.look.at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  m: Maybe<&2, Node>
+) -> Look:
+  match m:
+    case None{}:
+      Look.missing(h)
+    case Some{Node.Empty{}}:
+      Look.Absent{}
+    case Some{+n}:
+      Tree.look.go(~S, ~fetch, s, Tree.path(k), k, h, Some{n})
+
+# what a read of the key k finds in the tree whose root is h, in the store s
+def Tree.look(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Maybe<&2, Hashes.Hash>,
+  k: List<&2, U32>
+) -> Look:
+  Tree.look.at(~S, ~fetch, s, h, k, Tree.part(~S, ~fetch, s, h))
+
+# The entry points look at the root node first; the laws below are stated of
+# the plain ones (Tree.get.plain, Tree.set.plain, Tree.look.plain), which make
+# the path first. They are equal: Tree.get_plain, Tree.set_plain,
+# Tree.look_plain.
+
+# a read below no node gives nothing
+def Tree.get.go_none(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  p: List<&2, Nat>,
+  k: List<&2, U32>
+) -> {
+  Tree.get.go(
+    ~S,
+    ~fetch,
+    s,
+    p,
+    k,
+    None{}
+  )
+    == None{}: Maybe<&2, List<&2, U32>>
+}:
+  match p:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      {==}
+
+# a read below an empty node gives nothing
+def Tree.get.go_empty(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  p: List<&2, Nat>,
+  k: List<&2, U32>
+) -> {
+  Tree.get.go(
+    ~S,
+    ~fetch,
+    s,
+    p,
+    k,
+    Some{Node.Empty{}}
+  )
+    == None{}: Maybe<&2, List<&2, U32>>
+}:
+  match p:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      {==}
+
+# Get.is once the root node m is known
+def Tree.get_plain.at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  +k: List<&2, U32>,
+  m: Maybe<&2, Node>
+) -> {
+  Tree.get.at(~S, ~fetch, 
+    s,
+    k,
+    m
+  )
+    == Tree.get.go(
+      ~S,
+      ~fetch,
+      s,
+      Tree.path(k),
+      k,
+      m
+    ): Maybe<&2, List<&2, U32>>
+}:
+  match m:
+    case None{}:
+      Equal.sym(
+        Maybe<&2, List<&2, U32>>,
+        Tree.get.go(~S, ~fetch, s, Tree.path(k), k, None{}),
+        None{},
+        Tree.get.go_none(~S, ~fetch, s, Tree.path(k), k)
+      )
+    case Some{Node.Empty{}}:
+      Equal.sym(
+        Maybe<&2, List<&2, U32>>,
+        Tree.get.go(
+          ~S,
+          ~fetch,
+          s,
+          Tree.path(k),
+          k,
+          Some{Node.Empty{}}
+        ),
+        None{},
+        Tree.get.go_empty(~S, ~fetch, s, Tree.path(k), k)
+      )
+    case Some{Node.Leaf{a, b}}:
+      {==}
+    case Some{Node.Branch{ks}}:
+      {==}
+
+# the node's read of a tree is the tree's read
+def Tree.get_plain(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  h: Maybe<&2, Hashes.Hash>,
+  k: List<&2, U32>
+) -> {
+  Tree.get(~S, ~fetch, 
+    s,
+    h,
+    k
+  )
+    == Tree.get.plain(~S, ~fetch, s, h, k): Maybe<&2, List<&2, U32>>
+}:
+  Tree.get_plain.at(~S, ~fetch, s, k, Tree.part(~S, ~fetch, s, h))
+
+# a look below no node lacks it
+def Tree.look.go_none(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  p: List<&2, Nat>,
+  k: List<&2, U32>,
+  h: Maybe<&2, Hashes.Hash>
+) -> {
+  Tree.look.go(
+    ~S,
+    ~fetch,
+    s,
+    p,
+    k,
+    h,
+    None{}
+  )
+    == Look.missing(h): Look
+}:
+  match p:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      {==}
+
+# a look below an empty node finds nothing
+def Tree.look.go_empty(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  p: List<&2, Nat>,
+  k: List<&2, U32>,
+  h: Maybe<&2, Hashes.Hash>
+) -> {
+  Tree.look.go(
+    ~S,
+    ~fetch,
+    s,
+    p,
+    k,
+    h,
+    Some{Node.Empty{}}
+  )
+    == Look.Absent{}: Look
+}:
+  match p:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      {==}
+
+# Look.is once the root node m is known
+def Tree.look_plain.at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  m: Maybe<&2, Node>
+) -> {
+  Tree.look.at(~S, ~fetch, 
+    s,
+    h,
+    k,
+    m
+  )
+    == Tree.look.go(
+      ~S,
+      ~fetch,
+      s,
+      Tree.path(k),
+      k,
+      h,
+      m
+    ): Look
+}:
+  match m:
+    case None{}:
+      Equal.sym(
+        Look,
+        Tree.look.go(~S, ~fetch, s, Tree.path(k), k, h, None{}),
+        Look.missing(h),
+        Tree.look.go_none(~S, ~fetch, s, Tree.path(k), k, h)
+      )
+    case Some{Node.Empty{}}:
+      Equal.sym(
+        Look,
+        Tree.look.go(
+          ~S,
+          ~fetch,
+          s,
+          Tree.path(k),
+          k,
+          h,
+          Some{Node.Empty{}}
+        ),
+        Look.Absent{},
+        Tree.look.go_empty(~S, ~fetch, s, Tree.path(k), k, h)
+      )
+    case Some{Node.Leaf{a, b}}:
+      {==}
+    case Some{Node.Branch{ks}}:
+      {==}
+
+# the node's look at a tree is the tree's look
+def Tree.look_plain(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Maybe<&2, Hashes.Hash>,
+  k: List<&2, U32>
+) -> {
+  Tree.look(~S, ~fetch, 
+    s,
+    h,
+    k
+  )
+    == Tree.look.plain(~S, ~fetch, s, h, k): Look
+}:
+  Tree.look_plain.at(~S, ~fetch, s, h, k, Tree.part(~S, ~fetch, s, h))
+
+# a write below no node gives nothing
+def Tree.set.go_none(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  p: List<&2, Nat>,
+  d: Nat,
+  k: List<&2, U32>,
+  x: List<&2, U32>,
+  h: Maybe<&2, Hashes.Hash>
+) -> {
+  Tree.set.go(
+    ~S,
+    ~fetch,
+    s,
+    p,
+    d,
+    k,
+    x,
+    h,
+    None{}
+  )
+    == None{}: Maybe<&2, Put>
+}:
+  match p:
+    case Nil{}:
+      {==}
+    case Con{y, r}:
+      {==}
+
+# Set.is once the root node m is known
+def Tree.set_plain.at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  x: List<&2, U32>,
+  m: Maybe<&2, Node>
+) -> {
+  Tree.set.at(~S, ~fetch, 
+    s,
+    h,
+    k,
+    x,
+    m
+  )
+    == Tree.set.go(
+      ~S,
+      ~fetch,
+      s,
+      Tree.path(k),
+      0n,
+      k,
+      x,
+      h,
+      m
+    ): Maybe<&2, Put>
+}:
+  match m:
+    case None{}:
+      Equal.sym(
+        Maybe<&2, Put>,
+        Tree.set.go(
+          ~S,
+          ~fetch,
+          s,
+          Tree.path(k),
+          0n,
+          k,
+          x,
+          h,
+          None{}
+        ),
+        None{},
+        Tree.set.go_none(~S, ~fetch, s, Tree.path(k), 0n, k, x, h)
+      )
+    case Some{n}:
+      {==}
+
+# the node's write of a tree is the tree's write
+def Tree.set_plain(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Maybe<&2, Hashes.Hash>,
+  k: List<&2, U32>,
+  x: List<&2, U32>
+) -> {
+  Tree.set(~S, ~fetch, 
+    s,
+    h,
+    k,
+    x
+  )
+    == Tree.set.plain(~S, ~fetch, s, h, k, x): Maybe<&2, Put>
+}:
+  Tree.set_plain.at(~S, ~fetch, s, h, k, x, Tree.part(~S, ~fetch, s, h))
 
 # Laws
 # ----
@@ -1134,7 +1557,7 @@ law Tree.set_some:
   for +k: List<&2, U32>
   for v: List<&2, U32>
   {Tree.set.ok(~S, ~fetch, s, Tree.path(k), 0n, k, Tree.part(~S, ~fetch, s, h)) == True{}: Bool}
-    -> {Maybe.is_some(&2, Put, Tree.set(~S, ~fetch, s, h, k, v)) == True{}: Bool}
+    -> {Maybe.is_some(&2, Put, Tree.set.plain(~S, ~fetch, s, h, k, v)) == True{}: Bool}
 
 def Tree.set_some(ty, fetch, s, h, k, v):
   Tree.set_some.go(~ty, ~fetch, s, Tree.path(k), 0n, k, v, h, Tree.part(~ty, ~fetch, s, h))
@@ -2282,9 +2705,9 @@ law Tree.get_set:
   for +k: List<&2, U32>
   for v: List<&2, U32>
   for t: Put
-  {Tree.set(~S, ~fetch, s, h, k, v) == Some{t}: Maybe<&2, Put>}
+  {Tree.set.plain(~S, ~fetch, s, h, k, v) == Some{t}: Maybe<&2, Put>}
     -> {Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool}
-    -> {Tree.get(~S, ~fetch, s2, Some{Put.root(t)}, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+    -> {Tree.get.plain(~S, ~fetch, s2, Some{Put.root(t)}, k) == Some{v}: Maybe<&2, List<&2, U32>>}
 
 def Tree.get_set(ty, fetch, s, s2, h, k, v, t):
   e =>
@@ -2418,8 +2841,8 @@ law Tree.get_grows:
   for +k: List<&2, U32>
   for x: List<&2, U32>
   {grows(a, b) == True{}: Bool}
-    -> {Tree.get(~S, ~fetch, a, h, k) == Some{x}: Maybe<&2, List<&2, U32>>}
-    -> {Tree.get(~S, ~fetch, b, h, k) == Some{x}: Maybe<&2, List<&2, U32>>}
+    -> {Tree.get.plain(~S, ~fetch, a, h, k) == Some{x}: Maybe<&2, List<&2, U32>>}
+    -> {Tree.get.plain(~S, ~fetch, b, h, k) == Some{x}: Maybe<&2, List<&2, U32>>}
 
 def Tree.get_grows(ty, fetch, grows, kept, a, b, h, k, x):
   +gr => Tree.get.go_kept(
@@ -2437,20 +2860,6 @@ def Tree.get_grows(ty, fetch, grows, kept, a, b, h, k, x):
     n => Tree.part_kept(~ty, ~fetch, ~grows, ~kept, a, b, h, n, gr),
     gr
   )
-
-# a read at the empty node gives nothing
-def Tree.get.go_empty(
-  ~S: Data,
-  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  s: S,
-  p: List<&2, Nat>,
-  k: List<&2, U32>
-) -> {Tree.get.go(~S, ~fetch, s, p, k, Some{Node.Empty{}}) == None{}: Maybe<&2, List<&2, U32>>}:
-  match p:
-    case Nil{}:
-      {==}
-    case Con{x, r}:
-      {==}
 
 # a new branch of parts ks, whose part n is a new subtree, reads as nothing at
 # its end
@@ -3840,22 +4249,22 @@ law Tree.get_other:
   for +k2: List<&2, U32>
   {grows(s, s2) == True{}: Bool}
     -> {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool}
-    -> {Tree.set(~S, ~fetch, s, h, k, v) == Some{t}: Maybe<&2, Put>}
+    -> {Tree.set.plain(~S, ~fetch, s, h, k, v) == Some{t}: Maybe<&2, Put>}
     -> {Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool}
     -> {
-      Tree.get(
+      Tree.get.plain(
         ~S,
         ~fetch,
         s2,
         Some{Put.root(t)},
         k2
       )
-        == Tree.get(~S, ~fetch, s2, h, k2): Maybe<&2, List<&2, U32>>
+        == Tree.get.plain(~S, ~fetch, s2, h, k2): Maybe<&2, List<&2, U32>>
     }
 
 def Tree.get_other(ty, fetch, grows, kept, s, s2, h, k, v, t, k2):
   +gr => ne => e =>
-    %e: Tree.Reads(~ty, ~fetch, s2, Tree.path(k2), k2, Tree.get(~ty, ~fetch, s2, h, k2), _)
+    %e: Tree.Reads(~ty, ~fetch, s2, Tree.path(k2), k2, Tree.get.plain(~ty, ~fetch, s2, h, k2), _)
     Tree.set_keeps(
       ~ty,
       ~fetch,
@@ -4120,20 +4529,6 @@ def Tree.list_skip(
       h => h
     case g None{}:
       h => h
-
-# a read at no node gives nothing
-def Tree.get.go_none(
-  ~S: Data,
-  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  s: S,
-  p: List<&2, Nat>,
-  k: List<&2, U32>
-) -> {Tree.get.go(~S, ~fetch, s, p, k, None{}) == None{}: Maybe<&2, List<&2, U32>>}:
-  match p:
-    case Nil{}:
-      {==}
-    case Con{x, r}:
-      {==}
 
 # a key whose path starts with q is led to where q ends
 def Tree.leads_at(
@@ -4990,7 +5385,7 @@ law Tree.list_complete:
   for +h: Maybe<&2, Hashes.Hash>
   for +k: List<&2, U32>
   for +v: List<&2, U32>
-  {Tree.get(~S, ~fetch, s, h, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+  {Tree.get.plain(~S, ~fetch, s, h, k) == Some{v}: Maybe<&2, List<&2, U32>>}
     -> {
       List.contains(
         ~Binding,
@@ -6297,8 +6692,8 @@ law Tree.diff_complete:
   for +b: Maybe<&2, Hashes.Hash>
   for +k: List<&2, U32>
   for +v: List<&2, U32>
-  {Tree.get(~S, ~fetch, s, a, k) == Some{v}: Maybe<&2, List<&2, U32>>}
-    -> ({Tree.get(~S, ~fetch, s, b, k) == Some{v}: Maybe<&2, List<&2, U32>>} -> Empty)
+  {Tree.get.plain(~S, ~fetch, s, a, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+    -> ({Tree.get.plain(~S, ~fetch, s, b, k) == Some{v}: Maybe<&2, List<&2, U32>>} -> Empty)
     -> {
       List.contains(
         ~Binding,
@@ -6351,8 +6746,8 @@ law Tree.diff_complete_right:
   for +b: Maybe<&2, Hashes.Hash>
   for +k: List<&2, U32>
   for +v: List<&2, U32>
-  {Tree.get(~S, ~fetch, s, b, k) == Some{v}: Maybe<&2, List<&2, U32>>}
-    -> ({Tree.get(~S, ~fetch, s, a, k) == Some{v}: Maybe<&2, List<&2, U32>>} -> Empty)
+  {Tree.get.plain(~S, ~fetch, s, b, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+    -> ({Tree.get.plain(~S, ~fetch, s, a, k) == Some{v}: Maybe<&2, List<&2, U32>>} -> Empty)
     -> {
       List.contains(
         ~Binding,
@@ -7299,7 +7694,7 @@ law Tree.list_sound:
     )
       == True{}: Bool
   }
-    -> {Tree.get(~S, ~fetch, s, h, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+    -> {Tree.get.plain(~S, ~fetch, s, h, k) == Some{v}: Maybe<&2, List<&2, U32>>}
 
 def Tree.list_sound(ty, fetch, s, h, k, v):
   Tree.list_found.root(~ty, ~fetch, s, k, v, Tree.part(~ty, ~fetch, s, h))
@@ -12357,7 +12752,7 @@ law Tree.set_canon:
   for t: Put
   {Binds.distinct(bs) == True{}: Bool}
     -> {Canon.holds.of(~S, ~fetch, s, bs) == True{}: Bool}
-    -> {Tree.set(~S, ~fetch, s, Canon.of(bs), k, v) == Some{t}: Maybe<&2, Put>}
+    -> {Tree.set.plain(~S, ~fetch, s, Canon.of(bs), k, v) == Some{t}: Maybe<&2, Put>}
     -> {Some{Put.root(t)} == Canon.of(Binds.put(bs, k, v)): Maybe<&2, Hashes.Hash>}
 
 def Tree.set_canon(ty, fetch, s, bs, k, v, t):
@@ -12398,7 +12793,7 @@ law Tree.set_canon_holds:
   {grows(s, s2) == True{}: Bool}
     -> {Binds.distinct(bs) == True{}: Bool}
     -> {Canon.holds.of(~S, ~fetch, s, bs) == True{}: Bool}
-    -> {Tree.set(~S, ~fetch, s, Canon.of(bs), k, v) == Some{t}: Maybe<&2, Put>}
+    -> {Tree.set.plain(~S, ~fetch, s, Canon.of(bs), k, v) == Some{t}: Maybe<&2, Put>}
     -> {Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool}
     -> {Canon.holds.of(~S, ~fetch, s2, Binds.put(bs, k, v)) == True{}: Bool}
 
@@ -12450,13 +12845,13 @@ law Tree.set_comm:
     -> {Canon.holds.of(~S, ~fetch, s, bs) == True{}: Bool}
     -> {Shared.List.is_eq(~U32, ~U32.is_eq, k1, k2) == False{}: Bool}
     -> {grows(s, a) == True{}: Bool}
-    -> {Tree.set(~S, ~fetch, s, Canon.of(bs), k1, v1) == Some{t1}: Maybe<&2, Put>}
+    -> {Tree.set.plain(~S, ~fetch, s, Canon.of(bs), k1, v1) == Some{t1}: Maybe<&2, Put>}
     -> {Stores.Store.holds(~S, ~fetch, a, Put.nodes(t1)) == True{}: Bool}
-    -> {Tree.set(~S, ~fetch, a, Some{Put.root(t1)}, k2, v2) == Some{t12}: Maybe<&2, Put>}
+    -> {Tree.set.plain(~S, ~fetch, a, Some{Put.root(t1)}, k2, v2) == Some{t12}: Maybe<&2, Put>}
     -> {grows(s, b) == True{}: Bool}
-    -> {Tree.set(~S, ~fetch, s, Canon.of(bs), k2, v2) == Some{t2}: Maybe<&2, Put>}
+    -> {Tree.set.plain(~S, ~fetch, s, Canon.of(bs), k2, v2) == Some{t2}: Maybe<&2, Put>}
     -> {Stores.Store.holds(~S, ~fetch, b, Put.nodes(t2)) == True{}: Bool}
-    -> {Tree.set(~S, ~fetch, b, Some{Put.root(t2)}, k1, v1) == Some{t21}: Maybe<&2, Put>}
+    -> {Tree.set.plain(~S, ~fetch, b, Some{Put.root(t2)}, k1, v1) == Some{t21}: Maybe<&2, Put>}
     -> {Put.root(t12) == Put.root(t21): Hashes.Hash}
 
 def Tree.set_comm(ty, fetch, grows, kept, s, a, b, bs, k1, v1, k2, v2, t1, t12, t2, t21):
@@ -12475,11 +12870,11 @@ def Tree.set_comm(ty, fetch, grows, kept, s, a, b, bs, k1, v1, k2, v2, t1, t12, 
       t1
     )(ga)(hd)(hh)(hs1)(hn1)
     %Equal.sym(Maybe<&2, Hashes.Hash>, Some{Put.root(t1)}, Canon.of(Binds.put(bs, k1, v1)), r1):
-      {Tree.set(~ty, ~fetch, a, _, k2, v2) == Some{t12}: Maybe<&2, Put>}
+      {Tree.set.plain(~ty, ~fetch, a, _, k2, v2) == Some{t12}: Maybe<&2, Put>}
         -> {grows(s, b) == True{}: Bool}
-        -> {Tree.set(~ty, ~fetch, s, Canon.of(bs), k2, v2) == Some{t2}: Maybe<&2, Put>}
+        -> {Tree.set.plain(~ty, ~fetch, s, Canon.of(bs), k2, v2) == Some{t2}: Maybe<&2, Put>}
         -> {Stores.Store.holds(~ty, ~fetch, b, Put.nodes(t2)) == True{}: Bool}
-        -> {Tree.set(~ty, ~fetch, b, Some{Put.root(t2)}, k1, v1) == Some{t21}: Maybe<&2, Put>}
+        -> {Tree.set.plain(~ty, ~fetch, b, Some{Put.root(t2)}, k1, v1) == Some{t21}: Maybe<&2, Put>}
         -> {Put.root(t12) == Put.root(t21): Hashes.Hash}
     hs12 => gb => +hs2 => hn2 =>
       +r2 = Tree.set_canon(~ty, ~fetch, s, bs, k2, v2, t2)(hd)(hh)(hs2)
@@ -12497,7 +12892,7 @@ def Tree.set_comm(ty, fetch, grows, kept, s, a, b, bs, k1, v1, k2, v2, t1, t12, 
       )(gb)(hd)(hh)(hs2)(hn2)
       %Equal.sym(Maybe<&2, Hashes.Hash>, Some{Put.root(t2)}, Canon.of(Binds.put(bs, k2, v2)), r2):
         {
-          Tree.set(~ty, ~fetch, b, _, k1, v1) == Some{t21}: Maybe<&2, Put>
+          Tree.set.plain(~ty, ~fetch, b, _, k1, v1) == Some{t21}: Maybe<&2, Put>
         } -> {Put.root(t12) == Put.root(t21): Hashes.Hash}
       hs21 =>
         +r12 = Tree.set_canon(
@@ -12563,10 +12958,10 @@ law Tree.set_twice:
   {Binds.distinct(bs) == True{}: Bool}
     -> {Canon.holds.of(~S, ~fetch, s, bs) == True{}: Bool}
     -> {grows(s, a) == True{}: Bool}
-    -> {Tree.set(~S, ~fetch, s, Canon.of(bs), k, v1) == Some{t1}: Maybe<&2, Put>}
+    -> {Tree.set.plain(~S, ~fetch, s, Canon.of(bs), k, v1) == Some{t1}: Maybe<&2, Put>}
     -> {Stores.Store.holds(~S, ~fetch, a, Put.nodes(t1)) == True{}: Bool}
-    -> {Tree.set(~S, ~fetch, a, Some{Put.root(t1)}, k, v2) == Some{t12}: Maybe<&2, Put>}
-    -> {Tree.set(~S, ~fetch, s, Canon.of(bs), k, v2) == Some{t2}: Maybe<&2, Put>}
+    -> {Tree.set.plain(~S, ~fetch, a, Some{Put.root(t1)}, k, v2) == Some{t12}: Maybe<&2, Put>}
+    -> {Tree.set.plain(~S, ~fetch, s, Canon.of(bs), k, v2) == Some{t2}: Maybe<&2, Put>}
     -> {Put.root(t12) == Put.root(t2): Hashes.Hash}
 
 def Tree.set_twice(ty, fetch, grows, kept, s, a, bs, k, v1, v2, t1, t12, t2):
@@ -12585,8 +12980,8 @@ def Tree.set_twice(ty, fetch, grows, kept, s, a, bs, k, v1, v2, t1, t12, t2):
       t1
     )(ga)(hd)(hh)(hs1)(hn1)
     %Equal.sym(Maybe<&2, Hashes.Hash>, Some{Put.root(t1)}, Canon.of(Binds.put(bs, k, v1)), r1):
-      {Tree.set(~ty, ~fetch, a, _, k, v2) == Some{t12}: Maybe<&2, Put>}
-        -> {Tree.set(~ty, ~fetch, s, Canon.of(bs), k, v2) == Some{t2}: Maybe<&2, Put>}
+      {Tree.set.plain(~ty, ~fetch, a, _, k, v2) == Some{t12}: Maybe<&2, Put>}
+        -> {Tree.set.plain(~ty, ~fetch, s, Canon.of(bs), k, v2) == Some{t2}: Maybe<&2, Put>}
         -> {Put.root(t12) == Put.root(t2): Hashes.Hash}
     hs12 => hs2 =>
       +r12 = Tree.set_canon(
@@ -12695,9 +13090,9 @@ law Tree.look_value:
   for +k: List<&2, U32>
   {
     Look.value(
-      Tree.look(~S, ~fetch, s, h, k)
+      Tree.look.plain(~S, ~fetch, s, h, k)
     )
-      == Tree.get(~S, ~fetch, s, h, k): Maybe<&2, List<&2, U32>>
+      == Tree.get.plain(~S, ~fetch, s, h, k): Maybe<&2, List<&2, U32>>
   }
 
 def Tree.look_value(ty, fetch, s, h, k):
@@ -12751,18 +13146,18 @@ law Tree.look_found_kept:
   for +k: List<&2, U32>
   for +v: List<&2, U32>
   {grows(a, b) == True{}: Bool}
-    -> {Tree.look(~S, ~fetch, a, h, k) == Look.Found{v}: Look}
-    -> {Tree.look(~S, ~fetch, b, h, k) == Look.Found{v}: Look}
+    -> {Tree.look.plain(~S, ~fetch, a, h, k) == Look.Found{v}: Look}
+    -> {Tree.look.plain(~S, ~fetch, b, h, k) == Look.Found{v}: Look}
 
 def Tree.look_found_kept(ty, fetch, grows, kept, a, b, h, k, v):
   gr => e => Look.found_of(
-    Tree.look(~ty, ~fetch, b, h, k),
+    Tree.look.plain(~ty, ~fetch, b, h, k),
     v
   )(
     Equal.trans(
       Maybe<&2, List<&2, U32>>,
-      Look.value(Tree.look(~ty, ~fetch, b, h, k)),
-      Tree.get(~ty, ~fetch, b, h, k),
+      Look.value(Tree.look.plain(~ty, ~fetch, b, h, k)),
+      Tree.get.plain(~ty, ~fetch, b, h, k),
       Some{v},
       Tree.look_value(~ty, ~fetch, b, h, k),
       Tree.get_grows(
@@ -12780,20 +13175,20 @@ def Tree.look_found_kept(ty, fetch, grows, kept, a, b, h, k, v):
       )(
         Equal.trans(
           Maybe<&2, List<&2, U32>>,
-          Tree.get(~ty, ~fetch, a, h, k),
-          Look.value(Tree.look(~ty, ~fetch, a, h, k)),
+          Tree.get.plain(~ty, ~fetch, a, h, k),
+          Look.value(Tree.look.plain(~ty, ~fetch, a, h, k)),
           Some{v},
           Equal.sym(
             Maybe<&2, List<&2, U32>>,
-            Look.value(Tree.look(~ty, ~fetch, a, h, k)),
-            Tree.get(~ty, ~fetch, a, h, k),
+            Look.value(Tree.look.plain(~ty, ~fetch, a, h, k)),
+            Tree.get.plain(~ty, ~fetch, a, h, k),
             Tree.look_value(~ty, ~fetch, a, h, k)
           ),
           Equal.cong(
             Look,
             Maybe<&2, List<&2, U32>>,
             l => Look.value(l),
-            Tree.look(~ty, ~fetch, a, h, k),
+            Tree.look.plain(~ty, ~fetch, a, h, k),
             Look.Found{v},
             e
           )
@@ -12922,8 +13317,8 @@ law Tree.look_absent_kept:
   for +h: Maybe<&2, Hashes.Hash>
   for +k: List<&2, U32>
   {grows(a, b) == True{}: Bool}
-    -> {Tree.look(~S, ~fetch, a, h, k) == Look.Absent{}: Look}
-    -> {Tree.look(~S, ~fetch, b, h, k) == Look.Absent{}: Look}
+    -> {Tree.look.plain(~S, ~fetch, a, h, k) == Look.Absent{}: Look}
+    -> {Tree.look.plain(~S, ~fetch, b, h, k) == Look.Absent{}: Look}
 
 def Tree.look_absent_kept(ty, fetch, grows, kept, a, b, h, k):
   gr => Tree.look.go_absent(

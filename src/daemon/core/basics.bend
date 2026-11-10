@@ -603,65 +603,22 @@ def Res.of.read(m: Maybe<&2, Codes.Read<Maybe<&2, Ropes.Root>>>) -> Maybe<&2, Ro
 def Res.read(ws: List<&2, U32>) -> Maybe<&2, Ropes.Root>:
   Res.of.read(Codes.Code.maybe.read(~Ropes.Root, ~Ropes.Root.code.read, ws))
 
-# Node.get once the root node m of the tree is known. The node comes before
-# the path of the key (a hash): a tree with no node costs no hash, and a proof
-# about a tree that is not known makes none
-def Node.get.at(s: Node, +k: List<&2, U32>, m: Maybe<&2, Trees.Node>) -> Maybe<&2, List<&2, U32>>:
-  match m:
-    case None{}:
-      None{}
-    case Some{Trees.Node.Empty{}}:
-      None{}
-    case Some{+n}:
-      Trees.Tree.get.go(~Node, ~Store.fetch, s, Trees.Tree.path(k), k, Some{n})
-
 # what the tree whose root is h holds under the key k, in the store s
 def Node.get(+s: Node, h: Maybe<&2, Hashes.Hash>, k: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
-  Node.get.at(s, k, Trees.Tree.part(~Node, ~Store.fetch, s, h))
+  Trees.Tree.get(~Node, ~Store.fetch, s, h, k)
 
-# Node.set once the root node m of the tree is known (see Node.get.at)
-def Node.set.at(
-  s: Node,
-  h: Maybe<&2, Hashes.Hash>,
-  +k: List<&2, U32>,
-  x: List<&2, U32>,
-  m: Maybe<&2, Trees.Node>
-) -> Maybe<&2, Trees.Put>:
-  match m:
-    case None{}:
-      None{}
-    case Some{n}:
-      Trees.Tree.set.go(~Node, ~Store.fetch, s, Trees.Tree.path(k), 0n, k, x, h, Some{n})
-
-# the tree whose root is h with the key k set to x: Trees.Tree.set (impl:
-# Set.is)
+# the tree whose root is h with the key k set to x
 def Node.set(
   +s: Node,
   +h: Maybe<&2, Hashes.Hash>,
   k: List<&2, U32>,
   x: List<&2, U32>
 ) -> Maybe<&2, Trees.Put>:
-  Node.set.at(s, h, k, x, Trees.Tree.part(~Node, ~Store.fetch, s, h))
+  Trees.Tree.set(~Node, ~Store.fetch, s, h, k, x)
 
-# Node.look once the root node m of the tree is known (see Node.get.at)
-def Node.look.at(
-  s: Node,
-  h: Maybe<&2, Hashes.Hash>,
-  +k: List<&2, U32>,
-  m: Maybe<&2, Trees.Node>
-) -> Trees.Look:
-  match m:
-    case None{}:
-      Trees.Look.missing(h)
-    case Some{Trees.Node.Empty{}}:
-      Trees.Look.Absent{}
-    case Some{+n}:
-      Trees.Tree.look.go(~Node, ~Store.fetch, s, Trees.Tree.path(k), k, h, Some{n})
-
-# what a read of the key k finds in the tree whose root is h: Trees.Tree.look
-# (impl: Look.is)
+# what a read of the key k finds in the tree whose root is h
 def Node.look(+s: Node, +h: Maybe<&2, Hashes.Hash>, k: List<&2, U32>) -> Trees.Look:
-  Node.look.at(s, h, k, Trees.Tree.part(~Node, ~Store.fetch, s, h))
+  Trees.Tree.look(~Node, ~Store.fetch, s, h, k)
 
 # what a look knows: the value, or that there is none (none: it lacks a node,
 # and cannot tell)

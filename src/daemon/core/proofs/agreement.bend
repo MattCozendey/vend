@@ -799,9 +799,9 @@ def Set.reads.put(
         Equal.trans(
           Maybe<&2, List<&2, U32>>,
           Basics.Node.get(sk, Some{hh}, k),
-          Trees.Tree.get(~Basics.Node, ~Basics.Store.fetch, sk, Some{hh}, k),
+          Trees.Tree.get.plain(~Basics.Node, ~Basics.Store.fetch, sk, Some{hh}, k),
           Some{x},
-          ProofTrees.Get.is(sk, Some{hh}, k),
+          Trees.Tree.get_plain(~Basics.Node, ~Basics.Store.fetch, sk, Some{hh}, k),
           Trees.Tree.get_set(
             ~Basics.Node,
             ~Basics.Store.fetch,
@@ -814,14 +814,14 @@ def Set.reads.put(
           )(
             Equal.trans(
               Maybe<&2, Trees.Put>,
-              Trees.Tree.set(~Basics.Node, ~Basics.Store.fetch, s, h, k, x),
+              Trees.Tree.set.plain(~Basics.Node, ~Basics.Store.fetch, s, h, k, x),
               Basics.Node.set(s, h, k, x),
               Some{Trees.Put{hh, ws}},
               Equal.sym(
                 Maybe<&2, Trees.Put>,
                 Basics.Node.set(s, h, k, x),
-                Trees.Tree.set(~Basics.Node, ~Basics.Store.fetch, s, h, k, x),
-                ProofTrees.Set.is(s, h, k, x)
+                Trees.Tree.set.plain(~Basics.Node, ~Basics.Store.fetch, s, h, k, x),
+                Trees.Tree.set_plain(~Basics.Node, ~Basics.Store.fetch, s, h, k, x)
               ),
               es
             )

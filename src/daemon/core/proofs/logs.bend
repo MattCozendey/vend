@@ -253,9 +253,9 @@ def Get.grows(
   e => Equal.trans(
     Maybe<&2, List<&2, U32>>,
     Basics.Node.get(b, h, k),
-    Trees.Tree.get(~Basics.Node, ~Basics.Store.fetch, b, h, k),
+    Trees.Tree.get.plain(~Basics.Node, ~Basics.Store.fetch, b, h, k),
     Some{v},
-    ProofTrees.Get.is(b, h, k),
+    Trees.Tree.get_plain(~Basics.Node, ~Basics.Store.fetch, b, h, k),
     Trees.Tree.get_grows(
       ~Basics.Node,
       ~Basics.Store.fetch,
@@ -281,14 +281,14 @@ def Get.grows(
     )(
       Equal.trans(
         Maybe<&2, List<&2, U32>>,
-        Trees.Tree.get(~Basics.Node, ~Basics.Store.fetch, a, h, k),
+        Trees.Tree.get.plain(~Basics.Node, ~Basics.Store.fetch, a, h, k),
         Basics.Node.get(a, h, k),
         Some{v},
         Equal.sym(
           Maybe<&2, List<&2, U32>>,
           Basics.Node.get(a, h, k),
-          Trees.Tree.get(~Basics.Node, ~Basics.Store.fetch, a, h, k),
-          ProofTrees.Get.is(a, h, k)
+          Trees.Tree.get.plain(~Basics.Node, ~Basics.Store.fetch, a, h, k),
+          Trees.Tree.get_plain(~Basics.Node, ~Basics.Store.fetch, a, h, k)
         ),
         e
       )
@@ -330,13 +330,13 @@ def Set.kept.if(
         Equal.trans(
           Maybe<&2, List<&2, U32>>,
           Basics.Node.get(sk, Some{hh}, k2),
-          Trees.Tree.get(~Basics.Node, ~Basics.Store.fetch, sk, Some{hh}, k2),
+          Trees.Tree.get.plain(~Basics.Node, ~Basics.Store.fetch, sk, Some{hh}, k2),
           Basics.Node.get(sk, h, k2),
-          ProofTrees.Get.is(sk, Some{hh}, k2),
+          Trees.Tree.get_plain(~Basics.Node, ~Basics.Store.fetch, sk, Some{hh}, k2),
           Equal.trans(
             Maybe<&2, List<&2, U32>>,
-            Trees.Tree.get(~Basics.Node, ~Basics.Store.fetch, sk, Some{hh}, k2),
-            Trees.Tree.get(~Basics.Node, ~Basics.Store.fetch, sk, h, k2),
+            Trees.Tree.get.plain(~Basics.Node, ~Basics.Store.fetch, sk, Some{hh}, k2),
+            Trees.Tree.get.plain(~Basics.Node, ~Basics.Store.fetch, sk, h, k2),
             Basics.Node.get(sk, h, k2),
             Trees.Tree.get_other(
               ~Basics.Node,
@@ -367,14 +367,14 @@ def Set.kept.if(
             )(
               Equal.trans(
                 Maybe<&2, Trees.Put>,
-                Trees.Tree.set(~Basics.Node, ~Basics.Store.fetch, s, h, k, x),
+                Trees.Tree.set.plain(~Basics.Node, ~Basics.Store.fetch, s, h, k, x),
                 Basics.Node.set(s, h, k, x),
                 Some{Trees.Put{hh, ws}},
                 Equal.sym(
                   Maybe<&2, Trees.Put>,
                   Basics.Node.set(s, h, k, x),
-                  Trees.Tree.set(~Basics.Node, ~Basics.Store.fetch, s, h, k, x),
-                  ProofTrees.Set.is(s, h, k, x)
+                  Trees.Tree.set.plain(~Basics.Node, ~Basics.Store.fetch, s, h, k, x),
+                  Trees.Tree.set_plain(~Basics.Node, ~Basics.Store.fetch, s, h, k, x)
                 ),
                 em
               )
@@ -382,8 +382,8 @@ def Set.kept.if(
             Equal.sym(
               Maybe<&2, List<&2, U32>>,
               Basics.Node.get(sk, h, k2),
-              Trees.Tree.get(~Basics.Node, ~Basics.Store.fetch, sk, h, k2),
-              ProofTrees.Get.is(sk, h, k2)
+              Trees.Tree.get.plain(~Basics.Node, ~Basics.Store.fetch, sk, h, k2),
+              Trees.Tree.get_plain(~Basics.Node, ~Basics.Store.fetch, sk, h, k2)
             )
           )
         ),
