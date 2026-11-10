@@ -541,7 +541,7 @@ type Verdict<-Q: Data> is Data:
 # s with the words ds as data, when it then holds each of them under its hash
 # (none: a slot holds other words). A node reads back what it puts, so what a
 # tree or a rope reads after a put never rests on what the store held before
-def State.put(
+def State.put.plain(
   ~mach: Machine(),
   s: Node<Machine.Q(mach)>,
   +ds: List<&2, List<&2, U32>>
@@ -551,6 +551,21 @@ def State.put(
     Node<Machine.Q(mach)>,
     Stores.Store.holds(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), s2, ds),
     u => Some{s2}
+  )
+
+# State.put.plain in one pass, with one hash for each of ds: the laws are
+# stated of the plain one, and they are equal (State.put_plain)
+def State.put(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  ds: List<&2, List<&2, U32>>
+) -> Maybe<&2, Node<Machine.Q(mach)>>:
+  Maybe.map(
+    &2,
+    Ledgers.State(Machine.Q(mach)),
+    Node<Machine.Q(mach)>,
+    l => State.led(~mach, s, l),
+    Ledgers.State.add_datas(~Machine.Q(mach), ~Machine.same(mach), ds, State.ledger(~mach, s))
   )
 
 # the work at the root h on the state m
@@ -3538,12 +3553,220 @@ def Put.grows.if(
     case False{}:
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- the binders of the fetch that the rewrites of this proof name; they are used, and a proof does not run
+# a node with the ledger l holds the words that l holds
+def Holds.led(
+  ~mach: Machine(),
+  ds: List<&2, List<&2, U32>>,
+  +s: Node<Machine.Q(mach)>,
+  +l: Ledgers.State(Machine.Q(mach))
+) -> {
+  Stores.Store.holds(
+    ~Node<Machine.Q(mach)>,
+    ~Store.fetch(~mach),
+    State.led(~mach, s, l),
+    ds
+  )
+    == Stores.Store.holds(
+      ~Ledgers.State(Machine.Q(mach)),
+      ~(l => h => Ledgers.State.data(~Machine.Q(mach), l, h)),
+      l,
+      ds
+    ): Bool
+}:
+  match ds:
+    case Nil{}:
+      {==}
+    case Con{ws, r}:
+      %Equal.sym(
+        Ledgers.State(Machine.Q(mach)),
+        State.ledger(~mach, State.led(~mach, s, l)),
+        l,
+        Led.led(~mach, s, l)
+      ): {
+        List.all.if(
+          u => Stores.Store.holds(
+            ~Node<Machine.Q(mach)>,
+            ~Store.fetch(~mach),
+            State.led(~mach, s, l),
+            r
+          ),
+          Shared.Maybe.is_eq(
+            ~List<&2, U32>,
+            ~Shared.List.is_eq(~U32, ~U32.is_eq),
+            Ledgers.State.data(~Machine.Q(mach), _, Hashes.Sha.hash(ws)),
+            Some{ws}
+          )
+        )
+          == List.all.if(
+            u => Stores.Store.holds(
+              ~Ledgers.State(Machine.Q(mach)),
+              ~(l => h => Ledgers.State.data(~Machine.Q(mach), l, h)),
+              l,
+              r
+            ),
+            Shared.Maybe.is_eq(
+              ~List<&2, U32>,
+              ~Shared.List.is_eq(~U32, ~U32.is_eq),
+              Ledgers.State.data(~Machine.Q(mach), l, Hashes.Sha.hash(ws)),
+              Some{ws}
+            )
+          ): Bool
+      }
+      %Equal.sym(
+        Bool,
+        Stores.Store.holds(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), State.led(~mach, s, l), r),
+        Stores.Store.holds(
+          ~Ledgers.State(Machine.Q(mach)),
+          ~(l => h => Ledgers.State.data(~Machine.Q(mach), l, h)),
+          l,
+          r
+        ),
+        Holds.led(~mach, r, s, l)
+      ): {
+        List.all.if(
+          u => _,
+          Shared.Maybe.is_eq(
+            ~List<&2, U32>,
+            ~Shared.List.is_eq(~U32, ~U32.is_eq),
+            Ledgers.State.data(~Machine.Q(mach), l, Hashes.Sha.hash(ws)),
+            Some{ws}
+          )
+        )
+          == List.all.if(
+            u => Stores.Store.holds(
+              ~Ledgers.State(Machine.Q(mach)),
+              ~(l => h => Ledgers.State.data(~Machine.Q(mach), l, h)),
+              l,
+              r
+            ),
+            Shared.Maybe.is_eq(
+              ~List<&2, U32>,
+              ~Shared.List.is_eq(~U32, ~U32.is_eq),
+              Ledgers.State.data(~Machine.Q(mach), l, Hashes.Sha.hash(ws)),
+              Some{ws}
+            )
+          ): Bool
+      }
+      {==}
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# State.put_plain once the ledger l holds each of the words (b) or not
+def State.put_plain.if(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  l: Ledgers.State(Machine.Q(mach)),
+  b: Bool
+) -> {
+  Maybe.map(
+    &2,
+    Ledgers.State(Machine.Q(mach)),
+    Node<Machine.Q(mach)>,
+    x => State.led(~mach, s, x),
+    Shared.Maybe.when(Ledgers.State(Machine.Q(mach)), b, u => Some{l})
+  )
+    == Shared.Maybe.when(
+      Node<Machine.Q(mach)>,
+      b,
+      u => Some{State.led(~mach, s, l)}
+    ): Maybe<&2, Node<Machine.Q(mach)>>
+}:
+  match b:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# the one-pass put of a node is the plain one
+law State.put_plain:
+  for ~mach: Machine()
+  for +s: Node<Machine.Q(mach)>
+  for +ds: List<&2, List<&2, U32>>
+  {State.put(~mach, s, ds) == State.put.plain(~mach, s, ds): Maybe<&2, Node<Machine.Q(mach)>>}
+
+def State.put_plain(mach, s, ds):
+  +t = Ledgers.State.put_datas(~Machine.Q(mach), ~Machine.same(mach), ds, State.ledger(~mach, s))
+  %Equal.sym(
+    Bool,
+    Stores.Store.holds(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), State.keep(~mach, s, ds), ds),
+    Stores.Store.holds(
+      ~Ledgers.State(Machine.Q(mach)),
+      ~(l => h => Ledgers.State.data(~Machine.Q(mach), l, h)),
+      t,
+      ds
+    ),
+    Holds.led(~mach, ds, s, t)
+  ): {
+    State.put(
+      ~mach,
+      s,
+      ds
+    )
+      == Shared.Maybe.when(
+        Node<Machine.Q(mach)>,
+        _,
+        u => Some{State.keep(~mach, s, ds)}
+      ): Maybe<&2, Node<Machine.Q(mach)>>
+  }
+  %Equal.sym(
+    Maybe<&2, Ledgers.State(Machine.Q(mach))>,
+    Ledgers.State.add_datas(~Machine.Q(mach), ~Machine.same(mach), ds, State.ledger(~mach, s)),
+    Ledgers.State.add_datas.plain(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      ds,
+      State.ledger(~mach, s)
+    ),
+    Ledgers.State.add_datas_plain(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      ~Machine.laws(mach),
+      ds,
+      State.ledger(~mach, s)
+    )
+  ): {
+    Maybe.map(
+      &2,
+      Ledgers.State(Machine.Q(mach)),
+      Node<Machine.Q(mach)>,
+      l => State.led(~mach, s, l),
+      _
+    )
+      == Shared.Maybe.when(
+        Node<Machine.Q(mach)>,
+        Stores.Store.holds(
+          ~Ledgers.State(Machine.Q(mach)),
+          ~(l => h => Ledgers.State.data(~Machine.Q(mach), l, h)),
+          t,
+          ds
+        ),
+        u => Some{State.keep(~mach, s, ds)}
+      ): Maybe<&2, Node<Machine.Q(mach)>>
+  }
+  State.put_plain.if(
+    ~mach,
+    s,
+    t,
+    Stores.Store.holds(
+      ~Ledgers.State(Machine.Q(mach)),
+      ~(l => h => Ledgers.State.data(~Machine.Q(mach), l, h)),
+      t,
+      ds
+    )
+  )
+
 # data that a node puts and reads back only grows it
 def Put.grows(
   ~mach: Machine(),
   +s: Node<Machine.Q(mach)>,
   +ds: List<&2, List<&2, U32>>
 ) -> {State.after(~mach, s, State.put(~mach, s, ds)) == True{}: Bool}:
+  %Equal.sym(
+    Maybe<&2, Node<Machine.Q(mach)>>,
+    State.put(~mach, s, ds),
+    State.put.plain(~mach, s, ds),
+    State.put_plain(~mach, s, ds)
+  ): {State.after(~mach, s, _) == True{}: Bool}
   Put.grows.if(
     ~mach,
     s,
@@ -6962,6 +7185,12 @@ def Set.kept.of(
     case None{}:
       Unit{}
     case Some{Trees.Put{hh, +ws}}:
+      %Equal.sym(
+        Maybe<&2, Node<Machine.Q(mach)>>,
+        State.put(~mach, s, ws),
+        State.put.plain(~mach, s, ws),
+        State.put_plain(~mach, s, ws)
+      ): Work.Reads(~mach, k2, v, Work.on(~mach, _, Some{hh}))
       Set.kept.if(
         ~mach,
         s,
@@ -8546,12 +8775,20 @@ def Put.holds.if(
 # a node that a put gives holds the data
 def Put.holds(
   ~mach: Machine(),
-  s2: Node<Machine.Q(mach)>,
+  +s2: Node<Machine.Q(mach)>,
   +ds: List<&2, List<&2, U32>>,
   -s3: Node<Machine.Q(mach)>
 ) -> {
   State.put(~mach, s2, ds) == Some{s3}: Maybe<&2, Node<Machine.Q(mach)>>
 } -> {Stores.Store.holds(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), s3, ds) == True{}: Bool}:
+  %Equal.sym(
+    Maybe<&2, Node<Machine.Q(mach)>>,
+    State.put(~mach, s2, ds),
+    State.put.plain(~mach, s2, ds),
+    State.put_plain(~mach, s2, ds)
+  ): {
+    _ == Some{s3}: Maybe<&2, Node<Machine.Q(mach)>>
+  } -> {Stores.Store.holds(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), s3, ds) == True{}: Bool}
   Put.holds.if(
     ~mach,
     s2,
@@ -9280,21 +9517,28 @@ def Keep.reads(
 ) -> Work.Reads(~mach, k, v, Some{w}) -> Work.Reads(~mach, k, v, Work.keep(~mach, w, ns)):
   match w:
     case Work{s, h}:
-      hget => Keep.reads.if(
-        ~mach,
-        s,
-        h,
-        ns,
-        k,
-        v,
-        Stores.Store.holds(
-          ~Node<Machine.Q(mach)>,
-          ~Store.fetch(~mach),
-          State.keep(~mach, s, ns),
-          ns
-        ),
-        hget
-      )
+      hget =>
+        %Equal.sym(
+          Maybe<&2, Node<Machine.Q(mach)>>,
+          State.put(~mach, s, ns),
+          State.put.plain(~mach, s, ns),
+          State.put_plain(~mach, s, ns)
+        ): Work.Reads(~mach, k, v, Work.on(~mach, _, h))
+        Keep.reads.if(
+          ~mach,
+          s,
+          h,
+          ns,
+          k,
+          v,
+          Stores.Store.holds(
+            ~Node<Machine.Q(mach)>,
+            ~Store.fetch(~mach),
+            State.keep(~mach, s, ns),
+            ns
+          ),
+          hget
+        )
 
 # Set.read once it is known whether the node holds the new nodes (b)
 def Set.read.if(
@@ -9388,6 +9632,12 @@ def Set.read.of(
     case None{}:
       Unit{}
     case Some{Trees.Put{hh, ws}}:
+      %Equal.sym(
+        Maybe<&2, Node<Machine.Q(mach)>>,
+        State.put(~mach, s, ws),
+        State.put.plain(~mach, s, ws),
+        State.put_plain(~mach, s, ws)
+      ): Work.Reads(~mach, k, x, Work.on(~mach, _, Some{hh}))
       Set.read.if(
         ~mach,
         s,

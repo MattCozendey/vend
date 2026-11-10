@@ -6,6 +6,7 @@ import ./shared/shared/hash.bend as Hashes
 import ./shared/shared/seal.bend as Seals
 import ./shared/shared/shared.bend as Shared
 import ./shared/shared/trie.bend as Tries
+import ./shared/store.bend as Stores
 import ./shared/text.bend as Texts
 
 # Ledgers
@@ -1149,6 +1150,71 @@ def State.put_datas(
     case Con{ws, r}:
       State.put_datas(~Q, ~same, r, State.put_data(~Q, ~same, s, ws))
 
+# s with the data ws under its key k, once the cell m there is known (none:
+# the slot holds anything else than ws)
+def Data.add.of(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  s: State(Q),
+  k: List<&2, Bool>,
+  ws: List<&2, U32>,
+  m: Maybe<&2, Cells.Cell<Entry<Q>>>
+) -> Maybe<&2, State(Q)>:
+  match m:
+    case None{}:
+      Some{State.put(~Q, ~same, s, k, Entry.Data{ws})}
+    case Some{Cells.One{Entry.Data{ws2}}}:
+      Shared.Maybe.when(State(Q), Shared.List.is_eq(~U32, ~U32.is_eq, ws2, ws), u => Some{s})
+    case Some{c}:
+      None{}
+
+# s with the data ws, when it then holds ws under its hash (none: the slot
+# holds anything else). It hashes ws once: the words that the slot holds are
+# compared with ws, not hashed
+def State.add_data(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  +s: State(Q),
+  +ws: List<&2, U32>
+) -> Maybe<&2, State(Q)>:
+  +k = Slot.data(Hashes.Sha.hash(ws))
+  Data.add.of(~Q, ~same, s, k, ws, State.get(~Q, s, k))
+
+# s with the data ds, when it then holds each of them under its hash, in one
+# pass (State.add_datas_plain)
+def State.add_datas(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ds: List<&2, List<&2, U32>>,
+  s: State(Q)
+) -> Maybe<&2, State(Q)>:
+  match ds:
+    case Nil{}:
+      Some{s}
+    case Con{ws, r}:
+      Maybe.bind(
+        &2,
+        State(Q),
+        State(Q),
+        State.add_data(~Q, ~same, s, ws),
+        s2 => State.add_datas(~Q, ~same, r, s2)
+      )
+
+# s with the data ds, when it then holds each of them under its hash: each
+# put, then each read back
+def State.add_datas.plain(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  +ds: List<&2, List<&2, U32>>,
+  s: State(Q)
+) -> Maybe<&2, State(Q)>:
+  +s2 = State.put_datas(~Q, ~same, ds, s)
+  Shared.Maybe.when(
+    State(Q),
+    Stores.Store.holds(~State(Q), ~(l => h => State.data(~Q, l, h)), s2, ds),
+    u => Some{s2}
+  )
+
 # Changes
 # -------
 
@@ -2208,6 +2274,31 @@ def State.take_data(ty, same, s, ws):
     ): {Shared.Maybe.when(List<&2, U32>, _, u => Some{ws}) == Some{ws}: Maybe<&2, List<&2, U32>>}
     {==}
 
+# a cell that a ledger holds, it holds as it grows
+def State.held_grows(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  s: State(Q),
+  +s2: State(Q),
+  +k: List<&2, Bool>,
+  c: Cells.Cell<Entry<Q>>
+) -> {
+  State.grows(~Q, ~same, s, s2) == True{}: Bool
+} -> {
+  State.get(~Q, s, k) == Some{c}: Maybe<&2, Cells.Cell<Entry<Q>>>
+} -> {State.get(~Q, s2, k) == Some{c}: Maybe<&2, Cells.Cell<Entry<Q>>>}:
+  gr => eg =>
+    Cells.Cell.keeps_held(
+      ~Entry<Q>,
+      ~Entry.is_eq(~Q, ~same),
+      ~Entry.laws(~Q, ~same, ~laws),
+      c,
+      State.get(~Q, s2, k)
+    )(
+      %eg: {Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), _, State.get(~Q, s2, k)) == True{}: Bool}
+      Tries.Trie.keeps_get(~Cells.Cell<Entry<Q>>, ~Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), ~Cells.Cell.none_kept(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), s, s2, k)(gr))
+
 # an entry that a ledger holds, it holds as it grows
 law State.one_grows:
   for ~Q: Data
@@ -2222,16 +2313,7 @@ law State.one_grows:
     -> {State.get(~Q, s2, k) == Some{Cells.One{e}}: Maybe<&2, Cells.Cell<Entry<Q>>>}
 
 def State.one_grows(ty, same, laws, s, s2, k, e):
-  gr => eg =>
-    Cells.Cell.keeps_value(
-      ~Entry<ty>,
-      ~Entry.is_eq(~ty, ~same),
-      ~Entry.laws(~ty, ~same, ~laws),
-      e,
-      State.get(~ty, s2, k)
-    )(
-      %eg: {Cells.Cell.keeps(~Entry<ty>, ~Entry.is_eq(~ty, ~same), _, State.get(~ty, s2, k)) == True{}: Bool}
-      Tries.Trie.keeps_get(~Cells.Cell<Entry<ty>>, ~Cells.Cell.keeps(~Entry<ty>, ~Entry.is_eq(~ty, ~same)), ~Cells.Cell.none_kept(~Entry<ty>, ~Entry.is_eq(~ty, ~same)), s, s2, k)(gr))
+  State.held_grows(~ty, ~same, ~laws, s, s2, k, Cells.One{e})
 
 # a holder that lacks the slot k, and takes in a ledger t, holds what t holds
 # in k
@@ -2262,3 +2344,513 @@ def State.take_get(ty, s, t, k):
         %Equal.sym(Maybe<&2, Cells.Cell<Entry<ty>>>, State.get(~ty, s, k), None{}, e): {Shared.Maybe.join(~Cells.Cell<Entry<ty>>, ~(x => y => x), _, State.get(~ty, t, k)) == State.get(~ty, t, k): Maybe<&2, Cells.Cell<Entry<ty>>>}
         {==})
     )
+
+# a ledger holds the data that the slot of its hash holds
+def State.has_held(
+  ~Q: Data,
+  s: State(Q),
+  +ws: List<&2, U32>
+) -> {
+  State.get(
+    ~Q,
+    s,
+    Slot.data(Hashes.Sha.hash(ws))
+  )
+    == Some{Cells.One{Entry.Data{ws}}}: Maybe<&2, Cells.Cell<Entry<Q>>>
+} -> {Stores.Store.has(~State(Q), ~(l => h => State.data(~Q, l, h)), s, ws) == True{}: Bool}:
+  eg =>
+    %Equal.sym(
+      Maybe<&2, Cells.Cell<Entry<Q>>>,
+      State.get(~Q, s, Slot.data(Hashes.Sha.hash(ws))),
+      Some{Cells.One{Entry.Data{ws}}},
+      eg
+    ): {
+      Shared.Maybe.is_eq(
+        ~List<&2, U32>,
+        ~Shared.List.is_eq(~U32, ~U32.is_eq),
+        Maybe.bind(
+          &2,
+          List<&2, U32>,
+          List<&2, U32>,
+          Data.of(~Q, Cells.Cell.value(Entry<Q>, _)),
+          y => Data.check(Hashes.Sha.hash(ws), y)
+        ),
+        Some{ws}
+      )
+        == True{}: Bool
+    }
+    %Equal.sym(
+      Bool,
+      Hashes.Hash.is_eq(Hashes.Sha.hash(ws), Hashes.Sha.hash(ws)),
+      True{},
+      Hashes.Hash.is_eq_refl(Hashes.Sha.hash(ws))
+    ): {
+      Shared.Maybe.is_eq(
+        ~List<&2, U32>,
+        ~Shared.List.is_eq(~U32, ~U32.is_eq),
+        Shared.Maybe.when(List<&2, U32>, _, u => Some{ws}),
+        Some{ws}
+      )
+        == True{}: Bool
+    }
+    Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), ws)
+
+# State.has_other once the hash check (ok) is known
+def State.has_other.at(
+  ws: List<&2, U32>,
+  ws2: List<&2, U32>,
+  ok: Bool
+) -> {
+  Shared.List.is_eq(~U32, ~U32.is_eq, ws2, ws) == False{}: Bool
+} -> {
+  Shared.Maybe.is_eq(
+    ~List<&2, U32>,
+    ~Shared.List.is_eq(~U32, ~U32.is_eq),
+    Shared.Maybe.when(List<&2, U32>, ok, u => Some{ws2}),
+    Some{ws}
+  )
+    == False{}: Bool
+}:
+  match ok:
+    case True{}:
+      e => e
+    case False{}:
+      e => {==}
+
+# a ledger does not hold the data ws when the slot of its hash holds other
+# words
+def State.has_other(
+  ~Q: Data,
+  s: State(Q),
+  +ws: List<&2, U32>,
+  +ws2: List<&2, U32>
+) -> {
+  State.get(
+    ~Q,
+    s,
+    Slot.data(Hashes.Sha.hash(ws))
+  )
+    == Some{Cells.One{Entry.Data{ws2}}}: Maybe<&2, Cells.Cell<Entry<Q>>>
+} -> {
+  Shared.List.is_eq(~U32, ~U32.is_eq, ws2, ws) == False{}: Bool
+} -> {Stores.Store.has(~State(Q), ~(l => h => State.data(~Q, l, h)), s, ws) == False{}: Bool}:
+  eg => ne =>
+    %Equal.sym(
+      Maybe<&2, Cells.Cell<Entry<Q>>>,
+      State.get(~Q, s, Slot.data(Hashes.Sha.hash(ws))),
+      Some{Cells.One{Entry.Data{ws2}}},
+      eg
+    ): {
+      Shared.Maybe.is_eq(
+        ~List<&2, U32>,
+        ~Shared.List.is_eq(~U32, ~U32.is_eq),
+        Maybe.bind(
+          &2,
+          List<&2, U32>,
+          List<&2, U32>,
+          Data.of(~Q, Cells.Cell.value(Entry<Q>, _)),
+          y => Data.check(Hashes.Sha.hash(ws), y)
+        ),
+        Some{ws}
+      )
+        == False{}: Bool
+    }
+    State.has_other.at(ws, ws2, Hashes.Hash.is_eq(Hashes.Sha.hash(ws2), Hashes.Sha.hash(ws)))(ne)
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a ledger does not hold the data ws when the slot of its hash holds no data
+def State.has_none(
+  ~Q: Data,
+  s: State(Q),
+  ws: List<&2, U32>,
+  c: Cells.Cell<Entry<Q>>
+) -> {
+  State.get(~Q, s, Slot.data(Hashes.Sha.hash(ws))) == Some{c}: Maybe<&2, Cells.Cell<Entry<Q>>>
+} -> {
+  Data.of(~Q, Cells.Cell.value(Entry<Q>, Some{c})) == None{}: Maybe<&2, List<&2, U32>>
+} -> {Stores.Store.has(~State(Q), ~(l => h => State.data(~Q, l, h)), s, ws) == False{}: Bool}:
+  eg => en =>
+    %Equal.sym(
+      Maybe<&2, Cells.Cell<Entry<Q>>>,
+      State.get(~Q, s, Slot.data(Hashes.Sha.hash(ws))),
+      Some{c},
+      eg
+    ): {
+      Shared.Maybe.is_eq(
+        ~List<&2, U32>,
+        ~Shared.List.is_eq(~U32, ~U32.is_eq),
+        Maybe.bind(
+          &2,
+          List<&2, U32>,
+          List<&2, U32>,
+          Data.of(~Q, Cells.Cell.value(Entry<Q>, _)),
+          y => Data.check(Hashes.Sha.hash(ws), y)
+        ),
+        Some{ws}
+      )
+        == False{}: Bool
+    }
+    %Equal.sym(
+      Maybe<&2, List<&2, U32>>,
+      Data.of(~Q, Cells.Cell.value(Entry<Q>, Some{c})),
+      None{},
+      en
+    ): {
+      Shared.Maybe.is_eq(
+        ~List<&2, U32>,
+        ~Shared.List.is_eq(~U32, ~U32.is_eq),
+        Maybe.bind(&2, List<&2, U32>, List<&2, U32>, _, y => Data.check(Hashes.Sha.hash(ws), y)),
+        Some{ws}
+      )
+        == False{}: Bool
+    }
+    {==}
+
+# the plain put of the data ws and then r is the plain put of r, when the
+# state t after the puts holds ws
+def State.add_datas_plain.hit(
+  ~Q: Data,
+  -x: Maybe<&2, State(Q)>,
+  t: State(Q),
+  ws: List<&2, U32>,
+  r: List<&2, List<&2, U32>>
+) -> {
+  Stores.Store.has(~State(Q), ~(l => h => State.data(~Q, l, h)), t, ws) == True{}: Bool
+} -> {
+  x
+    == Shared.Maybe.when(
+      State(Q),
+      Stores.Store.holds(~State(Q), ~(l => h => State.data(~Q, l, h)), t, r),
+      u => Some{t}
+    ): Maybe<&2, State(Q)>
+} -> {
+  x
+    == Shared.Maybe.when(
+      State(Q),
+      Stores.Store.holds(~State(Q), ~(l => h => State.data(~Q, l, h)), t, ws <> r),
+      u => Some{t}
+    ): Maybe<&2, State(Q)>
+}:
+  eh => ex =>
+    %Equal.sym(
+      Bool,
+      Stores.Store.has(~State(Q), ~(l => h => State.data(~Q, l, h)), t, ws),
+      True{},
+      eh
+    ): {
+      x
+        == Shared.Maybe.when(
+          State(Q),
+          List.all.if(
+            u => Stores.Store.holds(~State(Q), ~(l => h => State.data(~Q, l, h)), t, r),
+            _
+          ),
+          u => Some{t}
+        ): Maybe<&2, State(Q)>
+    }
+    ex
+
+# the plain put of the data ws and then r gives nothing, when the state t
+# after the puts does not hold ws
+def State.add_datas_plain.miss(
+  ~Q: Data,
+  t: State(Q),
+  ws: List<&2, U32>,
+  r: List<&2, List<&2, U32>>
+) -> {
+  Stores.Store.has(~State(Q), ~(l => h => State.data(~Q, l, h)), t, ws) == False{}: Bool
+} -> {
+  None{}
+    == Shared.Maybe.when(
+      State(Q),
+      Stores.Store.holds(~State(Q), ~(l => h => State.data(~Q, l, h)), t, ws <> r),
+      u => Some{t}
+    ): Maybe<&2, State(Q)>
+}:
+  eh =>
+    %Equal.sym(
+      Bool,
+      Stores.Store.has(~State(Q), ~(l => h => State.data(~Q, l, h)), t, ws),
+      False{},
+      eh
+    ): {
+      None{}
+        == Shared.Maybe.when(
+          State(Q),
+          List.all.if(
+            u => Stores.Store.holds(~State(Q), ~(l => h => State.data(~Q, l, h)), t, r),
+            _
+          ),
+          u => Some{t}
+        ): Maybe<&2, State(Q)>
+    }
+    {==}
+
+# State.add_datas_plain where the slot of the first data ws holds the words
+# ws2, once their comparison (b) is known
+def State.add_datas_plain.same(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  s: State(Q),
+  +ws: List<&2, U32>,
+  ws2: List<&2, U32>,
+  +r: List<&2, List<&2, U32>>,
+  b: Bool,
+  eb: {Shared.List.is_eq(~U32, ~U32.is_eq, ws2, ws) == b: Bool},
+  eg: {
+    State.get(
+      ~Q,
+      State.put_datas(~Q, ~same, r, s),
+      Slot.data(Hashes.Sha.hash(ws))
+    )
+      == Some{Cells.One{Entry.Data{ws2}}}: Maybe<&2, Cells.Cell<Entry<Q>>>
+  },
+  ih: {
+    State.add_datas(~Q, ~same, r, s) == State.add_datas.plain(~Q, ~same, r, s): Maybe<&2, State(Q)>
+  }
+) -> {
+  Maybe.bind(
+    &2,
+    State(Q),
+    State(Q),
+    Shared.Maybe.when(State(Q), b, u => Some{s}),
+    s2 => State.add_datas(~Q, ~same, r, s2)
+  )
+    == Shared.Maybe.when(
+      State(Q),
+      Stores.Store.holds(
+        ~State(Q),
+        ~(l => h => State.data(~Q, l, h)),
+        State.put_datas(~Q, ~same, r, s),
+        ws <> r
+      ),
+      u => Some{State.put_datas(~Q, ~same, r, s)}
+    ): Maybe<&2, State(Q)>
+}:
+  match b:
+    case True{}:
+      +t = State.put_datas(~Q, ~same, r, s)
+      State.add_datas_plain.hit(
+        ~Q,
+        State.add_datas(~Q, ~same, r, s),
+        t,
+        ws,
+        r
+      )(State.has_held(~Q, t, ws)(
+          %Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), ws2, ws)(eb): {State.get(~Q, t, Slot.data(Hashes.Sha.hash(ws))) == Some{Cells.One{Entry.Data{_}}}: Maybe<&2, Cells.Cell<Entry<Q>>>}
+          eg))(ih)
+    case False{}:
+      +t = State.put_datas(~Q, ~same, r, s)
+      State.add_datas_plain.miss(~Q, t, ws, r)(State.has_other(~Q, t, ws, ws2)(eg)(eb))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# State.add_datas_plain where the slot of the first data ws holds a cell c
+# that is not data
+def State.add_datas_plain.other(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  +s: State(Q),
+  +ws: List<&2, U32>,
+  +r: List<&2, List<&2, U32>>,
+  +c: Cells.Cell<Entry<Q>>,
+  em: {
+    State.get(~Q, s, Slot.data(Hashes.Sha.hash(ws))) == Some{c}: Maybe<&2, Cells.Cell<Entry<Q>>>
+  },
+  en: {Data.of(~Q, Cells.Cell.value(Entry<Q>, Some{c})) == None{}: Maybe<&2, List<&2, U32>>}
+) -> {
+  None{}
+    == Shared.Maybe.when(
+      State(Q),
+      Stores.Store.holds(
+        ~State(Q),
+        ~(l => h => State.data(~Q, l, h)),
+        State.put_datas(~Q, ~same, r, s),
+        ws <> r
+      ),
+      u => Some{State.put_datas(~Q, ~same, r, s)}
+    ): Maybe<&2, State(Q)>
+}:
+  +t = State.put_datas(~Q, ~same, r, s)
+  State.add_datas_plain.miss(
+    ~Q,
+    t,
+    ws,
+    r
+  )(
+    State.has_none(
+      ~Q,
+      t,
+      ws,
+      c
+    )(
+      State.held_grows(
+        ~Q,
+        ~same,
+        ~laws,
+        s,
+        t,
+        Slot.data(Hashes.Sha.hash(ws)),
+        c
+      )(State.put_datas_grows(~Q, ~same, ~laws, r, s))(em)
+    )(en)
+  )
+
+# State.add_datas_plain for the first data ws, once the cell m of its slot is
+# known
+def State.add_datas_plain.at(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  +s: State(Q),
+  +ws: List<&2, U32>,
+  +r: List<&2, List<&2, U32>>,
+  m: Maybe<&2, Cells.Cell<Entry<Q>>>,
+  em: {State.get(~Q, s, Slot.data(Hashes.Sha.hash(ws))) == m: Maybe<&2, Cells.Cell<Entry<Q>>>},
+  ih: {
+    State.add_datas(
+      ~Q,
+      ~same,
+      r,
+      Data.put.of(~Q, ~same, s, Slot.data(Hashes.Sha.hash(ws)), ws, m)
+    )
+      == State.add_datas.plain(
+        ~Q,
+        ~same,
+        r,
+        Data.put.of(~Q, ~same, s, Slot.data(Hashes.Sha.hash(ws)), ws, m)
+      ): Maybe<&2, State(Q)>
+  }
+) -> {
+  Maybe.bind(
+    &2,
+    State(Q),
+    State(Q),
+    Data.add.of(~Q, ~same, s, Slot.data(Hashes.Sha.hash(ws)), ws, m),
+    s2 => State.add_datas(~Q, ~same, r, s2)
+  )
+    == Shared.Maybe.when(
+      State(Q),
+      Stores.Store.holds(
+        ~State(Q),
+        ~(l => h => State.data(~Q, l, h)),
+        State.put_datas(
+          ~Q,
+          ~same,
+          r,
+          Data.put.of(~Q, ~same, s, Slot.data(Hashes.Sha.hash(ws)), ws, m)
+        ),
+        ws <> r
+      ),
+      u => Some{
+        State.put_datas(
+          ~Q,
+          ~same,
+          r,
+          Data.put.of(~Q, ~same, s, Slot.data(Hashes.Sha.hash(ws)), ws, m)
+        )
+      }
+    ): Maybe<&2, State(Q)>
+}:
+  match m:
+    case None{}:
+      +k = Slot.data(Hashes.Sha.hash(ws))
+      +p = State.put(~Q, ~same, s, k, Entry.Data{ws})
+      +t = State.put_datas(~Q, ~same, r, p)
+      State.add_datas_plain.hit(
+        ~Q,
+        State.add_datas(~Q, ~same, r, p),
+        t,
+        ws,
+        r
+      )(
+        State.has_held(
+          ~Q,
+          t,
+          ws
+        )(
+          State.held_grows(
+            ~Q,
+            ~same,
+            ~laws,
+            p,
+            t,
+            k,
+            Cells.One{Entry.Data{ws}}
+          )(
+            State.put_datas_grows(~Q, ~same, ~laws, r, p)
+          )(State.put_get(~Q, ~same, s, k, Entry.Data{ws})(em))
+        )
+      )(ih)
+    case Some{Cells.One{Entry.Data{+ws2}}}:
+      State.add_datas_plain.same(
+        ~Q,
+        ~same,
+        s,
+        ws,
+        ws2,
+        r,
+        Shared.List.is_eq(~U32, ~U32.is_eq, ws2, ws),
+        {==},
+        State.held_grows(
+          ~Q,
+          ~same,
+          ~laws,
+          s,
+          State.put_datas(~Q, ~same, r, s),
+          Slot.data(Hashes.Sha.hash(ws)),
+          Cells.One{Entry.Data{ws2}}
+        )(State.put_datas_grows(~Q, ~same, ~laws, r, s))(em),
+        ih
+      )
+    case Some{Cells.One{Entry.Ask{i, t, q}}}:
+      State.add_datas_plain.other(
+        ~Q,
+        ~same,
+        ~laws,
+        s,
+        ws,
+        r,
+        Cells.One{Entry.Ask{i, t, q}},
+        em,
+        {==}
+      )
+    case Some{Cells.One{Entry.Vote{b}}}:
+      State.add_datas_plain.other(~Q, ~same, ~laws, s, ws, r, Cells.One{Entry.Vote{b}}, em, {==})
+    case Some{Cells.Many{}}:
+      State.add_datas_plain.other(~Q, ~same, ~laws, s, ws, r, Cells.Many{}, em, {==})
+
+# the one-pass put is the plain one: each of the data put, then each read
+# back under its hash
+law State.add_datas_plain:
+  for ~Q: Data
+  for ~same: Q -> Q -> Bool
+  for ~laws: Shared.Eq.Laws(Q, same)
+  for +ds: List<&2, List<&2, U32>>
+  for +s: State(Q)
+  {
+    State.add_datas(
+      ~Q,
+      ~same,
+      ds,
+      s
+    )
+      == State.add_datas.plain(~Q, ~same, ds, s): Maybe<&2, State(Q)>
+  }
+
+def State.add_datas_plain(ty, same, laws, ds, s):
+  match ds:
+    case Nil{}:
+      {==}
+    case Con{+ws, +r}:
+      State.add_datas_plain.at(
+        ~ty,
+        ~same,
+        ~laws,
+        s,
+        ws,
+        r,
+        State.get(~ty, s, Slot.data(Hashes.Sha.hash(ws))),
+        {==},
+        State.add_datas_plain(~ty, ~same, ~laws, r, State.put_data(~ty, ~same, s, ws))
+      )

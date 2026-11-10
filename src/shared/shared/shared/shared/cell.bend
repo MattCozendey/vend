@@ -416,6 +416,27 @@ def Cell.keeps_value(
     case None{}:
       h => Empty.absurd({None{} == Some{One{x}}: Maybe<&2, Cell<V>>}, Shared.Bool.false_ne_true(h))
 
+# a slot that keeps a held cell holds that cell
+def Cell.keeps_held(
+  ~V: Data,
+  ~same: V -> V -> Bool,
+  ~laws: Shared.Eq.Laws(V, same),
+  c: Cell<V>,
+  b: Maybe<&2, Cell<V>>
+) -> {Cell.keeps(~V, ~same, Some{c}, b) == True{}: Bool} -> {b == Some{c}: Maybe<&2, Cell<V>>}:
+  match c b:
+    case One{x} y:
+      Cell.keeps_value(~V, ~same, ~laws, x, y)
+    case Many{} Some{Many{}}:
+      h => {==}
+    case Many{} Some{One{y}}:
+      h => Empty.absurd(
+        {Some{One{y}} == Some{Many{}}: Maybe<&2, Cell<V>>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Many{} None{}:
+      h => Empty.absurd({None{} == Some{Many{}}: Maybe<&2, Cell<V>>}, Shared.Bool.false_ne_true(h))
+
 # a slot that keeps a full slot is full
 def Cell.keeps_some(
   ~V: Data,
