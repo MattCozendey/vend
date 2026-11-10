@@ -76,17 +76,6 @@ law Group.nodes:
   for g: String
   List<&2, String>
 
-# the verdict on a write of the resource n since base, with the content c, at
-# the tree h: take it when n holds at h what it held at base. It waits for a
-# node that it lacks: it does not refuse on what it cannot read
-law Judge.write:
-  for +s: Replicas.Node<Requests.Ask>
-  for +n: Resources.Name
-  for +base: Maybe<&2, Ledgers.Id>
-  for +c: Requests.Content
-  for +h: Maybe<&2, Hashes.Hash>
-  Maybe<&2, Replicas.Verdict<Requests.Ask>>
-
 # the trees of a resolve of the resource n with the root m, in the tree h:
 # the resource holds m, and its clash is shut (its key holds no request)
 law Resolve.work:
@@ -474,6 +463,115 @@ def Content.find(
     case Requests.Content.Of{w}:
       Res.find(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, Some{w}), n)
 
+# Judging
+# -------
+# The owners of a line give each request one outcome, in a step: take it, with
+# the content that the line holds after it, or refuse it as stale. A step
+# waits while a version that a request names is not decided yet, or the node
+# lacks a node of a tree that it reads.
+
+# the verdict that the outcome m of a version gives a request that names it:
+# take it when it is a version, refuse it when it is stale, else wait
+def Judge.ready.of(m: Maybe<&2, Replicas.Out>) -> Maybe<&2, Bool>:
+  match m:
+    case Some{Replicas.Out.Taken{n}}:
+      Some{True{}}
+    case Some{Replicas.Out.Stale{}}:
+      Some{False{}}
+    case None{}:
+      None{}
+
+# the verdict of the version v, for a request that names it
+def Judge.ready(s: Replicas.Node<Requests.Ask>, v: Ledgers.Id) -> Maybe<&2, Bool>:
+  Judge.ready.of(Replicas.Node.out(~Requests.Ask.machine(), s, v))
+
+# the verdict of the version m, if any
+def Judge.ready_maybe(s: Replicas.Node<Requests.Ask>, m: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Bool>:
+  match m:
+    case None{}:
+      Some{True{}}
+    case Some{v}:
+      Judge.ready(s, v)
+
+# the verdict on the content c: its version must be one
+def Judge.content(s: Replicas.Node<Requests.Ask>, c: Requests.Content) -> Maybe<&2, Bool>:
+  match c:
+    case Requests.Content.Root{x}:
+      Some{True{}}
+    case Requests.Content.Of{w}:
+      Judge.ready(s, w)
+
+# a refusal
+def Judge.refuse() -> Maybe<&2, Replicas.Verdict<Requests.Ask>>:
+  Some{Replicas.Verdict.Stale{}}
+
+# the verdict m, then k when m takes
+def Judge.then(
+  m: Maybe<&2, Bool>,
+  k: Unit -> Maybe<&2, Replicas.Verdict<Requests.Ask>>
+) -> Maybe<&2, Replicas.Verdict<Requests.Ask>>:
+  match m:
+    case Some{True{}}:
+      k(Unit{})
+    case Some{False{}}:
+      Judge.refuse()
+    case None{}:
+      None{}
+
+# k when b holds, else a refusal
+def Judge.when(
+  b: Bool,
+  k: Unit -> Maybe<&2, Replicas.Verdict<Requests.Ask>>
+) -> Maybe<&2, Replicas.Verdict<Requests.Ask>>:
+  Shared.Bool.when(Maybe<&2, Replicas.Verdict<Requests.Ask>>, b, k, u => Judge.refuse())
+
+# the verdict on a write of the resource n since base, with the content c, at
+# the tree h: take it when n holds at h what it held at base. It waits for a
+# node that it lacks: it does not refuse on what it cannot read
+def Judge.write(
+  +s: Replicas.Node<Requests.Ask>,
+  +n: Resources.Name,
+  +base: Maybe<&2, Ledgers.Id>,
+  +c: Requests.Content,
+  +h: Maybe<&2, Hashes.Hash>
+) -> Maybe<&2, Replicas.Verdict<Requests.Ask>>:
+  Judge.then(
+    Judge.ready_maybe(s, base),
+    u => Judge.then(
+      Judge.content(s, c),
+      w => Maybe.bind(
+        &2,
+        Maybe<&2, Ropes.Root>,
+        Replicas.Verdict<Requests.Ask>,
+        Res.find(s, h, n),
+        a => Maybe.bind(
+          &2,
+          Maybe<&2, Ropes.Root>,
+          Replicas.Verdict<Requests.Ask>,
+          Res.find(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, base), n),
+          b => Maybe.bind(
+            &2,
+            Maybe<&2, Ropes.Root>,
+            Replicas.Verdict<Requests.Ask>,
+            Content.find(s, n, c),
+            m => Judge.when(
+              Roots.same(a, b),
+              x => Replicas.Work.take(
+                ~Requests.Ask.machine(),
+                Replicas.Work.set(
+                  ~Requests.Ask.machine(),
+                  Replicas.Work{s, h},
+                  Key.res(n),
+                  Res.code(m)
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+
 # the store tree in which an Own of the line l, at the content h, reads its
 # group: a store reads its own content; a branch, the content of the version
 # at of its store
@@ -641,6 +739,40 @@ law Judge.write_reads:
   }
     -> {Content.find(s, n, c) == Some{m}: Maybe<&2, Maybe<&2, Ropes.Root>>}
     -> {Res.root(s3, h2, n) == m: Maybe<&2, Ropes.Root>}
+
+# a taken write changes only its resource: each other key reads, in the node
+# of the verdict, as it reads at h
+law Judge.write_keeps:
+  for +s: Replicas.Node<Requests.Ask>
+  for +n: Resources.Name
+  for +base: Maybe<&2, Ledgers.Id>
+  for +c: Requests.Content
+  for +h: Maybe<&2, Hashes.Hash>
+  for +h2: Maybe<&2, Hashes.Hash>
+  for +s3: Replicas.Node<Requests.Ask>
+  for +k: List<&2, U32>
+  {
+    Judge.write(
+      s,
+      n,
+      base,
+      c,
+      h
+    )
+      == Some{
+        Replicas.Verdict.Taken{Replicas.Work{s3, h2}}
+      }: Maybe<&2, Replicas.Verdict<Requests.Ask>>
+  }
+    -> {Shared.List.is_eq(~U32, ~U32.is_eq, Key.res(n), k) == False{}: Bool}
+    -> {
+      Replicas.Node.get(
+        ~Requests.Ask.machine(),
+        s3,
+        h2,
+        k
+      )
+        == Replicas.Node.get(~Requests.Ask.machine(), s3, h, k): Maybe<&2, List<&2, U32>>
+    }
 
 # a move records a version equal to its target: each resource of the version
 # to is, with the same content, in the tree that a move to it gives

@@ -563,103 +563,8 @@ def Group.loops.any(
 
 # Judging
 # -------
-# The owners of a line give each request one outcome, in a step: take it, with
-# the content that the line holds after it, or refuse it as stale. A step
-# waits while a version that a request names is not decided yet, or the node
-# lacks a node of a tree that it reads.
-
-# the verdict that the outcome m of a version gives a request that names it:
-# take it when it is a version, refuse it when it is stale, else wait
-def Judge.ready.of(m: Maybe<&2, Replicas.Out>) -> Maybe<&2, Bool>:
-  match m:
-    case Some{Replicas.Out.Taken{n}}:
-      Some{True{}}
-    case Some{Replicas.Out.Stale{}}:
-      Some{False{}}
-    case None{}:
-      None{}
-
-# the verdict of the version v, for a request that names it
-def Judge.ready(s: Replicas.Node<Requests.Ask>, v: Ledgers.Id) -> Maybe<&2, Bool>:
-  Judge.ready.of(Replicas.Node.out(~Requests.Ask.machine(), s, v))
-
-# the verdict of the version m, if any
-def Judge.ready_maybe(s: Replicas.Node<Requests.Ask>, m: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Bool>:
-  match m:
-    case None{}:
-      Some{True{}}
-    case Some{v}:
-      Judge.ready(s, v)
-
-# the verdict on the content c: its version must be one
-def Judge.content(s: Replicas.Node<Requests.Ask>, c: Requests.Content) -> Maybe<&2, Bool>:
-  match c:
-    case Requests.Content.Root{x}:
-      Some{True{}}
-    case Requests.Content.Of{w}:
-      Judge.ready(s, w)
-
-# a refusal
-def Judge.refuse() -> Maybe<&2, Replicas.Verdict<Requests.Ask>>:
-  Some{Replicas.Verdict.Stale{}}
-
-# the verdict m, then k when m takes
-def Judge.then(
-  m: Maybe<&2, Bool>,
-  k: Unit -> Maybe<&2, Replicas.Verdict<Requests.Ask>>
-) -> Maybe<&2, Replicas.Verdict<Requests.Ask>>:
-  match m:
-    case Some{True{}}:
-      k(Unit{})
-    case Some{False{}}:
-      Judge.refuse()
-    case None{}:
-      None{}
-
-# k when b holds, else a refusal
-def Judge.when(
-  b: Bool,
-  k: Unit -> Maybe<&2, Replicas.Verdict<Requests.Ask>>
-) -> Maybe<&2, Replicas.Verdict<Requests.Ask>>:
-  Shared.Bool.when(Maybe<&2, Replicas.Verdict<Requests.Ask>>, b, k, u => Judge.refuse())
-
-def Spec.Judge.write(s, n, base, c, h):
-  Judge.then(
-    Judge.ready_maybe(s, base),
-    u => Judge.then(
-      Judge.content(s, c),
-      w => Maybe.bind(
-        &2,
-        Maybe<&2, Ropes.Root>,
-        Replicas.Verdict<Requests.Ask>,
-        Spec.Res.find(s, h, n),
-        a => Maybe.bind(
-          &2,
-          Maybe<&2, Ropes.Root>,
-          Replicas.Verdict<Requests.Ask>,
-          Spec.Res.find(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, base), n),
-          b => Maybe.bind(
-            &2,
-            Maybe<&2, Ropes.Root>,
-            Replicas.Verdict<Requests.Ask>,
-            Spec.Content.find(s, n, c),
-            m => Judge.when(
-              Spec.Roots.same(a, b),
-              x => Replicas.Work.take(
-                ~Requests.Ask.machine(),
-                Replicas.Work.set(
-                  ~Requests.Ask.machine(),
-                  Replicas.Work{s, h},
-                  Spec.Key.res(n),
-                  Spec.Res.code(m)
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-  )
+# The judges of the other changes; the rule of a judge is in the spec
+# (Spec.Judge.write).
 
 # the version that the request m merged, when m is a merge on the branch b of
 # the store r
@@ -730,10 +635,10 @@ def Judge.resolve(
   +c: Requests.Content,
   +h: Maybe<&2, Hashes.Hash>
 ) -> Maybe<&2, Replicas.Verdict<Requests.Ask>>:
-  Judge.then(
-    Judge.ready(s, k),
-    u => Judge.then(
-      Judge.content(s, c),
+  Spec.Judge.then(
+    Spec.Judge.ready(s, k),
+    u => Spec.Judge.then(
+      Spec.Judge.content(s, c),
       w => Maybe.bind(
         &2,
         Bool,
@@ -749,7 +654,7 @@ def Judge.resolve(
           Maybe<&2, Ropes.Root>,
           Replicas.Verdict<Requests.Ask>,
           Spec.Content.find(s, n, c),
-          m => Judge.when(
+          m => Spec.Judge.when(
             open,
             x => Replicas.Work.take(~Requests.Ask.machine(), Spec.Resolve.work(s, h, n, m))
           )
@@ -1163,7 +1068,7 @@ def Own.change(
   os: List<&2, String>,
   +h: Maybe<&2, Hashes.Hash>
 ) -> Maybe<&2, Replicas.Verdict<Requests.Ask>>:
-  Judge.then(
+  Spec.Judge.then(
     Spec.Own.takes(s, r, l, g, at, os, h),
     u => Replicas.Work.take(
       ~Requests.Ask.machine(),
@@ -1221,7 +1126,7 @@ def Judge.change(
 ) -> Maybe<&2, Replicas.Verdict<Requests.Ask>>:
   match l c:
     case None{} Requests.Change.Group{+g, +ms}:
-      Judge.when(
+      Spec.Judge.when(
         Bool.not(Group.loops.any(s, h, g, ms)),
         u => Replicas.Work.take(~Requests.Ask.machine(), Group.work(s, h, g, ms))
       )
@@ -1242,8 +1147,8 @@ def Judge.change(
     case Some{+b} Requests.Change.Resolve{k, n, c2}:
       Judge.resolve(s, r, b, k, n, c2, h)
     case Some{+b} Requests.Change.Merge{+from}:
-      Judge.then(
-        Judge.ready(s, from),
+      Spec.Judge.then(
+        Spec.Judge.ready(s, from),
         u => Judge.whole(
           Whole.both(s, h, Replicas.Node.root_of(~Requests.Ask.machine(), s, Some{from})),
           v => Replicas.Work.take(
@@ -1253,8 +1158,8 @@ def Judge.change(
         )
       )
     case Some{+b} Requests.Change.Move{+to}:
-      Judge.then(
-        Judge.ready(s, to),
+      Spec.Judge.then(
+        Spec.Judge.ready(s, to),
         u => Judge.whole(
           Whole.both(s, h, Replicas.Node.root_of(~Requests.Ask.machine(), s, Some{to})),
           v => Replicas.Work.take(
@@ -1264,7 +1169,7 @@ def Judge.change(
         )
       )
     case w c3:
-      Judge.refuse()
+      Spec.Judge.refuse()
 
 # Steps
 # -----
@@ -1340,7 +1245,7 @@ def Branch.new(
         st,
         b,
         at,
-        Judge.ready_maybe(Replicas.Run.state(~Requests.Ask.machine(), r), at)
+        Spec.Judge.ready_maybe(Replicas.Run.state(~Requests.Ask.machine(), r), at)
       )
 
 # the run r of a store, after the request i for a new branch b from the
@@ -3199,7 +3104,7 @@ def Verdict.then(
   +m: Maybe<&2, Bool>,
   -k: Unit -> Maybe<&2, Replicas.Verdict<Requests.Ask>>,
   hk: {Replicas.Verdict.after(~Requests.Ask.machine(), s, k(Unit{})) == True{}: Bool}
-) -> {Replicas.Verdict.after(~Requests.Ask.machine(), s, Judge.then(m, k)) == True{}: Bool}:
+) -> {Replicas.Verdict.after(~Requests.Ask.machine(), s, Spec.Judge.then(m, k)) == True{}: Bool}:
   match m:
     case Some{True{}}:
       hk
@@ -3214,7 +3119,7 @@ def Verdict.when(
   +b: Bool,
   -k: Unit -> Maybe<&2, Replicas.Verdict<Requests.Ask>>,
   hk: {Replicas.Verdict.after(~Requests.Ask.machine(), s, k(Unit{})) == True{}: Bool}
-) -> {Replicas.Verdict.after(~Requests.Ask.machine(), s, Judge.when(b, k)) == True{}: Bool}:
+) -> {Replicas.Verdict.after(~Requests.Ask.machine(), s, Spec.Judge.when(b, k)) == True{}: Bool}:
   match b:
     case True{}:
       hk
@@ -3251,9 +3156,9 @@ def Verdict.write(
 }:
   Verdict.then(
     s,
-    Judge.ready_maybe(s, base),
-    u => Judge.then(
-      Judge.content(s, c),
+    Spec.Judge.ready_maybe(s, base),
+    u => Spec.Judge.then(
+      Spec.Judge.content(s, c),
       w => Maybe.bind(
         &2,
         Maybe<&2, Ropes.Root>,
@@ -3269,7 +3174,7 @@ def Verdict.write(
             Maybe<&2, Ropes.Root>,
             Replicas.Verdict<Requests.Ask>,
             Spec.Content.find(s, n, c),
-            m => Judge.when(
+            m => Spec.Judge.when(
               Spec.Roots.same(a, b),
               x => Replicas.Work.take(
                 ~Requests.Ask.machine(),
@@ -3287,7 +3192,7 @@ def Verdict.write(
     ),
     Verdict.then(
       s,
-      Judge.content(s, c),
+      Spec.Judge.content(s, c),
       w => Maybe.bind(
         &2,
         Maybe<&2, Ropes.Root>,
@@ -3303,7 +3208,7 @@ def Verdict.write(
             Maybe<&2, Ropes.Root>,
             Replicas.Verdict<Requests.Ask>,
             Spec.Content.find(s, n, c),
-            m => Judge.when(
+            m => Spec.Judge.when(
               Spec.Roots.same(a, b),
               x => Replicas.Work.take(
                 ~Requests.Ask.machine(),
@@ -3333,7 +3238,7 @@ def Verdict.write(
             Maybe<&2, Ropes.Root>,
             Replicas.Verdict<Requests.Ask>,
             Spec.Content.find(s, n, c),
-            m => Judge.when(
+            m => Spec.Judge.when(
               Spec.Roots.same(a, b),
               x => Replicas.Work.take(
                 ~Requests.Ask.machine(),
@@ -3357,7 +3262,7 @@ def Verdict.write(
             Maybe<&2, Ropes.Root>,
             Replicas.Verdict<Requests.Ask>,
             Spec.Content.find(s, n, c),
-            m => Judge.when(
+            m => Spec.Judge.when(
               Spec.Roots.same(a, b),
               x => Replicas.Work.take(
                 ~Requests.Ask.machine(),
@@ -3375,7 +3280,7 @@ def Verdict.write(
             Maybe<&2, Ropes.Root>,
             s,
             Spec.Content.find(s, n, c),
-            m => Judge.when(
+            m => Spec.Judge.when(
               Spec.Roots.same(a, b),
               x => Replicas.Work.take(
                 ~Requests.Ask.machine(),
@@ -3437,9 +3342,9 @@ def Verdict.resolve(
 }:
   Verdict.then(
     s,
-    Judge.ready(s, k),
-    u => Judge.then(
-      Judge.content(s, c),
+    Spec.Judge.ready(s, k),
+    u => Spec.Judge.then(
+      Spec.Judge.content(s, c),
       w => Maybe.bind(
         &2,
         Bool,
@@ -3455,7 +3360,7 @@ def Verdict.resolve(
           Maybe<&2, Ropes.Root>,
           Replicas.Verdict<Requests.Ask>,
           Spec.Content.find(s, n, c),
-          m => Judge.when(
+          m => Spec.Judge.when(
             open,
             x => Replicas.Work.take(~Requests.Ask.machine(), Spec.Resolve.work(s, h, n, m))
           )
@@ -3464,7 +3369,7 @@ def Verdict.resolve(
     ),
     Verdict.then(
       s,
-      Judge.content(s, c),
+      Spec.Judge.content(s, c),
       w => Maybe.bind(
         &2,
         Bool,
@@ -3480,7 +3385,7 @@ def Verdict.resolve(
           Maybe<&2, Ropes.Root>,
           Replicas.Verdict<Requests.Ask>,
           Spec.Content.find(s, n, c),
-          m => Judge.when(
+          m => Spec.Judge.when(
             open,
             x => Replicas.Work.take(~Requests.Ask.machine(), Spec.Resolve.work(s, h, n, m))
           )
@@ -3501,7 +3406,7 @@ def Verdict.resolve(
           Maybe<&2, Ropes.Root>,
           Replicas.Verdict<Requests.Ask>,
           Spec.Content.find(s, n, c),
-          m => Judge.when(
+          m => Spec.Judge.when(
             open,
             x => Replicas.Work.take(~Requests.Ask.machine(), Spec.Resolve.work(s, h, n, m))
           )
@@ -3511,7 +3416,7 @@ def Verdict.resolve(
           Maybe<&2, Ropes.Root>,
           s,
           Spec.Content.find(s, n, c),
-          m => Judge.when(
+          m => Spec.Judge.when(
             open,
             x => Replicas.Work.take(~Requests.Ask.machine(), Spec.Resolve.work(s, h, n, m))
           ),
@@ -3622,7 +3527,7 @@ def Verdict.change(
     case Some{+b} Requests.Change.Merge{+from}:
       Verdict.then(
         s,
-        Judge.ready(s, from),
+        Spec.Judge.ready(s, from),
         u => Judge.whole(
           Whole.both(s, h, Replicas.Node.root_of(~Requests.Ask.machine(), s, Some{from})),
           v => Replicas.Work.take(
@@ -3647,7 +3552,7 @@ def Verdict.change(
     case Some{+b} Requests.Change.Move{+to}:
       Verdict.then(
         s,
-        Judge.ready(s, to),
+        Spec.Judge.ready(s, to),
         u => Judge.whole(
           Whole.both(s, h, Replicas.Node.root_of(~Requests.Ask.machine(), s, Some{to})),
           v => Replicas.Work.take(
@@ -3802,7 +3707,7 @@ def Branch.new.grows(
         st,
         b,
         at,
-        Judge.ready_maybe(Replicas.Run.state(~Requests.Ask.machine(), r), at)
+        Spec.Judge.ready_maybe(Replicas.Run.state(~Requests.Ask.machine(), r), at)
       )
 
 # On.grows once it is known how the line takes the change (w)
@@ -4038,7 +3943,7 @@ def Branch.new.kept(
         st,
         b,
         at,
-        Judge.ready_maybe(Replicas.Run.state(~Requests.Ask.machine(), r), at),
+        Spec.Judge.ready_maybe(Replicas.Run.state(~Requests.Ask.machine(), r), at),
         k2,
         v
       )
@@ -4248,7 +4153,7 @@ def Branch.new.outs(
         st,
         b,
         at,
-        Judge.ready_maybe(Replicas.Run.state(~Requests.Ask.machine(), r), at)
+        Spec.Judge.ready_maybe(Replicas.Run.state(~Requests.Ask.machine(), r), at)
       )
 
 # On.outs once it is known how the line takes the change (w)
@@ -5593,7 +5498,7 @@ def Then.took(
   -h2: Maybe<&2, Hashes.Hash>,
   -s3: Replicas.Node<Requests.Ask>
 ) -> {
-  Judge.then(
+  Spec.Judge.then(
     m,
     k
   )
@@ -5626,7 +5531,7 @@ def Then.took(
             Maybe<&2, Replicas.Verdict<Requests.Ask>>,
             Bool,
             v => Replicas.Verdict.took(~Requests.Ask.machine(), v),
-            Judge.refuse(),
+            Spec.Judge.refuse(),
             Some{Replicas.Verdict.Taken{Replicas.Work{s3, h2}}},
             e
           )
@@ -5656,7 +5561,7 @@ def When.took(
   -h2: Maybe<&2, Hashes.Hash>,
   -s3: Replicas.Node<Requests.Ask>
 ) -> {
-  Judge.when(
+  Spec.Judge.when(
     b,
     k
   )
@@ -5689,94 +5594,103 @@ def When.took(
             Maybe<&2, Replicas.Verdict<Requests.Ask>>,
             Bool,
             v => Replicas.Verdict.took(~Requests.Ask.machine(), v),
-            Judge.refuse(),
+            Spec.Judge.refuse(),
             Some{Replicas.Verdict.Taken{Replicas.Work{s3, h2}}},
             e
           )
         )
       )
 
-def Spec.Judge.write_reads(s, n, base, c, h, h2, s3, m):
-  e => ec =>
-    %Equal.sym(
-      Maybe<&2, List<&2, U32>>,
-      Replicas.Node.get(~Requests.Ask.machine(), s3, h2, Spec.Key.res(n)),
-      Some{Spec.Res.code(m)},
-      Replicas.Set.reads(
+# a verdict that takes, after a read, is the verdict of what comes next for
+# the value read: P follows from each value a that the read gives
+def Bind.took(
+  -A: Data,
+  ma: Maybe<&2, A>,
+  -k: A -> Maybe<&2, Replicas.Verdict<Requests.Ask>>,
+  -w: Replicas.Work<Requests.Ask>,
+  -P: Type
+) -> {
+  Maybe.bind(
+    &2,
+    A,
+    Replicas.Verdict<Requests.Ask>,
+    ma,
+    k
+  )
+    == Some{Replicas.Verdict.Taken{w}}: Maybe<&2, Replicas.Verdict<Requests.Ask>>
+} -> (
+  @a: A -> {
+    ma == Some{a}: Maybe<&2, A>
+  } -> {k(a) == Some{Replicas.Verdict.Taken{w}}: Maybe<&2, Replicas.Verdict<Requests.Ask>>} -> P
+) -> P:
+  match ma:
+    case None{}:
+      e => f => Empty.absurd(
+        P,
+        Shared.Maybe.none_ne_some(Replicas.Verdict<Requests.Ask>, Replicas.Verdict.Taken{w}, e)
+      )
+    case Some{a}:
+      e => f => f(a)({==})(e)
+
+# a taken write: the content m that it gives, and the set of its resource to
+# m that the verdict takes; P follows from them
+def Write.took(
+  +s: Replicas.Node<Requests.Ask>,
+  +n: Resources.Name,
+  +base: Maybe<&2, Ledgers.Id>,
+  +c: Requests.Content,
+  h: Maybe<&2, Hashes.Hash>,
+  -h2: Maybe<&2, Hashes.Hash>,
+  -s3: Replicas.Node<Requests.Ask>,
+  -P: Type
+) -> {
+  Spec.Judge.write(
+    s,
+    n,
+    base,
+    c,
+    h
+  )
+    == Some{
+      Replicas.Verdict.Taken{Replicas.Work{s3, h2}}
+    }: Maybe<&2, Replicas.Verdict<Requests.Ask>>
+} -> (
+  @m: Maybe<
+    &2,
+    Ropes.Root> -> {
+    Spec.Content.find(s, n, c) == Some{m}: Maybe<&2, Maybe<&2, Ropes.Root>>
+  } -> {
+    Replicas.Work.take(
+      ~Requests.Ask.machine(),
+      Replicas.Work.set(
         ~Requests.Ask.machine(),
-        s,
-        h,
+        Replicas.Work{s, h},
         Spec.Key.res(n),
-        Spec.Res.code(m),
-        Replicas.Node.set(~Requests.Ask.machine(), s, h, Spec.Key.res(n), Spec.Res.code(m)),
-        h2,
-        s3
-      )(
-        {==}
-      )(
-        Replicas.With.took(
-          ~Requests.Ask.machine(),
+        Spec.Res.code(m)
+      )
+    )
+      == Some{
+        Replicas.Verdict.Taken{Replicas.Work{s3, h2}}
+      }: Maybe<&2, Replicas.Verdict<Requests.Ask>>
+  } -> P
+) -> P:
+  e => f =>
+    Bind.took(
+      Maybe<&2, Ropes.Root>,
+      Spec.Res.find(s, h, n),
+      a => Maybe.bind(
+        &2,
+        Maybe<&2, Ropes.Root>,
+        Replicas.Verdict<Requests.Ask>,
+        Spec.Res.find(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, base), n),
+        b => Maybe.bind(
+          &2,
           Maybe<&2, Ropes.Root>,
-          Spec.Res.find(s, h, n),
-          a1 => Maybe.bind(
-            &2,
-            Maybe<&2, Ropes.Root>,
-            Replicas.Verdict<Requests.Ask>,
-            Spec.Res.find(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, base), n),
-            b1 => Maybe.bind(
-              &2,
-              Maybe<&2, Ropes.Root>,
-              Replicas.Verdict<Requests.Ask>,
-              Spec.Content.find(s, n, c),
-              m1 => Judge.when(
-                Spec.Roots.same(a1, b1),
-                x => Replicas.Work.take(
-                  ~Requests.Ask.machine(),
-                  Replicas.Work.set(
-                    ~Requests.Ask.machine(),
-                    Replicas.Work{s, h},
-                    Spec.Key.res(n),
-                    Spec.Res.code(m1)
-                  )
-                )
-              )
-            )
-          ),
-          Replicas.Work.take(
-            ~Requests.Ask.machine(),
-            Replicas.Work.set(
-              ~Requests.Ask.machine(),
-              Replicas.Work{s, h},
-              Spec.Key.res(n),
-              Spec.Res.code(m)
-            )
-          ),
-          h2,
-          s3
-        )(
-          +a => Replicas.With.took(
-            ~Requests.Ask.machine(),
-            Maybe<&2, Ropes.Root>,
-            Spec.Res.find(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, base), n),
-            b1 => Maybe.bind(
-              &2,
-              Maybe<&2, Ropes.Root>,
-              Replicas.Verdict<Requests.Ask>,
-              Spec.Content.find(s, n, c),
-              m1 => Judge.when(
-                Spec.Roots.same(a, b1),
-                x => Replicas.Work.take(
-                  ~Requests.Ask.machine(),
-                  Replicas.Work.set(
-                    ~Requests.Ask.machine(),
-                    Replicas.Work{s, h},
-                    Spec.Key.res(n),
-                    Spec.Res.code(m1)
-                  )
-                )
-              )
-            ),
-            Replicas.Work.take(
+          Replicas.Verdict<Requests.Ask>,
+          Spec.Content.find(s, n, c),
+          m => Spec.Judge.when(
+            Spec.Roots.same(a, b),
+            x => Replicas.Work.take(
               ~Requests.Ask.machine(),
               Replicas.Work.set(
                 ~Requests.Ask.machine(),
@@ -5784,11 +5698,140 @@ def Spec.Judge.write_reads(s, n, base, c, h, h2, s3, m):
                 Spec.Key.res(n),
                 Spec.Res.code(m)
               )
-            ),
-            h2,
-            s3
+            )
+          )
+        )
+      ),
+      Replicas.Work{s3, h2},
+      P
+    )(
+      Then.took(
+        Spec.Judge.content(s, c),
+        w => Maybe.bind(
+          &2,
+          Maybe<&2, Ropes.Root>,
+          Replicas.Verdict<Requests.Ask>,
+          Spec.Res.find(s, h, n),
+          a => Maybe.bind(
+            &2,
+            Maybe<&2, Ropes.Root>,
+            Replicas.Verdict<Requests.Ask>,
+            Spec.Res.find(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, base), n),
+            b => Maybe.bind(
+              &2,
+              Maybe<&2, Ropes.Root>,
+              Replicas.Verdict<Requests.Ask>,
+              Spec.Content.find(s, n, c),
+              m => Spec.Judge.when(
+                Spec.Roots.same(a, b),
+                x => Replicas.Work.take(
+                  ~Requests.Ask.machine(),
+                  Replicas.Work.set(
+                    ~Requests.Ask.machine(),
+                    Replicas.Work{s, h},
+                    Spec.Key.res(n),
+                    Spec.Res.code(m)
+                  )
+                )
+              )
+            )
+          )
+        ),
+        h2,
+        s3
+      )(
+        Then.took(
+          Spec.Judge.ready_maybe(s, base),
+          u => Spec.Judge.then(
+            Spec.Judge.content(s, c),
+            w => Maybe.bind(
+              &2,
+              Maybe<&2, Ropes.Root>,
+              Replicas.Verdict<Requests.Ask>,
+              Spec.Res.find(s, h, n),
+              a => Maybe.bind(
+                &2,
+                Maybe<&2, Ropes.Root>,
+                Replicas.Verdict<Requests.Ask>,
+                Spec.Res.find(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, base), n),
+                b => Maybe.bind(
+                  &2,
+                  Maybe<&2, Ropes.Root>,
+                  Replicas.Verdict<Requests.Ask>,
+                  Spec.Content.find(s, n, c),
+                  m => Spec.Judge.when(
+                    Spec.Roots.same(a, b),
+                    x => Replicas.Work.take(
+                      ~Requests.Ask.machine(),
+                      Replicas.Work.set(
+                        ~Requests.Ask.machine(),
+                        Replicas.Work{s, h},
+                        Spec.Key.res(n),
+                        Spec.Res.code(m)
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          ),
+          h2,
+          s3
+        )(e)
+      )
+    )(
+      a => ea => e3 => Bind.took(
+        Maybe<&2, Ropes.Root>,
+        Spec.Res.find(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, base), n),
+        b => Maybe.bind(
+          &2,
+          Maybe<&2, Ropes.Root>,
+          Replicas.Verdict<Requests.Ask>,
+          Spec.Content.find(s, n, c),
+          m => Spec.Judge.when(
+            Spec.Roots.same(a, b),
+            x => Replicas.Work.take(
+              ~Requests.Ask.machine(),
+              Replicas.Work.set(
+                ~Requests.Ask.machine(),
+                Replicas.Work{s, h},
+                Spec.Key.res(n),
+                Spec.Res.code(m)
+              )
+            )
+          )
+        ),
+        Replicas.Work{s3, h2},
+        P
+      )(
+        e3
+      )(
+        b => eb => e4 => Bind.took(
+          Maybe<&2, Ropes.Root>,
+          Spec.Content.find(s, n, c),
+          m => Spec.Judge.when(
+            Spec.Roots.same(a, b),
+            x => Replicas.Work.take(
+              ~Requests.Ask.machine(),
+              Replicas.Work.set(
+                ~Requests.Ask.machine(),
+                Replicas.Work{s, h},
+                Spec.Key.res(n),
+                Spec.Res.code(m)
+              )
+            )
+          ),
+          Replicas.Work{s3, h2},
+          P
+        )(
+          e4
+        )(
+          m => em => e5 => f(
+            m
           )(
-            +b => ex => When.took(
+            em
+          )(
+            When.took(
               Spec.Roots.same(a, b),
               x => Replicas.Work.take(
                 ~Requests.Ask.machine(),
@@ -5801,99 +5844,53 @@ def Spec.Judge.write_reads(s, n, base, c, h, h2, s3, m):
               ),
               h2,
               s3
-            )(
-              %ec: {Maybe.bind(&2, Maybe<&2, Ropes.Root>, Replicas.Verdict<Requests.Ask>, _, m1 => Judge.when(Spec.Roots.same(a, b), x => Replicas.Work.take(~Requests.Ask.machine(), Replicas.Work.set(~Requests.Ask.machine(), Replicas.Work{s, h}, Spec.Key.res(n), Spec.Res.code(m1))))) == Some{Replicas.Verdict.Taken{Replicas.Work{s3, h2}}}: Maybe<&2, Replicas.Verdict<Requests.Ask>>}
-              ex)
-          )
-        )(
-          Then.took(
-            Judge.content(s, c),
-            w => Maybe.bind(
-              &2,
-              Maybe<&2, Ropes.Root>,
-              Replicas.Verdict<Requests.Ask>,
-              Spec.Res.find(s, h, n),
-              a1 => Maybe.bind(
-                &2,
-                Maybe<&2, Ropes.Root>,
-                Replicas.Verdict<Requests.Ask>,
-                Spec.Res.find(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, base), n),
-                b1 => Maybe.bind(
-                  &2,
-                  Maybe<&2, Ropes.Root>,
-                  Replicas.Verdict<Requests.Ask>,
-                  Spec.Content.find(s, n, c),
-                  m1 => Judge.when(
-                    Spec.Roots.same(a1, b1),
-                    x => Replicas.Work.take(
-                      ~Requests.Ask.machine(),
-                      Replicas.Work.set(
-                        ~Requests.Ask.machine(),
-                        Replicas.Work{s, h},
-                        Spec.Key.res(n),
-                        Spec.Res.code(m1)
-                      )
-                    )
-                  )
-                )
-              )
-            ),
-            h2,
-            s3
-          )(
-            Then.took(
-              Judge.ready_maybe(s, base),
-              u => Judge.then(
-                Judge.content(s, c),
-                w => Maybe.bind(
-                  &2,
-                  Maybe<&2, Ropes.Root>,
-                  Replicas.Verdict<Requests.Ask>,
-                  Spec.Res.find(s, h, n),
-                  a1 => Maybe.bind(
-                    &2,
-                    Maybe<&2, Ropes.Root>,
-                    Replicas.Verdict<Requests.Ask>,
-                    Spec.Res.find(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, base), n),
-                    b1 => Maybe.bind(
-                      &2,
-                      Maybe<&2, Ropes.Root>,
-                      Replicas.Verdict<Requests.Ask>,
-                      Spec.Content.find(s, n, c),
-                      m1 => Judge.when(
-                        Spec.Roots.same(a1, b1),
-                        x => Replicas.Work.take(
-                          ~Requests.Ask.machine(),
-                          Replicas.Work.set(
-                            ~Requests.Ask.machine(),
-                            Replicas.Work{s, h},
-                            Spec.Key.res(n),
-                            Spec.Res.code(m1)
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              ),
-              h2,
-              s3
-            )(e)
+            )(e5)
           )
         )
       )
-    ): {
-      Maybe.bind(
-        &2,
-        List<&2, U32>,
-        Ropes.Root,
-        _,
-        ws => Spec.Res.read(ws)
-      )
-        == m: Maybe<&2, Ropes.Root>
-    }
-    Res.round(m)
+    )
 
+def Spec.Judge.write_keeps(s, n, base, c, h, h2, s3, k):
+  e => hne =>
+    Write.took(
+      s,
+      n,
+      base,
+      c,
+      h,
+      h2,
+      s3,
+      {
+        Replicas.Node.get(
+          ~Requests.Ask.machine(),
+          s3,
+          h2,
+          k
+        )
+          == Replicas.Node.get(~Requests.Ask.machine(), s3, h, k): Maybe<&2, List<&2, U32>>
+      }
+    )(
+      e
+    )(
+      m => em => es => Replicas.Set.other(
+        ~Requests.Ask.machine(),
+        s,
+        h,
+        Spec.Key.res(n),
+        Spec.Res.code(m),
+        k,
+        h2,
+        s3
+      )(hne)(es)
+    )
+
+def Spec.Judge.write_reads(s, n, base, c, h, h2, s3, m):
+  e => ec =>
+    Write.took(s, n, base, c, h, h2, s3, {Spec.Res.root(s3, h2, n) == m: Maybe<&2, Ropes.Root>})(e)(
+      +m1 => em1 => es =>
+        +same = Equal.cong(Maybe<&2, Maybe<&2, Ropes.Root>>, Maybe<&2, Ropes.Root>, v => Maybe.default(&2, Maybe<&2, Ropes.Root>, v, None{}), Some{m1}, Some{m}, Equal.trans(Maybe<&2, Maybe<&2, Ropes.Root>>, Some{m1}, Spec.Content.find(s, n, c), Some{m}, Equal.sym(Maybe<&2, Maybe<&2, Ropes.Root>>, Spec.Content.find(s, n, c), Some{m1}, em1), ec))
+        %Equal.sym(Maybe<&2, List<&2, U32>>, Replicas.Node.get(~Requests.Ask.machine(), s3, h2, Spec.Key.res(n)), Some{Spec.Res.code(m1)}, Replicas.Set.reads(~Requests.Ask.machine(), s, h, Spec.Key.res(n), Spec.Res.code(m1), Replicas.Node.set(~Requests.Ask.machine(), s, h, Spec.Key.res(n), Spec.Res.code(m1)), h2, s3)({==})(es)): {Maybe.bind(&2, List<&2, U32>, Ropes.Root, _, ws => Spec.Res.read(ws)) == m: Maybe<&2, Ropes.Root>}
+        Equal.trans(Maybe<&2, Ropes.Root>, Spec.Res.read(Spec.Res.code(m1)), m1, m, Res.round(m1), same))
 # Merges
 # ------
 def Spec.Pick.merge_theirs(f, s, b, o, t):

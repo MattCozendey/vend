@@ -8104,16 +8104,144 @@ def Data.outs(
         {==}
       )
 
-# Set.kept once whether the node holds the new nodes is known (b)
-def Set.kept.if(
+# after a key k is set, another key k2 reads at the new root as it reads at
+# the old one, in the node that holds the new nodes
+def Set.other.at(
   ~mach: Machine(),
   +s: Node<Machine.Q(mach)>,
   +h: Maybe<&2, Hashes.Hash>,
   +k: List<&2, U32>,
   +x: List<&2, U32>,
   +k2: List<&2, U32>,
-  v: List<&2, U32>,
   +hh: Hashes.Hash,
+  +ws: List<&2, List<&2, U32>>,
+  eb: {
+    Stores.Store.holds(
+      ~Node<Machine.Q(mach)>,
+      ~Store.fetch(~mach),
+      State.keep(~mach, s, ws),
+      ws
+    )
+      == True{}: Bool
+  },
+  hne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool},
+  em: {Node.set(~mach, s, h, k, x) == Some{Trees.Put{hh, ws}}: Maybe<&2, Trees.Put>}
+) -> {
+  Node.get(
+    ~mach,
+    State.keep(~mach, s, ws),
+    Some{hh},
+    k2
+  )
+    == Node.get(~mach, State.keep(~mach, s, ws), h, k2): Maybe<&2, List<&2, U32>>
+}:
+  Equal.trans(
+    Maybe<&2, List<&2, U32>>,
+    Node.get(~mach, State.keep(~mach, s, ws), Some{hh}, k2),
+    Trees.Tree.get.plain(
+      ~Node<Machine.Q(mach)>,
+      ~Store.fetch(~mach),
+      State.keep(~mach, s, ws),
+      Some{hh},
+      k2
+    ),
+    Node.get(~mach, State.keep(~mach, s, ws), h, k2),
+    Trees.Tree.get_plain(
+      ~Node<Machine.Q(mach)>,
+      ~Store.fetch(~mach),
+      State.keep(~mach, s, ws),
+      Some{hh},
+      k2
+    ),
+    Equal.trans(
+      Maybe<&2, List<&2, U32>>,
+      Trees.Tree.get.plain(
+        ~Node<Machine.Q(mach)>,
+        ~Store.fetch(~mach),
+        State.keep(~mach, s, ws),
+        Some{hh},
+        k2
+      ),
+      Trees.Tree.get.plain(
+        ~Node<Machine.Q(mach)>,
+        ~Store.fetch(~mach),
+        State.keep(~mach, s, ws),
+        h,
+        k2
+      ),
+      Node.get(~mach, State.keep(~mach, s, ws), h, k2),
+      Trees.Tree.get_other(
+        ~Node<Machine.Q(mach)>,
+        ~Store.fetch(~mach),
+        ~Node.grows(~mach),
+        ~(
+          p => q => g => w => Ledgers.State.data_grows(
+            ~Machine.Q(mach),
+            ~Machine.same(mach),
+            ~Machine.laws(mach),
+            State.ledger(~mach, p),
+            State.ledger(~mach, q),
+            g,
+            w
+          )
+        ),
+        s,
+        State.keep(~mach, s, ws),
+        h,
+        k,
+        x,
+        Trees.Put{hh, ws},
+        k2
+      )(
+        Grows.keep(~mach, s, ws)
+      )(
+        hne
+      )(
+        Equal.trans(
+          Maybe<&2, Trees.Put>,
+          Trees.Tree.set.plain(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), s, h, k, x),
+          Node.set(~mach, s, h, k, x),
+          Some{Trees.Put{hh, ws}},
+          Equal.sym(
+            Maybe<&2, Trees.Put>,
+            Node.set(~mach, s, h, k, x),
+            Trees.Tree.set.plain(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), s, h, k, x),
+            Trees.Tree.set_plain(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), s, h, k, x)
+          ),
+          em
+        )
+      )(eb),
+      Equal.sym(
+        Maybe<&2, List<&2, U32>>,
+        Node.get(~mach, State.keep(~mach, s, ws), h, k2),
+        Trees.Tree.get.plain(
+          ~Node<Machine.Q(mach)>,
+          ~Store.fetch(~mach),
+          State.keep(~mach, s, ws),
+          h,
+          k2
+        ),
+        Trees.Tree.get_plain(
+          ~Node<Machine.Q(mach)>,
+          ~Store.fetch(~mach),
+          State.keep(~mach, s, ws),
+          h,
+          k2
+        )
+      )
+    )
+  )
+
+# Set.kept once whether the node holds the new nodes is known (b)
+def Set.kept.if(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  +h: Maybe<&2, Hashes.Hash>,
+  k: List<&2, U32>,
+  x: List<&2, U32>,
+  +k2: List<&2, U32>,
+  v: List<&2, U32>,
+  hh: Hashes.Hash,
   +ws: List<&2, List<&2, U32>>,
   b: Bool,
   eb: {
@@ -8142,72 +8270,13 @@ def Set.kept.if(
     case False{}:
       Unit{}
     case True{}:
-      +sk = State.keep(~mach, s, ws)
+      sk = State.keep(~mach, s, ws)
       Equal.trans(
         Maybe<&2, List<&2, U32>>,
         Node.get(~mach, sk, Some{hh}, k2),
         Node.get(~mach, sk, h, k2),
         Some{v},
-        Equal.trans(
-          Maybe<&2, List<&2, U32>>,
-          Node.get(~mach, sk, Some{hh}, k2),
-          Trees.Tree.get.plain(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), sk, Some{hh}, k2),
-          Node.get(~mach, sk, h, k2),
-          Trees.Tree.get_plain(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), sk, Some{hh}, k2),
-          Equal.trans(
-            Maybe<&2, List<&2, U32>>,
-            Trees.Tree.get.plain(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), sk, Some{hh}, k2),
-            Trees.Tree.get.plain(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), sk, h, k2),
-            Node.get(~mach, sk, h, k2),
-            Trees.Tree.get_other(
-              ~Node<Machine.Q(mach)>,
-              ~Store.fetch(~mach),
-              ~Node.grows(~mach),
-              ~(
-                p => q => g => w => Ledgers.State.data_grows(
-                  ~Machine.Q(mach),
-                  ~Machine.same(mach),
-                  ~Machine.laws(mach),
-                  State.ledger(~mach, p),
-                  State.ledger(~mach, q),
-                  g,
-                  w
-                )
-              ),
-              s,
-              sk,
-              h,
-              k,
-              x,
-              Trees.Put{hh, ws},
-              k2
-            )(
-              Grows.keep(~mach, s, ws)
-            )(
-              hne
-            )(
-              Equal.trans(
-                Maybe<&2, Trees.Put>,
-                Trees.Tree.set.plain(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), s, h, k, x),
-                Node.set(~mach, s, h, k, x),
-                Some{Trees.Put{hh, ws}},
-                Equal.sym(
-                  Maybe<&2, Trees.Put>,
-                  Node.set(~mach, s, h, k, x),
-                  Trees.Tree.set.plain(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), s, h, k, x),
-                  Trees.Tree.set_plain(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), s, h, k, x)
-                ),
-                em
-              )
-            )(eb),
-            Equal.sym(
-              Maybe<&2, List<&2, U32>>,
-              Node.get(~mach, sk, h, k2),
-              Trees.Tree.get.plain(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), sk, h, k2),
-              Trees.Tree.get_plain(~Node<Machine.Q(mach)>, ~Store.fetch(~mach), sk, h, k2)
-            )
-          )
-        ),
+        Set.other.at(~mach, s, h, k, x, k2, hh, ws, eb, hne, em),
         Get.grows(~mach, s, sk, h, k2, v, Grows.keep(~mach, s, ws))(hget)
       )
 
@@ -13061,37 +13130,157 @@ def Set.reads(
         y => ey => Put.holds(~mach, s, ws, y)(ey)
       )
 
-# a verdict that takes, after a read, is the verdict of what comes next
-def With.took(
+# Set.other once whether the node holds the new nodes is known (b)
+def Set.other.if(
   ~mach: Machine(),
-  -A: Data,
-  ma: Maybe<&2, A>,
-  -k: A -> Maybe<&2, Verdict<Machine.Q(mach)>>,
-  -kk: Maybe<&2, Verdict<Machine.Q(mach)>>,
+  s: Node<Machine.Q(mach)>,
+  h: Maybe<&2, Hashes.Hash>,
+  k: List<&2, U32>,
+  x: List<&2, U32>,
+  k2: List<&2, U32>,
+  hh: Hashes.Hash,
+  ws: List<&2, List<&2, U32>>,
   -h2: Maybe<&2, Hashes.Hash>,
-  -s3: Node<Machine.Q(mach)>
-) -> (
-  @a: A -> {
-    k(a) == Some{Verdict.Taken{Work{s3, h2}}}: Maybe<&2, Verdict<Machine.Q(mach)>>
-  } -> {kk == Some{Verdict.Taken{Work{s3, h2}}}: Maybe<&2, Verdict<Machine.Q(mach)>>}
+  s3: Node<Machine.Q(mach)>,
+  b: Bool,
+  eb: {
+    Stores.Store.holds(
+      ~Node<Machine.Q(mach)>,
+      ~Store.fetch(~mach),
+      State.keep(~mach, s, ws),
+      ws
+    )
+      == b: Bool
+  },
+  hne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool},
+  em: {Node.set(~mach, s, h, k, x) == Some{Trees.Put{hh, ws}}: Maybe<&2, Trees.Put>}
 ) -> {
-  Maybe.bind(
-    &2,
-    A,
-    Verdict<Machine.Q(mach)>,
-    ma,
-    k
+  Work.take(
+    ~mach,
+    Work.on(
+      ~mach,
+      Shared.Maybe.when(Node<Machine.Q(mach)>, b, u => Some{State.keep(~mach, s, ws)}),
+      Some{hh}
+    )
   )
     == Some{Verdict.Taken{Work{s3, h2}}}: Maybe<&2, Verdict<Machine.Q(mach)>>
-} -> {kk == Some{Verdict.Taken{Work{s3, h2}}}: Maybe<&2, Verdict<Machine.Q(mach)>>}:
-  match ma:
-    case None{}:
-      hk => e => Empty.absurd(
-        {kk == Some{Verdict.Taken{Work{s3, h2}}}: Maybe<&2, Verdict<Machine.Q(mach)>>},
+} -> {Node.get(~mach, s3, h2, k2) == Node.get(~mach, s3, h, k2): Maybe<&2, List<&2, U32>>}:
+  match b:
+    case False{}:
+      e => Empty.absurd(
+        {Node.get(~mach, s3, h2, k2) == Node.get(~mach, s3, h, k2): Maybe<&2, List<&2, U32>>},
         Shared.Maybe.none_ne_some(Verdict<Machine.Q(mach)>, Verdict.Taken{Work{s3, h2}}, e)
       )
-    case Some{a}:
-      hk => e => hk(a)(e)
+    case True{}:
+      +e =>
+        %Equal.cong(
+          Maybe<&2, Verdict<Machine.Q(mach)>>,
+          Node<Machine.Q(mach)>,
+          v => Took.node(~mach, v, s3),
+          Some{Verdict.Taken{Work{State.keep(~mach, s, ws), Some{hh}}}},
+          Some{Verdict.Taken{Work{s3, h2}}},
+          e
+        ): {Node.get(~mach, _, h2, k2) == Node.get(~mach, _, h, k2): Maybe<&2, List<&2, U32>>}
+        %Equal.cong(
+          Maybe<&2, Verdict<Machine.Q(mach)>>,
+          Maybe<&2, Hashes.Hash>,
+          v => Took.root(~mach, v),
+          Some{Verdict.Taken{Work{State.keep(~mach, s, ws), Some{hh}}}},
+          Some{Verdict.Taken{Work{s3, h2}}},
+          e
+        ): {
+          Node.get(
+            ~mach,
+            State.keep(~mach, s, ws),
+            _,
+            k2
+          )
+            == Node.get(~mach, State.keep(~mach, s, ws), h, k2): Maybe<&2, List<&2, U32>>
+        }
+        Set.other.at(~mach, s, h, k, x, k2, hh, ws, eb, hne, em)
+
+# Set.other once the new subtree m is known
+def Set.other.of(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  h: Maybe<&2, Hashes.Hash>,
+  k: List<&2, U32>,
+  x: List<&2, U32>,
+  k2: List<&2, U32>,
+  m: Maybe<&2, Trees.Put>,
+  -h2: Maybe<&2, Hashes.Hash>,
+  s3: Node<Machine.Q(mach)>,
+  em: {Node.set(~mach, s, h, k, x) == m: Maybe<&2, Trees.Put>},
+  hne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool}
+) -> {
+  Work.take(
+    ~mach,
+    Work.of(~mach, s, m)
+  )
+    == Some{Verdict.Taken{Work{s3, h2}}}: Maybe<&2, Verdict<Machine.Q(mach)>>
+} -> {Node.get(~mach, s3, h2, k2) == Node.get(~mach, s3, h, k2): Maybe<&2, List<&2, U32>>}:
+  match m:
+    case None{}:
+      e => Empty.absurd(
+        {Node.get(~mach, s3, h2, k2) == Node.get(~mach, s3, h, k2): Maybe<&2, List<&2, U32>>},
+        Shared.Maybe.none_ne_some(Verdict<Machine.Q(mach)>, Verdict.Taken{Work{s3, h2}}, e)
+      )
+    case Some{Trees.Put{hh, +ws}}:
+      %Equal.sym(
+        Maybe<&2, Node<Machine.Q(mach)>>,
+        State.put(~mach, s, ws),
+        State.put.plain(~mach, s, ws),
+        State.put_plain(~mach, s, ws)
+      ): {
+        Work.take(
+          ~mach,
+          Work.on(~mach, _, Some{hh})
+        )
+          == Some{Verdict.Taken{Work{s3, h2}}}: Maybe<&2, Verdict<Machine.Q(mach)>>
+      } -> {Node.get(~mach, s3, h2, k2) == Node.get(~mach, s3, h, k2): Maybe<&2, List<&2, U32>>}
+      Set.other.if(
+        ~mach,
+        s,
+        h,
+        k,
+        x,
+        k2,
+        hh,
+        ws,
+        h2,
+        s3,
+        Stores.Store.holds(
+          ~Node<Machine.Q(mach)>,
+          ~Store.fetch(~mach),
+          State.keep(~mach, s, ws),
+          ws
+        ),
+        {==},
+        hne,
+        em
+      )
+
+# a key set in a tree, when the verdict takes the new tree, leaves each other
+# key as it reads at the old root, in the node of the verdict
+def Set.other(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  k2: List<&2, U32>,
+  -h2: Maybe<&2, Hashes.Hash>,
+  s3: Node<Machine.Q(mach)>
+) -> {
+  Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool
+} -> {
+  Work.take(
+    ~mach,
+    Work.set(~mach, Work{s, h}, k, x)
+  )
+    == Some{Verdict.Taken{Work{s3, h2}}}: Maybe<&2, Verdict<Machine.Q(mach)>>
+} -> {Node.get(~mach, s3, h2, k2) == Node.get(~mach, s3, h, k2): Maybe<&2, List<&2, U32>>}:
+  hne => Set.other.of(~mach, s, h, k, x, k2, Node.set(~mach, s, h, k, x), h2, s3, {==}, hne)
 
 # a place is the same as itself
 def Prev.refl(m: Maybe<&2, Ledgers.Where>) -> {Prev.same(m, m) == True{}: Bool}:
