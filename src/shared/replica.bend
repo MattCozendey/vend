@@ -21068,6 +21068,267 @@ def Honest.accept.at(
           %Shared.Maybe.some_inj(Node<Machine.Q(mach)>, State.keyed(~mach, State.led(~mach, s, kept), ks), s2, Shared.Maybe.when_rest(Node<Machine.Q(mach)>, Ballot.keeps(~mach, s, kc, b), u => Some{State.keyed(~mach, State.led(~mach, s, kept), ks)}, s2)(ea)): {State.ledger(~mach, _) == kept: Ledgers.State(Machine.Q(mach))}
           State.led_keyed(~mach, s, kept, ks))(Shared.Maybe.is_none_sound(Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.of(b)))(Shared.List.all.if_hit(Ballot.first(~mach, s, b), u2 => Ballot.honest(~mach, s, b))(ef)))(Shared.List.all.if_rest(Ballot.first(~mach, s, b), u2 => Ballot.honest(~mach, s, b))(ef))
 
+# a and b hold the same ballots
+def Node.same_ballots(~mach: Machine(), a: Node<Machine.Q(mach)>, b: Node<Machine.Q(mach)>) -> Bool:
+  Ledgers.State.same_ballots(
+    ~Machine.Q(mach),
+    ~Machine.same(mach),
+    State.ledger(~mach, a),
+    State.ledger(~mach, b)
+  )
+
+# two nodes with the same ballots read the same vote
+def Cast.of_same(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  s2: Node<Machine.Q(mach)>,
+  c: Ledgers.Chain,
+  h: U32,
+  j: Nat,
+  p: String
+) -> {
+  Node.same_ballots(~mach, s, s2) == True{}: Bool
+} -> {
+  Cast.of(
+    ~mach,
+    s2,
+    Ledgers.Where{c, h, j},
+    p
+  )
+    == Cast.of(~mach, s, Ledgers.Where{c, h, j}, p): Maybe<&2, Ledgers.Vote>
+}:
+  e =>
+    +r = List.append(
+      &2,
+      Bool,
+      List.append(
+        &2,
+        Bool,
+        List.append(&2, Bool, Ledgers.Chain.key(c), Ledgers.Word.key(h)),
+        Ledgers.Round.key(j, [False{}])
+      ),
+      Ledgers.Slot.ballot(p)
+    )
+    %Ledgers.State.same_ballots_get(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      ~Machine.laws(mach),
+      State.ledger(~mach, s),
+      State.ledger(~mach, s2),
+      r
+    )(
+      e
+    ): {
+      Cast.step(
+        ~mach,
+        _,
+        Ledgers.Slot.height(c, h),
+        j,
+        p
+      )
+        == Cast.of(~mach, s, Ledgers.Where{c, h, j}, p): Maybe<&2, Ledgers.Vote>
+    }
+    {==}
+
+# two nodes with the same ballots read the same pass
+def Passed.same(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  s2: Node<Machine.Q(mach)>,
+  c: Ledgers.Chain,
+  h: U32,
+  j: Nat,
+  q: String
+) -> {
+  Node.same_ballots(~mach, s, s2) == True{}: Bool
+} -> {
+  Ledgers.State.passed(
+    ~Machine.Q(mach),
+    State.ledger(~mach, s2),
+    Ledgers.Where{c, h, j},
+    q
+  )
+    == Ledgers.State.passed(
+      ~Machine.Q(mach),
+      State.ledger(~mach, s),
+      Ledgers.Where{c, h, j},
+      q
+    ): Maybe<&2, Maybe<&2, Ledgers.Last>>
+}:
+  e =>
+    +r = List.append(
+      &2,
+      Bool,
+      List.append(
+        &2,
+        Bool,
+        List.append(&2, Bool, Ledgers.Chain.key(c), Ledgers.Word.key(h)),
+        Ledgers.Round.key(j, [True{}])
+      ),
+      Ledgers.Slot.ballot(q)
+    )
+    %Ledgers.State.same_ballots_get(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      ~Machine.laws(mach),
+      State.ledger(~mach, s),
+      State.ledger(~mach, s2),
+      r
+    )(
+      e
+    ): {
+      Ledgers.Passed.of(
+        ~Machine.Q(mach),
+        _,
+        Ledgers.Slot.height(c, h),
+        j,
+        q
+      )
+        == Ledgers.State.passed(
+          ~Machine.Q(mach),
+          State.ledger(~mach, s),
+          Ledgers.Where{c, h, j},
+          q
+        ): Maybe<&2, Maybe<&2, Ledgers.Last>>
+    }
+    {==}
+
+# two nodes with the same ballots read the same last vote
+def Last.mine_same(
+  ~mach: Machine(),
+  +n: String,
+  +s: Node<Machine.Q(mach)>,
+  +s2: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  +h: U32,
+  k: Nat
+) -> {
+  Node.same_ballots(~mach, s, s2) == True{}: Bool
+} -> {Last.mine(~mach, n, s2, c, h, k) == Last.mine(~mach, n, s, c, h, k): Maybe<&2, Ledgers.Last>}:
+  match k:
+    case 0n:
+      e =>
+        %Equal.sym(
+          Maybe<&2, Ledgers.Vote>,
+          Cast.of(~mach, s2, Ledgers.Where{c, h, 0n}, n),
+          Cast.of(~mach, s, Ledgers.Where{c, h, 0n}, n),
+          Cast.of_same(~mach, s, s2, c, h, 0n, n)(e)
+        ): {
+          Last.or(0n, _, u => None{}) == Last.mine(~mach, n, s, c, h, 0n): Maybe<&2, Ledgers.Last>
+        }
+        {==}
+    case 1n+(+p):
+      +e =>
+        %Equal.sym(
+          Maybe<&2, Ledgers.Vote>,
+          Cast.of(~mach, s2, Ledgers.Where{c, h, 1n+p}, n),
+          Cast.of(~mach, s, Ledgers.Where{c, h, 1n+p}, n),
+          Cast.of_same(~mach, s, s2, c, h, 1n+p, n)(e)
+        ): {
+          Last.or(
+            1n+p,
+            _,
+            u => Last.mine(~mach, n, s2, c, h, p)
+          )
+            == Last.mine(~mach, n, s, c, h, 1n+p): Maybe<&2, Ledgers.Last>
+        }
+        %Equal.sym(
+          Maybe<&2, Ledgers.Last>,
+          Last.mine(~mach, n, s2, c, h, p),
+          Last.mine(~mach, n, s, c, h, p),
+          Last.mine_same(~mach, n, s, s2, c, h, p)(e)
+        ): {
+          Last.or(
+            1n+p,
+            Cast.of(~mach, s, Ledgers.Where{c, h, 1n+p}, n),
+            u => _
+          )
+            == Last.mine(~mach, n, s, c, h, 1n+p): Maybe<&2, Ledgers.Last>
+        }
+        {==}
+
+# two nodes with the same ballots read the same last vote below a round
+def Last.below_same(
+  ~mach: Machine(),
+  n: String,
+  s: Node<Machine.Q(mach)>,
+  s2: Node<Machine.Q(mach)>,
+  c: Ledgers.Chain,
+  h: U32,
+  r: Nat
+) -> {
+  Node.same_ballots(~mach, s, s2) == True{}: Bool
+} -> {
+  Last.below(~mach, n, s2, c, h, r) == Last.below(~mach, n, s, c, h, r): Maybe<&2, Ledgers.Last>
+}:
+  match r:
+    case 0n:
+      e => {==}
+    case 1n+p:
+      Last.mine_same(~mach, n, s, s2, c, h, p)
+
+# a node with the ballots of an honest node is honest
+def Honest.frame(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  +s2: Node<Machine.Q(mach)>
+) -> {
+  Node.same_ballots(~mach, s, s2) == True{}: Bool
+} -> Node.Honest(~mach, s) -> Node.Honest(~mach, s2):
+  +e => hs => +c => +h => +r => +q => +l => ep =>
+    Equal.trans(
+      Maybe<&2, Ledgers.Last>,
+      l,
+      Last.below(~mach, q, s, c, h, r),
+      Last.below(~mach, q, s2, c, h, r),
+      hs(
+        c
+      )(
+        h
+      )(
+        r
+      )(
+        q
+      )(
+        l
+      )(
+        Equal.trans(
+          Maybe<&2, Maybe<&2, Ledgers.Last>>,
+          Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Where{c, h, r}, q),
+          Ledgers.State.passed(
+            ~Machine.Q(mach),
+            State.ledger(~mach, s2),
+            Ledgers.Where{c, h, r},
+            q
+          ),
+          Some{l},
+          Equal.sym(
+            Maybe<&2, Maybe<&2, Ledgers.Last>>,
+            Ledgers.State.passed(
+              ~Machine.Q(mach),
+              State.ledger(~mach, s2),
+              Ledgers.Where{c, h, r},
+              q
+            ),
+            Ledgers.State.passed(
+              ~Machine.Q(mach),
+              State.ledger(~mach, s),
+              Ledgers.Where{c, h, r},
+              q
+            ),
+            Passed.same(~mach, s, s2, c, h, r, q)(e)
+          ),
+          ep
+        )
+      ),
+      Equal.sym(
+        Maybe<&2, Ledgers.Last>,
+        Last.below(~mach, q, s2, c, h, r),
+        Last.below(~mach, q, s, c, h, r),
+        Last.below_same(~mach, q, s, s2, c, h, r)(e)
+      )
+    )
+
 # Seals
 # -----
 # a node keeps only ballots that it checked: a ballot that it accepts is the

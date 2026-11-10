@@ -3854,6 +3854,50 @@ def Trie.get_ones(
     case Bin{here, zero, one}:
       {==}
 
+# a key that starts with p leads with p
+def Trie.leads_append(
+  p: List<&2, Bool>,
+  r: List<&2, Bool>
+) -> {Trie.leads(p, List.append(&2, Bool, p, r)) == True{}: Bool}:
+  match p:
+    case Nil{}:
+      {==}
+    case Con{False{}, q}:
+      Trie.leads_append(q, r)
+    case Con{True{}, q}:
+      Trie.leads_append(q, r)
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# Trie.leads_other once the key test is known (b)
+def Trie.leads_other.at(
+  +p: List<&2, Bool>,
+  +r: List<&2, Bool>,
+  k: List<&2, Bool>,
+  b: Bool,
+  eb: {Trie.same_key(List.append(&2, Bool, p, r), k) == b: Bool}
+) -> {Trie.leads(p, k) == False{}: Bool} -> {b == False{}: Bool}:
+  match b:
+    case False{}:
+      e => {==}
+    case True{}:
+      e => Empty.absurd(
+        {True{} == False{}: Bool},
+        Shared.Bool.true_ne_false(Equal.trans(Bool, True{}, Trie.leads(p, k), False{}, (
+              %Trie.same_key_sound(List.append(&2, Bool, p, r), k)(eb): {True{} == Trie.leads(p, _): Bool}
+              Equal.sym(Bool, Trie.leads(p, List.append(&2, Bool, p, r)), True{}, Trie.leads_append(p, r))), e))
+      )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# a key that does not start with p is no key that starts with p
+def Trie.leads_other(
+  +p: List<&2, Bool>,
+  +r: List<&2, Bool>,
+  +k: List<&2, Bool>
+) -> {
+  Trie.leads(p, k) == False{}: Bool
+} -> {Trie.same_key(List.append(&2, Bool, p, r), k) == False{}: Bool}:
+  e => Trie.leads_other.at(p, r, k, Trie.same_key(List.append(&2, Bool, p, r), k), {==})(e)
+
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof: it does not run
 # a graft reads b at the keys that start with p, and a at the others

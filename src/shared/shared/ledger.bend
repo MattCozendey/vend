@@ -207,9 +207,13 @@ def Word.key(x: U32) -> List<&2, Bool>:
 def Slot.ask(i: Id) -> List<&2, Bool>:
   False{} <> False{} <> Id.key(i)
 
+# the start of the slots of ballots
+def Slot.ballots() -> List<&2, Bool>:
+  [False{}, True{}]
+
 # the start of the slots of the ballots of the line c
 def Slot.votes(c: Chain) -> List<&2, Bool>:
-  False{} <> True{} <> Chain.key(c)
+  List.append(&2, Bool, Slot.ballots(), Chain.key(c))
 
 # the start of the slots of the ballots of the height h of the line c, of
 # every round
@@ -1742,6 +1746,13 @@ def State.grows(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), s2: State(Q)) -> B
 # t holds the data of s
 def State.holds_data(~Q: Data, ~same: Q -> Q -> Bool, +s: State(Q), t: State(Q)) -> Bool:
   State.grows(~Q, ~same, s, State.with_data(~Q, s, t))
+
+# a and b hold the same ballots: each one keeps what the other holds in each
+# slot of a ballot
+def State.same_ballots(~Q: Data, ~same: Q -> Q -> Bool, a: State(Q), b: State(Q)) -> Bool:
+  +x = State.under(~Q, a, Slot.ballots())
+  +y = State.under(~Q, b, Slot.ballots())
+  List.all.if(u => State.grows(~Q, ~same, y, x), State.grows(~Q, ~same, x, y))
 
 # a sync that agrees grows a state
 def State.grows_join(
@@ -3774,3 +3785,715 @@ def State.holds_data_with(
       %Equal.sym(Maybe<&2, Cells.Cell<Entry<Q>>>, State.get(~Q, w, k), Bool.pick(Maybe<&2, Cells.Cell<Entry<Q>>>, Tries.Trie.leads(Slot.datas(), k), State.get(~Q, t, k), State.get(~Q, s, k)), Tries.Trie.get_graft(Cells.Cell<Entry<Q>>, Slot.datas(), s, t, k)): {Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), State.get(~Q, t, k), Bool.pick(Maybe<&2, Cells.Cell<Entry<Q>>>, Tries.Trie.leads(Slot.datas(), k), _, State.get(~Q, t, k))) == True{}: Bool}
       State.holds_data_with.at(~Q, ~same, ~laws, s, t, k, Tries.Trie.leads(Slot.datas(), k)))
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# Ballots
+# -------
+# A ledger keeps its ballots in the slots that start with Slot.ballots. Each
+# change of a node that is not a ballot it accepts writes elsewhere, so it
+# keeps the same ballots (State.same_ballots), and what a node holds of the
+# rounds reads only that part.
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+
+# a ledger holds the same ballots as itself
+def State.same_ballots_refl(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  a: State(Q)
+) -> {State.same_ballots(~Q, ~same, a, a) == True{}: Bool}:
+  x = State.under(~Q, a, Slot.ballots())
+  %Equal.sym(
+    Bool,
+    State.grows(~Q, ~same, x, x),
+    True{},
+    State.grows_refl(~Q, ~same, ~laws, x)
+  ): {List.all.if(u => _, _) == True{}: Bool}
+  {==}
+
+# the same ballots compose
+def State.same_ballots_trans(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  a: State(Q),
+  b: State(Q),
+  c: State(Q)
+) -> {
+  State.same_ballots(~Q, ~same, a, b) == True{}: Bool
+} -> {
+  State.same_ballots(~Q, ~same, b, c) == True{}: Bool
+} -> {State.same_ballots(~Q, ~same, a, c) == True{}: Bool}:
+  +eab => +ebc =>
+    +x = State.under(~Q, a, Slot.ballots())
+    +y = State.under(~Q, b, Slot.ballots())
+    +z = State.under(~Q, c, Slot.ballots())
+    Shared.List.all.if_both(
+      State.grows(~Q, ~same, x, z),
+      u => State.grows(~Q, ~same, z, x)
+    )(
+      State.grows_trans(
+        ~Q,
+        ~same,
+        ~laws,
+        x,
+        y,
+        z
+      )(
+        Shared.List.all.if_hit(State.grows(~Q, ~same, x, y), u => State.grows(~Q, ~same, y, x))(eab)
+      )(
+        Shared.List.all.if_hit(State.grows(~Q, ~same, y, z), u => State.grows(~Q, ~same, z, y))(ebc)
+      )
+    )(
+      State.grows_trans(
+        ~Q,
+        ~same,
+        ~laws,
+        z,
+        y,
+        x
+      )(
+        Shared.List.all.if_rest(
+          State.grows(~Q, ~same, y, z),
+          u => State.grows(~Q, ~same, z, y)
+        )(ebc)
+      )(
+        Shared.List.all.if_rest(
+          State.grows(~Q, ~same, x, y),
+          u => State.grows(~Q, ~same, y, x)
+        )(eab)
+      )
+    )
+
+# two ledgers with the same ballots read the same slot of a ballot
+def State.same_ballots_get(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  +a: State(Q),
+  +b: State(Q),
+  +r: List<&2, Bool>
+) -> {
+  State.same_ballots(~Q, ~same, a, b) == True{}: Bool
+} -> {
+  State.get(
+    ~Q,
+    a,
+    List.append(&2, Bool, Slot.ballots(), r)
+  )
+    == State.get(~Q, b, List.append(&2, Bool, Slot.ballots(), r)): Maybe<&2, Cells.Cell<Entry<Q>>>
+}:
+  +e =>
+    +x = State.under(~Q, a, Slot.ballots())
+    +y = State.under(~Q, b, Slot.ballots())
+    %Tries.Trie.get_under(
+      Cells.Cell<Entry<Q>>,
+      a,
+      Slot.ballots(),
+      r
+    ): {
+      _
+        == State.get(
+          ~Q,
+          b,
+          List.append(&2, Bool, Slot.ballots(), r)
+        ): Maybe<&2, Cells.Cell<Entry<Q>>>
+    }
+    %Tries.Trie.get_under(
+      Cells.Cell<Entry<Q>>,
+      b,
+      Slot.ballots(),
+      r
+    ): {State.get(~Q, x, r) == _: Maybe<&2, Cells.Cell<Entry<Q>>>}
+    Cells.Cell.keeps_both(
+      ~Entry<Q>,
+      ~Entry.is_eq(~Q, ~same),
+      ~Entry.laws(~Q, ~same, ~laws),
+      State.get(~Q, x, r),
+      State.get(~Q, y, r)
+    )(
+      Tries.Trie.keeps_get(
+        ~Cells.Cell<Entry<Q>>,
+        ~Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+        ~Cells.Cell.none_kept(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+        x,
+        y,
+        r
+      )(Shared.List.all.if_hit(State.grows(~Q, ~same, x, y), u => State.grows(~Q, ~same, y, x))(e))
+    )(
+      Tries.Trie.keeps_get(
+        ~Cells.Cell<Entry<Q>>,
+        ~Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+        ~Cells.Cell.none_kept(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+        y,
+        x,
+        r
+      )(Shared.List.all.if_rest(State.grows(~Q, ~same, x, y), u => State.grows(~Q, ~same, y, x))(e))
+    )
+
+# a ledger that keeps what a holds in each slot of a ballot, read the same
+# way at each such slot (f), grew in its ballots from a
+def State.grows_ballots_of(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  +a: State(Q),
+  +b: State(Q),
+  f: @r: List<
+    &2,
+    Bool> -> {
+    State.get(
+      ~Q,
+      a,
+      List.append(&2, Bool, Slot.ballots(), r)
+    )
+      == State.get(~Q, b, List.append(&2, Bool, Slot.ballots(), r)): Maybe<&2, Cells.Cell<Entry<Q>>>
+  }
+) -> {
+  State.grows(
+    ~Q,
+    ~same,
+    State.under(~Q, a, Slot.ballots()),
+    State.under(~Q, b, Slot.ballots())
+  )
+    == True{}: Bool
+}:
+  x = State.under(~Q, a, Slot.ballots())
+  y = State.under(~Q, b, Slot.ballots())
+  Tries.Trie.all2_of_get(
+    ~Cells.Cell<Entry<Q>>,
+    ~Cells.Cell<Entry<Q>>,
+    ~Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+    ~(t => Tries.Trie.all(~Cells.Cell<Entry<Q>>, ~(m => Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), m, None{})), t)),
+    ~(t => g => Tries.Trie.all_of_get(~Cells.Cell<Entry<Q>>, ~(m => Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), m, None{})), t, g)),
+    x,
+    y,
+    +r =>
+      %Equal.sym(Maybe<&2, Cells.Cell<Entry<Q>>>, State.get(~Q, y, r), State.get(~Q, b, List.append(&2, Bool, Slot.ballots(), r)), Tries.Trie.get_under(Cells.Cell<Entry<Q>>, b, Slot.ballots(), r)): {Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), State.get(~Q, x, r), _) == True{}: Bool}
+      %f(r): {Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), State.get(~Q, x, r), _) == True{}: Bool}
+      %Equal.sym(Maybe<&2, Cells.Cell<Entry<Q>>>, State.get(~Q, x, r), State.get(~Q, a, List.append(&2, Bool, Slot.ballots(), r)), Tries.Trie.get_under(Cells.Cell<Entry<Q>>, a, Slot.ballots(), r)): {Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), _, State.get(~Q, a, List.append(&2, Bool, Slot.ballots(), r))) == True{}: Bool}
+      Cells.Cell.keeps_refl(~Entry<Q>, ~Entry.is_eq(~Q, ~same), ~Entry.laws(~Q, ~same, ~laws), State.get(~Q, a, List.append(&2, Bool, Slot.ballots(), r))))
+
+# two ledgers that read the same at each slot of a ballot hold the same
+# ballots (f and g: the same fact, once for each way)
+def State.same_ballots_of(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  +a: State(Q),
+  +b: State(Q),
+  f: @r: List<
+    &2,
+    Bool> -> {
+    State.get(
+      ~Q,
+      a,
+      List.append(&2, Bool, Slot.ballots(), r)
+    )
+      == State.get(~Q, b, List.append(&2, Bool, Slot.ballots(), r)): Maybe<&2, Cells.Cell<Entry<Q>>>
+  },
+  g: @r: List<
+    &2,
+    Bool> -> {
+    State.get(
+      ~Q,
+      a,
+      List.append(&2, Bool, Slot.ballots(), r)
+    )
+      == State.get(~Q, b, List.append(&2, Bool, Slot.ballots(), r)): Maybe<&2, Cells.Cell<Entry<Q>>>
+  }
+) -> {State.same_ballots(~Q, ~same, a, b) == True{}: Bool}:
+  Shared.List.all.if_both(
+    State.grows(~Q, ~same, State.under(~Q, a, Slot.ballots()), State.under(~Q, b, Slot.ballots())),
+    u => State.grows(
+      ~Q,
+      ~same,
+      State.under(~Q, b, Slot.ballots()),
+      State.under(~Q, a, Slot.ballots())
+    )
+  )(
+    State.grows_ballots_of(~Q, ~same, ~laws, a, b, f)
+  )(
+    State.grows_ballots_of(
+      ~Q,
+      ~same,
+      ~laws,
+      b,
+      a,
+      +r => Equal.sym(
+        Maybe<&2, Cells.Cell<Entry<Q>>>,
+        State.get(~Q, a, List.append(&2, Bool, Slot.ballots(), r)),
+        State.get(~Q, b, List.append(&2, Bool, Slot.ballots(), r)),
+        g(r)
+      )
+    )
+  )
+
+# a put in a slot that is not of a ballot reads as before in each slot of a
+# ballot
+def State.put_ballots_at(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  +s: State(Q),
+  +k: List<&2, Bool>,
+  e: Entry<Q>,
+  +r: List<&2, Bool>
+) -> {
+  Tries.Trie.leads(Slot.ballots(), k) == False{}: Bool
+} -> {
+  State.get(
+    ~Q,
+    s,
+    List.append(&2, Bool, Slot.ballots(), r)
+  )
+    == State.get(
+      ~Q,
+      State.put(~Q, ~same, s, k, e),
+      List.append(&2, Bool, Slot.ballots(), r)
+    ): Maybe<&2, Cells.Cell<Entry<Q>>>
+}:
+  el =>
+    +q = List.append(&2, Bool, Slot.ballots(), r)
+    %Equal.sym(
+      Maybe<&2, Cells.Cell<Entry<Q>>>,
+      State.get(~Q, State.put(~Q, ~same, s, k, e), q),
+      Shared.Maybe.join(
+        ~Cells.Cell<Entry<Q>>,
+        ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+        State.get(~Q, s, q),
+        State.get(~Q, State.one(~Q, k, e), q)
+      ),
+      Tries.Trie.get_union(
+        ~Cells.Cell<Entry<Q>>,
+        ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+        s,
+        State.one(~Q, k, e),
+        q
+      )
+    ): {State.get(~Q, s, q) == _: Maybe<&2, Cells.Cell<Entry<Q>>>}
+    %Equal.sym(
+      Bool,
+      Tries.Trie.same_key(q, k),
+      False{},
+      Tries.Trie.leads_other(Slot.ballots(), r, k)(el)
+    ): {
+      State.get(
+        ~Q,
+        s,
+        q
+      )
+        == Shared.Maybe.join(
+          ~Cells.Cell<Entry<Q>>,
+          ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+          State.get(~Q, s, q),
+          Bool.pick(Maybe<&2, Cells.Cell<Entry<Q>>>, _, Some{Cells.One{e}}, None{})
+        ): Maybe<&2, Cells.Cell<Entry<Q>>>
+    }
+    Tries.Trie.none_join(
+      ~Cells.Cell<Entry<Q>>,
+      ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+      State.get(~Q, s, q)
+    )
+
+# State.add_ballots_at once the cell m of the slot is known
+def State.add_ballots_at.of(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  s: State(Q),
+  k: List<&2, Bool>,
+  e: Entry<Q>,
+  r: List<&2, Bool>,
+  m: Maybe<&2, Cells.Cell<Entry<Q>>>
+) -> {
+  Tries.Trie.leads(Slot.ballots(), k) == False{}: Bool
+} -> {
+  State.get(
+    ~Q,
+    s,
+    List.append(&2, Bool, Slot.ballots(), r)
+  )
+    == State.get(
+      ~Q,
+      State.add.of(~Q, ~same, s, k, e, m),
+      List.append(&2, Bool, Slot.ballots(), r)
+    ): Maybe<&2, Cells.Cell<Entry<Q>>>
+}:
+  match m:
+    case None{}:
+      State.put_ballots_at(~Q, ~same, s, k, e, r)
+    case Some{x}:
+      el => {==}
+
+# an add in a slot that is not of a ballot reads as before in each slot of a
+# ballot
+def State.add_ballots_at(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  +s: State(Q),
+  +k: List<&2, Bool>,
+  e: Entry<Q>,
+  r: List<&2, Bool>
+) -> {
+  Tries.Trie.leads(Slot.ballots(), k) == False{}: Bool
+} -> {
+  State.get(
+    ~Q,
+    s,
+    List.append(&2, Bool, Slot.ballots(), r)
+  )
+    == State.get(
+      ~Q,
+      State.add(~Q, ~same, s, k, e),
+      List.append(&2, Bool, Slot.ballots(), r)
+    ): Maybe<&2, Cells.Cell<Entry<Q>>>
+}:
+  State.add_ballots_at.of(~Q, ~same, s, k, e, r, State.get(~Q, s, k))
+
+# State.put_data_ballots_at once the cell m of the slot is known
+def State.put_data_ballots_at.of(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  s: State(Q),
+  k: List<&2, Bool>,
+  ws: List<&2, U32>,
+  r: List<&2, Bool>,
+  m: Maybe<&2, Cells.Cell<Entry<Q>>>
+) -> {
+  Tries.Trie.leads(Slot.ballots(), k) == False{}: Bool
+} -> {
+  State.get(
+    ~Q,
+    s,
+    List.append(&2, Bool, Slot.ballots(), r)
+  )
+    == State.get(
+      ~Q,
+      Data.put.of(~Q, ~same, s, k, ws, m),
+      List.append(&2, Bool, Slot.ballots(), r)
+    ): Maybe<&2, Cells.Cell<Entry<Q>>>
+}:
+  match m:
+    case None{}:
+      State.put_ballots_at(~Q, ~same, s, k, Entry.Data{ws}, r)
+    case Some{x}:
+      el => {==}
+
+# data reads as before in each slot of a ballot
+def State.put_datas_ballots_at(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ds: List<&2, List<&2, U32>>,
+  +s: State(Q),
+  +r: List<&2, Bool>
+) -> {
+  State.get(
+    ~Q,
+    s,
+    List.append(&2, Bool, Slot.ballots(), r)
+  )
+    == State.get(
+      ~Q,
+      State.put_datas(~Q, ~same, ds, s),
+      List.append(&2, Bool, Slot.ballots(), r)
+    ): Maybe<&2, Cells.Cell<Entry<Q>>>
+}:
+  match ds:
+    case Nil{}:
+      {==}
+    case Con{+ws, rest}:
+      +k = Slot.data(Hashes.Sha.hash(ws))
+      Equal.trans(
+        Maybe<&2, Cells.Cell<Entry<Q>>>,
+        State.get(~Q, s, List.append(&2, Bool, Slot.ballots(), r)),
+        State.get(~Q, State.put_data(~Q, ~same, s, ws), List.append(&2, Bool, Slot.ballots(), r)),
+        State.get(
+          ~Q,
+          State.put_datas(~Q, ~same, rest, State.put_data(~Q, ~same, s, ws)),
+          List.append(&2, Bool, Slot.ballots(), r)
+        ),
+        State.put_data_ballots_at.of(~Q, ~same, s, k, ws, r, State.get(~Q, s, k))({==}),
+        State.put_datas_ballots_at(~Q, ~same, rest, State.put_data(~Q, ~same, s, ws), r)
+      )
+
+# State.add_datas_ballots_at once the data m that the slot holds is known
+def State.add_data_ballots_at.of(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  s: State(Q),
+  k: List<&2, Bool>,
+  ws: List<&2, U32>,
+  r: List<&2, Bool>,
+  m: Maybe<&2, Cells.Cell<Entry<Q>>>,
+  -s2: State(Q)
+) -> {
+  Tries.Trie.leads(Slot.ballots(), k) == False{}: Bool
+} -> {
+  Data.add.of(~Q, ~same, s, k, ws, m) == Some{s2}: Maybe<&2, State(Q)>
+} -> {
+  State.get(
+    ~Q,
+    s,
+    List.append(&2, Bool, Slot.ballots(), r)
+  )
+    == State.get(~Q, s2, List.append(&2, Bool, Slot.ballots(), r)): Maybe<&2, Cells.Cell<Entry<Q>>>
+}:
+  match m:
+    case None{}:
+      el => ea =>
+        %Shared.Maybe.some_inj(
+          State(Q),
+          State.put(~Q, ~same, s, k, Entry.Data{ws}),
+          s2,
+          ea
+        ): {
+          State.get(
+            ~Q,
+            s,
+            List.append(&2, Bool, Slot.ballots(), r)
+          )
+            == State.get(
+              ~Q,
+              _,
+              List.append(&2, Bool, Slot.ballots(), r)
+            ): Maybe<&2, Cells.Cell<Entry<Q>>>
+        }
+        State.put_ballots_at(~Q, ~same, s, k, Entry.Data{ws}, r)(el)
+    case Some{Cells.One{Entry.Data{ws2}}}:
+      el => ea =>
+        %Shared.Maybe.some_inj(
+          State(Q),
+          s,
+          s2,
+          Shared.Maybe.when_rest(
+            State(Q),
+            Shared.List.is_eq(~U32, ~U32.is_eq, ws2, ws),
+            u => Some{s},
+            s2
+          )(ea)
+        ): {
+          State.get(
+            ~Q,
+            s,
+            List.append(&2, Bool, Slot.ballots(), r)
+          )
+            == State.get(
+              ~Q,
+              _,
+              List.append(&2, Bool, Slot.ballots(), r)
+            ): Maybe<&2, Cells.Cell<Entry<Q>>>
+        }
+        {==}
+    case Some{Cells.One{Entry.Ask{i, t, q}}}:
+      el => ea => Empty.absurd(
+        {
+          State.get(
+            ~Q,
+            s,
+            List.append(&2, Bool, Slot.ballots(), r)
+          )
+            == State.get(
+              ~Q,
+              s2,
+              List.append(&2, Bool, Slot.ballots(), r)
+            ): Maybe<&2, Cells.Cell<Entry<Q>>>
+        },
+        Shared.Maybe.none_ne_some(State(Q), s2, ea)
+      )
+    case Some{Cells.One{Entry.Vote{b}}}:
+      el => ea => Empty.absurd(
+        {
+          State.get(
+            ~Q,
+            s,
+            List.append(&2, Bool, Slot.ballots(), r)
+          )
+            == State.get(
+              ~Q,
+              s2,
+              List.append(&2, Bool, Slot.ballots(), r)
+            ): Maybe<&2, Cells.Cell<Entry<Q>>>
+        },
+        Shared.Maybe.none_ne_some(State(Q), s2, ea)
+      )
+    case Some{Cells.One{Entry.Lie{x}}}:
+      el => ea => Empty.absurd(
+        {
+          State.get(
+            ~Q,
+            s,
+            List.append(&2, Bool, Slot.ballots(), r)
+          )
+            == State.get(
+              ~Q,
+              s2,
+              List.append(&2, Bool, Slot.ballots(), r)
+            ): Maybe<&2, Cells.Cell<Entry<Q>>>
+        },
+        Shared.Maybe.none_ne_some(State(Q), s2, ea)
+      )
+    case Some{Cells.Many{}}:
+      el => ea => Empty.absurd(
+        {
+          State.get(
+            ~Q,
+            s,
+            List.append(&2, Bool, Slot.ballots(), r)
+          )
+            == State.get(
+              ~Q,
+              s2,
+              List.append(&2, Bool, Slot.ballots(), r)
+            ): Maybe<&2, Cells.Cell<Entry<Q>>>
+        },
+        Shared.Maybe.none_ne_some(State(Q), s2, ea)
+      )
+
+# data added reads as before in each slot of a ballot
+def State.add_datas_ballots_at(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ds: List<&2, List<&2, U32>>,
+  +s: State(Q),
+  +r: List<&2, Bool>,
+  -s2: State(Q)
+) -> {
+  State.add_datas(~Q, ~same, ds, s) == Some{s2}: Maybe<&2, State(Q)>
+} -> {
+  State.get(
+    ~Q,
+    s,
+    List.append(&2, Bool, Slot.ballots(), r)
+  )
+    == State.get(~Q, s2, List.append(&2, Bool, Slot.ballots(), r)): Maybe<&2, Cells.Cell<Entry<Q>>>
+}:
+  match ds:
+    case Nil{}:
+      ea =>
+        %Shared.Maybe.some_inj(
+          State(Q),
+          s,
+          s2,
+          ea
+        ): {
+          State.get(
+            ~Q,
+            s,
+            List.append(&2, Bool, Slot.ballots(), r)
+          )
+            == State.get(
+              ~Q,
+              _,
+              List.append(&2, Bool, Slot.ballots(), r)
+            ): Maybe<&2, Cells.Cell<Entry<Q>>>
+        }
+        {==}
+    case Con{+ws, rest}:
+      ea => Shared.Maybe.bind_some(
+        State(Q),
+        State(Q),
+        {
+          State.get(
+            ~Q,
+            s,
+            List.append(&2, Bool, Slot.ballots(), r)
+          )
+            == State.get(
+              ~Q,
+              s2,
+              List.append(&2, Bool, Slot.ballots(), r)
+            ): Maybe<&2, Cells.Cell<Entry<Q>>>
+        },
+        State.add_data(~Q, ~same, s, ws),
+        x => State.add_datas(~Q, ~same, rest, x),
+        s2
+      )(ea)(
+        +s1 => e1 => e2 =>
+          +k = Slot.data(Hashes.Sha.hash(ws))
+          Equal.trans(Maybe<&2, Cells.Cell<Entry<Q>>>, State.get(~Q, s, List.append(&2, Bool, Slot.ballots(), r)), State.get(~Q, s1, List.append(&2, Bool, Slot.ballots(), r)), State.get(~Q, s2, List.append(&2, Bool, Slot.ballots(), r)), State.add_data_ballots_at.of(~Q, ~same, s, k, ws, r, State.get(~Q, s, k), s1)({==})(e1), State.add_datas_ballots_at(~Q, ~same, rest, s1, r, s2)(e2)))
+
+# a take of a ledger that holds no ballot reads as before in each slot of a
+# ballot
+def State.take_ballots_at(
+  ~Q: Data,
+  +s: State(Q),
+  t: State(Q),
+  r: List<&2, Bool>
+) -> {
+  State.get(
+    ~Q,
+    t,
+    List.append(&2, Bool, Slot.ballots(), r)
+  )
+    == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>
+} -> {
+  State.get(
+    ~Q,
+    s,
+    List.append(&2, Bool, Slot.ballots(), r)
+  )
+    == State.get(
+      ~Q,
+      State.take(~Q, s, t),
+      List.append(&2, Bool, Slot.ballots(), r)
+    ): Maybe<&2, Cells.Cell<Entry<Q>>>
+}:
+  +q = List.append(&2, Bool, Slot.ballots(), r)
+  et =>
+    %Equal.sym(
+      Maybe<&2, Cells.Cell<Entry<Q>>>,
+      State.get(~Q, State.take(~Q, s, t), q),
+      Shared.Maybe.join(
+        ~Cells.Cell<Entry<Q>>,
+        ~(x => y => x),
+        State.get(~Q, s, q),
+        State.get(~Q, t, q)
+      ),
+      Tries.Trie.get_union(~Cells.Cell<Entry<Q>>, ~(x => y => x), s, t, q)
+    ): {State.get(~Q, s, q) == _: Maybe<&2, Cells.Cell<Entry<Q>>>}
+    %Equal.sym(
+      Maybe<&2, Cells.Cell<Entry<Q>>>,
+      State.get(~Q, t, q),
+      None{},
+      et
+    ): {
+      State.get(
+        ~Q,
+        s,
+        q
+      )
+        == Shared.Maybe.join(
+          ~Cells.Cell<Entry<Q>>,
+          ~(x => y => x),
+          State.get(~Q, s, q),
+          _
+        ): Maybe<&2, Cells.Cell<Entry<Q>>>
+    }
+    Tries.Trie.none_join(~Cells.Cell<Entry<Q>>, ~(x => y => x), State.get(~Q, s, q))
+
+# a ledger with the data of t reads as before in each slot of a ballot
+def State.with_data_ballots_at(
+  ~Q: Data,
+  s: State(Q),
+  t: State(Q),
+  r: List<&2, Bool>
+) -> {
+  State.get(
+    ~Q,
+    s,
+    List.append(&2, Bool, Slot.ballots(), r)
+  )
+    == State.get(
+      ~Q,
+      State.with_data(~Q, s, t),
+      List.append(&2, Bool, Slot.ballots(), r)
+    ): Maybe<&2, Cells.Cell<Entry<Q>>>
+}:
+  Equal.sym(
+    Maybe<&2, Cells.Cell<Entry<Q>>>,
+    State.get(~Q, State.with_data(~Q, s, t), List.append(&2, Bool, Slot.ballots(), r)),
+    State.get(~Q, s, List.append(&2, Bool, Slot.ballots(), r)),
+    State.with_data_other(~Q, s, t, List.append(&2, Bool, Slot.ballots(), r))({==})
+  )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
