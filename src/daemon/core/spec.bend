@@ -819,6 +819,14 @@ def Head.tip(s: State(), h: Head) -> Maybe<&2, Tip>:
 def Node.tip(+s: State(), c: Ledgers.Chain) -> Maybe<&2, Tip>:
   Maybe.bind(&2, Head, Tip, Node.head_of(s, c), h => Head.tip(s, h))
 
+# what the log of the head h holds under the key k
+def Head.get(+s: State(), h: Head, k: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  Maybe.bind(&2, Tip, List<&2, U32>, Head.tip(s, h), t => Node.get(s, Tip.log(t), k))
+
+# what the log of the line c holds under the key k, as the node knows it
+def Line.get(+s: State(), c: Ledgers.Chain, +k: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  Maybe.bind(&2, Head, List<&2, U32>, Node.head_of(s, c), h => Head.get(s, h, k))
+
 # the line that the request i of the change q changes: a request that starts a
 # store changes the store of its own name
 def Ask.chain(i: Ledgers.Id, q: Ask) -> Ledgers.Chain:
@@ -2164,11 +2172,17 @@ def Head.chain(h: Head) -> Ledgers.Chain:
     case Head{r, b, n, t}:
       Line.chain(r, b)
 
-# s with the head h of its line
-def State.head(s: State(), +h: Head) -> State():
+# the height of the next step of the head h
+def Head.next(h: Head) -> U32:
+  match h:
+    case Head{r, b, n, t}:
+      n
+
+# s with the head h of the line c
+def State.head(s: State(), c: Ledgers.Chain, h: Head) -> State():
   match s:
     case Node{l, hs, ws}:
-      Node{l, Tries.Trie.set(Head, hs, Ledgers.Chain.key(Head.chain(h)), h), ws}
+      Node{l, Tries.Trie.set(Head, hs, Ledgers.Chain.key(c), h), ws}
 
 # the requests of the line c that wait for a step, in the order that the node
 # took them in
@@ -2203,9 +2217,9 @@ def Wait.left(qs: List<&2, Ledgers.Id>, +done: Tries.Trie<Unit>) -> List<&2, Led
         Bool.not(Tries.Trie.has(Unit, done, Ledgers.Id.key(i)))
       )
 
-# s at the head h, after a step that ran the requests qs: they wait no more
-def State.moved(+s: State(), +h: Head, qs: List<&2, Ledgers.Id>) -> State():
-  +c = Head.chain(h)
+# s at the head h of the line c, after a step that ran the requests qs: they
+# wait no more
+def State.moved(+s: State(), +c: Ledgers.Chain, h: Head, qs: List<&2, Ledgers.Id>) -> State():
   State.head(
     Wait.set(
       s,
@@ -2215,16 +2229,30 @@ def State.moved(+s: State(), +h: Head, qs: List<&2, Ledgers.Id>) -> State():
         Tries.Trie.put_keys(~Ledgers.Id, ~Ledgers.Id.key, qs, Tries.Trie.new(Unit))
       )
     ),
+    c,
     h
   )
 
-# the state m at the head h, else s
-def Start.head(s: State(), m: Maybe<&2, State()>, h: Head) -> State():
+# State.first once the head m of the line is known
+def First.at(s: State(), c: Ledgers.Chain, h: Head, m: Maybe<&2, Head>) -> State():
+  match m:
+    case Some{Head{r, b, n, Some{t}}}:
+      s
+    case x:
+      State.head(s, c, h)
+
+# s with the first head h of the line c, when the line has no tip: a line
+# that has a tip moves only by a step
+def State.first(+s: State(), +c: Ledgers.Chain, h: Head) -> State():
+  First.at(s, c, h, Node.head_of(s, c))
+
+# the state m with the first head h of the line c, else s
+def Start.head(s: State(), m: Maybe<&2, State()>, c: Ledgers.Chain, h: Head) -> State():
   match m:
     case None{}:
       s
     case Some{s2}:
-      State.head(s2, h)
+      State.first(State.led(s, State.ledger(s2)), c, h)
 
 # s with the first tip of the store i, whose trees are m: a log whose owners
 # are the store's first owners, and no content
@@ -2234,7 +2262,12 @@ def Start.put(+s: State(), +i: Ledgers.Id, m: Maybe<&2, Work>) -> State():
       s
     case Some{Work{s2, l, ns}}:
       +t = {Tip{None{}, l}: Tip}
-      Start.head(s, State.put(s2, [Tip.words(t)]), Head{i, None{}, 0, Some{Tip.hash(t)}})
+      Start.head(
+        s,
+        State.put(s2, [Tip.words(t)]),
+        Ledgers.Chain{i, None{}},
+        Head{i, None{}, 0, Some{Tip.hash(t)}}
+      )
 
 # s, which follows the store that the request i starts with the owners os
 def Node.start(+s: State(), i: Ledgers.Id, os: List<&2, String>) -> State():
@@ -2258,26 +2291,31 @@ def Branch.first(+s: State(), b: String, m: Maybe<&2, Tip>) -> Maybe<&2, Hashes.
     case Some{t}:
       Branch.start(s, Tip.content(t), b)
 
-# s, which follows the line of the head h: a branch that the node waits for
-# opens at its first tip, once the store that the node follows made it
-def Node.opened(+s: State(), h: Head) -> State():
-  match h:
-    case Head{+r, Some{+b}, n, None{}}:
+# Node.open once the head m of the line is known
+def Open.at(+s: State(), c: Ledgers.Chain, m: Maybe<&2, Head>) -> State():
+  match m:
+    case Some{Head{+r, Some{+b}, n, None{}}}:
       State.head(
         s,
+        c,
         Head{r, Some{b}, 0, Branch.first(s, b, Node.tip(s, Ledgers.Chain{r, None{}}))}
       )
     case x:
       s
 
+# s, which follows the line c: a branch that the node waits for opens at its
+# first tip, once the store that the node follows made it
+def Node.open(+s: State(), +c: Ledgers.Chain) -> State():
+  Open.at(s, c, Node.head_of(s, c))
+
 # s, which follows the line l of the store r, when the head m says that it
 # does not yet
-def Follow.new(s: State(), r: Ledgers.Id, l: Maybe<&2, String>, m: Maybe<&2, Head>) -> State():
+def Follow.new(s: State(), +r: Ledgers.Id, +l: Maybe<&2, String>, m: Maybe<&2, Head>) -> State():
   match m:
     case Some{h}:
       s
     case None{}:
-      State.head(s, Head{r, l, 0, None{}})
+      State.head(s, Line.chain(r, l), Head{r, l, 0, None{}})
 
 # s, which follows the line l of the store r
 def Node.follow(+s: State(), +r: Ledgers.Id, +l: Maybe<&2, String>) -> State():
@@ -2316,8 +2354,8 @@ def Cast.vote(s: State(), m: Maybe<&2, State()>, w: Ledgers.Where, n: String, v:
   match m:
     case None{}:
       s
-    case Some{+s3}:
-      State.led(s3, Ledgers.State.cast(~Ask, ~Ask.is_eq, State.ledger(s3), w, n, v))
+    case Some{s3}:
+      State.led(s, Ledgers.State.cast(~Ask, ~Ask.is_eq, State.ledger(s3), w, n, v))
 
 # s with the node n's ballot at the place w for the step that ran qs from the
 # tip of the hash th, when the run m is there: the run's nodes, its tip, and
@@ -2336,11 +2374,10 @@ def Cast.put(
     case Some{Run{s2, +t2, ns}}:
       Cast.vote(s, State.put(s2, [Tip.words(t2)]), w, n, Ledgers.Vote{th, qs, Some{Tip.hash(t2)}})
 
-# Node.cast at the head h, whose tip is m
-def Cast.at(+n: String, +s: State(), h: Head, m: Maybe<&2, Tip>) -> State():
+# Node.cast at the head h of the line c, whose tip is m
+def Cast.at(+n: String, +s: State(), +c: Ledgers.Chain, h: Head, m: Maybe<&2, Tip>) -> State():
   match h m:
     case Head{r, b, +next, +th} Some{+t}:
-      +c = Line.chain(r, b)
       +qs = Wait.of(s, c)
       Shared.Bool.when(
         State(),
@@ -2351,24 +2388,39 @@ def Cast.at(+n: String, +s: State(), h: Head, m: Maybe<&2, Tip>) -> State():
     case x y:
       s
 
-# s, after the node n cast its ballot for the next step of the line of the
-# head h: the step that runs, from the tip, the requests that wait on the line
-def Node.cast(+n: String, +s: State(), +h: Head) -> State():
-  Cast.at(n, s, h, Head.tip(s, h))
+# Node.cast once the head m of the line c is known
+def Cast.head(+n: String, +s: State(), +c: Ledgers.Chain, m: Maybe<&2, Head>) -> State():
+  match m:
+    case None{}:
+      s
+    case Some{+h}:
+      Cast.at(n, s, c, h, Head.tip(s, h))
 
-# the state m at the head h, after a step that ran qs, else s
-def Advance.moved(s: State(), m: Maybe<&2, State()>, h: Head, qs: List<&2, Ledgers.Id>) -> State():
+# s, after the node n cast its ballot for the next step of the line c: the
+# step that runs, from the tip, the requests that wait on the line
+def Node.cast(+n: String, +s: State(), +c: Ledgers.Chain) -> State():
+  Cast.head(n, s, c, Node.head_of(s, c))
+
+# the state m at the head h of the line c, after a step that ran qs, else s
+def Advance.moved(
+  s: State(),
+  m: Maybe<&2, State()>,
+  c: Ledgers.Chain,
+  h: Head,
+  qs: List<&2, Ledgers.Id>
+) -> State():
   match m:
     case None{}:
       s
     case Some{s3}:
-      State.moved(s3, h, qs)
+      State.moved(State.led(s, State.ledger(s3)), c, h, qs)
 
-# s at the head of the next height, when the run m of the decided requests qs
-# gives the tip that the ballots name (after): a node checks a step before it
-# keeps it
+# s at the head of the next height of the line c, when the run m of the
+# decided requests qs gives the tip that the ballots name (after): a node
+# checks a step before it keeps it
 def Advance.ran(
   +s: State(),
+  c: Ledgers.Chain,
   r: Ledgers.Id,
   b: Maybe<&2, String>,
   next: U32,
@@ -2386,6 +2438,7 @@ def Advance.ran(
         u => Advance.moved(
           s,
           State.put(s2, [Tip.words(t2)]),
+          c,
           Head{r, b, U32.inc(next), Some{Tip.hash(t2)}},
           qs
         ),
@@ -2393,99 +2446,88 @@ def Advance.ran(
       )
 
 # Node.advance once the step m that the owners decided at the head is known
-def Advance.step(+s: State(), h: Head, +t: Tip, m: Maybe<&2, Ledgers.Vote>) -> State():
+def Advance.step(+s: State(), +c: Ledgers.Chain, h: Head, +t: Tip, m: Maybe<&2, Ledgers.Vote>) -> State():
   match h m:
-    case Head{+r, +b, next, th} Some{Ledgers.Vote{before, +qs, after}}:
+    case Head{r, b, next, th} Some{Ledgers.Vote{before, +qs, after}}:
       Shared.Bool.when(
         State(),
         Root.same(before, th),
-        u => Advance.ran(s, r, b, next, after, qs, Step.run(s, Line.chain(r, b), t, qs)),
+        u => Advance.ran(s, c, r, b, next, after, qs, Step.run(s, c, t, qs)),
         u => s
       )
     case x y:
       s
 
-# the height of the next step of the head h
-def Head.next(h: Head) -> U32:
-  match h:
-    case Head{r, b, n, t}:
-      n
-
-# Node.advance at the head h, whose tip is m
-def Advance.at(+s: State(), +h: Head, m: Maybe<&2, Tip>) -> State():
+# Node.advance at the head h of the line c, whose tip is m
+def Advance.at(+s: State(), +c: Ledgers.Chain, +h: Head, m: Maybe<&2, Tip>) -> State():
   match m:
     case None{}:
       s
     case Some{+t}:
       Advance.step(
         s,
+        c,
         h,
         t,
         Ledgers.State.decide(
           ~Ask,
           State.ledger(s),
-          Ledgers.Where{Head.chain(h), Head.next(h)},
+          Ledgers.Where{c, Head.next(h)},
           Line.owners(s, t)
         )
       )
 
-# s, with its head h moved over the next step, when a majority of the owners
-# in its tip cast it and the node's own run of it gives the same tip
-def Node.advance(+s: State(), +h: Head) -> State():
-  Advance.at(s, h, Head.tip(s, h))
-
-# s, after the node n cast its ballot at the head m, if any
-def Step.cast(n: String, s: State(), m: Maybe<&2, Head>) -> State():
-  match m:
-    case None{}:
-      s
-    case Some{h}:
-      Node.cast(n, s, h)
-
-# the head m is at the height n
-def Head.is_at(m: Maybe<&2, Head>, n: U32) -> Bool:
-  match m:
-    case None{}:
-      True{}
-    case Some{h}:
-      U32.is_eq(Head.next(h), n)
-
-# s, with the head m of the line c moved over each step that is decided, f
-# steps at most
-def Node.advances(f: Nat, +s: State(), +c: Ledgers.Chain, m: Maybe<&2, Head>) -> State():
-  match f m:
-    case 1n+p Some{+h}:
-      +s1 = Node.advance(s, h)
-      +m1 = Node.head_of(s1, c)
-      Shared.Bool.when(
-        State(),
-        Head.is_at(m1, Head.next(h)),
-        u => s1,
-        u => Node.advances(p, s1, c, m1)
-      )
-    case g x:
-      s
-
-# s, after the node n cast its ballot for the next step of the line of the
-# head m, and moved its head over each step that is decided
-def Step.head(n: String, +s: State(), +c: Ledgers.Chain, m: Maybe<&2, Head>) -> State():
+# Node.advance once the head m of the line c is known
+def Advance.head(+s: State(), +c: Ledgers.Chain, m: Maybe<&2, Head>) -> State():
   match m:
     case None{}:
       s
     case Some{+h}:
-      +s1 = Node.advances(4294967295n, s, c, Some{h})
-      +s2 = Step.cast(n, s1, Node.head_of(s1, c))
-      Node.advances(4294967295n, s2, c, Node.head_of(s2, c))
+      Advance.at(s, c, h, Head.tip(s, h))
 
+# s, with its head of the line c moved over the next step, when a majority of
+# the owners in its tip cast it and the node's own run of it gives the same
+# tip
+def Node.advance(+s: State(), +c: Ledgers.Chain) -> State():
+  Advance.head(s, c, Node.head_of(s, c))
+
+# the heads a and b are at the same height, or one is none
+def Heads.level(a: Maybe<&2, Head>, b: Maybe<&2, Head>) -> Bool:
+  match a b:
+    case Some{x} Some{y}:
+      U32.is_eq(Head.next(x), Head.next(y))
+    case x y:
+      True{}
+
+# Node.advances once the head m of the line c is known
+def Advances.at(f: Nat, +s: State(), +c: Ledgers.Chain, m: Maybe<&2, Head>) -> State():
+  match f m:
+    case 1n+p Some{+h}:
+      +s1 = Advance.at(s, c, h, Head.tip(s, h))
+      +m1 = Node.head_of(s1, c)
+      Shared.Bool.when(
+        State(),
+        Heads.level(Some{h}, m1),
+        u => s1,
+        u => Advances.at(p, s1, c, m1)
+      )
+    case g x:
+      s
+
+# s, with its head of the line c moved over each step that is decided, f
+# steps at most
+def Node.advances(f: Nat, +s: State(), +c: Ledgers.Chain) -> State():
+  Advances.at(f, s, c, Node.head_of(s, c))
+
+# s, after the node n moved its head of the line c over each step that is
+# decided, cast its ballot for the next step, and moved its head again
+def Step.head(+n: String, +s: State(), +c: Ledgers.Chain) -> State():
+  +s1 = Node.advances(4294967295n, s, c)
+  Node.advances(4294967295n, Node.cast(n, s1, c), c)
 
 # s, after the node n did what it can on the line c
-def Node.step(n: String, s: State(), +c: Ledgers.Chain, h: Maybe<&2, Head>) -> State():
-  match h:
-    case None{}:
-      s
-    case Some{x}:
-      +s1 = Node.opened(s, x)
-      Step.head(n, s1, c, Node.head_of(s1, c))
+def Node.step(n: String, +s: State(), +c: Ledgers.Chain) -> State():
+  Step.head(n, Node.open(s, c), c)
 
 # Node.ask once the cell m of the request's ID is known
 def Node.ask.at(
@@ -2509,7 +2551,7 @@ def Node.ask.at(
         i,
         q
       )
-      Node.step(n, s1, c, Node.head_of(s1, c))
+      Node.step(n, s1, c)
 
 # s, after the node n took in the request q of e, cast its ballot when it owns
 # its line, and moved its head when that decides the step. A request ID that s
@@ -2556,7 +2598,7 @@ def Node.steps(+n: String, hs: List<&2, Head>, s: State()) -> State():
     case Nil{}:
       s
     case Con{+h, rest}:
-      Node.steps(n, rest, Node.step(n, s, Head.chain(h), Some{h}))
+      Node.steps(n, rest, Node.step(n, s, Head.chain(h)))
 
 # s, after the node n took in t, which another node sent, and did what it can
 # on each line that it follows: how a node that is behind catches up
