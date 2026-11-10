@@ -92,8 +92,8 @@ All of `core/impl.bend` checks in about 13 s (it was 175 s). A proof file alone 
 
 README claim, then the law.
 
-- Catching up loses nothing: `Node.ask_grows`, `Node.take_grows`, `Node.sync_grows`,
-  `Node.after_grows`; ledger `take_grows`, `take_join`, `join_comm`, `join_assoc`, `join_idem`.
+- Catching up loses nothing: `Node.after_grows` (whatever the node does: a request, what
+  another node sent, a sync); ledger `take_grows`, `take_join`, `join_comm`, `join_assoc`, `join_idem`.
 - A node checks what it receives before it keeps it. By construction, not a law: `Node.take`
   puts each request and each data in the slot that its own content names (`Take.clean`), reads
   data only under its hash (`data_hash`), and keeps a ballot only when it checks
@@ -113,15 +113,16 @@ README claim, then the law.
   each round of a list). `Node.advance_at` (a head moves only over a step that the owners in its
   tip decided next, in some round), `Line.at_grows` (decided steps stay as a node grows),
   `Line.at_agrees` (the same number of decided steps from the same head give the same head on
-  any two nodes whose ledgers do not clash, whatever the round of each step).
+  any two nodes whose ledgers do not clash and hold ballots that follow the rules of rounds,
+  whatever the round of each step).
 - Every head is on the decided chain: `Node.after_on` (a head that is some decided steps from a
   head with a tip stays so, whatever the node does next). A node sets a head in four places: a
   step that it checked, and three that set only a head with no tip (`Path.moved`, `Path.set`).
 - Every node opens a branch at the same first tip: `Chain.start_final` (the log of the store
   holds the first tip of a branch for good), with the one history of the store's line.
-- A majority is enough, also when the proposer is away: `Rounds.one` (two rounds of one height
-  decide the same step, so "the rounds of a height decide one step", the premise of the laws
-  above, holds). Its premises are the rules of rounds, for the ballots that the node holds:
+- A majority is enough, also when the proposer is away: two rounds of one height decide the
+  same step (the lemma `Rounds.one`, inside the proof of `Line.at_agrees`). The premise of
+  `Line.at_agrees` is the rules of rounds (`Rounds.Rules`), for the ballots that the node holds:
   `Rounds.Allow` (the passes that a vote names allow it), `Rounds.Last` (a pass names the last
   vote of its node below its round), `Rounds.Same` (the votes of one round are for one step).
   They say that the owners' nodes follow the protocol; a node that stops is fine, a node that
@@ -169,7 +170,7 @@ README claim, then the law.
 ## 4. What the proofs assume, and what was decided
 
 - **Owners' nodes follow the protocol.** The rules of rounds (`Rounds.Allow`, `Rounds.Last`,
-  `Rounds.Same`) are premises of `Rounds.one`. A node that stops is fine; a node that lies is
+  `Rounds.Same`, together `Rounds.Rules`) are the premise of `Line.at_agrees`. A node that stops is fine; a node that lies is
   not. A node's own ballots follow the rules by construction (`Plan.lead`, `Pass.to`,
   `Cast.round`), and it copies only a vote that the rules allow (`Plan.follow_allowed`).
 - **Hash-based signatures hold.** That no other node can make a node's seal is the assumption of
