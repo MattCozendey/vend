@@ -1441,7 +1441,7 @@ def Plan.lead.grows(
 ) -> {Run.after(s, Spec.Plan.run(Spec.Plan.lead(s, c, w, t, th, os))) == True{}: Bool}:
   Plan.when.grows(
     s,
-    U32.is_eq(Spec.Where.round(w), 0),
+    Nat.is_eq(Spec.Where.round(w), 0n),
     Spec.Plan.own(s, c, t, []),
     Spec.Plan.later(s, c, w, t, th, os, Spec.Passes.of(s, w, os), Spec.Passes.last(s, w, Spec.Passes.of(s, w, os))),
     Plan.own.grows(s, c, t, []),
@@ -1735,10 +1735,10 @@ def Round.join.grows(
   +os: List<&2, String>
 ) -> {Spec.Node.grows(s, Spec.Round.join(n, s, c, h, os)) == True{}: Bool}:
   +top = Spec.Round.seen(s, c, h)
-  +k = U32.to_nat(top)
+  +k = top
   Grows.when(
     s,
-    U32.is_lt(Spec.Round.mine(n, s, c, h, k), top),
+    Nat.is_lt(Spec.Round.mine(n, s, c, h, k), top),
     Spec.Pass.to(n, s, Ledgers.Where{c, h, top}, os, k),
     s,
     Pass.to.grows(n, s, Ledgers.Where{c, h, top}, os, k),
@@ -1755,16 +1755,16 @@ def Cast.round.grows(
   +t: Spec.Tip
 ) -> {Spec.Node.grows(s, Spec.Cast.round(n, s, c, next, th, t)) == True{}: Bool}:
   +os = Spec.Line.owners(s, t)
-  +r = Spec.Round.mine(n, s, c, next, U32.to_nat(Spec.Round.seen(s, c, next)))
+  +r = Spec.Round.mine(n, s, c, next, Spec.Round.seen(s, c, next))
   +w = {Ledgers.Where{c, next, r}: Ledgers.Where}
-  +p = Spec.Plan.of(n, s, c, w, t, th, os, Spec.Owners.turn(os, U32.add(next, r)))
+  +p = Spec.Plan.of(n, s, c, w, t, th, os, Spec.Owners.turn(os, U32.add(next, U32.from_nat(r))))
   Grows.when(
     s,
     Spec.Cast.may(n, s, w, t, Spec.Plan.asks(p)),
     Spec.Cast.put(n, w, th, Spec.Plan.asks(p), Spec.Plan.from(p), Spec.Plan.run(p), s),
     s,
     Cast.put.grows(n, w, th, Spec.Plan.asks(p), Spec.Plan.from(p), Spec.Plan.run(p), s)(
-      Plan.of.grows(n, s, c, w, t, th, os, Spec.Owners.turn(os, U32.add(next, r)))
+      Plan.of.grows(n, s, c, w, t, th, os, Spec.Owners.turn(os, U32.add(next, U32.from_nat(r))))
     ),
     Grows.refl(s)
   )
@@ -1800,10 +1800,10 @@ def Pass.at.grows(
         Ledgers.Where{
           c,
           next,
-          U32.inc(Spec.Round.mine(n, s, c, next, U32.to_nat(Spec.Round.seen(s, c, next))))
+          1n+Spec.Round.mine(n, s, c, next, Spec.Round.seen(s, c, next))
         },
         Spec.Line.owners(s, t),
-        U32.to_nat(Spec.Round.seen(s, c, next))
+        Spec.Round.seen(s, c, next)
       )
     case Spec.Head{r, b, next, th} None{}:
       Grows.refl(s)
@@ -1950,7 +1950,7 @@ def Advance.at.grows(
         c,
         h,
         t,
-        Spec.Height.decide(s, c, Spec.Head.next(h), Spec.Line.owners(s, t), U32.to_nat(Spec.Round.seen(s, c, Spec.Head.next(h))))
+        Spec.Height.decide(s, c, Spec.Head.next(h), Spec.Line.owners(s, t), Spec.Round.seen(s, c, Spec.Head.next(h)))
       )
 
 # Node.advance only grows a node, once the head m is known
@@ -4371,9 +4371,9 @@ def Round.join.heads(
   +os: List<&2, String>
 ) -> {Spec.State.heads(s) == Spec.State.heads(Spec.Round.join(n, s, c, h, os)): Tries.Trie<Spec.Head>}:
   +top = Spec.Round.seen(s, c, h)
-  +k = U32.to_nat(top)
+  +k = top
   Heads.when(
-    U32.is_lt(Spec.Round.mine(n, s, c, h, k), top),
+    Nat.is_lt(Spec.Round.mine(n, s, c, h, k), top),
     s,
     Spec.Pass.to(n, s, Ledgers.Where{c, h, top}, os, k),
     s,
@@ -4391,9 +4391,9 @@ def Cast.round.heads(
   +t: Spec.Tip
 ) -> {Spec.State.heads(s) == Spec.State.heads(Spec.Cast.round(n, s, c, next, th, t)): Tries.Trie<Spec.Head>}:
   +os = Spec.Line.owners(s, t)
-  +r = Spec.Round.mine(n, s, c, next, U32.to_nat(Spec.Round.seen(s, c, next)))
+  +r = Spec.Round.mine(n, s, c, next, Spec.Round.seen(s, c, next))
   +w = {Ledgers.Where{c, next, r}: Ledgers.Where}
-  +p = Spec.Plan.of(n, s, c, w, t, th, os, Spec.Owners.turn(os, U32.add(next, r)))
+  +p = Spec.Plan.of(n, s, c, w, t, th, os, Spec.Owners.turn(os, U32.add(next, U32.from_nat(r))))
   Heads.when(
     Spec.Cast.may(n, s, w, t, Spec.Plan.asks(p)),
     s,
@@ -4434,10 +4434,10 @@ def Pass.at.heads(
         Ledgers.Where{
           c,
           next,
-          U32.inc(Spec.Round.mine(n, s, c, next, U32.to_nat(Spec.Round.seen(s, c, next))))
+          1n+Spec.Round.mine(n, s, c, next, Spec.Round.seen(s, c, next))
         },
         Spec.Line.owners(s, t),
-        U32.to_nat(Spec.Round.seen(s, c, next))
+        Spec.Round.seen(s, c, next)
       )
     case Spec.Head{r, b, next, th} None{}:
       {==}
@@ -4853,7 +4853,7 @@ def Advance.at.kept(
         c,
         h,
         t,
-        Spec.Height.decide(s, c, Spec.Head.next(h), Spec.Line.owners(s, t), U32.to_nat(Spec.Round.seen(s, c, Spec.Head.next(h))))
+        Spec.Height.decide(s, c, Spec.Head.next(h), Spec.Line.owners(s, t), Spec.Round.seen(s, c, Spec.Head.next(h)))
       )(em)(et)
 
 # Node.advance keeps the logs, once the head m is known
@@ -6325,12 +6325,12 @@ def Scan.elim.at(
   -os: List<&2, String>,
   -p: Nat,
   -v: Ledgers.Vote,
-  +r: U32,
+  +r: Nat,
   m: Maybe<&2, Ledgers.Vote>,
-  rec: {Spec.Height.decide(s, c, n, os, p) == Some{v}: Maybe<&2, Ledgers.Vote>} -> (@q: U32 -> {Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, n, q}, os) == Some{v}: Maybe<&2, Ledgers.Vote>} -> R) -> R
+  rec: {Spec.Height.decide(s, c, n, os, p) == Some{v}: Maybe<&2, Ledgers.Vote>} -> (@q: Nat -> {Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, n, q}, os) == Some{v}: Maybe<&2, Ledgers.Vote>} -> R) -> R
 ) -> {Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, n, r}, os) == m: Maybe<&2, Ledgers.Vote>} -> {
   Spec.Vote.first(m, u => Spec.Height.decide(s, c, n, os, p)) == Some{v}: Maybe<&2, Ledgers.Vote>
-} -> (@q: U32 -> {Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, n, q}, os) == Some{v}: Maybe<&2, Ledgers.Vote>} -> R) -> R:
+} -> (@q: Nat -> {Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, n, q}, os) == Some{v}: Maybe<&2, Ledgers.Vote>} -> R) -> R:
   match m:
     case None{}:
       em => e => f => rec(e)(f)
@@ -6346,10 +6346,10 @@ def Scan.elim(
   +os: List<&2, String>,
   k: Nat,
   -v: Ledgers.Vote
-) -> {Spec.Height.decide(s, c, n, os, k) == Some{v}: Maybe<&2, Ledgers.Vote>} -> (@q: U32 -> {Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, n, q}, os) == Some{v}: Maybe<&2, Ledgers.Vote>} -> R) -> R:
+) -> {Spec.Height.decide(s, c, n, os, k) == Some{v}: Maybe<&2, Ledgers.Vote>} -> (@q: Nat -> {Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, n, q}, os) == Some{v}: Maybe<&2, Ledgers.Vote>} -> R) -> R:
   match k:
     case 0n:
-      e => f => f(0)(e)
+      e => f => f(0n)(e)
     case 1n+(+p):
       Scan.elim.at(
         R,
@@ -6359,8 +6359,8 @@ def Scan.elim(
         os,
         p,
         v,
-        U32.from_nat(1n+p),
-        Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, n, U32.from_nat(1n+p)}, os),
+        1n+p,
+        Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, n, 1n+p}, os),
         Scan.elim(R, s, c, n, os, p, v)
       )({==})
 
@@ -6663,7 +6663,7 @@ def Advance.at.moves(
         %Equal.sym(
           Maybe<&2, Ledgers.Vote>,
           Spec.Advance.vote(s, c, h),
-          Spec.Height.decide(s, c, Spec.Head.next(h), Spec.Line.owners(s, t), U32.to_nat(Spec.Round.seen(s, c, Spec.Head.next(h)))),
+          Spec.Height.decide(s, c, Spec.Head.next(h), Spec.Line.owners(s, t), Spec.Round.seen(s, c, Spec.Head.next(h))),
           Equal.cong(
             Maybe<&2, Spec.Tip>,
             Maybe<&2, Ledgers.Vote>,
@@ -6672,7 +6672,7 @@ def Advance.at.moves(
               Spec.Tip,
               Ledgers.Vote,
               mt,
-              t1 => Spec.Height.decide(s, c, Spec.Head.next(h), Spec.Line.owners(s, t1), U32.to_nat(Spec.Round.seen(s, c, Spec.Head.next(h))))
+              t1 => Spec.Height.decide(s, c, Spec.Head.next(h), Spec.Line.owners(s, t1), Spec.Round.seen(s, c, Spec.Head.next(h)))
             ),
             Spec.Head.tip(s, h),
             Some{t},
@@ -6684,7 +6684,7 @@ def Advance.at.moves(
             c,
             h,
             t,
-            Spec.Height.decide(s, c, Spec.Head.next(h), Spec.Line.owners(s, t), U32.to_nat(Spec.Round.seen(s, c, Spec.Head.next(h))))
+            Spec.Height.decide(s, c, Spec.Head.next(h), Spec.Line.owners(s, t), Spec.Round.seen(s, c, Spec.Head.next(h)))
           ),
           c,
           h,
@@ -6695,7 +6695,7 @@ def Advance.at.moves(
           c,
           h,
           t,
-          Spec.Height.decide(s, c, Spec.Head.next(h), Spec.Line.owners(s, t), U32.to_nat(Spec.Round.seen(s, c, Spec.Head.next(h))))
+          Spec.Height.decide(s, c, Spec.Head.next(h), Spec.Line.owners(s, t), Spec.Round.seen(s, c, Spec.Head.next(h)))
         )(em)
 
 def Spec.Node.advance_decided(s, c, h):
@@ -6719,7 +6719,7 @@ def Found.elim.at(
   m: Maybe<&2, Spec.Tip>
 ) -> {Spec.Head.tip(s, h) == m: Maybe<&2, Spec.Tip>} -> {
   Maybe.bind(&2, Spec.Tip, Ledgers.Vote, m, t => Spec.Height.decide(s, c, Spec.Head.next(h), Spec.Line.owners(s, t), k)) == Some{v}: Maybe<&2, Ledgers.Vote>
-} -> (@t: Spec.Tip -> @q: U32 -> {Spec.Head.tip(s, h) == Some{t}: Maybe<&2, Spec.Tip>} -> {
+} -> (@t: Spec.Tip -> @q: Nat -> {Spec.Head.tip(s, h) == Some{t}: Maybe<&2, Spec.Tip>} -> {
   Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, Spec.Head.next(h), q}, Spec.Line.owners(s, t)) == Some{v}: Maybe<&2, Ledgers.Vote>
 } -> R) -> R:
   match m:
@@ -6737,7 +6737,7 @@ def Found.elim(
   +h: Spec.Head,
   k: Nat,
   -v: Ledgers.Vote
-) -> {Spec.Advance.found(s, c, h, k) == Some{v}: Maybe<&2, Ledgers.Vote>} -> (@t: Spec.Tip -> @q: U32 -> {
+) -> {Spec.Advance.found(s, c, h, k) == Some{v}: Maybe<&2, Ledgers.Vote>} -> (@t: Spec.Tip -> @q: Nat -> {
   Spec.Head.tip(s, h) == Some{t}: Maybe<&2, Spec.Tip>
 } -> {Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, Spec.Head.next(h), q}, Spec.Line.owners(s, t)) == Some{v}: Maybe<&2, Ledgers.Vote>} -> R) -> R:
   Found.elim.at(R, s, c, h, k, v, Spec.Head.tip(s, h))({==})
@@ -6817,8 +6817,8 @@ def Agree.steps(
           u,
           c,
           Spec.Head{r, br, n, th},
-          U32.to_nat(Spec.Round.seen(a, c, n)),
-          U32.to_nat(Spec.Round.seen(b, c, n)),
+          Spec.Round.seen(a, c, n),
+          Spec.Round.seen(b, c, n),
           v1,
           v2,
           ga,
@@ -7316,7 +7316,7 @@ def Scan.some.at(
   +os: List<&2, String>,
   +p: Nat,
   -v: Ledgers.Vote,
-  +r: U32,
+  +r: Nat,
   m: Maybe<&2, Ledgers.Vote>,
   +g: {Spec.Node.grows(a, u) == True{}: Bool},
   ih: {Spec.Height.decide(a, c, n, os, p) == Some{v}: Maybe<&2, Ledgers.Vote>} -> {Maybe.is_some(&2, Ledgers.Vote, Spec.Height.decide(u, c, n, os, p)) == True{}: Bool}
@@ -7362,7 +7362,7 @@ def Scan.some(
       e =>
         %Equal.sym(
           Maybe<&2, Ledgers.Vote>,
-          Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(u), Ledgers.Where{c, n, 0}, os),
+          Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(u), Ledgers.Where{c, n, 0n}, os),
           Some{v},
           Ledgers.State.decide_grows(
         ~Spec.Ask,
@@ -7370,7 +7370,7 @@ def Scan.some(
         ~Ask.laws(),
         Spec.State.ledger(a),
         Spec.State.ledger(u),
-        Ledgers.Where{c, n, 0},
+        Ledgers.Where{c, n, 0n},
         os,
         v
       )(g)(e)
@@ -7385,8 +7385,8 @@ def Scan.some(
         os,
         p,
         v,
-        U32.from_nat(1n+p),
-        Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(a), Ledgers.Where{c, n, U32.from_nat(1n+p)}, os),
+        1n+p,
+        Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(a), Ledgers.Where{c, n, 1n+p}, os),
         g,
         Scan.some(a, u, c, n, os, p, v, g)
       )({==})
@@ -7400,7 +7400,7 @@ def Scan.up.at(
   +k: Nat,
   -v: Ledgers.Vote,
   m: Maybe<&2, Ledgers.Vote>
-) -> {Spec.Height.decide(u, c, n, os, k) == m: Maybe<&2, Ledgers.Vote>} -> {Maybe.is_some(&2, Ledgers.Vote, m) == True{}: Bool} -> (@q: U32 -> @w: Ledgers.Vote -> {
+) -> {Spec.Height.decide(u, c, n, os, k) == m: Maybe<&2, Ledgers.Vote>} -> {Maybe.is_some(&2, Ledgers.Vote, m) == True{}: Bool} -> (@q: Nat -> @w: Ledgers.Vote -> {
   Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(u), Ledgers.Where{c, n, q}, os) == Some{w}: Maybe<&2, Ledgers.Vote>
 } -> {w == v: Ledgers.Vote}) -> {m == Some{v}: Maybe<&2, Ledgers.Vote>}:
   match m:

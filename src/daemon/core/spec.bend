@@ -460,7 +460,7 @@ type Keys is Data:
     seed: Hashes.Hash,
     chains: Tries.Trie<Chained>,
     asked: Tries.Trie<Unit>,
-    rounds: Tries.Trie<U32>
+    rounds: Tries.Trie<Nat>
   }
 
 # what a node holds: its ledger, which nodes replicate; its head of each line
@@ -521,7 +521,7 @@ def Node.empty(seed: Hashes.Hash) -> State():
     Ledgers.State.empty(~Ask),
     Tries.Trie.new(Head),
     Tries.Trie.new(List<&2, Ledgers.Id>),
-    Keys{seed, Tries.Trie.new(Chained), Tries.Trie.new(Unit), Tries.Trie.new(U32)}
+    Keys{seed, Tries.Trie.new(Chained), Tries.Trie.new(Unit), Tries.Trie.new(Nat)}
   }
 
 # the words that s holds under the hash h
@@ -2644,11 +2644,11 @@ def Keys.set(ks: Keys, k: List<&2, Bool>, c: Chained) -> Keys:
 
 # the highest round, in the rounds rs, of the height h of the line c (0: the
 # first round)
-def Rounds.at(rs: Tries.Trie<U32>, c: Ledgers.Chain, h: U32) -> U32:
-  Maybe.default(&2, U32, Tries.Trie.get(U32, rs, Ledgers.Slot.height(c, h)), 0)
+def Rounds.at(rs: Tries.Trie<Nat>, c: Ledgers.Chain, h: U32) -> Nat:
+  Maybe.default(&2, Nat, Tries.Trie.get(Nat, rs, Ledgers.Slot.height(c, h)), 0n)
 
 # the rounds of the keys ks
-def Keys.rounds(ks: Keys) -> Tries.Trie<U32>:
+def Keys.rounds(ks: Keys) -> Tries.Trie<Nat>:
   match ks:
     case Keys{seed, cs, as, rs}:
       rs
@@ -2662,15 +2662,15 @@ def Keys.saw(ks: Keys, w: Ledgers.Where) -> Keys:
         cs,
         as,
         Shared.Bool.when(
-          Tries.Trie<U32>,
-          U32.is_lt(Rounds.at(rs, c, h), r),
-          u => Tries.Trie.set(U32, rs, Ledgers.Slot.height(c, h), r),
+          Tries.Trie<Nat>,
+          Nat.is_lt(Rounds.at(rs, c, h), r),
+          u => Tries.Trie.set(Nat, rs, Ledgers.Slot.height(c, h), r),
           u => rs
         )
       }
 
 # the highest round of the height h of the line c of which s holds a ballot
-def Round.seen(s: State(), c: Ledgers.Chain, h: U32) -> U32:
+def Round.seen(s: State(), c: Ledgers.Chain, h: U32) -> Nat:
   Rounds.at(Keys.rounds(State.keys(s)), c, h)
 
 # the chain of the node n in the store r, as s knows it
@@ -3239,7 +3239,7 @@ def Plan.copy(
 # only one that a later round can decide.
 
 # the round of the place w
-def Where.round(w: Ledgers.Where) -> U32:
+def Where.round(w: Ledgers.Where) -> Nat:
   match w:
     case Ledgers.Where{c, h, r}:
       r
@@ -3259,24 +3259,24 @@ def Cast.act(s: State(), w: Ledgers.Where, p: String) -> Maybe<&2, Ledgers.Act>:
 
 # the highest round, up to k, to which the node n passed at the height h of
 # the line c (0: it passed to none)
-def Round.mine(+n: String, +s: State(), +c: Ledgers.Chain, +h: U32, k: Nat) -> U32:
+def Round.mine(+n: String, +s: State(), +c: Ledgers.Chain, +h: U32, k: Nat) -> Nat:
   match k:
     case 0n:
-      0
+      0n
     case 1n+(+p):
       Shared.Bool.when(
-        U32,
+        Nat,
         Maybe.is_some(
           &2,
           Maybe<&2, Ledgers.Last>,
-          Ledgers.State.passed(~Ask, State.ledger(s), Ledgers.Where{c, h, U32.from_nat(1n+p)}, n)
+          Ledgers.State.passed(~Ask, State.ledger(s), Ledgers.Where{c, h, 1n+p}, n)
         ),
-        u => U32.from_nat(1n+p),
+        u => 1n+p,
         u => Round.mine(n, s, c, h, p)
       )
 
 # the vote m of the round r, as a last vote, else what rest gives
-def Last.or(r: U32, m: Maybe<&2, Ledgers.Vote>, rest: Unit -> Maybe<&2, Ledgers.Last>) -> Maybe<&2, Ledgers.Last>:
+def Last.or(r: Nat, m: Maybe<&2, Ledgers.Vote>, rest: Unit -> Maybe<&2, Ledgers.Last>) -> Maybe<&2, Ledgers.Last>:
   match m:
     case Some{v}:
       Some{Ledgers.Last{r, v}}
@@ -3288,11 +3288,11 @@ def Last.or(r: U32, m: Maybe<&2, Ledgers.Vote>, rest: Unit -> Maybe<&2, Ledgers.
 def Last.mine(+n: String, +s: State(), +c: Ledgers.Chain, +h: U32, k: Nat) -> Maybe<&2, Ledgers.Last>:
   match k:
     case 0n:
-      Last.or(0, Cast.of(s, Ledgers.Where{c, h, 0}, n), u => None{})
+      Last.or(0n, Cast.of(s, Ledgers.Where{c, h, 0n}, n), u => None{})
     case 1n+(+p):
       Last.or(
-        U32.from_nat(1n+p),
-        Cast.of(s, Ledgers.Where{c, h, U32.from_nat(1n+p)}, n),
+        1n+p,
+        Cast.of(s, Ledgers.Where{c, h, 1n+p}, n),
         u => Last.mine(n, s, c, h, p)
       )
 
@@ -3319,7 +3319,7 @@ def Last.newer(a: Maybe<&2, Ledgers.Last>, b: Maybe<&2, Ledgers.Last>) -> Maybe<
     case Some{Ledgers.Last{+r1, v1}} Some{Ledgers.Last{+r2, v2}}:
       Shared.Bool.when(
         Maybe<&2, Ledgers.Last>,
-        U32.is_lt(r1, r2),
+        Nat.is_lt(r1, r2),
         u => Some{Ledgers.Last{r2, v2}},
         u => Some{Ledgers.Last{r1, v1}}
       )
@@ -3372,7 +3372,7 @@ def Allowed(+s: State(), +w: Ledgers.Where, +os: List<&2, String>, v: Ledgers.Vo
       ),
       Ledgers.Owners.is_eq(Passes.of(s, w, from), from)
     ),
-    U32.is_eq(Where.round(w), 0)
+    Nat.is_eq(Where.round(w), 0n)
   )
 
 # the plan of the proposer of a later round at the place w, once the nodes
@@ -3411,7 +3411,7 @@ def Plan.lead(
   +from = Passes.of(s, w, os)
   Shared.Bool.when(
     Plan,
-    U32.is_eq(Where.round(w), 0),
+    Nat.is_eq(Where.round(w), 0n),
     u => Plan.own(s, c, t, []),
     u => Plan.later(s, c, w, t, th, os, from, Passes.last(s, w, from))
   )
@@ -3490,11 +3490,10 @@ def Pass.to(+n: String, +s: State(), +w: Ledgers.Where, os: List<&2, String>, k:
 # the height h of the line c: a node casts in the round that the others reached
 def Round.join(+n: String, +s: State(), +c: Ledgers.Chain, +h: U32, os: List<&2, String>) -> State():
   +top = Round.seen(s, c, h)
-  +k = U32.to_nat(top)
   Shared.Bool.when(
     State(),
-    U32.is_lt(Round.mine(n, s, c, h, k), top),
-    u => Pass.to(n, s, Ledgers.Where{c, h, top}, os, k),
+    Nat.is_lt(Round.mine(n, s, c, h, top), top),
+    u => Pass.to(n, s, Ledgers.Where{c, h, top}, os, top),
     u => s
   )
 
@@ -3502,9 +3501,9 @@ def Round.join(+n: String, +s: State(), +c: Ledgers.Chain, +h: U32, os: List<&2,
 # the tip t of the hash th
 def Cast.round(+n: String, +s: State(), +c: Ledgers.Chain, +next: U32, +th: Maybe<&2, Hashes.Hash>, +t: Tip) -> State():
   +os = Line.owners(s, t)
-  +r = Round.mine(n, s, c, next, U32.to_nat(Round.seen(s, c, next)))
+  +r = Round.mine(n, s, c, next, Round.seen(s, c, next))
   +w = {Ledgers.Where{c, next, r}: Ledgers.Where}
-  +p = Plan.of(n, s, c, w, t, th, os, Owners.turn(os, U32.add(next, r)))
+  +p = Plan.of(n, s, c, w, t, th, os, Owners.turn(os, U32.add(next, U32.from_nat(r))))
   Shared.Bool.when(
     State(),
     Cast.may(n, s, w, t, Plan.asks(p)),
@@ -3524,11 +3523,11 @@ def Cast.at(+n: String, +s: State(), +c: Ledgers.Chain, h: Head, m: Maybe<&2, Ti
 def Pass.at(+n: String, +s: State(), +c: Ledgers.Chain, h: Head, m: Maybe<&2, Tip>) -> State():
   match h m:
     case Head{r, b, +next, th} Some{t}:
-      +k = U32.to_nat(Round.seen(s, c, next))
+      +k = Round.seen(s, c, next)
       Pass.to(
         n,
         s,
-        Ledgers.Where{c, next, U32.inc(Round.mine(n, s, c, next, k))},
+        Ledgers.Where{c, next, 1n+Round.mine(n, s, c, next, k)},
         Line.owners(s, t),
         k
       )
@@ -3635,17 +3634,17 @@ def Height.decide(
 ) -> Maybe<&2, Ledgers.Vote>:
   match k:
     case 0n:
-      Ledgers.State.decide(~Ask, State.ledger(s), Ledgers.Where{c, h, 0}, os)
+      Ledgers.State.decide(~Ask, State.ledger(s), Ledgers.Where{c, h, 0n}, os)
     case 1n+(+p):
       Vote.first(
-        Ledgers.State.decide(~Ask, State.ledger(s), Ledgers.Where{c, h, U32.from_nat(1n+p)}, os),
+        Ledgers.State.decide(~Ask, State.ledger(s), Ledgers.Where{c, h, 1n+p}, os),
         u => Height.decide(s, c, h, os, p)
       )
 
 # that the rounds of the height h of the line c decide one step in s, for the
 # owners os: a law of rounds, and a premise of the laws of agreement
 def Height.One(s: State(), c: Ledgers.Chain, h: U32, os: List<&2, String>) -> Type:
-  @r1: U32 -> @r2: U32 -> @v1: Ledgers.Vote -> @v2: Ledgers.Vote -> {
+  @r1: Nat -> @r2: Nat -> @v1: Ledgers.Vote -> @v2: Ledgers.Vote -> {
     Ledgers.State.decide(~Ask, State.ledger(s), Ledgers.Where{c, h, r1}, os) == Some{v1}: Maybe<&2, Ledgers.Vote>
   } -> {
     Ledgers.State.decide(~Ask, State.ledger(s), Ledgers.Where{c, h, r2}, os) == Some{v2}: Maybe<&2, Ledgers.Vote>
@@ -3665,7 +3664,7 @@ def Advance.found(+s: State(), +c: Ledgers.Chain, +h: Head, k: Nat) -> Maybe<&2,
 # the step that the owners in the tip of the head h decided next on the line
 # c, in a round of which the node holds a ballot, if they did
 def Advance.vote(+s: State(), +c: Ledgers.Chain, +h: Head) -> Maybe<&2, Ledgers.Vote>:
-  Advance.found(s, c, h, U32.to_nat(Round.seen(s, c, Head.next(h))))
+  Advance.found(s, c, h, Round.seen(s, c, Head.next(h)))
 
 # Node.advance at the head h of the line c, whose tip is m
 def Advance.at(+s: State(), +c: Ledgers.Chain, +h: Head, m: Maybe<&2, Tip>) -> State():
@@ -3683,7 +3682,7 @@ def Advance.at(+s: State(), +c: Ledgers.Chain, +h: Head, m: Maybe<&2, Tip>) -> S
           c,
           Head.next(h),
           Line.owners(s, t),
-          U32.to_nat(Round.seen(s, c, Head.next(h)))
+          Round.seen(s, c, Head.next(h))
         )
       )
 

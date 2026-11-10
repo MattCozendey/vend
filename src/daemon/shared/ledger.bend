@@ -36,7 +36,7 @@ type Chain is Data:
 
 # a place on a line: a height, and a round of the decision at that height
 type Where is Data:
-  Where{chain: Chain, height: U32, round: U32}
+  Where{chain: Chain, height: U32, round: Nat}
 
 # a ballot for a step: the requests that it decides, in order, and the hash of
 # what the line holds before and after it
@@ -45,7 +45,7 @@ type Vote is Data:
 
 # the last vote of a node at a height: its round, and the step
 type Last is Data:
-  Last{round: U32, vote: Vote}
+  Last{round: Nat, vote: Vote}
 
 # what a node does at a place. Vote: it casts for a step; in a round after
 # the first, with the nodes whose passes allow that step. Pass: it leaves the
@@ -212,15 +212,23 @@ def Slot.votes(c: Chain) -> List<&2, Bool>:
 def Slot.height(c: Chain, h: U32) -> List<&2, Bool>:
   List.append(&2, Bool, Slot.votes(c), Word.key(h))
 
+# the key of the round r below a height: r times True, then False
+def Round.key(r: Nat, rest: List<&2, Bool>) -> List<&2, Bool>:
+  match r:
+    case 0n:
+      False{} <> rest
+    case 1n+p:
+      True{} <> Round.key(p, rest)
+
 # the start of the slots of the bucket of the votes of the round r of the
 # height h of the line c
-def Slot.bucket(c: Chain, h: U32, r: U32) -> List<&2, Bool>:
-  List.append(&2, Bool, Slot.height(c, h), List.append(&2, Bool, Word.key(r), [False{}]))
+def Slot.bucket(c: Chain, h: U32, r: Nat) -> List<&2, Bool>:
+  List.append(&2, Bool, Slot.height(c, h), Round.key(r, [False{}]))
 
 # the start of the slots of the passes to the round r of the height h of the
 # line c
-def Slot.passes(c: Chain, h: U32, r: U32) -> List<&2, Bool>:
-  List.append(&2, Bool, Slot.height(c, h), List.append(&2, Bool, Word.key(r), [True{}]))
+def Slot.passes(c: Chain, h: U32, r: Nat) -> List<&2, Bool>:
+  List.append(&2, Bool, Slot.height(c, h), Round.key(r, [True{}]))
 
 # the slot of the node n's ballot in a bucket, below the bucket
 def Slot.ballot(n: String) -> List<&2, Bool>:
@@ -520,18 +528,18 @@ def Chain.codec() -> Codes.Codec(Chain):
 def Where.code(w: Where, r: List<&2, U32>) -> List<&2, U32>:
   match w:
     case Where{c, h, k}:
-      Chain.code(c, Codes.Code.token(h, Codes.Code.token(k, r)))
+      Chain.code(c, Codes.Code.token(h, Codes.Code.count(k, r)))
 
 # a place
 def Where.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Where>>:
   Codes.Code.three.read(
     ~Chain,
     ~U32,
-    ~U32,
+    ~Nat,
     ~Where,
     ~Chain.code.read,
     ~Codes.Code.token.read,
-    ~Codes.Code.token.read,
+    ~Codes.Code.count.read,
     c => h => k => Where{c, h, k},
     ts
   )
@@ -546,11 +554,11 @@ def Where.code_read(
       Codes.Code.three_read(
         ~Chain,
         ~U32,
-        ~U32,
+        ~Nat,
         ~Where,
         ~Chain.codec(),
         ~Codes.Code.token.codec(),
-        ~Codes.Code.token.codec(),
+        ~(Codes.Code.count, (Codes.Code.count.read, x => y => Codes.Code.count_read(x, y))),
         a => b => d => Where{a, b, d},
         c,
         h,
@@ -566,15 +574,15 @@ def Where.codec() -> Codes.Codec(Where):
 def Last.code(l: Last, r: List<&2, U32>) -> List<&2, U32>:
   match l:
     case Last{k, v}:
-      Codes.Code.token(k, Vote.code(v, r))
+      Codes.Code.count(k, Vote.code(v, r))
 
 # a last vote
 def Last.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Last>>:
   Codes.Code.two.read(
-    ~U32,
+    ~Nat,
     ~Vote,
     ~Last,
-    ~Codes.Code.token.read,
+    ~Codes.Code.count.read,
     ~Vote.code.read,
     k => v => Last{k, v},
     ts
@@ -588,10 +596,10 @@ def Last.code_read(
   match l:
     case Last{k, v}:
       Codes.Code.two_read(
-        ~U32,
+        ~Nat,
         ~Vote,
         ~Last,
-        ~Codes.Code.token.codec(),
+        ~(Codes.Code.count, (Codes.Code.count.read, x => y => Codes.Code.count_read(x, y))),
         ~Vote.codec(),
         a => b => Last{a, b},
         k,
