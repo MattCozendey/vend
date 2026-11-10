@@ -7,9 +7,10 @@ continues with no other context.
 
 | Branch | State |
 |---|---|
-| `master` | The start. Both feature branches are ahead of it, 0 behind. |
-| `feature/refactor-4` | Last fully checked state (tip `b4fa0da`). Every entry file prints ALL PROOFS CHECK, `bun run lint` ends with `0 finding(s)`. |
-| `feature/refactor-5` | `feature/refactor-4` plus the unfinished work of the agents, merged as a checkpoint. One new file does not check and lint has 48 findings; section 6.4 states the exact state. |
+| `master` | The start (`ec7c3fd`). |
+| `feature/refactor-4` | An older fully checked state (`b4fa0da`). |
+| `feature/refactor-5` | Tip `36aa821`. Every entry file prints ALL PROOFS CHECK, `bun run lint` ends with `0 finding(s)`, `git diff --check` is clean. |
+| `claude/vend-refactor-5-u8119r` | The working branch of the last agent; same tip as `feature/refactor-5`. |
 
 ## 2. The goal (the owner's words, short)
 
@@ -19,14 +20,15 @@ continues with no other context.
   (exception: a faster form that is proven the same).
 - No scope gets smaller. Fast, scalable, proven. No quadratic def on a run path.
 - "Leave nothing open. Always prefer the widest, strongest statements."
-- `README.md` is the canon and must stay true.
+- `README.md` is the canon and must stay true. Its line 3: only human hands change it, and code or
+  docs that state less than its strongest claims are wrong.
 
-## 3. Layout now
+## 3. Layout
 
 ```
 src/shared/replica.bend                       generic replicated machine (code, then "# Proofs")
 src/shared/shared/{ledger,tree,rope,formats,regex,search}.bend
-src/shared/shared/shared/{quorum,reach,text,store,keyset}.bend
+src/shared/shared/shared/{quorum,reach,text,store,keyset,spans}.bend
 src/shared/shared/shared/shared/{trie,cell,hash,hash.test,code,seal,shared}.bend
 src/node/core/{spec,impl}.bend                Vend's domain (spec: types, body-less op laws, claims)
 src/node/transport/spec.bend                  spec only; its open laws are expected
@@ -35,20 +37,26 @@ src/node/shared/shared/{resources,uris}.bend
 src/glob/{spec,impl}.bend
 ```
 
-The replica is generic over `~mach: Machine()`, `~kern: Kernel(mach)`, `~lawf: Lawful(mach)`.
+The replica is generic over `~mach: Machine()` and `~kern: Kernel(mach)`. A kernel returns an act
+(`Act.Stale`, `Act.Mark`, `Act.Judged`, `Act.Made`), and the replica does it (`Act.run`). So the
+machine laws hold for every kernel. `Lawful` is left only as internal plumbing that
+`Kernel.lawful` builds from any kernel; no law assumes it.
 
 ## 4. How to check
 
 ```sh
-bend <file> --check-only      # the judge; stops at the first error. replica.bend: about 40 s
+bend <file> --check-only      # the judge; it prints to stderr. replica.bend: about 15 s
 bun run lint                  # must end with "0 finding(s)"
 git diff --check
 ```
 
-Entry files: `src/node/core/impl.bend`, `src/glob/impl.bend`, `src/shared/replica.bend`,
-`src/shared/shared/ledger.bend`, `src/shared/shared/regex.bend`, `src/shared/shared/search.bend`,
-`src/shared/shared/shared/keyset.bend`, `src/shared/shared/shared/reach.bend`,
-`src/node/shared/shared/uris.bend`, `src/shared/shared/shared/shared/hash.test.bend`.
+Entry files: `src/shared/shared/shared/shared/shared.bend`, `src/shared/shared/shared/text.bend`,
+`src/shared/shared/shared/reach.bend`, `src/shared/shared/shared/keyset.bend`,
+`src/shared/shared/shared/spans.bend`, `src/shared/shared/regex.bend`,
+`src/shared/shared/search.bend`, `src/shared/shared/ledger.bend`, `src/shared/replica.bend`,
+`src/glob/impl.bend`, `src/node/core/impl.bend`, `src/node/shared/shared/uris.bend`,
+`src/shared/shared/shared/shared/hash.test.bend`. `src/glob/spec.bend` and
+`src/node/transport/spec.bend` alone print TODOs: those are their open laws, which impl files fill.
 
 Facts that cost time to find:
 
@@ -59,218 +67,130 @@ Facts that cost time to find:
   `bend-lint-rules/layout/format`, run `bunx bend-lint 'src/**/*.bend' --fix-dangerously`, and
   restore the file byte for byte. No lint rule was ever removed.
 - A "for every" hypothesis is a function, so it is affine: use it once, with the case split inside.
-- A def calls only defs above it. Match a parameter, not a computed value. The shrinking parameter
-  goes first.
+- A def calls only defs above it. Match a parameter, not a computed value, and not after a `let`
+  or a rewrite: give the computed value its own helper with an equation parameter. The shrinking
+  parameter goes first.
+- A rewrite `%e: P` needs the goal as `P[b]` for `e: {a == b}`. Most failed steps had `e` the wrong
+  way round: wrap it in `Equal.sym`.
+- A spec def cannot call a body-less op of the same spec: impl.bend fills the op below it.
+- A value of function type (a kernel, a continuation) cannot be used twice; pass it as a template
+  parameter (`~kern`).
+- A dead-code scan must count uses through an import alias (`Replicas.Node.find`). A scan that did
+  not deleted live defs once; it was undone before any commit.
 - Git Bash heredocs break Python that holds backslashes; write scripts as files.
 - Do not ask an agent to log its progress or its reasoning to a file (the owner's rule).
 
-## 5. Done and checked (on `feature/refactor-4`)
+## 5. Done on `feature/refactor-5` (since `783119f`)
 
-- Core folded to `spec.bend` + `impl.bend`; no `proofs` folder; `daemon` is `node`; `src/shared` is
-  layered folders.
-- Replica plucked out of the core (Machine / Kernel / Lawful), with its lemmas and laws.
-- Tip redesign, write-once log, O(1) wait queue, `Cast.free`, one-pass put (one SHA per node),
-  root-first trees, fast `Reach` with a visited set (law `Reach.all_in`), trie module shrunk.
-- **Intake check** (`Ballot.honest`, law `Seal.accept_honest`): a node refuses a pass that names the
-  wrong last vote of its node, and a vote below a round that its node passed to.
-- **Proof of a lie**: `Entry.Lie`, `Lie.checks`, `Lie.keep`, `Lie.detect`, `Node.liars`,
-  `Notice.Lied`, `Topic.Lies`. The slot is named by the content of the lie, so two honest nodes
-  never clash. Laws `Lie.keep_checks`, `Lie.checks_sealed`, `Lie.keep_named`, `Seal.accept_signs`,
-  `Lie.detect_holds`.
-- **Rounds safe by construction**: `Line.at_agrees` (one history) assumes only `Rounds.Last` (a pass
-  names the true last vote of its node). `Rounds.Allow` and `Rounds.Same` are gone: a round decides
-  a step only when a majority cast it and the proposer's vote for it is allowed (`Vote.allowed`,
-  `Round.decide`).
-- **Glob pluck, first part**: `regex.bend` (generic `Re<T>`, law `Re.accepts_matches`),
-  `search.bend` (law `Cert.sound`), `keyset.bend`. `src/glob/impl.bend` 7,327 -> 5,720 lines; the
-  five claims unchanged.
-- README: the Vend Owner Group entry states who is trusted (the owner asked for the line).
-- Comments in `resources.bend` and `uris.bend` no longer say that a path is '/'-separated.
+Numbers (all of `src/**/*.bend`): laws 194 → 201; spec files 1,596 → 1,714 lines (they grew because
+the rule of a write moved into the core spec); all `.bend` lines 81,799 → 92,497 (proofs added, and
+about 1,580 lines of proofs deleted).
 
-## 6. `feature/refactor-5`: the unfinished work
+### 5.1 Rounds
 
-### 6.1 Rounds follow-up (branch `worktree-agent-a4a44e5d370c90697`, merged)
+- `Node.Honest`: each pass that a node holds names the last vote of its node below its round, at
+  every height of every line.
+- Laws: `Seal.accept_keeps_honest`, `Node.empty_honest`, `Node.after_honest` (any kernel, no
+  premise), `Node.one_history` (an honest node shows one history), `Plan.lead_allowed` (the
+  proposer proposes only an allowed step), `Round.mine_free` (a node votes in no round below a
+  pass of its own).
+- A kernel adds data only, by construction (`Run.data`). `Advance.head.grows` is deleted.
+- Not provable as the code is: the ballot of `Pass.to` is first in its slot (`Pass.to` tests
+  `passed`, not the slot), and `Seal.fits` (the key that a store holds for a node is content of the
+  store; nothing ties it to the node's seed).
 
-Commits on top of `b4fa0da`:
+### 5.2 Glob
 
-- `e85d41b` Ledger: a ballot is read only as what it says. **Checked, lint 0.**
-- `249cac8` WIP checkpoint (rounds). **All three files check; lint has 3 findings.**
+- `spans.bend`: every proof is closed. The span algebra (`Span.meet`, the chain cover) is there,
+  not in the glob.
+- A class holds spans: `src/glob/spec.bend` has `Class{neg, ss: List<Spans.Span>}`, and
+  `Char.range` is gone (the owner accepted this change of the spec). Show writes each span in parts
+  that read back (`Span.parts_has`, `Span.parts_fine`). `read_after_show`, `read_rejects_root`,
+  `read_after_escape`, `search_found` and `search_absent` are still proven.
+- Speed: `KeySet.unique` and `Search.push` make the key of a new value once (about 5% on six
+  test queries). A profile of a large Absent query: the search and the certificate check take
+  about half of the time each, and making keys about a third. The test queries were not saved in
+  the repository. The method: a `main` that runs `Spec.Query.search`, `bend bench.bend -o
+  bench.js`, rename to `.cjs` (the package is `type: module`), `node --stack-size=65500`.
 
-**`e85d41b`, done.** The key of a line is any bit list (`Chain{root, sub}`), so two places can
-share one slot. A read took the ballot of the slot as the ballot of the place asked for; then
-`Rounds.Last` "for every line and height" is false. Now `Ballot.is(b, hk, r, n)` and
-`Cell.ballot(m, hk, r, n)` (ledger.bend) check the node, the round and `Slot.height(c, h)`.
-`Entry.ballot`, `Bucket.ballots`, `Bucket.decide`, `Passed.of` take `hk, r, n`; `State.bucket` and
-`Ballot.many_kept` are gone. In replica.bend: `Cast.step`, `Cast.of`, `Cast.act.of`, `Cast.act`,
-`Round.ballots`, `Round.hit`, `Hit.step` (new `Hit.vote`), `Hit.cast`, `Passed.up*`, `Act.up*`. No
-law statement changed.
+### 5.3 Claims made stronger
 
-**`249cac8`, WIP.** Every def checks, no `?TODO`.
+- The rule of a write is a reference def in `src/node/core/spec.bend` (`Judge.write`, with
+  `Judge.ready`, `Judge.ready_maybe`, `Judge.content`, `Judge.then`, `Judge.when`,
+  `Judge.refuse`): take a write only when its resource holds at h what it held at base, refuse
+  only a stale one, wait only for what the node cannot read.
+- New law `Judge.write_keeps`: a taken write changes only its resource (replica lemma `Set.other`).
+- `Pick.merge_ours` also covers "both sides made the same change"; with `Pick.merge_theirs` the
+  rule of a merge is stated in full, up to the merge of both.
+- New law `Merge.names_complete`: a merge sees each resource whose content differs between ours
+  and theirs. With `Merge.keeps`, a change made on only one side is kept.
+- Every kernel is lawful (section 3). The ten laws that assumed `~lawf: Lawful` take any kernel:
+  `Node.after_grows`, `Node.after_keeps`, `Step.run_outs`, `Node.out_final`, `Node.made_final`,
+  `Chain.version_final`, `Chain.mark_final`, `Chain.start_final`, `Node.after_on`,
+  `Node.ask_once`. Vend's own lawfulness proofs (`Ask.lawful`, `Change.grows`, `Change.kept`,
+  `Change.outs` and the defs only they used) are deleted.
 
-- `shared.bend`: `Nat.lt_succ_le`, `Nat.lt_before`.
-- `ledger.bend`: `Spine.count`, `Spine.depth`, `State.round(s, c, h)` (the highest round of a height
-  in which the ledger holds a cell); `Spine.above`, `State.round_top` (a held cell of round `r`
-  gives `r <= State.round`).
-- `replica.bend`: `Round.seen` is `Ledgers.State.round`. The rounds cache is gone (`rounds` field of
-  `Keys`, `Rounds.at`, `Keys.rounds`, `Keys.saw`). `Ballot.first(s, b)`: the slot of `b` is empty.
-  `Ballot.keeps` is fits, then first, then honest. New law `Seal.accept_first`.
-- Lint, 3 findings, all `performance/unused_result` on proof binders: `ledger.bend` in
-  `Spine.above` (two), `shared.bend` in `Nat.lt_succ_le`. Fix: the `expect-begin/-end
-  unused_result` directive that the nearby proofs use.
-- `git diff --check` was not run on this commit.
+### 5.4 Reviews
 
-**Left, in order:**
+The review skills ran on the glob and spans work until they found nothing; dead defs went. They
+did not run again on the claims work of 5.3; `bun run lint` did.
 
-1. **Close the WIP step.** The three directives. `State.round_top` has no user yet (step 2 uses
-   it). Check comments that still speak of a round "seen" by the keys. Note: `State.add` leaves a
-   full slot as it is (it does not make `Many`); before `Ballot.first` a second ballot was dropped
-   while the chain moved on, now it is refused and that chain stops.
-2. **`Node.Honest` and its first laws** (designed, nothing written).
-   - `Node.Honest(~mach, s) = @c -> @h -> Rounds.Last(~mach, s, c, h)`. It reads only the ledger.
-   - Ledger lemmas: `State.add_none` (add at an empty slot is put), `State.put_other` (a put keeps
-     the other slots: `Trie.get_union`, `Shared.Maybe.join_none`), `State.keep_at`,
-     `State.keep_other`, `Cell.kept` (with the slot empty, the read after `keep` is `Some{b}` when
-     the slot is b's and `Ballot.is` holds, else the old read; in the first case the old read is
-     `None`).
-   - Core lemma: for `s2` with `State.ledger(s2) == keep(ledger s, b)`, `Ballot.first` and
-     `Ballot.honest` true: `Honest(s) -> Honest(s2)`. Match `b`.
-     - Pass: no vote read changes, so `Last.mine` and `Last.below` are the same (induction on the
-       round). An old pass uses `Honest(s)`. The new pass: `Last.same` soundness
-       (`Shared.Maybe.is_eq_sound`, the code of `Last`) and a new `Last.below.keyed`.
-     - Vote: no pass read changes. A vote read at round `j` of a reader with a held pass at `r > j`
-       changes only if `Ballot.is` holds; then `Passed.above(Round.seen, ...)` is true, against the
-       intake. Needs a new `Passed.above_of` (induction on the bound) and `State.round_top`.
-   - Laws: `Node.empty_honest`; `Seal.accept` keeps `Node.Honest`; the one-node corollary from
-     `Line.at_agrees` with `u = a = b = s`, `~rules := x => t => e => honest(c)(Head.next(x))`,
-     and `Grows.refl` twice ("a node never shows two histories", no assumption).
-   - `Nat.lt_succ` was deleted earlier; add it again for `is_lt(p, 1n+p)`.
-3. **The kernel can only add data.** Decision: by construction first; a separate premise only as
-   fallback.
-   - Problem: `Kernel.change` returns a `Run` with a free `Node`. Its ledger is installed at three
-     sites with `State.led(s, State.ledger(s3))`: `Start.head`, `Cast.vote`, `Advance.moved`.
-     `Lawful.Grows` only says that it grows. So a kernel could write a ballot.
-   - Wanted: the kernel can only add content-named data (`State.add_data`, `State.add_datas`, the
-     `Stores` interface), and the replica applies it. Then "a run keeps the ballots" is one lemma.
-   - Not checked yet: what the Vend kernel in `impl.bend` writes (`Replicas.Work.after`,
-     `Set.grows`, `Verdict.after`, `Made.after`, `Run.after`). Expected: only data through
-     `Work.set`, `Work.keep`, `State.put`.
-   - Ruled out: grafting the node's ballot region back at install (the proofs move tree reads from
-     `s3` to the installed node through `Node.grows(s3, x)`, which fails if the kernel added a
-     cell); putting the frame into `Lawful` (every law with `~lawf` gets formally weaker).
-   - Fallback: a premise `Kernel.Frames` apart from `Lawful`, with a Bool relation "same ballots"
-     (`State.grows` both ways on `State.under(ledger, [False, True])`), and about 25 lemmas in
-     `impl.bend`.
-4. **`Plan.lead` proposes only an allowed vote** (not started). Today an owner that votes against
-   the proposer makes later passes name two votes of one round; then no vote with those passes is
-   allowed and the height waits for ever. `Plan.lead` must pick `from`: a majority of owners whose
-   passes it holds and for which `Vote.allowed` holds of its proposal (drop a pass that names
-   another vote of the top round). Law `Plan.lead_allowed`, same shape as `Plan.follow_allowed`.
-   Do it before step 5, so the frame lemma of `Plan.lead` is written once.
-5. **Every deed of `Node.after` keeps `Node.Honest`.** About 40 frame lemmas for defs that keep no
-   ballot, about 35 `Honest` lemmas for defs that call `Seal.accept`. Ledger writes outside
-   `Seal.accept`: `put_datas`, `add_datas`, `put_data`, `ask`, the put of a lie, `State.take` of
-   `Node.reads(t)` (asks and data only), the three run installs. Use the Bool relation of step 3
-   (`Trie.all2_of_get` backward, `Trie.all2_under` forward); sub-trie equality after a union is
-   hard.
-6. **Own-ballot law.** Provable: the ballot of `Pass.to` and of `Cast.put` is `Ballot.first` and
-   `Ballot.honest` where it is sealed. Not provable: `Seal.fits` (the key that the store holds for a
-   node is content of the store; nothing ties it to the node's seed).
-7. **Delete `Advance.head.grows`** (no user).
+## 6. Next steps
 
-**Pitfall, still open:** a store member can craft a line key so that its ballot fills the slot of
-another node's ballot. With `Ballot.first` that other ballot is refused. Safety holds (checked
-reads); liveness does not. The real fix is a prefix-free code of the line key in the slot.
+Order chosen by the owner. Each is one commit that checks.
 
-### 6.2 Glob follow-up (four branches, all merged)
+1. **One history across nodes, in the README's terms.** `Line.at_agrees` assumes a node u that
+   holds both ledgers and whose passes name their node's last vote (`Rounds.Rules`). Each node
+   that starts empty is honest (5.1). Missing: when no owner forks its chain, a node that takes in
+   another node's ballots keeps all of them. That is a proof about `Node.sync` and `Sync.more`,
+   which stop after a number of steps and keep a ballot whose key the store gives at a later height
+   only once the head is there. It also needs an invariant: the ballots of an owner that a node
+   holds are a prefix of the owner's one chain. Several days; the sync loop may have to change.
+   The owner chose to do it.
+2. **Writers are told of every change to what their work uses.** `Node.affects_used` states only
+   that each listed touch holds. Missing: each touch that holds is listed. First make "a branch
+   lacks a version" one concept: `Branch.lacked` uses version vectors, `Touch.lacks` uses
+   `Node.has`. `Touch.holds` does not compare the touch's branch with the branch of its `Seen`.
+   The spec also needs a meaning of its own for `Touch.holds`, `Seen.of`, `Group.nodes` and
+   `Merge.base`. The depth part is proven in `reach.bend` (`Reach.all_in`, `Reach.in_through`).
+3. **Operations that return "none".** `Work.Reads` is `Unit` for `None`, so `Move.reads`,
+   `Resolve.reads`, `Resolve.shuts` and `Merge.keeps` hold when the operation gives up. The tree
+   part is proven (`Tree.set_some`); missing are the replica's link from a set of the tree to the
+   node, and the core consequences. Also: `Move.reads` both ways (a move adds no resource; it needs
+   a frame law of a set that holds in every later store, as `Tree.get_other` does);
+   `Node.read` at each kind of point; `Node.draft` gives exactly the newest pending write, and each
+   draft comes from one; `Own.takes` both ways.
+4. **Claims for the operations that have none:** `Node.versions`, `Node.log`, `Node.diff`,
+   `Node.members`, `Node.resources`, `Node.notices`, `Node.impact`, `Vend.may_stop`. Most facts
+   they need are replica laws already (`Chain.version_final` and the others).
+5. **The glob search always decides** (Found or Absent, never Unknown). `search.bend` has only
+   `Cert.sound`; `regex.bend` has no law that an expression has finitely many derivatives.
+6. **One generic frame lemma** in place of the 59 lemmas of the Frames block of `replica.bend`,
+   which copy the growth lemmas. The owner allowed a review of their proof bodies for this.
+7. **`Lawful`**: rename or remove the internal plumbing (section 3).
+8. Run the review skills again on everything since 5.4, in order
+   (`thermo-nuclear-code-quality-review`, `cyclomatic-complexity`, `erasure`, `bun run lint`),
+   until they find nothing; then the final report to the owner (spec size and laws before and
+   after, what each law assumes, what is not done).
 
-**Written by the coordinator from the glob agent's status message and its late handoff for items
-4 and 5, the commits, and a check run of the merged state. The agent did not check the helper
-branches itself. Where it says "not known", nobody verified it.**
-
-Branches, all based on `10ad342`, merged in this order:
-
-| Branch | Commits | Item |
-|---|---|---|
-| `worktree-agent-a7a0b163b6abfad50` (the glob agent) | `7534766` Glob: one matcher | 1 |
-| `worktree-agent-a3b95579b85a04ef8` (helper) | `9931ee6` Glob, Reach: delete defs that nothing calls and copies of shared lemmas; `42f1c4f` WIP checkpoint (items 4 and 5), committed by the coordinator at the stop, as it was; `2829ec5` Glob: one search on the product machine (the helper's last fix, merged after) | 4, 5 |
-| `worktree-agent-a0321412f63377750` (helper) | `2462479` WIP checkpoint (item 2) | 2 |
-
-(`worktree-agent-af8600d9fcf867b7f` holds the helper's copy of "one matcher"; the glob agent took
-it as `7534766`. It is not merged again.)
-
-Merge conflicts, resolved without finishing any work:
-
-- `src/glob/impl.bend`: the helper of item 4 deleted the "Fast matching" block (`Glob.accepts`,
-  `Glob.accepts_ok`, `Rule.selects.fast*`, `Rule.selects_fast_ok*`) that "one matcher" had edited.
-  The deletion was taken.
-- `shared.bend`: the rounds agent and the helper of item 2 each appended lemmas at the end. Both
-  are kept.
-
-| Item | State at the checkpoint |
-|---|---|
-| 1. One matcher | **Done.** The spec states matching through `regex.bend` (`Atom` and `Glob.re` are reference defs of the spec); the spec's own matcher and `Glob.re_matches` are gone. `spec.bend` 481 lines. The agent reported the five claim statements byte-identical. |
-| 2. Classes as intervals | **WIP.** New `src/shared/shared/shared/spans.bend` (565 lines): a set of characters as a list of spans, membership by comparing codes; "marks" are the few characters that stand for all the others. Its defs and law statements check; 10 lemmas are proven; **24 proofs are `?TODO`**. Laws stated: `Span.has_one`, `Spans.alike_has`, `Spans.rep_alike`, `Spans.rep_in`, `Spans.marks_covered`. In `shared.bend` (checks): the order of `U32` is the order of the `U32.to_nat` codes (`U32.cmp_to_nat`, `U32.is_le_to_nat`, `U32.is_eq_to_nat`, `U32.to_nat_inj`, `U32.le_last`, `U32.inc_to_nat`, `Nat.le_both`, `Nat.succ_nle`, `Nat.nle_succ_le`, `Nat.cmp_double`, `Bool.iff`). **The glob side is not started**: the `Glob` type still holds an expanded class (`Char.range` in `spec.bend`), and read, show, escape and the search alphabet still use the list. |
-| 3. Speed | **Baseline only** (table below). No profile, nothing removed. The commands and queries of the measure are not known (the agent did not write them down); the method was: compile with `bend -o` to JavaScript, run with node, old search at `952d834` against the new one. |
-| 4. Leftovers | **Done** (`9931ee6`). `Reach.or_false` and `Reach.or_assoc` are deleted (the use sites take the shared lemmas through `Equal.sym`). The "Fast matching" block of `impl.bend` is deleted. |
-| 5. Absent over valid paths | **Done** (`42f1c4f` + `2829ec5`, merged; `impl.bend` checks on the merged tree). One search runs on the product machine `Walk` (the glob rules x the path automaton); `Search.decide` answers Absent when `Cert.proves` accepts the product certificate. Law `Path.walk_ok`: `{Path.is_end(Path.walk(String.to_list(p), PStart{})) == Spec.is_path(p): Bool}`. `Query.holds_fast_ok`: the product accepts the characters of `p` exactly when `Spec.Query.holds(q, p)`. The named characters now hold `/`, `.`, NUL and `\`. Deleted: phase one and its machine (`Abc.step`, `Abc.ends`, `St.accepts_ok`, `St.covers`, `St.rep`, `St.laws`), `Outcome`, `Search.run.walked/.paths/.closed`, `Abc.path_syms`. `spec.bend` untouched; `search_found` and `search_absent` proven with the same text. Two queries that only an invalid string satisfies went from Unknown to Absent. Added to `text.bend`: `String.eq_head_ne`, `String.split_some`. |
-
-Order for the rest: finish the proofs of `spans.bend`; then the glob side of item 2 (type, read,
-show, escape, and the alphabet from the marks: the alphabet section to change is now the product
-one, `Walk.covers`, `Walk.rep`, `Abc.fits`; the claims `read_after_show`, `read_rejects_root`,
-`read_after_escape` must stay proven); then item 3, measured again, since the single search of
-item 5 removed the two-phase cost (profile; suspects named in the
-brief: keys built more than once for each state, a key longer than it needs to be, a certificate
-check that repeats work of the search, the two-list queue).
-
-Compiled baseline (JavaScript from `bend -o`, run with node), old search against new, as the agent
-reported it:
-
-| Query | Old | New |
-|---|---|---|
-| small, found | out of memory | 235 ms |
-| small, absent | 215 ms | 198 ms |
-| mid, found | out of memory | 475 ms |
-| mid, absent | 402 ms | 334 ms |
-| large, absent | 15,138 ms | 1,068 ms |
-| large, found | not run | 1,462 ms |
-
-Known and unchanged: `src/glob` is a glob for file-system-style paths only. Nothing in `src/node`
-imports it and the README does not name it (the owner does not want a README entry).
-
-### 6.4 Check state of `feature/refactor-5` after all merges
-
-Run by the coordinator on the merged tree:
-
-- ALL PROOFS CHECK: `shared.bend`, `text.bend`, `reach.bend`, `keyset.bend`, `regex.bend`,
-  `search.bend`, `ledger.bend`, `replica.bend`, `src/glob/impl.bend`, `src/node/core/impl.bend`,
-  `src/node/shared/shared/uris.bend`, `hash.test.bend`.
-- SOME PROOFS FAIL: `src/shared/shared/shared/spans.bend` (24 `?TODO`). Nothing imports it yet.
-- `bun run lint`: **48 findings.** `spans.bend`: 34 `unneeded_plus`, 1 `format`. `shared.bend`: 4
-  `reused_binder`, 3 `unused_result`, 2 `unneeded_plus`, 1 `format`. `ledger.bend`: 2
-  `unused_result`. `src/glob/impl.bend`: 1 `reused_binder`. Most are in appended proofs that need
-  the directive their neighbours have, or a `+` to remove; none was looked at.
-- The review skills were not run on any of this.
-
-### 6.3 Not started (the coordinator's own steps)
-
-1. After 6.1: make the README sentence of the Vend Owner Group entry say exactly the assumption
-   that the final laws need. Target: "an owner never signs two different ballots for the same
-   position of its own chain". Today's sentence ("never sign two different decisions for the same
-   step") is close.
-2. Run the review skills on everything since the last review, in this order, and repeat until they
-   find nothing: `thermo-nuclear-code-quality-review`, `cyclomatic-complexity`, `erasure`,
-   `bun run lint`.
-3. Final report to the owner: how much smaller the proven area is (lines, claims, laws, what each
-   law now assumes), and an honest list of what is not done.
+README: the Vend Owner Group entry says the owners are trusted "to never sign two different
+decisions for the same step". The proofs assume that an owner never signs two different ballots
+for the same position of its own chain. The owner decides whether to change the sentence; only
+human hands change the README.
 
 ## 7. Known limits (say them, do not hide them)
 
-- One history across nodes still assumes `Rounds.Last` of a node that holds both ledgers. Per node
-  it becomes a proven invariant only when 6.1 steps 2, 3 and 5 are done.
+- One history across nodes still assumes `Rounds.Rules` of a node that holds both ledgers (step 1).
+  For one node it is proven with no premise.
 - One lying owner can break one history (majority quorum). A lie is recorded and told
   (`Node.liars`, `Notice.Lied`), not prevented. A two-thirds quorum is a different, slower product.
+- A member of a store can craft a line key so that its ballot fills the slot of another node's
+  ballot; with `Ballot.first` that other ballot is refused. Safety holds (reads are checked);
+  liveness does not. The fix is a prefix-free code of the line key in the slot.
 - SHA-256 and the one-time signature are assumed unbroken.
 - `Advance` runs a decided step again before it keeps it (the README: a node checks everything).
 - Tree and rope builders hash each node once more to link.
 - `src/node/transport/spec.bend` is a spec with open laws.
+- `src/glob` is a glob for file-system-style paths only. Nothing in `src/node` imports it, and the
+  README does not name it (the owner does not want a README entry).
 - An `expect` directive on `Holds.led` was added by an agent; its reason is not verified.
