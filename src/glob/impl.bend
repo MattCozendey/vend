@@ -3,6 +3,7 @@ import ../shared/shared/regex.bend as Regex
 import ../shared/shared/search.bend as Searches
 import ../shared/shared/shared/keyset.bend as KeySets
 import ../shared/shared/shared/reach.bend as Reaches
+import ../shared/shared/shared/spans.bend as Spans
 import ../shared/shared/shared/shared/shared.bend as Shared
 import ../shared/shared/shared/shared/trie.bend as Tries
 import ../shared/shared/shared/text.bend as Texts
@@ -19,7 +20,10 @@ def Atom.is_eq(a: Spec.Atom, b: Spec.Atom) -> Bool:
     case Spec.AAny{} Spec.AAny{}:
       True{}
     case Spec.AClass{n, xs} Spec.AClass{m, ys}:
-      List.all.if(u => Shared.List.is_eq(~Char, ~Char.is_eq, xs, ys), Shared.Bool.is_eq(n, m))
+      List.all.if(
+        u => Shared.List.is_eq(~Spans.Span, ~Spans.Span.is_eq, xs, ys),
+        Shared.Bool.is_eq(n, m)
+      )
     case _ _:
       False{}
 
@@ -33,10 +37,10 @@ def Atom.is_eq_refl(a: Spec.Atom) -> {Atom.is_eq(a, a) == True{}: Bool}:
     case Spec.AClass{+n, +xs}:
       Shared.List.all.if_both(
         Shared.Bool.is_eq(n, n),
-        u => Shared.List.is_eq(~Char, ~Char.is_eq, xs, xs)
+        u => Shared.List.is_eq(~Spans.Span, ~Spans.Span.is_eq, xs, xs)
       )(
         Shared.Bool.is_eq_refl(n)
-      )(Shared.List.is_eq_refl(~Char, ~Char.is_eq, ~Shared.Char.laws(), xs))
+      )(Shared.List.is_eq_refl(~Spans.Span, ~Spans.Span.is_eq, ~Spans.Span.laws(), xs))
 
 # Atom.is_eq is True only for the same atom
 def Atom.is_eq_sound(
@@ -79,22 +83,37 @@ def Atom.is_eq_sound(
           n,
           m
         )(
-          Shared.List.all.if_hit(same_n, u => Shared.List.is_eq(~Char, ~Char.is_eq, xs, ys))(h)
+          Shared.List.all.if_hit(same_n, u => Shared.List.is_eq(~Spans.Span, ~Spans.Span.is_eq, xs, ys))(h)
         ): {Spec.AClass{n, xs} == Spec.AClass{_, ys}: Spec.Atom}
         %Shared.List.is_eq_sound(
-          ~Char,
-          ~Char.is_eq,
-          ~Shared.Char.laws(),
+          ~Spans.Span,
+          ~Spans.Span.is_eq,
+          ~Spans.Span.laws(),
           xs,
           ys
         )(
-          Shared.List.all.if_rest(same_n, u => Shared.List.is_eq(~Char, ~Char.is_eq, xs, ys))(h)
+          Shared.List.all.if_rest(same_n, u => Shared.List.is_eq(~Spans.Span, ~Spans.Span.is_eq, xs, ys))(h)
         ): {Spec.AClass{n, xs} == Spec.AClass{n, _}: Spec.Atom}
         {==}
 
 # the laws of Atom.is_eq
 def Atom.laws() -> Shared.Eq.Laws(Spec.Atom, Atom.is_eq):
   (Atom.is_eq_refl, Atom.is_eq_sound)
+
+# the key of s: the keys of its ends
+def Span.key(s: Spans.Span) -> List<&2, Bool>:
+  match s:
+    case Spans.Span{Chr{lo}, Chr{hi}}:
+      List.append(&2, Bool, Tries.Trie.char(lo), Tries.Trie.char(hi))
+
+# the key of the spans ss of a class: a True and the key of each span, then a
+# False
+def Class.key(ss: List<&2, Spans.Span>) -> List<&2, Bool>:
+  match ss:
+    case Nil{}:
+      [False{}]
+    case Con{s, r}:
+      True{} <> List.append(&2, Bool, Span.key(s), Class.key(r))
 
 # the key of t: a bit or two for its form, then its parts
 def Atom.key(t: Spec.Atom) -> List<&2, Bool>:
@@ -103,8 +122,8 @@ def Atom.key(t: Spec.Atom) -> List<&2, Bool>:
       False{} <> Tries.Trie.char(x)
     case Spec.AAny{}:
       [True{}, False{}]
-    case Spec.AClass{neg, cs}:
-      True{} <> True{} <> neg <> Tries.Trie.text(String.from_list(cs))
+    case Spec.AClass{neg, ss}:
+      True{} <> True{} <> neg <> Class.key(ss)
 
 # Search states
 # -------------
@@ -877,10 +896,10 @@ def Path.walk_ok(p):
 # the rules. It accepts the characters of p from the place of a query exactly
 # when p answers the query (Query.holds_fast_ok).
 
-# What the machine knows: the characters cs that the search moves it under,
-# and one more, f (see "Representative characters").
+# What the machine knows: the spans that the query names, and those of the
+# characters with a role of their own (see "Representative characters").
 type Abc is Data:
-  Abc{cs: List<&2, Char>, f: Char}
+  Abc{ss: List<&2, Spans.Span>}
 
 # A place of the machine: where the path is, with the state; or past a
 # mistake of the path (Dead), where the state does not matter.
@@ -1382,522 +1401,558 @@ def Walk.key(w: Walk) -> List<&2, Bool>:
 
 # Representative characters
 # -------------------------
-# The search moves the machine only under the characters cs, and one more
-# character f. cs holds the characters that the globs of the query name, and
-# those with a role of their own for a path. A character that cs lacks moves
-# the machine as f does.
+# A character moves the machine as its mark does (Spans.rep): the two are in
+# the same spans (Spans.rep_alike). The spans are those of the classes of the
+# query, a character of a Lit as a span of one, and the characters with a
+# role of their own for a path, each a span of one. The search moves the
+# machine only under the marks of those spans, each once.
 
-# the characters that the search moves the machine under
+# the key of c
+def Char.key(c: Char) -> List<&2, Bool>:
+  match c:
+    case Chr{x}:
+      Tries.Trie.char(x)
+
+# the marks that the search moves the machine under, each once
 def Abc.syms(g: Abc) -> List<&2, Char>:
   match g:
-    case Abc{cs, f}:
-      f <> cs
+    case Abc{ss}:
+      KeySets.KeySet.unique(
+        ~Char,
+        ~Char.is_eq,
+        ~Char.key,
+        Spans.Spans.marks(ss),
+        Tries.Trie.new(Char)
+      )
 
-# the characters with a role of their own
-def Role.chars() -> List<&2, Char>:
-  ['/', '.', Chr{0}, Chr{92}]
+# the characters with a role of their own for a path, each a span of one
+def Role.spans() -> List<&2, Spans.Span>:
+  [
+    Spans.Span{'/', '/'},
+    Spans.Span{'.', '.'},
+    Spans.Span{Chr{0}, Chr{0}},
+    Spans.Span{Chr{92}, Chr{92}}
+  ]
 
-# cs holds c
-def Chars.has(cs: List<&2, Char>, c: Char) -> Bool:
-  List.contains(~Char, ~Char.is_eq, cs, c)
+# ss holds the span s
+def Span.within(ss: List<&2, Spans.Span>, +s: Spans.Span) -> Bool:
+  List.contains(~Spans.Span, ~Spans.Span.is_eq, ss, s)
 
-# every character that t names is in cs
-def Atom.within(cs: List<&2, Char>, t: Spec.Atom) -> Bool:
+# every span that t names is in ss: a character of a Lit as a span of one;
+# '/', which Any and a class name, is a span of Role.spans
+def Atom.within(ss: List<&2, Spans.Span>, t: Spec.Atom) -> Bool:
   match t:
-    case Spec.ALit{x}:
-      Chars.has(cs, x)
+    case Spec.ALit{+x}:
+      Span.within(ss, Spans.Span{x, x})
     case Spec.AAny{}:
       True{}
     case Spec.AClass{neg, xs}:
-      Reaches.Reach.within(~Char, ~Char.is_eq, xs, cs)
+      Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, xs, ss)
 
-# every character that slots name is in cs
-def Slots.within(slots: List<&2, Slot>, +cs: List<&2, Char>) -> Bool:
+# every span that slots name is in ss
+def Slots.within(slots: List<&2, Slot>, +ss: List<&2, Spans.Span>) -> Bool:
   match slots:
     case Nil{}:
       True{}
     case Con{Inc{xs}, t}:
       List.all.if(
-        u => Slots.within(t, cs),
-        Regex.Seqs.holds(~Spec.Atom, ~List<&2, Char>, ~Atom.within, xs, cs)
+        u => Slots.within(t, ss),
+        Regex.Seqs.holds(~Spec.Atom, ~List<&2, Spans.Span>, ~Atom.within, xs, ss)
       )
     case Con{Exc{xs}, t}:
       List.all.if(
-        u => Slots.within(t, cs),
-        Regex.Seqs.holds(~Spec.Atom, ~List<&2, Char>, ~Atom.within, xs, cs)
+        u => Slots.within(t, ss),
+        Regex.Seqs.holds(~Spec.Atom, ~List<&2, Spans.Span>, ~Atom.within, xs, ss)
       )
 
-# cs holds '/', and not c or f
-def Chars.near(cs: List<&2, Char>, c: Char, f: Char) -> Bool:
-  +cs = cs
+# c and d are in the same spans of ss, and ss holds the spans of Role.spans
+def Chars.near(ss: List<&2, Spans.Span>, c: Char, d: Char) -> Bool:
+  +ss = ss
   List.all.if(
-    u => List.all.if(u2 => Bool.not(Chars.has(cs, f)), Bool.not(Chars.has(cs, c))),
-    Chars.has(cs, '/')
+    u => Spans.Spans.alike(ss, c, d),
+    Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss)
   )
 
-# cs holds '/', when c and f are near
-def Chars.near_slash(
-  +cs: List<&2, Char>,
-  c: Char,
-  f: Char,
-  hn: {Chars.near(cs, c, f) == True{}: Bool}
-) -> {Chars.has(cs, '/') == True{}: Bool}:
-  Shared.List.all.if_hit(
-    Chars.has(cs, '/'),
-    u => List.all.if(u2 => Bool.not(Chars.has(cs, f)), Bool.not(Chars.has(cs, c)))
-  )(hn)
-
-# cs does not hold c, when c and f are near
-def Chars.near_left(
-  +cs: List<&2, Char>,
-  +c: Char,
-  +f: Char,
-  hn: {Chars.near(cs, c, f) == True{}: Bool}
-) -> {Chars.has(cs, c) == False{}: Bool}:
-  Shared.Bool.not_true(
-    Chars.has(cs, c)
-  )(
-    Shared.List.all.if_hit(
-      Bool.not(Chars.has(cs, c)),
-      u2 => Bool.not(Chars.has(cs, f))
-    )(
-      Shared.List.all.if_rest(
-        Chars.has(cs, '/'),
-        u => List.all.if(u2 => Bool.not(Chars.has(cs, f)), Bool.not(Chars.has(cs, c)))
-      )(hn)
-    )
-  )
-
-# cs does not hold f, when c and f are near
-def Chars.near_right(
-  +cs: List<&2, Char>,
-  +c: Char,
-  +f: Char,
-  hn: {Chars.near(cs, c, f) == True{}: Bool}
-) -> {Chars.has(cs, f) == False{}: Bool}:
-  Shared.Bool.not_true(
-    Chars.has(cs, f)
-  )(
-    Shared.List.all.if_rest(
-      Bool.not(Chars.has(cs, c)),
-      u2 => Bool.not(Chars.has(cs, f))
-    )(
-      Shared.List.all.if_rest(
-        Chars.has(cs, '/'),
-        u => List.all.if(u2 => Bool.not(Chars.has(cs, f)), Bool.not(Chars.has(cs, c)))
-      )(hn)
-    )
-  )
-
-# a character c that cs lacks is not a character r that cs holds
-def Chars.out_ne(
-  cs: List<&2, Char>,
-  +r: Char,
-  +c: Char,
-  hr: {Chars.has(cs, r) == True{}: Bool},
-  hc: {Chars.has(cs, c) == False{}: Bool}
-) -> {False{} == Char.is_eq(c, r): Bool}:
-  Equal.sym(
+# Char.is_eq gives the same either way round
+def Char.is_eq_comm(+a: Char, +b: Char) -> {Char.is_eq(a, b) == Char.is_eq(b, a): Bool}:
+  Equal.trans(
     Bool,
-    Char.is_eq(c, r),
-    False{},
-    Shared.Eq.ne_flip(
-      ~Char,
-      ~Char.is_eq,
-      ~Shared.Char.laws(),
-      r,
-      c,
-      Shared.List.contains_ne(~Char, ~Char.is_eq, ~Shared.Char.laws(), cs, r, c, hr, hc)
+    Char.is_eq(a, b),
+    Nat.is_eq(Spans.Char.code(a), Spans.Char.code(b)),
+    Char.is_eq(b, a),
+    Spans.Char.is_eq_codes(a, b),
+    Equal.trans(
+      Bool,
+      Nat.is_eq(Spans.Char.code(a), Spans.Char.code(b)),
+      Nat.is_eq(Spans.Char.code(b), Spans.Char.code(a)),
+      Char.is_eq(b, a),
+      Shared.Nat.is_eq_comm(Spans.Char.code(a), Spans.Char.code(b)),
+      Equal.sym(
+        Bool,
+        Char.is_eq(b, a),
+        Nat.is_eq(Spans.Char.code(b), Spans.Char.code(a)),
+        Spans.Char.is_eq_codes(b, a)
+      )
     )
   )
 
-# a character that cs lacks is not '/', when cs holds '/'
-def Char.inner_out(
-  cs: List<&2, Char>,
-  c: Char,
-  hs: {Chars.has(cs, '/') == True{}: Bool},
-  hc: {Chars.has(cs, c) == False{}: Bool}
-) -> {Spec.is_inner(c) == True{}: Bool}:
-  %Chars.out_ne(cs, '/', c, hs, hc): {Bool.not(_) == True{}: Bool}
+# c is k exactly when the span of one k holds c
+def Char.is_eq_span(+c: Char, +k: Char) -> {Char.is_eq(c, k) == Spans.Span.has(Spans.Span{k, k}, c): Bool}:
+  Equal.trans(
+    Bool,
+    Char.is_eq(c, k),
+    Char.is_eq(k, c),
+    Spans.Span.has(Spans.Span{k, k}, c),
+    Char.is_eq_comm(c, k),
+    Equal.sym(
+      Bool,
+      Spans.Span.has(Spans.Span{k, k}, c),
+      Char.is_eq(k, c),
+      Spans.Span.has_one(k, c)
+    )
+  )
+
+# two characters in the same spans of ss are both k or neither, when ss
+# holds the span of one k
+def Char.is_eq_alike(
+  +ss: List<&2, Spans.Span>,
+  +c: Char,
+  +d: Char,
+  +k: Char,
+  hn: {Spans.Spans.alike(ss, c, d) == True{}: Bool},
+  hk: {Span.within(ss, Spans.Span{k, k}) == True{}: Bool}
+) -> {Char.is_eq(c, k) == Char.is_eq(d, k): Bool}:
+  %Equal.sym(Bool, Char.is_eq(c, k), Spans.Span.has(Spans.Span{k, k}, c), Char.is_eq_span(c, k)): {
+    _ == Char.is_eq(d, k): Bool
+  }
+  %Equal.sym(Bool, Char.is_eq(d, k), Spans.Span.has(Spans.Span{k, k}, d), Char.is_eq_span(d, k)): {
+    Spans.Span.has(Spans.Span{k, k}, c) == _: Bool
+  }
+  Spans.Spans.alike_has(ss, c, d, Spans.Span{k, k})(hn)(hk)
+
+# the role of c, from whether it is '/', '.', NUL or '\'
+def Role.pick(slash: Bool, dot: Bool, nul: Bool, back: Bool) -> Role:
+  Bool.pick(
+    Role,
+    slash,
+    KSlash{},
+    Bool.pick(Role, dot, KDot{}, Bool.pick(Role, Bool.or(nul, back), KBad{}, KOther{}))
+  )
+
+# Role.of by Role.pick
+def Role.of_pick(
+  c: Char
+) -> {
+  Role.of(c)
+    == Role.pick(
+      Char.is_eq(c, '/'),
+      Char.is_eq(c, '.'),
+      Char.is_eq(c, Chr{0}),
+      Char.is_eq(c, Chr{92})
+    ): Role
+}:
+  match c:
+    case Chr{x}:
+      {==}
+
+# two characters in the same spans of ss have the same role, when ss holds
+# the spans of Role.spans
+def Role.alike(
+  +ss: List<&2, Spans.Span>,
+  +c: Char,
+  +d: Char,
+  +hn: {Spans.Spans.alike(ss, c, d) == True{}: Bool},
+  +hr: {Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss) == True{}: Bool}
+) -> {Role.of(c) == Role.of(d): Role}:
+  +w0 = Span.within(ss, Spans.Span{'/', '/'})
+  +w1 = Span.within(ss, Spans.Span{'.', '.'})
+  +w2 = Span.within(ss, Spans.Span{Chr{0}, Chr{0}})
+  +w3 = Span.within(ss, Spans.Span{Chr{92}, Chr{92}})
+  +r1 = Shared.Bool.and_true_right(w0, Bool.and(w1, Bool.and(w2, Bool.and(w3, True{}))))(hr)
+  +r2 = Shared.Bool.and_true_right(w1, Bool.and(w2, Bool.and(w3, True{})))(r1)
+  +r3 = Shared.Bool.and_true_right(w2, Bool.and(w3, True{}))(r2)
+  %Equal.sym(Role, Role.of(c), Role.pick(Char.is_eq(c, '/'), Char.is_eq(c, '.'), Char.is_eq(c, Chr{0}), Char.is_eq(c, Chr{92})), Role.of_pick(c)): {_ == Role.of(d): Role}
+  %Equal.sym(Role, Role.of(d), Role.pick(Char.is_eq(d, '/'), Char.is_eq(d, '.'), Char.is_eq(d, Chr{0}), Char.is_eq(d, Chr{92})), Role.of_pick(d)): {
+    Role.pick(
+      Char.is_eq(c, '/'),
+      Char.is_eq(c, '.'),
+      Char.is_eq(c, Chr{0}),
+      Char.is_eq(c, Chr{92})
+    )
+      == _: Role
+  }
+  %Equal.sym(Bool, Char.is_eq(c, '/'), Char.is_eq(d, '/'), Char.is_eq_alike(ss, c, d, '/', hn, Shared.Bool.and_true_left(w0, Bool.and(w1, Bool.and(w2, Bool.and(w3, True{}))))(hr))): {
+    Role.pick(
+      _,
+      Char.is_eq(c, '.'),
+      Char.is_eq(c, Chr{0}),
+      Char.is_eq(c, Chr{92})
+    )
+      == Role.pick(
+        Char.is_eq(d, '/'),
+        Char.is_eq(d, '.'),
+        Char.is_eq(d, Chr{0}),
+        Char.is_eq(d, Chr{92})
+      ): Role
+  }
+  %Equal.sym(Bool, Char.is_eq(c, '.'), Char.is_eq(d, '.'), Char.is_eq_alike(ss, c, d, '.', hn, Shared.Bool.and_true_left(w1, Bool.and(w2, Bool.and(w3, True{})))(r1))): {
+    Role.pick(
+      Char.is_eq(d, '/'),
+      _,
+      Char.is_eq(c, Chr{0}),
+      Char.is_eq(c, Chr{92})
+    )
+      == Role.pick(
+        Char.is_eq(d, '/'),
+        Char.is_eq(d, '.'),
+        Char.is_eq(d, Chr{0}),
+        Char.is_eq(d, Chr{92})
+      ): Role
+  }
+  %Equal.sym(Bool, Char.is_eq(c, Chr{0}), Char.is_eq(d, Chr{0}), Char.is_eq_alike(ss, c, d, Chr{0}, hn, Shared.Bool.and_true_left(w2, Bool.and(w3, True{}))(r2))): {
+    Role.pick(
+      Char.is_eq(d, '/'),
+      Char.is_eq(d, '.'),
+      _,
+      Char.is_eq(c, Chr{92})
+    )
+      == Role.pick(
+        Char.is_eq(d, '/'),
+        Char.is_eq(d, '.'),
+        Char.is_eq(d, Chr{0}),
+        Char.is_eq(d, Chr{92})
+      ): Role
+  }
+  %Equal.sym(Bool, Char.is_eq(c, Chr{92}), Char.is_eq(d, Chr{92}), Char.is_eq_alike(ss, c, d, Chr{92}, hn, Shared.Bool.and_true_left(w3, True{})(r3))): {
+    Role.pick(
+      Char.is_eq(d, '/'),
+      Char.is_eq(d, '.'),
+      Char.is_eq(d, Chr{0}),
+      _
+    )
+      == Role.pick(
+        Char.is_eq(d, '/'),
+        Char.is_eq(d, '.'),
+        Char.is_eq(d, Chr{0}),
+        Char.is_eq(d, Chr{92})
+      ): Role
+  }
   {==}
 
-# a character that is none of Role.chars has no role of its own
-def Role.of_other(
-  c: Char,
-  +h: {Chars.has(Role.chars(), c) == False{}: Bool}
-) -> {KOther{} == Role.of(c): Role}:
-  match c:
-    case Chr{+x}:
-      %Chars.out_ne(
-        Role.chars(),
-        '/',
-        Chr{x},
-        {==},
-        h
-      ): {
-        KOther{}
-          == Bool.pick(
-            Role,
-            _,
-            KSlash{},
-            Bool.pick(
-              Role,
-              U32.is_eq(x, 46),
-              KDot{},
-              Bool.pick(Role, Spec.is_banned(Chr{x}), KBad{}, KOther{})
-            )
-          ): Role
-      }
-      %Chars.out_ne(
-        Role.chars(),
-        '.',
-        Chr{x},
-        {==},
-        h
-      ): {
-        KOther{}
-          == Bool.pick(
-            Role,
-            _,
-            KDot{},
-            Bool.pick(Role, Spec.is_banned(Chr{x}), KBad{}, KOther{})
-          ): Role
-      }
-      %Chars.out_ne(
-        Role.chars(),
-        Chr{0},
-        Chr{x},
-        {==},
-        h
-      ): {KOther{} == Bool.pick(Role, Bool.or(_, U32.is_eq(x, 92)), KBad{}, KOther{}): Role}
-      %Chars.out_ne(
-        Role.chars(),
-        Chr{92},
-        Chr{x},
-        {==},
-        h
-      ): {KOther{} == Bool.pick(Role, _, KBad{}, KOther{}): Role}
-      {==}
-
-# an atom whose characters are in cs accepts c exactly when it accepts f,
-# two characters that cs lacks, when cs holds '/'
-def Atom.alike(
-  +cs: List<&2, Char>,
+# two characters in the same spans of ss are both inner or neither, when ss
+# holds the spans of Role.spans
+def Inner.alike(
+  +ss: List<&2, Spans.Span>,
   +c: Char,
-  +f: Char,
-  t: Spec.Atom,
-  +hn: {Chars.near(cs, c, f) == True{}: Bool},
-  hp: {Atom.within(cs, t) == True{}: Bool}
-) -> {Spec.Atom.hit(t, c) == Spec.Atom.hit(t, f): Bool}:
-  match t:
-    case Spec.ALit{+x}:
-      +hp = hp
-      Equal.trans(
-        Bool,
-        Char.is_eq(x, c),
-        False{},
-        Char.is_eq(x, f),
-        Shared.List.contains_ne(
-          ~Char,
-          ~Char.is_eq,
-          ~Shared.Char.laws(),
-          cs,
-          x,
-          c,
-          hp,
-          Chars.near_left(cs, c, f, hn)
-        ),
-        Equal.sym(
-          Bool,
-          Char.is_eq(x, f),
-          False{},
-          Shared.List.contains_ne(
-            ~Char,
-            ~Char.is_eq,
-            ~Shared.Char.laws(),
-            cs,
-            x,
-            f,
-            hp,
-            Chars.near_right(cs, c, f, hn)
+  +d: Char,
+  +hn: {Chars.near(ss, c, d) == True{}: Bool}
+) -> {Spec.is_inner(c) == Spec.is_inner(d): Bool}:
+  +hr = Shared.List.all.if_hit(
+    Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss),
+    u => Spans.Spans.alike(ss, c, d)
+  )(hn)
+  %Equal.sym(
+    Bool,
+    Char.is_eq(c, '/'),
+    Char.is_eq(d, '/'),
+    Char.is_eq_alike(
+      ss,
+      c,
+      d,
+      '/',
+      Shared.List.all.if_rest(
+        Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss),
+        u => Spans.Spans.alike(ss, c, d)
+      )(hn),
+      Shared.Bool.and_true_left(
+        Span.within(ss, Spans.Span{'/', '/'}),
+        Bool.and(
+          Span.within(ss, Spans.Span{'.', '.'}),
+          Bool.and(
+            Span.within(ss, Spans.Span{Chr{0}, Chr{0}}),
+            Bool.and(Span.within(ss, Spans.Span{Chr{92}, Chr{92}}), True{})
           )
         )
+      )(hr)
+    )
+  ): {Bool.not(_) == Spec.is_inner(d): Bool}
+  {==}
+
+# two characters in the same spans of ss are in the same spans of xs, when ss
+# holds each span of xs
+def Class.alike(
+  xs: List<&2, Spans.Span>,
+  +ss: List<&2, Spans.Span>,
+  +c: Char,
+  +d: Char,
+  +hn: {Spans.Spans.alike(ss, c, d) == True{}: Bool}
+) -> {
+  Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, xs, ss) == True{}: Bool
+} -> {Spans.Spans.has(xs, c) == Spans.Spans.has(xs, d): Bool}:
+  match xs:
+    case Nil{}:
+      e => {==}
+    case Con{+x, +r}:
+      +e =>
+        %Equal.sym(
+          Bool,
+          Spans.Span.has(x, c),
+          Spans.Span.has(x, d),
+          Spans.Spans.alike_has(ss, c, d, x)(hn)(
+            Shared.Bool.and_true_left(
+              Span.within(ss, x),
+              Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, r, ss)
+            )(e)
+          )
+        ): {
+          List.any.if(u => Spans.Spans.has(r, c), _)
+            == List.any.if(u => Spans.Spans.has(r, d), Spans.Span.has(x, d)): Bool
+        }
+        %Equal.sym(
+          Bool,
+          Spans.Spans.has(r, c),
+          Spans.Spans.has(r, d),
+          Class.alike(r, ss, c, d, hn)(
+            Shared.Bool.and_true_right(
+              Span.within(ss, x),
+              Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, r, ss)
+            )(e)
+          )
+        ): {
+          List.any.if(u => _, Spans.Span.has(x, d))
+            == List.any.if(u => Spans.Spans.has(r, d), Spans.Span.has(x, d)): Bool
+        }
+        {==}
+
+# an atom whose spans are in ss accepts c exactly when it accepts d, two
+# characters in the same spans of ss, when ss holds the spans of Role.spans
+def Atom.alike(
+  +ss: List<&2, Spans.Span>,
+  +c: Char,
+  +d: Char,
+  t: Spec.Atom,
+  +hn: {Chars.near(ss, c, d) == True{}: Bool},
+  hp: {Atom.within(ss, t) == True{}: Bool}
+) -> {Spec.Atom.hit(t, c) == Spec.Atom.hit(t, d): Bool}:
+  match t:
+    case Spec.ALit{+x}:
+      %Equal.sym(Bool, Char.is_eq(x, c), Char.is_eq(c, x), Char.is_eq_comm(x, c)): {
+        _ == Char.is_eq(x, d): Bool
+      }
+      %Equal.sym(Bool, Char.is_eq(x, d), Char.is_eq(d, x), Char.is_eq_comm(x, d)): {
+        Char.is_eq(c, x) == _: Bool
+      }
+      Char.is_eq_alike(
+        ss,
+        c,
+        d,
+        x,
+        Shared.List.all.if_rest(
+          Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss),
+          u => Spans.Spans.alike(ss, c, d)
+        )(hn),
+        hp
       )
     case Spec.AAny{}:
-      Equal.trans(
-        Bool,
-        Spec.is_inner(c),
-        True{},
-        Spec.is_inner(f),
-        Char.inner_out(cs, c, Chars.near_slash(cs, c, f, hn), Chars.near_left(cs, c, f, hn)),
-        Equal.sym(
-          Bool,
-          Spec.is_inner(f),
-          True{},
-          Char.inner_out(cs, f, Chars.near_slash(cs, c, f, hn), Chars.near_right(cs, c, f, hn))
-        )
-      )
-    case Spec.AClass{neg, +xs}:
-      +hp = hp
-      ic = Spec.is_inner(c)
-      xf = Bool.xor(neg, List.contains(~Char, ~Char.is_eq, xs, f))
+      Inner.alike(ss, c, d, hn)
+    case Spec.AClass{+neg, +xs}:
       %Equal.sym(
         Bool,
-        List.contains(~Char, ~Char.is_eq, xs, c),
-        False{},
-        Reaches.Reach.within_out(
-          ~Char,
-          ~Char.is_eq,
-          ~Shared.Char.laws(),
+        Spans.Spans.has(xs, c),
+        Spans.Spans.has(xs, d),
+        Class.alike(
           xs,
-          cs,
+          ss,
           c,
-          hp,
-          Chars.near_left(cs, c, f, hn)
-        )
-      ): {List.all.if(u => Bool.xor(neg, _), ic) == List.all.if(u => xf, Spec.is_inner(f)): Bool}
-      %Equal.sym(
-        Bool,
-        List.contains(~Char, ~Char.is_eq, xs, f),
-        False{},
-        Reaches.Reach.within_out(
-          ~Char,
-          ~Char.is_eq,
-          ~Shared.Char.laws(),
-          xs,
-          cs,
-          f,
-          hp,
-          Chars.near_right(cs, c, f, hn)
-        )
+          d,
+          Shared.List.all.if_rest(
+            Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss),
+            u => Spans.Spans.alike(ss, c, d)
+          )(hn)
+        )(hp)
       ): {
-        List.all.if(
-          u => Bool.xor(neg, False{}),
-          ic
-        )
-          == List.all.if(u => Bool.xor(neg, _), Spec.is_inner(f)): Bool
+        List.all.if(u => Bool.xor(neg, _), Spec.is_inner(c))
+          == List.all.if(u => Bool.xor(neg, Spans.Spans.has(xs, d)), Spec.is_inner(d)): Bool
       }
-      %Equal.sym(
-        Bool,
-        ic,
-        True{},
-        Char.inner_out(cs, c, Chars.near_slash(cs, c, f, hn), Chars.near_left(cs, c, f, hn))
-      ): {
-        List.all.if(
-          u => Bool.xor(neg, False{}),
-          _
-        )
-          == List.all.if(u => Bool.xor(neg, False{}), Spec.is_inner(f)): Bool
-      }
-      %Equal.sym(
-        Bool,
-        Spec.is_inner(f),
-        True{},
-        Char.inner_out(cs, f, Chars.near_slash(cs, c, f, hn), Chars.near_right(cs, c, f, hn))
-      ): {
-        List.all.if(
-          u => Bool.xor(neg, False{}),
-          True{}
-        )
-          == List.all.if(u => Bool.xor(neg, False{}), _): Bool
+      %Equal.sym(Bool, Spec.is_inner(c), Spec.is_inner(d), Inner.alike(ss, c, d, hn)): {
+        List.all.if(u => Bool.xor(neg, Spans.Spans.has(xs, d)), _)
+          == List.all.if(u => Bool.xor(neg, Spans.Spans.has(xs, d)), Spec.is_inner(d)): Bool
       }
       {==}
 
-# slots step alike under two characters that cs lacks, when cs holds '/' and
-# every character that the slots name
+# slots step alike under two characters in the same spans of ss, when ss
+# holds the spans of Role.spans and every span that the slots name
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- only proofs use it; no program runs it
 def Slot.step_alike(
   slots: List<&2, Slot>,
-  +cs: List<&2, Char>,
+  +ss: List<&2, Spans.Span>,
   +c: Char,
-  +f: Char,
-  +hn: {Chars.near(cs, c, f) == True{}: Bool}
+  +d: Char,
+  +hn: {Chars.near(ss, c, d) == True{}: Bool}
 ) -> {
-  Slots.within(slots, cs) == True{}: Bool
-} -> {Slot.step(slots, c) == Slot.step(slots, f): List<&2, Slot>}:
+  Slots.within(slots, ss) == True{}: Bool
+} -> {Slot.step(slots, c) == Slot.step(slots, d): List<&2, Slot>}:
   match slots:
     case Nil{}:
       _ => {==}
     case Con{Inc{+xs}, +t}:
       +hw =>
-        +wx = Regex.Seqs.holds(~Spec.Atom, ~List<&2, Char>, ~Atom.within, xs, cs)
+        +wx = Regex.Seqs.holds(~Spec.Atom, ~List<&2, Spans.Span>, ~Atom.within, xs, ss)
         +xc = Regex.Seqs.step(~Char, ~Spec.Atom, ~Spec.Atom.hit, ~Atom.is_eq, ~Atom.key, xs, c)
         +tc = Slot.step(t, c)
         %Regex.Seqs.step_alike(
           ~Char,
           ~Spec.Atom,
-          ~List<&2, Char>,
+          ~List<&2, Spans.Span>,
           ~Spec.Atom.hit,
           ~Atom.is_eq,
           ~Atom.key,
           ~Atom.within,
           ~Chars.near,
-          ~(g => c2 => f2 => t2 => hn2 => hp2 => Atom.alike(g, c2, f2, t2, hn2, hp2)),
+          ~(g => c2 => d2 => t2 => hn2 => hp2 => Atom.alike(g, c2, d2, t2, hn2, hp2)),
           xs,
-          cs,
+          ss,
           c,
-          f
+          d
         )(
           hn
         )(
-          Shared.List.all.if_hit(wx, u => Slots.within(t, cs))(hw)
-        ): {Con{Inc{xc}, tc} == Con{Inc{_}, Slot.step(t, f)}: List<&2, Slot>}
+          Shared.List.all.if_hit(wx, u => Slots.within(t, ss))(hw)
+        ): {Con{Inc{xc}, tc} == Con{Inc{_}, Slot.step(t, d)}: List<&2, Slot>}
         %Slot.step_alike(
           t,
-          cs,
+          ss,
           c,
-          f,
+          d,
           hn
         )(
-          Shared.List.all.if_rest(wx, u => Slots.within(t, cs))(hw)
+          Shared.List.all.if_rest(wx, u => Slots.within(t, ss))(hw)
         ): {Con{Inc{xc}, tc} == Con{Inc{xc}, _}: List<&2, Slot>}
         {==}
     case Con{Exc{+xs}, +t}:
       +hw =>
-        +wx = Regex.Seqs.holds(~Spec.Atom, ~List<&2, Char>, ~Atom.within, xs, cs)
+        +wx = Regex.Seqs.holds(~Spec.Atom, ~List<&2, Spans.Span>, ~Atom.within, xs, ss)
         +xc = Regex.Seqs.step(~Char, ~Spec.Atom, ~Spec.Atom.hit, ~Atom.is_eq, ~Atom.key, xs, c)
         +tc = Slot.step(t, c)
         %Regex.Seqs.step_alike(
           ~Char,
           ~Spec.Atom,
-          ~List<&2, Char>,
+          ~List<&2, Spans.Span>,
           ~Spec.Atom.hit,
           ~Atom.is_eq,
           ~Atom.key,
           ~Atom.within,
           ~Chars.near,
-          ~(g => c2 => f2 => t2 => hn2 => hp2 => Atom.alike(g, c2, f2, t2, hn2, hp2)),
+          ~(g => c2 => d2 => t2 => hn2 => hp2 => Atom.alike(g, c2, d2, t2, hn2, hp2)),
           xs,
-          cs,
+          ss,
           c,
-          f
+          d
         )(
           hn
         )(
-          Shared.List.all.if_hit(wx, u => Slots.within(t, cs))(hw)
-        ): {Con{Exc{xc}, tc} == Con{Exc{_}, Slot.step(t, f)}: List<&2, Slot>}
+          Shared.List.all.if_hit(wx, u => Slots.within(t, ss))(hw)
+        ): {Con{Exc{xc}, tc} == Con{Exc{_}, Slot.step(t, d)}: List<&2, Slot>}
         %Slot.step_alike(
           t,
-          cs,
+          ss,
           c,
-          f,
+          d,
           hn
         )(
-          Shared.List.all.if_rest(wx, u => Slots.within(t, cs))(hw)
+          Shared.List.all.if_rest(wx, u => Slots.within(t, ss))(hw)
         ): {Con{Exc{xc}, tc} == Con{Exc{xc}, _}: List<&2, Slot>}
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# f <> cs holds f
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
-def Chars.has_head(f: Char, cs: List<&2, Char>) -> {Chars.has(f <> cs, f) == True{}: Bool}:
-  %Equal.sym(
-    Bool,
-    Char.is_eq(f, f),
-    True{},
-    Shared.Char.is_eq_refl(f)
-  ): {List.any.if(u => Chars.has(cs, f), _) == True{}: Bool}
-  {==}
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# Contains as the "some" of KeySet.unique_some
+def Contains.some(
+  l: List<&2, Char>,
+  +d: Char
+) -> {
+  List.contains(~Char, ~Char.is_eq, l, d)
+    == Shared.List.some(~Char, ~Char, ~(g => x => Char.is_eq(x, g)), l, d): Bool
+}:
+  match l:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      %Equal.sym(
+        Bool,
+        List.contains(~Char, ~Char.is_eq, r, d),
+        Shared.List.some(~Char, ~Char, ~(g => x => Char.is_eq(x, g)), r, d),
+        Contains.some(r, d)
+      ): {
+        List.any.if(u => _, Char.is_eq(x, d))
+          == List.any.if(
+            u => Shared.List.some(~Char, ~Char, ~(g => x => Char.is_eq(x, g)), r, d),
+            Char.is_eq(x, d)
+          ): Bool
+      }
+      {==}
 
-# cs holds each character with a role of its own, and not f
-def Abc.fits(g: Abc) -> Bool:
-  match g:
-    case Abc{+cs, f}:
-      List.all.if(
-        u => Bool.not(Chars.has(cs, f)),
-        Reaches.Reach.within(~Char, ~Char.is_eq, Role.chars(), cs)
+# a mark of the spans ss is one of the characters that the search moves the
+# machine under
+def Abc.has_mark(
+  +ss: List<&2, Spans.Span>,
+  +d: Char
+) -> {
+  List.contains(~Char, ~Char.is_eq, Spans.Spans.marks(ss), d) == True{}: Bool
+} -> {List.contains(~Char, ~Char.is_eq, Abc.syms(Abc{ss}), d) == True{}: Bool}:
+  e =>
+    +ms = Spans.Spans.marks(ss)
+    +us = KeySets.KeySet.unique(~Char, ~Char.is_eq, ~Char.key, ms, Tries.Trie.new(Char))
+    Equal.trans(
+      Bool,
+      List.contains(~Char, ~Char.is_eq, us, d),
+      Shared.List.some(~Char, ~Char, ~(g => x => Char.is_eq(x, g)), us, d),
+      True{},
+      Contains.some(us, d),
+      Equal.trans(
+        Bool,
+        Shared.List.some(~Char, ~Char, ~(g => x => Char.is_eq(x, g)), us, d),
+        Shared.List.some(~Char, ~Char, ~(g => x => Char.is_eq(x, g)), ms, d),
+        True{},
+        KeySets.KeySet.unique_some(
+          ~Char,
+          ~Char,
+          ~Char.is_eq,
+          ~Char.key,
+          ~(g => x => Char.is_eq(x, g)),
+          ~Shared.Char.laws(),
+          ms,
+          d
+        ),
+        Equal.trans(
+          Bool,
+          Shared.List.some(~Char, ~Char, ~(g => x => Char.is_eq(x, g)), ms, d),
+          List.contains(~Char, ~Char.is_eq, ms, d),
+          True{},
+          Equal.sym(
+            Bool,
+            List.contains(~Char, ~Char.is_eq, ms, d),
+            Shared.List.some(~Char, ~Char, ~(g => x => Char.is_eq(x, g)), ms, d),
+            Contains.some(ms, d)
+          ),
+          e
+        )
       )
+    )
 
-# w is Dead; or g fits, and every character that the state of w names is in
-# its cs
+# w is Dead; or the spans of g hold the spans of Role.spans and every span that
+# the state of w names
 def Walk.covers(g: Abc, w: Walk) -> Bool:
   match g w:
     case _ Dead{}:
       True{}
-    case Abc{+cs, f} At{p, St{both, a, b}}:
+    case Abc{+ss} At{p, St{both, a, b}}:
       List.all.if(
-        u => List.all.if(u2 => Slots.within(b, cs), Slots.within(a, cs)),
-        Abc.fits(Abc{cs, f})
+        u => List.all.if(u2 => Slots.within(b, ss), Slots.within(a, ss)),
+        Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss)
       )
 
-# Walk.rep at a place that is not Dead, once it is known if f <> cs holds c
-# (known)
-def Walk.rep.at(
-  +cs: List<&2, Char>,
-  +f: Char,
-  p: Path,
-  both: Bool,
-  +a: List<&2, Slot>,
-  +b: List<&2, Slot>,
-  +c: Char,
-  known: Bool,
-  +h: {Walk.covers(Abc{cs, f}, At{p, St{both, a, b}}) == True{}: Bool}
-) -> {
-  Chars.has(f <> cs, c) == known: Bool
-} -> (
-  &d: Char -> {
-    List.contains(~Char, ~Char.is_eq, f <> cs, d) == True{}: Bool
-  }
-    & {
-      Walk.step(
-        Abc{cs, f},
-        At{p, St{both, a, b}},
-        c
-      )
-        == Walk.step(Abc{cs, f}, At{p, St{both, a, b}}, d): Walk
-    }
-):
-  match known:
-    case True{}:
-      e => (c, (e, {==}))
-    case False{}:
-      e =>
-        +wa = Slots.within(a, cs)
-        +wb = Slots.within(b, cs)
-        +roles = Reaches.Reach.within(~Char, ~Char.is_eq, Role.chars(), cs)
-        +no_f = Bool.not(Chars.has(cs, f))
-        +no_c = Bool.not(Chars.has(cs, c))
-        +fits = Shared.List.all.if_hit(
-          List.all.if(u => no_f, roles),
-          u => List.all.if(u2 => wb, wa)
-        )(h)
-        +within = Shared.List.all.if_rest(
-          List.all.if(u => no_f, roles),
-          u => List.all.if(u2 => wb, wa)
-        )(h)
-        +hr = Shared.List.all.if_hit(roles, u => no_f)(fits)
-        +hf = Shared.List.all.if_rest(roles, u => no_f)(fits)
-        +hc = Shared.List.any.if_false_rest(Char.is_eq(f, c), u => Chars.has(cs, c))(e)
-        +hn = {
-          Shared.List.all.if_both(
-            Chars.has(cs, '/'),
-            u => List.all.if(u2 => no_f, no_c)
-          )(
-            Shared.Bool.and_true_left(
-              Chars.has(cs, '/'),
-              Reaches.Reach.within(~Char, ~Char.is_eq, ['.', Chr{0}, Chr{92}], cs)
-            )(hr)
-          )(
-            Shared.List.all.if_both(
-              no_c,
-              u2 => no_f
-            )(Equal.cong(Bool, Bool, v => Bool.not(v), Chars.has(cs, c), False{}, hc))(hf)
-          ): {Chars.near(cs, c, f) == True{}: Bool}
-        }
-        -ac = Slot.step(a, c)
-        -bc = Slot.step(b, c)
-        -to = Path.step(p, KOther{})
-        (f, (Chars.has_head(f, cs), {
-              %Role.of_other(c, Reaches.Reach.within_out(~Char, ~Char.is_eq, ~Shared.Char.laws(), Role.chars(), cs, c, hr, hc)): {Walk.at(Path.step(p, _), u => St{both, ac, bc}) == Walk.at(Path.step(p, Role.of(f)), u => St{both, Slot.step(a, f), Slot.step(b, f)}): Walk}
-              %Role.of_other(f, Reaches.Reach.within_out(~Char, ~Char.is_eq, ~Shared.Char.laws(), Role.chars(), cs, f, hr, Shared.Bool.not_true(Chars.has(cs, f))(hf))): {Walk.at(to, u => St{both, ac, bc}) == Walk.at(Path.step(p, _), u => St{both, Slot.step(a, f), Slot.step(b, f)}): Walk}
-              %Slot.step_alike(a, cs, c, f, hn)(Shared.List.all.if_hit(wa, u2 => wb)(within)): {Walk.at(to, u => St{both, ac, bc}) == Walk.at(to, u => St{both, _, Slot.step(b, f)}): Walk}
-              %Slot.step_alike(b, cs, c, f, hn)(Shared.List.all.if_rest(wa, u2 => wb)(within)): {Walk.at(to, u => St{both, ac, bc}) == Walk.at(to, u => St{both, ac, _}): Walk}
-              {==}
-              : {Walk.step(Abc{cs, f}, At{p, St{both, a, b}}, c) == Walk.step(Abc{cs, f}, At{p, St{both, a, b}}, f): Walk}}))
-
-# under a place that g covers, each character moves the machine as some
-# character of Abc.syms(g) does
+# under a place that g covers, each character moves the machine as its mark
+# does, a character of Abc.syms(g)
 def Walk.rep(
   g: Abc,
   w: Walk,
@@ -1910,11 +1965,50 @@ def Walk.rep(
     & {Walk.step(g, w, c) == Walk.step(g, w, d): Walk}
 ):
   match g w:
-    case Abc{cs, +f} Dead{}:
-      (f, (Chars.has_head(f, cs), {==}))
-    case Abc{+cs, +f} At{p, St{both, a, b}}:
+    case Abc{+ss} Dead{}:
+      (Chr{0}, (Abc.has_mark(ss, Chr{0})({==}), {==}))
+    case Abc{+ss} At{+p, St{+both, +a, +b}}:
       +c = c
-      Walk.rep.at(cs, f, p, both, a, b, c, Chars.has(f <> cs, c), h)({==})
+      +h = h
+      +ms = Spans.Spans.marks(ss)
+      +d = Spans.Spans.rep(ms, c)
+      +roles = Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss)
+      +wa = Slots.within(a, ss)
+      +wb = Slots.within(b, ss)
+      +hr = Shared.List.all.if_hit(roles, u => List.all.if(u2 => wb, wa))(h)
+      +hw = Shared.List.all.if_rest(roles, u => List.all.if(u2 => wb, wa))(h)
+      +ha = Spans.Spans.rep_alike(ss, ms, c)(Spans.Spans.marks_covered(ss))
+      +hn = Shared.List.all.if_both(roles, u => Spans.Spans.alike(ss, c, d))(hr)(ha)
+      (
+        d,
+        (
+          Abc.has_mark(ss, d)(Spans.Spans.rep_in(ms, c)({==})),
+          (
+            %Equal.sym(Role, Role.of(c), Role.of(d), Role.alike(ss, c, d, ha, hr)): {
+              Walk.at(Path.step(p, _), u => St{both, Slot.step(a, c), Slot.step(b, c)})
+                == Walk.step(Abc{ss}, At{p, St{both, a, b}}, d): Walk
+            }
+            %Equal.sym(
+              List<&2, Slot>,
+              Slot.step(a, c),
+              Slot.step(a, d),
+              Slot.step_alike(a, ss, c, d, hn)(Shared.List.all.if_hit(wa, u2 => wb)(hw))
+            ): {
+              Walk.at(Path.step(p, Role.of(d)), u => St{both, _, Slot.step(b, c)})
+                == Walk.step(Abc{ss}, At{p, St{both, a, b}}, d): Walk
+            }
+            %Equal.sym(
+              List<&2, Slot>,
+              Slot.step(b, c),
+              Slot.step(b, d),
+              Slot.step_alike(b, ss, c, d, hn)(Shared.List.all.if_rest(wa, u2 => wb)(hw))
+            ): {
+              Walk.at(Path.step(p, Role.of(d)), u => St{both, Slot.step(a, d), _})
+                == Walk.step(Abc{ss}, At{p, St{both, a, b}}, d): Walk
+            }
+            {==})
+        )
+      )
 
 # Search
 # ------
@@ -1923,77 +2017,58 @@ def Walk.rep(
 # the machine accepts is a path to check; when no place accepts, the places
 # are a certificate to check.
 
-# the characters that g names, in front of acc
-def Glob.chars(g: Spec.Glob, acc: List<&2, Char>) -> List<&2, Char>:
+# the spans that g names, in front of acc: a character of a Lit as a span of
+# one
+def Glob.spans(g: Spec.Glob, acc: List<&2, Spans.Span>) -> List<&2, Spans.Span>:
   match g:
     case Spec.Void{}:
       acc
     case Spec.Eps{}:
       acc
-    case Spec.Lit{x}:
-      x <> acc
+    case Spec.Lit{+x}:
+      Spans.Span{x, x} <> acc
     case Spec.Any{}:
       acc
     case Spec.Star{}:
       acc
     case Spec.Class{n, xs}:
-      List.append(&2, Char, xs, acc)
+      List.append(&2, Spans.Span, xs, acc)
     case Spec.Deep{}:
       acc
     case Spec.Cat{a, b}:
-      Glob.chars(a, Glob.chars(b, acc))
+      Glob.spans(a, Glob.spans(b, acc))
     case Spec.Alt{a, b}:
-      Glob.chars(a, Glob.chars(b, acc))
+      Glob.spans(a, Glob.spans(b, acc))
 
-# the characters that the globs of rules name, in front of acc
-def Rules.chars(rules: List<&2, Spec.Rule>, acc: List<&2, Char>) -> List<&2, Char>:
+# the spans that the globs of rules name, in front of acc
+def Rules.spans(rules: List<&2, Spec.Rule>, acc: List<&2, Spans.Span>) -> List<&2, Spans.Span>:
   match rules:
     case Nil{}:
       acc
     case Con{Spec.Include{g}, t}:
-      Glob.chars(g, Rules.chars(t, acc))
+      Glob.spans(g, Rules.spans(t, acc))
     case Con{Spec.Exclude{g}, t}:
-      Glob.chars(g, Rules.chars(t, acc))
+      Glob.spans(g, Rules.spans(t, acc))
 
-# the key of c
-def Char.key(c: Char) -> List<&2, Bool>:
-  match c:
-    case Chr{x}:
-      Tries.Trie.char(x)
+# the spans of Role.spans and those that the globs of a and b name, each once
+def Rules.abc(a: List<&2, Spec.Rule>, b: List<&2, Spec.Rule>) -> Abc:
+  Abc{
+    KeySets.KeySet.unique(
+      ~Spans.Span,
+      ~Spans.Span.is_eq,
+      ~Span.key,
+      List.append(&2, Spans.Span, Role.spans(), Rules.spans(a, Rules.spans(b, []))),
+      Tries.Trie.new(Spans.Span)
+    )
+  }
 
-# the characters of Role.chars and those that the globs of a and b name,
-# each once
-def Rules.abc_chars(a: List<&2, Spec.Rule>, b: List<&2, Spec.Rule>) -> List<&2, Char>:
-  KeySets.KeySet.unique(
-    ~Char,
-    ~Char.is_eq,
-    ~Char.key,
-    List.append(&2, Char, Role.chars(), Rules.chars(a, Rules.chars(b, []))),
-    Tries.Trie.new(Char)
-  )
-
-# the characters of Role.chars and those that the globs of q name, each once
-def Query.chars(q: Spec.Query) -> List<&2, Char>:
+# what the machine knows for q
+def Query.abc(q: Spec.Query) -> Abc:
   match q:
     case Spec.Both{a, b}:
-      Rules.abc_chars(a, b)
+      Rules.abc(a, b)
     case Spec.Only{a, b}:
-      Rules.abc_chars(a, b)
-
-# the largest code in cs, or acc
-def Chars.max(cs: List<&2, Char>, +acc: U32) -> U32:
-  match cs:
-    case Nil{}:
-      acc
-    case Con{Chr{+x}, t}:
-      Chars.max(t, Bool.pick(U32, U32.is_gt(x, acc), x, acc))
-# a character after every character of cs
-def Chars.fresh(cs: List<&2, Char>) -> Char:
-  Chr{(Chars.max(cs, 0) + 1: U32)}
-# the named characters of q, and one more
-def Query.abc(q: Spec.Query) -> Abc:
-  +cs = Query.chars(q)
-  Abc{cs, Chars.fresh(cs)}
+      Rules.abc(a, b)
 
 # the places a search may visit before it gives up
 def Search.fuel() -> Nat:
@@ -2330,13 +2405,62 @@ def Glob.show.char(c: Char, k: Spec.Sym, rest: String) -> String:
     case _:
       SCon{Chr{92}, SCon{c, rest}}
 
-# each character of cs, escaped, before rest
-def Glob.show.chars(cs: List<&2, Char>, rest: String) -> String:
-  match cs:
+# the characters of s with a code from a to b, as a span (empty when none)
+def Span.cut(s: Spans.Span, +a: U32, +b: U32) -> Spans.Span:
+  match s:
+    case Spans.Span{Chr{+lo}, Chr{+hi}}:
+      Spans.Span{
+        Chr{Bool.pick(U32, U32.is_le(lo, a), a, lo)},
+        Chr{Bool.pick(U32, U32.is_le(hi, b), hi, b)}
+      }
+
+# the parts of s inside a class, in order: the characters before '!', '!', those
+# between '!' and '\', '\', ']', and those after ']'. The parts of more than one
+# character have no end that the text of a class gives a role ('!' at its
+# start, '\' and ']'), so each part reads back as itself
+def Span.parts(+s: Spans.Span) -> List<&2, Spans.Span>:
+  [
+    Span.cut(s, 0, 32),
+    Span.cut(s, 33, 33),
+    Span.cut(s, 34, 91),
+    Span.cut(s, 92, 92),
+    Span.cut(s, 93, 93),
+    Span.cut(s, 94, 4294967295)
+  ]
+
+# Span.show once it is known whether the span is empty (gap) and whether it is
+# one character (one)
+def Span.show.at(lo: U32, +hi: U32, gap: Bool, one: Bool, rest: String) -> String:
+  match gap one:
+    case True{} x:
+      rest
+    case False{} True{}:
+      SCon{Chr{92}, SCon{Chr{lo}, rest}}
+    case False{} False{}:
+      SCon{Chr{lo}, SCon{'-', SCon{Chr{hi}, rest}}}
+
+# the text of the span s in a class, before rest: nothing when it is empty, the
+# character escaped when it is one, else `lo-hi`
+def Span.show(s: Spans.Span, rest: String) -> String:
+  match s:
+    case Spans.Span{Chr{+lo}, Chr{+hi}}:
+      Span.show.at(lo, hi, U32.is_lt(hi, lo), U32.is_eq(lo, hi), rest)
+
+# the text of each span of ss, before rest
+def Span.show.all(ss: List<&2, Spans.Span>, rest: String) -> String:
+  match ss:
     case Nil{}:
       rest
-    case Con{h, t}:
-      SCon{Chr{92}, SCon{h, Glob.show.chars(t, rest)}}
+    case Con{s, t}:
+      Span.show(s, Span.show.all(t, rest))
+
+# the text of each span of ss in a class, part by part, before rest
+def Glob.show.spans(ss: List<&2, Spans.Span>, rest: String) -> String:
+  match ss:
+    case Nil{}:
+      rest
+    case Con{s, t}:
+      Span.show.all(Span.parts(s), Glob.show.spans(t, rest))
 
 # `!` before text when neg
 def Glob.show.neg(neg: Bool, text: String) -> String:
@@ -2359,8 +2483,8 @@ def Glob.show.go(g: Spec.Glob, rest: String) -> String:
       "?" ++ rest
     case Spec.Star{}:
       "{*}" ++ rest
-    case Spec.Class{neg, cs}:
-      "[" ++ Glob.show.neg(neg, Glob.show.chars(cs, "]" ++ rest))
+    case Spec.Class{neg, ss}:
+      "[" ++ Glob.show.neg(neg, Glob.show.spans(ss, "]" ++ rest))
     case Spec.Deep{}:
       "{*{,/**}}" ++ rest
     case Spec.Cat{a, b}:
@@ -2381,6 +2505,38 @@ def Show.deep() -> Spec.Glob:
   }
   Spec.Alt{Spec.Cat{Spec.Star{}, Spec.Cat{dirs, Spec.Eps{}}}, Spec.Void{}}
 
+# the span s before acc, unless it is empty (gap)
+def Span.keep.at(gap: Bool, s: Spans.Span, acc: List<&2, Spans.Span>) -> List<&2, Spans.Span>:
+  match gap:
+    case True{}:
+      acc
+    case False{}:
+      s <> acc
+
+# the span s before acc, unless it is empty: what the reader keeps of the
+# text of s
+def Span.keep(s: Spans.Span, acc: List<&2, Spans.Span>) -> List<&2, Spans.Span>:
+  match s:
+    case Spans.Span{Chr{+lo}, Chr{+hi}}:
+      Span.keep.at(U32.is_lt(hi, lo), Spans.Span{Chr{lo}, Chr{hi}}, acc)
+
+# the spans that the reader keeps of the text of the spans xs, after acc
+def Span.keep.all(xs: List<&2, Spans.Span>, acc: List<&2, Spans.Span>) -> List<&2, Spans.Span>:
+  match xs:
+    case Nil{}:
+      acc
+    case Con{x, t}:
+      Span.keep.all(t, Span.keep(x, acc))
+
+# the spans that the reader keeps of the text of the class ss, after acc: the
+# parts that are not empty, last first
+def Show.spans(ss: List<&2, Spans.Span>, acc: List<&2, Spans.Span>) -> List<&2, Spans.Span>:
+  match ss:
+    case Nil{}:
+      acc
+    case Con{s, t}:
+      Show.spans(t, Span.keep.all(Span.parts(s), acc))
+
 # the glob that the text of g reads back as
 # bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a glob tree is a few nodes, where a fork costs more than it saves
 def Show.glob(g: Spec.Glob) -> Spec.Glob:
@@ -2395,8 +2551,8 @@ def Show.glob(g: Spec.Glob) -> Spec.Glob:
       Spec.Any{}
     case Spec.Star{}:
       Spec.Alt{Spec.Cat{Spec.Star{}, Spec.Eps{}}, Spec.Void{}}
-    case Spec.Class{neg, cs}:
-      Spec.Class{neg, List.reverse(&2, Char, cs)}
+    case Spec.Class{neg, ss}:
+      Spec.Class{neg, Show.spans(ss, [])}
     case Spec.Deep{}:
       Show.deep()
     case Spec.Cat{a, b}:
@@ -3137,6 +3293,86 @@ def Step.star(
         case Spec.SChar{ch42}:
           {==}
 
+# s is `!`
+def Sym.bang(s: Spec.Sym) -> Bool:
+  match s:
+    case Spec.SBang{}:
+      True{}
+    case _:
+      False{}
+
+# `[` before a symbol that is not `!` opens a class
+def Step.left(
+  y: Spec.Sym,
+  l: List<&2, Spec.Sym>,
+  st: List<&2, Spec.Frame>,
+  seg: Bool
+) -> {
+  Sym.bang(y) == False{}: Bool
+} -> {
+  Spec.Glob.read.go(Con{y, l}, Spec.In{False{}, []}, st, seg)
+    == Spec.Glob.read.go(Con{Spec.SLeft{}, Con{y, l}}, Spec.Out{}, st, seg): Maybe<&2, Spec.Glob>
+}:
+  match y:
+    case Spec.SEsc{}:
+      e => {==}
+    case Spec.SAny{}:
+      e => {==}
+    case Spec.SStar{}:
+      e => {==}
+    case Spec.SSlash{}:
+      e => {==}
+    case Spec.SOpen{}:
+      e => {==}
+    case Spec.SComma{}:
+      e => {==}
+    case Spec.SClose{}:
+      e => {==}
+    case Spec.SLeft{}:
+      e => {==}
+    case Spec.SRight{}:
+      e => {==}
+    case Spec.SDash{}:
+      match l:
+        case Nil{}:
+          e => {==}
+        case Con{z, l2}:
+          match z:
+            case Spec.SEsc{}:
+              e => {==}
+            case Spec.SAny{}:
+              e => {==}
+            case Spec.SStar{}:
+              e => {==}
+            case Spec.SSlash{}:
+              e => {==}
+            case Spec.SOpen{}:
+              e => {==}
+            case Spec.SComma{}:
+              e => {==}
+            case Spec.SClose{}:
+              e => {==}
+            case Spec.SLeft{}:
+              e => {==}
+            case Spec.SRight{}:
+              e => {==}
+            case Spec.SBang{}:
+              e => {==}
+            case Spec.SDash{}:
+              e => {==}
+            case Spec.SChar{c}:
+              e => {==}
+    case Spec.SChar{c}:
+      e => {==}
+    case Spec.SBang{}:
+      e => Empty.absurd(
+        {
+          Spec.Glob.read.go(Con{Spec.SBang{}, l}, Spec.In{False{}, []}, st, seg)
+            == Spec.Glob.read.go(Con{Spec.SLeft{}, Con{Spec.SBang{}, l}}, Spec.Out{}, st, seg): Maybe<&2, Spec.Glob>
+        },
+        Shared.Bool.true_ne_false(e)
+      )
+
 # `[` before an escape opens a class
 def Step.left_esc(
   l: List<&2, Spec.Sym>,
@@ -3452,18 +3688,353 @@ def Step.left_bang(
         case Spec.SChar{ch42}:
           {==}
 
+# s is none of `\\`, `]` and `!`: at the start or an end of a span of a class
+# it stands for its own character
+def Sym.plain(s: Spec.Sym) -> Bool:
+  match s:
+    case Spec.SEsc{}:
+      False{}
+    case Spec.SRight{}:
+      False{}
+    case Spec.SBang{}:
+      False{}
+    case _:
+      True{}
+
+# a span `x-y` in a class, of two plain symbols
+def Step.range(
+  x: Spec.Sym,
+  y: Spec.Sym,
+  l: List<&2, Spec.Sym>,
+  n: Bool,
+  cs: List<&2, Spans.Span>,
+  st: List<&2, Spec.Frame>,
+  seg: Bool
+) -> {
+  Sym.plain(x) == True{}: Bool
+} -> {
+  Sym.plain(y) == True{}: Bool
+} -> {
+  Spec.Glob.read.range(
+    Spans.Span.of(Spec.Sym.char(x), Spec.Sym.char(y)),
+    s => Spec.Glob.read.go(l, Spec.In{n, Con{s, cs}}, st, seg)
+  )
+    == Spec.Glob.read.go(Con{x, Con{Spec.SDash{}, Con{y, l}}}, Spec.In{n, cs}, st, seg): Maybe<&2, Spec.Glob>
+}:
+  match x:
+    case Spec.SEsc{}:
+      +y = y
+      +l = l
+      +n = n
+      +cs = cs
+      +st = st
+      +seg = seg
+      x => Empty.absurd(@_:{Sym.plain(y) == True{} : Bool} -> {Spec.Glob.read.range(Spans.Span.of(Spec.Sym.char(Spec.SEsc{}), Spec.Sym.char(y)), s => Spec.Glob.read.go(l, Spec.In{n, s <> cs}, st, seg)) == Spec.Glob.read.go(Spec.SEsc{} <> Spec.SDash{} <> y <> l, Spec.In{n, cs}, st, seg) : Maybe<&2, Spec.Glob>}, {(%x : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+    case Spec.SAny{}:
+      match y:
+        case Spec.SEsc{}:
+          +l = l
+          +n = n
+          +cs = cs
+          +st = st
+          +seg = seg
+          x => x1 => Empty.absurd({Spec.Glob.read.range(Spans.Span.of(Spec.Sym.char(Spec.SAny{}), Spec.Sym.char(Spec.SEsc{})), s => Spec.Glob.read.go(l, Spec.In{n, s <> cs}, st, seg)) == Spec.Glob.read.go(Spec.SAny{} <> Spec.SDash{} <> Spec.SEsc{} <> l, Spec.In{n, cs}, st, seg) : Maybe<&2, Spec.Glob>}, {(%x1 : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+        case Spec.SAny{}:
+          x => x1 => {==}
+        case Spec.SStar{}:
+          x => x1 => {==}
+        case Spec.SSlash{}:
+          x => x1 => {==}
+        case Spec.SOpen{}:
+          x => x1 => {==}
+        case Spec.SComma{}:
+          x => x1 => {==}
+        case Spec.SClose{}:
+          x => x1 => {==}
+        case Spec.SLeft{}:
+          x => x1 => {==}
+        case Spec.SRight{}:
+          +l = l
+          +n = n
+          +cs = cs
+          +st = st
+          +seg = seg
+          x => x1 => Empty.absurd({Spec.Glob.read.range(Spans.Span.of(Spec.Sym.char(Spec.SAny{}), Spec.Sym.char(Spec.SRight{})), s => Spec.Glob.read.go(l, Spec.In{n, s <> cs}, st, seg)) == Spec.Glob.read.go(Spec.SAny{} <> Spec.SDash{} <> Spec.SRight{} <> l, Spec.In{n, cs}, st, seg) : Maybe<&2, Spec.Glob>}, {(%x1 : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+        case Spec.SBang{}:
+          x => x1 => {==}
+        case Spec.SDash{}:
+          x => x1 => {==}
+        case Spec.SChar{+c}:
+          x => x1 => {==}
+    case Spec.SStar{}:
+      match y:
+        case Spec.SEsc{}:
+          +l = l
+          +n = n
+          +cs = cs
+          +st = st
+          +seg = seg
+          x => x1 => Empty.absurd({Spec.Glob.read.range(Spans.Span.of(Spec.Sym.char(Spec.SStar{}), Spec.Sym.char(Spec.SEsc{})), s => Spec.Glob.read.go(l, Spec.In{n, s <> cs}, st, seg)) == Spec.Glob.read.go(Spec.SStar{} <> Spec.SDash{} <> Spec.SEsc{} <> l, Spec.In{n, cs}, st, seg) : Maybe<&2, Spec.Glob>}, {(%x1 : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+        case Spec.SAny{}:
+          x => x1 => {==}
+        case Spec.SStar{}:
+          x => x1 => {==}
+        case Spec.SSlash{}:
+          x => x1 => {==}
+        case Spec.SOpen{}:
+          x => x1 => {==}
+        case Spec.SComma{}:
+          x => x1 => {==}
+        case Spec.SClose{}:
+          x => x1 => {==}
+        case Spec.SLeft{}:
+          x => x1 => {==}
+        case Spec.SRight{}:
+          +l = l
+          +n = n
+          +cs = cs
+          +st = st
+          +seg = seg
+          x => x1 => Empty.absurd({Spec.Glob.read.range(Spans.Span.of(Spec.Sym.char(Spec.SStar{}), Spec.Sym.char(Spec.SRight{})), s => Spec.Glob.read.go(l, Spec.In{n, s <> cs}, st, seg)) == Spec.Glob.read.go(Spec.SStar{} <> Spec.SDash{} <> Spec.SRight{} <> l, Spec.In{n, cs}, st, seg) : Maybe<&2, Spec.Glob>}, {(%x1 : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+        case Spec.SBang{}:
+          x => x1 => {==}
+        case Spec.SDash{}:
+          x => x1 => {==}
+        case Spec.SChar{+c}:
+          x => x1 => {==}
+    case Spec.SSlash{}:
+      match y:
+        case Spec.SEsc{}:
+          +l = l
+          +n = n
+          +cs = cs
+          +st = st
+          +seg = seg
+          x => x1 => Empty.absurd({Spec.Glob.read.range(Spans.Span.of(Spec.Sym.char(Spec.SSlash{}), Spec.Sym.char(Spec.SEsc{})), s => Spec.Glob.read.go(l, Spec.In{n, s <> cs}, st, seg)) == Spec.Glob.read.go(Spec.SSlash{} <> Spec.SDash{} <> Spec.SEsc{} <> l, Spec.In{n, cs}, st, seg) : Maybe<&2, Spec.Glob>}, {(%x1 : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+        case Spec.SAny{}:
+          x => x1 => {==}
+        case Spec.SStar{}:
+          x => x1 => {==}
+        case Spec.SSlash{}:
+          x => x1 => {==}
+        case Spec.SOpen{}:
+          x => x1 => {==}
+        case Spec.SComma{}:
+          x => x1 => {==}
+        case Spec.SClose{}:
+          x => x1 => {==}
+        case Spec.SLeft{}:
+          x => x1 => {==}
+        case Spec.SRight{}:
+          +l = l
+          +n = n
+          +cs = cs
+          +st = st
+          +seg = seg
+          x => x1 => Empty.absurd({Spec.Glob.read.range(Spans.Span.of(Spec.Sym.char(Spec.SSlash{}), Spec.Sym.char(Spec.SRight{})), s => Spec.Glob.read.go(l, Spec.In{n, s <> cs}, st, seg)) == Spec.Glob.read.go(Spec.SSlash{} <> Spec.SDash{} <> Spec.SRight{} <> l, Spec.In{n, cs}, st, seg) : Maybe<&2, Spec.Glob>}, {(%x1 : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+        case Spec.SBang{}:
+          x => x1 => {==}
+        case Spec.SDash{}:
+          x => x1 => {==}
+        case Spec.SChar{+c}:
+          x => x1 => {==}
+    case Spec.SOpen{}:
+      match y:
+        case Spec.SEsc{}:
+          x => x1 => {==}
+        case Spec.SAny{}:
+          x => x1 => {==}
+        case Spec.SStar{}:
+          x => x1 => {==}
+        case Spec.SSlash{}:
+          x => x1 => {==}
+        case Spec.SOpen{}:
+          x => x1 => {==}
+        case Spec.SComma{}:
+          x => x1 => {==}
+        case Spec.SClose{}:
+          x => x1 => {==}
+        case Spec.SLeft{}:
+          x => x1 => {==}
+        case Spec.SRight{}:
+          x => x1 => {==}
+        case Spec.SBang{}:
+          x => x1 => {==}
+        case Spec.SDash{}:
+          x => x1 => {==}
+        case Spec.SChar{c}:
+          x => x1 => {==}
+    case Spec.SComma{}:
+      match y:
+        case Spec.SEsc{}:
+          x => x1 => Empty.absurd({Spec.Glob.read.range(Spans.Span.of(Spec.Sym.char(Spec.SComma{}), Spec.Sym.char(Spec.SEsc{})), s => Spec.Glob.read.go(l, Spec.In{n, s <> cs}, st, seg)) == Spec.Glob.read.go(Spec.SComma{} <> Spec.SDash{} <> Spec.SEsc{} <> l, Spec.In{n, cs}, st, seg) : Maybe<&2, Spec.Glob>}, {(%x1 : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+        case Spec.SAny{}:
+          x => x1 => {==}
+        case Spec.SStar{}:
+          x => x1 => {==}
+        case Spec.SSlash{}:
+          x => x1 => {==}
+        case Spec.SOpen{}:
+          x => x1 => {==}
+        case Spec.SComma{}:
+          x => x1 => {==}
+        case Spec.SClose{}:
+          x => x1 => {==}
+        case Spec.SLeft{}:
+          x => x1 => {==}
+        case Spec.SRight{}:
+          x => x1 => Empty.absurd({Spec.Glob.read.range(Spans.Span.of(Spec.Sym.char(Spec.SComma{}), Spec.Sym.char(Spec.SRight{})), s => Spec.Glob.read.go(l, Spec.In{n, s <> cs}, st, seg)) == Spec.Glob.read.go(Spec.SComma{} <> Spec.SDash{} <> Spec.SRight{} <> l, Spec.In{n, cs}, st, seg) : Maybe<&2, Spec.Glob>}, {(%x1 : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+        case Spec.SBang{}:
+          x => x1 => {==}
+        case Spec.SDash{}:
+          x => x1 => {==}
+        case Spec.SChar{c}:
+          x => x1 => {==}
+    case Spec.SClose{}:
+      match y:
+        case Spec.SEsc{}:
+          x => x1 => {==}
+        case Spec.SAny{}:
+          x => x1 => {==}
+        case Spec.SStar{}:
+          x => x1 => {==}
+        case Spec.SSlash{}:
+          x => x1 => {==}
+        case Spec.SOpen{}:
+          x => x1 => {==}
+        case Spec.SComma{}:
+          x => x1 => {==}
+        case Spec.SClose{}:
+          x => x1 => {==}
+        case Spec.SLeft{}:
+          x => x1 => {==}
+        case Spec.SRight{}:
+          x => x1 => {==}
+        case Spec.SBang{}:
+          x => x1 => {==}
+        case Spec.SDash{}:
+          x => x1 => {==}
+        case Spec.SChar{c}:
+          x => x1 => {==}
+    case Spec.SLeft{}:
+      match y:
+        case Spec.SEsc{}:
+          x => x1 => Empty.absurd({Spec.Glob.read.range(Spans.Span.of(Spec.Sym.char(Spec.SLeft{}), Spec.Sym.char(Spec.SEsc{})), s => Spec.Glob.read.go(l, Spec.In{n, s <> cs}, st, seg)) == Spec.Glob.read.go(Spec.SLeft{} <> Spec.SDash{} <> Spec.SEsc{} <> l, Spec.In{n, cs}, st, seg) : Maybe<&2, Spec.Glob>}, {(%x1 : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+        case Spec.SAny{}:
+          x => x1 => {==}
+        case Spec.SStar{}:
+          x => x1 => {==}
+        case Spec.SSlash{}:
+          x => x1 => {==}
+        case Spec.SOpen{}:
+          x => x1 => {==}
+        case Spec.SComma{}:
+          x => x1 => {==}
+        case Spec.SClose{}:
+          x => x1 => {==}
+        case Spec.SLeft{}:
+          x => x1 => {==}
+        case Spec.SRight{}:
+          x => x1 => Empty.absurd({Spec.Glob.read.range(Spans.Span.of(Spec.Sym.char(Spec.SLeft{}), Spec.Sym.char(Spec.SRight{})), s => Spec.Glob.read.go(l, Spec.In{n, s <> cs}, st, seg)) == Spec.Glob.read.go(Spec.SLeft{} <> Spec.SDash{} <> Spec.SRight{} <> l, Spec.In{n, cs}, st, seg) : Maybe<&2, Spec.Glob>}, {(%x1 : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+        case Spec.SBang{}:
+          x => x1 => {==}
+        case Spec.SDash{}:
+          x => x1 => {==}
+        case Spec.SChar{c}:
+          x => x1 => {==}
+    case Spec.SRight{}:
+      x => Empty.absurd(@_:{Sym.plain(y) == True{} : Bool} -> {Spec.Glob.read.range(Spans.Span.of(Spec.Sym.char(Spec.SRight{}), Spec.Sym.char(y)), s => Spec.Glob.read.go(l, Spec.In{n, s <> cs}, st, seg)) == Spec.Glob.read.go(Spec.SRight{} <> Spec.SDash{} <> y <> l, Spec.In{n, cs}, st, seg) : Maybe<&2, Spec.Glob>}, {(%x : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+    case Spec.SBang{}:
+      match y:
+        case Spec.SEsc{}:
+          x => x1 => Empty.absurd({Spec.Glob.read.range(Spans.Span.of(Spec.Sym.char(Spec.SBang{}), Spec.Sym.char(Spec.SEsc{})), s => Spec.Glob.read.go(l, Spec.In{n, s <> cs}, st, seg)) == Spec.Glob.read.go(Spec.SBang{} <> Spec.SDash{} <> Spec.SEsc{} <> l, Spec.In{n, cs}, st, seg) : Maybe<&2, Spec.Glob>}, {(%x1 : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+        case Spec.SAny{}:
+          x => x1 => {==}
+        case Spec.SStar{}:
+          x => x1 => {==}
+        case Spec.SSlash{}:
+          x => x1 => {==}
+        case Spec.SOpen{}:
+          x => x1 => {==}
+        case Spec.SComma{}:
+          x => x1 => {==}
+        case Spec.SClose{}:
+          x => x1 => {==}
+        case Spec.SLeft{}:
+          x => x1 => {==}
+        case Spec.SRight{}:
+          x => x1 => Empty.absurd({Spec.Glob.read.range(Spans.Span.of(Spec.Sym.char(Spec.SBang{}), Spec.Sym.char(Spec.SRight{})), s => Spec.Glob.read.go(l, Spec.In{n, s <> cs}, st, seg)) == Spec.Glob.read.go(Spec.SBang{} <> Spec.SDash{} <> Spec.SRight{} <> l, Spec.In{n, cs}, st, seg) : Maybe<&2, Spec.Glob>}, {(%x1 : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+        case Spec.SBang{}:
+          x => x1 => {==}
+        case Spec.SDash{}:
+          x => x1 => {==}
+        case Spec.SChar{c}:
+          x => x1 => {==}
+    case Spec.SDash{}:
+      match y:
+        case Spec.SEsc{}:
+          x => x1 => Empty.absurd({Spec.Glob.read.range(Spans.Span.of(Spec.Sym.char(Spec.SDash{}), Spec.Sym.char(Spec.SEsc{})), s => Spec.Glob.read.go(l, Spec.In{n, s <> cs}, st, seg)) == Spec.Glob.read.go(Spec.SDash{} <> Spec.SDash{} <> Spec.SEsc{} <> l, Spec.In{n, cs}, st, seg) : Maybe<&2, Spec.Glob>}, {(%x1 : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+        case Spec.SAny{}:
+          x => x1 => {==}
+        case Spec.SStar{}:
+          x => x1 => {==}
+        case Spec.SSlash{}:
+          x => x1 => {==}
+        case Spec.SOpen{}:
+          x => x1 => {==}
+        case Spec.SComma{}:
+          x => x1 => {==}
+        case Spec.SClose{}:
+          x => x1 => {==}
+        case Spec.SLeft{}:
+          x => x1 => {==}
+        case Spec.SRight{}:
+          x => x1 => Empty.absurd({Spec.Glob.read.range(Spans.Span.of(Spec.Sym.char(Spec.SDash{}), Spec.Sym.char(Spec.SRight{})), s => Spec.Glob.read.go(l, Spec.In{n, s <> cs}, st, seg)) == Spec.Glob.read.go(Spec.SDash{} <> Spec.SDash{} <> Spec.SRight{} <> l, Spec.In{n, cs}, st, seg) : Maybe<&2, Spec.Glob>}, {(%x1 : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+        case Spec.SBang{}:
+          x => x1 => {==}
+        case Spec.SDash{}:
+          x => x1 => {==}
+        case Spec.SChar{c}:
+          x => x1 => {==}
+    case Spec.SChar{c}:
+      match y:
+        case Spec.SEsc{}:
+          x => x1 => Empty.absurd({Spec.Glob.read.range(Spans.Span.of(Spec.Sym.char(Spec.SChar{c}), Spec.Sym.char(Spec.SEsc{})), s => Spec.Glob.read.go(l, Spec.In{n, s <> cs}, st, seg)) == Spec.Glob.read.go(Spec.SChar{c} <> Spec.SDash{} <> Spec.SEsc{} <> l, Spec.In{n, cs}, st, seg) : Maybe<&2, Spec.Glob>}, {(%x1 : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+        case Spec.SAny{}:
+          x => x1 => {==}
+        case Spec.SStar{}:
+          x => x1 => {==}
+        case Spec.SSlash{}:
+          x => x1 => {==}
+        case Spec.SOpen{}:
+          x => x1 => {==}
+        case Spec.SComma{}:
+          x => x1 => {==}
+        case Spec.SClose{}:
+          x => x1 => {==}
+        case Spec.SLeft{}:
+          x => x1 => {==}
+        case Spec.SRight{}:
+          x => x1 => Empty.absurd({Spec.Glob.read.range(Spans.Span.of(Spec.Sym.char(Spec.SChar{c}), Spec.Sym.char(Spec.SRight{})), s => Spec.Glob.read.go(l, Spec.In{n, s <> cs}, st, seg)) == Spec.Glob.read.go(Spec.SChar{c} <> Spec.SDash{} <> Spec.SRight{} <> l, Spec.In{n, cs}, st, seg) : Maybe<&2, Spec.Glob>}, {(%x1 : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+        case Spec.SBang{}:
+          x => x1 => {==}
+        case Spec.SDash{}:
+          x => x1 => {==}
+        case Spec.SChar{c1}:
+          x => x1 => {==}
+
 # an escaped symbol in a class adds its character
 def Step.esc_in(
   y: Spec.Sym,
   l: List<&2, Spec.Sym>,
   n: Bool,
-  cs: List<&2, Char>,
+  cs: List<&2, Spans.Span>,
   st: List<&2, Spec.Frame>,
   seg: Bool
 ) -> {
   Spec.Glob.read.go(
     l,
-    Spec.In{n, Con{Spec.Sym.char(y), cs}},
+    Spec.In{n, Con{Spans.Span{Spec.Sym.char(y), Spec.Sym.char(y)}, cs}},
     st,
     seg
   )
@@ -3555,7 +4126,7 @@ def Step.esc_in(
 def Step.right(
   l: List<&2, Spec.Sym>,
   n: Bool,
-  cs: List<&2, Char>,
+  cs: List<&2, Spans.Span>,
   st: List<&2, Spec.Frame>,
   seg: Bool
 ) -> {
@@ -3879,46 +4450,388 @@ def Step.deep(
 # Parsing shown text
 # ------------------
 
-# reading escaped characters in a class conses each onto the class
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- only proofs use it; no program runs it
-def Show.parse_chars(
-  cs: List<&2, Char>,
+# the text of s reads back as s: s is empty, or one character, or its ends are
+# plain symbols
+def Span.fine(s: Spans.Span) -> Bool:
+  match s:
+    case Spans.Span{Chr{+lo}, Chr{+hi}}:
+      List.any.if(
+        u => List.any.if(
+          u2 => List.all.if(
+            u3 => Sym.plain(Spec.Sym.of(Chr{hi})),
+            Sym.plain(Spec.Sym.of(Chr{lo}))
+          ),
+          U32.is_eq(lo, hi)
+        ),
+        U32.is_lt(hi, lo)
+      )
+
+# Span.parse once it is known whether the span is empty (gap) and whether it is
+# one character (one)
+def Span.parse.at(
+  +lo: U32,
+  +hi: U32,
+  gap: Bool,
+  +eg: {U32.is_lt(hi, lo) == gap: Bool},
+  one: Bool,
+  +eo: {U32.is_eq(lo, hi) == one: Bool},
   +rest: String,
   +n: Bool,
-  +acc: List<&2, Char>,
+  +acc: List<&2, Spans.Span>,
   +st: List<&2, Spec.Frame>,
   +seg: Bool
 ) -> {
+  List.any.if(
+    u => List.any.if(
+      u2 => List.all.if(u3 => Sym.plain(Spec.Sym.of(Chr{hi})), Sym.plain(Spec.Sym.of(Chr{lo}))),
+      one
+    ),
+    gap
+  )
+    == True{}: Bool
+} -> {
   Spec.Glob.read.go(
     Spec.Sym.list(rest),
-    Spec.In{n, List.reverse.go(&2, Char, cs, acc)},
+    Spec.In{n, Span.keep.at(gap, Spans.Span{Chr{lo}, Chr{hi}}, acc)},
     st,
     seg
   )
-    == Spec.Glob.read.go(
-      Spec.Sym.list(Glob.show.chars(cs, rest)),
-      Spec.In{n, acc},
-      st,
-      seg
-    ): Maybe<&2, Spec.Glob>
+    == Spec.Glob.read.go(Spec.Sym.list(Span.show.at(lo, hi, gap, one, rest)), Spec.In{n, acc}, st, seg): Maybe<&2, Spec.Glob>
 }:
-  match cs:
+  match gap one:
+    case True{} x:
+      e => {==}
+    case False{} True{}:
+      e =>
+        %Shared.U32.is_eq_sound(lo, hi)(eo): {
+          Spec.Glob.read.go(Spec.Sym.list(rest), Spec.In{n, Con{Spans.Span{Chr{lo}, Chr{_}}, acc}}, st, seg)
+            == Spec.Glob.read.go(
+              Spec.Sym.list(SCon{Chr{92}, SCon{Chr{lo}, rest}}),
+              Spec.In{n, acc},
+              st,
+              seg
+            ): Maybe<&2, Spec.Glob>
+        }
+        %Equal.sym(Char, Chr{lo}, Spec.Sym.char(Spec.Sym.of(Chr{lo})), Sym.char_of(Chr{lo})): {
+          Spec.Glob.read.go(Spec.Sym.list(rest), Spec.In{n, Con{Spans.Span{_, _}, acc}}, st, seg)
+            == Spec.Glob.read.go(
+              Spec.Sym.list(SCon{Chr{92}, SCon{Chr{lo}, rest}}),
+              Spec.In{n, acc},
+              st,
+              seg
+            ): Maybe<&2, Spec.Glob>
+        }
+        Step.esc_in(Spec.Sym.of(Chr{lo}), Spec.Sym.list(rest), n, acc, st, seg)
+    case False{} False{}:
+      +e =>
+        +pl = Shared.List.all.if_hit(Sym.plain(Spec.Sym.of(Chr{lo})), u3 => Sym.plain(Spec.Sym.of(Chr{hi})))(e)
+        +ph = Shared.List.all.if_rest(Sym.plain(Spec.Sym.of(Chr{lo})), u3 => Sym.plain(Spec.Sym.of(Chr{hi})))(e)
+        Equal.trans(
+          Maybe<&2, Spec.Glob>,
+          Spec.Glob.read.go(Spec.Sym.list(rest), Spec.In{n, Con{Spans.Span{Chr{lo}, Chr{hi}}, acc}}, st, seg),
+          Spec.Glob.read.range(
+            Spans.Span.of(Spec.Sym.char(Spec.Sym.of(Chr{lo})), Spec.Sym.char(Spec.Sym.of(Chr{hi}))),
+            s => Spec.Glob.read.go(Spec.Sym.list(rest), Spec.In{n, Con{s, acc}}, st, seg)
+          ),
+          Spec.Glob.read.go(
+            Spec.Sym.list(SCon{Chr{lo}, SCon{'-', SCon{Chr{hi}, rest}}}),
+            Spec.In{n, acc},
+            st,
+            seg
+          ),
+          (
+            %Sym.char_of(Chr{lo}): {
+              Spec.Glob.read.go(Spec.Sym.list(rest), Spec.In{n, Con{Spans.Span{Chr{lo}, Chr{hi}}, acc}}, st, seg)
+                == Spec.Glob.read.range(
+                  Spans.Span.of(_, Spec.Sym.char(Spec.Sym.of(Chr{hi}))),
+                  s => Spec.Glob.read.go(Spec.Sym.list(rest), Spec.In{n, Con{s, acc}}, st, seg)
+                ): Maybe<&2, Spec.Glob>
+            }
+            %Sym.char_of(Chr{hi}): {
+              Spec.Glob.read.go(Spec.Sym.list(rest), Spec.In{n, Con{Spans.Span{Chr{lo}, Chr{hi}}, acc}}, st, seg)
+                == Spec.Glob.read.range(
+                  Spans.Span.of(Chr{lo}, _),
+                  s => Spec.Glob.read.go(Spec.Sym.list(rest), Spec.In{n, Con{s, acc}}, st, seg)
+                ): Maybe<&2, Spec.Glob>
+            }
+            %Equal.sym(
+              Bool,
+              Nat.is_le(U32.to_nat(lo), U32.to_nat(hi)),
+              True{},
+              Shared.Nat.nlt_le(U32.to_nat(hi), U32.to_nat(lo))(
+                Equal.trans(
+                  Bool,
+                  Nat.is_lt(U32.to_nat(hi), U32.to_nat(lo)),
+                  U32.is_lt(hi, lo),
+                  False{},
+                  Equal.cong(
+                    Cmp,
+                    Bool,
+                    Cmp.is_lt,
+                    Nat.cmp(U32.to_nat(hi), U32.to_nat(lo)),
+                    U32.cmp(hi, lo),
+                    Equal.sym(
+                      Cmp,
+                      U32.cmp(hi, lo),
+                      Nat.cmp(U32.to_nat(hi), U32.to_nat(lo)),
+                      Shared.U32.cmp_to_nat(hi, lo)
+                    )
+                  ),
+                  eg
+                )
+              )
+            ): {
+              Spec.Glob.read.go(Spec.Sym.list(rest), Spec.In{n, Con{Spans.Span{Chr{lo}, Chr{hi}}, acc}}, st, seg)
+                == Spec.Glob.read.range(
+                  Shared.Maybe.when(Spans.Span, _, u => Some{Spans.Span{Chr{lo}, Chr{hi}}}),
+                  s => Spec.Glob.read.go(Spec.Sym.list(rest), Spec.In{n, Con{s, acc}}, st, seg)
+                ): Maybe<&2, Spec.Glob>
+            }
+            {==}),
+          Step.range(Spec.Sym.of(Chr{lo}), Spec.Sym.of(Chr{hi}), Spec.Sym.list(rest), n, acc, st, seg)(pl)(ph)
+        )
+
+# a span whose text reads back as itself is kept by the reader
+def Span.parse(
+  p: Spans.Span,
+  +rest: String,
+  +n: Bool,
+  +acc: List<&2, Spans.Span>,
+  +st: List<&2, Spec.Frame>,
+  +seg: Bool
+) -> {
+  Span.fine(p) == True{}: Bool
+} -> {
+  Spec.Glob.read.go(Spec.Sym.list(rest), Spec.In{n, Span.keep(p, acc)}, st, seg)
+    == Spec.Glob.read.go(Spec.Sym.list(Span.show(p, rest)), Spec.In{n, acc}, st, seg): Maybe<&2, Spec.Glob>
+}:
+  match p:
+    case Spans.Span{Chr{+lo}, Chr{+hi}}:
+      Span.parse.at(lo, hi, U32.is_lt(hi, lo), {==}, U32.is_eq(lo, hi), {==}, rest, n, acc, st, seg)
+
+# each part of s reads back as itself
+def Span.parts_fine(
+  s: Spans.Span
+) -> {List.all(~&2, ~Spans.Span, ~Span.fine, Span.parts(s)) == True{}: Bool}:
+  ?TODO
+
+# spans whose texts read back as themselves are kept by the reader, in turn
+def Span.parse.all(
+  xs: List<&2, Spans.Span>,
+  +rest: String,
+  +n: Bool,
+  +acc: List<&2, Spans.Span>,
+  +st: List<&2, Spec.Frame>,
+  +seg: Bool
+) -> {
+  List.all(~&2, ~Spans.Span, ~Span.fine, xs) == True{}: Bool
+} -> {
+  Spec.Glob.read.go(Spec.Sym.list(rest), Spec.In{n, Span.keep.all(xs, acc)}, st, seg)
+    == Spec.Glob.read.go(Spec.Sym.list(Span.show.all(xs, rest)), Spec.In{n, acc}, st, seg): Maybe<&2, Spec.Glob>
+}:
+  match xs:
+    case Nil{}:
+      e => {==}
+    case Con{+p, +t}:
+      +e =>
+        Equal.trans(
+          Maybe<&2, Spec.Glob>,
+          Spec.Glob.read.go(Spec.Sym.list(rest), Spec.In{n, Span.keep.all(t, Span.keep(p, acc))}, st, seg),
+          Spec.Glob.read.go(Spec.Sym.list(Span.show.all(t, rest)), Spec.In{n, Span.keep(p, acc)}, st, seg),
+          Spec.Glob.read.go(
+            Spec.Sym.list(Span.show(p, Span.show.all(t, rest))),
+            Spec.In{n, acc},
+            st,
+            seg
+          ),
+          Span.parse.all(t, rest, n, Span.keep(p, acc), st, seg)(
+            Shared.List.all.if_rest(Span.fine(p), u => List.all(~&2, ~Spans.Span, ~Span.fine, t))(e)
+          ),
+          Span.parse(p, Span.show.all(t, rest), n, acc, st, seg)(
+            Shared.List.all.if_hit(Span.fine(p), u => List.all(~&2, ~Spans.Span, ~Span.fine, t))(e)
+          )
+        )
+
+# reading the text of the spans of a class keeps their parts, last first
+def Show.parse_spans(
+  ss: List<&2, Spans.Span>,
+  +rest: String,
+  +n: Bool,
+  +acc: List<&2, Spans.Span>,
+  +st: List<&2, Spec.Frame>,
+  +seg: Bool
+) -> {
+  Spec.Glob.read.go(Spec.Sym.list(rest), Spec.In{n, Show.spans(ss, acc)}, st, seg)
+    == Spec.Glob.read.go(Spec.Sym.list(Glob.show.spans(ss, rest)), Spec.In{n, acc}, st, seg): Maybe<&2, Spec.Glob>
+}:
+  match ss:
     case Nil{}:
       {==}
-    case Con{+h, +t}:
-      l = Spec.Sym.list(Glob.show.chars(t, rest))
-      -tgt = Spec.Glob.read.go(
-        Spec.Sym.list(rest),
-        Spec.In{n, List.reverse.go(&2, Char, t, Con{h, acc})},
-        st,
-        seg
+    case Con{+s, +t}:
+      Equal.trans(
+        Maybe<&2, Spec.Glob>,
+        Spec.Glob.read.go(
+          Spec.Sym.list(rest),
+          Spec.In{n, Show.spans(t, Span.keep.all(Span.parts(s), acc))},
+          st,
+          seg
+        ),
+        Spec.Glob.read.go(
+          Spec.Sym.list(Glob.show.spans(t, rest)),
+          Spec.In{n, Span.keep.all(Span.parts(s), acc)},
+          st,
+          seg
+        ),
+        Spec.Glob.read.go(
+          Spec.Sym.list(Span.show.all(Span.parts(s), Glob.show.spans(t, rest))),
+          Spec.In{n, acc},
+          st,
+          seg
+        ),
+        Show.parse_spans(t, rest, n, Span.keep.all(Span.parts(s), acc), st, seg),
+        Span.parse.all(Span.parts(s), Glob.show.spans(t, rest), n, acc, st, seg)(Span.parts_fine(s))
       )
-      %Step.esc_in(Spec.Sym.of(h), l, n, acc, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
-      %Sym.char_of(
-        h
-      ): {tgt == Spec.Glob.read.go(l, Spec.In{n, Con{_, acc}}, st, seg): Maybe<&2, Spec.Glob>}
-      Show.parse_chars(t, rest, n, Con{h, acc}, st, seg)
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# the symbols l do not start with `!`
+def Syms.no_bang(l: List<&2, Spec.Sym>) -> Bool:
+  match l:
+    case Nil{}:
+      True{}
+    case Con{y, t}:
+      Bool.not(Sym.bang(y))
+
+# a plain symbol is not `!`
+def Sym.plain_bang(y: Spec.Sym) -> {Sym.plain(y) == True{}: Bool} -> {Sym.bang(y) == False{}: Bool}:
+  match y:
+    case Spec.SBang{}:
+      e => Empty.absurd({True{} == False{}: Bool}, Shared.Bool.false_ne_true(e))
+    case Spec.SEsc{}:
+      e => {==}
+    case Spec.SAny{}:
+      e => {==}
+    case Spec.SStar{}:
+      e => {==}
+    case Spec.SSlash{}:
+      e => {==}
+    case Spec.SOpen{}:
+      e => {==}
+    case Spec.SComma{}:
+      e => {==}
+    case Spec.SClose{}:
+      e => {==}
+    case Spec.SLeft{}:
+      e => {==}
+    case Spec.SRight{}:
+      e => {==}
+    case Spec.SDash{}:
+      e => {==}
+    case Spec.SChar{c}:
+      e => {==}
+
+# Span.no_bang once it is known whether the span is empty (gap) and whether it
+# is one character (one)
+def Span.no_bang.at(
+  +lo: U32,
+  +hi: U32,
+  gap: Bool,
+  one: Bool,
+  rest: String
+) -> {
+  List.any.if(
+    u => List.any.if(
+      u2 => List.all.if(u3 => Sym.plain(Spec.Sym.of(Chr{hi})), Sym.plain(Spec.Sym.of(Chr{lo}))),
+      one
+    ),
+    gap
+  )
+    == True{}: Bool
+} -> {
+  Syms.no_bang(Spec.Sym.list(rest)) == True{}: Bool
+} -> {Syms.no_bang(Spec.Sym.list(Span.show.at(lo, hi, gap, one, rest))) == True{}: Bool}:
+  match gap one:
+    case True{} x:
+      e => h => h
+    case False{} True{}:
+      e => h => {==}
+    case False{} False{}:
+      e => h => Equal.cong(
+        Bool,
+        Bool,
+        v => Bool.not(v),
+        Sym.bang(Spec.Sym.of(Chr{lo})),
+        False{},
+        Sym.plain_bang(Spec.Sym.of(Chr{lo}))(
+          Shared.List.all.if_hit(Sym.plain(Spec.Sym.of(Chr{lo})), u3 => Sym.plain(Spec.Sym.of(Chr{hi})))(e)
+        )
+      )
+
+# the text of a span whose text reads back as itself does not start with `!`,
+# when what follows it does not
+def Span.no_bang(
+  p: Spans.Span,
+  rest: String
+) -> {
+  Span.fine(p) == True{}: Bool
+} -> {
+  Syms.no_bang(Spec.Sym.list(rest)) == True{}: Bool
+} -> {Syms.no_bang(Spec.Sym.list(Span.show(p, rest))) == True{}: Bool}:
+  match p:
+    case Spans.Span{Chr{+lo}, Chr{+hi}}:
+      Span.no_bang.at(lo, hi, U32.is_lt(hi, lo), U32.is_eq(lo, hi), rest)
+
+# Span.no_bang for each span of xs
+def Span.no_bang.all(
+  xs: List<&2, Spans.Span>,
+  +rest: String
+) -> {
+  List.all(~&2, ~Spans.Span, ~Span.fine, xs) == True{}: Bool
+} -> {
+  Syms.no_bang(Spec.Sym.list(rest)) == True{}: Bool
+} -> {Syms.no_bang(Spec.Sym.list(Span.show.all(xs, rest))) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      e => h => h
+    case Con{+p, +t}:
+      +e => h => Span.no_bang(p, Span.show.all(t, rest))(
+        Shared.List.all.if_hit(Span.fine(p), u => List.all(~&2, ~Spans.Span, ~Span.fine, t))(e)
+      )(
+        Span.no_bang.all(t, rest)(
+          Shared.List.all.if_rest(Span.fine(p), u => List.all(~&2, ~Spans.Span, ~Span.fine, t))(e)
+        )(h)
+      )
+
+# the text of the spans of a class does not start with `!`, when what follows
+# it does not
+def Show.no_bang(
+  ss: List<&2, Spans.Span>,
+  +rest: String
+) -> {
+  Syms.no_bang(Spec.Sym.list(rest)) == True{}: Bool
+} -> {Syms.no_bang(Spec.Sym.list(Glob.show.spans(ss, rest))) == True{}: Bool}:
+  match ss:
+    case Nil{}:
+      h => h
+    case Con{+s, +t}:
+      h => Span.no_bang.all(Span.parts(s), Glob.show.spans(t, rest))(Span.parts_fine(s))(
+        Show.no_bang(t, rest)(h)
+      )
+
+# `[` before symbols that do not start with `!` opens a class
+def Show.open(
+  l: List<&2, Spec.Sym>,
+  +st: List<&2, Spec.Frame>,
+  +seg: Bool
+) -> {
+  Syms.no_bang(l) == True{}: Bool
+} -> {
+  Spec.Glob.read.go(l, Spec.In{False{}, []}, st, seg)
+    == Spec.Glob.read.go(Con{Spec.SLeft{}, l}, Spec.Out{}, st, seg): Maybe<&2, Spec.Glob>
+}:
+  match l:
+    case Nil{}:
+      e => {==}
+    case Con{+y, t}:
+      e => Step.left(y, t, st, seg)(Shared.Bool.not_true(Sym.bang(y))(e))
 
 # the text of Lit{c} reads back as Lit{c}, given k, the role of c
 def Show.parse_lit(
@@ -4227,10 +5140,11 @@ def Show.parse_lit(
         }
         {==}
 
-# the text of a class reads back as the class, its characters reversed
+# the text of a class reads back as the class of the parts of its spans that
+# are not empty, last first
 def Show.parse_class(
   neg: Bool,
-  cs: List<&2, Char>,
+  ss: List<&2, Spans.Span>,
   +rest: String,
   +a: List<&2, Spec.Glob>,
   +s: List<&2, Spec.Glob>,
@@ -4241,64 +5155,46 @@ def Show.parse_class(
   Spec.Glob.read.go(
     Spec.Sym.list(rest),
     Spec.Out{},
-    Con{Spec.Frame{a, Con{Show.glob(Spec.Class{neg, cs}), s}, b}, r},
+    Con{Spec.Frame{a, Con{Show.glob(Spec.Class{neg, ss}), s}, b}, r},
     False{}
   )
     == Spec.Glob.read.go(
-      Spec.Sym.list(Glob.show.go(Spec.Class{neg, cs}, rest)),
+      Spec.Sym.list(Glob.show.go(Spec.Class{neg, ss}, rest)),
       Spec.Out{},
       Con{Spec.Frame{a, s, b}, r},
       seg
     ): Maybe<&2, Spec.Glob>
 }:
-  match neg cs:
-    case True{} +cs:
+  match neg:
+    case True{}:
+      +ss = ss
       +l = Spec.Sym.list(rest)
       +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
       tgt = Spec.Glob.read.go(
         l,
         Spec.Out{},
-        Con{Spec.Frame{a, Con{Spec.Class{True{}, List.reverse(&2, Char, cs)}, s}, b}, r},
+        Con{Spec.Frame{a, Con{Spec.Class{True{}, Show.spans(ss, [])}, s}, b}, r},
         False{}
       )
-      lc = Spec.Sym.list(Glob.show.chars(cs, "]" ++ rest))
+      lc = Spec.Sym.list(Glob.show.spans(ss, "]" ++ rest))
       %Step.left_bang(lc, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
-      %Show.parse_chars(cs, "]" ++ rest, True{}, [], st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
-      %Step.right(l, True{}, List.reverse(&2, Char, cs), st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
+      %Show.parse_spans(ss, "]" ++ rest, True{}, [], st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
+      %Step.right(l, True{}, Show.spans(ss, []), st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
       {==}
-    case False{} Nil{}:
+    case False{}:
+      +ss = ss
       +l = Spec.Sym.list(rest)
       +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
       tgt = Spec.Glob.read.go(
         l,
         Spec.Out{},
-        Con{Spec.Frame{a, Con{Spec.Class{False{}, []}, s}, b}, r},
+        Con{Spec.Frame{a, Con{Spec.Class{False{}, Show.spans(ss, [])}, s}, b}, r},
         False{}
       )
-      %Step.left_right(l, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
-      %Step.right(l, False{}, [], st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
-      {==}
-    case False{} Con{+h, +t}:
-      +l = Spec.Sym.list(rest)
-      +st = {Con{Spec.Frame{a, s, b}, r}: List<&2, Spec.Frame>}
-      +rv = List.reverse(&2, Char, Con{h, t})
-      tgt = Spec.Glob.read.go(
-        l,
-        Spec.Out{},
-        Con{Spec.Frame{a, Con{Spec.Class{False{}, rv}, s}, b}, r},
-        False{}
-      )
-      lc = Spec.Sym.list(SCon{h, Glob.show.chars(t, "]" ++ rest)})
-      %Step.left_esc(lc, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
-      %Show.parse_chars(
-        Con{h, t},
-        "]" ++ rest,
-        False{},
-        [],
-        st,
-        seg
-      ): {tgt == _: Maybe<&2, Spec.Glob>}
-      %Step.right(l, False{}, rv, st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
+      lc = Spec.Sym.list(Glob.show.spans(ss, "]" ++ rest))
+      %Show.open(lc, st, seg)(Show.no_bang(ss, "]" ++ rest)({==})): {tgt == _: Maybe<&2, Spec.Glob>}
+      %Show.parse_spans(ss, "]" ++ rest, False{}, [], st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
+      %Step.right(l, False{}, Show.spans(ss, []), st, seg): {tgt == _: Maybe<&2, Spec.Glob>}
       {==}
 
 # the text of g, before rest, reads back as the one atom Show.glob(g)
@@ -4558,17 +5454,208 @@ def Show.star_point(
   %Glob.cat_eps_r(p, Spec.Star{}): {_ == Spec.Glob.matches(p, Spec.Star{}): Bool}
   {==}
 
-# a class with its characters reversed matches the same strings
+# no number from a to x and from x to b, when b is below a
+def Nat.gap_out(
+  +a: Nat,
+  +b: Nat,
+  +x: Nat,
+  la: Bool,
+  ela: {Nat.is_le(a, x) == la: Bool},
+  lb: Bool,
+  elb: {Nat.is_le(x, b) == lb: Bool}
+) -> {Nat.is_lt(b, a) == True{}: Bool} -> {Bool.and(la, lb) == False{}: Bool}:
+  match la lb:
+    case True{} True{}:
+      e => Empty.absurd(
+        {True{} == False{}: Bool},
+        Shared.Bool.true_ne_false(
+          Equal.trans(
+            Bool,
+            True{},
+            Nat.is_lt(b, a),
+            False{},
+            Equal.sym(Bool, Nat.is_lt(b, a), True{}, e),
+            Shared.Nat.le_nlt(a, b)(Shared.Nat.le_trans(a, x, b)(ela)(elb))
+          )
+        )
+      )
+    case True{} False{}:
+      e => {==}
+    case False{} y:
+      e => {==}
+
+# the order of U32 as the order of codes, for is_lt
+def U32.is_lt_codes(a: U32, b: U32) -> {U32.is_lt(a, b) == Nat.is_lt(U32.to_nat(a), U32.to_nat(b)): Bool}:
+  Equal.cong(
+    Cmp,
+    Bool,
+    Cmp.is_lt,
+    U32.cmp(a, b),
+    Nat.cmp(U32.to_nat(a), U32.to_nat(b)),
+    Shared.U32.cmp_to_nat(a, b)
+  )
+
+# no character is in a span that ends before it starts
+def Span.gap_has(
+  +lo: U32,
+  +hi: U32,
+  +c: Char
+) -> {
+  U32.is_lt(hi, lo) == True{}: Bool
+} -> {Spans.Span.has(Spans.Span{Chr{lo}, Chr{hi}}, c) == False{}: Bool}:
+  e =>
+    %Equal.sym(
+      Bool,
+      Spans.Span.has(Spans.Span{Chr{lo}, Chr{hi}}, c),
+      Bool.and(
+        Nat.is_le(U32.to_nat(lo), Spans.Char.code(c)),
+        Nat.is_le(Spans.Char.code(c), U32.to_nat(hi))
+      ),
+      Spans.Span.has_codes(Chr{lo}, Chr{hi}, c)
+    ): {_ == False{}: Bool}
+    Nat.gap_out(
+      U32.to_nat(lo),
+      U32.to_nat(hi),
+      Spans.Char.code(c),
+      Nat.is_le(U32.to_nat(lo), Spans.Char.code(c)),
+      {==},
+      Nat.is_le(Spans.Char.code(c), U32.to_nat(hi)),
+      {==}
+    )(
+      %U32.is_lt_codes(hi, lo): {
+        _ == True{}: Bool
+      }
+      e
+    )
+
+# Span.keep_has once it is known whether the span is empty (gap)
+def Span.keep_has.at(
+  +lo: U32,
+  +hi: U32,
+  gap: Bool,
+  eg: {U32.is_lt(hi, lo) == gap: Bool},
+  +acc: List<&2, Spans.Span>,
+  +c: Char
+) -> {
+  Spans.Spans.has(Span.keep.at(gap, Spans.Span{Chr{lo}, Chr{hi}}, acc), c)
+    == Bool.or(Spans.Span.has(Spans.Span{Chr{lo}, Chr{hi}}, c), Spans.Spans.has(acc, c)): Bool
+}:
+  match gap:
+    case True{}:
+      %Equal.sym(Bool, Spans.Span.has(Spans.Span{Chr{lo}, Chr{hi}}, c), False{}, Span.gap_has(lo, hi, c)(eg)): {
+        Spans.Spans.has(acc, c) == Bool.or(_, Spans.Spans.has(acc, c)): Bool
+      }
+      {==}
+    case False{}:
+      Shared.List.any.if_or(Spans.Span.has(Spans.Span{Chr{lo}, Chr{hi}}, c), u => Spans.Spans.has(acc, c))
+
+# a span that the reader keeps is in front of acc, or is empty
+def Span.keep_has(
+  x: Spans.Span,
+  +acc: List<&2, Spans.Span>,
+  +c: Char
+) -> {Spans.Spans.has(Span.keep(x, acc), c) == Bool.or(Spans.Span.has(x, c), Spans.Spans.has(acc, c)): Bool}:
+  match x:
+    case Spans.Span{Chr{+lo}, Chr{+hi}}:
+      Span.keep_has.at(lo, hi, U32.is_lt(hi, lo), {==}, acc, c)
+
+# or(t, or(x, a)) as or(any.if(u => t, x), a)
+def Or.front(
+  +x: Bool,
+  +t: Bool,
+  +a: Bool
+) -> {Bool.or(t, Bool.or(x, a)) == Bool.or(List.any.if(u => t, x), a): Bool}:
+  Equal.trans(
+    Bool,
+    Bool.or(t, Bool.or(x, a)),
+    Bool.or(x, Bool.or(t, a)),
+    Bool.or(List.any.if(u => t, x), a),
+    Shared.Bool.or_swap(t, x, a),
+    Equal.trans(
+      Bool,
+      Bool.or(x, Bool.or(t, a)),
+      Bool.or(Bool.or(x, t), a),
+      Bool.or(List.any.if(u => t, x), a),
+      Shared.Bool.or_assoc(x, t, a),
+      (
+        %Equal.sym(Bool, List.any.if(u => t, x), Bool.or(x, t), Shared.List.any.if_or(x, u => t)): {
+          Bool.or(Bool.or(x, t), a) == Bool.or(_, a): Bool
+        }
+        {==})
+    )
+  )
+
+# the spans that the reader keeps of xs, in front of acc, hold what xs and
+# acc hold
+def Span.keep_all_has(
+  xs: List<&2, Spans.Span>,
+  +acc: List<&2, Spans.Span>,
+  +c: Char
+) -> {Spans.Spans.has(Span.keep.all(xs, acc), c) == Bool.or(Spans.Spans.has(xs, c), Spans.Spans.has(acc, c)): Bool}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+x, +t}:
+      Equal.trans(
+        Bool,
+        Spans.Spans.has(Span.keep.all(t, Span.keep(x, acc)), c),
+        Bool.or(Spans.Spans.has(t, c), Spans.Spans.has(Span.keep(x, acc), c)),
+        Bool.or(Spans.Spans.has(Con{x, t}, c), Spans.Spans.has(acc, c)),
+        Span.keep_all_has(t, Span.keep(x, acc), c),
+        (
+          %Equal.sym(
+            Bool,
+            Spans.Spans.has(Span.keep(x, acc), c),
+            Bool.or(Spans.Span.has(x, c), Spans.Spans.has(acc, c)),
+            Span.keep_has(x, acc, c)
+          ): {Bool.or(Spans.Spans.has(t, c), _) == Bool.or(Spans.Spans.has(Con{x, t}, c), Spans.Spans.has(acc, c)): Bool}
+          Or.front(Spans.Span.has(x, c), Spans.Spans.has(t, c), Spans.Spans.has(acc, c)))
+      )
+
+# the parts of s hold what s holds
+def Span.parts_has(
+  s: Spans.Span,
+  c: Char
+) -> {Spans.Spans.has(Span.parts(s), c) == Spans.Span.has(s, c): Bool}:
+  ?TODO
+
+# the spans that the reader keeps of the text of the class ss, in front of
+# acc, hold what ss and acc hold
+def Show.spans_has(
+  ss: List<&2, Spans.Span>,
+  +acc: List<&2, Spans.Span>,
+  +c: Char
+) -> {Spans.Spans.has(Show.spans(ss, acc), c) == Bool.or(Spans.Spans.has(ss, c), Spans.Spans.has(acc, c)): Bool}:
+  match ss:
+    case Nil{}:
+      {==}
+    case Con{+s, +t}:
+      Equal.trans(
+        Bool,
+        Spans.Spans.has(Show.spans(t, Span.keep.all(Span.parts(s), acc)), c),
+        Bool.or(Spans.Spans.has(t, c), Spans.Spans.has(Span.keep.all(Span.parts(s), acc), c)),
+        Bool.or(Spans.Spans.has(Con{s, t}, c), Spans.Spans.has(acc, c)),
+        Show.spans_has(t, Span.keep.all(Span.parts(s), acc), c),
+        (
+          %Equal.sym(
+            Bool,
+            Spans.Spans.has(Span.keep.all(Span.parts(s), acc), c),
+            Bool.or(Spans.Spans.has(Span.parts(s), c), Spans.Spans.has(acc, c)),
+            Span.keep_all_has(Span.parts(s), acc, c)
+          ): {Bool.or(Spans.Spans.has(t, c), _) == Bool.or(Spans.Spans.has(Con{s, t}, c), Spans.Spans.has(acc, c)): Bool}
+          %Equal.sym(Bool, Spans.Spans.has(Span.parts(s), c), Spans.Span.has(s, c), Span.parts_has(s, c)): {
+            Bool.or(Spans.Spans.has(t, c), Bool.or(_, Spans.Spans.has(acc, c))) == Bool.or(Spans.Spans.has(Con{s, t}, c), Spans.Spans.has(acc, c)): Bool
+          }
+          Or.front(Spans.Span.has(s, c), Spans.Spans.has(t, c), Spans.Spans.has(acc, c)))
+      )
+
+# the class that the text of a class reads back as matches the same strings
 def Show.class_point(
   p: String,
   n: Bool,
-  +cs: List<&2, Char>
+  +ss: List<&2, Spans.Span>
 ) -> {
-  Spec.Glob.matches(
-    p,
-    Spec.Class{n, List.reverse(&2, Char, cs)}
-  )
-    == Spec.Glob.matches(p, Spec.Class{n, cs}): Bool
+  Spec.Glob.matches(p, Spec.Class{n, Show.spans(ss, [])}) == Spec.Glob.matches(p, Spec.Class{n, ss}): Bool
 }:
   match p:
     case SNil{}:
@@ -4576,7 +5663,7 @@ def Show.class_point(
     case SCon{+c, t}:
       i = Spec.is_inner(c)
       w = String.to_list(t)
-      +k = List.contains(~Char, ~Char.is_eq, cs, c)
+      +k = Spans.Spans.has(ss, c)
       r = Regex.Re.matches(
         ~Char,
         ~Spec.Atom,
@@ -4588,9 +5675,14 @@ def Show.class_point(
         Bool,
         k,
         Bool.or(k, False{}),
-        List.contains(~Char, ~Char.is_eq, List.reverse(&2, Char, cs), c),
+        Spans.Spans.has(Show.spans(ss, []), c),
         Shared.Bool.or_false(k),
-        Shared.List.contains_reverse(~Char, ~Char.is_eq, cs, [], c)
+        Equal.sym(
+          Bool,
+          Spans.Spans.has(Show.spans(ss, []), c),
+          Bool.or(k, False{}),
+          Show.spans_has(ss, [], c)
+        )
       ): {
         Regex.Re.matches(
           ~Char,

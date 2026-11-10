@@ -38,6 +38,10 @@ def Span.has(s: Span, c: Char) -> Bool:
     case Span{Chr{lo}, Chr{hi}} Chr{+x}:
       List.all.if(u => U32.is_le(x, hi), U32.is_le(lo, x))
 
+# the span from lo to hi, or None when hi is before lo
+def Span.of(+lo: Char, +hi: Char) -> Maybe<&2, Span>:
+  Shared.Maybe.when(Span, Nat.is_le(Char.code(lo), Char.code(hi)), u => Some{Span{lo, hi}})
+
 # some span of ss holds c
 def Spans.has(ss: List<&2, Span>, c: Char) -> Bool:
   Shared.List.some(~Span, ~Char, ~(c => s => Span.has(s, c)), ss, c)

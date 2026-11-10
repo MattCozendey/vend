@@ -1,5 +1,6 @@
 import Base
 import ../shared/shared/regex.bend as Regex
+import ../shared/shared/shared/spans.bend as Spans
 
 # A path is a String: segments joined by '/'. It has no leading or trailing
 # '/', and no empty, "." or ".." segment. A segment has no NUL and no '\'.
@@ -29,14 +30,14 @@ type Glob is Data:
   Lit{c: Char}
   Any{}
   Star{}
-  Class{neg: Bool, cs: List<&2, Char>}
+  Class{neg: Bool, ss: List<&2, Spans.Span>}
   Deep{}
   Cat{a: Glob, b: Glob}
   Alt{a: Glob, b: Glob}
 
 # Void: no text. Eps: only "". Lit: c. Any (`?`): one character.
 # Star (`*`): any text. Class (`[...]`, `[!...]` when neg): one character
-# in cs, or not in cs. None of these five matches '/'. Deep (`**`): any
+# in a span of ss, or in none. None of these five matches '/'. Deep (`**`): any
 # text, '/' included. Cat: a, then b. Alt (`{a,b}`): a or b.
 
 # c is not '/'
@@ -48,11 +49,11 @@ def is_inner(c: Char) -> Bool:
 # character.
 
 # What reads one character: the character c, any character but '/', or a
-# class (a character in cs, or one not in cs when neg; never '/').
+# class (a character in a span of ss, or in none when neg; never '/').
 type Atom is Data:
   ALit{c: Char}
   AAny{}
-  AClass{neg: Bool, cs: List<&2, Char>}
+  AClass{neg: Bool, ss: List<&2, Spans.Span>}
 
 # t accepts c
 def Atom.hit(t: Atom, c: Char) -> Bool:
@@ -61,9 +62,9 @@ def Atom.hit(t: Atom, c: Char) -> Bool:
       Char.is_eq(x, c)
     case AAny{}:
       is_inner(c)
-    case AClass{neg, cs}:
+    case AClass{neg, ss}:
       +c = c
-      List.all.if(u => Bool.xor(neg, List.contains(~Char, ~Char.is_eq, cs, c)), is_inner(c))
+      List.all.if(u => Bool.xor(neg, Spans.Spans.has(ss, c)), is_inner(c))
 
 # the regular expression of g
 # bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a glob tree is a few nodes, where a fork costs more than it saves
@@ -79,8 +80,8 @@ def Glob.re(g: Glob) -> Regex.Re<Atom>:
       Regex.One{AAny{}}
     case Star{}:
       Regex.Star{Regex.One{AAny{}}}
-    case Class{neg, cs}:
-      Regex.One{AClass{neg, cs}}
+    case Class{neg, ss}:
+      Regex.One{AClass{neg, ss}}
     case Deep{}:
       Regex.All{}
     case Cat{a, b}:
@@ -245,28 +246,6 @@ def Sym.of.go(specials: List<&2, Sym>, +c: Char) -> Sym:
 def Sym.of(c: Char) -> Sym:
   Sym.of.go(Sym.specials(), c)
 
-# lo, then the next n characters
-def Char.range.go(n: Nat, +lo: U32) -> List<&2, Char>:
-  match n:
-    case 0n:
-      [Chr{lo}]
-    case 1n+p:
-      Chr{lo} <> Char.range.go(p, (lo + 1: U32))
-
-# lo and the n characters after it, or None when ok is False
-def Char.range.if(lo: U32, n: Nat, ok: Bool) -> Maybe<&2, List<&2, Char>>:
-  match ok:
-    case False{}:
-      None{}
-    case True{}:
-      Some{Char.range.go(n, lo)}
-
-# every character from lo to hi, or None when hi comes before lo
-def Char.range(lo: Char, hi: Char) -> Maybe<&2, List<&2, Char>>:
-  match lo hi:
-    case Chr{+a} Chr{+b}:
-      Char.range.if(a, U32.to_nat((b - a: U32)), U32.is_le(a, b))
-
 # Inside a `{`: the alternatives so far and the atoms of the current one,
 # both last first, and whether the `{` opened at the start of a segment.
 # The bottom frame is the whole text.
@@ -274,11 +253,11 @@ type Frame is Data:
   Frame{alts: List<&2, Glob>, seq: List<&2, Glob>, start: Bool}
 
 # Out: between atoms. After: just after a `**`, where the segment must end.
-# In: inside a class, with its characters so far.
+# In: inside a class, with its spans so far.
 type Mode is Data:
   Out{}
   After{}
-  In{neg: Bool, cs: List<&2, Char>}
+  In{neg: Bool, ss: List<&2, Spans.Span>}
 
 # the atoms, last first, before acc
 def Glob.of_seq(atoms: List<&2, Glob>, acc: Glob) -> Glob:
@@ -312,16 +291,13 @@ def Glob.read.end(stack: List<&2, Frame>) -> Maybe<&2, Glob>:
     case _:
       None{}
 
-# k of the range r, or None when r is None
-def Glob.read.range(
-  r: Maybe<&2, List<&2, Char>>,
-  k: List<&2, Char> -> Maybe<&2, Glob>
-) -> Maybe<&2, Glob>:
+# k of the span r, or None when r is None
+def Glob.read.range(r: Maybe<&2, Spans.Span>, k: Spans.Span -> Maybe<&2, Glob>) -> Maybe<&2, Glob>:
   match r:
     case None{}:
       None{}
-    case Some{cs}:
-      k(cs)
+    case Some{s}:
+      k(s)
 
 # `**/`: "", or any text that ends with '/'
 def Glob.dirs() -> Glob:
@@ -354,27 +330,29 @@ def Glob.read.go(
   match syms mode:
     case Nil{} Out{}:
       Glob.read.end(stack)
-    case Nil{} In{neg, cs}:
+    case Nil{} In{neg, ss}:
       None{}
     case Con{SEsc{}, Nil{}} _:
       None{}
     case Con{SEsc{}, Con{x, t}} Out{}:
       Glob.read.go(t, Out{}, Frame.add(stack, Lit{Sym.char(x)}), False{})
-    case Con{SEsc{}, Con{x, t}} In{neg, cs}:
-      Glob.read.go(t, In{neg, Con{Sym.char(x), cs}}, stack, seg)
+    case Con{SEsc{}, Con{x, t}} In{neg, ss}:
+      +c = Sym.char(x)
+      Glob.read.go(t, In{neg, Con{Spans.Span{c, c}, ss}}, stack, seg)
     case Con{SRight{}, t} Out{}:
       None{}
-    case Con{SRight{}, t} In{neg, cs}:
-      Glob.read.go(t, Out{}, Frame.add(stack, Class{neg, cs}), False{})
-    case Con{x, Con{SDash{}, Con{SRight{}, t}}} In{neg, cs}:
+    case Con{SRight{}, t} In{neg, ss}:
+      Glob.read.go(t, Out{}, Frame.add(stack, Class{neg, ss}), False{})
+    case Con{x, Con{SDash{}, Con{SRight{}, t}}} In{neg, ss}:
       None{}
-    case Con{x, Con{SDash{}, Con{SEsc{}, t}}} In{neg, cs}:
+    case Con{x, Con{SDash{}, Con{SEsc{}, t}}} In{neg, ss}:
       None{}
-    case Con{x, Con{SDash{}, Con{y, t}}} In{neg, cs}:
-      r = Char.range(Sym.char(x), Sym.char(y))
-      Glob.read.range(r, rs => Glob.read.go(t, In{neg, List.append(&2, Char, rs, cs)}, stack, seg))
-    case Con{x, t} In{neg, cs}:
-      Glob.read.go(t, In{neg, Con{Sym.char(x), cs}}, stack, seg)
+    case Con{x, Con{SDash{}, Con{y, t}}} In{neg, ss}:
+      r = Spans.Span.of(Sym.char(x), Sym.char(y))
+      Glob.read.range(r, s => Glob.read.go(t, In{neg, Con{s, ss}}, stack, seg))
+    case Con{x, t} In{neg, ss}:
+      +c = Sym.char(x)
+      Glob.read.go(t, In{neg, Con{Spans.Span{c, c}, ss}}, stack, seg)
     case Con{SAny{}, t} _:
       Glob.read.go(t, Out{}, Frame.add(stack, Any{}), False{})
     case Nil{} After{}:
