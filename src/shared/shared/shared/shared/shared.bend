@@ -1720,6 +1720,162 @@ def Nat.nlt_le(
     case 1n+p 1n+q:
       h => Nat.nlt_le(p, q)(h)
 
+# x is at least q exactly when it is at least p and q, when p <= q
+def Nat.le_above.g1(
+  +p: Nat,
+  +q: Nat,
+  +x: Nat,
+  x1: {Nat.is_le(p, q) == True{}: Bool}
+) -> {Nat.is_le(q, x) == Bool.and(Nat.is_le(p, x), Nat.is_le(q, x)): Bool}:
+  match p:
+    case 0n:
+      match x:
+        case 0n:
+          {==}
+        case 1n+xp:
+          {==}
+    case 1n+pp:
+      match q:
+        case 0n:
+          Empty.absurd(
+            {Nat.is_le(0n, x) == Bool.and(Nat.is_le(1n+pp, x), Nat.is_le(0n, x)): Bool},
+            {(%x1: {\{False: Unit; \{True: Empty; \{}}}: Bool -> Type}(_); Unit{}): Empty}
+          )
+        case 1n+qp:
+          match x:
+            case 0n:
+              {==}
+            case 1n+xp:
+              %Nat.le_above.g1(pp, qp, xp, x1):
+                {Nat.is_le(qp, xp) == _: Bool}
+              {==}
+
+def Nat.le_above(
+  p: Nat,
+  q: Nat,
+  x: Nat
+) -> {
+  Nat.is_le(p, q) == True{}: Bool
+} -> {Nat.is_le(q, x) == Bool.and(Nat.is_le(p, x), Nat.is_le(q, x)): Bool}:
+  x1 => Nat.le_above.g1(p, q, x, x1)
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# x is at least p exactly when it is at least p and q, when q < p
+def Nat.le_above_not.g2(
+  +p: Nat,
+  +q: Nat,
+  x: Nat,
+  x1: {Nat.is_le(p, q) == False{}: Bool},
+  +x2: Bool,
+  hx2: {x2 == Nat.is_le(p, x): Bool}
+) -> {x2 == Bool.and(x2, Nat.is_le(q, x)): Bool}:
+  match x2:
+    case False{}:
+      {==}
+    case True{}:
+      Equal.sym(
+        Bool,
+        Bool.and(True{}, Nat.is_le(q, x)),
+        True{},
+        Nat.le_trans(
+          q,
+          p,
+          x
+        )(Nat.nle_le(p, q)(x1))(Equal.sym(Bool, True{}, Cmp.is_le(Nat.cmp(p, x)), hx2))
+      )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+def Nat.le_above_not(
+  +p: Nat,
+  q: Nat,
+  +x: Nat
+) -> {
+  Nat.is_le(p, q) == False{}: Bool
+} -> {Nat.is_le(p, x) == Bool.and(Nat.is_le(p, x), Nat.is_le(q, x)): Bool}:
+  x1 => Nat.le_above_not.g2(p, q, x, x1, Nat.is_le(p, x), {==})
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# x is at most h exactly when it is at most h and b, when h <= b
+def Nat.le_upto.g2(
+  h: Nat,
+  b: Nat,
+  x: Nat,
+  x1: {Nat.is_le(h, b) == True{}: Bool},
+  +x2: Bool,
+  hx2: {x2 == Nat.is_le(x, h): Bool}
+) -> {x2 == Bool.and(x2, Nat.is_le(x, b)): Bool}:
+  match x2:
+    case False{}:
+      {==}
+    case True{}:
+      Equal.sym(
+        Bool,
+        Cmp.is_le(Nat.cmp(x, b)),
+        True{},
+        Nat.le_trans(x, h, b)(Equal.sym(Bool, True{}, Cmp.is_le(Nat.cmp(x, h)), hx2))(x1)
+      )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+def Nat.le_upto(
+  +h: Nat,
+  b: Nat,
+  +x: Nat
+) -> {
+  Nat.is_le(h, b) == True{}: Bool
+} -> {Nat.is_le(x, h) == Bool.and(Nat.is_le(x, h), Nat.is_le(x, b)): Bool}:
+  x1 => Nat.le_upto.g2(h, b, x, x1, Nat.is_le(x, h), {==})
+
+# x is at most b exactly when it is at most h and b, when b < h
+def Nat.le_upto_not.g1(
+  +h: Nat,
+  +b: Nat,
+  +x: Nat,
+  x1: {Nat.is_le(h, b) == False{}: Bool}
+) -> {Nat.is_le(x, b) == Bool.and(Nat.is_le(x, h), Nat.is_le(x, b)): Bool}:
+  match h:
+    case 0n:
+      match b:
+        case 0n:
+          Empty.absurd(
+            {Nat.is_le(x, 0n) == Bool.and(Nat.is_le(x, 0n), Nat.is_le(x, 0n)): Bool},
+            {(%x1: {\{False: Empty; \{True: Unit; \{}}}: Bool -> Type}(_); Unit{}): Empty}
+          )
+        case 1n+bp:
+          Empty.absurd(
+            {Nat.is_le(x, 1n+bp) == Bool.and(Nat.is_le(x, 0n), Nat.is_le(x, 1n+bp)): Bool},
+            {(%x1: {\{False: Empty; \{True: Unit; \{}}}: Bool -> Type}(_); Unit{}): Empty}
+          )
+    case 1n+hp:
+      match b:
+        case 0n:
+          match x:
+            case 0n:
+              {==}
+            case 1n+xp:
+              %Equal.sym(
+                Bool,
+                Bool.and(Cmp.is_le(Nat.cmp(xp, hp)), False{}),
+                False{},
+                Bool.and_false_right(Cmp.is_le(Nat.cmp(xp, hp)))
+              ):
+                {False{} == _: Bool}
+              {==}
+        case 1n+bp:
+          match x:
+            case 0n:
+              {==}
+            case 1n+xp:
+              %Nat.le_upto_not.g1(hp, bp, xp, x1):
+                {Nat.is_le(xp, bp) == _: Bool}
+              {==}
+
+def Nat.le_upto_not(
+  h: Nat,
+  b: Nat,
+  x: Nat
+) -> {
+  Nat.is_le(h, b) == False{}: Bool
+} -> {Nat.is_le(x, b) == Bool.and(Nat.is_le(x, h), Nat.is_le(x, b)): Bool}:
+  x1 => Nat.le_upto_not.g1(h, b, x, x1)
+
 # a number at most b is not above b
 def Nat.le_nlt(
   a: Nat,
@@ -1955,6 +2111,27 @@ def Bool.or_false(a: Bool) -> {a == Bool.or(a, False{}): Bool}:
       {==}
     case True{}:
       {==}
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# the four parts of two ands, paired the other way
+def Bool.and_swap(
+  a: Bool,
+  b: Bool,
+  c: Bool,
+  d: Bool
+) -> {Bool.and(Bool.and(a, b), Bool.and(c, d)) == Bool.and(Bool.and(a, c), Bool.and(b, d)): Bool}:
+  match a:
+    case False{}:
+      {==}
+    case True{}:
+      match b:
+        case False{}:
+          %Equal.sym(Bool, Bool.and(c, False{}), False{}, Bool.and_false_right(c)):
+            {False{} == _: Bool}
+          {==}
+        case True{}:
+          {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a and True is a
 def Bool.and_true(a: Bool) -> {a == Bool.and(a, True{}): Bool}:
