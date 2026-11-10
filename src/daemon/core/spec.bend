@@ -1791,6 +1791,22 @@ def Clash.find(
         }
       )
 
+# the trees of a resolve of the resource n with the root m, in the tree h:
+# the resource holds m, and its clash is shut (its key holds no request)
+def Resolve.work(
+  s: State(),
+  h: Maybe<&2, Hashes.Hash>,
+  +n: Resources.Name,
+  m: Maybe<&2, Ropes.Root>
+) -> Maybe<&2, Work>:
+  Maybe.bind(
+    &2,
+    Work,
+    Work,
+    Work.set(Work{s, h, []}, Key.res(n), Res.code(m)),
+    y => Work.set(y, Key.clash(n), [])
+  )
+
 # the verdict on a resolve of the resource n, which the merge k left in clash
 # on the branch b of the store r, with the content c, at the tree h
 def Judge.resolve(
@@ -1821,15 +1837,7 @@ def Judge.resolve(
           m => Judge.when(
             open,
             h,
-            x => Work.take(
-              Maybe.bind(
-                &2,
-                Work,
-                Work,
-                Work.set(Work{s, h, []}, Key.res(n), Res.code(m)),
-                y => Work.set(y, Key.clash(n), [])
-              )
-            )
+            x => Work.take(Resolve.work(s, h, n, m))
           )
         )
       )
@@ -5708,6 +5716,31 @@ law Wait.left_keeps:
   {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, ws, i) == True{}: Bool}
     -> {Tries.Trie.has(Unit, done, Ledgers.Id.key(i)) == False{}: Bool}
     -> {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Wait.left(ws, done), i) == True{}: Bool}
+
+# a merge turns Written once each clashing resource is resolved: a resolve
+# gives the resource its content, and shuts its clash (a clash whose key holds
+# no request is not open: Clash.shut)
+law Resolve.reads:
+  for +s: State()
+  for +h: Maybe<&2, Hashes.Hash>
+  for +n: Resources.Name
+  for +m: Maybe<&2, Ropes.Root>
+  Work.Reads(Key.res(n), Res.code(m), Resolve.work(s, h, n, m))
+
+law Resolve.shuts:
+  for +s: State()
+  for +h: Maybe<&2, Hashes.Hash>
+  for +n: Resources.Name
+  for +m: Maybe<&2, Ropes.Root>
+  Work.Reads(Key.clash(n), [], Resolve.work(s, h, n, m))
+
+law Clash.shut:
+  for +s: State()
+  for +h: Maybe<&2, Hashes.Hash>
+  for +n: Resources.Name
+  for +f: Ledgers.Id
+  {Node.get(s, h, Key.clash(n)) == Some{[]}: Maybe<&2, List<&2, U32>>}
+    -> {Clash.open(s, h, n, f) == False{}: Bool}
 
 # a merge of whole trees keeps what the merge of each resource takes: when the
 # merge of the resource n takes the root x (Pick.merge_theirs, Pick.merge_ours:

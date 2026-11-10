@@ -128,6 +128,9 @@ README claim, then the law.
 - Writers are told only about changes to what their work uses: `Node.affects_used` (each change
   that a branch is told of was made on another line, and wrote a resource that a resource of the
   branch is, or uses through its imports, at any depth).
+- A merge turns Written once each clashing resource is resolved: `Resolve.reads` (a resolve gives
+  the resource its content), `Resolve.shuts` and `Clash.shut` (it shuts the clash); the answer
+  is Written when no clash of the merge is open (`Answer.left`, by construction).
 - A move records a version equal to its target: `Move.reads` (each resource of the target is, with
   the same content, in the tree that the move gives; a move sets only keys of the version
   vector).

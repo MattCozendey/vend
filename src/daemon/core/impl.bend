@@ -12517,6 +12517,54 @@ def Spec.Merge.keeps(s, c, from, h, n, b, o, t, x):
     )(ec)
   )
 
+def Spec.Resolve.reads(s, h, n, m):
+  Reads.bind(
+    Spec.Key.res(n),
+    Spec.Res.code(m),
+    Spec.Work.set(Spec.Work{s, h, []}, Spec.Key.res(n), Spec.Res.code(m)),
+    y => Spec.Work.set(y, Spec.Key.clash(n), [])
+  )(Set.read(Spec.Work{s, h, []}, Spec.Key.res(n), Spec.Res.code(m)))(
+    y => hy => Set.kept.work(y, Spec.Key.clash(n), [], Spec.Key.res(n), Spec.Res.code(m), Clash.apart(n, n))(hy)
+  )
+
+def Spec.Resolve.shuts(s, h, n, m):
+  Reads.with(
+    Spec.Work,
+    Spec.Key.clash(n),
+    [],
+    Spec.Work.set(Spec.Work{s, h, []}, Spec.Key.res(n), Spec.Res.code(m)),
+    y => Spec.Work.set(y, Spec.Key.clash(n), [])
+  )(y => Set.read(y, Spec.Key.clash(n), []))
+
+# the code of a count is not empty
+def Count.full(
+  n: Nat,
+  r: List<&2, U32>
+) -> {Shared.List.is_eq(~U32, ~U32.is_eq, [], Codes.Code.count(n, r)) == False{}: Bool}:
+  match n:
+    case 0n:
+      {==}
+    case 1n+p:
+      {==}
+
+def Spec.Clash.shut(s, h, n, f):
+  match f:
+    case Ledgers.Id{w, q}:
+      e =>
+        %Equal.sym(Maybe<&2, List<&2, U32>>, Spec.Node.get(s, h, Spec.Key.clash(n)), Some{[]}, e): {
+          Shared.Maybe.is_eq(
+            ~List<&2, U32>,
+            ~Shared.List.is_eq(~U32, ~U32.is_eq),
+            _,
+            Some{Spec.Clash.code(Ledgers.Id{w, q})}
+          )
+            == False{}: Bool
+        }
+        Count.full(
+          Codes.Code.length(w),
+          Codes.Code.chars(w, Codes.Code.count(Codes.Code.length(q), Codes.Code.chars(q, [])))
+        )
+
 # Outcomes
 # --------
 # A step gives each of its requests an outcome (Spec.Step.run_outs), and only
