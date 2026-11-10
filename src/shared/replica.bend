@@ -2378,6 +2378,14 @@ def Act.from(m: Maybe<&2, Ledgers.Act>) -> List<&2, String>:
     case x:
       []
 
+# the act m is a vote for the step v
+def Act.is(m: Maybe<&2, Ledgers.Act>, v: Ledgers.Vote) -> Bool:
+  match m:
+    case Some{Ledgers.Act.Vote{x, from}}:
+      Ledgers.Vote.is_eq(x, v)
+    case y:
+      False{}
+
 # the nodes whose passes allow the vote of the node p at the place w, as the
 # vote names them
 def Cast.from(
@@ -2495,6 +2503,22 @@ def Last.is(m: Maybe<&2, Ledgers.Last>, v: Ledgers.Vote) -> Bool:
     case Some{Ledgers.Last{r, x}}:
       Ledgers.Vote.is_eq(x, v)
 
+# the round of a last vote, 0 without one
+def Last.round(m: Maybe<&2, Ledgers.Last>) -> Nat:
+  match m:
+    case Some{Ledgers.Last{r, v}}:
+      r
+    case None{}:
+      0n
+
+# the last vote m is of the round r
+def Last.in(m: Maybe<&2, Ledgers.Last>, r: Nat) -> Bool:
+  match m:
+    case Some{Ledgers.Last{k, v}}:
+      Nat.is_eq(k, r)
+    case None{}:
+      False{}
+
 # the node s holds the pass to the place w of each of the nodes from
 def Passed.all(
   ~mach: Machine(),
@@ -2527,28 +2551,109 @@ def Owners.sub(os: List<&2, String>, from: List<&2, String>) -> Bool:
     case Con{o, +r} Con{+f, +fs}:
       Shared.Bool.when(Bool, String.eq(f, o), u => Owners.sub(r, fs), u => Owners.sub(r, f <> fs))
 
-# the passes of the nodes from allow a vote for the step v at the place w of
-# the owners os: in the first round, any step; later, the node holds the pass
-# to w of each of them, they are owners and a majority, and v is the last vote
-# of the highest round among them, if any
-def Vote.allowed(
+# each last vote of the round r that the passes of the nodes from to the place
+# w name is for the step v
+def Passes.agree(
   ~mach: Machine(),
   +s: Node<Machine.Q(mach)>,
   +w: Ledgers.Where,
+  from: List<&2, String>,
+  +r: Nat,
+  +v: Ledgers.Vote
+) -> Bool:
+  match from:
+    case Nil{}:
+      True{}
+    case Con{o, rest}:
+      +l = Passed.last(Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), w, o))
+      List.all.if(
+        u => Passes.agree(~mach, s, w, rest, r, v),
+        List.any.if(u2 => Last.is(l, v), Bool.not(Last.in(l, r)))
+      )
+
+# what the first of the nodes from whose pass to the round r names a vote of
+# the round k did in the round k, at the height h of the line c (none: no pass
+# names a vote of k, or s does not hold the ballot of that node in k)
+def Passes.act(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  +h: U32,
+  +r: Nat,
+  from: List<&2, String>,
+  +k: Nat
+) -> Maybe<&2, Ledgers.Act>:
+  match from:
+    case Nil{}:
+      None{}
+    case Con{+o, rest}:
+      Shared.Bool.when(
+        Maybe<&2, Ledgers.Act>,
+        Last.in(
+          Passed.last(
+            Ledgers.State.passed(
+              ~Machine.Q(mach),
+              State.ledger(~mach, s),
+              Ledgers.Where{c, h, r},
+              o
+            )
+          ),
+          k
+        ),
+        u => Cast.act(~mach, s, Ledgers.Where{c, h, k}, o),
+        u => Passes.act(~mach, s, c, h, r, rest, k)
+      )
+
+# bend-lint: expect-begin bend-lint-rules/performance/list_index_loop@warning -- the loop is over the rounds that the passes lead back to, not over os: each round has its own nodes from, and checks them against the owners once (rounds x owners)
+# Vote.allowed in the round r of the height h of the line c. Each step back to
+# the round of a named vote takes one of k: a pass names a round below its own,
+# so the number of the round is enough
+def Vote.allowed.in(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  +h: U32,
   +os: List<&2, String>,
-  v: Ledgers.Vote,
+  +v: Ledgers.Vote,
+  k: Nat,
+  r: Nat,
   +from: List<&2, String>
 ) -> Bool:
-  List.any.if(
-    u => List.all.if(
-      u2 => List.all.if(
-        u3 => List.all.if(u4 => Last.is(Passes.last(~mach, s, w, from), v), Owners.major(os, from)),
-        Owners.sub(os, from)
-      ),
-      Passed.all(~mach, s, w, from)
-    ),
-    Nat.is_eq(Where.round(w), 0n)
-  )
+  match k r:
+    case 0n 0n:
+      True{}
+    case 1n+j 0n:
+      True{}
+    case 0n 1n+p:
+      False{}
+    case 1n+(+j) 1n+(+p):
+      +w = {Ledgers.Where{c, h, 1n+p}: Ledgers.Where}
+      List.all.if(u => List.all.if(u2 => List.all.if(u3 => (
+              +top = Passes.last(~mach, s, w, from)
+              List.any.if(u4 => List.all.if(u5 => (
+                  +a = Passes.act(~mach, s, c, h, 1n+p, from, Last.round(top))
+                  List.all.if(u6 => Vote.allowed.in(~mach, s, c, h, os, v, j, Last.round(top), Act.from(a)), Act.is(a, v))), Passes.agree(~mach, s, w, from, Last.round(top), v)), Maybe.is_none(&2, Ledgers.Last, top))), Owners.major(os, from)), Owners.sub(os, from)), Passed.all(~mach, s, w, from))
+# bend-lint: expect-end bend-lint-rules/performance/list_index_loop@warning
+
+# the passes of the nodes from allow a vote for the step v at the place w of
+# the owners os. In the first round, any step. Later: the node holds the pass
+# to w of each of them, and they are owners and a majority. When their passes
+# name a last vote, take the highest round that they name: each last vote of
+# that round is for v, and v was allowed there: the node holds the vote for v,
+# in that round, of the first of them that names it, and the passes that this
+# vote names allow v in that round. So an allowed vote leads back, round by
+# round, to a vote that a majority left free
+def Vote.allowed(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  w: Ledgers.Where,
+  os: List<&2, String>,
+  v: Ledgers.Vote,
+  from: List<&2, String>
+) -> Bool:
+  match w:
+    case Ledgers.Where{c, h, +r}:
+      Vote.allowed.in(~mach, s, c, h, os, v, r, r, from)
 
 # the plan of the proposer of a later round at the place w, once the nodes
 # from that passed to it are known: none until they are a majority; then the
@@ -3024,15 +3129,6 @@ def Rounds.Last(~mach: Machine(), s: Node<Machine.Q(mach)>, c: Ledgers.Chain, h:
       == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
   } -> {l == Last.below(~mach, q, s, c, h, r): Maybe<&2, Ledgers.Last>}
 
-# that the votes of one round are for one step: one owner proposes, and the
-# others copy
-def Rounds.Same(~mach: Machine(), s: Node<Machine.Q(mach)>, c: Ledgers.Chain, h: U32) -> Type:
-  @r: Nat -> @q1: String -> @q2: String -> @a: Ledgers.Vote -> @b: Ledgers.Vote -> {
-    Cast.of(~mach, s, Ledgers.Where{c, h, r}, q1) == Some{a}: Maybe<&2, Ledgers.Vote>
-  } -> {
-    Cast.of(~mach, s, Ledgers.Where{c, h, r}, q2) == Some{b}: Maybe<&2, Ledgers.Vote>
-  } -> {a == b: Ledgers.Vote}
-
 # that the ballots that s holds on the line c follow the rules of rounds, at
 # the next height of each head whose tip s holds, for the owners in that tip
 def Rounds.Rules(~mach: Machine(), s: Node<Machine.Q(mach)>, c: Ledgers.Chain) -> Type:
@@ -3045,7 +3141,7 @@ def Rounds.Rules(~mach: Machine(), s: Node<Machine.Q(mach)>, c: Ledgers.Chain) -
     Head.next(x),
     Tip.owners(t)
   )
-    & (Rounds.Last(~mach, s, c, Head.next(x)) & Rounds.Same(~mach, s, c, Head.next(x)))
+    & Rounds.Last(~mach, s, c, Head.next(x))
 
 # Node.advance at the head h of the line c, whose tip is m
 def Advance.at(
@@ -12745,14 +12841,6 @@ def Major.meets(
       )
     )(em)
 
-# the round of a last vote, 0 without one
-def Last.round(m: Maybe<&2, Ledgers.Last>) -> Nat:
-  match m:
-    case Some{Ledgers.Last{r, v}}:
-      r
-    case None{}:
-      0n
-
 # the step of a last vote, d without one
 def Last.step(d: Ledgers.Vote, m: Maybe<&2, Ledgers.Last>) -> Ledgers.Vote:
   match m:
@@ -12768,70 +12856,6 @@ def Last.from(m: Maybe<&2, Ledgers.Last>, r1: Nat) -> Bool:
       Nat.is_le(r1, r)
     case None{}:
       False{}
-
-# Mine.le for one round
-def Mine.le.or(
-  k: Nat,
-  m: Maybe<&2, Ledgers.Vote>,
-  rest: Maybe<&2, Ledgers.Last>,
-  r: Nat,
-  x: Ledgers.Vote,
-  ih: {
-    rest == Some{Ledgers.Last{r, x}}: Maybe<&2, Ledgers.Last>
-  } -> {Nat.is_le(r, k) == True{}: Bool}
-) -> {
-  Last.or(k, m, u => rest) == Some{Ledgers.Last{r, x}}: Maybe<&2, Ledgers.Last>
-} -> {Nat.is_le(r, k) == True{}: Bool}:
-  match m:
-    case Some{y}:
-      e =>
-        %Equal.cong(
-          Maybe<&2, Ledgers.Last>,
-          Nat,
-          Last.round,
-          Some{Ledgers.Last{k, y}},
-          Some{Ledgers.Last{r, x}},
-          e
-        ): {Nat.is_le(_, k) == True{}: Bool}
-        Shared.Nat.le_refl(k)
-    case None{}:
-      e => ih(e)
-
-# the last vote of a node up to the round p is of a round up to p
-def Mine.le(
-  ~mach: Machine(),
-  +s: Node<Machine.Q(mach)>,
-  +c: Ledgers.Chain,
-  +h: U32,
-  +q: String,
-  p: Nat,
-  +r: Nat,
-  +x: Ledgers.Vote
-) -> {
-  Last.mine(~mach, q, s, c, h, p) == Some{Ledgers.Last{r, x}}: Maybe<&2, Ledgers.Last>
-} -> {Nat.is_le(r, p) == True{}: Bool}:
-  match p:
-    case 0n:
-      Mine.le.or(
-        0n,
-        Cast.of(~mach, s, Ledgers.Where{c, h, 0n}, q),
-        None{},
-        r,
-        x,
-        e => Empty.absurd(
-          {Nat.is_le(r, 0n) == True{}: Bool},
-          Shared.Maybe.none_ne_some(Ledgers.Last, Ledgers.Last{r, x}, e)
-        )
-      )
-    case 1n+(+j):
-      Mine.le.or(
-        1n+j,
-        Cast.of(~mach, s, Ledgers.Where{c, h, 1n+j}, q),
-        Last.mine(~mach, q, s, c, h, j),
-        r,
-        x,
-        e => Shared.Nat.le_succ(r, j)(Mine.le(~mach, s, c, h, q, j, r, x)(e))
-      )
 
 # Mine.cast for one round
 def Mine.cast.or(
@@ -13163,7 +13187,7 @@ def Rules.allow(
 ) -> Rounds.Allow(~mach, s, c, Head.next(hd), Tip.owners(tp)):
   Shared.Pair.first(
     Rounds.Allow(~mach, s, c, Head.next(hd), Tip.owners(tp)),
-    Rounds.Last(~mach, s, c, Head.next(hd)) & Rounds.Same(~mach, s, c, Head.next(hd)),
+    Rounds.Last(~mach, s, c, Head.next(hd)),
     rules(hd)(tp)(ok)
   )
 
@@ -13177,34 +13201,10 @@ def Rules.last(
   tp: Tip,
   ok: {Head.tip(~mach, s, hd) == Some{tp}: Maybe<&2, Tip>}
 ) -> Rounds.Last(~mach, s, c, Head.next(hd)):
-  Shared.Pair.first(
-    Rounds.Last(~mach, s, c, Head.next(hd)),
-    Rounds.Same(~mach, s, c, Head.next(hd)),
-    Shared.Pair.second(
-      Rounds.Allow(~mach, s, c, Head.next(hd), Tip.owners(tp)),
-      Rounds.Last(~mach, s, c, Head.next(hd)) & Rounds.Same(~mach, s, c, Head.next(hd)),
-      rules(hd)(tp)(ok)
-    )
-  )
-
-# the rule that the votes of one round are for one step, at the head hd whose tip is tp
-def Rules.same(
-  ~mach: Machine(),
-  ~s: Node<Machine.Q(mach)>,
-  ~c: Ledgers.Chain,
-  ~rules: Rounds.Rules(~mach, s, c),
-  hd: Head,
-  tp: Tip,
-  ok: {Head.tip(~mach, s, hd) == Some{tp}: Maybe<&2, Tip>}
-) -> Rounds.Same(~mach, s, c, Head.next(hd)):
   Shared.Pair.second(
+    Rounds.Allow(~mach, s, c, Head.next(hd), Tip.owners(tp)),
     Rounds.Last(~mach, s, c, Head.next(hd)),
-    Rounds.Same(~mach, s, c, Head.next(hd)),
-    Shared.Pair.second(
-      Rounds.Allow(~mach, s, c, Head.next(hd), Tip.owners(tp)),
-      Rounds.Last(~mach, s, c, Head.next(hd)) & Rounds.Same(~mach, s, c, Head.next(hd)),
-      rules(hd)(tp)(ok)
-    )
+    rules(hd)(tp)(ok)
   )
 
 # Pass.miss for a first node o, once its hit in the round r1 (hit) and its
@@ -13387,152 +13387,6 @@ def Pass.miss(
           )
         )
 
-# the case of a choice by b
-def When.elim(
-  -R: Type,
-  x: Bool,
-  a: Maybe<&2, Ledgers.Last>,
-  b: Maybe<&2, Ledgers.Last>,
-  l: Ledgers.Last
-) -> {
-  Shared.Bool.when(Maybe<&2, Ledgers.Last>, x, u => b, u => a) == Some{l}: Maybe<&2, Ledgers.Last>
-} -> (
-  {b == Some{l}: Maybe<&2, Ledgers.Last>} -> R
-) -> ({a == Some{l}: Maybe<&2, Ledgers.Last>} -> R) -> R:
-  match x:
-    case True{}:
-      e => f => g => f(e)
-    case False{}:
-      e => f => g => g(e)
-
-# that the pass of some node to the place w names the last vote l
-def Named(
-  ~mach: Machine(),
-  -R: Type,
-  s: Node<Machine.Q(mach)>,
-  w: Ledgers.Where,
-  l: Ledgers.Last
-) -> Type:
-  (
-    @q: String -> {
-      Passed.last(
-        Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), w, q)
-      )
-        == Some{l}: Maybe<&2, Ledgers.Last>
-    } -> R
-  ) -> R
-
-# Last.elim for a first node o, once what it named (a) and what the rest
-# named (b) are known
-def Last.elim.at(
-  ~mach: Machine(),
-  -R: Type,
-  s: Node<Machine.Q(mach)>,
-  w: Ledgers.Where,
-  o: String,
-  l: Ledgers.Last,
-  a: Maybe<&2, Ledgers.Last>,
-  b: Maybe<&2, Ledgers.Last>
-) -> {
-  Passed.last(
-    Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), w, o)
-  )
-    == a: Maybe<&2, Ledgers.Last>
-} -> (
-  {b == Some{l}: Maybe<&2, Ledgers.Last>} -> Named(~mach, R, s, w, l)
-) -> {Last.newer(a, b) == Some{l}: Maybe<&2, Ledgers.Last>} -> Named(~mach, R, s, w, l):
-  match a b:
-    case None{} y:
-      ea => ih => e => ih(e)
-    case Some{x} None{}:
-      ea => ih => e => k => k(
-        o
-      )(
-        Equal.trans(
-          Maybe<&2, Ledgers.Last>,
-          Passed.last(Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), w, o)),
-          Some{x},
-          Some{l},
-          ea,
-          e
-        )
-      )
-    case Some{Ledgers.Last{+ra, va}} Some{Ledgers.Last{+rb, vb}}:
-      ea => ih => e =>
-        When.elim(
-          Named(~mach, R, s, w, l),
-          Nat.is_lt(ra, rb),
-          Some{Ledgers.Last{ra, va}},
-          Some{Ledgers.Last{rb, vb}},
-          l
-        )(
-          e
-        )(
-          ih
-        )(
-          e2 => k => k(
-            o
-          )(
-            Equal.trans(
-              Maybe<&2, Ledgers.Last>,
-              Passed.last(Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), w, o)),
-              Some{Ledgers.Last{ra, va}},
-              Some{l},
-              ea,
-              e2
-            )
-          )
-        )
-
-# the last vote of the highest round that passes name is named by one of them
-def Last.elim(
-  ~mach: Machine(),
-  -R: Type,
-  +s: Node<Machine.Q(mach)>,
-  +w: Ledgers.Where,
-  from: List<&2, String>,
-  +l: Ledgers.Last
-) -> {
-  Passes.last(~mach, s, w, from) == Some{l}: Maybe<&2, Ledgers.Last>
-} -> Named(~mach, R, s, w, l):
-  match from:
-    case Nil{}:
-      e => k => Empty.absurd(R, Shared.Maybe.none_ne_some(Ledgers.Last, l, e))
-    case Con{+o, +rest}:
-      Last.elim.at(
-        ~mach,
-        R,
-        s,
-        w,
-        o,
-        l,
-        Passed.last(Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), w, o)),
-        Passes.last(~mach, s, w, rest)
-      )({==})(Last.elim(~mach, R, s, w, rest, l))
-
-# a pass that names a last vote is held
-def Passed.some(
-  m: Maybe<&2, Maybe<&2, Ledgers.Last>>,
-  l: Ledgers.Last
-) -> {
-  Passed.last(m) == Some{l}: Maybe<&2, Ledgers.Last>
-} -> {m == Some{Some{l}}: Maybe<&2, Maybe<&2, Ledgers.Last>>}:
-  match m:
-    case None{}:
-      e => Empty.absurd(
-        {None{} == Some{Some{l}}: Maybe<&2, Maybe<&2, Ledgers.Last>>},
-        Shared.Maybe.none_ne_some(Ledgers.Last, l, e)
-      )
-    case Some{x}:
-      e => Equal.cong(
-        Maybe<&2, Ledgers.Last>,
-        Maybe<&2, Maybe<&2, Ledgers.Last>>,
-        y => Some{y},
-        x,
-        Some{l},
-        e
-      )
-
 # the parts of the rule of a later round
 def Later.all(a: Bool, b: Bool, c: Bool, d: Bool) -> Bool:
   List.all.if(u2 => List.all.if(u3 => List.all.if(u4 => d, c), b), a)
@@ -13595,236 +13449,168 @@ def Later.all.d(
     case False{} y z:
       e => Empty.absurd({d == True{}: Bool}, Shared.Bool.false_ne_true(e))
 
-# that each vote of a round from r1 on, below the round j, is for the step v1
-def Rounds.Below(
+# the rule of the vote that passes name: no pass names one (the last vote m is
+# none), or ag and ia and rec
+def Top.all(m: Maybe<&2, Ledgers.Last>, ag: Bool, ia: Bool, rec: Bool) -> Bool:
+  List.any.if(
+    u4 => List.all.if(u5 => List.all.if(u6 => rec, ia), ag),
+    Maybe.is_none(&2, Ledgers.Last, m)
+  )
+
+# that the step x, when the rules of rounds allow it in a round after r1, with
+# k rounds to go back, is the step v1
+def Rounds.After(
   ~mach: Machine(),
   s: Node<Machine.Q(mach)>,
   c: Ledgers.Chain,
   h: U32,
+  os: List<&2, String>,
   r1: Nat,
   v1: Ledgers.Vote,
-  j: Nat
+  x: Ledgers.Vote,
+  k: Nat
 ) -> Type:
-  @rm: Nat -> @qm: String -> @vm: Ledgers.Vote -> {
-    Nat.is_lt(rm, j) == True{}: Bool
+  @r: Nat -> @from: List<
+    &2,
+    String> -> {
+    Nat.is_le(1n+r1, r) == True{}: Bool
   } -> {
-    Nat.is_le(r1, rm) == True{}: Bool
-  } -> {
-    Cast.of(~mach, s, Ledgers.Where{c, h, rm}, qm) == Some{vm}: Maybe<&2, Ledgers.Vote>
-  } -> {vm == v1: Ledgers.Vote}
+    Vote.allowed.in(~mach, s, c, h, os, x, k, r, from) == True{}: Bool
+  } -> {x == v1: Ledgers.Vote}
 
-# Rounds.last once the node qw that named the last vote is known, with its
-# last vote
-def Rounds.named(
+# Rounds.base at a node f that cast v1 in the round r1, once the last vote l
+# that its pass to the round 1 + p names is known
+def Rounds.base.last(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  +h: U32,
+  +f: String,
+  +p: Nat,
+  +r1: Nat,
+  +v1: Ledgers.Vote,
+  x: Ledgers.Vote,
+  l: Maybe<&2, Ledgers.Last>
+) -> {Last.mine(~mach, f, s, c, h, p) == l: Maybe<&2, Ledgers.Last>}
+  -> {Cast.of(~mach, s, Ledgers.Where{c, h, r1}, f) == Some{v1}: Maybe<&2, Ledgers.Vote>}
+  -> {Nat.is_le(r1, p) == True{}: Bool}
+  -> {Last.from(l, 1n+r1) == False{}: Bool}
+  -> {List.any.if(u2 => Last.is(l, x), Bool.not(Last.in(l, r1))) == True{}: Bool}
+  -> {x == v1: Ledgers.Vote}:
+  match l:
+    case None{}:
+      el => ec => le => ef => eg => Empty.absurd({x == v1: Ledgers.Vote}, Shared.Bool.false_ne_true(
+          %el: {Last.from(_, r1) == True{}: Bool}
+          Mine.from(~mach, s, c, h, f, p, r1, v1)(ec)(le)))
+    case Some{Ledgers.Last{+rl, +vl}}:
+      +el => +ec => le => ef => eg =>
+        +eq = Shared.Nat.le_nlt_eq(r1, rl)(
+          %el: {Last.from(_, r1) == True{}: Bool}
+          Mine.from(~mach, s, c, h, f, p, r1, v1)(ec)(le))(ef)
+        Equal.trans(
+          Ledgers.Vote,
+          x,
+          vl,
+          v1,
+          Equal.sym(Ledgers.Vote, vl, x, Ledgers.Vote.is_eq_sound(vl, x)(
+              %Shared.Nat.is_eq_refl(r1): {List.any.if(u2 => Ledgers.Vote.is_eq(vl, x), Bool.not(_)) == True{}: Bool}
+              %Equal.sym(Nat, r1, rl, eq): {List.any.if(u2 => Ledgers.Vote.is_eq(vl, x), Bool.not(Nat.is_eq(_, r1))) == True{}: Bool}
+              eg)),
+          Shared.Maybe.some_inj(
+            Ledgers.Vote,
+            vl,
+            v1,
+            Equal.trans(
+              Maybe<&2, Ledgers.Vote>,
+              Some{vl},
+              Cast.of(~mach, s, Ledgers.Where{c, h, rl}, f),
+              Some{v1},
+              Equal.sym(
+                Maybe<&2, Ledgers.Vote>,
+                Cast.of(~mach, s, Ledgers.Where{c, h, rl}, f),
+                Some{vl},
+                Mine.cast(~mach, s, c, h, f, p, rl, vl)(el)
+              ),
+              Cast.moved(~mach, s, c, h, f, r1, rl, v1, eq)(ec)
+            )
+          )
+        )
+
+# Rounds.base for a first node f, once its hit in the round r1 (hit) and its
+# pass (m) are known
+def Rounds.base.at(
   ~mach: Machine(),
   ~s: Node<Machine.Q(mach)>,
   ~c: Ledgers.Chain,
   ~rules: Rounds.Rules(~mach, s, c),
   +hd: Head,
   tp: Tip,
-  r1: Nat,
-  v1: Ledgers.Vote,
-  +p: Nat,
-  j: Nat,
-  +rm: Nat,
-  +vm: Ledgers.Vote,
-  +qw: String,
-  +em: {
-    Last.mine(
-      ~mach,
-      qw,
-      s,
-      c,
-      Head.next(hd),
-      p
-    )
-      == Some{Ledgers.Last{rm, vm}}: Maybe<&2, Ledgers.Last>
-  },
-  lt: {Nat.is_lt(p, j) == True{}: Bool},
-  le: {Nat.is_le(r1, rm) == True{}: Bool},
-  ih: Rounds.Below(~mach, s, c, Head.next(hd), r1, v1, j)
-) -> {vm == v1: Ledgers.Vote}:
-  ih(
-    rm
-  )(
-    qw
-  )(
-    vm
-  )(
-    Shared.Nat.le_lt(rm, p, j)(Mine.le(~mach, s, c, Head.next(hd), qw, p, rm, vm)(em))(lt)
-  )(le)(Mine.cast(~mach, s, c, Head.next(hd), qw, p, rm, vm)(em))
-
-# Rounds.round once the last vote m that the passes name is known: it is of
-# the round r1 or later, and the vote x is for its step
-def Rounds.last(
-  ~mach: Machine(),
-  ~s: Node<Machine.Q(mach)>,
-  ~c: Ledgers.Chain,
-  ~rules: Rounds.Rules(~mach, s, c),
-  +hd: Head,
-  +tp: Tip,
   ok: {Head.tip(~mach, s, hd) == Some{tp}: Maybe<&2, Tip>},
-  r1: Nat,
-  v1: Ledgers.Vote,
   +p: Nat,
-  x: Ledgers.Vote,
-  j: Nat,
-  from: List<&2, String>,
-  m: Maybe<&2, Ledgers.Last>
-) -> {
-  Passes.last(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from) == m: Maybe<&2, Ledgers.Last>
-}
-  -> {Last.from(m, r1) == True{}: Bool}
-  -> {Last.is(m, x) == True{}: Bool}
-  -> {Nat.is_lt(p, j) == True{}: Bool}
-  -> Rounds.Below(~mach, s, c, Head.next(hd), r1, v1, j)
-  -> {x == v1: Ledgers.Vote}:
-  match m:
-    case None{}:
-      em => ef => ei => lt => ih => Empty.absurd(
-        {x == v1: Ledgers.Vote},
-        Shared.Bool.false_ne_true(ef)
-      )
-    case Some{Ledgers.Last{+rm, +vm}}:
-      em => ef => ei => lt => ih =>
-        Last.elim(
-          ~mach,
-          {x == v1: Ledgers.Vote},
-          s,
-          Ledgers.Where{c, Head.next(hd), 1n+p},
-          from,
-          Ledgers.Last{rm, vm}
-        )(em)(
-          +qw => ew =>
-            %Ledgers.Vote.is_eq_sound(vm, x)(ei): {_ == v1: Ledgers.Vote}
-            Rounds.named(~mach, ~s, ~c, ~rules, hd, tp, r1, v1, p, j, rm, vm, qw, Equal.sym(Maybe<&2, Ledgers.Last>, Some{Ledgers.Last{rm, vm}}, Last.mine(~mach, qw, s, c, Head.next(hd), p), Rules.last(~mach, ~s, ~c, ~rules, hd, tp, ok)(1n+p)(qw)(Some{Ledgers.Last{rm, vm}})(Passed.some(Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Where{c, Head.next(hd), 1n+p}, qw), Ledgers.Last{rm, vm})(ew))), lt, ef, ih))
-
-# Rounds.round once it is known whether the passes name a vote of the round
-# r1 or later (f)
-def Rounds.pick(
-  ~mach: Machine(),
-  ~s: Node<Machine.Q(mach)>,
-  ~c: Ledgers.Chain,
-  ~rules: Rounds.Rules(~mach, s, c),
-  +hd: Head,
-  +tp: Tip,
-  ok: {Head.tip(~mach, s, hd) == Some{tp}: Maybe<&2, Tip>},
   +r1: Nat,
   +v1: Ledgers.Vote,
-  +p: Nat,
-  +x: Ledgers.Vote,
-  j: Nat,
-  +from: List<&2, String>,
-  f: Bool
-) -> {Last.from(Passes.last(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from), r1) == f: Bool}
+  x: Ledgers.Vote,
+  +f: String,
+  o: String,
+  rest: Maybe<&2, String>,
+  hit: Bool,
+  m: Maybe<&2, Maybe<&2, Ledgers.Last>>
+) -> {Round.hit(~mach, s, c, Head.next(hd), r1, f, v1) == hit: Bool}
   -> {
-    Quorums.Quorum.has(
-      ~Ledgers.Vote,
-      ~Ledgers.Vote.is_eq,
-      Round.ballots(~mach, s, c, Head.next(hd), r1, Tip.owners(tp)),
-      v1
+    Ledgers.State.passed(
+      ~Machine.Q(mach),
+      State.ledger(~mach, s),
+      Ledgers.Where{c, Head.next(hd), 1n+p},
+      f
     )
-      == True{}: Bool
+      == m: Maybe<&2, Maybe<&2, Ledgers.Last>>
   }
-  -> {Nat.is_lt(p, j) == True{}: Bool}
   -> {Nat.is_le(r1, p) == True{}: Bool}
-  -> Rounds.Below(~mach, s, c, Head.next(hd), r1, v1, j)
+  -> {Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, m) == True{}: Bool}
+  -> {Last.from(Passed.last(m), 1n+r1) == False{}: Bool}
   -> {
-    Later.all(
-      Passed.all(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from),
-      Owners.sub(Tip.owners(tp), from),
-      Owners.major(Tip.owners(tp), from),
-      Last.is(Passes.last(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from), x)
+    List.any.if(
+      u2 => Last.is(Passed.last(m), x),
+      Bool.not(Last.in(Passed.last(m), r1))
     )
       == True{}: Bool
   }
+  -> ({rest == Some{o}: Maybe<&2, String>} -> {x == v1: Ledgers.Vote})
+  -> {Voter.if(hit, f, rest) == Some{o}: Maybe<&2, String>}
   -> {x == v1: Ledgers.Vote}:
-  match f:
-    case False{}:
-      ef => hh => lt => le => ih => +al =>
-        Empty.absurd(
-          {x == v1: Ledgers.Vote},
-          Major.meets(
-            ~mach,
-            s,
-            c,
-            Head.next(hd),
-            r1,
-            Tip.owners(tp),
-            from,
-            v1
-          )(
-            hh
-          )(
-            Later.all.b(
-              Passed.all(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from),
-              Owners.sub(Tip.owners(tp), from),
-              Owners.major(Tip.owners(tp), from),
-              Last.is(Passes.last(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from), x)
-            )(al)
-          )(
-            Later.all.c(
-              Passed.all(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from),
-              Owners.sub(Tip.owners(tp), from),
-              Owners.major(Tip.owners(tp), from),
-              Last.is(Passes.last(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from), x)
-            )(al)
-          )(
-            Pass.miss(
-              ~mach,
-              ~s,
-              ~c,
-              ~rules,
-              hd,
-              tp,
-              ok,
-              p,
-              r1,
-              v1,
-              from
-            )(
-              le
-            )(
-              Later.all.a(
-                Passed.all(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from),
-                Owners.sub(Tip.owners(tp), from),
-                Owners.major(Tip.owners(tp), from),
-                Last.is(Passes.last(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from), x)
-              )(al)
-            )(ef)
-          )
-        )
-    case True{}:
-      ef => hh => lt => le => ih => al =>
-        Rounds.last(
+  match hit m:
+    case False{} y:
+      eh => em => le => es => ef => eg => ih => ev => ih(ev)
+    case True{} None{}:
+      eh => em => le => es => ef => eg => ih => ev => Empty.absurd(
+        {x == v1: Ledgers.Vote},
+        Shared.Bool.false_ne_true(es)
+      )
+    case True{} Some{+l}:
+      eh => em => le => es => ef => eg => ih => ev =>
+        Rounds.base.last(
           ~mach,
-          ~s,
-          ~c,
-          ~rules,
-          hd,
-          tp,
-          ok,
+          s,
+          c,
+          Head.next(hd),
+          f,
+          p,
           r1,
           v1,
-          p,
           x,
-          j,
-          from,
-          Passes.last(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from)
+          l
         )(
-          {==}
-        )(
-          ef
-        )(
-          Later.all.d(
-            Passed.all(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from),
-            Owners.sub(Tip.owners(tp), from),
-            Owners.major(Tip.owners(tp), from),
-            Last.is(Passes.last(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from), x)
-          )(al)
-        )(lt)(ih)
+          Equal.sym(
+            Maybe<&2, Ledgers.Last>,
+            l,
+            Last.mine(~mach, f, s, c, Head.next(hd), p),
+            Rules.last(~mach, ~s, ~c, ~rules, hd, tp, ok)(1n+p)(f)(l)(em)
+          )
+        )(Hit.cast(~mach, s, c, Head.next(hd), r1, f, v1)(eh))(le)(ef)(eg)
 
-# Rounds.same at the round r1 itself, once a voter m of the step v1 is known
+# when the passes of the nodes from to the round 1 + p name no vote of a round
+# after r1, and each vote of r1 that they name is for the step x, and one of
+# the nodes (o) cast v1 in r1, then x is v1: the pass of o names its vote of r1
 def Rounds.base(
   ~mach: Machine(),
   ~s: Node<Machine.Q(mach)>,
@@ -13832,89 +13618,37 @@ def Rounds.base(
   ~rules: Rounds.Rules(~mach, s, c),
   +hd: Head,
   +tp: Tip,
-  ok: {Head.tip(~mach, s, hd) == Some{tp}: Maybe<&2, Tip>},
+  +ok: {Head.tip(~mach, s, hd) == Some{tp}: Maybe<&2, Tip>},
+  +p: Nat,
   +r1: Nat,
   +v1: Ledgers.Vote,
-  q: String,
-  x: Ledgers.Vote,
-  m: Maybe<&2, String>
-) -> {Round.voter(~mach, s, c, Head.next(hd), r1, Tip.owners(tp), v1) == m: Maybe<&2, String>}
-  -> {
-    Quorums.Quorum.has(
-      ~Ledgers.Vote,
-      ~Ledgers.Vote.is_eq,
-      Round.ballots(~mach, s, c, Head.next(hd), r1, Tip.owners(tp)),
-      v1
-    )
-      == True{}: Bool
-  }
-  -> {Cast.of(~mach, s, Ledgers.Where{c, Head.next(hd), r1}, q) == Some{x}: Maybe<&2, Ledgers.Vote>}
-  -> {x == v1: Ledgers.Vote}:
-  match m:
-    case None{}:
-      em => hh => e => Empty.absurd(
-        {x == v1: Ledgers.Vote},
-        Has.voter(~mach, s, c, Head.next(hd), r1, Tip.owners(tp), v1)(hh)(em)
-      )
-    case Some{+o}:
-      em => hh => e => Rules.same(
-        ~mach,
-        ~s,
-        ~c,
-        ~rules,
-        hd,
-        tp,
-        ok
-      )(r1)(q)(o)(x)(v1)(e)(Voter.cast(~mach, s, c, Head.next(hd), r1, Tip.owners(tp), v1, o)(em))
-
-# Rounds.same in a round after r1
-def Rounds.step(
-  ~mach: Machine(),
-  ~s: Node<Machine.Q(mach)>,
-  ~c: Ledgers.Chain,
-  ~rules: Rounds.Rules(~mach, s, c),
-  +hd: Head,
-  +tp: Tip,
-  +ok: {Head.tip(~mach, s, hd) == Some{tp}: Maybe<&2, Tip>},
-  +r1: Nat,
-  v1: Ledgers.Vote,
-  r: Nat,
-  +q: String,
   +x: Ledgers.Vote,
-  j: Nat
-) -> {Nat.is_eq(r1, r) == False{}: Bool}
+  from: List<&2, String>,
+  +o: String
+) -> {Nat.is_le(r1, p) == True{}: Bool}
+  -> {Passed.all(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from) == True{}: Bool}
   -> {
-    Quorums.Quorum.has(
-      ~Ledgers.Vote,
-      ~Ledgers.Vote.is_eq,
-      Round.ballots(~mach, s, c, Head.next(hd), r1, Tip.owners(tp)),
-      v1
+    Last.from(
+      Passes.last(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from),
+      1n+r1
     )
-      == True{}: Bool
+      == False{}: Bool
   }
-  -> {Nat.is_lt(r, 1n+j) == True{}: Bool}
-  -> {Nat.is_le(r1, r) == True{}: Bool}
-  -> {Cast.of(~mach, s, Ledgers.Where{c, Head.next(hd), r}, q) == Some{x}: Maybe<&2, Ledgers.Vote>}
-  -> Rounds.Below(~mach, s, c, Head.next(hd), r1, v1, j)
+  -> {Passes.agree(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from, r1, x) == True{}: Bool}
+  -> {Round.voter(~mach, s, c, Head.next(hd), r1, from, v1) == Some{o}: Maybe<&2, String>}
   -> {x == v1: Ledgers.Vote}:
-  match r:
-    case 0n:
-      ne => hh => lt => le => e => ih => Empty.absurd(
+  match from:
+    case Nil{}:
+      le => ea => ef => eg => ev => Empty.absurd(
         {x == v1: Ledgers.Vote},
-        Shared.Bool.false_ne_true(
-          Equal.trans(
-            Bool,
-            False{},
-            Nat.is_eq(r1, 0n),
-            True{},
-            Equal.sym(Bool, Nat.is_eq(r1, 0n), False{}, ne),
-            Equal.cong(Nat, Bool, z => Nat.is_eq(z, 0n), r1, 0n, Shared.Nat.le_zero_eq(r1)(le))
-          )
-        )
+        Shared.Maybe.none_ne_some(String, o, ev)
       )
-    case 1n+(+p):
-      ne => hh => lt => le => e => ih =>
-        Rounds.pick(
+    case Con{+f, +rest}:
+      +le => +ea => +ef => +eg => ev =>
+        +w = {Ledgers.Where{c, Head.next(hd), 1n+p}: Ledgers.Where}
+        +m = Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), w, f)
+        +g = List.any.if(u2 => Last.is(Passed.last(m), x), Bool.not(Last.in(Passed.last(m), r1)))
+        Rounds.base.at(
           ~mach,
           ~s,
           ~c,
@@ -13922,33 +13656,61 @@ def Rounds.step(
           hd,
           tp,
           ok,
-          r1,
-          v1,
           p,
+          r1,
+          v1,
           x,
-          j,
-          Cast.from(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, q),
-          Last.from(
-            Passes.last(
-              ~mach,
-              s,
-              Ledgers.Where{c, Head.next(hd), 1n+p},
-              Cast.from(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, q)
-            ),
-            r1
-          )
+          f,
+          o,
+          Round.voter(~mach, s, c, Head.next(hd), r1, rest, v1),
+          Round.hit(~mach, s, c, Head.next(hd), r1, f, v1),
+          m
         )(
           {==}
         )(
-          hh
+          {==}
         )(
-          lt
+          le
         )(
-          Shared.Nat.le_step(r1, p)(le)(ne)
-        )(ih)(Rules.allow(~mach, ~s, ~c, ~rules, hd, tp, ok)(1n+p)(q)(x)(e))
+          Shared.List.all.if_hit(
+            Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, m),
+            u => Passed.all(~mach, s, w, rest)
+          )(ea)
+        )(
+          Newer.left(Passed.last(m), Passes.last(~mach, s, w, rest), 1n+r1)(ef)
+        )(
+          Shared.List.all.if_hit(g, u => Passes.agree(~mach, s, w, rest, r1, x))(eg)
+        )(
+          e => Rounds.base(
+            ~mach,
+            ~s,
+            ~c,
+            ~rules,
+            hd,
+            tp,
+            ok,
+            p,
+            r1,
+            v1,
+            x,
+            rest,
+            o
+          )(
+            le
+          )(
+            Shared.List.all.if_rest(
+              Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, m),
+              u => Passed.all(~mach, s, w, rest)
+            )(ea)
+          )(
+            Newer.right(Passed.last(m), Passes.last(~mach, s, w, rest), 1n+r1)(ef)
+          )(Shared.List.all.if_rest(g, u => Passes.agree(~mach, s, w, rest, r1, x))(eg))(e)
+        )(ev)
 
-# Rounds.same once it is known whether the round is r1 (b)
-def Rounds.same.at(
+# the passes of a majority of the owners to a round after r1 name a vote of r1
+# or of a later round, when a majority cast the step v1 in r1: a node of both
+# cast v1 in r1, and its pass names its last vote
+def Rounds.named(
   ~mach: Machine(),
   ~s: Node<Machine.Q(mach)>,
   ~c: Ledgers.Chain,
@@ -13956,78 +13718,10 @@ def Rounds.same.at(
   +hd: Head,
   +tp: Tip,
   ok: {Head.tip(~mach, s, hd) == Some{tp}: Maybe<&2, Tip>},
+  p: Nat,
   +r1: Nat,
   +v1: Ledgers.Vote,
-  +r: Nat,
-  +q: String,
-  +x: Ledgers.Vote,
-  j: Nat,
-  b: Bool
-) -> {Nat.is_eq(r1, r) == b: Bool}
-  -> {
-    Quorums.Quorum.has(
-      ~Ledgers.Vote,
-      ~Ledgers.Vote.is_eq,
-      Round.ballots(~mach, s, c, Head.next(hd), r1, Tip.owners(tp)),
-      v1
-    )
-      == True{}: Bool
-  }
-  -> {Nat.is_lt(r, 1n+j) == True{}: Bool}
-  -> {Nat.is_le(r1, r) == True{}: Bool}
-  -> {Cast.of(~mach, s, Ledgers.Where{c, Head.next(hd), r}, q) == Some{x}: Maybe<&2, Ledgers.Vote>}
-  -> Rounds.Below(~mach, s, c, Head.next(hd), r1, v1, j)
-  -> {x == v1: Ledgers.Vote}:
-  match b:
-    case True{}:
-      eb => hh => lt => le => e => ih =>
-        Rounds.base(
-          ~mach,
-          ~s,
-          ~c,
-          ~rules,
-          hd,
-          tp,
-          ok,
-          r1,
-          v1,
-          q,
-          x,
-          Round.voter(~mach, s, c, Head.next(hd), r1, Tip.owners(tp), v1)
-        )(
-          {==}
-        )(
-          hh
-        )(
-          Cast.moved(
-            ~mach,
-            s,
-            c,
-            Head.next(hd),
-            q,
-            r,
-            r1,
-            x,
-            Equal.sym(Nat, r1, r, Shared.Nat.is_eq_sound(r1, r)(eb))
-          )(e)
-        )
-    case False{}:
-      eb => hh => lt => le => e => ih =>
-        Rounds.step(~mach, ~s, ~c, ~rules, hd, tp, ok, r1, v1, r, q, x, j)(eb)(hh)(lt)(le)(e)(ih)
-
-# each vote of a round from r1 on, below the round k, is for the step that a
-# majority cast in r1
-def Rounds.same(
-  ~mach: Machine(),
-  ~s: Node<Machine.Q(mach)>,
-  ~c: Ledgers.Chain,
-  ~rules: Rounds.Rules(~mach, s, c),
-  +hd: Head,
-  +tp: Tip,
-  +ok: {Head.tip(~mach, s, hd) == Some{tp}: Maybe<&2, Tip>},
-  k: Nat,
-  +r1: Nat,
-  +v1: Ledgers.Vote
+  +from: List<&2, String>
 ) -> {
   Quorums.Quorum.has(
     ~Ledgers.Vote,
@@ -14036,15 +13730,180 @@ def Rounds.same(
     v1
   )
     == True{}: Bool
-} -> Rounds.Below(~mach, s, c, Head.next(hd), r1, v1, k):
-  match k:
-    case 0n:
-      hh => rm => qm => vm => lt => le => e => Empty.absurd(
-        {vm == v1: Ledgers.Vote},
-        Shared.Nat.lt_zero(rm)(lt)
+}
+  -> {Nat.is_le(r1, p) == True{}: Bool}
+  -> {Passed.all(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from) == True{}: Bool}
+  -> {Owners.sub(Tip.owners(tp), from) == True{}: Bool}
+  -> {Owners.major(Tip.owners(tp), from) == True{}: Bool}
+  -> {
+    Last.from(
+      Passes.last(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from),
+      r1
+    )
+      == False{}: Bool
+  }
+  -> Empty:
+  hh => le => ea => es => em => ef =>
+    Major.meets(
+      ~mach,
+      s,
+      c,
+      Head.next(hd),
+      r1,
+      Tip.owners(tp),
+      from,
+      v1
+    )(hh)(es)(em)(Pass.miss(~mach, ~s, ~c, ~rules, hd, tp, ok, p, r1, v1, from)(le)(ea)(ef))
+
+# Rounds.same once the highest round rm that the passes name is known: by
+# whether it is after r1 (b), and by the node of from that cast v1 in r1 (mv)
+def Rounds.same.at(
+  ~mach: Machine(),
+  ~s: Node<Machine.Q(mach)>,
+  ~c: Ledgers.Chain,
+  ~rules: Rounds.Rules(~mach, s, c),
+  hd: Head,
+  tp: Tip,
+  ok: {Head.tip(~mach, s, hd) == Some{tp}: Maybe<&2, Tip>},
+  +r1: Nat,
+  v1: Ledgers.Vote,
+  x: Ledgers.Vote,
+  j: Nat,
+  p: Nat,
+  from: List<&2, String>,
+  +rm: Nat,
+  b: Bool,
+  mv: Maybe<&2, String>
+) -> {Nat.is_le(1n+r1, rm) == b: Bool}
+  -> {
+    Last.from(Passes.last(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from), 1n+r1) == b: Bool
+  }
+  -> {Round.voter(~mach, s, c, Head.next(hd), r1, from, v1) == mv: Maybe<&2, String>}
+  -> {
+    Quorums.Quorum.has(
+      ~Ledgers.Vote,
+      ~Ledgers.Vote.is_eq,
+      Round.ballots(~mach, s, c, Head.next(hd), r1, Tip.owners(tp)),
+      v1
+    )
+      == True{}: Bool
+  }
+  -> {Nat.is_le(r1, p) == True{}: Bool}
+  -> {Nat.is_le(r1, rm) == True{}: Bool}
+  -> {Passed.all(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from) == True{}: Bool}
+  -> {Owners.sub(Tip.owners(tp), from) == True{}: Bool}
+  -> {Owners.major(Tip.owners(tp), from) == True{}: Bool}
+  -> {Passes.agree(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from, rm, x) == True{}: Bool}
+  -> {
+    Vote.allowed.in(
+      ~mach,
+      s,
+      c,
+      Head.next(hd),
+      Tip.owners(tp),
+      x,
+      j,
+      rm,
+      Act.from(Passes.act(~mach, s, c, Head.next(hd), 1n+p, from, rm))
+    )
+      == True{}: Bool
+  }
+  -> Rounds.After(~mach, s, c, Head.next(hd), Tip.owners(tp), r1, v1, x, j)
+  -> {x == v1: Ledgers.Vote}:
+  match b mv:
+    case True{} y:
+      eb => el => ev => hh => le => lm => ea => es => em => eg => er => ih => ih(
+        rm
+      )(Act.from(Passes.act(~mach, s, c, Head.next(hd), 1n+p, from, rm)))(eb)(er)
+    case False{} None{}:
+      eb => el => ev => hh => le => lm => ea => es => em => eg => er => ih => Empty.absurd(
+        {x == v1: Ledgers.Vote},
+        Major.meets(~mach, s, c, Head.next(hd), r1, Tip.owners(tp), from, v1)(hh)(es)(em)(ev)
       )
-    case 1n+(+j):
-      +hh => +rm => qm => vm => lt => le => e =>
+    case False{} Some{o}:
+      eb => el => ev => hh => le => lm => ea => es => em => eg => er => ih =>
+        Rounds.base(~mach, ~s, ~c, ~rules, hd, tp, ok, p, r1, v1, x, from, o)(le)(ea)(el)(
+          %Equal.sym(Nat, r1, rm, Shared.Nat.le_nlt_eq(r1, rm)(lm)(eb)): {Passes.agree(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from, _, x) == True{}: Bool}
+          eg)(ev)
+
+# Rounds.same in a round 1 + p, once the last vote m of the highest round that
+# the passes name is known, and whether it is of r1 or of a later round (f)
+def Rounds.same.top(
+  ~mach: Machine(),
+  ~s: Node<Machine.Q(mach)>,
+  ~c: Ledgers.Chain,
+  ~rules: Rounds.Rules(~mach, s, c),
+  +hd: Head,
+  +tp: Tip,
+  ok: {Head.tip(~mach, s, hd) == Some{tp}: Maybe<&2, Tip>},
+  +r1: Nat,
+  +v1: Ledgers.Vote,
+  +x: Ledgers.Vote,
+  +j: Nat,
+  +p: Nat,
+  +from: List<&2, String>,
+  m: Maybe<&2, Ledgers.Last>,
+  f: Bool
+) -> {
+  m == Passes.last(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from): Maybe<&2, Ledgers.Last>
+}
+  -> {Last.from(m, r1) == f: Bool}
+  -> {
+    Quorums.Quorum.has(
+      ~Ledgers.Vote,
+      ~Ledgers.Vote.is_eq,
+      Round.ballots(~mach, s, c, Head.next(hd), r1, Tip.owners(tp)),
+      v1
+    )
+      == True{}: Bool
+  }
+  -> {Nat.is_le(r1, p) == True{}: Bool}
+  -> {Passed.all(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from) == True{}: Bool}
+  -> {Owners.sub(Tip.owners(tp), from) == True{}: Bool}
+  -> {Owners.major(Tip.owners(tp), from) == True{}: Bool}
+  -> {
+    Top.all(
+      m,
+      Passes.agree(~mach, s, Ledgers.Where{c, Head.next(hd), 1n+p}, from, Last.round(m), x),
+      Act.is(Passes.act(~mach, s, c, Head.next(hd), 1n+p, from, Last.round(m)), x),
+      Vote.allowed.in(
+        ~mach,
+        s,
+        c,
+        Head.next(hd),
+        Tip.owners(tp),
+        x,
+        j,
+        Last.round(m),
+        Act.from(Passes.act(~mach, s, c, Head.next(hd), 1n+p, from, Last.round(m)))
+      )
+    )
+      == True{}: Bool
+  }
+  -> Rounds.After(~mach, s, c, Head.next(hd), Tip.owners(tp), r1, v1, x, j)
+  -> {x == v1: Ledgers.Vote}:
+  match m f:
+    case None{} y:
+      em => ef => hh => le => ea => es => ej => et => ih => Empty.absurd(
+        {x == v1: Ledgers.Vote},
+        Rounds.named(~mach, ~s, ~c, ~rules, hd, tp, ok, p, r1, v1, from)(hh)(le)(ea)(es)(ej)(
+          %em: {Last.from(_, r1) == False{}: Bool}
+          {==})
+      )
+    case Some{Ledgers.Last{rm, vm}} False{}:
+      em => ef => hh => le => ea => es => ej => et => ih => Empty.absurd(
+        {x == v1: Ledgers.Vote},
+        Rounds.named(~mach, ~s, ~c, ~rules, hd, tp, ok, p, r1, v1, from)(hh)(le)(ea)(es)(ej)(
+          %em: {Last.from(_, r1) == False{}: Bool}
+          ef)
+      )
+    case Some{Ledgers.Last{+rm, vm}} True{}:
+      em => ef => hh => le => ea => es => ej => +et => ih =>
+        +w = {Ledgers.Where{c, Head.next(hd), 1n+p}: Ledgers.Where}
+        +a = Passes.act(~mach, s, c, Head.next(hd), 1n+p, from, rm)
+        +ag = Passes.agree(~mach, s, w, from, rm, x)
+        +ia = Act.is(a, x)
+        +rec = Vote.allowed.in(~mach, s, c, Head.next(hd), Tip.owners(tp), x, j, rm, Act.from(a))
         Rounds.same.at(
           ~mach,
           ~s,
@@ -14055,14 +13914,152 @@ def Rounds.same(
           ok,
           r1,
           v1,
-          rm,
-          qm,
-          vm,
+          x,
           j,
-          Nat.is_eq(r1, rm)
-        )({==})(hh)(lt)(le)(e)(Rounds.same(~mach, ~s, ~c, ~rules, hd, tp, ok, j, r1, v1)(hh))
+          p,
+          from,
+          rm,
+          Nat.is_le(1n+r1, rm),
+          Round.voter(~mach, s, c, Head.next(hd), r1, from, v1)
+        )({==})(
+          %em: {Last.from(_, 1n+r1) == Nat.is_le(1n+r1, rm): Bool}
+          {==})(
+          {==}
+        )(
+          hh
+        )(
+          le
+        )(
+          ef
+        )(
+          ea
+        )(
+          es
+        )(
+          ej
+        )(
+          Shared.List.all.if_hit(ag, u5 => List.all.if(u6 => rec, ia))(et)
+        )(
+          Shared.List.all.if_rest(
+            ia,
+            u6 => rec
+          )(Shared.List.all.if_rest(ag, u5 => List.all.if(u6 => rec, ia))(et))
+        )(ih)
 
-# Rounds.later once a voter m of the step v2 in the round r2 is known
+# a step that the rules of rounds allow in a round after r1 is the step that a
+# majority cast in r1: the passes that allow it name a vote of r1 or later (a
+# node of both majorities cast in r1). When the highest round that they name is
+# r1, that node's vote is among the named votes of r1, which are all for the
+# step. When it is later, the step was allowed there: by induction on k
+def Rounds.same(
+  ~mach: Machine(),
+  ~s: Node<Machine.Q(mach)>,
+  ~c: Ledgers.Chain,
+  ~rules: Rounds.Rules(~mach, s, c),
+  +hd: Head,
+  +tp: Tip,
+  +ok: {Head.tip(~mach, s, hd) == Some{tp}: Maybe<&2, Tip>},
+  +r1: Nat,
+  +v1: Ledgers.Vote,
+  +x: Ledgers.Vote,
+  k: Nat,
+  r: Nat,
+  +from: List<&2, String>
+) -> {
+  Quorums.Quorum.has(
+    ~Ledgers.Vote,
+    ~Ledgers.Vote.is_eq,
+    Round.ballots(~mach, s, c, Head.next(hd), r1, Tip.owners(tp)),
+    v1
+  )
+    == True{}: Bool
+}
+  -> {Nat.is_le(1n+r1, r) == True{}: Bool}
+  -> {Vote.allowed.in(~mach, s, c, Head.next(hd), Tip.owners(tp), x, k, r, from) == True{}: Bool}
+  -> {x == v1: Ledgers.Vote}:
+  match k r:
+    case 0n 0n:
+      hh => lt => al => Empty.absurd({x == v1: Ledgers.Vote}, Shared.Bool.false_ne_true(lt))
+    case 1n+j 0n:
+      hh => lt => al => Empty.absurd({x == v1: Ledgers.Vote}, Shared.Bool.false_ne_true(lt))
+    case 0n 1n+p:
+      hh => lt => al => Empty.absurd({x == v1: Ledgers.Vote}, Shared.Bool.false_ne_true(al))
+    case 1n+(+j) 1n+(+p):
+      +hh => lt => +al =>
+        +w = {Ledgers.Where{c, Head.next(hd), 1n+p}: Ledgers.Where}
+        +top = Passes.last(~mach, s, w, from)
+        +a = Passes.act(~mach, s, c, Head.next(hd), 1n+p, from, Last.round(top))
+        +pa = Passed.all(~mach, s, w, from)
+        +sub = Owners.sub(Tip.owners(tp), from)
+        +maj = Owners.major(Tip.owners(tp), from)
+        +t = Top.all(
+          top,
+          Passes.agree(~mach, s, w, from, Last.round(top), x),
+          Act.is(a, x),
+          Vote.allowed.in(
+            ~mach,
+            s,
+            c,
+            Head.next(hd),
+            Tip.owners(tp),
+            x,
+            j,
+            Last.round(top),
+            Act.from(a)
+          )
+        )
+        Rounds.same.top(
+          ~mach,
+          ~s,
+          ~c,
+          ~rules,
+          hd,
+          tp,
+          ok,
+          r1,
+          v1,
+          x,
+          j,
+          p,
+          from,
+          top,
+          Last.from(top, r1)
+        )(
+          {==}
+        )(
+          {==}
+        )(
+          hh
+        )(
+          lt
+        )(
+          Later.all.a(pa, sub, maj, t)(al)
+        )(
+          Later.all.b(pa, sub, maj, t)(al)
+        )(
+          Later.all.c(pa, sub, maj, t)(al)
+        )(
+          Later.all.d(pa, sub, maj, t)(al)
+        )(
+          r2 => +from2 => Rounds.same(
+            ~mach,
+            ~s,
+            ~c,
+            ~rules,
+            hd,
+            tp,
+            ok,
+            r1,
+            v1,
+            x,
+            j,
+            r2,
+            from2
+          )(hh)
+        )
+
+# Rounds.later once it is known whether r1 is before r2 (b), with a voter m of
+# the step v2 in the round r2
 def Rounds.later.at(
   ~mach: Machine(),
   ~s: Node<Machine.Q(mach)>,
@@ -14070,41 +14067,90 @@ def Rounds.later.at(
   ~rules: Rounds.Rules(~mach, s, c),
   +hd: Head,
   +tp: Tip,
-  ok: {Head.tip(~mach, s, hd) == Some{tp}: Maybe<&2, Tip>},
-  r1: Nat,
+  +ok: {Head.tip(~mach, s, hd) == Some{tp}: Maybe<&2, Tip>},
+  +r1: Nat,
   +r2: Nat,
-  v1: Ledgers.Vote,
+  +v1: Ledgers.Vote,
   +v2: Ledgers.Vote,
+  b: Bool,
   m: Maybe<&2, String>
-) -> {Round.voter(~mach, s, c, Head.next(hd), r2, Tip.owners(tp), v2) == m: Maybe<&2, String>}
+) -> {Nat.is_le(1n+r1, r2) == b: Bool}
+  -> {Round.voter(~mach, s, c, Head.next(hd), r2, Tip.owners(tp), v2) == m: Maybe<&2, String>}
   -> {Nat.is_le(r1, r2) == True{}: Bool}
   -> {
-    Quorums.Quorum.has(
-      ~Ledgers.Vote,
-      ~Ledgers.Vote.is_eq,
-      Round.ballots(~mach, s, c, Head.next(hd), r1, Tip.owners(tp)),
-      v1
+    Ledgers.State.decide(
+      ~Machine.Q(mach),
+      State.ledger(~mach, s),
+      Ledgers.Where{c, Head.next(hd), r1},
+      Tip.owners(tp)
     )
-      == True{}: Bool
+      == Some{v1}: Maybe<&2, Ledgers.Vote>
   }
   -> {
-    Quorums.Quorum.has(
-      ~Ledgers.Vote,
-      ~Ledgers.Vote.is_eq,
-      Round.ballots(~mach, s, c, Head.next(hd), r2, Tip.owners(tp)),
-      v2
+    Ledgers.State.decide(
+      ~Machine.Q(mach),
+      State.ledger(~mach, s),
+      Ledgers.Where{c, Head.next(hd), r2},
+      Tip.owners(tp)
     )
-      == True{}: Bool
+      == Some{v2}: Maybe<&2, Ledgers.Vote>
   }
   -> {v2 == v1: Ledgers.Vote}:
-  match m:
-    case None{}:
-      em => le => h1 => h2 => Empty.absurd(
-        {v2 == v1: Ledgers.Vote},
-        Has.voter(~mach, s, c, Head.next(hd), r2, Tip.owners(tp), v2)(h2)(em)
+  match b m:
+    case False{} y:
+      eb => em => le => d1 => d2 => Shared.Maybe.some_inj(
+        Ledgers.Vote,
+        v2,
+        v1,
+        Equal.trans(
+          Maybe<&2, Ledgers.Vote>,
+          Some{v2},
+          Ledgers.State.decide(
+            ~Machine.Q(mach),
+            State.ledger(~mach, s),
+            Ledgers.Where{c, Head.next(hd), r2},
+            Tip.owners(tp)
+          ),
+          Some{v1},
+          Equal.sym(
+            Maybe<&2, Ledgers.Vote>,
+            Ledgers.State.decide(
+              ~Machine.Q(mach),
+              State.ledger(~mach, s),
+              Ledgers.Where{c, Head.next(hd), r2},
+              Tip.owners(tp)
+            ),
+            Some{v2},
+            d2
+          ),
+          (
+            %Shared.Nat.le_nlt_eq(r1, r2)(le)(eb): {Ledgers.State.decide(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Where{c, Head.next(hd), _}, Tip.owners(tp)) == Some{v1}: Maybe<&2, Ledgers.Vote>}
+            d1)
+        )
       )
-    case Some{+o}:
-      em => le => h1 => h2 =>
+    case True{} None{}:
+      eb => em => le => d1 => d2 => Empty.absurd(
+        {v2 == v1: Ledgers.Vote},
+        Has.voter(
+          ~mach,
+          s,
+          c,
+          Head.next(hd),
+          r2,
+          Tip.owners(tp),
+          v2
+        )(
+          Quorums.Quorum.major_has(
+            ~Ledgers.Vote,
+            ~Ledgers.Vote.is_eq,
+            ~Ledgers.Vote.laws(),
+            Round.ballots(~mach, s, c, Head.next(hd), r2, Tip.owners(tp)),
+            v2
+          )(d2)
+        )(em)
+      )
+    case True{} Some{+o}:
+      eb => em => le => d1 => d2 =>
         Rounds.same(
           ~mach,
           ~s,
@@ -14113,20 +14159,33 @@ def Rounds.later.at(
           hd,
           tp,
           ok,
-          1n+r2,
           r1,
-          v1
+          v1,
+          v2,
+          r2,
+          r2,
+          Cast.from(~mach, s, Ledgers.Where{c, Head.next(hd), r2}, o)
         )(
-          h1
+          Quorums.Quorum.major_has(
+            ~Ledgers.Vote,
+            ~Ledgers.Vote.is_eq,
+            ~Ledgers.Vote.laws(),
+            Round.ballots(~mach, s, c, Head.next(hd), r1, Tip.owners(tp)),
+            v1
+          )(d1)
         )(
-          r2
+          eb
         )(
-          o
-        )(
-          v2
-        )(
-          Shared.Nat.lt_succ(r2)
-        )(le)(Voter.cast(~mach, s, c, Head.next(hd), r2, Tip.owners(tp), v2, o)(em))
+          Rules.allow(
+            ~mach,
+            ~s,
+            ~c,
+            ~rules,
+            hd,
+            tp,
+            ok
+          )(r2)(o)(v2)(Voter.cast(~mach, s, c, Head.next(hd), r2, Tip.owners(tp), v2, o)(em))
+        )
 
 # a round decides what an earlier round of its height decided
 def Rounds.later(
@@ -14139,7 +14198,7 @@ def Rounds.later(
   ok: {Head.tip(~mach, s, hd) == Some{tp}: Maybe<&2, Tip>},
   +r1: Nat,
   +r2: Nat,
-  +v1: Ledgers.Vote,
+  v1: Ledgers.Vote,
   +v2: Ledgers.Vote
 ) -> {Nat.is_le(r1, r2) == True{}: Bool}
   -> {
@@ -14161,41 +14220,21 @@ def Rounds.later(
       == Some{v2}: Maybe<&2, Ledgers.Vote>
   }
   -> {v2 == v1: Ledgers.Vote}:
-  le => d1 => d2 =>
-    Rounds.later.at(
-      ~mach,
-      ~s,
-      ~c,
-      ~rules,
-      hd,
-      tp,
-      ok,
-      r1,
-      r2,
-      v1,
-      v2,
-      Round.voter(~mach, s, c, Head.next(hd), r2, Tip.owners(tp), v2)
-    )(
-      {==}
-    )(
-      le
-    )(
-      Quorums.Quorum.major_has(
-        ~Ledgers.Vote,
-        ~Ledgers.Vote.is_eq,
-        ~Ledgers.Vote.laws(),
-        Round.ballots(~mach, s, c, Head.next(hd), r1, Tip.owners(tp)),
-        v1
-      )(d1)
-    )(
-      Quorums.Quorum.major_has(
-        ~Ledgers.Vote,
-        ~Ledgers.Vote.is_eq,
-        ~Ledgers.Vote.laws(),
-        Round.ballots(~mach, s, c, Head.next(hd), r2, Tip.owners(tp)),
-        v2
-      )(d2)
-    )
+  Rounds.later.at(
+    ~mach,
+    ~s,
+    ~c,
+    ~rules,
+    hd,
+    tp,
+    ok,
+    r1,
+    r2,
+    v1,
+    v2,
+    Nat.is_le(1n+r1, r2),
+    Round.voter(~mach, s, c, Head.next(hd), r2, Tip.owners(tp), v2)
+  )({==})({==})
 
 # Rounds.one once it is known whether r1 is at most r2 (b)
 def Rounds.one.at(

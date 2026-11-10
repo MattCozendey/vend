@@ -1605,6 +1605,33 @@ def Nat.le_step(
       h => k => h
     case 1n+b 1n+q:
       h => k => Nat.le_step(b, q)(h)(k)
+
+# a number that is at most another, and that is not below it, is that number
+def Nat.le_nlt_eq(
+  a: Nat,
+  b: Nat
+) -> {Nat.is_le(a, b) == True{}: Bool} -> {Nat.is_le(1n+a, b) == False{}: Bool} -> {a == b: Nat}:
+  match a b:
+    case 0n 0n:
+      h => k => {==}
+    case 0n 1n+q:
+      h => k => Empty.absurd(
+        {0n == 1n+q: Nat},
+        Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            Nat.is_le(0n, q),
+            True{},
+            Equal.sym(Bool, Nat.is_le(0n, q), False{}, k),
+            Nat.le_zero(q)
+          )
+        )
+      )
+    case 1n+p 0n:
+      h => k => Empty.absurd({1n+p == 0n: Nat}, Bool.false_ne_true(h))
+    case 1n+p 1n+q:
+      h => k => Equal.cong(Nat, Nat, z => 1n+z, p, q, Nat.le_nlt_eq(p, q)(h)(k))
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
