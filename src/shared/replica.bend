@@ -1447,7 +1447,11 @@ def Wait.of(~mach: Machine(), s: Node<Machine.Q(mach)>, c: Ledgers.Chain) -> Lis
   )
 
 # the requests of the line c that wait for a step, as they came
-def Wait.order(~mach: Machine(), s: Node<Machine.Q(mach)>, c: Ledgers.Chain) -> List<&2, Ledgers.Id>:
+def Wait.order(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  c: Ledgers.Chain
+) -> List<&2, Ledgers.Id>:
   List.reverse(&2, Ledgers.Id, Wait.of(~mach, s, c))
 
 # ws with the requests qs waiting at the key k: a line with no waiting request
@@ -1721,7 +1725,13 @@ def Root.same(a: Maybe<&2, Hashes.Hash>, b: Maybe<&2, Hashes.Hash>) -> Bool:
 # the node n is free to cast a ballot at the place w of a line at the tip t:
 # n is an owner, and n cast none there. A node reads this before it runs the
 # requests that wait, so a node that cannot cast runs none
-def Cast.free(~mach: Machine(), +n: String, s: Node<Machine.Q(mach)>, w: Ledgers.Where, t: Tip) -> Bool:
+def Cast.free(
+  ~mach: Machine(),
+  +n: String,
+  s: Node<Machine.Q(mach)>,
+  w: Ledgers.Where,
+  t: Tip
+) -> Bool:
   List.all.if(
     v => Maybe.is_none(
       &2,
@@ -2439,7 +2449,15 @@ def Cast.round(
   Shared.Bool.when(
     Node<Machine.Q(mach)>,
     Cast.free(~mach, n, s, w, t),
-    u => Cast.plan(~mach, ~kern, n, w, th, Plan.of(~mach, ~kern, n, s, c, w, t, th, os, Owners.turn(os, U32.add(next, U32.from_nat(r)))), s),
+    u => Cast.plan(
+      ~mach,
+      ~kern,
+      n,
+      w,
+      th,
+      Plan.of(~mach, ~kern, n, s, c, w, t, th, os, Owners.turn(os, U32.add(next, U32.from_nat(r)))),
+      s
+    ),
     u => s
   )
 
@@ -5353,7 +5371,17 @@ def Plan.lead.grows(
     s,
     Nat.is_eq(Where.round(w), 0n),
     Plan.own(~mach, ~Lawful.kernel(mach, lawf), s, c, t, []),
-    Plan.later(~mach, ~Lawful.kernel(mach, lawf), s, c, t, th, os, Passes.of(~mach, s, w, os), Passes.last(~mach, s, w, Passes.of(~mach, s, w, os))),
+    Plan.later(
+      ~mach,
+      ~Lawful.kernel(mach, lawf),
+      s,
+      c,
+      t,
+      th,
+      os,
+      Passes.of(~mach, s, w, os),
+      Passes.last(~mach, s, w, Passes.of(~mach, s, w, os))
+    ),
     Plan.own.grows(~mach, ~lawf, s, c, t, []),
     Plan.later.grows(
       ~mach,
@@ -5472,7 +5500,18 @@ def Cast.round.grows(
   +os = Tip.owners(t)
   +r = Round.mine(~mach, n, s, c, next, Round.seen(~mach, s, c, next))
   +w = {Ledgers.Where{c, next, r}: Ledgers.Where}
-  +p = Plan.of(~mach, ~Lawful.kernel(mach, lawf), n, s, c, w, t, th, os, Owners.turn(os, U32.add(next, U32.from_nat(r))))
+  +p = Plan.of(
+    ~mach,
+    ~Lawful.kernel(mach, lawf),
+    n,
+    s,
+    c,
+    w,
+    t,
+    th,
+    os,
+    Owners.turn(os, U32.add(next, U32.from_nat(r)))
+  )
   Grows.when(
     ~mach,
     s,
@@ -12805,7 +12844,7 @@ def Rounds.last(
   ~rules: Rounds.Rules(~mach, s, c),
   +hd: Head,
   +tp: Tip,
-  +ok: {Head.tip(~mach, s, hd) == Some{tp}: Maybe<&2, Tip>},
+  ok: {Head.tip(~mach, s, hd) == Some{tp}: Maybe<&2, Tip>},
   r1: Nat,
   v1: Ledgers.Vote,
   +p: Nat,
@@ -14458,12 +14497,7 @@ def Wait.keeps.if(
   List.contains(
     ~Ledgers.Id,
     ~Ledgers.Id.is_eq,
-    Bool.pick(
-      List<&2, Ledgers.Id>,
-      b,
-      j <> Wait.of(~mach, s, c),
-      Wait.of(~mach, s, c2)
-    ),
+    Bool.pick(List<&2, Ledgers.Id>, b, j <> Wait.of(~mach, s, c), Wait.of(~mach, s, c2)),
     i
   )
     == True{}: Bool
@@ -14520,7 +14554,7 @@ def Wait.keeps(
 # a request waits on its line once it waits there
 def Wait.adds(
   ~mach: Machine(),
-  +s: Node<Machine.Q(mach)>,
+  s: Node<Machine.Q(mach)>,
   +c: Ledgers.Chain,
   +j: Ledgers.Id
 ) -> {
@@ -14552,12 +14586,7 @@ def Wait.adds(
     List.contains(
       ~Ledgers.Id,
       ~Ledgers.Id.is_eq,
-      Bool.pick(
-        List<&2, Ledgers.Id>,
-        _,
-        j <> Wait.of(~mach, s, c),
-        Wait.of(~mach, s, c)
-      ),
+      Bool.pick(List<&2, Ledgers.Id>, _, j <> Wait.of(~mach, s, c), Wait.of(~mach, s, c)),
       j
     )
       == True{}: Bool
@@ -19067,7 +19096,7 @@ def Take.asks.adds(
   time: String,
   +r: Ledgers.Id,
   +l: Maybe<&2, String>,
-  +ask: Machine.Q(mach),
+  ask: Machine.Q(mach),
   ea: {Machine.arrival(mach)(ask) == Arrival.Waits{r, l}: Arrival}
 ) -> {
   Ledgers.State.get(
@@ -19103,7 +19132,12 @@ def Take.asks.adds(
   match pre:
     case Nil{}:
       e =>
-        %Equal.sym(Arrival, Machine.arrival(mach)(ask), Arrival.Waits{r, l}, ea): {
+        %Equal.sym(
+          Arrival,
+          Machine.arrival(mach)(ask),
+          Arrival.Waits{r, l},
+          ea
+        ): {
           List.contains(
             ~Ledgers.Id,
             ~Ledgers.Id.is_eq,
@@ -19132,23 +19166,23 @@ def Take.asks.adds(
             == True{}: Bool
         }
         Take.asks.waits(
-        ~mach,
-        ~kern,
-        post,
-        old,
-        Shared.Bool.when(
-          Node<Machine.Q(mach)>,
-          Maybe.is_none(
-            &2,
-            Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-            Ledgers.State.get(~Machine.Q(mach), old, Ledgers.Slot.ask(i))
+          ~mach,
+          ~kern,
+          post,
+          old,
+          Shared.Bool.when(
+            Node<Machine.Q(mach)>,
+            Maybe.is_none(
+              &2,
+              Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+              Ledgers.State.get(~Machine.Q(mach), old, Ledgers.Slot.ask(i))
+            ),
+            u => Arrive.at(~mach, ~kern, s, i, Arrival.Waits{r, l}),
+            u => s
           ),
-          u => Arrive.at(~mach, ~kern, s, i, Arrival.Waits{r, l}),
-          u => s
-        ),
-        Line.chain(r, l),
-        i
-      )(
+          Line.chain(r, l),
+          i
+        )(
         %Equal.sym(Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>, Ledgers.State.get(~Machine.Q(mach), old, Ledgers.Slot.ask(i)), None{}, e): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Wait.of(~mach, Shared.Bool.when(Node<Machine.Q(mach)>, Maybe.is_none(&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, _), u => Arrive.at(~mach, ~kern, s, i, Arrival.Waits{r, l}), u => s), Line.chain(r, l)), i) == True{}: Bool}
         Wait.adds(~mach, Node.follow(~mach, s, r, l), Line.chain(r, l), i))
     case Con{Cells.One{Ledgers.Entry.Ask{j, t, q}}, rest}:
@@ -19202,7 +19236,9 @@ law Node.take_waits:
         Node.reads(~mach, t),
         Ledgers.Slot.ask(i)
       )
-        == Some{Cells.One{Ledgers.Entry.Ask{i, time, ask}}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+        == Some{
+          Cells.One{Ledgers.Entry.Ask{i, time, ask}}
+        }: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
     }
     -> {
       Ledgers.State.get(
@@ -19227,44 +19263,22 @@ def Node.take_waits(mach, kern, s, t, i, time, ask, r, l):
   l1 = Ledgers.State.take(~Machine.Q(mach), State.ledger(~mach, s), sent)
   +s1 = State.led(~mach, s, l1)
   cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, sent)
-  +s2 = Take.asks(
-    ~mach,
-    ~kern,
-    cs,
-    State.ledger(~mach, s),
-    s1
-  )
+  +s2 = Take.asks(~mach, ~kern, cs, State.ledger(~mach, s), s1)
   +bs = Ballots.of(
     ~mach,
     Tries.Trie.values(
       Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-      Ledgers.State.missing(
-        ~Machine.Q(mach),
-        ~Machine.same(mach),
-        t,
-        State.ledger(~mach, s)
-      )
+      Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
     )
   )
-  cell = {
-    Cells.One{
-      Ledgers.Entry.Ask{i, time, ask}
-    }: Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>
-  }
+  cell = {Cells.One{Ledgers.Entry.Ask{i, time, ask}}: Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>}
   ea => es => eb =>
     %Wait.same(
       ~mach,
       s2,
       Sealed.take(~mach, ~kern, bs, s2),
       Line.chain(r, l),
-      Each.waiting(
-        ~mach,
-        ~kern,
-        List.length(&2, Ledgers.Ballot, bs),
-        bs,
-        Pending.of(bs),
-        s2
-      )
+      Each.waiting(~mach, ~kern, List.length(&2, Ledgers.Ballot, bs), bs, Pending.of(bs), s2)
     ): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, _, i) == True{}: Bool}
     %Equal.sym(
       List<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
@@ -19273,7 +19287,8 @@ def Node.take_waits(mach, kern, s, t, i, time, ask, r, l):
         &2,
         Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
         Tries.Trie.before(Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, sent, Ledgers.Slot.ask(i)),
-        cell <> Tries.Trie.after(Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, sent, Ledgers.Slot.ask(i))
+        cell
+          <> Tries.Trie.after(Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, sent, Ledgers.Slot.ask(i))
       ),
       Tries.Trie.values_around(
         Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
@@ -19285,17 +19300,7 @@ def Node.take_waits(mach, kern, s, t, i, time, ask, r, l):
       List.contains(
         ~Ledgers.Id,
         ~Ledgers.Id.is_eq,
-        Wait.of(
-          ~mach,
-          Take.asks(
-            ~mach,
-            ~kern,
-            _,
-            State.ledger(~mach, s),
-            s1
-          ),
-          Line.chain(r, l)
-        ),
+        Wait.of(~mach, Take.asks(~mach, ~kern, _, State.ledger(~mach, s), s1), Line.chain(r, l)),
         i
       )
         == True{}: Bool

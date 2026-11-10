@@ -37,9 +37,6 @@ def Change.owners(c: Requests.Change) -> Maybe<&2, List<&2, String>>:
 # vector, the newest version of each other line that the content came from. 5
 # (in a store's tree): the first tip of each of its branches. 6: the line's
 # owner group. 7 (in a store's tree): the names of its groups.
-def Spec.Key.res(n):
-  0 <> Resources.Name.code(n, [])
-
 # the key of the members of the group g
 def Key.group(g: String) -> List<&2, U32>:
   2 <> Codes.Code.text(g, [])
@@ -52,53 +49,9 @@ def Key.owner() -> List<&2, U32>:
 def Key.groups() -> List<&2, U32>:
   [7]
 
-def Spec.Key.clash(n):
-  3 <> Resources.Name.code(n, [])
-
 # the key of the line c in a version vector
 def Key.vector(c: Ledgers.Chain) -> List<&2, U32>:
   4 <> Ledgers.Chain.code(c, [])
-
-def Spec.Res.code(m):
-  Codes.Code.maybe(~Ropes.Root, ~Ropes.Root.code, m, [])
-
-# the value of a resource, flattened: the root of its content, when it is
-# there
-def Res.of.read(m: Maybe<&2, Codes.Read<Maybe<&2, Ropes.Root>>>) -> Maybe<&2, Ropes.Root>:
-  match m:
-    case Some{Codes.Read{x, Nil{}}}:
-      x
-    case _:
-      None{}
-
-# the root of the content in the value ws of a resource, when it is there
-def Res.read(ws: List<&2, U32>) -> Maybe<&2, Ropes.Root>:
-  Res.of.read(Codes.Code.maybe.read(~Ropes.Root, ~Ropes.Root.code.read, ws))
-
-# the root in the value m of a resource, if any
-def Res.found(m: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Ropes.Root>:
-  Maybe.bind(&2, List<&2, U32>, Ropes.Root, m, ws => Res.read(ws))
-
-def Spec.Res.find(s, h, n):
-  Maybe.bind(
-    &2,
-    Maybe<&2, List<&2, U32>>,
-    Maybe<&2, Ropes.Root>,
-    Replicas.Node.find(~Requests.Ask.machine(), s, h, Spec.Key.res(n)),
-    m => Some{Res.found(m)}
-  )
-
-def Spec.Res.root(s, h, n):
-  Maybe.bind(
-    &2,
-    List<&2, U32>,
-    Ropes.Root,
-    Replicas.Node.get(~Requests.Ask.machine(), s, h, Spec.Key.res(n)),
-    ws => Res.read(ws)
-  )
-
-def Spec.Roots.same(a, b):
-  Shared.Maybe.is_eq(~Ropes.Root, ~Ropes.Root.is_eq, a, b)
 
 def Spec.Content.of(b):
   Requests.Content.Root{Ropes.Put.root(Replicas.Bytes.rope(b))}
@@ -418,7 +371,7 @@ def Res.binding(b: Trees.Binding) -> Maybe<&2, Resources.Name>:
     case Trees.Binding{Con{0, k}, ws}:
       Shared.Bool.when(
         Maybe<&2, Resources.Name>,
-        Maybe.is_some(&2, Ropes.Root, Res.read(ws)),
+        Maybe.is_some(&2, Ropes.Root, Spec.Res.read(ws)),
         u => Replicas.Read.whole(Resources.Name, Resources.Name.code.read(k)),
         u => None{}
       )
@@ -597,8 +550,8 @@ def Spec.Group.nodes(s, h, g):
 # is one of them, or is inside one. One search finds it, from a node whose
 # successors are the members (the empty key: no member has it)
 def Group.loops.any(
-  +s: Replicas.Node<Requests.Ask>,
-  +h: Maybe<&2, Hashes.Hash>,
+  s: Replicas.Node<Requests.Ask>,
+  h: Maybe<&2, Hashes.Hash>,
   g: String,
   ms: List<&2, Requests.Member>
 ) -> Bool:
@@ -670,20 +623,6 @@ def Judge.when(
 ) -> Maybe<&2, Replicas.Verdict<Requests.Ask>>:
   Shared.Bool.when(Maybe<&2, Replicas.Verdict<Requests.Ask>>, b, k, u => Judge.refuse())
 
-def Spec.Content.root(s, n, c):
-  match c:
-    case Requests.Content.Root{x}:
-      Some{x}
-    case Requests.Content.Of{w}:
-      Spec.Res.root(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, Some{w}), n)
-
-def Spec.Content.find(s, n, c):
-  match c:
-    case Requests.Content.Root{x}:
-      Some{Some{x}}
-    case Requests.Content.Of{w}:
-      Spec.Res.find(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, Some{w}), n)
-
 def Spec.Judge.write(s, n, base, c, h):
   Judge.then(
     Judge.ready_maybe(s, base),
@@ -720,19 +659,6 @@ def Spec.Judge.write(s, n, base, c, h):
         )
       )
     )
-  )
-
-# the value of the clash that the merge of the version f opened (a settled
-# clash holds no words)
-def Clash.code(f: Ledgers.Id) -> List<&2, U32>:
-  Ledgers.Id.code(f, [])
-
-def Spec.Clash.open(s, h, n, f):
-  Shared.Maybe.is_eq(
-    ~List<&2, U32>,
-    ~Shared.List.is_eq(~U32, ~U32.is_eq),
-    Replicas.Node.get(~Requests.Ask.machine(), s, h, Spec.Key.clash(n)),
-    Some{Clash.code(f)}
   )
 
 # the version that the request m merged, when m is a merge on the branch b of
@@ -774,7 +700,7 @@ def Clash.find(
             ~List<&2, U32>,
             ~Shared.List.is_eq(~U32, ~U32.is_eq),
             x,
-            Some{Clash.code(f)}
+            Some{Spec.Clash.code(f)}
           )
         }
       )
@@ -865,7 +791,7 @@ def Merge.put(
         Replicas.Work<Requests.Ask>,
         Replicas.Work<Requests.Ask>,
         Replicas.Work.set(~Requests.Ask.machine(), w, Spec.Key.res(n), Spec.Res.code(o)),
-        y => Replicas.Work.set(~Requests.Ask.machine(), y, Spec.Key.clash(n), Clash.code(f))
+        y => Replicas.Work.set(~Requests.Ask.machine(), y, Spec.Key.clash(n), Spec.Clash.code(f))
       )
 
 # w with the resource n merged: what the merge of the base b, ours o and theirs
@@ -1146,13 +1072,6 @@ def Make.first(
         t,
         Replicas.Work.keep(~Requests.Ask.machine(), w, [Replicas.Tip.words(t)])
       )
-
-def Spec.Own.tree(s, l, at, h):
-  match l at:
-    case Some{b} Some{v}:
-      Replicas.Node.root_of(~Requests.Ask.machine(), s, Some{v})
-    case x y:
-      h
 
 # the version at is a version of the store r: at the place m
 def Own.at(r: Ledgers.Id, m: Maybe<&2, Replicas.Place>) -> Maybe<&2, Bool>:
@@ -1481,7 +1400,7 @@ def Step.on.of(
       Step.branch(r, i, st, b, at)
     case Route.Judge{}:
       s = Replicas.Run.state(~Requests.Ask.machine(), r)
-      +t = Replicas.Run.tip(~Requests.Ask.machine(), r)
+      t = Replicas.Run.tip(~Requests.Ask.machine(), r)
       Replicas.Step.judged(
         ~Requests.Ask.machine(),
         r,
@@ -1762,30 +1681,6 @@ def Spec.Node.members(s, r, g):
 def Spec.Node.own(s, r, l, g):
   Requests.Ask.On{r, l, Requests.Change.Own{g, Store.head(s, r), Node.nodes(s, r, g)}}
 
-# the resource m of the branch x of the store st is the resource n of the
-# branch b of the store r
-def Draft.is_on(
-  r: Ledgers.Id,
-  b: String,
-  n: Resources.Name,
-  st: Ledgers.Id,
-  x: String,
-  m: Resources.Name
-) -> Bool:
-  List.all.if(
-    u => List.all.if(v => Resources.Name.is_eq(m, n), String.eq(x, b)),
-    Ledgers.Id.is_eq(st, r)
-  )
-
-def Spec.Draft.content(r, b, n, q):
-  match q:
-    case Requests.Ask.On{st, Some{x}, Requests.Change.Write{m, base, c}}:
-      Shared.Maybe.when(Requests.Content, Draft.is_on(r, b, n, st, x, m), u => Some{c})
-    case Requests.Ask.On{st, Some{x}, Requests.Change.Resolve{k, m, c}}:
-      Shared.Maybe.when(Requests.Content, Draft.is_on(r, b, n, st, x, m), u => Some{c})
-    case _:
-      None{}
-
 # a pending write: when its writer asked for it (the time, then the request
 # ID, as a key), and the content that it gives
 type Draft is Data:
@@ -1977,7 +1872,7 @@ def Clash.binding(b: Trees.Binding, f: Ledgers.Id) -> Maybe<&2, Resources.Name>:
     case Trees.Binding{Con{3, k}, ws}:
       Shared.Maybe.when(
         Resources.Name,
-        Shared.List.is_eq(~U32, ~U32.is_eq, ws, Clash.code(f)),
+        Shared.List.is_eq(~U32, ~U32.is_eq, ws, Spec.Clash.code(f)),
         u => Replicas.Read.whole(Resources.Name, Resources.Name.code.read(k))
       )
     case _:
@@ -2137,25 +2032,6 @@ def Spec.Node.answer(s, e, q):
       Ledgers.Slot.ask(i)
     )
   )
-
-def Spec.Answer.follows(a, m):
-  match a m:
-    case Spec.Answer.Pending{} Some{b}:
-      True{}
-    case Spec.Answer.Written{v} Some{Spec.Answer.Written{w}}:
-      Ledgers.Id.is_eq(v, w)
-    case Spec.Answer.Written{v} Some{Spec.Answer.Conflicted{w}}:
-      True{}
-    case Spec.Answer.Conflicted{v} Some{Spec.Answer.Written{w}}:
-      True{}
-    case Spec.Answer.Conflicted{v} Some{Spec.Answer.Conflicted{w}}:
-      Ledgers.Id.is_eq(v, w)
-    case Spec.Answer.Stale{} Some{Spec.Answer.Stale{}}:
-      True{}
-    case Spec.Answer.Refused{} Some{Spec.Answer.Refused{}}:
-      True{}
-    case x y:
-      False{}
 
 # Listings
 # --------
@@ -2413,7 +2289,7 @@ def Branch.key(b: Spec.Branch) -> List<&2, Bool>:
 # used, with the resources that use the resource m, if any, at any depth: one
 # search, once for each resource
 def Used.put(
-  +us: Spec.Uses,
+  us: Spec.Uses,
   m: Maybe<&2, Resources.Name>,
   +used: Tries.Trie<Tries.Trie<Unit>>
 ) -> Tries.Trie<Tries.Trie<Unit>>:
@@ -2468,7 +2344,7 @@ def Spec.Seen.of(s, b):
 
 def Spec.Touch.holds(g, t):
   match g t:
-    case Spec.Seen{+s, gb, +us, ls, used} Spec.Touch{+v, +c, b, +u}:
+    case Spec.Seen{+s, gb, us, ls, used} Spec.Touch{+v, +c, b, +u}:
       List.all.if(
         w => List.all.if(
           w => List.all.if(
@@ -2564,7 +2440,7 @@ def Impact.of(
   match es:
     case Nil{}:
       []
-    case Con{+b, r}:
+    case Con{b, r}:
       +g = Spec.Seen.of(s, b)
       List.append(
         &2,
@@ -2940,9 +2816,9 @@ def Grown.merge.put(
         ~Requests.Ask.machine(),
         Replicas.Work.state(~Requests.Ask.machine(), w),
         Replicas.Work.set(~Requests.Ask.machine(), w, Spec.Key.res(n), Spec.Res.code(o)),
-        y => Replicas.Work.set(~Requests.Ask.machine(), y, Spec.Key.clash(n), Clash.code(f)),
+        y => Replicas.Work.set(~Requests.Ask.machine(), y, Spec.Key.clash(n), Spec.Clash.code(f)),
         Replicas.Grown.set(~Requests.Ask.machine(), w, Spec.Key.res(n), Spec.Res.code(o)),
-        y => Replicas.Grown.set(~Requests.Ask.machine(), y, Spec.Key.clash(n), Clash.code(f))
+        y => Replicas.Grown.set(~Requests.Ask.machine(), y, Spec.Key.clash(n), Spec.Clash.code(f))
       )
 
 # a resource merged only grows a node
@@ -3683,12 +3559,7 @@ def Verdict.change(
   +h: Maybe<&2, Hashes.Hash>,
   os: List<&2, String>
 ) -> {
-  Replicas.Verdict.after(
-    ~Requests.Ask.machine(),
-    s,
-    Judge.change(s, r, l, c, h)
-  )
-    == True{}: Bool
+  Replicas.Verdict.after(~Requests.Ask.machine(), s, Judge.change(s, r, l, c, h)) == True{}: Bool
 }:
   match l c:
     case None{} Requests.Change.Group{+g, +ms}:
@@ -3952,7 +3823,13 @@ def On.of.grows(
         r,
         i,
         Change.owners(ch),
-        Judge.change(Replicas.Run.state(~Requests.Ask.machine(), r), st, l, ch, Replicas.Tip.content(Replicas.Run.tip(~Requests.Ask.machine(), r)))
+        Judge.change(
+          Replicas.Run.state(~Requests.Ask.machine(), r),
+          st,
+          l,
+          ch,
+          Replicas.Tip.content(Replicas.Run.tip(~Requests.Ask.machine(), r))
+        )
       )(
         Verdict.change(
           Replicas.Run.state(~Requests.Ask.machine(), r),
@@ -4186,7 +4063,13 @@ def On.of.kept(
         r,
         i,
         Change.owners(ch),
-        Judge.change(Replicas.Run.state(~Requests.Ask.machine(), r), st, l, ch, Replicas.Tip.content(Replicas.Run.tip(~Requests.Ask.machine(), r))),
+        Judge.change(
+          Replicas.Run.state(~Requests.Ask.machine(), r),
+          st,
+          l,
+          ch,
+          Replicas.Tip.content(Replicas.Run.tip(~Requests.Ask.machine(), r))
+        ),
         k2,
         v
       )(
@@ -4379,7 +4262,13 @@ def On.of.outs(
         r,
         i,
         Change.owners(ch),
-        Judge.change(Replicas.Run.state(~Requests.Ask.machine(), r), st, l, ch, Replicas.Tip.content(Replicas.Run.tip(~Requests.Ask.machine(), r)))
+        Judge.change(
+          Replicas.Run.state(~Requests.Ask.machine(), r),
+          st,
+          l,
+          ch,
+          Replicas.Tip.content(Replicas.Run.tip(~Requests.Ask.machine(), r))
+        )
       )
 
 # a change of a line has an outcome
@@ -4900,7 +4789,7 @@ def Merge.put.other(
         Spec.Key.res(n),
         v,
         Replicas.Work.set(~Requests.Ask.machine(), w, Spec.Key.res(m), Spec.Res.code(o2)),
-        y => Replicas.Work.set(~Requests.Ask.machine(), y, Spec.Key.clash(m), Clash.code(f))
+        y => Replicas.Work.set(~Requests.Ask.machine(), y, Spec.Key.clash(m), Spec.Clash.code(f))
       )(
         Replicas.Set.kept.work(
           ~Requests.Ask.machine(),
@@ -4916,7 +4805,7 @@ def Merge.put.other(
           ~Requests.Ask.machine(),
           y,
           Spec.Key.clash(m),
-          Clash.code(f),
+          Spec.Clash.code(f),
           Spec.Key.res(n),
           v,
           Clash.apart(m, n)
@@ -5633,7 +5522,7 @@ def Spec.Clash.shut(s, h, n, f):
             ~List<&2, U32>,
             ~Shared.List.is_eq(~U32, ~U32.is_eq),
             _,
-            Some{Clash.code(Ledgers.Id{w, q})}
+            Some{Spec.Clash.code(Ledgers.Id{w, q})}
           )
             == False{}: Bool
         }
@@ -5654,7 +5543,9 @@ def Spec.Clash.shut(s, h, n, f):
 # ------
 
 # the value of a resource reads back
-def Res.round(m: Maybe<&2, Ropes.Root>) -> {Res.read(Spec.Res.code(m)) == m: Maybe<&2, Ropes.Root>}:
+def Res.round(
+  m: Maybe<&2, Ropes.Root>
+) -> {Spec.Res.read(Spec.Res.code(m)) == m: Maybe<&2, Ropes.Root>}:
   %Equal.sym(
     Maybe<&2, Codes.Read<Maybe<&2, Ropes.Root>>>,
     Codes.Code.maybe.read(
@@ -5671,7 +5562,7 @@ def Res.round(m: Maybe<&2, Ropes.Root>) -> {Res.read(Spec.Res.code(m)) == m: May
       m,
       []
     )
-  ): {Res.of.read(_) == m: Maybe<&2, Ropes.Root>}
+  ): {Spec.Res.of.read(_) == m: Maybe<&2, Ropes.Root>}
   {==}
 
 # a verdict that takes, after a verdict, is the verdict of what comes next
@@ -5971,7 +5862,14 @@ def Spec.Judge.write_reads(s, n, base, c, h, h2, s3, m):
         )
       )
     ): {
-      Maybe.bind(&2, List<&2, U32>, Ropes.Root, _, ws => Res.read(ws)) == m: Maybe<&2, Ropes.Root>
+      Maybe.bind(
+        &2,
+        List<&2, U32>,
+        Ropes.Root,
+        _,
+        ws => Spec.Res.read(ws)
+      )
+        == m: Maybe<&2, Ropes.Root>
     }
     Res.round(m)
 

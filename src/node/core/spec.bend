@@ -3,14 +3,14 @@ import ../../shared/replica.bend as Replicas
 import ../../shared/shared/formats.bend as Formats
 import ../../shared/shared/ledger.bend as Ledgers
 import ../../shared/shared/rope.bend as Ropes
-import ../../shared/shared/shared/shared/cell.bend as Cells
+import ../../shared/shared/shared/reach.bend as Reaches
+import ../../shared/shared/shared/shared/code.bend as Codes
 import ../../shared/shared/shared/shared/hash.bend as Hashes
 import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../../shared/shared/shared/shared/trie.bend as Tries
 import ../../shared/shared/shared/text.bend as Texts
 import ../shared/requests.bend as Requests
 import ../shared/shared/resources.bend as Resources
-import ../../shared/shared/shared/reach.bend as Reaches
 
 # The pure core of a Vend Node (README): what it holds, what it answers, and
 # the laws about both. transport/spec.bend carries it over IO.
@@ -39,43 +39,6 @@ type Point is Data:
   Point.At{version: Ledgers.Id}
   Point.Head{store: Ledgers.Id, branch: String}
   Point.Mark{store: Ledgers.Id, branch: String, mark: String}
-
-# the key of the resource n
-law Key.res:
-  for n: Resources.Name
-  List<&2, U32>
-
-# the key of the clash of the resource n
-law Key.clash:
-  for n: Resources.Name
-  List<&2, U32>
-
-# the value of a resource whose content is under the root m (none: removed)
-law Res.code:
-  for m: Maybe<&2, Ropes.Root>
-  List<&2, U32>
-
-# the root of the content of the resource n in the tree whose root is h, or
-# that it is not there (none: the node lacks a node of the tree)
-law Res.find:
-  for s: Replicas.Node<Requests.Ask>
-  for h: Maybe<&2, Hashes.Hash>
-  for n: Resources.Name
-  Maybe<&2, Maybe<&2, Ropes.Root>>
-
-# the root of the content of the resource n in the tree whose root is h (none:
-# it is not there)
-law Res.root:
-  for s: Replicas.Node<Requests.Ask>
-  for h: Maybe<&2, Hashes.Hash>
-  for n: Resources.Name
-  Maybe<&2, Ropes.Root>
-
-# a and b are the same root, or both none: the same content
-law Roots.same:
-  for a: Maybe<&2, Ropes.Root>
-  for b: Maybe<&2, Ropes.Root>
-  Bool
 
 # what a merge keeps of a resource: the content of one side (none: removed),
 # new bytes, or a clash
@@ -113,22 +76,6 @@ law Group.nodes:
   for g: String
   List<&2, String>
 
-# the root that the content c gives the resource n (none: the version holds
-# none)
-law Content.root:
-  for +s: Replicas.Node<Requests.Ask>
-  for n: Resources.Name
-  for c: Requests.Content
-  Maybe<&2, Ropes.Root>
-
-# the root that the content c gives the resource n, or that it gives none
-# (none: the node lacks a node of the version's tree)
-law Content.find:
-  for +s: Replicas.Node<Requests.Ask>
-  for n: Resources.Name
-  for c: Requests.Content
-  Maybe<&2, Maybe<&2, Ropes.Root>>
-
 # the verdict on a write of the resource n since base, with the content c, at
 # the tree h: take it when n holds at h what it held at base. It waits for a
 # node that it lacks: it does not refuse on what it cannot read
@@ -139,15 +86,6 @@ law Judge.write:
   for +c: Requests.Content
   for +h: Maybe<&2, Hashes.Hash>
   Maybe<&2, Replicas.Verdict<Requests.Ask>>
-
-# the clash that the merge of the version f opened in the resource n is open
-# in the tree h
-law Clash.open:
-  for s: Replicas.Node<Requests.Ask>
-  for h: Maybe<&2, Hashes.Hash>
-  for n: Resources.Name
-  for f: Ledgers.Id
-  Bool
 
 # the trees of a resolve of the resource n with the root m, in the tree h:
 # the resource holds m, and its clash is shut (its key holds no request)
@@ -186,16 +124,6 @@ law Move.work:
   for h: Maybe<&2, Hashes.Hash>
   Maybe<&2, Replicas.Work<Requests.Ask>>
 
-# the store tree in which an Own of the line l, at the content h, reads its
-# group: a store reads its own content; a branch, the content of the version
-# at of its store
-law Own.tree:
-  for s: Replicas.Node<Requests.Ask>
-  for l: Maybe<&2, String>
-  for at: Maybe<&2, Ledgers.Id>
-  for h: Maybe<&2, Hashes.Hash>
-  Maybe<&2, Hashes.Hash>
-
 # whether the owners of the line l of the store r take an Own of the group g
 # with the owners os, at the tree h: os are the nodes inside g in the store
 # tree that it names (Own.tree; none: wait for its step, or for the groups)
@@ -212,15 +140,6 @@ law Own.takes:
 # the kernel of Vend
 law Ask.kernel:
   Replicas.Kernel(Requests.Ask.machine())
-
-# the content that the request q gives the resource n on the branch b of the
-# store r, when it writes it there
-law Draft.content:
-  for r: Ledgers.Id
-  for b: String
-  for n: Resources.Name
-  for q: Requests.Ask
-  Maybe<&2, Requests.Content>
 
 # the content of the newest pending write of the resource n on the branch b
 # of the store r that the writer w asked for, if there is one. The requests
@@ -264,16 +183,6 @@ law Node.answer:
   for e: Replicas.Envelope
   for q: Requests.Ask
   Maybe<&2, Answer>
-
-# the answer m may come after the answer a as the node goes on: a request
-# that a node answers stays answered; Pending may become any answer; Stale
-# and Refused are final; a taken change stays taken, as the same version or
-# the same merge (Written and Conflicted may follow each other: a merge is
-# Conflicted while resources clash)
-law Answer.follows:
-  for a: Answer
-  for m: Maybe<&2, Answer>
-  Bool
 
 # a branch: its store and its name
 type Branch is Data:
@@ -442,6 +351,189 @@ law Vend.may_stop:
   for v: Vend
   for force: Bool
   Bool
+
+# What the claims are stated in
+# ------------------------------
+# Defs that a reader of a claim must see: each is its own meaning.
+
+# the answer m may come after the answer a as the node goes on: a request
+# that a node answers stays answered; Pending may become any answer; Stale
+# and Refused are final; a taken change stays taken, as the same version or
+# the same merge (Written and Conflicted may follow each other: a merge is
+# Conflicted while resources clash)
+def Answer.follows(a: Answer, m: Maybe<&2, Answer>) -> Bool:
+  match a m:
+    case Answer.Pending{} Some{b}:
+      True{}
+    case Answer.Written{v} Some{Answer.Written{w}}:
+      Ledgers.Id.is_eq(v, w)
+    case Answer.Written{v} Some{Answer.Conflicted{w}}:
+      True{}
+    case Answer.Conflicted{v} Some{Answer.Written{w}}:
+      True{}
+    case Answer.Conflicted{v} Some{Answer.Conflicted{w}}:
+      Ledgers.Id.is_eq(v, w)
+    case Answer.Stale{} Some{Answer.Stale{}}:
+      True{}
+    case Answer.Refused{} Some{Answer.Refused{}}:
+      True{}
+    case x y:
+      False{}
+
+# a and b are the same root, or both none: the same content
+def Roots.same(a: Maybe<&2, Ropes.Root>, b: Maybe<&2, Ropes.Root>) -> Bool:
+  Shared.Maybe.is_eq(~Ropes.Root, ~Ropes.Root.is_eq, a, b)
+
+# the key of the resource n
+def Key.res(n: Resources.Name) -> List<&2, U32>:
+  0 <> Resources.Name.code(n, [])
+
+# the key of the clash of the resource n
+def Key.clash(n: Resources.Name) -> List<&2, U32>:
+  3 <> Resources.Name.code(n, [])
+
+# the value of a resource whose content is under the root m (none: removed)
+def Res.code(m: Maybe<&2, Ropes.Root>) -> List<&2, U32>:
+  Codes.Code.maybe(~Ropes.Root, ~Ropes.Root.code, m, [])
+
+# the value of a resource, flattened: the root of its content, when it is
+# there
+def Res.of.read(m: Maybe<&2, Codes.Read<Maybe<&2, Ropes.Root>>>) -> Maybe<&2, Ropes.Root>:
+  match m:
+    case Some{Codes.Read{x, Nil{}}}:
+      x
+    case _:
+      None{}
+
+# the root of the content in the value ws of a resource, when it is there
+def Res.read(ws: List<&2, U32>) -> Maybe<&2, Ropes.Root>:
+  Res.of.read(Codes.Code.maybe.read(~Ropes.Root, ~Ropes.Root.code.read, ws))
+
+# the root in the value m of a resource, if any
+def Res.found(m: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Ropes.Root>:
+  Maybe.bind(&2, List<&2, U32>, Ropes.Root, m, ws => Res.read(ws))
+
+# the root of the content of the resource n in the tree whose root is h, or
+# that it is not there (none: the node lacks a node of the tree)
+def Res.find(
+  s: Replicas.Node<Requests.Ask>,
+  h: Maybe<&2, Hashes.Hash>,
+  n: Resources.Name
+) -> Maybe<&2, Maybe<&2, Ropes.Root>>:
+  Maybe.bind(
+    &2,
+    Maybe<&2, List<&2, U32>>,
+    Maybe<&2, Ropes.Root>,
+    Replicas.Node.find(~Requests.Ask.machine(), s, h, Key.res(n)),
+    m => Some{Res.found(m)}
+  )
+
+# the root of the content of the resource n in the tree whose root is h (none:
+# it is not there)
+def Res.root(
+  s: Replicas.Node<Requests.Ask>,
+  h: Maybe<&2, Hashes.Hash>,
+  n: Resources.Name
+) -> Maybe<&2, Ropes.Root>:
+  Maybe.bind(
+    &2,
+    List<&2, U32>,
+    Ropes.Root,
+    Replicas.Node.get(~Requests.Ask.machine(), s, h, Key.res(n)),
+    ws => Res.read(ws)
+  )
+
+# the root that the content c gives the resource n (none: the version holds
+# none)
+def Content.root(
+  +s: Replicas.Node<Requests.Ask>,
+  n: Resources.Name,
+  c: Requests.Content
+) -> Maybe<&2, Ropes.Root>:
+  match c:
+    case Requests.Content.Root{x}:
+      Some{x}
+    case Requests.Content.Of{w}:
+      Res.root(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, Some{w}), n)
+
+# the root that the content c gives the resource n, or that it gives none
+# (none: the node lacks a node of the version's tree)
+def Content.find(
+  +s: Replicas.Node<Requests.Ask>,
+  n: Resources.Name,
+  c: Requests.Content
+) -> Maybe<&2, Maybe<&2, Ropes.Root>>:
+  match c:
+    case Requests.Content.Root{x}:
+      Some{Some{x}}
+    case Requests.Content.Of{w}:
+      Res.find(s, Replicas.Node.root_of(~Requests.Ask.machine(), s, Some{w}), n)
+
+# the store tree in which an Own of the line l, at the content h, reads its
+# group: a store reads its own content; a branch, the content of the version
+# at of its store
+def Own.tree(
+  s: Replicas.Node<Requests.Ask>,
+  l: Maybe<&2, String>,
+  at: Maybe<&2, Ledgers.Id>,
+  h: Maybe<&2, Hashes.Hash>
+) -> Maybe<&2, Hashes.Hash>:
+  match l at:
+    case Some{b} Some{v}:
+      Replicas.Node.root_of(~Requests.Ask.machine(), s, Some{v})
+    case x y:
+      h
+
+# the value of the clash that the merge of the version f opened (a settled
+# clash holds no words)
+def Clash.code(f: Ledgers.Id) -> List<&2, U32>:
+  Ledgers.Id.code(f, [])
+
+# the clash that the merge of the version f opened in the resource n is open
+# in the tree h
+def Clash.open(
+  s: Replicas.Node<Requests.Ask>,
+  h: Maybe<&2, Hashes.Hash>,
+  n: Resources.Name,
+  f: Ledgers.Id
+) -> Bool:
+  Shared.Maybe.is_eq(
+    ~List<&2, U32>,
+    ~Shared.List.is_eq(~U32, ~U32.is_eq),
+    Replicas.Node.get(~Requests.Ask.machine(), s, h, Key.clash(n)),
+    Some{Clash.code(f)}
+  )
+
+# the resource m of the branch x of the store st is the resource n of the
+# branch b of the store r
+def Draft.is_on(
+  r: Ledgers.Id,
+  b: String,
+  n: Resources.Name,
+  st: Ledgers.Id,
+  x: String,
+  m: Resources.Name
+) -> Bool:
+  List.all.if(
+    u => List.all.if(v => Resources.Name.is_eq(m, n), String.eq(x, b)),
+    Ledgers.Id.is_eq(st, r)
+  )
+
+# the content that the request q gives the resource n on the branch b of the
+# store r, when it writes it there
+def Draft.content(
+  r: Ledgers.Id,
+  b: String,
+  n: Resources.Name,
+  q: Requests.Ask
+) -> Maybe<&2, Requests.Content>:
+  match q:
+    case Requests.Ask.On{st, Some{x}, Requests.Change.Write{m, base, c}}:
+      Shared.Maybe.when(Requests.Content, Draft.is_on(r, b, n, st, x, m), u => Some{c})
+    case Requests.Ask.On{st, Some{x}, Requests.Change.Resolve{k, m, c}}:
+      Shared.Maybe.when(Requests.Content, Draft.is_on(r, b, n, st, x, m), u => Some{c})
+    case _:
+      None{}
 
 # Laws
 # ----

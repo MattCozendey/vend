@@ -3410,7 +3410,12 @@ def Graph.new() -> Graph:
 def Graph.succ(g: Graph, k: List<&2, Bool>) -> List<&2, List<&2, Bool>>:
   match g:
     case Graph{e, ns}:
-      Maybe.default(&2, List<&2, List<&2, Bool>>, Tries.Trie.get(List<&2, List<&2, Bool>>, e, k), [])
+      Maybe.default(
+        &2,
+        List<&2, List<&2, Bool>>,
+        Tries.Trie.get(List<&2, List<&2, Bool>>, e, k),
+        []
+      )
 
 # the nodes of g that have successors
 def Graph.nodes(g: Graph) -> List<&2, List<&2, Bool>>:
@@ -3455,5 +3460,5 @@ def Graph.back(ks: List<&2, List<&2, Bool>>, +t: List<&2, Bool>, g: Graph) -> Gr
       Graph.back(r, t, Graph.link(g, k, t))
 
 # every node that a search of g finds from the node x, at any depth
-def Graph.reach(+g: Graph, x: List<&2, Bool>) -> Tries.Trie<Unit>:
+def Graph.reach(g: Graph, x: List<&2, Bool>) -> Tries.Trie<Unit>:
   Reach.all(~Graph, ~Graph.succ, ~Graph.nodes, g, x)
