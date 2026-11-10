@@ -1385,18 +1385,48 @@ def Maybe.when(-B: Data, b: Bool, k: Unit -> Maybe<&2, B>) -> Maybe<&2, B>:
     case False{}:
       None{}
 
-# a "when" that gives a value has a condition that holds
-def Maybe.when_holds(
+# a "when" that gives a value holds
+def Maybe.when_hit(
   -B: Data,
   b: Bool,
   -k: Unit -> Maybe<&2, B>,
-  -x: B
-) -> {Maybe.when(B, b, k) == Some{x}: Maybe<&2, B>} -> {b == True{}: Bool}:
+  -y: B
+) -> {Maybe.when(B, b, k) == Some{y}: Maybe<&2, B>} -> {b == True{}: Bool}:
   match b:
     case True{}:
       e => {==}
     case False{}:
-      e => Empty.absurd({False{} == True{}: Bool}, Maybe.none_ne_some(B, x, e))
+      e => Empty.absurd({False{} == True{}: Bool}, Maybe.none_ne_some(B, y, e))
+
+# a "when" that gives a value gives what its rest gives
+def Maybe.when_rest(
+  -B: Data,
+  b: Bool,
+  -k: Unit -> Maybe<&2, B>,
+  -y: B
+) -> {Maybe.when(B, b, k) == Some{y}: Maybe<&2, B>} -> {k(Unit{}) == Some{y}: Maybe<&2, B>}:
+  match b:
+    case True{}:
+      e => e
+    case False{}:
+      e => Empty.absurd({k(Unit{}) == Some{y}: Maybe<&2, B>}, Maybe.none_ne_some(B, y, e))
+
+# a read m then k that gives x: m gives a value, and k gives x of it
+def Maybe.bind_some(
+  -A: Data,
+  -B: Data,
+  -R: Type,
+  m: Maybe<&2, A>,
+  -k: A -> Maybe<&2, B>,
+  -x: B
+) -> {
+  Maybe.bind(&2, A, B, m, k) == Some{x}: Maybe<&2, B>
+} -> (@a: A -> {m == Some{a}: Maybe<&2, A>} -> {k(a) == Some{x}: Maybe<&2, B>} -> R) -> R:
+  match m:
+    case Some{a}:
+      e => f => f(a)({==})(e)
+    case None{}:
+      e => f => Empty.absurd(R, Maybe.none_ne_some(B, x, e))
 
 # List equality
 # -------------
@@ -1576,10 +1606,6 @@ def List.all2(~A: Data, ~B: Data, ~r: A -> B -> Bool, xs: List<&2, A>, ys: List<
       False{}
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
-# no number is less than zero
-def Nat.lt_zero(a: Nat) -> {Nat.is_lt(a, 0n) == True{}: Bool} -> Empty:
-  h => Bool.false_ne_true(Nat.lt_pos(a, 0n)(h))
-
 # a number at most zero is zero
 def Nat.le_zero_eq(a: Nat) -> {Nat.is_le(a, 0n) == True{}: Bool} -> {a == 0n: Nat}:
   match a:
@@ -1667,14 +1693,6 @@ def Nat.nlt_le(
     case 1n+p 1n+q:
       h => Nat.nlt_le(p, q)(h)
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
-
-# a number is less than its successor
-def Nat.lt_succ(a: Nat) -> {Nat.is_lt(a, 1n+a) == True{}: Bool}:
-  match a:
-    case 0n:
-      {==}
-    case 1n+p:
-      Nat.lt_succ(p)
 
 # a number is at most its sum with another
 def Nat.le_add(y: Nat, +m: Nat) -> {Nat.is_le(m, Nat.add(y, m)) == True{}: Bool}:
@@ -1877,21 +1895,6 @@ def List.append_assoc(
         zs
       ): {x <> List.append(&2, A, List.append(&2, A, r, ys), zs) == x <> _: List<&2, A>}
       {==}
-
-# Pairs
-# -----
-
-# the first of the pair p
-def Pair.first(-A: Type, -B: Type, p: A & B) -> A:
-  match p:
-    case Tuple{a, b}:
-      a
-
-# the second of the pair p
-def Pair.second(-A: Type, -B: Type, p: A & B) -> B:
-  match p:
-    case Tuple{a, b}:
-      b
 
 # Bool algebra
 # ------------
