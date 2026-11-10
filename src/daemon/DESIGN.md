@@ -122,6 +122,9 @@ README claim, then the law.
   decided by a majority of the owners, and a node only grows, so a majority of the owners holds
   each part of each decided step. A part is lost only when a majority of the owners is lost;
   that each of them made the part before it cast is the protocol, as for rounds.
+- Writers are told only about changes to what their work uses: `Node.affects_used` (each change
+  that a branch is told of was made on another line, and wrote a resource that a resource of the
+  branch is, or uses through its imports, at any depth).
 - A taken write reads back: `Judge.write_reads`.
 - A merge never loses a change made on only one side: `Pick.merge_theirs`, `Pick.merge_ours`.
 - The owners of a line are the nodes inside its owner group: `Own.takes_inside`.
@@ -147,8 +150,7 @@ Design (each needs a decision or new work; none is a proof detail):
 - **Walks that are left:** `Node.versions` lists every version (use a range); `Node.log`,
   `Touch.versions`, `Version.keys`, `Node.affects`, `Node.impact`, `Node.notices` read every
   version of every branch. Target: notices are made when a head moves, from the diff of the two
-  contents and an index of imports by content root. No law yet for "writers are told only about
-  changes to what their work uses".
+  contents and an index of imports by content root.
 - **A put is done twice** for a taken request (`Work.put`, then `Run.content`): the second one
   makes growth independent of the judge. Target: prove that each judge only grows its node, and
   let the run keep the judge's node.

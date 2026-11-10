@@ -5683,6 +5683,24 @@ law Node.take_waits:
       List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Wait.of(Node.take(s, t), Line.chain(r, l)), i) == True{}: Bool
     }
 
+# writers are told only about changes to what their work uses: each change
+# that Node.affects gives for a branch holds (Touch.holds): another line made
+# it, the branch lacks it, and it wrote a resource that a resource of the
+# branch is, or uses through its imports, at any depth
+law Node.affects_used:
+  for +s: State()
+  for +b: Branch
+  {
+    Shared.List.holds(
+      ~Touch,
+      ~Seen,
+      ~Touch.holds,
+      Node.affects(s, b),
+      Seen.of(s, Branch.keys(s), Version.keys(s), b)
+    )
+      == True{}: Bool
+  }
+
 # a writer reads its own pending write: at the head of a branch, its read is
 # the bytes of its draft, not what the branch holds
 law Node.read_draft:

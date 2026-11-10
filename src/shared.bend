@@ -2110,3 +2110,53 @@ def Nat.before(n: Nat) -> Nat:
 # successors are the same only of the same numbers
 def Nat.succ_inj(-a: Nat, -b: Nat, e: {1n+a == 1n+b: Nat}) -> {a == b: Nat}:
   Equal.cong(Nat, Nat, Nat.before, 1n+a, 1n+b, e)
+
+# p holds of g and each element of xs
+def List.holds(~A: Data, ~V: Data, ~p: V -> A -> Bool, xs: List<&2, A>, +g: V) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case Con{x, r}:
+      List.all.if(u => List.holds(~A, ~V, ~p, r, g), p(g)(x))
+
+# List.keep_holds at one element, once p is known to keep it or not (k)
+def List.keep_holds.at(
+  ~A: Data,
+  ~V: Data,
+  ~p: V -> A -> Bool,
+  k: Bool,
+  x: A,
+  ks: List<&2, A>,
+  +g: V,
+  ek: {p(g)(x) == k: Bool},
+  ih: {List.holds(~A, ~V, ~p, ks, g) == True{}: Bool}
+) -> {List.holds(~A, ~V, ~p, List.filter.put(A, x, ks, k), g) == True{}: Bool}:
+  match k:
+    case True{}:
+      List.all.if_both(p(g)(x), u => List.holds(~A, ~V, ~p, ks, g))(ek)(ih)
+    case False{}:
+      ih
+
+# what List.keep keeps, p holds of
+def List.keep_holds(
+  ~A: Data,
+  ~V: Data,
+  ~p: V -> A -> Bool,
+  xs: List<&2, A>,
+  +g: V
+) -> {List.holds(~A, ~V, ~p, List.keep(~A, ~V, ~p, xs, g), g) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+x, +r}:
+      List.keep_holds.at(
+        ~A,
+        ~V,
+        ~p,
+        p(g)(x),
+        x,
+        List.keep(~A, ~V, ~p, r, g),
+        g,
+        {==},
+        List.keep_holds(~A, ~V, ~p, r, g)
+      )

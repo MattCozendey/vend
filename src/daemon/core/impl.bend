@@ -9689,6 +9689,10 @@ def Key.same(
     Ledgers.Chain.key(c)
   )
 
+def Spec.Node.affects_used(s, b):
+  +g = Spec.Seen.of(s, Spec.Branch.keys(s), Spec.Version.keys(s), b)
+  Shared.List.keep_holds(~Spec.Touch, ~Spec.Seen, ~Spec.Touch.holds, Spec.Affects.cands(s, g), g)
+
 # Waits
 # -----
 # A request that a node takes in waits on its line: a pending write goes with
