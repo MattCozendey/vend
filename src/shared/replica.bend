@@ -3149,6 +3149,12 @@ def Rounds.Rules(~mach: Machine(), s: Node<Machine.Q(mach)>, c: Ledgers.Chain) -
     Head.tip(~mach, s, x) == Some{t}: Maybe<&2, Tip>
   } -> Rounds.Last(~mach, s, c, Head.next(x))
 
+# that every pass that s holds names the last vote of its node below its
+# round, at every height of every line: Rounds.Last everywhere. It reads only
+# the ledger; Seal.accept keeps it (Seal.accept_keeps_honest)
+def Node.Honest(~mach: Machine(), s: Node<Machine.Q(mach)>) -> Type:
+  @c: Ledgers.Chain -> @h: U32 -> Rounds.Last(~mach, s, c, h)
+
 # Node.advance at the head h of the line c, whose tip is m
 def Advance.at(
   ~mach: Machine(),
@@ -18569,6 +18575,1920 @@ def Accept.keeps(
     %ec: {Seal.accept.at(~mach, s, b, _) == Some{s2}: Maybe<&2, Node<Machine.Q(mach)>>}
     ea)
 
+# Honest nodes
+# ------------
+# A node keeps a ballot only in its empty slot (Ballot.first), and only when
+# it is honest against the ballots that the node holds (Ballot.honest). So a
+# read of a slot after a keep is the old read, or the new ballot (Cell.kept),
+# and every pass that a node holds names the last vote of its node
+# (Node.Honest): Seal.accept keeps it.
+
+# a read of a vote reads the key of its height only
+def Cast.of_key(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  c: Ledgers.Chain,
+  h: U32,
+  c2: Ledgers.Chain,
+  h2: U32,
+  r: Nat,
+  p: String
+) -> {
+  Ledgers.Slot.height(c, h) == Ledgers.Slot.height(c2, h2): List<&2, Bool>
+} -> {
+  Cast.of(
+    ~mach,
+    s,
+    Ledgers.Where{c, h, r},
+    p
+  )
+    == Cast.of(~mach, s, Ledgers.Where{c2, h2, r}, p): Maybe<&2, Ledgers.Vote>
+}:
+  e =>
+    %Equal.sym(
+      List<&2, Bool>,
+      Ledgers.Slot.height(c, h),
+      Ledgers.Slot.height(c2, h2),
+      e
+    ): {
+      Cast.step(
+        ~mach,
+        Ledgers.State.get(
+          ~Machine.Q(mach),
+          State.ledger(~mach, s),
+          List.append(
+            &2,
+            Bool,
+            List.append(&2, Bool, _, Ledgers.Round.key(r, [False{}])),
+            Ledgers.Slot.ballot(p)
+          )
+        ),
+        _,
+        r,
+        p
+      )
+        == Cast.of(~mach, s, Ledgers.Where{c2, h2, r}, p): Maybe<&2, Ledgers.Vote>
+    }
+    {==}
+
+# the last vote of a node reads the key of its height only
+def Last.mine_key(
+  ~mach: Machine(),
+  +n: String,
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  +h: U32,
+  +c2: Ledgers.Chain,
+  +h2: U32,
+  k: Nat
+) -> {
+  Ledgers.Slot.height(c, h) == Ledgers.Slot.height(c2, h2): List<&2, Bool>
+} -> {
+  Last.mine(~mach, n, s, c, h, k) == Last.mine(~mach, n, s, c2, h2, k): Maybe<&2, Ledgers.Last>
+}:
+  match k:
+    case 0n:
+      +e =>
+        %Equal.sym(
+          Maybe<&2, Ledgers.Vote>,
+          Cast.of(~mach, s, Ledgers.Where{c, h, 0n}, n),
+          Cast.of(~mach, s, Ledgers.Where{c2, h2, 0n}, n),
+          Cast.of_key(~mach, s, c, h, c2, h2, 0n, n)(e)
+        ): {
+          Last.or(0n, _, u => None{}) == Last.mine(~mach, n, s, c2, h2, 0n): Maybe<&2, Ledgers.Last>
+        }
+        {==}
+    case 1n+(+p):
+      +e =>
+        %Equal.sym(
+          Maybe<&2, Ledgers.Vote>,
+          Cast.of(~mach, s, Ledgers.Where{c, h, 1n+p}, n),
+          Cast.of(~mach, s, Ledgers.Where{c2, h2, 1n+p}, n),
+          Cast.of_key(~mach, s, c, h, c2, h2, 1n+p, n)(e)
+        ): {
+          Last.or(
+            1n+p,
+            _,
+            u => Last.mine(~mach, n, s, c, h, p)
+          )
+            == Last.mine(~mach, n, s, c2, h2, 1n+p): Maybe<&2, Ledgers.Last>
+        }
+        %Equal.sym(
+          Maybe<&2, Ledgers.Last>,
+          Last.mine(~mach, n, s, c, h, p),
+          Last.mine(~mach, n, s, c2, h2, p),
+          Last.mine_key(~mach, n, s, c, h, c2, h2, p)(e)
+        ): {
+          Last.or(
+            1n+p,
+            Cast.of(~mach, s, Ledgers.Where{c2, h2, 1n+p}, n),
+            u => _
+          )
+            == Last.mine(~mach, n, s, c2, h2, 1n+p): Maybe<&2, Ledgers.Last>
+        }
+        {==}
+
+# the last vote below a round reads the key of its height only
+def Last.below_key(
+  ~mach: Machine(),
+  n: String,
+  s: Node<Machine.Q(mach)>,
+  c: Ledgers.Chain,
+  h: U32,
+  c2: Ledgers.Chain,
+  h2: U32,
+  r: Nat
+) -> {
+  Ledgers.Slot.height(c, h) == Ledgers.Slot.height(c2, h2): List<&2, Bool>
+} -> {
+  Last.below(~mach, n, s, c, h, r) == Last.below(~mach, n, s, c2, h2, r): Maybe<&2, Ledgers.Last>
+}:
+  match r:
+    case 0n:
+      e => {==}
+    case 1n+p:
+      Last.mine_key(~mach, n, s, c, h, c2, h2, p)
+
+# a read joined with a ballot b whose read f gives nothing reads as before
+def Kept.miss(
+  ~R: Data,
+  ~f: Ledgers.Ballot -> Maybe<&2, R>,
+  old: Maybe<&2, Ledgers.Ballot>,
+  hit: Bool,
+  b: Ledgers.Ballot
+) -> {
+  f(b) == None{}: Maybe<&2, R>
+} -> {
+  Maybe.bind(
+    &2,
+    Ledgers.Ballot,
+    R,
+    Shared.Maybe.join(
+      ~Ledgers.Ballot,
+      ~(x => y => x),
+      old,
+      Shared.Maybe.when(Ledgers.Ballot, hit, u => Some{b})
+    ),
+    f
+  )
+    == Maybe.bind(&2, Ledgers.Ballot, R, old, f): Maybe<&2, R>
+}:
+  match old hit:
+    case Some{x} True{}:
+      e => {==}
+    case Some{x} False{}:
+      e => {==}
+    case None{} True{}:
+      e => e
+    case None{} False{}:
+      e => {==}
+
+# a kept ballot that is not a vote changes no read of a vote
+def Cast.kept_miss(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  -s2: Node<Machine.Q(mach)>,
+  +b: Ledgers.Ballot,
+  +c: Ledgers.Chain,
+  +h: U32,
+  +j: Nat,
+  +p: String
+) -> {
+  State.ledger(
+    ~mach,
+    s2
+  )
+    == Ledgers.State.keep(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      State.ledger(~mach, s),
+      b
+    ): Ledgers.State(Machine.Q(mach))
+} -> {
+  Ledgers.State.get(
+    ~Machine.Q(mach),
+    State.ledger(~mach, s),
+    Ledgers.Slot.of(b)
+  )
+    == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+} -> {
+  Ledgers.Ballot.vote(b) == None{}: Maybe<&2, Ledgers.Vote>
+} -> {
+  Cast.of(
+    ~mach,
+    s2,
+    Ledgers.Where{c, h, j},
+    p
+  )
+    == Cast.of(~mach, s, Ledgers.Where{c, h, j}, p): Maybe<&2, Ledgers.Vote>
+}:
+  e2 => e0 => ev =>
+    +sv = Ledgers.Slot.vote(Ledgers.Where{c, h, j}, p)
+    +hk = Ledgers.Slot.height(c, h)
+    %Equal.sym(
+      Ledgers.State(Machine.Q(mach)),
+      State.ledger(~mach, s2),
+      Ledgers.State.keep(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, s), b),
+      e2
+    ): {
+      Cast.step(
+        ~mach,
+        Ledgers.State.get(~Machine.Q(mach), _, sv),
+        hk,
+        j,
+        p
+      )
+        == Cast.of(~mach, s, Ledgers.Where{c, h, j}, p): Maybe<&2, Ledgers.Vote>
+    }
+    %Equal.sym(
+      Maybe<&2, Ledgers.Ballot>,
+      Ledgers.Cell.ballot(
+        ~Machine.Q(mach),
+        Ledgers.State.get(
+          ~Machine.Q(mach),
+          Ledgers.State.keep(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, s), b),
+          sv
+        ),
+        hk,
+        j,
+        p
+      ),
+      Shared.Maybe.join(
+        ~Ledgers.Ballot,
+        ~(x => y => x),
+        Ledgers.Cell.ballot(
+          ~Machine.Q(mach),
+          Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), sv),
+          hk,
+          j,
+          p
+        ),
+        Shared.Maybe.when(
+          Ledgers.Ballot,
+          List.all.if(
+            u => Ledgers.Ballot.is(b, hk, j, p),
+            Tries.Trie.same_key(sv, Ledgers.Slot.of(b))
+          ),
+          u => Some{b}
+        )
+      ),
+      Ledgers.Cell.kept(
+        ~Machine.Q(mach),
+        ~Machine.same(mach),
+        State.ledger(~mach, s),
+        b,
+        sv,
+        hk,
+        j,
+        p
+      )(e0)
+    ): {
+      Maybe.bind(
+        &2,
+        Ledgers.Ballot,
+        Ledgers.Vote,
+        _,
+        b => Ledgers.Ballot.vote(b)
+      )
+        == Cast.of(~mach, s, Ledgers.Where{c, h, j}, p): Maybe<&2, Ledgers.Vote>
+    }
+    Kept.miss(
+      ~Ledgers.Vote,
+      ~(b => Ledgers.Ballot.vote(b)),
+      Ledgers.Cell.ballot(
+        ~Machine.Q(mach),
+        Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), sv),
+        hk,
+        j,
+        p
+      ),
+      List.all.if(u => Ledgers.Ballot.is(b, hk, j, p), Tries.Trie.same_key(sv, Ledgers.Slot.of(b))),
+      b
+    )(ev)
+
+# a kept ballot that is not a vote changes no last vote
+def Last.mine_kept_miss(
+  ~mach: Machine(),
+  +n: String,
+  +s: Node<Machine.Q(mach)>,
+  -s2: Node<Machine.Q(mach)>,
+  +b: Ledgers.Ballot,
+  +c: Ledgers.Chain,
+  +h: U32,
+  k: Nat
+) -> {
+  State.ledger(
+    ~mach,
+    s2
+  )
+    == Ledgers.State.keep(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      State.ledger(~mach, s),
+      b
+    ): Ledgers.State(Machine.Q(mach))
+} -> {
+  Ledgers.State.get(
+    ~Machine.Q(mach),
+    State.ledger(~mach, s),
+    Ledgers.Slot.of(b)
+  )
+    == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+} -> {
+  Ledgers.Ballot.vote(b) == None{}: Maybe<&2, Ledgers.Vote>
+} -> {Last.mine(~mach, n, s2, c, h, k) == Last.mine(~mach, n, s, c, h, k): Maybe<&2, Ledgers.Last>}:
+  match k:
+    case 0n:
+      e2 => e0 => ev =>
+        %Equal.sym(
+          Maybe<&2, Ledgers.Vote>,
+          Cast.of(~mach, s2, Ledgers.Where{c, h, 0n}, n),
+          Cast.of(~mach, s, Ledgers.Where{c, h, 0n}, n),
+          Cast.kept_miss(~mach, s, s2, b, c, h, 0n, n)(e2)(e0)(ev)
+        ): {
+          Last.or(0n, _, u => None{}) == Last.mine(~mach, n, s, c, h, 0n): Maybe<&2, Ledgers.Last>
+        }
+        {==}
+    case 1n+(+p):
+      +e2 => +e0 => +ev =>
+        %Equal.sym(
+          Maybe<&2, Ledgers.Vote>,
+          Cast.of(~mach, s2, Ledgers.Where{c, h, 1n+p}, n),
+          Cast.of(~mach, s, Ledgers.Where{c, h, 1n+p}, n),
+          Cast.kept_miss(~mach, s, s2, b, c, h, 1n+p, n)(e2)(e0)(ev)
+        ): {
+          Last.or(
+            1n+p,
+            _,
+            u => Last.mine(~mach, n, s2, c, h, p)
+          )
+            == Last.mine(~mach, n, s, c, h, 1n+p): Maybe<&2, Ledgers.Last>
+        }
+        %Equal.sym(
+          Maybe<&2, Ledgers.Last>,
+          Last.mine(~mach, n, s2, c, h, p),
+          Last.mine(~mach, n, s, c, h, p),
+          Last.mine_kept_miss(~mach, n, s, s2, b, c, h, p)(e2)(e0)(ev)
+        ): {
+          Last.or(
+            1n+p,
+            Cast.of(~mach, s, Ledgers.Where{c, h, 1n+p}, n),
+            u => _
+          )
+            == Last.mine(~mach, n, s, c, h, 1n+p): Maybe<&2, Ledgers.Last>
+        }
+        {==}
+
+# a kept ballot that is not a vote changes no last vote below a round
+def Last.below_kept_miss(
+  ~mach: Machine(),
+  n: String,
+  s: Node<Machine.Q(mach)>,
+  -s2: Node<Machine.Q(mach)>,
+  b: Ledgers.Ballot,
+  c: Ledgers.Chain,
+  h: U32,
+  r: Nat
+) -> {
+  State.ledger(
+    ~mach,
+    s2
+  )
+    == Ledgers.State.keep(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      State.ledger(~mach, s),
+      b
+    ): Ledgers.State(Machine.Q(mach))
+} -> {
+  Ledgers.State.get(
+    ~Machine.Q(mach),
+    State.ledger(~mach, s),
+    Ledgers.Slot.of(b)
+  )
+    == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+} -> {
+  Ledgers.Ballot.vote(b) == None{}: Maybe<&2, Ledgers.Vote>
+} -> {
+  Last.below(~mach, n, s2, c, h, r) == Last.below(~mach, n, s, c, h, r): Maybe<&2, Ledgers.Last>
+}:
+  match r:
+    case 0n:
+      e2 => e0 => ev => {==}
+    case 1n+p:
+      Last.mine_kept_miss(~mach, n, s, s2, b, c, h, p)
+
+# a kept ballot that is not a pass changes no read of a pass
+def Passed.kept_miss(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  -s2: Node<Machine.Q(mach)>,
+  +b: Ledgers.Ballot,
+  +c: Ledgers.Chain,
+  +h: U32,
+  +r: Nat,
+  +q: String
+) -> {
+  State.ledger(
+    ~mach,
+    s2
+  )
+    == Ledgers.State.keep(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      State.ledger(~mach, s),
+      b
+    ): Ledgers.State(Machine.Q(mach))
+} -> {
+  Ledgers.State.get(
+    ~Machine.Q(mach),
+    State.ledger(~mach, s),
+    Ledgers.Slot.of(b)
+  )
+    == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+} -> {
+  Ledgers.Ballot.pass(b) == None{}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+} -> {
+  Ledgers.State.passed(
+    ~Machine.Q(mach),
+    State.ledger(~mach, s2),
+    Ledgers.Where{c, h, r},
+    q
+  )
+    == Ledgers.State.passed(
+      ~Machine.Q(mach),
+      State.ledger(~mach, s),
+      Ledgers.Where{c, h, r},
+      q
+    ): Maybe<&2, Maybe<&2, Ledgers.Last>>
+}:
+  e2 => e0 => ev =>
+    +sp = Ledgers.Slot.pass(Ledgers.Where{c, h, r}, q)
+    +hk = Ledgers.Slot.height(c, h)
+    %Equal.sym(
+      Ledgers.State(Machine.Q(mach)),
+      State.ledger(~mach, s2),
+      Ledgers.State.keep(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, s), b),
+      e2
+    ): {
+      Ledgers.Passed.of(
+        ~Machine.Q(mach),
+        Ledgers.State.get(~Machine.Q(mach), _, sp),
+        hk,
+        r,
+        q
+      )
+        == Ledgers.State.passed(
+          ~Machine.Q(mach),
+          State.ledger(~mach, s),
+          Ledgers.Where{c, h, r},
+          q
+        ): Maybe<&2, Maybe<&2, Ledgers.Last>>
+    }
+    %Equal.sym(
+      Maybe<&2, Ledgers.Ballot>,
+      Ledgers.Cell.ballot(
+        ~Machine.Q(mach),
+        Ledgers.State.get(
+          ~Machine.Q(mach),
+          Ledgers.State.keep(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, s), b),
+          sp
+        ),
+        hk,
+        r,
+        q
+      ),
+      Shared.Maybe.join(
+        ~Ledgers.Ballot,
+        ~(x => y => x),
+        Ledgers.Cell.ballot(
+          ~Machine.Q(mach),
+          Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), sp),
+          hk,
+          r,
+          q
+        ),
+        Shared.Maybe.when(
+          Ledgers.Ballot,
+          List.all.if(
+            u => Ledgers.Ballot.is(b, hk, r, q),
+            Tries.Trie.same_key(sp, Ledgers.Slot.of(b))
+          ),
+          u => Some{b}
+        )
+      ),
+      Ledgers.Cell.kept(
+        ~Machine.Q(mach),
+        ~Machine.same(mach),
+        State.ledger(~mach, s),
+        b,
+        sp,
+        hk,
+        r,
+        q
+      )(e0)
+    ): {
+      Maybe.bind(
+        &2,
+        Ledgers.Ballot,
+        Maybe<&2, Ledgers.Last>,
+        _,
+        b => Ledgers.Ballot.pass(b)
+      )
+        == Ledgers.State.passed(
+          ~Machine.Q(mach),
+          State.ledger(~mach, s),
+          Ledgers.Where{c, h, r},
+          q
+        ): Maybe<&2, Maybe<&2, Ledgers.Last>>
+    }
+    Kept.miss(
+      ~Maybe<&2, Ledgers.Last>,
+      ~(b => Ledgers.Ballot.pass(b)),
+      Ledgers.Cell.ballot(
+        ~Machine.Q(mach),
+        Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), sp),
+        hk,
+        r,
+        q
+      ),
+      List.all.if(u => Ledgers.Ballot.is(b, hk, r, q), Tries.Trie.same_key(sp, Ledgers.Slot.of(b))),
+      b
+    )(ev)
+
+# a hit that is not asked for is no hit
+def Kept.unasked(
+  x: Bool,
+  same: Bool
+) -> {x == False{}: Bool} -> {List.all.if(u => x, same) == False{}: Bool}:
+  match same:
+    case True{}:
+      e => e
+    case False{}:
+      e => {==}
+
+# a read joined with no ballot reads as before
+def Kept.none(
+  old: Maybe<&2, Ledgers.Ballot>,
+  hit: Bool,
+  -b: Ledgers.Ballot
+) -> {
+  hit == False{}: Bool
+} -> {
+  Shared.Maybe.join(
+    ~Ledgers.Ballot,
+    ~(x => y => x),
+    old,
+    Shared.Maybe.when(Ledgers.Ballot, hit, u => Some{b})
+  )
+    == old: Maybe<&2, Ledgers.Ballot>
+}:
+  match old hit:
+    case Some{x} True{}:
+      e => {==}
+    case Some{x} False{}:
+      e => {==}
+    case None{} True{}:
+      e => Empty.absurd(
+        {Some{b} == None{}: Maybe<&2, Ledgers.Ballot>},
+        Shared.Bool.true_ne_false(e)
+      )
+    case None{} False{}:
+      e => {==}
+
+# a kept ballot changes no read of a vote of another node, height or round
+# than its own (Ballot.is)
+def Cast.kept_other(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  -s2: Node<Machine.Q(mach)>,
+  +b: Ledgers.Ballot,
+  +c: Ledgers.Chain,
+  +h: U32,
+  +j: Nat,
+  +p: String
+) -> {
+  State.ledger(
+    ~mach,
+    s2
+  )
+    == Ledgers.State.keep(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      State.ledger(~mach, s),
+      b
+    ): Ledgers.State(Machine.Q(mach))
+} -> {
+  Ledgers.State.get(
+    ~Machine.Q(mach),
+    State.ledger(~mach, s),
+    Ledgers.Slot.of(b)
+  )
+    == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+} -> {
+  Ledgers.Ballot.is(b, Ledgers.Slot.height(c, h), j, p) == False{}: Bool
+} -> {
+  Cast.of(
+    ~mach,
+    s2,
+    Ledgers.Where{c, h, j},
+    p
+  )
+    == Cast.of(~mach, s, Ledgers.Where{c, h, j}, p): Maybe<&2, Ledgers.Vote>
+}:
+  e2 => e0 => ei =>
+    +sv = Ledgers.Slot.vote(Ledgers.Where{c, h, j}, p)
+    +hk = Ledgers.Slot.height(c, h)
+    +old = Ledgers.Cell.ballot(
+      ~Machine.Q(mach),
+      Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), sv),
+      hk,
+      j,
+      p
+    )
+    +hit = List.all.if(
+      u => Ledgers.Ballot.is(b, hk, j, p),
+      Tries.Trie.same_key(sv, Ledgers.Slot.of(b))
+    )
+    %Equal.sym(
+      Ledgers.State(Machine.Q(mach)),
+      State.ledger(~mach, s2),
+      Ledgers.State.keep(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, s), b),
+      e2
+    ): {
+      Cast.step(
+        ~mach,
+        Ledgers.State.get(~Machine.Q(mach), _, sv),
+        hk,
+        j,
+        p
+      )
+        == Cast.of(~mach, s, Ledgers.Where{c, h, j}, p): Maybe<&2, Ledgers.Vote>
+    }
+    %Equal.sym(
+      Maybe<&2, Ledgers.Ballot>,
+      Ledgers.Cell.ballot(
+        ~Machine.Q(mach),
+        Ledgers.State.get(
+          ~Machine.Q(mach),
+          Ledgers.State.keep(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, s), b),
+          sv
+        ),
+        hk,
+        j,
+        p
+      ),
+      Shared.Maybe.join(
+        ~Ledgers.Ballot,
+        ~(x => y => x),
+        old,
+        Shared.Maybe.when(Ledgers.Ballot, hit, u => Some{b})
+      ),
+      Ledgers.Cell.kept(
+        ~Machine.Q(mach),
+        ~Machine.same(mach),
+        State.ledger(~mach, s),
+        b,
+        sv,
+        hk,
+        j,
+        p
+      )(e0)
+    ): {
+      Maybe.bind(
+        &2,
+        Ledgers.Ballot,
+        Ledgers.Vote,
+        _,
+        b => Ledgers.Ballot.vote(b)
+      )
+        == Cast.of(~mach, s, Ledgers.Where{c, h, j}, p): Maybe<&2, Ledgers.Vote>
+    }
+    %Equal.sym(
+      Maybe<&2, Ledgers.Ballot>,
+      Shared.Maybe.join(
+        ~Ledgers.Ballot,
+        ~(x => y => x),
+        old,
+        Shared.Maybe.when(Ledgers.Ballot, hit, u => Some{b})
+      ),
+      old,
+      Kept.none(
+        old,
+        hit,
+        b
+      )(
+        Kept.unasked(
+          Ledgers.Ballot.is(b, hk, j, p),
+          Tries.Trie.same_key(sv, Ledgers.Slot.of(b))
+        )(ei)
+      )
+    ): {
+      Maybe.bind(
+        &2,
+        Ledgers.Ballot,
+        Ledgers.Vote,
+        _,
+        b => Ledgers.Ballot.vote(b)
+      )
+        == Cast.of(~mach, s, Ledgers.Where{c, h, j}, p): Maybe<&2, Ledgers.Vote>
+    }
+    {==}
+
+# the ballot b is a ballot of the node n at the height whose slots start with
+# hk, in a round up to k
+def Ballot.upto(b: Ledgers.Ballot, hk: List<&2, Bool>, k: Nat, n: String) -> Bool:
+  match b:
+    case Ledgers.Ballot{Ledgers.Signed{Ledgers.Where{c, h, r}, m, a}, l}:
+      List.all.if(
+        u => List.all.if(u2 => Tries.Trie.same_key(Ledgers.Slot.height(c, h), hk), Nat.is_le(r, k)),
+        String.eq(m, n)
+      )
+
+# Ballot.below once the round test ie of the ballot's round r is known
+def Ballot.below.round(
+  same: Bool,
+  r: Nat,
+  j: Nat,
+  k: Nat,
+  ie: Bool,
+  eie: {Nat.is_eq(r, j) == ie: Bool}
+) -> {
+  List.all.if(u2 => same, Nat.is_le(r, k)) == False{}: Bool
+} -> {Nat.is_le(j, k) == True{}: Bool} -> {List.all.if(u2 => same, ie) == False{}: Bool}:
+  match ie:
+    case False{}:
+      eu => ek => {==}
+    case True{}:
+      %Equal.sym(
+        Nat,
+        r,
+        j,
+        Shared.Nat.is_eq_sound(r, j)(eie)
+      ): (
+        {
+          List.all.if(u2 => same, Nat.is_le(_, k)) == False{}: Bool
+        } -> {Nat.is_le(j, k) == True{}: Bool} -> {List.all.if(u2 => same, True{}) == False{}: Bool}
+      )
+      eu => ek =>
+        %ek: {List.all.if(u2 => same, _) == False{}: Bool}
+        eu
+
+# Ballot.below once the name test se of the ballot's node is known
+def Ballot.below.name(
+  same: Bool,
+  +r: Nat,
+  +j: Nat,
+  k: Nat,
+  se: Bool
+) -> {
+  List.all.if(u => List.all.if(u2 => same, Nat.is_le(r, k)), se) == False{}: Bool
+} -> {
+  Nat.is_le(j, k) == True{}: Bool
+} -> {List.all.if(u => List.all.if(u2 => same, Nat.is_eq(r, j)), se) == False{}: Bool}:
+  match se:
+    case False{}:
+      eu => ek => {==}
+    case True{}:
+      Ballot.below.round(same, r, j, k, Nat.is_eq(r, j), {==})
+
+# a ballot that is not one of the node n in a round up to k at a height is
+# not its ballot of any round j up to k there
+def Ballot.below(
+  b: Ledgers.Ballot,
+  hk: List<&2, Bool>,
+  j: Nat,
+  k: Nat,
+  n: String
+) -> {
+  Ballot.upto(b, hk, k, n) == False{}: Bool
+} -> {Nat.is_le(j, k) == True{}: Bool} -> {Ledgers.Ballot.is(b, hk, j, n) == False{}: Bool}:
+  match b:
+    case Ledgers.Ballot{Ledgers.Signed{Ledgers.Where{c, h, r}, m, a}, l}:
+      Ballot.below.name(
+        Tries.Trie.same_key(Ledgers.Slot.height(c, h), hk),
+        r,
+        j,
+        k,
+        String.eq(m, n)
+      )
+
+# a kept ballot that is not one of the node n in a round up to k changes no
+# last vote of n up to the round j <= k
+def Last.mine_kept_other(
+  ~mach: Machine(),
+  +n: String,
+  +s: Node<Machine.Q(mach)>,
+  -s2: Node<Machine.Q(mach)>,
+  +b: Ledgers.Ballot,
+  +c: Ledgers.Chain,
+  +h: U32,
+  +k: Nat,
+  j: Nat
+) -> {
+  State.ledger(
+    ~mach,
+    s2
+  )
+    == Ledgers.State.keep(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      State.ledger(~mach, s),
+      b
+    ): Ledgers.State(Machine.Q(mach))
+} -> {
+  Ledgers.State.get(
+    ~Machine.Q(mach),
+    State.ledger(~mach, s),
+    Ledgers.Slot.of(b)
+  )
+    == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+} -> {
+  Ballot.upto(b, Ledgers.Slot.height(c, h), k, n) == False{}: Bool
+} -> {
+  Nat.is_le(j, k) == True{}: Bool
+} -> {Last.mine(~mach, n, s2, c, h, j) == Last.mine(~mach, n, s, c, h, j): Maybe<&2, Ledgers.Last>}:
+  match j:
+    case 0n:
+      e2 => e0 => eu => ej =>
+        %Equal.sym(
+          Maybe<&2, Ledgers.Vote>,
+          Cast.of(~mach, s2, Ledgers.Where{c, h, 0n}, n),
+          Cast.of(~mach, s, Ledgers.Where{c, h, 0n}, n),
+          Cast.kept_other(
+            ~mach,
+            s,
+            s2,
+            b,
+            c,
+            h,
+            0n,
+            n
+          )(e2)(e0)(Ballot.below(b, Ledgers.Slot.height(c, h), 0n, k, n)(eu)(ej))
+        ): {
+          Last.or(0n, _, u => None{}) == Last.mine(~mach, n, s, c, h, 0n): Maybe<&2, Ledgers.Last>
+        }
+        {==}
+    case 1n+(+p):
+      +e2 => +e0 => +eu => +ej =>
+        %Equal.sym(
+          Maybe<&2, Ledgers.Vote>,
+          Cast.of(~mach, s2, Ledgers.Where{c, h, 1n+p}, n),
+          Cast.of(~mach, s, Ledgers.Where{c, h, 1n+p}, n),
+          Cast.kept_other(
+            ~mach,
+            s,
+            s2,
+            b,
+            c,
+            h,
+            1n+p,
+            n
+          )(e2)(e0)(Ballot.below(b, Ledgers.Slot.height(c, h), 1n+p, k, n)(eu)(ej))
+        ): {
+          Last.or(
+            1n+p,
+            _,
+            u => Last.mine(~mach, n, s2, c, h, p)
+          )
+            == Last.mine(~mach, n, s, c, h, 1n+p): Maybe<&2, Ledgers.Last>
+        }
+        %Equal.sym(
+          Maybe<&2, Ledgers.Last>,
+          Last.mine(~mach, n, s2, c, h, p),
+          Last.mine(~mach, n, s, c, h, p),
+          Last.mine_kept_other(
+            ~mach,
+            n,
+            s,
+            s2,
+            b,
+            c,
+            h,
+            k,
+            p
+          )(
+            e2
+          )(
+            e0
+          )(
+            eu
+          )(Shared.Nat.le_trans(p, 1n+p, k)(Shared.Nat.le_succ(p, p)(Shared.Nat.le_refl(p)))(ej))
+        ): {
+          Last.or(
+            1n+p,
+            Cast.of(~mach, s, Ledgers.Where{c, h, 1n+p}, n),
+            u => _
+          )
+            == Last.mine(~mach, n, s, c, h, 1n+p): Maybe<&2, Ledgers.Last>
+        }
+        {==}
+
+# Passed.above_of in a round 1 + p, once it is known whether j is 1 + p (ie)
+def Passed.above_of.at(
+  ~mach: Machine(),
+  +p: Nat,
+  s: Node<Machine.Q(mach)>,
+  c: Ledgers.Chain,
+  h: U32,
+  r: Nat,
+  q: String,
+  j: Nat,
+  ie: Bool,
+  eie: {Nat.is_eq(j, 1n+p) == ie: Bool},
+  ih: {
+    Nat.is_le(j, p) == True{}: Bool
+  } -> {
+    Maybe.is_some(
+      &2,
+      Maybe<&2, Ledgers.Last>,
+      Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Where{c, h, j}, q)
+    )
+      == True{}: Bool
+  } -> {Nat.is_lt(r, j) == True{}: Bool} -> {Passed.above(~mach, p, s, c, h, r, q) == True{}: Bool}
+) -> {
+  Nat.is_le(j, 1n+p) == True{}: Bool
+} -> {
+  Maybe.is_some(
+    &2,
+    Maybe<&2, Ledgers.Last>,
+    Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Where{c, h, j}, q)
+  )
+    == True{}: Bool
+} -> {
+  Nat.is_lt(r, j) == True{}: Bool
+} -> {Passed.above(~mach, 1n+p, s, c, h, r, q) == True{}: Bool}:
+  match ie:
+    case False{}:
+      el => ep => et =>
+        %Equal.sym(
+          Bool,
+          Passed.above(~mach, p, s, c, h, r, q),
+          True{},
+          ih(Shared.Nat.le_step(j, p)(el)(eie))(ep)(et)
+        ): {
+          List.any.if(
+            u => _,
+            List.all.if(
+              v => Maybe.is_some(
+                &2,
+                Maybe<&2, Ledgers.Last>,
+                Ledgers.State.passed(
+                  ~Machine.Q(mach),
+                  State.ledger(~mach, s),
+                  Ledgers.Where{c, h, 1n+p},
+                  q
+                )
+              ),
+              Nat.is_lt(r, 1n+p)
+            )
+          )
+            == True{}: Bool
+        }
+        Shared.List.any.if_true(
+          List.all.if(
+            v => Maybe.is_some(
+              &2,
+              Maybe<&2, Ledgers.Last>,
+              Ledgers.State.passed(
+                ~Machine.Q(mach),
+                State.ledger(~mach, s),
+                Ledgers.Where{c, h, 1n+p},
+                q
+              )
+            ),
+            Nat.is_lt(r, 1n+p)
+          )
+        )
+    case True{}:
+      %Equal.sym(
+        Nat,
+        j,
+        1n+p,
+        Shared.Nat.is_eq_sound(j, 1n+p)(eie)
+      ): (
+        {
+          Nat.is_le(_, 1n+p) == True{}: Bool
+        } -> {
+          Maybe.is_some(
+            &2,
+            Maybe<&2, Ledgers.Last>,
+            Ledgers.State.passed(
+              ~Machine.Q(mach),
+              State.ledger(~mach, s),
+              Ledgers.Where{c, h, _},
+              q
+            )
+          )
+            == True{}: Bool
+        } -> {
+          Nat.is_lt(r, _) == True{}: Bool
+        } -> {Passed.above(~mach, 1n+p, s, c, h, r, q) == True{}: Bool}
+      )
+      el => ep => et =>
+        %Equal.sym(
+          Bool,
+          Nat.is_lt(r, 1n+p),
+          True{},
+          et
+        ): {
+          List.any.if(
+            u => Passed.above(~mach, p, s, c, h, r, q),
+            List.all.if(
+              v => Maybe.is_some(
+                &2,
+                Maybe<&2, Ledgers.Last>,
+                Ledgers.State.passed(
+                  ~Machine.Q(mach),
+                  State.ledger(~mach, s),
+                  Ledgers.Where{c, h, 1n+p},
+                  q
+                )
+              ),
+              _
+            )
+          )
+            == True{}: Bool
+        }
+        %Equal.sym(
+          Bool,
+          Maybe.is_some(
+            &2,
+            Maybe<&2, Ledgers.Last>,
+            Ledgers.State.passed(
+              ~Machine.Q(mach),
+              State.ledger(~mach, s),
+              Ledgers.Where{c, h, 1n+p},
+              q
+            )
+          ),
+          True{},
+          ep
+        ): {
+          List.any.if(
+            u => Passed.above(~mach, p, s, c, h, r, q),
+            List.all.if(v => _, True{})
+          )
+            == True{}: Bool
+        }
+        {==}
+
+# a pass of the node q to a round j above r, up to k, that s holds is a pass
+# above r among the rounds up to k
+def Passed.above_of(
+  ~mach: Machine(),
+  k: Nat,
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  +h: U32,
+  +r: Nat,
+  +q: String,
+  +j: Nat
+) -> {
+  Nat.is_le(j, k) == True{}: Bool
+} -> {
+  Maybe.is_some(
+    &2,
+    Maybe<&2, Ledgers.Last>,
+    Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Where{c, h, j}, q)
+  )
+    == True{}: Bool
+} -> {Nat.is_lt(r, j) == True{}: Bool} -> {Passed.above(~mach, k, s, c, h, r, q) == True{}: Bool}:
+  match k:
+    case 0n:
+      el => ep => et => Empty.absurd(
+        {Passed.above(~mach, 0n, s, c, h, r, q) == True{}: Bool},
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            Nat.is_lt(r, 0n),
+            True{},
+            Equal.sym(Bool, Nat.is_lt(r, 0n), False{}, Shared.Nat.lt_zero(r)),
+            Shared.Nat.lt_le(r, j, 0n)(et)(el)
+          )
+        )
+      )
+    case 1n+(+p):
+      Passed.above_of.at(
+        ~mach,
+        p,
+        s,
+        c,
+        h,
+        r,
+        q,
+        j,
+        Nat.is_eq(j, 1n+p),
+        {==},
+        Passed.above_of(~mach, p, s, c, h, r, q, j)
+      )
+
+# two last votes that Last.same calls the same are the same
+def Last.same_sound(
+  a: Maybe<&2, Ledgers.Last>,
+  b: Maybe<&2, Ledgers.Last>
+) -> {Last.same(a, b) == True{}: Bool} -> {a == b: Maybe<&2, Ledgers.Last>}:
+  Shared.Maybe.is_eq_sound(
+    ~Ledgers.Last,
+    ~(x => y => Codes.Code.is_eq(~Ledgers.Last, ~Ledgers.Last.code, x, y)),
+    x => y => Codes.Code.is_eq_sound(
+      ~Ledgers.Last,
+      ~Ledgers.Last.code,
+      ~Ledgers.Last.code.read,
+      ~(l => r => Ledgers.Last.code_read(l, r)),
+      x,
+      y
+    ),
+    a,
+    b
+  )
+
+# a read of a pass after the ballot b is kept in its empty slot names the last
+# vote of its node: the old read does (hy), and so does b where it is read
+# (hb)
+def Honest.read_pass(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  +b: Ledgers.Ballot,
+  +c: Ledgers.Chain,
+  +h: U32,
+  +r: Nat,
+  +q: String,
+  l: Maybe<&2, Ledgers.Last>,
+  old: Maybe<&2, Ledgers.Ballot>,
+  hit: Bool,
+  eo: {
+    old
+      == Ledgers.Cell.ballot(
+        ~Machine.Q(mach),
+        Ledgers.State.get(
+          ~Machine.Q(mach),
+          State.ledger(~mach, s),
+          Ledgers.Slot.pass(Ledgers.Where{c, h, r}, q)
+        ),
+        Ledgers.Slot.height(c, h),
+        r,
+        q
+      ): Maybe<&2, Ledgers.Ballot>
+  },
+  eh: {
+    hit
+      == List.all.if(
+        u => Ledgers.Ballot.is(b, Ledgers.Slot.height(c, h), r, q),
+        Tries.Trie.same_key(Ledgers.Slot.pass(Ledgers.Where{c, h, r}, q), Ledgers.Slot.of(b))
+      ): Bool
+  },
+  hy: {
+    Ledgers.State.passed(
+      ~Machine.Q(mach),
+      State.ledger(~mach, s),
+      Ledgers.Where{c, h, r},
+      q
+    )
+      == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+  } -> {l == Last.below(~mach, q, s, c, h, r): Maybe<&2, Ledgers.Last>},
+  hb: {
+    Ledgers.Ballot.pass(b) == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+  } -> {
+    Ledgers.Ballot.is(b, Ledgers.Slot.height(c, h), r, q) == True{}: Bool
+  } -> {l == Last.below(~mach, q, s, c, h, r): Maybe<&2, Ledgers.Last>}
+) -> {
+  Maybe.bind(
+    &2,
+    Ledgers.Ballot,
+    Maybe<&2, Ledgers.Last>,
+    Shared.Maybe.join(
+      ~Ledgers.Ballot,
+      ~(x => y => x),
+      old,
+      Shared.Maybe.when(Ledgers.Ballot, hit, u => Some{b})
+    ),
+    b => Ledgers.Ballot.pass(b)
+  )
+    == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+} -> {l == Last.below(~mach, q, s, c, h, r): Maybe<&2, Ledgers.Last>}:
+  match old hit:
+    case Some{x} True{}:
+      e => hy((
+          %eo: {Maybe.bind(&2, Ledgers.Ballot, Maybe<&2, Ledgers.Last>, _, b => Ledgers.Ballot.pass(b)) == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>}
+          e))
+    case Some{x} False{}:
+      e => hy((
+          %eo: {Maybe.bind(&2, Ledgers.Ballot, Maybe<&2, Ledgers.Last>, _, b => Ledgers.Ballot.pass(b)) == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>}
+          e))
+    case None{} False{}:
+      e => Empty.absurd(
+        {l == Last.below(~mach, q, s, c, h, r): Maybe<&2, Ledgers.Last>},
+        Shared.Maybe.none_ne_some(Maybe<&2, Ledgers.Last>, l, e)
+      )
+    case None{} True{}:
+      e => hb(
+        e
+      )(
+        Shared.List.all.if_rest(
+          Tries.Trie.same_key(Ledgers.Slot.pass(Ledgers.Where{c, h, r}, q), Ledgers.Slot.of(b)),
+          u => Ledgers.Ballot.is(b, Ledgers.Slot.height(c, h), r, q)
+        )(
+          Equal.sym(
+            Bool,
+            True{},
+            List.all.if(
+              u => Ledgers.Ballot.is(b, Ledgers.Slot.height(c, h), r, q),
+              Tries.Trie.same_key(Ledgers.Slot.pass(Ledgers.Where{c, h, r}, q), Ledgers.Slot.of(b))
+            ),
+            eh
+          )
+        )
+      )
+
+# a pass kept in its empty slot that is honest names the last vote of its
+# node where it is read: a read of b as the pass of q to r at the height of
+# c and h is one of the place and the node of b (Ballot.is)
+def Honest.pass_hit(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  +cb: Ledgers.Chain,
+  +hb: U32,
+  +rb: Nat,
+  +qb: String,
+  lb: Maybe<&2, Ledgers.Last>,
+  k: Ledgers.Link,
+  +c: Ledgers.Chain,
+  +h: U32,
+  +r: Nat,
+  +q: String,
+  l: Maybe<&2, Ledgers.Last>
+) -> {
+  Last.same(lb, Last.below(~mach, qb, s, cb, hb, rb)) == True{}: Bool
+} -> {
+  Some{lb} == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+} -> {
+  Ledgers.Ballot.is(
+    Ledgers.Ballot{Ledgers.Signed{Ledgers.Where{cb, hb, rb}, qb, Ledgers.Act.Pass{lb}}, k},
+    Ledgers.Slot.height(c, h),
+    r,
+    q
+  )
+    == True{}: Bool
+} -> {l == Last.below(~mach, q, s, c, h, r): Maybe<&2, Ledgers.Last>}:
+  +eh => el => +ei =>
+    +sk = Tries.Trie.same_key(Ledgers.Slot.height(cb, hb), Ledgers.Slot.height(c, h))
+    +inner = Shared.List.all.if_rest(
+      String.eq(qb, q),
+      u => List.all.if(u2 => sk, Nat.is_eq(rb, r))
+    )(ei)
+    Equal.trans(
+      Maybe<&2, Ledgers.Last>,
+      l,
+      lb,
+      Last.below(~mach, q, s, c, h, r),
+      Equal.sym(
+        Maybe<&2, Ledgers.Last>,
+        lb,
+        l,
+        Shared.Maybe.some_inj(Maybe<&2, Ledgers.Last>, lb, l, el)
+      ),
+      (
+        %Last.below_key(~mach, q, s, cb, hb, c, h, r)(Tries.Trie.same_key_sound(Ledgers.Slot.height(cb, hb), Ledgers.Slot.height(c, h))(Shared.List.all.if_rest(Nat.is_eq(rb, r), u2 => sk)(inner))): {lb == _: Maybe<&2, Ledgers.Last>}
+        %Texts.String.eq_sound(qb, q)(Shared.List.all.if_hit(String.eq(qb, q), u => List.all.if(u2 => sk, Nat.is_eq(rb, r)))(ei)): {lb == Last.below(~mach, _, s, cb, hb, r): Maybe<&2, Ledgers.Last>}
+        %Shared.Nat.is_eq_sound(rb, r)(Shared.List.all.if_hit(Nat.is_eq(rb, r), u2 => sk)(inner)):
+          {lb == Last.below(~mach, qb, s, cb, hb, _): Maybe<&2, Ledgers.Last>}
+        Last.same_sound(lb, Last.below(~mach, qb, s, cb, hb, rb))(eh))
+    )
+
+# Honest.kept for a pass b, at the pass of q to r at the height of c and h
+def Honest.kept_pass(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  -s2: Node<Machine.Q(mach)>,
+  +b: Ledgers.Ballot,
+  +c: Ledgers.Chain,
+  +h: U32,
+  +r: Nat,
+  +q: String,
+  l: Maybe<&2, Ledgers.Last>
+) -> {
+  State.ledger(
+    ~mach,
+    s2
+  )
+    == Ledgers.State.keep(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      State.ledger(~mach, s),
+      b
+    ): Ledgers.State(Machine.Q(mach))
+} -> {
+  Ledgers.State.get(
+    ~Machine.Q(mach),
+    State.ledger(~mach, s),
+    Ledgers.Slot.of(b)
+  )
+    == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+} -> {
+  Ledgers.Ballot.vote(b) == None{}: Maybe<&2, Ledgers.Vote>
+} -> (
+  {
+    Ledgers.State.passed(
+      ~Machine.Q(mach),
+      State.ledger(~mach, s),
+      Ledgers.Where{c, h, r},
+      q
+    )
+      == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+  } -> {l == Last.below(~mach, q, s, c, h, r): Maybe<&2, Ledgers.Last>}
+) -> (
+  {
+    Ledgers.Ballot.pass(b) == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+  } -> {
+    Ledgers.Ballot.is(b, Ledgers.Slot.height(c, h), r, q) == True{}: Bool
+  } -> {l == Last.below(~mach, q, s, c, h, r): Maybe<&2, Ledgers.Last>}
+) -> {
+  Ledgers.State.passed(
+    ~Machine.Q(mach),
+    State.ledger(~mach, s2),
+    Ledgers.Where{c, h, r},
+    q
+  )
+    == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+} -> {l == Last.below(~mach, q, s2, c, h, r): Maybe<&2, Ledgers.Last>}:
+  +e2 => +e0 => +ev => hy => hb =>
+    +sp = Ledgers.Slot.pass(Ledgers.Where{c, h, r}, q)
+    +hk = Ledgers.Slot.height(c, h)
+    +old = Ledgers.Cell.ballot(
+      ~Machine.Q(mach),
+      Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), sp),
+      hk,
+      r,
+      q
+    )
+    +hit = List.all.if(
+      u => Ledgers.Ballot.is(b, hk, r, q),
+      Tries.Trie.same_key(sp, Ledgers.Slot.of(b))
+    )
+    %Equal.sym(
+      Maybe<&2, Ledgers.Last>,
+      Last.below(~mach, q, s2, c, h, r),
+      Last.below(~mach, q, s, c, h, r),
+      Last.below_kept_miss(~mach, q, s, s2, b, c, h, r)(e2)(e0)(ev)
+    ): (
+      {
+        Ledgers.State.passed(
+          ~Machine.Q(mach),
+          State.ledger(~mach, s2),
+          Ledgers.Where{c, h, r},
+          q
+        )
+          == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+      } -> {l == _: Maybe<&2, Ledgers.Last>}
+    )
+    %Equal.sym(
+      Ledgers.State(Machine.Q(mach)),
+      State.ledger(~mach, s2),
+      Ledgers.State.keep(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, s), b),
+      e2
+    ): (
+      {
+        Ledgers.Passed.of(
+          ~Machine.Q(mach),
+          Ledgers.State.get(~Machine.Q(mach), _, sp),
+          hk,
+          r,
+          q
+        )
+          == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+      } -> {l == Last.below(~mach, q, s, c, h, r): Maybe<&2, Ledgers.Last>}
+    )
+    %Equal.sym(
+      Maybe<&2, Ledgers.Ballot>,
+      Ledgers.Cell.ballot(
+        ~Machine.Q(mach),
+        Ledgers.State.get(
+          ~Machine.Q(mach),
+          Ledgers.State.keep(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, s), b),
+          sp
+        ),
+        hk,
+        r,
+        q
+      ),
+      Shared.Maybe.join(
+        ~Ledgers.Ballot,
+        ~(x => y => x),
+        old,
+        Shared.Maybe.when(Ledgers.Ballot, hit, u => Some{b})
+      ),
+      Ledgers.Cell.kept(
+        ~Machine.Q(mach),
+        ~Machine.same(mach),
+        State.ledger(~mach, s),
+        b,
+        sp,
+        hk,
+        r,
+        q
+      )(e0)
+    ): (
+      {
+        Maybe.bind(
+          &2,
+          Ledgers.Ballot,
+          Maybe<&2, Ledgers.Last>,
+          _,
+          b => Ledgers.Ballot.pass(b)
+        )
+          == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+      } -> {l == Last.below(~mach, q, s, c, h, r): Maybe<&2, Ledgers.Last>}
+    )
+    Honest.read_pass(~mach, s, b, c, h, r, q, l, old, hit, {==}, {==}, hy, hb)
+
+# a vote of qb in rb, kept by an honest check, is not one of q up to the
+# round kk at the height of c and h, when s holds a pass of q to 1 + kk there:
+# that pass is above rb, and the check refuses a vote below a pass of its node
+def Honest.vote_hit(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  +cb: Ledgers.Chain,
+  +hb: U32,
+  +rb: Nat,
+  +qb: String,
+  v: Ledgers.Vote,
+  from: List<&2, String>,
+  k: Ledgers.Link,
+  +c: Ledgers.Chain,
+  +h: U32,
+  +kk: Nat,
+  +q: String,
+  l: Maybe<&2, Ledgers.Last>
+) -> {
+  Bool.not(Passed.above(~mach, Round.seen(~mach, s, cb, hb), s, cb, hb, rb, qb)) == True{}: Bool
+} -> {
+  Ballot.upto(
+    Ledgers.Ballot{Ledgers.Signed{Ledgers.Where{cb, hb, rb}, qb, Ledgers.Act.Vote{v, from}}, k},
+    Ledgers.Slot.height(c, h),
+    kk,
+    q
+  )
+    == True{}: Bool
+} -> {
+  Ledgers.State.passed(
+    ~Machine.Q(mach),
+    State.ledger(~mach, s),
+    Ledgers.Where{c, h, 1n+kk},
+    q
+  )
+    == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+} -> Empty:
+  eh => +eu => ep =>
+    +L = State.ledger(~mach, s)
+    +sk = Tries.Trie.same_key(Ledgers.Slot.height(cb, hb), Ledgers.Slot.height(c, h))
+    +top = Round.seen(~mach, s, cb, hb)
+    +inner = Shared.List.all.if_rest(
+      String.eq(qb, q),
+      u => List.all.if(u2 => sk, Nat.is_le(rb, kk))
+    )(eu)
+    +epb = Equal.trans(
+      Maybe<&2, Maybe<&2, Ledgers.Last>>,
+      Ledgers.State.passed(~Machine.Q(mach), L, Ledgers.Where{cb, hb, 1n+kk}, qb),
+      Ledgers.State.passed(~Machine.Q(mach), L, Ledgers.Where{cb, hb, 1n+kk}, q),
+      Some{l},
+      Equal.cong(
+        String,
+        Maybe<&2, Maybe<&2, Ledgers.Last>>,
+        x => Ledgers.State.passed(~Machine.Q(mach), L, Ledgers.Where{cb, hb, 1n+kk}, x),
+        qb,
+        q,
+        Texts.String.eq_sound(
+          qb,
+          q
+        )(
+          Shared.List.all.if_hit(
+            String.eq(qb, q),
+            u => List.all.if(u2 => sk, Nat.is_le(rb, kk))
+          )(eu)
+        )
+      ),
+      Equal.trans(
+        Maybe<&2, Maybe<&2, Ledgers.Last>>,
+        Ledgers.State.passed(~Machine.Q(mach), L, Ledgers.Where{cb, hb, 1n+kk}, q),
+        Ledgers.State.passed(~Machine.Q(mach), L, Ledgers.Where{c, h, 1n+kk}, q),
+        Some{l},
+        Ledgers.State.passed_key(
+          ~Machine.Q(mach),
+          L,
+          cb,
+          hb,
+          c,
+          h,
+          1n+kk,
+          q
+        )(
+          Tries.Trie.same_key_sound(
+            Ledgers.Slot.height(cb, hb),
+            Ledgers.Slot.height(c, h)
+          )(Shared.List.all.if_rest(Nat.is_le(rb, kk), u2 => sk)(inner))
+        ),
+        ep
+      )
+    )
+    Shared.Bool.true_ne_false(
+      Equal.trans(
+        Bool,
+        True{},
+        Passed.above(~mach, top, s, cb, hb, rb, qb),
+        False{},
+        Equal.sym(
+          Bool,
+          Passed.above(~mach, top, s, cb, hb, rb, qb),
+          True{},
+          Passed.above_of(
+            ~mach,
+            top,
+            s,
+            cb,
+            hb,
+            rb,
+            qb,
+            1n+kk
+          )(Ledgers.State.passed_round(~Machine.Q(mach), L, cb, hb, 1n+kk, qb, l)(epb))(
+            %Equal.sym(Maybe<&2, Maybe<&2, Ledgers.Last>>, Ledgers.State.passed(~Machine.Q(mach), L, Ledgers.Where{cb, hb, 1n+kk}, qb), Some{l}, epb): {Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, _) == True{}: Bool}
+            {==})(
+            Shared.Nat.le_lt(
+              rb,
+              kk,
+              1n+kk
+            )(Shared.List.all.if_hit(Nat.is_le(rb, kk), u2 => sk)(inner))(Shared.Nat.lt_succ(kk))
+          )
+        ),
+        Shared.Bool.not_true(Passed.above(~mach, top, s, cb, hb, rb, qb))(eh)
+      )
+    )
+
+# Honest.below_vote in a round 1 + kk, once it is known whether b is a ballot
+# of q up to kk at the height (g)
+def Honest.below_vote.at(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  -s2: Node<Machine.Q(mach)>,
+  b: Ledgers.Ballot,
+  c: Ledgers.Chain,
+  h: U32,
+  +kk: Nat,
+  q: String,
+  -l: Maybe<&2, Ledgers.Last>,
+  g: Bool,
+  eg: {Ballot.upto(b, Ledgers.Slot.height(c, h), kk, q) == g: Bool}
+) -> {
+  State.ledger(
+    ~mach,
+    s2
+  )
+    == Ledgers.State.keep(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      State.ledger(~mach, s),
+      b
+    ): Ledgers.State(Machine.Q(mach))
+} -> {
+  Ledgers.State.get(
+    ~Machine.Q(mach),
+    State.ledger(~mach, s),
+    Ledgers.Slot.of(b)
+  )
+    == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+} -> (
+  {
+    Ballot.upto(b, Ledgers.Slot.height(c, h), kk, q) == True{}: Bool
+  } -> {
+    Ledgers.State.passed(
+      ~Machine.Q(mach),
+      State.ledger(~mach, s),
+      Ledgers.Where{c, h, 1n+kk},
+      q
+    )
+      == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+  } -> Empty
+) -> {
+  Ledgers.State.passed(
+    ~Machine.Q(mach),
+    State.ledger(~mach, s),
+    Ledgers.Where{c, h, 1n+kk},
+    q
+  )
+    == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+} -> {
+  Last.mine(~mach, q, s2, c, h, kk) == Last.mine(~mach, q, s, c, h, kk): Maybe<&2, Ledgers.Last>
+}:
+  match g:
+    case False{}:
+      e2 => e0 => hv => ep =>
+        Last.mine_kept_other(~mach, q, s, s2, b, c, h, kk, kk)(e2)(e0)(eg)(Shared.Nat.le_refl(kk))
+    case True{}:
+      e2 => e0 => hv => ep => Empty.absurd(
+        {
+          Last.mine(
+            ~mach,
+            q,
+            s2,
+            c,
+            h,
+            kk
+          )
+            == Last.mine(~mach, q, s, c, h, kk): Maybe<&2, Ledgers.Last>
+        },
+        hv(eg)(ep)
+      )
+
+# a vote kept in its empty slot changes no last vote below a round to which
+# s holds a pass, when no such pass is above a vote of its node (hv)
+def Honest.below_vote(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  -s2: Node<Machine.Q(mach)>,
+  +b: Ledgers.Ballot,
+  +c: Ledgers.Chain,
+  +h: U32,
+  r: Nat,
+  +q: String,
+  -l: Maybe<&2, Ledgers.Last>
+) -> {
+  State.ledger(
+    ~mach,
+    s2
+  )
+    == Ledgers.State.keep(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      State.ledger(~mach, s),
+      b
+    ): Ledgers.State(Machine.Q(mach))
+} -> {
+  Ledgers.State.get(
+    ~Machine.Q(mach),
+    State.ledger(~mach, s),
+    Ledgers.Slot.of(b)
+  )
+    == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+} -> (
+  @kk: Nat -> {
+    Ballot.upto(b, Ledgers.Slot.height(c, h), kk, q) == True{}: Bool
+  } -> {
+    Ledgers.State.passed(
+      ~Machine.Q(mach),
+      State.ledger(~mach, s),
+      Ledgers.Where{c, h, 1n+kk},
+      q
+    )
+      == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+  } -> Empty
+) -> {
+  Ledgers.State.passed(
+    ~Machine.Q(mach),
+    State.ledger(~mach, s),
+    Ledgers.Where{c, h, r},
+    q
+  )
+    == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+} -> {
+  Last.below(~mach, q, s2, c, h, r) == Last.below(~mach, q, s, c, h, r): Maybe<&2, Ledgers.Last>
+}:
+  match r:
+    case 0n:
+      e2 => e0 => hv => ep => {==}
+    case 1n+(+kk):
+      e2 => e0 => hv =>
+        Honest.below_vote.at(
+          ~mach,
+          s,
+          s2,
+          b,
+          c,
+          h,
+          kk,
+          q,
+          l,
+          Ballot.upto(b, Ledgers.Slot.height(c, h), kk, q),
+          {==}
+        )(e2)(e0)(hv(kk))
+
+# Honest.kept for a vote b, at the pass of q to r at the height of c and h
+def Honest.kept_vote(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  -s2: Node<Machine.Q(mach)>,
+  +b: Ledgers.Ballot,
+  +c: Ledgers.Chain,
+  +h: U32,
+  +r: Nat,
+  +q: String,
+  l: Maybe<&2, Ledgers.Last>
+) -> {
+  State.ledger(
+    ~mach,
+    s2
+  )
+    == Ledgers.State.keep(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      State.ledger(~mach, s),
+      b
+    ): Ledgers.State(Machine.Q(mach))
+} -> {
+  Ledgers.State.get(
+    ~Machine.Q(mach),
+    State.ledger(~mach, s),
+    Ledgers.Slot.of(b)
+  )
+    == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+} -> {
+  Ledgers.Ballot.pass(b) == None{}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+} -> (
+  {
+    Ledgers.State.passed(
+      ~Machine.Q(mach),
+      State.ledger(~mach, s),
+      Ledgers.Where{c, h, r},
+      q
+    )
+      == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+  } -> {l == Last.below(~mach, q, s, c, h, r): Maybe<&2, Ledgers.Last>}
+) -> (
+  @kk: Nat -> {
+    Ballot.upto(b, Ledgers.Slot.height(c, h), kk, q) == True{}: Bool
+  } -> {
+    Ledgers.State.passed(
+      ~Machine.Q(mach),
+      State.ledger(~mach, s),
+      Ledgers.Where{c, h, 1n+kk},
+      q
+    )
+      == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+  } -> Empty
+) -> {
+  Ledgers.State.passed(
+    ~Machine.Q(mach),
+    State.ledger(~mach, s2),
+    Ledgers.Where{c, h, r},
+    q
+  )
+    == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+} -> {l == Last.below(~mach, q, s2, c, h, r): Maybe<&2, Ledgers.Last>}:
+  +e2 => +e0 => ep0 => hy => hv =>
+    %Equal.sym(
+      Maybe<&2, Maybe<&2, Ledgers.Last>>,
+      Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s2), Ledgers.Where{c, h, r}, q),
+      Ledgers.State.passed(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Where{c, h, r}, q),
+      Passed.kept_miss(~mach, s, s2, b, c, h, r, q)(e2)(e0)(ep0)
+    ): (
+      {
+        _ == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+      } -> {l == Last.below(~mach, q, s2, c, h, r): Maybe<&2, Ledgers.Last>}
+    )
+    +ep =>
+      Equal.trans(
+        Maybe<&2, Ledgers.Last>,
+        l,
+        Last.below(~mach, q, s, c, h, r),
+        Last.below(~mach, q, s2, c, h, r),
+        hy(ep),
+        Equal.sym(
+          Maybe<&2, Ledgers.Last>,
+          Last.below(~mach, q, s2, c, h, r),
+          Last.below(~mach, q, s, c, h, r),
+          Honest.below_vote(~mach, s, s2, b, c, h, r, q, l)(e2)(e0)(hv)(ep)
+        )
+      )
+
+# a node that keeps an honest ballot in its empty slot stays honest
+def Honest.kept(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  -s2: Node<Machine.Q(mach)>,
+  b: Ledgers.Ballot
+) -> {
+  State.ledger(
+    ~mach,
+    s2
+  )
+    == Ledgers.State.keep(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      State.ledger(~mach, s),
+      b
+    ): Ledgers.State(Machine.Q(mach))
+} -> {
+  Ledgers.State.get(
+    ~Machine.Q(mach),
+    State.ledger(~mach, s),
+    Ledgers.Slot.of(b)
+  )
+    == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+} -> {
+  Ballot.honest(~mach, s, b) == True{}: Bool
+} -> Node.Honest(~mach, s) -> Node.Honest(~mach, s2):
+  match b:
+    case Ledgers.Ballot{
+      Ledgers.Signed{Ledgers.Where{+cb, +hb, +rb}, +qb, Ledgers.Act.Pass{+lb}},
+      +k
+    }:
+      +e2 => +e0 => +eh => hs => +c => +h => +r => +q => +l =>
+        Honest.kept_pass(
+          ~mach,
+          s,
+          s2,
+          Ledgers.Ballot{Ledgers.Signed{Ledgers.Where{cb, hb, rb}, qb, Ledgers.Act.Pass{lb}}, k},
+          c,
+          h,
+          r,
+          q,
+          l
+        )(
+          e2
+        )(
+          e0
+        )(
+          {==}
+        )(hs(c)(h)(r)(q)(l))(Honest.pass_hit(~mach, s, cb, hb, rb, qb, lb, k, c, h, r, q, l)(eh))
+    case Ledgers.Ballot{
+      Ledgers.Signed{Ledgers.Where{+cb, +hb, +rb}, +qb, Ledgers.Act.Vote{+v, +from}},
+      +k
+    }:
+      +e2 => +e0 => +eh => hs => +c => +h => +r => +q => +l =>
+        Honest.kept_vote(
+          ~mach,
+          s,
+          s2,
+          Ledgers.Ballot{
+            Ledgers.Signed{Ledgers.Where{cb, hb, rb}, qb, Ledgers.Act.Vote{v, from}},
+            k
+          },
+          c,
+          h,
+          r,
+          q,
+          l
+        )(
+          e2
+        )(
+          e0
+        )(
+          {==}
+        )(
+          hs(c)(h)(r)(q)(l)
+        )(kk => Honest.vote_hit(~mach, s, cb, hb, rb, qb, v, from, k, c, h, kk, q, l)(eh))
+
+# the ledger of s with the ledger x and the keys ks is x
+def State.led_keyed(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  -x: Ledgers.State(Machine.Q(mach)),
+  -ks: Keys
+) -> {
+  State.ledger(
+    ~mach,
+    State.keyed(~mach, State.led(~mach, s, x), ks)
+  )
+    == x: Ledgers.State(Machine.Q(mach))
+}:
+  match s:
+    case Node{l, hs, ws, old}:
+      {==}
+
+# Seal.accept_keeps_honest once the chain m of the ballot's node is known
+def Honest.accept.at(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  +b: Ledgers.Ballot,
+  -s2: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Keychain>
+) -> {
+  Seal.accept.at(~mach, s, b, m) == Some{s2}: Maybe<&2, Node<Machine.Q(mach)>>
+} -> Node.Honest(~mach, s) -> Node.Honest(~mach, s2):
+  match m:
+    case None{}:
+      ea => Empty.absurd(
+        Node.Honest(~mach, s) -> Node.Honest(~mach, s2),
+        Shared.Maybe.none_ne_some(Node<Machine.Q(mach)>, s2, ea)
+      )
+    case Some{+kc}:
+      +ea =>
+        +kept = Ledgers.State.keep(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, s), b)
+        +ks = Keys.kept(State.keys(~mach, s), kc, b)
+        +ek = Shared.Maybe.when_hit(
+          Node<Machine.Q(mach)>,
+          Ballot.keeps(~mach, s, kc, b),
+          u => Some{State.keyed(~mach, State.led(~mach, s, kept), ks)},
+          s2
+        )(ea)
+        +ef = Shared.List.all.if_rest(
+          Seal.fits(kc, b),
+          u => List.all.if(u2 => Ballot.honest(~mach, s, b), Ballot.first(~mach, s, b))
+        )(ek)
+        Honest.kept(~mach, s, s2, b)(
+          %Shared.Maybe.some_inj(Node<Machine.Q(mach)>, State.keyed(~mach, State.led(~mach, s, kept), ks), s2, Shared.Maybe.when_rest(Node<Machine.Q(mach)>, Ballot.keeps(~mach, s, kc, b), u => Some{State.keyed(~mach, State.led(~mach, s, kept), ks)}, s2)(ea)): {State.ledger(~mach, _) == kept: Ledgers.State(Machine.Q(mach))}
+          State.led_keyed(~mach, s, kept, ks))(Shared.Maybe.is_none_sound(Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.of(b)))(Shared.List.all.if_hit(Ballot.first(~mach, s, b), u2 => Ballot.honest(~mach, s, b))(ef)))(Shared.List.all.if_rest(Ballot.first(~mach, s, b), u2 => Ballot.honest(~mach, s, b))(ef))
+
 # Seals
 # -----
 # a node keeps only ballots that it checked: a ballot that it accepts is the
@@ -18638,6 +20558,22 @@ def Seal.accept_honest(mach, kern, s, b, c, s2):
       u => List.all.if(u2 => Ballot.honest(~mach, s, b), Ballot.first(~mach, s, b))
     )(Accept.keeps(~mach, ~kern, s, b, c, s2, ec, ea))
   )
+
+# a node stays honest as it accepts ballots: a ballot that it keeps is in its
+# empty slot and honest, so each pass that it holds still names the last vote
+# of its node (Node.Honest)
+law Seal.accept_keeps_honest:
+  for ~mach: Machine()
+  for ~kern: Kernel(mach)
+  for +s: Node<Machine.Q(mach)>
+  for +b: Ledgers.Ballot
+  for s2: Node<Machine.Q(mach)>
+  {Seal.accept(~mach, ~kern, s, b) == Some{s2}: Maybe<&2, Node<Machine.Q(mach)>>}
+    -> Node.Honest(~mach, s)
+    -> Node.Honest(~mach, s2)
+
+def Seal.accept_keeps_honest(mach, kern, s, b, s2):
+  Honest.accept.at(~mach, s, b, s2, Seal.chain(~mach, ~kern, s, Ballot.store(b), Ballot.node(b)))
 
 # the keys of a node with new keys are those keys
 def Keys.keyed(
@@ -19444,6 +21380,51 @@ def Line.at_agrees(mach, u, c, rules, rs1, rs2, a, b, h, x, y):
     )(
       Line.at_grows(~mach, rs1, a, u, c, h, x)(ga)(ea)
     )(Line.at_grows(~mach, rs2, b, u, c, h, y)(gb)(eb))
+
+# a node that holds nothing is honest
+law Node.empty_honest:
+  for ~mach: Machine()
+  for seed: Hashes.Hash
+  Node.Honest(~mach, Node.empty(~mach, seed))
+
+def Node.empty_honest(mach, seed):
+  c => h => r => q => l => e => Empty.absurd(
+    {l == Last.below(~mach, q, Node.empty(~mach, seed), c, h, r): Maybe<&2, Ledgers.Last>},
+    Shared.Maybe.none_ne_some(Maybe<&2, Ledgers.Last>, l, e)
+  )
+
+# a node never shows two histories: an honest node (Node.Honest) reaches one
+# head from a head of a line after the same number of decided steps, whatever
+# the round of each step
+law Node.one_history:
+  for ~mach: Machine()
+  for ~s: Node<Machine.Q(mach)>
+  for ~c: Ledgers.Chain
+  for ~honest: Node.Honest(~mach, s)
+  for +rs1: List<&2, Nat>
+  for +rs2: List<&2, Nat>
+  for +h: Head
+  for +x: Head
+  for +y: Head
+  {List.length(&2, Nat, rs1) == List.length(&2, Nat, rs2): Nat}
+    -> {Line.at(~mach, rs1, s, c, h) == Some{x}: Maybe<&2, Head>}
+    -> {Line.at(~mach, rs2, s, c, h) == Some{y}: Maybe<&2, Head>}
+    -> {x == y: Head}
+
+def Node.one_history(mach, s, c, honest, rs1, rs2, h, x, y):
+  Line.at_agrees(
+    ~mach,
+    ~s,
+    ~c,
+    ~(z => t => e => honest(c)(Head.next(z))),
+    rs1,
+    rs2,
+    s,
+    s,
+    h,
+    x,
+    y
+  )(Grows.refl(~mach, s))(Grows.refl(~mach, s))
 
 # every part is kept by enough nodes: a node that casts for a step keeps each
 # new part of the step (what its own run of the step put: the node of the run

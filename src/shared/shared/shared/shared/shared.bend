@@ -650,6 +650,22 @@ def Nat.lt_irrefl(a: Nat) -> {Nat.is_lt(a, a) == False{}: Bool}:
     case 1n+p:
       Nat.lt_irrefl(p)
 
+# no number is below 0
+def Nat.lt_zero(a: Nat) -> {Nat.is_lt(a, 0n) == False{}: Bool}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+p:
+      {==}
+
+# a number is below the number after it
+def Nat.lt_succ(a: Nat) -> {Nat.is_lt(a, 1n+a) == True{}: Bool}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+p:
+      Nat.lt_succ(p)
+
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a < b and b <= c give a < c
 def Nat.lt_le(
@@ -885,6 +901,17 @@ def Maybe.IsNone(-A: Data, m: Maybe<&2, A>) -> Type:
       Unit
     case Some{x}:
       Empty
+
+# a Maybe that is_none calls empty is None
+def Maybe.is_none_sound(
+  -A: Data,
+  m: Maybe<&2, A>
+) -> {Maybe.is_none(&2, A, m) == True{}: Bool} -> {m == None{}: Maybe<&2, A>}:
+  match m:
+    case None{}:
+      e => {==}
+    case Some{x}:
+      e => Empty.absurd({Some{x} == None{}: Maybe<&2, A>}, Bool.false_ne_true(e))
 
 # no None equals a Some
 def Maybe.none_ne_some(-A: Data, -x: A, e: {None{} == Some{x}: Maybe<&2, A>}) -> Empty:

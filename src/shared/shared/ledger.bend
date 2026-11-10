@@ -3208,3 +3208,315 @@ def State.round_top(
         )
       )
     )
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# Cell.kept once it is known whether the slot k is the slot of b (same_k)
+def Cell.kept.at(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  +s: State(Q),
+  b: Ballot,
+  +k: List<&2, Bool>,
+  hk: List<&2, Bool>,
+  r: Nat,
+  n: String,
+  same_k: Bool,
+  es: {Tries.Trie.same_key(k, Slot.of(b)) == same_k: Bool},
+  e0: {State.get(~Q, s, Slot.of(b)) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>}
+) -> {
+  Cell.ballot(
+    ~Q,
+    Shared.Maybe.join(
+      ~Cells.Cell<Entry<Q>>,
+      ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+      State.get(~Q, s, k),
+      Bool.pick(Maybe<&2, Cells.Cell<Entry<Q>>>, same_k, Some{Cells.One{Entry.Vote{b}}}, None{})
+    ),
+    hk,
+    r,
+    n
+  )
+    == Shared.Maybe.join(
+      ~Ballot,
+      ~(x => y => x),
+      Cell.ballot(~Q, State.get(~Q, s, k), hk, r, n),
+      Shared.Maybe.when(Ballot, List.all.if(u => Ballot.is(b, hk, r, n), same_k), u => Some{b})
+    ): Maybe<&2, Ballot>
+}:
+  match same_k:
+    case False{}:
+      %Tries.Trie.none_join(
+        ~Cells.Cell<Entry<Q>>,
+        ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+        State.get(~Q, s, k)
+      ): {
+        Cell.ballot(
+          ~Q,
+          _,
+          hk,
+          r,
+          n
+        )
+          == Shared.Maybe.join(
+            ~Ballot,
+            ~(x => y => x),
+            Cell.ballot(~Q, State.get(~Q, s, k), hk, r, n),
+            None{}
+          ): Maybe<&2, Ballot>
+      }
+      Tries.Trie.none_join(~Ballot, ~(x => y => x), Cell.ballot(~Q, State.get(~Q, s, k), hk, r, n))
+    case True{}:
+      %Equal.sym(
+        List<&2, Bool>,
+        k,
+        Slot.of(b),
+        Tries.Trie.same_key_sound(k, Slot.of(b))(es)
+      ): {
+        Cell.ballot(
+          ~Q,
+          Shared.Maybe.join(
+            ~Cells.Cell<Entry<Q>>,
+            ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+            State.get(~Q, s, _),
+            Some{Cells.One{Entry.Vote{b}}}
+          ),
+          hk,
+          r,
+          n
+        )
+          == Shared.Maybe.join(
+            ~Ballot,
+            ~(x => y => x),
+            Cell.ballot(~Q, State.get(~Q, s, _), hk, r, n),
+            Shared.Maybe.when(Ballot, Ballot.is(b, hk, r, n), u => Some{b})
+          ): Maybe<&2, Ballot>
+      }
+      %Equal.sym(
+        Maybe<&2, Cells.Cell<Entry<Q>>>,
+        State.get(~Q, s, Slot.of(b)),
+        None{},
+        e0
+      ): {
+        Cell.ballot(
+          ~Q,
+          Shared.Maybe.join(
+            ~Cells.Cell<Entry<Q>>,
+            ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+            _,
+            Some{Cells.One{Entry.Vote{b}}}
+          ),
+          hk,
+          r,
+          n
+        )
+          == Shared.Maybe.join(
+            ~Ballot,
+            ~(x => y => x),
+            Cell.ballot(~Q, _, hk, r, n),
+            Shared.Maybe.when(Ballot, Ballot.is(b, hk, r, n), u => Some{b})
+          ): Maybe<&2, Ballot>
+      }
+      {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# a read of the slot k after b is kept in its empty slot: the old read, joined
+# with b when k is the slot of b and b is the ballot asked for (Ballot.is)
+def Cell.kept(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  +s: State(Q),
+  +b: Ballot,
+  +k: List<&2, Bool>,
+  hk: List<&2, Bool>,
+  r: Nat,
+  n: String
+) -> {
+  State.get(~Q, s, Slot.of(b)) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>
+} -> {
+  Cell.ballot(
+    ~Q,
+    State.get(~Q, State.keep(~Q, ~same, s, b), k),
+    hk,
+    r,
+    n
+  )
+    == Shared.Maybe.join(
+      ~Ballot,
+      ~(x => y => x),
+      Cell.ballot(~Q, State.get(~Q, s, k), hk, r, n),
+      Shared.Maybe.when(
+        Ballot,
+        List.all.if(u => Ballot.is(b, hk, r, n), Tries.Trie.same_key(k, Slot.of(b))),
+        u => Some{b}
+      )
+    ): Maybe<&2, Ballot>
+}:
+  +e0 =>
+    %Equal.sym(
+      Maybe<&2, Cells.Cell<Entry<Q>>>,
+      State.get(~Q, s, Slot.of(b)),
+      None{},
+      e0
+    ): {
+      Cell.ballot(
+        ~Q,
+        State.get(~Q, State.add.of(~Q, ~same, s, Slot.of(b), Entry.Vote{b}, _), k),
+        hk,
+        r,
+        n
+      )
+        == Shared.Maybe.join(
+          ~Ballot,
+          ~(x => y => x),
+          Cell.ballot(~Q, State.get(~Q, s, k), hk, r, n),
+          Shared.Maybe.when(
+            Ballot,
+            List.all.if(u => Ballot.is(b, hk, r, n), Tries.Trie.same_key(k, Slot.of(b))),
+            u => Some{b}
+          )
+        ): Maybe<&2, Ballot>
+    }
+    %Equal.sym(
+      Maybe<&2, Cells.Cell<Entry<Q>>>,
+      State.get(~Q, State.put(~Q, ~same, s, Slot.of(b), Entry.Vote{b}), k),
+      Shared.Maybe.join(
+        ~Cells.Cell<Entry<Q>>,
+        ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+        State.get(~Q, s, k),
+        State.get(~Q, State.one(~Q, Slot.of(b), Entry.Vote{b}), k)
+      ),
+      Tries.Trie.get_union(
+        ~Cells.Cell<Entry<Q>>,
+        ~Cells.Cell.join(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+        s,
+        State.one(~Q, Slot.of(b), Entry.Vote{b}),
+        k
+      )
+    ): {
+      Cell.ballot(
+        ~Q,
+        _,
+        hk,
+        r,
+        n
+      )
+        == Shared.Maybe.join(
+          ~Ballot,
+          ~(x => y => x),
+          Cell.ballot(~Q, State.get(~Q, s, k), hk, r, n),
+          Shared.Maybe.when(
+            Ballot,
+            List.all.if(u => Ballot.is(b, hk, r, n), Tries.Trie.same_key(k, Slot.of(b))),
+            u => Some{b}
+          )
+        ): Maybe<&2, Ballot>
+    }
+    Cell.kept.at(~Q, ~same, s, b, k, hk, r, n, Tries.Trie.same_key(k, Slot.of(b)), {==}, e0)
+
+# a read of a pass reads the key of its height only: two heights with one key
+# read the same pass
+def State.passed_key(
+  ~Q: Data,
+  s: State(Q),
+  c: Chain,
+  h: U32,
+  c2: Chain,
+  h2: U32,
+  r: Nat,
+  n: String
+) -> {
+  Slot.height(c, h) == Slot.height(c2, h2): List<&2, Bool>
+} -> {
+  State.passed(
+    ~Q,
+    s,
+    Where{c, h, r},
+    n
+  )
+    == State.passed(~Q, s, Where{c2, h2, r}, n): Maybe<&2, Maybe<&2, Last>>
+}:
+  e =>
+    %Equal.sym(
+      List<&2, Bool>,
+      Slot.height(c, h),
+      Slot.height(c2, h2),
+      e
+    ): {
+      Passed.of(
+        ~Q,
+        State.get(
+          ~Q,
+          s,
+          List.append(&2, Bool, List.append(&2, Bool, _, Round.key(r, [True{}])), Slot.ballot(n))
+        ),
+        _,
+        r,
+        n
+      )
+        == State.passed(~Q, s, Where{c2, h2, r}, n): Maybe<&2, Maybe<&2, Last>>
+    }
+    {==}
+
+# the round of a height reads the key of the height only
+def State.round_key(
+  ~Q: Data,
+  s: State(Q),
+  c: Chain,
+  h: U32,
+  c2: Chain,
+  h2: U32
+) -> {
+  Slot.height(c, h) == Slot.height(c2, h2): List<&2, Bool>
+} -> {State.round(~Q, s, c, h) == State.round(~Q, s, c2, h2): Nat}:
+  e =>
+    %Equal.sym(
+      List<&2, Bool>,
+      Slot.height(c, h),
+      Slot.height(c2, h2),
+      e
+    ): {
+      Shared.Nat.before(
+        Spine.depth(Cells.Cell<Entry<Q>>, State.under(~Q, s, _))
+      )
+        == State.round(~Q, s, c2, h2): Nat
+    }
+    {==}
+
+# State.passed_round once the cell m of the pass is known
+def State.passed_round.at(
+  ~Q: Data,
+  s: State(Q),
+  c: Chain,
+  h: U32,
+  r: Nat,
+  n: String,
+  -l: Maybe<&2, Last>,
+  m: Maybe<&2, Cells.Cell<Entry<Q>>>
+) -> {
+  State.get(~Q, s, Slot.pass(Where{c, h, r}, n)) == m: Maybe<&2, Cells.Cell<Entry<Q>>>
+} -> {
+  Passed.of(~Q, m, Slot.height(c, h), r, n) == Some{l}: Maybe<&2, Maybe<&2, Last>>
+} -> {Nat.is_le(r, State.round(~Q, s, c, h)) == True{}: Bool}:
+  match m:
+    case None{}:
+      em => ep => Empty.absurd(
+        {Nat.is_le(r, State.round(~Q, s, c, h)) == True{}: Bool},
+        Shared.Maybe.none_ne_some(Maybe<&2, Last>, l, ep)
+      )
+    case Some{x}:
+      em => ep => State.round_top(~Q, s, c, h, r, [True{}], Slot.ballot(n), x)(em)
+
+# a pass that a ledger holds at a height is in a round up to the round that it
+# reads there
+def State.passed_round(
+  ~Q: Data,
+  +s: State(Q),
+  +c: Chain,
+  +h: U32,
+  +r: Nat,
+  +n: String,
+  -l: Maybe<&2, Last>
+) -> {
+  State.passed(~Q, s, Where{c, h, r}, n) == Some{l}: Maybe<&2, Maybe<&2, Last>>
+} -> {Nat.is_le(r, State.round(~Q, s, c, h)) == True{}: Bool}:
+  State.passed_round.at(~Q, s, c, h, r, n, l, State.get(~Q, s, Slot.pass(Where{c, h, r}, n)))({==})
