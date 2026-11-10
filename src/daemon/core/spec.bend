@@ -2507,6 +2507,31 @@ def Advance.at(+s: State(), +c: Ledgers.Chain, +h: Head, m: Maybe<&2, Tip>) -> S
         )
       )
 
+# the step that the owners in the tip of the head h decided next on the line
+# c, if they did
+def Advance.vote(+s: State(), c: Ledgers.Chain, +h: Head) -> Maybe<&2, Ledgers.Vote>:
+  Maybe.bind(
+    &2,
+    Tip,
+    Ledgers.Vote,
+    Head.tip(s, h),
+    t => Ledgers.State.decide(
+      ~Ask,
+      State.ledger(s),
+      Ledgers.Where{c, Head.next(h)},
+      Line.owners(s, t)
+    )
+  )
+
+# the head h after the step m: one height up, at the tip that the step names
+# (no step, or one that names no tip: h)
+def Head.step(h: Head, m: Maybe<&2, Ledgers.Vote>) -> Head:
+  match h m:
+    case Head{r, b, n, th} Some{Ledgers.Vote{before, qs, Some{x}}}:
+      Head{r, b, U32.inc(n), Some{x}}
+    case x y:
+      x
+
 # Node.advance once the head m of the line c is known
 def Advance.head(+s: State(), +c: Ledgers.Chain, m: Maybe<&2, Head>) -> State():
   match m:
@@ -3813,6 +3838,36 @@ law Node.draft_some:
     -> {Node.asked(s, Ledgers.Id{w, q2}) == Some{Ledgers.Asked{t, q}}: Maybe<&2, Ledgers.Asked<Ask>>}
     -> {Draft.content(r, b, n, q) == Some{c}: Maybe<&2, Content>}
     -> {Maybe.is_some(&2, Content, Node.draft(s, w, r, b, n)) == True{}: Bool}
+
+# a majority decides, in sequence: a head moves only to the tip that the
+# owners in its tip decided next (Advance.vote), so two nodes at the same head
+# of a line, whose ledgers do not clash (one ledger u keeps every cell of
+# both), move to the same head
+law Node.advance_decided:
+  for +s: State()
+  for +c: Ledgers.Chain
+  for +h: Head
+  {Node.head_of(s, c) == Some{h}: Maybe<&2, Head>}
+    -> {Heads.level(Some{h}, Node.head_of(Node.advance(s, c), c)) == False{}: Bool}
+    -> {
+      Node.head_of(Node.advance(s, c), c) == Some{Head.step(h, Advance.vote(s, c, h))}: Maybe<&2, Head>
+    }
+
+law Node.advance_agrees:
+  for +a: State()
+  for +b: State()
+  for +u: State()
+  for +c: Ledgers.Chain
+  for +h: Head
+  {Node.grows(a, u) == True{}: Bool}
+    -> {Node.grows(b, u) == True{}: Bool}
+    -> {Node.head_of(a, c) == Some{h}: Maybe<&2, Head>}
+    -> {Node.head_of(b, c) == Some{h}: Maybe<&2, Head>}
+    -> {Heads.level(Some{h}, Node.head_of(Node.advance(a, c), c)) == False{}: Bool}
+    -> {Heads.level(Some{h}, Node.head_of(Node.advance(b, c), c)) == False{}: Bool}
+    -> {
+      Node.head_of(Node.advance(a, c), c) == Node.head_of(Node.advance(b, c), c): Maybe<&2, Head>
+    }
 
 # a change counts once, however often and wherever it is sent: a node that
 # took a request in changes nothing when any node sends its ID again
