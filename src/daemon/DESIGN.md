@@ -112,6 +112,9 @@ README claim, then the law.
 - A writer's read shows its own pending write: `Node.draft_some` (a write that waits gives a
   draft), `Node.read_draft` (the read at the head of the branch is the bytes of the draft). On
   one node; after a switch of nodes it rests on sync, with no law.
+- A node fetches the rest on demand: `Node.fetch` (a node that lacks the data of a hash holds it
+  after it takes in what a node that holds it serves; `Node.lacks` gives the hash, `Node.serve`
+  the data). Below it: `State.take_data`.
 - A taken write reads back: `Judge.write_reads`.
 - A merge never loses a change made on only one side: `Pick.merge_theirs`, `Pick.merge_ours`.
 - The owners of a line are the nodes inside its owner group: `Own.takes_inside`.
@@ -139,9 +142,9 @@ Design (each needs a decision or new work; none is a proof detail):
   version of every branch. Target: notices are made when a head moves, from the diff of the two
   contents and an index of imports by content root. No law yet for "writers are told only about
   changes to what their work uses".
-- **README claims with no code yet:** every part is kept by enough nodes to never be lost; a
-  node fetches the rest on demand (a look gives the hash of the node that it lacks, nothing asks
-  for it yet).
+- **README claim with no law yet:** every part is kept by enough nodes to never be lost. Target:
+  a node that casts for a step holds each new part of the step, so a majority of the owners
+  holds each part of a decided step, and a ledger only grows.
 - **A put is done twice** for a taken request (`Work.put`, then `Run.content`): the second one
   makes growth independent of the judge. Target: prove that each judge only grows its node, and
   let the run keep the judge's node.

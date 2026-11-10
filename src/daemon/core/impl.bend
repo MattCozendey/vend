@@ -2495,6 +2495,113 @@ def Spec.Node.take_grows(s, t):
     )
   )
 
+# after its ledger took in what was sent, a node only grows as it takes the
+# rest in
+def Take.tail(
+  +s: Spec.State(),
+  +t: Ledgers.State(Spec.Ask)
+) -> {
+  Spec.Node.grows(
+    Spec.State.led(
+      s,
+      Ledgers.State.take(
+        ~Spec.Ask,
+        Spec.State.ledger(s),
+        Spec.Take.clean(Tries.Trie.values(Cells.Cell<Ledgers.Entry<Spec.Ask>>, t), Ledgers.State.empty(~Spec.Ask))
+      )
+    ),
+    Spec.Node.take(s, t)
+  )
+    == True{}: Bool
+}:
+  +sent = Spec.Take.clean(Tries.Trie.values(Cells.Cell<Ledgers.Entry<Spec.Ask>>, t), Ledgers.State.empty(~Spec.Ask))
+  +l1 = Ledgers.State.take(~Spec.Ask, Spec.State.ledger(s), sent)
+  +s1 = Spec.State.led(s, l1)
+  +cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Spec.Ask>>, sent)
+  +s2 = Spec.Take.asks(cs, Spec.State.ledger(s), s1)
+  +bs = Spec.Ballots.of(
+    Tries.Trie.values(Cells.Cell<Ledgers.Entry<Spec.Ask>>, Ledgers.State.missing(~Spec.Ask, ~Spec.Ask.is_eq, t, Spec.State.ledger(s)))
+  )
+  Grows.trans(s1, s2, Spec.Sealed.take(bs, s2))(Take.asks.grows(cs, Spec.State.ledger(s), s1))(
+    Each.grows(List.length(&2, Ledgers.Ballot, bs), bs, Spec.Pending.of(bs), s2)
+  )
+
+# Node.fetch for the data ws itself
+def Fetch.take(
+  +b: Spec.State(),
+  +ws: List<&2, U32>
+) -> {
+  Ledgers.State.get(~Spec.Ask, Spec.State.ledger(b), Ledgers.Slot.data(Hashes.Sha.hash(ws)))
+    == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
+} -> {
+  Ledgers.State.data(
+    ~Spec.Ask,
+    Spec.State.ledger(
+      Spec.Node.take(b, Ledgers.State.put_data(~Spec.Ask, ~Spec.Ask.is_eq, Ledgers.State.empty(~Spec.Ask), ws))
+    ),
+    Hashes.Sha.hash(ws)
+  )
+    == Some{ws}: Maybe<&2, List<&2, U32>>
+}:
+  +t = Ledgers.State.put_data(~Spec.Ask, ~Spec.Ask.is_eq, Ledgers.State.empty(~Spec.Ask), ws)
+  +l1 = Ledgers.State.take(~Spec.Ask, Spec.State.ledger(b), t)
+  e =>
+    Ledgers.State.data_grows(
+      ~Spec.Ask,
+      ~Spec.Ask.is_eq,
+      ~Ask.laws(),
+      Spec.State.ledger(Spec.State.led(b, l1)),
+      Spec.State.ledger(Spec.Node.take(b, t)),
+      Hashes.Sha.hash(ws),
+      ws
+    )(Take.tail(b, t))(
+      %Equal.sym(
+        Ledgers.State(Spec.Ask),
+        Spec.State.ledger(Spec.State.led(b, l1)),
+        l1,
+        Led.led(b, l1)
+      ): {Ledgers.State.data(~Spec.Ask, _, Hashes.Sha.hash(ws)) == Some{ws}: Maybe<&2, List<&2, U32>>}
+      Ledgers.State.take_data(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(b), ws)(e)
+    )
+
+def Spec.Node.fetch(a, b, h, ws):
+  +ea => eb =>
+    %Equal.sym(
+      Maybe<&2, List<&2, U32>>,
+      Ledgers.State.data(~Spec.Ask, Spec.State.ledger(a), h),
+      Some{ws},
+      ea
+    ): {
+      Ledgers.State.data(
+        ~Spec.Ask,
+        Spec.State.ledger(Spec.Node.take(b, Spec.Serve.put(_, Ledgers.State.empty(~Spec.Ask)))),
+        h
+      )
+        == Some{ws}: Maybe<&2, List<&2, U32>>
+    }
+    %Ledgers.State.data_hash(~Spec.Ask, Spec.State.ledger(a), h, ws)(ea): {
+      Ledgers.State.data(
+        ~Spec.Ask,
+        Spec.State.ledger(
+          Spec.Node.take(b, Ledgers.State.put_data(~Spec.Ask, ~Spec.Ask.is_eq, Ledgers.State.empty(~Spec.Ask), ws))
+        ),
+        _
+      )
+        == Some{ws}: Maybe<&2, List<&2, U32>>
+    }
+    Fetch.take(b, ws)(
+      %Equal.sym(
+        Hashes.Hash,
+        Hashes.Sha.hash(ws),
+        h,
+        Ledgers.State.data_hash(~Spec.Ask, Spec.State.ledger(a), h, ws)(ea)
+      ): {
+        Ledgers.State.get(~Spec.Ask, Spec.State.ledger(b), Ledgers.Slot.data(_))
+          == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
+      }
+      eb
+    )
+
 # what a node does on each of some lines only grows it
 def Steps.grows(
   +n: String,

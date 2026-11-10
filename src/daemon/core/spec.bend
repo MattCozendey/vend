@@ -3998,6 +3998,39 @@ def Consent.at(n: String, +s: State(), i: Ledgers.Id, m: Maybe<&2, Ledgers.Chain
 def Node.consent(n: String, +s: State(), +i: Ledgers.Id) -> State():
   Consent.at(n, s, i, Node.chain_of(s, i))
 
+# the hash of the node that the look l lacks, if it lacks one
+def Look.lack(l: Trees.Look) -> Maybe<&2, Hashes.Hash>:
+  match l:
+    case Trees.Look.Missing{x}:
+      Some{x}
+    case Trees.Look.Found{v}:
+      None{}
+    case Trees.Look.Absent{}:
+      None{}
+
+# the hash of the node that a read of the key k of the tree whose root is h
+# lacks in s, if it lacks one: what the node asks another node for. A node
+# keeps the part of a store that it uses, and fetches the rest on demand
+def Node.lacks(+s: State(), +h: Maybe<&2, Hashes.Hash>, k: List<&2, U32>) -> Maybe<&2, Hashes.Hash>:
+  Look.lack(Node.look(s, h, k))
+
+# l with the data m, if any
+def Serve.put(m: Maybe<&2, List<&2, U32>>, +l: Ledgers.State(Ask)) -> Ledgers.State(Ask):
+  match m:
+    case None{}:
+      l
+    case Some{+ws}:
+      Ledgers.State.put_data(~Ask, ~Ask.is_eq, l, ws)
+
+# the data that s holds under the hashes hs, as a ledger: what a node sends
+# to a node that asks for them (Node.fetch)
+def Node.serve(+s: State(), hs: List<&2, Hashes.Hash>) -> Ledgers.State(Ask):
+  match hs:
+    case Nil{}:
+      Ledgers.State.empty(~Ask)
+    case Con{+h, r}:
+      Serve.put(Ledgers.State.data(~Ask, State.ledger(s), h), Node.serve(s, r))
+
 # what the ledger r lacks of s: what a sync from s to a holder of r sends
 def Node.missing(s: State(), r: Ledgers.State(Ask)) -> Ledgers.State(Ask):
   Ledgers.State.missing(~Ask, ~Ask.is_eq, State.ledger(s), r)
@@ -5551,6 +5584,23 @@ law Line.at_agrees:
     -> {Line.at(rs1, a, c, h) == Some{x}: Maybe<&2, Head>}
     -> {Line.at(rs2, b, c, h) == Some{y}: Maybe<&2, Head>}
     -> {x == y: Head}
+
+# a node fetches on demand: a node b that lacks the data of the hash h holds
+# it after it takes in what a node a that holds it serves
+law Node.fetch:
+  for +a: State()
+  for +b: State()
+  for +h: Hashes.Hash
+  for +ws: List<&2, U32>
+  {Ledgers.State.data(~Ask, State.ledger(a), h) == Some{ws}: Maybe<&2, List<&2, U32>>}
+    -> {
+      Ledgers.State.get(~Ask, State.ledger(b), Ledgers.Slot.data(h))
+        == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
+    }
+    -> {
+      Ledgers.State.data(~Ask, State.ledger(Node.take(b, Node.serve(a, [h]))), h)
+        == Some{ws}: Maybe<&2, List<&2, U32>>
+    }
 
 # a writer reads its own pending write: at the head of a branch, its read is
 # the bytes of its draft, not what the branch holds

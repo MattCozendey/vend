@@ -2587,3 +2587,138 @@ def State.add.of.grows(
 
 def State.add_grows(ty, same, laws, s, k, e):
   State.add.of.grows(~ty, ~same, ~laws, s, k, e, State.get(~ty, s, k), {==})
+
+# a holder that lacks the data ws, and takes it in, holds it under its hash:
+# a part that a node asks another node for, it then holds
+law State.take_data:
+  for ~Q: Data
+  for ~same: Q -> Q -> Bool
+  for +s: State(Q)
+  for +ws: List<&2, U32>
+  {State.get(~Q, s, Slot.data(Hashes.Sha.hash(ws))) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>}
+    -> {
+      State.data(
+        ~Q,
+        State.take(~Q, s, State.put_data(~Q, ~same, State.empty(~Q), ws)),
+        Hashes.Sha.hash(ws)
+      )
+        == Some{ws}: Maybe<&2, List<&2, U32>>
+    }
+
+def State.take_data(ty, same, s, ws):
+  e =>
+    %Equal.sym(
+      Maybe<&2, Cells.Cell<Entry<ty>>>,
+      State.get(
+        ~ty,
+        State.take(~ty, s, State.put_data(~ty, ~same, State.empty(~ty), ws)),
+        Slot.data(Hashes.Sha.hash(ws))
+      ),
+      Some{Cells.One{Entry.Data{ws}}},
+      Equal.trans(
+        Maybe<&2, Cells.Cell<Entry<ty>>>,
+        State.get(
+          ~ty,
+          State.take(~ty, s, State.put_data(~ty, ~same, State.empty(~ty), ws)),
+          Slot.data(Hashes.Sha.hash(ws))
+        ),
+        Shared.Maybe.join(
+          ~Cells.Cell<Entry<ty>>,
+          ~(x => y => x),
+          State.get(~ty, s, Slot.data(Hashes.Sha.hash(ws))),
+          State.get(
+            ~ty,
+            State.put_data(~ty, ~same, State.empty(~ty), ws),
+            Slot.data(Hashes.Sha.hash(ws))
+          )
+        ),
+        Some{Cells.One{Entry.Data{ws}}},
+        Tries.Trie.get_union(
+          ~Cells.Cell<Entry<ty>>,
+          ~(x => y => x),
+          s,
+          State.put_data(~ty, ~same, State.empty(~ty), ws),
+          Slot.data(Hashes.Sha.hash(ws))
+        ),
+        (
+          %Equal.sym(
+            Maybe<&2, Cells.Cell<Entry<ty>>>,
+            State.get(~ty, s, Slot.data(Hashes.Sha.hash(ws))),
+            None{},
+            e
+          ): {
+            Shared.Maybe.join(
+              ~Cells.Cell<Entry<ty>>,
+              ~(x => y => x),
+              _,
+              State.get(
+                ~ty,
+                State.put_data(~ty, ~same, State.empty(~ty), ws),
+                Slot.data(Hashes.Sha.hash(ws))
+              )
+            )
+              == Some{Cells.One{Entry.Data{ws}}}: Maybe<&2, Cells.Cell<Entry<ty>>>
+          }
+          Equal.trans(
+            Maybe<&2, Cells.Cell<Entry<ty>>>,
+            Tries.Trie.get(
+              Cells.Cell<Entry<ty>>,
+              Tries.Trie.set(
+                Cells.Cell<Entry<ty>>,
+                Tries.Trie.new(Cells.Cell<Entry<ty>>),
+                Slot.data(Hashes.Sha.hash(ws)),
+                Cells.One{Entry.Data{ws}}
+              ),
+              Slot.data(Hashes.Sha.hash(ws))
+            ),
+            Bool.pick(
+              Maybe<&2, Cells.Cell<Entry<ty>>>,
+              Tries.Trie.same_key(Slot.data(Hashes.Sha.hash(ws)), Slot.data(Hashes.Sha.hash(ws))),
+              Some{Cells.One{Entry.Data{ws}}},
+              None{}
+            ),
+            Some{Cells.One{Entry.Data{ws}}},
+            Tries.Trie.get_set(
+              Cells.Cell<Entry<ty>>,
+              Tries.Trie.new(Cells.Cell<Entry<ty>>),
+              Slot.data(Hashes.Sha.hash(ws)),
+              Cells.One{Entry.Data{ws}},
+              Slot.data(Hashes.Sha.hash(ws))
+            ),
+            (
+              %Equal.sym(
+                Bool,
+                Tries.Trie.same_key(Slot.data(Hashes.Sha.hash(ws)), Slot.data(Hashes.Sha.hash(ws))),
+                True{},
+                Shared.List.is_eq_refl(
+                  ~Bool,
+                  ~Shared.Bool.is_eq,
+                  ~Shared.Bool.laws(),
+                  Slot.data(Hashes.Sha.hash(ws))
+                )
+              ): {
+                Bool.pick(Maybe<&2, Cells.Cell<Entry<ty>>>, _, Some{Cells.One{Entry.Data{ws}}}, None{})
+                  == Some{Cells.One{Entry.Data{ws}}}: Maybe<&2, Cells.Cell<Entry<ty>>>
+              }
+              {==}
+            )
+          )
+        )
+      )
+    ): {
+      Maybe.bind(
+        &2,
+        List<&2, U32>,
+        List<&2, U32>,
+        Data.of(~ty, Cells.Cell.value(Entry<ty>, _)),
+        w2 => Data.check(Hashes.Sha.hash(ws), w2)
+      )
+        == Some{ws}: Maybe<&2, List<&2, U32>>
+    }
+    %Equal.sym(
+      Bool,
+      Hashes.Hash.is_eq(Hashes.Sha.hash(ws), Hashes.Sha.hash(ws)),
+      True{},
+      Hashes.Hash.is_eq_refl(Hashes.Sha.hash(ws))
+    ): {Shared.Maybe.when(List<&2, U32>, _, u => Some{ws}) == Some{ws}: Maybe<&2, List<&2, U32>>}
+    {==}
