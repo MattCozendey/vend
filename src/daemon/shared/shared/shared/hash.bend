@@ -554,10 +554,6 @@ def Hash.is_eq_sound(a: Hash, b: Hash) -> {Hash.is_eq(a, b) == True{}: Bool} -> 
         )(e7): {Hash{a0, a1, a2, a3, a4, a5, a6, a7} == Hash{a0, a1, a2, a3, a4, a5, a6, _}: Hash}
         {==}
 
-# the laws of Hash.is_eq
-def Hash.laws() -> Shared.Eq.Laws(Hash, Hash.is_eq):
-  (a => Hash.is_eq_refl(a), a => b => Hash.is_eq_sound(a, b))
-
 # Codes
 # -----
 

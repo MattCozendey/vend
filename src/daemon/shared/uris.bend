@@ -228,21 +228,6 @@ def slash1.at(
     Texts.Text.drop_none(r)
   ): {SCon{c, r} == SCon{'/', _}: String}; slash_cons.at(b, c, r)(x)(x1))
 
-# a text that starts with '/' is '/' then the rest
-def slash1(
-  t: String
-) -> {
-  String.starts_with.go("/", t) == True{}: Bool
-} -> {t == SCon{'/', String.drop(t, 1n)}: String}:
-  match t:
-    case SNil{}:
-      h => Empty.absurd(
-        {SNil{} == SCon{'/', String.drop(SNil{}, 1n)}: String},
-        Shared.Bool.false_ne_true(h)
-      )
-    case SCon{+c, r}:
-      slash1.at(Char.is_eq(c, '/'), c, r)({==})
-
 # slash2, by whether the first character is '/' (b)
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 def slash2.at.g11(

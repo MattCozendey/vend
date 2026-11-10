@@ -88,14 +88,6 @@ def Eq.ne_flip(
 ) -> {same(y, x) == False{}: Bool}:
   Eq.ne_flip.at(~A, ~same, ~laws, same(y, x), x, y, no, {==})
 
-# an "and" with False is False
-def Bool.and_false_right(a: Bool) -> {Bool.and(a, False{}) == False{}: Bool}:
-  match a:
-    case True{}:
-      {==}
-    case False{}:
-      {==}
-
 # anything or True is True
 def Bool.or_true_right(a: Bool) -> {Bool.or(a, True{}) == True{}: Bool}:
   match a:
@@ -326,116 +318,7 @@ def List.keep(~A: Data, ~V: Data, ~p: V -> A -> Bool, xs: List<&2, A>, +g: V) ->
       List.filter.put(A, x, List.keep(~A, ~V, ~p, r, g), p(g)(x))
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# List.contains_keep at the first element x, once p is known to keep it or not (k)
-# and x is known to be m or not (hit)
-def List.contains_keep.at(
-  ~A: Data,
-  ~V: Data,
-  ~same: A -> A -> Bool,
-  ~p: V -> A -> Bool,
-  ~laws: Eq.Laws(A, same),
-  k: Bool,
-  hit: Bool,
-  x: A,
-  ks: List<&2, A>,
-  r: List<&2, A>,
-  g: V,
-  m: A,
-  ek: {p(g)(x) == k: Bool},
-  +eh: {same(x, m) == hit: Bool},
-  ih: {List.contains(~A, ~same, ks, m) == Bool.and(p(g)(m), List.contains(~A, ~same, r, m)): Bool}
-) -> {
-  List.contains(
-    ~A,
-    ~same,
-    List.filter.put(A, x, ks, k),
-    m
-  )
-    == Bool.and(p(g)(m), List.any.if(u => List.contains(~A, ~same, r, m), hit)): Bool
-}:
-  match k hit:
-    case True{} True{}:
-      %Equal.sym(Bool, same(x, m), True{}, eh):
-        {List.any.if(u => List.contains(~A, ~same, ks, m), _) == Bool.and(p(g)(m), True{}): Bool}
-      %Eq.sound(~A, ~same, laws, x, m)(eh): {True{} == Bool.and(p(g)(_), True{}): Bool}
-      %Equal.sym(Bool, p(g)(x), True{}, ek): {True{} == Bool.and(_, True{}): Bool}
-      {==}
-    case True{} False{}:
-      %Equal.sym(Bool, same(x, m), False{}, eh):
-        {
-          List.any.if(
-            u => List.contains(~A, ~same, ks, m),
-            _
-          )
-            == Bool.and(p(g)(m), List.contains(~A, ~same, r, m)): Bool
-        }
-      ih
-    case False{} True{}:
-      %Equal.sym(
-        Bool,
-        List.contains(~A, ~same, ks, m),
-        Bool.and(p(g)(m), List.contains(~A, ~same, r, m)),
-        ih
-      ):
-        {_ == Bool.and(p(g)(m), True{}): Bool}
-      %Eq.sound(
-        ~A,
-        ~same,
-        laws,
-        x,
-        m
-      )(eh): {Bool.and(p(g)(_), List.contains(~A, ~same, r, _)) == Bool.and(p(g)(_), True{}): Bool}
-      %Equal.sym(
-        Bool,
-        p(g)(x),
-        False{},
-        ek
-      ): {Bool.and(_, List.contains(~A, ~same, r, x)) == Bool.and(_, True{}): Bool}
-      {==}
-    case False{} False{}:
-      ih
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# m is kept exactly when p keeps it and xs has it
-def List.contains_keep(
-  ~A: Data,
-  ~V: Data,
-  ~same: A -> A -> Bool,
-  ~p: V -> A -> Bool,
-  ~laws: Eq.Laws(A, same),
-  xs: List<&2, A>,
-  +g: V,
-  +m: A
-) -> {
-  List.contains(
-    ~A,
-    ~same,
-    List.keep(~A, ~V, ~p, xs, g),
-    m
-  )
-    == Bool.and(p(g)(m), List.contains(~A, ~same, xs, m)): Bool
-}:
-  match xs:
-    case Nil{}:
-      Equal.sym(Bool, Bool.and(p(g)(m), False{}), False{}, Bool.and_false_right(p(g)(m)))
-    case Con{+x, +r}:
-      List.contains_keep.at(
-        ~A,
-        ~V,
-        ~same,
-        ~p,
-        ~laws,
-        p(g)(x),
-        same(x, m),
-        x,
-        List.keep(~A, ~V, ~p, r, g),
-        r,
-        g,
-        m,
-        {==},
-        {==},
-        List.contains_keep(~A, ~V, ~same, ~p, ~laws, r, g, m)
-      )
 
 # the lists that f gives for each element of xs, given g, one after another
 def List.flat(
@@ -453,102 +336,9 @@ def List.flat(
       List.append(&2, B, f(g)(x), List.flat(~A, ~B, ~V, ~f, r, g))
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# List.contains_flat at the first element h, once it is known to be x or not (hit)
-def List.contains_flat.at(
-  ~A: Data,
-  ~B: Data,
-  ~V: Data,
-  ~sa: A -> A -> Bool,
-  ~sb: B -> B -> Bool,
-  ~f: V -> A -> List<&2, B>,
-  ~laws: Eq.Laws(A, sa),
-  hit: Bool,
-  h: A,
-  r: List<&2, A>,
-  g: V,
-  x: A,
-  y: B,
-  eh: {sa(h, x) == hit: Bool},
-  hx: {List.any.if(u => List.contains(~A, ~sa, r, x), hit) == True{}: Bool},
-  hy: {List.contains(~B, ~sb, f(g)(x), y) == True{}: Bool},
-  ih: {
-    List.contains(~A, ~sa, r, x) == True{}: Bool
-  } -> {List.contains(~B, ~sb, List.flat(~A, ~B, ~V, ~f, r, g), y) == True{}: Bool}
-) -> {
-  Bool.or(
-    List.contains(~B, ~sb, f(g)(h), y),
-    List.contains(~B, ~sb, List.flat(~A, ~B, ~V, ~f, r, g), y)
-  )
-    == True{}: Bool
-}:
-  match hit:
-    case True{}:
-      contains1 = List.contains(~B, ~sb, List.flat(~A, ~B, ~V, ~f, r, g), y)
-      %Equal.sym(A, h, x, Eq.sound(~A, ~sa, laws, h, x)(eh)):
-        {Bool.or(List.contains(~B, ~sb, f(g)(_), y), contains1) == True{}: Bool}
-      %Equal.sym(Bool, List.contains(~B, ~sb, f(g)(x), y), True{}, hy):
-        {Bool.or(_, contains1) == True{}: Bool}
-      {==}
-    case False{}:
-      contains1 = List.contains(~B, ~sb, f(g)(h), y)
-      %Equal.sym(Bool, List.contains(~B, ~sb, List.flat(~A, ~B, ~V, ~f, r, g), y), True{}, ih(hx)):
-        {Bool.or(contains1, _) == True{}: Bool}
-      Bool.or_true_right(contains1)
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-# what f gives for an element of xs is in the flat list
-def List.contains_flat(
-  ~A: Data,
-  ~B: Data,
-  ~V: Data,
-  ~sa: A -> A -> Bool,
-  ~sb: B -> B -> Bool,
-  ~f: V -> A -> List<&2, B>,
-  ~laws: Eq.Laws(A, sa),
-  xs: List<&2, A>,
-  +g: V,
-  +x: A,
-  +y: B
-) -> {
-  List.contains(~A, ~sa, xs, x) == True{}: Bool
-} -> {
-  List.contains(~B, ~sb, f(g)(x), y) == True{}: Bool
-} -> {List.contains(~B, ~sb, List.flat(~A, ~B, ~V, ~f, xs, g), y) == True{}: Bool}:
-  match xs:
-    case Nil{}:
-      hx => hy => Empty.absurd(
-        {List.contains(~B, ~sb, List.flat(~A, ~B, ~V, ~f, [], g), y) == True{}: Bool},
-        Bool.false_ne_true(hx)
-      )
-    case Con{+h, +r}:
-      hx => +hy =>
-        +flat1 = List.flat(~A, ~B, ~V, ~f, r, g)
-        %Equal.sym(
-          Bool,
-          List.contains(~B, ~sb, List.append(&2, B, f(g)(h), flat1), y),
-          Bool.or(List.contains(~B, ~sb, f(g)(h), y), List.contains(~B, ~sb, flat1, y)),
-          List.contains_append(~B, ~sb, f(g)(h), flat1, y)
-        ): {_ == True{}: Bool}
-        List.contains_flat.at(
-          ~A,
-          ~B,
-          ~V,
-          ~sa,
-          ~sb,
-          ~f,
-          ~laws,
-          sa(h, x),
-          h,
-          r,
-          g,
-          x,
-          y,
-          {==},
-          hx,
-          hy,
-          hr => List.contains_flat(~A, ~B, ~V, ~sa, ~sb, ~f, ~laws, r, g, x, y)(hr)(hy)
-        )
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # Comparisons
@@ -1442,58 +1232,6 @@ def List.drop_at(
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# a list starts what it is appended to
-def List.take_append(
-  -A: Data,
-  xs: List<&2, A>,
-  ys: List<&2, A>
-) -> {List.take(&2, A, List.append(&2, A, xs, ys), List.length(&2, A, xs)) == xs: List<&2, A>}:
-  match xs:
-    case Nil{}:
-      List.take_zero(A, ys)
-    case Con{head, tail}:
-      %Equal.sym(
-        List<&2, A>,
-        List.take(&2, A, List.append(&2, A, tail, ys), List.length(&2, A, tail)),
-        tail,
-        List.take_append(A, tail, ys)
-      ):
-        {head <> _ == head <> tail: List<&2, A>}
-      {==}
-
-# when a starts b, xs then a starts xs then b
-def List.take_append_both(
-  -A: Data,
-  xs: List<&2, A>,
-  a: List<&2, A>,
-  b: List<&2, A>,
-  h: {List.take(&2, A, b, List.length(&2, A, a)) == a: List<&2, A>}
-) -> {
-  List.take(
-    &2,
-    A,
-    List.append(&2, A, xs, b),
-    List.length(&2, A, List.append(&2, A, xs, a))
-  )
-    == List.append(&2, A, xs, a): List<&2, A>
-}:
-  match xs:
-    case Nil{}:
-      h
-    case Con{head, tail}:
-      %Equal.sym(
-        List<&2, A>,
-        List.take(
-          &2,
-          A,
-          List.append(&2, A, tail, b),
-          List.length(&2, A, List.append(&2, A, tail, a))
-        ),
-        List.append(&2, A, tail, a),
-        List.take_append_both(A, tail, a, b, h)
-      ):
-        {head <> _ == head <> List.append(&2, A, tail, a): List<&2, A>}
-      {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # appending nothing keeps a list
@@ -1564,17 +1302,6 @@ def Maybe.is_eq_refl(
     case Some{x}:
       Eq.refl(~A, ~eq, laws, x)
 
-# the laws of Maybe.is_eq, by the laws of eq
-def Maybe.laws(
-  ~A: Data,
-  ~eq: A -> A -> Bool,
-  ~laws: Eq.Laws(A, eq)
-) -> Eq.Laws(Maybe<&2, A>, Maybe.is_eq(~A, ~eq)):
-  (
-    a => Maybe.is_eq_refl(~A, ~eq, ~laws, a),
-    a => b => Maybe.is_eq_sound(~A, ~eq, x => y => Eq.sound(~A, ~eq, laws, x, y), a, b)
-  )
-
 # a read m then k that gives x still gives x when m and each k keep what they
 # give (m2 and k2): a kept read of a kept read is kept
 def Maybe.bind_kept(
@@ -1613,24 +1340,6 @@ def Maybe.when(-B: Data, b: Bool, k: Unit -> Maybe<&2, B>) -> Maybe<&2, B>:
       k(Unit{})
     case False{}:
       None{}
-
-# a guarded read that gives x still gives x when its guard is the same and its
-# read k keeps what it gives (k2)
-def Maybe.when_kept(
-  -B: Data,
-  b: Bool,
-  -k: Unit -> Maybe<&2, B>,
-  -k2: Unit -> Maybe<&2, B>,
-  -x: B,
-  hk: {k(Unit{}) == Some{x}: Maybe<&2, B>} -> {k2(Unit{}) == Some{x}: Maybe<&2, B>}
-) -> {
-  Maybe.when(B, b, k) == Some{x}: Maybe<&2, B>
-} -> {Maybe.when(B, b, k2) == Some{x}: Maybe<&2, B>}:
-  match b:
-    case True{}:
-      hk
-    case False{}:
-      h => Empty.absurd({None{} == Some{x}: Maybe<&2, B>}, Maybe.none_ne_some(B, x, h))
 
 # List equality
 # -------------
@@ -1706,128 +1415,8 @@ def List.laws(
     xs => ys => List.is_eq_sound(~A, ~same, ~laws, xs, ys)
   )
 
-# ks, with each element of ns that ks does not hold, as same compares them
-def List.union(~A: Data, ~same: A -> A -> Bool, ns: List<&2, A>, +ks: List<&2, A>) -> List<&2, A>:
-  match ns:
-    case Nil{}:
-      ks
-    case Con{+n, r}:
-      List.union(~A, ~same, r, List.filter.put(A, n, ks, Bool.not(List.contains(~A, ~same, ks, n))))
-
-# a list starts with itself
-def List.take_length(
-  -A: Data,
-  xs: List<&2, A>
-) -> {List.take(&2, A, xs, List.length(&2, A, xs)) == xs: List<&2, A>}:
-  match xs:
-    case Nil{}:
-      {==}
-    case Con{x, r}:
-      %List.take_length(
-        A,
-        r
-      ): {x <> List.take(&2, A, r, List.length(&2, A, r)) == x <> _: List<&2, A>}
-      {==}
-
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-# what starts what starts zs starts zs
-def List.prefix_trans(
-  -A: Data,
-  xs: List<&2, A>,
-  ys: List<&2, A>,
-  zs: List<&2, A>
-) -> {
-  List.take(&2, A, ys, List.length(&2, A, xs)) == xs: List<&2, A>
-} -> {
-  List.take(&2, A, zs, List.length(&2, A, ys)) == ys: List<&2, A>
-} -> {List.take(&2, A, zs, List.length(&2, A, xs)) == xs: List<&2, A>}:
-  match xs ys zs:
-    case Nil{} b c:
-      hxy => hyz => List.take_zero(A, c)
-    case Con{x, r} Nil{} c:
-      hxy => hyz => Empty.absurd(
-        {List.take(&2, A, c, List.length(&2, A, x <> r)) == x <> r: List<&2, A>},
-        Bool.false_ne_true(
-          Equal.sym(
-            Bool,
-            True{},
-            False{},
-            Equal.cong(List<&2, A>, Bool, l => List.is_empty(&2, A, l), [], x <> r, hxy)
-          )
-        )
-      )
-    case Con{x, r} Con{y, r2} Nil{}:
-      hxy => hyz => Empty.absurd(
-        {List.take(&2, A, [], List.length(&2, A, x <> r)) == x <> r: List<&2, A>},
-        Bool.false_ne_true(
-          Equal.sym(
-            Bool,
-            True{},
-            False{},
-            Equal.cong(List<&2, A>, Bool, l => List.is_empty(&2, A, l), [], y <> r2, hyz)
-          )
-        )
-      )
-    case Con{+x, +r} Con{+y, +r2} Con{z, +r3}:
-      +hxy => +hyz =>
-        +take1 = List.take(&2, A, r3, List.length(&2, A, r))
-        +take2 = List.take(&2, A, r3, List.length(&2, A, r2))
-        +take3 = List.take(&2, A, r2, List.length(&2, A, r))
-        %Equal.sym(
-          A,
-          z,
-          y,
-          Equal.cong(
-            List<&2, A>,
-            A,
-            l => Maybe.default(&2, A, List.head(&2, A, l), y),
-            z <> take2,
-            y <> r2,
-            hyz
-          )
-        ): {_ <> take1 == x <> r: List<&2, A>}
-        %Equal.sym(
-          A,
-          y,
-          x,
-          Equal.cong(
-            List<&2, A>,
-            A,
-            l => Maybe.default(&2, A, List.head(&2, A, l), x),
-            y <> take3,
-            x <> r,
-            hxy
-          )
-        ): {_ <> take1 == x <> r: List<&2, A>}
-        %Equal.sym(
-          List<&2, A>,
-          take1,
-          r,
-          List.prefix_trans(
-            A,
-            r,
-            r2,
-            r3
-          )(
-            Equal.cong(List<&2, A>, List<&2, A>, l => List.tail(&2, A, l), y <> take3, x <> r, hxy)
-          )(
-            Equal.cong(List<&2, A>, List<&2, A>, l => List.tail(&2, A, l), z <> take2, y <> r2, hyz)
-          )
-        ):
-          {x <> _ == x <> r: List<&2, A>}
-        {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
-
-# a Maybe that is none is None
-def Maybe.is_none_eq(
-  -A: Data,
-  m: Maybe<&2, A>
-) -> {Maybe.is_none(&2, A, m) == True{}: Bool} -> {m == None{}: Maybe<&2, A>}:
-  match m:
-    case None{}:
-      h => {==}
-    case Some{x}:
-      h => Empty.absurd({Some{x} == None{}: Maybe<&2, A>}, Bool.false_ne_true(h))
 
 # Joins of Maybes
 # ---------------

@@ -192,38 +192,6 @@ def Root.is_eq(a: Root, b: Root) -> Bool:
     case Root{d1, h1} Root{d2, h2}:
       Bool.and(Nat.is_eq(d1, d2), Hashes.Hash.is_eq(h1, h2))
 
-# a root is the same as itself
-def Root.is_eq_refl(a: Root) -> {Root.is_eq(a, a) == True{}: Bool}:
-  match a:
-    case Root{+d, +h}:
-      Shared.Bool.and_both(
-        Nat.is_eq(d, d),
-        Hashes.Hash.is_eq(h, h)
-      )(Shared.Nat.is_eq_refl(d))(Hashes.Hash.is_eq_refl(h))
-
-# two roots that are the same are equal
-def Root.is_eq_sound(a: Root, b: Root) -> {Root.is_eq(a, b) == True{}: Bool} -> {a == b: Root}:
-  match a b:
-    case Root{+d1, +h1} Root{+d2, +h2}:
-      +e =>
-        %Shared.Nat.is_eq_sound(
-          d1,
-          d2
-        )(
-          Shared.Bool.and_true_left(Nat.is_eq(d1, d2), Hashes.Hash.is_eq(h1, h2))(e)
-        ): {Root{d1, h1} == Root{_, h2}: Root}
-        %Hashes.Hash.is_eq_sound(
-          h1,
-          h2
-        )(
-          Shared.Bool.and_true_right(Nat.is_eq(d1, d2), Hashes.Hash.is_eq(h1, h2))(e)
-        ): {Root{d1, h1} == Root{d1, _}: Root}
-        {==}
-
-# Root.is_eq is an equality
-def Root.laws() -> Shared.Eq.Laws(Root, Root.is_eq):
-  (a => Root.is_eq_refl(a), a => b => Root.is_eq_sound(a, b))
-
 # Cuts
 # ----
 
