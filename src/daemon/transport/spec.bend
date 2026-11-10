@@ -98,8 +98,10 @@ law Client:
 law Subscription:
   Type
 
-# runs the node named n on the store at store, until a stop; a node that
-# starts a new store asks for Core.Ask.start with itself as the owner
+# runs the node named n on the store at store, until a stop. The node keeps
+# its secret seed there (Core.Node.empty). A node that starts a new store asks
+# for Core.Ask.Start with itself as the first owner, and the first key of its
+# chain in the store (Core.Owner)
 law VendNode.try_start_or_resume:
   for n: String
   for store: Uris.Uri

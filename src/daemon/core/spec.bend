@@ -716,10 +716,6 @@ def Root.bytes(s: State(), m: Maybe<&2, Ropes.Root>) -> Maybe<&2, Texts.Bytes()>
     r => Ropes.Rope.read(~State(), ~Store.fetch, s, r)
   )
 
-# the bytes of the resource n in the tree whose root is h
-def Res.get(+s: State(), h: Maybe<&2, Hashes.Hash>, n: Resources.Name) -> Maybe<&2, Texts.Bytes()>:
-  Root.bytes(s, Res.root(s, h, n))
-
 # x is the byte that ends a line
 def Byte.is_end(x: U32) -> Bool:
   U32.is_eq(x, 10)
@@ -996,10 +992,6 @@ def Node.chain_of(s: State(), +i: Ledgers.Id) -> Maybe<&2, Ledgers.Chain>:
     a => Some{Ask.chain(i, Asked.ask(a))}
   )
 
-# the tip of the line of the request i
-def Node.tip_of(+s: State(), i: Ledgers.Id) -> Maybe<&2, Tip>:
-  Maybe.bind(&2, Ledgers.Chain, Tip, Node.chain_of(s, i), c => Node.tip(s, c))
-
 # the outcome of the request i on the line c, as the node knows it
 def Chain.out(+s: State(), c: Ledgers.Chain, i: Ledgers.Id) -> Maybe<&2, Out>:
   Maybe.bind(&2, List<&2, U32>, Out, Line.get(s, c, Log.out(i)), ws => Out.read(ws))
@@ -1021,18 +1013,6 @@ def Chain.mark(+s: State(), c: Ledgers.Chain, m: String) -> Maybe<&2, Ledgers.Id
 # the outcome of the request i (none: no step that the node knows decided it)
 def Node.out(+s: State(), +i: Ledgers.Id) -> Maybe<&2, Out>:
   Maybe.bind(&2, Ledgers.Chain, Out, Node.chain_of(s, i), c => Chain.out(s, c, i))
-
-# the version of the outcome o on a line at the tip t, when it took one
-def Out.version(s: State(), t: Tip, o: Out) -> Maybe<&2, Version>:
-  match o:
-    case Out.Stale{}:
-      None{}
-    case Out.Taken{n}:
-      Line.version(s, t, n)
-
-# the version that the request i made on a line at the tip t
-def Line.made(+s: State(), +t: Tip, i: Ledgers.Id) -> Maybe<&2, Version>:
-  Maybe.bind(&2, Out, Version, Line.out(s, t, i), o => Out.version(s, t, o))
 
 # the version of the outcome o on the line c, when it took one
 def Out.on(s: State(), c: Ledgers.Chain, o: Out) -> Maybe<&2, Version>:
@@ -2719,12 +2699,6 @@ def Sealed.each(+f: Nat, bs: List<&2, Ledgers.Ballot>, +p: Tries.Trie<Ledgers.Ba
 def Sealed.take(+bs: List<&2, Ledgers.Ballot>, s: State()) -> State():
   Sealed.each(List.length(&2, Ledgers.Ballot, bs), bs, Pending.of(bs), s)
 
-# the line of the head h
-def Head.chain(h: Head) -> Ledgers.Chain:
-  match h:
-    case Head{r, b, n, t}:
-      Line.chain(r, b)
-
 # the height of the next step of the head h
 def Head.next(h: Head) -> U32:
   match h:
@@ -3401,10 +3375,6 @@ def Node.owners(+s: State(), r: Ledgers.Id, l: Maybe<&2, String>) -> List<&2, St
 # the request i is a version: a step took it
 def Node.is_version(s: State(), i: Ledgers.Id) -> Bool:
   Maybe.is_some(&2, Version, Node.made(s, i))
-
-# the version that the mark m names on the line whose tip is t
-def Mark.at(s: State(), m: String, t: Tip) -> Maybe<&2, Ledgers.Id>:
-  Line.mark(s, t, m)
 
 # the version at the point p, if there is one
 def Node.version(+s: State(), p: Point) -> Maybe<&2, Ledgers.Id>:
