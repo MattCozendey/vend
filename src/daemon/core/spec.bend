@@ -398,7 +398,7 @@ law Plan.follow_allowed:
   {
     Maybe.is_some(
       &2,
-      Stepping.Run,
+      Replicas.Run<Basics.Ask>,
       Sealing.Plan.run(Voting.Plan.follow(s, c, w, t, th, os, Some{Ledgers.Act.Vote{v, from}}))
     )
       == True{}: Bool
@@ -406,11 +406,11 @@ law Plan.follow_allowed:
     -> {Voting.Vote.allowed(s, w, os, v, from) == True{}: Bool}
 
 # the log of the run m, if any, holds an outcome of the request i
-def Run.Outs(m: Maybe<&2, Stepping.Run>, i: Ledgers.Id) -> Type:
+def Run.Outs(m: Maybe<&2, Replicas.Run<Basics.Ask>>, i: Ledgers.Id) -> Type:
   match m:
     case None{}:
       Unit
-    case Some{Stepping.Run{s, t}}:
+    case Some{Replicas.Run{s, t}}:
       {
         Maybe.is_some(
           &2,
@@ -683,7 +683,7 @@ law Cast.put_keeps:
     -> {
       Reading.Node.grows(
         s2,
-        Sealing.Cast.put(n, w, th, qs, from, Some{Stepping.Run{s2, t2}}, s)
+        Sealing.Cast.put(n, w, th, qs, from, Some{Replicas.Run{s2, t2}}, s)
       )
         == True{}: Bool
     }
@@ -702,7 +702,7 @@ law Cast.put_tip:
   {Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]) == Some{s3}: Maybe<&2, Replicas.Node<Basics.Ask>>}
     -> {
       Replicas.Tip.at(~Basics.Ask.machine(), 
-        Sealing.Cast.put(n, w, th, qs, from, Some{Stepping.Run{s2, t2}}, s),
+        Sealing.Cast.put(n, w, th, qs, from, Some{Replicas.Run{s2, t2}}, s),
         Replicas.Tip.hash(t2)
       )
         == Some{t2}: Maybe<&2, Replicas.Tip>

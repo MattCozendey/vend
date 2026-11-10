@@ -498,3 +498,206 @@ def Work.take(~M: Machine(), m: Maybe<&2, Work<Machine.Q(M)>>) -> Maybe<&2, Verd
       None{}
     case Some{w}:
       Some{Verdict.Taken{w}}
+
+# the first tip of a new branch, and the node that holds it
+type Made<-Q: Data> is Data:
+  Made{tip: Tip, node: Node<Q>}
+
+# the first tip t of a branch, once the trees of m hold it
+def Made.put(~M: Machine(), t: Tip, m: Maybe<&2, Work<Machine.Q(M)>>) -> Maybe<&2, Made<Machine.Q(M)>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Work{s, l}}:
+      Some{Made{t, s}}
+
+# a run: the node that holds what it wrote, and the tip so far
+type Run<-Q: Data> is Data:
+  Run{state: Node<Q>, tip: Tip}
+
+# the state of the run r
+def Run.state(~M: Machine(), r: Run<Machine.Q(M)>) -> Node<Machine.Q(M)>:
+  match r:
+    case Run{s, t}:
+      s
+
+# the tip of the run r
+def Run.tip(~M: Machine(), r: Run<Machine.Q(M)>) -> Tip:
+  match r:
+    case Run{s, t}:
+      t
+
+# the run of the state and the log of the work m, at the tip t
+def Run.logged(~M: Machine(), t: Tip, m: Maybe<&2, Work<Machine.Q(M)>>) -> Maybe<&2, Run<Machine.Q(M)>>:
+  match t m:
+    case x None{}:
+      None{}
+    case Tip{c, old, n, os} Some{Work{s, l}}:
+      Some{Run{s, Tip{c, l, n, os}}}
+
+# Run.add once the value m of the key in the log is known
+def Run.add.at(
+  ~M: Machine(),
+  r: Run<Machine.Q(M)>,
+  k: List<&2, U32>,
+  x: List<&2, U32>,
+  m: Maybe<&2, List<&2, U32>>
+) -> Maybe<&2, Run<Machine.Q(M)>>:
+  match r m:
+    case Run{s, +t} None{}:
+      Run.logged(~M, t, Work.set(~M, Work{s, Tip.log(t)}, k, x))
+    case y Some{old}:
+      None{}
+
+# the run r with the new key k of its log set to x (none: the log holds k, or
+# the node lacks a node). A log only gains keys: no other def writes a log
+def Run.add(~M: Machine(), +r: Run<Machine.Q(M)>, +k: List<&2, U32>, x: List<&2, U32>) -> Maybe<&2, Run<Machine.Q(M)>>:
+  Run.add.at(~M, r, k, x, Node.get(~M, Run.state(~M, r), Tip.log(Run.tip(~M, r)), k))
+
+# the tip t with the content h
+def Tip.over(t: Tip, h: Maybe<&2, Hashes.Hash>) -> Tip:
+  match t:
+    case Tip{c, l, n, os}:
+      Tip{h, l, n, os}
+
+# the run r on the node s2, which a judge grew from the node of r, with the
+# content h
+def Run.over(~M: Machine(), r: Run<Machine.Q(M)>, s2: Node<Machine.Q(M)>, h: Maybe<&2, Hashes.Hash>) -> Run<Machine.Q(M)>:
+  Run{s2, Tip.over(Run.tip(~M, r), h)}
+
+# the tip t one version on, with the owners of the next step that the change
+# gives, if it gives any
+def Tip.next(t: Tip, own: Maybe<&2, List<&2, String>>) -> Tip:
+  match t:
+    case Tip{c, l, n, os}:
+      Tip{c, l, U32.inc(n), Maybe.default(&2, List<&2, String>, own, os)}
+
+# the run r one version on (Tip.next)
+def Run.next(~M: Machine(), r: Run<Machine.Q(M)>, own: Maybe<&2, List<&2, String>>) -> Run<Machine.Q(M)>:
+  match r:
+    case Run{s, t}:
+      Run{s, Tip.next(t, own)}
+
+# the run r, after it refused the request i as stale
+def Step.stale(~M: Machine(), r: Run<Machine.Q(M)>, i: Ledgers.Id) -> Maybe<&2, Run<Machine.Q(M)>>:
+  Run.add(~M, r, Log.out(i), Out.words(Out.Stale{}))
+
+# the run r, after it took the request i as the version of the number n: its
+# outcome, its version (the content of r), the count, and the owners that it
+# gives
+def Step.taken.at(
+  ~M: Machine(),
+  r: Run<Machine.Q(M)>,
+  +i: Ledgers.Id,
+  +n: U32,
+  own: Maybe<&2, List<&2, String>>
+) -> Maybe<&2, Run<Machine.Q(M)>>:
+  Maybe.bind(
+    &2,
+    Run<Machine.Q(M)>,
+    Run<Machine.Q(M)>,
+    Run.add(~M, r, Log.out(i), Out.words(Out.Taken{n})),
+    +r1 => Maybe.bind(
+      &2,
+      Run<Machine.Q(M)>,
+      Run<Machine.Q(M)>,
+      Run.add(~M, 
+        r1,
+        Log.version(n),
+        Version.words(Version{i, Tip.content(Run.tip(~M, r1))})
+      ),
+      r2 => Some{Run.next(~M, r2, own)}
+    )
+  )
+
+# the run r, after it took the request i as its next version
+def Step.taken(~M: Machine(), +r: Run<Machine.Q(M)>, i: Ledgers.Id, own: Maybe<&2, List<&2, String>>) -> Maybe<&2, Run<Machine.Q(M)>>:
+  Step.taken.at(~M, r, i, Tip.count(Run.tip(~M, r)), own)
+
+# the run r, after the verdict m on the request i (none: wait)
+def Step.judged(
+  ~M: Machine(),
+  r: Run<Machine.Q(M)>,
+  i: Ledgers.Id,
+  own: Maybe<&2, List<&2, String>>,
+  m: Maybe<&2, Verdict<Machine.Q(M)>>
+) -> Maybe<&2, Run<Machine.Q(M)>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Verdict.Stale{}}:
+      Step.stale(~M, r, i)
+    case Some{Verdict.Taken{Work{s2, h}}}:
+      Step.taken(~M, Run.over(~M, r, s2, h), i, own)
+
+# the run r with the mark m on the version v, then the request i taken
+def Step.marked(~M: Machine(), r: Run<Machine.Q(M)>, i: Ledgers.Id, m: String, v: Maybe<&2, Version>) -> Maybe<&2, Run<Machine.Q(M)>>:
+  match v:
+    case None{}:
+      None{}
+    case Some{x}:
+      Maybe.bind(
+        &2,
+        Run<Machine.Q(M)>,
+        Run<Machine.Q(M)>,
+        Run.add(~M, r, Log.mark(m), Ledgers.Id.code(Version.id(x), [])),
+        r2 => Step.taken(~M, r2, i, None{})
+      )
+
+# the run r, after a request i for the mark m: it names the newest version,
+# for good; a mark that the line has, or a line with no version, refuses it
+def Step.mark(~M: Machine(), +r: Run<Machine.Q(M)>, +i: Ledgers.Id, +m: String) -> Maybe<&2, Run<Machine.Q(M)>>:
+  +s = Run.state(~M, r)
+  +t = Run.tip(~M, r)
+  +n = Tip.count(t)
+  Shared.Bool.when(
+    Maybe<&2, Run<Machine.Q(M)>>,
+    List.all.if(
+      u => Maybe.is_none(&2, Ledgers.Id, Line.mark(~M, s, t, m)),
+      Bool.not(U32.is_eq(n, 0))
+    ),
+    u => Step.marked(~M, r, i, m, Line.version(~M, s, t, U32.sub(n, 1))),
+    u => Step.stale(~M, r, i)
+  )
+
+# the run r with the first tip m of the new branch b of its store in its log,
+# then the request i taken (none: the node lacks a node)
+def Branch.made(~M: Machine(), +r: Run<Machine.Q(M)>, i: Ledgers.Id, b: String, m: Maybe<&2, Made<Machine.Q(M)>>) -> Maybe<&2, Run<Machine.Q(M)>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Made{t, s2}}:
+      Maybe.bind(
+        &2,
+        Run<Machine.Q(M)>,
+        Run<Machine.Q(M)>,
+        Run.add(~M, 
+          Run.over(~M, r, s2, Tip.content(Run.tip(~M, r))),
+          Log.start(b),
+          Hashes.Hash.code(Tip.hash(t), [])
+        ),
+        r2 => Step.taken(~M, r2, i, None{})
+      )
+
+# the requests of a step that a node can run now, in order, and the run after
+# them
+type Picked<-Q: Data> is Data:
+  Picked{run: Run<Q>, asks: List<&2, Ledgers.Id>}
+
+# the run of p
+def Picked.run(~M: Machine(), p: Picked<Machine.Q(M)>) -> Run<Machine.Q(M)>:
+  match p:
+    case Picked{r, qs}:
+      r
+
+# the requests of p
+def Picked.asks(~M: Machine(), p: Picked<Machine.Q(M)>) -> List<&2, Ledgers.Id>:
+  match p:
+    case Picked{r, qs}:
+      qs
+
+# p, with the request i before its requests when b holds
+def Picked.add(~M: Machine(), b: Bool, i: Ledgers.Id, p: Picked<Machine.Q(M)>) -> Picked<Machine.Q(M)>:
+  match p:
+    case Picked{r, qs}:
+      Picked{r, List.filter.put(Ledgers.Id, i, qs, b)}

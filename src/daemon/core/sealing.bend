@@ -643,13 +643,13 @@ def Cast.put(
   th: Maybe<&2, Hashes.Hash>,
   qs: List<&2, Ledgers.Id>,
   from: List<&2, String>,
-  m: Maybe<&2, Stepping.Run>,
+  m: Maybe<&2, Replicas.Run<Basics.Ask>>,
   s: Replicas.Node<Basics.Ask>
 ) -> Replicas.Node<Basics.Ask>:
   match m:
     case None{}:
       s
-    case Some{Stepping.Run{s2, +t2}}:
+    case Some{Replicas.Run{s2, +t2}}:
       Cast.vote(
         s,
         Replicas.State.put(~Basics.Ask.machine(), s2, [Replicas.Tip.words(t2)]),
@@ -713,7 +713,7 @@ def Cast.of(s: Replicas.Node<Basics.Ask>, w: Ledgers.Where, p: String) -> Maybe<
 # what a node casts for: the requests of a step, its own run of them (none:
 # it cannot run them now), and the nodes whose passes allow the step
 type Plan is Data:
-  Plan{asks: List<&2, Ledgers.Id>, run: Maybe<&2, Stepping.Run>, from: List<&2, String>}
+  Plan{asks: List<&2, Ledgers.Id>, run: Maybe<&2, Replicas.Run<Basics.Ask>>, from: List<&2, String>}
 
 # the requests of the plan p
 def Plan.asks(p: Plan) -> List<&2, Ledgers.Id>:
@@ -722,7 +722,7 @@ def Plan.asks(p: Plan) -> List<&2, Ledgers.Id>:
       qs
 
 # the run of the plan p
-def Plan.run(p: Plan) -> Maybe<&2, Stepping.Run>:
+def Plan.run(p: Plan) -> Maybe<&2, Replicas.Run<Basics.Ask>>:
   match p:
     case Plan{qs, m, from}:
       m
@@ -736,8 +736,8 @@ def Plan.from(p: Plan) -> List<&2, String>:
 # the plan of an owner that proposes freely, on the line c at the tip t: the
 # requests that wait at it, that it may cast for and that can run now
 def Plan.own(+s: Replicas.Node<Basics.Ask>, +c: Ledgers.Chain, t: Replicas.Tip, from: List<&2, String>) -> Plan:
-  +p = Stepping.Step.some(c, Cast.mine(s, Wait.of(s, c)), Stepping.Run{s, t})
-  Plan{Stepping.Picked.asks(p), Some{Stepping.Picked.run(p)}, from}
+  +p = Stepping.Step.some(c, Cast.mine(s, Wait.of(s, c)), Replicas.Run{s, t})
+  Plan{Replicas.Picked.asks(~Basics.Ask.machine(), p), Some{Replicas.Picked.run(~Basics.Ask.machine(), p)}, from}
 
 # the node s may cast for each request of qs
 def Cast.all_mine(+s: Replicas.Node<Basics.Ask>, qs: List<&2, Ledgers.Id>) -> Bool:
@@ -748,15 +748,15 @@ def Cast.all_mine(+s: Replicas.Node<Basics.Ask>, qs: List<&2, Ledgers.Id>) -> Bo
       List.all.if(u => Cast.all_mine(s, r), Cast.mine.of(s, i, Replicas.Node.asked(~Basics.Ask.machine(), s, i)))
 
 # the run m, when it gives the tip of the hash after
-def Plan.fit(after: Maybe<&2, Hashes.Hash>, m: Maybe<&2, Stepping.Run>) -> Maybe<&2, Stepping.Run>:
+def Plan.fit(after: Maybe<&2, Hashes.Hash>, m: Maybe<&2, Replicas.Run<Basics.Ask>>) -> Maybe<&2, Replicas.Run<Basics.Ask>>:
   match m:
     case None{}:
       None{}
-    case Some{Stepping.Run{s2, +t2}}:
+    case Some{Replicas.Run{s2, +t2}}:
       Shared.Maybe.when(
-        Stepping.Run,
+        Replicas.Run<Basics.Ask>,
         Root.same(after, Some{Replicas.Tip.hash(t2)}),
-        u => Some{Stepping.Run{s2, t2}}
+        u => Some{Replicas.Run{s2, t2}}
       )
 
 # the plan for a step m that another ballot names, on the line c at the tip t

@@ -881,27 +881,15 @@ def Group.work(
 def Own.fits(+os: List<&2, String>, ns: List<&2, String>) -> Bool:
   List.all.if(u => Ledgers.Owners.is_eq(os, ns), Bool.not(List.is_empty(&2, String, os)))
 
-# the first tip of a new branch, and the node that holds it
-type Made is Data:
-  Made{tip: Replicas.Tip, node: Replicas.Node<Basics.Ask>}
-
-# the first tip t of a branch, once the trees of m hold it
-def Made.put(t: Replicas.Tip, m: Maybe<&2, Replicas.Work<Basics.Ask>>) -> Maybe<&2, Made>:
-  match m:
-    case None{}:
-      None{}
-    case Some{Replicas.Work{s, l}}:
-      Some{Made{t, s}}
-
 # the first tip of a new branch, from its first content (the root of start):
 # no log, no version, and the owners os of its store now
-def Make.first(start: Maybe<&2, Replicas.Work<Basics.Ask>>, os: List<&2, String>) -> Maybe<&2, Made>:
+def Make.first(start: Maybe<&2, Replicas.Work<Basics.Ask>>, os: List<&2, String>) -> Maybe<&2, Replicas.Made<Basics.Ask>>:
   match start:
     case None{}:
       None{}
     case Some{+w}:
       +t = {Replicas.Tip{Replicas.Work.root(~Basics.Ask.machine(), w), None{}, 0, os}: Replicas.Tip}
-      Made.put(t, Replicas.Work.keep(~Basics.Ask.machine(), w, [Replicas.Tip.words(t)]))
+      Replicas.Made.put(~Basics.Ask.machine(), t, Replicas.Work.keep(~Basics.Ask.machine(), w, [Replicas.Tip.words(t)]))
 
 # the store tree in which an Own of the line l, at the content h, reads its
 # group: a store reads its own content; a branch, the content of the version

@@ -487,12 +487,12 @@ def Advance.ran(
   next: U32,
   after: Maybe<&2, Hashes.Hash>,
   qs: List<&2, Ledgers.Id>,
-  m: Maybe<&2, Stepping.Run>
+  m: Maybe<&2, Replicas.Run<Basics.Ask>>
 ) -> Replicas.Node<Basics.Ask>:
   match m:
     case None{}:
       s
-    case Some{Stepping.Run{s2, +t2}}:
+    case Some{Replicas.Run{s2, +t2}}:
       Shared.Bool.when(
         Replicas.Node<Basics.Ask>,
         Sealing.Root.same(after, Some{Replicas.Tip.hash(t2)}),
