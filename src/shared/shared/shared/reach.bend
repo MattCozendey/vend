@@ -1878,6 +1878,51 @@ def Reach.within_in(
         )
       )({==})
 
+# Reach.within_out once it is known if p is in ps (b)
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+def Reach.within_out.at(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  ~laws: Shared.Eq.Laws(A, same),
+  ps: List<&2, A>,
+  ks: List<&2, A>,
+  p: A,
+  b: Bool,
+  hw: {Reach.within(~A, ~same, ps, ks) == True{}: Bool},
+  hk: {List.contains(~A, ~same, ks, p) == False{}: Bool}
+) -> {List.contains(~A, ~same, ps, p) == b: Bool} -> {b == False{}: Bool}:
+  match b:
+    case False{}:
+      e => {==}
+    case True{}:
+      e => Empty.absurd(
+        {True{} == False{}: Bool},
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            List.contains(~A, ~same, ks, p),
+            True{},
+            Equal.sym(Bool, List.contains(~A, ~same, ks, p), False{}, hk),
+            Reach.within_in(~A, ~same, ~laws, ps, ks, p)(hw)(e)
+          )
+        )
+      )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# a node that ks lacks is not in ps, when every node of ps is in ks
+def Reach.within_out(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  ~laws: Shared.Eq.Laws(A, same),
+  +ps: List<&2, A>,
+  ks: List<&2, A>,
+  +p: A,
+  hw: {Reach.within(~A, ~same, ps, ks) == True{}: Bool},
+  hk: {List.contains(~A, ~same, ks, p) == False{}: Bool}
+) -> {List.contains(~A, ~same, ps, p) == False{}: Bool}:
+  Reach.within_out.at(~A, ~same, ~laws, ps, ks, p, List.contains(~A, ~same, ps, p), hw, hk)({==})
+
 # ps is within js, when it is within ks and ks is within js
 def Reach.within_trans(
   ~A: Data,

@@ -1774,6 +1774,14 @@ def List.holds(~A: Data, ~V: Data, ~p: V -> A -> Bool, xs: List<&2, A>, +g: V) -
     case Con{x, r}:
       List.all.if(u => List.holds(~A, ~V, ~p, r, g), p(g)(x))
 
+# p holds of g and some element of xs
+def List.some(~A: Data, ~V: Data, ~p: V -> A -> Bool, xs: List<&2, A>, +g: V) -> Bool:
+  match xs:
+    case Nil{}:
+      False{}
+    case Con{x, r}:
+      List.any.if(u => List.some(~A, ~V, ~p, r, g), p(g)(x))
+
 # List.keep_holds at one element, once p is known to keep it or not (k)
 def List.keep_holds.at(
   ~A: Data,
@@ -2027,3 +2035,212 @@ def U32.cmp_swap_eq(
   %U32.is_eq_sound(x, y)(Cmp.is_eq_of(U32.cmp(x, y), e)): {EQ{} == U32.cmp(_, x): Cmp}
   Equal.sym(Cmp, U32.cmp(x, x), EQ{}, U32.cmp_refl(x))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# Lazy "and" and "or"
+# -------------------
+# List.all.if and List.any.if run their rest only when it decides the answer.
+# These lemmas turn them into Bool.and and Bool.or, for the Bool algebra.
+
+# a lazy "and" is Bool.and
+def List.all.if_and(
+  hit: Bool,
+  rest: Unit -> Bool
+) -> {List.all.if(rest, hit) == Bool.and(hit, rest(Unit{})): Bool}:
+  match hit:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# a lazy "or" is Bool.or
+def List.any.if_or(
+  hit: Bool,
+  rest: Unit -> Bool
+) -> {List.any.if(rest, hit) == Bool.or(hit, rest(Unit{})): Bool}:
+  match hit:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# Members and others
+# ------------------
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# List.contains_ne once same(x, y) is known (b)
+def List.contains_ne.at(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  ~laws: Eq.Laws(A, same),
+  xs: List<&2, A>,
+  x: A,
+  y: A,
+  b: Bool,
+  hx: {List.contains(~A, ~same, xs, x) == True{}: Bool},
+  hy: {List.contains(~A, ~same, xs, y) == False{}: Bool}
+) -> {same(x, y) == b: Bool} -> {b == False{}: Bool}:
+  match b:
+    case False{}:
+      e => {==}
+    case True{}:
+      e =>
+        in_y = {
+          %Eq.sound(~A, ~same, laws, x, y)(e): {List.contains(~A, ~same, xs, _) == True{}: Bool}
+          hx
+          : {List.contains(~A, ~same, xs, y) == True{}: Bool}}
+        Empty.absurd(
+          {True{} == False{}: Bool},
+          Bool.false_ne_true(
+            Equal.trans(
+              Bool,
+              False{},
+              List.contains(~A, ~same, xs, y),
+              True{},
+              Equal.sym(Bool, List.contains(~A, ~same, xs, y), False{}, hy),
+              in_y
+            )
+          )
+        )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# a value x of xs is not a value y that xs lacks
+def List.contains_ne(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  ~laws: Eq.Laws(A, same),
+  xs: List<&2, A>,
+  +x: A,
+  +y: A,
+  hx: {List.contains(~A, ~same, xs, x) == True{}: Bool},
+  hy: {List.contains(~A, ~same, xs, y) == False{}: Bool}
+) -> {same(x, y) == False{}: Bool}:
+  List.contains_ne.at(~A, ~same, ~laws, xs, x, y, same(x, y), hx, hy)({==})
+
+# List.some_append at the first element, by whether p holds of it (hit)
+def List.some_append.at(
+  ~A: Data,
+  ~V: Data,
+  ~p: V -> A -> Bool,
+  hit: Bool,
+  r: List<&2, A>,
+  b: List<&2, A>,
+  g: V,
+  ih: {
+    List.some(
+      ~A,
+      ~V,
+      ~p,
+      List.append(&2, A, r, b),
+      g
+    )
+      == Bool.or(List.some(~A, ~V, ~p, r, g), List.some(~A, ~V, ~p, b, g)): Bool
+  }
+) -> {
+  List.any.if(
+    u => List.some(~A, ~V, ~p, List.append(&2, A, r, b), g),
+    hit
+  )
+    == Bool.or(
+      List.any.if(u => List.some(~A, ~V, ~p, r, g), hit),
+      List.some(~A, ~V, ~p, b, g)
+    ): Bool
+}:
+  match hit:
+    case True{}:
+      {==}
+    case False{}:
+      ih
+
+# p holds of some element of a ++ b exactly when of some of a or of some of b
+def List.some_append(
+  ~A: Data,
+  ~V: Data,
+  ~p: V -> A -> Bool,
+  a: List<&2, A>,
+  +b: List<&2, A>,
+  +g: V
+) -> {
+  List.some(
+    ~A,
+    ~V,
+    ~p,
+    List.append(&2, A, a, b),
+    g
+  )
+    == Bool.or(List.some(~A, ~V, ~p, a, g), List.some(~A, ~V, ~p, b, g)): Bool
+}:
+  match a:
+    case Nil{}:
+      {==}
+    case Con{x, +r}:
+      List.some_append.at(~A, ~V, ~p, p(g)(x), r, b, g, List.some_append(~A, ~V, ~p, r, b, g))
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# List.some_member at the first element y, by whether it is x (hit)
+def List.some_member.at(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~p: V -> A -> Bool,
+  ~laws: Eq.Laws(A, same),
+  hit: Bool,
+  y: A,
+  r: List<&2, A>,
+  x: A,
+  g: V,
+  ey: {same(y, x) == hit: Bool},
+  hc: {List.any.if(u => List.contains(~A, ~same, r, x), hit) == True{}: Bool},
+  hp: {p(g)(x) == True{}: Bool},
+  ih: {
+    List.contains(~A, ~same, r, x) == True{}: Bool
+  } -> {p(g)(x) == True{}: Bool} -> {List.some(~A, ~V, ~p, r, g) == True{}: Bool}
+) -> {List.any.if(u => List.some(~A, ~V, ~p, r, g), p(g)(y)) == True{}: Bool}:
+  match hit:
+    case True{}:
+      %Equal.sym(A, y, x, Eq.sound(~A, ~same, laws, y, x)(ey)):
+        {List.any.if(u => List.some(~A, ~V, ~p, r, g), p(g)(_)) == True{}: Bool}
+      %Equal.sym(Bool, p(g)(x), True{}, hp):
+        {List.any.if(u => List.some(~A, ~V, ~p, r, g), _) == True{}: Bool}
+      {==}
+    case False{}:
+      %Equal.sym(Bool, List.some(~A, ~V, ~p, r, g), True{}, ih(hc)(hp)):
+        {List.any.if(u => _, p(g)(y)) == True{}: Bool}
+      List.any.if_true(p(g)(y))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# p holds of some element of xs when it holds of a member of xs
+def List.some_member(
+  ~A: Data,
+  ~V: Data,
+  ~same: A -> A -> Bool,
+  ~p: V -> A -> Bool,
+  ~laws: Eq.Laws(A, same),
+  xs: List<&2, A>,
+  +x: A,
+  +g: V
+) -> {
+  List.contains(~A, ~same, xs, x) == True{}: Bool
+} -> {p(g)(x) == True{}: Bool} -> {List.some(~A, ~V, ~p, xs, g) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      hc => Empty.absurd(
+        {p(g)(x) == True{}: Bool} -> {False{} == True{}: Bool},
+        Bool.false_ne_true(hc)
+      )
+    case Con{+y, +r}:
+      hc => hp => List.some_member.at(
+        ~A,
+        ~V,
+        ~same,
+        ~p,
+        ~laws,
+        same(y, x),
+        y,
+        r,
+        x,
+        g,
+        {==},
+        hc,
+        hp,
+        List.some_member(~A, ~V, ~same, ~p, ~laws, r, x, g)
+      )
