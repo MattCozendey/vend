@@ -2722,3 +2722,65 @@ def State.take_data(ty, same, s, ws):
       Hashes.Hash.is_eq_refl(Hashes.Sha.hash(ws))
     ): {Shared.Maybe.when(List<&2, U32>, _, u => Some{ws}) == Some{ws}: Maybe<&2, List<&2, U32>>}
     {==}
+
+# an entry that a ledger holds, it holds as it grows
+law State.one_grows:
+  for ~Q: Data
+  for ~same: Q -> Q -> Bool
+  for ~laws: Shared.Eq.Laws(Q, same)
+  for +s: State(Q)
+  for +s2: State(Q)
+  for +k: List<&2, Bool>
+  for +e: Entry<Q>
+  {State.grows(~Q, ~same, s, s2) == True{}: Bool}
+    -> {State.get(~Q, s, k) == Some{Cells.One{e}}: Maybe<&2, Cells.Cell<Entry<Q>>>}
+    -> {State.get(~Q, s2, k) == Some{Cells.One{e}}: Maybe<&2, Cells.Cell<Entry<Q>>>}
+
+def State.one_grows(ty, same, laws, s, s2, k, e):
+  gr => eg =>
+    Cells.Cell.keeps_value(
+      ~Entry<ty>,
+      ~Entry.is_eq(~ty, ~same),
+      ~Entry.laws(~ty, ~same, ~laws),
+      e,
+      State.get(~ty, s2, k)
+    )(
+      %eg: {
+        Cells.Cell.keeps(~Entry<ty>, ~Entry.is_eq(~ty, ~same), _, State.get(~ty, s2, k)) == True{}: Bool
+      }
+      Tries.Trie.keeps_get(
+        ~Cells.Cell<Entry<ty>>,
+        ~Cells.Cell.keeps(~Entry<ty>, ~Entry.is_eq(~ty, ~same)),
+        ~Cells.Cell.none_kept(~Entry<ty>, ~Entry.is_eq(~ty, ~same)),
+        s,
+        s2,
+        k
+      )(gr)
+    )
+
+# a holder that lacks the slot k, and takes in a ledger t, holds what t holds
+# in k
+law State.take_get:
+  for ~Q: Data
+  for +s: State(Q)
+  for +t: State(Q)
+  for +k: List<&2, Bool>
+  {State.get(~Q, s, k) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>}
+    -> {State.get(~Q, State.take(~Q, s, t), k) == State.get(~Q, t, k): Maybe<&2, Cells.Cell<Entry<Q>>>}
+
+def State.take_get(ty, s, t, k):
+  e =>
+    Equal.trans(
+      Maybe<&2, Cells.Cell<Entry<ty>>>,
+      State.get(~ty, State.take(~ty, s, t), k),
+      Shared.Maybe.join(~Cells.Cell<Entry<ty>>, ~(x => y => x), State.get(~ty, s, k), State.get(~ty, t, k)),
+      State.get(~ty, t, k),
+      Tries.Trie.get_union(~Cells.Cell<Entry<ty>>, ~(x => y => x), s, t, k),
+      (
+        %Equal.sym(Maybe<&2, Cells.Cell<Entry<ty>>>, State.get(~ty, s, k), None{}, e): {
+          Shared.Maybe.join(~Cells.Cell<Entry<ty>>, ~(x => y => x), _, State.get(~ty, t, k))
+            == State.get(~ty, t, k): Maybe<&2, Cells.Cell<Entry<ty>>>
+        }
+        {==}
+      )
+    )

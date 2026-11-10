@@ -4035,6 +4035,11 @@ def Node.serve(+s: State(), hs: List<&2, Hashes.Hash>) -> Ledgers.State(Ask):
 def Node.missing(s: State(), r: Ledgers.State(Ask)) -> Ledgers.State(Ask):
   Ledgers.State.missing(~Ask, ~Ask.is_eq, State.ledger(s), r)
 
+# what a node reads of the ledger t that another node sent: each request and
+# each data, in the slot that its own content names (Take.clean)
+def Node.reads(t: Ledgers.State(Ask)) -> Ledgers.State(Ask):
+  Take.clean(Tries.Trie.values(Cells.Cell<Ledgers.Entry<Ask>>, t), Ledgers.State.empty(~Ask))
+
 # the ballots among the cells cs
 def Ballots.of(cs: List<&2, Cells.Cell<Ledgers.Entry<Ask>>>) -> List<&2, Ledgers.Ballot>:
   match cs:
@@ -5636,6 +5641,46 @@ law Cast.put_tip:
     -> {
       Tip.at(Cast.put(n, w, th, qs, from, Some{Run{s2, t2, ns}}, s), Tip.hash(t2))
         == Some{t2}: Maybe<&2, Tip>
+    }
+
+# a node holds what it takes in: an entry that it reads of what was sent, in
+# a slot that it lacks, it then holds
+law Node.take_holds:
+  for +s: State()
+  for +t: Ledgers.State(Ask)
+  for +k: List<&2, Bool>
+  for +e: Ledgers.Entry<Ask>
+  {
+    Ledgers.State.get(~Ask, Node.reads(t), k)
+      == Some{Cells.One{e}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
+  }
+    -> {Ledgers.State.get(~Ask, State.ledger(s), k) == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>}
+    -> {
+      Ledgers.State.get(~Ask, State.ledger(Node.take(s, t)), k)
+        == Some{Cells.One{e}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
+    }
+
+# a pending write goes with its writer to another node: a request that a node
+# takes in waits on its line there, so the node has a draft for its writer
+# (Node.draft_some) and the writer's read shows it (Node.read_draft)
+law Node.take_waits:
+  for +s: State()
+  for +t: Ledgers.State(Ask)
+  for +i: Ledgers.Id
+  for +time: String
+  for +r: Ledgers.Id
+  for +l: Maybe<&2, String>
+  for +ch: Change
+  {
+    Ledgers.State.get(~Ask, Node.reads(t), Ledgers.Slot.ask(i))
+      == Some{Cells.One{Ledgers.Entry.Ask{i, time, Ask.On{r, l, ch}}}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
+  }
+    -> {
+      Ledgers.State.get(~Ask, State.ledger(s), Ledgers.Slot.ask(i))
+        == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
+    }
+    -> {
+      List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Wait.of(Node.take(s, t), Line.chain(r, l)), i) == True{}: Bool
     }
 
 # a writer reads its own pending write: at the head of a branch, its read is

@@ -9674,6 +9674,864 @@ def Spec.Cast.put_tip(n, w, th, qs, from, s2, t2, ns, s, s3):
       )(Cast.seal.grows(s4, w, n, a0, Spec.Seal.chain(s4, Spec.Where.store(w), n)))
     )(Tip.put.at(s2, t2, s3)(e))
 
+# lines with the same key have the same key
+def Key.same(
+  +c2: Ledgers.Chain,
+  +c: Ledgers.Chain
+) -> {Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)) == True{}: Bool} -> {
+  Ledgers.Chain.key(c2) == Ledgers.Chain.key(c): List<&2, Bool>
+}:
+  Shared.List.is_eq_sound(
+    ~Bool,
+    ~Shared.Bool.is_eq,
+    ~Shared.Bool.laws(),
+    Ledgers.Chain.key(c2),
+    Ledgers.Chain.key(c)
+  )
+
+# Waits
+# -----
+# A request that a node takes in waits on its line: a pending write goes with
+# its writer to another node (Spec.Node.take_waits).
+
+# a new ledger keeps the waiting requests
+def Waiting.led(
+  s: Spec.State(),
+  l: Ledgers.State(Spec.Ask)
+) -> {Spec.State.waiting(s) == Spec.State.waiting(Spec.State.led(s, l)): Tries.Trie<List<&2, Ledgers.Id>>}:
+  match s:
+    case Spec.Node{old, hs, ws, ks}:
+      {==}
+
+# new keys keep the waiting requests
+def Waiting.keyed(
+  s: Spec.State(),
+  ks: Spec.Keys
+) -> {Spec.State.waiting(s) == Spec.State.waiting(Spec.State.keyed(s, ks)): Tries.Trie<List<&2, Ledgers.Id>>}:
+  match s:
+    case Spec.Node{l, hs, ws, old}:
+      {==}
+
+# the waiting requests of the node m, if any, else of s
+def Waiting.of(s: Spec.State(), m: Maybe<&2, Spec.State()>) -> Tries.Trie<List<&2, Ledgers.Id>>:
+  match m:
+    case None{}:
+      Spec.State.waiting(s)
+    case Some{s2}:
+      Spec.State.waiting(s2)
+
+# a node that is kept when b holds has the waiting requests of s, when it has
+def Waiting.some.if(
+  b: Bool,
+  -s: Spec.State(),
+  -x: Spec.State(),
+  hx: {Spec.State.waiting(s) == Spec.State.waiting(x): Tries.Trie<List<&2, Ledgers.Id>>}
+) -> {Spec.State.waiting(s) == Waiting.of(s, Shared.Maybe.when(Spec.State(), b, u => Some{x})): Tries.Trie<List<&2, Ledgers.Id>>}:
+  match b:
+    case True{}:
+      hx
+    case False{}:
+      {==}
+
+# a ballot that a node accepts keeps the waiting requests
+def Accept.at.waiting(
+  +s: Spec.State(),
+  +b: Ledgers.Ballot,
+  m: Maybe<&2, Spec.Chained>
+) -> {Spec.State.waiting(s) == Waiting.of(s, Spec.Seal.accept.at(s, b, m)): Tries.Trie<List<&2, Ledgers.Id>>}:
+  match m:
+    case None{}:
+      {==}
+    case Some{+c}:
+      Waiting.some.if(
+        Spec.Seal.fits(c, b),
+        s,
+        Spec.State.keyed(
+        Spec.State.led(
+          s,
+          Ledgers.State.keep(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), b)
+        ),
+        Spec.Keys.saw(Spec.Keys.set(
+          Spec.State.keys(s),
+          Spec.Seal.slot(Spec.Ballot.store(b), Spec.Ballot.node(b)),
+          Spec.Chained.next(c, b)
+        ), Spec.Ballot.at(b))
+      ),
+        Equal.trans(
+          Tries.Trie<List<&2, Ledgers.Id>>,
+          Spec.State.waiting(s),
+          Spec.State.waiting(Spec.State.led(s, Ledgers.State.keep(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), b))),
+          Spec.State.waiting(Spec.State.keyed(
+        Spec.State.led(
+          s,
+          Ledgers.State.keep(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), b)
+        ),
+        Spec.Keys.saw(Spec.Keys.set(
+          Spec.State.keys(s),
+          Spec.Seal.slot(Spec.Ballot.store(b), Spec.Ballot.node(b)),
+          Spec.Chained.next(c, b)
+        ), Spec.Ballot.at(b))
+      )),
+          Waiting.led(s, Ledgers.State.keep(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), b)),
+          Waiting.keyed(Spec.State.led(s, Ledgers.State.keep(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s), b)), Spec.Keys.saw(Spec.Keys.set(
+          Spec.State.keys(s),
+          Spec.Seal.slot(Spec.Ballot.store(b), Spec.Ballot.node(b)),
+          Spec.Chained.next(c, b)
+        ), Spec.Ballot.at(b)))
+        )
+      )
+
+# the node m, if any, else s, has the waiting requests of s when m has
+def Default.waiting(
+  -s: Spec.State(),
+  m: Maybe<&2, Spec.State()>
+) -> {Spec.State.waiting(s) == Waiting.of(s, m): Tries.Trie<List<&2, Ledgers.Id>>} -> {Spec.State.waiting(s) == Spec.State.waiting(Maybe.default(&2, Spec.State(), m, s)): Tries.Trie<List<&2, Ledgers.Id>>}:
+  match m:
+    case None{}:
+      e => {==}
+    case Some{s2}:
+      e => e
+
+# the ballots that a chain leads to keep the waiting requests, when each one more does
+def Follow.step.waiting(
+  -s: Spec.State(),
+  m: Maybe<&2, Spec.State()>,
+  -k: Spec.State() -> Spec.State(),
+  ih: @s2: Spec.State() -> {Spec.State.waiting(s2) == Spec.State.waiting(k(s2)): Tries.Trie<List<&2, Ledgers.Id>>}
+) -> {Spec.State.waiting(s) == Waiting.of(s, m): Tries.Trie<List<&2, Ledgers.Id>>} -> {Spec.State.waiting(s) == Spec.State.waiting(Maybe.default(&2, Spec.State(), Maybe.bind(&2, Spec.State(), Spec.State(), m, s2 => Some{k(s2)}), s)): Tries.Trie<List<&2, Ledgers.Id>>}:
+  match m:
+    case None{}:
+      e => {==}
+    case Some{s2}:
+      e => Equal.trans(Tries.Trie<List<&2, Ledgers.Id>>, Spec.State.waiting(s), Spec.State.waiting(s2), Spec.State.waiting(k(s2)), e, ih(s2))
+
+# the ballots that a chain leads to keep the waiting requests
+def Follow.waiting(
+  f: Nat,
+  +s: Spec.State(),
+  +p: Tries.Trie<Ledgers.Ballot>,
+  +r: Ledgers.Id,
+  +n: String,
+  mb: Maybe<&2, Ledgers.Ballot>
+) -> {Spec.State.waiting(s) == Spec.State.waiting(Spec.Sealed.follow(f, s, p, r, n, mb)): Tries.Trie<List<&2, Ledgers.Id>>}:
+  match f mb:
+    case 0n x:
+      {==}
+    case 1n+g None{}:
+      {==}
+    case 1n+(+g) Some{+b}:
+      Follow.step.waiting(
+        s,
+        Spec.Seal.accept(s, b),
+        +s2 => Spec.Sealed.follow(g, s2, p, r, n, Spec.Pending.next(s2, p, r, n)),
+        +s2 => Follow.waiting(g, s2, p, r, n, Spec.Pending.next(s2, p, r, n))
+      )(Accept.at.waiting(s, b, Spec.Seal.chain(s, Spec.Ballot.store(b), Spec.Ballot.node(b))))
+
+# the ballots that the chains of some ballots lead to keep the waiting requests
+def Each.waiting(
+  +f: Nat,
+  bs: List<&2, Ledgers.Ballot>,
+  +p: Tries.Trie<Ledgers.Ballot>,
+  +s: Spec.State()
+) -> {Spec.State.waiting(s) == Spec.State.waiting(Spec.Sealed.each(f, bs, p, s)): Tries.Trie<List<&2, Ledgers.Id>>}:
+  match bs:
+    case Nil{}:
+      {==}
+    case Con{+b, rest}:
+      s1 = Spec.Sealed.follow(
+        f,
+        s,
+        p,
+        Spec.Ballot.store(b),
+        Spec.Ballot.node(b),
+        Spec.Pending.next(s, p, Spec.Ballot.store(b), Spec.Ballot.node(b))
+      )
+      Equal.trans(
+        Tries.Trie<List<&2, Ledgers.Id>>,
+        Spec.State.waiting(s),
+        Spec.State.waiting(s1),
+        Spec.State.waiting(Spec.Sealed.each(f, rest, p, s1)),
+        Follow.waiting(
+          f,
+          s,
+          p,
+          Spec.Ballot.store(b),
+          Spec.Ballot.node(b),
+          Spec.Pending.next(s, p, Spec.Ballot.store(b), Spec.Ballot.node(b))
+        ),
+        Each.waiting(f, rest, p, s1)
+      )
+
+# a new head keeps the waiting requests
+def Waiting.head(
+  +s: Spec.State(),
+  +c: Ledgers.Chain,
+  +h: Spec.Head
+) -> {Spec.State.waiting(s) == Spec.State.waiting(Spec.State.head(s, c, h)): Tries.Trie<List<&2, Ledgers.Id>>}:
+  match s:
+    case Spec.Node{l, hs, ws, ks}:
+      {==}
+
+# a first head keeps the waiting requests
+def First.at.waiting(
+  +s: Spec.State(),
+  +c: Ledgers.Chain,
+  +h: Spec.Head,
+  +m: Maybe<&2, Spec.Head>
+) -> {
+  Spec.State.waiting(s) == Spec.State.waiting(Spec.First.at(s, c, h, m)): Tries.Trie<List<&2, Ledgers.Id>>
+}:
+  match m:
+    case Some{Spec.Head{r, b, n, Some{t}}}:
+      {==}
+    case Some{Spec.Head{r, b, n, None{}}}:
+      Waiting.head(s, c, h)
+    case None{}:
+      Waiting.head(s, c, h)
+
+# the first head of a store keeps the waiting requests
+def Start.head.waiting(
+  +s: Spec.State(),
+  m: Maybe<&2, Spec.State()>,
+  +c: Ledgers.Chain,
+  +h: Spec.Head
+) -> {
+  Spec.State.waiting(s) == Spec.State.waiting(Spec.Start.head(s, m, c, h)): Tries.Trie<List<&2, Ledgers.Id>>
+}:
+  match m:
+    case None{}:
+      {==}
+    case Some{+s2}:
+      Equal.trans(
+        Tries.Trie<List<&2, Ledgers.Id>>,
+        Spec.State.waiting(s),
+        Spec.State.waiting(Spec.State.led(s, Spec.State.ledger(s2))),
+        Spec.State.waiting(Spec.State.first(Spec.State.led(s, Spec.State.ledger(s2)), c, h)),
+        Waiting.led(s, Spec.State.ledger(s2)),
+        First.at.waiting(
+          Spec.State.led(s, Spec.State.ledger(s2)),
+          c,
+          h,
+          Spec.Node.head_of(Spec.State.led(s, Spec.State.ledger(s2)), c)
+        )
+      )
+
+# the first tip of a store keeps the waiting requests
+def Start.put.waiting(
+  +s: Spec.State(),
+  +i: Ledgers.Id,
+  +c: Maybe<&2, Hashes.Hash>,
+  +m: Maybe<&2, Spec.Work>
+) -> {
+  Spec.State.waiting(s) == Spec.State.waiting(Spec.Start.put(s, i, c, m)): Tries.Trie<List<&2, Ledgers.Id>>
+}:
+  match m:
+    case None{}:
+      {==}
+    case Some{Spec.Work{+s2, +l, ns}}:
+      Start.head.waiting(
+        s,
+        Spec.State.put(s2, [Spec.Tip.words(Spec.Tip{c, l})]),
+        Ledgers.Chain{i, None{}},
+        Spec.Head{i, None{}, 0, Some{Spec.Tip.hash(Spec.Tip{c, l})}}
+      )
+
+# a store that starts keeps the waiting requests
+def Start.with.waiting(
+  +s: Spec.State(),
+  +i: Ledgers.Id,
+  +os: List<&2, String>,
+  +m: Maybe<&2, Spec.Work>
+) -> {
+  Spec.State.waiting(s) == Spec.State.waiting(Spec.Start.with(s, i, os, m)): Tries.Trie<List<&2, Ledgers.Id>>
+}:
+  match m:
+    case None{}:
+      {==}
+    case Some{+w}:
+      Start.put.waiting(s, i, Spec.Work.root(w), Spec.Log.first(w, os))
+
+# a line that a node starts to follow keeps the waiting requests
+def Follow.new.waiting(
+  +s: Spec.State(),
+  +r: Ledgers.Id,
+  +l: Maybe<&2, String>,
+  +m: Maybe<&2, Spec.Head>
+) -> {
+  Spec.State.waiting(s) == Spec.State.waiting(Spec.Follow.new(s, r, l, m)): Tries.Trie<List<&2, Ledgers.Id>>
+}:
+  match m:
+    case Some{h}:
+      {==}
+    case None{}:
+      Waiting.head(s, Spec.Line.chain(r, l), Spec.Head{r, l, 0, None{}})
+
+# nodes with the same waiting requests have the same ones on each line
+def Wait.same(
+  +a: Spec.State(),
+  +b: Spec.State(),
+  +c: Ledgers.Chain,
+  +e: {Spec.State.waiting(a) == Spec.State.waiting(b): Tries.Trie<List<&2, Ledgers.Id>>}
+) -> {Spec.Wait.of(a, c) == Spec.Wait.of(b, c): List<&2, Ledgers.Id>}:
+  Equal.cong(
+    Tries.Trie<List<&2, Ledgers.Id>>,
+    List<&2, Ledgers.Id>,
+    ws => Maybe.default(
+      &2,
+      List<&2, Ledgers.Id>,
+      Tries.Trie.get(List<&2, Ledgers.Id>, ws, Ledgers.Chain.key(c)),
+      []
+    ),
+    Spec.State.waiting(a),
+    Spec.State.waiting(b),
+    e
+  )
+
+# lines with the same key have the same waiting requests
+def Wait.keyed(
+  +s: Spec.State(),
+  +c2: Ledgers.Chain,
+  +c: Ledgers.Chain,
+  +ek: {Ledgers.Chain.key(c2) == Ledgers.Chain.key(c): List<&2, Bool>}
+) -> {Spec.Wait.of(s, c2) == Spec.Wait.of(s, c): List<&2, Ledgers.Id>}:
+  Equal.cong(
+    List<&2, Bool>,
+    List<&2, Ledgers.Id>,
+    kk => Maybe.default(
+      &2,
+      List<&2, Ledgers.Id>,
+      Tries.Trie.get(List<&2, Ledgers.Id>, Spec.State.waiting(s), kk),
+      []
+    ),
+    Ledgers.Chain.key(c2),
+    Ledgers.Chain.key(c),
+    ek
+  )
+
+# the default of a pick is the pick of the defaults
+def Wait.pick(
+  +b: Bool,
+  +v: List<&2, Ledgers.Id>,
+  +m: Maybe<&2, List<&2, Ledgers.Id>>
+) -> {
+  Maybe.default(&2, List<&2, Ledgers.Id>, Bool.pick(Maybe<&2, List<&2, Ledgers.Id>>, b, Some{v}, m), [])
+    == Bool.pick(List<&2, Ledgers.Id>, b, v, Maybe.default(&2, List<&2, Ledgers.Id>, m, [])): List<&2, Ledgers.Id>
+}:
+  match b:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# the requests that wait on a line, after some requests wait on the line c
+def Wait.set.of(
+  +s: Spec.State(),
+  +c: Ledgers.Chain,
+  +x: Ledgers.Id,
+  +r: List<&2, Ledgers.Id>,
+  +c2: Ledgers.Chain
+) -> {
+  Spec.Wait.of(Spec.Wait.set(s, c, x <> r), c2)
+    == Bool.pick(
+      List<&2, Ledgers.Id>,
+      Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)),
+      x <> r,
+      Spec.Wait.of(s, c2)
+    ): List<&2, Ledgers.Id>
+}:
+  match s:
+    case Spec.Node{l, hs, +ws, ks}:
+      %Equal.sym(
+        Maybe<&2, List<&2, Ledgers.Id>>,
+        Tries.Trie.get(
+          List<&2, Ledgers.Id>,
+          Tries.Trie.set(List<&2, Ledgers.Id>, ws, Ledgers.Chain.key(c), x <> r),
+          Ledgers.Chain.key(c2)
+        ),
+        Bool.pick(
+          Maybe<&2, List<&2, Ledgers.Id>>,
+          Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)),
+          Some{x <> r},
+          Tries.Trie.get(List<&2, Ledgers.Id>, ws, Ledgers.Chain.key(c2))
+        ),
+        Tries.Trie.get_set(List<&2, Ledgers.Id>, ws, Ledgers.Chain.key(c), x <> r, Ledgers.Chain.key(c2))
+      ): {
+        Maybe.default(&2, List<&2, Ledgers.Id>, _, [])
+          == Bool.pick(
+            List<&2, Ledgers.Id>,
+            Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)),
+            x <> r,
+            Maybe.default(
+              &2,
+              List<&2, Ledgers.Id>,
+              Tries.Trie.get(List<&2, Ledgers.Id>, ws, Ledgers.Chain.key(c2)),
+              []
+            )
+          ): List<&2, Ledgers.Id>
+      }
+      Wait.pick(
+        Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)),
+        x <> r,
+        Tries.Trie.get(List<&2, Ledgers.Id>, ws, Ledgers.Chain.key(c2))
+      )
+
+# Wait.wait for any requests ys that waited on the line c
+def Wait.wait.at(
+  +s: Spec.State(),
+  +c: Ledgers.Chain,
+  +j: Ledgers.Id,
+  +c2: Ledgers.Chain,
+  +ys: List<&2, Ledgers.Id>
+) -> {
+  Spec.Wait.of(Spec.Wait.set(s, c, List.append(&2, Ledgers.Id, ys, [j])), c2)
+    == Bool.pick(
+      List<&2, Ledgers.Id>,
+      Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)),
+      List.append(&2, Ledgers.Id, ys, [j]),
+      Spec.Wait.of(s, c2)
+    ): List<&2, Ledgers.Id>
+}:
+  match ys:
+    case Nil{}:
+      Wait.set.of(s, c, j, [], c2)
+    case Con{x, r}:
+      Wait.set.of(s, c, x, List.append(&2, Ledgers.Id, r, [j]), c2)
+
+# the requests that wait on a line, after one more waits on the line c
+def Wait.wait(
+  +s: Spec.State(),
+  +c: Ledgers.Chain,
+  +j: Ledgers.Id,
+  +c2: Ledgers.Chain
+) -> {
+  Spec.Wait.of(Spec.State.wait(s, c, j), c2)
+    == Bool.pick(
+      List<&2, Ledgers.Id>,
+      Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)),
+      List.append(&2, Ledgers.Id, Spec.Wait.of(s, c), [j]),
+      Spec.Wait.of(s, c2)
+    ): List<&2, Ledgers.Id>
+}:
+  Wait.wait.at(s, c, j, c2, Spec.Wait.of(s, c))
+
+# Wait.keeps once it is known whether the line has the key of c (b)
+def Wait.keeps.if(
+  +s: Spec.State(),
+  +c: Ledgers.Chain,
+  +j: Ledgers.Id,
+  +c2: Ledgers.Chain,
+  +i: Ledgers.Id,
+  +b: Bool,
+  +eb: {Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)) == b: Bool},
+  h: {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Spec.Wait.of(s, c2), i) == True{}: Bool}
+) -> {
+  List.contains(
+    ~Ledgers.Id,
+    ~Ledgers.Id.is_eq,
+    Bool.pick(
+      List<&2, Ledgers.Id>,
+      b,
+      List.append(&2, Ledgers.Id, Spec.Wait.of(s, c), [j]),
+      Spec.Wait.of(s, c2)
+    ),
+    i
+  )
+    == True{}: Bool
+}:
+  match b:
+    case True{}:
+      Shared.List.contains_left(
+        ~Ledgers.Id,
+        ~Ledgers.Id.is_eq,
+        Spec.Wait.of(s, c),
+        [j],
+        i,
+        (
+          %Wait.keyed(s, c2, c, Key.same(c2, c)(eb)): {
+            List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, _, i) == True{}: Bool
+          }
+          h
+        )
+      )
+    case False{}:
+      h
+
+# a request that waits on a line waits there after one more waits on a line
+def Wait.keeps(
+  +s: Spec.State(),
+  +c: Ledgers.Chain,
+  +j: Ledgers.Id,
+  +c2: Ledgers.Chain,
+  +i: Ledgers.Id,
+  h: {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Spec.Wait.of(s, c2), i) == True{}: Bool}
+) -> {
+  List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Spec.Wait.of(Spec.State.wait(s, c, j), c2), i) == True{}: Bool
+}:
+  %Equal.sym(
+    List<&2, Ledgers.Id>,
+    Spec.Wait.of(Spec.State.wait(s, c, j), c2),
+    Bool.pick(
+      List<&2, Ledgers.Id>,
+      Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)),
+      List.append(&2, Ledgers.Id, Spec.Wait.of(s, c), [j]),
+      Spec.Wait.of(s, c2)
+    ),
+    Wait.wait(s, c, j, c2)
+  ): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, _, i) == True{}: Bool}
+  Wait.keeps.if(
+    s,
+    c,
+    j,
+    c2,
+    i,
+    Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)),
+    {==},
+    h
+  )
+
+# a list of one is a member of itself
+def Contains.one(j: Ledgers.Id) -> {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, [j], j) == True{}: Bool}:
+  %Equal.sym(Bool, Ledgers.Id.is_eq(j, j), True{}, Ledgers.Id.is_eq_refl(j)): {
+    List.any.if(u => List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, [], j), _) == True{}: Bool
+  }
+  {==}
+
+# a request waits on its line once it waits there
+def Wait.adds(
+  +s: Spec.State(),
+  +c: Ledgers.Chain,
+  +j: Ledgers.Id
+) -> {
+  List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Spec.Wait.of(Spec.State.wait(s, c, j), c), j) == True{}: Bool
+}:
+  %Equal.sym(
+    List<&2, Ledgers.Id>,
+    Spec.Wait.of(Spec.State.wait(s, c, j), c),
+    Bool.pick(
+      List<&2, Ledgers.Id>,
+      Tries.Trie.same_key(Ledgers.Chain.key(c), Ledgers.Chain.key(c)),
+      List.append(&2, Ledgers.Id, Spec.Wait.of(s, c), [j]),
+      Spec.Wait.of(s, c)
+    ),
+    Wait.wait(s, c, j, c)
+  ): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, _, j) == True{}: Bool}
+  %Equal.sym(
+    Bool,
+    Tries.Trie.same_key(Ledgers.Chain.key(c), Ledgers.Chain.key(c)),
+    True{},
+    Shared.List.is_eq_refl(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws(), Ledgers.Chain.key(c))
+  ): {
+    List.contains(
+      ~Ledgers.Id,
+      ~Ledgers.Id.is_eq,
+      Bool.pick(
+        List<&2, Ledgers.Id>,
+        _,
+        List.append(&2, Ledgers.Id, Spec.Wait.of(s, c), [j]),
+        Spec.Wait.of(s, c)
+      ),
+      j
+    )
+      == True{}: Bool
+  }
+  Shared.List.contains_right(~Ledgers.Id, ~Ledgers.Id.is_eq, Spec.Wait.of(s, c), [j], j, Contains.one(j))
+
+# a request that waits on a line waits there after a request arrives
+def Arrive.waits(
+  +s: Spec.State(),
+  +j: Ledgers.Id,
+  +q: Spec.Ask,
+  +c2: Ledgers.Chain,
+  +i: Ledgers.Id,
+  h: {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Spec.Wait.of(s, c2), i) == True{}: Bool}
+) -> {
+  List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Spec.Wait.of(Spec.Node.arrive(s, j, q), c2), i) == True{}: Bool
+}:
+  match q:
+    case Spec.Ask.Start{os}:
+      %Wait.same(
+        s,
+        Spec.Node.start(s, j, os),
+        c2,
+        Start.with.waiting(
+          s,
+          j,
+          Spec.Owner.names(os),
+          Spec.Seal.firsts(os, Some{Spec.Work{s, None{}, []}})
+        )
+      ): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, _, i) == True{}: Bool}
+      h
+    case Spec.Ask.On{r, l, ch}:
+      Wait.keeps(
+        Spec.Node.follow(s, r, l),
+        Spec.Line.chain(r, l),
+        j,
+        c2,
+        i,
+        (
+          %Wait.same(
+            s,
+            Spec.Node.follow(s, r, l),
+            c2,
+            Follow.new.waiting(s, r, l, Spec.Node.head_of(s, Spec.Line.chain(r, l)))
+          ): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, _, i) == True{}: Bool}
+          h
+        )
+      )
+
+# one of two nodes, on each of which the request i waits on the line c2
+def Contains.when(
+  +b: Bool,
+  -x: Spec.State(),
+  -y: Spec.State(),
+  -c2: Ledgers.Chain,
+  -i: Ledgers.Id,
+  hx: {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Spec.Wait.of(x, c2), i) == True{}: Bool},
+  hy: {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Spec.Wait.of(y, c2), i) == True{}: Bool}
+) -> {
+  List.contains(
+    ~Ledgers.Id,
+    ~Ledgers.Id.is_eq,
+    Spec.Wait.of(Shared.Bool.when(Spec.State(), b, u => x, u => y), c2),
+    i
+  )
+    == True{}: Bool
+}:
+  match b:
+    case True{}:
+      hx
+    case False{}:
+      hy
+
+# a request that waits on a line waits there after more requests arrive
+def Take.asks.waits(
+  +cs: List<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+  +old: Ledgers.State(Spec.Ask),
+  +s: Spec.State(),
+  +c2: Ledgers.Chain,
+  +i: Ledgers.Id
+) -> {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Spec.Wait.of(s, c2), i) == True{}: Bool} -> {
+  List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Spec.Wait.of(Spec.Take.asks(cs, old, s), c2), i) == True{}: Bool
+}:
+  match cs:
+    case Nil{}:
+      h => h
+    case Con{Cells.One{Ledgers.Entry.Ask{j, t, q}}, rest}:
+      +h => Take.asks.waits(
+        rest,
+        old,
+        Shared.Bool.when(
+          Spec.State(),
+          Maybe.is_none(
+            &2,
+            Cells.Cell<Ledgers.Entry<Spec.Ask>>,
+            Ledgers.State.get(~Spec.Ask, old, Ledgers.Slot.ask(j))
+          ),
+          u => Spec.Node.arrive(s, j, q),
+          u => s
+        ),
+        c2,
+        i
+      )(
+        Contains.when(
+          Maybe.is_none(
+            &2,
+            Cells.Cell<Ledgers.Entry<Spec.Ask>>,
+            Ledgers.State.get(~Spec.Ask, old, Ledgers.Slot.ask(j))
+          ),
+          Spec.Node.arrive(s, j, q),
+          s,
+          c2,
+          i,
+          Arrive.waits(s, j, q, c2, i, h),
+          h
+        )
+      )
+    case Con{Cells.One{Ledgers.Entry.Vote{v}}, rest}:
+      Take.asks.waits(rest, old, s, c2, i)
+    case Con{Cells.One{Ledgers.Entry.Data{d}}, rest}:
+      Take.asks.waits(rest, old, s, c2, i)
+    case Con{Cells.Many{}, rest}:
+      Take.asks.waits(rest, old, s, c2, i)
+
+# a new request among the cells that a node takes in waits on its line
+def Take.asks.adds(
+  +pre: List<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+  +post: List<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+  +old: Ledgers.State(Spec.Ask),
+  +s: Spec.State(),
+  +i: Ledgers.Id,
+  +time: String,
+  +r: Ledgers.Id,
+  +l: Maybe<&2, String>,
+  +ch: Spec.Change
+) -> {
+  Ledgers.State.get(~Spec.Ask, old, Ledgers.Slot.ask(i)) == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
+} -> {
+  List.contains(
+    ~Ledgers.Id,
+    ~Ledgers.Id.is_eq,
+    Spec.Wait.of(
+      Spec.Take.asks(
+        List.append(
+          &2,
+          Cells.Cell<Ledgers.Entry<Spec.Ask>>,
+          pre,
+          Cells.One{Ledgers.Entry.Ask{i, time, Spec.Ask.On{r, l, ch}}} <> post
+        ),
+        old,
+        s
+      ),
+      Spec.Line.chain(r, l)
+    ),
+    i
+  )
+    == True{}: Bool
+}:
+  match pre:
+    case Nil{}:
+      e => Take.asks.waits(
+        post,
+        old,
+        Shared.Bool.when(
+          Spec.State(),
+          Maybe.is_none(
+            &2,
+            Cells.Cell<Ledgers.Entry<Spec.Ask>>,
+            Ledgers.State.get(~Spec.Ask, old, Ledgers.Slot.ask(i))
+          ),
+          u => Spec.Node.arrive(s, i, Spec.Ask.On{r, l, ch}),
+          u => s
+        ),
+        Spec.Line.chain(r, l),
+        i
+      )(
+        %Equal.sym(
+          Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+          Ledgers.State.get(~Spec.Ask, old, Ledgers.Slot.ask(i)),
+          None{},
+          e
+        ): {
+          List.contains(
+            ~Ledgers.Id,
+            ~Ledgers.Id.is_eq,
+            Spec.Wait.of(
+              Shared.Bool.when(
+                Spec.State(),
+                Maybe.is_none(&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>, _),
+                u => Spec.Node.arrive(s, i, Spec.Ask.On{r, l, ch}),
+                u => s
+              ),
+              Spec.Line.chain(r, l)
+            ),
+            i
+          )
+            == True{}: Bool
+        }
+        Wait.adds(Spec.Node.follow(s, r, l), Spec.Line.chain(r, l), i)
+      )
+    case Con{Cells.One{Ledgers.Entry.Ask{j, t, q}}, rest}:
+      e => Take.asks.adds(
+        rest,
+        post,
+        old,
+        Shared.Bool.when(
+          Spec.State(),
+          Maybe.is_none(
+            &2,
+            Cells.Cell<Ledgers.Entry<Spec.Ask>>,
+            Ledgers.State.get(~Spec.Ask, old, Ledgers.Slot.ask(j))
+          ),
+          u => Spec.Node.arrive(s, j, q),
+          u => s
+        ),
+        i,
+        time,
+        r,
+        l,
+        ch
+      )(e)
+    case Con{Cells.One{Ledgers.Entry.Vote{v}}, rest}:
+      Take.asks.adds(rest, post, old, s, i, time, r, l, ch)
+    case Con{Cells.One{Ledgers.Entry.Data{d}}, rest}:
+      Take.asks.adds(rest, post, old, s, i, time, r, l, ch)
+    case Con{Cells.Many{}, rest}:
+      Take.asks.adds(rest, post, old, s, i, time, r, l, ch)
+
+def Spec.Node.take_holds(s, t, k, e):
+  +sent = Spec.Node.reads(t)
+  +l1 = Ledgers.State.take(~Spec.Ask, Spec.State.ledger(s), sent)
+  es => eb =>
+    Ledgers.State.one_grows(
+      ~Spec.Ask,
+      ~Spec.Ask.is_eq,
+      ~Ask.laws(),
+      Spec.State.ledger(Spec.State.led(s, l1)),
+      Spec.State.ledger(Spec.Node.take(s, t)),
+      k,
+      e
+    )(Take.tail(s, t))(
+      %Equal.sym(Ledgers.State(Spec.Ask), Spec.State.ledger(Spec.State.led(s, l1)), l1, Led.led(s, l1)): {
+        Ledgers.State.get(~Spec.Ask, _, k) == Some{Cells.One{e}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>
+      }
+      Equal.trans(
+        Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+        Ledgers.State.get(~Spec.Ask, l1, k),
+        Ledgers.State.get(~Spec.Ask, sent, k),
+        Some{Cells.One{e}},
+        Ledgers.State.take_get(~Spec.Ask, Spec.State.ledger(s), sent, k)(eb),
+        es
+      )
+    )
+
+def Spec.Node.take_waits(s, t, i, time, r, l, ch):
+  +sent = Spec.Node.reads(t)
+  +l1 = Ledgers.State.take(~Spec.Ask, Spec.State.ledger(s), sent)
+  +s1 = Spec.State.led(s, l1)
+  +cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Spec.Ask>>, sent)
+  +s2 = Spec.Take.asks(cs, Spec.State.ledger(s), s1)
+  +bs = Spec.Ballots.of(
+    Tries.Trie.values(Cells.Cell<Ledgers.Entry<Spec.Ask>>, Ledgers.State.missing(~Spec.Ask, ~Spec.Ask.is_eq, t, Spec.State.ledger(s)))
+  )
+  +cell = {Cells.One{Ledgers.Entry.Ask{i, time, Spec.Ask.On{r, l, ch}}}: Cells.Cell<Ledgers.Entry<Spec.Ask>>}
+  es => eb =>
+    %Wait.same(
+      s2,
+      Spec.Sealed.take(bs, s2),
+      Spec.Line.chain(r, l),
+      Each.waiting(List.length(&2, Ledgers.Ballot, bs), bs, Spec.Pending.of(bs), s2)
+    ): {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, _, i) == True{}: Bool}
+    %Equal.sym(
+      List<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+      cs,
+      List.append(
+        &2,
+        Cells.Cell<Ledgers.Entry<Spec.Ask>>,
+        Tries.Trie.before(Cells.Cell<Ledgers.Entry<Spec.Ask>>, sent, Ledgers.Slot.ask(i)),
+        cell <> Tries.Trie.after(Cells.Cell<Ledgers.Entry<Spec.Ask>>, sent, Ledgers.Slot.ask(i))
+      ),
+      Tries.Trie.values_around(Cells.Cell<Ledgers.Entry<Spec.Ask>>, sent, Ledgers.Slot.ask(i), cell)(es)
+    ): {
+      List.contains(
+        ~Ledgers.Id,
+        ~Ledgers.Id.is_eq,
+        Spec.Wait.of(Spec.Take.asks(_, Spec.State.ledger(s), s1), Spec.Line.chain(r, l)),
+        i
+      )
+        == True{}: Bool
+    }
+    Take.asks.adds(
+      Tries.Trie.before(Cells.Cell<Ledgers.Entry<Spec.Ask>>, sent, Ledgers.Slot.ask(i)),
+      Tries.Trie.after(Cells.Cell<Ledgers.Entry<Spec.Ask>>, sent, Ledgers.Slot.ask(i)),
+      Spec.State.ledger(s),
+      s1,
+      i,
+      time,
+      r,
+      l,
+      ch
+    )(eb)
+
 # Paths
 # -----
 # Every head is on the decided chain. A node sets a head in four places: a
@@ -9915,21 +10773,6 @@ def Head.this(
       Spec.Node.head_of(b0, c2),
       ebs
     )
-  )
-
-# lines with the same key have the same key
-def Key.same(
-  +c2: Ledgers.Chain,
-  +c: Ledgers.Chain
-) -> {Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)) == True{}: Bool} -> {
-  Ledgers.Chain.key(c2) == Ledgers.Chain.key(c): List<&2, Bool>
-}:
-  Shared.List.is_eq_sound(
-    ~Bool,
-    ~Shared.Bool.is_eq,
-    ~Shared.Bool.laws(),
-    Ledgers.Chain.key(c2),
-    Ledgers.Chain.key(c)
   )
 
 # lines with the same key have the same head
