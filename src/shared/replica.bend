@@ -1333,28 +1333,43 @@ def Keys.kept(ks: Keys, +c: Keychain, +b: Ledgers.Ballot) -> Keys:
     Ballot.at(b)
   )
 
-# the step in the cell m of a ballot, if it holds one
+# the step in the cell m of a ballot, if it holds the vote of the node p in
+# the round r of the height whose slots start with hk
 def Cast.step(
   ~mach: Machine(),
-  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
+  hk: List<&2, Bool>,
+  r: Nat,
+  p: String
 ) -> Maybe<&2, Ledgers.Vote>:
-  match m:
-    case Some{Cells.One{Ledgers.Entry.Vote{b}}}:
-      Ledgers.Ballot.vote(b)
-    case x:
-      None{}
+  Maybe.bind(
+    &2,
+    Ledgers.Ballot,
+    Ledgers.Vote,
+    Ledgers.Cell.ballot(~Machine.Q(mach), m, hk, r, p),
+    b => Ledgers.Ballot.vote(b)
+  )
 
 # the step that the node p cast at the place w, if s holds its ballot
 def Cast.of(
   ~mach: Machine(),
   s: Node<Machine.Q(mach)>,
   w: Ledgers.Where,
-  p: String
+  +p: String
 ) -> Maybe<&2, Ledgers.Vote>:
-  Cast.step(
-    ~mach,
-    Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.vote(w, p))
-  )
+  match w:
+    case Ledgers.Where{+c, +h, +r}:
+      Cast.step(
+        ~mach,
+        Ledgers.State.get(
+          ~Machine.Q(mach),
+          State.ledger(~mach, s),
+          Ledgers.Slot.vote(Ledgers.Where{c, h, r}, p)
+        ),
+        Ledgers.Slot.height(c, h),
+        r,
+        p
+      )
 
 # the vote m of the round r, as a last vote, else what rest gives
 def Last.or(
@@ -2351,16 +2366,22 @@ def Where.round(w: Ledgers.Where) -> Nat:
     case Ledgers.Where{c, h, r}:
       r
 
-# what the node p did at the place w, in the cell m of its vote
+# what the node p did in the round r of the height whose slots start with hk,
+# in the cell m of its vote
 def Cast.act.of(
   ~mach: Machine(),
-  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
+  hk: List<&2, Bool>,
+  r: Nat,
+  p: String
 ) -> Maybe<&2, Ledgers.Act>:
-  match m:
-    case Some{Cells.One{Ledgers.Entry.Vote{Ledgers.Ballot{Ledgers.Signed{w, n, a}, l}}}}:
-      Some{a}
-    case x:
-      None{}
+  Maybe.bind(
+    &2,
+    Ledgers.Ballot,
+    Ledgers.Act,
+    Ledgers.Cell.ballot(~Machine.Q(mach), m, hk, r, p),
+    b => Some{Ledgers.Ballot.act(b)}
+  )
 
 # the vote of the node p at the place w, with the nodes whose passes allow
 # it, if s holds it
@@ -2368,12 +2389,21 @@ def Cast.act(
   ~mach: Machine(),
   s: Node<Machine.Q(mach)>,
   w: Ledgers.Where,
-  p: String
+  +p: String
 ) -> Maybe<&2, Ledgers.Act>:
-  Cast.act.of(
-    ~mach,
-    Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.vote(w, p))
-  )
+  match w:
+    case Ledgers.Where{+c, +h, +r}:
+      Cast.act.of(
+        ~mach,
+        Ledgers.State.get(
+          ~Machine.Q(mach),
+          State.ledger(~mach, s),
+          Ledgers.Slot.vote(Ledgers.Where{c, h, r}, p)
+        ),
+        Ledgers.Slot.height(c, h),
+        r,
+        p
+      )
 
 # the act m is a vote for the step v, and rest holds of the nodes whose passes
 # the vote names
@@ -10809,6 +10839,9 @@ def Passed.up.at(
   a: Node<Machine.Q(mach)>,
   u: Node<Machine.Q(mach)>,
   k: List<&2, Bool>,
+  hk: List<&2, Bool>,
+  j: Nat,
+  n: String,
   m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
   g: {Node.grows(~mach, a, u) == True{}: Bool}
 ) -> {
@@ -10819,15 +10852,26 @@ def Passed.up.at(
   )
     == m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
 } -> {
-  Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Ledgers.Passed.of(~Machine.Q(mach), m)) == True{}: Bool
+  Maybe.is_some(
+    &2,
+    Maybe<&2, Ledgers.Last>,
+    Ledgers.Passed.of(~Machine.Q(mach), m, hk, j, n)
+  )
+    == True{}: Bool
 } -> {
   Ledgers.Passed.of(
     ~Machine.Q(mach),
-    m
+    m,
+    hk,
+    j,
+    n
   )
     == Ledgers.Passed.of(
       ~Machine.Q(mach),
-      Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, u), k)
+      Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, u), k),
+      hk,
+      j,
+      n
     ): Maybe<&2, Maybe<&2, Ledgers.Last>>
 }:
   match m:
@@ -10836,11 +10880,17 @@ def Passed.up.at(
         {
           Ledgers.Passed.of(
             ~Machine.Q(mach),
-            None{}
+            None{},
+            hk,
+            j,
+            n
           )
             == Ledgers.Passed.of(
               ~Machine.Q(mach),
-              Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, u), k)
+              Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, u), k),
+              hk,
+              j,
+              n
             ): Maybe<&2, Maybe<&2, Ledgers.Last>>
         },
         Shared.Bool.false_ne_true(e)
@@ -10849,7 +10899,7 @@ def Passed.up.at(
       em => e => Equal.cong(
         Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
         Maybe<&2, Maybe<&2, Ledgers.Last>>,
-        z => Ledgers.Passed.of(~Machine.Q(mach), z),
+        z => Ledgers.Passed.of(~Machine.Q(mach), z, hk, j, n),
         Some{x},
         Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, u), k),
         Equal.sym(
@@ -10926,7 +10976,10 @@ def Passed.up(
               List.append(&2, Bool, _, Ledgers.Round.key(r, [True{}])),
               Ledgers.Slot.ballot(o)
             )
-          )
+          ),
+          _,
+          r,
+          o
         ): Maybe<&2, Maybe<&2, Ledgers.Last>>
     }
     Passed.up.at(
@@ -10934,6 +10987,9 @@ def Passed.up(
       a,
       u,
       Ledgers.Slot.pass(Ledgers.Where{c, h, r}, o),
+      Ledgers.Slot.height(c, h),
+      r,
+      o,
       Ledgers.State.get(
         ~Machine.Q(mach),
         State.ledger(~mach, a),
@@ -10948,6 +11004,9 @@ def Act.up.at(
   a: Node<Machine.Q(mach)>,
   u: Node<Machine.Q(mach)>,
   k: List<&2, Bool>,
+  hk: List<&2, Bool>,
+  j: Nat,
+  n: String,
   m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
   g: {Node.grows(~mach, a, u) == True{}: Bool}
 ) -> {
@@ -10958,15 +11017,21 @@ def Act.up.at(
   )
     == m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
 } -> {
-  Maybe.is_some(&2, Ledgers.Act, Cast.act.of(~mach, m)) == True{}: Bool
+  Maybe.is_some(&2, Ledgers.Act, Cast.act.of(~mach, m, hk, j, n)) == True{}: Bool
 } -> {
   Cast.act.of(
     ~mach,
-    m
+    m,
+    hk,
+    j,
+    n
   )
     == Cast.act.of(
       ~mach,
-      Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, u), k)
+      Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, u), k),
+      hk,
+      j,
+      n
     ): Maybe<&2, Ledgers.Act>
 }:
   match m:
@@ -10975,11 +11040,17 @@ def Act.up.at(
         {
           Cast.act.of(
             ~mach,
-            None{}
+            None{},
+            hk,
+            j,
+            n
           )
             == Cast.act.of(
               ~mach,
-              Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, u), k)
+              Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, u), k),
+              hk,
+              j,
+              n
             ): Maybe<&2, Ledgers.Act>
         },
         Shared.Bool.false_ne_true(e)
@@ -10988,7 +11059,7 @@ def Act.up.at(
       em => e => Equal.cong(
         Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
         Maybe<&2, Ledgers.Act>,
-        z => Cast.act.of(~mach, z),
+        z => Cast.act.of(~mach, z, hk, j, n),
         Some{x},
         Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, u), k),
         Equal.sym(
@@ -11055,7 +11126,10 @@ def Act.up(
               List.append(&2, Bool, _, Ledgers.Round.key(r, [False{}])),
               Ledgers.Slot.ballot(o)
             )
-          )
+          ),
+          _,
+          r,
+          o
         ): Maybe<&2, Ledgers.Act>
     }
     Act.up.at(
@@ -11063,6 +11137,9 @@ def Act.up(
       a,
       u,
       Ledgers.Slot.vote(Ledgers.Where{c, h, r}, o),
+      Ledgers.Slot.height(c, h),
+      r,
+      o,
       Ledgers.State.get(
         ~Machine.Q(mach),
         State.ledger(~mach, a),
@@ -11759,7 +11836,7 @@ def Decide.up(
     ),
     v,
     +v0 => e0 => (
-      %Slot.keyed(c, c2, h, ek): {Ledgers.Bucket.decide(~Machine.Q(mach), Ledgers.State.under(~Machine.Q(mach), State.ledger(~mach, u), List.append(&2, Bool, _, Ledgers.Round.key(r, [False{}]))), os) == Some{v0}: Maybe<&2, Ledgers.Vote>}
+      %Slot.keyed(c, c2, h, ek): {Ledgers.Bucket.decide(~Machine.Q(mach), Ledgers.State.under(~Machine.Q(mach), State.ledger(~mach, u), List.append(&2, Bool, _, Ledgers.Round.key(r, [False{}]))), _, r, os) == Some{v0}: Maybe<&2, Ledgers.Vote>}
       Ledgers.State.decide_grows(~Machine.Q(mach), ~Machine.same(mach), ~Machine.laws(mach), State.ledger(~mach, a), State.ledger(~mach, u), Ledgers.Where{c, h, r}, os, v0)(g)(e0)),
     +v0 => Shared.Maybe.bind_kept(
       String,
@@ -13071,14 +13148,16 @@ def Advance.at.one(
 def Round.ballots(
   ~mach: Machine(),
   s: Node<Machine.Q(mach)>,
-  c: Ledgers.Chain,
-  h: U32,
-  r: Nat,
+  +c: Ledgers.Chain,
+  +h: U32,
+  +r: Nat,
   os: List<&2, String>
 ) -> List<&2, Maybe<&2, Cells.Cell<Ledgers.Vote>>>:
   Ledgers.Bucket.ballots(
     ~Machine.Q(mach),
     Ledgers.State.under(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.bucket(c, h, r)),
+    Ledgers.Slot.height(c, h),
+    r,
     os
   )
 
@@ -13086,10 +13165,10 @@ def Round.ballots(
 def Round.hit(
   ~mach: Machine(),
   s: Node<Machine.Q(mach)>,
-  c: Ledgers.Chain,
-  h: U32,
-  r: Nat,
-  o: String,
+  +c: Ledgers.Chain,
+  +h: U32,
+  +r: Nat,
+  +o: String,
   v: Ledgers.Vote
 ) -> Bool:
   Quorums.Quorum.hit(
@@ -13101,53 +13180,62 @@ def Round.hit(
         ~Machine.Q(mach),
         Ledgers.State.under(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.bucket(c, h, r)),
         Ledgers.Slot.ballot(o)
-      )
+      ),
+      Ledgers.Slot.height(c, h),
+      r,
+      o
     ),
     v
   )
 
-# a cell that counts for the step v holds a vote for v
-def Hit.step(
-  ~mach: Machine(),
-  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
+# a vote that counts for the step v is a vote for v
+def Hit.vote(
+  x: Maybe<&2, Ledgers.Vote>,
   v: Ledgers.Vote
 ) -> {
   Quorums.Quorum.hit(
     ~Ledgers.Vote,
     ~Ledgers.Vote.is_eq,
-    Ledgers.Entry.ballot(~Machine.Q(mach), m),
+    Some{Ledgers.Ballot.cell(x)},
     v
   )
     == True{}: Bool
-} -> {Cast.step(~mach, m) == Some{v}: Maybe<&2, Ledgers.Vote>}:
-  match m:
+} -> {x == Some{v}: Maybe<&2, Ledgers.Vote>}:
+  match x:
     case None{}:
       e => Empty.absurd({None{} == Some{v}: Maybe<&2, Ledgers.Vote>}, Shared.Bool.false_ne_true(e))
-    case Some{Cells.Many{}}:
-      e => Empty.absurd({None{} == Some{v}: Maybe<&2, Ledgers.Vote>}, Shared.Bool.false_ne_true(e))
-    case Some{Cells.One{Ledgers.Entry.Ask{i, t, q}}}:
-      e => Empty.absurd({None{} == Some{v}: Maybe<&2, Ledgers.Vote>}, Shared.Bool.false_ne_true(e))
-    case Some{Cells.One{Ledgers.Entry.Data{ws}}}:
-      e => Empty.absurd({None{} == Some{v}: Maybe<&2, Ledgers.Vote>}, Shared.Bool.false_ne_true(e))
-    case Some{Cells.One{Ledgers.Entry.Lie{x}}}:
-      e => Empty.absurd({None{} == Some{v}: Maybe<&2, Ledgers.Vote>}, Shared.Bool.false_ne_true(e))
-    case Some{
-      Cells.One{Ledgers.Entry.Vote{Ledgers.Ballot{Ledgers.Signed{w, n, Ledgers.Act.Pass{p}}, l}}}
-    }:
-      e => Empty.absurd({None{} == Some{v}: Maybe<&2, Ledgers.Vote>}, Shared.Bool.false_ne_true(e))
-    case Some{
-      Cells.One{
-        Ledgers.Entry.Vote{Ledgers.Ballot{Ledgers.Signed{w, n, Ledgers.Act.Vote{x, from}}, l}}
-      }
-    }:
+    case Some{y}:
       e => Equal.cong(
         Ledgers.Vote,
         Maybe<&2, Ledgers.Vote>,
-        y => Some{y},
-        x,
+        z => Some{z},
+        y,
         v,
-        Ledgers.Vote.is_eq_sound(x, v)(e)
+        Ledgers.Vote.is_eq_sound(y, v)(e)
       )
+
+# a cell that counts for the step v holds a vote for v
+def Hit.step(
+  ~mach: Machine(),
+  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
+  hk: List<&2, Bool>,
+  r: Nat,
+  p: String,
+  v: Ledgers.Vote
+) -> {
+  Quorums.Quorum.hit(
+    ~Ledgers.Vote,
+    ~Ledgers.Vote.is_eq,
+    Ledgers.Entry.ballot(~Machine.Q(mach), m, hk, r, p),
+    v
+  )
+    == True{}: Bool
+} -> {Cast.step(~mach, m, hk, r, p) == Some{v}: Maybe<&2, Ledgers.Vote>}:
+  match m:
+    case None{}:
+      e => Empty.absurd({None{} == Some{v}: Maybe<&2, Ledgers.Vote>}, Shared.Bool.false_ne_true(e))
+    case Some{c}:
+      Hit.vote(Cast.step(~mach, Some{c}, hk, r, p), v)
 
 # a node that counts for the step v in a round cast v there
 def Hit.cast(
@@ -13167,7 +13255,7 @@ def Hit.cast(
       State.ledger(~mach, s),
       Ledgers.Slot.bucket(c, h, r),
       Ledgers.Slot.ballot(o)
-    ): {Cast.step(~mach, _) == Some{v}: Maybe<&2, Ledgers.Vote>}
+    ): {Cast.step(~mach, _, Ledgers.Slot.height(c, h), r, o) == Some{v}: Maybe<&2, Ledgers.Vote>}
     Hit.step(
       ~mach,
       Ledgers.State.get(
@@ -13175,6 +13263,9 @@ def Hit.cast(
         Ledgers.State.under(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.bucket(c, h, r)),
         Ledgers.Slot.ballot(o)
       ),
+      Ledgers.Slot.height(c, h),
+      r,
+      o,
       v
     )(e)
 

@@ -898,6 +898,24 @@ def Ballot.pass(b: Ballot) -> Maybe<&2, Maybe<&2, Last>>:
     case Ballot{Signed{w, n, Act.Vote{v, from}}, l}:
       None{}
 
+# what the ballot b does
+def Ballot.act(b: Ballot) -> Act:
+  match b:
+    case Ballot{Signed{w, n, a}, l}:
+      a
+
+# the ballot b is the ballot of the node n in the round r of the height whose
+# slots start with hk. A cell counts only as what its ballot says: the keys of
+# two places can meet in one slot, and a ballot is never read as one of a place
+# or a node that it does not name
+def Ballot.is(b: Ballot, hk: List<&2, Bool>, r: Nat, n: String) -> Bool:
+  match b:
+    case Ballot{Signed{Where{c, h, r2}, n2, a}, l}:
+      List.all.if(
+        u => List.all.if(u2 => Tries.Trie.same_key(Slot.height(c, h), hk), Nat.is_eq(r2, r)),
+        String.eq(n2, n)
+      )
+
 # the cell of the vote m of a ballot: void when the ballot is not a vote
 def Ballot.cell(m: Maybe<&2, Vote>) -> Cells.Cell<Vote>:
   match m:
@@ -1167,43 +1185,79 @@ def Asked.of(~Q: Data, m: Maybe<&2, Entry<Q>>) -> Maybe<&2, Asked<Q>>:
 def State.asked(~Q: Data, s: State(Q), i: Id) -> Maybe<&2, Asked<Q>>:
   Asked.of(~Q, State.entry(~Q, s, Slot.ask(i)))
 
-# the ballot of a cell of a bucket: a vote, void when it holds anything else,
-# none when it is empty
-def Entry.ballot(~Q: Data, m: Maybe<&2, Cells.Cell<Entry<Q>>>) -> Maybe<&2, Cells.Cell<Vote>>:
+# the ballot in the cell m, when it is the ballot of the node n in the round r
+# of the height whose slots start with hk (Ballot.is)
+def Cell.ballot(
+  ~Q: Data,
+  m: Maybe<&2, Cells.Cell<Entry<Q>>>,
+  hk: List<&2, Bool>,
+  r: Nat,
+  n: String
+) -> Maybe<&2, Ballot>:
+  match m:
+    case Some{Cells.One{Entry.Vote{+b}}}:
+      Shared.Maybe.when(Ballot, Ballot.is(b, hk, r, n), u => Some{b})
+    case x:
+      None{}
+
+# the ballot of a cell of a bucket, for the node n in the round r of the
+# height whose slots start with hk: its vote, void when the cell holds
+# anything else, none when it is empty
+def Entry.ballot(
+  ~Q: Data,
+  m: Maybe<&2, Cells.Cell<Entry<Q>>>,
+  hk: List<&2, Bool>,
+  r: Nat,
+  n: String
+) -> Maybe<&2, Cells.Cell<Vote>>:
   match m:
     case None{}:
       None{}
-    case Some{Cells.One{Entry.Vote{b}}}:
-      Some{Ballot.cell(Ballot.vote(b))}
     case Some{c}:
-      Some{Cells.Many{}}
+      Some{
+        Ballot.cell(
+          Maybe.bind(&2, Ballot, Vote, Cell.ballot(~Q, Some{c}, hk, r, n), b => Ballot.vote(b))
+        )
+      }
 
-# the ballots of the nodes ms in the bucket b, each read once
+# the ballots of the nodes ms in the bucket b of the round r of the height
+# whose slots start with hk, each read once
 def Bucket.ballots(
   ~Q: Data,
   +b: State(Q),
+  +hk: List<&2, Bool>,
+  +r: Nat,
   ms: List<&2, String>
 ) -> List<&2, Maybe<&2, Cells.Cell<Vote>>>:
   match ms:
     case Nil{}:
       []
-    case Con{m, r}:
-      Entry.ballot(~Q, State.get(~Q, b, Slot.ballot(m))) <> Bucket.ballots(~Q, b, r)
+    case Con{+m, rest}:
+      Entry.ballot(
+        ~Q,
+        State.get(~Q, b, Slot.ballot(m)),
+        hk,
+        r,
+        m
+      )
+        <> Bucket.ballots(~Q, b, hk, r, rest)
 
 # what the ballots of ms in the bucket b decide
-def Bucket.decide(~Q: Data, b: State(Q), ms: List<&2, String>) -> Maybe<&2, Vote>:
-  Quorums.Quorum.major(~Vote, ~Vote.is_eq, Bucket.ballots(~Q, b, ms))
-
-# the bucket of the place w in s
-def State.bucket(~Q: Data, s: State(Q), w: Where) -> State(Q):
-  match w:
-    case Where{c, h, r}:
-      State.under(~Q, s, Slot.bucket(c, h, r))
+def Bucket.decide(
+  ~Q: Data,
+  b: State(Q),
+  hk: List<&2, Bool>,
+  r: Nat,
+  ms: List<&2, String>
+) -> Maybe<&2, Vote>:
+  Quorums.Quorum.major(~Vote, ~Vote.is_eq, Bucket.ballots(~Q, b, hk, r, ms))
 
 # the step that a majority of the owners ms cast at the place w of s, if one
 # did
 def State.decide(~Q: Data, s: State(Q), w: Where, ms: List<&2, String>) -> Maybe<&2, Vote>:
-  Bucket.decide(~Q, State.bucket(~Q, s, w), ms)
+  match w:
+    case Where{+c, +h, +r}:
+      Bucket.decide(~Q, State.under(~Q, s, Slot.bucket(c, h, r)), Slot.height(c, h), r, ms)
 
 # Data
 # ----
@@ -1379,18 +1433,23 @@ def Slot.of(b: Ballot) -> List<&2, Bool>:
 def State.keep(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), +b: Ballot) -> State(Q):
   State.add(~Q, ~same, s, Slot.of(b), Entry.Vote{b})
 
-# the last vote in the cell m of a pass, if it holds a pass
-def Passed.of(~Q: Data, m: Maybe<&2, Cells.Cell<Entry<Q>>>) -> Maybe<&2, Maybe<&2, Last>>:
-  match m:
-    case Some{Cells.One{Entry.Vote{b}}}:
-      Ballot.pass(b)
-    case x:
-      None{}
+# the last vote in the cell m of a pass, if it holds the pass of the node n to
+# the round r of the height whose slots start with hk
+def Passed.of(
+  ~Q: Data,
+  m: Maybe<&2, Cells.Cell<Entry<Q>>>,
+  hk: List<&2, Bool>,
+  r: Nat,
+  n: String
+) -> Maybe<&2, Maybe<&2, Last>>:
+  Maybe.bind(&2, Ballot, Maybe<&2, Last>, Cell.ballot(~Q, m, hk, r, n), b => Ballot.pass(b))
 
 # the last vote that the node n named when it passed to the place w, if s
 # holds its pass
-def State.passed(~Q: Data, s: State(Q), w: Where, n: String) -> Maybe<&2, Maybe<&2, Last>>:
-  Passed.of(~Q, State.get(~Q, s, Slot.pass(w, n)))
+def State.passed(~Q: Data, s: State(Q), w: Where, +n: String) -> Maybe<&2, Maybe<&2, Last>>:
+  match w:
+    case Where{+c, +h, +r}:
+      Passed.of(~Q, State.get(~Q, s, Slot.pass(Where{c, h, r}, n)), Slot.height(c, h), r, n)
 
 # s holds a proof that the node of the ballot b lied in its store: a cell
 # below the lies of that node. It reads one key, whatever s holds
@@ -1863,61 +1922,6 @@ def Ballot.cell_refl(
     case None{}:
       {==}
 
-# the ballot of one entry is kept as itself
-def Ballot.refl(
-  ~Q: Data,
-  e: Entry<Q>
-) -> {
-  Cells.Cell.keeps(
-    ~Vote,
-    ~Vote.is_eq,
-    Entry.ballot(~Q, Some{Cells.One{e}}),
-    Entry.ballot(~Q, Some{Cells.One{e}})
-  )
-    == True{}: Bool
-}:
-  match e:
-    case Entry.Vote{v}:
-      Ballot.cell_refl(Ballot.vote(v))
-    case Entry.Ask{i, t, q}:
-      {==}
-    case Entry.Data{d}:
-      {==}
-    case Entry.Lie{l}:
-      {==}
-
-# a cell kept from many gives a void ballot
-def Ballot.many_kept(
-  ~Q: Data,
-  ~same: Q -> Q -> Bool,
-  b: Maybe<&2, Cells.Cell<Entry<Q>>>
-) -> {
-  Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), Some{Cells.Many{}}, b) == True{}: Bool
-} -> {
-  Cells.Cell.keeps(~Vote, ~Vote.is_eq, Some{Cells.Many{}}, Entry.ballot(~Q, b)) == True{}: Bool
-}:
-  match b:
-    case Some{Cells.Many{}}:
-      k => {==}
-    case Some{Cells.One{e}}:
-      k => Empty.absurd(
-        {
-          Cells.Cell.keeps(
-            ~Vote,
-            ~Vote.is_eq,
-            Some{Cells.Many{}},
-            Entry.ballot(~Q, Some{Cells.One{e}})
-          )
-            == True{}: Bool
-        },
-        Shared.Bool.false_ne_true(k)
-      )
-    case None{}:
-      k => Empty.absurd(
-        {Cells.Cell.keeps(~Vote, ~Vote.is_eq, Some{Cells.Many{}}, None{}) == True{}: Bool},
-        Shared.Bool.false_ne_true(k)
-      )
-
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # the ballot of a cell is kept in a cell that keeps it
 def Ballot.grows(
@@ -1925,40 +1929,49 @@ def Ballot.grows(
   ~same: Q -> Q -> Bool,
   ~laws: Shared.Eq.Laws(Q, same),
   a: Maybe<&2, Cells.Cell<Entry<Q>>>,
-  b: Maybe<&2, Cells.Cell<Entry<Q>>>
+  b: Maybe<&2, Cells.Cell<Entry<Q>>>,
+  hk: List<&2, Bool>,
+  r: Nat,
+  n: String
 ) -> {
   Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), a, b) == True{}: Bool
 } -> {
-  Cells.Cell.keeps(~Vote, ~Vote.is_eq, Entry.ballot(~Q, a), Entry.ballot(~Q, b)) == True{}: Bool
+  Cells.Cell.keeps(
+    ~Vote,
+    ~Vote.is_eq,
+    Entry.ballot(~Q, a, hk, r, n),
+    Entry.ballot(~Q, b, hk, r, n)
+  )
+    == True{}: Bool
 }:
   match a:
     case None{}:
       k => {==}
-    case Some{Cells.One{+e}}:
+    case Some{+c}:
       k =>
         %Equal.sym(
           Maybe<&2, Cells.Cell<Entry<Q>>>,
           b,
-          Some{Cells.One{e}},
-          Cells.Cell.keeps_value(
+          Some{c},
+          Cells.Cell.keeps_held(
             ~Entry<Q>,
             ~Entry.is_eq(~Q, ~same),
             ~Entry.laws(~Q, ~same, ~laws),
-            e,
+            c,
             b
           )(k)
         ): {
           Cells.Cell.keeps(
             ~Vote,
             ~Vote.is_eq,
-            Entry.ballot(~Q, Some{Cells.One{e}}),
-            Entry.ballot(~Q, _)
+            Entry.ballot(~Q, Some{c}, hk, r, n),
+            Entry.ballot(~Q, _, hk, r, n)
           )
             == True{}: Bool
         }
-        Ballot.refl(~Q, e)
-    case Some{Cells.Many{}}:
-      k => Ballot.many_kept(~Q, ~same, b, k)
+        Ballot.cell_refl(
+          Maybe.bind(&2, Ballot, Vote, Cell.ballot(~Q, Some{c}, hk, r, n), x => Ballot.vote(x))
+        )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the ballots of ms in the bucket at p are kept in a state that grows
@@ -1969,6 +1982,8 @@ def Ballots.grows(
   +s: State(Q),
   +s2: State(Q),
   +p: List<&2, Bool>,
+  +hk: List<&2, Bool>,
+  +j: Nat,
   ms: List<&2, String>,
   +gr: {State.grows(~Q, ~same, s, s2) == True{}: Bool}
 ) -> {
@@ -1976,34 +1991,39 @@ def Ballots.grows(
     ~Maybe<&2, Cells.Cell<Vote>>,
     ~Maybe<&2, Cells.Cell<Vote>>,
     ~Cells.Cell.keeps(~Vote, ~Vote.is_eq),
-    Bucket.ballots(~Q, State.under(~Q, s, p), ms),
-    Bucket.ballots(~Q, State.under(~Q, s2, p), ms)
+    Bucket.ballots(~Q, State.under(~Q, s, p), hk, j, ms),
+    Bucket.ballots(~Q, State.under(~Q, s2, p), hk, j, ms)
   )
     == True{}: Bool
 }:
   match ms:
     case Nil{}:
       {==}
-    case Con{m, +r}:
+    case Con{+m, +r}:
       +k = Slot.ballot(m)
       +b1 = State.get(~Q, State.under(~Q, s, p), k)
       +b2 = State.get(~Q, State.under(~Q, s2, p), k)
       Shared.Bool.and_both(
-        Cells.Cell.keeps(~Vote, ~Vote.is_eq, Entry.ballot(~Q, b1), Entry.ballot(~Q, b2)),
+        Cells.Cell.keeps(
+          ~Vote,
+          ~Vote.is_eq,
+          Entry.ballot(~Q, b1, hk, j, m),
+          Entry.ballot(~Q, b2, hk, j, m)
+        ),
         Shared.List.all2(
           ~Maybe<&2, Cells.Cell<Vote>>,
           ~Maybe<&2, Cells.Cell<Vote>>,
           ~Cells.Cell.keeps(~Vote, ~Vote.is_eq),
-          Bucket.ballots(~Q, State.under(~Q, s, p), r),
-          Bucket.ballots(~Q, State.under(~Q, s2, p), r)
+          Bucket.ballots(~Q, State.under(~Q, s, p), hk, j, r),
+          Bucket.ballots(~Q, State.under(~Q, s2, p), hk, j, r)
         )
-      )(Ballot.grows(~Q, ~same, ~laws, b1, b2)(
+      )(Ballot.grows(~Q, ~same, ~laws, b1, b2, hk, j, m)(
           %Equal.sym(Maybe<&2, Cells.Cell<Entry<Q>>>, State.get(~Q, State.under(~Q, s, p), k), State.get(~Q, s, List.append(&2, Bool, p, k)), Tries.Trie.get_under(Cells.Cell<Entry<Q>>, s, p, k)):
             {Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), _, b2) == True{}: Bool}
           %Equal.sym(Maybe<&2, Cells.Cell<Entry<Q>>>, State.get(~Q, State.under(~Q, s2, p), k), State.get(~Q, s2, List.append(&2, Bool, p, k)), Tries.Trie.get_under(Cells.Cell<Entry<Q>>, s2, p, k)):
             {Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), State.get(~Q, s, List.append(&2, Bool, p, k)), _) == True{}: Bool}
           Tries.Trie.keeps_get(~Cells.Cell<Entry<Q>>, ~Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), ~Cells.Cell.none_kept(~Entry<Q>, ~Entry.is_eq(~Q, ~same)), s, s2, List.append(&2, Bool, p, k))(gr)))(
-        Ballots.grows(~Q, ~same, ~laws, s, s2, p, r, gr)
+        Ballots.grows(~Q, ~same, ~laws, s, s2, p, hk, j, r, gr)
       )
 
 # what a majority of the owners cast at a place stays as the state grows: it
@@ -2023,10 +2043,11 @@ law State.decide_grows:
 
 def State.decide_grows(ty, same, laws, s, s2, w, ms, v):
   match w:
-    case Where{c, h, r}:
+    case Where{+c, +h, +r}:
       +p = Slot.bucket(c, h, r)
-      b1 = Bucket.ballots(~ty, State.under(~ty, s, p), ms)
-      b2 = Bucket.ballots(~ty, State.under(~ty, s2, p), ms)
+      +hk = Slot.height(c, h)
+      b1 = Bucket.ballots(~ty, State.under(~ty, s, p), hk, r, ms)
+      b2 = Bucket.ballots(~ty, State.under(~ty, s2, p), hk, r, ms)
       +gr => hd =>
         Quorums.Quorum.major_kept(
           ~Vote,
@@ -2035,7 +2056,7 @@ def State.decide_grows(ty, same, laws, s, s2, w, ms, v):
           b1,
           b2,
           v
-        )(Ballots.grows(~ty, ~same, ~laws, s, s2, p, ms, gr))(hd)
+        )(Ballots.grows(~ty, ~same, ~laws, s, s2, p, hk, r, ms, gr))(hd)
 
 # a state grows to itself
 def State.grows_refl(
