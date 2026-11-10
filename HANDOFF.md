@@ -183,16 +183,16 @@ reads); liveness does not. The real fix is a prefix-free code of the line key in
 
 ### 6.2 Glob follow-up (four branches, all merged)
 
-**The glob agent did not send its handoff before the checkpoint. This part is written by the
-coordinator from the agent's last status message, the commits and a check run of the merged state.
-Where it says "not known", nobody verified it.**
+**Written by the coordinator from the glob agent's status message and its late handoff for items
+4 and 5, the commits, and a check run of the merged state. The agent did not check the helper
+branches itself. Where it says "not known", nobody verified it.**
 
 Branches, all based on `10ad342`, merged in this order:
 
 | Branch | Commits | Item |
 |---|---|---|
 | `worktree-agent-a7a0b163b6abfad50` (the glob agent) | `7534766` Glob: one matcher | 1 |
-| `worktree-agent-a3b95579b85a04ef8` (helper) | `9931ee6` Glob, Reach: delete defs that nothing calls and copies of shared lemmas; `42f1c4f` WIP checkpoint (items 4 and 5), committed by the coordinator at the stop, as it was | 4, 5 |
+| `worktree-agent-a3b95579b85a04ef8` (helper) | `9931ee6` Glob, Reach: delete defs that nothing calls and copies of shared lemmas; `42f1c4f` WIP checkpoint (items 4 and 5), committed by the coordinator at the stop, as it was; `2829ec5` Glob: one search on the product machine (the helper's last fix, merged after) | 4, 5 |
 | `worktree-agent-a0321412f63377750` (helper) | `2462479` WIP checkpoint (item 2) | 2 |
 
 (`worktree-agent-af8600d9fcf867b7f` holds the helper's copy of "one matcher"; the glob agent took
@@ -211,12 +211,14 @@ Merge conflicts, resolved without finishing any work:
 | 1. One matcher | **Done.** The spec states matching through `regex.bend` (`Atom` and `Glob.re` are reference defs of the spec); the spec's own matcher and `Glob.re_matches` are gone. `spec.bend` 481 lines. The agent reported the five claim statements byte-identical. |
 | 2. Classes as intervals | **WIP.** New `src/shared/shared/shared/spans.bend` (565 lines): a set of characters as a list of spans, membership by comparing codes; "marks" are the few characters that stand for all the others. Its defs and law statements check; 10 lemmas are proven; **24 proofs are `?TODO`**. Laws stated: `Span.has_one`, `Spans.alike_has`, `Spans.rep_alike`, `Spans.rep_in`, `Spans.marks_covered`. In `shared.bend` (checks): the order of `U32` is the order of the `U32.to_nat` codes (`U32.cmp_to_nat`, `U32.is_le_to_nat`, `U32.is_eq_to_nat`, `U32.to_nat_inj`, `U32.le_last`, `U32.inc_to_nat`, `Nat.le_both`, `Nat.succ_nle`, `Nat.nle_succ_le`, `Nat.cmp_double`, `Bool.iff`). **The glob side is not started**: the `Glob` type still holds an expanded class (`Char.range` in `spec.bend`), and read, show, escape and the search alphabet still use the list. |
 | 3. Speed | **Baseline only** (table below). No profile, nothing removed. The commands and queries of the measure are not known (the agent did not write them down); the method was: compile with `bend -o` to JavaScript, run with node, old search at `952d834` against the new one. |
-| 4. Leftovers | **Done in `9931ee6`** (the agent's helper reported no check state; the merged `impl.bend` and `reach.bend` check). |
-| 5. Absent over valid paths | **WIP in `42f1c4f`**, and it checks. In `impl.bend`: a path automaton (`Role`, `Path.step`, `Path.walk`, `Path.is_end`) with the law `Path.walk_ok` ("the automaton accepts exactly the valid paths"), and a product machine `Walk` (`Walk.at`, `Walk.step`, `Walk.ends`, `Walk.of`) that the certificate code names. Not known: whether `Query.search` already runs the product and answers Absent for "no valid path", or whether the wiring is half done. `spec.bend` did not change in this commit, and the claim `search_absent` needs no change (its statement is about `Query.holds`); what gets stronger is how often the search can answer Absent. Check `Spec.search_absent` and `decide` in `impl.bend` first. |
+| 4. Leftovers | **Done** (`9931ee6`). `Reach.or_false` and `Reach.or_assoc` are deleted (the use sites take the shared lemmas through `Equal.sym`). The "Fast matching" block of `impl.bend` is deleted. |
+| 5. Absent over valid paths | **Done** (`42f1c4f` + `2829ec5`, merged; `impl.bend` checks on the merged tree). One search runs on the product machine `Walk` (the glob rules x the path automaton); `Search.decide` answers Absent when `Cert.proves` accepts the product certificate. Law `Path.walk_ok`: `{Path.is_end(Path.walk(String.to_list(p), PStart{})) == Spec.is_path(p): Bool}`. `Query.holds_fast_ok`: the product accepts the characters of `p` exactly when `Spec.Query.holds(q, p)`. The named characters now hold `/`, `.`, NUL and `\`. Deleted: phase one and its machine (`Abc.step`, `Abc.ends`, `St.accepts_ok`, `St.covers`, `St.rep`, `St.laws`), `Outcome`, `Search.run.walked/.paths/.closed`, `Abc.path_syms`. `spec.bend` untouched; `search_found` and `search_absent` proven with the same text. Two queries that only an invalid string satisfies went from Unknown to Absent. Added to `text.bend`: `String.eq_head_ne`, `String.split_some`. |
 
 Order for the rest: finish the proofs of `spans.bend`; then the glob side of item 2 (type, read,
-show, escape, alphabet from the marks; the claims `read_after_show`, `read_rejects_root`,
-`read_after_escape` must stay proven); confirm item 5; then item 3 (profile; suspects named in the
+show, escape, and the alphabet from the marks: the alphabet section to change is now the product
+one, `Walk.covers`, `Walk.rep`, `Abc.fits`; the claims `read_after_show`, `read_rejects_root`,
+`read_after_escape` must stay proven); then item 3, measured again, since the single search of
+item 5 removed the two-phase cost (profile; suspects named in the
 brief: keys built more than once for each state, a key longer than it needs to be, a certificate
 check that repeats work of the search, the two-list queue).
 
