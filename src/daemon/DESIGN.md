@@ -13,7 +13,7 @@ Delete each open item when the code makes it true.
   height (`State.decide`). The ledger does not read a line's state.
 - **Tip** (`core/spec.bend`): what a line holds, as two trees named by one hash.
   - Content: resources (each a root of a rope), clashes, version vector, owner group; for a store
-    also its groups and the first tip of each branch.
+    also its groups, the first tip of each branch, and the first key of each node.
   - Log: a tree that only gains keys. Owners of the next step, count of versions, outcome of each
     request, each version by number, each mark. An outcome, a version and a mark are written once
     (`Run.add`).
@@ -59,13 +59,16 @@ known words costs it about a million steps. So:
 
 All of `core/impl.bend` checks in about 10 s (it was 175 s).
 
-## 3. What is proven (every file prints ALL PROOFS CHECK)
+## 3. What is proven (`core/impl.bend` and every file below it print ALL PROOFS CHECK)
 
 README claim, then the law.
 
-- A node checks what it receives before it keeps it; catching up loses nothing:
-  `Node.ask_grows`, `Node.take_grows`, `Node.sync_grows`, `Node.after_grows`; ledger
-  `take_grows`, `take_join`, `join_comm`, `join_assoc`, `join_idem`, `data_hash`.
+- Catching up loses nothing: `Node.ask_grows`, `Node.take_grows`, `Node.sync_grows`,
+  `Node.after_grows`; ledger `take_grows`, `take_join`, `join_comm`, `join_assoc`, `join_idem`.
+- A node checks what it receives before it keeps it. By construction, not a law: `Node.take`
+  puts each request and each data in the slot that its own content names (`Take.clean`), reads
+  data only under its hash (`data_hash`), and keeps a ballot only when it checks
+  (`Seal.accept_fits`).
 - A change counts once: `Node.ask_once`; a step skips a request that the log holds (`Step.fresh`,
   by construction).
 - Stale and Refused are final; answers only move forward: `Node.answer_follows`,
@@ -83,7 +86,9 @@ README claim, then the law.
   steps of a line stay as a node grows), `Node.advance_at` (a move adds one decided step),
   `Line.at_agrees` (the same number of decided steps from the same first head give the same
   head on any two nodes whose ledgers do not clash).
-- A writer's read shows its own pending write: `Node.draft_some`.
+- A writer's read shows its own pending write: `Node.draft_some` (a write that waits gives a
+  draft), `Node.read_draft` (the read at the head of the branch is the bytes of the draft). On
+  one node; after a switch of nodes it rests on sync, with no law.
 - A taken write reads back: `Judge.write_reads`.
 - A merge never loses a change made on only one side: `Pick.merge_theirs`, `Pick.merge_ours`.
 - The owners of a line are the nodes inside its owner group: `Own.takes_inside`.
@@ -93,6 +98,17 @@ README claim, then the law.
 
 ## 4. Open
 
+Design (each needs a decision or new work; none is a proof detail):
+
+- **Who may ask for a Key, Own, Group, Branch or Move change.** The judge does not read who
+  asks, and an owner's node casts for every request that the judge takes. So any writer can
+  give a node a new first key, or change a group. README: owners decide. Needed: a rule for
+  who may ask (and how a node knows it), checked in the judge or before a node casts.
+- **A decision when owners cast different steps.** Each owner casts once at a height, for the
+  requests that wait at it, in its own order. Two owners that got different requests first cast
+  different steps; if a third owner is away, that height is never decided. A majority is enough
+  only when a majority casts the same step. Needed: more than one round at a height, or one
+  owner that proposes each height.
 - **Every head is on the decided chain.** `Line.at_grows`, `Node.advance_at` and
   `Line.at_agrees` give one history for nodes that start a line from the same first head. Not a
   law yet: that every head of a node is some number of decided steps from the first head of its
@@ -100,21 +116,32 @@ README claim, then the law.
   head.
 - **Missing is not absent, the rest.** The write, resolve, merge and Own judges wait. Still to
   do: the version vector, `Tree.list` and `Tree.diff` (they walk and give no sign of a node that
-  they lack), so a merge or a move can still act on a part of a tree. Then: a move records a
-  version equal to its target (law).
+  they lack), so a merge or a move can still act on a part of a tree. Then the laws: a merge
+  keeps a one-sided change as a whole (`Merge.work`, not only one pick), and a move records a
+  version with the resources of its target.
 - **Owners through a group.** After a group changes, each line that it owns gets its new owners
   by an Own request that any owner's node asks, once (`Node.adopt`). Target: a line reads its
   owners through its group at the store version that it names.
 - **Walks that are left:** `Node.versions` lists every version (use a range); `Node.log`,
   `Touch.versions`, `Version.keys`, `Node.affects`, `Node.impact`, `Node.notices` read every
   version of every branch. Target: notices are made when a head moves, from the diff of the two
-  contents and an index of imports by content root.
+  contents and an index of imports by content root. No law yet for "writers are told only about
+  changes to what their work uses".
+- **README claims with no code yet:** every part is kept by enough nodes to never be lost; a
+  node fetches the rest on demand (a look gives the hash of the node that it lacks, nothing asks
+  for it yet).
 - **A put is done twice** for a taken request (`Work.put`, then `Run.content`): the second one
   makes growth independent of the judge. Target: prove that each judge only grows its node, and
   let the run keep the judge's node.
-- **A sealed chain is checked in a few rounds.** A ballot is checked against the store content
-  at the node's head. A key that a store gives at height h is known only after the node moved
-  there, so a node that is far behind needs one more sync for each `Key` change in between.
-- **Lint and layout** of `trie.bend` (generated proof cases) and of the new proofs in
-  `core/impl.bend`.
+- **A sealed chain is checked in a few rounds.** A key that a store gives at height h is known
+  only after the node moved there, so a node that is far behind needs one more sync for each
+  `Key` change in between.
+- **A request that can never run** (it names a version that no line makes) waits for good. It
+  does not stop its line, but nothing removes it.
+- **Reads of codes are lenient:** an unknown tag reads as the last case (`Change.code.read.of`,
+  `Member`, `Content`, `Ask`).
+- **Names:** `State()` is `Node`; `Chain` (a line) and `Chained` (a chain of keys);
+  `core/spec.bend` holds about 15 domains in one file.
+- **Lint:** no error. Left: `layout/case` (false: constructors are PascalCase), hints in proof
+  bodies.
 - **Transport** (`transport/spec.bend`) is a spec only.

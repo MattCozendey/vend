@@ -305,8 +305,8 @@ def Fits.same(
 
 # Takes.at once whether the node holds the groups is known (b)
 def Takes.held(
-  +os: List<&2, String>,
-  +ns: List<&2, String>,
+  os: List<&2, String>,
+  ns: List<&2, String>,
   b: Bool
 ) -> {
   Shared.Maybe.when(Bool, b, u => Some{Spec.Own.fits(os, ns)}) == Some{True{}}: Maybe<&2, Bool>
@@ -321,8 +321,8 @@ def Takes.held(
 def Takes.at(
   +s: Spec.State(),
   +h: Maybe<&2, Hashes.Hash>,
-  +g: String,
-  +os: List<&2, String>,
+  g: String,
+  os: List<&2, String>,
   m: Maybe<&2, Bool>
 ) -> {
   Maybe.bind(&2, Bool, Bool, m, k => Spec.Own.takes.at(s, h, g, os, k)) == Some{True{}}: Maybe<&2, Bool>
@@ -381,7 +381,7 @@ def Go.empty(
 
 # Get.is once the root node m is known
 def Get.at.is(
-  +s: Spec.State(),
+  s: Spec.State(),
   +k: List<&2, U32>,
   m: Maybe<&2, Trees.Node>
 ) -> {
@@ -411,8 +411,8 @@ def Get.at.is(
 # the node's read of a tree is the tree's read
 def Get.is(
   +s: Spec.State(),
-  +h: Maybe<&2, Hashes.Hash>,
-  +k: List<&2, U32>
+  h: Maybe<&2, Hashes.Hash>,
+  k: List<&2, U32>
 ) -> {Spec.Node.get(s, h, k) == Trees.Tree.get(~Spec.State(), ~Spec.Store.fetch, s, h, k): Maybe<&2, List<&2, U32>>}:
   Get.at.is(s, k, Trees.Tree.part(~Spec.State(), ~Spec.Store.fetch, s, h))
 
@@ -444,8 +444,8 @@ def Look.go.empty(
 
 # Look.is once the root node m is known
 def Look.at.is(
-  +s: Spec.State(),
-  +h: Maybe<&2, Hashes.Hash>,
+  s: Spec.State(),
+  h: Maybe<&2, Hashes.Hash>,
   +k: List<&2, U32>,
   m: Maybe<&2, Trees.Node>
 ) -> {Spec.Node.look.at(s, h, k, m) == Trees.Tree.look.go(~Spec.State(), ~Spec.Store.fetch, s, Trees.Tree.path(k), k, h, m): Trees.Look}:
@@ -473,7 +473,7 @@ def Look.at.is(
 def Look.is(
   +s: Spec.State(),
   +h: Maybe<&2, Hashes.Hash>,
-  +k: List<&2, U32>
+  k: List<&2, U32>
 ) -> {Spec.Node.look(s, h, k) == Trees.Tree.look(~Spec.State(), ~Spec.Store.fetch, s, h, k): Trees.Look}:
   Look.at.is(s, h, k, Trees.Tree.part(~Spec.State(), ~Spec.Store.fetch, s, h))
 
@@ -494,10 +494,10 @@ def Set.go.none(
 
 # Set.is once the root node m is known
 def Set.at.is(
-  +s: Spec.State(),
-  +h: Maybe<&2, Hashes.Hash>,
+  s: Spec.State(),
+  h: Maybe<&2, Hashes.Hash>,
   +k: List<&2, U32>,
-  +x: List<&2, U32>,
+  x: List<&2, U32>,
   m: Maybe<&2, Trees.Node>
 ) -> {
   Spec.Node.set.at(s, h, k, x, m)
@@ -518,8 +518,8 @@ def Set.at.is(
 def Set.is(
   +s: Spec.State(),
   +h: Maybe<&2, Hashes.Hash>,
-  +k: List<&2, U32>,
-  +x: List<&2, U32>
+  k: List<&2, U32>,
+  x: List<&2, U32>
 ) -> {Spec.Node.set(s, h, k, x) == Trees.Tree.set(~Spec.State(), ~Spec.Store.fetch, s, h, k, x): Maybe<&2, Trees.Put>}:
   Set.at.is(s, h, k, x, Trees.Tree.part(~Spec.State(), ~Spec.Store.fetch, s, h))
 
@@ -656,22 +656,22 @@ def Work.put.grows(
 # a new subtree only grows a node
 def Work.of.grows(
   +s: Spec.State(),
-  +ns: List<&2, List<&2, U32>>,
+  ns: List<&2, List<&2, U32>>,
   m: Maybe<&2, Trees.Put>
 ) -> {Work.after(s, Spec.Work.of(s, ns, m)) == True{}: Bool}:
   match m:
     case None{}:
       {==}
-    case Some{Trees.Put{+h, +ws}}:
+    case Some{Trees.Put{h, +ws}}:
       Work.put.grows(s, Spec.State.put(s, ws), Some{h}, ws, ns)(Put.grows(s, ws))
 
 # a key set in a tree only grows a node
 def Set.grows(
   +s: Spec.State(),
-  +h: Maybe<&2, Hashes.Hash>,
-  +ns: List<&2, List<&2, U32>>,
-  +k: List<&2, U32>,
-  +x: List<&2, U32>
+  h: Maybe<&2, Hashes.Hash>,
+  ns: List<&2, List<&2, U32>>,
+  k: List<&2, U32>,
+  x: List<&2, U32>
 ) -> {Work.after(s, Spec.Work.set(Spec.Work{s, h, ns}, k, x)) == True{}: Bool}:
   Work.of.grows(s, ns, Spec.Node.set(s, h, k, x))
 
@@ -692,11 +692,11 @@ def After.self(r: Spec.Run) -> {Run.after(Spec.Run.state(r), Some{r}) == True{}:
 # a run on a node that grew from b is on one that grew from a, when b grew
 # from a
 def After.trans(
-  +a: Spec.State(),
-  +b: Spec.State(),
+  a: Spec.State(),
+  b: Spec.State(),
   +m: Maybe<&2, Spec.Run>,
-  +e1: {Spec.Node.grows(a, b) == True{}: Bool},
-  +e2: {Run.after(b, m) == True{}: Bool}
+  e1: {Spec.Node.grows(a, b) == True{}: Bool},
+  e2: {Run.after(b, m) == True{}: Bool}
 ) -> {Run.after(a, m) == True{}: Bool}:
   match m:
     case None{}:
@@ -706,10 +706,10 @@ def After.trans(
 
 # a run, then a run from it, is on a node that grew
 def After.bind(
-  +s: Spec.State(),
+  s: Spec.State(),
   +m: Maybe<&2, Spec.Run>,
   f: Spec.Run -> Maybe<&2, Spec.Run>,
-  +hm: {Run.after(s, m) == True{}: Bool},
+  hm: {Run.after(s, m) == True{}: Bool},
   hf: @r: Spec.Run -> {Run.after(Spec.Run.state(r), f(r)) == True{}: Bool}
 ) -> {Run.after(s, Maybe.bind(&2, Spec.Run, Spec.Run, m, f)) == True{}: Bool}:
   match m:
@@ -720,12 +720,12 @@ def After.bind(
 
 # one of two runs, each on a node that grew
 def After.when(
-  +s: Spec.State(),
+  s: Spec.State(),
   +b: Bool,
   -mx: Maybe<&2, Spec.Run>,
   -my: Maybe<&2, Spec.Run>,
-  +hx: {Run.after(s, mx) == True{}: Bool},
-  +hy: {Run.after(s, my) == True{}: Bool}
+  hx: {Run.after(s, mx) == True{}: Bool},
+  hy: {Run.after(s, my) == True{}: Bool}
 ) -> {Run.after(s, Shared.Bool.when(Maybe<&2, Spec.Run>, b, u => mx, u => my)) == True{}: Bool}:
   match b:
     case True{}:
@@ -735,10 +735,10 @@ def After.when(
 
 # the run of a new log is on a node that grew
 def Run.of.grows(
-  +s: Spec.State(),
-  +c: Maybe<&2, Hashes.Hash>,
+  s: Spec.State(),
+  c: Maybe<&2, Hashes.Hash>,
   +m: Maybe<&2, Spec.Work>,
-  +e: {Work.after(s, m) == True{}: Bool}
+  e: {Work.after(s, m) == True{}: Bool}
 ) -> {Run.after(s, Spec.Run.of(c, m)) == True{}: Bool}:
   match m:
     case None{}:
@@ -778,18 +778,18 @@ def Run.put.grows(
 # new content only grows a run's node
 def Content.grows(
   r: Spec.Run,
-  +h: Maybe<&2, Hashes.Hash>,
+  h: Maybe<&2, Hashes.Hash>,
   +ds: List<&2, List<&2, U32>>
 ) -> {Run.after(Spec.Run.state(r), Spec.Run.content(r, h, ds)) == True{}: Bool}:
   match r:
-    case Spec.Run{+s, Spec.Tip{c, +l}, +ns}:
+    case Spec.Run{+s, Spec.Tip{c, l}, ns}:
       Run.put.grows(s, Spec.State.put(s, ds), Spec.Tip{h, l}, ds, ns)(Put.grows(s, ds))
 
 # Add.grows once the value m of the key is known
 def Add.at.grows(
-  +r: Spec.Run,
-  +k: List<&2, U32>,
-  +x: List<&2, U32>,
+  r: Spec.Run,
+  k: List<&2, U32>,
+  x: List<&2, U32>,
   m: Maybe<&2, List<&2, U32>>
 ) -> {Run.after(Spec.Run.state(r), Spec.Run.add.at(r, k, x, m)) == True{}: Bool}:
   match m:
@@ -802,13 +802,13 @@ def Add.at.grows(
 def Add.grows(
   +r: Spec.Run,
   +k: List<&2, U32>,
-  +x: List<&2, U32>
+  x: List<&2, U32>
 ) -> {Run.after(Spec.Run.state(r), Spec.Run.add(r, k, x)) == True{}: Bool}:
   Add.at.grows(r, k, x, Spec.Node.get(Spec.Run.state(r), Spec.Tip.log(Spec.Run.tip(r)), k))
 
 # new owners only grow a run's node
 def Owners.grows(
-  +r: Spec.Run,
+  r: Spec.Run,
   +m: Maybe<&2, List<&2, String>>
 ) -> {Run.after(Spec.Run.state(r), Spec.Run.owners(r, m)) == True{}: Bool}:
   match m:
@@ -819,8 +819,8 @@ def Owners.grows(
 
 # a refused request only grows a run's node
 def Stale.grows(
-  +r: Spec.Run,
-  +i: Ledgers.Id
+  r: Spec.Run,
+  i: Ledgers.Id
 ) -> {Run.after(Spec.Run.state(r), Spec.Step.stale(r, i)) == True{}: Bool}:
   Add.grows(r, Spec.Log.out(i), Spec.Out.words(Spec.Out.Stale{}))
 
@@ -945,8 +945,8 @@ def Mark.grows(
 # a change of a line only grows a run's node
 def On.grows(
   +r: Spec.Run,
-  +i: Ledgers.Id,
-  +st: Ledgers.Id,
+  i: Ledgers.Id,
+  st: Ledgers.Id,
   +l: Maybe<&2, String>,
   +ch: Spec.Change
 ) -> {Run.after(Spec.Run.state(r), Spec.Step.on(r, i, st, l, ch)) == True{}: Bool}:
@@ -1195,14 +1195,14 @@ def On.grows(
 # a request only grows a run's node
 def Change.grows(
   +r: Spec.Run,
-  +c: Ledgers.Chain,
+  c: Ledgers.Chain,
   +i: Ledgers.Id,
   +q: Spec.Ask
 ) -> {Run.after(Spec.Run.state(r), Spec.Step.change(r, c, i, q)) == True{}: Bool}:
   match q:
     case Spec.Ask.Start{os}:
       Stale.grows(r, i)
-    case Spec.Ask.On{+st, +l, +ch}:
+    case Spec.Ask.On{+st, +l, ch}:
       After.when(
         Spec.Run.state(r),
         Ledgers.Chain.is_eq(Spec.Line.chain(st, l), c),
@@ -1214,9 +1214,9 @@ def Change.grows(
 
 # a request that the node holds or not only grows a run's node
 def Asked.grows(
-  +r: Spec.Run,
-  +c: Ledgers.Chain,
-  +i: Ledgers.Id,
+  r: Spec.Run,
+  c: Ledgers.Chain,
+  i: Ledgers.Id,
   +a: Maybe<&2, Ledgers.Asked<Spec.Ask>>
 ) -> {Run.after(Spec.Run.state(r), Spec.Step.asked(r, c, i, a)) == True{}: Bool}:
   match a:
@@ -1228,7 +1228,7 @@ def Asked.grows(
 # a request that the log holds or not only grows a run's node
 def Fresh.grows(
   +r: Spec.Run,
-  +c: Ledgers.Chain,
+  c: Ledgers.Chain,
   +i: Ledgers.Id,
   +o: Maybe<&2, Spec.Out>
 ) -> {Run.after(Spec.Run.state(r), Spec.Step.fresh(r, c, i, o)) == True{}: Bool}:
@@ -1241,7 +1241,7 @@ def Fresh.grows(
 # one request of a step only grows a run's node
 def One.grows(
   +r: Spec.Run,
-  +c: Ledgers.Chain,
+  c: Ledgers.Chain,
   +i: Ledgers.Id
 ) -> {Run.after(Spec.Run.state(r), Spec.Step.one(r, c, i)) == True{}: Bool}:
   Fresh.grows(r, c, i, Spec.Line.out(Spec.Run.state(r), Spec.Run.tip(r), i))
@@ -1267,9 +1267,9 @@ def All.grows(
 # a step only grows a node: its run is on a node that keeps every entry
 def Run.grows(
   +s: Spec.State(),
-  +c: Ledgers.Chain,
-  +t: Spec.Tip,
-  +qs: List<&2, Ledgers.Id>
+  c: Ledgers.Chain,
+  t: Spec.Tip,
+  qs: List<&2, Ledgers.Id>
 ) -> {Run.after(s, Spec.Step.run(s, c, t, qs)) == True{}: Bool}:
   All.grows(s, c, qs, Some{Spec.Run{s, t, []}})(Grows.refl(s))
 
@@ -1324,9 +1324,9 @@ def Some.grows(
 
 # a node with the ledger of a node that grew from a grew from a
 def Grows.to(
-  +a: Spec.State(),
-  +b: Spec.State(),
-  +x: Spec.State(),
+  a: Spec.State(),
+  b: Spec.State(),
+  x: Spec.State(),
   e: {Spec.State.ledger(x) == Spec.State.ledger(b): Ledgers.State(Spec.Ask)},
   g: {Spec.Node.grows(a, b) == True{}: Bool}
 ) -> {Spec.Node.grows(a, x) == True{}: Bool}:
@@ -1337,7 +1337,7 @@ def Grows.to(
 
 # one of two nodes, each grown from s
 def Grows.when(
-  +s: Spec.State(),
+  s: Spec.State(),
   b: Bool,
   -x: Spec.State(),
   -y: Spec.State(),
@@ -1373,8 +1373,8 @@ def Led.waits(
 
 # a node with the ledger of a node that grew from it grew
 def Grows.back(
-  +s: Spec.State(),
-  +s3: Spec.State(),
+  s: Spec.State(),
+  s3: Spec.State(),
   g: {Spec.Node.grows(s, s3) == True{}: Bool}
 ) -> {Spec.Node.grows(s, Spec.State.led(s, Spec.State.ledger(s3))) == True{}: Bool}:
   Grows.led(s, Spec.State.ledger(s3), g)
@@ -1448,7 +1448,7 @@ def Accept.at.grows(
 
 # the node m, if any, else s, grew from s when m did
 def Default.grows(
-  +s: Spec.State(),
+  s: Spec.State(),
   m: Maybe<&2, Spec.State()>
 ) -> {State.after(s, m) == True{}: Bool} -> {Spec.Node.grows(s, Maybe.default(&2, Spec.State(), m, s)) == True{}: Bool}:
   match m:
@@ -1461,14 +1461,14 @@ def Default.grows(
 def Cast.seal.grows(
   +s: Spec.State(),
   +w: Ledgers.Where,
-  +n: String,
-  +v: Ledgers.Vote,
+  n: String,
+  v: Ledgers.Vote,
   m: Maybe<&2, Spec.Chained>
 ) -> {Spec.Node.grows(s, Spec.Cast.seal(s, w, n, v, m)) == True{}: Bool}:
   match m:
     case None{}:
       Grows.refl(s)
-    case Some{Spec.Chained{+j, +last, key, f}}:
+    case Some{Spec.Chained{+j, last, key, f}}:
       +b = Ledgers.Ballot.make(
         Spec.Seal.secret(Spec.Keys.seed(Spec.State.keys(s)), Spec.Where.store(w), j),
         Ledgers.Signed{w, n, v},
@@ -1484,7 +1484,7 @@ def Cast.seal.grows(
 # a ballot on a node that grew from a, which grew from s, only grows s
 def Cast.vote.grows(
   +s: Spec.State(),
-  +a: Spec.State(),
+  a: Spec.State(),
   m: Maybe<&2, Spec.State()>,
   +w: Ledgers.Where,
   +n: String,
@@ -1503,12 +1503,12 @@ def Cast.vote.grows(
 
 # a ballot only grows a node
 def Cast.put.grows(
-  +n: String,
-  +w: Ledgers.Where,
-  +th: Maybe<&2, Hashes.Hash>,
-  +qs: List<&2, Ledgers.Id>,
+  n: String,
+  w: Ledgers.Where,
+  th: Maybe<&2, Hashes.Hash>,
+  qs: List<&2, Ledgers.Id>,
   m: Maybe<&2, Spec.Run>,
-  +s: Spec.State()
+  s: Spec.State()
 ) -> {Run.after(s, m) == True{}: Bool} -> {Spec.Node.grows(s, Spec.Cast.put(n, w, th, qs, m, s)) == True{}: Bool}:
   match m:
     case None{}:
@@ -1533,7 +1533,7 @@ def Cast.at.grows(
   m: Maybe<&2, Spec.Tip>
 ) -> {Spec.Node.grows(s, Spec.Cast.at(n, s, c, h, m)) == True{}: Bool}:
   match h m:
-    case Spec.Head{r, b, +next, +th} Some{+t}:
+    case Spec.Head{r, b, +next, th} Some{+t}:
       +p = Spec.Step.some(c, Spec.Wait.of(s, c), Spec.Run{s, t, []})
       +qs = Spec.Picked.asks(p)
       Grows.when(
@@ -1556,9 +1556,9 @@ def Cast.at.grows(
 
 # Node.cast only grows a node, once the head m is known
 def Cast.head.grows(
-  +n: String,
+  n: String,
   +s: Spec.State(),
-  +c: Ledgers.Chain,
+  c: Ledgers.Chain,
   m: Maybe<&2, Spec.Head>
 ) -> {Spec.Node.grows(s, Spec.Cast.head(n, s, c, m)) == True{}: Bool}:
   match m:
@@ -1569,7 +1569,7 @@ def Cast.head.grows(
 
 # a node's ballot only grows it
 def Cast.grows(
-  +n: String,
+  n: String,
   +s: Spec.State(),
   +c: Ledgers.Chain
 ) -> {Spec.Node.grows(s, Spec.Node.cast(n, s, c)) == True{}: Bool}:
@@ -1578,7 +1578,7 @@ def Cast.grows(
 # a head moved on a node that grew from a, which grew from s, only grows s
 def Advance.moved.grows(
   +s: Spec.State(),
-  +a: Spec.State(),
+  a: Spec.State(),
   m: Maybe<&2, Spec.State()>,
   +c: Ledgers.Chain,
   +h: Spec.Head,
@@ -1604,12 +1604,12 @@ def Advance.moved.grows(
 # a checked step only grows a node
 def Advance.ran.grows(
   +s: Spec.State(),
-  +c: Ledgers.Chain,
-  +r: Ledgers.Id,
-  +b: Maybe<&2, String>,
-  +next: U32,
-  +after: Maybe<&2, Hashes.Hash>,
-  +qs: List<&2, Ledgers.Id>,
+  c: Ledgers.Chain,
+  r: Ledgers.Id,
+  b: Maybe<&2, String>,
+  next: U32,
+  after: Maybe<&2, Hashes.Hash>,
+  qs: List<&2, Ledgers.Id>,
   m: Maybe<&2, Spec.Run>
 ) -> {
   Run.after(s, m) == True{}: Bool
@@ -1646,7 +1646,7 @@ def Advance.step.grows(
   m: Maybe<&2, Ledgers.Vote>
 ) -> {Spec.Node.grows(s, Spec.Advance.step(s, c, h, t, m)) == True{}: Bool}:
   match h m:
-    case Spec.Head{+r, +b, +next, +th} Some{Ledgers.Vote{+before, +qs, +after}}:
+    case Spec.Head{r, b, next, th} Some{Ledgers.Vote{before, +qs, after}}:
       Grows.when(
         s,
         Spec.Root.same(before, th),
@@ -1694,7 +1694,7 @@ def Advance.at.grows(
 # Node.advance only grows a node, once the head m is known
 def Advance.head.grows(
   +s: Spec.State(),
-  +c: Ledgers.Chain,
+  c: Ledgers.Chain,
   m: Maybe<&2, Spec.Head>
 ) -> {Spec.Node.grows(s, Spec.Advance.head(s, c, m)) == True{}: Bool}:
   match m:
@@ -1810,7 +1810,7 @@ def First.at.grows(
 # a first head on a node that grew from a, which grew from s, only grows s
 def Start.head.grows(
   +s: Spec.State(),
-  +a: Spec.State(),
+  a: Spec.State(),
   m: Maybe<&2, Spec.State()>,
   +c: Ledgers.Chain,
   +h: Spec.Head,
@@ -1829,8 +1829,8 @@ def Start.head.grows(
 # a work on a node that grew from b is on one that grew from a, when b grew
 # from a
 def Work.after.trans(
-  +a: Spec.State(),
-  +b: Spec.State(),
+  a: Spec.State(),
+  b: Spec.State(),
   m: Maybe<&2, Spec.Work>,
   e1: {Spec.Node.grows(a, b) == True{}: Bool},
   e2: {Work.after(b, m) == True{}: Bool}
@@ -1843,7 +1843,7 @@ def Work.after.trans(
 
 # a key set in a work on a node that grew from s is on a node that grew from s
 def Work.set.after(
-  +s: Spec.State(),
+  s: Spec.State(),
   m: Maybe<&2, Spec.Work>,
   +k: List<&2, U32>,
   +x: List<&2, U32>
@@ -1886,7 +1886,7 @@ def Firsts.after(
 
 # the first log of a line is on a node that grew
 def Log.first.after(
-  +s: Spec.State(),
+  s: Spec.State(),
   w: Spec.Work,
   +os: List<&2, String>
 ) -> {Work.after(s, Some{w}) == True{}: Bool} -> {Work.after(s, Spec.Log.first(w, os)) == True{}: Bool}:
@@ -1902,15 +1902,15 @@ def Log.first.after(
 
 # the first tip of a store only grows a node
 def Start.put.grows(
-  +s: Spec.State(),
+  s: Spec.State(),
   +i: Ledgers.Id,
-  +c: Maybe<&2, Hashes.Hash>,
+  c: Maybe<&2, Hashes.Hash>,
   m: Maybe<&2, Spec.Work>
 ) -> {Work.after(s, m) == True{}: Bool} -> {Spec.Node.grows(s, Spec.Start.put(s, i, c, m)) == True{}: Bool}:
   match m:
     case None{}:
       e => Grows.refl(s)
-    case Some{Spec.Work{+s2, +l, ns}}:
+    case Some{Spec.Work{+s2, l, ns}}:
       e =>
         +t = {Spec.Tip{c, l}: Spec.Tip}
         Start.head.grows(
@@ -1925,7 +1925,7 @@ def Start.put.grows(
 # Start.grows once the content m of the store is known
 def Start.with.grows(
   +s: Spec.State(),
-  +i: Ledgers.Id,
+  i: Ledgers.Id,
   +os: List<&2, String>,
   m: Maybe<&2, Spec.Work>
 ) -> {Work.after(s, m) == True{}: Bool} -> {Spec.Node.grows(s, Spec.Start.with(s, i, os, m)) == True{}: Bool}:
@@ -1938,7 +1938,7 @@ def Start.with.grows(
 # a store that starts only grows a node
 def Start.grows(
   +s: Spec.State(),
-  +i: Ledgers.Id,
+  i: Ledgers.Id,
   +os: List<&2, Spec.Owner>
 ) -> {Spec.Node.grows(s, Spec.Node.start(s, i, os)) == True{}: Bool}:
   Start.with.grows(
@@ -1974,7 +1974,7 @@ def Arrive.grows(
   q: Spec.Ask
 ) -> {Spec.Node.grows(s, Spec.Node.arrive(s, i, q)) == True{}: Bool}:
   match q:
-    case Spec.Ask.Start{+os}:
+    case Spec.Ask.Start{os}:
       Start.grows(s, i, os)
     case Spec.Ask.On{+r, +l, c}:
       +s1 = Spec.Node.follow(s, r, l)
@@ -2059,7 +2059,7 @@ def Take.asks.grows(
 
 # the ballots that a chain leads to only grow a node, when each one more does
 def Follow.step.grows(
-  +s: Spec.State(),
+  s: Spec.State(),
   m: Maybe<&2, Spec.State()>,
   k: Spec.State() -> Spec.State(),
   ih: @s2: Spec.State() -> {Spec.Node.grows(s2, k(s2)) == True{}: Bool}
@@ -2359,8 +2359,8 @@ def Get.grows(
   +b: Spec.State(),
   +h: Maybe<&2, Hashes.Hash>,
   +k: List<&2, U32>,
-  +v: List<&2, U32>,
-  +g: {Spec.Node.grows(a, b) == True{}: Bool}
+  v: List<&2, U32>,
+  g: {Spec.Node.grows(a, b) == True{}: Bool}
 ) -> {
   Spec.Node.get(a, h, k) == Some{v}: Maybe<&2, List<&2, U32>>
 } -> {Spec.Node.get(b, h, k) == Some{v}: Maybe<&2, List<&2, U32>>}:
@@ -2419,11 +2419,11 @@ def Work.Keeps(k2: List<&2, U32>, v: List<&2, U32>, m: Maybe<&2, Spec.Work>) -> 
 def Set.kept.if(
   +s: Spec.State(),
   +h: Maybe<&2, Hashes.Hash>,
-  +ns: List<&2, List<&2, U32>>,
+  ns: List<&2, List<&2, U32>>,
   +k: List<&2, U32>,
   +x: List<&2, U32>,
   +k2: List<&2, U32>,
-  +v: List<&2, U32>,
+  v: List<&2, U32>,
   +hh: Hashes.Hash,
   +ws: List<&2, List<&2, U32>>,
   b: Bool,
@@ -2513,12 +2513,12 @@ def Set.kept.if(
 # Set.kept once the new subtree m is known
 def Set.kept.of(
   +s: Spec.State(),
-  +h: Maybe<&2, Hashes.Hash>,
-  +ns: List<&2, List<&2, U32>>,
-  +k: List<&2, U32>,
-  +x: List<&2, U32>,
-  +k2: List<&2, U32>,
-  +v: List<&2, U32>,
+  h: Maybe<&2, Hashes.Hash>,
+  ns: List<&2, List<&2, U32>>,
+  k: List<&2, U32>,
+  x: List<&2, U32>,
+  k2: List<&2, U32>,
+  v: List<&2, U32>,
   m: Maybe<&2, Trees.Put>,
   em: {Spec.Node.set(s, h, k, x) == m: Maybe<&2, Trees.Put>},
   hne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool},
@@ -2527,7 +2527,7 @@ def Set.kept.of(
   match m:
     case None{}:
       Unit{}
-    case Some{Trees.Put{+hh, +ws}}:
+    case Some{Trees.Put{hh, +ws}}:
       Set.kept.if(
         s,
         h,
@@ -2549,11 +2549,11 @@ def Set.kept.of(
 def Set.kept(
   +s: Spec.State(),
   +h: Maybe<&2, Hashes.Hash>,
-  +ns: List<&2, List<&2, U32>>,
+  ns: List<&2, List<&2, U32>>,
   +k: List<&2, U32>,
   +x: List<&2, U32>,
-  +k2: List<&2, U32>,
-  +v: List<&2, U32>,
+  k2: List<&2, U32>,
+  v: List<&2, U32>,
   hne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool},
   hget: {Spec.Node.get(s, h, k2) == Some{v}: Maybe<&2, List<&2, U32>>}
 ) -> Work.Keeps(k2, v, Spec.Work.set(Spec.Work{s, h, ns}, k, x)):
@@ -2597,8 +2597,8 @@ def Log.kept(
   r: Spec.Run,
   +k: List<&2, U32>,
   +x: List<&2, U32>,
-  +k2: List<&2, U32>,
-  +v: List<&2, U32>,
+  k2: List<&2, U32>,
+  v: List<&2, U32>,
   hne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool}
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Spec.Run.log(r, k, x)):
   match r:
@@ -2613,11 +2613,11 @@ def Log.kept(
 # a key that a tree does not hold is not a key that it holds, once whether
 # they are the same is known (b)
 def Keys.differ.if(
-  +s: Spec.State(),
-  +h: Maybe<&2, Hashes.Hash>,
-  +k: List<&2, U32>,
-  +k2: List<&2, U32>,
-  +v: List<&2, U32>,
+  s: Spec.State(),
+  h: Maybe<&2, Hashes.Hash>,
+  k: List<&2, U32>,
+  k2: List<&2, U32>,
+  v: List<&2, U32>,
   b: Bool,
   eb: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == b: Bool},
   e1: {Spec.Node.get(s, h, k) == None{}: Maybe<&2, List<&2, U32>>},
@@ -2654,11 +2654,11 @@ def Keys.differ.if(
 # Add.kept when the log does not hold the new key
 def Add.new.kept(
   +s: Spec.State(),
-  +c: Maybe<&2, Hashes.Hash>,
+  c: Maybe<&2, Hashes.Hash>,
   +l: Maybe<&2, Hashes.Hash>,
-  +ns: List<&2, List<&2, U32>>,
+  ns: List<&2, List<&2, U32>>,
   +k: List<&2, U32>,
-  +x: List<&2, U32>,
+  x: List<&2, U32>,
   +k2: List<&2, U32>,
   +v: List<&2, U32>,
   em: {Spec.Node.get(s, l, k) == None{}: Maybe<&2, List<&2, U32>>},
@@ -2686,10 +2686,10 @@ def Add.new.kept(
 # Add.kept once the value m of the new key is known
 def Add.at.kept(
   r: Spec.Run,
-  +k: List<&2, U32>,
-  +x: List<&2, U32>,
-  +k2: List<&2, U32>,
-  +v: List<&2, U32>,
+  k: List<&2, U32>,
+  x: List<&2, U32>,
+  k2: List<&2, U32>,
+  v: List<&2, U32>,
   m: Maybe<&2, List<&2, U32>>
 ) -> {
   Spec.Node.get(Spec.Run.state(r), Spec.Tip.log(Spec.Run.tip(r)), k) == m: Maybe<&2, List<&2, U32>>
@@ -2704,9 +2704,9 @@ def Add.at.kept(
 def Add.kept(
   +r: Spec.Run,
   +k: List<&2, U32>,
-  +x: List<&2, U32>,
-  +k2: List<&2, U32>,
-  +v: List<&2, U32>
+  x: List<&2, U32>,
+  k2: List<&2, U32>,
+  v: List<&2, U32>
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Spec.Run.add(r, k, x)):
   Add.at.kept(
     r,
@@ -2720,12 +2720,12 @@ def Add.kept(
 # Content.kept once whether the node holds the new nodes is known (b)
 def Content.kept.if(
   +s: Spec.State(),
-  +l: Maybe<&2, Hashes.Hash>,
+  l: Maybe<&2, Hashes.Hash>,
   h: Maybe<&2, Hashes.Hash>,
   +ds: List<&2, List<&2, U32>>,
   ns: List<&2, List<&2, U32>>,
-  +k2: List<&2, U32>,
-  +v: List<&2, U32>,
+  k2: List<&2, U32>,
+  v: List<&2, U32>,
   b: Bool,
   hr: {Spec.Node.get(s, l, k2) == Some{v}: Maybe<&2, List<&2, U32>>}
 ) -> Run.Keeps(
@@ -2747,13 +2747,13 @@ def Content.kept.if(
 # new content keeps each key of a run's log
 def Content.kept(
   r: Spec.Run,
-  +h: Maybe<&2, Hashes.Hash>,
+  h: Maybe<&2, Hashes.Hash>,
   +ds: List<&2, List<&2, U32>>,
-  +k2: List<&2, U32>,
-  +v: List<&2, U32>
+  k2: List<&2, U32>,
+  v: List<&2, U32>
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Spec.Run.content(r, h, ds)):
   match r:
-    case Spec.Run{+s, Spec.Tip{c, +l}, +ns}:
+    case Spec.Run{+s, Spec.Tip{c, l}, ns}:
       hr => Content.kept.if(
         s,
         l,
@@ -2806,10 +2806,10 @@ def Keeps.when(
 
 # new owners keep each other key of a run's log
 def Owners.kept(
-  +r: Spec.Run,
+  r: Spec.Run,
   m: Maybe<&2, List<&2, String>>,
-  +k2: List<&2, U32>,
-  +v: List<&2, U32>,
+  k2: List<&2, U32>,
+  v: List<&2, U32>,
   n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool}
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Spec.Run.owners(r, m)):
   match m:
@@ -2823,11 +2823,11 @@ def Owners.kept(
 def Taken.kept(
   +r: Spec.Run,
   +i: Ledgers.Id,
-  +own: Maybe<&2, List<&2, String>>,
+  own: Maybe<&2, List<&2, String>>,
   +k2: List<&2, U32>,
   +v: List<&2, U32>,
-  +n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
-  +n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
+  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
+  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Spec.Step.taken(r, i, own)):
   +n = Spec.Line.count(Spec.Run.state(r), Spec.Run.tip(r))
   hr => Keeps.bind(
@@ -2893,13 +2893,13 @@ def Taken.kept(
 # the count
 def Judged.kept(
   +r: Spec.Run,
-  +i: Ledgers.Id,
-  +own: Maybe<&2, List<&2, String>>,
+  i: Ledgers.Id,
+  own: Maybe<&2, List<&2, String>>,
   m: Maybe<&2, Spec.Verdict>,
   +k2: List<&2, U32>,
   +v: List<&2, U32>,
-  +n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
-  +n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
+  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
+  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Spec.Step.judged(r, i, own, m)):
   match m:
     case None{}:
@@ -2918,13 +2918,13 @@ def Judged.kept(
 # and the count
 def Marked.kept(
   +r: Spec.Run,
-  +i: Ledgers.Id,
+  i: Ledgers.Id,
   +m: String,
   x: Maybe<&2, Spec.Version>,
   +k2: List<&2, U32>,
   +v: List<&2, U32>,
-  +n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
-  +n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
+  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
+  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Spec.Step.marked(r, i, m, x)):
   match x:
     case None{}:
@@ -2947,8 +2947,8 @@ def Mark.kept(
   +m: String,
   +k2: List<&2, U32>,
   +v: List<&2, U32>,
-  +n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
-  +n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
+  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
+  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Spec.Step.mark(r, i, m)):
   +s = Spec.Run.state(r)
   +t = Spec.Run.tip(r)
@@ -2971,14 +2971,14 @@ def Mark.kept(
 # the count
 def On.kept(
   +r: Spec.Run,
-  +i: Ledgers.Id,
-  +st: Ledgers.Id,
+  i: Ledgers.Id,
+  st: Ledgers.Id,
   l: Maybe<&2, String>,
   ch: Spec.Change,
-  +k2: List<&2, U32>,
-  +v: List<&2, U32>,
-  +n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
-  +n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
+  k2: List<&2, U32>,
+  v: List<&2, U32>,
+  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
+  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Spec.Step.on(r, i, st, l, ch)):
   match l ch:
     case None{} Spec.Change.Branch{+a, +b}:
@@ -3125,7 +3125,7 @@ def On.kept(
         n0,
         n1
       )(hr)
-    case Some{+x} Spec.Change.Branch{+a, +b}:
+    case Some{x} Spec.Change.Branch{+a, +b}:
       hr => Judged.kept(
         r,
         i,
@@ -3251,7 +3251,7 @@ def On.kept(
         n0,
         n1
       )(hr)
-    case Some{+x} Spec.Change.Mark{+a, +b}:
+    case Some{+x} Spec.Change.Mark{a, b}:
       hr => Mark.kept(r, i, a, k2, v, n0, n1)(hr)
     case None{} Spec.Change.Key{+a, +b}:
       hr => Judged.kept(
@@ -3293,18 +3293,18 @@ def On.kept(
 # a request keeps each key of a run's log, other than the owners and the count
 def Change.kept(
   +r: Spec.Run,
-  +c: Ledgers.Chain,
+  c: Ledgers.Chain,
   +i: Ledgers.Id,
   q: Spec.Ask,
   +k2: List<&2, U32>,
   +v: List<&2, U32>,
-  +n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
-  +n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
+  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
+  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Spec.Step.change(r, c, i, q)):
   match q:
     case Spec.Ask.Start{os}:
       hr => Add.kept(r, Spec.Log.out(i), Spec.Out.words(Spec.Out.Stale{}), k2, v)(hr)
-    case Spec.Ask.On{+st, +l, +ch}:
+    case Spec.Ask.On{+st, +l, ch}:
       Keeps.when(
         k2,
         v,
@@ -3318,14 +3318,14 @@ def Change.kept(
 
 # a request that the node holds or not keeps each key of a run's log
 def Asked.kept(
-  +r: Spec.Run,
-  +c: Ledgers.Chain,
-  +i: Ledgers.Id,
+  r: Spec.Run,
+  c: Ledgers.Chain,
+  i: Ledgers.Id,
   a: Maybe<&2, Ledgers.Asked<Spec.Ask>>,
-  +k2: List<&2, U32>,
-  +v: List<&2, U32>,
-  +n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
-  +n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
+  k2: List<&2, U32>,
+  v: List<&2, U32>,
+  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
+  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Spec.Step.asked(r, c, i, a)):
   match a:
     case None{}:
@@ -3336,13 +3336,13 @@ def Asked.kept(
 # a request that the log holds or not keeps each key of a run's log
 def Fresh.kept(
   +r: Spec.Run,
-  +c: Ledgers.Chain,
+  c: Ledgers.Chain,
   +i: Ledgers.Id,
   o: Maybe<&2, Spec.Out>,
-  +k2: List<&2, U32>,
-  +v: List<&2, U32>,
-  +n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
-  +n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
+  k2: List<&2, U32>,
+  v: List<&2, U32>,
+  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
+  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
 ) -> Run.Keeps(k2, v, Some{r}) -> Run.Keeps(k2, v, Spec.Step.fresh(r, c, i, o)):
   match o:
     case Some{x}:
@@ -3398,19 +3398,19 @@ def All.kept(
 # a log only gains keys: a key that the log of a tip holds, other than the
 # owners and the count, holds the same value after a step
 def Run.kept(
-  +s: Spec.State(),
-  +c: Ledgers.Chain,
+  s: Spec.State(),
+  c: Ledgers.Chain,
   t: Spec.Tip,
-  +qs: List<&2, Ledgers.Id>,
-  +k2: List<&2, U32>,
-  +v: List<&2, U32>,
-  +n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
-  +n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
+  qs: List<&2, Ledgers.Id>,
+  k2: List<&2, U32>,
+  v: List<&2, U32>,
+  n0: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k2) == False{}: Bool},
+  n1: {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k2) == False{}: Bool}
 ) -> {
   Spec.Node.get(s, Spec.Tip.log(t), k2) == Some{v}: Maybe<&2, List<&2, U32>>
 } -> Run.Keeps(k2, v, Spec.Step.run(s, c, t, qs)):
   match t:
-    case Spec.Tip{+c0, +l}:
+    case Spec.Tip{c0, l}:
       h => All.kept(c, qs, Some{Spec.Run{s, Spec.Tip{c0, l}, []}}, k2, v, n0, n1)(h)
 
 # Lines
@@ -3422,10 +3422,10 @@ def Run.kept(
 # a tip that a node holds, a node that grew from it holds
 def Tip.at.grows(
   +a: Spec.State(),
-  +b: Spec.State(),
+  b: Spec.State(),
   +x: Hashes.Hash,
   -t: Spec.Tip,
-  +g: {Spec.Node.grows(a, b) == True{}: Bool}
+  g: {Spec.Node.grows(a, b) == True{}: Bool}
 ) -> {Spec.Tip.at(a, x) == Some{t}: Maybe<&2, Spec.Tip>} -> {Spec.Tip.at(b, x) == Some{t}: Maybe<&2, Spec.Tip>}:
   Shared.Maybe.bind_kept(
     List<&2, U32>,
@@ -3449,11 +3449,11 @@ w => e => e
 
 # the tip of a head, in a node that grew
 def Head.tip.grows(
-  +a: Spec.State(),
-  +b: Spec.State(),
+  a: Spec.State(),
+  b: Spec.State(),
   h: Spec.Head,
   -t: Spec.Tip,
-  +g: {Spec.Node.grows(a, b) == True{}: Bool}
+  g: {Spec.Node.grows(a, b) == True{}: Bool}
 ) -> {Spec.Head.tip(a, h) == Some{t}: Maybe<&2, Spec.Tip>} -> {
   Spec.Head.tip(b, h) == Some{t}: Maybe<&2, Spec.Tip>
 }:
@@ -3476,8 +3476,8 @@ def Head.get.grows(
   +a: Spec.State(),
   +b: Spec.State(),
   +h: Spec.Head,
-  +k: List<&2, U32>,
-  +v: List<&2, U32>,
+  k: List<&2, U32>,
+  v: List<&2, U32>,
   +g: {Spec.Node.grows(a, b) == True{}: Bool}
 ) -> {Spec.Head.get(a, h, k) == Some{v}: Maybe<&2, List<&2, U32>>} -> {Spec.Head.get(b, h, k) == Some{v}: Maybe<&2, List<&2, U32>>}:
   Shared.Maybe.bind_kept(
@@ -3495,12 +3495,12 @@ t => Get.grows(a, b, Spec.Tip.log(t), k, v, g)
 # a line whose head is the same in a node that grew holds what it held
 def Line.same(
   +a: Spec.State(),
-  +b: Spec.State(),
-  +c: Ledgers.Chain,
-  +k: List<&2, U32>,
-  +v: List<&2, U32>,
-  +g: {Spec.Node.grows(a, b) == True{}: Bool},
-  +eh: {Spec.Node.head_of(a, c) == Spec.Node.head_of(b, c): Maybe<&2, Spec.Head>}
+  b: Spec.State(),
+  c: Ledgers.Chain,
+  k: List<&2, U32>,
+  v: List<&2, U32>,
+  g: {Spec.Node.grows(a, b) == True{}: Bool},
+  eh: {Spec.Node.head_of(a, c) == Spec.Node.head_of(b, c): Maybe<&2, Spec.Head>}
 ) -> {Spec.Line.get(a, c, k) == Some{v}: Maybe<&2, List<&2, U32>>} -> {Spec.Line.get(b, c, k) == Some{v}: Maybe<&2, List<&2, U32>>}:
   Shared.Maybe.bind_kept(
     Spec.Head,
@@ -3552,10 +3552,10 @@ def Kept.when(
 
 # a node that grew, with the same heads, keeps the logs
 def Kept.same(
-  +a: Spec.State(),
-  +b: Spec.State(),
-  +g: {Spec.Node.grows(a, b) == True{}: Bool},
-  +eh: {Spec.State.heads(a) == Spec.State.heads(b): Tries.Trie<Spec.Head>}
+  a: Spec.State(),
+  b: Spec.State(),
+  g: {Spec.Node.grows(a, b) == True{}: Bool},
+  eh: {Spec.State.heads(a) == Spec.State.heads(b): Tries.Trie<Spec.Head>}
 ) -> Spec.Node.Keeps(a, b):
   +c => k => v => n0 => n1 => Line.same(
     a,
@@ -3646,12 +3646,12 @@ def Head.put.kept.if(
   +c: Ledgers.Chain,
   +hd: Spec.Head,
   +c2: Ledgers.Chain,
-  +k: List<&2, U32>,
-  +v: List<&2, U32>,
+  k: List<&2, U32>,
+  v: List<&2, U32>,
   bs: Bool,
   +ebs: {Tries.Trie.same_key(Ledgers.Chain.key(c2), Ledgers.Chain.key(c)) == bs: Bool},
-  +g: {Spec.Node.grows(a, b0) == True{}: Bool},
-  +eh: {Spec.State.heads(a) == Spec.State.heads(b0): Tries.Trie<Spec.Head>},
+  g: {Spec.Node.grows(a, b0) == True{}: Bool},
+  eh: {Spec.State.heads(a) == Spec.State.heads(b0): Tries.Trie<Spec.Head>},
   cov: {Spec.Line.get(a, c, k) == Some{v}: Maybe<&2, List<&2, U32>>} -> {Spec.Head.get(Spec.State.head(b0, c, hd), hd, k) == Some{v}: Maybe<&2, List<&2, U32>>}
 ) -> {Spec.Line.get(a, c2, k) == Some{v}: Maybe<&2, List<&2, U32>>} -> {Spec.Line.get(Spec.State.head(b0, c, hd), c2, k) == Some{v}: Maybe<&2, List<&2, U32>>}:
   match bs:
@@ -3777,12 +3777,12 @@ def Head.put.kept.if(
 # a node b0 with a new head hd of the line c keeps the logs of a, when b0 grew
 # from a with the same heads, and hd holds what the line c holds in a
 def Head.put.kept(
-  +a: Spec.State(),
-  +b0: Spec.State(),
+  a: Spec.State(),
+  b0: Spec.State(),
   +c: Ledgers.Chain,
-  +hd: Spec.Head,
-  +g: {Spec.Node.grows(a, b0) == True{}: Bool},
-  +eh: {Spec.State.heads(a) == Spec.State.heads(b0): Tries.Trie<Spec.Head>},
+  hd: Spec.Head,
+  g: {Spec.Node.grows(a, b0) == True{}: Bool},
+  eh: {Spec.State.heads(a) == Spec.State.heads(b0): Tries.Trie<Spec.Head>},
   cover: @k: List<&2, U32> -> @v: List<&2, U32> -> {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k) == False{}: Bool} -> {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k) == False{}: Bool} -> {Spec.Line.get(a, c, k) == Some{v}: Maybe<&2, List<&2, U32>>} -> {Spec.Head.get(Spec.State.head(b0, c, hd), hd, k) == Some{v}: Maybe<&2, List<&2, U32>>}
 ) -> Spec.Node.Keeps(a, Spec.State.head(b0, c, hd)):
   +c2 => +k => +v => n0 => n1 => Head.put.kept.if(
@@ -3908,14 +3908,14 @@ def Default.heads(
 def Cast.seal.heads(
   +s: Spec.State(),
   +w: Ledgers.Where,
-  +n: String,
-  +v: Ledgers.Vote,
+  n: String,
+  v: Ledgers.Vote,
   m: Maybe<&2, Spec.Chained>
 ) -> {Spec.State.heads(s) == Spec.State.heads(Spec.Cast.seal(s, w, n, v, m)): Tries.Trie<Spec.Head>}:
   match m:
     case None{}:
       {==}
-    case Some{Spec.Chained{+j, +last, key, f}}:
+    case Some{Spec.Chained{+j, last, key, f}}:
       +b = Ledgers.Ballot.make(
         Spec.Seal.secret(Spec.Keys.seed(Spec.State.keys(s)), Spec.Where.store(w), j),
         Ledgers.Signed{w, n, v},
@@ -3934,7 +3934,7 @@ def Cast.vote.heads(
   m: Maybe<&2, Spec.State()>,
   +w: Ledgers.Where,
   +n: String,
-  +v: Ledgers.Vote
+  v: Ledgers.Vote
 ) -> {Spec.State.heads(s) == Spec.State.heads(Spec.Cast.vote(s, m, w, n, v)): Tries.Trie<Spec.Head>}:
   match m:
     case None{}:
@@ -3995,8 +3995,8 @@ def Each.heads(
   match bs:
     case Nil{}:
       {==}
-    case Con{+b, +rest}:
-      +s1 = Spec.Sealed.follow(
+    case Con{+b, rest}:
+      s1 = Spec.Sealed.follow(
         f,
         s,
         p,
@@ -4050,7 +4050,7 @@ def Cast.at.heads(
   m: Maybe<&2, Spec.Tip>
 ) -> {Spec.State.heads(s) == Spec.State.heads(Spec.Cast.at(n, s, c, h, m)): Tries.Trie<Spec.Head>}:
   match h m:
-    case Spec.Head{r, b, +next, +th} Some{+t}:
+    case Spec.Head{r, b, +next, th} Some{+t}:
       +p = Spec.Step.some(c, Spec.Wait.of(s, c), Spec.Run{s, t, []})
       +qs = Spec.Picked.asks(p)
       Heads.when(
@@ -4066,9 +4066,9 @@ def Cast.at.heads(
 
 # Node.cast keeps the heads, once the head m is known
 def Cast.head.heads(
-  +n: String,
+  n: String,
   +s: Spec.State(),
-  +c: Ledgers.Chain,
+  c: Ledgers.Chain,
   m: Maybe<&2, Spec.Head>
 ) -> {Spec.State.heads(s) == Spec.State.heads(Spec.Cast.head(n, s, c, m)): Tries.Trie<Spec.Head>}:
   match m:
@@ -4089,7 +4089,7 @@ def Cast.kept(+n: String, +s: Spec.State(), +c: Ledgers.Chain) -> Spec.Node.Keep
 # the words of a tip read as the tip
 def Tip.round(t: Spec.Tip) -> {Spec.Tip.read(Spec.Tip.words(t)) == Some{t}: Maybe<&2, Spec.Tip>}:
   match t:
-    case Spec.Tip{+c, +l}:
+    case Spec.Tip{c, l}:
       %Equal.sym(
         Maybe<&2, Codes.Read<Spec.Tip>>,
         Codes.Code.two.read(
@@ -4143,7 +4143,7 @@ def Put.holds.if(
 
 # a node that a put gives holds the data
 def Put.holds(
-  +s2: Spec.State(),
+  s2: Spec.State(),
   +ds: List<&2, List<&2, U32>>,
   -s3: Spec.State()
 ) -> {Spec.State.put(s2, ds) == Some{s3}: Maybe<&2, Spec.State()>} -> {
@@ -4159,8 +4159,8 @@ def Put.holds(
 
 # a node that a put gives grew
 def Put.grew(
-  +s2: Spec.State(),
-  +ds: List<&2, List<&2, U32>>,
+  s2: Spec.State(),
+  ds: List<&2, List<&2, U32>>,
   -s3: Spec.State(),
   e: {Spec.State.put(s2, ds) == Some{s3}: Maybe<&2, Spec.State()>}
 ) -> {Spec.Node.grows(s2, s3) == True{}: Bool}:
@@ -4169,7 +4169,7 @@ def Put.grew(
 
 # a node that the put of a tip gives holds the tip under its hash
 def Tip.put.at(
-  +s2: Spec.State(),
+  s2: Spec.State(),
   +t2: Spec.Tip,
   +s3: Spec.State()
 ) -> {Spec.State.put(s2, [Spec.Tip.words(t2)]) == Some{s3}: Maybe<&2, Spec.State()>} -> {
@@ -4216,8 +4216,8 @@ def Moved.cover(
   +s3: Spec.State(),
   +b: Spec.State(),
   +t2: Spec.Tip,
-  +k: List<&2, U32>,
-  +v: List<&2, U32>,
+  k: List<&2, U32>,
+  v: List<&2, U32>,
   -r: Ledgers.Id,
   -br: Maybe<&2, String>,
   -nx: U32,
@@ -4239,17 +4239,17 @@ def Moved.kept(
   +s: Spec.State(),
   +s3: Spec.State(),
   +c: Ledgers.Chain,
-  +r: Ledgers.Id,
-  +br: Maybe<&2, String>,
-  +nx: U32,
+  r: Ledgers.Id,
+  br: Maybe<&2, String>,
+  nx: U32,
   +t2: Spec.Tip,
-  +qs: List<&2, Ledgers.Id>,
-  +h: Spec.Head,
-  +t: Spec.Tip,
-  +g3: {Spec.Node.grows(s, s3) == True{}: Bool},
-  +em: {Spec.Node.head_of(s, c) == Some{h}: Maybe<&2, Spec.Head>},
-  +et: {Spec.Head.tip(s, h) == Some{t}: Maybe<&2, Spec.Tip>},
-  +e3: {Spec.Tip.at(s3, Spec.Tip.hash(t2)) == Some{t2}: Maybe<&2, Spec.Tip>},
+  qs: List<&2, Ledgers.Id>,
+  h: Spec.Head,
+  t: Spec.Tip,
+  g3: {Spec.Node.grows(s, s3) == True{}: Bool},
+  em: {Spec.Node.head_of(s, c) == Some{h}: Maybe<&2, Spec.Head>},
+  et: {Spec.Head.tip(s, h) == Some{t}: Maybe<&2, Spec.Tip>},
+  e3: {Spec.Tip.at(s3, Spec.Tip.hash(t2)) == Some{t2}: Maybe<&2, Spec.Tip>},
   kk: @k: List<&2, U32> -> @v: List<&2, U32> -> {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k) == False{}: Bool} -> {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k) == False{}: Bool} -> {Spec.Node.get(s, Spec.Tip.log(t), k) == Some{v}: Maybe<&2, List<&2, U32>>} -> {Spec.Node.get(s3, Spec.Tip.log(t2), k) == Some{v}: Maybe<&2, List<&2, U32>>}
 ) -> Spec.Node.Keeps(s, Spec.State.moved(Spec.State.led(s, Spec.State.ledger(s3)), c, Spec.Head{r, br, nx, Some{Spec.Tip.hash(t2)}}, qs)):
   +x = Spec.State.led(s, Spec.State.ledger(s3))
@@ -4313,17 +4313,17 @@ def Advance.moved.kept(
   +s: Spec.State(),
   +s2: Spec.State(),
   m: Maybe<&2, Spec.State()>,
-  +c: Ledgers.Chain,
-  +r: Ledgers.Id,
-  +br: Maybe<&2, String>,
-  +nx: U32,
+  c: Ledgers.Chain,
+  r: Ledgers.Id,
+  br: Maybe<&2, String>,
+  nx: U32,
   +t2: Spec.Tip,
-  +qs: List<&2, Ledgers.Id>,
-  +h: Spec.Head,
-  +t: Spec.Tip,
-  +g2: {Spec.Node.grows(s, s2) == True{}: Bool},
-  +em: {Spec.Node.head_of(s, c) == Some{h}: Maybe<&2, Spec.Head>},
-  +et: {Spec.Head.tip(s, h) == Some{t}: Maybe<&2, Spec.Tip>},
+  qs: List<&2, Ledgers.Id>,
+  h: Spec.Head,
+  t: Spec.Tip,
+  g2: {Spec.Node.grows(s, s2) == True{}: Bool},
+  em: {Spec.Node.head_of(s, c) == Some{h}: Maybe<&2, Spec.Head>},
+  et: {Spec.Head.tip(s, h) == Some{t}: Maybe<&2, Spec.Tip>},
   kk: @k: List<&2, U32> -> @v: List<&2, U32> -> {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k) == False{}: Bool} -> {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k) == False{}: Bool} -> {Spec.Node.get(s, Spec.Tip.log(t), k) == Some{v}: Maybe<&2, List<&2, U32>>} -> {Spec.Node.get(s2, Spec.Tip.log(t2), k) == Some{v}: Maybe<&2, List<&2, U32>>}
 ) -> {Spec.State.put(s2, [Spec.Tip.words(t2)]) == m: Maybe<&2, Spec.State()>} -> Spec.Node.Keeps(
   s,
@@ -4360,18 +4360,18 @@ def Advance.moved.kept(
 
 # a checked step keeps the logs
 def Advance.ran.kept(
-  +s: Spec.State(),
-  +c: Ledgers.Chain,
-  +r: Ledgers.Id,
-  +br: Maybe<&2, String>,
-  +next: U32,
-  +after: Maybe<&2, Hashes.Hash>,
-  +qs: List<&2, Ledgers.Id>,
+  s: Spec.State(),
+  c: Ledgers.Chain,
+  r: Ledgers.Id,
+  br: Maybe<&2, String>,
+  next: U32,
+  after: Maybe<&2, Hashes.Hash>,
+  qs: List<&2, Ledgers.Id>,
   m: Maybe<&2, Spec.Run>,
-  +h: Spec.Head,
-  +t: Spec.Tip,
-  +em: {Spec.Node.head_of(s, c) == Some{h}: Maybe<&2, Spec.Head>},
-  +et: {Spec.Head.tip(s, h) == Some{t}: Maybe<&2, Spec.Tip>}
+  h: Spec.Head,
+  t: Spec.Tip,
+  em: {Spec.Node.head_of(s, c) == Some{h}: Maybe<&2, Spec.Head>},
+  et: {Spec.Head.tip(s, h) == Some{t}: Maybe<&2, Spec.Tip>}
 ) -> {Run.after(s, m) == True{}: Bool} -> (@k: List<&2, U32> -> @v: List<&2, U32> -> {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.owners(), k) == False{}: Bool} -> {Shared.List.is_eq(~U32, ~U32.is_eq, Spec.Log.count(), k) == False{}: Bool} -> {Spec.Node.get(s, Spec.Tip.log(t), k) == Some{v}: Maybe<&2, List<&2, U32>>} -> Run.Keeps(
   k,
   v,
@@ -4421,7 +4421,7 @@ def Advance.step.kept(
   m: Maybe<&2, Ledgers.Vote>
 ) -> {Spec.Node.head_of(s, c) == Some{h}: Maybe<&2, Spec.Head>} -> {Spec.Head.tip(s, h) == Some{t}: Maybe<&2, Spec.Tip>} -> Spec.Node.Keeps(s, Spec.Advance.step(s, c, h, t, m)):
   match h m:
-    case Spec.Head{+r, +br, +next, +th} Some{Ledgers.Vote{+before, +qs, +after}}:
+    case Spec.Head{+r, +br, +next, +th} Some{Ledgers.Vote{before, +qs, after}}:
       +em => +et => Kept.when(
         Spec.Root.same(before, th),
         s,
@@ -4473,7 +4473,7 @@ def Advance.at.kept(
 # Node.advance keeps the logs, once the head m is known
 def Advance.head.kept(
   +s: Spec.State(),
-  +c: Ledgers.Chain,
+  c: Ledgers.Chain,
   m: Maybe<&2, Spec.Head>
 ) -> {Spec.Node.head_of(s, c) == m: Maybe<&2, Spec.Head>} -> Spec.Node.Keeps(s, Spec.Advance.head(s, c, m)):
   match m:
@@ -4521,7 +4521,7 @@ def Advances.kept(f: Nat, +s: Spec.State(), +c: Ledgers.Chain) -> Spec.Node.Keep
 def Step.head.kept(+n: String, +s: Spec.State(), +c: Ledgers.Chain) -> Spec.Node.Keeps(s, Spec.Step.head(n, s, c)):
   +s1 = Spec.Node.advances(4294967295n, s, c)
   +s2 = Spec.Node.cast(n, s1, c)
-  +s3 = Spec.Node.advances(4294967295n, s2, c)
+  s3 = Spec.Node.advances(4294967295n, s2, c)
   Kept.trans(
     s,
     s1,
@@ -4570,11 +4570,11 @@ def Cover.wait(
 # a line that opens keeps the logs, once its head m is known
 def Open.at.kept(
   +s: Spec.State(),
-  +c: Ledgers.Chain,
+  c: Ledgers.Chain,
   m: Maybe<&2, Spec.Head>
 ) -> {Spec.Node.head_of(s, c) == m: Maybe<&2, Spec.Head>} -> Spec.Node.Keeps(s, Spec.Open.at(s, c, m)):
   match m:
-    case Some{Spec.Head{+r, Some{+b}, +n, None{}}}:
+    case Some{Spec.Head{+r, Some{+b}, n, None{}}}:
       +em =>
         +hd = {
           Spec.Head{
@@ -4601,8 +4601,8 @@ def Open.at.kept(
       em => Kept.refl(s)
 
 # what a node does on a line keeps the logs
-def Step.kept(+n: String, +s: Spec.State(), +c: Ledgers.Chain) -> Spec.Node.Keeps(s, Spec.Node.step(n, s, c)):
-  +s1 = Spec.Node.open(s, c)
+def Step.kept(n: String, +s: Spec.State(), +c: Ledgers.Chain) -> Spec.Node.Keeps(s, Spec.Node.step(n, s, c)):
+  s1 = Spec.Node.open(s, c)
   Kept.trans(
     s,
     s1,
@@ -4614,8 +4614,8 @@ def Step.kept(+n: String, +s: Spec.State(), +c: Ledgers.Chain) -> Spec.Node.Keep
 # a first head keeps the logs, once the head m of its line is known
 def First.at.kept(
   +s: Spec.State(),
-  +c: Ledgers.Chain,
-  +h: Spec.Head,
+  c: Ledgers.Chain,
+  h: Spec.Head,
   m: Maybe<&2, Spec.Head>
 ) -> {Spec.Node.head_of(s, c) == m: Maybe<&2, Spec.Head>} -> Spec.Node.Keeps(s, Spec.First.at(s, c, h, m)):
   match m:
@@ -4645,10 +4645,10 @@ def First.at.kept(
 # a first head on a node that grew from a, which grew from s, keeps the logs
 def Start.head.kept(
   +s: Spec.State(),
-  +a: Spec.State(),
+  a: Spec.State(),
   m: Maybe<&2, Spec.State()>,
   +c: Ledgers.Chain,
-  +h: Spec.Head,
+  h: Spec.Head,
   g: {Spec.Node.grows(s, a) == True{}: Bool}
 ) -> {State.after(a, m) == True{}: Bool} -> Spec.Node.Keeps(s, Spec.Start.head(s, m, c, h)):
   match m:
@@ -4672,15 +4672,15 @@ def Start.head.kept(
 
 # the first tip of a store keeps the logs
 def Start.put.kept(
-  +s: Spec.State(),
+  s: Spec.State(),
   +i: Ledgers.Id,
-  +c: Maybe<&2, Hashes.Hash>,
+  c: Maybe<&2, Hashes.Hash>,
   m: Maybe<&2, Spec.Work>
 ) -> {Work.after(s, m) == True{}: Bool} -> Spec.Node.Keeps(s, Spec.Start.put(s, i, c, m)):
   match m:
     case None{}:
       e => Kept.refl(s)
-    case Some{Spec.Work{+s2, +l, ns}}:
+    case Some{Spec.Work{+s2, l, ns}}:
       e =>
         +t = {Spec.Tip{c, l}: Spec.Tip}
         Start.head.kept(
@@ -4695,7 +4695,7 @@ def Start.put.kept(
 # Start.kept once the content m of the store is known
 def Start.with.kept(
   +s: Spec.State(),
-  +i: Ledgers.Id,
+  i: Ledgers.Id,
   +os: List<&2, String>,
   m: Maybe<&2, Spec.Work>
 ) -> {Work.after(s, m) == True{}: Bool} -> Spec.Node.Keeps(s, Spec.Start.with(s, i, os, m)):
@@ -4706,7 +4706,7 @@ def Start.with.kept(
       e => Start.put.kept(s, i, Spec.Work.root(w), Spec.Log.first(w, os))(Log.first.after(s, w, os)(e))
 
 # a store that starts keeps the logs
-def Start.kept(+s: Spec.State(), +i: Ledgers.Id, +os: List<&2, Spec.Owner>) -> Spec.Node.Keeps(
+def Start.kept(+s: Spec.State(), i: Ledgers.Id, +os: List<&2, Spec.Owner>) -> Spec.Node.Keeps(
   s,
   Spec.Node.start(s, i, os)
 ):
@@ -4759,7 +4759,7 @@ def Heads.waits(
 # a new request keeps the logs
 def Arrive.kept(+s: Spec.State(), +i: Ledgers.Id, q: Spec.Ask) -> Spec.Node.Keeps(s, Spec.Node.arrive(s, i, q)):
   match q:
-    case Spec.Ask.Start{+os}:
+    case Spec.Ask.Start{os}:
       Start.kept(s, i, os)
     case Spec.Ask.On{+r, +l, c}:
       +s1 = Spec.Node.follow(s, r, l)
@@ -4784,7 +4784,7 @@ def Arrive.kept(+s: Spec.State(), +i: Ledgers.Id, q: Spec.Ask) -> Spec.Node.Keep
 
 # Node.ask_keeps once the cell m of the request's ID is known
 def Ask.at.kept(
-  +n: String,
+  n: String,
   +s: Spec.State(),
   +e: Spec.Envelope,
   +q: Spec.Ask,
@@ -4795,7 +4795,7 @@ def Ask.at.kept(
       Kept.refl(s)
     case None{}:
       +i = Spec.Envelope.of(e)
-      +c = Spec.Ask.chain(i, q)
+      c = Spec.Ask.chain(i, q)
       +l0 = Ledgers.State.ask(
         ~Spec.Ask,
         ~Spec.Ask.is_eq,
@@ -4805,7 +4805,7 @@ def Ask.at.kept(
         q
       )
       +s0 = Spec.State.led(s, l0)
-      +s1 = Spec.Node.arrive(s0, i, q)
+      s1 = Spec.Node.arrive(s0, i, q)
       Kept.trans(
         s,
         s0,
@@ -4831,7 +4831,7 @@ def Ask.at.kept(
       )
 
 # Node.ask keeps the logs
-def Ask.kept(+n: String, +s: Spec.State(), +e: Spec.Envelope, +q: Spec.Ask) -> Spec.Node.Keeps(
+def Ask.kept(n: String, +s: Spec.State(), +e: Spec.Envelope, q: Spec.Ask) -> Spec.Node.Keeps(
   s,
   Spec.Node.ask(n, s, e, q)
 ):
@@ -4852,8 +4852,8 @@ def Take.asks.kept(
   match cs:
     case Nil{}:
       Kept.refl(s)
-    case Con{Cells.One{Ledgers.Entry.Ask{+i, t, +q}}, +rest}:
-      +s1 = Shared.Bool.when(Spec.State(), Maybe.is_none(&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>, Ledgers.State.get(~Spec.Ask, old, Ledgers.Slot.ask(i))), u => Spec.Node.arrive(s, i, q), u => s)
+    case Con{Cells.One{Ledgers.Entry.Ask{+i, t, +q}}, rest}:
+      s1 = Shared.Bool.when(Spec.State(), Maybe.is_none(&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>, Ledgers.State.get(~Spec.Ask, old, Ledgers.Slot.ask(i))), u => Spec.Node.arrive(s, i, q), u => s)
       Kept.trans(
         s,
         s1,
@@ -4914,31 +4914,31 @@ def Steps.kept(+n: String, cs: List<&2, Ledgers.Chain>, +s: Spec.State()) -> Spe
   match cs:
     case Nil{}:
       Kept.refl(s)
-    case Con{+c, +rest}:
-      +s1 = Spec.Node.step(n, s, c)
+    case Con{+c, rest}:
+      s1 = Spec.Node.step(n, s, c)
       Kept.trans(s, s1, Spec.Node.steps(n, rest, s1), Step.kept(n, s, c), Steps.kept(n, rest, s1))
 
 # Node.sync keeps the logs
-def Sync.kept(+n: String, +s: Spec.State(), +t: Ledgers.State(Spec.Ask)) -> Spec.Node.Keeps(
+def Sync.kept(n: String, +s: Spec.State(), +t: Ledgers.State(Spec.Ask)) -> Spec.Node.Keeps(
   s,
   Spec.Node.sync(n, s, t)
 ):
   +s1 = Spec.Node.take(s, t)
-  +cs = Spec.Sync.lines(s, s1, t)
+  cs = Spec.Sync.lines(s, s1, t)
   Kept.trans(s, s1, Spec.Node.steps(n, cs, s1), Take.kept(s, t), Steps.kept(n, cs, s1))
 
 # what a node does only grows it
 def Does.grows(
-  +n: String,
-  +s: Spec.State(),
+  n: String,
+  s: Spec.State(),
   ev: Spec.Deed
 ) -> {Spec.Node.grows(s, Spec.Node.does(n, s, ev)) == True{}: Bool}:
   match ev:
-    case Spec.Deed.Ask{+e, +q}:
+    case Spec.Deed.Ask{e, q}:
       Spec.Node.ask_grows(n, s, e, q)
-    case Spec.Deed.Take{+t}:
+    case Spec.Deed.Take{t}:
       Spec.Node.take_grows(s, t)
-    case Spec.Deed.Sync{+t}:
+    case Spec.Deed.Sync{t}:
       Spec.Node.sync_grows(n, s, t)
     case Spec.Deed.Keep{b}:
       Grows.keep(s, Ropes.Put.nodes(Spec.Bytes.rope(b)))
@@ -4954,13 +4954,13 @@ def Spec.Node.after_grows(n, evs, s):
       )
 
 # what a node does keeps the logs
-def Does.kept(+n: String, +s: Spec.State(), ev: Spec.Deed) -> Spec.Node.Keeps(s, Spec.Node.does(n, s, ev)):
+def Does.kept(n: String, +s: Spec.State(), ev: Spec.Deed) -> Spec.Node.Keeps(s, Spec.Node.does(n, s, ev)):
   match ev:
-    case Spec.Deed.Ask{+e, +q}:
+    case Spec.Deed.Ask{e, q}:
       Ask.kept(n, s, e, q)
-    case Spec.Deed.Take{+t}:
+    case Spec.Deed.Take{t}:
       Take.kept(s, t)
-    case Spec.Deed.Sync{+t}:
+    case Spec.Deed.Sync{t}:
       Sync.kept(n, s, t)
     case Spec.Deed.Keep{+b}:
       Kept.same(
@@ -4982,8 +4982,8 @@ def Spec.Node.after_keeps(n, evs, s):
   match evs:
     case Nil{}:
       Kept.refl(s)
-    case Con{+ev, +rest}:
-      +s1 = Spec.Node.does(n, s, ev)
+    case Con{+ev, rest}:
+      s1 = Spec.Node.does(n, s, ev)
       Kept.trans(
         s,
         s1,
@@ -4998,8 +4998,8 @@ def Spec.Node.after_keeps(n, evs, s):
 
 # an outcome that a line holds, it holds in a node that keeps its logs
 def Chain.out.kept(
-  +a: Spec.State(),
-  +b: Spec.State(),
+  a: Spec.State(),
+  b: Spec.State(),
   +c: Ledgers.Chain,
   +i: Ledgers.Id,
   -o: Spec.Out,
@@ -5022,8 +5022,8 @@ w => e => e
 # the version of a number that a line holds, it holds in a node that keeps
 # its logs
 def Chain.version.kept(
-  +a: Spec.State(),
-  +b: Spec.State(),
+  a: Spec.State(),
+  b: Spec.State(),
   +c: Ledgers.Chain,
   +n: U32,
   -x: Spec.Version,
@@ -5045,8 +5045,8 @@ w => e => e
 
 # a mark that a line holds, it holds in a node that keeps its logs
 def Chain.mark.kept(
-  +a: Spec.State(),
-  +b: Spec.State(),
+  a: Spec.State(),
+  b: Spec.State(),
   +c: Ledgers.Chain,
   +m: String,
   -v: Ledgers.Id,
@@ -5069,10 +5069,10 @@ w => e => e
 # the line of a request that a node holds, a node that grew holds
 def Chain.of.kept(
   +a: Spec.State(),
-  +b: Spec.State(),
+  b: Spec.State(),
   +i: Ledgers.Id,
   -c: Ledgers.Chain,
-  +g: {Spec.Node.grows(a, b) == True{}: Bool}
+  g: {Spec.Node.grows(a, b) == True{}: Bool}
 ) -> {Spec.Node.chain_of(a, i) == Some{c}: Maybe<&2, Ledgers.Chain>} -> {
   Spec.Node.chain_of(b, i) == Some{c}: Maybe<&2, Ledgers.Chain>
 }:
@@ -5105,7 +5105,7 @@ def Out.kept(
   +b: Spec.State(),
   +i: Ledgers.Id,
   -o: Spec.Out,
-  +g: {Spec.Node.grows(a, b) == True{}: Bool},
+  g: {Spec.Node.grows(a, b) == True{}: Bool},
   hk: Spec.Node.Keeps(a, b)
 ) -> {Spec.Node.out(a, i) == Some{o}: Maybe<&2, Spec.Out>} -> {
   Spec.Node.out(b, i) == Some{o}: Maybe<&2, Spec.Out>
@@ -5124,9 +5124,9 @@ c => Chain.of.kept(a, b, i, c, g),
 
 # the version of an outcome, in a node that keeps the logs
 def Out.on.kept(
-  +a: Spec.State(),
-  +b: Spec.State(),
-  +c: Ledgers.Chain,
+  a: Spec.State(),
+  b: Spec.State(),
+  c: Ledgers.Chain,
   o: Spec.Out,
   -x: Spec.Version,
   hk: Spec.Node.Keeps(a, b)
@@ -5136,7 +5136,7 @@ def Out.on.kept(
   match o:
     case Spec.Out.Stale{}:
       e => e
-    case Spec.Out.Taken{+n}:
+    case Spec.Out.Taken{n}:
       Chain.version.kept(a, b, c, n, x, hk)
 
 # the version that a request made on a line, in a node that keeps the logs
@@ -5169,7 +5169,7 @@ def Made.kept(
   +b: Spec.State(),
   +v: Ledgers.Id,
   -x: Spec.Version,
-  +g: {Spec.Node.grows(a, b) == True{}: Bool},
+  g: {Spec.Node.grows(a, b) == True{}: Bool},
   hk1: Spec.Node.Keeps(a, b),
   hk2: Spec.Node.Keeps(a, b)
 ) -> {Spec.Node.made(a, v) == Some{x}: Maybe<&2, Spec.Version>} -> {
@@ -5249,8 +5249,8 @@ def Left.follows(
 
 # the answer to a taken change may come after the answer to it
 def Taken.follows(
-  +a: Spec.State(),
-  +b: Spec.State(),
+  a: Spec.State(),
+  b: Spec.State(),
   +i: Ledgers.Id,
   q: Spec.Ask
 ) -> {Spec.Answer.follows(Spec.Answer.taken(a, i, q), Some{Spec.Answer.taken(b, i, q)}) == True{}: Bool}:
@@ -5288,10 +5288,10 @@ def Taken.follows(
 
 # Asked.follows once the outcome oa of the request is known
 def Of.follows(
-  +a: Spec.State(),
-  +b: Spec.State(),
-  +i: Ledgers.Id,
-  +q: Spec.Ask,
+  a: Spec.State(),
+  b: Spec.State(),
+  i: Ledgers.Id,
+  q: Spec.Ask,
   oa: Maybe<&2, Spec.Out>
 ) -> {Spec.Node.out(a, i) == oa: Maybe<&2, Spec.Out>} -> (@o: Spec.Out -> {
   Spec.Node.out(a, i) == Some{o}: Maybe<&2, Spec.Out>
@@ -5335,7 +5335,7 @@ def Of.follows(
             == True{}: Bool
         }
         {==}
-    case Some{Spec.Out.Taken{+k}}:
+    case Some{Spec.Out.Taken{k}}:
       +eo => ho =>
         %Equal.sym(Maybe<&2, Spec.Out>, Spec.Node.out(a, i), Some{Spec.Out.Taken{k}}, eo): {
           Spec.Answer.follows(
@@ -5361,7 +5361,7 @@ def Of.follows(
 # the answer to a request that a node holds may come after the answer to it
 def Asked.follows(
   +a: Spec.State(),
-  +b: Spec.State(),
+  b: Spec.State(),
   +i: Ledgers.Id,
   q: Spec.Ask,
   ho: @o: Spec.Out -> {Spec.Node.out(a, i) == Some{o}: Maybe<&2, Spec.Out>} -> {
@@ -5371,7 +5371,7 @@ def Asked.follows(
   match q:
     case Spec.Ask.Start{os}:
       Ledgers.Id.is_eq_refl(i)
-    case Spec.Ask.On{+st, +l, +ch}:
+    case Spec.Ask.On{st, l, ch}:
       Of.follows(a, b, i, Spec.Ask.On{st, l, ch}, Spec.Node.out(a, i))({==})(ho)
 
 # Held.follows once whether the held change is the one asked is known (bq)
@@ -5395,10 +5395,10 @@ def Held.follows.if(
 
 # the answer of a node that holds the same cell may come after the answer
 def Held.follows(
-  +a: Spec.State(),
-  +b: Spec.State(),
-  +i: Ledgers.Id,
-  +q: Spec.Ask,
+  a: Spec.State(),
+  b: Spec.State(),
+  i: Ledgers.Id,
+  q: Spec.Ask,
   m: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
   ho: @o: Spec.Out -> {Spec.Node.out(a, i) == Some{o}: Maybe<&2, Spec.Out>} -> {
     Spec.Node.out(b, i) == Some{o}: Maybe<&2, Spec.Out>
@@ -5447,13 +5447,13 @@ def Cell.kept.eq(
 
 # Node.answer_follows once the cell ma of the request's ID is known
 def Answer.follows.at(
-  +a: Spec.State(),
-  +b: Spec.State(),
-  +i: Ledgers.Id,
-  +q: Spec.Ask,
+  a: Spec.State(),
+  b: Spec.State(),
+  i: Ledgers.Id,
+  q: Spec.Ask,
   -x: Spec.Answer,
   ma: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
-  +mb: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
+  mb: Maybe<&2, Cells.Cell<Ledgers.Entry<Spec.Ask>>>,
   ho: @o: Spec.Out -> {Spec.Node.out(a, i) == Some{o}: Maybe<&2, Spec.Out>} -> {
     Spec.Node.out(b, i) == Some{o}: Maybe<&2, Spec.Out>
   }
@@ -5537,16 +5537,16 @@ def Draft.with.some(
 
 # a draft that is there stays, after one more request
 def Draft.of.some(
-  +w: String,
-  +r: Ledgers.Id,
-  +b: String,
-  +n: Resources.Name,
+  w: String,
+  r: Ledgers.Id,
+  b: String,
+  n: Resources.Name,
   i: Ledgers.Id,
   a: Maybe<&2, Ledgers.Asked<Spec.Ask>>,
   -found: Maybe<&2, Spec.Draft>
 ) -> {Maybe.is_some(&2, Spec.Draft, found) == True{}: Bool} -> {Maybe.is_some(&2, Spec.Draft, Spec.Draft.of(w, r, b, n, i, a, found)) == True{}: Bool}:
   match i a:
-    case Ledgers.Id{+w2, +q2} Some{Ledgers.Asked{+t, +q}}:
+    case Ledgers.Id{w2, q2} Some{Ledgers.Asked{t, q}}:
       +h => When.some(
         String.eq(w2, w),
         Spec.Draft.with(found, List.append(&2, Bool, Tries.Trie.text(t), Tries.Trie.text(q2)), Spec.Draft.content(r, b, n, q)),
@@ -5565,7 +5565,7 @@ def Last.some(
   +b: String,
   +n: Resources.Name,
   qs: List<&2, Ledgers.Id>,
-  +found: Maybe<&2, Spec.Draft>
+  found: Maybe<&2, Spec.Draft>
 ) -> {Maybe.is_some(&2, Spec.Draft, found) == True{}: Bool} -> {Maybe.is_some(&2, Spec.Draft, Spec.Draft.last(s, w, r, b, n, qs, found)) == True{}: Bool}:
   match qs:
     case Nil{}:
@@ -5583,7 +5583,7 @@ def Last.some(
 
 # a write of the writer w to the resource gives a draft
 def Draft.of.hit(
-  +w: String,
+  w: String,
   -r: Ledgers.Id,
   -b: String,
   -n: Resources.Name,
@@ -5620,9 +5620,9 @@ def Last.hit.if(
   +b: String,
   +n: Resources.Name,
   +i: Ledgers.Id,
-  +rest: List<&2, Ledgers.Id>,
-  +found: Maybe<&2, Spec.Draft>,
-  +q2: String,
+  rest: List<&2, Ledgers.Id>,
+  found: Maybe<&2, Spec.Draft>,
+  q2: String,
   -t: String,
   -q: Spec.Ask,
   -c: Spec.Content,
@@ -5768,10 +5768,10 @@ def Decide.none(
 
 # Owners.up once what the log holds under the owners' key is known (m)
 def Owners.up.at(
-  +a: Spec.State(),
-  +u: Spec.State(),
-  +t: Spec.Tip,
-  +w: Ledgers.Where,
+  a: Spec.State(),
+  u: Spec.State(),
+  t: Spec.Tip,
+  w: Ledgers.Where,
   -v: Ledgers.Vote,
   m: Maybe<&2, List<&2, U32>>,
   g: {Spec.Node.grows(a, u) == True{}: Bool}
@@ -5795,7 +5795,7 @@ def Owners.up.at(
           )
         )
       )
-    case Some{+ws}:
+    case Some{ws}:
       em => e =>
         %Equal.sym(
           Maybe<&2, List<&2, U32>>,
@@ -5808,9 +5808,9 @@ def Owners.up.at(
 # owners that decide a step are the owners in any node that grew
 def Owners.up(
   +a: Spec.State(),
-  +u: Spec.State(),
+  u: Spec.State(),
   +t: Spec.Tip,
-  +w: Ledgers.Where,
+  w: Ledgers.Where,
   -v: Ledgers.Vote,
   g: {Spec.Node.grows(a, u) == True{}: Bool}
 ) -> {Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(a), w, Spec.Line.owners(a, t)) == Some{v}: Maybe<&2, Ledgers.Vote>} -> {
@@ -5824,7 +5824,7 @@ def Vote.up(
   +u: Spec.State(),
   +c: Ledgers.Chain,
   +h: Spec.Head,
-  +v: Ledgers.Vote,
+  v: Ledgers.Vote,
   +g: {Spec.Node.grows(a, u) == True{}: Bool}
 ) -> {Spec.Advance.vote(a, c, h) == Some{v}: Maybe<&2, Ledgers.Vote>} -> {Spec.Advance.vote(u, c, h) == Some{v}: Maybe<&2, Ledgers.Vote>}:
   Shared.Maybe.bind_kept(
@@ -5867,7 +5867,7 @@ def Moves(s2: Spec.State(), c: Ledgers.Chain, h: Spec.Head, x: Spec.Head) -> Typ
 def Stay(
   -s: Spec.State(),
   -c: Ledgers.Chain,
-  +h: Spec.Head,
+  h: Spec.Head,
   -x: Spec.Head,
   em: {Spec.Node.head_of(s, c) == Some{h}: Maybe<&2, Spec.Head>}
 ) -> Moves(s, c, h, x):
@@ -5918,9 +5918,9 @@ def Moves.when(
 
 # the head of a line, after it is set
 def Head.at_set(
-  +b0: Spec.State(),
+  b0: Spec.State(),
   +c: Ledgers.Chain,
-  +hd: Spec.Head
+  hd: Spec.Head
 ) -> {Spec.Node.head_of(Spec.State.head(b0, c, hd), c) == Some{hd}: Maybe<&2, Spec.Head>}:
   Equal.trans(
     Maybe<&2, Spec.Head>,
@@ -5948,9 +5948,9 @@ def Advance.moved.moves(
   +s: Spec.State(),
   m: Maybe<&2, Spec.State()>,
   +c: Ledgers.Chain,
-  +hd: Spec.Head,
-  +qs: List<&2, Ledgers.Id>,
-  +h: Spec.Head,
+  hd: Spec.Head,
+  qs: List<&2, Ledgers.Id>,
+  h: Spec.Head,
   -x: Spec.Head,
   em: {Spec.Node.head_of(s, c) == Some{h}: Maybe<&2, Spec.Head>},
   ex: {hd == x: Spec.Head}
@@ -5983,16 +5983,16 @@ def Advance.moved.moves(
 # Advance.ran.moves once whether the run gives the tip that the step names is
 # known (bq)
 def Advance.ran.moves.if(
-  +s: Spec.State(),
-  +s2: Spec.State(),
+  s: Spec.State(),
+  s2: Spec.State(),
   +t2: Spec.Tip,
-  +c: Ledgers.Chain,
-  +r: Ledgers.Id,
-  +br: Maybe<&2, String>,
-  +next: U32,
-  +after: Maybe<&2, Hashes.Hash>,
-  +qs: List<&2, Ledgers.Id>,
-  +h: Spec.Head,
+  c: Ledgers.Chain,
+  r: Ledgers.Id,
+  br: Maybe<&2, String>,
+  next: U32,
+  after: Maybe<&2, Hashes.Hash>,
+  qs: List<&2, Ledgers.Id>,
+  h: Spec.Head,
   -x: Spec.Head,
   bq: Bool,
   ebq: {Spec.Root.same(after, Some{Spec.Tip.hash(t2)}) == bq: Bool},
@@ -6035,15 +6035,15 @@ def Advance.ran.moves.if(
 
 # a checked step moves the head to the tip that the step names, or not at all
 def Advance.ran.moves(
-  +s: Spec.State(),
-  +c: Ledgers.Chain,
-  +r: Ledgers.Id,
-  +br: Maybe<&2, String>,
-  +next: U32,
+  s: Spec.State(),
+  c: Ledgers.Chain,
+  r: Ledgers.Id,
+  br: Maybe<&2, String>,
+  next: U32,
   +after: Maybe<&2, Hashes.Hash>,
-  +qs: List<&2, Ledgers.Id>,
+  qs: List<&2, Ledgers.Id>,
   m: Maybe<&2, Spec.Run>,
-  +h: Spec.Head,
+  h: Spec.Head,
   -x: Spec.Head,
   em: {Spec.Node.head_of(s, c) == Some{h}: Maybe<&2, Spec.Head>},
   ex: @t2: Spec.Tip -> {Spec.Root.same(after, Some{Spec.Tip.hash(t2)}) == True{}: Bool} -> {
@@ -6053,7 +6053,7 @@ def Advance.ran.moves(
   match m:
     case None{}:
       Stay(s, c, h, x, em)
-    case Some{Spec.Run{+s2, +t2, ns}}:
+    case Some{Spec.Run{s2, +t2, ns}}:
       Advance.ran.moves.if(
         s,
         s2,
@@ -6077,11 +6077,11 @@ def Advance.step.moves(
   +s: Spec.State(),
   +c: Ledgers.Chain,
   h: Spec.Head,
-  +t: Spec.Tip,
+  t: Spec.Tip,
   m: Maybe<&2, Ledgers.Vote>
 ) -> {Spec.Node.head_of(s, c) == Some{h}: Maybe<&2, Spec.Head>} -> Moves(Spec.Advance.step(s, c, h, t, m), c, h, Spec.Head.step(h, m)):
   match h m:
-    case Spec.Head{+r, +br, +next, +th} Some{Ledgers.Vote{+before, +qs, +after}}:
+    case Spec.Head{+r, +br, +next, +th} Some{Ledgers.Vote{before, +qs, +after}}:
       +em => Moves.when(
         Spec.Root.same(before, th),
         Spec.Advance.ran(s, c, r, br, next, after, qs, Spec.Step.run(s, c, t, qs)),
@@ -6198,8 +6198,8 @@ def Spec.Node.advance_decided(s, c, h):
 
 # two nodes whose ledgers do not clash, at the same head, step it the same
 def Agree.steps(
-  +a: Spec.State(),
-  +b: Spec.State(),
+  a: Spec.State(),
+  b: Spec.State(),
   +u: Spec.State(),
   +c: Ledgers.Chain,
   h: Spec.Head,
@@ -6211,7 +6211,7 @@ def Agree.steps(
   Spec.Head.step(h, va) == Spec.Head.step(h, vb): Spec.Head
 }:
   match h va vb:
-    case Spec.Head{+r, +br, +n, +th} Some{+v1} Some{+v2}:
+    case Spec.Head{+r, +br, +n, +th} Some{v1} Some{v2}:
       ea => eb => ma => mb => Equal.cong(
         Ledgers.Vote,
         Spec.Head,
@@ -6487,13 +6487,13 @@ def Set.reads.put(
 # node that holds the new nodes
 def Set.reads(
   +s: Spec.State(),
-  +h: Maybe<&2, Hashes.Hash>,
-  +k: List<&2, U32>,
-  +x: List<&2, U32>,
+  h: Maybe<&2, Hashes.Hash>,
+  k: List<&2, U32>,
+  x: List<&2, U32>,
   m: Maybe<&2, Trees.Put>,
   -h2: Maybe<&2, Hashes.Hash>,
   -ds: List<&2, List<&2, U32>>,
-  +s3: Spec.State()
+  s3: Spec.State()
 ) -> {Spec.Node.set(s, h, k, x) == m: Maybe<&2, Trees.Put>} -> {
   Spec.Work.take(Spec.Work.of(s, [], m)) == Some{Spec.Verdict{True{}, h2, ds}}: Maybe<&2, Spec.Verdict>
 } -> {Trees.Tree.holds(~Spec.State(), ~Spec.Store.fetch, s3, ds) == True{}: Bool} -> {Spec.Node.get(s3, h2, k) == Some{x}: Maybe<&2, List<&2, U32>>}:
@@ -6503,7 +6503,7 @@ def Set.reads(
         {Spec.Node.get(s3, h2, k) == Some{x}: Maybe<&2, List<&2, U32>>},
         Shared.Maybe.none_ne_some(Spec.Verdict, Spec.Verdict{True{}, h2, ds}, e)
       )
-    case Some{Trees.Put{+hh, +ws}}:
+    case Some{Trees.Put{hh, +ws}}:
       Set.reads.put(s, h, k, x, hh, ws, Spec.State.put(s, ws), h2, ds, s3)
 
 # a verdict that takes, after a read, is the verdict of what comes next
@@ -6707,13 +6707,13 @@ def Level.none(
 
 # Moved.up once the step va decided at the head in a is known
 def Moved.up.at(
-  +a: Spec.State(),
-  +u: Spec.State(),
-  +c: Ledgers.Chain,
-  +x: Spec.Head,
+  a: Spec.State(),
+  u: Spec.State(),
+  c: Ledgers.Chain,
+  x: Spec.Head,
   -y: Spec.Head,
   va: Maybe<&2, Ledgers.Vote>,
-  +g: {Spec.Node.grows(a, u) == True{}: Bool}
+  g: {Spec.Node.grows(a, u) == True{}: Bool}
 ) -> {Spec.Advance.vote(a, c, x) == va: Maybe<&2, Ledgers.Vote>} -> {Spec.Head.moved(x, va) == Some{y}: Maybe<&2, Spec.Head>} -> {
   Spec.Head.moved(x, Spec.Advance.vote(u, c, x)) == Some{y}: Maybe<&2, Spec.Head>
 }:
@@ -6733,7 +6733,7 @@ def Moved.up.at(
           )
         )
       )
-    case Some{+v}:
+    case Some{v}:
       ea => e =>
         %Equal.sym(Maybe<&2, Ledgers.Vote>, Spec.Advance.vote(u, c, x), Some{v}, Vote.up(a, u, c, x, v, g)(ea)): {
           Spec.Head.moved(x, _) == Some{y}: Maybe<&2, Spec.Head>
@@ -6743,11 +6743,11 @@ def Moved.up.at(
 # a head that a step moves in a, it moves the same in a node that grew
 def Moved.up(
   +a: Spec.State(),
-  +u: Spec.State(),
+  u: Spec.State(),
   +c: Ledgers.Chain,
   +x: Spec.Head,
   -y: Spec.Head,
-  +g: {Spec.Node.grows(a, u) == True{}: Bool}
+  g: {Spec.Node.grows(a, u) == True{}: Bool}
 ) -> {Spec.Head.moved(x, Spec.Advance.vote(a, c, x)) == Some{y}: Maybe<&2, Spec.Head>} -> {
   Spec.Head.moved(x, Spec.Advance.vote(u, c, x)) == Some{y}: Maybe<&2, Spec.Head>
 }:
@@ -6787,8 +6787,8 @@ def Spec.Line.at_agrees(k, a, b, u, c, h, x, y):
 
 # a step that moves a head gives the head after it
 def Moved.self(
-  +x: Spec.Head,
-  +m: Maybe<&2, Ledgers.Vote>,
+  x: Spec.Head,
+  m: Maybe<&2, Ledgers.Vote>,
   lv: {Spec.Heads.level(Some{x}, Some{Spec.Head.step(x, m)}) == False{}: Bool}
 ) -> {Spec.Head.moved(x, m) == Some{Spec.Head.step(x, m)}: Maybe<&2, Spec.Head>}:
   %Equal.sym(Bool, Spec.Heads.level(Some{x}, Some{Spec.Head.step(x, m)}), False{}, lv): {

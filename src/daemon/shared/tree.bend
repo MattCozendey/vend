@@ -12644,7 +12644,7 @@ def Tree.look.go_value(
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   +s: S,
   p: List<&2, Nat>,
-  +k: List<&2, U32>,
+  k: List<&2, U32>,
   m: Maybe<&2, Node>,
   o: Maybe<&2, Hashes.Hash>
 ) -> {Look.value(Tree.look.go(~S, ~fetch, s, p, k, o, m)) == Tree.get.go(~S, ~fetch, s, p, k, m): Maybe<&2, List<&2, U32>>}:
@@ -12765,7 +12765,7 @@ def Tree.look.go_absent(
   +a: S,
   +b: S,
   p: List<&2, Nat>,
-  +k: List<&2, U32>,
+  k: List<&2, U32>,
   m: Maybe<&2, Node>,
   o: Maybe<&2, Hashes.Hash>,
   +gr: {grows(a, b) == True{}: Bool}

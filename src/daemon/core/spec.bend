@@ -600,7 +600,7 @@ def Start.of.read(m: Maybe<&2, Codes.Read<Maybe<&2, Hashes.Hash>>>) -> Maybe<&2,
 # Node.get once the root node m of the tree is known. The node comes before
 # the path of the key (a hash): a tree with no node costs no hash, and a proof
 # about a tree that is not known makes none
-def Node.get.at(+s: State(), +k: List<&2, U32>, m: Maybe<&2, Trees.Node>) -> Maybe<&2, List<&2, U32>>:
+def Node.get.at(s: State(), +k: List<&2, U32>, m: Maybe<&2, Trees.Node>) -> Maybe<&2, List<&2, U32>>:
   match m:
     case None{}:
       None{}
@@ -610,13 +610,13 @@ def Node.get.at(+s: State(), +k: List<&2, U32>, m: Maybe<&2, Trees.Node>) -> May
       Trees.Tree.get.go(~State(), ~Store.fetch, s, Trees.Tree.path(k), k, Some{n})
 
 # what the tree whose root is h holds under the key k, in the store s
-def Node.get(+s: State(), h: Maybe<&2, Hashes.Hash>, +k: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+def Node.get(+s: State(), h: Maybe<&2, Hashes.Hash>, k: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
   Node.get.at(s, k, Trees.Tree.part(~State(), ~Store.fetch, s, h))
 
 # Node.set once the root node m of the tree is known (see Node.get.at)
 def Node.set.at(
-  +s: State(),
-  +h: Maybe<&2, Hashes.Hash>,
+  s: State(),
+  h: Maybe<&2, Hashes.Hash>,
   +k: List<&2, U32>,
   x: List<&2, U32>,
   m: Maybe<&2, Trees.Node>
@@ -624,7 +624,7 @@ def Node.set.at(
   match m:
     case None{}:
       None{}
-    case Some{+n}:
+    case Some{n}:
       Trees.Tree.set.go(~State(), ~Store.fetch, s, Trees.Tree.path(k), 0n, k, x, h, Some{n})
 
 # the tree whose root is h with the key k set to x: Trees.Tree.set (impl:
@@ -632,15 +632,15 @@ def Node.set.at(
 def Node.set(
   +s: State(),
   +h: Maybe<&2, Hashes.Hash>,
-  +k: List<&2, U32>,
+  k: List<&2, U32>,
   x: List<&2, U32>
 ) -> Maybe<&2, Trees.Put>:
   Node.set.at(s, h, k, x, Trees.Tree.part(~State(), ~Store.fetch, s, h))
 
 # Node.look once the root node m of the tree is known (see Node.get.at)
 def Node.look.at(
-  +s: State(),
-  +h: Maybe<&2, Hashes.Hash>,
+  s: State(),
+  h: Maybe<&2, Hashes.Hash>,
   +k: List<&2, U32>,
   m: Maybe<&2, Trees.Node>
 ) -> Trees.Look:
@@ -654,7 +654,7 @@ def Node.look.at(
 
 # what a read of the key k finds in the tree whose root is h: Trees.Tree.look
 # (impl: Look.is)
-def Node.look(+s: State(), +h: Maybe<&2, Hashes.Hash>, +k: List<&2, U32>) -> Trees.Look:
+def Node.look(+s: State(), +h: Maybe<&2, Hashes.Hash>, k: List<&2, U32>) -> Trees.Look:
   Node.look.at(s, h, k, Trees.Tree.part(~State(), ~Store.fetch, s, h))
 
 # what a look knows: the value, or that there is none (none: it lacks a node,
@@ -672,9 +672,9 @@ def Look.known(l: Trees.Look) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
 # nothing there (none: the node lacks a node of the tree). A judge reads with
 # this: it refuses only on what it knows, and waits for what it lacks
 def Node.find(
-  +s: State(),
-  +h: Maybe<&2, Hashes.Hash>,
-  +k: List<&2, U32>
+  s: State(),
+  h: Maybe<&2, Hashes.Hash>,
+  k: List<&2, U32>
 ) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
   Look.known(Node.look(s, h, k))
 
@@ -685,8 +685,8 @@ def Res.found(m: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Ropes.Root>:
 # the root of the content of the resource n in the tree whose root is h, or
 # that it is not there (none: the node lacks a node of the tree)
 def Res.find(
-  +s: State(),
-  +h: Maybe<&2, Hashes.Hash>,
+  s: State(),
+  h: Maybe<&2, Hashes.Hash>,
   n: Resources.Name
 ) -> Maybe<&2, Maybe<&2, Ropes.Root>>:
   Maybe.bind(
@@ -964,7 +964,7 @@ def Head.get(+s: State(), h: Head, k: List<&2, U32>) -> Maybe<&2, List<&2, U32>>
   Maybe.bind(&2, Tip, List<&2, U32>, Head.tip(s, h), t => Node.get(s, Tip.log(t), k))
 
 # what the log of the line c holds under the key k, as the node knows it
-def Line.get(+s: State(), c: Ledgers.Chain, +k: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+def Line.get(+s: State(), c: Ledgers.Chain, k: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
   Maybe.bind(&2, Head, List<&2, U32>, Node.head_of(s, c), h => Head.get(s, h, k))
 
 # the line that the request i of the change q changes: a request that starts a
@@ -993,15 +993,15 @@ def Node.chain_of(s: State(), +i: Ledgers.Id) -> Maybe<&2, Ledgers.Chain>:
   )
 
 # the outcome of the request i on the line c, as the node knows it
-def Chain.out(+s: State(), c: Ledgers.Chain, i: Ledgers.Id) -> Maybe<&2, Out>:
+def Chain.out(s: State(), c: Ledgers.Chain, i: Ledgers.Id) -> Maybe<&2, Out>:
   Maybe.bind(&2, List<&2, U32>, Out, Line.get(s, c, Log.out(i)), ws => Out.read(ws))
 
 # the version of the number n of the line c, as the node knows it
-def Chain.version(+s: State(), c: Ledgers.Chain, n: U32) -> Maybe<&2, Version>:
+def Chain.version(s: State(), c: Ledgers.Chain, n: U32) -> Maybe<&2, Version>:
   Maybe.bind(&2, List<&2, U32>, Version, Line.get(s, c, Log.version(n)), ws => Version.read(ws))
 
 # the version that the mark m names on the line c, as the node knows it
-def Chain.mark(+s: State(), c: Ledgers.Chain, m: String) -> Maybe<&2, Ledgers.Id>:
+def Chain.mark(s: State(), c: Ledgers.Chain, m: String) -> Maybe<&2, Ledgers.Id>:
   Maybe.bind(
     &2,
     List<&2, U32>,
@@ -1163,7 +1163,7 @@ type Work is Data:
 # s with the words ds as data, when it then holds each of them under its hash
 # (none: a slot holds other words). A node reads back what it puts, so what a
 # tree or a rope reads after a put never rests on what the store held before
-def State.put(+s: State(), +ds: List<&2, List<&2, U32>>) -> Maybe<&2, State()>:
+def State.put(s: State(), +ds: List<&2, List<&2, U32>>) -> Maybe<&2, State()>:
   +s2 = State.keep(s, ds)
   Shared.Maybe.when(State(), Trees.Tree.holds(~State(), ~Store.fetch, s2, ds), u => Some{s2})
 
@@ -1181,7 +1181,7 @@ def Work.put(
       Some{Work{s2, h, List.append(&2, List<&2, U32>, ws, ns)}}
 
 # the work that the new subtree m gives, after the state s and the nodes ns
-def Work.of(+s: State(), ns: List<&2, List<&2, U32>>, m: Maybe<&2, Trees.Put>) -> Maybe<&2, Work>:
+def Work.of(s: State(), ns: List<&2, List<&2, U32>>, m: Maybe<&2, Trees.Put>) -> Maybe<&2, Work>:
   match m:
     case None{}:
       None{}
@@ -1736,8 +1736,8 @@ def Merge.from_on(m: Maybe<&2, Ledgers.Asked<Ask>>, r: Ledgers.Id, b: String) ->
 # the clash of the resource n is open in the tree h, by the merge of the
 # version m, if any (none: the node lacks a node of the tree)
 def Clash.find(
-  +s: State(),
-  +h: Maybe<&2, Hashes.Hash>,
+  s: State(),
+  h: Maybe<&2, Hashes.Hash>,
   n: Resources.Name,
   m: Maybe<&2, Ledgers.Id>
 ) -> Maybe<&2, Bool>:
@@ -1913,24 +1913,61 @@ def Version.at(+s: State(), p: Place) -> Maybe<&2, Ledgers.Id>:
     case Place{c, n}:
       Maybe.bind(&2, Tip, Ledgers.Id, Node.tip(s, c), t => Version.in(s, n, t))
 
-# the base of a merge of from into the line c: from itself when it is of c,
-# else the version of c at the place that from's version vector gives c
-def Merge.base(+s: State(), +c: Ledgers.Chain, +from: Ledgers.Id) -> Maybe<&2, Ledgers.Id>:
+# the newer of two versions that both sides of a merge came from: a, a
+# version of our line that theirs came from, and the version at the place p of
+# their line cf that ours came from. a is the newer one when it came from the
+# other
+def Base.pick(
+  +s: State(),
+  cf: Ledgers.Chain,
+  ma: Maybe<&2, Ledgers.Id>,
+  mp: Maybe<&2, Place>
+) -> Maybe<&2, Ledgers.Id>:
+  match ma mp:
+    case None{} None{}:
+      None{}
+    case Some{a} None{}:
+      Some{a}
+    case None{} Some{p}:
+      Version.at(s, p)
+    case Some{+a} Some{+p}:
+      Shared.Bool.when(
+        Maybe<&2, Ledgers.Id>,
+        Place.covered(Node.vector(s, Node.root_of(s, Some{a}), cf), p),
+        u => Some{a},
+        u => Version.at(s, p)
+      )
+
+# the base of a merge of from into the line c, whose tree is h: from itself
+# when it is of c; else the newest version that both came from, by the version
+# vectors of both sides (the version of c that from came from, or the version
+# of from's line that h came from)
+def Merge.base(
+  +s: State(),
+  +c: Ledgers.Chain,
+  +from: Ledgers.Id,
+  h: Maybe<&2, Hashes.Hash>
+) -> Maybe<&2, Ledgers.Id>:
   Maybe.bind(
     &2,
     Place,
     Ledgers.Id,
     Node.place(s, from),
-    pf => Shared.Bool.when(
+    +pf => Shared.Bool.when(
       Maybe<&2, Ledgers.Id>,
       Ledgers.Chain.is_eq(Place.chain(pf), c),
       u => Some{from},
-      u => Maybe.bind(
-        &2,
-        Place,
-        Ledgers.Id,
-        Node.vector(s, Node.root_of(s, Some{from}), c),
-        w => Version.at(s, w)
+      u => Base.pick(
+        s,
+        Place.chain(pf),
+        Maybe.bind(
+          &2,
+          Place,
+          Ledgers.Id,
+          Node.vector(s, Node.root_of(s, Some{from}), c),
+          w => Version.at(s, w)
+        ),
+        Node.vector(s, h, Place.chain(pf))
       )
     )
   )
@@ -1967,7 +2004,7 @@ def Merge.work(
       s,
       from,
       Merge.names(s, h, ht),
-      Node.root_of(s, Merge.base(s, c, from)),
+      Node.root_of(s, Merge.base(s, c, from, h)),
       h,
       ht,
       Some{Work{s, h, []}}
@@ -2029,7 +2066,7 @@ def Log.first(w: Work, os: List<&2, String>) -> Maybe<&2, Work>:
 
 # the store's content h with the first tip of its new branch b: the content
 # start (the root of w), and a log whose owners are the store's owners os now
-def Make.put(+b: String, +start: Maybe<&2, Hashes.Hash>, h: Maybe<&2, Hashes.Hash>, +wl: Work) -> Maybe<&2, Work>:
+def Make.put(b: String, start: Maybe<&2, Hashes.Hash>, h: Maybe<&2, Hashes.Hash>, +wl: Work) -> Maybe<&2, Work>:
   +t = {Tip{start, Work.root(wl)}: Tip}
   Maybe.bind(
     &2,
@@ -2043,9 +2080,9 @@ def Make.put(+b: String, +start: Maybe<&2, Hashes.Hash>, h: Maybe<&2, Hashes.Has
 # content h of its store, whose owners are os
 def Make.work(
   start: Maybe<&2, Work>,
-  +b: String,
-  +os: List<&2, String>,
-  +h: Maybe<&2, Hashes.Hash>
+  b: String,
+  os: List<&2, String>,
+  h: Maybe<&2, Hashes.Hash>
 ) -> Maybe<&2, Work>:
   Maybe.bind(
     &2,
@@ -2130,10 +2167,10 @@ def Own.takes(
   +s: State(),
   r: Ledgers.Id,
   +l: Maybe<&2, String>,
-  +g: String,
+  g: String,
   +at: Maybe<&2, Ledgers.Id>,
-  +os: List<&2, String>,
-  +h: Maybe<&2, Hashes.Hash>
+  os: List<&2, String>,
+  h: Maybe<&2, Hashes.Hash>
 ) -> Maybe<&2, Bool>:
   Maybe.bind(
     &2,
@@ -2288,7 +2325,7 @@ def Step.stale(r: Run, i: Ledgers.Id) -> Maybe<&2, Run>:
 # outcome, its version (the content of r), the count, and the owners that it
 # gives
 def Step.taken.at(
-  +r: Run,
+  r: Run,
   +i: Ledgers.Id,
   +n: U32,
   own: Maybe<&2, List<&2, String>>
@@ -2313,7 +2350,7 @@ def Step.taken(+r: Run, i: Ledgers.Id, own: Maybe<&2, List<&2, String>>) -> Mayb
 
 # the run r, after the verdict m on the request i (none: wait)
 def Step.judged(
-  +r: Run,
+  r: Run,
   i: Ledgers.Id,
   own: Maybe<&2, List<&2, String>>,
   m: Maybe<&2, Verdict>
@@ -2327,7 +2364,7 @@ def Step.judged(
       Maybe.bind(&2, Run, Run, Run.content(r, h, ds), r2 => Step.taken(r2, i, own))
 
 # the run r with the mark m on the version v, then the request i taken
-def Step.marked(+r: Run, +i: Ledgers.Id, m: String, v: Maybe<&2, Version>) -> Maybe<&2, Run>:
+def Step.marked(r: Run, i: Ledgers.Id, m: String, v: Maybe<&2, Version>) -> Maybe<&2, Run>:
   match v:
     case None{}:
       None{}
@@ -2358,7 +2395,7 @@ def Step.mark(+r: Run, +i: Ledgers.Id, +m: String) -> Maybe<&2, Run>:
 
 # the run r, after the request i of the change ch of the line l of the store
 # st
-def Step.on(+r: Run, +i: Ledgers.Id, st: Ledgers.Id, l: Maybe<&2, String>, ch: Change) -> Maybe<&2, Run>:
+def Step.on(+r: Run, i: Ledgers.Id, st: Ledgers.Id, l: Maybe<&2, String>, ch: Change) -> Maybe<&2, Run>:
   match l ch:
     case Some{b} Change.Mark{m, d}:
       Step.mark(r, i, m)
@@ -2456,7 +2493,7 @@ def Step.some(+c: Ledgers.Chain, qs: List<&2, Ledgers.Id>, +r: Run) -> Picked:
 
 # the step of the line c that runs the requests qs from the tip t (none: wait
 # for a request, a version or a node)
-def Step.run(s: State(), +c: Ledgers.Chain, t: Tip, qs: List<&2, Ledgers.Id>) -> Maybe<&2, Run>:
+def Step.run(s: State(), c: Ledgers.Chain, t: Tip, qs: List<&2, Ledgers.Id>) -> Maybe<&2, Run>:
   Step.all(c, qs, Some{Run{s, t, []}})
 
 # The node
@@ -2672,7 +2709,7 @@ def Chained.last(c: Chained) -> Maybe<&2, Ledgers.Where>:
 
 # the ballot of p that is the next of the chain of the node n in the store r
 def Pending.next(
-  +s: State(),
+  s: State(),
   p: Tries.Trie<Ledgers.Ballot>,
   +r: Ledgers.Id,
   +n: String
@@ -2845,7 +2882,7 @@ def Seal.firsts(os: List<&2, Owner>, m: Maybe<&2, Work>) -> Maybe<&2, Work>:
 
 # s with the first tip of the store i, whose content is c and whose log is on
 # the trees of m: its owners are the store's first owners
-def Start.put(+s: State(), +i: Ledgers.Id, +c: Maybe<&2, Hashes.Hash>, m: Maybe<&2, Work>) -> State():
+def Start.put(s: State(), +i: Ledgers.Id, c: Maybe<&2, Hashes.Hash>, m: Maybe<&2, Work>) -> State():
   match m:
     case None{}:
       s
@@ -2859,7 +2896,7 @@ def Start.put(+s: State(), +i: Ledgers.Id, +c: Maybe<&2, Hashes.Hash>, m: Maybe<
       )
 
 # Node.start once the content m of the store is known
-def Start.with(+s: State(), +i: Ledgers.Id, os: List<&2, String>, m: Maybe<&2, Work>) -> State():
+def Start.with(s: State(), i: Ledgers.Id, os: List<&2, String>, m: Maybe<&2, Work>) -> State():
   match m:
     case None{}:
       s
@@ -2868,7 +2905,7 @@ def Start.with(+s: State(), +i: Ledgers.Id, os: List<&2, String>, m: Maybe<&2, W
 
 # s, which follows the store that the request i starts with the first owners
 # os: its content holds their first keys
-def Node.start(+s: State(), +i: Ledgers.Id, +os: List<&2, Owner>) -> State():
+def Node.start(+s: State(), i: Ledgers.Id, +os: List<&2, Owner>) -> State():
   Start.with(s, i, Owner.names(os), Seal.firsts(os, Some{Work{s, None{}, []}}))
 
 # the first tip of the branch b in the store content h, if the store made b
@@ -2882,7 +2919,7 @@ def Branch.start(s: State(), h: Maybe<&2, Hashes.Hash>, b: String) -> Maybe<&2, 
   )
 
 # the first tip of the branch b of a store whose tip is m
-def Branch.first(+s: State(), b: String, m: Maybe<&2, Tip>) -> Maybe<&2, Hashes.Hash>:
+def Branch.first(s: State(), b: String, m: Maybe<&2, Tip>) -> Maybe<&2, Hashes.Hash>:
   match m:
     case None{}:
       None{}
@@ -2921,7 +2958,7 @@ def Node.follow(+s: State(), +r: Ledgers.Id, +l: Maybe<&2, String>) -> State():
 
 # s, once it holds the new request i of the change q: a store starts, or the
 # request waits on its line
-def Node.arrive(+s: State(), +i: Ledgers.Id, q: Ask) -> State():
+def Node.arrive(s: State(), i: Ledgers.Id, q: Ask) -> State():
   match q:
     case Ask.Start{os}:
       Node.start(s, i, os)
@@ -2949,7 +2986,7 @@ def Cast.may(+n: String, +s: State(), w: Ledgers.Where, t: Tip, qs: List<&2, Led
 
 # s with the node n's ballot for the step v at the place w, sealed as the
 # next of the node's chain m (none: the store gave the node no key)
-def Cast.seal(+s: State(), +w: Ledgers.Where, +n: String, v: Ledgers.Vote, m: Maybe<&2, Chained>) -> State():
+def Cast.seal(+s: State(), +w: Ledgers.Where, n: String, v: Ledgers.Vote, m: Maybe<&2, Chained>) -> State():
   match m:
     case None{}:
       s
@@ -2972,7 +3009,7 @@ def Cast.seal(+s: State(), +w: Ledgers.Where, +n: String, v: Ledgers.Vote, m: Ma
       )
 
 # the state m with the node n's ballot v at the place w, else s
-def Cast.vote(+s: State(), m: Maybe<&2, State()>, +w: Ledgers.Where, +n: String, v: Ledgers.Vote) -> State():
+def Cast.vote(s: State(), m: Maybe<&2, State()>, +w: Ledgers.Where, +n: String, v: Ledgers.Vote) -> State():
   match m:
     case None{}:
       s
@@ -2989,7 +3026,7 @@ def Cast.put(
   th: Maybe<&2, Hashes.Hash>,
   qs: List<&2, Ledgers.Id>,
   m: Maybe<&2, Run>,
-  +s: State()
+  s: State()
 ) -> State():
   match m:
     case None{}:
@@ -3000,7 +3037,7 @@ def Cast.put(
 # Node.cast at the head h of the line c, whose tip is m
 def Cast.at(+n: String, +s: State(), +c: Ledgers.Chain, h: Head, m: Maybe<&2, Tip>) -> State():
   match h m:
-    case Head{r, b, +next, +th} Some{+t}:
+    case Head{r, b, +next, th} Some{+t}:
       +p = Step.some(c, Wait.of(s, c), Run{s, t, []})
       Shared.Bool.when(
         State(),
@@ -3012,7 +3049,7 @@ def Cast.at(+n: String, +s: State(), +c: Ledgers.Chain, h: Head, m: Maybe<&2, Ti
       s
 
 # Node.cast once the head m of the line c is known
-def Cast.head(+n: String, +s: State(), +c: Ledgers.Chain, m: Maybe<&2, Head>) -> State():
+def Cast.head(n: String, +s: State(), c: Ledgers.Chain, m: Maybe<&2, Head>) -> State():
   match m:
     case None{}:
       s
@@ -3022,7 +3059,7 @@ def Cast.head(+n: String, +s: State(), +c: Ledgers.Chain, m: Maybe<&2, Head>) ->
 # s, after the node n cast its ballot for the next step of the line c: the
 # step that runs, from the tip, the requests that wait on the line and can
 # run now
-def Node.cast(+n: String, +s: State(), +c: Ledgers.Chain) -> State():
+def Node.cast(n: String, +s: State(), +c: Ledgers.Chain) -> State():
   Cast.head(n, s, c, Node.head_of(s, c))
 
 # the state m at the head h of the line c, after a step that ran qs, else s
@@ -3070,7 +3107,7 @@ def Advance.ran(
       )
 
 # Node.advance once the step m that the owners decided at the head is known
-def Advance.step(+s: State(), +c: Ledgers.Chain, h: Head, +t: Tip, m: Maybe<&2, Ledgers.Vote>) -> State():
+def Advance.step(+s: State(), +c: Ledgers.Chain, h: Head, t: Tip, m: Maybe<&2, Ledgers.Vote>) -> State():
   match h m:
     case Head{r, b, next, th} Some{Ledgers.Vote{before, +qs, after}}:
       Shared.Bool.when(
@@ -3127,7 +3164,7 @@ def Head.step(h: Head, m: Maybe<&2, Ledgers.Vote>) -> Head:
       x
 
 # Node.advance once the head m of the line c is known
-def Advance.head(+s: State(), +c: Ledgers.Chain, m: Maybe<&2, Head>) -> State():
+def Advance.head(+s: State(), c: Ledgers.Chain, m: Maybe<&2, Head>) -> State():
   match m:
     case None{}:
       s
@@ -3170,12 +3207,12 @@ def Node.advances(f: Nat, +s: State(), +c: Ledgers.Chain) -> State():
 
 # s, after the node n moved its head of the line c over each step that is
 # decided, cast its ballot for the next step, and moved its head again
-def Step.head(+n: String, +s: State(), +c: Ledgers.Chain) -> State():
-  +s1 = Node.advances(4294967295n, s, c)
+def Step.head(n: String, s: State(), +c: Ledgers.Chain) -> State():
+  s1 = Node.advances(4294967295n, s, c)
   Node.advances(4294967295n, Node.cast(n, s1, c), c)
 
 # s, after the node n did what it can on the line c
-def Node.step(n: String, +s: State(), +c: Ledgers.Chain) -> State():
+def Node.step(n: String, s: State(), +c: Ledgers.Chain) -> State():
   Step.head(n, Node.open(s, c), c)
 
 # Node.ask once the cell m of the request's ID is known
@@ -3191,8 +3228,8 @@ def Node.ask.at(
       s
     case None{}:
       +i = Envelope.of(e)
-      +c = Ask.chain(i, q)
-      +s1 = Node.arrive(
+      c = Ask.chain(i, q)
+      s1 = Node.arrive(
         State.led(
           s,
           Ledgers.State.ask(~Ask, ~Ask.is_eq, State.ledger(s), i, Envelope.time(e), q)
@@ -3224,7 +3261,7 @@ def Take.asks(
   match cs:
     case Nil{}:
       s
-    case Con{Cells.One{Ledgers.Entry.Ask{+i, t, +q}}, rest}:
+    case Con{Cells.One{Ledgers.Entry.Ask{+i, t, q}}, rest}:
       Take.asks(
         rest,
         old,
@@ -3299,12 +3336,12 @@ def Node.steps(+n: String, cs: List<&2, Ledgers.Chain>, s: State()) -> State():
   match cs:
     case Nil{}:
       s
-    case Con{+c, rest}:
+    case Con{c, rest}:
       Node.steps(n, rest, Node.step(n, s, c))
 
 # the line of the first of the waiting requests qs, then rest
 def Lines.waiting(
-  +s: State(),
+  s: State(),
   qs: List<&2, Ledgers.Id>,
   +rest: List<&2, Ledgers.Chain>
 ) -> List<&2, Ledgers.Chain>:
@@ -3335,7 +3372,7 @@ def Lines.new(
   match cs:
     case Nil{}:
       rest
-    case Con{Cells.One{Ledgers.Entry.Ask{+i, t, q}}, r}:
+    case Con{Cells.One{Ledgers.Entry.Ask{i, t, q}}, r}:
       Ask.chain(i, q) <> Lines.new(r, rest)
     case Con{Cells.One{Ledgers.Entry.Vote{b}}, r}:
       Where.line(Ballot.at(b)) <> Lines.new(r, rest)
@@ -3345,7 +3382,7 @@ def Lines.new(
 # the lines that a sync of t into s may move, each once: those of the new
 # requests and ballots of t, and those with waiting requests (new data can let
 # them run). So a sync costs about what it brings, not every line of the node
-def Sync.lines(+s: State(), +s1: State(), t: Ledgers.State(Ask)) -> List<&2, Ledgers.Chain>:
+def Sync.lines(s: State(), +s1: State(), t: Ledgers.State(Ask)) -> List<&2, Ledgers.Chain>:
   Tries.Trie.unique(
     ~Ledgers.Chain,
     ~Ledgers.Chain.key,
@@ -3361,7 +3398,7 @@ def Sync.lines(+s: State(), +s1: State(), t: Ledgers.State(Ask)) -> List<&2, Led
 
 # s, after the node n took in t, which another node sent, and did what it can
 # on each line that this may move: how a node that is behind catches up
-def Node.sync(+n: String, +s: State(), +t: Ledgers.State(Ask)) -> State():
+def Node.sync(n: String, +s: State(), +t: Ledgers.State(Ask)) -> State():
   +s1 = Node.take(s, t)
   Node.steps(n, Sync.lines(s, s1, t), s1)
 
@@ -3371,7 +3408,7 @@ def Node.sync(+n: String, +s: State(), +t: Ledgers.State(Ask)) -> State():
 
 # the root of the content of the line c now (none: the empty tree, or the node
 # does not follow c)
-def Chain.root(+s: State(), c: Ledgers.Chain) -> Maybe<&2, Hashes.Hash>:
+def Chain.root(s: State(), c: Ledgers.Chain) -> Maybe<&2, Hashes.Hash>:
   Maybe.bind(&2, Tip, Hashes.Hash, Node.tip(s, c), t => Tip.content(t))
 
 # the root of the content of the store r now
@@ -3437,7 +3474,7 @@ def Node.is_version(s: State(), i: Ledgers.Id) -> Bool:
   Maybe.is_some(&2, Version, Node.made(s, i))
 
 # the version at the point p, if there is one
-def Node.version(+s: State(), p: Point) -> Maybe<&2, Ledgers.Id>:
+def Node.version(s: State(), p: Point) -> Maybe<&2, Ledgers.Id>:
   match p:
     case Point.At{+v}:
       Shared.Bool.when(Maybe<&2, Ledgers.Id>, Node.is_version(s, v), u => Some{v}, u => None{})
@@ -3663,10 +3700,10 @@ def Draft.what(m: Maybe<&2, Draft>) -> Maybe<&2, Content>:
 # every request of the writer
 def Node.draft(
   +s: State(),
-  +w: String,
+  w: String,
   +r: Ledgers.Id,
   +b: String,
-  +n: Resources.Name
+  n: Resources.Name
 ) -> Maybe<&2, Content>:
   Draft.what(Draft.last(s, w, r, b, n, Wait.of(s, Line.chain(r, Some{b})), None{}))
 
@@ -3680,7 +3717,7 @@ def Read.of(+s: State(), n: Resources.Name, m: Maybe<&2, Content>, p: Point) -> 
 
 # what the writer w reads of the resource n at the point p: at the head of a
 # branch, its own pending write; else what the point holds
-def Node.read(+s: State(), +w: String, +n: Resources.Name, p: Point) -> Maybe<&2, Texts.Bytes()>:
+def Node.read(+s: State(), w: String, +n: Resources.Name, p: Point) -> Maybe<&2, Texts.Bytes()>:
   match p:
     case Point.Head{+r, +b}:
       Read.of(s, n, Node.draft(s, w, r, b, n), Point.Head{r, b})
@@ -3866,8 +3903,8 @@ def Answer.asked(+s: State(), +i: Ledgers.Id, q: Ask) -> Answer:
 # the answer to the change q of the request i, whose slot holds m: none when it
 # is empty, Refused when it holds another change
 def Answer.held(
-  +s: State(),
-  +i: Ledgers.Id,
+  s: State(),
+  i: Ledgers.Id,
   q: Ask,
   m: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
 ) -> Maybe<&2, Answer>:
@@ -4434,7 +4471,7 @@ type Deed is Data:
   Deed.Keep{bytes: Texts.Bytes()}
 
 # s, after the node n did ev
-def Node.does(+n: String, +s: State(), ev: Deed) -> State():
+def Node.does(n: String, s: State(), ev: Deed) -> State():
   match ev:
     case Deed.Ask{e, q}:
       Node.ask(n, s, e, q)

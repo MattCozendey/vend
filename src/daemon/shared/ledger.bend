@@ -696,15 +696,15 @@ def Ballot.make(seed: Hashes.Hash, +x: Signed, +p: Maybe<&2, Where>, +k: Hashes.
 # the key signs the ballot b
 def Ballot.sealed(key: Hashes.Hash, b: Ballot) -> Bool:
   match b:
-    case Ballot{+x, Link{+p, +k, z}}:
+    case Ballot{x, Link{p, k, z}}:
       Seals.Seal.check(key, Ballot.digest(x, p, k), z)
 
 # a ballot that a seed seals is signed by the key of the seed
 def Ballot.sealed_make(
-  +seed: Hashes.Hash,
-  +x: Signed,
-  +p: Maybe<&2, Where>,
-  +k: Hashes.Hash
+  seed: Hashes.Hash,
+  x: Signed,
+  p: Maybe<&2, Where>,
+  k: Hashes.Hash
 ) -> {Ballot.sealed(Seals.Seal.public(seed), Ballot.make(seed, x, p, k)) == True{}: Bool}:
   Seals.Seal.check_sign(seed, Ballot.digest(x, p, k))
 
@@ -2389,9 +2389,9 @@ def State.add.of.grows(
   ~Q: Data,
   ~same: Q -> Q -> Bool,
   ~laws: Shared.Eq.Laws(Q, same),
-  +s: State(Q),
-  +k: List<&2, Bool>,
-  +e: Entry<Q>,
+  s: State(Q),
+  k: List<&2, Bool>,
+  e: Entry<Q>,
   m: Maybe<&2, Cells.Cell<Entry<Q>>>,
   em: {State.get(~Q, s, k) == m: Maybe<&2, Cells.Cell<Entry<Q>>>}
 ) -> {State.grows(~Q, ~same, s, State.add.of(~Q, ~same, s, k, e, m)) == True{}: Bool}:
