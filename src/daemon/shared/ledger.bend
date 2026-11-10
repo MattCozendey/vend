@@ -198,10 +198,6 @@ def Word.key(x: U32) -> List<&2, Bool>:
 def Slot.ask(i: Id) -> List<&2, Bool>:
   False{} <> False{} <> Id.key(i)
 
-# the start of the slots of the requests of the writer w
-def Slot.writer(w: String) -> List<&2, Bool>:
-  False{} <> False{} <> Tries.Trie.text(w)
-
 # the start of the slots of the ballots of the line c
 def Slot.votes(c: Chain) -> List<&2, Bool>:
   False{} <> True{} <> Chain.key(c)
@@ -1229,11 +1225,6 @@ def State.add(~Q: Data, ~same: Q -> Q -> Bool, +s: State(Q), +k: List<&2, Bool>,
 # holds counts once
 def State.ask(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), +i: Id, t: String, q: Q) -> State(Q):
   State.add(~Q, ~same, s, Slot.ask(i), Entry.Ask{i, t, q})
-
-# s with the node n's ballot v at the place w: a node casts one ballot at a
-# place
-def State.cast(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), w: Where, n: String, b: Ballot) -> State(Q):
-  State.add(~Q, ~same, s, Slot.vote(w, n), Entry.Vote{b})
 
 # the slot of the ballot b: a vote in the bucket of its place, a pass among
 # the passes to its place

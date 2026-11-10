@@ -2033,13 +2033,6 @@ def Advance.head.grows(
     case Some{+h}:
       Advance.at.grows(s, c, h, Spec.Head.tip(s, h))
 
-# a head that moves only grows a node
-def Advance.grows(
-  +s: Spec.State(),
-  +c: Ledgers.Chain
-) -> {Spec.Node.grows(s, Spec.Node.advance(s, c)) == True{}: Bool}:
-  Advance.head.grows(s, c, Spec.Node.head_of(s, c))
-
 # Advances.grows once the head m is known
 def Advances.at.grows(
   f: Nat,
@@ -5118,18 +5111,6 @@ def Advance.at.kept(
         Spec.Height.decide(s, c, Spec.Head.next(h), Spec.Line.owners(s, t), Spec.Round.seen(s, c, Spec.Head.next(h)))
       )(em)(et)
 
-# Node.advance keeps the logs, once the head m is known
-def Advance.head.kept(
-  +s: Spec.State(),
-  c: Ledgers.Chain,
-  m: Maybe<&2, Spec.Head>
-) -> {Spec.Node.head_of(s, c) == m: Maybe<&2, Spec.Head>} -> Spec.Node.Keeps(s, Spec.Advance.head(s, c, m)):
-  match m:
-    case None{}:
-      em => Kept.refl(s)
-    case Some{+h}:
-      em => Advance.at.kept(s, c, h, Spec.Head.tip(s, h))(em)({==})
-
 # Advances.kept once the head m is known
 def Advances.at.kept(
   f: Nat,
@@ -6635,6 +6616,31 @@ def Level.refl(h: Spec.Head) -> {Spec.Heads.level(Some{h}, Some{h}) == True{}: B
     case Spec.Head{r, b, n, t}:
       Shared.Eq.refl(~U32, ~U32.is_eq, Shared.U32.laws(), n)
 
+# the step that the owners in the tip of the head h decided next on the line
+# c, in a round up to k, if they did
+def Advance.found(+s: Spec.State(), c: Ledgers.Chain, +h: Spec.Head, k: Nat) -> Maybe<&2, Ledgers.Vote>:
+  Maybe.bind(
+    &2,
+    Spec.Tip,
+    Ledgers.Vote,
+    Spec.Head.tip(s, h),
+    t => Spec.Height.decide(s, c, Spec.Head.next(h), Spec.Line.owners(s, t), k)
+  )
+
+# the step that the owners in the tip of the head h decided next on the line
+# c, in a round of which the node holds a ballot, if they did
+def Advance.vote(+s: Spec.State(), +c: Ledgers.Chain, +h: Spec.Head) -> Maybe<&2, Ledgers.Vote>:
+  Advance.found(s, c, h, Spec.Round.seen(s, c, Spec.Head.next(h)))
+
+# the head h after the step m: one height up, at the tip that the step names
+# (no step, or one that names no tip: h)
+def Head.step(h: Spec.Head, m: Maybe<&2, Ledgers.Vote>) -> Spec.Head:
+  match h m:
+    case Spec.Head{r, b, n, th} Some{Ledgers.Vote{before, qs, Some{x}}}:
+      Spec.Head{r, b, U32.inc(n), Some{x}}
+    case x y:
+      x
+
 # that the head of the line c in the node s2, when it is not at the height of
 # h, is x
 def Moves(s2: Spec.State(), c: Ledgers.Chain, h: Spec.Head, x: Spec.Head) -> Type:
@@ -6856,7 +6862,7 @@ def Advance.step.moves(
   h: Spec.Head,
   t: Spec.Tip,
   m: Maybe<&2, Ledgers.Vote>
-) -> {Spec.Node.head_of(s, c) == Some{h}: Maybe<&2, Spec.Head>} -> Moves(Spec.Advance.step(s, c, h, t, m), c, h, Spec.Head.step(h, m)):
+) -> {Spec.Node.head_of(s, c) == Some{h}: Maybe<&2, Spec.Head>} -> Moves(Spec.Advance.step(s, c, h, t, m), c, h, Head.step(h, m)):
   match h m:
     case Spec.Head{+r, +br, +next, +th} Some{Ledgers.Vote{before, +qs, +after}}:
       +em => Moves.when(
@@ -6865,7 +6871,7 @@ def Advance.step.moves(
         s,
         c,
         Spec.Head{r, br, next, th},
-        Spec.Head.step(Spec.Head{r, br, next, th}, Some{Ledgers.Vote{before, qs, after}}),
+        Head.step(Spec.Head{r, br, next, th}, Some{Ledgers.Vote{before, qs, after}}),
         Advance.ran.moves(
           s,
           c,
@@ -6876,7 +6882,7 @@ def Advance.step.moves(
           qs,
           Spec.Step.run(s, c, t, qs),
           Spec.Head{r, br, next, th},
-          Spec.Head.step(Spec.Head{r, br, next, th}, Some{Ledgers.Vote{before, qs, after}}),
+          Head.step(Spec.Head{r, br, next, th}, Some{Ledgers.Vote{before, qs, after}}),
           em,
           t2 => er =>
             %Equal.sym(
@@ -6892,7 +6898,7 @@ def Advance.step.moves(
               )(er)
             ): {
               Spec.Head{r, br, U32.inc(next), Some{Spec.Tip.hash(t2)}}
-                == Spec.Head.step(Spec.Head{r, br, next, th}, Some{Ledgers.Vote{before, qs, _}}): Spec.Head
+                == Head.step(Spec.Head{r, br, next, th}, Some{Ledgers.Vote{before, qs, _}}): Spec.Head
             }
             {==}
         ),
@@ -6900,7 +6906,7 @@ def Advance.step.moves(
           s,
           c,
           Spec.Head{r, br, next, th},
-          Spec.Head.step(Spec.Head{r, br, next, th}, Some{Ledgers.Vote{before, qs, after}}),
+          Head.step(Spec.Head{r, br, next, th}, Some{Ledgers.Vote{before, qs, after}}),
           em
         )
       )
@@ -6918,16 +6924,16 @@ def Advance.at.moves(
   Spec.Advance.at(s, c, h, m),
   c,
   h,
-  Spec.Head.step(h, Spec.Advance.vote(s, c, h))
+  Head.step(h, Advance.vote(s, c, h))
 ):
   match m:
     case None{}:
-      em => et => Stay(s, c, h, Spec.Head.step(h, Spec.Advance.vote(s, c, h)), em)
+      em => et => Stay(s, c, h, Head.step(h, Advance.vote(s, c, h)), em)
     case Some{+t}:
       em => et =>
         %Equal.sym(
           Maybe<&2, Ledgers.Vote>,
-          Spec.Advance.vote(s, c, h),
+          Advance.vote(s, c, h),
           Spec.Height.decide(s, c, Spec.Head.next(h), Spec.Line.owners(s, t), Spec.Round.seen(s, c, Spec.Head.next(h))),
           Equal.cong(
             Maybe<&2, Spec.Tip>,
@@ -6953,7 +6959,7 @@ def Advance.at.moves(
           ),
           c,
           h,
-          Spec.Head.step(h, _)
+          Head.step(h, _)
         )
         Advance.step.moves(
           s,
@@ -6963,13 +6969,22 @@ def Advance.at.moves(
           Spec.Height.decide(s, c, Spec.Head.next(h), Spec.Line.owners(s, t), Spec.Round.seen(s, c, Spec.Head.next(h)))
         )(em)
 
-def Spec.Node.advance_decided(s, c, h):
+# a head moves only to the tip that the owners in its tip decided next
+def Advance.decided(
+  +s: Spec.State(),
+  c: Ledgers.Chain,
+  +h: Spec.Head
+) -> {Spec.Node.head_of(s, c) == Some{h}: Maybe<&2, Spec.Head>} -> {
+  Spec.Heads.level(Some{h}, Spec.Node.head_of(Spec.Node.advance(s, c), c)) == False{}: Bool
+} -> {
+  Spec.Node.head_of(Spec.Node.advance(s, c), c) == Some{Head.step(h, Advance.vote(s, c, h))}: Maybe<&2, Spec.Head>
+}:
   +em =>
     %Equal.sym(Maybe<&2, Spec.Head>, Spec.Node.head_of(s, c), Some{h}, em): Moves(
       Spec.Advance.head(s, c, _),
       c,
       h,
-      Spec.Head.step(h, Spec.Advance.vote(s, c, h))
+      Head.step(h, Advance.vote(s, c, h))
     )
     Advance.at.moves(s, c, h, Spec.Head.tip(s, h))(em)({==})
 
@@ -7002,171 +7017,10 @@ def Found.elim(
   +h: Spec.Head,
   k: Nat,
   -v: Ledgers.Vote
-) -> {Spec.Advance.found(s, c, h, k) == Some{v}: Maybe<&2, Ledgers.Vote>} -> (@t: Spec.Tip -> @q: Nat -> {
+) -> {Advance.found(s, c, h, k) == Some{v}: Maybe<&2, Ledgers.Vote>} -> (@t: Spec.Tip -> @q: Nat -> {
   Spec.Head.tip(s, h) == Some{t}: Maybe<&2, Spec.Tip>
 } -> {Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(s), Ledgers.Where{c, Spec.Head.next(h), q}, Spec.Line.owners(s, t)) == Some{v}: Maybe<&2, Ledgers.Vote>} -> R) -> R:
   Found.elim.at(R, s, c, h, k, v, Spec.Head.tip(s, h))({==})
-
-# the steps that two nodes found at one head are the same, when their ledgers
-# do not clash and the rounds of the height decide one step
-def Agree.votes(
-  +a: Spec.State(),
-  +b: Spec.State(),
-  +u: Spec.State(),
-  +c: Ledgers.Chain,
-  +h: Spec.Head,
-  ka: Nat,
-  kb: Nat,
-  +v1: Ledgers.Vote,
-  +v2: Ledgers.Vote,
-  +ga: {Spec.Node.grows(a, u) == True{}: Bool},
-  +gb: {Spec.Node.grows(b, u) == True{}: Bool},
-  one: Spec.Line.One(u, c)
-) -> {Spec.Advance.found(a, c, h, ka) == Some{v1}: Maybe<&2, Ledgers.Vote>} -> {
-  Spec.Advance.found(b, c, h, kb) == Some{v2}: Maybe<&2, Ledgers.Vote>
-} -> {v1 == v2: Ledgers.Vote}:
-  ea => eb => Found.elim({v1 == v2: Ledgers.Vote}, a, c, h, ka, v1)(ea)(
-    +t => +q => +et => ed => Found.elim({v1 == v2: Ledgers.Vote}, b, c, h, kb, v2)(eb)(
-      +tb => +q2 => etb => edb => one(h)(t)(Head.tip.grows(a, u, h, t, ga)(et))(q)(q2)(v1)(v2)(
-        Decide.up(a, u, t, Ledgers.Where{c, Spec.Head.next(h), q}, v1, ga)(ed)
-      )(
-        %Equal.sym(
-          Spec.Tip,
-          t,
-          tb,
-          Shared.Maybe.some_inj(
-            Spec.Tip,
-            t,
-            tb,
-            Equal.trans(
-              Maybe<&2, Spec.Tip>,
-              Some{t},
-              Spec.Head.tip(u, h),
-              Some{tb},
-              Equal.sym(Maybe<&2, Spec.Tip>, Spec.Head.tip(u, h), Some{t}, Head.tip.grows(a, u, h, t, ga)(et)),
-              Head.tip.grows(b, u, h, tb, gb)(etb)
-            )
-          )
-        ): {Ledgers.State.decide(~Spec.Ask, Spec.State.ledger(u), Ledgers.Where{c, Spec.Head.next(h), q2}, Spec.Line.owners(u, _)) == Some{v2}: Maybe<&2, Ledgers.Vote>}
-        Decide.up(b, u, tb, Ledgers.Where{c, Spec.Head.next(h), q2}, v2, gb)(edb)
-      )
-    )
-  )
-
-# two nodes whose ledgers do not clash, at the same head, step it the same
-def Agree.steps(
-  +a: Spec.State(),
-  +b: Spec.State(),
-  +u: Spec.State(),
-  +c: Ledgers.Chain,
-  h: Spec.Head,
-  va: Maybe<&2, Ledgers.Vote>,
-  vb: Maybe<&2, Ledgers.Vote>,
-  ga: {Spec.Node.grows(a, u) == True{}: Bool},
-  gb: {Spec.Node.grows(b, u) == True{}: Bool},
-  one: Spec.Line.One(u, c)
-) -> {Spec.Advance.vote(a, c, h) == va: Maybe<&2, Ledgers.Vote>} -> {Spec.Advance.vote(b, c, h) == vb: Maybe<&2, Ledgers.Vote>} -> {Spec.Heads.level(Some{h}, Some{Spec.Head.step(h, va)}) == False{}: Bool} -> {Spec.Heads.level(Some{h}, Some{Spec.Head.step(h, vb)}) == False{}: Bool} -> {
-  Spec.Head.step(h, va) == Spec.Head.step(h, vb): Spec.Head
-}:
-  match h va vb:
-    case Spec.Head{+r, +br, +n, +th} Some{+v1} Some{+v2}:
-      ea => eb => ma => mb => Equal.cong(
-        Ledgers.Vote,
-        Spec.Head,
-        v => Spec.Head.step(Spec.Head{r, br, n, th}, Some{v}),
-        v1,
-        v2,
-        Agree.votes(
-          a,
-          b,
-          u,
-          c,
-          Spec.Head{r, br, n, th},
-          Spec.Round.seen(a, c, n),
-          Spec.Round.seen(b, c, n),
-          v1,
-          v2,
-          ga,
-          gb,
-          one
-        )(ea)(eb)
-      )
-    case Spec.Head{r, br, +n, th} None{} y:
-      ea => eb => ma => mb => Empty.absurd(
-        {Spec.Head{r, br, n, th} == Spec.Head.step(Spec.Head{r, br, n, th}, y): Spec.Head},
-        Shared.Bool.false_ne_true(
-          Equal.trans(
-            Bool,
-            False{},
-            U32.is_eq(n, n),
-            True{},
-            Equal.sym(Bool, U32.is_eq(n, n), False{}, ma),
-            Shared.Eq.refl(~U32, ~U32.is_eq, Shared.U32.laws(), n)
-          )
-        )
-      )
-    case Spec.Head{r, br, +n, th} Some{v1} None{}:
-      ea => eb => ma => mb => Empty.absurd(
-        {
-          Spec.Head.step(Spec.Head{r, br, n, th}, Some{v1}) == Spec.Head{r, br, n, th}: Spec.Head
-        },
-        Shared.Bool.false_ne_true(
-          Equal.trans(
-            Bool,
-            False{},
-            U32.is_eq(n, n),
-            True{},
-            Equal.sym(Bool, U32.is_eq(n, n), False{}, mb),
-            Shared.Eq.refl(~U32, ~U32.is_eq, Shared.U32.laws(), n)
-          )
-        )
-      )
-
-def Spec.Node.advance_agrees(a, b, u, c, h):
-  ga => gb => one => +ea => +eb => +la => +lb => Equal.trans(
-    Maybe<&2, Spec.Head>,
-    Spec.Node.head_of(Spec.Node.advance(a, c), c),
-    Some{Spec.Head.step(h, Spec.Advance.vote(a, c, h))},
-    Spec.Node.head_of(Spec.Node.advance(b, c), c),
-    Spec.Node.advance_decided(a, c, h)(ea)(la),
-    Equal.trans(
-      Maybe<&2, Spec.Head>,
-      Some{Spec.Head.step(h, Spec.Advance.vote(a, c, h))},
-      Some{Spec.Head.step(h, Spec.Advance.vote(b, c, h))},
-      Spec.Node.head_of(Spec.Node.advance(b, c), c),
-      Equal.cong(
-        Spec.Head,
-        Maybe<&2, Spec.Head>,
-        x => Some{x},
-        Spec.Head.step(h, Spec.Advance.vote(a, c, h)),
-        Spec.Head.step(h, Spec.Advance.vote(b, c, h)),
-        Agree.steps(
-          a,
-          b,
-          u,
-          c,
-          h,
-          Spec.Advance.vote(a, c, h),
-          Spec.Advance.vote(b, c, h),
-          ga,
-          gb,
-          one
-        )({==})({==})(
-          %Spec.Node.advance_decided(a, c, h)(ea)(la): {Spec.Heads.level(Some{h}, _) == False{}: Bool}
-          la
-        )(
-          %Spec.Node.advance_decided(b, c, h)(eb)(lb): {Spec.Heads.level(Some{h}, _) == False{}: Bool}
-          lb
-        )
-      ),
-      Equal.sym(
-        Maybe<&2, Spec.Head>,
-        Spec.Node.head_of(Spec.Node.advance(b, c), c),
-        Some{Spec.Head.step(h, Spec.Advance.vote(b, c, h))},
-        Spec.Node.advance_decided(b, c, h)(eb)(lb)
-      )
-    )
-  )
 
 # Writes
 # ------
@@ -7552,7 +7406,7 @@ def Spec.Seal.fits_own(seed, x, last, k, n, f):
 # a head that no step moves is at its own height
 def Level.none(
   x: Spec.Head
-) -> {Spec.Heads.level(Some{x}, Some{Spec.Head.step(x, None{})}) == True{}: Bool}:
+) -> {Spec.Heads.level(Some{x}, Some{Head.step(x, None{})}) == True{}: Bool}:
   match x:
     case Spec.Head{r, b, n, t}:
       Shared.Eq.refl(~U32, ~U32.is_eq, Shared.U32.laws(), n)
@@ -7939,8 +7793,8 @@ def Spec.Line.at_agrees(rs1, rs2, a, b, u, c, h, x, y):
 def Moved.step(
   h: Spec.Head,
   v: Ledgers.Vote
-) -> {Spec.Heads.level(Some{h}, Some{Spec.Head.step(h, Some{v})}) == False{}: Bool} -> {
-  Spec.Head.moved(h, Some{v}) == Some{Spec.Head.step(h, Some{v})}: Maybe<&2, Spec.Head>
+) -> {Spec.Heads.level(Some{h}, Some{Head.step(h, Some{v})}) == False{}: Bool} -> {
+  Spec.Head.moved(h, Some{v}) == Some{Head.step(h, Some{v})}: Maybe<&2, Spec.Head>
 }:
   match h v:
     case Spec.Head{r, b, n, th} Ledgers.Vote{before, qs, Some{y}}:
@@ -7971,20 +7825,20 @@ def Advance.at.one(
   +c: Ledgers.Chain,
   +h: Spec.Head,
   m: Maybe<&2, Ledgers.Vote>
-) -> {Spec.Advance.vote(s, c, h) == m: Maybe<&2, Ledgers.Vote>} -> {
-  Spec.Heads.level(Some{h}, Some{Spec.Head.step(h, m)}) == False{}: Bool
-} -> Exists(Nat, q => {Spec.Line.at([q], s, c, h) == Some{Spec.Head.step(h, m)}: Maybe<&2, Spec.Head>}):
+) -> {Advance.vote(s, c, h) == m: Maybe<&2, Ledgers.Vote>} -> {
+  Spec.Heads.level(Some{h}, Some{Head.step(h, m)}) == False{}: Bool
+} -> Exists(Nat, q => {Spec.Line.at([q], s, c, h) == Some{Head.step(h, m)}: Maybe<&2, Spec.Head>}):
   match m:
     case None{}:
       em => hl => Empty.absurd(
-        Exists(Nat, q => {Spec.Line.at([q], s, c, h) == Some{Spec.Head.step(h, None{})}: Maybe<&2, Spec.Head>}),
+        Exists(Nat, q => {Spec.Line.at([q], s, c, h) == Some{Head.step(h, None{})}: Maybe<&2, Spec.Head>}),
         Shared.Bool.false_ne_true(
           Equal.trans(
             Bool,
             False{},
-            Spec.Heads.level(Some{h}, Some{Spec.Head.step(h, None{})}),
+            Spec.Heads.level(Some{h}, Some{Head.step(h, None{})}),
             True{},
-            Equal.sym(Bool, Spec.Heads.level(Some{h}, Some{Spec.Head.step(h, None{})}), False{}, hl),
+            Equal.sym(Bool, Spec.Heads.level(Some{h}, Some{Head.step(h, None{})}), False{}, hl),
             Level.none(h)
           )
         )
@@ -7992,7 +7846,7 @@ def Advance.at.one(
     case Some{+v}:
       em => hl =>
         Found.elim(
-          Exists(Nat, q => {Spec.Line.at([q], s, c, h) == Some{Spec.Head.step(h, Some{v})}: Maybe<&2, Spec.Head>}),
+          Exists(Nat, q => {Spec.Line.at([q], s, c, h) == Some{Head.step(h, Some{v})}: Maybe<&2, Spec.Head>}),
           s,
           c,
           h,
@@ -8018,7 +7872,7 @@ def Advance.at.one(
                     )
                   )
                 )
-                  == Some{Spec.Head.step(h, Some{v})}: Maybe<&2, Spec.Head>
+                  == Some{Head.step(h, Some{v})}: Maybe<&2, Spec.Head>
               }
               %Equal.sym(
                 Maybe<&2, Ledgers.Vote>,
@@ -8030,7 +7884,7 @@ def Advance.at.one(
                 ),
                 Some{v},
                 d
-              ): {Spec.Head.moved(h, _) == Some{Spec.Head.step(h, Some{v})}: Maybe<&2, Spec.Head>}
+              ): {Spec.Head.moved(h, _) == Some{Head.step(h, Some{v})}: Maybe<&2, Spec.Head>}
               Moved.step(h, v)(hl)
             )
           }
@@ -8041,11 +7895,11 @@ def Spec.Node.advance_at(s, c, h):
     %Equal.sym(
       Maybe<&2, Spec.Head>,
       Spec.Node.head_of(Spec.Node.advance(s, c), c),
-      Some{Spec.Head.step(h, Spec.Advance.vote(s, c, h))},
-      Spec.Node.advance_decided(s, c, h)(eh)(hl)
+      Some{Head.step(h, Advance.vote(s, c, h))},
+      Advance.decided(s, c, h)(eh)(hl)
     ): Exists(Nat, q => {Spec.Line.at([q], s, c, h) == _: Maybe<&2, Spec.Head>})
-    Advance.at.one(s, c, h, Spec.Advance.vote(s, c, h))({==})(
-      %Spec.Node.advance_decided(s, c, h)(eh)(hl): {Spec.Heads.level(Some{h}, _) == False{}: Bool}
+    Advance.at.one(s, c, h, Advance.vote(s, c, h))({==})(
+      %Advance.decided(s, c, h)(eh)(hl): {Spec.Heads.level(Some{h}, _) == False{}: Bool}
       hl
     )
 
@@ -9785,17 +9639,6 @@ def Accept.at.waiting(
         )
       )
 
-# the node m, if any, else s, has the waiting requests of s when m has
-def Default.waiting(
-  -s: Spec.State(),
-  m: Maybe<&2, Spec.State()>
-) -> {Spec.State.waiting(s) == Waiting.of(s, m): Tries.Trie<List<&2, Ledgers.Id>>} -> {Spec.State.waiting(s) == Spec.State.waiting(Maybe.default(&2, Spec.State(), m, s)): Tries.Trie<List<&2, Ledgers.Id>>}:
-  match m:
-    case None{}:
-      e => {==}
-    case Some{s2}:
-      e => e
-
 # the ballots that a chain leads to keep the waiting requests, when each one more does
 def Follow.step.waiting(
   -s: Spec.State(),
@@ -11400,18 +11243,6 @@ def Cast.path(+n: String, +s: Spec.State(), +c: Ledgers.Chain) -> Spec.Node.On(s
     Cast.grows(n, s, c),
     Cast.head.heads(n, s, c, Spec.Node.head_of(s, c))
   )
-
-# Node.advance is on the paths, once the head m is known
-def Advance.head.path(
-  +s: Spec.State(),
-  c: Ledgers.Chain,
-  m: Maybe<&2, Spec.Head>
-) -> {Spec.Node.head_of(s, c) == m: Maybe<&2, Spec.Head>} -> Spec.Node.On(s, Spec.Advance.head(s, c, m)):
-  match m:
-    case None{}:
-      em => Path.refl(s)
-    case Some{+h}:
-      em => Advance.at.path(s, c, h, Spec.Head.tip(s, h))(em)({==})
 
 # Advances.kept once the head m is known
 def Advances.at.path(

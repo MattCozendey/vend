@@ -26,9 +26,9 @@ import ../shared/tree.bend as Trees
 # A step takes a tip to the next one: it runs a batch of requests, in order
 # (Step.run), and any node can run it again. The owners of a line cast ballots
 # for steps (Ledgers); a node moves its head of a line only to a step that the
-# owners in its tip decided (a majority of them, or all of them: Quorum.decide),
-# and that it ran itself with the same result (Node.advance). A node's ledger only grows, and its heads only move
-# along steps, so what it answers stays.
+# owners in its tip decided (a majority of them, in one round), and that it
+# ran itself with the same result (Node.advance). A node's ledger only grows,
+# and its heads only move along steps, so what it answers stays.
 
 # Names
 # -----
@@ -3204,14 +3204,6 @@ def Owners.turn(+os: List<&2, String>, h: U32) -> Maybe<&2, String>:
     U32.to_nat(U32.mod(h, U32.from_nat(List.length(&2, String, os))))
   )
 
-# the node n is the node m, if any
-def Turn.is(m: Maybe<&2, String>, n: String) -> Bool:
-  match m:
-    case None{}:
-      False{}
-    case Some{p}:
-      String.eq(p, n)
-
 # the step in the cell m of a ballot, if it holds one
 def Cast.step(m: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>) -> Maybe<&2, Ledgers.Vote>:
   match m:
@@ -3801,22 +3793,6 @@ law Rounds.one:
   for ~fc: Rounds.Same(s, c, h)
   Height.One(s, c, h, os)
 
-# the step that the owners in the tip of the head h decided next on the line
-# c, in a round up to k, if they did
-def Advance.found(+s: State(), +c: Ledgers.Chain, +h: Head, k: Nat) -> Maybe<&2, Ledgers.Vote>:
-  Maybe.bind(
-    &2,
-    Tip,
-    Ledgers.Vote,
-    Head.tip(s, h),
-    t => Height.decide(s, c, Head.next(h), Line.owners(s, t), k)
-  )
-
-# the step that the owners in the tip of the head h decided next on the line
-# c, in a round of which the node holds a ballot, if they did
-def Advance.vote(+s: State(), +c: Ledgers.Chain, +h: Head) -> Maybe<&2, Ledgers.Vote>:
-  Advance.found(s, c, h, Round.seen(s, c, Head.next(h)))
-
 # Node.advance at the head h of the line c, whose tip is m
 def Advance.at(+s: State(), +c: Ledgers.Chain, +h: Head, m: Maybe<&2, Tip>) -> State():
   match m:
@@ -3836,15 +3812,6 @@ def Advance.at(+s: State(), +c: Ledgers.Chain, +h: Head, m: Maybe<&2, Tip>) -> S
           Round.seen(s, c, Head.next(h))
         )
       )
-
-# the head h after the step m: one height up, at the tip that the step names
-# (no step, or one that names no tip: h)
-def Head.step(h: Head, m: Maybe<&2, Ledgers.Vote>) -> Head:
-  match h m:
-    case Head{r, b, n, th} Some{Ledgers.Vote{before, qs, Some{x}}}:
-      Head{r, b, U32.inc(n), Some{x}}
-    case x y:
-      x
 
 # Node.advance once the head m of the line c is known
 def Advance.head(+s: State(), c: Ledgers.Chain, m: Maybe<&2, Head>) -> State():
@@ -5446,38 +5413,6 @@ law Node.draft_some:
     -> {Draft.content(r, b, n, q) == Some{c}: Maybe<&2, Content>}
     -> {Maybe.is_some(&2, Content, Node.draft(s, w, r, b, n)) == True{}: Bool}
 
-# a majority decides, in sequence: a head moves only to the tip that the
-# owners in its tip decided next (Advance.vote)
-law Node.advance_decided:
-  for +s: State()
-  for +c: Ledgers.Chain
-  for +h: Head
-  {Node.head_of(s, c) == Some{h}: Maybe<&2, Head>}
-    -> {Heads.level(Some{h}, Node.head_of(Node.advance(s, c), c)) == False{}: Bool}
-    -> {
-      Node.head_of(Node.advance(s, c), c) == Some{Head.step(h, Advance.vote(s, c, h))}: Maybe<&2, Head>
-    }
-
-# so two nodes at the same head of a line, whose ledgers do not clash (one
-# node u keeps every cell of both, and the rounds of the height decide one
-# step in it), move to the same head
-law Node.advance_agrees:
-  for +a: State()
-  for +b: State()
-  for +u: State()
-  for +c: Ledgers.Chain
-  for +h: Head
-  {Node.grows(a, u) == True{}: Bool}
-    -> {Node.grows(b, u) == True{}: Bool}
-    -> Line.One(u, c)
-    -> {Node.head_of(a, c) == Some{h}: Maybe<&2, Head>}
-    -> {Node.head_of(b, c) == Some{h}: Maybe<&2, Head>}
-    -> {Heads.level(Some{h}, Node.head_of(Node.advance(a, c), c)) == False{}: Bool}
-    -> {Heads.level(Some{h}, Node.head_of(Node.advance(b, c), c)) == False{}: Bool}
-    -> {
-      Node.head_of(Node.advance(a, c), c) == Node.head_of(Node.advance(b, c), c): Maybe<&2, Head>
-    }
-
 # a write that its owners take is what the resource holds after it: in a node
 # that holds the new nodes, the resource reads as the content of the write
 law Judge.write_reads:
@@ -5543,7 +5478,8 @@ law Seal.fits_own:
       == True{}: Bool
   }
 
-# a move of a head is one decided step of its line, in some round
+# a majority decides, in sequence: a head moves only over a step that the
+# owners in its tip decided next, in some round
 law Node.advance_at:
   for +s: State()
   for +c: Ledgers.Chain

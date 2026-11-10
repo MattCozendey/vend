@@ -90,13 +90,11 @@ README claim, then the law.
   chain and that the chain's key signs), `Seal.fits_own` (a ballot sealed with the chain's
   secret fits), `Seal.check_sign`. That no other node can make one is the assumption of
   hash-based signatures; it is not a law.
-- A majority decides, in sequence: `Node.advance_decided` (a head moves only to the tip that the
-  owners in its tip decided next), `Node.advance_agrees` (two nodes at the same head, whose
-  ledgers do not clash, move to the same head). Over a history, measured by `Line.at` (one
-  decided step for each round of a list): `Node.advance_at` (a move is one decided step, in
-  some round), `Line.at_grows` (decided steps stay as a node grows), `Line.at_agrees` (the same
-  number of decided steps from the same head give the same head on any two nodes whose ledgers
-  do not clash, whatever the round of each step).
+- A majority decides, in sequence. A history is measured by `Line.at` (one decided step for
+  each round of a list). `Node.advance_at` (a head moves only over a step that the owners in its
+  tip decided next, in some round), `Line.at_grows` (decided steps stay as a node grows),
+  `Line.at_agrees` (the same number of decided steps from the same head give the same head on
+  any two nodes whose ledgers do not clash, whatever the round of each step).
 - Every head is on the decided chain: `Node.after_on` (a head that is some decided steps from a
   head with a tip stays so, whatever the node does next). A node sets a head in four places: a
   step that it checked, and three that set only a head with no tip (`Path.moved`, `Path.set`).
