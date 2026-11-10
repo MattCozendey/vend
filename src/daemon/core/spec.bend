@@ -3039,9 +3039,9 @@ def Cast.may(+n: String, +s: State(), w: Ledgers.Where, t: Tip, qs: List<&2, Led
     Bool.not(List.is_empty(&2, Ledgers.Id, qs))
   )
 
-# s with the node n's ballot for the step v at the place w, sealed as the
-# next of the node's chain m (none: the store gave the node no key)
-def Cast.seal(+s: State(), +w: Ledgers.Where, n: String, v: Ledgers.Vote, m: Maybe<&2, Chained>) -> State():
+# s with the node n's ballot for the act a at the place w, sealed as the next
+# of the node's chain m (none: the store gave the node no key)
+def Cast.seal(+s: State(), +w: Ledgers.Where, n: String, a: Ledgers.Act, m: Maybe<&2, Chained>) -> State():
   match m:
     case None{}:
       s
@@ -3055,7 +3055,7 @@ def Cast.seal(+s: State(), +w: Ledgers.Where, n: String, v: Ledgers.Vote, m: May
           s,
           Ledgers.Ballot.make(
             Seal.secret(seed, r, j),
-            Ledgers.Signed{w, n, Ledgers.Act.Vote{v, []}},
+            Ledgers.Signed{w, n, a},
             last,
             Seals.Seal.public(Seal.secret(seed, r, U32.inc(j)))
           )
@@ -3063,23 +3063,24 @@ def Cast.seal(+s: State(), +w: Ledgers.Where, n: String, v: Ledgers.Vote, m: May
         s
       )
 
-# the state m with the node n's ballot v at the place w, else s
-def Cast.vote(s: State(), m: Maybe<&2, State()>, +w: Ledgers.Where, +n: String, v: Ledgers.Vote) -> State():
+# the state m with the node n's ballot for the act a at the place w, else s
+def Cast.vote(s: State(), m: Maybe<&2, State()>, +w: Ledgers.Where, +n: String, a: Ledgers.Act) -> State():
   match m:
     case None{}:
       s
     case Some{s3}:
       +s4 = State.led(s, State.ledger(s3))
-      Cast.seal(s4, w, n, v, Seal.chain(s4, Where.store(w), n))
+      Cast.seal(s4, w, n, a, Seal.chain(s4, Where.store(w), n))
 
-# s with the node n's ballot at the place w for the step that ran qs from the
-# tip of the hash th, when the run m is there: the run's nodes, its tip, and
-# the ballot
+# s with the node n's vote at the place w for the step that ran qs from the
+# tip of the hash th, which the passes of the nodes from allow, when the run m
+# is there: the run's nodes, its tip, and the ballot
 def Cast.put(
   n: String,
   w: Ledgers.Where,
   th: Maybe<&2, Hashes.Hash>,
   qs: List<&2, Ledgers.Id>,
+  from: List<&2, String>,
   m: Maybe<&2, Run>,
   s: State()
 ) -> State():
@@ -3087,7 +3088,13 @@ def Cast.put(
     case None{}:
       s
     case Some{Run{s2, +t2, ns}}:
-      Cast.vote(s, State.put(s2, [Tip.words(t2)]), w, n, Ledgers.Vote{th, qs, Some{Tip.hash(t2)}})
+      Cast.vote(
+        s,
+        State.put(s2, [Tip.words(t2)]),
+        w,
+        n,
+        Ledgers.Act.Vote{Ledgers.Vote{th, qs, Some{Tip.hash(t2)}}, from}
+      )
 
 # the change q is one of who decides: a first key of a node, a group, the
 # owners of a line, or a new branch. The owners of a store decide these, so an
@@ -3154,28 +3161,34 @@ def Cast.step(m: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>) -> Maybe<&2, Ledgers
 def Cast.of(s: State(), w: Ledgers.Where, p: String) -> Maybe<&2, Ledgers.Vote>:
   Cast.step(Ledgers.State.get(~Ask, State.ledger(s), Ledgers.Slot.vote(w, p)))
 
-# what a node casts for: the requests of a step, and its own run of them
-# (none: it cannot run them now)
+# what a node casts for: the requests of a step, its own run of them (none:
+# it cannot run them now), and the nodes whose passes allow the step
 type Plan is Data:
-  Plan{asks: List<&2, Ledgers.Id>, run: Maybe<&2, Run>}
+  Plan{asks: List<&2, Ledgers.Id>, run: Maybe<&2, Run>, from: List<&2, String>}
 
 # the requests of the plan p
 def Plan.asks(p: Plan) -> List<&2, Ledgers.Id>:
   match p:
-    case Plan{qs, m}:
+    case Plan{qs, m, from}:
       qs
 
 # the run of the plan p
 def Plan.run(p: Plan) -> Maybe<&2, Run>:
   match p:
-    case Plan{qs, m}:
+    case Plan{qs, m, from}:
       m
 
-# the plan of the owner whose turn it is, on the line c at the tip t: the
+# the nodes whose passes allow the step of the plan p
+def Plan.from(p: Plan) -> List<&2, String>:
+  match p:
+    case Plan{qs, m, from}:
+      from
+
+# the plan of an owner that proposes freely, on the line c at the tip t: the
 # requests that wait at it, that it may cast for and that can run now
-def Plan.own(+s: State(), +c: Ledgers.Chain, t: Tip) -> Plan:
+def Plan.own(+s: State(), +c: Ledgers.Chain, t: Tip, from: List<&2, String>) -> Plan:
   +p = Step.some(c, Cast.mine(s, Wait.of(s, c)), Run{s, t, []})
-  Plan{Picked.asks(p), Some{Picked.run(p)}}
+  Plan{Picked.asks(p), Some{Picked.run(p)}, from}
 
 # the node s may cast for each request of qs
 def Cast.all_mine(+s: State(), qs: List<&2, Ledgers.Id>) -> Bool:
@@ -3193,63 +3206,342 @@ def Plan.fit(after: Maybe<&2, Hashes.Hash>, m: Maybe<&2, Run>) -> Maybe<&2, Run>
     case Some{Run{s2, +t2, ns}}:
       Shared.Maybe.when(Run, Root.same(after, Some{Tip.hash(t2)}), u => Some{Run{s2, t2, ns}})
 
-# the plan of another owner, on the line c at the tip t of the hash th: the
-# step m that the owner whose turn it is cast, when it starts from this tip,
-# the node may cast for each of its requests, and the node's own run of them
-# gives the same tip
+# the plan for a step m that another ballot names, on the line c at the tip t
+# of the hash th: when the step starts from this tip, the node may cast for
+# each of its requests, and the node's own run of them gives the same tip
 def Plan.copy(
   +s: State(),
   +c: Ledgers.Chain,
   t: Tip,
   th: Maybe<&2, Hashes.Hash>,
-  m: Maybe<&2, Ledgers.Vote>
+  m: Maybe<&2, Ledgers.Vote>,
+  from: List<&2, String>
 ) -> Plan:
   match m:
     case None{}:
-      Plan{[], None{}}
+      Plan{[], None{}, []}
     case Some{Ledgers.Vote{before, +qs, after}}:
       Shared.Bool.when(
         Plan,
         List.all.if(u => Cast.all_mine(s, qs), Root.same(before, th)),
-        u => Plan{qs, Plan.fit(after, Step.run(s, c, t, qs))},
-        u => Plan{[], None{}}
+        u => Plan{qs, Plan.fit(after, Step.run(s, c, t, qs)), from},
+        u => Plan{[], None{}, []}
       )
 
+# Rounds
+# ------
+# The decision of a height goes in rounds. In the round r the owner (h + r),
+# in turn, proposes. In the first round it proposes freely. A node that waited
+# too long passes to the next round: it casts no vote in the rounds below any
+# more, and names its last vote at the height. In a later round the proposer
+# needs the passes of a majority; it proposes the last vote of the highest
+# round among them, if there is one, so a step that a round decided is the
+# only one that a later round can decide.
+
+# the round of the place w
+def Where.round(w: Ledgers.Where) -> U32:
+  match w:
+    case Ledgers.Where{c, h, r}:
+      r
+
+# what the node p did at the place w, in the cell m of its vote
+def Cast.act.of(m: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>) -> Maybe<&2, Ledgers.Act>:
+  match m:
+    case Some{Cells.One{Ledgers.Entry.Vote{Ledgers.Ballot{Ledgers.Signed{w, n, a}, l}}}}:
+      Some{a}
+    case x:
+      None{}
+
+# the vote of the node p at the place w, with the nodes whose passes allow
+# it, if s holds it
+def Cast.act(s: State(), w: Ledgers.Where, p: String) -> Maybe<&2, Ledgers.Act>:
+  Cast.act.of(Ledgers.State.get(~Ask, State.ledger(s), Ledgers.Slot.vote(w, p)))
+
+# the highest round, up to k, to which the node n passed at the height h of
+# the line c (0: it passed to none)
+def Round.mine(+n: String, +s: State(), +c: Ledgers.Chain, +h: U32, k: Nat) -> U32:
+  match k:
+    case 0n:
+      0
+    case 1n+(+p):
+      Shared.Bool.when(
+        U32,
+        Maybe.is_some(
+          &2,
+          Maybe<&2, Ledgers.Last>,
+          Ledgers.State.passed(~Ask, State.ledger(s), Ledgers.Where{c, h, U32.from_nat(1n+p)}, n)
+        ),
+        u => U32.from_nat(1n+p),
+        u => Round.mine(n, s, c, h, p)
+      )
+
+# the vote m of the round r, as a last vote, else what rest gives
+def Last.or(r: U32, m: Maybe<&2, Ledgers.Vote>, rest: Unit -> Maybe<&2, Ledgers.Last>) -> Maybe<&2, Ledgers.Last>:
+  match m:
+    case Some{v}:
+      Some{Ledgers.Last{r, v}}
+    case None{}:
+      rest(Unit{})
+
+# the last vote of the node n at the height h of the line c, in a round up to
+# k, if it cast one
+def Last.mine(+n: String, +s: State(), +c: Ledgers.Chain, +h: U32, k: Nat) -> Maybe<&2, Ledgers.Last>:
+  match k:
+    case 0n:
+      Last.or(0, Cast.of(s, Ledgers.Where{c, h, 0}, n), u => None{})
+    case 1n+(+p):
+      Last.or(
+        U32.from_nat(1n+p),
+        Cast.of(s, Ledgers.Where{c, h, U32.from_nat(1n+p)}, n),
+        u => Last.mine(n, s, c, h, p)
+      )
+
+# the nodes of os whose pass to the place w the node s holds
+def Passes.of(+s: State(), +w: Ledgers.Where, os: List<&2, String>) -> List<&2, String>:
+  match os:
+    case Nil{}:
+      []
+    case Con{+o, r}:
+      List.filter.put(
+        String,
+        o,
+        Passes.of(s, w, r),
+        Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Ledgers.State.passed(~Ask, State.ledger(s), w, o))
+      )
+
+# the last vote of the higher round of a and b
+def Last.newer(a: Maybe<&2, Ledgers.Last>, b: Maybe<&2, Ledgers.Last>) -> Maybe<&2, Ledgers.Last>:
+  match a b:
+    case None{} y:
+      y
+    case Some{x} None{}:
+      Some{x}
+    case Some{Ledgers.Last{+r1, v1}} Some{Ledgers.Last{+r2, v2}}:
+      Shared.Bool.when(
+        Maybe<&2, Ledgers.Last>,
+        U32.is_lt(r1, r2),
+        u => Some{Ledgers.Last{r2, v2}},
+        u => Some{Ledgers.Last{r1, v1}}
+      )
+
+# the last vote that a pass names, flattened
+def Passed.last(m: Maybe<&2, Maybe<&2, Ledgers.Last>>) -> Maybe<&2, Ledgers.Last>:
+  match m:
+    case Some{x}:
+      x
+    case None{}:
+      None{}
+
+# the last vote of the highest round that the passes of the nodes from to the
+# place w name, if any names one
+def Passes.last(+s: State(), +w: Ledgers.Where, from: List<&2, String>) -> Maybe<&2, Ledgers.Last>:
+  match from:
+    case Nil{}:
+      None{}
+    case Con{o, r}:
+      Last.newer(
+        Passed.last(Ledgers.State.passed(~Ask, State.ledger(s), w, o)),
+        Passes.last(s, w, r)
+      )
+
+# the nodes from are a majority of the owners os
+def Major(os: List<&2, String>, +from: List<&2, String>) -> Bool:
+  Nat.is_lt(
+    List.length(&2, String, os),
+    Nat.add(List.length(&2, String, from), List.length(&2, String, from))
+  )
+
+# the last vote m, if any, is for the step v
+def Last.is(m: Maybe<&2, Ledgers.Last>, v: Ledgers.Vote) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{Ledgers.Last{r, x}}:
+      Ledgers.Vote.is_eq(x, v)
+
+# the passes of the nodes from allow a vote for the step v at the place w of
+# the owners os: in the first round, any step; later, the nodes are the owners
+# that passed to w, as the proposer held them, they are a majority, and v is
+# the last vote of the highest round among them, if any
+def Allowed(+s: State(), +w: Ledgers.Where, +os: List<&2, String>, v: Ledgers.Vote, +from: List<&2, String>) -> Bool:
+  List.any.if(
+    u => List.all.if(
+      u2 => List.all.if(
+        u3 => Last.is(Passes.last(s, w, from), v),
+        Major(os, from)
+      ),
+      Ledgers.Owners.is_eq(Passes.of(s, w, from), from)
+    ),
+    U32.is_eq(Where.round(w), 0)
+  )
+
+# the plan of the proposer of a later round at the place w, once the nodes
+# from that passed to it are known: none until they are a majority; then the
+# last vote of the highest round among them, else what waits at the proposer
+def Plan.later(
+  +s: State(),
+  +c: Ledgers.Chain,
+  +w: Ledgers.Where,
+  +t: Tip,
+  th: Maybe<&2, Hashes.Hash>,
+  +os: List<&2, String>,
+  +from: List<&2, String>,
+  m: Maybe<&2, Ledgers.Last>
+) -> Plan:
+  match m:
+    case None{}:
+      Shared.Bool.when(Plan, Major(os, from), u => Plan.own(s, c, t, from), u => Plan{[], None{}, []})
+    case Some{Ledgers.Last{r, v}}:
+      Shared.Bool.when(
+        Plan,
+        Major(os, from),
+        u => Plan.copy(s, c, t, th, Some{v}, from),
+        u => Plan{[], None{}, []}
+      )
+
+# the plan of the proposer at the place w
+def Plan.lead(
+  +s: State(),
+  +c: Ledgers.Chain,
+  +w: Ledgers.Where,
+  +t: Tip,
+  th: Maybe<&2, Hashes.Hash>,
+  +os: List<&2, String>
+) -> Plan:
+  +from = Passes.of(s, w, os)
+  Shared.Bool.when(
+    Plan,
+    U32.is_eq(Where.round(w), 0),
+    u => Plan.own(s, c, t, []),
+    u => Plan.later(s, c, w, t, th, os, from, Passes.last(s, w, from))
+  )
+
+# the plan of another owner at the place w, once what the proposer did there
+# is known (m): the proposer's step, when its passes allow it
+def Plan.follow(
+  +s: State(),
+  +c: Ledgers.Chain,
+  +w: Ledgers.Where,
+  t: Tip,
+  th: Maybe<&2, Hashes.Hash>,
+  +os: List<&2, String>,
+  m: Maybe<&2, Ledgers.Act>
+) -> Plan:
+  match m:
+    case Some{Ledgers.Act.Vote{+v, +from}}:
+      Shared.Bool.when(
+        Plan,
+        Allowed(s, w, os, v, from),
+        u => Plan.copy(s, c, t, th, Some{v}, from),
+        u => Plan{[], None{}, []}
+      )
+    case x:
+      Plan{[], None{}, []}
+
 # what the node n casts for at the place w of the line c, at the tip t of the
-# hash th, when it is turn's turn to propose
+# hash th, with the owners os, when it is turn's turn to propose
 def Plan.of(
   n: String,
   +s: State(),
   +c: Ledgers.Chain,
-  w: Ledgers.Where,
+  +w: Ledgers.Where,
   +t: Tip,
-  th: Maybe<&2, Hashes.Hash>,
+  +th: Maybe<&2, Hashes.Hash>,
+  +os: List<&2, String>,
   turn: Maybe<&2, String>
 ) -> Plan:
   match turn:
     case None{}:
-      Plan{[], None{}}
+      Plan{[], None{}, []}
     case Some{+p}:
       Shared.Bool.when(
         Plan,
         String.eq(p, n),
-        u => Plan.own(s, c, t),
-        u => Plan.copy(s, c, t, th, Cast.of(s, w, p))
+        u => Plan.lead(s, c, w, t, th, os),
+        u => Plan.follow(s, c, w, t, th, os, Cast.act(s, w, p))
       )
+
+# s with the node n's pass to the place w, when n is one of the owners os and
+# did not pass to w: it names its last vote at the height, in a round up to k
+def Pass.to(+n: String, +s: State(), +w: Ledgers.Where, os: List<&2, String>, k: Nat) -> State():
+  match w:
+    case Ledgers.Where{+c, +h, +r}:
+      Shared.Bool.when(
+        State(),
+        List.all.if(
+          u => Maybe.is_none(
+            &2,
+            Maybe<&2, Ledgers.Last>,
+            Ledgers.State.passed(~Ask, State.ledger(s), Ledgers.Where{c, h, r}, n)
+          ),
+          List.contains(~String, ~String.eq, os, n)
+        ),
+        u => Cast.seal(
+          s,
+          Ledgers.Where{c, h, r},
+          n,
+          Ledgers.Act.Pass{Last.mine(n, s, c, h, k)},
+          Seal.chain(s, Where.store(Ledgers.Where{c, h, r}), n)
+        ),
+        u => s
+      )
+
+# s, after the owner n joined the highest round of which it holds a ballot at
+# the height h of the line c: a node casts in the round that the others reached
+def Round.join(+n: String, +s: State(), +c: Ledgers.Chain, +h: U32, os: List<&2, String>) -> State():
+  +top = Round.seen(s, c, h)
+  +k = U32.to_nat(top)
+  Shared.Bool.when(
+    State(),
+    U32.is_lt(Round.mine(n, s, c, h, k), top),
+    u => Pass.to(n, s, Ledgers.Where{c, h, top}, os, k),
+    u => s
+  )
+
+# Node.cast in the round of the node n at the height next of the line c, at
+# the tip t of the hash th
+def Cast.round(+n: String, +s: State(), +c: Ledgers.Chain, +next: U32, +th: Maybe<&2, Hashes.Hash>, +t: Tip) -> State():
+  +os = Line.owners(s, t)
+  +r = Round.mine(n, s, c, next, U32.to_nat(Round.seen(s, c, next)))
+  +w = {Ledgers.Where{c, next, r}: Ledgers.Where}
+  +p = Plan.of(n, s, c, w, t, th, os, Owners.turn(os, U32.add(next, r)))
+  Shared.Bool.when(
+    State(),
+    Cast.may(n, s, w, t, Plan.asks(p)),
+    u => Cast.put(n, w, th, Plan.asks(p), Plan.from(p), Plan.run(p), s),
+    u => s
+  )
 
 # Node.cast at the head h of the line c, whose tip is m
 def Cast.at(+n: String, +s: State(), +c: Ledgers.Chain, h: Head, m: Maybe<&2, Tip>) -> State():
   match h m:
     case Head{r, b, +next, +th} Some{+t}:
-      +p = Plan.of(n, s, c, Ledgers.Where{c, next, 0}, t, th, Owners.turn(Line.owners(s, t), next))
-      Shared.Bool.when(
-        State(),
-        Cast.may(n, s, Ledgers.Where{c, next, 0}, t, Plan.asks(p)),
-        u => Cast.put(n, Ledgers.Where{c, next, 0}, th, Plan.asks(p), Plan.run(p), s),
-        u => s
+      Cast.round(n, Round.join(n, s, c, next, Line.owners(s, t)), c, next, th, t)
+    case x y:
+      s
+
+# Node.pass at the head h of the line c, whose tip is m
+def Pass.at(+n: String, +s: State(), +c: Ledgers.Chain, h: Head, m: Maybe<&2, Tip>) -> State():
+  match h m:
+    case Head{r, b, +next, th} Some{t}:
+      +k = U32.to_nat(Round.seen(s, c, next))
+      Pass.to(
+        n,
+        s,
+        Ledgers.Where{c, next, U32.inc(Round.mine(n, s, c, next, k))},
+        Line.owners(s, t),
+        k
       )
     case x y:
       s
+
+# Node.pass once the head m of the line c is known
+def Pass.head(+n: String, +s: State(), +c: Ledgers.Chain, m: Maybe<&2, Head>) -> State():
+  match m:
+    case None{}:
+      s
+    case Some{+h}:
+      Pass.at(n, s, c, h, Head.tip(s, h))
 
 # Node.cast once the head m of the line c is known
 def Cast.head(n: String, +s: State(), c: Ledgers.Chain, m: Maybe<&2, Head>) -> State():
@@ -3259,10 +3551,10 @@ def Cast.head(n: String, +s: State(), c: Ledgers.Chain, m: Maybe<&2, Head>) -> S
     case Some{+h}:
       Cast.at(n, s, c, h, Head.tip(s, h))
 
-# s, after the node n cast its ballot for the next step of the line c: when
-# it is its turn, the step that runs, from the tip, the requests that wait on
-# the line and can run now; else the step that the owner whose turn it is
-# cast, when the node's own run of it gives the same tip
+# s, after the node n cast its ballot for the next step of the line c, in its
+# round (Rounds): when it is its turn, the step that the rules of the round
+# give it; else the step that the owner whose turn it is cast, when the rules
+# allow it and the node's own run of it gives the same tip
 def Node.cast(n: String, +s: State(), +c: Ledgers.Chain) -> State():
   Cast.head(n, s, c, Node.head_of(s, c))
 
@@ -3455,6 +3747,12 @@ def Step.head(n: String, s: State(), +c: Ledgers.Chain) -> State():
 # s, after the node n did what it can on the line c
 def Node.step(n: String, s: State(), +c: Ledgers.Chain) -> State():
   Step.head(n, Node.open(s, c), c)
+
+# s, after the owner n passed to the next round of the next step of the line
+# c, and did what it can there: the round took too long (the proposer may be
+# away). Transport asks for this; the core has no clock
+def Node.pass(+n: String, +s: State(), +c: Ledgers.Chain) -> State():
+  Node.step(n, Pass.head(n, s, c, Node.head_of(s, c)), c)
 
 # s, after the node n took in the new request q of e
 def Node.ask.new(n: String, +s: State(), +e: Envelope, +q: Ask) -> State():
@@ -4745,13 +5043,14 @@ def Line.Ones(k: Nat, s: State(), c: Ledgers.Chain) -> Type:
 
 # what a node does next: it takes in a request, or what another node sent,
 # or it does a sync, or it keeps new bytes, or a writer connected to it asks
-# for a request that it holds
+# for a request that it holds, or it passes to the next round on a line
 type Deed is Data:
   Deed.Ask{envelope: Envelope, ask: Ask}
   Deed.Take{sent: Ledgers.State(Ask)}
   Deed.Sync{sent: Ledgers.State(Ask)}
   Deed.Keep{bytes: Texts.Bytes()}
   Deed.Consent{id: Ledgers.Id}
+  Deed.Pass{line: Ledgers.Chain}
 
 # s, after the node n did ev
 def Node.does(n: String, s: State(), ev: Deed) -> State():
@@ -4766,6 +5065,8 @@ def Node.does(n: String, s: State(), ev: Deed) -> State():
       Node.keep(s, b)
     case Deed.Consent{i}:
       Node.consent(n, s, i)
+    case Deed.Pass{c}:
+      Node.pass(n, s, c)
 
 # s, after the node n did each of evs, in order: any later state of the node
 def Node.after(+n: String, evs: List<&2, Deed>, s: State()) -> State():
