@@ -827,6 +827,24 @@ law Clash.shut:
   }
     -> {Clash.open(s, h, n, f) == False{}: Bool}
 
+# a merge looks at each resource whose content differs between ours (the
+# tree h) and theirs (ht): Merge.names lists it
+law Merge.names_complete:
+  for +s: Replicas.Node<Requests.Ask>
+  for +h: Maybe<&2, Hashes.Hash>
+  for +ht: Maybe<&2, Hashes.Hash>
+  for +n: Resources.Name
+  {Roots.same(Res.root(s, h, n), Res.root(s, ht, n)) == False{}: Bool}
+    -> {
+      List.contains(
+        ~Resources.Name,
+        ~Resources.Name.is_eq,
+        Merge.names(s, h, ht),
+        n
+      )
+        == True{}: Bool
+    }
+
 # a merge of whole trees keeps what the merge of each resource takes: when the
 # merge of the resource n takes the root x (Pick.merge_theirs, Pick.merge_ours:
 # a change that only one side made), the tree that the merge gives holds n

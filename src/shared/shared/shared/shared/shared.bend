@@ -2259,6 +2259,35 @@ def List.all.if_and(
     case True{}:
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# List.contains as a List.some, with p the test of eq against each value
+def List.contains_some(
+  ~A: Data,
+  ~eq: A -> A -> Bool,
+  l: List<&2, A>,
+  d: A
+) -> {List.contains(~A, ~eq, l, d) == List.some(~A, ~A, ~(g => x => eq(x, g)), l, d): Bool}:
+  match l:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      %Equal.sym(
+        Bool,
+        List.contains(~A, ~eq, r, d),
+        List.some(~A, ~A, ~(g => x => eq(x, g)), r, d),
+        List.contains_some(~A, ~eq, r, d)
+      ): {
+        List.any.if(
+          u => _,
+          eq(x, d)
+        )
+          == List.any.if(u => List.some(~A, ~A, ~(g => x => eq(x, g)), r, d), eq(x, d)): Bool
+      }
+      {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
 # a lazy "or" is Bool.or
 def List.any.if_or(
   hit: Bool,

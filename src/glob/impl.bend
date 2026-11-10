@@ -1969,42 +1969,6 @@ def Slot.step_alike(
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
-# Contains as the "some" of KeySet.unique_some
-def Contains.some(
-  l: List<&2, Char>,
-  d: Char
-) -> {
-  List.contains(
-    ~Char,
-    ~Char.is_eq,
-    l,
-    d
-  )
-    == Shared.List.some(~Char, ~Char, ~(g => x => Char.is_eq(x, g)), l, d): Bool
-}:
-  match l:
-    case Nil{}:
-      {==}
-    case Con{x, r}:
-      %Equal.sym(
-        Bool,
-        List.contains(~Char, ~Char.is_eq, r, d),
-        Shared.List.some(~Char, ~Char, ~(g => x => Char.is_eq(x, g)), r, d),
-        Contains.some(r, d)
-      ): {
-        List.any.if(
-          u => _,
-          Char.is_eq(x, d)
-        )
-          == List.any.if(
-            u => Shared.List.some(~Char, ~Char, ~(g => x => Char.is_eq(x, g)), r, d),
-            Char.is_eq(x, d)
-          ): Bool
-      }
-      {==}
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
 # a mark of the spans ss is one of the characters that the search moves the
 # machine under
 def Abc.has_mark(
@@ -2021,7 +1985,7 @@ def Abc.has_mark(
       List.contains(~Char, ~Char.is_eq, us, d),
       Shared.List.some(~Char, ~Char, ~(g => x => Char.is_eq(x, g)), us, d),
       True{},
-      Contains.some(us, d),
+      Shared.List.contains_some(~Char, ~Char.is_eq, us, d),
       Equal.trans(
         Bool,
         Shared.List.some(~Char, ~Char, ~(g => x => Char.is_eq(x, g)), us, d),
@@ -2046,7 +2010,7 @@ def Abc.has_mark(
             Bool,
             List.contains(~Char, ~Char.is_eq, ms, d),
             Shared.List.some(~Char, ~Char, ~(g => x => Char.is_eq(x, g)), ms, d),
-            Contains.some(ms, d)
+            Shared.List.contains_some(~Char, ~Char.is_eq, ms, d)
           ),
           e
         )

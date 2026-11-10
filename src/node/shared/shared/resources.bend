@@ -29,6 +29,14 @@ def Name.is_eq_sound(+m: Name, +n: Name) -> {Name.is_eq(m, n) == True{}: Bool} -
     case Name{t1} Name{t2}:
       e => Equal.cong(String, Name, z => Name{z}, t1, t2, Texts.String.eq_sound(t1, t2)(e))
 
+# a resource is the same as itself
+def Name.is_eq_refl(n: Name) -> {Name.is_eq(n, n) == True{}: Bool}:
+  Texts.String.eq_refl(Name.show(n))
+
+# the laws of the sameness of resources
+def Name.laws() -> Shared.Eq.Laws(Name, Name.is_eq):
+  (n => Name.is_eq_refl(n), m => n => e => Name.is_eq_sound(m, n)(e))
+
 # the space in the cut c of the text t: t itself when it has no ':'
 def Name.space.cut(c: Maybe<&2, Texts.Cut<String>>, t: String) -> String:
   match c:

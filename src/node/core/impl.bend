@@ -3,6 +3,7 @@ import ../../shared/replica.bend as Replicas
 import ../../shared/shared/formats.bend as Formats
 import ../../shared/shared/ledger.bend as Ledgers
 import ../../shared/shared/rope.bend as Ropes
+import ../../shared/shared/shared/keyset.bend as KeySets
 import ../../shared/shared/shared/reach.bend as Reaches
 import ../../shared/shared/shared/shared/cell.bend as Cells
 import ../../shared/shared/shared/shared/code.bend as Codes
@@ -405,8 +406,9 @@ def Name.key(n: Resources.Name) -> List<&2, Bool>:
   Tries.Trie.text(Resources.Name.show(n))
 
 def Spec.Merge.names(s, h, ht):
-  Tries.Trie.unique(
+  KeySets.KeySet.unique(
     ~Resources.Name,
+    ~Resources.Name.is_eq,
     ~Name.key,
     Res.of.bindings(
       Trees.Tree.diff(
@@ -417,7 +419,7 @@ def Spec.Merge.names(s, h, ht):
         ht
       )
     ),
-    Tries.Trie.new(Unit)
+    Tries.Trie.new(Resources.Name)
   )
 
 # the groups of a store tree, as a graph
@@ -5350,6 +5352,964 @@ def Merge.all.takes(
           ep
         )
       )
+
+# a root, or none, is the same as itself
+def Roots.same_refl(m: Maybe<&2, Ropes.Root>) -> {Spec.Roots.same(m, m) == True{}: Bool}:
+  match m:
+    case None{}:
+      {==}
+    case Some{Ropes.Root{d, hh}}:
+      %Equal.sym(
+        Bool,
+        Nat.is_eq(d, d),
+        True{},
+        Shared.Nat.is_eq_refl(d)
+      ): {Bool.and(_, Hashes.Hash.is_eq(hh, hh)) == True{}: Bool}
+      Hashes.Hash.is_eq_refl(hh)
+
+# a resource that rest holds, Names.put keeps
+def Names.put_keeps(
+  m: Maybe<&2, Resources.Name>,
+  rest: List<&2, Resources.Name>,
+  +n: Resources.Name
+) -> {
+  List.contains(~Resources.Name, ~Resources.Name.is_eq, rest, n) == True{}: Bool
+} -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, Names.put(m, rest), n) == True{}: Bool}:
+  match m:
+    case None{}:
+      e => e
+    case Some{+x}:
+      e =>
+        Equal.trans(
+          Bool,
+          List.any.if(
+            u => List.contains(~Resources.Name, ~Resources.Name.is_eq, rest, n),
+            Resources.Name.is_eq(x, n)
+          ),
+          Bool.or(
+            Resources.Name.is_eq(x, n),
+            List.contains(~Resources.Name, ~Resources.Name.is_eq, rest, n)
+          ),
+          True{},
+          Shared.List.any.if_or(
+            Resources.Name.is_eq(x, n),
+            u => List.contains(~Resources.Name, ~Resources.Name.is_eq, rest, n)
+          ),
+          (
+            %Equal.sym(Bool, List.contains(~Resources.Name, ~Resources.Name.is_eq, rest, n), True{}, e): {Bool.or(Resources.Name.is_eq(x, n), _) == True{}: Bool}
+            Shared.Bool.or_true_right(Resources.Name.is_eq(x, n)))
+        )
+
+# the binding of the resource n, with a value that holds a root, names n
+def Names.binding(
+  +n: Resources.Name,
+  w: List<&2, U32>,
+  r: List<&2, Resources.Name>
+) -> {
+  Maybe.is_some(&2, Ropes.Root, Spec.Res.read(w)) == True{}: Bool
+} -> {
+  List.contains(
+    ~Resources.Name,
+    ~Resources.Name.is_eq,
+    Names.put(Res.binding(Trees.Binding{Spec.Key.res(n), w}), r),
+    n
+  )
+    == True{}: Bool
+}:
+  hr =>
+    %Equal.sym(
+      Bool,
+      Maybe.is_some(&2, Ropes.Root, Spec.Res.read(w)),
+      True{},
+      hr
+    ): {
+      List.contains(
+        ~Resources.Name,
+        ~Resources.Name.is_eq,
+        Names.put(
+          Shared.Bool.when(
+            Maybe<&2, Resources.Name>,
+            _,
+            u => Replicas.Read.whole(
+              Resources.Name,
+              Resources.Name.code.read(Resources.Name.code(n, []))
+            ),
+            u => None{}
+          ),
+          r
+        ),
+        n
+      )
+        == True{}: Bool
+    }
+    %Equal.sym(
+      Maybe<&2, Codes.Read<Resources.Name>>,
+      Resources.Name.code.read(Resources.Name.code(n, [])),
+      Some{Codes.Read{n, []}},
+      Resources.Name.code_read(n, [])
+    ): {
+      List.contains(
+        ~Resources.Name,
+        ~Resources.Name.is_eq,
+        Names.put(Replicas.Read.whole(Resources.Name, _), r),
+        n
+      )
+        == True{}: Bool
+    }
+    Equal.trans(
+      Bool,
+      List.any.if(
+        u => List.contains(~Resources.Name, ~Resources.Name.is_eq, r, n),
+        Resources.Name.is_eq(n, n)
+      ),
+      Bool.or(
+        Resources.Name.is_eq(n, n),
+        List.contains(~Resources.Name, ~Resources.Name.is_eq, r, n)
+      ),
+      True{},
+      Shared.List.any.if_or(
+        Resources.Name.is_eq(n, n),
+        u => List.contains(~Resources.Name, ~Resources.Name.is_eq, r, n)
+      ),
+      (
+        %Equal.sym(Bool, Resources.Name.is_eq(n, n), True{}, Resources.Name.is_eq_refl(n)): {Bool.or(_, List.contains(~Resources.Name, ~Resources.Name.is_eq, r, n)) == True{}: Bool}
+        {==})
+    )
+
+# Names.has at the first binding b, once it is known whether it is the
+# binding of n (k)
+def Names.has.at(
+  b: Trees.Binding,
+  r: List<&2, Trees.Binding>,
+  +n: Resources.Name,
+  +w: List<&2, U32>,
+  k: Bool,
+  ek: {Trees.Binding.is_eq(b, Trees.Binding{Spec.Key.res(n), w}) == k: Bool},
+  hr: {Maybe.is_some(&2, Ropes.Root, Spec.Res.read(w)) == True{}: Bool},
+  e: {
+    List.any.if(
+      u => List.contains(
+        ~Trees.Binding,
+        ~Trees.Binding.is_eq,
+        r,
+        Trees.Binding{Spec.Key.res(n), w}
+      ),
+      k
+    )
+      == True{}: Bool
+  },
+  ih: {
+    List.contains(
+      ~Trees.Binding,
+      ~Trees.Binding.is_eq,
+      r,
+      Trees.Binding{Spec.Key.res(n), w}
+    )
+      == True{}: Bool
+  } -> {
+    List.contains(~Resources.Name, ~Resources.Name.is_eq, Res.of.bindings(r), n) == True{}: Bool
+  }
+) -> {
+  List.contains(
+    ~Resources.Name,
+    ~Resources.Name.is_eq,
+    Res.of.bindings(Con{b, r}),
+    n
+  )
+    == True{}: Bool
+}:
+  match k:
+    case True{}:
+      %Equal.sym(
+        Trees.Binding,
+        b,
+        Trees.Binding{Spec.Key.res(n), w},
+        Trees.Binding.is_eq_sound(b, Trees.Binding{Spec.Key.res(n), w})(ek)
+      ): {
+        List.contains(
+          ~Resources.Name,
+          ~Resources.Name.is_eq,
+          Names.put(Res.binding(_), Res.of.bindings(r)),
+          n
+        )
+          == True{}: Bool
+      }
+      Names.binding(n, w, Res.of.bindings(r))(hr)
+    case False{}:
+      Names.put_keeps(Res.binding(b), Res.of.bindings(r), n)(ih(e))
+
+# the resources of some bindings hold n when the bindings hold a binding of n
+# with a root
+def Names.has(
+  bs: List<&2, Trees.Binding>,
+  +n: Resources.Name,
+  +w: List<&2, U32>
+) -> {
+  Maybe.is_some(&2, Ropes.Root, Spec.Res.read(w)) == True{}: Bool
+} -> {
+  List.contains(
+    ~Trees.Binding,
+    ~Trees.Binding.is_eq,
+    bs,
+    Trees.Binding{Spec.Key.res(n), w}
+  )
+    == True{}: Bool
+} -> {
+  List.contains(~Resources.Name, ~Resources.Name.is_eq, Res.of.bindings(bs), n) == True{}: Bool
+}:
+  match bs:
+    case Nil{}:
+      hr => e => Empty.absurd(
+        {
+          List.contains(
+            ~Resources.Name,
+            ~Resources.Name.is_eq,
+            Res.of.bindings([]),
+            n
+          )
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(e)
+      )
+    case Con{+b, +r}:
+      +hr => e =>
+        Names.has.at(
+          b,
+          r,
+          n,
+          w,
+          Trees.Binding.is_eq(b, Trees.Binding{Spec.Key.res(n), w}),
+          {==},
+          hr,
+          e,
+          Names.has(r, n, w)(hr)
+        )
+
+# a resource that ours reads as w, with a root, and theirs does not, is among
+# the resources of the difference of the trees
+def Names.side(
+  +s: Replicas.Node<Requests.Ask>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +n: Resources.Name,
+  +w: List<&2, U32>
+) -> {
+  Replicas.Node.get(
+    ~Requests.Ask.machine(),
+    s,
+    h,
+    Spec.Key.res(n)
+  )
+    == Some{w}: Maybe<&2, List<&2, U32>>
+} -> (
+  {
+    Replicas.Node.get(
+      ~Requests.Ask.machine(),
+      s,
+      ht,
+      Spec.Key.res(n)
+    )
+      == Some{w}: Maybe<&2, List<&2, U32>>
+  } -> Empty
+) -> {
+  Maybe.is_some(&2, Ropes.Root, Spec.Res.read(w)) == True{}: Bool
+} -> {
+  List.contains(
+    ~Resources.Name,
+    ~Resources.Name.is_eq,
+    Res.of.bindings(
+      Trees.Tree.diff(
+        ~Replicas.Node<Requests.Ask>,
+        ~Replicas.Store.fetch(~Requests.Ask.machine()),
+        s,
+        h,
+        ht
+      )
+    ),
+    n
+  )
+    == True{}: Bool
+}:
+  ea => ne => hr =>
+    Names.has(
+      Trees.Tree.diff(
+        ~Replicas.Node<Requests.Ask>,
+        ~Replicas.Store.fetch(~Requests.Ask.machine()),
+        s,
+        h,
+        ht
+      ),
+      n,
+      w
+    )(
+      hr
+    )(
+      Trees.Tree.diff_complete(
+        ~Replicas.Node<Requests.Ask>,
+        ~Replicas.Store.fetch(~Requests.Ask.machine()),
+        s,
+        h,
+        ht,
+        Spec.Key.res(n),
+        w
+      )(
+        Equal.trans(
+          Maybe<&2, List<&2, U32>>,
+          Trees.Tree.get.plain(
+            ~Replicas.Node<Requests.Ask>,
+            ~Replicas.Store.fetch(~Requests.Ask.machine()),
+            s,
+            h,
+            Spec.Key.res(n)
+          ),
+          Replicas.Node.get(~Requests.Ask.machine(), s, h, Spec.Key.res(n)),
+          Some{w},
+          Equal.sym(
+            Maybe<&2, List<&2, U32>>,
+            Replicas.Node.get(~Requests.Ask.machine(), s, h, Spec.Key.res(n)),
+            Trees.Tree.get.plain(
+              ~Replicas.Node<Requests.Ask>,
+              ~Replicas.Store.fetch(~Requests.Ask.machine()),
+              s,
+              h,
+              Spec.Key.res(n)
+            ),
+            Trees.Tree.get_plain(
+              ~Replicas.Node<Requests.Ask>,
+              ~Replicas.Store.fetch(~Requests.Ask.machine()),
+              s,
+              h,
+              Spec.Key.res(n)
+            )
+          ),
+          ea
+        )
+      )(
+        ep => ne(
+          Equal.trans(
+            Maybe<&2, List<&2, U32>>,
+            Replicas.Node.get(~Requests.Ask.machine(), s, ht, Spec.Key.res(n)),
+            Trees.Tree.get.plain(
+              ~Replicas.Node<Requests.Ask>,
+              ~Replicas.Store.fetch(~Requests.Ask.machine()),
+              s,
+              ht,
+              Spec.Key.res(n)
+            ),
+            Some{w},
+            Trees.Tree.get_plain(
+              ~Replicas.Node<Requests.Ask>,
+              ~Replicas.Store.fetch(~Requests.Ask.machine()),
+              s,
+              ht,
+              Spec.Key.res(n)
+            ),
+            ep
+          )
+        )
+      )
+    )
+
+# and so for theirs against ours
+def Names.side_right(
+  +s: Replicas.Node<Requests.Ask>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +n: Resources.Name,
+  +w: List<&2, U32>
+) -> {
+  Replicas.Node.get(
+    ~Requests.Ask.machine(),
+    s,
+    ht,
+    Spec.Key.res(n)
+  )
+    == Some{w}: Maybe<&2, List<&2, U32>>
+} -> (
+  {
+    Replicas.Node.get(
+      ~Requests.Ask.machine(),
+      s,
+      h,
+      Spec.Key.res(n)
+    )
+      == Some{w}: Maybe<&2, List<&2, U32>>
+  } -> Empty
+) -> {
+  Maybe.is_some(&2, Ropes.Root, Spec.Res.read(w)) == True{}: Bool
+} -> {
+  List.contains(
+    ~Resources.Name,
+    ~Resources.Name.is_eq,
+    Res.of.bindings(
+      Trees.Tree.diff(
+        ~Replicas.Node<Requests.Ask>,
+        ~Replicas.Store.fetch(~Requests.Ask.machine()),
+        s,
+        h,
+        ht
+      )
+    ),
+    n
+  )
+    == True{}: Bool
+}:
+  ea => ne => hr =>
+    Names.has(
+      Trees.Tree.diff(
+        ~Replicas.Node<Requests.Ask>,
+        ~Replicas.Store.fetch(~Requests.Ask.machine()),
+        s,
+        h,
+        ht
+      ),
+      n,
+      w
+    )(
+      hr
+    )(
+      Trees.Tree.diff_complete_right(
+        ~Replicas.Node<Requests.Ask>,
+        ~Replicas.Store.fetch(~Requests.Ask.machine()),
+        s,
+        h,
+        ht,
+        Spec.Key.res(n),
+        w
+      )(
+        Equal.trans(
+          Maybe<&2, List<&2, U32>>,
+          Trees.Tree.get.plain(
+            ~Replicas.Node<Requests.Ask>,
+            ~Replicas.Store.fetch(~Requests.Ask.machine()),
+            s,
+            ht,
+            Spec.Key.res(n)
+          ),
+          Replicas.Node.get(~Requests.Ask.machine(), s, ht, Spec.Key.res(n)),
+          Some{w},
+          Equal.sym(
+            Maybe<&2, List<&2, U32>>,
+            Replicas.Node.get(~Requests.Ask.machine(), s, ht, Spec.Key.res(n)),
+            Trees.Tree.get.plain(
+              ~Replicas.Node<Requests.Ask>,
+              ~Replicas.Store.fetch(~Requests.Ask.machine()),
+              s,
+              ht,
+              Spec.Key.res(n)
+            ),
+            Trees.Tree.get_plain(
+              ~Replicas.Node<Requests.Ask>,
+              ~Replicas.Store.fetch(~Requests.Ask.machine()),
+              s,
+              ht,
+              Spec.Key.res(n)
+            )
+          ),
+          ea
+        )
+      )(
+        ep => ne(
+          Equal.trans(
+            Maybe<&2, List<&2, U32>>,
+            Replicas.Node.get(~Requests.Ask.machine(), s, h, Spec.Key.res(n)),
+            Trees.Tree.get.plain(
+              ~Replicas.Node<Requests.Ask>,
+              ~Replicas.Store.fetch(~Requests.Ask.machine()),
+              s,
+              h,
+              Spec.Key.res(n)
+            ),
+            Some{w},
+            Trees.Tree.get_plain(
+              ~Replicas.Node<Requests.Ask>,
+              ~Replicas.Store.fetch(~Requests.Ask.machine()),
+              s,
+              h,
+              Spec.Key.res(n)
+            ),
+            ep
+          )
+        )
+      )
+    )
+
+# two values of a key that Some makes the same are the same
+def Words.inj(
+  -a: List<&2, U32>,
+  -b: List<&2, U32>
+) -> {Some{a} == Some{b}: Maybe<&2, List<&2, U32>>} -> {a == b: List<&2, U32>}:
+  e => Equal.cong(
+    Maybe<&2, List<&2, U32>>,
+    List<&2, U32>,
+    v => Maybe.default(&2, List<&2, U32>, v, []),
+    Some{a},
+    Some{b},
+    e
+  )
+
+# Merge.names_complete when both trees read the resource, as wa and wb, once
+# the roots ra and rb that they hold are known
+def Complete.both(
+  s: Replicas.Node<Requests.Ask>,
+  h: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  n: Resources.Name,
+  wa: List<&2, U32>,
+  wb: List<&2, U32>,
+  ra: Maybe<&2, Ropes.Root>,
+  +era: {Spec.Res.read(wa) == ra: Maybe<&2, Ropes.Root>},
+  rb: Maybe<&2, Ropes.Root>,
+  +erb: {Spec.Res.read(wb) == rb: Maybe<&2, Ropes.Root>},
+  ega: {
+    Replicas.Node.get(
+      ~Requests.Ask.machine(),
+      s,
+      h,
+      Spec.Key.res(n)
+    )
+      == Some{wa}: Maybe<&2, List<&2, U32>>
+  },
+  egb: {
+    Replicas.Node.get(
+      ~Requests.Ask.machine(),
+      s,
+      ht,
+      Spec.Key.res(n)
+    )
+      == Some{wb}: Maybe<&2, List<&2, U32>>
+  },
+  e: {Spec.Roots.same(ra, rb) == False{}: Bool}
+) -> {
+  List.contains(
+    ~Resources.Name,
+    ~Resources.Name.is_eq,
+    Res.of.bindings(
+      Trees.Tree.diff(
+        ~Replicas.Node<Requests.Ask>,
+        ~Replicas.Store.fetch(~Requests.Ask.machine()),
+        s,
+        h,
+        ht
+      )
+    ),
+    n
+  )
+    == True{}: Bool
+}:
+  match ra rb:
+    case Some{x} y:
+      Names.side(s, h, ht, n, wa)(ega)(
+        ep =>
+          +ew = Words.inj(wb, wa)(Equal.trans(Maybe<&2, List<&2, U32>>, Some{wb}, Replicas.Node.get(~Requests.Ask.machine(), s, ht, Spec.Key.res(n)), Some{wa}, Equal.sym(Maybe<&2, List<&2, U32>>, Replicas.Node.get(~Requests.Ask.machine(), s, ht, Spec.Key.res(n)), Some{wb}, egb), ep))
+          +erx = Equal.trans(Maybe<&2, Ropes.Root>, y, Spec.Res.read(wa), Some{x}, (%ew: {y == Spec.Res.read(_): Maybe<&2, Ropes.Root>}; Equal.sym(Maybe<&2, Ropes.Root>, Spec.Res.read(wb), y, erb)), era)
+          Empty.absurd(Empty, Shared.Bool.false_ne_true(Equal.trans(Bool, False{}, Spec.Roots.same(Some{x}, y), True{}, Equal.sym(Bool, Spec.Roots.same(Some{x}, y), False{}, e), (%Equal.sym(Maybe<&2, Ropes.Root>, y, Some{x}, erx): {Spec.Roots.same(Some{x}, _) == True{}: Bool}; Roots.same_refl(Some{x}))))))((%Equal.sym(Maybe<&2, Ropes.Root>, Spec.Res.read(wa), Some{x}, era): {Maybe.is_some(&2, Ropes.Root, _) == True{}: Bool}; {==}))
+    case None{} Some{y}:
+      Names.side_right(s, h, ht, n, wb)(egb)(
+        ep =>
+          +ew = Words.inj(wa, wb)(Equal.trans(Maybe<&2, List<&2, U32>>, Some{wa}, Replicas.Node.get(~Requests.Ask.machine(), s, h, Spec.Key.res(n)), Some{wb}, Equal.sym(Maybe<&2, List<&2, U32>>, Replicas.Node.get(~Requests.Ask.machine(), s, h, Spec.Key.res(n)), Some{wa}, ega), ep))
+          Shared.Maybe.none_ne_some(Ropes.Root, y, Equal.trans(Maybe<&2, Ropes.Root>, None{}, Spec.Res.read(wa), Some{y}, Equal.sym(Maybe<&2, Ropes.Root>, Spec.Res.read(wa), None{}, era), (%Equal.sym(List<&2, U32>, wa, wb, ew): {Spec.Res.read(_) == Some{y}: Maybe<&2, Ropes.Root>}; erb))))((%Equal.sym(Maybe<&2, Ropes.Root>, Spec.Res.read(wb), Some{y}, erb): {Maybe.is_some(&2, Ropes.Root, _) == True{}: Bool}; {==}))
+    case None{} None{}:
+      Empty.absurd(
+        {
+          List.contains(
+            ~Resources.Name,
+            ~Resources.Name.is_eq,
+            Res.of.bindings(
+              Trees.Tree.diff(
+                ~Replicas.Node<Requests.Ask>,
+                ~Replicas.Store.fetch(~Requests.Ask.machine()),
+                s,
+                h,
+                ht
+              )
+            ),
+            n
+          )
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, e))
+      )
+
+# Merge.names_complete when only ours reads the resource, as wa
+def Complete.ours(
+  s: Replicas.Node<Requests.Ask>,
+  h: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  n: Resources.Name,
+  wa: List<&2, U32>,
+  ra: Maybe<&2, Ropes.Root>,
+  era: {Spec.Res.read(wa) == ra: Maybe<&2, Ropes.Root>},
+  ega: {
+    Replicas.Node.get(
+      ~Requests.Ask.machine(),
+      s,
+      h,
+      Spec.Key.res(n)
+    )
+      == Some{wa}: Maybe<&2, List<&2, U32>>
+  },
+  egb: {
+    Replicas.Node.get(
+      ~Requests.Ask.machine(),
+      s,
+      ht,
+      Spec.Key.res(n)
+    )
+      == None{}: Maybe<&2, List<&2, U32>>
+  },
+  e: {Spec.Roots.same(ra, None{}) == False{}: Bool}
+) -> {
+  List.contains(
+    ~Resources.Name,
+    ~Resources.Name.is_eq,
+    Res.of.bindings(
+      Trees.Tree.diff(
+        ~Replicas.Node<Requests.Ask>,
+        ~Replicas.Store.fetch(~Requests.Ask.machine()),
+        s,
+        h,
+        ht
+      )
+    ),
+    n
+  )
+    == True{}: Bool
+}:
+  match ra:
+    case Some{x}:
+      Names.side(
+        s,
+        h,
+        ht,
+        n,
+        wa
+      )(
+        ega
+      )(
+        ep => Shared.Maybe.none_ne_some(
+          List<&2, U32>,
+          wa,
+          Equal.trans(
+            Maybe<&2, List<&2, U32>>,
+            None{},
+            Replicas.Node.get(~Requests.Ask.machine(), s, ht, Spec.Key.res(n)),
+            Some{wa},
+            Equal.sym(
+              Maybe<&2, List<&2, U32>>,
+              Replicas.Node.get(~Requests.Ask.machine(), s, ht, Spec.Key.res(n)),
+              None{},
+              egb
+            ),
+            ep
+          )
+        )
+      )(
+        (%Equal.sym(
+          Maybe<&2, Ropes.Root>,
+          Spec.Res.read(wa),
+          Some{x},
+          era
+        ): {Maybe.is_some(&2, Ropes.Root, _) == True{}: Bool}; {==})
+      )
+    case None{}:
+      Empty.absurd(
+        {
+          List.contains(
+            ~Resources.Name,
+            ~Resources.Name.is_eq,
+            Res.of.bindings(
+              Trees.Tree.diff(
+                ~Replicas.Node<Requests.Ask>,
+                ~Replicas.Store.fetch(~Requests.Ask.machine()),
+                s,
+                h,
+                ht
+              )
+            ),
+            n
+          )
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, e))
+      )
+
+# Merge.names_complete when only theirs reads the resource, as wb
+def Complete.theirs(
+  s: Replicas.Node<Requests.Ask>,
+  h: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  n: Resources.Name,
+  wb: List<&2, U32>,
+  rb: Maybe<&2, Ropes.Root>,
+  erb: {Spec.Res.read(wb) == rb: Maybe<&2, Ropes.Root>},
+  ega: {
+    Replicas.Node.get(
+      ~Requests.Ask.machine(),
+      s,
+      h,
+      Spec.Key.res(n)
+    )
+      == None{}: Maybe<&2, List<&2, U32>>
+  },
+  egb: {
+    Replicas.Node.get(
+      ~Requests.Ask.machine(),
+      s,
+      ht,
+      Spec.Key.res(n)
+    )
+      == Some{wb}: Maybe<&2, List<&2, U32>>
+  },
+  e: {Spec.Roots.same(None{}, rb) == False{}: Bool}
+) -> {
+  List.contains(
+    ~Resources.Name,
+    ~Resources.Name.is_eq,
+    Res.of.bindings(
+      Trees.Tree.diff(
+        ~Replicas.Node<Requests.Ask>,
+        ~Replicas.Store.fetch(~Requests.Ask.machine()),
+        s,
+        h,
+        ht
+      )
+    ),
+    n
+  )
+    == True{}: Bool
+}:
+  match rb:
+    case Some{y}:
+      Names.side_right(
+        s,
+        h,
+        ht,
+        n,
+        wb
+      )(
+        egb
+      )(
+        ep => Shared.Maybe.none_ne_some(
+          List<&2, U32>,
+          wb,
+          Equal.trans(
+            Maybe<&2, List<&2, U32>>,
+            None{},
+            Replicas.Node.get(~Requests.Ask.machine(), s, h, Spec.Key.res(n)),
+            Some{wb},
+            Equal.sym(
+              Maybe<&2, List<&2, U32>>,
+              Replicas.Node.get(~Requests.Ask.machine(), s, h, Spec.Key.res(n)),
+              None{},
+              ega
+            ),
+            ep
+          )
+        )
+      )(
+        (%Equal.sym(
+          Maybe<&2, Ropes.Root>,
+          Spec.Res.read(wb),
+          Some{y},
+          erb
+        ): {Maybe.is_some(&2, Ropes.Root, _) == True{}: Bool}; {==})
+      )
+    case None{}:
+      Empty.absurd(
+        {
+          List.contains(
+            ~Resources.Name,
+            ~Resources.Name.is_eq,
+            Res.of.bindings(
+              Trees.Tree.diff(
+                ~Replicas.Node<Requests.Ask>,
+                ~Replicas.Store.fetch(~Requests.Ask.machine()),
+                s,
+                h,
+                ht
+              )
+            ),
+            n
+          )
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, e))
+      )
+
+# Merge.names_complete once what each tree reads of the resource (ga, gb) is
+# known
+def Complete.at(
+  s: Replicas.Node<Requests.Ask>,
+  h: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  n: Resources.Name,
+  ga: Maybe<&2, List<&2, U32>>,
+  ega: {
+    Replicas.Node.get(
+      ~Requests.Ask.machine(),
+      s,
+      h,
+      Spec.Key.res(n)
+    )
+      == ga: Maybe<&2, List<&2, U32>>
+  },
+  gb: Maybe<&2, List<&2, U32>>,
+  egb: {
+    Replicas.Node.get(
+      ~Requests.Ask.machine(),
+      s,
+      ht,
+      Spec.Key.res(n)
+    )
+      == gb: Maybe<&2, List<&2, U32>>
+  },
+  e: {
+    Spec.Roots.same(
+      Maybe.bind(&2, List<&2, U32>, Ropes.Root, ga, ws => Spec.Res.read(ws)),
+      Maybe.bind(&2, List<&2, U32>, Ropes.Root, gb, ws => Spec.Res.read(ws))
+    )
+      == False{}: Bool
+  }
+) -> {
+  List.contains(
+    ~Resources.Name,
+    ~Resources.Name.is_eq,
+    Res.of.bindings(
+      Trees.Tree.diff(
+        ~Replicas.Node<Requests.Ask>,
+        ~Replicas.Store.fetch(~Requests.Ask.machine()),
+        s,
+        h,
+        ht
+      )
+    ),
+    n
+  )
+    == True{}: Bool
+}:
+  match ga gb:
+    case Some{+wa} Some{+wb}:
+      Complete.both(
+        s,
+        h,
+        ht,
+        n,
+        wa,
+        wb,
+        Spec.Res.read(wa),
+        {==},
+        Spec.Res.read(wb),
+        {==},
+        ega,
+        egb,
+        e
+      )
+    case Some{+wa} None{}:
+      Complete.ours(s, h, ht, n, wa, Spec.Res.read(wa), {==}, ega, egb, e)
+    case None{} Some{+wb}:
+      Complete.theirs(s, h, ht, n, wb, Spec.Res.read(wb), {==}, ega, egb, e)
+    case None{} None{}:
+      Empty.absurd(
+        {
+          List.contains(
+            ~Resources.Name,
+            ~Resources.Name.is_eq,
+            Res.of.bindings(
+              Trees.Tree.diff(
+                ~Replicas.Node<Requests.Ask>,
+                ~Replicas.Store.fetch(~Requests.Ask.machine()),
+                s,
+                h,
+                ht
+              )
+            ),
+            n
+          )
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, e))
+      )
+
+def Spec.Merge.names_complete(s, h, ht, n):
+  e =>
+    +xs = Res.of.bindings(
+      Trees.Tree.diff(
+        ~Replicas.Node<Requests.Ask>,
+        ~Replicas.Store.fetch(~Requests.Ask.machine()),
+        s,
+        h,
+        ht
+      )
+    )
+    %Equal.sym(
+      Bool,
+      List.contains(~Resources.Name, ~Resources.Name.is_eq, Spec.Merge.names(s, h, ht), n),
+      Shared.List.some(
+        ~Resources.Name,
+        ~Resources.Name,
+        ~(g => x => Resources.Name.is_eq(x, g)),
+        KeySets.KeySet.unique(
+          ~Resources.Name,
+          ~Resources.Name.is_eq,
+          ~Name.key,
+          xs,
+          Tries.Trie.new(Resources.Name)
+        ),
+        n
+      ),
+      Shared.List.contains_some(
+        ~Resources.Name,
+        ~Resources.Name.is_eq,
+        Spec.Merge.names(s, h, ht),
+        n
+      )
+    ): {_ == True{}: Bool}
+    %Equal.sym(
+      Bool,
+      Shared.List.some(
+        ~Resources.Name,
+        ~Resources.Name,
+        ~(g => x => Resources.Name.is_eq(x, g)),
+        KeySets.KeySet.unique(
+          ~Resources.Name,
+          ~Resources.Name.is_eq,
+          ~Name.key,
+          xs,
+          Tries.Trie.new(Resources.Name)
+        ),
+        n
+      ),
+      Shared.List.some(
+        ~Resources.Name,
+        ~Resources.Name,
+        ~(g => x => Resources.Name.is_eq(x, g)),
+        xs,
+        n
+      ),
+      KeySets.KeySet.unique_some(
+        ~Resources.Name,
+        ~Resources.Name,
+        ~Resources.Name.is_eq,
+        ~Name.key,
+        ~(g => x => Resources.Name.is_eq(x, g)),
+        ~Resources.Name.laws(),
+        xs,
+        n
+      )
+    ): {_ == True{}: Bool}
+    %Shared.List.contains_some(~Resources.Name, ~Resources.Name.is_eq, xs, n): {_ == True{}: Bool}
+    Complete.at(
+      s,
+      h,
+      ht,
+      n,
+      Replicas.Node.get(~Requests.Ask.machine(), s, h, Spec.Key.res(n)),
+      {==},
+      Replicas.Node.get(~Requests.Ask.machine(), s, ht, Spec.Key.res(n)),
+      {==},
+      e
+    )
 
 def Spec.Merge.keeps(s, c, from, h, n, b, o, t, x):
   ec => eb => eo => et => ep => Vector.joined.reads(
