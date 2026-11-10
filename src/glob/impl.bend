@@ -1,380 +1,262 @@
 import Base
+import ../shared/shared/regex.bend as Regex
+import ../shared/shared/search.bend as Searches
+import ../shared/shared/shared/keyset.bend as KeySets
+import ../shared/shared/shared/reach.bend as Reaches
 import ../shared/shared/shared/shared/shared.bend as Shared
+import ../shared/shared/shared/shared/trie.bend as Tries
 import ../shared/shared/shared/text.bend as Texts
 import ./spec.bend as Spec
 
-# Equality
-# --------
-# Each is_eq answers True only for equal values (its is_eq_sound), so a
-# membership test can stand for the member itself.
+# Globs as regular expressions
+# ----------------------------
+# A glob is a regular expression over characters (regex.bend) whose atoms
+# are the three glob forms that read one character. Glob.re_matches says
+# that the expression matches what Spec.Glob.matches says the glob matches,
+# so the laws of regex.bend hold for globs.
 
-# a and b are the same glob
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
-def Glob.is_eq(a: Spec.Glob, b: Spec.Glob) -> Bool:
-  match a b:
-    case Spec.Void{} Spec.Void{}:
-      True{}
-    case Spec.Eps{} Spec.Eps{}:
-      True{}
-    case Spec.Lit{x1} Spec.Lit{x2}:
-      Char.is_eq(x1, x2)
-    case Spec.Any{} Spec.Any{}:
-      True{}
-    case Spec.Star{} Spec.Star{}:
-      True{}
-    case Spec.Class{n1, cs1} Spec.Class{n2, cs2}:
-      Bool.and(Shared.Bool.is_eq(n1, n2), Shared.List.is_eq(~Char, ~Char.is_eq, cs1, cs2))
-    case Spec.Deep{} Spec.Deep{}:
-      True{}
-    case Spec.Cat{a1, b1} Spec.Cat{a2, b2}:
-      Bool.and(Glob.is_eq(a1, a2), Glob.is_eq(b1, b2))
-    case Spec.Alt{a1, b1} Spec.Alt{a2, b2}:
-      Bool.and(Glob.is_eq(a1, a2), Glob.is_eq(b1, b2))
-    case _ _:
-      False{}
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# What reads one character: the character c, any character but '/', or a
+# class (a character in cs, or one not in cs when neg; never '/').
+type Atom is Data:
+  ALit{c: Char}
+  AAny{}
+  AClass{neg: Bool, cs: List<&2, Char>}
 
-# Glob.is_eq is True only for the same glob
+# t accepts c
+def Atom.hit(t: Atom, c: Char) -> Bool:
+  match t:
+    case ALit{x}:
+      Char.is_eq(x, c)
+    case AAny{}:
+      Spec.is_inner(c)
+    case AClass{neg, cs}:
+      +c = c
+      List.all.if(u => Bool.xor(neg, List.contains(~Char, ~Char.is_eq, cs, c)), Spec.is_inner(c))
+
+# the regular expression of g
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a glob tree is a few nodes, where a fork costs more than it saves
+def Glob.re(g: Spec.Glob) -> Regex.Re<Atom>:
+  match g:
+    case Spec.Void{}:
+      Regex.Void{}
+    case Spec.Eps{}:
+      Regex.Eps{}
+    case Spec.Lit{c}:
+      Regex.One{ALit{c}}
+    case Spec.Any{}:
+      Regex.One{AAny{}}
+    case Spec.Star{}:
+      Regex.Star{Regex.One{AAny{}}}
+    case Spec.Class{neg, cs}:
+      Regex.One{AClass{neg, cs}}
+    case Spec.Deep{}:
+      Regex.All{}
+    case Spec.Cat{a, b}:
+      Regex.Cat{Glob.re(a), Glob.re(b)}
+    case Spec.Alt{a, b}:
+      Regex.Alt{Glob.re(a), Glob.re(b)}
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
+
+# the expression of Glob.of_bool(b) is Re.of_bool(b)
+def Glob.re_of_bool(
+  b: Bool
+) -> {Glob.re(Spec.Glob.of_bool(b)) == Regex.Re.of_bool(Atom, b): Regex.Re<Atom>}:
+  match b:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# a glob matches "" exactly when its expression does
+def Glob.re_nullable(
+  g: Spec.Glob
+) -> {Spec.Glob.is_nullable(g) == Regex.Re.is_nullable(Atom, Glob.re(g)): Bool}:
+  match g:
+    case Spec.Void{}:
+      {==}
+    case Spec.Eps{}:
+      {==}
+    case Spec.Lit{c}:
+      {==}
+    case Spec.Any{}:
+      {==}
+    case Spec.Star{}:
+      {==}
+    case Spec.Class{neg, cs}:
+      {==}
+    case Spec.Deep{}:
+      {==}
+    case Spec.Cat{+a, +b}:
+      na = Spec.Glob.is_nullable(a)
+      nb = Spec.Glob.is_nullable(b)
+      %Glob.re_nullable(
+        a
+      ): {Bool.and(na, nb) == List.all.if(u => Regex.Re.is_nullable(Atom, Glob.re(b)), _): Bool}
+      %Glob.re_nullable(b): {Bool.and(na, nb) == List.all.if(u => _, na): Bool}
+      %Shared.List.all.if_and(na, u => nb): {_ == List.all.if(u => nb, na): Bool}
+      {==}
+    case Spec.Alt{+a, +b}:
+      na = Spec.Glob.is_nullable(a)
+      nb = Spec.Glob.is_nullable(b)
+      %Glob.re_nullable(
+        a
+      ): {Bool.or(na, nb) == List.any.if(u => Regex.Re.is_nullable(Atom, Glob.re(b)), _): Bool}
+      %Glob.re_nullable(b): {Bool.or(na, nb) == List.any.if(u => _, na): Bool}
+      %Shared.List.any.if_or(na, u => nb): {_ == List.any.if(u => nb, na): Bool}
+      {==}
+
+# the expression of a glob after c is its expression, after c
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- only proofs use it; no program runs it
-def Glob.is_eq_sound(
-  a: Spec.Glob,
-  b: Spec.Glob
-) -> {Glob.is_eq(a, b) == True{}: Bool} -> {a == b: Spec.Glob}:
-  match a b:
-    case Spec.Void{} Spec.Void{}:
-      _ => {==}
-    case Spec.Void{} Spec.Eps{}:
-      h => Empty.absurd({Spec.Void{} == Spec.Eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Void{} Spec.Lit{x2}:
-      h => Empty.absurd({Spec.Void{} == Spec.Lit{x2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Void{} Spec.Any{}:
-      h => Empty.absurd({Spec.Void{} == Spec.Any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Void{} Spec.Star{}:
-      h => Empty.absurd({Spec.Void{} == Spec.Star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Void{} Spec.Class{n2, cs2}:
-      h => Empty.absurd(
-        {Spec.Void{} == Spec.Class{n2, cs2}: Spec.Glob},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Void{} Spec.Deep{}:
-      h => Empty.absurd({Spec.Void{} == Spec.Deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Void{} Spec.Cat{a2, b2}:
-      h => Empty.absurd({Spec.Void{} == Spec.Cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Void{} Spec.Alt{a2, b2}:
-      h => Empty.absurd({Spec.Void{} == Spec.Alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Eps{} Spec.Void{}:
-      h => Empty.absurd({Spec.Eps{} == Spec.Void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Eps{} Spec.Eps{}:
-      _ => {==}
-    case Spec.Eps{} Spec.Lit{x2}:
-      h => Empty.absurd({Spec.Eps{} == Spec.Lit{x2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Eps{} Spec.Any{}:
-      h => Empty.absurd({Spec.Eps{} == Spec.Any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Eps{} Spec.Star{}:
-      h => Empty.absurd({Spec.Eps{} == Spec.Star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Eps{} Spec.Class{n2, cs2}:
-      h => Empty.absurd(
-        {Spec.Eps{} == Spec.Class{n2, cs2}: Spec.Glob},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Eps{} Spec.Deep{}:
-      h => Empty.absurd({Spec.Eps{} == Spec.Deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Eps{} Spec.Cat{a2, b2}:
-      h => Empty.absurd({Spec.Eps{} == Spec.Cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Eps{} Spec.Alt{a2, b2}:
-      h => Empty.absurd({Spec.Eps{} == Spec.Alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Lit{x1} Spec.Void{}:
-      h => Empty.absurd({Spec.Lit{x1} == Spec.Void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Lit{+x1} Spec.Eps{}:
-      h => Empty.absurd({Spec.Lit{x1} == Spec.Eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Lit{+x1} Spec.Lit{x2}:
-      h => Equal.cong(Char, Spec.Glob, c => Spec.Lit{c}, x1, x2, Shared.Char.is_eq_sound(x1, x2)(h))
-    case Spec.Lit{+x1} Spec.Any{}:
-      h => Empty.absurd({Spec.Lit{x1} == Spec.Any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Lit{+x1} Spec.Star{}:
-      h => Empty.absurd({Spec.Lit{x1} == Spec.Star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Lit{+x1} Spec.Class{n2, cs2}:
-      h => Empty.absurd(
-        {Spec.Lit{x1} == Spec.Class{n2, cs2}: Spec.Glob},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Lit{+x1} Spec.Deep{}:
-      h => Empty.absurd({Spec.Lit{x1} == Spec.Deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Lit{+x1} Spec.Cat{a2, b2}:
-      h => Empty.absurd({Spec.Lit{x1} == Spec.Cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Lit{+x1} Spec.Alt{a2, b2}:
-      h => Empty.absurd({Spec.Lit{x1} == Spec.Alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Any{} Spec.Void{}:
-      h => Empty.absurd({Spec.Any{} == Spec.Void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Any{} Spec.Eps{}:
-      h => Empty.absurd({Spec.Any{} == Spec.Eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Any{} Spec.Lit{x2}:
-      h => Empty.absurd({Spec.Any{} == Spec.Lit{x2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Any{} Spec.Any{}:
-      _ => {==}
-    case Spec.Any{} Spec.Star{}:
-      h => Empty.absurd({Spec.Any{} == Spec.Star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Any{} Spec.Class{n2, cs2}:
-      h => Empty.absurd(
-        {Spec.Any{} == Spec.Class{n2, cs2}: Spec.Glob},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Any{} Spec.Deep{}:
-      h => Empty.absurd({Spec.Any{} == Spec.Deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Any{} Spec.Cat{a2, b2}:
-      h => Empty.absurd({Spec.Any{} == Spec.Cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Any{} Spec.Alt{a2, b2}:
-      h => Empty.absurd({Spec.Any{} == Spec.Alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Star{} Spec.Void{}:
-      h => Empty.absurd({Spec.Star{} == Spec.Void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Star{} Spec.Eps{}:
-      h => Empty.absurd({Spec.Star{} == Spec.Eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Star{} Spec.Lit{x2}:
-      h => Empty.absurd({Spec.Star{} == Spec.Lit{x2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Star{} Spec.Any{}:
-      h => Empty.absurd({Spec.Star{} == Spec.Any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Star{} Spec.Star{}:
-      _ => {==}
-    case Spec.Star{} Spec.Class{n2, cs2}:
-      h => Empty.absurd(
-        {Spec.Star{} == Spec.Class{n2, cs2}: Spec.Glob},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Star{} Spec.Deep{}:
-      h => Empty.absurd({Spec.Star{} == Spec.Deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Star{} Spec.Cat{a2, b2}:
-      h => Empty.absurd({Spec.Star{} == Spec.Cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Star{} Spec.Alt{a2, b2}:
-      h => Empty.absurd({Spec.Star{} == Spec.Alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Class{+n1, +cs1} Spec.Void{}:
-      +h => Empty.absurd(
-        {Spec.Class{n1, cs1} == Spec.Void{}: Spec.Glob},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Class{+n1, +cs1} Spec.Eps{}:
-      +h => Empty.absurd(
-        {Spec.Class{n1, cs1} == Spec.Eps{}: Spec.Glob},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Class{+n1, +cs1} Spec.Lit{x2}:
-      +h => Empty.absurd(
-        {Spec.Class{n1, cs1} == Spec.Lit{x2}: Spec.Glob},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Class{+n1, +cs1} Spec.Any{}:
-      +h => Empty.absurd(
-        {Spec.Class{n1, cs1} == Spec.Any{}: Spec.Glob},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Class{+n1, +cs1} Spec.Star{}:
-      +h => Empty.absurd(
-        {Spec.Class{n1, cs1} == Spec.Star{}: Spec.Glob},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Class{+n1, +cs1} Spec.Class{+n2, +cs2}:
-      +h =>
-        %Shared.Bool.is_eq_sound(
-          n1,
-          n2
-        )(
-          Shared.Bool.and_true_left(
-            Shared.Bool.is_eq(n1, n2),
-            Shared.List.is_eq(~Char, ~Char.is_eq, cs1, cs2)
-          )(h)
-        ): {Spec.Class{n1, cs1} == Spec.Class{_, cs2}: Spec.Glob}
-        %Shared.List.is_eq_sound(
-          ~Char,
-          ~Char.is_eq,
-          ~Shared.Char.laws(),
-          cs1,
-          cs2
-        )(
-          Shared.Bool.and_true_right(
-            Shared.Bool.is_eq(n1, n2),
-            Shared.List.is_eq(~Char, ~Char.is_eq, cs1, cs2)
-          )(h)
-        ): {Spec.Class{n1, cs1} == Spec.Class{n1, _}: Spec.Glob}
-        {==}
-    case Spec.Class{+n1, +cs1} Spec.Deep{}:
-      +h => Empty.absurd(
-        {Spec.Class{n1, cs1} == Spec.Deep{}: Spec.Glob},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Class{+n1, +cs1} Spec.Cat{a2, b2}:
-      +h => Empty.absurd(
-        {Spec.Class{n1, cs1} == Spec.Cat{a2, b2}: Spec.Glob},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Class{+n1, +cs1} Spec.Alt{a2, b2}:
-      +h => Empty.absurd(
-        {Spec.Class{n1, cs1} == Spec.Alt{a2, b2}: Spec.Glob},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Deep{} Spec.Void{}:
-      h => Empty.absurd({Spec.Deep{} == Spec.Void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Deep{} Spec.Eps{}:
-      h => Empty.absurd({Spec.Deep{} == Spec.Eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Deep{} Spec.Lit{x2}:
-      h => Empty.absurd({Spec.Deep{} == Spec.Lit{x2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Deep{} Spec.Any{}:
-      h => Empty.absurd({Spec.Deep{} == Spec.Any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Deep{} Spec.Star{}:
-      h => Empty.absurd({Spec.Deep{} == Spec.Star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Deep{} Spec.Class{n2, cs2}:
-      h => Empty.absurd(
-        {Spec.Deep{} == Spec.Class{n2, cs2}: Spec.Glob},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Deep{} Spec.Deep{}:
-      _ => {==}
-    case Spec.Deep{} Spec.Cat{a2, b2}:
-      h => Empty.absurd({Spec.Deep{} == Spec.Cat{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Deep{} Spec.Alt{a2, b2}:
-      h => Empty.absurd({Spec.Deep{} == Spec.Alt{a2, b2}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Cat{+a1, +b1} Spec.Void{}:
-      +h => Empty.absurd({Spec.Cat{a1, b1} == Spec.Void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Cat{+a1, +b1} Spec.Eps{}:
-      +h => Empty.absurd({Spec.Cat{a1, b1} == Spec.Eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Cat{+a1, +b1} Spec.Lit{x2}:
-      +h => Empty.absurd(
-        {Spec.Cat{a1, b1} == Spec.Lit{x2}: Spec.Glob},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Cat{+a1, +b1} Spec.Any{}:
-      +h => Empty.absurd({Spec.Cat{a1, b1} == Spec.Any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Cat{+a1, +b1} Spec.Star{}:
-      +h => Empty.absurd({Spec.Cat{a1, b1} == Spec.Star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Cat{+a1, +b1} Spec.Class{n2, cs2}:
-      +h => Empty.absurd(
-        {Spec.Cat{a1, b1} == Spec.Class{n2, cs2}: Spec.Glob},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Cat{+a1, +b1} Spec.Deep{}:
-      +h => Empty.absurd({Spec.Cat{a1, b1} == Spec.Deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Cat{+a1, +b1} Spec.Cat{+a2, +b2}:
-      +h =>
-        %Glob.is_eq_sound(
-          a1,
-          a2
-        )(
-          Shared.Bool.and_true_left(Glob.is_eq(a1, a2), Glob.is_eq(b1, b2))(h)
-        ): {Spec.Cat{a1, b1} == Spec.Cat{_, b2}: Spec.Glob}
-        %Glob.is_eq_sound(
-          b1,
-          b2
-        )(
-          Shared.Bool.and_true_right(Glob.is_eq(a1, a2), Glob.is_eq(b1, b2))(h)
-        ): {Spec.Cat{a1, b1} == Spec.Cat{a1, _}: Spec.Glob}
-        {==}
-    case Spec.Cat{+a1, +b1} Spec.Alt{a2, b2}:
-      +h => Empty.absurd(
-        {Spec.Cat{a1, b1} == Spec.Alt{a2, b2}: Spec.Glob},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Alt{+a1, +b1} Spec.Void{}:
-      +h => Empty.absurd({Spec.Alt{a1, b1} == Spec.Void{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Alt{+a1, +b1} Spec.Eps{}:
-      +h => Empty.absurd({Spec.Alt{a1, b1} == Spec.Eps{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Alt{+a1, +b1} Spec.Lit{x2}:
-      +h => Empty.absurd(
-        {Spec.Alt{a1, b1} == Spec.Lit{x2}: Spec.Glob},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Alt{+a1, +b1} Spec.Any{}:
-      +h => Empty.absurd({Spec.Alt{a1, b1} == Spec.Any{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Alt{+a1, +b1} Spec.Star{}:
-      +h => Empty.absurd({Spec.Alt{a1, b1} == Spec.Star{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Alt{+a1, +b1} Spec.Class{n2, cs2}:
-      +h => Empty.absurd(
-        {Spec.Alt{a1, b1} == Spec.Class{n2, cs2}: Spec.Glob},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Alt{+a1, +b1} Spec.Deep{}:
-      +h => Empty.absurd({Spec.Alt{a1, b1} == Spec.Deep{}: Spec.Glob}, Shared.Bool.false_ne_true(h))
-    case Spec.Alt{+a1, +b1} Spec.Cat{a2, b2}:
-      +h => Empty.absurd(
-        {Spec.Alt{a1, b1} == Spec.Cat{a2, b2}: Spec.Glob},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Spec.Alt{+a1, +b1} Spec.Alt{+a2, +b2}:
-      +h =>
-        %Glob.is_eq_sound(
-          a1,
-          a2
-        )(
-          Shared.Bool.and_true_left(Glob.is_eq(a1, a2), Glob.is_eq(b1, b2))(h)
-        ): {Spec.Alt{a1, b1} == Spec.Alt{_, b2}: Spec.Glob}
-        %Glob.is_eq_sound(
-          b1,
-          b2
-        )(
-          Shared.Bool.and_true_right(Glob.is_eq(a1, a2), Glob.is_eq(b1, b2))(h)
-        ): {Spec.Alt{a1, b1} == Spec.Alt{a1, _}: Spec.Glob}
-        {==}
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
-
-# Glob.is_eq is True for a glob and itself
-def Glob.is_eq_refl(a: Spec.Glob) -> {Glob.is_eq(a, a) == True{}: Bool}:
-  match a:
+def Glob.re_step(
+  g: Spec.Glob,
+  +c: Char
+) -> {
+  Glob.re(
+    Spec.Glob.step(g, c)
+  )
+    == Regex.Re.step(~Char, ~Atom, ~Atom.hit, Glob.re(g), c): Regex.Re<Atom>
+}:
+  match g:
     case Spec.Void{}:
       {==}
     case Spec.Eps{}:
       {==}
     case Spec.Lit{x}:
-      Shared.Char.is_eq_refl(x)
+      Glob.re_of_bool(Char.is_eq(x, c))
     case Spec.Any{}:
-      {==}
+      Glob.re_of_bool(Spec.is_inner(c))
     case Spec.Star{}:
+      i = Spec.is_inner(c)
+      star = {Regex.Star{Regex.One{AAny{}}}: Regex.Re<Atom>}
+      %Glob.re_of_bool(
+        i
+      ): {Regex.Cat{Glob.re(Spec.Glob.of_bool(i)), star} == Regex.Cat{_, star}: Regex.Re<Atom>}
       {==}
-    case Spec.Class{n, cs}:
-      %Equal.sym(
-        Bool,
-        Shared.Bool.is_eq(n, n),
-        True{},
-        Shared.Bool.is_eq_refl(n)
-      ): {Bool.and(_, Shared.List.is_eq(~Char, ~Char.is_eq, cs, cs)) == True{}: Bool}
-      Shared.List.is_eq_refl(~Char, ~Char.is_eq, ~Shared.Char.laws(), cs)
+    case Spec.Class{neg, cs}:
+      +i = Spec.is_inner(c)
+      +x = Bool.xor(neg, List.contains(~Char, ~Char.is_eq, cs, c))
+      %Shared.List.all.if_and(
+        i,
+        u => x
+      ): {
+        Glob.re(
+          Spec.Glob.of_bool(_)
+        )
+          == Regex.Re.of_bool(Atom, List.all.if(u => x, i)): Regex.Re<Atom>
+      }
+      Glob.re_of_bool(List.all.if(u => x, i))
     case Spec.Deep{}:
       {==}
-    case Spec.Cat{a1, b1}:
-      %Equal.sym(
-        Bool,
-        Glob.is_eq(a1, a1),
-        True{},
-        Glob.is_eq_refl(a1)
-      ): {Bool.and(_, Glob.is_eq(b1, b1)) == True{}: Bool}
-      Glob.is_eq_refl(b1)
-    case Spec.Alt{a1, b1}:
-      %Equal.sym(
-        Bool,
-        Glob.is_eq(a1, a1),
-        True{},
-        Glob.is_eq_refl(a1)
-      ): {Bool.and(_, Glob.is_eq(b1, b1)) == True{}: Bool}
-      Glob.is_eq_refl(b1)
+    case Spec.Cat{+a, +b}:
+      ra = Glob.re(a)
+      rb = Glob.re(b)
+      sa = Glob.re(Spec.Glob.step(a, c))
+      sb = Glob.re(Spec.Glob.step(b, c))
+      +na = Spec.Glob.is_nullable(a)
+      lhs = {
+        Regex.Alt{Regex.Cat{sa, rb}, Regex.Cat{Glob.re(Spec.Glob.of_bool(na)), sb}}: Regex.Re<Atom>
+      }
+      %Glob.re_step(
+        a,
+        c
+      ): {
+        lhs
+          == Regex.Alt{
+            Regex.Cat{_, rb},
+            Regex.Cat{
+              Regex.Re.of_bool(Atom, Regex.Re.is_nullable(Atom, ra)),
+              Regex.Re.step(~Char, ~Atom, ~Atom.hit, rb, c)
+            }
+          }: Regex.Re<Atom>
+      }
+      %Glob.re_step(
+        b,
+        c
+      ): {
+        lhs
+          == Regex.Alt{
+            Regex.Cat{sa, rb},
+            Regex.Cat{Regex.Re.of_bool(Atom, Regex.Re.is_nullable(Atom, ra)), _}
+          }: Regex.Re<Atom>
+      }
+      %Glob.re_nullable(
+        a
+      ): {
+        lhs
+          == Regex.Alt{Regex.Cat{sa, rb}, Regex.Cat{Regex.Re.of_bool(Atom, _), sb}}: Regex.Re<Atom>
+      }
+      %Glob.re_of_bool(na): {lhs == Regex.Alt{Regex.Cat{sa, rb}, Regex.Cat{_, sb}}: Regex.Re<Atom>}
+      {==}
+    case Spec.Alt{+a, +b}:
+      sa = Glob.re(Spec.Glob.step(a, c))
+      sb = Glob.re(Spec.Glob.step(b, c))
+      %Glob.re_step(
+        a,
+        c
+      ): {
+        Regex.Alt{
+          sa,
+          sb
+        }
+          == Regex.Alt{_, Regex.Re.step(~Char, ~Atom, ~Atom.hit, Glob.re(b), c)}: Regex.Re<Atom>
+      }
+      %Glob.re_step(b, c): {Regex.Alt{sa, sb} == Regex.Alt{sa, _}: Regex.Re<Atom>}
+      {==}
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# the laws of Glob.is_eq
-def Glob.laws() -> Shared.Eq.Laws(Spec.Glob, Glob.is_eq):
-  (Glob.is_eq_refl, Glob.is_eq_sound)
+# a glob matches p exactly when its expression matches the characters of p
+def Glob.re_matches(
+  p: String,
+  +g: Spec.Glob
+) -> {
+  Regex.Re.matches(
+    ~Char,
+    ~Atom,
+    ~Atom.hit,
+    String.to_list(p),
+    Glob.re(g)
+  )
+    == Spec.Glob.matches(p, g): Bool
+}:
+  match p:
+    case SNil{}:
+      Equal.sym(
+        Bool,
+        Spec.Glob.is_nullable(g),
+        Regex.Re.is_nullable(Atom, Glob.re(g)),
+        Glob.re_nullable(g)
+      )
+    case SCon{+c, t}:
+      %Glob.re_step(
+        g,
+        c
+      ): {
+        Regex.Re.matches(
+          ~Char,
+          ~Atom,
+          ~Atom.hit,
+          String.to_list(t),
+          _
+        )
+          == Spec.Glob.matches(t, Spec.Glob.step(g, c)): Bool
+      }
+      Glob.re_matches(t, Spec.Glob.step(g, c))
 
 # Matching algebra
 # ----------------
-# Each lemma states the simpler side first, so a rewrite with it turns a
-# glob into its simpler meaning.
+# The laws of regex.bend, for globs. Each states the simpler side first, so a
+# rewrite with it turns a glob into its simpler meaning.
 
 # Void matches nothing
-def Glob.void_never(p: String) -> {False{} == Spec.Glob.matches(p, Spec.Void{}): Bool}:
-  match p:
-    case SNil{}:
-      {==}
-    case SCon{c, t}:
-      Glob.void_never(t)
+def Glob.void_never(+p: String) -> {False{} == Spec.Glob.matches(p, Spec.Void{}): Bool}:
+  %Glob.re_matches(p, Spec.Void{}): {False{} == _: Bool}
+  Regex.Re.void_never(~Char, ~Atom, ~Atom.hit, String.to_list(p))
 
 # Alt matches what either side matches
 def Glob.alt_or(
-  p: String,
-  a: Spec.Glob,
-  b: Spec.Glob
+  +p: String,
+  +a: Spec.Glob,
+  +b: Spec.Glob
 ) -> {
   Bool.or(
     Spec.Glob.matches(p, a),
@@ -382,267 +264,54 @@ def Glob.alt_or(
   )
     == Spec.Glob.matches(p, Spec.Alt{a, b}): Bool
 }:
-  match p:
-    case SNil{}:
-      {==}
-    case SCon{+c, t}:
-      Glob.alt_or(t, Spec.Glob.step(a, c), Spec.Glob.step(b, c))
+  +w = String.to_list(p)
+  ma = Regex.Re.matches(~Char, ~Atom, ~Atom.hit, w, Glob.re(a))
+  mb = Regex.Re.matches(~Char, ~Atom, ~Atom.hit, w, Glob.re(b))
+  %Glob.re_matches(
+    p,
+    a
+  ): {Bool.or(_, Spec.Glob.matches(p, b)) == Spec.Glob.matches(p, Spec.Alt{a, b}): Bool}
+  %Glob.re_matches(p, b): {Bool.or(ma, _) == Spec.Glob.matches(p, Spec.Alt{a, b}): Bool}
+  %Glob.re_matches(p, Spec.Alt{a, b}): {Bool.or(ma, mb) == _: Bool}
+  Regex.Re.alt_or(~Char, ~Atom, ~Atom.hit, w, Glob.re(a), Glob.re(b))
 
 # Cat after Void matches nothing
 def Glob.cat_void_l(
-  p: String,
+  +p: String,
   +x: Spec.Glob
 ) -> {False{} == Spec.Glob.matches(p, Spec.Cat{Spec.Void{}, x}): Bool}:
-  match p:
-    case SNil{}:
-      {==}
-    case SCon{c, +t}:
-      +x2 = Spec.Glob.step(x, c)
-      %Glob.alt_or(t, Spec.Cat{Spec.Void{}, x}, Spec.Cat{Spec.Void{}, x2}): {False{} == _: Bool}
-      %Glob.cat_void_l(
-        t,
-        x
-      ): {False{} == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Void{}, x2})): Bool}
-      Glob.cat_void_l(t, x2)
-
-# Cat before Void matches nothing
-def Glob.cat_void_r(
-  p: String,
-  +x: Spec.Glob
-) -> {False{} == Spec.Glob.matches(p, Spec.Cat{x, Spec.Void{}}): Bool}:
-  match p:
-    case SNil{}:
-      Equal.sym(
-        Bool,
-        Bool.and(Spec.Glob.is_nullable(x), False{}),
-        False{},
-        Shared.Bool.and_false_right(Spec.Glob.is_nullable(x))
-      )
-    case SCon{c, +t}:
-      +x2 = Spec.Glob.step(x, c)
-      +n = Spec.Glob.of_bool(Spec.Glob.is_nullable(x))
-      %Glob.alt_or(t, Spec.Cat{x2, Spec.Void{}}, Spec.Cat{n, Spec.Void{}}): {False{} == _: Bool}
-      %Glob.cat_void_r(
-        t,
-        x2
-      ): {False{} == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{n, Spec.Void{}})): Bool}
-      Glob.cat_void_r(t, n)
+  %Glob.re_matches(p, Spec.Cat{Spec.Void{}, x}): {False{} == _: Bool}
+  Regex.Re.cat_void_l(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(x))
 
 # Cat after Eps matches what its right side matches
 def Glob.cat_eps_l(
-  p: String,
+  +p: String,
   +x: Spec.Glob
 ) -> {Spec.Glob.matches(p, x) == Spec.Glob.matches(p, Spec.Cat{Spec.Eps{}, x}): Bool}:
-  match p:
-    case SNil{}:
-      {==}
-    case SCon{c, +t}:
-      +x2 = Spec.Glob.step(x, c)
-      %Glob.alt_or(
-        t,
-        Spec.Cat{Spec.Void{}, x},
-        Spec.Cat{Spec.Eps{}, x2}
-      ): {Spec.Glob.matches(t, x2) == _: Bool}
-      %Glob.cat_void_l(
-        t,
-        x
-      ): {
-        Spec.Glob.matches(t, x2) == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Eps{}, x2})): Bool
-      }
-      Glob.cat_eps_l(t, x2)
+  %Glob.re_matches(p, x): {_ == Spec.Glob.matches(p, Spec.Cat{Spec.Eps{}, x}): Bool}
+  %Glob.re_matches(
+    p,
+    Spec.Cat{Spec.Eps{}, x}
+  ): {Regex.Re.matches(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(x)) == _: Bool}
+  Regex.Re.cat_eps_l(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(x))
 
 # Cat before Eps matches what its left side matches
 def Glob.cat_eps_r(
-  p: String,
+  +p: String,
   +x: Spec.Glob
 ) -> {Spec.Glob.matches(p, x) == Spec.Glob.matches(p, Spec.Cat{x, Spec.Eps{}}): Bool}:
-  match p:
-    case SNil{}:
-      Shared.Bool.and_true(Spec.Glob.is_nullable(x))
-    case SCon{c, +t}:
-      +x2 = Spec.Glob.step(x, c)
-      +n = Spec.Glob.of_bool(Spec.Glob.is_nullable(x))
-      %Glob.alt_or(
-        t,
-        Spec.Cat{x2, Spec.Eps{}},
-        Spec.Cat{n, Spec.Void{}}
-      ): {Spec.Glob.matches(t, x2) == _: Bool}
-      %Glob.cat_void_r(
-        t,
-        n
-      ): {
-        Spec.Glob.matches(t, x2) == Bool.or(Spec.Glob.matches(t, Spec.Cat{x2, Spec.Eps{}}), _): Bool
-      }
-      %Shared.Bool.or_false(
-        Spec.Glob.matches(t, Spec.Cat{x2, Spec.Eps{}})
-      ): {Spec.Glob.matches(t, x2) == _: Bool}
-      Glob.cat_eps_r(t, x2)
-
-# the Bool shape of one step of Glob.cat_alt
-def Bool.cat_alt_step(
-  x: Bool,
-  y: Bool,
-  a: Bool,
-  b: Bool,
-  z: Bool
-) -> {
-  Bool.or(
-    Bool.or(x, Bool.and(a, z)),
-    Bool.or(y, Bool.and(b, z))
-  )
-    == Bool.or(Bool.or(x, y), Bool.and(Bool.or(a, b), z)): Bool
-}:
-  match x y a b z:
-    case False{} False{} False{} False{} False{}:
-      {==}
-    case False{} False{} False{} False{} True{}:
-      {==}
-    case False{} False{} False{} True{} False{}:
-      {==}
-    case False{} False{} False{} True{} True{}:
-      {==}
-    case False{} False{} True{} False{} False{}:
-      {==}
-    case False{} False{} True{} False{} True{}:
-      {==}
-    case False{} False{} True{} True{} False{}:
-      {==}
-    case False{} False{} True{} True{} True{}:
-      {==}
-    case False{} True{} False{} False{} False{}:
-      {==}
-    case False{} True{} False{} False{} True{}:
-      {==}
-    case False{} True{} False{} True{} False{}:
-      {==}
-    case False{} True{} False{} True{} True{}:
-      {==}
-    case False{} True{} True{} False{} False{}:
-      {==}
-    case False{} True{} True{} False{} True{}:
-      {==}
-    case False{} True{} True{} True{} False{}:
-      {==}
-    case False{} True{} True{} True{} True{}:
-      {==}
-    case True{} False{} False{} False{} False{}:
-      {==}
-    case True{} False{} False{} False{} True{}:
-      {==}
-    case True{} False{} False{} True{} False{}:
-      {==}
-    case True{} False{} False{} True{} True{}:
-      {==}
-    case True{} False{} True{} False{} False{}:
-      {==}
-    case True{} False{} True{} False{} True{}:
-      {==}
-    case True{} False{} True{} True{} False{}:
-      {==}
-    case True{} False{} True{} True{} True{}:
-      {==}
-    case True{} True{} False{} False{} False{}:
-      {==}
-    case True{} True{} False{} False{} True{}:
-      {==}
-    case True{} True{} False{} True{} False{}:
-      {==}
-    case True{} True{} False{} True{} True{}:
-      {==}
-    case True{} True{} True{} False{} False{}:
-      {==}
-    case True{} True{} True{} False{} True{}:
-      {==}
-    case True{} True{} True{} True{} False{}:
-      {==}
-    case True{} True{} True{} True{} True{}:
-      {==}
-
-# the Bool shape of one step of Glob.cat_assoc
-def Bool.cat_assoc_step(
-  x: Bool,
-  y: Bool,
-  a: Bool,
-  b: Bool,
-  z: Bool
-) -> {
-  Bool.or(
-    x,
-    Bool.and(a, Bool.or(y, Bool.and(b, z)))
-  )
-    == Bool.or(Bool.or(x, Bool.and(a, y)), Bool.and(Bool.and(a, b), z)): Bool
-}:
-  match x y a b z:
-    case False{} False{} False{} False{} False{}:
-      {==}
-    case False{} False{} False{} False{} True{}:
-      {==}
-    case False{} False{} False{} True{} False{}:
-      {==}
-    case False{} False{} False{} True{} True{}:
-      {==}
-    case False{} False{} True{} False{} False{}:
-      {==}
-    case False{} False{} True{} False{} True{}:
-      {==}
-    case False{} False{} True{} True{} False{}:
-      {==}
-    case False{} False{} True{} True{} True{}:
-      {==}
-    case False{} True{} False{} False{} False{}:
-      {==}
-    case False{} True{} False{} False{} True{}:
-      {==}
-    case False{} True{} False{} True{} False{}:
-      {==}
-    case False{} True{} False{} True{} True{}:
-      {==}
-    case False{} True{} True{} False{} False{}:
-      {==}
-    case False{} True{} True{} False{} True{}:
-      {==}
-    case False{} True{} True{} True{} False{}:
-      {==}
-    case False{} True{} True{} True{} True{}:
-      {==}
-    case True{} False{} False{} False{} False{}:
-      {==}
-    case True{} False{} False{} False{} True{}:
-      {==}
-    case True{} False{} False{} True{} False{}:
-      {==}
-    case True{} False{} False{} True{} True{}:
-      {==}
-    case True{} False{} True{} False{} False{}:
-      {==}
-    case True{} False{} True{} False{} True{}:
-      {==}
-    case True{} False{} True{} True{} False{}:
-      {==}
-    case True{} False{} True{} True{} True{}:
-      {==}
-    case True{} True{} False{} False{} False{}:
-      {==}
-    case True{} True{} False{} False{} True{}:
-      {==}
-    case True{} True{} False{} True{} False{}:
-      {==}
-    case True{} True{} False{} True{} True{}:
-      {==}
-    case True{} True{} True{} False{} False{}:
-      {==}
-    case True{} True{} True{} False{} True{}:
-      {==}
-    case True{} True{} True{} True{} False{}:
-      {==}
-    case True{} True{} True{} True{} True{}:
-      {==}
+  %Glob.re_matches(p, x): {_ == Spec.Glob.matches(p, Spec.Cat{x, Spec.Eps{}}): Bool}
+  %Glob.re_matches(
+    p,
+    Spec.Cat{x, Spec.Eps{}}
+  ): {Regex.Re.matches(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(x)) == _: Bool}
+  Regex.Re.cat_eps_r(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(x))
 
 # Cat after of_bool(b) matches what its right side matches, when b holds
 def Glob.cat_of_bool(
-  p: String,
-  b: Bool,
-  r: Spec.Glob
+  +p: String,
+  +b: Bool,
+  +r: Spec.Glob
 ) -> {
   Bool.and(
     b,
@@ -650,69 +319,26 @@ def Glob.cat_of_bool(
   )
     == Spec.Glob.matches(p, Spec.Cat{Spec.Glob.of_bool(b), r}): Bool
 }:
-  match b:
-    case False{}:
-      Glob.cat_void_l(p, r)
-    case True{}:
-      Glob.cat_eps_l(p, r)
-
-# Cat after Alt matches what either Cat matches
-def Glob.cat_alt(
-  p: String,
-  +a: Spec.Glob,
-  +b: Spec.Glob,
-  +r: Spec.Glob
-) -> {
-  Bool.or(
-    Spec.Glob.matches(p, Spec.Cat{a, r}),
-    Spec.Glob.matches(p, Spec.Cat{b, r})
-  )
-    == Spec.Glob.matches(p, Spec.Cat{Spec.Alt{a, b}, r}): Bool
-}:
-  match p:
-    case SNil{}:
-      Shared.Bool.and_or(
-        Spec.Glob.is_nullable(a),
-        Spec.Glob.is_nullable(b),
-        Spec.Glob.is_nullable(r)
-      )
-    case SCon{+c, +t}:
-      +a2 = Spec.Glob.step(a, c)
-      +b2 = Spec.Glob.step(b, c)
-      +r2 = Spec.Glob.step(r, c)
-      +na = Spec.Glob.is_nullable(a)
-      +nb = Spec.Glob.is_nullable(b)
-      +p1 = {Spec.Cat{a2, r}: Spec.Glob}
-      q1 = {Spec.Cat{Spec.Glob.of_bool(na), r2}: Spec.Glob}
-      +p2 = {Spec.Cat{b2, r}: Spec.Glob}
-      q2 = {Spec.Cat{Spec.Glob.of_bool(nb), r2}: Spec.Glob}
-      +ab = {Spec.Cat{Spec.Alt{a2, b2}, r}: Spec.Glob}
-      +qab = {Spec.Cat{Spec.Glob.of_bool(Bool.or(na, nb)), r2}: Spec.Glob}
-      +x = Spec.Glob.matches(t, p1)
-      +y = Spec.Glob.matches(t, p2)
-      +z = Spec.Glob.matches(t, r2)
-      rhs = Spec.Glob.matches(t, Spec.Alt{ab, qab})
-      %Glob.alt_or(t, p1, q1): {Bool.or(_, Spec.Glob.matches(t, Spec.Alt{p2, q2})) == rhs: Bool}
-      %Glob.alt_or(t, p2, q2): {Bool.or(Bool.or(x, Spec.Glob.matches(t, q1)), _) == rhs: Bool}
-      %Glob.cat_of_bool(
-        t,
-        na,
-        r2
-      ): {Bool.or(Bool.or(x, _), Bool.or(y, Spec.Glob.matches(t, q2))) == rhs: Bool}
-      +l = Bool.or(Bool.or(x, Bool.and(na, z)), Bool.or(y, Bool.and(nb, z)))
-      %Glob.cat_of_bool(
-        t,
-        nb,
-        r2
-      ): {Bool.or(Bool.or(x, Bool.and(na, z)), Bool.or(y, _)) == rhs: Bool}
-      %Glob.alt_or(t, ab, qab): {l == _: Bool}
-      %Glob.cat_alt(t, a2, b2, r): {l == Bool.or(_, Spec.Glob.matches(t, qab)): Bool}
-      %Glob.cat_of_bool(t, Bool.or(na, nb), r2): {l == Bool.or(Bool.or(x, y), _): Bool}
-      Bool.cat_alt_step(x, y, na, nb, z)
+  +w = String.to_list(p)
+  mr = Regex.Re.matches(~Char, ~Atom, ~Atom.hit, w, Glob.re(r))
+  %Glob.re_matches(
+    p,
+    r
+  ): {Bool.and(b, _) == Spec.Glob.matches(p, Spec.Cat{Spec.Glob.of_bool(b), r}): Bool}
+  %Glob.re_matches(p, Spec.Cat{Spec.Glob.of_bool(b), r}): {Bool.and(b, mr) == _: Bool}
+  %Equal.sym(
+    Regex.Re<Atom>,
+    Glob.re(Spec.Glob.of_bool(b)),
+    Regex.Re.of_bool(Atom, b),
+    Glob.re_of_bool(b)
+  ): {
+    Bool.and(b, mr) == Regex.Re.matches(~Char, ~Atom, ~Atom.hit, w, Regex.Cat{_, Glob.re(r)}): Bool
+  }
+  Regex.Re.cat_of_bool(~Char, ~Atom, ~Atom.hit, w, b, Glob.re(r))
 
 # Cat is associative
 def Glob.cat_assoc(
-  p: String,
+  +p: String,
   +a: Spec.Glob,
   +b: Spec.Glob,
   +r: Spec.Glob
@@ -723,577 +349,318 @@ def Glob.cat_assoc(
   )
     == Spec.Glob.matches(p, Spec.Cat{Spec.Cat{a, b}, r}): Bool
 }:
-  match p:
-    case SNil{}:
-      Shared.Bool.and_assoc(
-        Spec.Glob.is_nullable(a),
-        Spec.Glob.is_nullable(b),
-        Spec.Glob.is_nullable(r)
-      )
-    case SCon{+c, +t}:
-      +a2 = Spec.Glob.step(a, c)
-      +b2 = Spec.Glob.step(b, c)
-      +r2 = Spec.Glob.step(r, c)
-      +na = Spec.Glob.is_nullable(a)
-      +nb = Spec.Glob.is_nullable(b)
-      +x1 = {Spec.Cat{a2, Spec.Cat{b, r}}: Spec.Glob}
-      +br = {Spec.Cat{b2, r}: Spec.Glob}
-      +inner = {Spec.Alt{br, Spec.Cat{Spec.Glob.of_bool(nb), r2}}: Spec.Glob}
-      q = {Spec.Cat{Spec.Glob.of_bool(na), inner}: Spec.Glob}
-      +c1 = {Spec.Cat{a2, b}: Spec.Glob}
-      +c2 = {Spec.Cat{Spec.Glob.of_bool(na), b2}: Spec.Glob}
-      +qn = {Spec.Cat{Spec.Glob.of_bool(Bool.and(na, nb)), r2}: Spec.Glob}
-      +x = Spec.Glob.matches(t, x1)
-      +y = Spec.Glob.matches(t, br)
-      +z = Spec.Glob.matches(t, r2)
-      rhs = Spec.Glob.matches(t, Spec.Alt{Spec.Cat{Spec.Alt{c1, c2}, r}, qn})
-      %Glob.alt_or(t, x1, q): {_ == rhs: Bool}
-      %Glob.cat_of_bool(t, na, inner): {Bool.or(x, _) == rhs: Bool}
-      %Glob.alt_or(
-        t,
-        br,
-        Spec.Cat{Spec.Glob.of_bool(nb), r2}
-      ): {Bool.or(x, Bool.and(na, _)) == rhs: Bool}
-      %Glob.cat_of_bool(t, nb, r2): {Bool.or(x, Bool.and(na, Bool.or(y, _))) == rhs: Bool}
-      +l = Bool.or(x, Bool.and(na, Bool.or(y, Bool.and(nb, z))))
-      %Glob.alt_or(t, Spec.Cat{Spec.Alt{c1, c2}, r}, qn): {l == _: Bool}
-      %Glob.cat_alt(t, c1, c2, r): {l == Bool.or(_, Spec.Glob.matches(t, qn)): Bool}
-      %Glob.cat_assoc(
-        t,
-        a2,
-        b,
-        r
-      ): {
-        l
-          == Bool.or(
-            Bool.or(_, Spec.Glob.matches(t, Spec.Cat{c2, r})),
-            Spec.Glob.matches(t, qn)
-          ): Bool
-      }
-      %Glob.cat_assoc(
-        t,
-        Spec.Glob.of_bool(na),
-        b2,
-        r
-      ): {l == Bool.or(Bool.or(x, _), Spec.Glob.matches(t, qn)): Bool}
-      %Glob.cat_of_bool(t, na, br): {l == Bool.or(Bool.or(x, _), Spec.Glob.matches(t, qn)): Bool}
-      %Glob.cat_of_bool(
-        t,
-        Bool.and(na, nb),
-        r2
-      ): {l == Bool.or(Bool.or(x, Bool.and(na, y)), _): Bool}
-      Bool.cat_assoc_step(x, y, na, nb, z)
+  w = String.to_list(p)
+  %Glob.re_matches(
+    p,
+    Spec.Cat{a, Spec.Cat{b, r}}
+  ): {_ == Spec.Glob.matches(p, Spec.Cat{Spec.Cat{a, b}, r}): Bool}
+  %Glob.re_matches(
+    p,
+    Spec.Cat{Spec.Cat{a, b}, r}
+  ): {Regex.Re.matches(~Char, ~Atom, ~Atom.hit, w, Glob.re(Spec.Cat{a, Spec.Cat{b, r}})) == _: Bool}
+  Regex.Re.cat_assoc(~Char, ~Atom, ~Atom.hit, w, Glob.re(a), Glob.re(b), Glob.re(r))
 
-# Partial derivatives
-# -------------------
-# A Seq is globs one after another; a set of Seqs matches what any of them
-# matches. After a character, a Seq becomes a set of Seqs whose parts are
-# parts of the original glob, so a search over them meets finitely many.
+# Atom equality and keys
+# ----------------------
 
-# the glob of the parts of s, one after another
-def Seq.glob(s: List<&2, Spec.Glob>) -> Spec.Glob:
-  match s:
-    case Nil{}:
-      Spec.Eps{}
-    case Con{h, t}:
-      Spec.Cat{h, Seq.glob(t)}
-
-# some Seq of xs matches p
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
-def Seqs.matches(+p: String, xs: List<&2, List<&2, Spec.Glob>>) -> Bool:
-  match xs:
-    case Nil{}:
+# a and b are the same atom
+def Atom.is_eq(a: Atom, b: Atom) -> Bool:
+  match a b:
+    case ALit{x} ALit{y}:
+      Char.is_eq(x, y)
+    case AAny{} AAny{}:
+      True{}
+    case AClass{n, xs} AClass{m, ys}:
+      List.all.if(u => Shared.List.is_eq(~Char, ~Char.is_eq, xs, ys), Shared.Bool.is_eq(n, m))
+    case _ _:
       False{}
-    case Con{h, t}:
-      Bool.or(Spec.Glob.matches(p, Seq.glob(h)), Seqs.matches(p, t))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
-# xs then ys matches what xs or ys matches
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
-def Seqs.matches_append(
-  +p: String,
-  xs: List<&2, List<&2, Spec.Glob>>,
-  +ys: List<&2, List<&2, Spec.Glob>>
-) -> {
-  Bool.or(
-    Seqs.matches(p, xs),
-    Seqs.matches(p, ys)
-  )
-    == Seqs.matches(p, List.append(&2, List<&2, Spec.Glob>, xs, ys)): Bool
-}:
-  match xs:
-    case Nil{}:
+# Atom.is_eq is True for an atom and itself
+def Atom.is_eq_refl(a: Atom) -> {Atom.is_eq(a, a) == True{}: Bool}:
+  match a:
+    case ALit{x}:
+      Shared.Char.is_eq_refl(x)
+    case AAny{}:
       {==}
-    case Con{h, +t}:
-      m = Spec.Glob.matches(p, Seq.glob(h))
-      %Seqs.matches_append(
-        p,
-        t,
-        ys
-      ): {Bool.or(Bool.or(m, Seqs.matches(p, t)), Seqs.matches(p, ys)) == Bool.or(m, _): Bool}
-      Equal.sym(
-        Bool,
-        Bool.or(m, Bool.or(Seqs.matches(p, t), Seqs.matches(p, ys))),
-        Bool.or(Bool.or(m, Seqs.matches(p, t)), Seqs.matches(p, ys)),
-        Shared.Bool.or_assoc(m, Seqs.matches(p, t), Seqs.matches(p, ys))
-      )
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+    case AClass{+n, +xs}:
+      Shared.List.all.if_both(
+        Shared.Bool.is_eq(n, n),
+        u => Shared.List.is_eq(~Char, ~Char.is_eq, xs, xs)
+      )(
+        Shared.Bool.is_eq_refl(n)
+      )(Shared.List.is_eq_refl(~Char, ~Char.is_eq, ~Shared.Char.laws(), xs))
 
-# [r] when hit, else []
-def Seq.keep(hit: Bool, r: List<&2, Spec.Glob>) -> List<&2, List<&2, Spec.Glob>>:
-  match hit:
-    case False{}:
-      []
-    case True{}:
-      [r]
-
-# the Seqs that h then r becomes after c, given k: what r becomes after c
-# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a glob tree is a few nodes, where a fork costs more than it saves
-def Seq.step.head(
-  h: Spec.Glob,
-  +r: List<&2, Spec.Glob>,
-  +c: Char,
-  +k: List<&2, List<&2, Spec.Glob>>
-) -> List<&2, List<&2, Spec.Glob>>:
-  match h:
-    case Spec.Void{}:
-      []
-    case Spec.Eps{}:
-      k
-    case Spec.Lit{x}:
-      Seq.keep(Char.is_eq(x, c), r)
-    case Spec.Any{}:
-      Seq.keep(Spec.is_inner(c), r)
-    case Spec.Star{}:
-      List.append(&2, List<&2, Spec.Glob>, Seq.keep(Spec.is_inner(c), Con{Spec.Star{}, r}), k)
-    case Spec.Class{neg, cs}:
-      hit = Bool.xor(neg, List.contains(~Char, ~Char.is_eq, cs, c))
-      Seq.keep(Bool.and(Spec.is_inner(c), hit), r)
-    case Spec.Deep{}:
-      Con{Con{Spec.Deep{}, r}, k}
-    case Spec.Cat{a, +b}:
-      Seq.step.head(a, Con{b, r}, c, Seq.step.head(b, r, c, k))
-    case Spec.Alt{a, b}:
-      List.append(&2, List<&2, Spec.Glob>, Seq.step.head(a, r, c, k), Seq.step.head(b, r, c, k))
-# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
-
-# the Seqs that s becomes after c
-def Seq.step(s: List<&2, Spec.Glob>, +c: Char) -> List<&2, List<&2, Spec.Glob>>:
-  match s:
-    case Nil{}:
-      []
-    case Con{h, +t}:
-      Seq.step.head(h, t, c, Seq.step(t, c))
-
-# Seq.keep(hit, r) matches t when hit holds and r matches t
-def Seq.keep_ok(
-  +hit: Bool,
-  t: String,
-  r: List<&2, Spec.Glob>
-) -> {
-  Seqs.matches(
-    t,
-    Seq.keep(hit, r)
-  )
-    == Bool.or(Bool.and(hit, Spec.Glob.matches(t, Seq.glob(r))), False{}): Bool
-}:
-  match hit:
-    case False{}:
-      {==}
-    case True{}:
-      {==}
-
-# a head that reads one character: after c it is of_bool(hit), then r
-def Seq.step_head_one(
-  +hit: Bool,
-  +r: List<&2, Spec.Glob>,
-  c: Char,
-  +t: String
-) -> {
-  Seqs.matches(
-    t,
-    Seq.keep(hit, r)
-  )
-    == Spec.Glob.matches(
-      t,
-      Spec.Alt{
-        Spec.Cat{Spec.Glob.of_bool(hit), Seq.glob(r)},
-        Spec.Cat{Spec.Void{}, Spec.Glob.step(Seq.glob(r), c)}
-      }
-    ): Bool
-}:
-  +g = Seq.glob(r)
-  +g2 = Spec.Glob.step(g, c)
-  l = Seqs.matches(t, Seq.keep(hit, r))
-  %Glob.alt_or(t, Spec.Cat{Spec.Glob.of_bool(hit), g}, Spec.Cat{Spec.Void{}, g2}): {l == _: Bool}
-  %Glob.cat_of_bool(
-    t,
-    hit,
-    g
-  ): {l == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Void{}, g2})): Bool}
-  %Glob.cat_void_l(t, g2): {l == Bool.or(Bool.and(hit, Spec.Glob.matches(t, g)), _): Bool}
-  Seq.keep_ok(hit, t, r)
-
-# Seq.step.head(h, r, c, k) matches t when h then r matches c then t,
-# given that k matches t when r matches c then t
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
-def Seq.step_head_ok(
-  h: Spec.Glob,
-  +r: List<&2, Spec.Glob>,
-  +c: Char,
-  +t: String,
-  +k: List<&2, List<&2, Spec.Glob>>,
-  +hk: {Seqs.matches(t, k) == Spec.Glob.matches(SCon{c, t}, Seq.glob(r)): Bool}
-) -> {
-  Seqs.matches(
-    t,
-    Seq.step.head(h, r, c, k)
-  )
-    == Spec.Glob.matches(SCon{c, t}, Spec.Cat{h, Seq.glob(r)}): Bool
-}:
-  match h:
-    case Spec.Void{}:
-      g = Seq.glob(r)
-      Glob.cat_void_l(SCon{c, t}, g)
-    case Spec.Eps{}:
-      g = Seq.glob(r)
-      %Glob.cat_eps_l(SCon{c, t}, g): {Seqs.matches(t, k) == _: Bool}
-      hk
-    case Spec.Lit{x}:
-      Seq.step_head_one(Char.is_eq(x, c), r, c, t)
-    case Spec.Any{}:
-      Seq.step_head_one(Spec.is_inner(c), r, c, t)
-    case Spec.Star{}:
-      +i = Spec.is_inner(c)
-      +s = {Con{Spec.Star{}, r}: List<&2, Spec.Glob>}
-      +g = Seq.glob(r)
-      +g2 = Spec.Glob.step(g, c)
-      +m = Spec.Glob.matches(t, Spec.Cat{Spec.Star{}, g})
-      sk = Seqs.matches(t, k)
-      +cs = {Spec.Cat{Spec.Cat{Spec.Glob.of_bool(i), Spec.Star{}}, g}: Spec.Glob}
-      rhs = Spec.Glob.matches(t, Spec.Alt{cs, Spec.Cat{Spec.Eps{}, g2}})
-      %Seqs.matches_append(t, Seq.keep(i, s), k): {_ == rhs: Bool}
-      %Equal.sym(
-        Bool,
-        Seqs.matches(t, Seq.keep(i, s)),
-        Bool.or(Bool.and(i, m), False{}),
-        Seq.keep_ok(i, t, s)
-      ): {Bool.or(_, sk) == rhs: Bool}
-      %Shared.Bool.or_false(Bool.and(i, m)): {Bool.or(_, sk) == rhs: Bool}
-      +l = Bool.or(Bool.and(i, m), sk)
-      %Glob.alt_or(t, cs, Spec.Cat{Spec.Eps{}, g2}): {l == _: Bool}
-      %Glob.cat_assoc(
-        t,
-        Spec.Glob.of_bool(i),
-        Spec.Star{},
-        g
-      ): {l == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Eps{}, g2})): Bool}
-      %Glob.cat_of_bool(
-        t,
-        i,
-        Spec.Cat{Spec.Star{}, g}
-      ): {l == Bool.or(_, Spec.Glob.matches(t, Spec.Cat{Spec.Eps{}, g2})): Bool}
-      %Glob.cat_eps_l(t, g2): {l == Bool.or(Bool.and(i, m), _): Bool}
-      %hk: {l == Bool.or(Bool.and(i, m), _): Bool}
-      {==}
-    case Spec.Class{neg, cs}:
-      hit = Bool.xor(neg, List.contains(~Char, ~Char.is_eq, cs, c))
-      Seq.step_head_one(Bool.and(Spec.is_inner(c), hit), r, c, t)
-    case Spec.Deep{}:
-      +g = Seq.glob(r)
-      +g2 = Spec.Glob.step(g, c)
-      l = Seqs.matches(t, Con{Con{Spec.Deep{}, r}, k})
-      %Glob.alt_or(t, Spec.Cat{Spec.Deep{}, g}, Spec.Cat{Spec.Eps{}, g2}): {l == _: Bool}
-      %Glob.cat_eps_l(
-        t,
-        g2
-      ): {l == Bool.or(Spec.Glob.matches(t, Spec.Cat{Spec.Deep{}, g}), _): Bool}
-      %hk: {l == Bool.or(Spec.Glob.matches(t, Spec.Cat{Spec.Deep{}, g}), _): Bool}
-      {==}
-    case Spec.Cat{+a, +b}:
-      g = Seq.glob(r)
-      kb = Seq.step.head(b, r, c, k)
-      hb = Seq.step_head_ok(b, r, c, t, k, hk)
-      %Glob.cat_assoc(
-        SCon{c, t},
-        a,
-        b,
-        g
-      ): {Seqs.matches(t, Seq.step.head(a, Con{b, r}, c, kb)) == _: Bool}
-      Seq.step_head_ok(a, Con{b, r}, c, t, kb, hb)
-    case Spec.Alt{+a, +b}:
-      g = Seq.glob(r)
-      +ka = Seq.step.head(a, r, c, k)
-      +kb = Seq.step.head(b, r, c, k)
-      l = Bool.or(Seqs.matches(t, ka), Seqs.matches(t, kb))
-      %Seqs.matches_append(
-        t,
-        ka,
-        kb
-      ): {_ == Spec.Glob.matches(SCon{c, t}, Spec.Cat{Spec.Alt{a, b}, g}): Bool}
-      %Glob.cat_alt(SCon{c, t}, a, b, g): {l == _: Bool}
-      %Seq.step_head_ok(
-        a,
-        r,
-        c,
-        t,
-        k,
-        hk
-      ): {l == Bool.or(_, Spec.Glob.matches(SCon{c, t}, Spec.Cat{b, g})): Bool}
-      %Seq.step_head_ok(b, r, c, t, k, hk): {l == Bool.or(Seqs.matches(t, ka), _): Bool}
-      {==}
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# Seq.step(s, c) matches t when s matches c then t
-def Seq.step_ok(
-  s: List<&2, Spec.Glob>,
-  +c: Char,
-  +t: String
-) -> {Seqs.matches(t, Seq.step(s, c)) == Spec.Glob.matches(SCon{c, t}, Seq.glob(s)): Bool}:
-  match s:
-    case Nil{}:
-      Glob.void_never(t)
-    case Con{h, +r}:
-      Seq.step_head_ok(h, r, c, t, Seq.step(r, c), Seq.step_ok(r, c, t))
-
-# xs and ys are the same globs
-def Seq.is_eq(xs: List<&2, Spec.Glob>, ys: List<&2, Spec.Glob>) -> Bool:
-  Shared.List.is_eq(~Spec.Glob, ~Glob.is_eq, xs, ys)
-
-# the laws of Seq.is_eq
-def Seq.laws() -> Shared.Eq.Laws(List<&2, Spec.Glob>, Seq.is_eq):
-  (
-    xs => Shared.List.is_eq_refl(~Spec.Glob, ~Glob.is_eq, ~Glob.laws(), xs),
-    xs => ys => Shared.List.is_eq_sound(~Spec.Glob, ~Glob.is_eq, ~Glob.laws(), xs, ys)
-  )
-
-# xs holds x
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
-def Seqs.has(xs: List<&2, List<&2, Spec.Glob>>, +x: List<&2, Spec.Glob>) -> Bool:
-  match xs:
-    case Nil{}:
-      False{}
-    case Con{h, t}:
-      Bool.or(Seq.is_eq(h, x), Seqs.has(t, x))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# one step of Seqs.has_absorb, with e the answer of Seq.is_eq(hd, x)
-def Seqs.has_absorb.at(
-  +hd: List<&2, Spec.Glob>,
-  r: List<&2, List<&2, Spec.Glob>>,
-  x: List<&2, Spec.Glob>,
-  +t: String,
-  e: Bool,
-  ih: {
-    Seqs.has(r, x) == True{}: Bool
-  } -> {Seqs.matches(t, r) == Bool.or(Spec.Glob.matches(t, Seq.glob(x)), Seqs.matches(t, r)): Bool}
-) -> {
-  Seq.is_eq(hd, x) == e: Bool
-} -> {
-  Bool.or(e, Seqs.has(r, x)) == True{}: Bool
-} -> {
-  Seqs.matches(
-    t,
-    Con{hd, r}
-  )
-    == Bool.or(Spec.Glob.matches(t, Seq.glob(x)), Seqs.matches(t, Con{hd, r})): Bool
-}:
-  match e:
-    case True{}:
-      eq => h =>
-        +mh = Spec.Glob.matches(t, Seq.glob(hd))
-        +sr = Seqs.matches(t, r)
-        %Shared.List.is_eq_sound(
-          ~Spec.Glob,
-          ~Glob.is_eq,
-          ~Glob.laws(),
-          hd,
-          x
+# Atom.is_eq is True only for the same atom
+def Atom.is_eq_sound(a: Atom, b: Atom) -> {Atom.is_eq(a, b) == True{}: Bool} -> {a == b: Atom}:
+  match a b:
+    case ALit{x} ALit{y}:
+      h => Equal.cong(Char, Atom, u => ALit{u}, x, y, Shared.Char.is_eq_sound(x, y)(h))
+    case ALit{x} AAny{}:
+      h => Empty.absurd({ALit{x} == AAny{}: Atom}, Shared.Bool.false_ne_true(h))
+    case ALit{x} AClass{m, ys}:
+      h => Empty.absurd({ALit{x} == AClass{m, ys}: Atom}, Shared.Bool.false_ne_true(h))
+    case AAny{} ALit{y}:
+      h => Empty.absurd({AAny{} == ALit{y}: Atom}, Shared.Bool.false_ne_true(h))
+    case AAny{} AAny{}:
+      h => {==}
+    case AAny{} AClass{m, ys}:
+      h => Empty.absurd({AAny{} == AClass{m, ys}: Atom}, Shared.Bool.false_ne_true(h))
+    case AClass{n, xs} ALit{y}:
+      h => Empty.absurd({AClass{n, xs} == ALit{y}: Atom}, Shared.Bool.false_ne_true(h))
+    case AClass{n, xs} AAny{}:
+      h => Empty.absurd({AClass{n, xs} == AAny{}: Atom}, Shared.Bool.false_ne_true(h))
+    case AClass{+n, +xs} AClass{+m, +ys}:
+      +h =>
+        +same_n = Shared.Bool.is_eq(n, m)
+        %Shared.Bool.is_eq_sound(
+          n,
+          m
         )(
-          eq
-        ): {Bool.or(mh, sr) == Bool.or(Spec.Glob.matches(t, Seq.glob(_)), Bool.or(mh, sr)): Bool}
-        Equal.sym(
-          Bool,
-          Bool.or(mh, Bool.or(mh, sr)),
-          Bool.or(mh, sr),
-          Shared.Bool.or_absorb(mh, sr)
-        )
-    case False{}:
-      eq => h =>
-        +mh = Spec.Glob.matches(t, Seq.glob(hd))
-        +sr = Seqs.matches(t, r)
-        +mx = Spec.Glob.matches(t, Seq.glob(x))
-        %Shared.Bool.or_swap(mh, mx, sr): {Bool.or(mh, sr) == _: Bool}
-        %ih(h): {Bool.or(mh, sr) == Bool.or(mh, _): Bool}
+          Shared.List.all.if_hit(same_n, u => Shared.List.is_eq(~Char, ~Char.is_eq, xs, ys))(h)
+        ): {AClass{n, xs} == AClass{_, ys}: Atom}
+        %Shared.List.is_eq_sound(
+          ~Char,
+          ~Char.is_eq,
+          ~Shared.Char.laws(),
+          xs,
+          ys
+        )(
+          Shared.List.all.if_rest(same_n, u => Shared.List.is_eq(~Char, ~Char.is_eq, xs, ys))(h)
+        ): {AClass{n, xs} == AClass{n, _}: Atom}
         {==}
 
-# a Seq that xs holds adds nothing to what xs matches
-def Seqs.has_absorb(
-  xs: List<&2, List<&2, Spec.Glob>>,
-  +x: List<&2, Spec.Glob>,
-  +t: String
-) -> {
-  Seqs.has(xs, x) == True{}: Bool
-} -> {Seqs.matches(t, xs) == Bool.or(Spec.Glob.matches(t, Seq.glob(x)), Seqs.matches(t, xs)): Bool}:
-  match xs:
-    case Nil{}:
-      h => Empty.absurd(
-        {False{} == Bool.or(Spec.Glob.matches(t, Seq.glob(x)), False{}): Bool},
-        Shared.Bool.false_ne_true(h)
-      )
-    case Con{+hd, +r}:
-      h => Seqs.has_absorb.at(hd, r, x, t, Seq.is_eq(hd, x), Seqs.has_absorb(r, x, t))({==}, h)
+# the laws of Atom.is_eq
+def Atom.laws() -> Shared.Eq.Laws(Atom, Atom.is_eq):
+  (Atom.is_eq_refl, Atom.is_eq_sound)
 
-# xs when has, else x before xs
-def Seqs.add.if(
-  x: List<&2, Spec.Glob>,
-  xs: List<&2, List<&2, Spec.Glob>>,
-  has: Bool
-) -> List<&2, List<&2, Spec.Glob>>:
-  match has:
-    case False{}:
-      Con{x, xs}
-    case True{}:
-      xs
+# the key of t: a bit or two for its form, then its parts
+def Atom.key(t: Atom) -> List<&2, Bool>:
+  match t:
+    case ALit{Chr{x}}:
+      False{} <> Tries.Trie.char(x)
+    case AAny{}:
+      [True{}, False{}]
+    case AClass{neg, cs}:
+      True{} <> True{} <> neg <> Tries.Trie.text(String.from_list(cs))
 
-# xs with x, once
-def Seqs.add(
-  +x: List<&2, Spec.Glob>,
-  +xs: List<&2, List<&2, Spec.Glob>>
-) -> List<&2, List<&2, Spec.Glob>>:
-  Seqs.add.if(x, xs, Seqs.has(xs, x))
+# Fast matching
+# -------------
+# Spec.Rule.selects asks each glob through Spec.Glob.matches, whose
+# derivatives are not normalized, so a '*' makes its cost grow fast with the
+# path. Glob.accepts steps the deduplicated derivative lists of regex.bend,
+# for the same answer.
 
-# Seqs.add_ok, given b, the answer of Seqs.has(xs, x)
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
-def Seqs.add_ok.at(
-  x: List<&2, Spec.Glob>,
-  xs: List<&2, List<&2, Spec.Glob>>,
-  t: String,
-  b: Bool
-) -> {
-  Seqs.has(xs, x) == b: Bool
-} -> {
-  Bool.or(
-    Spec.Glob.matches(t, Seq.glob(x)),
-    Seqs.matches(t, xs)
+# g matches the characters w
+def Glob.accepts(w: List<&2, Char>, g: Spec.Glob) -> Bool:
+  Regex.Re.accepts(~Char, ~Atom, ~Atom.hit, ~Atom.is_eq, ~Atom.key, w, Glob.re(g))
+
+# Glob.accepts gives the answer of Spec.Glob.matches
+def Glob.accepts_ok(
+  +p: String,
+  +g: Spec.Glob
+) -> {Glob.accepts(String.to_list(p), g) == Spec.Glob.matches(p, g): Bool}:
+  Equal.trans(
+    Bool,
+    Glob.accepts(String.to_list(p), g),
+    Regex.Re.matches(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(g)),
+    Spec.Glob.matches(p, g),
+    Regex.Re.accepts_matches(
+      ~Char,
+      ~Atom,
+      ~Atom.hit,
+      ~Atom.is_eq,
+      ~Atom.key,
+      ~Atom.laws(),
+      String.to_list(p),
+      Glob.re(g)
+    ),
+    Glob.re_matches(p, g)
   )
-    == Seqs.matches(t, Seqs.add.if(x, xs, b)): Bool
-}:
-  match b:
-    case False{}:
-      e => {==}
-    case True{}:
-      e => Equal.sym(
-        Bool,
-        Seqs.matches(t, xs),
-        Bool.or(Spec.Glob.matches(t, Seq.glob(x)), Seqs.matches(t, xs)),
-        Seqs.has_absorb(xs, x, t)(e)
-      )
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
-# Seqs.add(x, xs) matches what x or xs matches
-def Seqs.add_ok(
-  +x: List<&2, Spec.Glob>,
-  +xs: List<&2, List<&2, Spec.Glob>>,
-  t: String
-) -> {
-  Bool.or(
-    Spec.Glob.matches(t, Seq.glob(x)),
-    Seqs.matches(t, xs)
-  )
-    == Seqs.matches(t, Seqs.add(x, xs)): Bool
-}:
-  Seqs.add_ok.at(x, xs, t, Seqs.has(xs, x))({==})
-
-# acc with each Seq of ys, once
-def Seqs.add_all(
-  ys: List<&2, List<&2, Spec.Glob>>,
-  acc: List<&2, List<&2, Spec.Glob>>
-) -> List<&2, List<&2, Spec.Glob>>:
-  match ys:
-    case Nil{}:
+# the answer for the characters w after rules, given the answer acc before
+# them
+def Rule.selects.fast.go(rules: List<&2, Spec.Rule>, +w: List<&2, Char>, acc: Bool) -> Bool:
+  match rules acc:
+    case Nil{} _:
       acc
-    case Con{y, r}:
-      Seqs.add(y, Seqs.add_all(r, acc))
+    case Con{Spec.Include{g}, t} False{}:
+      Rule.selects.fast.go(t, w, Glob.accepts(w, g))
+    case Con{Spec.Include{g}, t} True{}:
+      Rule.selects.fast.go(t, w, True{})
+    case Con{Spec.Exclude{g}, t} False{}:
+      Rule.selects.fast.go(t, w, False{})
+    case Con{Spec.Exclude{g}, t} True{}:
+      Rule.selects.fast.go(t, w, Bool.not(Glob.accepts(w, g)))
 
-# Seqs.add_all(ys, acc) matches what ys or acc matches
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
-def Seqs.add_all_ok(
-  ys: List<&2, List<&2, Spec.Glob>>,
-  +acc: List<&2, List<&2, Spec.Glob>>,
-  +t: String
+# Rule.selects.fast.go gives the answer of Spec.Rule.selects.go
+def Rule.selects_fast_ok.go(
+  rules: List<&2, Spec.Rule>,
+  +p: String,
+  acc: Bool
 ) -> {
-  Bool.or(Seqs.matches(t, ys), Seqs.matches(t, acc)) == Seqs.matches(t, Seqs.add_all(ys, acc)): Bool
+  Rule.selects.fast.go(rules, String.to_list(p), acc) == Spec.Rule.selects.go(rules, p, acc): Bool
 }:
-  match ys:
-    case Nil{}:
+  match rules acc:
+    case Nil{} _:
       {==}
-    case Con{+y, +r}:
-      +my = Spec.Glob.matches(t, Seq.glob(y))
-      l = Bool.or(Bool.or(my, Seqs.matches(t, r)), Seqs.matches(t, acc))
-      %Seqs.add_ok(y, Seqs.add_all(r, acc), t): {l == _: Bool}
-      %Seqs.add_all_ok(r, acc, t): {l == Bool.or(my, _): Bool}
-      Equal.sym(
-        Bool,
-        Bool.or(my, Bool.or(Seqs.matches(t, r), Seqs.matches(t, acc))),
-        l,
-        Shared.Bool.or_assoc(my, Seqs.matches(t, r), Seqs.matches(t, acc))
+    case Con{Spec.Include{+g}, t} False{}:
+      %Glob.accepts_ok(
+        p,
+        g
+      ): {
+        Rule.selects.fast.go(
+          t,
+          String.to_list(p),
+          Glob.accepts(String.to_list(p), g)
+        )
+          == Spec.Rule.selects.go(t, p, _): Bool
+      }
+      Rule.selects_fast_ok.go(t, p, Glob.accepts(String.to_list(p), g))
+    case Con{Spec.Include{g}, t} True{}:
+      Rule.selects_fast_ok.go(t, p, True{})
+    case Con{Spec.Exclude{g}, t} False{}:
+      Rule.selects_fast_ok.go(t, p, False{})
+    case Con{Spec.Exclude{+g}, +t} True{}:
+      %Glob.accepts_ok(
+        p,
+        g
+      ): {
+        Rule.selects.fast.go(
+          t,
+          String.to_list(p),
+          Bool.not(Glob.accepts(String.to_list(p), g))
+        )
+          == Spec.Rule.selects.go(t, p, Bool.not(_)): Bool
+      }
+      Rule.selects_fast_ok.go(t, p, Bool.not(Glob.accepts(String.to_list(p), g)))
+
+# rules select p: Spec.Rule.selects, by Glob.accepts
+def Rule.selects.fast(rules: List<&2, Spec.Rule>, p: String) -> Bool:
+  Rule.selects.fast.go(rules, String.to_list(p), False{})
+
+# the fast selection gives the answer of Spec.Rule.selects
+def Rule.selects_fast_ok(
+  rules: List<&2, Spec.Rule>,
+  p: String
+) -> {Rule.selects.fast(rules, p) == Spec.Rule.selects(rules, p): Bool}:
+  Rule.selects_fast_ok.go(rules, p, False{})
+
+# p is a valid path that answers q: Spec.Query.holds, by the fast selection
+def Query.holds.fast(q: Spec.Query, +p: String) -> Bool:
+  match q:
+    case Spec.Both{a, b}:
+      List.all.if(
+        u => List.all.if(u2 => Rule.selects.fast(b, p), Rule.selects.fast(a, p)),
+        Spec.is_path(p)
       )
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+    case Spec.Only{a, b}:
+      List.all.if(
+        u => List.all.if(u2 => Bool.not(Rule.selects.fast(b, p)), Rule.selects.fast(a, p)),
+        Spec.is_path(p)
+      )
 
-# the Seqs that xs become after c
-def Seqs.step(xs: List<&2, List<&2, Spec.Glob>>, +c: Char) -> List<&2, List<&2, Spec.Glob>>:
-  match xs:
-    case Nil{}:
-      []
-    case Con{x, r}:
-      Seqs.add_all(Seq.step(x, c), Seqs.step(r, c))
-
-# Seqs.step(xs, c) matches t when xs matches c then t
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
-def Seqs.step_ok(
-  xs: List<&2, List<&2, Spec.Glob>>,
-  +c: Char,
-  +t: String
-) -> {Seqs.matches(t, Seqs.step(xs, c)) == Seqs.matches(SCon{c, t}, xs): Bool}:
-  match xs:
-    case Nil{}:
+# Query.holds.fast gives the answer of Spec.Query.holds
+def Query.holds_fast_ok(
+  q: Spec.Query,
+  +p: String
+) -> {Query.holds.fast(q, p) == Spec.Query.holds(q, p): Bool}:
+  match q:
+    case Spec.Both{+a, +b}:
+      v = Spec.is_path(p)
+      +sa = Spec.Rule.selects(a, p)
+      +sb = Spec.Rule.selects(b, p)
+      fa = Rule.selects.fast(a, p)
+      fb = Rule.selects.fast(b, p)
+      %Shared.List.all.if_and(
+        sa,
+        u => sb
+      ): {List.all.if(u => List.all.if(u2 => fb, fa), v) == Bool.and(v, _): Bool}
+      %Shared.List.all.if_and(
+        v,
+        u => List.all.if(u2 => sb, sa)
+      ): {List.all.if(u => List.all.if(u2 => fb, fa), v) == _: Bool}
+      %Rule.selects_fast_ok(
+        a,
+        p
+      ): {
+        List.all.if(
+          u => List.all.if(u2 => fb, fa),
+          v
+        )
+          == List.all.if(u => List.all.if(u2 => sb, _), v): Bool
+      }
+      %Rule.selects_fast_ok(
+        b,
+        p
+      ): {
+        List.all.if(
+          u => List.all.if(u2 => fb, fa),
+          v
+        )
+          == List.all.if(u => List.all.if(u2 => _, fa), v): Bool
+      }
       {==}
-    case Con{+x, +r}:
-      +a = Seq.step(x, c)
-      +b = Seqs.step(r, c)
-      %Seqs.add_all_ok(a, b, t): {_ == Seqs.matches(SCon{c, t}, Con{x, r}): Bool}
-      +l = Bool.or(Seqs.matches(t, a), Seqs.matches(t, b))
-      %Seq.step_ok(x, c, t): {l == Bool.or(_, Seqs.matches(SCon{c, t}, r)): Bool}
-      %Seqs.step_ok(r, c, t): {l == Bool.or(Seqs.matches(t, a), _): Bool}
+    case Spec.Only{+a, +b}:
+      v = Spec.is_path(p)
+      +sa = Spec.Rule.selects(a, p)
+      +sb = Bool.not(Spec.Rule.selects(b, p))
+      fa = Rule.selects.fast(a, p)
+      fb = Rule.selects.fast(b, p)
+      %Shared.List.all.if_and(
+        sa,
+        u => sb
+      ): {List.all.if(u => List.all.if(u2 => Bool.not(fb), fa), v) == Bool.and(v, _): Bool}
+      %Shared.List.all.if_and(
+        v,
+        u => List.all.if(u2 => sb, sa)
+      ): {List.all.if(u => List.all.if(u2 => Bool.not(fb), fa), v) == _: Bool}
+      %Rule.selects_fast_ok(
+        a,
+        p
+      ): {
+        List.all.if(
+          u => List.all.if(u2 => Bool.not(fb), fa),
+          v
+        )
+          == List.all.if(u => List.all.if(u2 => sb, _), v): Bool
+      }
+      %Rule.selects_fast_ok(
+        b,
+        p
+      ): {
+        List.all.if(
+          u => List.all.if(u2 => Bool.not(fb), fa),
+          v
+        )
+          == List.all.if(u => List.all.if(u2 => Bool.not(_), fa), v): Bool
+      }
       {==}
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
-# Rules as derivative sets
-# ------------------------
+# Search states
+# -------------
+# A rule as the derivative lists (Seqs) of its glob, and a state of the
+# search as the rules of both lists of a query. A state reads a path one
+# character at a time.
 
-# A rule whose glob is a set of Seqs.
+# A rule whose glob is a list of Seqs.
 type Slot is Data:
-  Inc{xs: List<&2, List<&2, Spec.Glob>>}
-  Exc{xs: List<&2, List<&2, Spec.Glob>>}
+  Inc{xs: List<&2, List<&2, Regex.Re<Atom>>>}
+  Exc{xs: List<&2, List<&2, Regex.Re<Atom>>>}
 
-# the answer for p after slots, given the answer acc before them
-def Slot.selects.go(slots: List<&2, Slot>, +p: String, acc: Bool) -> Bool:
+# the answer for the characters w after slots, given the answer acc before
+# them
+def Slot.selects.go(slots: List<&2, Slot>, +w: List<&2, Char>, acc: Bool) -> Bool:
   match slots acc:
     case Nil{} _:
       acc
     case Con{Inc{xs}, t} False{}:
-      Slot.selects.go(t, p, Seqs.matches(p, xs))
+      Slot.selects.go(t, w, Regex.Seqs.matches(~Char, ~Atom, ~Atom.hit, xs, w))
     case Con{Inc{xs}, t} True{}:
-      Slot.selects.go(t, p, True{})
+      Slot.selects.go(t, w, True{})
     case Con{Exc{xs}, t} False{}:
-      Slot.selects.go(t, p, False{})
+      Slot.selects.go(t, w, False{})
     case Con{Exc{xs}, t} True{}:
-      Slot.selects.go(t, p, Bool.not(Seqs.matches(p, xs)))
+      Slot.selects.go(t, w, Bool.not(Regex.Seqs.matches(~Char, ~Atom, ~Atom.hit, xs, w)))
 
 # the slots of rules
 def Slot.of_rules(rules: List<&2, Spec.Rule>) -> List<&2, Slot>:
@@ -1301,9 +668,9 @@ def Slot.of_rules(rules: List<&2, Spec.Rule>) -> List<&2, Slot>:
     case Nil{}:
       Nil{}
     case Con{Spec.Include{g}, t}:
-      Con{Inc{[[g]]}, Slot.of_rules(t)}
+      Con{Inc{[[Glob.re(g)]]}, Slot.of_rules(t)}
     case Con{Spec.Exclude{g}, t}:
-      Con{Exc{[[g]]}, Slot.of_rules(t)}
+      Con{Exc{[[Glob.re(g)]]}, Slot.of_rules(t)}
 
 # the slots after c
 def Slot.step(slots: List<&2, Slot>, +c: Char) -> List<&2, Slot>:
@@ -1311,31 +678,59 @@ def Slot.step(slots: List<&2, Slot>, +c: Char) -> List<&2, Slot>:
     case Nil{}:
       Nil{}
     case Con{Inc{xs}, t}:
-      Con{Inc{Seqs.step(xs, c)}, Slot.step(t, c)}
+      Con{
+        Inc{Regex.Seqs.step(~Char, ~Atom, ~Atom.hit, ~Atom.is_eq, ~Atom.key, xs, c)},
+        Slot.step(t, c)
+      }
     case Con{Exc{xs}, t}:
-      Con{Exc{Seqs.step(xs, c)}, Slot.step(t, c)}
+      Con{
+        Exc{Regex.Seqs.step(~Char, ~Atom, ~Atom.hit, ~Atom.is_eq, ~Atom.key, xs, c)},
+        Slot.step(t, c)
+      }
 
-# the one-Seq set of g matches what g matches
-def Seqs.single_ok(
+# the one-Seq list of g matches what g matches
+def Glob.single_ok(
   +p: String,
   +g: Spec.Glob
-) -> {Spec.Glob.matches(p, g) == Seqs.matches(p, [[g]]): Bool}:
-  %Shared.Bool.or_false(
-    Spec.Glob.matches(p, Spec.Cat{g, Spec.Eps{}})
-  ): {Spec.Glob.matches(p, g) == _: Bool}
-  Glob.cat_eps_r(p, g)
+) -> {
+  Spec.Glob.matches(
+    p,
+    g
+  )
+    == Regex.Seqs.matches(~Char, ~Atom, ~Atom.hit, [[Glob.re(g)]], String.to_list(p)): Bool
+}:
+  Equal.sym(
+    Bool,
+    Regex.Seqs.matches(~Char, ~Atom, ~Atom.hit, [[Glob.re(g)]], String.to_list(p)),
+    Spec.Glob.matches(p, g),
+    Equal.trans(
+      Bool,
+      Regex.Seqs.matches(~Char, ~Atom, ~Atom.hit, [[Glob.re(g)]], String.to_list(p)),
+      Regex.Re.matches(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(g)),
+      Spec.Glob.matches(p, g),
+      Regex.Seqs.matches_one(~Char, ~Atom, ~Atom.hit, String.to_list(p), Glob.re(g)),
+      Glob.re_matches(p, g)
+    )
+  )
 
 # rules and their slots select the same paths
 def Slot.of_rules_ok(
   rules: List<&2, Spec.Rule>,
   +p: String,
   acc: Bool
-) -> {Spec.Rule.selects.go(rules, p, acc) == Slot.selects.go(Slot.of_rules(rules), p, acc): Bool}:
+) -> {
+  Spec.Rule.selects.go(
+    rules,
+    p,
+    acc
+  )
+    == Slot.selects.go(Slot.of_rules(rules), String.to_list(p), acc): Bool
+}:
   match rules acc:
     case Nil{} _:
       {==}
     case Con{Spec.Include{+g}, t} False{}:
-      %Seqs.single_ok(
+      %Glob.single_ok(
         p,
         g
       ): {
@@ -1344,7 +739,7 @@ def Slot.of_rules_ok(
           p,
           Spec.Glob.matches(p, g)
         )
-          == Slot.selects.go(Slot.of_rules(t), p, _): Bool
+          == Slot.selects.go(Slot.of_rules(t), String.to_list(p), _): Bool
       }
       Slot.of_rules_ok(t, p, Spec.Glob.matches(p, g))
     case Con{Spec.Include{g}, t} True{}:
@@ -1352,7 +747,7 @@ def Slot.of_rules_ok(
     case Con{Spec.Exclude{g}, t} False{}:
       Slot.of_rules_ok(t, p, False{})
     case Con{Spec.Exclude{+g}, +t} True{}:
-      %Seqs.single_ok(
+      %Glob.single_ok(
         p,
         g
       ): {
@@ -1361,7 +756,7 @@ def Slot.of_rules_ok(
           p,
           Bool.not(Spec.Glob.matches(p, g))
         )
-          == Slot.selects.go(Slot.of_rules(t), p, Bool.not(_)): Bool
+          == Slot.selects.go(Slot.of_rules(t), String.to_list(p), Bool.not(_)): Bool
       }
       Slot.of_rules_ok(t, p, Bool.not(Spec.Glob.matches(p, g)))
 
@@ -1369,34 +764,51 @@ def Slot.of_rules_ok(
 def Slot.step_ok(
   slots: List<&2, Slot>,
   +c: Char,
-  +t: String,
+  +t: List<&2, Char>,
   acc: Bool
-) -> {
-  Slot.selects.go(Slot.step(slots, c), t, acc) == Slot.selects.go(slots, SCon{c, t}, acc): Bool
-}:
+) -> {Slot.selects.go(Slot.step(slots, c), t, acc) == Slot.selects.go(slots, c <> t, acc): Bool}:
   match slots acc:
     case Nil{} _:
       {==}
     case Con{Inc{+xs}, r} False{}:
-      %Seqs.step_ok(
+      m = Regex.Seqs.matches(
+        ~Char,
+        ~Atom,
+        ~Atom.hit,
+        Regex.Seqs.step(~Char, ~Atom, ~Atom.hit, ~Atom.is_eq, ~Atom.key, xs, c),
+        t
+      )
+      %Regex.Seqs.matches_step(
+        ~Char,
+        ~Atom,
+        ~Atom.hit,
+        ~Atom.is_eq,
+        ~Atom.key,
+        ~Atom.laws(),
         xs,
         c,
         t
-      ): {
-        Slot.selects.go(
-          Slot.step(r, c),
-          t,
-          Seqs.matches(t, Seqs.step(xs, c))
-        )
-          == Slot.selects.go(r, SCon{c, t}, _): Bool
-      }
-      Slot.step_ok(r, c, t, Seqs.matches(t, Seqs.step(xs, c)))
+      ): {Slot.selects.go(Slot.step(r, c), t, m) == Slot.selects.go(r, c <> t, _): Bool}
+      Slot.step_ok(r, c, t, m)
     case Con{Inc{xs}, r} True{}:
       Slot.step_ok(r, c, t, True{})
     case Con{Exc{xs}, r} False{}:
       Slot.step_ok(r, c, t, False{})
     case Con{Exc{+xs}, +r} True{}:
-      %Seqs.step_ok(
+      m = Regex.Seqs.matches(
+        ~Char,
+        ~Atom,
+        ~Atom.hit,
+        Regex.Seqs.step(~Char, ~Atom, ~Atom.hit, ~Atom.is_eq, ~Atom.key, xs, c),
+        t
+      )
+      %Regex.Seqs.matches_step(
+        ~Char,
+        ~Atom,
+        ~Atom.hit,
+        ~Atom.is_eq,
+        ~Atom.key,
+        ~Atom.laws(),
         xs,
         c,
         t
@@ -1404,24 +816,153 @@ def Slot.step_ok(
         Slot.selects.go(
           Slot.step(r, c),
           t,
-          Bool.not(Seqs.matches(t, Seqs.step(xs, c)))
+          Bool.not(m)
         )
-          == Slot.selects.go(r, SCon{c, t}, Bool.not(_)): Bool
+          == Slot.selects.go(r, c <> t, Bool.not(_)): Bool
       }
-      Slot.step_ok(r, c, t, Bool.not(Seqs.matches(t, Seqs.step(xs, c))))
+      Slot.step_ok(r, c, t, Bool.not(m))
 
-# Search states
-# -------------
+# A search state: the slots of both rule lists. both: the query asks for a
+# path that b selects too; else, one that b does not select.
+type St is Data:
+  St{both: Bool, a: List<&2, Slot>, b: List<&2, Slot>}
+
+# v when both, else not v
+def St.side(both: Bool, v: Bool) -> Bool:
+  match both:
+    case False{}:
+      Bool.not(v)
+    case True{}:
+      v
+
+# the characters w answer the query of state x
+def St.holds(x: St, +w: List<&2, Char>) -> Bool:
+  match x:
+    case St{both, a, b}:
+      List.all.if(
+        u => St.side(both, Slot.selects.go(b, w, False{})),
+        Slot.selects.go(a, w, False{})
+      )
+
+# the state that a query starts in
+def St.of(q: Spec.Query) -> St:
+  match q:
+    case Spec.Both{a, b}:
+      St{True{}, Slot.of_rules(a), Slot.of_rules(b)}
+    case Spec.Only{a, b}:
+      St{False{}, Slot.of_rules(a), Slot.of_rules(b)}
+
+# the state after c
+def St.step(x: St, +c: Char) -> St:
+  match x:
+    case St{both, a, b}:
+      St{both, Slot.step(a, c), Slot.step(b, c)}
+
+# the state after c holds for t when the state holds for c then t
+def St.step_ok(
+  x: St,
+  +c: Char,
+  +t: List<&2, Char>
+) -> {St.holds(St.step(x, c), t) == St.holds(x, c <> t): Bool}:
+  match x:
+    case St{both, +a, +b}:
+      sa = Slot.selects.go(Slot.step(a, c), t, False{})
+      sb = Slot.selects.go(Slot.step(b, c), t, False{})
+      %Slot.step_ok(
+        a,
+        c,
+        t,
+        False{}
+      ): {
+        List.all.if(
+          u => St.side(both, sb),
+          sa
+        )
+          == List.all.if(u => St.side(both, Slot.selects.go(b, c <> t, False{})), _): Bool
+      }
+      %Slot.step_ok(
+        b,
+        c,
+        t,
+        False{}
+      ): {List.all.if(u => St.side(both, sb), sa) == List.all.if(u => St.side(both, _), sa): Bool}
+      {==}
+
+# a query holds for p when p is a valid path and its start state holds
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
+def St.of_ok(
+  q: Spec.Query,
+  +p: String
+) -> {
+  Bool.and(Spec.is_path(p), St.holds(St.of(q), String.to_list(p))) == Spec.Query.holds(q, p): Bool
+}:
+  match q:
+    case Spec.Both{+a, +b}:
+      v = Spec.is_path(p)
+      +w = String.to_list(p)
+      sa = Slot.selects.go(Slot.of_rules(a), w, False{})
+      sb = Slot.selects.go(Slot.of_rules(b), w, False{})
+      r = Spec.Query.holds(Spec.Both{a, b}, p)
+      %Equal.sym(
+        Bool,
+        List.all.if(u => sb, sa),
+        Bool.and(sa, sb),
+        Shared.List.all.if_and(sa, u => sb)
+      ): {Bool.and(v, _) == r: Bool}
+      %Slot.of_rules_ok(a, p, False{}): {Bool.and(v, Bool.and(_, sb)) == r: Bool}
+      %Slot.of_rules_ok(
+        b,
+        p,
+        False{}
+      ): {Bool.and(v, Bool.and(Spec.Rule.selects.go(a, p, False{}), _)) == r: Bool}
+      {==}
+    case Spec.Only{+a, +b}:
+      v = Spec.is_path(p)
+      +w = String.to_list(p)
+      sa = Slot.selects.go(Slot.of_rules(a), w, False{})
+      sb = Slot.selects.go(Slot.of_rules(b), w, False{})
+      r = Spec.Query.holds(Spec.Only{a, b}, p)
+      %Equal.sym(
+        Bool,
+        List.all.if(u => Bool.not(sb), sa),
+        Bool.and(sa, Bool.not(sb)),
+        Shared.List.all.if_and(sa, u => Bool.not(sb))
+      ): {Bool.and(v, _) == r: Bool}
+      %Slot.of_rules_ok(a, p, False{}): {Bool.and(v, Bool.and(_, Bool.not(sb))) == r: Bool}
+      %Slot.of_rules_ok(
+        b,
+        p,
+        False{}
+      ): {Bool.and(v, Bool.and(Spec.Rule.selects.go(a, p, False{}), Bool.not(_))) == r: Bool}
+      {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# State equality and keys
+# -----------------------
 
 # xs and ys are the same Seqs
-def Seqs.is_eq(xs: List<&2, List<&2, Spec.Glob>>, ys: List<&2, List<&2, Spec.Glob>>) -> Bool:
-  Shared.List.is_eq(~List<&2, Spec.Glob>, ~Seq.is_eq, xs, ys)
+def Seqs.is_eq(
+  xs: List<&2, List<&2, Regex.Re<Atom>>>,
+  ys: List<&2, List<&2, Regex.Re<Atom>>>
+) -> Bool:
+  Shared.List.is_eq(~List<&2, Regex.Re<Atom>>, ~Regex.Seq.is_eq(~Atom, ~Atom.is_eq), xs, ys)
 
 # the laws of Seqs.is_eq
-def Seqs.laws() -> Shared.Eq.Laws(List<&2, List<&2, Spec.Glob>>, Seqs.is_eq):
+def Seqs.laws() -> Shared.Eq.Laws(List<&2, List<&2, Regex.Re<Atom>>>, Seqs.is_eq):
   (
-    xs => Shared.List.is_eq_refl(~List<&2, Spec.Glob>, ~Seq.is_eq, ~Seq.laws(), xs),
-    xs => ys => Shared.List.is_eq_sound(~List<&2, Spec.Glob>, ~Seq.is_eq, ~Seq.laws(), xs, ys)
+    xs => Shared.List.is_eq_refl(
+      ~List<&2, Regex.Re<Atom>>,
+      ~Regex.Seq.is_eq(~Atom, ~Atom.is_eq),
+      ~Regex.Seq.laws(~Atom, ~Atom.is_eq, ~Atom.laws()),
+      xs
+    ),
+    xs => ys => Shared.List.is_eq_sound(
+      ~List<&2, Regex.Re<Atom>>,
+      ~Regex.Seq.is_eq(~Atom, ~Atom.is_eq),
+      ~Regex.Seq.laws(~Atom, ~Atom.is_eq, ~Atom.laws()),
+      xs,
+      ys
+    )
   )
 
 # a and b are the same slot
@@ -1438,21 +979,21 @@ def Slot.is_eq(a: Slot, b: Slot) -> Bool:
 def Slot.is_eq_refl(a: Slot) -> {Slot.is_eq(a, a) == True{}: Bool}:
   match a:
     case Inc{x}:
-      Shared.Eq.refl(~List<&2, List<&2, Spec.Glob>>, ~Seqs.is_eq, Seqs.laws(), x)
+      Shared.Eq.refl(~List<&2, List<&2, Regex.Re<Atom>>>, ~Seqs.is_eq, Seqs.laws(), x)
     case Exc{x}:
-      Shared.Eq.refl(~List<&2, List<&2, Spec.Glob>>, ~Seqs.is_eq, Seqs.laws(), x)
+      Shared.Eq.refl(~List<&2, List<&2, Regex.Re<Atom>>>, ~Seqs.is_eq, Seqs.laws(), x)
 
 # Slot.is_eq is True only for the same slot
 def Slot.is_eq_sound(a: Slot, b: Slot) -> {Slot.is_eq(a, b) == True{}: Bool} -> {a == b: Slot}:
   match a b:
     case Inc{x} Inc{y}:
       h => Equal.cong(
-        List<&2, List<&2, Spec.Glob>>,
+        List<&2, List<&2, Regex.Re<Atom>>>,
         Slot,
         u => Inc{u},
         x,
         y,
-        Shared.Eq.sound(~List<&2, List<&2, Spec.Glob>>, ~Seqs.is_eq, Seqs.laws(), x, y)(h)
+        Shared.Eq.sound(~List<&2, List<&2, Regex.Re<Atom>>>, ~Seqs.is_eq, Seqs.laws(), x, y)(h)
       )
     case Inc{x} Exc{y}:
       h => Empty.absurd({Inc{x} == Exc{y}: Slot}, Shared.Bool.false_ne_true(h))
@@ -1460,12 +1001,12 @@ def Slot.is_eq_sound(a: Slot, b: Slot) -> {Slot.is_eq(a, b) == True{}: Bool} -> 
       h => Empty.absurd({Exc{x} == Inc{y}: Slot}, Shared.Bool.false_ne_true(h))
     case Exc{x} Exc{y}:
       h => Equal.cong(
-        List<&2, List<&2, Spec.Glob>>,
+        List<&2, List<&2, Regex.Re<Atom>>>,
         Slot,
         u => Exc{u},
         x,
         y,
-        Shared.Eq.sound(~List<&2, List<&2, Spec.Glob>>, ~Seqs.is_eq, Seqs.laws(), x, y)(h)
+        Shared.Eq.sound(~List<&2, List<&2, Regex.Re<Atom>>>, ~Seqs.is_eq, Seqs.laws(), x, y)(h)
       )
 
 # the laws of Slot.is_eq
@@ -1476,62 +1017,47 @@ def Slot.laws() -> Shared.Eq.Laws(Slot, Slot.is_eq):
 def Slots.is_eq(a: List<&2, Slot>, b: List<&2, Slot>) -> Bool:
   Shared.List.is_eq(~Slot, ~Slot.is_eq, a, b)
 
-# A search state: the slots of both rule lists. both: the query asks for a
-# path that b selects too; else, one that b does not select.
-type St is Data:
-  St{both: Bool, a: List<&2, Slot>, b: List<&2, Slot>}
-
-# v when both, else not v
-def St.side(both: Bool, v: Bool) -> Bool:
-  match both:
-    case False{}:
-      Bool.not(v)
-    case True{}:
-      v
-
-# p answers the query of state x
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
-def St.holds(x: St, +p: String) -> Bool:
-  match x:
-    case St{both, a, b}:
-      Bool.and(Slot.selects.go(a, p, False{}), St.side(both, Slot.selects.go(b, p, False{})))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# the state that a query starts in
-def St.of(q: Spec.Query) -> St:
-  match q:
-    case Spec.Both{a, b}:
-      St{True{}, Slot.of_rules(a), Slot.of_rules(b)}
-    case Spec.Only{a, b}:
-      St{False{}, Slot.of_rules(a), Slot.of_rules(b)}
-
-# the state after c
-def St.step(x: St, +c: Char) -> St:
-  match x:
-    case St{both, a, b}:
-      St{both, Slot.step(a, c), Slot.step(b, c)}
-
 # x and y are the same state
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
 def St.is_eq(x: St, y: St) -> Bool:
   match x y:
     case St{n, a, b} St{m, c, d}:
-      Bool.and(Shared.Bool.is_eq(n, m), Bool.and(Slots.is_eq(a, c), Slots.is_eq(b, d)))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+      List.all.if(
+        u => List.all.if(u2 => Slots.is_eq(b, d), Slots.is_eq(a, c)),
+        Shared.Bool.is_eq(n, m)
+      )
+
+# St.is_eq is True for a state and itself
+def St.is_eq_refl(x: St) -> {St.is_eq(x, x) == True{}: Bool}:
+  match x:
+    case St{+n, +a, +b}:
+      Shared.List.all.if_both(
+        Shared.Bool.is_eq(n, n),
+        u => List.all.if(u2 => Slots.is_eq(b, b), Slots.is_eq(a, a))
+      )(
+        Shared.Bool.is_eq_refl(n)
+      )(
+        Shared.List.all.if_both(
+          Slots.is_eq(a, a),
+          u2 => Slots.is_eq(b, b)
+        )(
+          Shared.List.is_eq_refl(~Slot, ~Slot.is_eq, ~Slot.laws(), a)
+        )(Shared.List.is_eq_refl(~Slot, ~Slot.is_eq, ~Slot.laws(), b))
+      )
 
 # St.is_eq is True only for the same state
 def St.is_eq_sound(x: St, y: St) -> {St.is_eq(x, y) == True{}: Bool} -> {x == y: St}:
   match x y:
     case St{+n, +a, +b} St{+m, +c, +d}:
       +h =>
+        +sn = Shared.Bool.is_eq(n, m)
         +sa = Slots.is_eq(a, c)
         +sb = Slots.is_eq(b, d)
-        +rest = Shared.Bool.and_true_right(Shared.Bool.is_eq(n, m), Bool.and(sa, sb))(h)
+        +rest = Shared.List.all.if_rest(sn, u => List.all.if(u2 => sb, sa))(h)
         %Shared.Bool.is_eq_sound(
           n,
           m
         )(
-          Shared.Bool.and_true_left(Shared.Bool.is_eq(n, m), Bool.and(sa, sb))(h)
+          Shared.List.all.if_hit(sn, u => List.all.if(u2 => sb, sa))(h)
         ): {St{n, a, b} == St{_, c, d}: St}
         %Shared.List.is_eq_sound(
           ~Slot,
@@ -1539,661 +1065,316 @@ def St.is_eq_sound(x: St, y: St) -> {St.is_eq(x, y) == True{}: Bool} -> {x == y:
           ~Slot.laws(),
           a,
           c
-        )(Shared.Bool.and_true_left(sa, sb)(rest)): {St{n, a, b} == St{n, _, d}: St}
+        )(Shared.List.all.if_hit(sa, u2 => sb)(rest)): {St{n, a, b} == St{n, _, d}: St}
         %Shared.List.is_eq_sound(
           ~Slot,
           ~Slot.is_eq,
           ~Slot.laws(),
           b,
           d
-        )(Shared.Bool.and_true_right(sa, sb)(rest)): {St{n, a, b} == St{n, a, _}: St}
+        )(Shared.List.all.if_rest(sa, u2 => sb)(rest)): {St{n, a, b} == St{n, a, _}: St}
         {==}
 
-# xs holds x
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
-def St.has(xs: List<&2, St>, +x: St) -> Bool:
+# the laws of St.is_eq
+def St.laws() -> Shared.Eq.Laws(St, St.is_eq):
+  (St.is_eq_refl, St.is_eq_sound)
+
+# the key of xs, then rest: True before each Seq, False after the last
+def Seqs.key(xs: List<&2, List<&2, Regex.Re<Atom>>>, rest: List<&2, Bool>) -> List<&2, Bool>:
   match xs:
     case Nil{}:
-      False{}
-    case Con{h, t}:
-      Bool.or(St.is_eq(h, x), St.has(t, x))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+      False{} <> rest
+    case Con{s, r}:
+      True{} <> Regex.Seq.key.go(~Atom, ~Atom.key, s, Seqs.key(r, rest))
 
-# the state after c holds for t when the state holds for c then t
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
-def St.step_ok(
-  x: St,
-  +c: Char,
-  +t: String
-) -> {St.holds(St.step(x, c), t) == St.holds(x, SCon{c, t}): Bool}:
+# the key of slots, then rest: True and the kind before each slot, False
+# after the last
+def Slots.key(slots: List<&2, Slot>, rest: List<&2, Bool>) -> List<&2, Bool>:
+  match slots:
+    case Nil{}:
+      False{} <> rest
+    case Con{Inc{xs}, r}:
+      True{} <> False{} <> Seqs.key(xs, Slots.key(r, rest))
+    case Con{Exc{xs}, r}:
+      True{} <> True{} <> Seqs.key(xs, Slots.key(r, rest))
+
+# the key of x
+def St.key(x: St) -> List<&2, Bool>:
   match x:
-    case St{both, +a, +b}:
-      l = Bool.and(
-        Slot.selects.go(Slot.step(a, c), t, False{}),
-        St.side(both, Slot.selects.go(Slot.step(b, c), t, False{}))
-      )
-      %Slot.step_ok(
-        a,
-        c,
-        t,
-        False{}
-      ): {l == Bool.and(_, St.side(both, Slot.selects.go(b, SCon{c, t}, False{}))): Bool}
-      %Slot.step_ok(
-        b,
-        c,
-        t,
-        False{}
-      ): {l == Bool.and(Slot.selects.go(Slot.step(a, c), t, False{}), St.side(both, _)): Bool}
-      {==}
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# a query holds for p when p is a valid path and its start state holds
-def St.of_ok(
-  q: Spec.Query,
-  +p: String
-) -> {Bool.and(Spec.is_path(p), St.holds(St.of(q), p)) == Spec.Query.holds(q, p): Bool}:
-  match q:
-    case Spec.Both{+a, +b}:
-      r = Spec.Query.holds(Spec.Both{a, b}, p)
-      %Slot.of_rules_ok(
-        a,
-        p,
-        False{}
-      ): {
-        Bool.and(
-          Spec.is_path(p),
-          Bool.and(_, Slot.selects.go(Slot.of_rules(b), p, False{}))
-        )
-          == r: Bool
-      }
-      %Slot.of_rules_ok(
-        b,
-        p,
-        False{}
-      ): {Bool.and(Spec.is_path(p), Bool.and(Spec.Rule.selects.go(a, p, False{}), _)) == r: Bool}
-      {==}
-    case Spec.Only{+a, +b}:
-      r = Spec.Query.holds(Spec.Only{a, b}, p)
-      %Slot.of_rules_ok(
-        a,
-        p,
-        False{}
-      ): {
-        Bool.and(
-          Spec.is_path(p),
-          Bool.and(_, Bool.not(Slot.selects.go(Slot.of_rules(b), p, False{})))
-        )
-          == r: Bool
-      }
-      %Slot.of_rules_ok(
-        b,
-        p,
-        False{}
-      ): {
-        Bool.and(
-          Spec.is_path(p),
-          Bool.and(Spec.Rule.selects.go(a, p, False{}), Bool.not(_))
-        )
-          == r: Bool
-      }
-      {==}
+    case St{both, a, b}:
+      both <> Slots.key(a, Slots.key(b, []))
 
 # Representative characters
 # -------------------------
-# A character that no glob of a state names, and that is not '/', moves the
-# state like any other such character.
+# The search moves a state only under the characters that the globs of the
+# query name, '/', and one more character f that they do not name. A
+# character that is not named moves a state as f does.
+
+# The named characters cs, and the character f.
+type Abc is Data:
+  Abc{cs: List<&2, Char>, f: Char}
+
+# the characters that the search moves a state under
+def Abc.syms(g: Abc) -> List<&2, Char>:
+  match g:
+    case Abc{cs, f}:
+      f <> cs
+
+# The machine that the search runs: a state reads one character.
+def Abc.step(g: Abc, x: St, c: Char) -> St:
+  St.step(x, c)
+
+# the machine accepts at x when x holds for ""
+def Abc.ends(g: Abc, x: St) -> Bool:
+  St.holds(x, [])
 
 # cs holds c
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
-def Chars.has(cs: List<&2, Char>, +c: Char) -> Bool:
-  match cs:
-    case Nil{}:
-      False{}
-    case Con{h, t}:
-      Bool.or(Char.is_eq(h, c), Chars.has(t, c))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+def Chars.has(cs: List<&2, Char>, c: Char) -> Bool:
+  List.contains(~Char, ~Char.is_eq, cs, c)
 
-# every character of xs is in cs
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
-def Chars.all_in(xs: List<&2, Char>, +cs: List<&2, Char>) -> Bool:
-  match xs:
-    case Nil{}:
-      True{}
-    case Con{h, t}:
-      Bool.and(Chars.has(cs, h), Chars.all_in(t, cs))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# every character that g names is in cs
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
-def Glob.within(g: Spec.Glob, +cs: List<&2, Char>) -> Bool:
-  match g:
-    case Spec.Void{}:
-      True{}
-    case Spec.Eps{}:
-      True{}
-    case Spec.Lit{x}:
+# every character that t names is in cs
+def Atom.within(cs: List<&2, Char>, t: Atom) -> Bool:
+  match t:
+    case ALit{x}:
       Chars.has(cs, x)
-    case Spec.Any{}:
+    case AAny{}:
       True{}
-    case Spec.Star{}:
-      True{}
-    case Spec.Class{n, xs}:
-      Chars.all_in(xs, cs)
-    case Spec.Deep{}:
-      True{}
-    case Spec.Cat{a, b}:
-      Bool.and(Glob.within(a, cs), Glob.within(b, cs))
-    case Spec.Alt{a, b}:
-      Bool.and(Glob.within(a, cs), Glob.within(b, cs))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# every character that s names is in cs
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
-def Seq.within(s: List<&2, Spec.Glob>, +cs: List<&2, Char>) -> Bool:
-  match s:
-    case Nil{}:
-      True{}
-    case Con{h, t}:
-      Bool.and(Glob.within(h, cs), Seq.within(t, cs))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# every character that xs names is in cs
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
-def Seqs.within(xs: List<&2, List<&2, Spec.Glob>>, +cs: List<&2, Char>) -> Bool:
-  match xs:
-    case Nil{}:
-      True{}
-    case Con{h, t}:
-      Bool.and(Seq.within(h, cs), Seqs.within(t, cs))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+    case AClass{neg, xs}:
+      Reaches.Reach.within(~Char, ~Char.is_eq, xs, cs)
 
 # every character that slots name is in cs
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
 def Slots.within(slots: List<&2, Slot>, +cs: List<&2, Char>) -> Bool:
   match slots:
     case Nil{}:
       True{}
     case Con{Inc{xs}, t}:
-      Bool.and(Seqs.within(xs, cs), Slots.within(t, cs))
+      List.all.if(
+        u => Slots.within(t, cs),
+        Regex.Seqs.holds(~Atom, ~List<&2, Char>, ~Atom.within, xs, cs)
+      )
     case Con{Exc{xs}, t}:
-      Bool.and(Seqs.within(xs, cs), Slots.within(t, cs))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+      List.all.if(
+        u => Slots.within(t, cs),
+        Regex.Seqs.holds(~Atom, ~List<&2, Char>, ~Atom.within, xs, cs)
+      )
 
-# every character that x names is in cs
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
-def St.within(x: St, +cs: List<&2, Char>) -> Bool:
-  match x:
-    case St{both, a, b}:
-      Bool.and(Slots.within(a, cs), Slots.within(b, cs))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# cs holds '/', and not c or f
+def Chars.near(cs: List<&2, Char>, c: Char, f: Char) -> Bool:
+  +cs = cs
+  List.all.if(
+    u => List.all.if(u2 => Bool.not(Chars.has(cs, f)), Bool.not(Chars.has(cs, c))),
+    Chars.has(cs, '/')
+  )
 
-# a character x of cs is not c when c is not in cs, given b: Char.is_eq(x, c)
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
-def Char.ne_in.at(
-  cs: List<&2, Char>,
-  x: Char,
-  c: Char,
-  b: Bool,
-  hx: {Chars.has(cs, x) == True{}: Bool},
-  hc: {Chars.has(cs, c) == False{}: Bool}
-) -> {Char.is_eq(x, c) == b: Bool} -> {False{} == b: Bool}:
-  match b:
-    case False{}:
-      e => {==}
-    case True{}:
-      e =>
-        in_c = {
-          %Shared.Char.is_eq_sound(x, c)(e): {Chars.has(cs, _) == True{}: Bool}
-          hx
-          : {Chars.has(cs, c) == True{}: Bool}}
-        Empty.absurd(
-          {False{} == True{}: Bool},
-          Shared.Bool.false_ne_true(
-            Equal.trans(
-              Bool,
-              False{},
-              Chars.has(cs, c),
-              True{},
-              Equal.sym(Bool, Chars.has(cs, c), False{}, hc),
-              in_c
-            )
-          )
-        )
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# a character x of cs is not c when c is not in cs
-def Char.ne_in(
-  cs: List<&2, Char>,
-  +x: Char,
-  +c: Char,
-  hx: {Chars.has(cs, x) == True{}: Bool},
-  hc: {Chars.has(cs, c) == False{}: Bool}
-) -> {False{} == Char.is_eq(x, c): Bool}:
-  Char.ne_in.at(cs, x, c, Char.is_eq(x, c), hx, hc)({==})
-
-# c is not a character x of cs when c is not in cs, given b: Char.is_eq(c, x)
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
-def Char.ne_in_r.at(
-  cs: List<&2, Char>,
-  x: Char,
-  c: Char,
-  b: Bool,
-  hx: {Chars.has(cs, x) == True{}: Bool},
-  hc: {Chars.has(cs, c) == False{}: Bool}
-) -> {Char.is_eq(c, x) == b: Bool} -> {False{} == b: Bool}:
-  match b:
-    case False{}:
-      e => {==}
-    case True{}:
-      e =>
-        in_c = {
-          %Equal.sym(Char, c, x, Shared.Char.is_eq_sound(c, x)(e)): {Chars.has(cs, _) == True{}: Bool}
-          hx
-          : {Chars.has(cs, c) == True{}: Bool}}
-        Empty.absurd(
-          {False{} == True{}: Bool},
-          Shared.Bool.false_ne_true(
-            Equal.trans(
-              Bool,
-              False{},
-              Chars.has(cs, c),
-              True{},
-              Equal.sym(Bool, Chars.has(cs, c), False{}, hc),
-              in_c
-            )
-          )
-        )
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# c is not a character x of cs when c is not in cs
-def Char.ne_in_r(
-  cs: List<&2, Char>,
-  +x: Char,
-  +c: Char,
-  hx: {Chars.has(cs, x) == True{}: Bool},
-  hc: {Chars.has(cs, c) == False{}: Bool}
-) -> {False{} == Char.is_eq(c, x): Bool}:
-  Char.ne_in_r.at(cs, x, c, Char.is_eq(c, x), hx, hc)({==})
-
-# a class whose characters are all in cs does not hold c when cs does not
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- only proofs use it; no program runs it
-def Chars.contains_out(
-  xs: List<&2, Char>,
+# cs holds '/', when c and f are near
+def Chars.near_slash(
   +cs: List<&2, Char>,
-  +c: Char,
-  +hc: {Chars.has(cs, c) == False{}: Bool}
-) -> {
-  Chars.all_in(xs, cs) == True{}: Bool
-} -> {False{} == List.contains(~Char, ~Char.is_eq, xs, c): Bool}:
-  match xs:
-    case Nil{}:
-      _ => {==}
-    case Con{+x, +t}:
-      +h =>
-        %Char.ne_in(
-          cs,
-          x,
-          c,
-          Shared.Bool.and_true_left(Chars.has(cs, x), Chars.all_in(t, cs))(h),
-          hc
-        ):
-          {False{} == List.any.if(u => List.contains(~Char, ~Char.is_eq, t, c), _): Bool}
-        Chars.contains_out(
-          t,
-          cs,
-          c,
-          hc
-        )(Shared.Bool.and_true_right(Chars.has(cs, x), Chars.all_in(t, cs))(h))
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+  c: Char,
+  f: Char,
+  hn: {Chars.near(cs, c, f) == True{}: Bool}
+) -> {Chars.has(cs, '/') == True{}: Bool}:
+  Shared.List.all.if_hit(
+    Chars.has(cs, '/'),
+    u => List.all.if(u2 => Bool.not(Chars.has(cs, f)), Bool.not(Chars.has(cs, c)))
+  )(hn)
 
-# Seq.step.head moves h the same under c and f, two characters that h does
-# not name and that are not '/'
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- only proofs use it; no program runs it
-def Seq.step.head_rep(
-  h: Spec.Glob,
-  +r: List<&2, Spec.Glob>,
+# cs does not hold c, when c and f are near
+def Chars.near_left(
+  +cs: List<&2, Char>,
   +c: Char,
   +f: Char,
-  +kc: List<&2, List<&2, Spec.Glob>>,
-  +kf: List<&2, List<&2, Spec.Glob>>,
+  hn: {Chars.near(cs, c, f) == True{}: Bool}
+) -> {Chars.has(cs, c) == False{}: Bool}:
+  Shared.Bool.not_true(
+    Chars.has(cs, c)
+  )(
+    Shared.List.all.if_hit(
+      Bool.not(Chars.has(cs, c)),
+      u2 => Bool.not(Chars.has(cs, f))
+    )(
+      Shared.List.all.if_rest(
+        Chars.has(cs, '/'),
+        u => List.all.if(u2 => Bool.not(Chars.has(cs, f)), Bool.not(Chars.has(cs, c)))
+      )(hn)
+    )
+  )
+
+# cs does not hold f, when c and f are near
+def Chars.near_right(
   +cs: List<&2, Char>,
-  +hc: {Chars.has(cs, c) == False{}: Bool},
-  +hf: {Chars.has(cs, f) == False{}: Bool},
-  +hs: {Chars.has(cs, '/') == True{}: Bool},
-  +ek: {kc == kf: List<&2, List<&2, Spec.Glob>>}
-) -> {
-  Glob.within(h, cs) == True{}: Bool
-} -> {Seq.step.head(h, r, c, kc) == Seq.step.head(h, r, f, kf): List<&2, List<&2, Spec.Glob>>}:
-  match h:
-    case Spec.Void{}:
-      _ => {==}
-    case Spec.Eps{}:
-      _ => ek
-    case Spec.Lit{+x}:
-      +hw =>
-        %Char.ne_in(
+  +c: Char,
+  +f: Char,
+  hn: {Chars.near(cs, c, f) == True{}: Bool}
+) -> {Chars.has(cs, f) == False{}: Bool}:
+  Shared.Bool.not_true(
+    Chars.has(cs, f)
+  )(
+    Shared.List.all.if_rest(
+      Bool.not(Chars.has(cs, c)),
+      u2 => Bool.not(Chars.has(cs, f))
+    )(
+      Shared.List.all.if_rest(
+        Chars.has(cs, '/'),
+        u => List.all.if(u2 => Bool.not(Chars.has(cs, f)), Bool.not(Chars.has(cs, c)))
+      )(hn)
+    )
+  )
+
+# a character that cs lacks is not '/', when cs holds '/'
+def Char.inner_out(
+  cs: List<&2, Char>,
+  +c: Char,
+  hs: {Chars.has(cs, '/') == True{}: Bool},
+  hc: {Chars.has(cs, c) == False{}: Bool}
+) -> {Spec.is_inner(c) == True{}: Bool}:
+  %Equal.sym(
+    Bool,
+    Char.is_eq(c, '/'),
+    False{},
+    Shared.Eq.ne_flip(
+      ~Char,
+      ~Char.is_eq,
+      ~Shared.Char.laws(),
+      '/',
+      c,
+      Shared.List.contains_ne(~Char, ~Char.is_eq, ~Shared.Char.laws(), cs, '/', c, hs, hc)
+    )
+  ): {Bool.not(_) == True{}: Bool}
+  {==}
+
+# an atom whose characters are in cs accepts c exactly when it accepts f,
+# two characters that cs lacks, when cs holds '/'
+def Atom.alike(
+  +cs: List<&2, Char>,
+  +c: Char,
+  +f: Char,
+  t: Atom,
+  +hn: {Chars.near(cs, c, f) == True{}: Bool},
+  hp: {Atom.within(cs, t) == True{}: Bool}
+) -> {Atom.hit(t, c) == Atom.hit(t, f): Bool}:
+  match t:
+    case ALit{+x}:
+      +hp = hp
+      Equal.trans(
+        Bool,
+        Char.is_eq(x, c),
+        False{},
+        Char.is_eq(x, f),
+        Shared.List.contains_ne(
+          ~Char,
+          ~Char.is_eq,
+          ~Shared.Char.laws(),
           cs,
           x,
           c,
-          hw,
-          hc
-        ): {Seq.keep(_, r) == Seq.keep(Char.is_eq(x, f), r): List<&2, List<&2, Spec.Glob>>}
-        %Char.ne_in(
-          cs,
-          x,
-          f,
-          hw,
-          hf
-        ): {Seq.keep(False{}, r) == Seq.keep(_, r): List<&2, List<&2, Spec.Glob>>}
-        {==}
-    case Spec.Any{}:
-      _ =>
-        %Char.ne_in_r(
-          cs,
-          '/',
-          c,
-          hs,
-          hc
-        ): {
-          Seq.keep(Bool.not(_), r) == Seq.keep(Spec.is_inner(f), r): List<&2, List<&2, Spec.Glob>>
-        }
-        %Char.ne_in_r(
-          cs,
-          '/',
-          f,
-          hs,
-          hf
-        ): {Seq.keep(True{}, r) == Seq.keep(Bool.not(_), r): List<&2, List<&2, Spec.Glob>>}
-        {==}
-    case Spec.Star{}:
-      _ =>
-        +s = {Con{Spec.Star{}, r}: List<&2, Spec.Glob>}
-        %Char.ne_in_r(
-          cs,
-          '/',
-          c,
-          hs,
-          hc
-        ): {
-          List.append(
-            &2,
-            List<&2, Spec.Glob>,
-            Seq.keep(Bool.not(_), s),
-            kc
+          hp,
+          Chars.near_left(cs, c, f, hn)
+        ),
+        Equal.sym(
+          Bool,
+          Char.is_eq(x, f),
+          False{},
+          Shared.List.contains_ne(
+            ~Char,
+            ~Char.is_eq,
+            ~Shared.Char.laws(),
+            cs,
+            x,
+            f,
+            hp,
+            Chars.near_right(cs, c, f, hn)
           )
-            == List.append(
-              &2,
-              List<&2, Spec.Glob>,
-              Seq.keep(Spec.is_inner(f), s),
-              kf
-            ): List<&2, List<&2, Spec.Glob>>
-        }
-        %Char.ne_in_r(
-          cs,
-          '/',
-          f,
-          hs,
-          hf
-        ): {
-          List.append(
-            &2,
-            List<&2, Spec.Glob>,
-            Seq.keep(True{}, s),
-            kc
-          )
-            == List.append(
-              &2,
-              List<&2, Spec.Glob>,
-              Seq.keep(Bool.not(_), s),
-              kf
-            ): List<&2, List<&2, Spec.Glob>>
-        }
-        %ek: {
-          List.append(
-            &2,
-            List<&2, Spec.Glob>,
-            Seq.keep(True{}, s),
-            kc
-          )
-            == List.append(
-              &2,
-              List<&2, Spec.Glob>,
-              Seq.keep(True{}, s),
-              _
-            ): List<&2, List<&2, Spec.Glob>>
-        }
-        {==}
-    case Spec.Class{n, +xs}:
-      +hw =>
-        +cc = List.contains(~Char, ~Char.is_eq, xs, c)
-        +cf = List.contains(~Char, ~Char.is_eq, xs, f)
-        %Char.ne_in_r(
-          cs,
-          '/',
-          c,
-          hs,
-          hc
-        ): {
-          Seq.keep(
-            Bool.and(Bool.not(_), Bool.xor(n, cc)),
-            r
-          )
-            == Seq.keep(
-              Bool.and(Spec.is_inner(f), Bool.xor(n, cf)),
-              r
-            ): List<&2, List<&2, Spec.Glob>>
-        }
-        %Char.ne_in_r(
-          cs,
-          '/',
-          f,
-          hs,
-          hf
-        ): {
-          Seq.keep(
-            Bool.and(True{}, Bool.xor(n, cc)),
-            r
-          )
-            == Seq.keep(Bool.and(Bool.not(_), Bool.xor(n, cf)), r): List<&2, List<&2, Spec.Glob>>
-        }
-        %Chars.contains_out(
+        )
+      )
+    case AAny{}:
+      Equal.trans(
+        Bool,
+        Spec.is_inner(c),
+        True{},
+        Spec.is_inner(f),
+        Char.inner_out(cs, c, Chars.near_slash(cs, c, f, hn), Chars.near_left(cs, c, f, hn)),
+        Equal.sym(
+          Bool,
+          Spec.is_inner(f),
+          True{},
+          Char.inner_out(cs, f, Chars.near_slash(cs, c, f, hn), Chars.near_right(cs, c, f, hn))
+        )
+      )
+    case AClass{neg, +xs}:
+      +hp = hp
+      ic = Spec.is_inner(c)
+      xf = Bool.xor(neg, List.contains(~Char, ~Char.is_eq, xs, f))
+      %Equal.sym(
+        Bool,
+        List.contains(~Char, ~Char.is_eq, xs, c),
+        False{},
+        Reaches.Reach.within_out(
+          ~Char,
+          ~Char.is_eq,
+          ~Shared.Char.laws(),
           xs,
           cs,
           c,
-          hc
-        )(
-          hw
-        ): {
-          Seq.keep(
-            Bool.and(True{}, Bool.xor(n, _)),
-            r
-          )
-            == Seq.keep(Bool.and(True{}, Bool.xor(n, cf)), r): List<&2, List<&2, Spec.Glob>>
-        }
-        %Chars.contains_out(
+          hp,
+          Chars.near_left(cs, c, f, hn)
+        )
+      ): {List.all.if(u => Bool.xor(neg, _), ic) == List.all.if(u => xf, Spec.is_inner(f)): Bool}
+      %Equal.sym(
+        Bool,
+        List.contains(~Char, ~Char.is_eq, xs, f),
+        False{},
+        Reaches.Reach.within_out(
+          ~Char,
+          ~Char.is_eq,
+          ~Shared.Char.laws(),
           xs,
           cs,
           f,
-          hf
-        )(
-          hw
-        ): {
-          Seq.keep(
-            Bool.and(True{}, Bool.xor(n, False{})),
-            r
-          )
-            == Seq.keep(Bool.and(True{}, Bool.xor(n, _)), r): List<&2, List<&2, Spec.Glob>>
-        }
-        {==}
-    case Spec.Deep{}:
-      _ =>
-        %ek: {
-          Con{Con{Spec.Deep{}, r}, kc} == Con{Con{Spec.Deep{}, r}, _}: List<&2, List<&2, Spec.Glob>>
-        }
-        {==}
-    case Spec.Cat{+a, +b}:
-      +hw =>
-        +wa = Glob.within(a, cs)
-        +wb = Glob.within(b, cs)
-        eb = Seq.step.head_rep(
-          b,
-          r,
-          c,
-          f,
-          kc,
-          kf,
-          cs,
-          hc,
-          hf,
-          hs,
-          ek
-        )(Shared.Bool.and_true_right(wa, wb)(hw))
-        Seq.step.head_rep(
-          a,
-          Con{b, r},
-          c,
-          f,
-          Seq.step.head(b, r, c, kc),
-          Seq.step.head(b, r, f, kf),
-          cs,
-          hc,
-          hf,
-          hs,
-          eb
-        )(Shared.Bool.and_true_left(wa, wb)(hw))
-    case Spec.Alt{+a, +b}:
-      +hw =>
-        +wa = Glob.within(a, cs)
-        +wb = Glob.within(b, cs)
-        +ac = Seq.step.head(a, r, c, kc)
-        +bc = Seq.step.head(b, r, c, kc)
-        %Seq.step.head_rep(
-          a,
-          r,
-          c,
-          f,
-          kc,
-          kf,
-          cs,
-          hc,
-          hf,
-          hs,
-          ek
-        )(Shared.Bool.and_true_left(wa, wb)(hw)):
-          {
-            List.append(
-              &2,
-              List<&2, Spec.Glob>,
-              ac,
-              bc
-            )
-              == List.append(
-                &2,
-                List<&2, Spec.Glob>,
-                _,
-                Seq.step.head(b, r, f, kf)
-              ): List<&2, List<&2, Spec.Glob>>
-          }
-        %Seq.step.head_rep(
-          b,
-          r,
-          c,
-          f,
-          kc,
-          kf,
-          cs,
-          hc,
-          hf,
-          hs,
-          ek
-        )(Shared.Bool.and_true_right(wa, wb)(hw)):
-          {
-            List.append(
-              &2,
-              List<&2, Spec.Glob>,
-              ac,
-              bc
-            )
-              == List.append(&2, List<&2, Spec.Glob>, ac, _): List<&2, List<&2, Spec.Glob>>
-          }
-        {==}
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+          hp,
+          Chars.near_right(cs, c, f, hn)
+        )
+      ): {
+        List.all.if(
+          u => Bool.xor(neg, False{}),
+          ic
+        )
+          == List.all.if(u => Bool.xor(neg, _), Spec.is_inner(f)): Bool
+      }
+      %Equal.sym(
+        Bool,
+        ic,
+        True{},
+        Char.inner_out(cs, c, Chars.near_slash(cs, c, f, hn), Chars.near_left(cs, c, f, hn))
+      ): {
+        List.all.if(
+          u => Bool.xor(neg, False{}),
+          _
+        )
+          == List.all.if(u => Bool.xor(neg, False{}), Spec.is_inner(f)): Bool
+      }
+      %Equal.sym(
+        Bool,
+        Spec.is_inner(f),
+        True{},
+        Char.inner_out(cs, f, Chars.near_slash(cs, c, f, hn), Chars.near_right(cs, c, f, hn))
+      ): {
+        List.all.if(
+          u => Bool.xor(neg, False{}),
+          True{}
+        )
+          == List.all.if(u => Bool.xor(neg, False{}), _): Bool
+      }
+      {==}
 
-# Seq.step moves s the same under c and f
+# slots step alike under two characters that cs lacks, when cs holds '/' and
+# every character that the slots name
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- only proofs use it; no program runs it
-def Seq.step_rep(
-  s: List<&2, Spec.Glob>,
-  +c: Char,
-  +f: Char,
-  +cs: List<&2, Char>,
-  +hc: {Chars.has(cs, c) == False{}: Bool},
-  +hf: {Chars.has(cs, f) == False{}: Bool},
-  +hs: {Chars.has(cs, '/') == True{}: Bool}
-) -> {
-  Seq.within(s, cs) == True{}: Bool
-} -> {Seq.step(s, c) == Seq.step(s, f): List<&2, List<&2, Spec.Glob>>}:
-  match s:
-    case Nil{}:
-      _ => {==}
-    case Con{+h, +t}:
-      +hw =>
-        +wh = Glob.within(h, cs)
-        +wt = Seq.within(t, cs)
-        et = Seq.step_rep(t, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_right(wh, wt)(hw))
-        Seq.step.head_rep(
-          h,
-          t,
-          c,
-          f,
-          Seq.step(t, c),
-          Seq.step(t, f),
-          cs,
-          hc,
-          hf,
-          hs,
-          et
-        )(Shared.Bool.and_true_left(wh, wt)(hw))
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
-
-# Seqs.step moves xs the same under c and f
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- only proofs use it; no program runs it
-def Seqs.step_rep(
-  xs: List<&2, List<&2, Spec.Glob>>,
-  +c: Char,
-  +f: Char,
-  +cs: List<&2, Char>,
-  +hc: {Chars.has(cs, c) == False{}: Bool},
-  +hf: {Chars.has(cs, f) == False{}: Bool},
-  +hs: {Chars.has(cs, '/') == True{}: Bool}
-) -> {
-  Seqs.within(xs, cs) == True{}: Bool
-} -> {Seqs.step(xs, c) == Seqs.step(xs, f): List<&2, List<&2, Spec.Glob>>}:
-  match xs:
-    case Nil{}:
-      _ => {==}
-    case Con{+x, +r}:
-      +hw =>
-        +wx = Seq.within(x, cs)
-        +wr = Seqs.within(r, cs)
-        +sc = Seq.step(x, c)
-        +rc = Seqs.step(r, c)
-        %Seq.step_rep(x, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_left(wx, wr)(hw)):
-          {Seqs.add_all(sc, rc) == Seqs.add_all(_, Seqs.step(r, f)): List<&2, List<&2, Spec.Glob>>}
-        %Seqs.step_rep(r, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_right(wx, wr)(hw)):
-          {Seqs.add_all(sc, rc) == Seqs.add_all(sc, _): List<&2, List<&2, Spec.Glob>>}
-        {==}
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
-
-# Slot.step moves slots the same under c and f
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- only proofs use it; no program runs it
-def Slot.step_rep(
+def Slot.step_alike(
   slots: List<&2, Slot>,
+  +cs: List<&2, Char>,
   +c: Char,
   +f: Char,
-  +cs: List<&2, Char>,
-  +hc: {Chars.has(cs, c) == False{}: Bool},
-  +hf: {Chars.has(cs, f) == False{}: Bool},
-  +hs: {Chars.has(cs, '/') == True{}: Bool}
+  +hn: {Chars.near(cs, c, f) == True{}: Bool}
 ) -> {
   Slots.within(slots, cs) == True{}: Bool
 } -> {Slot.step(slots, c) == Slot.step(slots, f): List<&2, Slot>}:
@@ -2202,360 +1383,263 @@ def Slot.step_rep(
       _ => {==}
     case Con{Inc{+xs}, +t}:
       +hw =>
-        +wx = Seqs.within(xs, cs)
-        +wt = Slots.within(t, cs)
-        +xc = Seqs.step(xs, c)
+        +wx = Regex.Seqs.holds(~Atom, ~List<&2, Char>, ~Atom.within, xs, cs)
+        +xc = Regex.Seqs.step(~Char, ~Atom, ~Atom.hit, ~Atom.is_eq, ~Atom.key, xs, c)
         +tc = Slot.step(t, c)
-        %Seqs.step_rep(xs, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_left(wx, wt)(hw)):
-          {Con{Inc{xc}, tc} == Con{Inc{_}, Slot.step(t, f)}: List<&2, Slot>}
-        %Slot.step_rep(t, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_right(wx, wt)(hw)):
-          {Con{Inc{xc}, tc} == Con{Inc{xc}, _}: List<&2, Slot>}
+        %Regex.Seqs.step_alike(
+          ~Char,
+          ~Atom,
+          ~List<&2, Char>,
+          ~Atom.hit,
+          ~Atom.is_eq,
+          ~Atom.key,
+          ~Atom.within,
+          ~Chars.near,
+          ~(g => c2 => f2 => t2 => hn2 => hp2 => Atom.alike(g, c2, f2, t2, hn2, hp2)),
+          xs,
+          cs,
+          c,
+          f
+        )(
+          hn
+        )(
+          Shared.List.all.if_hit(wx, u => Slots.within(t, cs))(hw)
+        ): {Con{Inc{xc}, tc} == Con{Inc{_}, Slot.step(t, f)}: List<&2, Slot>}
+        %Slot.step_alike(
+          t,
+          cs,
+          c,
+          f,
+          hn
+        )(
+          Shared.List.all.if_rest(wx, u => Slots.within(t, cs))(hw)
+        ): {Con{Inc{xc}, tc} == Con{Inc{xc}, _}: List<&2, Slot>}
         {==}
     case Con{Exc{+xs}, +t}:
       +hw =>
-        +wx = Seqs.within(xs, cs)
-        +wt = Slots.within(t, cs)
-        +xc = Seqs.step(xs, c)
+        +wx = Regex.Seqs.holds(~Atom, ~List<&2, Char>, ~Atom.within, xs, cs)
+        +xc = Regex.Seqs.step(~Char, ~Atom, ~Atom.hit, ~Atom.is_eq, ~Atom.key, xs, c)
         +tc = Slot.step(t, c)
-        %Seqs.step_rep(xs, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_left(wx, wt)(hw)):
-          {Con{Exc{xc}, tc} == Con{Exc{_}, Slot.step(t, f)}: List<&2, Slot>}
-        %Slot.step_rep(t, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_right(wx, wt)(hw)):
-          {Con{Exc{xc}, tc} == Con{Exc{xc}, _}: List<&2, Slot>}
+        %Regex.Seqs.step_alike(
+          ~Char,
+          ~Atom,
+          ~List<&2, Char>,
+          ~Atom.hit,
+          ~Atom.is_eq,
+          ~Atom.key,
+          ~Atom.within,
+          ~Chars.near,
+          ~(g => c2 => f2 => t2 => hn2 => hp2 => Atom.alike(g, c2, f2, t2, hn2, hp2)),
+          xs,
+          cs,
+          c,
+          f
+        )(
+          hn
+        )(
+          Shared.List.all.if_hit(wx, u => Slots.within(t, cs))(hw)
+        ): {Con{Exc{xc}, tc} == Con{Exc{_}, Slot.step(t, f)}: List<&2, Slot>}
+        %Slot.step_alike(
+          t,
+          cs,
+          c,
+          f,
+          hn
+        )(
+          Shared.List.all.if_rest(wx, u => Slots.within(t, cs))(hw)
+        ): {Con{Exc{xc}, tc} == Con{Exc{xc}, _}: List<&2, Slot>}
         {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# St.step moves x the same under c and f
-def St.step_rep(
-  x: St,
-  +c: Char,
-  +f: Char,
-  +cs: List<&2, Char>,
-  +hc: {Chars.has(cs, c) == False{}: Bool},
-  +hf: {Chars.has(cs, f) == False{}: Bool},
-  +hs: {Chars.has(cs, '/') == True{}: Bool}
-) -> {St.within(x, cs) == True{}: Bool} -> {St.step(x, c) == St.step(x, f): St}:
-  match x:
-    case St{both, +a, +b}:
-      +hw =>
-        +wa = Slots.within(a, cs)
-        +wb = Slots.within(b, cs)
-        +ac = Slot.step(a, c)
-        +bc = Slot.step(b, c)
-        %Slot.step_rep(a, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_left(wa, wb)(hw)):
-          {St{both, ac, bc} == St{both, _, Slot.step(b, f)}: St}
-        %Slot.step_rep(b, c, f, cs, hc, hf, hs)(Shared.Bool.and_true_right(wa, wb)(hw)):
-          {St{both, ac, bc} == St{both, ac, _}: St}
-        {==}
+# cs holds '/' and not f
+def Abc.fits(g: Abc) -> Bool:
+  match g:
+    case Abc{+cs, f}:
+      List.all.if(u => Bool.not(Chars.has(cs, f)), Chars.has(cs, '/'))
 
-# Certificates
-# ------------
-# A certificate is a list of states xs, the characters cs that its globs
-# name (with '/'), and one more character f outside cs. When every state of
-# xs fails on "" and steps into xs under f and each character of cs, no
-# state of xs holds for any string.
-
-# each step of x under a character of ds lands in xs
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
-def St.closed(+x: St, ds: List<&2, Char>, +xs: List<&2, St>) -> Bool:
-  match ds:
-    case Nil{}:
-      True{}
-    case Con{d, t}:
-      Bool.and(St.has(xs, St.step(x, d)), St.closed(x, t, xs))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# x fails on "", names only characters of cs, and steps into xs
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
-def St.ok(+x: St, +cs: List<&2, Char>, f: Char, xs: List<&2, St>) -> Bool:
-  Bool.and(Bool.not(St.holds(x, SNil{})), Bool.and(St.within(x, cs), St.closed(x, Con{f, cs}, xs)))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# every state of ys is ok
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
-def St.all_ok(ys: List<&2, St>, +cs: List<&2, Char>, +f: Char, +xs: List<&2, St>) -> Bool:
-  match ys:
-    case Nil{}:
-      True{}
-    case Con{y, t}:
-      Bool.and(St.ok(y, cs, f, xs), St.all_ok(t, cs, f, xs))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# (xs, cs, f) is a certificate
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
-def Cert.check(+xs: List<&2, St>, +cs: List<&2, Char>, +f: Char) -> Bool:
-  Bool.and(Chars.has(cs, '/'), Bool.and(Bool.not(Chars.has(cs, f)), St.all_ok(xs, cs, f, xs)))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# one step of St.all_ok_has, given b: St.is_eq(y, x)
-def St.all_ok_has.at(
-  +y: St,
-  t: List<&2, St>,
-  x: St,
-  +cs: List<&2, Char>,
-  +f: Char,
-  +xs: List<&2, St>,
-  b: Bool,
-  ih: {
-    St.all_ok(t, cs, f, xs) == True{}: Bool
-  } -> {St.has(t, x) == True{}: Bool} -> {St.ok(x, cs, f, xs) == True{}: Bool},
-  ha: {Bool.and(St.ok(y, cs, f, xs), St.all_ok(t, cs, f, xs)) == True{}: Bool}
-) -> {
-  St.is_eq(y, x) == b: Bool
-} -> {Bool.or(b, St.has(t, x)) == True{}: Bool} -> {St.ok(x, cs, f, xs) == True{}: Bool}:
-  match b:
-    case False{}:
-      e => hh => ih(
-        Shared.Bool.and_true_right(St.ok(y, cs, f, xs), St.all_ok(t, cs, f, xs))(ha)
-      )(hh)
-    case True{}:
-      e => hh =>
-        %St.is_eq_sound(y, x)(e): {St.ok(_, cs, f, xs) == True{}: Bool}
-        Shared.Bool.and_true_left(St.ok(y, cs, f, xs), St.all_ok(t, cs, f, xs))(ha)
-
-# a state that ys holds is ok when all of ys are
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- only proofs use it; no program runs it
-def St.all_ok_has(
-  ys: List<&2, St>,
-  +x: St,
-  +cs: List<&2, Char>,
-  +f: Char,
-  +xs: List<&2, St>
-) -> {
-  St.all_ok(ys, cs, f, xs) == True{}: Bool
-} -> {St.has(ys, x) == True{}: Bool} -> {St.ok(x, cs, f, xs) == True{}: Bool}:
-  match ys:
-    case Nil{}:
-      _ => hh => Empty.absurd({St.ok(x, cs, f, xs) == True{}: Bool}, Shared.Bool.false_ne_true(hh))
-    case Con{+y, +t}:
-      ha => St.all_ok_has.at(
-        y,
-        t,
-        x,
-        cs,
-        f,
-        xs,
-        St.is_eq(y, x),
-        St.all_ok_has(t, x, cs, f, xs),
-        ha
-      )({==})
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
-
-# one step of St.closed_has, given b: Char.is_eq(d, c)
-def St.closed_has.at(
-  +x: St,
-  +d: Char,
-  t: List<&2, Char>,
-  +xs: List<&2, St>,
-  c: Char,
-  b: Bool,
-  ih: {
-    St.closed(x, t, xs) == True{}: Bool
-  } -> {Chars.has(t, c) == True{}: Bool} -> {St.has(xs, St.step(x, c)) == True{}: Bool},
-  hcl: {Bool.and(St.has(xs, St.step(x, d)), St.closed(x, t, xs)) == True{}: Bool}
-) -> {
-  Char.is_eq(d, c) == b: Bool
-} -> {Bool.or(b, Chars.has(t, c)) == True{}: Bool} -> {St.has(xs, St.step(x, c)) == True{}: Bool}:
-  match b:
-    case False{}:
-      e => hh => ih(
-        Shared.Bool.and_true_right(St.has(xs, St.step(x, d)), St.closed(x, t, xs))(hcl)
-      )(hh)
-    case True{}:
-      e => hh =>
-        %Shared.Char.is_eq_sound(d, c)(e): {St.has(xs, St.step(x, _)) == True{}: Bool}
-        Shared.Bool.and_true_left(St.has(xs, St.step(x, d)), St.closed(x, t, xs))(hcl)
-
-# x steps into xs under each character of ds when it is closed for ds
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- only proofs use it; no program runs it
-def St.closed_has(
-  +x: St,
-  ds: List<&2, Char>,
-  +xs: List<&2, St>,
-  +c: Char
-) -> {
-  St.closed(x, ds, xs) == True{}: Bool
-} -> {Chars.has(ds, c) == True{}: Bool} -> {St.has(xs, St.step(x, c)) == True{}: Bool}:
-  match ds:
-    case Nil{}:
-      _ => hh => Empty.absurd(
-        {St.has(xs, St.step(x, c)) == True{}: Bool},
-        Shared.Bool.false_ne_true(hh)
+# g fits, and every character that x names is in its cs
+def St.covers(g: Abc, x: St) -> Bool:
+  match g x:
+    case Abc{+cs, f} St{both, a, b}:
+      List.all.if(
+        u => List.all.if(u2 => Slots.within(b, cs), Slots.within(a, cs)),
+        Abc.fits(Abc{cs, f})
       )
-    case Con{+d, +t}:
-      hcl => St.closed_has.at(
-        x,
-        d,
-        t,
-        xs,
-        c,
-        Char.is_eq(d, c),
-        St.closed_has(x, t, xs, c),
-        hcl
-      )({==})
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# St.next_in, given b: Chars.has(Con{f, cs}, c)
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
-def St.next_in.at(
-  +x: St,
-  +c: Char,
-  cs: List<&2, Char>,
+# St.rep, once it is known if f <> cs holds c (known)
+def St.rep.at(
+  +cs: List<&2, Char>,
   +f: Char,
-  xs: List<&2, St>,
-  b: Bool,
-  hs: {Chars.has(cs, '/') == True{}: Bool},
-  hf: {Chars.has(cs, f) == False{}: Bool},
-  hw: {St.within(x, cs) == True{}: Bool},
-  hcl: {St.closed(x, Con{f, cs}, xs) == True{}: Bool}
-) -> {Chars.has(Con{f, cs}, c) == b: Bool} -> {St.has(xs, St.step(x, c)) == True{}: Bool}:
-  match b:
+  both: Bool,
+  +a: List<&2, Slot>,
+  +b: List<&2, Slot>,
+  +c: Char,
+  known: Bool,
+  +h: {St.covers(Abc{cs, f}, St{both, a, b}) == True{}: Bool}
+) -> {
+  Chars.has(f <> cs, c) == known: Bool
+} -> (
+  &d: Char -> {
+    List.contains(~Char, ~Char.is_eq, f <> cs, d) == True{}: Bool
+  }
+    & {St.step(St{both, a, b}, c) == St.step(St{both, a, b}, d): St}
+):
+  match known:
     case True{}:
-      e => St.closed_has(x, Con{f, cs}, xs, c)(hcl)(e)
+      e => (c, (e, {==}))
     case False{}:
       e =>
-        hc = Shared.Bool.or_false_right(Char.is_eq(f, c), Chars.has(cs, c))(e)
-        rep = St.step_rep(x, c, f, cs, hc, hf, hs)(hw)
-        %Equal.sym(St, St.step(x, c), St.step(x, f), rep): {St.has(xs, _) == True{}: Bool}
-        Shared.Bool.and_true_left(St.has(xs, St.step(x, f)), St.closed(x, cs, xs))(hcl)
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+        +wa = Slots.within(a, cs)
+        +wb = Slots.within(b, cs)
+        +has_s = Chars.has(cs, '/')
+        +no_f = Bool.not(Chars.has(cs, f))
+        +no_c = Bool.not(Chars.has(cs, c))
+        +fits = Shared.List.all.if_hit(
+          List.all.if(u => no_f, has_s),
+          u => List.all.if(u2 => wb, wa)
+        )(h)
+        +within = Shared.List.all.if_rest(
+          List.all.if(u => no_f, has_s),
+          u => List.all.if(u2 => wb, wa)
+        )(h)
+        hc = Shared.List.any.if_false_rest(Char.is_eq(f, c), u => Chars.has(cs, c))(e)
+        +hn = {
+          Shared.List.all.if_both(
+            has_s,
+            u => List.all.if(u2 => no_f, no_c)
+          )(
+            Shared.List.all.if_hit(has_s, u => no_f)(fits)
+          )(
+            Shared.List.all.if_both(
+              no_c,
+              u2 => no_f
+            )(
+              Equal.cong(Bool, Bool, v => Bool.not(v), Chars.has(cs, c), False{}, hc)
+            )(Shared.List.all.if_rest(has_s, u => no_f)(fits))
+          ): {Chars.near(cs, c, f) == True{}: Bool}
+        }
+        +ac = Slot.step(a, c)
+        +bc = Slot.step(b, c)
+        (f, ({
+              %Equal.sym(Bool, Char.is_eq(f, f), True{}, Shared.Char.is_eq_refl(f)): {List.any.if(u => List.contains(~Char, ~Char.is_eq, cs, f), _) == True{}: Bool}
+              {==}
+              : {List.contains(~Char, ~Char.is_eq, f <> cs, f) == True{}: Bool}}, {
+              %Slot.step_alike(a, cs, c, f, hn)(Shared.List.all.if_hit(wa, u2 => wb)(within)): {St{both, ac, bc} == St{both, _, Slot.step(b, f)}: St}
+              %Slot.step_alike(b, cs, c, f, hn)(Shared.List.all.if_rest(wa, u2 => wb)(within)): {St{both, ac, bc} == St{both, ac, _}: St}
+              {==}
+              : {St{both, ac, bc} == St{both, Slot.step(a, f), Slot.step(b, f)}: St}}))
 
-# an ok state of a certificate steps into it under any character
-def St.next_in(
-  +x: St,
-  +c: Char,
-  +cs: List<&2, Char>,
-  +f: Char,
-  +xs: List<&2, St>,
-  hs: {Chars.has(cs, '/') == True{}: Bool},
-  hf: {Chars.has(cs, f) == False{}: Bool},
-  hok: {St.ok(x, cs, f, xs) == True{}: Bool}
-) -> {St.has(xs, St.step(x, c)) == True{}: Bool}:
-  nh = Bool.not(St.holds(x, SNil{}))
-  +wi = St.within(x, cs)
-  +cl = St.closed(x, Con{f, cs}, xs)
-  +rest = Shared.Bool.and_true_right(nh, Bool.and(wi, cl))(hok)
-  hw = Shared.Bool.and_true_left(wi, cl)(rest)
-  hcl = Shared.Bool.and_true_right(wi, cl)(rest)
-  St.next_in.at(x, c, cs, f, xs, Chars.has(Con{f, cs}, c), hs, hf, hw, hcl)({==})
-
-# a valid certificate names '/'
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
-def Cert.slash(
-  cs: List<&2, Char>,
-  f: Char,
-  xs: List<&2, St>,
-  hcert: {Cert.check(xs, cs, f) == True{}: Bool}
-) -> {Chars.has(cs, '/') == True{}: Bool}:
-  Shared.Bool.and_true_left(
-    Chars.has(cs, '/'),
-    Bool.and(Bool.not(Chars.has(cs, f)), St.all_ok(xs, cs, f, xs))
-  )(hcert)
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# a valid certificate does not name f
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
-def Cert.fresh(
-  +cs: List<&2, Char>,
-  +f: Char,
-  +xs: List<&2, St>,
-  hcert: {Cert.check(xs, cs, f) == True{}: Bool}
-) -> {Chars.has(cs, f) == False{}: Bool}:
-  +nf = Bool.not(Chars.has(cs, f))
-  al = St.all_ok(xs, cs, f, xs)
-  rest = Shared.Bool.and_true_right(Chars.has(cs, '/'), Bool.and(nf, al))(hcert)
-  Shared.Bool.not_true(Chars.has(cs, f))(Shared.Bool.and_true_left(nf, al)(rest))
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# every state of a valid certificate is ok
-def Cert.ok_of(
+# under a state that g covers, each character moves the machine as some
+# character of Abc.syms(g) does
+def St.rep(
+  g: Abc,
   x: St,
-  +cs: List<&2, Char>,
-  +f: Char,
-  +xs: List<&2, St>,
-  hcert: {Cert.check(xs, cs, f) == True{}: Bool},
-  hx: {St.has(xs, x) == True{}: Bool}
-) -> {St.ok(x, cs, f, xs) == True{}: Bool}:
-  +nf = Bool.not(Chars.has(cs, f))
-  +al = St.all_ok(xs, cs, f, xs)
-  rest = Shared.Bool.and_true_right(Chars.has(cs, '/'), Bool.and(nf, al))(hcert)
-  St.all_ok_has(xs, x, cs, f, xs)(Shared.Bool.and_true_right(nf, al)(rest))(hx)
+  c: Char,
+  h: {St.covers(g, x) == True{}: Bool}
+) -> (
+  &d: Char -> {
+    List.contains(~Char, ~Char.is_eq, Abc.syms(g), d) == True{}: Bool
+  }
+    & {Abc.step(g, x, c) == Abc.step(g, x, d): St}
+):
+  match g x:
+    case Abc{+cs, +f} St{both, a, b}:
+      +c = c
+      St.rep.at(cs, f, both, a, b, c, Chars.has(f <> cs, c), h)({==})
 
-# no state of a certificate holds for any string
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
-def Cert.sound(
-  w: String,
+# the machine accepts w from x exactly when x holds for w
+def St.accepts_ok(
+  w: List<&2, Char>,
   +x: St,
-  +cs: List<&2, Char>,
-  +f: Char,
-  +xs: List<&2, St>,
-  +hcert: {Cert.check(xs, cs, f) == True{}: Bool},
-  hx: {St.has(xs, x) == True{}: Bool}
-) -> {St.holds(x, w) == False{}: Bool}:
+  g: Abc
+) -> {
+  Searches.Machine.accepts(~St, ~Char, ~Abc, ~Abc.step, ~Abc.ends, w, x, g) == St.holds(x, w): Bool
+}:
   match w:
-    case SNil{}:
-      nh = Bool.not(St.holds(x, SNil{}))
-      rest = Bool.and(St.within(x, cs), St.closed(x, Con{f, cs}, xs))
-      Shared.Bool.not_true(
-        St.holds(x, SNil{})
-      )(Shared.Bool.and_true_left(nh, rest)(Cert.ok_of(x, cs, f, xs, hcert, hx)))
-    case SCon{+c, +t}:
-      hs = Cert.slash(cs, f, xs, hcert)
-      hf = Cert.fresh(cs, f, xs, hcert)
-      hn = St.next_in(x, c, cs, f, xs, hs, hf, Cert.ok_of(x, cs, f, xs, hcert, hx))
-      %St.step_ok(x, c, t): {_ == False{}: Bool}
-      Cert.sound(t, St.step(x, c), cs, f, xs, hcert, hn)
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+    case Nil{}:
+      {==}
+    case Con{+c, +t}:
+      %St.step_ok(
+        x,
+        c,
+        t
+      ): {
+        Searches.Machine.accepts(
+          ~St,
+          ~Char,
+          ~Abc,
+          ~Abc.step,
+          ~Abc.ends,
+          t,
+          St.step(x, c),
+          g
+        )
+          == _: Bool
+      }
+      St.accepts_ok(t, St.step(x, c), g)
 
 # Search
 # ------
 # The search needs no proof: `decide` checks what it returns. Phase one
-# collects the states reachable from the start; when none holds on "", they
-# are a certificate. Else phase two looks for a valid path that holds,
+# visits the states that the start state can reach; when none holds for "",
+# they are a certificate. Else phase two looks for a valid path that holds,
 # guided by an automaton of valid paths.
 
-# the characters that g names
-# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a glob tree is a few nodes, where a fork costs more than it saves
-def Glob.chars(g: Spec.Glob) -> List<&2, Char>:
+# the characters that g names, in front of acc
+def Glob.chars(g: Spec.Glob, acc: List<&2, Char>) -> List<&2, Char>:
   match g:
     case Spec.Void{}:
-      []
+      acc
     case Spec.Eps{}:
-      []
+      acc
     case Spec.Lit{x}:
-      [x]
+      x <> acc
     case Spec.Any{}:
-      []
+      acc
     case Spec.Star{}:
-      []
+      acc
     case Spec.Class{n, xs}:
-      xs
+      List.append(&2, Char, xs, acc)
     case Spec.Deep{}:
-      []
+      acc
     case Spec.Cat{a, b}:
-      List.append(&2, Char, Glob.chars(a), Glob.chars(b))
+      Glob.chars(a, Glob.chars(b, acc))
     case Spec.Alt{a, b}:
-      List.append(&2, Char, Glob.chars(a), Glob.chars(b))
-# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
+      Glob.chars(a, Glob.chars(b, acc))
 
-# the characters that the globs of rules name
-def Rules.chars(rules: List<&2, Spec.Rule>) -> List<&2, Char>:
+# the characters that the globs of rules name, in front of acc
+def Rules.chars(rules: List<&2, Spec.Rule>, acc: List<&2, Char>) -> List<&2, Char>:
   match rules:
     case Nil{}:
-      []
+      acc
     case Con{Spec.Include{g}, t}:
-      List.append(&2, Char, Glob.chars(g), Rules.chars(t))
+      Glob.chars(g, Rules.chars(t, acc))
     case Con{Spec.Exclude{g}, t}:
-      List.append(&2, Char, Glob.chars(g), Rules.chars(t))
+      Glob.chars(g, Rules.chars(t, acc))
 
-# '/' and the characters that the globs of q name
+# the key of c
+def Char.key(c: Char) -> List<&2, Bool>:
+  match c:
+    case Chr{x}:
+      Tries.Trie.char(x)
+
+# '/' and the characters that the globs of a and b name, each once
+def Rules.abc_chars(a: List<&2, Spec.Rule>, b: List<&2, Spec.Rule>) -> List<&2, Char>:
+  KeySets.KeySet.unique(
+    ~Char,
+    ~Char.is_eq,
+    ~Char.key,
+    '/' <> Rules.chars(a, Rules.chars(b, [])),
+    Tries.Trie.new(Char)
+  )
+
+# '/' and the characters that the globs of q name, each once
 def Query.chars(q: Spec.Query) -> List<&2, Char>:
   match q:
     case Spec.Both{a, b}:
-      Con{'/', List.append(&2, Char, Rules.chars(a), Rules.chars(b))}
+      Rules.abc_chars(a, b)
     case Spec.Only{a, b}:
-      Con{'/', List.append(&2, Char, Rules.chars(a), Rules.chars(b))}
+      Rules.abc_chars(a, b)
 
 # the largest code in cs, or acc
 def Chars.max(cs: List<&2, Char>, +acc: U32) -> U32:
@@ -2564,63 +1648,13 @@ def Chars.max(cs: List<&2, Char>, +acc: U32) -> U32:
       acc
     case Con{Chr{+x}, t}:
       Chars.max(t, Bool.pick(U32, U32.is_gt(x, acc), x, acc))
-
 # a character after every character of cs
 def Chars.fresh(cs: List<&2, Char>) -> Char:
   Chr{(Chars.max(cs, 0) + 1: U32)}
-
-# acc with y, unless known
-def Search.add_new(y: St, acc: List<&2, St>, known: Bool) -> List<&2, St>:
-  match known:
-    case False{}:
-      Con{y, acc}
-    case True{}:
-      acc
-
-# the steps of x under ds that neither seen nor acc holds
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
-def Search.fresh(
-  +x: St,
-  ds: List<&2, Char>,
-  +seen: List<&2, St>,
-  +acc: List<&2, St>
-) -> List<&2, St>:
-  match ds:
-    case Nil{}:
-      acc
-    case Con{d, t}:
-      +y = St.step(x, d)
-      Search.fresh(x, t, seen, Search.add_new(y, acc, Bool.or(St.has(seen, y), St.has(acc, y))))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# k(), or None when x holds on ""
-def Search.close.if(hit: Bool, k: Unit -> Maybe<&2, List<&2, St>>) -> Maybe<&2, List<&2, St>>:
-  match hit:
-    case False{}:
-      k(Unit{})
-    case True{}:
-      None{}
-
-# every state reachable from todo, with seen; None when one holds on "" or
-# fuel runs out
-def Search.close(
-  fuel: Nat,
-  todo: List<&2, St>,
-  +seen: List<&2, St>,
-  +ds: List<&2, Char>
-) -> Maybe<&2, List<&2, St>>:
-  match fuel todo:
-    case 0n _:
-      None{}
-    case 1n+n Nil{}:
-      Some{seen}
-    case 1n+n Con{+x, t}:
-      +new = Search.fresh(x, ds, seen, [])
-      next = List.append(&2, St, t, new)
-      Search.close.if(
-        St.holds(x, SNil{}),
-        u => Search.close(n, next, List.append(&2, St, new, seen), ds)
-      )
+# the named characters of q, and one more
+def Query.abc(q: Spec.Query) -> Abc:
+  +cs = Query.chars(q)
+  Abc{cs, Chars.fresh(cs)}
 
 # Where a valid path is: at a segment start, after "." or "..", inside a
 # valid segment, or past a mistake.
@@ -2630,14 +1664,12 @@ type Path is Data:
   PDots{}
   PSeg{}
   PDead{}
-
 # What a character is to a path: '/', '.', a banned character, or another.
 type Role is Data:
   KSlash{}
   KDot{}
   KBad{}
   KOther{}
-
 # what c is to a path
 def Role.of(c: Char) -> Role:
   match c:
@@ -2653,7 +1685,6 @@ def Role.of(c: Char) -> Role:
           Bool.pick(Role, Bool.or(U32.is_eq(x, 0), U32.is_eq(x, 92)), KBad{}, KOther{})
         )
       )
-
 # where a path is after a character of kind k
 def Path.step(s: Path, k: Role) -> Path:
   match s k:
@@ -2671,7 +1702,6 @@ def Path.step(s: Path, k: Role) -> Path:
       PDots{}
     case _ _:
       PSeg{}
-
 # a and b are the same place
 def Path.is_eq(a: Path, b: Path) -> Bool:
   match a b:
@@ -2687,7 +1717,6 @@ def Path.is_eq(a: Path, b: Path) -> Bool:
       True{}
     case _ _:
       False{}
-
 # a valid path can end here
 def Path.is_end(s: Path) -> Bool:
   match s:
@@ -2695,125 +1724,142 @@ def Path.is_end(s: Path) -> Bool:
       True{}
     case _:
       False{}
+# the key of a place
+def Path.key(s: Path) -> List<&2, Bool>:
+  match s:
+    case PStart{}:
+      [False{}, False{}, False{}]
+    case PDot{}:
+      [False{}, False{}, True{}]
+    case PDots{}:
+      [False{}, True{}, False{}]
+    case PSeg{}:
+      [False{}, True{}, True{}]
+    case PDead{}:
+      [True{}, False{}, False{}]
 
-# A node of phase two: where the path is, the state, and the characters so
-# far, last first.
-type Node is Data:
-  Node{at: Path, x: St, rev: String}
+# A place of phase two: where the path is, with the state; or past a
+# mistake of the path (Dead), where the state does not matter.
+type Walk is Data:
+  Dead{}
+  At{at: Path, x: St}
 
-# a node with the same place and state as n is in ns
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
-def Node.seen(ns: List<&2, Node>, +n: Node) -> Bool:
-  match ns:
-    case Nil{}:
+# the place after c, once the path is at a
+def Walk.at(a: Path, x: St, c: Char) -> Walk:
+  match a:
+    case PDead{}:
+      Dead{}
+    case other:
+      At{other, St.step(x, c)}
+
+# The machine of phase two: the place after c.
+def Walk.step(g: Abc, w: Walk, c: Char) -> Walk:
+  match w:
+    case Dead{}:
+      Dead{}
+    case At{a, x}:
+      +c = c
+      Walk.at(Path.step(a, Role.of(c)), x, c)
+
+# a valid path that the state holds for can end here
+def Walk.ends(g: Abc, w: Walk) -> Bool:
+  match w:
+    case Dead{}:
       False{}
-    case Con{Node{a, x, r}, t}:
-      match n:
-        case Node{+b, +y, s}:
-          Bool.or(Bool.and(Path.is_eq(a, b), St.is_eq(x, y)), Node.seen(t, Node{b, y, s}))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+    case At{a, x}:
+      List.all.if(u => St.holds(x, []), Path.is_end(a))
 
-# acc with n, unless known or its path went wrong
-def Node.add(known: Bool, n: Node, acc: List<&2, Node>) -> List<&2, Node>:
-  match known n:
-    case True{} _:
-      acc
-    case False{} Node{PDead{}, x, r}:
-      acc
-    case False{} n:
-      Con{n, acc}
+# v and w are the same place
+def Walk.is_eq(v: Walk, w: Walk) -> Bool:
+  match v w:
+    case Dead{} Dead{}:
+      True{}
+    case At{a, x} At{b, y}:
+      List.all.if(u => St.is_eq(x, y), Path.is_eq(a, b))
+    case _ _:
+      False{}
 
-# the steps of n under ds that neither seen nor acc holds
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
-def Node.fresh(
-  ds: List<&2, Char>,
-  +n: Node,
-  +seen: List<&2, Node>,
-  +acc: List<&2, Node>
-) -> List<&2, Node>:
-  match ds:
-    case Nil{}:
-      acc
-    case Con{+d, t}:
-      match n:
-        case Node{+a, +x, +r}:
-          +m = {Node{Path.step(a, Role.of(d)), St.step(x, d), SCon{d, r}}: Node}
-          Node.fresh(
-            t,
-            Node{a, x, r},
-            seen,
-            Node.add(Bool.or(Node.seen(seen, m), Node.seen(acc, m)), m, acc)
-          )
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# the key of a place
+def Walk.key(w: Walk) -> List<&2, Bool>:
+  match w:
+    case Dead{}:
+      [False{}]
+    case At{a, x}:
+      True{} <> List.append(&2, Bool, Path.key(a), St.key(x))
 
-# the path of n when it is a valid path that holds, else k()
-def Search.witness.if(hit: Bool, n: Node, k: Unit -> Maybe<&2, String>) -> Maybe<&2, String>:
-  match hit n:
-    case True{} Node{a, x, r}:
-      Some{String.reverse(r)}
-    case False{} _:
-      k(Unit{})
-
-# a valid path that some node reachable from todo holds for, or None
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
-def Search.witness(
-  fuel: Nat,
-  todo: List<&2, Node>,
-  +seen: List<&2, Node>,
-  +ds: List<&2, Char>
-) -> Maybe<&2, String>:
-  match fuel todo:
-    case 0n _:
-      None{}
-    case 1n+n Nil{}:
-      None{}
-    case 1n+n Con{Node{+a, +x, r}, t}:
-      +m = {Node{a, x, r}: Node}
-      +new = Node.fresh(ds, m, seen, [])
-      next = List.append(&2, Node, t, new)
-      hit = Bool.and(Path.is_end(a), St.holds(x, SNil{}))
-      Search.witness.if(hit, m, u => Search.witness(n, next, List.append(&2, Node, new, seen), ds))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# the characters that phase two moves under: those of phase one, and a
+# letter, as f may be a character that a path may not hold
+def Abc.path_syms(g: Abc) -> List<&2, Char>:
+  'x' <> Abc.syms(g)
 
 # What the search found: a path to check, a certificate to check, or neither.
 type Outcome is Data:
   Witness{path: String}
-  Proof{xs: List<&2, St>, cs: List<&2, Char>, f: Char}
+  Proof{xs: List<&2, St>, g: Abc}
   NoAnswer{}
 
 # the states a search may visit before it gives up
 def Search.fuel() -> Nat:
   4096n
-
-# phase two, after phase one found no certificate
-def Search.run.witness(found: Maybe<&2, String>) -> Outcome:
+# what phase two found
+def Search.run.walked(found: Searches.Found<Walk, Char>) -> Outcome:
   match found:
-    case None{}:
+    case Searches.Hit{w}:
+      Witness{String.from_list(w)}
+    case Searches.Closed{xs}:
       NoAnswer{}
-    case Some{p}:
-      Witness{p}
+    case Searches.Out{}:
+      NoAnswer{}
+
+# phase two, from the state x0
+def Search.run.paths(x0: St, g: Abc) -> Outcome:
+  Search.run.walked(
+    Searches.Search.run(
+      ~Walk,
+      ~Char,
+      ~Abc,
+      ~Walk.is_eq,
+      ~Walk.key,
+      ~Walk.step,
+      ~Walk.ends,
+      ~Abc.path_syms,
+      Search.fuel(),
+      At{PStart{}, x0},
+      g
+    )
+  )
 
 # the certificate of phase one, or phase two when there is none
-def Search.run.closed(
-  x0: St,
-  cs: List<&2, Char>,
-  f: Char,
-  closed: Maybe<&2, List<&2, St>>
-) -> Outcome:
-  match closed:
-    case Some{xs}:
-      Proof{xs, cs, f}
-    case None{}:
-      ds = {Con{'x', Con{f, cs}}: List<&2, Char>}
-      +start = {Node{PStart{}, x0, SNil{}}: Node}
-      Search.run.witness(Search.witness(Search.fuel(), [start], [start], ds))
+def Search.run.closed(x0: St, g: Abc, found: Searches.Found<St, Char>) -> Outcome:
+  match found:
+    case Searches.Closed{xs}:
+      Proof{xs, g}
+    case Searches.Hit{w}:
+      Search.run.paths(x0, g)
+    case Searches.Out{}:
+      Search.run.paths(x0, g)
 
 # what the search finds for q
 def Search.run(+q: Spec.Query) -> Outcome:
   +x0 = St.of(q)
-  +cs = Query.chars(q)
-  +f = Chars.fresh(cs)
-  Search.run.closed(x0, cs, f, Search.close(Search.fuel(), [x0], [x0], Con{f, cs}))
+  +g = Query.abc(q)
+  Search.run.closed(
+    x0,
+    g,
+    Searches.Search.run(
+      ~St,
+      ~Char,
+      ~Abc,
+      ~St.is_eq,
+      ~St.key,
+      ~Abc.step,
+      ~Abc.ends,
+      ~Abc.syms,
+      Search.fuel(),
+      x0,
+      g
+    )
+  )
 
 # Found{p} when ok, else Unknown
 def Search.found_if(p: String, ok: Bool) -> Spec.Search:
@@ -2822,7 +1868,6 @@ def Search.found_if(p: String, ok: Bool) -> Spec.Search:
       Spec.Unknown{}
     case True{}:
       Spec.Found{p}
-
 # Absent when ok, else Unknown
 def Search.absent_if(ok: Bool) -> Spec.Search:
   match ok:
@@ -2830,18 +1875,33 @@ def Search.absent_if(ok: Bool) -> Spec.Search:
       Spec.Unknown{}
     case True{}:
       Spec.Absent{}
+# xs is a certificate for q
+def Search.proves(q: Spec.Query, xs: List<&2, St>, g: Abc) -> Bool:
+  Searches.Cert.proves(
+    ~St,
+    ~Char,
+    ~Abc,
+    ~St.is_eq,
+    ~St.key,
+    ~Abc.step,
+    ~Abc.ends,
+    ~St.covers,
+    ~Abc.syms,
+    xs,
+    St.of(q),
+    g
+  )
 
 # the answer to q, from what the search found, once checked
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- it works on a glob, a search state or a character list of a few items, so the extra call is short
 def Search.decide(q: Spec.Query, r: Outcome) -> Spec.Search:
   match r:
     case Witness{+p}:
-      Search.found_if(p, Spec.Query.holds(q, p))
-    case Proof{+xs, cs, f}:
-      Search.absent_if(Bool.and(Cert.check(xs, cs, f), St.has(xs, St.of(q))))
+      Search.found_if(p, Query.holds.fast(q, p))
+    case Proof{xs, g}:
+      Search.absent_if(Search.proves(q, xs, g))
     case NoAnswer{}:
       Spec.Unknown{}
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
 def Spec.Query.search(q):
   +q = q
   Search.decide(q, Search.run(q))
@@ -2855,7 +1915,6 @@ def Search.NotFound(s: Spec.Search) -> Type:
       Unit
     case Spec.Unknown{}:
       Unit
-
 # Empty when s is Absent
 def Search.NotAbsent(s: Spec.Search) -> Type:
   match s:
@@ -2865,7 +1924,6 @@ def Search.NotAbsent(s: Spec.Search) -> Type:
       Empty
     case Spec.Unknown{}:
       Unit
-
 # no s that is not Found equals Found{p}
 def Search.ne_found(
   -s: Spec.Search,
@@ -2875,7 +1933,6 @@ def Search.ne_found(
 ) -> Empty:
   %e: Search.NotFound(_)
   n
-
 # no s that is not Absent equals Absent
 def Search.ne_absent(
   -s: Spec.Search,
@@ -2884,7 +1941,6 @@ def Search.ne_absent(
 ) -> Empty:
   %e: Search.NotAbsent(_)
   n
-
 # the path of a Found answer
 def Search.path(s: Spec.Search) -> String:
   match s:
@@ -2894,15 +1950,16 @@ def Search.path(s: Spec.Search) -> String:
       SNil{}
     case Spec.Unknown{}:
       SNil{}
-
-# found_if answers Found{p} only for a path that holds, given b: holds(q, p0)
+# found_if answers Found{p} only for a path that holds, given b: the fast
+# check of p0
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- a false positive, as the rule notes: the other use is an erased argument (of Equal.sym or a motive)
 def Search.found_if_found(
   q: Spec.Query,
   p0: String,
   p: String,
   b: Bool
 ) -> {
-  Spec.Query.holds(q, p0) == b: Bool
+  Query.holds.fast(q, p0) == b: Bool
 } -> {
   Search.found_if(p0, b) == Spec.Found{p}: Spec.Search
 } -> {Spec.Query.holds(q, p) == True{}: Bool}:
@@ -2923,7 +1980,20 @@ def Search.found_if_found(
           h
         )
         %same: {Spec.Query.holds(q, _) == True{}: Bool}
-        e
+        Equal.trans(
+          Bool,
+          Spec.Query.holds(q, p0),
+          Query.holds.fast(q, p0),
+          True{},
+          Equal.sym(
+            Bool,
+            Query.holds.fast(q, p0),
+            Spec.Query.holds(q, p0),
+            Query.holds_fast_ok(q, p0)
+          ),
+          e
+        )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # absent_if never answers Found
 def Search.absent_if_found(
@@ -2935,7 +2005,6 @@ def Search.absent_if_found(
       h => Search.ne_found(Spec.Unknown{}, p, Unit{}, h)
     case True{}:
       h => Search.ne_found(Spec.Absent{}, p, Unit{}, h)
-
 # found_if never answers Absent
 def Search.found_if_absent(
   -p: String,
@@ -2946,9 +2015,7 @@ def Search.found_if_absent(
       h => Search.ne_absent(Spec.Unknown{}, Unit{}, h)
     case True{}:
       h => Search.ne_absent(Spec.Found{p}, Unit{}, h)
-
 # a Found answer of decide names a path that holds
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
 def Search.decide_found(
   +q: Spec.Query,
   r: Outcome,
@@ -2958,29 +2025,27 @@ def Search.decide_found(
 } -> {Spec.Query.holds(q, p) == True{}: Bool}:
   match r:
     case Witness{+p0}:
-      h => Search.found_if_found(q, p0, p, Spec.Query.holds(q, p0))({==}, h)
-    case Proof{+xs, cs, f}:
+      h => Search.found_if_found(q, p0, p, Query.holds.fast(q, p0))({==}, h)
+    case Proof{xs, g}:
       h => Empty.absurd(
         {Spec.Query.holds(q, p) == True{}: Bool},
-        Search.absent_if_found(Bool.and(Cert.check(xs, cs, f), St.has(xs, St.of(q))), p)(h)
+        Search.absent_if_found(Search.proves(q, xs, g), p)(h)
       )
     case NoAnswer{}:
       h => Empty.absurd(
         {Spec.Query.holds(q, p) == True{}: Bool},
         Search.ne_found(Spec.Unknown{}, p, Unit{}, h)
       )
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
-# absent_if answers Absent only for a valid certificate that holds the start
+# absent_if answers Absent only for a certificate for q, given b: its check
 def Search.absent_if_absent(
   +q: Spec.Query,
-  +xs: List<&2, St>,
-  +cs: List<&2, Char>,
-  +f: Char,
+  xs: List<&2, St>,
+  +g: Abc,
   +p: String,
   b: Bool
 ) -> {
-  Bool.and(Cert.check(xs, cs, f), St.has(xs, St.of(q))) == b: Bool
+  Search.proves(q, xs, g) == b: Bool
 } -> {
   Search.absent_if(b) == Spec.Absent{}: Spec.Search
 } -> {Spec.Query.holds(q, p) == False{}: Bool}:
@@ -2991,29 +2056,49 @@ def Search.absent_if_absent(
         Search.ne_absent(Spec.Unknown{}, Unit{}, h)
       )
     case True{}:
-      +e => h =>
-        +ck = Cert.check(xs, cs, f)
-        +hs = St.has(xs, St.of(q))
-        none = Cert.sound(
-          p,
-          St.of(q),
-          cs,
-          f,
-          xs,
-          Shared.Bool.and_true_left(ck, hs)(e),
-          Shared.Bool.and_true_right(ck, hs)(e)
+      e => h =>
+        +w = String.to_list(p)
+        none = Equal.trans(
+          Bool,
+          St.holds(St.of(q), w),
+          Searches.Machine.accepts(~St, ~Char, ~Abc, ~Abc.step, ~Abc.ends, w, St.of(q), g),
+          False{},
+          Equal.sym(
+            Bool,
+            Searches.Machine.accepts(~St, ~Char, ~Abc, ~Abc.step, ~Abc.ends, w, St.of(q), g),
+            St.holds(St.of(q), w),
+            St.accepts_ok(w, St.of(q), g)
+          ),
+          Searches.Cert.sound(
+            ~St,
+            ~Char,
+            ~Abc,
+            ~St.is_eq,
+            ~St.key,
+            ~Char.is_eq,
+            ~Abc.step,
+            ~Abc.ends,
+            ~St.covers,
+            ~Abc.syms,
+            ~St.laws(),
+            ~Shared.Char.laws(),
+            ~St.rep,
+            xs,
+            St.of(q),
+            g,
+            w
+          )(e)
         )
         %St.of_ok(q, p): {_ == False{}: Bool}
         %Equal.sym(
           Bool,
-          St.holds(St.of(q), p),
+          St.holds(St.of(q), w),
           False{},
           none
         ): {Bool.and(Spec.is_path(p), _) == False{}: Bool}
         Shared.Bool.and_false_right(Spec.is_path(p))
 
 # an Absent answer of decide means no path holds
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
 def Search.decide_absent(
   +q: Spec.Query,
   r: Outcome,
@@ -3025,23 +2110,16 @@ def Search.decide_absent(
     case Witness{p0}:
       h => Empty.absurd(
         {Spec.Query.holds(q, p) == False{}: Bool},
-        Search.found_if_absent(p0, Spec.Query.holds(q, p0))(h)
+        Search.found_if_absent(p0, Query.holds.fast(q, p0))(h)
       )
-    case Proof{+xs, +cs, +f}:
-      h => Search.absent_if_absent(
-        q,
-        xs,
-        cs,
-        f,
-        p,
-        Bool.and(Cert.check(xs, cs, f), St.has(xs, St.of(q)))
-      )({==}, h)
+    case Proof{+xs, +g}:
+      h => Search.absent_if_absent(q, xs, g, p, Search.proves(q, xs, g))({==}, h)
     case NoAnswer{}:
       h => Empty.absurd(
         {Spec.Query.holds(q, p) == False{}: Bool},
         Search.ne_absent(Spec.Unknown{}, Unit{}, h)
       )
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
 def Spec.search_found(q, p, h):
   +q = q
   Search.decide_found(q, Search.run(q), p)(h)
@@ -7035,56 +6113,3 @@ def Spec.read_after_escape(p, v):
 
 # Fast selection
 # --------------
-# Spec.Rule.selects asks each glob through Spec.Glob.matches, whose
-# derivatives are not normalized, so a '*' makes its cost grow fast with the
-# path. The slots step the deduplicated derivative sets one character at a
-# time and ask only "" at the end, for the same answer.
-
-# the slots after they read p
-def Slot.walk(p: String, slots: List<&2, Slot>) -> List<&2, Slot>:
-  match p:
-    case SNil{}:
-      slots
-    case SCon{c, t}:
-      Slot.walk(t, Slot.step(slots, c))
-
-# walking p, then selecting "", selects what the slots select for p
-def Slot.walk_ok(
-  p: String,
-  +slots: List<&2, Slot>,
-  +acc: Bool
-) -> {Slot.selects.go(Slot.walk(p, slots), SNil{}, acc) == Slot.selects.go(slots, p, acc): Bool}:
-  match p:
-    case SNil{}:
-      {==}
-    case SCon{+c, +t}:
-      %Slot.step_ok(
-        slots,
-        c,
-        t,
-        acc
-      ): {Slot.selects.go(Slot.walk(t, Slot.step(slots, c)), SNil{}, acc) == _: Bool}
-      Slot.walk_ok(t, Slot.step(slots, c), acc)
-
-# rules select p: Spec.Rule.selects, through the slots
-def Rule.selects.fast(rules: List<&2, Spec.Rule>, p: String) -> Bool:
-  Slot.selects.go(Slot.walk(p, Slot.of_rules(rules)), SNil{}, False{})
-
-# the fast selection gives the answer of Spec.Rule.selects
-def Rule.selects_fast_ok(
-  +rules: List<&2, Spec.Rule>,
-  +p: String
-) -> {Rule.selects.fast(rules, p) == Spec.Rule.selects(rules, p): Bool}:
-  Equal.trans(
-    Bool,
-    Rule.selects.fast(rules, p),
-    Slot.selects.go(Slot.of_rules(rules), p, False{}),
-    Spec.Rule.selects(rules, p),
-    Slot.walk_ok(p, Slot.of_rules(rules), False{}),
-    Equal.sym(
-      Bool,
-      Spec.Rule.selects.go(rules, p, False{}),
-      Slot.selects.go(Slot.of_rules(rules), p, False{}),
-      Slot.of_rules_ok(rules, p, False{})
-    )
-  )
