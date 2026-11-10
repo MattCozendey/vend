@@ -5,9 +5,8 @@ import ../../../shared/shared/shared/text.bend as Texts
 # URIs
 # ----
 # A URI in the generic syntax of RFC 3986, section 3, without a query or a
-# fragment: scheme ":" ["//" authority] path. The path of a hierarchical
-# URI is '/'-separated whatever the scheme, so globs and relative
-# references work the same for every scheme.
+# fragment: scheme ":" ["//" authority] path. The path is the scheme's own
+# text: nothing here reads a '/' in it as a separator.
 
 # A URI: its scheme, its authority when "//" follows the scheme, its path.
 type Uri is Data:

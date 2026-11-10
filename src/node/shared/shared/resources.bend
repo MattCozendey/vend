@@ -5,11 +5,9 @@ import ../../../shared/shared/shared/text.bend as Texts
 
 # Names
 # -----
-# A resource is named by its space and a path relative to the space's root,
-# so the same file has the same name on every machine. The path is a valid
-# glob-module path (Glob.is_path); a shared module may import only
-# shared.bend, so the places that make names (the core and the views) check
-# it.
+# A resource is named by its space and its path in that space, so the same
+# resource has the same name on every machine. The path is the space's own
+# text: a file path, or any other address that the space gives.
 
 # A resource name is its text, "<space>:<path>": the space is the text up to
 # its first ':', the path is the rest. Two resources are the same exactly when
