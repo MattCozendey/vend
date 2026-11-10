@@ -1,7 +1,20 @@
 # Daemon core: design and state
 
-README.md is the truth. This file says how the core is built, what is proven, and what is not yet.
-Delete each open item when the code makes it true.
+README.md is the truth. This file says how the core is built, what is proven, and what the proofs
+assume.
+
+Files of the core (`core/`), each one domain, in the order in which they build on each other:
+
+| File | Holds |
+| --- | --- |
+| `basics.bend` | names, the node, content, tips and logs, heads, ancestry |
+| `judging.bend` | the judges: write, resolve, merge, move, groups, owners |
+| `stepping.bend` | runs and steps |
+| `sealing.bend` | seals and key chains |
+| `voting.bend` | rounds, ballots, moves of a head, what a node does with a request |
+| `reading.bend` | sync, reads, drafts, answers, notices |
+| `spec.bend` | the laws, and the measures that only laws use |
+| `proofs/*.bend` | the proofs, by subject; `impl.bend` gathers them: a check of it checks all |
 
 ## 1. The design
 
@@ -12,7 +25,7 @@ Delete each open item when the code makes it true.
   (`State.take`), so a ledger only grows. A step is what a majority of a line's owners cast in
   one round of a height (`State.decide`), and nothing else. The ledger does not read a line's
   state.
-- **Tip** (`core/spec.bend`): what a line holds, as two trees named by one hash.
+- **Tip** (`core/basics.bend`): what a line holds, as two trees named by one hash.
   - Content: resources (each a root of a rope), clashes, version vector, owner group; for a store
     also its groups and the first key of each node.
   - Log: a tree that only gains keys. Owners of the next step, count of versions, outcome of each
@@ -73,7 +86,7 @@ known words costs it about a million steps. So:
 - A proof never compares two hashes of known words (`Rope.put.go_nil` is the one place).
 - A loop with a large fuel waits on a value that a proof does not know (`Advances.at`).
 
-All of `core/impl.bend` checks in about 13 s (it was 175 s).
+All of `core/impl.bend` checks in about 13 s (it was 175 s). A proof file alone checks with no error; it reports as open only the laws that another file proves.
 
 ## 3. What is proven (`core/impl.bend` and every file below it print ALL PROOFS CHECK)
 
@@ -120,9 +133,12 @@ README claim, then the law.
   node. A request waits until its line gives it an outcome: `Step.run_outs` (a step gives each
   of its requests an outcome) and `Wait.left_keeps` (a head that moves takes only the requests
   of its step off the requests that wait; `State.moved` is the one place that takes any off).
+  A request that names a version that no line makes stays Pending, as the README says of a
+  request whose owners were not reached.
 - A node fetches the rest on demand: `Node.fetch` (a node that lacks the data of a hash holds it
   after it takes in what a node that holds it serves; `Node.lacks` gives the hash, `Node.serve`
-  the data). Below it: `State.take_data`.
+  the data). Below it: `State.take_data`. A sync catches up in one go, also over each change
+  of a key (`Sync.more`).
 - Every part is kept by enough nodes: `Cast.put_keeps` (a node that casts for a step keeps each
   new part of the step, from its own run of it), `Cast.put_tip` (and the step's tip). A step is
   decided by a majority of the owners, and a node only grows, so a majority of the owners holds
@@ -150,27 +166,21 @@ README claim, then the law.
 - Below the core: quorum, trie, cell, tree (`get_set`, `get_other`, `get_grows`, ...), rope
   (`read_put`, `read_grows`), codes, formats, seal (`Seal.check_sign`).
 
-## 4. Open
+## 4. What the proofs assume, and what was decided
 
-Design (each needs a decision or new work; none is a proof detail):
-
-- **The rules of rounds are premises.** A node's own ballots follow them by construction
-  (`Plan.lead`, `Pass.to`, `Cast.round`), with one law: `Plan.follow_allowed` (a node copies only
-  a vote that the rules allow). A node keeps a vote of
-  another node without a check of `Vote.allowed`; it only copies a vote that is allowed.
-- **Reads of a whole history:** `Node.versions` and `Node.log` list or scan every version of one
-  branch (a range is the target). `Node.affects` and `Node.impact` read each branch that the
-  node follows once, and of each only the versions that the branch did not take in.
-- **A put is done twice** for a taken request (`Work.put`, then `Run.content`): the second one
-  makes growth independent of the judge. Target: prove that each judge only grows its node, and
-  let the run keep the judge's node.
-- **A sealed chain is checked in a few rounds.** A key that a store gives at height h is known
-  only after the node moved there, so a node that is far behind needs one more sync for each
-  `Key` change in between.
-- **A request that can never run** (it names a version that no line makes) waits for good. It
-  does not stop its line, but nothing removes it.
-- **Names:** `State()` is `Node`; `Chain` (a line) and `Chained` (a chain of keys);
-  `core/spec.bend` holds about 15 domains in one file.
-- **Lint:** no error. Left: `layout/case` (false: constructors are PascalCase) and performance
-  hints in the trie (`LINTCONTEXT.md`).
-- **Transport** (`transport/spec.bend`) is a spec only.
+- **Owners' nodes follow the protocol.** The rules of rounds (`Rounds.Allow`, `Rounds.Last`,
+  `Rounds.Same`) are premises of `Rounds.one`. A node that stops is fine; a node that lies is
+  not. A node's own ballots follow the rules by construction (`Plan.lead`, `Pass.to`,
+  `Cast.round`), and it copies only a vote that the rules allow (`Plan.follow_allowed`).
+- **Hash-based signatures hold.** That no other node can make a node's seal is the assumption of
+  one-time signatures on SHA-256.
+- **A group change reaches a line by the line's next decided step** (README, Vend Owner Group).
+  A change at once, without the line's present owners, cannot be safe.
+- **A run puts the new nodes of a taken request again** (`Run.content`), after the judge put
+  them in its own work. So "a node only grows" holds for each judge by construction, also for a
+  judge that a new format adds; the cost is one more hash of each new node.
+- **Reads of a history are by range**: `Node.versions` and `Node.log` take a first number and a
+  count. `Node.affects` and `Node.impact` read each branch that the node follows once, and of
+  each only the versions that the branch did not take in.
+- **Transport** (`transport/spec.bend`) is a spec only; it is not part of the core.
+- **Lint**: `LINTCONTEXT.md`.
