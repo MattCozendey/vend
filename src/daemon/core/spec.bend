@@ -962,13 +962,33 @@ def Node.forward(+s: State(), +x: Ledgers.Id, +y: Ledgers.Id) -> Maybe<&2, Ledge
 type Work is Data:
   Work{state: State(), root: Maybe<&2, Hashes.Hash>, nodes: List<&2, List<&2, U32>>}
 
+# s with the words ds as data, when it then holds each of them under its hash
+# (none: a slot holds other words). A node reads back what it puts, so what a
+# tree or a rope reads after a put never rests on what the store held before
+def State.put(+s: State(), +ds: List<&2, List<&2, U32>>) -> Maybe<&2, State()>:
+  +s2 = State.keep(s, ds)
+  Shared.Maybe.when(State(), Trees.Tree.holds(~State(), ~Store.fetch, s2, ds), u => Some{s2})
+
+# the work at the root h on the state m, with the new nodes ws before ns
+def Work.put(
+  m: Maybe<&2, State()>,
+  h: Maybe<&2, Hashes.Hash>,
+  ws: List<&2, List<&2, U32>>,
+  ns: List<&2, List<&2, U32>>
+) -> Maybe<&2, Work>:
+  match m:
+    case None{}:
+      None{}
+    case Some{s2}:
+      Some{Work{s2, h, List.append(&2, List<&2, U32>, ws, ns)}}
+
 # the work that the new subtree m gives, after the state s and the nodes ns
 def Work.of(+s: State(), ns: List<&2, List<&2, U32>>, m: Maybe<&2, Trees.Put>) -> Maybe<&2, Work>:
   match m:
     case None{}:
       None{}
     case Some{Trees.Put{h, +ws}}:
-      Some{Work{State.keep(s, ws), Some{h}, List.append(&2, List<&2, U32>, ws, ns)}}
+      Work.put(State.put(s, ws), Some{h}, ws, ns)
 
 # w with the key k set to the value x (none: the store lacks a node)
 def Work.set(w: Work, k: List<&2, U32>, x: List<&2, U32>) -> Maybe<&2, Work>:
@@ -977,10 +997,10 @@ def Work.set(w: Work, k: List<&2, U32>, x: List<&2, U32>) -> Maybe<&2, Work>:
       Work.of(s, ns, Trees.Tree.set(~State(), ~Store.fetch, s, h, k, x))
 
 # w with the words ns as data, and among its new nodes
-def Work.keep(w: Work, +ns: List<&2, List<&2, U32>>) -> Work:
+def Work.keep(w: Work, +ns: List<&2, List<&2, U32>>) -> Maybe<&2, Work>:
   match w:
     case Work{s, h, old}:
-      Work{State.keep(s, ns), h, List.append(&2, List<&2, U32>, ns, old)}
+      Work.put(State.put(s, ns), h, ns, old)
 
 # the root of w
 def Work.root(w: Work) -> Maybe<&2, Hashes.Hash>:
@@ -1544,10 +1564,12 @@ def Merge.put(
       Work.set(w, Key.res(n), Res.code(m))
     case Pick.Make{x}:
       +rp = Bytes.rope(x)
-      Work.set(
+      Maybe.bind(
+        &2,
+        Work,
+        Work,
         Work.keep(w, Ropes.Put.nodes(rp)),
-        Key.res(n),
-        Res.code(Some{Ropes.Put.root(rp)})
+        w2 => Work.set(w2, Key.res(n), Res.code(Some{Ropes.Put.root(rp)}))
       )
     case Pick.Clash{}:
       Maybe.bind(
@@ -1740,10 +1762,12 @@ def Log.first(w: Work, os: List<&2, String>) -> Maybe<&2, Work>:
 # start (the root of w), and a log whose owners are the store's owners os now
 def Make.put(+b: String, +start: Maybe<&2, Hashes.Hash>, h: Maybe<&2, Hashes.Hash>, +wl: Work) -> Maybe<&2, Work>:
   +t = {Tip{start, Work.root(wl)}: Tip}
-  Work.set(
+  Maybe.bind(
+    &2,
+    Work,
+    Work,
     Work.keep(Work.at(wl, h), [Tip.words(t)]),
-    Key.start(Line.key(b)),
-    Start.code(Some{Tip.hash(t)})
+    w2 => Work.set(w2, Key.start(Line.key(b)), Start.code(Some{Tip.hash(t)}))
   )
 
 # the trees of a make of the branch b, from its first content start, in the
@@ -1910,11 +1934,24 @@ def Run.log(r: Run, k: List<&2, U32>, x: List<&2, U32>) -> Maybe<&2, Run>:
     case Run{s, Tip{c, l}, ns}:
       Run.of(c, Work.set(Work{s, l, ns}, k, x))
 
+# the run on the state m, at the tip t, with the new nodes ds before ns
+def Run.put(
+  m: Maybe<&2, State()>,
+  t: Tip,
+  ds: List<&2, List<&2, U32>>,
+  ns: List<&2, List<&2, U32>>
+) -> Maybe<&2, Run>:
+  match m:
+    case None{}:
+      None{}
+    case Some{s2}:
+      Some{Run{s2, t, List.append(&2, List<&2, U32>, ds, ns)}}
+
 # the run r with the content h, and its new nodes ds
-def Run.content(r: Run, h: Maybe<&2, Hashes.Hash>, +ds: List<&2, List<&2, U32>>) -> Run:
+def Run.content(r: Run, h: Maybe<&2, Hashes.Hash>, +ds: List<&2, List<&2, U32>>) -> Maybe<&2, Run>:
   match r:
     case Run{s, Tip{c, l}, ns}:
-      Run{State.keep(s, ds), Tip{h, l}, List.append(&2, List<&2, U32>, ds, ns)}
+      Run.put(State.put(s, ds), Tip{h, l}, ds, ns)
 
 # the run r with the owners os of the next step, if the change gives any
 def Run.owners(r: Run, m: Maybe<&2, List<&2, String>>) -> Maybe<&2, Run>:
@@ -1968,7 +2005,7 @@ def Step.judged(
     case Some{Verdict{False{}, h, ds}}:
       Step.stale(r, i)
     case Some{Verdict{True{}, h, ds}}:
-      Step.taken(Run.content(r, h, ds), i, own)
+      Maybe.bind(&2, Run, Run, Run.content(r, h, ds), r2 => Step.taken(r2, i, own))
 
 # the run r with the mark m on the version v, then the request i taken
 def Step.marked(+r: Run, +i: Ledgers.Id, m: String, v: Maybe<&2, Version>) -> Maybe<&2, Run>:
@@ -2131,15 +2168,23 @@ def State.moved(+s: State(), +h: Head, qs: List<&2, Ledgers.Id>) -> State():
     h
   )
 
+# the state m at the head h, else s
+def Start.head(s: State(), m: Maybe<&2, State()>, h: Head) -> State():
+  match m:
+    case None{}:
+      s
+    case Some{s2}:
+      State.head(s2, h)
+
 # s with the first tip of the store i, whose trees are m: a log whose owners
 # are the store's first owners, and no content
-def Start.put(s: State(), +i: Ledgers.Id, m: Maybe<&2, Work>) -> State():
+def Start.put(+s: State(), +i: Ledgers.Id, m: Maybe<&2, Work>) -> State():
   match m:
     case None{}:
       s
     case Some{Work{s2, l, ns}}:
       +t = {Tip{None{}, l}: Tip}
-      State.head(State.keep(s2, [Tip.words(t)]), Head{i, None{}, 0, Some{Tip.hash(t)}})
+      Start.head(s, State.put(s2, [Tip.words(t)]), Head{i, None{}, 0, Some{Tip.hash(t)}})
 
 # s, which follows the store that the request i starts with the owners os
 def Node.start(+s: State(), i: Ledgers.Id, os: List<&2, String>) -> State():
@@ -2216,6 +2261,14 @@ def Cast.may(+n: String, +s: State(), w: Ledgers.Where, t: Tip, qs: List<&2, Led
     Bool.not(List.is_empty(&2, Ledgers.Id, qs))
   )
 
+# the state m with the node n's ballot v at the place w, else s
+def Cast.vote(s: State(), m: Maybe<&2, State()>, w: Ledgers.Where, n: String, v: Ledgers.Vote) -> State():
+  match m:
+    case None{}:
+      s
+    case Some{+s3}:
+      State.led(s3, Ledgers.State.cast(~Ask, ~Ask.is_eq, State.ledger(s3), w, n, v))
+
 # s with the node n's ballot at the place w for the step that ran qs from the
 # tip of the hash th, when the run m is there: the run's nodes, its tip, and
 # the ballot
@@ -2225,24 +2278,13 @@ def Cast.put(
   th: Maybe<&2, Hashes.Hash>,
   qs: List<&2, Ledgers.Id>,
   m: Maybe<&2, Run>,
-  s: State()
+  +s: State()
 ) -> State():
   match m:
     case None{}:
       s
     case Some{Run{s2, +t2, ns}}:
-      +s3 = State.keep(s2, [Tip.words(t2)])
-      State.led(
-        s3,
-        Ledgers.State.cast(
-          ~Ask,
-          ~Ask.is_eq,
-          State.ledger(s3),
-          w,
-          n,
-          Ledgers.Vote{th, qs, Some{Tip.hash(t2)}}
-        )
-      )
+      Cast.vote(s, State.put(s2, [Tip.words(t2)]), w, n, Ledgers.Vote{th, qs, Some{Tip.hash(t2)}})
 
 # Node.cast at the head h, whose tip is m
 def Cast.at(+n: String, +s: State(), h: Head, m: Maybe<&2, Tip>) -> State():
@@ -2264,6 +2306,14 @@ def Cast.at(+n: String, +s: State(), h: Head, m: Maybe<&2, Tip>) -> State():
 def Node.cast(+n: String, +s: State(), +h: Head) -> State():
   Cast.at(n, s, h, Head.tip(s, h))
 
+# the state m at the head h, after a step that ran qs, else s
+def Advance.moved(s: State(), m: Maybe<&2, State()>, h: Head, qs: List<&2, Ledgers.Id>) -> State():
+  match m:
+    case None{}:
+      s
+    case Some{s3}:
+      State.moved(s3, h, qs)
+
 # s at the head of the next height, when the run m of the decided requests qs
 # gives the tip that the ballots name (after): a node checks a step before it
 # keeps it
@@ -2283,8 +2333,9 @@ def Advance.ran(
       Shared.Bool.when(
         State(),
         Root.same(after, Some{Tip.hash(t2)}),
-        u => State.moved(
-          State.keep(s2, [Tip.words(t2)]),
+        u => Advance.moved(
+          s,
+          State.put(s2, [Tip.words(t2)]),
           Head{r, b, U32.inc(next), Some{Tip.hash(t2)}},
           qs
         ),

@@ -387,17 +387,64 @@ def Work.after(s: Spec.State(), m: Maybe<&2, Spec.Work>) -> Bool:
     case Some{Spec.Work{s2, h, ns}}:
       Spec.Node.grows(s, s2)
 
+# the node m, if any, grew from s
+def State.after(s: Spec.State(), m: Maybe<&2, Spec.State()>) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{s2}:
+      Spec.Node.grows(s, s2)
+
+# a node that is kept when b holds grew from s, when it did
+def Put.grows.if(
+  s: Spec.State(),
+  -s2: Spec.State(),
+  b: Bool,
+  g: {Spec.Node.grows(s, s2) == True{}: Bool}
+) -> {State.after(s, Shared.Maybe.when(Spec.State(), b, u => Some{s2})) == True{}: Bool}:
+  match b:
+    case True{}:
+      g
+    case False{}:
+      {==}
+
+# data that a node puts and reads back only grows it
+def Put.grows(
+  +s: Spec.State(),
+  +ds: List<&2, List<&2, U32>>
+) -> {State.after(s, Spec.State.put(s, ds)) == True{}: Bool}:
+  Put.grows.if(
+    s,
+    Spec.State.keep(s, ds),
+    Trees.Tree.holds(~Spec.State(), ~Spec.Store.fetch, Spec.State.keep(s, ds), ds),
+    Grows.keep(s, ds)
+  )
+
+# a work on a node that grew
+def Work.put.grows(
+  s: Spec.State(),
+  m: Maybe<&2, Spec.State()>,
+  h: Maybe<&2, Hashes.Hash>,
+  ws: List<&2, List<&2, U32>>,
+  ns: List<&2, List<&2, U32>>
+) -> {State.after(s, m) == True{}: Bool} -> {Work.after(s, Spec.Work.put(m, h, ws, ns)) == True{}: Bool}:
+  match m:
+    case None{}:
+      e => {==}
+    case Some{s2}:
+      e => e
+
 # a new subtree only grows a node
 def Work.of.grows(
   +s: Spec.State(),
   +ns: List<&2, List<&2, U32>>,
-  +m: Maybe<&2, Trees.Put>
+  m: Maybe<&2, Trees.Put>
 ) -> {Work.after(s, Spec.Work.of(s, ns, m)) == True{}: Bool}:
   match m:
     case None{}:
       {==}
-    case Some{Trees.Put{h, ws}}:
-      Grows.keep(s, ws)
+    case Some{Trees.Put{+h, +ws}}:
+      Work.put.grows(s, Spec.State.put(s, ws), Some{h}, ws, ns)(Put.grows(s, ws))
 
 # a key set in a tree only grows a node
 def Set.grows(
@@ -495,17 +542,29 @@ def Log.grows(
         Set.grows(s, l, ns, k, x)
       )
 
+# a run on a node that grew
+def Run.put.grows(
+  s: Spec.State(),
+  m: Maybe<&2, Spec.State()>,
+  t: Spec.Tip,
+  ds: List<&2, List<&2, U32>>,
+  ns: List<&2, List<&2, U32>>
+) -> {State.after(s, m) == True{}: Bool} -> {Run.after(s, Spec.Run.put(m, t, ds, ns)) == True{}: Bool}:
+  match m:
+    case None{}:
+      e => {==}
+    case Some{s2}:
+      e => e
+
 # new content only grows a run's node
 def Content.grows(
-  +r: Spec.Run,
+  r: Spec.Run,
   +h: Maybe<&2, Hashes.Hash>,
   +ds: List<&2, List<&2, U32>>
-) -> {
-  Spec.Node.grows(Spec.Run.state(r), Spec.Run.state(Spec.Run.content(r, h, ds))) == True{}: Bool
-}:
+) -> {Run.after(Spec.Run.state(r), Spec.Run.content(r, h, ds)) == True{}: Bool}:
   match r:
-    case Spec.Run{s, Spec.Tip{c, l}, ns}:
-      Grows.keep(s, ds)
+    case Spec.Run{+s, Spec.Tip{c, +l}, +ns}:
+      Run.put.grows(s, Spec.State.put(s, ds), Spec.Tip{h, l}, ds, ns)(Put.grows(s, ds))
 
 # new owners only grow a run's node
 def Owners.grows(
@@ -595,12 +654,12 @@ def Judged.grows(
     case Some{Spec.Verdict{False{}, h, ds}}:
       Stale.grows(r, i)
     case Some{Spec.Verdict{True{}, +h, +ds}}:
-      After.trans(
+      After.bind(
         Spec.Run.state(r),
-        Spec.Run.state(Spec.Run.content(r, h, ds)),
-        Spec.Step.taken(Spec.Run.content(r, h, ds), i, own),
+        Spec.Run.content(r, h, ds),
+        r2 => Spec.Step.taken(r2, i, own),
         Content.grows(r, h, ds),
-        Taken.grows(Spec.Run.content(r, h, ds), i, own)
+        r2 => Taken.grows(r2, i, own)
       )
 
 # a mark on a version only grows a run's node
@@ -994,6 +1053,39 @@ def Led.waits(
     case Spec.Node{l, hs, ws}:
       {==}
 
+# a ballot on a node that grew from a, which grew from s, only grows s
+def Cast.vote.grows(
+  +s: Spec.State(),
+  +a: Spec.State(),
+  m: Maybe<&2, Spec.State()>,
+  +w: Ledgers.Where,
+  +n: String,
+  +v: Ledgers.Vote,
+  g: {Spec.Node.grows(s, a) == True{}: Bool}
+) -> {State.after(a, m) == True{}: Bool} -> {Spec.Node.grows(s, Spec.Cast.vote(s, m, w, n, v)) == True{}: Bool}:
+  match m:
+    case None{}:
+      e => Grows.refl(s)
+    case Some{+s3}:
+      e =>
+        +l4 = Ledgers.State.cast(~Spec.Ask, ~Spec.Ask.is_eq, Spec.State.ledger(s3), w, n, v)
+        Grows.trans(s, a, Spec.State.led(s3, l4))(g)(
+          Grows.trans(a, s3, Spec.State.led(s3, l4))(e)(
+            Grows.led(
+              s3,
+              l4,
+              Ledgers.State.add_grows(
+                ~Spec.Ask,
+                ~Spec.Ask.is_eq,
+                ~Ask.laws(),
+                Spec.State.ledger(s3),
+                Ledgers.Slot.vote(w, n),
+                Ledgers.Entry.Vote{v}
+              )
+            )
+          )
+        )
+
 # a ballot only grows a node
 def Cast.put.grows(
   +n: String,
@@ -1007,34 +1099,15 @@ def Cast.put.grows(
     case None{}:
       e => Grows.refl(s)
     case Some{Spec.Run{+s2, +t2, ns}}:
-      e =>
-        +s3 = Spec.State.keep(s2, [Spec.Tip.words(t2)])
-        +l4 = Ledgers.State.cast(
-          ~Spec.Ask,
-          ~Spec.Ask.is_eq,
-          Spec.State.ledger(s3),
-          w,
-          n,
-          Ledgers.Vote{th, qs, Some{Spec.Tip.hash(t2)}}
-        )
-        Grows.trans(s, s2, Spec.State.led(s3, l4))(e)(
-          Grows.trans(s2, s3, Spec.State.led(s3, l4))(
-            Grows.keep(s2, [Spec.Tip.words(t2)])
-          )(
-            Grows.led(
-              s3,
-              l4,
-              Ledgers.State.add_grows(
-                ~Spec.Ask,
-                ~Spec.Ask.is_eq,
-                ~Ask.laws(),
-                Spec.State.ledger(s3),
-                Ledgers.Slot.vote(w, n),
-                Ledgers.Entry.Vote{Ledgers.Vote{th, qs, Some{Spec.Tip.hash(t2)}}}
-              )
-            )
-          )
-        )
+      e => Cast.vote.grows(
+        s,
+        s2,
+        Spec.State.put(s2, [Spec.Tip.words(t2)]),
+        w,
+        n,
+        Ledgers.Vote{th, qs, Some{Spec.Tip.hash(t2)}},
+        e
+      )(Put.grows(s2, [Spec.Tip.words(t2)]))
 
 # Node.cast only grows a node, at the head h whose tip is m
 def Cast.at.grows(
@@ -1073,6 +1146,27 @@ def Cast.grows(
 ) -> {Spec.Node.grows(s, Spec.Node.cast(n, s, h)) == True{}: Bool}:
   Cast.at.grows(n, s, h, Spec.Head.tip(s, h))
 
+# a head moved on a node that grew from a, which grew from s, only grows s
+def Advance.moved.grows(
+  +s: Spec.State(),
+  +a: Spec.State(),
+  m: Maybe<&2, Spec.State()>,
+  +h: Spec.Head,
+  +qs: List<&2, Ledgers.Id>,
+  g: {Spec.Node.grows(s, a) == True{}: Bool}
+) -> {State.after(a, m) == True{}: Bool} -> {Spec.Node.grows(s, Spec.Advance.moved(s, m, h, qs)) == True{}: Bool}:
+  match m:
+    case None{}:
+      e => Grows.refl(s)
+    case Some{+s3}:
+      e => Grows.to(
+        s,
+        s3,
+        Spec.State.moved(s3, h, qs),
+        Led.moved(s3, h, qs),
+        Grows.trans(s, a, s3)(g)(e)
+      )
+
 # a checked step only grows a node
 def Advance.ran.grows(
   +s: Spec.State(),
@@ -1090,20 +1184,20 @@ def Advance.ran.grows(
       e => Grows.refl(s)
     case Some{Spec.Run{+s2, +t2, ns}}:
       e =>
-        +s3 = Spec.State.keep(s2, [Spec.Tip.words(t2)])
         +hd = {Spec.Head{r, b, U32.inc(next), Some{Spec.Tip.hash(t2)}}: Spec.Head}
         Grows.when(
           s,
           Spec.Root.same(after, Some{Spec.Tip.hash(t2)}),
-          Spec.State.moved(s3, hd, qs),
+          Spec.Advance.moved(s, Spec.State.put(s2, [Spec.Tip.words(t2)]), hd, qs),
           s,
-          Grows.to(
+          Advance.moved.grows(
             s,
-            s3,
-            Spec.State.moved(s3, hd, qs),
-            Led.moved(s3, hd, qs),
-            Grows.trans(s, s2, s3)(e)(Grows.keep(s2, [Spec.Tip.words(t2)]))
-          ),
+            s2,
+            Spec.State.put(s2, [Spec.Tip.words(t2)]),
+            hd,
+            qs,
+            e
+          )(Put.grows(s2, [Spec.Tip.words(t2)])),
           Grows.refl(s)
         )
 
@@ -1269,6 +1363,20 @@ def Step.grows(
         Opened.grows(s, x)
       )(Step.head.grows(n, s1, c, Spec.Node.head_of(s1, c)))
 
+# a first head on a node that grew from a, which grew from s, only grows s
+def Start.head.grows(
+  +s: Spec.State(),
+  +a: Spec.State(),
+  m: Maybe<&2, Spec.State()>,
+  +h: Spec.Head,
+  g: {Spec.Node.grows(s, a) == True{}: Bool}
+) -> {State.after(a, m) == True{}: Bool} -> {Spec.Node.grows(s, Spec.Start.head(s, m, h)) == True{}: Bool}:
+  match m:
+    case None{}:
+      e => Grows.refl(s)
+    case Some{+s3}:
+      e => Grows.to(s, s3, Spec.State.head(s3, h), Led.head(s3, h), Grows.trans(s, a, s3)(g)(e))
+
 # the first tip of a store only grows a node
 def Start.put.grows(
   +s: Spec.State(),
@@ -1281,15 +1389,13 @@ def Start.put.grows(
     case Some{Spec.Work{+s2, +l, ns}}:
       e =>
         +t = {Spec.Tip{None{}, l}: Spec.Tip}
-        +s3 = Spec.State.keep(s2, [Spec.Tip.words(t)])
-        +hd = {Spec.Head{i, None{}, 0, Some{Spec.Tip.hash(t)}}: Spec.Head}
-        Grows.to(
+        Start.head.grows(
           s,
-          s3,
-          Spec.State.head(s3, hd),
-          Led.head(s3, hd),
-          Grows.trans(s, s2, s3)(e)(Grows.keep(s2, [Spec.Tip.words(t)]))
-        )
+          s2,
+          Spec.State.put(s2, [Spec.Tip.words(t)]),
+          Spec.Head{i, None{}, 0, Some{Spec.Tip.hash(t)}},
+          e
+        )(Put.grows(s2, [Spec.Tip.words(t)]))
 
 # a store that starts only grows a node
 def Start.grows(
