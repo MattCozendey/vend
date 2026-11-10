@@ -13,6 +13,21 @@ import ../voting.bend as Voting
 import ./agreement.bend as ProofAgreement
 import ./lines.bend as ProofLines
 
+# that the rounds of each height of the line c decide one step in s
+def Line.One(s: Basics.Node, c: Ledgers.Chain) -> Type:
+  @x: Basics.Head -> @t: Basics.Tip -> {
+    Basics.Head.tip(s, x) == Some{t}: Maybe<&2, Basics.Tip>
+  } -> Voting.Height.One(s, c, Sealing.Head.next(x), Basics.Line.owners(s, t))
+
+# that the rounds of each of k heights of the line c decide one step in s (one
+# witness for each step of a history: a proof uses each once)
+def Line.Ones(k: Nat, s: Basics.Node, c: Ledgers.Chain) -> Type:
+  match k:
+    case 0n:
+      Unit
+    case 1n+p:
+      Line.Ones(p, s, c) & Line.One(s, c)
+
 # Histories
 # ---------
 
@@ -233,7 +248,7 @@ def Step.same(
   -x: Basics.Head,
   -y: Basics.Head,
   m: Maybe<&2, Basics.Tip>,
-  one: Spec.Line.One(u, c)
+  one: Line.One(u, c)
 ) -> {
   Basics.Head.tip(u, z) == m: Maybe<&2, Basics.Tip>
 } -> {
@@ -313,7 +328,7 @@ def At.same.step(
   -y: Basics.Head,
   m1: Maybe<&2, Basics.Head>,
   m2: Maybe<&2, Basics.Head>,
-  one: Spec.Line.One(u, c),
+  one: Line.One(u, c),
   ih: @z1: Basics.Head -> @z2: Basics.Head -> {
     m1 == Some{z1}: Maybe<&2, Basics.Head>
   } -> {m2 == Some{z2}: Maybe<&2, Basics.Head>} -> {z1 == z2: Basics.Head}
@@ -386,8 +401,8 @@ def At.same.con(
   t2: List<&2, Nat>,
   -x: Basics.Head,
   -y: Basics.Head,
-  ones: Spec.Line.Ones(List.length(&2, Nat, t1), u, c) & Spec.Line.One(u, c),
-  ih: @z1: Basics.Head -> @z2: Basics.Head -> Spec.Line.Ones(
+  ones: Line.Ones(List.length(&2, Nat, t1), u, c) & Line.One(u, c),
+  ih: @z1: Basics.Head -> @z2: Basics.Head -> Line.Ones(
     List.length(&2, Nat, t1),
     u,
     c
@@ -422,7 +437,7 @@ def At.same(
   +h: Basics.Head,
   x: Basics.Head,
   y: Basics.Head
-) -> Spec.Line.Ones(List.length(&2, Nat, rs1), u, c)
+) -> Line.Ones(List.length(&2, Nat, rs1), u, c)
   -> {List.length(&2, Nat, rs1) == List.length(&2, Nat, rs2): Nat}
   -> {Spec.Line.at(rs1, u, c, h) == Some{x}: Maybe<&2, Basics.Head>}
   -> {Spec.Line.at(rs2, u, c, h) == Some{y}: Maybe<&2, Basics.Head>}
@@ -478,24 +493,6 @@ def At.same(
             z2
           )(rest)(Shared.Nat.succ_inj(List.length(&2, Nat, t1), List.length(&2, Nat, t2), el))
         )
-
-def Spec.Line.at_agrees(rs1, rs2, a, b, u, c, h, x, y):
-  ga => gb => ones => el => ea => eb =>
-    At.same(
-      rs1,
-      rs2,
-      u,
-      c,
-      h,
-      x,
-      y
-    )(
-      ones
-    )(
-      el
-    )(
-      Spec.Line.at_grows(rs1, a, u, c, h, x)(ga)(ea)
-    )(Spec.Line.at_grows(rs2, b, u, c, h, y)(gb)(eb))
 
 # a step that changes the height of a head moves it one height up
 def Moved.step(

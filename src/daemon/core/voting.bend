@@ -577,7 +577,7 @@ def Height.One(s: Basics.Node, c: Ledgers.Chain, h: U32, os: List<&2, String>) -
 
 # The rules of rounds, for the ballots that s holds at the height h of the line
 # c. A node that follows them makes them true of its own ballots; that every
-# node follows them is the premise of Rounds.one.
+# node follows them is the premise of Line.at_agrees.
 
 # that the passes that a vote names allow it (Vote.allowed), for the owners os
 def Rounds.Allow(s: Basics.Node, c: Ledgers.Chain, h: U32, os: List<&2, String>) -> Type:
@@ -618,17 +618,13 @@ def Rounds.Same(s: Basics.Node, c: Ledgers.Chain, h: U32) -> Type:
     Sealing.Cast.of(s, Ledgers.Where{c, h, r}, q2) == Some{b}: Maybe<&2, Ledgers.Vote>
   } -> {a == b: Ledgers.Vote}
 
-# the rounds of a height decide one step, when the ballots follow the rules
-# of rounds: a later round can only decide what an earlier round decided
-law Rounds.one:
-  for ~s: Basics.Node
-  for ~c: Ledgers.Chain
-  for ~h: U32
-  for ~os: List<&2, String>
-  for ~fa: Rounds.Allow(s, c, h, os)
-  for ~fb: Rounds.Last(s, c, h)
-  for ~fc: Rounds.Same(s, c, h)
-  Height.One(s, c, h, os)
+# that the ballots that s holds on the line c follow the rules of rounds, at
+# the next height of each head whose tip s holds, for the owners in that tip
+def Rounds.Rules(s: Basics.Node, c: Ledgers.Chain) -> Type:
+  @x: Basics.Head -> @t: Basics.Tip -> {
+    Basics.Head.tip(s, x) == Some{t}: Maybe<&2, Basics.Tip>
+  } -> Rounds.Allow(s, c, Sealing.Head.next(x), Basics.Line.owners(s, t))
+    & (Rounds.Last(s, c, Sealing.Head.next(x)) & Rounds.Same(s, c, Sealing.Head.next(x)))
 
 # Node.advance at the head h of the line c, whose tip is m
 def Advance.at(

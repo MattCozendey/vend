@@ -117,21 +117,6 @@ def Line.at(
         +x => Head.moved(x, Advance.in(s, c, x, r))
       )
 
-# that the rounds of each height of the line c decide one step in s
-def Line.One(s: Basics.Node, c: Ledgers.Chain) -> Type:
-  @x: Basics.Head -> @t: Basics.Tip -> {
-    Basics.Head.tip(s, x) == Some{t}: Maybe<&2, Basics.Tip>
-  } -> Voting.Height.One(s, c, Sealing.Head.next(x), Basics.Line.owners(s, t))
-
-# that the rounds of each of k heights of the line c decide one step in s (one
-# witness for each step of a history: a proof uses each once)
-def Line.Ones(k: Nat, s: Basics.Node, c: Ledgers.Chain) -> Type:
-  match k:
-    case 0n:
-      Unit
-    case 1n+p:
-      Line.Ones(p, s, c) & Line.One(s, c)
-
 # bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # what a node does next: it takes in a request, or what another node sent,
 # or it does a sync, or it keeps new bytes, or a writer connected to it asks
@@ -637,23 +622,23 @@ law Line.at_grows:
     -> {Line.at(rs, a, c, h) == Some{x}: Maybe<&2, Basics.Head>}
     -> {Line.at(rs, u, c, h) == Some{x}: Maybe<&2, Basics.Head>}
 
-# so two nodes whose ledgers do not clash (one node u keeps every cell of
-# both, and the rounds of each height decide one step in it), the same number
-# of decided steps from the same head of a line, are at the same head,
-# whatever the round of each step: one history
+# one history: two nodes whose ledgers do not clash (one node u keeps every
+# cell of both, and the ballots that u holds on the line follow the rules of
+# rounds), the same number of decided steps from the same head of a line, are
+# at the same head, whatever the round of each step
 law Line.at_agrees:
+  for ~u: Basics.Node
+  for ~c: Ledgers.Chain
+  for ~rules: Voting.Rounds.Rules(u, c)
   for +rs1: List<&2, Nat>
   for +rs2: List<&2, Nat>
   for +a: Basics.Node
   for +b: Basics.Node
-  for +u: Basics.Node
-  for +c: Ledgers.Chain
   for +h: Basics.Head
   for +x: Basics.Head
   for +y: Basics.Head
   {Reading.Node.grows(a, u) == True{}: Bool}
     -> {Reading.Node.grows(b, u) == True{}: Bool}
-    -> Line.Ones(List.length(&2, Nat, rs1), u, c)
     -> {List.length(&2, Nat, rs1) == List.length(&2, Nat, rs2): Nat}
     -> {Line.at(rs1, a, c, h) == Some{x}: Maybe<&2, Basics.Head>}
     -> {Line.at(rs2, b, c, h) == Some{y}: Maybe<&2, Basics.Head>}

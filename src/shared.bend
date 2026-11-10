@@ -1761,3 +1761,18 @@ def List.keep_holds(
         {==},
         List.keep_holds(~A, ~V, ~p, r, g)
       )
+
+# Pairs
+# -----
+
+# the first of the pair p
+def Pair.first(-A: Type, -B: Type, p: A & B) -> A:
+  match p:
+    case Tuple{a, b}:
+      a
+
+# the second of the pair p
+def Pair.second(-A: Type, -B: Type, p: A & B) -> B:
+  match p:
+    case Tuple{a, b}:
+      b
