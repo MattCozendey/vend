@@ -5089,25 +5089,49 @@ law Node.sync_grows:
   for +t: Ledgers.State(Ask)
   {Node.grows(s, Node.sync(n, s, t)) == True{}: Bool}
 
-# the head x after the step m, when the step moves it (none: no step)
-def Head.moved(+x: Head, m: Maybe<&2, Ledgers.Vote>) -> Maybe<&2, Head>:
-  +y = Head.step(x, m)
-  Shared.Maybe.when(Head, Bool.not(Heads.level(Some{x}, Some{y})), u => Some{y})
+# the tip that the step m names, if any
+def Vote.tip(m: Maybe<&2, Ledgers.Vote>) -> Maybe<&2, Hashes.Hash>:
+  match m:
+    case Some{Ledgers.Vote{before, qs, after}}:
+      after
+    case None{}:
+      None{}
 
-# the head of the line c after k decided steps from the head h, each in a
-# round up to n, by the ledger of s alone (none: fewer steps are decided). A
-# law's measure: no node runs it
-def Line.at(k: Nat, +s: State(), +c: Ledgers.Chain, h: Head, +n: Nat) -> Maybe<&2, Head>:
-  match k:
-    case 0n:
+# the head x one height up, at the tip y
+def Head.up(x: Head, y: Hashes.Hash) -> Head:
+  match x:
+    case Head{r, b, n, th}:
+      Head{r, b, U32.inc(n), Some{y}}
+
+# the head x after the step m (none: no step, or one that names no tip)
+def Head.moved(x: Head, m: Maybe<&2, Ledgers.Vote>) -> Maybe<&2, Head>:
+  Maybe.bind(&2, Hashes.Hash, Head, Vote.tip(m), y => Some{Head.up(x, y)})
+
+# the step that the owners in the tip of the head x decided next on the line
+# c, in the round r, if they did
+def Advance.in(+s: State(), c: Ledgers.Chain, +x: Head, r: Nat) -> Maybe<&2, Ledgers.Vote>:
+  Maybe.bind(
+    &2,
+    Tip,
+    Ledgers.Vote,
+    Head.tip(s, x),
+    t => Ledgers.State.decide(~Ask, State.ledger(s), Ledgers.Where{c, Head.next(x), r}, Line.owners(s, t))
+  )
+
+# the head of the line c after one decided step for each round of rs, the
+# last first, from the head h, by the ledger of s alone (none: a step is not
+# decided in its round). A law's measure: no node runs it
+def Line.at(rs: List<&2, Nat>, +s: State(), +c: Ledgers.Chain, h: Head) -> Maybe<&2, Head>:
+  match rs:
+    case Nil{}:
       Some{h}
-    case 1n+p:
+    case Con{+r, rest}:
       Maybe.bind(
         &2,
         Head,
         Head,
-        Line.at(p, s, c, h, n),
-        +x => Head.moved(x, Advance.found(s, c, x, n))
+        Line.at(rest, s, c, h),
+        +x => Head.moved(x, Advance.in(s, c, x, r))
       )
 
 # that the rounds of each height of the line c decide one step in s
@@ -5186,6 +5210,42 @@ law Node.after_keeps:
   for +evs: List<&2, Deed>
   for +s: State()
   Node.Keeps(s, Node.after(n, evs, s))
+
+# the head m has a tip
+def Head.held(m: Maybe<&2, Head>) -> Bool:
+  match m:
+    case Some{Head{r, b, n, Some{t}}}:
+      True{}
+    case x:
+      False{}
+
+# that the head of the line c in s is some decided steps from the head h0, by
+# the ledger of s
+def Line.Reach(s: State(), c: Ledgers.Chain, h0: Head) -> Type:
+  Exists(
+    List<&2, Nat>,
+    rs => Exists(
+      Head,
+      h => {Node.head_of(s, c) == Some{h}: Maybe<&2, Head>} & {Line.at(rs, s, c, h0) == Some{h}: Maybe<&2, Head>}
+    )
+  )
+
+# that each head of a that is some decided steps from a head with a tip is,
+# in b, some decided steps from it
+def Node.On(a: State(), b: State()) -> Type:
+  @c: Ledgers.Chain -> @h0: Head -> {Head.held(Some{h0}) == True{}: Bool} -> Line.Reach(a, c, h0) -> Line.Reach(
+    b,
+    c,
+    h0
+  )
+
+# every head is on the decided chain: a head that has a tip moves only over
+# decided steps, whatever the node does next
+law Node.after_on:
+  for +n: String
+  for +evs: List<&2, Deed>
+  for +s: State()
+  Node.On(s, Node.after(n, evs, s))
 
 # an outcome is final: a request that a step took stays taken, as the same
 # version number, and one that its owners refused stays refused
@@ -5366,53 +5426,51 @@ law Seal.fits_own:
       == True{}: Bool
   }
 
-# a move of a head is one decided step of its line, in a round up to any n
-# from the highest round that the node saw at the height
+# a move of a head is one decided step of its line, in some round
 law Node.advance_at:
   for +s: State()
   for +c: Ledgers.Chain
   for +h: Head
-  for +n: Nat
-  Line.One(s, c)
-    -> {Node.head_of(s, c) == Some{h}: Maybe<&2, Head>}
+  {Node.head_of(s, c) == Some{h}: Maybe<&2, Head>}
     -> {Heads.level(Some{h}, Node.head_of(Node.advance(s, c), c)) == False{}: Bool}
-    -> {Nat.is_le(Round.seen(s, c, Head.next(h)), n) == True{}: Bool}
-    -> {Line.at(1n, s, c, h, n) == Node.head_of(Node.advance(s, c), c): Maybe<&2, Head>}
+    -> Exists(
+      Nat,
+      q => {Line.at([q], s, c, h) == Node.head_of(Node.advance(s, c), c): Maybe<&2, Head>}
+    )
 
-# the decided steps of a line stay as a node grows: a head that is k decided
-# steps from a head h, each in a round up to n, is so in any node that keeps
-# every cell and whose rounds decide one step at each height
+# the decided steps of a line stay as a node grows: a head that is some
+# decided steps from a head h is so in any node that keeps every cell
 law Line.at_grows:
-  for +k: Nat
+  for +rs: List<&2, Nat>
   for +a: State()
   for +u: State()
   for +c: Ledgers.Chain
   for +h: Head
-  for +n: Nat
   for +x: Head
   {Node.grows(a, u) == True{}: Bool}
-    -> Line.Ones(k, u, c)
-    -> {Line.at(k, a, c, h, n) == Some{x}: Maybe<&2, Head>}
-    -> {Line.at(k, u, c, h, n) == Some{x}: Maybe<&2, Head>}
+    -> {Line.at(rs, a, c, h) == Some{x}: Maybe<&2, Head>}
+    -> {Line.at(rs, u, c, h) == Some{x}: Maybe<&2, Head>}
 
-# so two nodes whose ledgers do not clash, the same number of decided steps
-# from the same first head of a line, are at the same head: one history
+# so two nodes whose ledgers do not clash (one node u keeps every cell of
+# both, and the rounds of each height decide one step in it), the same number
+# of decided steps from the same head of a line, are at the same head,
+# whatever the round of each step: one history
 law Line.at_agrees:
-  for +k: Nat
+  for +rs1: List<&2, Nat>
+  for +rs2: List<&2, Nat>
   for +a: State()
   for +b: State()
   for +u: State()
   for +c: Ledgers.Chain
   for +h: Head
-  for +n: Nat
   for +x: Head
   for +y: Head
   {Node.grows(a, u) == True{}: Bool}
     -> {Node.grows(b, u) == True{}: Bool}
-    -> Line.Ones(k, u, c)
-    -> Line.Ones(k, u, c)
-    -> {Line.at(k, a, c, h, n) == Some{x}: Maybe<&2, Head>}
-    -> {Line.at(k, b, c, h, n) == Some{y}: Maybe<&2, Head>}
+    -> Line.Ones(List.length(&2, Nat, rs1), u, c)
+    -> {List.length(&2, Nat, rs1) == List.length(&2, Nat, rs2): Nat}
+    -> {Line.at(rs1, a, c, h) == Some{x}: Maybe<&2, Head>}
+    -> {Line.at(rs2, b, c, h) == Some{y}: Maybe<&2, Head>}
     -> {x == y: Head}
 
 # a writer reads its own pending write: at the head of a branch, its read is

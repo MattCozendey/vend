@@ -91,10 +91,14 @@ README claim, then the law.
   hash-based signatures; it is not a law.
 - A majority decides, in sequence: `Node.advance_decided` (a head moves only to the tip that the
   owners in its tip decided next), `Node.advance_agrees` (two nodes at the same head, whose
-  ledgers do not clash, move to the same head); over a history: `Line.at_grows` (the decided
-  steps of a line stay as a node grows), `Node.advance_at` (a move adds one decided step),
-  `Line.at_agrees` (the same number of decided steps from the same first head give the same
-  head on any two nodes whose ledgers do not clash).
+  ledgers do not clash, move to the same head). Over a history, measured by `Line.at` (one
+  decided step for each round of a list): `Node.advance_at` (a move is one decided step, in
+  some round), `Line.at_grows` (decided steps stay as a node grows), `Line.at_agrees` (the same
+  number of decided steps from the same head give the same head on any two nodes whose ledgers
+  do not clash, whatever the round of each step).
+- Every head is on the decided chain: `Node.after_on` (a head that is some decided steps from a
+  head with a tip stays so, whatever the node does next). A node sets a head in four places: a
+  step that it checked, and three that set only a head with no tip (`Path.moved`, `Path.set`).
 - A majority is enough, also when the proposer is away: `Rounds.one` (two rounds of one height
   decide the same step, so "the rounds of a height decide one step", the premise of the laws
   above, holds). Its premises are the rules of rounds, for the ballots that the node holds:
@@ -119,12 +123,9 @@ Design (each needs a decision or new work; none is a proof detail):
 - **The rules of rounds are premises.** A node's own ballots follow them by construction
   (`Plan.lead`, `Plan.follow`, `Pass.to`, `Cast.round`), with no law yet. A node keeps a vote of
   another node without a check of `Allowed`; it only copies a vote that is allowed.
-- **Every head is on the decided chain.** `Line.at_grows`, `Node.advance_at` (a move is
-  one decided step, in a round up to any bound from the highest round that the node saw) and
-  `Line.at_agrees` give one history for nodes that start a line from the same first head. Not a
-  law yet: that every head of a node is some number of decided steps from the first head of its
-  line (an invariant kept by each operation), and that two nodes give a branch the same first
-  head.
+- **The same first head.** `Node.after_on` and `Line.at_agrees` give one history for nodes that
+  start a line from the same first head. Not a law yet: that two nodes give a branch the same
+  first head (`Open.at` reads it from the store's content at the node's head of the store).
 - **Missing is not absent, the rest.** The write, resolve, merge and Own judges wait. Still to
   do: the version vector, `Tree.list` and `Tree.diff` (they walk and give no sign of a node that
   they lack), so a merge or a move can still act on a part of a tree. Then the laws: a merge

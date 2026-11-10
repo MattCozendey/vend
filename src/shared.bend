@@ -2085,3 +2085,28 @@ def Nat.nle_trans(
   c: Nat
 ) -> {Nat.is_le(a, c) == False{}: Bool} -> {Nat.is_le(b, c) == True{}: Bool} -> {Nat.is_le(a, b) == False{}: Bool}:
   h => k => Nat.nle_trans.at(a, b, c, Nat.is_le(a, b))({==})(h)(k)
+
+# a number is zero
+def Nat.IsZero(n: Nat) -> Type:
+  match n:
+    case 0n:
+      Unit
+    case 1n+p:
+      Empty
+
+# zero is no successor
+def Nat.zero_ne_succ(-b: Nat, e: {0n == 1n+b: Nat}) -> Empty:
+  %e: Nat.IsZero(_)
+  Unit{}
+
+# the number before n, 0 before 0
+def Nat.before(n: Nat) -> Nat:
+  match n:
+    case 0n:
+      0n
+    case 1n+p:
+      p
+
+# successors are the same only of the same numbers
+def Nat.succ_inj(-a: Nat, -b: Nat, e: {1n+a == 1n+b: Nat}) -> {a == b: Nat}:
+  Equal.cong(Nat, Nat, Nat.before, 1n+a, 1n+b, e)
