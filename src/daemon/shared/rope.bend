@@ -123,14 +123,7 @@ def Node.code_read(
         r
       )
     case Node.Branch{ks}:
-      Codes.Code.one_read(
-        ~List<&2, Hashes.Hash>,
-        ~Node,
-        ~Kids.codec(),
-        a => Node.Branch{a},
-        ks,
-        r
-      )
+      Codes.Code.one_read(~List<&2, Hashes.Hash>, ~Node, ~Kids.codec(), a => Node.Branch{a}, ks, r)
 
 # a node is the node of its words
 law Node.of_words:
@@ -211,10 +204,16 @@ def Root.is_eq_sound(a: Root, b: Root) -> {Root.is_eq(a, b) == True{}: Bool} -> 
   match a b:
     case Root{+d1, +h1} Root{+d2, +h2}:
       +e =>
-        %Shared.Nat.is_eq_sound(d1, d2)(
+        %Shared.Nat.is_eq_sound(
+          d1,
+          d2
+        )(
           Shared.Bool.and_true_left(Nat.is_eq(d1, d2), Hashes.Hash.is_eq(h1, h2))(e)
         ): {Root{d1, h1} == Root{_, h2}: Root}
-        %Hashes.Hash.is_eq_sound(h1, h2)(
+        %Hashes.Hash.is_eq_sound(
+          h1,
+          h2
+        )(
           Shared.Bool.and_true_right(Nat.is_eq(d1, d2), Hashes.Hash.is_eq(h1, h2))(e)
         ): {Root{d1, h1} == Root{d1, _}: Root}
         {==}
@@ -280,7 +279,11 @@ def Rope.cut_flat(ty, edge, xs):
         x <> List.concat(&2, ty, Rope.cut(~ty, ~edge, r)),
         Rope.cut.at_flat(ty, edge(x), x, Rope.cut(~ty, ~edge, r))
       ): {_ == x <> r: List<&2, ty>}
-      %Rope.cut_flat(~ty, ~edge, r): {x <> List.concat(&2, ty, Rope.cut(~ty, ~edge, r)) == x <> _: List<&2, ty>}
+      %Rope.cut_flat(
+        ~ty,
+        ~edge,
+        r
+      ): {x <> List.concat(&2, ty, Rope.cut(~ty, ~edge, r)) == x <> _: List<&2, ty>}
       {==}
 
 # Stores
@@ -492,21 +495,13 @@ def Node.branch.of(ks: List<&2, Hashes.Hash>) -> Node:
 # the rope whose top is one branch of the nodes under hs, which have d branch
 # levels above their leaves, with the nodes acc
 def Rope.put.top(d: Nat, +hs: List<&2, Hashes.Hash>, acc: List<&2, List<&2, U32>>) -> Put:
-  Put{
-    Root{1n+d, Node.hash(Node.Branch{hs})},
-    Rope.codes(~Hashes.Hash, ~Node.branch.of, [hs], acc)
-  }
+  Put{Root{1n+d, Node.hash(Node.Branch{hs})}, Rope.codes(~Hashes.Hash, ~Node.branch.of, [hs], acc)}
 
 # the rope above the nodes under hs, which have d branch levels above their
 # leaves, with the nodes acc: one node is the top; more are cut into the
 # branches of the next level, while a level has fewer nodes than the one
 # below it and f lasts
-def Rope.put.go(
-  f: Nat,
-  +d: Nat,
-  +hs: List<&2, Hashes.Hash>,
-  +acc: List<&2, List<&2, U32>>
-) -> Put:
+def Rope.put.go(f: Nat, +d: Nat, +hs: List<&2, Hashes.Hash>, +acc: List<&2, List<&2, U32>>) -> Put:
   match f hs:
     case 0n hs:
       Rope.put.top(d, hs, acc)
@@ -576,7 +571,15 @@ def Rope.holds_acc(
     case Nil{}:
       e => e
     case Con{g, +r}:
-      e => Rope.holds_acc(~S, ~fetch, ~A, ~mk, s, r, acc)(
+      e => Rope.holds_acc(
+        ~S,
+        ~fetch,
+        ~A,
+        ~mk,
+        s,
+        r,
+        acc
+      )(
         Shared.List.all.if_rest(
           Rope.has(~S, ~fetch, s, Node.words(mk(g))),
           u => Rope.holds(~S, ~fetch, s, Rope.codes(~A, ~mk, r, acc))
@@ -599,7 +602,14 @@ def Rope.level_put(
 ) -> {
   Rope.holds(~S, ~fetch, s, Rope.codes(~A, ~mk, gs, acc)) == True{}: Bool
 } -> {
-  Rope.level(~S, ~fetch, ~A, ~part, s, Rope.hashes(~A, ~mk, gs))
+  Rope.level(
+    ~S,
+    ~fetch,
+    ~A,
+    ~part,
+    s,
+    Rope.hashes(~A, ~mk, gs)
+  )
     == Some{List.concat(&2, A, gs)}: Maybe<&2, List<&2, A>>
 }:
   match gs:
@@ -662,14 +672,30 @@ def Rope.level_put(
           Maybe<&2, List<&2, A>>,
           Rope.level(~S, ~fetch, ~A, ~part, s, Rope.hashes(~A, ~mk, r)),
           Some{List.concat(&2, A, r)},
-          Rope.level_put(~S, ~fetch, ~A, ~part, ~mk, ~back, s, r, acc)(
+          Rope.level_put(
+            ~S,
+            ~fetch,
+            ~A,
+            ~part,
+            ~mk,
+            ~back,
+            s,
+            r,
+            acc
+          )(
             Shared.List.all.if_rest(
               Rope.has(~S, ~fetch, s, Node.words(mk(g))),
               u => Rope.holds(~S, ~fetch, s, Rope.codes(~A, ~mk, r, acc))
             )(e)
           )
         ): {
-          Maybe.bind(&2, List<&2, A>, List<&2, A>, _, y => Some{List.append(&2, A, g, y)})
+          Maybe.bind(
+            &2,
+            List<&2, A>,
+            List<&2, A>,
+            _,
+            y => Some{List.append(&2, A, g, y)}
+          )
             == Some{List.append(&2, A, g, List.concat(&2, A, r))}: Maybe<&2, List<&2, A>>
         }
         {==}
@@ -681,16 +707,24 @@ def Rope.append_assoc(
   ys: List<&2, A>,
   zs: List<&2, A>
 ) -> {
-  List.append(&2, A, List.append(&2, A, xs, ys), zs)
+  List.append(
+    &2,
+    A,
+    List.append(&2, A, xs, ys),
+    zs
+  )
     == List.append(&2, A, xs, List.append(&2, A, ys, zs)): List<&2, A>
 }:
   match xs:
     case Nil{}:
       {==}
     case Con{x, r}:
-      %Rope.append_assoc(A, r, ys, zs): {
-        x <> List.append(&2, A, List.append(&2, A, r, ys), zs) == x <> _: List<&2, A>
-      }
+      %Rope.append_assoc(
+        A,
+        r,
+        ys,
+        zs
+      ): {x <> List.append(&2, A, List.append(&2, A, r, ys), zs) == x <> _: List<&2, A>}
       {==}
 
 # the lists of xs then ys, one after the other, are those of xs, then those
@@ -700,7 +734,11 @@ def Rope.concat_append(
   xs: List<&2, List<&2, A>>,
   +ys: List<&2, List<&2, A>>
 ) -> {
-  List.concat(&2, A, List.append(&2, List<&2, A>, xs, ys))
+  List.concat(
+    &2,
+    A,
+    List.append(&2, List<&2, A>, xs, ys)
+  )
     == List.append(&2, A, List.concat(&2, A, xs), List.concat(&2, A, ys)): List<&2, A>
 }:
   match xs:
@@ -713,8 +751,18 @@ def Rope.concat_append(
         List.append(&2, A, List.concat(&2, A, r), List.concat(&2, A, ys)),
         Rope.concat_append(A, r, ys)
       ): {
-        List.append(&2, A, x, _)
-          == List.append(&2, A, List.append(&2, A, x, List.concat(&2, A, r)), List.concat(&2, A, ys)): List<&2, A>
+        List.append(
+          &2,
+          A,
+          x,
+          _
+        )
+          == List.append(
+            &2,
+            A,
+            List.append(&2, A, x, List.concat(&2, A, r)),
+            List.concat(&2, A, ys)
+          ): List<&2, A>
       }
       Equal.sym(
         List<&2, A>,
@@ -728,7 +776,11 @@ def Rope.concat_append(
 def Rope.joins_flat(
   gs: List<&2, List<&2, List<&2, U32>>>
 ) -> {
-  List.concat(&2, U32, Rope.joins(gs))
+  List.concat(
+    &2,
+    U32,
+    Rope.joins(gs)
+  )
     == List.concat(&2, U32, List.concat(&2, List<&2, U32>, gs)): List<&2, U32>
 }:
   match gs:
@@ -738,11 +790,31 @@ def Rope.joins_flat(
       %Equal.sym(
         List<&2, U32>,
         List.concat(&2, U32, List.append(&2, List<&2, U32>, g, List.concat(&2, List<&2, U32>, r))),
-        List.append(&2, U32, List.concat(&2, U32, g), List.concat(&2, U32, List.concat(&2, List<&2, U32>, r))),
+        List.append(
+          &2,
+          U32,
+          List.concat(&2, U32, g),
+          List.concat(&2, U32, List.concat(&2, List<&2, U32>, r))
+        ),
         Rope.concat_append(U32, g, List.concat(&2, List<&2, U32>, r))
-      ): {List.append(&2, U32, List.concat(&2, U32, g), List.concat(&2, U32, Rope.joins(r))) == _: List<&2, U32>}
-      %Rope.joins_flat(r): {
-        List.append(&2, U32, List.concat(&2, U32, g), List.concat(&2, U32, Rope.joins(r)))
+      ): {
+        List.append(
+          &2,
+          U32,
+          List.concat(&2, U32, g),
+          List.concat(&2, U32, Rope.joins(r))
+        )
+          == _: List<&2, U32>
+      }
+      %Rope.joins_flat(
+        r
+      ): {
+        List.append(
+          &2,
+          U32,
+          List.concat(&2, U32, g),
+          List.concat(&2, U32, Rope.joins(r))
+        )
           == List.append(&2, U32, List.concat(&2, U32, g), _): List<&2, U32>
       }
       {==}
@@ -755,8 +827,16 @@ def Rope.leaves_flat(
     case Nil{}:
       {==}
     case Con{+c, +r}:
-      %Rope.cut_flat(~List<&2, U32>, ~Chunk.is_edge, Con{c, r}): {
-        List.concat(&2, U32, Rope.joins(Rope.cut(~List<&2, U32>, ~Chunk.is_edge, Con{c, r})))
+      %Rope.cut_flat(
+        ~List<&2, U32>,
+        ~Chunk.is_edge,
+        Con{c, r}
+      ): {
+        List.concat(
+          &2,
+          U32,
+          Rope.joins(Rope.cut(~List<&2, U32>, ~Chunk.is_edge, Con{c, r}))
+        )
           == List.concat(&2, U32, _): List<&2, U32>
       }
       Rope.joins_flat(Rope.cut(~List<&2, U32>, ~Chunk.is_edge, Con{c, r}))
@@ -786,16 +866,27 @@ def Rope.up_reads(
   -x: List<&2, U32>,
   flat: {List.concat(&2, Hashes.Hash, gs) == hs: List<&2, Hashes.Hash>},
   pre: {Rope.read.go(~S, ~fetch, d, s, hs) == Some{x}: Maybe<&2, List<&2, U32>>},
-  e: {
-    Rope.holds(~S, ~fetch, s, Rope.codes(~Hashes.Hash, ~Node.branch.of, gs, acc)) == True{}: Bool
-  }
+  e: {Rope.holds(~S, ~fetch, s, Rope.codes(~Hashes.Hash, ~Node.branch.of, gs, acc)) == True{}: Bool}
 ) -> {
-  Rope.read.go(~S, ~fetch, 1n+d, s, Rope.hashes(~Hashes.Hash, ~Node.branch.of, gs))
+  Rope.read.go(
+    ~S,
+    ~fetch,
+    1n+d,
+    s,
+    Rope.hashes(~Hashes.Hash, ~Node.branch.of, gs)
+  )
     == Some{x}: Maybe<&2, List<&2, U32>>
 }:
   %Equal.sym(
     Maybe<&2, List<&2, Hashes.Hash>>,
-    Rope.level(~S, ~fetch, ~Hashes.Hash, ~Node.kids, s, Rope.hashes(~Hashes.Hash, ~Node.branch.of, gs)),
+    Rope.level(
+      ~S,
+      ~fetch,
+      ~Hashes.Hash,
+      ~Node.kids,
+      s,
+      Rope.hashes(~Hashes.Hash, ~Node.branch.of, gs)
+    ),
     Some{List.concat(&2, Hashes.Hash, gs)},
     Rope.level_put(
       ~S,
@@ -868,7 +959,9 @@ def Rope.put.top_reads(
   pre: {Rope.read.go(~S, ~fetch, d, s, hs) == Some{x}: Maybe<&2, List<&2, U32>>}
 ) -> {
   Rope.holds(~S, ~fetch, s, Put.nodes(Rope.put.top(d, hs, acc))) == True{}: Bool
-} -> {Rope.read(~S, ~fetch, s, Put.root(Rope.put.top(d, hs, acc))) == Some{x}: Maybe<&2, List<&2, U32>>}:
+} -> {
+  Rope.read(~S, ~fetch, s, Put.root(Rope.put.top(d, hs, acc))) == Some{x}: Maybe<&2, List<&2, U32>>
+}:
   e => Rope.up_reads(
     ~S,
     ~fetch,
@@ -996,7 +1089,11 @@ def Rope.put.go_holds(
     case 1n+p Con{h, Nil{}}:
       e => e
     case 1n+p Nil{}:
-      %Rope.put.go_nil(p, d, acc): {
+      %Rope.put.go_nil(
+        p,
+        d,
+        acc
+      ): {
         Rope.holds(~S, ~fetch, s, Put.nodes(_)) == True{}: Bool
       } -> {Rope.holds(~S, ~fetch, s, acc) == True{}: Bool}
       Rope.put.top_holds(~S, ~fetch, d, [], acc, s)
@@ -1014,8 +1111,17 @@ def Rope.put.go_holds(
           ~fetch,
           p,
           1n+d,
-          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, Con{h, Con{h2, t}})),
-          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, Con{h, Con{h2, t}}), acc),
+          Rope.hashes(
+            ~Hashes.Hash,
+            ~Node.branch.of,
+            Rope.cut(~Hashes.Hash, ~Hash.is_edge, Con{h, Con{h2, t}})
+          ),
+          Rope.codes(
+            ~Hashes.Hash,
+            ~Node.branch.of,
+            Rope.cut(~Hashes.Hash, ~Hash.is_edge, Con{h, Con{h2, t}}),
+            acc
+          ),
           s
         )
       )
@@ -1150,15 +1256,15 @@ def Rope.put.step_reads(
       Rope.holds(~S, ~fetch, s, Put.nodes(q)) == True{}: Bool
     } -> {Rope.read(~S, ~fetch, s, Put.root(q)) == Some{x}: Maybe<&2, List<&2, U32>>},
     Nat.is_lt(
-          List.length(&2, List<&2, Hashes.Hash>, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)),
-          List.length(&2, Hashes.Hash, hs)
-        ),
+      List.length(&2, List<&2, Hashes.Hash>, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)),
+      List.length(&2, Hashes.Hash, hs)
+    ),
     u => Rope.put.go(
-          p,
-          1n+d,
-          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)),
-          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs), acc)
-        ),
+      p,
+      1n+d,
+      Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)),
+      Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs), acc)
+    ),
     u => Rope.put.top(d, hs, acc),
     +e => ih(
       Rope.up_reads(
@@ -1193,7 +1299,12 @@ def Rope.put.go_reads(
 ) -> {
   Rope.holds(~S, ~fetch, s, Put.nodes(Rope.put.go(f, d, hs, acc))) == True{}: Bool
 } -> {
-  Rope.read(~S, ~fetch, s, Put.root(Rope.put.go(f, d, hs, acc)))
+  Rope.read(
+    ~S,
+    ~fetch,
+    s,
+    Put.root(Rope.put.go(f, d, hs, acc))
+  )
     == Some{x}: Maybe<&2, List<&2, U32>>
 }:
   match f hs:
@@ -1202,7 +1313,11 @@ def Rope.put.go_reads(
     case 1n+p Con{h, Nil{}}:
       e => pre
     case 1n+p Nil{}:
-      %Rope.put.go_nil(p, d, acc): {
+      %Rope.put.go_nil(
+        p,
+        d,
+        acc
+      ): {
         Rope.holds(~S, ~fetch, s, Put.nodes(_)) == True{}: Bool
       } -> {Rope.read(~S, ~fetch, s, Put.root(_)) == Some{x}: Maybe<&2, List<&2, U32>>}
       Rope.put.top_reads(~S, ~fetch, d, [], acc, s, x, pre)
@@ -1222,8 +1337,17 @@ def Rope.put.go_reads(
           ~fetch,
           p,
           1n+d,
-          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, Con{h, Con{h2, t}})),
-          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, Con{h, Con{h2, t}}), acc),
+          Rope.hashes(
+            ~Hashes.Hash,
+            ~Node.branch.of,
+            Rope.cut(~Hashes.Hash, ~Hash.is_edge, Con{h, Con{h2, t}})
+          ),
+          Rope.codes(
+            ~Hashes.Hash,
+            ~Node.branch.of,
+            Rope.cut(~Hashes.Hash, ~Hash.is_edge, Con{h, Con{h2, t}}),
+            acc
+          ),
           s
         ),
         pre2 => Rope.put.go_reads(
@@ -1231,8 +1355,17 @@ def Rope.put.go_reads(
           ~fetch,
           p,
           1n+d,
-          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, Con{h, Con{h2, t}})),
-          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, Con{h, Con{h2, t}}), acc),
+          Rope.hashes(
+            ~Hashes.Hash,
+            ~Node.branch.of,
+            Rope.cut(~Hashes.Hash, ~Hash.is_edge, Con{h, Con{h2, t}})
+          ),
+          Rope.codes(
+            ~Hashes.Hash,
+            ~Node.branch.of,
+            Rope.cut(~Hashes.Hash, ~Hash.is_edge, Con{h, Con{h2, t}}),
+            acc
+          ),
           s,
           x,
           pre2
@@ -1249,7 +1382,12 @@ def Rope.put.of_reads(
 ) -> {
   Rope.holds(~S, ~fetch, s, Put.nodes(Rope.put.of(ls))) == True{}: Bool
 } -> {
-  Rope.read(~S, ~fetch, s, Put.root(Rope.put.of(ls)))
+  Rope.read(
+    ~S,
+    ~fetch,
+    s,
+    Put.root(Rope.put.of(ls))
+  )
     == Some{List.concat(&2, U32, ls)}: Maybe<&2, List<&2, U32>>
 }:
   +e => Rope.put.go_reads(
@@ -1292,15 +1430,20 @@ law Rope.read_put:
   for +cs: List<&2, List<&2, U32>>
   {Rope.holds(~S, ~fetch, s, Put.nodes(Rope.put(cs))) == True{}: Bool}
     -> {
-      Rope.read(~S, ~fetch, s, Put.root(Rope.put(cs)))
+      Rope.read(
+        ~S,
+        ~fetch,
+        s,
+        Put.root(Rope.put(cs))
+      )
         == Some{List.concat(&2, U32, cs)}: Maybe<&2, List<&2, U32>>
     }
 
 def Rope.read_put(ty, fetch, s, cs):
   e =>
-    %Rope.leaves_flat(cs): {
-      Rope.read(~ty, ~fetch, s, Put.root(Rope.put(cs))) == Some{_}: Maybe<&2, List<&2, U32>>
-    }
+    %Rope.leaves_flat(
+      cs
+    ): {Rope.read(~ty, ~fetch, s, Put.root(Rope.put(cs))) == Some{_}: Maybe<&2, List<&2, U32>>}
     Rope.put.of_reads(~ty, ~fetch, s, Rope.leaves(cs))(e)
 
 # a node that a store gives, a store that grows from it gives too

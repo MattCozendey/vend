@@ -269,7 +269,12 @@ def Slot.data(h: Hashes.Hash) -> List<&2, Bool>:
                   &2,
                   Bool,
                   Word.key(e),
-                  List.append(&2, Bool, Word.key(f), List.append(&2, Bool, Word.key(g), Word.key(i)))
+                  List.append(
+                    &2,
+                    Bool,
+                    Word.key(f),
+                    List.append(&2, Bool, Word.key(g), Word.key(i))
+                  )
                 )
               )
             )
@@ -419,10 +424,16 @@ def Root.codec() -> Codes.Codec(Maybe<&2, Hashes.Hash>):
 def Vote.code(v: Vote, r: List<&2, U32>) -> List<&2, U32>:
   match v:
     case Vote{b, qs, a}:
-      Codes.Codec.enc(Maybe<&2, Hashes.Hash>, Root.codec())(b)(
-        Codes.Codec.enc(List<&2, Id>, Codes.Code.list.codec(~Id, ~Id.codec()))(qs)(
-          Codes.Codec.enc(Maybe<&2, Hashes.Hash>, Root.codec())(a)(r)
-        )
+      Codes.Codec.enc(
+        Maybe<&2, Hashes.Hash>,
+        Root.codec()
+      )(
+        b
+      )(
+        Codes.Codec.enc(
+          List<&2, Id>,
+          Codes.Code.list.codec(~Id, ~Id.codec())
+        )(qs)(Codes.Codec.enc(Maybe<&2, Hashes.Hash>, Root.codec())(a)(r))
       )
 
 # a ballot
@@ -824,7 +835,10 @@ def Ballot.is_eq_refl(a: Ballot) -> {Ballot.is_eq(a, a) == True{}: Bool}:
   Shared.Eq.refl(~Ballot, ~Ballot.is_eq, Ballot.laws(), a)
 
 # Ballot.is_eq is True only for equal ballots
-def Ballot.is_eq_sound(a: Ballot, b: Ballot) -> {Ballot.is_eq(a, b) == True{}: Bool} -> {a == b: Ballot}:
+def Ballot.is_eq_sound(
+  a: Ballot,
+  b: Ballot
+) -> {Ballot.is_eq(a, b) == True{}: Bool} -> {a == b: Ballot}:
   Shared.Eq.sound(~Ballot, ~Ballot.is_eq, Ballot.laws(), a, b)
 
 # the step that the ballot b is for
@@ -960,15 +974,27 @@ def Entry.is_eq_sound(
         )(h): {Entry.Data{d1} == Entry.Data{_}: Entry<Q>}
         {==}
     case Entry.Ask{i, t, q} Entry.Vote{v}:
-      h => Empty.absurd({Entry.Ask{i, t, q} == Entry.Vote{v}: Entry<Q>}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Entry.Ask{i, t, q} == Entry.Vote{v}: Entry<Q>},
+        Shared.Bool.false_ne_true(h)
+      )
     case Entry.Ask{i, t, q} Entry.Data{d}:
-      h => Empty.absurd({Entry.Ask{i, t, q} == Entry.Data{d}: Entry<Q>}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Entry.Ask{i, t, q} == Entry.Data{d}: Entry<Q>},
+        Shared.Bool.false_ne_true(h)
+      )
     case Entry.Vote{v} Entry.Ask{i, t, q}:
-      h => Empty.absurd({Entry.Vote{v} == Entry.Ask{i, t, q}: Entry<Q>}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Entry.Vote{v} == Entry.Ask{i, t, q}: Entry<Q>},
+        Shared.Bool.false_ne_true(h)
+      )
     case Entry.Vote{v} Entry.Data{d}:
       h => Empty.absurd({Entry.Vote{v} == Entry.Data{d}: Entry<Q>}, Shared.Bool.false_ne_true(h))
     case Entry.Data{d} Entry.Ask{i, t, q}:
-      h => Empty.absurd({Entry.Data{d} == Entry.Ask{i, t, q}: Entry<Q>}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Entry.Data{d} == Entry.Ask{i, t, q}: Entry<Q>},
+        Shared.Bool.false_ne_true(h)
+      )
     case Entry.Data{d} Entry.Vote{v}:
       h => Empty.absurd({Entry.Data{d} == Entry.Vote{v}: Entry<Q>}, Shared.Bool.false_ne_true(h))
 
@@ -1218,7 +1244,13 @@ def State.add.of(
       s
 
 # s with the entry e in the slot k, when the slot is empty
-def State.add(~Q: Data, ~same: Q -> Q -> Bool, +s: State(Q), +k: List<&2, Bool>, e: Entry<Q>) -> State(Q):
+def State.add(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  +s: State(Q),
+  +k: List<&2, Bool>,
+  e: Entry<Q>
+) -> State(Q):
   State.add.of(~Q, ~same, s, k, e, State.get(~Q, s, k))
 
 # s with the request i of the change q at the time t: a request ID that s
@@ -1780,9 +1812,14 @@ def State.decide_grows(ty, same, laws, s, s2, w, ms, v):
       b1 = Bucket.ballots(~ty, State.under(~ty, s, p), ms)
       b2 = Bucket.ballots(~ty, State.under(~ty, s2, p), ms)
       +gr => hd =>
-        Quorums.Quorum.major_kept(~Vote, ~Vote.is_eq, ~Vote.laws(), b1, b2, v)(
-          Ballots.grows(~ty, ~same, ~laws, s, s2, p, ms, gr)
-        )(hd)
+        Quorums.Quorum.major_kept(
+          ~Vote,
+          ~Vote.is_eq,
+          ~Vote.laws(),
+          b1,
+          b2,
+          v
+        )(Ballots.grows(~ty, ~same, ~laws, s, s2, p, ms, gr))(hd)
 
 # a state grows to itself
 def State.grows_refl(
@@ -2632,69 +2669,10 @@ def State.take_data(ty, same, s, ws):
           Slot.data(Hashes.Sha.hash(ws))
         ),
         (
-          %Equal.sym(
-            Maybe<&2, Cells.Cell<Entry<ty>>>,
-            State.get(~ty, s, Slot.data(Hashes.Sha.hash(ws))),
-            None{},
-            e
-          ): {
-            Shared.Maybe.join(
-              ~Cells.Cell<Entry<ty>>,
-              ~(x => y => x),
-              _,
-              State.get(
-                ~ty,
-                State.put_data(~ty, ~same, State.empty(~ty), ws),
-                Slot.data(Hashes.Sha.hash(ws))
-              )
-            )
-              == Some{Cells.One{Entry.Data{ws}}}: Maybe<&2, Cells.Cell<Entry<ty>>>
-          }
-          Equal.trans(
-            Maybe<&2, Cells.Cell<Entry<ty>>>,
-            Tries.Trie.get(
-              Cells.Cell<Entry<ty>>,
-              Tries.Trie.set(
-                Cells.Cell<Entry<ty>>,
-                Tries.Trie.new(Cells.Cell<Entry<ty>>),
-                Slot.data(Hashes.Sha.hash(ws)),
-                Cells.One{Entry.Data{ws}}
-              ),
-              Slot.data(Hashes.Sha.hash(ws))
-            ),
-            Bool.pick(
-              Maybe<&2, Cells.Cell<Entry<ty>>>,
-              Tries.Trie.same_key(Slot.data(Hashes.Sha.hash(ws)), Slot.data(Hashes.Sha.hash(ws))),
-              Some{Cells.One{Entry.Data{ws}}},
-              None{}
-            ),
-            Some{Cells.One{Entry.Data{ws}}},
-            Tries.Trie.get_set(
-              Cells.Cell<Entry<ty>>,
-              Tries.Trie.new(Cells.Cell<Entry<ty>>),
-              Slot.data(Hashes.Sha.hash(ws)),
-              Cells.One{Entry.Data{ws}},
-              Slot.data(Hashes.Sha.hash(ws))
-            ),
-            (
-              %Equal.sym(
-                Bool,
-                Tries.Trie.same_key(Slot.data(Hashes.Sha.hash(ws)), Slot.data(Hashes.Sha.hash(ws))),
-                True{},
-                Shared.List.is_eq_refl(
-                  ~Bool,
-                  ~Shared.Bool.is_eq,
-                  ~Shared.Bool.laws(),
-                  Slot.data(Hashes.Sha.hash(ws))
-                )
-              ): {
-                Bool.pick(Maybe<&2, Cells.Cell<Entry<ty>>>, _, Some{Cells.One{Entry.Data{ws}}}, None{})
-                  == Some{Cells.One{Entry.Data{ws}}}: Maybe<&2, Cells.Cell<Entry<ty>>>
-              }
-              {==}
-            )
-          )
-        )
+          %Equal.sym(Maybe<&2, Cells.Cell<Entry<ty>>>, State.get(~ty, s, Slot.data(Hashes.Sha.hash(ws))), None{}, e): {Shared.Maybe.join(~Cells.Cell<Entry<ty>>, ~(x => y => x), _, State.get(~ty, State.put_data(~ty, ~same, State.empty(~ty), ws), Slot.data(Hashes.Sha.hash(ws)))) == Some{Cells.One{Entry.Data{ws}}}: Maybe<&2, Cells.Cell<Entry<ty>>>}
+          Equal.trans(Maybe<&2, Cells.Cell<Entry<ty>>>, Tries.Trie.get(Cells.Cell<Entry<ty>>, Tries.Trie.set(Cells.Cell<Entry<ty>>, Tries.Trie.new(Cells.Cell<Entry<ty>>), Slot.data(Hashes.Sha.hash(ws)), Cells.One{Entry.Data{ws}}), Slot.data(Hashes.Sha.hash(ws))), Bool.pick(Maybe<&2, Cells.Cell<Entry<ty>>>, Tries.Trie.same_key(Slot.data(Hashes.Sha.hash(ws)), Slot.data(Hashes.Sha.hash(ws))), Some{Cells.One{Entry.Data{ws}}}, None{}), Some{Cells.One{Entry.Data{ws}}}, Tries.Trie.get_set(Cells.Cell<Entry<ty>>, Tries.Trie.new(Cells.Cell<Entry<ty>>), Slot.data(Hashes.Sha.hash(ws)), Cells.One{Entry.Data{ws}}, Slot.data(Hashes.Sha.hash(ws))), (
+            %Equal.sym(Bool, Tries.Trie.same_key(Slot.data(Hashes.Sha.hash(ws)), Slot.data(Hashes.Sha.hash(ws))), True{}, Shared.List.is_eq_refl(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws(), Slot.data(Hashes.Sha.hash(ws)))): {Bool.pick(Maybe<&2, Cells.Cell<Entry<ty>>>, _, Some{Cells.One{Entry.Data{ws}}}, None{}) == Some{Cells.One{Entry.Data{ws}}}: Maybe<&2, Cells.Cell<Entry<ty>>>}
+            {==})))
       )
     ): {
       Maybe.bind(
@@ -2736,18 +2714,8 @@ def State.one_grows(ty, same, laws, s, s2, k, e):
       e,
       State.get(~ty, s2, k)
     )(
-      %eg: {
-        Cells.Cell.keeps(~Entry<ty>, ~Entry.is_eq(~ty, ~same), _, State.get(~ty, s2, k)) == True{}: Bool
-      }
-      Tries.Trie.keeps_get(
-        ~Cells.Cell<Entry<ty>>,
-        ~Cells.Cell.keeps(~Entry<ty>, ~Entry.is_eq(~ty, ~same)),
-        ~Cells.Cell.none_kept(~Entry<ty>, ~Entry.is_eq(~ty, ~same)),
-        s,
-        s2,
-        k
-      )(gr)
-    )
+      %eg: {Cells.Cell.keeps(~Entry<ty>, ~Entry.is_eq(~ty, ~same), _, State.get(~ty, s2, k)) == True{}: Bool}
+      Tries.Trie.keeps_get(~Cells.Cell<Entry<ty>>, ~Cells.Cell.keeps(~Entry<ty>, ~Entry.is_eq(~ty, ~same)), ~Cells.Cell.none_kept(~Entry<ty>, ~Entry.is_eq(~ty, ~same)), s, s2, k)(gr))
 
 # a holder that lacks the slot k, and takes in a ledger t, holds what t holds
 # in k
@@ -2757,21 +2725,24 @@ law State.take_get:
   for +t: State(Q)
   for +k: List<&2, Bool>
   {State.get(~Q, s, k) == None{}: Maybe<&2, Cells.Cell<Entry<Q>>>}
-    -> {State.get(~Q, State.take(~Q, s, t), k) == State.get(~Q, t, k): Maybe<&2, Cells.Cell<Entry<Q>>>}
+    -> {
+      State.get(~Q, State.take(~Q, s, t), k) == State.get(~Q, t, k): Maybe<&2, Cells.Cell<Entry<Q>>>
+    }
 
 def State.take_get(ty, s, t, k):
   e =>
     Equal.trans(
       Maybe<&2, Cells.Cell<Entry<ty>>>,
       State.get(~ty, State.take(~ty, s, t), k),
-      Shared.Maybe.join(~Cells.Cell<Entry<ty>>, ~(x => y => x), State.get(~ty, s, k), State.get(~ty, t, k)),
+      Shared.Maybe.join(
+        ~Cells.Cell<Entry<ty>>,
+        ~(x => y => x),
+        State.get(~ty, s, k),
+        State.get(~ty, t, k)
+      ),
       State.get(~ty, t, k),
       Tries.Trie.get_union(~Cells.Cell<Entry<ty>>, ~(x => y => x), s, t, k),
       (
-        %Equal.sym(Maybe<&2, Cells.Cell<Entry<ty>>>, State.get(~ty, s, k), None{}, e): {
-          Shared.Maybe.join(~Cells.Cell<Entry<ty>>, ~(x => y => x), _, State.get(~ty, t, k))
-            == State.get(~ty, t, k): Maybe<&2, Cells.Cell<Entry<ty>>>
-        }
-        {==}
-      )
+        %Equal.sym(Maybe<&2, Cells.Cell<Entry<ty>>>, State.get(~ty, s, k), None{}, e): {Shared.Maybe.join(~Cells.Cell<Entry<ty>>, ~(x => y => x), _, State.get(~ty, t, k)) == State.get(~ty, t, k): Maybe<&2, Cells.Cell<Entry<ty>>>}
+        {==})
     )

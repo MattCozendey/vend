@@ -150,7 +150,13 @@ def Member.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Member>>:
         u => Shared.Bool.when(
           Maybe<&2, Codes.Read<Member>>,
           U32.is_eq(x, 1),
-          u => Codes.Code.one.read(~String, ~Member, ~Codes.Code.text.read, n => Member.Group{n}, r),
+          u => Codes.Code.one.read(
+            ~String,
+            ~Member,
+            ~Codes.Code.text.read,
+            n => Member.Group{n},
+            r
+          ),
           u => None{}
         )
       )
@@ -613,7 +619,11 @@ def Res.read(ws: List<&2, U32>) -> Maybe<&2, Ropes.Root>:
 # Node.get once the root node m of the tree is known. The node comes before
 # the path of the key (a hash): a tree with no node costs no hash, and a proof
 # about a tree that is not known makes none
-def Node.get.at(s: State(), +k: List<&2, U32>, m: Maybe<&2, Trees.Node>) -> Maybe<&2, List<&2, U32>>:
+def Node.get.at(
+  s: State(),
+  +k: List<&2, U32>,
+  m: Maybe<&2, Trees.Node>
+) -> Maybe<&2, List<&2, U32>>:
   match m:
     case None{}:
       None{}
@@ -721,13 +731,7 @@ def Roots.same(a: Maybe<&2, Ropes.Root>, b: Maybe<&2, Ropes.Root>) -> Bool:
 
 # the bytes under the root m, if any, when s holds their rope
 def Root.bytes(s: State(), m: Maybe<&2, Ropes.Root>) -> Maybe<&2, Texts.Bytes()>:
-  Maybe.bind(
-    &2,
-    Ropes.Root,
-    Texts.Bytes(),
-    m,
-    r => Ropes.Rope.read(~State(), ~Store.fetch, s, r)
-  )
+  Maybe.bind(&2, Ropes.Root, Texts.Bytes(), m, r => Ropes.Rope.read(~State(), ~Store.fetch, s, r))
 
 # x is the byte that ends a line
 def Byte.is_end(x: U32) -> Bool:
@@ -1476,7 +1480,9 @@ def Merge.names(
   h: Maybe<&2, Hashes.Hash>,
   ht: Maybe<&2, Hashes.Hash>
 ) -> List<&2, Resources.Name>:
-  Tries.Trie.unique(~Resources.Name, ~Name.key, 
+  Tries.Trie.unique(
+    ~Resources.Name,
+    ~Name.key,
     Res.of.bindings(Trees.Tree.diff(~State(), ~Store.fetch, s, h, ht)),
     Tries.Trie.new(Unit)
   )
@@ -1743,10 +1749,18 @@ def Clash.open(s: State(), h: Maybe<&2, Hashes.Hash>, n: Resources.Name, f: Ledg
 
 # the version that the request m merged, when m is a merge on the branch b of
 # the store r
-def Merge.from_on(m: Maybe<&2, Ledgers.Asked<Ask>>, r: Ledgers.Id, b: String) -> Maybe<&2, Ledgers.Id>:
+def Merge.from_on(
+  m: Maybe<&2, Ledgers.Asked<Ask>>,
+  r: Ledgers.Id,
+  b: String
+) -> Maybe<&2, Ledgers.Id>:
   match m:
     case Some{Ledgers.Asked{t, Ask.On{st, Some{x}, Change.Merge{f}}}}:
-      Shared.Maybe.when(Ledgers.Id, Bool.and(Ledgers.Id.is_eq(st, r), String.eq(x, b)), u => Some{f})
+      Shared.Maybe.when(
+        Ledgers.Id,
+        Bool.and(Ledgers.Id.is_eq(st, r), String.eq(x, b)),
+        u => Some{f}
+      )
     case _:
       None{}
 
@@ -1768,7 +1782,12 @@ def Clash.find(
         Bool,
         Node.find(s, h, Key.clash(n)),
         x => Some{
-          Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), x, Some{Clash.code(f)})
+          Shared.Maybe.is_eq(
+            ~List<&2, U32>,
+            ~Shared.List.is_eq(~U32, ~U32.is_eq),
+            x,
+            Some{Clash.code(f)}
+          )
         }
       )
 
@@ -2058,7 +2077,12 @@ def Make.branch(+s: State(), c: Ledgers.Chain, m: Maybe<&2, Ledgers.Id>) -> Mayb
 
 # the store tree h with the group g, of the members ms, and its name among the
 # names of its groups
-def Group.work(+s: State(), +h: Maybe<&2, Hashes.Hash>, +g: String, ms: List<&2, Member>) -> Maybe<&2, Work>:
+def Group.work(
+  +s: State(),
+  +h: Maybe<&2, Hashes.Hash>,
+  +g: String,
+  ms: List<&2, Member>
+) -> Maybe<&2, Work>:
   +ns = Group.names(s, h)
   Maybe.bind(
     &2,
@@ -2124,7 +2148,12 @@ def Own.at(r: Ledgers.Id, m: Maybe<&2, Place>) -> Maybe<&2, Bool>:
 
 # an Own of the line l of the store r may name the version at: a store reads
 # its own content; a branch names a version of its store (none: wait for it)
-def Own.ok(s: State(), r: Ledgers.Id, l: Maybe<&2, String>, at: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Bool>:
+def Own.ok(
+  s: State(),
+  r: Ledgers.Id,
+  l: Maybe<&2, String>,
+  at: Maybe<&2, Ledgers.Id>
+) -> Maybe<&2, Bool>:
   match l at:
     case None{} y:
       Some{True{}}
@@ -2232,11 +2261,7 @@ def Judge.change(
         u => Work.take(Merge.work(s, Line.chain(r, Some{b}), from, h))
       )
     case Some{+b} Change.Move{+to}:
-      Judge.then(
-        Judge.ready(s, to),
-        h,
-        u => Work.take(Move.work(s, Line.chain(r, Some{b}), to, h))
-      )
+      Judge.then(Judge.ready(s, to), h, u => Work.take(Move.work(s, Line.chain(r, Some{b}), to, h)))
     case w c3:
       Judge.refuse(h)
 
@@ -2291,7 +2316,12 @@ def Run.put(
       Some{Run{s2, t, List.append(&2, List<&2, U32>, ds, ns)}}
 
 # Run.add once the value m of the key in the log is known
-def Run.add.at(r: Run, k: List<&2, U32>, x: List<&2, U32>, m: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Run>:
+def Run.add.at(
+  r: Run,
+  k: List<&2, U32>,
+  x: List<&2, U32>,
+  m: Maybe<&2, List<&2, U32>>
+) -> Maybe<&2, Run>:
   match m:
     case None{}:
       Run.log(r, k, x)
@@ -2341,7 +2371,13 @@ def Step.taken.at(
       Run,
       Run,
       Run.add(r1, Log.version(n), Version.words(Version{i, Tip.content(Run.tip(r1))})),
-      r2 => Maybe.bind(&2, Run, Run, Run.log(r2, Log.count(), [U32.inc(n)]), r3 => Run.owners(r3, own))
+      r2 => Maybe.bind(
+        &2,
+        Run,
+        Run,
+        Run.log(r2, Log.count(), [U32.inc(n)]),
+        r3 => Run.owners(r3, own)
+      )
     )
   )
 
@@ -2386,10 +2422,7 @@ def Step.mark(+r: Run, +i: Ledgers.Id, +m: String) -> Maybe<&2, Run>:
   +n = Line.count(s, t)
   Shared.Bool.when(
     Maybe<&2, Run>,
-    List.all.if(
-      u => Maybe.is_none(&2, Ledgers.Id, Line.mark(s, t, m)),
-      Bool.not(U32.is_eq(n, 0))
-    ),
+    List.all.if(u => Maybe.is_none(&2, Ledgers.Id, Line.mark(s, t, m)), Bool.not(U32.is_eq(n, 0))),
     u => Step.marked(r, i, m, Line.version(s, t, U32.sub(n, 1))),
     u => Step.stale(r, i)
   )
@@ -2462,12 +2495,24 @@ def Branch.new(
 # the run r of a store, after the request i for a new branch b from the
 # version at: the log gets the first tip of b, for good; a store makes a
 # branch once, so a branch that it has refuses the request
-def Step.branch(+r: Run, i: Ledgers.Id, st: Ledgers.Id, +b: String, at: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Run>:
+def Step.branch(
+  +r: Run,
+  i: Ledgers.Id,
+  st: Ledgers.Id,
+  +b: String,
+  at: Maybe<&2, Ledgers.Id>
+) -> Maybe<&2, Run>:
   Branch.new(r, i, st, b, at, Node.find(Run.state(r), Tip.log(Run.tip(r)), Log.start(b)))
 
 # the run r, after the request i of the change ch of the line l of the store
 # st
-def Step.on(+r: Run, i: Ledgers.Id, st: Ledgers.Id, l: Maybe<&2, String>, ch: Change) -> Maybe<&2, Run>:
+def Step.on(
+  +r: Run,
+  i: Ledgers.Id,
+  st: Ledgers.Id,
+  l: Maybe<&2, String>,
+  ch: Change
+) -> Maybe<&2, Run>:
   match l ch:
     case Some{b} Change.Mark{m, d}:
       Step.mark(r, i, m)
@@ -2499,7 +2544,12 @@ def Step.change(+r: Run, c: Ledgers.Chain, +i: Ledgers.Id, q: Ask) -> Maybe<&2, 
 
 # the run r of the line c, after the request i, which the node holds as a
 # (none: wait for the request)
-def Step.asked(r: Run, c: Ledgers.Chain, i: Ledgers.Id, a: Maybe<&2, Ledgers.Asked<Ask>>) -> Maybe<&2, Run>:
+def Step.asked(
+  r: Run,
+  c: Ledgers.Chain,
+  i: Ledgers.Id,
+  a: Maybe<&2, Ledgers.Asked<Ask>>
+) -> Maybe<&2, Run>:
   match a:
     case None{}:
       None{}
@@ -2559,11 +2609,7 @@ def Step.some(+c: Ledgers.Chain, qs: List<&2, Ledgers.Id>, +r: Run) -> Picked:
       Picked{r, []}
     case Con{+i, rest}:
       +m = Step.one(r, c, i)
-      Picked.add(
-        Maybe.is_some(&2, Run, m),
-        i,
-        Step.some(c, rest, Maybe.default(&2, Run, m, r))
-      )
+      Picked.add(Maybe.is_some(&2, Run, m), i, Step.some(c, rest, Maybe.default(&2, Run, m, r)))
 
 # the step of the line c that runs the requests qs from the tip t (none: wait
 # for a request, a version or a node)
@@ -2768,12 +2814,13 @@ def Seal.accept.at(+s: State(), +b: Ledgers.Ballot, m: Maybe<&2, Chained>) -> Ma
         Seal.fits(c, b),
         u => Some{
           State.keyed(
-            State.led(
-              s,
-              Ledgers.State.keep(~Ask, ~Ask.is_eq, State.ledger(s), b)
-            ),
+            State.led(s, Ledgers.State.keep(~Ask, ~Ask.is_eq, State.ledger(s), b)),
             Keys.saw(
-              Keys.set(State.keys(s), Seal.slot(Ballot.store(b), Ballot.node(b)), Chained.next(c, b)),
+              Keys.set(
+                State.keys(s),
+                Seal.slot(Ballot.store(b), Ballot.node(b)),
+                Chained.next(c, b)
+              ),
               Ballot.at(b)
             )
           )
@@ -2801,12 +2848,7 @@ def Prev.key(m: Maybe<&2, Ledgers.Where>) -> List<&2, Bool>:
 # the key of where the ballot after the one at last waits, for the node n in
 # the store r
 def Seal.link(r: Ledgers.Id, n: String, last: Maybe<&2, Ledgers.Where>) -> List<&2, Bool>:
-  List.append(
-    &2,
-    Bool,
-    Seal.slot(r, n),
-    Prev.key(last)
-  )
+  List.append(&2, Bool, Seal.slot(r, n), Prev.key(last))
 
 # the ballots bs, each at the key of where it waits in its chain
 def Pending.of(bs: List<&2, Ledgers.Ballot>) -> Tries.Trie<Ledgers.Ballot>:
@@ -2870,7 +2912,12 @@ def Sealed.follow(
       s
 
 # s with the ballots of p that the chains of the ballots bs lead to
-def Sealed.each(+f: Nat, bs: List<&2, Ledgers.Ballot>, +p: Tries.Trie<Ledgers.Ballot>, +s: State()) -> State():
+def Sealed.each(
+  +f: Nat,
+  bs: List<&2, Ledgers.Ballot>,
+  +p: Tries.Trie<Ledgers.Ballot>,
+  +s: State()
+) -> State():
   match bs:
     case Nil{}:
       s
@@ -3104,7 +3151,13 @@ def Cast.may(+n: String, +s: State(), w: Ledgers.Where, t: Tip, qs: List<&2, Led
 
 # s with the node n's ballot for the act a at the place w, sealed as the next
 # of the node's chain m (none: the store gave the node no key)
-def Cast.seal(+s: State(), +w: Ledgers.Where, n: String, a: Ledgers.Act, m: Maybe<&2, Chained>) -> State():
+def Cast.seal(
+  +s: State(),
+  +w: Ledgers.Where,
+  n: String,
+  a: Ledgers.Act,
+  m: Maybe<&2, Chained>
+) -> State():
   match m:
     case None{}:
       s
@@ -3127,7 +3180,13 @@ def Cast.seal(+s: State(), +w: Ledgers.Where, n: String, a: Ledgers.Act, m: Mayb
       )
 
 # the state m with the node n's ballot for the act a at the place w, else s
-def Cast.vote(s: State(), m: Maybe<&2, State()>, +w: Ledgers.Where, +n: String, a: Ledgers.Act) -> State():
+def Cast.vote(
+  s: State(),
+  m: Maybe<&2, State()>,
+  +w: Ledgers.Where,
+  +n: String,
+  a: Ledgers.Act
+) -> State():
   match m:
     case None{}:
       s
@@ -3197,12 +3256,7 @@ def Cast.mine(+s: State(), qs: List<&2, Ledgers.Id>) -> List<&2, Ledgers.Id>:
 # others cast for the same step, so the owners do not split over what waits
 # at each of them
 def Owners.turn(+os: List<&2, String>, h: U32) -> Maybe<&2, String>:
-  List.get(
-    &2,
-    String,
-    os,
-    U32.to_nat(U32.mod(h, U32.from_nat(List.length(&2, String, os))))
-  )
+  List.get(&2, String, os, U32.to_nat(U32.mod(h, U32.from_nat(List.length(&2, String, os)))))
 
 # the step in the cell m of a ballot, if it holds one
 def Cast.step(m: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>) -> Maybe<&2, Ledgers.Vote>:
@@ -3344,7 +3398,11 @@ def Round.mine(+n: String, +s: State(), +c: Ledgers.Chain, +h: U32, k: Nat) -> N
       )
 
 # the vote m of the round r, as a last vote, else what rest gives
-def Last.or(r: Nat, m: Maybe<&2, Ledgers.Vote>, rest: Unit -> Maybe<&2, Ledgers.Last>) -> Maybe<&2, Ledgers.Last>:
+def Last.or(
+  r: Nat,
+  m: Maybe<&2, Ledgers.Vote>,
+  rest: Unit -> Maybe<&2, Ledgers.Last>
+) -> Maybe<&2, Ledgers.Last>:
   match m:
     case Some{v}:
       Some{Ledgers.Last{r, v}}
@@ -3353,16 +3411,18 @@ def Last.or(r: Nat, m: Maybe<&2, Ledgers.Vote>, rest: Unit -> Maybe<&2, Ledgers.
 
 # the last vote of the node n at the height h of the line c, in a round up to
 # k, if it cast one
-def Last.mine(+n: String, +s: State(), +c: Ledgers.Chain, +h: U32, k: Nat) -> Maybe<&2, Ledgers.Last>:
+def Last.mine(
+  +n: String,
+  +s: State(),
+  +c: Ledgers.Chain,
+  +h: U32,
+  k: Nat
+) -> Maybe<&2, Ledgers.Last>:
   match k:
     case 0n:
       Last.or(0n, Cast.of(s, Ledgers.Where{c, h, 0n}, n), u => None{})
     case 1n+(+p):
-      Last.or(
-        1n+p,
-        Cast.of(s, Ledgers.Where{c, h, 1n+p}, n),
-        u => Last.mine(n, s, c, h, p)
-      )
+      Last.or(1n+p, Cast.of(s, Ledgers.Where{c, h, 1n+p}, n), u => Last.mine(n, s, c, h, p))
 
 # the last vote of the node n at the height h of the line c, in a round below
 # r, if it cast one
@@ -3383,7 +3443,11 @@ def Passes.of(+s: State(), +w: Ledgers.Where, os: List<&2, String>) -> List<&2, 
         String,
         o,
         Passes.of(s, w, r),
-        Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Ledgers.State.passed(~Ask, State.ledger(s), w, o))
+        Maybe.is_some(
+          &2,
+          Maybe<&2, Ledgers.Last>,
+          Ledgers.State.passed(~Ask, State.ledger(s), w, o)
+        )
       )
 
 # the last vote of the higher round of a and b
@@ -3444,7 +3508,11 @@ def Passed.all(+s: State(), +w: Ledgers.Where, from: List<&2, String>) -> Bool:
     case Con{o, r}:
       List.all.if(
         u => Passed.all(s, w, r),
-        Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Ledgers.State.passed(~Ask, State.ledger(s), w, o))
+        Maybe.is_some(
+          &2,
+          Maybe<&2, Ledgers.Last>,
+          Ledgers.State.passed(~Ask, State.ledger(s), w, o)
+        )
       )
 
 # the nodes from are some of the owners os, each once, in their order
@@ -3463,14 +3531,17 @@ def Owners.sub(os: List<&2, String>, from: List<&2, String>) -> Bool:
 # the owners os: in the first round, any step; later, the node holds the pass
 # to w of each of them, they are owners and a majority, and v is the last vote
 # of the highest round among them, if any
-def Allowed(+s: State(), +w: Ledgers.Where, +os: List<&2, String>, v: Ledgers.Vote, +from: List<&2, String>) -> Bool:
+def Allowed(
+  +s: State(),
+  +w: Ledgers.Where,
+  +os: List<&2, String>,
+  v: Ledgers.Vote,
+  +from: List<&2, String>
+) -> Bool:
   List.any.if(
     u => List.all.if(
       u2 => List.all.if(
-        u3 => List.all.if(
-          u4 => Last.is(Passes.last(s, w, from), v),
-          Major(os, from)
-        ),
+        u3 => List.all.if(u4 => Last.is(Passes.last(s, w, from), v), Major(os, from)),
         Owners.sub(os, from)
       ),
       Passed.all(s, w, from)
@@ -3493,7 +3564,12 @@ def Plan.later(
 ) -> Plan:
   match m:
     case None{}:
-      Shared.Bool.when(Plan, Major(os, from), u => Plan.own(s, c, t, from), u => Plan{[], None{}, []})
+      Shared.Bool.when(
+        Plan,
+        Major(os, from),
+        u => Plan.own(s, c, t, from),
+        u => Plan{[], None{}, []}
+      )
     case Some{Ledgers.Last{r, v}}:
       Shared.Bool.when(
         Plan,
@@ -3591,7 +3667,13 @@ def Pass.to(+n: String, +s: State(), +w: Ledgers.Where, os: List<&2, String>) ->
 
 # s, after the owner n joined the highest round of which it holds a ballot at
 # the height h of the line c: a node casts in the round that the others reached
-def Round.join(+n: String, +s: State(), +c: Ledgers.Chain, +h: U32, os: List<&2, String>) -> State():
+def Round.join(
+  +n: String,
+  +s: State(),
+  +c: Ledgers.Chain,
+  +h: U32,
+  os: List<&2, String>
+) -> State():
   +top = Round.seen(s, c, h)
   Shared.Bool.when(
     State(),
@@ -3602,7 +3684,14 @@ def Round.join(+n: String, +s: State(), +c: Ledgers.Chain, +h: U32, os: List<&2,
 
 # Node.cast in the round of the node n at the height next of the line c, at
 # the tip t of the hash th
-def Cast.round(+n: String, +s: State(), +c: Ledgers.Chain, +next: U32, +th: Maybe<&2, Hashes.Hash>, +t: Tip) -> State():
+def Cast.round(
+  +n: String,
+  +s: State(),
+  +c: Ledgers.Chain,
+  +next: U32,
+  +th: Maybe<&2, Hashes.Hash>,
+  +t: Tip
+) -> State():
   +os = Line.owners(s, t)
   +r = Round.mine(n, s, c, next, Round.seen(s, c, next))
   +w = {Ledgers.Where{c, next, r}: Ledgers.Where}
@@ -3627,12 +3716,7 @@ def Pass.at(+n: String, +s: State(), +c: Ledgers.Chain, h: Head, m: Maybe<&2, Ti
   match h m:
     case Head{r, b, +next, th} Some{t}:
       k = Round.seen(s, c, next)
-      Pass.to(
-        n,
-        s,
-        Ledgers.Where{c, next, 1n+Round.mine(n, s, c, next, k)},
-        Line.owners(s, t)
-      )
+      Pass.to(n, s, Ledgers.Where{c, next, 1n+Round.mine(n, s, c, next, k)}, Line.owners(s, t))
     case x y:
       s
 
@@ -3704,7 +3788,13 @@ def Advance.ran(
       )
 
 # Node.advance once the step m that the owners decided at the head is known
-def Advance.step(+s: State(), +c: Ledgers.Chain, h: Head, t: Tip, m: Maybe<&2, Ledgers.Vote>) -> State():
+def Advance.step(
+  +s: State(),
+  +c: Ledgers.Chain,
+  h: Head,
+  t: Tip,
+  m: Maybe<&2, Ledgers.Vote>
+) -> State():
   match h m:
     case Head{r, b, next, th} Some{Ledgers.Vote{before, +qs, after}}:
       Shared.Bool.when(
@@ -3717,7 +3807,10 @@ def Advance.step(+s: State(), +c: Ledgers.Chain, h: Head, t: Tip, m: Maybe<&2, L
       s
 
 # the step m, if any, else the step that rest gives
-def Vote.first(m: Maybe<&2, Ledgers.Vote>, rest: Unit -> Maybe<&2, Ledgers.Vote>) -> Maybe<&2, Ledgers.Vote>:
+def Vote.first(
+  m: Maybe<&2, Ledgers.Vote>,
+  rest: Unit -> Maybe<&2, Ledgers.Vote>
+) -> Maybe<&2, Ledgers.Vote>:
   match m:
     case Some{v}:
       Some{v}
@@ -3747,9 +3840,21 @@ def Height.decide(
 # owners os: a law of rounds, and a premise of the laws of agreement
 def Height.One(s: State(), c: Ledgers.Chain, h: U32, os: List<&2, String>) -> Type:
   @r1: Nat -> @r2: Nat -> @v1: Ledgers.Vote -> @v2: Ledgers.Vote -> {
-    Ledgers.State.decide(~Ask, State.ledger(s), Ledgers.Where{c, h, r1}, os) == Some{v1}: Maybe<&2, Ledgers.Vote>
+    Ledgers.State.decide(
+      ~Ask,
+      State.ledger(s),
+      Ledgers.Where{c, h, r1},
+      os
+    )
+      == Some{v1}: Maybe<&2, Ledgers.Vote>
   } -> {
-    Ledgers.State.decide(~Ask, State.ledger(s), Ledgers.Where{c, h, r2}, os) == Some{v2}: Maybe<&2, Ledgers.Vote>
+    Ledgers.State.decide(
+      ~Ask,
+      State.ledger(s),
+      Ledgers.Where{c, h, r2},
+      os
+    )
+      == Some{v2}: Maybe<&2, Ledgers.Vote>
   } -> {v1 == v2: Ledgers.Vote}
 
 # The rules of rounds, for the ballots that s holds at the height h of the line
@@ -3761,14 +3866,28 @@ def Rounds.Allow(s: State(), c: Ledgers.Chain, h: U32, os: List<&2, String>) -> 
   @r: Nat -> @q: String -> @v: Ledgers.Vote -> {
     Cast.of(s, Ledgers.Where{c, h, r}, q) == Some{v}: Maybe<&2, Ledgers.Vote>
   } -> {
-    Allowed(s, Ledgers.Where{c, h, r}, os, v, Cast.from(s, Ledgers.Where{c, h, r}, q)) == True{}: Bool
+    Allowed(
+      s,
+      Ledgers.Where{c, h, r},
+      os,
+      v,
+      Cast.from(s, Ledgers.Where{c, h, r}, q)
+    )
+      == True{}: Bool
   }
 
 # that a pass names the last vote of its node below its round: a node that
 # passed to a round casts no vote below it
 def Rounds.Last(s: State(), c: Ledgers.Chain, h: U32) -> Type:
-  @r: Nat -> @q: String -> @l: Maybe<&2, Ledgers.Last> -> {
-    Ledgers.State.passed(~Ask, State.ledger(s), Ledgers.Where{c, h, r}, q)
+  @r: Nat -> @q: String -> @l: Maybe<
+    &2,
+    Ledgers.Last> -> {
+    Ledgers.State.passed(
+      ~Ask,
+      State.ledger(s),
+      Ledgers.Where{c, h, r},
+      q
+    )
       == Some{l}: Maybe<&2, Maybe<&2, Ledgers.Last>>
   } -> {l == Last.below(q, s, c, h, r): Maybe<&2, Ledgers.Last>}
 
@@ -3804,13 +3923,7 @@ def Advance.at(+s: State(), +c: Ledgers.Chain, +h: Head, m: Maybe<&2, Tip>) -> S
         c,
         h,
         t,
-        Height.decide(
-          s,
-          c,
-          Head.next(h),
-          Line.owners(s, t),
-          Round.seen(s, c, Head.next(h))
-        )
+        Height.decide(s, c, Head.next(h), Line.owners(s, t), Round.seen(s, c, Head.next(h)))
       )
 
 # Node.advance once the head m of the line c is known
@@ -3841,12 +3954,7 @@ def Advances.at(f: Nat, +s: State(), +c: Ledgers.Chain, m: Maybe<&2, Head>) -> S
     case 1n+p Some{+h}:
       +s1 = Advance.at(s, c, h, Head.tip(s, h))
       +m1 = Node.head_of(s1, c)
-      Shared.Bool.when(
-        State(),
-        Heads.level(Some{h}, m1),
-        u => s1,
-        u => Advances.at(p, s1, c, m1)
-      )
+      Shared.Bool.when(State(), Heads.level(Some{h}, m1), u => s1, u => Advances.at(p, s1, c, m1))
     case g x:
       s
 
@@ -3940,7 +4048,10 @@ def Take.asks(
 # its own content names (a request by its ID, data by its hash). A ballot, a
 # cell that is not one entry, and the slot that the sender gave are not kept:
 # what another node sent is read, not believed
-def Take.clean(cs: List<&2, Cells.Cell<Ledgers.Entry<Ask>>>, l: Ledgers.State(Ask)) -> Ledgers.State(Ask):
+def Take.clean(
+  cs: List<&2, Cells.Cell<Ledgers.Entry<Ask>>>,
+  l: Ledgers.State(Ask)
+) -> Ledgers.State(Ask):
   match cs:
     case Nil{}:
       l
@@ -4061,7 +4172,13 @@ def Lines.waiting(
       Maybe.default(
         &2,
         List<&2, Ledgers.Chain>,
-        Maybe.bind(&2, Ledgers.Chain, List<&2, Ledgers.Chain>, Node.chain_of(s, i), c => Some{c <> rest}),
+        Maybe.bind(
+          &2,
+          Ledgers.Chain,
+          List<&2, Ledgers.Chain>,
+          Node.chain_of(s, i),
+          c => Some{c <> rest}
+        ),
         rest
       )
 
@@ -4174,7 +4291,13 @@ def Node.owners(+s: State(), r: Ledgers.Id, l: Maybe<&2, String>) -> List<&2, St
   Maybe.default(
     &2,
     List<&2, String>,
-    Maybe.bind(&2, Tip, List<&2, String>, Node.tip(s, Line.chain(r, l)), t => Some{Line.owners(s, t)}),
+    Maybe.bind(
+      &2,
+      Tip,
+      List<&2, String>,
+      Node.tip(s, Line.chain(r, l)),
+      t => Some{Line.owners(s, t)}
+    ),
     []
   )
 
@@ -4265,9 +4388,7 @@ def Adopt.of(
       Shared.Maybe.when(
         Request,
         Bool.not(Ledgers.Owners.is_eq(os, Node.owners(s, r, l))),
-        u => Some{
-          Request{Envelope{Adopt.id(l, at), "", ""}, Ask.On{r, l, Change.Own{g, at, os}}}
-        }
+        u => Some{Request{Envelope{Adopt.id(l, at), "", ""}, Ask.On{r, l, Change.Own{g, at, os}}}}
       )
 
 # the adoption of the line l of the store r, if its owners are not the nodes
@@ -4344,7 +4465,11 @@ def Draft.newer(found: Maybe<&2, Draft>, +d: Draft) -> Draft:
       Shared.Bool.when(Draft, Bits.before(k1, k2), u => Draft{k2, c2}, u => Draft{k1, c1})
 
 # the newer of found and the write of the content m at the key k, if any
-def Draft.with(found: Maybe<&2, Draft>, k: List<&2, Bool>, m: Maybe<&2, Content>) -> Maybe<&2, Draft>:
+def Draft.with(
+  found: Maybe<&2, Draft>,
+  k: List<&2, Bool>,
+  m: Maybe<&2, Content>
+) -> Maybe<&2, Draft>:
   match m:
     case None{}:
       found
@@ -4417,7 +4542,12 @@ def Node.draft(
   Draft.what(Draft.last(s, w, r, b, n, Wait.of(s, Line.chain(r, Some{b})), None{}))
 
 # the bytes of the draft m of the resource n, else what the point p holds
-def Read.of(+s: State(), n: Resources.Name, m: Maybe<&2, Content>, p: Point) -> Maybe<&2, Texts.Bytes()>:
+def Read.of(
+  +s: State(),
+  n: Resources.Name,
+  m: Maybe<&2, Content>,
+  p: Point
+) -> Maybe<&2, Texts.Bytes()>:
   match m:
     case Some{c}:
       Root.bytes(s, Content.root(s, n, c))
@@ -4529,7 +4659,11 @@ def Clash.left(
 
 # the resources that clashed at the request k, whose request is a, when it is a
 # merge
-def Merge.clashes(+s: State(), k: Ledgers.Id, a: Maybe<&2, Ledgers.Asked<Ask>>) -> List<&2, Resources.Name>:
+def Merge.clashes(
+  +s: State(),
+  k: Ledgers.Id,
+  a: Maybe<&2, Ledgers.Asked<Ask>>
+) -> List<&2, Resources.Name>:
   match a:
     case Some{Ledgers.Asked{t, Ask.On{r, l, Change.Merge{f}}}}:
       Clash.names(s, Node.root_of(s, Some{k}), f)
@@ -5183,7 +5317,12 @@ def Advance.in(+s: State(), c: Ledgers.Chain, +x: Head, r: Nat) -> Maybe<&2, Led
     Tip,
     Ledgers.Vote,
     Head.tip(s, x),
-    t => Ledgers.State.decide(~Ask, State.ledger(s), Ledgers.Where{c, Head.next(x), r}, Line.owners(s, t))
+    t => Ledgers.State.decide(
+      ~Ask,
+      State.ledger(s),
+      Ledgers.Where{c, Head.next(x), r},
+      Line.owners(s, t)
+    )
   )
 
 # the head of the line c after one decided step for each round of rs, the
@@ -5204,12 +5343,9 @@ def Line.at(rs: List<&2, Nat>, +s: State(), +c: Ledgers.Chain, h: Head) -> Maybe
 
 # that the rounds of each height of the line c decide one step in s
 def Line.One(s: State(), c: Ledgers.Chain) -> Type:
-  @x: Head -> @t: Tip -> {Head.tip(s, x) == Some{t}: Maybe<&2, Tip>} -> Height.One(
-    s,
-    c,
-    Head.next(x),
-    Line.owners(s, t)
-  )
+  @x: Head -> @t: Tip -> {
+    Head.tip(s, x) == Some{t}: Maybe<&2, Tip>
+  } -> Height.One(s, c, Head.next(x), Line.owners(s, t))
 
 # that the rounds of each of k heights of the line c decide one step in s (one
 # witness for each step of a history: a proof uses each once)
@@ -5258,9 +5394,15 @@ def Node.after(+n: String, evs: List<&2, Deed>, s: State()) -> State():
 # that b holds, in the log of each line, each key that a holds there, other
 # than the owners of the next step and the count of versions
 def Node.Keeps(a: State(), b: State()) -> Type:
-  @c: Ledgers.Chain -> @k: List<&2, U32> -> @v: List<&2, U32> -> {
+  @c: Ledgers.Chain -> @k: List<
+    &2,
+    U32> -> @v: List<
+    &2,
+    U32> -> {
     Shared.List.is_eq(~U32, ~U32.is_eq, Log.owners(), k) == False{}: Bool
-  } -> {Shared.List.is_eq(~U32, ~U32.is_eq, Log.count(), k) == False{}: Bool} -> {
+  } -> {
+    Shared.List.is_eq(~U32, ~U32.is_eq, Log.count(), k) == False{}: Bool
+  } -> {
     Line.get(a, c, k) == Some{v}: Maybe<&2, List<&2, U32>>
   } -> {Line.get(b, c, k) == Some{v}: Maybe<&2, List<&2, U32>>}
 
@@ -5294,18 +5436,19 @@ def Line.Reach(s: State(), c: Ledgers.Chain, h0: Head) -> Type:
     List<&2, Nat>,
     rs => Exists(
       Head,
-      h => {Node.head_of(s, c) == Some{h}: Maybe<&2, Head>} & {Line.at(rs, s, c, h0) == Some{h}: Maybe<&2, Head>}
+      h => {
+        Node.head_of(s, c) == Some{h}: Maybe<&2, Head>
+      }
+        & {Line.at(rs, s, c, h0) == Some{h}: Maybe<&2, Head>}
     )
   )
 
 # that each head of a that is some decided steps from a head with a tip is,
 # in b, some decided steps from it
 def Node.On(a: State(), b: State()) -> Type:
-  @c: Ledgers.Chain -> @h0: Head -> {Head.held(Some{h0}) == True{}: Bool} -> Line.Reach(a, c, h0) -> Line.Reach(
-    b,
-    c,
-    h0
-  )
+  @c: Ledgers.Chain -> @h0: Head -> {
+    Head.held(Some{h0}) == True{}: Bool
+  } -> Line.Reach(a, c, h0) -> Line.Reach(b, c, h0)
 
 # every head is on the decided chain: a head that has a tip moves only over
 # decided steps, whatever the node does next
@@ -5371,7 +5514,11 @@ law Chain.start_final:
   for +v: List<&2, U32>
   {Line.get(s, Ledgers.Chain{r, None{}}, Log.start(b)) == Some{v}: Maybe<&2, List<&2, U32>>}
     -> {
-      Line.get(Node.after(n, evs, s), Ledgers.Chain{r, None{}}, Log.start(b))
+      Line.get(
+        Node.after(n, evs, s),
+        Ledgers.Chain{r, None{}},
+        Log.start(b)
+      )
         == Some{v}: Maybe<&2, List<&2, U32>>
     }
 
@@ -5409,7 +5556,9 @@ law Node.draft_some:
     )
       == True{}: Bool
   }
-    -> {Node.asked(s, Ledgers.Id{w, q2}) == Some{Ledgers.Asked{t, q}}: Maybe<&2, Ledgers.Asked<Ask>>}
+    -> {
+      Node.asked(s, Ledgers.Id{w, q2}) == Some{Ledgers.Asked{t, q}}: Maybe<&2, Ledgers.Asked<Ask>>
+    }
     -> {Draft.content(r, b, n, q) == Some{c}: Maybe<&2, Content>}
     -> {Maybe.is_some(&2, Content, Node.draft(s, w, r, b, n)) == True{}: Bool}
 
@@ -5474,7 +5623,10 @@ law Seal.fits_own:
   for +n: U32
   for +f: Hashes.Hash
   {
-    Seal.fits(Chained{n, last, Seals.Seal.public(seed), f}, Ledgers.Ballot.make(seed, x, last, k))
+    Seal.fits(
+      Chained{n, last, Seals.Seal.public(seed), f},
+      Ledgers.Ballot.make(seed, x, last, k)
+    )
       == True{}: Bool
   }
 
@@ -5535,11 +5687,19 @@ law Node.fetch:
   for +ws: List<&2, U32>
   {Ledgers.State.data(~Ask, State.ledger(a), h) == Some{ws}: Maybe<&2, List<&2, U32>>}
     -> {
-      Ledgers.State.get(~Ask, State.ledger(b), Ledgers.Slot.data(h))
+      Ledgers.State.get(
+        ~Ask,
+        State.ledger(b),
+        Ledgers.Slot.data(h)
+      )
         == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
     }
     -> {
-      Ledgers.State.data(~Ask, State.ledger(Node.take(b, Node.serve(a, [h]))), h)
+      Ledgers.State.data(
+        ~Ask,
+        State.ledger(Node.take(b, Node.serve(a, [h]))),
+        h
+      )
         == Some{ws}: Maybe<&2, List<&2, U32>>
     }
 
@@ -5575,7 +5735,10 @@ law Cast.put_tip:
   for +s3: State()
   {State.put(s2, [Tip.words(t2)]) == Some{s3}: Maybe<&2, State()>}
     -> {
-      Tip.at(Cast.put(n, w, th, qs, from, Some{Run{s2, t2, ns}}, s), Tip.hash(t2))
+      Tip.at(
+        Cast.put(n, w, th, qs, from, Some{Run{s2, t2, ns}}, s),
+        Tip.hash(t2)
+      )
         == Some{t2}: Maybe<&2, Tip>
     }
 
@@ -5587,12 +5750,27 @@ law Node.take_holds:
   for +k: List<&2, Bool>
   for +e: Ledgers.Entry<Ask>
   {
-    Ledgers.State.get(~Ask, Node.reads(t), k)
+    Ledgers.State.get(
+      ~Ask,
+      Node.reads(t),
+      k
+    )
       == Some{Cells.One{e}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
   }
-    -> {Ledgers.State.get(~Ask, State.ledger(s), k) == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>}
     -> {
-      Ledgers.State.get(~Ask, State.ledger(Node.take(s, t)), k)
+      Ledgers.State.get(
+        ~Ask,
+        State.ledger(s),
+        k
+      )
+        == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
+    }
+    -> {
+      Ledgers.State.get(
+        ~Ask,
+        State.ledger(Node.take(s, t)),
+        k
+      )
         == Some{Cells.One{e}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
     }
 
@@ -5608,15 +5786,31 @@ law Node.take_waits:
   for +l: Maybe<&2, String>
   for +ch: Change
   {
-    Ledgers.State.get(~Ask, Node.reads(t), Ledgers.Slot.ask(i))
-      == Some{Cells.One{Ledgers.Entry.Ask{i, time, Ask.On{r, l, ch}}}}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
+    Ledgers.State.get(
+      ~Ask,
+      Node.reads(t),
+      Ledgers.Slot.ask(i)
+    )
+      == Some{
+        Cells.One{Ledgers.Entry.Ask{i, time, Ask.On{r, l, ch}}}
+      }: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
   }
     -> {
-      Ledgers.State.get(~Ask, State.ledger(s), Ledgers.Slot.ask(i))
+      Ledgers.State.get(
+        ~Ask,
+        State.ledger(s),
+        Ledgers.Slot.ask(i)
+      )
         == None{}: Maybe<&2, Cells.Cell<Ledgers.Entry<Ask>>>
     }
     -> {
-      List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, Wait.of(Node.take(s, t), Line.chain(r, l)), i) == True{}: Bool
+      List.contains(
+        ~Ledgers.Id,
+        ~Ledgers.Id.is_eq,
+        Wait.of(Node.take(s, t), Line.chain(r, l)),
+        i
+      )
+        == True{}: Bool
     }
 
 # writers are told only about changes to what their work uses: each change
@@ -5648,7 +5842,13 @@ law Node.read_draft:
   for +c: Content
   {Node.draft(s, w, r, b, n) == Some{c}: Maybe<&2, Content>}
     -> {
-      Node.read(s, w, n, Point.Head{r, b}) == Root.bytes(s, Content.root(s, n, c)): Maybe<&2, Texts.Bytes()>
+      Node.read(
+        s,
+        w,
+        n,
+        Point.Head{r, b}
+      )
+        == Root.bytes(s, Content.root(s, n, c)): Maybe<&2, Texts.Bytes()>
     }
 
 # a change counts once on a node, however often it is asked: a node that took
