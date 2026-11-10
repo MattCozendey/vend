@@ -5602,6 +5602,42 @@ law Node.fetch:
         == Some{ws}: Maybe<&2, List<&2, U32>>
     }
 
+# every part is kept by enough nodes: a node that casts for a step keeps each
+# new part of the step (what its own run of the step put: the node of the run
+# is s2), so a majority of the owners holds each part of a decided step; and a
+# node only grows (Node.after_grows)
+law Cast.put_keeps:
+  for +n: String
+  for +w: Ledgers.Where
+  for +th: Maybe<&2, Hashes.Hash>
+  for +qs: List<&2, Ledgers.Id>
+  for +from: List<&2, String>
+  for +s2: State()
+  for +t2: Tip
+  for +ns: List<&2, List<&2, U32>>
+  for +s: State()
+  for +s3: State()
+  {State.put(s2, [Tip.words(t2)]) == Some{s3}: Maybe<&2, State()>}
+    -> {Node.grows(s2, Cast.put(n, w, th, qs, from, Some{Run{s2, t2, ns}}, s)) == True{}: Bool}
+
+# and it holds the tip that it casts for
+law Cast.put_tip:
+  for +n: String
+  for +w: Ledgers.Where
+  for +th: Maybe<&2, Hashes.Hash>
+  for +qs: List<&2, Ledgers.Id>
+  for +from: List<&2, String>
+  for +s2: State()
+  for +t2: Tip
+  for +ns: List<&2, List<&2, U32>>
+  for +s: State()
+  for +s3: State()
+  {State.put(s2, [Tip.words(t2)]) == Some{s3}: Maybe<&2, State()>}
+    -> {
+      Tip.at(Cast.put(n, w, th, qs, from, Some{Run{s2, t2, ns}}, s), Tip.hash(t2))
+        == Some{t2}: Maybe<&2, Tip>
+    }
+
 # a writer reads its own pending write: at the head of a branch, its read is
 # the bytes of its draft, not what the branch holds
 law Node.read_draft:

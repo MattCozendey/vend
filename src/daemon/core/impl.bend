@@ -9640,6 +9640,40 @@ def Spec.Rounds.one(s, c, h, os, fa, fb, fc):
   +r1 => +r2 => v1 => v2 => d1 => d2 =>
     Rounds.one.at(~s, ~c, ~h, ~os, ~fa, ~fb, ~fc, r1, r2, v1, v2, Nat.is_le(r1, r2))({==})(d1)(d2)
 
+def Spec.Cast.put_keeps(n, w, th, qs, from, s2, t2, ns, s, s3):
+  +s4 = Spec.State.led(s, Spec.State.ledger(s3))
+  +a0 = {Ledgers.Act.Vote{Ledgers.Vote{th, qs, Some{Spec.Tip.hash(t2)}}, from}: Ledgers.Act}
+  +e =>
+    %Equal.sym(Maybe<&2, Spec.State()>, Spec.State.put(s2, [Spec.Tip.words(t2)]), Some{s3}, e): {
+      Spec.Node.grows(s2, Spec.Cast.vote(s, _, w, n, a0)) == True{}: Bool
+    }
+    Grows.trans(s2, s4, Spec.Cast.seal(s4, w, n, a0, Spec.Seal.chain(s4, Spec.Where.store(w), n)))(
+      Grows.to(
+        s2,
+        s3,
+        s4,
+        Led.led(s, Spec.State.ledger(s3)),
+        Put.grew(s2, [Spec.Tip.words(t2)], s3, e)
+      )
+    )(Cast.seal.grows(s4, w, n, a0, Spec.Seal.chain(s4, Spec.Where.store(w), n)))
+
+def Spec.Cast.put_tip(n, w, th, qs, from, s2, t2, ns, s, s3):
+  +s4 = Spec.State.led(s, Spec.State.ledger(s3))
+  +a0 = {Ledgers.Act.Vote{Ledgers.Vote{th, qs, Some{Spec.Tip.hash(t2)}}, from}: Ledgers.Act}
+  +e =>
+    %Equal.sym(Maybe<&2, Spec.State()>, Spec.State.put(s2, [Spec.Tip.words(t2)]), Some{s3}, e): {
+      Spec.Tip.at(Spec.Cast.vote(s, _, w, n, a0), Spec.Tip.hash(t2)) == Some{t2}: Maybe<&2, Spec.Tip>
+    }
+    Tip.at.grows(
+      s3,
+      Spec.Cast.seal(s4, w, n, a0, Spec.Seal.chain(s4, Spec.Where.store(w), n)),
+      Spec.Tip.hash(t2),
+      t2,
+      Grows.trans(s3, s4, Spec.Cast.seal(s4, w, n, a0, Spec.Seal.chain(s4, Spec.Where.store(w), n)))(
+        Grows.to(s3, s3, s4, Led.led(s, Spec.State.ledger(s3)), Grows.refl(s3))
+      )(Cast.seal.grows(s4, w, n, a0, Spec.Seal.chain(s4, Spec.Where.store(w), n)))
+    )(Tip.put.at(s2, t2, s3)(e))
+
 # Paths
 # -----
 # Every head is on the decided chain. A node sets a head in four places: a

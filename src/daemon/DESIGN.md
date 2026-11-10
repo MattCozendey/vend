@@ -115,6 +115,11 @@ README claim, then the law.
 - A node fetches the rest on demand: `Node.fetch` (a node that lacks the data of a hash holds it
   after it takes in what a node that holds it serves; `Node.lacks` gives the hash, `Node.serve`
   the data). Below it: `State.take_data`.
+- Every part is kept by enough nodes: `Cast.put_keeps` (a node that casts for a step keeps each
+  new part of the step, from its own run of it), `Cast.put_tip` (and the step's tip). A step is
+  decided by a majority of the owners, and a node only grows, so a majority of the owners holds
+  each part of each decided step. A part is lost only when a majority of the owners is lost;
+  that each of them made the part before it cast is the protocol, as for rounds.
 - A taken write reads back: `Judge.write_reads`.
 - A merge never loses a change made on only one side: `Pick.merge_theirs`, `Pick.merge_ours`.
 - The owners of a line are the nodes inside its owner group: `Own.takes_inside`.
@@ -142,9 +147,6 @@ Design (each needs a decision or new work; none is a proof detail):
   version of every branch. Target: notices are made when a head moves, from the diff of the two
   contents and an index of imports by content root. No law yet for "writers are told only about
   changes to what their work uses".
-- **README claim with no law yet:** every part is kept by enough nodes to never be lost. Target:
-  a node that casts for a step holds each new part of the step, so a majority of the owners
-  holds each part of a decided step, and a ledger only grows.
 - **A put is done twice** for a taken request (`Work.put`, then `Run.content`): the second one
   makes growth independent of the judge. Target: prove that each judge only grows its node, and
   let the run keep the judge's node.
