@@ -937,7 +937,81 @@ def Arrival.chain(i: Ledgers.Id, a: Arrival) -> Ledgers.Chain:
     case Arrival.Waits{r, l}:
       Line.chain(r, l)
 
-# the kernel of a machine mach: what a request does to the run of a line; and
+# what a kernel says a request does to the run of a line: refuse it as stale,
+# mark the newest version, take it with the verdict of a judge and the owners
+# it gives, or make the first tip of a branch. The replica does it (Act.run),
+# so the log of a line only gains keys and each request gets an outcome,
+# whatever the kernel
+type Act<-Q: Data> is Data:
+  Act.Stale{}
+  Act.Mark{mark: String}
+  Act.Judged{owners: Maybe<&2, List<&2, String>>, verdict: Verdict<Q>}
+  Act.Made{branch: String, made: Made<Q>}
+
+# the act of a judge's verdict m, with the owners own (none: wait)
+def Act.judged(
+  -Q: Data,
+  own: Maybe<&2, List<&2, String>>,
+  m: Maybe<&2, Verdict<Q>>
+) -> Maybe<&2, Act<Q>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{v}:
+      Some{Act.Judged{own, v}}
+
+# the act that makes the first tip m of the branch b (none: wait)
+def Act.made(-Q: Data, b: String, m: Maybe<&2, Made<Q>>) -> Maybe<&2, Act<Q>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{x}:
+      Some{Act.Made{b, x}}
+
+# s with the data of s2 added: what the replica keeps of a node that a kernel
+# gives. It grows s, whatever s2 holds
+def Node.add_data(~mach: Machine(), +s: Node<Machine.Q(mach)>, s2: Node<Machine.Q(mach)>) -> Node<Machine.Q(mach)>:
+  State.led(
+    ~mach,
+    s,
+    Ledgers.State.add_data_of(~Machine.Q(mach), State.ledger(~mach, s), State.ledger(~mach, s2))
+  )
+
+# the verdict v, on s with the data of its node added
+def Verdict.grown(~mach: Machine(), +s: Node<Machine.Q(mach)>, v: Verdict<Machine.Q(mach)>) -> Verdict<Machine.Q(mach)>:
+  match v:
+    case Verdict.Stale{}:
+      Verdict.Stale{}
+    case Verdict.Taken{Work{s2, h}}:
+      Verdict.Taken{Work{Node.add_data(~mach, s, s2), h}}
+
+# the first tip m, on s with the data of its node added
+def Made.grown(~mach: Machine(), +s: Node<Machine.Q(mach)>, m: Made<Machine.Q(mach)>) -> Made<Machine.Q(mach)>:
+  match m:
+    case Made{t, s2}:
+      Made{t, Node.add_data(~mach, s, s2)}
+
+# the run r after the request i, by the act m of a kernel (none: wait)
+def Act.run(
+  ~mach: Machine(),
+  +r: Run<Machine.Q(mach)>,
+  +i: Ledgers.Id,
+  m: Maybe<&2, Act<Machine.Q(mach)>>
+) -> Maybe<&2, Run<Machine.Q(mach)>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Act.Stale{}}:
+      Step.stale(~mach, r, i)
+    case Some{Act.Mark{x}}:
+      Step.mark(~mach, r, i, x)
+    case Some{Act.Judged{own, v}}:
+      Step.judged(~mach, r, i, own, Some{Verdict.grown(~mach, Run.state(~mach, r), v)})
+    case Some{Act.Made{b, x}}:
+      Branch.made(~mach, r, i, b, Some{Made.grown(~mach, Run.state(~mach, r), x)})
+
+# the kernel of a machine mach: what a request does to the run of a line (an
+# act); and
 # the request, if any, that a node asks by itself after it works on a line of
 # a store
 def Kernel(mach: Machine()) -> Type:
@@ -945,7 +1019,7 @@ def Kernel(mach: Machine()) -> Type:
     Run<
       Machine.Q(
         mach
-      )> -> Ledgers.Chain -> Ledgers.Id -> Machine.Q(mach) -> Maybe<&2, Run<Machine.Q(mach)>>
+      )> -> Ledgers.Chain -> Ledgers.Id -> Machine.Q(mach) -> Maybe<&2, Act<Machine.Q(mach)>>
   )
     & (
       Node<
@@ -959,7 +1033,7 @@ def Kernel.change(
 ) -> Run<
   Machine.Q(
     mach
-  )> -> Ledgers.Chain -> Ledgers.Id -> Machine.Q(mach) -> Maybe<&2, Run<Machine.Q(mach)>>:
+  )> -> Ledgers.Chain -> Ledgers.Id -> Machine.Q(mach) -> Maybe<&2, Act<Machine.Q(mach)>>:
   match k:
     case Tuple{c, f}:
       c
@@ -1008,14 +1082,14 @@ def Step.asked(
   ~kern: Kernel(mach),
   +r: Run<Machine.Q(mach)>,
   c: Ledgers.Chain,
-  i: Ledgers.Id,
+  +i: Ledgers.Id,
   a: Maybe<&2, Ledgers.Asked<Machine.Q(mach)>>
 ) -> Maybe<&2, Run<Machine.Q(mach)>>:
   match a:
     case None{}:
       None{}
     case Some{Ledgers.Asked{t, q}}:
-      Run.data(~mach, Run.state(~mach, r), Kernel.change(mach, kern)(r)(c)(i)(q))
+      Run.data(~mach, Run.state(~mach, r), Act.run(~mach, r, i, Kernel.change(mach, kern)(r)(c)(i)(q)))
 
 # the run r of the line c, after the request i, whose outcome in the log is o:
 # a request that has one is skipped
@@ -6017,7 +6091,7 @@ def Take.grows(
     Lies.take(~mach, ~kern, s3, new)
   )(Take.of.grows(~mach, ~kern, s, t))(Lies.grows(~mach, ~kern, s3, new))
 
-# that the change of the kernel kern only grows the node of a run
+# that the act of the kernel kern only grows the node of a run
 def Lawful.Grows(mach: Machine(), kern: Kernel(mach)) -> Type:
   @r: Run<
     Machine.Q(
@@ -6025,10 +6099,10 @@ def Lawful.Grows(mach: Machine(), kern: Kernel(mach)) -> Type:
     )> -> @c: Ledgers.Chain -> @i: Ledgers.Id -> @q: Machine.Q(
     mach
   ) -> {
-    Run.after(~mach, Run.state(~mach, r), Kernel.change(mach, kern)(r)(c)(i)(q)) == True{}: Bool
+    Run.after(~mach, Run.state(~mach, r), Act.run(~mach, r, i, Kernel.change(mach, kern)(r)(c)(i)(q))) == True{}: Bool
   }
 
-# that the change of the kernel kern keeps each key of the log of a run
+# that the act of the kernel kern keeps each key of the log of a run
 def Lawful.Keeps(mach: Machine(), kern: Kernel(mach)) -> Type:
   @r: Run<
     Machine.Q(
@@ -6044,19 +6118,20 @@ def Lawful.Keeps(mach: Machine(), kern: Kernel(mach)) -> Type:
     k2,
     v,
     Some{r}
-  ) -> Run.Keeps(~mach, k2, v, Kernel.change(mach, kern)(r)(c)(i)(q))
+  ) -> Run.Keeps(~mach, k2, v, Act.run(~mach, r, i, Kernel.change(mach, kern)(r)(c)(i)(q)))
 
-# that the change of the kernel kern gives its request an outcome
+# that the act of the kernel kern gives its request an outcome
 def Lawful.Outs(mach: Machine(), kern: Kernel(mach)) -> Type:
   @r: Run<
     Machine.Q(
       mach
     )> -> @c: Ledgers.Chain -> @i: Ledgers.Id -> @q: Machine.Q(
     mach
-  ) -> Run.Outs(~mach, Kernel.change(mach, kern)(r)(c)(i)(q), i)
+  ) -> Run.Outs(~mach, Act.run(~mach, r, i, Kernel.change(mach, kern)(r)(c)(i)(q)), i)
 
-# a lawful kernel of the machine mach: a kernel, and the proofs that its change
-# only grows the node, keeps the log, and gives an outcome
+# a kernel of the machine mach, with the proofs that its acts only grow the
+# node, keep the log, and give an outcome: every kernel has them, since the
+# replica does each act (Kernel.lawful)
 def Lawful(mach: Machine()) -> Type:
   &kern: Kernel(
     mach
@@ -6135,7 +6210,7 @@ def Asked.grows(
       Data.after(
         ~mach,
         Run.state(~mach, r),
-        Kernel.change(mach, Lawful.kernel(mach, lawf))(r)(c)(i)(q)
+        Act.run(~mach, r, i, Kernel.change(mach, Lawful.kernel(mach, lawf))(r)(c)(i)(q))
       )(Lawful.grows(mach, lawf)(r)(c)(i)(q))
 
 # a request that the log holds or not only grows a run's node
@@ -10987,6 +11062,126 @@ def Branch.made.outs(
         i,
         r2 => Taken.outs(~mach, r2, i, None{})
       )
+
+# the node of a verdict, with the data of its node added, grew from s
+def Verdict.grown_after(~mach: Machine(), +s: Node<Machine.Q(mach)>, v: Verdict<Machine.Q(mach)>) -> {
+  Verdict.after(~mach, s, Some{Verdict.grown(~mach, s, v)}) == True{}: Bool
+}:
+  match v:
+    case Verdict.Stale{}:
+      {==}
+    case Verdict.Taken{Work{+s2, h}}:
+      Grows.led(
+        ~mach,
+        s,
+        Ledgers.State.add_data_of(~Machine.Q(mach), State.ledger(~mach, s), State.ledger(~mach, s2)),
+        Ledgers.State.add_data_of_grows(
+          ~Machine.Q(mach),
+          ~Machine.same(mach),
+          ~Machine.laws(mach),
+          State.ledger(~mach, s),
+          State.ledger(~mach, s2)
+        )
+      )
+
+# the node of a first tip, with the data of its node added, grew from s
+def Made.grown_after(~mach: Machine(), +s: Node<Machine.Q(mach)>, m: Made<Machine.Q(mach)>) -> {
+  Made.after(~mach, s, Some{Made.grown(~mach, s, m)}) == True{}: Bool
+}:
+  match m:
+    case Made{t, +s2}:
+      Grows.led(
+        ~mach,
+        s,
+        Ledgers.State.add_data_of(~Machine.Q(mach), State.ledger(~mach, s), State.ledger(~mach, s2)),
+        Ledgers.State.add_data_of_grows(
+          ~Machine.Q(mach),
+          ~Machine.same(mach),
+          ~Machine.laws(mach),
+          State.ledger(~mach, s),
+          State.ledger(~mach, s2)
+        )
+      )
+
+# an act of any kernel only grows the node of a run
+def Act.grows(
+  ~mach: Machine(),
+  +r: Run<Machine.Q(mach)>,
+  +i: Ledgers.Id,
+  m: Maybe<&2, Act<Machine.Q(mach)>>
+) -> {Run.after(~mach, Run.state(~mach, r), Act.run(~mach, r, i, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      {==}
+    case Some{Act.Stale{}}:
+      Stale.grows(~mach, r, i)
+    case Some{Act.Mark{+x}}:
+      Mark.grows(~mach, r, i, x)
+    case Some{Act.Judged{+own, +v}}:
+      Judged.grows(~mach, r, i, own, Some{Verdict.grown(~mach, Run.state(~mach, r), v)})(
+        Verdict.grown_after(~mach, Run.state(~mach, r), v)
+      )
+    case Some{Act.Made{+b, +x}}:
+      Branch.made.grows(~mach, r, i, b, Some{Made.grown(~mach, Run.state(~mach, r), x)})(
+        Made.grown_after(~mach, Run.state(~mach, r), x)
+      )
+
+# an act of any kernel keeps each key of the log of a run
+def Act.kept(
+  ~mach: Machine(),
+  +r: Run<Machine.Q(mach)>,
+  +i: Ledgers.Id,
+  m: Maybe<&2, Act<Machine.Q(mach)>>,
+  +k2: List<&2, U32>,
+  +v: List<&2, U32>
+) -> Run.Keeps(~mach, k2, v, Some{r}) -> Run.Keeps(~mach, k2, v, Act.run(~mach, r, i, m)):
+  match m:
+    case None{}:
+      hr => Unit{}
+    case Some{Act.Stale{}}:
+      Add.kept(~mach, r, Log.out(i), Out.words(Out.Stale{}), k2, v)
+    case Some{Act.Mark{+x}}:
+      Mark.kept(~mach, r, i, x, k2, v)
+    case Some{Act.Judged{+own, +w}}:
+      Judged.kept(~mach, r, i, own, Some{Verdict.grown(~mach, Run.state(~mach, r), w)}, k2, v)(
+        Verdict.grown_after(~mach, Run.state(~mach, r), w)
+      )
+    case Some{Act.Made{+b, +x}}:
+      Branch.made.kept(~mach, r, i, b, Some{Made.grown(~mach, Run.state(~mach, r), x)}, k2, v)(
+        Made.grown_after(~mach, Run.state(~mach, r), x)
+      )
+
+# an act of any kernel gives its request an outcome
+def Act.outs(
+  ~mach: Machine(),
+  +r: Run<Machine.Q(mach)>,
+  +i: Ledgers.Id,
+  m: Maybe<&2, Act<Machine.Q(mach)>>
+) -> Run.Outs(~mach, Act.run(~mach, r, i, m), i):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{Act.Stale{}}:
+      Stale.outs(~mach, r, i)
+    case Some{Act.Mark{+x}}:
+      Mark.outs(~mach, r, i, x)
+    case Some{Act.Judged{+own, +v}}:
+      Judged.outs(~mach, r, i, own, Some{Verdict.grown(~mach, Run.state(~mach, r), v)})
+    case Some{Act.Made{+b, +x}}:
+      Branch.made.outs(~mach, r, i, b, Some{Made.grown(~mach, Run.state(~mach, r), x)})
+
+# every kernel is lawful: the replica does its acts
+def Kernel.lawful(~mach: Machine(), ~kern: Kernel(mach)) -> Lawful(mach):
+  (
+    kern,
+    (
+      +r => c => +i => q => Act.grows(~mach, r, i, Kernel.change(mach, kern)(r)(c)(i)(q)),
+      (
+        +r => c => +i => q => +k2 => +v => Act.kept(~mach, r, i, Kernel.change(mach, kern)(r)(c)(i)(q), k2, v),
+        +r => c => +i => q => Act.outs(~mach, r, i, Kernel.change(mach, kern)(r)(c)(i)(q))
+      )
+    )
+  )
 
 # a run whose log reads the outcome key of i has an outcome of i
 def Outs.self(
@@ -17660,7 +17855,7 @@ def Asked.kept(
       hr => Data.keeps(
         ~mach,
         Run.state(~mach, r),
-        Kernel.change(mach, Lawful.kernel(mach, lawf))(r)(c)(i)(q),
+        Act.run(~mach, r, i, Kernel.change(mach, Lawful.kernel(mach, lawf))(r)(c)(i)(q)),
         k2,
         v
       )(Lawful.kept(mach, lawf)(r)(c)(i)(q)(k2)(v)(hr))
@@ -18700,7 +18895,7 @@ def Asked.outs(
       Data.outs(
         ~mach,
         Run.state(~mach, r),
-        Kernel.change(mach, Lawful.kernel(mach, lawf))(r)(c)(i)(q),
+        Act.run(~mach, r, i, Kernel.change(mach, Lawful.kernel(mach, lawf))(r)(c)(i)(q)),
         i
       )(Lawful.outs(mach, lawf)(r)(c)(i)(q))
 
@@ -19063,7 +19258,7 @@ def Node.fetch(mach, kern, a, b, h, ws):
 # skips a request that its log holds, Step.fresh)
 law Node.ask_once:
   for ~mach: Machine()
-  for ~lawf: Lawful(mach)
+  for ~kern: Kernel(mach)
   for +n: String
   for m: String
   for +s: Node<Machine.Q(mach)>
@@ -19075,21 +19270,21 @@ law Node.ask_once:
     -> {
       Node.ask(
         ~mach,
-        ~Lawful.kernel(mach, lawf),
+        ~kern,
         m,
-        Node.ask(~mach, ~Lawful.kernel(mach, lawf), n, s, e, q),
+        Node.ask(~mach, ~kern, n, s, e, q),
         e2,
         q2
       )
-        == Node.ask(~mach, ~Lawful.kernel(mach, lawf), n, s, e, q): Node<Machine.Q(mach)>
+        == Node.ask(~mach, ~kern, n, s, e, q): Node<Machine.Q(mach)>
     }
 
-def Node.ask_once(mach, lawf, n, m, s, e, q, e2, q2):
+def Node.ask_once(mach, kern, n, m, s, e, q, e2, q2):
   h =>
-    +a = Node.ask(~mach, ~Lawful.kernel(mach, lawf), n, s, e, q)
+    +a = Node.ask(~mach, ~Lawful.kernel(mach, Kernel.lawful(mach, kern)), n, s, e, q)
     Ask.once.at(
       ~mach,
-      ~Lawful.kernel(mach, lawf),
+      ~Lawful.kernel(mach, Kernel.lawful(mach, kern)),
       m,
       a,
       e2,
@@ -19097,70 +19292,70 @@ def Node.ask_once(mach, lawf, n, m, s, e, q, e2, q2):
       Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, a), Ledgers.Slot.ask(Envelope.of(e2)))
     )(
       %Equal.sym(Ledgers.Id, Envelope.of(e2), Envelope.of(e), h): {Maybe.is_some(&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, a), Ledgers.Slot.ask(_))) == True{}: Bool}
-      Ask.held.at(~mach, ~lawf, n, s, e, q, Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.ask(Envelope.of(e))), {==}))
+      Ask.held.at(~mach, ~Kernel.lawful(mach, kern), n, s, e, q, Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.ask(Envelope.of(e))), {==}))
 
 # a node only grows, whatever it does
 law Node.after_grows:
   for ~mach: Machine()
-  for ~lawf: Lawful(mach)
+  for ~kern: Kernel(mach)
   for +n: String
   for +evs: List<&2, Deed<Machine.Q(mach)>>
   for +s: Node<Machine.Q(mach)>
-  {Node.grows(~mach, s, Node.after(~mach, ~Lawful.kernel(mach, lawf), n, evs, s)) == True{}: Bool}
+  {Node.grows(~mach, s, Node.after(~mach, ~kern, n, evs, s)) == True{}: Bool}
 
-def Node.after_grows(mach, lawf, n, evs, s):
+def Node.after_grows(mach, kern, n, evs, s):
   match evs:
     case Nil{}:
       Grows.refl(~mach, s)
     case Con{+ev, +rest}:
-      +s1 = Node.does(~mach, ~Lawful.kernel(mach, lawf), n, s, ev)
+      +s1 = Node.does(~mach, ~Lawful.kernel(mach, Kernel.lawful(mach, kern)), n, s, ev)
       Grows.trans(
         ~mach,
         s,
         s1,
-        Node.after(~mach, ~Lawful.kernel(mach, lawf), n, rest, s1)
-      )(Does.grows(~mach, ~lawf, n, s, ev))(Node.after_grows(~mach, ~lawf, n, rest, s1))
+        Node.after(~mach, ~Lawful.kernel(mach, Kernel.lawful(mach, kern)), n, rest, s1)
+      )(Does.grows(~mach, ~Kernel.lawful(mach, kern), n, s, ev))(Node.after_grows(~mach, ~kern, n, rest, s1))
 
 # a log only gains keys: what the log of a line holds, it holds for good,
 # whatever the node does next
 law Node.after_keeps:
   for ~mach: Machine()
-  for ~lawf: Lawful(mach)
+  for ~kern: Kernel(mach)
   for +n: String
   for +evs: List<&2, Deed<Machine.Q(mach)>>
   for +s: Node<Machine.Q(mach)>
-  Node.Keeps(~mach, s, Node.after(~mach, ~Lawful.kernel(mach, lawf), n, evs, s))
+  Node.Keeps(~mach, s, Node.after(~mach, ~kern, n, evs, s))
 
-def Node.after_keeps(mach, lawf, n, evs, s):
+def Node.after_keeps(mach, kern, n, evs, s):
   match evs:
     case Nil{}:
       Kept.refl(~mach, s)
     case Con{+ev, rest}:
-      s1 = Node.does(~mach, ~Lawful.kernel(mach, lawf), n, s, ev)
+      s1 = Node.does(~mach, ~Lawful.kernel(mach, Kernel.lawful(mach, kern)), n, s, ev)
       Kept.trans(
         ~mach,
         s,
         s1,
-        Node.after(~mach, ~Lawful.kernel(mach, lawf), n, rest, s1),
-        Does.kept(~mach, ~lawf, n, s, ev),
-        Node.after_keeps(~mach, ~lawf, n, rest, s1)
+        Node.after(~mach, ~Lawful.kernel(mach, Kernel.lawful(mach, kern)), n, rest, s1),
+        Does.kept(~mach, ~Kernel.lawful(mach, kern), n, s, ev),
+        Node.after_keeps(~mach, ~kern, n, rest, s1)
       )
 
 # a request waits until its line gives it an outcome. A step gives each of
 # its requests an outcome
 law Step.run_outs:
   for ~mach: Machine()
-  for ~lawf: Lawful(mach)
+  for ~kern: Kernel(mach)
   for s: Node<Machine.Q(mach)>
   for c: Ledgers.Chain
   for t: Tip
   for qs: List<&2, Ledgers.Id>
   for i: Ledgers.Id
   {List.contains(~Ledgers.Id, ~Ledgers.Id.is_eq, qs, i) == True{}: Bool}
-    -> Run.Outs(~mach, Step.run(~mach, ~Lawful.kernel(mach, lawf), s, c, t, qs), i)
+    -> Run.Outs(~mach, Step.run(~mach, ~kern, s, c, t, qs), i)
 
-def Step.run_outs(mach, lawf, s, c, t, qs, i):
-  All.outs(~mach, ~lawf, c, qs, Some{Run{s, t}}, i)
+def Step.run_outs(mach, kern, s, c, t, qs, i):
+  All.outs(~mach, ~Kernel.lawful(mach, kern), c, qs, Some{Run{s, t}}, i)
 
 # and a head that moves over a step takes only the requests of the step off
 # the requests that wait (State.moved, the one place that takes any off)
@@ -22529,14 +22724,14 @@ def Asked.frames(
   ~kern: Kernel(mach),
   +r: Run<Machine.Q(mach)>,
   c: Ledgers.Chain,
-  i: Ledgers.Id,
+  +i: Ledgers.Id,
   +a: Maybe<&2, Ledgers.Asked<Machine.Q(mach)>>
 ) -> {Run.framed(~mach, Run.state(~mach, r), Step.asked(~mach, ~kern, r, c, i, a)) == True{}: Bool}:
   match a:
     case None{}:
       {==}
     case Some{Ledgers.Asked{t, q}}:
-      Data.frames(~mach, Run.state(~mach, r), Kernel.change(mach, kern)(r)(c)(i)(q))
+      Data.frames(~mach, Run.state(~mach, r), Act.run(~mach, r, i, Kernel.change(mach, kern)(r)(c)(i)(q)))
 
 # a request that the log holds or not keeps the ballots of a run's node
 def Fresh.frames(
@@ -25627,7 +25822,7 @@ def Cast.put_tip(mach, kern, n, w, th, qs, from, s2, t2, s, s3):
 # version number, and one that its owners refused stays refused
 law Node.out_final:
   for ~mach: Machine()
-  for ~lawf: Lawful(mach)
+  for ~kern: Kernel(mach)
   for +n: String
   for +evs: List<&2, Deed<Machine.Q(mach)>>
   for +s: Node<Machine.Q(mach)>
@@ -25637,28 +25832,28 @@ law Node.out_final:
     -> {
       Node.out(
         ~mach,
-        Node.after(~mach, ~Lawful.kernel(mach, lawf), n, evs, s),
+        Node.after(~mach, ~kern, n, evs, s),
         i
       )
         == Some{o}: Maybe<&2, Out>
     }
 
-def Node.out_final(mach, lawf, n, evs, s, i, o):
+def Node.out_final(mach, kern, n, evs, s, i, o):
   Out.kept(
     ~mach,
     s,
-    Node.after(~mach, ~Lawful.kernel(mach, lawf), n, evs, s),
+    Node.after(~mach, ~Lawful.kernel(mach, Kernel.lawful(mach, kern)), n, evs, s),
     i,
     o,
-    Node.after_grows(~mach, ~lawf, n, evs, s),
-    Node.after_keeps(~mach, ~lawf, n, evs, s)
+    Node.after_grows(~mach, ~kern, n, evs, s),
+    Node.after_keeps(~mach, ~kern, n, evs, s)
   )
 
 # a version never changes: the request that made it and the root of its
 # content stay
 law Node.made_final:
   for ~mach: Machine()
-  for ~lawf: Lawful(mach)
+  for ~kern: Kernel(mach)
   for +n: String
   for +evs: List<&2, Deed<Machine.Q(mach)>>
   for +s: Node<Machine.Q(mach)>
@@ -25668,28 +25863,28 @@ law Node.made_final:
     -> {
       Node.made(
         ~mach,
-        Node.after(~mach, ~Lawful.kernel(mach, lawf), n, evs, s),
+        Node.after(~mach, ~kern, n, evs, s),
         v
       )
         == Some{x}: Maybe<&2, Version>
     }
 
-def Node.made_final(mach, lawf, n, evs, s, v, x):
+def Node.made_final(mach, kern, n, evs, s, v, x):
   Made.kept(
     ~mach,
     s,
-    Node.after(~mach, ~Lawful.kernel(mach, lawf), n, evs, s),
+    Node.after(~mach, ~Lawful.kernel(mach, Kernel.lawful(mach, kern)), n, evs, s),
     v,
     x,
-    Node.after_grows(~mach, ~lawf, n, evs, s),
-    Node.after_keeps(~mach, ~lawf, n, evs, s),
-    Node.after_keeps(~mach, ~lawf, n, evs, s)
+    Node.after_grows(~mach, ~kern, n, evs, s),
+    Node.after_keeps(~mach, ~kern, n, evs, s),
+    Node.after_keeps(~mach, ~kern, n, evs, s)
   )
 
 # the history of a line only grows at its end: the version of a number stays
 law Chain.version_final:
   for ~mach: Machine()
-  for ~lawf: Lawful(mach)
+  for ~kern: Kernel(mach)
   for +n: String
   for +evs: List<&2, Deed<Machine.Q(mach)>>
   for +s: Node<Machine.Q(mach)>
@@ -25700,28 +25895,28 @@ law Chain.version_final:
     -> {
       Chain.version(
         ~mach,
-        Node.after(~mach, ~Lawful.kernel(mach, lawf), n, evs, s),
+        Node.after(~mach, ~kern, n, evs, s),
         c,
         k
       )
         == Some{x}: Maybe<&2, Version>
     }
 
-def Chain.version_final(mach, lawf, n, evs, s, c, k, x):
+def Chain.version_final(mach, kern, n, evs, s, c, k, x):
   Chain.version.kept(
     ~mach,
     s,
-    Node.after(~mach, ~Lawful.kernel(mach, lawf), n, evs, s),
+    Node.after(~mach, ~Lawful.kernel(mach, Kernel.lawful(mach, kern)), n, evs, s),
     c,
     k,
     x,
-    Node.after_keeps(~mach, ~lawf, n, evs, s)
+    Node.after_keeps(~mach, ~kern, n, evs, s)
   )
 
 # a mark names its version for good
 law Chain.mark_final:
   for ~mach: Machine()
-  for ~lawf: Lawful(mach)
+  for ~kern: Kernel(mach)
   for +n: String
   for +evs: List<&2, Deed<Machine.Q(mach)>>
   for +s: Node<Machine.Q(mach)>
@@ -25732,22 +25927,22 @@ law Chain.mark_final:
     -> {
       Chain.mark(
         ~mach,
-        Node.after(~mach, ~Lawful.kernel(mach, lawf), n, evs, s),
+        Node.after(~mach, ~kern, n, evs, s),
         c,
         m
       )
         == Some{v}: Maybe<&2, Ledgers.Id>
     }
 
-def Chain.mark_final(mach, lawf, n, evs, s, c, m, v):
+def Chain.mark_final(mach, kern, n, evs, s, c, m, v):
   Chain.mark.kept(
     ~mach,
     s,
-    Node.after(~mach, ~Lawful.kernel(mach, lawf), n, evs, s),
+    Node.after(~mach, ~Lawful.kernel(mach, Kernel.lawful(mach, kern)), n, evs, s),
     c,
     m,
     v,
-    Node.after_keeps(~mach, ~lawf, n, evs, s)
+    Node.after_keeps(~mach, ~kern, n, evs, s)
   )
 
 # the first tip of a branch is for good: what the log of a store holds for a
@@ -25755,7 +25950,7 @@ def Chain.mark_final(mach, lawf, n, evs, s, c, m, v):
 # branch later opens it at the same tip
 law Chain.start_final:
   for ~mach: Machine()
-  for ~lawf: Lawful(mach)
+  for ~kern: Kernel(mach)
   for n: String
   for evs: List<&2, Deed<Machine.Q(mach)>>
   for s: Node<Machine.Q(mach)>
@@ -25766,15 +25961,15 @@ law Chain.start_final:
     -> {
       Line.get(
         ~mach,
-        Node.after(~mach, ~Lawful.kernel(mach, lawf), n, evs, s),
+        Node.after(~mach, ~kern, n, evs, s),
         Ledgers.Chain{r, None{}},
         Log.start(b)
       )
         == Some{v}: Maybe<&2, List<&2, U32>>
     }
 
-def Chain.start_final(mach, lawf, n, evs, s, r, b, v):
-  Node.after_keeps(~mach, ~lawf, n, evs, s)(Ledgers.Chain{r, None{}})(Log.start(b))(v)
+def Chain.start_final(mach, kern, n, evs, s, r, b, v):
+  Node.after_keeps(~mach, ~kern, n, evs, s)(Ledgers.Chain{r, None{}})(Log.start(b))(v)
 
 # a line whose head is the same in a node that grew is where it was
 def Reach.same(
@@ -27490,25 +27685,25 @@ def Does.path(
 # decided steps, whatever the node does next
 law Node.after_on:
   for ~mach: Machine()
-  for ~lawf: Lawful(mach)
+  for ~kern: Kernel(mach)
   for +n: String
   for +evs: List<&2, Deed<Machine.Q(mach)>>
   for +s: Node<Machine.Q(mach)>
-  Node.On(~mach, s, Node.after(~mach, ~Lawful.kernel(mach, lawf), n, evs, s))
+  Node.On(~mach, s, Node.after(~mach, ~kern, n, evs, s))
 
-def Node.after_on(mach, lawf, n, evs, s):
+def Node.after_on(mach, kern, n, evs, s):
   match evs:
     case Nil{}:
       Path.refl(~mach, s)
     case Con{+ev, rest}:
-      s1 = Node.does(~mach, ~Lawful.kernel(mach, lawf), n, s, ev)
+      s1 = Node.does(~mach, ~Lawful.kernel(mach, Kernel.lawful(mach, kern)), n, s, ev)
       Path.trans(
         ~mach,
         s,
         s1,
-        Node.after(~mach, ~Lawful.kernel(mach, lawf), n, rest, s1),
-        Does.path(~mach, ~lawf, n, s, ev),
-        Node.after_on(~mach, ~lawf, n, rest, s1)
+        Node.after(~mach, ~Lawful.kernel(mach, Kernel.lawful(mach, kern)), n, rest, s1),
+        Does.path(~mach, ~Kernel.lawful(mach, kern), n, s, ev),
+        Node.after_on(~mach, ~kern, n, rest, s1)
       )
 
 # a node holds what it takes in: an entry that it reads of what was sent, in

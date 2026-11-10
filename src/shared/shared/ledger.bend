@@ -1164,6 +1164,11 @@ def State.under(~Q: Data, s: State(Q), k: List<&2, Bool>) -> State(Q):
 def State.with_data(~Q: Data, s: State(Q), t: State(Q)) -> State(Q):
   Tries.Trie.graft(Cells.Cell<Entry<Q>>, Slot.datas(), s, t)
 
+# s with the data of t added: the data of s, and those of t in the slots of data
+# that s leaves empty. It grows s, whatever t holds (State.add_data_of_grows)
+def State.add_data_of(~Q: Data, +s: State(Q), t: State(Q)) -> State(Q):
+  State.with_data(~Q, s, Tries.Trie.union(~Cells.Cell<Entry<Q>>, ~(x => y => x), s, t))
+
 # a ledger that holds only the entry e, in the slot k
 def State.one(~Q: Data, k: List<&2, Bool>, e: Entry<Q>) -> State(Q):
   Tries.Trie.one(Cells.Cell<Entry<Q>>, k, Cells.One{e})
@@ -3665,6 +3670,58 @@ def State.with_data_grows(
       %Equal.sym(Maybe<&2, Cells.Cell<Entry<Q>>>, State.get(~Q, State.with_data(~Q, s, t), k), Bool.pick(Maybe<&2, Cells.Cell<Entry<Q>>>, Tries.Trie.leads(Slot.datas(), k), State.get(~Q, t, k), State.get(~Q, s, k)), Tries.Trie.get_graft(Cells.Cell<Entry<Q>>, Slot.datas(), s, t, k)): {Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), State.get(~Q, s, k), _) == True{}: Bool}
       State.with_data_grows.at(~Q, ~same, ~laws, s, t, k, Tries.Trie.leads(Slot.datas(), k))(gr))
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# a cell, then the cell that a union keeps first, keeps the first cell
+def Union.first_keeps(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  a: Maybe<&2, Cells.Cell<Entry<Q>>>,
+  b: Maybe<&2, Cells.Cell<Entry<Q>>>
+) -> {Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), a, Shared.Maybe.join(~Cells.Cell<Entry<Q>>, ~(x => y => x), a, b)) == True{}: Bool}:
+  match a b:
+    case None{} y:
+      {==}
+    case Some{+x} None{}:
+      Cells.Cell.keeps_refl(~Entry<Q>, ~Entry.is_eq(~Q, ~same), ~Entry.laws(~Q, ~same, ~laws), Some{x})
+    case Some{+x} Some{y}:
+      Cells.Cell.keeps_refl(~Entry<Q>, ~Entry.is_eq(~Q, ~same), ~Entry.laws(~Q, ~same, ~laws), Some{x})
+
+# a union that keeps the cells of s first grows s
+def Union.first_grows(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  +s: State(Q),
+  +t: State(Q)
+) -> {State.grows(~Q, ~same, s, Tries.Trie.union(~Cells.Cell<Entry<Q>>, ~(x => y => x), s, t)) == True{}: Bool}:
+  Tries.Trie.all2_of_get(
+    ~Cells.Cell<Entry<Q>>,
+    ~Cells.Cell<Entry<Q>>,
+    ~Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same)),
+    ~(x => Tries.Trie.all(~Cells.Cell<Entry<Q>>, ~(m => Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), m, None{})), x)),
+    ~(x => f => Tries.Trie.all_of_get(~Cells.Cell<Entry<Q>>, ~(m => Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), m, None{})), x, f)),
+    s,
+    Tries.Trie.union(~Cells.Cell<Entry<Q>>, ~(x => y => x), s, t),
+    +k =>
+      %Equal.sym(
+        Maybe<&2, Cells.Cell<Entry<Q>>>,
+        Tries.Trie.get(Cells.Cell<Entry<Q>>, Tries.Trie.union(~Cells.Cell<Entry<Q>>, ~(x => y => x), s, t), k),
+        Shared.Maybe.join(~Cells.Cell<Entry<Q>>, ~(x => y => x), Tries.Trie.get(Cells.Cell<Entry<Q>>, s, k), Tries.Trie.get(Cells.Cell<Entry<Q>>, t, k)),
+        Tries.Trie.get_union(~Cells.Cell<Entry<Q>>, ~(x => y => x), s, t, k)
+      ): {Cells.Cell.keeps(~Entry<Q>, ~Entry.is_eq(~Q, ~same), State.get(~Q, s, k), _) == True{}: Bool}
+      Union.first_keeps(~Q, ~same, ~laws, State.get(~Q, s, k), State.get(~Q, t, k))
+  )
+
+# s with the data of t added grows s, whatever t holds
+def State.add_data_of_grows(
+  ~Q: Data,
+  ~same: Q -> Q -> Bool,
+  ~laws: Shared.Eq.Laws(Q, same),
+  +s: State(Q),
+  +t: State(Q)
+) -> {State.grows(~Q, ~same, s, State.add_data_of(~Q, s, t)) == True{}: Bool}:
+  State.with_data_grows(~Q, ~same, ~laws, s, Tries.Trie.union(~Cells.Cell<Entry<Q>>, ~(x => y => x), s, t))(Union.first_grows(~Q, ~same, ~laws, s, t))
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # a ledger that holds the data of s reads each data that s reads
