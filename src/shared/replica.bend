@@ -21335,7 +21335,6 @@ def Honest.frame(
 # a request or the proof of a lie, or a run with only its data (Run.data). The
 # lemmas follow those of growth, with Node.same_ballots for Node.grows.
 
-
 # a node holds the same ballots as itself
 def Frames.refl(
   ~mach: Machine(),
@@ -21356,7 +21355,9 @@ def Frames.trans(
   c: Node<Machine.Q(mach)>
 ) -> {
   Node.same_ballots(~mach, a, b) == True{}: Bool
-} -> {Node.same_ballots(~mach, b, c) == True{}: Bool} -> {Node.same_ballots(~mach, a, c) == True{}: Bool}:
+} -> {
+  Node.same_ballots(~mach, b, c) == True{}: Bool
+} -> {Node.same_ballots(~mach, a, c) == True{}: Bool}:
   Ledgers.State.same_ballots_trans(
     ~Machine.Q(mach),
     ~Machine.same(mach),
@@ -21414,8 +21415,20 @@ def Frames.keep(
       ~Machine.laws(mach),
       State.ledger(~mach, s),
       l,
-      +r => Ledgers.State.put_datas_ballots_at(~Machine.Q(mach), ~Machine.same(mach), ds, State.ledger(~mach, s), r),
-      +r => Ledgers.State.put_datas_ballots_at(~Machine.Q(mach), ~Machine.same(mach), ds, State.ledger(~mach, s), r)
+      +r => Ledgers.State.put_datas_ballots_at(
+        ~Machine.Q(mach),
+        ~Machine.same(mach),
+        ds,
+        State.ledger(~mach, s),
+        r
+      ),
+      +r => Ledgers.State.put_datas_ballots_at(
+        ~Machine.Q(mach),
+        ~Machine.same(mach),
+        ds,
+        State.ledger(~mach, s),
+        r
+      )
     )
   )
 
@@ -21450,7 +21463,12 @@ def Put.frames.at(
   +ds: List<&2, List<&2, U32>>,
   m: Maybe<&2, Ledgers.State(Machine.Q(mach))>,
   +em: {
-    Ledgers.State.add_datas(~Machine.Q(mach), ~Machine.same(mach), ds, State.ledger(~mach, s))
+    Ledgers.State.add_datas(
+      ~Machine.Q(mach),
+      ~Machine.same(mach),
+      ds,
+      State.ledger(~mach, s)
+    )
       == m: Maybe<&2, Ledgers.State(Machine.Q(mach))>
   }
 ) -> {
@@ -21481,8 +21499,22 @@ def Put.frames.at(
           ~Machine.laws(mach),
           State.ledger(~mach, s),
           l,
-          +r => Ledgers.State.add_datas_ballots_at(~Machine.Q(mach), ~Machine.same(mach), ds, State.ledger(~mach, s), r, l)(em),
-          +r => Ledgers.State.add_datas_ballots_at(~Machine.Q(mach), ~Machine.same(mach), ds, State.ledger(~mach, s), r, l)(em)
+          +r => Ledgers.State.add_datas_ballots_at(
+            ~Machine.Q(mach),
+            ~Machine.same(mach),
+            ds,
+            State.ledger(~mach, s),
+            r,
+            l
+          )(em),
+          +r => Ledgers.State.add_datas_ballots_at(
+            ~Machine.Q(mach),
+            ~Machine.same(mach),
+            ds,
+            State.ledger(~mach, s),
+            r,
+            l
+          )(em)
         )
       )
 
@@ -21752,7 +21784,12 @@ def Frames.when(
   hx: {Node.same_ballots(~mach, s, x) == True{}: Bool},
   hy: {Node.same_ballots(~mach, s, y) == True{}: Bool}
 ) -> {
-  Node.same_ballots(~mach, s, Shared.Bool.when(Node<Machine.Q(mach)>, b, u => x, u => y)) == True{}: Bool
+  Node.same_ballots(
+    ~mach,
+    s,
+    Shared.Bool.when(Node<Machine.Q(mach)>, b, u => x, u => y)
+  )
+    == True{}: Bool
 }:
   match b:
     case True{}:
@@ -21810,7 +21847,9 @@ def Advance.ran.frames(
   m: Maybe<&2, Run<Machine.Q(mach)>>
 ) -> {
   Run.framed(~mach, s, m) == True{}: Bool
-} -> {Node.same_ballots(~mach, s, Advance.ran(~mach, s, c, r, b, next, after, qs, m)) == True{}: Bool}:
+} -> {
+  Node.same_ballots(~mach, s, Advance.ran(~mach, s, c, r, b, next, after, qs, m)) == True{}: Bool
+}:
   match m:
     case None{}:
       e => Frames.refl(~mach, s)
@@ -22114,7 +22153,7 @@ def Ledger.frames.when(
 def Lie.keep.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
-  +s: Node<Machine.Q(mach)>,
+  s: Node<Machine.Q(mach)>,
   +x: Ledgers.Lie,
   +l: Ledgers.State(Machine.Q(mach))
 ) -> {
@@ -22126,7 +22165,13 @@ def Lie.keep.frames(
   )
     == True{}: Bool
 }:
-  +l2 = Ledgers.State.put(~Machine.Q(mach), ~Machine.same(mach), l, Ledgers.Slot.lie(x), Ledgers.Entry.Lie{x})
+  l2 = Ledgers.State.put(
+    ~Machine.Q(mach),
+    ~Machine.same(mach),
+    l,
+    Ledgers.Slot.lie(x),
+    Ledgers.Entry.Lie{x}
+  )
   Ledger.frames.if(
     ~mach,
     l,
@@ -22138,8 +22183,22 @@ def Lie.keep.frames(
       ~Machine.laws(mach),
       l,
       l2,
-      +r => Ledgers.State.put_ballots_at(~Machine.Q(mach), ~Machine.same(mach), l, Ledgers.Slot.lie(x), Ledgers.Entry.Lie{x}, r)(Ledgers.Slot.lie_other(x)),
-      +r => Ledgers.State.put_ballots_at(~Machine.Q(mach), ~Machine.same(mach), l, Ledgers.Slot.lie(x), Ledgers.Entry.Lie{x}, r)(Ledgers.Slot.lie_other(x))
+      +r => Ledgers.State.put_ballots_at(
+        ~Machine.Q(mach),
+        ~Machine.same(mach),
+        l,
+        Ledgers.Slot.lie(x),
+        Ledgers.Entry.Lie{x},
+        r
+      )(Ledgers.Slot.lie_other(x)),
+      +r => Ledgers.State.put_ballots_at(
+        ~Machine.Q(mach),
+        ~Machine.same(mach),
+        l,
+        Ledgers.Slot.lie(x),
+        Ledgers.Entry.Lie{x},
+        r
+      )(Ledgers.Slot.lie_other(x))
     )
   )
 
@@ -22275,7 +22334,11 @@ def Data.frames(
     case None{}:
       {==}
     case Some{Run{+s2, t}}:
-      +l = Ledgers.State.with_data(~Machine.Q(mach), State.ledger(~mach, s), State.ledger(~mach, s2))
+      +l = Ledgers.State.with_data(
+        ~Machine.Q(mach),
+        State.ledger(~mach, s),
+        State.ledger(~mach, s2)
+      )
       Frames.led(
         ~mach,
         s,
@@ -22286,8 +22349,18 @@ def Data.frames(
           ~Machine.laws(mach),
           State.ledger(~mach, s),
           l,
-          +r => Ledgers.State.with_data_ballots_at(~Machine.Q(mach), State.ledger(~mach, s), State.ledger(~mach, s2), r),
-          +r => Ledgers.State.with_data_ballots_at(~Machine.Q(mach), State.ledger(~mach, s), State.ledger(~mach, s2), r)
+          +r => Ledgers.State.with_data_ballots_at(
+            ~Machine.Q(mach),
+            State.ledger(~mach, s),
+            State.ledger(~mach, s2),
+            r
+          ),
+          +r => Ledgers.State.with_data_ballots_at(
+            ~Machine.Q(mach),
+            State.ledger(~mach, s),
+            State.ledger(~mach, s2),
+            r
+          )
         )
       )
 
@@ -22297,16 +22370,14 @@ def Asked.frames(
   ~mach: Machine(),
   ~kern: Kernel(mach),
   +r: Run<Machine.Q(mach)>,
-  +c: Ledgers.Chain,
-  +i: Ledgers.Id,
+  c: Ledgers.Chain,
+  i: Ledgers.Id,
   +a: Maybe<&2, Ledgers.Asked<Machine.Q(mach)>>
-) -> {
-  Run.framed(~mach, Run.state(~mach, r), Step.asked(~mach, ~kern, r, c, i, a)) == True{}: Bool
-}:
+) -> {Run.framed(~mach, Run.state(~mach, r), Step.asked(~mach, ~kern, r, c, i, a)) == True{}: Bool}:
   match a:
     case None{}:
       {==}
-    case Some{Ledgers.Asked{t, +q}}:
+    case Some{Ledgers.Asked{t, q}}:
       Data.frames(~mach, Run.state(~mach, r), Kernel.change(mach, kern)(r)(c)(i)(q))
 
 # a request that the log holds or not only keeps its ballots a run's node
@@ -22317,14 +22388,7 @@ def Fresh.frames(
   c: Ledgers.Chain,
   +i: Ledgers.Id,
   +o: Maybe<&2, Out>
-) -> {
-  Run.framed(
-    ~mach,
-    Run.state(~mach, r),
-    Step.fresh(~mach, ~kern, r, c, i, o)
-  )
-    == True{}: Bool
-}:
+) -> {Run.framed(~mach, Run.state(~mach, r), Step.fresh(~mach, ~kern, r, c, i, o)) == True{}: Bool}:
   match o:
     case Some{x}:
       Framed.self(~mach, r)
@@ -22338,14 +22402,7 @@ def One.frames(
   +r: Run<Machine.Q(mach)>,
   c: Ledgers.Chain,
   +i: Ledgers.Id
-) -> {
-  Run.framed(
-    ~mach,
-    Run.state(~mach, r),
-    Step.one(~mach, ~kern, r, c, i)
-  )
-    == True{}: Bool
-}:
+) -> {Run.framed(~mach, Run.state(~mach, r), Step.one(~mach, ~kern, r, c, i)) == True{}: Bool}:
   Fresh.frames(~mach, ~kern, r, c, i, Line.out(~mach, Run.state(~mach, r), Run.tip(~mach, r), i))
 
 # the requests of a step only grow a run's node
@@ -22395,9 +22452,7 @@ def Run.frames(
   c: Ledgers.Chain,
   t: Tip,
   qs: List<&2, Ledgers.Id>
-) -> {
-  Run.framed(~mach, s, Step.run(~mach, ~kern, s, c, t, qs)) == True{}: Bool
-}:
+) -> {Run.framed(~mach, s, Step.run(~mach, ~kern, s, c, t, qs)) == True{}: Bool}:
   All.frames(~mach, ~kern, s, c, qs, Some{Run{s, t}})(Frames.refl(~mach, s))
 
 # the run of the requests that can run is on a node that grew
@@ -22457,21 +22512,8 @@ def Plan.own.frames(
   +c: Ledgers.Chain,
   t: Tip,
   -from: List<&2, String>
-) -> {
-  Run.framed(
-    ~mach,
-    s,
-    Plan.run(~mach, Plan.own(~mach, ~kern, s, c, t, from))
-  )
-    == True{}: Bool
-}:
-  Some.frames(
-    ~mach,
-    ~kern,
-    c,
-    Cast.mine(~mach, ~kern, s, Wait.order(~mach, s, c)),
-    Run{s, t}
-  )
+) -> {Run.framed(~mach, s, Plan.run(~mach, Plan.own(~mach, ~kern, s, c, t, from))) == True{}: Bool}:
+  Some.frames(~mach, ~kern, c, Cast.mine(~mach, ~kern, s, Wait.order(~mach, s, c)), Run{s, t})
 
 # the run of the plan for a step that another ballot names is on a node that
 # grew
@@ -22499,15 +22541,8 @@ def Plan.copy.frames(
       Plan.when.frames(
         ~mach,
         s,
-        List.all.if(
-          u => Cast.all_mine(~mach, ~kern, s, qs),
-          Root.same(before, th)
-        ),
-        Plan{
-          qs,
-          Plan.fit(~mach, after, Step.run(~mach, ~kern, s, c, t, qs)),
-          from
-        },
+        List.all.if(u => Cast.all_mine(~mach, ~kern, s, qs), Root.same(before, th)),
+        Plan{qs, Plan.fit(~mach, after, Step.run(~mach, ~kern, s, c, t, qs)), from},
         Plan{[], None{}, []},
         Plan.fit.frames(
           ~mach,
@@ -22597,26 +22632,10 @@ def Plan.lead.frames(
   +th: Maybe<&2, Hashes.Hash>,
   +os: List<&2, String>
 ) -> {
-  Run.framed(
-    ~mach,
-    s,
-    Plan.run(~mach, Plan.lead(~mach, ~kern, s, c, w, t, th, os))
-  )
-    == True{}: Bool
+  Run.framed(~mach, s, Plan.run(~mach, Plan.lead(~mach, ~kern, s, c, w, t, th, os))) == True{}: Bool
 }:
   +from = Passes.of(~mach, s, w, os)
-  later = Plan.later(
-    ~mach,
-    ~kern,
-    s,
-    c,
-    w,
-    t,
-    th,
-    os,
-    from,
-    Passes.last(~mach, s, w, from)
-  )
+  later = Plan.later(~mach, ~kern, s, c, w, t, th, os, from, Passes.last(~mach, s, w, from))
   Plan.allowed.frames(
     ~mach,
     s,
@@ -22705,17 +22724,7 @@ def Plan.of.frames(
         s,
         String.eq(p, n),
         Plan.lead(~mach, ~kern, s, c, w, t, th, os),
-        Plan.follow(
-          ~mach,
-          ~kern,
-          s,
-          c,
-          w,
-          t,
-          th,
-          os,
-          Cast.act(~mach, s, w, p)
-        ),
+        Plan.follow(~mach, ~kern, s, c, w, t, th, os, Cast.act(~mach, s, w, p)),
         Plan.lead.frames(~mach, ~kern, s, c, w, t, th, os),
         Plan.follow.frames(~mach, ~kern, s, c, w, t, th, os, Cast.act(~mach, s, w, p))
       )
@@ -22729,31 +22738,14 @@ def Advance.step.frames(
   h: Head,
   +t: Tip,
   m: Maybe<&2, Ledgers.Vote>
-) -> {
-  Node.same_ballots(
-    ~mach,
-    s,
-    Advance.step(~mach, ~kern, s, c, h, t, m)
-  )
-    == True{}: Bool
-}:
+) -> {Node.same_ballots(~mach, s, Advance.step(~mach, ~kern, s, c, h, t, m)) == True{}: Bool}:
   match h m:
     case Head{r, b, next, th} Some{Ledgers.Vote{before, +qs, after}}:
       Frames.when(
         ~mach,
         s,
         Root.same(before, th),
-        Advance.ran(
-          ~mach,
-          s,
-          c,
-          r,
-          b,
-          next,
-          after,
-          qs,
-          Step.run(~mach, ~kern, s, c, t, qs)
-        ),
+        Advance.ran(~mach, s, c, r, b, next, after, qs, Step.run(~mach, ~kern, s, c, t, qs)),
         s,
         Advance.ran.frames(
           ~mach,
@@ -22779,9 +22771,7 @@ def Advance.at.frames(
   +c: Ledgers.Chain,
   +h: Head,
   m: Maybe<&2, Tip>
-) -> {
-  Node.same_ballots(~mach, s, Advance.at(~mach, ~kern, s, c, h, m)) == True{}: Bool
-}:
+) -> {Node.same_ballots(~mach, s, Advance.at(~mach, ~kern, s, c, h, m)) == True{}: Bool}:
   match m:
     case None{}:
       Frames.refl(~mach, s)
@@ -22811,9 +22801,7 @@ def Advances.at.frames(
   +s: Node<Machine.Q(mach)>,
   +c: Ledgers.Chain,
   m: Maybe<&2, Head>
-) -> {
-  Node.same_ballots(~mach, s, Advances.at(~mach, ~kern, f, s, c, m)) == True{}: Bool
-}:
+) -> {Node.same_ballots(~mach, s, Advances.at(~mach, ~kern, f, s, c, m)) == True{}: Bool}:
   match f m:
     case 0n x:
       Frames.refl(~mach, s)
@@ -22846,10 +22834,1350 @@ def Advances.frames(
   f: Nat,
   +s: Node<Machine.Q(mach)>,
   +c: Ledgers.Chain
-) -> {
-  Node.same_ballots(~mach, s, Node.advances(~mach, ~kern, f, s, c)) == True{}: Bool
-}:
+) -> {Node.same_ballots(~mach, s, Node.advances(~mach, ~kern, f, s, c)) == True{}: Bool}:
   Advances.at.frames(~mach, ~kern, f, s, c, Node.head_of(~mach, s, c))
+
+# Honest changes
+# --------------
+# Each deed of a node keeps it honest (Node.Honest), whatever the kernel: a
+# ballot that it accepts does (Honest.accept.at), and so does each change that
+# keeps its ballots (Honest.frame). The lemmas follow those of growth, with
+# Honest.Keeps for Node.grows.
+
+# b is honest when a is
+def Honest.Keeps(~mach: Machine(), a: Node<Machine.Q(mach)>, b: Node<Machine.Q(mach)>) -> Type:
+  Node.Honest(~mach, a) -> Node.Honest(~mach, b)
+
+# the node m, if any, is honest when s is
+def State.Honest(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Node<Machine.Q(mach)>>
+) -> Type:
+  match m:
+    case None{}:
+      Unit
+    case Some{s2}:
+      Honest.Keeps(~mach, s, s2)
+
+# a node is honest when it is
+def Honest.refl(~mach: Machine(), -s: Node<Machine.Q(mach)>) -> Honest.Keeps(~mach, s, s):
+  h => h
+
+# honest changes compose
+def Honest.trans(
+  ~mach: Machine(),
+  -a: Node<Machine.Q(mach)>,
+  -b: Node<Machine.Q(mach)>,
+  -c: Node<Machine.Q(mach)>
+) -> Honest.Keeps(~mach, a, b) -> Honest.Keeps(~mach, b, c) -> Honest.Keeps(~mach, a, c):
+  f => g => h => g(f(h))
+
+# either of two honest changes is honest
+def Honest.when(
+  ~mach: Machine(),
+  -s: Node<Machine.Q(mach)>,
+  b: Bool,
+  -x: Node<Machine.Q(mach)>,
+  -y: Node<Machine.Q(mach)>,
+  hx: Honest.Keeps(~mach, s, x),
+  hy: Honest.Keeps(~mach, s, y)
+) -> Honest.Keeps(~mach, s, Shared.Bool.when(Node<Machine.Q(mach)>, b, u => x, u => y)):
+  match b:
+    case True{}:
+      hx
+    case False{}:
+      hy
+
+# a node with the ledger of a node that is honest when a is, is honest when a
+# is
+def Honest.to(
+  ~mach: Machine(),
+  -a: Node<Machine.Q(mach)>,
+  +b: Node<Machine.Q(mach)>,
+  +x: Node<Machine.Q(mach)>,
+  e: {State.ledger(~mach, x) == State.ledger(~mach, b): Ledgers.State(Machine.Q(mach))},
+  g: Honest.Keeps(~mach, a, b)
+) -> Honest.Keeps(~mach, a, x):
+  h => Honest.frame(~mach, b, x)(Frames.to(~mach, b, b, x, e, Frames.refl(~mach, b)))(g(h))
+
+# a ledger that a node takes in, of what another node sent, reads as before
+# in each slot of a ballot: what Take.clean keeps is requests and data
+def Clean.ballots(
+  ~mach: Machine(),
+  cs: List<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
+  +l: Ledgers.State(Machine.Q(mach)),
+  +r: List<&2, Bool>
+) -> {
+  Ledgers.State.get(
+    ~Machine.Q(mach),
+    l,
+    List.append(&2, Bool, Ledgers.Slot.ballots(), r)
+  )
+    == Ledgers.State.get(
+      ~Machine.Q(mach),
+      Take.clean(~mach, cs, l),
+      List.append(&2, Bool, Ledgers.Slot.ballots(), r)
+    ): Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+}:
+  match cs:
+    case Nil{}:
+      {==}
+    case Con{Cells.One{Ledgers.Entry.Ask{+i, +t, +q}}, rest}:
+      l1 = Ledgers.State.ask(~Machine.Q(mach), ~Machine.same(mach), l, i, t, q)
+      Equal.trans(
+        Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
+        Ledgers.State.get(~Machine.Q(mach), l, List.append(&2, Bool, Ledgers.Slot.ballots(), r)),
+        Ledgers.State.get(~Machine.Q(mach), l1, List.append(&2, Bool, Ledgers.Slot.ballots(), r)),
+        Ledgers.State.get(
+          ~Machine.Q(mach),
+          Take.clean(~mach, rest, l1),
+          List.append(&2, Bool, Ledgers.Slot.ballots(), r)
+        ),
+        Ledgers.State.add_ballots_at(
+          ~Machine.Q(mach),
+          ~Machine.same(mach),
+          l,
+          Ledgers.Slot.ask(i),
+          Ledgers.Entry.Ask{i, t, q},
+          r
+        )({==}),
+        Clean.ballots(~mach, rest, l1, r)
+      )
+    case Con{Cells.One{Ledgers.Entry.Data{+ws}}, rest}:
+      l1 = Ledgers.State.put_data(~Machine.Q(mach), ~Machine.same(mach), l, ws)
+      +k = Ledgers.Slot.data(Hashes.Sha.hash(ws))
+      Equal.trans(
+        Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
+        Ledgers.State.get(~Machine.Q(mach), l, List.append(&2, Bool, Ledgers.Slot.ballots(), r)),
+        Ledgers.State.get(~Machine.Q(mach), l1, List.append(&2, Bool, Ledgers.Slot.ballots(), r)),
+        Ledgers.State.get(
+          ~Machine.Q(mach),
+          Take.clean(~mach, rest, l1),
+          List.append(&2, Bool, Ledgers.Slot.ballots(), r)
+        ),
+        Ledgers.State.put_data_ballots_at.of(
+          ~Machine.Q(mach),
+          ~Machine.same(mach),
+          l,
+          k,
+          ws,
+          r,
+          Ledgers.State.get(~Machine.Q(mach), l, k)
+        )({==}),
+        Clean.ballots(~mach, rest, l1, r)
+      )
+    case Con{Cells.One{Ledgers.Entry.Vote{b}}, rest}:
+      Clean.ballots(~mach, rest, l, r)
+    case Con{Cells.One{Ledgers.Entry.Lie{x}}, rest}:
+      Clean.ballots(~mach, rest, l, r)
+    case Con{Cells.Many{}, rest}:
+      Clean.ballots(~mach, rest, l, r)
+
+# what a node takes in of what another node sent keeps its ballots
+def Take.ballots(
+  ~mach: Machine(),
+  +l: Ledgers.State(Machine.Q(mach)),
+  +t: Ledgers.State(Machine.Q(mach))
+) -> {
+  Ledgers.State.same_ballots(
+    ~Machine.Q(mach),
+    ~Machine.same(mach),
+    l,
+    Ledgers.State.take(~Machine.Q(mach), l, Node.reads(~mach, t))
+  )
+    == True{}: Bool
+}:
+  +cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, t)
+  +e = Ledgers.State.empty(~Machine.Q(mach))
+  Ledgers.State.same_ballots_of(
+    ~Machine.Q(mach),
+    ~Machine.same(mach),
+    ~Machine.laws(mach),
+    l,
+    Ledgers.State.take(~Machine.Q(mach), l, Node.reads(~mach, t)),
+    +r => Ledgers.State.take_ballots_at(
+      ~Machine.Q(mach),
+      l,
+      Node.reads(~mach, t),
+      r
+    )(
+      Equal.sym(
+        Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
+        Ledgers.State.get(~Machine.Q(mach), e, List.append(&2, Bool, Ledgers.Slot.ballots(), r)),
+        Ledgers.State.get(
+          ~Machine.Q(mach),
+          Node.reads(~mach, t),
+          List.append(&2, Bool, Ledgers.Slot.ballots(), r)
+        ),
+        Clean.ballots(~mach, cs, e, r)
+      )
+    ),
+    +r => Ledgers.State.take_ballots_at(
+      ~Machine.Q(mach),
+      l,
+      Node.reads(~mach, t),
+      r
+    )(
+      Equal.sym(
+        Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>,
+        Ledgers.State.get(~Machine.Q(mach), e, List.append(&2, Bool, Ledgers.Slot.ballots(), r)),
+        Ledgers.State.get(
+          ~Machine.Q(mach),
+          Node.reads(~mach, t),
+          List.append(&2, Bool, Ledgers.Slot.ballots(), r)
+        ),
+        Clean.ballots(~mach, cs, e, r)
+      )
+    )
+  )
+
+# Accept.at.honest once the check k of the ballot is known
+def Accept.at.honest.if(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  b: Ledgers.Ballot,
+  c: Keychain,
+  k: Bool,
+  ek: {Ballot.keeps(~mach, s, c, b) == k: Bool}
+) -> State.Honest(
+  ~mach,
+  s,
+  Shared.Maybe.when(
+    Node<Machine.Q(mach)>,
+    k,
+    u => Some{
+      State.keyed(
+        ~mach,
+        State.led(
+          ~mach,
+          s,
+          Ledgers.State.keep(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, s), b)
+        ),
+        Keys.kept(State.keys(~mach, s), c, b)
+      )
+    }
+  )
+):
+  match k:
+    case True{}:
+      Honest.accept.at(
+        ~mach,
+        s,
+        b,
+        State.keyed(
+          ~mach,
+          State.led(
+            ~mach,
+            s,
+            Ledgers.State.keep(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, s), b)
+          ),
+          Keys.kept(State.keys(~mach, s), c, b)
+        ),
+        Some{c}
+      )((
+          %Equal.sym(Bool, Ballot.keeps(~mach, s, c, b), True{}, ek): {Shared.Maybe.when(Node<Machine.Q(mach)>, _, u => Some{State.keyed(~mach, State.led(~mach, s, Ledgers.State.keep(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, s), b)), Keys.kept(State.keys(~mach, s), c, b))}) == Some{State.keyed(~mach, State.led(~mach, s, Ledgers.State.keep(~Machine.Q(mach), ~Machine.same(mach), State.ledger(~mach, s), b)), Keys.kept(State.keys(~mach, s), c, b))}: Maybe<&2, Node<Machine.Q(mach)>>}
+          {==}))
+    case False{}:
+      Unit{}
+
+# a ballot that a node accepts keeps it honest
+def Accept.at.honest(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  +b: Ledgers.Ballot,
+  m: Maybe<&2, Keychain>
+) -> State.Honest(~mach, s, Seal.accept.at(~mach, s, b, m)):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{+c}:
+      Accept.at.honest.if(~mach, s, b, c, Ballot.keeps(~mach, s, c, b), {==})
+
+# a node that may change keeps honest, when the change does
+def Default.honest(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Node<Machine.Q(mach)>>
+) -> State.Honest(
+  ~mach,
+  s,
+  m
+) -> Honest.Keeps(~mach, s, Maybe.default(&2, Node<Machine.Q(mach)>, m, s)):
+  match m:
+    case None{}:
+      e => Honest.refl(~mach, s)
+    case Some{s2}:
+      e => e
+
+# a sealed ballot keeps honest a node
+def Cast.seal.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  +w: Ledgers.Where,
+  n: String,
+  a0: Ledgers.Act,
+  m: Maybe<&2, Keychain>
+) -> Honest.Keeps(~mach, s, Cast.seal(~mach, ~kern, s, w, n, a0, m)):
+  match m:
+    case None{}:
+      Honest.refl(~mach, s)
+    case Some{Keychain{+j, last, key, f}}:
+      +b = Ledgers.Ballot.make(
+        Seal.secret(Keys.seed(State.keys(~mach, s)), Where.store(w), j),
+        Ledgers.Signed{w, n, a0},
+        last,
+        Seals.Seal.public(Seal.secret(Keys.seed(State.keys(~mach, s)), Where.store(w), U32.inc(j)))
+      )
+      Default.honest(
+        ~mach,
+        s,
+        Seal.accept(~mach, ~kern, s, b)
+      )(Accept.at.honest(~mach, s, b, Seal.chain(~mach, ~kern, s, Ballot.store(b), Ballot.node(b))))
+
+# a ballot on a node with the ballots of a, which holds the ballots of s,
+# keeps s honest
+def Cast.vote.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  a: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Node<Machine.Q(mach)>>,
+  +w: Ledgers.Where,
+  +n: String,
+  a0: Ledgers.Act,
+  g: {Node.same_ballots(~mach, s, a) == True{}: Bool}
+) -> {
+  State.framed(~mach, a, m) == True{}: Bool
+} -> Honest.Keeps(~mach, s, Cast.vote(~mach, ~kern, s, m, w, n, a0)):
+  match m:
+    case None{}:
+      e => Honest.refl(~mach, s)
+    case Some{+s3}:
+      e =>
+        +s4 = State.led(~mach, s, State.ledger(~mach, s3))
+        Honest.trans(
+          ~mach,
+          s,
+          s4,
+          Cast.seal(~mach, ~kern, s4, w, n, a0, Seal.chain(~mach, ~kern, s4, Where.store(w), n))
+        )(
+          Honest.frame(~mach, s, s4)(Frames.back(~mach, s, s3, Frames.trans(~mach, s, a, s3)(g)(e)))
+        )(
+          Cast.seal.honest(
+            ~mach,
+            ~kern,
+            s4,
+            w,
+            n,
+            a0,
+            Seal.chain(~mach, ~kern, s4, Where.store(w), n)
+          )
+        )
+
+# a vote keeps a node honest, when its run keeps the node's ballots
+def Cast.put.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  n: String,
+  w: Ledgers.Where,
+  th: Maybe<&2, Hashes.Hash>,
+  qs: List<&2, Ledgers.Id>,
+  from: List<&2, String>,
+  m: Maybe<&2, Run<Machine.Q(mach)>>,
+  s: Node<Machine.Q(mach)>
+) -> {
+  Run.framed(~mach, s, m) == True{}: Bool
+} -> Honest.Keeps(~mach, s, Cast.put(~mach, ~kern, n, w, th, qs, from, m, s)):
+  match m:
+    case None{}:
+      e => Honest.refl(~mach, s)
+    case Some{Run{+s2, +t2}}:
+      e => Cast.vote.honest(
+        ~mach,
+        ~kern,
+        s,
+        s2,
+        State.put(~mach, s2, [Tip.words(t2)]),
+        w,
+        n,
+        Ledgers.Act.Vote{Ledgers.Vote{th, qs, Some{Tip.hash(t2)}}, from},
+        e
+      )(Put.frames(~mach, s2, [Tip.words(t2)]))
+
+# a pass keeps honest a node
+def Pass.to.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +n: String,
+  +s: Node<Machine.Q(mach)>,
+  w: Ledgers.Where,
+  os: List<&2, String>
+) -> Honest.Keeps(~mach, s, Pass.to(~mach, ~kern, n, s, w, os)):
+  match w:
+    case Ledgers.Where{+c, +h, +r}:
+      Honest.when(
+        ~mach,
+        s,
+        List.all.if(
+          u => Maybe.is_none(
+            &2,
+            Maybe<&2, Ledgers.Last>,
+            Ledgers.State.passed(
+              ~Machine.Q(mach),
+              State.ledger(~mach, s),
+              Ledgers.Where{c, h, r},
+              n
+            )
+          ),
+          List.contains(~String, ~String.eq, os, n)
+        ),
+        Cast.seal(
+          ~mach,
+          ~kern,
+          s,
+          Ledgers.Where{c, h, r},
+          n,
+          Ledgers.Act.Pass{Last.below(~mach, n, s, c, h, r)},
+          Seal.chain(~mach, ~kern, s, Where.store(Ledgers.Where{c, h, r}), n)
+        ),
+        s,
+        Cast.seal.honest(
+          ~mach,
+          ~kern,
+          s,
+          Ledgers.Where{c, h, r},
+          n,
+          Ledgers.Act.Pass{Last.below(~mach, n, s, c, h, r)},
+          Seal.chain(~mach, ~kern, s, Where.store(Ledgers.Where{c, h, r}), n)
+        ),
+        Honest.refl(~mach, s)
+      )
+
+# a node that joins a round keeps honest a node
+def Round.join.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +n: String,
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  +h: U32,
+  os: List<&2, String>
+) -> Honest.Keeps(~mach, s, Round.join(~mach, ~kern, n, s, c, h, os)):
+  +top = Round.seen(~mach, s, c, h)
+  k = top
+  Honest.when(
+    ~mach,
+    s,
+    Nat.is_lt(Round.mine(~mach, n, s, c, h, k), top),
+    Pass.to(~mach, ~kern, n, s, Ledgers.Where{c, h, top}, os),
+    s,
+    Pass.to.honest(~mach, ~kern, n, s, Ledgers.Where{c, h, top}, os),
+    Honest.refl(~mach, s)
+  )
+
+# a line that opens keeps honest a node, once its head m is known
+def Open.at.honest(
+  ~mach: Machine(),
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  m: Maybe<&2, Head>
+) -> Honest.Keeps(~mach, s, Open.at(~mach, s, c, m)):
+  match m:
+    case Some{Head{+r, Some{+b}, n, None{}}}:
+      +hd = {
+        Head{
+          r,
+          Some{b},
+          0,
+          Branch.first(~mach, s, b, Node.tip(~mach, s, Ledgers.Chain{r, None{}}))
+        }: Head
+      }
+      Honest.to(
+        ~mach,
+        s,
+        s,
+        State.head(~mach, s, c, hd),
+        Led.head(~mach, s, c, hd),
+        Honest.refl(~mach, s)
+      )
+    case Some{Head{r, Some{b}, n, Some{t}}}:
+      Honest.refl(~mach, s)
+    case Some{Head{r, None{}, n, t}}:
+      Honest.refl(~mach, s)
+    case None{}:
+      Honest.refl(~mach, s)
+
+# Sealed.follow keeps a node honest, once the node m after its first ballot
+# is known: when m is, and each later ballot keeps it honest (ih)
+def Follow.step.honest(
+  ~mach: Machine(),
+  s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Node<Machine.Q(mach)>>,
+  k: Node<Machine.Q(mach)> -> Node<Machine.Q(mach)>,
+  ih: @s2: Node<Machine.Q(mach)> -> Honest.Keeps(~mach, s2, k(s2))
+) -> State.Honest(
+  ~mach,
+  s,
+  m
+) -> Honest.Keeps(
+  ~mach,
+  s,
+  Maybe.default(
+    &2,
+    Node<Machine.Q(mach)>,
+    Maybe.bind(&2, Node<Machine.Q(mach)>, Node<Machine.Q(mach)>, m, s2 => Some{k(s2)}),
+    s
+  )
+):
+  match m:
+    case None{}:
+      e => Honest.refl(~mach, s)
+    case Some{s2}:
+      e => Honest.trans(~mach, s, s2, k(s2))(e)(ih(s2))
+
+# the ballots that a chain leads to only grow a node
+def Follow.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  f: Nat,
+  +s: Node<Machine.Q(mach)>,
+  +p: Tries.Trie<Ledgers.Ballot>,
+  +r: Ledgers.Id,
+  +n: String,
+  mb: Maybe<&2, Ledgers.Ballot>
+) -> Honest.Keeps(~mach, s, Sealed.follow(~mach, ~kern, f, s, p, r, n, mb)):
+  match f mb:
+    case 0n x:
+      Honest.refl(~mach, s)
+    case 1n+g None{}:
+      Honest.refl(~mach, s)
+    case 1n+(+g) Some{+b}:
+      Follow.step.honest(
+        ~mach,
+        s,
+        Seal.accept(~mach, ~kern, s, b),
+        +s2 => Sealed.follow(~mach, ~kern, g, s2, p, r, n, Pending.next(~mach, ~kern, s2, p, r, n)),
+        +s2 => Follow.honest(~mach, ~kern, g, s2, p, r, n, Pending.next(~mach, ~kern, s2, p, r, n))
+      )(Accept.at.honest(~mach, s, b, Seal.chain(~mach, ~kern, s, Ballot.store(b), Ballot.node(b))))
+
+# the ballots that the chains of some ballots lead to only grow a node
+def Each.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +f: Nat,
+  bs: List<&2, Ledgers.Ballot>,
+  +p: Tries.Trie<Ledgers.Ballot>,
+  +s: Node<Machine.Q(mach)>
+) -> Honest.Keeps(~mach, s, Sealed.each(~mach, ~kern, f, bs, p, s)):
+  match bs:
+    case Nil{}:
+      Honest.refl(~mach, s)
+    case Con{+b, rest}:
+      s1 = Sealed.follow(
+        ~mach,
+        ~kern,
+        f,
+        s,
+        p,
+        Ballot.store(b),
+        Ballot.node(b),
+        Pending.next(~mach, ~kern, s, p, Ballot.store(b), Ballot.node(b))
+      )
+      Honest.trans(
+        ~mach,
+        s,
+        s1,
+        Sealed.each(~mach, ~kern, f, rest, p, s1)
+      )(
+        Follow.honest(
+          ~mach,
+          ~kern,
+          f,
+          s,
+          p,
+          Ballot.store(b),
+          Ballot.node(b),
+          Pending.next(~mach, ~kern, s, p, Ballot.store(b), Ballot.node(b))
+        )
+      )(Each.honest(~mach, ~kern, f, rest, p, s1))
+
+# a node that takes in what another node sent, but for the lies, keeps honest
+def Take.of.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  +t: Ledgers.State(Machine.Q(mach))
+) -> Honest.Keeps(
+  ~mach,
+  s,
+  Take.of(
+    ~mach,
+    ~kern,
+    s,
+    t,
+    Tries.Trie.values(
+      Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+      Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
+    )
+  )
+):
+  +sent = Take.clean(
+    ~mach,
+    Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, t),
+    Ledgers.State.empty(~Machine.Q(mach))
+  )
+  +l1 = Ledgers.State.take(~Machine.Q(mach), State.ledger(~mach, s), sent)
+  +s1 = State.led(~mach, s, l1)
+  +cs = Tries.Trie.values(Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>, sent)
+  +s2 = Take.asks(~mach, ~kern, cs, State.ledger(~mach, s), s1)
+  +bs = Ballots.of(
+    ~mach,
+    Tries.Trie.values(
+      Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+      Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
+    )
+  )
+  Honest.trans(
+    ~mach,
+    s,
+    s1,
+    Sealed.take(~mach, ~kern, bs, s2)
+  )(
+    Honest.frame(
+      ~mach,
+      s,
+      s1
+    )(Frames.led(~mach, s, l1, Take.ballots(~mach, State.ledger(~mach, s), t)))
+  )(
+    Honest.trans(
+      ~mach,
+      s1,
+      s2,
+      Sealed.take(~mach, ~kern, bs, s2)
+    )(
+      Honest.frame(~mach, s1, s2)(Take.asks.frames(~mach, ~kern, cs, State.ledger(~mach, s), s1))
+    )(Each.honest(~mach, ~kern, List.length(&2, Ledgers.Ballot, bs), bs, Pending.of(bs), s2))
+  )
+
+# a node that takes in what another node sent keeps honest
+def Take.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +s: Node<Machine.Q(mach)>,
+  +t: Ledgers.State(Machine.Q(mach))
+) -> Honest.Keeps(~mach, s, Node.take(~mach, ~kern, s, t)):
+  +new = Tries.Trie.values(
+    Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+    Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
+  )
+  +s3 = Take.of(~mach, ~kern, s, t, new)
+  Honest.trans(
+    ~mach,
+    s,
+    s3,
+    Lies.take(~mach, ~kern, s3, new)
+  )(
+    Take.of.honest(~mach, ~kern, s, t)
+  )(Honest.frame(~mach, s3, Lies.take(~mach, ~kern, s3, new))(Lies.frames(~mach, ~kern, s3, new)))
+
+# a ballot in the node's round keeps honest a node
+def Cast.round.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +n: String,
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  +next: U32,
+  +th: Maybe<&2, Hashes.Hash>,
+  +t: Tip
+) -> Honest.Keeps(~mach, s, Cast.round(~mach, ~kern, n, s, c, next, th, t)):
+  +os = Tip.owners(t)
+  +r = Round.mine(~mach, n, s, c, next, Round.seen(~mach, s, c, next))
+  +w = {Ledgers.Where{c, next, r}: Ledgers.Where}
+  +p = Plan.of(~mach, ~kern, n, s, c, w, t, th, os, Owners.turn(os, next, r))
+  Honest.when(
+    ~mach,
+    s,
+    Cast.free(~mach, n, s, w, t),
+    Cast.plan(~mach, ~kern, n, w, th, p, s),
+    s,
+    Honest.when(
+      ~mach,
+      s,
+      Bool.not(List.is_empty(&2, Ledgers.Id, Plan.asks(~mach, p))),
+      Cast.put(
+        ~mach,
+        ~kern,
+        n,
+        w,
+        th,
+        Plan.asks(~mach, p),
+        Plan.from(~mach, p),
+        Plan.run(~mach, p),
+        s
+      ),
+      s,
+      Cast.put.honest(
+        ~mach,
+        ~kern,
+        n,
+        w,
+        th,
+        Plan.asks(~mach, p),
+        Plan.from(~mach, p),
+        Plan.run(~mach, p),
+        s
+      )(Plan.of.frames(~mach, ~kern, n, s, c, w, t, th, os, Owners.turn(os, next, r))),
+      Honest.refl(~mach, s)
+    ),
+    Honest.refl(~mach, s)
+  )
+
+# Node.cast keeps honest a node, at the head h whose tip is m
+def Cast.at.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +n: String,
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  h: Head,
+  m: Maybe<&2, Tip>
+) -> Honest.Keeps(~mach, s, Cast.at(~mach, ~kern, n, s, c, h, m)):
+  match h m:
+    case Head{r, b, +next, th} Some{+t}:
+      s1 = Round.join(~mach, ~kern, n, s, c, next, Tip.owners(t))
+      Honest.trans(
+        ~mach,
+        s,
+        s1,
+        Cast.round(~mach, ~kern, n, s1, c, next, th, t)
+      )(
+        Round.join.honest(~mach, ~kern, n, s, c, next, Tip.owners(t))
+      )(Cast.round.honest(~mach, ~kern, n, s1, c, next, th, t))
+    case Head{r, b, next, th} None{}:
+      Honest.refl(~mach, s)
+
+# Node.cast keeps honest a node, once the head m is known
+def Cast.head.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  n: String,
+  +s: Node<Machine.Q(mach)>,
+  c: Ledgers.Chain,
+  m: Maybe<&2, Head>
+) -> Honest.Keeps(~mach, s, Cast.head(~mach, ~kern, n, s, c, m)):
+  match m:
+    case None{}:
+      Honest.refl(~mach, s)
+    case Some{+h}:
+      Cast.at.honest(~mach, ~kern, n, s, c, h, Head.tip(~mach, s, h))
+
+# a node's ballot keeps honest it
+def Cast.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  n: String,
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain
+) -> Honest.Keeps(~mach, s, Node.cast(~mach, ~kern, n, s, c)):
+  Cast.head.honest(~mach, ~kern, n, s, c, Node.head_of(~mach, s, c))
+
+# what a node does at a head keeps honest it
+def Step.head.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +n: String,
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain
+) -> Honest.Keeps(~mach, s, Step.head(~mach, ~kern, n, s, c)):
+  +s1 = Node.advances(~mach, ~kern, 4294967295n, s, c)
+  +s2 = Node.cast(~mach, ~kern, n, s1, c)
+  s3 = Node.advances(~mach, ~kern, 4294967295n, s2, c)
+  Honest.trans(
+    ~mach,
+    s,
+    s1,
+    s3
+  )(
+    Honest.frame(~mach, s, s1)(Advances.frames(~mach, ~kern, 4294967295n, s, c))
+  )(
+    Honest.trans(
+      ~mach,
+      s1,
+      s2,
+      s3
+    )(
+      Cast.honest(~mach, ~kern, n, s1, c)
+    )(Honest.frame(~mach, s2, s3)(Advances.frames(~mach, ~kern, 4294967295n, s2, c)))
+  )
+
+# what a node does on a line keeps honest it
+def Step.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  n: String,
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain
+) -> Honest.Keeps(~mach, s, Node.step(~mach, ~kern, n, s, c)):
+  s1 = Node.open(~mach, s, c)
+  Honest.trans(
+    ~mach,
+    s,
+    s1,
+    Step.head(~mach, ~kern, n, s1, c)
+  )(
+    Open.at.honest(~mach, s, c, Node.head_of(~mach, s, c))
+  )(Step.head.honest(~mach, ~kern, n, s1, c))
+
+# a new request keeps honest a node
+def Ask.new.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  n: String,
+  +s: Node<Machine.Q(mach)>,
+  +e: Envelope,
+  +q: Machine.Q(mach)
+) -> Honest.Keeps(~mach, s, Node.ask.new(~mach, ~kern, n, s, e, q)):
+  +i = Envelope.of(e)
+  c = Arrival.chain(i, Machine.arrival(mach)(q))
+  +l0 = Ledgers.State.ask(
+    ~Machine.Q(mach),
+    ~Machine.same(mach),
+    State.ledger(~mach, s),
+    i,
+    Envelope.time(e),
+    q
+  )
+  +s0 = State.led(~mach, s, l0)
+  +s1 = Node.arrive(~mach, ~kern, s0, i, q)
+  Honest.trans(
+    ~mach,
+    s,
+    s0,
+    Node.step(~mach, ~kern, n, s1, c)
+  )(
+    Honest.frame(
+      ~mach,
+      s,
+      s0
+    )(
+      Frames.led(
+        ~mach,
+        s,
+        l0,
+        Ledgers.State.same_ballots_of(
+          ~Machine.Q(mach),
+          ~Machine.same(mach),
+          ~Machine.laws(mach),
+          State.ledger(~mach, s),
+          l0,
+          +r => Ledgers.State.add_ballots_at(
+            ~Machine.Q(mach),
+            ~Machine.same(mach),
+            State.ledger(~mach, s),
+            Ledgers.Slot.ask(i),
+            Ledgers.Entry.Ask{i, Envelope.time(e), q},
+            r
+          )({==}),
+          +r => Ledgers.State.add_ballots_at(
+            ~Machine.Q(mach),
+            ~Machine.same(mach),
+            State.ledger(~mach, s),
+            Ledgers.Slot.ask(i),
+            Ledgers.Entry.Ask{i, Envelope.time(e), q},
+            r
+          )({==})
+        )
+      )
+    )
+  )(
+    Honest.trans(
+      ~mach,
+      s0,
+      s1,
+      Node.step(~mach, ~kern, n, s1, c)
+    )(
+      Honest.frame(~mach, s0, s1)(Arrive.frames(~mach, ~kern, s0, i, Machine.arrival(mach)(q)))
+    )(Step.honest(~mach, ~kern, n, s1, c))
+  )
+
+# Node.ask_keeps honest once the cell m of the request's ID is known
+def Ask.at.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  n: String,
+  +s: Node<Machine.Q(mach)>,
+  +e: Envelope,
+  q: Machine.Q(mach),
+  m: Maybe<&2, Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>>
+) -> Honest.Keeps(~mach, s, Node.ask.at(~mach, ~kern, n, s, e, q, m)):
+  match m:
+    case Some{x}:
+      Honest.refl(~mach, s)
+    case None{}:
+      Honest.trans(
+        ~mach,
+        s,
+        State.keyed(~mach, s, Keys.mark(State.keys(~mach, s), Envelope.of(e))),
+        Node.ask.new(
+          ~mach,
+          ~kern,
+          n,
+          State.keyed(~mach, s, Keys.mark(State.keys(~mach, s), Envelope.of(e))),
+          e,
+          q
+        )
+      )(
+        Honest.to(
+          ~mach,
+          s,
+          s,
+          State.keyed(~mach, s, Keys.mark(State.keys(~mach, s), Envelope.of(e))),
+          Led.keyed(~mach, s, Keys.mark(State.keys(~mach, s), Envelope.of(e))),
+          Honest.refl(~mach, s)
+        )
+      )(
+        Ask.new.honest(
+          ~mach,
+          ~kern,
+          n,
+          State.keyed(~mach, s, Keys.mark(State.keys(~mach, s), Envelope.of(e))),
+          e,
+          q
+        )
+      )
+
+# a node that takes in a request keeps honest
+def Ask.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  n: String,
+  +s: Node<Machine.Q(mach)>,
+  +e: Envelope,
+  q: Machine.Q(mach)
+) -> Honest.Keeps(~mach, s, Node.ask(~mach, ~kern, n, s, e, q)):
+  Ask.at.honest(
+    ~mach,
+    ~kern,
+    n,
+    s,
+    e,
+    q,
+    Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.ask(Envelope.of(e)))
+  )
+
+# what a node does on each of some lines keeps honest it
+def Steps.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +n: String,
+  cs: List<&2, Ledgers.Chain>,
+  +s: Node<Machine.Q(mach)>
+) -> Honest.Keeps(~mach, s, Node.steps(~mach, ~kern, n, cs, s)):
+  match cs:
+    case Nil{}:
+      Honest.refl(~mach, s)
+    case Con{+c, rest}:
+      s1 = Node.step(~mach, ~kern, n, s, c)
+      Honest.trans(
+        ~mach,
+        s,
+        s1,
+        Node.steps(~mach, ~kern, n, rest, s1)
+      )(Step.honest(~mach, ~kern, n, s, c))(Steps.honest(~mach, ~kern, n, rest, s1))
+
+# an adoption keeps honest a node, once the request m is known
+def Adopt.ask.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  n: String,
+  s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Request<Machine.Q(mach)>>
+) -> Honest.Keeps(~mach, s, Adopt.ask(~mach, ~kern, n, s, m)):
+  match m:
+    case None{}:
+      Honest.refl(~mach, s)
+    case Some{Request{e, q}}:
+      Ask.honest(~mach, ~kern, n, s, e, q)
+
+# an adoption keeps honest a node, once the head m of the line is known
+def Adopt.head.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  n: String,
+  +s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Head>
+) -> Honest.Keeps(~mach, s, Adopt.head(~mach, ~kern, n, s, m)):
+  match m:
+    case None{}:
+      Honest.refl(~mach, s)
+    case Some{Head{r, b, next, t}}:
+      Adopt.ask.honest(~mach, ~kern, n, s, Kernel.follow(mach, kern)(s)(r)(b))
+
+# the adoption of a line keeps honest a node
+def Adopt.at.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  n: String,
+  +s: Node<Machine.Q(mach)>,
+  c: Ledgers.Chain
+) -> Honest.Keeps(~mach, s, Adopt.at(~mach, ~kern, n, s, c)):
+  Adopt.head.honest(~mach, ~kern, n, s, Node.head_of(~mach, s, c))
+
+# the adoption of each of some lines keeps honest a node
+def Adopts.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +n: String,
+  cs: List<&2, Ledgers.Chain>,
+  +s: Node<Machine.Q(mach)>
+) -> Honest.Keeps(~mach, s, Node.adopts(~mach, ~kern, n, cs, s)):
+  match cs:
+    case Nil{}:
+      Honest.refl(~mach, s)
+    case Con{+c, rest}:
+      Honest.trans(
+        ~mach,
+        s,
+        Adopt.at(~mach, ~kern, n, s, c),
+        Node.adopts(~mach, ~kern, n, rest, Adopt.at(~mach, ~kern, n, s, c))
+      )(
+        Adopt.at.honest(~mach, ~kern, n, s, c)
+      )(Adopts.honest(~mach, ~kern, n, rest, Adopt.at(~mach, ~kern, n, s, c)))
+
+# more rounds of a sync, keeps honest
+def More.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  f: Nat,
+  +n: String,
+  +cs: List<&2, Ledgers.Chain>,
+  +k: Nat,
+  +bs: List<&2, Ledgers.Ballot>,
+  +pd: Tries.Trie<Ledgers.Ballot>,
+  +s: Node<Machine.Q(mach)>
+) -> Honest.Keeps(~mach, s, Sync.more(~mach, ~kern, f, n, cs, k, bs, pd, s)):
+  match f:
+    case 0n:
+      Honest.refl(~mach, s)
+    case 1n+(p):
+      Honest.when(
+        ~mach,
+        s,
+        Lines.level(
+          ~mach,
+          cs,
+          s,
+          Node.steps(~mach, ~kern, n, cs, Sealed.each(~mach, ~kern, k, bs, pd, s))
+        ),
+        Node.steps(~mach, ~kern, n, cs, Sealed.each(~mach, ~kern, k, bs, pd, s)),
+        Sync.more(
+          ~mach,
+          ~kern,
+          p,
+          n,
+          cs,
+          k,
+          bs,
+          pd,
+          Node.steps(~mach, ~kern, n, cs, Sealed.each(~mach, ~kern, k, bs, pd, s))
+        ),
+        Honest.trans(
+          ~mach,
+          s,
+          Sealed.each(~mach, ~kern, k, bs, pd, s),
+          Node.steps(~mach, ~kern, n, cs, Sealed.each(~mach, ~kern, k, bs, pd, s))
+        )(
+          Each.honest(~mach, ~kern, k, bs, pd, s)
+        )(Steps.honest(~mach, ~kern, n, cs, Sealed.each(~mach, ~kern, k, bs, pd, s))),
+        Honest.trans(
+          ~mach,
+          s,
+          Node.steps(~mach, ~kern, n, cs, Sealed.each(~mach, ~kern, k, bs, pd, s)),
+          Sync.more(
+            ~mach,
+            ~kern,
+            p,
+            n,
+            cs,
+            k,
+            bs,
+            pd,
+            Node.steps(~mach, ~kern, n, cs, Sealed.each(~mach, ~kern, k, bs, pd, s))
+          )
+        )(
+          Honest.trans(
+            ~mach,
+            s,
+            Sealed.each(~mach, ~kern, k, bs, pd, s),
+            Node.steps(~mach, ~kern, n, cs, Sealed.each(~mach, ~kern, k, bs, pd, s))
+          )(
+            Each.honest(~mach, ~kern, k, bs, pd, s)
+          )(Steps.honest(~mach, ~kern, n, cs, Sealed.each(~mach, ~kern, k, bs, pd, s)))
+        )(
+          More.honest(
+            ~mach,
+            ~kern,
+            p,
+            n,
+            cs,
+            k,
+            bs,
+            pd,
+            Node.steps(~mach, ~kern, n, cs, Sealed.each(~mach, ~kern, k, bs, pd, s))
+          )
+        )
+      )
+
+# a sync keeps honest a node
+def Sync.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +n: String,
+  +s: Node<Machine.Q(mach)>,
+  +t: Ledgers.State(Machine.Q(mach))
+) -> Honest.Keeps(~mach, s, Node.sync(~mach, ~kern, n, s, t)):
+  +new = Tries.Trie.values(
+    Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+    Ledgers.State.missing(~Machine.Q(mach), ~Machine.same(mach), t, State.ledger(~mach, s))
+  )
+  +s1 = Take.of(~mach, ~kern, s, t, new)
+  +cs = Sync.lines(~mach, s, s1, t)
+  +bs = Ballots.of(~mach, new)
+  +s2 = Node.steps(~mach, ~kern, n, cs, s1)
+  +s3 = Sync.more(
+    ~mach,
+    ~kern,
+    List.length(&2, Ledgers.Ballot, bs),
+    n,
+    cs,
+    List.length(&2, Ledgers.Ballot, bs),
+    bs,
+    Pending.of(bs),
+    s2
+  )
+  +s4 = Lies.take(~mach, ~kern, s3, new)
+  Honest.trans(
+    ~mach,
+    s,
+    s1,
+    Node.adopts(~mach, ~kern, n, cs, s4)
+  )(
+    Take.of.honest(~mach, ~kern, s, t)
+  )(
+    Honest.trans(
+      ~mach,
+      s1,
+      s2,
+      Node.adopts(~mach, ~kern, n, cs, s4)
+    )(
+      Steps.honest(~mach, ~kern, n, cs, s1)
+    )(
+      Honest.trans(
+        ~mach,
+        s2,
+        s3,
+        Node.adopts(~mach, ~kern, n, cs, s4)
+      )(
+        More.honest(
+          ~mach,
+          ~kern,
+          List.length(&2, Ledgers.Ballot, bs),
+          n,
+          cs,
+          List.length(&2, Ledgers.Ballot, bs),
+          bs,
+          Pending.of(bs),
+          s2
+        )
+      )(
+        Honest.trans(
+          ~mach,
+          s3,
+          s4,
+          Node.adopts(~mach, ~kern, n, cs, s4)
+        )(
+          Honest.frame(~mach, s3, s4)(Lies.frames(~mach, ~kern, s3, new))
+        )(Adopts.honest(~mach, ~kern, n, cs, s4))
+      )
+    )
+  )
+
+# Node.pass keeps honest a node, at the head h whose tip is m
+def Pass.at.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +n: String,
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain,
+  h: Head,
+  m: Maybe<&2, Tip>
+) -> Honest.Keeps(~mach, s, Pass.at(~mach, ~kern, n, s, c, h, m)):
+  match h m:
+    case Head{r, b, +next, th} Some{t}:
+      Pass.to.honest(
+        ~mach,
+        ~kern,
+        n,
+        s,
+        Ledgers.Where{c, next, 1n+Round.mine(~mach, n, s, c, next, Round.seen(~mach, s, c, next))},
+        Tip.owners(t)
+      )
+    case Head{r, b, next, th} None{}:
+      Honest.refl(~mach, s)
+
+# Node.pass keeps honest a node, once the head m is known
+def Pass.head.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  n: String,
+  +s: Node<Machine.Q(mach)>,
+  c: Ledgers.Chain,
+  m: Maybe<&2, Head>
+) -> Honest.Keeps(~mach, s, Pass.head(~mach, ~kern, n, s, c, m)):
+  match m:
+    case None{}:
+      Honest.refl(~mach, s)
+    case Some{+h}:
+      Pass.at.honest(~mach, ~kern, n, s, c, h, Head.tip(~mach, s, h))
+
+# a pass to the next round keeps honest a node
+def Pass.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +n: String,
+  +s: Node<Machine.Q(mach)>,
+  +c: Ledgers.Chain
+) -> Honest.Keeps(~mach, s, Node.pass(~mach, ~kern, n, s, c)):
+  s1 = Pass.head(~mach, ~kern, n, s, c, Node.head_of(~mach, s, c))
+  Honest.trans(
+    ~mach,
+    s,
+    s1,
+    Node.step(~mach, ~kern, n, s1, c)
+  )(
+    Pass.head.honest(~mach, ~kern, n, s, c, Node.head_of(~mach, s, c))
+  )(Step.honest(~mach, ~kern, n, s1, c))
+
+# the adoption of a line, if any, keeps honest a node
+def Adopt.maybe.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  n: String,
+  s: Node<Machine.Q(mach)>,
+  m: Maybe<&2, Ledgers.Chain>
+) -> Honest.Keeps(~mach, s, Adopt.maybe(~mach, ~kern, n, s, m)):
+  match m:
+    case None{}:
+      Honest.refl(~mach, s)
+    case Some{c}:
+      Adopt.at.honest(~mach, ~kern, n, s, c)
+
+# a request that a writer asks again at a node keeps honest it
+def Consent.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  n: String,
+  +s: Node<Machine.Q(mach)>,
+  +i: Ledgers.Id,
+  m: Maybe<&2, Ledgers.Chain>
+) -> Honest.Keeps(~mach, s, Consent.at(~mach, ~kern, n, s, i, m)):
+  match m:
+    case None{}:
+      Honest.refl(~mach, s)
+    case Some{c}:
+      Honest.trans(
+        ~mach,
+        s,
+        State.keyed(~mach, s, Keys.mark(State.keys(~mach, s), i)),
+        Node.step(~mach, ~kern, n, State.keyed(~mach, s, Keys.mark(State.keys(~mach, s), i)), c)
+      )(
+        Honest.to(
+          ~mach,
+          s,
+          s,
+          State.keyed(~mach, s, Keys.mark(State.keys(~mach, s), i)),
+          Led.keyed(~mach, s, Keys.mark(State.keys(~mach, s), i)),
+          Honest.refl(~mach, s)
+        )
+      )(Step.honest(~mach, ~kern, n, State.keyed(~mach, s, Keys.mark(State.keys(~mach, s), i)), c))
+
+# what a node does keeps honest it
+def Does.honest(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  +n: String,
+  +s: Node<Machine.Q(mach)>,
+  ev: Deed<Machine.Q(mach)>
+) -> Honest.Keeps(~mach, s, Node.does(~mach, ~kern, n, s, ev)):
+  match ev:
+    case Deed.Ask{+e, +q}:
+      Honest.trans(
+        ~mach,
+        s,
+        Node.ask(~mach, ~kern, n, s, e, q),
+        Adopt.at(
+          ~mach,
+          ~kern,
+          n,
+          Node.ask(~mach, ~kern, n, s, e, q),
+          Arrival.chain(Envelope.of(e), Machine.arrival(mach)(q))
+        )
+      )(
+        Ask.honest(~mach, ~kern, n, s, e, q)
+      )(
+        Adopt.at.honest(
+          ~mach,
+          ~kern,
+          n,
+          Node.ask(~mach, ~kern, n, s, e, q),
+          Arrival.chain(Envelope.of(e), Machine.arrival(mach)(q))
+        )
+      )
+    case Deed.Take{t}:
+      Take.honest(~mach, ~kern, s, t)
+    case Deed.Sync{t}:
+      Sync.honest(~mach, ~kern, n, s, t)
+    case Deed.Keep{+b}:
+      Honest.frame(
+        ~mach,
+        s,
+        Node.keep(~mach, s, b)
+      )(Frames.keep(~mach, s, Ropes.Put.nodes(Bytes.rope(b))))
+    case Deed.Consent{+i}:
+      Honest.trans(
+        ~mach,
+        s,
+        Node.consent(~mach, ~kern, n, s, i),
+        Adopt.maybe(
+          ~mach,
+          ~kern,
+          n,
+          Node.consent(~mach, ~kern, n, s, i),
+          Node.chain_of(~mach, s, i)
+        )
+      )(
+        Consent.honest(~mach, ~kern, n, s, i, Node.chain_of(~mach, s, i))
+      )(
+        Adopt.maybe.honest(
+          ~mach,
+          ~kern,
+          n,
+          Node.consent(~mach, ~kern, n, s, i),
+          Node.chain_of(~mach, s, i)
+        )
+      )
+    case Deed.Pass{+c}:
+      Honest.trans(
+        ~mach,
+        s,
+        Node.pass(~mach, ~kern, n, s, c),
+        Adopt.at(~mach, ~kern, n, Node.pass(~mach, ~kern, n, s, c), c)
+      )(
+        Pass.honest(~mach, ~kern, n, s, c)
+      )(Adopt.at.honest(~mach, ~kern, n, Node.pass(~mach, ~kern, n, s, c), c))
 
 # Seals
 # -----
@@ -23787,6 +25115,30 @@ def Node.one_history(mach, s, c, honest, rs1, rs2, h, x, y):
     x,
     y
   )(Grows.refl(~mach, s))(Grows.refl(~mach, s))
+
+# a node stays honest, whatever it does and whatever its kernel: each pass that
+# it holds names the last vote of its node (Node.Honest), so a node that
+# starts empty (Node.empty_honest) never shows two histories (Node.one_history)
+law Node.after_honest:
+  for ~mach: Machine()
+  for ~kern: Kernel(mach)
+  for +n: String
+  for +evs: List<&2, Deed<Machine.Q(mach)>>
+  for +s: Node<Machine.Q(mach)>
+  Node.Honest(~mach, s) -> Node.Honest(~mach, Node.after(~mach, ~kern, n, evs, s))
+
+def Node.after_honest(mach, kern, n, evs, s):
+  match evs:
+    case Nil{}:
+      Honest.refl(~mach, s)
+    case Con{+ev, rest}:
+      s1 = Node.does(~mach, ~kern, n, s, ev)
+      Honest.trans(
+        ~mach,
+        s,
+        s1,
+        Node.after(~mach, ~kern, n, rest, s1)
+      )(Does.honest(~mach, ~kern, n, s, ev))(Node.after_honest(~mach, ~kern, n, rest, s1))
 
 # every part is kept by enough nodes: a node that casts for a step keeps each
 # new part of the step (what its own run of the step put: the node of the run
