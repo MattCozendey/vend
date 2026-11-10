@@ -16,9 +16,14 @@ import ../shared/tree.bend as Trees
 # keys. It is generic over the machine: what a request is, and what a request
 # does to a line. src/daemon/core gives the machine of Vend.
 
-# a machine: its requests, when two are the same, and that this is equality
+# a machine: its requests; when two are the same, and that this is equality;
+# how a request arrives at a node; whether it changes who decides; and the key
+# of the first key of a node in the content of a store
 def Machine() -> Type:
-  &Q: Data -> &same: (Q -> Q -> Bool) -> Shared.Eq.Laws(Q, same)
+  &Q: Data -> &same: (Q -> Q -> Bool) -> Shared.Eq.Laws(
+    Q,
+    same
+  ) & ((Q -> Arrival) & ((Q -> Bool) & (String -> List<&2, U32>)))
 
 # the requests of the machine m
 def Machine.Q(m: Machine()) -> Data:
@@ -29,14 +34,33 @@ def Machine.Q(m: Machine()) -> Data:
 # two requests of the machine m are the same
 def Machine.same(m: Machine()) -> Machine.Q(m) -> Machine.Q(m) -> Bool:
   match m:
-    case Tuple{q, Tuple{s, l}}:
+    case Tuple{q, Tuple{s, r}}:
       s
 
 # the sameness of the machine m is equality
 def Machine.laws(m: Machine()) -> Shared.Eq.Laws(Machine.Q(m), Machine.same(m)):
   match m:
-    case Tuple{q, Tuple{s, l}}:
+    case Tuple{q, Tuple{s, Tuple{l, r}}}:
       l
+
+# how a request of the machine m arrives
+def Machine.arrival(m: Machine()) -> Machine.Q(m) -> Arrival:
+  match m:
+    case Tuple{q, Tuple{s, Tuple{l, Tuple{a, r}}}}:
+      a
+
+# a request of the machine m changes who decides
+def Machine.governs(m: Machine()) -> Machine.Q(m) -> Bool:
+  match m:
+    case Tuple{q, Tuple{s, Tuple{l, Tuple{a, Tuple{g, k}}}}}:
+      g
+
+# the key of the first key of a node, in the content of a store of the machine
+# m
+def Machine.seal(m: Machine()) -> String -> List<&2, U32>:
+  match m:
+    case Tuple{q, Tuple{s, Tuple{l, Tuple{a, Tuple{g, k}}}}}:
+      k
 
 # who asks for a change, and when
 type Envelope is Data:
@@ -765,7 +789,7 @@ def Owner.codec() -> Codes.Codec(Owner):
 
 # Kernels
 # -------
-# A kernel is a machine and what a replica asks of its requests.
+# A kernel is a machine and what one of its requests does to a run.
 
 # bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # how a request arrives at a node: it starts a store, with its first owners,
@@ -784,46 +808,16 @@ def Arrival.chain(i: Ledgers.Id, a: Arrival) -> Ledgers.Chain:
     case Arrival.Waits{r, l}:
       Line.chain(r, l)
 
-# what a kernel says of the requests of the machine M: how one arrives,
-# whether it changes who decides, the key of the first key of a node in the
-# content of a store, and what one does to the run of a line
-def Kernel.Hooks(M: Machine()) -> Type:
-  (Machine.Q(M) -> Arrival) & (
-    (Machine.Q(M) -> Bool) & (
-      (String -> List<&2, U32>) & (
-        Run<Machine.Q(M)> -> Ledgers.Chain -> Ledgers.Id -> Machine.Q(M) -> Maybe<&2, Run<Machine.Q(M)>>
-      )
-    )
-  )
-
-# a kernel: a machine, and its hooks
+# a kernel: a machine, and what a request does to the run of a line
 def Kernel() -> Type:
-  &M: Machine() -> Kernel.Hooks(M)
+  &M: Machine() -> Run<
+    Machine.Q(M)> -> Ledgers.Chain -> Ledgers.Id -> Machine.Q(M) -> Maybe<&2, Run<Machine.Q(M)>>
 
 # the machine of the kernel k
 def Kernel.machine(k: Kernel()) -> Machine():
   match k:
-    case Tuple{m, h}:
+    case Tuple{m, c}:
       m
-
-# how a request of the kernel k arrives
-def Kernel.arrival(k: Kernel()) -> Machine.Q(Kernel.machine(k)) -> Arrival:
-  match k:
-    case Tuple{m, Tuple{a, h}}:
-      a
-
-# a request of the kernel k changes who decides
-def Kernel.governs(k: Kernel()) -> Machine.Q(Kernel.machine(k)) -> Bool:
-  match k:
-    case Tuple{m, Tuple{a, Tuple{g, h}}}:
-      g
-
-# the key of the first key of a node, in the content of a store of the kernel
-# k
-def Kernel.seal(k: Kernel()) -> String -> List<&2, U32>:
-  match k:
-    case Tuple{m, Tuple{a, Tuple{g, Tuple{s, c}}}}:
-      s
 
 # what a request of the kernel k does to the run of a line
 def Kernel.change(
@@ -833,8 +827,9 @@ def Kernel.change(
   &2,
   Run<Machine.Q(Kernel.machine(k))>>:
   match k:
-    case Tuple{m, Tuple{a, Tuple{g, Tuple{s, c}}}}:
+    case Tuple{m, c}:
       c
+
 
 # the run r of the line c, after the request i, which the node holds as a
 # (none: wait for the request)
@@ -976,7 +971,7 @@ def Seal.first(~K: Kernel(), +s: Node<Machine.Q(Kernel.machine(K))>, r: Ledgers.
         Node.tip(~Kernel.machine(K), s, Ledgers.Chain{r, None{}}),
         t => Tip.content(t)
       ),
-      Kernel.seal(K)(n)
+      Machine.seal(Kernel.machine(K))(n)
     )
   )
 
@@ -1356,7 +1351,7 @@ def Seal.firsts(~K: Kernel(), os: List<&2, Owner>, m: Maybe<&2, Work<Machine.Q(K
           Work<Machine.Q(Kernel.machine(K))>,
           Work<Machine.Q(Kernel.machine(K))>,
           m,
-          w => Work.set(~Kernel.machine(K), w, Kernel.seal(K)(n), Hashes.Hash.code(k, []))
+          w => Work.set(~Kernel.machine(K), w, Machine.seal(Kernel.machine(K))(n), Hashes.Hash.code(k, []))
         )
       )
 
@@ -1449,7 +1444,7 @@ def Arrive.at(~K: Kernel(), s: Node<Machine.Q(Kernel.machine(K))>, i: Ledgers.Id
 
 # s, once it holds the new request i of the change q
 def Node.arrive(~K: Kernel(), s: Node<Machine.Q(Kernel.machine(K))>, i: Ledgers.Id, q: Machine.Q(Kernel.machine(K))) -> Node<Machine.Q(Kernel.machine(K))>:
-  Arrive.at(~K, s, i, Kernel.arrival(K)(q))
+  Arrive.at(~K, s, i, Machine.arrival(Kernel.machine(K))(q))
 
 # a and b are the same root
 def Root.same(a: Maybe<&2, Hashes.Hash>, b: Maybe<&2, Hashes.Hash>) -> Bool:
@@ -1556,7 +1551,7 @@ def Cast.mine.of(~K: Kernel(), s: Node<Machine.Q(Kernel.machine(K))>, i: Ledgers
     case None{}:
       True{}
     case Some{Ledgers.Asked{t, q}}:
-      List.any.if(u => Keys.asked(State.keys(~Kernel.machine(K), s), i), Bool.not(Kernel.governs(K)(q)))
+      List.any.if(u => Keys.asked(State.keys(~Kernel.machine(K), s), i), Bool.not(Machine.governs(Kernel.machine(K))(q)))
 
 # the requests of qs that the node s may cast for
 def Cast.mine(~K: Kernel(), +s: Node<Machine.Q(Kernel.machine(K))>, qs: List<&2, Ledgers.Id>) -> List<&2, Ledgers.Id>:

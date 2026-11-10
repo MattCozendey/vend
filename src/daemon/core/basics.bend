@@ -620,9 +620,38 @@ def Ask.laws() -> Shared.Eq.Laws(Ask, Ask.is_eq):
   Codes.Code.eq_laws(~Ask, ~Ask.codec())
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
-# the machine of Vend: its requests, and when two are the same
+# how the request q arrives at a node
+def Ask.arrival(q: Ask) -> Replicas.Arrival:
+  match q:
+    case Ask.Start{os}:
+      Replicas.Arrival.Starts{os}
+    case Ask.On{r, l, c}:
+      Replicas.Arrival.Waits{r, l}
+
+# the change q is one of who decides: a first key of a node, a group, the
+# owners of a line, or a new branch. The owners of a store decide these, so an
+# owner casts for one only when a writer connected to it asked for it
+def Ask.governs(q: Ask) -> Bool:
+  match q:
+    case Ask.On{r, l, Change.Key{n, k}}:
+      True{}
+    case Ask.On{r, l, Change.Group{g, ms}}:
+      True{}
+    case Ask.On{r, l, Change.Own{g, at, os}}:
+      True{}
+    case Ask.On{r, l, Change.Branch{b, at}}:
+      True{}
+    case x:
+      False{}
+
+# the key of the first key of the node n in a store
+def Key.seal(n: String) -> List<&2, U32>:
+  8 <> Codes.Code.text(n, [])
+
+# the machine of Vend: its requests, when two are the same, how one arrives,
+# whether it changes who decides, and the key of a node's first key
 def Ask.machine() -> Replicas.Machine():
-  (Ask, (Ask.is_eq, Ask.laws()))
+  (Ask, (Ask.is_eq, (Ask.laws(), (Ask.arrival, (Ask.governs, Key.seal)))))
 
 # the owners that the change c gives its chain, when it sets them
 def Change.owners(c: Change) -> Maybe<&2, List<&2, String>>:
@@ -667,10 +696,6 @@ def Key.clash(n: Resources.Name) -> List<&2, U32>:
 # the key of the line c in a version vector
 def Key.vector(c: Ledgers.Chain) -> List<&2, U32>:
   4 <> Ledgers.Chain.code(c, [])
-
-# the key of the first key of the node n in a store
-def Key.seal(n: String) -> List<&2, U32>:
-  8 <> Codes.Code.text(n, [])
 
 # the value of a resource whose content is under the root m (none: removed)
 def Res.code(m: Maybe<&2, Ropes.Root>) -> List<&2, U32>:
@@ -749,33 +774,9 @@ def Members.in(s: Replicas.Node<Ask>, h: Maybe<&2, Hashes.Hash>, g: String) -> M
 def Node.keep(s: Replicas.Node<Ask>, b: Texts.Bytes()) -> Replicas.Node<Ask>:
   Replicas.State.keep(~Ask.machine(), s, Ropes.Put.nodes(Bytes.rope(b)))
 
-# how the request q arrives at a node
-def Ask.arrival(q: Ask) -> Replicas.Arrival:
-  match q:
-    case Ask.Start{os}:
-      Replicas.Arrival.Starts{os}
-    case Ask.On{r, l, c}:
-      Replicas.Arrival.Waits{r, l}
-
 # the line of the request i of the change q
 def Ask.chain(i: Ledgers.Id, q: Ask) -> Ledgers.Chain:
   Replicas.Arrival.chain(i, Ask.arrival(q))
-
-# the change q is one of who decides: a first key of a node, a group, the
-# owners of a line, or a new branch. The owners of a store decide these, so an
-# owner casts for one only when a writer connected to it asked for it
-def Ask.governs(q: Ask) -> Bool:
-  match q:
-    case Ask.On{r, l, Change.Key{n, k}}:
-      True{}
-    case Ask.On{r, l, Change.Group{g, ms}}:
-      True{}
-    case Ask.On{r, l, Change.Own{g, at, os}}:
-      True{}
-    case Ask.On{r, l, Change.Branch{b, at}}:
-      True{}
-    case x:
-      False{}
 
 # the line of the request i, when s holds it
 def Node.chain_of(s: Replicas.Node<Ask>, +i: Ledgers.Id) -> Maybe<&2, Ledgers.Chain>:
@@ -784,7 +785,7 @@ def Node.chain_of(s: Replicas.Node<Ask>, +i: Ledgers.Id) -> Maybe<&2, Ledgers.Ch
     Ledgers.Asked<Ask>,
     Ledgers.Chain,
     Replicas.Node.asked(~Ask.machine(), s, i),
-    a => Some{Ask.chain(i, Replicas.Asked.ask(~Ask.machine(), a))}
+    a => Some{Replicas.Arrival.chain(i, Replicas.Machine.arrival(Ask.machine())(Replicas.Asked.ask(~Ask.machine(), a)))}
   )
 
 # the outcome of the request i (none: no step that the node knows decided it)

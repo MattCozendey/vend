@@ -157,10 +157,4 @@ def Step.change(+r: Replicas.Run<Basics.Ask>, c: Ledgers.Chain, +i: Ledgers.Id, 
 
 # the kernel of Vend
 def Ask.kernel() -> Replicas.Kernel():
-  (
-    Basics.Ask.machine(),
-    (
-      Basics.Ask.arrival,
-      (Basics.Ask.governs, (Basics.Key.seal, +r => c => +i => q => Step.change(r, c, i, q)))
-    )
-  )
+  (Basics.Ask.machine(), +r => c => +i => q => Step.change(r, c, i, q))

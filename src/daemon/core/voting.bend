@@ -722,7 +722,7 @@ def Node.pass(+n: String, +s: Replicas.Node<Basics.Ask>, +c: Ledgers.Chain) -> R
 # s, after the node n took in the new request q of e
 def Node.ask.new(n: String, +s: Replicas.Node<Basics.Ask>, +e: Replicas.Envelope, +q: Basics.Ask) -> Replicas.Node<Basics.Ask>:
   +i = Replicas.Envelope.of(e)
-  c = Replicas.Arrival.chain(i, Replicas.Kernel.arrival(Stepping.Ask.kernel())(q))
+  c = Replicas.Arrival.chain(i, Replicas.Machine.arrival(Basics.Ask.machine())(q))
   s1 = Replicas.Node.arrive(~Stepping.Ask.kernel(), 
     Replicas.State.led(~Basics.Ask.machine(), 
       s,
@@ -969,7 +969,7 @@ def Lines.new(
     case Nil{}:
       rest
     case Con{Cells.One{Ledgers.Entry.Ask{i, t, q}}, r}:
-      Replicas.Arrival.chain(i, Replicas.Kernel.arrival(Stepping.Ask.kernel())(q)) <> Lines.new(r, rest)
+      Replicas.Arrival.chain(i, Replicas.Machine.arrival(Basics.Ask.machine())(q)) <> Lines.new(r, rest)
     case Con{Cells.One{Ledgers.Entry.Vote{b}}, r}:
       Replicas.Where.line(Replicas.Ballot.at(b)) <> Lines.new(r, rest)
     case Con{c, r}:
