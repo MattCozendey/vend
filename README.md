@@ -24,7 +24,7 @@ A Vend Writer is anyone (people, agents, tools) connected to a Vend Node under a
 
 ## Vend Owner Group
 
-A Vend Owner Group is a composition of Vend Nodes that decide and sign the changes of a branch or of the Vend Store itself in sequence, many changes per decision, and a majority of its Vend Nodes is enough to decide. A member is a Vend Node or another Vend Owner Group, and a group's Vend Nodes are all those reachable through it, so changing a group changes the owners of everything it owns, each by its next decided step.
+A Vend Owner Group is a composition of Vend Nodes that decide and sign the changes of a branch or of the Vend Store itself in sequence, many changes per decision, and a majority of its Vend Nodes is enough to decide. A member is a Vend Node or another Vend Owner Group, and a group's Vend Nodes are all those reachable through it, so changing a group changes the owners of everything it owns, each by its next decided step. Only the Vend Nodes of a Vend Owner Group are trusted, and only for one thing: to never sign two different decisions for the same step. They can be offline, slow or lost, and the history stays one. Vend Writers and every other Vend Node are not trusted at all: two Vend Writers changing the same thing is just a conflict, and nothing they send is kept unless it checks.
 
 ## Vend Branch
 
