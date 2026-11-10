@@ -895,7 +895,8 @@ law Pick.merge_theirs:
   {Roots.same(o, b) == True{}: Bool}
     -> {Pick.merge(f, s, b, o, t) == Some{Pick.Take{t}}: Maybe<&2, Pick>}
 
-# and when theirs is the base, it keeps ours
+# and when theirs is the base, or both sides made the same change, it keeps
+# ours
 law Pick.merge_ours:
   for f: Formats.Format
   for s: Replicas.Node<Requests.Ask>
@@ -903,7 +904,7 @@ law Pick.merge_ours:
   for +o: Maybe<&2, Ropes.Root>
   for +t: Maybe<&2, Ropes.Root>
   {Roots.same(o, b) == False{}: Bool}
-    -> {Roots.same(t, b) == True{}: Bool}
+    -> {Bool.or(Roots.same(t, b), Roots.same(o, t)) == True{}: Bool}
     -> {Pick.merge(f, s, b, o, t) == Some{Pick.Take{o}}: Maybe<&2, Pick>}
 
 # writers are told only about changes to what their work uses: each change

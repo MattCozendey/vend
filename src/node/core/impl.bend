@@ -5939,20 +5939,22 @@ def Spec.Pick.merge_ours(f, s, b, o, t):
     }
     %Equal.sym(
       Bool,
-      Spec.Roots.same(t, b),
+      List.any.if(v => Spec.Roots.same(o, t), Spec.Roots.same(t, b)),
       True{},
-      e2
+      Equal.trans(
+        Bool,
+        List.any.if(v => Spec.Roots.same(o, t), Spec.Roots.same(t, b)),
+        Bool.or(Spec.Roots.same(t, b), Spec.Roots.same(o, t)),
+        True{},
+        Shared.List.any.if_or(Spec.Roots.same(t, b), v => Spec.Roots.same(o, t)),
+        e2
+      )
     ): {
       Shared.Bool.when(
         Maybe<&2, Spec.Pick>,
-        False{},
-        u => Some{Spec.Pick.Take{t}},
-        u => Shared.Bool.when(
-          Maybe<&2, Spec.Pick>,
-          List.any.if(v => Spec.Roots.same(o, t), _),
-          w => Some{Spec.Pick.Take{o}},
-          w => Pick.both(f, s, b, o, t)
-        )
+        _,
+        w => Some{Spec.Pick.Take{o}},
+        w => Pick.both(f, s, b, o, t)
       )
         == Some{Spec.Pick.Take{o}}: Maybe<&2, Spec.Pick>
     }
