@@ -12682,3 +12682,59 @@ def Take.asks.waits(
       Take.asks.waits(~K, rest, old, s, c2, i)
     case Con{Cells.Many{}, rest}:
       Take.asks.waits(~K, rest, old, s, c2, i)
+
+# Lawful kernels
+# --------------
+# The laws of a replica hold for a kernel whose change is sound.
+
+# that the change of the kernel K only grows the node of a run
+def Lawful.Grows(K: Kernel()) -> Type:
+  @r: Run<Machine.Q(Kernel.machine(K))> -> @c: Ledgers.Chain -> @i: Ledgers.Id -> @q: Machine.Q(Kernel.machine(K)) -> {
+    Run.after(~Kernel.machine(K), Run.state(~Kernel.machine(K), r), Kernel.change(K)(r)(c)(i)(q)) == True{}: Bool
+  }
+
+# that the change of the kernel K keeps each key of the log of a run
+def Lawful.Keeps(K: Kernel()) -> Type:
+  @r: Run<Machine.Q(Kernel.machine(K))> -> @c: Ledgers.Chain -> @i: Ledgers.Id -> @q: Machine.Q(Kernel.machine(K)) -> @k2: List<&2, U32> -> @v: List<&2, U32> -> Run.Keeps(
+    ~Kernel.machine(K),
+    k2,
+    v,
+    Some{r}
+  ) -> Run.Keeps(~Kernel.machine(K), k2, v, Kernel.change(K)(r)(c)(i)(q))
+
+# that the change of the kernel K gives its request an outcome
+def Lawful.Outs(K: Kernel()) -> Type:
+  @r: Run<Machine.Q(Kernel.machine(K))> -> @c: Ledgers.Chain -> @i: Ledgers.Id -> @q: Machine.Q(Kernel.machine(K)) -> Run.Outs(~Kernel.machine(K), Kernel.change(K)(r)(c)(i)(q), i)
+
+# a lawful kernel: a kernel, and the proofs that its change only grows the
+# node, keeps the log, and gives an outcome
+def Lawful() -> Type:
+  &K: Kernel() -> Lawful.Grows(K) & (Lawful.Keeps(K) & Lawful.Outs(K))
+
+# the kernel of the lawful kernel l
+def Lawful.kernel(l: Lawful()) -> Kernel():
+  match l:
+    case Tuple{k, p}:
+      k
+
+# the machine of the lawful kernel l
+def Lawful.machine(l: Lawful()) -> Machine():
+  Kernel.machine(Lawful.kernel(l))
+
+# the change of the lawful kernel l only grows the node of a run
+def Lawful.grows(l: Lawful()) -> Lawful.Grows(Lawful.kernel(l)):
+  match l:
+    case Tuple{k, Tuple{g, p}}:
+      g
+
+# the change of the lawful kernel l keeps each key of the log of a run
+def Lawful.kept(l: Lawful()) -> Lawful.Keeps(Lawful.kernel(l)):
+  match l:
+    case Tuple{k, Tuple{g, Tuple{kp, o}}}:
+      kp
+
+# the change of the lawful kernel l gives its request an outcome
+def Lawful.outs(l: Lawful()) -> Lawful.Outs(Lawful.kernel(l)):
+  match l:
+    case Tuple{k, Tuple{g, Tuple{kp, o}}}:
+      o

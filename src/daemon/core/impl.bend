@@ -25,7 +25,6 @@ import ./spec.bend as Spec
 import ./stepping.bend as Stepping
 
 # The proofs of the core's laws.
-
 def Spec.Ask.same():
   Basics.Ask.laws()
 
@@ -1021,6 +1020,332 @@ def Change.grows(
         Replicas.Stale.grows(~Basics.Ask.machine(), r, i)
       )
 
+# a request for a branch keeps each key of a run's log, other than the owners
+# and the count, once it is known whether its version is one
+def Branch.ready.kept(
+  +r: Replicas.Run<Basics.Ask>,
+  i: Ledgers.Id,
+  +st: Ledgers.Id,
+  +b: String,
+  +at: Maybe<&2, Ledgers.Id>,
+  m: Maybe<&2, Bool>,
+  k2: List<&2, U32>,
+  v: List<&2, U32>
+) -> Replicas.Run.Keeps(~Basics.Ask.machine(), k2, v, Some{r}) -> Replicas.Run.Keeps(~Basics.Ask.machine(), k2, v, Stepping.Branch.ready(r, i, st, b, at, m)):
+  match m:
+    case None{}:
+      hr => Unit{}
+    case Some{False{}}:
+      Replicas.Add.kept(~Basics.Ask.machine(), r, Replicas.Log.out(i), Replicas.Out.words(Replicas.Out.Stale{}), k2, v)
+    case Some{True{}}:
+      Replicas.Keeps.when(~Basics.Ask.machine(), 
+        k2,
+        v,
+        r,
+        Trees.Tree.whole(
+          ~Replicas.Node<Basics.Ask>,
+          ~Replicas.Store.fetch(~Basics.Ask.machine()),
+          Replicas.Run.state(~Basics.Ask.machine(), r),
+          Replicas.Node.root_of(~Basics.Ask.machine(), Replicas.Run.state(~Basics.Ask.machine(), r), at)
+        ),
+        Replicas.Branch.made(~Basics.Ask.machine(), 
+          r,
+          i,
+          b,
+          Judging.Make.first(
+            Judging.Make.branch(Replicas.Run.state(~Basics.Ask.machine(), r), Replicas.Line.chain(st, Some{b}), at),
+            Replicas.Tip.owners(Replicas.Run.tip(~Basics.Ask.machine(), r))
+          )
+        ),
+        None{},
+        Replicas.Branch.made.kept(~Basics.Ask.machine(), 
+          r,
+          i,
+          b,
+          Judging.Make.first(
+            Judging.Make.branch(Replicas.Run.state(~Basics.Ask.machine(), r), Replicas.Line.chain(st, Some{b}), at),
+            Replicas.Tip.owners(Replicas.Run.tip(~Basics.Ask.machine(), r))
+          ),
+          k2,
+          v
+        )(
+          Grown.make.first(
+            Replicas.Run.state(~Basics.Ask.machine(), r),
+            Judging.Make.branch(Replicas.Run.state(~Basics.Ask.machine(), r), Replicas.Line.chain(st, Some{b}), at),
+            Replicas.Tip.owners(Replicas.Run.tip(~Basics.Ask.machine(), r))
+          )(Grown.make.branch(Replicas.Run.state(~Basics.Ask.machine(), r), Replicas.Line.chain(st, Some{b}), at))
+        ),
+        hr => Unit{}
+      )
+
+# a request for a branch keeps each key of a run's log, other than the owners
+# and the count
+def Branch.new.kept(
+  +r: Replicas.Run<Basics.Ask>,
+  i: Ledgers.Id,
+  st: Ledgers.Id,
+  b: String,
+  +at: Maybe<&2, Ledgers.Id>,
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>,
+  k2: List<&2, U32>,
+  v: List<&2, U32>
+) -> Replicas.Run.Keeps(~Basics.Ask.machine(), k2, v, Some{r}) -> Replicas.Run.Keeps(~Basics.Ask.machine(), k2, v, Stepping.Branch.new(r, i, st, b, at, m)):
+  match m:
+    case None{}:
+      hr => Unit{}
+    case Some{Some{x}}:
+      Replicas.Add.kept(~Basics.Ask.machine(), r, Replicas.Log.out(i), Replicas.Out.words(Replicas.Out.Stale{}), k2, v)
+    case Some{None{}}:
+      Branch.ready.kept(
+        r,
+        i,
+        st,
+        b,
+        at,
+        Judging.Judge.ready_maybe(Replicas.Run.state(~Basics.Ask.machine(), r), at),
+        k2,
+        v
+      )
+
+# On.kept once it is known how the line takes the change (w)
+def On.of.kept(
+  +r: Replicas.Run<Basics.Ask>,
+  i: Ledgers.Id,
+  +st: Ledgers.Id,
+  +l: Maybe<&2, String>,
+  +ch: Basics.Change,
+  w: Stepping.Route,
+  k2: List<&2, U32>,
+  v: List<&2, U32>
+) -> Replicas.Run.Keeps(~Basics.Ask.machine(), k2, v, Some{r}) -> Replicas.Run.Keeps(~Basics.Ask.machine(), k2, v, Stepping.Step.on.of(r, i, st, l, ch, w)):
+  match w:
+    case Stepping.Route.Mark{a}:
+      hr => Replicas.Mark.kept(~Basics.Ask.machine(), r, i, a, k2, v)(hr)
+    case Stepping.Route.Branch{+a, b}:
+      Branch.new.kept(
+        r,
+        i,
+        st,
+        a,
+        b,
+        Replicas.Node.find(~Basics.Ask.machine(), 
+          Replicas.Run.state(~Basics.Ask.machine(), r),
+          Replicas.Tip.log(Replicas.Run.tip(~Basics.Ask.machine(), r)),
+          Replicas.Log.start(a)
+        ),
+        k2,
+        v
+      )
+    case Stepping.Route.Judge{}:
+      hr => Replicas.Judged.kept(~Basics.Ask.machine(), 
+        r,
+        i,
+        Basics.Change.owners(ch),
+        Judging.Judge.change(
+          Replicas.Run.state(~Basics.Ask.machine(), r),
+          st,
+          l,
+          ch,
+          Replicas.Tip.content(Replicas.Run.tip(~Basics.Ask.machine(), r)),
+          Replicas.Tip.owners(Replicas.Run.tip(~Basics.Ask.machine(), r))
+        ),
+        k2,
+        v
+      )(
+        Verdict.change(
+          Replicas.Run.state(~Basics.Ask.machine(), r),
+          st,
+          l,
+          ch,
+          Replicas.Tip.content(Replicas.Run.tip(~Basics.Ask.machine(), r)),
+          Replicas.Tip.owners(Replicas.Run.tip(~Basics.Ask.machine(), r))
+        )
+      )(hr)
+
+# a change of a line keeps each key of a run's log, other than the owners and
+# the count
+def On.kept(
+  r: Replicas.Run<Basics.Ask>,
+  i: Ledgers.Id,
+  st: Ledgers.Id,
+  +l: Maybe<&2, String>,
+  +ch: Basics.Change,
+  k2: List<&2, U32>,
+  v: List<&2, U32>
+) -> Replicas.Run.Keeps(~Basics.Ask.machine(), k2, v, Some{r}) -> Replicas.Run.Keeps(~Basics.Ask.machine(), k2, v, Stepping.Step.on(r, i, st, l, ch)):
+  On.of.kept(r, i, st, l, ch, Stepping.Route.of(l, ch), k2, v)
+
+# a request keeps each key of a run's log, other than the owners and the count
+def Change.kept(
+  +r: Replicas.Run<Basics.Ask>,
+  c: Ledgers.Chain,
+  +i: Ledgers.Id,
+  q: Basics.Ask,
+  +k2: List<&2, U32>,
+  +v: List<&2, U32>
+) -> Replicas.Run.Keeps(~Basics.Ask.machine(), k2, v, Some{r}) -> Replicas.Run.Keeps(~Basics.Ask.machine(), k2, v, Stepping.Step.change(r, c, i, q)):
+  match q:
+    case Basics.Ask.Start{os}:
+      hr => Replicas.Add.kept(~Basics.Ask.machine(), r, Replicas.Log.out(i), Replicas.Out.words(Replicas.Out.Stale{}), k2, v)(hr)
+    case Basics.Ask.On{+st, +l, ch}:
+      Replicas.Keeps.when(~Basics.Ask.machine(), 
+        k2,
+        v,
+        r,
+        Ledgers.Chain.is_eq(Replicas.Line.chain(st, l), c),
+        Stepping.Step.on(r, i, st, l, ch),
+        Replicas.Step.stale(~Basics.Ask.machine(), r, i),
+        On.kept(r, i, st, l, ch, k2, v),
+        Replicas.Add.kept(~Basics.Ask.machine(), r, Replicas.Log.out(i), Replicas.Out.words(Replicas.Out.Stale{}), k2, v)
+      )
+
+# a request for a branch has an outcome, once it is known whether its version
+# is one
+def Branch.ready.outs(
+  +r: Replicas.Run<Basics.Ask>,
+  i: Ledgers.Id,
+  st: Ledgers.Id,
+  +b: String,
+  +at: Maybe<&2, Ledgers.Id>,
+  +m: Maybe<&2, Bool>
+) -> Replicas.Run.Outs(~Basics.Ask.machine(), Stepping.Branch.ready(r, i, st, b, at, m), i):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{False{}}:
+      Replicas.Stale.outs(~Basics.Ask.machine(), r, i)
+    case Some{True{}}:
+      Replicas.Outs.when(~Basics.Ask.machine(), 
+        Trees.Tree.whole(
+          ~Replicas.Node<Basics.Ask>,
+          ~Replicas.Store.fetch(~Basics.Ask.machine()),
+          Replicas.Run.state(~Basics.Ask.machine(), r),
+          Replicas.Node.root_of(~Basics.Ask.machine(), Replicas.Run.state(~Basics.Ask.machine(), r), at)
+        ),
+        Replicas.Branch.made(~Basics.Ask.machine(), 
+          r,
+          i,
+          b,
+          Judging.Make.first(
+            Judging.Make.branch(Replicas.Run.state(~Basics.Ask.machine(), r), Replicas.Line.chain(st, Some{b}), at),
+            Replicas.Tip.owners(Replicas.Run.tip(~Basics.Ask.machine(), r))
+          )
+        ),
+        None{},
+        i,
+        Replicas.Branch.made.outs(~Basics.Ask.machine(), 
+          r,
+          i,
+          b,
+          Judging.Make.first(
+            Judging.Make.branch(Replicas.Run.state(~Basics.Ask.machine(), r), Replicas.Line.chain(st, Some{b}), at),
+            Replicas.Tip.owners(Replicas.Run.tip(~Basics.Ask.machine(), r))
+          )
+        ),
+        Unit{}
+      )
+
+# a request for a branch has an outcome
+def Branch.new.outs(
+  +r: Replicas.Run<Basics.Ask>,
+  i: Ledgers.Id,
+  st: Ledgers.Id,
+  b: String,
+  +at: Maybe<&2, Ledgers.Id>,
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>
+) -> Replicas.Run.Outs(~Basics.Ask.machine(), Stepping.Branch.new(r, i, st, b, at, m), i):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{Some{x}}:
+      Replicas.Stale.outs(~Basics.Ask.machine(), r, i)
+    case Some{None{}}:
+      Branch.ready.outs(r, i, st, b, at, Judging.Judge.ready_maybe(Replicas.Run.state(~Basics.Ask.machine(), r), at))
+
+# On.outs once it is known how the line takes the change (w)
+def On.of.outs(
+  +r: Replicas.Run<Basics.Ask>,
+  i: Ledgers.Id,
+  st: Ledgers.Id,
+  l: Maybe<&2, String>,
+  +ch: Basics.Change,
+  w: Stepping.Route
+) -> Replicas.Run.Outs(~Basics.Ask.machine(), Stepping.Step.on.of(r, i, st, l, ch, w), i):
+  match w:
+    case Stepping.Route.Mark{a}:
+      Replicas.Mark.outs(~Basics.Ask.machine(), r, i, a)
+    case Stepping.Route.Branch{+a, b}:
+      Branch.new.outs(
+        r,
+        i,
+        st,
+        a,
+        b,
+        Replicas.Node.find(~Basics.Ask.machine(), 
+          Replicas.Run.state(~Basics.Ask.machine(), r),
+          Replicas.Tip.log(Replicas.Run.tip(~Basics.Ask.machine(), r)),
+          Replicas.Log.start(a)
+        )
+      )
+    case Stepping.Route.Judge{}:
+      Replicas.Judged.outs(~Basics.Ask.machine(), 
+        r,
+        i,
+        Basics.Change.owners(ch),
+        Judging.Judge.change(
+          Replicas.Run.state(~Basics.Ask.machine(), r),
+          st,
+          l,
+          ch,
+          Replicas.Tip.content(Replicas.Run.tip(~Basics.Ask.machine(), r)),
+          Replicas.Tip.owners(Replicas.Run.tip(~Basics.Ask.machine(), r))
+        )
+      )
+
+# a change of a line has an outcome
+def On.outs(
+  r: Replicas.Run<Basics.Ask>,
+  i: Ledgers.Id,
+  st: Ledgers.Id,
+  +l: Maybe<&2, String>,
+  +ch: Basics.Change
+) -> Replicas.Run.Outs(~Basics.Ask.machine(), Stepping.Step.on(r, i, st, l, ch), i):
+  On.of.outs(r, i, st, l, ch, Stepping.Route.of(l, ch))
+
+# a request of a run has an outcome
+def Change.outs(
+  +r: Replicas.Run<Basics.Ask>,
+  c: Ledgers.Chain,
+  +i: Ledgers.Id,
+  +q: Basics.Ask
+) -> Replicas.Run.Outs(~Basics.Ask.machine(), Stepping.Step.change(r, c, i, q), i):
+  match q:
+    case Basics.Ask.Start{os}:
+      Replicas.Stale.outs(~Basics.Ask.machine(), r, i)
+    case Basics.Ask.On{st, l, ch}:
+      Replicas.Outs.when(~Basics.Ask.machine(), 
+        Ledgers.Chain.is_eq(Replicas.Line.chain(st, l), c),
+        Stepping.Step.on(r, i, st, l, ch),
+        Replicas.Step.stale(~Basics.Ask.machine(), r, i),
+        i,
+        On.outs(r, i, st, l, ch),
+        Replicas.Stale.outs(~Basics.Ask.machine(), r, i)
+      )
+
+# the lawful kernel of Vend: its change only grows the node of a run, keeps
+# each key of its log, and gives its request an outcome
+def Ask.lawful() -> Replicas.Lawful():
+  (
+    Stepping.Ask.kernel(),
+    (
+      +r => c => +i => +q => Change.grows(r, c, i, q),
+      (
+        +r => c => +i => q => +k2 => +v => Change.kept(r, c, i, q, k2, v),
+        +r => c => +i => +q => Change.outs(r, c, i, q)
+      )
+    )
+  )
+
 # a request that the node holds or not only grows a run's node
 def Asked.grows(
   r: Replicas.Run<Basics.Ask>,
@@ -1032,7 +1357,7 @@ def Asked.grows(
     case None{}:
       {==}
     case Some{Ledgers.Asked{t, q}}:
-      Change.grows(r, c, i, q)
+      Replicas.Lawful.grows(Ask.lawful())(r)(c)(i)(q)
 
 # a request that the log holds or not only grows a run's node
 def Fresh.grows(
@@ -1995,185 +2320,6 @@ def Spec.Node.ask_once(n, m, s, e, q, e2, q2):
 # A log only gains keys: a key that a log holds, other than the owners and the
 # count, holds the same value after any step.
 
-# a request for a branch keeps each key of a run's log, other than the owners
-# and the count, once it is known whether its version is one
-def Branch.ready.kept(
-  +r: Replicas.Run<Basics.Ask>,
-  i: Ledgers.Id,
-  +st: Ledgers.Id,
-  +b: String,
-  +at: Maybe<&2, Ledgers.Id>,
-  m: Maybe<&2, Bool>,
-  k2: List<&2, U32>,
-  v: List<&2, U32>
-) -> Replicas.Run.Keeps(~Basics.Ask.machine(), k2, v, Some{r}) -> Replicas.Run.Keeps(~Basics.Ask.machine(), k2, v, Stepping.Branch.ready(r, i, st, b, at, m)):
-  match m:
-    case None{}:
-      hr => Unit{}
-    case Some{False{}}:
-      Replicas.Add.kept(~Basics.Ask.machine(), r, Replicas.Log.out(i), Replicas.Out.words(Replicas.Out.Stale{}), k2, v)
-    case Some{True{}}:
-      Replicas.Keeps.when(~Basics.Ask.machine(), 
-        k2,
-        v,
-        r,
-        Trees.Tree.whole(
-          ~Replicas.Node<Basics.Ask>,
-          ~Replicas.Store.fetch(~Basics.Ask.machine()),
-          Replicas.Run.state(~Basics.Ask.machine(), r),
-          Replicas.Node.root_of(~Basics.Ask.machine(), Replicas.Run.state(~Basics.Ask.machine(), r), at)
-        ),
-        Replicas.Branch.made(~Basics.Ask.machine(), 
-          r,
-          i,
-          b,
-          Judging.Make.first(
-            Judging.Make.branch(Replicas.Run.state(~Basics.Ask.machine(), r), Replicas.Line.chain(st, Some{b}), at),
-            Replicas.Tip.owners(Replicas.Run.tip(~Basics.Ask.machine(), r))
-          )
-        ),
-        None{},
-        Replicas.Branch.made.kept(~Basics.Ask.machine(), 
-          r,
-          i,
-          b,
-          Judging.Make.first(
-            Judging.Make.branch(Replicas.Run.state(~Basics.Ask.machine(), r), Replicas.Line.chain(st, Some{b}), at),
-            Replicas.Tip.owners(Replicas.Run.tip(~Basics.Ask.machine(), r))
-          ),
-          k2,
-          v
-        )(
-          Grown.make.first(
-            Replicas.Run.state(~Basics.Ask.machine(), r),
-            Judging.Make.branch(Replicas.Run.state(~Basics.Ask.machine(), r), Replicas.Line.chain(st, Some{b}), at),
-            Replicas.Tip.owners(Replicas.Run.tip(~Basics.Ask.machine(), r))
-          )(Grown.make.branch(Replicas.Run.state(~Basics.Ask.machine(), r), Replicas.Line.chain(st, Some{b}), at))
-        ),
-        hr => Unit{}
-      )
-
-# a request for a branch keeps each key of a run's log, other than the owners
-# and the count
-def Branch.new.kept(
-  +r: Replicas.Run<Basics.Ask>,
-  i: Ledgers.Id,
-  st: Ledgers.Id,
-  b: String,
-  +at: Maybe<&2, Ledgers.Id>,
-  m: Maybe<&2, Maybe<&2, List<&2, U32>>>,
-  k2: List<&2, U32>,
-  v: List<&2, U32>
-) -> Replicas.Run.Keeps(~Basics.Ask.machine(), k2, v, Some{r}) -> Replicas.Run.Keeps(~Basics.Ask.machine(), k2, v, Stepping.Branch.new(r, i, st, b, at, m)):
-  match m:
-    case None{}:
-      hr => Unit{}
-    case Some{Some{x}}:
-      Replicas.Add.kept(~Basics.Ask.machine(), r, Replicas.Log.out(i), Replicas.Out.words(Replicas.Out.Stale{}), k2, v)
-    case Some{None{}}:
-      Branch.ready.kept(
-        r,
-        i,
-        st,
-        b,
-        at,
-        Judging.Judge.ready_maybe(Replicas.Run.state(~Basics.Ask.machine(), r), at),
-        k2,
-        v
-      )
-
-# On.kept once it is known how the line takes the change (w)
-def On.of.kept(
-  +r: Replicas.Run<Basics.Ask>,
-  i: Ledgers.Id,
-  +st: Ledgers.Id,
-  +l: Maybe<&2, String>,
-  +ch: Basics.Change,
-  w: Stepping.Route,
-  k2: List<&2, U32>,
-  v: List<&2, U32>
-) -> Replicas.Run.Keeps(~Basics.Ask.machine(), k2, v, Some{r}) -> Replicas.Run.Keeps(~Basics.Ask.machine(), k2, v, Stepping.Step.on.of(r, i, st, l, ch, w)):
-  match w:
-    case Stepping.Route.Mark{a}:
-      hr => Replicas.Mark.kept(~Basics.Ask.machine(), r, i, a, k2, v)(hr)
-    case Stepping.Route.Branch{+a, b}:
-      Branch.new.kept(
-        r,
-        i,
-        st,
-        a,
-        b,
-        Replicas.Node.find(~Basics.Ask.machine(), 
-          Replicas.Run.state(~Basics.Ask.machine(), r),
-          Replicas.Tip.log(Replicas.Run.tip(~Basics.Ask.machine(), r)),
-          Replicas.Log.start(a)
-        ),
-        k2,
-        v
-      )
-    case Stepping.Route.Judge{}:
-      hr => Replicas.Judged.kept(~Basics.Ask.machine(), 
-        r,
-        i,
-        Basics.Change.owners(ch),
-        Judging.Judge.change(
-          Replicas.Run.state(~Basics.Ask.machine(), r),
-          st,
-          l,
-          ch,
-          Replicas.Tip.content(Replicas.Run.tip(~Basics.Ask.machine(), r)),
-          Replicas.Tip.owners(Replicas.Run.tip(~Basics.Ask.machine(), r))
-        ),
-        k2,
-        v
-      )(
-        Verdict.change(
-          Replicas.Run.state(~Basics.Ask.machine(), r),
-          st,
-          l,
-          ch,
-          Replicas.Tip.content(Replicas.Run.tip(~Basics.Ask.machine(), r)),
-          Replicas.Tip.owners(Replicas.Run.tip(~Basics.Ask.machine(), r))
-        )
-      )(hr)
-
-# a change of a line keeps each key of a run's log, other than the owners and
-# the count
-def On.kept(
-  r: Replicas.Run<Basics.Ask>,
-  i: Ledgers.Id,
-  st: Ledgers.Id,
-  +l: Maybe<&2, String>,
-  +ch: Basics.Change,
-  k2: List<&2, U32>,
-  v: List<&2, U32>
-) -> Replicas.Run.Keeps(~Basics.Ask.machine(), k2, v, Some{r}) -> Replicas.Run.Keeps(~Basics.Ask.machine(), k2, v, Stepping.Step.on(r, i, st, l, ch)):
-  On.of.kept(r, i, st, l, ch, Stepping.Route.of(l, ch), k2, v)
-
-# a request keeps each key of a run's log, other than the owners and the count
-def Change.kept(
-  +r: Replicas.Run<Basics.Ask>,
-  c: Ledgers.Chain,
-  +i: Ledgers.Id,
-  q: Basics.Ask,
-  +k2: List<&2, U32>,
-  +v: List<&2, U32>
-) -> Replicas.Run.Keeps(~Basics.Ask.machine(), k2, v, Some{r}) -> Replicas.Run.Keeps(~Basics.Ask.machine(), k2, v, Stepping.Step.change(r, c, i, q)):
-  match q:
-    case Basics.Ask.Start{os}:
-      hr => Replicas.Add.kept(~Basics.Ask.machine(), r, Replicas.Log.out(i), Replicas.Out.words(Replicas.Out.Stale{}), k2, v)(hr)
-    case Basics.Ask.On{+st, +l, ch}:
-      Replicas.Keeps.when(~Basics.Ask.machine(), 
-        k2,
-        v,
-        r,
-        Ledgers.Chain.is_eq(Replicas.Line.chain(st, l), c),
-        Stepping.Step.on(r, i, st, l, ch),
-        Replicas.Step.stale(~Basics.Ask.machine(), r, i),
-        On.kept(r, i, st, l, ch, k2, v),
-        Replicas.Add.kept(~Basics.Ask.machine(), r, Replicas.Log.out(i), Replicas.Out.words(Replicas.Out.Stale{}), k2, v)
-      )
-
 # a request that the node holds or not keeps each key of a run's log
 def Asked.kept(
   r: Replicas.Run<Basics.Ask>,
@@ -2187,7 +2333,7 @@ def Asked.kept(
     case None{}:
       hr => Unit{}
     case Some{Ledgers.Asked{t, q}}:
-      Change.kept(r, c, i, q, k2, v)
+      Replicas.Lawful.kept(Ask.lawful())(r)(c)(i)(q)(k2)(v)
 
 # a request that the log holds or not keeps each key of a run's log
 def Fresh.kept(
@@ -3962,139 +4108,6 @@ def Spec.Clash.shut(s, h, n, f):
 # A step gives each of its requests an outcome (Spec.Step.run_outs), and only
 # the requests of a step leave the requests that wait (Spec.Wait.left_keeps).
 
-# a request for a branch has an outcome, once it is known whether its version
-# is one
-def Branch.ready.outs(
-  +r: Replicas.Run<Basics.Ask>,
-  i: Ledgers.Id,
-  st: Ledgers.Id,
-  +b: String,
-  +at: Maybe<&2, Ledgers.Id>,
-  +m: Maybe<&2, Bool>
-) -> Replicas.Run.Outs(~Basics.Ask.machine(), Stepping.Branch.ready(r, i, st, b, at, m), i):
-  match m:
-    case None{}:
-      Unit{}
-    case Some{False{}}:
-      Replicas.Stale.outs(~Basics.Ask.machine(), r, i)
-    case Some{True{}}:
-      Replicas.Outs.when(~Basics.Ask.machine(), 
-        Trees.Tree.whole(
-          ~Replicas.Node<Basics.Ask>,
-          ~Replicas.Store.fetch(~Basics.Ask.machine()),
-          Replicas.Run.state(~Basics.Ask.machine(), r),
-          Replicas.Node.root_of(~Basics.Ask.machine(), Replicas.Run.state(~Basics.Ask.machine(), r), at)
-        ),
-        Replicas.Branch.made(~Basics.Ask.machine(), 
-          r,
-          i,
-          b,
-          Judging.Make.first(
-            Judging.Make.branch(Replicas.Run.state(~Basics.Ask.machine(), r), Replicas.Line.chain(st, Some{b}), at),
-            Replicas.Tip.owners(Replicas.Run.tip(~Basics.Ask.machine(), r))
-          )
-        ),
-        None{},
-        i,
-        Replicas.Branch.made.outs(~Basics.Ask.machine(), 
-          r,
-          i,
-          b,
-          Judging.Make.first(
-            Judging.Make.branch(Replicas.Run.state(~Basics.Ask.machine(), r), Replicas.Line.chain(st, Some{b}), at),
-            Replicas.Tip.owners(Replicas.Run.tip(~Basics.Ask.machine(), r))
-          )
-        ),
-        Unit{}
-      )
-
-# a request for a branch has an outcome
-def Branch.new.outs(
-  +r: Replicas.Run<Basics.Ask>,
-  i: Ledgers.Id,
-  st: Ledgers.Id,
-  b: String,
-  +at: Maybe<&2, Ledgers.Id>,
-  m: Maybe<&2, Maybe<&2, List<&2, U32>>>
-) -> Replicas.Run.Outs(~Basics.Ask.machine(), Stepping.Branch.new(r, i, st, b, at, m), i):
-  match m:
-    case None{}:
-      Unit{}
-    case Some{Some{x}}:
-      Replicas.Stale.outs(~Basics.Ask.machine(), r, i)
-    case Some{None{}}:
-      Branch.ready.outs(r, i, st, b, at, Judging.Judge.ready_maybe(Replicas.Run.state(~Basics.Ask.machine(), r), at))
-
-# On.outs once it is known how the line takes the change (w)
-def On.of.outs(
-  +r: Replicas.Run<Basics.Ask>,
-  i: Ledgers.Id,
-  st: Ledgers.Id,
-  l: Maybe<&2, String>,
-  +ch: Basics.Change,
-  w: Stepping.Route
-) -> Replicas.Run.Outs(~Basics.Ask.machine(), Stepping.Step.on.of(r, i, st, l, ch, w), i):
-  match w:
-    case Stepping.Route.Mark{a}:
-      Replicas.Mark.outs(~Basics.Ask.machine(), r, i, a)
-    case Stepping.Route.Branch{+a, b}:
-      Branch.new.outs(
-        r,
-        i,
-        st,
-        a,
-        b,
-        Replicas.Node.find(~Basics.Ask.machine(), 
-          Replicas.Run.state(~Basics.Ask.machine(), r),
-          Replicas.Tip.log(Replicas.Run.tip(~Basics.Ask.machine(), r)),
-          Replicas.Log.start(a)
-        )
-      )
-    case Stepping.Route.Judge{}:
-      Replicas.Judged.outs(~Basics.Ask.machine(), 
-        r,
-        i,
-        Basics.Change.owners(ch),
-        Judging.Judge.change(
-          Replicas.Run.state(~Basics.Ask.machine(), r),
-          st,
-          l,
-          ch,
-          Replicas.Tip.content(Replicas.Run.tip(~Basics.Ask.machine(), r)),
-          Replicas.Tip.owners(Replicas.Run.tip(~Basics.Ask.machine(), r))
-        )
-      )
-
-# a change of a line has an outcome
-def On.outs(
-  r: Replicas.Run<Basics.Ask>,
-  i: Ledgers.Id,
-  st: Ledgers.Id,
-  +l: Maybe<&2, String>,
-  +ch: Basics.Change
-) -> Replicas.Run.Outs(~Basics.Ask.machine(), Stepping.Step.on(r, i, st, l, ch), i):
-  On.of.outs(r, i, st, l, ch, Stepping.Route.of(l, ch))
-
-# a request of a run has an outcome
-def Change.outs(
-  +r: Replicas.Run<Basics.Ask>,
-  c: Ledgers.Chain,
-  +i: Ledgers.Id,
-  +q: Basics.Ask
-) -> Replicas.Run.Outs(~Basics.Ask.machine(), Stepping.Step.change(r, c, i, q), i):
-  match q:
-    case Basics.Ask.Start{os}:
-      Replicas.Stale.outs(~Basics.Ask.machine(), r, i)
-    case Basics.Ask.On{st, l, ch}:
-      Replicas.Outs.when(~Basics.Ask.machine(), 
-        Ledgers.Chain.is_eq(Replicas.Line.chain(st, l), c),
-        Stepping.Step.on(r, i, st, l, ch),
-        Replicas.Step.stale(~Basics.Ask.machine(), r, i),
-        i,
-        On.outs(r, i, st, l, ch),
-        Replicas.Stale.outs(~Basics.Ask.machine(), r, i)
-      )
-
 # a request that the node holds or not, of a run, has an outcome
 def Asked.outs(
   r: Replicas.Run<Basics.Ask>,
@@ -4106,7 +4119,7 @@ def Asked.outs(
     case None{}:
       Unit{}
     case Some{Ledgers.Asked{t, q}}:
-      Change.outs(r, c, i, q)
+      Replicas.Lawful.outs(Ask.lawful())(r)(c)(i)(q)
 
 # One.outs once the outcome o that the words ws read as is known
 def One.outs.read(
@@ -4630,7 +4643,6 @@ def Spec.Pick.merge_ours(f, s, b, o, t):
 
 # Seals
 # -----
-
 def Spec.Seal.accept_fits(s, b, c, s2):
   ec => ea => Replicas.Accept.fits.if(~Basics.Ask.machine(), 
     Replicas.Seal.fits(c, b),
@@ -4661,7 +4673,6 @@ def Spec.Seal.fits_own(seed, x, last, k, n, f):
 
 # Histories
 # ---------
-
 def Spec.Line.at_grows(rs, a, u, c, h, x):
   match rs:
     case Nil{}:
@@ -4717,7 +4728,6 @@ def Spec.Node.read_draft(s, w, r, b, n, c):
 # and its pass names a vote of r1 or later. So the vote is the last vote of a
 # round from r1 on, which is v1 by the same argument, by induction on the
 # round.
-
 def Spec.Line.at_agrees(u, c, rules, rs1, rs2, a, b, h, x, y):
   ga => gb => el => ea => eb =>
     Replicas.At.same(~Basics.Ask.machine(), 
@@ -4809,7 +4819,6 @@ def Spec.Node.affects_used(s, b):
 # Finality
 # --------
 # What a node knows of a line stays, whatever the node does next.
-
 def Spec.Node.out_final(n, evs, s, i, o):
   Replicas.Out.kept(~Basics.Ask.machine(), 
     s,
@@ -7072,3 +7081,4 @@ def Spec.Node.take_waits(s, t, i, time, r, l, ch):
       l,
       ch
     )(eb)
+
