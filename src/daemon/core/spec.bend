@@ -856,9 +856,27 @@ def Node.chain_of(s: State(), +i: Ledgers.Id) -> Maybe<&2, Ledgers.Chain>:
 def Node.tip_of(+s: State(), i: Ledgers.Id) -> Maybe<&2, Tip>:
   Maybe.bind(&2, Ledgers.Chain, Tip, Node.chain_of(s, i), c => Node.tip(s, c))
 
+# the outcome of the request i on the line c, as the node knows it
+def Chain.out(+s: State(), c: Ledgers.Chain, i: Ledgers.Id) -> Maybe<&2, Out>:
+  Maybe.bind(&2, List<&2, U32>, Out, Line.get(s, c, Log.out(i)), ws => Out.read(ws))
+
+# the version of the number n of the line c, as the node knows it
+def Chain.version(+s: State(), c: Ledgers.Chain, n: U32) -> Maybe<&2, Version>:
+  Maybe.bind(&2, List<&2, U32>, Version, Line.get(s, c, Log.version(n)), ws => Version.read(ws))
+
+# the version that the mark m names on the line c, as the node knows it
+def Chain.mark(+s: State(), c: Ledgers.Chain, m: String) -> Maybe<&2, Ledgers.Id>:
+  Maybe.bind(
+    &2,
+    List<&2, U32>,
+    Ledgers.Id,
+    Line.get(s, c, Log.mark(m)),
+    ws => Read.whole(Ledgers.Id, Ledgers.Id.code.read(ws))
+  )
+
 # the outcome of the request i (none: no step that the node knows decided it)
 def Node.out(+s: State(), +i: Ledgers.Id) -> Maybe<&2, Out>:
-  Maybe.bind(&2, Tip, Out, Node.tip_of(s, i), t => Line.out(s, t, i))
+  Maybe.bind(&2, Ledgers.Chain, Out, Node.chain_of(s, i), c => Chain.out(s, c, i))
 
 # the version of the outcome o on a line at the tip t, when it took one
 def Out.version(s: State(), t: Tip, o: Out) -> Maybe<&2, Version>:
@@ -872,10 +890,22 @@ def Out.version(s: State(), t: Tip, o: Out) -> Maybe<&2, Version>:
 def Line.made(+s: State(), +t: Tip, i: Ledgers.Id) -> Maybe<&2, Version>:
   Maybe.bind(&2, Out, Version, Line.out(s, t, i), o => Out.version(s, t, o))
 
+# the version of the outcome o on the line c, when it took one
+def Out.on(s: State(), c: Ledgers.Chain, o: Out) -> Maybe<&2, Version>:
+  match o:
+    case Out.Stale{}:
+      None{}
+    case Out.Taken{n}:
+      Chain.version(s, c, n)
+
+# the version that the request v made on the line c
+def Chain.made(+s: State(), +c: Ledgers.Chain, v: Ledgers.Id) -> Maybe<&2, Version>:
+  Maybe.bind(&2, Out, Version, Chain.out(s, c, v), o => Out.on(s, c, o))
+
 # the version that the request v made (none: v is not a version that the node
 # knows)
 def Node.made(+s: State(), +v: Ledgers.Id) -> Maybe<&2, Version>:
-  Maybe.bind(&2, Tip, Version, Node.tip_of(s, v), +t => Line.made(s, t, v))
+  Maybe.bind(&2, Ledgers.Chain, Version, Node.chain_of(s, v), +c => Chain.made(s, c, v))
 
 # the root of the content of the version v (none: v is not a version)
 def Node.root(s: State(), v: Ledgers.Id) -> Maybe<&2, Maybe<&2, Hashes.Hash>>:
@@ -2689,7 +2719,7 @@ def Node.version(+s: State(), p: Point) -> Maybe<&2, Ledgers.Id>:
     case Point.Head{r, b}:
       Node.head(s, r, b)
     case Point.Mark{r, b, m}:
-      Maybe.bind(&2, Tip, Ledgers.Id, Node.tip(s, Line.chain(r, Some{b})), t => Mark.at(s, m, t))
+      Chain.mark(s, Line.chain(r, Some{b}), m)
 
 # the root of the content of the resource n at the version m, if it holds it
 def Res.root_at(+s: State(), n: Resources.Name, m: Maybe<&2, Ledgers.Id>) -> Maybe<&2, Ropes.Root>:
@@ -3614,46 +3644,110 @@ law Node.sync_grows:
   for +t: Ledgers.State(Ask)
   {Node.grows(s, Node.sync(n, s, t)) == True{}: Bool}
 
-# a log only gains keys. What the log of a line holds under a key, other than
-# the owners of the next step and the count of versions, it holds for good:
-# after the node takes in a request
-law Node.ask_keeps:
+# what a node does next: it takes in a request, or what another node sent,
+# or it does a sync
+type Deed is Data:
+  Deed.Ask{envelope: Envelope, ask: Ask}
+  Deed.Take{sent: Ledgers.State(Ask)}
+  Deed.Sync{sent: Ledgers.State(Ask)}
+
+# s, after the node n did ev
+def Node.does(+n: String, +s: State(), ev: Deed) -> State():
+  match ev:
+    case Deed.Ask{e, q}:
+      Node.ask(n, s, e, q)
+    case Deed.Take{t}:
+      Node.take(s, t)
+    case Deed.Sync{t}:
+      Node.sync(n, s, t)
+
+# s, after the node n did each of evs, in order: any later state of the node
+def Node.after(+n: String, evs: List<&2, Deed>, s: State()) -> State():
+  match evs:
+    case Nil{}:
+      s
+    case Con{ev, rest}:
+      Node.after(n, rest, Node.does(n, s, ev))
+
+# that b holds, in the log of each line, each key that a holds there, other
+# than the owners of the next step and the count of versions
+def Node.Keeps(a: State(), b: State()) -> Type:
+  @c: Ledgers.Chain -> @k: List<&2, U32> -> @v: List<&2, U32> -> {
+    Shared.List.is_eq(~U32, ~U32.is_eq, Log.owners(), k) == False{}: Bool
+  } -> {Shared.List.is_eq(~U32, ~U32.is_eq, Log.count(), k) == False{}: Bool} -> {
+    Line.get(a, c, k) == Some{v}: Maybe<&2, List<&2, U32>>
+  } -> {Line.get(b, c, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+
+# a node only grows, whatever it does
+law Node.after_grows:
   for +n: String
+  for +evs: List<&2, Deed>
+  for +s: State()
+  {Node.grows(s, Node.after(n, evs, s)) == True{}: Bool}
+
+# a log only gains keys: what the log of a line holds, it holds for good,
+# whatever the node does next
+law Node.after_keeps:
+  for +n: String
+  for +evs: List<&2, Deed>
+  for +s: State()
+  Node.Keeps(s, Node.after(n, evs, s))
+
+# an outcome is final: a request that a step took stays taken, as the same
+# version number, and one that its owners refused stays refused
+law Node.out_final:
+  for +n: String
+  for +evs: List<&2, Deed>
+  for +s: State()
+  for +i: Ledgers.Id
+  for +o: Out
+  {Node.out(s, i) == Some{o}: Maybe<&2, Out>}
+    -> {Node.out(Node.after(n, evs, s), i) == Some{o}: Maybe<&2, Out>}
+
+# a version never changes: the request that made it and the root of its
+# content stay
+law Node.made_final:
+  for +n: String
+  for +evs: List<&2, Deed>
+  for +s: State()
+  for +v: Ledgers.Id
+  for +x: Version
+  {Node.made(s, v) == Some{x}: Maybe<&2, Version>}
+    -> {Node.made(Node.after(n, evs, s), v) == Some{x}: Maybe<&2, Version>}
+
+# the history of a line only grows at its end: the version of a number stays
+law Chain.version_final:
+  for +n: String
+  for +evs: List<&2, Deed>
+  for +s: State()
+  for +c: Ledgers.Chain
+  for +k: U32
+  for +x: Version
+  {Chain.version(s, c, k) == Some{x}: Maybe<&2, Version>}
+    -> {Chain.version(Node.after(n, evs, s), c, k) == Some{x}: Maybe<&2, Version>}
+
+# a mark names its version for good
+law Chain.mark_final:
+  for +n: String
+  for +evs: List<&2, Deed>
+  for +s: State()
+  for +c: Ledgers.Chain
+  for +m: String
+  for +v: Ledgers.Id
+  {Chain.mark(s, c, m) == Some{v}: Maybe<&2, Ledgers.Id>}
+    -> {Chain.mark(Node.after(n, evs, s), c, m) == Some{v}: Maybe<&2, Ledgers.Id>}
+
+# answers only move forward: a request that a node answers stays answered;
+# Stale and Refused are final; a taken change stays taken (Answer.follows)
+law Node.answer_follows:
+  for +n: String
+  for +evs: List<&2, Deed>
   for +s: State()
   for +e: Envelope
   for +q: Ask
-  for +c: Ledgers.Chain
-  for +k: List<&2, U32>
-  for +v: List<&2, U32>
-  {Shared.List.is_eq(~U32, ~U32.is_eq, Log.owners(), k) == False{}: Bool}
-    -> {Shared.List.is_eq(~U32, ~U32.is_eq, Log.count(), k) == False{}: Bool}
-    -> {Line.get(s, c, k) == Some{v}: Maybe<&2, List<&2, U32>>}
-    -> {Line.get(Node.ask(n, s, e, q), c, k) == Some{v}: Maybe<&2, List<&2, U32>>}
-
-# after the node takes in what another node sent, whatever was sent
-law Node.take_keeps:
-  for +s: State()
-  for +t: Ledgers.State(Ask)
-  for +c: Ledgers.Chain
-  for +k: List<&2, U32>
-  for +v: List<&2, U32>
-  {Shared.List.is_eq(~U32, ~U32.is_eq, Log.owners(), k) == False{}: Bool}
-    -> {Shared.List.is_eq(~U32, ~U32.is_eq, Log.count(), k) == False{}: Bool}
-    -> {Line.get(s, c, k) == Some{v}: Maybe<&2, List<&2, U32>>}
-    -> {Line.get(Node.take(s, t), c, k) == Some{v}: Maybe<&2, List<&2, U32>>}
-
-# and after a sync
-law Node.sync_keeps:
-  for +n: String
-  for +s: State()
-  for +t: Ledgers.State(Ask)
-  for +c: Ledgers.Chain
-  for +k: List<&2, U32>
-  for +v: List<&2, U32>
-  {Shared.List.is_eq(~U32, ~U32.is_eq, Log.owners(), k) == False{}: Bool}
-    -> {Shared.List.is_eq(~U32, ~U32.is_eq, Log.count(), k) == False{}: Bool}
-    -> {Line.get(s, c, k) == Some{v}: Maybe<&2, List<&2, U32>>}
-    -> {Line.get(Node.sync(n, s, t), c, k) == Some{v}: Maybe<&2, List<&2, U32>>}
+  for +x: Answer
+  {Node.answer(s, e, q) == Some{x}: Maybe<&2, Answer>}
+    -> {Answer.follows(x, Node.answer(Node.after(n, evs, s), e, q)) == True{}: Bool}
 
 # a change counts once, however often and wherever it is sent: a node that
 # took a request in changes nothing when any node sends its ID again
