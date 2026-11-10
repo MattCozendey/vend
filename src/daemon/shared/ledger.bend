@@ -4,6 +4,7 @@ import ./shared/quorum.bend as Quorums
 import ./shared/shared/cell.bend as Cells
 import ./shared/shared/code.bend as Codes
 import ./shared/shared/hash.bend as Hashes
+import ./shared/shared/seal.bend as Seals
 import ./shared/shared/trie.bend as Tries
 import ./shared/text.bend as Texts
 
@@ -41,10 +42,24 @@ type Where is Data:
 type Vote is Data:
   Vote{before: Maybe<&2, Hashes.Hash>, asks: List<&2, Id>, after: Maybe<&2, Hashes.Hash>}
 
+# what a node signs with a ballot: the place, its own name, and the step
+type Signed is Data:
+  Signed{at: Where, node: String, vote: Vote}
+
+# how a ballot is sealed. A node's ballots in one store are a chain: each
+# names the place of the one before it (none: the first), and the key of the
+# next one, so each key signs once
+type Link is Data:
+  Link{prev: Maybe<&2, Where>, next: Hashes.Hash, seal: Seals.Seal}
+
+# a ballot of a node: what it signs, and how it is sealed
+type Ballot is Data:
+  Ballot{signed: Signed, link: Link}
+
 # a request of a change, with its time; a ballot of a node; or data
 type Entry<-Q: Data> is Data:
   Entry.Ask{id: Id, time: String, ask: Q}
-  Entry.Vote{vote: Vote}
+  Entry.Vote{ballot: Ballot}
   Entry.Data{words: List<&2, U32>}
 
 # Codes
@@ -431,13 +446,272 @@ def Vote.is_eq_refl(a: Vote) -> {Vote.is_eq(a, a) == True{}: Bool}:
 def Vote.is_eq_sound(a: Vote, b: Vote) -> {Vote.is_eq(a, b) == True{}: Bool} -> {a == b: Vote}:
   Shared.Eq.sound(~Vote, ~Vote.is_eq, Vote.laws(), a, b)
 
+# a bit reads back
+def Bit.code_read(
+  b: Bool,
+  r: List<&2, U32>
+) -> {Bit.code.read(Bit.code(b, r)) == Some{Codes.Read{b, r}}: Maybe<&2, Codes.Read<Bool>>}:
+  match b:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# the code of bits
+def Bits.codec() -> Codes.Codec(List<&2, Bool>):
+  Codes.Code.list.codec(~Bool, ~(Bit.code, (Bit.code.read, b => r => Bit.code_read(b, r))))
+
+# a line reads back
+def Chain.code_read(
+  c: Chain,
+  r: List<&2, U32>
+) -> {Chain.code.read(Chain.code(c, r)) == Some{Codes.Read{c, r}}: Maybe<&2, Codes.Read<Chain>>}:
+  match c:
+    case Chain{i, k}:
+      Codes.Code.two_read(
+        ~Id,
+        ~Maybe<&2, List<&2, Bool>>,
+        ~Chain,
+        ~Id.codec(),
+        ~Codes.Code.maybe.codec(~List<&2, Bool>, ~Bits.codec()),
+        a => b => Chain{a, b},
+        i,
+        k,
+        r
+      )
+
+# the code of lines
+def Chain.codec() -> Codes.Codec(Chain):
+  (Chain.code, (Chain.code.read, c => r => Chain.code_read(c, r)))
+
+# the place w, then r
+def Where.code(w: Where, r: List<&2, U32>) -> List<&2, U32>:
+  match w:
+    case Where{c, h}:
+      Chain.code(c, Codes.Code.token(h, r))
+
+# a place
+def Where.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Where>>:
+  Codes.Code.two.read(
+    ~Chain,
+    ~U32,
+    ~Where,
+    ~Chain.code.read,
+    ~Codes.Code.token.read,
+    c => h => Where{c, h},
+    ts
+  )
+
+# a place reads back
+def Where.code_read(
+  w: Where,
+  r: List<&2, U32>
+) -> {Where.code.read(Where.code(w, r)) == Some{Codes.Read{w, r}}: Maybe<&2, Codes.Read<Where>>}:
+  match w:
+    case Where{c, h}:
+      Codes.Code.two_read(
+        ~Chain,
+        ~U32,
+        ~Where,
+        ~Chain.codec(),
+        ~Codes.Code.token.codec(),
+        a => b => Where{a, b},
+        c,
+        h,
+        r
+      )
+
+# the code of places
+def Where.codec() -> Codes.Codec(Where):
+  (Where.code, (Where.code.read, w => r => Where.code_read(w, r)))
+
+# what a node signs, then r
+def Signed.code(x: Signed, r: List<&2, U32>) -> List<&2, U32>:
+  match x:
+    case Signed{w, n, v}:
+      Where.code(w, Codes.Code.text(n, Vote.code(v, r)))
+
+# what a node signs
+def Signed.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Signed>>:
+  Codes.Code.three.read(
+    ~Where,
+    ~String,
+    ~Vote,
+    ~Signed,
+    ~Where.code.read,
+    ~Codes.Code.text.read,
+    ~Vote.code.read,
+    w => n => v => Signed{w, n, v},
+    ts
+  )
+
+# what a node signs reads back
+def Signed.code_read(
+  x: Signed,
+  r: List<&2, U32>
+) -> {Signed.code.read(Signed.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Signed>>}:
+  match x:
+    case Signed{w, n, v}:
+      Codes.Code.three_read(
+        ~Where,
+        ~String,
+        ~Vote,
+        ~Signed,
+        ~Where.codec(),
+        ~Codes.Code.text.codec(),
+        ~Vote.codec(),
+        a => b => c => Signed{a, b, c},
+        w,
+        n,
+        v,
+        r
+      )
+
+# the code of what a node signs
+def Signed.codec() -> Codes.Codec(Signed):
+  (Signed.code, (Signed.code.read, x => r => Signed.code_read(x, r)))
+
+# the link l, then r
+def Link.code(l: Link, r: List<&2, U32>) -> List<&2, U32>:
+  match l:
+    case Link{p, k, z}:
+      Codes.Code.maybe(~Where, ~Where.code, p, Hash.code(k, Seals.Seal.code(z, r)))
+
+# a link
+def Link.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Link>>:
+  Codes.Code.three.read(
+    ~Maybe<&2, Where>,
+    ~Hashes.Hash,
+    ~Seals.Seal,
+    ~Link,
+    ~(m => Codes.Code.maybe.read(~Where, ~Where.code.read, m)),
+    ~Hash.code.read,
+    ~Seals.Seal.code.read,
+    p => k => z => Link{p, k, z},
+    ts
+  )
+
+# a link reads back
+def Link.code_read(
+  l: Link,
+  r: List<&2, U32>
+) -> {Link.code.read(Link.code(l, r)) == Some{Codes.Read{l, r}}: Maybe<&2, Codes.Read<Link>>}:
+  match l:
+    case Link{p, k, z}:
+      Codes.Code.three_read(
+        ~Maybe<&2, Where>,
+        ~Hashes.Hash,
+        ~Seals.Seal,
+        ~Link,
+        ~Codes.Code.maybe.codec(~Where, ~Where.codec()),
+        ~Hash.codec(),
+        ~Seals.Seal.codec(),
+        a => b => c => Link{a, b, c},
+        p,
+        k,
+        z,
+        r
+      )
+
+# the code of links
+def Link.codec() -> Codes.Codec(Link):
+  (Link.code, (Link.code.read, l => r => Link.code_read(l, r)))
+
+# the ballot b, then r
+def Ballot.code(b: Ballot, r: List<&2, U32>) -> List<&2, U32>:
+  match b:
+    case Ballot{x, l}:
+      Signed.code(x, Link.code(l, r))
+
+# a ballot
+def Ballot.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ballot>>:
+  Codes.Code.two.read(
+    ~Signed,
+    ~Link,
+    ~Ballot,
+    ~Signed.code.read,
+    ~Link.code.read,
+    x => l => Ballot{x, l},
+    ts
+  )
+
+# a ballot reads back
+def Ballot.code_read(
+  b: Ballot,
+  r: List<&2, U32>
+) -> {Ballot.code.read(Ballot.code(b, r)) == Some{Codes.Read{b, r}}: Maybe<&2, Codes.Read<Ballot>>}:
+  match b:
+    case Ballot{x, l}:
+      Codes.Code.two_read(
+        ~Signed,
+        ~Link,
+        ~Ballot,
+        ~Signed.codec(),
+        ~Link.codec(),
+        a => c => Ballot{a, c},
+        x,
+        l,
+        r
+      )
+
+# the code of ballots
+def Ballot.codec() -> Codes.Codec(Ballot):
+  (Ballot.code, (Ballot.code.read, b => r => Ballot.code_read(b, r)))
+
+# a and b are the same ballot: they have the same code
+def Ballot.is_eq(a: Ballot, b: Ballot) -> Bool:
+  Codes.Code.is_eq(~Ballot, ~Ballot.code, a, b)
+
+# the laws of Ballot.is_eq
+def Ballot.laws() -> Shared.Eq.Laws(Ballot, Ballot.is_eq):
+  Codes.Code.eq_laws(~Ballot, ~Ballot.codec())
+
+# Ballot.is_eq is True for a ballot and itself
+def Ballot.is_eq_refl(a: Ballot) -> {Ballot.is_eq(a, a) == True{}: Bool}:
+  Shared.Eq.refl(~Ballot, ~Ballot.is_eq, Ballot.laws(), a)
+
+# Ballot.is_eq is True only for equal ballots
+def Ballot.is_eq_sound(a: Ballot, b: Ballot) -> {Ballot.is_eq(a, b) == True{}: Bool} -> {a == b: Ballot}:
+  Shared.Eq.sound(~Ballot, ~Ballot.is_eq, Ballot.laws(), a, b)
+
+# the step that the ballot b is for
+def Ballot.vote(b: Ballot) -> Vote:
+  match b:
+    case Ballot{Signed{w, n, v}, l}:
+      v
+
+# what a seal of a ballot signs: the hash of what the node signs, the place of
+# its ballot before, and the key of its next one
+def Ballot.digest(x: Signed, p: Maybe<&2, Where>, k: Hashes.Hash) -> Hashes.Hash:
+  Hashes.Sha.hash(Signed.code(x, Codes.Code.maybe(~Where, ~Where.code, p, Hash.code(k, []))))
+
+# the ballot of x that the secret seed seals, after the ballot at p, with k as
+# the key of the next one
+def Ballot.make(seed: Hashes.Hash, +x: Signed, +p: Maybe<&2, Where>, +k: Hashes.Hash) -> Ballot:
+  Ballot{x, Link{p, k, Seals.Seal.sign(seed, Ballot.digest(x, p, k))}}
+
+# the key signs the ballot b
+def Ballot.sealed(key: Hashes.Hash, b: Ballot) -> Bool:
+  match b:
+    case Ballot{+x, Link{+p, +k, z}}:
+      Seals.Seal.check(key, Ballot.digest(x, p, k), z)
+
+# a ballot that a seed seals is signed by the key of the seed
+def Ballot.sealed_make(
+  +seed: Hashes.Hash,
+  +x: Signed,
+  +p: Maybe<&2, Where>,
+  +k: Hashes.Hash
+) -> {Ballot.sealed(Seals.Seal.public(seed), Ballot.make(seed, x, p, k)) == True{}: Bool}:
+  Seals.Seal.check_sign(seed, Ballot.digest(x, p, k))
+
 # a and b are the same entry, when same compares changes
 def Entry.is_eq(~Q: Data, ~same: Q -> Q -> Bool, a: Entry<Q>, b: Entry<Q>) -> Bool:
   match a b:
     case Entry.Ask{i1, t1, q1} Entry.Ask{i2, t2, q2}:
       Bool.and(Id.is_eq(i1, i2), Bool.and(String.eq(t1, t2), same(q1, q2)))
     case Entry.Vote{v1} Entry.Vote{v2}:
-      Vote.is_eq(v1, v2)
+      Ballot.is_eq(v1, v2)
     case Entry.Data{d1} Entry.Data{d2}:
       Shared.List.is_eq(~U32, ~U32.is_eq, d1, d2)
     case _ _:
@@ -465,7 +739,7 @@ def Entry.is_eq_refl(
         )(Texts.String.eq_refl(t))(Shared.Eq.refl(~Q, ~same, laws, q))
       )
     case Entry.Vote{v}:
-      Vote.is_eq_refl(v)
+      Ballot.is_eq_refl(v)
     case Entry.Data{d}:
       Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), d)
 
@@ -502,7 +776,7 @@ def Entry.is_eq_sound(
         )
     case Entry.Vote{v1} Entry.Vote{v2}:
       h =>
-        %Vote.is_eq_sound(v1, v2)(h): {Entry.Vote{v1} == Entry.Vote{_}: Entry<Q>}
+        %Ballot.is_eq_sound(v1, v2)(h): {Entry.Vote{v1} == Entry.Vote{_}: Entry<Q>}
         {==}
     case Entry.Data{d1} Entry.Data{d2}:
       h =>
@@ -629,8 +903,8 @@ def Entry.ballot(~Q: Data, m: Maybe<&2, Cells.Cell<Entry<Q>>>) -> Maybe<&2, Cell
   match m:
     case None{}:
       None{}
-    case Some{Cells.One{Entry.Vote{v}}}:
-      Some{Cells.One{v}}
+    case Some{Cells.One{Entry.Vote{b}}}:
+      Some{Cells.One{Ballot.vote(b)}}
     case Some{c}:
       Some{Cells.Many{}}
 
@@ -783,8 +1057,8 @@ def State.ask(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), +i: Id, t: String, q
 
 # s with the node n's ballot v at the place w: a node casts one ballot at a
 # place
-def State.cast(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), w: Where, n: String, v: Vote) -> State(Q):
-  State.add(~Q, ~same, s, Slot.vote(w, n), Entry.Vote{v})
+def State.cast(~Q: Data, ~same: Q -> Q -> Bool, s: State(Q), w: Where, n: String, b: Ballot) -> State(Q):
+  State.add(~Q, ~same, s, Slot.vote(w, n), Entry.Vote{b})
 
 # Laws
 # ----
@@ -1155,7 +1429,7 @@ def Ballot.refl(
 }:
   match e:
     case Entry.Vote{v}:
-      Vote.is_eq_refl(v)
+      Vote.is_eq_refl(Ballot.vote(v))
     case Entry.Ask{i, t, q}:
       {==}
     case Entry.Data{d}:

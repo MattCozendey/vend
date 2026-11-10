@@ -8,6 +8,7 @@ import ../shared/shared/reach.bend as Reaches
 import ../shared/shared/shared/cell.bend as Cells
 import ../shared/shared/shared/code.bend as Codes
 import ../shared/shared/shared/hash.bend as Hashes
+import ../shared/shared/shared/seal.bend as Seals
 import ../shared/shared/shared/trie.bend as Tries
 import ../shared/shared/text.bend as Texts
 import ../shared/tree.bend as Trees
@@ -54,7 +55,9 @@ type Point is Data:
   Point.Head{store: Ledgers.Id, branch: String}
   Point.Mark{store: Ledgers.Id, branch: String, mark: String}
 
-# a change of a branch, or of its store (Ask.on). Branch: the store makes the
+# a change of a branch, or of its store (Ask.on). Key: the store gives the
+# node the key that signs its first ballot in the store (again after the node
+# lost its secret: a new chain of keys). Branch: the store makes the
 # branch, at a version if any. Group: the store makes the group, or replaces
 # its members. Own: the line's owner group is group, whose nodes, in the tree
 # of the step at of the store (a store reads its own tree), are owners
@@ -67,11 +70,17 @@ type Change is Data:
   Change.Merge{from: Ledgers.Id}
   Change.Move{to: Ledgers.Id}
   Change.Mark{mark: String, message: String}
+  Change.Key{node: String, key: Hashes.Hash}
+
+# a first owner of a store: a node, and the key that signs its first ballot in
+# the store
+type Owner is Data:
+  Owner{name: String, key: Hashes.Hash}
 
 # a change that a writer asks for: a store that starts with its first owners,
 # or a change of a branch of a store (none: of the store itself)
 type Ask is Data:
-  Ask.Start{owners: List<&2, String>}
+  Ask.Start{owners: List<&2, Owner>}
   Ask.On{store: Ledgers.Id, branch: Maybe<&2, String>, change: Change}
 
 # who asks for a change, and when
@@ -201,6 +210,8 @@ def Change.code(c: Change, r: List<&2, U32>) -> List<&2, U32>:
       6 <> Codes.Code.text(m, Codes.Code.text(t, r))
     case Change.Group{g, ms}:
       7 <> Codes.Code.text(g, Members.code(ms, r))
+    case Change.Key{n, k}:
+      8 <> Codes.Code.text(n, Trees.Hash.code(k, r))
 
 # a change whose tag is x, from the tokens r after it
 def Change.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Change>>:
@@ -290,14 +301,27 @@ def Change.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Chan
                   m => n => Change.Mark{m, n},
                   r
                 ),
-                u => Codes.Code.two.read(
-                  ~String,
-                  ~List<&2, Member>,
-                  ~Change,
-                  ~Codes.Code.text.read,
-                  ~Members.code.read,
-                  g => ms => Change.Group{g, ms},
-                  r
+                u => Shared.Bool.when(
+                  Maybe<&2, Codes.Read<Change>>,
+                  U32.is_eq(x, 8),
+                  u => Codes.Code.two.read(
+                    ~String,
+                    ~Hashes.Hash,
+                    ~Change,
+                    ~Codes.Code.text.read,
+                    ~Trees.Hash.code.read,
+                    n => k => Change.Key{n, k},
+                    r
+                  ),
+                  u => Codes.Code.two.read(
+                    ~String,
+                    ~List<&2, Member>,
+                    ~Change,
+                    ~Codes.Code.text.read,
+                    ~Members.code.read,
+                    g => ms => Change.Group{g, ms},
+                    r
+                  )
                 )
               )
             )
@@ -315,11 +339,37 @@ def Change.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Change>>:
     case Con{x, r}:
       Change.code.read.of(x, r)
 
+# the first owner o, then r
+def Owner.code(o: Owner, r: List<&2, U32>) -> List<&2, U32>:
+  match o:
+    case Owner{n, k}:
+      Codes.Code.text(n, Trees.Hash.code(k, r))
+
+# a first owner
+def Owner.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Owner>>:
+  Codes.Code.two.read(
+    ~String,
+    ~Hashes.Hash,
+    ~Owner,
+    ~Codes.Code.text.read,
+    ~Trees.Hash.code.read,
+    n => k => Owner{n, k},
+    ts
+  )
+
+# the names of the first owners os
+def Owner.names(os: List<&2, Owner>) -> List<&2, String>:
+  match os:
+    case Nil{}:
+      []
+    case Con{Owner{n, k}, r}:
+      n <> Owner.names(r)
+
 # the request q, then r
 def Ask.code(q: Ask, r: List<&2, U32>) -> List<&2, U32>:
   match q:
     case Ask.Start{os}:
-      0 <> Ledgers.Owners.code(os, r)
+      0 <> Codes.Code.list(~Owner, ~Owner.code, os, r)
     case Ask.On{st, l, c}:
       1 <> Ledgers.Id.code(st, Target.code(l, Change.code(c, r)))
 
@@ -333,9 +383,9 @@ def Ask.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ask>>:
         Maybe<&2, Codes.Read<Ask>>,
         U32.is_eq(x, 0),
         u => Codes.Code.one.read(
-          ~List<&2, String>,
+          ~List<&2, Owner>,
           ~Ask,
-          ~Ledgers.Owners.code.read,
+          ~(m => Codes.Code.list.read(~Owner, ~Owner.code.read, m)),
           os => Ask.Start{os},
           r
         ),
@@ -393,14 +443,27 @@ type Tip is Data:
 type Head is Data:
   Head{store: Ledgers.Id, branch: Maybe<&2, String>, next: U32, tip: Maybe<&2, Hashes.Hash>}
 
+# the key chain of one node in one store, as a node knows it: how many of its
+# ballots the node holds, the place of the last one, the key that signs the
+# next one, and the first key of the chain (the one that the store gave it)
+type Chained is Data:
+  Chained{count: U32, last: Maybe<&2, Ledgers.Where>, key: Hashes.Hash, first: Hashes.Hash}
+
+# what a node keeps to seal its ballots and to check those of other nodes: its
+# secret seed, and the key chain of each node in each store (its own too)
+type Keys is Data:
+  Keys{seed: Hashes.Hash, chains: Tries.Trie<Chained>}
+
 # what a node holds: its ledger, which nodes replicate; its head of each line
-# that it follows; and the requests of each line that wait for a step. Heads
-# and waiting requests are the node's own: no other node sends them
+# that it follows; the requests of each line that wait for a step; and its
+# keys. Heads, waiting requests and keys are the node's own: no other node
+# sends them
 type Node is Data:
   Node{
     ledger: Ledgers.State(Ask),
     heads: Tries.Trie<Head>,
-    waiting: Tries.Trie<List<&2, Ledgers.Id>>
+    waiting: Tries.Trie<List<&2, Ledgers.Id>>,
+    keys: Keys
   }
 
 # what a node holds
@@ -410,30 +473,47 @@ def State() -> Data:
 # the ledger of s
 def State.ledger(s: State()) -> Ledgers.State(Ask):
   match s:
-    case Node{l, hs, ws}:
+    case Node{l, hs, ws, ks}:
       l
 
 # the heads of s
 def State.heads(s: State()) -> Tries.Trie<Head>:
   match s:
-    case Node{l, hs, ws}:
+    case Node{l, hs, ws, ks}:
       hs
 
 # the requests of s that wait for a step, by line
 def State.waiting(s: State()) -> Tries.Trie<List<&2, Ledgers.Id>>:
   match s:
-    case Node{l, hs, ws}:
+    case Node{l, hs, ws, ks}:
       ws
+
+# the keys of s
+def State.keys(s: State()) -> Keys:
+  match s:
+    case Node{l, hs, ws, ks}:
+      ks
 
 # s with the ledger l
 def State.led(s: State(), l: Ledgers.State(Ask)) -> State():
   match s:
-    case Node{old, hs, ws}:
-      Node{l, hs, ws}
+    case Node{old, hs, ws, ks}:
+      Node{l, hs, ws, ks}
 
-# a node that holds nothing yet
-def Node.empty() -> State():
-  Node{Ledgers.State.empty(~Ask), Tries.Trie.new(Head), Tries.Trie.new(List<&2, Ledgers.Id>)}
+# s with the keys ks
+def State.keyed(s: State(), ks: Keys) -> State():
+  match s:
+    case Node{l, hs, ws, old}:
+      Node{l, hs, ws, ks}
+
+# a node that holds nothing yet, with the secret seed
+def Node.empty(seed: Hashes.Hash) -> State():
+  Node{
+    Ledgers.State.empty(~Ask),
+    Tries.Trie.new(Head),
+    Tries.Trie.new(List<&2, Ledgers.Id>),
+    Keys{seed, Tries.Trie.new(Chained)}
+  }
 
 # the words that s holds under the hash h
 def Store.fetch(s: State(), h: Hashes.Hash) -> Maybe<&2, List<&2, U32>>:
@@ -479,6 +559,10 @@ def Key.clash(n: Resources.Name) -> List<&2, U32>:
 # the key of the line c in a version vector
 def Key.vector(c: Ledgers.Chain) -> List<&2, U32>:
   4 <> Ledgers.Chain.code(c, [])
+
+# the key of the first key of the node n in a store
+def Key.seal(n: String) -> List<&2, U32>:
+  8 <> Codes.Code.text(n, [])
 
 # the key of where the line of the key k below a store starts
 def Key.start(k: List<&2, Bool>) -> List<&2, U32>:
@@ -2115,6 +2199,8 @@ def Judge.change(
       )
     case None{} Change.Group{+g, +ms}:
       Judge.when(Bool.not(Group.loops.any(s, h, g, ms)), h, u => Work.take(Group.work(s, h, g, ms)))
+    case None{} Change.Key{n, k}:
+      Work.take(Work.set(Work{s, h, []}, Key.seal(n), Trees.Hash.code(k, [])))
     case w Change.Own{g, at, os2}:
       Own.change(s, r, w, g, at, os2, h)
     case Some{b} Change.Write{n, base, c2}:
@@ -2361,6 +2447,272 @@ def Step.run(s: State(), +c: Ledgers.Chain, t: Tip, qs: List<&2, Ledgers.Id>) ->
 # next step of each line that it owns, and moves each head along the steps
 # that are decided.
 
+# Seals
+# -----
+# A node signs each ballot. Its ballots in one store are a chain: each names
+# the place of the one before it and the key of the next one, so a key signs
+# once (Seals). The store gives a node the first key of its chain (a first
+# owner's in the request that starts the store, then by a Key change). A node
+# keeps a ballot only when it is the next of its chain and the key of the
+# chain signs it, so a ledger holds no ballot that its node did not check.
+
+# the place of the ballot b
+def Ballot.at(b: Ledgers.Ballot) -> Ledgers.Where:
+  match b:
+    case Ledgers.Ballot{Ledgers.Signed{w, n, v}, l}:
+      w
+
+# the node of the ballot b
+def Ballot.node(b: Ledgers.Ballot) -> String:
+  match b:
+    case Ledgers.Ballot{Ledgers.Signed{w, n, v}, l}:
+      n
+
+# the place of the ballot before b in its chain
+def Ballot.prev(b: Ledgers.Ballot) -> Maybe<&2, Ledgers.Where>:
+  match b:
+    case Ledgers.Ballot{x, Ledgers.Link{p, k, z}}:
+      p
+
+# the key of the ballot after b in its chain
+def Ballot.next(b: Ledgers.Ballot) -> Hashes.Hash:
+  match b:
+    case Ledgers.Ballot{x, Ledgers.Link{p, k, z}}:
+      k
+
+# the store of the place w
+def Where.store(w: Ledgers.Where) -> Ledgers.Id:
+  match w:
+    case Ledgers.Where{Ledgers.Chain{r, k}, h}:
+      r
+
+# the store of the ballot b
+def Ballot.store(b: Ledgers.Ballot) -> Ledgers.Id:
+  Where.store(Ballot.at(b))
+
+# the key of the chain of the node n in the store r
+def Seal.slot(r: Ledgers.Id, n: String) -> List<&2, Bool>:
+  List.append(&2, Bool, Ledgers.Id.key(r), Tries.Trie.text(n))
+
+# a and b are the same place, or both none
+def Prev.same(a: Maybe<&2, Ledgers.Where>, b: Maybe<&2, Ledgers.Where>) -> Bool:
+  match a b:
+    case None{} None{}:
+      True{}
+    case Some{x} Some{y}:
+      Codes.Code.is_eq(~Ledgers.Where, ~Ledgers.Where.code, x, y)
+    case x y:
+      False{}
+
+# the key in the value m, if any
+def Seal.read(m: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Hashes.Hash>:
+  Maybe.bind(
+    &2,
+    List<&2, U32>,
+    Hashes.Hash,
+    m,
+    ws => Read.whole(Hashes.Hash, Trees.Hash.code.read(ws))
+  )
+
+# the first key that the store r gave the node n, as s knows the store
+def Seal.first(+s: State(), r: Ledgers.Id, n: String) -> Maybe<&2, Hashes.Hash>:
+  Seal.read(
+    Node.get(
+      s,
+      Maybe.bind(&2, Tip, Hashes.Hash, Node.tip(s, Ledgers.Chain{r, None{}}), t => Tip.content(t)),
+      Key.seal(n)
+    )
+  )
+
+# the chain c, when it starts from the first key m; else a new chain from m
+# (none: the store gave the node no key)
+def Chained.from(m: Maybe<&2, Hashes.Hash>, c: Maybe<&2, Chained>) -> Maybe<&2, Chained>:
+  match m c:
+    case None{} y:
+      None{}
+    case Some{k} None{}:
+      Some{Chained{0, None{}, k, k}}
+    case Some{+k} Some{Chained{n, l, x, +f}}:
+      Some{
+        Shared.Bool.when(
+          Chained,
+          Hashes.Hash.is_eq(f, k),
+          u => Chained{n, l, x, f},
+          u => Chained{0, None{}, k, k}
+        )
+      }
+
+# the chains of the keys ks
+def Keys.chains(ks: Keys) -> Tries.Trie<Chained>:
+  match ks:
+    case Keys{seed, cs}:
+      cs
+
+# the secret seed of the keys ks
+def Keys.seed(ks: Keys) -> Hashes.Hash:
+  match ks:
+    case Keys{seed, cs}:
+      seed
+
+# ks with the chain c at the key k
+def Keys.set(ks: Keys, k: List<&2, Bool>, c: Chained) -> Keys:
+  match ks:
+    case Keys{seed, cs}:
+      Keys{seed, Tries.Trie.set(Chained, cs, k, c)}
+
+# the chain of the node n in the store r, as s knows it
+def Seal.chain(+s: State(), +r: Ledgers.Id, +n: String) -> Maybe<&2, Chained>:
+  Chained.from(
+    Seal.first(s, r, n),
+    Tries.Trie.get(Chained, Keys.chains(State.keys(s)), Seal.slot(r, n))
+  )
+
+# the ballot b is the next of the chain c, and the key of c signs it
+def Seal.fits(c: Chained, +b: Ledgers.Ballot) -> Bool:
+  match c:
+    case Chained{n, last, key, f}:
+      List.all.if(u => Ledgers.Ballot.sealed(key, b), Prev.same(Ballot.prev(b), last))
+
+# the chain c after its next ballot b
+def Chained.next(c: Chained, +b: Ledgers.Ballot) -> Chained:
+  match c:
+    case Chained{n, last, key, f}:
+      Chained{U32.inc(n), Some{Ballot.at(b)}, Ballot.next(b), f}
+
+# Seal.accept once the chain m of the ballot's node is known
+def Seal.accept.at(+s: State(), +b: Ledgers.Ballot, m: Maybe<&2, Chained>) -> Maybe<&2, State()>:
+  match m:
+    case None{}:
+      None{}
+    case Some{+c}:
+      Shared.Maybe.when(
+        State(),
+        Seal.fits(c, b),
+        u => Some{
+          State.keyed(
+            State.led(
+              s,
+              Ledgers.State.cast(~Ask, ~Ask.is_eq, State.ledger(s), Ballot.at(b), Ballot.node(b), b)
+            ),
+            Keys.set(State.keys(s), Seal.slot(Ballot.store(b), Ballot.node(b)), Chained.next(c, b))
+          )
+        }
+      )
+
+# s with the ballot b, when it is the next of its node's chain in its store
+# and the key of the chain signs it (none: not now)
+def Seal.accept(+s: State(), +b: Ledgers.Ballot) -> Maybe<&2, State()>:
+  Seal.accept.at(s, b, Seal.chain(s, Ballot.store(b), Ballot.node(b)))
+
+# the secret of the ballot of the number j of a node in the store r, from the
+# node's seed
+def Seal.secret(seed: Hashes.Hash, r: Ledgers.Id, j: U32) -> Hashes.Hash:
+  Hashes.Sha.hash(Trees.Hash.code(seed, Ledgers.Id.code(r, [j])))
+
+# the key of the place m, if any
+def Prev.key(m: Maybe<&2, Ledgers.Where>) -> List<&2, Bool>:
+  match m:
+    case None{}:
+      [False{}]
+    case Some{w}:
+      True{} <> Ledgers.Slot.vote(w, "")
+
+# the key of where the ballot after the one at last waits, for the node n in
+# the store r
+def Seal.link(r: Ledgers.Id, n: String, last: Maybe<&2, Ledgers.Where>) -> List<&2, Bool>:
+  List.append(
+    &2,
+    Bool,
+    Seal.slot(r, n),
+    Prev.key(last)
+  )
+
+# the ballots bs, each at the key of where it waits in its chain
+def Pending.of(bs: List<&2, Ledgers.Ballot>) -> Tries.Trie<Ledgers.Ballot>:
+  match bs:
+    case Nil{}:
+      Tries.Trie.new(Ledgers.Ballot)
+    case Con{+b, r}:
+      Tries.Trie.set(
+        Ledgers.Ballot,
+        Pending.of(r),
+        Seal.link(Ballot.store(b), Ballot.node(b), Ballot.prev(b)),
+        b
+      )
+
+# the last place of the chain c
+def Chained.last(c: Chained) -> Maybe<&2, Ledgers.Where>:
+  match c:
+    case Chained{n, last, key, f}:
+      last
+
+# the ballot of p that is the next of the chain of the node n in the store r
+def Pending.next(
+  +s: State(),
+  p: Tries.Trie<Ledgers.Ballot>,
+  +r: Ledgers.Id,
+  +n: String
+) -> Maybe<&2, Ledgers.Ballot>:
+  Maybe.bind(
+    &2,
+    Chained,
+    Ledgers.Ballot,
+    Seal.chain(s, r, n),
+    c => Tries.Trie.get(Ledgers.Ballot, p, Seal.link(r, n, Chained.last(c)))
+  )
+
+# s with each ballot of p that the chain of the node n in the store r leads
+# to, from the ballot mb, f ballots at most
+def Sealed.follow(
+  f: Nat,
+  +s: State(),
+  +p: Tries.Trie<Ledgers.Ballot>,
+  +r: Ledgers.Id,
+  +n: String,
+  mb: Maybe<&2, Ledgers.Ballot>
+) -> State():
+  match f mb:
+    case 1n+g Some{b}:
+      Maybe.default(
+        &2,
+        State(),
+        Maybe.bind(
+          &2,
+          State(),
+          State(),
+          Seal.accept(s, b),
+          +s2 => Some{Sealed.follow(g, s2, p, r, n, Pending.next(s2, p, r, n))}
+        ),
+        s
+      )
+    case x y:
+      s
+
+# s with the ballots of p that the chains of the ballots bs lead to
+def Sealed.each(+f: Nat, bs: List<&2, Ledgers.Ballot>, +p: Tries.Trie<Ledgers.Ballot>, +s: State()) -> State():
+  match bs:
+    case Nil{}:
+      s
+    case Con{+b, rest}:
+      Sealed.each(
+        f,
+        rest,
+        p,
+        Sealed.follow(
+          f,
+          s,
+          p,
+          Ballot.store(b),
+          Ballot.node(b),
+          Pending.next(s, p, Ballot.store(b), Ballot.node(b))
+        )
+      )
+
+# s with each ballot of bs that its node's chain leads to and its key signs:
+# the cost is about that of the ballots, in any order
+def Sealed.take(+bs: List<&2, Ledgers.Ballot>, s: State()) -> State():
+  Sealed.each(List.length(&2, Ledgers.Ballot, bs), bs, Pending.of(bs), s)
+
 # the line of the head h
 def Head.chain(h: Head) -> Ledgers.Chain:
   match h:
@@ -2376,8 +2728,8 @@ def Head.next(h: Head) -> U32:
 # s with the head h of the line c
 def State.head(s: State(), c: Ledgers.Chain, h: Head) -> State():
   match s:
-    case Node{l, hs, ws}:
-      Node{l, Tries.Trie.set(Head, hs, Ledgers.Chain.key(c), h), ws}
+    case Node{l, hs, ws, ks}:
+      Node{l, Tries.Trie.set(Head, hs, Ledgers.Chain.key(c), h), ws, ks}
 
 # the requests of the line c that wait for a step, in the order that the node
 # took them in
@@ -2392,8 +2744,8 @@ def Wait.of(s: State(), c: Ledgers.Chain) -> List<&2, Ledgers.Id>:
 # s with the requests qs waiting on the line c
 def Wait.set(s: State(), c: Ledgers.Chain, qs: List<&2, Ledgers.Id>) -> State():
   match s:
-    case Node{l, hs, ws}:
-      Node{l, hs, Tries.Trie.set(List<&2, Ledgers.Id>, ws, Ledgers.Chain.key(c), qs)}
+    case Node{l, hs, ws, ks}:
+      Node{l, hs, Tries.Trie.set(List<&2, Ledgers.Id>, ws, Ledgers.Chain.key(c), qs), ks}
 
 # s with the request i waiting on the line c, after those that wait
 def State.wait(+s: State(), +c: Ledgers.Chain, i: Ledgers.Id) -> State():
@@ -2449,14 +2801,25 @@ def Start.head(s: State(), m: Maybe<&2, State()>, c: Ledgers.Chain, h: Head) -> 
     case Some{s2}:
       State.first(State.led(s, State.ledger(s2)), c, h)
 
-# s with the first tip of the store i, whose trees are m: a log whose owners
-# are the store's first owners, and no content
-def Start.put(+s: State(), +i: Ledgers.Id, m: Maybe<&2, Work>) -> State():
+# w with the first key of each first owner of os
+def Seal.firsts(os: List<&2, Owner>, m: Maybe<&2, Work>) -> Maybe<&2, Work>:
+  match os:
+    case Nil{}:
+      m
+    case Con{Owner{n, k}, r}:
+      Seal.firsts(
+        r,
+        Maybe.bind(&2, Work, Work, m, w => Work.set(w, Key.seal(n), Trees.Hash.code(k, [])))
+      )
+
+# s with the first tip of the store i, whose content is c and whose log is on
+# the trees of m: its owners are the store's first owners
+def Start.put(+s: State(), +i: Ledgers.Id, +c: Maybe<&2, Hashes.Hash>, m: Maybe<&2, Work>) -> State():
   match m:
     case None{}:
       s
     case Some{Work{s2, l, ns}}:
-      +t = {Tip{None{}, l}: Tip}
+      +t = {Tip{c, l}: Tip}
       Start.head(
         s,
         State.put(s2, [Tip.words(t)]),
@@ -2464,9 +2827,18 @@ def Start.put(+s: State(), +i: Ledgers.Id, m: Maybe<&2, Work>) -> State():
         Head{i, None{}, 0, Some{Tip.hash(t)}}
       )
 
-# s, which follows the store that the request i starts with the owners os
-def Node.start(+s: State(), i: Ledgers.Id, os: List<&2, String>) -> State():
-  Start.put(s, i, Log.first(Work{s, None{}, []}, os))
+# Node.start once the content m of the store is known
+def Start.with(+s: State(), +i: Ledgers.Id, os: List<&2, String>, m: Maybe<&2, Work>) -> State():
+  match m:
+    case None{}:
+      s
+    case Some{+w}:
+      Start.put(s, i, Work.root(w), Log.first(w, os))
+
+# s, which follows the store that the request i starts with the first owners
+# os: its content holds their first keys
+def Node.start(+s: State(), +i: Ledgers.Id, +os: List<&2, Owner>) -> State():
+  Start.with(s, i, Owner.names(os), Seal.firsts(os, Some{Work{s, None{}, []}}))
 
 # the first tip of the branch b in the store content h, if the store made b
 def Branch.start(s: State(), h: Maybe<&2, Hashes.Hash>, b: String) -> Maybe<&2, Hashes.Hash>:
@@ -2544,13 +2916,38 @@ def Cast.may(+n: String, +s: State(), w: Ledgers.Where, t: Tip, qs: List<&2, Led
     Bool.not(List.is_empty(&2, Ledgers.Id, qs))
   )
 
+# s with the node n's ballot for the step v at the place w, sealed as the
+# next of the node's chain m (none: the store gave the node no key)
+def Cast.seal(+s: State(), +w: Ledgers.Where, +n: String, v: Ledgers.Vote, m: Maybe<&2, Chained>) -> State():
+  match m:
+    case None{}:
+      s
+    case Some{Chained{+j, last, key, f}}:
+      +seed = Keys.seed(State.keys(s))
+      +r = Where.store(w)
+      Maybe.default(
+        &2,
+        State(),
+        Seal.accept(
+          s,
+          Ledgers.Ballot.make(
+            Seal.secret(seed, r, j),
+            Ledgers.Signed{w, n, v},
+            last,
+            Seals.Seal.public(Seal.secret(seed, r, U32.inc(j)))
+          )
+        ),
+        s
+      )
+
 # the state m with the node n's ballot v at the place w, else s
-def Cast.vote(s: State(), m: Maybe<&2, State()>, w: Ledgers.Where, n: String, v: Ledgers.Vote) -> State():
+def Cast.vote(+s: State(), m: Maybe<&2, State()>, +w: Ledgers.Where, +n: String, v: Ledgers.Vote) -> State():
   match m:
     case None{}:
       s
     case Some{s3}:
-      State.led(s, Ledgers.State.cast(~Ask, ~Ask.is_eq, State.ledger(s3), w, n, v))
+      +s4 = State.led(s, State.ledger(s3))
+      Cast.seal(s4, w, n, v, Seal.chain(s4, Where.store(w), n))
 
 # s with the node n's ballot at the place w for the step that ran qs from the
 # tip of the hash th, when the run m is there: the run's nodes, its tip, and
@@ -2799,17 +3196,49 @@ def Take.asks(cs: List<&2, Cells.Cell<Ledgers.Entry<Ask>>>, s: State()) -> State
 def Node.missing(s: State(), r: Ledgers.State(Ask)) -> Ledgers.State(Ask):
   Ledgers.State.missing(~Ask, ~Ask.is_eq, State.ledger(s), r)
 
-# what a holder of s keeps of t, which another node sent: the entries of t in
-# the slots where s holds nothing. A node checks what it receives against what
-# it holds, so nothing that it holds is lost or changed. Each new request
-# waits on its line: the cost is what t adds, not what s holds
+# the cell c is not a ballot
+def Cell.no_ballot(c: Cells.Cell<Ledgers.Entry<Ask>>) -> Bool:
+  match c:
+    case Cells.One{Ledgers.Entry.Vote{b}}:
+      False{}
+    case x:
+      True{}
+
+# the ballots among the cells cs
+def Ballots.of(cs: List<&2, Cells.Cell<Ledgers.Entry<Ask>>>) -> List<&2, Ledgers.Ballot>:
+  match cs:
+    case Nil{}:
+      []
+    case Con{Cells.One{Ledgers.Entry.Vote{b}}, rest}:
+      b <> Ballots.of(rest)
+    case Con{c, rest}:
+      Ballots.of(rest)
+
+# what a holder of s keeps of t, which another node sent: the requests and the
+# data of t in the slots where s holds nothing, and each ballot of t that its
+# node's chain leads to and its key signs. A node checks what it receives
+# against what it holds, so nothing that it holds is lost or changed, and it
+# keeps no ballot that it did not check; a ballot that it cannot check yet
+# comes again with the next sync. Each new request waits on its line: the
+# cost is what t adds, not what s holds
 def Node.take(+s: State(), +t: Ledgers.State(Ask)) -> State():
-  Take.asks(
-    Tries.Trie.values(
-      Cells.Cell<Ledgers.Entry<Ask>>,
-      Ledgers.State.missing(~Ask, ~Ask.is_eq, t, State.ledger(s))
-    ),
-    State.led(s, Ledgers.State.take(~Ask, State.ledger(s), t))
+  +new = Tries.Trie.values(
+    Cells.Cell<Ledgers.Entry<Ask>>,
+    Ledgers.State.missing(~Ask, ~Ask.is_eq, t, State.ledger(s))
+  )
+  Sealed.take(
+    Ballots.of(new),
+    Take.asks(
+      new,
+      State.led(
+        s,
+        Ledgers.State.take(
+          ~Ask,
+          State.ledger(s),
+          Tries.Trie.keep(~Cells.Cell<Ledgers.Entry<Ask>>, ~Cell.no_ballot, t)
+        )
+      )
+    )
   )
 
 # s, after the node n did what it can on the line of each head of hs
