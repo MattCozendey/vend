@@ -1718,26 +1718,17 @@ def Node.arrive(
 def Root.same(a: Maybe<&2, Hashes.Hash>, b: Maybe<&2, Hashes.Hash>) -> Bool:
   Shared.Maybe.is_eq(~Hashes.Hash, ~Hashes.Hash.is_eq, a, b)
 
-# the node n may cast a ballot at the place w of a line at the tip t, for the
-# requests qs: there is a request, n is an owner, and n cast none there
-def Cast.may(
-  ~mach: Machine(),
-  +n: String,
-  s: Node<Machine.Q(mach)>,
-  w: Ledgers.Where,
-  t: Tip,
-  qs: List<&2, Ledgers.Id>
-) -> Bool:
+# the node n is free to cast a ballot at the place w of a line at the tip t:
+# n is an owner, and n cast none there. A node reads this before it runs the
+# requests that wait, so a node that cannot cast runs none
+def Cast.free(~mach: Machine(), +n: String, s: Node<Machine.Q(mach)>, w: Ledgers.Where, t: Tip) -> Bool:
   List.all.if(
-    u => List.all.if(
-      v => Maybe.is_none(
-        &2,
-        Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
-        Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.vote(w, n))
-      ),
-      List.contains(~String, ~String.eq, Tip.owners(t), n)
+    v => Maybe.is_none(
+      &2,
+      Cells.Cell<Ledgers.Entry<Machine.Q(mach)>>,
+      Ledgers.State.get(~Machine.Q(mach), State.ledger(~mach, s), Ledgers.Slot.vote(w, n))
     ),
-    Bool.not(List.is_empty(&2, Ledgers.Id, qs))
+    List.contains(~String, ~String.eq, Tip.owners(t), n)
   )
 
 # s with the node n's ballot for the act a at the place w, sealed as the next
@@ -2403,6 +2394,34 @@ def Round.join(
     u => s
   )
 
+# s with the vote of the node n at the place w for the plan p, when the plan
+# has a request
+def Cast.plan(
+  ~mach: Machine(),
+  ~kern: Kernel(mach),
+  n: String,
+  w: Ledgers.Where,
+  th: Maybe<&2, Hashes.Hash>,
+  +p: Plan<Machine.Q(mach)>,
+  +s: Node<Machine.Q(mach)>
+) -> Node<Machine.Q(mach)>:
+  Shared.Bool.when(
+    Node<Machine.Q(mach)>,
+    Bool.not(List.is_empty(&2, Ledgers.Id, Plan.asks(~mach, p))),
+    u => Cast.put(
+      ~mach,
+      ~kern,
+      n,
+      w,
+      th,
+      Plan.asks(~mach, p),
+      Plan.from(~mach, p),
+      Plan.run(~mach, p),
+      s
+    ),
+    u => s
+  )
+
 # Node.cast in the round of the node n at the height next of the line c, at
 # the tip t of the hash th
 def Cast.round(
@@ -2418,21 +2437,10 @@ def Cast.round(
   +os = Tip.owners(t)
   +r = Round.mine(~mach, n, s, c, next, Round.seen(~mach, s, c, next))
   +w = {Ledgers.Where{c, next, r}: Ledgers.Where}
-  +p = Plan.of(~mach, ~kern, n, s, c, w, t, th, os, Owners.turn(os, U32.add(next, U32.from_nat(r))))
   Shared.Bool.when(
     Node<Machine.Q(mach)>,
-    Cast.may(~mach, n, s, w, t, Plan.asks(~mach, p)),
-    u => Cast.put(
-      ~mach,
-      ~kern,
-      n,
-      w,
-      th,
-      Plan.asks(~mach, p),
-      Plan.from(~mach, p),
-      Plan.run(~mach, p),
-      s
-    ),
+    Cast.free(~mach, n, s, w, t),
+    u => Cast.plan(~mach, ~kern, n, w, th, Plan.of(~mach, ~kern, n, s, c, w, t, th, os, Owners.turn(os, U32.add(next, U32.from_nat(r)))), s),
     u => s
   )
 
@@ -5452,57 +5460,54 @@ def Cast.round.grows(
   +os = Tip.owners(t)
   +r = Round.mine(~mach, n, s, c, next, Round.seen(~mach, s, c, next))
   +w = {Ledgers.Where{c, next, r}: Ledgers.Where}
-  +p = Plan.of(
-    ~mach,
-    ~Lawful.kernel(mach, lawf),
-    n,
-    s,
-    c,
-    w,
-    t,
-    th,
-    os,
-    Owners.turn(os, U32.add(next, U32.from_nat(r)))
-  )
+  +p = Plan.of(~mach, ~Lawful.kernel(mach, lawf), n, s, c, w, t, th, os, Owners.turn(os, U32.add(next, U32.from_nat(r))))
   Grows.when(
     ~mach,
     s,
-    Cast.may(~mach, n, s, w, t, Plan.asks(~mach, p)),
-    Cast.put(
-      ~mach,
-      ~Lawful.kernel(mach, lawf),
-      n,
-      w,
-      th,
-      Plan.asks(~mach, p),
-      Plan.from(~mach, p),
-      Plan.run(~mach, p),
-      s
-    ),
+    Cast.free(~mach, n, s, w, t),
+    Cast.plan(~mach, ~Lawful.kernel(mach, lawf), n, w, th, p, s),
     s,
-    Cast.put.grows(
+    Grows.when(
       ~mach,
-      ~Lawful.kernel(mach, lawf),
-      n,
-      w,
-      th,
-      Plan.asks(~mach, p),
-      Plan.from(~mach, p),
-      Plan.run(~mach, p),
-      s
-    )(
-      Plan.of.grows(
+      s,
+      Bool.not(List.is_empty(&2, Ledgers.Id, Plan.asks(~mach, p))),
+      Cast.put(
         ~mach,
-        ~lawf,
+        ~Lawful.kernel(mach, lawf),
         n,
-        s,
-        c,
         w,
-        t,
         th,
-        os,
-        Owners.turn(os, U32.add(next, U32.from_nat(r)))
-      )
+        Plan.asks(~mach, p),
+        Plan.from(~mach, p),
+        Plan.run(~mach, p),
+        s
+      ),
+      s,
+      Cast.put.grows(
+        ~mach,
+        ~Lawful.kernel(mach, lawf),
+        n,
+        w,
+        th,
+        Plan.asks(~mach, p),
+        Plan.from(~mach, p),
+        Plan.run(~mach, p),
+        s
+      )(
+        Plan.of.grows(
+          ~mach,
+          ~lawf,
+          n,
+          s,
+          c,
+          w,
+          t,
+          th,
+          os,
+          Owners.turn(os, U32.add(next, U32.from_nat(r)))
+        )
+      ),
+      Grows.refl(~mach, s)
     ),
     Grows.refl(~mach, s)
   )
@@ -8245,30 +8250,38 @@ def Cast.round.heads(
   +p = Plan.of(~mach, ~kern, n, s, c, w, t, th, os, Owners.turn(os, U32.add(next, U32.from_nat(r))))
   Heads.when(
     ~mach,
-    Cast.may(~mach, n, s, w, t, Plan.asks(~mach, p)),
+    Cast.free(~mach, n, s, w, t),
     s,
-    Cast.put(
-      ~mach,
-      ~kern,
-      n,
-      w,
-      th,
-      Plan.asks(~mach, p),
-      Plan.from(~mach, p),
-      Plan.run(~mach, p),
-      s
-    ),
+    Cast.plan(~mach, ~kern, n, w, th, p, s),
     s,
-    Cast.put.heads(
+    Heads.when(
       ~mach,
-      ~kern,
-      n,
-      w,
-      th,
-      Plan.asks(~mach, p),
-      Plan.from(~mach, p),
-      Plan.run(~mach, p),
-      s
+      Bool.not(List.is_empty(&2, Ledgers.Id, Plan.asks(~mach, p))),
+      s,
+      Cast.put(
+        ~mach,
+        ~kern,
+        n,
+        w,
+        th,
+        Plan.asks(~mach, p),
+        Plan.from(~mach, p),
+        Plan.run(~mach, p),
+        s
+      ),
+      s,
+      Cast.put.heads(
+        ~mach,
+        ~kern,
+        n,
+        w,
+        th,
+        Plan.asks(~mach, p),
+        Plan.from(~mach, p),
+        Plan.run(~mach, p),
+        s
+      ),
+      {==}
     ),
     {==}
   )
