@@ -770,7 +770,15 @@ def Rope.up_reads(
   -x: List<&2, U32>,
   flat: {List.concat(&2, Hashes.Hash, gs) == hs: List<&2, Hashes.Hash>},
   pre: {Rope.read.go(~S, ~fetch, d, s, hs) == Some{x}: Maybe<&2, List<&2, U32>>},
-  e: {Stores.Store.holds(~S, ~fetch, s, Rope.codes(~Hashes.Hash, ~Node.branch.of, gs, acc)) == True{}: Bool}
+  e: {
+    Stores.Store.holds(
+      ~S,
+      ~fetch,
+      s,
+      Rope.codes(~Hashes.Hash, ~Node.branch.of, gs, acc)
+    )
+      == True{}: Bool
+  }
 ) -> {
   Rope.read.go(
     ~S,

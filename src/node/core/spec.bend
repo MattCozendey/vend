@@ -348,9 +348,10 @@ type Mount is Data:
 
 # Laws
 # ----
-# What README says of a Vend Node's core, as laws. src/daemon/DESIGN.md lists
-# the laws that are not stated yet. A law of the ledger that asks for the laws
-# of a change's equality holds of a node's ledger by Ask.same.
+# What README says of what is Vend's in a Vend Node, as laws. The laws of the
+# machine (a node only grows, a log only gains keys, one history) are the
+# replica's: src/shared/replica.bend proves them for any lawful kernel, and
+# impl.bend gives the lawful kernel of Vend.
 
 # two requests are the same exactly when they are equal
 law Ask.same:
@@ -380,7 +381,13 @@ law Node.answer_follows:
   for +q: Requests.Ask
   for +x: Answer
   {Node.answer(s, e, q) == Some{x}: Maybe<&2, Answer>}
-    -> {Answer.follows(x, Node.answer(Replicas.Node.after(~Requests.Ask.machine(), ~Ask.kernel(), n, evs, s), e, q)) == True{}: Bool}
+    -> {
+      Answer.follows(
+        x,
+        Node.answer(Replicas.Node.after(~Requests.Ask.machine(), ~Ask.kernel(), n, evs, s), e, q)
+      )
+        == True{}: Bool
+    }
 
 # while a write that the writer w asked for waits on its line, the node has a
 # draft of the resource for w (the newest of its pending writes, by
@@ -405,7 +412,8 @@ law Node.draft_some:
       == True{}: Bool
   }
     -> {
-      Replicas.Node.asked(~Requests.Ask.machine(), 
+      Replicas.Node.asked(
+        ~Requests.Ask.machine(),
         s,
         Ledgers.Id{w, q2}
       )
@@ -433,7 +441,9 @@ law Judge.write_reads:
       c,
       h
     )
-      == Some{Replicas.Verdict.Taken{Replicas.Work{s3, h2}}}: Maybe<&2, Replicas.Verdict<Requests.Ask>>
+      == Some{
+        Replicas.Verdict.Taken{Replicas.Work{s3, h2}}
+      }: Maybe<&2, Replicas.Verdict<Requests.Ask>>
   }
     -> {Content.find(s, n, c) == Some{m}: Maybe<&2, Maybe<&2, Ropes.Root>>}
     -> {Res.root(s3, h2, n) == m: Maybe<&2, Ropes.Root>}
@@ -448,7 +458,8 @@ law Move.reads:
   for +n: Resources.Name
   for +v: List<&2, U32>
   {
-    Replicas.Node.get(~Requests.Ask.machine(), 
+    Replicas.Node.get(
+      ~Requests.Ask.machine(),
       s,
       Replicas.Node.root_of(~Requests.Ask.machine(), s, Some{to}),
       Key.res(n)
@@ -479,7 +490,15 @@ law Clash.shut:
   for +h: Maybe<&2, Hashes.Hash>
   for +n: Resources.Name
   for +f: Ledgers.Id
-  {Replicas.Node.get(~Requests.Ask.machine(), s, h, Key.clash(n)) == Some{[]}: Maybe<&2, List<&2, U32>>}
+  {
+    Replicas.Node.get(
+      ~Requests.Ask.machine(),
+      s,
+      h,
+      Key.clash(n)
+    )
+      == Some{[]}: Maybe<&2, List<&2, U32>>
+  }
     -> {Clash.open(s, h, n, f) == False{}: Bool}
 
 # a merge of whole trees keeps what the merge of each resource takes: when the
@@ -532,7 +551,12 @@ law Merge.keeps:
       )
         == Some{Pick.Take{x}}: Maybe<&2, Pick>
     }
-    -> Replicas.Work.Reads(~Requests.Ask.machine(), Key.res(n), Res.code(x), Merge.work(s, c, from, h))
+    -> Replicas.Work.Reads(
+      ~Requests.Ask.machine(),
+      Key.res(n),
+      Res.code(x),
+      Merge.work(s, c, from, h)
+    )
 
 # a merge keeps, for each resource, a change that only one side made: when
 # ours is the base, it keeps theirs
@@ -591,7 +615,11 @@ law Node.read_draft:
         n,
         Point.Head{r, b}
       )
-        == Replicas.Root.bytes(~Requests.Ask.machine(), s, Content.root(s, n, c)): Maybe<&2, Texts.Bytes()>
+        == Replicas.Root.bytes(
+          ~Requests.Ask.machine(),
+          s,
+          Content.root(s, n, c)
+        ): Maybe<&2, Texts.Bytes()>
     }
 
 # a pending write goes with its writer to another node: a request that a node
@@ -627,7 +655,11 @@ law Node.take_waits:
       List.contains(
         ~Ledgers.Id,
         ~Ledgers.Id.is_eq,
-        Replicas.Wait.of(~Requests.Ask.machine(), Replicas.Node.take(~Requests.Ask.machine(), ~Ask.kernel(), s, t), Replicas.Line.chain(r, l)),
+        Replicas.Wait.of(
+          ~Requests.Ask.machine(),
+          Replicas.Node.take(~Requests.Ask.machine(), ~Ask.kernel(), s, t),
+          Replicas.Line.chain(r, l)
+        ),
         i
       )
         == True{}: Bool

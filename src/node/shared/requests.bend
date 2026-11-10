@@ -352,35 +352,17 @@ def Ask.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ask>>:
 def Ask.is_eq(a: Ask, b: Ask) -> Bool:
   Codes.Code.is_eq(~Ask, ~Ask.code, a, b)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument
 # a member reads back
 def Member.code_read(
   x: Member,
   r: List<&2, U32>
-) -> {
-  Member.code.read(
-    Member.code(x, r)
-  )
-    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Member>>
-}:
+) -> {Member.code.read(Member.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Member>>}:
   match x:
     case Member.Node{n}:
-      Codes.Code.one_read(
-        ~String,
-        ~Member,
-        ~Codes.Code.text.codec(),
-        a => Member.Node{a},
-        n,
-        r
-      )
+      Codes.Code.one_read(~String, ~Member, ~Codes.Code.text.codec(), a => Member.Node{a}, n, r)
     case Member.Group{n}:
-      Codes.Code.one_read(
-        ~String,
-        ~Member,
-        ~Codes.Code.text.codec(),
-        a => Member.Group{a},
-        n,
-        r
-      )
+      Codes.Code.one_read(~String, ~Member, ~Codes.Code.text.codec(), a => Member.Group{a}, n, r)
 
 # the code of members
 def Member.codec() -> Codes.Codec(Member):
@@ -391,30 +373,13 @@ def Content.code_read(
   x: Content,
   r: List<&2, U32>
 ) -> {
-  Content.code.read(
-    Content.code(x, r)
-  )
-    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Content>>
+  Content.code.read(Content.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Content>>
 }:
   match x:
     case Content.Root{b}:
-      Codes.Code.one_read(
-        ~Ropes.Root,
-        ~Content,
-        ~Ropes.Root.codec(),
-        a => Content.Root{a},
-        b,
-        r
-      )
+      Codes.Code.one_read(~Ropes.Root, ~Content, ~Ropes.Root.codec(), a => Content.Root{a}, b, r)
     case Content.Of{v}:
-      Codes.Code.one_read(
-        ~Ledgers.Id,
-        ~Content,
-        ~Ledgers.Id.codec(),
-        a => Content.Of{a},
-        v,
-        r
-      )
+      Codes.Code.one_read(~Ledgers.Id, ~Content, ~Ledgers.Id.codec(), a => Content.Of{a}, v, r)
 
 # the code of contents
 def Content.codec() -> Codes.Codec(Content):
@@ -424,12 +389,7 @@ def Content.codec() -> Codes.Codec(Content):
 def Change.code_read(
   x: Change,
   r: List<&2, U32>
-) -> {
-  Change.code.read(
-    Change.code(x, r)
-  )
-    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Change>>
-}:
+) -> {Change.code.read(Change.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Change>>}:
   match x:
     case Change.Branch{n, at}:
       Codes.Code.two_read(
@@ -501,23 +461,9 @@ def Change.code_read(
         r
       )
     case Change.Merge{v}:
-      Codes.Code.one_read(
-        ~Ledgers.Id,
-        ~Change,
-        ~Ledgers.Id.codec(),
-        a => Change.Merge{a},
-        v,
-        r
-      )
+      Codes.Code.one_read(~Ledgers.Id, ~Change, ~Ledgers.Id.codec(), a => Change.Merge{a}, v, r)
     case Change.Move{v}:
-      Codes.Code.one_read(
-        ~Ledgers.Id,
-        ~Change,
-        ~Ledgers.Id.codec(),
-        a => Change.Move{a},
-        v,
-        r
-      )
+      Codes.Code.one_read(~Ledgers.Id, ~Change, ~Ledgers.Id.codec(), a => Change.Move{a}, v, r)
     case Change.Mark{m, n}:
       Codes.Code.two_read(
         ~String,
@@ -551,12 +497,7 @@ def Change.codec() -> Codes.Codec(Change):
 def Ask.code_read(
   x: Ask,
   r: List<&2, U32>
-) -> {
-  Ask.code.read(
-    Ask.code(x, r)
-  )
-    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Ask>>
-}:
+) -> {Ask.code.read(Ask.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Ask>>}:
   match x:
     case Ask.Start{os}:
       Codes.Code.one_read(

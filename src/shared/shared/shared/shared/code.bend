@@ -687,8 +687,35 @@ def Code.four_read(
   )
     == Some{Read{mk(a)(b)(c)(d), r}}: Maybe<&2, Read<T>>
 }:
-  %Equal.sym(Maybe<&2, Read<A>>, Codec.dec(A, ca, Codec.enc(A, ca, a, Codec.enc(B, cb, b, Codec.enc(C, cc, c, Codec.enc(D, cd, d, r))))), Some{Read{a, Codec.enc(B, cb, b, Codec.enc(C, cc, c, Codec.enc(D, cd, d, r)))}}, Codec.laws(A, ca)(a)(Codec.enc(B, cb, b, Codec.enc(C, cc, c, Codec.enc(D, cd, d, r))))) :
-    {Read.then(A, T, _, a => r => Code.three.read(B, C, D, T, Codec.dec(B, cb), Codec.dec(C, cc), Codec.dec(D, cd), mk(a), r)) == Some{Read{mk(a, b, c, d), r}} : Maybe<&2, Read<T>>}
+  %Equal.sym(
+    Maybe<&2, Read<A>>,
+    Codec.dec(
+      A,
+      ca,
+      Codec.enc(A, ca, a, Codec.enc(B, cb, b, Codec.enc(C, cc, c, Codec.enc(D, cd, d, r))))
+    ),
+    Some{Read{a, Codec.enc(B, cb, b, Codec.enc(C, cc, c, Codec.enc(D, cd, d, r)))}},
+    Codec.laws(A, ca)(a)(Codec.enc(B, cb, b, Codec.enc(C, cc, c, Codec.enc(D, cd, d, r))))
+  ):
+    {
+      Read.then(
+        A,
+        T,
+        _,
+        a => r => Code.three.read(
+          B,
+          C,
+          D,
+          T,
+          Codec.dec(B, cb),
+          Codec.dec(C, cc),
+          Codec.dec(D, cd),
+          mk(a),
+          r
+        )
+      )
+        == Some{Read{mk(a, b, c, d), r}}: Maybe<&2, Read<T>>
+    }
   Code.three_read(B, C, D, T, cb, cc, cd, mk(a), b, c, d, r)
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
