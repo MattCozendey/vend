@@ -1938,7 +1938,7 @@ law Crit.new_wf:
   {Crit.wf(~V, Crit.new(V), 0n) == True{}: Bool}
 
 def Crit.new_wf(ty):
-  ?TODO
+  {==}
 
 # a write keeps a map well formed
 law Crit.upsert_wf:
