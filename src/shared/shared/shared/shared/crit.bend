@@ -6241,6 +6241,363 @@ def Crit.is_some_when(-V: Data, +k: List<&2, U32>, +q: List<&2, U32>, -w: V) -> 
 }:
   Crit.is_some_when.at(V, k, q, w, Key.is_eq(q, k))({==})
 
+# Crit.leaf_minus where the entry's key is the key q or not (b), and the map
+# holds it
+def Crit.leaf_minus.t(-V: Data, +y: Crit<V>, +k: List<&2, U32>, +q: List<&2, U32>, -v: V, b: Bool) -> {Key.is_eq(k, q) == b: Bool} -> {
+  Maybe.is_some(&2, V, Crit.lookup(V, y, k)) == True{}: Bool
+} -> {Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, y, q)), None{}, Shared.Maybe.when(V, b, u => Some{v})) == None{}: Maybe<&2, V>}:
+  match b:
+    case True{}:
+      e => hs =>
+        %Key.is_eq_sound(k, q)(e): {Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, y, _)), None{}, Some{v}) == None{}: Maybe<&2, V>}
+        %Equal.sym(Bool, Maybe.is_some(&2, V, Crit.lookup(V, y, k)), True{}, hs): {Bool.pick(Maybe<&2, V>, _, None{}, Some{v}) == None{}: Maybe<&2, V>}
+        {==}
+    case False{}:
+      e => hs => Crit.pick_none(V, Maybe.is_some(&2, V, Crit.lookup(V, y, q)))
+
+# Crit.leaf_minus where the entry's key is the key q or not (b), and the map
+# lacks it
+def Crit.leaf_minus.f(-V: Data, +y: Crit<V>, +k: List<&2, U32>, +q: List<&2, U32>, -v: V, b: Bool) -> {Key.is_eq(k, q) == b: Bool} -> {
+  Maybe.is_some(&2, V, Crit.lookup(V, y, k)) == False{}: Bool
+} -> {Shared.Maybe.when(V, b, u => Some{v}) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, y, q)), None{}, Shared.Maybe.when(V, b, u => Some{v})): Maybe<&2, V>}:
+  match b:
+    case True{}:
+      e => hs =>
+        %Key.is_eq_sound(k, q)(e): {Some{v} == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, y, _)), None{}, Some{v}): Maybe<&2, V>}
+        %Equal.sym(Bool, Maybe.is_some(&2, V, Crit.lookup(V, y, k)), False{}, hs): {Some{v} == Bool.pick(Maybe<&2, V>, _, None{}, Some{v}): Maybe<&2, V>}
+        {==}
+    case False{}:
+      e => hs => Equal.sym(Maybe<&2, V>, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, y, q)), None{}, None{}), None{}, Crit.pick_none(V, Maybe.is_some(&2, V, Crit.lookup(V, y, q))))
+
+# the difference of an entry and a well formed map
+def Crit.leaf_minus(~V: Data, +k: List<&2, U32>, +v: V, +y: Crit<V>, +ly: Nat, +q: List<&2, U32>) -> {Crit.wf(~V, y, ly) == True{}: Bool} -> {
+  Crit.lookup(V, Shared.Bool.when(Crit<V>, Crit.has(V, y, k), u => Crit.Tip{}, u => Crit.Leaf{k, v}), q)
+    == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, y, q)), None{}, Crit.lookup(V, Crit.Leaf{k, v}, q)): Maybe<&2, V>
+}:
+  +h => Shared.Bool.when_cases(
+    Crit<V>,
+    t => {Crit.lookup(V, t, q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, y, q)), None{}, Crit.lookup(V, Crit.Leaf{k, v}, q)): Maybe<&2, V>},
+    Crit.has(V, y, k),
+    u => Crit.Tip{},
+    u => Crit.Leaf{k, v},
+    t1 => Equal.sym(
+      Maybe<&2, V>,
+      Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, y, q)), None{}, Crit.lookup(V, Crit.Leaf{k, v}, q)),
+      None{},
+      Crit.leaf_minus.t(V, y, k, q, v, Key.is_eq(k, q))({==})(
+        Equal.trans(Bool, Maybe.is_some(&2, V, Crit.lookup(V, y, k)), Maybe.is_some(&2, V, Crit.get(V, y, k)), True{}, Equal.cong(Maybe<&2, V>, Bool, x => Maybe.is_some(&2, V, x), Crit.lookup(V, y, k), Crit.get(V, y, k), Equal.sym(Maybe<&2, V>, Crit.get(V, y, k), Crit.lookup(V, y, k), Crit.get_lookup.lo(~V, y, ly, k)(h))), t1)
+      )
+    ),
+    t1 => Crit.leaf_minus.f(V, y, k, q, v, Key.is_eq(k, q))({==})(
+      Equal.trans(Bool, Maybe.is_some(&2, V, Crit.lookup(V, y, k)), Maybe.is_some(&2, V, Crit.get(V, y, k)), False{}, Equal.cong(Maybe<&2, V>, Bool, x => Maybe.is_some(&2, V, x), Crit.lookup(V, y, k), Crit.get(V, y, k), Equal.sym(Maybe<&2, V>, Crit.get(V, y, k), Crit.lookup(V, y, k), Crit.get_lookup.lo(~V, y, ly, k)(h))), t1)
+    )
+  )
+
+# the difference of two well formed forks whose reps differ before both bits
+# is the first: they hold no key in common
+def Crit.minus_both(~V: Data, +ra: List<&2, U32>, +pa: Nat, +ea: Maybe<&2, V>, +za: Crit<V>, +oa: Crit<V>, +rb: List<&2, U32>, +pb: Nat, +eb: Maybe<&2, V>, +zb: Crit<V>, +ob: Crit<V>, +la: Nat, +lb: Nat, +q: List<&2, U32>) -> {Crit.wf(~V, Crit.Fork{ra, pa, ea, za, oa}, la) == True{}: Bool} -> {Crit.wf(~V, Crit.Fork{rb, pb, eb, zb, ob}, lb) == True{}: Bool} -> {
+  Bool.and(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pb)) == True{}: Bool
+} -> {Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)): Maybe<&2, V>}:
+  +ha => +hb => +hab => Crit.pick_disj(V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q), Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q))(
+    +t => Crit.none_by(V, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q))(
+      +s =>
+        +sd = Crit.above_some(Key.diff(ra, rb), pa)(Shared.Bool.and_true_left(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pb))(hab))
+        +lta = Crit.above_lt(Key.diff(ra, rb), pa, Maybe.default(&2, Nat, Key.diff(ra, rb), 0n))(sd)(Shared.Bool.and_true_left(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pb))(hab))
+        +ltb = Crit.above_lt(Key.diff(ra, rb), pb, Maybe.default(&2, Nat, Key.diff(ra, rb), 0n))(sd)(Shared.Bool.and_true_right(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pb))(hab))
+        +qa = Key.agree_le(q, ra, 1n+Maybe.default(&2, Nat, Key.diff(ra, rb), 0n), pa)(Crit.lt_le_succ(Maybe.default(&2, Nat, Key.diff(ra, rb), 0n), pa)(lta))(Crit.in_fork_agree(~V, ra, pa, ea, za, oa, la, q)(ha)(s))
+        +qb = Key.agree_le(q, rb, 1n+Maybe.default(&2, Nat, Key.diff(ra, rb), 0n), pb)(Crit.lt_le_succ(Maybe.default(&2, Nat, Key.diff(ra, rb), 0n), pb)(ltb))(Crit.in_fork_agree(~V, rb, pb, eb, zb, ob, lb, q)(hb)(t))
+        Crit.clash(
+          Key.agree(ra, rb, 1n+Maybe.default(&2, Nat, Key.diff(ra, rb), 0n)),
+          True{},
+          False{},
+          Key.agree_join(ra, rb, q, 1n+Maybe.default(&2, Nat, Key.diff(ra, rb), 0n))(Key.agree_sym(q, ra, 1n+Maybe.default(&2, Nat, Key.diff(ra, rb), 0n))(qa))(Key.agree_sym(q, rb, 1n+Maybe.default(&2, Nat, Key.diff(ra, rb), 0n))(qb)),
+          (
+            %Equal.sym(Maybe<&2, Nat>, Key.diff(ra, rb), Some{Maybe.default(&2, Nat, Key.diff(ra, rb), 0n)}, sd): {Bits.agree(_, 1n+Maybe.default(&2, Nat, Key.diff(ra, rb), 0n)) == False{}: Bool}
+            Shared.Nat.succ_nle(Maybe.default(&2, Nat, Key.diff(ra, rb), 0n))
+          ),
+          Shared.Bool.true_ne_false
+        )
+    )
+  )
+
+# the difference of two well formed forks at one bit, whose reps agree before
+# it
+def Crit.minus_eq(~V: Data, +ra: List<&2, U32>, +pa: Nat, +ea: Maybe<&2, V>, +za: Crit<V>, +oa: Crit<V>, +rb: List<&2, U32>, +pb: Nat, +eb: Maybe<&2, V>, +zb: Crit<V>, +ob: Crit<V>, +la: Nat, +lb: Nat, +q: List<&2, U32>) -> {Crit.wf(~V, Crit.Fork{ra, pa, ea, za, oa}, la) == True{}: Bool} -> {Crit.wf(~V, Crit.Fork{rb, pb, eb, zb, ob}, lb) == True{}: Bool} -> {pa == pb: Nat} -> {Crit.above(Key.diff(ra, rb), pa) == False{}: Bool} -> {
+  Crit.lookup(V, Crit.minus(V, za, zb), q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, zb, q)), None{}, Crit.lookup(V, za, q)): Maybe<&2, V>
+} -> {Crit.lookup(V, Crit.minus(V, oa, ob), q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, ob, q)), None{}, Crit.lookup(V, oa, q)): Maybe<&2, V>} -> {
+  Crit.lookup(V, Crit.mk(V, ra, pa, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, eb), None{}, ea), Crit.minus(V, za, zb), Crit.minus(V, oa, ob)), q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)): Maybe<&2, V>
+}:
+  +ha => +hb => +eqp => +hab => +iz => +io => Equal.trans(
+    Maybe<&2, V>,
+    Crit.lookup(V, Crit.mk(V, ra, pa, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, eb), None{}, ea), Crit.minus(V, za, zb), Crit.minus(V, oa, ob)), q),
+    Maybe.or(&2, V, Crit.ended(V, ra, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, eb), None{}, ea), q), Maybe.or(&2, V, Crit.lookup(V, Crit.minus(V, za, zb), q), Crit.lookup(V, Crit.minus(V, oa, ob), q))),
+    Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)),
+    Crit.mk_lookup(V, ra, pa, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, eb), None{}, ea), Crit.minus(V, za, zb), Crit.minus(V, oa, ob), q),
+    Crit.side_split({Maybe.or(&2, V, Crit.ended(V, ra, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, eb), None{}, ea), q), Maybe.or(&2, V, Crit.lookup(V, Crit.minus(V, za, zb), q), Crit.lookup(V, Crit.minus(V, oa, ob), q))) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)): Maybe<&2, V>}, q, pa)(
+      +hs => Equal.trans(Maybe<&2, V>, Maybe.or(&2, V, Crit.ended(V, ra, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, eb), None{}, ea), q), Maybe.or(&2, V, Crit.lookup(V, Crit.minus(V, za, zb), q), Crit.lookup(V, Crit.minus(V, oa, ob), q))), Crit.lookup(V, Crit.minus(V, oa, ob), q), Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)), Crit.or_third(V, Crit.ended(V, ra, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, eb), None{}, ea), q), Crit.lookup(V, Crit.minus(V, za, zb), q), Crit.lookup(V, Crit.minus(V, oa, ob), q))(Crit.ended_pick(V, ra, eb, ea, q)(Crit.ended_long(V, ra, pa, ea, za, q, List.drop(&2, Bool, Key.bits(q), pa))(Crit.wf.rep_ok(~V, ra, pa, ea, za, oa, la)(ha))({==})(Crit.side_some_ne(q, pa, True{})(hs))))(Equal.trans(Maybe<&2, V>, Crit.lookup(V, Crit.minus(V, za, zb), q), Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, zb, q)), None{}, Crit.lookup(V, za, q)), None{}, iz, Crit.pick_none2(V, Maybe.is_some(&2, V, Crit.lookup(V, zb, q)), Crit.lookup(V, za, q))(Crit.lookup_all(~V, ~Place, ~Place.has, za, Place{ra, pa, False{}}, q)(Crit.wf.all_z(~V, ra, pa, ea, za, oa, la)(ha))(Place.has_not(ra, pa, False{}, q, Some{True{}}, hs, {==}))))), Equal.trans(Maybe<&2, V>, Crit.lookup(V, Crit.minus(V, oa, ob), q), Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, ob, q)), None{}, Crit.lookup(V, oa, q)), Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)), io, Equal.sym(Maybe<&2, V>, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)), Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, ob, q)), None{}, Crit.lookup(V, oa, q)), Equal.trans(Maybe<&2, V>, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)), Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, ob, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)), Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, ob, q)), None{}, Crit.lookup(V, oa, q)), Equal.cong(Maybe<&2, V>, Maybe<&2, V>, t => Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, t), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)), Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q), Crit.lookup(V, ob, q), Crit.route_side(~V, rb, pb, eb, zb, ob, lb, q, True{})(hb)((
+          %eqp: {Key.side(q, _) == Some{True{}}: Maybe<&2, Bool>}
+          hs
+        ))), Equal.cong(Maybe<&2, V>, Maybe<&2, V>, t => Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, ob, q)), None{}, t), Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q), Crit.lookup(V, oa, q), Crit.route_side(~V, ra, pa, ea, za, oa, la, q, True{})(ha)(hs))))))
+    )(
+      +hs => Equal.trans(Maybe<&2, V>, Maybe.or(&2, V, Crit.ended(V, ra, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, eb), None{}, ea), q), Maybe.or(&2, V, Crit.lookup(V, Crit.minus(V, za, zb), q), Crit.lookup(V, Crit.minus(V, oa, ob), q))), Crit.lookup(V, Crit.minus(V, za, zb), q), Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)), Crit.or_second(V, Crit.ended(V, ra, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, eb), None{}, ea), q), Crit.lookup(V, Crit.minus(V, za, zb), q), Crit.lookup(V, Crit.minus(V, oa, ob), q))(Crit.ended_pick(V, ra, eb, ea, q)(Crit.ended_long(V, ra, pa, ea, za, q, List.drop(&2, Bool, Key.bits(q), pa))(Crit.wf.rep_ok(~V, ra, pa, ea, za, oa, la)(ha))({==})(Crit.side_some_ne(q, pa, False{})(hs))))(Equal.trans(Maybe<&2, V>, Crit.lookup(V, Crit.minus(V, oa, ob), q), Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, ob, q)), None{}, Crit.lookup(V, oa, q)), None{}, io, Crit.pick_none2(V, Maybe.is_some(&2, V, Crit.lookup(V, ob, q)), Crit.lookup(V, oa, q))(Crit.lookup_all(~V, ~Place, ~Place.has, oa, Place{ra, pa, True{}}, q)(Crit.wf.all_o(~V, ra, pa, ea, za, oa, la)(ha))(Place.has_not(ra, pa, True{}, q, Some{False{}}, hs, {==}))))), Equal.trans(Maybe<&2, V>, Crit.lookup(V, Crit.minus(V, za, zb), q), Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, zb, q)), None{}, Crit.lookup(V, za, q)), Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)), iz, Equal.sym(Maybe<&2, V>, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)), Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, zb, q)), None{}, Crit.lookup(V, za, q)), Equal.trans(Maybe<&2, V>, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)), Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, zb, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)), Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, zb, q)), None{}, Crit.lookup(V, za, q)), Equal.cong(Maybe<&2, V>, Maybe<&2, V>, t => Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, t), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)), Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q), Crit.lookup(V, zb, q), Crit.route_side(~V, rb, pb, eb, zb, ob, lb, q, False{})(hb)((
+          %eqp: {Key.side(q, _) == Some{False{}}: Maybe<&2, Bool>}
+          hs
+        ))), Equal.cong(Maybe<&2, V>, Maybe<&2, V>, t => Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, zb, q)), None{}, t), Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q), Crit.lookup(V, za, q), Crit.route_side(~V, ra, pa, ea, za, oa, la, q, False{})(ha)(hs))))))
+    )(
+      +hs =>
+          +nil = Crit.side_nil(q, pa)(hs)
+          Equal.trans(
+            Maybe<&2, V>,
+            Maybe.or(&2, V, Crit.ended(V, ra, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, eb), None{}, ea), q), Maybe.or(&2, V, Crit.lookup(V, Crit.minus(V, za, zb), q), Crit.lookup(V, Crit.minus(V, oa, ob), q))),
+            Crit.ended(V, ra, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, eb), None{}, ea), q),
+            Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)),
+            Crit.or_first(V, Crit.ended(V, ra, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, eb), None{}, ea), q), Crit.lookup(V, Crit.minus(V, za, zb), q), Crit.lookup(V, Crit.minus(V, oa, ob), q))(
+              Equal.trans(Maybe<&2, V>, Crit.lookup(V, Crit.minus(V, za, zb), q), Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, zb, q)), None{}, Crit.lookup(V, za, q)), None{}, iz, Crit.pick_none2(V, Maybe.is_some(&2, V, Crit.lookup(V, zb, q)), Crit.lookup(V, za, q))(Crit.no_side(~V, ra, pa, za, False{}, q)(Crit.wf.all_z(~V, ra, pa, ea, za, oa, la)(ha))(nil)))
+            )(Equal.trans(Maybe<&2, V>, Crit.lookup(V, Crit.minus(V, oa, ob), q), Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, ob, q)), None{}, Crit.lookup(V, oa, q)), None{}, io, Crit.pick_none2(V, Maybe.is_some(&2, V, Crit.lookup(V, ob, q)), Crit.lookup(V, oa, q))(Crit.no_side(~V, ra, pa, oa, True{}, q)(Crit.wf.all_o(~V, ra, pa, ea, za, oa, la)(ha))(nil)))),
+            Equal.trans(
+              Maybe<&2, V>,
+              Crit.ended(V, ra, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, eb), None{}, ea), q),
+              Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.ended(V, rb, eb, q)), None{}, Crit.ended(V, ra, ea, q)),
+              Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)),
+              Crit.ends_minus(V, ra, pa, ea, za, rb, pb, eb, zb, q)(Crit.wf.rep_ok(~V, ra, pa, ea, za, oa, la)(ha))(Crit.wf.rep_ok(~V, rb, pb, eb, zb, ob, lb)(hb))(eqp)(hab),
+              Equal.sym(
+                Maybe<&2, V>,
+                Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)),
+                Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.ended(V, rb, eb, q)), None{}, Crit.ended(V, ra, ea, q)),
+                Equal.trans(
+                  Maybe<&2, V>,
+                  Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)),
+                  Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.ended(V, rb, eb, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)),
+                  Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.ended(V, rb, eb, q)), None{}, Crit.ended(V, ra, ea, q)),
+                  Equal.cong(Maybe<&2, V>, Maybe<&2, V>, t => Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, t), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)), Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q), Crit.ended(V, rb, eb, q), Crit.route_end(~V, rb, pb, eb, zb, ob, lb, q)(hb)((
+          %eqp: {Key.side(q, _) == None{}: Maybe<&2, Bool>}
+          hs
+        ))),
+                  Equal.cong(Maybe<&2, V>, Maybe<&2, V>, t => Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.ended(V, rb, eb, q)), None{}, t), Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q), Crit.ended(V, ra, ea, q), Crit.route_end(~V, ra, pa, ea, za, oa, la, q)(ha)(hs))
+                )
+              )
+            )
+          )
+    )
+  )
+
+# the keys on a side of a fork are on the same side, named by an equal bit
+def Crit.all_place_b(~V: Data, +m: Crit<V>, +r: List<&2, U32>, +pos: Nat, b1: Bool, +b2: Bool) -> {b1 == b2: Bool} -> {
+  Crit.all(~V, ~Place, ~Place.has, m, Place{r, pos, b1}) == True{}: Bool
+} -> {Crit.all(~V, ~Place, ~Place.has, m, Place{r, pos, b2}) == True{}: Bool}:
+  e => h =>
+    %e: {Crit.all(~V, ~Place, ~Place.has, m, Place{r, pos, _}) == True{}: Bool}
+    h
+
+# the difference of two well formed forks whose reps agree before the bit pa
+# of the first, which is before the bit pb of the second: b goes to its side
+# of a
+def Crit.minus_lt(~V: Data, +ra: List<&2, U32>, +pa: Nat, +ea: Maybe<&2, V>, +za: Crit<V>, +oa: Crit<V>, +rb: List<&2, U32>, +pb: Nat, +eb: Maybe<&2, V>, +zb: Crit<V>, +ob: Crit<V>, +la: Nat, +lb: Nat, +q: List<&2, U32>) -> {Crit.wf(~V, Crit.Fork{ra, pa, ea, za, oa}, la) == True{}: Bool} -> {Crit.wf(~V, Crit.Fork{rb, pb, eb, zb, ob}, lb) == True{}: Bool} -> {Nat.is_lt(pa, pb) == True{}: Bool} -> {Crit.above(Key.diff(ra, rb), pa) == False{}: Bool} -> {
+  Crit.lookup(V, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, za, q)): Maybe<&2, V>
+} -> {Crit.lookup(V, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, oa, q)): Maybe<&2, V>} -> {
+  Crit.lookup(V, Shared.Bool.when(Crit<V>, Key.bit(rb, pa), u => Crit.mk(V, ra, pa, ea, za, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob})), u => Crit.mk(V, ra, pa, ea, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), oa)), q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)): Maybe<&2, V>
+}:
+  +ha => +hb => +lt => +hab => +iz => +io =>
+    +nr = Crit.len_drop(Key.bits(rb), pa)(Shared.Nat.lt_le(pa, pb, List.length(&2, Bool, Key.bits(rb)))(lt)(Crit.rep_long(~V, rb, pb, eb, zb, ob, lb)(hb)))
+    +t2n = Equal.trans(
+      Bool,
+      Cur.done(Key.at(rb, pa)),
+      List.is_empty(&2, Bool, List.drop(&2, Bool, Key.bits(rb), pa)),
+      False{},
+      Crit.done_of(Key.at(rb, pa), List.drop(&2, Bool, Key.bits(rb), pa))(Cur.skip_bits(pa, Cur.of(rb))),
+      nr
+    )
+    +allb = Crit.fork_place(~V, rb, pb, eb, zb, ob, lb, ra, pa, Cur.bit(Key.at(rb, pa)))(hb)(lt)(Crit.not_above_agree(Key.diff(ra, rb), pa)(hab))(Crit.side_of(rb, pa, Cur.bit(Key.at(rb, pa)))(t2n)({==}))
+    Shared.Bool.when_cases(
+      Crit<V>,
+      t => {Crit.lookup(V, t, q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)): Maybe<&2, V>},
+      Key.bit(rb, pa),
+      u => Crit.mk(V, ra, pa, ea, za, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob})),
+      u => Crit.mk(V, ra, pa, ea, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), oa),
+      +t3 =>
+          +allt = Crit.all_place_b(~V, Crit.Fork{rb, pb, eb, zb, ob}, ra, pa, Key.bit(rb, pa), True{})(t3)(allb)
+          Equal.trans(
+            Maybe<&2, V>,
+            Crit.lookup(V, Crit.mk(V, ra, pa, ea, za, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob})), q),
+            Maybe.or(&2, V, Crit.ended(V, ra, ea, q), Maybe.or(&2, V, Crit.lookup(V, za, q), Crit.lookup(V, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), q))),
+            Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)),
+            Crit.mk_lookup(V, ra, pa, ea, za, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), q),
+            Equal.sym(
+              Maybe<&2, V>,
+              Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)),
+              Maybe.or(&2, V, Crit.ended(V, ra, ea, q), Maybe.or(&2, V, Crit.lookup(V, za, q), Crit.lookup(V, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), q))),
+              Crit.pick_cases(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q), Maybe.or(&2, V, Crit.ended(V, ra, ea, q), Maybe.or(&2, V, Crit.lookup(V, za, q), Crit.lookup(V, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), q))))(
+                +ct =>
+                  +hsq = Place.has_side(ra, pa, True{}, q)(Crit.in_place(~V, Crit.Fork{rb, pb, eb, zb, ob}, Place{ra, pa, True{}}, q)(allt)(ct))
+                  Equal.sym(Maybe<&2, V>, Maybe.or(&2, V, Crit.ended(V, ra, ea, q), Maybe.or(&2, V, Crit.lookup(V, za, q), Crit.lookup(V, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), q))), None{}, Crit.or3_none(V, Crit.ended(V, ra, ea, q), Crit.lookup(V, za, q), Crit.lookup(V, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), q))(Crit.ended_long(V, ra, pa, ea, za, q, List.drop(&2, Bool, Key.bits(q), pa))(Crit.wf.rep_ok(~V, ra, pa, ea, za, oa, la)(ha))({==})(Crit.side_some_ne(q, pa, True{})(hsq)))(Crit.lookup_all(~V, ~Place, ~Place.has, za, Place{ra, pa, False{}}, q)(Crit.wf.all_z(~V, ra, pa, ea, za, oa, la)(ha))(Place.has_not(ra, pa, False{}, q, Some{True{}}, hsq, {==})))(Equal.trans(Maybe<&2, V>, Crit.lookup(V, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), q), Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, oa, q)), None{}, io, (
+                %Equal.sym(Bool, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), True{}, ct): {Bool.pick(Maybe<&2, V>, _, None{}, Crit.lookup(V, oa, q)) == None{}: Maybe<&2, V>}
+                {==}
+              ))))
+              )(
+                cf => Equal.cong(Maybe<&2, V>, Maybe<&2, V>, t => Maybe.or(&2, V, Crit.ended(V, ra, ea, q), Maybe.or(&2, V, Crit.lookup(V, za, q), t)), Crit.lookup(V, oa, q), Crit.lookup(V, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), q), Equal.sym(Maybe<&2, V>, Crit.lookup(V, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), q), Crit.lookup(V, oa, q), Equal.trans(Maybe<&2, V>, Crit.lookup(V, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), q), Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, oa, q)), Crit.lookup(V, oa, q), io, (
+                %Equal.sym(Bool, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), False{}, cf): {Bool.pick(Maybe<&2, V>, _, None{}, Crit.lookup(V, oa, q)) == Crit.lookup(V, oa, q): Maybe<&2, V>}
+                {==}
+              ))))
+              )
+            )
+          ),
+      +t3 =>
+          +allt = Crit.all_place_b(~V, Crit.Fork{rb, pb, eb, zb, ob}, ra, pa, Key.bit(rb, pa), False{})(t3)(allb)
+          Equal.trans(
+            Maybe<&2, V>,
+            Crit.lookup(V, Crit.mk(V, ra, pa, ea, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), oa), q),
+            Maybe.or(&2, V, Crit.ended(V, ra, ea, q), Maybe.or(&2, V, Crit.lookup(V, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), q), Crit.lookup(V, oa, q))),
+            Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)),
+            Crit.mk_lookup(V, ra, pa, ea, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), oa, q),
+            Equal.sym(
+              Maybe<&2, V>,
+              Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)),
+              Maybe.or(&2, V, Crit.ended(V, ra, ea, q), Maybe.or(&2, V, Crit.lookup(V, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), q), Crit.lookup(V, oa, q))),
+              Crit.pick_cases(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q), Maybe.or(&2, V, Crit.ended(V, ra, ea, q), Maybe.or(&2, V, Crit.lookup(V, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), q), Crit.lookup(V, oa, q))))(
+                +ct =>
+                  +hsq = Place.has_side(ra, pa, False{}, q)(Crit.in_place(~V, Crit.Fork{rb, pb, eb, zb, ob}, Place{ra, pa, False{}}, q)(allt)(ct))
+                  Equal.sym(Maybe<&2, V>, Maybe.or(&2, V, Crit.ended(V, ra, ea, q), Maybe.or(&2, V, Crit.lookup(V, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), q), Crit.lookup(V, oa, q))), None{}, Crit.or3_none(V, Crit.ended(V, ra, ea, q), Crit.lookup(V, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), q), Crit.lookup(V, oa, q))(Crit.ended_long(V, ra, pa, ea, za, q, List.drop(&2, Bool, Key.bits(q), pa))(Crit.wf.rep_ok(~V, ra, pa, ea, za, oa, la)(ha))({==})(Crit.side_some_ne(q, pa, False{})(hsq)))(Equal.trans(Maybe<&2, V>, Crit.lookup(V, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), q), Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, za, q)), None{}, iz, (
+                %Equal.sym(Bool, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), True{}, ct): {Bool.pick(Maybe<&2, V>, _, None{}, Crit.lookup(V, za, q)) == None{}: Maybe<&2, V>}
+                {==}
+              )))(Crit.lookup_all(~V, ~Place, ~Place.has, oa, Place{ra, pa, True{}}, q)(Crit.wf.all_o(~V, ra, pa, ea, za, oa, la)(ha))(Place.has_not(ra, pa, True{}, q, Some{False{}}, hsq, {==}))))
+              )(
+                cf => Equal.cong(Maybe<&2, V>, Maybe<&2, V>, t => Maybe.or(&2, V, Crit.ended(V, ra, ea, q), Maybe.or(&2, V, t, Crit.lookup(V, oa, q))), Crit.lookup(V, za, q), Crit.lookup(V, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), q), Equal.sym(Maybe<&2, V>, Crit.lookup(V, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), q), Crit.lookup(V, za, q), Equal.trans(Maybe<&2, V>, Crit.lookup(V, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), q), Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, za, q)), Crit.lookup(V, za, q), iz, (
+                %Equal.sym(Bool, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), False{}, cf): {Bool.pick(Maybe<&2, V>, _, None{}, Crit.lookup(V, za, q)) == Crit.lookup(V, za, q): Maybe<&2, V>}
+                {==}
+              ))))
+              )
+            )
+          )
+    )
+
+# the difference of two well formed forks whose reps agree before the bit pb
+# of the second, which is before the bit pa of the first: a goes to its side
+# of b
+def Crit.minus_gt(~V: Data, +ra: List<&2, U32>, +pa: Nat, +ea: Maybe<&2, V>, +za: Crit<V>, +oa: Crit<V>, +rb: List<&2, U32>, +pb: Nat, +eb: Maybe<&2, V>, +zb: Crit<V>, +ob: Crit<V>, +la: Nat, +lb: Nat, +q: List<&2, U32>) -> {Crit.wf(~V, Crit.Fork{ra, pa, ea, za, oa}, la) == True{}: Bool} -> {Crit.wf(~V, Crit.Fork{rb, pb, eb, zb, ob}, lb) == True{}: Bool} -> {Nat.is_lt(pb, pa) == True{}: Bool} -> {Crit.above(Key.diff(ra, rb), pb) == False{}: Bool} -> {
+  Crit.lookup(V, Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, zb), q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, zb, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)): Maybe<&2, V>
+} -> {Crit.lookup(V, Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, ob), q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, ob, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)): Maybe<&2, V>} -> {
+  Crit.lookup(V, Shared.Bool.when(Crit<V>, Key.bit(ra, pb), u => Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, ob), u => Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, zb)), q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)): Maybe<&2, V>
+}:
+  +ha => +hb => +gt => +hab => +iz => +io =>
+    +nr = Crit.len_drop(Key.bits(ra), pb)(Shared.Nat.lt_le(pb, pa, List.length(&2, Bool, Key.bits(ra)))(gt)(Crit.rep_long(~V, ra, pa, ea, za, oa, la)(ha)))
+    +t2n = Equal.trans(
+      Bool,
+      Cur.done(Key.at(ra, pb)),
+      List.is_empty(&2, Bool, List.drop(&2, Bool, Key.bits(ra), pb)),
+      False{},
+      Crit.done_of(Key.at(ra, pb), List.drop(&2, Bool, Key.bits(ra), pb))(Cur.skip_bits(pb, Cur.of(ra))),
+      nr
+    )
+    +alla = Crit.fork_place(~V, ra, pa, ea, za, oa, la, rb, pb, Cur.bit(Key.at(ra, pb)))(ha)(gt)(Key.agree_sym(ra, rb, pb)(Crit.not_above_agree(Key.diff(ra, rb), pb)(hab)))(Crit.side_of(ra, pb, Cur.bit(Key.at(ra, pb)))(t2n)({==}))
+    Shared.Bool.when_cases(
+      Crit<V>,
+      t => {Crit.lookup(V, t, q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)): Maybe<&2, V>},
+      Key.bit(ra, pb),
+      u => Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, ob),
+      u => Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, zb),
+      +t3 =>
+          +allt = Crit.all_place_b(~V, Crit.Fork{ra, pa, ea, za, oa}, rb, pb, Key.bit(ra, pb), True{})(t3)(alla)
+          Equal.trans(
+            Maybe<&2, V>,
+            Crit.lookup(V, Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, ob), q),
+            Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, ob, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)),
+            Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)),
+            io,
+            Crit.pick_same(V, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q), Maybe.is_some(&2, V, Crit.lookup(V, ob, q)), Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)))(
+              s => Equal.sym(
+                Bool,
+                Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)),
+                Maybe.is_some(&2, V, Crit.lookup(V, ob, q)),
+                Equal.cong(Maybe<&2, V>, Bool, x => Maybe.is_some(&2, V, x), Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q), Crit.lookup(V, ob, q), Crit.route_side(~V, rb, pb, eb, zb, ob, lb, q, True{})(hb)(Place.has_side(rb, pb, True{}, q)(Crit.in_place(~V, Crit.Fork{ra, pa, ea, za, oa}, Place{rb, pb, True{}}, q)(allt)(s))))
+              )
+            )
+          ),
+      +t3 =>
+          +allt = Crit.all_place_b(~V, Crit.Fork{ra, pa, ea, za, oa}, rb, pb, Key.bit(ra, pb), False{})(t3)(alla)
+          Equal.trans(
+            Maybe<&2, V>,
+            Crit.lookup(V, Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, zb), q),
+            Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, zb, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)),
+            Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)),
+            iz,
+            Crit.pick_same(V, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q), Maybe.is_some(&2, V, Crit.lookup(V, zb, q)), Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)))(
+              s => Equal.sym(
+                Bool,
+                Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)),
+                Maybe.is_some(&2, V, Crit.lookup(V, zb, q)),
+                Equal.cong(Maybe<&2, V>, Bool, x => Maybe.is_some(&2, V, x), Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q), Crit.lookup(V, zb, q), Crit.route_side(~V, rb, pb, eb, zb, ob, lb, q, False{})(hb)(Place.has_side(rb, pb, False{}, q)(Crit.in_place(~V, Crit.Fork{ra, pa, ea, za, oa}, Place{rb, pb, False{}}, q)(allt)(s))))
+              )
+            )
+          )
+    )
+
+# the difference of two well formed forks whose reps do not differ before
+# both bits, by how the bits compare (c)
+def Crit.minus_at_lookup(~V: Data, +ra: List<&2, U32>, +pa: Nat, +ea: Maybe<&2, V>, +za: Crit<V>, +oa: Crit<V>, +rb: List<&2, U32>, +pb: Nat, +eb: Maybe<&2, V>, +zb: Crit<V>, +ob: Crit<V>, +la: Nat, +lb: Nat, +q: List<&2, U32>, c: Cmp) -> {Nat.cmp(pa, pb) == c: Cmp} -> {Crit.wf(~V, Crit.Fork{ra, pa, ea, za, oa}, la) == True{}: Bool} -> {Crit.wf(~V, Crit.Fork{rb, pb, eb, zb, ob}, lb) == True{}: Bool} -> {Bool.and(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pb)) == False{}: Bool} -> {Crit.lookup(V, Crit.minus(V, za, zb), q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, zb, q)), None{}, Crit.lookup(V, za, q)): Maybe<&2, V>} -> {Crit.lookup(V, Crit.minus(V, oa, ob), q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, ob, q)), None{}, Crit.lookup(V, oa, q)): Maybe<&2, V>} -> {Crit.lookup(V, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, za, q)): Maybe<&2, V>} -> {Crit.lookup(V, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, oa, q)): Maybe<&2, V>} -> {Crit.lookup(V, Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, zb), q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, zb, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)): Maybe<&2, V>} -> {Crit.lookup(V, Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, ob), q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, ob, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)): Maybe<&2, V>} -> {
+  Crit.lookup(V, Crit.minus.at(V, c, ra, pa, ea, rb, pb, eb, u2 => Crit.minus(V, za, zb), u2 => Crit.minus(V, oa, ob), u2 => Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), u2 => Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), u2 => Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, zb), u2 => Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, ob), za, oa), q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)): Maybe<&2, V>
+}:
+  match c:
+    case EQ{}:
+      hc => ha => hb => +hn => i1 => i2 => i3 => i4 => i5 => i6 =>
+        +eqp = Crit.cmp_eq(pa, pb)(hc)
+        Crit.minus_eq(~V, ra, pa, ea, za, oa, rb, pb, eb, zb, ob, la, lb, q)(ha)(hb)(eqp)(
+          Crit.above_eq(Key.diff(ra, rb), pa)(Equal.trans(Bool, Bool.and(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pa)), Bool.and(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pb)), False{}, Equal.cong(Nat, Bool, t => Bool.and(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), t)), pa, pb, eqp), hn))
+        )(i1)(i2)
+    case LT{}:
+      +hc => ha => hb => hn => i1 => i2 => i3 => i4 => i5 => i6 => Crit.minus_lt(~V, ra, pa, ea, za, oa, rb, pb, eb, zb, ob, la, lb, q)(ha)(hb)(Crit.cmp_lt(pa, pb)(hc))(
+        Crit.above_lt_left(Key.diff(ra, rb), pa, pb)(hn)(Crit.cmp_lt(pa, pb)(hc))
+      )(i3)(i4)
+    case GT{}:
+      +hc => ha => hb => hn => i1 => i2 => i3 => i4 => i5 => i6 => Crit.minus_gt(~V, ra, pa, ea, za, oa, rb, pb, eb, zb, ob, la, lb, q)(ha)(hb)(Crit.cmp_gt(pa, pb)(hc))(
+        Crit.above_lt_right(Key.diff(ra, rb), pa, pb)(hn)(Crit.cmp_gt(pa, pb)(hc))
+      )(i5)(i6)
+
+# the difference of two well formed maps holds what a holds under the keys
+# that b lacks
+def Crit.minus_go_lookup(~V: Data, +a: Crit<V>, +b: Crit<V>, +la: Nat, +lb: Nat, +q: List<&2, U32>) -> {Crit.wf(~V, a, la) == True{}: Bool} -> {
+  Crit.wf(~V, b, lb) == True{}: Bool
+} -> {Crit.lookup(V, Crit.minus(V, a, b), q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, b, q)), None{}, Crit.lookup(V, a, q)): Maybe<&2, V>}:
+  match a b:
+    case Crit.Tip{} Crit.Tip{}:
+      ha => hb => Equal.sym(Maybe<&2, V>, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Tip{}, q)), None{}, None{}), None{}, Crit.pick_none(V, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Tip{}, q))))
+    case Crit.Tip{} Crit.Leaf{+k2, +w2}:
+      ha => hb => Equal.sym(Maybe<&2, V>, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Leaf{k2, w2}, q)), None{}, None{}), None{}, Crit.pick_none(V, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Leaf{k2, w2}, q))))
+    case Crit.Tip{} Crit.Fork{+r2, +p2, +e2, +z2, +o2}:
+      ha => hb => Equal.sym(Maybe<&2, V>, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{r2, p2, e2, z2, o2}, q)), None{}, None{}), None{}, Crit.pick_none(V, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{r2, p2, e2, z2, o2}, q))))
+    case Crit.Leaf{k, v} Crit.Tip{}:
+      ha => hb => {==}
+    case Crit.Fork{ra, pa, ea, za, oa} Crit.Tip{}:
+      ha => hb => {==}
+    case Crit.Leaf{+k, +v} Crit.Leaf{+k2, +w}:
+      ha => hb => Crit.leaf_minus(~V, k, v, Crit.Leaf{k2, w}, lb, q)(hb)
+    case Crit.Leaf{+k, +v} Crit.Fork{+rb, +pb, +eb, +zb, +ob}:
+      ha => hb => Crit.leaf_minus(~V, k, v, Crit.Fork{rb, pb, eb, zb, ob}, lb, q)(hb)
+    case Crit.Fork{+ra, +pa, +ea, +za, +oa} Crit.Leaf{+k, +w}:
+      ha => hb => Equal.trans(
+        Maybe<&2, V>,
+        Crit.lookup(V, Crit.drop(V, Crit.Fork{ra, pa, ea, za, oa}, k), q),
+        Bool.pick(Maybe<&2, V>, Key.is_eq(q, k), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)),
+        Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Leaf{k, w}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)),
+        Crit.drop_lookup.at(~V, Crit.Fork{ra, pa, ea, za, oa}, la, k, q)(ha),
+        Equal.cong(Bool, Maybe<&2, V>, t => Bool.pick(Maybe<&2, V>, t, None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)), Key.is_eq(q, k), Maybe.is_some(&2, V, Crit.lookup(V, Crit.Leaf{k, w}, q)), Equal.sym(Bool, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Leaf{k, w}, q)), Key.is_eq(q, k), Crit.is_some_when(V, k, q, w)))
+      )
+    case Crit.Fork{+ra, +pa, +ea, +za, +oa} Crit.Fork{+rb, +pb, +eb, +zb, +ob}:
+      +ha => +hb => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.lookup(V, t, q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, q)), None{}, Crit.lookup(V, Crit.Fork{ra, pa, ea, za, oa}, q)): Maybe<&2, V>},
+        Bool.and(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pb)),
+        u => Crit.Fork{ra, pa, ea, za, oa},
+        u => Crit.minus.at(V, Nat.cmp(pa, pb), ra, pa, ea, rb, pb, eb, u2 => Crit.minus(V, za, zb), u2 => Crit.minus(V, oa, ob), u2 => Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), u2 => Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), u2 => Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, zb), u2 => Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, ob), za, oa),
+        +t => Crit.minus_both(~V, ra, pa, ea, za, oa, rb, pb, eb, zb, ob, la, lb, q)(ha)(hb)(t),
+        +t => Crit.minus_at_lookup(~V, ra, pa, ea, za, oa, rb, pb, eb, zb, ob, la, lb, q, Nat.cmp(pa, pb))({==})(ha)(hb)(t)(
+          Crit.minus_go_lookup(~V, za, zb, 1n+pa, 1n+pb, q)(Crit.wf.wf_z(~V, ra, pa, ea, za, oa, la)(ha))(Crit.wf.wf_z(~V, rb, pb, eb, zb, ob, lb)(hb))
+        )(Crit.minus_go_lookup(~V, oa, ob, 1n+pa, 1n+pb, q)(Crit.wf.wf_o(~V, ra, pa, ea, za, oa, la)(ha))(Crit.wf.wf_o(~V, rb, pb, eb, zb, ob, lb)(hb)))(
+          Crit.minus_go_lookup(~V, za, b, 1n+pa, lb, q)(Crit.wf.wf_z(~V, ra, pa, ea, za, oa, la)(ha))(hb)
+        )(Crit.minus_go_lookup(~V, oa, b, 1n+pa, lb, q)(Crit.wf.wf_o(~V, ra, pa, ea, za, oa, la)(ha))(hb))(
+          Crit.minus_go_lookup(~V, a, zb, la, 1n+pb, q)(ha)(Crit.wf.wf_z(~V, rb, pb, eb, zb, ob, lb)(hb))
+        )(Crit.minus_go_lookup(~V, a, ob, la, 1n+pb, q)(ha)(Crit.wf.wf_o(~V, rb, pb, eb, zb, ob, lb)(hb)))
+      )
+
 # a difference holds what a holds under the keys that b lacks
 law Crit.minus_lookup:
   for ~V: Data
@@ -6252,7 +6609,7 @@ law Crit.minus_lookup:
   }
 
 def Crit.minus_lookup(ty, a, b, q):
-  ?TODO
+  ha => hb => Crit.minus_go_lookup(~ty, a, b, 0n, 0n, q)(ha)(hb)
 
 # a read of a well formed map is its clear read, with k used more than once
 def Crit.get_lookup.at(~ty: Data, +m: Crit<ty>, +k: List<&2, U32>) -> {Crit.wf(~ty, m, 0n) == True{}: Bool} -> {
