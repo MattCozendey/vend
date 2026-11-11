@@ -3225,6 +3225,469 @@ def Mst.key_ne(+k: List<&2, U32>, +k2: List<&2, U32>) -> {
       )
     )
 
+# what holds of each value of a bit holds of the bit
+def Mst.case_bool(
+  -P: Bool -> Type,
+  b: Bool,
+  pt: {b == True{}: Bool} -> P(True{}),
+  pf: {b == False{}: Bool} -> P(False{})
+) -> P(b):
+  match b:
+    case True{}:
+      pt({==})
+    case False{}:
+      pf({==})
+
+# what holds of each value of a comparison holds of the comparison
+def Mst.case_cmp(
+  -P: Cmp -> Type,
+  c: Cmp,
+  plt: {c == LT{}: Cmp} -> P(LT{}),
+  peq: {c == EQ{}: Cmp} -> P(EQ{}),
+  pgt: {c == GT{}: Cmp} -> P(GT{})
+) -> P(c):
+  match c:
+    case LT{}:
+      plt({==})
+    case EQ{}:
+      peq({==})
+    case GT{}:
+      pgt({==})
+
+# a comparison that is GT is GT
+def Mst.gt_sound(c: Cmp) -> {Cmp.is_gt(c) == True{}: Bool} -> {c == GT{}: Cmp}:
+  match c:
+    case LT{}:
+      e => Empty.absurd({LT{} == GT{}: Cmp}, Shared.Bool.false_ne_true(e))
+    case EQ{}:
+      e => Empty.absurd({EQ{} == GT{}: Cmp}, Shared.Bool.false_ne_true(e))
+    case GT{}:
+      e => {==}
+
+# every key of the items xs compares LT to k
+def Mst.all_lt(xs: List<&2, Item>, +k: List<&2, U32>) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case Con{Item{ik, iv, r}, rest}:
+      Bool.and(Cmp.is_lt(Key.cmp(ik, k)), Mst.all_lt(rest, k))
+
+# k2 compares GT to every key of the items xs: a pick of k2 passes them
+def Mst.passes(xs: List<&2, Item>, +k2: List<&2, U32>) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case Con{Item{ik, iv, r}, rest}:
+      Bool.and(Cmp.is_gt(Key.cmp(k2, ik)), Mst.passes(rest, k2))
+
+# a pick of k2 among the items ys stops at once: there is none, or k2 comes
+# before the first
+def Mst.stops_first(ys: List<&2, Item>, k2: List<&2, U32>) -> Bool:
+  match ys:
+    case Nil{}:
+      True{}
+    case Con{Item{ik, iv, r}, rest}:
+      Cmp.is_lt(Key.cmp(k2, ik))
+
+# the lower bound lo2 is at or below lo1 (none: no bound)
+def Mst.lo_le(+lo2: Maybe<&2, List<&2, U32>>, +lo1: Maybe<&2, List<&2, U32>>) -> Bool:
+  match lo2 lo1:
+    case None{} y:
+      True{}
+    case Some{a2} None{}:
+      False{}
+    case Some{a2} Some{a1}:
+      Cmp.is_le(Key.cmp(a2, a1))
+
+# the upper bound hi2 is at or above hi1 (none: no bound)
+def Mst.hi_le(+hi1: Maybe<&2, List<&2, U32>>, +hi2: Maybe<&2, List<&2, U32>>) -> Bool:
+  match hi1 hi2:
+    case x None{}:
+      True{}
+    case None{} Some{b2}:
+      False{}
+    case Some{b1} Some{b2}:
+      Cmp.is_le(Key.cmp(b1, b2))
+
+# a at or below b, and b before c: a before c
+def Mst.key_le_lt(+a: List<&2, U32>, +b: List<&2, U32>, +c: List<&2, U32>) -> {
+  Cmp.is_le(Key.cmp(a, b)) == True{}: Bool
+} -> {Key.cmp(b, c) == LT{}: Cmp} -> {Key.cmp(a, c) == LT{}: Cmp}:
+  Mst.case_cmp(
+    t => {Key.cmp(a, b) == t: Cmp} -> {Cmp.is_le(t) == True{}: Bool} -> {Key.cmp(b, c) == LT{}: Cmp} -> {
+      Key.cmp(a, c) == LT{}: Cmp
+    },
+    Key.cmp(a, b),
+    q => e => l => e1 => Mst.key_trans(a, b, c)(e)(e1),
+    q => e => l => e1 =>
+      %Equal.sym(List<&2, U32>, a, b, Mst.key_eq(a, b)(e)): {Key.cmp(_, c) == LT{}: Cmp}
+      e1,
+    q => e => l => e1 => Empty.absurd({Key.cmp(a, c) == LT{}: Cmp}, Shared.Bool.false_ne_true(l))
+  )({==})
+
+# a before b, and b at or below c: a before c
+def Mst.key_lt_le(+a: List<&2, U32>, +b: List<&2, U32>, +c: List<&2, U32>) -> {Key.cmp(a, b) == LT{}: Cmp} -> {
+  Cmp.is_le(Key.cmp(b, c)) == True{}: Bool
+} -> {Key.cmp(a, c) == LT{}: Cmp}:
+  Mst.case_cmp(
+    t => {Key.cmp(b, c) == t: Cmp} -> {Key.cmp(a, b) == LT{}: Cmp} -> {Cmp.is_le(t) == True{}: Bool} -> {
+      Key.cmp(a, c) == LT{}: Cmp
+    },
+    Key.cmp(b, c),
+    q => e => e1 => l => Mst.key_trans(a, b, c)(e1)(e),
+    q => e => e1 => l =>
+      %Mst.key_eq(b, c)(e): {Key.cmp(a, _) == LT{}: Cmp}
+      e1,
+    q => e => e1 => l => Empty.absurd({Key.cmp(a, c) == LT{}: Cmp}, Shared.Bool.false_ne_true(l))
+  )({==})
+
+# a key after lo1 is after a lower bound at or below it
+def Mst.after_wide(+lo2: Maybe<&2, List<&2, U32>>, +lo1: Maybe<&2, List<&2, U32>>, +x: List<&2, U32>) -> {
+  Mst.lo_le(lo2, lo1) == True{}: Bool
+} -> {Bound.after(lo1, x) == True{}: Bool} -> {Bound.after(lo2, x) == True{}: Bool}:
+  match lo2 lo1:
+    case None{} y:
+      w => e => {==}
+    case Some{a2} None{}:
+      w => e => Empty.absurd({Bound.after(Some{a2}, x) == True{}: Bool}, Shared.Bool.false_ne_true(w))
+    case Some{+a2} Some{+a1}:
+      w => e => Mst.key_is_lt(a2, x)(Mst.key_le_lt(a2, a1, x)(w)(Mst.key_lt_of(a1, x)(e)))
+
+# a key before hi1 is before an upper bound at or above it
+def Mst.before_wide(+x: List<&2, U32>, +hi1: Maybe<&2, List<&2, U32>>, +hi2: Maybe<&2, List<&2, U32>>) -> {
+  Mst.hi_le(hi1, hi2) == True{}: Bool
+} -> {Bound.before(x, hi1) == True{}: Bool} -> {Bound.before(x, hi2) == True{}: Bool}:
+  match hi1 hi2:
+    case y None{}:
+      w => e => {==}
+    case None{} Some{b2}:
+      w => e => Empty.absurd({Bound.before(x, Some{b2}) == True{}: Bool}, Shared.Bool.false_ne_true(w))
+    case Some{+b1} Some{+b2}:
+      w => e => Mst.key_is_lt(x, b2)(Mst.key_lt_le(x, b1, b2)(Mst.key_lt_of(x, b1)(e))(w))
+
+# a bound is at or below itself
+def Mst.lo_le_refl(+lo: Maybe<&2, List<&2, U32>>) -> {Mst.lo_le(lo, lo) == True{}: Bool}:
+  match lo:
+    case None{}:
+      {==}
+    case Some{+a}:
+      %Equal.sym(Cmp, Key.cmp(a, a), EQ{}, Mst.key_refl(a)): {Cmp.is_le(_) == True{}: Bool}
+      {==}
+
+# a bound is at or above itself
+def Mst.hi_le_refl(+hi: Maybe<&2, List<&2, U32>>) -> {Mst.hi_le(hi, hi) == True{}: Bool}:
+  match hi:
+    case None{}:
+      {==}
+    case Some{+b}:
+      %Equal.sym(Cmp, Key.cmp(b, b), EQ{}, Mst.key_refl(b)): {Cmp.is_le(_) == True{}: Bool}
+      {==}
+
+# a lower bound before k is below the bound k
+def Mst.lo_le_key(+lo: Maybe<&2, List<&2, U32>>, +k: List<&2, U32>) -> {Bound.after(lo, k) == True{}: Bool} -> {
+  Mst.lo_le(lo, Some{k}) == True{}: Bool
+}:
+  match lo:
+    case None{}:
+      e => {==}
+    case Some{+a}:
+      e =>
+        %Equal.sym(Cmp, Key.cmp(a, k), LT{}, Mst.key_lt_of(a, k)(e)): {Cmp.is_le(_) == True{}: Bool}
+        {==}
+
+# an upper bound after k is above the bound k
+def Mst.hi_le_key(+k: List<&2, U32>, +hi: Maybe<&2, List<&2, U32>>) -> {Bound.before(k, hi) == True{}: Bool} -> {
+  Mst.hi_le(Some{k}, hi) == True{}: Bool
+}:
+  match hi:
+    case None{}:
+      e => {==}
+    case Some{+b}:
+      e =>
+        %Equal.sym(Cmp, Key.cmp(k, b), LT{}, Mst.key_lt_of(k, b)(e)): {Cmp.is_le(_) == True{}: Bool}
+        {==}
+
+# items that fit between two bounds fit between wider ones
+def Mst.fit_wide(
+  xs: List<&2, Item>,
+  +lo1: Maybe<&2, List<&2, U32>>,
+  +lo2: Maybe<&2, List<&2, U32>>,
+  +hi1: Maybe<&2, List<&2, U32>>,
+  +hi2: Maybe<&2, List<&2, U32>>,
+  +wl: {Mst.lo_le(lo2, lo1) == True{}: Bool},
+  +wh: {Mst.hi_le(hi1, hi2) == True{}: Bool}
+) -> {Items.fit(xs, lo1, hi1) == True{}: Bool} -> {Items.fit(xs, lo2, hi2) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      +e => {==}
+    case Con{Item{+k, v, r}, +rest}:
+      +e => Shared.Bool.and_both(
+        Bool.and(Bound.after(lo2, k), Bound.before(k, hi2)),
+        Items.fit(rest, Some{k}, hi2),
+        Shared.Bool.and_both(
+          Bound.after(lo2, k),
+          Bound.before(k, hi2),
+          Mst.after_wide(lo2, lo1, k)(wl)(
+            Shared.Bool.and_true_left(
+              Bound.after(lo1, k),
+              Bound.before(k, hi1),
+              Shared.Bool.and_true_left(
+                Bool.and(Bound.after(lo1, k), Bound.before(k, hi1)),
+                Items.fit(rest, Some{k}, hi1),
+                e
+              )
+            )
+          ),
+          Mst.before_wide(k, hi1, hi2)(wh)(
+            Shared.Bool.and_true_right(
+              Bound.after(lo1, k),
+              Bound.before(k, hi1),
+              Shared.Bool.and_true_left(
+                Bool.and(Bound.after(lo1, k), Bound.before(k, hi1)),
+                Items.fit(rest, Some{k}, hi1),
+                e
+              )
+            )
+          )
+        ),
+        Mst.fit_wide(rest, Some{k}, Some{k}, hi1, hi2, Mst.lo_le_refl(Some{k}), wh)(
+          Shared.Bool.and_true_right(
+            Bool.and(Bound.after(lo1, k), Bound.before(k, hi1)),
+            Items.fit(rest, Some{k}, hi1),
+            e
+          )
+        )
+      )
+
+# items fit in a row as the first fit, and the rest fit after the last of
+# the first
+def Mst.fit_append(xs: List<&2, Item>, +ys: List<&2, Item>, +lo: Maybe<&2, List<&2, U32>>, +hi: Maybe<&2, List<&2, U32>>) -> {
+  Items.fit(List.append(&2, Item, xs, ys), lo, hi)
+    == Bool.and(Items.fit(xs, lo, hi), Items.fit(ys, Items.last_key(xs, lo), hi)): Bool
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{Item{+k, +v, +r}, +rest}:
+      %Equal.sym(
+        Bool,
+        Items.fit(List.append(&2, Item, rest, ys), Some{k}, hi),
+        Bool.and(Items.fit(rest, Some{k}, hi), Items.fit(ys, Items.last_key(rest, Some{k}), hi)),
+        Mst.fit_append(rest, ys, Some{k}, hi)
+      ): {
+        Bool.and(Bool.and(Bound.after(lo, k), Bound.before(k, hi)), _)
+          == Bool.and(
+            Bool.and(Bool.and(Bound.after(lo, k), Bound.before(k, hi)), Items.fit(rest, Some{k}, hi)),
+            Items.fit(ys, Items.last_key(rest, Some{k}), hi)
+          ): Bool
+      }
+      Shared.Bool.and_assoc(
+        Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+        Items.fit(rest, Some{k}, hi),
+        Items.fit(ys, Items.last_key(rest, Some{k}), hi)
+      )
+
+# the items with their last subtree set fit as they did
+def Mst.fit_set_last(xs: List<&2, Item>, -m: Maybe<&2, Hashes.Hash>, +lo: Maybe<&2, List<&2, U32>>, +hi: Maybe<&2, List<&2, U32>>) -> {
+  Items.fit(Mst.set_last(xs, m), lo, hi) == Items.fit(xs, lo, hi): Bool
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{Item{+k, +v, +r}, Nil{}}:
+      {==}
+    case Con{Item{+k, +v, +r}, Con{+y, +rest}}:
+      %Equal.sym(
+        Bool,
+        Items.fit(Mst.set_last(y <> rest, m), Some{k}, hi),
+        Items.fit(y <> rest, Some{k}, hi),
+        Mst.fit_set_last(y <> rest, m, Some{k}, hi)
+      ): {Bool.and(Bool.and(Bound.after(lo, k), Bound.before(k, hi)), _) == Items.fit(Item{k, v, r} <> y <> rest, lo, hi): Bool}
+      {==}
+
+# the last key of items with their last subtree set is their last key
+def Mst.last_key_set_last(xs: List<&2, Item>, -m: Maybe<&2, Hashes.Hash>, +lo: Maybe<&2, List<&2, U32>>) -> {
+  Items.last_key(Mst.set_last(xs, m), lo) == Items.last_key(xs, lo): Maybe<&2, List<&2, U32>>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{Item{+k, +v, +r}, Nil{}}:
+      {==}
+    case Con{Item{+k, +v, +r}, Con{+y, +rest}}:
+      Mst.last_key_set_last(y <> rest, m, Some{k})
+
+# a pick passes items with their last subtree set as it passes them
+def Mst.passes_set_last(xs: List<&2, Item>, -m: Maybe<&2, Hashes.Hash>, +k2: List<&2, U32>) -> {
+  Mst.passes(Mst.set_last(xs, m), k2) == Mst.passes(xs, k2): Bool
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{Item{+k, +v, +r}, Nil{}}:
+      {==}
+    case Con{Item{+k, +v, +r}, Con{+y, +rest}}:
+      %Equal.sym(
+        Bool,
+        Mst.passes(Mst.set_last(y <> rest, m), k2),
+        Mst.passes(y <> rest, k2),
+        Mst.passes_set_last(y <> rest, m, k2)
+      ): {Bool.and(Cmp.is_gt(Key.cmp(k2, k)), _) == Mst.passes(Item{k, v, r} <> y <> rest, k2): Bool}
+      {==}
+
+# the last subtree of items with it set to m is m
+def Mst.last_set_last(xs: List<&2, Item>, -left: Maybe<&2, Hashes.Hash>, -m: Maybe<&2, Hashes.Hash>) -> {
+  Mst.last(Mst.set_last(xs, m), Mst.end_left(xs, left, m)) == m: Maybe<&2, Hashes.Hash>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{Item{+k, +v, +r}, Nil{}}:
+      {==}
+    case Con{Item{+k, +v, +r}, Con{+y, +rest}}:
+      Mst.last_set_last(y <> rest, r, m)
+
+# the last key of items in a row is the last key of the second, after the
+# first
+def Mst.last_key_append(xs: List<&2, Item>, -ys: List<&2, Item>, +lo: Maybe<&2, List<&2, U32>>) -> {
+  Items.last_key(List.append(&2, Item, xs, ys), lo) == Items.last_key(ys, Items.last_key(xs, lo)): Maybe<&2, List<&2, U32>>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{Item{+k, +v, +r}, +rest}:
+      Mst.last_key_append(rest, ys, Some{k})
+
+# items that fit before hi and come before k fit before k
+def Mst.fit_below(
+  +xs: List<&2, Item>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>
+) -> {Items.fit(xs, lo, hi) == True{}: Bool} -> {Mst.all_lt(xs, k) == True{}: Bool} -> {
+  Items.fit(xs, lo, Some{k}) == True{}: Bool
+}:
+  match xs:
+    case Nil{}:
+      +e => +a => {==}
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      +e => +a => Shared.Bool.and_both(
+        Bool.and(Bound.after(lo, ik), Bound.before(ik, Some{k})),
+        Items.fit(rest, Some{ik}, Some{k}),
+        Shared.Bool.and_both(
+          Bound.after(lo, ik),
+          Bound.before(ik, Some{k}),
+          Shared.Bool.and_true_left(
+            Bound.after(lo, ik),
+            Bound.before(ik, hi),
+            Shared.Bool.and_true_left(Bool.and(Bound.after(lo, ik), Bound.before(ik, hi)), Items.fit(rest, Some{ik}, hi), e)
+          ),
+          Mst.key_is_lt(ik, k)(
+            Mst.lt_sound(Key.cmp(ik, k))(
+              Shared.Bool.and_true_left(Cmp.is_lt(Key.cmp(ik, k)), Mst.all_lt(rest, k), a)
+            )
+          )
+        ),
+        Mst.fit_below(rest, Some{ik}, hi, k)(
+          Shared.Bool.and_true_right(Bool.and(Bound.after(lo, ik), Bound.before(ik, hi)), Items.fit(rest, Some{ik}, hi), e)
+        )(Shared.Bool.and_true_right(Cmp.is_lt(Key.cmp(ik, k)), Mst.all_lt(rest, k), a))
+      )
+
+# items that all come before k end before k, once their lower bound does
+def Mst.last_below(xs: List<&2, Item>, +lo: Maybe<&2, List<&2, U32>>, +k: List<&2, U32>) -> {
+  Mst.all_lt(xs, k) == True{}: Bool
+} -> {Bound.after(lo, k) == True{}: Bool} -> {Bound.after(Items.last_key(xs, lo), k) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      +a => +e => e
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      +a => +e => Mst.last_below(rest, Some{ik}, k)(
+        Shared.Bool.and_true_right(Cmp.is_lt(Key.cmp(ik, k)), Mst.all_lt(rest, k), a)
+      )(
+        Mst.key_is_lt(ik, k)(
+          Mst.lt_sound(Key.cmp(ik, k))(Shared.Bool.and_true_left(Cmp.is_lt(Key.cmp(ik, k)), Mst.all_lt(rest, k), a))
+        )
+      )
+
+# items that fit before k come before k
+def Mst.fit_all_lt(xs: List<&2, Item>, +lo: Maybe<&2, List<&2, U32>>, +k: List<&2, U32>) -> {
+  Items.fit(xs, lo, Some{k}) == True{}: Bool
+} -> {Mst.all_lt(xs, k) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      +e => {==}
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      +e => Shared.Bool.and_both(
+        Cmp.is_lt(Key.cmp(ik, k)),
+        Mst.all_lt(rest, k),
+        Equal.trans(
+          Bool,
+          Cmp.is_lt(Key.cmp(ik, k)),
+          Key.is_lt(ik, k),
+          True{},
+          Mst.key_lt(ik, k),
+          Shared.Bool.and_true_right(
+            Bound.after(lo, ik),
+            Key.is_lt(ik, k),
+            Shared.Bool.and_true_left(Bool.and(Bound.after(lo, ik), Key.is_lt(ik, k)), Items.fit(rest, Some{ik}, Some{k}), e)
+          )
+        ),
+        Mst.fit_all_lt(rest, Some{ik}, k)(
+          Shared.Bool.and_true_right(Bool.and(Bound.after(lo, ik), Key.is_lt(ik, k)), Items.fit(rest, Some{ik}, Some{k}), e)
+        )
+      )
+
+# a key after k2 passes nothing it does not pass: if k2 is after every key of
+# xs, so is a key after k2 (here: a key that compares GT to k2)
+def Mst.passes_of_lt(xs: List<&2, Item>, +k: List<&2, U32>, +k2: List<&2, U32>) -> {Mst.all_lt(xs, k) == True{}: Bool} -> {
+  Cmp.is_lt(Key.cmp(k, k2)) == True{}: Bool
+} -> {Mst.passes(xs, k2) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      +a => +e => {==}
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      +a => +e => Shared.Bool.and_both(
+        Cmp.is_gt(Key.cmp(k2, ik)),
+        Mst.passes(rest, k2),
+        Equal.cong(
+          Cmp,
+          Bool,
+          Cmp.is_gt,
+          Key.cmp(k2, ik),
+          GT{},
+          Mst.key_lt_gt(ik, k2)(
+            Mst.key_trans(ik, k, k2)(
+              Mst.lt_sound(Key.cmp(ik, k))(Shared.Bool.and_true_left(Cmp.is_lt(Key.cmp(ik, k)), Mst.all_lt(rest, k), a))
+            )(Mst.lt_sound(Key.cmp(k, k2))(e))
+          )
+        ),
+        Mst.passes_of_lt(rest, k, k2)(Shared.Bool.and_true_right(Cmp.is_lt(Key.cmp(ik, k)), Mst.all_lt(rest, k), a))(e)
+      )
+
+# a pick of k passes the items before k (k itself here)
+def Mst.passes_of_all_lt(xs: List<&2, Item>, +k: List<&2, U32>) -> {Mst.all_lt(xs, k) == True{}: Bool} -> {
+  Mst.passes(xs, k) == True{}: Bool
+}:
+  match xs:
+    case Nil{}:
+      +a => {==}
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      +a => Shared.Bool.and_both(
+        Cmp.is_gt(Key.cmp(k, ik)),
+        Mst.passes(rest, k),
+        Equal.cong(
+          Cmp,
+          Bool,
+          Cmp.is_gt,
+          Key.cmp(k, ik),
+          GT{},
+          Mst.key_lt_gt(ik, k)(
+            Mst.lt_sound(Key.cmp(ik, k))(Shared.Bool.and_true_left(Cmp.is_lt(Key.cmp(ik, k)), Mst.all_lt(rest, k), a))
+          )
+        ),
+        Mst.passes_of_all_lt(rest, k)(Shared.Bool.and_true_right(Cmp.is_lt(Key.cmp(ik, k)), Mst.all_lt(rest, k), a))
+      )
+
 # what a read tells stays, in a depot that keeps what it holds
 law Mst.reads_final:
   for ~S: Data
