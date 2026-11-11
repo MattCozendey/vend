@@ -1723,6 +1723,37 @@ def Led.Later(~mach: Machine(), ~d: Led(mach), a: Led.L(mach, d), +b: Led.L(mach
       == True{}: Bool
   }
 
+# the laws of the ledger d
+def Led.laws(
+  -mach: Machine(),
+  d: Led(mach)
+) -> Ledgers.Ledger.Laws(Machine.Q(mach), Machine.code(mach), Led.kind(mach, d)):
+  match d:
+    case Tuple{x, t}:
+      Ledgers.Ledger.laws(Machine.Q(mach), Machine.code(mach), x)
+
+# Led.later_grows, once the later ledger can be used often
+def Led.later_grows.go(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  h: Led.Later(~mach, ~d, a, b)
+) -> Led.Grows(mach, d, a, b):
+  Ledgers.Kind.grows_get(
+    ~Machine.Q(mach),
+    ~Machine.code(mach),
+    ~Led.kind(mach, d),
+    ~Led.laws(mach, d),
+    a,
+    b
+  )(
+    Shared.Bool.and_true_left(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )(h)
+  )
+
 # a later ledger holds each entry of the earlier one
 law Led.later_grows:
   for ~mach: Machine()
@@ -1732,7 +1763,7 @@ law Led.later_grows:
   Led.Later(~mach, ~d, a, b) -> Led.Grows(mach, d, a, b)
 
 def Led.later_grows(mach, d, a, b):
-  ?TODO
+  h => Led.later_grows.go(~mach, ~d, a, b, h)
 
 # the ballots of a later ledger cast one vote at a place and one pass to it
 law Led.later_single:
