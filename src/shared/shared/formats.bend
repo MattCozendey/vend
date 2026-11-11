@@ -692,6 +692,25 @@ def Lines.apply.all(hs: List<&2, Hunk>, +a: List<&2, Texts.Bytes()>) -> List<&2,
         List.append(&2, Texts.Bytes(), put, Lines.apply.all(rest, List.drop(&2, Texts.Bytes(), a, Nat.add(k, d))))
       )
 
+# the one hunk Hunk{k, d, put} is Lines.apply(k, a, d, put)
+def Lines.apply.all_one(
+  k: Nat,
+  a: List<&2, Texts.Bytes()>,
+  d: Nat,
+  put: List<&2, Texts.Bytes()>
+) -> {Lines.apply.all([Hunk{k, d, put}], a) == Lines.apply(k, a, d, put): List<&2, Texts.Bytes()>}:
+  match k a:
+    case 0n Nil{}:
+      {==}
+    case 0n Con{l, r}:
+      {==}
+    case 1n+p Nil{}:
+      Shared.List.append_nil(Texts.Bytes(), put)
+    case 1n+p Con{l, r}:
+      %Lines.apply.all_one(p, r, d, put):
+        {l <> Lines.apply.all([Hunk{p, d, put}], r) == l <> _: List<&2, Texts.Bytes()>}
+      {==}
+
 # a step of an edit: keep a line of both, drop a line of the old, or put a
 # line of the new
 type Op is Data:
@@ -820,6 +839,33 @@ def Cut.hunks(c: Cut) -> List<&2, Hunk>:
     case Cut{s, o, n, e}:
       [Hunk{List.length(&2, Texts.Bytes(), s), List.length(&2, Texts.Bytes(), o), n}]
 
+# the hunks of a cut c of a and b, applied to a, give b
+def Lines.apply_cut_hunks(
+  c: Cut,
+  a: List<&2, Texts.Bytes()>,
+  b: List<&2, Texts.Bytes()>,
+  hl: {Cut.left(c) == a: List<&2, Texts.Bytes()>},
+  hr: {Cut.right(c) == b: List<&2, Texts.Bytes()>}
+) -> {Lines.apply.all(Cut.hunks(c), a) == b: List<&2, Texts.Bytes()>}:
+  match c:
+    case Cut{+s, +o, +n, +e}:
+      length1 = List.length(&2, Texts.Bytes(), s)
+      length2 = List.length(&2, Texts.Bytes(), o)
+      %hl: {Lines.apply.all([Hunk{length1, length2, n}], _) == b: List<&2, Texts.Bytes()>}
+      %hr:
+        {
+          Lines.apply.all([Hunk{length1, length2, n}], Cut.left(Cut{s, o, n, e}))
+            == _: List<&2, Texts.Bytes()>
+        }
+      Equal.trans(
+        List<&2, Texts.Bytes()>,
+        Lines.apply.all([Hunk{length1, length2, n}], Cut.left(Cut{s, o, n, e})),
+        Lines.apply(length1, Cut.left(Cut{s, o, n, e}), length2, n),
+        Cut.right(Cut{s, o, n, e}),
+        Lines.apply.all_one(length1, Cut.left(Cut{s, o, n, e}), length2, n),
+        Lines.apply_cut(s, o, n, e)
+      )
+
 # the hunks m, when they make b of a; else the one cut of a and b
 def Lines.diff.check(m: Maybe<&2, List<&2, Hunk>>, +a: List<&2, Texts.Bytes()>, +b: List<&2, Texts.Bytes()>) -> List<&2, Hunk>:
   match m:
@@ -833,10 +879,48 @@ def Lines.diff.check(m: Maybe<&2, List<&2, Hunk>>, +a: List<&2, Texts.Bytes()>, 
     case None{}:
       Cut.hunks(Lines.cut(a, b))
 
+# the checked hunks, applied to a, give b
+def Lines.diff.check_apply(
+  m: Maybe<&2, List<&2, Hunk>>,
+  +a: List<&2, Texts.Bytes()>,
+  +b: List<&2, Texts.Bytes()>
+) -> {Lines.apply.all(Lines.diff.check(m, a, b), a) == b: List<&2, Texts.Bytes()>}:
+  match m:
+    case Some{+hs}:
+      Shared.Bool.when_cases(
+        List<&2, Hunk>,
+        r => {Lines.apply.all(r, a) == b: List<&2, Texts.Bytes()>},
+        Shared.List.is_eq(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), Lines.apply.all(hs, a), b),
+        u => hs,
+        u => Cut.hunks(Lines.cut(a, b)),
+        e =>
+          Shared.List.is_eq_sound(
+            ~Texts.Bytes(),
+            ~Shared.List.is_eq(~U32, ~U32.is_eq),
+            ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
+            Lines.apply.all(hs, a),
+            b
+          )(e),
+        e => Lines.apply_cut_hunks(Lines.cut(a, b), a, b, Lines.cut_left(a, b), Lines.cut_right(a, b))
+      )
+    case None{}:
+      Lines.apply_cut_hunks(Lines.cut(a, b), a, b, Lines.cut_left(a, b), Lines.cut_right(a, b))
+
 # the hunks from the lines a to the lines b, with the fewest lines dropped and
 # put
 def Lines.diff(+a: List<&2, Texts.Bytes()>, +b: List<&2, Texts.Bytes()>) -> List<&2, Hunk>:
   Lines.diff.check(
+    Maybe.map(&2, List<&2, Op>, List<&2, Hunk>, ops => Ops.hunks(ops, 0n, 0n, []), Lines.ops(a, b)),
+    a,
+    b
+  )
+
+# the hunks of a diff of a and b, applied to a, give b
+def Lines.apply_diff(
+  +a: List<&2, Texts.Bytes()>,
+  +b: List<&2, Texts.Bytes()>
+) -> {Lines.apply.all(Lines.diff(a, b), a) == b: List<&2, Texts.Bytes()>}:
+  Lines.diff.check_apply(
     Maybe.map(&2, List<&2, Op>, List<&2, Hunk>, ops => Ops.hunks(ops, 0n, 0n, []), Lines.ops(a, b)),
     a,
     b
@@ -896,19 +980,14 @@ def Plain.apply_patch(
   hl: {Cut.left(c) == Lines.list(a): List<&2, Texts.Bytes()>},
   hr: {Cut.right(c) == lb: List<&2, Texts.Bytes()>}
 ) -> {Plain.apply(a, Lines.patch(c)) == Lines.bytes(lb): Texts.Bytes()}:
-  match c:
-    case Cut{+s, +o, n, e}:
-      length1 = List.length(&2, Texts.Bytes(), s)
-      length2 = List.length(&2, Texts.Bytes(), o)
-      Equal.cong(
-        List<&2, Texts.Bytes()>,
-        Texts.Bytes(),
-        z => Lines.bytes(z),
-        Lines.apply(length1, Lines.list(a), length2, n),
-        lb,
-        %hl: {Lines.apply(length1, _, length2, n) == lb: List<&2, Texts.Bytes()>}
-        %hr: {Lines.apply(length1, Cut.left(Cut{s, o, n, e}), length2, n) == _: List<&2, Texts.Bytes()>}
-        Lines.apply_cut(s, o, n, e))
+  Equal.cong(
+    List<&2, Texts.Bytes()>,
+    Texts.Bytes(),
+    z => Lines.bytes(z),
+    Lines.apply.all(Cut.hunks(c), Lines.list(a)),
+    lb,
+    Lines.apply_cut_hunks(c, Lines.list(a), lb, hl, hr)
+  )
 
 # Plain.apply_diff, by whether both are text (text)
 def Plain.apply_diff.by(
@@ -922,15 +1001,16 @@ def Plain.apply_diff.by(
       +lb = Lines.list(b)
       Equal.trans(
         Texts.Bytes(),
-        Plain.apply(a, Lines.patch(Lines.cut(la, lb))),
+        Lines.bytes(Lines.apply.all(Lines.diff(la, lb), la)),
         Lines.bytes(lb),
         b,
-        Plain.apply_patch(
-          Lines.cut(la, lb),
-          a,
+        Equal.cong(
+          List<&2, Texts.Bytes()>,
+          Texts.Bytes(),
+          z => Lines.bytes(z),
+          Lines.apply.all(Lines.diff(la, lb), la),
           lb,
-          Lines.cut_left(la, lb),
-          Lines.cut_right(la, lb)
+          Lines.apply_diff(la, lb)
         ),
         Lines.bytes_list(b)
       )
