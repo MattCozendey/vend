@@ -5551,7 +5551,7 @@ def Affects.binding_sound(a: Trees.Binding, b: Trees.Binding) -> {Trees.Binding.
 def Affects.range_of(
   -S: Data,
   -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  -grows: S -> S -> Type,
+  -grows: S -> S -> Bool,
   t: Trees.Tree(S, fetch, grows)
 ) -> Trees.Laws.Range(S, Trees.Tree.ops(S, fetch, grows, t)):
   match t:
@@ -5562,7 +5562,7 @@ def Affects.range_of(
 def Affects.diff_of(
   -S: Data,
   -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  -grows: S -> S -> Type,
+  -grows: S -> S -> Bool,
   t: Trees.Tree(S, fetch, grows)
 ) -> Trees.Laws.Diff(S, Trees.Tree.ops(S, fetch, grows, t)):
   match t:
@@ -5582,9 +5582,10 @@ def Affects.range(d: Led()) -> Trees.Laws.Range(L(d), Replicas.Led.tree(Requests
           Replicas.Machine.Q(Requests.Ask.machine()),
           Ledgers.Ledger.kind(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Machine.code(Requests.Ask.machine()), x)
         ),
-        a => b => Ledgers.Kind.Grows(
-          Replicas.Machine.Q(Requests.Ask.machine()),
-          Ledgers.Ledger.kind(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Machine.code(Requests.Ask.machine()), x),
+        a => b => Ledgers.Kind.grows(
+          ~Replicas.Machine.Q(Requests.Ask.machine()),
+          ~Replicas.Machine.code(Requests.Ask.machine()),
+          ~Ledgers.Ledger.kind(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Machine.code(Requests.Ask.machine()), x),
           a,
           b
         ),
@@ -5604,9 +5605,10 @@ def Affects.diff(d: Led()) -> Trees.Laws.Diff(L(d), Replicas.Led.tree(Requests.A
           Replicas.Machine.Q(Requests.Ask.machine()),
           Ledgers.Ledger.kind(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Machine.code(Requests.Ask.machine()), x)
         ),
-        a => b => Ledgers.Kind.Grows(
-          Replicas.Machine.Q(Requests.Ask.machine()),
-          Ledgers.Ledger.kind(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Machine.code(Requests.Ask.machine()), x),
+        a => b => Ledgers.Kind.grows(
+          ~Replicas.Machine.Q(Requests.Ask.machine()),
+          ~Replicas.Machine.code(Requests.Ask.machine()),
+          ~Ledgers.Ledger.kind(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Machine.code(Requests.Ask.machine()), x),
           a,
           b
         ),
@@ -5713,14 +5715,14 @@ def Affects.contains_head(
 # finds, the other way.
 
 # Graph.succ of a picked entry, once the pick is known
-def Affects.pick_succ(b: Bool, -v: List<&2, List<&2, Bool>>, x: Maybe<&2, List<&2, List<&2, Bool>>>) -> {
+def Affects.pick_succ(b: Bool, -v: List<&2, List<&2, U32>>, x: Maybe<&2, List<&2, List<&2, U32>>>) -> {
   Maybe.default(
     &2,
-    List<&2, List<&2, Bool>>,
-    Bool.pick(Maybe<&2, List<&2, List<&2, Bool>>>, b, Some{v}, x),
+    List<&2, List<&2, U32>>,
+    Bool.pick(Maybe<&2, List<&2, List<&2, U32>>>, b, Some{v}, x),
     []
   )
-    == Bool.pick(List<&2, List<&2, Bool>>, b, v, Maybe.default(&2, List<&2, List<&2, Bool>>, x, [])): List<&2, List<&2, Bool>>
+    == Bool.pick(List<&2, List<&2, U32>>, b, v, Maybe.default(&2, List<&2, List<&2, U32>>, x, [])): List<&2, List<&2, U32>>
 }:
   match b:
     case True{}:
@@ -5730,138 +5732,138 @@ def Affects.pick_succ(b: Bool, -v: List<&2, List<&2, Bool>>, x: Maybe<&2, List<&
 
 # Affects.link_succ once the successors m of k are known
 def Affects.link_succ.at(
-  +e: Tries.Trie<List<&2, List<&2, Bool>>>,
-  +ns: List<&2, List<&2, Bool>>,
-  +k: List<&2, Bool>,
-  +t: List<&2, Bool>,
-  m: Maybe<&2, List<&2, List<&2, Bool>>>,
-  em: {Tries.Trie.get(List<&2, List<&2, Bool>>, e, k) == m: Maybe<&2, List<&2, List<&2, Bool>>>},
-  +p: List<&2, Bool>
+  +e: Crits.Dict(List<&2, List<&2, U32>>),
+  +ns: List<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +t: List<&2, U32>,
+  m: Maybe<&2, List<&2, List<&2, U32>>>,
+  em: {Crits.Dict.get(List<&2, List<&2, U32>>, e, k) == m: Maybe<&2, List<&2, List<&2, U32>>>},
+  +p: List<&2, U32>
 ) -> {
   Reaches.Graph.succ(Reaches.Graph.link.at(e, ns, k, t, m), p)
     == Bool.pick(
-      List<&2, List<&2, Bool>>,
-      Tries.Trie.same_key(p, k),
+      List<&2, List<&2, U32>>,
+      Crits.Key.is_eq(p, k),
       t <> Reaches.Graph.succ(Reaches.Graph{e, ns}, k),
       Reaches.Graph.succ(Reaches.Graph{e, ns}, p)
-    ): List<&2, List<&2, Bool>>
+    ): List<&2, List<&2, U32>>
 }:
   match m:
     case None{}:
       %Equal.sym(
-        Maybe<&2, List<&2, List<&2, Bool>>>,
-        Tries.Trie.get(List<&2, List<&2, Bool>>, Tries.Trie.set(List<&2, List<&2, Bool>>, e, k, [t]), p),
+        Maybe<&2, List<&2, List<&2, U32>>>,
+        Crits.Dict.get(List<&2, List<&2, U32>>, Crits.Dict.set(~List<&2, List<&2, U32>>, e, k, [t]), p),
         Bool.pick(
-          Maybe<&2, List<&2, List<&2, Bool>>>,
-          Tries.Trie.same_key(p, k),
+          Maybe<&2, List<&2, List<&2, U32>>>,
+          Crits.Key.is_eq(p, k),
           Some{[t]},
-          Tries.Trie.get(List<&2, List<&2, Bool>>, e, p)
+          Crits.Dict.get(List<&2, List<&2, U32>>, e, p)
         ),
-        Tries.Trie.get_set(List<&2, List<&2, Bool>>, e, k, [t], p)
+        Crits.Dict.get_set(~List<&2, List<&2, U32>>, e, k, [t], p)
       ): {
-        Maybe.default(&2, List<&2, List<&2, Bool>>, _, [])
+        Maybe.default(&2, List<&2, List<&2, U32>>, _, [])
           == Bool.pick(
-            List<&2, List<&2, Bool>>,
-            Tries.Trie.same_key(p, k),
+            List<&2, List<&2, U32>>,
+            Crits.Key.is_eq(p, k),
             t <> Reaches.Graph.succ(Reaches.Graph{e, ns}, k),
             Reaches.Graph.succ(Reaches.Graph{e, ns}, p)
-          ): List<&2, List<&2, Bool>>
+          ): List<&2, List<&2, U32>>
       }
-      %Equal.sym(Maybe<&2, List<&2, List<&2, Bool>>>, Tries.Trie.get(List<&2, List<&2, Bool>>, e, k), None{}, em): {
+      %Equal.sym(Maybe<&2, List<&2, List<&2, U32>>>, Crits.Dict.get(List<&2, List<&2, U32>>, e, k), None{}, em): {
         Maybe.default(
           &2,
-          List<&2, List<&2, Bool>>,
+          List<&2, List<&2, U32>>,
           Bool.pick(
-            Maybe<&2, List<&2, List<&2, Bool>>>,
-            Tries.Trie.same_key(p, k),
+            Maybe<&2, List<&2, List<&2, U32>>>,
+            Crits.Key.is_eq(p, k),
             Some{[t]},
-            Tries.Trie.get(List<&2, List<&2, Bool>>, e, p)
+            Crits.Dict.get(List<&2, List<&2, U32>>, e, p)
           ),
           []
         )
           == Bool.pick(
-            List<&2, List<&2, Bool>>,
-            Tries.Trie.same_key(p, k),
-            t <> Maybe.default(&2, List<&2, List<&2, Bool>>, _, []),
+            List<&2, List<&2, U32>>,
+            Crits.Key.is_eq(p, k),
+            t <> Maybe.default(&2, List<&2, List<&2, U32>>, _, []),
             Reaches.Graph.succ(Reaches.Graph{e, ns}, p)
-          ): List<&2, List<&2, Bool>>
+          ): List<&2, List<&2, U32>>
       }
-      Affects.pick_succ(Tries.Trie.same_key(p, k), [t], Tries.Trie.get(List<&2, List<&2, Bool>>, e, p))
+      Affects.pick_succ(Crits.Key.is_eq(p, k), [t], Crits.Dict.get(List<&2, List<&2, U32>>, e, p))
     case Some{+ts}:
       %Equal.sym(
-        Maybe<&2, List<&2, List<&2, Bool>>>,
-        Tries.Trie.get(List<&2, List<&2, Bool>>, Tries.Trie.set(List<&2, List<&2, Bool>>, e, k, t <> ts), p),
+        Maybe<&2, List<&2, List<&2, U32>>>,
+        Crits.Dict.get(List<&2, List<&2, U32>>, Crits.Dict.set(~List<&2, List<&2, U32>>, e, k, t <> ts), p),
         Bool.pick(
-          Maybe<&2, List<&2, List<&2, Bool>>>,
-          Tries.Trie.same_key(p, k),
+          Maybe<&2, List<&2, List<&2, U32>>>,
+          Crits.Key.is_eq(p, k),
           Some{t <> ts},
-          Tries.Trie.get(List<&2, List<&2, Bool>>, e, p)
+          Crits.Dict.get(List<&2, List<&2, U32>>, e, p)
         ),
-        Tries.Trie.get_set(List<&2, List<&2, Bool>>, e, k, t <> ts, p)
+        Crits.Dict.get_set(~List<&2, List<&2, U32>>, e, k, t <> ts, p)
       ): {
-        Maybe.default(&2, List<&2, List<&2, Bool>>, _, [])
+        Maybe.default(&2, List<&2, List<&2, U32>>, _, [])
           == Bool.pick(
-            List<&2, List<&2, Bool>>,
-            Tries.Trie.same_key(p, k),
+            List<&2, List<&2, U32>>,
+            Crits.Key.is_eq(p, k),
             t <> Reaches.Graph.succ(Reaches.Graph{e, ns}, k),
             Reaches.Graph.succ(Reaches.Graph{e, ns}, p)
-          ): List<&2, List<&2, Bool>>
+          ): List<&2, List<&2, U32>>
       }
-      %Equal.sym(Maybe<&2, List<&2, List<&2, Bool>>>, Tries.Trie.get(List<&2, List<&2, Bool>>, e, k), Some{ts}, em): {
+      %Equal.sym(Maybe<&2, List<&2, List<&2, U32>>>, Crits.Dict.get(List<&2, List<&2, U32>>, e, k), Some{ts}, em): {
         Maybe.default(
           &2,
-          List<&2, List<&2, Bool>>,
+          List<&2, List<&2, U32>>,
           Bool.pick(
-            Maybe<&2, List<&2, List<&2, Bool>>>,
-            Tries.Trie.same_key(p, k),
+            Maybe<&2, List<&2, List<&2, U32>>>,
+            Crits.Key.is_eq(p, k),
             Some{t <> ts},
-            Tries.Trie.get(List<&2, List<&2, Bool>>, e, p)
+            Crits.Dict.get(List<&2, List<&2, U32>>, e, p)
           ),
           []
         )
           == Bool.pick(
-            List<&2, List<&2, Bool>>,
-            Tries.Trie.same_key(p, k),
-            t <> Maybe.default(&2, List<&2, List<&2, Bool>>, _, []),
+            List<&2, List<&2, U32>>,
+            Crits.Key.is_eq(p, k),
+            t <> Maybe.default(&2, List<&2, List<&2, U32>>, _, []),
             Reaches.Graph.succ(Reaches.Graph{e, ns}, p)
-          ): List<&2, List<&2, Bool>>
+          ): List<&2, List<&2, U32>>
       }
-      Affects.pick_succ(Tries.Trie.same_key(p, k), t <> ts, Tries.Trie.get(List<&2, List<&2, Bool>>, e, p))
+      Affects.pick_succ(Crits.Key.is_eq(p, k), t <> ts, Crits.Dict.get(List<&2, List<&2, U32>>, e, p))
 
 # the successors of p in g with t as one more successor of k: t and those of
 # k when p is k, else those of p
-def Affects.link_succ(+g: Reaches.Graph, +k: List<&2, Bool>, +t: List<&2, Bool>, +p: List<&2, Bool>) -> {
+def Affects.link_succ(+g: Reaches.Graph, +k: List<&2, U32>, +t: List<&2, U32>, +p: List<&2, U32>) -> {
   Reaches.Graph.succ(Reaches.Graph.link(g, k, t), p)
     == Bool.pick(
-      List<&2, List<&2, Bool>>,
-      Tries.Trie.same_key(p, k),
+      List<&2, List<&2, U32>>,
+      Crits.Key.is_eq(p, k),
       t <> Reaches.Graph.succ(g, k),
       Reaches.Graph.succ(g, p)
-    ): List<&2, List<&2, Bool>>
+    ): List<&2, List<&2, U32>>
 }:
   match g:
     case Reaches.Graph{+e, +ns}:
-      Affects.link_succ.at(e, ns, k, t, Tries.Trie.get(List<&2, List<&2, Bool>>, e, k), {==}, p)
+      Affects.link_succ.at(e, ns, k, t, Crits.Dict.get(List<&2, List<&2, U32>>, e, k), {==}, p)
 
 # that q is a successor of p in g
-def Affects.Edge(g: Reaches.Graph, p: List<&2, Bool>, q: List<&2, Bool>) -> Type:
-  {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, Reaches.Graph.succ(g, p), q) == True{}: Bool}
+def Affects.Edge(g: Reaches.Graph, p: List<&2, U32>, q: List<&2, U32>) -> Type:
+  {List.contains(~List<&2, U32>, ~Crits.Key.is_eq, Reaches.Graph.succ(g, p), q) == True{}: Bool}
 
 # Affects.link_in once the head of the successors of k is known to be q (c)
 def Affects.link_in.hit(
   +g: Reaches.Graph,
-  +k: List<&2, Bool>,
-  +t: List<&2, Bool>,
-  +p: List<&2, Bool>,
-  +q: List<&2, Bool>,
+  +k: List<&2, U32>,
+  +t: List<&2, U32>,
+  +p: List<&2, U32>,
+  +q: List<&2, U32>,
   -P: Type,
-  ep: {Tries.Trie.same_key(p, k) == True{}: Bool},
+  ep: {Crits.Key.is_eq(p, k) == True{}: Bool},
   c: Bool,
-  ec: {Tries.Trie.same_key(t, q) == c: Bool},
-  kh: {Tries.Trie.same_key(p, k) == True{}: Bool} -> {Tries.Trie.same_key(t, q) == True{}: Bool} -> P,
+  ec: {Crits.Key.is_eq(t, q) == c: Bool},
+  kh: {Crits.Key.is_eq(p, k) == True{}: Bool} -> {Crits.Key.is_eq(t, q) == True{}: Bool} -> P,
   kr: Affects.Edge(g, p, q) -> P
 ) -> {
-  List.any.if(u => List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, Reaches.Graph.succ(g, k), q), c) == True{}: Bool
+  List.any.if(u => List.contains(~List<&2, U32>, ~Crits.Key.is_eq, Reaches.Graph.succ(g, k), q), c) == True{}: Bool
 } -> P:
   match c:
     case True{}:
@@ -5869,11 +5871,11 @@ def Affects.link_in.hit(
     case False{}:
       h => kr(
         Affects.cast(
-          List<&2, Bool>,
+          List<&2, U32>,
           z => Affects.Edge(g, z, q),
           k,
           p,
-          Equal.sym(List<&2, Bool>, p, k, Tries.Trie.same_key_sound(p, k)(ep)),
+          Equal.sym(List<&2, U32>, p, k, Crits.Key.is_eq_sound(p, k)(ep)),
           h
         )
       )
@@ -5881,49 +5883,49 @@ def Affects.link_in.hit(
 # Affects.link_in once it is known whether p is k (b)
 def Affects.link_in.at(
   +g: Reaches.Graph,
-  +k: List<&2, Bool>,
-  +t: List<&2, Bool>,
-  +p: List<&2, Bool>,
-  +q: List<&2, Bool>,
+  +k: List<&2, U32>,
+  +t: List<&2, U32>,
+  +p: List<&2, U32>,
+  +q: List<&2, U32>,
   -P: Type,
   b: Bool,
-  eb: {Tries.Trie.same_key(p, k) == b: Bool},
-  kh: {Tries.Trie.same_key(p, k) == True{}: Bool} -> {Tries.Trie.same_key(t, q) == True{}: Bool} -> P,
+  eb: {Crits.Key.is_eq(p, k) == b: Bool},
+  kh: {Crits.Key.is_eq(p, k) == True{}: Bool} -> {Crits.Key.is_eq(t, q) == True{}: Bool} -> P,
   kr: Affects.Edge(g, p, q) -> P
 ) -> {
   List.contains(
-    ~List<&2, Bool>,
-    ~Tries.Trie.same_key,
-    Bool.pick(List<&2, List<&2, Bool>>, b, t <> Reaches.Graph.succ(g, k), Reaches.Graph.succ(g, p)),
+    ~List<&2, U32>,
+    ~Crits.Key.is_eq,
+    Bool.pick(List<&2, List<&2, U32>>, b, t <> Reaches.Graph.succ(g, k), Reaches.Graph.succ(g, p)),
     q
   )
     == True{}: Bool
 } -> P:
   match b:
     case True{}:
-      h => Affects.link_in.hit(g, k, t, p, q, P, eb, Tries.Trie.same_key(t, q), {==}, kh, kr)(h)
+      h => Affects.link_in.hit(g, k, t, p, q, P, eb, Crits.Key.is_eq(t, q), {==}, kh, kr)(h)
     case False{}:
       h => kr(h)
 
 # an edge of g with t as one more successor of k is that one, or one of g
 def Affects.link_in(
   +g: Reaches.Graph,
-  +k: List<&2, Bool>,
-  +t: List<&2, Bool>,
-  +p: List<&2, Bool>,
-  +q: List<&2, Bool>,
+  +k: List<&2, U32>,
+  +t: List<&2, U32>,
+  +p: List<&2, U32>,
+  +q: List<&2, U32>,
   -P: Type,
-  kh: {Tries.Trie.same_key(p, k) == True{}: Bool} -> {Tries.Trie.same_key(t, q) == True{}: Bool} -> P,
+  kh: {Crits.Key.is_eq(p, k) == True{}: Bool} -> {Crits.Key.is_eq(t, q) == True{}: Bool} -> P,
   kr: Affects.Edge(g, p, q) -> P
 ) -> Affects.Edge(Reaches.Graph.link(g, k, t), p, q) -> P:
-  h => Affects.link_in.at(g, k, t, p, q, P, Tries.Trie.same_key(p, k), {==}, kh, kr)(
+  h => Affects.link_in.at(g, k, t, p, q, P, Crits.Key.is_eq(p, k), {==}, kh, kr)(
     Affects.cast(
-      List<&2, List<&2, Bool>>,
-      z => {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, z, q) == True{}: Bool},
+      List<&2, List<&2, U32>>,
+      z => {List.contains(~List<&2, U32>, ~Crits.Key.is_eq, z, q) == True{}: Bool},
       Reaches.Graph.succ(Reaches.Graph.link(g, k, t), p),
       Bool.pick(
-        List<&2, List<&2, Bool>>,
-        Tries.Trie.same_key(p, k),
+        List<&2, List<&2, U32>>,
+        Crits.Key.is_eq(p, k),
         t <> Reaches.Graph.succ(g, k),
         Reaches.Graph.succ(g, p)
       ),
@@ -5935,31 +5937,31 @@ def Affects.link_in(
 # Affects.link_keep once it is known whether p is k (b)
 def Affects.link_keep.at(
   +g: Reaches.Graph,
-  +k: List<&2, Bool>,
-  +t: List<&2, Bool>,
-  +p: List<&2, Bool>,
-  +q: List<&2, Bool>,
+  +k: List<&2, U32>,
+  +t: List<&2, U32>,
+  +p: List<&2, U32>,
+  +q: List<&2, U32>,
   b: Bool,
-  eb: {Tries.Trie.same_key(p, k) == b: Bool},
+  eb: {Crits.Key.is_eq(p, k) == b: Bool},
   h: Affects.Edge(g, p, q)
 ) -> {
   List.contains(
-    ~List<&2, Bool>,
-    ~Tries.Trie.same_key,
-    Bool.pick(List<&2, List<&2, Bool>>, b, t <> Reaches.Graph.succ(g, k), Reaches.Graph.succ(g, p)),
+    ~List<&2, U32>,
+    ~Crits.Key.is_eq,
+    Bool.pick(List<&2, List<&2, U32>>, b, t <> Reaches.Graph.succ(g, k), Reaches.Graph.succ(g, p)),
     q
   )
     == True{}: Bool
 }:
   match b:
     case True{}:
-      Shared.List.contains_cons(~List<&2, Bool>, ~Tries.Trie.same_key, t, Reaches.Graph.succ(g, k), q)(
+      Shared.List.contains_cons(~List<&2, U32>, ~Crits.Key.is_eq, t, Reaches.Graph.succ(g, k), q)(
         Affects.cast(
-          List<&2, Bool>,
+          List<&2, U32>,
           z => Affects.Edge(g, z, q),
           p,
           k,
-          Tries.Trie.same_key_sound(p, k)(eb),
+          Crits.Key.is_eq_sound(p, k)(eb),
           h
         )
       )
@@ -5969,57 +5971,57 @@ def Affects.link_keep.at(
 # an edge of g stays when t becomes one more successor of k
 def Affects.link_keep(
   +g: Reaches.Graph,
-  +k: List<&2, Bool>,
-  +t: List<&2, Bool>,
-  +p: List<&2, Bool>,
-  +q: List<&2, Bool>
+  +k: List<&2, U32>,
+  +t: List<&2, U32>,
+  +p: List<&2, U32>,
+  +q: List<&2, U32>
 ) -> Affects.Edge(g, p, q) -> Affects.Edge(Reaches.Graph.link(g, k, t), p, q):
   h => Affects.cast(
-    List<&2, List<&2, Bool>>,
-    z => {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, z, q) == True{}: Bool},
+    List<&2, List<&2, U32>>,
+    z => {List.contains(~List<&2, U32>, ~Crits.Key.is_eq, z, q) == True{}: Bool},
     Bool.pick(
-      List<&2, List<&2, Bool>>,
-      Tries.Trie.same_key(p, k),
+      List<&2, List<&2, U32>>,
+      Crits.Key.is_eq(p, k),
       t <> Reaches.Graph.succ(g, k),
       Reaches.Graph.succ(g, p)
     ),
     Reaches.Graph.succ(Reaches.Graph.link(g, k, t), p),
     Equal.sym(
-      List<&2, List<&2, Bool>>,
+      List<&2, List<&2, U32>>,
       Reaches.Graph.succ(Reaches.Graph.link(g, k, t), p),
       Bool.pick(
-        List<&2, List<&2, Bool>>,
-        Tries.Trie.same_key(p, k),
+        List<&2, List<&2, U32>>,
+        Crits.Key.is_eq(p, k),
         t <> Reaches.Graph.succ(g, k),
         Reaches.Graph.succ(g, p)
       ),
       Affects.link_succ(g, k, t, p)
     ),
-    Affects.link_keep.at(g, k, t, p, q, Tries.Trie.same_key(p, k), {==}, h)
+    Affects.link_keep.at(g, k, t, p, q, Crits.Key.is_eq(p, k), {==}, h)
   )
 
 # the laws of Trie.same_key
-def Affects.key_laws() -> Shared.Eq.Laws(List<&2, Bool>, Tries.Trie.same_key):
-  Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws())
+def Affects.key_laws() -> Shared.Eq.Laws(List<&2, U32>, Crits.Key.is_eq):
+  (a => Crits.Key.is_eq_refl(a), a => b => Crits.Key.is_eq_sound(a, b))
 
 # t is a successor of k in g with t as one more successor of k
-def Affects.link_new(+g: Reaches.Graph, +k: List<&2, Bool>, +t: List<&2, Bool>) -> Affects.Edge(Reaches.Graph.link(g, k, t), k, t):
+def Affects.link_new(+g: Reaches.Graph, +k: List<&2, U32>, +t: List<&2, U32>) -> Affects.Edge(Reaches.Graph.link(g, k, t), k, t):
   Affects.cast(
-    List<&2, List<&2, Bool>>,
-    z => {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, z, t) == True{}: Bool},
+    List<&2, List<&2, U32>>,
+    z => {List.contains(~List<&2, U32>, ~Crits.Key.is_eq, z, t) == True{}: Bool},
     Bool.pick(
-      List<&2, List<&2, Bool>>,
-      Tries.Trie.same_key(k, k),
+      List<&2, List<&2, U32>>,
+      Crits.Key.is_eq(k, k),
       t <> Reaches.Graph.succ(g, k),
       Reaches.Graph.succ(g, k)
     ),
     Reaches.Graph.succ(Reaches.Graph.link(g, k, t), k),
     Equal.sym(
-      List<&2, List<&2, Bool>>,
+      List<&2, List<&2, U32>>,
       Reaches.Graph.succ(Reaches.Graph.link(g, k, t), k),
       Bool.pick(
-        List<&2, List<&2, Bool>>,
-        Tries.Trie.same_key(k, k),
+        List<&2, List<&2, U32>>,
+        Crits.Key.is_eq(k, k),
         t <> Reaches.Graph.succ(g, k),
         Reaches.Graph.succ(g, k)
       ),
@@ -6029,17 +6031,17 @@ def Affects.link_new(+g: Reaches.Graph, +k: List<&2, Bool>, +t: List<&2, Bool>) 
       Bool,
       z => {
         List.contains(
-          ~List<&2, Bool>,
-          ~Tries.Trie.same_key,
-          Bool.pick(List<&2, List<&2, Bool>>, z, t <> Reaches.Graph.succ(g, k), Reaches.Graph.succ(g, k)),
+          ~List<&2, U32>,
+          ~Crits.Key.is_eq,
+          Bool.pick(List<&2, List<&2, U32>>, z, t <> Reaches.Graph.succ(g, k), Reaches.Graph.succ(g, k)),
           t
         )
           == True{}: Bool
       },
       True{},
-      Tries.Trie.same_key(k, k),
-      Equal.sym(Bool, Tries.Trie.same_key(k, k), True{}, Shared.Eq.refl(~List<&2, Bool>, ~Tries.Trie.same_key, Affects.key_laws(), k)),
-      Affects.contains_head(~List<&2, Bool>, ~Tries.Trie.same_key, ~Affects.key_laws(), t, Reaches.Graph.succ(g, k))
+      Crits.Key.is_eq(k, k),
+      Equal.sym(Bool, Crits.Key.is_eq(k, k), True{}, Shared.Eq.refl(~List<&2, U32>, ~Crits.Key.is_eq, Affects.key_laws(), k)),
+      Affects.contains_head(~List<&2, U32>, ~Crits.Key.is_eq, ~Affects.key_laws(), t, Reaches.Graph.succ(g, k))
     )
   )
 
@@ -6047,78 +6049,78 @@ def Affects.link_new(+g: Reaches.Graph, +k: List<&2, Bool>, +t: List<&2, Bool>) 
 def Affects.Has(g: Reaches.Graph) -> Type:
   match g:
     case Reaches.Graph{+e, +ns}:
-      @p: List<&2, Bool> -> {
-        Maybe.is_some(&2, List<&2, List<&2, Bool>>, Tries.Trie.get(List<&2, List<&2, Bool>>, e, p)) == True{}: Bool
-      } -> {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ns, p) == True{}: Bool}
+      @p: List<&2, U32> -> {
+        Maybe.is_some(&2, List<&2, List<&2, U32>>, Crits.Dict.get(List<&2, List<&2, U32>>, e, p)) == True{}: Bool
+      } -> {List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ns, p) == True{}: Bool}
 
 # the graph with no node has no entry
 def Affects.has_new() -> Affects.Has(Reaches.Graph.new()):
   p => h => Empty.absurd(
-    {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, [], p) == True{}: Bool},
+    {List.contains(~List<&2, U32>, ~Crits.Key.is_eq, [], p) == True{}: Bool},
     Shared.Bool.false_ne_true(h)
   )
 
 # Affects.has_link at a new node k, once it is known whether p is k (b)
 def Affects.has_pick.new(
-  +e: Tries.Trie<List<&2, List<&2, Bool>>>,
-  +ns: List<&2, List<&2, Bool>>,
-  +k: List<&2, Bool>,
-  +p: List<&2, Bool>,
+  +e: Crits.Dict(List<&2, List<&2, U32>>),
+  +ns: List<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +p: List<&2, U32>,
   b: Bool,
-  eb: {Tries.Trie.same_key(p, k) == b: Bool},
-  -v: List<&2, List<&2, Bool>>,
+  eb: {Crits.Key.is_eq(p, k) == b: Bool},
+  -v: List<&2, List<&2, U32>>,
   hg: Affects.Has(Reaches.Graph{e, ns})
 ) -> {
   Maybe.is_some(
     &2,
-    List<&2, List<&2, Bool>>,
-    Bool.pick(Maybe<&2, List<&2, List<&2, Bool>>>, b, Some{v}, Tries.Trie.get(List<&2, List<&2, Bool>>, e, p))
+    List<&2, List<&2, U32>>,
+    Bool.pick(Maybe<&2, List<&2, List<&2, U32>>>, b, Some{v}, Crits.Dict.get(List<&2, List<&2, U32>>, e, p))
   )
     == True{}: Bool
-} -> {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, k <> ns, p) == True{}: Bool}:
+} -> {List.contains(~List<&2, U32>, ~Crits.Key.is_eq, k <> ns, p) == True{}: Bool}:
   match b:
     case True{}:
       h => Affects.cast(
-        List<&2, Bool>,
-        z => {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, k <> ns, z) == True{}: Bool},
+        List<&2, U32>,
+        z => {List.contains(~List<&2, U32>, ~Crits.Key.is_eq, k <> ns, z) == True{}: Bool},
         k,
         p,
-        Equal.sym(List<&2, Bool>, p, k, Tries.Trie.same_key_sound(p, k)(eb)),
-        Affects.contains_head(~List<&2, Bool>, ~Tries.Trie.same_key, ~Affects.key_laws(), k, ns)
+        Equal.sym(List<&2, U32>, p, k, Crits.Key.is_eq_sound(p, k)(eb)),
+        Affects.contains_head(~List<&2, U32>, ~Crits.Key.is_eq, ~Affects.key_laws(), k, ns)
       )
     case False{}:
-      h => Shared.List.contains_cons(~List<&2, Bool>, ~Tries.Trie.same_key, k, ns, p)(hg(p)(h))
+      h => Shared.List.contains_cons(~List<&2, U32>, ~Crits.Key.is_eq, k, ns, p)(hg(p)(h))
 
 # Affects.has_link at a node k that has an entry, once it is known whether p
 # is k (b)
 def Affects.has_pick.old(
-  +e: Tries.Trie<List<&2, List<&2, Bool>>>,
-  +ns: List<&2, List<&2, Bool>>,
-  +k: List<&2, Bool>,
-  +p: List<&2, Bool>,
+  +e: Crits.Dict(List<&2, List<&2, U32>>),
+  +ns: List<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +p: List<&2, U32>,
   b: Bool,
-  eb: {Tries.Trie.same_key(p, k) == b: Bool},
-  -v: List<&2, List<&2, Bool>>,
+  eb: {Crits.Key.is_eq(p, k) == b: Bool},
+  -v: List<&2, List<&2, U32>>,
   +ek: {
-    Maybe.is_some(&2, List<&2, List<&2, Bool>>, Tries.Trie.get(List<&2, List<&2, Bool>>, e, k)) == True{}: Bool
+    Maybe.is_some(&2, List<&2, List<&2, U32>>, Crits.Dict.get(List<&2, List<&2, U32>>, e, k)) == True{}: Bool
   },
   hg: Affects.Has(Reaches.Graph{e, ns})
 ) -> {
   Maybe.is_some(
     &2,
-    List<&2, List<&2, Bool>>,
-    Bool.pick(Maybe<&2, List<&2, List<&2, Bool>>>, b, Some{v}, Tries.Trie.get(List<&2, List<&2, Bool>>, e, p))
+    List<&2, List<&2, U32>>,
+    Bool.pick(Maybe<&2, List<&2, List<&2, U32>>>, b, Some{v}, Crits.Dict.get(List<&2, List<&2, U32>>, e, p))
   )
     == True{}: Bool
-} -> {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ns, p) == True{}: Bool}:
+} -> {List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ns, p) == True{}: Bool}:
   match b:
     case True{}:
       h => Affects.cast(
-        List<&2, Bool>,
-        z => {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ns, z) == True{}: Bool},
+        List<&2, U32>,
+        z => {List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ns, z) == True{}: Bool},
         k,
         p,
-        Equal.sym(List<&2, Bool>, p, k, Tries.Trie.same_key_sound(p, k)(eb)),
+        Equal.sym(List<&2, U32>, p, k, Crits.Key.is_eq_sound(p, k)(eb)),
         hg(k)(ek)
       )
     case False{}:
@@ -6126,87 +6128,87 @@ def Affects.has_pick.old(
 
 # a read of t set at k, as a pick
 def Affects.set_get(
-  +e: Tries.Trie<List<&2, List<&2, Bool>>>,
-  +k: List<&2, Bool>,
-  +v: List<&2, List<&2, Bool>>,
-  +p: List<&2, Bool>
+  +e: Crits.Dict(List<&2, List<&2, U32>>),
+  +k: List<&2, U32>,
+  +v: List<&2, List<&2, U32>>,
+  +p: List<&2, U32>
 ) -> {
   Maybe.is_some(
     &2,
-    List<&2, List<&2, Bool>>,
-    Tries.Trie.get(List<&2, List<&2, Bool>>, Tries.Trie.set(List<&2, List<&2, Bool>>, e, k, v), p)
+    List<&2, List<&2, U32>>,
+    Crits.Dict.get(List<&2, List<&2, U32>>, Crits.Dict.set(~List<&2, List<&2, U32>>, e, k, v), p)
   )
     == True{}: Bool
 } -> {
   Maybe.is_some(
     &2,
-    List<&2, List<&2, Bool>>,
+    List<&2, List<&2, U32>>,
     Bool.pick(
-      Maybe<&2, List<&2, List<&2, Bool>>>,
-      Tries.Trie.same_key(p, k),
+      Maybe<&2, List<&2, List<&2, U32>>>,
+      Crits.Key.is_eq(p, k),
       Some{v},
-      Tries.Trie.get(List<&2, List<&2, Bool>>, e, p)
+      Crits.Dict.get(List<&2, List<&2, U32>>, e, p)
     )
   )
     == True{}: Bool
 }:
   h => Affects.cast(
-    Maybe<&2, List<&2, List<&2, Bool>>>,
-    z => {Maybe.is_some(&2, List<&2, List<&2, Bool>>, z) == True{}: Bool},
-    Tries.Trie.get(List<&2, List<&2, Bool>>, Tries.Trie.set(List<&2, List<&2, Bool>>, e, k, v), p),
+    Maybe<&2, List<&2, List<&2, U32>>>,
+    z => {Maybe.is_some(&2, List<&2, List<&2, U32>>, z) == True{}: Bool},
+    Crits.Dict.get(List<&2, List<&2, U32>>, Crits.Dict.set(~List<&2, List<&2, U32>>, e, k, v), p),
     Bool.pick(
-      Maybe<&2, List<&2, List<&2, Bool>>>,
-      Tries.Trie.same_key(p, k),
+      Maybe<&2, List<&2, List<&2, U32>>>,
+      Crits.Key.is_eq(p, k),
       Some{v},
-      Tries.Trie.get(List<&2, List<&2, Bool>>, e, p)
+      Crits.Dict.get(List<&2, List<&2, U32>>, e, p)
     ),
-    Tries.Trie.get_set(List<&2, List<&2, Bool>>, e, k, v, p),
+    Crits.Dict.get_set(~List<&2, List<&2, U32>>, e, k, v, p),
     h
   )
 
 # Affects.has_link once the successors m of k are known
 def Affects.has_link.at(
-  +e: Tries.Trie<List<&2, List<&2, Bool>>>,
-  +ns: List<&2, List<&2, Bool>>,
-  +k: List<&2, Bool>,
-  +t: List<&2, Bool>,
-  m: Maybe<&2, List<&2, List<&2, Bool>>>,
-  +em: {Tries.Trie.get(List<&2, List<&2, Bool>>, e, k) == m: Maybe<&2, List<&2, List<&2, Bool>>>},
+  +e: Crits.Dict(List<&2, List<&2, U32>>),
+  +ns: List<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +t: List<&2, U32>,
+  m: Maybe<&2, List<&2, List<&2, U32>>>,
+  +em: {Crits.Dict.get(List<&2, List<&2, U32>>, e, k) == m: Maybe<&2, List<&2, List<&2, U32>>>},
   hg: Affects.Has(Reaches.Graph{e, ns})
 ) -> Affects.Has(Reaches.Graph.link.at(e, ns, k, t, m)):
   match m:
     case None{}:
-      +p => h => Affects.has_pick.new(e, ns, k, p, Tries.Trie.same_key(p, k), {==}, [t], hg)(Affects.set_get(e, k, [t], p)(h))
+      +p => h => Affects.has_pick.new(e, ns, k, p, Crits.Key.is_eq(p, k), {==}, [t], hg)(Affects.set_get(e, k, [t], p)(h))
     case Some{+ts}:
       +p => h => Affects.has_pick.old(
         e,
         ns,
         k,
         p,
-        Tries.Trie.same_key(p, k),
+        Crits.Key.is_eq(p, k),
         {==},
         t <> ts,
         Affects.cast(
-          Maybe<&2, List<&2, List<&2, Bool>>>,
-          z => {Maybe.is_some(&2, List<&2, List<&2, Bool>>, z) == True{}: Bool},
+          Maybe<&2, List<&2, List<&2, U32>>>,
+          z => {Maybe.is_some(&2, List<&2, List<&2, U32>>, z) == True{}: Bool},
           Some{ts},
-          Tries.Trie.get(List<&2, List<&2, Bool>>, e, k),
-          Equal.sym(Maybe<&2, List<&2, List<&2, Bool>>>, Tries.Trie.get(List<&2, List<&2, Bool>>, e, k), Some{ts}, em),
+          Crits.Dict.get(List<&2, List<&2, U32>>, e, k),
+          Equal.sym(Maybe<&2, List<&2, List<&2, U32>>>, Crits.Dict.get(List<&2, List<&2, U32>>, e, k), Some{ts}, em),
           {==}
         ),
         hg
       )(Affects.set_get(e, k, t <> ts, p)(h))
 
 # each node with an entry is a node, still, with t as one more successor of k
-def Affects.has_link(+g: Reaches.Graph, +k: List<&2, Bool>, +t: List<&2, Bool>, hg: Affects.Has(g)) -> Affects.Has(Reaches.Graph.link(g, k, t)):
+def Affects.has_link(+g: Reaches.Graph, +k: List<&2, U32>, +t: List<&2, U32>, hg: Affects.Has(g)) -> Affects.Has(Reaches.Graph.link(g, k, t)):
   match g:
     case Reaches.Graph{+e, +ns}:
-      Affects.has_link.at(e, ns, k, t, Tries.Trie.get(List<&2, List<&2, Bool>>, e, k), {==}, hg)
+      Affects.has_link.at(e, ns, k, t, Crits.Dict.get(List<&2, List<&2, U32>>, e, k), {==}, hg)
 
 # each node with an entry is a node, still, with the successors ts of k
 def Affects.has_links(
-  ts: List<&2, List<&2, Bool>>,
-  +k: List<&2, Bool>,
+  ts: List<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
   +g: Reaches.Graph,
   hg: Affects.Has(g)
 ) -> Affects.Has(Reaches.Graph.links(ts, k, g)):
@@ -6218,8 +6220,8 @@ def Affects.has_links(
 
 # each node with an entry is a node, still, with t a successor of each of ks
 def Affects.has_back(
-  ks: List<&2, List<&2, Bool>>,
-  +t: List<&2, Bool>,
+  ks: List<&2, List<&2, U32>>,
+  +t: List<&2, U32>,
   +g: Reaches.Graph,
   hg: Affects.Has(g)
 ) -> Affects.Has(Reaches.Graph.back(ks, t, g)):
@@ -6231,14 +6233,14 @@ def Affects.has_back(
 
 # Affects.has_live once the entry m of p is known
 def Affects.has_live.at(
-  m: Maybe<&2, List<&2, List<&2, Bool>>>,
-  +q: List<&2, Bool>,
+  m: Maybe<&2, List<&2, List<&2, U32>>>,
+  +q: List<&2, U32>,
   -R: Type,
   hc: {
-    List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, Maybe.default(&2, List<&2, List<&2, Bool>>, m, []), q)
+    List.contains(~List<&2, U32>, ~Crits.Key.is_eq, Maybe.default(&2, List<&2, List<&2, U32>>, m, []), q)
       == True{}: Bool
   },
-  hs: {Maybe.is_some(&2, List<&2, List<&2, Bool>>, m) == True{}: Bool} -> R
+  hs: {Maybe.is_some(&2, List<&2, List<&2, U32>>, m) == True{}: Bool} -> R
 ) -> R:
   match m:
     case None{}:
@@ -6250,23 +6252,23 @@ def Affects.has_live.at(
 def Affects.has_live(
   +g: Reaches.Graph,
   hg: Affects.Has(g),
-  +p: List<&2, Bool>,
-  +q: List<&2, Bool>
-) -> Affects.Edge(g, p, q) -> {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, Reaches.Graph.nodes(g), p) == True{}: Bool}:
+  +p: List<&2, U32>,
+  +q: List<&2, U32>
+) -> Affects.Edge(g, p, q) -> {List.contains(~List<&2, U32>, ~Crits.Key.is_eq, Reaches.Graph.nodes(g), p) == True{}: Bool}:
   match g:
     case Reaches.Graph{+e, +ns}:
       h => Affects.has_live.at(
-        Tries.Trie.get(List<&2, List<&2, Bool>>, e, p),
+        Crits.Dict.get(List<&2, List<&2, U32>>, e, p),
         q,
-        {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ns, p) == True{}: Bool},
+        {List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ns, p) == True{}: Bool},
         h,
         hg(p)
       )
 
 # the edges of g2 are those of g1, reversed
 def Affects.Inv(g1: Reaches.Graph, g2: Reaches.Graph) -> Type:
-  (@p: List<&2, Bool> -> @q: List<&2, Bool> -> Affects.Edge(g1, p, q) -> Affects.Edge(g2, q, p))
-    & (@p: List<&2, Bool> -> @q: List<&2, Bool> -> Affects.Edge(g2, p, q) -> Affects.Edge(g1, q, p))
+  (@p: List<&2, U32> -> @q: List<&2, U32> -> Affects.Edge(g1, p, q) -> Affects.Edge(g2, q, p))
+    & (@p: List<&2, U32> -> @q: List<&2, U32> -> Affects.Edge(g2, p, q) -> Affects.Edge(g1, q, p))
 
 # the graph with no node is its own reverse
 def Affects.inv_new() -> Affects.Inv(Reaches.Graph.new(), Reaches.Graph.new()):
@@ -6279,8 +6281,8 @@ def Affects.inv_new() -> Affects.Inv(Reaches.Graph.new(), Reaches.Graph.new()):
 def Affects.inv_link(
   +g1: Reaches.Graph,
   +g2: Reaches.Graph,
-  +k: List<&2, Bool>,
-  +t: List<&2, Bool>,
+  +k: List<&2, U32>,
+  +t: List<&2, U32>,
   i: Affects.Inv(g1, g2)
 ) -> Affects.Inv(Reaches.Graph.link(g1, k, t), Reaches.Graph.link(g2, t, k)):
   (i1, i2) = i
@@ -6293,17 +6295,17 @@ def Affects.inv_link(
       q,
       Affects.Edge(Reaches.Graph.link(g2, t, k), q, p),
       a => b => Affects.cast(
-        List<&2, Bool>,
+        List<&2, U32>,
         z => Affects.Edge(Reaches.Graph.link(g2, t, k), q, z),
         k,
         p,
-        Equal.sym(List<&2, Bool>, p, k, Tries.Trie.same_key_sound(p, k)(a)),
+        Equal.sym(List<&2, U32>, p, k, Crits.Key.is_eq_sound(p, k)(a)),
         Affects.cast(
-          List<&2, Bool>,
+          List<&2, U32>,
           z => Affects.Edge(Reaches.Graph.link(g2, t, k), z, k),
           t,
           q,
-          Tries.Trie.same_key_sound(t, q)(b),
+          Crits.Key.is_eq_sound(t, q)(b),
           Affects.link_new(g2, t, k)
         )
       ),
@@ -6317,17 +6319,17 @@ def Affects.inv_link(
       q,
       Affects.Edge(Reaches.Graph.link(g1, k, t), q, p),
       a => b => Affects.cast(
-        List<&2, Bool>,
+        List<&2, U32>,
         z => Affects.Edge(Reaches.Graph.link(g1, k, t), q, z),
         t,
         p,
-        Equal.sym(List<&2, Bool>, p, t, Tries.Trie.same_key_sound(p, t)(a)),
+        Equal.sym(List<&2, U32>, p, t, Crits.Key.is_eq_sound(p, t)(a)),
         Affects.cast(
-          List<&2, Bool>,
+          List<&2, U32>,
           z => Affects.Edge(Reaches.Graph.link(g1, k, t), z, t),
           k,
           q,
-          Tries.Trie.same_key_sound(k, q)(b),
+          Crits.Key.is_eq_sound(k, q)(b),
           Affects.link_new(g1, k, t)
         )
       ),
@@ -6338,8 +6340,8 @@ def Affects.inv_link(
 # the successors ts of k, and k as a successor of each of ts, keep two graphs
 # reversed
 def Affects.inv_links(
-  ts: List<&2, List<&2, Bool>>,
-  +k: List<&2, Bool>,
+  ts: List<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
   +g1: Reaches.Graph,
   +g2: Reaches.Graph,
   i: Affects.Inv(g1, g2)
@@ -6570,8 +6572,8 @@ def Affects.inv_fst(
   -g1: Reaches.Graph,
   -g2: Reaches.Graph,
   i: Affects.Inv(g1, g2),
-  p: List<&2, Bool>,
-  q: List<&2, Bool>
+  p: List<&2, U32>,
+  q: List<&2, U32>
 ) -> Affects.Edge(g1, p, q) -> Affects.Edge(g2, q, p):
   (i1, i2) = i
   i1(p)(q)
@@ -6584,8 +6586,8 @@ def Affects.side_edge(
   +h: Maybe<&2, Hashes.Hash>,
   +ns: List<&2, Resources.Name>,
   +b: Bool,
-  +p: List<&2, Bool>,
-  +q: List<&2, Bool>
+  +p: List<&2, U32>,
+  +q: List<&2, U32>
 ) -> Affects.Edge(Affects.side(~d, l, view, h, ns, b), p, q) -> Affects.Edge(Affects.side(~d, l, view, h, ns, Bool.not(b)), q, p):
   Affects.inv_fst(
     Affects.side(~d, l, view, h, ns, b),
@@ -6618,10 +6620,10 @@ def Affects.side_live(
   +h: Maybe<&2, Hashes.Hash>,
   +ns: List<&2, Resources.Name>,
   +b: Bool,
-  +p: List<&2, Bool>,
-  +q: List<&2, Bool>
+  +p: List<&2, U32>,
+  +q: List<&2, U32>
 ) -> Affects.Edge(Affects.side(~d, l, view, h, ns, b), p, q) -> {
-  List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b)), p)
+  List.contains(~List<&2, U32>, ~Crits.Key.is_eq, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b)), p)
     == True{}: Bool
 }:
   Affects.has_live(Affects.side(~d, l, view, h, ns, b), Affects.side_has(~d, l, view, h, ns, b), p, q)
@@ -6634,15 +6636,15 @@ def Affects.rev_path.cons(
   +h: Maybe<&2, Hashes.Hash>,
   +ns: List<&2, Resources.Name>,
   +b: Bool,
-  +p: List<&2, Bool>,
-  +x: List<&2, Bool>,
-  +m: List<&2, Bool>,
+  +p: List<&2, U32>,
+  +x: List<&2, U32>,
+  +m: List<&2, U32>,
   he: Affects.Edge(Affects.side(~d, l, view, h, ns, b), x, p),
-  w: &qs: List<&2, List<&2, Bool>> -> {
+  w: &qs: List<&2, List<&2, U32>> -> {
     Reaches.Reach.path(
-      ~List<&2, Bool>,
+      ~List<&2, U32>,
       ~Reaches.Graph,
-      ~Tries.Trie.same_key,
+      ~Crits.Key.is_eq,
       ~Reaches.Graph.succ,
       qs,
       Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, Bool.not(b)), m),
@@ -6651,11 +6653,11 @@ def Affects.rev_path.cons(
     )
       == True{}: Bool
   }
-) -> &qs: List<&2, List<&2, Bool>> -> {
+) -> &qs: List<&2, List<&2, U32>> -> {
   Reaches.Reach.path(
-    ~List<&2, Bool>,
+    ~List<&2, U32>,
     ~Reaches.Graph,
-    ~Tries.Trie.same_key,
+    ~Crits.Key.is_eq,
     ~Reaches.Graph.succ,
     qs,
     Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, Bool.not(b)), m),
@@ -6667,11 +6669,11 @@ def Affects.rev_path.cons(
   match w:
     case (+qs, hq):
       (
-        List.append(&2, List<&2, Bool>, qs, [p]),
+        List.append(&2, List<&2, U32>, qs, [p]),
         Reaches.Reach.path_append(
-          ~List<&2, Bool>,
+          ~List<&2, U32>,
           ~Reaches.Graph,
-          ~Tries.Trie.same_key,
+          ~Crits.Key.is_eq,
           ~Reaches.Graph.succ,
           qs,
           Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, Bool.not(b)), m),
@@ -6690,14 +6692,14 @@ def Affects.rev_path(
   +h: Maybe<&2, Hashes.Hash>,
   +ns: List<&2, Resources.Name>,
   +b: Bool,
-  ps: List<&2, List<&2, Bool>>,
-  +x: List<&2, Bool>,
-  +m: List<&2, Bool>
+  ps: List<&2, List<&2, U32>>,
+  +x: List<&2, U32>,
+  +m: List<&2, U32>
 ) -> {
   Reaches.Reach.path(
-    ~List<&2, Bool>,
+    ~List<&2, U32>,
     ~Reaches.Graph,
-    ~Tries.Trie.same_key,
+    ~Crits.Key.is_eq,
     ~Reaches.Graph.succ,
     ps,
     Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, b), x),
@@ -6705,11 +6707,11 @@ def Affects.rev_path(
     m
   )
     == True{}: Bool
-} -> &qs: List<&2, List<&2, Bool>> -> {
+} -> &qs: List<&2, List<&2, U32>> -> {
   Reaches.Reach.path(
-    ~List<&2, Bool>,
+    ~List<&2, U32>,
     ~Reaches.Graph,
-    ~Tries.Trie.same_key,
+    ~Crits.Key.is_eq,
     ~Reaches.Graph.succ,
     qs,
     Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, Bool.not(b)), m),
@@ -6724,15 +6726,15 @@ def Affects.rev_path(
     case Con{+p, +r}:
       +hp =>
         +contains1 = List.contains(
-          ~List<&2, Bool>,
-          ~Tries.Trie.same_key,
+          ~List<&2, U32>,
+          ~Crits.Key.is_eq,
           Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, b), x),
           p
         )
         +path1 = Reaches.Reach.path(
-          ~List<&2, Bool>,
+          ~List<&2, U32>,
           ~Reaches.Graph,
-          ~Tries.Trie.same_key,
+          ~Crits.Key.is_eq,
           ~Reaches.Graph.succ,
           r,
           Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, b), p),
@@ -6761,14 +6763,14 @@ def Affects.within(
   +h: Maybe<&2, Hashes.Hash>,
   +ns: List<&2, Resources.Name>,
   +b: Bool,
-  +ps: List<&2, List<&2, Bool>>,
-  ys: List<&2, List<&2, Bool>>,
-  +m: List<&2, Bool>
+  +ps: List<&2, List<&2, U32>>,
+  ys: List<&2, List<&2, U32>>,
+  +m: List<&2, U32>
 ) -> {
   Reaches.Reach.path(
-    ~List<&2, Bool>,
+    ~List<&2, U32>,
     ~Reaches.Graph,
-    ~Tries.Trie.same_key,
+    ~Crits.Key.is_eq,
     ~Reaches.Graph.succ,
     ps,
     ys,
@@ -6777,7 +6779,7 @@ def Affects.within(
   )
     == True{}: Bool
 } -> {
-  Shared.List.within(~List<&2, Bool>, ~Tries.Trie.same_key, ps, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b)))
+  Shared.List.within(~List<&2, U32>, ~Crits.Key.is_eq, ps, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b)))
     == True{}: Bool
 }:
   match ps:
@@ -6786,20 +6788,20 @@ def Affects.within(
     case Con{+p, +r}:
       +hp =>
         +path1 = Reaches.Reach.path(
-          ~List<&2, Bool>,
+          ~List<&2, U32>,
           ~Reaches.Graph,
-          ~Tries.Trie.same_key,
+          ~Crits.Key.is_eq,
           ~Reaches.Graph.succ,
           r,
           Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, b), p),
           Affects.side(~d, l, view, h, ns, b),
           m
         )
-        +contains1 = List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ys, p)
+        +contains1 = List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ys, p)
         hf = Reaches.Reach.path_first(
-          ~List<&2, Bool>,
+          ~List<&2, U32>,
           ~Reaches.Graph,
-          ~Tries.Trie.same_key,
+          ~Crits.Key.is_eq,
           ~Reaches.Graph.succ,
           r,
           Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, b), p),
@@ -6808,13 +6810,13 @@ def Affects.within(
         )(Shared.Bool.and_true_right(contains1, path1)(hp))
         %Equal.sym(
           Bool,
-          List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b)), p),
+          List.contains(~List<&2, U32>, ~Crits.Key.is_eq, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b)), p),
           True{},
-          Affects.side_live(~d, l, view, h, ns, b, p, Reaches.Reach.first(List<&2, Bool>, r, m))(hf)
+          Affects.side_live(~d, l, view, h, ns, b, p, Reaches.Reach.first(List<&2, U32>, r, m))(hf)
         ): {
           Bool.and(
             _,
-            Shared.List.within(~List<&2, Bool>, ~Tries.Trie.same_key, r, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b)))
+            Shared.List.within(~List<&2, U32>, ~Crits.Key.is_eq, r, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b)))
           )
             == True{}: Bool
         }
@@ -6839,13 +6841,13 @@ def Affects.fin(
   +h: Maybe<&2, Hashes.Hash>,
   +ns: List<&2, Resources.Name>,
   +b: Bool,
-  +x: List<&2, Bool>,
-  +m: List<&2, Bool>,
-  w: &qs: List<&2, List<&2, Bool>> -> {
+  +x: List<&2, U32>,
+  +m: List<&2, U32>,
+  w: &qs: List<&2, List<&2, U32>> -> {
     Reaches.Reach.path(
-      ~List<&2, Bool>,
+      ~List<&2, U32>,
       ~Reaches.Graph,
-      ~Tries.Trie.same_key,
+      ~Crits.Key.is_eq,
       ~Reaches.Graph.succ,
       qs,
       Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, b), x),
@@ -6854,12 +6856,12 @@ def Affects.fin(
     )
       == True{}: Bool
   }
-    & {Reaches.Reach.distinct(~List<&2, Bool>, ~Tries.Trie.same_key, qs) == True{}: Bool}
+    & {Reaches.Reach.distinct(~List<&2, U32>, ~Crits.Key.is_eq, qs) == True{}: Bool}
 ) -> {
   Reaches.Reach.in(
-    ~List<&2, Bool>,
+    ~List<&2, U32>,
     ~Reaches.Graph,
-    ~Tries.Trie.same_key,
+    ~Crits.Key.is_eq,
     ~Reaches.Graph.succ,
     ~Reaches.Graph.nodes,
     Affects.side(~d, l, view, h, ns, b),
@@ -6871,20 +6873,20 @@ def Affects.fin(
   match w:
     case (+qs, (+hq, hd)):
       Reaches.Reach.path_go(
-        ~List<&2, Bool>,
+        ~List<&2, U32>,
         ~Reaches.Graph,
-        ~Tries.Trie.same_key,
+        ~Crits.Key.is_eq,
         ~Reaches.Graph.succ,
         ~Affects.key_laws(),
         qs,
-        List.length(&2, List<&2, Bool>, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b))),
+        List.length(&2, List<&2, U32>, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b))),
         Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, b), x),
         Affects.side(~d, l, view, h, ns, b),
         m
       )(hq)(
         Reaches.Reach.fits_nodes(
-          ~List<&2, Bool>,
-          ~Tries.Trie.same_key,
+          ~List<&2, U32>,
+          ~Crits.Key.is_eq,
           ~Affects.key_laws(),
           qs,
           Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b))
@@ -6899,13 +6901,13 @@ def Affects.rev_in.one(
   +h: Maybe<&2, Hashes.Hash>,
   +ns: List<&2, Resources.Name>,
   +b: Bool,
-  +x: List<&2, Bool>,
-  +m: List<&2, Bool>,
-  w: &ps: List<&2, List<&2, Bool>> -> {
+  +x: List<&2, U32>,
+  +m: List<&2, U32>,
+  w: &ps: List<&2, List<&2, U32>> -> {
     Reaches.Reach.path(
-      ~List<&2, Bool>,
+      ~List<&2, U32>,
       ~Reaches.Graph,
-      ~Tries.Trie.same_key,
+      ~Crits.Key.is_eq,
       ~Reaches.Graph.succ,
       ps,
       Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, b), x),
@@ -6916,17 +6918,17 @@ def Affects.rev_in.one(
   }
     & {
       Reaches.Reach.fits(
-        List<&2, Bool>,
+        List<&2, U32>,
         ps,
-        List.length(&2, List<&2, Bool>, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b)))
+        List.length(&2, List<&2, U32>, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b)))
       )
         == True{}: Bool
     }
-) -> &qs: List<&2, List<&2, Bool>> -> {
+) -> &qs: List<&2, List<&2, U32>> -> {
   Reaches.Reach.path(
-    ~List<&2, Bool>,
+    ~List<&2, U32>,
     ~Reaches.Graph,
-    ~Tries.Trie.same_key,
+    ~Crits.Key.is_eq,
     ~Reaches.Graph.succ,
     qs,
     Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, Bool.not(b)), m),
@@ -6947,13 +6949,13 @@ def Affects.rev_in.two(
   +h: Maybe<&2, Hashes.Hash>,
   +ns: List<&2, Resources.Name>,
   +b: Bool,
-  +x: List<&2, Bool>,
-  +m: List<&2, Bool>,
-  w: &qs: List<&2, List<&2, Bool>> -> {
+  +x: List<&2, U32>,
+  +m: List<&2, U32>,
+  w: &qs: List<&2, List<&2, U32>> -> {
     Reaches.Reach.path(
-      ~List<&2, Bool>,
+      ~List<&2, U32>,
       ~Reaches.Graph,
-      ~Tries.Trie.same_key,
+      ~Crits.Key.is_eq,
       ~Reaches.Graph.succ,
       qs,
       Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, Bool.not(b)), m),
@@ -6964,9 +6966,9 @@ def Affects.rev_in.two(
   }
 ) -> {
   Reaches.Reach.in(
-    ~List<&2, Bool>,
+    ~List<&2, U32>,
     ~Reaches.Graph,
-    ~Tries.Trie.same_key,
+    ~Crits.Key.is_eq,
     ~Reaches.Graph.succ,
     ~Reaches.Graph.nodes,
     Affects.side(~d, l, view, h, ns, Bool.not(b)),
@@ -6987,9 +6989,9 @@ def Affects.rev_in.two(
         m,
         x,
         Reaches.Reach.shorten(
-          ~List<&2, Bool>,
+          ~List<&2, U32>,
           ~Reaches.Graph,
-          ~Tries.Trie.same_key,
+          ~Crits.Key.is_eq,
           ~Reaches.Graph.succ,
           ~Affects.key_laws(),
           qs,
@@ -7008,13 +7010,13 @@ def Affects.rev_in(
   +h: Maybe<&2, Hashes.Hash>,
   +ns: List<&2, Resources.Name>,
   +b: Bool,
-  +x: List<&2, Bool>,
-  +m: List<&2, Bool>
+  +x: List<&2, U32>,
+  +m: List<&2, U32>
 ) -> {
   Reaches.Reach.in(
-    ~List<&2, Bool>,
+    ~List<&2, U32>,
     ~Reaches.Graph,
-    ~Tries.Trie.same_key,
+    ~Crits.Key.is_eq,
     ~Reaches.Graph.succ,
     ~Reaches.Graph.nodes,
     Affects.side(~d, l, view, h, ns, b),
@@ -7024,9 +7026,9 @@ def Affects.rev_in(
     == True{}: Bool
 } -> {
   Reaches.Reach.in(
-    ~List<&2, Bool>,
+    ~List<&2, U32>,
     ~Reaches.Graph,
-    ~Tries.Trie.same_key,
+    ~Crits.Key.is_eq,
     ~Reaches.Graph.succ,
     ~Reaches.Graph.nodes,
     Affects.side(~d, l, view, h, ns, Bool.not(b)),
@@ -7054,12 +7056,12 @@ def Affects.rev_in(
       x,
       m,
       Reaches.Reach.go_path(
-        ~List<&2, Bool>,
+        ~List<&2, U32>,
         ~Reaches.Graph,
-        ~Tries.Trie.same_key,
+        ~Crits.Key.is_eq,
         ~Reaches.Graph.succ,
         ~Affects.key_laws(),
-        List.length(&2, List<&2, Bool>, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b))),
+        List.length(&2, List<&2, U32>, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b))),
         Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, b), x),
         Affects.side(~d, l, view, h, ns, b),
         m
@@ -7076,19 +7078,19 @@ def Affects.reach_rev(
   +h: Maybe<&2, Hashes.Hash>,
   +ns: List<&2, Resources.Name>,
   +b: Bool,
-  +x: List<&2, Bool>,
-  +m: List<&2, Bool>
+  +x: List<&2, U32>,
+  +m: List<&2, U32>
 ) -> {
-  Tries.Trie.has(Unit, Reaches.Graph.reach(Affects.side(~d, l, view, h, ns, b), x), m) == True{}: Bool
-} -> {Tries.Trie.has(Unit, Reaches.Graph.reach(Affects.side(~d, l, view, h, ns, Bool.not(b)), m), x) == True{}: Bool}:
+  Crits.Dict.has(Unit, Reaches.Graph.reach(Affects.side(~d, l, view, h, ns, b), x), m) == True{}: Bool
+} -> {Crits.Dict.has(Unit, Reaches.Graph.reach(Affects.side(~d, l, view, h, ns, Bool.not(b)), m), x) == True{}: Bool}:
   hp =>
     %Equal.sym(
       Bool,
-      Tries.Trie.has(Unit, Reaches.Graph.reach(Affects.side(~d, l, view, h, ns, Bool.not(b)), m), x),
+      Crits.Dict.has(Unit, Reaches.Graph.reach(Affects.side(~d, l, view, h, ns, Bool.not(b)), m), x),
       Reaches.Reach.in(
-        ~List<&2, Bool>,
+        ~List<&2, U32>,
         ~Reaches.Graph,
-        ~Tries.Trie.same_key,
+        ~Crits.Key.is_eq,
         ~Reaches.Graph.succ,
         ~Reaches.Graph.nodes,
         Affects.side(~d, l, view, h, ns, Bool.not(b)),
@@ -7101,24 +7103,24 @@ def Affects.reach_rev(
       Equal.trans(
         Bool,
         Reaches.Reach.in(
-          ~List<&2, Bool>,
+          ~List<&2, U32>,
           ~Reaches.Graph,
-          ~Tries.Trie.same_key,
+          ~Crits.Key.is_eq,
           ~Reaches.Graph.succ,
           ~Reaches.Graph.nodes,
           Affects.side(~d, l, view, h, ns, b),
           x,
           m
         ),
-        Tries.Trie.has(Unit, Reaches.Graph.reach(Affects.side(~d, l, view, h, ns, b), x), m),
+        Crits.Dict.has(Unit, Reaches.Graph.reach(Affects.side(~d, l, view, h, ns, b), x), m),
         True{},
         Equal.sym(
           Bool,
-          Tries.Trie.has(Unit, Reaches.Graph.reach(Affects.side(~d, l, view, h, ns, b), x), m),
+          Crits.Dict.has(Unit, Reaches.Graph.reach(Affects.side(~d, l, view, h, ns, b), x), m),
           Reaches.Reach.in(
-            ~List<&2, Bool>,
+            ~List<&2, U32>,
             ~Reaches.Graph,
-            ~Tries.Trie.same_key,
+            ~Crits.Key.is_eq,
             ~Reaches.Graph.succ,
             ~Reaches.Graph.nodes,
             Affects.side(~d, l, view, h, ns, b),
