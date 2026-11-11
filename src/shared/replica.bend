@@ -4073,6 +4073,367 @@ def Hist.walk_keep(
         v
       )({==})(Keep.next(~mach, ~d, ~kern, b, c, h, t, t2, key, v)(em)(ek))
 
+# the walks of a line in a ledger and in a later one: what the log of the
+# first walk holds, the log of the second holds. The later walk follows the
+# same tips (Hist.next), has at least as much fuel, and then keeps the keys
+# (Hist.walk_keep)
+def Hist.walk(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  ~ll: Hist.LaterLast(mach, d),
+  fa: Nat,
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +t: Tip,
+  ma: Maybe<&2, Tip>,
+  fb: Nat,
+  mb: Maybe<&2, Tip>,
+  +key: List<&2, U32>,
+  +v: List<&2, U32>
+) -> {Nat.is_le(fa, fb) == True{}: Bool}
+  -> {Line.next(~mach, ~d, ~kern, a, c, h, t) == ma: Maybe<&2, Tip>}
+  -> {Line.next(~mach, ~d, ~kern, b, c, h, t) == mb: Maybe<&2, Tip>}
+  -> {Tip.get(~mach, ~d, a, Line.walk(~mach, ~d, ~kern, fa, a, c, h, t, ma), key) == Some{v}: Maybe<&2, List<&2, U32>>}
+  -> {Tip.get(~mach, ~d, b, Line.walk(~mach, ~d, ~kern, fb, b, c, h, t, mb), key) == Some{v}: Maybe<&2, List<&2, U32>>}:
+  match fa ma:
+    case 0n y:
+      le => ea => eb => eg => Hist.walk_keep(
+        ~mach,
+        ~d,
+        ~kern,
+        fb,
+        b,
+        c,
+        h,
+        t,
+        mb,
+        key,
+        v
+      )(eb)(Hist.tip_get(~mach, ~d, a, b, t, key, v, lg(a)(b)(later))(eg))
+    case 1n+f None{}:
+      le => ea => eb => eg => Hist.walk_keep(
+        ~mach,
+        ~d,
+        ~kern,
+        fb,
+        b,
+        c,
+        h,
+        t,
+        mb,
+        key,
+        v
+      )(eb)(Hist.tip_get(~mach, ~d, a, b, t, key, v, lg(a)(b)(later))(eg))
+    case 1n+(+f) Some{+t2}:
+      match fb mb:
+        case 0n y:
+          le => Empty.absurd(
+            {Line.next(~mach, ~d, ~kern, a, c, h, t) == Some{t2}: Maybe<&2, Tip>}
+              -> {Line.next(~mach, ~d, ~kern, b, c, h, t) == y: Maybe<&2, Tip>}
+              -> {Tip.get(~mach, ~d, a, Line.walk(~mach, ~d, ~kern, 1n+f, a, c, h, t, Some{t2}), key) == Some{v}: Maybe<&2, List<&2, U32>>}
+              -> {Tip.get(~mach, ~d, b, Line.walk(~mach, ~d, ~kern, 0n, b, c, h, t, y), key) == Some{v}: Maybe<&2, List<&2, U32>>},
+            Shared.Bool.false_ne_true(le)
+          )
+        case 1n+g None{}:
+          le => ea => eb => Empty.absurd(
+            {Tip.get(~mach, ~d, a, Line.walk(~mach, ~d, ~kern, 1n+f, a, c, h, t, Some{t2}), key) == Some{v}: Maybe<&2, List<&2, U32>>}
+              -> {Tip.get(~mach, ~d, b, Line.walk(~mach, ~d, ~kern, 1n+g, b, c, h, t, None{}), key) == Some{v}: Maybe<&2, List<&2, U32>>},
+            Shared.Maybe.none_ne_some(
+              Tip,
+              t2,
+              Equal.trans(
+                Maybe<&2, Tip>,
+                None{},
+                Line.next(~mach, ~d, ~kern, b, c, h, t),
+                Some{t2},
+                Equal.sym(Maybe<&2, Tip>, Line.next(~mach, ~d, ~kern, b, c, h, t), None{}, eb),
+                Hist.next(~mach, ~d, ~kern, ~lg, ~ls, ~ll, a, b, later, c, h, t, t2)(ea)
+              )
+            )
+          )
+        case 1n+(+g) Some{+t3}:
+          le => ea => eb => eg =>
+            %Shared.Maybe.some_inj(
+              Tip,
+              t2,
+              t3,
+              Equal.trans(
+                Maybe<&2, Tip>,
+                Some{t2},
+                Line.next(~mach, ~d, ~kern, b, c, h, t),
+                Some{t3},
+                Equal.sym(
+                  Maybe<&2, Tip>,
+                  Line.next(~mach, ~d, ~kern, b, c, h, t),
+                  Some{t2},
+                  Hist.next(~mach, ~d, ~kern, ~lg, ~ls, ~ll, a, b, later, c, h, t, t2)(ea)
+                ),
+                eb
+              )
+            ): {
+              Tip.get(
+                ~mach,
+                ~d,
+                b,
+                Line.walk(~mach, ~d, ~kern, g, b, c, U32.inc(h), _, Line.next(~mach, ~d, ~kern, b, c, U32.inc(h), _)),
+                key
+              )
+                == Some{v}: Maybe<&2, List<&2, U32>>
+            }
+            Hist.walk(
+              ~mach,
+              ~d,
+              ~kern,
+              ~lg,
+              ~ls,
+              ~ll,
+              f,
+              a,
+              b,
+              later,
+              c,
+              U32.inc(h),
+              t2,
+              Line.next(~mach, ~d, ~kern, a, c, U32.inc(h), t2),
+              g,
+              Line.next(~mach, ~d, ~kern, b, c, U32.inc(h), t2),
+              key,
+              v
+            )(le)({==})({==})(eg)
+
+# that no ballot is above the height bound, of the laws ls
+def Hist.laws.heights1(
+  -Q: Data,
+  -c: Codes.Codec(Q),
+  -k: Ledgers.Ledger.Kind(Q),
+  ls: Ledgers.Ledger.Laws(Q, c, k)
+) -> @l: Ledgers.Kind.L(Q, k) -> @b: Ledgers.Ballot -> @line: Ledgers.Line -> @h: U32 -> @r: Nat -> @voter: String -> {
+  Ledgers.Kind.has(~Q, ~c, ~k, l, Ledgers.Entry.Ballot{b}) == True{}: Bool
+} -> {
+  Ledgers.Ballot.is_at(b, Ledgers.Place{line, h, r}, voter) == True{}: Bool
+} -> {Nat.is_le(U32.to_nat(h), Ledgers.Kind.heights(Q, k)(l)(line)) == True{}: Bool}:
+  match ls:
+    case Tuple{e0, Tuple{e1, Tuple{e2, Tuple{e3, Tuple{e4, Tuple{e5, Tuple{e6, Tuple{e7, Tuple{Tuple{p1, p2}, r}}}}}}}}}:
+      p1
+
+# that the height bound is the height of a ballot, or 0, of the laws ls
+def Hist.laws.heights2(
+  -Q: Data,
+  -c: Codes.Codec(Q),
+  -k: Ledgers.Ledger.Kind(Q),
+  ls: Ledgers.Ledger.Laws(Q, c, k)
+) -> @l: Ledgers.Kind.L(Q, k) -> @line: Ledgers.Line -> {
+  Nat.is_eq(Ledgers.Kind.heights(Q, k)(l)(line), 0n) == False{}: Bool
+} -> Exists(
+  Ledgers.Ballot,
+  b => {
+    Ledgers.Kind.has(~Q, ~c, ~k, l, Ledgers.Entry.Ballot{b}) == True{}: Bool
+  }
+    & Exists(
+      U32,
+      h => Exists(
+        Nat,
+        r => {
+          Ledgers.Ballot.is_at(b, Ledgers.Place{line, h, r}, Ledgers.Ballot.voter(b)) == True{}: Bool
+        }
+          & {U32.to_nat(h) == Ledgers.Kind.heights(Q, k)(l)(line): Nat}
+      )
+    )
+):
+  match ls:
+    case Tuple{e0, Tuple{e1, Tuple{e2, Tuple{e3, Tuple{e4, Tuple{e5, Tuple{e6, Tuple{e7, Tuple{Tuple{p1, p2}, r}}}}}}}}}:
+      p2
+
+# a number that is one more than another is not zero
+def Hist.ne_zero(-n: Nat, -p: Nat, e: {n == 1n+p: Nat}) -> {Nat.is_eq(n, 0n) == False{}: Bool}:
+  %Equal.sym(Nat, n, 1n+p, e): {Nat.is_eq(_, 0n) == False{}: Bool}
+  {==}
+
+# what a ledger holds, a ledger that grows holds, once the entry under its
+# name is known (m)
+def Hist.has_grows.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  -a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +n: Ledgers.Name,
+  +e: Entry(mach),
+  m: Maybe<&2, Entry(mach)>,
+  g: Led.Grows(mach, d, a, b)
+) -> {Led.get(~mach, ~d, a, n) == m: Maybe<&2, Entry(mach)>}
+  -> {Shared.Maybe.is_eq(~Entry(mach), ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)), m, Some{e}) == True{}: Bool}
+  -> {
+    Shared.Maybe.is_eq(
+      ~Entry(mach),
+      ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
+      Led.get(~mach, ~d, b, n),
+      Some{e}
+    )
+      == True{}: Bool
+  }:
+  match m:
+    case None{}:
+      em => h => Empty.absurd(
+        {
+          Shared.Maybe.is_eq(
+            ~Entry(mach),
+            ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
+            Led.get(~mach, ~d, b, n),
+            Some{e}
+          )
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(h)
+      )
+    case Some{y}:
+      em => h =>
+        %Equal.sym(Maybe<&2, Entry(mach)>, Led.get(~mach, ~d, b, n), Some{y}, g(n)(y)(em)): {
+          Shared.Maybe.is_eq(~Entry(mach), ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)), _, Some{e})
+            == True{}: Bool
+        }
+        h
+
+# what a ledger holds, a ledger that grows holds
+def Hist.has_grows(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +e: Entry(mach),
+  g: Led.Grows(mach, d, a, b)
+) -> {Ledgers.Kind.has(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, e) == True{}: Bool}
+  -> {Ledgers.Kind.has(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), b, e) == True{}: Bool}:
+  h => Hist.has_grows.at(
+    ~mach,
+    ~d,
+    a,
+    b,
+    Entry.name(~mach, e),
+    e,
+    Led.get(~mach, ~d, a, Entry.name(~mach, e)),
+    g
+  )({==})(h)
+
+# the height bound of a line grows with the ledger, once a ballot at it is
+# known (ex)
+def Hist.heights.of(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  ex: Exists(
+    Ledgers.Ballot,
+    bl => {
+      Ledgers.Kind.has(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, Ledgers.Entry.Ballot{bl}) == True{}: Bool
+    }
+      & Exists(
+        U32,
+        h => Exists(
+          Nat,
+          r => {
+            Ledgers.Ballot.is_at(bl, Ledgers.Place{c, h, r}, Ledgers.Ballot.voter(bl)) == True{}: Bool
+          }
+            & {U32.to_nat(h) == Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(a)(c): Nat}
+        )
+      )
+  )
+) -> {
+  Nat.is_le(
+    Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(a)(c),
+    Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(b)(c)
+  )
+    == True{}: Bool
+}:
+  match ex:
+    case Tuple{+bl, Tuple{hasa, Tuple{+h, Tuple{+r, Tuple{isat, eh}}}}}:
+      %eh: {Nat.is_le(_, Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(b)(c)) == True{}: Bool}
+      Hist.laws.heights1(
+        Machine.Q(mach),
+        Machine.code(mach),
+        Led.kind(mach, d),
+        Hist.laws(mach, d)
+      )(
+        b
+      )(
+        bl
+      )(
+        c
+      )(
+        h
+      )(
+        r
+      )(
+        Ledgers.Ballot.voter(bl)
+      )(Hist.has_grows(~mach, ~d, a, b, Ledgers.Entry.Ballot{bl}, lg(a)(b)(later))(hasa))(isat)
+
+# the height bound of a line grows with the ledger, once it is known (n)
+def Hist.heights.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  n: Nat
+) -> {Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(a)(c) == n: Nat} -> {
+  Nat.is_le(
+    Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(a)(c),
+    Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(b)(c)
+  )
+    == True{}: Bool
+}:
+  match n:
+    case 0n:
+      en =>
+        %Equal.sym(Nat, Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(a)(c), 0n, en): {
+          Nat.is_le(_, Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(b)(c)) == True{}: Bool
+        }
+        Shared.Nat.le_zero(Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(b)(c))
+    case 1n+p:
+      en => Hist.heights.of(
+        ~mach,
+        ~d,
+        ~lg,
+        a,
+        b,
+        later,
+        c,
+        Hist.laws.heights2(
+          Machine.Q(mach),
+          Machine.code(mach),
+          Led.kind(mach, d),
+          Hist.laws(mach, d)
+        )(a)(c)(Hist.ne_zero(Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(a)(c), p, en))
+      )
+
 # one history: the tip of a line after a number of steps stays as the ledger
 # grows, while its ballots are honest. So two replicas whose ledgers an
 # honest ledger holds are, after the same number of steps, at the same tip:
