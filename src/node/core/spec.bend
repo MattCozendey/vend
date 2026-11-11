@@ -3102,6 +3102,32 @@ def Answer.merged_follows.at(
     case False{} False{}:
       {==}
 
+# Answer.merged follows itself once the reads of the clashes (m, m2) are
+# known: a read that told, tells in the next
+def Answer.merged_follows.of(
+  m: Maybe<&2, Bool>,
+  m2: Maybe<&2, Bool>,
+  +k: Ledgers.Id,
+  kn: {Maybe.is_some(&2, Bool, m) == True{}: Bool} -> {Maybe.is_some(&2, Bool, m2) == True{}: Bool}
+) -> {Answer.follows(Answer.merged.of(m, k), Some{Answer.merged.of(m2, k)}) == True{}: Bool}:
+  match m m2:
+    case None{} y:
+      {==}
+    case Some{p} None{}:
+      Empty.absurd(
+        {Answer.follows(Answer.merged.of(Some{p}, k), Some{Answer.merged.of(None{}, k)}) == True{}: Bool},
+        Shared.Bool.false_ne_true(kn({==}))
+      )
+    case Some{+p} Some{+p2}:
+      Answer.merged_follows.at(p, p2, k)
+
+# that a read of the clashes of a merge that told in the first ledger and tree
+# tells in the second
+def Answer.Known(~d: Led(), l: L(d), h: Maybe<&2, Hashes.Hash>, l2: L(d), h2: Maybe<&2, Hashes.Hash>) -> Type:
+  @k: Ledgers.Id -> {Maybe.is_some(&2, Bool, Clash.left(~d, l, h, k)) == True{}: Bool} -> {
+    Maybe.is_some(&2, Bool, Clash.left(~d, l2, h2, k)) == True{}: Bool
+  }
+
 # Answer.merged follows itself at another ledger and tree
 def Answer.merged_follows(
   ~d: Led(),
@@ -3109,9 +3135,10 @@ def Answer.merged_follows(
   l2: L(d),
   h: Maybe<&2, Hashes.Hash>,
   h2: Maybe<&2, Hashes.Hash>,
-  +k: Ledgers.Id
+  +k: Ledgers.Id,
+  kn: Answer.Known(~d, l, h, l2, h2)
 ) -> {Answer.follows(Answer.merged(~d, l, h, k), Some{Answer.merged(~d, l2, h2, k)}) == True{}: Bool}:
-  Answer.merged_follows.at(Clash.left(~d, l, h, k), Clash.left(~d, l2, h2, k), k)
+  Answer.merged_follows.of(Clash.left(~d, l, h, k), Clash.left(~d, l2, h2, k), k, kn(k))
 
 # Answer.taken follows itself at another ledger and tree: the merge that a
 # change names is its own
@@ -3122,7 +3149,8 @@ def Answer.taken_follows(
   h: Maybe<&2, Hashes.Hash>,
   h2: Maybe<&2, Hashes.Hash>,
   +i: Ledgers.Id,
-  +q: Requests.Ask
+  +q: Requests.Ask,
+  kn: Answer.Known(~d, l, h, l2, h2)
 ) -> {Answer.follows(Answer.taken(~d, l, h, i, q), Some{Answer.taken(~d, l2, h2, i, q)}) == True{}: Bool}:
   match q:
     case Requests.Ask.Start{os}:
@@ -3136,9 +3164,9 @@ def Answer.taken_follows(
     case Requests.Ask.On{st, b, Requests.Change.Write{n, base, x}}:
       {==}
     case Requests.Ask.On{st, b, Requests.Change.Resolve{k, n, x}}:
-      Answer.merged_follows(~d, l, l2, h, h2, k)
+      Answer.merged_follows(~d, l, l2, h, h2, k, kn)
     case Requests.Ask.On{st, b, Requests.Change.Merge{v, base}}:
-      Answer.merged_follows(~d, l, l2, h, h2, i)
+      Answer.merged_follows(~d, l, l2, h, h2, i, kn)
     case Requests.Ask.On{st, b, Requests.Change.Move{v}}:
       {==}
     case Requests.Ask.On{st, b, Requests.Change.Mark{m, text}}:
@@ -3173,7 +3201,8 @@ def Answer.out_follows.taken(
   h2: Maybe<&2, Hashes.Hash>,
   +i: Ledgers.Id,
   +q: Requests.Ask,
-  +p: Bool
+  +p: Bool,
+  kn: Answer.Known(~d, l, h, l2, h2)
 ) -> {
   Answer.follows(
     Shared.Bool.when(Answer, p, u => Answer.taken(~d, l, h, i, q), u => Answer.Refused{}),
@@ -3183,7 +3212,7 @@ def Answer.out_follows.taken(
 }:
   match p:
     case True{}:
-      Answer.taken_follows(~d, l, l2, h, h2, i, q)
+      Answer.taken_follows(~d, l, l2, h, h2, i, q, kn)
     case False{}:
       {==}
 
@@ -3198,7 +3227,8 @@ def Answer.out_follows(
   +i: Ledgers.Id,
   +q: Requests.Ask,
   +a: Hashes.Hash,
-  o: Maybe<&2, Replicas.Out>
+  o: Maybe<&2, Replicas.Out>,
+  kn: Answer.Known(~d, l, Replicas.Tip.content(t), l2, Replicas.Tip.content(t2))
 ) -> {
   Answer.follows(Answer.out(~d, l, t, i, q, a, o), Some{Answer.out(~d, l2, t2, i, q, a, o)}) == True{}: Bool
 }:
@@ -3216,7 +3246,8 @@ def Answer.out_follows(
         Replicas.Tip.content(t2),
         i,
         q,
-        Hashes.Hash.is_eq(x, a)
+        Hashes.Hash.is_eq(x, a),
+        kn
       )
 
 # Answer.at follows itself once the outcome is read from two words (g1 at the
@@ -3232,7 +3263,8 @@ def Answer.at_follows.words(
   +a: Hashes.Hash,
   g1: Maybe<&2, List<&2, U32>>,
   g2: Maybe<&2, List<&2, U32>>,
-  keep: @ws: List<&2, U32> -> {g1 == Some{ws}: Maybe<&2, List<&2, U32>>} -> {g2 == Some{ws}: Maybe<&2, List<&2, U32>>}
+  keep: @ws: List<&2, U32> -> {g1 == Some{ws}: Maybe<&2, List<&2, U32>>} -> {g2 == Some{ws}: Maybe<&2, List<&2, U32>>},
+  kn: Answer.Known(~d, l, Replicas.Tip.content(t), l2, Replicas.Tip.content(t2))
 ) -> {
   Answer.follows(
     Answer.out(~d, l, t, i, q, a, Codes.Code.whole.of(~Replicas.Out, ~Replicas.Out.code, ~Replicas.Out.code.read, g1)),
@@ -3255,7 +3287,7 @@ def Answer.at_follows.words(
         )
           == True{}: Bool
       }
-      Answer.out_follows(~d, l, l2, t, t2, i, q, a, Codes.Code.whole.of(~Replicas.Out, ~Replicas.Out.code, ~Replicas.Out.code.read, Some{ws}))
+      Answer.out_follows(~d, l, l2, t, t2, i, q, a, Codes.Code.whole.of(~Replicas.Out, ~Replicas.Out.code, ~Replicas.Out.code.read, Some{ws}), kn)
 
 # Answer.at follows Pending: no outcome words are read at the first tip
 def Answer.at_follows.pending(
@@ -3311,7 +3343,14 @@ def Answer.at_follows.tip(
       t2 => Replicas.Tip.get(~Requests.Ask.machine(), ~d, b, t2, Replicas.Log.out(i))
     )
       == Some{ws}: Maybe<&2, List<&2, U32>>
-  }
+  },
+  kn: @t2: Replicas.Tip -> {m2 == Some{t2}: Maybe<&2, Replicas.Tip>} -> Answer.Known(
+    ~d,
+    a,
+    Replicas.Tip.content(t),
+    b,
+    Replicas.Tip.content(t2)
+  )
 ) -> {Answer.follows(Answer.at(~d, a, i, q, h, Some{t}), Some{Answer.at(~d, b, i, q, h, m2)}) == True{}: Bool}:
   match m2:
     case None{}:
@@ -3337,7 +3376,8 @@ def Answer.at_follows.tip(
         h,
         Replicas.Tip.get(~Requests.Ask.machine(), ~d, a, t, Replicas.Log.out(i)),
         Replicas.Tip.get(~Requests.Ask.machine(), ~d, b, t2, Replicas.Log.out(i)),
-        keep
+        keep,
+        kn(t2)({==})
       )
 
 # what Replicas.Line.get_grows says of the ledger d and the kernel kern: what
@@ -3422,7 +3462,10 @@ def Answer.at_follows.head(
   m1: Maybe<&2, Replicas.Tip>,
   +m2: Maybe<&2, Replicas.Tip>,
   +e1: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c) == m1: Maybe<&2, Replicas.Tip>},
-  +e2: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c) == m2: Maybe<&2, Replicas.Tip>}
+  +e2: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c) == m2: Maybe<&2, Replicas.Tip>},
+  kn: @t: Replicas.Tip -> @t2: Replicas.Tip -> {m1 == Some{t}: Maybe<&2, Replicas.Tip>} -> {
+    m2 == Some{t2}: Maybe<&2, Replicas.Tip>
+  } -> Answer.Known(~d, a, Replicas.Tip.content(t), b, Replicas.Tip.content(t2))
 ) -> {Answer.follows(Answer.at(~d, a, i, q, h, m1), Some{Answer.at(~d, b, i, q, h, m2)}) == True{}: Bool}:
   match m1:
     case None{}:
@@ -3437,7 +3480,8 @@ def Answer.at_follows.head(
         i,
         q,
         h,
-        ws => hw => Answer.at_follows.keep(~d, ~kern, a, b, c, i, t, m2, g, stays, e1, e2, ws, hw)
+        ws => hw => Answer.at_follows.keep(~d, ~kern, a, b, c, i, t, m2, g, stays, e1, e2, ws, hw),
+        t2 => e2x => kn(t)(t2)({==})(e2x)
       )
 
 # Answer.of follows itself in a later state of the ledger
@@ -3451,7 +3495,12 @@ def Answer.of_follows(
   +h: Hashes.Hash,
   g: Replicas.Led.Later(~Requests.Ask.machine(), ~d, a, b),
   stays: Answer.Stays(~d, ~kern),
-  w: Replicas.Arrival
+  w: Replicas.Arrival,
+  kn: @c: Ledgers.Line -> @t: Replicas.Tip -> @t2: Replicas.Tip -> {
+    Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c) == Some{t}: Maybe<&2, Replicas.Tip>
+  } -> {
+    Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c) == Some{t2}: Maybe<&2, Replicas.Tip>
+  } -> Answer.Known(~d, a, Replicas.Tip.content(t), b, Replicas.Tip.content(t2))
 ) -> {Answer.follows(Answer.of(~d, ~kern, a, i, q, h, w), Some{Answer.of(~d, ~kern, b, i, q, h, w)}) == True{}: Bool}:
   match w:
     case Replicas.Arrival.Starts{vs}:
@@ -3471,7 +3520,8 @@ def Answer.of_follows(
         Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c),
         Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c),
         {==},
-        {==}
+        {==},
+        t => t2 => e1 => e2 => kn(c)(t)(t2)(e1)(e2)
       )
 
 # an entry that a holds is held by b, when b holds what a held under its name
@@ -3546,7 +3596,12 @@ def Node.answer_follows.go(
   +x: Answer,
   +g: Replicas.Led.Later(~Requests.Ask.machine(), ~d, a, b),
   stays: Answer.Stays(~d, ~kern),
-  e: {Node.answer(~d, ~kern, a, i, time, q) == Some{x}: Maybe<&2, Answer>}
+  e: {Node.answer(~d, ~kern, a, i, time, q) == Some{x}: Maybe<&2, Answer>},
+  kn: @c: Ledgers.Line -> @t: Replicas.Tip -> @t2: Replicas.Tip -> {
+    Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c) == Some{t}: Maybe<&2, Replicas.Tip>
+  } -> {
+    Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c) == Some{t2}: Maybe<&2, Replicas.Tip>
+  } -> Answer.Known(~d, a, Replicas.Tip.content(t), b, Replicas.Tip.content(t2))
 ) -> {Answer.follows(x, Node.answer(~d, ~kern, b, i, time, q)) == True{}: Bool}:
   Node.answer_follows.when(
     Replicas.Led.has(~Requests.Ask.machine(), ~d, a, Ledgers.Entry.Ask{i, time, q}),
@@ -3565,7 +3620,8 @@ def Node.answer_follows.go(
       Ledgers.Name.hash(Replicas.Entry.name(~Requests.Ask.machine(), Ledgers.Entry.Ask{i, time, q})),
       g,
       stays,
-      Requests.Ask.arrival(q)
+      Requests.Ask.arrival(q),
+      kn
     ),
     e
   )
@@ -3588,20 +3644,6 @@ law Node.answer_follows:
     l => Node.answer(~d, ~kern, l, i, time, q)
   )
 
-def Node.answer_follows(d, kern, rules, i, time, q):
-  a => b => x => g => e => Node.answer_follows.go(
-    ~d,
-    ~kern,
-    a,
-    b,
-    i,
-    time,
-    q,
-    x,
-    g,
-    c => key => Replicas.Line.get_grows(~Requests.Ask.machine(), ~d, ~kern, c, key),
-    e
-  )
 
 # MERGE-HELPERS-BEGIN
 # Merging, one tree at a time
