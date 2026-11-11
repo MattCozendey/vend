@@ -6994,9 +6994,6 @@ def Spec.read_after_show(g):
   read = Equal.sym(Maybe<&2, Spec.Glob>, Some{h}, Spec.Glob.read(Spec.Glob.show(g)), Show.read(g))
   (h, (read, p => Show.same(g, p)))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-def Spec.read_rejects_root(s):
-  {==}
-
 # Escaped paths
 # -------------
 

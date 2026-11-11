@@ -17,6 +17,17 @@ type Member is Data:
   Member.Node{name: String}
   Member.Group{name: String}
 
+# a version of a store, named from inside the store: the branch that made it
+# (none: the store itself), and the request that made it
+type Ref is Data:
+  Ref{branch: Maybe<&2, String>, id: Ledgers.Id}
+
+# content that a change takes from a version: the version that it is said to
+# be of, and the root of the tree. A change carries the root, so its line
+# never reads another line; the version is a claim, which a reader can check
+type Source is Data:
+  Source{version: Ref, root: Maybe<&2, Hashes.Hash>}
+
 # new content: what a node holds under a root (the root of the rope of its
 # bytes: Content.of), or what an old version held. A change names its content
 # and does not carry it, so a change of a huge resource is small
@@ -31,21 +42,21 @@ type Content is Data:
 # its members. Own: the line's owner group is group, whose nodes, in the tree
 # of the step at of the store (a store reads its own tree), are owners
 type Change is Data:
-  Change.Branch{name: String, at: Maybe<&2, Ledgers.Id>}
+  Change.Branch{name: String, at: Maybe<&2, Source>}
   Change.Group{name: String, members: List<&2, Member>}
-  Change.Own{group: String, at: Maybe<&2, Ledgers.Id>, owners: List<&2, String>}
+  Change.Own{group: String, at: Maybe<&2, Source>, owners: List<&2, String>}
   Change.Write{name: Resources.Name, base: Maybe<&2, Ledgers.Id>, content: Content}
   Change.Resolve{conflict: Ledgers.Id, name: Resources.Name, content: Content}
-  Change.Merge{from: Ledgers.Id}
-  Change.Move{to: Ledgers.Id}
+  Change.Merge{from: Source, base: Maybe<&2, Source>}
+  Change.Move{to: Source}
   Change.Mark{mark: String, message: String}
   Change.Key{node: String, key: Hashes.Hash}
 
 # a change that a writer asks for: a store that starts with its first owners,
 # or a change of a branch of a store (none: of the store itself)
 type Ask is Data:
-  Ask.Start{owners: List<&2, Replicas.Owner>}
-  Ask.On{store: Ledgers.Id, branch: Maybe<&2, String>, change: Change}
+  Ask.Start{owners: List<&2, Replicas.Voter>}
+  Ask.On{store: Hashes.Hash, branch: Maybe<&2, String>, change: Change}
 
 # the version m, if any (where a line starts, or the base of a write), then r
 def Base.code(m: Maybe<&2, Ledgers.Id>, r: List<&2, U32>) -> List<&2, U32>:
@@ -66,6 +77,96 @@ def Target.code(m: Maybe<&2, String>, r: List<&2, U32>) -> List<&2, U32>:
 # a branch, if any
 def Target.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Maybe<&2, String>>>:
   Codes.Code.maybe.read(~String, ~Codes.Code.text.read, ts)
+
+# the version v, then r
+def Ref.code(v: Ref, r: List<&2, U32>) -> List<&2, U32>:
+  match v:
+    case Ref{b, i}:
+      Target.code(b, Ledgers.Id.code(i, r))
+
+# a version
+def Ref.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ref>>:
+  Codes.Code.two.read(
+    ~Maybe<&2, String>,
+    ~Ledgers.Id,
+    ~Ref,
+    ~Target.code.read,
+    ~Ledgers.Id.code.read,
+    b => i => Ref{b, i},
+    ts
+  )
+
+# a version reads back
+def Ref.code_read(
+  v: Ref,
+  r: List<&2, U32>
+) -> {Ref.code.read(Ref.code(v, r)) == Some{Codes.Read{v, r}}: Maybe<&2, Codes.Read<Ref>>}:
+  match v:
+    case Ref{b, i}:
+      Codes.Code.two_read(
+        ~Maybe<&2, String>,
+        ~Ledgers.Id,
+        ~Ref,
+        ~Codes.Code.maybe.codec(~String, ~Codes.Code.text.codec()),
+        ~Ledgers.Id.codec(),
+        x => y => Ref{x, y},
+        b,
+        i,
+        r
+      )
+
+# the code of versions
+def Ref.codec() -> Codes.Codec(Ref):
+  (Ref.code, (Ref.code.read, v => r => Ref.code_read(v, r)))
+
+# the source s, then r
+def Source.code(s: Source, r: List<&2, U32>) -> List<&2, U32>:
+  match s:
+    case Source{v, h}:
+      Ref.code(v, Codes.Code.maybe(~Hashes.Hash, ~Hashes.Hash.code, h, r))
+
+# a source
+def Source.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Source>>:
+  Codes.Code.two.read(
+    ~Ref,
+    ~Maybe<&2, Hashes.Hash>,
+    ~Source,
+    ~Ref.code.read,
+    ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Hashes.Hash.code.read, m)),
+    v => h => Source{v, h},
+    ts
+  )
+
+# a source reads back
+def Source.code_read(
+  s: Source,
+  r: List<&2, U32>
+) -> {Source.code.read(Source.code(s, r)) == Some{Codes.Read{s, r}}: Maybe<&2, Codes.Read<Source>>}:
+  match s:
+    case Source{v, h}:
+      Codes.Code.two_read(
+        ~Ref,
+        ~Maybe<&2, Hashes.Hash>,
+        ~Source,
+        ~Ref.codec(),
+        ~Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec()),
+        x => y => Source{x, y},
+        v,
+        h,
+        r
+      )
+
+# the code of sources
+def Source.codec() -> Codes.Codec(Source):
+  (Source.code, (Source.code.read, s => r => Source.code_read(s, r)))
+
+# the source m, if any, then r
+def At.code(m: Maybe<&2, Source>, r: List<&2, U32>) -> List<&2, U32>:
+  Codes.Code.maybe(~Source, ~Source.code, m, r)
+
+# a source, if any
+def At.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Maybe<&2, Source>>>:
+  Codes.Code.maybe.read(~Source, ~Source.code.read, ts)
 
 # the member l, then r
 def Member.code(l: Member, r: List<&2, U32>) -> List<&2, U32>:
@@ -149,17 +250,17 @@ def Content.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Content>>:
 def Change.code(c: Change, r: List<&2, U32>) -> List<&2, U32>:
   match c:
     case Change.Branch{n, at}:
-      0 <> Codes.Code.text(n, Base.code(at, r))
+      0 <> Codes.Code.text(n, At.code(at, r))
     case Change.Own{g, at, os}:
-      1 <> Codes.Code.text(g, Base.code(at, Ledgers.Owners.code(os, r)))
+      1 <> Codes.Code.text(g, At.code(at, Ledgers.Voters.code(os, r)))
     case Change.Write{n, base, x}:
       2 <> Resources.Name.code(n, Base.code(base, Content.code(x, r)))
     case Change.Resolve{k, n, x}:
       3 <> Ledgers.Id.code(k, Resources.Name.code(n, Content.code(x, r)))
-    case Change.Merge{v}:
-      4 <> Ledgers.Id.code(v, r)
+    case Change.Merge{v, b}:
+      4 <> Source.code(v, At.code(b, r))
     case Change.Move{v}:
-      5 <> Ledgers.Id.code(v, r)
+      5 <> Source.code(v, r)
     case Change.Mark{m, t}:
       6 <> Codes.Code.text(m, Codes.Code.text(t, r))
     case Change.Group{g, ms}:
@@ -174,10 +275,10 @@ def Change.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Chan
     U32.is_eq(x, 0),
     u => Codes.Code.two.read(
       ~String,
-      ~Maybe<&2, Ledgers.Id>,
+      ~Maybe<&2, Source>,
       ~Change,
       ~Codes.Code.text.read,
-      ~Base.code.read,
+      ~At.code.read,
       n => a => Change.Branch{n, a},
       r
     ),
@@ -186,12 +287,12 @@ def Change.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Chan
       U32.is_eq(x, 1),
       u => Codes.Code.three.read(
         ~String,
-        ~Maybe<&2, Ledgers.Id>,
+        ~Maybe<&2, Source>,
         ~List<&2, String>,
         ~Change,
         ~Codes.Code.text.read,
-        ~Base.code.read,
-        ~Ledgers.Owners.code.read,
+        ~At.code.read,
+        ~Ledgers.Voters.code.read,
         g => a => os => Change.Own{g, a, os},
         r
       ),
@@ -226,20 +327,22 @@ def Change.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Chan
           u => Shared.Bool.when(
             Maybe<&2, Codes.Read<Change>>,
             U32.is_eq(x, 4),
-            u => Codes.Code.one.read(
-              ~Ledgers.Id,
+            u => Codes.Code.two.read(
+              ~Source,
+              ~Maybe<&2, Source>,
               ~Change,
-              ~Ledgers.Id.code.read,
-              v => Change.Merge{v},
+              ~Source.code.read,
+              ~At.code.read,
+              v => b => Change.Merge{v, b},
               r
             ),
             u => Shared.Bool.when(
               Maybe<&2, Codes.Read<Change>>,
               U32.is_eq(x, 5),
               u => Codes.Code.one.read(
-                ~Ledgers.Id,
+                ~Source,
                 ~Change,
-                ~Ledgers.Id.code.read,
+                ~Source.code.read,
                 v => Change.Move{v},
                 r
               ),
@@ -302,9 +405,9 @@ def Change.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Change>>:
 def Ask.code(q: Ask, r: List<&2, U32>) -> List<&2, U32>:
   match q:
     case Ask.Start{os}:
-      0 <> Codes.Code.list(~Replicas.Owner, ~Replicas.Owner.code, os, r)
+      0 <> Codes.Code.list(~Replicas.Voter, ~Replicas.Voter.code, os, r)
     case Ask.On{st, l, c}:
-      1 <> Ledgers.Id.code(st, Target.code(l, Change.code(c, r)))
+      1 <> Hashes.Hash.code(st, Target.code(l, Change.code(c, r)))
 
 # a request
 def Ask.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ask>>:
@@ -316,9 +419,9 @@ def Ask.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ask>>:
         Maybe<&2, Codes.Read<Ask>>,
         U32.is_eq(x, 0),
         u => Codes.Code.one.read(
-          ~List<&2, Replicas.Owner>,
+          ~List<&2, Replicas.Voter>,
           ~Ask,
-          ~(m => Codes.Code.list.read(~Replicas.Owner, ~Replicas.Owner.code.read, m)),
+          ~(m => Codes.Code.list.read(~Replicas.Voter, ~Replicas.Voter.code.read, m)),
           os => Ask.Start{os},
           r
         ),
@@ -326,11 +429,11 @@ def Ask.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ask>>:
           Maybe<&2, Codes.Read<Ask>>,
           U32.is_eq(x, 1),
           u => Codes.Code.three.read(
-            ~Ledgers.Id,
+            ~Hashes.Hash,
             ~Maybe<&2, String>,
             ~Change,
             ~Ask,
-            ~Ledgers.Id.code.read,
+            ~Hashes.Hash.code.read,
             ~Target.code.read,
             ~Change.code.read,
             s => l => c => Ask.On{s, l, c},
@@ -339,10 +442,6 @@ def Ask.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Ask>>:
           u => None{}
         )
       )
-
-# a and b are the same request: they have the same code
-def Ask.is_eq(a: Ask, b: Ask) -> Bool:
-  Codes.Code.is_eq(~Ask, ~Ask.code, a, b)
 
 # a member reads back
 def Member.code_read(
@@ -385,10 +484,10 @@ def Change.code_read(
     case Change.Branch{n, at}:
       Codes.Code.two_read(
         ~String,
-        ~Maybe<&2, Ledgers.Id>,
+        ~Maybe<&2, Source>,
         ~Change,
         ~Codes.Code.text.codec(),
-        ~Codes.Code.maybe.codec(~Ledgers.Id, ~Ledgers.Id.codec()),
+        ~Codes.Code.maybe.codec(~Source, ~Source.codec()),
         a => b => Change.Branch{a, b},
         n,
         at,
@@ -409,11 +508,11 @@ def Change.code_read(
     case Change.Own{g, at, os}:
       Codes.Code.three_read(
         ~String,
-        ~Maybe<&2, Ledgers.Id>,
+        ~Maybe<&2, Source>,
         ~List<&2, String>,
         ~Change,
         ~Codes.Code.text.codec(),
-        ~Codes.Code.maybe.codec(~Ledgers.Id, ~Ledgers.Id.codec()),
+        ~Codes.Code.maybe.codec(~Source, ~Source.codec()),
         ~Codes.Code.list.codec(~String, ~Codes.Code.text.codec()),
         a => b => c => Change.Own{a, b, c},
         g,
@@ -451,10 +550,20 @@ def Change.code_read(
         c,
         r
       )
-    case Change.Merge{v}:
-      Codes.Code.one_read(~Ledgers.Id, ~Change, ~Ledgers.Id.codec(), a => Change.Merge{a}, v, r)
+    case Change.Merge{v, b}:
+      Codes.Code.two_read(
+        ~Source,
+        ~Maybe<&2, Source>,
+        ~Change,
+        ~Source.codec(),
+        ~Codes.Code.maybe.codec(~Source, ~Source.codec()),
+        x => y => Change.Merge{x, y},
+        v,
+        b,
+        r
+      )
     case Change.Move{v}:
-      Codes.Code.one_read(~Ledgers.Id, ~Change, ~Ledgers.Id.codec(), a => Change.Move{a}, v, r)
+      Codes.Code.one_read(~Source, ~Change, ~Source.codec(), a => Change.Move{a}, v, r)
     case Change.Mark{m, n}:
       Codes.Code.two_read(
         ~String,
@@ -492,20 +601,20 @@ def Ask.code_read(
   match x:
     case Ask.Start{os}:
       Codes.Code.one_read(
-        ~List<&2, Replicas.Owner>,
+        ~List<&2, Replicas.Voter>,
         ~Ask,
-        ~Codes.Code.list.codec(~Replicas.Owner, ~Replicas.Owner.codec()),
+        ~Codes.Code.list.codec(~Replicas.Voter, ~Replicas.Voter.codec()),
         a => Ask.Start{a},
         os,
         r
       )
     case Ask.On{st, l, c}:
       Codes.Code.three_read(
-        ~Ledgers.Id,
+        ~Hashes.Hash,
         ~Maybe<&2, String>,
         ~Change,
         ~Ask,
-        ~Ledgers.Id.codec(),
+        ~Hashes.Hash.codec(),
         ~Codes.Code.maybe.codec(~String, ~Codes.Code.text.codec()),
         ~Change.codec(),
         a => b => c => Ask.On{a, b, c},
@@ -519,18 +628,13 @@ def Ask.code_read(
 def Ask.codec() -> Codes.Codec(Ask):
   (Ask.code, (Ask.code.read, x => r => Ask.code_read(x, r)))
 
-# the laws of Spec.Ask.is_eq: two requests are the same exactly when their codes
-# are
-def Ask.laws() -> Shared.Eq.Laws(Ask, Ask.is_eq):
-  Codes.Code.eq_laws(~Ask, ~Ask.codec())
-
 # how the request q arrives at a node
 def Ask.arrival(q: Ask) -> Replicas.Arrival:
   match q:
     case Ask.Start{os}:
       Replicas.Arrival.Starts{os}
     case Ask.On{r, l, c}:
-      Replicas.Arrival.Waits{r, l}
+      Replicas.Arrival.Waits{Ledgers.Line{r, l}}
 
 # the change q is one of who decides: a first key of a node, a group, the
 # owners of a line, or a new branch. The owners of a store decide these, so an
@@ -552,7 +656,8 @@ def Ask.governs(q: Ask) -> Bool:
 def Key.seal(n: String) -> List<&2, U32>:
   8 <> Codes.Code.text(n, [])
 
-# the machine of Vend: its requests, when two are the same, how one arrives,
-# whether it changes who decides, and the key of a node's first key
+# the machine of Vend: its requests, their code (two requests are the same
+# when their codes are), how one arrives, whether it changes who decides, and
+# the key of a node's first key
 def Ask.machine() -> Replicas.Machine():
-  (Ask, (Ask.is_eq, (Ask.laws(), (Ask.arrival, (Ask.governs, Key.seal)))))
+  (Ask, (Ask.codec(), (Ask.arrival, (Ask.governs, Key.seal))))

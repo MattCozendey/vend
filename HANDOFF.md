@@ -1,196 +1,234 @@
-# HANDOFF
+# Handoff
 
-Checkpoint of the "compression by simplification" work. Written for an agent or a person who
-continues with no other context.
+This file states what must hold, and the types and defs that make it hold. It does not say how to
+build anything: a better implementation is free to exist, if the invariants hold.
 
-## 1. Branches
+## State
 
-| Branch | State |
-|---|---|
-| `master` | The start (`ec7c3fd`). |
-| `feature/refactor-4` | An older fully checked state (`b4fa0da`). |
-| `feature/refactor-5` | Tip `36aa821`. Every entry file prints ALL PROOFS CHECK, `bun run lint` ends with `0 finding(s)`, `git diff --check` is clean. |
-| `claude/vend-refactor-5-u8119r` | The working branch of the last agent; same tip as `feature/refactor-5`. |
+Check a file with `bend <file> --check-only`. Every file type-checks. Nothing was proven in the
+last rounds: the work was to state laws and to construct types.
 
-## 2. The goal (the owner's words, short)
+| File | Result |
+| --- | --- |
+| `src/shared/shared/shared/pack.bend` | 1 open law |
+| Every other file under `src/shared` but `replica.bend` | ALL PROOFS CHECK |
+| `src/shared/replica.bend` | 3 open laws |
+| `src/node/core/spec.bend` | 5 open laws (and the 4 above) |
+| `src/node/transport/spec.bend` | 33 IO declarations, no implementation |
+| `src/glob/impl.bend` | ALL PROOFS CHECK |
 
-- Find what is general and move it to `src/shared`; the domains (`src/node`, `src/glob`) state fewer
-  things.
-- Guarantees hold by construction (design), not by many laws. One concept, one representation
-  (exception: a faster form that is proven the same).
-- No scope gets smaller. Fast, scalable, proven. No quadratic def on a run path.
-- "Leave nothing open. Always prefer the widest, strongest statements."
-- `README.md` is the canon and must stay true. Its line 3: only human hands change it, and code or
-  docs that state less than its strongest claims are wrong.
+There is no implementation of a ledger, of a replica or of Vend's kernel. They are stated as records
+(below).
 
-## 3. Layout
+## How correctness is built in
 
-```
-src/shared/replica.bend                       generic replicated machine (code, then "# Proofs")
-src/shared/shared/{ledger,tree,rope,formats,regex,search}.bend
-src/shared/shared/shared/{quorum,reach,text,store,keyset,spans}.bend
-src/shared/shared/shared/shared/{trie,cell,hash,hash.test,code,seal,shared}.bend
-src/node/core/{spec,impl}.bend                Vend's domain (spec: types, body-less op laws, claims)
-src/node/transport/spec.bend                  spec only; its open laws are expected
-src/node/shared/requests.bend                 Vend's requests and their machine
-src/node/shared/shared/{resources,uris}.bend
-src/glob/{spec,impl}.bend
-```
+1. **An interface is a record that holds its own laws.** A value of the record type is a proof. The
+   repo already did this for `Codec`. It now does it for:
+   - `Ledgers.Ledger(Q, c)`: `Ledger.Kind` (the operations) and `Ledger.Laws`.
+   - `Replicas.Kernel(mach, d)`: what a request does, and `Kernel.Stable`.
+   - `Replicas.Replica(mach, d, kern)`: `Replica.Kind` (the operations) and `Replica.Laws`.
+   - `Core.Kernel(d)`: a kernel of Vend, and `Kernel.Rules`.
+2. **Every answer is a read of a ledger.** `Replicas.Line.head`, `Line.at` and `Line.get` are pure
+   defs over a ledger. Every `Core.Node.*` read is a pure def over them. No answer reads the state
+   of a replica. So two nodes that hold the same entries give the same answers.
+3. **An entry is under the name that its content gives it.** `Ledgers.Entry.name` is the kind and
+   the hash. A step names its requests by hash (`Step.asks`). The root of a line is the hash of the
+   request that started it (`Line.root`).
+4. **A request ID names one request for good, and the owners decide which.** The log holds, for an
+   ID, the hash of the entry that got the outcome (`Replicas.Out`). Another entry with that ID is
+   `Refused` on every node.
+5. **A kernel gives an act, not a state.** `Replicas.Act` is data to add and a result. A kernel
+   cannot change a log, a ballot or a request.
+6. **A log only gains keys.** `Replicas.Run.add` is the one def that writes a log, and it refuses a
+   key that the log holds.
+7. **No rule reads another line.** A rule of Vend reads the ledger and the tip of its own line. The
+   content of another line comes with the change, as `Requests.Source`: the root of a tree, and the
+   version that it is said to be of. So the history of a line never depends on the history of
+   another line, and `Kernel.Stable` needs no premise about ballots.
+8. **Vend's kernel is one def.** `Core.Ask.act` says what every request does. `Kernel.Rules` is
+   one equation: the kernel does what `Ask.act` says. What a node asks by itself is `Own.due`.
+9. **The owners keep each part of what they decide.** A rule waits until the ledger holds the bytes
+   and the trees of its result (`Root.held`, `Tree.kept`). A replica holds what its votes run
+   (`Replica.Runs`).
+10. **Trust is two defs.** `Replicas.Led.Single` (one vote at a place, one pass to it) and
+    `Replicas.Rounds.Last` (a pass names the last vote). `Led.Honest` is both. No law assumes more.
+11. **A key signs one ballot.** `Replicas.Key.secret` is a hash of the seed of a replica, the root
+    and the number of the ballot. A replica keeps only its seed.
 
-The replica is generic over `~mach: Machine()` and `~kern: Kernel(mach)`. A kernel returns an act
-(`Act.Stale`, `Act.Mark`, `Act.Judged`, `Act.Made`), and the replica does it (`Act.run`). So the
-machine laws hold for every kernel. `Lawful` is left only as internal plumbing that
-`Kernel.lawful` builds from any kernel; no law assumes it.
+## What must be built
 
-## 4. How to check
+Each item is a value of a record type. Its laws are the fields.
 
-```sh
-bend <file> --check-only      # the judge; it prints to stderr. replica.bend: about 15 s
-bun run lint                  # must end with "0 finding(s)"
-git diff --check
-```
+### A ledger: `Ledgers.Ledger(Q, c)`
 
-Entry files: `src/shared/shared/shared/shared/shared.bend`, `src/shared/shared/shared/text.bend`,
-`src/shared/shared/shared/reach.bend`, `src/shared/shared/shared/keyset.bend`,
-`src/shared/shared/shared/spans.bend`, `src/shared/shared/regex.bend`,
-`src/shared/shared/search.bend`, `src/shared/shared/ledger.bend`, `src/shared/replica.bend`,
-`src/glob/impl.bend`, `src/node/core/impl.bend`, `src/node/shared/shared/uris.bend`,
-`src/shared/shared/shared/shared/hash.test.bend`. `src/glob/spec.bend` and
-`src/node/transport/spec.bend` alone print TODOs: those are their open laws, which impl files fill.
+A ledger is what `Kind.get` gives. The laws state each other operation by it.
 
-Facts that cost time to find:
+| Law | It says |
+| --- | --- |
+| `Laws.GetEmpty` | A ledger that holds nothing gives nothing. |
+| `Laws.GetAdd` | A ledger with one more entry holds what it held, and the entry when its name was free. |
+| `Laws.GetNamed` | An entry is under its own name. No data is under a hash that it does not match. |
+| `Laws.AddComm` | Two entries that do not clash give the same ledger in either order. |
+| `Laws.AddTwice` | An entry added twice is added once. |
+| `Laws.Missing` | A sync sends each entry that the other ledger lacks, and no other. |
+| `Laws.Ballots`, `Laws.Asks` | The ballots at a place, and the requests of an author, are exactly those that the ledger holds. |
+| `Laws.Rounds`, `Laws.Heights` | No ballot is above the bound, and the bound is the round or the height of a ballot that the ledger holds, or 0. |
+| `Laws.LiarsSound`, `Laws.LiarsComplete` | A voter is a liar exactly when the ledger holds a proof against it. |
 
-- `bend` runs natively on Windows (the fork in `../bend`). **gen3 does not**: run it through WSL
-  (`bun tools/gen3/gen3.ts prove <file> <def> --wait 60 --write`). `gen3 check` can be stale;
-  `bend` is the judge. On the large files gen3 proves only small lemmas.
-- Canonical format: replace `bend-lint.json` for a moment with a config that holds only
-  `bend-lint-rules/layout/format`, run `bunx bend-lint 'src/**/*.bend' --fix-dangerously`, and
-  restore the file byte for byte. No lint rule was ever removed.
-- A "for every" hypothesis is a function, so it is affine: use it once, with the case split inside.
-- A def calls only defs above it. Match a parameter, not a computed value, and not after a `let`
-  or a rewrite: give the computed value its own helper with an equation parameter. The shrinking
-  parameter goes first.
-- A rewrite `%e: P` needs the goal as `P[b]` for `e: {a == b}`. Most failed steps had `e` the wrong
-  way round: wrap it in `Equal.sym`.
-- A spec def cannot call a body-less op of the same spec: impl.bend fills the op below it.
-- A value of function type (a kernel, a continuation) cannot be used twice; pass it as a template
-  parameter (`~kern`).
-- A dead-code scan must count uses through an import alias (`Replicas.Node.find`). A scan that did
-  not deleted live defs once; it was undone before any commit.
-- Git Bash heredocs break Python that holds backslashes; write scripts as files.
-- Do not ask an agent to log its progress or its reasoning to a file (the owner's rule).
+Cost, stated on each operation: a read costs one name, a sync costs what differs.
 
-## 5. Done on `feature/refactor-5` (since `783119f`)
+### A replica: `Replicas.Replica(mach, d, kern)`
 
-Numbers (all of `src/**/*.bend`): laws 194 → 201; spec files 1,596 → 1,714 lines (they grew because
-the rule of a write moved into the core spec); all `.bend` lines 81,799 → 92,497 (proofs added, and
-about 1,580 lines of proofs deleted).
+| Law | It says |
+| --- | --- |
+| `Laws.Empty`, `Laws.Keeps` | The name, the seed and the consents of a replica change only as a deed says. |
+| `Laws.Grows` | A replica never loses or changes an entry, whatever it does. |
+| `Laws.Good` | An empty replica is good, and a good replica stays good. The parts of good are below. |
+| `Laws.Takes` | An entry that a deed brings, that checks, and whose name is free, the replica then holds. |
+| `Laws.Detects` | A replica that sees two ballots signed with one key names the voter a liar. |
+| `Laws.Passes` | A replica that passes on a line is then in a higher round. |
 
-### 5.1 Rounds
+The parts of `Replica.Good`:
 
-- `Node.Honest`: each pass that a node holds names the last vote of its node below its round, at
-  every height of every line.
-- Laws: `Seal.accept_keeps_honest`, `Node.empty_honest`, `Node.after_honest` (any kernel, no
-  premise), `Node.one_history` (an honest node shows one history), `Plan.lead_allowed` (the
-  proposer proposes only an allowed step), `Round.mine_free` (a node votes in no round below a
-  pass of its own).
-- A kernel adds data only, by construction (`Run.data`). `Advance.head.grows` is deleted.
-- Not provable as the code is: the ballot of `Pass.to` is first in its slot (`Pass.to` tests
-  `passed`, not the slot), and `Seal.fits` (the key that a store holds for a node is content of the
-  store; nothing ties it to the node's seed).
+| Part | It says |
+| --- | --- |
+| `Led.Honest` | Its ledger holds one vote of a voter at a place and one pass to it, and each pass names the last vote. |
+| `Led.Sound` | It holds only ballots that a key of the voter's chain signs, and only proofs that are proofs. |
+| `Replica.Runs` | It can run each step that it voted for, and holds what the run adds. It voted for a change of who decides only when a client asked it. |
+| `Replica.Asks` | It holds the request that the kernel says to ask for each line. |
+| `Replica.Follows` | In the round that it is in, it holds its vote for the step of the voter whose turn it is, when the rules allow the step and it can run it. |
+| `Replica.Leads` | When the turn is its own, it holds a vote of its own: in the first round when a request waits, in a later round when the rules allow a step that it can run. |
 
-### 5.2 Glob
+`Follows`, `Leads` and `Passes` hold for a replica that is a voter of the line and has a key under
+its root (`Replica.Keyed`).
 
-- `spans.bend`: every proof is closed. The span algebra (`Span.meet`, the chain cover) is there,
-  not in the glob.
-- A class holds spans: `src/glob/spec.bend` has `Class{neg, ss: List<Spans.Span>}`, and
-  `Char.range` is gone (the owner accepted this change of the spec). Show writes each span in parts
-  that read back (`Span.parts_has`, `Span.parts_fine`). `read_after_show`, `read_rejects_root`,
-  `read_after_escape`, `search_found` and `search_absent` are still proven.
-- Speed: `KeySet.unique` and `Search.push` make the key of a new value once (about 5% on six
-  test queries). A profile of a large Absent query: the search and the certificate check take
-  about half of the time each, and making keys about a third. The test queries were not saved in
-  the repository. The method: a `main` that runs `Spec.Query.search`, `bend bench.bend -o
-  bench.js`, rename to `.cjs` (the package is `type: module`), `node --stack-size=65500`.
+### Vend's kernel: `Core.Kernel(d)`
 
-### 5.3 Claims made stronger
+`Kernel.Stable`: an act stays as the ledger grows.
 
-- The rule of a write is a reference def in `src/node/core/spec.bend` (`Judge.write`, with
-  `Judge.ready`, `Judge.ready_maybe`, `Judge.content`, `Judge.then`, `Judge.when`,
-  `Judge.refuse`): take a write only when its resource holds at h what it held at base, refuse
-  only a stale one, wait only for what the node cannot read.
-- New law `Judge.write_keeps`: a taken write changes only its resource (replica lemma `Set.other`).
-- `Pick.merge_ours` also covers "both sides made the same change"; with `Pick.merge_theirs` the
-  rule of a merge is stated in full, up to the merge of both.
-- New law `Merge.names_complete`: a merge sees each resource whose content differs between ours
-  and theirs. With `Merge.keeps`, a change made on only one side is kept.
-- Every kernel is lawful (section 3). The ten laws that assumed `~lawf: Lawful` take any kernel:
-  `Node.after_grows`, `Node.after_keeps`, `Step.run_outs`, `Node.out_final`, `Node.made_final`,
-  `Chain.version_final`, `Chain.mark_final`, `Chain.start_final`, `Node.after_on`,
-  `Node.ask_once`. Vend's own lawfulness proofs (`Ask.lawful`, `Change.grows`, `Change.kept`,
-  `Change.outs` and the defs only they used) are deleted.
+`Kernel.Rules`: the kernel does what `Ask.act` says, and asks what `Own.due` says. `Ask.act` sends
+each change to its rule, on the line where it belongs, and refuses any other.
 
-### 5.4 Reviews
+| Change | Def that is its meaning |
+| --- | --- |
+| Write | `Write.act`: taken when the resource holds what it held at the base, else stale. |
+| Resolve | `Resolve.act`: while the clash is open, the resource holds the content and the clash is shut. |
+| Merge | `Merge.act`: each resource that the two sides hold differently gets `Pick.merge`: theirs when ours is the base, ours when theirs is the base or both agree, else both merged in the format. A clash keeps ours and puts the resource among the open clashes of the merge. |
+| Move | `Move.act`: the content is the tree of the target, the same tree. |
+| Mark | `Replicas.Act.Label`: a label on the newest version, for good. |
+| Branch | `Branch.act`: the store opens the branch, empty or with the tree of its source. |
+| Group | `Group.act`: the tree of the store holds the members; a group that would reach itself is refused. |
+| Own | `Own.act`: taken when the owners are the nodes of the group (`Group.nodes`), and there is one at least. The line records its owner group. |
+| Key | `Key.act`: the store holds the first key of a node. |
 
-The review skills ran on the glob and spans work until they found nothing; dead defs went. They
-did not run again on the claims work of 5.3; `bun run lint` did.
+## Open laws
 
-## 6. Next steps
+| Law | It says |
+| --- | --- |
+| `Packs.Pack.read_lines` | Packed lines read back as their bytes. |
+| `Replicas.Line.at_grows` | One history: the tip of a line after k steps stays as the ledger grows, while the ballots are honest. |
+| `Replicas.Line.get_grows` | What a log holds under a key, it holds for good. Outcomes, versions, marks and branch starts are each one key. |
+| `Replicas.Step.run_outs` | A step gives each of its requests an outcome. |
+| `Core.Node.answer_follows` | Answers only move forward: Stale and Refused are final, a taken change stays taken. |
+| `Core.Merge.act_takes` | A merge never loses a change that only one side made: where the pick takes one side, the tree of the merge holds it. |
+| `Core.Merge.act_clashes` | Where the pick clashes, the tree of the merge holds ours, and the clash is open. |
+| `Core.Node.affects_holds` | Each touch that `Node.affects` gives holds (`Touch.holds`). |
+| `Core.Node.affects_complete` | Each touch that holds is among the touches that `Node.affects` gives. |
 
-Order chosen by the owner. Each is one commit that checks.
+## README, sentence by sentence
 
-1. **One history across nodes, in the README's terms.** `Line.at_agrees` assumes a node u that
-   holds both ledgers and whose passes name their node's last vote (`Rounds.Rules`). Each node
-   that starts empty is honest (5.1). Missing: when no owner forks its chain, a node that takes in
-   another node's ballots keeps all of them. That is a proof about `Node.sync` and `Sync.more`,
-   which stop after a number of steps and keep a ballot whose key the store gives at a later height
-   only once the head is there. It also needs an invariant: the ballots of an owner that a node
-   holds are a prefix of the owner's one chain. Several days; the sync loop may have to change.
-   The owner chose to do it.
-2. **Writers are told of every change to what their work uses.** `Node.affects_used` states only
-   that each listed touch holds. Missing: each touch that holds is listed. First make "a branch
-   lacks a version" one concept: `Branch.lacked` uses version vectors, `Touch.lacks` uses
-   `Node.has`. `Touch.holds` does not compare the touch's branch with the branch of its `Seen`.
-   The spec also needs a meaning of its own for `Touch.holds`, `Seen.of`, `Group.nodes` and
-   `Merge.base`. The depth part is proven in `reach.bend` (`Reach.all_in`, `Reach.in_through`).
-3. **Operations that return "none".** `Work.Reads` is `Unit` for `None`, so `Move.reads`,
-   `Resolve.reads`, `Resolve.shuts` and `Merge.keeps` hold when the operation gives up. The tree
-   part is proven (`Tree.set_some`); missing are the replica's link from a set of the tree to the
-   node, and the core consequences. Also: `Move.reads` both ways (a move adds no resource; it needs
-   a frame law of a set that holds in every later store, as `Tree.get_other` does);
-   `Node.read` at each kind of point; `Node.draft` gives exactly the newest pending write, and each
-   draft comes from one; `Own.takes` both ways.
-4. **Claims for the operations that have none:** `Node.versions`, `Node.log`, `Node.diff`,
-   `Node.members`, `Node.resources`, `Node.notices`, `Node.impact`, `Vend.may_stop`. Most facts
-   they need are replica laws already (`Chain.version_final` and the others).
-5. **The glob search always decides** (Found or Absent, never Unknown). `search.bend` has only
-   `Cert.sound`; `regex.bend` has no law that an expression has finitely many derivatives.
-6. **One generic frame lemma** in place of the 59 lemmas of the Frames block of `replica.bend`,
-   which copy the growth lemmas. The owner allowed a review of their proof bodies for this.
-7. **`Lawful`**: rename or remove the internal plumbing (section 3).
-8. Run the review skills again on everything since 5.4, in order
-   (`thermo-nuclear-code-quality-review`, `cyclomatic-complexity`, `erasure`, `bun run lint`),
-   until they find nothing; then the final report to the owner (spec size and laws before and
-   after, what each law assumes, what is not done).
+| README | Where it holds |
+| --- | --- |
+| Catching up never creates conflicts; a node checks what it receives | `Laws.Grows`, `Laws.Good`, `Laws.GetNamed` |
+| Same changes, same answers, whatever the order | Item 2 above, with `Laws.AddComm` |
+| A node stops only when nothing is mounted and no writer is connected | `Core.Node.may_stop` (a def) |
+| A store is identified by the hash of the request that started it | `Ledgers.Line.root` |
+| Content is stored once by hash; an edit costs about its own size | `Laws.GetNamed`; `Core.Bytes.rope` cuts at lines; trees and ropes share nodes |
+| Each part is fetched on demand, and kept by enough nodes | `Laws.Takes`; item 9 above |
+| The store's owner group decides which branch and group names exist | `Ask.act`: Branch, Group and Key are changes of the store line only |
+| A change counts once, however often it is sent | `Laws.AddTwice`; a step skips an ID that has an outcome (`Step.fresh`) |
+| Written, Conflicted, Pending, Stale, Refused | `Core.Node.answer` (a def), `Node.answer_follows` |
+| Pending is still delivered later | `Replica.Follows`, `Replica.Leads`, `Laws.Passes` |
+| Writers are told only about changes to what their work uses | `Core.Touch.holds` (a def), `Node.affects_holds`, `Node.affects_complete` |
+| Every read shows the writer's own pending changes, at every node | `Core.Node.read` reads `Draft.newest` first; it is a read of the ledger |
+| A majority decides, in sequence, many changes per decision | `Round.decide`, `Line.next`, `Step.run` |
+| A group's nodes are all those reachable through it | `Core.Group.nodes`, by `Reaches.Graph.reach` |
+| A change of a group changes the owners of what it owns | `Core.Own.due`, `Replica.Asks` |
+| The history stays one | `Line.at_grows` |
+| Nothing a writer sends is kept unless it checks | `Laws.Takes`, `Laws.Good` |
+| History only grows; a version never changes; marks are for good | `Line.get_grows` |
+| A move records a version equal to its target | `Move.act` |
+| Merges go resource by resource, each in its own format | `Merge.act`, `Pick.merge` |
+| A conflict is stored; the merge is Written once each clash is resolved | `Key.clashes`, `Resolve.act`, `Answer.merged` |
+| A merge never loses a change made on only one side | `Merge.act_takes`; inside one resource, `Formats.Plain.merge.cuts` applies both changes or clashes |
+| What a mounted resource held before is recorded as a change | `Core.Mount.change` (a def) |
+| A submodule points to a branch and version of another store | `Core.Pointer`, `Pointer.code_read` |
 
-README: the Vend Owner Group entry says the owners are trusted "to never sign two different
-decisions for the same step". The proofs assume that an owner never signs two different ballots
-for the same position of its own chain. The owner decides whether to change the sentence; only
-human hands change the README.
+## What is still not stated
 
-## 7. Known limits (say them, do not hide them)
+1. **The claim of a source.** `Requests.Source` carries a tree and names the version that it is
+   said to be of. No rule checks the claim, and none needs it for one history. A false claim gives a
+   writer nothing that writes cannot give. A front must send true claims, and the base of a merge
+   must be the newest version that both sides came from. Neither is stated.
+2. **Consent to what a node asks by itself.** `Own.due` is a change of who decides, so a replica
+   votes for it only when a client asked (`Replica.Runs`). The front of a node is that client: it
+   checks `Own.due` and consents. This is decided, and not a law: a replica that consents by itself
+   would have to trust a tree of another line.
+3. **IO.** One node per address, mounts, checkout, worktree and the service of submodules are IO
+   declarations in `transport/spec.bend`. A law cannot state them.
+4. **A search that answers.** `Glob.Query.search` may answer `Unknown` for every query.
 
-- One history across nodes still assumes `Rounds.Rules` of a node that holds both ledgers (step 1).
-  For one node it is proven with no premise.
-- One lying owner can break one history (majority quorum). A lie is recorded and told
-  (`Node.liars`, `Notice.Lied`), not prevented. A two-thirds quorum is a different, slower product.
-- A member of a store can craft a line key so that its ballot fills the slot of another node's
-  ballot; with `Ballot.first` that other ballot is refused. Safety holds (reads are checked);
-  liveness does not. The fix is a prefix-free code of the line key in the slot.
-- SHA-256 and the one-time signature are assumed unbroken.
-- `Advance` runs a decided step again before it keeps it (the README: a node checks everything).
-- Tree and rope builders hash each node once more to link.
-- `src/node/transport/spec.bend` is a spec with open laws.
-- `src/glob` is a glob for file-system-style paths only. Nothing in `src/node` imports it, and the
-  README does not name it (the owner does not want a README entry).
-- An `expect` directive on `Holds.led` was added by an agent; its reason is not verified.
+## Structure, laziness and parallel work
+
+No law fixes how a ledger, a replica or a kernel is kept: each is a record, and any value of it
+is lawful. No cache is stated. A cache comes later, on these structures, and must be proven equal
+to the def that it stands for.
+
+Structure that is decided:
+
+1. **Content is packed.** A rope holds lines, each packed four bytes in a word (`Packs.Pack`). The
+   formats still work on a list with one byte in each element, for the time of one merge or diff.
+2. **The open clashes of a merge are one key** (`Core.Key.clashes`). What a merge left is one
+   read, not a walk of a tree.
+3. **What touches a branch reads each thing once** (`Core.Branch.touches`): the resources of the
+   branch, their imports turned round into one graph of users, and the history of the other
+   branch.
+4. **A choice runs only its chosen side.** Each branch of a rule is a thunk (`Shared.Bool.when`,
+   `List.all.if`, `Draft.or`, `Touches.when`). A rule checks the cheap condition first.
+5. **Parallel work is in the trees.** A trie forks at each node, and a tree goes 16 ways: these
+   are balanced. The new defs fold lists, and a fork on a list is not balanced, so they do not
+   fork. A merge reads its picks one after the other: to fork them, the differences of two trees
+   must come as a tree, not as a list.
+
+Defs that state a meaning, and are slow by design. A cache or a faster structure must equal each:
+
+| Def | Its cost | What a faster one needs |
+| --- | --- | --- |
+| `Replicas.Line.head` | It runs a history from its start. | The head of each line, kept by a replica. |
+| `Core.Tree.kept` | It walks a tree and reads each resource. | To know which trees a ledger holds whole. |
+| `Core.Group.nodes`, `Tree.resources`, `Node.branches` | Each lists a tree. | A tree for each kind of key. `Trees.Tree` has no delete and no range. |
+| `Core.Node.affects` | The history of each other branch. | A mark of how far a reader is. |
+
+Limits that the types fix:
+
+1. **A ledger is a pure value, and a replica only grows** (`Laws.Grows`). What a replica holds in
+   memory only grows, unless a deed runs on a part of what the node keeps. A read on a part is
+   sound: an answer that a part gives, the whole gives (`Line.get_grows`). No law says that for a
+   deed.
+2. **A node that is new runs each history from its start.** There is no checkpoint.
+3. **A ballot holds a seal of 67 hashes**, and a ledger keeps each ballot for good.
+4. **The proven `Trie` keeps a key as a list of bits.** A ledger kept in it, under names of 256
+   bits, costs one list element for each bit that a leaf keeps. `Ledger.Kind` does not ask for it.
+
+## Points for the owner of README
+
+1. README names one thing that owners are trusted for. The rounds need two: `Led.Single` and
+   `Rounds.Last`.
+2. An import names its target as written, in the space of the resource that imports it
+   (`Core.Edge.name`). README does not say how a target becomes a resource.
+
+## Proven and kept
+
+`shared`, `code`, `hash`, `seal`, `cell`, `trie`, `depot`, `text`, `spans`, `keyset`, `quorum`,
+`reach`, `regex`, `search`, `rope`, `tree`, `formats`, the types and codes of `ledger`, `requests`,
+`resources`, `uris`, and `glob`.

@@ -2,19 +2,19 @@ import Base
 import ./shared/shared/code.bend as Codes
 import ./shared/shared/hash.bend as Hashes
 import ./shared/shared/shared.bend as Shared
-import ./shared/store.bend as Stores
+import ./shared/depot.bend as Depots
 
 # Trees
 # =====
 # A tree maps keys to values (both lists of words), and is held as nodes in a
-# store of data by hash: a version of a line is the hash of its tree's root.
+# depot of data by hash: a version of a line is the hash of its tree's root.
 # A tree goes 16 ways by the nibbles of its key's hash, highest first, and
 # ends in a leaf as soon as a subtree holds one key, so a read or a write
 # visits about log16 of its size nodes. A tree is named by the hash of its root
 # (none: the empty tree), and two versions share every subtree that neither
 # changed.
 
-# a node: empty (what an empty part reads as; never stored), a leaf, which
+# a node: empty (what an empty part reads as; never kept), a leaf, which
 # holds one key and its value, or a branch, which holds the root of each of
 # its 16 parts (none: empty)
 type Node is Data:
@@ -274,7 +274,7 @@ def Parts.none() -> List<&2, Maybe<&2, Hashes.Hash>>:
 # Reads
 # -----
 
-# the node of the hash h, in the store s
+# the node of the hash h, in the depot s
 def Tree.node(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -283,7 +283,7 @@ def Tree.node(
 ) -> Maybe<&2, Node>:
   Maybe.bind(&2, List<&2, U32>, Node, fetch(s)(h), Node.of)
 
-# the node of the part x of a branch (none: empty), in the store s
+# the node of the part x of a branch (none: empty), in the depot s
 def Tree.part(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -296,7 +296,7 @@ def Tree.part(
     case Some{h}:
       Tree.node(~S, ~fetch, s, h)
 
-# the value of the key k in the node m (none: not in the store), whose path
+# the value of the key k in the node m (none: not in the depot), whose path
 # below it is p
 def Tree.get.go(
   ~S: Data,
@@ -318,7 +318,7 @@ def Tree.get.go(
     case Con{x, r} Some{Node.Branch{ks}}:
       Tree.get.go(~S, ~fetch, s, r, k, Tree.part(~S, ~fetch, s, Parts.at(ks, x)))
 
-# the value of the key k in the tree whose root is h, in the store s
+# the value of the key k in the tree whose root is h, in the depot s
 def Tree.get.plain(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -329,9 +329,9 @@ def Tree.get.plain(
   Tree.get.go(~S, ~fetch, s, Tree.path(k), k, Tree.part(~S, ~fetch, s, h))
 
 # what a read of a key finds: its value; that the tree does not hold the key;
-# or that the store lacks the node of a hash, so the read cannot tell yet.
+# or that the depot lacks the node of a hash, so the read cannot tell yet.
 # Found and Absent are final (Tree.look_found_kept, Tree.look_absent_kept):
-# only Missing changes when the store gets more nodes
+# only Missing changes when the depot gets more nodes
 type Look is Data:
   Look.Found{value: List<&2, U32>}
   Look.Absent{}
@@ -356,7 +356,7 @@ def Look.missing(o: Maybe<&2, Hashes.Hash>) -> Look:
       Look.Missing{h}
 
 # what a read of the key k finds at the part o, whose node is m (none: not in
-# the store) and whose path below it is p
+# the depot) and whose path below it is p
 def Tree.look.go(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -383,7 +383,7 @@ def Tree.look.go(
     case Con{+x, r} Some{Node.Branch{+ks}}:
       Tree.look.go(~S, ~fetch, s, r, k, Parts.at(ks, x), Tree.part(~S, ~fetch, s, Parts.at(ks, x)))
 
-# what a read of the key k finds in the tree whose root is h, in the store s
+# what a read of the key k finds in the tree whose root is h, in the depot s
 def Tree.look.plain(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -411,7 +411,7 @@ def Tree.leads(k: List<&2, U32>, +pre: List<&2, Nat>) -> Bool:
     pre
   )
 
-# the node of the first part of ps, in the store s (none: no part)
+# the node of the first part of ps, in the depot s (none: no part)
 def Tree.first(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -480,7 +480,7 @@ def Tree.list.root(
     case w:
       []
 
-# the bindings of the tree whose root is h, in the store s
+# the bindings of the tree whose root is h, in the depot s
 def Tree.list(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -490,7 +490,7 @@ def Tree.list(
   Tree.list.root(~S, ~fetch, s, Tree.part(~S, ~fetch, s, h))
 
 # bend-lint: expect-begin bend-lint-rules/language/decreasing_call@warning -- g is f itself, bound by the match; the checker accepts these calls
-# the store holds each node under the parts ps of a branch, whose first node
+# the depot holds each node under the parts ps of a branch, whose first node
 # is m; f levels deep at most (deeper: it cannot tell, so no)
 def Tree.whole.go(
   ~S: Data,
@@ -533,7 +533,7 @@ def Tree.whole.root(
     case Some{w}:
       True{}
 
-# the store s holds each node of the tree whose root is h: a walk of the tree
+# the depot s holds each node of the tree whose root is h: a walk of the tree
 # (Tree.list, Tree.diff) then sees all of it, not a part
 def Tree.whole(
   ~S: Data,
@@ -727,7 +727,7 @@ def Tree.diff(
 
 # Writes
 # ------
-# A write fails (none) when the store does not hold a node on its path, or
+# A write fails (none) when the depot does not hold a node on its path, or
 # when the key's path is the whole path of another key in the tree.
 
 # a new subtree: its root, and the words of the nodes that it adds
@@ -786,7 +786,7 @@ def Tree.split(
     case q w:
       None{}
 
-# the part o (none: empty), whose node is m (none: not in the store), at depth
+# the part o (none: empty), whose node is m (none: not in the depot), at depth
 # d, whose path below is p, with the key k set to the value v
 def Tree.set.go(
   ~S: Data,
@@ -824,7 +824,7 @@ def Tree.set.go(
     case Nil{} Some{Node.Branch{ks}}:
       None{}
 
-# the tree whose root is h, in the store s, with the key k set to the value
+# the tree whose root is h, in the depot s, with the key k set to the value
 # v: its new root, and the nodes that it adds
 def Tree.set.plain(
   ~S: Data,
@@ -854,7 +854,7 @@ def Tree.get.at(
     case Some{+n}:
       Tree.get.go(~S, ~fetch, s, Tree.path(k), k, Some{n})
 
-# the value of the key k in the tree whose root is h, in the store s
+# the value of the key k in the tree whose root is h, in the depot s
 def Tree.get(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -880,7 +880,7 @@ def Tree.set.at(
     case Some{n}:
       Tree.set.go(~S, ~fetch, s, Tree.path(k), 0n, k, x, h, Some{n})
 
-# the tree whose root is h, in the store s, with the key k set to the value
+# the tree whose root is h, in the depot s, with the key k set to the value
 # x: its new root, and the nodes that it adds
 def Tree.set(
   ~S: Data,
@@ -909,7 +909,7 @@ def Tree.look.at(
     case Some{+n}:
       Tree.look.go(~S, ~fetch, s, Tree.path(k), k, h, Some{n})
 
-# what a read of the key k finds in the tree whose root is h, in the store s
+# what a read of the key k finds in the tree whose root is h, in the depot s
 def Tree.look(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -1076,8 +1076,8 @@ def Tree.split.ok(p1: List<&2, Nat>, p2: List<&2, Nat>) -> Bool:
     case q w:
       False{}
 
-# the store s holds every node on the path p from the node m (none: not in the
-# store) at depth d, and the leaf at its end, if any, is the key k's, or its
+# the depot s holds every node on the path p from the node m (none: not in the
+# depot) at depth d, and the leaf at its end, if any, is the key k's, or its
 # path parts from p
 def Tree.set.ok(
   ~S: Data,
@@ -1209,7 +1209,7 @@ def Tree.split_some(
         Shared.Bool.false_ne_true(e)
       )
 
-# a write along a path that the store holds, with no other key at its end,
+# a write along a path that the depot holds, with no other key at its end,
 # gives a subtree
 # the part c of a write at a leaf of k2 gives a subtree, when the paths part
 def Tree.set_some.leaf(
@@ -1349,7 +1349,7 @@ def Tree.set_some.go(
         Shared.Bool.false_ne_true(e)
       )
 
-# a write gives a subtree when the store holds every node on the key's path,
+# a write gives a subtree when the depot holds every node on the key's path,
 # and no other key has the key's whole path
 law Tree.set_some:
   for ~S: Data
@@ -2014,14 +2014,14 @@ def Node.ok_put(
 ) -> {Node.ok(Node.Branch{Parts.put(ks, n, y)}) == True{}: Bool}:
   Parts.ok_trim(Parts.set(ks, n, y))
 
-# a store that holds the words of the node n gives n for its hash
+# a depot that holds the words of the node n gives n for its hash
 def Tree.has_node(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   s: S,
   +n: Node,
   ok: {Node.ok(n) == True{}: Bool},
-  e: {Stores.Store.has(~S, ~fetch, s, Node.words(n)) == True{}: Bool}
+  e: {Depots.Depot.has(~S, ~fetch, s, Node.words(n)) == True{}: Bool}
 ) -> {Tree.node(~S, ~fetch, s, Node.hash(n)) == Some{n}: Maybe<&2, Node>}:
   %Equal.sym(
     Maybe<&2, List<&2, U32>>,
@@ -2091,7 +2091,7 @@ def Tree.read_leaf(
   {==}
 
 # what a read of the key k along p gives at the root of the new subtree r
-# (none: a write that failed), in any store s2 that holds its nodes: w
+# (none: a write that failed), in any depot s2 that holds its nodes: w
 def Tree.Reads(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -2106,7 +2106,7 @@ def Tree.Reads(
       Unit
     case Some{q}:
       {
-        Stores.Store.holds(~S, ~fetch, s2, Put.nodes(q)) == True{}: Bool
+        Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(q)) == True{}: Bool
       } -> {
         Tree.get.go(
           ~S,
@@ -2170,7 +2170,7 @@ def Tree.read_new_leaf(
         Node.Leaf{k, v},
         {==},
         Shared.List.all.if_hit(
-          Stores.Store.has(~S, ~fetch, s2, Node.words(Node.Leaf{k, v})),
+          Depots.Depot.has(~S, ~fetch, s2, Node.words(Node.Leaf{k, v})),
           u => True{}
         )(e)
       )
@@ -2195,7 +2195,7 @@ def Tree.read_into(
 ) -> Tree.Reads(~S, ~fetch, s2, Con{x, r}, k, w, Some{Put.into(ks, n, q)}):
   +e =>
     +b = {Node.Branch{Parts.put(ks, n, Some{Put.root(q)})}: Node}
-    +rest = Stores.Store.holds(~S, ~fetch, s2, Put.nodes(q))
+    +rest = Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(q))
     %Equal.sym(
       Maybe<&2, Node>,
       Tree.node(~S, ~fetch, s2, Node.hash(b)),
@@ -2206,7 +2206,7 @@ def Tree.read_into(
         s2,
         b,
         Node.ok_put(ks, n, Some{Put.root(q)}),
-        Shared.List.all.if_hit(Stores.Store.has(~S, ~fetch, s2, Node.words(b)), u => rest)(e)
+        Shared.List.all.if_hit(Depots.Depot.has(~S, ~fetch, s2, Node.words(b)), u => rest)(e)
       )
     ): {Tree.get.go(~S, ~fetch, s2, Con{x, r}, k, _) == w: Maybe<&2, List<&2, U32>>}
     %Equal.sym(
@@ -2233,7 +2233,7 @@ def Tree.read_into(
     ): {
       Tree.get.go(~S, ~fetch, s2, r, k, Tree.part(~S, ~fetch, s2, _)) == w: Maybe<&2, List<&2, U32>>
     }
-    ih(Shared.List.all.if_rest(Stores.Store.has(~S, ~fetch, s2, Node.words(b)), u => rest)(e))
+    ih(Shared.List.all.if_rest(Depots.Depot.has(~S, ~fetch, s2, Node.words(b)), u => rest)(e))
 
 # the subtree c of Tree.split, with the new leaf of k and v, reads as v along a
 # then r1
@@ -2305,7 +2305,7 @@ def Tree.read_split.when(
         +l = {Node.Leaf{k, v}: Node}
         +ka = Parts.put(Parts.none(), a, Some{Node.hash(l)})
         +n = {Node.Branch{Parts.put(ka, b, o)}: Node}
-        +rest = Stores.Store.holds(~S, ~fetch, s2, [Node.words(l)])
+        +rest = Depots.Depot.holds(~S, ~fetch, s2, [Node.words(l)])
         %Equal.sym(
           Maybe<&2, Node>,
           Tree.node(~S, ~fetch, s2, Node.hash(n)),
@@ -2316,7 +2316,7 @@ def Tree.read_split.when(
             s2,
             n,
             Node.ok_put(ka, b, o),
-            Shared.List.all.if_hit(Stores.Store.has(~S, ~fetch, s2, Node.words(n)), u => rest)(e)
+            Shared.List.all.if_hit(Depots.Depot.has(~S, ~fetch, s2, Node.words(n)), u => rest)(e)
           )
         ): {Tree.get.go(~S, ~fetch, s2, Con{a, r1}, k, _) == Some{v}: Maybe<&2, List<&2, U32>>}
         %Equal.sym(
@@ -2362,10 +2362,10 @@ def Tree.read_split.when(
             l,
             {==},
             Shared.List.all.if_hit(
-              Stores.Store.has(~S, ~fetch, s2, Node.words(l)),
+              Depots.Depot.has(~S, ~fetch, s2, Node.words(l)),
               u => True{}
             )(
-              Shared.List.all.if_rest(Stores.Store.has(~S, ~fetch, s2, Node.words(n)), u => rest)(e)
+              Shared.List.all.if_rest(Depots.Depot.has(~S, ~fetch, s2, Node.words(n)), u => rest)(e)
             )
           )
         ): {Tree.get.go(~S, ~fetch, s2, r1, k, _) == Some{v}: Maybe<&2, List<&2, U32>>}
@@ -2445,8 +2445,8 @@ def Tree.set_reads.when(
       Tree.read_split(~S, ~fetch, s2, q, List.drop(&2, Nat, Tree.path(k2), d), o, k, v)
 
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a binder of an erased argument of a proof; a proof does not run
-# Tree.set.go from the part o, whose node is m in the store s, with k set to v,
-# reads as v along p, in any store s2 that holds its nodes
+# Tree.set.go from the part o, whose node is m in the depot s, with k set to v,
+# reads as v along p, in any depot s2 that holds its nodes
 def Tree.set_reads(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -2498,8 +2498,8 @@ def Tree.set_reads(
 
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# after the key k is set to v in the tree whose root is h in the store s, a
-# read of k at the new root gives v, in any store s2 that holds the new nodes
+# after the key k is set to v in the tree whose root is h in the depot s, a
+# read of k at the new root gives v, in any depot s2 that holds the new nodes
 law Tree.get_set:
   for ~S: Data
   for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
@@ -2510,7 +2510,7 @@ law Tree.get_set:
   for v: List<&2, U32>
   for t: Put
   {Tree.set.plain(~S, ~fetch, s, h, k, v) == Some{t}: Maybe<&2, Put>}
-    -> {Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool}
+    -> {Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool}
     -> {Tree.get.plain(~S, ~fetch, s2, Some{Put.root(t)}, k) == Some{v}: Maybe<&2, List<&2, U32>>}
 
 def Tree.get_set(ty, fetch, s, s2, h, k, v, t):
@@ -2518,12 +2518,12 @@ def Tree.get_set(ty, fetch, s, s2, h, k, v, t):
     %e: Tree.Reads(~ty, ~fetch, s2, Tree.path(k), k, Some{v}, _)
     Tree.set_reads(~ty, ~fetch, s, s2, Tree.path(k), 0n, k, v, h, Tree.part(~ty, ~fetch, s, h))
 
-# a store b that grows from a gives each node that a gives
+# a depot b that grows from a gives each node that a gives
 def Tree.node_kept(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   ~grows: S -> S -> Bool,
-  ~kept: Stores.Store.Keeps(S, fetch, grows),
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
   +a: S,
   b: S,
   +h: Hashes.Hash,
@@ -2544,12 +2544,12 @@ def Tree.node_kept(
     w => e => e
   )
 
-# a store b that grows from a gives each node of a part that a gives
+# a depot b that grows from a gives each node of a part that a gives
 def Tree.part_kept(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   ~grows: S -> S -> Bool,
-  ~kept: Stores.Store.Keeps(S, fetch, grows),
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
   a: S,
   b: S,
   x: Maybe<&2, Hashes.Hash>,
@@ -2565,13 +2565,13 @@ def Tree.part_kept(
       Tree.node_kept(~S, ~fetch, ~grows, ~kept, a, b, h, n, gr)
 
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a binder of an erased argument of a proof; a proof does not run
-# a read of the key k at the node m in a store a gives the same in a store b
+# a read of the key k at the node m in a depot a gives the same in a depot b
 # that grows from a, at a node m2 that b gives where a gives m
 def Tree.get.go_kept(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   ~grows: S -> S -> Bool,
-  ~kept: Stores.Store.Keeps(S, fetch, grows),
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
   +a: S,
   +b: S,
   p: List<&2, Nat>,
@@ -2633,12 +2633,12 @@ def Tree.get.go_kept(
           gr
         )(e)
 
-# a read that a store gives, a store that grows from it gives too
+# a read that a depot gives, a depot that grows from it gives too
 law Tree.get_grows:
   for ~S: Data
   for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
   for ~grows: S -> S -> Bool
-  for ~kept: Stores.Store.Keeps(S, fetch, grows)
+  for ~kept: Depots.Depot.Keeps(S, fetch, grows)
   for +a: S
   for +b: S
   for +h: Maybe<&2, Hashes.Hash>
@@ -2701,8 +2701,8 @@ def Tree.read_into_nil(
             b,
             Node.ok_put(ks, n, Some{Put.root(q)}),
             Shared.List.all.if_hit(
-              Stores.Store.has(~S, ~fetch, s2, Node.words(b)),
-              u => Stores.Store.holds(~S, ~fetch, s2, Put.nodes(q))
+              Depots.Depot.has(~S, ~fetch, s2, Node.words(b)),
+              u => Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(q))
             )(e)
           )
         ): {Tree.get.go(~S, ~fetch, s2, [], k, _) == None{}: Maybe<&2, List<&2, U32>>}
@@ -2743,8 +2743,8 @@ def Tree.read_into_off(
         b,
         Node.ok_put(ks, n, Some{Put.root(q)}),
         Shared.List.all.if_hit(
-          Stores.Store.has(~S, ~fetch, s2, Node.words(b)),
-          u => Stores.Store.holds(~S, ~fetch, s2, Put.nodes(q))
+          Depots.Depot.has(~S, ~fetch, s2, Node.words(b)),
+          u => Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(q))
         )(e)
       )
     ): {
@@ -2859,7 +2859,7 @@ def Tree.read_new_leaf_off(
         s2,
         l,
         {==},
-        Shared.List.all.if_hit(Stores.Store.has(~S, ~fetch, s2, Node.words(l)), u => True{})(e)
+        Shared.List.all.if_hit(Depots.Depot.has(~S, ~fetch, s2, Node.words(l)), u => True{})(e)
       )
     ): {Tree.get.go(~S, ~fetch, s2, p, k2, _) == None{}: Maybe<&2, List<&2, U32>>}
     Tree.get.go_leaf_off(~S, ~fetch, s2, p, k2, k, v, ne)
@@ -2972,8 +2972,8 @@ def Tree.other_split_old.when(
             n,
             Node.ok_put(ka, b, o),
             Shared.List.all.if_hit(
-              Stores.Store.has(~S, ~fetch, s2, Node.words(n)),
-              u => Stores.Store.holds(~S, ~fetch, s2, Put.nodes(l))
+              Depots.Depot.has(~S, ~fetch, s2, Node.words(n)),
+              u => Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(l))
             )(e)
           )
         ): {
@@ -3299,8 +3299,8 @@ def Tree.other_split_new.nil(
             n,
             Node.ok_put(Parts.put(Parts.none(), a, Some{Node.hash(l)}), b, o),
             Shared.List.all.if_hit(
-              Stores.Store.has(~S, ~fetch, s2, Node.words(n)),
-              u => Stores.Store.holds(~S, ~fetch, s2, [Node.words(l)])
+              Depots.Depot.has(~S, ~fetch, s2, Node.words(n)),
+              u => Depots.Depot.holds(~S, ~fetch, s2, [Node.words(l)])
             )(e)
           )
         ): {Tree.get.go(~S, ~fetch, s2, [], k2, _) == None{}: Maybe<&2, List<&2, U32>>}
@@ -3390,7 +3390,7 @@ def Tree.other_split_new.con(
         +l = {Node.Leaf{k, v}: Node}
         +ka = Parts.put(Parts.none(), a, Some{Node.hash(l)})
         +n = {Node.Branch{Parts.put(ka, b, o)}: Node}
-        +rest = Stores.Store.holds(~S, ~fetch, s2, [Node.words(l)])
+        +rest = Depots.Depot.holds(~S, ~fetch, s2, [Node.words(l)])
         %Equal.sym(
           Maybe<&2, Node>,
           Tree.node(~S, ~fetch, s2, Node.hash(n)),
@@ -3401,7 +3401,7 @@ def Tree.other_split_new.con(
             s2,
             n,
             Node.ok_put(ka, b, o),
-            Shared.List.all.if_hit(Stores.Store.has(~S, ~fetch, s2, Node.words(n)), u => rest)(e)
+            Shared.List.all.if_hit(Depots.Depot.has(~S, ~fetch, s2, Node.words(n)), u => rest)(e)
           )
         ): {Tree.get.go(~S, ~fetch, s2, Con{z, r2}, k2, _) == None{}: Maybe<&2, List<&2, U32>>}
         %Equal.sym(
@@ -3464,10 +3464,10 @@ def Tree.other_split_new.con(
             l,
             {==},
             Shared.List.all.if_hit(
-              Stores.Store.has(~S, ~fetch, s2, Node.words(l)),
+              Depots.Depot.has(~S, ~fetch, s2, Node.words(l)),
               u => True{}
             )(
-              Shared.List.all.if_rest(Stores.Store.has(~S, ~fetch, s2, Node.words(n)), u => rest)(e)
+              Shared.List.all.if_rest(Depots.Depot.has(~S, ~fetch, s2, Node.words(n)), u => rest)(e)
             )
           ),
           ne,
@@ -3876,14 +3876,14 @@ def Tree.set_keeps.branch(
         ih(r2)(Shared.List.drop_step(&2, Nat, Tree.path(k2), d, z, r2)(hp))
       )
 
-# Tree.set.go from the part o, whose node is m in the store s, with k set to v,
-# reads for another key k2 along its path p2 as o does, in a store s2 that
+# Tree.set.go from the part o, whose node is m in the depot s, with k set to v,
+# reads for another key k2 along its path p2 as o does, in a depot s2 that
 # grows from s
 def Tree.set_keeps(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   ~grows: S -> S -> Bool,
-  ~kept: Stores.Store.Keeps(S, fetch, grows),
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
   +s: S,
   +s2: S,
   p: List<&2, Nat>,
@@ -4038,14 +4038,14 @@ def Tree.set_keeps(
     case Nil{} Some{Node.Branch{ks}}:
       Unit{}
 
-# after the key k is set to v in the tree whose root is h in the store s, a
+# after the key k is set to v in the tree whose root is h in the depot s, a
 # read of another key k2 at the new root gives what it gives at h, in any
-# store s2 that grows from s and holds the new nodes
+# depot s2 that grows from s and holds the new nodes
 law Tree.get_other:
   for ~S: Data
   for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
   for ~grows: S -> S -> Bool
-  for ~kept: Stores.Store.Keeps(S, fetch, grows)
+  for ~kept: Depots.Depot.Keeps(S, fetch, grows)
   for +s: S
   for +s2: S
   for +h: Maybe<&2, Hashes.Hash>
@@ -4056,7 +4056,7 @@ law Tree.get_other:
   {grows(s, s2) == True{}: Bool}
     -> {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool}
     -> {Tree.set.plain(~S, ~fetch, s, h, k, v) == Some{t}: Maybe<&2, Put>}
-    -> {Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool}
+    -> {Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool}
     -> {
       Tree.get.plain(
         ~S,
@@ -7511,10 +7511,9 @@ def Tree.list_sound(ty, fetch, s, h, k, v):
 # ---------------
 # The root of a tree is a function of its bindings alone: Canon.root builds
 # it from a list of bindings with distinct keys. A write gives the Canon.root
-# of the bindings with its own (Tree.set_canon), and the store then holds the
-# canonical tree (Tree.set_canon_holds). So writes of different keys commute
-# (Tree.set_comm), and a second write of a key replaces the first
-# (Tree.set_twice).
+# of the bindings with its own (Tree.set_canon), and the depot then holds the
+# canonical tree (Tree.set_canon_holds). So the order of writes does not
+# change a root: the bindings are the same in either order (Canon.put_comm).
 
 # the nibble at depth d of the path of the key k
 def Key.nibble(k: List<&2, U32>, d: Nat) -> Nat:
@@ -8554,7 +8553,7 @@ def Canon.sub(n: Nat, d: Nat, sub: List<&2, Binding>) -> Maybe<&2, Hashes.Hash>:
 def Canon.of(bs: List<&2, Binding>) -> Maybe<&2, Hashes.Hash>:
   Canon.root(64n, 0n, bs)
 
-# the store s holds the node of the canonical root of bs, whose branch, if any,
+# the depot s holds the node of the canonical root of bs, whose branch, if any,
 # has the parts ps, and holds what is below it when below
 def Canon.holds.node(
   ~S: Data,
@@ -8568,11 +8567,11 @@ def Canon.holds.node(
     case Nil{}:
       True{}
     case Con{b, Nil{}}:
-      Stores.Store.has(~S, ~fetch, s, Node.words(Binding.node(b)))
+      Depots.Depot.has(~S, ~fetch, s, Node.words(Binding.node(b)))
     case Con{b, Con{c, r}}:
-      List.all.if(u => below, Stores.Store.has(~S, ~fetch, s, Node.words(Node.Branch{ps})))
+      List.all.if(u => below, Depots.Depot.has(~S, ~fetch, s, Node.words(Node.Branch{ps})))
 
-# the store s holds the canonical tree under the nibble of each binding of bs,
+# the depot s holds the canonical tree under the nibble of each binding of bs,
 # below a branch of the bindings all at depth d, n nibbles above the end of a
 # path
 def Canon.holds.parts(
@@ -8603,7 +8602,7 @@ def Canon.holds.parts(
         )
       )
 
-# the store s holds the canonical tree of the bindings bs at depth d, n nibbles
+# the depot s holds the canonical tree of the bindings bs at depth d, n nibbles
 # above the end of a path
 def Canon.holds(
   ~S: Data,
@@ -8622,7 +8621,7 @@ def Canon.holds(
     Canon.holds.parts(~S, ~fetch, s, n, d, bs, bs)
   )
 
-# the store s holds the canonical tree of the bindings bs of a whole tree
+# the depot s holds the canonical tree of the bindings bs of a whole tree
 def Canon.holds.of(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -9461,7 +9460,7 @@ def List.empty_nil(
     case Con{b, r}:
       h => Empty.absurd({b <> r == []: List<&2, Binding>}, Shared.Bool.false_ne_true(h))
 
-# the store holds the canonical tree under the nibble z, when the binding b,
+# the depot holds the canonical tree under the nibble z, when the binding b,
 # kept when c (it is under z) before the bindings r, is under z
 def Canon.holds_at.at(
   ~S: Data,
@@ -9500,7 +9499,7 @@ def Canon.holds_at.at(
     case False{}:
       h => he => ih(he)
 
-# the store holds the canonical tree under a nibble z that a binding of l is
+# the depot holds the canonical tree under a nibble z that a binding of l is
 # under, when it holds the trees under the nibbles of l
 def Canon.holds_at(
   ~S: Data,
@@ -9552,7 +9551,7 @@ def Canon.holds_at(
         )
       )(h)
 
-# the store holds the canonical tree under the nibble z, whether its bindings
+# the depot holds the canonical tree under the nibble z, whether its bindings
 # are empty (c) or not
 def Canon.holds_all.at(
   ~S: Data,
@@ -9581,7 +9580,7 @@ def Canon.holds_all.at(
     case False{}:
       h => Canon.holds_at(~S, ~fetch, s, m, d, all, all, z)(h)(ec)
 
-# the store holds the canonical tree under each nibble z of a branch whose
+# the depot holds the canonical tree under each nibble z of a branch whose
 # canonical subtrees it holds
 def Canon.holds_all(
   ~S: Data,
@@ -10341,7 +10340,7 @@ def Canon.set_root.branch(
   )
 
 # a write of the key k into the canonical tree of distinct bindings bs, at
-# depth d, whose path from there is p, in a store that holds that tree, gives
+# depth d, whose path from there is p, in a depot that holds that tree, gives
 # the canonical root of bs with k bound
 def Canon.set_root(
   ~S: Data,
@@ -10481,7 +10480,7 @@ def Canon.set_root(
             Node.Branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)},
             Canon.parts_ok(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest),
             Shared.List.all.if_hit(
-              Stores.Store.has(
+              Depots.Depot.has(
                 ~S,
                 ~fetch,
                 s,
@@ -10546,7 +10545,7 @@ def Canon.set_root(
             },
             Canon.parts_ok(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest),
             Shared.List.all.if_hit(
-              Stores.Store.has(
+              Depots.Depot.has(
                 ~S,
                 ~fetch,
                 s,
@@ -10634,7 +10633,7 @@ def Canon.set_root(
               x
             )(
               Shared.List.all.if_rest(
-                Stores.Store.has(
+                Depots.Depot.has(
                   ~S,
                   ~fetch,
                   s,
@@ -10658,19 +10657,19 @@ def Canon.set_root(
           )
         )(hs)
 
-# a store that grows from a holds the words that a holds
+# a depot that grows from a holds the words that a holds
 def Tree.has_kept(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   ~grows: S -> S -> Bool,
-  ~kept: Stores.Store.Keeps(S, fetch, grows),
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
   +a: S,
   b: S,
   +ws: List<&2, U32>,
   gr: {grows(a, b) == True{}: Bool}
 ) -> {
-  Stores.Store.has(~S, ~fetch, a, ws) == True{}: Bool
-} -> {Stores.Store.has(~S, ~fetch, b, ws) == True{}: Bool}:
+  Depots.Depot.has(~S, ~fetch, a, ws) == True{}: Bool
+} -> {Depots.Depot.has(~S, ~fetch, b, ws) == True{}: Bool}:
   h =>
     %Equal.sym(
       Maybe<&2, List<&2, U32>>,
@@ -10711,13 +10710,13 @@ def Tree.has_kept(
       Some{ws}
     )
 
-# a store that grows from a holds the canonical node of bs that a holds, when
+# a depot that grows from a holds the canonical node of bs that a holds, when
 # it holds what is below it
 def Canon.holds.node_grows(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   ~grows: S -> S -> Bool,
-  ~kept: Stores.Store.Keeps(S, fetch, grows),
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
   +a: S,
   +b: S,
   bs: List<&2, Binding>,
@@ -10737,7 +10736,7 @@ def Canon.holds.node_grows(
       h => hb => Tree.has_kept(~S, ~fetch, ~grows, ~kept, a, b, Node.words(Binding.node(c)), gr)(h)
     case Con{c, Con{c2, r}}:
       +h => hb => Shared.List.all.if_both(
-        Stores.Store.has(~S, ~fetch, b, Node.words(Node.Branch{ps})),
+        Depots.Depot.has(~S, ~fetch, b, Node.words(Node.Branch{ps})),
         u => bb
       )(
         Tree.has_kept(
@@ -10751,25 +10750,25 @@ def Canon.holds.node_grows(
           gr
         )(
           Shared.List.all.if_hit(
-            Stores.Store.has(~S, ~fetch, a, Node.words(Node.Branch{ps})),
+            Depots.Depot.has(~S, ~fetch, a, Node.words(Node.Branch{ps})),
             u => ba
           )(h)
         )
       )(
         hb(
           Shared.List.all.if_rest(
-            Stores.Store.has(~S, ~fetch, a, Node.words(Node.Branch{ps})),
+            Depots.Depot.has(~S, ~fetch, a, Node.words(Node.Branch{ps})),
             u => ba
           )(h)
         )
       )
 
-# a store that grows from a holds the canonical subtrees that a holds
+# a depot that grows from a holds the canonical subtrees that a holds
 def Canon.holds_grows(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   ~grows: S -> S -> Bool,
-  ~kept: Stores.Store.Keeps(S, fetch, grows),
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
   n: Nat,
   l: List<&2, Binding>,
   +a: S,
@@ -10831,12 +10830,12 @@ def Canon.holds_grows(
           )
         )
 
-# a store that grows from a holds the canonical trees that a holds
+# a depot that grows from a holds the canonical trees that a holds
 def Canon.holds_grows.root(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   ~grows: S -> S -> Bool,
-  ~kept: Stores.Store.Keeps(S, fetch, grows),
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
   +n: Nat,
   +d: Nat,
   +bs: List<&2, Binding>,
@@ -10860,7 +10859,7 @@ def Canon.holds_grows.root(
     gr
   )(h)(hb => Canon.holds_grows(~S, ~fetch, ~grows, ~kept, n, bs, a, b, d, bs, gr)(hb))
 
-# a store holds the canonical subtrees of two bindings when it holds the
+# a depot holds the canonical subtrees of two bindings when it holds the
 # canonical tree under the nibble of each
 def Canon.holds_pair(
   ~S: Data,
@@ -10903,7 +10902,7 @@ def Canon.holds_pair(
     )(h2)({==})
   )
 
-# a store holds the canonical tree of a binding before others when it holds its
+# a depot holds the canonical tree of a binding before others when it holds its
 # branch and the canonical subtrees
 def Canon.holds_make(
   ~S: Data,
@@ -10916,7 +10915,7 @@ def Canon.holds_make(
 ) -> {
   List.is_empty(&2, Binding, x) == False{}: Bool
 } -> {
-  Stores.Store.has(
+  Depots.Depot.has(
     ~S,
     ~fetch,
     s,
@@ -10934,7 +10933,7 @@ def Canon.holds_make(
       )
     case Con{+c, +r}:
       e => h1 => h2 => Shared.List.all.if_both(
-        Stores.Store.has(
+        Depots.Depot.has(
           ~S,
           ~fetch,
           s,
@@ -10963,7 +10962,7 @@ def Canon.into_elim(
         %Shared.Maybe.some_inj(Put, Put.into(ks, a, t2), t, h): G(_)
         k(t2)({==})
 
-# a store that holds the nodes of a split of two leaves under the nibbles a and
+# a depot that holds the nodes of a split of two leaves under the nibbles a and
 # b of their paths, when c tells whether a is b, holds the canonical tree of
 # the two
 def Canon.split_holds.at(
@@ -11011,7 +11010,7 @@ def Canon.split_holds.at(
     )
       == Some{t2}: Maybe<&2, Put>
   } -> {
-    Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t2)) == True{}: Bool
+    Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t2)) == True{}: Bool
   } -> {
     Canon.holds(
       ~S,
@@ -11032,7 +11031,7 @@ def Canon.split_holds.at(
     )
       == Some{t2}: Maybe<&2, Put>
   } -> {
-    Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t2)) == True{}: Bool
+    Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t2)) == True{}: Bool
   } -> {
     Canon.holds(
       ~S,
@@ -11044,7 +11043,7 @@ def Canon.split_holds.at(
     )
       == True{}: Bool
   },
-  hl2: {Stores.Store.has(~S, ~fetch, s2, Node.words(Node.Leaf{k2, v2})) == True{}: Bool}
+  hl2: {Depots.Depot.has(~S, ~fetch, s2, Node.words(Node.Leaf{k2, v2})) == True{}: Bool}
 ) -> {
   Shared.Bool.when(
     Maybe<&2, Put>,
@@ -11076,7 +11075,7 @@ def Canon.split_holds.at(
   )
     == Some{t}: Maybe<&2, Put>
 } -> {
-  Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
+  Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
 } -> {
   Canon.holds(
     ~S,
@@ -11106,7 +11105,7 @@ def Canon.split_holds.at(
           a,
           t,
           t3 => {
-            Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t3)) == True{}: Bool
+            Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t3)) == True{}: Bool
           } -> {Canon.holds(~S, ~fetch, s2, 1n+m, d, l) == True{}: Bool},
           +t2 => +e => +hn => Canon.holds_make(
             ~S,
@@ -11118,18 +11117,18 @@ def Canon.split_holds.at(
             [Binding{k2, v2}]
           )({==})(
             %Equal.sym(List<&2, Maybe<&2, Hashes.Hash>>, Canon.parts(1n+m, d, l, l), Parts.put([], a, Canon.root(m, 1n+d, l)), Canon.two_same(m, d, Binding{k1, v1}, Binding{k2, v2}, a)(e1)(e2a)):
-              {Stores.Store.has(~S, ~fetch, s2, Node.words(Node.Branch{_})) == True{}: Bool}
-            %ihr(t2)(e): {Stores.Store.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put([], a, _)})) == True{}: Bool}
-            Shared.List.all.if_hit(Stores.Store.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put([], a, Some{Put.root(t2)})})), u => Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t2)))(hn))(
+              {Depots.Depot.has(~S, ~fetch, s2, Node.words(Node.Branch{_})) == True{}: Bool}
+            %ihr(t2)(e): {Depots.Depot.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put([], a, _)})) == True{}: Bool}
+            Shared.List.all.if_hit(Depots.Depot.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put([], a, Some{Put.root(t2)})})), u => Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t2)))(hn))(
             Canon.holds_pair(~S, ~fetch, s2, m, d, Binding{k1, v1}, Binding{k2, v2})(
               %Equal.sym(Nat, Key.nibble(k1, d), a, e1): {Canon.holds(~S, ~fetch, s2, m, 1n+d, Binds.at(l, d, _)) == True{}: Bool}
               %Equal.sym(List<&2, Binding>, Binds.at(l, d, a), l, Binds.at_same(Binding{k1, v1}, Binding{k2, v2}, d, a)(e1)(e2a)):
                 {Canon.holds(~S, ~fetch, s2, m, 1n+d, _) == True{}: Bool}
-              ihh1(t2)(e)(Shared.List.all.if_rest(Stores.Store.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put([], a, Some{Put.root(t2)})})), u => Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t2)))(hn)))(
+              ihh1(t2)(e)(Shared.List.all.if_rest(Depots.Depot.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put([], a, Some{Put.root(t2)})})), u => Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t2)))(hn)))(
               %Equal.sym(Nat, Key.nibble(k2, d), a, e2a): {Canon.holds(~S, ~fetch, s2, m, 1n+d, Binds.at(l, d, _)) == True{}: Bool}
               %Equal.sym(List<&2, Binding>, Binds.at(l, d, a), l, Binds.at_same(Binding{k1, v1}, Binding{k2, v2}, d, a)(e1)(e2a)):
                 {Canon.holds(~S, ~fetch, s2, m, 1n+d, _) == True{}: Bool}
-              ihh2(t2)(e)(Shared.List.all.if_rest(Stores.Store.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put([], a, Some{Put.root(t2)})})), u => Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t2)))(hn)))
+              ihh2(t2)(e)(Shared.List.all.if_rest(Depots.Depot.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put([], a, Some{Put.root(t2)})})), u => Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t2)))(hn)))
           )
         )(hs)
     case False{}:
@@ -11156,22 +11155,22 @@ def Canon.split_holds.at(
           hs
         ):
           {
-            Stores.Store.holds(~S, ~fetch, s2, Put.nodes(_)) == True{}: Bool
+            Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(_)) == True{}: Bool
           } -> {Canon.holds(~S, ~fetch, s2, 1n+m, d, l) == True{}: Bool}
         +hn => Canon.holds_make(~S, ~fetch, s2, 1n+m, d, Binding{k1, v1}, [Binding{k2, v2}])({==})(
           %Equal.sym(List<&2, Maybe<&2, Hashes.Hash>>, Canon.parts(1n+m, d, l, l), pp, Canon.two_other(m, d, Binding{k1, v1}, Binding{k2, v2}, a, b)(e1)(e2)(ec)):
-            {Stores.Store.has(~S, ~fetch, s2, Node.words(Node.Branch{_})) == True{}: Bool}
-          Shared.List.all.if_hit(Stores.Store.has(~S, ~fetch, s2, Node.words(Node.Branch{pp})), u => Stores.Store.holds(~S, ~fetch, s2, [Node.words(Node.Leaf{k1, v1})]))(hn))(Canon.holds_pair(~S, ~fetch, s2, m, d, Binding{k1, v1}, Binding{k2, v2})(
+            {Depots.Depot.has(~S, ~fetch, s2, Node.words(Node.Branch{_})) == True{}: Bool}
+          Shared.List.all.if_hit(Depots.Depot.has(~S, ~fetch, s2, Node.words(Node.Branch{pp})), u => Depots.Depot.holds(~S, ~fetch, s2, [Node.words(Node.Leaf{k1, v1})]))(hn))(Canon.holds_pair(~S, ~fetch, s2, m, d, Binding{k1, v1}, Binding{k2, v2})(
             %Equal.sym(Nat, Key.nibble(k1, d), a, e1): {Canon.holds(~S, ~fetch, s2, m, 1n+d, Binds.at(l, d, _)) == True{}: Bool}
             %Equal.sym(List<&2, Binding>, Binds.at(l, d, a), [Binding{k1, v1}], Binds.at_first(Binding{k1, v1}, Binding{k2, v2}, d, a, b)(e1)(e2)(ec)):
               {Canon.holds(~S, ~fetch, s2, m, 1n+d, _) == True{}: Bool}
-            Shared.List.all.if_hit(Stores.Store.has(~S, ~fetch, s2, Node.words(Node.Leaf{k1, v1})), u => Stores.Store.holds(~S, ~fetch, s2, []))(Shared.List.all.if_rest(Stores.Store.has(~S, ~fetch, s2, Node.words(Node.Branch{pp})), u => Stores.Store.holds(~S, ~fetch, s2, [Node.words(Node.Leaf{k1, v1})]))(hn)))(
+            Shared.List.all.if_hit(Depots.Depot.has(~S, ~fetch, s2, Node.words(Node.Leaf{k1, v1})), u => Depots.Depot.holds(~S, ~fetch, s2, []))(Shared.List.all.if_rest(Depots.Depot.has(~S, ~fetch, s2, Node.words(Node.Branch{pp})), u => Depots.Depot.holds(~S, ~fetch, s2, [Node.words(Node.Leaf{k1, v1})]))(hn)))(
             %Equal.sym(Nat, Key.nibble(k2, d), b, e2): {Canon.holds(~S, ~fetch, s2, m, 1n+d, Binds.at(l, d, _)) == True{}: Bool}
             %Equal.sym(List<&2, Binding>, Binds.at(l, d, b), [Binding{k2, v2}], Binds.at_second(Binding{k1, v1}, Binding{k2, v2}, d, a, b)(e1)(e2)(nb)):
               {Canon.holds(~S, ~fetch, s2, m, 1n+d, _) == True{}: Bool}
             hl2))
 
-# a store that holds the nodes of a split of a new leaf and a leaf already
+# a depot that holds the nodes of a split of a new leaf and a leaf already
 # there, and the old leaf, holds the canonical tree of the two
 def Canon.split_holds(
   ~S: Data,
@@ -11198,9 +11197,9 @@ def Canon.split_holds(
   )
     == Some{t}: Maybe<&2, Put>
 } -> {
-  Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
+  Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
 } -> {
-  Stores.Store.has(~S, ~fetch, s2, Node.words(Node.Leaf{k2, v2})) == True{}: Bool
+  Depots.Depot.has(~S, ~fetch, s2, Node.words(Node.Leaf{k2, v2})) == True{}: Bool
 } -> {
   Canon.holds(
     ~S,
@@ -11352,15 +11351,15 @@ def Binds.at_put_other(
       )
     )
 
-# a store b that holds the canonical tree of the bindings under the nibble x
-# of k, with k bound, and grows from a store a that holds the canonical
+# a depot b that holds the canonical tree of the bindings under the nibble x
+# of k, with k bound, and grows from a depot a that holds the canonical
 # subtrees of bs, holds the canonical tree under the nibble z of bs with k
 # bound, when c tells whether z is x
 def Canon.holds_put.one(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   ~grows: S -> S -> Bool,
-  ~kept: Stores.Store.Keeps(S, fetch, grows),
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
   c: Bool,
   +m: Nat,
   +d: Nat,
@@ -11414,13 +11413,13 @@ def Canon.holds_put.one(
         gr
       )(Canon.holds_all(~S, ~fetch, a, m, d, bs, z)(fo))
 
-# such a store b holds the canonical subtrees of bs with k bound, under the
+# such a depot b holds the canonical subtrees of bs with k bound, under the
 # nibbles of the bindings l
 def Canon.holds_put(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   ~grows: S -> S -> Bool,
-  ~kept: Stores.Store.Keeps(S, fetch, grows),
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
   l: List<&2, Binding>,
   +m: Nat,
   +d: Nat,
@@ -11473,7 +11472,7 @@ def Canon.holds_put(
         )
       )(Canon.holds_put(~S, ~fetch, ~grows, ~kept, r, m, d, bs, k, v, x, a, b, gr, hx, fx, fo))
 
-# a store that holds the nodes of a new leaf holds the leaf
+# a depot that holds the nodes of a new leaf holds the leaf
 def Canon.set_holds.empty(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -11484,19 +11483,19 @@ def Canon.set_holds.empty(
 ) -> {
   Some{Put.node(Node.Leaf{k, v}, [])} == Some{t}: Maybe<&2, Put>
 } -> {
-  Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
-} -> {Stores.Store.has(~S, ~fetch, s2, Node.words(Node.Leaf{k, v})) == True{}: Bool}:
+  Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
+} -> {Depots.Depot.has(~S, ~fetch, s2, Node.words(Node.Leaf{k, v})) == True{}: Bool}:
   h =>
     %Shared.Maybe.some_inj(Put, Put.node(Node.Leaf{k, v}, []), t, h):
       {
-        Stores.Store.holds(~S, ~fetch, s2, Put.nodes(_)) == True{}: Bool
-      } -> {Stores.Store.has(~S, ~fetch, s2, Node.words(Node.Leaf{k, v})) == True{}: Bool}
+        Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(_)) == True{}: Bool
+      } -> {Depots.Depot.has(~S, ~fetch, s2, Node.words(Node.Leaf{k, v})) == True{}: Bool}
     hn => Shared.List.all.if_hit(
-      Stores.Store.has(~S, ~fetch, s2, Node.words(Node.Leaf{k, v})),
-      u => Stores.Store.holds(~S, ~fetch, s2, [])
+      Depots.Depot.has(~S, ~fetch, s2, Node.words(Node.Leaf{k, v})),
+      u => Depots.Depot.holds(~S, ~fetch, s2, [])
     )(hn)
 
-# a store that holds the nodes of a write of the key k at the leaf of the key
+# a depot that holds the nodes of a write of the key k at the leaf of the key
 # k2, when c tells whether k2 is k, and the old leaf, holds the canonical tree
 # of the bindings after the write
 def Canon.set_holds.leaf(
@@ -11513,7 +11512,7 @@ def Canon.set_holds.leaf(
   s2: S,
   ec: {Shared.List.is_eq(~U32, ~U32.is_eq, k2, k) == c: Bool},
   hq: {q == List.drop(&2, Nat, Tree.path(k), d): List<&2, Nat>},
-  hl2: {Stores.Store.has(~S, ~fetch, s2, Node.words(Node.Leaf{k2, v2})) == True{}: Bool}
+  hl2: {Depots.Depot.has(~S, ~fetch, s2, Node.words(Node.Leaf{k2, v2})) == True{}: Bool}
 ) -> {
   Shared.Bool.when(
     Maybe<&2, Put>,
@@ -11528,7 +11527,7 @@ def Canon.set_holds.leaf(
   )
     == Some{t}: Maybe<&2, Put>
 } -> {
-  Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
+  Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
 } -> {
   Canon.holds(
     ~S,
@@ -11558,7 +11557,7 @@ def Canon.set_holds.leaf(
         s2
       )(hq)({==})(hs)(hn)(hl2)
 
-# a store b that grows from a store a and holds the nodes of a write down a
+# a depot b that grows from a depot a and holds the nodes of a write down a
 # branch, two or more distinct bindings, at the part x of its path, holds the
 # canonical tree of the bindings with the new one, when it holds that of the
 # bindings under x with it
@@ -11566,7 +11565,7 @@ def Canon.set_holds.branch(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   ~grows: S -> S -> Bool,
-  ~kept: Stores.Store.Keeps(S, fetch, grows),
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
   +s: S,
   +s2: S,
   +x: Nat,
@@ -11617,7 +11616,7 @@ def Canon.set_holds.branch(
     )
       == Some{t2}: Maybe<&2, Put>
   } -> {
-    Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t2)) == True{}: Bool
+    Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t2)) == True{}: Bool
   } -> {
     Canon.holds(
       ~S,
@@ -11644,7 +11643,7 @@ def Canon.set_holds.branch(
   )
     == Some{t}: Maybe<&2, Put>
 } -> {
-  Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
+  Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
 } -> {
   Canon.holds(~S, ~fetch, s2, 1n+List.length(&2, Nat, r), d, Binds.put(bs, k, v)) == True{}: Bool
 }:
@@ -11659,23 +11658,23 @@ def Canon.set_holds.branch(
   ): {
     Canon.step(~S, ~fetch, s, r, d, k, v, ps, x, _) == Some{t}: Maybe<&2, Put>
   } -> {
-    Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
+    Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
   } -> {Canon.holds(~S, ~fetch, s2, 1n+m, d, Binds.put(bs, k, v)) == True{}: Bool}
   hs => Canon.into_elim(
     Tree.set.go(~S, ~fetch, s, r, 1n+d, k, v, kid, Tree.part(~S, ~fetch, s, kid)),
     ps,
     x,
     t,
-    t3 => {Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t3)) == True{}: Bool} -> {Canon.holds(~S, ~fetch, s2, 1n+m, d, Binds.put(bs, k, v)) == True{}: Bool},
+    t3 => {Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t3)) == True{}: Bool} -> {Canon.holds(~S, ~fetch, s2, 1n+m, d, Binds.put(bs, k, v)) == True{}: Bool},
     +t2 => +e => +hn =>
-      +rest = Shared.List.all.if_rest(Stores.Store.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put(ps, x, Some{Put.root(t2)})})), u => Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t2)))(hn)
+      +rest = Shared.List.all.if_rest(Depots.Depot.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put(ps, x, Some{Put.root(t2)})})), u => Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t2)))(hn)
       Canon.holds_make(~S, ~fetch, s2, 1n+m, d, Binding{k, v}, Binds.drop(bs, k))(hne)(
     %Equal.sym(List<&2, Maybe<&2, Hashes.Hash>>, Canon.parts(1n+m, d, Binds.put(bs, k, v), Binds.put(bs, k, v)), Parts.put(ps, x, Canon.root(m, 1n+d, Binds.put(Binds.at(bs, d, x), k, v))), Canon.parts_of_put(m, d, bs, k, v, x)(hx)):
-      {Stores.Store.has(~S, ~fetch, s2, Node.words(Node.Branch{_})) == True{}: Bool}
-    %ihr(t2)(e): {Stores.Store.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put(ps, x, _)})) == True{}: Bool}
-    Shared.List.all.if_hit(Stores.Store.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put(ps, x, Some{Put.root(t2)})})), u => Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t2)))(hn))(Canon.holds_put(~S, ~fetch, ~grows, ~kept, Binds.put(bs, k, v), m, d, bs, k, v, x, s, s2, gr, hx, ihh(t2)(e)(rest), hold)))(hs)
+      {Depots.Depot.has(~S, ~fetch, s2, Node.words(Node.Branch{_})) == True{}: Bool}
+    %ihr(t2)(e): {Depots.Depot.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put(ps, x, _)})) == True{}: Bool}
+    Shared.List.all.if_hit(Depots.Depot.has(~S, ~fetch, s2, Node.words(Node.Branch{Parts.put(ps, x, Some{Put.root(t2)})})), u => Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t2)))(hn))(Canon.holds_put(~S, ~fetch, ~grows, ~kept, Binds.put(bs, k, v), m, d, bs, k, v, x, s, s2, gr, hx, ihh(t2)(e)(rest), hold)))(hs)
 
-# a store s2 that grows from a store s that holds the canonical tree of
+# a depot s2 that grows from a depot s that holds the canonical tree of
 # distinct bindings bs at depth d, whose path from there is p, and holds the
 # nodes that a write of the key k there adds, holds the canonical tree of bs
 # with k bound
@@ -11683,7 +11682,7 @@ def Canon.set_holds(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   ~grows: S -> S -> Bool,
-  ~kept: Stores.Store.Keeps(S, fetch, grows),
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
   p: List<&2, Nat>,
   +s: S,
   +s2: S,
@@ -11713,7 +11712,7 @@ def Canon.set_holds(
   )
     == Some{t}: Maybe<&2, Put>
 } -> {
-  Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
+  Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
 } -> {Canon.holds(~S, ~fetch, s2, List.length(&2, Nat, p), d, Binds.put(bs, k, v)) == True{}: Bool}:
   match p bs:
     case Nil{} Nil{}:
@@ -11741,7 +11740,7 @@ def Canon.set_holds(
           )
             == Some{t}: Maybe<&2, Put>
         } -> {
-          Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
+          Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
         } -> {
           Canon.holds(~S, ~fetch, s2, 0n, d, Binds.put([Binding{k2, v2}], k, v)) == True{}: Bool
         }
@@ -11782,7 +11781,7 @@ def Canon.set_holds(
           )
             == Some{t}: Maybe<&2, Put>
         } -> {
-          Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
+          Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
         } -> {
           Canon.holds(
             ~S,
@@ -11828,7 +11827,7 @@ def Canon.set_holds(
             Node.Branch{Canon.parts(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest)},
             Canon.parts_ok(0n, d, b1 <> b2 <> rest, b1 <> b2 <> rest),
             Shared.List.all.if_hit(
-              Stores.Store.has(
+              Depots.Depot.has(
                 ~S,
                 ~fetch,
                 s,
@@ -11851,7 +11850,7 @@ def Canon.set_holds(
           )
             == Some{t}: Maybe<&2, Put>
         } -> {
-          Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
+          Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
         } -> {Canon.holds(~S, ~fetch, s2, 0n, d, Binds.put(b1 <> b2 <> rest, k, v)) == True{}: Bool}
         hs => hn => Empty.absurd(
           {Canon.holds(~S, ~fetch, s2, 0n, d, Binds.put(b1 <> b2 <> rest, k, v)) == True{}: Bool},
@@ -11885,7 +11884,7 @@ def Canon.set_holds(
             },
             Canon.parts_ok(1n+List.length(&2, Nat, r), d, b1 <> b2 <> rest, b1 <> b2 <> rest),
             Shared.List.all.if_hit(
-              Stores.Store.has(
+              Depots.Depot.has(
                 ~S,
                 ~fetch,
                 s,
@@ -11926,7 +11925,7 @@ def Canon.set_holds(
           )
             == Some{t}: Maybe<&2, Put>
         } -> {
-          Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
+          Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
         } -> {
           Canon.holds(
             ~S,
@@ -11939,7 +11938,7 @@ def Canon.set_holds(
             == True{}: Bool
         }
         +hold = Shared.List.all.if_rest(
-          Stores.Store.has(
+          Depots.Depot.has(
             ~S,
             ~fetch,
             s,
@@ -12552,10 +12551,10 @@ def Canon.SetHolds(
     )
       == Some{t}: Maybe<&2, Put>
   } -> {
-    Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
+    Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool
   } -> {Canon.holds(~S, ~fetch, s2, n, 0n, Binds.put(bs, k, v)) == True{}: Bool}
 
-# a write of the key k into the tree of distinct bindings bs, in a store that
+# a write of the key k into the tree of distinct bindings bs, in a depot that
 # holds that tree, gives the tree of bs with k bound: a tree's root is a
 # function of its bindings alone, not of the order of its writes
 law Tree.set_canon:
@@ -12592,14 +12591,14 @@ def Tree.set_canon(ty, fetch, s, bs, k, v, t):
     )
   )(hd)(hh)(hs)
 
-# a store that grows from one holding the tree of distinct bindings bs, and
+# a depot that grows from one holding the tree of distinct bindings bs, and
 # holds the nodes that a write of the key k adds, holds the tree of bs with k
 # bound: the next write's premise
 law Tree.set_canon_holds:
   for ~S: Data
   for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
   for ~grows: S -> S -> Bool
-  for ~kept: Stores.Store.Keeps(S, fetch, grows)
+  for ~kept: Depots.Depot.Keeps(S, fetch, grows)
   for +s: S
   for +s2: S
   for +bs: List<&2, Binding>
@@ -12610,7 +12609,7 @@ law Tree.set_canon_holds:
     -> {Binds.distinct(bs) == True{}: Bool}
     -> {Canon.holds.of(~S, ~fetch, s, bs) == True{}: Bool}
     -> {Tree.set.plain(~S, ~fetch, s, Canon.of(bs), k, v) == Some{t}: Maybe<&2, Put>}
-    -> {Stores.Store.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool}
+    -> {Depots.Depot.holds(~S, ~fetch, s2, Put.nodes(t)) == True{}: Bool}
     -> {Canon.holds.of(~S, ~fetch, s2, Binds.put(bs, k, v)) == True{}: Bool}
 
 def Tree.set_canon_holds(ty, fetch, grows, kept, s, s2, bs, k, v, t):
@@ -12639,204 +12638,6 @@ def Tree.set_canon_holds(ty, fetch, grows, kept, s, s2, bs, k, v, t):
       )
     )(hd)(hh)(hs)(hn)
 
-# writes of two other keys to a tree, in either order, give the same root
-law Tree.set_comm:
-  for ~S: Data
-  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
-  for ~grows: S -> S -> Bool
-  for ~kept: Stores.Store.Keeps(S, fetch, grows)
-  for +s: S
-  for +a: S
-  for +b: S
-  for +bs: List<&2, Binding>
-  for +k1: List<&2, U32>
-  for +v1: List<&2, U32>
-  for +k2: List<&2, U32>
-  for +v2: List<&2, U32>
-  for +t1: Put
-  for +t12: Put
-  for +t2: Put
-  for +t21: Put
-  {Binds.distinct(bs) == True{}: Bool}
-    -> {Canon.holds.of(~S, ~fetch, s, bs) == True{}: Bool}
-    -> {Shared.List.is_eq(~U32, ~U32.is_eq, k1, k2) == False{}: Bool}
-    -> {grows(s, a) == True{}: Bool}
-    -> {Tree.set.plain(~S, ~fetch, s, Canon.of(bs), k1, v1) == Some{t1}: Maybe<&2, Put>}
-    -> {Stores.Store.holds(~S, ~fetch, a, Put.nodes(t1)) == True{}: Bool}
-    -> {Tree.set.plain(~S, ~fetch, a, Some{Put.root(t1)}, k2, v2) == Some{t12}: Maybe<&2, Put>}
-    -> {grows(s, b) == True{}: Bool}
-    -> {Tree.set.plain(~S, ~fetch, s, Canon.of(bs), k2, v2) == Some{t2}: Maybe<&2, Put>}
-    -> {Stores.Store.holds(~S, ~fetch, b, Put.nodes(t2)) == True{}: Bool}
-    -> {Tree.set.plain(~S, ~fetch, b, Some{Put.root(t2)}, k1, v1) == Some{t21}: Maybe<&2, Put>}
-    -> {Put.root(t12) == Put.root(t21): Hashes.Hash}
-
-def Tree.set_comm(ty, fetch, grows, kept, s, a, b, bs, k1, v1, k2, v2, t1, t12, t2, t21):
-  +hd => +hh => ne => ga => +hs1 => hn1 =>
-    +r1 = Tree.set_canon(~ty, ~fetch, s, bs, k1, v1, t1)(hd)(hh)(hs1)
-    +ha = Tree.set_canon_holds(
-      ~ty,
-      ~fetch,
-      ~grows,
-      ~kept,
-      s,
-      a,
-      bs,
-      k1,
-      v1,
-      t1
-    )(ga)(hd)(hh)(hs1)(hn1)
-    %Equal.sym(Maybe<&2, Hashes.Hash>, Some{Put.root(t1)}, Canon.of(Binds.put(bs, k1, v1)), r1):
-      {Tree.set.plain(~ty, ~fetch, a, _, k2, v2) == Some{t12}: Maybe<&2, Put>}
-        -> {grows(s, b) == True{}: Bool}
-        -> {Tree.set.plain(~ty, ~fetch, s, Canon.of(bs), k2, v2) == Some{t2}: Maybe<&2, Put>}
-        -> {Stores.Store.holds(~ty, ~fetch, b, Put.nodes(t2)) == True{}: Bool}
-        -> {Tree.set.plain(~ty, ~fetch, b, Some{Put.root(t2)}, k1, v1) == Some{t21}: Maybe<&2, Put>}
-        -> {Put.root(t12) == Put.root(t21): Hashes.Hash}
-    hs12 => gb => +hs2 => hn2 =>
-      +r2 = Tree.set_canon(~ty, ~fetch, s, bs, k2, v2, t2)(hd)(hh)(hs2)
-      +hb = Tree.set_canon_holds(
-        ~ty,
-        ~fetch,
-        ~grows,
-        ~kept,
-        s,
-        b,
-        bs,
-        k2,
-        v2,
-        t2
-      )(gb)(hd)(hh)(hs2)(hn2)
-      %Equal.sym(Maybe<&2, Hashes.Hash>, Some{Put.root(t2)}, Canon.of(Binds.put(bs, k2, v2)), r2):
-        {
-          Tree.set.plain(~ty, ~fetch, b, _, k1, v1) == Some{t21}: Maybe<&2, Put>
-        } -> {Put.root(t12) == Put.root(t21): Hashes.Hash}
-      hs21 =>
-        +r12 = Tree.set_canon(
-          ~ty,
-          ~fetch,
-          a,
-          Binds.put(bs, k1, v1),
-          k2,
-          v2,
-          t12
-        )(Binds.distinct_put(bs, k1, v1)(hd))(ha)(hs12)
-        +r21 = Tree.set_canon(
-          ~ty,
-          ~fetch,
-          b,
-          Binds.put(bs, k2, v2),
-          k1,
-          v1,
-          t21
-        )(Binds.distinct_put(bs, k2, v2)(hd))(hb)(hs21)
-        Shared.Maybe.some_inj(
-          Hashes.Hash,
-          Put.root(t12),
-          Put.root(t21),
-          Equal.trans(
-            Maybe<&2, Hashes.Hash>,
-            Some{Put.root(t12)},
-            Canon.of(Binds.put(Binds.put(bs, k2, v2), k1, v1)),
-            Some{Put.root(t21)},
-            Equal.trans(
-              Maybe<&2, Hashes.Hash>,
-              Some{Put.root(t12)},
-              Canon.of(Binds.put(Binds.put(bs, k1, v1), k2, v2)),
-              Canon.of(Binds.put(Binds.put(bs, k2, v2), k1, v1)),
-              r12,
-              Canon.put_comm(64n, 0n, bs, k1, v1, k2, v2)(ne)
-            ),
-            Equal.sym(
-              Maybe<&2, Hashes.Hash>,
-              Some{Put.root(t21)},
-              Canon.of(Binds.put(Binds.put(bs, k2, v2), k1, v1)),
-              r21
-            )
-          )
-        )
-
-# a second write of a key replaces the first: its root is that of the second
-# write alone
-law Tree.set_twice:
-  for ~S: Data
-  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
-  for ~grows: S -> S -> Bool
-  for ~kept: Stores.Store.Keeps(S, fetch, grows)
-  for +s: S
-  for +a: S
-  for +bs: List<&2, Binding>
-  for +k: List<&2, U32>
-  for +v1: List<&2, U32>
-  for +v2: List<&2, U32>
-  for +t1: Put
-  for +t12: Put
-  for +t2: Put
-  {Binds.distinct(bs) == True{}: Bool}
-    -> {Canon.holds.of(~S, ~fetch, s, bs) == True{}: Bool}
-    -> {grows(s, a) == True{}: Bool}
-    -> {Tree.set.plain(~S, ~fetch, s, Canon.of(bs), k, v1) == Some{t1}: Maybe<&2, Put>}
-    -> {Stores.Store.holds(~S, ~fetch, a, Put.nodes(t1)) == True{}: Bool}
-    -> {Tree.set.plain(~S, ~fetch, a, Some{Put.root(t1)}, k, v2) == Some{t12}: Maybe<&2, Put>}
-    -> {Tree.set.plain(~S, ~fetch, s, Canon.of(bs), k, v2) == Some{t2}: Maybe<&2, Put>}
-    -> {Put.root(t12) == Put.root(t2): Hashes.Hash}
-
-def Tree.set_twice(ty, fetch, grows, kept, s, a, bs, k, v1, v2, t1, t12, t2):
-  +hd => +hh => ga => +hs1 => hn1 =>
-    +r1 = Tree.set_canon(~ty, ~fetch, s, bs, k, v1, t1)(hd)(hh)(hs1)
-    +ha = Tree.set_canon_holds(
-      ~ty,
-      ~fetch,
-      ~grows,
-      ~kept,
-      s,
-      a,
-      bs,
-      k,
-      v1,
-      t1
-    )(ga)(hd)(hh)(hs1)(hn1)
-    %Equal.sym(Maybe<&2, Hashes.Hash>, Some{Put.root(t1)}, Canon.of(Binds.put(bs, k, v1)), r1):
-      {Tree.set.plain(~ty, ~fetch, a, _, k, v2) == Some{t12}: Maybe<&2, Put>}
-        -> {Tree.set.plain(~ty, ~fetch, s, Canon.of(bs), k, v2) == Some{t2}: Maybe<&2, Put>}
-        -> {Put.root(t12) == Put.root(t2): Hashes.Hash}
-    hs12 => hs2 =>
-      +r12 = Tree.set_canon(
-        ~ty,
-        ~fetch,
-        a,
-        Binds.put(bs, k, v1),
-        k,
-        v2,
-        t12
-      )(Binds.distinct_put(bs, k, v1)(hd))(ha)(hs12)
-      +r2 = Tree.set_canon(~ty, ~fetch, s, bs, k, v2, t2)(hd)(hh)(hs2)
-      Shared.Maybe.some_inj(
-        Hashes.Hash,
-        Put.root(t12),
-        Put.root(t2),
-        Equal.trans(
-          Maybe<&2, Hashes.Hash>,
-          Some{Put.root(t12)},
-          Canon.of(Binds.put(bs, k, v2)),
-          Some{Put.root(t2)},
-          Equal.trans(
-            Maybe<&2, Hashes.Hash>,
-            Some{Put.root(t12)},
-            Canon.of(Binds.put(Binds.put(bs, k, v1), k, v2)),
-            Canon.of(Binds.put(bs, k, v2)),
-            r12,
-            Equal.cong(
-              List<&2, Binding>,
-              Maybe<&2, Hashes.Hash>,
-              l => Canon.of(l),
-              Binds.put(Binds.put(bs, k, v1), k, v2),
-              Binds.put(bs, k, v2),
-              Binds.put_twice(bs, k, v1, v2)
-            )
-          ),
-          Equal.sym(Maybe<&2, Hashes.Hash>, Some{Put.root(t2)}, Canon.of(Binds.put(bs, k, v2)), r2)
-        )
-      )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
@@ -12950,12 +12751,12 @@ def Look.found_of(
         Shared.Maybe.none_ne_some(List<&2, U32>, v, e)
       )
 
-# a value that a look found, it finds in any store that grows: Found is final
+# a value that a look found, it finds in any depot that grows: Found is final
 law Tree.look_found_kept:
   for ~S: Data
   for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
   for ~grows: S -> S -> Bool
-  for ~kept: Stores.Store.Keeps(S, fetch, grows)
+  for ~kept: Depots.Depot.Keeps(S, fetch, grows)
   for +a: S
   for +b: S
   for +h: Maybe<&2, Hashes.Hash>
@@ -13014,12 +12815,12 @@ def Tree.look_found_kept(ty, fetch, grows, kept, a, b, h, k, v):
   )
 
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-# a key that a look found absent at a part is absent in any store that grows
+# a key that a look found absent at a part is absent in any depot that grows
 def Tree.look.go_absent(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   ~grows: S -> S -> Bool,
-  ~kept: Stores.Store.Keeps(S, fetch, grows),
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
   +a: S,
   +b: S,
   p: List<&2, Nat>,
@@ -13121,13 +12922,13 @@ def Tree.look.go_absent(
         )({==})(e)
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# a key that a look found absent is absent in any store that grows: Absent is
+# a key that a look found absent is absent in any depot that grows: Absent is
 # final
 law Tree.look_absent_kept:
   for ~S: Data
   for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
   for ~grows: S -> S -> Bool
-  for ~kept: Stores.Store.Keeps(S, fetch, grows)
+  for ~kept: Depots.Depot.Keeps(S, fetch, grows)
   for +a: S
   for +b: S
   for +h: Maybe<&2, Hashes.Hash>

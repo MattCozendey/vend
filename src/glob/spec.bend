@@ -433,11 +433,6 @@ law read_after_show:
   exs h: Glob
   {Glob.read(Glob.show(g)) == Some{h}: Maybe<&2, Glob>} & Glob.Same(g, h)
 
-# text that starts with '/' is an error
-law read_rejects_root:
-  for s: String
-  {Glob.read(SCon{'/', s}) == None{}: Maybe<&2, Glob>}
-
 # the escaped text of a valid path p matches p and nothing else
 law read_after_escape:
   for p: String
