@@ -697,3 +697,243 @@ def Crit.entries.go(-V: Data, m: Crit<V>, rest: List<&2, Bind<V>>) -> List<&2, B
 # the entries of m, in the order of their keys
 def Crit.entries(-V: Data, m: Crit<V>) -> List<&2, Bind<V>>:
   Crit.entries.go(V, m, [])
+
+# Laws of cursors
+# ---------------
+# A cursor reads exactly the bits that it has yet to read (Cur.bits): each
+# move of a cursor is the same move on its bits.
+
+# a word of n bits has n bits
+def Word.bits_length(n: Nat, w: Word(n)) -> {List.length(&2, Bool, Word.bits(n, w)) == n: Nat}:
+  match n:
+    case 0n:
+      {==}
+    case 1n+p:
+      match w:
+        case WCon{b, t}:
+          %Equal.sym(Nat, List.length(&2, Bool, Word.bits(p, t)), p, Word.bits_length(p, t)): {
+            1n+_ == 1n+p: Nat
+          }
+          {==}
+
+# a cursor one bit on reads its bits after the first
+def Cur.next_bits(c: Cur) -> {Cur.bits(Cur.next(c)) == List.drop(&2, Bool, Cur.bits(c), 1n): List<&2, Bool>}:
+  match c:
+    case Cur{1n+p, WCon{b, t}, r}:
+      +x = List.append(&2, Bool, Word.bits(p, t), Key.bits(r))
+      Equal.sym(List<&2, Bool>, List.drop(&2, Bool, x, 0n), x, Shared.List.drop_zero(&2, Bool, x))
+    case Cur{0n, w, Con{U32{WCon{b, t}}, r}}:
+      +x = List.append(&2, Bool, Word.bits(31n, t), Key.bits(r))
+      Equal.sym(List<&2, Bool>, List.drop(&2, Bool, x, 0n), x, Shared.List.drop_zero(&2, Bool, x))
+    case Cur{0n, w, Nil{}}:
+      {==}
+
+# a cursor is done when it has no bit left
+def Cur.done_bits(c: Cur) -> {Cur.done(c) == List.is_empty(&2, Bool, Cur.bits(c)): Bool}:
+  match c:
+    case Cur{1n+p, WCon{b, t}, r}:
+      {==}
+    case Cur{0n, w, Con{U32{WCon{b, t}}, r}}:
+      {==}
+    case Cur{0n, w, Nil{}}:
+      {==}
+
+# the next bit of a cursor is the first of its bits
+def Cur.bit_bits(c: Cur) -> {Cur.bit(c) == Shared.List.head_or(Bool, Cur.bits(c), False{}): Bool}:
+  match c:
+    case Cur{1n+p, WCon{b, t}, r}:
+      {==}
+    case Cur{0n, w, Con{U32{WCon{b, t}}, r}}:
+      {==}
+    case Cur{0n, w, Nil{}}:
+      {==}
+
+# a cursor n bits on, one at a time, reads its bits after the first n
+def Cur.drop_bits(n: Nat, +c: Cur) -> {Cur.bits(Cur.drop(n, c)) == List.drop(&2, Bool, Cur.bits(c), n): List<&2, Bool>}:
+  match n:
+    case 0n:
+      Equal.sym(List<&2, Bool>, List.drop(&2, Bool, Cur.bits(c), 0n), Cur.bits(c), Shared.List.drop_zero(&2, Bool, Cur.bits(c)))
+    case 1n+(+p):
+      %Equal.sym(
+        List<&2, Bool>,
+        Cur.bits(Cur.drop(p, Cur.next(c))),
+        List.drop(&2, Bool, Cur.bits(Cur.next(c)), p),
+        Cur.drop_bits(p, Cur.next(c))
+      ): {_ == List.drop(&2, Bool, Cur.bits(c), 1n+p): List<&2, Bool>}
+      %Equal.sym(
+        List<&2, Bool>,
+        Cur.bits(Cur.next(c)),
+        List.drop(&2, Bool, Cur.bits(c), 1n),
+        Cur.next_bits(c)
+      ): {List.drop(&2, Bool, _, p) == List.drop(&2, Bool, Cur.bits(c), 1n+p): List<&2, Bool>}
+      Shared.List.drop_one_drop(Bool, Cur.bits(c), p)
+
+# a cursor n bits into some words, a word at a time, reads their bits after
+# the first n
+def Cur.words.long(
+  +x: Word(32n),
+  +r: List<&2, U32>,
+  +n: Nat,
+  h: {Nat.is_le(32n, n) == True{}: Bool},
+  ih: {Cur.bits(Cur.words(r, Nat.sub(n, 32n))) == List.drop(&2, Bool, Key.bits(r), Nat.sub(n, 32n)): List<&2, Bool>}
+) -> {Cur.bits(Cur.words(r, Nat.sub(n, 32n))) == List.drop(&2, Bool, Key.bits(U32{x} <> r), n): List<&2, Bool>}:
+      %Equal.sym(
+        List<&2, Bool>,
+        Cur.bits(Cur.words(r, Nat.sub(n, 32n))),
+        List.drop(&2, Bool, Key.bits(r), Nat.sub(n, 32n)),
+        ih
+      ): {_ == List.drop(&2, Bool, List.append(&2, Bool, Word.bits(32n, x), Key.bits(r)), n): List<&2, Bool>}
+      %Equal.sym(
+        List<&2, Bool>,
+        List.drop(&2, Bool, List.append(&2, Bool, Word.bits(32n, x), Key.bits(r)), n),
+        List.drop(&2, Bool, Key.bits(r), Nat.sub(n, List.length(&2, Bool, Word.bits(32n, x)))),
+        Shared.List.drop_append_le(Bool, Word.bits(32n, x), Key.bits(r), n)((
+          %Equal.sym(Nat, List.length(&2, Bool, Word.bits(32n, x)), 32n, Word.bits_length(32n, x)): {
+            Nat.is_le(_, n) == True{}: Bool
+          }
+          h
+        ))
+      ): {List.drop(&2, Bool, Key.bits(r), Nat.sub(n, 32n)) == _: List<&2, Bool>}
+      %Equal.sym(Nat, List.length(&2, Bool, Word.bits(32n, x)), 32n, Word.bits_length(32n, x)): {
+        List.drop(&2, Bool, Key.bits(r), Nat.sub(n, 32n)) == List.drop(&2, Bool, Key.bits(r), Nat.sub(n, _)): List<&2, Bool>
+      }
+      {==}
+
+# a cursor n bits into the words ws reads their bits after the first n
+def Cur.words_bits(ws: List<&2, U32>, +n: Nat) -> {
+  Cur.bits(Cur.words(ws, n)) == List.drop(&2, Bool, Key.bits(ws), n): List<&2, Bool>
+}:
+  match ws:
+    case Nil{}:
+      {==}
+    case Con{U32{+x}, +r}:
+      Shared.Bool.when_cases(
+        Cur,
+        c => {Cur.bits(c) == List.drop(&2, Bool, Key.bits(U32{x} <> r), n): List<&2, Bool>},
+        Nat.is_le(32n, n),
+        u => Cur.words(r, Nat.sub(n, 32n)),
+        u => Cur.drop(n, Cur{0n, WNil{}, U32{x} <> r}),
+        h => Cur.words.long(x, r, n, h, Cur.words_bits(r, Nat.sub(n, 32n))),
+        h => Cur.drop_bits(n, Cur{0n, WNil{}, U32{x} <> r})
+      )
+
+# a cursor that skips past the word it is in reads the bits after the first n
+def Cur.skip.long(
+  +left: Nat,
+  +w: Word(left),
+  +r: List<&2, U32>,
+  +n: Nat,
+  h: {Nat.is_le(left, n) == True{}: Bool}
+) -> {
+  Cur.bits(Cur.words(r, Nat.sub(n, left)))
+    == List.drop(&2, Bool, List.append(&2, Bool, Word.bits(left, w), Key.bits(r)), n): List<&2, Bool>
+}:
+      %Equal.sym(
+        List<&2, Bool>,
+        Cur.bits(Cur.words(r, Nat.sub(n, left))),
+        List.drop(&2, Bool, Key.bits(r), Nat.sub(n, left)),
+        Cur.words_bits(r, Nat.sub(n, left))
+      ): {_ == List.drop(&2, Bool, List.append(&2, Bool, Word.bits(left, w), Key.bits(r)), n): List<&2, Bool>}
+      %Equal.sym(
+        List<&2, Bool>,
+        List.drop(&2, Bool, List.append(&2, Bool, Word.bits(left, w), Key.bits(r)), n),
+        List.drop(&2, Bool, Key.bits(r), Nat.sub(n, List.length(&2, Bool, Word.bits(left, w)))),
+        Shared.List.drop_append_le(Bool, Word.bits(left, w), Key.bits(r), n)((
+          %Equal.sym(Nat, List.length(&2, Bool, Word.bits(left, w)), left, Word.bits_length(left, w)): {
+            Nat.is_le(_, n) == True{}: Bool
+          }
+          h
+        ))
+      ): {List.drop(&2, Bool, Key.bits(r), Nat.sub(n, left)) == _: List<&2, Bool>}
+      %Equal.sym(Nat, List.length(&2, Bool, Word.bits(left, w)), left, Word.bits_length(left, w)): {
+        List.drop(&2, Bool, Key.bits(r), Nat.sub(n, left)) == List.drop(&2, Bool, Key.bits(r), Nat.sub(n, _)): List<&2, Bool>
+      }
+      {==}
+
+# a cursor n bits on reads its bits after the first n
+def Cur.skip_bits(+n: Nat, c: Cur) -> {
+  Cur.bits(Cur.skip(n, c)) == List.drop(&2, Bool, Cur.bits(c), n): List<&2, Bool>
+}:
+  match c:
+    case Cur{+left, +w, +r}:
+      Shared.Bool.when_cases(
+        Cur,
+        c2 => {Cur.bits(c2) == List.drop(&2, Bool, Cur.bits(Cur{left, w, r}), n): List<&2, Bool>},
+        Nat.is_le(left, n),
+        u => Cur.words(r, Nat.sub(n, left)),
+        u => Cur.drop(n, Cur{left, w, r}),
+        h => Cur.skip.long(left, w, r, n, h),
+        h => Cur.drop_bits(n, Cur{left, w, r})
+      )
+
+# the read of a key from a cursor finds what the clear read of its bits finds
+def Crit.get_find(-V: Data, m: Crit<V>, +at: Nat, +c: Cur, +k: List<&2, U32>) -> {
+  Crit.get.go(V, m, at, c, k) == Crit.find(V, m, at, Cur.bits(c), k): Maybe<&2, V>
+}:
+  match m:
+    case Crit.Tip{}:
+      {==}
+    case Crit.Leaf{k2, v}:
+      {==}
+    case Crit.Fork{+rep, +pos, +e, +z, +o}:
+      %Cur.skip_bits(Nat.sub(pos, at), c): {
+        Crit.get.go(V, Crit.Fork{rep, pos, e, z, o}, at, c, k)
+          == Shared.Bool.when(
+            Maybe<&2, V>,
+            List.is_empty(&2, Bool, _),
+            u => Crit.ended(V, rep, e, k),
+            u => Shared.Bool.when(Maybe<&2, V>, Shared.List.head_or(Bool, _, False{}), u => Crit.find(V, o, 1n+pos, List.drop(&2, Bool, _, 1n), k), u => Crit.find(V, z, 1n+pos, List.drop(&2, Bool, _, 1n), k))
+          ): Maybe<&2, V>
+      }
+      %Cur.done_bits(Cur.skip(Nat.sub(pos, at), c)): {
+        Crit.get.go(V, Crit.Fork{rep, pos, e, z, o}, at, c, k)
+          == Shared.Bool.when(
+            Maybe<&2, V>,
+            _,
+            u => Crit.ended(V, rep, e, k),
+            u => Shared.Bool.when(Maybe<&2, V>, Shared.List.head_or(Bool, Cur.bits(Cur.skip(Nat.sub(pos, at), c)), False{}), u => Crit.find(V, o, 1n+pos, List.drop(&2, Bool, Cur.bits(Cur.skip(Nat.sub(pos, at), c)), 1n), k), u => Crit.find(V, z, 1n+pos, List.drop(&2, Bool, Cur.bits(Cur.skip(Nat.sub(pos, at), c)), 1n), k))
+          ): Maybe<&2, V>
+      }
+      %Cur.bit_bits(Cur.skip(Nat.sub(pos, at), c)): {
+        Crit.get.go(V, Crit.Fork{rep, pos, e, z, o}, at, c, k)
+          == Shared.Bool.when(
+            Maybe<&2, V>,
+            Cur.done(Cur.skip(Nat.sub(pos, at), c)),
+            u => Crit.ended(V, rep, e, k),
+            u => Shared.Bool.when(Maybe<&2, V>, _, u => Crit.find(V, o, 1n+pos, List.drop(&2, Bool, Cur.bits(Cur.skip(Nat.sub(pos, at), c)), 1n), k), u => Crit.find(V, z, 1n+pos, List.drop(&2, Bool, Cur.bits(Cur.skip(Nat.sub(pos, at), c)), 1n), k))
+          ): Maybe<&2, V>
+      }
+      %Cur.next_bits(Cur.skip(Nat.sub(pos, at), c)): {
+        Crit.get.go(V, Crit.Fork{rep, pos, e, z, o}, at, c, k)
+          == Shared.Bool.when(
+            Maybe<&2, V>,
+            Cur.done(Cur.skip(Nat.sub(pos, at), c)),
+            u => Crit.ended(V, rep, e, k),
+            u => Shared.Bool.when(Maybe<&2, V>, Cur.bit(Cur.skip(Nat.sub(pos, at), c)), u => Crit.find(V, o, 1n+pos, _, k), u => Crit.find(V, z, 1n+pos, _, k))
+          ): Maybe<&2, V>
+      }
+      %Crit.get_find(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k): {
+        Crit.get.go(V, Crit.Fork{rep, pos, e, z, o}, at, c, k)
+          == Shared.Bool.when(
+            Maybe<&2, V>,
+            Cur.done(Cur.skip(Nat.sub(pos, at), c)),
+            u => Crit.ended(V, rep, e, k),
+            u => Shared.Bool.when(Maybe<&2, V>, Cur.bit(Cur.skip(Nat.sub(pos, at), c)), u => _, u => Crit.find(V, z, 1n+pos, Cur.bits(Cur.next(Cur.skip(Nat.sub(pos, at), c))), k))
+          ): Maybe<&2, V>
+      }
+      %Crit.get_find(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k): {
+        Crit.get.go(V, Crit.Fork{rep, pos, e, z, o}, at, c, k)
+          == Shared.Bool.when(
+            Maybe<&2, V>,
+            Cur.done(Cur.skip(Nat.sub(pos, at), c)),
+            u => Crit.ended(V, rep, e, k),
+            u => Shared.Bool.when(Maybe<&2, V>, Cur.bit(Cur.skip(Nat.sub(pos, at), c)), u => Crit.get.go(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k), u => _)
+          ): Maybe<&2, V>
+      }
+      {==}
+
+# the read of a key finds what the clear read of its bits finds
+def Crit.get_is_find(-V: Data, m: Crit<V>, +k: List<&2, U32>) -> {
+  Crit.get(V, m, k) == Crit.find(V, m, 0n, Key.bits(k), k): Maybe<&2, V>
+}:
+  Crit.get_find(V, m, 0n, Cur.of(k), k)

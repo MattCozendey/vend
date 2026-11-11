@@ -496,6 +496,22 @@ def Bool.when(-A: Type, b: Bool, k: Unit -> A, e: Unit -> A) -> A:
     case True{}:
       k(Unit{})
 
+# what holds of each choice, given the test, holds of the choice that runs
+def Bool.when_cases(
+  -A: Type,
+  -P: A -> Type,
+  b: Bool,
+  -k: Unit -> A,
+  -e: Unit -> A,
+  pk: {b == True{}: Bool} -> P(k(Unit{})),
+  pe: {b == False{}: Bool} -> P(e(Unit{}))
+) -> P(Bool.when(A, b, k, e)):
+  match b:
+    case True{}:
+      pk({==})
+    case False{}:
+      pe({==})
+
 # both sides of a true "and" are true
 def Bool.and_true_left(
   a: Bool,
@@ -2856,3 +2872,41 @@ def Nat.sub_zero(a: Nat) -> {Nat.sub(a, 0n) == a: Nat}:
       {==}
     case 1n+p:
       {==}
+
+# dropping one, then p, is dropping 1 + p
+def List.drop_one_drop(-A: Data, xs: List<&2, A>, p: Nat) -> {
+  List.drop(&2, A, List.drop(&2, A, xs, 1n), p) == List.drop(&2, A, xs, 1n+p): List<&2, A>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      %Equal.sym(List<&2, A>, List.drop(&2, A, t, 0n), t, List.drop_zero(&2, A, t)): {
+        List.drop(&2, A, _, p) == List.drop(&2, A, t, p): List<&2, A>
+      }
+      {==}
+
+# dropping at least all of a from a then b is dropping the rest from b
+def List.drop_append_le(
+  -A: Data,
+  a: List<&2, A>,
+  b: List<&2, A>,
+  n: Nat
+) -> {Nat.is_le(List.length(&2, A, a), n) == True{}: Bool} -> {
+  List.drop(&2, A, List.append(&2, A, a, b), n)
+    == List.drop(&2, A, b, Nat.sub(n, List.length(&2, A, a))): List<&2, A>
+}:
+  match a n:
+    case Nil{} m:
+      h =>
+        %Equal.sym(Nat, Nat.sub(m, 0n), m, Nat.sub_zero(m)): {
+          List.drop(&2, A, b, m) == List.drop(&2, A, b, _): List<&2, A>
+        }
+        {==}
+    case Con{x, r} 0n:
+      h => Empty.absurd(
+        {List.drop(&2, A, x <> List.append(&2, A, r, b), 0n) == List.drop(&2, A, b, 0n): List<&2, A>},
+        Bool.false_ne_true(h)
+      )
+    case Con{x, r} 1n+p:
+      h => List.drop_append_le(A, r, b, p)(h)
