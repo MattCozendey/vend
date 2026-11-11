@@ -1745,22 +1745,17 @@ def Keys.names(ks: List<&2, List<&2, U32>>) -> List<&2, Resources.Name>:
       Shared.Maybe.cons(Resources.Name, Res.name(k), Keys.names(rest))
 
 # the resources of the tree whose root is h
-def Tree.resources(~d: Led(), l: L(d), h: Maybe<&2, Hashes.Hash>) -> List<&2, Resources.Name>:
-  Res.names(Tree.list(~d, l, h, [0]))
+def Tree.resources(~d: Led(), l: L(d), h: Maybe<&2, Hashes.Hash>) -> Maybe<&2, List<&2, Resources.Name>>:
+  Maybe.map(&2, List<&2, Trees.Binding>, List<&2, Resources.Name>, Res.names, Tree.range(~d, l, h, [0]))
 
 # the resources of the branch b at its head
-def Node.resources(~d: Led(), ~kern: Kern(d), +l: L(d), b: Branch) -> List<&2, Resources.Name>:
-  Maybe.default(
+def Node.resources(~d: Led(), ~kern: Kern(d), +l: L(d), b: Branch) -> Maybe<&2, List<&2, Resources.Name>>:
+  Maybe.bind(
     &2,
+    Replicas.Tip,
     List<&2, Resources.Name>,
-    Maybe.bind(
-      &2,
-      Replicas.Tip,
-      List<&2, Resources.Name>,
-      Branch.head(~d, ~kern, l, b),
-      t => Some{Tree.resources(~d, l, Replicas.Tip.content(t))}
-    ),
-    []
+    Branch.head(~d, ~kern, l, b),
+    t => Tree.resources(~d, l, Replicas.Tip.content(t))
   )
 
 # the members of the group g of the store st, if g is there
@@ -1909,21 +1904,37 @@ def Node.branches(~d: Led(), ~kern: Kern(d), +l: L(d), +st: Hashes.Hash) -> List
 # (Formats.Brings). An import that brings all of a place names each resource
 # under it.
 
-# the first of the names ns that is a resource of the tree h
-def Names.first(~d: Led(), +l: L(d), +h: Maybe<&2, Hashes.Hash>, ns: List<&2, Resources.Name>) -> Maybe<&2, Resources.Name>:
+# Names.first once it is known whether the tree holds the name n (m); go
+# looks at the names after it
+def Names.first.at(
+  m: Maybe<&2, Requests.Res>,
+  n: Resources.Name,
+  go: Unit -> Maybe<&2, Maybe<&2, Resources.Name>>
+) -> Maybe<&2, Maybe<&2, Resources.Name>>:
+  match m:
+    case Some{x}:
+      Some{Some{n}}
+    case None{}:
+      go(Unit{})
+
+# the first of the names ns that is a resource of the tree h, or that none is
+# (none: l lacks a node, so a read cannot tell)
+def Names.first(
+  ~d: Led(),
+  +l: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  ns: List<&2, Resources.Name>
+) -> Maybe<&2, Maybe<&2, Resources.Name>>:
   match ns:
     case Nil{}:
-      None{}
+      Some{None{}}
     case Con{+n, rest}:
-      Shared.Bool.when(
+      Maybe.bind(
+        &2,
+        Maybe<&2, Requests.Res>,
         Maybe<&2, Resources.Name>,
-        Maybe.is_some(
-          &2,
-          Requests.Res,
-          Maybe.default(&2, Maybe<&2, Requests.Res>, Res.find(~d, l, h, n), None{})
-        ),
-        u => Some{n},
-        u => Names.first(~d, l, h, rest)
+        Res.find(~d, l, h, n),
+        m => Names.first.at(m, n, u => Names.first(~d, l, h, rest))
       )
 
 # each resource under the first candidate cs, when the import brings all of
@@ -1934,14 +1945,32 @@ def Import.under(
   h: Maybe<&2, Hashes.Hash>,
   br: Formats.Brings,
   cs: List<&2, Resources.Name>
-) -> List<&2, Resources.Name>:
+) -> Maybe<&2, List<&2, Resources.Name>>:
   match br cs:
     case Formats.Brings.Named{} x:
-      []
+      Some{[]}
     case y Nil{}:
-      []
-    case y Con{c, rest}:
-      Resources.Name.under(c, Tree.resources(~d, l, h))
+      Some{[]}
+    case y Con{+c, rest}:
+      Maybe.map(
+        &2,
+        List<&2, Resources.Name>,
+        List<&2, Resources.Name>,
+        ns => Resources.Name.under(c, ns),
+        Tree.resources(~d, l, h)
+      )
+
+# the names that an import names once its first candidate there is known (m):
+# that one, else what under gives
+def Import.names.of(
+  m: Maybe<&2, Resources.Name>,
+  under: Unit -> Maybe<&2, List<&2, Resources.Name>>
+) -> Maybe<&2, List<&2, Resources.Name>>:
+  match m:
+    case Some{x}:
+      Some{[x]}
+    case None{}:
+      under(Unit{})
 
 # the resources that the import x of the resource n names, in the tree h: the
 # first of its candidates that is there; else, when it brings all of its
@@ -1952,15 +1981,16 @@ def Import.names(
   +h: Maybe<&2, Hashes.Hash>,
   +n: Resources.Name,
   x: Formats.Import
-) -> List<&2, Resources.Name>:
+) -> Maybe<&2, List<&2, Resources.Name>>:
   match x:
     case Formats.Import{Formats.Edge{target, alias, ns, conds}, br, fi}:
       +cs = Resources.Name.candidates(n, fi, Texts.Bytes.to_text(target))
-      Maybe.default(
+      Maybe.bind(
         &2,
+        Maybe<&2, Resources.Name>,
         List<&2, Resources.Name>,
-        Maybe.bind(&2, Resources.Name, List<&2, Resources.Name>, Names.first(~d, l, h, cs), m => Some{[m]}),
-        Import.under(~d, l, h, br, cs)
+        Names.first(~d, l, h, cs),
+        m => Import.names.of(m, u => Import.under(~d, l, h, br, cs))
       )
 
 # the resources that the imports xs of the resource n name, in the tree h
@@ -1971,21 +2001,28 @@ def Imports.names(
   +h: Maybe<&2, Hashes.Hash>,
   +n: Resources.Name,
   xs: List<&2, Formats.Import>
-) -> List<&2, Resources.Name>:
+) -> Maybe<&2, List<&2, Resources.Name>>:
   match xs:
     case Nil{}:
-      []
+      Some{[]}
     case Con{+x, rest}:
-      List.append(
+      Maybe.bind(
         &2,
-        Resources.Name,
+        List<&2, Resources.Name>,
+        List<&2, Resources.Name>,
         Shared.Bool.when(
-          List<&2, Resources.Name>,
+          Maybe<&2, List<&2, Resources.Name>>,
           Formats.Import.holds(view, x),
           u => Import.names(~d, l, h, n, x),
-          u => []
+          u => Some{[]}
         ),
-        Imports.names(~d, l, view, h, n, rest)
+        a => Maybe.map(
+          &2,
+          List<&2, Resources.Name>,
+          List<&2, Resources.Name>,
+          b => List.append(&2, Resources.Name, a, b),
+          Imports.names(~d, l, view, h, n, rest)
+        )
       )
 
 # Res.imports once the resource m is known
@@ -2011,7 +2048,7 @@ def Res.imports.of(
           Texts.Bytes(),
           List<&2, Resources.Name>,
           Root.bytes(~d, l, Res.root(x)),
-          bs => Some{Imports.names(~d, l, view, h, n, Formats.Format.uses(f, [bs]))}
+          bs => Imports.names(~d, l, view, h, n, Formats.Format.uses(f, [bs]))
         )
       )
 
@@ -2086,7 +2123,13 @@ def Uses.reaches(
       &2,
       Reaches.Graph,
       Bool,
-      Uses.graph(~d, l, view, h, Tree.resources(~d, l, h), Reaches.Graph.new()),
+      Maybe.bind(
+        &2,
+        List<&2, Resources.Name>,
+        Reaches.Graph,
+        Tree.resources(~d, l, h),
+        ns => Uses.graph(~d, l, view, h, ns, Reaches.Graph.new())
+      ),
       g => Some{Tries.Trie.has(Unit, Reaches.Graph.reach(g, Name.key(used)), Name.key(changed))}
     )
   )
