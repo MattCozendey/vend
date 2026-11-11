@@ -3684,6 +3684,193 @@ def Merge.get_add(~d: Led()) -> Ledgers.Laws.GetAdd(
     Replicas.Led.laws(Requests.Ask.machine(), d)
   )
 
+# Merge.one once the pick of the three reads is known (mp)
+def Merge.one.p(
+  ~d: Led(),
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  mp: Maybe<&2, Pick>
+) -> Maybe<&2, Work<L(d)>>:
+  Maybe.bind(&2, Pick, Work<L(d)>, mp, p => Merge.pick(~d, w, k, n, p))
+
+# Merge.one once the read of theirs is known (mt)
+def Merge.one.t(
+  ~d: Led(),
+  +l: L(d),
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  mt: Maybe<&2, Maybe<&2, Requests.Res>>
+) -> Maybe<&2, Work<L(d)>>:
+  Maybe.bind(
+    &2,
+    Maybe<&2, Requests.Res>,
+    Work<L(d)>,
+    mt,
+    t => Merge.one.p(~d, w, k, n, Pick.merge(~d, l, b, o, t))
+  )
+
+# Merge.one once the read of ours is known (mo)
+def Merge.one.o(
+  ~d: Led(),
+  +l: L(d),
+  ht: Maybe<&2, Hashes.Hash>,
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b: Maybe<&2, Requests.Res>,
+  mo: Maybe<&2, Maybe<&2, Requests.Res>>
+) -> Maybe<&2, Work<L(d)>>:
+  Maybe.bind(
+    &2,
+    Maybe<&2, Requests.Res>,
+    Work<L(d)>,
+    mo,
+    +o => Merge.one.t(~d, l, w, k, n, b, o, Res.find(~d, l, ht, n))
+  )
+
+# Merge.one once the read of the base is known (mb)
+def Merge.one.b(
+  ~d: Led(),
+  +l: L(d),
+  ho: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  mb: Maybe<&2, Maybe<&2, Requests.Res>>
+) -> Maybe<&2, Work<L(d)>>:
+  Maybe.bind(
+    &2,
+    Maybe<&2, Requests.Res>,
+    Work<L(d)>,
+    mb,
+    +b => Merge.one.o(~d, l, ht, w, k, n, b, Res.find(~d, l, ho, n))
+  )
+
+# the reads and the pick of a merge of a resource, that gave the work W1
+def Merge.Read.p(
+  ~d: Led(),
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  mp: Maybe<&2, Pick>,
+  W1: Work<L(d)>
+) -> Data:
+  Sigma<&2, &2, Pick, p => Merge.And({mp == Some{p}: Maybe<&2, Pick>}, {Merge.pick(~d, w, k, n, p) == Some{W1}: Maybe<&2, Work<L(d)>>})>
+
+def Merge.Read.t(
+  ~d: Led(),
+  +l: L(d),
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  mt: Maybe<&2, Maybe<&2, Requests.Res>>,
+  W1: Work<L(d)>
+) -> Data:
+  Sigma<&2, &2, Maybe<&2, Requests.Res>, t => Merge.And({mt == Some{t}: Maybe<&2, Maybe<&2, Requests.Res>>}, Merge.Read.p(~d, w, k, n, Pick.merge(~d, l, b, o, t), W1))>
+
+def Merge.Read.o(
+  ~d: Led(),
+  +l: L(d),
+  ht: Maybe<&2, Hashes.Hash>,
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b: Maybe<&2, Requests.Res>,
+  mo: Maybe<&2, Maybe<&2, Requests.Res>>,
+  W1: Work<L(d)>
+) -> Data:
+  Sigma<&2, &2, Maybe<&2, Requests.Res>, o => Merge.And({mo == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>}, Merge.Read.t(~d, l, w, k, n, b, o, Res.find(~d, l, ht, n), W1))>
+
+def Merge.Read.b(
+  ~d: Led(),
+  +l: L(d),
+  ho: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  mb: Maybe<&2, Maybe<&2, Requests.Res>>,
+  W1: Work<L(d)>
+) -> Data:
+  Sigma<&2, &2, Maybe<&2, Requests.Res>, b => Merge.And({mb == Some{b}: Maybe<&2, Maybe<&2, Requests.Res>>}, Merge.Read.o(~d, l, ht, w, k, n, b, Res.find(~d, l, ho, n), W1))>
+
+def Merge.read.p(
+  ~d: Led(),
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  mp: Maybe<&2, Pick>,
+  +W1: Work<L(d)>,
+  e: {Merge.one.p(~d, w, k, n, mp) == Some{W1}: Maybe<&2, Work<L(d)>>}
+) -> Merge.Read.p(~d, w, k, n, mp, W1):
+  match mp:
+    case None{}:
+      Empty.absurd(Merge.Read.p(~d, w, k, n, None{}, W1), Shared.Maybe.none_ne_some(Work<L(d)>, W1, e))
+    case Some{+p}:
+      (p, ({==}, e))
+
+def Merge.read.t(
+  ~d: Led(),
+  +l: L(d),
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  mt: Maybe<&2, Maybe<&2, Requests.Res>>,
+  +W1: Work<L(d)>,
+  e: {Merge.one.t(~d, l, w, k, n, b, o, mt) == Some{W1}: Maybe<&2, Work<L(d)>>}
+) -> Merge.Read.t(~d, l, w, k, n, b, o, mt, W1):
+  match mt:
+    case None{}:
+      Empty.absurd(Merge.Read.t(~d, l, w, k, n, b, o, None{}, W1), Shared.Maybe.none_ne_some(Work<L(d)>, W1, e))
+    case Some{+t}:
+      (t, ({==}, Merge.read.p(~d, w, k, n, Pick.merge(~d, l, b, o, t), W1, e)))
+
+def Merge.read.o(
+  ~d: Led(),
+  +l: L(d),
+  ht: Maybe<&2, Hashes.Hash>,
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b: Maybe<&2, Requests.Res>,
+  mo: Maybe<&2, Maybe<&2, Requests.Res>>,
+  +W1: Work<L(d)>,
+  e: {Merge.one.o(~d, l, ht, w, k, n, b, mo) == Some{W1}: Maybe<&2, Work<L(d)>>}
+) -> Merge.Read.o(~d, l, ht, w, k, n, b, mo, W1):
+  match mo:
+    case None{}:
+      Empty.absurd(Merge.Read.o(~d, l, ht, w, k, n, b, None{}, W1), Shared.Maybe.none_ne_some(Work<L(d)>, W1, e))
+    case Some{+o}:
+      (o, ({==}, Merge.read.t(~d, l, w, k, n, b, o, Res.find(~d, l, ht, n), W1, e)))
+
+# the reads and the pick of a merge of a resource that gave the work W1
+def Merge.read(
+  ~d: Led(),
+  +l: L(d),
+  ho: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  mb: Maybe<&2, Maybe<&2, Requests.Res>>,
+  +W1: Work<L(d)>,
+  e: {Merge.one.b(~d, l, ho, ht, w, k, n, mb) == Some{W1}: Maybe<&2, Work<L(d)>>}
+) -> Merge.Read.b(~d, l, ho, ht, w, k, n, mb, W1):
+  match mb:
+    case None{}:
+      Empty.absurd(Merge.Read.b(~d, l, ho, ht, w, k, n, None{}, W1), Shared.Maybe.none_ne_some(Work<L(d)>, W1, e))
+    case Some{+b}:
+      (b, ({==}, Merge.read.o(~d, l, ht, w, k, n, b, Res.find(~d, l, ho, n), W1, e)))
+
 # the entry e, when it is under the name n
 def Merge.new_entry(~d: Led(), +e: Ledgers.Entry<Requests.Ask>, n: Ledgers.Name) -> Maybe<&2, Ledgers.Entry<Requests.Ask>>:
   Shared.Maybe.when(
