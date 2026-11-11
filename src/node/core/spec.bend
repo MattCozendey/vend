@@ -5544,6 +5544,263 @@ def Affects.find_names(
     )
   )(ef)
 
+# Affects.keys_of once it is known whether the key j is k (b)
+def Affects.keys_of.at(
+  +j: List<&2, U32>,
+  +rest: List<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +c: Resources.Name,
+  b: Bool,
+  eb: {Shared.List.is_eq(~U32, ~U32.is_eq, j, k) == b: Bool},
+  +en: {Res.name(k) == Some{c}: Maybe<&2, Resources.Name>},
+  ih: {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), rest, k) == True{}: Bool}
+    -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, Keys.names(rest), c) == True{}: Bool}
+) -> {
+  List.any.if(w => List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), rest, k), b) == True{}: Bool
+} -> {
+  List.contains(~Resources.Name, ~Resources.Name.is_eq, Shared.Maybe.cons(Resources.Name, Res.name(j), Keys.names(rest)), c)
+    == True{}: Bool
+}:
+  match b:
+    case True{}:
+      h => Affects.cast(
+        List<&2, U32>,
+        z => {
+          List.contains(~Resources.Name, ~Resources.Name.is_eq, Shared.Maybe.cons(Resources.Name, Res.name(z), Keys.names(rest)), c)
+            == True{}: Bool
+        },
+        k,
+        j,
+        Equal.sym(List<&2, U32>, j, k, Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), j, k)(eb)),
+        Affects.cast(
+          Maybe<&2, Resources.Name>,
+          z => {
+            List.contains(~Resources.Name, ~Resources.Name.is_eq, Shared.Maybe.cons(Resources.Name, z, Keys.names(rest)), c)
+              == True{}: Bool
+          },
+          Some{c},
+          Res.name(k),
+          Equal.sym(Maybe<&2, Resources.Name>, Res.name(k), Some{c}, en),
+          Affects.contains_head(~Resources.Name, ~Resources.Name.is_eq, ~Affects.name_laws(), c, Keys.names(rest))
+        )
+      )
+    case False{}:
+      h => Affects.cons_keep(Res.name(j), Keys.names(rest), c)(ih(h))
+
+# the name of a key among ks is among the names of ks
+def Affects.keys_of(
+  ks: List<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +c: Resources.Name,
+  +en: {Res.name(k) == Some{c}: Maybe<&2, Resources.Name>}
+) -> {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), ks, k) == True{}: Bool}
+  -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, Keys.names(ks), c) == True{}: Bool}:
+  match ks:
+    case Nil{}:
+      h => Empty.absurd(
+        {List.contains(~Resources.Name, ~Resources.Name.is_eq, [], c) == True{}: Bool},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Con{+j, +rest}:
+      h => Affects.keys_of.at(j, rest, k, c, Shared.List.is_eq(~U32, ~U32.is_eq, j, k), {==}, en, h2 => Affects.keys_of(rest, k, c, en)(h2))(h)
+
+# Affects.diff_names once it is known whether the two trees read the key of
+# c the same (q)
+def Affects.diff_names.bit(
+  q: Bool,
+  +v0: Maybe<&2, List<&2, U32>>,
+  +v1: Maybe<&2, List<&2, U32>>,
+  +eq: {
+    Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), v0, v1) == q: Bool
+  },
+  +a: Maybe<&2, Requests.Res>,
+  +b: Maybe<&2, Requests.Res>,
+  eab: {v0 == v1: Maybe<&2, List<&2, U32>>} -> {a == b: Maybe<&2, Requests.Res>},
+  +ns: {Bool.not(Res.same(a, b)) == True{}: Bool}
+) -> {Bool.not(q) == True{}: Bool}:
+  match q:
+    case True{}:
+      Empty.absurd(
+        {False{} == True{}: Bool},
+        Shared.Bool.false_ne_true(
+          Affects.cast(
+            Bool,
+            z => {Bool.not(z) == True{}: Bool},
+            Res.same(a, b),
+            True{},
+            Affects.cast(
+              Maybe<&2, Requests.Res>,
+              z => {Res.same(a, z) == True{}: Bool},
+              a,
+              b,
+              eab(
+                Shared.Maybe.is_eq_sound(
+                  ~List<&2, U32>,
+                  ~Shared.List.is_eq(~U32, ~U32.is_eq),
+                  x => y => Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), x, y),
+                  v0,
+                  v1
+                )(eq)
+              ),
+              Affects.same_refl(a)
+            ),
+            ns
+          )
+        )
+      )
+    case False{}:
+      {==}
+
+# Affects.diff_names once the reads m1 (of h) and m0 (of h0) of the key of c
+# are known
+def Affects.diff_names.fin(
+  ~d: Led(),
+  +l: L(d),
+  +h0: Maybe<&2, Hashes.Hash>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +ks: List<&2, List<&2, U32>>,
+  +ed: {Replicas.Tree.diff(~Requests.Ask.machine(), ~d, l, h0, h) == Some{ks}: Maybe<&2, List<&2, List<&2, U32>>>},
+  +c: Resources.Name,
+  +a: Maybe<&2, Requests.Res>,
+  +b: Maybe<&2, Requests.Res>,
+  +ns: {Bool.not(Res.same(a, b)) == True{}: Bool},
+  +m1: Maybe<&2, List<&2, U32>>,
+  +m0: Maybe<&2, List<&2, U32>>,
+  +em1: {Replicas.Tree.find(~Requests.Ask.machine(), ~d, l, h, Key.res(c)) == Some{m1}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+  +em0: {Replicas.Tree.find(~Requests.Ask.machine(), ~d, l, h0, Key.res(c)) == Some{m0}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+  +ea: {Res.found(m1) == a: Maybe<&2, Requests.Res>},
+  +eb: {Res.found(m0) == b: Maybe<&2, Requests.Res>}
+) -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, Keys.names(ks), c) == True{}: Bool}:
+  +look1 = Replicas.Tree.look(~Requests.Ask.machine(), ~d, l, h, Key.res(c))
+  +look0 = Replicas.Tree.look(~Requests.Ask.machine(), ~d, l, h0, Key.res(c))
+  +e1 = Affects.known_value(look1, m1)(em1)
+  +e0 = Affects.known_value(look0, m0)(em0)
+  +iseq = Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Trees.Look.value(look0), Trees.Look.value(look1))
+  Affects.keys_of(ks, Key.res(c), c, Affects.name_key(c))(
+    Equal.trans(
+      Bool,
+      List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), ks, Key.res(c)),
+      Bool.not(iseq),
+      True{},
+      Affects.diff_has(~d, l, h0, h, ks, ed, Key.res(c)),
+      Affects.diff_names.bit(
+        iseq,
+        Trees.Look.value(look0),
+        Trees.Look.value(look1),
+        {==},
+        a,
+        b,
+        e => Equal.trans(
+          Maybe<&2, Requests.Res>,
+          a,
+          Res.found(m1),
+          b,
+          Equal.sym(Maybe<&2, Requests.Res>, Res.found(m1), a, ea),
+          Equal.trans(
+            Maybe<&2, Requests.Res>,
+            Res.found(m1),
+            Res.found(m0),
+            b,
+            Equal.cong(
+              Maybe<&2, List<&2, U32>>,
+              Maybe<&2, Requests.Res>,
+              Res.found,
+              m1,
+              m0,
+              Equal.trans(
+                Maybe<&2, List<&2, U32>>,
+                m1,
+                Trees.Look.value(look0),
+                m0,
+                Equal.trans(
+                  Maybe<&2, List<&2, U32>>,
+                  m1,
+                  Trees.Look.value(look1),
+                  Trees.Look.value(look0),
+                  Equal.sym(Maybe<&2, List<&2, U32>>, Trees.Look.value(look1), m1, e1),
+                  Equal.sym(Maybe<&2, List<&2, U32>>, Trees.Look.value(look0), Trees.Look.value(look1), e)
+                ),
+                e0
+              )
+            ),
+            eb
+          )
+        ),
+        ns
+      )
+    )
+  )
+
+# a resource that a version changed is a name of a key of the difference of
+# its trees
+def Affects.diff_names(
+  ~d: Led(),
+  +l: L(d),
+  +h0: Maybe<&2, Hashes.Hash>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +ks: List<&2, List<&2, U32>>,
+  +ed: {Replicas.Tree.diff(~Requests.Ask.machine(), ~d, l, h0, h) == Some{ks}: Maybe<&2, List<&2, List<&2, U32>>>},
+  +c: Resources.Name
+) -> {Res.differs(~d, l, h, h0, c) == Some{True{}}: Maybe<&2, Bool>}
+  -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, Keys.names(ks), c) == True{}: Bool}:
+  -goal = {List.contains(~Resources.Name, ~Resources.Name.is_eq, Keys.names(ks), c) == True{}: Bool}
+  ediff => Affects.bind_some(
+    Maybe<&2, Requests.Res>,
+    Bool,
+    goal,
+    Res.find(~d, l, h, c),
+    a => Maybe.bind(
+      &2,
+      Maybe<&2, Requests.Res>,
+      Bool,
+      Res.find(~d, l, h0, c),
+      b => Some{Bool.not(Res.same(a, b))}
+    ),
+    True{},
+    +a => ea => e2 => Affects.bind_some(
+      Maybe<&2, Requests.Res>,
+      Bool,
+      goal,
+      Res.find(~d, l, h0, c),
+      b => Some{Bool.not(Res.same(a, b))},
+      True{},
+      +b => eb => e3 => Affects.bind_some(
+        Maybe<&2, List<&2, U32>>,
+        Maybe<&2, Requests.Res>,
+        goal,
+        Replicas.Tree.find(~Requests.Ask.machine(), ~d, l, h, Key.res(c)),
+        m => Some{Res.found(m)},
+        a,
+        +m1 => em1 => fa => Affects.bind_some(
+          Maybe<&2, List<&2, U32>>,
+          Maybe<&2, Requests.Res>,
+          goal,
+          Replicas.Tree.find(~Requests.Ask.machine(), ~d, l, h0, Key.res(c)),
+          m => Some{Res.found(m)},
+          b,
+          +m0 => em0 => fb => Affects.diff_names.fin(
+            ~d,
+            l,
+            h0,
+            h,
+            ks,
+            ed,
+            c,
+            a,
+            b,
+            Shared.Maybe.some_inj(Bool, Bool.not(Res.same(a, b)), True{}, e3),
+            m1,
+            m0,
+            em1,
+            em0,
+            Shared.Maybe.some_inj(Maybe<&2, Requests.Res>, Res.found(m1), a, fa),
+            Shared.Maybe.some_inj(Maybe<&2, Requests.Res>, Res.found(m0), b, fb)
+          )
+        )(eb)
+      )(ea)
+    )(e2)
+  )(ediff)
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
