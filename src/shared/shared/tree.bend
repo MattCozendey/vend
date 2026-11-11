@@ -5467,11 +5467,917 @@ def Mst.canon_sub.one(
     )(eo)
   )(Mst.sub_list_on(~S, ~fetch, f, s, h, up, lo, hi, a)(hb)(e))
 
+# two subtrees whose bounds hold keys, with nodes whose listings are one
+# (ihn: two such nodes of one level are one), are one subtree
+def Mst.canon_sub.both(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  +h1: Hashes.Hash,
+  +h2: Hashes.Hash,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +a: List<&2, Binding>,
+  +hb: {Bound.before([], hi) == True{}: Bool},
+  ihn: @xs1: List<&2, Item> -> @xs2: List<&2, Item> -> @l: Nat -> @p1: Maybe<&2, Hashes.Hash> -> @p2: Maybe<&2, Hashes.Hash> -> @ks1: List<
+    &2,
+    Piece> -> @ks2: List<&2, Piece> -> {Bound.before([], hi) == True{}: Bool} -> {
+    Mst.pieces(xs1, l, p1, lo, hi) == Some{ks1}: Maybe<&2, List<&2, Piece>>
+  } -> {Mst.range.go(~S, ~fetch, f, s, [], ks1) == Some{a}: Maybe<&2, List<&2, Binding>>} -> {
+    Mst.pieces(xs2, l, p2, lo, hi) == Some{ks2}: Maybe<&2, List<&2, Piece>>
+  } -> {Mst.range.go(~S, ~fetch, f, s, [], ks2) == Some{a}: Maybe<&2, List<&2, Binding>>} -> {Node{l, p1, xs1} == Node{l, p2, xs2}: Node}
+) -> {Mst.sub_list(~S, ~fetch, f, s, [], Some{h1}, up, lo, hi) == Some{a}: Maybe<&2, List<&2, Binding>>} -> {
+  Mst.sub_list(~S, ~fetch, f, s, [], Some{h2}, up, lo, hi) == Some{a}: Maybe<&2, List<&2, Binding>>
+} -> {Some{h1} == Some{h2}: Maybe<&2, Hashes.Hash>}:
+  e1 => e2 => Maybe.bind_cases(
+    List<&2, Piece>,
+    List<&2, Binding>,
+    Mst.open(~S, ~fetch, s, h1, up, lo, hi),
+    ks => Mst.range.go(~S, ~fetch, f, s, [], ks),
+    a,
+    {Some{h1} == Some{h2}: Maybe<&2, Hashes.Hash>},
+    +ks1 => eo1 => +ea1 => Mst.open_cases(
+      ~S,
+      ~fetch,
+      s,
+      h1,
+      up,
+      lo,
+      hi,
+      ks1,
+      {Some{h1} == Some{h2}: Maybe<&2, Hashes.Hash>},
+      +l1 => +left1 => +xs1 => ef1 => +eh1 => en1 => elt1 => +ee1 => +ep1 => Maybe.bind_cases(
+        List<&2, Piece>,
+        List<&2, Binding>,
+        Mst.open(~S, ~fetch, s, h2, up, lo, hi),
+        ks => Mst.range.go(~S, ~fetch, f, s, [], ks),
+        a,
+        {Some{h1} == Some{h2}: Maybe<&2, Hashes.Hash>},
+        +ks2 => eo2 => +ea2 => Mst.open_cases(
+          ~S,
+          ~fetch,
+          s,
+          h2,
+          up,
+          lo,
+          hi,
+          ks2,
+          {Some{h1} == Some{h2}: Maybe<&2, Hashes.Hash>},
+          +l2 => +left2 => +xs2 => ef2 => +eh2 => en2 => elt2 => +ee2 => +ep2 =>
+            +l12 = Nat.lt_succ_eq(
+              l1,
+              l2
+            )(
+              Bindings.has_level_lt(
+                a,
+                l1,
+                1n+l2
+              )(Mst.lists_below(~S, ~fetch, f, s, [], xs2, l2, left2, lo, hi, ks2, a)(ep2)(ea2))(
+                Mst.lists_level(~S, ~fetch, f, s, xs1, l1, left1, lo, hi, ks1, a)(ee1)(ep1)(ea1)
+              )
+            )(
+              Bindings.has_level_lt(
+                a,
+                l2,
+                1n+l1
+              )(Mst.lists_below(~S, ~fetch, f, s, [], xs1, l1, left1, lo, hi, ks1, a)(ep1)(ea1))(
+                Mst.lists_level(~S, ~fetch, f, s, xs2, l2, left2, lo, hi, ks2, a)(ee2)(ep2)(ea2)
+              )
+            )
+            +nodes = ihn(xs1)(xs2)(l1)(left1)(left2)(ks1)(ks2)(hb)(ep1)(ea1)(
+              Equal.trans(
+                Maybe<&2, List<&2, Piece>>,
+                Mst.pieces(xs2, l1, left2, lo, hi),
+                Mst.pieces(xs2, l2, left2, lo, hi),
+                Some{ks2},
+                Equal.cong(Nat, Maybe<&2, List<&2, Piece>>, x => Mst.pieces(xs2, x, left2, lo, hi), l1, l2, l12),
+                ep2
+              )
+            )(ea2)
+            +n12 = Equal.trans(
+              Node,
+              Node{l1, left1, xs1},
+              Node{l1, left2, xs2},
+              Node{l2, left2, xs2},
+              nodes,
+              Equal.cong(Nat, Node, x => Node{x, left2, xs2}, l1, l2, l12)
+            )
+            Equal.cong(
+              Hashes.Hash,
+              Maybe<&2, Hashes.Hash>,
+              x => Some{x},
+              h1,
+              h2,
+              Equal.trans(
+                Hashes.Hash,
+                h1,
+                Hashes.Sha.hash(Node.code(Node{l1, left1, xs1}, [])),
+                h2,
+                Equal.sym(Hashes.Hash, Hashes.Sha.hash(Node.code(Node{l1, left1, xs1}, [])), h1, eh1),
+                Equal.trans(
+                  Hashes.Hash,
+                  Hashes.Sha.hash(Node.code(Node{l1, left1, xs1}, [])),
+                  Hashes.Sha.hash(Node.code(Node{l2, left2, xs2}, [])),
+                  h2,
+                  Equal.cong(Node, Hashes.Hash, x => Hashes.Sha.hash(Node.code(x, [])), Node{l1, left1, xs1}, Node{l2, left2, xs2}, n12),
+                  eh2
+                )
+              )
+            )
+        )(eo2)
+      )(Mst.sub_list_on(~S, ~fetch, f, s, h2, up, lo, hi, a)(hb)(e2))
+    )(eo1)
+  )(Mst.sub_list_on(~S, ~fetch, f, s, h1, up, lo, hi, a)(hb)(e1))
+
+# two subtrees in one room that list the same bindings, under no prefix, are
+# one subtree, when two such nodes of one level are one (ihn)
+def Mst.canon_sub(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  m1: Maybe<&2, Hashes.Hash>,
+  m2: Maybe<&2, Hashes.Hash>,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +a: List<&2, Binding>,
+  hn1: {Bool.or(Maybe.is_none(&2, Hashes.Hash, m1), Bound.before([], hi)) == True{}: Bool},
+  hn2: {Bool.or(Maybe.is_none(&2, Hashes.Hash, m2), Bound.before([], hi)) == True{}: Bool},
+  ihn: @xs1: List<&2, Item> -> @xs2: List<&2, Item> -> @l: Nat -> @p1: Maybe<&2, Hashes.Hash> -> @p2: Maybe<&2, Hashes.Hash> -> @ks1: List<
+    &2,
+    Piece> -> @ks2: List<&2, Piece> -> {Bound.before([], hi) == True{}: Bool} -> {
+    Mst.pieces(xs1, l, p1, lo, hi) == Some{ks1}: Maybe<&2, List<&2, Piece>>
+  } -> {Mst.range.go(~S, ~fetch, f, s, [], ks1) == Some{a}: Maybe<&2, List<&2, Binding>>} -> {
+    Mst.pieces(xs2, l, p2, lo, hi) == Some{ks2}: Maybe<&2, List<&2, Piece>>
+  } -> {Mst.range.go(~S, ~fetch, f, s, [], ks2) == Some{a}: Maybe<&2, List<&2, Binding>>} -> {Node{l, p1, xs1} == Node{l, p2, xs2}: Node}
+) -> {Mst.sub_list(~S, ~fetch, f, s, [], m1, up, lo, hi) == Some{a}: Maybe<&2, List<&2, Binding>>} -> {
+  Mst.sub_list(~S, ~fetch, f, s, [], m2, up, lo, hi) == Some{a}: Maybe<&2, List<&2, Binding>>
+} -> {m1 == m2: Maybe<&2, Hashes.Hash>}:
+  match m1 m2:
+    case None{} None{}:
+      e1 => e2 => {==}
+    case None{} Some{+h2}:
+      e1 => e2 => Empty.absurd({None{} == Some{h2}: Maybe<&2, Hashes.Hash>}, Mst.canon_sub.one(~S, ~fetch, f, s, h2, up, lo, hi, a, hn2)(e1)(e2))
+    case Some{+h1} None{}:
+      e1 => e2 => Empty.absurd({Some{h1} == None{}: Maybe<&2, Hashes.Hash>}, Mst.canon_sub.one(~S, ~fetch, f, s, h1, up, lo, hi, a, hn1)(e2)(e1))
+    case Some{+h1} Some{+h2}:
+      e1 => e2 => Mst.canon_sub.both(~S, ~fetch, f, s, h1, h2, up, lo, hi, a, hn1, ihn)(e1)(e2)
+
+# a node with no item and a node with an item, of one level and room, list
+# different bindings: the second holds a key of its level, the first none
+def Mst.canon_clash(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  +l: Nat,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +ks: List<&2, Piece>,
+  +a: List<&2, Binding>,
+  hh: {Bindings.has_level(a, l) == True{}: Bool}
+) -> {Mst.pieces([], l, prev, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>} -> {
+  Mst.range.go(~S, ~fetch, 1n+q, s, [], ks) == Some{a}: Maybe<&2, List<&2, Binding>>
+} -> Empty:
+  ep => e => Mst.range_list(
+    ~S,
+    ~fetch,
+    prev,
+    q,
+    s,
+    [],
+    l,
+    lo,
+    hi,
+    [],
+    a,
+    Empty,
+    +a1 => b => e4 => eb => esl => Bindings.level_clash(
+      a,
+      l
+    )(
+      Equal.trans(
+        Bool,
+        Bindings.below(a, l),
+        Bindings.below(a1, l),
+        True{},
+        Equal.cong(List<&2, Binding>, Bool, x => Bindings.below(x, l), a, a1, Equal.sym(List<&2, Binding>, a1, a, Bindings.cat_nil(a1, b, a)(eb)(e4))),
+        Mst.sub_below(
+          ~S,
+          ~fetch,
+          q,
+          s,
+          [],
+          prev,
+          l,
+          lo,
+          hi,
+          a1,
+          xs2 => l2 => left2 => ks2 => ep2 => ea2 => Mst.lists_below(~S, ~fetch, q, s, [], xs2, l2, left2, lo, hi, ks2, a1)(ep2)(ea2)
+        )(esl)
+      )
+    )(hh)
+  )(
+    Equal.trans(
+      Maybe<&2, List<&2, Binding>>,
+      Mst.range.go(~S, ~fetch, 1n+q, s, [], Piece.sub(prev, l, lo, hi, [])),
+      Mst.range.go(~S, ~fetch, 1n+q, s, [], ks),
+      Some{a},
+      Equal.cong(
+        List<&2, Piece>,
+        Maybe<&2, List<&2, Binding>>,
+        x => Mst.range.go(~S, ~fetch, 1n+q, s, [], x),
+        Piece.sub(prev, l, lo, hi, []),
+        ks,
+        Shared.Maybe.some_inj(List<&2, Piece>, Piece.sub(prev, l, lo, hi, []), ks, ep)
+      ),
+      e
+    )
+  )
+
+# two nodes of one level, in one room, whose pieces list the same bindings
+# under no prefix, are one node
+def Mst.canon_node(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  xs1: List<&2, Item>,
+  +xs2: List<&2, Item>,
+  +l: Nat,
+  +prev1: Maybe<&2, Hashes.Hash>,
+  +prev2: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +ks1: List<&2, Piece>,
+  +ks2: List<&2, Piece>,
+  +a: List<&2, Binding>
+) -> {Bound.before([], hi) == True{}: Bool} -> {Mst.pieces(xs1, l, prev1, lo, hi) == Some{ks1}: Maybe<&2, List<&2, Piece>>} -> {
+  Mst.range.go(~S, ~fetch, f, s, [], ks1) == Some{a}: Maybe<&2, List<&2, Binding>>
+} -> {Mst.pieces(xs2, l, prev2, lo, hi) == Some{ks2}: Maybe<&2, List<&2, Piece>>} -> {
+  Mst.range.go(~S, ~fetch, f, s, [], ks2) == Some{a}: Maybe<&2, List<&2, Binding>>
+} -> {Node{l, prev1, xs1} == Node{l, prev2, xs2}: Node}:
+  match f:
+    case 0n:
+      hb => ep1 => e1 => ep2 => e2 => Equal.trans(
+        Node,
+        Node{l, prev1, xs1},
+        Node{l, None{}, []},
+        Node{l, prev2, xs2},
+        Mst.pieces_empty(
+          xs1,
+          l,
+          prev1,
+          lo,
+          hi
+        )(
+          Equal.trans(
+            Maybe<&2, List<&2, Piece>>,
+            Mst.pieces(xs1, l, prev1, lo, hi),
+            Some{ks1},
+            Some{[]},
+            ep1,
+            Equal.cong(List<&2, Piece>, Maybe<&2, List<&2, Piece>>, x => Some{x}, ks1, [], Mst.range_zero_nil(~S, ~fetch, s, [], ks1, a)(e1))
+          )
+        ),
+        Equal.sym(
+          Node,
+          Node{l, prev2, xs2},
+          Node{l, None{}, []},
+          Mst.pieces_empty(
+            xs2,
+            l,
+            prev2,
+            lo,
+            hi
+          )(
+            Equal.trans(
+              Maybe<&2, List<&2, Piece>>,
+              Mst.pieces(xs2, l, prev2, lo, hi),
+              Some{ks2},
+              Some{[]},
+              ep2,
+              Equal.cong(List<&2, Piece>, Maybe<&2, List<&2, Piece>>, x => Some{x}, ks2, [], Mst.range_zero_nil(~S, ~fetch, s, [], ks2, a)(e2))
+            )
+          )
+        )
+      )
+    case 1n+(+q):
+      match xs1 xs2:
+        case Nil{} Nil{}:
+          +hb => ep1 => e1 => ep2 => e2 => Mst.range_list(
+            ~S,
+            ~fetch,
+            prev1,
+            q,
+            s,
+            [],
+            l,
+            lo,
+            hi,
+            [],
+            a,
+            {Node{l, prev1, []} == Node{l, prev2, []}: Node},
+            +a1 => b1 => e41 => eb1 => esl1 => Mst.range_list(
+              ~S,
+              ~fetch,
+              prev2,
+              q,
+              s,
+              [],
+              l,
+              lo,
+              hi,
+              [],
+              a,
+              {Node{l, prev1, []} == Node{l, prev2, []}: Node},
+              +a2 => b2 => e42 => eb2 => esl2 => Equal.cong(
+                Maybe<&2, Hashes.Hash>,
+                Node,
+                x => Node{l, x, []},
+                prev1,
+                prev2,
+                Mst.canon_sub(
+                  ~S,
+                  ~fetch,
+                  q,
+                  s,
+                  prev1,
+                  prev2,
+                  l,
+                  lo,
+                  hi,
+                  a,
+                  Bool.or_true_of(Maybe.is_none(&2, Hashes.Hash, prev1), Bound.before([], hi))(hb),
+                  Bool.or_true_of(Maybe.is_none(&2, Hashes.Hash, prev2), Bound.before([], hi))(hb),
+                  ys1 => ys2 => l3 => p1 => p2 => j1 => j2 => hb3 => f1 => g1 => f2 => g2 => Mst.canon_node(
+                    ~S,
+                    ~fetch,
+                    q,
+                    s,
+                    ys1,
+                    ys2,
+                    l3,
+                    p1,
+                    p2,
+                    lo,
+                    hi,
+                    j1,
+                    j2,
+                    a
+                  )(hb3)(f1)(g1)(f2)(g2)
+                )(
+                  Equal.trans(
+                    Maybe<&2, List<&2, Binding>>,
+                    Mst.sub_list(~S, ~fetch, q, s, [], prev1, l, lo, hi),
+                    Some{a1},
+                    Some{a},
+                    esl1,
+                    Equal.cong(List<&2, Binding>, Maybe<&2, List<&2, Binding>>, x => Some{x}, a1, a, Bindings.cat_nil(a1, b1, a)(eb1)(e41))
+                  )
+                )(
+                  Equal.trans(
+                    Maybe<&2, List<&2, Binding>>,
+                    Mst.sub_list(~S, ~fetch, q, s, [], prev2, l, lo, hi),
+                    Some{a2},
+                    Some{a},
+                    esl2,
+                    Equal.cong(List<&2, Binding>, Maybe<&2, List<&2, Binding>>, x => Some{x}, a2, a, Bindings.cat_nil(a2, b2, a)(eb2)(e42))
+                  )
+                )
+              )
+            )(
+              Equal.trans(
+                Maybe<&2, List<&2, Binding>>,
+                Mst.range.go(~S, ~fetch, 1n+q, s, [], Piece.sub(prev2, l, lo, hi, [])),
+                Mst.range.go(~S, ~fetch, 1n+q, s, [], ks2),
+                Some{a},
+                Equal.cong(
+                  List<&2, Piece>,
+                  Maybe<&2, List<&2, Binding>>,
+                  x => Mst.range.go(~S, ~fetch, 1n+q, s, [], x),
+                  Piece.sub(prev2, l, lo, hi, []),
+                  ks2,
+                  Shared.Maybe.some_inj(List<&2, Piece>, Piece.sub(prev2, l, lo, hi, []), ks2, ep2)
+                ),
+                e2
+              )
+            )
+          )(
+            Equal.trans(
+              Maybe<&2, List<&2, Binding>>,
+              Mst.range.go(~S, ~fetch, 1n+q, s, [], Piece.sub(prev1, l, lo, hi, [])),
+              Mst.range.go(~S, ~fetch, 1n+q, s, [], ks1),
+              Some{a},
+              Equal.cong(
+                List<&2, Piece>,
+                Maybe<&2, List<&2, Binding>>,
+                x => Mst.range.go(~S, ~fetch, 1n+q, s, [], x),
+                Piece.sub(prev1, l, lo, hi, []),
+                ks1,
+                Shared.Maybe.some_inj(List<&2, Piece>, Piece.sub(prev1, l, lo, hi, []), ks1, ep1)
+              ),
+              e1
+            )
+          )
+        case Nil{} Con{Item{+k2, +v2, +r2}, +rest2}:
+          hb => ep1 => e1 => ep2 => e2 => Empty.absurd(
+            {Node{l, prev1, []} == Node{l, prev2, Item{k2, v2, r2} <> rest2}: Node},
+            Mst.canon_clash(
+              ~S,
+              ~fetch,
+              q,
+              s,
+              l,
+              prev1,
+              lo,
+              hi,
+              ks1,
+              a,
+              Mst.lists_level(~S, ~fetch, 1n+q, s, Item{k2, v2, r2} <> rest2, l, prev2, lo, hi, ks2, a)({==})(ep2)(e2)
+            )(ep1)(e1)
+          )
+        case Con{Item{+k1, +v1, +r1}, +rest1} Nil{}:
+          hb => ep1 => e1 => ep2 => e2 => Empty.absurd(
+            {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev2, []}: Node},
+            Mst.canon_clash(
+              ~S,
+              ~fetch,
+              q,
+              s,
+              l,
+              prev2,
+              lo,
+              hi,
+              ks2,
+              a,
+              Mst.lists_level(~S, ~fetch, 1n+q, s, Item{k1, v1, r1} <> rest1, l, prev1, lo, hi, ks1, a)({==})(ep1)(e1)
+            )(ep2)(e2)
+          )
+        case Con{Item{+k1, +v1, +r1}, +rest1} Con{Item{+k2, +v2, +r2}, +rest2}:
+          +hb => ep1 => e1 => ep2 => e2 => Maybe.when_cases(
+            List<&2, Piece>,
+            Bool.and(
+              Bool.and(Nat.is_eq(Key.level(k1), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev1), Bool.not(List.is_empty(&2, U32, k1)))),
+              Bool.and(Bound.after(lo, k1), Bound.before(k1, hi))
+            ),
+            u => Maybe.map(
+              &2,
+              List<&2, Piece>,
+              List<&2, Piece>,
+              ps2 => Piece.sub(prev1, l, lo, Some{k1}, Piece.Bind{k1, v1} <> ps2),
+              Mst.pieces(rest1, l, r1, Some{k1}, hi)
+            ),
+            ks1,
+            {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev2, Item{k2, v2, r2} <> rest2}: Node},
+            +c1 => e21 => Maybe.map_cases(
+              List<&2, Piece>,
+              List<&2, Piece>,
+              Mst.pieces(rest1, l, r1, Some{k1}, hi),
+              ps2 => Piece.sub(prev1, l, lo, Some{k1}, Piece.Bind{k1, v1} <> ps2),
+              ks1,
+              {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev2, Item{k2, v2, r2} <> rest2}: Node},
+              +ks1b => +e31 => e41 => Maybe.when_cases(
+                List<&2, Piece>,
+                Bool.and(
+                  Bool.and(Nat.is_eq(Key.level(k2), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), Bool.not(List.is_empty(&2, U32, k2)))),
+                  Bool.and(Bound.after(lo, k2), Bound.before(k2, hi))
+                ),
+                u => Maybe.map(
+                  &2,
+                  List<&2, Piece>,
+                  List<&2, Piece>,
+                  ps2 => Piece.sub(prev2, l, lo, Some{k2}, Piece.Bind{k2, v2} <> ps2),
+                  Mst.pieces(rest2, l, r2, Some{k2}, hi)
+                ),
+                ks2,
+                {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev2, Item{k2, v2, r2} <> rest2}: Node},
+                +c2 => e22 => Maybe.map_cases(
+                  List<&2, Piece>,
+                  List<&2, Piece>,
+                  Mst.pieces(rest2, l, r2, Some{k2}, hi),
+                  ps2 => Piece.sub(prev2, l, lo, Some{k2}, Piece.Bind{k2, v2} <> ps2),
+                  ks2,
+                  {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev2, Item{k2, v2, r2} <> rest2}: Node},
+                  +ks2b => +e32 => e42 => Mst.range_list(
+                    ~S,
+                    ~fetch,
+                    prev1,
+                    q,
+                    s,
+                    [],
+                    l,
+                    lo,
+                    Some{k1},
+                    Piece.Bind{k1, v1} <> ks1b,
+                    a,
+                    {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev2, Item{k2, v2, r2} <> rest2}: Node},
+                    +ca => +ba => e51 => eb1 => +esl1 => Maybe.map_cases(
+                      List<&2, Binding>,
+                      List<&2, Binding>,
+                      Mst.range.go(~S, ~fetch, 1n+q, s, [], ks1b),
+                      +bb => Shared.Bool.when(List<&2, Binding>, Key.leads([], k1), u => Binding{k1, v1} <> bb, u => bb),
+                      ba,
+                      {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev2, Item{k2, v2, r2} <> rest2}: Node},
+                      +ba2 => +eb12 => e61 => Mst.range_list(
+                        ~S,
+                        ~fetch,
+                        prev2,
+                        q,
+                        s,
+                        [],
+                        l,
+                        lo,
+                        Some{k2},
+                        Piece.Bind{k2, v2} <> ks2b,
+                        a,
+                        {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev2, Item{k2, v2, r2} <> rest2}: Node},
+                        +cb => +bx => e52 => eb2 => +esl2 => Maybe.map_cases(
+                          List<&2, Binding>,
+                          List<&2, Binding>,
+                          Mst.range.go(~S, ~fetch, 1n+q, s, [], ks2b),
+                          +bb => Shared.Bool.when(List<&2, Binding>, Key.leads([], k2), u => Binding{k2, v2} <> bb, u => bb),
+                          bx,
+                          {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev2, Item{k2, v2, r2} <> rest2}: Node},
+                          +bb2 => +eb22 => e62 => Bindings.split_eq(
+                            ca,
+                            cb,
+                            Binding{k1, v1},
+                            Binding{k2, v2},
+                            ba2,
+                            bb2,
+                            l,
+                            {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev2, Item{k2, v2, r2} <> rest2}: Node},
+                            +ec => +ex => +er =>
+                              +kk = Equal.cong(Binding, List<&2, U32>, Binding.key, Binding{k1, v1}, Binding{k2, v2}, ex)
+                              +vv = Equal.cong(Binding, List<&2, U32>, Binding.value, Binding{k1, v1}, Binding{k2, v2}, ex)
+                              +pp = Mst.canon_sub(
+                                ~S,
+                                ~fetch,
+                                q,
+                                s,
+                                prev1,
+                                prev2,
+                                l,
+                                lo,
+                                Some{k1},
+                                ca,
+                                Equal.trans(
+                                  Bool,
+                                  Bool.or(Maybe.is_none(&2, Hashes.Hash, prev1), Key.is_lt([], k1)),
+                                  Bool.or(Maybe.is_none(&2, Hashes.Hash, prev1), Bool.not(List.is_empty(&2, U32, k1))),
+                                  True{},
+                                  Equal.cong(
+                                    Bool,
+                                    Bool,
+                                    x => Bool.or(Maybe.is_none(&2, Hashes.Hash, prev1), x),
+                                    Key.is_lt([], k1),
+                                    Bool.not(List.is_empty(&2, U32, k1)),
+                                    Key.lt_nil_left(k1)
+                                  ),
+                                  Shared.Bool.and_true_right(
+                                    Nat.is_eq(Key.level(k1), l),
+                                    Bool.or(Maybe.is_none(&2, Hashes.Hash, prev1), Bool.not(List.is_empty(&2, U32, k1)))
+                                  )(
+                                    Shared.Bool.and_true_left(
+                                      Bool.and(
+                                        Nat.is_eq(Key.level(k1), l),
+                                        Bool.or(Maybe.is_none(&2, Hashes.Hash, prev1), Bool.not(List.is_empty(&2, U32, k1)))
+                                      ),
+                                      Bool.and(Bound.after(lo, k1), Bound.before(k1, hi))
+                                    )(c1)
+                                  )
+                                ),
+                                Equal.trans(
+                                  Bool,
+                                  Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), Key.is_lt([], k1)),
+                                  Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), Key.is_lt([], k2)),
+                                  True{},
+                                  Equal.cong(List<&2, U32>, Bool, x => Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), Key.is_lt([], x)), k1, k2, kk),
+                                  Equal.trans(
+                                    Bool,
+                                    Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), Key.is_lt([], k2)),
+                                    Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), Bool.not(List.is_empty(&2, U32, k2))),
+                                    True{},
+                                    Equal.cong(
+                                      Bool,
+                                      Bool,
+                                      x => Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), x),
+                                      Key.is_lt([], k2),
+                                      Bool.not(List.is_empty(&2, U32, k2)),
+                                      Key.lt_nil_left(k2)
+                                    ),
+                                    Shared.Bool.and_true_right(
+                                      Nat.is_eq(Key.level(k2), l),
+                                      Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), Bool.not(List.is_empty(&2, U32, k2)))
+                                    )(
+                                      Shared.Bool.and_true_left(
+                                        Bool.and(
+                                          Nat.is_eq(Key.level(k2), l),
+                                          Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), Bool.not(List.is_empty(&2, U32, k2)))
+                                        ),
+                                        Bool.and(Bound.after(lo, k2), Bound.before(k2, hi))
+                                      )(c2)
+                                    )
+                                  )
+                                ),
+                                ys1 => ys2 => l3 => p1 => p2 => j1 => j2 => hb3 => f1 => g1 => f2 => g2 => Mst.canon_node(
+                                  ~S,
+                                  ~fetch,
+                                  q,
+                                  s,
+                                  ys1,
+                                  ys2,
+                                  l3,
+                                  p1,
+                                  p2,
+                                  lo,
+                                  Some{k1},
+                                  j1,
+                                  j2,
+                                  ca
+                                )(hb3)(f1)(g1)(f2)(g2)
+                              )(esl1)(
+                                Equal.trans(
+                                  Maybe<&2, List<&2, Binding>>,
+                                  Mst.sub_list(~S, ~fetch, q, s, [], prev2, l, lo, Some{k1}),
+                                  Mst.sub_list(~S, ~fetch, q, s, [], prev2, l, lo, Some{k2}),
+                                  Some{ca},
+                                  Equal.cong(
+                                    List<&2, U32>,
+                                    Maybe<&2, List<&2, Binding>>,
+                                    x => Mst.sub_list(~S, ~fetch, q, s, [], prev2, l, lo, Some{x}),
+                                    k1,
+                                    k2,
+                                    kk
+                                  ),
+                                  Equal.trans(
+                                    Maybe<&2, List<&2, Binding>>,
+                                    Mst.sub_list(~S, ~fetch, q, s, [], prev2, l, lo, Some{k2}),
+                                    Some{cb},
+                                    Some{ca},
+                                    esl2,
+                                    Equal.cong(
+                                      List<&2, Binding>,
+                                      Maybe<&2, List<&2, Binding>>,
+                                      x => Some{x},
+                                      cb,
+                                      ca,
+                                      Equal.sym(List<&2, Binding>, ca, cb, ec)
+                                    )
+                                  )
+                                )
+                              )
+                              +nr = Mst.canon_node(
+                                ~S,
+                                ~fetch,
+                                1n+q,
+                                s,
+                                rest1,
+                                rest2,
+                                l,
+                                r1,
+                                r2,
+                                Some{k1},
+                                hi,
+                                ks1b,
+                                ks2b,
+                                ba2
+                              )(hb)(e31)(eb12)(
+                                Equal.trans(
+                                  Maybe<&2, List<&2, Piece>>,
+                                  Mst.pieces(rest2, l, r2, Some{k1}, hi),
+                                  Mst.pieces(rest2, l, r2, Some{k2}, hi),
+                                  Some{ks2b},
+                                  Equal.cong(List<&2, U32>, Maybe<&2, List<&2, Piece>>, x => Mst.pieces(rest2, l, r2, Some{x}, hi), k1, k2, kk),
+                                  e32
+                                )
+                              )(
+                                Equal.trans(
+                                  Maybe<&2, List<&2, Binding>>,
+                                  Mst.range.go(~S, ~fetch, 1n+q, s, [], ks2b),
+                                  Some{bb2},
+                                  Some{ba2},
+                                  eb22,
+                                  Equal.cong(
+                                    List<&2, Binding>,
+                                    Maybe<&2, List<&2, Binding>>,
+                                    x => Some{x},
+                                    bb2,
+                                    ba2,
+                                    Equal.sym(List<&2, Binding>, ba2, bb2, er)
+                                  )
+                                )
+                              )
+                              %pp: {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, _, Item{k2, v2, r2} <> rest2}: Node}
+                              %kk: {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev1, Item{_, v2, r2} <> rest2}: Node}
+                              %vv: {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev1, Item{k1, _, r2} <> rest2}: Node}
+                              Equal.cong(Node, Node, n => Node.under(n, l, prev1, k1, v1), Node{l, r1, rest1}, Node{l, r2, rest2}, nr)
+                          )(
+                            Equal.trans(
+                              List<&2, Binding>,
+                              List.append(&2, Binding, ca, Binding{k1, v1} <> ba2),
+                              a,
+                              List.append(&2, Binding, cb, Binding{k2, v2} <> bb2),
+                              Equal.trans(
+                                List<&2, Binding>,
+                                List.append(&2, Binding, ca, Binding{k1, v1} <> ba2),
+                                List.append(&2, Binding, ca, ba),
+                                a,
+                                Equal.cong(List<&2, Binding>, List<&2, Binding>, x => List.append(&2, Binding, ca, x), Binding{k1, v1} <> ba2, ba, e61),
+                                e51
+                              ),
+                              Equal.sym(
+                                List<&2, Binding>,
+                                List.append(&2, Binding, cb, Binding{k2, v2} <> bb2),
+                                a,
+                                Equal.trans(
+                                  List<&2, Binding>,
+                                  List.append(&2, Binding, cb, Binding{k2, v2} <> bb2),
+                                  List.append(&2, Binding, cb, bx),
+                                  a,
+                                  Equal.cong(List<&2, Binding>, List<&2, Binding>, x => List.append(&2, Binding, cb, x), Binding{k2, v2} <> bb2, bx, e62),
+                                  e52
+                                )
+                              )
+                            )
+                          )(
+                            Mst.sub_below(
+                              ~S,
+                              ~fetch,
+                              q,
+                              s,
+                              [],
+                              prev1,
+                              l,
+                              lo,
+                              Some{k1},
+                              ca,
+                              xs3 => l3 => left3 => ks3 => ep3 => ea3 => Mst.lists_below(~S, ~fetch, q, s, [], xs3, l3, left3, lo, Some{k1}, ks3, ca)(ep3)(ea3)
+                            )(esl1)
+                          )(
+                            Mst.sub_below(
+                              ~S,
+                              ~fetch,
+                              q,
+                              s,
+                              [],
+                              prev2,
+                              l,
+                              lo,
+                              Some{k2},
+                              cb,
+                              xs3 => l3 => left3 => ks3 => ep3 => ea3 => Mst.lists_below(~S, ~fetch, q, s, [], xs3, l3, left3, lo, Some{k2}, ks3, cb)(ep3)(ea3)
+                            )(esl2)
+                          )(
+                            Shared.Bool.and_true_left(
+                              Nat.is_eq(Key.level(k1), l),
+                              Bool.or(Maybe.is_none(&2, Hashes.Hash, prev1), Bool.not(List.is_empty(&2, U32, k1)))
+                            )(
+                              Shared.Bool.and_true_left(
+                                Bool.and(Nat.is_eq(Key.level(k1), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev1), Bool.not(List.is_empty(&2, U32, k1)))),
+                                Bool.and(Bound.after(lo, k1), Bound.before(k1, hi))
+                              )(c1)
+                            )
+                          )(
+                            Shared.Bool.and_true_left(
+                              Nat.is_eq(Key.level(k2), l),
+                              Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), Bool.not(List.is_empty(&2, U32, k2)))
+                            )(
+                              Shared.Bool.and_true_left(
+                                Bool.and(Nat.is_eq(Key.level(k2), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), Bool.not(List.is_empty(&2, U32, k2)))),
+                                Bool.and(Bound.after(lo, k2), Bound.before(k2, hi))
+                              )(c2)
+                            )
+                          )
+                        )(eb2)
+                      )(
+                        Equal.trans(
+                          Maybe<&2, List<&2, Binding>>,
+                          Mst.range.go(~S, ~fetch, 1n+q, s, [], Piece.sub(prev2, l, lo, Some{k2}, Piece.Bind{k2, v2} <> ks2b)),
+                          Mst.range.go(~S, ~fetch, 1n+q, s, [], ks2),
+                          Some{a},
+                          Equal.cong(
+                            List<&2, Piece>,
+                            Maybe<&2, List<&2, Binding>>,
+                            x => Mst.range.go(~S, ~fetch, 1n+q, s, [], x),
+                            Piece.sub(prev2, l, lo, Some{k2}, Piece.Bind{k2, v2} <> ks2b),
+                            ks2,
+                            e42
+                          ),
+                          e2
+                        )
+                      )
+                    )(eb1)
+                  )(
+                    Equal.trans(
+                      Maybe<&2, List<&2, Binding>>,
+                      Mst.range.go(~S, ~fetch, 1n+q, s, [], Piece.sub(prev1, l, lo, Some{k1}, Piece.Bind{k1, v1} <> ks1b)),
+                      Mst.range.go(~S, ~fetch, 1n+q, s, [], ks1),
+                      Some{a},
+                      Equal.cong(
+                        List<&2, Piece>,
+                        Maybe<&2, List<&2, Binding>>,
+                        x => Mst.range.go(~S, ~fetch, 1n+q, s, [], x),
+                        Piece.sub(prev1, l, lo, Some{k1}, Piece.Bind{k1, v1} <> ks1b),
+                        ks1,
+                        e41
+                      ),
+                      e1
+                    )
+                  )
+                )(e22)
+              )(ep2)
+            )(e21)
+          )(ep1)
+
 # a root is a function of its bindings, over any root
 law Mst.canon:
   for ~S: Data
   for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
   Laws.Canon(S, Mst.ops(~S, ~fetch))
+
+def Mst.canon(ty, fetch):
+  +s => +h1 => +h2 => +bs => e1 => e2 => Mst.range_list(
+    ~ty,
+    ~fetch,
+    h1,
+    63n,
+    s,
+    [],
+    Mst.depth(),
+    None{},
+    None{},
+    [],
+    bs,
+    {h1 == h2: Maybe<&2, Hashes.Hash>},
+    +a1 => b1 => e41 => eb1 => esl1 => Mst.range_list(
+      ~ty,
+      ~fetch,
+      h2,
+      63n,
+      s,
+      [],
+      Mst.depth(),
+      None{},
+      None{},
+      [],
+      bs,
+      {h1 == h2: Maybe<&2, Hashes.Hash>},
+      +a2 => b2 => e42 => eb2 => esl2 => Mst.canon_sub(
+        ~ty,
+        ~fetch,
+        63n,
+        s,
+        h1,
+        h2,
+        Mst.depth(),
+        None{},
+        None{},
+        bs,
+        Shared.Bool.or_true_right(Maybe.is_none(&2, Hashes.Hash, h1)),
+        Shared.Bool.or_true_right(Maybe.is_none(&2, Hashes.Hash, h2)),
+        ys1 => ys2 => l3 => p1 => p2 => j1 => j2 => hb3 => f1 => g1 => f2 => g2 => Mst.canon_node(
+          ~ty,
+          ~fetch,
+          63n,
+          s,
+          ys1,
+          ys2,
+          l3,
+          p1,
+          p2,
+          None{},
+          None{},
+          j1,
+          j2,
+          bs
+        )(hb3)(f1)(g1)(f2)(g2)
+      )(
+        Equal.trans(
+          Maybe<&2, List<&2, Binding>>,
+          Mst.sub_list(~ty, ~fetch, 63n, s, [], h1, Mst.depth(), None{}, None{}),
+          Some{a1},
+          Some{bs},
+          esl1,
+          Equal.cong(List<&2, Binding>, Maybe<&2, List<&2, Binding>>, x => Some{x}, a1, bs, Bindings.cat_nil(a1, b1, bs)(eb1)(e41))
+        )
+      )(
+        Equal.trans(
+          Maybe<&2, List<&2, Binding>>,
+          Mst.sub_list(~ty, ~fetch, 63n, s, [], h2, Mst.depth(), None{}, None{}),
+          Some{a2},
+          Some{bs},
+          esl2,
+          Equal.cong(List<&2, Binding>, Maybe<&2, List<&2, Binding>>, x => Some{x}, a2, bs, Bindings.cat_nil(a2, b2, bs)(eb2)(e42))
+        )
+      )
+    )(e2)
+  )(e1)
 
 # a listing holds exactly the bindings under its prefix, in order
 law Mst.lists:
