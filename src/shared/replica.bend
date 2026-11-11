@@ -3739,6 +3739,115 @@ def Safe.sub_count(
         )(Safe.sub_count(~mach, ~d, l, w, r, f <> fs, v)(h))
       )
 
+# what the laws of a later ledger give, as premises: a proof takes each as a
+# template, so it may use it as often as it needs (Led.later_grows,
+# Led.later_single, Led.later_last)
+def Hist.LaterGrows(-mach: Machine(), -d: Led(mach)) -> Type:
+  @a: Led.L(mach, d) -> @b: Led.L(mach, d) -> Led.Later(~mach, ~d, a, b) -> Led.Grows(mach, d, a, b)
+
+# that the ballots of a later ledger cast one vote at a place and one pass
+def Hist.LaterSingle(-mach: Machine(), -d: Led(mach)) -> Type:
+  @a: Led.L(mach, d) -> @b: Led.L(mach, d) -> Led.Later(~mach, ~d, a, b) -> Led.Single(mach, d, b)
+
+# that the passes of a later ledger name the last vote of their voter
+def Hist.LaterLast(-mach: Machine(), -d: Led(mach)) -> Type:
+  @a: Led.L(mach, d) -> @b: Led.L(mach, d) -> @c: Ledgers.Line -> @h: U32 -> Led.Later(~mach, ~d, a, b)
+    -> Rounds.Last(mach, d, b, c, h)
+
+# Safety of rounds: the decision of a height
+# -------------------------------------------
+
+# a height decides the same step in a later ledger
+def Safe.decide(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  +v: Ledgers.Step
+) -> {
+  Height.decide(
+    ~mach,
+    ~d,
+    a,
+    c,
+    h,
+    os,
+    Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(a)(c)(h)
+  )
+    == Some{v}: Maybe<&2, Ledgers.Step>
+} -> {
+  Height.decide(
+    ~mach,
+    ~d,
+    b,
+    c,
+    h,
+    os,
+    Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(b)(c)(h)
+  )
+    == Some{v}: Maybe<&2, Ledgers.Step>
+}:
+  ?TODO
+
+# Runs of a step
+# --------------
+
+# a step lands on the same tip in a later ledger
+def Sim.moved(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  ~lg: Hist.LaterGrows(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +t: Tip,
+  +v: Ledgers.Step,
+  +x: Tip
+) -> {Line.moved(~mach, ~d, ~kern, a, c, t, Some{v}) == Some{x}: Maybe<&2, Tip>}
+  -> {Line.moved(~mach, ~d, ~kern, b, c, t, Some{v}) == Some{x}: Maybe<&2, Tip>}:
+  ?TODO
+
+# a step keeps each key that the log of its line holds, with its value
+def Keep.next(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +l: Led.L(mach, d),
+  +c: Ledgers.Line,
+  +h: U32,
+  +t: Tip,
+  +x: Tip,
+  +key: List<&2, U32>,
+  +v: List<&2, U32>
+) -> {Line.next(~mach, ~d, ~kern, l, c, h, t) == Some{x}: Maybe<&2, Tip>}
+  -> {Tip.get(~mach, ~d, l, t, key) == Some{v}: Maybe<&2, List<&2, U32>>}
+  -> {Tip.get(~mach, ~d, l, x, key) == Some{v}: Maybe<&2, List<&2, U32>>}:
+  ?TODO
+
+# Histories that stay
+# -------------------
+
 # one history: the tip of a line after a number of steps stays as the ledger
 # grows, while its ballots are honest. So two replicas whose ledgers an
 # honest ledger holds are, after the same number of steps, at the same tip:
