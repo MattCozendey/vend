@@ -1463,6 +1463,36 @@ law Bits.agree_diff:
 def Bits.agree_diff(a, b, n):
   ?TODO
 
+# Bool.is_eq does not depend on the order of its arguments
+def Bits.is_eq_comm(a: Bool, b: Bool) -> {Shared.Bool.is_eq(a, b) == Shared.Bool.is_eq(b, a): Bool}:
+  match a b:
+    case True{} True{}:
+      {==}
+    case True{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case False{} False{}:
+      {==}
+
+# equal left parts and equal right parts give equal ands
+def Bits.and_cong(
+  a: Bool,
+  b: Bool,
+  c: Bool,
+  d: Bool,
+  ea: {a == c: Bool},
+  eb: {b == d: Bool}
+) -> {Bool.and(a, b) == Bool.and(c, d): Bool}:
+  Equal.trans(
+    Bool,
+    Bool.and(a, b),
+    Bool.and(c, b),
+    Bool.and(c, d),
+    Equal.cong(Bool, Bool, u => Bool.and(u, b), a, c, ea),
+    Equal.cong(Bool, Bool, v => Bool.and(c, v), b, d, eb)
+  )
+
 # agreement is the same either way round
 law Bits.agree_n_sym:
   for a: List<&2, Bool>
@@ -1471,7 +1501,38 @@ law Bits.agree_n_sym:
   {Bits.agree_n(n, a, b) == Bits.agree_n(n, b, a): Bool}
 
 def Bits.agree_n_sym(a, b, n):
-  ?TODO
+  match a b:
+    case Nil{} Nil{}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+p:
+          {==}
+    case Con{+x, +ra} Con{+y, +rb}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+(+p):
+          Bits.and_cong(
+            Shared.Bool.is_eq(x, y),
+            Bits.agree_n(p, ra, rb),
+            Shared.Bool.is_eq(y, x),
+            Bits.agree_n(p, rb, ra),
+            Bits.is_eq_comm(x, y),
+            Bits.agree_n_sym(ra, rb, p)
+          )
+    case Nil{} Con{y, rb}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+p:
+          {==}
+    case Con{x, ra} Nil{}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+p:
+          {==}
 
 # what agrees with what agrees with c agrees with c
 law Bits.agree_n_trans:
