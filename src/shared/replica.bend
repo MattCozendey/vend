@@ -4573,6 +4573,317 @@ def Safe.of_in_b(
       ls(a)(b)(later)
     )
 
+# a list within ks is within ks with one more element
+def Safe.within_cons(~A: Data, ~same: A -> A -> Bool, ps: List<&2, A>, +k: A, +ks: List<&2, A>) -> {
+  Shared.List.within(~A, ~same, ps, ks) == True{}: Bool
+} -> {Shared.List.within(~A, ~same, ps, k <> ks) == True{}: Bool}:
+  match ps:
+    case Nil{}:
+      h => {==}
+    case Con{+p, +r}:
+      +h => Shared.Bool.and_both(
+        List.contains(~A, ~same, k <> ks, p),
+        Shared.List.within(~A, ~same, r, k <> ks)
+      )(
+        Shared.List.contains_cons(~A, ~same, k, ks, p)(
+          Shared.Bool.and_true_left(List.contains(~A, ~same, ks, p), Shared.List.within(~A, ~same, r, ks))(h)
+        )
+      )(
+        Safe.within_cons(~A, ~same, r, k, ks)(
+          Shared.Bool.and_true_right(List.contains(~A, ~same, ks, p), Shared.List.within(~A, ~same, r, ks))(h)
+        )
+      )
+
+# an element heads a list that it starts
+def Safe.contains_self(~A: Data, ~same: A -> A -> Bool, ~laws: Shared.Eq.Laws(A, same), +x: A, r: List<&2, A>) -> {
+  List.contains(~A, ~same, x <> r, x) == True{}: Bool
+}:
+  %Equal.sym(Bool, same(x, x), True{}, Shared.Eq.refl(~A, ~same, laws, x)): {
+    List.any.if(u => List.contains(~A, ~same, r, x), _) == True{}: Bool
+  }
+  {==}
+
+# a list is within itself
+def Safe.within_refl(~A: Data, ~same: A -> A -> Bool, ~laws: Shared.Eq.Laws(A, same), xs: List<&2, A>) -> {
+  Shared.List.within(~A, ~same, xs, xs) == True{}: Bool
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+x, +r}:
+      Shared.Bool.and_both(
+        List.contains(~A, ~same, x <> r, x),
+        Shared.List.within(~A, ~same, r, x <> r)
+      )(Safe.contains_self(~A, ~same, ~laws, x, r))(
+        Safe.within_cons(~A, ~same, r, x, r)(Safe.within_refl(~A, ~same, ~laws, r))
+      )
+
+# the ballots of a voter at a place, in a later ledger, each hold what one of
+# them holds
+def Safe.all_in_b(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~ls: Hist.LaterSingle(mach, d),
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~sl: Shared.Eq.Laws(B, same),
+  ~of: Ledgers.Ballot -> Maybe<&2, B>,
+  ~kd: Bool,
+  ~ofc: @e1: Ledgers.Ballot -> @e2: Ledgers.Ballot -> {
+    Ledgers.Ballot.cast(e1) == Ledgers.Ballot.cast(e2): Ledgers.Cast
+  } -> {of(e1) == of(e2): Maybe<&2, B>},
+  ~ofk: @e1: Ledgers.Ballot -> @y: B -> {of(e1) == Some{y}: Maybe<&2, B>} -> {
+    Cast.is_vote(Ledgers.Ballot.cast(e1)) == kd: Bool
+  },
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +w: Ledgers.Place,
+  +voter: String,
+  +e0: Ledgers.Ballot,
+  +x: B,
+  sfx: List<&2, Ledgers.Ballot>
+) -> {List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter), e0) == True{}: Bool}
+  -> {of(e0) == Some{x}: Maybe<&2, B>}
+  -> {Shared.List.within(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, sfx, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter)) == True{}: Bool}
+  -> {Safe.all_of(~B, ~same, ~of, sfx, x) == True{}: Bool}:
+  match sfx:
+    case Nil{}:
+      h0 => hx => h => {==}
+    case Con{+e, +r}:
+      +h0 => +hx => +h => Shared.List.all.if_both(
+        Safe.of_is(~B, ~same, of(e), x),
+        u => Safe.all_of(~B, ~same, ~of, r, x)
+      )(
+        Safe.of_in_b(~mach, ~d, ~ls, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, e0, x, e)(h0)(hx)(
+          Shared.Bool.and_true_left(List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter), e), Shared.List.within(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, r, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter)))(h)
+        )
+      )(
+        Safe.all_in_b(~mach, ~d, ~ls, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, e0, x, r)(h0)(hx)(
+          Shared.Bool.and_true_right(List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter), e), Shared.List.within(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, r, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter)))(h)
+        )
+      )
+
+# and so do those of the earlier ledger
+def Safe.all_in_a(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~sl: Shared.Eq.Laws(B, same),
+  ~of: Ledgers.Ballot -> Maybe<&2, B>,
+  ~kd: Bool,
+  ~ofc: @e1: Ledgers.Ballot -> @e2: Ledgers.Ballot -> {
+    Ledgers.Ballot.cast(e1) == Ledgers.Ballot.cast(e2): Ledgers.Cast
+  } -> {of(e1) == of(e2): Maybe<&2, B>},
+  ~ofk: @e1: Ledgers.Ballot -> @y: B -> {of(e1) == Some{y}: Maybe<&2, B>} -> {
+    Cast.is_vote(Ledgers.Ballot.cast(e1)) == kd: Bool
+  },
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +w: Ledgers.Place,
+  +voter: String,
+  +e0: Ledgers.Ballot,
+  +x: B,
+  sfx: List<&2, Ledgers.Ballot>
+) -> {List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter), e0) == True{}: Bool}
+  -> {of(e0) == Some{x}: Maybe<&2, B>}
+  -> {Shared.List.within(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, sfx, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter)) == True{}: Bool}
+  -> {Safe.all_of(~B, ~same, ~of, sfx, x) == True{}: Bool}:
+  match sfx:
+    case Nil{}:
+      h0 => hx => h => {==}
+    case Con{+e, +r}:
+      +h0 => +hx => +h => Shared.List.all.if_both(
+        Safe.of_is(~B, ~same, of(e), x),
+        u => Safe.all_of(~B, ~same, ~of, r, x)
+      )(
+        Safe.of_in_b(~mach, ~d, ~ls, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, e0, x, e)(h0)(hx)(
+          Safe.in_b(~mach, ~d, ~lg, a, b, later, w, voter, e)(
+            Shared.Bool.and_true_left(List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter), e), Shared.List.within(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, r, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter)))(h)
+          )
+        )
+      )(
+        Safe.all_in_a(~mach, ~d, ~lg, ~ls, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, e0, x, r)(h0)(hx)(
+          Shared.Bool.and_true_right(List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter), e), Shared.List.within(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, r, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter)))(h)
+        )
+      )
+
+# what is some value holds something
+def Safe.some_of(-A: Data, m: Maybe<&2, A>, -c: A) -> {m == Some{c}: Maybe<&2, A>} -> {Maybe.is_some(&2, A, m) == True{}: Bool}:
+  match m:
+    case None{}:
+      e => Empty.absurd({False{} == True{}: Bool}, Shared.Maybe.none_ne_some(A, c, e))
+    case Some{y}:
+      e => {==}
+
+# Safe.cell_kept from a ballot e0 of the earlier ledger, and its value
+def Safe.cell_kept.of(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~sl: Shared.Eq.Laws(B, same),
+  ~of: Ledgers.Ballot -> Maybe<&2, B>,
+  ~kd: Bool,
+  ~ofc: @e1: Ledgers.Ballot -> @e2: Ledgers.Ballot -> {
+    Ledgers.Ballot.cast(e1) == Ledgers.Ballot.cast(e2): Ledgers.Cast
+  } -> {of(e1) == of(e2): Maybe<&2, B>},
+  ~ofk: @e1: Ledgers.Ballot -> @y: B -> {of(e1) == Some{y}: Maybe<&2, B>} -> {
+    Cast.is_vote(Ledgers.Ballot.cast(e1)) == kd: Bool
+  },
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +w: Ledgers.Place,
+  +voter: String,
+  -c: Cells.Cell<B>,
+  +h: {Ledgers.Ballots.cell(~B, ~same, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter)) == Some{c}: Maybe<&2, Cells.Cell<B>>},
+  +e0: Ledgers.Ballot,
+  hc: {List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter), e0) == True{}: Bool},
+  q: Exists(B, y => {of(e0) == Some{y}: Maybe<&2, B>})
+) -> {Ledgers.Ballots.cell(~B, ~same, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter)) == Some{c}: Maybe<&2, Cells.Cell<B>>}:
+  match q:
+    case Tuple{+x, hx1}:
+      +hx = {hx1 : {of(e0) == Some{x}: Maybe<&2, B>}}
+      +hcb = Safe.in_b(~mach, ~d, ~lg, a, b, later, w, voter, e0)(hc)
+      +caA = Safe.most_some(~B, ~same, ~sl, Ledgers.Ballots.cell(~B, ~same, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter)), x)(
+        Safe.cell_most(~B, ~same, ~sl, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter), x)(
+          Safe.all_in_a(~mach, ~d, ~lg, ~ls, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, e0, x, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter))(hcb)(hx)(
+            Safe.within_refl(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, ~Ledgers.Ballot.laws(), Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter))
+          )
+        )
+      )(Safe.some_of(Cells.Cell<B>, Ledgers.Ballots.cell(~B, ~same, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter)), c, h))
+      +cb = Safe.most_some(~B, ~same, ~sl, Ledgers.Ballots.cell(~B, ~same, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter)), x)(
+        Safe.cell_most(~B, ~same, ~sl, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter), x)(
+          Safe.all_in_b(~mach, ~d, ~ls, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, e0, x, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter))(hcb)(hx)(
+            Safe.within_refl(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, ~Ledgers.Ballot.laws(), Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter))
+          )
+        )
+      )(Safe.cell_some(~B, ~same, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter), e0, x)(hcb)(hx))
+      Equal.trans(
+        Maybe<&2, Cells.Cell<B>>,
+        Ledgers.Ballots.cell(~B, ~same, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter)),
+        Some{Cells.One{x}},
+        Some{c},
+        cb,
+        Equal.trans(
+          Maybe<&2, Cells.Cell<B>>,
+          Some{Cells.One{x}},
+          Ledgers.Ballots.cell(~B, ~same, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter)),
+          Some{c},
+          Equal.sym(Maybe<&2, Cells.Cell<B>>, Ledgers.Ballots.cell(~B, ~same, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter)), Some{Cells.One{x}}, caA),
+          h
+        )
+      )
+
+# Safe.cell_kept from a ballot of the earlier ledger that holds a value
+def Safe.cell_kept.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~sl: Shared.Eq.Laws(B, same),
+  ~of: Ledgers.Ballot -> Maybe<&2, B>,
+  ~kd: Bool,
+  ~ofc: @e1: Ledgers.Ballot -> @e2: Ledgers.Ballot -> {
+    Ledgers.Ballot.cast(e1) == Ledgers.Ballot.cast(e2): Ledgers.Cast
+  } -> {of(e1) == of(e2): Maybe<&2, B>},
+  ~ofk: @e1: Ledgers.Ballot -> @y: B -> {of(e1) == Some{y}: Maybe<&2, B>} -> {
+    Cast.is_vote(Ledgers.Ballot.cast(e1)) == kd: Bool
+  },
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +w: Ledgers.Place,
+  +voter: String,
+  -c: Cells.Cell<B>,
+  +h: {Ledgers.Ballots.cell(~B, ~same, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter)) == Some{c}: Maybe<&2, Cells.Cell<B>>},
+  wt: Safe.Wit(~B, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter))
+) -> {Ledgers.Ballots.cell(~B, ~same, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter)) == Some{c}: Maybe<&2, Cells.Cell<B>>}:
+  match wt:
+    case Tuple{+e0, Tuple{hc, q}}:
+      Safe.cell_kept.of(~mach, ~d, ~lg, ~ls, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, c, h, e0, hc, q)
+
+# the cell of a voter at a place stays in a later ledger: an honest later
+# ledger holds no ballot of the voter there that disagrees
+def Safe.cell_kept(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~sl: Shared.Eq.Laws(B, same),
+  ~of: Ledgers.Ballot -> Maybe<&2, B>,
+  ~kd: Bool,
+  ~ofc: @e1: Ledgers.Ballot -> @e2: Ledgers.Ballot -> {
+    Ledgers.Ballot.cast(e1) == Ledgers.Ballot.cast(e2): Ledgers.Cast
+  } -> {of(e1) == of(e2): Maybe<&2, B>},
+  ~ofk: @e1: Ledgers.Ballot -> @y: B -> {of(e1) == Some{y}: Maybe<&2, B>} -> {
+    Cast.is_vote(Ledgers.Ballot.cast(e1)) == kd: Bool
+  },
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +w: Ledgers.Place,
+  +voter: String,
+  -c: Cells.Cell<B>
+) -> {Ledgers.Ballots.cell(~B, ~same, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter)) == Some{c}: Maybe<&2, Cells.Cell<B>>}
+  -> {Ledgers.Ballots.cell(~B, ~same, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter)) == Some{c}: Maybe<&2, Cells.Cell<B>>}:
+  +h => Safe.cell_kept.at(
+    ~mach,
+    ~d,
+    ~lg,
+    ~ls,
+    ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk,
+    a,
+    b,
+    later,
+    w,
+    voter,
+    c,
+    h,
+    Safe.witness(~B, ~same, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter), c)(h)
+  )
+
 # a height decides the same step in a later ledger
 def Safe.decide(
   ~mach: Machine(),
