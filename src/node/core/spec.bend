@@ -2204,31 +2204,27 @@ def Node.log(
     []
   )
 
-# the version of the outcome o, at the tip t, wrote the resource n: the
-# resource holds after it what it did not hold before it
-def Out.wrote(~d: Led(), +l: L(d), +t: Replicas.Tip, o: Replicas.Out, +n: Resources.Name) -> Bool:
-  match o:
-    case Replicas.Out.Stale{a}:
-      False{}
-    case Replicas.Out.Taken{a, +m}:
-      Maybe.default(
+# the version that the line took as the number m, at the tip t, wrote the
+# resource n: the resource holds after it what it did not hold before it
+def Version.wrote(~d: Led(), +l: L(d), +t: Replicas.Tip, +m: U32, +n: Resources.Name) -> Bool:
+  Maybe.default(
+    &2,
+    Bool,
+    Maybe.bind(
+      &2,
+      Maybe<&2, Hashes.Hash>,
+      Bool,
+      Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, t, m),
+      h0 => Maybe.bind(
         &2,
+        Replicas.Taken,
         Bool,
-        Maybe.bind(
-          &2,
-          Maybe<&2, Hashes.Hash>,
-          Bool,
-          Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, t, m),
-          h0 => Maybe.bind(
-            &2,
-            Replicas.Taken,
-            Bool,
-            Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, t, m),
-            x => Some{Res.differs(~d, l, Replicas.Taken.root(x), h0, n)}
-          )
-        ),
-        False{}
+        Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, t, m),
+        x => Some{Res.differs(~d, l, Replicas.Taken.root(x), h0, n)}
       )
+    ),
+    False{}
+  )
 
 # Touch.holds once the newest tips tf of the branch from and tb of the branch
 # are known
@@ -2266,10 +2262,10 @@ def Touch.holds.at(
       Bool,
       Maybe.bind(
         &2,
-        Replicas.Out,
+        U32,
         Bool,
-        Replicas.Tip.out(~Requests.Ask.machine(), ~d, l, tf, v),
-        o => Some{Out.wrote(~d, l, tf, o, changed)}
+        Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, v),
+        m => Some{Version.wrote(~d, l, tf, m, changed)}
       ),
       False{}
     )

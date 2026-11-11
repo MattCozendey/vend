@@ -1121,21 +1121,32 @@ def Taken.root(x: Taken) -> Maybe<&2, Hashes.Hash>:
     case Taken{i, r}:
       r
 
-# the root of the content that the outcome o names at the tip t (none: the
-# outcome is a refusal, or l lacks a node)
-def Out.root(~mach: Machine(),
-  ~d: Led(mach), l: Led.L(mach, d), t: Tip, o: Out) -> Maybe<&2, Maybe<&2, Hashes.Hash>>:
+# the request taken x is i
+def Taken.is_of(m: Maybe<&2, Taken>, +i: Ledgers.Id) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{Taken{j, r}}:
+      Ledgers.Id.is_eq(j, i)
+
+# the number that the outcome o of the request i names at the tip t, when the
+# line took i there, below its count
+def Out.number(~mach: Machine(), ~d: Led(mach), +l: Led.L(mach, d), +t: Tip, +i: Ledgers.Id, o: Out) -> Maybe<&2, U32>:
   match o:
     case Out.Stale{a}:
       None{}
-    case Out.Taken{a, n}:
-      Maybe.bind(
-        &2,
-        Taken,
-        Maybe<&2, Hashes.Hash>,
-        Tip.taken(~mach, ~d, l, t, n),
-        x => Some{Taken.root(x)}
+    case Out.Taken{a, +m}:
+      Shared.Maybe.when(
+        U32,
+        Bool.and(U32.is_lt(m, Tip.count(t)), Taken.is_of(Tip.taken(~mach, ~d, l, t, m), i)),
+        u => Some{m}
       )
+
+# the number of the request i at the tip t: the number that its outcome names,
+# when the request taken there is i, below the count (none: else, or l lacks
+# a node). The one reading of a log by ID and by number, so both agree
+def Tip.number(~mach: Machine(), ~d: Led(mach), +l: Led.L(mach, d), +t: Tip, +i: Ledgers.Id) -> Maybe<&2, U32>:
+  Maybe.bind(&2, Out, U32, Tip.out(~mach, ~d, l, t, i), o => Out.number(~mach, ~d, l, t, i, o))
 
 # the root of the content of the version of the request i, at the tip t of
 # its line (none: the line did not take it, or l lacks a node)
@@ -1144,14 +1155,14 @@ def Tip.version(
   ~d: Led(mach),
   +l: Led.L(mach, d),
   +t: Tip,
-  i: Ledgers.Id
+  +i: Ledgers.Id
 ) -> Maybe<&2, Maybe<&2, Hashes.Hash>>:
   Maybe.bind(
     &2,
-    Out,
+    U32,
     Maybe<&2, Hashes.Hash>,
-    Tip.out(~mach, ~d, l, t, i),
-    o => Out.root(~mach, ~d, l, t, o)
+    Tip.number(~mach, ~d, l, t, i),
+    m => Maybe.bind(&2, Taken, Maybe<&2, Hashes.Hash>, Tip.taken(~mach, ~d, l, t, m), x => Some{Taken.root(x)})
   )
 
 # the IDs of the taken requests xs
