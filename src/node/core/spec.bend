@@ -4178,6 +4178,285 @@ def Merge.set_core(
         Merge.grows_of(~d, l, lc, lf, P, N, wc, wf, Merge.nodes_drop(P, Trees.Edit.nodes(e), N, Merge.put_nodes(~d, lc, P, e, W1, e1, N, nd)))
       )(+w => c => Merge.holds_fetch(~d, lf, N, w)(held)(Merge.nodes_contains(P, Trees.Edit.nodes(e), N, Merge.put_nodes(~d, lc, P, e, W1, e1, N, nd), w, c)))
 
+# the work after a write has the ledger of the nodes that it has, and its nodes
+# come after those before it
+def Merge.set_facts.at(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +P: List<&2, List<&2, U32>>,
+  +W1: Work<L(d)>,
+  p: Maybe<&2, Trees.Edit>,
+  +e1: {Work.put(~d, lc, P, p) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  +wc: Merge.Puts(~d, l, lc, P)
+) -> Merge.And(
+  Merge.Puts(~d, l, Merge.ledger(~d, W1), Merge.nodes(~d, W1)),
+  Merge.Nodes(P, Merge.nodes(~d, W1))
+):
+  match p:
+    case None{}:
+      Empty.absurd(
+        Merge.And(
+          Merge.Puts(~d, l, Merge.ledger(~d, W1), Merge.nodes(~d, W1)),
+          Merge.Nodes(P, Merge.nodes(~d, W1))
+        ),
+        Shared.Maybe.none_ne_some(Work<L(d)>, W1, e1)
+      )
+    case Some{+e}:
+      %Merge.put_work(~d, lc, P, e, W1, e1): Merge.And(
+        Merge.Puts(~d, l, Merge.ledger(~d, _), Merge.nodes(~d, _)),
+        Merge.Nodes(P, Merge.nodes(~d, _))
+      )
+      (
+        %Equal.sym(L(d), lc, Replicas.Led.puts(~Requests.Ask.machine(), ~d, P, l), wc): {
+          Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(e), _)
+            == Replicas.Led.puts(~Requests.Ask.machine(), ~d, List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(e)), l): L(d)
+        }
+        Equal.sym(
+          L(d),
+          Replicas.Led.puts(~Requests.Ask.machine(), ~d, List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(e)), l),
+          Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(e), Replicas.Led.puts(~Requests.Ask.machine(), ~d, P, l)),
+          Merge.puts_append(~d, P, Trees.Edit.nodes(e), l)
+        ),
+        (Trees.Edit.nodes(e), {==})
+      )
+
+# the work after a write of the key kw to the value m has the ledger of the
+# nodes that it has, and its nodes come after those before it
+def Merge.set_facts(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +kw: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>,
+  +W1: Work<L(d)>,
+  +e1: {Work.set(~d, Work{lc, hc, P}, kw, m) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  +wc: Merge.Puts(~d, l, lc, P)
+) -> Merge.And(
+  Merge.Puts(~d, l, Merge.ledger(~d, W1), Merge.nodes(~d, W1)),
+  Merge.Nodes(P, Merge.nodes(~d, W1))
+):
+  Merge.set_facts.at(
+    ~d,
+    l,
+    lc,
+    P,
+    W1,
+    Replicas.Tree.put(~Requests.Ask.machine(), ~d, lc, hc, kw, m),
+    e1,
+    wc
+  )
+
+# the key written is the key read, when the write is read
+def Merge.writes_hit(
+  ~d: Led(),
+  lf: L(d),
+  h1: Maybe<&2, Hashes.Hash>,
+  hc: Maybe<&2, Hashes.Hash>,
+  kw: List<&2, U32>,
+  m: Maybe<&2, List<&2, U32>>,
+  wr: Merge.Writes(~d, lf, h1, hc, kw, m)
+) -> {Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h1, kw) == Trees.Look.of(m): Trees.Look}:
+  match wr:
+    case Tuple{hit, frame}:
+      hit
+
+# a key other than the key written is read as before, when the write is read
+def Merge.writes_frame(
+  ~d: Led(),
+  lf: L(d),
+  h1: Maybe<&2, Hashes.Hash>,
+  hc: Maybe<&2, Hashes.Hash>,
+  kw: List<&2, U32>,
+  m: Maybe<&2, List<&2, U32>>,
+  wr: Merge.Writes(~d, lf, h1, hc, kw, m),
+  k2: List<&2, U32>,
+  hk: {Shared.List.is_eq(~U32, ~U32.is_eq, kw, k2) == False{}: Bool}
+) -> {
+  Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h1, k2)
+    == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, k2): Trees.Look
+}:
+  match wr:
+    case Tuple{hit, frame}:
+      frame(k2)(hk)
+
+# the ledger of a work that gets more nodes is the ledger of the nodes that it
+# has
+def Merge.keep_puts(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +P: List<&2, List<&2, U32>>,
+  +ms: List<&2, List<&2, U32>>,
+  wc: Merge.Puts(~d, l, lc, P)
+) -> Merge.Puts(
+  ~d,
+  l,
+  Replicas.Led.puts(~Requests.Ask.machine(), ~d, ms, lc),
+  List.append(&2, List<&2, U32>, P, ms)
+):
+  %Equal.sym(L(d), lc, Replicas.Led.puts(~Requests.Ask.machine(), ~d, P, l), wc): {
+    Replicas.Led.puts(~Requests.Ask.machine(), ~d, ms, _)
+      == Replicas.Led.puts(~Requests.Ask.machine(), ~d, List.append(&2, List<&2, U32>, P, ms), l): L(d)
+  }
+  Equal.sym(
+    L(d),
+    Replicas.Led.puts(~Requests.Ask.machine(), ~d, List.append(&2, List<&2, U32>, P, ms), l),
+    Replicas.Led.puts(~Requests.Ask.machine(), ~d, ms, Replicas.Led.puts(~Requests.Ask.machine(), ~d, P, l)),
+    Merge.puts_append(~d, P, ms, l)
+  )
+
+# the facts about the work after a pick that makes nodes, from those of the
+# write that follows them
+def Merge.pick_facts.make(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +P: List<&2, List<&2, U32>>,
+  +ms: List<&2, List<&2, U32>>,
+  +W1: Work<L(d)>,
+  f: Merge.And(
+    Merge.Puts(~d, l, Merge.ledger(~d, W1), Merge.nodes(~d, W1)),
+    Merge.Nodes(List.append(&2, List<&2, U32>, P, ms), Merge.nodes(~d, W1))
+  )
+) -> Merge.And(
+  Merge.Puts(~d, l, Merge.ledger(~d, W1), Merge.nodes(~d, W1)),
+  Merge.Nodes(P, Merge.nodes(~d, W1))
+):
+  (+a, nd) = f
+  (
+    a,
+    Merge.nodes_trans(P, List.append(&2, List<&2, U32>, P, ms), Merge.nodes(~d, W1), (ms, {==}), nd)
+  )
+
+# the facts about the work after a clash, once the clashes that are open are
+# read (mc)
+def Merge.pick_facts.clash.at(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +W1: Work<L(d)>,
+  mc: Maybe<&2, List<&2, Resources.Name>>,
+  +eb: {
+    Maybe.bind(
+      &2,
+      List<&2, Resources.Name>,
+      Work<L(d)>,
+      mc,
+      cs => Work.set(~d, Work{lc, hc, P}, Key.clashes(k), Clash.value(Clash.put(n, cs)))
+    )
+      == Some{W1}: Maybe<&2, Work<L(d)>>
+  },
+  +wc: Merge.Puts(~d, l, lc, P)
+) -> Merge.And(
+  Merge.Puts(~d, l, Merge.ledger(~d, W1), Merge.nodes(~d, W1)),
+  Merge.Nodes(P, Merge.nodes(~d, W1))
+):
+  match mc:
+    case None{}:
+      Empty.absurd(
+        Merge.And(
+          Merge.Puts(~d, l, Merge.ledger(~d, W1), Merge.nodes(~d, W1)),
+          Merge.Nodes(P, Merge.nodes(~d, W1))
+        ),
+        Shared.Maybe.none_ne_some(Work<L(d)>, W1, eb)
+      )
+    case Some{+cs}:
+      Merge.set_facts(~d, l, lc, hc, P, Key.clashes(k), Clash.value(Clash.put(n, cs)), W1, eb, wc)
+
+# the facts about the work after a clash
+def Merge.pick_facts.clash(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +W1: Work<L(d)>,
+  mc: Maybe<&2, List<&2, Resources.Name>>,
+  emc: {Clash.names(~d, lc, hc, k) == mc: Maybe<&2, List<&2, Resources.Name>>},
+  +e1: {Merge.pick(~d, Work{lc, hc, P}, k, n, Pick.Clash{}) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  +wc: Merge.Puts(~d, l, lc, P)
+) -> Merge.And(
+  Merge.Puts(~d, l, Merge.ledger(~d, W1), Merge.nodes(~d, W1)),
+  Merge.Nodes(P, Merge.nodes(~d, W1))
+):
+  Merge.pick_facts.clash.at(
+    ~d,
+    l,
+    lc,
+    hc,
+    P,
+    k,
+    n,
+    W1,
+    mc,
+    %emc: {
+      Maybe.bind(
+        &2,
+        List<&2, Resources.Name>,
+        Work<L(d)>,
+        _,
+        cs => Work.set(~d, Work{lc, hc, P}, Key.clashes(k), Clash.value(Clash.put(n, cs)))
+      )
+        == Some{W1}: Maybe<&2, Work<L(d)>>
+    }
+    e1,
+    wc
+  )
+
+# what a pick of a merge gives the work: the ledger of the nodes that it has,
+# and nodes that come after those before it
+def Merge.pick_facts(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  p: Pick,
+  +W1: Work<L(d)>,
+  +e1: {Merge.pick(~d, Work{lc, hc, P}, k, n, p) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  +wc: Merge.Puts(~d, l, lc, P)
+) -> Merge.And(
+  Merge.Puts(~d, l, Merge.ledger(~d, W1), Merge.nodes(~d, W1)),
+  Merge.Nodes(P, Merge.nodes(~d, W1))
+):
+  match p:
+    case Pick.Take{x}:
+      Merge.set_facts(~d, l, lc, hc, P, Key.res(n), Res.value(x), W1, e1, wc)
+    case Pick.Make{+h, +bytes}:
+      Merge.pick_facts.make(
+        ~d,
+        l,
+        lc,
+        P,
+        Ropes.Put.nodes(Ropes.Rope.of_bytes(bytes)),
+        W1,
+        Merge.set_facts(
+          ~d,
+          l,
+          Replicas.Led.puts(~Requests.Ask.machine(), ~d, Ropes.Put.nodes(Ropes.Rope.of_bytes(bytes)), lc),
+          hc,
+          List.append(&2, List<&2, U32>, P, Ropes.Put.nodes(Ropes.Rope.of_bytes(bytes))),
+          Key.res(n),
+          Res.value(Some{Requests.Res{h, Ropes.Put.root(Ropes.Rope.of_bytes(bytes))}}),
+          W1,
+          e1,
+          Merge.keep_puts(~d, l, lc, P, Ropes.Put.nodes(Ropes.Rope.of_bytes(bytes)), wc)
+        )
+      )
+    case Pick.Clash{}:
+      Merge.pick_facts.clash(~d, l, lc, hc, P, k, n, W1, Clash.names(~d, lc, hc, k), {==}, e1, wc)
+
 # MERGE-HELPERS-END
 
 # a merge never loses a change that only one side made: when the merge of a
