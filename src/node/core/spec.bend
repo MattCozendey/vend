@@ -10804,6 +10804,445 @@ def Affects.all_has(
         )(ea)
       )(ev)
 
+# what a touch that holds reads, at the tips tf and tb: the number m of its
+# version, below the count; the trees hz before it and hX after it, which
+# differ at the resource changed, and of which tb holds something else there;
+# and the resource used of tb, that is changed or uses it
+def Affects.AtFacts(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +tf: Replicas.Tip,
+  +tb: Replicas.Tip,
+  +v: Ledgers.Id,
+  +changed: Resources.Name,
+  +used: Resources.Name,
+  -R: Type
+) -> Type:
+  @m: U32 -> {Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, v) == Some{m}: Maybe<&2, U32>}
+    -> {U32.is_lt(m, Replicas.Tip.count(tf)) == True{}: Bool}
+    -> @hz: Maybe<&2, Hashes.Hash> -> {Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, tf, m) == Some{hz}: Maybe<&2, Maybe<&2, Hashes.Hash>>}
+    -> @hX: Maybe<&2, Hashes.Hash> -> {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, m) == Some{Replicas.Taken{v, hX}}: Maybe<&2, Replicas.Taken>}
+    -> {Res.differs(~d, l, hX, hz, changed) == Some{True{}}: Maybe<&2, Bool>}
+    -> {Res.differs(~d, l, hX, Replicas.Tip.content(tb), changed) == Some{True{}}: Maybe<&2, Bool>}
+    -> @r0: Requests.Res -> {Res.find(~d, l, Replicas.Tip.content(tb), used) == Some{Some{r0}}: Maybe<&2, Maybe<&2, Requests.Res>>}
+    -> {Uses.reaches(~d, l, view, Replicas.Tip.content(tb), used, changed) == Some{True{}}: Maybe<&2, Bool>}
+    -> R
+
+# a choice that gives some y: the test holds, and its choice gives y
+def Affects.when_facts(
+  q: Bool,
+  -B: Data,
+  -kk: Unit -> Maybe<&2, B>,
+  -y: B,
+  -R: Type,
+  k: {q == True{}: Bool} -> {kk(Unit{}) == Some{y}: Maybe<&2, B>} -> R
+) -> {Shared.Maybe.when(B, q, kk) == Some{y}: Maybe<&2, B>} -> R:
+  match q:
+    case True{}:
+      h => k({==})(h)
+    case False{}:
+      h => Empty.absurd(R, Shared.Maybe.none_ne_some(B, y, h))
+
+# Affects.number_facts once the outcome o of the request is known
+def Affects.number_facts.at(
+  ~d: Led(),
+  +l: L(d),
+  +tf: Replicas.Tip,
+  +v: Ledgers.Id,
+  +m: U32,
+  o: Replicas.Out,
+  -R: Type,
+  k: {U32.is_lt(m, Replicas.Tip.count(tf)) == True{}: Bool}
+    -> {Replicas.Taken.is_of(Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, m), v) == True{}: Bool} -> R
+) -> {Replicas.Out.number(~Requests.Ask.machine(), ~d, l, tf, v, o) == Some{m}: Maybe<&2, U32>} -> R:
+  match o:
+    case Replicas.Out.Stale{a}:
+      e => Empty.absurd(R, Shared.Maybe.none_ne_some(U32, m, e))
+    case Replicas.Out.Taken{a, +m1}:
+      e => Affects.when_facts(
+        Bool.and(U32.is_lt(m1, Replicas.Tip.count(tf)), Replicas.Taken.is_of(Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, m1), v)),
+        U32,
+        u => Some{m1},
+        m,
+        R,
+        +eb => +e2 => k(
+          Affects.cast(
+            U32,
+            z => {U32.is_lt(z, Replicas.Tip.count(tf)) == True{}: Bool},
+            m1,
+            m,
+            Shared.Maybe.some_inj(U32, m1, m, e2),
+            Shared.Bool.and_true_left(
+              U32.is_lt(m1, Replicas.Tip.count(tf)),
+              Replicas.Taken.is_of(Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, m1), v)
+            )(eb)
+          )
+        )(
+          Affects.cast(
+            U32,
+            z => {Replicas.Taken.is_of(Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, z), v) == True{}: Bool},
+            m1,
+            m,
+            Shared.Maybe.some_inj(U32, m1, m, e2),
+            Shared.Bool.and_true_right(
+              U32.is_lt(m1, Replicas.Tip.count(tf)),
+              Replicas.Taken.is_of(Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, m1), v)
+            )(eb)
+          )
+        )
+      )(e)
+
+# the number m of the request v at the tip tf is below the count, and the
+# request taken there is v
+def Affects.number_facts(
+  ~d: Led(),
+  +l: L(d),
+  +tf: Replicas.Tip,
+  +v: Ledgers.Id,
+  +m: U32,
+  -R: Type,
+  k: {U32.is_lt(m, Replicas.Tip.count(tf)) == True{}: Bool}
+    -> {Replicas.Taken.is_of(Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, m), v) == True{}: Bool} -> R
+) -> {Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, v) == Some{m}: Maybe<&2, U32>} -> R:
+  e => Affects.bind_some(
+    Replicas.Out,
+    U32,
+    R,
+    Replicas.Tip.out(~Requests.Ask.machine(), ~d, l, tf, v),
+    o => Replicas.Out.number(~Requests.Ask.machine(), ~d, l, tf, v, o),
+    m,
+    +o => eo => e2 => Affects.number_facts.at(~d, l, tf, v, m, o, R, k)(e2)
+  )(e)
+
+# the version m wrote the resource changed: the trees before and after it
+def Affects.wrote_facts(
+  ~d: Led(),
+  +l: L(d),
+  +tf: Replicas.Tip,
+  +m: U32,
+  +changed: Resources.Name,
+  -R: Type,
+  k: @hz: Maybe<&2, Hashes.Hash> -> {Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, tf, m) == Some{hz}: Maybe<&2, Maybe<&2, Hashes.Hash>>}
+    -> @x0: Replicas.Taken -> {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, m) == Some{x0}: Maybe<&2, Replicas.Taken>}
+    -> {Res.differs(~d, l, Replicas.Taken.root(x0), hz, changed) == Some{True{}}: Maybe<&2, Bool>} -> R
+) -> {Version.wrote(~d, l, tf, m, changed) == Some{True{}}: Maybe<&2, Bool>} -> R:
+  e => Affects.bind_some(
+    Maybe<&2, Hashes.Hash>,
+    Bool,
+    R,
+    Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, tf, m),
+    h0 => Maybe.bind(
+      &2,
+      Replicas.Taken,
+      Bool,
+      Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, m),
+      x => Res.differs(~d, l, Replicas.Taken.root(x), h0, changed)
+    ),
+    True{},
+    +hz => +ebef => e2 => Affects.bind_some(
+      Replicas.Taken,
+      Bool,
+      R,
+      Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, m),
+      x => Res.differs(~d, l, Replicas.Taken.root(x), hz, changed),
+      True{},
+      +x0 => +etk0 => e3 => k(hz)(ebef)(x0)(etk0)(e3)
+    )(e2)
+  )(e)
+
+# Affects.at_facts once the resource r that tb holds at used is known
+def Affects.at_facts.find(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +tf: Replicas.Tip,
+  +tb: Replicas.Tip,
+  +v: Ledgers.Id,
+  +changed: Resources.Name,
+  +used: Resources.Name,
+  -R: Type,
+  k: Affects.AtFacts(~d, l, view, tf, tb, v, changed, used, R),
+  +m: U32,
+  +enum: {Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, v) == Some{m}: Maybe<&2, U32>},
+  +elt: {U32.is_lt(m, Replicas.Tip.count(tf)) == True{}: Bool},
+  +hz: Maybe<&2, Hashes.Hash>,
+  +ebef: {Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, tf, m) == Some{hz}: Maybe<&2, Maybe<&2, Hashes.Hash>>},
+  +hX: Maybe<&2, Hashes.Hash>,
+  +etk: {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, m) == Some{Replicas.Taken{v, hX}}: Maybe<&2, Replicas.Taken>},
+  +d1: {Res.differs(~d, l, hX, hz, changed) == Some{True{}}: Maybe<&2, Bool>},
+  +d2: {Res.differs(~d, l, hX, Replicas.Tip.content(tb), changed) == Some{True{}}: Maybe<&2, Bool>},
+  r: Maybe<&2, Requests.Res>,
+  +efind: {Res.find(~d, l, Replicas.Tip.content(tb), used) == Some{r}: Maybe<&2, Maybe<&2, Requests.Res>>}
+) -> {Shared.Bool.when(Maybe<&2, Bool>, Maybe.is_some(&2, Requests.Res, r), u3 => Uses.reaches(~d, l, view, Replicas.Tip.content(tb), used, changed), u3 => Some{False{}}) == Some{True{}}: Maybe<&2, Bool>} -> R:
+  match r:
+    case None{}:
+      e => Empty.absurd(R, Shared.Bool.false_ne_true(Shared.Maybe.some_inj(Bool, False{}, True{}, e)))
+    case Some{+r0}:
+      e => k(m)(enum)(elt)(hz)(ebef)(hX)(etk)(d1)(d2)(r0)(efind)(e)
+
+# Affects.at_facts once the test whether tb holds something else is known
+def Affects.at_facts.dif(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +tf: Replicas.Tip,
+  +tb: Replicas.Tip,
+  +v: Ledgers.Id,
+  +changed: Resources.Name,
+  +used: Resources.Name,
+  -R: Type,
+  k: Affects.AtFacts(~d, l, view, tf, tb, v, changed, used, R),
+  +m: U32,
+  +enum: {Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, v) == Some{m}: Maybe<&2, U32>},
+  +elt: {U32.is_lt(m, Replicas.Tip.count(tf)) == True{}: Bool},
+  +hz: Maybe<&2, Hashes.Hash>,
+  +ebef: {Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, tf, m) == Some{hz}: Maybe<&2, Maybe<&2, Hashes.Hash>>},
+  +hX: Maybe<&2, Hashes.Hash>,
+  +etk: {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, m) == Some{Replicas.Taken{v, hX}}: Maybe<&2, Replicas.Taken>},
+  +d1: {Res.differs(~d, l, hX, hz, changed) == Some{True{}}: Maybe<&2, Bool>},
+  dv: Bool,
+  +ed: {Res.differs(~d, l, hX, Replicas.Tip.content(tb), changed) == Some{dv}: Maybe<&2, Bool>}
+) -> {Shared.Bool.when(Maybe<&2, Bool>, dv, u2 => Maybe.bind(&2, Maybe<&2, Requests.Res>, Bool, Res.find(~d, l, Replicas.Tip.content(tb), used), r => Shared.Bool.when(Maybe<&2, Bool>, Maybe.is_some(&2, Requests.Res, r), u3 => Uses.reaches(~d, l, view, Replicas.Tip.content(tb), used, changed), u3 => Some{False{}})), u2 => Some{False{}}) == Some{True{}}: Maybe<&2, Bool>} -> R:
+  match dv:
+    case False{}:
+      e => Empty.absurd(R, Shared.Bool.false_ne_true(Shared.Maybe.some_inj(Bool, False{}, True{}, e)))
+    case True{}:
+      e => Affects.bind_some(
+        Maybe<&2, Requests.Res>,
+        Bool,
+        R,
+        Res.find(~d, l, Replicas.Tip.content(tb), used),
+        r => Shared.Bool.when(Maybe<&2, Bool>, Maybe.is_some(&2, Requests.Res, r), u3 => Uses.reaches(~d, l, view, Replicas.Tip.content(tb), used, changed), u3 => Some{False{}}),
+        True{},
+        +r => +efind => e2 => Affects.at_facts.find(~d, l, view, tf, tb, v, changed, used, R, k, m, enum, elt, hz, ebef, hX, etk, d1, ed, r, efind)(e2)
+      )(e)
+
+# Affects.at_facts once the taken request x0 of the number m is known
+def Affects.at_facts.ver(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +tf: Replicas.Tip,
+  +tb: Replicas.Tip,
+  +v: Ledgers.Id,
+  +changed: Resources.Name,
+  +used: Resources.Name,
+  -R: Type,
+  k: Affects.AtFacts(~d, l, view, tf, tb, v, changed, used, R),
+  +m: U32,
+  +enum: {Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, v) == Some{m}: Maybe<&2, U32>},
+  +elt: {U32.is_lt(m, Replicas.Tip.count(tf)) == True{}: Bool},
+  +eisof: {Replicas.Taken.is_of(Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, m), v) == True{}: Bool},
+  +hz: Maybe<&2, Hashes.Hash>,
+  +ebef: {Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, tf, m) == Some{hz}: Maybe<&2, Maybe<&2, Hashes.Hash>>},
+  x0: Replicas.Taken,
+  +etk0: {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, m) == Some{x0}: Maybe<&2, Replicas.Taken>},
+  +d10: {Res.differs(~d, l, Replicas.Taken.root(x0), hz, changed) == Some{True{}}: Maybe<&2, Bool>}
+) -> {
+  Maybe.bind(&2, Maybe<&2, Hashes.Hash>, Bool, Replicas.Tip.version(~Requests.Ask.machine(), ~d, l, tf, v), h => Maybe.bind(&2, Bool, Bool, Res.differs(~d, l, h, Replicas.Tip.content(tb), changed), differs => Shared.Bool.when(Maybe<&2, Bool>, differs, u2 => Maybe.bind(&2, Maybe<&2, Requests.Res>, Bool, Res.find(~d, l, Replicas.Tip.content(tb), used), r => Shared.Bool.when(Maybe<&2, Bool>, Maybe.is_some(&2, Requests.Res, r), u3 => Uses.reaches(~d, l, view, Replicas.Tip.content(tb), used, changed), u3 => Some{False{}})), u2 => Some{False{}})))
+    == Some{True{}}: Maybe<&2, Bool>
+} -> R:
+  match x0:
+    case Replicas.Taken{+j, +hX}:
+      +eiv = Ledgers.Id.is_eq_sound(j, v)(
+        Affects.cast(
+          Maybe<&2, Replicas.Taken>,
+          z => {Replicas.Taken.is_of(z, v) == True{}: Bool},
+          Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, m),
+          Some{Replicas.Taken{j, hX}},
+          etk0,
+          eisof
+        )
+      )
+      +etk = Affects.cast(
+        Ledgers.Id,
+        z => {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, m) == Some{Replicas.Taken{z, hX}}: Maybe<&2, Replicas.Taken>},
+        j,
+        v,
+        eiv,
+        etk0
+      )
+      e => Affects.bind_some(
+        Maybe<&2, Hashes.Hash>,
+        Bool,
+        R,
+        Replicas.Tip.version(~Requests.Ask.machine(), ~d, l, tf, v),
+        h => Maybe.bind(&2, Bool, Bool, Res.differs(~d, l, h, Replicas.Tip.content(tb), changed), differs => Shared.Bool.when(Maybe<&2, Bool>, differs, u2 => Maybe.bind(&2, Maybe<&2, Requests.Res>, Bool, Res.find(~d, l, Replicas.Tip.content(tb), used), r => Shared.Bool.when(Maybe<&2, Bool>, Maybe.is_some(&2, Requests.Res, r), u3 => Uses.reaches(~d, l, view, Replicas.Tip.content(tb), used, changed), u3 => Some{False{}})), u2 => Some{False{}})),
+        True{},
+        +hv => +ever => e3 => Affects.bind_some(
+          Bool,
+          Bool,
+          R,
+          Res.differs(~d, l, hv, Replicas.Tip.content(tb), changed),
+          differs => Shared.Bool.when(Maybe<&2, Bool>, differs, u2 => Maybe.bind(&2, Maybe<&2, Requests.Res>, Bool, Res.find(~d, l, Replicas.Tip.content(tb), used), r => Shared.Bool.when(Maybe<&2, Bool>, Maybe.is_some(&2, Requests.Res, r), u3 => Uses.reaches(~d, l, view, Replicas.Tip.content(tb), used, changed), u3 => Some{False{}})), u2 => Some{False{}}),
+          True{},
+          +dv => +ed => e4 => Affects.at_facts.dif(
+            ~d,
+            l,
+            view,
+            tf,
+            tb,
+            v,
+            changed,
+            used,
+            R,
+            k,
+            m,
+            enum,
+            elt,
+            hz,
+            ebef,
+            hX,
+            etk,
+            d10,
+            dv,
+            Affects.cast(
+              Maybe<&2, Hashes.Hash>,
+              z => {Res.differs(~d, l, z, Replicas.Tip.content(tb), changed) == Some{dv}: Maybe<&2, Bool>},
+              hv,
+              hX,
+              Shared.Maybe.some_inj(
+                Maybe<&2, Hashes.Hash>,
+                hv,
+                hX,
+                Equal.trans(
+                  Maybe<&2, Maybe<&2, Hashes.Hash>>,
+                  Some{hv},
+                  Replicas.Tip.version(~Requests.Ask.machine(), ~d, l, tf, v),
+                  Some{hX},
+                  Equal.sym(Maybe<&2, Maybe<&2, Hashes.Hash>>, Replicas.Tip.version(~Requests.Ask.machine(), ~d, l, tf, v), Some{hv}, ever),
+                  Affects.version_of(~d, l, tf, v, m, hX, enum, etk)
+                )
+              ),
+              ed
+            )
+          )(e4)
+        )(e3)
+      )(e)
+
+# Affects.at_facts once it is known whether the version wrote the resource (w)
+def Affects.at_facts.wrote(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +tf: Replicas.Tip,
+  +tb: Replicas.Tip,
+  +v: Ledgers.Id,
+  +changed: Resources.Name,
+  +used: Resources.Name,
+  -R: Type,
+  k: Affects.AtFacts(~d, l, view, tf, tb, v, changed, used, R),
+  +m: U32,
+  +enum: {Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, v) == Some{m}: Maybe<&2, U32>},
+  +elt: {U32.is_lt(m, Replicas.Tip.count(tf)) == True{}: Bool},
+  +eisof: {Replicas.Taken.is_of(Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, m), v) == True{}: Bool},
+  w: Bool,
+  +ew: {Version.wrote(~d, l, tf, m, changed) == Some{w}: Maybe<&2, Bool>}
+) -> {Shared.Bool.when(Maybe<&2, Bool>, w, u => Maybe.bind(&2, Maybe<&2, Hashes.Hash>, Bool, Replicas.Tip.version(~Requests.Ask.machine(), ~d, l, tf, v), h => Maybe.bind(&2, Bool, Bool, Res.differs(~d, l, h, Replicas.Tip.content(tb), changed), differs => Shared.Bool.when(Maybe<&2, Bool>, differs, u2 => Maybe.bind(&2, Maybe<&2, Requests.Res>, Bool, Res.find(~d, l, Replicas.Tip.content(tb), used), r => Shared.Bool.when(Maybe<&2, Bool>, Maybe.is_some(&2, Requests.Res, r), u3 => Uses.reaches(~d, l, view, Replicas.Tip.content(tb), used, changed), u3 => Some{False{}})), u2 => Some{False{}}))), u => Some{False{}}) == Some{True{}}: Maybe<&2, Bool>} -> R:
+  match w:
+    case False{}:
+      e => Empty.absurd(R, Shared.Bool.false_ne_true(Shared.Maybe.some_inj(Bool, False{}, True{}, e)))
+    case True{}:
+      +e => Affects.wrote_facts(
+        ~d,
+        l,
+        tf,
+        m,
+        changed,
+        R,
+        +hz => +ebef => +x0 => +etk0 => +d10 => Affects.at_facts.ver(~d, l, view, tf, tb, v, changed, used, R, k, m, enum, elt, eisof, hz, ebef, x0, etk0, d10)(e)
+      )(ew)
+
+# what Touch.holds.at reads, when it holds
+def Affects.at_facts(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +tf: Replicas.Tip,
+  +tb: Replicas.Tip,
+  +v: Ledgers.Id,
+  +changed: Resources.Name,
+  +used: Resources.Name,
+  -R: Type,
+  k: Affects.AtFacts(~d, l, view, tf, tb, v, changed, used, R)
+) -> {Touch.holds.at(~d, l, view, tf, tb, v, changed, used) == Some{True{}}: Maybe<&2, Bool>} -> R:
+  e => Affects.bind_some(
+    U32,
+    Bool,
+    R,
+    Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, v),
+    m => Maybe.bind(&2, Bool, Bool, Version.wrote(~d, l, tf, m, changed), wrote => Shared.Bool.when(Maybe<&2, Bool>, wrote, u => Maybe.bind(&2, Maybe<&2, Hashes.Hash>, Bool, Replicas.Tip.version(~Requests.Ask.machine(), ~d, l, tf, v), h => Maybe.bind(&2, Bool, Bool, Res.differs(~d, l, h, Replicas.Tip.content(tb), changed), differs => Shared.Bool.when(Maybe<&2, Bool>, differs, u2 => Maybe.bind(&2, Maybe<&2, Requests.Res>, Bool, Res.find(~d, l, Replicas.Tip.content(tb), used), r => Shared.Bool.when(Maybe<&2, Bool>, Maybe.is_some(&2, Requests.Res, r), u3 => Uses.reaches(~d, l, view, Replicas.Tip.content(tb), used, changed), u3 => Some{False{}})), u2 => Some{False{}}))), u => Some{False{}})),
+    True{},
+    +m => +enum => e1 => Affects.number_facts(
+      ~d,
+      l,
+      tf,
+      v,
+      m,
+      R,
+      +elt => +eisof => Affects.bind_some(
+        Bool,
+        Bool,
+        R,
+        Version.wrote(~d, l, tf, m, changed),
+        wrote => Shared.Bool.when(Maybe<&2, Bool>, wrote, u => Maybe.bind(&2, Maybe<&2, Hashes.Hash>, Bool, Replicas.Tip.version(~Requests.Ask.machine(), ~d, l, tf, v), h => Maybe.bind(&2, Bool, Bool, Res.differs(~d, l, h, Replicas.Tip.content(tb), changed), differs => Shared.Bool.when(Maybe<&2, Bool>, differs, u2 => Maybe.bind(&2, Maybe<&2, Requests.Res>, Bool, Res.find(~d, l, Replicas.Tip.content(tb), used), r => Shared.Bool.when(Maybe<&2, Bool>, Maybe.is_some(&2, Requests.Res, r), u3 => Uses.reaches(~d, l, view, Replicas.Tip.content(tb), used, changed), u3 => Some{False{}})), u2 => Some{False{}}))), u => Some{False{}}),
+        True{},
+        +w => +ew => e2 => Affects.at_facts.wrote(~d, l, view, tf, tb, v, changed, used, R, k, m, enum, elt, eisof, w, ew)(e2)
+      )(e1)
+    )(enum)
+  )(e)
+
+# what Touch.holds reads, when it holds
+def Affects.holds_facts(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +from: Branch,
+  +v: Ledgers.Id,
+  +changed: Resources.Name,
+  +b: Branch,
+  +used: Resources.Name,
+  -R: Type,
+  k: {Branch.other(from, b) == True{}: Bool}
+    -> @tf: Replicas.Tip -> {Branch.head(~d, ~kern, l, from) == Some{tf}: Maybe<&2, Replicas.Tip>}
+    -> @tb: Replicas.Tip -> {Branch.head(~d, ~kern, l, b) == Some{tb}: Maybe<&2, Replicas.Tip>}
+    -> Affects.AtFacts(~d, l, view, tf, tb, v, changed, used, R)
+) -> {Touch.holds(~d, ~kern, l, view, Touch{from, v, changed, b, used}) == Some{True{}}: Maybe<&2, Bool>} -> R:
+  e => Affects.when_is(
+    Maybe<&2, Bool>,
+    R,
+    Branch.other(from, b),
+    u => Maybe.bind(
+      &2,
+      Replicas.Tip,
+      Bool,
+      Branch.head(~d, ~kern, l, from),
+      tf => Maybe.bind(&2, Replicas.Tip, Bool, Branch.head(~d, ~kern, l, b), tb => Touch.holds.at(~d, l, view, tf, tb, v, changed, used))
+    ),
+    u => Some{False{}},
+    Some{True{}},
+    +eo => e1 => Affects.bind_some(
+      Replicas.Tip,
+      Bool,
+      R,
+      Branch.head(~d, ~kern, l, from),
+      tf => Maybe.bind(&2, Replicas.Tip, Bool, Branch.head(~d, ~kern, l, b), tb => Touch.holds.at(~d, l, view, tf, tb, v, changed, used)),
+      True{},
+      +tf => +ef => e2 => Affects.bind_some(
+        Replicas.Tip,
+        Bool,
+        R,
+        Branch.head(~d, ~kern, l, b),
+        tb => Touch.holds.at(~d, l, view, tf, tb, v, changed, used),
+        True{},
+        +tb => +eb => e3 => Affects.at_facts(~d, l, view, tf, tb, v, changed, used, R, k(eo)(tf)(ef)(tb)(eb))(e3)
+      )(e2)
+    )(e1),
+    eof => e4 => Empty.absurd(R, Shared.Bool.false_ne_true(Shared.Maybe.some_inj(Bool, False{}, True{}, e4)))
+  )(e)
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
