@@ -7944,3 +7944,165 @@ law Crit.size_upsert:
 
 def Crit.size_upsert(ty, f, m, k, v):
   Crit.size_upsert.go(~ty, ~f, m, k, v)
+
+# Dicts
+# -----
+# A map in its one shape: a crit-bit map with the proof that it is well
+# formed. Each operation keeps the proof, so the laws of a dict need no
+# premise, and a dict is a value of its entries alone.
+
+# a dict from keys to values of V
+def Dict(-V: Data) -> Data:
+  Sigma<&2, &2, Crit<V>, m => {Crit.wf(~V, m, 0n) == True{}: Bool}>
+
+# the map of the dict d
+def Dict.crit(-V: Data, d: Dict(V)) -> Crit<V>:
+  match d:
+    case Tuple{m, w}:
+      m
+
+# a dict with no entry
+def Dict.new(~V: Data) -> Dict(V):
+  (Crit.new(V), Crit.new_wf(~V))
+
+# what d holds under the key k
+def Dict.get(-V: Data, d: Dict(V), +k: List<&2, U32>) -> Maybe<&2, V>:
+  Crit.get(V, Dict.crit(V, d), k)
+
+# d holds the key k
+def Dict.has(-V: Data, d: Dict(V), +k: List<&2, U32>) -> Bool:
+  Maybe.is_some(&2, V, Dict.get(V, d, k))
+
+# d with the key k bound to v
+def Dict.set(~V: Data, d: Dict(V), +k: List<&2, U32>, +v: V) -> Dict(V):
+  match d:
+    case Tuple{+m, w}:
+      (Crit.set(~V, m, k, v), Crit.upsert_wf(~V, ~(a => b => b), m, k, v)(w))
+
+# d without the key k
+def Dict.drop(~V: Data, d: Dict(V), +k: List<&2, U32>) -> Dict(V):
+  match d:
+    case Tuple{+m, w}:
+      (Crit.drop(V, m, k), Crit.drop_wf(~V, m, k)(w))
+
+# the entries of a whose keys b lacks
+def Dict.minus(~V: Data, a: Dict(V), b: Dict(V)) -> Dict(V):
+  match a b:
+    case Tuple{+ma, wa} Tuple{+mb, wb}:
+      (Crit.minus(V, ma, mb), Crit.minus_wf(~V, ma, mb)(wa)(wb))
+
+# the count of the entries of d
+def Dict.size(-V: Data, d: Dict(V)) -> Nat:
+  Crit.size(V, Dict.crit(V, d))
+
+# d has no entry
+def Dict.is_empty(-V: Data, d: Dict(V)) -> Bool:
+  Crit.is_tip(V, Dict.crit(V, d))
+
+# the entries of d, in the order of their keys
+def Dict.entries(-V: Data, d: Dict(V)) -> List<&2, Bind<V>>:
+  Crit.entries(V, Dict.crit(V, d))
+
+# the values of the entries es, in order
+def Binds.values(-V: Data, es: List<&2, Bind<V>>) -> List<&2, V>:
+  match es:
+    case Nil{}:
+      []
+    case Con{Bind{k, v}, rest}:
+      v <> Binds.values(V, rest)
+
+# the values of d, in the order of their keys
+def Dict.values(-V: Data, d: Dict(V)) -> List<&2, V>:
+  Binds.values(V, Dict.entries(V, d))
+
+# s with the key of each of xs, as a set
+def Dict.put_keys(
+  ~A: Data,
+  ~key: A -> List<&2, U32>,
+  xs: List<&2, A>,
+  s: Dict(Unit)
+) -> Dict(Unit):
+  match xs:
+    case Nil{}:
+      s
+    case Con{x, r}:
+      Dict.put_keys(~A, ~key, r, Dict.set(~Unit, s, key(x), Unit{}))
+
+# xs, each once, but for the keys in seen
+def Dict.unique(
+  ~A: Data,
+  ~key: A -> List<&2, U32>,
+  xs: List<&2, A>,
+  +seen: Dict(Unit)
+) -> List<&2, A>:
+  match xs:
+    case Nil{}:
+      []
+    case Con{+x, +r}:
+      +k = key(x)
+      Shared.Bool.when(
+        List<&2, A>,
+        Dict.has(Unit, seen, k),
+        u => Dict.unique(~A, ~key, r, seen),
+        u => x <> Dict.unique(~A, ~key, r, Dict.set(~Unit, seen, k, Unit{}))
+      )
+
+# Laws of dicts
+
+# a new dict holds no key
+law Dict.get_new:
+  for ~V: Data
+  for k: List<&2, U32>
+  {Dict.get(V, Dict.new(~V), k) == None{}: Maybe<&2, V>}
+
+# a write binds its key to its value, and no other key
+law Dict.get_set:
+  for ~V: Data
+  for d: Dict(V)
+  for k0: List<&2, U32>
+  for v: V
+  for k: List<&2, U32>
+  {
+    Dict.get(V, Dict.set(~V, d, k0, v), k)
+      == Bool.pick(Maybe<&2, V>, Key.is_eq(k, k0), Some{v}, Dict.get(V, d, k)): Maybe<&2, V>
+  }
+
+# a drop unbinds its key, and no other key
+law Dict.get_drop:
+  for ~V: Data
+  for d: Dict(V)
+  for k0: List<&2, U32>
+  for k: List<&2, U32>
+  {
+    Dict.get(V, Dict.drop(~V, d, k0), k)
+      == Bool.pick(Maybe<&2, V>, Key.is_eq(k, k0), None{}, Dict.get(V, d, k)): Maybe<&2, V>
+  }
+
+# a difference holds what a holds under each key that b lacks
+law Dict.get_minus:
+  for ~V: Data
+  for a: Dict(V)
+  for b: Dict(V)
+  for k: List<&2, U32>
+  {
+    Dict.get(V, Dict.minus(~V, a, b), k)
+      == Bool.pick(Maybe<&2, V>, Dict.has(V, b, k), None{}, Dict.get(V, a, k)): Maybe<&2, V>
+  }
+
+# a write adds one entry exactly when its key was not there
+law Dict.size_set:
+  for ~V: Data
+  for d: Dict(V)
+  for k: List<&2, U32>
+  for v: V
+  {
+    Dict.size(V, Dict.set(~V, d, k, v))
+      == Shared.Nat.add_if(Bool.not(Dict.has(V, d, k)), Dict.size(V, d)): Nat
+  }
+
+# a dict is its entries: two dicts with the same entries are the same dict
+law Dict.ext:
+  for ~V: Data
+  for a: Dict(V)
+  for b: Dict(V)
+  {Dict.entries(V, a) == Dict.entries(V, b): List<&2, Bind<V>>} -> {a == b: Dict(V)}
