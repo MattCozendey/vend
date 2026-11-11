@@ -3111,12 +3111,23 @@ def Answer.at_follows.tip(
         keep
       )
 
+# what Replicas.Led.Later says of the ledgers a and b, as Data: a proof of it
+# may be used as often as a proof needs
+def Answer.Later(~d: Led(), a: L(d), +b: L(d)) -> Data:
+  {
+    Bool.and(
+      Ledgers.Kind.grows(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine()), ~Replicas.Led.kind(Requests.Ask.machine(), d), a, b),
+      Replicas.Led.honest(~Requests.Ask.machine(), ~d, b)
+    )
+      == True{}: Bool
+  }
+
 # what Replicas.Line.get_grows says of the ledger d and the kernel kern: what
 # the log of a line holds under a key, it holds for good
-def Answer.Stays(-d: Led(), -kern: Kern(d)) -> Type:
+def Answer.Stays(~d: Led(), ~kern: Kern(d)) -> Type:
   @c: Ledgers.Line -> @key: List<&2, U32> -> Shared.Read.Stable(
     L(d),
-    a => b => Replicas.Led.Later(Requests.Ask.machine(), d, a, b),
+    a => b => Replicas.Led.Later(~Requests.Ask.machine(), ~d, a, b),
     List<&2, U32>,
     l => Replicas.Line.get(~Requests.Ask.machine(), ~d, ~kern, l, c, key)
   )
@@ -3132,8 +3143,8 @@ def Answer.at_follows.keep(
   +i: Ledgers.Id,
   +t: Replicas.Tip,
   +m2: Maybe<&2, Replicas.Tip>,
-  g: Replicas.Led.Later(Requests.Ask.machine(), d, a, b),
-  stays: Answer.Stays(d, kern),
+  g: Answer.Later(~d, a, b),
+  stays: Answer.Stays(~d, ~kern),
   e1: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c) == Some{t}: Maybe<&2, Replicas.Tip>},
   e2: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c) == m2: Maybe<&2, Replicas.Tip>},
   +ws: List<&2, U32>,
@@ -3188,8 +3199,8 @@ def Answer.at_follows.head(
   +i: Ledgers.Id,
   +q: Requests.Ask,
   +h: Hashes.Hash,
-  g: Replicas.Led.Later(Requests.Ask.machine(), d, a, b),
-  stays: Answer.Stays(d, kern),
+  g: Answer.Later(~d, a, b),
+  stays: Answer.Stays(~d, ~kern),
   m1: Maybe<&2, Replicas.Tip>,
   +m2: Maybe<&2, Replicas.Tip>,
   +e1: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c) == m1: Maybe<&2, Replicas.Tip>},
@@ -3220,8 +3231,8 @@ def Answer.of_follows(
   +i: Ledgers.Id,
   +q: Requests.Ask,
   +h: Hashes.Hash,
-  g: Replicas.Led.Later(Requests.Ask.machine(), d, a, b),
-  stays: Answer.Stays(d, kern),
+  g: Answer.Later(~d, a, b),
+  stays: Answer.Stays(~d, ~kern),
   w: Replicas.Arrival
 ) -> {Answer.follows(Answer.of(~d, ~kern, a, i, q, h, w), Some{Answer.of(~d, ~kern, b, i, q, h, w)}) == True{}: Bool}:
   match w:
@@ -3305,6 +3316,42 @@ def Node.answer_follows.when(
         Shared.Maybe.none_ne_some(Answer, x, e)
       )
 
+# Node.answer_follows for the ledgers a and b, once Line.get_grows is known
+def Node.answer_follows.go(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +a: L(d),
+  +b: L(d),
+  +i: Ledgers.Id,
+  +time: String,
+  +q: Requests.Ask,
+  +x: Answer,
+  +g: Answer.Later(~d, a, b),
+  stays: Answer.Stays(~d, ~kern),
+  e: {Node.answer(~d, ~kern, a, i, time, q) == Some{x}: Maybe<&2, Answer>}
+) -> {Answer.follows(x, Node.answer(~d, ~kern, b, i, time, q)) == True{}: Bool}:
+  Node.answer_follows.when(
+    Replicas.Led.has(~Requests.Ask.machine(), ~d, a, Ledgers.Entry.Ask{i, time, q}),
+    Replicas.Led.has(~Requests.Ask.machine(), ~d, b, Ledgers.Entry.Ask{i, time, q}),
+    Answer.of(~d, ~kern, a, i, q, Ledgers.Name.hash(Replicas.Entry.name(~Requests.Ask.machine(), Ledgers.Entry.Ask{i, time, q})), Requests.Ask.arrival(q)),
+    Answer.of(~d, ~kern, b, i, q, Ledgers.Name.hash(Replicas.Entry.name(~Requests.Ask.machine(), Ledgers.Entry.Ask{i, time, q})), Requests.Ask.arrival(q)),
+    x,
+    Answer.has_grows(~d, a, b, Ledgers.Entry.Ask{i, time, q}, Replicas.Led.later_grows(~Requests.Ask.machine(), ~d, a, b)(g)),
+    Answer.of_follows(
+      ~d,
+      ~kern,
+      a,
+      b,
+      i,
+      q,
+      Ledgers.Name.hash(Replicas.Entry.name(~Requests.Ask.machine(), Ledgers.Entry.Ask{i, time, q})),
+      g,
+      stays,
+      Requests.Ask.arrival(q)
+    ),
+    e
+  )
+
 # answers only move forward: as the ledger grows, and while its ballots are
 # honest, a request that a node answers stays answered; Stale and Refused are
 # final; a taken change stays taken (Answer.follows)
@@ -3321,6 +3368,21 @@ law Node.answer_follows:
     Answer,
     x => m => {Answer.follows(x, m) == True{}: Bool},
     l => Node.answer(~d, ~kern, l, i, time, q)
+  )
+
+def Node.answer_follows(d, kern, rules, i, time, q):
+  a => b => x => g => e => Node.answer_follows.go(
+    ~d,
+    ~kern,
+    a,
+    b,
+    i,
+    time,
+    q,
+    x,
+    g,
+    c => key => Replicas.Line.get_grows(~Requests.Ask.machine(), ~d, ~kern, c, key),
+    e
   )
 
 # a merge never loses a change that only one side made: when the merge of a
