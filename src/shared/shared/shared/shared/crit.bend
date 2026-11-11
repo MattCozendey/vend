@@ -1705,6 +1705,18 @@ def Bits.agree_n_le(a, b, m, n):
             case 1n+(+q):
               h1 => h2 => Empty.absurd({Bits.agree_n(1n+p, Con{x, ra}, Nil{}) == True{}: Bool}, Shared.Bool.false_ne_true(h2))
 
+# the zero step of agree_n_succ: two first bits, and the empty rest
+def Bits.agree_n_succ.zero(x: Bool, y: Bool) -> {Bool.and(Shared.Bool.is_eq(x, y), True{}) == Shared.Bool.is_eq(x, y): Bool}:
+  match x y:
+    case True{} True{}:
+      {==}
+    case True{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case False{} False{}:
+      {==}
+
 # bits agree on n + 1 exactly when they agree on n and have the same bit at n
 law Bits.agree_n_succ:
   for a: List<&2, Bool>
@@ -1719,7 +1731,45 @@ law Bits.agree_n_succ:
   }
 
 def Bits.agree_n_succ(a, b, n):
-  ?TODO
+  match a b:
+    case Nil{} Nil{}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+p:
+          {==}
+    case Con{+x, +ra} Con{+y, +rb}:
+      match n:
+        case 0n:
+          Bits.agree_n_succ.zero(x, y)
+        case 1n+(+p):
+          Equal.trans(
+            Bool,
+            Bool.and(Shared.Bool.is_eq(x, y), Bits.agree_n(1n+p, ra, rb)),
+            Bool.and(Shared.Bool.is_eq(x, y), Bool.and(Bits.agree_n(p, ra, rb), Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Bits.at(ra, p), Bits.at(rb, p)))),
+            Bool.and(Bool.and(Shared.Bool.is_eq(x, y), Bits.agree_n(p, ra, rb)), Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Bits.at(ra, p), Bits.at(rb, p))),
+            Equal.cong(
+              Bool,
+              Bool,
+              u => Bool.and(Shared.Bool.is_eq(x, y), u),
+              Bits.agree_n(1n+p, ra, rb),
+              Bool.and(Bits.agree_n(p, ra, rb), Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Bits.at(ra, p), Bits.at(rb, p))),
+              Bits.agree_n_succ(ra, rb, p)
+            ),
+            Shared.Bool.and_assoc(Shared.Bool.is_eq(x, y), Bits.agree_n(p, ra, rb), Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Bits.at(ra, p), Bits.at(rb, p)))
+          )
+    case Nil{} Con{y, rb}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+p:
+          {==}
+    case Con{x, ra} Nil{}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+p:
+          {==}
 
 # the side of a key at pos is its bit there
 law Key.side_bits:
