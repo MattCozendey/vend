@@ -3924,10 +3924,9 @@ def Merge.Writes(
 ) -> Type:
   {Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h1, kw) == Trees.Look.of(m): Trees.Look}
     & (
-      @k2: List<&2, U32> -> {Shared.List.is_eq(~U32, ~U32.is_eq, kw, k2) == False{}: Bool} -> {
-        Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h1, k2)
-          == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, k2): Trees.Look
-      }
+      @k2: List<&2, U32> -> @x: Maybe<&2, List<&2, U32>> -> {Shared.List.is_eq(~U32, ~U32.is_eq, kw, k2) == False{}: Bool} -> {
+        Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hc, k2) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+      } -> {Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, h1, k2) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
     )
 
 # the data of the ledger lf that holds the nodes N are the nodes N
@@ -4151,14 +4150,13 @@ def Merge.writes_frame(
   m: Maybe<&2, List<&2, U32>>,
   wr: Merge.Writes(~d, lf, h1, hc, kw, m),
   k2: List<&2, U32>,
-  hk: {Shared.List.is_eq(~U32, ~U32.is_eq, kw, k2) == False{}: Bool}
-) -> {
-  Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h1, k2)
-    == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, k2): Trees.Look
-}:
+  x: Maybe<&2, List<&2, U32>>,
+  hk: {Shared.List.is_eq(~U32, ~U32.is_eq, kw, k2) == False{}: Bool},
+  kn: {Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hc, k2) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+) -> {Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, h1, k2) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
   match wr:
     case Tuple{hit, frame}:
-      frame(k2)(hk)
+      frame(k2)(x)(hk)(kn)
 
 # the ledger of a work that gets more nodes is the ledger of the nodes that it
 # has
@@ -4412,17 +4410,17 @@ def Merge.pick_frame.clash.at(
   +wc: Merge.Puts(~d, l, lc, P),
   +wf: Merge.Puts(~d, l, lf, N),
   +held: Merge.Held(~d, lf, N),
-  +nd: Merge.Nodes(Merge.nodes(~d, W1), N)
+  +nd: Merge.Nodes(Merge.nodes(~d, W1), N),
+  +v: Maybe<&2, List<&2, U32>>,
+  +kn: {Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
 ) -> {
-  Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n0))
-    == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)): Trees.Look
+  Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n0)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>
 }:
   match mc:
     case None{}:
       Empty.absurd(
         {
-          Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n0))
-            == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)): Trees.Look
+          Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n0)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>
         },
         Shared.Maybe.none_ne_some(Work<L(d)>, W1, eb)
       )
@@ -4454,7 +4452,9 @@ def Merge.pick_frame.clash.at(
           nd
         ),
         Key.res(n0),
-        {==}
+        v,
+        {==},
+        kn
       )
 
 # what a pick of a merge does to the key of a resource n0 that it does not
@@ -4477,10 +4477,11 @@ def Merge.pick_frame(
   +wf: Merge.Puts(~d, l, lf, N),
   +held: Merge.Held(~d, lf, N),
   +nd: Merge.Nodes(Merge.nodes(~d, W1), N),
-  +hk: {Shared.List.is_eq(~U32, ~U32.is_eq, Key.res(n), Key.res(n0)) == False{}: Bool}
+  +hk: {Shared.List.is_eq(~U32, ~U32.is_eq, Key.res(n), Key.res(n0)) == False{}: Bool},
+  +v: Maybe<&2, List<&2, U32>>,
+  +kn: {Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
 ) -> {
-  Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n0))
-    == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)): Trees.Look
+  Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n0)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>
 }:
   match p:
     case Pick.Take{+x}:
@@ -4511,7 +4512,9 @@ def Merge.pick_frame(
           nd
         ),
         Key.res(n0),
-        hk
+        v,
+        hk,
+        kn
       )
     case Pick.Make{+h, +bytes}:
       Merge.writes_frame(
@@ -4548,7 +4551,9 @@ def Merge.pick_frame(
           nd
         ),
         Key.res(n0),
-        hk
+        v,
+        hk,
+        kn
       )
     case Pick.Clash{}:
       Merge.pick_frame.clash.at(
@@ -4568,7 +4573,9 @@ def Merge.pick_frame(
         wc,
         wf,
         held,
-        nd
+        nd,
+        v,
+        kn
       )
 
 # Merge.one once the pick of the three reads is known (mp)
@@ -4810,10 +4817,11 @@ def Merge.one_frame.at(
   +wf: Merge.Puts(~d, l, lf, N),
   +held: Merge.Held(~d, lf, N),
   +nd: Merge.Nodes(Merge.nodes(~d, W1), N),
-  +hk: {Shared.List.is_eq(~U32, ~U32.is_eq, Key.res(n), Key.res(n0)) == False{}: Bool}
+  +hk: {Shared.List.is_eq(~U32, ~U32.is_eq, Key.res(n), Key.res(n0)) == False{}: Bool},
+  +v: Maybe<&2, List<&2, U32>>,
+  +kn: {Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
 ) -> {
-  Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n0))
-    == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)): Trees.Look
+  Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n0)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>
 }:
   (+b, r1) = rd
   (eb, r2) = r1
@@ -4823,7 +4831,7 @@ def Merge.one_frame.at(
   (et, r6) = r5
   (+p, r7) = r6
   (ep, e) = r7
-  Merge.pick_frame(~d, l, lc, hc, P, k, n, n0, p, W1, lf, N, e, wc, wf, held, nd, hk)
+  Merge.pick_frame(~d, l, lc, hc, P, k, n, n0, p, W1, lf, N, e, wc, wf, held, nd, hk, v, kn)
 
 # the merge of the same reads is the same pick
 def Merge.merge_args(
@@ -5374,7 +5382,6 @@ def Merge.all_step(
     Merge.all_from(~d, l, hb, ho, ht, k, rest, Merge.step(~d, l, hb, ho, ht, k, x, w), Wf, e)
   )
 
-# NEW-HELPERS-BEGIN
 # the first of a pair of Data
 def Merge.And.left(-A: Data, -B: Data, p: Merge.And(A, B)) -> A:
   match p:
@@ -5461,18 +5468,18 @@ def Merge.next_frame(
   +wf: Merge.Puts(~d, l, lf, N),
   +held: Merge.Held(~d, lf, N),
   +nd: Merge.Nodes(Merge.nodes(~d, W1), N),
-  +hk: {Merge.apart(mn, n0) == True{}: Bool}
+  +hk: {Merge.apart(mn, n0) == True{}: Bool},
+  +v: Maybe<&2, List<&2, U32>>,
+  +kn: {Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
 ) -> {
-  Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n0))
-    == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)): Trees.Look
+  Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n0)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>
 }:
   match mn:
     case None{}:
       %Shared.Maybe.some_inj(Work<L(d)>, Work{lc, hc, P}, W1, e): {
-        Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, _), Key.res(n0))
-          == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)): Trees.Look
+        Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, _), Key.res(n0)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>
       }
-      {==}
+      kn
     case Some{+n}:
       Merge.one_frame.at(
         ~d,
@@ -5494,7 +5501,9 @@ def Merge.next_frame(
         wf,
         held,
         nd,
-        Shared.Bool.not_true(Shared.List.is_eq(~U32, ~U32.is_eq, Key.res(n), Key.res(n0)))(hk)
+        Shared.Bool.not_true(Shared.List.is_eq(~U32, ~U32.is_eq, Key.res(n), Key.res(n0)))(hk),
+        v,
+        kn
       )
 
 # the tree of the work after the next merge of the resource n reads it as taken,
@@ -5866,6 +5875,7 @@ def Merge.FrameIH(
   +ht: Maybe<&2, Hashes.Hash>,
   +k: Ledgers.Id,
   +n0: Resources.Name,
+  +v: Maybe<&2, List<&2, U32>>,
   rest: List<&2, List<&2, U32>>,
   lf: L(d),
   hf: Maybe<&2, Hashes.Hash>,
@@ -5875,91 +5885,9 @@ def Merge.FrameIH(
     Merge.all(~d, l, hb, ho, ht, k, rest, Some{Work{lc1, hc1, P1}}) == Some{Work{lf, hf, N}}: Maybe<&2, Work<L(d)>>
   } -> Merge.Puts(~d, l, lc1, P1) -> {
     List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), rest, Key.res(n0)) == False{}: Bool
-  } -> Merge.And(
-    Merge.Nodes(P1, N),
-    {
-      Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hf, Key.res(n0))
-        == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc1, Key.res(n0)): Trees.Look
-    }
-  )
-
-
-# the frame of a merge of the keys x then rest, from the facts of the first step
-# and the frame of the rest
-def Merge.all_frame.mid(
-  ~d: Led(),
-  +l: L(d),
-  +lc: L(d),
-  +hb: Maybe<&2, Hashes.Hash>,
-  +ho: Maybe<&2, Hashes.Hash>,
-  +ht: Maybe<&2, Hashes.Hash>,
-  +hc: Maybe<&2, Hashes.Hash>,
-  +P: List<&2, List<&2, U32>>,
-  +k: Ledgers.Id,
-  +n0: Resources.Name,
-  +x: List<&2, U32>,
-  +lf: L(d),
-  +hf: Maybe<&2, Hashes.Hash>,
-  +N: List<&2, List<&2, U32>>,
-  +lc1: L(d),
-  +hc1: Maybe<&2, Hashes.Hash>,
-  +P1: List<&2, List<&2, U32>>,
-  +wc: Merge.Puts(~d, l, lc, P),
-  +wf: Merge.Puts(~d, l, lf, N),
-  +held: Merge.Held(~d, lf, N),
-  +enext: {
-    Merge.next(~d, l, hb, ho, ht, k, Work{lc, hc, P}, Res.name(x)) == Some{Work{lc1, hc1, P1}}: Maybe<&2, Work<L(d)>>
-  },
-  +hx0: {Shared.List.is_eq(~U32, ~U32.is_eq, x, Key.res(n0)) == False{}: Bool},
-  facts: Merge.And(Merge.Puts(~d, l, lc1, P1), Merge.Nodes(P, P1)),
-  ihres: Merge.And(
-    Merge.Nodes(P1, N),
-    {
-      Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hf, Key.res(n0))
-        == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc1, Key.res(n0)): Trees.Look
-    }
-  )
-) -> Merge.And(
-  Merge.Nodes(P, N),
-  {
-    Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hf, Key.res(n0))
-      == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)): Trees.Look
-  }
-):
-  (+a, ndP) = facts
-  (+nd1, lk1) = ihres
-  (
-    Merge.nodes_trans(P, P1, N, ndP, nd1),
-    Equal.trans(
-      Trees.Look,
-      Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hf, Key.res(n0)),
-      Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc1, Key.res(n0)),
-      Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)),
-      lk1,
-      Merge.next_frame(
-        ~d,
-        l,
-        lc,
-        hb,
-        ho,
-        ht,
-        hc,
-        P,
-        k,
-        n0,
-        Res.name(x),
-        Work{lc1, hc1, P1},
-        lf,
-        N,
-        enext,
-        wc,
-        wf,
-        held,
-        nd1,
-        Merge.apart_of(x, n0, hx0)
-      )
-    )
-  )
+  } -> {
+    Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hc1, Key.res(n0)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  } -> {Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hf, Key.res(n0)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
 
 # Merge.all_frame for the keys x then rest, once the work W1 after the first
 # step is known
@@ -5971,6 +5899,7 @@ def Merge.all_frame.con2(
   +ht: Maybe<&2, Hashes.Hash>,
   +k: Ledgers.Id,
   +n0: Resources.Name,
+  +v: Maybe<&2, List<&2, U32>>,
   +x: List<&2, U32>,
   +rest: List<&2, List<&2, U32>>,
   +lc: L(d),
@@ -5983,59 +5912,82 @@ def Merge.all_frame.con2(
   +wf: Merge.Puts(~d, l, lf, N),
   +held: Merge.Held(~d, lf, N),
   +hx: {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), x <> rest, Key.res(n0)) == False{}: Bool},
+  +kn: {Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
   W1: Work<L(d)>,
   +erest: {Merge.all(~d, l, hb, ho, ht, k, rest, Some{W1}) == Some{Work{lf, hf, N}}: Maybe<&2, Work<L(d)>>},
   +enext: {Merge.next(~d, l, hb, ho, ht, k, Work{lc, hc, P}, Res.name(x)) == Some{W1}: Maybe<&2, Work<L(d)>>},
-  ih: Merge.FrameIH(~d, l, hb, ho, ht, k, n0, rest, lf, hf, N)
-) -> Merge.And(
-  Merge.Nodes(P, N),
-  {
-    Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hf, Key.res(n0))
-      == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)): Trees.Look
-  }
-):
+  ih: Merge.FrameIH(~d, l, hb, ho, ht, k, n0, v, rest, lf, hf, N)
+) -> {Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hf, Key.res(n0)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
   match W1:
     case Work{+lc1, +hc1, +P1}:
-      Merge.all_frame.mid(
-        ~d,
-        l,
-        lc,
-        hb,
-        ho,
-        ht,
-        hc,
-        P,
-        k,
-        n0,
-        x,
-        lf,
-        hf,
-        N,
-        lc1,
-        hc1,
-        P1,
-        wc,
-        wf,
-        held,
-        enext,
+      ih(lc1)(hc1)(P1)(erest)(
         Merge.And.left(
+          Merge.Puts(~d, l, lc1, P1),
+          Merge.Nodes(P, P1),
+          Merge.next_facts(~d, l, lc, hb, ho, ht, hc, P, k, Res.name(x), Work{lc1, hc1, P1}, enext, wc)
+        )
+      )(
+        Merge.And.right(
           {Shared.List.is_eq(~U32, ~U32.is_eq, x, Key.res(n0)) == False{}: Bool},
           {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), rest, Key.res(n0)) == False{}: Bool},
           Merge.cons_false(x, rest, Key.res(n0), hx)
-        ),
-        Merge.next_facts(~d, l, lc, hb, ho, ht, hc, P, k, Res.name(x), Work{lc1, hc1, P1}, enext, wc),
-        ih(lc1)(hc1)(P1)(erest)(
-          Merge.And.left(
-            Merge.Puts(~d, l, lc1, P1),
-            Merge.Nodes(P, P1),
-            Merge.next_facts(~d, l, lc, hb, ho, ht, hc, P, k, Res.name(x), Work{lc1, hc1, P1}, enext, wc)
-          )
-        )(
+        )
+      )(
+        Merge.next_frame(
+          ~d,
+          l,
+          lc,
+          hb,
+          ho,
+          ht,
+          hc,
+          P,
+          k,
+          n0,
+          Res.name(x),
+          Work{lc1, hc1, P1},
+          lf,
+          N,
+          enext,
+          wc,
+          wf,
+          held,
           Merge.And.right(
-            {Shared.List.is_eq(~U32, ~U32.is_eq, x, Key.res(n0)) == False{}: Bool},
-            {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), rest, Key.res(n0)) == False{}: Bool},
-            Merge.cons_false(x, rest, Key.res(n0), hx)
-          )
+            Merge.Puts(~d, l, lf, N),
+            Merge.Nodes(P1, N),
+            Merge.all_puts(
+              ~d,
+              l,
+              hb,
+              ho,
+              ht,
+              k,
+              rest,
+              lc1,
+              hc1,
+              P1,
+              lf,
+              hf,
+              N,
+              erest,
+              Merge.And.left(
+                Merge.Puts(~d, l, lc1, P1),
+                Merge.Nodes(P, P1),
+                Merge.next_facts(~d, l, lc, hb, ho, ht, hc, P, k, Res.name(x), Work{lc1, hc1, P1}, enext, wc)
+              )
+            )
+          ),
+          Merge.apart_of(
+            x,
+            n0,
+            Merge.And.left(
+              {Shared.List.is_eq(~U32, ~U32.is_eq, x, Key.res(n0)) == False{}: Bool},
+              {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), rest, Key.res(n0)) == False{}: Bool},
+              Merge.cons_false(x, rest, Key.res(n0), hx)
+            )
+          ),
+          v,
+          kn
         )
       )
 
@@ -6048,6 +6000,7 @@ def Merge.all_frame.con(
   +ht: Maybe<&2, Hashes.Hash>,
   +k: Ledgers.Id,
   +n0: Resources.Name,
+  +v: Maybe<&2, List<&2, U32>>,
   +x: List<&2, U32>,
   +rest: List<&2, List<&2, U32>>,
   +lc: L(d),
@@ -6060,21 +6013,16 @@ def Merge.all_frame.con(
   +wf: Merge.Puts(~d, l, lf, N),
   +held: Merge.Held(~d, lf, N),
   +hx: {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), x <> rest, Key.res(n0)) == False{}: Bool},
+  +kn: {Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
   sg: Merge.Stepped(~d, l, hb, ho, ht, k, x, rest, Work{lc, hc, P}, Work{lf, hf, N}),
-  ih: Merge.FrameIH(~d, l, hb, ho, ht, k, n0, rest, lf, hf, N)
-) -> Merge.And(
-  Merge.Nodes(P, N),
-  {
-    Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hf, Key.res(n0))
-      == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)): Trees.Look
-  }
-):
+  ih: Merge.FrameIH(~d, l, hb, ho, ht, k, n0, v, rest, lf, hf, N)
+) -> {Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hf, Key.res(n0)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
   (+W1, st) = sg
   (erest, enext) = st
-  Merge.all_frame.con2(~d, l, hb, ho, ht, k, n0, x, rest, lc, hc, P, lf, hf, N, wc, wf, held, hx, W1, erest, enext, ih)
+  Merge.all_frame.con2(~d, l, hb, ho, ht, k, n0, v, x, rest, lc, hc, P, lf, hf, N, wc, wf, held, hx, kn, W1, erest, enext, ih)
 
-# a merge of keys among which is not the key of a resource leaves it as it was,
-# and its nodes come after those of the work that it starts from
+# a merge of keys among which is not the key of a resource leaves what it reads
+# as it was
 def Merge.all_frame(
   ~d: Led(),
   +l: L(d),
@@ -6083,6 +6031,7 @@ def Merge.all_frame(
   +ht: Maybe<&2, Hashes.Hash>,
   +k: Ledgers.Id,
   +n0: Resources.Name,
+  +v: Maybe<&2, List<&2, U32>>,
   xs: List<&2, List<&2, U32>>,
   +lc: L(d),
   +hc: Maybe<&2, Hashes.Hash>,
@@ -6094,25 +6043,15 @@ def Merge.all_frame(
   +wc: Merge.Puts(~d, l, lc, P),
   +wf: Merge.Puts(~d, l, lf, N),
   +held: Merge.Held(~d, lf, N),
-  +hx: {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), xs, Key.res(n0)) == False{}: Bool}
-) -> Merge.And(
-  Merge.Nodes(P, N),
-  {
-    Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hf, Key.res(n0))
-      == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)): Trees.Look
-  }
-):
+  +hx: {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), xs, Key.res(n0)) == False{}: Bool},
+  +kn: {Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+) -> {Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hf, Key.res(n0)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
   match xs:
     case Nil{}:
-      (
-        %Merge.work_eq.nodes(~d, lc, hc, P, lf, hf, N, e): Merge.Nodes(P, _)
-        Merge.nodes_refl(P),
-        %Merge.work_eq.root(~d, lc, hc, P, lf, hf, N, e): {
-          Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, _, Key.res(n0))
-            == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)): Trees.Look
-        }
-        {==}
-      )
+      %Merge.work_eq.root(~d, lc, hc, P, lf, hf, N, e): {
+        Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, _, Key.res(n0)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+      }
+      kn
     case Con{+x, +rest}:
       Merge.all_frame.con(
         ~d,
@@ -6122,6 +6061,7 @@ def Merge.all_frame(
         ht,
         k,
         n0,
+        v,
         x,
         rest,
         lc,
@@ -6134,11 +6074,10 @@ def Merge.all_frame(
         wf,
         held,
         hx,
+        kn,
         Merge.all_step(~d, l, hb, ho, ht, k, x, rest, Work{lc, hc, P}, Work{lf, hf, N}, e),
-        lc1 => hc1 => P1 => e1 => wc1 => hx1 => Merge.all_frame(~d, l, hb, ho, ht, k, n0, rest, lc1, hc1, P1, lf, hf, N, e1, wc1, wf, held, hx1)
+        lc1 => hc1 => P1 => e1 => wc1 => hx1 => kn1 => Merge.all_frame(~d, l, hb, ho, ht, k, n0, v, rest, lc1, hc1, P1, lf, hf, N, e1, wc1, wf, held, hx1, kn1)
       )
-
-# NEW-HELPERS-END
 
 # a merge never loses a change that only one side made: when the merge of a
 # resource takes the content of one side (Pick.merge: theirs when ours is the
