@@ -1,6 +1,6 @@
 import Base
 import ./shared/shared.bend as Shared
-import ./shared/trie.bend as Tries
+import ./shared/crit.bend as Crits
 
 # Sets by key
 # -----------
@@ -22,23 +22,23 @@ def KeySet.has.at(~A: Data, ~same: A -> A -> Bool, m: Maybe<&2, A>, x: A) -> Boo
 def KeySet.has(
   ~A: Data,
   ~same: A -> A -> Bool,
-  ~key: A -> List<&2, Bool>,
-  t: Tries.Trie<A>,
+  ~key: A -> List<&2, U32>,
+  t: Crits.Dict(A),
   +x: A
 ) -> Bool:
-  KeySet.has.at(~A, ~same, Tries.Trie.get(A, t, key(x)), x)
+  KeySet.has.at(~A, ~same, Crits.Dict.get(A, t, key(x)), x)
 
 # t with x
-def KeySet.put(~A: Data, ~key: A -> List<&2, Bool>, t: Tries.Trie<A>, +x: A) -> Tries.Trie<A>:
-  Tries.Trie.set(A, t, key(x), x)
+def KeySet.put(~A: Data, ~key: A -> List<&2, U32>, t: Crits.Dict(A), +x: A) -> Crits.Dict(A):
+  Crits.Dict.set(~A, t, key(x), x)
 
 # t with each value of xs
 def KeySet.put_all(
   ~A: Data,
-  ~key: A -> List<&2, Bool>,
+  ~key: A -> List<&2, U32>,
   xs: List<&2, A>,
-  t: Tries.Trie<A>
-) -> Tries.Trie<A>:
+  t: Crits.Dict(A)
+) -> Crits.Dict(A):
   match xs:
     case Nil{}:
       t
@@ -50,9 +50,9 @@ def KeySet.put_all(
 def KeySet.unique(
   ~A: Data,
   ~same: A -> A -> Bool,
-  ~key: A -> List<&2, Bool>,
+  ~key: A -> List<&2, U32>,
   xs: List<&2, A>,
-  +seen: Tries.Trie<A>
+  +seen: Crits.Dict(A)
 ) -> List<&2, A>:
   match xs:
     case Nil{}:
@@ -61,9 +61,9 @@ def KeySet.unique(
       +k = key(x)
       Shared.Bool.when(
         List<&2, A>,
-        KeySet.has.at(~A, ~same, Tries.Trie.get(A, seen, k), x),
+        KeySet.has.at(~A, ~same, Crits.Dict.get(A, seen, k), x),
         u => KeySet.unique(~A, ~same, ~key, r, seen),
-        u => x <> KeySet.unique(~A, ~same, ~key, r, Tries.Trie.set(A, seen, k, x))
+        u => x <> KeySet.unique(~A, ~same, ~key, r, Crits.Dict.set(~A, seen, k, x))
       )
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
@@ -97,9 +97,9 @@ def KeySet.has_put_all.at(
 def KeySet.has_put_all.go(
   ~A: Data,
   ~same: A -> A -> Bool,
-  ~key: A -> List<&2, Bool>,
+  ~key: A -> List<&2, U32>,
   xs: List<&2, A>,
-  +t: Tries.Trie<A>,
+  +t: Crits.Dict(A),
   +x: A
 ) -> {
   KeySet.has(~A, ~same, ~key, KeySet.put_all(~A, ~key, xs, t), x) == True{}: Bool
@@ -120,13 +120,13 @@ def KeySet.has_put_all.go(
         KeySet.has_put_all.at(
           ~A,
           ~same,
-          Tries.Trie.same_key(key(x), key(y)),
+          Crits.Key.is_eq(key(x), key(y)),
           y,
-          Tries.Trie.get(A, t, key(x)),
+          Crits.Dict.get(A, t, key(x)),
           x,
           List.contains(~A, ~same, r, x)
         )((
-            %Tries.Trie.get_set(A, t, key(y), y, key(x)):
+            %Crits.Dict.get_set(~A, t, key(y), y, key(x)):
               {Bool.or(KeySet.has.at(~A, ~same, _, x), List.contains(~A, ~same, r, x)) == True{}: Bool}
             KeySet.has_put_all.go(~A, ~same, ~key, r, KeySet.put(~A, ~key, t, y), x)(h)))
 
@@ -134,22 +134,22 @@ def KeySet.has_put_all.go(
 law KeySet.has_put_all:
   for ~A: Data
   for ~same: A -> A -> Bool
-  for ~key: A -> List<&2, Bool>
+  for ~key: A -> List<&2, U32>
   for xs: List<&2, A>
   for x: A
   {
-    KeySet.has(~A, ~same, ~key, KeySet.put_all(~A, ~key, xs, Tries.Trie.new(A)), x) == True{}: Bool
+    KeySet.has(~A, ~same, ~key, KeySet.put_all(~A, ~key, xs, Crits.Dict.new(~A)), x) == True{}: Bool
   } -> {List.contains(~A, ~same, xs, x) == True{}: Bool}
 
 def KeySet.has_put_all(ty, same, key, xs, x):
-  KeySet.has_put_all.go(~ty, ~same, ~key, xs, Tries.Trie.new(ty), x)
+  KeySet.has_put_all.go(~ty, ~same, ~key, xs, Crits.Dict.new(~ty), x)
 
 # t with each value of pre and then x is t with each value of pre, with x
 def KeySet.put_all_snoc(
   ~A: Data,
-  ~key: A -> List<&2, Bool>,
+  ~key: A -> List<&2, U32>,
   pre: List<&2, A>,
-  t: Tries.Trie<A>,
+  t: Crits.Dict(A),
   x: A
 ) -> {
   KeySet.put_all(
@@ -158,7 +158,7 @@ def KeySet.put_all_snoc(
     List.append(&2, A, pre, [x]),
     t
   )
-    == KeySet.put(~A, ~key, KeySet.put_all(~A, ~key, pre, t), x): Tries.Trie<A>
+    == KeySet.put(~A, ~key, KeySet.put_all(~A, ~key, pre, t), x): Crits.Dict(A)
 }:
   match pre:
     case Nil{}:
@@ -251,7 +251,7 @@ def KeySet.unique_some.go(
   ~A: Data,
   ~V: Data,
   ~same: A -> A -> Bool,
-  ~key: A -> List<&2, Bool>,
+  ~key: A -> List<&2, U32>,
   ~p: V -> A -> Bool,
   ~laws: Shared.Eq.Laws(A, same),
   xs: List<&2, A>,
@@ -264,7 +264,7 @@ def KeySet.unique_some.go(
       ~A,
       ~V,
       ~p,
-      KeySet.unique(~A, ~same, ~key, xs, KeySet.put_all(~A, ~key, pre, Tries.Trie.new(A))),
+      KeySet.unique(~A, ~same, ~key, xs, KeySet.put_all(~A, ~key, pre, Crits.Dict.new(~A))),
       g
     )
   )
@@ -274,7 +274,7 @@ def KeySet.unique_some.go(
     case Nil{}:
       {==}
     case Con{+x, +r}:
-      +seen = KeySet.put_all(~A, ~key, pre, Tries.Trie.new(A))
+      +seen = KeySet.put_all(~A, ~key, pre, Crits.Dict.new(~A))
       a = Shared.List.some(~A, ~V, ~p, pre, g)
       one = Shared.List.some(~A, ~V, ~p, [x], g)
       rest = Shared.List.some(~A, ~V, ~p, r, g)
@@ -301,10 +301,10 @@ def KeySet.unique_some.go(
         )(KeySet.has_put_all(~A, ~same, ~key, pre, x)(hs)),
         KeySet.unique_some.go(~A, ~V, ~same, ~key, ~p, ~laws, r, pre, g),
         (
-          %KeySet.put_all_snoc(~A, ~key, pre, Tries.Trie.new(A), x):
+          %KeySet.put_all_snoc(~A, ~key, pre, Crits.Dict.new(~A), x):
             {Bool.or(Bool.or(a, one), Shared.List.some(~A, ~V, ~p, KeySet.unique(~A, ~same, ~key, r, _), g)) == Bool.or(Bool.or(a, one), rest): Bool}
           %Shared.List.some_append(~A, ~V, ~p, pre, [x], g):
-            {Bool.or(_, Shared.List.some(~A, ~V, ~p, KeySet.unique(~A, ~same, ~key, r, KeySet.put_all(~A, ~key, List.append(&2, A, pre, [x]), Tries.Trie.new(A))), g)) == Bool.or(_, rest): Bool}
+            {Bool.or(_, Shared.List.some(~A, ~V, ~p, KeySet.unique(~A, ~same, ~key, r, KeySet.put_all(~A, ~key, List.append(&2, A, pre, [x]), Crits.Dict.new(~A))), g)) == Bool.or(_, rest): Bool}
           KeySet.unique_some.go(~A, ~V, ~same, ~key, ~p, ~laws, r, List.append(&2, A, pre, [x]), g))
       )
 # bend-lint: expect-end bend-lint-rules/performance/append_in_loop@warning
@@ -314,7 +314,7 @@ law KeySet.unique_some:
   for ~A: Data
   for ~V: Data
   for ~same: A -> A -> Bool
-  for ~key: A -> List<&2, Bool>
+  for ~key: A -> List<&2, U32>
   for ~p: V -> A -> Bool
   for ~laws: Shared.Eq.Laws(A, same)
   for xs: List<&2, A>
@@ -324,7 +324,7 @@ law KeySet.unique_some:
       ~A,
       ~V,
       ~p,
-      KeySet.unique(~A, ~same, ~key, xs, Tries.Trie.new(A)),
+      KeySet.unique(~A, ~same, ~key, xs, Crits.Dict.new(~A)),
       g
     )
       == Shared.List.some(~A, ~V, ~p, xs, g): Bool

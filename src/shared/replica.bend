@@ -133,9 +133,10 @@ def Led(-mach: Machine()) -> Type:
   &x: Ledgers.Ledger(Machine.Q(mach), Machine.code(mach)) -> Trees.Tree(
     Ledgers.Kind.L(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
     Ledgers.Kind.data(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
-    a => b => Ledgers.Kind.Grows(
-      Machine.Q(mach),
-      Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
+    a => b => Ledgers.Kind.grows(
+      ~Machine.Q(mach),
+      ~Machine.code(mach),
+      ~Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
       a,
       b
     )
@@ -158,9 +159,10 @@ def Led.tree(-mach: Machine(), d: Led(mach)) -> Trees.Tree.Ops(Led.L(mach, d)):
       Trees.Tree.ops(
         Ledgers.Kind.L(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
         Ledgers.Kind.data(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
-        a => b => Ledgers.Kind.Grows(
-          Machine.Q(mach),
-          Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
+        a => b => Ledgers.Kind.grows(
+          ~Machine.Q(mach),
+          ~Machine.code(mach),
+          ~Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
           a,
           b
         ),
@@ -189,8 +191,8 @@ def Led.has(~mach: Machine(), ~d: Led(mach), l: Led.L(mach, d), e: Entry(mach)) 
   Ledgers.Kind.has(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), l, e)
 
 # that the ledger b holds each entry that a holds
-def Led.Grows(-mach: Machine(), -d: Led(mach), -a: Led.L(mach, d), -b: Led.L(mach, d)) -> Type:
-  Ledgers.Kind.Grows(Machine.Q(mach), Led.kind(mach, d), a, b)
+def Led.Grows(-mach: Machine(), -d: Led(mach), -a: Led.L(mach, d), -b: Led.L(mach, d)) -> Data:
+  {Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b) == True{}: Bool}
 
 # the data of l whose hash is h
 def Led.fetch(
@@ -1775,19 +1777,10 @@ def Led.later_grows.go(
   +b: Led.L(mach, d),
   h: Led.Later(~mach, ~d, a, b)
 ) -> Led.Grows(mach, d, a, b):
-  Ledgers.Kind.grows_get(
-    ~Machine.Q(mach),
-    ~Machine.code(mach),
-    ~Led.kind(mach, d),
-    ~Led.laws(mach, d),
-    a,
-    b
-  )(
-    Shared.Bool.and_true_left(
-      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
-      Led.honest(~mach, ~d, b)
-    )(h)
-  )
+  Shared.Bool.and_true_left(
+    Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+    Led.honest(~mach, ~d, b)
+  )(h)
 
 # a later ledger holds each entry of the earlier one
 law Led.later_grows:
@@ -4013,88 +4006,40 @@ def Replica(-mach: Machine(), -d: Led(mach), -kern: Kernel(mach, d)) -> Type:
 # ------------------
 # Growth of a ledger, and the laws of its parts, as the proofs below use them.
 
-# the laws of the ledger d
-def Hist.laws(-mach: Machine(), d: Led(mach)) -> Ledgers.Ledger.Laws(
-  Machine.Q(mach),
-  Machine.code(mach),
-  Led.kind(mach, d)
-):
-  match d:
-    case Tuple{x, t}:
-      Ledgers.Ledger.laws(Machine.Q(mach), Machine.code(mach), x)
-
-# the law of an added entry, of the laws ls
-def Hist.laws.add(
-  -Q: Data,
-  -c: Codes.Codec(Q),
-  -k: Ledgers.Ledger.Kind(Q),
-  ls: Ledgers.Ledger.Laws(Q, c, k)
-) -> Ledgers.Laws.GetAdd(Q, c, k):
-  match ls:
-    case Tuple{e, Tuple{a, r}}:
-      a
-
-# the law of an added entry, of the ledger d
-def Hist.get_add(-mach: Machine(), d: Led(mach)) -> Ledgers.Laws.GetAdd(
-  Machine.Q(mach),
-  Machine.code(mach),
-  Led.kind(mach, d)
-):
-  Hist.laws.add(Machine.Q(mach), Machine.code(mach), Led.kind(mach, d), Hist.laws(mach, d))
+# what a ledger that grows from a gives under each name, by the check
+def Hist.gets(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +g: Led.Grows(mach, d, a, b)
+) -> Ledgers.Kind.Grows(Machine.Q(mach), Led.kind(mach, d), a, b):
+  Ledgers.Kind.grows_get(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), ~Led.laws(mach, d), a, b)(g)
 
 # a ledger grows from itself
-def Hist.refl(-mach: Machine(), -d: Led(mach), -l: Led.L(mach, d)) -> Led.Grows(mach, d, l, l):
-  n => e => h => h
+def Hist.refl(~mach: Machine(), ~d: Led(mach), +l: Led.L(mach, d)) -> Led.Grows(mach, d, l, l):
+  Ledgers.Kind.grows_refl(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), ~Led.laws(mach, d), l)
 
 # growth is transitive
 def Hist.trans(
-  -mach: Machine(),
-  -d: Led(mach),
-  -a: Led.L(mach, d),
-  -b: Led.L(mach, d),
-  -c: Led.L(mach, d),
-  g1: Led.Grows(mach, d, a, b),
-  g2: Led.Grows(mach, d, b, c)
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +c: Led.L(mach, d),
+  +g1: Led.Grows(mach, d, a, b),
+  +g2: Led.Grows(mach, d, b, c)
 ) -> Led.Grows(mach, d, a, c):
-  +n => +e => h => g2(n)(e)(g1(n)(e)(h))
+  Ledgers.Kind.grows_trans(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), ~Led.laws(mach, d), a, b, c, g1, g2)
 
 # a ledger grows by an entry
-def Hist.add(~mach: Machine(), ~d: Led(mach), l: Led.L(mach, d), x: Entry(mach)) -> Led.Grows(
+def Hist.add(~mach: Machine(), ~d: Led(mach), +l: Led.L(mach, d), +x: Entry(mach)) -> Led.Grows(
   mach,
   d,
   l,
   Led.add(~mach, ~d, l, x)
 ):
-  +n => +e => h =>
-    %Equal.sym(
-      Maybe<&2, Entry(mach)>,
-      Led.get(~mach, ~d, Led.add(~mach, ~d, l, x), n),
-      Maybe.or(
-        &2,
-        Entry(mach),
-        Led.get(~mach, ~d, l, n),
-        Shared.Maybe.when(
-          Entry(mach),
-          Ledgers.Name.is_eq(Entry.name(~mach, x), n),
-          u => Some{x}
-        )
-      ),
-      Hist.get_add(mach, d)(l)(x)(n)
-    ): {_ == Some{e}: Maybe<&2, Entry(mach)>}
-    %Equal.sym(Maybe<&2, Entry(mach)>, Led.get(~mach, ~d, l, n), Some{e}, h): {
-      Maybe.or(
-        &2,
-        Entry(mach),
-        _,
-        Shared.Maybe.when(
-          Entry(mach),
-          Ledgers.Name.is_eq(Entry.name(~mach, x), n),
-          u => Some{x}
-        )
-      )
-        == Some{e}: Maybe<&2, Entry(mach)>
-    }
-    {==}
+  Ledgers.Kind.grows_add(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), ~Led.laws(mach, d), l, x)
 
 # a ledger grows by the data ns
 def Hist.puts(~mach: Machine(), ~d: Led(mach), ns: List<&2, List<&2, U32>>, +l: Led.L(mach, d)) -> Led.Grows(
@@ -4105,11 +4050,9 @@ def Hist.puts(~mach: Machine(), ~d: Led(mach), ns: List<&2, List<&2, U32>>, +l: 
 ):
   match ns:
     case Nil{}:
-      Hist.refl(mach, d, l)
-    case Con{+ws, rest}:
-      Hist.trans(
-        mach,
-        d,
+      Hist.refl(~mach, ~d, l)
+    case Con{+ws, +rest}:
+      Hist.trans(~mach, ~d,
         l,
         Led.add(~mach, ~d, l, Ledgers.Entry.Data{ws}),
         Led.puts(~mach, ~d, rest, Led.add(~mach, ~d, l, Ledgers.Entry.Data{ws})),
@@ -4143,11 +4086,11 @@ def Hist.words(
 def Hist.fetch(
   ~mach: Machine(),
   ~d: Led(mach),
-  a: Led.L(mach, d),
-  -b: Led.L(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
   +h: Hashes.Hash,
   -w: List<&2, U32>,
-  g: Led.Grows(mach, d, a, b)
+  +g: Led.Grows(mach, d, a, b)
 ) -> {Led.fetch(~mach, ~d, a, h) == Some{w}: Maybe<&2, List<&2, U32>>}
   -> {Led.fetch(~mach, ~d, b, h) == Some{w}: Maybe<&2, List<&2, U32>>}:
   Hist.words(
@@ -4155,7 +4098,7 @@ def Hist.fetch(
     Led.get(~mach, ~d, a, Ledgers.Name.Data{h}),
     Led.get(~mach, ~d, b, Ledgers.Name.Data{h}),
     w,
-    e => g(Ledgers.Name.Data{h})(e)
+    e => Hist.gets(~mach, ~d, a, b, g)(Ledgers.Name.Data{h})(e)
   )
 
 # a ledger that holds some words gives them under their hash
@@ -4193,7 +4136,7 @@ def Hist.has.of(
 def Hist.final.of(
   -S: Data,
   -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  -grows: S -> S -> Type,
+  -grows: S -> S -> Bool,
   t: Trees.Tree(S, fetch, grows)
 ) -> Trees.Laws.Final(S, grows, Trees.Tree.ops(S, fetch, grows, t)):
   match t:
@@ -4204,7 +4147,7 @@ def Hist.final.of(
 def Hist.put_final.of(
   -S: Data,
   -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  -grows: S -> S -> Type,
+  -grows: S -> S -> Bool,
   t: Trees.Tree(S, fetch, grows)
 ) -> Trees.Laws.PutFinal(S, grows, Trees.Tree.ops(S, fetch, grows, t)):
   match t:
@@ -4215,7 +4158,7 @@ def Hist.put_final.of(
 def Hist.write.of(
   -S: Data,
   -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  -grows: S -> S -> Type,
+  -grows: S -> S -> Bool,
   t: Trees.Tree(S, fetch, grows)
 ) -> Trees.Laws.Write(S, fetch, grows, Trees.Tree.ops(S, fetch, grows, t)):
   match t:
@@ -4225,7 +4168,7 @@ def Hist.write.of(
 # the law that a read stays, of the tree of the ledger d
 def Hist.final(-mach: Machine(), d: Led(mach)) -> Trees.Laws.Final(
   Led.L(mach, d),
-  a => b => Led.Grows(mach, d, a, b),
+  a => b => Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
   Led.tree(mach, d)
 ):
   match d:
@@ -4233,9 +4176,10 @@ def Hist.final(-mach: Machine(), d: Led(mach)) -> Trees.Laws.Final(
       Hist.final.of(
         Ledgers.Kind.L(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
         Ledgers.Kind.data(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
-        a => b => Ledgers.Kind.Grows(
-          Machine.Q(mach),
-          Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
+        a => b => Ledgers.Kind.grows(
+          ~Machine.Q(mach),
+          ~Machine.code(mach),
+          ~Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
           a,
           b
         ),
@@ -4245,7 +4189,7 @@ def Hist.final(-mach: Machine(), d: Led(mach)) -> Trees.Laws.Final(
 # the law that a write stays, of the tree of the ledger d
 def Hist.put_final(-mach: Machine(), d: Led(mach)) -> Trees.Laws.PutFinal(
   Led.L(mach, d),
-  a => b => Led.Grows(mach, d, a, b),
+  a => b => Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
   Led.tree(mach, d)
 ):
   match d:
@@ -4253,9 +4197,10 @@ def Hist.put_final(-mach: Machine(), d: Led(mach)) -> Trees.Laws.PutFinal(
       Hist.put_final.of(
         Ledgers.Kind.L(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
         Ledgers.Kind.data(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
-        a => b => Ledgers.Kind.Grows(
-          Machine.Q(mach),
-          Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
+        a => b => Ledgers.Kind.grows(
+          ~Machine.Q(mach),
+          ~Machine.code(mach),
+          ~Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
           a,
           b
         ),
@@ -4266,7 +4211,7 @@ def Hist.put_final(-mach: Machine(), d: Led(mach)) -> Trees.Laws.PutFinal(
 def Hist.write(-mach: Machine(), d: Led(mach)) -> Trees.Laws.Write(
   Led.L(mach, d),
   l => h => Led.fetch(~mach, ~d, l, h),
-  a => b => Led.Grows(mach, d, a, b),
+  a => b => Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
   Led.tree(mach, d)
 ):
   match d:
@@ -4274,9 +4219,10 @@ def Hist.write(-mach: Machine(), d: Led(mach)) -> Trees.Laws.Write(
       Hist.write.of(
         Ledgers.Kind.L(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
         Ledgers.Kind.data(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
-        a => b => Ledgers.Kind.Grows(
-          Machine.Q(mach),
-          Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
+        a => b => Ledgers.Kind.grows(
+          ~Machine.Q(mach),
+          ~Machine.code(mach),
+          ~Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
           a,
           b
         ),
@@ -4527,21 +4473,6 @@ def Safe.sub_count(
           List.length(&2, String, f <> fs)
         )(Safe.sub_count(~mach, ~d, l, w, r, f <> fs, v)(h))
       )
-
-# what the laws of a later ledger give, as premises: a proof takes each as a
-# template, so it may use it as often as it needs (Led.later_grows,
-# Led.later_single, Led.later_last)
-def Hist.LaterGrows(-mach: Machine(), -d: Led(mach)) -> Type:
-  @a: Led.L(mach, d) -> @b: Led.L(mach, d) -> Led.Later(~mach, ~d, a, b) -> Led.Grows(mach, d, a, b)
-
-# that the ballots of a later ledger cast one vote at a place and one pass
-def Hist.LaterSingle(-mach: Machine(), -d: Led(mach)) -> Type:
-  @a: Led.L(mach, d) -> @b: Led.L(mach, d) -> Led.Later(~mach, ~d, a, b) -> Led.Single(mach, d, b)
-
-# that the passes of a later ledger name the last vote of their voter
-def Hist.LaterLast(-mach: Machine(), -d: Led(mach)) -> Type:
-  @a: Led.L(mach, d) -> @b: Led.L(mach, d) -> @c: Ledgers.Line -> @h: U32 -> Led.Later(~mach, ~d, a, b)
-    -> Rounds.Last(mach, d, b, c, h)
 
 # Safety of rounds: the decision of a height
 # -------------------------------------------
@@ -4921,47 +4852,26 @@ def Safe.witness(
         Safe.witness(~B, ~same, ~of, t, c)
       )
 
-# two places that Place.is_eq calls the same are the same
-def Safe.place_sound(a: Ledgers.Place, b: Ledgers.Place) -> {Ledgers.Place.is_eq(a, b) == True{}: Bool} -> {a == b: Ledgers.Place}:
-  match a b:
-    case Ledgers.Place{+c1, +h1, +r1} Ledgers.Place{+c2, +h2, +r2}:
-      +h =>
-        +x = Shared.List.all.if_rest(
-          Ledgers.Line.is_eq(c1, c2),
-          u => List.all.if(u2 => Nat.is_eq(r1, r2), U32.is_eq(h1, h2))
-        )(h)
-        Ledgers.Eq.three(
-          Ledgers.Line,
-          U32,
-          Nat,
-          Ledgers.Place,
-          x => y => z => Ledgers.Place{x, y, z},
-          c1,
-          c2,
-          h1,
-          h2,
-          r1,
-          r2,
-          Line.is_eq_sound(
-            c1,
-            c2
-          )(
-            Shared.List.all.if_hit(
-              Ledgers.Line.is_eq(c1, c2),
-              u => List.all.if(u2 => Nat.is_eq(r1, r2), U32.is_eq(h1, h2))
-            )(h)
-          ),
-          Shared.U32.is_eq_sound(h1, h2)(Shared.List.all.if_hit(U32.is_eq(h1, h2), u2 => Nat.is_eq(r1, r2))(x)),
-          Shared.Nat.is_eq_sound(r1, r2)(Shared.List.all.if_rest(U32.is_eq(h1, h2), u2 => Nat.is_eq(r1, r2))(x))
-        )
-
 # a ballot at the place w is at w
-def Safe.at_of(e: Ledgers.Ballot, +w: Ledgers.Place, +voter: String) -> {
+def Safe.at_of(e: Ledgers.Ballot, w: Ledgers.Place, +voter: String) -> {
   Ledgers.Ballot.is_at(e, w, voter) == True{}: Bool
 } -> {Ledgers.Ballot.at(e) == w: Ledgers.Place}:
-  match e:
-    case Ledgers.Ballot{Ledgers.Signed{+w2, +n, a}, l}:
-      h => Safe.place_sound(w2, w)(Shared.List.all.if_hit(Ledgers.Place.is_eq(w2, w), u => String.eq(n, voter))(h))
+  match e w:
+    case Ledgers.Ballot{Ledgers.Signed{Ledgers.Place{+c1, +h1, +r1}, +n, a}, l} Ledgers.Place{+c2, +h2, +r2}:
+      h => Place.is_eq_move(
+        c => x => r => {Ledgers.Place{c1, h1, r1} == Ledgers.Place{c, x, r}: Ledgers.Place},
+        c1,
+        h1,
+        r1,
+        c2,
+        h2,
+        r2,
+        Shared.List.all.if_hit(
+          Ledgers.Place.is_eq(Ledgers.Place{c1, h1, r1}, Ledgers.Place{c2, h2, r2}),
+          u => String.eq(n, voter)
+        )(h),
+        {==}
+      )
 
 # the law of the ballots of a voter, of the laws ls
 def Safe.laws.ballots(
@@ -4991,7 +4901,7 @@ def Safe.ballots_law(-mach: Machine(), d: Led(mach)) -> Ledgers.Laws.Ballots(
   Machine.code(mach),
   Led.kind(mach, d)
 ):
-  Safe.laws.ballots(Machine.Q(mach), Machine.code(mach), Led.kind(mach, d), Hist.laws(mach, d))
+  Safe.laws.ballots(Machine.Q(mach), Machine.code(mach), Led.kind(mach, d), Led.laws(mach, d))
 
 # the law of the bound of rounds, of the ledger d
 def Safe.rounds_law(-mach: Machine(), d: Led(mach)) -> Ledgers.Laws.Rounds(
@@ -4999,7 +4909,7 @@ def Safe.rounds_law(-mach: Machine(), d: Led(mach)) -> Ledgers.Laws.Rounds(
   Machine.code(mach),
   Led.kind(mach, d)
 ):
-  Safe.laws.rounds(Machine.Q(mach), Machine.code(mach), Led.kind(mach, d), Hist.laws(mach, d))
+  Safe.laws.rounds(Machine.Q(mach), Machine.code(mach), Led.kind(mach, d), Led.laws(mach, d))
 
 # a read that holds y stays so when its value is kept
 def Safe.is_eq_kept(
@@ -5025,7 +4935,6 @@ def Safe.is_eq_kept(
 def Safe.has_grows(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -5043,14 +4952,13 @@ def Safe.has_grows(
     Ledgers.Kind.get(Machine.Q(mach), Led.kind(mach, d))(a)(Entry.name(~mach, e)),
     Ledgers.Kind.get(Machine.Q(mach), Led.kind(mach, d))(b)(Entry.name(~mach, e)),
     e,
-    x => lg(a)(b)(later)(Entry.name(~mach, e))(x)
+    x => Hist.gets(~mach, ~d, a, b, Led.later_grows(~mach, ~d, a, b)(later))(Entry.name(~mach, e))(x)
   )
 
 # a ballot of a voter at a place in a ledger is one in a later ledger
 def Safe.in_b(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -5131,7 +5039,6 @@ def Safe.in_b(
         Safe.has_grows(
           ~mach,
           ~d,
-          ~lg,
           a,
           b,
           later,
@@ -5252,7 +5159,6 @@ def Safe.of_in_b.at(
 def Safe.of_in_b(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~ls: Hist.LaterSingle(mach, d),
   ~B: Data,
   ~same: B -> B -> Bool,
   ~sl: Shared.Eq.Laws(B, same),
@@ -5325,7 +5231,7 @@ def Safe.of_in_b(
         Ledgers.Ballot.is_at(e, w, _) == True{}: Bool
       }
       Shared.Bool.and_true_right(Led.has(~mach, ~d, b, Ledgers.Entry.Ballot{e}), Ledgers.Ballot.is_at(e, w, voter))(k1),
-      ls(a)(b)(later)
+      Led.later_single(~mach, ~d, a, b)(later)
     )
 
 # a list within ks is within ks with one more element
@@ -5378,7 +5284,6 @@ def Safe.within_refl(~A: Data, ~same: A -> A -> Bool, ~laws: Shared.Eq.Laws(A, s
 def Safe.all_in_b(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~ls: Hist.LaterSingle(mach, d),
   ~B: Data,
   ~same: B -> B -> Bool,
   ~sl: Shared.Eq.Laws(B, same),
@@ -5416,11 +5321,11 @@ def Safe.all_in_b(
         Safe.of_is(~B, ~same, of(e), x),
         u => Safe.all_of(~B, ~same, ~of, r, x)
       )(
-        Safe.of_in_b(~mach, ~d, ~ls, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, e0, x, e)(h0)(hx)(
+        Safe.of_in_b(~mach, ~d, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, e0, x, e)(h0)(hx)(
           Shared.Bool.and_true_left(List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter), e), Shared.List.within(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, r, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter)))(h)
         )
       )(
-        Safe.all_in_b(~mach, ~d, ~ls, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, e0, x, r)(h0)(hx)(
+        Safe.all_in_b(~mach, ~d, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, e0, x, r)(h0)(hx)(
           Shared.Bool.and_true_right(List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter), e), Shared.List.within(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, r, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter)))(h)
         )
       )
@@ -5429,8 +5334,6 @@ def Safe.all_in_b(
 def Safe.all_in_a(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
   ~B: Data,
   ~same: B -> B -> Bool,
   ~sl: Shared.Eq.Laws(B, same),
@@ -5468,13 +5371,13 @@ def Safe.all_in_a(
         Safe.of_is(~B, ~same, of(e), x),
         u => Safe.all_of(~B, ~same, ~of, r, x)
       )(
-        Safe.of_in_b(~mach, ~d, ~ls, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, e0, x, e)(h0)(hx)(
-          Safe.in_b(~mach, ~d, ~lg, a, b, later, w, voter, e)(
+        Safe.of_in_b(~mach, ~d, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, e0, x, e)(h0)(hx)(
+          Safe.in_b(~mach, ~d, a, b, later, w, voter, e)(
             Shared.Bool.and_true_left(List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter), e), Shared.List.within(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, r, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter)))(h)
           )
         )
       )(
-        Safe.all_in_a(~mach, ~d, ~lg, ~ls, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, e0, x, r)(h0)(hx)(
+        Safe.all_in_a(~mach, ~d, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, e0, x, r)(h0)(hx)(
           Shared.Bool.and_true_right(List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter), e), Shared.List.within(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, r, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter)))(h)
         )
       )
@@ -5491,8 +5394,6 @@ def Safe.some_of(-A: Data, m: Maybe<&2, A>, -c: A) -> {m == Some{c}: Maybe<&2, A
 def Safe.cell_kept.of(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
   ~B: Data,
   ~same: B -> B -> Bool,
   ~sl: Shared.Eq.Laws(B, same),
@@ -5524,17 +5425,17 @@ def Safe.cell_kept.of(
   match q:
     case Tuple{+x, hx1}:
       +hx = {hx1 : {of(e0) == Some{x}: Maybe<&2, B>}}
-      +hcb = Safe.in_b(~mach, ~d, ~lg, a, b, later, w, voter, e0)(hc)
+      +hcb = Safe.in_b(~mach, ~d, a, b, later, w, voter, e0)(hc)
       +caA = Safe.most_some(~B, ~same, ~sl, Ledgers.Ballots.cell(~B, ~same, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter)), x)(
         Safe.cell_most(~B, ~same, ~sl, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter), x)(
-          Safe.all_in_a(~mach, ~d, ~lg, ~ls, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, e0, x, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter))(hcb)(hx)(
+          Safe.all_in_a(~mach, ~d, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, e0, x, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter))(hcb)(hx)(
             Safe.within_refl(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, ~Ledgers.Ballot.laws(), Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter))
           )
         )
       )(Safe.some_of(Cells.Cell<B>, Ledgers.Ballots.cell(~B, ~same, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter)), c, h))
       +cb = Safe.most_some(~B, ~same, ~sl, Ledgers.Ballots.cell(~B, ~same, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter)), x)(
         Safe.cell_most(~B, ~same, ~sl, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter), x)(
-          Safe.all_in_b(~mach, ~d, ~ls, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, e0, x, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter))(hcb)(hx)(
+          Safe.all_in_b(~mach, ~d, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, e0, x, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter))(hcb)(hx)(
             Safe.within_refl(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, ~Ledgers.Ballot.laws(), Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter))
           )
         )
@@ -5559,8 +5460,6 @@ def Safe.cell_kept.of(
 def Safe.cell_kept.at(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
   ~B: Data,
   ~same: B -> B -> Bool,
   ~sl: Shared.Eq.Laws(B, same),
@@ -5589,15 +5488,13 @@ def Safe.cell_kept.at(
 ) -> {Ledgers.Ballots.cell(~B, ~same, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter)) == Some{c}: Maybe<&2, Cells.Cell<B>>}:
   match wt:
     case Tuple{+e0, Tuple{hc, q}}:
-      Safe.cell_kept.of(~mach, ~d, ~lg, ~ls, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, c, h, e0, hc, q)
+      Safe.cell_kept.of(~mach, ~d, ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk, a, b, later, w, voter, c, h, e0, hc, q)
 
 # the cell of a voter at a place stays in a later ledger: an honest later
 # ledger holds no ballot of the voter there that disagrees
 def Safe.cell_kept(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
   ~B: Data,
   ~same: B -> B -> Bool,
   ~sl: Shared.Eq.Laws(B, same),
@@ -5626,8 +5523,6 @@ def Safe.cell_kept(
   +h => Safe.cell_kept.at(
     ~mach,
     ~d,
-    ~lg,
-    ~ls,
     ~B, ~same, ~sl, ~of, ~kd, ~ofc, ~ofk,
     a,
     b,
@@ -5658,22 +5553,7 @@ def Safe.last_refl(a: Maybe<&2, Ledgers.Last>) -> {Ledgers.Last.is_eq(a, a) == T
 
 # the laws of Last.is_eq
 def Safe.last_laws() -> Shared.Eq.Laws(Maybe<&2, Ledgers.Last>, Ledgers.Last.is_eq):
-  (
-    a => Safe.last_refl(a),
-    a => b => Shared.Maybe.is_eq_sound(
-      ~Ledgers.Last,
-      ~(x => y => Codes.Code.is_eq(~Ledgers.Last, ~Ledgers.Last.code, x, y)),
-      x => y => Shared.Eq.sound(
-        ~Ledgers.Last,
-        ~(x => y => Codes.Code.is_eq(~Ledgers.Last, ~Ledgers.Last.code, x, y)),
-        Codes.Code.eq_laws(~Ledgers.Last, ~Ledgers.Last.codec()),
-        x,
-        y
-      ),
-      a,
-      b
-    )
-  )
+  (a => Safe.last_refl(a), a => b => Last.is_eq_sound(a, b))
 
 # what Ledgers.Ballot.step reads of a ballot is what its cast says
 def Safe.step_same(
@@ -5838,8 +5718,6 @@ def Safe.keeps_kept(
 def Safe.step_kept(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -5862,8 +5740,6 @@ def Safe.step_kept(
     c => Safe.cell_kept(
       ~mach,
       ~d,
-      ~lg,
-      ~ls,
       ~Ledgers.Step, ~Ledgers.Step.is_eq, ~Ledgers.Step.laws(), ~Ledgers.Ballot.step, ~True{}, ~(x => y => Safe.step_cast(x, y)), ~(x => y => Safe.step_kind(x, y)),
       a,
       b,
@@ -5878,8 +5754,6 @@ def Safe.step_kept(
 def Safe.vote_kept(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -5902,8 +5776,6 @@ def Safe.vote_kept(
     c => Safe.cell_kept(
       ~mach,
       ~d,
-      ~lg,
-      ~ls,
       ~Ledgers.Cast, ~Ledgers.Cast.is_eq, ~Safe.cast_laws(), ~Ledgers.Ballot.vote, ~True{}, ~(x => y => Safe.vote_cast(x, y)), ~(x => y => Safe.vote_kind(x, y)),
       a,
       b,
@@ -5918,8 +5790,6 @@ def Safe.vote_kept(
 def Safe.pass_kept(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -5942,8 +5812,6 @@ def Safe.pass_kept(
     c => Safe.cell_kept(
       ~mach,
       ~d,
-      ~lg,
-      ~ls,
       ~Maybe<&2, Ledgers.Last>, ~Ledgers.Last.is_eq, ~Safe.last_laws(), ~Ledgers.Ballot.pass, ~False{}, ~(x => y => Safe.pass_cast(x, y)), ~(x => y => Safe.pass_kind(x, y)),
       a,
       b,
@@ -5959,8 +5827,6 @@ def Safe.pass_kept(
 def Safe.cells_keep(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -6007,16 +5873,14 @@ def Safe.cells_keep(
           ~Ledgers.Step.laws(),
           Ledgers.Kind.cell(~Machine.Q(mach), ~Led.kind(mach, d), a, w, o),
           Ledgers.Kind.cell(~Machine.Q(mach), ~Led.kind(mach, d), b, w, o),
-          c => Safe.cell_kept(~mach, ~d, ~lg, ~ls, ~Ledgers.Step, ~Ledgers.Step.is_eq, ~Ledgers.Step.laws(), ~Ledgers.Ballot.step, ~True{}, ~(x => y => Safe.step_cast(x, y)), ~(x => y => Safe.step_kind(x, y)), a, b, later, w, o, c)
+          c => Safe.cell_kept(~mach, ~d, ~Ledgers.Step, ~Ledgers.Step.is_eq, ~Ledgers.Step.laws(), ~Ledgers.Ballot.step, ~True{}, ~(x => y => Safe.step_cast(x, y)), ~(x => y => Safe.step_kind(x, y)), a, b, later, w, o, c)
         )
-      )(Safe.cells_keep(~mach, ~d, ~lg, ~ls, a, b, later, w, r))
+      )(Safe.cells_keep(~mach, ~d, a, b, later, w, r))
 
 # the step that a majority cast at a place stays in a later ledger
 def Safe.tally_kept(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -6033,7 +5897,7 @@ def Safe.tally_kept(
   -> {Led.tally(~mach, ~d, b, w, os) == Some{v}: Maybe<&2, Ledgers.Step>}:
   h => Quorums.Quorum.major_kept(~Ledgers.Step, ~Ledgers.Step.is_eq, ~Ledgers.Step.laws())(
     Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), a, w, os)
-  )(Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), b, w, os))(v)(Safe.cells_keep(~mach, ~d, ~lg, ~ls, a, b, later, w, os))(h)
+  )(Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), b, w, os))(v)(Safe.cells_keep(~mach, ~d, a, b, later, w, os))(h)
 
 # a read that holds something stays so when its value is kept
 def Safe.is_some_kept(
@@ -6067,8 +5931,6 @@ def Safe.eq_kept(
 def Safe.passed_all_kept(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -6093,10 +5955,10 @@ def Safe.passed_all_kept(
           Maybe<&2, Ledgers.Last>,
           Led.passed(~mach, ~d, a, w, o),
           Led.passed(~mach, ~d, b, w, o),
-          y => Safe.pass_kept(~mach, ~d, ~lg, ~ls, a, b, later, w, o, y)
+          y => Safe.pass_kept(~mach, ~d, a, b, later, w, o, y)
         )(Shared.List.all.if_hit(Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Led.passed(~mach, ~d, a, w, o)), u => Passed.all(~mach, ~d, a, w, r))(e))
       )(
-        Safe.passed_all_kept(~mach, ~d, ~lg, ~ls, a, b, later, w, r)(
+        Safe.passed_all_kept(~mach, ~d, a, b, later, w, r)(
           Shared.List.all.if_rest(Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Led.passed(~mach, ~d, a, w, o)), u => Passed.all(~mach, ~d, a, w, r))(e)
         )
       )
@@ -6105,8 +5967,6 @@ def Safe.passed_all_kept(
 def Safe.passed_eq(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -6124,7 +5984,7 @@ def Safe.passed_eq(
     Maybe<&2, Ledgers.Last>,
     Led.passed(~mach, ~d, a, w, o),
     Led.passed(~mach, ~d, b, w, o),
-    y => Safe.pass_kept(~mach, ~d, ~lg, ~ls, a, b, later, w, o, y)
+    y => Safe.pass_kept(~mach, ~d, a, b, later, w, o, y)
   )
 
 # the highest last vote that the passes of some voters name is the same in a
@@ -6132,8 +5992,6 @@ def Safe.passed_eq(
 def Safe.last_eq(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -6156,7 +6014,7 @@ def Safe.last_eq(
           Maybe<&2, Maybe<&2, Ledgers.Last>>,
           Led.passed(~mach, ~d, b, w, o),
           Led.passed(~mach, ~d, a, w, o),
-          Safe.passed_eq(~mach, ~d, ~lg, ~ls, a, b, later, w, o)(
+          Safe.passed_eq(~mach, ~d, a, b, later, w, o)(
             Shared.List.all.if_hit(Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Led.passed(~mach, ~d, a, w, o)), u => Passed.all(~mach, ~d, a, w, r))(e)
           )
         ): {
@@ -6167,7 +6025,7 @@ def Safe.last_eq(
           Maybe<&2, Ledgers.Last>,
           Passes.last(~mach, ~d, b, w, r),
           Passes.last(~mach, ~d, a, w, r),
-          Safe.last_eq(~mach, ~d, ~lg, ~ls, a, b, later, w, r)(
+          Safe.last_eq(~mach, ~d, a, b, later, w, r)(
             Shared.List.all.if_rest(Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Led.passed(~mach, ~d, a, w, o)), u => Passed.all(~mach, ~d, a, w, r))(e)
           )
         ): {
@@ -6181,8 +6039,6 @@ def Safe.last_eq(
 def Safe.agree_eq(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -6207,7 +6063,7 @@ def Safe.agree_eq(
           Maybe<&2, Maybe<&2, Ledgers.Last>>,
           Led.passed(~mach, ~d, b, w, o),
           Led.passed(~mach, ~d, a, w, o),
-          Safe.passed_eq(~mach, ~d, ~lg, ~ls, a, b, later, w, o)(
+          Safe.passed_eq(~mach, ~d, a, b, later, w, o)(
             Shared.List.all.if_hit(Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Led.passed(~mach, ~d, a, w, o)), u => Passed.all(~mach, ~d, a, w, r))(e)
           )
         ): {
@@ -6218,7 +6074,7 @@ def Safe.agree_eq(
           Bool,
           Passes.agree(~mach, ~d, b, w, r, t, v),
           Passes.agree(~mach, ~d, a, w, r, t, v),
-          Safe.agree_eq(~mach, ~d, ~lg, ~ls, a, b, later, w, r, t, v)(
+          Safe.agree_eq(~mach, ~d, a, b, later, w, r, t, v)(
             Shared.List.all.if_rest(Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Led.passed(~mach, ~d, a, w, o)), u => Passed.all(~mach, ~d, a, w, r))(e)
           )
         ): {
@@ -6231,8 +6087,6 @@ def Safe.agree_eq(
 def Safe.act_kept.at(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -6271,7 +6125,7 @@ def Safe.act_kept.at(
 }:
   match cond:
     case True{}:
-      Safe.vote_kept(~mach, ~d, ~lg, ~ls, a, b, later, Ledgers.Place{c, h, k}, o, y)
+      Safe.vote_kept(~mach, ~d, a, b, later, Ledgers.Place{c, h, k}, o, y)
     case False{}:
       ih
 
@@ -6280,8 +6134,6 @@ def Safe.act_kept.at(
 def Safe.act_kept(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -6309,7 +6161,7 @@ def Safe.act_kept(
           Maybe<&2, Maybe<&2, Ledgers.Last>>,
           Led.passed(~mach, ~d, b, Ledgers.Place{c, h, r}, o),
           Led.passed(~mach, ~d, a, Ledgers.Place{c, h, r}, o),
-          Safe.passed_eq(~mach, ~d, ~lg, ~ls, a, b, later, Ledgers.Place{c, h, r}, o)(
+          Safe.passed_eq(~mach, ~d, a, b, later, Ledgers.Place{c, h, r}, o)(
             Shared.List.all.if_hit(
               Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Led.passed(~mach, ~d, a, Ledgers.Place{c, h, r}, o)),
               u => Passed.all(~mach, ~d, a, Ledgers.Place{c, h, r}, rest)
@@ -6333,8 +6185,7 @@ def Safe.act_kept(
               == Some{y}: Maybe<&2, Ledgers.Cast>
           }
         Safe.act_kept.at(
-          ~mach, ~d, ~lg, ~ls,
-          a,
+          ~mach, ~d, a,
           b,
           later,
           c,
@@ -6345,7 +6196,7 @@ def Safe.act_kept(
           o,
           y,
           Last.in(Passed.last(Led.passed(~mach, ~d, a, Ledgers.Place{c, h, r}, o)), k),
-          Safe.act_kept(~mach, ~d, ~lg, ~ls, a, b, later, c, h, r, rest, k, y)(
+          Safe.act_kept(~mach, ~d, a, b, later, c, h, r, rest, k, y)(
             Shared.List.all.if_rest(
               Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Led.passed(~mach, ~d, a, Ledgers.Place{c, h, r}, o)),
               u => Passed.all(~mach, ~d, a, Ledgers.Place{c, h, r}, rest)
@@ -6426,8 +6277,6 @@ def Safe.holds_kept(
 def Safe.allowed_kept(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -6470,7 +6319,7 @@ def Safe.allowed_kept(
           Shared.List.all.if_both(
             Passed.all(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from),
             u => List.all.if(u2 => Voters.major(os, from), Voters.sub(os, from))
-          )(Safe.passed_all_kept(~mach, ~d, ~lg, ~ls, a, b, later, Ledgers.Place{c, h, 1n+p}, from)(pall))(
+          )(Safe.passed_all_kept(~mach, ~d, a, b, later, Ledgers.Place{c, h, 1n+p}, from)(pall))(
             Shared.List.all.if_rest(
               Passed.all(~mach, ~d, a, Ledgers.Place{c, h, 1n+p}, from),
               u => List.all.if(u2 => Voters.major(os, from), Voters.sub(os, from))
@@ -6481,7 +6330,7 @@ def Safe.allowed_kept(
             Maybe<&2, Ledgers.Last>,
             Passes.last(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from),
             Passes.last(~mach, ~d, a, Ledgers.Place{c, h, 1n+p}, from),
-            Safe.last_eq(~mach, ~d, ~lg, ~ls, a, b, later, Ledgers.Place{c, h, 1n+p}, from)(pall)
+            Safe.last_eq(~mach, ~d, a, b, later, Ledgers.Place{c, h, 1n+p}, from)(pall)
           ): {
             Last.holds(_, +t => List.all.if(u2 => Cast.casts(Passes.act(~mach, ~d, b, c, h, 1n+p, from, t), v, +f => Step.allowed.in(~mach, ~d, b, c, h, os, v, j, t, f)), Passes.agree(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from, t, v))) == True{}: Bool
           }
@@ -6501,7 +6350,7 @@ def Safe.allowed_kept(
                 Bool,
                 Passes.agree(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from, t, v),
                 Passes.agree(~mach, ~d, a, Ledgers.Place{c, h, 1n+p}, from, t, v),
-                Safe.agree_eq(~mach, ~d, ~lg, ~ls, a, b, later, Ledgers.Place{c, h, 1n+p}, from, t, v)(pall)
+                Safe.agree_eq(~mach, ~d, a, b, later, Ledgers.Place{c, h, 1n+p}, from, t, v)(pall)
               ): {_ == True{}: Bool}
               Shared.List.all.if_hit(
                 Passes.agree(~mach, ~d, a, Ledgers.Place{c, h, 1n+p}, from, t, v),
@@ -6518,8 +6367,8 @@ def Safe.allowed_kept(
                 v,
                 +f => Step.allowed.in(~mach, ~d, a, c, h, os, v, j, t, f),
                 +f => Step.allowed.in(~mach, ~d, b, c, h, os, v, j, t, f),
-                y => Safe.act_kept(~mach, ~d, ~lg, ~ls, a, b, later, c, h, 1n+p, from, t, y)(pall),
-                f => Safe.allowed_kept(~mach, ~d, ~lg, ~ls, a, b, later, c, h, os, v, j, t, f)
+                y => Safe.act_kept(~mach, ~d, a, b, later, c, h, 1n+p, from, t, y)(pall),
+                f => Safe.allowed_kept(~mach, ~d, a, b, later, c, h, os, v, j, t, f)
               )(
                 Shared.List.all.if_rest(
                   Passes.agree(~mach, ~d, a, Ledgers.Place{c, h, 1n+p}, from, t, v),
@@ -6543,8 +6392,6 @@ def Safe.allowed_kept(
 def Safe.allowed_at(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -6562,7 +6409,7 @@ def Safe.allowed_at(
   -> {Step.allowed(~mach, ~d, b, w, os, v, from) == True{}: Bool}:
   match w:
     case Ledgers.Place{+c, +h, +r}:
-      Safe.allowed_kept(~mach, ~d, ~lg, ~ls, a, b, later, c, h, os, v, r, r, from)
+      Safe.allowed_kept(~mach, ~d, a, b, later, c, h, os, v, r, r, from)
 
 # a when that holds stays so under a weaker test
 def Safe.when_kept(
@@ -6586,8 +6433,6 @@ def Safe.when_kept(
 def Safe.led_kept(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -6616,8 +6461,8 @@ def Safe.led_kept(
       v,
       f => Step.allowed(~mach, ~d, a, w, os, v, f),
       f => Step.allowed(~mach, ~d, b, w, os, v, f),
-      y => Safe.vote_kept(~mach, ~d, ~lg, ~ls, a, b, later, w, p, y),
-      f => Safe.allowed_at(~mach, ~d, ~lg, ~ls, a, b, later, w, os, v, f)
+      y => Safe.vote_kept(~mach, ~d, a, b, later, w, p, y),
+      f => Safe.allowed_at(~mach, ~d, a, b, later, w, os, v, f)
     )
   )
 
@@ -6625,8 +6470,6 @@ def Safe.led_kept(
 def Safe.decide_kept(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -6663,7 +6506,7 @@ def Safe.decide_kept(
       p => Round.led(~mach, ~d, b, Ledgers.Place{c, h, r}, os, v, p)
     ),
     x,
-    v => Safe.tally_kept(~mach, ~d, ~lg, ~ls, a, b, later, Ledgers.Place{c, h, r}, os, v),
+    v => Safe.tally_kept(~mach, ~d, a, b, later, Ledgers.Place{c, h, r}, os, v),
     +v => Shared.Maybe.bind_kept(
       String,
       Ledgers.Step,
@@ -6673,7 +6516,7 @@ def Safe.decide_kept(
       p => Round.led(~mach, ~d, b, Ledgers.Place{c, h, r}, os, v, p),
       x,
       p => e => e,
-      p => Safe.led_kept(~mach, ~d, ~lg, ~ls, a, b, later, Ledgers.Place{c, h, r}, os, v, p, x)
+      p => Safe.led_kept(~mach, ~d, a, b, later, Ledgers.Place{c, h, r}, os, v, p, x)
     )
   )
 
@@ -7398,7 +7241,6 @@ def Safe.after_none(y: Maybe<&2, Ledgers.Last>, +r1: Nat, v1: Ledgers.Step) -> {
 def Safe.round_safe.after(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -7423,7 +7265,7 @@ def Safe.round_safe.after(
     Maybe<&2, Ledgers.Last>,
     y,
     Last.below(~mach, ~d, q, b, c, h, 1n+p),
-    ll(a)(b)(c)(h)(later)(1n+p)(q)(y)(hp)
+    Led.later_last(~mach, ~d, a, b, c, h)(later)(1n+p)(q)(y)(hp)
   ): {Safe.after(_, r1, v1) == True{}: Bool}
   Safe.mine(~mach, ~d, q, b, c, h, p, r1, v1)(hv)(Shared.Nat.lt_succ_le(r1, p)(hl))
 
@@ -7432,7 +7274,6 @@ def Safe.round_safe.after(
 def Safe.round_safe.none2(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -7460,7 +7301,7 @@ def Safe.round_safe.none2(
 ) -> Empty:
   match ex:
     case Tuple{+y, Tuple{hp, hle}}:
-      Safe.after_none(y, r1, v1)(Safe.round_safe.after(~mach, ~d, ~ll, a, b, later, c, h, r1, v1, p, q, y, hp, hv, hl))(
+      Safe.after_none(y, r1, v1)(Safe.round_safe.after(~mach, ~d, a, b, later, c, h, r1, v1, p, q, y, hp, hv, hl))(
         %eM: {Safe.le(y, _) == True{}: Bool}
         hle
       )
@@ -7470,7 +7311,6 @@ def Safe.round_safe.none2(
 def Safe.round_safe.none(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -7492,14 +7332,13 @@ def Safe.round_safe.none(
 ) -> Empty:
   match mt:
     case Tuple{+q, Tuple{hv, ex}}:
-      Safe.round_safe.none2(~mach, ~d, ~ll, a, b, later, c, h, r1, v1, p, from, eM, hl, q, hv, ex)
+      Safe.round_safe.none2(~mach, ~d, a, b, later, c, h, r1, v1, p, from, eM, hl, q, hv, ex)
 
 # Safe.round_safe in the case of a later round t of the passes, once the act of
 # the first voter whose pass names t is known
 def Safe.round_safe.act(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -7539,7 +7378,6 @@ def Safe.round_safe.act(
 def Safe.round_safe.cmp(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -7626,7 +7464,7 @@ def Safe.round_safe.cmp(
       )
     case False{}:
       Safe.round_safe.act(
-        ~mach, ~d, ~ll, a, b, later, c, h, os, r1, v1, j, p, v2, from,
+        ~mach, ~d, a, b, later, c, h, os, r1, v1, j, p, v2, from,
         t,
         Passes.act(~mach, ~d, b, c, h, 1n+p, from, t),
         cs,
@@ -7648,7 +7486,6 @@ def Safe.round_safe.cmp(
 def Safe.round_safe.y(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -7682,13 +7519,12 @@ def Safe.round_safe.y(
     case None{}:
       Empty.absurd({v2 == v1: Ledgers.Step}, Shared.Bool.false_ne_true(aft))
     case Some{Ledgers.Last{+tq, +xq}}:
-      Safe.round_safe.cmp(~mach, ~d, ~ll, a, b, later, c, h, os, r1, v1, j, p, v2, from, t, tq, xq, Nat.is_eq(t, r1), {==}, aft, ha, hle, cs, ih)
+      Safe.round_safe.cmp(~mach, ~d, a, b, later, c, h, os, r1, v1, j, p, v2, from, t, tq, xq, Nat.is_eq(t, r1), {==}, aft, ha, hle, cs, ih)
 
 # Safe.round_safe once the pass of the shared voter is known
 def Safe.round_safe.some2(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -7726,11 +7562,11 @@ def Safe.round_safe.some2(
   match ex:
     case Tuple{+y, Tuple{hp, Tuple{ha, hle}}}:
       Safe.round_safe.y(
-        ~mach, ~d, ~ll, a, b, later, c, h, os, r1, v1, j, p, v2, from,
+        ~mach, ~d, a, b, later, c, h, os, r1, v1, j, p, v2, from,
         t,
         x,
         y,
-        Safe.round_safe.after(~mach, ~d, ~ll, a, b, later, c, h, r1, v1, p, q, y, hp, hv, hl),
+        Safe.round_safe.after(~mach, ~d, a, b, later, c, h, r1, v1, p, q, y, hp, hv, hl),
         ha,
         %eM: {Safe.le(y, _) == True{}: Bool}
         hle,
@@ -7742,7 +7578,6 @@ def Safe.round_safe.some2(
 def Safe.round_safe.some(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -7773,13 +7608,12 @@ def Safe.round_safe.some(
 ) -> {v2 == v1: Ledgers.Step}:
   match mt:
     case Tuple{+q, Tuple{hv, ex}}:
-      Safe.round_safe.some2(~mach, ~d, ~ll, a, b, later, c, h, os, r1, v1, j, p, v2, from, t, x, eM, hl, cs, ih, q, hv, ex)
+      Safe.round_safe.some2(~mach, ~d, a, b, later, c, h, os, r1, v1, j, p, v2, from, t, x, eM, hl, cs, ih, q, hv, ex)
 
 # Safe.round_safe once the highest last vote M that the passes name is known
 def Safe.round_safe.at(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -7817,7 +7651,6 @@ def Safe.round_safe.at(
         Safe.round_safe.none(
           ~mach,
           ~d,
-          ~ll,
           a,
           b,
           later,
@@ -7835,7 +7668,7 @@ def Safe.round_safe.at(
     case Some{Ledgers.Last{+t, x}}:
       +lh2 = {lh : {List.all.if(u2 => Cast.casts(Passes.act(~mach, ~d, b, c, h, 1n+p, from, t), v2, +f => Step.allowed.in(~mach, ~d, b, c, h, os, v2, j, t, f)), Passes.agree(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from, t, v2)) == True{}: Bool}}
       Safe.round_safe.some(
-        ~mach, ~d, ~ll, a, b, later, c, h, os, r1, v1, j, p, v2, from,
+        ~mach, ~d, a, b, later, c, h, os, r1, v1, j, p, v2, from,
         t,
         x,
         eM,
@@ -7855,7 +7688,6 @@ def Safe.round_safe.at(
 def Safe.round_safe(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -7906,7 +7738,7 @@ def Safe.round_safe(
           u => List.all.if(u2 => Voters.major(os, from), Voters.sub(os, from))
         )(pm)
         Safe.round_safe.at(
-          ~mach, ~d, ~ll, a, b, later, c, h, os, r1, v1, j, p, v2, from,
+          ~mach, ~d, a, b, later, c, h, os, r1, v1, j, p, v2, from,
           Passes.last(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from),
           {==},
           Shared.List.all.if_rest(
@@ -7921,7 +7753,7 @@ def Safe.round_safe(
             Shared.List.all.if_hit(Voters.sub(os, from), u2 => Voters.major(os, from))(prs)
           )(Shared.List.all.if_rest(Voters.sub(os, from), u2 => Voters.major(os, from))(prs))(hq),
           hl,
-          t => f => hlt => ha => Safe.round_safe(~mach, ~d, ~ll, a, b, later, c, h, os, r1, v1, j, t, v2, f)(hq)(hlt)(ha)
+          t => f => hlt => ha => Safe.round_safe(~mach, ~d, a, b, later, c, h, os, r1, v1, j, t, v2, f)(hq)(hlt)(ha)
         )
 
 # a round decided x: its tally gave x, and the voter whose turn it was cast x
@@ -8061,7 +7893,6 @@ def Safe.decided(
 def Safe.one.cast(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -8085,7 +7916,7 @@ def Safe.one.cast(
 ) -> {v2 == v1: Ledgers.Step}:
   match m:
     case Some{Ledgers.Cast.Vote{x, +f}}:
-      Safe.round_safe(~mach, ~d, ~ll, a, b, later, c, h, os, r1, v1, r2, r2, v2, f)(hq)(hl)(
+      Safe.round_safe(~mach, ~d, a, b, later, c, h, os, r1, v1, r2, r2, v2, f)(hq)(hl)(
         Shared.List.all.if_rest(
           Ledgers.Step.is_eq(x, v2),
           u => Step.allowed(~mach, ~d, b, Ledgers.Place{c, h, r2}, os, v2, f)
@@ -8100,7 +7931,6 @@ def Safe.one.cast(
 def Safe.one.at(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -8126,7 +7956,6 @@ def Safe.one.at(
       Safe.one.cast(
         ~mach,
         ~d,
-        ~ll,
         a,
         b,
         later,
@@ -8147,7 +7976,6 @@ def Safe.one.at(
 def Safe.one(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -8171,7 +7999,6 @@ def Safe.one(
   e1 => e2 => hl => Safe.one.at(
     ~mach,
     ~d,
-    ~ll,
     a,
     b,
     later,
@@ -8191,7 +8018,6 @@ def Safe.one(
 def Safe.same.at(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -8217,13 +8043,13 @@ def Safe.same.at(
   -> {v2 == v: Ledgers.Step}:
   match l1 l2:
     case True{} y:
-      e1 => e2 => Safe.one(~mach, ~d, ~ll, a, b, later, c, h, os, r, r2, v, v2)(e1)(e2)(el1)
+      e1 => e2 => Safe.one(~mach, ~d, a, b, later, c, h, os, r, r2, v, v2)(e1)(e2)(el1)
     case False{} True{}:
       e1 => e2 => Equal.sym(
         Ledgers.Step,
         v,
         v2,
-        Safe.one(~mach, ~d, ~ll, a, b, later, c, h, os, r2, r, v2, v)(e2)(e1)(el2)
+        Safe.one(~mach, ~d, a, b, later, c, h, os, r2, r, v2, v)(e2)(e1)(el2)
       )
     case False{} False{}:
       e1 => e2 => Shared.Maybe.some_inj(
@@ -8259,7 +8085,6 @@ def Safe.same.at(
 def Safe.same(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -8279,7 +8104,7 @@ def Safe.same(
 ) -> {Round.decide(~mach, ~d, b, c, h, os, r) == Some{v}: Maybe<&2, Ledgers.Step>}
   -> {Round.decide(~mach, ~d, b, c, h, os, r2) == Some{v2}: Maybe<&2, Ledgers.Step>}
   -> {v2 == v: Ledgers.Step}:
-  Safe.same.at(~mach, ~d, ~ll, a, b, later, c, h, os, r, r2, v, v2, Nat.is_lt(r, r2), {==}, Nat.is_lt(r2, r), {==})
+  Safe.same.at(~mach, ~d, a, b, later, c, h, os, r, r2, v, v2, Nat.is_lt(r, r2), {==}, Nat.is_lt(r2, r), {==})
 
 # a round up to k that decided x, of a height that decided x up to k
 def Safe.Round(
@@ -8406,7 +8231,6 @@ def Safe.height_of.none(
 def Safe.height_of.at(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -8436,7 +8260,7 @@ def Safe.height_of.at(
         z => Some{z},
         y,
         v,
-        Safe.same(~mach, ~d, ~ll, a, b, later, c, h, os, r, 1n+p, v, y)(hd)(em)
+        Safe.same(~mach, ~d, a, b, later, c, h, os, r, 1n+p, v, y)(hd)(em)
       )
     case None{}:
       Safe.height_of.none(~mach, ~d, b, c, h, os, p, r, v, Nat.is_eq(r, 1n+p), {==}, em, hd, hle, ih)
@@ -8446,7 +8270,6 @@ def Safe.height_of.at(
 def Safe.height_of(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -8474,7 +8297,6 @@ def Safe.height_of(
       +hd => +hle => Safe.height_of.at(
         ~mach,
         ~d,
-        ~ll,
         a,
         b,
         later,
@@ -8488,7 +8310,7 @@ def Safe.height_of(
         {==},
         hd,
         hle,
-        hl2 => Safe.height_of(~mach, ~d, ~ll, a, b, later, c, h, os, p, r, v)(hd)(hl2)
+        hl2 => Safe.height_of(~mach, ~d, a, b, later, c, h, os, p, r, v)(hd)(hl2)
       )
 
 # the law that no ballot is above the bound of rounds, of the laws rl
@@ -8529,7 +8351,6 @@ def Safe.laws.rounds_has(
 def Safe.rounds_mono.ex(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -8555,14 +8376,13 @@ def Safe.rounds_mono.ex(
         Led.kind(mach, d),
         Safe.rounds_law(mach, d)
       )(b)(e0)(c)(h)(Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(a)(c)(h))(Ledgers.Ballot.voter(e0))(
-        Safe.has_grows(~mach, ~d, ~lg, a, b, later, Ledgers.Entry.Ballot{e0})(hh)
+        Safe.has_grows(~mach, ~d, a, b, later, Ledgers.Entry.Ballot{e0})(hh)
       )(hat)
 
 # Safe.rounds_mono once it is known whether the bound of a is 0
 def Safe.rounds_mono.at(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -8587,7 +8407,6 @@ def Safe.rounds_mono.at(
       Safe.rounds_mono.ex(
         ~mach,
         ~d,
-        ~lg,
         a,
         b,
         later,
@@ -8600,7 +8419,6 @@ def Safe.rounds_mono.at(
 def Safe.rounds_mono(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -8613,15 +8431,12 @@ def Safe.rounds_mono(
   +c: Ledgers.Line,
   +h: U32
 ) -> {Nat.is_le(Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(a)(c)(h), Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(b)(c)(h)) == True{}: Bool}:
-  Safe.rounds_mono.at(~mach, ~d, ~lg, a, b, later, c, h, Nat.is_eq(Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(a)(c)(h), 0n), {==})
+  Safe.rounds_mono.at(~mach, ~d, a, b, later, c, h, Nat.is_eq(Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(a)(c)(h), 0n), {==})
 
 # Safe.decide once a round of the earlier ledger that decided v is known
 def Safe.decide.at(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -8639,17 +8454,14 @@ def Safe.decide.at(
 ) -> {Height.decide(~mach, ~d, b, c, h, os, Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(b)(c)(h)) == Some{v}: Maybe<&2, Ledgers.Step>}:
   match ex:
     case Tuple{+r, Tuple{hle, hdr}}:
-      Safe.height_of(~mach, ~d, ~ll, a, b, later, c, h, os, Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(b)(c)(h), r, v)(
-        Safe.decide_kept(~mach, ~d, ~lg, ~ls, a, b, later, c, h, os, r, v)(hdr)
-      )(Shared.Nat.le_trans(r, Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(a)(c)(h), Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(b)(c)(h))(hle)(Safe.rounds_mono(~mach, ~d, ~lg, a, b, later, c, h)))
+      Safe.height_of(~mach, ~d, a, b, later, c, h, os, Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(b)(c)(h), r, v)(
+        Safe.decide_kept(~mach, ~d, a, b, later, c, h, os, r, v)(hdr)
+      )(Shared.Nat.le_trans(r, Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(a)(c)(h), Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(b)(c)(h))(hle)(Safe.rounds_mono(~mach, ~d, a, b, later, c, h)))
 
 # a height decides the same step in a later ledger
 def Safe.decide(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -8689,9 +8501,6 @@ def Safe.decide(
   hd => Safe.decide.at(
     ~mach,
     ~d,
-    ~lg,
-    ~ls,
-    ~ll,
     a,
     b,
     later,
@@ -9757,14 +9566,14 @@ def Ext.add_into.none(
 def Ext.add_into.at(
   ~mach: Machine(),
   ~d: Led(mach),
-  -la: Led.L(mach, d),
+  +la: Led.L(mach, d),
   +lb: Led.L(mach, d),
   +w: List<&2, U32>,
   +n: Ledgers.Name,
   +e: Entry(mach),
   m: Maybe<&2, Entry(mach)>,
   em: {Led.get(~mach, ~d, la, n) == m: Maybe<&2, Entry(mach)>},
-  g: Led.Grows(mach, d, la, lb),
+  +g: Led.Grows(mach, d, la, lb),
   hw: {Ext.has(~mach, ~d, lb, w) == True{}: Bool},
   h: {
     Maybe.or(
@@ -9782,20 +9591,20 @@ def Ext.add_into.at(
 ) -> {Led.get(~mach, ~d, lb, n) == Some{e}: Maybe<&2, Entry(mach)>}:
   match m:
     case Some{x}:
-      g(n)(e)(Equal.trans(Maybe<&2, Entry(mach)>, Led.get(~mach, ~d, la, n), Some{x}, Some{e}, em, h))
+      Hist.gets(~mach, ~d, la, lb, g)(n)(e)(Equal.trans(Maybe<&2, Entry(mach)>, Led.get(~mach, ~d, la, n), Some{x}, Some{e}, em, h))
     case None{}:
       Ext.add_into.none(~mach, ~d, lb, w, n, e, hw, h)
 
-# a ledger with data that lb holds still grows into lb
-def Ext.add_into(
+# a ledger with data that lb holds gives what lb gives
+def Ext.add_into.pi(
   ~mach: Machine(),
   ~d: Led(mach),
   +la: Led.L(mach, d),
   +lb: Led.L(mach, d),
   +w: List<&2, U32>,
-  g: Led.Grows(mach, d, la, lb),
-  hw: {Ext.has(~mach, ~d, lb, w) == True{}: Bool}
-) -> Led.Grows(mach, d, Led.add(~mach, ~d, la, Ledgers.Entry.Data{w}), lb):
+  +g: Led.Grows(mach, d, la, lb),
+  +hw: {Ext.has(~mach, ~d, lb, w) == True{}: Bool}
+) -> Ledgers.Kind.Grows(Machine.Q(mach), Led.kind(mach, d), Led.add(~mach, ~d, la, Ledgers.Entry.Data{w}), lb):
   +n => +e => h => Ext.add_into.at(
     ~mach,
     ~d,
@@ -9835,10 +9644,82 @@ def Ext.add_into(
             u => Some{Ledgers.Entry.Data{w}}
           )
         ),
-        Hist.get_add(mach, d)(la)(Ledgers.Entry.Data{w})(n)
+        Ledgers.Laws.get_add(Machine.Q(mach), Machine.code(mach), Led.kind(mach, d), Led.laws(mach, d))(la)(Ledgers.Entry.Data{w})(n)
       ),
       h
     )
+  )
+
+# a ledger la that grows into lb, and data w that lb holds
+def Ext.Into(-mach: Machine(), -d: Led(mach)) -> Data:
+  +Sigma<Led.L(mach, d), la => +Sigma<Led.L(mach, d), lb => +Sigma<List<&2, U32>, w => +Sigma<
+    Led.Grows(mach, d, la, lb),
+    g => {Ext.has(~mach, ~d, lb, w) == True{}: Bool}>>>>
+
+# la of x with the data w of x
+def Ext.Into.from(~mach: Machine(), ~d: Led(mach), x: Ext.Into(mach, d)) -> Led.L(mach, d):
+  match x:
+    case Tuple{la, Tuple{lb, Tuple{w, r}}}:
+      Led.add(~mach, ~d, la, Ledgers.Entry.Data{w})
+
+# lb of x
+def Ext.Into.to(-mach: Machine(), -d: Led(mach), x: Ext.Into(mach, d)) -> Led.L(mach, d):
+  match x:
+    case Tuple{la, Tuple{lb, r}}:
+      lb
+
+# what la of x with the data w of x holds, lb of x holds
+def Ext.into.has(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  x: Ext.Into(mach, d),
+  +e: Entry(mach)
+) -> {Ledgers.Kind.has(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), Ext.Into.from(~mach, ~d, x), e) == True{}: Bool}
+  -> {Ledgers.Kind.has(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), Ext.Into.to(mach, d, x), e) == True{}: Bool}:
+  match x:
+    case Tuple{+la, Tuple{+lb, Tuple{+w, Tuple{+g, +hw}}}}:
+      h => Ledgers.Kind.has_of_get(
+        ~Machine.Q(mach),
+        ~Machine.code(mach),
+        ~Led.kind(mach, d),
+        Ledgers.Laws.get_named(Machine.Q(mach), Machine.code(mach), Led.kind(mach, d), Led.laws(mach, d)),
+        lb,
+        Entry.name(~mach, e),
+        e,
+        Ext.add_into.pi(~mach, ~d, la, lb, w, g, hw)(Entry.name(~mach, e))(e)(
+          Ledgers.Kind.get_of_has(
+            ~Machine.Q(mach),
+            ~Machine.code(mach),
+            ~Led.kind(mach, d),
+            Led.add(~mach, ~d, la, Ledgers.Entry.Data{w}),
+            Entry.name(~mach, e),
+            e,
+            {==},
+            h
+          )
+        )
+      )
+
+# a ledger with data that lb holds still grows into lb
+def Ext.add_into(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +la: Led.L(mach, d),
+  +lb: Led.L(mach, d),
+  +w: List<&2, U32>,
+  +g: Led.Grows(mach, d, la, lb),
+  +hw: {Ext.has(~mach, ~d, lb, w) == True{}: Bool}
+) -> Led.Grows(mach, d, Led.add(~mach, ~d, la, Ledgers.Entry.Data{w}), lb):
+  Ledgers.Kind.grows_core(
+    ~Machine.Q(mach),
+    ~Machine.code(mach),
+    ~Led.kind(mach, d),
+    ~Led.laws(mach, d),
+    ~Ext.Into(mach, d),
+    ~(x => Ext.Into.from(~mach, ~d, x)),
+    ~(x => Ext.Into.to(mach, d, x)),
+    ~(x => e => h => Ext.into.has(~mach, ~d, x, e)(h)),
+    Tuple{la, Tuple{lb, Tuple{w, Tuple{g, hw}}}}
   )
 
 # a ledger with data ns that lb holds still grows into lb
@@ -9896,7 +9777,7 @@ def Ext.based_grows(
         xs,
         base,
         base,
-        Hist.refl(mach, d, base),
+        Hist.refl(~mach, ~d, base),
         Equal.trans(
           Bool,
           Ext.holds(~mach, ~d, base, xs),
@@ -10072,6 +9953,125 @@ def Keep.found_back(
 # -------------------------
 # A run whose nodes a ledger l holds keeps, in l, each key that its log holds.
 
+# that a ledger s reads the run r: the ledger of r and s are one ledger with
+# data put (xs and ws), and s holds xs when it holds what r added
+def Keep.Base(-mach: Machine(), -d: Led(mach), -s: Led.L(mach, d), -r: Run<Led.L(mach, d)>) -> Data:
+  +Sigma<List<&2, List<&2, U32>>, xs => +Sigma<Led.L(mach, d), l0 => +Sigma<List<&2, List<&2, U32>>, ws => +Sigma<
+    {Run.ledger(Led.L(mach, d), r) == Led.puts(~mach, ~d, xs, l0): Led.L(mach, d)},
+    e1 => +Sigma<
+      {s == Led.puts(~mach, ~d, ws, l0): Led.L(mach, d)},
+      es => {Ext.holds(~mach, ~d, s, xs) == Ext.holds(~mach, ~d, s, Run.added(Led.L(mach, d), r)): Bool}>>>>>
+
+# a run that follows a run that s reads is read by s
+def Keep.base(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +r2: Run<Led.L(mach, d)>,
+  bd: Keep.Base(mach, d, s, r),
+  g: Ext.Gain(mach, d, s, r, r2)
+) -> Keep.Base(mach, d, s, r2):
+  match bd:
+    case Tuple{+xs, Tuple{+l0, Tuple{+ws, Tuple{e1, Tuple{es, e2}}}}}:
+      match g:
+        case Tuple{+ys, Tuple{+zs, Tuple{a1, Tuple{l1, h1}}}}:
+          Tuple{
+            List.append(&2, List<&2, U32>, xs, zs),
+            Tuple{
+              l0,
+              Tuple{
+                ws,
+                Tuple{
+                  Equal.trans(
+                    Led.L(mach, d),
+                    Run.ledger(Led.L(mach, d), r2),
+                    Led.puts(~mach, ~d, zs, Run.ledger(Led.L(mach, d), r)),
+                    Led.puts(~mach, ~d, List.append(&2, List<&2, U32>, xs, zs), l0),
+                    l1,
+                    Equal.trans(
+                      Led.L(mach, d),
+                      Led.puts(~mach, ~d, zs, Run.ledger(Led.L(mach, d), r)),
+                      Led.puts(~mach, ~d, zs, Led.puts(~mach, ~d, xs, l0)),
+                      Led.puts(~mach, ~d, List.append(&2, List<&2, U32>, xs, zs), l0),
+                      Equal.cong(
+                        Led.L(mach, d),
+                        Led.L(mach, d),
+                        z => Led.puts(~mach, ~d, zs, z),
+                        Run.ledger(Led.L(mach, d), r),
+                        Led.puts(~mach, ~d, xs, l0),
+                        e1
+                      ),
+                      Ext.puts_append(~mach, ~d, xs, zs, l0)
+                    )
+                  ),
+                  Tuple{
+                    es,
+                    Ext.based.holds(
+                      ~mach,
+                      ~d,
+                      s,
+                      xs,
+                      ys,
+                      zs,
+                      Run.added(Led.L(mach, d), r),
+                      Run.added(Led.L(mach, d), r2),
+                      e2,
+                      h1,
+                      a1
+                    )
+                  }
+                }
+              }
+            }
+          }
+
+# a ledger that is l0 with data put grows from l0
+def Keep.base_from(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l0: Led.L(mach, d),
+  -s: Led.L(mach, d),
+  +ws: List<&2, List<&2, U32>>,
+  es: {s == Led.puts(~mach, ~d, ws, l0): Led.L(mach, d)}
+) -> Led.Grows(mach, d, l0, s):
+  %Equal.sym(Led.L(mach, d), s, Led.puts(~mach, ~d, ws, l0), es): Led.Grows(mach, d, l0, _)
+  Hist.puts(~mach, ~d, ws, l0)
+
+# the ledger of a run that s reads grows into s, once s holds what it added
+def Keep.base_grows(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  r: Run<Led.L(mach, d)>,
+  bd: Keep.Base(mach, d, s, r),
+  h: {Ext.holds(~mach, ~d, s, Run.added(Led.L(mach, d), r)) == True{}: Bool}
+) -> Led.Grows(mach, d, Run.ledger(Led.L(mach, d), r), s):
+  match bd:
+    case Tuple{+xs, Tuple{+l0, Tuple{+ws, Tuple{e1, Tuple{es, e2}}}}}:
+      %Equal.sym(Led.L(mach, d), Run.ledger(Led.L(mach, d), r), Led.puts(~mach, ~d, xs, l0), e1): Led.Grows(
+        mach,
+        d,
+        _,
+        s
+      )
+      Ext.puts_into(
+        ~mach,
+        ~d,
+        xs,
+        l0,
+        s,
+        Keep.base_from(~mach, ~d, l0, s, ws, es),
+        Equal.trans(
+          Bool,
+          Ext.holds(~mach, ~d, s, xs),
+          Ext.holds(~mach, ~d, s, Run.added(Led.L(mach, d), r)),
+          True{},
+          e2,
+          h
+        )
+      )
+
 # that the log of the run r reads the value val under key in l, once l holds
 # what r added
 def Keep.Has(
@@ -10111,7 +10111,7 @@ def Keep.ne.at(
   +key: List<&2, U32>,
   +val: List<&2, U32>,
   +a: List<&2, List<&2, U32>>,
-  +bd: Ext.Based(mach, d, l, Run{lr, t, a}),
+  +bd: Keep.Base(mach, d, l, Run{lr, t, a}),
   +ha: {Ext.holds(~mach, ~d, l, a) == True{}: Bool},
   b: Bool,
   eb: {Shared.List.is_eq(~U32, ~U32.is_eq, k, key) == b: Bool},
@@ -10166,7 +10166,7 @@ def Keep.ne.at(
                     Tip.log(t),
                     k,
                     None{},
-                    Ext.based_grows(~mach, ~d, l, Run{lr, t, a}, bd, ha)
+                    Keep.base_grows(~mach, ~d, l, Run{lr, t, a}, bd, ha)
                   )(em)
                 )
               ),
@@ -10199,11 +10199,14 @@ def Keep.fin.of(
       == Trees.Look.of(Some{x}): Trees.Look
   }
     & (
-      @k2: List<&2, U32> -> {
+      @k2: List<&2, U32> -> @y: Maybe<&2, List<&2, U32>> -> {
         Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool
       } -> {
-        Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(Trees.Edit.root(e))(k2)
-          == Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(Tip.log(t))(k2): Trees.Look
+        Trees.Look.known(Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(Tip.log(t))(k2))
+          == Some{y}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+      } -> {
+        Trees.Look.known(Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(Trees.Edit.root(e))(k2))
+          == Some{y}: Maybe<&2, Maybe<&2, List<&2, U32>>>
       }
     )
 ) -> {Tip.get(~mach, ~d, l, Tip.logged(t, Trees.Edit.root(e)), key) == Some{val}: Maybe<&2, List<&2, U32>>}:
@@ -10215,13 +10218,11 @@ def Keep.fin.of(
         Trees.Edit.root(e),
         Keep.log_logged(t, Trees.Edit.root(e))
       ): {Tree.get(~mach, ~d, l, _, key) == Some{val}: Maybe<&2, List<&2, U32>>}
-      %Equal.sym(
-        Trees.Look,
+      Keep.found_back(
         Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(Trees.Edit.root(e))(key),
-        Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(Tip.log(t))(key),
-        w2(key)(ne)
-      ): {Trees.Look.value(_) == Some{val}: Maybe<&2, List<&2, U32>>}
-      hg
+        val,
+        w2(key)(Some{val})(ne)(Keep.found(Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(Tip.log(t))(key), val, hg))
+      )
 
 # after a write of an absent key, whose nodes l holds, the log reads key as before
 def Keep.fin(
@@ -10238,7 +10239,7 @@ def Keep.fin(
   +e: Trees.Edit,
   ep: {Tree.put(~mach, ~d, lr, Tip.log(t), k, Some{x}) == Some{e}: Maybe<&2, Trees.Edit>},
   em: {Tip.find(~mach, ~d, lr, t, k) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
-  +bd: Ext.Based(mach, d, l, Run{lr, t, a}),
+  +bd: Keep.Base(mach, d, l, Run{lr, t, a}),
   +hg: {Tip.get(~mach, ~d, l, t, key) == Some{val}: Maybe<&2, List<&2, U32>>},
   hn: {Ext.holds(~mach, ~d, l, Trees.Edit.nodes(e)) == True{}: Bool},
   +ha: {Ext.holds(~mach, ~d, l, a) == True{}: Bool}
@@ -10271,7 +10272,7 @@ def Keep.fin(
       hg
     ),
     hg,
-    Hist.write(mach, d)(lr)(l)(Tip.log(t))(k)(Some{x})(e)(ep)(Ext.based_grows(~mach, ~d, l, Run{lr, t, a}, bd, ha))(
+    Hist.write(mach, d)(lr)(l)(Tip.log(t))(k)(Some{x})(e)(ep)(Keep.base_grows(~mach, ~d, l, Run{lr, t, a}, bd, ha))(
       Ext.held(~mach, ~d, l, e, hn)
     )
   )
@@ -10291,7 +10292,7 @@ def Keep.logged(
   p: Maybe<&2, Trees.Edit>,
   ep: {Tree.put(~mach, ~d, lr, Tip.log(t), k, Some{x}) == p: Maybe<&2, Trees.Edit>},
   em: {Tip.find(~mach, ~d, lr, t, k) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
-  +bd: Ext.Based(mach, d, l, Run{lr, t, a}),
+  +bd: Keep.Base(mach, d, l, Run{lr, t, a}),
   kh: Keep.Has(mach, d, l, key, val, Run{lr, t, a})
 ) -> Keep.Out(mach, d, l, key, val, Run.logged(~mach, ~d, lr, t, a, p)):
   match p:
@@ -10332,7 +10333,7 @@ def Keep.add.at(
   em: {
     Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), k) == m: Maybe<&2, Maybe<&2, List<&2, U32>>>
   },
-  bd: Ext.Based(mach, d, l, r),
+  bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Run.add.at(~mach, ~d, r, k, x, m)):
   match r m:
@@ -10353,7 +10354,7 @@ def Keep.add(
   +r: Run<Led.L(mach, d)>,
   +k: List<&2, U32>,
   +x: List<&2, U32>,
-  bd: Ext.Based(mach, d, l, r),
+  bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Run.add(~mach, ~d, r, k, x)):
   Keep.add.at(
@@ -10381,7 +10382,7 @@ def Keep.stale(
   +r: Run<Led.L(mach, d)>,
   +i: Ledgers.Id,
   +a: Hashes.Hash,
-  bd: Ext.Based(mach, d, l, r),
+  bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Step.stale(~mach, ~d, r, i, a)):
   Keep.add(~mach, ~d, l, key, val, r, Log.out(i), Out.code(Out.Stale{a}, []), bd, kh)
@@ -10437,15 +10438,15 @@ def Keep.bind(
   g: Run<Led.L(mach, d)> -> Maybe<&2, Run<Led.L(mach, d)>>,
   hm: Keep.Out(mach, d, l, key, val, m),
   gm: Ext.GainM(mach, d, l, r, m),
-  bd: Ext.Based(mach, d, l, r),
-  hg: @r1: Run<Led.L(mach, d)> -> Ext.Based(mach, d, l, r1) -> Keep.Has(mach, d, l, key, val, r1)
+  bd: Keep.Base(mach, d, l, r),
+  hg: @r1: Run<Led.L(mach, d)> -> Keep.Base(mach, d, l, r1) -> Keep.Has(mach, d, l, key, val, r1)
     -> Keep.Out(mach, d, l, key, val, g(r1))
 ) -> Keep.Out(mach, d, l, key, val, Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, m, g)):
   match m:
     case None{}:
       Unit{}
     case Some{+r1}:
-      hg(r1)(Ext.based(~mach, ~d, l, r, r1, bd, gm))(hm)
+      hg(r1)(Keep.base(~mach, ~d, l, r, r1, bd, gm))(hm)
 
 # taking a request keeps each key
 def Keep.taken.at(
@@ -10459,7 +10460,7 @@ def Keep.taken.at(
   +a: Hashes.Hash,
   +n: U32,
   +vs: Maybe<&2, List<&2, String>>,
-  +bd: Ext.Based(mach, d, l, r),
+  +bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Step.taken.at(~mach, ~d, r, i, a, n, vs)):
   Keep.bind(
@@ -10537,7 +10538,7 @@ def Keep.taken(
   +i: Ledgers.Id,
   +a: Hashes.Hash,
   +vs: Maybe<&2, List<&2, String>>,
-  bd: Ext.Based(mach, d, l, r),
+  bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Step.taken(~mach, ~d, r, i, a, vs)):
   Keep.taken.at(~mach, ~d, l, key, val, r, i, a, Tip.count(Run.tip(Led.L(mach, d), r)), vs, bd, kh)
@@ -10554,7 +10555,7 @@ def Keep.labelled(
   +a: Hashes.Hash,
   +m: String,
   v: Maybe<&2, Taken>,
-  +bd: Ext.Based(mach, d, l, r),
+  +bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Step.labelled(~mach, ~d, r, i, a, m, v)):
   match v:
@@ -10588,7 +10589,7 @@ def Keep.label.at(
   +a: Hashes.Hash,
   +m: String,
   k: Maybe<&2, Maybe<&2, Ledgers.Id>>,
-  +bd: Ext.Based(mach, d, l, r),
+  +bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Step.label.at(~mach, ~d, r, i, a, m, k)):
   match k:
@@ -10651,7 +10652,7 @@ def Keep.label(
   +i: Ledgers.Id,
   +a: Hashes.Hash,
   +m: String,
-  bd: Ext.Based(mach, d, l, r),
+  bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Step.label(~mach, ~d, r, i, a, m)):
   Keep.label.at(
@@ -10687,7 +10688,7 @@ def Keep.opens(
   +b: String,
   +t: Tip,
   +ns: List<&2, List<&2, U32>>,
-  +bd: Ext.Based(mach, d, l, r),
+  +bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Step.opens(~mach, ~d, r, i, a, b, t, ns)):
   +r0 = Run.over(~mach, ~d, r, Tip.code(t, []) <> ns, Tip.content(Run.tip(Led.L(mach, d), r)))
@@ -10709,7 +10710,7 @@ def Keep.opens(
       r0,
       Log.start(b),
       Hashes.Hash.code(Tip.hash(t), []),
-      Ext.based(
+      Keep.base(
         ~mach,
         ~d,
         l,
@@ -10745,7 +10746,7 @@ def Keep.act(
   +i: Ledgers.Id,
   +a: Hashes.Hash,
   m: Maybe<&2, Act>,
-  +bd: Ext.Based(mach, d, l, r),
+  +bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Act.run(~mach, ~d, r, i, a, m)):
   match m:
@@ -10766,7 +10767,7 @@ def Keep.act(
         i,
         a,
         vs,
-        Ext.based(~mach, ~d, l, r, Run.over(~mach, ~d, r, ns, h), bd, Ext.over(~mach, ~d, l, r, ns, h)),
+        Keep.base(~mach, ~d, l, r, Run.over(~mach, ~d, r, ns, h), bd, Ext.over(~mach, ~d, l, r, ns, h)),
         Keep.over(~mach, ~d, l, key, val, r, ns, h, kh)
       )
     case Some{Act.Opens{b, t, ns}}:
@@ -10786,7 +10787,7 @@ def Keep.fresh(
   +a: Hashes.Hash,
   +q: Machine.Q(mach),
   o: Maybe<&2, Maybe<&2, Out>>,
-  bd: Ext.Based(mach, d, l, r),
+  bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Step.fresh(~mach, ~d, ~kern, r, c, i, a, q, o)):
   match o:
@@ -10821,7 +10822,7 @@ def Keep.asked(
   +c: Ledgers.Line,
   +a: Hashes.Hash,
   m: Maybe<&2, Entry(mach)>,
-  bd: Ext.Based(mach, d, l, r),
+  bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Step.asked(~mach, ~d, ~kern, r, c, a, m)):
   match m:
@@ -10867,7 +10868,7 @@ def Keep.one(
   +r: Run<Led.L(mach, d)>,
   +c: Ledgers.Line,
   +a: Hashes.Hash,
-  bd: Ext.Based(mach, d, l, r),
+  bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Step.one(~mach, ~d, ~kern, r, c, a)):
   Keep.asked(
@@ -10898,7 +10899,7 @@ def Keep.All(
     case None{}:
       Unit
     case Some{r}:
-      Ext.Based(mach, d, l, r) & Keep.Has(mach, d, l, key, val, r)
+      Keep.Base(mach, d, l, r) & Keep.Has(mach, d, l, key, val, r)
 
 # Keep.All of a run m2 that follows r1
 def Keep.all_pair(
@@ -10911,13 +10912,13 @@ def Keep.all_pair(
   m2: Maybe<&2, Run<Led.L(mach, d)>>,
   ko: Keep.Out(mach, d, l, key, val, m2),
   gm: Ext.GainM(mach, d, l, r1, m2),
-  bd: Ext.Based(mach, d, l, r1)
+  bd: Keep.Base(mach, d, l, r1)
 ) -> Keep.All(mach, d, l, key, val, m2):
   match m2:
     case None{}:
       Unit{}
     case Some{+r2}:
-      Tuple{Ext.based(~mach, ~d, l, r1, r2, bd, gm), ko}
+      Tuple{Keep.base(~mach, ~d, l, r1, r2, bd, gm), ko}
 
 # Keep.All after one more request
 def Keep.all_step(
@@ -11121,7 +11122,7 @@ def Keep.moved.at(
           c,
           qs,
           Some{Run{l, t, []}},
-          Tuple{Tuple{[], Tuple{{==}, {==}}}, u => hg}
+          Tuple{Tuple{[], Tuple{l, Tuple{[], Tuple{{==}, Tuple{{==}, {==}}}}}}, u => hg}
         ),
         e
       )
@@ -11238,7 +11239,6 @@ def Sim.Has(
 def Sim.grows(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -11256,21 +11256,18 @@ def Sim.grows(
   bdb: Ext.Based(mach, d, b, Run{lb, ta, aa}),
   ha: {Ext.holds(~mach, ~d, a, aa) == True{}: Bool}
 ) -> Led.Grows(mach, d, la, lb):
-  Hist.trans(
-    mach,
-    d,
+  Hist.trans(~mach, ~d,
     la,
     a,
     lb,
     Ext.based_grows(~mach, ~d, a, Run{la, ta, aa}, bda, ha),
-    Hist.trans(mach, d, a, b, lb, lg(a)(b)(later), Ext.based_from(~mach, ~d, b, Run{lb, ta, aa}, bdb))
+    Hist.trans(~mach, ~d, a, b, lb, Led.later_grows(~mach, ~d, a, b)(later), Ext.based_from(~mach, ~d, b, Run{lb, ta, aa}, bdb))
   )
 
 # b holds what a holds
 def Sim.holds_b(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -11304,14 +11301,13 @@ def Sim.holds_b(
             b,
             Hashes.Sha.hash(w),
             w,
-            lg(a)(b)(later)
+            Led.later_grows(~mach, ~d, a, b)(later)
           )(Hist.has(~mach, ~d, a, w)(Shared.List.all.if_hit(Ext.has(~mach, ~d, a, w), u => Ext.holds(~mach, ~d, a, r))(h)))
         )
       )(
         Sim.holds_b(
           ~mach,
           ~d,
-          ~lg,
           a,
           b,
           later,
@@ -11324,7 +11320,6 @@ def Sim.holds_b(
 def Sim.grow_of(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -11349,7 +11344,7 @@ def Sim.grow_of(
             la,
             Run.ledger(Led.L(mach, d), _)
           )
-          Sim.grows(~mach, ~d, ~lg, a, b, later, la, ta, aa, lb, bda, bdb, ha)
+          Sim.grows(~mach, ~d, a, b, later, la, ta, aa, lb, bda, bdb, ha)
 
 # two related runs have the same tip
 def Sim.tip_of(
@@ -11451,7 +11446,6 @@ def Sim.bind(
 def Sim.add.fin(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -11502,7 +11496,7 @@ def Sim.add.fin(
         Maybe<&2, Maybe<&2, List<&2, U32>>>,
         Tip.find(~mach, ~d, lb, ta, k),
         Some{None{}},
-        Hist.find(~mach, ~d, la, lb, Tip.log(ta), k, None{}, Sim.grows(~mach, ~d, ~lg, a, b, later, la, ta, aa, lb, bda, bdb, ha))(
+        Hist.find(~mach, ~d, la, lb, Tip.log(ta), k, None{}, Sim.grows(~mach, ~d, a, b, later, la, ta, aa, lb, bda, bdb, ha))(
           em
         )
       ): Sim.R2(
@@ -11530,7 +11524,7 @@ def Sim.add.fin(
           k,
           Some{x},
           e,
-          Sim.grows(~mach, ~d, ~lg, a, b, later, la, ta, aa, lb, bda, bdb, ha)
+          Sim.grows(~mach, ~d, a, b, later, la, ta, aa, lb, bda, bdb, ha)
         )(ep)
       ): Sim.R2(
         mach,
@@ -11583,7 +11577,6 @@ def Sim.add.fin(
 def Sim.add.put(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -11611,7 +11604,6 @@ def Sim.add.put(
       +hh => Sim.add.fin(
         ~mach,
         ~d,
-        ~lg,
         a,
         b,
         later,
@@ -11632,7 +11624,6 @@ def Sim.add.put(
 def Sim.add.find(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -11661,7 +11652,6 @@ def Sim.add.find(
       Sim.add.put(
         ~mach,
         ~d,
-        ~lg,
         a,
         b,
         later,
@@ -11681,7 +11671,6 @@ def Sim.add.find(
 def Sim.add(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -11699,13 +11688,12 @@ def Sim.add(
 ) -> Sim.Out(mach, d, a, b, Run.add(~mach, ~d, ra, k, x), Run.add(~mach, ~d, rb, k, x)):
   match ra:
     case Run{+la, +ta, +aa}:
-      Sim.add.find(~mach, ~d, ~lg, a, b, later, la, ta, aa, rb, k, x, Tip.find(~mach, ~d, la, ta, k), {==}, sh)
+      Sim.add.find(~mach, ~d, a, b, later, la, ta, aa, rb, k, x, Tip.find(~mach, ~d, la, ta, k), {==}, sh)
 
 # a refusal, in a and in b, keeps two runs related
 def Sim.stale(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -11721,7 +11709,7 @@ def Sim.stale(
   +q: Hashes.Hash,
   sh: Sim.Has(mach, d, a, b, ra, rb)
 ) -> Sim.Out(mach, d, a, b, Step.stale(~mach, ~d, ra, i, q), Step.stale(~mach, ~d, rb, i, q)):
-  Sim.add(~mach, ~d, ~lg, a, b, later, ra, rb, Log.out(i), Out.code(Out.Stale{q}, []), sh)
+  Sim.add(~mach, ~d, a, b, later, ra, rb, Log.out(i), Out.code(Out.Stale{q}, []), sh)
 
 # Sim.step_next once the relation is known
 def Sim.next.fin(
@@ -11866,7 +11854,6 @@ def Sim.over(
 def Sim.find_eq(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -11895,7 +11882,7 @@ def Sim.find_eq(
           %Equal.sym(Run<Led.L(mach, d)>, rb, Run{lb, ta, aa}, erb): {
             Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), _), Run.tip(Led.L(mach, d), _), k) == Some{y}: Maybe<&2, Maybe<&2, List<&2, U32>>>
           }
-          Hist.find(~mach, ~d, la, lb, Tip.log(ta), k, y, Sim.grows(~mach, ~d, ~lg, a, b, later, la, ta, aa, lb, bda, bdb, ha))(
+          Hist.find(~mach, ~d, la, lb, Tip.log(ta), k, y, Sim.grows(~mach, ~d, a, b, later, la, ta, aa, lb, bda, bdb, ha))(
             ef
           )
 
@@ -11903,7 +11890,6 @@ def Sim.find_eq(
 def Sim.get_eq(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -11913,22 +11899,27 @@ def Sim.get_eq(
     )
       == True{}: Bool
   },
-  ra: Run<Led.L(mach, d)>,
-  rb: Run<Led.L(mach, d)>,
+  +ra: Run<Led.L(mach, d)>,
+  +rb: Run<Led.L(mach, d)>,
   +n: Ledgers.Name,
   +e: Entry(mach),
   rel: Sim.Rel(mach, d, a, b, ra, rb),
   ha: {Ext.holds(~mach, ~d, a, Run.added(Led.L(mach, d), ra)) == True{}: Bool},
   h: {Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), ra), n) == Some{e}: Maybe<&2, Entry(mach)>}
 ) -> {Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), rb), n) == Some{e}: Maybe<&2, Entry(mach)>}:
-  Sim.grow_of(~mach, ~d, ~lg, a, b, later, ra, rb, rel, ha)(n)(e)(h)
+  Hist.gets(
+    ~mach,
+    ~d,
+    Run.ledger(Led.L(mach, d), ra),
+    Run.ledger(Led.L(mach, d), rb),
+    Sim.grow_of(~mach, ~d, a, b, later, ra, rb, rel, ha)
+  )(n)(e)(h)
 
 # an act of the kernel in the run in a is its act in the run in b
 def Sim.kern_eq(
   ~mach: Machine(),
   ~d: Led(mach),
   ~kern: Kernel(mach, d),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -11959,7 +11950,7 @@ def Sim.kern_eq(
           %Equal.sym(Run<Led.L(mach, d)>, rb, Run{lb, ta, aa}, erb): {
             Kernel.change(mach, d, kern)(Run.ledger(Led.L(mach, d), _))(Run.tip(Led.L(mach, d), _))(c)(i)(q) == Some{act}: Maybe<&2, Act>
           }
-          Hist.kern(mach, d, kern)(ta)(c)(i)(q)(la)(lb)(act)(Sim.grows(~mach, ~d, ~lg, a, b, later, la, ta, aa, lb, bda, bdb, ha))(h)
+          Hist.kern(mach, d, kern)(ta)(c)(i)(q)(la)(lb)(act)(Sim.grows(~mach, ~d, a, b, later, la, ta, aa, lb, bda, bdb, ha))(h)
 
 # Sim.taken_eq once the read of the log in a is known (m)
 def Sim.taken_eq.at(
@@ -12006,7 +11997,6 @@ def Sim.taken_eq.at(
 def Sim.taken_eq(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -12033,7 +12023,7 @@ def Sim.taken_eq(
     t,
     n,
     x,
-    Sim.grow_of(~mach, ~d, ~lg, a, b, later, ra, rb, rel, ha),
+    Sim.grow_of(~mach, ~d, a, b, later, ra, rb, rel, ha),
     Tip.get(~mach, ~d, Run.ledger(Led.L(mach, d), ra), t, Log.taken(n)),
     {==},
     h
@@ -12043,7 +12033,6 @@ def Sim.taken_eq(
 def Sim.taken.at(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -12081,7 +12070,7 @@ def Sim.taken.at(
       ),
       r2 => Some{Run.next(Led.L(mach, d), r2, vs)}
     ),
-    Sim.add(~mach, ~d, ~lg, a, b, later, ra, rb, Log.out(i), Out.code(Out.Taken{ah, n}, []), sh),
+    Sim.add(~mach, ~d, a, b, later, ra, rb, Log.out(i), Out.code(Out.Taken{ah, n}, []), sh),
     +r1 => Ext.bind(
       ~mach,
       ~d,
@@ -12212,7 +12201,6 @@ def Sim.taken.at(
         Sim.add(
           ~mach,
           ~d,
-          ~lg,
           a,
           b,
           later,
@@ -12232,7 +12220,6 @@ def Sim.taken.at(
 def Sim.taken(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -12269,14 +12256,13 @@ def Sim.taken(
       Run.tip(Led.L(mach, d), rb),
       Sim.tip_of(mach, d, a, b, ra, rb, rel)
     ),
-    sh2 => Sim.taken.at(~mach, ~d, ~lg, a, b, later, ra, rb, i, ah, Tip.count(Run.tip(Led.L(mach, d), ra)), vs, sh2)
+    sh2 => Sim.taken.at(~mach, ~d, a, b, later, ra, rb, i, ah, Tip.count(Run.tip(Led.L(mach, d), ra)), vs, sh2)
   )
 
 # a label on the same taken request, in a and in b, keeps two runs related
 def Sim.labelled.some(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -12309,16 +12295,15 @@ def Sim.labelled.some(
     Run.add(~mach, ~d, ra, Log.label(m), Ledgers.Id.code(Taken.id(x), [])),
     Run.add(~mach, ~d, rb, Log.label(m), Ledgers.Id.code(Taken.id(x), [])),
     r2 => Step.taken(~mach, ~d, r2, i, ah, None{}),
-    Sim.add(~mach, ~d, ~lg, a, b, later, ra, rb, Log.label(m), Ledgers.Id.code(Taken.id(x), []), sh),
+    Sim.add(~mach, ~d, a, b, later, ra, rb, Log.label(m), Ledgers.Id.code(Taken.id(x), []), sh),
     r2 => Ext.taken(~mach, ~d, a, r2, i, ah, None{}),
-    r2 => rb2 => sh2 => Sim.taken(~mach, ~d, ~lg, a, b, later, r2, rb2, i, ah, None{}, sh2)
+    r2 => rb2 => sh2 => Sim.taken(~mach, ~d, a, b, later, r2, rb2, i, ah, None{}, sh2)
   )
 
 # a label, in a and in b, once the taken request in a is known (va)
 def Sim.labelled.read(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -12372,10 +12357,10 @@ def Sim.labelled.read(
             Maybe<&2, Taken>,
             Tip.taken(~mach, ~d, Run.ledger(Led.L(mach, d), rb), t, n),
             Some{x},
-            Sim.taken_eq(~mach, ~d, ~lg, a, b, later, ra, rb, t, n, x, rel, hr, ev)
+            Sim.taken_eq(~mach, ~d, a, b, later, ra, rb, t, n, x, rel, hr, ev)
           )
         ),
-        sh2 => Sim.labelled.some(~mach, ~d, ~lg, a, b, later, ra, rb, i, ah, m, x, sh2)
+        sh2 => Sim.labelled.some(~mach, ~d, a, b, later, ra, rb, i, ah, m, x, sh2)
       )
 
 # two runs related when a check is the same on both
@@ -12412,7 +12397,6 @@ def Sim.when(
 def Sim.label.at(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -12434,7 +12418,7 @@ def Sim.label.at(
     case None{}:
       Unit{}
     case Some{Some{x}}:
-      Sim.stale(~mach, ~d, ~lg, a, b, later, ra, rb, i, ah, sh)
+      Sim.stale(~mach, ~d, a, b, later, ra, rb, i, ah, sh)
     case Some{None{}}:
       Sim.cond(
         ~mach,
@@ -12529,11 +12513,10 @@ def Sim.label.at(
             )
           ),
           sh2,
-          e => sh3 => Sim.stale(~mach, ~d, ~lg, a, b, later, ra, rb, i, ah, sh3),
+          e => sh3 => Sim.stale(~mach, ~d, a, b, later, ra, rb, i, ah, sh3),
           e => sh3 => Sim.labelled.read(
             ~mach,
             ~d,
-            ~lg,
             a,
             b,
             later,
@@ -12562,7 +12545,6 @@ def Sim.label.at(
 def Sim.label.read(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -12616,13 +12598,12 @@ def Sim.label.read(
             Maybe<&2, Maybe<&2, List<&2, U32>>>,
             Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), rb), Run.tip(Led.L(mach, d), rb), Log.label(m)),
             Some{y},
-            Sim.find_eq(~mach, ~d, ~lg, a, b, later, ra, rb, Log.label(m), y, rel, hr, ef)
+            Sim.find_eq(~mach, ~d, a, b, later, ra, rb, Log.label(m), y, rel, hr, ef)
           )
         ),
         sh2 => Sim.label.at(
           ~mach,
           ~d,
-          ~lg,
           a,
           b,
           later,
@@ -12640,7 +12621,6 @@ def Sim.label.read(
 def Sim.label(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -12660,7 +12640,6 @@ def Sim.label(
   Sim.label.read(
     ~mach,
     ~d,
-    ~lg,
     a,
     b,
     later,
@@ -12678,7 +12657,6 @@ def Sim.label(
 def Sim.opens(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -12764,7 +12742,6 @@ def Sim.opens(
       Sim.add(
         ~mach,
         ~d,
-        ~lg,
         a,
         b,
         later,
@@ -12775,7 +12752,7 @@ def Sim.opens(
         Sim.over(~mach, ~d, a, b, ra, rb, Tip.code(t, []) <> ns, Tip.content(Run.tip(Led.L(mach, d), ra)), sh2)
       ),
       r2 => Ext.taken(~mach, ~d, a, r2, i, ah, None{}),
-      r2 => rb2 => sh3 => Sim.taken(~mach, ~d, ~lg, a, b, later, r2, rb2, i, ah, None{}, sh3)
+      r2 => rb2 => sh3 => Sim.taken(~mach, ~d, a, b, later, r2, rb2, i, ah, None{}, sh3)
     )
   )
 
@@ -12783,7 +12760,6 @@ def Sim.opens(
 def Sim.act(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -12804,14 +12780,13 @@ def Sim.act(
     case None{}:
       Unit{}
     case Some{Act.Stale{}}:
-      Sim.stale(~mach, ~d, ~lg, a, b, later, ra, rb, i, ah, sh)
+      Sim.stale(~mach, ~d, a, b, later, ra, rb, i, ah, sh)
     case Some{Act.Label{x}}:
-      Sim.label(~mach, ~d, ~lg, a, b, later, ra, rb, i, ah, x, sh)
+      Sim.label(~mach, ~d, a, b, later, ra, rb, i, ah, x, sh)
     case Some{Act.Taken{+vs, +h, +ns}}:
       Sim.taken(
         ~mach,
         ~d,
-        ~lg,
         a,
         b,
         later,
@@ -12823,14 +12798,13 @@ def Sim.act(
         Sim.over(~mach, ~d, a, b, ra, rb, ns, h, sh)
       )
     case Some{Act.Opens{bn, t, ns}}:
-      Sim.opens(~mach, ~d, ~lg, a, b, later, ra, rb, i, ah, bn, t, ns, sh)
+      Sim.opens(~mach, ~d, a, b, later, ra, rb, i, ah, bn, t, ns, sh)
 
 # an act, in a and in b, once the act in a is known (ma)
 def Sim.fresh.act(
   ~mach: Machine(),
   ~d: Led(mach),
   ~kern: Kernel(mach, d),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -12899,10 +12873,10 @@ def Sim.fresh.act(
             Maybe<&2, Act>,
             Kernel.change(mach, d, kern)(Run.ledger(Led.L(mach, d), rb))(Run.tip(Led.L(mach, d), rb))(c)(i)(q),
             Some{act},
-            Sim.kern_eq(~mach, ~d, ~kern, ~lg, a, b, later, ra, rb, c, i, q, act, rel, hr, em)
+            Sim.kern_eq(~mach, ~d, ~kern, a, b, later, ra, rb, c, i, q, act, rel, hr, em)
           )
         ),
-        sh2 => Sim.act(~mach, ~d, ~lg, a, b, later, ra, rb, i, ah, Some{act}, sh2)
+        sh2 => Sim.act(~mach, ~d, a, b, later, ra, rb, i, ah, Some{act}, sh2)
       )
 
 # a request with the outcome o, in a and in b, keeps two runs related
@@ -12910,7 +12884,6 @@ def Sim.fresh(
   ~mach: Machine(),
   ~d: Led(mach),
   ~kern: Kernel(mach, d),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -12946,7 +12919,6 @@ def Sim.fresh(
         ~mach,
         ~d,
         ~kern,
-        ~lg,
         a,
         b,
         later,
@@ -12966,7 +12938,6 @@ def Sim.asked.find(
   ~mach: Machine(),
   ~d: Led(mach),
   ~kern: Kernel(mach, d),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -13051,14 +13022,13 @@ def Sim.asked.find(
             Maybe<&2, Maybe<&2, List<&2, U32>>>,
             Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), rb), Run.tip(Led.L(mach, d), rb), Log.out(i)),
             Some{y},
-            Sim.find_eq(~mach, ~d, ~lg, a, b, later, ra, rb, Log.out(i), y, rel, hr, ef)
+            Sim.find_eq(~mach, ~d, a, b, later, ra, rb, Log.out(i), y, rel, hr, ef)
           )
         ),
         sh2 => Sim.fresh(
           ~mach,
           ~d,
           ~kern,
-          ~lg,
           a,
           b,
           later,
@@ -13078,7 +13048,6 @@ def Sim.asked(
   ~mach: Machine(),
   ~d: Led(mach),
   ~kern: Kernel(mach, d),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -13101,7 +13070,6 @@ def Sim.asked(
         ~mach,
         ~d,
         ~kern,
-        ~lg,
         a,
         b,
         later,
@@ -13129,7 +13097,6 @@ def Sim.one.get(
   ~mach: Machine(),
   ~d: Led(mach),
   ~kern: Kernel(mach, d),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -13180,10 +13147,10 @@ def Sim.one.get(
             Maybe<&2, Entry(mach)>,
             Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), rb), Ledgers.Name.Ask{ah}),
             Some{e},
-            Sim.get_eq(~mach, ~d, ~lg, a, b, later, ra, rb, Ledgers.Name.Ask{ah}, e, rel, hr, eme)
+            Sim.get_eq(~mach, ~d, a, b, later, ra, rb, Ledgers.Name.Ask{ah}, e, rel, hr, eme)
           )
         ),
-        sh2 => Sim.asked(~mach, ~d, ~kern, ~lg, a, b, later, ra, rb, c, ah, Some{e}, sh2)
+        sh2 => Sim.asked(~mach, ~d, ~kern, a, b, later, ra, rb, c, ah, Some{e}, sh2)
       )
 
 # one request, in a and in b, keeps two runs related
@@ -13191,7 +13158,6 @@ def Sim.one(
   ~mach: Machine(),
   ~d: Led(mach),
   ~kern: Kernel(mach, d),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -13211,7 +13177,6 @@ def Sim.one(
     ~mach,
     ~d,
     ~kern,
-    ~lg,
     a,
     b,
     later,
@@ -13229,7 +13194,6 @@ def Sim.all(
   ~mach: Machine(),
   ~d: Led(mach),
   ~kern: Kernel(mach, d),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -13253,7 +13217,6 @@ def Sim.all(
         ~mach,
         ~d,
         ~kern,
-        ~lg,
         a,
         b,
         later,
@@ -13271,7 +13234,7 @@ def Sim.all(
           x => Step.one(~mach, ~d, ~kern, x, c, q),
           hm,
           x => Ext.one(~mach, ~d, ~kern, a, x, c, q),
-          x => y => s => Sim.one(~mach, ~d, ~kern, ~lg, a, b, later, x, y, c, q, s)
+          x => y => s => Sim.one(~mach, ~d, ~kern, a, b, later, x, y, c, q, s)
         )
       )
 
@@ -13279,7 +13242,6 @@ def Sim.all(
 def Sim.landed.fin(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -13306,7 +13268,7 @@ def Sim.landed.fin(
       %Equal.sym(Bool, Tips.same(Some{Tip.hash(ta)}, after), True{}, es): {
         Shared.Maybe.when(Tip, Bool.and(_, Ext.holds(~mach, ~d, b, aa)), u => Some{ta}) == Some{x}: Maybe<&2, Tip>
       }
-      %Equal.sym(Bool, Ext.holds(~mach, ~d, b, aa), True{}, Sim.holds_b(~mach, ~d, ~lg, a, b, later, aa, ha)): {
+      %Equal.sym(Bool, Ext.holds(~mach, ~d, b, aa), True{}, Sim.holds_b(~mach, ~d, a, b, later, aa, ha)): {
         Shared.Maybe.when(Tip, Bool.and(True{}, _), u => Some{ta}) == Some{x}: Maybe<&2, Tip>
       }
       Equal.cong(Tip, Maybe<&2, Tip>, z => Some{z}, ta, x, ex)
@@ -13315,7 +13277,6 @@ def Sim.landed.fin(
 def Sim.landed.mb(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -13340,13 +13301,12 @@ def Sim.landed.mb(
     case None{}:
       Empty.absurd({Line.landed(~mach, ~d, b, None{}, after) == Some{x}: Maybe<&2, Tip>}, r2)
     case Some{rb}:
-      Sim.landed.fin(~mach, ~d, ~lg, a, b, later, la, ta, aa, after, x, rb, r2, ha, es, ex)
+      Sim.landed.fin(~mach, ~d, a, b, later, la, ta, aa, after, x, rb, r2, ha, es, ex)
 
 # Sim.landed once the check of the run in a is known (bv)
 def Sim.landed.at(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -13373,7 +13333,6 @@ def Sim.landed.at(
       Sim.landed.mb(
         ~mach,
         ~d,
-        ~lg,
         a,
         b,
         later,
@@ -13398,7 +13357,6 @@ def Sim.landed.at(
 def Sim.landed(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -13422,7 +13380,6 @@ def Sim.landed(
       Sim.landed.at(
         ~mach,
         ~d,
-        ~lg,
         a,
         b,
         later,
@@ -13443,7 +13400,6 @@ def Sim.moved.at(
   ~mach: Machine(),
   ~d: Led(mach),
   ~kern: Kernel(mach, d),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -13472,7 +13428,6 @@ def Sim.moved.at(
       Sim.landed(
         ~mach,
         ~d,
-        ~lg,
         a,
         b,
         later,
@@ -13482,7 +13437,6 @@ def Sim.moved.at(
           ~mach,
           ~d,
           ~kern,
-          ~lg,
           a,
           b,
           later,
@@ -13507,7 +13461,6 @@ def Sim.moved(
   ~mach: Machine(),
   ~d: Led(mach),
   ~kern: Kernel(mach, d),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -13529,7 +13482,6 @@ def Sim.moved(
         ~mach,
         ~d,
         ~kern,
-        ~lg,
         a,
         b,
         later,
@@ -13589,9 +13541,6 @@ def Hist.next.at(
   ~mach: Machine(),
   ~d: Led(mach),
   ~kern: Kernel(mach, d),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -13639,18 +13588,15 @@ def Hist.next.at(
             Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(b)(c)(h)
           ),
           Some{v},
-          Safe.decide(~mach, ~d, ~lg, ~ls, ~ll, a, b, later, c, h, Tip.voters(t), v)(em)
+          Safe.decide(~mach, ~d, a, b, later, c, h, Tip.voters(t), v)(em)
         ): {Line.moved(~mach, ~d, ~kern, b, c, t, _) == Some{x}: Maybe<&2, Tip>}
-        Sim.moved(~mach, ~d, ~kern, ~lg, a, b, later, c, t, v, x)(e)
+        Sim.moved(~mach, ~d, ~kern, a, b, later, c, t, v, x)(e)
 
 # the next tip of a line stays in a later ledger
 def Hist.next(
   ~mach: Machine(),
   ~d: Led(mach),
   ~kern: Kernel(mach, d),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -13670,9 +13616,6 @@ def Hist.next(
     ~mach,
     ~d,
     ~kern,
-    ~lg,
-    ~ls,
-    ~ll,
     a,
     b,
     later,
@@ -13816,9 +13759,6 @@ def Hist.walk(
   ~mach: Machine(),
   ~d: Led(mach),
   ~kern: Kernel(mach, d),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
-  ~ll: Hist.LaterLast(mach, d),
   fa: Nat,
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
@@ -13856,7 +13796,7 @@ def Hist.walk(
         mb,
         key,
         v
-      )(eb)(Hist.tip_get(~mach, ~d, a, b, t, key, v, lg(a)(b)(later))(eg))
+      )(eb)(Hist.tip_get(~mach, ~d, a, b, t, key, v, Led.later_grows(~mach, ~d, a, b)(later))(eg))
     case 1n+f None{}:
       le => ea => eb => eg => Hist.walk_keep(
         ~mach,
@@ -13870,7 +13810,7 @@ def Hist.walk(
         mb,
         key,
         v
-      )(eb)(Hist.tip_get(~mach, ~d, a, b, t, key, v, lg(a)(b)(later))(eg))
+      )(eb)(Hist.tip_get(~mach, ~d, a, b, t, key, v, Led.later_grows(~mach, ~d, a, b)(later))(eg))
     case 1n+(+f) Some{+t2}:
       match fb mb:
         case 0n y:
@@ -13894,7 +13834,7 @@ def Hist.walk(
                 Line.next(~mach, ~d, ~kern, b, c, h, t),
                 Some{t2},
                 Equal.sym(Maybe<&2, Tip>, Line.next(~mach, ~d, ~kern, b, c, h, t), None{}, eb),
-                Hist.next(~mach, ~d, ~kern, ~lg, ~ls, ~ll, a, b, later, c, h, t, t2)(ea)
+                Hist.next(~mach, ~d, ~kern, a, b, later, c, h, t, t2)(ea)
               )
             )
           )
@@ -13913,7 +13853,7 @@ def Hist.walk(
                   Maybe<&2, Tip>,
                   Line.next(~mach, ~d, ~kern, b, c, h, t),
                   Some{t2},
-                  Hist.next(~mach, ~d, ~kern, ~lg, ~ls, ~ll, a, b, later, c, h, t, t2)(ea)
+                  Hist.next(~mach, ~d, ~kern, a, b, later, c, h, t, t2)(ea)
                 ),
                 eb
               )
@@ -13931,9 +13871,6 @@ def Hist.walk(
               ~mach,
               ~d,
               ~kern,
-              ~lg,
-              ~ls,
-              ~ll,
               f,
               a,
               b,
@@ -13996,50 +13933,6 @@ def Hist.ne_zero(-n: Nat, -p: Nat, e: {n == 1n+p: Nat}) -> {Nat.is_eq(n, 0n) == 
   %Equal.sym(Nat, n, 1n+p, e): {Nat.is_eq(_, 0n) == False{}: Bool}
   {==}
 
-# what a ledger holds, a ledger that grows holds, once the entry under its
-# name is known (m)
-def Hist.has_grows.at(
-  ~mach: Machine(),
-  ~d: Led(mach),
-  -a: Led.L(mach, d),
-  +b: Led.L(mach, d),
-  +n: Ledgers.Name,
-  +e: Entry(mach),
-  m: Maybe<&2, Entry(mach)>,
-  g: Led.Grows(mach, d, a, b)
-) -> {Led.get(~mach, ~d, a, n) == m: Maybe<&2, Entry(mach)>}
-  -> {Shared.Maybe.is_eq(~Entry(mach), ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)), m, Some{e}) == True{}: Bool}
-  -> {
-    Shared.Maybe.is_eq(
-      ~Entry(mach),
-      ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
-      Led.get(~mach, ~d, b, n),
-      Some{e}
-    )
-      == True{}: Bool
-  }:
-  match m:
-    case None{}:
-      em => h => Empty.absurd(
-        {
-          Shared.Maybe.is_eq(
-            ~Entry(mach),
-            ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
-            Led.get(~mach, ~d, b, n),
-            Some{e}
-          )
-            == True{}: Bool
-        },
-        Shared.Bool.false_ne_true(h)
-      )
-    case Some{y}:
-      em => h =>
-        %Equal.sym(Maybe<&2, Entry(mach)>, Led.get(~mach, ~d, b, n), Some{y}, g(n)(y)(em)): {
-          Shared.Maybe.is_eq(~Entry(mach), ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)), _, Some{e})
-            == True{}: Bool
-        }
-        h
-
 # what a ledger holds, a ledger that grows holds
 def Hist.has_grows(
   ~mach: Machine(),
@@ -14047,26 +13940,16 @@ def Hist.has_grows(
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +e: Entry(mach),
-  g: Led.Grows(mach, d, a, b)
+  +g: Led.Grows(mach, d, a, b)
 ) -> {Ledgers.Kind.has(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, e) == True{}: Bool}
   -> {Ledgers.Kind.has(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), b, e) == True{}: Bool}:
-  h => Hist.has_grows.at(
-    ~mach,
-    ~d,
-    a,
-    b,
-    Entry.name(~mach, e),
-    e,
-    Led.get(~mach, ~d, a, Entry.name(~mach, e)),
-    g
-  )({==})(h)
+  Ledgers.Kind.grows_has(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), ~Led.laws(mach, d), a, b, g, e)
 
 # the height bound of a line grows with the ledger, once a ballot at it is
 # known (ex)
 def Hist.heights.of(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -14107,7 +13990,7 @@ def Hist.heights.of(
         Machine.Q(mach),
         Machine.code(mach),
         Led.kind(mach, d),
-        Hist.laws(mach, d)
+        Led.laws(mach, d)
       )(
         b
       )(
@@ -14120,13 +14003,12 @@ def Hist.heights.of(
         r
       )(
         Ledgers.Ballot.voter(bl)
-      )(Hist.has_grows(~mach, ~d, a, b, Ledgers.Entry.Ballot{bl}, lg(a)(b)(later))(hasa))(isat)
+      )(Hist.has_grows(~mach, ~d, a, b, Ledgers.Entry.Ballot{bl}, Led.later_grows(~mach, ~d, a, b)(later))(hasa))(isat)
 
 # the height bound of a line grows with the ledger, once it is known (n)
 def Hist.heights.at(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -14156,7 +14038,6 @@ def Hist.heights.at(
       en => Hist.heights.of(
         ~mach,
         ~d,
-        ~lg,
         a,
         b,
         later,
@@ -14165,7 +14046,7 @@ def Hist.heights.at(
           Machine.Q(mach),
           Machine.code(mach),
           Led.kind(mach, d),
-          Hist.laws(mach, d)
+          Led.laws(mach, d)
         )(a)(c)(Hist.ne_zero(Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(a)(c), p, en))
       )
 
@@ -14195,7 +14076,6 @@ def Hist.root_start.at(
 def Hist.root_start(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -14213,7 +14093,7 @@ def Hist.root_start(
     ~mach,
     Led.get(~mach, ~d, a, Ledgers.Name.Ask{r}),
     Led.get(~mach, ~d, b, Ledgers.Name.Ask{r}),
-    y => lg(a)(b)(later)(Ledgers.Name.Ask{r})(y),
+    y => Hist.gets(~mach, ~d, a, b, Led.later_grows(~mach, ~d, a, b)(later))(Ledgers.Name.Ask{r})(y),
     x
   )(e)
 
@@ -14242,7 +14122,6 @@ def Hist.whole(
 def Hist.named(
   ~mach: Machine(),
   ~d: Led(mach),
-  ~lg: Hist.LaterGrows(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -14268,7 +14147,7 @@ def Hist.named(
     +h => Hist.whole(
       Led.fetch(~mach, ~d, a, h),
       Led.fetch(~mach, ~d, b, h),
-      w => Hist.fetch(~mach, ~d, a, b, h, w, lg(a)(b)(later)),
+      w => Hist.fetch(~mach, ~d, a, b, h, w, Led.later_grows(~mach, ~d, a, b)(later)),
       x
     )
   )(e)
@@ -14297,9 +14176,6 @@ def Hist.head_get(
   ~mach: Machine(),
   ~d: Led(mach),
   ~kern: Kernel(mach, d),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -14341,9 +14217,6 @@ def Hist.head_get(
           ~mach,
           ~d,
           ~kern,
-          ~lg,
-          ~ls,
-          ~ll,
           1n+Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(a)(c),
           a,
           b,
@@ -14360,7 +14233,6 @@ def Hist.head_get(
           Hist.heights.at(
             ~mach,
             ~d,
-            ~lg,
             a,
             b,
             later,
@@ -14375,9 +14247,6 @@ def Hist.sub_start(
   ~mach: Machine(),
   ~d: Led(mach),
   ~kern: Kernel(mach, d),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -14441,20 +14310,17 @@ def Hist.sub_start(
         ~mach,
         ~d,
         ~kern,
-        ~lg,
-        ~ls,
-        ~ll,
         a,
         b,
         later,
         Ledgers.Line{r, None{}},
         Root.start(~mach, ~d, a, r),
         Root.start(~mach, ~d, b, r),
-        t => Hist.root_start(~mach, ~d, ~lg, a, b, later, r, t),
+        t => Hist.root_start(~mach, ~d, a, b, later, r, t),
         Log.start(s),
         ws
       ),
-      ws => Hist.named(~mach, ~d, ~lg, a, b, later, ws, x)
+      ws => Hist.named(~mach, ~d, a, b, later, ws, x)
     )(
       Equal.trans(
         Maybe<&2, Tip>,
@@ -14508,9 +14374,6 @@ def Hist.start(
   ~mach: Machine(),
   ~d: Led(mach),
   ~kern: Kernel(mach, d),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -14526,18 +14389,15 @@ def Hist.start(
   -> {Line.start(~mach, ~d, ~kern, b, c) == Some{x}: Maybe<&2, Tip>}:
   match c:
     case Ledgers.Line{+r, None{}}:
-      Hist.root_start(~mach, ~d, ~lg, a, b, later, r, x)
+      Hist.root_start(~mach, ~d, a, b, later, r, x)
     case Ledgers.Line{+r, Some{+s}}:
-      Hist.sub_start(~mach, ~d, ~kern, ~lg, ~ls, ~ll, a, b, later, r, s, x)
+      Hist.sub_start(~mach, ~d, ~kern, a, b, later, r, s, x)
 
 # the tip of a line after k steps stays in a later ledger
 def Hist.at(
   ~mach: Machine(),
   ~d: Led(mach),
   ~kern: Kernel(mach, d),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
-  ~ll: Hist.LaterLast(mach, d),
   k: Nat,
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
@@ -14554,7 +14414,7 @@ def Hist.at(
   -> {Line.at(~mach, ~d, ~kern, k, b, c) == Some{x}: Maybe<&2, Tip>}:
   match k:
     case 0n:
-      Hist.start(~mach, ~d, ~kern, ~lg, ~ls, ~ll, a, b, later, c, x)
+      Hist.start(~mach, ~d, ~kern, a, b, later, c, x)
     case 1n+(+p):
       e => Shared.Maybe.bind_kept(
         Tip,
@@ -14564,8 +14424,8 @@ def Hist.at(
         t => Line.next(~mach, ~d, ~kern, a, c, U32.from_nat(p), t),
         t => Line.next(~mach, ~d, ~kern, b, c, U32.from_nat(p), t),
         x,
-        t => Hist.at(~mach, ~d, ~kern, ~lg, ~ls, ~ll, p, a, b, later, c, t),
-        +t => Hist.next(~mach, ~d, ~kern, ~lg, ~ls, ~ll, a, b, later, c, U32.from_nat(p), t, x)
+        t => Hist.at(~mach, ~d, ~kern, p, a, b, later, c, t),
+        +t => Hist.next(~mach, ~d, ~kern, a, b, later, c, U32.from_nat(p), t, x)
       )(e)
 
 # what the log of a line holds stays in a later ledger
@@ -14573,9 +14433,6 @@ def Hist.get(
   ~mach: Machine(),
   ~d: Led(mach),
   ~kern: Kernel(mach, d),
-  ~lg: Hist.LaterGrows(mach, d),
-  ~ls: Hist.LaterSingle(mach, d),
-  ~ll: Hist.LaterLast(mach, d),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +later: {
@@ -14594,16 +14451,13 @@ def Hist.get(
     ~mach,
     ~d,
     ~kern,
-    ~lg,
-    ~ls,
-    ~ll,
     a,
     b,
     later,
     c,
     Line.start(~mach, ~d, ~kern, a, c),
     Line.start(~mach, ~d, ~kern, b, c),
-    t => Hist.start(~mach, ~d, ~kern, ~lg, ~ls, ~ll, a, b, later, c, t),
+    t => Hist.start(~mach, ~d, ~kern, a, b, later, c, t),
     key,
     v
   )
@@ -14631,9 +14485,6 @@ def Line.at_grows(mach, d, kern, k, c):
     ~mach,
     ~d,
     ~kern,
-    ~(x => y => z => Led.later_grows(~mach, ~d, x, y)(z)),
-    ~(x => y => z => Led.later_single(~mach, ~d, x, y)(z)),
-    ~(x => y => c2 => h2 => z => Led.later_last(~mach, ~d, x, y, c2, h2)(z)),
     k,
     a,
     b,
@@ -14664,9 +14515,6 @@ def Line.get_grows(mach, d, kern, c, key):
     ~mach,
     ~d,
     ~kern,
-    ~(x => y => z => Led.later_grows(~mach, ~d, x, y)(z)),
-    ~(x => y => z => Led.later_single(~mach, ~d, x, y)(z)),
-    ~(x => y => c2 => h2 => z => Led.later_last(~mach, ~d, x, y, c2, h2)(z)),
     a,
     b,
     later,
@@ -14674,6 +14522,1131 @@ def Line.get_grows(mach, d, kern, c, key):
     key,
     x
   )(e)
+
+# Outcomes of a step
+# ------------------
+# A run whose ledger holds what it added gives each of its requests an
+# outcome: the run writes it, or finds it, and then keeps it (Keep).
+
+# the words v are the code of an outcome
+def Outs.decodes(v: List<&2, U32>) -> Bool:
+  Maybe.is_some(&2, Out, Codes.Code.whole.of(~Out, ~Out.code, ~Out.code.read, Some{v}))
+
+# that the log of the run r reads, in s, the outcome of the request i, once s
+# holds what r added
+def Outs.Has(-mach: Machine(), -d: Led(mach), -s: Led.L(mach, d), -i: Ledgers.Id, -r: Run<Led.L(mach, d)>) -> Type:
+  Exists(
+    List<&2, U32>,
+    v => {Outs.decodes(v) == True{}: Bool} & Keep.Has(mach, d, s, Log.out(i), v, r)
+  )
+
+# Outs.Has of the result m of a run, when there is one
+def Outs.Res(
+  -mach: Machine(),
+  -d: Led(mach),
+  -s: Led.L(mach, d),
+  -i: Ledgers.Id,
+  m: Maybe<&2, Run<Led.L(mach, d)>>
+) -> Type:
+  match m:
+    case None{}:
+      Unit
+    case Some{r}:
+      Outs.Has(mach, d, s, i, r)
+
+# the code of an outcome is the code of an outcome
+def Outs.code(+o: Out) -> {Outs.decodes(Out.code(o, [])) == True{}: Bool}:
+  %Equal.sym(
+    Maybe<&2, Out>,
+    Codes.Code.whole.read(~Out, ~Out.code, ~Out.code.read, Out.code(o, [])),
+    Some{o},
+    Codes.Code.whole_read(~Out, ~Out.code, ~Out.code.read, ~(x => r => Out.code_read(x, r)), o)
+  ): {Maybe.is_some(&2, Out, _) == True{}: Bool}
+  {==}
+
+# a kept outcome is an outcome
+def Outs.of_keep(
+  -mach: Machine(),
+  -d: Led(mach),
+  -s: Led.L(mach, d),
+  -i: Ledgers.Id,
+  v: List<&2, U32>,
+  dv: {Outs.decodes(v) == True{}: Bool},
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  ko: Keep.Out(mach, d, s, Log.out(i), v, m)
+) -> Outs.Res(mach, d, s, i, m):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{r}:
+      Tuple{v, Tuple{dv, ko}}
+
+# after a write that s holds, the log reads the key as written, in s (w: the
+# law of the write)
+def Outs.fin.of(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +t: Tip,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  +e: Trees.Edit,
+  w: {
+    Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(s)(Trees.Edit.root(e))(k)
+      == Trees.Look.of(Some{x}): Trees.Look
+  }
+    & (
+      @k2: List<&2, U32> -> @y: Maybe<&2, List<&2, U32>> -> {
+        Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool
+      } -> {
+        Trees.Look.known(Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(s)(Tip.log(t))(k2))
+          == Some{y}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+      } -> {
+        Trees.Look.known(Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(s)(Trees.Edit.root(e))(k2))
+          == Some{y}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+      }
+    )
+) -> {Tip.get(~mach, ~d, s, Tip.logged(t, Trees.Edit.root(e)), k) == Some{x}: Maybe<&2, List<&2, U32>>}:
+  match w:
+    case Tuple{w1, w2}:
+      %Equal.sym(
+        Maybe<&2, Hashes.Hash>,
+        Tip.log(Tip.logged(t, Trees.Edit.root(e))),
+        Trees.Edit.root(e),
+        Keep.log_logged(t, Trees.Edit.root(e))
+      ): {Tree.get(~mach, ~d, s, _, k) == Some{x}: Maybe<&2, List<&2, U32>>}
+      %Equal.sym(
+        Trees.Look,
+        Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(s)(Trees.Edit.root(e))(k),
+        Trees.Look.of(Some{x}),
+        w1
+      ): {Trees.Look.value(_) == Some{x}: Maybe<&2, List<&2, U32>>}
+      {==}
+
+# a write whose nodes s holds reads, in s, as written
+def Outs.fin(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +lr: Led.L(mach, d),
+  +t: Tip,
+  +a: List<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  +e: Trees.Edit,
+  ep: {Tree.put(~mach, ~d, lr, Tip.log(t), k, Some{x}) == Some{e}: Maybe<&2, Trees.Edit>},
+  bd: Keep.Base(mach, d, s, Run{lr, t, a}),
+  hn: {Ext.holds(~mach, ~d, s, Trees.Edit.nodes(e)) == True{}: Bool},
+  ha: {Ext.holds(~mach, ~d, s, a) == True{}: Bool}
+) -> {Tip.get(~mach, ~d, s, Tip.logged(t, Trees.Edit.root(e)), k) == Some{x}: Maybe<&2, List<&2, U32>>}:
+  Outs.fin.of(
+    ~mach,
+    ~d,
+    s,
+    t,
+    k,
+    x,
+    e,
+    Hist.write(mach, d)(lr)(s)(Tip.log(t))(k)(Some{x})(e)(ep)(Keep.base_grows(~mach, ~d, s, Run{lr, t, a}, bd, ha))(
+      Ext.held(~mach, ~d, s, e, hn)
+    )
+  )
+
+# a write of a key reads as written
+def Outs.logged(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +lr: Led.L(mach, d),
+  +t: Tip,
+  +a: List<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  p: Maybe<&2, Trees.Edit>,
+  ep: {Tree.put(~mach, ~d, lr, Tip.log(t), k, Some{x}) == p: Maybe<&2, Trees.Edit>},
+  bd: Keep.Base(mach, d, s, Run{lr, t, a})
+) -> Keep.Out(mach, d, s, k, x, Run.logged(~mach, ~d, lr, t, a, p)):
+  match p:
+    case None{}:
+      Unit{}
+    case Some{+e}:
+      +hh => Outs.fin(
+        ~mach,
+        ~d,
+        s,
+        lr,
+        t,
+        a,
+        k,
+        x,
+        e,
+        ep,
+        bd,
+        Ext.holds_left(~mach, ~d, s, Trees.Edit.nodes(e), a)(hh),
+        Ext.holds_right(~mach, ~d, s, Trees.Edit.nodes(e), a)(hh)
+      )
+
+# Run.add.at reads as written
+def Outs.add.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  r: Run<Led.L(mach, d)>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>,
+  bd: Keep.Base(mach, d, s, r)
+) -> Keep.Out(mach, d, s, k, x, Run.add.at(~mach, ~d, r, k, x, m)):
+  match r m:
+    case Run{+lr, +t, +a} Some{None{}}:
+      Outs.logged(~mach, ~d, s, lr, t, a, k, x, Tree.put(~mach, ~d, lr, Tip.log(t), k, Some{x}), {==}, bd)
+    case y Some{Some{old}}:
+      Unit{}
+    case y None{}:
+      Unit{}
+
+# Run.add reads as written
+def Outs.add(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  bd: Keep.Base(mach, d, s, r)
+) -> Keep.Out(mach, d, s, k, x, Run.add(~mach, ~d, r, k, x)):
+  Outs.add.at(
+    ~mach,
+    ~d,
+    s,
+    r,
+    k,
+    x,
+    Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), k),
+    bd
+  )
+
+# a refusal gives an outcome
+def Outs.stale(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Step.stale(~mach, ~d, r, i, a)):
+  Outs.of_keep(
+    mach,
+    d,
+    s,
+    i,
+    Out.code(Out.Stale{a}, []),
+    Outs.code(Out.Stale{a}),
+    Step.stale(~mach, ~d, r, i, a),
+    Outs.add(~mach, ~d, s, r, Log.out(i), Out.code(Out.Stale{a}, []), bd)
+  )
+
+# taking a request gives an outcome
+def Outs.taken.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +n: U32,
+  +vs: Maybe<&2, List<&2, String>>,
+  +bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Step.taken.at(~mach, ~d, r, i, a, n, vs)):
+  Outs.of_keep(
+    mach,
+    d,
+    s,
+    i,
+    Out.code(Out.Taken{a, n}, []),
+    Outs.code(Out.Taken{a, n}),
+    Step.taken.at(~mach, ~d, r, i, a, n, vs),
+    Keep.bind(
+      ~mach,
+      ~d,
+      s,
+      Log.out(i),
+      Out.code(Out.Taken{a, n}, []),
+      r,
+      Run.add(~mach, ~d, r, Log.out(i), Out.code(Out.Taken{a, n}, [])),
+      +r1 => Maybe.bind(
+        &2,
+        Run<Led.L(mach, d)>,
+        Run<Led.L(mach, d)>,
+        Run.add(
+          ~mach,
+          ~d,
+          r1,
+          Log.taken(n),
+          Taken.code(Taken{i, Tip.content(Run.tip(Led.L(mach, d), r1))}, [])
+        ),
+        r2 => Some{Run.next(Led.L(mach, d), r2, vs)}
+      ),
+      Outs.add(~mach, ~d, s, r, Log.out(i), Out.code(Out.Taken{a, n}, []), bd),
+      Ext.add(~mach, ~d, s, r, Log.out(i), Out.code(Out.Taken{a, n}, [])),
+      bd,
+      +r1 => +bd1 => kh1 => Keep.bind(
+        ~mach,
+        ~d,
+        s,
+        Log.out(i),
+        Out.code(Out.Taken{a, n}, []),
+        r1,
+        Run.add(
+          ~mach,
+          ~d,
+          r1,
+          Log.taken(n),
+          Taken.code(Taken{i, Tip.content(Run.tip(Led.L(mach, d), r1))}, [])
+        ),
+        r2 => Some{Run.next(Led.L(mach, d), r2, vs)},
+        Keep.add(
+          ~mach,
+          ~d,
+          s,
+          Log.out(i),
+          Out.code(Out.Taken{a, n}, []),
+          r1,
+          Log.taken(n),
+          Taken.code(Taken{i, Tip.content(Run.tip(Led.L(mach, d), r1))}, []),
+          bd1,
+          kh1
+        ),
+        Ext.add(
+          ~mach,
+          ~d,
+          s,
+          r1,
+          Log.taken(n),
+          Taken.code(Taken{i, Tip.content(Run.tip(Led.L(mach, d), r1))}, [])
+        ),
+        bd1,
+        r2 => bd2 => kh2 => Keep.step_next(~mach, ~d, s, Log.out(i), Out.code(Out.Taken{a, n}, []), r2, vs, kh2)
+      )
+    )
+  )
+
+# taking a request as the next number gives an outcome
+def Outs.taken(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +vs: Maybe<&2, List<&2, String>>,
+  bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Step.taken(~mach, ~d, r, i, a, vs)):
+  Outs.taken.at(~mach, ~d, s, r, i, a, Tip.count(Run.tip(Led.L(mach, d), r)), vs, bd)
+
+# a run then a step that gives an outcome gives an outcome
+def Outs.bind(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  -i: Ledgers.Id,
+  +r: Run<Led.L(mach, d)>,
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  -g: Run<Led.L(mach, d)> -> Maybe<&2, Run<Led.L(mach, d)>>,
+  gm: Ext.GainM(mach, d, s, r, m),
+  bd: Keep.Base(mach, d, s, r),
+  hg: @r1: Run<Led.L(mach, d)> -> Keep.Base(mach, d, s, r1) -> Outs.Res(mach, d, s, i, g(r1))
+) -> Outs.Res(mach, d, s, i, Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, m, g)):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{+r1}:
+      hg(r1)(Keep.base(~mach, ~d, s, r, r1, bd, gm))
+
+# a label on a taken request gives an outcome
+def Outs.labelled(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +m: String,
+  v: Maybe<&2, Taken>,
+  +bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Step.labelled(~mach, ~d, r, i, a, m, v)):
+  match v:
+    case None{}:
+      Unit{}
+    case Some{+x}:
+      Outs.bind(
+        ~mach,
+        ~d,
+        s,
+        i,
+        r,
+        Run.add(~mach, ~d, r, Log.label(m), Ledgers.Id.code(Taken.id(x), [])),
+        r2 => Step.taken(~mach, ~d, r2, i, a, None{}),
+        Ext.add(~mach, ~d, s, r, Log.label(m), Ledgers.Id.code(Taken.id(x), [])),
+        bd,
+        +r2 => bd2 => Outs.taken(~mach, ~d, s, r2, i, a, None{}, bd2)
+      )
+
+# Step.label.at gives an outcome
+def Outs.label.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +m: String,
+  k: Maybe<&2, Maybe<&2, Ledgers.Id>>,
+  +bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Step.label.at(~mach, ~d, r, i, a, m, k)):
+  match k:
+    case None{}:
+      Unit{}
+    case Some{Some{x}}:
+      Outs.stale(~mach, ~d, s, r, i, a, bd)
+    case Some{None{}}:
+      Shared.Bool.when_cases(
+        Maybe<&2, Run<Led.L(mach, d)>>,
+        z => Outs.Res(mach, d, s, i, z),
+        U32.is_eq(Tip.count(Run.tip(Led.L(mach, d), r)), 0),
+        u => Step.stale(~mach, ~d, r, i, a),
+        u => Step.labelled(
+          ~mach,
+          ~d,
+          r,
+          i,
+          a,
+          m,
+          Tip.taken(
+            ~mach,
+            ~d,
+            Run.ledger(Led.L(mach, d), r),
+            Run.tip(Led.L(mach, d), r),
+            U32.sub(Tip.count(Run.tip(Led.L(mach, d), r)), 1)
+          )
+        ),
+        e => Outs.stale(~mach, ~d, s, r, i, a, bd),
+        e => Outs.labelled(
+          ~mach,
+          ~d,
+          s,
+          r,
+          i,
+          a,
+          m,
+          Tip.taken(
+            ~mach,
+            ~d,
+            Run.ledger(Led.L(mach, d), r),
+            Run.tip(Led.L(mach, d), r),
+            U32.sub(Tip.count(Run.tip(Led.L(mach, d), r)), 1)
+          ),
+          bd
+        )
+      )
+
+# a request for a label gives an outcome
+def Outs.label(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +m: String,
+  bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Step.label(~mach, ~d, r, i, a, m)):
+  Outs.label.at(
+    ~mach,
+    ~d,
+    s,
+    r,
+    i,
+    a,
+    m,
+    Tip.known(
+      ~Ledgers.Id,
+      ~Ledgers.Id.code,
+      ~Ledgers.Id.code.read,
+      Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), Log.label(m))
+    ),
+    bd
+  )
+
+# opening a sub line gives an outcome
+def Outs.opens(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +b: String,
+  +t: Tip,
+  +ns: List<&2, List<&2, U32>>,
+  +bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Step.opens(~mach, ~d, r, i, a, b, t, ns)):
+  +r0 = Run.over(~mach, ~d, r, Tip.code(t, []) <> ns, Tip.content(Run.tip(Led.L(mach, d), r)))
+  Outs.bind(
+    ~mach,
+    ~d,
+    s,
+    i,
+    r,
+    Run.add(~mach, ~d, r0, Log.start(b), Hashes.Hash.code(Tip.hash(t), [])),
+    r2 => Step.taken(~mach, ~d, r2, i, a, None{}),
+    Ext.transM(
+      ~mach,
+      ~d,
+      s,
+      r,
+      r0,
+      Run.add(~mach, ~d, r0, Log.start(b), Hashes.Hash.code(Tip.hash(t), [])),
+      Ext.over(~mach, ~d, s, r, Tip.code(t, []) <> ns, Tip.content(Run.tip(Led.L(mach, d), r))),
+      Ext.add(~mach, ~d, s, r0, Log.start(b), Hashes.Hash.code(Tip.hash(t), []))
+    ),
+    bd,
+    +r2 => bd2 => Outs.taken(~mach, ~d, s, r2, i, a, None{}, bd2)
+  )
+
+# an act of a kernel gives an outcome
+def Outs.act(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  m: Maybe<&2, Act>,
+  +bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Act.run(~mach, ~d, r, i, a, m)):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{Act.Stale{}}:
+      Outs.stale(~mach, ~d, s, r, i, a, bd)
+    case Some{Act.Label{x}}:
+      Outs.label(~mach, ~d, s, r, i, a, x, bd)
+    case Some{Act.Taken{+vs, +h, +ns}}:
+      Outs.taken(
+        ~mach,
+        ~d,
+        s,
+        Run.over(~mach, ~d, r, ns, h),
+        i,
+        a,
+        vs,
+        Keep.base(~mach, ~d, s, r, Run.over(~mach, ~d, r, ns, h), bd, Ext.over(~mach, ~d, s, r, ns, h))
+      )
+    case Some{Act.Opens{b, t, ns}}:
+      Outs.opens(~mach, ~d, s, r, i, a, b, t, ns, bd)
+
+# a request whose outcome the log holds keeps it, once its code is read (dm)
+def Outs.found(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +q: Machine.Q(mach),
+  +w: List<&2, U32>,
+  dm: Maybe<&2, Out>,
+  edm: {Codes.Code.whole.of(~Out, ~Out.code, ~Out.code.read, Some{w}) == dm: Maybe<&2, Out>},
+  +em: {
+    Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), Log.out(i))
+      == Some{Some{w}}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  },
+  +bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Step.fresh(~mach, ~d, ~kern, r, c, i, a, q, Some{dm})):
+  match dm:
+    case Some{x}:
+      Tuple{
+        w,
+        Tuple{
+          %Equal.sym(
+            Maybe<&2, Out>,
+            Codes.Code.whole.of(~Out, ~Out.code, ~Out.code.read, Some{w}),
+            Some{x},
+            edm
+          ): {Maybe.is_some(&2, Out, _) == True{}: Bool}
+          {==},
+          +hh => Keep.found_back(
+            Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(s)(Tip.log(Run.tip(Led.L(mach, d), r)))(Log.out(i)),
+            w,
+            Hist.find(
+              ~mach,
+              ~d,
+              Run.ledger(Led.L(mach, d), r),
+              s,
+              Tip.log(Run.tip(Led.L(mach, d), r)),
+              Log.out(i),
+              Some{w},
+              Keep.base_grows(~mach, ~d, s, r, bd, hh)
+            )(em)
+          )
+        }
+      }
+    case None{}:
+      Outs.act(
+        ~mach,
+        ~d,
+        s,
+        r,
+        i,
+        a,
+        Kernel.change(mach, d, kern)(Run.ledger(Led.L(mach, d), r))(Run.tip(Led.L(mach, d), r))(c)(i)(q),
+        bd
+      )
+
+# a request gives an outcome, once the read of its outcome is known (fm)
+def Outs.fresh(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +q: Machine.Q(mach),
+  fm: Maybe<&2, Maybe<&2, List<&2, U32>>>,
+  em: {
+    Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), Log.out(i))
+      == fm: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  },
+  +bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Step.fresh(~mach, ~d, ~kern, r, c, i, a, q, Tip.known(~Out, ~Out.code, ~Out.code.read, fm))):
+  match fm:
+    case None{}:
+      Unit{}
+    case Some{None{}}:
+      Outs.act(
+        ~mach,
+        ~d,
+        s,
+        r,
+        i,
+        a,
+        Kernel.change(mach, d, kern)(Run.ledger(Led.L(mach, d), r))(Run.tip(Led.L(mach, d), r))(c)(i)(q),
+        bd
+      )
+    case Some{Some{+w}}:
+      Outs.found(
+        ~mach,
+        ~d,
+        ~kern,
+        s,
+        r,
+        c,
+        i,
+        a,
+        q,
+        w,
+        Codes.Code.whole.of(~Out, ~Out.code, ~Out.code.read, Some{w}),
+        {==},
+        em,
+        bd
+      )
+
+# the request whose entry is known gives an outcome
+def Outs.one(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +c: Ledgers.Line,
+  +a: Hashes.Hash,
+  +i: Ledgers.Id,
+  +time: String,
+  +q: Machine.Q(mach),
+  eg: {
+    Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), r), Ledgers.Name.Ask{a})
+      == Some{Ledgers.Entry.Ask{i, time, q}}: Maybe<&2, Entry(mach)>
+  },
+  +bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Step.one(~mach, ~d, ~kern, r, c, a)):
+  %Equal.sym(
+    Maybe<&2, Entry(mach)>,
+    Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), r), Ledgers.Name.Ask{a}),
+    Some{Ledgers.Entry.Ask{i, time, q}},
+    eg
+  ): Outs.Res(mach, d, s, i, Step.asked(~mach, ~d, ~kern, r, c, a, _))
+  Outs.fresh(
+    ~mach,
+    ~d,
+    ~kern,
+    s,
+    r,
+    c,
+    i,
+    a,
+    q,
+    Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), Log.out(i)),
+    {==},
+    bd
+  )
+
+# before the request a runs: s reads the run m, and its ledger holds the
+# entry of a
+def Outs.Pre(
+  -mach: Machine(),
+  -d: Led(mach),
+  -s: Led.L(mach, d),
+  -a: Hashes.Hash,
+  -e: Entry(mach),
+  m: Maybe<&2, Run<Led.L(mach, d)>>
+) -> Data:
+  match m:
+    case None{}:
+      Unit
+    case Some{r}:
+      +Sigma<
+        Keep.Base(mach, d, s, r),
+        x => {Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), r), Ledgers.Name.Ask{a}) == Some{e}: Maybe<&2, Entry(mach)>}>
+
+# after the request of the ID i ran: s reads the run m, and its outcome
+def Outs.All(
+  -mach: Machine(),
+  -d: Led(mach),
+  -s: Led.L(mach, d),
+  -i: Ledgers.Id,
+  m: Maybe<&2, Run<Led.L(mach, d)>>
+) -> Type:
+  match m:
+    case None{}:
+      Unit
+    case Some{r}:
+      Keep.Base(mach, d, s, r) & Outs.Has(mach, d, s, i, r)
+
+# the entry that the ledger of a run holds, a run that follows it holds
+def Outs.get_gain(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  -s: Led.L(mach, d),
+  +a: Hashes.Hash,
+  +e: Entry(mach),
+  +r: Run<Led.L(mach, d)>,
+  -r2: Run<Led.L(mach, d)>,
+  g: Ext.Gain(mach, d, s, r, r2),
+  eg: {Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), r), Ledgers.Name.Ask{a}) == Some{e}: Maybe<&2, Entry(mach)>}
+) -> {Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), r2), Ledgers.Name.Ask{a}) == Some{e}: Maybe<&2, Entry(mach)>}:
+  match g:
+    case Tuple{ys, Tuple{+zs, Tuple{a1, Tuple{l1, h1}}}}:
+      %Equal.sym(
+        Led.L(mach, d),
+        Run.ledger(Led.L(mach, d), r2),
+        Led.puts(~mach, ~d, zs, Run.ledger(Led.L(mach, d), r)),
+        l1
+      ): {Led.get(~mach, ~d, _, Ledgers.Name.Ask{a}) == Some{e}: Maybe<&2, Entry(mach)>}
+      Hist.gets(
+        ~mach,
+        ~d,
+        Run.ledger(Led.L(mach, d), r),
+        Led.puts(~mach, ~d, zs, Run.ledger(Led.L(mach, d), r)),
+        Hist.puts(~mach, ~d, zs, Run.ledger(Led.L(mach, d), r))
+      )(Ledgers.Name.Ask{a})(e)(eg)
+
+# Outs.Pre of a run m2 that follows r
+def Outs.pre_pair(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +a: Hashes.Hash,
+  +e: Entry(mach),
+  +r: Run<Led.L(mach, d)>,
+  m2: Maybe<&2, Run<Led.L(mach, d)>>,
+  +gm: Ext.GainM(mach, d, s, r, m2),
+  +bd: Keep.Base(mach, d, s, r),
+  +eg: {Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), r), Ledgers.Name.Ask{a}) == Some{e}: Maybe<&2, Entry(mach)>}
+) -> Outs.Pre(mach, d, s, a, e, m2):
+  match m2:
+    case None{}:
+      Unit{}
+    case Some{+r2}:
+      Tuple{Keep.base(~mach, ~d, s, r, r2, bd, gm), Outs.get_gain(~mach, ~d, s, a, e, r, r2, gm, eg)}
+
+# Outs.Pre after one more request
+def Outs.pre_step(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +s: Led.L(mach, d),
+  +a: Hashes.Hash,
+  +e: Entry(mach),
+  +c: Ledgers.Line,
+  +q: Hashes.Hash,
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  st: Outs.Pre(mach, d, s, a, e, m)
+) -> Outs.Pre(
+  mach,
+  d,
+  s,
+  a,
+  e,
+  Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, m, x => Step.one(~mach, ~d, ~kern, x, c, q))
+):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{+r}:
+      match st:
+        case Tuple{+bd, +eg}:
+          Outs.pre_pair(
+            ~mach,
+            ~d,
+            s,
+            a,
+            e,
+            r,
+            Step.one(~mach, ~d, ~kern, r, c, q),
+            Ext.one(~mach, ~d, ~kern, s, r, c, q),
+            bd,
+            eg
+          )
+
+# Outs.All of a run m2 that follows r
+def Outs.mid_pair(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  -i: Ledgers.Id,
+  +r: Run<Led.L(mach, d)>,
+  m2: Maybe<&2, Run<Led.L(mach, d)>>,
+  res: Outs.Res(mach, d, s, i, m2),
+  gm: Ext.GainM(mach, d, s, r, m2),
+  bd: Keep.Base(mach, d, s, r)
+) -> Outs.All(mach, d, s, i, m2):
+  match m2:
+    case None{}:
+      Unit{}
+    case Some{+r2}:
+      Tuple{Keep.base(~mach, ~d, s, r, r2, bd, gm), res}
+
+# the request a gives its outcome
+def Outs.mid(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +s: Led.L(mach, d),
+  +a: Hashes.Hash,
+  +i: Ledgers.Id,
+  +time: String,
+  +q: Machine.Q(mach),
+  +c: Ledgers.Line,
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  st: Outs.Pre(mach, d, s, a, Ledgers.Entry.Ask{i, time, q}, m)
+) -> Outs.All(
+  mach,
+  d,
+  s,
+  i,
+  Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, m, x => Step.one(~mach, ~d, ~kern, x, c, a))
+):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{+r}:
+      match st:
+        case Tuple{+bd, eg}:
+          Outs.mid_pair(
+            ~mach,
+            ~d,
+            s,
+            i,
+            r,
+            Step.one(~mach, ~d, ~kern, r, c, a),
+            Outs.one(~mach, ~d, ~kern, s, r, c, a, i, time, q, eg, bd),
+            Ext.one(~mach, ~d, ~kern, s, r, c, a),
+            bd
+          )
+
+# the outcome stays through the rest of the requests
+def Outs.post(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +s: Led.L(mach, d),
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +c: Ledgers.Line,
+  +rest: List<&2, Hashes.Hash>,
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  st: Outs.All(mach, d, s, i, m)
+) -> Outs.Res(mach, d, s, i, Step.all(~mach, ~d, ~kern, c, rest, m)):
+  match m:
+    case None{}:
+      Outs.of_keep(
+        mach,
+        d,
+        s,
+        i,
+        Out.code(Out.Stale{a}, []),
+        Outs.code(Out.Stale{a}),
+        Step.all(~mach, ~d, ~kern, c, rest, None{}),
+        Keep.all(~mach, ~d, ~kern, s, Log.out(i), Out.code(Out.Stale{a}, []), c, rest, None{}, Unit{})
+      )
+    case Some{+r1}:
+      match st:
+        case Tuple{+bd, oh}:
+          match oh:
+            case Tuple{+v, Tuple{dv, kh}}:
+              Outs.of_keep(
+                mach,
+                d,
+                s,
+                i,
+                v,
+                dv,
+                Step.all(~mach, ~d, ~kern, c, rest, Some{r1}),
+                Keep.all(~mach, ~d, ~kern, s, Log.out(i), v, c, rest, Some{r1}, Tuple{bd, kh})
+              )
+
+# a step whose requests include a gives a its outcome
+def Outs.all(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +s: Led.L(mach, d),
+  +a: Hashes.Hash,
+  +i: Ledgers.Id,
+  +time: String,
+  +q: Machine.Q(mach),
+  +c: Ledgers.Line,
+  qs: List<&2, Hashes.Hash>,
+  +m: Maybe<&2, Run<Led.L(mach, d)>>,
+  +st: Outs.Pre(mach, d, s, a, Ledgers.Entry.Ask{i, time, q}, m)
+) -> {List.contains(~Hashes.Hash, ~Hashes.Hash.is_eq, qs, a) == True{}: Bool}
+  -> Outs.Res(mach, d, s, i, Step.all(~mach, ~d, ~kern, c, qs, m)):
+  match qs:
+    case Nil{}:
+      h => Empty.absurd(Outs.Res(mach, d, s, i, Step.all(~mach, ~d, ~kern, c, [], m)), Shared.Bool.false_ne_true(h))
+    case Con{+x, +rest}:
+      h => Ext.any_cases(
+        Hashes.Hash.is_eq(x, a),
+        u => List.contains(~Hashes.Hash, ~Hashes.Hash.is_eq, rest, a),
+        Outs.Res(mach, d, s, i, Step.all(~mach, ~d, ~kern, c, x <> rest, m)),
+        hx =>
+          %Equal.sym(Hashes.Hash, x, a, Hashes.Hash.is_eq_sound(x, a)(hx)): Outs.Res(
+            mach,
+            d,
+            s,
+            i,
+            Step.all(
+              ~mach,
+              ~d,
+              ~kern,
+              c,
+              rest,
+              Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, m, y => Step.one(~mach, ~d, ~kern, y, c, _))
+            )
+          )
+          Outs.post(
+            ~mach,
+            ~d,
+            ~kern,
+            s,
+            i,
+            a,
+            c,
+            rest,
+            Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, m, y => Step.one(~mach, ~d, ~kern, y, c, a)),
+            Outs.mid(~mach, ~d, ~kern, s, a, i, time, q, c, m, st)
+          ),
+        hr => Outs.all(
+          ~mach,
+          ~d,
+          ~kern,
+          s,
+          a,
+          i,
+          time,
+          q,
+          c,
+          rest,
+          Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, m, y => Step.one(~mach, ~d, ~kern, y, c, x)),
+          Outs.pre_step(~mach, ~d, ~kern, s, a, Ledgers.Entry.Ask{i, time, q}, c, x, m, st)
+        )(hr),
+        h
+      )
+
+# the outcome that the log of a run reads, once s holds what it added
+def Outs.final.has(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +i: Ledgers.Id,
+  +r: Run<Led.L(mach, d)>,
+  res: Outs.Has(mach, d, s, i, r)
+) -> {Ext.holds(~mach, ~d, s, Run.added(Led.L(mach, d), r)) == True{}: Bool}
+  -> {Maybe.is_some(&2, Out, Tip.out(~mach, ~d, s, Run.tip(Led.L(mach, d), r), i)) == True{}: Bool}:
+  match res:
+    case Tuple{+v, Tuple{dv, kh}}:
+      hh =>
+        %Equal.sym(
+          Maybe<&2, List<&2, U32>>,
+          Tip.get(~mach, ~d, s, Run.tip(Led.L(mach, d), r), Log.out(i)),
+          Some{v},
+          kh(hh)
+        ): {Maybe.is_some(&2, Out, Codes.Code.whole.of(~Out, ~Out.code, ~Out.code.read, _)) == True{}: Bool}
+        dv
+
+# the outcome of the run that a step gave
+def Outs.final(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +i: Ledgers.Id,
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  +r: Run<Led.L(mach, d)>,
+  res: Outs.Res(mach, d, s, i, m)
+) -> {m == Some{r}: Maybe<&2, Run<Led.L(mach, d)>>}
+  -> {Ext.holds(~mach, ~d, s, Run.added(Led.L(mach, d), r)) == True{}: Bool}
+  -> {Maybe.is_some(&2, Out, Tip.out(~mach, ~d, s, Run.tip(Led.L(mach, d), r), i)) == True{}: Bool}:
+  match m:
+    case None{}:
+      e => Empty.absurd(
+        {Ext.holds(~mach, ~d, s, Run.added(Led.L(mach, d), r)) == True{}: Bool}
+          -> {Maybe.is_some(&2, Out, Tip.out(~mach, ~d, s, Run.tip(Led.L(mach, d), r), i)) == True{}: Bool},
+        Shared.Maybe.none_ne_some(Run<Led.L(mach, d)>, r, e)
+      )
+    case Some{+r2}:
+      e =>
+        %Shared.Maybe.some_inj(Run<Led.L(mach, d)>, r2, r, e): {
+          Ext.holds(~mach, ~d, s, Run.added(Led.L(mach, d), _)) == True{}: Bool
+        }
+          -> {Maybe.is_some(&2, Out, Tip.out(~mach, ~d, s, Run.tip(Led.L(mach, d), _), i)) == True{}: Bool}
+        Outs.final.has(~mach, ~d, s, i, r2, res)
+
+# the start of a run that ends at r2, which the ledger of r reads, when r2 is r
+def Outs.base0.of(
+  -mach: Machine(),
+  -d: Led(mach),
+  +l: Led.L(mach, d),
+  -t: Tip,
+  r2: Run<Led.L(mach, d)>,
+  -r: Run<Led.L(mach, d)>,
+  g: Ext.Gain(mach, d, Run.ledger(Led.L(mach, d), r), Run{l, t, []}, r2),
+  er: {r2 == r: Run<Led.L(mach, d)>}
+) -> Keep.Base(mach, d, Run.ledger(Led.L(mach, d), r), Run{l, t, []}):
+  match g:
+    case Tuple{ys, Tuple{+zs, Tuple{a1, Tuple{l1, h1}}}}:
+      Tuple{
+        [],
+        Tuple{
+          l,
+          Tuple{
+            zs,
+            Tuple{
+              {==},
+              Tuple{
+                Equal.trans(
+                  Led.L(mach, d),
+                  Run.ledger(Led.L(mach, d), r),
+                  Run.ledger(Led.L(mach, d), r2),
+                  Led.puts(~mach, ~d, zs, l),
+                  Equal.cong(
+                    Run<Led.L(mach, d)>,
+                    Led.L(mach, d),
+                    z => Run.ledger(Led.L(mach, d), z),
+                    r,
+                    r2,
+                    Equal.sym(Run<Led.L(mach, d)>, r2, r, er)
+                  ),
+                  l1
+                ),
+                {==}
+              }
+            }
+          }
+        }
+      }
+
+# the start of a run that ends at r, which the ledger of r reads, once the
+# run is known (m)
+def Outs.base0(
+  -mach: Machine(),
+  -d: Led(mach),
+  +l: Led.L(mach, d),
+  +t: Tip,
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  -r: Run<Led.L(mach, d)>,
+  gm: Ext.GainM(mach, d, Run.ledger(Led.L(mach, d), r), Run{l, t, []}, m)
+) -> {m == Some{r}: Maybe<&2, Run<Led.L(mach, d)>>}
+  -> Keep.Base(mach, d, Run.ledger(Led.L(mach, d), r), Run{l, t, []}):
+  match m:
+    case None{}:
+      e => Empty.absurd(
+        Keep.Base(mach, d, Run.ledger(Led.L(mach, d), r), Run{l, t, []}),
+        Shared.Maybe.none_ne_some(Run<Led.L(mach, d)>, r, e)
+      )
+    case Some{+r2}:
+      e => Outs.base0.of(mach, d, l, t, r2, r, gm, Shared.Maybe.some_inj(Run<Led.L(mach, d)>, r2, r, e))
+
+# Step.run_outs, with its premises
+def Outs.go(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +l: Led.L(mach, d),
+  +c: Ledgers.Line,
+  +t: Tip,
+  +qs: List<&2, Hashes.Hash>,
+  +r: Run<Led.L(mach, d)>,
+  +a: Hashes.Hash,
+  +i: Ledgers.Id,
+  +time: String,
+  +q: Machine.Q(mach),
+  +e: {Step.run(~mach, ~d, ~kern, l, c, t, qs) == Some{r}: Maybe<&2, Run<Led.L(mach, d)>>},
+  hh: {Ext.holds(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.added(Led.L(mach, d), r)) == True{}: Bool},
+  hc: {List.contains(~Hashes.Hash, ~Hashes.Hash.is_eq, qs, a) == True{}: Bool},
+  eg: {Led.get(~mach, ~d, l, Ledgers.Name.Ask{a}) == Some{Ledgers.Entry.Ask{i, time, q}}: Maybe<&2, Entry(mach)>}
+) -> {
+  Maybe.is_some(&2, Out, Tip.out(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), i)) == True{}: Bool
+}:
+  +s = Run.ledger(Led.L(mach, d), r)
+  Outs.final(
+    ~mach,
+    ~d,
+    s,
+    i,
+    Step.run(~mach, ~d, ~kern, l, c, t, qs),
+    r,
+    Outs.all(
+      ~mach,
+      ~d,
+      ~kern,
+      s,
+      a,
+      i,
+      time,
+      q,
+      c,
+      qs,
+      Some{Run{l, t, []}},
+      Tuple{
+        Outs.base0(
+          mach,
+          d,
+          l,
+          t,
+          Step.run(~mach, ~d, ~kern, l, c, t, qs),
+          r,
+          Ext.all(~mach, ~d, ~kern, s, Run{l, t, []}, c, qs, Some{Run{l, t, []}}, Ext.refl(mach, d, s, Run{l, t, []}))
+        )(e),
+        eg
+      }
+    )(hc)
+  )(e)(hh)
 
 # a step gives each of its requests an outcome: after a run whose ledger
 # holds each node that it added (as a landed step's does), the log holds an
@@ -14713,3 +15686,6 @@ law Step.run_outs:
       )
         == True{}: Bool
     }
+
+def Step.run_outs(mach, d, kern, l, c, t, qs, r, a, i, time, q):
+  e => hh => hc => eg => Outs.go(~mach, ~d, ~kern, l, c, t, qs, r, a, i, time, q, e, hh, hc, eg)

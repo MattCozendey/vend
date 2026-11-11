@@ -1,7 +1,7 @@
 import Base
 import ./shared/keyset.bend as KeySets
 import ./shared/shared/shared.bend as Shared
-import ./shared/shared/trie.bend as Tries
+import ./shared/shared/crit.bend as Crits
 
 # Regular expressions
 # -------------------
@@ -102,23 +102,23 @@ def Re.is_eq(~T: Data, ~same: T -> T -> Bool, a: Re<T>, b: Re<T>) -> Bool:
     case _ _:
       False{}
 
-# the key of r, then rest: three bits for the shape of r, then its parts
-def Re.key(~T: Data, ~key: T -> List<&2, Bool>, r: Re<T>, rest: List<&2, Bool>) -> List<&2, Bool>:
+# the key of r, then rest: a word for the shape of r, then its parts
+def Re.key(~T: Data, ~key: T -> List<&2, U32>, r: Re<T>, rest: List<&2, U32>) -> List<&2, U32>:
   match r:
     case Void{}:
-      False{} <> False{} <> False{} <> rest
+      0 <> rest
     case Eps{}:
-      False{} <> False{} <> True{} <> rest
+      1 <> rest
     case One{t}:
-      False{} <> True{} <> False{} <> List.append(&2, Bool, key(t), rest)
+      2 <> List.append(&2, U32, key(t), rest)
     case All{}:
-      False{} <> True{} <> True{} <> rest
+      3 <> rest
     case Star{x}:
-      True{} <> False{} <> False{} <> Re.key(~T, ~key, x, rest)
+      4 <> Re.key(~T, ~key, x, rest)
     case Cat{a, b}:
-      True{} <> False{} <> True{} <> Re.key(~T, ~key, a, Re.key(~T, ~key, b, rest))
+      5 <> Re.key(~T, ~key, a, Re.key(~T, ~key, b, rest))
     case Alt{a, b}:
-      True{} <> True{} <> False{} <> Re.key(~T, ~key, a, Re.key(~T, ~key, b, rest))
+      6 <> Re.key(~T, ~key, a, Re.key(~T, ~key, b, rest))
 
 # Partial derivatives
 # -------------------
@@ -160,21 +160,21 @@ def Seqs.matches(
 def Seq.is_eq(~T: Data, ~same: T -> T -> Bool, a: List<&2, Re<T>>, b: List<&2, Re<T>>) -> Bool:
   Shared.List.is_eq(~Re<T>, ~Re.is_eq(~T, ~same), a, b)
 
-# the key of s, then rest: True before each part, False after the last
+# the key of s, then rest: a 1 before each part, a 0 after the last
 def Seq.key.go(
   ~T: Data,
-  ~key: T -> List<&2, Bool>,
+  ~key: T -> List<&2, U32>,
   s: List<&2, Re<T>>,
-  rest: List<&2, Bool>
-) -> List<&2, Bool>:
+  rest: List<&2, U32>
+) -> List<&2, U32>:
   match s:
     case Nil{}:
-      False{} <> rest
+      0 <> rest
     case Con{h, t}:
-      True{} <> Re.key(~T, ~key, h, Seq.key.go(~T, ~key, t, rest))
+      1 <> Re.key(~T, ~key, h, Seq.key.go(~T, ~key, t, rest))
 
 # the key of s
-def Seq.key(~T: Data, ~key: T -> List<&2, Bool>, s: List<&2, Re<T>>) -> List<&2, Bool>:
+def Seq.key(~T: Data, ~key: T -> List<&2, U32>, s: List<&2, Re<T>>) -> List<&2, U32>:
   Seq.key.go(~T, ~key, s, [])
 
 # acc, with r in front when hit
@@ -278,7 +278,7 @@ def Seqs.step(
   ~T: Data,
   ~hit: T -> A -> Bool,
   ~same: T -> T -> Bool,
-  ~key: T -> List<&2, Bool>,
+  ~key: T -> List<&2, U32>,
   xs: List<&2, List<&2, Re<T>>>,
   c: A
 ) -> List<&2, List<&2, Re<T>>>:
@@ -287,7 +287,7 @@ def Seqs.step(
     ~Seq.is_eq(~T, ~same),
     ~Seq.key(~T, ~key),
     Seqs.step.all(~A, ~T, ~hit, xs, c),
-    Tries.Trie.new(List<&2, Re<T>>)
+    Crits.Dict.new(~List<&2, Re<T>>)
   )
 
 # the Seqs that xs becomes after the word w
@@ -296,7 +296,7 @@ def Seqs.walk(
   ~T: Data,
   ~hit: T -> A -> Bool,
   ~same: T -> T -> Bool,
-  ~key: T -> List<&2, Bool>,
+  ~key: T -> List<&2, U32>,
   w: List<&2, A>,
   xs: List<&2, List<&2, Re<T>>>
 ) -> List<&2, List<&2, Re<T>>>:
@@ -313,7 +313,7 @@ def Re.accepts(
   ~T: Data,
   ~hit: T -> A -> Bool,
   ~same: T -> T -> Bool,
-  ~key: T -> List<&2, Bool>,
+  ~key: T -> List<&2, U32>,
   w: List<&2, A>,
   r: Re<T>
 ) -> Bool:
@@ -1639,7 +1639,7 @@ law Seqs.matches_step:
   for ~T: Data
   for ~hit: T -> A -> Bool
   for ~same: T -> T -> Bool
-  for ~key: T -> List<&2, Bool>
+  for ~key: T -> List<&2, U32>
   for ~laws: Shared.Eq.Laws(T, same)
   for +xs: List<&2, List<&2, Re<T>>>
   for +c: A
@@ -1681,7 +1681,7 @@ def Seqs.walk_matches(
   ~T: Data,
   ~hit: T -> A -> Bool,
   ~same: T -> T -> Bool,
-  ~key: T -> List<&2, Bool>,
+  ~key: T -> List<&2, U32>,
   ~laws: Shared.Eq.Laws(T, same),
   w: List<&2, A>,
   +xs: List<&2, List<&2, Re<T>>>
@@ -1719,7 +1719,7 @@ law Re.accepts_matches:
   for ~T: Data
   for ~hit: T -> A -> Bool
   for ~same: T -> T -> Bool
-  for ~key: T -> List<&2, Bool>
+  for ~key: T -> List<&2, U32>
   for ~laws: Shared.Eq.Laws(T, same)
   for +w: List<&2, A>
   for +r: Re<T>
@@ -2089,7 +2089,7 @@ law Seqs.step_alike:
   for ~V: Data
   for ~hit: T -> A -> Bool
   for ~same: T -> T -> Bool
-  for ~key: T -> List<&2, Bool>
+  for ~key: T -> List<&2, U32>
   for ~p: V -> T -> Bool
   for ~near: V -> A -> A -> Bool
   for ~alike: @g: V -> @c: A -> @f: A -> @t: T -> {
@@ -2125,7 +2125,7 @@ def Seqs.step_alike(aty, tty, vty, hit, same, key, p, near, alike, xs, g, c, f):
       ~Seq.is_eq(~tty, ~same),
       ~Seq.key(~tty, ~key),
       l,
-      Tries.Trie.new(List<&2, Re<tty>>)
+      Crits.Dict.new(~List<&2, Re<tty>>)
     ),
     Seqs.step.all(~aty, ~tty, ~hit, xs, c),
     Seqs.step.all(~aty, ~tty, ~hit, xs, f),

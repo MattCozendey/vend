@@ -11,7 +11,7 @@ import ../../shared/shared/shared/shared/code.bend as Codes
 import ../../shared/shared/shared/shared/hash.bend as Hashes
 import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../../shared/shared/shared/shared/side.bend as Sides
-import ../../shared/shared/shared/shared/trie.bend as Tries
+import ../../shared/shared/shared/shared/crit.bend as Crits
 import ../../shared/shared/shared/text.bend as Texts
 import ../../shared/shared/tree.bend as Trees
 import ../shared/requests.bend as Requests
@@ -1075,15 +1075,15 @@ def Groups.of(xs: List<&2, Trees.Binding>) -> List<&2, Group>:
       Shared.Maybe.cons(Group, Group.read(x), Groups.of(rest))
 
 # the key of the node n in the graph of members
-def Node.key(n: String) -> List<&2, Bool>:
-  False{} <> Tries.Trie.text(n)
+def Node.key(n: String) -> List<&2, U32>:
+  0 <> Codes.Code.text(n, [])
 
 # the key of the group g in the graph of members
-def Group.key(g: String) -> List<&2, Bool>:
-  True{} <> Tries.Trie.text(g)
+def Group.key(g: String) -> List<&2, U32>:
+  1 <> Codes.Code.text(g, [])
 
 # the key of each of the members ms
-def Members.keys(ms: List<&2, Requests.Member>) -> List<&2, List<&2, Bool>>:
+def Members.keys(ms: List<&2, Requests.Member>) -> List<&2, List<&2, U32>>:
   match ms:
     case Nil{}:
       []
@@ -1119,16 +1119,16 @@ def Groups.nodes(gs: List<&2, Group>) -> List<&2, String>:
       Members.nodes(ms, Groups.nodes(rest))
 
 # the nodes of ns that the set reach holds
-def Nodes.inside(ns: List<&2, String>, +reach: Tries.Trie<Unit>) -> List<&2, String>:
+def Nodes.inside(ns: List<&2, String>, +reach: Crits.Dict(Unit)) -> List<&2, String>:
   match ns:
     case Nil{}:
       []
     case Con{+n, rest}:
-      List.filter.put(String, n, Nodes.inside(rest, reach), Tries.Trie.has(Unit, reach, Node.key(n)))
+      List.filter.put(String, n, Nodes.inside(rest, reach), Crits.Dict.has(Unit, reach, Node.key(n)))
 
 # what the group g reaches among the groups gs: each member, and each member
 # of one, at any depth
-def Group.reach(+gs: List<&2, Group>, g: String) -> Tries.Trie<Unit>:
+def Group.reach(+gs: List<&2, Group>, g: String) -> Crits.Dict(Unit):
   Reaches.Graph.reach(Groups.graph(gs, Reaches.Graph.new()), Group.key(g))
 
 # the nodes of the group g among the groups gs, each once
@@ -1136,9 +1136,9 @@ def Group.nodes.of(+gs: List<&2, Group>, g: String) -> List<&2, String>:
   KeySets.KeySet.unique(
     ~String,
     ~String.eq,
-    ~Tries.Trie.text,
+    ~(t => Codes.Code.text(t, [])),
     Nodes.inside(Groups.nodes(gs), Group.reach(gs, g)),
-    Tries.Trie.new(String)
+    Crits.Dict.new(~String)
   )
 
 # the groups of the tree whose root is h
@@ -1164,7 +1164,7 @@ def Group.act.of(~d: Led(), l: L(d), +g: String, p: Maybe<&2, Trees.Edit>) -> Ma
         Groups.in(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(x), l), Trees.Edit.root(x)),
         gs => Shared.Bool.when(
           Maybe<&2, Replicas.Act>,
-          Tries.Trie.has(Unit, Group.reach(gs, g), Group.key(g)),
+          Crits.Dict.has(Unit, Group.reach(gs, g), Group.key(g)),
           u => Some{Replicas.Act.Stale{}},
           u => Act.put(None{}, [], Some{x})
         )
@@ -2133,11 +2133,11 @@ def Res.imports(
   )
 
 # the key of the resource n in the graph of imports
-def Name.key(n: Resources.Name) -> List<&2, Bool>:
-  Tries.Trie.text(Resources.Name.show(n))
+def Name.key(n: Resources.Name) -> List<&2, U32>:
+  Resources.Name.code(n, [])
 
 # the key of each of the resources ns
-def Names.keys(ns: List<&2, Resources.Name>) -> List<&2, List<&2, Bool>>:
+def Names.keys(ns: List<&2, Resources.Name>) -> List<&2, List<&2, U32>>:
   match ns:
     case Nil{}:
       []
@@ -2192,7 +2192,7 @@ def Uses.reaches(
         Tree.resources(~d, l, h),
         ns => Uses.graph(~d, l, view, h, ns, Reaches.Graph.new())
       ),
-      g => Some{Tries.Trie.has(Unit, Reaches.Graph.reach(g, Name.key(used)), Name.key(changed))}
+      g => Some{Crits.Dict.has(Unit, Reaches.Graph.reach(g, Name.key(used)), Name.key(changed))}
     )
   )
 
@@ -2471,7 +2471,7 @@ def Touches.of(
   +c: Resources.Name,
   +b: Branch,
   used: List<&2, Resources.Name>,
-  +reach: Tries.Trie<Unit>
+  +reach: Crits.Dict(Unit)
 ) -> List<&2, Touch>:
   match used:
     case Nil{}:
@@ -2482,7 +2482,7 @@ def Touches.of(
         Touch{from, v, c, b, u},
         Touches.of(from, v, c, b, rest, reach),
         List.any.if(
-          w => Tries.Trie.has(Unit, reach, Name.key(u)),
+          w => Crits.Dict.has(Unit, reach, Name.key(u)),
           Resources.Name.is_eq(u, c)
         )
       )
@@ -2901,14 +2901,14 @@ def Node.notices(~d: Led(), ~kern: Kern(d), +l: L(d), x: Topic) -> Maybe<&2, Lis
 # A resource is mounted to one branch at a time: to mount it to another is a
 # checkout, and to mount another resource to another branch is a worktree
 def Mounts() -> Data:
-  Tries.Trie<Branch>
+  Crits.Dict(Branch)
 
 # a node may stop: it is forced to, or no resource is mounted and no writer
 # is connected
-def Node.may_stop(mounts: Mounts(), writers: Tries.Trie<Unit>, force: Bool) -> Bool:
+def Node.may_stop(mounts: Mounts(), writers: Crits.Dict(Unit), force: Bool) -> Bool:
   Bool.or(
     force,
-    Bool.and(Tries.Trie.is_tip(Branch, mounts), Tries.Trie.is_tip(Unit, writers))
+    Bool.and(Crits.Dict.is_empty(Branch, mounts), Crits.Dict.is_empty(Unit, writers))
   )
 
 # the change that records what a resource held when it is mounted: a write
@@ -3086,6 +3086,566 @@ def Kernel(-d: Led()) -> Type:
 # Laws
 # ----
 
+# Answer.merged follows itself: a clash that is open or shut after the merge k
+# gives Conflicted or Written, and both may follow each other
+def Answer.merged_follows.at(
+  p: Bool,
+  p2: Bool,
+  +k: Ledgers.Id
+) -> {
+  Answer.follows(
+    Shared.Bool.when(Answer, p, u => Answer.Conflicted{k}, u => Answer.Written{}),
+    Some{Shared.Bool.when(Answer, p2, u => Answer.Conflicted{k}, u => Answer.Written{})}
+  )
+    == True{}: Bool
+}:
+  match p p2:
+    case True{} True{}:
+      Ledgers.Id.is_eq_refl(k)
+    case True{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case False{} False{}:
+      {==}
+
+# Answer.merged follows itself once the reads of the clashes (m, m2) are
+# known: a read that told, tells in the next
+def Answer.merged_follows.of(
+  m: Maybe<&2, Bool>,
+  m2: Maybe<&2, Bool>,
+  +k: Ledgers.Id,
+  kn: {Maybe.is_some(&2, Bool, m) == True{}: Bool} -> {Maybe.is_some(&2, Bool, m2) == True{}: Bool}
+) -> {Answer.follows(Answer.merged.of(m, k), Some{Answer.merged.of(m2, k)}) == True{}: Bool}:
+  match m m2:
+    case None{} y:
+      {==}
+    case Some{p} None{}:
+      Empty.absurd(
+        {Answer.follows(Answer.merged.of(Some{p}, k), Some{Answer.merged.of(None{}, k)}) == True{}: Bool},
+        Shared.Bool.false_ne_true(kn({==}))
+      )
+    case Some{+p} Some{+p2}:
+      Answer.merged_follows.at(p, p2, k)
+
+# that a read of the clashes of a merge that told in the first ledger and tree
+# tells in the second
+def Answer.Known(~d: Led(), l: L(d), h: Maybe<&2, Hashes.Hash>, l2: L(d), h2: Maybe<&2, Hashes.Hash>) -> Type:
+  @k: Ledgers.Id -> {Maybe.is_some(&2, Bool, Clash.left(~d, l, h, k)) == True{}: Bool} -> {
+    Maybe.is_some(&2, Bool, Clash.left(~d, l2, h2, k)) == True{}: Bool
+  }
+
+# Answer.merged follows itself at another ledger and tree
+def Answer.merged_follows(
+  ~d: Led(),
+  l: L(d),
+  l2: L(d),
+  h: Maybe<&2, Hashes.Hash>,
+  h2: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  kn: Answer.Known(~d, l, h, l2, h2)
+) -> {Answer.follows(Answer.merged(~d, l, h, k), Some{Answer.merged(~d, l2, h2, k)}) == True{}: Bool}:
+  Answer.merged_follows.of(Clash.left(~d, l, h, k), Clash.left(~d, l2, h2, k), k, kn(k))
+
+# Answer.taken follows itself at another ledger and tree: the merge that a
+# change names is its own
+def Answer.taken_follows(
+  ~d: Led(),
+  l: L(d),
+  l2: L(d),
+  h: Maybe<&2, Hashes.Hash>,
+  h2: Maybe<&2, Hashes.Hash>,
+  +i: Ledgers.Id,
+  +q: Requests.Ask,
+  kn: Answer.Known(~d, l, h, l2, h2)
+) -> {Answer.follows(Answer.taken(~d, l, h, i, q), Some{Answer.taken(~d, l2, h2, i, q)}) == True{}: Bool}:
+  match q:
+    case Requests.Ask.Start{os}:
+      {==}
+    case Requests.Ask.On{st, b, Requests.Change.Branch{n, at}}:
+      {==}
+    case Requests.Ask.On{st, b, Requests.Change.Group{n, ms}}:
+      {==}
+    case Requests.Ask.On{st, b, Requests.Change.Own{g, at, os}}:
+      {==}
+    case Requests.Ask.On{st, b, Requests.Change.Write{n, base, x}}:
+      {==}
+    case Requests.Ask.On{st, b, Requests.Change.Resolve{k, n, x}}:
+      Answer.merged_follows(~d, l, l2, h, h2, k, kn)
+    case Requests.Ask.On{st, b, Requests.Change.Merge{v, base}}:
+      Answer.merged_follows(~d, l, l2, h, h2, i, kn)
+    case Requests.Ask.On{st, b, Requests.Change.Move{v}}:
+      {==}
+    case Requests.Ask.On{st, b, Requests.Change.Mark{m, text}}:
+      {==}
+    case Requests.Ask.On{st, b, Requests.Change.Key{n, k}}:
+      {==}
+
+# Answer.out follows itself once it is known whether the entry of the outcome
+# is the request (p): Stale and Refused are final
+def Answer.out_follows.stale(
+  +p: Bool
+) -> {
+  Answer.follows(
+    Shared.Bool.when(Answer, p, u => Answer.Stale{}, u => Answer.Refused{}),
+    Some{Shared.Bool.when(Answer, p, u => Answer.Stale{}, u => Answer.Refused{})}
+  )
+    == True{}: Bool
+}:
+  match p:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# Answer.out follows itself for a taken outcome once it is known whether the
+# entry of the outcome is the request (p)
+def Answer.out_follows.taken(
+  ~d: Led(),
+  l: L(d),
+  l2: L(d),
+  h: Maybe<&2, Hashes.Hash>,
+  h2: Maybe<&2, Hashes.Hash>,
+  +i: Ledgers.Id,
+  +q: Requests.Ask,
+  +p: Bool,
+  kn: Answer.Known(~d, l, h, l2, h2)
+) -> {
+  Answer.follows(
+    Shared.Bool.when(Answer, p, u => Answer.taken(~d, l, h, i, q), u => Answer.Refused{}),
+    Some{Shared.Bool.when(Answer, p, u => Answer.taken(~d, l2, h2, i, q), u => Answer.Refused{})}
+  )
+    == True{}: Bool
+}:
+  match p:
+    case True{}:
+      Answer.taken_follows(~d, l, l2, h, h2, i, q, kn)
+    case False{}:
+      {==}
+
+# Answer.out follows itself for one outcome, at another ledger and tip: a
+# request that has an outcome keeps its answer, but for the clash of a merge
+def Answer.out_follows(
+  ~d: Led(),
+  l: L(d),
+  l2: L(d),
+  t: Replicas.Tip,
+  t2: Replicas.Tip,
+  +i: Ledgers.Id,
+  +q: Requests.Ask,
+  +a: Hashes.Hash,
+  o: Maybe<&2, Replicas.Out>,
+  kn: Answer.Known(~d, l, Replicas.Tip.content(t), l2, Replicas.Tip.content(t2))
+) -> {
+  Answer.follows(Answer.out(~d, l, t, i, q, a, o), Some{Answer.out(~d, l2, t2, i, q, a, o)}) == True{}: Bool
+}:
+  match o:
+    case None{}:
+      {==}
+    case Some{Replicas.Out.Stale{x}}:
+      Answer.out_follows.stale(Hashes.Hash.is_eq(x, a))
+    case Some{Replicas.Out.Taken{x, n}}:
+      Answer.out_follows.taken(
+        ~d,
+        l,
+        l2,
+        Replicas.Tip.content(t),
+        Replicas.Tip.content(t2),
+        i,
+        q,
+        Hashes.Hash.is_eq(x, a),
+        kn
+      )
+
+# Answer.at follows itself once the outcome is read from two words (g1 at the
+# first tip, g2 at the second) and g2 holds what g1 does
+def Answer.at_follows.words(
+  ~d: Led(),
+  l: L(d),
+  l2: L(d),
+  t: Replicas.Tip,
+  t2: Replicas.Tip,
+  +i: Ledgers.Id,
+  +q: Requests.Ask,
+  +a: Hashes.Hash,
+  g1: Maybe<&2, List<&2, U32>>,
+  g2: Maybe<&2, List<&2, U32>>,
+  keep: @ws: List<&2, U32> -> {g1 == Some{ws}: Maybe<&2, List<&2, U32>>} -> {g2 == Some{ws}: Maybe<&2, List<&2, U32>>},
+  kn: Answer.Known(~d, l, Replicas.Tip.content(t), l2, Replicas.Tip.content(t2))
+) -> {
+  Answer.follows(
+    Answer.out(~d, l, t, i, q, a, Codes.Code.whole.of(~Replicas.Out, ~Replicas.Out.code, ~Replicas.Out.code.read, g1)),
+    Some{
+      Answer.out(~d, l2, t2, i, q, a, Codes.Code.whole.of(~Replicas.Out, ~Replicas.Out.code, ~Replicas.Out.code.read, g2))
+    }
+  )
+    == True{}: Bool
+}:
+  match g1:
+    case None{}:
+      {==}
+    case Some{+ws}:
+      %Equal.sym(Maybe<&2, List<&2, U32>>, g2, Some{ws}, keep(ws)({==})): {
+        Answer.follows(
+          Answer.out(~d, l, t, i, q, a, Codes.Code.whole.of(~Replicas.Out, ~Replicas.Out.code, ~Replicas.Out.code.read, Some{ws})),
+          Some{
+            Answer.out(~d, l2, t2, i, q, a, Codes.Code.whole.of(~Replicas.Out, ~Replicas.Out.code, ~Replicas.Out.code.read, _))
+          }
+        )
+          == True{}: Bool
+      }
+      Answer.out_follows(~d, l, l2, t, t2, i, q, a, Codes.Code.whole.of(~Replicas.Out, ~Replicas.Out.code, ~Replicas.Out.code.read, Some{ws}), kn)
+
+# Answer.at follows Pending: no outcome words are read at the first tip
+def Answer.at_follows.pending(
+  ~d: Led(),
+  l: L(d),
+  t: Replicas.Tip,
+  +i: Ledgers.Id,
+  +q: Requests.Ask,
+  +a: Hashes.Hash,
+  g1: Maybe<&2, List<&2, U32>>,
+  none: @ws: List<&2, U32> -> {g1 == Some{ws}: Maybe<&2, List<&2, U32>>} -> Empty
+) -> {
+  Answer.follows(
+    Answer.out(~d, l, t, i, q, a, Codes.Code.whole.of(~Replicas.Out, ~Replicas.Out.code, ~Replicas.Out.code.read, g1)),
+    Some{Answer.Pending{}}
+  )
+    == True{}: Bool
+}:
+  match g1:
+    case None{}:
+      {==}
+    case Some{ws}:
+      Empty.absurd(
+        {
+          Answer.follows(
+            Answer.out(~d, l, t, i, q, a, Codes.Code.whole.of(~Replicas.Out, ~Replicas.Out.code, ~Replicas.Out.code.read, Some{ws})),
+            Some{Answer.Pending{}}
+          )
+            == True{}: Bool
+        },
+        none(ws)({==})
+      )
+
+# Answer.at follows itself from a tip t of the first ledger, once the words
+# that t holds for the outcome of i are held by the tip m2 of the second
+def Answer.at_follows.tip(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +t: Replicas.Tip,
+  +m2: Maybe<&2, Replicas.Tip>,
+  +i: Ledgers.Id,
+  +q: Requests.Ask,
+  +h: Hashes.Hash,
+  keep: @ws: List<&2, U32> -> {
+    Replicas.Tip.get(~Requests.Ask.machine(), ~d, a, t, Replicas.Log.out(i)) == Some{ws}: Maybe<&2, List<&2, U32>>
+  } -> {
+    Maybe.bind(
+      &2,
+      Replicas.Tip,
+      List<&2, U32>,
+      m2,
+      t2 => Replicas.Tip.get(~Requests.Ask.machine(), ~d, b, t2, Replicas.Log.out(i))
+    )
+      == Some{ws}: Maybe<&2, List<&2, U32>>
+  },
+  kn: @t2: Replicas.Tip -> {m2 == Some{t2}: Maybe<&2, Replicas.Tip>} -> Answer.Known(
+    ~d,
+    a,
+    Replicas.Tip.content(t),
+    b,
+    Replicas.Tip.content(t2)
+  )
+) -> {Answer.follows(Answer.at(~d, a, i, q, h, Some{t}), Some{Answer.at(~d, b, i, q, h, m2)}) == True{}: Bool}:
+  match m2:
+    case None{}:
+      Answer.at_follows.pending(
+        ~d,
+        a,
+        t,
+        i,
+        q,
+        h,
+        Replicas.Tip.get(~Requests.Ask.machine(), ~d, a, t, Replicas.Log.out(i)),
+        ws => e => Shared.Maybe.none_ne_some(List<&2, U32>, ws, keep(ws)(e))
+      )
+    case Some{+t2}:
+      Answer.at_follows.words(
+        ~d,
+        a,
+        b,
+        t,
+        t2,
+        i,
+        q,
+        h,
+        Replicas.Tip.get(~Requests.Ask.machine(), ~d, a, t, Replicas.Log.out(i)),
+        Replicas.Tip.get(~Requests.Ask.machine(), ~d, b, t2, Replicas.Log.out(i)),
+        keep,
+        kn(t2)({==})
+      )
+
+# what Replicas.Line.get_grows says of the ledger d and the kernel kern: what
+# the log of a line holds under a key, it holds for good
+def Answer.Stays(~d: Led(), ~kern: Kern(d)) -> Type:
+  @c: Ledgers.Line -> @key: List<&2, U32> -> Shared.Read.Stable(
+    L(d),
+    a => b => Replicas.Led.Later(~Requests.Ask.machine(), ~d, a, b),
+    List<&2, U32>,
+    l => Replicas.Line.get(~Requests.Ask.machine(), ~d, ~kern, l, c, key)
+  )
+
+# the log of the head of the line c holds, at a later ledger, what it holds
+# under the key of the outcome of i (Answer.Stays)
+def Answer.at_follows.keep(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +a: L(d),
+  +b: L(d),
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +t: Replicas.Tip,
+  +m2: Maybe<&2, Replicas.Tip>,
+  g: Replicas.Led.Later(~Requests.Ask.machine(), ~d, a, b),
+  stays: Answer.Stays(~d, ~kern),
+  e1: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c) == Some{t}: Maybe<&2, Replicas.Tip>},
+  e2: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c) == m2: Maybe<&2, Replicas.Tip>},
+  +ws: List<&2, U32>,
+  hw: {Replicas.Tip.get(~Requests.Ask.machine(), ~d, a, t, Replicas.Log.out(i)) == Some{ws}: Maybe<&2, List<&2, U32>>}
+) -> {
+  Maybe.bind(
+    &2,
+    Replicas.Tip,
+    List<&2, U32>,
+    m2,
+    t2 => Replicas.Tip.get(~Requests.Ask.machine(), ~d, b, t2, Replicas.Log.out(i))
+  )
+    == Some{ws}: Maybe<&2, List<&2, U32>>
+}:
+  %e2: {
+    Maybe.bind(
+      &2,
+      Replicas.Tip,
+      List<&2, U32>,
+      _,
+      t2 => Replicas.Tip.get(~Requests.Ask.machine(), ~d, b, t2, Replicas.Log.out(i))
+    )
+      == Some{ws}: Maybe<&2, List<&2, U32>>
+  }
+  stays(c)(Replicas.Log.out(i))(a)(b)(ws)(g)(
+    %Equal.sym(
+      Maybe<&2, Replicas.Tip>,
+      Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c),
+      Some{t},
+      e1
+    ): {
+      Maybe.bind(
+        &2,
+        Replicas.Tip,
+        List<&2, U32>,
+        _,
+        t2 => Replicas.Tip.get(~Requests.Ask.machine(), ~d, a, t2, Replicas.Log.out(i))
+      )
+        == Some{ws}: Maybe<&2, List<&2, U32>>
+    }
+    hw
+  )
+
+# Answer.at follows itself at the heads m1 and m2 of the line c, in two
+# ledgers where the second is a later state of the first
+def Answer.at_follows.head(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +a: L(d),
+  +b: L(d),
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +q: Requests.Ask,
+  +h: Hashes.Hash,
+  g: Replicas.Led.Later(~Requests.Ask.machine(), ~d, a, b),
+  stays: Answer.Stays(~d, ~kern),
+  m1: Maybe<&2, Replicas.Tip>,
+  +m2: Maybe<&2, Replicas.Tip>,
+  +e1: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c) == m1: Maybe<&2, Replicas.Tip>},
+  +e2: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c) == m2: Maybe<&2, Replicas.Tip>},
+  kn: @t: Replicas.Tip -> @t2: Replicas.Tip -> {m1 == Some{t}: Maybe<&2, Replicas.Tip>} -> {
+    m2 == Some{t2}: Maybe<&2, Replicas.Tip>
+  } -> Answer.Known(~d, a, Replicas.Tip.content(t), b, Replicas.Tip.content(t2))
+) -> {Answer.follows(Answer.at(~d, a, i, q, h, m1), Some{Answer.at(~d, b, i, q, h, m2)}) == True{}: Bool}:
+  match m1:
+    case None{}:
+      {==}
+    case Some{+t}:
+      Answer.at_follows.tip(
+        ~d,
+        a,
+        b,
+        t,
+        m2,
+        i,
+        q,
+        h,
+        ws => hw => Answer.at_follows.keep(~d, ~kern, a, b, c, i, t, m2, g, stays, e1, e2, ws, hw),
+        t2 => e2x => kn(t)(t2)({==})(e2x)
+      )
+
+# Answer.of follows itself in a later state of the ledger
+def Answer.of_follows(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +a: L(d),
+  +b: L(d),
+  +i: Ledgers.Id,
+  +q: Requests.Ask,
+  +h: Hashes.Hash,
+  g: Replicas.Led.Later(~Requests.Ask.machine(), ~d, a, b),
+  stays: Answer.Stays(~d, ~kern),
+  w: Replicas.Arrival,
+  kn: @c: Ledgers.Line -> @t: Replicas.Tip -> @t2: Replicas.Tip -> {
+    Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c) == Some{t}: Maybe<&2, Replicas.Tip>
+  } -> {
+    Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c) == Some{t2}: Maybe<&2, Replicas.Tip>
+  } -> Answer.Known(~d, a, Replicas.Tip.content(t), b, Replicas.Tip.content(t2))
+) -> {Answer.follows(Answer.of(~d, ~kern, a, i, q, h, w), Some{Answer.of(~d, ~kern, b, i, q, h, w)}) == True{}: Bool}:
+  match w:
+    case Replicas.Arrival.Starts{vs}:
+      {==}
+    case Replicas.Arrival.Waits{+c}:
+      Answer.at_follows.head(
+        ~d,
+        ~kern,
+        a,
+        b,
+        c,
+        i,
+        q,
+        h,
+        g,
+        stays,
+        Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c),
+        Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c),
+        {==},
+        {==},
+        t => t2 => e1 => e2 => kn(c)(t)(t2)(e1)(e2)
+      )
+
+# an entry that a holds is held by b, when b holds what a held under its name
+def Answer.has_grows.at(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  ma: Maybe<&2, A>,
+  mb: Maybe<&2, A>,
+  +e: A,
+  keep: @x: A -> {ma == Some{x}: Maybe<&2, A>} -> {mb == Some{x}: Maybe<&2, A>}
+) -> {Shared.Maybe.is_eq(~A, ~same, ma, Some{e}) == True{}: Bool}
+  -> {Shared.Maybe.is_eq(~A, ~same, mb, Some{e}) == True{}: Bool}:
+  match ma:
+    case None{}:
+      h => Empty.absurd({Shared.Maybe.is_eq(~A, ~same, mb, Some{e}) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+    case Some{+x}:
+      h =>
+        %Equal.sym(Maybe<&2, A>, mb, Some{x}, keep(x)({==})): {Shared.Maybe.is_eq(~A, ~same, _, Some{e}) == True{}: Bool}
+        h
+
+# a ledger that grows holds each entry that it held
+def Answer.has_grows(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +e: Ledgers.Entry<Requests.Ask>,
+  grows: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Replicas.Led.has(~Requests.Ask.machine(), ~d, a, e) == True{}: Bool}
+  -> {Replicas.Led.has(~Requests.Ask.machine(), ~d, b, e) == True{}: Bool}:
+  Answer.has_grows.at(
+    ~Ledgers.Entry<Requests.Ask>,
+    ~Ledgers.Entry.same(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine())),
+    Replicas.Led.get(~Requests.Ask.machine(), ~d, a, Replicas.Entry.name(~Requests.Ask.machine(), e)),
+    Replicas.Led.get(~Requests.Ask.machine(), ~d, b, Replicas.Entry.name(~Requests.Ask.machine(), e)),
+    e,
+    x => hx => grows(Replicas.Entry.name(~Requests.Ask.machine(), e))(x)(hx)
+  )
+
+# Node.answer follows itself once it is known whether each ledger holds the
+# request (pa, pb), and the answers that they give (A1, A2) follow
+def Node.answer_follows.when(
+  +pa: Bool,
+  +pb: Bool,
+  +A1: Answer,
+  +A2: Answer,
+  +x: Answer,
+  keep: {pa == True{}: Bool} -> {pb == True{}: Bool},
+  step: {Answer.follows(A1, Some{A2}) == True{}: Bool},
+  e: {Shared.Maybe.when(Answer, pa, u => Some{A1}) == Some{x}: Maybe<&2, Answer>}
+) -> {Answer.follows(x, Shared.Maybe.when(Answer, pb, u => Some{A2})) == True{}: Bool}:
+  match pa pb:
+    case True{} True{}:
+      %Shared.Maybe.some_inj(Answer, A1, x, e): {Answer.follows(_, Some{A2}) == True{}: Bool}
+      step
+    case True{} False{}:
+      Empty.absurd({Answer.follows(x, None{}) == True{}: Bool}, Shared.Bool.false_ne_true(keep({==})))
+    case False{} y:
+      Empty.absurd(
+        {Answer.follows(x, Shared.Maybe.when(Answer, y, u => Some{A2})) == True{}: Bool},
+        Shared.Maybe.none_ne_some(Answer, x, e)
+      )
+
+# Node.answer_follows for the ledgers a and b, once Line.get_grows is known
+def Node.answer_follows.go(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +a: L(d),
+  +b: L(d),
+  +i: Ledgers.Id,
+  +time: String,
+  +q: Requests.Ask,
+  +x: Answer,
+  +g: Replicas.Led.Later(~Requests.Ask.machine(), ~d, a, b),
+  stays: Answer.Stays(~d, ~kern),
+  e: {Node.answer(~d, ~kern, a, i, time, q) == Some{x}: Maybe<&2, Answer>},
+  kn: @c: Ledgers.Line -> @t: Replicas.Tip -> @t2: Replicas.Tip -> {
+    Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c) == Some{t}: Maybe<&2, Replicas.Tip>
+  } -> {
+    Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c) == Some{t2}: Maybe<&2, Replicas.Tip>
+  } -> Answer.Known(~d, a, Replicas.Tip.content(t), b, Replicas.Tip.content(t2))
+) -> {Answer.follows(x, Node.answer(~d, ~kern, b, i, time, q)) == True{}: Bool}:
+  Node.answer_follows.when(
+    Replicas.Led.has(~Requests.Ask.machine(), ~d, a, Ledgers.Entry.Ask{i, time, q}),
+    Replicas.Led.has(~Requests.Ask.machine(), ~d, b, Ledgers.Entry.Ask{i, time, q}),
+    Answer.of(~d, ~kern, a, i, q, Ledgers.Name.hash(Replicas.Entry.name(~Requests.Ask.machine(), Ledgers.Entry.Ask{i, time, q})), Requests.Ask.arrival(q)),
+    Answer.of(~d, ~kern, b, i, q, Ledgers.Name.hash(Replicas.Entry.name(~Requests.Ask.machine(), Ledgers.Entry.Ask{i, time, q})), Requests.Ask.arrival(q)),
+    x,
+    Answer.has_grows(~d, a, b, Ledgers.Entry.Ask{i, time, q}, Replicas.Led.later_grows(~Requests.Ask.machine(), ~d, a, b)(g)),
+    Answer.of_follows(
+      ~d,
+      ~kern,
+      a,
+      b,
+      i,
+      q,
+      Ledgers.Name.hash(Replicas.Entry.name(~Requests.Ask.machine(), Ledgers.Entry.Ask{i, time, q})),
+      g,
+      stays,
+      Requests.Ask.arrival(q),
+      kn
+    ),
+    e
+  )
+
+# the owners of a line keep each part of what they decide: the ledger holds
+# the whole of the content of the newest tip of each line, its nodes and the
+# format and the bytes of each of its resources
+law Node.head_kept:
+  for ~d: Led()
+  for ~kern: Kern(d)
+  for ~rules: Kernel.Rules(d, kern)
+  for l: L(d)
+  for c: Ledgers.Line
+  for t: Replicas.Tip
+  {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, l, c) == Some{t}: Maybe<&2, Replicas.Tip>}
+    -> {Tree.kept(~d, l, Replicas.Tip.content(t)) == True{}: Bool}
+
 # answers only move forward: as the ledger grows, and while its ballots are
 # honest, a request that a node answers stays answered; Stale and Refused are
 # final; a taken change stays taken (Answer.follows)
@@ -3102,6 +3662,1674 @@ law Node.answer_follows:
     Answer,
     x => m => {Answer.follows(x, m) == True{}: Bool},
     l => Node.answer(~d, ~kern, l, i, time, q)
+  )
+
+
+# Merging, one tree at a time
+# ---------------------------
+# Lemmas for the two laws below. They read the ledger d only by its laws: a
+# write changes its key and no other, and what a taken act writes reads back.
+
+# both A and B, as Data: a proof of it may be used as often as a proof needs
+def Merge.And(-A: Data, -B: Data) -> Data:
+  Sigma<&2, &2, A, _ => B>
+
+# the nodes ns2 are the nodes ns, then others
+def Merge.Nodes(-ns: List<&2, List<&2, U32>>, -ns2: List<&2, List<&2, U32>>) -> Data:
+  Sigma<&2, &2, List<&2, List<&2, U32>>, ex => {ns2 == List.append(&2, List<&2, U32>, ns, ex): List<&2, List<&2, U32>>}>
+
+# the add law of the laws of a ledger
+def Merge.get_add.of(
+  -Q: Data,
+  -c: Codes.Codec(Q),
+  -k: Ledgers.Ledger.Kind(Q),
+  laws: Ledgers.Ledger.Laws(Q, c, k)
+) -> Ledgers.Laws.GetAdd(Q, c, k):
+  match laws:
+    case Tuple{ge, Tuple{ga, rest}}:
+      ga
+
+# a ledger with one more entry holds what it held, and the entry when its name
+# was free
+def Merge.get_add(~d: Led()) -> Ledgers.Laws.GetAdd(
+  Requests.Ask,
+  Replicas.Machine.code(Requests.Ask.machine()),
+  Replicas.Led.kind(Requests.Ask.machine(), d)
+):
+  Merge.get_add.of(
+    Requests.Ask,
+    Replicas.Machine.code(Requests.Ask.machine()),
+    Replicas.Led.kind(Requests.Ask.machine(), d),
+    Replicas.Led.laws(Requests.Ask.machine(), d)
+  )
+
+# the entry e, when it is under the name n
+def Merge.new_entry(~d: Led(), +e: Ledgers.Entry<Requests.Ask>, n: Ledgers.Name) -> Maybe<&2, Ledgers.Entry<Requests.Ask>>:
+  Shared.Maybe.when(
+    Ledgers.Entry<Requests.Ask>,
+    Ledgers.Name.is_eq(Ledgers.Entry.name(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine()), e), n),
+    u => Some{e}
+  )
+
+# what a read finds first, it finds before what comes after
+def Merge.or_keeps(
+  -A: Data,
+  a: Maybe<&2, A>,
+  b: Maybe<&2, A>,
+  x: A,
+  e: {a == Some{x}: Maybe<&2, A>}
+) -> {Maybe.or(&2, A, a, b) == Some{x}: Maybe<&2, A>}:
+  %Equal.sym(Maybe<&2, A>, a, Some{x}, e): {Maybe.or(&2, A, _, b) == Some{x}: Maybe<&2, A>}
+  {==}
+
+# a ledger with one more entry holds each entry that it held
+def Merge.add_grows(
+  ~d: Led(),
+  +l: L(d),
+  +e: Ledgers.Entry<Requests.Ask>
+) -> Replicas.Led.Grows(Requests.Ask.machine(), d, l, Replicas.Led.add(~Requests.Ask.machine(), ~d, l, e)):
+  +n => +e2 => h => Equal.trans(
+    Maybe<&2, Ledgers.Entry<Requests.Ask>>,
+    Replicas.Led.get(~Requests.Ask.machine(), ~d, Replicas.Led.add(~Requests.Ask.machine(), ~d, l, e), n),
+    Maybe.or(
+      &2,
+      Ledgers.Entry<Requests.Ask>,
+      Replicas.Led.get(~Requests.Ask.machine(), ~d, l, n),
+      Merge.new_entry(~d, e, n)
+    ),
+    Some{e2},
+    Merge.get_add(~d)(l)(e)(n),
+    Merge.or_keeps(
+      Ledgers.Entry<Requests.Ask>,
+      Replicas.Led.get(~Requests.Ask.machine(), ~d, l, n),
+      Merge.new_entry(~d, e, n),
+      e2,
+      h
+    )
+  )
+
+# a ledger grows from itself
+def Merge.grows_refl(~d: Led(), +a: L(d)) -> Replicas.Led.Grows(Requests.Ask.machine(), d, a, a):
+  n => e => h => h
+
+# a ledger that grows from a ledger that grows from a grows from a
+def Merge.grows_trans(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +c: L(d),
+  g1: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  g2: Replicas.Led.Grows(Requests.Ask.machine(), d, b, c)
+) -> Replicas.Led.Grows(Requests.Ask.machine(), d, a, c):
+  +n => +e => h => g2(n)(e)(g1(n)(e)(h))
+
+# a ledger grows by each list of data that it gets
+def Merge.puts_grows(
+  ~d: Led(),
+  ns: List<&2, List<&2, U32>>,
+  +l: L(d)
+) -> Replicas.Led.Grows(Requests.Ask.machine(), d, l, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l)):
+  match ns:
+    case Nil{}:
+      Merge.grows_refl(~d, l)
+    case Con{+ws, +rest}:
+      Merge.grows_trans(
+        ~d,
+        l,
+        Replicas.Led.add(~Requests.Ask.machine(), ~d, l, Ledgers.Entry.Data{ws}),
+        Replicas.Led.puts(~Requests.Ask.machine(), ~d, rest, Replicas.Led.add(~Requests.Ask.machine(), ~d, l, Ledgers.Entry.Data{ws})),
+        Merge.add_grows(~d, l, Ledgers.Entry.Data{ws}),
+        Merge.puts_grows(~d, rest, Replicas.Led.add(~Requests.Ask.machine(), ~d, l, Ledgers.Entry.Data{ws}))
+      )
+
+# a ledger that gets some data, then some more, is a ledger that gets both
+def Merge.puts_append(
+  ~d: Led(),
+  as: List<&2, List<&2, U32>>,
+  +bs: List<&2, List<&2, U32>>,
+  +l: L(d)
+) -> {
+  Replicas.Led.puts(~Requests.Ask.machine(), ~d, List.append(&2, List<&2, U32>, as, bs), l)
+    == Replicas.Led.puts(~Requests.Ask.machine(), ~d, bs, Replicas.Led.puts(~Requests.Ask.machine(), ~d, as, l)): L(d)
+}:
+  match as:
+    case Nil{}:
+      {==}
+    case Con{+ws, rest}:
+      Merge.puts_append(~d, rest, bs, Replicas.Led.add(~Requests.Ask.machine(), ~d, l, Ledgers.Entry.Data{ws}))
+
+# a depot that holds the words x gives them under their hash
+def Merge.holds_fetch.has(
+  ~d: Led(),
+  +s: L(d),
+  +x: List<&2, U32>
+) -> {
+  Depots.Depot.has(~L(d), ~(s2 => y => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s2, y)), s, x) == True{}: Bool
+} -> {Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, Hashes.Sha.hash(x)) == Some{x}: Maybe<&2, List<&2, U32>>}:
+  h => Shared.Maybe.is_eq_sound(
+    ~List<&2, U32>,
+    ~Shared.List.is_eq(~U32, ~U32.is_eq),
+    xs => ys => Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), xs, ys),
+    Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, Hashes.Sha.hash(x)),
+    Some{x}
+  )(h)
+
+# Merge.holds_fetch for the first words x of the list, once the checks are known
+def Merge.holds_fetch.cons(
+  ~d: Led(),
+  +s: L(d),
+  +x: List<&2, U32>,
+  rest: List<&2, List<&2, U32>>,
+  +w: List<&2, U32>,
+  +q: Bool,
+  +p: Bool,
+  hq: {
+    Depots.Depot.has(~L(d), ~(s2 => y => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s2, y)), s, x) == q: Bool
+  },
+  hp: {Shared.List.is_eq(~U32, ~U32.is_eq, x, w) == p: Bool},
+  h: {
+    List.all.if(
+      u => Depots.Depot.holds(~L(d), ~(s2 => y => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s2, y)), s, rest),
+      q
+    )
+      == True{}: Bool
+  },
+  c: {
+    List.any.if(
+      u => List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), rest, w),
+      p
+    )
+      == True{}: Bool
+  },
+  ih: {
+    Depots.Depot.holds(~L(d), ~(s2 => y => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s2, y)), s, rest) == True{}: Bool
+  } -> {
+    List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), rest, w) == True{}: Bool
+  } -> {Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, Hashes.Sha.hash(w)) == Some{w}: Maybe<&2, List<&2, U32>>}
+) -> {Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, Hashes.Sha.hash(w)) == Some{w}: Maybe<&2, List<&2, U32>>}:
+  match q p:
+    case True{} True{}:
+      %Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), x, w)(hp): {
+        Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, Hashes.Sha.hash(_)) == Some{_}: Maybe<&2, List<&2, U32>>
+      }
+      Merge.holds_fetch.has(~d, s, x)(hq)
+    case True{} False{}:
+      ih(h)(c)
+    case False{} y:
+      Empty.absurd(
+        {Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, Hashes.Sha.hash(w)) == Some{w}: Maybe<&2, List<&2, U32>>},
+        Shared.Bool.false_ne_true(h)
+      )
+
+# a depot that holds each of some words gives each of them under its hash
+def Merge.holds_fetch(
+  ~d: Led(),
+  +s: L(d),
+  ns: List<&2, List<&2, U32>>,
+  +w: List<&2, U32>
+) -> {
+  Depots.Depot.holds(~L(d), ~(s2 => y => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s2, y)), s, ns) == True{}: Bool
+} -> {
+  List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), ns, w) == True{}: Bool
+} -> {Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, Hashes.Sha.hash(w)) == Some{w}: Maybe<&2, List<&2, U32>>}:
+  match ns:
+    case Nil{}:
+      h => c => Empty.absurd(
+        {Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, Hashes.Sha.hash(w)) == Some{w}: Maybe<&2, List<&2, U32>>},
+        Shared.Bool.false_ne_true(c)
+      )
+    case Con{+x, +rest}:
+      h => c => Merge.holds_fetch.cons(
+        ~d,
+        s,
+        x,
+        rest,
+        w,
+        Depots.Depot.has(~L(d), ~(s2 => y => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s2, y)), s, x),
+        Shared.List.is_eq(~U32, ~U32.is_eq, x, w),
+        {==},
+        {==},
+        h,
+        c,
+        Merge.holds_fetch(~d, s, rest, w)
+      )
+
+# what a read of a tree could tell, it tells in each ledger that grows
+def Merge.final(d: Led()) -> Trees.Laws.Final(
+  L(d),
+  a => b => Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  Replicas.Led.tree(Requests.Ask.machine(), d)
+):
+  match d:
+    case Tuple{x, Tuple{o, Tuple{fin, rest}}}:
+      fin
+
+# a write changes its key and no other, in a ledger that holds its nodes
+def Merge.write(d: Led()) -> Trees.Laws.Write(
+  L(d),
+  Ledgers.Kind.data(Requests.Ask, Replicas.Led.kind(Requests.Ask.machine(), d)),
+  a => b => Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  Replicas.Led.tree(Requests.Ask.machine(), d)
+):
+  match d:
+    case Tuple{x, Tuple{o, Tuple{fin, Tuple{pf, Tuple{wr, rest}}}}}:
+      wr
+
+# the ledger of the work w
+def Merge.ledger(~d: Led(), w: Work<L(d)>) -> L(d):
+  match w:
+    case Work{l, h, ns}:
+      l
+
+# the tree of the work w
+def Merge.root(~d: Led(), w: Work<L(d)>) -> Maybe<&2, Hashes.Hash>:
+  match w:
+    case Work{l, h, ns}:
+      h
+
+# the nodes that the work w added
+def Merge.nodes(~d: Led(), w: Work<L(d)>) -> List<&2, List<&2, U32>>:
+  match w:
+    case Work{l, h, ns}:
+      ns
+
+# no nodes are no more nodes
+def Merge.nodes_refl(+ns: List<&2, List<&2, U32>>) -> Merge.Nodes(ns, ns):
+  (
+    [],
+    Equal.sym(
+      List<&2, List<&2, U32>>,
+      List.append(&2, List<&2, U32>, ns, []),
+      ns,
+      Shared.List.append_nil(List<&2, U32>, ns)
+    )
+  )
+
+# the nodes after the nodes after a are the nodes after a
+def Merge.nodes_trans(
+  +a: List<&2, List<&2, U32>>,
+  +b: List<&2, List<&2, U32>>,
+  +c: List<&2, List<&2, U32>>,
+  x: Merge.Nodes(a, b),
+  y: Merge.Nodes(b, c)
+) -> Merge.Nodes(a, c):
+  (+ex1, p1) = x
+  (+ex2, p2) = y
+  (
+    List.append(&2, List<&2, U32>, ex1, ex2),
+    %Shared.List.append_assoc(List<&2, U32>, a, ex1, ex2): {c == _: List<&2, List<&2, U32>>}
+    %p1: {c == List.append(&2, List<&2, U32>, _, ex2): List<&2, List<&2, U32>>}
+    p2
+  )
+
+# the nodes after a and the nodes ne are nodes after a
+def Merge.nodes_drop(
+  +a: List<&2, List<&2, U32>>,
+  +ne: List<&2, List<&2, U32>>,
+  +N: List<&2, List<&2, U32>>,
+  nd: Merge.Nodes(List.append(&2, List<&2, U32>, a, ne), N)
+) -> Merge.Nodes(a, N):
+  (+ex, pe) = nd
+  (
+    List.append(&2, List<&2, U32>, ne, ex),
+    %Shared.List.append_assoc(List<&2, U32>, a, ne, ex): {N == _: List<&2, List<&2, U32>>}
+    pe
+  )
+
+# the nodes after a are those after b, when a is b
+def Merge.nodes_cast(
+  +a: List<&2, List<&2, U32>>,
+  +a2: List<&2, List<&2, U32>>,
+  +N: List<&2, List<&2, U32>>,
+  e: {a == a2: List<&2, List<&2, U32>>},
+  nd: Merge.Nodes(a, N)
+) -> Merge.Nodes(a2, N):
+  %e: Merge.Nodes(_, N)
+  nd
+
+# a node among those that come after a and the nodes ne is among those that
+# come after
+def Merge.nodes_contains(
+  +a: List<&2, List<&2, U32>>,
+  +ne: List<&2, List<&2, U32>>,
+  +N: List<&2, List<&2, U32>>,
+  nd: Merge.Nodes(List.append(&2, List<&2, U32>, a, ne), N),
+  +w: List<&2, U32>,
+  c: {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), ne, w) == True{}: Bool}
+) -> {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), N, w) == True{}: Bool}:
+  (+ex, pe) = nd
+  %Equal.sym(
+    List<&2, List<&2, U32>>,
+    N,
+    List.append(&2, List<&2, U32>, List.append(&2, List<&2, U32>, a, ne), ex),
+    pe
+  ): {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), _, w) == True{}: Bool}
+  Shared.List.contains_left(
+    ~List<&2, U32>,
+    ~Shared.List.is_eq(~U32, ~U32.is_eq),
+    List.append(&2, List<&2, U32>, a, ne),
+    ex,
+    w,
+    Shared.List.contains_right(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), a, ne, w, c)
+  )
+
+# a ledger that gets the nodes ns, from the one that gets the nodes ps, grows
+# from it
+def Merge.grows_of(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +lf: L(d),
+  +ps: List<&2, List<&2, U32>>,
+  +ns: List<&2, List<&2, U32>>,
+  wc: {lc == Replicas.Led.puts(~Requests.Ask.machine(), ~d, ps, l): L(d)},
+  wf: {lf == Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l): L(d)},
+  nd: Merge.Nodes(ps, ns)
+) -> Replicas.Led.Grows(Requests.Ask.machine(), d, lc, lf):
+  (+ex, pe) = nd
+  %Equal.sym(L(d), lc, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ps, l), wc): Replicas.Led.Grows(Requests.Ask.machine(), d, _, lf)
+  %Equal.sym(L(d), lf, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l), wf): Replicas.Led.Grows(
+    Requests.Ask.machine(),
+    d,
+    Replicas.Led.puts(~Requests.Ask.machine(), ~d, ps, l),
+    _
+  )
+  %Equal.sym(List<&2, List<&2, U32>>, ns, List.append(&2, List<&2, U32>, ps, ex), pe): Replicas.Led.Grows(
+    Requests.Ask.machine(),
+    d,
+    Replicas.Led.puts(~Requests.Ask.machine(), ~d, ps, l),
+    Replicas.Led.puts(~Requests.Ask.machine(), ~d, _, l)
+  )
+  %Equal.sym(
+    L(d),
+    Replicas.Led.puts(~Requests.Ask.machine(), ~d, List.append(&2, List<&2, U32>, ps, ex), l),
+    Replicas.Led.puts(~Requests.Ask.machine(), ~d, ex, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ps, l)),
+    Merge.puts_append(~d, ps, ex, l)
+  ): Replicas.Led.Grows(
+    Requests.Ask.machine(),
+    d,
+    Replicas.Led.puts(~Requests.Ask.machine(), ~d, ps, l),
+    _
+  )
+  Merge.puts_grows(~d, ex, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ps, l))
+
+# what a write of the key kw to the value m, to the tree hc, gives in the ledger
+# lf: the new tree h1 reads the key as written, and each other key as hc did
+def Merge.Writes(
+  ~d: Led(),
+  lf: L(d),
+  h1: Maybe<&2, Hashes.Hash>,
+  hc: Maybe<&2, Hashes.Hash>,
+  kw: List<&2, U32>,
+  m: Maybe<&2, List<&2, U32>>
+) -> Type:
+  {Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h1, kw) == Trees.Look.of(m): Trees.Look}
+    & (
+      @k2: List<&2, U32> -> {Shared.List.is_eq(~U32, ~U32.is_eq, kw, k2) == False{}: Bool} -> {
+        Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h1, k2)
+          == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, k2): Trees.Look
+      }
+    )
+
+# the data of the ledger lf that holds the nodes N are the nodes N
+def Merge.Held(~d: Led(), lf: L(d), N: List<&2, List<&2, U32>>) -> Data:
+  {
+    Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), lf, N) == True{}: Bool
+  }
+
+# the ledger lc is the ledger l with the nodes ps
+def Merge.Puts(~d: Led(), l: L(d), lc: L(d), ps: List<&2, List<&2, U32>>) -> Data:
+  {lc == Replicas.Led.puts(~Requests.Ask.machine(), ~d, ps, l): L(d)}
+
+# the work after a write of the edit e is the work of its ledger, tree and nodes
+def Merge.put_work(
+  ~d: Led(),
+  +lc: L(d),
+  +P: List<&2, List<&2, U32>>,
+  +e: Trees.Edit,
+  +W1: Work<L(d)>,
+  e1: {Work.put(~d, lc, P, Some{e}) == Some{W1}: Maybe<&2, Work<L(d)>>}
+) -> {
+  Work{
+    Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(e), lc),
+    Trees.Edit.root(e),
+    List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(e))
+  }
+    == W1: Work<L(d)>
+}:
+  Shared.Maybe.some_inj(
+    Work<L(d)>,
+    Work{
+      Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(e), lc),
+      Trees.Edit.root(e),
+      List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(e))
+    },
+    W1,
+    e1
+  )
+
+# the tree of the work after a write of the edit e is the tree of e
+def Merge.put_root(
+  ~d: Led(),
+  +lc: L(d),
+  +P: List<&2, List<&2, U32>>,
+  +e: Trees.Edit,
+  +W1: Work<L(d)>,
+  e1: {Work.put(~d, lc, P, Some{e}) == Some{W1}: Maybe<&2, Work<L(d)>>}
+) -> {Trees.Edit.root(e) == Merge.root(~d, W1): Maybe<&2, Hashes.Hash>}:
+  Equal.cong(
+    Work<L(d)>,
+    Maybe<&2, Hashes.Hash>,
+    w => Merge.root(~d, w),
+    Work{
+      Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(e), lc),
+      Trees.Edit.root(e),
+      List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(e))
+    },
+    W1,
+    Merge.put_work(~d, lc, P, e, W1, e1)
+  )
+
+# the nodes of the work after a write of the edit e are those before it, and
+# the nodes of e
+def Merge.put_nodes(
+  ~d: Led(),
+  +lc: L(d),
+  +P: List<&2, List<&2, U32>>,
+  +e: Trees.Edit,
+  +W1: Work<L(d)>,
+  e1: {Work.put(~d, lc, P, Some{e}) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  +N: List<&2, List<&2, U32>>,
+  nd: Merge.Nodes(Merge.nodes(~d, W1), N)
+) -> Merge.Nodes(List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(e)), N):
+  Merge.nodes_cast(
+    Merge.nodes(~d, W1),
+    List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(e)),
+    N,
+    Equal.sym(
+      List<&2, List<&2, U32>>,
+      List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(e)),
+      Merge.nodes(~d, W1),
+      Equal.cong(
+        Work<L(d)>,
+        List<&2, List<&2, U32>>,
+        w => Merge.nodes(~d, w),
+        Work{
+          Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(e), lc),
+          Trees.Edit.root(e),
+          List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(e))
+        },
+        W1,
+        Merge.put_work(~d, lc, P, e, W1, e1)
+      )
+    ),
+    nd
+  )
+
+# the work W1 is the work after a write of the key kw to the value m, to the
+# tree hc of the work with the ledger lc and the nodes P, when the ledger lf
+# holds the nodes N that come after those of W1
+def Merge.set_core(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +kw: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>,
+  +lf: L(d),
+  +N: List<&2, List<&2, U32>>,
+  +W1: Work<L(d)>,
+  p: Maybe<&2, Trees.Edit>,
+  +ep: {Replicas.Tree.put(~Requests.Ask.machine(), ~d, lc, hc, kw, m) == p: Maybe<&2, Trees.Edit>},
+  +e1: {Work.put(~d, lc, P, p) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  +wc: Merge.Puts(~d, l, lc, P),
+  +wf: Merge.Puts(~d, l, lf, N),
+  +held: Merge.Held(~d, lf, N),
+  +nd: Merge.Nodes(Merge.nodes(~d, W1), N)
+) -> Merge.Writes(~d, lf, Merge.root(~d, W1), hc, kw, m):
+  match p:
+    case None{}:
+      Empty.absurd(Merge.Writes(~d, lf, Merge.root(~d, W1), hc, kw, m), Shared.Maybe.none_ne_some(Work<L(d)>, W1, e1))
+    case Some{+e}:
+      %Merge.put_root(~d, lc, P, e, W1, e1): Merge.Writes(~d, lf, _, hc, kw, m)
+      Merge.write(d)(lc)(lf)(hc)(kw)(m)(e)(ep)(
+        Merge.grows_of(~d, l, lc, lf, P, N, wc, wf, Merge.nodes_drop(P, Trees.Edit.nodes(e), N, Merge.put_nodes(~d, lc, P, e, W1, e1, N, nd)))
+      )(+w => c => Merge.holds_fetch(~d, lf, N, w)(held)(Merge.nodes_contains(P, Trees.Edit.nodes(e), N, Merge.put_nodes(~d, lc, P, e, W1, e1, N, nd), w, c)))
+
+# the work after a write has the ledger of the nodes that it has, and its nodes
+# come after those before it
+def Merge.set_facts.at(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +P: List<&2, List<&2, U32>>,
+  +W1: Work<L(d)>,
+  p: Maybe<&2, Trees.Edit>,
+  +e1: {Work.put(~d, lc, P, p) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  +wc: Merge.Puts(~d, l, lc, P)
+) -> Merge.And(
+  Merge.Puts(~d, l, Merge.ledger(~d, W1), Merge.nodes(~d, W1)),
+  Merge.Nodes(P, Merge.nodes(~d, W1))
+):
+  match p:
+    case None{}:
+      Empty.absurd(
+        Merge.And(
+          Merge.Puts(~d, l, Merge.ledger(~d, W1), Merge.nodes(~d, W1)),
+          Merge.Nodes(P, Merge.nodes(~d, W1))
+        ),
+        Shared.Maybe.none_ne_some(Work<L(d)>, W1, e1)
+      )
+    case Some{+e}:
+      %Merge.put_work(~d, lc, P, e, W1, e1): Merge.And(
+        Merge.Puts(~d, l, Merge.ledger(~d, _), Merge.nodes(~d, _)),
+        Merge.Nodes(P, Merge.nodes(~d, _))
+      )
+      (
+        %Equal.sym(L(d), lc, Replicas.Led.puts(~Requests.Ask.machine(), ~d, P, l), wc): {
+          Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(e), _)
+            == Replicas.Led.puts(~Requests.Ask.machine(), ~d, List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(e)), l): L(d)
+        }
+        Equal.sym(
+          L(d),
+          Replicas.Led.puts(~Requests.Ask.machine(), ~d, List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(e)), l),
+          Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(e), Replicas.Led.puts(~Requests.Ask.machine(), ~d, P, l)),
+          Merge.puts_append(~d, P, Trees.Edit.nodes(e), l)
+        ),
+        (Trees.Edit.nodes(e), {==})
+      )
+
+# the work after a write of the key kw to the value m has the ledger of the
+# nodes that it has, and its nodes come after those before it
+def Merge.set_facts(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +kw: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>,
+  +W1: Work<L(d)>,
+  +e1: {Work.set(~d, Work{lc, hc, P}, kw, m) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  +wc: Merge.Puts(~d, l, lc, P)
+) -> Merge.And(
+  Merge.Puts(~d, l, Merge.ledger(~d, W1), Merge.nodes(~d, W1)),
+  Merge.Nodes(P, Merge.nodes(~d, W1))
+):
+  Merge.set_facts.at(
+    ~d,
+    l,
+    lc,
+    P,
+    W1,
+    Replicas.Tree.put(~Requests.Ask.machine(), ~d, lc, hc, kw, m),
+    e1,
+    wc
+  )
+
+# the key written is the key read, when the write is read
+def Merge.writes_hit(
+  ~d: Led(),
+  lf: L(d),
+  h1: Maybe<&2, Hashes.Hash>,
+  hc: Maybe<&2, Hashes.Hash>,
+  kw: List<&2, U32>,
+  m: Maybe<&2, List<&2, U32>>,
+  wr: Merge.Writes(~d, lf, h1, hc, kw, m)
+) -> {Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h1, kw) == Trees.Look.of(m): Trees.Look}:
+  match wr:
+    case Tuple{hit, frame}:
+      hit
+
+# a key other than the key written is read as before, when the write is read
+def Merge.writes_frame(
+  ~d: Led(),
+  lf: L(d),
+  h1: Maybe<&2, Hashes.Hash>,
+  hc: Maybe<&2, Hashes.Hash>,
+  kw: List<&2, U32>,
+  m: Maybe<&2, List<&2, U32>>,
+  wr: Merge.Writes(~d, lf, h1, hc, kw, m),
+  k2: List<&2, U32>,
+  hk: {Shared.List.is_eq(~U32, ~U32.is_eq, kw, k2) == False{}: Bool}
+) -> {
+  Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h1, k2)
+    == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, k2): Trees.Look
+}:
+  match wr:
+    case Tuple{hit, frame}:
+      frame(k2)(hk)
+
+# the ledger of a work that gets more nodes is the ledger of the nodes that it
+# has
+def Merge.keep_puts(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +P: List<&2, List<&2, U32>>,
+  +ms: List<&2, List<&2, U32>>,
+  wc: Merge.Puts(~d, l, lc, P)
+) -> Merge.Puts(
+  ~d,
+  l,
+  Replicas.Led.puts(~Requests.Ask.machine(), ~d, ms, lc),
+  List.append(&2, List<&2, U32>, P, ms)
+):
+  %Equal.sym(L(d), lc, Replicas.Led.puts(~Requests.Ask.machine(), ~d, P, l), wc): {
+    Replicas.Led.puts(~Requests.Ask.machine(), ~d, ms, _)
+      == Replicas.Led.puts(~Requests.Ask.machine(), ~d, List.append(&2, List<&2, U32>, P, ms), l): L(d)
+  }
+  Equal.sym(
+    L(d),
+    Replicas.Led.puts(~Requests.Ask.machine(), ~d, List.append(&2, List<&2, U32>, P, ms), l),
+    Replicas.Led.puts(~Requests.Ask.machine(), ~d, ms, Replicas.Led.puts(~Requests.Ask.machine(), ~d, P, l)),
+    Merge.puts_append(~d, P, ms, l)
+  )
+
+# the facts about the work after a pick that makes nodes, from those of the
+# write that follows them
+def Merge.pick_facts.make(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +P: List<&2, List<&2, U32>>,
+  +ms: List<&2, List<&2, U32>>,
+  +W1: Work<L(d)>,
+  f: Merge.And(
+    Merge.Puts(~d, l, Merge.ledger(~d, W1), Merge.nodes(~d, W1)),
+    Merge.Nodes(List.append(&2, List<&2, U32>, P, ms), Merge.nodes(~d, W1))
+  )
+) -> Merge.And(
+  Merge.Puts(~d, l, Merge.ledger(~d, W1), Merge.nodes(~d, W1)),
+  Merge.Nodes(P, Merge.nodes(~d, W1))
+):
+  (+a, nd) = f
+  (
+    a,
+    Merge.nodes_trans(P, List.append(&2, List<&2, U32>, P, ms), Merge.nodes(~d, W1), (ms, {==}), nd)
+  )
+
+# the facts about the work after a clash, once the clashes that are open are
+# read (mc)
+def Merge.pick_facts.clash.at(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +W1: Work<L(d)>,
+  mc: Maybe<&2, List<&2, Resources.Name>>,
+  +eb: {
+    Maybe.bind(
+      &2,
+      List<&2, Resources.Name>,
+      Work<L(d)>,
+      mc,
+      cs => Work.set(~d, Work{lc, hc, P}, Key.clashes(k), Clash.value(Clash.put(n, cs)))
+    )
+      == Some{W1}: Maybe<&2, Work<L(d)>>
+  },
+  +wc: Merge.Puts(~d, l, lc, P)
+) -> Merge.And(
+  Merge.Puts(~d, l, Merge.ledger(~d, W1), Merge.nodes(~d, W1)),
+  Merge.Nodes(P, Merge.nodes(~d, W1))
+):
+  match mc:
+    case None{}:
+      Empty.absurd(
+        Merge.And(
+          Merge.Puts(~d, l, Merge.ledger(~d, W1), Merge.nodes(~d, W1)),
+          Merge.Nodes(P, Merge.nodes(~d, W1))
+        ),
+        Shared.Maybe.none_ne_some(Work<L(d)>, W1, eb)
+      )
+    case Some{+cs}:
+      Merge.set_facts(~d, l, lc, hc, P, Key.clashes(k), Clash.value(Clash.put(n, cs)), W1, eb, wc)
+
+# the facts about the work after a clash
+def Merge.pick_facts.clash(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +W1: Work<L(d)>,
+  mc: Maybe<&2, List<&2, Resources.Name>>,
+  emc: {Clash.names(~d, lc, hc, k) == mc: Maybe<&2, List<&2, Resources.Name>>},
+  +e1: {Merge.pick(~d, Work{lc, hc, P}, k, n, Pick.Clash{}) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  +wc: Merge.Puts(~d, l, lc, P)
+) -> Merge.And(
+  Merge.Puts(~d, l, Merge.ledger(~d, W1), Merge.nodes(~d, W1)),
+  Merge.Nodes(P, Merge.nodes(~d, W1))
+):
+  Merge.pick_facts.clash.at(
+    ~d,
+    l,
+    lc,
+    hc,
+    P,
+    k,
+    n,
+    W1,
+    mc,
+    %emc: {
+      Maybe.bind(
+        &2,
+        List<&2, Resources.Name>,
+        Work<L(d)>,
+        _,
+        cs => Work.set(~d, Work{lc, hc, P}, Key.clashes(k), Clash.value(Clash.put(n, cs)))
+      )
+        == Some{W1}: Maybe<&2, Work<L(d)>>
+    }
+    e1,
+    wc
+  )
+
+# what a pick of a merge gives the work: the ledger of the nodes that it has,
+# and nodes that come after those before it
+def Merge.pick_facts(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  p: Pick,
+  +W1: Work<L(d)>,
+  +e1: {Merge.pick(~d, Work{lc, hc, P}, k, n, p) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  +wc: Merge.Puts(~d, l, lc, P)
+) -> Merge.And(
+  Merge.Puts(~d, l, Merge.ledger(~d, W1), Merge.nodes(~d, W1)),
+  Merge.Nodes(P, Merge.nodes(~d, W1))
+):
+  match p:
+    case Pick.Take{x}:
+      Merge.set_facts(~d, l, lc, hc, P, Key.res(n), Res.value(x), W1, e1, wc)
+    case Pick.Make{+h, +bytes}:
+      Merge.pick_facts.make(
+        ~d,
+        l,
+        lc,
+        P,
+        Ropes.Put.nodes(Ropes.Rope.of_bytes(bytes)),
+        W1,
+        Merge.set_facts(
+          ~d,
+          l,
+          Replicas.Led.puts(~Requests.Ask.machine(), ~d, Ropes.Put.nodes(Ropes.Rope.of_bytes(bytes)), lc),
+          hc,
+          List.append(&2, List<&2, U32>, P, Ropes.Put.nodes(Ropes.Rope.of_bytes(bytes))),
+          Key.res(n),
+          Res.value(Some{Requests.Res{h, Ropes.Put.root(Ropes.Rope.of_bytes(bytes))}}),
+          W1,
+          e1,
+          Merge.keep_puts(~d, l, lc, P, Ropes.Put.nodes(Ropes.Rope.of_bytes(bytes)), wc)
+        )
+      )
+    case Pick.Clash{}:
+      Merge.pick_facts.clash(~d, l, lc, hc, P, k, n, W1, Clash.names(~d, lc, hc, k), {==}, e1, wc)
+
+# the tree of the work after a take reads the resource as taken
+def Merge.take_hit(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +x: Maybe<&2, Requests.Res>,
+  +W1: Work<L(d)>,
+  +lf: L(d),
+  +N: List<&2, List<&2, U32>>,
+  +e1: {Merge.pick(~d, Work{lc, hc, P}, k, n, Pick.Take{x}) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  +wc: Merge.Puts(~d, l, lc, P),
+  +wf: Merge.Puts(~d, l, lf, N),
+  +held: Merge.Held(~d, lf, N),
+  +nd: Merge.Nodes(Merge.nodes(~d, W1), N)
+) -> {
+  Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n)) == Trees.Look.of(Res.value(x)): Trees.Look
+}:
+  Merge.writes_hit(
+    ~d,
+    lf,
+    Merge.root(~d, W1),
+    hc,
+    Key.res(n),
+    Res.value(x),
+    Merge.set_core(
+      ~d,
+      l,
+      lc,
+      hc,
+      P,
+      Key.res(n),
+      Res.value(x),
+      lf,
+      N,
+      W1,
+      Replicas.Tree.put(~Requests.Ask.machine(), ~d, lc, hc, Key.res(n), Res.value(x)),
+      {==},
+      e1,
+      wc,
+      wf,
+      held,
+      nd
+    )
+  )
+
+# a pick that clashes leaves the key of a resource as it was, once the clashes
+# that are open are read (mc)
+def Merge.pick_frame.clash.at(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +n0: Resources.Name,
+  +W1: Work<L(d)>,
+  +lf: L(d),
+  +N: List<&2, List<&2, U32>>,
+  mc: Maybe<&2, List<&2, Resources.Name>>,
+  +eb: {
+    Maybe.bind(
+      &2,
+      List<&2, Resources.Name>,
+      Work<L(d)>,
+      mc,
+      cs => Work.set(~d, Work{lc, hc, P}, Key.clashes(k), Clash.value(Clash.put(n, cs)))
+    )
+      == Some{W1}: Maybe<&2, Work<L(d)>>
+  },
+  +wc: Merge.Puts(~d, l, lc, P),
+  +wf: Merge.Puts(~d, l, lf, N),
+  +held: Merge.Held(~d, lf, N),
+  +nd: Merge.Nodes(Merge.nodes(~d, W1), N)
+) -> {
+  Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n0))
+    == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)): Trees.Look
+}:
+  match mc:
+    case None{}:
+      Empty.absurd(
+        {
+          Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n0))
+            == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)): Trees.Look
+        },
+        Shared.Maybe.none_ne_some(Work<L(d)>, W1, eb)
+      )
+    case Some{+cs}:
+      Merge.writes_frame(
+        ~d,
+        lf,
+        Merge.root(~d, W1),
+        hc,
+        Key.clashes(k),
+        Clash.value(Clash.put(n, cs)),
+        Merge.set_core(
+          ~d,
+          l,
+          lc,
+          hc,
+          P,
+          Key.clashes(k),
+          Clash.value(Clash.put(n, cs)),
+          lf,
+          N,
+          W1,
+          Replicas.Tree.put(~Requests.Ask.machine(), ~d, lc, hc, Key.clashes(k), Clash.value(Clash.put(n, cs))),
+          {==},
+          eb,
+          wc,
+          wf,
+          held,
+          nd
+        ),
+        Key.res(n0),
+        {==}
+      )
+
+# what a pick of a merge does to the key of a resource n0 that it does not
+# write: it reads as it did
+def Merge.pick_frame(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +n0: Resources.Name,
+  p: Pick,
+  +W1: Work<L(d)>,
+  +lf: L(d),
+  +N: List<&2, List<&2, U32>>,
+  +e1: {Merge.pick(~d, Work{lc, hc, P}, k, n, p) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  +wc: Merge.Puts(~d, l, lc, P),
+  +wf: Merge.Puts(~d, l, lf, N),
+  +held: Merge.Held(~d, lf, N),
+  +nd: Merge.Nodes(Merge.nodes(~d, W1), N),
+  +hk: {Shared.List.is_eq(~U32, ~U32.is_eq, Key.res(n), Key.res(n0)) == False{}: Bool}
+) -> {
+  Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n0))
+    == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)): Trees.Look
+}:
+  match p:
+    case Pick.Take{+x}:
+      Merge.writes_frame(
+        ~d,
+        lf,
+        Merge.root(~d, W1),
+        hc,
+        Key.res(n),
+        Res.value(x),
+        Merge.set_core(
+          ~d,
+          l,
+          lc,
+          hc,
+          P,
+          Key.res(n),
+          Res.value(x),
+          lf,
+          N,
+          W1,
+          Replicas.Tree.put(~Requests.Ask.machine(), ~d, lc, hc, Key.res(n), Res.value(x)),
+          {==},
+          e1,
+          wc,
+          wf,
+          held,
+          nd
+        ),
+        Key.res(n0),
+        hk
+      )
+    case Pick.Make{+h, +bytes}:
+      Merge.writes_frame(
+        ~d,
+        lf,
+        Merge.root(~d, W1),
+        hc,
+        Key.res(n),
+        Res.value(Some{Requests.Res{h, Ropes.Put.root(Ropes.Rope.of_bytes(bytes))}}),
+        Merge.set_core(
+          ~d,
+          l,
+          Replicas.Led.puts(~Requests.Ask.machine(), ~d, Ropes.Put.nodes(Ropes.Rope.of_bytes(bytes)), lc),
+          hc,
+          List.append(&2, List<&2, U32>, P, Ropes.Put.nodes(Ropes.Rope.of_bytes(bytes))),
+          Key.res(n),
+          Res.value(Some{Requests.Res{h, Ropes.Put.root(Ropes.Rope.of_bytes(bytes))}}),
+          lf,
+          N,
+          W1,
+          Replicas.Tree.put(
+            ~Requests.Ask.machine(),
+            ~d,
+            Replicas.Led.puts(~Requests.Ask.machine(), ~d, Ropes.Put.nodes(Ropes.Rope.of_bytes(bytes)), lc),
+            hc,
+            Key.res(n),
+            Res.value(Some{Requests.Res{h, Ropes.Put.root(Ropes.Rope.of_bytes(bytes))}})
+          ),
+          {==},
+          e1,
+          Merge.keep_puts(~d, l, lc, P, Ropes.Put.nodes(Ropes.Rope.of_bytes(bytes)), wc),
+          wf,
+          held,
+          nd
+        ),
+        Key.res(n0),
+        hk
+      )
+    case Pick.Clash{}:
+      Merge.pick_frame.clash.at(
+        ~d,
+        l,
+        lc,
+        hc,
+        P,
+        k,
+        n,
+        n0,
+        W1,
+        lf,
+        N,
+        Clash.names(~d, lc, hc, k),
+        e1,
+        wc,
+        wf,
+        held,
+        nd
+      )
+
+# Merge.one once the pick of the three reads is known (mp)
+def Merge.one.p(
+  ~d: Led(),
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  mp: Maybe<&2, Pick>
+) -> Maybe<&2, Work<L(d)>>:
+  Maybe.bind(&2, Pick, Work<L(d)>, mp, p => Merge.pick(~d, w, k, n, p))
+
+# Merge.one once the read of theirs is known (mt)
+def Merge.one.t(
+  ~d: Led(),
+  +l: L(d),
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  mt: Maybe<&2, Maybe<&2, Requests.Res>>
+) -> Maybe<&2, Work<L(d)>>:
+  Maybe.bind(
+    &2,
+    Maybe<&2, Requests.Res>,
+    Work<L(d)>,
+    mt,
+    t => Merge.one.p(~d, w, k, n, Pick.merge(~d, l, b, o, t))
+  )
+
+# Merge.one once the read of ours is known (mo)
+def Merge.one.o(
+  ~d: Led(),
+  +l: L(d),
+  ht: Maybe<&2, Hashes.Hash>,
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b: Maybe<&2, Requests.Res>,
+  mo: Maybe<&2, Maybe<&2, Requests.Res>>
+) -> Maybe<&2, Work<L(d)>>:
+  Maybe.bind(
+    &2,
+    Maybe<&2, Requests.Res>,
+    Work<L(d)>,
+    mo,
+    +o => Merge.one.t(~d, l, w, k, n, b, o, Res.find(~d, l, ht, n))
+  )
+
+# Merge.one once the read of the base is known (mb)
+def Merge.one.b(
+  ~d: Led(),
+  +l: L(d),
+  ho: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  mb: Maybe<&2, Maybe<&2, Requests.Res>>
+) -> Maybe<&2, Work<L(d)>>:
+  Maybe.bind(
+    &2,
+    Maybe<&2, Requests.Res>,
+    Work<L(d)>,
+    mb,
+    +b => Merge.one.o(~d, l, ht, w, k, n, b, Res.find(~d, l, ho, n))
+  )
+
+# the reads and the pick of a merge of a resource, that gave the work W1
+def Merge.Read.p(
+  ~d: Led(),
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  mp: Maybe<&2, Pick>,
+  W1: Work<L(d)>
+) -> Data:
+  Sigma<&2, &2, Pick, p => Merge.And({mp == Some{p}: Maybe<&2, Pick>}, {Merge.pick(~d, w, k, n, p) == Some{W1}: Maybe<&2, Work<L(d)>>})>
+
+def Merge.Read.t(
+  ~d: Led(),
+  +l: L(d),
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  mt: Maybe<&2, Maybe<&2, Requests.Res>>,
+  W1: Work<L(d)>
+) -> Data:
+  Sigma<&2, &2, Maybe<&2, Requests.Res>, t => Merge.And({mt == Some{t}: Maybe<&2, Maybe<&2, Requests.Res>>}, Merge.Read.p(~d, w, k, n, Pick.merge(~d, l, b, o, t), W1))>
+
+def Merge.Read.o(
+  ~d: Led(),
+  +l: L(d),
+  ht: Maybe<&2, Hashes.Hash>,
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b: Maybe<&2, Requests.Res>,
+  mo: Maybe<&2, Maybe<&2, Requests.Res>>,
+  W1: Work<L(d)>
+) -> Data:
+  Sigma<&2, &2, Maybe<&2, Requests.Res>, o => Merge.And({mo == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>}, Merge.Read.t(~d, l, w, k, n, b, o, Res.find(~d, l, ht, n), W1))>
+
+def Merge.Read.b(
+  ~d: Led(),
+  +l: L(d),
+  ho: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  mb: Maybe<&2, Maybe<&2, Requests.Res>>,
+  W1: Work<L(d)>
+) -> Data:
+  Sigma<&2, &2, Maybe<&2, Requests.Res>, b => Merge.And({mb == Some{b}: Maybe<&2, Maybe<&2, Requests.Res>>}, Merge.Read.o(~d, l, ht, w, k, n, b, Res.find(~d, l, ho, n), W1))>
+
+def Merge.read.p(
+  ~d: Led(),
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  mp: Maybe<&2, Pick>,
+  +W1: Work<L(d)>,
+  e: {Merge.one.p(~d, w, k, n, mp) == Some{W1}: Maybe<&2, Work<L(d)>>}
+) -> Merge.Read.p(~d, w, k, n, mp, W1):
+  match mp:
+    case None{}:
+      Empty.absurd(Merge.Read.p(~d, w, k, n, None{}, W1), Shared.Maybe.none_ne_some(Work<L(d)>, W1, e))
+    case Some{+p}:
+      (p, ({==}, e))
+
+def Merge.read.t(
+  ~d: Led(),
+  +l: L(d),
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  mt: Maybe<&2, Maybe<&2, Requests.Res>>,
+  +W1: Work<L(d)>,
+  e: {Merge.one.t(~d, l, w, k, n, b, o, mt) == Some{W1}: Maybe<&2, Work<L(d)>>}
+) -> Merge.Read.t(~d, l, w, k, n, b, o, mt, W1):
+  match mt:
+    case None{}:
+      Empty.absurd(Merge.Read.t(~d, l, w, k, n, b, o, None{}, W1), Shared.Maybe.none_ne_some(Work<L(d)>, W1, e))
+    case Some{+t}:
+      (t, ({==}, Merge.read.p(~d, w, k, n, Pick.merge(~d, l, b, o, t), W1, e)))
+
+def Merge.read.o(
+  ~d: Led(),
+  +l: L(d),
+  ht: Maybe<&2, Hashes.Hash>,
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b: Maybe<&2, Requests.Res>,
+  mo: Maybe<&2, Maybe<&2, Requests.Res>>,
+  +W1: Work<L(d)>,
+  e: {Merge.one.o(~d, l, ht, w, k, n, b, mo) == Some{W1}: Maybe<&2, Work<L(d)>>}
+) -> Merge.Read.o(~d, l, ht, w, k, n, b, mo, W1):
+  match mo:
+    case None{}:
+      Empty.absurd(Merge.Read.o(~d, l, ht, w, k, n, b, None{}, W1), Shared.Maybe.none_ne_some(Work<L(d)>, W1, e))
+    case Some{+o}:
+      (o, ({==}, Merge.read.t(~d, l, w, k, n, b, o, Res.find(~d, l, ht, n), W1, e)))
+
+# the reads and the pick of a merge of a resource that gave the work W1
+def Merge.read(
+  ~d: Led(),
+  +l: L(d),
+  ho: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  w: Work<L(d)>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  mb: Maybe<&2, Maybe<&2, Requests.Res>>,
+  +W1: Work<L(d)>,
+  e: {Merge.one.b(~d, l, ho, ht, w, k, n, mb) == Some{W1}: Maybe<&2, Work<L(d)>>}
+) -> Merge.Read.b(~d, l, ho, ht, w, k, n, mb, W1):
+  match mb:
+    case None{}:
+      Empty.absurd(Merge.Read.b(~d, l, ho, ht, w, k, n, None{}, W1), Shared.Maybe.none_ne_some(Work<L(d)>, W1, e))
+    case Some{+b}:
+      (b, ({==}, Merge.read.o(~d, l, ht, w, k, n, b, Res.find(~d, l, ho, n), W1, e)))
+
+# what a merge of a resource gives the work: the ledger of the nodes that it
+# has, and nodes that come after those before it
+def Merge.one_facts.at(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  ho: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +W1: Work<L(d)>,
+  mb: Maybe<&2, Maybe<&2, Requests.Res>>,
+  +wc: Merge.Puts(~d, l, lc, P),
+  rd: Merge.Read.b(~d, l, ho, ht, Work{lc, hc, P}, k, n, mb, W1)
+) -> Merge.And(
+  Merge.Puts(~d, l, Merge.ledger(~d, W1), Merge.nodes(~d, W1)),
+  Merge.Nodes(P, Merge.nodes(~d, W1))
+):
+  (+b, r1) = rd
+  (eb, r2) = r1
+  (+o, r3) = r2
+  (eo, r4) = r3
+  (+t, r5) = r4
+  (et, r6) = r5
+  (+p, r7) = r6
+  (ep, e) = r7
+  Merge.pick_facts(~d, l, lc, hc, P, k, n, p, W1, e, wc)
+
+# what a merge of a resource that does not write the key of the resource n0
+# does to it: nothing
+def Merge.one_frame.at(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  ho: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +n0: Resources.Name,
+  mb: Maybe<&2, Maybe<&2, Requests.Res>>,
+  +W1: Work<L(d)>,
+  rd: Merge.Read.b(~d, l, ho, ht, Work{lc, hc, P}, k, n, mb, W1),
+  +lf: L(d),
+  +N: List<&2, List<&2, U32>>,
+  +wc: Merge.Puts(~d, l, lc, P),
+  +wf: Merge.Puts(~d, l, lf, N),
+  +held: Merge.Held(~d, lf, N),
+  +nd: Merge.Nodes(Merge.nodes(~d, W1), N),
+  +hk: {Shared.List.is_eq(~U32, ~U32.is_eq, Key.res(n), Key.res(n0)) == False{}: Bool}
+) -> {
+  Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n0))
+    == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)): Trees.Look
+}:
+  (+b, r1) = rd
+  (eb, r2) = r1
+  (+o, r3) = r2
+  (eo, r4) = r3
+  (+t, r5) = r4
+  (et, r6) = r5
+  (+p, r7) = r6
+  (ep, e) = r7
+  Merge.pick_frame(~d, l, lc, hc, P, k, n, n0, p, W1, lf, N, e, wc, wf, held, nd, hk)
+
+# the merge of the same reads is the same pick
+def Merge.merge_args(
+  ~d: Led(),
+  +l: L(d),
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  +t: Maybe<&2, Requests.Res>,
+  +b0: Maybe<&2, Requests.Res>,
+  +o0: Maybe<&2, Requests.Res>,
+  +t0: Maybe<&2, Requests.Res>,
+  eb: {b == b0: Maybe<&2, Requests.Res>},
+  eo: {o == o0: Maybe<&2, Requests.Res>},
+  et: {t == t0: Maybe<&2, Requests.Res>}
+) -> {Pick.merge(~d, l, b, o, t) == Pick.merge(~d, l, b0, o0, t0): Maybe<&2, Pick>}:
+  %et: {Pick.merge(~d, l, b, o, t) == Pick.merge(~d, l, b0, o0, _): Maybe<&2, Pick>}
+  %eo: {Pick.merge(~d, l, b, o, t) == Pick.merge(~d, l, b0, _, t): Maybe<&2, Pick>}
+  %eb: {Pick.merge(~d, l, b, o, t) == Pick.merge(~d, l, _, o, t): Maybe<&2, Pick>}
+  {==}
+
+# the pick of a merge of a resource, as its premises say: the reads are those
+# of the premises, so the pick is
+def Merge.pick_same(
+  ~d: Led(),
+  +l: L(d),
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  +t: Maybe<&2, Requests.Res>,
+  +b0: Maybe<&2, Requests.Res>,
+  +o0: Maybe<&2, Requests.Res>,
+  +t0: Maybe<&2, Requests.Res>,
+  +p: Pick,
+  +q: Pick,
+  eb: {b == b0: Maybe<&2, Requests.Res>},
+  eo: {o == o0: Maybe<&2, Requests.Res>},
+  et: {t == t0: Maybe<&2, Requests.Res>},
+  ep: {Pick.merge(~d, l, b, o, t) == Some{p}: Maybe<&2, Pick>},
+  hp: {Pick.merge(~d, l, b0, o0, t0) == Some{q}: Maybe<&2, Pick>}
+) -> {p == q: Pick}:
+  Shared.Maybe.some_inj(
+    Pick,
+    p,
+    q,
+    Equal.trans(
+      Maybe<&2, Pick>,
+      Some{p},
+      Pick.merge(~d, l, b, o, t),
+      Some{q},
+      Equal.sym(Maybe<&2, Pick>, Pick.merge(~d, l, b, o, t), Some{p}, ep),
+      Equal.trans(
+        Maybe<&2, Pick>,
+        Pick.merge(~d, l, b, o, t),
+        Pick.merge(~d, l, b0, o0, t0),
+        Some{q},
+        Merge.merge_args(~d, l, b, o, t, b0, o0, t0, eb, eo, et),
+        hp
+      )
+    )
+  )
+
+# the tree of the work after the merge of the resource n reads it as taken,
+# when its reads and its pick are those that the premises say
+def Merge.one_hit.at(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  ho: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b0: Maybe<&2, Requests.Res>,
+  +o0: Maybe<&2, Requests.Res>,
+  +t0: Maybe<&2, Requests.Res>,
+  +x: Maybe<&2, Requests.Res>,
+  mb: Maybe<&2, Maybe<&2, Requests.Res>>,
+  +W1: Work<L(d)>,
+  rd: Merge.Read.b(~d, l, ho, ht, Work{lc, hc, P}, k, n, mb, W1),
+  hb0: {mb == Some{b0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  ho0: {Res.find(~d, l, ho, n) == Some{o0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  ht0: {Res.find(~d, l, ht, n) == Some{t0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  hp: {Pick.merge(~d, l, b0, o0, t0) == Some{Pick.Take{x}}: Maybe<&2, Pick>},
+  +lf: L(d),
+  +N: List<&2, List<&2, U32>>,
+  +wc: Merge.Puts(~d, l, lc, P),
+  +wf: Merge.Puts(~d, l, lf, N),
+  +held: Merge.Held(~d, lf, N),
+  +nd: Merge.Nodes(Merge.nodes(~d, W1), N)
+) -> {
+  Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n)) == Trees.Look.of(Res.value(x)): Trees.Look
+}:
+  (+b, r1) = rd
+  (eb, r2) = r1
+  (+o, r3) = r2
+  (eo, r4) = r3
+  (+t, r5) = r4
+  (et, r6) = r5
+  (+p, r7) = r6
+  (ep, e) = r7
+  Merge.take_hit(
+    ~d,
+    l,
+    lc,
+    hc,
+    P,
+    k,
+    n,
+    x,
+    W1,
+    lf,
+    N,
+      %Merge.pick_same(
+        ~d,
+        l,
+        b,
+        o,
+        t,
+        b0,
+        o0,
+        t0,
+        p,
+        Pick.Take{x},
+        Shared.Maybe.some_inj(
+          Maybe<&2, Requests.Res>,
+          b,
+          b0,
+          Equal.trans(Maybe<&2, Maybe<&2, Requests.Res>>, Some{b}, mb, Some{b0}, Equal.sym(Maybe<&2, Maybe<&2, Requests.Res>>, mb, Some{b}, eb), hb0)
+        ),
+        Shared.Maybe.some_inj(
+          Maybe<&2, Requests.Res>,
+          o,
+          o0,
+          Equal.trans(
+            Maybe<&2, Maybe<&2, Requests.Res>>,
+            Some{o},
+            Res.find(~d, l, ho, n),
+            Some{o0},
+            Equal.sym(Maybe<&2, Maybe<&2, Requests.Res>>, Res.find(~d, l, ho, n), Some{o}, eo),
+            ho0
+          )
+        ),
+        Shared.Maybe.some_inj(
+          Maybe<&2, Requests.Res>,
+          t,
+          t0,
+          Equal.trans(
+            Maybe<&2, Maybe<&2, Requests.Res>>,
+            Some{t},
+            Res.find(~d, l, ht, n),
+            Some{t0},
+            Equal.sym(Maybe<&2, Maybe<&2, Requests.Res>>, Res.find(~d, l, ht, n), Some{t}, et),
+            ht0
+          )
+        ),
+        ep,
+        hp
+      ): {Merge.pick(~d, Work{lc, hc, P}, k, n, _) == Some{W1}: Maybe<&2, Work<L(d)>>}
+      e,
+    wc,
+    wf,
+    held,
+    nd
+  )
+
+# the name of the key of a resource is the name
+def Merge.key_name(+n: Resources.Name) -> {Res.name(Key.res(n)) == Some{n}: Maybe<&2, Resources.Name>}:
+  Codes.Code.whole_read(
+    ~Resources.Name,
+    ~Resources.Name.code,
+    ~Resources.Name.code.read,
+    ~(x => r => Resources.Name.code_read(x, r)),
+    n
+  )
+
+# the work after the merge of the key x: the work, or what the merge of the
+# resource that the key names gives
+def Merge.next(
+  ~d: Led(),
+  +l: L(d),
+  hb: Maybe<&2, Hashes.Hash>,
+  ho: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +w: Work<L(d)>,
+  mn: Maybe<&2, Resources.Name>
+) -> Maybe<&2, Work<L(d)>>:
+  match mn:
+    case None{}:
+      Some{w}
+    case Some{+n}:
+      Merge.one(~d, l, hb, ho, ht, k, n, w)
+
+# the work that Merge.all goes on with after the key x
+def Merge.step(
+  ~d: Led(),
+  +l: L(d),
+  hb: Maybe<&2, Hashes.Hash>,
+  ho: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  x: List<&2, U32>,
+  +w: Work<L(d)>
+) -> Maybe<&2, Work<L(d)>>:
+  Maybe.default(
+    &2,
+    Maybe<&2, Work<L(d)>>,
+    Maybe.bind(
+      &2,
+      Resources.Name,
+      Maybe<&2, Work<L(d)>>,
+      Res.name(x),
+      n => Some{Merge.one(~d, l, hb, ho, ht, k, n, w)}
+    ),
+    Some{w}
+  )
+
+# a step is the work that the name of its key gives, once it is read (mn)
+def Merge.step_eq.at(
+  ~d: Led(),
+  +l: L(d),
+  hb: Maybe<&2, Hashes.Hash>,
+  ho: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +w: Work<L(d)>,
+  mn: Maybe<&2, Resources.Name>
+) -> {
+  Maybe.default(
+    &2,
+    Maybe<&2, Work<L(d)>>,
+    Maybe.bind(
+      &2,
+      Resources.Name,
+      Maybe<&2, Work<L(d)>>,
+      mn,
+      n => Some{Merge.one(~d, l, hb, ho, ht, k, n, w)}
+    ),
+    Some{w}
+  )
+    == Merge.next(~d, l, hb, ho, ht, k, w, mn): Maybe<&2, Work<L(d)>>
+}:
+  match mn:
+    case None{}:
+      {==}
+    case Some{+n}:
+      {==}
+
+# the work that a merge goes on with after a key is the next work
+def Merge.step_eq(
+  ~d: Led(),
+  +l: L(d),
+  hb: Maybe<&2, Hashes.Hash>,
+  ho: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  x: List<&2, U32>,
+  +w: Work<L(d)>
+) -> {Merge.step(~d, l, hb, ho, ht, k, x, w) == Merge.next(~d, l, hb, ho, ht, k, w, Res.name(x)): Maybe<&2, Work<L(d)>>}:
+  Merge.step_eq.at(~d, l, hb, ho, ht, k, w, Res.name(x))
+
+# a merge that gave a work went on with a work
+def Merge.all_from(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  xs: List<&2, List<&2, U32>>,
+  m: Maybe<&2, Work<L(d)>>,
+  +Wf: Work<L(d)>,
+  e: {Merge.all(~d, l, hb, ho, ht, k, xs, m) == Some{Wf}: Maybe<&2, Work<L(d)>>}
+) -> Sigma<&2, &2, Work<L(d)>, W1 => {m == Some{W1}: Maybe<&2, Work<L(d)>>}>:
+  match xs m:
+    case Nil{} y:
+      (Wf, e)
+    case Con{x, rest} None{}:
+      Empty.absurd(
+        Sigma<&2, &2, Work<L(d)>, W1 => {None{} == Some{W1}: Maybe<&2, Work<L(d)>>}>,
+        Shared.Maybe.none_ne_some(Work<L(d)>, Wf, e)
+      )
+    case Con{x, rest} Some{+w}:
+      (w, {==})
+
+# the merge of the key x went on, from the work w, with a work W1: the merge of
+# the keys after it went on from W1 to Wf
+def Merge.Stepped(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +x: List<&2, U32>,
+  +rest: List<&2, List<&2, U32>>,
+  +w: Work<L(d)>,
+  +Wf: Work<L(d)>
+) -> Data:
+  Sigma<&2, &2, Work<L(d)>, W1 => Merge.And({Merge.all(~d, l, hb, ho, ht, k, rest, Some{W1}) == Some{Wf}: Maybe<&2, Work<L(d)>>}, {Merge.next(~d, l, hb, ho, ht, k, w, Res.name(x)) == Some{W1}: Maybe<&2, Work<L(d)>>})>
+
+# a merge that went on after a key, from the work w, went on with the work W1
+def Merge.all_step.at(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +x: List<&2, U32>,
+  +rest: List<&2, List<&2, U32>>,
+  +w: Work<L(d)>,
+  +Wf: Work<L(d)>,
+  +e: {Merge.all(~d, l, hb, ho, ht, k, x <> rest, Some{w}) == Some{Wf}: Maybe<&2, Work<L(d)>>},
+  sg: Sigma<&2, &2, Work<L(d)>, W1 => {Merge.step(~d, l, hb, ho, ht, k, x, w) == Some{W1}: Maybe<&2, Work<L(d)>>}>
+) -> Merge.Stepped(~d, l, hb, ho, ht, k, x, rest, w, Wf):
+  (+W1, +es) = sg
+  (
+    W1,
+    (
+      %es: {Merge.all(~d, l, hb, ho, ht, k, rest, _) == Some{Wf}: Maybe<&2, Work<L(d)>>}
+      e,
+      Equal.trans(
+        Maybe<&2, Work<L(d)>>,
+        Merge.next(~d, l, hb, ho, ht, k, w, Res.name(x)),
+        Merge.step(~d, l, hb, ho, ht, k, x, w),
+        Some{W1},
+        Equal.sym(
+          Maybe<&2, Work<L(d)>>,
+          Merge.step(~d, l, hb, ho, ht, k, x, w),
+          Merge.next(~d, l, hb, ho, ht, k, w, Res.name(x)),
+          Merge.step_eq(~d, l, hb, ho, ht, k, x, w)
+        ),
+        es
+      )
+    )
+  )
+
+# a merge that went on after a key went on with a work
+def Merge.all_step(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +x: List<&2, U32>,
+  +rest: List<&2, List<&2, U32>>,
+  +w: Work<L(d)>,
+  +Wf: Work<L(d)>,
+  +e: {Merge.all(~d, l, hb, ho, ht, k, x <> rest, Some{w}) == Some{Wf}: Maybe<&2, Work<L(d)>>}
+) -> Merge.Stepped(~d, l, hb, ho, ht, k, x, rest, w, Wf):
+  Merge.all_step.at(
+    ~d,
+    l,
+    hb,
+    ho,
+    ht,
+    k,
+    x,
+    rest,
+    w,
+    Wf,
+    e,
+    Merge.all_from(~d, l, hb, ho, ht, k, rest, Merge.step(~d, l, hb, ho, ht, k, x, w), Wf, e)
   )
 
 # a merge never loses a change that only one side made: when the merge of a
