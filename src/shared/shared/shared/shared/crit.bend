@@ -10019,6 +10019,39 @@ def Crit.last_max.go(~V: Data, m: Crit<V>, +lo: Nat, +k: List<&2, U32>, +v: V) -
         x => Crit.last_max.go(~V, o, 1n+p, k, v)(Crit.wf.wf_o(~V, r, p, e, z, o, lo)(h))(x)
       )(x => Crit.last_max.go(~V, z, 1n+p, k, v)(Crit.wf.wf_z(~V, r, p, e, z, o, lo)(h))(x))(h)(hl)
 
+# the part of a well formed map under a prefix, read from any cursor, is
+# well formed
+def Crit.under_go_wf(~V: Data, m: Crit<V>, +lo: Nat, +at: Nat, +c: Cur, +p: List<&2, U32>) -> {Crit.wf(~V, m, lo) == True{}: Bool} -> {
+  Crit.wf(~V, Crit.under.go(V, m, at, c, p), lo) == True{}: Bool
+}:
+  match m:
+    case Crit.Tip{}:
+      h => {==}
+    case Crit.Leaf{+k, +v}:
+      h => Shared.Bool.when_cases(Crit<V>, t => {Crit.wf(~V, t, lo) == True{}: Bool}, Key.starts(p, k), u => Crit.Leaf{k, v}, u => Crit.Tip{}, t => {==}, t => {==})
+    case Crit.Fork{+rep, +pos, +e, +z, +o}:
+      +h => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.wf(~V, t, lo) == True{}: Bool},
+        Cur.done(Cur.skip(Nat.sub(pos, at), c)),
+        u => Shared.Bool.when(Crit<V>, Key.starts(p, rep), w => Crit.Fork{rep, pos, e, z, o}, w => Crit.Tip{}),
+        u => Shared.Bool.when(Crit<V>, Cur.bit(Cur.skip(Nat.sub(pos, at), c)), w => Crit.under.go(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), p), w => Crit.under.go(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), p)),
+        t => Shared.Bool.when_cases(Crit<V>, t => {Crit.wf(~V, t, lo) == True{}: Bool}, Key.starts(p, rep), w => Crit.Fork{rep, pos, e, z, o}, w => Crit.Tip{}, t2 => h, t2 => {==}),
+        t => Shared.Bool.when_cases(
+          Crit<V>,
+          t => {Crit.wf(~V, t, lo) == True{}: Bool},
+          Cur.bit(Cur.skip(Nat.sub(pos, at), c)),
+          w => Crit.under.go(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), p),
+          w => Crit.under.go(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), p),
+          t2 => Crit.wf_mono(~V, Crit.under.go(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), p), 1n+pos, lo)(Crit.under_go_wf(~V, o, 1n+pos, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), p)(Crit.wf.wf_o(~V, rep, pos, e, z, o, lo)(h)))(Shared.Nat.le_succ(lo, pos)(Crit.wf.le(~V, rep, pos, e, z, o, lo)(h))),
+          t2 => Crit.wf_mono(~V, Crit.under.go(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), p), 1n+pos, lo)(Crit.under_go_wf(~V, z, 1n+pos, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), p)(Crit.wf.wf_z(~V, rep, pos, e, z, o, lo)(h)))(Shared.Nat.le_succ(lo, pos)(Crit.wf.le(~V, rep, pos, e, z, o, lo)(h)))
+        )
+      )
+
+# Crit.under_wf, with p used more than once
+def Crit.under_wf.go(~V: Data, m: Crit<V>, +p: List<&2, U32>) -> {Crit.wf(~V, m, 0n) == True{}: Bool} -> {Crit.wf(~V, Crit.under(V, m, p), 0n) == True{}: Bool}:
+  h => Crit.under_go_wf(~V, m, 0n, 0n, Cur.of(p), p)(h)
+
 # Laws of prefixes and order
 
 # a part under a prefix is well formed
@@ -10029,7 +10062,7 @@ law Crit.under_wf:
   {Crit.wf(~V, m, 0n) == True{}: Bool} -> {Crit.wf(~V, Crit.under(V, m, p), 0n) == True{}: Bool}
 
 def Crit.under_wf(ty, m, p):
-  ?TODO
+  Crit.under_wf.go(~ty, m, p)
 
 # a part under a prefix holds what the map holds under each key that starts
 # with the prefix, and nothing else
