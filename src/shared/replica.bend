@@ -4884,6 +4884,402 @@ def Safe.cell_kept(
     Safe.witness(~B, ~same, ~of, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter), c)(h)
   )
 
+# the laws of Cast.is_eq
+def Safe.cast_laws() -> Shared.Eq.Laws(Ledgers.Cast, Ledgers.Cast.is_eq):
+  Codes.Code.eq_laws(~Ledgers.Cast, ~Ledgers.Cast.codec())
+
+# Last.is_eq is True for a last vote and itself
+def Safe.last_refl(a: Maybe<&2, Ledgers.Last>) -> {Ledgers.Last.is_eq(a, a) == True{}: Bool}:
+  match a:
+    case None{}:
+      {==}
+    case Some{x}:
+      Shared.Eq.refl(
+        ~Ledgers.Last,
+        ~(x => y => Codes.Code.is_eq(~Ledgers.Last, ~Ledgers.Last.code, x, y)),
+        Codes.Code.eq_laws(~Ledgers.Last, ~Ledgers.Last.codec()),
+        x
+      )
+
+# the laws of Last.is_eq
+def Safe.last_laws() -> Shared.Eq.Laws(Maybe<&2, Ledgers.Last>, Ledgers.Last.is_eq):
+  (
+    a => Safe.last_refl(a),
+    a => b => Shared.Maybe.is_eq_sound(
+      ~Ledgers.Last,
+      ~(x => y => Codes.Code.is_eq(~Ledgers.Last, ~Ledgers.Last.code, x, y)),
+      x => y => Shared.Eq.sound(
+        ~Ledgers.Last,
+        ~(x => y => Codes.Code.is_eq(~Ledgers.Last, ~Ledgers.Last.code, x, y)),
+        Codes.Code.eq_laws(~Ledgers.Last, ~Ledgers.Last.codec()),
+        x,
+        y
+      ),
+      a,
+      b
+    )
+  )
+
+# what Ledgers.Ballot.step reads of a ballot is what its cast says
+def Safe.step_same(
+  a: Ledgers.Cast,
+  -w1: Ledgers.Place,
+  -n1: String,
+  -l1: Ledgers.Link,
+  -w2: Ledgers.Place,
+  -n2: String,
+  -l2: Ledgers.Link
+) -> {
+  Ledgers.Ballot.step(Ledgers.Ballot{Ledgers.Signed{w1, n1, a}, l1}) == Ledgers.Ballot.step(Ledgers.Ballot{Ledgers.Signed{w2, n2, a}, l2}): Maybe<&2, Ledgers.Step>
+}:
+  match a:
+    case Ledgers.Cast.Vote{v, f}:
+      {==}
+    case Ledgers.Cast.Pass{p}:
+      {==}
+
+# two ballots that cast the same read the same
+def Safe.step_cast(e1: Ledgers.Ballot, e2: Ledgers.Ballot) -> {
+  Ledgers.Ballot.cast(e1) == Ledgers.Ballot.cast(e2): Ledgers.Cast
+} -> {Ledgers.Ballot.step(e1) == Ledgers.Ballot.step(e2): Maybe<&2, Ledgers.Step>}:
+  match e1 e2:
+    case Ledgers.Ballot{Ledgers.Signed{w1, n1, +a1}, l1} Ledgers.Ballot{Ledgers.Signed{w2, n2, a2}, l2}:
+      h =>
+        %h: {
+          Ledgers.Ballot.step(Ledgers.Ballot{Ledgers.Signed{w1, n1, a1}, l1}) == Ledgers.Ballot.step(Ledgers.Ballot{Ledgers.Signed{w2, n2, _}, l2}): Maybe<&2, Ledgers.Step>
+        }
+        Safe.step_same(a1, w1, n1, l1, w2, n2, l2)
+
+# what Ledgers.Ballot.vote reads of a ballot is what its cast says
+def Safe.vote_same(
+  a: Ledgers.Cast,
+  -w1: Ledgers.Place,
+  -n1: String,
+  -l1: Ledgers.Link,
+  -w2: Ledgers.Place,
+  -n2: String,
+  -l2: Ledgers.Link
+) -> {
+  Ledgers.Ballot.vote(Ledgers.Ballot{Ledgers.Signed{w1, n1, a}, l1}) == Ledgers.Ballot.vote(Ledgers.Ballot{Ledgers.Signed{w2, n2, a}, l2}): Maybe<&2, Ledgers.Cast>
+}:
+  match a:
+    case Ledgers.Cast.Vote{v, f}:
+      {==}
+    case Ledgers.Cast.Pass{p}:
+      {==}
+
+# two ballots that cast the same read the same
+def Safe.vote_cast(e1: Ledgers.Ballot, e2: Ledgers.Ballot) -> {
+  Ledgers.Ballot.cast(e1) == Ledgers.Ballot.cast(e2): Ledgers.Cast
+} -> {Ledgers.Ballot.vote(e1) == Ledgers.Ballot.vote(e2): Maybe<&2, Ledgers.Cast>}:
+  match e1 e2:
+    case Ledgers.Ballot{Ledgers.Signed{w1, n1, +a1}, l1} Ledgers.Ballot{Ledgers.Signed{w2, n2, a2}, l2}:
+      h =>
+        %h: {
+          Ledgers.Ballot.vote(Ledgers.Ballot{Ledgers.Signed{w1, n1, a1}, l1}) == Ledgers.Ballot.vote(Ledgers.Ballot{Ledgers.Signed{w2, n2, _}, l2}): Maybe<&2, Ledgers.Cast>
+        }
+        Safe.vote_same(a1, w1, n1, l1, w2, n2, l2)
+
+# what Ledgers.Ballot.pass reads of a ballot is what its cast says
+def Safe.pass_same(
+  a: Ledgers.Cast,
+  -w1: Ledgers.Place,
+  -n1: String,
+  -l1: Ledgers.Link,
+  -w2: Ledgers.Place,
+  -n2: String,
+  -l2: Ledgers.Link
+) -> {
+  Ledgers.Ballot.pass(Ledgers.Ballot{Ledgers.Signed{w1, n1, a}, l1}) == Ledgers.Ballot.pass(Ledgers.Ballot{Ledgers.Signed{w2, n2, a}, l2}): Maybe<&2, Maybe<&2, Ledgers.Last>>
+}:
+  match a:
+    case Ledgers.Cast.Vote{v, f}:
+      {==}
+    case Ledgers.Cast.Pass{p}:
+      {==}
+
+# two ballots that cast the same read the same
+def Safe.pass_cast(e1: Ledgers.Ballot, e2: Ledgers.Ballot) -> {
+  Ledgers.Ballot.cast(e1) == Ledgers.Ballot.cast(e2): Ledgers.Cast
+} -> {Ledgers.Ballot.pass(e1) == Ledgers.Ballot.pass(e2): Maybe<&2, Maybe<&2, Ledgers.Last>>}:
+  match e1 e2:
+    case Ledgers.Ballot{Ledgers.Signed{w1, n1, +a1}, l1} Ledgers.Ballot{Ledgers.Signed{w2, n2, a2}, l2}:
+      h =>
+        %h: {
+          Ledgers.Ballot.pass(Ledgers.Ballot{Ledgers.Signed{w1, n1, a1}, l1}) == Ledgers.Ballot.pass(Ledgers.Ballot{Ledgers.Signed{w2, n2, _}, l2}): Maybe<&2, Maybe<&2, Ledgers.Last>>
+        }
+        Safe.pass_same(a1, w1, n1, l1, w2, n2, l2)
+
+# a ballot for a step is a vote
+def Safe.step_kind(e: Ledgers.Ballot, -y: Ledgers.Step) -> {Ledgers.Ballot.step(e) == Some{y}: Maybe<&2, Ledgers.Step>}
+  -> {Cast.is_vote(Ledgers.Ballot.cast(e)) == True{}: Bool}:
+  match e:
+    case Ledgers.Ballot{Ledgers.Signed{w, n, Ledgers.Cast.Vote{v, f}}, l}:
+      h => {==}
+    case Ledgers.Ballot{Ledgers.Signed{w, n, Ledgers.Cast.Pass{p}}, l}:
+      h => Empty.absurd({False{} == True{}: Bool}, Shared.Maybe.none_ne_some(Ledgers.Step, y, h))
+
+# a ballot that reads as a vote is a vote
+def Safe.vote_kind(e: Ledgers.Ballot, -y: Ledgers.Cast) -> {Ledgers.Ballot.vote(e) == Some{y}: Maybe<&2, Ledgers.Cast>}
+  -> {Cast.is_vote(Ledgers.Ballot.cast(e)) == True{}: Bool}:
+  match e:
+    case Ledgers.Ballot{Ledgers.Signed{w, n, Ledgers.Cast.Vote{v, f}}, l}:
+      h => {==}
+    case Ledgers.Ballot{Ledgers.Signed{w, n, Ledgers.Cast.Pass{p}}, l}:
+      h => Empty.absurd({False{} == True{}: Bool}, Shared.Maybe.none_ne_some(Ledgers.Cast, y, h))
+
+# a ballot that reads as a pass is not a vote
+def Safe.pass_kind(e: Ledgers.Ballot, -y: Maybe<&2, Ledgers.Last>) -> {
+  Ledgers.Ballot.pass(e) == Some{y}: Maybe<&2, Maybe<&2, Ledgers.Last>>
+} -> {Cast.is_vote(Ledgers.Ballot.cast(e)) == False{}: Bool}:
+  match e:
+    case Ledgers.Ballot{Ledgers.Signed{w, n, Ledgers.Cast.Pass{p}}, l}:
+      h => {==}
+    case Ledgers.Ballot{Ledgers.Signed{w, n, Ledgers.Cast.Vote{v, f}}, l}:
+      h => Empty.absurd({True{} == False{}: Bool}, Shared.Maybe.none_ne_some(Maybe<&2, Ledgers.Last>, y, h))
+
+# the value of a cell that stays stays
+def Safe.value_kept(
+  -B: Data,
+  m: Maybe<&2, Cells.Cell<B>>,
+  -m2: Maybe<&2, Cells.Cell<B>>,
+  -v: B,
+  hm: @c: Cells.Cell<B> -> {m == Some{c}: Maybe<&2, Cells.Cell<B>>} -> {m2 == Some{c}: Maybe<&2, Cells.Cell<B>>}
+) -> {Cells.Cell.value(B, m) == Some{v}: Maybe<&2, B>} -> {Cells.Cell.value(B, m2) == Some{v}: Maybe<&2, B>}:
+  match m:
+    case None{}:
+      h => Empty.absurd({Cells.Cell.value(B, m2) == Some{v}: Maybe<&2, B>}, Shared.Maybe.none_ne_some(B, v, h))
+    case Some{c}:
+      h =>
+        %Equal.sym(Maybe<&2, Cells.Cell<B>>, m2, Some{c}, hm(c)({==})): {
+          Cells.Cell.value(B, _) == Some{v}: Maybe<&2, B>
+        }
+        h
+
+# a slot that stays keeps what it holds
+def Safe.keeps_kept(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~sl: Shared.Eq.Laws(B, same),
+  m: Maybe<&2, Cells.Cell<B>>,
+  -m2: Maybe<&2, Cells.Cell<B>>,
+  hm: @c: Cells.Cell<B> -> {m == Some{c}: Maybe<&2, Cells.Cell<B>>} -> {m2 == Some{c}: Maybe<&2, Cells.Cell<B>>}
+) -> {Cells.Cell.keeps(~B, ~same, m, m2) == True{}: Bool}:
+  match m:
+    case None{}:
+      {==}
+    case Some{Cells.One{+x}}:
+      %Equal.sym(Maybe<&2, Cells.Cell<B>>, m2, Some{Cells.One{x}}, hm(Cells.One{x})({==})): {
+        Cells.Cell.keeps(~B, ~same, Some{Cells.One{x}}, _) == True{}: Bool
+      }
+      Shared.Eq.refl(~B, ~same, sl, x)
+    case Some{Cells.Many{}}:
+      %Equal.sym(Maybe<&2, Cells.Cell<B>>, m2, Some{Cells.Many{}}, hm(Cells.Many{})({==})): {
+        Cells.Cell.keeps(~B, ~same, Some{Cells.Many{}}, _) == True{}: Bool
+      }
+      {==}
+
+# the step that a voter cast at a place stays in a later ledger
+def Safe.step_kept(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +w: Ledgers.Place,
+  +voter: String,
+  -v: Ledgers.Step
+) -> {Led.voted(~mach, ~d, a, w, voter) == Some{v}: Maybe<&2, Ledgers.Step>}
+  -> {Led.voted(~mach, ~d, b, w, voter) == Some{v}: Maybe<&2, Ledgers.Step>}:
+  Safe.value_kept(
+    Ledgers.Step,
+    Ledgers.Ballots.cell(~Ledgers.Step, ~Ledgers.Step.is_eq, ~Ledgers.Ballot.step, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter)),
+    Ledgers.Ballots.cell(~Ledgers.Step, ~Ledgers.Step.is_eq, ~Ledgers.Ballot.step, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter)),
+    v,
+    c => Safe.cell_kept(
+      ~mach,
+      ~d,
+      ~lg,
+      ~ls,
+      ~Ledgers.Step, ~Ledgers.Step.is_eq, ~Ledgers.Step.laws(), ~Ledgers.Ballot.step, ~True{}, ~(x => y => Safe.step_cast(x, y)), ~(x => y => Safe.step_kind(x, y)),
+      a,
+      b,
+      later,
+      w,
+      voter,
+      c
+    )
+  )
+
+# the vote of a voter at a place stays in a later ledger
+def Safe.vote_kept(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +w: Ledgers.Place,
+  +voter: String,
+  -v: Ledgers.Cast
+) -> {Led.cast(~mach, ~d, a, w, voter) == Some{v}: Maybe<&2, Ledgers.Cast>}
+  -> {Led.cast(~mach, ~d, b, w, voter) == Some{v}: Maybe<&2, Ledgers.Cast>}:
+  Safe.value_kept(
+    Ledgers.Cast,
+    Ledgers.Ballots.cell(~Ledgers.Cast, ~Ledgers.Cast.is_eq, ~Ledgers.Ballot.vote, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter)),
+    Ledgers.Ballots.cell(~Ledgers.Cast, ~Ledgers.Cast.is_eq, ~Ledgers.Ballot.vote, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter)),
+    v,
+    c => Safe.cell_kept(
+      ~mach,
+      ~d,
+      ~lg,
+      ~ls,
+      ~Ledgers.Cast, ~Ledgers.Cast.is_eq, ~Safe.cast_laws(), ~Ledgers.Ballot.vote, ~True{}, ~(x => y => Safe.vote_cast(x, y)), ~(x => y => Safe.vote_kind(x, y)),
+      a,
+      b,
+      later,
+      w,
+      voter,
+      c
+    )
+  )
+
+# the pass of a voter to a place stays in a later ledger
+def Safe.pass_kept(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +w: Ledgers.Place,
+  +voter: String,
+  -v: Maybe<&2, Ledgers.Last>
+) -> {Led.passed(~mach, ~d, a, w, voter) == Some{v}: Maybe<&2, Maybe<&2, Ledgers.Last>>}
+  -> {Led.passed(~mach, ~d, b, w, voter) == Some{v}: Maybe<&2, Maybe<&2, Ledgers.Last>>}:
+  Safe.value_kept(
+    Maybe<&2, Ledgers.Last>,
+    Ledgers.Ballots.cell(~Maybe<&2, Ledgers.Last>, ~Ledgers.Last.is_eq, ~Ledgers.Ballot.pass, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(a)(w)(voter)),
+    Ledgers.Ballots.cell(~Maybe<&2, Ledgers.Last>, ~Ledgers.Last.is_eq, ~Ledgers.Ballot.pass, Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(b)(w)(voter)),
+    v,
+    c => Safe.cell_kept(
+      ~mach,
+      ~d,
+      ~lg,
+      ~ls,
+      ~Maybe<&2, Ledgers.Last>, ~Ledgers.Last.is_eq, ~Safe.last_laws(), ~Ledgers.Ballot.pass, ~False{}, ~(x => y => Safe.pass_cast(x, y)), ~(x => y => Safe.pass_kind(x, y)),
+      a,
+      b,
+      later,
+      w,
+      voter,
+      c
+    )
+  )
+
+# the cells of the voters os at a place keep what they hold in a later
+# ledger
+def Safe.cells_keep(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +w: Ledgers.Place,
+  os: List<&2, String>
+) -> {
+  Shared.List.all2(
+    ~Maybe<&2, Cells.Cell<Ledgers.Step>>,
+    ~Maybe<&2, Cells.Cell<Ledgers.Step>>,
+    ~Cells.Cell.keeps(~Ledgers.Step, ~Ledgers.Step.is_eq),
+    Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), a, w, os),
+    Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), b, w, os)
+  )
+    == True{}: Bool
+}:
+  match os:
+    case Nil{}:
+      {==}
+    case Con{+o, +r}:
+      Shared.Bool.and_both(
+        Cells.Cell.keeps(
+          ~Ledgers.Step,
+          ~Ledgers.Step.is_eq,
+          Ledgers.Kind.cell(~Machine.Q(mach), ~Led.kind(mach, d), a, w, o),
+          Ledgers.Kind.cell(~Machine.Q(mach), ~Led.kind(mach, d), b, w, o)
+        ),
+        Shared.List.all2(
+          ~Maybe<&2, Cells.Cell<Ledgers.Step>>,
+          ~Maybe<&2, Cells.Cell<Ledgers.Step>>,
+          ~Cells.Cell.keeps(~Ledgers.Step, ~Ledgers.Step.is_eq),
+          Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), a, w, r),
+          Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), b, w, r)
+        )
+      )(
+        Safe.keeps_kept(
+          ~Ledgers.Step,
+          ~Ledgers.Step.is_eq,
+          ~Ledgers.Step.laws(),
+          Ledgers.Kind.cell(~Machine.Q(mach), ~Led.kind(mach, d), a, w, o),
+          Ledgers.Kind.cell(~Machine.Q(mach), ~Led.kind(mach, d), b, w, o),
+          c => Safe.cell_kept(~mach, ~d, ~lg, ~ls, ~Ledgers.Step, ~Ledgers.Step.is_eq, ~Ledgers.Step.laws(), ~Ledgers.Ballot.step, ~True{}, ~(x => y => Safe.step_cast(x, y)), ~(x => y => Safe.step_kind(x, y)), a, b, later, w, o, c)
+        )
+      )(Safe.cells_keep(~mach, ~d, ~lg, ~ls, a, b, later, w, r))
+
+# the step that a majority cast at a place stays in a later ledger
+def Safe.tally_kept(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +w: Ledgers.Place,
+  +os: List<&2, String>,
+  +v: Ledgers.Step
+) -> {Led.tally(~mach, ~d, a, w, os) == Some{v}: Maybe<&2, Ledgers.Step>}
+  -> {Led.tally(~mach, ~d, b, w, os) == Some{v}: Maybe<&2, Ledgers.Step>}:
+  h => Quorums.Quorum.major_kept(~Ledgers.Step, ~Ledgers.Step.is_eq, ~Ledgers.Step.laws())(
+    Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), a, w, os)
+  )(Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), b, w, os))(v)(Safe.cells_keep(~mach, ~d, ~lg, ~ls, a, b, later, w, os))(h)
+
 # a height decides the same step in a later ledger
 def Safe.decide(
   ~mach: Machine(),
