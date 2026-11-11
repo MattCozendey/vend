@@ -1,4 +1,5 @@
 import Base
+import ./shared/shared/code.bend as Codes
 import ./shared/shared/hash.bend as Hashes
 import ./shared/shared/shared.bend as Shared
 
@@ -11,12 +12,13 @@ import ./shared/shared/shared.bend as Shared
 # a tree. Its root is a function of its bindings alone, so nodes that hold the
 # same bindings hold the same root, whatever the order of their writes.
 #
-# The best known structure for it is a tree sorted by key and cut where its
-# content says (a prolly tree): a node ends after a binding whose hash says so,
-# as a rope cuts bytes (Ropes). A read or a write visits about log n nodes, a
-# listing of the keys under a prefix costs the nodes on its path and what it
-# lists, and a difference costs the nodes that differ. Its two halves at each
-# node are apart, so a listing or a difference forks there.
+# The tree of this file is a Merkle search tree (Mst): each key has a level,
+# from the hash of the key, so about one key in 32 is a level up. A node holds
+# the keys of one level in its range, in order, and between them the subtrees
+# of the keys of lower levels. So the shape is a function of the keys, a read
+# or a write visits about log n nodes, a write adds only the nodes on its
+# path, and two trees share each subtree whose keys and values they share, so
+# a difference costs the nodes that differ.
 
 # what a read of a key finds: its value; that the tree does not hold the key;
 # or that the depot lacks the node of a hash, so the read cannot tell yet.
@@ -346,3 +348,229 @@ def Tree.ops(
   match t:
     case Tuple{o, laws}:
       o
+
+# Merkle search trees
+# -------------------
+
+# how the key a compares to the key b: word by word, a key before each key
+# that it starts
+def Key.cmp(a: List<&2, U32>, b: List<&2, U32>) -> Cmp:
+  match a b:
+    case Nil{} Nil{}:
+      EQ{}
+    case Nil{} Con{y, rb}:
+      LT{}
+    case Con{x, ra} Nil{}:
+      GT{}
+    case Con{x, ra} Con{y, rb}:
+      +c = U32.cmp(x, y)
+      Shared.Bool.when(Cmp, Cmp.is_eq(c), u => Key.cmp(ra, rb), u => c)
+
+# the number of zero groups of 5 bits at the top of x, f groups at most
+def Level.zeros(f: Nat, +x: U32) -> Nat:
+  match f:
+    case 0n:
+      0n
+    case 1n+p:
+      Shared.Bool.when(
+        Nat,
+        U32.is_eq(U32.and(x, 4160749568), 0),
+        u => 1n+Level.zeros(p, U32.mul(x, 32)),
+        u => 0n
+      )
+
+# the level of a key of the hash h: its zero groups of 5 bits at the top, so
+# about one key in 32 is a level up
+def Level.of(h: Hashes.Hash) -> Nat:
+  match h:
+    case Hashes.Hash{a, b, c, d, e, f, g, i}:
+      +za = Level.zeros(6n, a)
+      Shared.Bool.when(Nat, Nat.is_eq(za, 6n), u => Nat.add(6n, Level.zeros(6n, b)), u => za)
+
+# the level of the key k: by its hash, so no writer can choose it
+def Key.level(k: List<&2, U32>) -> Nat:
+  Level.of(Hashes.Sha.hash(k))
+
+# a binding of a node, and the subtree of the keys between it and the next
+type Item is Data:
+  Item{key: List<&2, U32>, value: List<&2, U32>, right: Maybe<&2, Hashes.Hash>}
+
+# a node of a tree: its level, the subtree of the keys before its first item,
+# and its items, in the order of their keys
+type Node is Data:
+  Node{level: Nat, left: Maybe<&2, Hashes.Hash>, items: List<&2, Item>}
+
+# the item x, then r
+def Item.code(x: Item, r: List<&2, U32>) -> List<&2, U32>:
+  match x:
+    case Item{k, v, h}:
+      Codes.Code.words(k, Codes.Code.words(v, Codes.Code.maybe(~Hashes.Hash, ~Hashes.Hash.code, h, r)))
+
+# an item
+def Item.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Item>>:
+  Codes.Code.three.read(
+    ~List<&2, U32>,
+    ~List<&2, U32>,
+    ~Maybe<&2, Hashes.Hash>,
+    ~Item,
+    ~Codes.Code.words.read,
+    ~Codes.Code.words.read,
+    ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Hashes.Hash.code.read, m)),
+    k => v => h => Item{k, v, h},
+    ts
+  )
+
+# an item reads back
+def Item.code_read(x: Item, r: List<&2, U32>) -> {
+  Item.code.read(Item.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Item>>
+}:
+  match x:
+    case Item{k, v, h}:
+      Codes.Code.three_read(
+        ~List<&2, U32>,
+        ~List<&2, U32>,
+        ~Maybe<&2, Hashes.Hash>,
+        ~Item,
+        ~Codes.Code.words.codec(),
+        ~Codes.Code.words.codec(),
+        ~Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec()),
+        a => b => c => Item{a, b, c},
+        k,
+        v,
+        h,
+        r
+      )
+
+# the code of items
+def Item.codec() -> Codes.Codec(Item):
+  (Item.code, (Item.code.read, x => r => Item.code_read(x, r)))
+
+# the code of counts
+def Count.codec() -> Codes.Codec(Nat):
+  (Codes.Code.count, (Codes.Code.count.read, x => r => Codes.Code.count_read(x, r)))
+
+# the node n, then r
+def Node.code(n: Node, r: List<&2, U32>) -> List<&2, U32>:
+  match n:
+    case Node{l, h, xs}:
+      Codes.Code.count(
+        l,
+        Codes.Code.maybe(~Hashes.Hash, ~Hashes.Hash.code, h, Codes.Code.list(~Item, ~Item.code, xs, r))
+      )
+
+# a node
+def Node.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Node>>:
+  Codes.Code.three.read(
+    ~Nat,
+    ~Maybe<&2, Hashes.Hash>,
+    ~List<&2, Item>,
+    ~Node,
+    ~Codes.Code.count.read,
+    ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Hashes.Hash.code.read, m)),
+    ~(m => Codes.Code.list.read(~Item, ~Item.code.read, m)),
+    l => h => xs => Node{l, h, xs},
+    ts
+  )
+
+# a node reads back
+def Node.code_read(n: Node, r: List<&2, U32>) -> {
+  Node.code.read(Node.code(n, r)) == Some{Codes.Read{n, r}}: Maybe<&2, Codes.Read<Node>>
+}:
+  match n:
+    case Node{l, h, xs}:
+      Codes.Code.three_read(
+        ~Nat,
+        ~Maybe<&2, Hashes.Hash>,
+        ~List<&2, Item>,
+        ~Node,
+        ~Count.codec(),
+        ~Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec()),
+        ~Codes.Code.list.codec(~Item, ~Item.codec()),
+        a => b => c => Node{a, b, c},
+        l,
+        h,
+        xs,
+        r
+      )
+
+# the node that the depot s holds under the hash h (none: s lacks it, or it
+# is not the code of one node)
+def Mst.node(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  h: Hashes.Hash
+) -> Maybe<&2, Node>:
+  Codes.Code.whole.of(~Node, ~Node.code, ~Node.code.read, fetch(s)(h))
+
+# what a read of a node finds: the value of the key, or the subtree to go on in
+type Pick is Data:
+  Pick.Hit{value: List<&2, U32>}
+  Pick.Down{sub: Maybe<&2, Hashes.Hash>}
+
+# the pick of the key k among the items xs, whose subtree before is prev
+def Mst.pick(xs: List<&2, Item>, prev: Maybe<&2, Hashes.Hash>, +k: List<&2, U32>) -> Pick:
+  match xs:
+    case Nil{}:
+      Pick.Down{prev}
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      +c = Key.cmp(k, ik)
+      Shared.Bool.when(
+        Pick,
+        Cmp.is_lt(c),
+        u => Pick.Down{prev},
+        u => Shared.Bool.when(Pick, Cmp.is_eq(c), w => Pick.Hit{iv}, w => Mst.pick(rest, r, k))
+      )
+
+# the read that a pick gives: a value, or the read of its subtree (go)
+def Mst.look.pick(p: Pick, go: Maybe<&2, Hashes.Hash> -> Look) -> Look:
+  match p:
+    case Pick.Hit{v}:
+      Look.Found{v}
+    case Pick.Down{m}:
+      go(m)
+
+# the read of the key k in the node m of the hash h
+def Mst.look.at(
+  h: Hashes.Hash,
+  m: Maybe<&2, Node>,
+  +k: List<&2, U32>,
+  go: Maybe<&2, Hashes.Hash> -> Look
+) -> Look:
+  match m:
+    case None{}:
+      Look.Missing{h}
+    case Some{Node{l, left, xs}}:
+      Mst.look.pick(Mst.pick(xs, left, k), go)
+
+# the read of the key k in the tree of the root m, at most f levels down
+def Mst.look.go(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  m: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>
+) -> Look:
+  match f m:
+    case x None{}:
+      Look.Absent{}
+    case 0n Some{h}:
+      Look.Missing{h}
+    case 1n+p Some{+h}:
+      Mst.look.at(h, Mst.node(~S, ~fetch, s, h), k, m2 => Mst.look.go(~S, ~fetch, p, s, m2, k))
+
+# no tree is deeper than this many levels: a level holds about 32 times the
+# keys of the one below
+def Mst.depth() -> Nat:
+  64n
+
+# the read of the key k in the tree of the root m
+def Mst.look(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  m: Maybe<&2, Hashes.Hash>,
+  k: List<&2, U32>
+) -> Look:
+  Mst.look.go(~S, ~fetch, Mst.depth(), s, m, k)
