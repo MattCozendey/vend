@@ -273,18 +273,9 @@ def Rope.read(
 # Puts
 # ----
 
-# the chunk c ends a leaf, by its words mixed into x: the top 5 bits of the
-# mix are 0
-def Chunk.is_edge.go(c: List<&2, U32>, x: U32) -> Bool:
-  match c:
-    case Nil{}:
-      U32.is_eq(U32.and(x, 4160749568), 0)
-    case Con{w, r}:
-      Chunk.is_edge.go(r, U32.mul(U32.xor(x, w), 2654435761))
-
 # the chunk c ends a leaf: one chunk in about 32 does
 def Chunk.is_edge(c: List<&2, U32>) -> Bool:
-  Chunk.is_edge.go(c, 0)
+  Shared.Words.edge(0, c)
 
 # the hash h ends a branch: one hash in about 32 does
 def Hash.is_edge(h: Hashes.Hash) -> Bool:
