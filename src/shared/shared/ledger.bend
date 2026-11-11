@@ -3031,6 +3031,329 @@ def Book.keys_one(-Q: Data, +i: Nat, e1: Entry<Q>, +n1: Name, e2: Entry<Q>, +n2:
                       Book.key_tail.asks(Q, e2, n2, p, k)(h2)
                     )
 
+# what the dict d holds under k is what its map holds there
+def Book.dict_lookup(~V: Data, d: Crits.Dict(V), +k: List<&2, U32>) -> {
+  Crits.Dict.get(V, d, k) == Crits.Crit.lookup(V, Crits.Dict.crit(V, d), k): Maybe<&2, V>
+}:
+  match d:
+    case Tuple{+m, w}:
+      Crits.Crit.get_lookup(~V, m, k)(w)
+
+# each entry of the dict d is an entry of its map
+def Book.dict_agrees(~V: Data, d: Crits.Dict(V)) -> Crits.Crit.agrees(V, Crits.Dict.entries(V, d), Crits.Dict.crit(V, d)):
+  match d:
+    case Tuple{+m, w}:
+      Crits.Crit.sub_to_list(V, m, [], m)(Crits.Crit.sub_self(~V, m, 0n)(w))(Unit{})
+
+# Book.when_end once the test of k2 and k is known (b)
+def Book.when_end.at(-V: Data, -f: List<&2, U32> -> V -> Bool, +k2: List<&2, U32>, -w: V, +k: List<&2, U32>, -v: V, b: Bool) -> {
+  Crits.Key.is_eq(k2, k) == b: Bool
+} -> {f(k2)(w) == True{}: Bool} -> {Shared.Maybe.when(V, b, u => Some{w}) == Some{v}: Maybe<&2, V>} -> {f(k)(v) == True{}: Bool}:
+  match b:
+    case True{}:
+      eb => hf => hw =>
+        %Crits.Key.is_eq_sound(k2, k)(eb): {f(_)(v) == True{}: Bool}
+        %Shared.Maybe.some_inj(V, w, v, hw): {f(k2)(_) == True{}: Bool}
+        hf
+    case False{}:
+      eb => hf => hw => Empty.absurd({f(k)(v) == True{}: Bool}, Shared.Maybe.none_ne_some(V, v, hw))
+
+# what holds of an entry of the key k2 and the value w holds of what it gives,
+# read at k
+def Book.when_end(-V: Data, -f: List<&2, U32> -> V -> Bool, +k2: List<&2, U32>, -w: V, +k: List<&2, U32>, -v: V) -> {f(k2)(w) == True{}: Bool} -> {
+  Shared.Maybe.when(V, Crits.Key.is_eq(k2, k), u => Some{w}) == Some{v}: Maybe<&2, V>
+} -> {f(k)(v) == True{}: Bool}:
+  Book.when_end.at(V, f, k2, w, k, v, Crits.Key.is_eq(k2, k))({==})
+
+# the entries rest of the book b are each in their place, when those of m
+# then rest are
+def Book.ok.entries_rest(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>, m: Crits.Crit<Entry<Q>>, +rest: List<&2, Crits.Bind<Entry<Q>>>) -> {
+  Book.ok.entries(~Q, ~c, b, Crits.Crit.entries.go(Entry<Q>, m, rest)) == True{}: Bool
+} -> {Book.ok.entries(~Q, ~c, b, rest) == True{}: Bool}:
+  ?TODO
+
+# an entry of m is in its place in the book b, when the entries of m then
+# rest are
+def Book.ok.entries_at(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>, m: Crits.Crit<Entry<Q>>, +rest: List<&2, Crits.Bind<Entry<Q>>>, +k: List<&2, U32>, -v: Entry<Q>) -> {
+  Book.ok.entries(~Q, ~c, b, Crits.Crit.entries.go(Entry<Q>, m, rest)) == True{}: Bool
+} -> {Crits.Crit.lookup(Entry<Q>, m, k) == Some{v}: Maybe<&2, Entry<Q>>} -> {Bool.and(Crits.Key.is_eq(Name.key(Entry.name(~Q, ~c, v)), k), Book.indexed(Q, b, Entry.keys(Q, v, Entry.name(~Q, ~c, v)), Entry.name(~Q, ~c, v))) == True{}: Bool}:
+  ?TODO
+
+# an entry of the dict d is in its place in the book b, when the entries of d
+# are
+def Book.ok.entries_get(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>, +d: Crits.Dict(Entry<Q>), +k: List<&2, U32>, -v: Entry<Q>) -> {
+  Book.ok.entries(~Q, ~c, b, Crits.Dict.entries(Entry<Q>, d)) == True{}: Bool
+} -> {Crits.Dict.get(Entry<Q>, d, k) == Some{v}: Maybe<&2, Entry<Q>>} -> {Bool.and(Crits.Key.is_eq(Name.key(Entry.name(~Q, ~c, v)), k), Book.indexed(Q, b, Entry.keys(Q, v, Entry.name(~Q, ~c, v)), Entry.name(~Q, ~c, v))) == True{}: Bool}:
+  ?TODO
+
+# the keys rest of the index i of the book b each name an entry with that key,
+# when those of m then rest do
+def Book.ok.index_rest(-Q: Data, +b: Book<Q>, +i: Nat, m: Crits.Crit<Name>, +rest: List<&2, Crits.Bind<Name>>) -> {
+  Book.ok.index(Q, b, i, Crits.Crit.entries.go(Name, m, rest)) == True{}: Bool
+} -> {Book.ok.index(Q, b, i, rest) == True{}: Bool}:
+  ?TODO
+
+# a key of m of the index i of the book b names an entry with that key, when
+# the keys of m then rest do
+def Book.ok.index_at(-Q: Data, +b: Book<Q>, +i: Nat, m: Crits.Crit<Name>, +rest: List<&2, Crits.Bind<Name>>, +k: List<&2, U32>, -x: Name) -> {
+  Book.ok.index(Q, b, i, Crits.Crit.entries.go(Name, m, rest)) == True{}: Bool
+} -> {Crits.Crit.lookup(Name, m, k) == Some{x}: Maybe<&2, Name>} -> {Book.ok.key(Q, Book.get(Q, b, x), i, k, x) == True{}: Bool}:
+  ?TODO
+
+# a key of the dict d names an entry of the book b with that key in the index
+# i, when the keys of d do
+def Book.ok.index_get(-Q: Data, +b: Book<Q>, +i: Nat, +d: Crits.Dict(Name), +k: List<&2, U32>, -x: Name) -> {
+  Book.ok.index(Q, b, i, Crits.Dict.entries(Name, d)) == True{}: Bool
+} -> {Crits.Dict.get(Name, d, k) == Some{x}: Maybe<&2, Name>} -> {Book.ok.key(Q, Book.get(Q, b, x), i, k, x) == True{}: Bool}:
+  ?TODO
+
+# the entries of a put
+def Book.entries_put(~Q: Data, b: Book<Q>, +e: Entry<Q>, +n: Name, -ks: Keys) -> {
+  Book.entries(Q, Book.put(~Q, b, e, n, ks)) == Crits.Dict.set(~Entry<Q>, Book.entries(Q, b), Name.key(n), e): Crits.Dict(Entry<Q>)
+}:
+  match b:
+    case Book{es, bs, rs, hs, ls, as}:
+      {==}
+
+# the index i of a put
+def Book.index_put(~Q: Data, b: Book<Q>, -e: Entry<Q>, +n: Name, ks: Keys, i: Nat) -> {
+  Book.index(Q, Book.put(~Q, b, e, n, ks), i) == Index.put(Book.index(Q, b, i), Keys.at(ks, i), n): Crits.Dict(Name)
+}:
+  match b ks:
+    case Book{es, bs, rs, hs, ls, as} Keys{kb, kr, kh, kl, ka}:
+      match i:
+        case 0n:
+          {==}
+        case 1n+i1:
+          match i1:
+            case 0n:
+              {==}
+            case 1n+i2:
+              match i2:
+                case 0n:
+                  {==}
+                case 1n+i3:
+                  match i3:
+                    case 0n:
+                      {==}
+                    case 1n+p:
+                      {==}
+
+# the entries of a take
+def Book.entries_take(~Q: Data, b: Book<Q>, +n: Name, -ks: Keys) -> {
+  Book.entries(Q, Book.take(~Q, b, n, ks)) == Crits.Dict.drop(~Entry<Q>, Book.entries(Q, b), Name.key(n)): Crits.Dict(Entry<Q>)
+}:
+  match b:
+    case Book{es, bs, rs, hs, ls, as}:
+      {==}
+
+# the index i of a take
+def Book.index_take(~Q: Data, b: Book<Q>, -n: Name, ks: Keys, i: Nat) -> {
+  Book.index(Q, Book.take(~Q, b, n, ks), i) == Index.drop(Book.index(Q, b, i), Keys.at(ks, i)): Crits.Dict(Name)
+}:
+  match b ks:
+    case Book{es, bs, rs, hs, ls, as} Keys{kb, kr, kh, kl, ka}:
+      match i:
+        case 0n:
+          {==}
+        case 1n+i1:
+          match i1:
+            case 0n:
+              {==}
+            case 1n+i2:
+              match i2:
+                case 0n:
+                  {==}
+                case 1n+i3:
+                  match i3:
+                    case 0n:
+                      {==}
+                    case 1n+p:
+                      {==}
+
+# a put of the name n under the key m holds n there
+def Index.holds_put(d: Crits.Dict(Name), m: Maybe<&2, List<&2, U32>>, +n: Name) -> {Index.holds(Index.put(d, m, n), m, n) == True{}: Bool}:
+  match m:
+    case None{}:
+      {==}
+    case Some{+k}:
+      %Equal.sym(
+        Maybe<&2, Name>,
+        Crits.Dict.get(Name, Crits.Dict.set(~Name, d, k, n), k),
+        Bool.pick(Maybe<&2, Name>, Crits.Key.is_eq(k, k), Some{n}, Crits.Dict.get(Name, d, k)),
+        Crits.Dict.get_set(~Name, d, k, n, k)
+      ): {Shared.Maybe.is_eq(~Name, ~Name.is_eq, _, Some{n}) == True{}: Bool}
+      %Equal.sym(Bool, Crits.Key.is_eq(k, k), True{}, Crits.Key.is_eq_refl(k)): {
+        Shared.Maybe.is_eq(~Name, ~Name.is_eq, Bool.pick(Maybe<&2, Name>, _, Some{n}, Crits.Dict.get(Name, d, k)), Some{n}) == True{}: Bool
+      }
+      Name.is_eq_refl(n)
+
+# a put under a key m that m2 is not keeps what holds under m2
+def Index.holds_put_apart(+d: Crits.Dict(Name), m: Maybe<&2, List<&2, U32>>, m2: Maybe<&2, List<&2, U32>>, +n: Name, +n2: Name) -> (
+  @k: List<&2, U32> -> {m == Some{k}: Maybe<&2, List<&2, U32>>} -> {m2 == Some{k}: Maybe<&2, List<&2, U32>>} -> Empty
+) -> {Index.holds(Index.put(d, m, n), m2, n2) == Index.holds(d, m2, n2): Bool}:
+  match m m2:
+    case None{} y:
+      dist => {==}
+    case Some{+k} None{}:
+      dist => {==}
+    case Some{+k} Some{+k2}:
+      dist =>
+        %Equal.sym(
+          Maybe<&2, Name>,
+          Crits.Dict.get(Name, Crits.Dict.set(~Name, d, k, n), k2),
+          Bool.pick(Maybe<&2, Name>, Crits.Key.is_eq(k2, k), Some{n}, Crits.Dict.get(Name, d, k2)),
+          Crits.Dict.get_set(~Name, d, k, n, k2)
+        ): {
+          Shared.Maybe.is_eq(~Name, ~Name.is_eq, _, Some{n2}) == Shared.Maybe.is_eq(~Name, ~Name.is_eq, Crits.Dict.get(Name, d, k2), Some{n2}): Bool
+        }
+        Book.by({Shared.Maybe.is_eq(~Name, ~Name.is_eq, Bool.pick(Maybe<&2, Name>, Crits.Key.is_eq(k2, k), Some{n}, Crits.Dict.get(Name, d, k2)), Some{n2}) == Shared.Maybe.is_eq(~Name, ~Name.is_eq, Crits.Dict.get(Name, d, k2), Some{n2}): Bool}, Crits.Key.is_eq(k2, k))(
+          t => Empty.absurd({Shared.Maybe.is_eq(~Name, ~Name.is_eq, Bool.pick(Maybe<&2, Name>, Crits.Key.is_eq(k2, k), Some{n}, Crits.Dict.get(Name, d, k2)), Some{n2}) == Shared.Maybe.is_eq(~Name, ~Name.is_eq, Crits.Dict.get(Name, d, k2), Some{n2}): Bool}, dist(k)({==})(Equal.cong(List<&2, U32>, Maybe<&2, List<&2, U32>>, z => Some{z}, k2, k, Crits.Key.is_eq_sound(k2, k)(t))))
+        )(
+          f => Equal.cong(
+            Maybe<&2, Name>,
+            Bool,
+            z => Shared.Maybe.is_eq(~Name, ~Name.is_eq, z, Some{n2}),
+            Bool.pick(Maybe<&2, Name>, Crits.Key.is_eq(k2, k), Some{n}, Crits.Dict.get(Name, d, k2)),
+            Crits.Dict.get(Name, d, k2),
+            Book.pick_false(Maybe<&2, Name>, Crits.Key.is_eq(k2, k), Some{n}, Crits.Dict.get(Name, d, k2))(f)
+          )
+        )
+
+# a drop of a key m that m2 is not keeps what holds under m2
+def Index.holds_drop_apart(+d: Crits.Dict(Name), m: Maybe<&2, List<&2, U32>>, m2: Maybe<&2, List<&2, U32>>, +n2: Name) -> (
+  @k: List<&2, U32> -> {m == Some{k}: Maybe<&2, List<&2, U32>>} -> {m2 == Some{k}: Maybe<&2, List<&2, U32>>} -> Empty
+) -> {Index.holds(Index.drop(d, m), m2, n2) == Index.holds(d, m2, n2): Bool}:
+  match m m2:
+    case None{} y:
+      dist => {==}
+    case Some{+k} None{}:
+      dist => {==}
+    case Some{+k} Some{+k2}:
+      dist =>
+        %Equal.sym(
+          Maybe<&2, Name>,
+          Crits.Dict.get(Name, Crits.Dict.drop(~Name, d, k), k2),
+          Bool.pick(Maybe<&2, Name>, Crits.Key.is_eq(k2, k), None{}, Crits.Dict.get(Name, d, k2)),
+          Crits.Dict.get_drop(~Name, d, k, k2)
+        ): {
+          Shared.Maybe.is_eq(~Name, ~Name.is_eq, _, Some{n2}) == Shared.Maybe.is_eq(~Name, ~Name.is_eq, Crits.Dict.get(Name, d, k2), Some{n2}): Bool
+        }
+        Book.by({Shared.Maybe.is_eq(~Name, ~Name.is_eq, Bool.pick(Maybe<&2, Name>, Crits.Key.is_eq(k2, k), None{}, Crits.Dict.get(Name, d, k2)), Some{n2}) == Shared.Maybe.is_eq(~Name, ~Name.is_eq, Crits.Dict.get(Name, d, k2), Some{n2}): Bool}, Crits.Key.is_eq(k2, k))(
+          t => Empty.absurd({Shared.Maybe.is_eq(~Name, ~Name.is_eq, Bool.pick(Maybe<&2, Name>, Crits.Key.is_eq(k2, k), None{}, Crits.Dict.get(Name, d, k2)), Some{n2}) == Shared.Maybe.is_eq(~Name, ~Name.is_eq, Crits.Dict.get(Name, d, k2), Some{n2}): Bool}, dist(k)({==})(Equal.cong(List<&2, U32>, Maybe<&2, List<&2, U32>>, z => Some{z}, k2, k, Crits.Key.is_eq_sound(k2, k)(t))))
+        )(
+          f => Equal.cong(
+            Maybe<&2, Name>,
+            Bool,
+            z => Shared.Maybe.is_eq(~Name, ~Name.is_eq, z, Some{n2}),
+            Bool.pick(Maybe<&2, Name>, Crits.Key.is_eq(k2, k), None{}, Crits.Dict.get(Name, d, k2)),
+            Crits.Dict.get(Name, d, k2),
+            Book.pick_false(Maybe<&2, Name>, Crits.Key.is_eq(k2, k), None{}, Crits.Dict.get(Name, d, k2))(f)
+          )
+        )
+
+# keys that Crits.Key.is_eq calls apart are not equal
+def Book.key_apart(+a: List<&2, U32>, +b: List<&2, U32>) -> {Crits.Key.is_eq(a, b) == False{}: Bool} -> {b == a: List<&2, U32>} -> Empty:
+  hf => e =>
+    Shared.Bool.true_ne_false(
+      Equal.trans(
+        Bool,
+        True{},
+        Crits.Key.is_eq(a, b),
+        False{},
+        Equal.trans(
+          Bool,
+          True{},
+          Crits.Key.is_eq(a, a),
+          Crits.Key.is_eq(a, b),
+          Equal.sym(Bool, Crits.Key.is_eq(a, a), True{}, Crits.Key.is_eq_refl(a)),
+          Equal.cong(List<&2, U32>, Bool, z => Crits.Key.is_eq(a, z), a, b, Equal.sym(List<&2, U32>, b, a, e))
+        ),
+        hf
+      )
+    )
+
+# a book that each index of which holds what another holds under the keys ks
+# indexes the name n there as the other does
+def Book.indexed_same(-Q: Data, +b: Book<Q>, +b2: Book<Q>, +ks: Keys, +n: Name) -> {
+  Index.holds(Book.index(Q, b2, 0n), Keys.at(ks, 0n), n) == Index.holds(Book.index(Q, b, 0n), Keys.at(ks, 0n), n): Bool
+} -> {
+  Index.holds(Book.index(Q, b2, 1n), Keys.at(ks, 1n), n) == Index.holds(Book.index(Q, b, 1n), Keys.at(ks, 1n), n): Bool
+} -> {
+  Index.holds(Book.index(Q, b2, 2n), Keys.at(ks, 2n), n) == Index.holds(Book.index(Q, b, 2n), Keys.at(ks, 2n), n): Bool
+} -> {
+  Index.holds(Book.index(Q, b2, 3n), Keys.at(ks, 3n), n) == Index.holds(Book.index(Q, b, 3n), Keys.at(ks, 3n), n): Bool
+} -> {
+  Index.holds(Book.index(Q, b2, 4n), Keys.at(ks, 4n), n) == Index.holds(Book.index(Q, b, 4n), Keys.at(ks, 4n), n): Bool
+} -> {Book.indexed(Q, b2, ks, n) == Book.indexed(Q, b, ks, n): Bool}:
+  e0 => e1 => e2 => e3 => e4 =>
+    %e0: {Book.indexed(Q, b2, ks, n) == Bool.and(Bool.and(_, Index.holds(Book.index(Q, b, 1n), Keys.at(ks, 1n), n)), Bool.and(Bool.and(Index.holds(Book.index(Q, b, 2n), Keys.at(ks, 2n), n), Index.holds(Book.index(Q, b, 3n), Keys.at(ks, 3n), n)), Index.holds(Book.index(Q, b, 4n), Keys.at(ks, 4n), n))): Bool}
+    %e1: {Book.indexed(Q, b2, ks, n) == Bool.and(Bool.and(Index.holds(Book.index(Q, b2, 0n), Keys.at(ks, 0n), n), _), Bool.and(Bool.and(Index.holds(Book.index(Q, b, 2n), Keys.at(ks, 2n), n), Index.holds(Book.index(Q, b, 3n), Keys.at(ks, 3n), n)), Index.holds(Book.index(Q, b, 4n), Keys.at(ks, 4n), n))): Bool}
+    %e2: {Book.indexed(Q, b2, ks, n) == Bool.and(Bool.and(Index.holds(Book.index(Q, b2, 0n), Keys.at(ks, 0n), n), Index.holds(Book.index(Q, b2, 1n), Keys.at(ks, 1n), n)), Bool.and(Bool.and(_, Index.holds(Book.index(Q, b, 3n), Keys.at(ks, 3n), n)), Index.holds(Book.index(Q, b, 4n), Keys.at(ks, 4n), n))): Bool}
+    %e3: {Book.indexed(Q, b2, ks, n) == Bool.and(Bool.and(Index.holds(Book.index(Q, b2, 0n), Keys.at(ks, 0n), n), Index.holds(Book.index(Q, b2, 1n), Keys.at(ks, 1n), n)), Bool.and(Bool.and(Index.holds(Book.index(Q, b2, 2n), Keys.at(ks, 2n), n), _), Index.holds(Book.index(Q, b, 4n), Keys.at(ks, 4n), n))): Bool}
+    %e4: {Book.indexed(Q, b2, ks, n) == Bool.and(Bool.and(Index.holds(Book.index(Q, b2, 0n), Keys.at(ks, 0n), n), Index.holds(Book.index(Q, b2, 1n), Keys.at(ks, 1n), n)), Bool.and(Bool.and(Index.holds(Book.index(Q, b2, 2n), Keys.at(ks, 2n), n), Index.holds(Book.index(Q, b2, 3n), Keys.at(ks, 3n), n)), _)): Bool}
+    {==}
+
+# a put of an entry e of the name n keeps what the index i holds under the key
+# there of an entry v of a name m whose key is not that of n
+def Book.holds_put(~Q: Data, +b: Book<Q>, +e: Entry<Q>, +n: Name, +v: Entry<Q>, +m: Name, +i: Nat) -> {
+  Crits.Key.is_eq(Name.key(m), Name.key(n)) == False{}: Bool
+} -> {
+  Index.holds(Book.index(Q, Book.put(~Q, b, e, n, Entry.keys(Q, e, n)), i), Keys.at(Entry.keys(Q, v, m), i), m)
+    == Index.holds(Book.index(Q, b, i), Keys.at(Entry.keys(Q, v, m), i), m): Bool
+}:
+  hne =>
+    %Equal.sym(
+      Crits.Dict(Name),
+      Book.index(Q, Book.put(~Q, b, e, n, Entry.keys(Q, e, n)), i),
+      Index.put(Book.index(Q, b, i), Keys.at(Entry.keys(Q, e, n), i), n),
+      Book.index_put(~Q, b, e, n, Entry.keys(Q, e, n), i)
+    ): {Index.holds(_, Keys.at(Entry.keys(Q, v, m), i), m) == Index.holds(Book.index(Q, b, i), Keys.at(Entry.keys(Q, v, m), i), m): Bool}
+    Index.holds_put_apart(Book.index(Q, b, i), Keys.at(Entry.keys(Q, e, n), i), Keys.at(Entry.keys(Q, v, m), i), n, m)(
+      kk => h1 => h2 => Book.key_apart(Name.key(m), Name.key(n))(hne)(Book.keys_one(Q, i, e, n, v, m, kk)(h1)(h2))
+    )
+
+# a take of an entry e of the name n keeps what the index i holds under the
+# key there of an entry v of a name m whose key is not that of n
+def Book.holds_take(~Q: Data, +b: Book<Q>, +e: Entry<Q>, +n: Name, +v: Entry<Q>, +m: Name, +i: Nat) -> {
+  Crits.Key.is_eq(Name.key(m), Name.key(n)) == False{}: Bool
+} -> {
+  Index.holds(Book.index(Q, Book.take(~Q, b, n, Entry.keys(Q, e, n)), i), Keys.at(Entry.keys(Q, v, m), i), m)
+    == Index.holds(Book.index(Q, b, i), Keys.at(Entry.keys(Q, v, m), i), m): Bool
+}:
+  hne =>
+    %Equal.sym(
+      Crits.Dict(Name),
+      Book.index(Q, Book.take(~Q, b, n, Entry.keys(Q, e, n)), i),
+      Index.drop(Book.index(Q, b, i), Keys.at(Entry.keys(Q, e, n), i)),
+      Book.index_take(~Q, b, n, Entry.keys(Q, e, n), i)
+    ): {Index.holds(_, Keys.at(Entry.keys(Q, v, m), i), m) == Index.holds(Book.index(Q, b, i), Keys.at(Entry.keys(Q, v, m), i), m): Bool}
+    Index.holds_drop_apart(Book.index(Q, b, i), Keys.at(Entry.keys(Q, e, n), i), Keys.at(Entry.keys(Q, v, m), i), m)(
+      kk => h1 => h2 => Book.key_apart(Name.key(m), Name.key(n))(hne)(Book.keys_one(Q, i, e, n, v, m, kk)(h1)(h2))
+    )
+
+# a put of the entry e of the name n indexes n under its key in the index i
+def Book.holds_put_same(~Q: Data, +b: Book<Q>, +e: Entry<Q>, +n: Name, +i: Nat) -> {
+  Index.holds(Book.index(Q, Book.put(~Q, b, e, n, Entry.keys(Q, e, n)), i), Keys.at(Entry.keys(Q, e, n), i), n) == True{}: Bool
+}:
+  %Equal.sym(
+    Crits.Dict(Name),
+    Book.index(Q, Book.put(~Q, b, e, n, Entry.keys(Q, e, n)), i),
+    Index.put(Book.index(Q, b, i), Keys.at(Entry.keys(Q, e, n), i), n),
+    Book.index_put(~Q, b, e, n, Entry.keys(Q, e, n), i)
+  ): {Index.holds(_, Keys.at(Entry.keys(Q, e, n), i), n) == True{}: Bool}
+  Index.holds_put(Book.index(Q, b, i), Keys.at(Entry.keys(Q, e, n), i), n)
+
+# a put of the entry e of the name n indexes n under each key of e
+def Book.indexed_put(~Q: Data, +b: Book<Q>, +e: Entry<Q>, +n: Name) -> {
+  Book.indexed(Q, Book.put(~Q, b, e, n, Entry.keys(Q, e, n)), Entry.keys(Q, e, n), n) == True{}: Bool
+}:
+  Shared.Bool.and_both(Bool.and(Index.holds(Book.index(Q, Book.put(~Q, b, e, n, Entry.keys(Q, e, n)), 0n), Keys.at(Entry.keys(Q, e, n), 0n), n), Index.holds(Book.index(Q, Book.put(~Q, b, e, n, Entry.keys(Q, e, n)), 1n), Keys.at(Entry.keys(Q, e, n), 1n), n)), Bool.and(Bool.and(Index.holds(Book.index(Q, Book.put(~Q, b, e, n, Entry.keys(Q, e, n)), 2n), Keys.at(Entry.keys(Q, e, n), 2n), n), Index.holds(Book.index(Q, Book.put(~Q, b, e, n, Entry.keys(Q, e, n)), 3n), Keys.at(Entry.keys(Q, e, n), 3n), n)), Index.holds(Book.index(Q, Book.put(~Q, b, e, n, Entry.keys(Q, e, n)), 4n), Keys.at(Entry.keys(Q, e, n), 4n), n)))(
+    Shared.Bool.and_both(Index.holds(Book.index(Q, Book.put(~Q, b, e, n, Entry.keys(Q, e, n)), 0n), Keys.at(Entry.keys(Q, e, n), 0n), n), Index.holds(Book.index(Q, Book.put(~Q, b, e, n, Entry.keys(Q, e, n)), 1n), Keys.at(Entry.keys(Q, e, n), 1n), n))(Book.holds_put_same(~Q, b, e, n, 0n))(Book.holds_put_same(~Q, b, e, n, 1n))
+  )(
+    Shared.Bool.and_both(Bool.and(Index.holds(Book.index(Q, Book.put(~Q, b, e, n, Entry.keys(Q, e, n)), 2n), Keys.at(Entry.keys(Q, e, n), 2n), n), Index.holds(Book.index(Q, Book.put(~Q, b, e, n, Entry.keys(Q, e, n)), 3n), Keys.at(Entry.keys(Q, e, n), 3n), n)), Index.holds(Book.index(Q, Book.put(~Q, b, e, n, Entry.keys(Q, e, n)), 4n), Keys.at(Entry.keys(Q, e, n), 4n), n))(Shared.Bool.and_both(Index.holds(Book.index(Q, Book.put(~Q, b, e, n, Entry.keys(Q, e, n)), 2n), Keys.at(Entry.keys(Q, e, n), 2n), n), Index.holds(Book.index(Q, Book.put(~Q, b, e, n, Entry.keys(Q, e, n)), 3n), Keys.at(Entry.keys(Q, e, n), 3n), n))(Book.holds_put_same(~Q, b, e, n, 2n))(Book.holds_put_same(~Q, b, e, n, 3n)))(Book.holds_put_same(~Q, b, e, n, 4n))
+  )
+
 # an add keeps a book in its one shape
 law Book.ok_add:
   for ~Q: Data
