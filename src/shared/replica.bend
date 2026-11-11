@@ -3805,6 +3805,347 @@ def Safe.decide(
 # Runs of a step
 # --------------
 
+# Gains of a run
+# --------------
+# A run only adds: its added nodes grow at their front, and its ledger is the
+# ledger before with some data put, the same nodes in another order.
+
+# the ledger l holds each of the words ns, under their hashes
+def Ext.holds(~mach: Machine(), ~d: Led(mach), +l: Led.L(mach, d), ns: List<&2, List<&2, U32>>) -> Bool:
+  Depots.Depot.holds(~Led.L(mach, d), ~(s => h => Led.fetch(~mach, ~d, s, h)), l, ns)
+
+# that the run r2 follows the run r: it added ys at the front of what r added,
+# and its ledger is that of r with zs put, where s holds zs when it holds ys
+def Ext.Gain(
+  -mach: Machine(),
+  -d: Led(mach),
+  -s: Led.L(mach, d),
+  -r: Run<Led.L(mach, d)>,
+  -r2: Run<Led.L(mach, d)>
+) -> Data:
+  +Sigma<List<&2, List<&2, U32>>, ys => +Sigma<List<&2, List<&2, U32>>, zs => +Sigma<
+    {
+      Run.added(Led.L(mach, d), r2)
+        == List.append(&2, List<&2, U32>, ys, Run.added(Led.L(mach, d), r)): List<&2, List<&2, U32>>
+    },
+    e1 => +Sigma<
+      {Run.ledger(Led.L(mach, d), r2) == Led.puts(~mach, ~d, zs, Run.ledger(Led.L(mach, d), r)): Led.L(mach, d)},
+      e2 => {Ext.holds(~mach, ~d, s, zs) == Ext.holds(~mach, ~d, s, ys): Bool}>>>>
+
+# Ext.Gain of the run r and the result m of a run, when there is one
+def Ext.GainM(
+  -mach: Machine(),
+  -d: Led(mach),
+  -s: Led.L(mach, d),
+  -r: Run<Led.L(mach, d)>,
+  m: Maybe<&2, Run<Led.L(mach, d)>>
+) -> Data:
+  match m:
+    case None{}:
+      Unit
+    case Some{r2}:
+      Ext.Gain(mach, d, s, r, r2)
+
+# an "and" is the same either way round
+def Ext.and_comm(a: Bool, b: Bool) -> {Bool.and(a, b) == Bool.and(b, a): Bool}:
+  match a b:
+    case False{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case True{} False{}:
+      {==}
+    case True{} True{}:
+      {==}
+
+# the ledger l holds the words ws, under their hash
+def Ext.has(~mach: Machine(), ~d: Led(mach), l: Led.L(mach, d), +ws: List<&2, U32>) -> Bool:
+  Depots.Depot.has(~Led.L(mach, d), ~(s => h => Led.fetch(~mach, ~d, s, h)), l, ws)
+
+# Ext.holds_append once whether l holds w is known (hb)
+def Ext.holds_append.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +w: List<&2, U32>,
+  r: List<&2, List<&2, U32>>,
+  +ys: List<&2, List<&2, U32>>,
+  hb: Bool,
+  eh: {Ext.has(~mach, ~d, l, w) == hb: Bool},
+  ih: {
+    Ext.holds(~mach, ~d, l, List.append(&2, List<&2, U32>, r, ys))
+      == Bool.and(Ext.holds(~mach, ~d, l, r), Ext.holds(~mach, ~d, l, ys)): Bool
+  }
+) -> {
+  List.all.if(u => Ext.holds(~mach, ~d, l, List.append(&2, List<&2, U32>, r, ys)), Ext.has(~mach, ~d, l, w))
+    == Bool.and(
+      List.all.if(u => Ext.holds(~mach, ~d, l, r), Ext.has(~mach, ~d, l, w)),
+      Ext.holds(~mach, ~d, l, ys)
+    ): Bool
+}:
+  match hb:
+    case True{}:
+      %Equal.sym(Bool, Ext.has(~mach, ~d, l, w), True{}, eh): {
+        List.all.if(u => Ext.holds(~mach, ~d, l, List.append(&2, List<&2, U32>, r, ys)), _)
+          == Bool.and(List.all.if(u => Ext.holds(~mach, ~d, l, r), _), Ext.holds(~mach, ~d, l, ys)): Bool
+      }
+      ih
+    case False{}:
+      %Equal.sym(Bool, Ext.has(~mach, ~d, l, w), False{}, eh): {
+        List.all.if(u => Ext.holds(~mach, ~d, l, List.append(&2, List<&2, U32>, r, ys)), _)
+          == Bool.and(List.all.if(u => Ext.holds(~mach, ~d, l, r), _), Ext.holds(~mach, ~d, l, ys)): Bool
+      }
+      {==}
+
+# a ledger holds two lists of words when it holds each
+def Ext.holds_append(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  xs: List<&2, List<&2, U32>>,
+  +ys: List<&2, List<&2, U32>>
+) -> {
+  Ext.holds(~mach, ~d, l, List.append(&2, List<&2, U32>, xs, ys))
+    == Bool.and(Ext.holds(~mach, ~d, l, xs), Ext.holds(~mach, ~d, l, ys)): Bool
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+w, +r}:
+      Ext.holds_append.at(
+        ~mach,
+        ~d,
+        l,
+        w,
+        r,
+        ys,
+        Ext.has(~mach, ~d, l, w),
+        {==},
+        Ext.holds_append(~mach, ~d, l, r, ys)
+      )
+
+# a ledger that holds two lists of words holds the first
+def Ext.holds_left(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +xs: List<&2, List<&2, U32>>,
+  +ys: List<&2, List<&2, U32>>
+) -> {Ext.holds(~mach, ~d, l, List.append(&2, List<&2, U32>, xs, ys)) == True{}: Bool}
+  -> {Ext.holds(~mach, ~d, l, xs) == True{}: Bool}:
+  h => Shared.Bool.and_true_left(
+    Ext.holds(~mach, ~d, l, xs),
+    Ext.holds(~mach, ~d, l, ys)
+  )(
+    Equal.trans(
+      Bool,
+      Bool.and(Ext.holds(~mach, ~d, l, xs), Ext.holds(~mach, ~d, l, ys)),
+      Ext.holds(~mach, ~d, l, List.append(&2, List<&2, U32>, xs, ys)),
+      True{},
+      Equal.sym(
+        Bool,
+        Ext.holds(~mach, ~d, l, List.append(&2, List<&2, U32>, xs, ys)),
+        Bool.and(Ext.holds(~mach, ~d, l, xs), Ext.holds(~mach, ~d, l, ys)),
+        Ext.holds_append(~mach, ~d, l, xs, ys)
+      ),
+      h
+    )
+  )
+
+# a ledger that holds two lists of words holds the second
+def Ext.holds_right(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +xs: List<&2, List<&2, U32>>,
+  +ys: List<&2, List<&2, U32>>
+) -> {Ext.holds(~mach, ~d, l, List.append(&2, List<&2, U32>, xs, ys)) == True{}: Bool}
+  -> {Ext.holds(~mach, ~d, l, ys) == True{}: Bool}:
+  h => Shared.Bool.and_true_right(
+    Ext.holds(~mach, ~d, l, xs),
+    Ext.holds(~mach, ~d, l, ys)
+  )(
+    Equal.trans(
+      Bool,
+      Bool.and(Ext.holds(~mach, ~d, l, xs), Ext.holds(~mach, ~d, l, ys)),
+      Ext.holds(~mach, ~d, l, List.append(&2, List<&2, U32>, xs, ys)),
+      True{},
+      Equal.sym(
+        Bool,
+        Ext.holds(~mach, ~d, l, List.append(&2, List<&2, U32>, xs, ys)),
+        Bool.and(Ext.holds(~mach, ~d, l, xs), Ext.holds(~mach, ~d, l, ys)),
+        Ext.holds_append(~mach, ~d, l, xs, ys)
+      ),
+      h
+    )
+  )
+
+# putting xs, then ys, is putting xs then ys at once
+def Ext.puts_append(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  xs: List<&2, List<&2, U32>>,
+  +ys: List<&2, List<&2, U32>>,
+  +l: Led.L(mach, d)
+) -> {
+  Led.puts(~mach, ~d, ys, Led.puts(~mach, ~d, xs, l))
+    == Led.puts(~mach, ~d, List.append(&2, List<&2, U32>, xs, ys), l): Led.L(mach, d)
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+w, r}:
+      Ext.puts_append(~mach, ~d, r, ys, Led.add(~mach, ~d, l, Ledgers.Entry.Data{w}))
+
+# the check of two gains: s holds the puts when it holds the added nodes
+def Ext.trans.holds(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +ys1: List<&2, List<&2, U32>>,
+  +zs1: List<&2, List<&2, U32>>,
+  +ys2: List<&2, List<&2, U32>>,
+  +zs2: List<&2, List<&2, U32>>,
+  h1: {Ext.holds(~mach, ~d, s, zs1) == Ext.holds(~mach, ~d, s, ys1): Bool},
+  h2: {Ext.holds(~mach, ~d, s, zs2) == Ext.holds(~mach, ~d, s, ys2): Bool}
+) -> {
+  Ext.holds(~mach, ~d, s, List.append(&2, List<&2, U32>, zs1, zs2))
+    == Ext.holds(~mach, ~d, s, List.append(&2, List<&2, U32>, ys2, ys1)): Bool
+}:
+  %Equal.sym(
+    Bool,
+    Ext.holds(~mach, ~d, s, List.append(&2, List<&2, U32>, zs1, zs2)),
+    Bool.and(Ext.holds(~mach, ~d, s, zs1), Ext.holds(~mach, ~d, s, zs2)),
+    Ext.holds_append(~mach, ~d, s, zs1, zs2)
+  ): {_ == Ext.holds(~mach, ~d, s, List.append(&2, List<&2, U32>, ys2, ys1)): Bool}
+  %Equal.sym(Bool, Ext.holds(~mach, ~d, s, zs1), Ext.holds(~mach, ~d, s, ys1), h1): {
+    Bool.and(_, Ext.holds(~mach, ~d, s, zs2)) == Ext.holds(~mach, ~d, s, List.append(&2, List<&2, U32>, ys2, ys1)): Bool
+  }
+  %Equal.sym(Bool, Ext.holds(~mach, ~d, s, zs2), Ext.holds(~mach, ~d, s, ys2), h2): {
+    Bool.and(Ext.holds(~mach, ~d, s, ys1), _) == Ext.holds(~mach, ~d, s, List.append(&2, List<&2, U32>, ys2, ys1)): Bool
+  }
+  %Equal.sym(
+    Bool,
+    Ext.holds(~mach, ~d, s, List.append(&2, List<&2, U32>, ys2, ys1)),
+    Bool.and(Ext.holds(~mach, ~d, s, ys2), Ext.holds(~mach, ~d, s, ys1)),
+    Ext.holds_append(~mach, ~d, s, ys2, ys1)
+  ): {Bool.and(Ext.holds(~mach, ~d, s, ys1), Ext.holds(~mach, ~d, s, ys2)) == _: Bool}
+  Ext.and_comm(Ext.holds(~mach, ~d, s, ys1), Ext.holds(~mach, ~d, s, ys2))
+
+# a run follows itself
+def Ext.refl(-mach: Machine(), -d: Led(mach), -s: Led.L(mach, d), -r: Run<Led.L(mach, d)>) -> Ext.Gain(mach, d, s, r, r):
+  Tuple{[], Tuple{[], Tuple{{==}, Tuple{{==}, {==}}}}}
+
+# a run that follows a run that follows r follows r
+def Ext.trans(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +r1: Run<Led.L(mach, d)>,
+  +r2: Run<Led.L(mach, d)>,
+  g1: Ext.Gain(mach, d, s, r, r1),
+  g2: Ext.Gain(mach, d, s, r1, r2)
+) -> Ext.Gain(mach, d, s, r, r2):
+  match g1:
+    case Tuple{+ys1, Tuple{+zs1, Tuple{a1, Tuple{l1, h1}}}}:
+      match g2:
+        case Tuple{+ys2, Tuple{+zs2, Tuple{a2, Tuple{l2, h2}}}}:
+          Tuple{
+            List.append(&2, List<&2, U32>, ys2, ys1),
+            Tuple{
+              List.append(&2, List<&2, U32>, zs1, zs2),
+              Tuple{
+                Equal.trans(
+                  List<&2, List<&2, U32>>,
+                  Run.added(Led.L(mach, d), r2),
+                  List.append(&2, List<&2, U32>, ys2, Run.added(Led.L(mach, d), r1)),
+                  List.append(&2, List<&2, U32>, List.append(&2, List<&2, U32>, ys2, ys1), Run.added(Led.L(mach, d), r)),
+                  a2,
+                  Equal.trans(
+                    List<&2, List<&2, U32>>,
+                    List.append(&2, List<&2, U32>, ys2, Run.added(Led.L(mach, d), r1)),
+                    List.append(&2, List<&2, U32>, ys2, List.append(&2, List<&2, U32>, ys1, Run.added(Led.L(mach, d), r))),
+                    List.append(&2, List<&2, U32>, List.append(&2, List<&2, U32>, ys2, ys1), Run.added(Led.L(mach, d), r)),
+                    Equal.cong(
+                      List<&2, List<&2, U32>>,
+                      List<&2, List<&2, U32>>,
+                      z => List.append(&2, List<&2, U32>, ys2, z),
+                      Run.added(Led.L(mach, d), r1),
+                      List.append(&2, List<&2, U32>, ys1, Run.added(Led.L(mach, d), r)),
+                      a1
+                    ),
+                    Equal.sym(
+                      List<&2, List<&2, U32>>,
+                      List.append(&2, List<&2, U32>, List.append(&2, List<&2, U32>, ys2, ys1), Run.added(Led.L(mach, d), r)),
+                      List.append(&2, List<&2, U32>, ys2, List.append(&2, List<&2, U32>, ys1, Run.added(Led.L(mach, d), r))),
+                      Shared.List.append_assoc(List<&2, U32>, ys2, ys1, Run.added(Led.L(mach, d), r))
+                    )
+                  )
+                ),
+                Tuple{
+                  Equal.trans(
+                    Led.L(mach, d),
+                    Run.ledger(Led.L(mach, d), r2),
+                    Led.puts(~mach, ~d, zs2, Run.ledger(Led.L(mach, d), r1)),
+                    Led.puts(~mach, ~d, List.append(&2, List<&2, U32>, zs1, zs2), Run.ledger(Led.L(mach, d), r)),
+                    l2,
+                    Equal.trans(
+                      Led.L(mach, d),
+                      Led.puts(~mach, ~d, zs2, Run.ledger(Led.L(mach, d), r1)),
+                      Led.puts(~mach, ~d, zs2, Led.puts(~mach, ~d, zs1, Run.ledger(Led.L(mach, d), r))),
+                      Led.puts(~mach, ~d, List.append(&2, List<&2, U32>, zs1, zs2), Run.ledger(Led.L(mach, d), r)),
+                      Equal.cong(
+                        Led.L(mach, d),
+                        Led.L(mach, d),
+                        z => Led.puts(~mach, ~d, zs2, z),
+                        Run.ledger(Led.L(mach, d), r1),
+                        Led.puts(~mach, ~d, zs1, Run.ledger(Led.L(mach, d), r)),
+                        l1
+                      ),
+                      Ext.puts_append(~mach, ~d, zs1, zs2, Run.ledger(Led.L(mach, d), r))
+                    )
+                  ),
+                  Ext.trans.holds(~mach, ~d, s, ys1, zs1, ys2, zs2, h1, h2)
+                }
+              }
+            }
+          }
+
+# Ext.trans, when the second run may be none
+def Ext.transM(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +r1: Run<Led.L(mach, d)>,
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  g: Ext.Gain(mach, d, s, r, r1),
+  gm: Ext.GainM(mach, d, s, r1, m)
+) -> Ext.GainM(mach, d, s, r, m):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{r2}:
+      Ext.trans(~mach, ~d, s, r, r1, r2, g, gm)
+
+# a run then a step that follows its run follows r
+def Ext.bind(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  g: Run<Led.L(mach, d)> -> Maybe<&2, Run<Led.L(mach, d)>>,
+  hm: Ext.GainM(mach, d, s, r, m),
+  hg: @r1: Run<Led.L(mach, d)> -> Ext.GainM(mach, d, s, r1, g(r1))
+) -> Ext.GainM(mach, d, s, r, Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, m, g)):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{+r1}:
+      Ext.transM(~mach, ~d, s, r, r1, g(r1), hm, hg(r1))
+
 # a step lands on the same tip in a later ledger
 def Sim.moved(
   ~mach: Machine(),
