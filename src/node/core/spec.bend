@@ -5080,6 +5080,247 @@ def Affects.key_of_name(k: List<&2, U32>, +u: Resources.Name) -> {
         Shared.Maybe.none_ne_some(Resources.Name, u, h)
       )
 
+# the laws of Resources.Name.is_eq
+def Affects.name_laws() -> Shared.Eq.Laws(Resources.Name, Resources.Name.is_eq):
+  (n => Resources.Name.is_eq_refl(n), a => b => Resources.Name.is_eq_sound(a, b))
+
+# the laws of Trees.Binding.is_eq
+def Affects.binding_laws() -> Shared.Eq.Laws(Trees.Binding, Trees.Binding.is_eq):
+  (a => Affects.binding_refl(a), a => b => Affects.binding_sound(a, b))
+
+# the key of a resource names it
+def Affects.name_key(+n: Resources.Name) -> {Res.name(Key.res(n)) == Some{n}: Maybe<&2, Resources.Name>}:
+  Codes.Code.whole_read(~Resources.Name, ~Resources.Name.code, ~Resources.Name.code.read, ~(a => r => Resources.Name.code_read(a, r)), n)
+
+# Affects.range_has, from the law of a listing
+def Affects.range_has.of(
+  ~d: Led(),
+  l: L(d),
+  h: Maybe<&2, Hashes.Hash>,
+  p: List<&2, U32>,
+  bs: List<&2, Trees.Binding>,
+  w: {Trees.Bindings.sorted(bs) == True{}: Bool}
+    & (
+      @k: List<&2, U32> -> @v: List<&2, U32> -> {
+        List.contains(~Trees.Binding, ~Trees.Binding.is_eq, bs, Trees.Binding{k, v})
+          == Bool.and(
+            Trees.Key.leads(p, k),
+            Shared.Maybe.is_eq(
+              ~List<&2, U32>,
+              ~Shared.List.is_eq(~U32, ~U32.is_eq),
+              Trees.Look.value(Replicas.Tree.look(~Requests.Ask.machine(), ~d, l, h, k)),
+              Some{v}
+            )
+          ): Bool
+      }
+    ),
+  k: List<&2, U32>,
+  v: List<&2, U32>
+) -> {
+  List.contains(~Trees.Binding, ~Trees.Binding.is_eq, bs, Trees.Binding{k, v})
+    == Bool.and(
+      Trees.Key.leads(p, k),
+      Shared.Maybe.is_eq(
+        ~List<&2, U32>,
+        ~Shared.List.is_eq(~U32, ~U32.is_eq),
+        Trees.Look.value(Replicas.Tree.look(~Requests.Ask.machine(), ~d, l, h, k)),
+        Some{v}
+      )
+    ): Bool
+}:
+  (s, f) = w
+  f(k)(v)
+
+# a listing holds a binding exactly when its key starts with the prefix and
+# the tree reads it so
+def Affects.range_has(
+  ~d: Led(),
+  +l: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +p: List<&2, U32>,
+  +bs: List<&2, Trees.Binding>,
+  e: {Tree.range(~d, l, h, p) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>},
+  k: List<&2, U32>,
+  v: List<&2, U32>
+) -> {
+  List.contains(~Trees.Binding, ~Trees.Binding.is_eq, bs, Trees.Binding{k, v})
+    == Bool.and(
+      Trees.Key.leads(p, k),
+      Shared.Maybe.is_eq(
+        ~List<&2, U32>,
+        ~Shared.List.is_eq(~U32, ~U32.is_eq),
+        Trees.Look.value(Replicas.Tree.look(~Requests.Ask.machine(), ~d, l, h, k)),
+        Some{v}
+      )
+    ): Bool
+}:
+  Affects.range_has.of(~d, l, h, p, bs, Affects.range(d)(l)(h)(p)(bs)(e), k, v)
+
+# a difference holds a key exactly when the two trees read it differently
+def Affects.diff_has(
+  ~d: Led(),
+  l: L(d),
+  a: Maybe<&2, Hashes.Hash>,
+  b: Maybe<&2, Hashes.Hash>,
+  ks: List<&2, List<&2, U32>>,
+  e: {
+    Replicas.Tree.diff(~Requests.Ask.machine(), ~d, l, a, b) == Some{ks}: Maybe<&2, List<&2, List<&2, U32>>>
+  },
+  k: List<&2, U32>
+) -> {
+  List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), ks, k)
+    == Bool.not(
+      Shared.Maybe.is_eq(
+        ~List<&2, U32>,
+        ~Shared.List.is_eq(~U32, ~U32.is_eq),
+        Trees.Look.value(Replicas.Tree.look(~Requests.Ask.machine(), ~d, l, a, k)),
+        Trees.Look.value(Replicas.Tree.look(~Requests.Ask.machine(), ~d, l, b, k))
+      )
+    ): Bool
+}:
+  Affects.diff(d)(l)(a)(b)(ks)(e)(k)
+
+# Affects.names_in once it is known whether the name u0 of x is u (c)
+def Affects.names_in.hit(
+  +x: Trees.Binding,
+  +rest: List<&2, Trees.Binding>,
+  +u: Resources.Name,
+  +u0: Resources.Name,
+  +em: {Res.named(x) == Some{u0}: Maybe<&2, Resources.Name>},
+  c: Bool,
+  ec: {Resources.Name.is_eq(u0, u) == c: Bool},
+  -P: Type,
+  k: @b: Trees.Binding -> {List.contains(~Trees.Binding, ~Trees.Binding.is_eq, x <> rest, b) == True{}: Bool}
+    -> {Res.named(b) == Some{u}: Maybe<&2, Resources.Name>} -> P,
+  ih: (
+    @b: Trees.Binding -> {List.contains(~Trees.Binding, ~Trees.Binding.is_eq, rest, b) == True{}: Bool}
+      -> {Res.named(b) == Some{u}: Maybe<&2, Resources.Name>} -> P
+  ) -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, Res.names(rest), u) == True{}: Bool} -> P
+) -> {
+  List.any.if(w => List.contains(~Resources.Name, ~Resources.Name.is_eq, Res.names(rest), u), c) == True{}: Bool
+} -> P:
+  match c:
+    case True{}:
+      h => k(x)(Affects.contains_head(~Trees.Binding, ~Trees.Binding.is_eq, ~Affects.binding_laws(), x, rest))(
+        Affects.cast(
+          Resources.Name,
+          z => {Res.named(x) == Some{z}: Maybe<&2, Resources.Name>},
+          u0,
+          u,
+          Resources.Name.is_eq_sound(u0, u)(ec),
+          em
+        )
+      )
+    case False{}:
+      h => ih(+b => hb => hn => k(b)(Shared.List.contains_cons(~Trees.Binding, ~Trees.Binding.is_eq, x, rest, b)(hb))(hn))(h)
+
+# Affects.names_in once the name m of the binding x is known
+def Affects.names_in.at(
+  +x: Trees.Binding,
+  +rest: List<&2, Trees.Binding>,
+  +u: Resources.Name,
+  m: Maybe<&2, Resources.Name>,
+  +em: {Res.named(x) == m: Maybe<&2, Resources.Name>},
+  -P: Type,
+  k: @b: Trees.Binding -> {List.contains(~Trees.Binding, ~Trees.Binding.is_eq, x <> rest, b) == True{}: Bool}
+    -> {Res.named(b) == Some{u}: Maybe<&2, Resources.Name>} -> P,
+  ih: (
+    @b: Trees.Binding -> {List.contains(~Trees.Binding, ~Trees.Binding.is_eq, rest, b) == True{}: Bool}
+      -> {Res.named(b) == Some{u}: Maybe<&2, Resources.Name>} -> P
+  ) -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, Res.names(rest), u) == True{}: Bool} -> P
+) -> {
+  List.contains(~Resources.Name, ~Resources.Name.is_eq, Shared.Maybe.cons(Resources.Name, m, Res.names(rest)), u) == True{}: Bool
+} -> P:
+  match m:
+    case None{}:
+      h => ih(+b => hb => hn => k(b)(Shared.List.contains_cons(~Trees.Binding, ~Trees.Binding.is_eq, x, rest, b)(hb))(hn))(h)
+    case Some{+u0}:
+      h => Affects.names_in.hit(x, rest, u, u0, em, Resources.Name.is_eq(u0, u), {==}, P, k, ih)(h)
+
+# a resource of the bindings xs is the name of one of them
+def Affects.names_in(
+  xs: List<&2, Trees.Binding>,
+  +u: Resources.Name,
+  -P: Type,
+  k: @b: Trees.Binding -> {List.contains(~Trees.Binding, ~Trees.Binding.is_eq, xs, b) == True{}: Bool}
+    -> {Res.named(b) == Some{u}: Maybe<&2, Resources.Name>} -> P
+) -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, Res.names(xs), u) == True{}: Bool} -> P:
+  match xs:
+    case Nil{}:
+      h => Empty.absurd(P, Shared.Bool.false_ne_true(h))
+    case Con{+x, +rest}:
+      h => Affects.names_in.at(x, rest, u, Res.named(x), {==}, P, k, k2 => h2 => Affects.names_in(rest, u, P, k2)(h2))(h)
+
+# a list that holds u holds it with one more value m before it, if any
+def Affects.cons_keep(m: Maybe<&2, Resources.Name>, +r: List<&2, Resources.Name>, +u: Resources.Name) -> {
+  List.contains(~Resources.Name, ~Resources.Name.is_eq, r, u) == True{}: Bool
+} -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, Shared.Maybe.cons(Resources.Name, m, r), u) == True{}: Bool}:
+  match m:
+    case None{}:
+      h => h
+    case Some{y}:
+      h => Shared.List.contains_cons(~Resources.Name, ~Resources.Name.is_eq, y, r, u)(h)
+
+# Affects.names_of once it is known whether x is b (c)
+def Affects.names_of.at(
+  +x: Trees.Binding,
+  +rest: List<&2, Trees.Binding>,
+  +b: Trees.Binding,
+  +u: Resources.Name,
+  c: Bool,
+  ec: {Trees.Binding.is_eq(x, b) == c: Bool},
+  +en: {Res.named(b) == Some{u}: Maybe<&2, Resources.Name>},
+  ih: {List.contains(~Trees.Binding, ~Trees.Binding.is_eq, rest, b) == True{}: Bool}
+    -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, Res.names(rest), u) == True{}: Bool}
+) -> {
+  List.any.if(w => List.contains(~Trees.Binding, ~Trees.Binding.is_eq, rest, b), c) == True{}: Bool
+} -> {
+  List.contains(~Resources.Name, ~Resources.Name.is_eq, Shared.Maybe.cons(Resources.Name, Res.named(x), Res.names(rest)), u)
+    == True{}: Bool
+}:
+  match c:
+    case True{}:
+      h => Affects.cast(
+        Trees.Binding,
+        z => {
+          List.contains(~Resources.Name, ~Resources.Name.is_eq, Shared.Maybe.cons(Resources.Name, Res.named(z), Res.names(rest)), u)
+            == True{}: Bool
+        },
+        b,
+        x,
+        Equal.sym(Trees.Binding, x, b, Affects.binding_sound(x, b)(ec)),
+        Affects.cast(
+          Maybe<&2, Resources.Name>,
+          z => {
+            List.contains(~Resources.Name, ~Resources.Name.is_eq, Shared.Maybe.cons(Resources.Name, z, Res.names(rest)), u)
+              == True{}: Bool
+          },
+          Some{u},
+          Res.named(b),
+          Equal.sym(Maybe<&2, Resources.Name>, Res.named(b), Some{u}, en),
+          Affects.contains_head(~Resources.Name, ~Resources.Name.is_eq, ~Affects.name_laws(), u, Res.names(rest))
+        )
+      )
+    case False{}:
+      h => Affects.cons_keep(Res.named(x), Res.names(rest), u)(ih(h))
+
+# the name of a binding of xs is a resource of xs
+def Affects.names_of(
+  xs: List<&2, Trees.Binding>,
+  +b: Trees.Binding,
+  +u: Resources.Name,
+  +en: {Res.named(b) == Some{u}: Maybe<&2, Resources.Name>}
+) -> {List.contains(~Trees.Binding, ~Trees.Binding.is_eq, xs, b) == True{}: Bool}
+  -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, Res.names(xs), u) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      h => Empty.absurd(
+        {List.contains(~Resources.Name, ~Resources.Name.is_eq, [], u) == True{}: Bool},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Con{+x, +rest}:
+      h => Affects.names_of.at(x, rest, b, u, Trees.Binding.is_eq(x, b), {==}, en, h2 => Affects.names_of(rest, b, u, en)(h2))(h)
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
