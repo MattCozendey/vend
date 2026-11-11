@@ -16358,6 +16358,318 @@ def Chk.link_find(xs: List<&2, Ledgers.Ballot>, +b: Ledgers.Ballot) -> {Ballots.
         Chk.link_find(rest, b)
       )
 
+# a ballot that a link names is a ballot of the ledger at the place before
+def Chk.linked_some.of(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  -kern: Kernel(mach, d),
+  +l: Led.L(mach, d),
+  +b: Ledgers.Ballot,
+  +w: Ledgers.Place,
+  ex: Exists(
+    Ledgers.Ballot,
+    x => {
+      List.contains(
+        ~Ledgers.Ballot,
+        ~Ledgers.Ballot.is_eq,
+        Led.ballots.at(~mach, ~d, l, w, Ledgers.Ballot.voter(b)),
+        x
+      )
+        == True{}: Bool
+    }
+      & {Ledgers.Ballot.sealed(Ballot.next(x), b) == True{}: Bool}
+  )
+) -> Ballot.Linked(mach, d, kern, l, b, Some{w}):
+  match ex:
+    case Tuple{+x, Tuple{hc, hs}}:
+      +ha = Equal.trans(
+        Bool,
+        Bool.and(
+          Ledgers.Kind.has(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), l, Ledgers.Entry.Ballot{x}),
+          Ledgers.Ballot.is_at(x, w, Ledgers.Ballot.voter(b))
+        ),
+        List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, Led.ballots.at(~mach, ~d, l, w, Ledgers.Ballot.voter(b)), x),
+        True{},
+        Equal.sym(
+          Bool,
+          List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, Led.ballots.at(~mach, ~d, l, w, Ledgers.Ballot.voter(b)), x),
+          Bool.and(
+            Ledgers.Kind.has(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), l, Ledgers.Entry.Ballot{x}),
+            Ledgers.Ballot.is_at(x, w, Ledgers.Ballot.voter(b))
+          ),
+          Ledgers.Laws.ballots(Machine.Q(mach), Machine.code(mach), Led.kind(mach, d), Led.laws(mach, d))(l)(w)(
+            Ledgers.Ballot.voter(b)
+          )(x)
+        ),
+        hc
+      )
+      Tuple{
+        x,
+        Tuple{
+          Shared.Bool.and_true_left(
+            Ledgers.Kind.has(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), l, Ledgers.Entry.Ballot{x}),
+            Ledgers.Ballot.is_at(x, w, Ledgers.Ballot.voter(b))
+          )(ha),
+          Tuple{
+            Shared.Bool.and_true_right(
+              Ledgers.Kind.has(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), l, Ledgers.Entry.Ballot{x}),
+              Ledgers.Ballot.is_at(x, w, Ledgers.Ballot.voter(b))
+            )(ha),
+            hs
+          }
+        }
+      }
+
+# what a test of a ballot that has a ballot before it says
+def Chk.linked_some(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  -kern: Kernel(mach, d),
+  +l: Led.L(mach, d),
+  +b: Ledgers.Ballot,
+  +w: Ledgers.Place
+) -> {Ballots.link(Led.ballots.at(~mach, ~d, l, w, Ledgers.Ballot.voter(b)), b) == True{}: Bool}
+  -> Ballot.Linked(mach, d, kern, l, b, Some{w}):
+  h => Chk.linked_some.of(
+    ~mach,
+    ~d,
+    kern,
+    l,
+    b,
+    w,
+    Chk.link_find(Led.ballots.at(~mach, ~d, l, w, Ledgers.Ballot.voter(b)), b)(h)
+  )
+
+# the key that a walk of the line found at the tip after j steps
+def Chk.walk.hit.of(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +l: Led.L(mach, d),
+  +c: Ledgers.Line,
+  +j: Nat,
+  +t: Tip,
+  +voter: String,
+  -b: Ledgers.Ballot,
+  et: {Line.at(~mach, ~d, ~kern, j, l, c) == Some{t}: Maybe<&2, Tip>},
+  ex: Exists(
+    Hashes.Hash,
+    k => {Tip.key(~mach, ~d, l, Some{t}, voter) == Some{k}: Maybe<&2, Hashes.Hash>}
+      & {Ledgers.Ballot.sealed(k, b) == True{}: Bool}
+  )
+) -> Exists(
+  Hashes.Hash,
+  k => {Ledgers.Ballot.sealed(k, b) == True{}: Bool}
+    & Exists(Nat, n => {Tip.key(~mach, ~d, l, Line.at(~mach, ~d, ~kern, n, l, c), voter) == Some{k}: Maybe<&2, Hashes.Hash>})
+):
+  match ex:
+    case Tuple{+k, Tuple{ek, sk}}:
+      Tuple{
+        k,
+        Tuple{
+          sk,
+          Tuple{
+            j,
+            %Equal.sym(Maybe<&2, Tip>, Line.at(~mach, ~d, ~kern, j, l, c), Some{t}, et): {
+              Tip.key(~mach, ~d, l, _, voter) == Some{k}: Maybe<&2, Hashes.Hash>
+            }
+            ek
+          }
+        }
+      }
+
+# Chk.walk once the next tip is known (m)
+def Chk.walk.next(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +p: Nat,
+  +l: Led.L(mach, d),
+  +c: Ledgers.Line,
+  +j: Nat,
+  +t: Tip,
+  +voter: String,
+  +b: Ledgers.Ballot,
+  m: Maybe<&2, Tip>,
+  em: {Line.next(~mach, ~d, ~kern, l, c, U32.from_nat(j), t) == m: Maybe<&2, Tip>},
+  et: {Line.at(~mach, ~d, ~kern, j, l, c) == Some{t}: Maybe<&2, Tip>},
+  h: {Tip.on(m, t2 => Root.seals.go(~mach, ~d, ~kern, p, l, c, U32.inc(U32.from_nat(j)), t2, voter, b)) == True{}: Bool},
+  ih: @t2: Tip -> {Line.at(~mach, ~d, ~kern, 1n+j, l, c) == Some{t2}: Maybe<&2, Tip>}
+    -> {Root.seals.go(~mach, ~d, ~kern, p, l, c, U32.from_nat(1n+j), t2, voter, b) == True{}: Bool}
+    -> Exists(
+      Hashes.Hash,
+      k => {Ledgers.Ballot.sealed(k, b) == True{}: Bool}
+        & Exists(Nat, n => {Tip.key(~mach, ~d, l, Line.at(~mach, ~d, ~kern, n, l, c), voter) == Some{k}: Maybe<&2, Hashes.Hash>})
+    )
+) -> Exists(
+  Hashes.Hash,
+  k => {Ledgers.Ballot.sealed(k, b) == True{}: Bool}
+    & Exists(Nat, n => {Tip.key(~mach, ~d, l, Line.at(~mach, ~d, ~kern, n, l, c), voter) == Some{k}: Maybe<&2, Hashes.Hash>})
+):
+  match m:
+    case None{}:
+      Empty.absurd(
+        Exists(
+          Hashes.Hash,
+          k => {Ledgers.Ballot.sealed(k, b) == True{}: Bool}
+            & Exists(Nat, n => {Tip.key(~mach, ~d, l, Line.at(~mach, ~d, ~kern, n, l, c), voter) == Some{k}: Maybe<&2, Hashes.Hash>})
+        ),
+        Shared.Bool.false_ne_true(h)
+      )
+    case Some{+t2}:
+      ih(
+        t2
+      )(
+        %Equal.sym(Maybe<&2, Tip>, Line.at(~mach, ~d, ~kern, j, l, c), Some{t}, et): {
+          Maybe.bind(&2, Tip, Tip, _, +x => Line.next(~mach, ~d, ~kern, l, c, U32.from_nat(j), x)) == Some{t2}: Maybe<&2, Tip>
+        }
+        em
+      )(h)
+
+# Chk.walk once whether the tip itself gives the key is known (s)
+def Chk.walk.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +p: Nat,
+  +l: Led.L(mach, d),
+  +c: Ledgers.Line,
+  +j: Nat,
+  +t: Tip,
+  +voter: String,
+  +b: Ledgers.Ballot,
+  s: Bool,
+  es: {Key.seals(Tip.key(~mach, ~d, l, Some{t}, voter), b) == s: Bool},
+  h: {
+    Bool.or(
+      Key.seals(Tip.key(~mach, ~d, l, Some{t}, voter), b),
+      Tip.on(
+        Line.next(~mach, ~d, ~kern, l, c, U32.from_nat(j), t),
+        t2 => Root.seals.go(~mach, ~d, ~kern, p, l, c, U32.inc(U32.from_nat(j)), t2, voter, b)
+      )
+    )
+      == True{}: Bool
+  },
+  +et: {Line.at(~mach, ~d, ~kern, j, l, c) == Some{t}: Maybe<&2, Tip>},
+  ih: @t2: Tip -> {Line.at(~mach, ~d, ~kern, 1n+j, l, c) == Some{t2}: Maybe<&2, Tip>}
+    -> {Root.seals.go(~mach, ~d, ~kern, p, l, c, U32.from_nat(1n+j), t2, voter, b) == True{}: Bool}
+    -> Exists(
+      Hashes.Hash,
+      k => {Ledgers.Ballot.sealed(k, b) == True{}: Bool}
+        & Exists(Nat, n => {Tip.key(~mach, ~d, l, Line.at(~mach, ~d, ~kern, n, l, c), voter) == Some{k}: Maybe<&2, Hashes.Hash>})
+    )
+) -> Exists(
+  Hashes.Hash,
+  k => {Ledgers.Ballot.sealed(k, b) == True{}: Bool}
+    & Exists(Nat, n => {Tip.key(~mach, ~d, l, Line.at(~mach, ~d, ~kern, n, l, c), voter) == Some{k}: Maybe<&2, Hashes.Hash>})
+):
+  match s:
+    case True{}:
+      Chk.walk.hit.of(~mach, ~d, ~kern, l, c, j, t, voter, b, et, Chk.seals(Tip.key(~mach, ~d, l, Some{t}, voter), b)(es))
+    case False{}:
+      Chk.walk.next(
+        ~mach,
+        ~d,
+        ~kern,
+        p,
+        l,
+        c,
+        j,
+        t,
+        voter,
+        b,
+        Line.next(~mach, ~d, ~kern, l, c, U32.from_nat(j), t),
+        {==},
+        et,
+        Equal.trans(
+          Bool,
+          Tip.on(
+            Line.next(~mach, ~d, ~kern, l, c, U32.from_nat(j), t),
+            t2 => Root.seals.go(~mach, ~d, ~kern, p, l, c, U32.inc(U32.from_nat(j)), t2, voter, b)
+          ),
+          Bool.or(
+            Key.seals(Tip.key(~mach, ~d, l, Some{t}, voter), b),
+            Tip.on(
+              Line.next(~mach, ~d, ~kern, l, c, U32.from_nat(j), t),
+              t2 => Root.seals.go(~mach, ~d, ~kern, p, l, c, U32.inc(U32.from_nat(j)), t2, voter, b)
+            )
+          ),
+          True{},
+          Equal.sym(
+            Bool,
+            Bool.or(
+              Key.seals(Tip.key(~mach, ~d, l, Some{t}, voter), b),
+              Tip.on(
+                Line.next(~mach, ~d, ~kern, l, c, U32.from_nat(j), t),
+                t2 => Root.seals.go(~mach, ~d, ~kern, p, l, c, U32.inc(U32.from_nat(j)), t2, voter, b)
+              )
+            ),
+            Tip.on(
+              Line.next(~mach, ~d, ~kern, l, c, U32.from_nat(j), t),
+              t2 => Root.seals.go(~mach, ~d, ~kern, p, l, c, U32.inc(U32.from_nat(j)), t2, voter, b)
+            ),
+            Equal.cong(
+              Bool,
+              Bool,
+              z => Bool.or(
+                z,
+                Tip.on(
+                  Line.next(~mach, ~d, ~kern, l, c, U32.from_nat(j), t),
+                  t2 => Root.seals.go(~mach, ~d, ~kern, p, l, c, U32.inc(U32.from_nat(j)), t2, voter, b)
+                )
+              ),
+              Key.seals(Tip.key(~mach, ~d, l, Some{t}, voter), b),
+              False{},
+              es
+            )
+          ),
+          h
+        ),
+        ih
+      )
+
+# a walk of a line from the tip after j steps that finds a key that seals b
+# finds it at a tip after some steps
+def Chk.walk(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  f: Nat,
+  +l: Led.L(mach, d),
+  +c: Ledgers.Line,
+  +j: Nat,
+  +t: Tip,
+  +voter: String,
+  +b: Ledgers.Ballot
+) -> {Line.at(~mach, ~d, ~kern, j, l, c) == Some{t}: Maybe<&2, Tip>}
+  -> {Root.seals.go(~mach, ~d, ~kern, f, l, c, U32.from_nat(j), t, voter, b) == True{}: Bool}
+  -> Exists(
+    Hashes.Hash,
+    k => {Ledgers.Ballot.sealed(k, b) == True{}: Bool}
+      & Exists(Nat, n => {Tip.key(~mach, ~d, l, Line.at(~mach, ~d, ~kern, n, l, c), voter) == Some{k}: Maybe<&2, Hashes.Hash>})
+  ):
+  match f:
+    case 0n:
+      et => h => Chk.walk.hit.of(~mach, ~d, ~kern, l, c, j, t, voter, b, et, Chk.seals(Tip.key(~mach, ~d, l, Some{t}, voter), b)(h))
+    case 1n+(+p):
+      +et => h => Chk.walk.at(
+        ~mach,
+        ~d,
+        ~kern,
+        p,
+        l,
+        c,
+        j,
+        t,
+        voter,
+        b,
+        Key.seals(Tip.key(~mach, ~d, l, Some{t}, voter), b),
+        {==},
+        h,
+        et,
+        t2 => Chk.walk(~mach, ~d, ~kern, p, l, c, 1n+j, t2, voter, b)
+      )
+
 # Laws of checks
 
 # a lie that the test passes proves
