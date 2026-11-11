@@ -1848,11 +1848,79 @@ def Bits.agree_n_succ(a, b, n):
         case 1n+p:
           {==}
 
+# a list that is empty has no head
+def Key.side_bits.nil(bs: List<&2, Bool>, e: {List.is_empty(&2, Bool, bs) == True{}: Bool}) -> {Bits.head(bs) == None{}: Maybe<&2, Bool>}:
+  match bs:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      Empty.absurd({Some{x} == None{}: Maybe<&2, Bool>}, Shared.Bool.false_ne_true(e))
+
+# a list that is not empty has a head: its first bit
+def Key.side_bits.some(bs: List<&2, Bool>, e: {List.is_empty(&2, Bool, bs) == False{}: Bool}) -> {Some{Shared.List.head_or(Bool, bs, False{})} == Bits.head(bs): Maybe<&2, Bool>}:
+  match bs:
+    case Nil{}:
+      Empty.absurd({Some{False{}} == None{}: Maybe<&2, Bool>}, Shared.Bool.false_ne_true(Equal.sym(Bool, List.is_empty(&2, Bool, Nil{}), False{}, e)))
+    case Con{x, r}:
+      {==}
+
+# the bit of a cursor, or none when it is done, is the head of the bits it has
+# yet to read
+def Key.side_bits.cur(+c: Cur) -> {
+  Shared.Bool.when(Maybe<&2, Bool>, Cur.done(c), u => None{}, u => Some{Cur.bit(c)}) == Bits.head(Cur.bits(c)): Maybe<&2, Bool>
+}:
+  Shared.Bool.when_cases(
+    Maybe<&2, Bool>,
+    m => {m == Bits.head(Cur.bits(c)): Maybe<&2, Bool>},
+    Cur.done(c),
+    u => None{},
+    u => Some{Cur.bit(c)},
+    h => Equal.sym(
+      Maybe<&2, Bool>,
+      Bits.head(Cur.bits(c)),
+      None{},
+      Key.side_bits.nil(Cur.bits(c), Equal.trans(Bool, List.is_empty(&2, Bool, Cur.bits(c)), Cur.done(c), True{}, Equal.sym(Bool, Cur.done(c), List.is_empty(&2, Bool, Cur.bits(c)), Cur.done_bits(c)), h))
+    ),
+    h => Equal.trans(
+      Maybe<&2, Bool>,
+      Some{Cur.bit(c)},
+      Some{Shared.List.head_or(Bool, Cur.bits(c), False{})},
+      Bits.head(Cur.bits(c)),
+      Equal.cong(Bool, Maybe<&2, Bool>, b => Some{b}, Cur.bit(c), Shared.List.head_or(Bool, Cur.bits(c), False{}), Cur.bit_bits(c)),
+      Key.side_bits.some(Cur.bits(c), Equal.trans(Bool, List.is_empty(&2, Bool, Cur.bits(c)), Cur.done(c), False{}, Equal.sym(Bool, Cur.done(c), List.is_empty(&2, Bool, Cur.bits(c)), Cur.done_bits(c)), h))
+    )
+  )
+
 # the side of a key at pos is its bit there
 law Key.side_bits:
   for k: List<&2, U32>
   for pos: Nat
   {Key.side(k, pos) == Bits.at(Key.bits(k), pos): Maybe<&2, Bool>}
 
+# the side of a key at pos is its bit there, with pos used more than once
+def Key.side_bits.at(+k: List<&2, U32>, +pos: Nat) -> {
+  Key.side(k, pos) == Bits.at(Key.bits(k), pos): Maybe<&2, Bool>
+}:
+  Equal.trans(
+    Maybe<&2, Bool>,
+    Key.side(k, pos),
+    Bits.head(Cur.bits(Key.at(k, pos))),
+    Bits.at(Key.bits(k), pos),
+    Key.side_bits.cur(Key.at(k, pos)),
+    Equal.sym(
+      Maybe<&2, Bool>,
+      Bits.at(Key.bits(k), pos),
+      Bits.head(Cur.bits(Key.at(k, pos))),
+      Equal.cong(
+        List<&2, Bool>,
+        Maybe<&2, Bool>,
+        bs => Bits.head(bs),
+        List.drop(&2, Bool, Key.bits(k), pos),
+        Cur.bits(Key.at(k, pos)),
+        Equal.sym(List<&2, Bool>, Cur.bits(Key.at(k, pos)), List.drop(&2, Bool, Key.bits(k), pos), Cur.skip_bits(pos, Cur.of(k)))
+      )
+    )
+  )
+
 def Key.side_bits(k, pos):
-  ?TODO
+  Key.side_bits.at(k, pos)
