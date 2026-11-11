@@ -1132,13 +1132,13 @@ def Group.nodes.of(+gs: List<&2, Group>, g: String) -> List<&2, String>:
   )
 
 # the groups of the tree whose root is h
-def Groups.in(~d: Led(), l: L(d), h: Maybe<&2, Hashes.Hash>) -> List<&2, Group>:
-  Groups.of(Tree.list(~d, l, h, [2]))
+def Groups.in(~d: Led(), l: L(d), h: Maybe<&2, Hashes.Hash>) -> Maybe<&2, List<&2, Group>>:
+  Maybe.map(&2, List<&2, Trees.Binding>, List<&2, Group>, Groups.of, Tree.range(~d, l, h, [2]))
 
 # the nodes of the group g in the tree whose root is h, each once: the nodes
 # that own what g owns. A clear def: it walks the tree
-def Group.nodes(~d: Led(), l: L(d), h: Maybe<&2, Hashes.Hash>, g: String) -> List<&2, String>:
-  Group.nodes.of(Groups.in(~d, l, h), g)
+def Group.nodes(~d: Led(), l: L(d), h: Maybe<&2, Hashes.Hash>, +g: String) -> Maybe<&2, List<&2, String>>:
+  Maybe.map(&2, List<&2, Group>, List<&2, String>, gs => Group.nodes.of(gs, g), Groups.in(~d, l, h))
 
 # Group.act once the tree with the new members is known: stale when the group
 # then reaches itself
@@ -1147,22 +1147,17 @@ def Group.act.of(~d: Led(), l: L(d), +g: String, p: Maybe<&2, Trees.Edit>) -> Ma
     case None{}:
       None{}
     case Some{+x}:
-      Shared.Bool.when(
-        Maybe<&2, Replicas.Act>,
-        Tries.Trie.has(
-          Unit,
-          Group.reach(
-            Groups.in(
-              ~d,
-              Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(x), l),
-              Trees.Edit.root(x)
-            ),
-            g
-          ),
-          Group.key(g)
-        ),
-        u => Some{Replicas.Act.Stale{}},
-        u => Act.put(None{}, [], Some{x})
+      Maybe.bind(
+        &2,
+        List<&2, Group>,
+        Replicas.Act,
+        Groups.in(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(x), l), Trees.Edit.root(x)),
+        gs => Shared.Bool.when(
+          Maybe<&2, Replicas.Act>,
+          Tries.Trie.has(Unit, Group.reach(gs, g), Group.key(g)),
+          u => Some{Replicas.Act.Stale{}},
+          u => Act.put(None{}, [], Some{x})
+        )
       )
 
 # what a group g with the members ms does, at the tip t of a store: the tree
@@ -1220,10 +1215,15 @@ def Own.act(
   Shared.Bool.when(
     Maybe<&2, Replicas.Act>,
     Tree.whole(~d, l, h),
-    u => Shared.Bool.when(
+    u => Maybe.bind(
+      &2,
+      List<&2, String>,
+      Replicas.Act,
+      Group.nodes(~d, l, h, g),
+      +ns => Shared.Bool.when(
       Maybe<&2, Replicas.Act>,
       List.all.if(
-        v => Shared.List.same_set(~String, ~String.eq, os, Group.nodes(~d, l, h, g)),
+        v => Shared.List.same_set(~String, ~String.eq, os, ns),
         Bool.not(List.is_empty(&2, String, os))
       ),
       v => Act.put(
@@ -1239,6 +1239,7 @@ def Own.act(
         )
       ),
       v => Some{Replicas.Act.Stale{}}
+      )
     ),
     u => None{}
   )
@@ -2834,7 +2835,13 @@ def Own.due.at(
       Ledgers.Id,
       Replicas.Request<Requests.Ask>,
       Replicas.Tip.newest(~Requests.Ask.machine(), ~d, l, ts),
-      v => Own.due.of(c, t, ts, g, Group.nodes(~d, l, Replicas.Tip.content(ts), g), v)
+      v => Maybe.bind(
+        &2,
+        List<&2, String>,
+        Replicas.Request<Requests.Ask>,
+        Group.nodes(~d, l, Replicas.Tip.content(ts), g),
+        ns => Own.due.of(c, t, ts, g, ns, v)
+      )
     )
   )
 
