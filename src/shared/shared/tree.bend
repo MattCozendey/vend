@@ -3688,6 +3688,535 @@ def Mst.passes_of_all_lt(xs: List<&2, Item>, +k: List<&2, U32>) -> {Mst.all_lt(x
         Mst.passes_of_all_lt(rest, k)(Shared.Bool.and_true_right(Cmp.is_lt(Key.cmp(ik, k)), Mst.all_lt(rest, k), a))
       )
 
+# the items xs before the first whose key is not before k (what a part of
+# them at k puts before)
+def Mst.pre(xs: List<&2, Item>, +k: List<&2, U32>) -> List<&2, Item>:
+  match xs:
+    case Nil{}:
+      []
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      Shared.Bool.when(List<&2, Item>, Cmp.is_lt(Key.cmp(ik, k)), u => Item{ik, iv, r} <> Mst.pre(rest, k), u => [])
+
+# the items xs from the first whose key is not before k on
+def Mst.post(xs: List<&2, Item>, +k: List<&2, U32>) -> List<&2, Item>:
+  match xs:
+    case Nil{}:
+      []
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      Shared.Bool.when(List<&2, Item>, Cmp.is_lt(Key.cmp(ik, k)), u => Mst.post(rest, k), u => Item{ik, iv, r} <> rest)
+
+# the first of the items ys (if any) does not come before k
+def Mst.head_not_lt(ys: List<&2, Item>, +k: List<&2, U32>) -> Bool:
+  match ys:
+    case Nil{}:
+      True{}
+    case Con{Item{ik, iv, r}, rest}:
+      Bool.not(Cmp.is_lt(Key.cmp(ik, k)))
+
+# the part of the items xs at k, by Mst.pre and Mst.post
+def Mst.part_eq(+xs: List<&2, Item>, +prev: Maybe<&2, Hashes.Hash>, +k: List<&2, U32>, +acc: List<&2, Item>) -> {
+  Mst.part(xs, prev, k, acc)
+    == Part{List.reverse.go(&2, Item, Mst.pre(xs, k), acc), Mst.last(Mst.pre(xs, k), prev), Mst.post(xs, k)}: Part
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      Mst.case_bool(
+        b => {
+          Shared.Bool.when(
+            Part,
+            b,
+            u => Mst.part(rest, r, k, Item{ik, iv, r} <> acc),
+            u => Part{acc, prev, Item{ik, iv, r} <> rest}
+          )
+            == Part{
+              List.reverse.go(
+                &2,
+                Item,
+                Shared.Bool.when(List<&2, Item>, b, u => Item{ik, iv, r} <> Mst.pre(rest, k), u => []),
+                acc
+              ),
+              Mst.last(Shared.Bool.when(List<&2, Item>, b, u => Item{ik, iv, r} <> Mst.pre(rest, k), u => []), prev),
+              Shared.Bool.when(List<&2, Item>, b, u => Mst.post(rest, k), u => Item{ik, iv, r} <> rest)
+            }: Part
+        },
+        Cmp.is_lt(Key.cmp(ik, k)),
+        +q => Mst.part_eq(rest, r, k, Item{ik, iv, r} <> acc),
+        +q => {==}
+      )
+
+# the items before k and from k on are the items
+def Mst.pre_post(+xs: List<&2, Item>, +k: List<&2, U32>) -> {
+  List.append(&2, Item, Mst.pre(xs, k), Mst.post(xs, k)) == xs: List<&2, Item>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      Mst.case_bool(
+        b => {
+          List.append(
+            &2,
+            Item,
+            Shared.Bool.when(List<&2, Item>, b, u => Item{ik, iv, r} <> Mst.pre(rest, k), u => []),
+            Shared.Bool.when(List<&2, Item>, b, u => Mst.post(rest, k), u => Item{ik, iv, r} <> rest)
+          )
+            == Item{ik, iv, r} <> rest: List<&2, Item>
+        },
+        Cmp.is_lt(Key.cmp(ik, k)),
+        +q => Equal.cong(
+          List<&2, Item>,
+          List<&2, Item>,
+          ys => Item{ik, iv, r} <> ys,
+          List.append(&2, Item, Mst.pre(rest, k), Mst.post(rest, k)),
+          rest,
+          Mst.pre_post(rest, k)
+        ),
+        +q => {==}
+      )
+
+# the items before k all come before k
+def Mst.pre_all_lt(+xs: List<&2, Item>, +k: List<&2, U32>) -> {Mst.all_lt(Mst.pre(xs, k), k) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      Mst.case_bool(
+        b => {b == Cmp.is_lt(Key.cmp(ik, k)): Bool} -> {
+          Mst.all_lt(Shared.Bool.when(List<&2, Item>, b, u => Item{ik, iv, r} <> Mst.pre(rest, k), u => []), k) == True{}: Bool
+        },
+        Cmp.is_lt(Key.cmp(ik, k)),
+        +q => +e =>
+          %e: {Bool.and(_, Mst.all_lt(Mst.pre(rest, k), k)) == True{}: Bool}
+          Mst.pre_all_lt(rest, k),
+        +q => +e => {==}
+      )({==})
+
+# the first item from k on does not come before k
+def Mst.post_head(+xs: List<&2, Item>, +k: List<&2, U32>) -> {Mst.head_not_lt(Mst.post(xs, k), k) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      Mst.case_bool(
+        b => {b == Cmp.is_lt(Key.cmp(ik, k)): Bool} -> {
+          Mst.head_not_lt(Shared.Bool.when(List<&2, Item>, b, u => Mst.post(rest, k), u => Item{ik, iv, r} <> rest), k)
+            == True{}: Bool
+        },
+        Cmp.is_lt(Key.cmp(ik, k)),
+        +q => +e => Mst.post_head(rest, k),
+        +q => +e =>
+          %e: {Bool.not(_) == True{}: Bool}
+          {==}
+      )({==})
+
+# a list reversed onto zs, then ys, is the list reversed onto zs then ys
+def Mst.rev_append(+acc: List<&2, Item>, +zs: List<&2, Item>, +ys: List<&2, Item>) -> {
+  List.append(&2, Item, List.reverse.go(&2, Item, acc, zs), ys) == List.reverse.go(&2, Item, acc, List.append(&2, Item, zs, ys)): List<&2, Item>
+}:
+  match acc:
+    case Nil{}:
+      {==}
+    case Con{+a, +as}:
+      Mst.rev_append(as, a <> zs, ys)
+
+# Mst.rejoin of nonempty items reversed onto acc
+def Mst.rejoin_rev.go(+xs: List<&2, Item>, +x: Item, +acc: List<&2, Item>, +m: Maybe<&2, Hashes.Hash>, +after: List<&2, Item>) -> {
+  Mst.rejoin(List.reverse.go(&2, Item, x <> xs, acc), m, after)
+    == List.reverse.go(&2, Item, acc, List.append(&2, Item, Mst.set_last(x <> xs, m), after)): List<&2, Item>
+}:
+  match xs x:
+    case Nil{} Item{+k, +v, +r}:
+      Mst.rev_append(acc, [], Item{k, v, m} <> after)
+    case Con{+y, +ys} Item{+k, +v, +r}:
+      Mst.rejoin_rev.go(ys, y, Item{k, v, r} <> acc, m, after)
+
+# Mst.rejoin of the items before a place, as a part gives them, is the items
+# with their last subtree set
+def Mst.rejoin_rev(+xs: List<&2, Item>, +m: Maybe<&2, Hashes.Hash>, +after: List<&2, Item>) -> {
+  Mst.rejoin(List.reverse.go(&2, Item, xs, []), m, after) == List.append(&2, Item, Mst.set_last(xs, m), after): List<&2, Item>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+x, +rest}:
+      Mst.rejoin_rev.go(rest, x, [], m, after)
+
+# a node with no item before a place keeps left, else as Mst.end_left
+def Mst.end_left_same(+xs: List<&2, Item>, +left: Maybe<&2, Hashes.Hash>) -> {
+  Mst.end_left(xs, left, left) == left: Maybe<&2, Hashes.Hash>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      {==}
+
+# Mst.left of the items before a place reversed onto acc
+def Mst.left_rev.go(+xs: List<&2, Item>, +acc: List<&2, Item>, +left: Maybe<&2, Hashes.Hash>, +m: Maybe<&2, Hashes.Hash>) -> {
+  Mst.left(List.reverse.go(&2, Item, xs, acc), left, m) == Mst.end_left(xs, left, Mst.left(acc, left, m)): Maybe<&2, Hashes.Hash>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+x, +rest}:
+      %Equal.sym(
+        Maybe<&2, Hashes.Hash>,
+        Mst.left(List.reverse.go(&2, Item, rest, x <> acc), left, m),
+        Mst.end_left(rest, left, left),
+        Mst.left_rev.go(rest, x <> acc, left, m)
+      ): {_ == left: Maybe<&2, Hashes.Hash>}
+      Mst.end_left_same(rest, left)
+
+# Mst.left of the items before a place, as a part gives them
+def Mst.left_rev(+xs: List<&2, Item>, +left: Maybe<&2, Hashes.Hash>, +m: Maybe<&2, Hashes.Hash>) -> {
+  Mst.left(List.reverse.go(&2, Item, xs, []), left, m) == Mst.end_left(xs, left, m): Maybe<&2, Hashes.Hash>
+}:
+  Mst.left_rev.go(xs, [], left, m)
+
+# the head key of items reversed onto acc
+def Mst.head_rev.go(+xs: List<&2, Item>, +acc: List<&2, Item>, +lo: Maybe<&2, List<&2, U32>>) -> {
+  Items.head_key(List.reverse.go(&2, Item, xs, acc), lo) == Items.last_key(xs, Items.head_key(acc, lo)): Maybe<&2, List<&2, U32>>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{Item{+k, +v, +r}, +rest}:
+      Mst.head_rev.go(rest, Item{k, v, r} <> acc, lo)
+
+# the head key of the items before a place, as a part gives them, is their
+# last key
+def Mst.head_rev(+xs: List<&2, Item>, +lo: Maybe<&2, List<&2, U32>>) -> {
+  Items.head_key(List.reverse.go(&2, Item, xs, []), lo) == Items.last_key(xs, lo): Maybe<&2, List<&2, U32>>
+}:
+  Mst.head_rev.go(xs, [], lo)
+
+# a pick passes the items that k2 is after
+def Mst.pick_passes(
+  +xs: List<&2, Item>,
+  +ys: List<&2, Item>,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k2: List<&2, U32>
+) -> {Mst.passes(xs, k2) == True{}: Bool} -> {
+  Mst.pick(List.append(&2, Item, xs, ys), prev, l, lo, hi, k2)
+    == Mst.pick(ys, Mst.last(xs, prev), l, Items.last_key(xs, lo), hi, k2): Pick
+}:
+  match xs:
+    case Nil{}:
+      +e => {==}
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      +e =>
+        %Equal.sym(
+          Cmp,
+          Key.cmp(k2, ik),
+          GT{},
+          Mst.gt_sound(Key.cmp(k2, ik))(Shared.Bool.and_true_left(Cmp.is_gt(Key.cmp(k2, ik)), Mst.passes(rest, k2), e))
+        ): {
+          Shared.Bool.when(
+            Pick,
+            Cmp.is_lt(_),
+            u => Pick.Down{prev, Room.of(l, lo, Some{ik})},
+            u => Shared.Bool.when(
+              Pick,
+              Cmp.is_eq(_),
+              w => Pick.Hit{iv},
+              w => Mst.pick(List.append(&2, Item, rest, ys), r, l, Some{ik}, hi, k2)
+            )
+          )
+            == Mst.pick(ys, Mst.last(rest, r), l, Items.last_key(rest, Some{ik}), hi, k2): Pick
+        }
+        Mst.pick_passes(rest, ys, r, l, Some{ik}, hi, k2)(
+          Shared.Bool.and_true_right(Cmp.is_gt(Key.cmp(k2, ik)), Mst.passes(rest, k2), e)
+        )
+
+# a pick that stops within the items xs reads nothing after them
+def Mst.pick_stops(
+  +xs: List<&2, Item>,
+  +ys1: List<&2, Item>,
+  +ys2: List<&2, Item>,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi1: Maybe<&2, List<&2, U32>>,
+  +hi2: Maybe<&2, List<&2, U32>>,
+  +k2: List<&2, U32>
+) -> {Mst.passes(xs, k2) == False{}: Bool} -> {
+  Mst.pick(List.append(&2, Item, xs, ys1), prev, l, lo, hi1, k2)
+    == Mst.pick(List.append(&2, Item, xs, ys2), prev, l, lo, hi2, k2): Pick
+}:
+  match xs:
+    case Nil{}:
+      +e => Empty.absurd(
+        {Mst.pick(ys1, prev, l, lo, hi1, k2) == Mst.pick(ys2, prev, l, lo, hi2, k2): Pick},
+        Shared.Bool.true_ne_false(e)
+      )
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      Mst.case_cmp(
+        c => {Bool.and(Cmp.is_gt(c), Mst.passes(rest, k2)) == False{}: Bool} -> {
+          Shared.Bool.when(
+            Pick,
+            Cmp.is_lt(c),
+            u => Pick.Down{prev, Room.of(l, lo, Some{ik})},
+            u => Shared.Bool.when(
+              Pick,
+              Cmp.is_eq(c),
+              w => Pick.Hit{iv},
+              w => Mst.pick(List.append(&2, Item, rest, ys1), r, l, Some{ik}, hi1, k2)
+            )
+          )
+            == Shared.Bool.when(
+              Pick,
+              Cmp.is_lt(c),
+              u => Pick.Down{prev, Room.of(l, lo, Some{ik})},
+              u => Shared.Bool.when(
+                Pick,
+                Cmp.is_eq(c),
+                w => Pick.Hit{iv},
+                w => Mst.pick(List.append(&2, Item, rest, ys2), r, l, Some{ik}, hi2, k2)
+              )
+            ): Pick
+        },
+        Key.cmp(k2, ik),
+        +q => +e => {==},
+        +q => +e => {==},
+        +q => +e => Mst.pick_stops(rest, ys1, ys2, r, l, Some{ik}, hi1, hi2, k2)(e)
+      )
+
+# Mst.pick_stops, with the last subtree of the items set on one side
+def Mst.pick_stops_set(
+  +xs: List<&2, Item>,
+  +m: Maybe<&2, Hashes.Hash>,
+  +ys1: List<&2, Item>,
+  +ys2: List<&2, Item>,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi1: Maybe<&2, List<&2, U32>>,
+  +hi2: Maybe<&2, List<&2, U32>>,
+  +k2: List<&2, U32>
+) -> {Mst.passes(xs, k2) == False{}: Bool} -> {
+  Mst.pick(List.append(&2, Item, Mst.set_last(xs, m), ys1), prev, l, lo, hi1, k2)
+    == Mst.pick(List.append(&2, Item, xs, ys2), prev, l, lo, hi2, k2): Pick
+}:
+  match xs:
+    case Nil{}:
+      +e => Empty.absurd(
+        {Mst.pick(ys1, prev, l, lo, hi1, k2) == Mst.pick(ys2, prev, l, lo, hi2, k2): Pick},
+        Shared.Bool.true_ne_false(e)
+      )
+    case Con{Item{+ik, +iv, +r}, Nil{}}:
+      Mst.case_cmp(
+        c => {Bool.and(Cmp.is_gt(c), True{}) == False{}: Bool} -> {
+          Shared.Bool.when(
+            Pick,
+            Cmp.is_lt(c),
+            u => Pick.Down{prev, Room.of(l, lo, Some{ik})},
+            u => Shared.Bool.when(Pick, Cmp.is_eq(c), w => Pick.Hit{iv}, w => Mst.pick(ys1, m, l, Some{ik}, hi1, k2))
+          )
+            == Shared.Bool.when(
+              Pick,
+              Cmp.is_lt(c),
+              u => Pick.Down{prev, Room.of(l, lo, Some{ik})},
+              u => Shared.Bool.when(Pick, Cmp.is_eq(c), w => Pick.Hit{iv}, w => Mst.pick(ys2, r, l, Some{ik}, hi2, k2))
+            ): Pick
+        },
+        Key.cmp(k2, ik),
+        +q => +e => {==},
+        +q => +e => {==},
+        +q => +e => Empty.absurd(
+          {Mst.pick(ys1, m, l, Some{ik}, hi1, k2) == Mst.pick(ys2, r, l, Some{ik}, hi2, k2): Pick},
+          Shared.Bool.true_ne_false(e)
+        )
+      )
+    case Con{Item{+ik, +iv, +r}, Con{+y, +rest}}:
+      Mst.case_cmp(
+        c => {Bool.and(Cmp.is_gt(c), Mst.passes(y <> rest, k2)) == False{}: Bool} -> {
+          Shared.Bool.when(
+            Pick,
+            Cmp.is_lt(c),
+            u => Pick.Down{prev, Room.of(l, lo, Some{ik})},
+            u => Shared.Bool.when(
+              Pick,
+              Cmp.is_eq(c),
+              w => Pick.Hit{iv},
+              w => Mst.pick(List.append(&2, Item, Mst.set_last(y <> rest, m), ys1), r, l, Some{ik}, hi1, k2)
+            )
+          )
+            == Shared.Bool.when(
+              Pick,
+              Cmp.is_lt(c),
+              u => Pick.Down{prev, Room.of(l, lo, Some{ik})},
+              u => Shared.Bool.when(
+                Pick,
+                Cmp.is_eq(c),
+                w => Pick.Hit{iv},
+                w => Mst.pick(List.append(&2, Item, y <> rest, ys2), r, l, Some{ik}, hi2, k2)
+              )
+            ): Pick
+        },
+        Key.cmp(k2, ik),
+        +q => +e => {==},
+        +q => +e => {==},
+        +q => +e => Mst.pick_stops_set(y <> rest, m, ys1, ys2, r, l, Some{ik}, hi1, hi2, k2)(e)
+      )
+
+# a pick that stops at the first item goes down before it
+def Mst.pick_first(
+  +ys: List<&2, Item>,
+  +m: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k2: List<&2, U32>
+) -> {Mst.stops_first(ys, k2) == True{}: Bool} -> {
+  Mst.pick(ys, m, l, lo, hi, k2) == Pick.Down{m, Room.of(l, lo, Items.head_key(ys, hi))}: Pick
+}:
+  match ys:
+    case Nil{}:
+      +e => {==}
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      +e =>
+        %Equal.sym(Cmp, Key.cmp(k2, ik), LT{}, Mst.lt_sound(Key.cmp(k2, ik))(e)): {
+          Shared.Bool.when(
+            Pick,
+            Cmp.is_lt(_),
+            u => Pick.Down{m, Room.of(l, lo, Some{ik})},
+            u => Shared.Bool.when(Pick, Cmp.is_eq(_), w => Pick.Hit{iv}, w => Mst.pick(rest, r, l, Some{ik}, hi, k2))
+          )
+            == Pick.Down{m, Room.of(l, lo, Some{ik})}: Pick
+        }
+        {==}
+
+# a pick that does not stop at the first item reads neither the subtree
+# before it nor the bound before it
+def Mst.pick_past(
+  +ys: List<&2, Item>,
+  +m1: Maybe<&2, Hashes.Hash>,
+  +m2: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +lo1: Maybe<&2, List<&2, U32>>,
+  +lo2: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k2: List<&2, U32>
+) -> {Mst.stops_first(ys, k2) == False{}: Bool} -> {
+  Mst.pick(ys, m1, l, lo1, hi, k2) == Mst.pick(ys, m2, l, lo2, hi, k2): Pick
+}:
+  match ys:
+    case Nil{}:
+      +e => Empty.absurd(
+        {Pick.Down{m1, Room.of(l, lo1, hi)} == Pick.Down{m2, Room.of(l, lo2, hi)}: Pick},
+        Shared.Bool.true_ne_false(e)
+      )
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      Mst.case_cmp(
+        c => {Cmp.is_lt(c) == False{}: Bool} -> {
+          Shared.Bool.when(
+            Pick,
+            Cmp.is_lt(c),
+            u => Pick.Down{m1, Room.of(l, lo1, Some{ik})},
+            u => Shared.Bool.when(Pick, Cmp.is_eq(c), w => Pick.Hit{iv}, w => Mst.pick(rest, r, l, Some{ik}, hi, k2))
+          )
+            == Shared.Bool.when(
+              Pick,
+              Cmp.is_lt(c),
+              u => Pick.Down{m2, Room.of(l, lo2, Some{ik})},
+              u => Shared.Bool.when(Pick, Cmp.is_eq(c), w => Pick.Hit{iv}, w => Mst.pick(rest, r, l, Some{ik}, hi, k2))
+            ): Pick
+        },
+        Key.cmp(k2, ik),
+        +q => +e => Empty.absurd(
+          {Pick.Down{m1, Room.of(l, lo1, Some{ik})} == Pick.Down{m2, Room.of(l, lo2, Some{ik})}: Pick},
+          Shared.Bool.true_ne_false(e)
+        ),
+        +q => +e => {==},
+        +q => +e => {==}
+      )
+
+# the up of a room
+def Mst.room_up(r: Room) -> Nat:
+  match r:
+    case Room{u, lo, hi}:
+      u
+
+# the room r2 is at least as wide as r1
+def Mst.room_le(r1: Room, r2: Room) -> Bool:
+  match r1 r2:
+    case Room{u1, lo1, hi1} Room{u2, lo2, hi2}:
+      Bool.and(Nat.is_le(u1, u2), Bool.and(Mst.lo_le(lo2, lo1), Mst.hi_le(hi1, hi2)))
+
+# two picks of one key among the same items of a node of the level l: the
+# same hit, or the same subtree, in a room at least as wide and of the up l
+def Mst.PickSub(l: Nat, p1: Pick, p2: Pick) -> Type:
+  match p1 p2:
+    case Pick.Hit{v1} Pick.Hit{v2}:
+      {v1 == v2: List<&2, U32>}
+    case Pick.Down{m1, r1} Pick.Down{m2, r2}:
+      {m1 == m2: Maybe<&2, Hashes.Hash>} & ({Mst.room_le(r1, r2) == True{}: Bool} & {Mst.room_up(r2) == l: Nat})
+    case Pick.Hit{v1} Pick.Down{m2, r2}:
+      Empty
+    case Pick.Down{m1, r1} Pick.Hit{v2}:
+      Empty
+
+# a room of the up l, between wider bounds, is wider
+def Mst.room_le_of(
+  +l: Nat,
+  +lo1: Maybe<&2, List<&2, U32>>,
+  +lo2: Maybe<&2, List<&2, U32>>,
+  +hi1: Maybe<&2, List<&2, U32>>,
+  +hi2: Maybe<&2, List<&2, U32>>,
+  +wl: {Mst.lo_le(lo2, lo1) == True{}: Bool},
+  +wh: {Mst.hi_le(hi1, hi2) == True{}: Bool}
+) -> {Mst.room_le(Room{l, lo1, hi1}, Room{l, lo2, hi2}) == True{}: Bool}:
+  Shared.Bool.and_both(
+    Nat.is_le(l, l),
+    Bool.and(Mst.lo_le(lo2, lo1), Mst.hi_le(hi1, hi2)),
+    Shared.Nat.le_refl(l),
+    Shared.Bool.and_both(Mst.lo_le(lo2, lo1), Mst.hi_le(hi1, hi2), wl, wh)
+  )
+
+# a pick between wider bounds finds the same, in a wider room
+def Mst.pick_wide(
+  +xs: List<&2, Item>,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +lo1: Maybe<&2, List<&2, U32>>,
+  +lo2: Maybe<&2, List<&2, U32>>,
+  +hi1: Maybe<&2, List<&2, U32>>,
+  +hi2: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +wl: {Mst.lo_le(lo2, lo1) == True{}: Bool},
+  +wh: {Mst.hi_le(hi1, hi2) == True{}: Bool}
+) -> Mst.PickSub(l, Mst.pick(xs, prev, l, lo1, hi1, k), Mst.pick(xs, prev, l, lo2, hi2, k)):
+  match xs:
+    case Nil{}:
+      ({==}, (Mst.room_le_of(l, lo1, lo2, hi1, hi2, wl, wh), {==}))
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      Mst.case_cmp(
+        c => Mst.PickSub(
+          l,
+          Shared.Bool.when(
+            Pick,
+            Cmp.is_lt(c),
+            u => Pick.Down{prev, Room.of(l, lo1, Some{ik})},
+            u => Shared.Bool.when(Pick, Cmp.is_eq(c), w => Pick.Hit{iv}, w => Mst.pick(rest, r, l, Some{ik}, hi1, k))
+          ),
+          Shared.Bool.when(
+            Pick,
+            Cmp.is_lt(c),
+            u => Pick.Down{prev, Room.of(l, lo2, Some{ik})},
+            u => Shared.Bool.when(Pick, Cmp.is_eq(c), w => Pick.Hit{iv}, w => Mst.pick(rest, r, l, Some{ik}, hi2, k))
+          )
+        ),
+        Key.cmp(k, ik),
+        +q => ({==}, (Mst.room_le_of(l, lo1, lo2, Some{ik}, Some{ik}, wl, Mst.hi_le_refl(Some{ik})), {==})),
+        +q => {==},
+        +q => Mst.pick_wide(rest, r, l, Some{ik}, Some{ik}, hi1, hi2, k, Mst.lo_le_refl(Some{ik}), wh)
+      )
+
 # what a read tells stays, in a depot that keeps what it holds
 law Mst.reads_final:
   for ~S: Data
