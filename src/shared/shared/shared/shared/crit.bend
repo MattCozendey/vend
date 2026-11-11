@@ -2140,6 +2140,25 @@ def Crit.wf.wf_o(~V: Data, +rep: List<&2, U32>, +pos: Nat, +e: Maybe<&2, V>, +z:
 } -> {Crit.wf(~V, o, 1n+pos) == True{}: Bool}:
   h => Shared.List.all.if_rest(Crit.wf(~V, z, 1n+pos), u => Crit.wf(~V, o, 1n+pos))(Shared.List.all.if_rest(Crit.all(~V, ~Place, ~Place.has, o, Place{rep, pos, True{}}), u => List.all.if(u => Crit.wf(~V, o, 1n+pos), Crit.wf(~V, z, 1n+pos)))(Shared.List.all.if_rest(Crit.all(~V, ~Place, ~Place.has, z, Place{rep, pos, False{}}), u => List.all.if(u => List.all.if(u => Crit.wf(~V, o, 1n+pos), Crit.wf(~V, z, 1n+pos)), Crit.all(~V, ~Place, ~Place.has, o, Place{rep, pos, True{}})))(Shared.List.all.if_rest(Crit.rep_ok(V, rep, pos, e, z), u => List.all.if(u => List.all.if(u => List.all.if(u => Crit.wf(~V, o, 1n+pos), Crit.wf(~V, z, 1n+pos)), Crit.all(~V, ~Place, ~Place.has, o, Place{rep, pos, True{}})), Crit.all(~V, ~Place, ~Place.has, z, Place{rep, pos, False{}})))(Shared.List.all.if_rest(Crit.shape(V, e, z, o), u => List.all.if(u => List.all.if(u => List.all.if(u => List.all.if(u => Crit.wf(~V, o, 1n+pos), Crit.wf(~V, z, 1n+pos)), Crit.all(~V, ~Place, ~Place.has, o, Place{rep, pos, True{}})), Crit.all(~V, ~Place, ~Place.has, z, Place{rep, pos, False{}})), Crit.rep_ok(V, rep, pos, e, z)))(Shared.List.all.if_rest(Nat.is_le(lo, pos), u => List.all.if(u => List.all.if(u => List.all.if(u => List.all.if(u => List.all.if(u => Crit.wf(~V, o, 1n+pos), Crit.wf(~V, z, 1n+pos)), Crit.all(~V, ~Place, ~Place.has, o, Place{rep, pos, True{}})), Crit.all(~V, ~Place, ~Place.has, z, Place{rep, pos, False{}})), Crit.rep_ok(V, rep, pos, e, z)), Crit.shape(V, e, z, o)))(h))))))
 
+# a fork is well formed when each of its parts is
+def Crit.wf.intro(~V: Data, +rep: List<&2, U32>, +pos: Nat, +e: Maybe<&2, V>, +z: Crit<V>, +o: Crit<V>, +lo: Nat) -> {Nat.is_le(lo, pos) == True{}: Bool} -> {Crit.shape(V, e, z, o) == True{}: Bool} -> {Crit.rep_ok(V, rep, pos, e, z) == True{}: Bool} -> {Crit.all(~V, ~Place, ~Place.has, z, Place{rep, pos, False{}}) == True{}: Bool} -> {Crit.all(~V, ~Place, ~Place.has, o, Place{rep, pos, True{}}) == True{}: Bool} -> {Crit.wf(~V, z, 1n+pos) == True{}: Bool} -> {Crit.wf(~V, o, 1n+pos) == True{}: Bool} -> {Crit.wf(~V, Crit.Fork{rep, pos, e, z, o}, lo) == True{}: Bool}:
+  le => sh => ro => az => ao => wz => wo => Shared.List.all.if_both(Nat.is_le(lo, pos), u => List.all.if(u => List.all.if(u => List.all.if(u => List.all.if(u => List.all.if(u => Crit.wf(~V, o, 1n+pos), Crit.wf(~V, z, 1n+pos)), Crit.all(~V, ~Place, ~Place.has, o, Place{rep, pos, True{}})), Crit.all(~V, ~Place, ~Place.has, z, Place{rep, pos, False{}})), Crit.rep_ok(V, rep, pos, e, z)), Crit.shape(V, e, z, o)))(le)(Shared.List.all.if_both(Crit.shape(V, e, z, o), u => List.all.if(u => List.all.if(u => List.all.if(u => List.all.if(u => Crit.wf(~V, o, 1n+pos), Crit.wf(~V, z, 1n+pos)), Crit.all(~V, ~Place, ~Place.has, o, Place{rep, pos, True{}})), Crit.all(~V, ~Place, ~Place.has, z, Place{rep, pos, False{}})), Crit.rep_ok(V, rep, pos, e, z)))(sh)(Shared.List.all.if_both(Crit.rep_ok(V, rep, pos, e, z), u => List.all.if(u => List.all.if(u => List.all.if(u => Crit.wf(~V, o, 1n+pos), Crit.wf(~V, z, 1n+pos)), Crit.all(~V, ~Place, ~Place.has, o, Place{rep, pos, True{}})), Crit.all(~V, ~Place, ~Place.has, z, Place{rep, pos, False{}})))(ro)(Shared.List.all.if_both(Crit.all(~V, ~Place, ~Place.has, z, Place{rep, pos, False{}}), u => List.all.if(u => List.all.if(u => Crit.wf(~V, o, 1n+pos), Crit.wf(~V, z, 1n+pos)), Crit.all(~V, ~Place, ~Place.has, o, Place{rep, pos, True{}})))(az)(Shared.List.all.if_both(Crit.all(~V, ~Place, ~Place.has, o, Place{rep, pos, True{}}), u => List.all.if(u => Crit.wf(~V, o, 1n+pos), Crit.wf(~V, z, 1n+pos)))(ao)(Shared.List.all.if_both(Crit.wf(~V, z, 1n+pos), u => Crit.wf(~V, o, 1n+pos))(wz)(wo))))))
+
+# a map well formed below a fork at a bit before a is well formed below one
+# before any b up to a
+def Crit.wf_mono(~V: Data, m: Crit<V>, +a: Nat, +b: Nat) -> {Crit.wf(~V, m, a) == True{}: Bool} -> {Nat.is_le(b, a) == True{}: Bool} -> {
+  Crit.wf(~V, m, b) == True{}: Bool
+}:
+  match m:
+    case Crit.Tip{}:
+      h => l => {==}
+    case Crit.Leaf{k, v}:
+      h => l => {==}
+    case Crit.Fork{+rep, +pos, +e, +z, +o}:
+      +h => l => Shared.List.all.if_both(Nat.is_le(b, pos), u => List.all.if(u => List.all.if(u => List.all.if(u => List.all.if(u => List.all.if(u => Crit.wf(~V, o, 1n+pos), Crit.wf(~V, z, 1n+pos)), Crit.all(~V, ~Place, ~Place.has, o, Place{rep, pos, True{}})), Crit.all(~V, ~Place, ~Place.has, z, Place{rep, pos, False{}})), Crit.rep_ok(V, rep, pos, e, z)), Crit.shape(V, e, z, o)))(Shared.Nat.le_trans(b, a, pos)(l)(Crit.wf.le(~V, rep, pos, e, z, o, a)(h)))(
+        Shared.List.all.if_rest(Nat.is_le(a, pos), u => List.all.if(u => List.all.if(u => List.all.if(u => List.all.if(u => List.all.if(u => Crit.wf(~V, o, 1n+pos), Crit.wf(~V, z, 1n+pos)), Crit.all(~V, ~Place, ~Place.has, o, Place{rep, pos, True{}})), Crit.all(~V, ~Place, ~Place.has, z, Place{rep, pos, False{}})), Crit.rep_ok(V, rep, pos, e, z)), Crit.shape(V, e, z, o)))(h)
+      )
+
 # dropping all of a list leaves nothing
 def Crit.drop_length(xs: List<&2, Bool>) -> {List.drop(&2, Bool, xs, List.length(&2, Bool, xs)) == []: List<&2, Bool>}:
   match xs:
@@ -3101,6 +3120,170 @@ def Crit.not_in_fork(~V: Data, +rep: List<&2, U32>, +pos: Nat, +e: Maybe<&2, V>,
       Place.has_not_agree(rep, pos, True{}, k)(n)
     )
   )
+
+# a fork whose end passes p, and whose sides do, passes p
+def Crit.all.intro(~V: Data, ~G: Data, ~p: G -> List<&2, U32> -> Bool, +rep: List<&2, U32>, +pos: Nat, +e: Maybe<&2, V>, +z: Crit<V>, +o: Crit<V>, +g: G) -> {
+  Bool.or(Maybe.is_none(&2, V, e), p(g)(rep)) == True{}: Bool
+} -> {Crit.all(~V, ~G, ~p, z, g) == True{}: Bool} -> {Crit.all(~V, ~G, ~p, o, g) == True{}: Bool} -> {
+  Crit.all(~V, ~G, ~p, Crit.Fork{rep, pos, e, z, o}, g) == True{}: Bool
+}:
+  hh => hz => ho => Shared.List.all.if_both(Bool.or(Maybe.is_none(&2, V, e), p(g)(rep)), u => List.all.if(u2 => Crit.all(~V, ~G, ~p, o, g), Crit.all(~V, ~G, ~p, z, g)))(hh)(
+    Shared.List.all.if_both(Crit.all(~V, ~G, ~p, z, g), u2 => Crit.all(~V, ~G, ~p, o, g))(hz)(ho)
+  )
+
+# an end that passes one test passes another that the first implies
+def Crit.or_hit_move(-V: Data, e: Maybe<&2, V>, -x: Bool, -y: Bool) -> ({x == True{}: Bool} -> {y == True{}: Bool}) -> {
+  Bool.or(Maybe.is_none(&2, V, e), x) == True{}: Bool
+} -> {Bool.or(Maybe.is_none(&2, V, e), y) == True{}: Bool}:
+  match e:
+    case None{}:
+      f => h => {==}
+    case Some{v}:
+      f => h => f(h)
+
+# a key on a side of a fork at pos with rep r is on the same side of one with
+# rep r2, when r2 agrees with r before pos
+def Place.move(+r: List<&2, U32>, +r2: List<&2, U32>, +pos: Nat, +b: Bool, +k: List<&2, U32>) -> {Key.agree(r2, r, pos) == True{}: Bool} -> {
+  Place.has(Place{r, pos, b}, k) == True{}: Bool
+} -> {Place.has(Place{r2, pos, b}, k) == True{}: Bool}:
+  ha => +h => Shared.List.all.if_both(Key.agree(k, r2, pos), u => Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Key.side(k, pos), Some{b}))(
+    Key.agree_join(k, r2, r, pos)(Place.has_agree(r, pos, b, k)(h))(ha)
+  )(Shared.List.all.if_rest(Key.agree(k, r, pos), u => Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Key.side(k, pos), Some{b}))(h))
+
+# the keys on a side of a fork at pos with rep r are on the same side of one
+# with rep r2, when r2 agrees with r before pos
+def Crit.place_shift(~V: Data, m: Crit<V>, +r: List<&2, U32>, +r2: List<&2, U32>, +pos: Nat, +b: Bool) -> {Key.agree(r2, r, pos) == True{}: Bool} -> {
+  Crit.all(~V, ~Place, ~Place.has, m, Place{r, pos, b}) == True{}: Bool
+} -> {Crit.all(~V, ~Place, ~Place.has, m, Place{r2, pos, b}) == True{}: Bool}:
+  match m:
+    case Crit.Tip{}:
+      ha => h => {==}
+    case Crit.Leaf{+k, v}:
+      ha => h => Place.move(r, r2, pos, b, k)(ha)(h)
+    case Crit.Fork{+rep, +p2, +e, +z, +o}:
+      +ha => +h => Crit.all.intro(~V, ~Place, ~Place.has, rep, p2, e, z, o, Place{r2, pos, b})(
+        Crit.or_hit_move(V, e, Place.has(Place{r, pos, b}, rep), Place.has(Place{r2, pos, b}, rep))(Place.move(r, r2, pos, b, rep)(ha))(
+          Crit.all.hit(~V, ~Place, ~Place.has, rep, p2, e, z, o, Place{r, pos, b})(h)
+        )
+      )(Crit.place_shift(~V, z, r, r2, pos, b)(ha)(Crit.all.z(~V, ~Place, ~Place.has, rep, p2, e, z, o, Place{r, pos, b})(h)))(
+        Crit.place_shift(~V, o, r, r2, pos, b)(ha)(Crit.all.o(~V, ~Place, ~Place.has, rep, p2, e, z, o, Place{r, pos, b})(h))
+      )
+
+# a rep that is right for its end is of pos bits, or there is no end
+def Crit.rep_or(-V: Data, +rep: List<&2, U32>, +pos: Nat, e: Maybe<&2, V>, -z: Crit<V>) -> {Crit.rep_ok(V, rep, pos, e, z) == True{}: Bool} -> {
+  Bool.or(Maybe.is_none(&2, V, e), Nat.is_eq(List.length(&2, Bool, Key.bits(rep)), pos)) == True{}: Bool
+}:
+  match e:
+    case None{}:
+      h => {==}
+    case Some{v}:
+      h => h
+
+# a fork in its one shape holds the keys of its parts
+def Crit.mk_all(~V: Data, ~G: Data, ~p: G -> List<&2, U32> -> Bool, +r: List<&2, U32>, +pos: Nat, e: Maybe<&2, V>, z: Crit<V>, o: Crit<V>, +g: G) -> {
+  Bool.or(Maybe.is_none(&2, V, e), p(g)(r)) == True{}: Bool
+} -> {Crit.all(~V, ~G, ~p, z, g) == True{}: Bool} -> {Crit.all(~V, ~G, ~p, o, g) == True{}: Bool} -> {
+  Crit.all(~V, ~G, ~p, Crit.mk(V, r, pos, e, z, o), g) == True{}: Bool
+}:
+  match e z o:
+    case None{} Crit.Tip{} Crit.Tip{}:
+      +hh => +hz => +ho => {==}
+    case None{} Crit.Tip{} Crit.Leaf{+kl2, +vl2}:
+      +hh => +hz => +ho => ho
+    case None{} Crit.Tip{} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      +hh => +hz => +ho => ho
+    case None{} Crit.Leaf{+kl, +vl} Crit.Tip{}:
+      +hh => +hz => +ho => hz
+    case None{} Crit.Leaf{+kl, +vl} Crit.Leaf{+kl2, +vl2}:
+      +hh => +hz => +ho => Crit.all.intro(~V, ~G, ~p, kl, pos, None{}, Crit.Leaf{kl, vl}, Crit.Leaf{kl2, vl2}, g)({==})(hz)(ho)
+    case None{} Crit.Leaf{+kl, +vl} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      +hh => +hz => +ho => Crit.all.intro(~V, ~G, ~p, kl, pos, None{}, Crit.Leaf{kl, vl}, Crit.Fork{fr2, fp2, fe2, fz2, fo2}, g)({==})(hz)(ho)
+    case None{} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Tip{}:
+      +hh => +hz => +ho => hz
+    case None{} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Leaf{+kl2, +vl2}:
+      +hh => +hz => +ho => Crit.all.intro(~V, ~G, ~p, fr, pos, None{}, Crit.Fork{fr, fp, fe, fz, fo}, Crit.Leaf{kl2, vl2}, g)({==})(hz)(ho)
+    case None{} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      +hh => +hz => +ho => Crit.all.intro(~V, ~G, ~p, fr, pos, None{}, Crit.Fork{fr, fp, fe, fz, fo}, Crit.Fork{fr2, fp2, fe2, fz2, fo2}, g)({==})(hz)(ho)
+    case Some{+v} Crit.Tip{} Crit.Tip{}:
+      +hh => +hz => +ho => hh
+    case Some{+v} Crit.Tip{} Crit.Leaf{+kl2, +vl2}:
+      +hh => +hz => +ho => Crit.all.intro(~V, ~G, ~p, r, pos, Some{v}, Crit.Tip{}, Crit.Leaf{kl2, vl2}, g)(hh)(hz)(ho)
+    case Some{+v} Crit.Tip{} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      +hh => +hz => +ho => Crit.all.intro(~V, ~G, ~p, r, pos, Some{v}, Crit.Tip{}, Crit.Fork{fr2, fp2, fe2, fz2, fo2}, g)(hh)(hz)(ho)
+    case Some{+v} Crit.Leaf{+kl, +vl} Crit.Tip{}:
+      +hh => +hz => +ho => Crit.all.intro(~V, ~G, ~p, r, pos, Some{v}, Crit.Leaf{kl, vl}, Crit.Tip{}, g)(hh)(hz)(ho)
+    case Some{+v} Crit.Leaf{+kl, +vl} Crit.Leaf{+kl2, +vl2}:
+      +hh => +hz => +ho => Crit.all.intro(~V, ~G, ~p, r, pos, Some{v}, Crit.Leaf{kl, vl}, Crit.Leaf{kl2, vl2}, g)(hh)(hz)(ho)
+    case Some{+v} Crit.Leaf{+kl, +vl} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      +hh => +hz => +ho => Crit.all.intro(~V, ~G, ~p, r, pos, Some{v}, Crit.Leaf{kl, vl}, Crit.Fork{fr2, fp2, fe2, fz2, fo2}, g)(hh)(hz)(ho)
+    case Some{+v} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Tip{}:
+      +hh => +hz => +ho => Crit.all.intro(~V, ~G, ~p, r, pos, Some{v}, Crit.Fork{fr, fp, fe, fz, fo}, Crit.Tip{}, g)(hh)(hz)(ho)
+    case Some{+v} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Leaf{+kl2, +vl2}:
+      +hh => +hz => +ho => Crit.all.intro(~V, ~G, ~p, r, pos, Some{v}, Crit.Fork{fr, fp, fe, fz, fo}, Crit.Leaf{kl2, vl2}, g)(hh)(hz)(ho)
+    case Some{+v} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      +hh => +hz => +ho => Crit.all.intro(~V, ~G, ~p, r, pos, Some{v}, Crit.Fork{fr, fp, fe, fz, fo}, Crit.Fork{fr2, fp2, fe2, fz2, fo2}, g)(hh)(hz)(ho)
+
+# a fork in its one shape is well formed when its parts are
+def Crit.mk_wf(~V: Data, +r: List<&2, U32>, +pos: Nat, e: Maybe<&2, V>, z: Crit<V>, o: Crit<V>, +lo: Nat) -> {Nat.is_le(lo, pos) == True{}: Bool} -> {
+  Bool.or(Maybe.is_none(&2, V, e), Nat.is_eq(List.length(&2, Bool, Key.bits(r)), pos)) == True{}: Bool
+} -> {Crit.all(~V, ~Place, ~Place.has, z, Place{r, pos, False{}}) == True{}: Bool} -> {
+  Crit.all(~V, ~Place, ~Place.has, o, Place{r, pos, True{}}) == True{}: Bool
+} -> {Crit.wf(~V, z, 1n+pos) == True{}: Bool} -> {Crit.wf(~V, o, 1n+pos) == True{}: Bool} -> {
+  Crit.wf(~V, Crit.mk(V, r, pos, e, z, o), lo) == True{}: Bool
+}:
+  match e z o:
+    case None{} Crit.Tip{} Crit.Tip{}:
+      +le => +hr => +az => +ao => +wz => +wo => {==}
+    case None{} Crit.Tip{} Crit.Leaf{+kl2, +vl2}:
+      +le => +hr => +az => +ao => +wz => +wo => {==}
+    case None{} Crit.Tip{} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      +le => +hr => +az => +ao => +wz => +wo => Crit.wf_mono(~V, Crit.Fork{fr2, fp2, fe2, fz2, fo2}, 1n+pos, lo)(wo)(Shared.Nat.le_succ(lo, pos)(le))
+    case None{} Crit.Leaf{+kl, +vl} Crit.Tip{}:
+      +le => +hr => +az => +ao => +wz => +wo => {==}
+    case None{} Crit.Leaf{+kl, +vl} Crit.Leaf{+kl2, +vl2}:
+      +le => +hr => +az => +ao => +wz => +wo => 
+        +ag = Place.has_agree(r, pos, False{}, kl)(Crit.rep_pass(~V, ~Place, ~Place.has, Crit.Leaf{kl, vl}, 1n+pos, Place{r, pos, False{}}, r)(wz)(az)({==}))
+        Crit.wf.intro(~V, kl, pos, None{}, Crit.Leaf{kl, vl}, Crit.Leaf{kl2, vl2}, lo)(le)({==})(Key.is_eq_refl(kl))(
+          Crit.place_shift(~V, Crit.Leaf{kl, vl}, r, kl, pos, False{})(ag)(az)
+        )(Crit.place_shift(~V, Crit.Leaf{kl2, vl2}, r, kl, pos, True{})(ag)(ao))(wz)(wo)
+    case None{} Crit.Leaf{+kl, +vl} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      +le => +hr => +az => +ao => +wz => +wo => 
+        +ag = Place.has_agree(r, pos, False{}, kl)(Crit.rep_pass(~V, ~Place, ~Place.has, Crit.Leaf{kl, vl}, 1n+pos, Place{r, pos, False{}}, r)(wz)(az)({==}))
+        Crit.wf.intro(~V, kl, pos, None{}, Crit.Leaf{kl, vl}, Crit.Fork{fr2, fp2, fe2, fz2, fo2}, lo)(le)({==})(Key.is_eq_refl(kl))(
+          Crit.place_shift(~V, Crit.Leaf{kl, vl}, r, kl, pos, False{})(ag)(az)
+        )(Crit.place_shift(~V, Crit.Fork{fr2, fp2, fe2, fz2, fo2}, r, kl, pos, True{})(ag)(ao))(wz)(wo)
+    case None{} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Tip{}:
+      +le => +hr => +az => +ao => +wz => +wo => Crit.wf_mono(~V, Crit.Fork{fr, fp, fe, fz, fo}, 1n+pos, lo)(wz)(Shared.Nat.le_succ(lo, pos)(le))
+    case None{} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Leaf{+kl2, +vl2}:
+      +le => +hr => +az => +ao => +wz => +wo => 
+        +ag = Place.has_agree(r, pos, False{}, fr)(Crit.rep_pass(~V, ~Place, ~Place.has, Crit.Fork{fr, fp, fe, fz, fo}, 1n+pos, Place{r, pos, False{}}, r)(wz)(az)({==}))
+        Crit.wf.intro(~V, fr, pos, None{}, Crit.Fork{fr, fp, fe, fz, fo}, Crit.Leaf{kl2, vl2}, lo)(le)({==})(Key.is_eq_refl(fr))(
+          Crit.place_shift(~V, Crit.Fork{fr, fp, fe, fz, fo}, r, fr, pos, False{})(ag)(az)
+        )(Crit.place_shift(~V, Crit.Leaf{kl2, vl2}, r, fr, pos, True{})(ag)(ao))(wz)(wo)
+    case None{} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      +le => +hr => +az => +ao => +wz => +wo => 
+        +ag = Place.has_agree(r, pos, False{}, fr)(Crit.rep_pass(~V, ~Place, ~Place.has, Crit.Fork{fr, fp, fe, fz, fo}, 1n+pos, Place{r, pos, False{}}, r)(wz)(az)({==}))
+        Crit.wf.intro(~V, fr, pos, None{}, Crit.Fork{fr, fp, fe, fz, fo}, Crit.Fork{fr2, fp2, fe2, fz2, fo2}, lo)(le)({==})(Key.is_eq_refl(fr))(
+          Crit.place_shift(~V, Crit.Fork{fr, fp, fe, fz, fo}, r, fr, pos, False{})(ag)(az)
+        )(Crit.place_shift(~V, Crit.Fork{fr2, fp2, fe2, fz2, fo2}, r, fr, pos, True{})(ag)(ao))(wz)(wo)
+    case Some{+v} Crit.Tip{} Crit.Tip{}:
+      +le => +hr => +az => +ao => +wz => +wo => {==}
+    case Some{+v} Crit.Tip{} Crit.Leaf{+kl2, +vl2}:
+      +le => +hr => +az => +ao => +wz => +wo => Crit.wf.intro(~V, r, pos, Some{v}, Crit.Tip{}, Crit.Leaf{kl2, vl2}, lo)(le)({==})(hr)(az)(ao)(wz)(wo)
+    case Some{+v} Crit.Tip{} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      +le => +hr => +az => +ao => +wz => +wo => Crit.wf.intro(~V, r, pos, Some{v}, Crit.Tip{}, Crit.Fork{fr2, fp2, fe2, fz2, fo2}, lo)(le)({==})(hr)(az)(ao)(wz)(wo)
+    case Some{+v} Crit.Leaf{+kl, +vl} Crit.Tip{}:
+      +le => +hr => +az => +ao => +wz => +wo => Crit.wf.intro(~V, r, pos, Some{v}, Crit.Leaf{kl, vl}, Crit.Tip{}, lo)(le)({==})(hr)(az)(ao)(wz)(wo)
+    case Some{+v} Crit.Leaf{+kl, +vl} Crit.Leaf{+kl2, +vl2}:
+      +le => +hr => +az => +ao => +wz => +wo => Crit.wf.intro(~V, r, pos, Some{v}, Crit.Leaf{kl, vl}, Crit.Leaf{kl2, vl2}, lo)(le)({==})(hr)(az)(ao)(wz)(wo)
+    case Some{+v} Crit.Leaf{+kl, +vl} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      +le => +hr => +az => +ao => +wz => +wo => Crit.wf.intro(~V, r, pos, Some{v}, Crit.Leaf{kl, vl}, Crit.Fork{fr2, fp2, fe2, fz2, fo2}, lo)(le)({==})(hr)(az)(ao)(wz)(wo)
+    case Some{+v} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Tip{}:
+      +le => +hr => +az => +ao => +wz => +wo => Crit.wf.intro(~V, r, pos, Some{v}, Crit.Fork{fr, fp, fe, fz, fo}, Crit.Tip{}, lo)(le)({==})(hr)(az)(ao)(wz)(wo)
+    case Some{+v} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Leaf{+kl2, +vl2}:
+      +le => +hr => +az => +ao => +wz => +wo => Crit.wf.intro(~V, r, pos, Some{v}, Crit.Fork{fr, fp, fe, fz, fo}, Crit.Leaf{kl2, vl2}, lo)(le)({==})(hr)(az)(ao)(wz)(wo)
+    case Some{+v} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      +le => +hr => +az => +ao => +wz => +wo => Crit.wf.intro(~V, r, pos, Some{v}, Crit.Fork{fr, fp, fe, fz, fo}, Crit.Fork{fr2, fp2, fe2, fz2, fo2}, lo)(le)({==})(hr)(az)(ao)(wz)(wo)
 
 # a map with no entry is well formed
 law Crit.new_wf:
@@ -4107,6 +4290,100 @@ law Crit.upsert_lookup:
 def Crit.upsert_lookup(ty, f, m, k, v, q):
   Crit.upsert_lookup.go(~ty, ~f, m, k, v, q)
 
+# a drop keeps only keys of the map
+def Crit.drop_all(~V: Data, ~G: Data, ~p: G -> List<&2, U32> -> Bool, m: Crit<V>, +at: Nat, +c: Cur, +k: List<&2, U32>, +g: G) -> {
+  Crit.all(~V, ~G, ~p, m, g) == True{}: Bool
+} -> {Crit.all(~V, ~G, ~p, Crit.drop.go(V, m, at, c, k), g) == True{}: Bool}:
+  match m:
+    case Crit.Tip{}:
+      h => {==}
+    case Crit.Leaf{+k2, +w}:
+      h => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.all(~V, ~G, ~p, t, g) == True{}: Bool},
+        Key.is_eq(k2, k),
+        u => Crit.Tip{},
+        u => Crit.Leaf{k2, w},
+        t1 => {==},
+        t1 => h
+      )
+    case Crit.Fork{+rep, +pos, +e, +z, +o}:
+      +h => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.all(~V, ~G, ~p, t, g) == True{}: Bool},
+        Cur.done(Cur.skip(Nat.sub(pos, at), c)),
+        u => Shared.Bool.when(Crit<V>, Key.is_eq(rep, k), w => Crit.mk(V, rep, pos, None{}, z, o), w => Crit.Fork{rep, pos, e, z, o}),
+        u => Shared.Bool.when(Crit<V>, Cur.bit(Cur.skip(Nat.sub(pos, at), c)), w => Crit.mk(V, rep, pos, e, z, Crit.drop.go(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k)), w => Crit.mk(V, rep, pos, e, Crit.drop.go(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k), o)),
+        t1 => Shared.Bool.when_cases(
+          Crit<V>,
+          t => {Crit.all(~V, ~G, ~p, t, g) == True{}: Bool},
+          Key.is_eq(rep, k),
+          w => Crit.mk(V, rep, pos, None{}, z, o),
+          w => Crit.Fork{rep, pos, e, z, o},
+          t2 => Crit.mk_all(~V, ~G, ~p, rep, pos, None{}, z, o, g)({==})(Crit.all.z(~V, ~G, ~p, rep, pos, e, z, o, g)(h))(Crit.all.o(~V, ~G, ~p, rep, pos, e, z, o, g)(h)),
+          t2 => h
+        ),
+        t1 => Shared.Bool.when_cases(
+          Crit<V>,
+          t => {Crit.all(~V, ~G, ~p, t, g) == True{}: Bool},
+          Cur.bit(Cur.skip(Nat.sub(pos, at), c)),
+          w => Crit.mk(V, rep, pos, e, z, Crit.drop.go(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k)),
+          w => Crit.mk(V, rep, pos, e, Crit.drop.go(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k), o),
+          t2 => Crit.mk_all(~V, ~G, ~p, rep, pos, e, z, Crit.drop.go(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k), g)(Crit.all.hit(~V, ~G, ~p, rep, pos, e, z, o, g)(h))(Crit.all.z(~V, ~G, ~p, rep, pos, e, z, o, g)(h))(Crit.drop_all(~V, ~G, ~p, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k, g)(Crit.all.o(~V, ~G, ~p, rep, pos, e, z, o, g)(h))),
+          t2 => Crit.mk_all(~V, ~G, ~p, rep, pos, e, Crit.drop.go(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k), o, g)(Crit.all.hit(~V, ~G, ~p, rep, pos, e, z, o, g)(h))(Crit.drop_all(~V, ~G, ~p, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k, g)(Crit.all.z(~V, ~G, ~p, rep, pos, e, z, o, g)(h)))(Crit.all.o(~V, ~G, ~p, rep, pos, e, z, o, g)(h))
+        )
+      )
+
+# a drop, read from any cursor, keeps a map well formed
+def Crit.drop_go_wf(~V: Data, m: Crit<V>, +lo: Nat, +at: Nat, +c: Cur, +k: List<&2, U32>) -> {Crit.wf(~V, m, lo) == True{}: Bool} -> {
+  Crit.wf(~V, Crit.drop.go(V, m, at, c, k), lo) == True{}: Bool
+}:
+  match m:
+    case Crit.Tip{}:
+      h => {==}
+    case Crit.Leaf{+k2, +w}:
+      h => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.wf(~V, t, lo) == True{}: Bool},
+        Key.is_eq(k2, k),
+        u => Crit.Tip{},
+        u => Crit.Leaf{k2, w},
+        t1 => {==},
+        t1 => {==}
+      )
+    case Crit.Fork{+rep, +pos, +e, +z, +o}:
+      +h => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.wf(~V, t, lo) == True{}: Bool},
+        Cur.done(Cur.skip(Nat.sub(pos, at), c)),
+        u => Shared.Bool.when(Crit<V>, Key.is_eq(rep, k), w => Crit.mk(V, rep, pos, None{}, z, o), w => Crit.Fork{rep, pos, e, z, o}),
+        u => Shared.Bool.when(Crit<V>, Cur.bit(Cur.skip(Nat.sub(pos, at), c)), w => Crit.mk(V, rep, pos, e, z, Crit.drop.go(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k)), w => Crit.mk(V, rep, pos, e, Crit.drop.go(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k), o)),
+        t1 => Shared.Bool.when_cases(
+          Crit<V>,
+          t => {Crit.wf(~V, t, lo) == True{}: Bool},
+          Key.is_eq(rep, k),
+          w => Crit.mk(V, rep, pos, None{}, z, o),
+          w => Crit.Fork{rep, pos, e, z, o},
+          t2 => Crit.mk_wf(~V, rep, pos, None{}, z, o, lo)(Crit.wf.le(~V, rep, pos, e, z, o, lo)(h))({==})(Crit.wf.all_z(~V, rep, pos, e, z, o, lo)(h))(Crit.wf.all_o(~V, rep, pos, e, z, o, lo)(h))(Crit.wf.wf_z(~V, rep, pos, e, z, o, lo)(h))(Crit.wf.wf_o(~V, rep, pos, e, z, o, lo)(h)),
+          t2 => h
+        ),
+        t1 => Shared.Bool.when_cases(
+          Crit<V>,
+          t => {Crit.wf(~V, t, lo) == True{}: Bool},
+          Cur.bit(Cur.skip(Nat.sub(pos, at), c)),
+          w => Crit.mk(V, rep, pos, e, z, Crit.drop.go(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k)),
+          w => Crit.mk(V, rep, pos, e, Crit.drop.go(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k), o),
+          t2 => Crit.mk_wf(~V, rep, pos, e, z, Crit.drop.go(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k), lo)(Crit.wf.le(~V, rep, pos, e, z, o, lo)(h))(Crit.rep_or(V, rep, pos, e, z)(Crit.wf.rep_ok(~V, rep, pos, e, z, o, lo)(h)))(Crit.wf.all_z(~V, rep, pos, e, z, o, lo)(h))(Crit.drop_all(~V, ~Place, ~Place.has, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k, Place{rep, pos, True{}})(Crit.wf.all_o(~V, rep, pos, e, z, o, lo)(h)))(Crit.wf.wf_z(~V, rep, pos, e, z, o, lo)(h))(Crit.drop_go_wf(~V, o, 1n+pos, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k)(Crit.wf.wf_o(~V, rep, pos, e, z, o, lo)(h))),
+          t2 => Crit.mk_wf(~V, rep, pos, e, Crit.drop.go(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k), o, lo)(Crit.wf.le(~V, rep, pos, e, z, o, lo)(h))(Crit.rep_or(V, rep, pos, e, z)(Crit.wf.rep_ok(~V, rep, pos, e, z, o, lo)(h)))(Crit.drop_all(~V, ~Place, ~Place.has, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k, Place{rep, pos, False{}})(Crit.wf.all_z(~V, rep, pos, e, z, o, lo)(h)))(Crit.wf.all_o(~V, rep, pos, e, z, o, lo)(h))(Crit.drop_go_wf(~V, z, 1n+pos, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k)(Crit.wf.wf_z(~V, rep, pos, e, z, o, lo)(h)))(Crit.wf.wf_o(~V, rep, pos, e, z, o, lo)(h))
+        )
+      )
+
+# a drop keeps a map well formed, with k used more than once
+def Crit.drop_wf.at(~V: Data, m: Crit<V>, +k: List<&2, U32>) -> {Crit.wf(~V, m, 0n) == True{}: Bool} -> {
+  Crit.wf(~V, Crit.drop(V, m, k), 0n) == True{}: Bool
+}:
+  h => Crit.drop_go_wf(~V, m, 0n, 0n, Cur.of(k), k)(h)
+
 # a drop keeps a map well formed
 law Crit.drop_wf:
   for ~V: Data
@@ -4115,7 +4392,7 @@ law Crit.drop_wf:
   {Crit.wf(~V, m, 0n) == True{}: Bool} -> {Crit.wf(~V, Crit.drop(V, m, k), 0n) == True{}: Bool}
 
 def Crit.drop_wf(ty, m, k):
-  ?TODO
+  Crit.drop_wf.at(~ty, m, k)
 
 # Crit.drop_go_other at a fork, from the cursor c2 at its bit: the drops dz
 # and dn of its sides keep each other key
