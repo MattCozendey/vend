@@ -1319,3 +1319,104 @@ def Crit.join_lookup(-V: Data, +x: Crit<V>, +y: Crit<V>, +d: Nat, +q: List<&2, U
         )
       )
     )
+
+# Shape
+# -----
+# A map that the writes build is well formed (Crit.wf): each fork splits its
+# keys at its bit, which is after the bit of the fork above it; the keys of
+# each side agree with its rep before the bit and have their side's bit there;
+# the key that ends at the bit is the rep; and a fork holds two entries at
+# least.
+
+# a first difference d is at n or after (none: no difference)
+def Bits.agree(d: Maybe<&2, Nat>, +n: Nat) -> Bool:
+  match d:
+    case None{}:
+      True{}
+    case Some{x}:
+      Nat.is_le(n, x)
+
+# the keys a and b agree on their first n bits
+def Key.agree(a: List<&2, U32>, b: List<&2, U32>, +n: Nat) -> Bool:
+  Bits.agree(Key.diff(a, b), n)
+
+# the bit of the key k at pos (none: k ends there, or before)
+def Key.side(k: List<&2, U32>, +pos: Nat) -> Maybe<&2, Bool>:
+  +c = Key.at(k, pos)
+  Shared.Bool.when(Maybe<&2, Bool>, Cur.done(c), u => None{}, u => Some{Cur.bit(c)})
+
+# a side of a fork: its rep, its bit, and which side
+type Place is Data:
+  Place{rep: List<&2, U32>, pos: Nat, side: Bool}
+
+# the key k belongs to the side g: it agrees with the rep before the bit, and
+# has the side's bit there
+def Place.has(g: Place, k: List<&2, U32>) -> Bool:
+  match g:
+    case Place{rep, +pos, b}:
+      +k = k
+      List.all.if(
+        u => Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Key.side(k, pos), Some{b}),
+        Key.agree(k, rep, pos)
+      )
+
+# p holds of g and the key of each entry of m
+def Crit.all(~V: Data, ~G: Data, ~p: G -> List<&2, U32> -> Bool, m: Crit<V>, +g: G) -> Bool:
+  match m:
+    case Crit.Tip{}:
+      True{}
+    case Crit.Leaf{k, v}:
+      p(g)(k)
+    case Crit.Fork{rep, pos, e, z, o}:
+      List.all.if(
+        u => List.all.if(u2 => Crit.all(~V, ~G, ~p, o, g), Crit.all(~V, ~G, ~p, z, g)),
+        Bool.or(Maybe.is_none(&2, V, e), p(g)(rep))
+      )
+
+# a fork of the end e and the sides z and o holds two entries at least
+def Crit.shape(-V: Data, e: Maybe<&2, V>, z: Crit<V>, o: Crit<V>) -> Bool:
+  match e z o:
+    case Some{v} Crit.Tip{} Crit.Tip{}:
+      False{}
+    case Some{v} z1 o1:
+      True{}
+    case None{} Crit.Tip{} o1:
+      False{}
+    case None{} z1 Crit.Tip{}:
+      False{}
+    case None{} z1 o1:
+      True{}
+
+# the rep of a fork at pos is its first key: the key that ends at pos, else
+# the first of the zero side
+def Crit.rep_ok(-V: Data, +rep: List<&2, U32>, +pos: Nat, e: Maybe<&2, V>, z: Crit<V>) -> Bool:
+  match e:
+    case Some{v}:
+      Nat.is_eq(List.length(&2, Bool, Key.bits(rep)), pos)
+    case None{}:
+      Key.is_eq(rep, Crit.rep(V, z, rep))
+
+# m is well formed, below a fork at a bit before lo
+def Crit.wf(~V: Data, m: Crit<V>, +lo: Nat) -> Bool:
+  match m:
+    case Crit.Tip{}:
+      True{}
+    case Crit.Leaf{k, v}:
+      True{}
+    case Crit.Fork{+rep, +pos, +e, +z, +o}:
+      List.all.if(
+        u => List.all.if(
+          u => List.all.if(
+            u => List.all.if(
+              u => List.all.if(
+                u => List.all.if(u => Crit.wf(~V, o, 1n+pos), Crit.wf(~V, z, 1n+pos)),
+                Crit.all(~V, ~Place, ~Place.has, o, Place{rep, pos, True{}})
+              ),
+              Crit.all(~V, ~Place, ~Place.has, z, Place{rep, pos, False{}})
+            ),
+            Crit.rep_ok(V, rep, pos, e, z)
+          ),
+          Crit.shape(V, e, z, o)
+        ),
+        Nat.is_le(lo, pos)
+      )
