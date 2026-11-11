@@ -4146,6 +4146,452 @@ def Ext.bind(
     case Some{+r1}:
       Ext.transM(~mach, ~d, s, r, r1, g(r1), hm, hg(r1))
 
+# a run on l at t follows itself after a write to its log
+def Ext.logged(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  -s: Led.L(mach, d),
+  -l: Led.L(mach, d),
+  -t: Tip,
+  -a: List<&2, List<&2, U32>>,
+  p: Maybe<&2, Trees.Edit>
+) -> Ext.GainM(mach, d, s, Run{l, t, a}, Run.logged(~mach, ~d, l, t, a, p)):
+  match p:
+    case None{}:
+      Unit{}
+    case Some{+x}:
+      Tuple{Trees.Edit.nodes(x), Tuple{Trees.Edit.nodes(x), Tuple{{==}, Tuple{{==}, {==}}}}}
+
+# a run follows itself after Run.add.at
+def Ext.add.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  -s: Led.L(mach, d),
+  r: Run<Led.L(mach, d)>,
+  k: List<&2, U32>,
+  x: List<&2, U32>,
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>
+) -> Ext.GainM(mach, d, s, r, Run.add.at(~mach, ~d, r, k, x, m)):
+  match r m:
+    case Run{+l, +t, a} Some{None{}}:
+      Ext.logged(~mach, ~d, s, l, t, a, Tree.put(~mach, ~d, l, Tip.log(t), k, Some{x}))
+    case y Some{Some{old}}:
+      Unit{}
+    case y None{}:
+      Unit{}
+
+# a run follows itself after Run.add
+def Ext.add(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  -s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +k: List<&2, U32>,
+  x: List<&2, U32>
+) -> Ext.GainM(mach, d, s, r, Run.add(~mach, ~d, r, k, x)):
+  Ext.add.at(
+    ~mach,
+    ~d,
+    s,
+    r,
+    k,
+    x,
+    Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), k)
+  )
+
+# a run follows itself after a refusal
+def Ext.stale(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  -s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  a: Hashes.Hash
+) -> Ext.GainM(mach, d, s, r, Step.stale(~mach, ~d, r, i, a)):
+  Ext.add(~mach, ~d, s, r, Log.out(i), Out.code(Out.Stale{a}, []))
+
+# a run follows itself one request on
+def Ext.next(
+  -mach: Machine(),
+  -d: Led(mach),
+  -s: Led.L(mach, d),
+  r: Run<Led.L(mach, d)>,
+  -vs: Maybe<&2, List<&2, String>>
+) -> Ext.Gain(mach, d, s, r, Run.next(Led.L(mach, d), r, vs)):
+  match r:
+    case Run{l, t, a}:
+      Tuple{[], Tuple{[], Tuple{{==}, Tuple{{==}, {==}}}}}
+
+# a run follows itself with new content
+def Ext.over(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  -s: Led.L(mach, d),
+  r: Run<Led.L(mach, d)>,
+  +ns: List<&2, List<&2, U32>>,
+  -h: Maybe<&2, Hashes.Hash>
+) -> Ext.Gain(mach, d, s, r, Run.over(~mach, ~d, r, ns, h)):
+  match r:
+    case Run{l, t, a}:
+      Tuple{ns, Tuple{ns, Tuple{{==}, Tuple{{==}, {==}}}}}
+
+# a run follows itself after it took a request
+def Ext.taken.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +n: U32,
+  +vs: Maybe<&2, List<&2, String>>
+) -> Ext.GainM(mach, d, s, r, Step.taken.at(~mach, ~d, r, i, a, n, vs)):
+  Ext.bind(
+    ~mach,
+    ~d,
+    s,
+    r,
+    Run.add(~mach, ~d, r, Log.out(i), Out.code(Out.Taken{a, n}, [])),
+    +r1 => Maybe.bind(
+      &2,
+      Run<Led.L(mach, d)>,
+      Run<Led.L(mach, d)>,
+      Run.add(
+        ~mach,
+        ~d,
+        r1,
+        Log.taken(n),
+        Taken.code(Taken{i, Tip.content(Run.tip(Led.L(mach, d), r1))}, [])
+      ),
+      r2 => Some{Run.next(Led.L(mach, d), r2, vs)}
+    ),
+    Ext.add(~mach, ~d, s, r, Log.out(i), Out.code(Out.Taken{a, n}, [])),
+    +r1 => Ext.bind(
+      ~mach,
+      ~d,
+      s,
+      r1,
+      Run.add(
+        ~mach,
+        ~d,
+        r1,
+        Log.taken(n),
+        Taken.code(Taken{i, Tip.content(Run.tip(Led.L(mach, d), r1))}, [])
+      ),
+      r2 => Some{Run.next(Led.L(mach, d), r2, vs)},
+      Ext.add(
+        ~mach,
+        ~d,
+        s,
+        r1,
+        Log.taken(n),
+        Taken.code(Taken{i, Tip.content(Run.tip(Led.L(mach, d), r1))}, [])
+      ),
+      r2 => Ext.next(mach, d, s, r2, vs)
+    )
+  )
+
+# a run follows itself after it took a request as its next number
+def Ext.taken(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +vs: Maybe<&2, List<&2, String>>
+) -> Ext.GainM(mach, d, s, r, Step.taken(~mach, ~d, r, i, a, vs)):
+  Ext.taken.at(~mach, ~d, s, r, i, a, Tip.count(Run.tip(Led.L(mach, d), r)), vs)
+
+# a run follows itself after a label
+def Ext.labelled(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +m: String,
+  v: Maybe<&2, Taken>
+) -> Ext.GainM(mach, d, s, r, Step.labelled(~mach, ~d, r, i, a, m, v)):
+  match v:
+    case None{}:
+      Unit{}
+    case Some{+x}:
+      Ext.bind(
+        ~mach,
+        ~d,
+        s,
+        r,
+        Run.add(~mach, ~d, r, Log.label(m), Ledgers.Id.code(Taken.id(x), [])),
+        r2 => Step.taken(~mach, ~d, r2, i, a, None{}),
+        Ext.add(~mach, ~d, s, r, Log.label(m), Ledgers.Id.code(Taken.id(x), [])),
+        r2 => Ext.taken(~mach, ~d, s, r2, i, a, None{})
+      )
+
+# a run follows itself after Step.label.at
+def Ext.label.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +m: String,
+  k: Maybe<&2, Maybe<&2, Ledgers.Id>>
+) -> Ext.GainM(mach, d, s, r, Step.label.at(~mach, ~d, r, i, a, m, k)):
+  match k:
+    case None{}:
+      Unit{}
+    case Some{Some{x}}:
+      Ext.stale(~mach, ~d, s, r, i, a)
+    case Some{None{}}:
+      Shared.Bool.when_cases(
+        Maybe<&2, Run<Led.L(mach, d)>>,
+        x => Ext.GainM(mach, d, s, r, x),
+        U32.is_eq(Tip.count(Run.tip(Led.L(mach, d), r)), 0),
+        u => Step.stale(~mach, ~d, r, i, a),
+        u => Step.labelled(
+          ~mach,
+          ~d,
+          r,
+          i,
+          a,
+          m,
+          Tip.taken(
+            ~mach,
+            ~d,
+            Run.ledger(Led.L(mach, d), r),
+            Run.tip(Led.L(mach, d), r),
+            U32.sub(Tip.count(Run.tip(Led.L(mach, d), r)), 1)
+          )
+        ),
+        e => Ext.stale(~mach, ~d, s, r, i, a),
+        e => Ext.labelled(
+          ~mach,
+          ~d,
+          s,
+          r,
+          i,
+          a,
+          m,
+          Tip.taken(
+            ~mach,
+            ~d,
+            Run.ledger(Led.L(mach, d), r),
+            Run.tip(Led.L(mach, d), r),
+            U32.sub(Tip.count(Run.tip(Led.L(mach, d), r)), 1)
+          )
+        )
+      )
+
+# a run follows itself after a request for a label
+def Ext.label(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +m: String
+) -> Ext.GainM(mach, d, s, r, Step.label(~mach, ~d, r, i, a, m)):
+  Ext.label.at(
+    ~mach,
+    ~d,
+    s,
+    r,
+    i,
+    a,
+    m,
+    Tip.known(
+      ~Ledgers.Id,
+      ~Ledgers.Id.code,
+      ~Ledgers.Id.code.read,
+      Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), Log.label(m))
+    )
+  )
+
+# a run follows itself after it opened a sub line
+def Ext.opens(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +b: String,
+  +t: Tip,
+  +ns: List<&2, List<&2, U32>>
+) -> Ext.GainM(mach, d, s, r, Step.opens(~mach, ~d, r, i, a, b, t, ns)):
+  +r0 = Run.over(~mach, ~d, r, Tip.code(t, []) <> ns, Tip.content(Run.tip(Led.L(mach, d), r)))
+  Ext.bind(
+    ~mach,
+    ~d,
+    s,
+    r,
+    Run.add(~mach, ~d, r0, Log.start(b), Hashes.Hash.code(Tip.hash(t), [])),
+    r2 => Step.taken(~mach, ~d, r2, i, a, None{}),
+    Ext.transM(
+      ~mach,
+      ~d,
+      s,
+      r,
+      r0,
+      Run.add(~mach, ~d, r0, Log.start(b), Hashes.Hash.code(Tip.hash(t), [])),
+      Ext.over(~mach, ~d, s, r, Tip.code(t, []) <> ns, Tip.content(Run.tip(Led.L(mach, d), r))),
+      Ext.add(~mach, ~d, s, r0, Log.start(b), Hashes.Hash.code(Tip.hash(t), []))
+    ),
+    r2 => Ext.taken(~mach, ~d, s, r2, i, a, None{})
+  )
+
+# a run follows itself after an act of a kernel
+def Ext.act(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  m: Maybe<&2, Act>
+) -> Ext.GainM(mach, d, s, r, Act.run(~mach, ~d, r, i, a, m)):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{Act.Stale{}}:
+      Ext.stale(~mach, ~d, s, r, i, a)
+    case Some{Act.Label{x}}:
+      Ext.label(~mach, ~d, s, r, i, a, x)
+    case Some{Act.Taken{+vs, +h, +ns}}:
+      Ext.transM(
+        ~mach,
+        ~d,
+        s,
+        r,
+        Run.over(~mach, ~d, r, ns, h),
+        Step.taken(~mach, ~d, Run.over(~mach, ~d, r, ns, h), i, a, vs),
+        Ext.over(~mach, ~d, s, r, ns, h),
+        Ext.taken(~mach, ~d, s, Run.over(~mach, ~d, r, ns, h), i, a, vs)
+      )
+    case Some{Act.Opens{b, t, ns}}:
+      Ext.opens(~mach, ~d, s, r, i, a, b, t, ns)
+
+# a run follows itself after a request with the outcome o
+def Ext.fresh(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +q: Machine.Q(mach),
+  o: Maybe<&2, Maybe<&2, Out>>
+) -> Ext.GainM(mach, d, s, r, Step.fresh(~mach, ~d, ~kern, r, c, i, a, q, o)):
+  match o:
+    case None{}:
+      Unit{}
+    case Some{Some{x}}:
+      Ext.refl(mach, d, s, r)
+    case Some{None{}}:
+      Ext.act(
+        ~mach,
+        ~d,
+        s,
+        r,
+        i,
+        a,
+        Kernel.change(mach, d, kern)(Run.ledger(Led.L(mach, d), r))(Run.tip(Led.L(mach, d), r))(c)(i)(q)
+      )
+
+# a run follows itself after the entry m
+def Ext.asked(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +c: Ledgers.Line,
+  +a: Hashes.Hash,
+  m: Maybe<&2, Entry(mach)>
+) -> Ext.GainM(mach, d, s, r, Step.asked(~mach, ~d, ~kern, r, c, a, m)):
+  match m:
+    case Some{Ledgers.Entry.Ask{+i, t, q}}:
+      Ext.fresh(
+        ~mach,
+        ~d,
+        ~kern,
+        s,
+        r,
+        c,
+        i,
+        a,
+        q,
+        Tip.known(
+          ~Out,
+          ~Out.code,
+          ~Out.code.read,
+          Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), Log.out(i))
+        )
+      )
+    case None{}:
+      Unit{}
+    case Some{Ledgers.Entry.Ballot{x}}:
+      Unit{}
+    case Some{Ledgers.Entry.Data{x}}:
+      Unit{}
+    case Some{Ledgers.Entry.Lie{x}}:
+      Unit{}
+
+# a run follows itself after one request
+def Ext.one(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +c: Ledgers.Line,
+  +a: Hashes.Hash
+) -> Ext.GainM(mach, d, s, r, Step.one(~mach, ~d, ~kern, r, c, a)):
+  Ext.asked(~mach, ~d, ~kern, s, r, c, a, Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), r), Ledgers.Name.Ask{a}))
+
+# a run m that follows r follows it after the requests qs
+def Ext.all(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +c: Ledgers.Line,
+  qs: List<&2, Hashes.Hash>,
+  +m: Maybe<&2, Run<Led.L(mach, d)>>,
+  hm: Ext.GainM(mach, d, s, r, m)
+) -> Ext.GainM(mach, d, s, r, Step.all(~mach, ~d, ~kern, c, qs, m)):
+  match qs:
+    case Nil{}:
+      hm
+    case Con{+q, rest}:
+      Ext.all(
+        ~mach,
+        ~d,
+        ~kern,
+        s,
+        r,
+        c,
+        rest,
+        Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, m, x => Step.one(~mach, ~d, ~kern, x, c, q)),
+        Ext.bind(
+          ~mach,
+          ~d,
+          s,
+          r,
+          m,
+          x => Step.one(~mach, ~d, ~kern, x, c, q),
+          hm,
+          x => Ext.one(~mach, ~d, ~kern, s, x, c, q)
+        )
+      )
+
 # a step lands on the same tip in a later ledger
 def Sim.moved(
   ~mach: Machine(),
