@@ -7169,6 +7169,725 @@ def Safe.round_safe(
           t => f => hlt => ha => Safe.round_safe(~mach, ~d, ~ll, a, b, later, c, h, os, r1, v1, j, t, v2, f)(hq)(hlt)(ha)
         )
 
+# a round decided x: its tally gave x, and the voter whose turn it was cast x
+# with passes that allow it
+def Safe.Dec(
+  -mach: Machine(),
+  -d: Led(mach),
+  -l: Led.L(mach, d),
+  -w: Ledgers.Place,
+  -os: List<&2, String>,
+  -x: Ledgers.Step
+) -> Type:
+  Exists(
+    String,
+    p => {Led.tally(~mach, ~d, l, w, os) == Some{x}: Maybe<&2, Ledgers.Step>}
+      & {Cast.casts(Led.cast(~mach, ~d, l, w, p), x, f => Step.allowed(~mach, ~d, l, w, os, x, f)) == True{}: Bool}
+  )
+
+# the step that a round leads with is the step that it decides
+def Safe.decided.led(cond: Bool, -v: Ledgers.Step, -x: Ledgers.Step) -> {
+  Shared.Maybe.when(Ledgers.Step, cond, u => Some{v}) == Some{x}: Maybe<&2, Ledgers.Step>
+} -> ({cond == True{}: Bool} & {v == x: Ledgers.Step}):
+  match cond:
+    case True{}:
+      e => Tuple{{==}, Shared.Maybe.some_inj(Ledgers.Step, v, x, e)}
+    case False{}:
+      e => Empty.absurd(
+        {False{} == True{}: Bool} & {v == x: Ledgers.Step},
+        Shared.Maybe.none_ne_some(Ledgers.Step, x, e)
+      )
+
+# Safe.decided once the test of the voter p is known
+def Safe.decided.pair(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +w: Ledgers.Place,
+  +os: List<&2, String>,
+  +p: String,
+  +v: Ledgers.Step,
+  -x: Ledgers.Step,
+  em: {Led.tally(~mach, ~d, l, w, os) == Some{v}: Maybe<&2, Ledgers.Step>},
+  pr: {Cast.casts(Led.cast(~mach, ~d, l, w, p), v, f => Step.allowed(~mach, ~d, l, w, os, v, f)) == True{}: Bool} & {v == x: Ledgers.Step}
+) -> Safe.Dec(mach, d, l, w, os, x):
+  match pr:
+    case Tuple{hc, +hvx}:
+      Tuple{
+        p,
+        Tuple{
+          Equal.trans(
+            Maybe<&2, Ledgers.Step>,
+            Led.tally(~mach, ~d, l, w, os),
+            Some{v},
+            Some{x},
+            em,
+            Equal.cong(Ledgers.Step, Maybe<&2, Ledgers.Step>, z => Some{z}, v, x, hvx)
+          ),
+          %hvx: {Cast.casts(Led.cast(~mach, ~d, l, w, p), _, f => Step.allowed(~mach, ~d, l, w, os, _, f)) == True{}: Bool}
+          hc
+        }
+      }
+
+# Safe.decided once the voter whose turn it is is known
+def Safe.decided.turn(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  t: Maybe<&2, String>,
+  +l: Led.L(mach, d),
+  +w: Ledgers.Place,
+  +os: List<&2, String>,
+  +v: Ledgers.Step,
+  -x: Ledgers.Step,
+  em: {Led.tally(~mach, ~d, l, w, os) == Some{v}: Maybe<&2, Ledgers.Step>}
+) -> {
+  Maybe.bind(&2, String, Ledgers.Step, t, p => Round.led(~mach, ~d, l, w, os, v, p)) == Some{x}: Maybe<&2, Ledgers.Step>
+} -> Safe.Dec(mach, d, l, w, os, x):
+  match t:
+    case None{}:
+      e => Empty.absurd(Safe.Dec(mach, d, l, w, os, x), Shared.Maybe.none_ne_some(Ledgers.Step, x, e))
+    case Some{+p}:
+      e => Safe.decided.pair(
+        ~mach,
+        ~d,
+        l,
+        w,
+        os,
+        p,
+        v,
+        x,
+        em,
+        Safe.decided.led(Cast.casts(Led.cast(~mach, ~d, l, w, p), v, f => Step.allowed(~mach, ~d, l, w, os, v, f)), v, x)(e)
+      )
+
+# Safe.decided once the tally m is known
+def Safe.decided.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  m: Maybe<&2, Ledgers.Step>,
+  +l: Led.L(mach, d),
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  +r: Nat,
+  -x: Ledgers.Step,
+  em: {Led.tally(~mach, ~d, l, Ledgers.Place{c, h, r}, os) == m: Maybe<&2, Ledgers.Step>}
+) -> {
+  Maybe.bind(
+    &2,
+    Ledgers.Step,
+    Ledgers.Step,
+    m,
+    +v => Maybe.bind(&2, String, Ledgers.Step, Voters.turn(os, h, r), p => Round.led(~mach, ~d, l, Ledgers.Place{c, h, r}, os, v, p))
+  )
+    == Some{x}: Maybe<&2, Ledgers.Step>
+} -> Safe.Dec(mach, d, l, Ledgers.Place{c, h, r}, os, x):
+  match m:
+    case None{}:
+      e => Empty.absurd(Safe.Dec(mach, d, l, Ledgers.Place{c, h, r}, os, x), Shared.Maybe.none_ne_some(Ledgers.Step, x, e))
+    case Some{+v}:
+      Safe.decided.turn(~mach, ~d, Voters.turn(os, h, r), l, Ledgers.Place{c, h, r}, os, v, x, em)
+
+# a round that decides x tallied x, and its leader cast x with passes that
+# allow it
+def Safe.decided(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  +r: Nat,
+  -x: Ledgers.Step
+) -> {Round.decide(~mach, ~d, l, c, h, os, r) == Some{x}: Maybe<&2, Ledgers.Step>} -> Safe.Dec(mach, d, l, Ledgers.Place{c, h, r}, os, x):
+  Safe.decided.at(~mach, ~d, Led.tally(~mach, ~d, l, Ledgers.Place{c, h, r}, os), l, c, h, os, r, x, {==})
+
+# Safe.one once the cast of the leader of the later round is known
+def Safe.one.cast(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  +r1: Nat,
+  +r2: Nat,
+  +v1: Ledgers.Step,
+  +v2: Ledgers.Step,
+  m: Maybe<&2, Ledgers.Cast>,
+  c2: {Cast.casts(m, v2, f => Step.allowed(~mach, ~d, b, Ledgers.Place{c, h, r2}, os, v2, f)) == True{}: Bool},
+  hq: {Quorums.Quorum.has(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), b, Ledgers.Place{c, h, r1}, os), v1) == True{}: Bool},
+  hl: {Nat.is_lt(r1, r2) == True{}: Bool}
+) -> {v2 == v1: Ledgers.Step}:
+  match m:
+    case Some{Ledgers.Cast.Vote{x, +f}}:
+      Safe.round_safe(~mach, ~d, ~ll, a, b, later, c, h, os, r1, v1, r2, r2, v2, f)(hq)(hl)(
+        Shared.List.all.if_rest(
+          Ledgers.Step.is_eq(x, v2),
+          u => Step.allowed(~mach, ~d, b, Ledgers.Place{c, h, r2}, os, v2, f)
+        )(c2)
+      )
+    case Some{Ledgers.Cast.Pass{q}}:
+      Empty.absurd({v2 == v1: Ledgers.Step}, Shared.Bool.false_ne_true(c2))
+    case None{}:
+      Empty.absurd({v2 == v1: Ledgers.Step}, Shared.Bool.false_ne_true(c2))
+
+# Safe.one once both decisions are split
+def Safe.one.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  +r1: Nat,
+  +r2: Nat,
+  +v1: Ledgers.Step,
+  +v2: Ledgers.Step,
+  d1: Safe.Dec(mach, d, b, Ledgers.Place{c, h, r1}, os, v1),
+  d2: Safe.Dec(mach, d, b, Ledgers.Place{c, h, r2}, os, v2),
+  hl: {Nat.is_lt(r1, r2) == True{}: Bool}
+) -> {v2 == v1: Ledgers.Step}:
+  match d1 d2:
+    case Tuple{p1, Tuple{t1, c1}} Tuple{+p2, Tuple{t2, c2}}:
+      Safe.one.cast(
+        ~mach,
+        ~d,
+        ~ll,
+        a,
+        b,
+        later,
+        c,
+        h,
+        os,
+        r1,
+        r2,
+        v1,
+        v2,
+        Led.cast(~mach, ~d, b, Ledgers.Place{c, h, r2}, p2),
+        c2,
+        Quorums.Quorum.major_has(~Ledgers.Step, ~Ledgers.Step.is_eq, ~Ledgers.Step.laws(), Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), b, Ledgers.Place{c, h, r1}, os), v1)(t1),
+        hl
+      )
+
+# two rounds of a height, the first below the second, decide one step
+def Safe.one(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  +r1: Nat,
+  +r2: Nat,
+  +v1: Ledgers.Step,
+  +v2: Ledgers.Step
+) -> {Round.decide(~mach, ~d, b, c, h, os, r1) == Some{v1}: Maybe<&2, Ledgers.Step>}
+  -> {Round.decide(~mach, ~d, b, c, h, os, r2) == Some{v2}: Maybe<&2, Ledgers.Step>}
+  -> {Nat.is_lt(r1, r2) == True{}: Bool}
+  -> {v2 == v1: Ledgers.Step}:
+  e1 => e2 => hl => Safe.one.at(
+    ~mach,
+    ~d,
+    ~ll,
+    a,
+    b,
+    later,
+    c,
+    h,
+    os,
+    r1,
+    r2,
+    v1,
+    v2,
+    Safe.decided(~mach, ~d, b, c, h, os, r1, v1)(e1),
+    Safe.decided(~mach, ~d, b, c, h, os, r2, v2)(e2),
+    hl
+  )
+
+# Safe.same once it is known which round is lower
+def Safe.same.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  +r: Nat,
+  +r2: Nat,
+  +v: Ledgers.Step,
+  +v2: Ledgers.Step,
+  l1: Bool,
+  +el1: {Nat.is_lt(r, r2) == l1: Bool},
+  l2: Bool,
+  +el2: {Nat.is_lt(r2, r) == l2: Bool}
+) -> {Round.decide(~mach, ~d, b, c, h, os, r) == Some{v}: Maybe<&2, Ledgers.Step>}
+  -> {Round.decide(~mach, ~d, b, c, h, os, r2) == Some{v2}: Maybe<&2, Ledgers.Step>}
+  -> {v2 == v: Ledgers.Step}:
+  match l1 l2:
+    case True{} y:
+      e1 => e2 => Safe.one(~mach, ~d, ~ll, a, b, later, c, h, os, r, r2, v, v2)(e1)(e2)(el1)
+    case False{} True{}:
+      e1 => e2 => Equal.sym(
+        Ledgers.Step,
+        v,
+        v2,
+        Safe.one(~mach, ~d, ~ll, a, b, later, c, h, os, r2, r, v2, v)(e2)(e1)(el2)
+      )
+    case False{} False{}:
+      e1 => e2 => Shared.Maybe.some_inj(
+        Ledgers.Step,
+        v2,
+        v,
+        Equal.trans(
+          Maybe<&2, Ledgers.Step>,
+          Some{v2},
+          Round.decide(~mach, ~d, b, c, h, os, r2),
+          Some{v},
+          Equal.sym(Maybe<&2, Ledgers.Step>, Round.decide(~mach, ~d, b, c, h, os, r2), Some{v2}, e2),
+          %Shared.Nat.is_eq_sound(
+            r,
+            r2
+          )(
+            Equal.trans(
+              Bool,
+              Nat.is_eq(r, r2),
+              Bool.and(Nat.is_le(r, r2), Nat.is_le(r2, r)),
+              True{},
+              Equal.sym(Bool, Bool.and(Nat.is_le(r, r2), Nat.is_le(r2, r)), Nat.is_eq(r, r2), Shared.Nat.le_both(r, r2)),
+              Shared.Bool.and_both(Nat.is_le(r, r2), Nat.is_le(r2, r))(Shared.Nat.nlt_le(r2, r)(el2))(
+                Shared.Nat.nlt_le(r, r2)(el1)
+              )
+            )
+          ): {Round.decide(~mach, ~d, b, c, h, os, _) == Some{v}: Maybe<&2, Ledgers.Step>}
+          e1
+        )
+      )
+
+# any two rounds of a height decide one step, in an honest ledger
+def Safe.same(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  +r: Nat,
+  +r2: Nat,
+  +v: Ledgers.Step,
+  +v2: Ledgers.Step
+) -> {Round.decide(~mach, ~d, b, c, h, os, r) == Some{v}: Maybe<&2, Ledgers.Step>}
+  -> {Round.decide(~mach, ~d, b, c, h, os, r2) == Some{v2}: Maybe<&2, Ledgers.Step>}
+  -> {v2 == v: Ledgers.Step}:
+  Safe.same.at(~mach, ~d, ~ll, a, b, later, c, h, os, r, r2, v, v2, Nat.is_lt(r, r2), {==}, Nat.is_lt(r2, r), {==})
+
+# a round up to k that decided x, of a height that decided x up to k
+def Safe.Round(
+  -mach: Machine(),
+  -d: Led(mach),
+  -l: Led.L(mach, d),
+  -c: Ledgers.Line,
+  -h: U32,
+  -os: List<&2, String>,
+  -k: Nat,
+  -x: Ledgers.Step
+) -> Type:
+  Exists(
+    Nat,
+    r => {Nat.is_le(r, k) == True{}: Bool} & {Round.decide(~mach, ~d, l, c, h, os, r) == Some{x}: Maybe<&2, Ledgers.Step>}
+  )
+
+# a round up to p is a round up to 1 + p
+def Safe.height_round.lift(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  -l: Led.L(mach, d),
+  -c: Ledgers.Line,
+  -h: U32,
+  -os: List<&2, String>,
+  +p: Nat,
+  -x: Ledgers.Step,
+  ex: Safe.Round(mach, d, l, c, h, os, p, x)
+) -> Safe.Round(mach, d, l, c, h, os, 1n+p, x):
+  match ex:
+    case Tuple{+r, Tuple{hle, hd}}:
+      Tuple{r, Tuple{Shared.Nat.le_succ(r, p)(hle), hd}}
+
+# Safe.height_round once the round 1 + p is known
+def Safe.height_round.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  -l: Led.L(mach, d),
+  -c: Ledgers.Line,
+  -h: U32,
+  -os: List<&2, String>,
+  +p: Nat,
+  -x: Ledgers.Step,
+  m: Maybe<&2, Ledgers.Step>,
+  em: {Round.decide(~mach, ~d, l, c, h, os, 1n+p) == m: Maybe<&2, Ledgers.Step>},
+  ih: {Height.decide(~mach, ~d, l, c, h, os, p) == Some{x}: Maybe<&2, Ledgers.Step>} -> Safe.Round(mach, d, l, c, h, os, p, x)
+) -> {Step.first(m, u => Height.decide(~mach, ~d, l, c, h, os, p)) == Some{x}: Maybe<&2, Ledgers.Step>} -> Safe.Round(mach, d, l, c, h, os, 1n+p, x):
+  match m:
+    case Some{y}:
+      e => Tuple{1n+p, Tuple{Shared.Nat.le_refl(1n+p), Equal.trans(Maybe<&2, Ledgers.Step>, Round.decide(~mach, ~d, l, c, h, os, 1n+p), Some{y}, Some{x}, em, e)}}
+    case None{}:
+      e => Safe.height_round.lift(~mach, ~d, l, c, h, os, p, x, ih(e))
+
+# a height that decided x up to k did in some round up to k
+def Safe.height_round(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  k: Nat,
+  -x: Ledgers.Step
+) -> {Height.decide(~mach, ~d, l, c, h, os, k) == Some{x}: Maybe<&2, Ledgers.Step>} -> Safe.Round(mach, d, l, c, h, os, k, x):
+  match k:
+    case 0n:
+      e => Tuple{0n, Tuple{{==}, e}}
+    case 1n+(+p):
+      Safe.height_round.at(
+        ~mach,
+        ~d,
+        l,
+        c,
+        h,
+        os,
+        p,
+        x,
+        Round.decide(~mach, ~d, l, c, h, os, 1n+p),
+        {==},
+        Safe.height_round(~mach, ~d, l, c, h, os, p, x)
+      )
+
+# Safe.height_of when the round 1 + p decided nothing, once it is known
+# whether r is 1 + p
+def Safe.height_of.none(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +b: Led.L(mach, d),
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  +p: Nat,
+  +r: Nat,
+  -v: Ledgers.Step,
+  eb: Bool,
+  ee: {Nat.is_eq(r, 1n+p) == eb: Bool},
+  em: {Round.decide(~mach, ~d, b, c, h, os, 1n+p) == None{}: Maybe<&2, Ledgers.Step>},
+  hd: {Round.decide(~mach, ~d, b, c, h, os, r) == Some{v}: Maybe<&2, Ledgers.Step>},
+  hle: {Nat.is_le(r, 1n+p) == True{}: Bool},
+  ih: {Nat.is_le(r, p) == True{}: Bool} -> {Height.decide(~mach, ~d, b, c, h, os, p) == Some{v}: Maybe<&2, Ledgers.Step>}
+) -> {Height.decide(~mach, ~d, b, c, h, os, p) == Some{v}: Maybe<&2, Ledgers.Step>}:
+  match eb:
+    case True{}:
+      Empty.absurd(
+        {Height.decide(~mach, ~d, b, c, h, os, p) == Some{v}: Maybe<&2, Ledgers.Step>},
+        Shared.Maybe.none_ne_some(
+          Ledgers.Step,
+          v,
+          Equal.trans(
+            Maybe<&2, Ledgers.Step>,
+            None{},
+            Round.decide(~mach, ~d, b, c, h, os, 1n+p),
+            Some{v},
+            Equal.sym(Maybe<&2, Ledgers.Step>, Round.decide(~mach, ~d, b, c, h, os, 1n+p), None{}, em),
+            %Shared.Nat.is_eq_sound(r, 1n+p)(ee): {Round.decide(~mach, ~d, b, c, h, os, _) == Some{v}: Maybe<&2, Ledgers.Step>}
+            hd
+          )
+        )
+      )
+    case False{}:
+      ih(Shared.Nat.le_step(r, p)(hle)(ee))
+
+# Safe.height_of once the round 1 + p is known
+def Safe.height_of.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  +p: Nat,
+  +r: Nat,
+  +v: Ledgers.Step,
+  m: Maybe<&2, Ledgers.Step>,
+  +em: {Round.decide(~mach, ~d, b, c, h, os, 1n+p) == m: Maybe<&2, Ledgers.Step>},
+  +hd: {Round.decide(~mach, ~d, b, c, h, os, r) == Some{v}: Maybe<&2, Ledgers.Step>},
+  +hle: {Nat.is_le(r, 1n+p) == True{}: Bool},
+  ih: {Nat.is_le(r, p) == True{}: Bool} -> {Height.decide(~mach, ~d, b, c, h, os, p) == Some{v}: Maybe<&2, Ledgers.Step>}
+) -> {Step.first(m, u => Height.decide(~mach, ~d, b, c, h, os, p)) == Some{v}: Maybe<&2, Ledgers.Step>}:
+  match m:
+    case Some{+y}:
+      Equal.cong(
+        Ledgers.Step,
+        Maybe<&2, Ledgers.Step>,
+        z => Some{z},
+        y,
+        v,
+        Safe.same(~mach, ~d, ~ll, a, b, later, c, h, os, r, 1n+p, v, y)(hd)(em)
+      )
+    case None{}:
+      Safe.height_of.none(~mach, ~d, b, c, h, os, p, r, v, Nat.is_eq(r, 1n+p), {==}, em, hd, hle, ih)
+
+# a height decides x up to k when a round up to k decided x, in an honest
+# ledger
+def Safe.height_of(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  k: Nat,
+  +r: Nat,
+  +v: Ledgers.Step
+) -> {Round.decide(~mach, ~d, b, c, h, os, r) == Some{v}: Maybe<&2, Ledgers.Step>}
+  -> {Nat.is_le(r, k) == True{}: Bool}
+  -> {Height.decide(~mach, ~d, b, c, h, os, k) == Some{v}: Maybe<&2, Ledgers.Step>}:
+  match k:
+    case 0n:
+      hd => hle =>
+        %Safe.le_zero_eq(r)(hle): {Round.decide(~mach, ~d, b, c, h, os, _) == Some{v}: Maybe<&2, Ledgers.Step>}
+        hd
+    case 1n+(+p):
+      +hd => +hle => Safe.height_of.at(
+        ~mach,
+        ~d,
+        ~ll,
+        a,
+        b,
+        later,
+        c,
+        h,
+        os,
+        p,
+        r,
+        v,
+        Round.decide(~mach, ~d, b, c, h, os, 1n+p),
+        {==},
+        hd,
+        hle,
+        hl2 => Safe.height_of(~mach, ~d, ~ll, a, b, later, c, h, os, p, r, v)(hd)(hl2)
+      )
+
+# the law that no ballot is above the bound of rounds, of the laws rl
+def Safe.laws.rounds_le(
+  -Q: Data,
+  -c: Codes.Codec(Q),
+  -k: Ledgers.Ledger.Kind(Q),
+  rl: Ledgers.Laws.Rounds(Q, c, k)
+) -> @l: Ledgers.Kind.L(Q, k) -> @b: Ledgers.Ballot -> @line: Ledgers.Line -> @h: U32 -> @r: Nat -> @voter: String -> {
+  Ledgers.Kind.has(~Q, ~c, ~k, l, Ledgers.Entry.Ballot{b}) == True{}: Bool
+} -> {
+  Ledgers.Ballot.is_at(b, Ledgers.Place{line, h, r}, voter) == True{}: Bool
+} -> {Nat.is_le(r, Ledgers.Kind.rounds(Q, k)(l)(line)(h)) == True{}: Bool}:
+  match rl:
+    case Tuple{p1, p2}:
+      p1
+
+# the law that a bound of rounds is the round of a ballot, of the laws rl
+def Safe.laws.rounds_has(
+  -Q: Data,
+  -c: Codes.Codec(Q),
+  -k: Ledgers.Ledger.Kind(Q),
+  rl: Ledgers.Laws.Rounds(Q, c, k)
+) -> @l: Ledgers.Kind.L(Q, k) -> @line: Ledgers.Line -> @h: U32 -> {
+  Nat.is_eq(Ledgers.Kind.rounds(Q, k)(l)(line)(h), 0n) == False{}: Bool
+} -> Exists(
+  Ledgers.Ballot,
+  b => {Ledgers.Kind.has(~Q, ~c, ~k, l, Ledgers.Entry.Ballot{b}) == True{}: Bool}
+    & {
+      Ledgers.Ballot.is_at(b, Ledgers.Place{line, h, Ledgers.Kind.rounds(Q, k)(l)(line)(h)}, Ledgers.Ballot.voter(b)) == True{}: Bool
+    }
+):
+  match rl:
+    case Tuple{p1, p2}:
+      p2
+
+# Safe.rounds_mono from a ballot at the bound of rounds of a
+def Safe.rounds_mono.ex(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  ex: Exists(
+    Ledgers.Ballot,
+    e => {Led.has(~mach, ~d, a, Ledgers.Entry.Ballot{e}) == True{}: Bool}
+      & {Ledgers.Ballot.is_at(e, Ledgers.Place{c, h, Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(a)(c)(h)}, Ledgers.Ballot.voter(e)) == True{}: Bool}
+  )
+) -> {Nat.is_le(Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(a)(c)(h), Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(b)(c)(h)) == True{}: Bool}:
+  match ex:
+    case Tuple{+e0, Tuple{hh, hat}}:
+      Safe.laws.rounds_le(
+        Machine.Q(mach),
+        Machine.code(mach),
+        Led.kind(mach, d),
+        Safe.rounds_law(mach, d)
+      )(b)(e0)(c)(h)(Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(a)(c)(h))(Ledgers.Ballot.voter(e0))(
+        Safe.has_grows(~mach, ~d, ~lg, a, b, later, Ledgers.Entry.Ballot{e0})(hh)
+      )(hat)
+
+# Safe.rounds_mono once it is known whether the bound of a is 0
+def Safe.rounds_mono.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  eb: Bool,
+  ee: {Nat.is_eq(Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(a)(c)(h), 0n) == eb: Bool}
+) -> {Nat.is_le(Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(a)(c)(h), Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(b)(c)(h)) == True{}: Bool}:
+  match eb:
+    case True{}:
+      %Equal.sym(Nat, Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(a)(c)(h), 0n, Shared.Nat.is_eq_sound(Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(a)(c)(h), 0n)(ee)): {
+        Nat.is_le(_, Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(b)(c)(h)) == True{}: Bool
+      }
+      Shared.Nat.le_zero(Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(b)(c)(h))
+    case False{}:
+      Safe.rounds_mono.ex(
+        ~mach,
+        ~d,
+        ~lg,
+        a,
+        b,
+        later,
+        c,
+        h,
+        Safe.laws.rounds_has(Machine.Q(mach), Machine.code(mach), Led.kind(mach, d), Safe.rounds_law(mach, d))(a)(c)(h)(ee)
+      )
+
+# the bound of rounds of a height only grows in a later ledger
+def Safe.rounds_mono(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32
+) -> {Nat.is_le(Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(a)(c)(h), Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(b)(c)(h)) == True{}: Bool}:
+  Safe.rounds_mono.at(~mach, ~d, ~lg, a, b, later, c, h, Nat.is_eq(Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(a)(c)(h), 0n), {==})
+
+# Safe.decide once a round of the earlier ledger that decided v is known
+def Safe.decide.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  +v: Ledgers.Step,
+  ex: Safe.Round(mach, d, a, c, h, os, Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(a)(c)(h), v)
+) -> {Height.decide(~mach, ~d, b, c, h, os, Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(b)(c)(h)) == Some{v}: Maybe<&2, Ledgers.Step>}:
+  match ex:
+    case Tuple{+r, Tuple{hle, hdr}}:
+      Safe.height_of(~mach, ~d, ~ll, a, b, later, c, h, os, Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(b)(c)(h), r, v)(
+        Safe.decide_kept(~mach, ~d, ~lg, ~ls, a, b, later, c, h, os, r, v)(hdr)
+      )(Shared.Nat.le_trans(r, Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(a)(c)(h), Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(b)(c)(h))(hle)(Safe.rounds_mono(~mach, ~d, ~lg, a, b, later, c, h)))
+
 # a height decides the same step in a later ledger
 def Safe.decide(
   ~mach: Machine(),
@@ -7212,7 +7931,30 @@ def Safe.decide(
   )
     == Some{v}: Maybe<&2, Ledgers.Step>
 }:
-  ?TODO
+  hd => Safe.decide.at(
+    ~mach,
+    ~d,
+    ~lg,
+    ~ls,
+    ~ll,
+    a,
+    b,
+    later,
+    c,
+    h,
+    os,
+    v,
+    Safe.height_round(
+      ~mach,
+      ~d,
+      a,
+      c,
+      h,
+      os,
+      Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(a)(c)(h),
+      v
+    )(hd)
+  )
 
 # Runs of a step
 # --------------
