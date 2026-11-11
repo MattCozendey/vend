@@ -4999,6 +4999,189 @@ def Merge.key_name(+n: Resources.Name) -> {Res.name(Key.res(n)) == Some{n}: Mayb
     n
   )
 
+# a first word that is not zero is not the first word of the key of a resource
+def Merge.head_nonzero(
+  w: Word(32n),
+  t: List<&2, U32>,
+  +n: Resources.Name,
+  nz: {Shared.Word.is_zero(32n, w) == False{}: Bool},
+  hh: {Res.name(U32{w} <> t) == Some{n}: Maybe<&2, Resources.Name>}
+) -> Empty:
+  match w:
+    case WCon{True{}, w2}:
+      Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+    case WCon{False{}, w2}:
+      match w2:
+        case WCon{True{}, w3}:
+          Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+        case WCon{False{}, w3}:
+          match w3:
+            case WCon{True{}, w4}:
+              Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+            case WCon{False{}, w4}:
+              match w4:
+                case WCon{True{}, w5}:
+                  Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                case WCon{False{}, w5}:
+                  match w5:
+                    case WCon{True{}, w6}:
+                      Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                    case WCon{False{}, w6}:
+                      match w6:
+                        case WCon{True{}, w7}:
+                          Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                        case WCon{False{}, w7}:
+                          match w7:
+                            case WCon{True{}, w8}:
+                              Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                            case WCon{False{}, w8}:
+                              match w8:
+                                case WCon{True{}, w9}:
+                                  Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                case WCon{False{}, w9}:
+                                  match w9:
+                                    case WCon{True{}, w10}:
+                                      Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                    case WCon{False{}, w10}:
+                                      match w10:
+                                        case WCon{True{}, w11}:
+                                          Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                        case WCon{False{}, w11}:
+                                          match w11:
+                                            case WCon{True{}, w12}:
+                                              Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                            case WCon{False{}, w12}:
+                                              match w12:
+                                                case WCon{True{}, w13}:
+                                                  Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                case WCon{False{}, w13}:
+                                                  match w13:
+                                                    case WCon{True{}, w14}:
+                                                      Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                    case WCon{False{}, w14}:
+                                                      match w14:
+                                                        case WCon{True{}, w15}:
+                                                          Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                        case WCon{False{}, w15}:
+                                                          match w15:
+                                                            case WCon{True{}, w16}:
+                                                              Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                            case WCon{False{}, w16}:
+                                                              match w16:
+                                                                case WCon{True{}, w17}:
+                                                                  Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                                case WCon{False{}, w17}:
+                                                                  match w17:
+                                                                    case WCon{True{}, w18}:
+                                                                      Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                                    case WCon{False{}, w18}:
+                                                                      match w18:
+                                                                        case WCon{True{}, w19}:
+                                                                          Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                                        case WCon{False{}, w19}:
+                                                                          match w19:
+                                                                            case WCon{True{}, w20}:
+                                                                              Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                                            case WCon{False{}, w20}:
+                                                                              match w20:
+                                                                                case WCon{True{}, w21}:
+                                                                                  Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                                                case WCon{False{}, w21}:
+                                                                                  match w21:
+                                                                                    case WCon{True{}, w22}:
+                                                                                      Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                                                    case WCon{False{}, w22}:
+                                                                                      match w22:
+                                                                                        case WCon{True{}, w23}:
+                                                                                          Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                                                        case WCon{False{}, w23}:
+                                                                                          match w23:
+                                                                                            case WCon{True{}, w24}:
+                                                                                              Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                                                            case WCon{False{}, w24}:
+                                                                                              match w24:
+                                                                                                case WCon{True{}, w25}:
+                                                                                                  Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                                                                case WCon{False{}, w25}:
+                                                                                                  match w25:
+                                                                                                    case WCon{True{}, w26}:
+                                                                                                      Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                                                                    case WCon{False{}, w26}:
+                                                                                                      match w26:
+                                                                                                        case WCon{True{}, w27}:
+                                                                                                          Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                                                                        case WCon{False{}, w27}:
+                                                                                                          match w27:
+                                                                                                            case WCon{True{}, w28}:
+                                                                                                              Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                                                                            case WCon{False{}, w28}:
+                                                                                                              match w28:
+                                                                                                                case WCon{True{}, w29}:
+                                                                                                                  Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                                                                                case WCon{False{}, w29}:
+                                                                                                                  match w29:
+                                                                                                                    case WCon{True{}, w30}:
+                                                                                                                      Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                                                                                    case WCon{False{}, w30}:
+                                                                                                                      match w30:
+                                                                                                                        case WCon{True{}, w31}:
+                                                                                                                          Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                                                                                        case WCon{False{}, w31}:
+                                                                                                                          match w31:
+                                                                                                                            case WCon{True{}, w32}:
+                                                                                                                              Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                                                                                            case WCon{False{}, w32}:
+                                                                                                                              match w32:
+                                                                                                                                case WCon{True{}, w33}:
+                                                                                                                                  Shared.Maybe.none_ne_some(Resources.Name, n, hh)
+                                                                                                                                case WCon{False{}, w33}:
+                                                                                                                                  match w33:
+                                                                                                                                    case WNil{}:
+                                                                                                                                      Shared.Bool.true_ne_false(nz)
+
+# a key that has a name is the key of that resource, once it is known whether
+# its first word is zero (b)
+def Merge.name_key.at(
+  +w: Word(32n),
+  +r: List<&2, U32>,
+  +n: Resources.Name,
+  +b: Bool,
+  +eb: {Shared.Word.is_zero(32n, w) == b: Bool},
+  +h: {Res.name(U32{w} <> r) == Some{n}: Maybe<&2, Resources.Name>}
+) -> {U32{w} <> r == Key.res(n): List<&2, U32>}:
+  match b:
+    case True{}:
+      %Equal.sym(
+        Word(32n),
+        w,
+        Word.zero(32n),
+        Shared.Word.is_zero_eq(32n, w)(eb)
+      ): {U32{_} <> r == Key.res(n): List<&2, U32>}
+      %Codes.Code.whole_back(
+        ~Resources.Name,
+        ~Resources.Name.code,
+        ~Resources.Name.code.read,
+        r,
+        n
+      )(
+        %Shared.Word.is_zero_eq(32n, w)(eb): {Res.name(U32{_} <> r) == Some{n}: Maybe<&2, Resources.Name>}
+        h
+      ): {U32{Word.zero(32n)} <> _ == Key.res(n): List<&2, U32>}
+      {==}
+    case False{}:
+      Empty.absurd({U32{w} <> r == Key.res(n): List<&2, U32>}, Merge.head_nonzero(w, r, n, eb, h))
+
+# a key that has a name is the key of the resource of that name
+def Merge.name_key(
+  y: List<&2, U32>,
+  +n: Resources.Name
+) -> {Res.name(y) == Some{n}: Maybe<&2, Resources.Name>} -> {y == Key.res(n): List<&2, U32>}:
+  match y:
+    case Nil{}:
+      h => Empty.absurd({Nil{} == Key.res(n): List<&2, U32>}, Shared.Maybe.none_ne_some(Resources.Name, n, h))
+    case Con{U32{+w}, +r}:
+      h => Merge.name_key.at(w, r, n, Shared.Word.is_zero(32n, w), {==}, h)
+
 # the work after the merge of the key x: the work, or what the merge of the
 # resource that the key names gives
 def Merge.next(
