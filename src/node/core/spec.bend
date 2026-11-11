@@ -9494,6 +9494,281 @@ def Affects.holds_of(
   }
   ehat
 
+# each touch that Branch.touches.at gives holds
+def Affects.at_in(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +from: Branch,
+  +tf: Replicas.Tip,
+  +b: Branch,
+  +tb: Replicas.Tip,
+  +eo: {Branch.other(from, b) == True{}: Bool},
+  +ef: {Branch.head(~d, ~kern, l, from) == Some{tf}: Maybe<&2, Replicas.Tip>},
+  +eb: {Branch.head(~d, ~kern, l, b) == Some{tb}: Maybe<&2, Replicas.Tip>},
+  +ts: List<&2, Touch>,
+  +x: Touch
+) -> {Branch.touches.at(~d, l, view, from, tf, b, tb) == Some{ts}: Maybe<&2, List<&2, Touch>>}
+  -> {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool}
+  -> {Touch.holds(~d, ~kern, l, view, x) == Some{True{}}: Maybe<&2, Bool>}:
+  +hb = Replicas.Tip.content(tb)
+  e => +hc => Affects.bind_some(
+    List<&2, Trees.Binding>,
+    List<&2, Touch>,
+    {Touch.holds(~d, ~kern, l, view, x) == Some{True{}}: Maybe<&2, Bool>},
+    Tree.range(~d, l, hb, [0]),
+    xs => Maybe.bind(
+      &2,
+      Reaches.Graph,
+      List<&2, Touch>,
+      Uses.users(~d, l, view, hb, Res.names(xs), Reaches.Graph.new()),
+      users => Maybe.bind(
+        &2,
+        List<&2, Replicas.Taken>,
+        List<&2, Touch>,
+        Replicas.Tip.versions(~Requests.Ask.machine(), ~d, U32.to_nat(Replicas.Tip.count(tf)), l, tf, 0),
+        xs2 => Touches.all(~d, l, from, tf, xs2, 0, None{}, b, hb, Res.names(xs), users)
+      )
+    ),
+    ts,
+    +xs => +er => e2 => Affects.bind_some(
+      Reaches.Graph,
+      List<&2, Touch>,
+      {Touch.holds(~d, ~kern, l, view, x) == Some{True{}}: Maybe<&2, Bool>},
+      Uses.users(~d, l, view, hb, Res.names(xs), Reaches.Graph.new()),
+      users => Maybe.bind(
+        &2,
+        List<&2, Replicas.Taken>,
+        List<&2, Touch>,
+        Replicas.Tip.versions(~Requests.Ask.machine(), ~d, U32.to_nat(Replicas.Tip.count(tf)), l, tf, 0),
+        xs2 => Touches.all(~d, l, from, tf, xs2, 0, None{}, b, hb, Res.names(xs), users)
+      ),
+      ts,
+      +users => +eu => e3 => Affects.bind_some(
+        List<&2, Replicas.Taken>,
+        List<&2, Touch>,
+        {Touch.holds(~d, ~kern, l, view, x) == Some{True{}}: Maybe<&2, Bool>},
+        Replicas.Tip.versions(~Requests.Ask.machine(), ~d, U32.to_nat(Replicas.Tip.count(tf)), l, tf, 0),
+        xs2 => Touches.all(~d, l, from, tf, xs2, 0, None{}, b, hb, Res.names(xs), users),
+        ts,
+        +xs2 => +ev => e4 => Affects.all_in(
+          ~d,
+          l,
+          from,
+          tf,
+          xs2,
+          0,
+          None{},
+          b,
+          hb,
+          Res.names(xs),
+          users,
+          y => {Touch.holds(~d, ~kern, l, view, y) == Some{True{}}: Maybe<&2, Bool>},
+          +i => +hz => +hy => +m => +enum => +ebef => +etk => +c => +d1 => +d2 => +u2 => a1 => +b1 => Affects.find_named(
+            ~d,
+            l,
+            hb,
+            xs,
+            er,
+            u2,
+            {Touch.holds(~d, ~kern, l, view, Touch{from, i, c, b, u2}) == Some{True{}}: Maybe<&2, Bool>},
+            +r0 => +efind => +esome => Affects.holds_of(
+              ~d,
+              ~kern,
+              l,
+              view,
+              from,
+              b,
+              tf,
+              tb,
+              eo,
+              ef,
+              eb,
+              i,
+              c,
+              u2,
+              Affects.holds_at(
+                ~d,
+                l,
+                view,
+                tf,
+                tb,
+                i,
+                c,
+                u2,
+                m,
+                hz,
+                hy,
+                enum,
+                ebef,
+                etk,
+                d1,
+                d2,
+                r0,
+                efind,
+                esome,
+                Affects.reaches_of(~d, l, view, hb, xs, er, users, eu, u2, c, b1)
+              )
+            )
+          )(a1),
+          U32.to_nat(Replicas.Tip.count(tf)),
+          {==},
+          ev,
+          x
+        )(ts)(e4)(hc)
+      )(e3)
+    )(e2)
+  )(e)
+
+# Affects.touches_in once the newest tip m of the branch b is known
+def Affects.touches_of_in(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +from: Branch,
+  +tf: Replicas.Tip,
+  +b: Branch,
+  m: Maybe<&2, Replicas.Tip>,
+  +em: {Branch.head(~d, ~kern, l, b) == m: Maybe<&2, Replicas.Tip>},
+  +eo: {Branch.other(from, b) == True{}: Bool},
+  +ef: {Branch.head(~d, ~kern, l, from) == Some{tf}: Maybe<&2, Replicas.Tip>},
+  +ts: List<&2, Touch>,
+  +x: Touch
+) -> {Branch.touches.of(~d, l, view, from, tf, b, m) == Some{ts}: Maybe<&2, List<&2, Touch>>}
+  -> {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool}
+  -> {Touch.holds(~d, ~kern, l, view, x) == Some{True{}}: Maybe<&2, Bool>}:
+  match m:
+    case None{}:
+      e => hc => Empty.absurd(
+        {Touch.holds(~d, ~kern, l, view, x) == Some{True{}}: Maybe<&2, Bool>},
+        Shared.Maybe.none_ne_some(List<&2, Touch>, ts, e)
+      )
+    case Some{+tb}:
+      e => hc => Affects.at_in(~d, ~kern, l, view, from, tf, b, tb, eo, ef, em, ts, x)(e)(hc)
+
+# each touch that Branch.touches gives holds
+def Affects.touches_in(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +from: Branch,
+  +b: Branch,
+  +ts: List<&2, Touch>,
+  +x: Touch
+) -> {Branch.touches(~d, ~kern, l, view, from, b) == Some{ts}: Maybe<&2, List<&2, Touch>>}
+  -> {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool}
+  -> {Touch.holds(~d, ~kern, l, view, x) == Some{True{}}: Maybe<&2, Bool>}:
+  e => +hc => Affects.when_is(
+    Maybe<&2, List<&2, Touch>>,
+    {Touch.holds(~d, ~kern, l, view, x) == Some{True{}}: Maybe<&2, Bool>},
+    Branch.other(from, b),
+    u => Maybe.bind(
+      &2,
+      Replicas.Tip,
+      List<&2, Touch>,
+      Branch.head(~d, ~kern, l, from),
+      tf => Branch.touches.of(~d, l, view, from, tf, b, Branch.head(~d, ~kern, l, b))
+    ),
+    u => Some{[]},
+    Some{ts},
+    +eo => e1 => Affects.bind_some(
+      Replicas.Tip,
+      List<&2, Touch>,
+      {Touch.holds(~d, ~kern, l, view, x) == Some{True{}}: Maybe<&2, Bool>},
+      Branch.head(~d, ~kern, l, from),
+      tf => Branch.touches.of(~d, l, view, from, tf, b, Branch.head(~d, ~kern, l, b)),
+      ts,
+      +tf => +ef => e2 => Affects.touches_of_in(~d, ~kern, l, view, from, tf, b, Branch.head(~d, ~kern, l, b), {==}, eo, ef, ts, x)(e2)(hc)
+    )(e1),
+    eo2 => e3 => Affects.none_in(y => {Touch.holds(~d, ~kern, l, view, y) == Some{True{}}: Maybe<&2, Bool>}, ts, x, e3)(hc)
+  )(e)
+
+# each touch that Branches.touch gives holds
+def Affects.branches_in(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  es: List<&2, BranchEntry>,
+  +b: Branch,
+  +ts: List<&2, Touch>,
+  +x: Touch
+) -> {Branches.touch(~d, ~kern, l, view, es, b) == Some{ts}: Maybe<&2, List<&2, Touch>>}
+  -> {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool}
+  -> {Touch.holds(~d, ~kern, l, view, x) == Some{True{}}: Maybe<&2, Bool>}:
+  match es:
+    case Nil{}:
+      e => hc => Affects.none_in(y => {Touch.holds(~d, ~kern, l, view, y) == Some{True{}}: Maybe<&2, Bool>}, ts, x, e)(hc)
+    case Con{BranchEntry{+from, os, hd}, +rest}:
+      e => +hc => Affects.bind_some(
+        List<&2, Touch>,
+        List<&2, Touch>,
+        {Touch.holds(~d, ~kern, l, view, x) == Some{True{}}: Maybe<&2, Bool>},
+        Branch.touches(~d, ~kern, l, view, from, b),
+        a => Maybe.map(
+          &2,
+          List<&2, Touch>,
+          List<&2, Touch>,
+          r => List.append(&2, Touch, a, r),
+          Branches.touch(~d, ~kern, l, view, rest, b)
+        ),
+        ts,
+        +a => +ea => e2 => Affects.map_some(
+          List<&2, Touch>,
+          List<&2, Touch>,
+          {Touch.holds(~d, ~kern, l, view, x) == Some{True{}}: Maybe<&2, Bool>},
+          r => List.append(&2, Touch, a, r),
+          Branches.touch(~d, ~kern, l, view, rest, b),
+          ts,
+          +r => +er => +eapp => Affects.app_in(
+            Unit,
+            y => {Touch.holds(~d, ~kern, l, view, y) == Some{True{}}: Maybe<&2, Bool>},
+            a,
+            r,
+            x,
+            Unit{},
+            z => ha => Affects.touches_in(~d, ~kern, l, view, from, b, a, x)(ea)(ha),
+            z => hr => Affects.branches_in(~d, ~kern, l, view, rest, b, r, x)(er)(hr)
+          )(
+            Affects.cast(
+              List<&2, Touch>,
+              z => {List.contains(~Touch, ~Touch.is_eq, z, x) == True{}: Bool},
+              ts,
+              List.append(&2, Touch, a, r),
+              Equal.sym(List<&2, Touch>, List.append(&2, Touch, a, r), ts, eapp),
+              hc
+            )
+          )
+        )(e2)
+      )(e)
+
+# Node.affects_holds, with its binders reusable
+def Affects.holds_law(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  b: Branch,
+  +ts: List<&2, Touch>,
+  +x: Touch
+) -> {Node.affects(~d, ~kern, l, view, b) == Some{ts}: Maybe<&2, List<&2, Touch>>}
+  -> {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool}
+  -> {Touch.holds(~d, ~kern, l, view, x) == Some{True{}}: Maybe<&2, Bool>}:
+  match b:
+    case Branch{+st, +n}:
+      e => +hc => Affects.bind_some(
+        List<&2, BranchEntry>,
+        List<&2, Touch>,
+        {Touch.holds(~d, ~kern, l, view, x) == Some{True{}}: Maybe<&2, Bool>},
+        Node.branches(~d, ~kern, l, st),
+        es => Branches.touch(~d, ~kern, l, view, es, Branch{st, n}),
+        ts,
+        +es => ees => e2 => Affects.branches_in(~d, ~kern, l, view, es, Branch{st, n}, ts, x)(e2)(hc)
+      )(e)
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
@@ -9508,6 +9783,9 @@ law Node.affects_holds:
   {Node.affects(~d, ~kern, l, view, b) == Some{ts}: Maybe<&2, List<&2, Touch>>}
     -> {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool}
     -> {Touch.holds(~d, ~kern, l, view, x) == Some{True{}}: Maybe<&2, Bool>}
+
+def Node.affects_holds(d, kern, rules, l, view, b, ts, x):
+  Affects.holds_law(~d, ~kern, l, view, b, ts, x)
 
 # and they are told about each of them: a touch that holds is among the
 # touches that Node.affects gives for its branch
