@@ -2517,7 +2517,9 @@ def Mst.open_cases(
     fetch(s)(h) == Some{Node.code(Node{l, left, xs}, [])}: Maybe<&2, List<&2, U32>>
   } -> {Hashes.Sha.hash(Node.code(Node{l, left, xs}, [])) == h: Hashes.Hash} -> {
     Mst.node.in(~S, ~fetch, s, h, Room{up, lo, hi}) == Some{Node{l, left, xs}}: Maybe<&2, Node>
-  } -> {Mst.pieces(xs, l, left, lo, hi) == Some{ps}: Maybe<&2, List<&2, Piece>>} -> P
+  } -> {Nat.is_lt(l, up) == True{}: Bool} -> {List.is_empty(&2, Item, xs) == False{}: Bool} -> {
+    Mst.pieces(xs, l, left, lo, hi) == Some{ps}: Maybe<&2, List<&2, Piece>>
+  } -> P
 ) -> {Mst.open(~S, ~fetch, s, h, up, lo, hi) == Some{ps}: Maybe<&2, List<&2, Piece>>} -> P:
   e => Maybe.bind_cases(
     List<&2, U32>,
@@ -2602,7 +2604,7 @@ def Mst.open_cases(
                 ),
                 Hashes.Hash.is_eq_sound(Hashes.Sha.hash(ws), h)(eh)
               )
-            )(Mst.node.in_of(~S, ~fetch, s, h, up, lo, hi, ws, l, left, xs, ew, er2, elt, ee, Mst.pieces_fit(xs, l, left, lo, hi, ps)(ep)))(ep)
+            )(Mst.node.in_of(~S, ~fetch, s, h, up, lo, hi, ws, l, left, xs, ew, er2, elt, ee, Mst.pieces_fit(xs, l, left, lo, hi, ps)(ep)))(elt)(ee)(ep)
         )(e3)
       )(e2)
     )(e1)
@@ -3237,7 +3239,7 @@ def Mst.has_open(
           Look.has(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k), v)
         ): Bool
     },
-    +l => +left => +xs => ef => eh => en => ep =>
+    +l => +left => +xs => ef => eh => en => elt => ee0 => ep =>
       %Equal.sym(Maybe<&2, Node>, Mst.node.in(~S, ~fetch, s, h, Room{up, lo, hi}), Some{Node{l, left, xs}}, en): {
         Pieces.has(~S, ~fetch, q, s, ks, k, v)
           == Bool.and(
@@ -4111,7 +4113,7 @@ def Mst.lists_within(
                 hi,
                 ks2,
                 {Bindings.within(a, lo, hi) == True{}: Bool},
-                +l2 => +left2 => +xs2 => ef => eh => en => ep2 => Mst.lists_within(~S, ~fetch, q, s, p, xs2, l2, left2, lo, hi, ks2, a)(ep2)(ea)
+                +l2 => +left2 => +xs2 => ef => eh => en => elt => ee0 => ep2 => Mst.lists_within(~S, ~fetch, q, s, p, xs2, l2, left2, lo, hi, ks2, a)(ep2)(ea)
               )(eo)
             )(
               Equal.trans(
@@ -4204,7 +4206,7 @@ def Mst.lists_within(
                     Some{ik},
                     ks3,
                     {Bindings.within(a, lo, Some{ik}) == True{}: Bool},
-                    +l2 => +left2 => +xs2 => ef => eh => en => ep2 => Mst.lists_within(~S, ~fetch, q, s, p, xs2, l2, left2, lo, Some{ik}, ks3, a)(ep2)(ea)
+                    +l2 => +left2 => +xs2 => ef => eh => en => elt => ee0 => ep2 => Mst.lists_within(~S, ~fetch, q, s, p, xs2, l2, left2, lo, Some{ik}, ks3, a)(ep2)(ea)
                   )(eo)
                 )(Equal.trans(
                   Maybe<&2, List<&2, Binding>>,
@@ -4262,7 +4264,7 @@ def Mst.lists_sorted(
           None{},
           ks,
           {Bindings.within(a, None{}, None{}) == True{}: Bool},
-          +l2 => +left2 => +xs2 => ef => eh => en => ep => Mst.lists_within(~S, ~fetch, 63n, s, p, xs2, l2, left2, None{}, None{}, ks, a)(ep)(ea)
+          +l2 => +left2 => +xs2 => ef => eh => en => elt => ee0 => ep => Mst.lists_within(~S, ~fetch, 63n, s, p, xs2, l2, left2, None{}, None{}, ks, a)(ep)(ea)
         )(eo)
       )(e)
 
