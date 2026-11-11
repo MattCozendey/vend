@@ -1653,6 +1653,59 @@ def Bits.head(bs: List<&2, Bool>) -> Maybe<&2, Bool>:
 def Bits.at(bs: List<&2, Bool>, n: Nat) -> Maybe<&2, Bool>:
   Bits.head(List.drop(&2, Bool, bs, n))
 
+# a difference agrees on 0 bits
+def Bits.agree.zero(d: Maybe<&2, Nat>) -> {Bits.agree(d, 0n) == True{}: Bool}:
+  match d:
+    case None{}:
+      {==}
+    case Some{x}:
+      Shared.Nat.le_zero(x)
+
+# a difference one bit on is one more, and agreement moves with it
+def Bits.agree.shift(d: Maybe<&2, Nat>, p: Nat) -> {
+  Bits.agree(Maybe.map(&2, Nat, Nat, m => 1n+m, d), 1n+p) == Bits.agree(d, p): Bool
+}:
+  match d:
+    case None{}:
+      {==}
+    case Some{x}:
+      {==}
+
+# at 0 bits, the bits of a and b agree whichever way they differ
+def Bits.agree_diff.zero_step(x: Bool, y: Bool, d: Maybe<&2, Nat>) -> {
+  Bits.agree(Shared.Bool.when(Maybe<&2, Nat>, Shared.Bool.is_eq(x, y), u => Maybe.map(&2, Nat, Nat, m => 1n+m, d), u => Some{0n}), 0n) == True{}: Bool
+}:
+  match x y:
+    case True{} True{}:
+      Bits.agree.zero(Maybe.map(&2, Nat, Nat, m => 1n+m, d))
+    case True{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case False{} False{}:
+      Bits.agree.zero(Maybe.map(&2, Nat, Nat, m => 1n+m, d))
+
+# one bit on: the first bits decide, and the rest agrees with r
+def Bits.agree_diff.step(
+  x: Bool,
+  y: Bool,
+  +d: Maybe<&2, Nat>,
+  p: Nat,
+  r: Bool,
+  ih: {Bits.agree(d, p) == r: Bool}
+) -> {
+  Bits.agree(Shared.Bool.when(Maybe<&2, Nat>, Shared.Bool.is_eq(x, y), u => Maybe.map(&2, Nat, Nat, m => 1n+m, d), u => Some{0n}), 1n+p) == Bool.and(Shared.Bool.is_eq(x, y), r): Bool
+}:
+  match x y:
+    case True{} True{}:
+      Equal.trans(Bool, Bits.agree(Maybe.map(&2, Nat, Nat, m => 1n+m, d), 1n+p), Bits.agree(d, p), r, Bits.agree.shift(d, p), ih)
+    case True{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case False{} False{}:
+      Equal.trans(Bool, Bits.agree(Maybe.map(&2, Nat, Nat, m => 1n+m, d), 1n+p), Bits.agree(d, p), r, Bits.agree.shift(d, p), ih)
+
 # a first difference is at n or after exactly when the bits agree on their
 # first n
 law Bits.agree_diff:
@@ -1662,7 +1715,61 @@ law Bits.agree_diff:
   {Bits.agree(Bits.diff(a, b), n) == Bits.agree_n(n, a, b): Bool}
 
 def Bits.agree_diff(a, b, n):
-  ?TODO
+  match a b:
+    case Nil{} Nil{}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+p:
+          {==}
+    case Con{+x, +ra} Con{+y, +rb}:
+      match n:
+        case 0n:
+          Bits.agree_diff.zero_step(x, y, Bits.diff(ra, rb))
+        case 1n+(+p):
+          Bits.agree_diff.step(x, y, Bits.diff(ra, rb), p, Bits.agree_n(p, ra, rb), Bits.agree_diff(ra, rb, p))
+    case Nil{} Con{y, rb}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+p:
+          {==}
+    case Con{x, ra} Nil{}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+p:
+          {==}
+
+# Bool.is_eq does not depend on the order of its arguments
+def Bits.is_eq_comm(a: Bool, b: Bool) -> {Shared.Bool.is_eq(a, b) == Shared.Bool.is_eq(b, a): Bool}:
+  match a b:
+    case True{} True{}:
+      {==}
+    case True{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case False{} False{}:
+      {==}
+
+# equal left parts and equal right parts give equal ands
+def Bits.and_cong(
+  a: Bool,
+  b: Bool,
+  c: Bool,
+  d: Bool,
+  ea: {a == c: Bool},
+  eb: {b == d: Bool}
+) -> {Bool.and(a, b) == Bool.and(c, d): Bool}:
+  Equal.trans(
+    Bool,
+    Bool.and(a, b),
+    Bool.and(c, b),
+    Bool.and(c, d),
+    Equal.cong(Bool, Bool, u => Bool.and(u, b), a, c, ea),
+    Equal.cong(Bool, Bool, v => Bool.and(c, v), b, d, eb)
+  )
 
 # agreement is the same either way round
 law Bits.agree_n_sym:
@@ -1672,7 +1779,69 @@ law Bits.agree_n_sym:
   {Bits.agree_n(n, a, b) == Bits.agree_n(n, b, a): Bool}
 
 def Bits.agree_n_sym(a, b, n):
-  ?TODO
+  match a b:
+    case Nil{} Nil{}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+p:
+          {==}
+    case Con{+x, +ra} Con{+y, +rb}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+(+p):
+          Bits.and_cong(
+            Shared.Bool.is_eq(x, y),
+            Bits.agree_n(p, ra, rb),
+            Shared.Bool.is_eq(y, x),
+            Bits.agree_n(p, rb, ra),
+            Bits.is_eq_comm(x, y),
+            Bits.agree_n_sym(ra, rb, p)
+          )
+    case Nil{} Con{y, rb}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+p:
+          {==}
+    case Con{x, ra} Nil{}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+p:
+          {==}
+
+# the step of agree_n_trans: x, y, z are the first bits, a, b, c what follows
+# them; ih is the claim for what follows, and the claim holds for the first bits
+def Bits.agree_n_trans.step(
+  x: Bool,
+  y: Bool,
+  z: Bool,
+  a: Bool,
+  b: Bool,
+  c: Bool,
+  ih: {a == True{}: Bool} -> {b == True{}: Bool} -> {c == True{}: Bool},
+  h1: {Bool.and(Shared.Bool.is_eq(x, y), a) == True{}: Bool},
+  h2: {Bool.and(Shared.Bool.is_eq(y, z), b) == True{}: Bool}
+) -> {Bool.and(Shared.Bool.is_eq(x, z), c) == True{}: Bool}:
+  match x y z:
+    case True{} True{} True{}:
+      ih(h1)(h2)
+    case True{} True{} False{}:
+      Empty.absurd({Bool.and(Shared.Bool.is_eq(True{}, False{}), c) == True{}: Bool}, Shared.Bool.false_ne_true(h2))
+    case True{} False{} True{}:
+      Empty.absurd({Bool.and(Shared.Bool.is_eq(True{}, True{}), c) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+    case True{} False{} False{}:
+      Empty.absurd({Bool.and(Shared.Bool.is_eq(True{}, False{}), c) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+    case False{} True{} True{}:
+      Empty.absurd({Bool.and(Shared.Bool.is_eq(False{}, True{}), c) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+    case False{} True{} False{}:
+      Empty.absurd({Bool.and(Shared.Bool.is_eq(False{}, False{}), c) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+    case False{} False{} True{}:
+      Empty.absurd({Bool.and(Shared.Bool.is_eq(False{}, True{}), c) == True{}: Bool}, Shared.Bool.false_ne_true(h2))
+    case False{} False{} False{}:
+      ih(h1)(h2)
 
 # what agrees with what agrees with c agrees with c
 law Bits.agree_n_trans:
@@ -1685,7 +1854,85 @@ law Bits.agree_n_trans:
     -> {Bits.agree_n(n, a, c) == True{}: Bool}
 
 def Bits.agree_n_trans(a, b, c, n):
-  ?TODO
+  match a b c:
+    case Nil{} Nil{} Nil{}:
+      match n:
+        case 0n:
+          h1 => h2 => {==}
+        case 1n+(+p):
+          h1 => h2 => {==}
+    case Nil{} Nil{} Con{z, rc}:
+      match n:
+        case 0n:
+          h1 => h2 => {==}
+        case 1n+(+p):
+          h1 => h2 => Empty.absurd({Bits.agree_n(1n+p, Nil{}, Con{z, rc}) == True{}: Bool}, Shared.Bool.false_ne_true(h2))
+    case Nil{} Con{x, ra} Nil{}:
+      match n:
+        case 0n:
+          h1 => h2 => {==}
+        case 1n+(+p):
+          h1 => h2 => {==}
+    case Nil{} Con{x, ra} Con{z, rc}:
+      match n:
+        case 0n:
+          h1 => h2 => {==}
+        case 1n+(+p):
+          h1 => h2 => Empty.absurd({Bits.agree_n(1n+p, Nil{}, Con{z, rc}) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+    case Con{x, ra} Nil{} Nil{}:
+      match n:
+        case 0n:
+          h1 => h2 => {==}
+        case 1n+(+p):
+          h1 => h2 => Empty.absurd({Bits.agree_n(1n+p, Con{x, ra}, Nil{}) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+    case Con{x, ra} Nil{} Con{z, rc}:
+      match n:
+        case 0n:
+          h1 => h2 => {==}
+        case 1n+(+p):
+          h1 => h2 => Empty.absurd({Bits.agree_n(1n+p, Con{x, ra}, Con{z, rc}) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+    case Con{x, ra} Con{y, rb} Nil{}:
+      match n:
+        case 0n:
+          h1 => h2 => {==}
+        case 1n+(+p):
+          h1 => h2 => Empty.absurd({Bits.agree_n(1n+p, Con{x, ra}, Nil{}) == True{}: Bool}, Shared.Bool.false_ne_true(h2))
+    case Con{x, +ra} Con{y, +rb} Con{z, +rc}:
+      match n:
+        case 0n:
+          h1 => h2 => {==}
+        case 1n+(+p):
+          h1 => h2 => Bits.agree_n_trans.step(
+            x,
+            y,
+            z,
+            Bits.agree_n(p, ra, rb),
+            Bits.agree_n(p, rb, rc),
+            Bits.agree_n(p, ra, rc),
+            Bits.agree_n_trans(ra, rb, rc, p),
+            h1,
+            h2
+          )
+
+# the step of agree_n_le: x and y are the first bits, a and c what follows
+# them; ih turns agreement on a into agreement on c, and h gives a
+def Bits.agree_n_le.step(
+  x: Bool,
+  y: Bool,
+  a: Bool,
+  c: Bool,
+  ih: {a == True{}: Bool} -> {c == True{}: Bool},
+  h: {Bool.and(Shared.Bool.is_eq(x, y), a) == True{}: Bool}
+) -> {Bool.and(Shared.Bool.is_eq(x, y), c) == True{}: Bool}:
+  match x y:
+    case True{} True{}:
+      ih(h)
+    case True{} False{}:
+      Empty.absurd({Bool.and(Shared.Bool.is_eq(True{}, False{}), c) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+    case False{} True{}:
+      Empty.absurd({Bool.and(Shared.Bool.is_eq(False{}, True{}), c) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+    case False{} False{}:
+      ih(h)
 
 # bits that agree on their first n agree on fewer
 law Bits.agree_n_le:
@@ -1698,7 +1945,55 @@ law Bits.agree_n_le:
     -> {Bits.agree_n(m, a, b) == True{}: Bool}
 
 def Bits.agree_n_le(a, b, m, n):
-  ?TODO
+  match a b:
+    case Nil{} Nil{}:
+      match m:
+        case 0n:
+          h1 => h2 => {==}
+        case 1n+p:
+          h1 => h2 => {==}
+    case Con{x, +ra} Con{y, +rb}:
+      match m:
+        case 0n:
+          h1 => h2 => {==}
+        case 1n+(+p):
+          match n:
+            case 0n:
+              h1 => h2 => Empty.absurd({Bits.agree_n(1n+p, Con{x, ra}, Con{y, rb}) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+            case 1n+(+q):
+              h1 => h2 => Bits.agree_n_le.step(x, y, Bits.agree_n(q, ra, rb), Bits.agree_n(p, ra, rb), Bits.agree_n_le(ra, rb, p, q)(h1), h2)
+    case Nil{} Con{y, rb}:
+      match m:
+        case 0n:
+          h1 => h2 => {==}
+        case 1n+(+p):
+          match n:
+            case 0n:
+              h1 => h2 => Empty.absurd({Bits.agree_n(1n+p, Nil{}, Con{y, rb}) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+            case 1n+(+q):
+              h1 => h2 => Empty.absurd({Bits.agree_n(1n+p, Nil{}, Con{y, rb}) == True{}: Bool}, Shared.Bool.false_ne_true(h2))
+    case Con{x, ra} Nil{}:
+      match m:
+        case 0n:
+          h1 => h2 => {==}
+        case 1n+(+p):
+          match n:
+            case 0n:
+              h1 => h2 => Empty.absurd({Bits.agree_n(1n+p, Con{x, ra}, Nil{}) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+            case 1n+(+q):
+              h1 => h2 => Empty.absurd({Bits.agree_n(1n+p, Con{x, ra}, Nil{}) == True{}: Bool}, Shared.Bool.false_ne_true(h2))
+
+# the zero step of agree_n_succ: two first bits, and the empty rest
+def Bits.agree_n_succ.zero(x: Bool, y: Bool) -> {Bool.and(Shared.Bool.is_eq(x, y), True{}) == Shared.Bool.is_eq(x, y): Bool}:
+  match x y:
+    case True{} True{}:
+      {==}
+    case True{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case False{} False{}:
+      {==}
 
 # bits agree on n + 1 exactly when they agree on n and have the same bit at n
 law Bits.agree_n_succ:
@@ -1714,7 +2009,88 @@ law Bits.agree_n_succ:
   }
 
 def Bits.agree_n_succ(a, b, n):
-  ?TODO
+  match a b:
+    case Nil{} Nil{}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+p:
+          {==}
+    case Con{+x, +ra} Con{+y, +rb}:
+      match n:
+        case 0n:
+          Bits.agree_n_succ.zero(x, y)
+        case 1n+(+p):
+          Equal.trans(
+            Bool,
+            Bool.and(Shared.Bool.is_eq(x, y), Bits.agree_n(1n+p, ra, rb)),
+            Bool.and(Shared.Bool.is_eq(x, y), Bool.and(Bits.agree_n(p, ra, rb), Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Bits.at(ra, p), Bits.at(rb, p)))),
+            Bool.and(Bool.and(Shared.Bool.is_eq(x, y), Bits.agree_n(p, ra, rb)), Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Bits.at(ra, p), Bits.at(rb, p))),
+            Equal.cong(
+              Bool,
+              Bool,
+              u => Bool.and(Shared.Bool.is_eq(x, y), u),
+              Bits.agree_n(1n+p, ra, rb),
+              Bool.and(Bits.agree_n(p, ra, rb), Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Bits.at(ra, p), Bits.at(rb, p))),
+              Bits.agree_n_succ(ra, rb, p)
+            ),
+            Shared.Bool.and_assoc(Shared.Bool.is_eq(x, y), Bits.agree_n(p, ra, rb), Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Bits.at(ra, p), Bits.at(rb, p)))
+          )
+    case Nil{} Con{y, rb}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+p:
+          {==}
+    case Con{x, ra} Nil{}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+p:
+          {==}
+
+# a list that is empty has no head
+def Key.side_bits.nil(bs: List<&2, Bool>, e: {List.is_empty(&2, Bool, bs) == True{}: Bool}) -> {Bits.head(bs) == None{}: Maybe<&2, Bool>}:
+  match bs:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      Empty.absurd({Some{x} == None{}: Maybe<&2, Bool>}, Shared.Bool.false_ne_true(e))
+
+# a list that is not empty has a head: its first bit
+def Key.side_bits.some(bs: List<&2, Bool>, e: {List.is_empty(&2, Bool, bs) == False{}: Bool}) -> {Some{Shared.List.head_or(Bool, bs, False{})} == Bits.head(bs): Maybe<&2, Bool>}:
+  match bs:
+    case Nil{}:
+      Empty.absurd({Some{False{}} == None{}: Maybe<&2, Bool>}, Shared.Bool.false_ne_true(Equal.sym(Bool, List.is_empty(&2, Bool, Nil{}), False{}, e)))
+    case Con{x, r}:
+      {==}
+
+# the bit of a cursor, or none when it is done, is the head of the bits it has
+# yet to read
+def Key.side_bits.cur(+c: Cur) -> {
+  Shared.Bool.when(Maybe<&2, Bool>, Cur.done(c), u => None{}, u => Some{Cur.bit(c)}) == Bits.head(Cur.bits(c)): Maybe<&2, Bool>
+}:
+  Shared.Bool.when_cases(
+    Maybe<&2, Bool>,
+    m => {m == Bits.head(Cur.bits(c)): Maybe<&2, Bool>},
+    Cur.done(c),
+    u => None{},
+    u => Some{Cur.bit(c)},
+    h => Equal.sym(
+      Maybe<&2, Bool>,
+      Bits.head(Cur.bits(c)),
+      None{},
+      Key.side_bits.nil(Cur.bits(c), Equal.trans(Bool, List.is_empty(&2, Bool, Cur.bits(c)), Cur.done(c), True{}, Equal.sym(Bool, Cur.done(c), List.is_empty(&2, Bool, Cur.bits(c)), Cur.done_bits(c)), h))
+    ),
+    h => Equal.trans(
+      Maybe<&2, Bool>,
+      Some{Cur.bit(c)},
+      Some{Shared.List.head_or(Bool, Cur.bits(c), False{})},
+      Bits.head(Cur.bits(c)),
+      Equal.cong(Bool, Maybe<&2, Bool>, b => Some{b}, Cur.bit(c), Shared.List.head_or(Bool, Cur.bits(c), False{}), Cur.bit_bits(c)),
+      Key.side_bits.some(Cur.bits(c), Equal.trans(Bool, List.is_empty(&2, Bool, Cur.bits(c)), Cur.done(c), False{}, Equal.sym(Bool, Cur.done(c), List.is_empty(&2, Bool, Cur.bits(c)), Cur.done_bits(c)), h))
+    )
+  )
 
 # the side of a key at pos is its bit there
 law Key.side_bits:
@@ -1722,5 +2098,30 @@ law Key.side_bits:
   for pos: Nat
   {Key.side(k, pos) == Bits.at(Key.bits(k), pos): Maybe<&2, Bool>}
 
+# the side of a key at pos is its bit there, with pos used more than once
+def Key.side_bits.at(+k: List<&2, U32>, +pos: Nat) -> {
+  Key.side(k, pos) == Bits.at(Key.bits(k), pos): Maybe<&2, Bool>
+}:
+  Equal.trans(
+    Maybe<&2, Bool>,
+    Key.side(k, pos),
+    Bits.head(Cur.bits(Key.at(k, pos))),
+    Bits.at(Key.bits(k), pos),
+    Key.side_bits.cur(Key.at(k, pos)),
+    Equal.sym(
+      Maybe<&2, Bool>,
+      Bits.at(Key.bits(k), pos),
+      Bits.head(Cur.bits(Key.at(k, pos))),
+      Equal.cong(
+        List<&2, Bool>,
+        Maybe<&2, Bool>,
+        bs => Bits.head(bs),
+        List.drop(&2, Bool, Key.bits(k), pos),
+        Cur.bits(Key.at(k, pos)),
+        Equal.sym(List<&2, Bool>, Cur.bits(Key.at(k, pos)), List.drop(&2, Bool, Key.bits(k), pos), Cur.skip_bits(pos, Cur.of(k)))
+      )
+    )
+  )
+
 def Key.side_bits(k, pos):
-  ?TODO
+  Key.side_bits.at(k, pos)
