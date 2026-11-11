@@ -9651,17 +9651,22 @@ def Crit.last(-V: Data, m: Crit<V>) -> Maybe<&2, Bind<V>>:
     case Crit.Fork{rep, pos, e, z, o}:
       Crit.last.or(V, Crit.last(V, o), u => Crit.last.or(V, Crit.last(V, z), w => Crit.end.bind(V, rep, e)))
 
-# the bits of x, the lowest first, put into r from its low end: n of them
-def U32.rev.go(n: Nat, +x: U32, +r: U32) -> U32:
-  match n:
-    case 0n:
-      r
-    case 1n+p:
-      U32.rev.go(p, U32.shr(x), U32.add(U32.mul(r, 2), U32.and(x, 1)))
+# the word of n bits whose bits are bs, the lowest first (a False for each
+# bit that bs lacks)
+def Word.of(n: Nat, bs: List<&2, Bool>) -> Word(n):
+  match n bs:
+    case 0n x:
+      WNil{}
+    case 1n+p Nil{}:
+      WCon{False{}, Word.of(p, [])}
+    case 1n+p Con{b, r}:
+      WCon{b, Word.of(p, r)}
 
 # x with its bits in the other order, so that a map reads its highest first
 def U32.rev(x: U32) -> U32:
-  U32.rev.go(32n, x, 0)
+  match x:
+    case U32{w}:
+      U32{Word.of(32n, List.reverse(&2, Bool, Word.bits(32n, w)))}
 
 # the words ws, each with its bits in the other order, then r
 def Words.rev(ws: List<&2, U32>, r: List<&2, U32>) -> List<&2, U32>:
