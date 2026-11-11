@@ -4122,6 +4122,282 @@ def Affects.inv_links(
     case Con{+t, r}:
       Affects.inv_links(r, k, Reaches.Graph.link(g1, k, t), Reaches.Graph.link(g2, t, k), Affects.inv_link(g1, g2, k, t, i))
 
+# Affects.inv_fold once the imports m of a resource are read
+def Affects.inv_fold.at(
+  m: Maybe<&2, List<&2, Resources.Name>>,
+  -f1: List<&2, Resources.Name> -> Maybe<&2, Reaches.Graph>,
+  -f2: List<&2, Resources.Name> -> Maybe<&2, Reaches.Graph>,
+  ih: @ns2: List<&2, Resources.Name> -> Affects.Inv(
+    Maybe.default(&2, Reaches.Graph, f1(ns2), Reaches.Graph.new()),
+    Maybe.default(&2, Reaches.Graph, f2(ns2), Reaches.Graph.new())
+  )
+) -> Affects.Inv(
+  Maybe.default(&2, Reaches.Graph, Maybe.bind(&2, List<&2, Resources.Name>, Reaches.Graph, m, f1), Reaches.Graph.new()),
+  Maybe.default(&2, Reaches.Graph, Maybe.bind(&2, List<&2, Resources.Name>, Reaches.Graph, m, f2), Reaches.Graph.new())
+):
+  match m:
+    case None{}:
+      Affects.inv_new()
+    case Some{ns2}:
+      ih(ns2)
+
+# the users graph of the resources ns is their graph of imports, reversed
+def Affects.inv_fold(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +h: Maybe<&2, Hashes.Hash>,
+  ns: List<&2, Resources.Name>,
+  +g1: Reaches.Graph,
+  +g2: Reaches.Graph,
+  i: Affects.Inv(g1, g2)
+) -> Affects.Inv(
+  Maybe.default(&2, Reaches.Graph, Uses.graph(~d, l, view, h, ns, g1), Reaches.Graph.new()),
+  Maybe.default(&2, Reaches.Graph, Uses.users(~d, l, view, h, ns, g2), Reaches.Graph.new())
+):
+  match ns:
+    case Nil{}:
+      i
+    case Con{+n, +rest}:
+      Affects.inv_fold.at(
+        Res.imports(~d, l, view, h, n),
+        ns2 => Uses.graph(~d, l, view, h, rest, Reaches.Graph.links(Names.keys(ns2), Name.key(n), g1)),
+        ns2 => Uses.users(~d, l, view, h, rest, Reaches.Graph.back(Names.keys(ns2), Name.key(n), g2)),
+        +ns2 => Affects.inv_fold(
+          ~d,
+          l,
+          view,
+          h,
+          rest,
+          Reaches.Graph.links(Names.keys(ns2), Name.key(n), g1),
+          Reaches.Graph.back(Names.keys(ns2), Name.key(n), g2),
+          Affects.inv_links(Names.keys(ns2), Name.key(n), g1, g2, i)
+        )
+      )
+
+# Affects.has_graph and Affects.has_users once the imports m of a resource
+# are read
+def Affects.has_fold.at(
+  m: Maybe<&2, List<&2, Resources.Name>>,
+  -f: List<&2, Resources.Name> -> Maybe<&2, Reaches.Graph>,
+  ih: @ns2: List<&2, Resources.Name> -> Affects.Has(Maybe.default(&2, Reaches.Graph, f(ns2), Reaches.Graph.new()))
+) -> Affects.Has(
+  Maybe.default(&2, Reaches.Graph, Maybe.bind(&2, List<&2, Resources.Name>, Reaches.Graph, m, f), Reaches.Graph.new())
+):
+  match m:
+    case None{}:
+      Affects.has_new()
+    case Some{ns2}:
+      ih(ns2)
+
+# each node with an entry in a graph of imports is one of its nodes
+def Affects.has_graph(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +h: Maybe<&2, Hashes.Hash>,
+  ns: List<&2, Resources.Name>,
+  +g: Reaches.Graph,
+  hg: Affects.Has(g)
+) -> Affects.Has(Maybe.default(&2, Reaches.Graph, Uses.graph(~d, l, view, h, ns, g), Reaches.Graph.new())):
+  match ns:
+    case Nil{}:
+      hg
+    case Con{+n, +rest}:
+      Affects.has_fold.at(
+        Res.imports(~d, l, view, h, n),
+        ns2 => Uses.graph(~d, l, view, h, rest, Reaches.Graph.links(Names.keys(ns2), Name.key(n), g)),
+        +ns2 => Affects.has_graph(
+          ~d,
+          l,
+          view,
+          h,
+          rest,
+          Reaches.Graph.links(Names.keys(ns2), Name.key(n), g),
+          Affects.has_links(Names.keys(ns2), Name.key(n), g, hg)
+        )
+      )
+
+# each node with an entry in a users graph is one of its nodes
+def Affects.has_users(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +h: Maybe<&2, Hashes.Hash>,
+  ns: List<&2, Resources.Name>,
+  +g: Reaches.Graph,
+  hg: Affects.Has(g)
+) -> Affects.Has(Maybe.default(&2, Reaches.Graph, Uses.users(~d, l, view, h, ns, g), Reaches.Graph.new())):
+  match ns:
+    case Nil{}:
+      hg
+    case Con{+n, +rest}:
+      Affects.has_fold.at(
+        Res.imports(~d, l, view, h, n),
+        ns2 => Uses.users(~d, l, view, h, rest, Reaches.Graph.back(Names.keys(ns2), Name.key(n), g)),
+        +ns2 => Affects.has_users(
+          ~d,
+          l,
+          view,
+          h,
+          rest,
+          Reaches.Graph.back(Names.keys(ns2), Name.key(n), g),
+          Affects.has_back(Names.keys(ns2), Name.key(n), g, hg)
+        )
+      )
+
+# Affects.some_fold once the imports m of a resource are read
+def Affects.some_fold.at(
+  m: Maybe<&2, List<&2, Resources.Name>>,
+  -f1: List<&2, Resources.Name> -> Maybe<&2, Reaches.Graph>,
+  -f2: List<&2, Resources.Name> -> Maybe<&2, Reaches.Graph>,
+  ih: @ns2: List<&2, Resources.Name> -> {
+    Maybe.is_some(&2, Reaches.Graph, f2(ns2)) == Maybe.is_some(&2, Reaches.Graph, f1(ns2)): Bool
+  }
+) -> {
+  Maybe.is_some(&2, Reaches.Graph, Maybe.bind(&2, List<&2, Resources.Name>, Reaches.Graph, m, f2))
+    == Maybe.is_some(&2, Reaches.Graph, Maybe.bind(&2, List<&2, Resources.Name>, Reaches.Graph, m, f1)): Bool
+}:
+  match m:
+    case None{}:
+      {==}
+    case Some{ns2}:
+      ih(ns2)
+
+# the users graph of the resources ns is read exactly when their graph of
+# imports is: both read the same imports
+def Affects.some_fold(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +h: Maybe<&2, Hashes.Hash>,
+  ns: List<&2, Resources.Name>,
+  +g1: Reaches.Graph,
+  +g2: Reaches.Graph
+) -> {
+  Maybe.is_some(&2, Reaches.Graph, Uses.users(~d, l, view, h, ns, g2))
+    == Maybe.is_some(&2, Reaches.Graph, Uses.graph(~d, l, view, h, ns, g1)): Bool
+}:
+  match ns:
+    case Nil{}:
+      {==}
+    case Con{+n, +rest}:
+      Affects.some_fold.at(
+        Res.imports(~d, l, view, h, n),
+        ns2 => Uses.graph(~d, l, view, h, rest, Reaches.Graph.links(Names.keys(ns2), Name.key(n), g1)),
+        ns2 => Uses.users(~d, l, view, h, rest, Reaches.Graph.back(Names.keys(ns2), Name.key(n), g2)),
+        +ns2 => Affects.some_fold(
+          ~d,
+          l,
+          view,
+          h,
+          rest,
+          Reaches.Graph.links(Names.keys(ns2), Name.key(n), g1),
+          Reaches.Graph.back(Names.keys(ns2), Name.key(n), g2)
+        )
+      )
+
+# the graph of imports of the resources ns of the tree h (True), or their
+# users graph (False); the graph with no node while l lacks an import
+def Affects.side(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, Resources.Name>,
+  b: Bool
+) -> Reaches.Graph:
+  match b:
+    case True{}:
+      Maybe.default(&2, Reaches.Graph, Uses.graph(~d, l, view, h, ns, Reaches.Graph.new()), Reaches.Graph.new())
+    case False{}:
+      Maybe.default(&2, Reaches.Graph, Uses.users(~d, l, view, h, ns, Reaches.Graph.new()), Reaches.Graph.new())
+
+# the reverse of two reversed graphs
+def Affects.inv_swap(-g1: Reaches.Graph, -g2: Reaches.Graph, i: Affects.Inv(g1, g2)) -> Affects.Inv(g2, g1):
+  (i1, i2) = i
+  (i2, i1)
+
+# each side is the other, reversed
+def Affects.side_inv(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, Resources.Name>,
+  b: Bool
+) -> Affects.Inv(Affects.side(~d, l, view, h, ns, b), Affects.side(~d, l, view, h, ns, Bool.not(b))):
+  match b:
+    case True{}:
+      Affects.inv_fold(~d, l, view, h, ns, Reaches.Graph.new(), Reaches.Graph.new(), Affects.inv_new())
+    case False{}:
+      Affects.inv_swap(
+        Affects.side(~d, l, view, h, ns, True{}),
+        Affects.side(~d, l, view, h, ns, False{}),
+        Affects.inv_fold(~d, l, view, h, ns, Reaches.Graph.new(), Reaches.Graph.new(), Affects.inv_new())
+      )
+
+# an edge of g1 is an edge of g2, reversed, when g2 is g1 reversed
+def Affects.inv_fst(
+  -g1: Reaches.Graph,
+  -g2: Reaches.Graph,
+  i: Affects.Inv(g1, g2),
+  p: List<&2, Bool>,
+  q: List<&2, Bool>
+) -> Affects.Edge(g1, p, q) -> Affects.Edge(g2, q, p):
+  (i1, i2) = i
+  i1(p)(q)
+
+# an edge of a side is an edge of the other side, reversed
+def Affects.side_edge(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, Resources.Name>,
+  +b: Bool,
+  +p: List<&2, Bool>,
+  +q: List<&2, Bool>
+) -> Affects.Edge(Affects.side(~d, l, view, h, ns, b), p, q) -> Affects.Edge(Affects.side(~d, l, view, h, ns, Bool.not(b)), q, p):
+  Affects.inv_fst(
+    Affects.side(~d, l, view, h, ns, b),
+    Affects.side(~d, l, view, h, ns, Bool.not(b)),
+    Affects.side_inv(~d, l, view, h, ns, b),
+    p,
+    q
+  )
+
+# each node with an entry in a side is one of its nodes
+def Affects.side_has(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, Resources.Name>,
+  b: Bool
+) -> Affects.Has(Affects.side(~d, l, view, h, ns, b)):
+  match b:
+    case True{}:
+      Affects.has_graph(~d, l, view, h, ns, Reaches.Graph.new(), Affects.has_new())
+    case False{}:
+      Affects.has_users(~d, l, view, h, ns, Reaches.Graph.new(), Affects.has_new())
+
+# a node with a successor in a side is one of its nodes
+def Affects.side_live(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, Resources.Name>,
+  +b: Bool,
+  +p: List<&2, Bool>,
+  +q: List<&2, Bool>
+) -> Affects.Edge(Affects.side(~d, l, view, h, ns, b), p, q) -> {
+  List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b)), p)
+    == True{}: Bool
+}:
+  Affects.has_live(Affects.side(~d, l, view, h, ns, b), Affects.side_has(~d, l, view, h, ns, b), p, q)
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
