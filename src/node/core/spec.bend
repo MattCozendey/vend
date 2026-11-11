@@ -5374,6 +5374,192 @@ def Merge.all_step(
     Merge.all_from(~d, l, hb, ho, ht, k, rest, Merge.step(~d, l, hb, ho, ht, k, x, w), Wf, e)
   )
 
+# NEW-HELPERS-BEGIN
+# the first of a pair of Data
+def Merge.And.left(-A: Data, -B: Data, p: Merge.And(A, B)) -> A:
+  match p:
+    case Tuple{a, b}:
+      a
+
+# the second of a pair of Data
+def Merge.And.right(-A: Data, -B: Data, p: Merge.And(A, B)) -> B:
+  match p:
+    case Tuple{a, b}:
+      b
+
+# what the next merge gives the work: the ledger of the nodes that it has, and
+# nodes that come after those before it
+def Merge.next_facts(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +k: Ledgers.Id,
+  mn: Maybe<&2, Resources.Name>,
+  +W1: Work<L(d)>,
+  +e: {Merge.next(~d, l, hb, ho, ht, k, Work{lc, hc, P}, mn) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  +wc: Merge.Puts(~d, l, lc, P)
+) -> Merge.And(
+  Merge.Puts(~d, l, Merge.ledger(~d, W1), Merge.nodes(~d, W1)),
+  Merge.Nodes(P, Merge.nodes(~d, W1))
+):
+  match mn:
+    case None{}:
+      %Shared.Maybe.some_inj(Work<L(d)>, Work{lc, hc, P}, W1, e): Merge.And(
+        Merge.Puts(~d, l, Merge.ledger(~d, _), Merge.nodes(~d, _)),
+        Merge.Nodes(P, Merge.nodes(~d, _))
+      )
+      (wc, Merge.nodes_refl(P))
+    case Some{+n}:
+      Merge.one_facts.at(
+        ~d,
+        l,
+        lc,
+        ho,
+        ht,
+        hc,
+        P,
+        k,
+        n,
+        W1,
+        Res.find(~d, l, hb, n),
+        wc,
+        Merge.read(~d, l, ho, ht, Work{lc, hc, P}, k, n, Res.find(~d, l, hb, n), W1, e)
+      )
+
+# the merge of the key of a name writes no other key than the key of that name
+def Merge.apart(mn: Maybe<&2, Resources.Name>, n0: Resources.Name) -> Bool:
+  match mn:
+    case None{}:
+      True{}
+    case Some{n}:
+      Bool.not(Shared.List.is_eq(~U32, ~U32.is_eq, Key.res(n), Key.res(n0)))
+
+# the tree of the work after the next merge reads the key of a resource n0 as
+# it did, when the merge does not write it
+def Merge.next_frame(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +k: Ledgers.Id,
+  +n0: Resources.Name,
+  mn: Maybe<&2, Resources.Name>,
+  +W1: Work<L(d)>,
+  +lf: L(d),
+  +N: List<&2, List<&2, U32>>,
+  +e: {Merge.next(~d, l, hb, ho, ht, k, Work{lc, hc, P}, mn) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  +wc: Merge.Puts(~d, l, lc, P),
+  +wf: Merge.Puts(~d, l, lf, N),
+  +held: Merge.Held(~d, lf, N),
+  +nd: Merge.Nodes(Merge.nodes(~d, W1), N),
+  +hk: {Merge.apart(mn, n0) == True{}: Bool}
+) -> {
+  Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n0))
+    == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)): Trees.Look
+}:
+  match mn:
+    case None{}:
+      %Shared.Maybe.some_inj(Work<L(d)>, Work{lc, hc, P}, W1, e): {
+        Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, _), Key.res(n0))
+          == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)): Trees.Look
+      }
+      {==}
+    case Some{+n}:
+      Merge.one_frame.at(
+        ~d,
+        l,
+        lc,
+        ho,
+        ht,
+        hc,
+        P,
+        k,
+        n,
+        n0,
+        Res.find(~d, l, hb, n),
+        W1,
+        Merge.read(~d, l, ho, ht, Work{lc, hc, P}, k, n, Res.find(~d, l, hb, n), W1, e),
+        lf,
+        N,
+        wc,
+        wf,
+        held,
+        nd,
+        Shared.Bool.not_true(Shared.List.is_eq(~U32, ~U32.is_eq, Key.res(n), Key.res(n0)))(hk)
+      )
+
+# the tree of the work after the next merge of the resource n reads it as taken,
+# when the reads and the pick are those that the premises say
+def Merge.next_hit(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b0: Maybe<&2, Requests.Res>,
+  +o0: Maybe<&2, Requests.Res>,
+  +t0: Maybe<&2, Requests.Res>,
+  +x: Maybe<&2, Requests.Res>,
+  +W1: Work<L(d)>,
+  +lf: L(d),
+  +N: List<&2, List<&2, U32>>,
+  +e: {Merge.next(~d, l, hb, ho, ht, k, Work{lc, hc, P}, Some{n}) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  hb0: {Res.find(~d, l, hb, n) == Some{b0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  ho0: {Res.find(~d, l, ho, n) == Some{o0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  ht0: {Res.find(~d, l, ht, n) == Some{t0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  hp: {Pick.merge(~d, l, b0, o0, t0) == Some{Pick.Take{x}}: Maybe<&2, Pick>},
+  +wc: Merge.Puts(~d, l, lc, P),
+  +wf: Merge.Puts(~d, l, lf, N),
+  +held: Merge.Held(~d, lf, N),
+  +nd: Merge.Nodes(Merge.nodes(~d, W1), N)
+) -> {
+  Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n)) == Trees.Look.of(Res.value(x)): Trees.Look
+}:
+  Merge.one_hit.at(
+    ~d,
+    l,
+    lc,
+    ho,
+    ht,
+    hc,
+    P,
+    k,
+    n,
+    b0,
+    o0,
+    t0,
+    x,
+    Res.find(~d, l, hb, n),
+    W1,
+    Merge.read(~d, l, ho, ht, Work{lc, hc, P}, k, n, Res.find(~d, l, hb, n), W1, e),
+    hb0,
+    ho0,
+    ht0,
+    hp,
+    lf,
+    N,
+    wc,
+    wf,
+    held,
+    nd
+  )
+
+# NEW-HELPERS-END
+
 # a merge never loses a change that only one side made: when the merge of a
 # resource takes the content of one side (Pick.merge: theirs when ours is the
 # base, ours when theirs is the base or both agree), the tree that a taken
