@@ -1229,3 +1229,93 @@ def Crit.mk_lookup(
       {==}
     case Some{v} Crit.Fork{fr, fp, fe, fz, fo} Crit.Fork{fr2, fp2, fe2, fz2, fo2}:
       {==}
+
+# a fork of an entry that ends at its bit and a map holds what both hold
+def Crit.join.end_lookup(-V: Data, x: Crit<V>, +y: Crit<V>, +d: Nat, b: Bool, +q: List<&2, U32>) -> {
+  Crit.lookup(V, Crit.join.end(V, x, y, d, b), q)
+    == Maybe.or(&2, V, Crit.lookup(V, x, q), Crit.lookup(V, y, q)): Maybe<&2, V>
+}:
+  match x b:
+    case Crit.Leaf{k, v} True{}:
+      {==}
+    case Crit.Leaf{k, v} False{}:
+      %Equal.sym(
+        Maybe<&2, V>,
+        Maybe.or(&2, V, Crit.lookup(V, y, q), None{}),
+        Crit.lookup(V, y, q),
+        Shared.Maybe.or_none(V, Crit.lookup(V, y, q))
+      ): {
+        Maybe.or(&2, V, Shared.Maybe.when(V, Key.is_eq(k, q), u => Some{v}), _)
+          == Maybe.or(&2, V, Shared.Maybe.when(V, Key.is_eq(k, q), u => Some{v}), Crit.lookup(V, y, q)): Maybe<&2, V>
+      }
+      {==}
+    case Crit.Tip{} b1:
+      {==}
+    case Crit.Fork{r, p, e, z, o} b1:
+      {==}
+
+# the fork of two maps that hold no key in common holds what both hold
+def Crit.join_lookup(-V: Data, +x: Crit<V>, +y: Crit<V>, +d: Nat, +q: List<&2, U32>) -> {
+  Bool.or(Maybe.is_none(&2, V, Crit.lookup(V, x, q)), Maybe.is_none(&2, V, Crit.lookup(V, y, q))) == True{}: Bool
+} -> {Crit.lookup(V, Crit.join(V, x, y, d), q) == Maybe.or(&2, V, Crit.lookup(V, x, q), Crit.lookup(V, y, q)): Maybe<&2, V>}:
+  +h =>
+    +swap = Equal.trans(
+      Maybe<&2, V>,
+      Maybe.or(&2, V, Crit.lookup(V, y, q), Crit.lookup(V, x, q)),
+      Maybe.or(&2, V, Crit.lookup(V, x, q), Crit.lookup(V, y, q)),
+      Maybe.or(&2, V, Crit.lookup(V, x, q), Crit.lookup(V, y, q)),
+      Shared.Maybe.or_comm(V, Crit.lookup(V, y, q), Crit.lookup(V, x, q))(
+        %Shared.Bool.or_comm(Maybe.is_none(&2, V, Crit.lookup(V, x, q)), Maybe.is_none(&2, V, Crit.lookup(V, y, q))): {_ == True{}: Bool}
+        h
+      ),
+      {==}
+    )
+    +kx = Crit.rep(V, x, [])
+    +ky = Crit.rep(V, y, [])
+    Shared.Bool.when_cases(
+      Crit<V>,
+      t => {Crit.lookup(V, t, q) == Maybe.or(&2, V, Crit.lookup(V, x, q), Crit.lookup(V, y, q)): Maybe<&2, V>},
+      Cur.done(Key.at(kx, d)),
+      u => Crit.join.end(V, x, y, d, Cur.bit(Key.at(ky, d))),
+      u => Shared.Bool.when(
+        Crit<V>,
+        Cur.done(Key.at(ky, d)),
+        v => Crit.join.end(V, y, x, d, Cur.bit(Key.at(kx, d))),
+        v => Shared.Bool.when(
+          Crit<V>,
+          Cur.bit(Key.at(kx, d)),
+          w => Crit.Fork{ky, d, None{}, y, x},
+          w => Crit.Fork{kx, d, None{}, x, y}
+        )
+      ),
+      e1 => Crit.join.end_lookup(V, x, y, d, Cur.bit(Key.at(ky, d)), q),
+      e1 => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.lookup(V, t, q) == Maybe.or(&2, V, Crit.lookup(V, x, q), Crit.lookup(V, y, q)): Maybe<&2, V>},
+        Cur.done(Key.at(ky, d)),
+        v => Crit.join.end(V, y, x, d, Cur.bit(Key.at(kx, d))),
+        v => Shared.Bool.when(
+          Crit<V>,
+          Cur.bit(Key.at(kx, d)),
+          w => Crit.Fork{ky, d, None{}, y, x},
+          w => Crit.Fork{kx, d, None{}, x, y}
+        ),
+        e2 => Equal.trans(
+          Maybe<&2, V>,
+          Crit.lookup(V, Crit.join.end(V, y, x, d, Cur.bit(Key.at(kx, d))), q),
+          Maybe.or(&2, V, Crit.lookup(V, y, q), Crit.lookup(V, x, q)),
+          Maybe.or(&2, V, Crit.lookup(V, x, q), Crit.lookup(V, y, q)),
+          Crit.join.end_lookup(V, y, x, d, Cur.bit(Key.at(kx, d)), q),
+          swap
+        ),
+        e2 => Shared.Bool.when_cases(
+          Crit<V>,
+          t => {Crit.lookup(V, t, q) == Maybe.or(&2, V, Crit.lookup(V, x, q), Crit.lookup(V, y, q)): Maybe<&2, V>},
+          Cur.bit(Key.at(kx, d)),
+          w => Crit.Fork{ky, d, None{}, y, x},
+          w => Crit.Fork{kx, d, None{}, x, y},
+          e3 => swap,
+          e3 => {==}
+        )
+      )
+    )

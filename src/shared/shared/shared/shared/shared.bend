@@ -2930,3 +2930,15 @@ def Maybe.or_comm(-A: Data, a: Maybe<&2, A>, b: Maybe<&2, A>) -> {
       h => {==}
     case Some{x} Some{y}:
       h => Empty.absurd({Some{x} == Some{y}: Maybe<&2, A>}, Bool.false_ne_true(h))
+
+# an "or" is the same either way round
+def Bool.or_comm(a: Bool, b: Bool) -> {Bool.or(a, b) == Bool.or(b, a): Bool}:
+  match a b:
+    case False{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case True{} False{}:
+      {==}
+    case True{} True{}:
+      {==}
