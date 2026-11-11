@@ -6075,6 +6075,452 @@ def Crit.all_place_b(~V: Data, +m: Crit<V>, +r: List<&2, U32>, +pos: Nat, b1: Bo
     %e: {Crit.all(~V, ~Place, ~Place.has, m, Place{r, pos, _}) == True{}: Bool}
     h
 
+# the keys of a and of b are on one side of a fork at the bit before lo
+# (r and s: its rep and side), or lo is 0
+def Crit.fits(~V: Data, a: Crit<V>, b: Crit<V>, lo: Nat, +r: List<&2, U32>, +s: Bool) -> Bool:
+  match lo:
+    case 0n:
+      True{}
+    case 1n+(+p):
+      Bool.and(Crit.all(~V, ~Place, ~Place.has, a, Place{r, p, s}), Crit.all(~V, ~Place, ~Place.has, b, Place{r, p, s}))
+
+# Crit.fits either way round
+def Crit.fits_swap(~V: Data, +a: Crit<V>, +b: Crit<V>, lo: Nat, +r: List<&2, U32>, +s: Bool) -> {Crit.fits(~V, a, b, lo, r, s) == True{}: Bool} -> {
+  Crit.fits(~V, b, a, lo, r, s) == True{}: Bool
+}:
+  match lo:
+    case 0n:
+      h => {==}
+    case 1n+(+p):
+      +h => Crit.and_true(Crit.all(~V, ~Place, ~Place.has, b, Place{r, p, s}), Crit.all(~V, ~Place, ~Place.has, a, Place{r, p, s}))(
+        Shared.Bool.and_true_right(Crit.all(~V, ~Place, ~Place.has, a, Place{r, p, s}), Crit.all(~V, ~Place, ~Place.has, b, Place{r, p, s}))(h)
+      )(Shared.Bool.and_true_left(Crit.all(~V, ~Place, ~Place.has, a, Place{r, p, s}), Crit.all(~V, ~Place, ~Place.has, b, Place{r, p, s}))(h))
+
+# keys on one side of a fork agree on one bit past it
+def Crit.fit_agree(+k: List<&2, U32>, +x: List<&2, U32>, +r: List<&2, U32>, +p: Nat, +s: Bool) -> {Place.has(Place{r, p, s}, k) == True{}: Bool} -> {
+  Place.has(Place{r, p, s}, x) == True{}: Bool
+} -> {Key.agree(k, x, 1n+p) == True{}: Bool}:
+  +hk => +hx => Key.agree_succ(k, x, p, s)(Key.agree_join(k, x, r, p)(Place.has_agree(r, p, s, k)(hk))(Place.has_agree(r, p, s, x)(hx)))(
+    Place.has_side(r, p, s, k)(hk)
+  )(Place.has_side(r, p, s, x)(hx))
+
+# k fits a well formed map m at lo: it agrees with the key a read of m reaches
+def Crit.fit_hi(~V: Data, +m: Crit<V>, +k: List<&2, U32>, -v: V, +x: List<&2, U32>, +r: List<&2, U32>, +s: Bool, lo: Nat) -> {Crit.wf(~V, m, lo) == True{}: Bool} -> {
+  Crit.near(V, m, 0n, Cur.of(k)) == Some{x}: Maybe<&2, List<&2, U32>>
+} -> {Crit.fits(~V, Crit.Leaf{k, v}, m, lo, r, s) == True{}: Bool} -> {Bool.or(Crit.is_tip(V, m), Bits.agree(Key.diff(k, x), lo)) == True{}: Bool}:
+  match lo:
+    case 0n:
+      h => hm => hf => Crit.or_right(Crit.is_tip(V, m), Bits.agree(Key.diff(k, x), 0n))(Bits.agree.zero(Key.diff(k, x)))
+    case 1n+(+p):
+      h => hm => +hf => Crit.or_right(Crit.is_tip(V, m), Bits.agree(Key.diff(k, x), 1n+p))(
+        Crit.fit_agree(k, x, r, p, s)(Shared.Bool.and_true_left(Place.has(Place{r, p, s}, k), Crit.all(~V, ~Place, ~Place.has, m, Place{r, p, s}))(hf))(
+          Crit.near_pass(~V, ~Place, ~Place.has, m, 1n+p, 0n, Cur.of(k), Place{r, p, s}, x)(h)(Shared.Bool.and_true_right(Place.has(Place{r, p, s}, k), Crit.all(~V, ~Place, ~Place.has, m, Place{r, p, s}))(hf))(hm)
+        )
+      )
+
+# Crit.upsert_fit, once the key that a read of k reaches is known (nm)
+def Crit.upsert_fit.at(~V: Data, ~f: V -> V -> V, +m: Crit<V>, +lo: Nat, +k: List<&2, U32>, +v: V, +r: List<&2, U32>, +s: Bool, nm: Maybe<&2, List<&2, U32>>) -> {Crit.wf(~V, m, lo) == True{}: Bool} -> {
+  Crit.near(V, m, 0n, Cur.of(k)) == nm: Maybe<&2, List<&2, U32>>
+} -> {Crit.fits(~V, Crit.Leaf{k, v}, m, lo, r, s) == True{}: Bool} -> {Crit.wf(~V, Crit.put(~V, ~f, m, 0n, Cur.of(k), k, v, Crit.diff(k, nm)), lo) == True{}: Bool}:
+  match nm:
+    case None{}:
+      h => hm => hf => Crit.put_wf(~V, ~f, m, lo, 0n, Cur.of(k), k, v, None{}, Some{k}, k)(h)(Shared.Nat.le_zero(lo))(
+        Equal.sym(List<&2, Bool>, List.drop(&2, Bool, Key.bits(k), 0n), Key.bits(k), Shared.List.drop_zero(&2, Bool, Key.bits(k)))
+      )(
+        %Equal.sym(Maybe<&2, List<&2, U32>>, Crit.near(V, m, 0n, Cur.of(k)), None{}, hm): {Maybe.or(&2, List<&2, U32>, _, Some{k}) == Some{k}: Maybe<&2, List<&2, U32>>}
+        {==}
+      )(Equal.sym(Maybe<&2, Nat>, Key.diff(k, k), None{}, Key.diff_self(k)))(Shared.Bool.or_true_right(Crit.is_tip(V, m)))
+    case Some{+x}:
+      +h => +hm => hf => Crit.put_wf(~V, ~f, m, lo, 0n, Cur.of(k), k, v, Key.diff(k, x), None{}, x)(h)(Shared.Nat.le_zero(lo))(
+        Equal.sym(List<&2, Bool>, List.drop(&2, Bool, Key.bits(k), 0n), Key.bits(k), Shared.List.drop_zero(&2, Bool, Key.bits(k)))
+      )(Equal.trans(Maybe<&2, List<&2, U32>>, Maybe.or(&2, List<&2, U32>, Crit.near(V, m, 0n, Cur.of(k)), None{}), Crit.near(V, m, 0n, Cur.of(k)), Some{x}, Shared.Maybe.or_none(List<&2, U32>, Crit.near(V, m, 0n, Cur.of(k))), hm))({==})(
+        Crit.fit_hi(~V, m, k, v, x, r, s, lo)(h)(hm)(hf)
+      )
+
+# a write of a key that fits a well formed map keeps it well formed
+def Crit.upsert_fit(~V: Data, ~f: V -> V -> V, +m: Crit<V>, +lo: Nat, +k: List<&2, U32>, +v: V, +r: List<&2, U32>, +s: Bool) -> {Crit.wf(~V, m, lo) == True{}: Bool} -> {
+  Crit.fits(~V, Crit.Leaf{k, v}, m, lo, r, s) == True{}: Bool
+} -> {Crit.wf(~V, Crit.upsert(~V, ~f, m, k, v), lo) == True{}: Bool}:
+  h => hf => Crit.upsert_fit.at(~V, ~f, m, lo, k, v, r, s, Crit.near(V, m, 0n, Cur.of(k)))(h)({==})(hf)
+
+# a fork of two maps whose first keys end at its bit, or not, passes p when both do
+def Crit.join_end_all.any(~V: Data, ~G: Data, ~p: G -> List<&2, U32> -> Bool, x: Crit<V>, +y: Crit<V>, +d: Nat, b: Bool, +g: G) -> {Crit.all(~V, ~G, ~p, x, g) == True{}: Bool} -> {
+  Crit.all(~V, ~G, ~p, y, g) == True{}: Bool
+} -> {Crit.all(~V, ~G, ~p, Crit.join.end(V, x, y, d, b), g) == True{}: Bool}:
+  match x b:
+    case Crit.Leaf{+k, +v} True{}:
+      hx => hy => Crit.all.intro(~V, ~G, ~p, k, d, Some{v}, Crit.Tip{}, y, g)(hx)({==})(hy)
+    case Crit.Leaf{+k, +v} False{}:
+      hx => hy => Crit.all.intro(~V, ~G, ~p, k, d, Some{v}, y, Crit.Tip{}, g)(hx)(hy)({==})
+    case Crit.Tip{} b1:
+      hx => hy => Crit.all.intro(~V, ~G, ~p, [], d, None{}, Crit.Tip{}, y, g)({==})({==})(hy)
+    case Crit.Fork{+r, +q, +e, +z, +o} b1:
+      hx => hy => Crit.all.intro(~V, ~G, ~p, r, d, None{}, Crit.Fork{r, q, e, z, o}, y, g)({==})(hx)(hy)
+
+# a fork of two maps passes p when both do
+def Crit.join_all.any(~V: Data, ~G: Data, ~p: G -> List<&2, U32> -> Bool, +x: Crit<V>, +y: Crit<V>, +d: Nat, +g: G) -> {Crit.all(~V, ~G, ~p, x, g) == True{}: Bool} -> {
+  Crit.all(~V, ~G, ~p, y, g) == True{}: Bool
+} -> {Crit.all(~V, ~G, ~p, Crit.join(V, x, y, d), g) == True{}: Bool}:
+  +hx => +hy => Shared.Bool.when_cases(
+    Crit<V>,
+    t => {Crit.all(~V, ~G, ~p, t, g) == True{}: Bool},
+    Cur.done(Key.at(Crit.rep(V, x, []), d)),
+    u => Crit.join.end(V, x, y, d, Cur.bit(Key.at(Crit.rep(V, y, []), d))),
+    u => Shared.Bool.when(
+      Crit<V>,
+      Cur.done(Key.at(Crit.rep(V, y, []), d)),
+      q1 => Crit.join.end(V, y, x, d, Cur.bit(Key.at(Crit.rep(V, x, []), d))),
+      q1 => Shared.Bool.when(Crit<V>, Cur.bit(Key.at(Crit.rep(V, x, []), d)), q2 => Crit.Fork{Crit.rep(V, y, []), d, None{}, y, x}, q2 => Crit.Fork{Crit.rep(V, x, []), d, None{}, x, y})
+    ),
+    t1 => Crit.join_end_all.any(~V, ~G, ~p, x, y, d, Cur.bit(Key.at(Crit.rep(V, y, []), d)), g)(hx)(hy),
+    t1 => Shared.Bool.when_cases(
+      Crit<V>,
+      t => {Crit.all(~V, ~G, ~p, t, g) == True{}: Bool},
+      Cur.done(Key.at(Crit.rep(V, y, []), d)),
+      q1 => Crit.join.end(V, y, x, d, Cur.bit(Key.at(Crit.rep(V, x, []), d))),
+      q1 => Shared.Bool.when(Crit<V>, Cur.bit(Key.at(Crit.rep(V, x, []), d)), q2 => Crit.Fork{Crit.rep(V, y, []), d, None{}, y, x}, q2 => Crit.Fork{Crit.rep(V, x, []), d, None{}, x, y}),
+      t2 => Crit.join_end_all.any(~V, ~G, ~p, y, x, d, Cur.bit(Key.at(Crit.rep(V, x, []), d)), g)(hy)(hx),
+      t2 => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.all(~V, ~G, ~p, t, g) == True{}: Bool},
+        Cur.bit(Key.at(Crit.rep(V, x, []), d)),
+        q2 => Crit.Fork{Crit.rep(V, y, []), d, None{}, y, x},
+        q2 => Crit.Fork{Crit.rep(V, x, []), d, None{}, x, y},
+        t3 => Crit.all.intro(~V, ~G, ~p, Crit.rep(V, y, []), d, None{}, y, x, g)({==})(hy)(hx),
+        t3 => Crit.all.intro(~V, ~G, ~p, Crit.rep(V, x, []), d, None{}, x, y, g)({==})(hx)(hy)
+      )
+    )
+  )
+
+# the end of a union of two ends passes p when both do
+def Crit.hit_join(~V: Data, ~j: V -> V -> V, ~G: Data, ~p: G -> List<&2, U32> -> Bool, ea: Maybe<&2, V>, eb: Maybe<&2, V>, +ra: List<&2, U32>, +rb: List<&2, U32>, +g: G) -> {
+  Bool.or(Maybe.is_none(&2, V, ea), p(g)(ra)) == True{}: Bool
+} -> {Bool.or(Maybe.is_none(&2, V, eb), p(g)(rb)) == True{}: Bool} -> {Bool.or(Maybe.is_none(&2, V, Shared.Maybe.join(~V, ~j, ea, eb)), p(g)(Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, rb))) == True{}: Bool}:
+  match ea eb:
+    case None{} None{}:
+      ha => hb => {==}
+    case None{} Some{w}:
+      ha => hb => hb
+    case Some{u} None{}:
+      ha => hb => ha
+    case Some{u} Some{w}:
+      ha => hb => ha
+
+# the union of two forks whose reps do not differ before both bits passes p
+# when both do, by how the bits compare (c)
+def Crit.union_at_all(~V: Data, ~j: V -> V -> V, ~G: Data, ~p: G -> List<&2, U32> -> Bool, +ra: List<&2, U32>, +pa: Nat, +ea: Maybe<&2, V>, +za: Crit<V>, +oa: Crit<V>, +rb: List<&2, U32>, +pb: Nat, +eb: Maybe<&2, V>, +zb: Crit<V>, +ob: Crit<V>, +g: G, c: Cmp) -> {Crit.all(~V, ~G, ~p, Crit.Fork{ra, pa, ea, za, oa}, g) == True{}: Bool} -> {Crit.all(~V, ~G, ~p, Crit.Fork{rb, pb, eb, zb, ob}, g) == True{}: Bool} -> {Crit.all(~V, ~G, ~p, Crit.union(~V, ~j, za, zb), g) == True{}: Bool} -> {Crit.all(~V, ~G, ~p, Crit.union(~V, ~j, oa, ob), g) == True{}: Bool} -> {Crit.all(~V, ~G, ~p, Crit.union(~V, ~j, za, Crit.Fork{rb, pb, eb, zb, ob}), g) == True{}: Bool} -> {Crit.all(~V, ~G, ~p, Crit.union(~V, ~j, oa, Crit.Fork{rb, pb, eb, zb, ob}), g) == True{}: Bool} -> {Crit.all(~V, ~G, ~p, Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, zb), g) == True{}: Bool} -> {Crit.all(~V, ~G, ~p, Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, ob), g) == True{}: Bool} -> {Crit.all(~V, ~G, ~p, Crit.union.at(~V, ~j, c, ra, pa, ea, rb, pb, eb, zs => os => Crit.mk(V, Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, rb), pa, Shared.Maybe.join(~V, ~j, ea, eb), zs, os), u2 => Crit.union(~V, ~j, za, zb), u2 => Crit.union(~V, ~j, oa, ob), u2 => Crit.union(~V, ~j, za, Crit.Fork{rb, pb, eb, zb, ob}), u2 => Crit.union(~V, ~j, oa, Crit.Fork{rb, pb, eb, zb, ob}), u2 => Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, zb), u2 => Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, ob), za, oa, zb, ob), g) == True{}: Bool}:
+  match c:
+    case EQ{}:
+      +ha => +hb => i1 => i2 => i3 => i4 => i5 => i6 => Crit.mk_all(~V, ~G, ~p, Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, rb), pa, Shared.Maybe.join(~V, ~j, ea, eb), Crit.union(~V, ~j, za, zb), Crit.union(~V, ~j, oa, ob), g)(
+        Crit.hit_join(~V, ~j, ~G, ~p, ea, eb, ra, rb, g)(Crit.all.hit(~V, ~G, ~p, ra, pa, ea, za, oa, g)(ha))(Crit.all.hit(~V, ~G, ~p, rb, pb, eb, zb, ob, g)(hb))
+      )(i1)(i2)
+    case LT{}:
+      +ha => hb => i1 => i2 => i3 => i4 => i5 => i6 => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.all(~V, ~G, ~p, t, g) == True{}: Bool},
+        Key.bit(rb, pa),
+        u => Crit.mk(V, ra, pa, ea, za, Crit.union(~V, ~j, oa, Crit.Fork{rb, pb, eb, zb, ob})),
+        u => Crit.mk(V, ra, pa, ea, Crit.union(~V, ~j, za, Crit.Fork{rb, pb, eb, zb, ob}), oa),
+        t3 => Crit.mk_all(~V, ~G, ~p, ra, pa, ea, za, Crit.union(~V, ~j, oa, Crit.Fork{rb, pb, eb, zb, ob}), g)(Crit.all.hit(~V, ~G, ~p, ra, pa, ea, za, oa, g)(ha))(Crit.all.z(~V, ~G, ~p, ra, pa, ea, za, oa, g)(ha))(i4),
+        t3 => Crit.mk_all(~V, ~G, ~p, ra, pa, ea, Crit.union(~V, ~j, za, Crit.Fork{rb, pb, eb, zb, ob}), oa, g)(Crit.all.hit(~V, ~G, ~p, ra, pa, ea, za, oa, g)(ha))(i3)(Crit.all.o(~V, ~G, ~p, ra, pa, ea, za, oa, g)(ha))
+      )
+    case GT{}:
+      ha => +hb => i1 => i2 => i3 => i4 => i5 => i6 => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.all(~V, ~G, ~p, t, g) == True{}: Bool},
+        Key.bit(ra, pb),
+        u => Crit.mk(V, rb, pb, eb, zb, Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, ob)),
+        u => Crit.mk(V, rb, pb, eb, Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, zb), ob),
+        t3 => Crit.mk_all(~V, ~G, ~p, rb, pb, eb, zb, Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, ob), g)(Crit.all.hit(~V, ~G, ~p, rb, pb, eb, zb, ob, g)(hb))(Crit.all.z(~V, ~G, ~p, rb, pb, eb, zb, ob, g)(hb))(i6),
+        t3 => Crit.mk_all(~V, ~G, ~p, rb, pb, eb, Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, zb), ob, g)(Crit.all.hit(~V, ~G, ~p, rb, pb, eb, zb, ob, g)(hb))(i5)(Crit.all.o(~V, ~G, ~p, rb, pb, eb, zb, ob, g)(hb))
+      )
+
+# a union passes p when both maps do
+def Crit.union_all(~V: Data, ~j: V -> V -> V, ~G: Data, ~p: G -> List<&2, U32> -> Bool, +a: Crit<V>, +b: Crit<V>, +g: G) -> {Crit.all(~V, ~G, ~p, a, g) == True{}: Bool} -> {
+  Crit.all(~V, ~G, ~p, b, g) == True{}: Bool
+} -> {Crit.all(~V, ~G, ~p, Crit.union(~V, ~j, a, b), g) == True{}: Bool}:
+  match a b:
+    case Crit.Tip{} Crit.Tip{}:
+      ha => hb => {==}
+    case Crit.Tip{} Crit.Leaf{k2, w2}:
+      ha => hb => hb
+    case Crit.Tip{} Crit.Fork{r2, p2, e2, z2, o2}:
+      ha => hb => hb
+    case Crit.Leaf{k, v} Crit.Tip{}:
+      ha => hb => ha
+    case Crit.Fork{ra, pa, ea, za, oa} Crit.Tip{}:
+      ha => hb => ha
+    case Crit.Leaf{+k, +v} Crit.Leaf{+k2, +w}:
+      ha => hb => Crit.put_all(~V, ~(w => x => j(x, w)), ~G, ~p, Crit.Leaf{k2, w}, 0n, Cur.of(k), k, v, Crit.diff(k, Crit.near(V, Crit.Leaf{k2, w}, 0n, Cur.of(k))), g)(hb)(ha)
+    case Crit.Leaf{+k, +v} Crit.Fork{+rb, +pb, +eb, +zb, +ob}:
+      ha => hb => Crit.put_all(~V, ~(w => x => j(x, w)), ~G, ~p, Crit.Fork{rb, pb, eb, zb, ob}, 0n, Cur.of(k), k, v, Crit.diff(k, Crit.near(V, Crit.Fork{rb, pb, eb, zb, ob}, 0n, Cur.of(k))), g)(hb)(ha)
+    case Crit.Fork{+ra, +pa, +ea, +za, +oa} Crit.Leaf{+k, +w}:
+      ha => hb => Crit.put_all(~V, ~j, ~G, ~p, Crit.Fork{ra, pa, ea, za, oa}, 0n, Cur.of(k), k, w, Crit.diff(k, Crit.near(V, Crit.Fork{ra, pa, ea, za, oa}, 0n, Cur.of(k))), g)(ha)(hb)
+    case Crit.Fork{+ra, +pa, +ea, +za, +oa} Crit.Fork{+rb, +pb, +eb, +zb, +ob}:
+      +ha => +hb => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.all(~V, ~G, ~p, t, g) == True{}: Bool},
+        Bool.and(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pb)),
+        u => Crit.join(V, Crit.Fork{ra, pa, ea, za, oa}, Crit.Fork{rb, pb, eb, zb, ob}, Maybe.default(&2, Nat, Key.diff(ra, rb), 0n)),
+        u => Crit.union.at(~V, ~j, Nat.cmp(pa, pb), ra, pa, ea, rb, pb, eb, zs => os => Crit.mk(V, Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, rb), pa, Shared.Maybe.join(~V, ~j, ea, eb), zs, os), u2 => Crit.union(~V, ~j, za, zb), u2 => Crit.union(~V, ~j, oa, ob), u2 => Crit.union(~V, ~j, za, Crit.Fork{rb, pb, eb, zb, ob}), u2 => Crit.union(~V, ~j, oa, Crit.Fork{rb, pb, eb, zb, ob}), u2 => Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, zb), u2 => Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, ob), za, oa, zb, ob),
+        t => Crit.join_all.any(~V, ~G, ~p, Crit.Fork{ra, pa, ea, za, oa}, Crit.Fork{rb, pb, eb, zb, ob}, Maybe.default(&2, Nat, Key.diff(ra, rb), 0n), g)(ha)(hb),
+        t => Crit.union_at_all(~V, ~j, ~G, ~p, ra, pa, ea, za, oa, rb, pb, eb, zb, ob, g, Nat.cmp(pa, pb))(ha)(hb)(
+          Crit.union_all(~V, ~j, ~G, ~p, za, zb, g)(Crit.all.z(~V, ~G, ~p, ra, pa, ea, za, oa, g)(ha))(Crit.all.z(~V, ~G, ~p, rb, pb, eb, zb, ob, g)(hb))
+        )(Crit.union_all(~V, ~j, ~G, ~p, oa, ob, g)(Crit.all.o(~V, ~G, ~p, ra, pa, ea, za, oa, g)(ha))(Crit.all.o(~V, ~G, ~p, rb, pb, eb, zb, ob, g)(hb)))(
+          Crit.union_all(~V, ~j, ~G, ~p, za, b, g)(Crit.all.z(~V, ~G, ~p, ra, pa, ea, za, oa, g)(ha))(hb)
+        )(Crit.union_all(~V, ~j, ~G, ~p, oa, b, g)(Crit.all.o(~V, ~G, ~p, ra, pa, ea, za, oa, g)(ha))(hb))(
+          Crit.union_all(~V, ~j, ~G, ~p, a, zb, g)(ha)(Crit.all.z(~V, ~G, ~p, rb, pb, eb, zb, ob, g)(hb))
+        )(Crit.union_all(~V, ~j, ~G, ~p, a, ob, g)(ha)(Crit.all.o(~V, ~G, ~p, rb, pb, eb, zb, ob, g)(hb)))
+      )
+
+# the cursor at x of the rep of a well formed fork at a later bit is not done
+def Crit.rep_not_done(~V: Data, +rep: List<&2, U32>, +pos: Nat, +e: Maybe<&2, V>, +z: Crit<V>, +o: Crit<V>, +lo: Nat, +x: Nat) -> {Crit.wf(~V, Crit.Fork{rep, pos, e, z, o}, lo) == True{}: Bool} -> {
+  Nat.is_lt(x, pos) == True{}: Bool
+} -> {Cur.done(Key.at(rep, x)) == False{}: Bool}:
+  h => lt => Equal.trans(
+    Bool,
+    Cur.done(Key.at(rep, x)),
+    List.is_empty(&2, Bool, List.drop(&2, Bool, Key.bits(rep), x)),
+    False{},
+    Crit.done_of(Key.at(rep, x), List.drop(&2, Bool, Key.bits(rep), x))(Cur.skip_bits(x, Cur.of(rep))),
+    Crit.len_drop(Key.bits(rep), x)(Shared.Nat.lt_le(x, pos, List.length(&2, Bool, Key.bits(rep)))(lt)(Crit.rep_long(~V, rep, pos, e, z, o, lo)(h)))
+  )
+
+# a fork of two well formed forks whose reps differ first at x, before both
+# bits, is well formed below x
+def Crit.join_wf_ff(~V: Data, +ra: List<&2, U32>, +pa: Nat, +ea: Maybe<&2, V>, +za: Crit<V>, +oa: Crit<V>, +rb: List<&2, U32>, +pb: Nat, +eb: Maybe<&2, V>, +zb: Crit<V>, +ob: Crit<V>, +la: Nat, +lb: Nat, +lo: Nat, +x: Nat) -> {Crit.wf(~V, Crit.Fork{ra, pa, ea, za, oa}, la) == True{}: Bool} -> {Crit.wf(~V, Crit.Fork{rb, pb, eb, zb, ob}, lb) == True{}: Bool} -> {Nat.is_le(lo, x) == True{}: Bool} -> {
+  Nat.is_lt(x, pa) == True{}: Bool
+} -> {Nat.is_lt(x, pb) == True{}: Bool} -> {Key.diff(ra, rb) == Some{x}: Maybe<&2, Nat>} -> {Crit.wf(~V, Crit.join(V, Crit.Fork{ra, pa, ea, za, oa}, Crit.Fork{rb, pb, eb, zb, ob}, x), lo) == True{}: Bool}:
+  +ha => +hb => +le => +lta => +ltb => +hd =>
+    +na = Crit.rep_not_done(~V, ra, pa, ea, za, oa, la, x)(ha)(lta)
+    +nb = Crit.rep_not_done(~V, rb, pb, eb, zb, ob, lb, x)(hb)(ltb)
+    +sa = Crit.side_of(ra, x, Cur.bit(Key.at(ra, x)))(na)({==})
+    +sb = Crit.side_of(rb, x, Cur.bit(Key.at(rb, x)))(nb)({==})
+    +sne = Crit.diff_sides(ra, rb, x)(hd)
+    +ab = Key.agree_of_diff(ra, rb, x)(hd)
+    +wa = Crit.wf_lower(~V, ra, pa, ea, za, oa, la, 1n+x)(ha)(Crit.lt_le_succ(x, pa)(lta))
+    +wb = Crit.wf_lower(~V, rb, pb, eb, zb, ob, lb, 1n+x)(hb)(Crit.lt_le_succ(x, pb)(ltb))
+    +aa = Crit.fork_place(~V, ra, pa, ea, za, oa, la, ra, x, Cur.bit(Key.at(ra, x)))(ha)(lta)(Key.agree_self(ra, x))(sa)
+    +bb = Crit.fork_place(~V, rb, pb, eb, zb, ob, lb, ra, x, Cur.bit(Key.at(rb, x)))(hb)(ltb)(ab)(sb)
+    Shared.Bool.when_cases(
+      Crit<V>,
+      t => {Crit.wf(~V, t, lo) == True{}: Bool},
+      Cur.done(Key.at(ra, x)),
+      u => Crit.join.end(V, Crit.Fork{ra, pa, ea, za, oa}, Crit.Fork{rb, pb, eb, zb, ob}, x, Cur.bit(Key.at(rb, x))),
+      u => Shared.Bool.when(
+        Crit<V>,
+        Cur.done(Key.at(rb, x)),
+        q1 => Crit.join.end(V, Crit.Fork{rb, pb, eb, zb, ob}, Crit.Fork{ra, pa, ea, za, oa}, x, Cur.bit(Key.at(ra, x))),
+        q1 => Shared.Bool.when(Crit<V>, Cur.bit(Key.at(ra, x)), q2 => Crit.Fork{rb, x, None{}, Crit.Fork{rb, pb, eb, zb, ob}, Crit.Fork{ra, pa, ea, za, oa}}, q2 => Crit.Fork{ra, x, None{}, Crit.Fork{ra, pa, ea, za, oa}, Crit.Fork{rb, pb, eb, zb, ob}})
+      ),
+      t1 => Empty.absurd({Crit.wf(~V, Crit.join.end(V, Crit.Fork{ra, pa, ea, za, oa}, Crit.Fork{rb, pb, eb, zb, ob}, x, Cur.bit(Key.at(rb, x))), lo) == True{}: Bool}, Crit.clash(Cur.done(Key.at(ra, x)), True{}, False{}, t1, na, Shared.Bool.true_ne_false)),
+      t1 => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.wf(~V, t, lo) == True{}: Bool},
+        Cur.done(Key.at(rb, x)),
+        q1 => Crit.join.end(V, Crit.Fork{rb, pb, eb, zb, ob}, Crit.Fork{ra, pa, ea, za, oa}, x, Cur.bit(Key.at(ra, x))),
+        q1 => Shared.Bool.when(Crit<V>, Cur.bit(Key.at(ra, x)), q2 => Crit.Fork{rb, x, None{}, Crit.Fork{rb, pb, eb, zb, ob}, Crit.Fork{ra, pa, ea, za, oa}}, q2 => Crit.Fork{ra, x, None{}, Crit.Fork{ra, pa, ea, za, oa}, Crit.Fork{rb, pb, eb, zb, ob}}),
+        t2 => Empty.absurd({Crit.wf(~V, Crit.join.end(V, Crit.Fork{rb, pb, eb, zb, ob}, Crit.Fork{ra, pa, ea, za, oa}, x, Cur.bit(Key.at(ra, x))), lo) == True{}: Bool}, Crit.clash(Cur.done(Key.at(rb, x)), True{}, False{}, t2, nb, Shared.Bool.true_ne_false)),
+        t2 => Shared.Bool.when_cases(
+          Crit<V>,
+          t => {Crit.wf(~V, t, lo) == True{}: Bool},
+          Cur.bit(Key.at(ra, x)),
+          q2 => Crit.Fork{rb, x, None{}, Crit.Fork{rb, pb, eb, zb, ob}, Crit.Fork{ra, pa, ea, za, oa}},
+          q2 => Crit.Fork{ra, x, None{}, Crit.Fork{ra, pa, ea, za, oa}, Crit.Fork{rb, pb, eb, zb, ob}},
+          +t3 =>
+            +bf = Crit.ne_true(Cur.bit(Key.at(rb, x)))(Crit.ne_sides(ra, rb, x, Some{True{}}, Some{Cur.bit(Key.at(rb, x))})(Crit.side_of(ra, x, True{})(na)(t3))(sb)(sne))
+            Crit.wf.intro(~V, rb, x, None{}, Crit.Fork{rb, pb, eb, zb, ob}, Crit.Fork{ra, pa, ea, za, oa}, lo)(le)({==})(Key.is_eq_refl(rb))(
+              Crit.place_shift(~V, Crit.Fork{rb, pb, eb, zb, ob}, ra, rb, x, False{})(Key.agree_sym(ra, rb, x)(ab))(Crit.all_place_b(~V, Crit.Fork{rb, pb, eb, zb, ob}, ra, x, Cur.bit(Key.at(rb, x)), False{})(bf)(bb))
+            )(Crit.place_shift(~V, Crit.Fork{ra, pa, ea, za, oa}, ra, rb, x, True{})(Key.agree_sym(ra, rb, x)(ab))(Crit.all_place_b(~V, Crit.Fork{ra, pa, ea, za, oa}, ra, x, Cur.bit(Key.at(ra, x)), True{})(t3)(aa)))(wb)(wa),
+          +t3 =>
+            +bt = Crit.ne_false(Cur.bit(Key.at(rb, x)))(Crit.ne_sides(ra, rb, x, Some{False{}}, Some{Cur.bit(Key.at(rb, x))})(Crit.side_of(ra, x, False{})(na)(t3))(sb)(sne))
+            Crit.wf.intro(~V, ra, x, None{}, Crit.Fork{ra, pa, ea, za, oa}, Crit.Fork{rb, pb, eb, zb, ob}, lo)(le)({==})(Key.is_eq_refl(ra))(Crit.all_place_b(~V, Crit.Fork{ra, pa, ea, za, oa}, ra, x, Cur.bit(Key.at(ra, x)), False{})(t3)(aa))(
+              Crit.all_place_b(~V, Crit.Fork{rb, pb, eb, zb, ob}, ra, x, Cur.bit(Key.at(rb, x)), True{})(bt)(bb)
+            )(wa)(wb)
+        )
+      )
+    )
+
+# the reps of two well formed forks whose keys fit lo agree on lo bits
+def Crit.fit_le(~V: Data, +ra: List<&2, U32>, +pa: Nat, +ea: Maybe<&2, V>, +za: Crit<V>, +oa: Crit<V>, +rb: List<&2, U32>, +pb: Nat, +eb: Maybe<&2, V>, +zb: Crit<V>, +ob: Crit<V>, lo: Nat, +r: List<&2, U32>, +s: Bool) -> {Crit.wf(~V, Crit.Fork{ra, pa, ea, za, oa}, lo) == True{}: Bool} -> {Crit.wf(~V, Crit.Fork{rb, pb, eb, zb, ob}, lo) == True{}: Bool} -> {Crit.fits(~V, Crit.Fork{ra, pa, ea, za, oa}, Crit.Fork{rb, pb, eb, zb, ob}, lo, r, s) == True{}: Bool} -> {
+  Bits.agree(Key.diff(ra, rb), lo) == True{}: Bool
+}:
+  match lo:
+    case 0n:
+      ha => hb => hf => Bits.agree.zero(Key.diff(ra, rb))
+    case 1n+(+p):
+      ha => hb => +hf => Crit.fit_agree(ra, rb, r, p, s)(
+        Crit.rep_pass(~V, ~Place, ~Place.has, Crit.Fork{ra, pa, ea, za, oa}, 1n+p, Place{r, p, s}, [])(ha)(Shared.Bool.and_true_left(Crit.all(~V, ~Place, ~Place.has, Crit.Fork{ra, pa, ea, za, oa}, Place{r, p, s}), Crit.all(~V, ~Place, ~Place.has, Crit.Fork{rb, pb, eb, zb, ob}, Place{r, p, s}))(hf))({==})
+      )(Crit.rep_pass(~V, ~Place, ~Place.has, Crit.Fork{rb, pb, eb, zb, ob}, 1n+p, Place{r, p, s}, [])(hb)(Shared.Bool.and_true_right(Crit.all(~V, ~Place, ~Place.has, Crit.Fork{ra, pa, ea, za, oa}, Place{r, p, s}), Crit.all(~V, ~Place, ~Place.has, Crit.Fork{rb, pb, eb, zb, ob}, Place{r, p, s}))(hf))({==}))
+
+# a pick of two keys that agree on pos bits agrees with each
+def Crit.pick_agree_l(c: Bool, +ra: List<&2, U32>, +rb: List<&2, U32>, +pos: Nat) -> {Key.agree(rb, ra, pos) == True{}: Bool} -> {Key.agree(Bool.pick(List<&2, U32>, c, ra, rb), ra, pos) == True{}: Bool}:
+  match c:
+    case True{}:
+      h => Key.agree_self(ra, pos)
+    case False{}:
+      h => h
+
+def Crit.pick_agree_r(c: Bool, +ra: List<&2, U32>, +rb: List<&2, U32>, +pos: Nat) -> {Key.agree(rb, ra, pos) == True{}: Bool} -> {Key.agree(Bool.pick(List<&2, U32>, c, ra, rb), rb, pos) == True{}: Bool}:
+  match c:
+    case True{}:
+      h => Key.agree_sym(rb, ra, pos)(h)
+    case False{}:
+      h => Key.agree_self(rb, pos)
+
+# the rep of a union of two forks at one bit is right for its end
+def Crit.rep_or_union(~V: Data, ~j: V -> V -> V, +ra: List<&2, U32>, +pa: Nat, ea: Maybe<&2, V>, -za: Crit<V>, +rb: List<&2, U32>, +pb: Nat, eb: Maybe<&2, V>, -zb: Crit<V>) -> {
+  Crit.rep_ok(V, ra, pa, ea, za) == True{}: Bool
+} -> {Crit.rep_ok(V, rb, pb, eb, zb) == True{}: Bool} -> {pa == pb: Nat} -> {
+  Bool.or(Maybe.is_none(&2, V, Shared.Maybe.join(~V, ~j, ea, eb)), Nat.is_eq(List.length(&2, Bool, Key.bits(Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, rb))), pa)) == True{}: Bool
+}:
+  match ea eb:
+    case None{} None{}:
+      hra => hrb => eqp => {==}
+    case Some{u} None{}:
+      hra => hrb => eqp => hra
+    case Some{u} Some{w}:
+      hra => hrb => eqp => hra
+    case None{} Some{w}:
+      hra => hrb => eqp =>
+        %Equal.sym(Nat, pa, pb, eqp): {Nat.is_eq(List.length(&2, Bool, Key.bits(rb)), _) == True{}: Bool}
+        hrb
+
+# the keys on a side of a fork at a bit are on that side of one at an equal bit
+def Crit.all_pos(~V: Data, +m: Crit<V>, +r: List<&2, U32>, p1: Nat, +p2: Nat, +b: Bool) -> {p1 == p2: Nat} -> {
+  Crit.all(~V, ~Place, ~Place.has, m, Place{r, p1, b}) == True{}: Bool
+} -> {Crit.all(~V, ~Place, ~Place.has, m, Place{r, p2, b}) == True{}: Bool}:
+  e => h =>
+    %e: {Crit.all(~V, ~Place, ~Place.has, m, Place{r, _, b}) == True{}: Bool}
+    h
+
+# the union of two well formed forks whose reps do not differ before both
+# bits is well formed, by how the bits compare (c)
+def Crit.union_at_wf(~V: Data, ~j: V -> V -> V, +ra: List<&2, U32>, +pa: Nat, +ea: Maybe<&2, V>, +za: Crit<V>, +oa: Crit<V>, +rb: List<&2, U32>, +pb: Nat, +eb: Maybe<&2, V>, +zb: Crit<V>, +ob: Crit<V>, +lo: Nat, c: Cmp) -> {Nat.cmp(pa, pb) == c: Cmp} -> {Crit.wf(~V, Crit.Fork{ra, pa, ea, za, oa}, lo) == True{}: Bool} -> {Crit.wf(~V, Crit.Fork{rb, pb, eb, zb, ob}, lo) == True{}: Bool} -> {Bool.and(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pb)) == False{}: Bool} -> ({pa == pb: Nat} -> {Crit.wf(~V, Crit.union(~V, ~j, za, zb), 1n+pa) == True{}: Bool}) -> ({pa == pb: Nat} -> {Crit.wf(~V, Crit.union(~V, ~j, oa, ob), 1n+pa) == True{}: Bool}) -> ({Nat.is_lt(pa, pb) == True{}: Bool} -> {Crit.all(~V, ~Place, ~Place.has, Crit.Fork{rb, pb, eb, zb, ob}, Place{ra, pa, False{}}) == True{}: Bool} -> {Crit.wf(~V, Crit.union(~V, ~j, za, Crit.Fork{rb, pb, eb, zb, ob}), 1n+pa) == True{}: Bool}) -> ({Nat.is_lt(pa, pb) == True{}: Bool} -> {Crit.all(~V, ~Place, ~Place.has, Crit.Fork{rb, pb, eb, zb, ob}, Place{ra, pa, True{}}) == True{}: Bool} -> {Crit.wf(~V, Crit.union(~V, ~j, oa, Crit.Fork{rb, pb, eb, zb, ob}), 1n+pa) == True{}: Bool}) -> ({Nat.is_lt(pb, pa) == True{}: Bool} -> {Crit.all(~V, ~Place, ~Place.has, Crit.Fork{ra, pa, ea, za, oa}, Place{rb, pb, False{}}) == True{}: Bool} -> {Crit.wf(~V, Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, zb), 1n+pb) == True{}: Bool}) -> ({Nat.is_lt(pb, pa) == True{}: Bool} -> {Crit.all(~V, ~Place, ~Place.has, Crit.Fork{ra, pa, ea, za, oa}, Place{rb, pb, True{}}) == True{}: Bool} -> {Crit.wf(~V, Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, ob), 1n+pb) == True{}: Bool}) -> {Crit.wf(~V, Crit.union.at(~V, ~j, c, ra, pa, ea, rb, pb, eb, zs => os => Crit.mk(V, Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, rb), pa, Shared.Maybe.join(~V, ~j, ea, eb), zs, os), u2 => Crit.union(~V, ~j, za, zb), u2 => Crit.union(~V, ~j, oa, ob), u2 => Crit.union(~V, ~j, za, Crit.Fork{rb, pb, eb, zb, ob}), u2 => Crit.union(~V, ~j, oa, Crit.Fork{rb, pb, eb, zb, ob}), u2 => Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, zb), u2 => Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, ob), za, oa, zb, ob), lo) == True{}: Bool}:
+  match c:
+    case EQ{}:
+      hc => +ha => +hb => +hn => i1 => i2 => i3 => i4 => i5 => i6 =>
+        +eqp = Crit.cmp_eq(pa, pb)(hc)
+        +hab = Crit.above_eq(Key.diff(ra, rb), pa)(Equal.trans(Bool, Bool.and(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pa)), Bool.and(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pb)), False{}, Equal.cong(Nat, Bool, t => Bool.and(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), t)), pa, pb, eqp), hn))
+        +arb = Key.agree_sym(ra, rb, pa)(Crit.not_above_agree(Key.diff(ra, rb), pa)(hab))
+        +azb = Crit.all_pos(~V, zb, rb, pb, pa, False{})(Equal.sym(Nat, pa, pb, eqp))(Crit.wf.all_z(~V, rb, pb, eb, zb, ob, lo)(hb))
+        +aob = Crit.all_pos(~V, ob, rb, pb, pa, True{})(Equal.sym(Nat, pa, pb, eqp))(Crit.wf.all_o(~V, rb, pb, eb, zb, ob, lo)(hb))
+        Crit.mk_wf(~V, Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, rb), pa, Shared.Maybe.join(~V, ~j, ea, eb), Crit.union(~V, ~j, za, zb), Crit.union(~V, ~j, oa, ob), lo)(Crit.wf.le(~V, ra, pa, ea, za, oa, lo)(ha))(
+          Crit.rep_or_union(~V, ~j, ra, pa, ea, za, rb, pb, eb, zb)(Crit.wf.rep_ok(~V, ra, pa, ea, za, oa, lo)(ha))(Crit.wf.rep_ok(~V, rb, pb, eb, zb, ob, lo)(hb))(eqp)
+        )(Crit.union_all(~V, ~j, ~Place, ~Place.has, za, zb, Place{Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, rb), pa, False{}})(Crit.place_shift(~V, za, ra, Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, rb), pa, False{})(Crit.pick_agree_l(Maybe.is_some(&2, V, ea), ra, rb, pa)(arb))(Crit.wf.all_z(~V, ra, pa, ea, za, oa, lo)(ha)))(Crit.place_shift(~V, zb, rb, Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, rb), pa, False{})(Crit.pick_agree_r(Maybe.is_some(&2, V, ea), ra, rb, pa)(arb))(azb)))(Crit.union_all(~V, ~j, ~Place, ~Place.has, oa, ob, Place{Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, rb), pa, True{}})(Crit.place_shift(~V, oa, ra, Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, rb), pa, True{})(Crit.pick_agree_l(Maybe.is_some(&2, V, ea), ra, rb, pa)(arb))(Crit.wf.all_o(~V, ra, pa, ea, za, oa, lo)(ha)))(Crit.place_shift(~V, ob, rb, Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, rb), pa, True{})(Crit.pick_agree_r(Maybe.is_some(&2, V, ea), ra, rb, pa)(arb))(aob)))(i1(eqp))(i2(eqp))
+    case LT{}:
+      hc => +ha => +hb => hn => i1 => i2 => i3 => i4 => i5 => i6 =>
+        +lt = Crit.cmp_lt(pa, pb)(hc)
+        +hab = Crit.above_lt_left(Key.diff(ra, rb), pa, pb)(hn)(lt)
+        +allb = Crit.fork_place(~V, rb, pb, eb, zb, ob, lo, ra, pa, Cur.bit(Key.at(rb, pa)))(hb)(lt)(Crit.not_above_agree(Key.diff(ra, rb), pa)(hab))(Crit.side_of(rb, pa, Cur.bit(Key.at(rb, pa)))(Crit.rep_not_done(~V, rb, pb, eb, zb, ob, lo, pa)(hb)(lt))({==}))
+        Shared.Bool.when_cases(
+          Crit<V>,
+          t => {Crit.wf(~V, t, lo) == True{}: Bool},
+          Key.bit(rb, pa),
+          u => Crit.mk(V, ra, pa, ea, za, Crit.union(~V, ~j, oa, Crit.Fork{rb, pb, eb, zb, ob})),
+          u => Crit.mk(V, ra, pa, ea, Crit.union(~V, ~j, za, Crit.Fork{rb, pb, eb, zb, ob}), oa),
+          +t3 =>
+          +allt = Crit.all_place_b(~V, Crit.Fork{rb, pb, eb, zb, ob}, ra, pa, Key.bit(rb, pa), True{})(t3)(allb)
+          Crit.mk_wf(~V, ra, pa, ea, za, Crit.union(~V, ~j, oa, Crit.Fork{rb, pb, eb, zb, ob}), lo)(Crit.wf.le(~V, ra, pa, ea, za, oa, lo)(ha))(Crit.rep_or(V, ra, pa, ea, za)(Crit.wf.rep_ok(~V, ra, pa, ea, za, oa, lo)(ha)))(Crit.wf.all_z(~V, ra, pa, ea, za, oa, lo)(ha))(Crit.union_all(~V, ~j, ~Place, ~Place.has, oa, Crit.Fork{rb, pb, eb, zb, ob}, Place{ra, pa, True{}})(Crit.wf.all_o(~V, ra, pa, ea, za, oa, lo)(ha))(allt))(Crit.wf.wf_z(~V, ra, pa, ea, za, oa, lo)(ha))(i4(lt)(allt)),
+          +t3 =>
+          +allt = Crit.all_place_b(~V, Crit.Fork{rb, pb, eb, zb, ob}, ra, pa, Key.bit(rb, pa), False{})(t3)(allb)
+          Crit.mk_wf(~V, ra, pa, ea, Crit.union(~V, ~j, za, Crit.Fork{rb, pb, eb, zb, ob}), oa, lo)(Crit.wf.le(~V, ra, pa, ea, za, oa, lo)(ha))(Crit.rep_or(V, ra, pa, ea, za)(Crit.wf.rep_ok(~V, ra, pa, ea, za, oa, lo)(ha)))(Crit.union_all(~V, ~j, ~Place, ~Place.has, za, Crit.Fork{rb, pb, eb, zb, ob}, Place{ra, pa, False{}})(Crit.wf.all_z(~V, ra, pa, ea, za, oa, lo)(ha))(allt))(Crit.wf.all_o(~V, ra, pa, ea, za, oa, lo)(ha))(i3(lt)(allt))(Crit.wf.wf_o(~V, ra, pa, ea, za, oa, lo)(ha))
+        )
+    case GT{}:
+      hc => +ha => +hb => hn => i1 => i2 => i3 => i4 => i5 => i6 =>
+        +gt = Crit.cmp_gt(pa, pb)(hc)
+        +hab = Crit.above_lt_right(Key.diff(ra, rb), pa, pb)(hn)(gt)
+        +alla = Crit.fork_place(~V, ra, pa, ea, za, oa, lo, rb, pb, Cur.bit(Key.at(ra, pb)))(ha)(gt)(Key.agree_sym(ra, rb, pb)(Crit.not_above_agree(Key.diff(ra, rb), pb)(hab)))(Crit.side_of(ra, pb, Cur.bit(Key.at(ra, pb)))(Crit.rep_not_done(~V, ra, pa, ea, za, oa, lo, pb)(ha)(gt))({==}))
+        Shared.Bool.when_cases(
+          Crit<V>,
+          t => {Crit.wf(~V, t, lo) == True{}: Bool},
+          Key.bit(ra, pb),
+          u => Crit.mk(V, rb, pb, eb, zb, Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, ob)),
+          u => Crit.mk(V, rb, pb, eb, Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, zb), ob),
+          +t3 =>
+          +allt = Crit.all_place_b(~V, Crit.Fork{ra, pa, ea, za, oa}, rb, pb, Key.bit(ra, pb), True{})(t3)(alla)
+          Crit.mk_wf(~V, rb, pb, eb, zb, Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, ob), lo)(Crit.wf.le(~V, rb, pb, eb, zb, ob, lo)(hb))(Crit.rep_or(V, rb, pb, eb, zb)(Crit.wf.rep_ok(~V, rb, pb, eb, zb, ob, lo)(hb)))(Crit.wf.all_z(~V, rb, pb, eb, zb, ob, lo)(hb))(Crit.union_all(~V, ~j, ~Place, ~Place.has, Crit.Fork{ra, pa, ea, za, oa}, ob, Place{rb, pb, True{}})(allt)(Crit.wf.all_o(~V, rb, pb, eb, zb, ob, lo)(hb)))(Crit.wf.wf_z(~V, rb, pb, eb, zb, ob, lo)(hb))(i6(gt)(allt)),
+          +t3 =>
+          +allt = Crit.all_place_b(~V, Crit.Fork{ra, pa, ea, za, oa}, rb, pb, Key.bit(ra, pb), False{})(t3)(alla)
+          Crit.mk_wf(~V, rb, pb, eb, Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, zb), ob, lo)(Crit.wf.le(~V, rb, pb, eb, zb, ob, lo)(hb))(Crit.rep_or(V, rb, pb, eb, zb)(Crit.wf.rep_ok(~V, rb, pb, eb, zb, ob, lo)(hb)))(Crit.union_all(~V, ~j, ~Place, ~Place.has, Crit.Fork{ra, pa, ea, za, oa}, zb, Place{rb, pb, False{}})(allt)(Crit.wf.all_z(~V, rb, pb, eb, zb, ob, lo)(hb)))(Crit.wf.all_o(~V, rb, pb, eb, zb, ob, lo)(hb))(i5(gt)(allt))(Crit.wf.wf_o(~V, rb, pb, eb, zb, ob, lo)(hb))
+        )
+
+# the union of two well formed maps whose keys fit lo is well formed
+def Crit.union_go_wf(~V: Data, ~j: V -> V -> V, +a: Crit<V>, +b: Crit<V>, +lo: Nat, +r: List<&2, U32>, +s: Bool) -> {Crit.wf(~V, a, lo) == True{}: Bool} -> {Crit.wf(~V, b, lo) == True{}: Bool} -> {Crit.fits(~V, a, b, lo, r, s) == True{}: Bool} -> {Crit.wf(~V, Crit.union(~V, ~j, a, b), lo) == True{}: Bool}:
+  match a b:
+    case Crit.Tip{} Crit.Tip{}:
+      ha => hb => hf => {==}
+    case Crit.Tip{} Crit.Leaf{k2, w2}:
+      ha => hb => hf => hb
+    case Crit.Tip{} Crit.Fork{r2, p2, e2, z2, o2}:
+      ha => hb => hf => hb
+    case Crit.Leaf{k, v} Crit.Tip{}:
+      ha => hb => hf => ha
+    case Crit.Fork{ra, pa, ea, za, oa} Crit.Tip{}:
+      ha => hb => hf => ha
+    case Crit.Leaf{+k, +v} Crit.Leaf{+k2, +w}:
+      ha => hb => hf => Crit.upsert_fit(~V, ~(w => x => j(x, w)), Crit.Leaf{k2, w}, lo, k, v, r, s)(hb)(hf)
+    case Crit.Leaf{+k, +v} Crit.Fork{+rb, +pb, +eb, +zb, +ob}:
+      ha => hb => hf => Crit.upsert_fit(~V, ~(w => x => j(x, w)), Crit.Fork{rb, pb, eb, zb, ob}, lo, k, v, r, s)(hb)(hf)
+    case Crit.Fork{+ra, +pa, +ea, +za, +oa} Crit.Leaf{+k, +w}:
+      ha => hb => hf => Crit.upsert_fit(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, lo, k, w, r, s)(ha)(Crit.fits_swap(~V, Crit.Fork{ra, pa, ea, za, oa}, Crit.Leaf{k, w}, lo, r, s)(hf))
+    case Crit.Fork{+ra, +pa, +ea, +za, +oa} Crit.Fork{+rb, +pb, +eb, +zb, +ob}:
+      +ha => +hb => +hf => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.wf(~V, t, lo) == True{}: Bool},
+        Bool.and(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pb)),
+        u => Crit.join(V, Crit.Fork{ra, pa, ea, za, oa}, Crit.Fork{rb, pb, eb, zb, ob}, Maybe.default(&2, Nat, Key.diff(ra, rb), 0n)),
+        u => Crit.union.at(~V, ~j, Nat.cmp(pa, pb), ra, pa, ea, rb, pb, eb, zs => os => Crit.mk(V, Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, rb), pa, Shared.Maybe.join(~V, ~j, ea, eb), zs, os), u2 => Crit.union(~V, ~j, za, zb), u2 => Crit.union(~V, ~j, oa, ob), u2 => Crit.union(~V, ~j, za, Crit.Fork{rb, pb, eb, zb, ob}), u2 => Crit.union(~V, ~j, oa, Crit.Fork{rb, pb, eb, zb, ob}), u2 => Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, zb), u2 => Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, ob), za, oa, zb, ob),
+        +t =>
+          +sd = Crit.above_some(Key.diff(ra, rb), pa)(Shared.Bool.and_true_left(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pb))(t))
+          Crit.join_wf_ff(~V, ra, pa, ea, za, oa, rb, pb, eb, zb, ob, lo, lo, lo, Maybe.default(&2, Nat, Key.diff(ra, rb), 0n))(ha)(hb)(
+            Equal.trans(Bool, Bits.agree(Some{Maybe.default(&2, Nat, Key.diff(ra, rb), 0n)}, lo), Bits.agree(Key.diff(ra, rb), lo), True{}, Equal.cong(Maybe<&2, Nat>, Bool, q => Bits.agree(q, lo), Some{Maybe.default(&2, Nat, Key.diff(ra, rb), 0n)}, Key.diff(ra, rb), Equal.sym(Maybe<&2, Nat>, Key.diff(ra, rb), Some{Maybe.default(&2, Nat, Key.diff(ra, rb), 0n)}, sd)), Crit.fit_le(~V, ra, pa, ea, za, oa, rb, pb, eb, zb, ob, lo, r, s)(ha)(hb)(hf))
+          )(Crit.above_lt(Key.diff(ra, rb), pa, Maybe.default(&2, Nat, Key.diff(ra, rb), 0n))(sd)(Shared.Bool.and_true_left(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pb))(t)))(
+            Crit.above_lt(Key.diff(ra, rb), pb, Maybe.default(&2, Nat, Key.diff(ra, rb), 0n))(sd)(Shared.Bool.and_true_right(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pb))(t))
+          )(sd),
+        +t => Crit.union_at_wf(~V, ~j, ra, pa, ea, za, oa, rb, pb, eb, zb, ob, lo, Nat.cmp(pa, pb))({==})(ha)(hb)(t)(
+          +eqp => Crit.union_go_wf(~V, ~j, za, zb, 1n+pa, ra, False{})(Crit.wf.wf_z(~V, ra, pa, ea, za, oa, lo)(ha))((
+            %Equal.sym(Nat, pa, pb, eqp): {Crit.wf(~V, zb, 1n+_) == True{}: Bool}
+            Crit.wf.wf_z(~V, rb, pb, eb, zb, ob, lo)(hb)
+          ))(
+            Crit.and_true(Crit.all(~V, ~Place, ~Place.has, za, Place{ra, pa, False{}}), Crit.all(~V, ~Place, ~Place.has, zb, Place{ra, pa, False{}}))(Crit.wf.all_z(~V, ra, pa, ea, za, oa, lo)(ha))(
+              Crit.place_shift(~V, zb, rb, ra, pa, False{})(Crit.not_above_agree(Key.diff(ra, rb), pa)(Crit.above_eq(Key.diff(ra, rb), pa)(Equal.trans(Bool, Bool.and(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pa)), Bool.and(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pb)), False{}, Equal.cong(Nat, Bool, q => Bool.and(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), q)), pa, pb, eqp), t))))((
+                %Equal.sym(Nat, pa, pb, eqp): {Crit.all(~V, ~Place, ~Place.has, zb, Place{rb, _, False{}}) == True{}: Bool}
+                Crit.wf.all_z(~V, rb, pb, eb, zb, ob, lo)(hb)
+              ))
+            )
+          )
+        )(
+          +eqp => Crit.union_go_wf(~V, ~j, oa, ob, 1n+pa, ra, True{})(Crit.wf.wf_o(~V, ra, pa, ea, za, oa, lo)(ha))((
+            %Equal.sym(Nat, pa, pb, eqp): {Crit.wf(~V, ob, 1n+_) == True{}: Bool}
+            Crit.wf.wf_o(~V, rb, pb, eb, zb, ob, lo)(hb)
+          ))(
+            Crit.and_true(Crit.all(~V, ~Place, ~Place.has, oa, Place{ra, pa, True{}}), Crit.all(~V, ~Place, ~Place.has, ob, Place{ra, pa, True{}}))(Crit.wf.all_o(~V, ra, pa, ea, za, oa, lo)(ha))(
+              Crit.place_shift(~V, ob, rb, ra, pa, True{})(Crit.not_above_agree(Key.diff(ra, rb), pa)(Crit.above_eq(Key.diff(ra, rb), pa)(Equal.trans(Bool, Bool.and(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pa)), Bool.and(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pb)), False{}, Equal.cong(Nat, Bool, q => Bool.and(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), q)), pa, pb, eqp), t))))((
+                %Equal.sym(Nat, pa, pb, eqp): {Crit.all(~V, ~Place, ~Place.has, ob, Place{rb, _, True{}}) == True{}: Bool}
+                Crit.wf.all_o(~V, rb, pb, eb, zb, ob, lo)(hb)
+              ))
+            )
+          )
+        )(
+          lt => +ab => Crit.union_go_wf(~V, ~j, za, b, 1n+pa, ra, False{})(Crit.wf.wf_z(~V, ra, pa, ea, za, oa, lo)(ha))(Crit.wf_lower(~V, rb, pb, eb, zb, ob, lo, 1n+pa)(hb)(Crit.lt_le_succ(pa, pb)(lt)))(
+            Crit.and_true(Crit.all(~V, ~Place, ~Place.has, za, Place{ra, pa, False{}}), Crit.all(~V, ~Place, ~Place.has, Crit.Fork{rb, pb, eb, zb, ob}, Place{ra, pa, False{}}))(Crit.wf.all_z(~V, ra, pa, ea, za, oa, lo)(ha))(ab)
+          )
+        )(
+          lt => +ab => Crit.union_go_wf(~V, ~j, oa, b, 1n+pa, ra, True{})(Crit.wf.wf_o(~V, ra, pa, ea, za, oa, lo)(ha))(Crit.wf_lower(~V, rb, pb, eb, zb, ob, lo, 1n+pa)(hb)(Crit.lt_le_succ(pa, pb)(lt)))(
+            Crit.and_true(Crit.all(~V, ~Place, ~Place.has, oa, Place{ra, pa, True{}}), Crit.all(~V, ~Place, ~Place.has, Crit.Fork{rb, pb, eb, zb, ob}, Place{ra, pa, True{}}))(Crit.wf.all_o(~V, ra, pa, ea, za, oa, lo)(ha))(ab)
+          )
+        )(
+          gt => +aa => Crit.union_go_wf(~V, ~j, a, zb, 1n+pb, rb, False{})(Crit.wf_lower(~V, ra, pa, ea, za, oa, lo, 1n+pb)(ha)(Crit.lt_le_succ(pb, pa)(gt)))(Crit.wf.wf_z(~V, rb, pb, eb, zb, ob, lo)(hb))(
+            Crit.and_true(Crit.all(~V, ~Place, ~Place.has, Crit.Fork{ra, pa, ea, za, oa}, Place{rb, pb, False{}}), Crit.all(~V, ~Place, ~Place.has, zb, Place{rb, pb, False{}}))(aa)(Crit.wf.all_z(~V, rb, pb, eb, zb, ob, lo)(hb))
+          )
+        )(
+          gt => +aa => Crit.union_go_wf(~V, ~j, a, ob, 1n+pb, rb, True{})(Crit.wf_lower(~V, ra, pa, ea, za, oa, lo, 1n+pb)(ha)(Crit.lt_le_succ(pb, pa)(gt)))(Crit.wf.wf_o(~V, rb, pb, eb, zb, ob, lo)(hb))(
+            Crit.and_true(Crit.all(~V, ~Place, ~Place.has, Crit.Fork{ra, pa, ea, za, oa}, Place{rb, pb, True{}}), Crit.all(~V, ~Place, ~Place.has, ob, Place{rb, pb, True{}}))(aa)(Crit.wf.all_o(~V, rb, pb, eb, zb, ob, lo)(hb))
+          )
+        )
+      )
+
 # a union keeps maps well formed
 law Crit.union_wf:
   for ~V: Data
@@ -6084,7 +6530,7 @@ law Crit.union_wf:
   {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.wf(~V, b, 0n) == True{}: Bool} -> {Crit.wf(~V, Crit.union(~V, ~j, a, b), 0n) == True{}: Bool}
 
 def Crit.union_wf(ty, j, a, b):
-  ?TODO
+  ha => hb => Crit.union_go_wf(~ty, ~j, a, b, 0n, [], False{})(ha)(hb)({==})
 
 # what holds when a test holds, and when it does not, holds
 def Crit.bool_split(-T: Type, b: Bool) -> ({b == True{}: Bool} -> T) -> ({b == False{}: Bool} -> T) -> T:
