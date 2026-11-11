@@ -10366,6 +10366,85 @@ def Crit.under_lookup.go(~V: Data, m: Crit<V>, +p: List<&2, U32>, +k: List<&2, U
 }:
   h => Crit.under_go_lookup(~V, m, 0n, 0n, Cur.of(p), p, k)(h)({==})(Equal.sym(List<&2, Bool>, List.drop(&2, Bool, Key.bits(p), 0n), Key.bits(p), Shared.List.drop_zero(&2, Bool, Key.bits(p))))
 
+# a word built from the bits of a word is that word
+def Word.of_bits(n: Nat, w: Word(n)) -> {Word.of(n, Word.bits(n, w)) == w: Word(n)}:
+  match n:
+    case 0n:
+      match w:
+        case WNil{}:
+          {==}
+    case 1n+(+q):
+      match w:
+        case WCon{+b, +t}:
+          Equal.cong(Word(q), Word(1n+q), x => WCon{b, x}, Word.of(q, Word.bits(q, t)), t, Word.of_bits(q, t))
+
+# reversing bits before acc is reversing them, then acc
+def Bits.rev_go(xs: List<&2, Bool>, +acc: List<&2, Bool>) -> {
+  List.reverse.go(&2, Bool, xs, acc) == List.append(&2, Bool, List.reverse.go(&2, Bool, xs, []), acc): List<&2, Bool>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+h, +t}:
+      %Equal.sym(List<&2, Bool>, List.reverse.go(&2, Bool, t, h <> acc), List.append(&2, Bool, List.reverse.go(&2, Bool, t, []), h <> acc), Bits.rev_go(t, h <> acc)): {_ == List.append(&2, Bool, List.reverse.go(&2, Bool, t, [h]), acc): List<&2, Bool>}
+      %Equal.sym(List<&2, Bool>, List.reverse.go(&2, Bool, t, [h]), List.append(&2, Bool, List.reverse.go(&2, Bool, t, []), [h]), Bits.rev_go(t, [h])): {List.append(&2, Bool, List.reverse.go(&2, Bool, t, []), h <> acc) == List.append(&2, Bool, _, acc): List<&2, Bool>}
+      Equal.sym(List<&2, Bool>, List.append(&2, Bool, List.append(&2, Bool, List.reverse.go(&2, Bool, t, []), [h]), acc), List.append(&2, Bool, List.reverse.go(&2, Bool, t, []), h <> acc), Shared.List.append_assoc(Bool, List.reverse.go(&2, Bool, t, []), [h], acc))
+
+# a word built from n bits has those bits
+def Word.bits_of(n: Nat, bs: List<&2, Bool>) -> {List.length(&2, Bool, bs) == n: Nat} -> {Word.bits(n, Word.of(n, bs)) == bs: List<&2, Bool>}:
+  match n bs:
+    case 0n Nil{}:
+      h => {==}
+    case 0n Con{b, r}:
+      h => Empty.absurd({[] == b <> r: List<&2, Bool>}, Crit.zero_ne_succ(List.length(&2, Bool, r), Equal.sym(Nat, 1n+List.length(&2, Bool, r), 0n, h)))
+    case 1n+q Nil{}:
+      h => Empty.absurd({Word.bits(1n+q, Word.of(1n+q, [])) == []: List<&2, Bool>}, Crit.zero_ne_succ(q, h))
+    case 1n+q Con{+b, +r}:
+      h => Equal.cong(List<&2, Bool>, List<&2, Bool>, x => b <> x, Word.bits(q, Word.of(q, r)), r, Word.bits_of(q, r)(Equal.cong(Nat, Nat, t => Crit.pred(t), 1n+List.length(&2, Bool, r), 1n+q, h)))
+
+# a reversed list is as long
+def Bits.rev_length(xs: List<&2, Bool>, +acc: List<&2, Bool>) -> {List.length(&2, Bool, List.reverse.go(&2, Bool, xs, acc)) == Nat.add(List.length(&2, Bool, xs), List.length(&2, Bool, acc)): Nat}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+h, +t}:
+      Equal.trans(Nat, List.length(&2, Bool, List.reverse.go(&2, Bool, t, h <> acc)), Nat.add(List.length(&2, Bool, t), 1n+List.length(&2, Bool, acc)), 1n+Nat.add(List.length(&2, Bool, t), List.length(&2, Bool, acc)), Bits.rev_length(t, h <> acc), Shared.Nat.add_succ(List.length(&2, Bool, t), List.length(&2, Bool, acc)))
+
+# reversing bits twice gives them back
+def Bits.rev_rev(xs: List<&2, Bool>, +acc: List<&2, Bool>, +ys: List<&2, Bool>) -> {List.reverse.go(&2, Bool, List.reverse.go(&2, Bool, xs, acc), ys) == List.reverse.go(&2, Bool, acc, List.append(&2, Bool, xs, ys)): List<&2, Bool>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+h, +t}:
+      Bits.rev_rev(t, h <> acc, ys)
+
+# a word reversed twice is the word
+def U32.rev_rev(x: U32) -> {U32.rev(U32.rev(x)) == x: U32}:
+  match x:
+    case U32{+w}:
+      %Equal.sym(List<&2, Bool>, Word.bits(32n, Word.of(32n, List.reverse(&2, Bool, Word.bits(32n, w)))), List.reverse(&2, Bool, Word.bits(32n, w)), Word.bits_of(32n, List.reverse(&2, Bool, Word.bits(32n, w)))(
+        Equal.trans(Nat, List.length(&2, Bool, List.reverse.go(&2, Bool, Word.bits(32n, w), [])), Nat.add(List.length(&2, Bool, Word.bits(32n, w)), 0n), 32n, Bits.rev_length(Word.bits(32n, w), []), Equal.trans(Nat, Nat.add(List.length(&2, Bool, Word.bits(32n, w)), 0n), List.length(&2, Bool, Word.bits(32n, w)), 32n, Shared.Nat.add_zero(List.length(&2, Bool, Word.bits(32n, w))), Word.bits_length(32n, w)))
+      )): {U32{Word.of(32n, List.reverse(&2, Bool, _))} == U32{w}: U32}
+      %Equal.sym(List<&2, Bool>, List.reverse.go(&2, Bool, List.reverse.go(&2, Bool, Word.bits(32n, w), []), []), List.reverse.go(&2, Bool, [], List.append(&2, Bool, Word.bits(32n, w), [])), Bits.rev_rev(Word.bits(32n, w), [], [])): {U32{Word.of(32n, _)} == U32{w}: U32}
+      %Equal.sym(List<&2, Bool>, List.append(&2, Bool, Word.bits(32n, w), []), Word.bits(32n, w), Shared.List.append_nil(Bool, Word.bits(32n, w))): {U32{Word.of(32n, _)} == U32{w}: U32}
+      Equal.cong(Word(32n), U32, y => U32{y}, Word.of(32n, Word.bits(32n, w)), w, Word.of_bits(32n, w))
+
+# words reversed after words reversed are the words, then the rest reversed
+def Words.rev_rev(ws: List<&2, U32>, +r: List<&2, U32>) -> {Words.rev(Words.rev(ws, r), []) == List.append(&2, U32, ws, Words.rev(r, [])): List<&2, U32>}:
+  match ws:
+    case Nil{}:
+      {==}
+    case Con{+w, +rest}:
+      %U32.rev_rev(w): {U32.rev(U32.rev(w)) <> Words.rev(Words.rev(rest, r), []) == _ <> List.append(&2, U32, rest, Words.rev(r, [])): List<&2, U32>}
+      Equal.cong(List<&2, U32>, List<&2, U32>, t => U32.rev(U32.rev(w)) <> t, Words.rev(Words.rev(rest, r), []), List.append(&2, U32, rest, Words.rev(r, [])), Words.rev_rev(rest, r))
+
+# Key.ord_value, with r used more than once
+def Key.ord_value.go(+n: Nat, +r: List<&2, U32>) -> {Key.ord.value(Key.ord(n, r)) == Some{n}: Maybe<&2, Nat>}:
+  %Equal.sym(List<&2, U32>, Words.rev(Words.rev(Codes.Code.count(n, []), r), []), List.append(&2, U32, Codes.Code.count(n, []), Words.rev(r, [])), Words.rev_rev(Codes.Code.count(n, []), r)): {Key.ord.of(Codes.Code.count.read(_)) == Some{n}: Maybe<&2, Nat>}
+  %Equal.sym(List<&2, U32>, List.append(&2, U32, Codes.Code.count.go(n, 0, []), Words.rev(r, [])), Codes.Code.count.go(n, 0, Words.rev(r, [])), Codes.Code.count_append(n, 0, [], Words.rev(r, []))): {Key.ord.of(Codes.Code.count.read(_)) == Some{n}: Maybe<&2, Nat>}
+  %Equal.sym(Maybe<&2, Codes.Read<Nat>>, Codes.Code.count.read(Codes.Code.count(n, Words.rev(r, []))), Some{Codes.Read{n, Words.rev(r, [])}}, Codes.Code.count_read(n, Words.rev(r, []))): {Key.ord.of(_) == Some{n}: Maybe<&2, Nat>}
+  {==}
+
 # Laws of prefixes and order
 
 # a part under a prefix is well formed
@@ -10430,7 +10509,7 @@ law Key.ord_value:
   {Key.ord.value(Key.ord(n, r)) == Some{n}: Maybe<&2, Nat>}
 
 def Key.ord_value(n, r):
-  ?TODO
+  Key.ord_value.go(n, r)
 
 # the keys of numbers are in the order of the numbers, whatever follows them
 law Key.ord_lt:
