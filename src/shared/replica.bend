@@ -1,6 +1,9 @@
 import Base
 import ./shared/ledger.bend as Ledgers
 import ./shared/shared/depot.bend as Depots
+import ./shared/shared/quorum.bend as Quorums
+import ./shared/shared/text.bend as Texts
+import ./shared/shared/shared/cell.bend as Cells
 import ./shared/shared/shared/code.bend as Codes
 import ./shared/shared/shared/hash.bend as Hashes
 import ./shared/shared/shared/seal.bend as Seals
@@ -3410,6 +3413,212 @@ def Hist.kern(-mach: Machine(), -d: Led(mach), kern: Kernel(mach, d)) -> Kernel.
   match kern:
     case Tuple{f, Tuple{s, w}}:
       s
+
+# Safety of rounds
+# ----------------
+# Two majorities of the voters of a height share a voter: the voters whose
+# passes allow a step, and the voters that cast the step of an earlier round.
+
+# the ballots of the voters os at the place w, for the step v and against it,
+# count the voters
+def Safe.yes_no.at(+h: Bool, a: Nat, b: Nat) -> {
+  Nat.add(Shared.Nat.add_if(h, a), Shared.Nat.add_if(Bool.not(h), b)) == 1n+Nat.add(a, b): Nat
+}:
+  match h:
+    case True{}:
+      {==}
+    case False{}:
+      Shared.Nat.add_succ(a, b)
+
+# the ballots for the step v and against it count the voters os
+def Safe.yes_no(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +w: Ledgers.Place,
+  os: List<&2, String>,
+  +v: Ledgers.Step
+) -> {
+  Nat.add(
+    Quorums.Quorum.yes(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, os), v),
+    Quorums.Quorum.no(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, os), v)
+  )
+    == List.length(&2, String, os): Nat
+}:
+  match os:
+    case Nil{}:
+      {==}
+    case Con{o, +r}:
+      +y = Quorums.Quorum.yes(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, r), v)
+      +n = Quorums.Quorum.no(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, r), v)
+      Equal.trans(
+        Nat,
+        Nat.add(
+          Shared.Nat.add_if(
+            Quorums.Quorum.hit(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cell(~Machine.Q(mach), ~Led.kind(mach, d), l, w, o), v),
+            y
+          ),
+          Shared.Nat.add_if(
+            Bool.not(
+              Quorums.Quorum.hit(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cell(~Machine.Q(mach), ~Led.kind(mach, d), l, w, o), v)
+            ),
+            n
+          )
+        ),
+        1n+Nat.add(y, n),
+        1n+List.length(&2, String, r),
+        Safe.yes_no.at(
+          Quorums.Quorum.hit(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cell(~Machine.Q(mach), ~Led.kind(mach, d), l, w, o), v),
+          y,
+          n
+        ),
+        Equal.cong(Nat, Nat, x => 1n+x, Nat.add(y, n), List.length(&2, String, r), Safe.yes_no(~mach, ~d, l, w, r, v))
+      )
+
+# one more voter, for or against: the bound grows by one
+def Safe.count_step(+hb: Bool, a: Nat, b: Nat, n: Nat) -> {Nat.is_le(n, Nat.add(a, b)) == True{}: Bool}
+  -> {Nat.is_le(1n+n, Nat.add(Shared.Nat.add_if(Bool.not(hb), a), Shared.Nat.add_if(hb, b))) == True{}: Bool}:
+  match hb:
+    case True{}:
+      h =>
+        %Equal.sym(Nat, Nat.add(a, 1n+b), 1n+Nat.add(a, b), Shared.Nat.add_succ(a, b)): {
+          Nat.is_le(1n+n, _) == True{}: Bool
+        }
+        h
+    case False{}:
+      h => h
+
+# a voter more against: the bound stays
+def Safe.count_skip(+hb: Bool, +a: Nat, +c: Nat, n: Nat) -> {Nat.is_le(n, Nat.add(a, c)) == True{}: Bool}
+  -> {Nat.is_le(n, Nat.add(Shared.Nat.add_if(hb, a), c)) == True{}: Bool}:
+  h => Shared.Nat.le_trans(
+    n,
+    Nat.add(a, c),
+    Nat.add(Shared.Nat.add_if(hb, a), c)
+  )(h)(
+    Shared.Nat.add_le_right(
+      Shared.Nat.add_if(hb, a),
+      a,
+      c
+    )(Shared.Nat.le_add_if(hb, a, a)(Shared.Nat.le_refl(a)))
+  )
+
+# some of the voters os are at most the voters os against v, and those of
+# them for v
+def Safe.sub_count(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +w: Ledgers.Place,
+  os: List<&2, String>,
+  from: List<&2, String>,
+  +v: Ledgers.Step
+) -> {Voters.sub(os, from) == True{}: Bool} -> {
+  Nat.is_le(
+    List.length(&2, String, from),
+    Nat.add(
+      Quorums.Quorum.no(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, os), v),
+      Quorums.Quorum.yes(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, from), v)
+    )
+  )
+    == True{}: Bool
+}:
+  match os from:
+    case Nil{} Nil{}:
+      h => {==}
+    case Nil{} Con{f, fs}:
+      h => Empty.absurd(
+        {
+          Nat.is_le(
+            List.length(&2, String, f <> fs),
+            Nat.add(
+              0n,
+              Quorums.Quorum.yes(
+                ~Ledgers.Step,
+                ~Ledgers.Step.is_eq,
+                Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, f <> fs),
+                v
+              )
+            )
+          )
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(h)
+      )
+    case Con{o, r} Nil{}:
+      h => Shared.Nat.le_zero(
+        Nat.add(
+          Quorums.Quorum.no(
+            ~Ledgers.Step,
+            ~Ledgers.Step.is_eq,
+            Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, o <> r),
+            v
+          ),
+          0n
+        )
+      )
+    case Con{+o, +r} Con{+f, +fs}:
+      Shared.Bool.when_cases(
+        Bool,
+        x => {x == True{}: Bool} -> {
+          Nat.is_le(
+            List.length(&2, String, f <> fs),
+            Nat.add(
+              Quorums.Quorum.no(
+                ~Ledgers.Step,
+                ~Ledgers.Step.is_eq,
+                Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, o <> r),
+                v
+              ),
+              Quorums.Quorum.yes(
+                ~Ledgers.Step,
+                ~Ledgers.Step.is_eq,
+                Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, f <> fs),
+                v
+              )
+            )
+          )
+            == True{}: Bool
+        },
+        String.eq(f, o),
+        u => Voters.sub(r, fs),
+        u => Voters.sub(r, f <> fs),
+        ef => h =>
+          %Equal.sym(String, f, o, Texts.String.eq_sound(f, o)(ef)): {
+            Nat.is_le(
+              1n+List.length(&2, String, fs),
+              Nat.add(
+                Quorums.Quorum.no(
+                  ~Ledgers.Step,
+                  ~Ledgers.Step.is_eq,
+                  Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, o <> r),
+                  v
+                ),
+                Quorums.Quorum.yes(
+                  ~Ledgers.Step,
+                  ~Ledgers.Step.is_eq,
+                  Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, _ <> fs),
+                  v
+                )
+              )
+            )
+              == True{}: Bool
+          }
+          Safe.count_step(
+            Quorums.Quorum.hit(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cell(~Machine.Q(mach), ~Led.kind(mach, d), l, w, o), v),
+            Quorums.Quorum.no(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, r), v),
+            Quorums.Quorum.yes(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, fs), v),
+            List.length(&2, String, fs)
+          )(Safe.sub_count(~mach, ~d, l, w, r, fs, v)(h)),
+        ef => h => Safe.count_skip(
+          Bool.not(
+            Quorums.Quorum.hit(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cell(~Machine.Q(mach), ~Led.kind(mach, d), l, w, o), v)
+          ),
+          Quorums.Quorum.no(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, r), v),
+          Quorums.Quorum.yes(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, f <> fs), v),
+          List.length(&2, String, f <> fs)
+        )(Safe.sub_count(~mach, ~d, l, w, r, f <> fs, v)(h))
+      )
 
 # one history: the tip of a line after a number of steps stays as the ledger
 # grows, while its ballots are honest. So two replicas whose ledgers an
