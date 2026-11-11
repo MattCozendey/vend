@@ -52,6 +52,14 @@ def Look.known(l: Look) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
 def Look.is_final(l: Look) -> Bool:
   Maybe.is_some(&2, Maybe<&2, List<&2, U32>>, Look.known(l))
 
+# the read l found that the tree does not hold the key
+def Look.is_absent(l: Look) -> Bool:
+  match l:
+    case Look.Absent{}:
+      True{}
+    case _:
+      False{}
+
 # what a read of a key gives after a write of the value m there (none: a
 # delete)
 def Look.of(m: Maybe<&2, List<&2, U32>>) -> Look:
@@ -565,11 +573,14 @@ def Mst.pick(xs: List<&2, Item>, prev: Maybe<&2, Hashes.Hash>, +k: List<&2, U32>
         u => Shared.Bool.when(Pick, Cmp.is_eq(c), w => Pick.Hit{iv}, w => Mst.pick(rest, r, k))
       )
 
-# the read that a pick gives: a value, or the read of its subtree (go)
-def Mst.look.pick(p: Pick, go: Maybe<&2, Hashes.Hash> -> Look) -> Look:
+# the read that a pick in the node of the hash h, of the level l, gives for
+# the key k: its value, when the node is of the level of k (else the tree is
+# not in its one shape, and the read cannot tell); or the read of its subtree
+# (go)
+def Mst.look.pick(p: Pick, h: Hashes.Hash, l: Nat, k: List<&2, U32>, go: Maybe<&2, Hashes.Hash> -> Look) -> Look:
   match p:
     case Pick.Hit{v}:
-      Look.Found{v}
+      Shared.Bool.when(Look, Nat.is_eq(Key.level(k), l), u => Look.Found{v}, u => Look.Missing{h})
     case Pick.Down{m}:
       go(m)
 
@@ -584,8 +595,8 @@ def Mst.look.at(
   match m:
     case None{}:
       Look.Missing{h}
-    case Some{Node{l, left, xs}}:
-      Mst.look.pick(Mst.pick(xs, left, k), go(l))
+    case Some{Node{+l, left, xs}}:
+      Mst.look.pick(Mst.pick(xs, left, k), h, l, k, go(l))
 
 # the read of the key k in the tree of the root m, below the level up, at
 # most f levels down
@@ -665,6 +676,14 @@ def Part.gap(p: Part) -> Maybe<&2, Hashes.Hash>:
     case Part{b, g, a}:
       g
 
+# the part p cuts its node at a key k that the node holds
+def Part.hits(p: Part, k: List<&2, U32>) -> Bool:
+  match p:
+    case Part{b, g, Con{Item{ik, iv, r}, rest}}:
+      Cmp.is_eq(Key.cmp(ik, k))
+    case Part{b, g, Nil{}}:
+      False{}
+
 # a node's items before a place, last first, with the subtree there set to
 # m, in order, then the items after
 def Mst.rejoin(before: List<&2, Item>, m: Maybe<&2, Hashes.Hash>, after: List<&2, Item>) -> List<&2, Item>:
@@ -711,10 +730,16 @@ def Mst.split.at(
       None{}
     case Some{Node{+l, +left, xs}}:
       +p = Mst.part(xs, left, k, [])
-      Mst.split.done(l, left, p, go(l)(Part.gap(p)))
+      Shared.Bool.when(
+        Maybe<&2, Halves>,
+        Part.hits(p, k),
+        u => None{},
+        u => Mst.split.done(l, left, p, go(l)(Part.gap(p)))
+      )
 
 # the tree of the root m, below the level up, split at the key k, which it
-# lacks, at most f levels down
+# lacks, at most f levels down (none: a node holds k, so the tree is not in
+# its one shape)
 def Mst.split(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -928,7 +953,8 @@ def Mst.with_gap(+l: Nat, +left: Maybe<&2, Hashes.Hash>, p: Part, e: Maybe<&2, E
 # the node of the hash h, of the level l, that gets the key k of the level L,
 # by how l compares to L (c): above it a new node splits the tree (sp); at
 # it, it takes the key (spg splits its gap); below it, the key goes into the
-# gap of its part (ins)
+# gap of its part (ins). A node of another level that holds k is not in its
+# one shape: none
 def Mst.insert.node(
   c: Cmp,
   +h: Hashes.Hash,
@@ -949,7 +975,7 @@ def Mst.insert.node(
       Mst.insert.here(l, left, k, v, Mst.part(xs, left, k, []), spg(l))
     case GT{}:
       +p = Mst.part(xs, left, k, [])
-      Mst.with_gap(l, left, p, ins(l)(Part.gap(p)))
+      Shared.Bool.when(Maybe<&2, Edit>, Part.hits(p, k), u => None{}, u => Mst.with_gap(l, left, p, ins(l)(Part.gap(p))))
 
 # the node m of the hash h with the key k of the level L bound to v
 def Mst.insert.at(
@@ -998,15 +1024,23 @@ def Mst.insert(
         u2 => c => Mst.insert(~S, ~fetch, p, s, u2, c, k, v, L)
       )
 
+# the tree of the hash h, unchanged, once a read of k in its subtree m, below
+# the level l, finds that it is absent (lk reads); else none: the tree holds
+# k where it does not belong, or the read cannot tell
+def Mst.delete.none(+h: Hashes.Hash, l: Nat, m: Maybe<&2, Hashes.Hash>, lk: Nat -> Maybe<&2, Hashes.Hash> -> Look) -> Maybe<&2, Edit>:
+  Shared.Maybe.when(Edit, Look.is_absent(lk(l)(m)), u => Some{Edit{Some{h}, []}})
+
 # a node of the level l, split at k by its part p, without the key k: the two
-# subtrees beside k merge (mg); a node that lacks k stays (h)
+# subtrees beside k merge (mg); a node that lacks k stays (h), once its gap
+# lacks k too (lk)
 def Mst.delete.here(
   +h: Hashes.Hash,
   +l: Nat,
   +left: Maybe<&2, Hashes.Hash>,
   +k: List<&2, U32>,
   p: Part,
-  mg: Nat -> Nat -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>
+  mg: Nat -> Nat -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  lk: Nat -> Maybe<&2, Hashes.Hash> -> Look
 ) -> Maybe<&2, Edit>:
   match p:
     case Part{+b, +g, Con{Item{+ik, iv, +r}, +rest}}:
@@ -1014,13 +1048,24 @@ def Mst.delete.here(
         Maybe<&2, Edit>,
         Cmp.is_eq(Key.cmp(ik, k)),
         u => Mst.with_gap(l, left, Part{b, g, rest}, mg(l)(l)(g)(r)),
-        u => Some{Edit{Some{h}, []}}
+        u => Mst.delete.none(h, l, g, lk)
       )
     case Part{b, g, Nil{}}:
-      Some{Edit{Some{h}, []}}
+      Mst.delete.none(h, l, g, lk)
+
+# the pick p of k in a node of the level l lacks k, and so does the subtree
+# it goes on in (lk reads)
+def Mst.delete.lacks(p: Pick, l: Nat, lk: Nat -> Maybe<&2, Hashes.Hash> -> Look) -> Bool:
+  match p:
+    case Pick.Hit{v}:
+      False{}
+    case Pick.Down{m}:
+      Look.is_absent(lk(l)(m))
 
 # the node of the hash h, of the level l, without the key k of the level L,
-# by how l compares to L (c)
+# by how l compares to L (c). Below it, k is not there, once a read (lk)
+# finds it absent; a node of another level that holds k is not in its one
+# shape: none
 def Mst.delete.node(
   c: Cmp,
   +h: Hashes.Hash,
@@ -1029,16 +1074,17 @@ def Mst.delete.node(
   xs: List<&2, Item>,
   +k: List<&2, U32>,
   mg: Nat -> Nat -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
-  del: Nat -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>
+  del: Nat -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  lk: Nat -> Maybe<&2, Hashes.Hash> -> Look
 ) -> Maybe<&2, Edit>:
   match c:
     case LT{}:
-      Some{Edit{Some{h}, []}}
+      Shared.Maybe.when(Edit, Mst.delete.lacks(Mst.pick(xs, left, k), l, lk), u => Some{Edit{Some{h}, []}})
     case EQ{}:
-      Mst.delete.here(h, l, left, k, Mst.part(xs, left, k, []), mg)
+      Mst.delete.here(h, l, left, k, Mst.part(xs, left, k, []), mg, lk)
     case GT{}:
       +p = Mst.part(xs, left, k, [])
-      Mst.with_gap(l, left, p, del(l)(Part.gap(p)))
+      Shared.Bool.when(Maybe<&2, Edit>, Part.hits(p, k), u => None{}, u => Mst.with_gap(l, left, p, del(l)(Part.gap(p))))
 
 # the node m of the hash h without the key k of the level L
 def Mst.delete.at(
@@ -1047,13 +1093,14 @@ def Mst.delete.at(
   +k: List<&2, U32>,
   +L: Nat,
   mg: Nat -> Nat -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
-  del: Nat -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>
+  del: Nat -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  lk: Nat -> Maybe<&2, Hashes.Hash> -> Look
 ) -> Maybe<&2, Edit>:
   match m:
     case None{}:
       None{}
     case Some{Node{+l, left, xs}}:
-      Mst.delete.node(Nat.cmp(l, L), h, l, left, xs, k, mg, del)
+      Mst.delete.node(Nat.cmp(l, L), h, l, left, xs, k, mg, del, lk)
 
 # the tree of the root m, below the level up, without the key k, of the level
 # L, at most f levels down
@@ -1079,7 +1126,8 @@ def Mst.delete(
         k,
         L,
         u1 => u2 => x => y => Mst.merge(~S, ~fetch, p, s, u1, u2, x, y),
-        u2 => c => Mst.delete(~S, ~fetch, p, s, u2, c, k, L)
+        u2 => c => Mst.delete(~S, ~fetch, p, s, u2, c, k, L),
+        u2 => c => Mst.look.go(~S, ~fetch, p, s, u2, c, k)
       )
 
 # the tree of the root m with the key k set to the value of m2 (none: deleted)

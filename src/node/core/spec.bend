@@ -11,7 +11,7 @@ import ../../shared/shared/shared/shared/code.bend as Codes
 import ../../shared/shared/shared/shared/hash.bend as Hashes
 import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../../shared/shared/shared/shared/side.bend as Sides
-import ../../shared/shared/shared/shared/trie.bend as Tries
+import ../../shared/shared/shared/shared/crit.bend as Crits
 import ../../shared/shared/shared/text.bend as Texts
 import ../../shared/shared/tree.bend as Trees
 import ../shared/requests.bend as Requests
@@ -1075,15 +1075,15 @@ def Groups.of(xs: List<&2, Trees.Binding>) -> List<&2, Group>:
       Shared.Maybe.cons(Group, Group.read(x), Groups.of(rest))
 
 # the key of the node n in the graph of members
-def Node.key(n: String) -> List<&2, Bool>:
-  False{} <> Tries.Trie.text(n)
+def Node.key(n: String) -> List<&2, U32>:
+  0 <> Codes.Code.text(n, [])
 
 # the key of the group g in the graph of members
-def Group.key(g: String) -> List<&2, Bool>:
-  True{} <> Tries.Trie.text(g)
+def Group.key(g: String) -> List<&2, U32>:
+  1 <> Codes.Code.text(g, [])
 
 # the key of each of the members ms
-def Members.keys(ms: List<&2, Requests.Member>) -> List<&2, List<&2, Bool>>:
+def Members.keys(ms: List<&2, Requests.Member>) -> List<&2, List<&2, U32>>:
   match ms:
     case Nil{}:
       []
@@ -1119,16 +1119,16 @@ def Groups.nodes(gs: List<&2, Group>) -> List<&2, String>:
       Members.nodes(ms, Groups.nodes(rest))
 
 # the nodes of ns that the set reach holds
-def Nodes.inside(ns: List<&2, String>, +reach: Tries.Trie<Unit>) -> List<&2, String>:
+def Nodes.inside(ns: List<&2, String>, +reach: Crits.Dict(Unit)) -> List<&2, String>:
   match ns:
     case Nil{}:
       []
     case Con{+n, rest}:
-      List.filter.put(String, n, Nodes.inside(rest, reach), Tries.Trie.has(Unit, reach, Node.key(n)))
+      List.filter.put(String, n, Nodes.inside(rest, reach), Crits.Dict.has(Unit, reach, Node.key(n)))
 
 # what the group g reaches among the groups gs: each member, and each member
 # of one, at any depth
-def Group.reach(+gs: List<&2, Group>, g: String) -> Tries.Trie<Unit>:
+def Group.reach(+gs: List<&2, Group>, g: String) -> Crits.Dict(Unit):
   Reaches.Graph.reach(Groups.graph(gs, Reaches.Graph.new()), Group.key(g))
 
 # the nodes of the group g among the groups gs, each once
@@ -1136,9 +1136,9 @@ def Group.nodes.of(+gs: List<&2, Group>, g: String) -> List<&2, String>:
   KeySets.KeySet.unique(
     ~String,
     ~String.eq,
-    ~Tries.Trie.text,
+    ~(t => Codes.Code.text(t, [])),
     Nodes.inside(Groups.nodes(gs), Group.reach(gs, g)),
-    Tries.Trie.new(String)
+    Crits.Dict.new(~String)
   )
 
 # the groups of the tree whose root is h
@@ -1164,7 +1164,7 @@ def Group.act.of(~d: Led(), l: L(d), +g: String, p: Maybe<&2, Trees.Edit>) -> Ma
         Groups.in(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(x), l), Trees.Edit.root(x)),
         gs => Shared.Bool.when(
           Maybe<&2, Replicas.Act>,
-          Tries.Trie.has(Unit, Group.reach(gs, g), Group.key(g)),
+          Crits.Dict.has(Unit, Group.reach(gs, g), Group.key(g)),
           u => Some{Replicas.Act.Stale{}},
           u => Act.put(None{}, [], Some{x})
         )
@@ -2133,11 +2133,11 @@ def Res.imports(
   )
 
 # the key of the resource n in the graph of imports
-def Name.key(n: Resources.Name) -> List<&2, Bool>:
-  Tries.Trie.text(Resources.Name.show(n))
+def Name.key(n: Resources.Name) -> List<&2, U32>:
+  Resources.Name.code(n, [])
 
 # the key of each of the resources ns
-def Names.keys(ns: List<&2, Resources.Name>) -> List<&2, List<&2, Bool>>:
+def Names.keys(ns: List<&2, Resources.Name>) -> List<&2, List<&2, U32>>:
   match ns:
     case Nil{}:
       []
@@ -2192,7 +2192,7 @@ def Uses.reaches(
         Tree.resources(~d, l, h),
         ns => Uses.graph(~d, l, view, h, ns, Reaches.Graph.new())
       ),
-      g => Some{Tries.Trie.has(Unit, Reaches.Graph.reach(g, Name.key(used)), Name.key(changed))}
+      g => Some{Crits.Dict.has(Unit, Reaches.Graph.reach(g, Name.key(used)), Name.key(changed))}
     )
   )
 
@@ -2471,7 +2471,7 @@ def Touches.of(
   +c: Resources.Name,
   +b: Branch,
   used: List<&2, Resources.Name>,
-  +reach: Tries.Trie<Unit>
+  +reach: Crits.Dict(Unit)
 ) -> List<&2, Touch>:
   match used:
     case Nil{}:
@@ -2482,7 +2482,7 @@ def Touches.of(
         Touch{from, v, c, b, u},
         Touches.of(from, v, c, b, rest, reach),
         List.any.if(
-          w => Tries.Trie.has(Unit, reach, Name.key(u)),
+          w => Crits.Dict.has(Unit, reach, Name.key(u)),
           Resources.Name.is_eq(u, c)
         )
       )
@@ -2901,14 +2901,14 @@ def Node.notices(~d: Led(), ~kern: Kern(d), +l: L(d), x: Topic) -> Maybe<&2, Lis
 # A resource is mounted to one branch at a time: to mount it to another is a
 # checkout, and to mount another resource to another branch is a worktree
 def Mounts() -> Data:
-  Tries.Trie<Branch>
+  Crits.Dict(Branch)
 
 # a node may stop: it is forced to, or no resource is mounted and no writer
 # is connected
-def Node.may_stop(mounts: Mounts(), writers: Tries.Trie<Unit>, force: Bool) -> Bool:
+def Node.may_stop(mounts: Mounts(), writers: Crits.Dict(Unit), force: Bool) -> Bool:
   Bool.or(
     force,
-    Bool.and(Tries.Trie.is_tip(Branch, mounts), Tries.Trie.is_tip(Unit, writers))
+    Bool.and(Crits.Dict.is_empty(Branch, mounts), Crits.Dict.is_empty(Unit, writers))
   )
 
 # the change that records what a resource held when it is mounted: a write

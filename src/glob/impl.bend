@@ -3,7 +3,7 @@ import ../shared/shared/regex.bend as Regex
 import ../shared/shared/search.bend as Searches
 import ../shared/shared/shared/keyset.bend as KeySets
 import ../shared/shared/shared/shared/shared.bend as Shared
-import ../shared/shared/shared/shared/trie.bend as Tries
+import ../shared/shared/shared/shared/crit.bend as Crits
 import ../shared/shared/shared/spans.bend as Spans
 import ../shared/shared/shared/text.bend as Texts
 import ./spec.bend as Spec
@@ -105,30 +105,33 @@ def Atom.is_eq_sound(
 def Atom.laws() -> Shared.Eq.Laws(Spec.Atom, Atom.is_eq):
   (Atom.is_eq_refl, Atom.is_eq_sound)
 
-# the key of s: the keys of its ends
-def Span.key(s: Spans.Span) -> List<&2, Bool>:
+# a word for the flag b
+def Flag.word(b: Bool) -> U32:
+  Shared.Bool.when(U32, b, u => 1, u => 0)
+
+# the key of s: its ends
+def Span.key(s: Spans.Span) -> List<&2, U32>:
   match s:
     case Spans.Span{Chr{lo}, Chr{hi}}:
-      List.append(&2, Bool, Tries.Trie.char(lo), Tries.Trie.char(hi))
+      [lo, hi]
 
-# the key of the spans ss of a class: a True and the key of each span, then a
-# False
-def Class.key(ss: List<&2, Spans.Span>) -> List<&2, Bool>:
+# the key of the spans ss of a class: a 1 and the key of each span, then a 0
+def Class.key(ss: List<&2, Spans.Span>) -> List<&2, U32>:
   match ss:
     case Nil{}:
-      [False{}]
+      [0]
     case Con{s, r}:
-      True{} <> List.append(&2, Bool, Span.key(s), Class.key(r))
+      1 <> List.append(&2, U32, Span.key(s), Class.key(r))
 
-# the key of t: a bit or two for its form, then its parts
-def Atom.key(t: Spec.Atom) -> List<&2, Bool>:
+# the key of t: a word for its form, then its parts
+def Atom.key(t: Spec.Atom) -> List<&2, U32>:
   match t:
     case Spec.ALit{Chr{x}}:
-      False{} <> Tries.Trie.char(x)
+      [0, x]
     case Spec.AAny{}:
-      [True{}, False{}]
+      [1]
     case Spec.AClass{neg, ss}:
-      True{} <> True{} <> neg <> Class.key(ss)
+      2 <> Flag.word(neg) <> Class.key(ss)
 
 # Search states
 # -------------
@@ -1246,105 +1249,68 @@ def St.is_eq_sound(x: St, y: St) -> {St.is_eq(x, y) == True{}: Bool} -> {x == y:
         )(Shared.List.all.if_rest(sa, u2 => sb)(rest)): {St{n, a, b} == St{n, a, _}: St}
         {==}
 
-# the key of xs, then rest: True before each Seq, False after the last
-def Seqs.key(xs: List<&2, List<&2, Regex.Re<Spec.Atom>>>, rest: List<&2, Bool>) -> List<&2, Bool>:
+# the key of xs, then rest: a 1 before each Seq, a 0 after the last
+def Seqs.key(xs: List<&2, List<&2, Regex.Re<Spec.Atom>>>, rest: List<&2, U32>) -> List<&2, U32>:
   match xs:
     case Nil{}:
-      False{} <> rest
+      0 <> rest
     case Con{s, r}:
-      True{} <> Regex.Seq.key.go(~Spec.Atom, ~Atom.key, s, Seqs.key(r, rest))
+      1 <> Regex.Seq.key.go(~Spec.Atom, ~Atom.key, s, Seqs.key(r, rest))
 
-# the key of slots, then rest: True and the kind before each slot, False
-# after the last
-def Slots.key(slots: List<&2, Slot>, rest: List<&2, Bool>) -> List<&2, Bool>:
+# the key of slots, then rest: a word for the kind of each slot (1: Inc, 2:
+# Exc), a 0 after the last
+def Slots.key(slots: List<&2, Slot>, rest: List<&2, U32>) -> List<&2, U32>:
   match slots:
     case Nil{}:
-      False{} <> rest
+      0 <> rest
     case Con{Inc{xs}, r}:
-      True{} <> False{} <> Seqs.key(xs, Slots.key(r, rest))
+      1 <> Seqs.key(xs, Slots.key(r, rest))
     case Con{Exc{xs}, r}:
-      True{} <> True{} <> Seqs.key(xs, Slots.key(r, rest))
+      2 <> Seqs.key(xs, Slots.key(r, rest))
 
 # the key of x
-def St.key(x: St) -> List<&2, Bool>:
+def St.key(x: St) -> List<&2, U32>:
   match x:
     case St{both, a, b}:
-      both <> Slots.key(a, Slots.key(b, []))
+      Flag.word(both) <> Slots.key(a, Slots.key(b, []))
 
 # the key of a place of a path
-def Path.key(s: Path) -> List<&2, Bool>:
+def Path.key(s: Path) -> List<&2, U32>:
   match s:
     case PStart{}:
-      [False{}, False{}, False{}]
+      [0]
     case PDot{}:
-      [False{}, False{}, True{}]
+      [1]
     case PDots{}:
-      [False{}, True{}, False{}]
+      [2]
     case PSeg{}:
-      [False{}, True{}, True{}]
+      [3]
     case PDead{}:
-      [True{}, False{}, False{}]
-
-# the place of a path whose key is k
-def Path.of_key(k: List<&2, Bool>) -> Path:
-  match k:
-    case Con{False{}, Con{False{}, Con{False{}, Nil{}}}}:
-      PStart{}
-    case Con{False{}, Con{False{}, Con{True{}, Nil{}}}}:
-      PDot{}
-    case Con{False{}, Con{True{}, Con{False{}, Nil{}}}}:
-      PDots{}
-    case Con{False{}, Con{True{}, Con{True{}, Nil{}}}}:
-      PSeg{}
-    case _:
-      PDead{}
-
-# the key of a place of a path gives the place back
-def Path.key_back(s: Path) -> {Path.of_key(Path.key(s)) == s: Path}:
-  match s:
-    case PStart{}:
-      {==}
-    case PDot{}:
-      {==}
-    case PDots{}:
-      {==}
-    case PSeg{}:
-      {==}
-    case PDead{}:
-      {==}
+      [4]
 
 # a and b are the same place of a path
 def Path.is_eq(a: Path, b: Path) -> Bool:
-  Tries.Trie.same_key(Path.key(a), Path.key(b))
+  match a b:
+    case PStart{} PStart{}:
+      True{}
+    case PDot{} PDot{}:
+      True{}
+    case PDots{} PDots{}:
+      True{}
+    case PSeg{} PSeg{}:
+      True{}
+    case PDead{} PDead{}:
+      True{}
+    case x y:
+      False{}
 
 # Path.is_eq is True for a place and itself
 def Path.is_eq_refl(a: Path) -> {Path.is_eq(a, a) == True{}: Bool}:
-  Shared.List.is_eq_refl(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws(), Path.key(a))
+  ?TODO
 
 # Path.is_eq is True only for the same place
 def Path.is_eq_sound(+a: Path, +b: Path) -> {Path.is_eq(a, b) == True{}: Bool} -> {a == b: Path}:
-  h => Equal.trans(
-    Path,
-    a,
-    Path.of_key(Path.key(b)),
-    b,
-    Equal.trans(
-      Path,
-      a,
-      Path.of_key(Path.key(a)),
-      Path.of_key(Path.key(b)),
-      Equal.sym(Path, Path.of_key(Path.key(a)), a, Path.key_back(a)),
-      Equal.cong(
-        List<&2, Bool>,
-        Path,
-        k => Path.of_key(k),
-        Path.key(a),
-        Path.key(b),
-        Tries.Trie.same_key_sound(Path.key(a), Path.key(b))(h)
-      )
-    ),
-    Path.key_back(b)
-  )
+  ?TODO
 
 # v and w are the same place
 def Walk.is_eq(v: Walk, w: Walk) -> Bool:
@@ -1397,12 +1363,12 @@ def Walk.laws() -> Shared.Eq.Laws(Walk, Walk.is_eq):
   (Walk.is_eq_refl, Walk.is_eq_sound)
 
 # the key of a place
-def Walk.key(w: Walk) -> List<&2, Bool>:
+def Walk.key(w: Walk) -> List<&2, U32>:
   match w:
     case Dead{}:
-      [False{}]
+      [0]
     case At{a, x}:
-      True{} <> List.append(&2, Bool, Path.key(a), St.key(x))
+      1 <> List.append(&2, U32, Path.key(a), St.key(x))
 
 # Representative characters
 # -------------------------
@@ -1413,10 +1379,10 @@ def Walk.key(w: Walk) -> List<&2, Bool>:
 # machine only under the marks of those spans, each once.
 
 # the key of c
-def Char.key(c: Char) -> List<&2, Bool>:
+def Char.key(c: Char) -> List<&2, U32>:
   match c:
     case Chr{x}:
-      Tries.Trie.char(x)
+      [x]
 
 # the marks that the search moves the machine under, each once
 def Abc.syms(g: Abc) -> List<&2, Char>:
@@ -1427,7 +1393,7 @@ def Abc.syms(g: Abc) -> List<&2, Char>:
         ~Char.is_eq,
         ~Char.key,
         Spans.Spans.marks(ss),
-        Tries.Trie.new(Char)
+        Crits.Dict.new(~Char)
       )
 
 # the characters with a role of their own for a path, each a span of one
@@ -1978,7 +1944,7 @@ def Abc.has_mark(
 } -> {List.contains(~Char, ~Char.is_eq, Abc.syms(Abc{ss}), d) == True{}: Bool}:
   e =>
     +ms = Spans.Spans.marks(ss)
-    +us = KeySets.KeySet.unique(~Char, ~Char.is_eq, ~Char.key, ms, Tries.Trie.new(Char))
+    +us = KeySets.KeySet.unique(~Char, ~Char.is_eq, ~Char.key, ms, Crits.Dict.new(~Char))
     Equal.trans(
       Bool,
       List.contains(~Char, ~Char.is_eq, us, d),
@@ -2110,7 +2076,7 @@ def Rules.abc(a: List<&2, Spec.Rule>, b: List<&2, Spec.Rule>) -> Abc:
       ~Spans.Span.is_eq,
       ~Span.key,
       List.append(&2, Spans.Span, Role.spans(), Rules.spans(a, Rules.spans(b, []))),
-      Tries.Trie.new(Spans.Span)
+      Crits.Dict.new(~Spans.Span)
     )
   }
 
